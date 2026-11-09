@@ -25,8 +25,14 @@ function buildRailyard() {
     [29.5, 33, 2.5, 6.5, 2.7, 'container'],
     [27, 17.5, 2.5, 5, 2.7, 'container'],
     // North lane cover.
-    [19, 4, 2, 2, 1.1, 'crate'],
-    [25, 6, 3.5, 0.8, 0.9, 'barrier'],
+    [19, 2, 2, 2, 1.1, 'crate'],
+    [23, 6.2, 2.2, 0.8, 0.9, 'barrier'],
+    // Tall lane breaks: no gun gets a clean shot down a whole lane.
+    [18.5, 7, 2.5, 3.2, 2.7, 'container'],
+    [34, 5.5, 3, 2.2, 2.7, 'container'],
+    [18.5, 37.5, 2.5, 3.2, 2.7, 'container'],
+    [26, 0, 2.5, 5.6, 2.7, 'container'],
+    [26, 42.4, 2.5, 5.6, 2.7, 'container'],
     // Mid lane cover.
     [11, 22.5, 2, 2, 1.1, 'crate'],
     [20, 21, 4.5, 0.8, 0.9, 'barrier'],

@@ -41,10 +41,24 @@ export function raycastMap(map, ox, oz, dirX, dirZ, maxDist, flag = 'blocksBulle
            nx: h.axis === 0 ? h.sign : 0, nz: h.axis === 1 ? h.sign : 0, wall: w };
 }
 
-export function hasLineOfSight(map, ax, az, bx, bz) {
+// True when segment a-b passes through any smoke cloud ({x,z,r}), unless one endpoint is inside it:
+// someone in the smoke can still see out and be seen at very close range.
+export function smokeBlocks(smokes, ax, az, bx, bz) {
+  if (!smokes || !smokes.length) return false;
+  const dx = bx - ax, dz = bz - az, lenSq = dx * dx + dz * dz;
+  for (const s of smokes) {
+    const u = lenSq > 0 ? Math.max(0, Math.min(1, ((s.x - ax) * dx + (s.z - az) * dz) / lenSq)) : 0;
+    const px = ax + dx * u - s.x, pz = az + dz * u - s.z;
+    if (px * px + pz * pz <= s.r * s.r) return true;
+  }
+  return false;
+}
+
+export function hasLineOfSight(map, ax, az, bx, bz, smokes) {
   const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
   if (len < 1e-6) return true;
-  return raycastMap(map, ax, az, dx / len, dz / len, len, 'blocksVision') === null;
+  if (raycastMap(map, ax, az, dx / len, dz / len, len, 'blocksVision') !== null) return false;
+  return !smokeBlocks(smokes, ax, az, bx, bz);
 }
 
 // Distance along a normalised ray to a circle, or -1 for a miss.
