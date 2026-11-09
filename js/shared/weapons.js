@@ -20,6 +20,10 @@
 //   adsGate         damage multiplier applied unless fully aimed (sniper hipfire)
 //   boltKick        adsT is knocked back to this after a shot (bolt cycle costs you the scope)
 //   unlimitedReserve reloading never drains reserve, so nobody is ever left unarmed
+//
+// Attachments (js/shared/attachments.js) produce an effective def with these same fields; see effectiveWeapon.
+
+import { applyAttachments } from './attachments.js';
 
 // A ray passing this close to a target's centre is a head hit. Top-down, so the head is the bullseye.
 export const HEAD_RADIUS = 0.2;
@@ -105,6 +109,12 @@ export function damageAt(w, dist, ads = true) {
   if (dist > f.start) k = dist >= f.end ? f.min : 1 + (f.min - 1) * (dist - f.start) / (f.end - f.start);
   if (w.adsGate && !ads) k *= w.adsGate;
   return w.damage * k;
+}
+
+// A gun's real stats with a kit fitted. Memoised: an empty kit returns the plain def, equal kits the same object.
+export function effectiveWeapon(weaponId, attachments) {
+  const w = WEAPONS[weaponId];
+  return w && applyAttachments(w, attachments);
 }
 
 export function headMultFor(weaponId) {

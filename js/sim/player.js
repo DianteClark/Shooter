@@ -4,7 +4,8 @@
 
 import { PLAYER_RADIUS, SECONDARY_ID, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle, resolveCircle } from '../shared/geometry.js';
-import { HEAD_RADIUS, WEAPONS } from '../shared/weapons.js';
+import { HEAD_RADIUS, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
+import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
 import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
 
 export { HEAD_RADIUS, headMultFor } from '../shared/weapons.js';
@@ -60,6 +61,18 @@ export function angleDiff(a, b) {
 
 function reserveFor(w) { return w.reserve; }
 
+// The effective def of a gun this player carries: attachments applied at loadout time, so it is a field read
+// and allocates nothing. Anything the player does not carry resolves to the plain def.
+export function weaponDef(ps, id = ps.weapon) {
+  const d = ps.defs;
+  return d[0].id === id ? d[0] : d[1].id === id ? d[1] : WEAPONS[id];
+}
+
+function refreshDefs(ps) {
+  ps.defs[0] = effectiveWeapon(ps.primary, attachmentsFor(ps, ps.primary));
+  ps.defs[1] = effectiveWeapon(ps.secondary, attachmentsFor(ps, ps.secondary));
+}
+
 function hasPerk(ps, perk) { return ps.perks.includes(perk); }
 function reloadMult(ps) { return hasPerk(ps, 'fasthands') ? FASTHANDS_MULT : 1; }
 function slideCooldownOf(ps) { return MOVE.slideCooldown * (hasPerk(ps, 'marathon') ? MARATHON_SLIDE_COOL : 1); }
@@ -72,6 +85,8 @@ function applyLoadout(ps, l) {
   if (Array.isArray(l.perks)) ps.perks = l.perks.slice();
   if (TACTICALS[l.tactical]) ps.tactical = l.tactical;
   if (LETHALS[l.lethal]) ps.lethal = l.lethal;
+  if (l.attachments && typeof l.attachments === 'object') ps.attachments = l.attachments;
+  refreshDefs(ps);
 }
 
 function refillEquipment(ps) {
@@ -96,6 +111,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout }
   const ps = {
     id, x: 0, z: 0, aim: 0, vx: 0, vz: 0,
     slot: 0, primary, secondary: SECONDARY_ID, weapon: primary, camo,
+    attachments: NO_ATTACHMENTS, defs: [WEAPONS[primary], WEAPONS[SECONDARY_ID]],
     perks: [], tactical: DEFAULT_LOADOUT.tactical, lethal: DEFAULT_LOADOUT.lethal,
     tacticalLeft: 0, lethalLeft: 0,
     heat: 0, overheated: false, overheatT: 0, overheatEdge: false, firingT: 0,
@@ -118,7 +134,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout }
 }
 
 function fillAmmo(ps) {
-  const a = WEAPONS[ps.primary], b = WEAPONS[ps.secondary];
+  const a = weaponDef(ps, ps.primary), b = weaponDef(ps, ps.secondary);
   ps.ammo[0] = a.magazine; ps.ammo[1] = b.magazine;
   ps.reserve[0] = reserveFor(a); ps.reserve[1] = reserveFor(b);
 }
@@ -145,7 +161,7 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
 function setSlot(ps, slot) {
   ps.slot = slot;
   ps.weapon = slot === 0 ? ps.primary : ps.secondary;
-  const w = WEAPONS[ps.weapon];
+  const w = weaponDef(ps);
   ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
   ps.shotIndex = 0; ps.bloom = 0;
   ps.adsT *= 0.4;
@@ -195,7 +211,7 @@ function stepReload(ps, w, dt) {
 }
 
 // Current spread half-angle in radians. Exported so the HUD or tests can read the true cone.
-export function currentSpread(ps, w = WEAPONS[ps.weapon]) {
+export function currentSpread(ps, w = weaponDef(ps)) {
   const ads = ps.adsT;
   let s = w.hipSpread + (w.adsSpread - w.hipSpread) * ads;
   s *= 1 + ps.bloom * (w.bloomScale || 1);
@@ -218,7 +234,7 @@ function isLocked(ps, w) { return w.heat !== undefined && ps.overheated; }
 
 // Runs whichever gun is in hand, so a locked LMG keeps cooling behind the pistol.
 function stepHeat(ps, dt) {
-  const h = WEAPONS[ps.primary].heat;
+  const h = weaponDef(ps, ps.primary).heat;
   if (!h) return;
   ps.heatIdle += dt;
   if (ps.overheated) {
@@ -263,10 +279,14 @@ function fireOne(ps, w, rng) {
     ox: ps.x, oz: ps.z, aim: ps.aim, weapon: ps.weapon, angles,
     ads: ps.adsT >= ADS_FULL,
   };
+  // Lets the owner's own traceShot match the host, which works the range out from the loadout itself.
+  if (w.range !== WEAPONS[ps.weapon].range) shot.range = w.range;
   ps.ammo[ps.slot]--;
   ps.shotIndex++;
   ps.sinceShot = 0;
-  ps.firingT = FIRING_REVEAL;
+  // A suppressed shot leaves any reveal from an earlier unsuppressed shot to run out on its own.
+  if (w.suppressed) shot.sup = 1;
+  else ps.firingT = FIRING_REVEAL;
   if (w.heat) addHeat(ps, w.heat);
   else ps.bloom = Math.min(1, ps.bloom + w.bloomPerShot * (1 - 0.4 * ps.adsT));
   if (w.boltKick !== undefined) ps.adsT = Math.min(ps.adsT, w.boltKick);
@@ -368,7 +388,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   if (input.swap) setSlot(ps, ps.slot === 0 ? 1 : 0);
   if (ps.swapT > 0) ps.swapT -= dt;
 
-  let w = WEAPONS[ps.weapon];
+  let w = weaponDef(ps);
   stepMovement(ps, input, w, dt, map);
 
   // ADS blocked by sprinting, swapping and magazine reloads; a shell-fed gun can stay up.
@@ -427,13 +447,14 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   return shots;
 }
 
-// Resolves a shot against walls and players. Bullets stop at the first enemy; teammates are passed
+// Resolves a shot against walls and players. `def` is the shooter's effective def when the caller knows it (the
+// host does); otherwise the range the shot carries is used. Bullets stop at the first enemy; teammates are passed
 // through when the entries carry a `team` (GameView players do), matching no-friendly-fire rules.
 // A ray that hits a player carries `target` (and `id`, the same value) and `head`: whether it passed
 // within HEAD_RADIUS of the centre. Entries may carry `sliding`, which shrinks the body but not the head.
-export function traceShot(shot, map, players, selfId) {
+export function traceShot(shot, map, players, selfId, def) {
   const w = WEAPONS[shot.weapon];
-  const range = w ? w.range : 60;
+  const range = def ? def.range : (shot.range || (w ? w.range : 60));
   const ox = shot.ox, oz = shot.oz;
   let selfTeam;
   for (let i = 0; i < players.length; i++) {

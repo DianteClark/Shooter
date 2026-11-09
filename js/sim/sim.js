@@ -5,11 +5,12 @@ import { LETHALS, normalizeLoadout, SCORE, STREAK_IDS, TACTICALS } from '../shar
 import { MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SCORE_LIMIT, SIM_HZ, SPAWN_PROTECT, TEAM_SIZE, TIME_LIMIT, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
+import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { damageAt, headMultFor, WEAPONS } from '../shared/weapons.js';
-import { BotBrain } from './bots.js';
+import { botAttachments, BotBrain } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, traceShot } from './player.js';
+import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, traceShot, weaponDef } from './player.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 
 const STEP = 1 / SIM_HZ;
@@ -48,6 +49,7 @@ const TACTICAL_IDS = Object.keys(TACTICALS);
 const LETHAL_IDS = Object.keys(LETHALS);
 const POS = { x: 0, z: 0, sliding: false };
 const PLAYER_STRIDE = 24;
+const META_KIT_SHIFT = 13;       // Meta int: 13 bits of equipment and streaks, then the primary's packed kit.
 const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex'];
 const BOT_PRIMARIES = ['ar', 'smg', 'lmg', 'shotgun', 'ar', 'sniper', 'smg', 'ar'];
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
@@ -67,7 +69,7 @@ function bell(rng) { return (rng() + rng() + rng()) / 1.5 - 1; }
 // owns a human's ammo can apply the same rule when it receives the `scavenge` event.
 export function scavengeRefill(ps) {
   for (let i = 0; i < 2; i++) {
-    const w = WEAPONS[i === 0 ? ps.primary : ps.secondary];
+    const w = weaponDef(ps, i === 0 ? ps.primary : ps.secondary);
     if (w && !w.unlimitedReserve) ps.reserve[i] = Math.min(w.reserve, ps.reserve[i] + w.magazine * SCAVENGE_MAGS);
   }
 }
@@ -95,14 +97,16 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE }
     weaponI = team * 3;
     for (; count < teamSize; count++, n++) {
       const i = n + team;
+      const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
+      const primary = BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length];
       const loadout = normalizeLoadout({
-        primary: BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length], camo: 'none',
+        primary, camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
         tactical: BOT_TACTICALS[i % BOT_TACTICALS.length], lethal: BOT_LETHALS[i % BOT_LETHALS.length],
         perks: BOT_PERKS[i % BOT_PERKS.length], streaks: BOT_STREAKS[i % BOT_STREAKS.length],
       });
       roster.push({
         id: `bot${n}`, name: BOT_NAMES[nameI++ % BOT_NAMES.length], team, isBot: true,
-        skill: botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill,
+        skill,
         primary: loadout.primary, camo: loadout.camo, loadout,
       });
     }
@@ -155,6 +159,8 @@ export class Sim {
         kills: 0, deaths: 0, assists: 0, head: 0, streak: 0, chain: 0, lastKillT: -99,
         lastKilledBy: null, score: createStreakState(loadout.streaks),
         regenT: 0, dmgBy: new Float32Array(n), dmgT: new Float32Array(n).fill(-99),
+        kits: [attachmentsFor(loadout, loadout.primary), attachmentsFor(loadout, loadout.secondary)],
+        kitBits: -1, kitWeapon: null,
         hx: new Float32Array(HISTORY), hz: new Float32Array(HISTORY), hs: new Uint8Array(HISTORY),
         prevReload: false, prevWeapon: loadout.primary, prevSliding: false, prevOverheated: false,
         ackX: 0, ackZ: 0, ackT: 0,
@@ -207,6 +213,8 @@ export class Sim {
     if (p.pendingLoadout) {
       p.loadout = p.pendingLoadout; p.pendingLoadout = null;
       p.primary = p.loadout.primary; p.camo = p.loadout.camo;
+      p.kits[0] = attachmentsFor(p.loadout, p.loadout.primary);
+      p.kits[1] = attachmentsFor(p.loadout, p.loadout.secondary);
       setStreakKinds(p.score, p.loadout.streaks);
       this._metaUntil = this.tick + 2;
     }
@@ -423,7 +431,8 @@ export class Sim {
   applyShot(id, shot, ageSeconds = 0) {
     const shooter = this.byId.get(id);
     if (!shooter || !shooter.alive || this.phase === 'ended') return;
-    const w = WEAPONS[shot.weapon];
+    // Every gun stat below comes from the shooter's loadout as the host knows it, never from the shot itself.
+    const w = weaponDef(shooter.ps, shot.weapon);
     if (!w) return;
 
     const age = Math.min(Math.max(0, ageSeconds), MAX_REWIND);
@@ -436,7 +445,7 @@ export class Sim {
       if (age > 0) this.posAt(p, age, e);
       else { e.x = p.ps.x; e.z = p.ps.z; e.sliding = p.ps.sliding; }
     }
-    const rays = traceShot(shot, this.map, scratch, id);
+    const rays = traceShot(shot, this.map, scratch, id, w);
     const turretHits = this.turrets.length > 0 ? this._raysVsTurrets(shot, rays, shooter) : null;
 
     const lean = new Array(rays.length);
@@ -445,9 +454,11 @@ export class Sim {
       // To everyone drawing it, a bullet stopped by a turret is a bullet that hit something hard.
       lean[i] = { x: round2(r.x), z: round2(r.z), hit: r.hit === 'turret' ? 'wall' : r.hit, nx: round2(r.nx), nz: round2(r.nz) };
     }
-    this._emit({ t: 'shot', by: id, weapon: shot.weapon, camo: shooter.camo,
-      ox: round2(shot.ox), oz: round2(shot.oz), aim: round2(shot.aim), rays: lean });
-    this._alertBots(shooter);
+    const fired = { t: 'shot', by: id, weapon: shot.weapon, camo: shooter.camo,
+      ox: round2(shot.ox), oz: round2(shot.oz), aim: round2(shot.aim), rays: lean };
+    if (w.suppressed) fired.sup = 1;
+    this._emit(fired);
+    this._alertBots(shooter, !!w.suppressed);
 
     if (this.phase !== 'live') return;
     shooter.spawnProtect = 0;      // Shooting gives up your protection.
@@ -499,10 +510,10 @@ export class Sim {
     }
   }
 
-  _alertBots(shooter) {
+  _alertBots(shooter, suppressed) {
     for (let i = 0; i < this.players.length; i++) {
       const p = this.players[i];
-      if (p.bot && p.alive && p.team !== shooter.team) p.bot.onGunshot(shooter);
+      if (p.bot && p.alive && p.team !== shooter.team) p.bot.onGunshot(shooter, suppressed);
     }
   }
 
@@ -915,7 +926,20 @@ export class Sim {
       heat: ps.heat, overheated: ps.overheated, firingT: ps.firingT,
       tacticalLeft: ps.tacticalLeft, lethalLeft: ps.lethalLeft, tactical: ps.tactical, lethal: ps.lethal,
       ghost: ps.perks.includes('ghost'),
+      attachments: this._heldKit(p, ps.weapon),
     };
+  }
+
+  // The kit on the gun a player is holding, for the gun model. Stable object per kit.
+  _heldKit(p, weapon) {
+    return weapon === p.loadout.primary ? p.kits[0] : weapon === p.loadout.secondary ? p.kits[1] : NO_ATTACHMENTS;
+  }
+
+  // Same, on a guest: the snapshot says which gun, and the meta block (once seen) says what is on it.
+  _decodedKit(p, weapon) {
+    if (weapon === p.loadout.secondary) return p.kits[1];
+    if (p.kitBits >= 0 && p.kitWeapon !== weapon) { p.kits[0] = unpackKit(weapon, p.kitBits); p.kitWeapon = weapon; }
+    return p.kits[0];
   }
 
   getView(localId) {
@@ -981,7 +1005,7 @@ export class Sim {
       this.players.map(p => {
         let n = TACTICAL_IDS.indexOf(p.ps.tactical) | (LETHAL_IDS.indexOf(p.ps.lethal) << 2);
         p.score.slots.forEach((s, k) => { n |= STREAK_IDS.indexOf(s.kind) << (4 + k * 3); });
-        return n;
+        return n | (packKit(p.kits[0]) << META_KIT_SHIFT);
       }),
       this.mode,
     ];
@@ -1005,6 +1029,9 @@ export class Sim {
       p.ps.lethal = LETHAL_IDS[(n >> 2) & 3] ?? p.ps.lethal;
       const kinds = p.score.slots.map((s, k) => STREAK_IDS[(n >> (4 + k * 3)) & 7] ?? s.kind);
       if (kinds.some((kind, k) => kind !== p.score.slots[k].kind)) setStreakKinds(p.score, kinds);
+      // A guest's roster goes stale if someone changes loadout mid-match, and only the gun model cares.
+      const bits = n >>> META_KIT_SHIFT;
+      if (bits !== p.kitBits) { p.kitBits = bits; p.kitWeapon = null; }
     }
   }
 
@@ -1032,6 +1059,7 @@ export class Sim {
         tactical: r.ps.tactical, lethal: r.ps.lethal,
         heat: d[o + 21] / 20, overheated: !!(flags & 32), firingT: d[o + 22] / 10, head: d[o + 23],
         ghost: !!(flags & 16),
+        attachments: this._decodedKit(r, WEAPON_IDS[d[o + 8]]),
       };
     }
     let lastKill = null;

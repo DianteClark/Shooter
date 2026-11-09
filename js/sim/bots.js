@@ -6,9 +6,8 @@
 // trigger runs every tick, which is what keeps them looking fluid.
 
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
-import { WEAPONS } from '../shared/weapons.js';
 import { EQUIPMENT } from './equipment.js';
-import { angleDiff, stepPlayer } from './player.js';
+import { angleDiff, stepPlayer, weaponDef } from './player.js';
 
 const DEG = Math.PI / 180;
 
@@ -63,6 +62,54 @@ const THROW_REACH = 12.75;      // Where a throw ends up on open ground: flight 
 const TURRET_THREAT = 21;
 const TURRET_WAIT = 10;         // Seconds a bot will hold a turret looking for a good moment to drop it.
 const LANDING = { x: 0, z: 0, t: 0 };
+const SUPPRESSED_HEARING = 0.4; // Fraction of the normal hearing range for a suppressed shot.
+
+// Full kits per gun; a bot runs one of them, cut down for its tier. Slots listed in the order they are fitted,
+// so a low tier keeps what matters most on that gun. Suppressors are listed third: veterans and elites only.
+const BOT_KITS = {
+  ar: [
+    { barrel: 'compensator', optic: 'reflex', grip: 'vertical', mag: 'extmag' },
+    { optic: 'longeye', barrel: 'longbarrel', mag: 'speedmag', grip: 'vertical' },
+    { optic: 'holo', grip: 'angled', barrel: 'suppressor', mag: 'lightmag' },
+  ],
+  smg: [
+    { optic: 'holo', grip: 'angled', mag: 'extmag', barrel: 'longbarrel' },
+    { barrel: 'compensator', optic: 'reflex', mag: 'speedmag', grip: 'wrap' },
+    { grip: 'angled', optic: 'holo', barrel: 'suppressor', mag: 'lightmag' },
+  ],
+  shotgun: [
+    { barrel: 'choke', optic: 'holo', mag: 'extmag', grip: 'angled' },
+    { barrel: 'sawnoff', grip: 'wrap', mag: 'speedmag', optic: 'reflex' },
+  ],
+  lmg: [
+    { barrel: 'heatsink', optic: 'reflex', grip: 'brace', mag: 'speedmag' },
+    { optic: 'longeye', barrel: 'compensator', grip: 'vertical', mag: 'extmag' },
+    { barrel: 'longbarrel', optic: 'holo', grip: 'brace', mag: 'lightmag' },
+  ],
+  sniper: [
+    { optic: 'snapsight', grip: 'angled', mag: 'speedmag', barrel: 'fluted' },
+    { grip: 'wrap', mag: 'extmag', barrel: 'suppressor' },
+  ],
+  pistol: [
+    { mag: 'extmag', barrel: 'compensator', optic: 'reflex', grip: 'wrap' },
+  ],
+};
+const BOT_KIT_SLOTS = { recruit: 1, regular: 2, veteran: 3, elite: 4 };
+
+// The kit a bot of this tier carries on this gun: recruits only sometimes have one attachment, elites a full kit.
+export function botAttachments(weaponId, skill, i) {
+  const kits = BOT_KITS[weaponId];
+  if (!kits || (skill === 'recruit' && i % 2 === 1)) return {};
+  const kit = kits[i % kits.length];
+  const keep = BOT_KIT_SLOTS[skill] ?? 2;
+  const out = {};
+  let n = 0;
+  for (const slot in kit) {
+    if (n++ >= keep) break;
+    out[slot] = kit[slot];
+  }
+  return out;
+}
 
 function gaussian(rng) { return (rng() + rng() + rng() + rng() - 2) / 0.577; }
 function between(rng, a, b) { return a + (b - a) * rng(); }
@@ -120,11 +167,11 @@ export class BotBrain {
     this.knownX = x; this.knownZ = z; this.knownT = this.sim.time; this.hasKnown = true; this.knownSoft = soft;
   }
 
-  onGunshot(shooter) {
+  onGunshot(shooter, suppressed = false) {
     const S = this.S, ps = this.ps, q = shooter.ps;
     if (this.targetVisible) return;
     const d = Math.hypot(q.x - ps.x, q.z - ps.z);
-    if (d > S.hearing) return;
+    if (d > S.hearing * (suppressed ? SUPPRESSED_HEARING : 1)) return;
     // Sound gives a position, not a perfect one.
     const blur = 1 + d * 0.12;
     this._note(q.x + (this.sim.rng() - 0.5) * blur, q.z + (this.sim.rng() - 0.5) * blur);
@@ -243,7 +290,7 @@ export class BotBrain {
     const ammo = ps.ammo[ps.slot];
 
     // A belt-fed gun keeps hammering the spot where someone just ducked out of sight, which is what builds heat.
-    this.suppressing = !visible && !!WEAPONS[ps.weapon].heat && !ps.overheated && !!this.target && this.target.alive
+    this.suppressing = !visible && !!weaponDef(ps).heat && !ps.overheated && !!this.target && this.target.alive
       && sim.time - this.sawT < S.suppress && this.flashT <= 0
       && hasLineOfSight(sim.map, ps.x, ps.z, this.sawX, this.sawZ, sim.smokes);
 
@@ -601,7 +648,7 @@ export class BotBrain {
 
   _trigger(q, d, perceived, dt) {
     const { ps, S, input: I, sim } = this;
-    const w = WEAPONS[ps.weapon];
+    const w = weaponDef(ps);
     const offAim = Math.abs(angleDiff(ps.aim, perceived));
     // Tolerance widens up close, where the target covers more of the view.
     const tol = S.fireTol + Math.atan2(0.5, Math.max(d, 1)) * 0.6;
