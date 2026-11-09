@@ -3,14 +3,15 @@
 // what it sees (cone + hasLineOfSight), what it hears, callouts from teammates, and UAV pings. The last three are
 // never a position: each gives a rough area with an error radius, delayed and stale, that ages out.
 // Enemy positions are read in exactly four places: _perceive (with the line-of-sight gate), onGunshot, onDamaged,
-// and the UAV sweep. Nothing else may read ps.x of someone this bot cannot see.
+// and the radar sweep. Marks (Tracker, Sensor) are the same deal as the UAV: told to the team by a machine, with error,
+// and only while they last. Nothing else may read ps.x of someone this bot cannot see.
 //
 // Thinking (perception, decisions) runs at 5-12 Hz, staggered across bots. Driving the stick, aim and
 // trigger runs every tick, which is what keeps them looking fluid.
 
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
-import { EQUIPMENT, maxThrowRange, previewThrow } from './equipment.js';
-import { angleDiff, stepPlayer, weaponDef } from './player.js';
+import { effectRadius, landingOf, maxThrowRange } from './equipment.js';
+import { angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 
 const DEG = Math.PI / 180;
 
@@ -74,7 +75,9 @@ const POS = { x: 0, z: 0 };
 const TAU = Math.PI * 2;
 const PATH_POINTS = 24;
 const TURRET_THREAT = 21;
-const TURRET_WAIT = 10;         // Seconds a bot will hold a turret looking for a good moment to drop it.
+const STREAK_WAIT = 10;         // Seconds a bot will hold a streak looking for a good moment, before calling it anyway.
+const SENSOR_RANGE = 15;        // Metres of throw a bot will spend finding someone it only half knows about.
+const MINE_SPOT = 2.5;          // A mine goes this far in front of its owner.
 const SUPPRESSED_HEARING = 0.4; // Fraction of the normal hearing range for a suppressed shot.
 const HEAR_OCCLUDED = 0.6;      // Range left to hear a shot with a wall in the way.
 const HEAR_GAP = 0.45;          // A bot takes in one gunshot at a time, so a long burst cannot average away the error.
@@ -337,12 +340,11 @@ export class BotBrain {
     this.strafeT = 0; this.strafeDir = 0;
     this.burstLeft = 0; this.burstPause = 0;
     this.wantSwap = false; this.wantSlide = false;
-    this.lastFireFlag = false;
     this.stuckT = 0; this.stuckX = ps.x; this.stuckZ = ps.z; this.stuckN = 0; this.escapeT = 0; this.escapeX = 0; this.escapeZ = 0;
     this.sepX = 0; this.sepZ = 0;
     this.moveIntent = false;
     this.streakT = between(this.sim.rng, 0.2, this.S.streakDelay);
-    this.turretWait = 0;
+    this.streakWait = 0;
     this.nadeT = between(this.sim.rng, 2, 6);     // No grenades in the first seconds of a life: a spawn is not a fight.
     this.tacticalT = between(this.sim.rng, 1, 4);
     this.flashT = 0;
@@ -352,6 +354,8 @@ export class BotBrain {
     this.style = STYLE[ps.primary] || STYLE.ar;
     this.peek = 0;
     this.objective = null; this.objKey = null; this.objAim = 0; this.objPushRoll = false;
+    this.canHit = true;
+    this.lastFireFlag = false;
     this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
     this._assignLane();
   }
@@ -483,7 +487,7 @@ export class BotBrain {
       // Keeping track of someone just seen needs no cone; it stops mattering the moment they have been gone a while.
       const tracking = q === sameTarget && sim.time - this.sawT < SIGHT_KEEP;
       // Someone within arm's reach is noticed without looking only if they make a noise doing it.
-      const noisy = d <= S.close && (Math.hypot(q.ps.vx, q.ps.vz) >= AUDIBLE_SPEED || q.ps.firingT > 0);
+      const noisy = d <= S.close && ((Math.hypot(q.ps.vx, q.ps.vz) >= AUDIBLE_SPEED && !q.ps.perks.includes('deadsilence')) || q.ps.firingT > 0);
       const inCone = Math.abs(angleDiff(Math.atan2(dz, dx), ps.aim)) <= S.fov / 2;
       if (!tracking && !noisy && !inCone) continue;
       // Walls first, then the dice: nothing about a hidden enemy, not even whether a roll was made, reaches this bot.
@@ -506,8 +510,8 @@ export class BotBrain {
 
     // Shared info: never targets, only somewhere to look or go.
     if (!best) {
-      if (sim.uav[p.team] > 0) this._uavPing();
-      else if (S.callouts) this._hearCallouts();
+      if (sim.radarUp(p.team)) this._uavPing();
+      else if (!this._markPing() && S.callouts) this._hearCallouts();
     }
     this._ageKnowledge();
     if (this.target && !this.targetVisible && sim.time - this.sawT > Math.max(S.memory, S.suppress)) this.target = null;
@@ -519,13 +523,31 @@ export class BotBrain {
     if (sim.time - this.lastUavT < UAV_PING) return;
     this.lastUavT = sim.time;
     let bestD = 30, near = null;
+    const hidden = sim.overwatch[p.team] <= 0;     // Overwatch sees through Ghost.
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
-      if (q.team === p.team || !q.alive || q.dummy || q.ps.perks.includes('ghost')) continue;
+      if (q.team === p.team || !q.alive || q.dummy || (hidden && q.ps.perks.includes('ghost'))) continue;
       const d = Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z);
       if (d < bestD) { bestD = d; near = q; }
     }
     if (near) this._note(near.ps.x, near.ps.z, true, UAV_ERR);
+  }
+
+  // Someone a teammate's Tracker or Sensor put on the map. Same treatment as a radar blip.
+  _markPing() {
+    const { sim, p, ps } = this;
+    if (sim.time - this.lastUavT < UAV_PING) return false;
+    let bestD = 24, near = null;
+    for (let i = 0; i < sim.players.length; i++) {
+      const q = sim.players[i];
+      if (q.team === p.team || !q.alive || q.markT <= 0) continue;
+      const d = Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z);
+      if (d < bestD) { bestD = d; near = q; }
+    }
+    if (!near) return false;
+    this.lastUavT = sim.time;
+    this._note(near.ps.x, near.ps.z, true, UAV_ERR);
+    return true;
   }
 
   // Announced to the team: the spot and the moment, frozen. Teammates hear it later, and it never updates.
@@ -589,6 +611,8 @@ export class BotBrain {
 
     const visible = this.targetVisible;
     const ammo = ps.ammo[ps.slot];
+    // Being able to see someone over a crate is not the same as being able to shoot them through it.
+    this.canHit = !visible || shotPassage(sim.map, ps.x, ps.z, this.target.ps.x, this.target.ps.z, weaponDef(ps)) > 0;
 
     // A belt-fed gun keeps hammering the spot where someone just ducked out of sight, which is what builds heat.
     this.suppressing = !visible && !!weaponDef(ps).heat && !ps.overheated && !!this.target && this.target.alive
@@ -598,6 +622,12 @@ export class BotBrain {
     this._thinkStreaks(visible);
     this._thinkEquipment(visible);
     this._thinkTurrets(visible);
+
+    // Burning ground is a problem you can see, whichever side lit it.
+    if (this.mode !== 'cover') {
+      const fire = sim.eq.inFire(ps.x, ps.z, p.team);
+      if (fire) this._coverFrom(fire.x, fire.z);
+    }
 
     // Retreat low, reload behind cover.
     if (this.mode === 'cover') {
@@ -660,58 +690,81 @@ export class BotBrain {
 
   _setMode(m) { this.mode = m; if (m === 'none') this.arrived = false; }
 
-  // Uses a streak a moment after earning it. The dearest goes first, so a capped bot resets its score.
+  // Uses a streak a moment after earning it. Recruits press whichever button lit up first; everyone else goes for the
+  // dearest they hold, waits for a moment it is actually worth something, and a capped bot's spend resets its score.
   _thinkStreaks(visible) {
     const { sim, p, S } = this;
     const slots = p.score.slots;
-    let slot = -1;
-    if (S.turret === null) {            // A recruit just presses whichever button lit up first.
-      for (let i = 0; i < slots.length && slot < 0; i++) if (slots[i].held) slot = i;
-    } else {
-      for (let i = slots.length - 1; i >= 0 && slot < 0; i--) if (slots[i].held) slot = i;
+    const smart = S.turret !== null;
+    let found = false, spent = false;
+    for (let n = 0; n < slots.length && !spent; n++) {
+      const i = smart ? slots.length - 1 - n : n;
+      const s = slots[i];
+      if (!s.held) continue;
+      found = true;
+      this.streakT -= this.interval;
+      if (this.streakT > 0) break;
+      if (sim.streakDenied(p, s.kind)) continue;     // Blocked: keep it and try the next one down.
+      if (smart && !this._streakMoment(s.kind, visible)) continue;
+      spent = sim.useStreak(p.id, i) !== null;
     }
-    if (slot < 0) { this.turretWait = 0; return; }
-    this.streakT -= this.interval;
-    if (this.streakT > 0) return;
-    // A turret is only worth anything where a fight is about to happen.
-    if (slots[slot].kind === 'turret' && S.turret !== null && !visible && !this.hasKnown && this.mode !== 'hold' && this.turretWait < TURRET_WAIT) {
-      this.turretWait += this.interval;
-      return;
+    if (!found) { this.streakWait = 0; return; }
+    if (spent) { this.streakWait = 0; this.streakT = between(sim.rng, 0.3, S.streakDelay); }
+    else if (this.streakT <= 0) this.streakWait += this.interval;
+  }
+
+  // Is now a good time for this streak? A bot that has been sitting on one long enough calls it anyway.
+  _streakMoment(kind, visible) {
+    const { sim, p, ps } = this;
+    if (this.streakWait >= STREAK_WAIT) return true;
+    const enemy = 1 - p.team;
+    const busy = visible || this.hasKnown;
+    switch (kind) {
+      case 'uav':
+      case 'overwatch': return !visible;
+      case 'jammer': return sim.radarUp(enemy) || busy;
+      case 'turret': return busy || this.mode === 'hold';
+      case 'mortar':
+      case 'strike': return busy;
+      case 'resupply': return p.hp < 60 || ps.lethalLeft === 0 || ps.ammo[ps.slot] === 0;
+      // Anything overhead is common knowledge; a sentry only counts once this bot has actually seen one.
+      case 'emp': return sim.radarUp(enemy) || sim.gunships.some(g => g.team === enemy) || this.turretTarget !== null;
+      default: return true;     // Chopper, gunship: they find their own work.
     }
-    sim.useStreak(p.id, slot);
-    this.turretWait = 0;
-    this.streakT = between(sim.rng, 0.3, S.streakDelay);
   }
 
   // Where this throw would really end up, bounces and all, through the same code that flies it.
-  // Returns null when there is no throw to make.
+  // Returns null when there is no throw to make. The landing object is shared; copy what you keep.
   _landing(kind, aim, dist) {
     const { sim, ps } = this;
-    const reach = Math.min(dist, maxThrowRange(ps.perks));
-    const path = previewThrow(sim.map, ps.x, ps.z, aim, reach, kind);
-    return path && { x: path.landing.x, z: path.landing.z, t: path.landing.t, dist: reach };
+    return landingOf(sim.map, ps.x, ps.z, aim, Math.min(dist, maxThrowRange(ps.perks)), kind);
   }
 
   // Bots who have played this map before look for a line that gets there when the direct one comes up short:
   // banked off a wall, or lobbed past low cover. Tries a few angles around the target, nearest first.
   _bestThrow(kind, aim, tx, tz, radius) {
     const { ps, S } = this;
-    const want = Math.hypot(tx - ps.x, tz - ps.z);
+    const want = Math.hypot(tx - ps.x, tz - ps.z), reach = Math.min(want, maxThrowRange(ps.perks));
     const shots = S.arcTries ?? 0;
-    let best = null, bestMiss = radius;
+    let found = false, bestMiss = radius, bestAim = 0, bestX = 0, bestZ = 0;
     for (let i = 0; i <= shots; i++) {
       const a = aim + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.32);
       const land = this._landing(kind, a, want);
       if (!land) continue;
       const miss = Math.hypot(land.x - tx, land.z - tz);
-      if (miss < bestMiss) { bestMiss = miss; best = { ...land, aim: a, miss }; }
+      if (miss < bestMiss) { found = true; bestMiss = miss; bestAim = a; bestX = land.x; bestZ = land.z; }
     }
-    return best;
+    return found ? { x: bestX, z: bestZ, aim: bestAim, miss: bestMiss, dist: reach } : null;
   }
 
   _throw(slot, aim, dist) {
     const { sim, p, ps } = this;
     sim.applyCommand(p.id, { cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim, dist });
+  }
+
+  // Standing somewhere worth holding: on a point, or at a hold.
+  get _dugIn() {
+    return (this.mode === 'hold' || this.mode === 'objective') && this.arrived;
   }
 
   _thinkEquipment(visible) {
@@ -726,6 +779,28 @@ export class BotBrain {
       return;
     }
 
+    // Things that are placed, not aimed: a Trophy and a Mine go down where the bot means to stay.
+    if (this._dugIn) {
+      if (ps.tactical === 'trophy' && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
+        if (sim.rng() < S.flash) this._throw('tactical', ps.aim, MINE_SPOT);
+        this.tacticalT = between(sim.rng, 10, 18);
+      }
+      if (ps.lethal === 'mine' && ps.lethalLeft > 0 && this.nadeT <= 0) {
+        if (sim.rng() < S.nade) this._throw('lethal', ps.aim, MINE_SPOT);
+        this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
+      }
+    }
+
+    // A vague contact is exactly when a Sensor earns its keep.
+    if (ps.tactical === 'sensor' && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible && this.hasKnown) {
+      const dist = Math.hypot(this.knownX - ps.x, this.knownZ - ps.z);
+      if (dist < SENSOR_RANGE && dist > 4) {
+        if (sim.rng() < S.flash) this._throw('tactical', Math.atan2(this.knownZ - ps.z, this.knownX - ps.x), dist);
+        this.tacticalT = between(sim.rng, 8, 14);
+        return;
+      }
+    }
+
     // Everything else is thrown at someone. Only firm information counts: not a UAV blip, a callout or a vague noise.
     const fresh = this.hasKnown && !this.knownSoft && this.knownErr <= NADE_MAX_ERR && sim.time - this.knownT < 3;
     if (!visible && !fresh) return;
@@ -733,8 +808,20 @@ export class BotBrain {
     const d = Math.hypot(tx - ps.x, tz - ps.z);
     const aim = Math.atan2(tz - ps.z, tx - ps.x) + gaussian(sim.rng) * S.aimFloor;
 
-    if (this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
-      const radius = EQUIPMENT[ps.lethal].blast.radius;
+    // A Decoy does its job off to one side: the noise pulls attention away from where the bot is about to go.
+    if (ps.tactical === 'decoy' && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
+      this.tacticalT = between(sim.rng, 9, 16);
+      if (sim.rng() < S.flash) { this._throw('tactical', aim + (sim.rng() < 0.5 ? -1 : 1) * 1.1, 9); return; }
+    }
+
+    if (ps.lethal === 'hatchet') {
+      // Thrown flat at someone it can see, inside the range it can actually hit from.
+      if (this.nadeT <= 0 && ps.lethalLeft > 0 && visible && d < 11 && d > 2.5) {
+        this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
+        if (sim.rng() < S.nade) { this._throw('lethal', aim, d); return; }
+      }
+    } else if (ps.lethal !== 'mine' && this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
+      const radius = effectRadius(ps.lethal);
       const land = this._bestThrow(ps.lethal, aim, tx, tz, radius * 0.7);
       if (land && Math.hypot(land.x - ps.x, land.z - ps.z) > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
         if (sim.rng() < S.nade) {
@@ -1001,7 +1088,9 @@ export class BotBrain {
     const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend');
     const atHold = (this.mode === 'hold' && this.arrived) || holdingPoint;
     let fwd = 0;
-    if (!atHold) {
+    // A wall of crates between us that this gun cannot punch through: get an angle by closing in.
+    if (!this.canHit && !holdingPoint) fwd = 1;
+    else if (!atHold) {
       if (d > style.pref + 4) fwd = 1;
       else if (d < style.pref - 3 && style.pref >= 12) fwd = -0.85;
     }
@@ -1034,7 +1123,7 @@ export class BotBrain {
     const offAim = Math.abs(angleDiff(ps.aim, perceived));
     // Tolerance widens up close, where the target covers more of the view.
     const tol = S.fireTol + Math.atan2(0.5, Math.max(d, 1)) * 0.6;
-    let fire = this.reactLeft <= 0 && offAim < tol && ps.swapT <= 0 && d <= w.range && ps.ammo[ps.slot] > 0;
+    let fire = this.reactLeft <= 0 && offAim < tol && ps.swapT <= 0 && d <= w.range && ps.ammo[ps.slot] > 0 && (q === null || this.canHit);
 
     // Heat discipline: let go of the trigger before the bar fills. Sometimes a bot gets greedy and pays for it.
     if (w.heat) {
@@ -1064,7 +1153,7 @@ export class BotBrain {
       }
     }
 
-    // Semi-auto guns need the trigger released between shots.
+    // A semi-auto is tapped. Holding one also fires (at its own cadence) but a tap is the faster way to run it.
     if (fire && !w.auto && this.lastFireFlag) fire = false;
     this.lastFireFlag = fire;
     I.fire = fire;

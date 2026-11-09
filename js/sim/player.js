@@ -1,10 +1,23 @@
 // Player movement, weapon handling and shot tracing. The same code drives humans (every render
 // frame with a variable dt) and bots (30 Hz on the host). No DOM, no three, no per-frame garbage:
 // the only allocations are the shot/ray objects that exist because a gun actually fired.
+//
+// RAY CONTRACT (traceShot, Wave 5). Each ray: {x, z, hit, nx, nz, ...}
+//   hit       'player' | 'wall' | 'none'. Waist-high cover that stops a round reports 'wall' with cover:true.
+//   cover     true when the ray stopped on waist-high cover (crate, barrier, stall, sandbag, boulder).
+//   pen       damage multiplier from cover the round passed through. Only present when below 1. Multiply it in:
+//             damage = rayDamage(w, ray, dist, ads)   (weapons.js), which is falloff x head x (ray.pen ?? 1).
+//   id/target the player hit; head: true when the ray is a head hit (any head hit is lethal, see weapons.js).
+// A shot def carries `penetrate` the same way it carries `range`: only when an attachment changed it.
+// Pellet guns: only one pellet per target can be the head hit, and only when the centre of the fan is on the head.
+//
+// For bots and any "can I shoot that" question use shotPassage(map, ax, az, bx, bz, weaponDef): 0 when the gun's
+// round cannot get there, otherwise the damage multiplier left after cover. Sight (hasLineOfSight) is not enough:
+// you can see over a crate that an SMG cannot shoot through.
 
 import { PLAYER_RADIUS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, rayCircle, resolveCircle } from '../shared/geometry.js';
-import { HEAD_RADIUS, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
+import { hasLineOfSight, rayCircle, resolveCircle } from '../shared/geometry.js';
+import { HEAD_RADIUS, MAX_COVER_PIECES, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
 import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
 
@@ -123,7 +136,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, 
     sliding: false, slideT: 0, slideCool: 0,
     cooldown: 0, bloom: 0, shotIndex: 0,
     // Internal, not part of the wire format.
-    swapT: 0, shellT: 0, sinceShot: 9, triggerDown: false, armed: false, burstLeft: 0,
+    swapT: 0, shellT: 0, sinceShot: 9, burstLeft: 0,
     heatIdle: 9, calmT: 0,
     slideDirX: 0, slideDirZ: 0, slideSpeed: 0,
     aaOffset: 0, aaRaw: null,
@@ -155,7 +168,7 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
   ps.sprinting = false; ps.sprintRecoverT = 0;
   ps.sliding = false; ps.slideT = 0; ps.slideCool = 0;
   ps.cooldown = 0; ps.bloom = 0; ps.shotIndex = 0;
-  ps.swapT = 0; ps.sinceShot = 9; ps.triggerDown = false; ps.armed = false; ps.burstLeft = 0;
+  ps.swapT = 0; ps.sinceShot = 9; ps.burstLeft = 0;
   ps.aaOffset = 0; ps.aaRaw = null;
   return ps;
 }
@@ -292,6 +305,7 @@ function fireOne(ps, w, rng) {
   };
   // Lets the owner's own traceShot match the host, which works the range out from the loadout itself.
   if (w.range !== WEAPONS[ps.weapon].range) shot.range = w.range;
+  if (w.penetrate !== WEAPONS[ps.weapon].penetrate) shot.penetrate = w.penetrate;
   ps.ammo[ps.slot]--;
   ps.shotIndex++;
   ps.sinceShot = 0;
@@ -416,11 +430,6 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
 
   const trigger = !!input.fire;
   ps.calmT = trigger || input.aiming ? 0 : ps.calmT + dt;
-  // A press stays armed until it fires or is released, so a semi-auto pressed during sprint-out,
-  // a swap or the last moments of its cycle goes off the instant the gun is ready.
-  if (!trigger) ps.armed = false;
-  else if (!ps.triggerDown) ps.armed = true;
-  ps.triggerDown = trigger;
 
   // Firing with rounds left cancels any reload; progress on a magazine swap is lost.
   if (trigger && ps.reloadT > 0 && ps.ammo[ps.slot] > 0 && !isLocked(ps, w)) {
@@ -432,7 +441,6 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   let shots = NO_SHOTS;
   if ((trigger || ps.burstLeft > 0) && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
     for (let guard = 0; guard < 4 && ps.cooldown <= 0 && ps.ammo[ps.slot] > 0 && !isLocked(ps, w); guard++) {
-      if (!w.auto && !ps.armed && (!w.holdRpm || ps.sinceShot < 60 / w.holdRpm)) break;
       let interval;
       if (w.burst) {
         if (ps.burstLeft <= 0) ps.burstLeft = w.burst.count;
@@ -442,7 +450,6 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
         interval = shotInterval(w, ps.shotIndex);
       }
       const shot = fireOne(ps, w, rng);
-      ps.armed = false;
       if (shots === NO_SHOTS) shots = [];
       shots.push(shot);
       ps.cooldown += interval;
@@ -470,25 +477,124 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   return shots;
 }
 
-// Resolves a shot against walls and players. `def` is the shooter's effective def when the caller knows it (the
-// host does); otherwise the range the shot carries is used. Bullets stop at the first enemy; teammates are passed
-// through when the entries carry a `team` (GameView players do), matching no-friendly-fire rules.
-// A ray that hits a player carries `target` (and `id`, the same value) and `head`: whether it passed
-// within HEAD_RADIUS of the centre. Entries may carry `sliding`, which shrinks the body but not the head.
+// What a ray's walk across the map found. One module-level record reused per ray: traceShot is synchronous.
+const SEG = { hardT: Infinity, hardNx: 0, hardNz: 0, stopT: Infinity, stopNx: 0, stopNz: 0, count: 0, inT: [], outT: [], nx: [], nz: [] };
+
+// True for waist-high cover: blocks movement, not sight, and is not water.
+export function isWaistCover(w) { return w.blocksMove && !w.blocksBullet && w.kind !== 'water'; }
+
+// Entry and exit of a ray into a rectangle, closed on the near side: an origin on or inside a rectangle counts as
+// entering at t=0 (geometry.js raycastMap returns null there, which is what let a shot escape a wall it started in).
+// Returns false for a miss, or for a ray that only ever leaves the rectangle.
+let spanIn = 0, spanOut = 0, spanNx = 0, spanNz = 0;
+function raySpan(ox, oz, dx, dz, r) {
+  let tIn = -Infinity, tOut = Infinity, nx = 0, nz = 0;
+  if (Math.abs(dx) < 1e-9) {
+    if (ox < r.x || ox > r.x + r.w) return false;
+  } else {
+    let t0 = (r.x - ox) / dx, t1 = (r.x + r.w - ox) / dx, n = -1;
+    if (t0 > t1) { const q = t0; t0 = t1; t1 = q; n = 1; }
+    tIn = t0; tOut = t1; nx = n;
+  }
+  if (Math.abs(dz) < 1e-9) {
+    if (oz < r.z || oz > r.z + r.d) return false;
+  } else {
+    let t0 = (r.z - oz) / dz, t1 = (r.z + r.d - oz) / dz, n = -1;
+    if (t0 > t1) { const q = t0; t0 = t1; t1 = q; n = 1; }
+    if (t0 > tIn) { tIn = t0; nx = 0; nz = n; }
+    if (t1 < tOut) tOut = t1;
+  }
+  if (tIn > tOut || tOut <= 1e-7) return false;
+  spanIn = Math.max(0, tIn); spanOut = tOut;
+  // Started inside: there is no face it came through, so the normal just points back up the ray.
+  if (tIn <= 0) { spanNx = -dx; spanNz = -dz; } else { spanNx = nx; spanNz = nz; }
+  return true;
+}
+
+// Walks one ray across every wall. Fills SEG: where a solid stops it (hardT) and, depending on the round, where
+// waist-high cover stops it (stopT) and the pieces of cover it passes through before that.
+function walkRay(map, ox, oz, dx, dz, range, penetrate, overCover) {
+  const S = SEG;
+  S.hardT = Infinity; S.stopT = Infinity; S.count = 0;
+  const walls = map.walls;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (w.blocksBullet) {
+      if (raySpan(ox, oz, dx, dz, w) && spanIn < S.hardT && spanIn < range) { S.hardT = spanIn; S.hardNx = spanNx; S.hardNz = spanNz; }
+    } else if (!overCover && isWaistCover(w)) {
+      if (!raySpan(ox, oz, dx, dz, w) || spanIn >= range) continue;
+      if (!penetrate) {
+        if (spanIn < S.stopT) { S.stopT = spanIn; S.stopNx = spanNx; S.stopNz = spanNz; }
+        continue;
+      }
+      // Insertion sort by entry distance; a ray crosses a handful of props at most.
+      let j = S.count++;
+      while (j > 0 && S.inT[j - 1] > spanIn) { S.inT[j] = S.inT[j - 1]; S.outT[j] = S.outT[j - 1]; S.nx[j] = S.nx[j - 1]; S.nz[j] = S.nz[j - 1]; j--; }
+      S.inT[j] = spanIn; S.outT[j] = spanOut; S.nx[j] = spanNx; S.nz[j] = spanNz;
+    }
+  }
+  if (penetrate && S.count > 0) {
+    // Abutting props are one piece of cover, so a stall built from two boxes costs one penetration.
+    let w = 0;
+    for (let i = 1; i < S.count; i++) {
+      if (S.inT[i] <= S.outT[w] + 0.05) S.outT[w] = Math.max(S.outT[w], S.outT[i]);
+      else { w++; S.inT[w] = S.inT[i]; S.outT[w] = S.outT[i]; S.nx[w] = S.nx[i]; S.nz[w] = S.nz[i]; }
+    }
+    S.count = Math.min(w + 1, MAX_COVER_PIECES + 1);
+    if (S.count > MAX_COVER_PIECES) { S.stopT = S.inT[MAX_COVER_PIECES]; S.stopNx = S.nx[MAX_COVER_PIECES]; S.stopNz = S.nz[MAX_COVER_PIECES]; S.count = MAX_COVER_PIECES; }
+  }
+}
+
+// Damage multiplier left after the pieces of cover a round entered before distance t. 1 when none.
+function penAt(t, penetrate) {
+  let k = 1;
+  for (let i = 0; i < SEG.count && SEG.inT[i] < t; i++) k *= penetrate;
+  return k;
+}
+
+// Can this gun's round travel from a to b? 0 when a solid or cover stops it first, else the damage multiplier left.
+export function shotPassage(map, ax, az, bx, bz, w) {
+  const len = Math.hypot(bx - ax, bz - az);
+  if (len < 1e-6) return 1;
+  if (len > w.range) return 0;
+  const dx = (bx - ax) / len, dz = (bz - az) / len;
+  walkRay(map, ax, az, dx, dz, w.range, w.penetrate, !!w.explosive);
+  if (Math.min(SEG.hardT, SEG.stopT) < len) return 0;
+  return penAt(len, w.penetrate);
+}
+
+// Resolves a shot against walls, cover and players. `def` is the shooter's effective def when the caller knows it
+// (the host does); otherwise the range and penetrate the shot carries are used. Bullets stop at the first enemy;
+// teammates are passed through when the entries carry a `team` (GameView players do), matching no-friendly-fire
+// rules. See RAY CONTRACT at the top of this file. Entries may carry `sliding`, which shrinks the body not the head.
 export function traceShot(shot, map, players, selfId, def) {
   const w = WEAPONS[shot.weapon];
   const range = def ? def.range : (shot.range || (w ? w.range : 60));
+  const penetrate = def ? def.penetrate : (shot.penetrate ?? (w ? w.penetrate : undefined));
+  const overCover = !!(def || w || {}).explosive;
   const ox = shot.ox, oz = shot.oz;
   let selfTeam;
   for (let i = 0; i < players.length; i++) {
     if (players[i].id === selfId) { selfTeam = players[i].team; break; }
   }
   const n = shot.angles.length;
+  // A pellet gun's head zone is judged on the centre of its fan, or the fan's width would find the head every time.
+  let fanX = 0, fanZ = 0, fanStop = 0;
+  if (n > 1) {
+    let sum = 0;
+    for (let a = 0; a < n; a++) sum += shot.angles[a];
+    fanX = Math.cos(sum / n); fanZ = Math.sin(sum / n);
+    walkRay(map, ox, oz, fanX, fanZ, range, penetrate, overCover);
+    fanStop = Math.min(SEG.hardT, SEG.stopT, range);
+  }
   const rays = new Array(n);
   for (let a = 0; a < n; a++) {
     const dirX = Math.cos(shot.angles[a]), dirZ = Math.sin(shot.angles[a]);
-    const wall = raycastMap(map, ox, oz, dirX, dirZ, range, 'blocksBullet');
-    let bestT = wall ? wall.t : range;
+    walkRay(map, ox, oz, dirX, dirZ, range, penetrate, overCover);
+    // The first thing that can end this ray: range, a solid, or cover the round cannot pass.
+    const coverStops = SEG.stopT < SEG.hardT;
+    const stopT = Math.min(SEG.hardT, SEG.stopT, range);
+    let bestT = stopT;
     let target = null;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -499,11 +605,26 @@ export function traceShot(shot, map, players, selfId, def) {
     }
     const x = ox + dirX * bestT, z = oz + dirZ * bestT;
     if (target) {
-      const miss = Math.abs((target.x - ox) * dirZ - (target.z - oz) * dirX);
-      rays[a] = { x, z, hit: 'player', nx: -dirX, nz: -dirZ, id: target.id, target: target.id, head: miss <= HEAD_RADIUS };
+      const fx = target.x - ox, fz = target.z - oz;
+      const lineX = n > 1 ? fanX : dirX, lineZ = n > 1 ? fanZ : dirZ;
+      const miss = Math.abs(fx * lineZ - fz * lineX), along = fx * lineX + fz * lineZ;
+      // The head is at the centre of the body: a round stopped before reaching that point only clipped an edge.
+      let head = miss <= HEAD_RADIUS && along <= (n > 1 ? fanStop : stopT);
+      if (head && n > 1) for (let j = 0; j < a; j++) if (rays[j].head && rays[j].id === target.id) { head = false; break; }
+      const ray = { x, z, hit: 'player', nx: -dirX, nz: -dirZ, id: target.id, target: target.id, head };
+      const k = penetrate ? penAt(bestT, penetrate) : 1;
+      if (k < 1) ray.pen = k;
+      rays[a] = ray;
+    } else if (stopT < range) {
+      const ray = coverStops ? { x, z, hit: 'wall', nx: SEG.stopNx, nz: SEG.stopNz, cover: true }
+                             : { x, z, hit: 'wall', nx: SEG.hardNx, nz: SEG.hardNz };
+      if (!coverStops && penetrate) { const k = penAt(bestT, penetrate); if (k < 1) ray.pen = k; }
+      rays[a] = ray;
+    } else {
+      const ray = { x, z, hit: 'none', nx: 0, nz: 0 };
+      if (penetrate) { const k = penAt(bestT, penetrate); if (k < 1) ray.pen = k; }
+      rays[a] = ray;
     }
-    else if (wall) rays[a] = { x, z, hit: 'wall', nx: wall.nx, nz: wall.nz };
-    else rays[a] = { x, z, hit: 'none', nx: 0, nz: 0 };
   }
   return rays;
 }

@@ -2,8 +2,14 @@
 // when audio unlocks; playing one costs a source, a gain and a panner. Firing 12 guns is then just
 // buffer playback, which is what keeps a firefight from stuttering on a phone.
 //
-// Graph: voices -> dry bus + far bus (lowpass) + room send -> compressor -> master -> limiter -> soft clip -> out.
-// Feedback sounds (hitmarkers, medals, music) join after the compressor so gunfire never ducks them.
+// Graph: world voices -> dry bus + far bus (lowpass) + room send -> world duck -> compressor -> master -> limiter -> soft clip.
+// The local player's gun skips the duck, so it sits on top of everything else. Feedback sounds (hitmarkers, medals, music)
+// join after the compressor so gunfire never ducks them. Weather and thunder duck under a firefight (see _updateDucks).
+//
+// The mix is a strict priority list with hard caps. Every voice has a priority (PR) and a class (CLASS_CAP): your own
+// gun and threats near you take the top, a class over its cap replaces its own weakest voice or is refused. Gunfire past
+// FAR_CULL never gets a voice at all: it just raises one looped far-firefight layer, so twelve players across the map
+// cost one voice and read as one sound, not a pile of quiet repeats.
 //
 // A gunshot is four layers. near: crack, body, low thump and the gun's own action, all one buffer. tail: the long
 // distant roar, which is what you hear from across the map. reflection: the slap off whatever the map is built
@@ -13,18 +19,31 @@
 
 import { WEAPONS } from '../shared/weapons.js';
 
-const MAX_VOICES = 32;
-const MAX_GUN_VOICES = 13;
-const GUN_WINDOW = 0.03;         // Seconds; the gunshot rate cap below applies per window.
-const GUN_WINDOW_CAP = 4;
-const SHOOTER_MIN_GAP = 0.05;    // Fast guns from other players don't need every shot rendered.
-const HEAR_RANGE = 58;
-const TAIL_RANGE = 82;           // The roar of a gunfight carries further than the bang.
-const STEP_RANGE = 24;
+const MAX_VOICES = 26;
+// Priority. A new voice can only replace something strictly lower, so the top of this list always plays.
+const PR = { own: 7, threat: 6, hit: 5, boom: 4, gunNear: 3, ui: 3, world: 2, gun: 1, step: 1, tail: 0 };
+// Hard caps: never more than this many voices of a class at once. The far layer is not a voice: it is one loop.
+const CLASS_CAP = { own: 3, threat: 4, gun: 3, tail: 3, reflect: 1, boom: 3, impact: 2, foley: 2, step: 2, world: 3, ui: 3, medal: 1, loud: 2 };
+
+const THREAT_RANGE = 14;         // An enemy gun this close is a threat, not background.
+const FAR_CULL = 30;             // Other players' guns past this distance get no voice of their own.
+const GUN_WINDOW = 0.05;         // Seconds; the gunshot rate cap below applies per window.
+const GUN_WINDOW_CAP = 3;
+const SHOOTER_GAP_NEAR = 0.05;   // Per shooter: fast guns don't need every shot rendered, and less so with distance.
+const SHOOTER_GAP_MID = 0.1;
+const SHOOTER_GAP_FAR = 0.16;
 const TAIL_GAP = 0.11;           // Seconds. A held trigger renders one tail per this, not one per round.
+const TAIL_GLOBAL_GAP = 0.05;    // And no more than one new tail per this across the whole map.
 const REFLECT_GAP = 0.13;
+const HEAR_RANGE = 58;
+const STEP_RANGE = 24;
 const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
-const IMPACT_RANGE = 26;
+const IMPACT_RANGE = 16;
+const FOLEY_RANGE = 12;
+const HIT_GAP = 0.05;            // Hitmarkers: one per this, however fast the gun.
+const MEDAL_STALE = 1.4;         // A medal that could not play within this many seconds is dropped, not queued.
+const FIGHT_DECAY = 0.45;        // Per second. How fast the "firefight" level (which ducks the beds) falls back to calm.
+const WORLD_DUCK = 0.6;          // World buses while your own gun is firing.
 const TENSION_KILLS = 5;         // Team deathmatch and Kill Confirmed: this many short of the limit is "last kills".
 const TENSION_POINTS = 0.1;      // Objective modes: this fraction of the limit left.
 
@@ -378,6 +397,9 @@ const FOLEY = {
 };
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
+// Rarer outranks commoner when medals collide.
+const MEDAL_RANK = { streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, revenge: 7, longshot: 6, streak3: 5, double: 4, capture: 3, defend: 2, confirm: 1, deny: 0 };
+
 const MEDALS = {
   first_blood: { notes: [[0, 0], [7, 0.09], [12, 0.18]], dur: 0.5, gain: 0.7 },
   double:      { notes: [[4, 0], [7, 0.08]], dur: 0.32, gain: 0.6 },
@@ -426,7 +448,6 @@ function renderSfx(sr) {
   return {
     // The tick has to cut through gunfire, so it sits above the guns' energy.
     hit: mk(0.075, (d, r) => { addTone(d, sr, { dur: 0.05, gain: 1, f0: 2500, f1: 1900, decay: 8 }); addClick(d, sr, r, { dur: 0.003, gain: 0.8, hp: 5000 }); }),
-    hitHeavy: mk(0.13, (d, r) => { addTone(d, sr, { dur: 0.085, gain: 1, f0: 1700, f1: 1100, decay: 6 }); addClick(d, sr, r, { dur: 0.005, gain: 1, hp: 3500 }); }),
     // The kill confirm: a body-blow thump, a hard metal strike, then a bright two-note sting that lifts off it.
     kill: mk(0.5, (d, r) => {
       addTone(d, sr, { dur: 0.09, gain: 1.3, f0: 140, f1: 48, decay: 4.5, shape: 1.4 });
@@ -516,6 +537,37 @@ function renderSfx(sr) {
       addTone(d, sr, { at: 0.1, dur: 0.48, gain: 0.8, f0: 520, f1: 1240, decay: 3, attack: 0.02, shape: 0.4 });
       addTone(d, sr, { at: 0.2, dur: 0.38, gain: 0.5, f0: 780, f1: 1860, decay: 3.4, attack: 0.02 });
     }, 0.75),
+    // Wave 5 equipment and streaks.
+    molotov: mk(0.9, (d, r) => {
+      addClick(d, sr, r, { dur: 0.01, gain: 0.7, hp: 1600 });
+      addNoise(d, sr, r, { dur: 0.25, gain: 1, f0: 1700, f1: 260, decay: 3 });
+      addNoise(d, sr, r, { at: 0.05, dur: 0.82, gain: 0.5, f0: 4600, f1: 1200, hp: 700, decay: 2.5 });
+    }, 0.82),
+    pulse: mk(0.5, (d) => {
+      addTone(d, sr, { dur: 0.16, gain: 1, f0: 1200, f1: 1650, decay: 5, attack: 0.004 });
+      addTone(d, sr, { at: 0.16, dur: 0.3, gain: 0.7, f0: 1650, f1: 900, decay: 5, attack: 0.004 });
+    }, 0.6),
+    zap: mk(0.18, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 4800 });
+      addNoise(d, sr, r, { at: 0.002, dur: 0.14, gain: 0.8, f0: 8000, f1: 2600, hp: 2000, decay: 6 });
+    }, 0.8),
+    denied: mk(0.22, (d) => {
+      addTone(d, sr, { dur: 0.09, gain: 1, f0: 240, decay: 3, attack: 0.002, shape: 1.6 });
+      addTone(d, sr, { at: 0.11, dur: 0.09, gain: 1, f0: 200, decay: 3, attack: 0.002, shape: 1.6 });
+    }, 0.6),
+    whistle: mk(1.2, (d) => { addTone(d, sr, { dur: 1.15, gain: 0.8, f0: 1400, f1: 500, decay: 0.6, attack: 0.05, shape: 0.3 }); }, 0.55),
+    jam: mk(1, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.98, gain: 1, f0: 5200, f1: 2200, hp: 900, decay: 1.2 });
+      for (let i = 0; i < 8; i++) addClick(d, sr, r, { at: 0.06 + i * 0.11, dur: 0.01, gain: 0.9, hp: 1400 });
+    }, 0.62),
+    empBlast: mk(1.3, (d, r) => {
+      addTone(d, sr, { dur: 0.5, gain: 1.2, f0: 220, f1: 34, decay: 2.8, shape: 1.5 });
+      addNoise(d, sr, r, { dur: 1.25, gain: 0.9, f0: 7000, f1: 900, hp: 1100, decay: 2.4 });
+      for (let i = 0; i < 10; i++) addClick(d, sr, r, { at: 0.12 + i * 0.09, dur: 0.004, gain: 0.6, hp: 3800 });
+    }, 0.85),
+    supply: mk(0.7, (d) => {
+      for (const [at, f] of [[0, 523], [0.12, 659], [0.24, 784]]) addTone(d, sr, { at, dur: 0.42, gain: 0.7, f0: f, decay: 5, attack: 0.004, shape: 0.4 });
+    }, 0.6),
     turretDeploy: mk(0.55, (d, r) => {
       addClick(d, sr, r, { dur: 0.012, gain: 1.1, hp: 500 });
       addTone(d, sr, { dur: 0.16, gain: 0.8, f0: 190, f1: 80, decay: 5, shape: 1 });
@@ -584,6 +636,20 @@ function loopFromFill(sr, seconds, fill, peak) {
     raw[i] = raw[i] * k + raw[n + i] * (1 - k);
   }
   return normalize(raw.subarray(0, n), peak);
+}
+
+// The sound of a firefight somewhere else: sparse low cracks and thuds with no detail to pick out, made to loop forever.
+function renderDistantFire(sr, seed) {
+  const r = rngFrom(seed);
+  return loopFromFill(sr, 6, (d) => {
+    const n = d.length, sec = n / sr;
+    for (let i = 0; i < 90; i++) {
+      const at = (r() + 1) * 0.5 * sec * 0.95;
+      const low = r() > 0.2;
+      addNoise(d, sr, r, { at, dur: low ? 0.16 : 0.08, gain: (low ? 0.8 : 0.45) + (r() + 1) * 0.3, f0: low ? 750 : 2100, f1: low ? 130 : 500, decay: 6 });
+    }
+    addNoise(d, sr, r, { dur: sec, gain: 0.08, f0: 320, f1: 120, decay: 0 });
+  }, 0.7);
 }
 
 function renderRain(sr, seed) {
@@ -732,10 +798,8 @@ export class AudioEngine {
     this.micActive = false;
     this.volume = 1;
     this.voices = [];
-    this.gunCount = 0;
     this.lastShot = new Map();     // Shooter id -> time of last rendered shot.
     this.windowT = 0; this.windowN = 0;
-    this.nextMedalAt = 0;
     this.stepState = new Map();
     this.heartT = 0;
     this.heatTickT = 0; this.prevHeat = 0; this.lastVentAt = -9;
@@ -752,6 +816,13 @@ export class AudioEngine {
     this.thunderT = 8; this.nextAmbRefresh = 0;
     this.tension = false; this.stingerDone = false;
     this.windSrc = null; this.rainSrc = null; this.tensionSrc = null;
+    this.classCount = Object.create(null);
+    this.classPeak = Object.create(null);      // Highest ever per class, for tests.
+    this.peakVoices = 0;
+    this.tailGlobalAt = -9; this.hitAt = -9; this.lastKillSfxAt = -9;
+    this.farLevel = 0; this.farPanValue = 0;
+    this.fight = 0; this.duckUntil = 0;
+    this.medalPending = null; this.medalBusyUntil = 0;
 
     // Unlock on the first gesture, and again whenever iOS suspends audio (calls, Siri, backgrounding).
     this._onGesture = () => this.unlock();
@@ -806,24 +877,33 @@ export class AudioEngine {
     this.limiter.threshold.value = -1.5; this.limiter.knee.value = 0;
     this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.08;
     this.comp = ctx.createDynamicsCompressor();
-    this.comp.threshold.value = -16; this.comp.knee.value = 10;
-    this.comp.ratio.value = 6; this.comp.attack.value = 0.003; this.comp.release.value = 0.14;
+    this.comp.threshold.value = -14; this.comp.knee.value = 10;
+    this.comp.ratio.value = 4; this.comp.attack.value = 0.003; this.comp.release.value = 0.14;
 
-    this.dry = ctx.createGain(); this.dry.gain.value = 0.8;
+    this.dry = ctx.createGain(); this.dry.gain.value = 0.75;
     this.farFilter = ctx.createBiquadFilter();
     this.farFilter.type = 'lowpass'; this.farFilter.frequency.value = 1500; this.farFilter.Q.value = 0.4;
     this.far = ctx.createGain(); this.far.gain.value = 0.9;
-    this.ui = ctx.createGain(); this.ui.gain.value = 0.85;      // Hitmarkers, medals: never distance-filtered.
+    this.ui = ctx.createGain(); this.ui.gain.value = 0.78;      // Hitmarkers, medals: never distance-filtered.
     this.roomSend = ctx.createGain(); this.roomSend.gain.value = 1;
     this.room = ctx.createConvolver();
     this.rooms = {};
     this.applyRoom('railyard');
     this.roomOut = ctx.createGain(); this.roomOut.gain.value = THEME_AUDIO.railyard.ir.gain;
 
-    this.dry.connect(this.comp);
-    this.far.connect(this.farFilter); this.farFilter.connect(this.comp);
-    this.roomSend.connect(this.room); this.room.connect(this.roomOut); this.roomOut.connect(this.comp);
-    this.comp.connect(this.master);
+    // Everything from the world goes through one duck; your own gun comes in behind it.
+    this.worldDuck = ctx.createGain(); this.worldDuck.gain.value = 1;
+    this.own = ctx.createGain(); this.own.gain.value = 1;
+    this.dry.connect(this.worldDuck);
+    this.far.connect(this.farFilter); this.farFilter.connect(this.worldDuck);
+    this.roomSend.connect(this.room); this.room.connect(this.roomOut); this.roomOut.connect(this.worldDuck);
+    this.worldDuck.connect(this.comp);
+    this.own.connect(this.comp);
+    // The compressor's built-in makeup gain pushes a dense mix right back up; this takes it back down to where a
+    // firefight does not sit at full scale for its whole length.
+    this.postComp = ctx.createGain(); this.postComp.gain.value = 0.7;
+    this.comp.connect(this.postComp);
+    this.postComp.connect(this.master);
     this.ui.connect(this.master);
     // Music sits with the feedback: it is not world sound and must not be ducked by a firefight.
     this.music = ctx.createGain(); this.music.gain.value = 0.7;
@@ -887,6 +967,7 @@ export class AudioEngine {
     for (const k of Object.keys(stingers)) jobs.push(() => { this.stingers[k] = this._toBuffer(stingers[k]()); });
     jobs.push(() => { this.loops.rain = this._toBuffer(renderRain(sr, 77)); });
     jobs.push(() => { this.loops.wind = this._toBuffer(renderWind(sr, 91)); });
+    jobs.push(() => { this.loops.farFire = this._toBuffer(renderDistantFire(sr, 133)); });
     for (let v = 0; v < 3; v++) jobs.push(() => { this.thunder[v] = this._toBuffer(renderThunder(sr, 4100 + v * 13)); });
     let i = 0;
     this.buildMs = 0; this.buildMaxJobMs = 0;
@@ -897,9 +978,42 @@ export class AudioEngine {
       const ms = performance.now() - t;
       this.buildMs += ms; this.buildMaxJobMs = Math.max(this.buildMaxJobMs, ms);
       if (i < jobs.length) setTimeout(runNext, 0);
-      else { this.ready = true; this.setMicActive(this.micActive); this._readyDone(); }
+      else { this._startFarLayer(); this._warmThrowBuffers(); this.ready = true; this.setMicActive(this.micActive); this._readyDone(); }
     };
     setTimeout(runNext, 0);
+  }
+
+  // iOS does real work the first time a given AudioBuffer is handed to a source node. Do that here, silently, for
+  // everything a throw can trigger, so the first grenade of a match costs the same as the tenth.
+  _warmThrowBuffers() {
+    const ctx = this.ctx, mute = ctx.createGain();
+    mute.gain.value = 0;
+    mute.connect(ctx.destination);
+    const list = [this.sfx.pin, this.sfx.frag, this.sfx.explosion, this.sfx.flashBang, this.sfx.flashRing, this.sfx.smoke, this.sfx.stim, this.sfx.molotov, this.sfx.pulse, this.sfx.zap];
+    const t = ctx.currentTime;
+    for (let i = 0; i < list.length; i++) {
+      const src = ctx.createBufferSource();
+      src.buffer = list[i];
+      src.connect(mute);
+      src.start(t);
+      src.stop(t + 0.001);
+    }
+  }
+
+  // The far-firefight layer: one looped voice that runs silently from the start.
+  _startFarLayer() {
+    const ctx = this.ctx;
+    this.farGain = ctx.createGain();
+    this.farGain.gain.value = 0;
+    this.farPan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    const src = ctx.createBufferSource();
+    src.buffer = this.loops.farFire;
+    src.loop = true;
+    src.connect(this.farGain);
+    if (this.farPan) { this.farGain.connect(this.farPan); this.farPan.connect(this.far); }
+    else this.farGain.connect(this.far);
+    src.start();
+    this.farSrc = src;
   }
 
   _toBuffer(data) {
@@ -917,8 +1031,8 @@ export class AudioEngine {
     const boost = this.micActive ? 2.3 : 1;
     this.master.gain.cancelScheduledValues(now);
     this.master.gain.setTargetAtTime(this.volume * boost, now, 0.08);
-    this.comp.threshold.setTargetAtTime(this.micActive ? -24 : -16, now, 0.08);
-    this.comp.ratio.setTargetAtTime(this.micActive ? 9 : 6, now, 0.08);
+    this.comp.threshold.setTargetAtTime(this.micActive ? -22 : -14, now, 0.08);
+    this.comp.ratio.setTargetAtTime(this.micActive ? 7 : 4, now, 0.08);
     // Mic mode: the master boost is meant for gunfire and callouts, so music and weather give some of it back.
     this.music.gain.setTargetAtTime((this.micActive ? 0.34 : 0.7) * (this.musicVolume ?? 1), now, 0.08);
     this.thunderBus.gain.setTargetAtTime(this.micActive ? 0.25 : 0.55, now, 0.08);
@@ -939,27 +1053,29 @@ export class AudioEngine {
     if (this.music) this.setMicActive(this.micActive);
   }
 
-  // Removes finished voices. Called before any decision that needs the live count.
+  // Removes finished voices and recounts the classes. Called before any decision that needs the live count.
   _reap(now) {
     let w = 0;
-    let guns = 0;
+    const counts = this.classCount;
+    for (const k in counts) counts[k] = 0;
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];
       if (v.end <= now) continue;
       this.voices[w++] = v;
-      if (v.gun) guns++;
+      counts[v.cls] = (counts[v.cls] || 0) + 1;
     }
     this.voices.length = w;
-    this.gunCount = guns;
   }
 
-  // Voice stealing: the weakest (lowest priority, then oldest) gives way to something more important.
-  _stealFor(priority, gunsOnly, now) {
-    let victim = -1, vp = priority + 1, vt = Infinity;
+  // Stealing: the weakest (lowest priority, then oldest) gives way to something strictly more important.
+  // `cls` limits the choice to one class, for when that class is at its cap.
+  _stealFor(priority, cls, now) {
+    let victim = -1, vp = priority, vt = Infinity;
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];
-      if (gunsOnly && !v.gun) continue;
-      if (v.priority < vp || (v.priority === vp && v.start < vt)) { victim = i; vp = v.priority; vt = v.start; }
+      if (cls && v.cls !== cls) continue;
+      // Within a class at its cap, equal priority yields to the newer sound (the oldest of a class is the least useful).
+      if (v.priority < vp || (v.priority === vp && (cls !== null) && v.start < vt)) { victim = i; vp = v.priority; vt = v.start; }
     }
     if (victim < 0) return false;
     const v = this.voices[victim];
@@ -968,17 +1084,18 @@ export class AudioEngine {
     try { v.src.stop(now + 0.04); } catch { /* already stopped */ }
     v.end = now + 0.04;
     this.voices.splice(victim, 1);
-    if (v.gun) this.gunCount--;
+    this.classCount[v.cls]--;
     return true;
   }
 
-  // The single place sound starts. Returns false when the voice budget refuses it.
-  _play(buffer, { gain = 1, pan = 0, far = 0, rate = 1, bus = null, priority = 1, gun = false, when = 0, room = 0 } = {}) {
+  // The single place sound starts. Returns the voice, or null when the budget refuses it.
+  _play(buffer, { gain = 1, pan = 0, far = 0, rate = 1, bus = null, priority = 1, cls = 'world', when = 0, room = 0 } = {}) {
     if (!buffer || !this._running()) return null;
     const ctx = this.ctx, now = ctx.currentTime;
     this._reap(now);
-    if (gun && this.gunCount >= MAX_GUN_VOICES && !this._stealFor(priority, true, now)) return null;
-    if (this.voices.length >= MAX_VOICES && !this._stealFor(priority, false, now)) return null;
+    const cap = CLASS_CAP[cls] ?? 3;
+    if ((this.classCount[cls] || 0) >= cap && !this._stealFor(priority, cls, now)) return null;
+    if (this.voices.length >= MAX_VOICES && !this._stealFor(priority, null, now)) return null;
 
     const src = ctx.createBufferSource();
     src.buffer = buffer;
@@ -999,18 +1116,20 @@ export class AudioEngine {
       // Crossfade between the bright dry path and the dull far path by distance.
       if (far < 0.95) tail.connect(this.dry);
       if (far > 0.05) tail.connect(this.far);
-      if (room > 0) {
-        const send = ctx.createGain();
-        send.gain.value = room;
-        g.connect(send);
-        send.connect(this.roomSend);
-      }
+    }
+    if (room > 0) {
+      const send = ctx.createGain();
+      send.gain.value = room;
+      g.connect(send);
+      send.connect(this.roomSend);
     }
     src.start(when || 0);
     const start = when || now;
-    const voice = { src, gain: g, priority, gun, start, end: start + buffer.duration / rate + 0.05 };
+    const voice = { src, gain: g, priority, cls, start, end: start + buffer.duration / rate + 0.05 };
     this.voices.push(voice);
-    if (gun) this.gunCount++;
+    this.classCount[cls] = (this.classCount[cls] || 0) + 1;
+    if (this.classCount[cls] > (this.classPeak[cls] || 0)) this.classPeak[cls] = this.classCount[cls];
+    if (this.voices.length > this.peakVoices) this.peakVoices = this.voices.length;
     return voice;
   }
 
@@ -1062,51 +1181,67 @@ export class AudioEngine {
     const near = sup ? g.sup : g.near;
     const pick = near[Math.floor(Math.random() * near.length)];
     if (self) {
-      this._play(pick, { gain: sup ? 0.7 : 1, rate: 0.97 + Math.random() * 0.06, priority: 4, gun: true, room: sup ? 0.04 : 0.22 });
+      this.fight = Math.min(1, this.fight + 0.1);
+      this.duckUntil = now + 0.16;
+      this._play(pick, { gain: sup ? 0.7 : 0.95, rate: 0.97 + Math.random() * 0.06, priority: PR.own, cls: 'own', bus: this.own, room: sup ? 0.04 : 0.12 });
       this._gunLayers(e, g, sup, true, now);
       return;
     }
     const d = this._spatial(e.ox, e.oz);
     this._whiz(e, now);
     this._impact(e, now);
-    if (d > (sup ? 22 : HEAR_RANGE)) { if (d <= TAIL_RANGE) this._gunLayers(e, g, sup, false, now); return; }
-    const last = this.lastShot.get(e.by) || 0;
-    if (now - last >= SHOOTER_MIN_GAP) {
+    if (d > FAR_CULL) { if (!sup) this._raiseFarLayer(d); return; }
+    if (sup && d > 22) return;
+
+    this.fight = Math.min(1, this.fight + (d < 16 ? 0.08 : 0.04));
+    const threat = d <= THREAT_RANGE && !this._isAlly(e.by);
+    // Near a threat you hear every shot; further out, a burst is one bang now and then with its tail filling in.
+    const gap = d <= THREAT_RANGE ? SHOOTER_GAP_NEAR : d <= 22 ? SHOOTER_GAP_MID : SHOOTER_GAP_FAR;
+    if (now - (this.lastShot.get(e.by) || -9) >= gap) {
       // At most a few new gunshots per window: stacked identical transients are what makes a mix crackle.
       if (now - this.windowT > GUN_WINDOW) { this.windowT = now; this.windowN = 0; }
-      if (this.windowN < GUN_WINDOW_CAP || d <= 14) {
+      if (this.windowN < GUN_WINDOW_CAP || threat) {
         this.windowN++;
         this.lastShot.set(e.by, now);
         this._play(pick, {
-          gain: (sup ? 0.65 : 0.92) * this.sGain, pan: this.sPan, far: this.sFar,
-          rate: 0.95 + Math.random() * 0.1,
-          priority: d < 16 ? 2 : 1, gun: true, room: sup ? 0.04 : 0.14 + 0.28 * this.sFar,
+          gain: (sup ? 0.65 : threat ? 0.85 : 0.55) * this.sGain, pan: this.sPan, far: this.sFar,
+          rate: 0.95 + Math.random() * 0.1, cls: threat ? 'threat' : 'gun',
+          priority: threat ? PR.threat : (d < 22 ? PR.gunNear : PR.gun), room: sup ? 0.04 : 0.06 + 0.14 * this.sFar,
         });
+        this._gunLayers(e, g, sup, false, now);
       }
     }
-    this._gunLayers(e, g, sup, false, now);
+  }
+
+  // A gun out past the discrete range just pushes the one far layer up a little.
+  _raiseFarLayer(d) {
+    const k = 1 - Math.min(1, (d - FAR_CULL) / (HEAR_RANGE + 30 - FAR_CULL));
+    this.farLevel = Math.min(1, this.farLevel + 0.06 * k);
+    this.farPanValue += (this.sPan - this.farPanValue) * 0.12;
+    this.fight = Math.min(1, this.fight + 0.01);
   }
 
   // Tail and map reflection for a shot. Everything here is optional, so it runs at the bottom of the priority list.
   _gunLayers(e, g, sup, self, now) {
     const d = self ? 0 : this.sD, shooter = e.by;
-    if (!sup && now - (this.tailAt.get(shooter) ?? -9) >= TAIL_GAP && g.tail) {
+    if (!sup && g.tail && now - (this.tailAt.get(shooter) ?? -9) >= TAIL_GAP && now - this.tailGlobalAt >= TAIL_GLOBAL_GAP) {
       this.tailAt.set(shooter, now);
-      if (self) this._play(g.tail, { gain: 0.42, rate: 0.98 + Math.random() * 0.04, priority: 0 });
-      else if (d < TAIL_RANGE) {
+      this.tailGlobalAt = now;
+      if (self) this._play(g.tail, { gain: 0.3, rate: 0.98 + Math.random() * 0.04, priority: PR.tail, cls: 'tail' });
+      else {
         const k = d / 34;
         // The tail falls off far more slowly than the bang, and its share of the sound grows with distance.
-        const gain = (0.55 + 0.35 * this.sFar) / (1 + k * k * Math.sqrt(k));
-        this._play(g.tail, { gain, pan: this.sPan, far: Math.max(0.55, this.sFar), rate: 0.94 + Math.random() * 0.1, priority: 0 });
+        const gain = (0.32 + 0.26 * this.sFar) / (1 + k * k * Math.sqrt(k));
+        this._play(g.tail, { gain, pan: this.sPan, far: Math.max(0.55, this.sFar), rate: 0.94 + Math.random() * 0.1, priority: PR.tail, cls: 'tail' });
       }
     }
-    if (sup || now - this.reflectAt < REFLECT_GAP || d > 48) return;
+    if (sup || now - this.reflectAt < REFLECT_GAP) return;
     const bank = this.reflect[this.theme] || this.reflect.railyard;
     const buf = bank && bank[g.size];
     if (!buf) return;
     this.reflectAt = now;
-    if (self) this._play(buf, { gain: 0.36, priority: 0 });
-    else this._play(buf, { gain: 0.4 * this.sGain, pan: this.sPan * 0.5, far: Math.max(0.3, this.sFar), priority: 0 });
+    if (self) this._play(buf, { gain: 0.26, priority: PR.tail, cls: 'reflect' });
+    else this._play(buf, { gain: 0.26 * this.sGain, pan: this.sPan * 0.5, far: Math.max(0.3, this.sFar), priority: PR.tail, cls: 'reflect' });
   }
 
   // A round from someone else that passes close enough to hear.
@@ -1121,7 +1256,8 @@ export class AudioEngine {
       const px = ox + dx * u - this.lx, pz = oz + dz * u - this.lz;
       if (px * px + pz * pz > WHIZ_RADIUS * WHIZ_RADIUS) continue;
       this.whizAt = now;
-      this._play(this.sfx.whiz, { bus: this.ui, gain: 0.5, rate: 0.9 + Math.random() * 0.25, priority: 3, pan: Math.max(-0.7, Math.min(0.7, (this.lx - (ox + dx)) / 10)) });
+      this.fight = Math.min(1, this.fight + 0.15);
+      this._play(this.sfx.whiz, { bus: this.ui, gain: 0.5, rate: 0.9 + Math.random() * 0.25, priority: PR.threat, cls: 'ui', pan: Math.max(-0.7, Math.min(0.7, (this.lx - (ox + dx)) / 10)) });
       return;
     }
   }
@@ -1133,7 +1269,7 @@ export class AudioEngine {
     if (r.hit !== 'wall') return;
     this.impactAt = now;
     const buf = this.theme === 'railyard' ? this.sfx.impactMetal : this.theme === 'dust' ? this.sfx.impactDirt : this.sfx.impactConcrete;
-    this._world(buf, r.x, r.z, IMPACT_RANGE, { gain: 0.5, priority: 0, rate: 0.9 + Math.random() * 0.2 });
+    this._world(buf, r.x, r.z, IMPACT_RANGE, { gain: 0.34, priority: PR.tail, cls: 'impact', rate: 0.9 + Math.random() * 0.2 });
   }
 
   _isAlly(id) {
@@ -1143,17 +1279,41 @@ export class AudioEngine {
 
   _world(buffer, x, z, range, opts) {
     if (this._spatial(x, z) > range) return;
-    this._play(buffer, { gain: (opts.gain ?? 1) * this.sGain, pan: this.sPan, far: this.sFar, priority: opts.priority ?? 1, room: opts.room ?? 0, rate: opts.rate ?? 1 });
+    this._play(buffer, { gain: (opts.gain ?? 1) * this.sGain, pan: this.sPan, far: this.sFar, priority: opts.priority ?? PR.world, cls: opts.cls ?? 'world', room: opts.room ?? 0, rate: opts.rate ?? 1 });
   }
 
+  // Medal priority: when several land together (they do, on a multi-kill), the rarest one is the one you hear.
+  _medalRank(id) { return MEDAL_RANK[id] ?? 0; }
+
+  // Only ever one medal playing and one waiting. Anything that cannot wait its turn is dropped.
   _medal(id) {
-    const buf = this.medals[id];
-    if (!buf) return;
-    // Stack multiple medals one after another, never on top of each other.
+    if (!this.medals[id]) return;
     const now = this.ctx.currentTime;
-    const when = Math.max(now, this.nextMedalAt);
-    this._play(buf, { bus: this.ui, priority: 3, when });
-    this.nextMedalAt = when + buf.duration * 0.65;
+    if (now >= this.medalBusyUntil) { this._playMedal(id, now); return; }
+    if (!this.medalPending || this._medalRank(id) >= this._medalRank(this.medalPending)) { this.medalPending = id; this.medalAt = now; }
+  }
+
+  _playMedal(id, now) {
+    const buf = this.medals[id];
+    this.medalBusyUntil = now + buf.duration * 0.8;
+    this._play(buf, { bus: this.ui, priority: PR.ui, cls: 'medal' });
+  }
+
+  _updateMedals(now) {
+    if (!this.medalPending || now < this.medalBusyUntil) return;
+    const id = this.medalPending;
+    this.medalPending = null;
+    if (now - this.medalAt <= MEDAL_STALE) this._playMedal(id, now);
+  }
+
+  // Hitmarkers: rate-limited, and the kill sound replaces the heavy tick instead of stacking on it.
+  _hitSound(e) {
+    const now = this.ctx.currentTime;
+    if (e.head) { this.hitAt = now; this._play(this.sfx.headshot, { bus: this.ui, priority: PR.hit, cls: 'ui', gain: 1, rate: 0.98 + Math.random() * 0.04 }); return; }
+    if (e.killed) return;                         // The kill event has its own sound.
+    if (now - this.hitAt < HIT_GAP) return;
+    this.hitAt = now;
+    this._play(this.sfx.hit, { bus: this.ui, priority: PR.hit, cls: 'ui', gain: 0.8, rate: 0.98 + Math.random() * 0.04 });
   }
 
   onEvents(events, view) {
@@ -1166,13 +1326,12 @@ export class AudioEngine {
       switch (e.t) {
         case 'shot': this._shot(e); break;
         case 'hit':
-          if (e.by === me && e.head) this._play(this.sfx.headshot, { bus: this.ui, priority: 5, gain: 1, rate: 0.98 + Math.random() * 0.04 });
-          else if (e.by === me) this._play(e.killed ? this.sfx.hitHeavy : this.sfx.hit, { bus: this.ui, priority: 5, gain: 0.8, rate: 0.98 + Math.random() * 0.04 });
-          else if (e.target === me) this._play(this.sfx.hurt, { bus: this.ui, priority: 5, gain: 0.85 });
+          if (e.by === me) this._hitSound(e);
+          else if (e.target === me) { this.fight = 1; this._play(this.sfx.hurt, { bus: this.ui, priority: PR.threat, cls: 'ui', gain: 0.85 }); }
           break;
         case 'kill':
           if (e.by === me) this._killConfirm(e);
-          else if (e.assist === me) this._play(this.sfx.assist, { bus: this.ui, priority: 4, gain: 0.8 });
+          else if (e.assist === me) this._play(this.sfx.assist, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.8 });
           break;
         case 'medal':
           if (e.id === me) this._medal(e.medal);
@@ -1182,67 +1341,77 @@ export class AudioEngine {
           const p = this._posOf(view, e.id);
           const f = p && this.foley[p.weapon];
           if (!f) break;
-          if (e.id === me) this._play(f.swap, { bus: this.ui, priority: 3, gain: 0.55 });
-          else this._world(f.swap, p.x, p.z, 14, { gain: 0.4, priority: 1 });
+          if (e.id === me) this._play(f.swap, { bus: this.ui, priority: PR.ui, cls: 'foley', gain: 0.55 });
+          else this._world(f.swap, p.x, p.z, FOLEY_RANGE, { gain: 0.4, priority: PR.gun, cls: 'foley' });
           break;
         }
         case 'slide': {
           const p = this._posOf(view, e.id);
-          if (e.id === me) this._play(this.sfx.slide, { bus: this.ui, priority: 2, gain: 0.6 });
-          else if (p) this._world(this.sfx.slide, p.x, p.z, 22, { gain: 0.8, priority: 1 });
+          if (e.id === me) this._play(this.sfx.slide, { bus: this.ui, priority: PR.ui, cls: 'foley', gain: 0.6 });
+          else if (p) this._world(this.sfx.slide, p.x, p.z, 16, { gain: 0.7, priority: PR.gun, cls: 'foley' });
           break;
         }
         case 'spawn':
-          if (e.id === me) this._play(this.sfx.spawn, { bus: this.ui, priority: 2 });
+          if (e.id === me) this._play(this.sfx.spawn, { bus: this.ui, priority: PR.ui, cls: 'ui' });
           break;
-        case 'streak':
-          if (e.kind === 'uav') this._play(this.sfx.uav, { bus: this.ui, priority: 3, gain: e.team === this.localTeam ? 0.7 : 0.45 });
-          else this._play(this.sfx.strike, { bus: this.ui, priority: 3, gain: e.team === this.localTeam ? 0.55 : 0.8 });
+        case 'streak': this._streakCall(e); break;
+        case 'streak_denied':
+          if (e.id === me) this._play(this.sfx.denied, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.7 });
+          break;
+        case 'emp':
+          this._play(this.sfx.empBlast, { bus: this.ui, priority: PR.boom, cls: 'loud', gain: e.team === this.localTeam ? 0.85 : 0.6 });
+          break;
+        case 'incoming':
+          this._world(this.sfx.whistle, e.x, e.z, HEAR_RANGE, { gain: e.team === this.localTeam ? 0.35 : 0.8, priority: PR.boom, cls: 'world' });
           break;
         case 'explosion':
+          this.fight = 1;
           // A rocket is one warhead, not a line of them from the sky: the frag's punch, pitched down.
-          if (e.weapon) this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE + 10, { gain: 2.2, priority: 4, room: 0.4, rate: 0.82 });
-          else this._world(this.sfx.explosion, e.x, e.z, HEAR_RANGE + 20, { gain: 2.3, priority: 4, room: 0.45 });
+          if (e.weapon) this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE + 10, { gain: 1.75, priority: PR.boom, cls: 'boom', room: 0.3, rate: 0.82 });
+          else this._world(this.sfx.explosion, e.x, e.z, HEAR_RANGE + 20, { gain: 1.8, priority: PR.boom, cls: 'boom', room: 0.32 });
           break;
         case 'tag':
-          if (e.by === me) this._play(this.sfx.tag, { bus: this.ui, priority: 4, gain: 0.85, rate: e.kind === 'confirm' ? 1 : 0.8 });
-          else this._world(this.sfx.tag, e.x, e.z, 16, { gain: 0.5, priority: 1, rate: e.kind === 'confirm' ? 1 : 0.8 });
+          if (e.by === me) this._play(this.sfx.tag, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.85, rate: e.kind === 'confirm' ? 1 : 0.8 });
+          else this._world(this.sfx.tag, e.x, e.z, 16, { gain: 0.5, priority: PR.gun, rate: e.kind === 'confirm' ? 1 : 0.8 });
           break;
         case 'capture':
-          this._play(e.team === this.localTeam ? this.sfx.flagTaken : this.sfx.flagLost, { bus: this.ui, priority: 4, gain: 0.7 });
+          this._play(e.team === this.localTeam ? this.sfx.flagTaken : this.sfx.flagLost, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.7 });
           break;
         case 'hard_move':
-          this._play(this.sfx.zoneMove, { bus: this.ui, priority: 4, gain: 0.7 });
+          this._play(this.sfx.zoneMove, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.7 });
           break;
         case 'throw':
-          if (e.id === me) this._play(this.sfx.pin, { bus: this.ui, priority: 3, gain: 0.75 });
-          else this._world(this.sfx.pin, e.ox, e.oz, 20, { gain: 0.7, priority: 1 });
+          if (e.id === me) this._play(this.sfx.pin, { bus: this.ui, priority: PR.ui, cls: 'foley', gain: 0.75 });
+          else this._world(this.sfx.pin, e.ox, e.oz, 18, { gain: 0.6, priority: PR.gun, cls: 'foley' });
           break;
         case 'bang': this._bang(e); break;
+        case 'pulse': this._world(this.sfx.pulse, e.x, e.z, 28, { gain: 0.9, priority: PR.world }); break;
+        case 'zap': this._world(this.sfx.zap, e.x, e.z, 24, { gain: 1, priority: PR.world }); break;
+        case 'decoy': this._shot({ by: 'decoy', weapon: e.weapon, ox: e.x, oz: e.z, rays: null }); break;
         case 'flashed':
-          if (e.id === me) this._play(this.sfx.flashRing, { bus: this.ui, priority: 4, gain: 0.3 + 0.6 * e.amount });
+          if (e.id === me) this._play(this.sfx.flashRing, { bus: this.ui, priority: PR.boom, cls: 'loud', gain: 0.3 + 0.6 * e.amount });
           break;
         case 'heal': {
           const p = this._posOf(view, e.id);
-          if (e.id === me) this._play(this.sfx.stim, { bus: this.ui, priority: 3, gain: 0.8 });
-          else if (p) this._world(this.sfx.stim, p.x, p.z, 16, { gain: 0.6, priority: 1 });
+          if (e.id === me) this._play(this.sfx.stim, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.8 });
+          else if (p) this._world(this.sfx.stim, p.x, p.z, 12, { gain: 0.5, priority: PR.gun });
           break;
         }
         case 'overheat': this._overheat(e, view); break;
         case 'turret':
-          this._world(this.sfx.turretDeploy, e.x, e.z, HEAR_RANGE, { gain: 1.3, priority: 3, room: 0.2 });
+          this._world(this.sfx.turretDeploy, e.x, e.z, HEAR_RANGE, { gain: 1.3, priority: PR.ui, room: 0.2 });
           break;
         case 'turret_down':
-          this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: 1.2, priority: 3, room: 0.3, rate: 1.25 });
+          this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: 1.2, priority: PR.ui, cls: 'boom', room: 0.3, rate: 1.25 });
           break;
         case 'turret_shot':
           this._streakGun('turret', e.ox, e.oz, 0.85);
           break;
         case 'gunship':
-          this._play(this.sfx.strike, { bus: this.ui, priority: 3, gain: e.team === this.localTeam ? 0.45 : 0.8, rate: 0.7 });
+          this._play(this.sfx.strike, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: e.team === this.localTeam ? 0.45 : 0.8, rate: 0.7 });
           break;
         case 'gunship_shot':
-          this._streakGun('gunship', e.x, e.z, 1.5);
+          this._streakGun(e.kind === 'chopper' ? 'turret' : 'gunship', e.x, e.z, e.kind === 'chopper' ? 0.9 : 1.5);
           break;
         case 'phase':
           this._phaseMusic(e, view);
@@ -1252,12 +1421,23 @@ export class AudioEngine {
     }
   }
 
+  // A streak being called: each has its own short sting, and the far team hears it at a lower level.
+  _streakCall(e) {
+    const mine = e.team === this.localTeam;
+    let buf = this.sfx.strike, rate = 1, gain = mine ? 0.55 : 0.8;
+    if (e.kind === 'uav' || e.kind === 'overwatch') { buf = this.sfx.uav; gain = mine ? 0.7 : 0.45; if (e.kind === 'overwatch') rate = 0.8; }
+    else if (e.kind === 'jammer') { buf = this.sfx.jam; gain = mine ? 0.5 : 0.75; }
+    else if (e.kind === 'resupply') { buf = this.sfx.supply; gain = mine ? 0.7 : 0.35; }
+    else if (e.kind === 'emp' || e.kind === 'mortar') { buf = e.kind === 'emp' ? this.sfx.jam : this.sfx.strike; if (e.kind === 'emp') rate = 0.8; }
+    this._play(buf, { bus: this.ui, priority: PR.ui, cls: 'ui', gain, rate });
+  }
+
   // A kill chain climbs in pitch, so the third in a row feels different from the first.
   _killConfirm(e) {
     const now = this.ctx.currentTime;
     this.killChain = now - this.lastKillAt < 3.5 ? Math.min(this.killChain + 1, 6) : 0;
     this.lastKillAt = now;
-    this._play(this.sfx.kill, { bus: this.ui, priority: 5, gain: 1, rate: 1 + this.killChain * 0.05 });
+    this._play(this.sfx.kill, { bus: this.ui, priority: PR.hit, cls: 'ui', gain: 1, rate: 1 + this.killChain * 0.05 });
   }
 
   _reloadFoley(e, view) {
@@ -1266,8 +1446,8 @@ export class AudioEngine {
     if (!f) return;
     const now = this.ctx.currentTime, wdef = WEAPONS[p.weapon];
     const place = (buf, when, gain) => e.id === me
-      ? this._play(buf, { bus: this.ui, priority: 3, gain: gain * 0.7, when })
-      : (this._spatial(p.x, p.z) <= 18 ? this._play(buf, { gain: gain * 0.5 * this.sGain, pan: this.sPan, far: this.sFar, priority: 1, when }) : null);
+      ? this._play(buf, { bus: this.ui, priority: PR.ui, cls: 'foley', gain: gain * 0.7, when })
+      : (this._spatial(p.x, p.z) <= FOLEY_RANGE ? this._play(buf, { gain: gain * 0.5 * this.sGain, pan: this.sPan, far: this.sFar, priority: PR.gun, cls: 'foley', when }) : null);
     if (e.stage !== 'start') {
       // Whatever was still queued was for a reload that just stopped: fired through it, or it finished.
       this._cancelFoley(e.id, now);
@@ -1306,14 +1486,14 @@ export class AudioEngine {
     if (view && view.mode === 'range') return;
     if (e.phase === 'live') {
       this.stingerDone = false;
-      this._play(this.stingers.matchStart, { bus: this.music, priority: 5, gain: 1 });
+      this._play(this.stingers.matchStart, { bus: this.music, priority: PR.boom, cls: 'loud', gain: 1 });
     } else if (e.phase === 'ended' && !this.stingerDone) {
       this.stingerDone = true;
       this._stopTension();
       const won = view && view.winner !== null && view.winner === this.localTeam;
       const lost = view && view.winner !== null && view.winner !== this.localTeam;
       const buf = won ? this.stingers.victory : lost ? this.stingers.defeat : this.sfx.end;
-      this._play(buf, { bus: won || lost ? this.music : this.ui, priority: 5, gain: 1 });
+      this._play(buf, { bus: won || lost ? this.music : this.ui, priority: PR.own, cls: 'loud', gain: 1 });
     }
   }
 
@@ -1327,7 +1507,7 @@ export class AudioEngine {
     const closing = view.phase === 'live' && (lim - top <= margin || (view.timeLeft > 0 && view.timeLeft <= 30));
     if (closing && !this.tension) {
       this.tension = true;
-      this._play(this.stingers.tension, { bus: this.music, priority: 5, gain: 1 });
+      this._play(this.stingers.tension, { bus: this.music, priority: PR.boom, cls: 'loud', gain: 1 });
       if (!this.tensionSrc && this.stingers.tensionLoop) {
         const src = this.ctx.createBufferSource();
         src.buffer = this.stingers.tensionLoop;
@@ -1341,7 +1521,7 @@ export class AudioEngine {
         this.tensionGain = g;
       }
     }
-    if (this.tensionGain) this._holdGain(this.tensionGain.gain, closing ? (this.micActive ? 0.1 : 0.2) : 0);
+    if (this.tensionGain) this._holdGain(this.tensionGain.gain, closing ? (this.micActive ? 0.1 : 0.2) * (1 - 0.5 * this.fight) : 0);
   }
 
   _stopTension() {
@@ -1402,23 +1582,31 @@ export class AudioEngine {
     if (now >= this.nextAmbRefresh) {
       this.nextAmbRefresh = now + 0.25;
       const base = this.theme === 'harbor' || this.theme === 'neon' ? 0.1 : this.theme === 'dust' ? 0.12 : 0;
-      this._holdGain(this.amb.gain, base * (this.micActive ? 0.45 : 1));
+      // A firefight pushes the weather right down; this is the music-free part of the ducking.
+      this._holdGain(this.amb.gain, base * (this.micActive ? 0.45 : 1) * (1 - 0.75 * this.fight));
     }
     if (this.theme === 'harbor') {
       this.thunderT -= dt;
       if (this.thunderT <= 0 && view.phase !== 'ended') {
         this.thunderT = 14 + Math.random() * 26;
-        this._play(this.thunder[Math.floor(Math.random() * this.thunder.length)], {
-          bus: this.thunderBus, gain: 0.45 + Math.random() * 0.4, rate: 0.9 + Math.random() * 0.2, priority: 2, pan: (Math.random() - 0.5) * 0.6,
+        // Thunder over a firefight is just more noise: it waits for a lull.
+        if (this.fight < 0.4) this._play(this.thunder[Math.floor(Math.random() * this.thunder.length)], {
+          bus: this.thunderBus, gain: 0.45 + Math.random() * 0.4, rate: 0.9 + Math.random() * 0.2, priority: PR.world, cls: 'loud', pan: (Math.random() - 0.5) * 0.6,
         });
       }
     }
   }
 
   _bang(e) {
-    if (e.kind === 'smoke') this._world(this.sfx.smoke, e.x, e.z, 34, { gain: 1, priority: 2, room: 0.1 });
-    else if (e.kind === 'flash') this._world(this.sfx.flashBang, e.x, e.z, HEAR_RANGE, { gain: 2, priority: 4, room: 0.4 });
-    else this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: e.kind === 'sticky' ? 1.8 : 2.1, priority: 4, room: 0.4 });
+    if (e.kind === 'smoke') this._world(this.sfx.smoke, e.x, e.z, 34, { gain: 1, priority: PR.world, room: 0.1 });
+    else if (e.kind === 'flash') this._world(this.sfx.flashBang, e.x, e.z, HEAR_RANGE, { gain: 1.6, priority: PR.boom, cls: 'boom', room: 0.3 });
+    else if (e.kind === 'molotov') this._world(this.sfx.molotov, e.x, e.z, HEAR_RANGE, { gain: 1.4, priority: PR.boom, cls: 'boom', room: 0.25 });
+    else {
+      this.fight = Math.min(1, this.fight + 0.5);
+      // A cluster's bomblets are small and quick: higher pitched, lower, and they share the boom cap with everything else.
+      const g = e.kind === 'bomblet' ? 0.95 : e.kind === 'sticky' ? 1.45 : 1.7;
+      this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: g, priority: PR.boom, cls: 'boom', room: 0.4, rate: e.kind === 'bomblet' ? 1.45 : 1 });
+    }
   }
 
   // The local player's event can reach us twice (own frame, host echo), so one vent per lockout.
@@ -1427,17 +1615,33 @@ export class AudioEngine {
       const now = this.ctx.currentTime;
       if (now - this.lastVentAt < 1) return;
       this.lastVentAt = now;
-      this._play(this.sfx.vent, { bus: this.ui, priority: 4, gain: 0.8 });
+      this._play(this.sfx.vent, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.8 });
       return;
     }
     const p = this._posOf(view, e.id);
-    if (p) this._world(this.sfx.vent, p.x, p.z, 30, { gain: 1.1, priority: 2 });
+    if (p) this._world(this.sfx.vent, p.x, p.z, 22, { gain: 1, priority: PR.gun, cls: 'foley' });
   }
 
   _streakGun(id, x, z, gain) {
     const g = this.guns[id];
     if (!g || !g.near.length || x === undefined) return;
-    this._world(g.near[Math.floor(Math.random() * g.near.length)], x, z, HEAR_RANGE, { gain, priority: 2, room: 0.25, rate: 0.96 + Math.random() * 0.08 });
+    // Streak guns follow the same culling as any other gun: past the discrete range they only feed the far layer.
+    if (this._spatial(x, z) > FAR_CULL) { this._raiseFarLayer(this.sD); return; }
+    this.fight = Math.min(1, this.fight + 0.04);
+    this._play(g.near[Math.floor(Math.random() * g.near.length)], { gain: gain * 0.75 * this.sGain, pan: this.sPan, far: this.sFar, priority: this.sD < THREAT_RANGE ? PR.threat : PR.gun, cls: this.sD < THREAT_RANGE ? 'threat' : 'gun', room: 0.2, rate: 0.96 + Math.random() * 0.08 });
+  }
+
+  // The firefight level and what follows it: the world dips under your own gun, and the far layer eases back down
+  // when nobody is shooting out there any more.
+  _updateDucks(dt) {
+    const now = this.ctx.currentTime;
+    this.fight = Math.max(0, this.fight - FIGHT_DECAY * dt);
+    this.farLevel = Math.max(0, this.farLevel - dt * 0.55);
+    this.worldDuck.gain.setTargetAtTime(now < this.duckUntil ? WORLD_DUCK : 1, now, now < this.duckUntil ? 0.012 : 0.09);
+    if (this.farGain) {
+      this.farGain.gain.setTargetAtTime(this.farLevel * 0.22, now, 0.08);
+      if (this.farPan) this.farPan.pan.setTargetAtTime(this.farPanValue * 0.6, now, 0.3);
+    }
   }
 
   // Ticks only while the bar is climbing, so a cooling gun is quiet. Faster and higher as it nears lockout.
@@ -1449,7 +1653,7 @@ export class AudioEngine {
       if (this.heatTickT <= 0) {
         const k = (heat - 0.55) / 0.45;
         this.heatTickT = 0.2 - 0.13 * k;
-        this._play(this.sfx.heatTick, { bus: this.ui, priority: 3, gain: 0.3 + 0.5 * k, rate: 1 + 0.9 * k });
+        this._play(this.sfx.heatTick, { bus: this.ui, priority: PR.gun, cls: 'foley', gain: 0.3 + 0.5 * k, rate: 1 + 0.9 * k });
       }
     } else if (heat <= this.prevHeat) {
       this.heatTickT = 0;
@@ -1471,7 +1675,7 @@ export class AudioEngine {
       this.rumbleGain.connect(this.dry);
       src.start();
     }
-    if (this.rumbleGain) this.rumbleGain.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.5);
+    if (this.rumbleGain) this.rumbleGain.gain.setTargetAtTime(on ? 0.5 * (1 - 0.5 * this.fight) : 0, this.ctx.currentTime, 0.5);
   }
 
   // Continuous sounds that come from state instead of events: footsteps, the low-health heartbeat,
@@ -1500,12 +1704,14 @@ export class AudioEngine {
       this.heartT -= dt;
       if (this.heartT <= 0) {
         this.heartT = 0.62 + this.localHp / 35 * 0.42;
-        this._play(this.sfx.heartbeat, { bus: this.ui, priority: 4, gain: 0.9 });
+        this._play(this.sfx.heartbeat, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.75 });
       }
     } else {
       this.heartT = 0;
     }
 
+    this._updateDucks(dt);
+    this._updateMedals(this.ctx.currentTime);
     this._updateHeat(view, dt);
     this._updateRumble(view);
     this._updateTension(view);
@@ -1515,15 +1721,15 @@ export class AudioEngine {
   _step(p) {
     const buf = this.sfx.steps[Math.floor(Math.random() * this.sfx.steps.length)];
     if (p.id === this.localId) {
-      this._play(buf, { priority: 1, gain: 0.14, rate: 0.95 + Math.random() * 0.1 });
+      this._play(buf, { priority: PR.step, cls: 'step', gain: 0.14, rate: 0.95 + Math.random() * 0.1 });
       return;
     }
-    if (p.team === this.localTeam) return;    // Enemies only: footsteps are information.
+    if (p.team === this.localTeam || p.quiet) return;    // Enemies only, and Dead Silence means what it says.
     if (this._spatial(p.x, p.z) > STEP_RANGE) return;
     // Steps stay audible further than the gun model would, otherwise they carry no information.
     this._play(buf, {
       gain: (p.sprinting ? 0.85 : 0.5) * Math.max(0.12, 1 - this.sD / STEP_RANGE),
-      pan: this.sPan, far: this.sFar, priority: this.sD < 10 ? 2 : 1,
+      pan: this.sPan, far: this.sFar, priority: this.sD < 10 ? PR.gunNear : PR.step, cls: 'step',
       rate: 0.92 + Math.random() * 0.16,
     });
   }
@@ -1534,7 +1740,10 @@ export class AudioEngine {
         document.removeEventListener(type, this._onGesture, { capture: true });
       }
     }
-    if (this.ctx) this._stopLoops();
+    if (this.ctx) {
+      this._stopLoops();
+      if (this.farSrc) { try { this.farSrc.stop(); } catch { /* already stopped */ } }
+    }
     if (this.ctx && !this.offline) this.ctx.close().catch(() => {});
     this.ctx = null;
     this.ready = false;

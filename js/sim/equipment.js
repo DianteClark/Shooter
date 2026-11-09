@@ -2,16 +2,21 @@
 //
 // Interface (sim.js owns one instance per match):
 //   const eq = new EquipmentSystem(map);
-//   eq.throw(owner, kind, ox, oz, aim, dist)  owner is a player id, or {id, team}. kind: frag|sticky|smoke|flash|stim.
-//                                        dist (optional, metres) is where it should end up on open ground; absent
-//                                        means the default range. Does not check counts: the caller validates those.
+//   eq.throw(owner, kind, ox, oz, aim, dist)  owner is a player id, or {id, team}. kind: any id in EQUIPMENT that a
+//                                        loadout can hold. dist (optional, metres) is where it should end up on open
+//                                        ground; absent means the default range. Does not check counts: the caller does.
 //   previewThrow(map, ox, oz, aim, dist, kind)   the same throw run forward: polyline, bounces and landing.
+//   landingOf(map, ox, oz, aim, dist, kind)      just the landing of that throw, with no allocation (the bots' version).
 //   eq.step(dt, players, onEvent, onDamage)
 //       players    [{id, team, x, z, alive, perks?, spawnProtect?}], the flat shape traceShot takes.
 //       onEvent(e) {t:'throw',id,kind,ox,oz,aim}    queued by throw(), delivered on the next step
 //                  {t:'heal',id,amount}             the caller adds amount to HP, capped at MAX_HP
-//                  {t:'bang',kind,x,z,r,by}         frag, sticky, flash, smoke bursts
+//                  {t:'bang',kind,x,z,r,by}         anything that goes off
 //                  {t:'flashed',id,amount,dur,by}   amount 0..1, dur = seconds of blindness
+//                  {t:'pulse',kind,x,z,r,by}        a Sensor reading, no damage and no flash
+//                  {t:'marked',id,by,dur}           the sim shows that enemy to the thrower's team for dur seconds
+//                  {t:'decoy',x,z,by,weapon}        one fake gunshot from a Decoy
+//                  {t:'zap',x,z,ox,oz,by}           a Trophy shooting something down
 //       onDamage(targetId, dmg, ownerId, kind)      Flak is ALREADY applied. Never called for the
 //                                                   owner or the owner's team. dmg is a whole number.
 //   eq.projectiles   live [{id,kind,x,z,y,owner,...}]  matches GameView.projectiles
@@ -19,6 +24,9 @@
 //   eq.reset()       drops everything in flight (between rounds)
 //
 // A Strike or other host-side explosion can share the falloff through blastDamage() and flakMult().
+//
+// Entries with `noThrow` (fire, bomblet) are the things a throw turns into. They live in the same list as everything
+// else, so snapshots, host migration and the renderer's grenade dots all cover them without knowing they exist.
 
 import { MAX_HP, SIM_HZ } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, resolveCircle } from '../shared/geometry.js';
@@ -37,6 +45,13 @@ const WALL_SCRUB = 0.85;        // Speed kept along the wall after a bounce.
 const LAND_SPEED_KEEP = 0.5;
 const ROLL_DECEL = 18;
 const STOPPED_SPEED = 0.4;
+const DIRECT_DAMAGE = 200;      // More than a full health bar, and still subject to spawn protection like anything else.
+const BURN_TICK = 0.25;
+const ENGINEER_TROPHY = 1;      // Extra shots a Trophy gets with the Engineer perk.
+const TACMASK_FLASH = 0.4;      // Share of a flash a Tac Mask lets through, in both strength and length.
+const TACMASK_FIRE = 0.5;
+const COLD_TRIGGER = 0.45;      // Cold Blooded: fraction of a mine's trigger radius that still sets it off.
+const DECOY_RHYTHM = [0.11, 0.11, 0.11, 0.85, 0.11, 0.11, 1.3];   // Seconds between fake shots: short bursts, like a person.
 
 // `air` is how long the throw flies before touching the ground. A rolling grenade flies 11.25 m and
 // rolls about 1.5 m more, so every kind ends up near THROW_RANGE.
@@ -46,7 +61,21 @@ export const EQUIPMENT = {
   flash:  { fuse: 0.95, air: 0.75, flash: { radius: 12, inner: 3, maxDur: 3.2 } },
   smoke:  { fuse: 2.2, air: 0.75, popsOnStop: true, cloud: { radius: 4.5, life: 9, grow: 0.8, fade: 1.8 } },
   stim:   { instant: true, heal: MAX_HP },
+
+  molotov: { fuse: 3, air: 0.75, sticks: true, burstOnStick: true, spawns: 'fire', burstR: 3.2 },
+  fire:    { noThrow: true, as: 'molotov', quietEnd: true, fuse: 5.5, burn: { radius: 3.2, dps: 34 } },
+  mine:    { fuse: 45, air: 0.75, sticks: true, quietEnd: true, mine: { arm: 1.1, trigger: 2.4 }, blast: { radius: 4.4, inner: 1.4, max: 150, min: 30 } },
+  cluster: { fuse: 1.6, air: 0.75, blast: { radius: 4, inner: 1, max: 70, min: 12 }, scatter: { kind: 'bomblet', n: 4, r: 3.1, gap: 0.16 } },
+  bomblet: { noThrow: true, as: 'cluster', fuse: 0.3, sticks: true, blast: { radius: 3.3, inner: 0.9, max: 62, min: 15 } },
+  hatchet: { fuse: 1.3, air: 0.62, sticks: true, quietEnd: true, direct: { radius: 0.62, damage: DIRECT_DAMAGE } },
+
+  decoy:   { fuse: 8, air: 0.75, sticks: true, quietEnd: true, decoy: { weapon: 'ar' } },
+  sensor:  { fuse: 1, air: 0.75, sticks: true, sensor: { radius: 13, dur: 4 } },
+  trophy:  { fuse: 16, air: 0.75, sticks: true, quietEnd: true, trophy: { radius: 6.5, charges: 2, gap: 0.3 } },
 };
+
+// What a Trophy will shoot at.
+const ZAPPABLE = new Set(['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet']);
 
 // Furthest a player with these perks may throw. The host clamps with this; so should anything drawing a preview.
 export function maxThrowRange(perks) {
@@ -68,10 +97,28 @@ function ownerIdOf(owner) {
   return owner !== null && typeof owner === 'object' ? owner.id : owner;
 }
 
+// Radius a kind's effect covers, for anyone deciding where to throw it.
+export function effectRadius(kind) {
+  const s = EQUIPMENT[kind];
+  if (!s) return 0;
+  if (s.blast) return s.blast.radius;
+  if (s.flash) return s.flash.radius;
+  if (s.cloud) return s.cloud.radius;
+  if (s.burstR) return s.burstR;
+  if (s.sensor) return s.sensor.radius;
+  if (s.direct) return s.direct.radius;
+  return 0;
+}
+
 function makeProjectile(id, kind, owner, ox, oz, aim, dist) {
   const v = speedFor(kind, dist);
   return { id, kind, owner, team: undefined, x: ox, z: oz, y: 1.1,
-    vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false };
+    vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
+}
+
+// Something a burst left on the ground. A positive `delay` holds it back that many seconds.
+function makeLying(id, kind, owner, team, x, z, delay = 0) {
+  return { id, kind, owner, team, x, z, y: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0 };
 }
 
 // One tick of a live projectile. Real throws and previews both go through here, so they cannot disagree.
@@ -80,7 +127,7 @@ function advance(map, p, spec, dt, onBounce) {
   p.age += dt;
   fly(map, p, spec, dt, onBounce);
   const stopped = spec.popsOnStop && p.grounded && Math.hypot(p.vx, p.vz) < STOPPED_SPEED;
-  return p.age >= spec.fuse || stopped;
+  return p.age >= spec.fuse || stopped || (!!spec.burstOnStick && p.stuck);
 }
 
 function fly(map, p, spec, dt, onBounce) {
@@ -134,7 +181,7 @@ const OPEN_GROUND = { walls: [], width: 1e7, height: 1e7 };
 const SPEED_MIN = 1, SPEED_STEP = 1, SPEED_COUNT = 40;
 const REACH_TABLE = {};
 for (const kind of Object.keys(EQUIPMENT)) {
-  if (EQUIPMENT[kind].instant) continue;
+  if (EQUIPMENT[kind].instant || EQUIPMENT[kind].noThrow) continue;
   const spec = EQUIPMENT[kind], reach = new Float32Array(SPEED_COUNT);
   for (let i = 0; i < SPEED_COUNT; i++) {
     const p = { x: 5e6, z: 5e6, y: 1.1, vx: SPEED_MIN + i * SPEED_STEP, vz: 0, age: 0, stuck: false, grounded: false };
@@ -154,21 +201,66 @@ function speedFor(kind, dist) {
   return SPEED_MIN + (i + Math.max(0, Math.min(1, f))) * SPEED_STEP;
 }
 
+// Everything a preview needs, kept between calls: holding a throw recomputes the arc every frame, and a fresh polyline
+// each time is steady garbage for as long as the thumb is down. Pools only grow; `points` and `bounces` are short lists
+// of references into them, so a shrinking arc does not throw objects away.
+const PREVIEW = { points: [], bounces: [], landing: { x: 0, z: 0, t: 0, kind: null } };
+const pointPool = [], bouncePool = [];
+function poolPoint(pool, i, x, z, y) {
+  let p = pool[i];
+  if (!p) { p = { x: 0, z: 0, y: 0 }; pool[i] = p; }
+  p.x = x; p.z = z; p.y = y;
+  return p;
+}
+let previewBounceN = 0;
+function previewOnBounce(x, z) {
+  PREVIEW.bounces[previewBounceN] = poolPoint(bouncePool, previewBounceN, x, z, 0);
+  previewBounceN++;
+}
+
+// The one projectile the previews fly. Never escapes this file.
+const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
+function launchFlyer(kind, ox, oz, aim, dist) {
+  const v = speedFor(kind, dist);
+  FLYER.kind = kind; FLYER.x = ox; FLYER.z = oz; FLYER.y = 1.1;
+  FLYER.vx = Math.cos(aim) * v; FLYER.vz = Math.sin(aim) * v;
+  FLYER.age = 0; FLYER.stuck = false; FLYER.grounded = false;
+  return FLYER;
+}
+
 // The exact path of the throw `eq.throw(.., ox, oz, aim, dist)` would make, ticked forward with no one in the way.
 // Returns { points:[{x,z,y}], bounces:[{x,z}], landing:{x,z,t,kind} }, or null for stim and unknown kinds.
 // `landing` is where it goes off (or stops, for smoke). Callers clamp `dist` with maxThrowRange(perks).
+// The result is reused by the next call: read it now, or copy it.
 export function previewThrow(map, ox, oz, aim, dist, kind) {
   const spec = EQUIPMENT[kind];
-  if (!spec || spec.instant) return null;
-  const p = makeProjectile(0, kind, null, ox, oz, aim, dist);
-  const points = [{ x: ox, z: oz, y: p.y }], bounces = [];
-  const onBounce = (x, z) => { bounces.push({ x, z }); };
+  if (!spec || spec.instant || spec.noThrow) return null;
+  const p = launchFlyer(kind, ox, oz, aim, dist);
+  const points = PREVIEW.points;
+  let n = 0;
+  previewBounceN = 0;
+  points[n++] = poolPoint(pointPool, 0, ox, oz, p.y);
   for (let g = 0; g < 400; g++) {
-    const done = advance(map, p, spec, STEP, onBounce);
-    points.push({ x: p.x, z: p.z, y: p.y });
-    if (done) break;
+    const done = advance(map, p, spec, STEP, previewOnBounce);
+    points[n] = poolPoint(pointPool, n, p.x, p.z, p.y);
+    n++;
+    // Things that sit until something happens have no interesting path after they stop.
+    if (done || (p.stuck && spec.quietEnd)) break;
   }
-  return { points, bounces, landing: { x: p.x, z: p.z, t: p.age, kind } };
+  points.length = n; PREVIEW.bounces.length = previewBounceN;
+  PREVIEW.landing.x = p.x; PREVIEW.landing.z = p.z; PREVIEW.landing.t = p.age; PREVIEW.landing.kind = kind;
+  return PREVIEW;
+}
+
+// Where a throw ends up, and nothing else. Returns a shared {x,z,t}, or null for stim and unknown kinds.
+const LANDING = { x: 0, z: 0, t: 0 };
+export function landingOf(map, ox, oz, aim, dist, kind) {
+  const spec = EQUIPMENT[kind];
+  if (!spec || spec.instant || spec.noThrow) return null;
+  const p = launchFlyer(kind, ox, oz, aim, dist);
+  for (let g = 0; g < 400; g++) if (advance(map, p, spec, STEP) || (p.stuck && spec.quietEnd)) break;
+  LANDING.x = p.x; LANDING.z = p.z; LANDING.t = p.age;
+  return LANDING;
 }
 
 export class EquipmentSystem {
@@ -198,9 +290,12 @@ export class EquipmentSystem {
       this._pending.push({ t: 'heal', id, amount: spec.heal });
       return null;
     }
+    if (spec.noThrow) return null;
     this._pending.push({ t: 'throw', id, kind, ox, oz, aim, dist: Number.isFinite(dist) ? dist : THROW_RANGE });
     const p = makeProjectile(this._nextId++, kind, id, ox, oz, aim, dist);
     p.team = owner !== null && typeof owner === 'object' ? owner.team : undefined;
+    const perks = owner !== null && typeof owner === 'object' ? owner.ps?.perks : null;
+    if (spec.trophy) p.charges = spec.trophy.charges + (perks && perks.includes('engineer') ? ENGINEER_TROPHY : 0);
     this._projectiles.push(p);
     return p;
   }
@@ -210,12 +305,21 @@ export class EquipmentSystem {
     for (const v of projectiles || []) {
       if (!EQUIPMENT[v.kind] || EQUIPMENT[v.kind].instant) continue;
       this._projectiles.push({ id: v.id, kind: v.kind, owner: v.owner, team: teamOf(v.owner), x: v.x, z: v.z, y: v.y,
-        vx: v.vx || 0, vz: v.vz || 0, age: v.age || 0, stuck: !!v.stuck, grounded: !!v.grounded });
+        vx: v.vx || 0, vz: v.vz || 0, age: v.age || 0, stuck: !!v.stuck, grounded: !!v.grounded,
+        t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0 });
       this._nextId = Math.max(this._nextId, v.id + 1);
     }
     for (const v of smokes || []) {
       this._smokes.push({ id: v.id, x: v.x, z: v.z, r: v.r, a: 1, t: v.age || 0 });
       this._nextId = Math.max(this._nextId, v.id + 1);
+    }
+  }
+
+  // An EMP's reach: whatever the enemy left sitting on the map stops working. Things in the air keep flying.
+  clearDeployed(team, teamOf) {
+    for (let i = 0; i < this._projectiles.length; i++) {
+      const p = this._projectiles[i], spec = EQUIPMENT[p.kind];
+      if ((spec.mine || spec.trophy || spec.decoy || spec.sensor) && (p.team ?? teamOf(p.owner)) === team) p.dead = true;
     }
   }
 
@@ -228,11 +332,20 @@ export class EquipmentSystem {
     for (let i = 0; i < this._pending.length; i++) if (onEvent) onEvent(this._pending[i]);
     this._pending.length = 0;
 
+    // A burst can add to the list while this runs (bomblets, fire); they are appended and picked up by the same loop.
     const list = this._projectiles;
     let w = 0;
     for (let i = 0; i < list.length; i++) {
       const p = list[i], spec = EQUIPMENT[p.kind];
-      if (advance(this.map, p, spec, dt)) this._burst(p, spec, players, onEvent, onDamage);
+      if (p.dead) continue;
+      const px = p.x, pz = p.z;
+      const done = advance(this.map, p, spec, dt);
+      if (spec.direct && !p.stuck && this._directHit(p, spec, px, pz, players, onDamage)) continue;
+      if (spec.mine && p.age >= spec.mine.arm && this._tripped(p, spec, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
+      if (spec.burn) this._burn(p, spec, dt, players, onDamage);
+      if (spec.decoy && p.stuck) this._decoy(p, spec, dt, onEvent);
+      if (spec.trophy && p.stuck && this._zap(p, spec, dt, players, onEvent)) continue;
+      if (done) { if (!spec.quietEnd) this._burst(p, spec, players, onEvent, onDamage); }
       else list[w++] = p;
     }
     list.length = w;
@@ -241,10 +354,23 @@ export class EquipmentSystem {
   }
 
   // Finds the thrower's team once, at burst time, so a throw by bare id still respects teams.
+  // Inside a burning patch that hurts `team`?
+  inFire(x, z, team) {
+    for (let i = 0; i < this._projectiles.length; i++) {
+      const p = this._projectiles[i], b = EQUIPMENT[p.kind].burn;
+      if (b && p.team !== team && Math.hypot(p.x - x, p.z - z) < b.radius) return p;
+    }
+    return null;
+  }
+
   _teamOf(p, players) {
     if (p.team !== undefined) return p.team;
     for (let i = 0; i < players.length; i++) if (players[i].id === p.owner) return players[i].team;
     return undefined;
+  }
+
+  _enemyOf(p, v, team) {
+    return v.alive && v.id !== p.owner && !(team !== undefined && v.team === team);
   }
 
   _burst(p, spec, players, onEvent, onDamage) {
@@ -253,26 +379,121 @@ export class EquipmentSystem {
       if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r: spec.cloud.radius, by: p.owner });
       return;
     }
+    if (spec.sensor) { this._sense(p, spec, players, onEvent); return; }
+    if (spec.spawns) {
+      if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r: spec.burstR, by: p.owner });
+      this._projectiles.push(makeLying(this._nextId++, spec.spawns, p.owner, p.team, p.x, p.z));
+      return;
+    }
+    if (spec.scatter) this._scatter(p, spec);
     const r = spec.blast ? spec.blast.radius : spec.flash.radius;
     if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r, by: p.owner });
     const team = this._teamOf(p, players);
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
-      if (!v.alive || v.id === p.owner || v.spawnProtect) continue;
-      if (team !== undefined && v.team === team) continue;
+      if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
       const d = Math.hypot(v.x - p.x, v.z - p.z);
       if (d >= r) continue;
       if (spec.blast) {
         if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
         const dmg = blastDamage(spec.blast, d, v.perks);
-        if (dmg > 0 && onDamage) onDamage(v.id, dmg, p.owner, p.kind);
+        if (dmg > 0 && onDamage) onDamage(v.id, dmg, p.owner, spec.as || p.kind);
       } else {
         if (!hasLineOfSight(this.map, p.x, p.z, v.x, v.z, this._smokes)) continue;
-        const f = spec.flash;
-        const amount = d <= f.inner ? 1 : (f.radius - d) / (f.radius - f.inner);
+        const f = spec.flash, masked = v.perks && v.perks.includes('tacmask') ? TACMASK_FLASH : 1;
+        const amount = (d <= f.inner ? 1 : (f.radius - d) / (f.radius - f.inner)) * masked;
         if (onEvent) onEvent({ t: 'flashed', id: v.id, amount, dur: amount * f.maxDur, by: p.owner });
       }
     }
+  }
+
+  // Bomblets land on a ring around the burst, staggered, each one kept on this side of any wall it would be behind.
+  _scatter(p, spec) {
+    const s = spec.scatter;
+    for (let i = 0; i < s.n; i++) {
+      const a = p.id * 2.399 + (i / s.n) * Math.PI * 2;      // Golden-angle offset: varied per grenade, repeatable per id.
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const hit = raycastMap(this.map, p.x, p.z, dx, dz, s.r + SKIN, 'blocksMove');
+      const r = hit ? Math.max(0, hit.t - SKIN) : s.r;
+      this._projectiles.push(makeLying(this._nextId++, s.kind, p.owner, p.team, p.x + dx * r, p.z + dz * r, i * s.gap));
+    }
+  }
+
+  // Returns true when it hit someone, which uses it up.
+  _directHit(p, spec, px, pz, players, onDamage) {
+    const team = p.team, dx = p.x - px, dz = p.z - pz, len = Math.hypot(dx, dz);
+    if (len < 1e-6) return false;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
+      const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
+      if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) > spec.direct.radius) continue;
+      if (onDamage) onDamage(v.id, spec.direct.damage, p.owner, p.kind);
+      return true;
+    }
+    return false;
+  }
+
+  _tripped(p, spec, players) {
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
+      const reach = spec.mine.trigger * (v.perks && v.perks.includes('coldblood') ? COLD_TRIGGER : 1);
+      if (Math.hypot(v.x - p.x, v.z - p.z) < reach) return true;
+    }
+    return false;
+  }
+
+  _burn(p, spec, dt, players, onDamage) {
+    p.t += dt;
+    if (p.t < BURN_TICK) return;
+    p.t -= BURN_TICK;
+    const { radius, dps } = spec.burn;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= radius) continue;
+      if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+      const k = v.perks && v.perks.includes('tacmask') ? TACMASK_FIRE : 1;
+      if (onDamage) onDamage(v.id, Math.max(1, Math.round(dps * BURN_TICK * k)), p.owner, spec.as);
+    }
+  }
+
+  _decoy(p, spec, dt, onEvent) {
+    p.t -= dt;
+    if (p.t > 0) return;
+    p.t += DECOY_RHYTHM[p.n++ % DECOY_RHYTHM.length];
+    if (onEvent) onEvent({ t: 'decoy', x: p.x, z: p.z, by: p.owner, team: p.team, weapon: spec.decoy.weapon });
+  }
+
+  _sense(p, spec, players, onEvent) {
+    if (!onEvent) return;
+    const { radius, dur } = spec.sensor;
+    onEvent({ t: 'pulse', kind: p.kind, x: p.x, z: p.z, r: radius, by: p.owner });
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (this._enemyOf(p, v, p.team) && Math.hypot(v.x - p.x, v.z - p.z) < radius) onEvent({ t: 'marked', id: v.id, by: p.owner, dur });
+    }
+  }
+
+  // Shoots down the nearest enemy device in reach. Returns true when that was its last charge.
+  _zap(p, spec, dt, players, onEvent) {
+    p.t -= dt;
+    if (p.t > 0) return false;
+    const team = this._teamOf(p, players), list = this._projectiles;
+    let best = null, bestD = spec.trophy.radius;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q === p || q.dead || !ZAPPABLE.has(q.kind) || q.owner === p.owner || (team !== undefined && this._teamOf(q, players) === team)) continue;
+      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      if (d < bestD) { bestD = d; best = q; }
+    }
+    if (!best) return false;
+    best.dead = true;
+    p.t = spec.trophy.gap;
+    if (onEvent) onEvent({ t: 'zap', x: best.x, z: best.z, ox: p.x, oz: p.z, by: p.owner });
+    return --p.charges <= 0;
   }
 
   _stepSmokes(dt) {
