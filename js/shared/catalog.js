@@ -1,6 +1,6 @@
 // Everything a loadout can contain. Adding an item is one line of data here plus its behaviour in the sim.
 
-export const SCORE = { kill: 100, headshot: 25, assist: 50 };
+export const SCORE = { kill: 100, headshot: 25, assist: 50, confirm: 50, deny: 25, capture: 100, defend: 50, holdTick: 10 };
 
 export const STREAKS = {
   uav:     { id: 'uav',     name: 'UAV',     cost: 300,  desc: 'Reveal enemies for 20 s' },

@@ -39,7 +39,7 @@ export class Match {
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
     this.sim = new Sim({
       roster: this.roster, map: this.map, seed: this.seed,
-      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit,
+      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode,
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
     this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });

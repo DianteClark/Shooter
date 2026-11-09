@@ -17,7 +17,8 @@ export const TEAMS = [
   { id: 1, name: 'Reapers',  color: 0xff4d3d, css: '#ff4d3d' },
 ];
 
-export const WEAPON_IDS = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
-export const PRIMARY_IDS = ['ar', 'smg', 'shotgun', 'lmg', 'sniper'];
+export const PRIMARY_IDS = ['ar', 'burst', 'smg', 'pdw', 'shotgun', 'autoshot', 'lmg', 'dmr', 'sniper'];
+export const SECONDARY_IDS = ['pistol', 'revolver', 'launcher'];
+export const WEAPON_IDS = [...PRIMARY_IDS, ...SECONDARY_IDS];
 export const SECONDARY_ID = 'pistol';
 export const BOT_SKILLS = ['recruit', 'regular', 'veteran', 'elite'];
