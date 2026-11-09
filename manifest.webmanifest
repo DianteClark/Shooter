@@ -1,0 +1,15 @@
+{
+  "name": "Switchyard",
+  "short_name": "Switchyard",
+  "description": "6v6 team deathmatch in a freight yard at dusk.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#1d232b",
+  "theme_color": "#1d232b",
+  "icons": [
+    { "src": "assets/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
