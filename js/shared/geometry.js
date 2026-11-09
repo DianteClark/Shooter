@@ -41,12 +41,13 @@ export function raycastMap(map, ox, oz, dirX, dirZ, maxDist, flag = 'blocksBulle
            nx: h.axis === 0 ? h.sign : 0, nz: h.axis === 1 ? h.sign : 0, wall: w };
 }
 
-// True when segment a-b passes through any smoke cloud ({x,z,r}), unless one endpoint is inside it:
-// someone in the smoke can still see out and be seen at very close range.
+// True when segment a-b passes through a smoke cloud ({x,z,r}). A viewer at a inside a cloud can see out
+// of that cloud, but a target at b inside one stays hidden from outside it.
 export function smokeBlocks(smokes, ax, az, bx, bz) {
   if (!smokes || !smokes.length) return false;
   const dx = bx - ax, dz = bz - az, lenSq = dx * dx + dz * dz;
   for (const s of smokes) {
+    if ((ax - s.x) ** 2 + (az - s.z) ** 2 <= s.r * s.r) continue;
     const u = lenSq > 0 ? Math.max(0, Math.min(1, ((s.x - ax) * dx + (s.z - az) * dz) / lenSq)) : 0;
     const px = ax + dx * u - s.x, pz = az + dz * u - s.z;
     if (px * px + pz * pz <= s.r * s.r) return true;

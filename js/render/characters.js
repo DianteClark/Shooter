@@ -8,6 +8,7 @@ import { createCamoMaterial, addCamoInstanceAttributes, camoIndex, camoTint } fr
 import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
 import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
 import { castRay } from './fog.js';
+import { smokeBlocks } from '../shared/geometry.js';
 
 const MAX_PLAYERS = 16;
 
@@ -182,6 +183,8 @@ class Rig {
     this.team = 0;
     this.moveX = 0; this.moveZ = 0;
     this.visible = false;
+    this.heat = 0;
+    this.overheated = false;
   }
 }
 
@@ -312,7 +315,7 @@ export class Characters {
   }
 
   // Local visibility test for an enemy: centre and both shoulders, so a peeking shoulder still shows.
-  _seenBy(localX, localZ, px, pz) {
+  _seenBy(localX, localZ, px, pz, smokes) {
     const dx = px - localX, dz = pz - localZ;
     const len = Math.hypot(dx, dz);
     if (len < 0.5) return true;
@@ -321,7 +324,7 @@ export class Characters {
       const sx = px + (-uz * i * 0.35), sz = pz + (ux * i * 0.35);
       const ldx = sx - localX, ldz = sz - localZ;
       const l = Math.hypot(ldx, ldz);
-      if (castRay(this.visionWalls, localX, localZ, ldx / l, ldz / l, l) >= l) return true;
+      if (castRay(this.visionWalls, localX, localZ, ldx / l, ldz / l, l) >= l && !smokeBlocks(smokes, localX, localZ, sx, sz)) return true;
     }
     return false;
   }
@@ -360,7 +363,9 @@ export class Characters {
       r.sprint += (sprintTarget - r.sprint) * damp(10, dt);
 
       const friendly = p.team === localTeam;
-      const seen = p.alive && (friendly || uav || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z));
+      r.heat = p.heat ?? 0;
+      r.overheated = !!p.overheated;
+      const seen = p.alive && (friendly || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
       r.seen = seen;
       r.reveal += (seen ? 1 : -1) * dt / (seen ? 0.09 : 0.18);
       r.reveal = Math.min(1, Math.max(0, r.reveal));
@@ -433,6 +438,7 @@ export class Characters {
       if (tint >= 0) { ga.aAccent.setXYZ(gi, (tint >> 16 & 255) / 255, (tint >> 8 & 255) / 255, (tint & 255) / 255); }
       else ga.aAccent.setXYZ(gi, team[0], team[1], team[2]);
       ga.aFx.setXY(gi, fade, flash);
+      ga.aHeat.setX(gi, r.heat);
 
       // Arms: shoulder to hand. Right hand on the grip (gun origin), left on the fore point.
       const shoulderY = 0.42 * CHAR_SCALE;
@@ -497,7 +503,7 @@ export class Characters {
       if (m.count === 0) continue;
       m.instanceMatrix.needsUpdate = true;
       const a = m.geometry.attributes;
-      a.aFx.needsUpdate = true; a.aCamo.needsUpdate = true; a.aAccent.needsUpdate = true;
+      a.aFx.needsUpdate = true; a.aCamo.needsUpdate = true; a.aAccent.needsUpdate = true; a.aHeat.needsUpdate = true;
     }
   }
 

@@ -7,6 +7,7 @@ import { buildWorld } from './world.js';
 import { FogMask, castRay } from './fog.js';
 import { Characters } from './characters.js';
 import { VFX } from './vfx.js';
+import { CombatFX, GUNSHIP_Y } from './combat.js';
 import { getGun } from './guns.js';
 import { hexRGB } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
@@ -62,6 +63,10 @@ function tracerColor(camoId, team) {
   return t || TEAM_RGB[team] || TEAM_RGB[0];
 }
 
+const GUNSHIP_TRACER = [1.0, 0.42, 0.12];
+const FIRE_SPARK = [1.0, 0.6, 0.2];
+const TURRET_TRACER = [1.0, 0.72, 0.3];
+
 // Cheap pseudo-noise for screen shake.
 function wobble(t, seed) {
   return Math.sin(t * 91.7 + seed) * 0.6 + Math.sin(t * 57.3 + seed * 1.7) * 0.4;
@@ -99,6 +104,7 @@ export class GameRenderer {
     this.scene.add(world.group);
     this.chars = new Characters(this.scene, map, this.time);
     this.vfx = new VFX(this.scene);
+    this.combat = new CombatFX(this.scene, this.vfx, map, this.time);
     for (const child of this.scene.children) child.updateMatrixWorld(true);
 
     this.visionWalls = map.walls.filter(w => w.blocksVision);
@@ -136,6 +142,8 @@ export class GameRenderer {
 
     this._laserRGB = [0, 0, 0];
     this._charOpts = { localId: null, localTeam: 0, uav: false, revealAll: false };   // Reused every frame.
+    this._hotRGB = [0, 0, 0];
+    this.steamClock = 0;
     this.frameAcc = 0;
     this.frameCount = 0;
     this.upStreak = 0;
@@ -203,6 +211,7 @@ export class GameRenderer {
           const r = chars.rigs.get(ev.target);
           if (r && (r.visible || r.team === localTeam)) {
             vfx.bodyHit(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
+            if (ev.head) vfx.headBurst(ev.x, ev.z);
             chars.onHit(ev.target);
           }
           if (ev.target === localId) { this.trauma = Math.min(1, this.trauma + 0.4); this.hurt = 1; }
@@ -240,6 +249,39 @@ export class GameRenderer {
           break;
         }
         case 'swap': chars.onSwap(ev.id); break;
+        case 'bang': {
+          if (ev.kind === 'flash') vfx.flashBurst(ev.x, ev.z, ev.r || 7);
+          else if (ev.kind !== 'smoke') vfx.fragBurst(ev.x, ev.z, ev.r || 4.5);
+          const me = chars.rigs.get(localId);
+          if (me) {
+            const d = Math.hypot(me.x - ev.x, me.z - ev.z);
+            this.trauma = Math.min(1, this.trauma + Math.max(0, 1 - d / 16) * (ev.kind === 'flash' ? 0.35 : 0.8));
+          }
+          break;
+        }
+        case 'heal': {
+          const r = chars.rigs.get(ev.id);
+          if (r && (r.visible || r.team === localTeam)) vfx.healBurst(r.x, r.z);
+          break;
+        }
+        case 'overheat': {
+          const r = chars.rigs.get(ev.id);
+          if (r && r.visible) vfx.steam(r.muzzle[0], r.muzzle[1], r.muzzle[2], 14);
+          break;
+        }
+        case 'turret': vfx.turretDrop(ev.x, ev.z, TEAM_RGB[ev.team] || TEAM_RGB[0]); break;
+        case 'turret_down': vfx.fragBurst(ev.x, ev.z, 2.2); break;
+        case 'turret_shot': {
+          vfx.tracer(ev.ox, 1.0, ev.oz, ev.x, 1.05, ev.z, TURRET_TRACER, 0.1);
+          vfx.sparks(ev.x, 0.6, ev.z, 0, 0, FIRE_SPARK, 2, 6);
+          break;
+        }
+        case 'gunship_shot': {
+          vfx.tracer(ev.ox, GUNSHIP_Y, ev.oz, ev.x, 1.05, ev.z, GUNSHIP_TRACER, 0.16);
+          vfx.sparks(ev.x, 0.5, ev.z, 0, 0, FIRE_SPARK, 4, 8);
+          vfx.pop(ev.x, 1.2, ev.z, 3, GUNSHIP_TRACER, 0.1);
+          break;
+        }
         default: break;
       }
     }
@@ -249,15 +291,24 @@ export class GameRenderer {
     const { vfx, chars } = this;
     const r = chars.rigs.get(ev.by);
     const team = r ? r.team : 0;
-    const rgb = tracerColor(ev.camo, team);
+    let rgb = tracerColor(ev.camo, team);
     const visible = !r || r.visible || team === localTeam;
     const kick = kickOf(ev.weapon);
+    // A hot barrel throws hotter tracers: the colour pushes to white-gold and the streak fattens.
+    const heat = r && r.heat > 0.05 ? r.heat : 0;
 
     let mx, my, mz;
     if (r) { mx = r.muzzle[0]; my = r.muzzle[1]; mz = r.muzzle[2]; }
     else { mx = ev.ox; my = 1.2; mz = ev.oz; }
 
-    const width = tracerWidthOf(ev.weapon);
+    const width = tracerWidthOf(ev.weapon) * (1 + heat * 0.75);
+    if (heat > 0) {
+      const hot = this._hotRGB, k = heat * heat;
+      hot[0] = rgb[0] + (1 - rgb[0]) * k;
+      hot[1] = rgb[1] + (0.82 - rgb[1]) * k;
+      hot[2] = rgb[2] + (0.42 - rgb[2]) * k;
+      rgb = hot;
+    }
     const rays = ev.rays;
     if (rays) {
       for (let i = 0; i < rays.length; i++) {
@@ -329,6 +380,25 @@ export class GameRenderer {
     this.camera.updateMatrixWorld();
   }
 
+  // Barrel glow at the muzzle, and steam for as long as a gun is locked up.
+  _heatFx(view, dt, localTeam) {
+    this.steamClock += dt;
+    const puff = this.steamClock >= 0.06;
+    if (puff) this.steamClock = 0;
+    const { vfx, chars } = this;
+    for (let i = 0; i < view.players.length; i++) {
+      const p = view.players[i];
+      if (!p.alive || (p.heat ?? 0) < 0.15) continue;
+      const r = chars.rigs.get(p.id);
+      if (!r || !(r.visible || r.team === localTeam)) continue;
+      const k = p.heat;
+      const rgb = this._hotRGB;
+      rgb[0] = 1; rgb[1] = 0.28 + 0.62 * k * k; rgb[2] = 0.04 + 0.5 * k * k;
+      vfx.addDot(r.muzzle[0], r.muzzle[1], r.muzzle[2], 0.1 + k * 0.32, rgb);
+      if (p.overheated && puff) vfx.steam(r.muzzle[0], r.muzzle[1], r.muzzle[2], 2);
+    }
+  }
+
   // Beam from the local muzzle, ending at the first bullet-blocking wall.
   _drawLaser(local) {
     const ads = local && local.alive ? local.adsT : 0;
@@ -372,6 +442,8 @@ export class GameRenderer {
     this.chars.update(view, fxDt, opts);
     this._handleEvents(events, localId, localTeam);
     this.vfx.step(fxDt);
+    this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
+    this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill) this._drawLaser(local);
     this.vfx.flushTracers();
     this.vfx.applyPops(this.world.material);
@@ -390,7 +462,7 @@ export class GameRenderer {
     const fogOn = this.finalKill ? 0 : 1;
     this.fog.uniforms.on.value += (fogOn - this.fog.uniforms.on.value) * Math.min(1, realDt * 6);
 
-    if (local) this.fog.update(local.x, local.z, realDt);
+    if (local) this.fog.update(local.x, local.z, realDt, view.smokes);
     else this.fog.uniforms.on.value = 0;
 
     this._updateCamera(realDt, local);
@@ -422,6 +494,7 @@ export class GameRenderer {
   dispose() {
     this.chars.dispose();
     this.vfx.dispose();
+    this.combat.dispose();
     this.fog.dispose();
     this.world.group.traverse(o => {
       if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); }

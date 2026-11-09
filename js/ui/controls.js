@@ -1,3 +1,6 @@
+import { STREAKS, TACTICALS, LETHALS } from '../shared/catalog.js';
+import { icon } from './icons.js';
+
 // Twin-stick touch input. Touch handlers only store numbers; read() turns them into the Input object and
 // repaints with transforms, once per frame, so a burst of touchmoves costs nothing extra.
 const LEFT_RADIUS = 64;
@@ -12,19 +15,18 @@ const FIRE_RELEASE = FIRE_RING * 0.88;
 const AIM_DEAD = 4;             // Thumb wobble under this many pixels does not rotate the player.
 const KNOB_LIMIT = FIRE_RING + 16;
 
-const BUTTONS = ['slide', 'reload', 'swap', 'streak'];
+const BUTTONS = ['slide', 'swap', 'tactical', 'lethal'];
+const TILE_COUNT = 3;
+const TILE_IDS = Array.from({ length: TILE_COUNT }, (_, i) => `tile${i}`);
+const TOUCH_TARGETS = [...BUTTONS, ...TILE_IDS];
 const BUTTON_SLOP = 8;          // Fat-finger margin around every button.
+const TILE_SLOP = 3;            // Tiles sit in a tight row; slop here would steal their neighbours' taps.
 
-const ICONS = {
-  slide: '<path d="M4 20h24M7 15l9 2 5-6 5 1M15 8a2.5 2.5 0 1 0 0-.01" />',
-  reload: '<path d="M25 13a10 10 0 1 0 1 8M26 6v7h-7" />',
-  swap: '<path d="M5 11h19l-5-5M27 21H8l5 5" />',
-  streak: '<path d="M16 4v6M16 22v6M4 16h6M22 16h6" /><path d="M16 9l7 7-7 7-7-7z" />',
-};
-const LABELS = { slide: 'Slide', reload: 'Reload', swap: 'Swap', streak: 'Streak' };
+const LABELS = { slide: 'Slide', swap: 'Swap', tactical: 'Tactical', lethal: 'Lethal' };
+const EMPTY_ICON = { tactical: 'smoke', lethal: 'frag' };
 
 function freshInput() {
-  return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, reload: false, swap: false, streak: false };
+  return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
 }
 
 export class Controls {
@@ -37,8 +39,11 @@ export class Controls {
     this.fireLatch = false;        // A flick can cross the ring and let go between two frames.
     this.aimLatch = null;
     this.sprintOn = false;
-    this.edge = { slide: false, reload: false, swap: false, streak: false };
-    this.buttonTouch = new Map();  // touch id -> button name
+    this.edge = { slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
+    this.buttonTouch = new Map();  // touch id -> button or tile name
+    this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
+    this.equip = { tactical: { kind: '', left: NaN }, lethal: { kind: '', left: NaN } };
+    this.scoreCache = { score: NaN, capped: null };
     this.rects = {};
     this.width = window.innerWidth;
     this.paintDirty = true;
@@ -78,9 +83,23 @@ export class Controls {
       <i class="rest rest-l"></i><i class="rest rest-r"></i>
       ${BUTTONS.map(b => `
       <button class="tbtn tbtn-${b}" data-btn="${b}" aria-label="${LABELS[b]}">
-        <svg viewBox="0 0 32 32" aria-hidden="true">${ICONS[b]}</svg>
-        <span>${LABELS[b]}</span>
-      </button>`).join('')}`;
+        ${icon(EMPTY_ICON[b] ?? b)}
+        <span class="tbtn-label">${LABELS[b]}</span>
+        ${b in EMPTY_ICON ? '<b class="tbtn-count">0</b>' : ''}
+      </button>`).join('')}
+      <div class="streaks">
+        <div class="st-score"><span>Score</span><b>0</b></div>
+        <div class="st-row">
+        ${TILE_IDS.map((t, i) => `
+          <button class="st-tile" data-btn="${t}" data-slot="${i}" aria-label="Streak ${i + 1}">
+            <i class="st-fill"></i>
+            <i class="st-ring"></i>
+            <span class="st-icon"></span>
+            <span class="st-lock">${icon('lock')}</span>
+            <b class="st-cost">0</b>
+          </button>`).join('')}
+        </div>
+      </div>`;
     this.root.appendChild(el);
     this.moveEl = el.querySelector('.stick-move');
     this.aimEl = el.querySelector('.stick-aim');
@@ -89,15 +108,29 @@ export class Controls {
     this.hintEl = el.querySelector('.aim-hint');
     this.buttons = {};
     for (const b of BUTTONS) this.buttons[b] = el.querySelector(`[data-btn="${b}"]`);
+    this.scoreEl = el.querySelector('.st-score b');
+    this.scoreBox = el.querySelector('.st-score');
+    this.tiles = TILE_IDS.map(id => {
+      const node = el.querySelector(`[data-btn="${id}"]`);
+      return {
+        node, fill: node.querySelector('.st-fill'), iconEl: node.querySelector('.st-icon'), costEl: node.querySelector('.st-cost'),
+        kind: '', cost: NaN, frac: NaN, state: '', pulse: 0,
+      };
+    });
+    this.tileById = id => this.tiles[TILE_IDS.indexOf(id)];
+    // The lit pop plays once per grant; removing the class on animationend lets the next grant replay it.
+    for (const t of this.tiles) t.node.addEventListener('animationend', e => { if (e.animationName === 'tile-pop') t.node.classList.remove('pop'); });
   }
 
   // Layout is only ever measured here, never during play.
   #measure() {
     this.width = window.innerWidth;
-    for (const b of BUTTONS) {
-      const r = this.buttons[b].getBoundingClientRect();
-      this.rects[b] = { x0: r.left - BUTTON_SLOP, y0: r.top - BUTTON_SLOP, x1: r.right + BUTTON_SLOP, y1: r.bottom + BUTTON_SLOP };
-    }
+    const box = (node, slop) => {
+      const r = node.getBoundingClientRect();
+      return { x0: r.left - slop, y0: r.top - slop, x1: r.right + slop, y1: r.bottom + slop };
+    };
+    for (const b of BUTTONS) this.rects[b] = box(this.buttons[b], BUTTON_SLOP);
+    this.tiles.forEach((t, i) => { this.rects[TILE_IDS[i]] = box(t.node, TILE_SLOP); });
     const l = this.el.querySelector('.rest-l').getBoundingClientRect();
     const r = this.el.querySelector('.rest-r').getBoundingClientRect();
     this.restLeft = { x: l.left, y: l.top };
@@ -112,19 +145,65 @@ export class Controls {
     else this.#release();
   }
 
-  // The HUD decides what the streak button shows; Controls owns the element.
-  // kind is null | 'uav' | 'strike'. progress is a short tag such as '2/3' while nothing is ready.
-  setStreak(kind, progress = '') {
-    const b = this.buttons.streak;
-    b.classList.toggle('ready', !!kind);
-    b.dataset.kind = kind ?? '';
-    const label = b.querySelector('span');
-    const text = kind === 'uav' ? 'UAV' : kind === 'strike' ? 'Strike' : (progress || 'Streak');
-    if (label.textContent !== text) label.textContent = text;
+  // slot: { kind, cost, held, blocked }. score is the player's current score. Returns true when this call
+  // is the moment the slot became held, so the HUD can announce it.
+  setTile(i, slot, score) {
+    const t = this.tiles[i];
+    if (!t || !slot) return false;
+    if (t.kind !== slot.kind) {
+      t.kind = slot.kind;
+      t.iconEl.innerHTML = icon(slot.kind);
+      t.node.setAttribute('aria-label', STREAKS[slot.kind]?.name ?? slot.kind);
+    }
+    if (t.cost !== slot.cost) {
+      t.cost = slot.cost;
+      t.costEl.textContent = slot.cost;
+    }
+    const frac = slot.held ? 1 : Math.min(1, Math.round(score / slot.cost * 50) / 50);
+    if (frac !== t.frac) {
+      t.frac = frac;
+      t.fill.style.transform = `scaleY(${frac})`;
+    }
+    const state = slot.held ? 'held' : slot.blocked ? 'blocked' : 'earning';
+    if (state === t.state) return false;
+    const prev = t.state;
+    t.state = state;
+    t.node.classList.toggle('held', state === 'held');
+    t.node.classList.toggle('blocked', state === 'blocked');
+    const justLit = state === 'held' && prev !== '';
+    if (justLit) t.node.classList.add('pop');
+    return justLit;
   }
 
-  setReloadUrgent(on) {
-    this.buttons.reload.classList.toggle('urgent', on);
+  setScore(score, capped) {
+    const c = this.scoreCache;
+    if (c.score !== score) { c.score = score; this.scoreEl.textContent = score; }
+    if (c.capped !== capped) { c.capped = capped; this.scoreBox.classList.toggle('capped', capped); }
+  }
+
+  // kind is a TACTICALS or LETHALS id; left is the remaining count.
+  setEquip(which, kind, left) {
+    const e = this.equip[which], b = this.buttons[which];
+    if (kind && e.kind !== kind) {
+      e.kind = kind;
+      b.querySelector('svg').outerHTML = icon(kind);
+      b.querySelector('.tbtn-label').textContent = (which === 'tactical' ? TACTICALS : LETHALS)[kind]?.name ?? kind;
+    }
+    if (e.left !== left) {
+      e.left = left;
+      b.querySelector('.tbtn-count').textContent = left ?? 0;
+      b.classList.toggle('empty', !left);
+    }
+  }
+
+  // Lights Swap when the current gun has nothing left to fire.
+  setSwapHint(on) {
+    this.buttons.swap.classList.toggle('urgent', on);
+  }
+
+  // While dead the thumb area belongs to the respawn screen. Hidden with visibility so measured rects stay valid.
+  setDown(on) {
+    this.el.classList.toggle('down-state', on);
   }
 
   // showAimHint(true) walks a new player through the fire ring; false or a timeout removes it.
@@ -136,7 +215,7 @@ export class Controls {
   }
 
   #buttonAt(x, y) {
-    for (const b of BUTTONS) {
+    for (const b of TOUCH_TARGETS) {
       const r = this.rects[b];
       if (r && x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return b;
     }
@@ -154,9 +233,8 @@ export class Controls {
       const x = t.clientX, y = t.clientY;
       const btn = this.#buttonAt(x, y);
       if (btn) {
-        this.edge[btn] = true;
+        this.#press(btn);
         this.buttonTouch.set(t.identifier, btn);
-        this.buttons[btn].classList.add('down');
         this.hintEl.hidden = true;
         continue;
       }
@@ -165,6 +243,18 @@ export class Controls {
       } else if (this.right.id === null) {
         this.#grabRight(t.identifier, x, y);
       }
+    }
+  }
+
+  #press(btn) {
+    const tile = this.tileById(btn);
+    if (tile) {
+      // Only a lit tile fires; the sim would refuse anything else anyway.
+      if (tile.state === 'held') this.edge.streak = Number(tile.node.dataset.slot);
+      tile.node.classList.add('down');
+    } else {
+      this.edge[btn] = true;
+      this.buttons[btn].classList.add('down');
     }
   }
 
@@ -230,7 +320,7 @@ export class Controls {
     } else {
       const btn = this.buttonTouch.get(id);
       if (btn) {
-        this.buttons[btn].classList.remove('down');
+        (this.buttons[btn] ?? this.tileById(btn).node).classList.remove('down');
         this.buttonTouch.delete(id);
       }
     }
@@ -257,6 +347,8 @@ export class Controls {
       this.edge[b] = false;
       this.buttons[b].classList.remove('down');
     }
+    this.edge.streak = -1;
+    for (const t of this.tiles) t.node.classList.remove('down');
     this.buttonTouch.clear();
     this.paintDirty = true;
     this.#paint();
@@ -268,7 +360,8 @@ export class Controls {
       inp.mx = inp.mz = 0;
       inp.aim = null;
       inp.aiming = inp.fire = inp.sprint = false;
-      inp.slide = inp.reload = inp.swap = inp.streak = false;
+      inp.slide = inp.swap = inp.tactical = inp.lethal = false;
+      inp.streak = -1;
       return inp;
     }
 
@@ -305,10 +398,12 @@ export class Controls {
     this.fireLatch = false;
 
     inp.slide = this.edge.slide;
-    inp.reload = this.edge.reload;
     inp.swap = this.edge.swap;
+    inp.tactical = this.edge.tactical;
+    inp.lethal = this.edge.lethal;
     inp.streak = this.edge.streak;
-    this.edge.slide = this.edge.reload = this.edge.swap = this.edge.streak = false;
+    this.edge.slide = this.edge.swap = this.edge.tactical = this.edge.lethal = false;
+    this.edge.streak = -1;
 
     if (this.paintDirty) this.#paint();
     return inp;

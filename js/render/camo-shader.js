@@ -28,6 +28,7 @@ attribute float aPart;
 attribute float aCamo;
 attribute vec3 aAccent;
 attribute vec2 aFx;            // x: fade 0..1, y: white hit flash 0..1
+attribute float aHeat;         // Overheat glow along the barrel, 0..1 (LMG only; other guns stay 0).
 
 varying vec3 vCol;
 varying vec3 vLight;
@@ -36,6 +37,7 @@ varying vec2 vFx;
 varying vec2 vUv2;
 varying float vPart;
 varying float vSpec;
+varying float vHeat;
 flat varying int vCamo;
 
 ${GLSL_LIGHT}
@@ -45,6 +47,8 @@ void main() {
   vec3 n = normalize(mat3(world) * normal);
   vCol = aCol; vPart = aPart; vAccent = aAccent; vFx = aFx; vCamo = int(aCamo + 0.5);
   vLight = duskLight(n);
+  // The glow gathers toward the muzzle; the grip never heats.
+  vHeat = aHeat * smoothstep(0.42, 1.25, position.x) * (aPart > 0.5 && aPart < 1.5 ? 0.0 : 1.0);
   vec3 h = normalize(vec3(-0.17, 0.87, 0.47));
   vSpec = pow(max(dot(n, h), 0.0), 18.0);
 
@@ -70,6 +74,7 @@ varying vec2 vFx;
 varying vec2 vUv2;
 varying float vPart;
 varying float vSpec;
+varying float vHeat;
 flat varying int vCamo;
 
 ${GLSL_DITHER}
@@ -178,6 +183,10 @@ void main() {
     emit = vAccent * 1.25;
   }
   col = col * vLight + emit + vSpec * gloss * vec3(1.0, 0.86, 0.68);
+  if (vHeat > 0.002) {
+    vec3 hot = mix(vec3(1.0, 0.3, 0.04), vec3(1.0, 0.94, 0.78), smoothstep(0.5, 0.95, vHeat));
+    col = mix(col, hot, smoothstep(0.0, 0.6, vHeat)) + hot * vHeat * vHeat;
+  }
   col += vFx.y * vec3(1.2);
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -205,10 +214,12 @@ export function addCamoInstanceAttributes(geometry, capacity) {
   const aCamo = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
   const aAccent = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0.6), 3);
   const aFx = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
+  const aHeat = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
   for (let i = 0; i < capacity; i++) aFx.setXY(i, 1, 0);
-  for (const a of [aCamo, aAccent, aFx]) a.setUsage(THREE.DynamicDrawUsage);
+  for (const a of [aCamo, aAccent, aFx, aHeat]) a.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('aCamo', aCamo);
   geometry.setAttribute('aAccent', aAccent);
   geometry.setAttribute('aFx', aFx);
+  geometry.setAttribute('aHeat', aHeat);
   return geometry;
 }

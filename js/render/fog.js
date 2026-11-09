@@ -41,6 +41,9 @@ void main() { gl_Position = vec4((position.xz * uXf.xy + uXf.zw + uJit) * 2.0 - 
 
 // Drawing the polygon several times with sub-pixel offsets gives a soft penumbra at the cost of a
 // few tiny draws, and keeps the fragment work in world materials at a single texture read.
+const MAX_SMOKES = 6;       // CombatFX pools the same number of clouds.
+const SMOKE_RAYS = 18;      // Rays across one cloud; enough that its edge reads as round in the mask.
+
 const JITTER_TEXELS = [[2.0, 0.7], [-0.7, 2.0], [-2.0, -0.7], [0.7, -2.0], [1.3, -1.3], [-1.3, 1.3]];
 
 export class FogMask {
@@ -72,9 +75,10 @@ export class FogMask {
       this.cornerX[i * 4 + 2] = w.x + w.w; this.cornerZ[i * 4 + 2] = w.z + w.d;
       this.cornerX[i * 4 + 3] = w.x; this.cornerZ[i * 4 + 3] = w.z + w.d;
     });
-    const maxRays = this.walls.length * 4 * 3 + 8;
+    const maxRays = this.walls.length * 4 * 3 + 8 + MAX_SMOKES * SMOKE_RAYS;
     this.angles = new Float32Array(maxRays);
-    this.angleView = this.angles.subarray(0, this.cornerX.length * 3 + 8);   // Ray count is fixed.
+    this.maxRays = maxRays;
+    this.hadSmoke = false;
     this.ax = new Float32Array(maxRays);
     this.az = new Float32Array(maxRays);
     this.touched = new Uint8Array(this.walls.length);
@@ -134,8 +138,9 @@ export class FogMask {
     webgl.setRenderTarget(null);
   }
 
-  _sweep(px, pz) {
+  _sweep(px, pz, smokes) {
     const { cornerX, cornerZ, angles, ax, az, walls, touched, hit } = this;
+    const smokeN = smokes ? Math.min(smokes.length, MAX_SMOKES) : 0;
     let n = 0;
     for (let i = 0; i < cornerX.length; i++) {
       const a = Math.atan2(cornerZ[i] - pz, cornerX[i] - px);
@@ -143,12 +148,35 @@ export class FogMask {
     }
     // A few fixed rays guarantee full coverage even if corners end up degenerate.
     for (let i = 0; i < 8; i++) angles[n++] = -Math.PI + (i / 8) * Math.PI * 2;
-    const list = this.angleView.sort();
+    // Smoke: a fan of rays across each cloud, so the far side of the circle becomes a shadow edge.
+    for (let s = 0; s < smokeN; s++) {
+      const c = smokes[s], cx = c.x - px, cz = c.z - pz, d = Math.hypot(cx, cz);
+      if (d <= c.r + 1e-3) continue;          // A viewer inside a cloud can see out, so it casts nothing for them.
+      const base = Math.atan2(cz, cx), half = Math.asin(c.r / d) * 1.02;
+      for (let i = 0; i < SMOKE_RAYS; i++) {
+        let a = base - half + (i / (SMOKE_RAYS - 1)) * half * 2;
+        if (a > Math.PI) a -= Math.PI * 2; else if (a < -Math.PI) a += Math.PI * 2;
+        angles[n++] = a;
+      }
+    }
+    // Spare slots sort to the end, so one fixed-size in-place sort serves any ray count.
+    angles.fill(Infinity, n);
+    angles.sort();
+    const list = angles;
     touched.fill(0);
     for (let i = 0; i < n; i++) {
       const dx = Math.cos(list[i]), dz = Math.sin(list[i]);
-      const t = castRay(walls, px, pz, dx, dz, 300, hit);
-      if (hit[0] >= 0) touched[hit[0]] = 1;
+      let t = castRay(walls, px, pz, dx, dz, 300, hit);
+      let blockedBySmoke = false;
+      for (let s = 0; s < smokeN; s++) {
+        const c = smokes[s], fx = c.x - px, fz = c.z - pz;
+        const along = fx * dx + fz * dz, off2 = fx * fx + fz * fz - along * along;
+        if (along <= 0 || off2 >= c.r * c.r || fx * fx + fz * fz <= c.r * c.r) continue;
+        // The cloud's near surface, nudged inward so the polygon edge is hidden behind the cloud's own mesh.
+        const enter = along - Math.sqrt(c.r * c.r - off2) + c.r * 0.35;
+        if (enter < t) { t = enter; blockedBySmoke = true; }
+      }
+      if (hit[0] >= 0 && !blockedBySmoke) touched[hit[0]] = 1;
       // Extend just past the hit so the base of the wall is inside the polygon.
       const e = t + 0.35;
       ax[i] = px + dx * e;
@@ -158,10 +186,13 @@ export class FogMask {
   }
 
   // Sweeps, fills the mesh, and blends it into the mask. Call once per frame.
-  update(px, pz, dt) {
-    if (px !== this.lastX || pz !== this.lastZ || !this._n) {
+  update(px, pz, dt, smokes) {
+    const hasSmoke = !!smokes && smokes.length > 0;
+    // Clouds grow and drift, so their shadow must be recomputed even for a standing player.
+    if (hasSmoke || this.hadSmoke || px !== this.lastX || pz !== this.lastZ || !this._n) {
+      this.hadSmoke = hasSmoke;
       this.lastX = px; this.lastZ = pz;
-      const n = this._sweep(px, pz);
+      const n = this._sweep(px, pz, smokes);
       this._n = n;
       const P = this.positions;
       let v = 0;

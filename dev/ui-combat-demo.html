@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Combat UI demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../css/game.css">
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<script type="module">
+// Real renderer, HUD and controls driven by a hand-built GameView, so every 4.0 state can be posed for a
+// screenshot. window.__demo.set(patch) merges into the local player and view; window.__emit(event) queues an event.
+import { GameRenderer } from '../js/render/renderer.js';
+import { Controls } from '../js/ui/controls.js';
+import { HUD } from '../js/ui/hud.js';
+import { Menu } from '../js/ui/menu.js';
+import { MAPS } from '../js/shared/map.js';
+
+const canvas = document.getElementById('game');
+const uiRoot = document.getElementById('ui');
+const controls = new Controls(uiRoot);
+const hud = new HUD(uiRoot);
+hud.bindControls(controls);
+const menu = new Menu(uiRoot);
+hud.prepare({ scoreLimit: 75 });
+hud.setVisible(true);
+const renderer = new GameRenderer(canvas, MAPS.railyard, { dynamicRes: false });
+renderer.setLocal('me');
+controls.setEnabled(true);
+
+const weapons = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
+const anchors = [[36, 24], [40, 18], [28, 30], [40, 26], [24, 22], [33, 30], [44, 24], [41, 15], [46, 31], [50, 20], [37, 21], [33, 29]];
+const names = ['Rookie', 'Bravo', 'Atlas', 'Cinder', 'Dusk', 'Echo', 'Fang', 'Ghost', 'Hex', 'Ion', 'Jinx', 'Kilo'];
+const players = anchors.map((a, i) => ({
+  id: i === 0 ? 'me' : 'p' + i, name: names[i], team: i < 6 ? 0 : 1, isBot: i > 0, skill: 'regular',
+  x: a[0], z: a[1], aim: -0.4, vx: 0, vz: 0, hp: 100, alive: true, respawnT: 0, weapon: weapons[i % 6], camo: 'none',
+  ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2, adsT: 0, sprinting: false, sliding: false, spawnProtect: false,
+  kills: (11 - i) * 2, deaths: i, streak: 0, streakReady: null, bloom: 0,
+  score: 400, capped: false, slots: [{ kind: 'uav', cost: 300, held: true, blocked: false }, { kind: 'turret', cost: 500, held: false, blocked: false }, { kind: 'gunship', cost: 1000, held: false, blocked: false }],
+  heat: 0, overheated: false, head: 11 - i, assists: i * 2, firingT: 0, tacticalLeft: 2, lethalLeft: 2, tactical: 'smoke', lethal: 'frag',
+}));
+players[0].weapon = 'lmg';
+const view = {
+  t: 0, phase: 'live', timeLeft: 312, scores: [42, 37], winner: null, uav: [0, 0], players, localId: 'me', lastKill: null,
+  projectiles: [], smokes: [], turrets: [], gunships: [], mode: 'tdm',
+};
+const events = [];
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000) * (window.__demo.speed ?? 1);
+  last = now;
+  view.t += dt;
+  renderer.update(view, events, dt);
+  hud.onEvents(events);
+  hud.update(view, dt);
+  events.length = 0;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__emit = e => events.push(e);
+window.__demo = {
+  view, me: players[0], players, hud, controls, menu, renderer,
+  set(p) { const { view: v, ...me } = p; Object.assign(players[0], me); if (v) Object.assign(view, v); },
+};
+window.__ready = true;
+</script>
+</body>
+</html>

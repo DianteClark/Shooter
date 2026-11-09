@@ -5,7 +5,9 @@ import { WEAPONS } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { getCamo } from '../shared/camos.js';
-import { Progress } from './progress.js';
+import { STREAKS, LETHALS, normalizeLoadout } from '../shared/catalog.js';
+import { Progress, matchScore } from './progress.js';
+import { LoadoutEditor } from './loadout.js';
 
 const MINIMAP_HZ = 10;
 const MM_SCALE = 2;              // Backing-store pixels per CSS pixel; fixed so the canvas is never resized.
@@ -17,7 +19,12 @@ const DMG_LIFE = 1.3;
 const MEDAL_LIFE = 1.6;
 const MEDAL_GAP = 0.55;
 const LOW_AMMO = 0.25;
-const UAV_KILLS = 3, STRIKE_KILLS = 5;
+const SKULL_LIFE = 0.55;         // A kill marker lingers longer than a hit tick so it registers mid-fight.
+const HEAT_WARN = 0.72;          // Heat fraction where the bar starts to pulse.
+const FLASH_HOLD = 1.6;          // Seconds of solid white at full flash strength, before the fade.
+const FLASH_FADE = 1.8;
+const FIRE_REVEAL = 1.5;         // Matches the sim's firingT lifetime; only shapes the minimap ping's fade.
+const BOARD_HZ = 4;
 const END_BANNER_MIN = 700;
 
 const MEDALS = {
@@ -26,8 +33,23 @@ const MEDALS = {
   streak3: ['Three Streak', 'UAV earned'], streak5: ['Five Streak', 'Strike earned'], streak10: ['Ten Streak', 'Unbroken'],
 };
 
+const CALLOUT_POP = [
+  { opacity: 0, transform: 'translateX(-50%) scale(1.8)' },
+  { opacity: 1, transform: 'translateX(-50%) scale(1)', offset: 0.14 },
+  { opacity: 1, transform: 'translateX(-50%) scale(1)', offset: 0.7 },
+  { opacity: 0, transform: 'translate(-50%,-8px) scale(1)' },
+];
+const HEAL_PULSE = [{ opacity: 0 }, { opacity: 0.9, offset: 0.2 }, { opacity: 0 }];
+
 const pad2 = n => (n < 10 ? '0' + n : '' + n);
 const weaponName = id => WEAPONS[id]?.name ?? (id === 'strike' ? 'Strike' : id ?? '');
+
+// What the feed names for a kill: a gun id alone would credit the gun for a grenade or streak kill.
+function killCause(e) {
+  if (e.equip) return LETHALS[e.equip]?.name ?? e.equip;
+  if (typeof e.streak === 'string') return STREAKS[e.streak]?.name ?? e.streak;
+  return weaponName(e.weapon);
+}
 
 export class HUD {
   constructor(root) {
@@ -40,14 +62,23 @@ export class HUD {
     this.scoreLimit = SCORE_LIMIT;
     this.timeLimit = TIME_LIMIT;
     this.primary = Progress.primary;
+    this.sheetEditor = null;
+    this.#seedFallback();
     this.#build();
     this.#drawMapBase();
     this.reset();
   }
 
-  // Controls paints the streak and reload buttons so there is a single touch surface.
+  // Controls owns the buttons and streak tiles so there is a single touch surface; the HUD feeds them.
   bindControls(controls) {
     this.controls = controls;
+  }
+
+  // Tiles and buttons need something to draw before the first frame that carries real slots.
+  #seedFallback() {
+    const l = normalizeLoadout(Progress.loadout());
+    this.fallbackSlots = l.streaks.map(kind => ({ kind, cost: STREAKS[kind].cost, held: false, blocked: false }));
+    this.fallbackEquip = { tactical: l.tactical, lethal: l.lethal };
   }
 
   // Call before each match.
@@ -56,6 +87,7 @@ export class HUD {
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
     this.primary = Progress.primary;
+    this.#seedFallback();
     this.#drawMapBase();
     this.reset();
   }
@@ -65,13 +97,25 @@ export class HUD {
     this.cache = {
       myScore: NaN, otherScore: NaN, teamFlip: NaN, time: NaN, phase: '', hp: NaN, hpFrac: NaN, ammo: NaN, reserve: NaN,
       weapon: '', reloadFrac: NaN, reloadOn: null, low: null, hurt: null, vign: NaN, dead: null, respawn: NaN,
-      streakKey: '', urgent: null, protect: null, picked: '', enemyUav: null,
+      protect: null, picked: '', enemyUav: null, tag: '', heatOn: null, heat: NaN, heatLevel: '', overBanner: null,
+      score: NaN, capped: null, swapHint: null,
     };
     this.view = null;
     this.unlocks = [];            // Camos earned this match, drained by the results screen.
     this.mmClock = 0;
     this.hitT = 0;
     this.hitKill = false;
+    this.hitHead = false;
+    this.hitLife = HIT_LIFE;
+    this.flashT = 0;
+    this.flashLen = 1;
+    this.weaponKills = {};        // Kills per weapon this match, for the results screen.
+    this.boardOpen = false;
+    this.boardClock = 0;
+    this.closeSheet();
+    this.boardEl.hidden = true;
+    this.flashFadeLen = 1;
+    this.flashEl.style.opacity = '0';
     this.feed = [];
     this.medalQueue = [];
     this.medalClock = 0;
@@ -84,6 +128,7 @@ export class HUD {
     this.hitEl.style.opacity = '0';
     this.deathEl.classList.remove('show');
     this.endEl.classList.remove('show');
+    this.controls?.setDown(false);
     this.setNotice('');
     this.setSpectate(null);
     this.#paintPicker();
@@ -93,7 +138,7 @@ export class HUD {
     this.el.classList.toggle('on', on);
   }
 
-  // cb({ primary, camo }) when the player picks a different weapon on the death screen.
+  // cb(loadout), the full normalized loadout, whenever the player changes it on the death screen.
   onSetLoadout(cb) { this.loadoutCb = cb; }
   onMic(cb) { this.micCb = cb; }
   onSpeaker(cb) { this.speakerCb = cb; }
@@ -162,7 +207,7 @@ export class HUD {
     el.className = 'hud';
     el.innerHTML = `
       <div class="vignette"></div>
-      <div class="scorebar">
+      <div class="scorebar" data-tap="1">
         <div class="sb-side mine">
           <b class="sb-name"></b><b class="sb-score">0</b>
           <i class="sb-track"><i class="sb-fill"></i></i>
@@ -179,7 +224,10 @@ export class HUD {
       </div>
       <div class="feed"></div>
       <div class="medals"></div>
-      <div class="hit"><svg viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-14 -14l9 9M14 -14l-9 9M-14 14l9 -9M14 14l-9 -9" /></svg></div>
+      <div class="hit">
+        <svg class="hit-x" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-14 -14l9 9M14 -14l-9 9M-14 14l9 -9M14 14l-9 -9" /></svg>
+        <svg class="hit-skull" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M0 -17C-11 -17 -16 -10 -16 -3C-16 3 -13 6 -10 8L-9 14H-5V10H-2V14H2V10H5V14H9L10 8C13 6 16 3 16 -3C16 -10 11 -17 0 -17ZM-9 -6A4.5 4.5 0 1 1 -9 3A4.5 4.5 0 1 1 -9 -6ZM9 -6A4.5 4.5 0 1 1 9 3A4.5 4.5 0 1 1 9 -6ZM0 2L3 7H-3Z" fill-rule="evenodd"/></svg>
+      </div>
       ${[0, 1, 2, 3].map(() => '<svg class="dmg" viewBox="-110 -110 220 220" aria-hidden="true"><path d="M-46 -94 A105 105 0 0 1 46 -94 L39 -80 A90 90 0 0 0 -39 -80 Z" /></svg>').join('')}
       <div class="corner">
         <div class="net-chip" hidden><i class="bars"><i></i><i></i><i></i></i><span>--</span></div>
@@ -198,11 +246,15 @@ export class HUD {
           <span class="protect" hidden>Protected</span>
         </div>
         <div class="arms">
+          <i class="heat" hidden><i class="heat-fill"></i></i>
           <div class="arms-name"><span></span></div>
           <div class="arms-count"><b class="ammo">30</b><span class="reserve">/150</span></div>
           <i class="reload-track"><i class="reload-fill"></i></i>
         </div>
       </div>
+      <div class="over-banner"><b>Overheated</b><small>Swap to sidearm</small></div>
+      <div class="board" hidden><div class="board-grid"></div><small class="board-tip">Tap the score to close</small></div>
+      <div class="callout"></div>
       <div class="notice"></div>
       <div class="spectate" hidden></div>
       <div class="death">
@@ -216,8 +268,17 @@ export class HUD {
           <button class="pick" data-tap="1" data-weapon="${id}">
             <b>${esc(weaponName(id))}</b><small>${esc(WEAPONS[id]?.role ?? '')}</small>
           </button>`).join('')}
+          <button class="pick pick-loadout" data-tap="1"><b>Loadout</b><small>Gear</small></button>
         </div>
       </div>
+      <div class="sheet-wrap" data-tap="1" hidden>
+        <div class="loadout-sheet">
+          <div class="ls-bar"><h2>Loadout</h2><small>Applies when you next spawn</small><button class="back" data-sheet-close="1">Close</button></div>
+          <div class="lo-grid"></div>
+        </div>
+      </div>
+      <div class="flashbang"></div>
+      <div class="heal-veil"></div>
       <div class="endbanner"><b></b><small></small></div>`;
     this.root.appendChild(el);
 
@@ -242,6 +303,17 @@ export class HUD {
     this.hpFill = $('.hp-fill');
     this.protectEl = $('.protect');
     this.vitals = $('.vitals');
+    this.heatEl = $('.heat');
+    this.heatFill = $('.heat-fill');
+    this.overEl = $('.over-banner');
+    this.boardEl = $('.board');
+    this.boardGrid = $('.board-grid');
+    this.calloutEl = $('.callout');
+    this.flashEl = $('.flashbang');
+    this.healEl = $('.heal-veil');
+    this.sheetWrap = $('.sheet-wrap');
+    this.loGrid = $('.lo-grid');
+    this.hitX = $('.hit-x');
     this.armsName = $('.arms-name span');
     this.ammoEl = $('.ammo');
     this.reserveEl = $('.reserve');
@@ -259,8 +331,68 @@ export class HUD {
     this.micBtn.addEventListener('click', () => this.micCb?.());
     this.speakerBtn.addEventListener('click', () => this.speakerCb?.());
     for (const pick of this.picks) {
-      pick.addEventListener('click', () => this.#choose(pick.dataset.weapon));
+      if (pick.dataset.weapon) pick.addEventListener('click', () => this.#choose(pick.dataset.weapon));
     }
+    $('.pick-loadout').addEventListener('click', () => this.openSheet());
+    el.addEventListener('click', e => { if (e.target.closest('[data-sheet-close]')) this.closeSheet(); });
+    $('.scorebar').addEventListener('click', () => this.toggleBoard());
+    this.#buildBoard();
+  }
+
+  // Twelve rows made once and only ever retexted, so an open board costs a few text writes a second.
+  #buildBoard() {
+    this.boardGrid.innerHTML = [0, 1].map(() => `
+      <div class="lb-side">
+        <div class="lb-head"><b class="lb-team"></b><span>K</span><span>D</span><span>A</span><span>HS</span><span>Score</span></div>
+        ${[0, 1, 2, 3, 4, 5].map(() => '<div class="lb-row"><b></b><span></span><span></span><span></span><span></span><span></span></div>').join('')}
+      </div>`).join('');
+    this.boardSides = [...this.boardGrid.querySelectorAll('.lb-side')].map(node => ({
+      team: node.querySelector('.lb-team'),
+      rows: [...node.querySelectorAll('.lb-row')],
+    }));
+  }
+
+  toggleBoard() {
+    this.boardOpen = !this.boardOpen;
+    this.boardEl.hidden = !this.boardOpen;
+    this.boardClock = 0;
+    if (this.boardOpen && this.view) this.#paintBoard(this.view);
+  }
+
+  #paintBoard(view) {
+    const me = this.#findLocal(view);
+    if (!me) return;
+    [me.team, 1 - me.team].forEach((team, s) => {
+      const side = this.boardSides[s];
+      side.team.textContent = `${TEAMS[team].name}  ${view.scores[team]}`;
+      side.team.style.color = TEAMS[team].css;
+      const rows = view.players.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
+      side.rows.forEach((row, i) => {
+        const p = rows[i], cells = row.children;
+        row.hidden = !p;
+        if (!p) return;
+        row.classList.toggle('me', p.id === me.id);
+        cells[0].textContent = p.name;
+        cells[1].textContent = p.kills;
+        cells[2].textContent = p.deaths;
+        cells[3].textContent = p.assists ?? 0;
+        cells[4].textContent = p.head ?? 0;
+        cells[5].textContent = matchScore(p);
+      });
+    });
+  }
+
+  openSheet() {
+    this.sheetWrap.hidden = false;
+    this.sheetEditor?.dispose();
+    this.sheetEditor = new LoadoutEditor(this.loGrid, l => this.loadoutCb?.({ ...l, primary: this.primary, camo: Progress.camo(this.primary) }));
+  }
+
+  closeSheet() {
+    if (!this.sheetWrap) return;
+    this.sheetWrap.hidden = true;
+    this.sheetEditor?.dispose();
+    this.sheetEditor = null;
   }
 
   #choose(weapon) {
@@ -309,16 +441,28 @@ export class HUD {
 
     if (view.phase !== previousPhase) {
       c.phase = view.phase;
-      if (view.phase === 'ended' && !this.endShown) this.#showEndBanner(view.winner, myTeam);
+      if (view.phase === 'ended' && !this.endShown) {
+        this.#showEndBanner(view.winner, myTeam);
+        if (this.boardOpen) this.toggleBoard();
+        this.closeSheet();
+      }
     }
 
     this.#updateVitals(me, c, view);
     this.#updateArms(me, c);
-    this.#updateStreak(me, c);
+    this.#updateTiles(me, c);
     this.#updateDeath(me, c, view);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
+
+    if (this.boardOpen) {
+      this.boardClock += dt;
+      if (this.boardClock >= 1 / BOARD_HZ) {
+        this.boardClock = 0;
+        this.#paintBoard(view);
+      }
+    }
 
     this.mmClock += dt;
     if (this.mmClock >= 1 / MINIMAP_HZ) {
@@ -371,6 +515,7 @@ export class HUD {
       c.weapon = me.weapon;
       this.armsName.textContent = weaponName(me.weapon);
       c.magazine = WEAPONS[me.weapon]?.magazine ?? 30;
+      c.tag = null;                // The status line may need to return to the weapon's name.
     }
     if (me.ammo !== c.ammo) {
       c.ammo = me.ammo;
@@ -393,25 +538,60 @@ export class HUD {
         this.reloadFill.style.transform = `scaleX(${frac})`;
       }
     }
+    // There is no reload button, so the ammo readout itself says what is happening.
+    const empty = me.ammo <= 0 && me.reserve <= 0;
     const low = !reloading && me.ammo <= Math.ceil((c.magazine ?? 30) * LOW_AMMO);
-    if (low !== c.low) {
-      c.low = low;
-      this.arms.classList.toggle('low', low);
-      this.controls?.setReloadUrgent(low);
+    const tag = empty ? 'empty' : reloading ? 'reloading' : low ? 'low' : '';
+    if (tag !== c.tag) {
+      c.tag = tag;
+      this.arms.dataset.tag = tag;
+      this.armsName.textContent = empty ? 'Out of ammo' : reloading ? 'Reloading' : low ? 'Low ammo' : weaponName(me.weapon);
+    }
+    if (empty !== c.swapHint) {
+      c.swapHint = empty;
+      this.controls?.setSwapHint(empty);
+    }
+    this.#updateHeat(me, c);
+  }
+
+  #updateHeat(me, c) {
+    const heatGun = !!WEAPONS[me.weapon]?.heat;
+    if (heatGun !== c.heatOn) {
+      c.heatOn = heatGun;
+      this.heatEl.hidden = !heatGun;
+    }
+    const heat = heatGun ? Math.round((me.heat ?? 0) * 40) / 40 : 0;
+    if (heat !== c.heat) {
+      c.heat = heat;
+      this.heatFill.style.transform = `scaleX(${heat})`;
+    }
+    const over = heatGun && !!me.overheated;
+    const level = over ? 'over' : heat >= HEAT_WARN ? 'warm' : '';
+    if (level !== c.heatLevel) {
+      c.heatLevel = level;
+      this.arms.dataset.heat = level;
+    }
+    if (over !== c.overBanner) {
+      c.overBanner = over;
+      this.overEl.classList.toggle('show', over);
     }
   }
 
-  #updateStreak(me, c) {
-    const key = me.streakReady ?? `n${me.streak >= UAV_KILLS ? me.streak % STRIKE_KILLS : me.streak}`;
-    if (key === c.streakKey) return;
-    c.streakKey = key;
-    if (me.streakReady) {
-      this.controls?.setStreak(me.streakReady);
-      return;
+  #updateTiles(me, c) {
+    const controls = this.controls;
+    if (!controls) return;
+    const score = me.score ?? 0, capped = !!me.capped;
+    if (score !== c.score || capped !== c.capped) {
+      c.score = score; c.capped = capped;
+      controls.setScore(score, capped);
     }
-    const kills = me.streak ?? 0;
-    const need = kills < UAV_KILLS ? UAV_KILLS : STRIKE_KILLS;
-    this.controls?.setStreak(null, `${Math.min(kills, need)}/${need}`);
+    const slots = me.slots ?? this.fallbackSlots;
+    for (let i = 0; i < 3; i++) {
+      const slot = slots[i];
+      if (controls.setTile(i, slot, score)) this.medalQueue.push({ title: `${STREAKS[slot.kind]?.name ?? slot.kind} ready`, sub: 'Tap to call it in', big: true });
+    }
+    controls.setEquip('tactical', me.tactical ?? this.fallbackEquip.tactical, me.tacticalLeft ?? 0);
+    controls.setEquip('lethal', me.lethal ?? this.fallbackEquip.lethal, me.lethalLeft ?? 0);
   }
 
   #updateDeath(me, c, view) {
@@ -419,7 +599,9 @@ export class HUD {
     if (dead !== c.dead) {
       c.dead = dead;
       this.deathEl.classList.toggle('show', dead);
+      this.controls?.setDown(dead);
       if (dead) this.#paintDeathHead();
+      else this.closeSheet();
     }
     if (!dead) return;
     const left = Math.max(1, Math.ceil(me.respawnT ?? 0));
@@ -441,9 +623,13 @@ export class HUD {
   #decayEffects(dt) {
     if (this.hitT > 0) {
       this.hitT = Math.max(0, this.hitT - dt);
-      const f = this.hitT / HIT_LIFE;
-      this.hitEl.style.opacity = f;
+      const f = this.hitT / this.hitLife;
+      this.hitEl.style.opacity = Math.min(1, f * 2);
       this.hitEl.style.transform = `translate3d(-50%,-50%,0) scale(${1 + (1 - f) * 0.35})`;
+    }
+    if (this.flashT > 0) {
+      this.flashT = Math.max(0, this.flashT - dt);
+      this.flashEl.style.opacity = Math.min(1, this.flashT / this.flashFadeLen).toFixed(3);
     }
     for (const d of this.dmg) {
       if (d.life <= 0) continue;
@@ -462,6 +648,8 @@ export class HUD {
         case 'medal': if (e.id === this.view?.localId) this.medalQueue.push(e.medal); break;
         case 'spawn': if (e.id === this.view?.localId) { this.killer = null; this.deathPainted = false; } break;
         case 'streak': this.#onStreak(e); break;
+        case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
+        case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
         default: break;
       }
     }
@@ -470,13 +658,33 @@ export class HUD {
   #onHit(e) {
     const localId = this.view?.localId;
     if (e.by === localId) {
-      this.hitT = HIT_LIFE;
-      if (this.hitKill !== e.killed) {
-        this.hitKill = !!e.killed;
-        this.hitEl.classList.toggle('kill', this.hitKill);
+      const kill = !!e.killed, head = !!e.head;
+      this.hitLife = kill ? SKULL_LIFE : HIT_LIFE;
+      this.hitT = this.hitLife;
+      if (this.hitKill !== kill) {
+        this.hitKill = kill;
+        this.hitEl.classList.toggle('kill', kill);
       }
+      if (this.hitHead !== head) {
+        this.hitHead = head;
+        this.hitEl.classList.toggle('head', head);
+      }
+      if (head) this.#callout(kill ? 'Headshot kill' : 'Headshot');
     }
     if (e.target === localId && e.by !== localId) this.#damageFrom(e);
+  }
+
+  #callout(text) {
+    const el = this.calloutEl;
+    if (el.textContent !== text) el.textContent = text;
+    el.animate(CALLOUT_POP, { duration: 900, easing: 'cubic-bezier(.2,.9,.3,1)' });
+  }
+
+  // amount 0..1 sets how long the player stays blind; the screen always starts fully white.
+  #onFlashed(amount) {
+    const hold = FLASH_HOLD * amount, fade = FLASH_FADE * Math.max(0.3, amount);
+    this.flashFadeLen = fade;
+    this.flashT = Math.max(this.flashT, hold + fade);
   }
 
   #damageFrom(e) {
@@ -502,13 +710,14 @@ export class HUD {
     const tgtName = tgtP?.name ?? '?';
     const byCss = TEAMS[byP?.team ?? 0].css, tgtCss = TEAMS[tgtP?.team ?? 1].css;
     const mine = e.by === view.localId || e.target === view.localId;
-    this.#pushFeed(`<em style="color:${byCss}">${esc(byName)}</em><span class="f-w">${esc(weaponName(e.weapon))}</span><em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine);
+    this.#pushFeed(`<em style="color:${byCss}">${esc(byName)}</em><span class="f-w">${esc(killCause(e))}</span><em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine);
 
     if (e.target === view.localId) {
-      this.killer = { name: byName, color: byCss, weapon: weaponName(e.weapon) };
+      this.killer = { name: byName, color: byCss, weapon: killCause(e) };
       this.deathPainted = false;
     }
-    if (e.by === view.localId && e.target !== view.localId && !e.streak && WEAPONS[e.weapon]) {
+    if (e.by === view.localId && e.target !== view.localId && !e.streak && !e.equip && WEAPONS[e.weapon]) {
+      this.weaponKills[e.weapon] = (this.weaponKills[e.weapon] ?? 0) + 1;
       for (const camo of Progress.recordKill(e.weapon)) {
         this.unlocks.push({ weapon: e.weapon, camoId: camo.id });
         this.notify(`${weaponName(e.weapon)} camo unlocked: ${getCamo(camo.id).name}`);
@@ -523,7 +732,7 @@ export class HUD {
     const me = this.#findLocal(view);
     if (!p || !me) return;
     const friendly = p.team === me.team;
-    const verb = e.kind === 'uav' ? 'UAV online' : 'Strike inbound';
+    const verb = { uav: 'UAV online', strike: 'Strike inbound', turret: 'Turret deployed', gunship: 'Gunship overhead' }[e.kind] ?? `${e.kind} called in`;
     this.notify(`${friendly ? '' : 'Enemy '}${verb}`);
   }
 
@@ -557,10 +766,12 @@ export class HUD {
     this.#stamp(this.medalQueue.shift());
   }
 
+  // id is a medal id, or a ready-made { title, sub, big } card such as a streak coming online.
   #stamp(id) {
-    const [title, sub] = MEDALS[id] ?? [String(id).replace(/_/g, ' '), ''];
+    const card = typeof id === 'object' ? id : null;
+    const [title, sub] = card ? [card.title, card.sub] : MEDALS[id] ?? [String(id).replace(/_/g, ' '), ''];
     const node = document.createElement('div');
-    node.className = `medal${id === 'first_blood' || id === 'streak5' || id === 'streak10' ? ' big' : ''}`;
+    node.className = `medal${card?.big || id === 'first_blood' || id === 'streak5' || id === 'streak10' ? ' big' : ''}`;
     node.innerHTML = `<b>${esc(title)}</b><small>${esc(sub)}</small>`;
     node.style.setProperty('--tilt', `${(Math.random() * 7 - 3.5).toFixed(1)}deg`);
     node.style.animationDuration = `${MEDAL_LIFE}s`;
@@ -626,12 +837,33 @@ export class HUD {
       g.stroke();
     }
 
+    if (view.smokes?.length) {
+      g.fillStyle = 'rgba(201,205,214,.55)';
+      for (const s of view.smokes) {
+        g.beginPath();
+        g.arc(s.x * sx, s.z * sz, s.r * sx, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
     for (const p of view.players) {
       if (!p.alive || p.id === me.id) continue;
       const friendly = p.team === myTeam;
-      if (!friendly && !myUav && !(me.alive && hasLineOfSight(this.map, me.x, me.z, p.x, p.z))) continue;
+      const seen = friendly || (myUav && !p.ghost) || (me.alive && hasLineOfSight(this.map, me.x, me.z, p.x, p.z, view.smokes));
+      const firing = !seen && (p.firingT ?? 0) > 0;
+      if (!seen && !firing) continue;
       const x = p.x * sx, y = p.z * sz;
-      if (friendly) {
+      if (firing) {
+        // Gunfire ping: a hollow marker that fades as the reveal runs out, plainly weaker than a sighting.
+        const k = Math.min(1, p.firingT / FIRE_REVEAL);
+        g.strokeStyle = TEAMS[p.team].css;
+        g.globalAlpha = 0.35 + 0.65 * k;
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.arc(x, y, 4 + (1 - k) * 8, 0, Math.PI * 2);
+        g.stroke();
+        g.globalAlpha = 1;
+      } else if (friendly) {
         g.fillStyle = TEAMS[p.team].css;
         g.fillRect(x - 3.5, y - 3.5, 7, 7);
       } else {
@@ -644,6 +876,8 @@ export class HUD {
       }
     }
 
+    this.#drawDeployables(view, myTeam, sx, sz, g);
+
     if (me.alive) {
       const x = me.x * sx, y = me.z * sz, a = me.aim;
       g.fillStyle = '#fff';
@@ -653,6 +887,40 @@ export class HUD {
       g.lineTo(x + Math.cos(a - 2.5) * 7, y + Math.sin(a - 2.5) * 7);
       g.closePath();
       g.fill();
+    }
+  }
+
+  #drawDeployables(view, myTeam, sx, sz, g) {
+    if (view.turrets) {
+      for (const t of view.turrets) {
+        const x = t.x * sx, y = t.z * sz;
+        g.fillStyle = TEAMS[t.team].css;
+        g.fillRect(x - 5, y - 5, 10, 10);
+        g.strokeStyle = t.team === myTeam ? '#fff' : '#171c22';
+        g.lineWidth = 2;
+        g.strokeRect(x - 5, y - 5, 10, 10);
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + Math.cos(t.aim) * 11, y + Math.sin(t.aim) * 11);
+        g.stroke();
+      }
+    }
+    if (view.gunships) {
+      for (const s of view.gunships) {
+        const x = s.x * sx, y = s.z * sz, ca = Math.cos(s.aim), sa = Math.sin(s.aim);
+        const px = -sa, py = ca;       // Wing direction.
+        g.fillStyle = TEAMS[s.team].css;
+        g.strokeStyle = '#fff';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(x + ca * 12, y + sa * 12);
+        g.lineTo(x + px * 11 - ca * 3, y + py * 11 - sa * 3);
+        g.lineTo(x - ca * 7, y - sa * 7);
+        g.lineTo(x - px * 11 - ca * 3, y - py * 11 - sa * 3);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
     }
   }
 }

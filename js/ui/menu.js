@@ -3,7 +3,8 @@ import { TEAMS, TEAM_SIZE, PRIMARY_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { CAMOS, getCamo } from '../shared/camos.js';
 import { GunPreview } from '../render/renderer.js';
-import { Progress } from './progress.js';
+import { Progress, matchScore } from './progress.js';
+import { LoadoutEditor } from './loadout.js';
 import { yardBackdrop } from './yard.js';
 
 const QWERTY = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM-_.'];
@@ -56,6 +57,8 @@ export class Menu {
   show() { this.el.classList.add('on'); }
   hide() {
     this.#stopPreview();
+    this.loEditor?.dispose();
+    this.loEditor = null;
     this.el.classList.remove('on');
     this.el.textContent = '';
   }
@@ -97,6 +100,7 @@ export class Menu {
         <button class="route" data-act="host"><i class="lamp"></i><b>Host a match</b></button>
         <button class="route" data-act="join"><i class="lamp"></i><b>Join with a code</b></button>
         <button class="route" data-act="gunsmith"><i class="lamp"></i><b>Gunsmith</b></button>
+        <button class="route" data-act="loadout"><i class="lamp"></i><b>Loadout</b></button>
       </nav>`;
     this.show();
   }
@@ -180,7 +184,8 @@ export class Menu {
   lobby(state) {
     this.#stopPreview();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, net } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false } = state;
+    const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
     const train = team => {
@@ -207,8 +212,12 @@ export class Menu {
     };
     const isReady = me?.ready;
     const start = isHost
-      ? `<button class="route primary" data-act="start" ${allReady ? '' : 'disabled'}><i class="lamp"></i><b>${allReady ? 'Start match' : 'Waiting for ready'}</b></button>`
-      : `<button class="route primary${isReady ? ' lit' : ''}" data-act="toggleReady"><i class="lamp"></i><b>${isReady ? 'Ready' : 'Tap when ready'}</b></button>`;
+      ? `<button class="route primary" data-act="start" ${counting || allReady ? '' : 'disabled'}><i class="lamp"></i><b>${counting ? 'Start now' : allReady ? 'Start match' : 'Waiting for ready'}</b></button>`
+      : counting
+        ? '<div class="route primary lit static"><i class="lamp"></i><b>Rematch</b></div>'
+        : rematchWait
+          ? '<div class="route static"><i class="lamp"></i><b>Waiting for host</b></div>'
+          : `<button class="route primary${isReady ? ' lit' : ''}" data-act="toggleReady"><i class="lamp"></i><b>${isReady ? 'Ready' : 'Tap when ready'}</b></button>`;
     this.el.innerHTML = `
       <header class="bar">
         <button class="back" data-act="leaveLobby">Leave</button>
@@ -216,7 +225,8 @@ export class Menu {
           <span>Room code</span>
           <b>${esc(code)}</b>
         </div>
-        <p class="room-tip">${isHost ? 'Read this code to friends. Tap a player to swap teams.' : 'Tap your name to swap teams.'}</p>
+        ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
+        <p class="room-tip">${isHost ? (counting ? 'Tap a player to swap teams.' : 'Read this code to friends. Tap a player to swap teams.') : 'Tap your name to swap teams.'}</p>
       </header>
       <div class="yard-lines">
         ${train(0)}
@@ -228,6 +238,7 @@ export class Menu {
           ${SKILLS.map(([id, label]) => `<button class="seg${botSkill === id ? ' on' : ''}" ${isHost ? `data-act="botSkill" data-skill="${id}"` : 'disabled'}>${label}</button>`).join('')}
         </div>
         <button class="route small" data-act="gunsmith"><b>${esc(WEAPONS[Progress.primary]?.name ?? '')}</b></button>
+        <button class="route small" data-act="loadout"><b>Loadout</b></button>
         ${start}
       </footer>`;
     this.show();
@@ -288,42 +299,93 @@ export class Menu {
     this.show();
   }
 
-  // data: { results, title, mine, xpGained, levelInfo, unlocks, mvp, finalKill, finalKillBy, teams, next:'lobby'|'menu' }
-  results(data, onContinue) {
+  // Countdown ticks for a guest still reading results; the lobby repaints in full, so it needs no call of its own.
+  updateCountdown(left) {
+    const n = this.el.querySelector('.auto-n');
+    if (n && left !== null) n.textContent = left;
+    const note = this.el.querySelector('.res-note');
+    if (note) note.textContent = left === null ? '' : `Rematch starts in ${left}`;
+  }
+
+  // Note above the choices on the results screen: 'Host lost, waiting', etc.
+  resultsNote(text) {
+    const note = this.el.querySelector('.res-note');
+    if (note) note.textContent = text;
+  }
+
+  // Swaps the Rematch button's action after the host is gone: label says what it now does.
+  relabelRematch(text) {
+    const b = this.el.querySelector('[data-act="resRematch"] b');
+    if (b) b.textContent = text;
+  }
+
+  loadoutScreen(onBack, onChange) {
+    this.#stopPreview();
+    this.el.dataset.screen = 'loadout';
+    this.el.innerHTML = `
+      <header class="bar">
+        <button class="back" data-act="loBack">Done</button>
+        <h2>Loadout</h2>
+      </header>
+      <div class="lo-grid"></div>`;
+    this.loEditor?.dispose();
+    this.loEditor = new LoadoutEditor(this.el.querySelector('.lo-grid'), onChange);
+    this.on({ loBack: () => { this.loEditor?.dispose(); this.loEditor = null; onBack(); } });
+    this.show();
+  }
+
+  // data: outcome, scores, myTeam, roster, mvp, xp:{total, lines:[[label,amount]], level, into, span, levelUp},
+  // weapons:[{name, gained, total, nextName, nextAt}], unlocks, finalKill, rematchLabel, note.
+  results(data, { rematch, menu }) {
     this.#stopPreview();
     this.el.dataset.screen = 'results';
-    const { outcome, scores, myTeam, roster, mvp, xpGained, level, unlocks, finalKill } = data;
+    const { outcome, scores, myTeam, roster, mvp, xp, weapons, unlocks, finalKill: fk } = data;
     const board = team => {
-      const rows = roster.filter(p => p.team === team).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-      return `<div class="board" style="--team:${TEAMS[team].css}">
-        <h3>${esc(TEAMS[team].name)}<b>${scores[team]}</b></h3>
-        ${rows.map(p => `<div class="brow${p.id === data.localId ? ' me' : ''}"><span>${esc(p.name)}</span><b>${p.kills}</b><em>${p.deaths}</em></div>`).join('')}
+      const rows = roster.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
+      return `<div class="rb" style="--team:${TEAMS[team].css}">
+        <div class="rb-head"><b class="rb-team">${esc(TEAMS[team].name)}</b><b class="rb-pts">${scores[team]}</b>
+          <span>K</span><span>D</span><span>A</span><span>HS</span><span class="wide">Score</span></div>
+        ${rows.map(p => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}">
+          <b>${esc(p.name)}</b><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${p.head ?? 0}</span><span class="wide">${matchScore(p)}</span>
+        </div>`).join('')}
       </div>`;
     };
-    const fk = finalKill;
+    const weaponRow = w => `
+      <div class="wp">
+        <div class="wp-line"><b>${esc(w.name)}</b><span>+${w.gained} kills</span></div>
+        ${w.nextAt
+          ? `<i class="xp"><i style="transform:scaleX(${Math.min(1, w.total / w.nextAt).toFixed(3)})"></i></i><small>${w.total}/${w.nextAt} to ${esc(w.nextName)}</small>`
+          : '<small>Every camo unlocked</small>'}
+      </div>`;
     this.el.innerHTML = `
-      <div class="res-head" data-outcome="${outcome}">
+      <div class="res-top" data-outcome="${outcome}">
         <h2>${outcome === 'win' ? 'Victory' : outcome === 'loss' ? 'Defeat' : 'Stalemate'}</h2>
+        <span class="res-score">${scores[myTeam]}<i>-</i>${scores[1 - myTeam]}</span>
+        ${mvp ? `<div class="mvp-tag" style="--team:${TEAMS[mvp.team].css}"><span>MVP</span><b>${esc(mvp.name)}</b><small>${matchScore(mvp)} pts</small></div>` : ''}
       </div>
-      <div class="res-main">
-        <div class="boards">${board(myTeam)}${board(1 - myTeam)}</div>
-        <aside class="res-side">
-          ${mvp ? `<div class="mvp" style="--team:${TEAMS[mvp.team].css}"><span>Most valuable</span><b>${esc(mvp.name)}</b><small>${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${mvp.deaths} ${mvp.deaths === 1 ? 'death' : 'deaths'}</small></div>` : ''}
-          <div class="finalcard">
-            <canvas class="fk-canvas"></canvas>
-            <div class="fk-cap">${fk ? `Final kill by <b>${esc(fk.byName)}</b> with the ${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}` : 'No final kill'}</div>
-          </div>
-        </aside>
-      </div>
-      <footer class="res-foot">
-        <div class="xpbar">
-          <div class="xp-line"><b>+${xpGained} XP</b><span>Level ${level.level}${level.levelUp ? ', level up' : ''}</span></div>
-          <i class="xp big"><i class="xp-fill" style="transform:scaleX(${(level.into / level.span).toFixed(3)})"></i></i>
+      <div class="rb-pair">${board(myTeam)}${board(1 - myTeam)}</div>
+      <div class="res-cards">
+        <div class="finalcard">
+          <canvas class="fk-canvas"></canvas>
+          <div class="fk-cap">${fk ? `Final kill<br><b>${esc(fk.byName)}</b> on <b>${esc(fk.targetName)}</b><br>${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}` : 'No final kill'}</div>
+        </div>
+        <div class="xp-card">
+          <div class="xp-head"><b>+${xp.total} XP</b><span>Level ${xp.level}${xp.levelUp ? ' up' : ''}</span></div>
+          ${xp.lines.map(([label, amount]) => `<div class="xp-row"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('')}
+          <i class="xp big"><i class="xp-fill" style="transform:scaleX(${(xp.into / xp.span).toFixed(3)})"></i></i>
+        </div>
+        <div class="wp-card">
+          <h4>Weapons</h4>
+          ${weapons.length ? weapons.map(weaponRow).join('') : '<small>No weapon kills this match</small>'}
           ${unlocks.length ? `<div class="unlocks">${unlocks.map(u => `<span><i style="background:${hex(u.colors[0])}"></i>${esc(u.weaponName)}: ${esc(u.name)}</span>`).join('')}</div>` : ''}
         </div>
-        <button class="route primary" data-act="resContinue"><i class="lamp"></i><b>${data.continueLabel}</b></button>
-      </footer>`;
-    this.on({ resContinue: onContinue });
+        <div class="res-choice">
+          <button class="route primary" data-act="resRematch"><i class="lamp"></i><b>${esc(data.rematchLabel)}</b></button>
+          <button class="route" data-act="resMenu"><i class="lamp"></i><b>Menu</b></button>
+          <p class="res-note">${esc(data.note ?? '')}</p>
+        </div>
+      </div>`;
+    this.on({ resRematch: rematch, resMenu: menu });
     if (fk) this.#startPreview(this.el.querySelector('.fk-canvas'), fk.weapon, fk.camo);
     this.show();
   }

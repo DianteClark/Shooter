@@ -5,19 +5,21 @@ import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
 import { WEAPONS } from './shared/weapons.js';
-import { getCamo } from './shared/camos.js';
+import { CAMOS, getCamo } from './shared/camos.js';
+import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE, SCORE_LIMIT, TIME_LIMIT } from './shared/constants.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
-import { Progress } from './ui/progress.js';
+import { Progress, matchScore } from './ui/progress.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
 
 const GAME_NAME = 'Switchyard';
 const NET_POLL_MS = 1000;
-const XP = { kill: 100, win: 500, played: 200 };
+const REMATCH_SECONDS = 15;
+const XP = { kill: 100, headshot: 25, assist: 50, win: 500, played: 200 };
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
 // Test hook: ?limit=N shortens a match. Without the parameter normal rules apply.
@@ -44,6 +46,10 @@ const app = {
   lobby: { humans: [], botSkill: 'mixed' },
   inMatch: false,
   dead: new Set(),          // Peers dropped during the current match; they cannot be seated back in.
+  rematch: null,            // Host only: { left, timer } while the auto-start countdown runs.
+  countdown: null,          // Seconds left in the rematch countdown as last announced; null when none.
+  rematchWait: false,       // Guest pressed Rematch and is waiting for the host to do the same.
+  soloRematch: false,       // The session is gone, so the results screen's Rematch now starts a solo match.
 };
 
 function blockIosGestures() {
@@ -71,8 +77,18 @@ function myLoadout() {
   return Progress.loadout();
 }
 
+// What every human carries in the lobby and into the roster.
+function seatData() {
+  const loadout = myLoadout();
+  return { primary: loadout.primary, camo: loadout.camo, loadout };
+}
+
 function goTitle(message) {
   teardownNet();
+  stopRematch();
+  app.soloRematch = false;
+  app.countdown = null;
+  app.rematchWait = false;
   app.lobby = { humans: [], botSkill: 'mixed' };
   hud.setVisible(false);
   menu.overlay('');
@@ -96,6 +112,7 @@ menu.on({
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
   gunsmith: () => openGunsmith(),
+  loadout: () => openLoadout(),
   leaveLobby: () => goTitle(),
   toggleReady: () => toggleReady(),
   start: () => startHostMatch(),
@@ -126,23 +143,27 @@ function askCode() {
   });
 }
 
+function afterEditing() {
+  if (app.net && app.lobby.humans.length) renderLobby();
+  else menu.title();
+}
+
+// Keeps the host's seat record in step with what this player just changed.
+function shareLoadout() {
+  if (!app.net) return;
+  const me = localHuman();
+  if (!me) return;
+  Object.assign(me, seatData());
+  if (app.isHost) broadcastLobby();
+  else app.net.sendLobby({ t: 'loadout', ...seatData() });
+}
+
 function openGunsmith() {
-  const back = () => {
-    if (app.net && app.lobby.humans.length) renderLobby();
-    else menu.title();
-  };
-  menu.gunsmith({
-    onBack: back,
-    onChange: () => {
-      if (!app.net) return;
-      const me = localHuman();
-      if (me) {
-        Object.assign(me, myLoadout());
-        if (app.isHost) broadcastLobby();
-        else app.net.sendLobby({ t: 'loadout', ...myLoadout() });
-      }
-    },
-  });
+  menu.gunsmith({ onBack: afterEditing, onChange: shareLoadout });
+}
+
+function openLoadout() {
+  menu.loadoutScreen(afterEditing, shareLoadout);
 }
 
 // --- Lobby ---
@@ -155,12 +176,37 @@ function renderLobby() {
   menu.lobby({
     code: app.code, humans: app.lobby.humans, botSkill: app.lobby.botSkill, isHost: app.isHost,
     localId: app.net.localId, hostId: app.net.hostId,
+    countdown: app.isHost ? (app.rematch?.left ?? null) : app.countdown,
+    rematchWait: app.rematchWait,
   });
 }
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null });
+}
+
+// --- Rematch: same room and code, players land in the lobby and the host's countdown launches the next match. ---
+function startRematchCountdown() {
+  stopRematch();
+  const rematch = app.rematch = { left: REMATCH_SECONDS, timer: 0 };
+  rematch.timer = setInterval(() => {
+    rematch.left--;
+    if (rematch.left <= 0) {
+      stopRematch();
+      startHostMatch();
+      return;
+    }
+    broadcastLobby();
+    if (menuShows('lobby')) renderLobby();
+  }, 1000);
+  broadcastLobby();
+  renderLobby();
+}
+
+function stopRematch() {
+  clearInterval(app.rematch?.timer);
+  app.rematch = null;
 }
 
 function teamOpen(team, except = null) {
@@ -174,7 +220,7 @@ function startHosting() {
   app.code = code;
   app.isHost = true;
   app.lobby = {
-    humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...myLoadout() }],
+    humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...seatData() }],
     botSkill: 'mixed',
   };
   wireSharedNet(net);
@@ -200,13 +246,13 @@ function hostLobbyMessage(msg, from) {
           return;
         }
         // Friends default to the same side; overflow goes to the other team.
-        guest = { id: from, name: String(msg.name).slice(0, 12), team: teamOpen(0) ? 0 : 1, ready: false, primary: msg.primary, camo: msg.camo };
+        guest = { id: from, name: String(msg.name).slice(0, 12), team: teamOpen(0) ? 0 : 1, ready: false, ...seatFrom(msg) };
         humans.push(guest);
       }
       break;
     }
     case 'ready': if (guest) guest.ready = !!msg.ready; break;
-    case 'loadout': if (guest) { guest.primary = msg.primary; guest.camo = msg.camo; } break;
+    case 'loadout': if (guest) Object.assign(guest, seatFrom(msg)); break;
     case 'team': {
       if (guest && teamOpen(msg.team, guest.id)) guest.team = msg.team;
       break;
@@ -215,6 +261,12 @@ function hostLobbyMessage(msg, from) {
   }
   broadcastLobby();
   if (menuShows('lobby')) renderLobby();
+}
+
+// A peer on another version may send a partial or stale loadout; normalizing here protects the match.
+function seatFrom(msg) {
+  const loadout = normalizeLoadout({ ...msg.loadout, primary: msg.primary, camo: msg.camo });
+  return { primary: loadout.primary, camo: loadout.camo, loadout };
 }
 
 function menuShows(screen) {
@@ -263,7 +315,7 @@ function startJoining(code) {
   menu.searching(code, () => goTitle());
   wireSharedNet(net);
   net.onConnected(() => {
-    net.sendLobby({ t: 'join', name: myName(), ...myLoadout() });
+    net.sendLobby({ t: 'join', name: myName(), ...seatData() });
   });
   net.onJoinFailed(() => {
     teardownNet();
@@ -281,10 +333,16 @@ function guestLobbyMessage(msg) {
     case 'state':
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
+      app.countdown = msg.countdown ?? null;
       if (app.voice) updateVoiceTeam();
-      if (!app.inMatch && menu.el.dataset.screen !== 'gunsmith' && menu.el.dataset.screen !== 'results') renderLobby();
+      if (menuShows('results')) menu.updateCountdown(app.countdown);
+      else if (!app.inMatch && !['gunsmith', 'loadout'].includes(menu.el.dataset.screen)) renderLobby();
       break;
     case 'start':
+      // Normally the old match is long over; a guest whose final-kill hold outlasted the countdown is cut short here.
+      endLocalMatch();
+      app.countdown = null;
+      app.rematchWait = false;
       beginMatch({
         roster: msg.roster, seed: msg.seed, mapId: msg.mapId,
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
@@ -307,6 +365,8 @@ function setHostNotice(left) {
   const text = left > 0 ? `Host lost, waiting... ${left}` : '';
   if (app.inMatch) {
     hud.setNotice(text);
+  } else if (menuShows('results')) {
+    menu.resultsNote(text);
   } else {
     menu.overlay(`<div class="sheet slim"><div class="signal"><i></i><i></i><i></i></div><h2>Host lost, waiting...</h2><p>Returning to the menu in ${left}s if they don't come back.</p></div>`);
   }
@@ -314,12 +374,22 @@ function setHostNotice(left) {
 
 function clearHostNotice() {
   if (app.inMatch) hud.setNotice('');
+  else if (menuShows('results')) menu.updateCountdown(app.countdown);
   else menu.overlay('');
 }
 
 function hostGone(reason) {
+  const message = reason === 'ended' ? 'The host ended the session.' : 'The host did not come back.';
+  // Someone reading their results keeps them; the room is gone, so Rematch becomes a fresh match against bots.
+  if (menuShows('results')) {
+    teardownNet();
+    app.soloRematch = true;
+    menu.relabelRematch('Play vs bots');
+    menu.resultsNote(message);
+    return;
+  }
   endLocalMatch();
-  goTitle(reason === 'ended' ? 'The host ended the session.' : 'The host did not come back.');
+  goTitle(message);
 }
 
 // Handlers needed on both sides of a session.
@@ -346,10 +416,12 @@ function updateVoiceTeam() {
 function startSolo() {
   needName(() => {
     teardownNet();
+    stopRematch();
+    app.soloRematch = false;
     const id = 'local';
     app.isHost = true;
     app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed' };
-    const humans = [{ id, name: myName(), team: 0, ...myLoadout() }];
+    const humans = [{ id, name: myName(), team: 0, ...seatData() }];
     beginMatch({
       roster: buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE }),
       seed: randomSeed(), mapId: DEFAULT_MAP, scoreLimit: SCORE, timeLimit: TIME_LIMIT,
@@ -361,8 +433,9 @@ function startSolo() {
 function startHostMatch() {
   const net = app.net;
   if (!net) return;
+  stopRematch();
   const { humans, botSkill } = app.lobby;
-  const clean = humans.map(({ id, name, team, primary, camo }) => ({ id, name, team, primary, camo }));
+  const clean = humans.map(({ id, name, team, primary, camo, loadout }) => ({ id, name, team, primary, camo, loadout }));
   const payload = {
     t: 'start', seed: randomSeed(), mapId: DEFAULT_MAP, scoreLimit: SCORE, timeLimit: TIME_LIMIT,
     roster: buildRoster(clean, { botSkill, teamSize: TEAM_SIZE }),
@@ -431,37 +504,66 @@ function onMatchEnd(results) {
   hud.showEnd(results, () => showResults(results));
 }
 
+// Sorts by match score, and breaks ties in favour of kills, then fewer deaths.
+function pickMvp(players) {
+  let mvp = null;
+  for (const p of players) {
+    if (!mvp) { mvp = p; continue; }
+    const diff = matchScore(p) - matchScore(mvp);
+    if (diff > 0 || (diff === 0 && (p.kills > mvp.kills || (p.kills === mvp.kills && p.deaths < mvp.deaths)))) mvp = p;
+  }
+  return mvp;
+}
+
+function xpBreakdown(me, won) {
+  const kills = me?.kills ?? 0, head = me?.head ?? 0, assists = me?.assists ?? 0;
+  const lines = [['Match played', XP.played]];
+  if (kills) lines.push([`Kills x${kills}`, kills * XP.kill]);
+  if (head) lines.push([`Headshots x${head}`, head * XP.headshot]);
+  if (assists) lines.push([`Assists x${assists}`, assists * XP.assist]);
+  if (won) lines.push(['Win', XP.win]);
+  return { lines, total: lines.reduce((sum, l) => sum + l[1], 0) };
+}
+
+function weaponProgress() {
+  return Object.entries(hud.weaponKills ?? {}).map(([weapon, gained]) => {
+    const total = Progress.kills(weapon);
+    const next = CAMOS.find(c => c.unlockKills > total);
+    return { name: WEAPONS[weapon]?.name ?? weapon, gained, total, nextName: next?.name ?? '', nextAt: next?.unlockKills ?? 0 };
+  });
+}
+
 function showResults(results) {
   const unlocks = collectUnlocks();
+  const weapons = weaponProgress();
   endLocalMatch();
+  app.rematchWait = false;
 
   const me = results.players.find(p => p.id === results.localId);
   const won = results.winner === results.myTeam;
   const drawn = results.winner === null || results.winner === undefined;
-  const xpGained = XP.played + (me?.kills ?? 0) * XP.kill + (won ? XP.win : 0);
-  const change = Progress.addXp(xpGained);
+  const { lines, total } = xpBreakdown(me, won);
+  const change = Progress.addXp(total);
   const lp = Progress.levelProgress();
-
-  let mvp = null;
-  for (const p of results.players) {
-    if (!mvp || p.kills > mvp.kills || (p.kills === mvp.kills && p.deaths < mvp.deaths)) mvp = p;
-  }
 
   const lastKill = results.lastKill;
   const killer = lastKill && results.players.find(p => p.id === lastKill.by);
+  const victim = lastKill && results.players.find(p => p.id === lastKill.target);
+  const counting = app.countdown !== null && !!app.net && !app.isHost;
   menu.results({
     outcome: drawn ? 'draw' : won ? 'win' : 'loss',
     scores: results.scores,
     myTeam: results.myTeam,
     localId: results.localId,
     roster: results.players,
-    mvp,
-    xpGained,
-    level: { level: lp.level, into: lp.into, span: lp.span, levelUp: change.after > change.before },
+    mvp: pickMvp(results.players),
+    xp: { total, lines, level: lp.level, into: lp.into, span: lp.span, levelUp: change.after > change.before },
+    weapons,
     unlocks,
-    finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '' } : null,
-    continueLabel: app.net ? 'Back to lobby' : 'Back to menu',
-  }, () => afterResults());
+    finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
+    rematchLabel: 'Rematch',
+    note: counting ? `Rematch starts in ${app.countdown}` : '',
+  }, { rematch: () => afterResults(), menu: () => goTitle() });
 }
 
 function collectUnlocks() {
@@ -472,16 +574,18 @@ function collectUnlocks() {
 }
 
 function afterResults() {
-  if (!app.net) return menu.title();
+  if (app.soloRematch || !app.net) return startSolo();
   const me = localHuman();
-  if (me && !app.isHost) {
-    me.ready = false;
-    app.net.sendLobby({ t: 'ready', ready: false });
-  }
   if (app.isHost) {
-    for (const h of app.lobby.humans) h.ready = h.host ? true : false;
-    broadcastLobby();
+    for (const h of app.lobby.humans) h.ready = !!h.host;
+    startRematchCountdown();
+    return;
   }
+  // Guests who are not in the host's roster can't be seated; send them home rather than leave them waiting.
+  if (!me) return goTitle('That room no longer has a seat for you.');
+  me.ready = true;
+  app.net.sendLobby({ t: 'ready', ready: true });
+  app.rematchWait = true;
   renderLobby();
 }
 

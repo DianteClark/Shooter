@@ -60,6 +60,11 @@ export class Interpolator {
     out.uav = b.uav;
     out.localId = b.localId;
     out.lastKill = b.lastKill;
+    out.projectiles = b.projectiles;
+    out.smokes = b.smokes;
+    out.turrets = b.turrets;
+    out.gunships = b.gunships;
+    out.mode = b.mode;
 
     const fromById = this.newestById;
     fromById.clear();

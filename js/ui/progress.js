@@ -2,11 +2,12 @@
 // read and write tolerates failure and the game simply plays without persistence.
 import { CAMOS } from '../shared/camos.js';
 import { PRIMARY_IDS } from '../shared/constants.js';
+import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 
 const KEY = 'switchyard.progress.v1';
 
 function blank() {
-  return { name: '', primary: PRIMARY_IDS[0], camoByWeapon: {}, kills: {}, xp: 0, flags: {} };
+  return { name: '', primary: PRIMARY_IDS[0], camoByWeapon: {}, kills: {}, xp: 0, flags: {}, equipment: {} };
 }
 
 function load() {
@@ -23,6 +24,11 @@ function save() {
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch { /* quota or private mode */ }
+}
+
+// Points a player earned over the whole match. PlayerView.score cannot serve here because it resets when a streak is cashed in.
+export function matchScore(p) {
+  return (p.kills ?? 0) * SCORE.kill + (p.head ?? 0) * SCORE.headshot + (p.assists ?? 0) * SCORE.assist;
 }
 
 const XP_STEP = 400;   // Level n needs XP_STEP * n * (n - 1) / 2 in total, so each level costs a little more.
@@ -78,8 +84,15 @@ export const Progress = {
     return !!camo && this.kills(weapon) >= (camo.unlockKills ?? 0);
   },
 
+  // The full loadout for a match: the chosen gun and camo plus the saved equipment, always normalized.
   loadout(primary = data.primary) {
-    return { primary, camo: this.camo(primary) };
+    return normalizeLoadout({ ...data.equipment, primary, camo: this.camo(primary) });
+  },
+
+  // Saves any of { tactical, lethal, perks, streaks }.
+  setEquipment(part) {
+    data.equipment = { ...data.equipment, ...part };
+    save();
   },
 
   // Returns camos newly earned on this weapon by this kill.

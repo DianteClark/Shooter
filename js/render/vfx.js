@@ -231,6 +231,82 @@ export class VFX {
     this.pop(x, 1.8, z, radius * 3.4, FIRE_POP, 0.26);
   }
 
+  // Grenade: tighter and more violent than an airstrike explosion, with shrapnel.
+  fragBurst(x, z, radius) {
+    for (let i = 0; i < 18; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(8, 26);
+      this.spawn(x, 0.5, z, Math.cos(a) * s, rand(3, 12), Math.sin(a) * s, rand(0.22, 0.42), 0.16, 0.03, FIRE, 0, 18, 1.5, 0.04);
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(5, 15);
+      this.shard(x, 0.6, z, Math.cos(a) * s, rand(4, 13), Math.sin(a) * s, GRENADE_SHARD);
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(1, 4);
+      this.spawn(x + Math.cos(a) * 0.5, 0.5, z + Math.sin(a) * 0.5, Math.cos(a) * s, rand(1, 3), Math.sin(a) * s, rand(0.5, 1), radius * 0.2, radius * 0.7, SMOKE, 0.7, -1.2, 1.8);
+    }
+    this.fireball(x, 0.8, z, radius * 0.85);
+    this.ring(x, z, radius * 0.2, radius * 1.3, 0.3, FIRE, 1);
+    this.scorch(x, z, radius * 0.55);
+    this.pop(x, 1.6, z, radius * 3, FIRE_POP, 0.22);
+  }
+
+  // Flashbang: white-hot and instant, with no smoke, so it reads as different from a frag at a glance.
+  flashBurst(x, z, radius) {
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.16, 1.2, radius * 1.3, WHITE, 0, 0, 0);
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.3, 0.8, radius * 0.7, FLASH_TINT, 0, 0, 0);
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2;
+      const s = rand(14, 26);
+      this.spawn(x, 1.1, z, Math.cos(a) * s, rand(1, 6), Math.sin(a) * s, rand(0.14, 0.3), 0.14, 0.02, WHITE, 0, 0, 2.4, 0.05);
+    }
+    this.ring(x, z, 0.4, radius, 0.26, FLASH_TINT, 1);
+    this.ring(x, z, 0.2, radius * 0.6, 0.2, WHITE, 1);
+    this.pop(x, 2.2, z, radius * 3, FLASH_POP, 0.3);
+  }
+
+  // Headshot: a sharp gold star above the shoulders.
+  headBurst(x, z) {
+    const y = 1.7;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + rand(-0.2, 0.2), s = rand(5, 10);
+      this.spawn(x, y, z, Math.cos(a) * s, rand(2, 7), Math.sin(a) * s, rand(0.16, 0.28), 0.13, 0.02, HEAD_GOLD, 0, 14, 2.4, 0.05);
+    }
+    this.spawn(x, y, z, 0, 0, 0, 0.13, 0.5, 1.5, HEAD_GOLD, 0, 0, 0);
+    this.spawn(x, y, z, 0, 0, 0, 0.09, 0.3, 0.8, WHITE, 0, 0, 0);
+  }
+
+  // Stim: rising green motes and a soft ring at the feet.
+  healBurst(x, z) {
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2), r = rand(0.15, 0.7);
+      this.spawn(x + Math.cos(a) * r, rand(0.2, 1), z + Math.sin(a) * r, 0, rand(2.2, 4.5), 0, rand(0.4, 0.75), 0.13, 0.03, HEAL, 0, 0, 0.6, 0.05);
+    }
+    this.ring(x, z, 0.3, 1.5, 0.42, HEAL, 0.9);
+    this.pop(x, 1.2, z, 5, HEAL, 0.16);
+  }
+
+  // Overheat vent: pale steam jetting up off the barrel.
+  steam(x, y, z, n) {
+    for (let i = 0; i < n; i++) {
+      this.spawn(x, y, z, rand(-0.9, 0.9), rand(1.5, 3.6), rand(-0.9, 0.9), rand(0.45, 0.85), 0.1, 0.5, STEAM, 0.55, -1.2, 1.8);
+    }
+  }
+
+  // Burst of matching low-poly-coloured puffs the moment a smoke cloud starts.
+  smokePop(x, z, r) {
+    for (let i = 0; i < 12; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(2, 5);
+      this.spawn(x, 0.4, z, Math.cos(a) * s, rand(0.5, 2), Math.sin(a) * s, rand(0.4, 0.8), r * 0.15, r * 0.5, STEAM, 0.8, -0.5, 2.2);
+    }
+  }
+
+  // Deployed turret landing.
+  turretDrop(x, z, rgb) {
+    for (let i = 0; i < 6; i++) this.spawn(x + rand(-0.5, 0.5), 0.2, z + rand(-0.5, 0.5), rand(-2, 2), rand(0.6, 2), rand(-2, 2), rand(0.25, 0.5), 0.14, 0.4, DUST, 0.5, -0.5, 2.5);
+    this.ring(x, z, 0.3, 2.1, 0.36, rgb, 0.9);
+  }
+
   spawnFx(x, z, rgb) {
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
@@ -702,6 +778,12 @@ export class VFX {
 }
 
 const WARM_SPARK = [1.0, 0.72, 0.3];
+const GRENADE_SHARD = [0.82, 0.68, 0.5];
+const FLASH_TINT = [0.82, 0.92, 1.0];
+const FLASH_POP = [0.9, 0.96, 1.05];
+const HEAD_GOLD = [1.0, 0.82, 0.22];
+const HEAL = [0.3, 1.0, 0.56];
+const STEAM = [0.72, 0.74, 0.78];
 const WHITE = [1, 1, 1];
 const DUST = [0.42, 0.38, 0.36];
 const SMOKE = [0.12, 0.11, 0.14];
