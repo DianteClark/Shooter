@@ -4,10 +4,9 @@ import { GameRenderer } from './render/renderer.js';
 import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
-import { WEAPONS } from './shared/weapons.js';
-import { CAMOS, getCamo } from './shared/camos.js';
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE, SCORE_LIMIT, TIME_LIMIT } from './shared/constants.js';
+import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
@@ -19,7 +18,7 @@ import { Voice } from './net/voice.js';
 const GAME_NAME = 'Switchyard';
 const NET_POLL_MS = 1000;
 const REMATCH_SECONDS = 15;
-const XP = { kill: 100, headshot: 25, assist: 50, win: 500, played: 200 };
+const EDIT_SCREENS = ['gunsmith', 'loadouts', 'profile', 'save', 'keypad'];   // A lobby update must not pull a guest out of these.
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
 // Test hook: ?limit=N shortens a match. Without the parameter normal rules apply.
@@ -58,10 +57,12 @@ function blockIosGestures() {
   document.addEventListener('gesturechange', stop, { passive: false });
   document.addEventListener('dblclick', stop, { passive: false });
   // Nothing in the app scrolls, so a stray drag must never rubber-band Safari's page.
-  document.addEventListener('touchmove', stop, { passive: false });
+  // The one exception is the save code boxes, which need to scroll and take selection and paste.
+  document.addEventListener('touchmove', e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); }, { passive: false });
   // Safari still offers text selection on long-press through some layered elements.
-  document.addEventListener('selectstart', stop);
-  document.addEventListener('contextmenu', stop);
+  const unlessField = e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); };
+  document.addEventListener('selectstart', unlessField);
+  document.addEventListener('contextmenu', unlessField);
 
   // Audio must start from a user gesture, and iOS can suspend it again after backgrounding.
   const unlock = () => audio.unlock();
@@ -80,7 +81,7 @@ function myLoadout() {
 // What every human carries in the lobby and into the roster.
 function seatData() {
   const loadout = myLoadout();
-  return { primary: loadout.primary, camo: loadout.camo, loadout };
+  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: Progress.badge() };
 }
 
 function goTitle(message) {
@@ -107,7 +108,8 @@ function teardownNet() {
 
 // --- Title actions ---
 menu.on({
-  editName: () => editName(() => menu.title()),
+  profile: () => openProfile(),
+  saveCode: () => openSave(),
   solo: () => { startSolo(); },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
@@ -125,12 +127,12 @@ function needName(next) {
   else editName(next);
 }
 
-function editName(next) {
+function editName(next, back = () => menu.title()) {
   menu.keypad({
     title: 'Choose a callsign', value: Progress.name, max: 12, kind: 'name', doneLabel: 'Save',
     hint: 'Your squad sees this in the lobby and the kill feed.',
     onDone: value => { Progress.name = value; next(); },
-    onCancel: () => menu.title(),
+    onCancel: back,
   });
 }
 
@@ -158,12 +160,37 @@ function shareLoadout() {
   else app.net.sendLobby({ t: 'loadout', ...seatData() });
 }
 
-function openGunsmith() {
-  menu.gunsmith({ onBack: afterEditing, onChange: shareLoadout });
+function openGunsmith(loadoutIndex, onBack = afterEditing) {
+  menu.gunsmith({ loadoutIndex, onBack, onChange: shareLoadout });
 }
 
 function openLoadout() {
-  menu.loadoutScreen(afterEditing, shareLoadout);
+  menu.loadouts({
+    onBack: afterEditing,
+    onChange: shareLoadout,
+    onGunsmith: i => openGunsmith(i, openLoadout),
+    onRename: i => menu.keypad({
+      title: 'Name this loadout', value: Progress.loadouts()[i].name, max: 16, kind: 'name', doneLabel: 'Save',
+      onDone: value => { Progress.renameLoadout(i, value); shareLoadout(); openLoadout(); },
+      onCancel: openLoadout,
+    }),
+  });
+}
+
+function openProfile() {
+  menu.profile({
+    onBack: afterEditing,
+    onChange: shareLoadout,
+    onRename: () => editName(() => { shareLoadout(); openProfile(); }, openProfile),
+    onSave: () => openSave(openProfile),
+  });
+}
+
+function openSave(back = afterEditing) {
+  menu.saveCode({
+    onBack: back,
+    onImported: () => { shareLoadout(); menu.toast('Save loaded'); back(); },
+  });
 }
 
 // --- Lobby ---
@@ -265,8 +292,23 @@ function hostLobbyMessage(msg, from) {
 
 // A peer on another version may send a partial or stale loadout; normalizing here protects the match.
 function seatFrom(msg) {
-  const loadout = normalizeLoadout({ ...msg.loadout, primary: msg.primary, camo: msg.camo });
-  return { primary: loadout.primary, camo: loadout.camo, loadout };
+  const loadout = { ...msg.loadout, ...normalizeLoadout({ ...msg.loadout, primary: msg.primary, camo: msg.camo }) };
+  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: cleanBadge(msg.badge) };
+}
+
+function cleanBadge(b) {
+  const n = (v, max, min) => Math.min(max, Math.max(min, Math.floor(Number(v)) || min));
+  return { prestige: n(b?.prestige, MAX_PRESTIGE, 0), level: n(b?.level, MAX_LEVEL, 1) };
+}
+
+// Bots have no save to read, so their rank follows their skill; a little variety by seat keeps tables believable.
+const BOT_LEVEL = { recruit: 4, regular: 14, veteran: 27, elite: 42 };
+function withBadges(roster, humans) {
+  return roster.map((r, i) => {
+    if (r.badge) return r;
+    const human = humans.find(h => h.id === r.id);
+    return { ...r, badge: human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 } };
+  });
 }
 
 function menuShows(screen) {
@@ -336,7 +378,7 @@ function guestLobbyMessage(msg) {
       app.countdown = msg.countdown ?? null;
       if (app.voice) updateVoiceTeam();
       if (menuShows('results')) menu.updateCountdown(app.countdown);
-      else if (!app.inMatch && !['gunsmith', 'loadout'].includes(menu.el.dataset.screen)) renderLobby();
+      else if (!app.inMatch && !EDIT_SCREENS.includes(menu.el.dataset.screen)) renderLobby();
       break;
     case 'start':
       // Normally the old match is long over; a guest whose final-kill hold outlasted the countdown is cut short here.
@@ -423,7 +465,7 @@ function startSolo() {
     app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed' };
     const humans = [{ id, name: myName(), team: 0, ...seatData() }];
     beginMatch({
-      roster: buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE }),
+      roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE }), humans),
       seed: randomSeed(), mapId: DEFAULT_MAP, scoreLimit: SCORE, timeLimit: TIME_LIMIT,
       hostId: id, isHost: true, localId: id,
     });
@@ -435,10 +477,10 @@ function startHostMatch() {
   if (!net) return;
   stopRematch();
   const { humans, botSkill } = app.lobby;
-  const clean = humans.map(({ id, name, team, primary, camo, loadout }) => ({ id, name, team, primary, camo, loadout }));
+  const clean = humans.map(({ id, name, team, primary, camo, loadout, badge }) => ({ id, name, team, primary, camo, loadout, badge }));
   const payload = {
     t: 'start', seed: randomSeed(), mapId: DEFAULT_MAP, scoreLimit: SCORE, timeLimit: TIME_LIMIT,
-    roster: buildRoster(clean, { botSkill, teamSize: TEAM_SIZE }),
+    roster: withBadges(buildRoster(clean, { botSkill, teamSize: TEAM_SIZE }), clean),
   };
   net.sendLobby(payload);
   beginMatch({ ...payload, hostId: net.localId, isHost: true });
@@ -457,7 +499,8 @@ function beginMatch({ roster, seed, mapId, scoreLimit, timeLimit, hostId, isHost
 
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster });
+  app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
   updateVoiceTeam();
@@ -515,37 +558,12 @@ function pickMvp(players) {
   return mvp;
 }
 
-function xpBreakdown(me, won) {
-  const kills = me?.kills ?? 0, head = me?.head ?? 0, assists = me?.assists ?? 0;
-  const lines = [['Match played', XP.played]];
-  if (kills) lines.push([`Kills x${kills}`, kills * XP.kill]);
-  if (head) lines.push([`Headshots x${head}`, head * XP.headshot]);
-  if (assists) lines.push([`Assists x${assists}`, assists * XP.assist]);
-  if (won) lines.push(['Win', XP.win]);
-  return { lines, total: lines.reduce((sum, l) => sum + l[1], 0) };
-}
-
-function weaponProgress() {
-  return Object.entries(hud.weaponKills ?? {}).map(([weapon, gained]) => {
-    const total = Progress.kills(weapon);
-    const next = CAMOS.find(c => c.unlockKills > total);
-    return { name: WEAPONS[weapon]?.name ?? weapon, gained, total, nextName: next?.name ?? '', nextAt: next?.unlockKills ?? 0 };
-  });
-}
-
 function showResults(results) {
-  const unlocks = collectUnlocks();
-  const weapons = weaponProgress();
   endLocalMatch();
   app.rematchWait = false;
 
-  const me = results.players.find(p => p.id === results.localId);
   const won = results.winner === results.myTeam;
   const drawn = results.winner === null || results.winner === undefined;
-  const { lines, total } = xpBreakdown(me, won);
-  const change = Progress.addXp(total);
-  const lp = Progress.levelProgress();
-
   const lastKill = results.lastKill;
   const killer = lastKill && results.players.find(p => p.id === lastKill.by);
   const victim = lastKill && results.players.find(p => p.id === lastKill.target);
@@ -556,21 +574,17 @@ function showResults(results) {
     myTeam: results.myTeam,
     localId: results.localId,
     roster: results.players,
+    badges: app.badges,
     mvp: pickMvp(results.players),
-    xp: { total, lines, level: lp.level, into: lp.into, span: lp.span, levelUp: change.after > change.before },
-    weapons,
-    unlocks,
+    // XP, level changes and unlocks were already applied to the save by MatchAwards.finish.
+    xp: results.xp,
+    level: results.level,
+    weapons: results.weapons ?? [],
+    unlocks: results.unlocks ?? [],
     finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
     rematchLabel: 'Rematch',
     note: counting ? `Rematch starts in ${app.countdown}` : '',
   }, { rematch: () => afterResults(), menu: () => goTitle() });
-}
-
-function collectUnlocks() {
-  return (hud.unlocks ?? []).splice(0).map(({ weapon, camoId }) => {
-    const c = getCamo(camoId);
-    return { weaponName: WEAPONS[weapon]?.name ?? weapon, name: c.name, colors: c.colors };
-  });
 }
 
 function afterResults() {

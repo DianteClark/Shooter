@@ -1,4 +1,5 @@
 @import url("fonts.css");
+@import url("menus.css");
 
 /* Dusk yard: steel that has gone blue-mauve in the last light, with sodium lamps for anything that wants attention.
    Team colours come from js/shared/constants.js and are the only fully saturated colours on screen. */
@@ -168,6 +169,7 @@ button {
 .f-row em { font-style: normal; }
 .f-w { color: var(--haze); font-size: 10px; }
 .f-note { color: var(--sodium); }
+.f-bdg { line-height: 0; align-self: center; margin-right: -3px; }
 
 .medals { position: absolute; left: 50%; top: calc(var(--st) + 62px); transform: translateX(-50%); width: 360px; height: 74px; display: flex; flex-direction: column; align-items: center; }
 .medal {
@@ -271,6 +273,9 @@ button {
 }
 .board-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .lb-side { width: 248px; }
+.lb-name { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.lb-bdg { line-height: 0; flex: none; }
+.lb-lv { font-size: 8px; color: var(--haze); text-decoration: none; flex: none; min-width: 11px; }
 .lb-head, .lb-row { display: grid; grid-template-columns: 1fr 20px 20px 20px 22px 44px; align-items: center; column-gap: 2px; font-size: 11px; }
 .lb-head { height: 18px; color: var(--haze); font-size: 9px; border-bottom: 1px solid rgba(231,234,228,.25); }
 .lb-head .lb-team { font: 400 12px/1 var(--plate-face); }
@@ -279,16 +284,6 @@ button {
 .lb-head span, .lb-row span { text-align: right; }
 .lb-row.me { background: rgba(231,234,228,.14); }
 .board-tip { font-size: 9px; color: var(--haze); }
-
-.sheet-wrap {
-  position: absolute; inset: 0; pointer-events: auto; display: flex; align-items: center; justify-content: center;
-  padding: calc(var(--st) + 8px) calc(var(--sr) + 14px) calc(var(--sb) + 8px) calc(var(--sl) + 14px); background: rgba(29,35,43,.82);
-}
-.loadout-sheet { width: 100%; max-width: 720px; padding: 8px 12px 10px; background: var(--ballast); box-shadow: inset 0 3px 0 var(--sodium); }
-.ls-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-.ls-bar h2 { font: 400 24px/1 var(--stencil); }
-.ls-bar small { font: 12px/1 var(--body); letter-spacing: 0; color: var(--haze); }
-.ls-bar .back { margin-left: auto; }
 
 .notice { position: absolute; left: 50%; top: 42%; transform: translateX(-50%); padding: 6px 14px; font: 18px/1 var(--stencil); background: rgba(29,35,43,.82); color: var(--sodium); opacity: 0; white-space: nowrap; }
 .notice.show { opacity: 1; }
@@ -306,11 +301,11 @@ button {
 .picker { display: flex; gap: 6px; pointer-events: auto; align-items: center; }
 .picker-label { font-size: 11px; color: var(--haze); margin-right: 3px; }
 .pick {
-  width: 94px; height: 50px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1px;
+  width: 118px; height: 50px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1px;
   background: rgba(29,35,43,.88); box-shadow: inset 0 0 0 1.5px rgba(231,234,228,.26);
   --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
-.pick b { font: 400 16px/1 var(--plate-face); }
+.pick b { font: 400 14px/1 var(--plate-face); white-space: nowrap; }
 .pick small { font-size: 9px; color: var(--haze); }
 .pick.on { background: var(--chalk); color: var(--ballast); }
 .pick.on small { color: var(--steel); }
@@ -325,7 +320,7 @@ button {
 /* --- Menus --- */
 .menu {
   position: absolute; inset: 0; display: none; flex-direction: column; background: var(--ballast);
-  padding: calc(var(--st) + 8px) calc(var(--sr) + 14px) calc(var(--sb) + 8px) calc(var(--sl) + 14px);
+  padding: calc(var(--st) + 8px) max(var(--sr), 12px) max(var(--sb), 8px) max(var(--sl), 12px);
 }
 .menu.on { display: flex; }
 
@@ -359,13 +354,6 @@ button {
 @keyframes boxcar-arrives { from { transform: translateX(-104%); } to { transform: none; } }
 .wordmark { font: 400 clamp(52px, 9.6vw, 84px)/.9 var(--stencil); letter-spacing: .01em; color: var(--chalk); white-space: nowrap; }
 .wordmark-sub { font-size: 12px; color: #c8ced3; margin-top: 8px; letter-spacing: .08em; }
-.callsign {
-  margin-top: auto; align-self: flex-start; display: grid; grid-template-columns: auto auto; column-gap: 18px; text-align: left; padding: 8px 12px;
-  background: rgba(29,35,43,.46); border-left: 3px solid var(--sodium);
-}
-.cs-label { font-size: 10px; color: var(--haze); grid-column: 1; }
-.cs-name { font: 400 24px/1.05 var(--stencil); grid-column: 1; grid-row: 2; }
-.cs-rank { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; flex-direction: column; gap: 5px; font-size: 12px; min-width: 96px; }
 .xp { display: block; position: relative; height: 4px; background: rgba(231,234,228,.18); overflow: hidden; }
 .xp > i, .xp-fill { position: absolute; inset: 0; display: block; background: var(--sodium); transform-origin: left center; }
 .xp.big { height: 7px; }
@@ -432,106 +420,6 @@ button {
 .skills span { font-size: 11px; color: var(--haze); margin-right: 6px; }
 .seg { height: 36px; padding: 0 10px; font-size: 12px; background: var(--steel); color: var(--haze); }
 .seg.on { background: var(--chalk); color: var(--ballast); }
-
-/* Loadout */
-.menu[data-screen="loadout"] .lo-grid { margin-top: 4px; }
-.lo-grid { display: flex; flex-direction: column; gap: 5px; flex: 1; justify-content: center; }
-.lo-row { display: flex; align-items: stretch; gap: 8px; }
-.lo-head { width: 74px; display: flex; flex-direction: column; justify-content: center; text-align: right; }
-.lo-head b { font: 400 15px/1.1 var(--plate-face); color: var(--chalk); }
-.lo-head small { font-size: 10px; color: var(--haze); }
-.lo-tiles { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
-.lo-tile {
-  position: relative; min-height: 58px; display: flex; align-items: center; gap: 6px; padding: 4px 7px; text-align: left; background: var(--steel); color: var(--chalk);
-  --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
-}
-.lo-tile svg { flex: none; width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: square; }
-.lo-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.lo-text b { font: 400 14px/1 var(--plate-face); }
-.lo-text small { font: 11px/1.1 var(--body); letter-spacing: 0; color: var(--haze); }
-.lo-tile em { position: absolute; right: 7px; top: 5px; font: 400 13px/1 var(--stencil); font-style: normal; color: var(--sodium); }
-.lo-tile.on { background: var(--chalk); color: var(--ballast); box-shadow: inset 0 0 0 2px var(--sodium); }
-.lo-tile.on small { color: #4a5660; }
-.lo-tile.on em { color: #9a5f06; }
-
-/* Gunsmith */
-.kills-note { margin-left: auto; font-size: 12px; color: var(--haze); }
-.kills-note b { color: var(--chalk); font-weight: 400; font-size: 18px; }
-.gs { flex: 1; min-height: 0; display: grid; grid-template-columns: 116px 1fr 268px; gap: 12px; margin-top: 8px; }
-.gs-weapons { display: flex; flex-direction: column; gap: 4px; }
-.gs-w { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: 0 10px; background: var(--steel); text-align: left; }
-.gs-w b { font: 400 16px/1 var(--plate-face); }
-.gs-w small { font-size: 10px; color: var(--haze); }
-.gs-w.on { background: var(--chalk); color: var(--ballast); }
-.gs-w.on small { color: var(--steel); }
-.gs-bench { position: relative; min-width: 0; background: linear-gradient(170deg, #36394a, var(--steel) 55%, #29323b); overflow: hidden; }
-.gs-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.gs-title { position: absolute; left: 12px; top: 10px; display: flex; flex-direction: column; pointer-events: none; }
-.gs-title b { font: 400 30px/1 var(--stencil); }
-.gs-title small { font-size: 12px; color: var(--sodium); }
-.gs-stats { position: absolute; left: 12px; right: 12px; bottom: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; pointer-events: none; }
-.stat span { font-size: 10px; color: var(--haze); }
-.stat i { display: block; position: relative; height: 4px; background: rgba(231,234,228,.16); margin-top: 2px; }
-.stat i i { position: absolute; inset: 0; background: var(--chalk); transform-origin: left center; }
-.gs-camos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; align-content: stretch; }
-.tile { position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; padding: 3px; background: var(--steel); text-align: left; min-height: 0; overflow: hidden; }
-.tile-swatch { position: absolute; left: 0; right: 0; top: 0; height: 42%; }
-.tile b { position: relative; font: 400 10px/1.1 var(--plate-face); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile small { position: relative; font-size: 9px; color: var(--haze); }
-.tile.locked .tile-swatch { filter: saturate(.5) brightness(.68); }
-.tile.locked b { color: var(--haze); }
-.tile.on { box-shadow: inset 0 0 0 2px var(--sodium); }
-.tile-bar { position: relative; display: block; height: 3px; background: rgba(231,234,228,.14); margin-top: 1px; }
-.tile-bar i { position: absolute; inset: 0; background: var(--sodium); transform-origin: left center; }
-
-/* Results */
-.menu[data-screen="results"] { gap: 5px; }
-.res-top { display: flex; align-items: center; gap: 14px; min-height: 38px; }
-.res-top h2 { font: 400 38px/1 var(--stencil); }
-.res-top[data-outcome="win"] h2 { color: var(--blue); }
-.res-top[data-outcome="loss"] h2 { color: var(--red); }
-.res-score { font: 400 32px/1 var(--stencil); }
-.res-score i { font-style: normal; margin: 0 4px; color: var(--haze); }
-.mvp-tag { margin-left: auto; display: grid; grid-template-columns: auto auto; column-gap: 8px; align-items: baseline; padding: 3px 12px 4px; background: var(--steel); box-shadow: inset 3px 0 0 var(--team); }
-.mvp-tag span { grid-column: 1 / span 2; font-size: 10px; color: var(--sodium); }
-.mvp-tag b { font: 400 20px/1 var(--stencil); }
-.mvp-tag small { font-size: 11px; color: var(--haze); }
-.rb-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.rb-head, .rb-row { display: grid; grid-template-columns: 1fr 22px 22px 22px 26px 48px; align-items: center; column-gap: 3px; padding: 0 4px; }
-.rb-head { height: 22px; border-bottom: 2px solid var(--team); }
-.rb-head span { font-size: 10px; color: var(--haze); text-align: right; }
-.rb-team { font: 400 13px/1 var(--plate-face); color: var(--team); }
-.rb-pts { display: none; }
-.rb-row { height: 20px; font-size: 12px; }
-.rb-row b { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rb-row span { text-align: right; }
-.rb-row.me { background: rgba(231,234,228,.12); }
-.rb-row.mvp b { color: var(--sodium); }
-.res-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: 182px 1fr 1fr 142px; gap: 8px; }
-.finalcard { position: relative; min-height: 0; background: linear-gradient(170deg, #36394a, var(--steel) 60%, #29323b); overflow: hidden; }
-.fk-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.fk-cap { position: absolute; left: 7px; right: 7px; bottom: 5px; font-size: 10px; line-height: 1.25; color: var(--chalk); }
-.fk-cap b { color: var(--sodium); font-weight: 400; }
-.xp-card, .wp-card { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: rgba(47,57,68,.7); }
-.xp-head { display: flex; justify-content: space-between; align-items: baseline; }
-.xp-head b { font: 400 18px/1 var(--stencil); color: var(--sodium); }
-.xp-head span { font-size: 11px; color: var(--haze); }
-.xp-row { display: flex; justify-content: space-between; font-size: 11px; line-height: 15px; }
-.xp-row b { font-weight: 400; }
-.xp-card .xp.big { margin-top: auto; }
-.wp-card h4 { font: 400 11px/1 var(--plate-face); color: var(--haze); margin-bottom: 2px; }
-.wp-card > small { font-size: 11px; color: var(--haze); }
-.wp { display: flex; flex-direction: column; gap: 2px; margin-bottom: 3px; }
-.wp-line { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
-.wp-line b { font-weight: 400; }
-.wp-line span { font-size: 10px; color: var(--go); }
-.wp small { font-size: 10px; color: var(--haze); }
-.unlocks { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10px; }
-.unlocks span { display: flex; align-items: center; gap: 4px; }
-.unlocks i { width: 9px; height: 9px; }
-.res-choice { display: flex; flex-direction: column; gap: 6px; justify-content: flex-end; }
-.res-choice .route { height: 46px; font-size: 15px; }
-.res-choice .res-note { font: 11px/1.2 var(--body); letter-spacing: 0; color: var(--sodium); min-height: 14px; }
 
 /* Overlays */
 .overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(29,35,43,.68); padding: calc(var(--st) + 10px) calc(var(--sr) + 14px) calc(var(--sb) + 10px) calc(var(--sl) + 14px); }

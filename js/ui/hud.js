@@ -1,13 +1,13 @@
 // In-match overlay. Built once; update() runs every frame and touches the DOM only when a displayed value
 // actually changes, and then only with text, a transform or a class flip.
-import { TEAMS, MAX_HP, SCORE_LIMIT, PRIMARY_IDS, TIME_LIMIT } from '../shared/constants.js';
-import { WEAPONS } from '../shared/weapons.js';
+import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT } from '../shared/constants.js';
+import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { getCamo } from '../shared/camos.js';
 import { STREAKS, LETHALS, normalizeLoadout } from '../shared/catalog.js';
 import { Progress, matchScore } from './progress.js';
-import { LoadoutEditor } from './loadout.js';
+import { badgeMark } from './widgets.js';
+import { LOADOUT_COUNT } from '../shared/progression.js';
 
 const MINIMAP_HZ = 10;
 const MM_SCALE = 2;              // Backing-store pixels per CSS pixel; fixed so the canvas is never resized.
@@ -61,8 +61,7 @@ export class HUD {
     this.map = MAPS[DEFAULT_MAP];
     this.scoreLimit = SCORE_LIMIT;
     this.timeLimit = TIME_LIMIT;
-    this.primary = Progress.primary;
-    this.sheetEditor = null;
+    this.badges = new Map();      // Player id -> { prestige, level }, from the match roster.
     this.#seedFallback();
     this.#build();
     this.#drawMapBase();
@@ -82,11 +81,11 @@ export class HUD {
   }
 
   // Call before each match.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT } = {}) {
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [] } = {}) {
     this.map = MAPS[mapId] ?? this.map;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
-    this.primary = Progress.primary;
+    this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     this.#seedFallback();
     this.#drawMapBase();
     this.reset();
@@ -97,11 +96,10 @@ export class HUD {
     this.cache = {
       myScore: NaN, otherScore: NaN, teamFlip: NaN, time: NaN, phase: '', hp: NaN, hpFrac: NaN, ammo: NaN, reserve: NaN,
       weapon: '', reloadFrac: NaN, reloadOn: null, low: null, hurt: null, vign: NaN, dead: null, respawn: NaN,
-      protect: null, picked: '', enemyUav: null, tag: '', heatOn: null, heat: NaN, heatLevel: '', overBanner: null,
+      protect: null, picked: -1, enemyUav: null, tag: '', heatOn: null, heat: NaN, heatLevel: '', overBanner: null,
       score: NaN, capped: null, swapHint: null,
     };
     this.view = null;
-    this.unlocks = [];            // Camos earned this match, drained by the results screen.
     this.mmClock = 0;
     this.hitT = 0;
     this.hitKill = false;
@@ -109,10 +107,8 @@ export class HUD {
     this.hitLife = HIT_LIFE;
     this.flashT = 0;
     this.flashLen = 1;
-    this.weaponKills = {};        // Kills per weapon this match, for the results screen.
     this.boardOpen = false;
     this.boardClock = 0;
-    this.closeSheet();
     this.boardEl.hidden = true;
     this.flashFadeLen = 1;
     this.flashEl.style.opacity = '0';
@@ -131,14 +127,14 @@ export class HUD {
     this.controls?.setDown(false);
     this.setNotice('');
     this.setSpectate(null);
-    this.#paintPicker();
+    this.#paintPicker(true);
   }
 
   setVisible(on) {
     this.el.classList.toggle('on', on);
   }
 
-  // cb(loadout), the full normalized loadout, whenever the player changes it on the death screen.
+  // cb(loadout), the full match loadout, whenever the player picks another one on the death screen.
   onSetLoadout(cb) { this.loadoutCb = cb; }
   onMic(cb) { this.micCb = cb; }
   onSpeaker(cb) { this.speakerCb = cb; }
@@ -264,17 +260,8 @@ export class HUD {
         </div>
         <div class="picker">
           <span class="picker-label">Next life</span>
-          ${PRIMARY_IDS.map(id => `
-          <button class="pick" data-tap="1" data-weapon="${id}">
-            <b>${esc(weaponName(id))}</b><small>${esc(WEAPONS[id]?.role ?? '')}</small>
-          </button>`).join('')}
-          <button class="pick pick-loadout" data-tap="1"><b>Loadout</b><small>Gear</small></button>
-        </div>
-      </div>
-      <div class="sheet-wrap" data-tap="1" hidden>
-        <div class="loadout-sheet">
-          <div class="ls-bar"><h2>Loadout</h2><small>Applies when you next spawn</small><button class="back" data-sheet-close="1">Close</button></div>
-          <div class="lo-grid"></div>
+          ${Array.from({ length: LOADOUT_COUNT }, (_, i) => `
+          <button class="pick" data-tap="1" data-i="${i}"><b></b><small></small></button>`).join('')}
         </div>
       </div>
       <div class="flashbang"></div>
@@ -311,8 +298,6 @@ export class HUD {
     this.calloutEl = $('.callout');
     this.flashEl = $('.flashbang');
     this.healEl = $('.heal-veil');
-    this.sheetWrap = $('.sheet-wrap');
-    this.loGrid = $('.lo-grid');
     this.hitX = $('.hit-x');
     this.armsName = $('.arms-name span');
     this.ammoEl = $('.ammo');
@@ -330,11 +315,7 @@ export class HUD {
 
     this.micBtn.addEventListener('click', () => this.micCb?.());
     this.speakerBtn.addEventListener('click', () => this.speakerCb?.());
-    for (const pick of this.picks) {
-      if (pick.dataset.weapon) pick.addEventListener('click', () => this.#choose(pick.dataset.weapon));
-    }
-    $('.pick-loadout').addEventListener('click', () => this.openSheet());
-    el.addEventListener('click', e => { if (e.target.closest('[data-sheet-close]')) this.closeSheet(); });
+    for (const pick of this.picks) pick.addEventListener('click', () => this.#choose(Number(pick.dataset.i)));
     $('.scorebar').addEventListener('click', () => this.toggleBoard());
     this.#buildBoard();
   }
@@ -344,11 +325,13 @@ export class HUD {
     this.boardGrid.innerHTML = [0, 1].map(() => `
       <div class="lb-side">
         <div class="lb-head"><b class="lb-team"></b><span>K</span><span>D</span><span>A</span><span>HS</span><span>Score</span></div>
-        ${[0, 1, 2, 3, 4, 5].map(() => '<div class="lb-row"><b></b><span></span><span></span><span></span><span></span><span></span></div>').join('')}
+        ${[0, 1, 2, 3, 4, 5].map(() => '<div class="lb-row"><span class="lb-name"><i class="lb-bdg"></i><u class="lb-lv"></u><b></b></span><span></span><span></span><span></span><span></span><span></span></div>').join('')}
       </div>`).join('');
     this.boardSides = [...this.boardGrid.querySelectorAll('.lb-side')].map(node => ({
       team: node.querySelector('.lb-team'),
-      rows: [...node.querySelectorAll('.lb-row')],
+      rows: [...node.querySelectorAll('.lb-row')].map(row => ({
+        row, cells: row.children, name: row.querySelector('.lb-name b'), bdg: row.querySelector('.lb-bdg'), lv: row.querySelector('.lb-lv'), rank: -1,
+      })),
     }));
   }
 
@@ -367,12 +350,19 @@ export class HUD {
       side.team.textContent = `${TEAMS[team].name}  ${view.scores[team]}`;
       side.team.style.color = TEAMS[team].css;
       const rows = view.players.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
-      side.rows.forEach((row, i) => {
-        const p = rows[i], cells = row.children;
+      side.rows.forEach((slot, i) => {
+        const p = rows[i], { row, cells } = slot;
         row.hidden = !p;
         if (!p) return;
         row.classList.toggle('me', p.id === me.id);
-        cells[0].textContent = p.name;
+        slot.name.textContent = p.name;
+        const badge = this.badges.get(p.id);
+        const rank = badge?.prestige ?? -1;
+        if (rank !== slot.rank) {
+          slot.rank = rank;
+          slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : '';
+        }
+        slot.lv.textContent = badge?.level ?? '';
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
@@ -382,30 +372,24 @@ export class HUD {
     });
   }
 
-  openSheet() {
-    this.sheetWrap.hidden = false;
-    this.sheetEditor?.dispose();
-    this.sheetEditor = new LoadoutEditor(this.loGrid, l => this.loadoutCb?.({ ...l, primary: this.primary, camo: Progress.camo(this.primary) }));
-  }
-
-  closeSheet() {
-    if (!this.sheetWrap) return;
-    this.sheetWrap.hidden = true;
-    this.sheetEditor?.dispose();
-    this.sheetEditor = null;
-  }
-
-  #choose(weapon) {
-    this.primary = weapon;
-    Progress.primary = weapon;
+  #choose(index) {
+    Progress.activeLoadout = index;
     this.#paintPicker();
-    this.loadoutCb?.(Progress.loadout(weapon));
+    this.loadoutCb?.(Progress.loadout());
   }
 
-  #paintPicker() {
-    if (this.cache.picked === this.primary) return;
-    this.cache.picked = this.primary;
-    for (const pick of this.picks) pick.classList.toggle('on', pick.dataset.weapon === this.primary);
+  #paintPicker(relabel = false) {
+    if (relabel) {
+      const all = Progress.loadouts();
+      this.picks.forEach((pick, i) => {
+        pick.querySelector('b').textContent = all[i].name;
+        pick.querySelector('small').textContent = weaponName(all[i].primary);
+      });
+    }
+    const active = Progress.activeLoadout;
+    if (this.cache.picked === active) return;
+    this.cache.picked = active;
+    this.picks.forEach((pick, i) => pick.classList.toggle('on', i === active));
   }
 
   // --- Per-frame ---
@@ -444,7 +428,6 @@ export class HUD {
       if (view.phase === 'ended' && !this.endShown) {
         this.#showEndBanner(view.winner, myTeam);
         if (this.boardOpen) this.toggleBoard();
-        this.closeSheet();
       }
     }
 
@@ -511,10 +494,11 @@ export class HUD {
   }
 
   #updateArms(me, c) {
-    if (me.weapon !== c.weapon) {
+    if (me.weapon !== c.weapon || me.attachments !== c.kit) {
       c.weapon = me.weapon;
+      c.kit = me.attachments;
       this.armsName.textContent = weaponName(me.weapon);
-      c.magazine = WEAPONS[me.weapon]?.magazine ?? 30;
+      c.magazine = effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
       c.tag = null;                // The status line may need to return to the weapon's name.
     }
     if (me.ammo !== c.ammo) {
@@ -601,7 +585,6 @@ export class HUD {
       this.deathEl.classList.toggle('show', dead);
       this.controls?.setDown(dead);
       if (dead) this.#paintDeathHead();
-      else this.closeSheet();
     }
     if (!dead) return;
     const left = Math.max(1, Math.ceil(me.respawnT ?? 0));
@@ -710,19 +693,17 @@ export class HUD {
     const tgtName = tgtP?.name ?? '?';
     const byCss = TEAMS[byP?.team ?? 0].css, tgtCss = TEAMS[tgtP?.team ?? 1].css;
     const mine = e.by === view.localId || e.target === view.localId;
-    this.#pushFeed(`<em style="color:${byCss}">${esc(byName)}</em><span class="f-w">${esc(killCause(e))}</span><em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine);
+    this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${esc(byName)}</em><span class="f-w">${esc(killCause(e))}</span>${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine);
 
     if (e.target === view.localId) {
       this.killer = { name: byName, color: byCss, weapon: killCause(e) };
       this.deathPainted = false;
     }
-    if (e.by === view.localId && e.target !== view.localId && !e.streak && !e.equip && WEAPONS[e.weapon]) {
-      this.weaponKills[e.weapon] = (this.weaponKills[e.weapon] ?? 0) + 1;
-      for (const camo of Progress.recordKill(e.weapon)) {
-        this.unlocks.push({ weapon: e.weapon, camoId: camo.id });
-        this.notify(`${weaponName(e.weapon)} camo unlocked: ${getCamo(camo.id).name}`);
-      }
-    }
+  }
+
+  #feedBadge(id) {
+    const badge = this.badges.get(id);
+    return badge ? `<i class="f-bdg">${badgeMark(badge.prestige ?? 0, 13)}</i>` : '';
   }
 
   #onStreak(e) {

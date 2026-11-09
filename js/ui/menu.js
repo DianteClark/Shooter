@@ -1,17 +1,21 @@
-// Every screen outside a match. Stateless templates driven by main.js through this small object.
-import { TEAMS, TEAM_SIZE, PRIMARY_IDS } from '../shared/constants.js';
-import { WEAPONS } from '../shared/weapons.js';
-import { CAMOS, getCamo } from '../shared/camos.js';
+// Every screen outside a match. Templates driven by main.js through this small object; the larger screens
+// live in their own modules and share this object's actions, overlay and single gun preview.
+import { TEAMS, TEAM_SIZE } from '../shared/constants.js';
 import { GunPreview } from '../render/renderer.js';
-import { Progress, matchScore } from './progress.js';
-import { LoadoutEditor } from './loadout.js';
+import { Progress } from './progress.js';
+import { LoadoutsScreen } from './loadout.js';
+import { Gunsmith } from './gunsmith.js';
+import { profileScreen } from './prestige.js';
+import { resultsScreen } from './results.js';
+import { saveScreen } from './savecode.js';
 import { yardBackdrop } from './yard.js';
+import { esc, badgeMark, ROMAN } from './widgets.js';
+
+export { esc };
 
 const QWERTY = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM-_.'];
 const CODE_CHARS = ['ABCDEFGHJKM', 'NPQRSTUVWX', 'YZ23456789'];
 
-export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const hex = n => '#' + n.toString(16).padStart(6, '0');
 
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
@@ -28,8 +32,10 @@ export class Menu {
     this.toastEl.className = 'toast';
     root.appendChild(this.toastEl);
     this.actions = {};
-    this.preview = null;
+    this.preview = null;           // One GunPreview for the whole menu layer, so only one WebGL context ever exists here.
+    this.previewCanvas = null;
     this.previewRaf = 0;
+    this.reel = null;              // The results reel, when one is running.
 
     this.el.addEventListener('click', e => this.#click(e));
     this.overlayEl.addEventListener('click', e => this.#click(e));
@@ -57,8 +63,7 @@ export class Menu {
   show() { this.el.classList.add('on'); }
   hide() {
     this.#stopPreview();
-    this.loEditor?.dispose();
-    this.loEditor = null;
+    this.#endReel();
     this.el.classList.remove('on');
     this.el.textContent = '';
   }
@@ -78,7 +83,9 @@ export class Menu {
 
   title({ arrive = false } = {}) {
     this.#stopPreview();
-    const { level, into, span } = Progress.levelProgress();
+    this.#endReel();
+    const lp = Progress.levelProgress();
+    const can = Progress.canPrestige();
     const name = Progress.name || 'Rookie';
     this.el.dataset.screen = 'title';
     this.el.innerHTML = `
@@ -88,10 +95,13 @@ export class Menu {
         <div class="boxcar-face">
           <h1 class="wordmark">Switchyard</h1>
           <p class="wordmark-sub">6v6 team deathmatch in a freight yard at dusk</p>
-          <button class="callsign" data-act="editName">
-            <span class="cs-label">Callsign</span>
-            <b class="cs-name">${esc(name)}</b>
-            <span class="cs-rank">Level ${level}<i class="xp"><i style="transform:scaleX(${(into / span).toFixed(3)})"></i></i></span>
+          <button class="pcard${can ? ' ready' : ''}" data-act="profile">
+            <span class="pc-badge">${badgeMark(lp.prestige, 48)}</span>
+            <span class="pc-body">
+              <span class="pc-top"><b class="pc-name">${esc(name)}</b><span class="pc-lv">Level ${lp.level}${lp.prestige ? ` <em>${ROMAN[lp.prestige]}</em>` : ''}</span></span>
+              <i class="xp"><i style="transform:scaleX(${(lp.maxed ? 1 : lp.into / lp.span).toFixed(3)})"></i></i>
+              <small class="pc-sub">${can ? 'Prestige available' : lp.maxed ? 'Maximum level' : `${Math.round(lp.into)} / ${lp.span} XP`}</small>
+            </span>
           </button>
         </div>
       </section>
@@ -99,8 +109,11 @@ export class Menu {
         <button class="route primary" data-act="solo"><i class="lamp"></i><b>Play vs bots</b></button>
         <button class="route" data-act="host"><i class="lamp"></i><b>Host a match</b></button>
         <button class="route" data-act="join"><i class="lamp"></i><b>Join with a code</b></button>
-        <button class="route" data-act="gunsmith"><i class="lamp"></i><b>Gunsmith</b></button>
-        <button class="route" data-act="loadout"><i class="lamp"></i><b>Loadout</b></button>
+        <div class="route-pair">
+          <button class="route" data-act="loadout"><b>Loadouts</b></button>
+          <button class="route" data-act="gunsmith"><b>Gunsmith</b></button>
+        </div>
+        <button class="route small" data-act="saveCode"><b>Save code</b></button>
       </nav>`;
     this.show();
   }
@@ -183,6 +196,7 @@ export class Menu {
   // state: { code, humans:[{id,name,team,ready,primary}], botSkill, isHost, localId, notice }
   lobby(state) {
     this.#stopPreview();
+    this.#endReel();
     this.el.dataset.screen = 'lobby';
     const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false } = state;
     const counting = countdown !== null;
@@ -197,8 +211,8 @@ export class Menu {
           const self = h.id === localId;
           const can = isHost || self;
           cells += `<button class="car human${self ? ' self' : ''}${h.ready ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
-            <b>${esc(h.name)}</b>
-            <small>${h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready'}</small>
+            <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 20) : ''}<b>${esc(h.name)}</b></span>
+            <small>${h.badge ? `Lv ${h.badge.level} / ` : ''}${h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready'}</small>
             <i class="wheels"></i>
           </button>`;
         } else {
@@ -237,66 +251,31 @@ export class Menu {
           <span>Bots</span>
           ${SKILLS.map(([id, label]) => `<button class="seg${botSkill === id ? ' on' : ''}" ${isHost ? `data-act="botSkill" data-skill="${id}"` : 'disabled'}>${label}</button>`).join('')}
         </div>
-        <button class="route small" data-act="gunsmith"><b>${esc(WEAPONS[Progress.primary]?.name ?? '')}</b></button>
-        <button class="route small" data-act="loadout"><b>Loadout</b></button>
+        <button class="route small" data-act="gunsmith"><b>Gunsmith</b></button>
+        <button class="route small" data-act="loadout"><b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
         ${start}
       </footer>`;
     this.show();
   }
 
-  gunsmith({ onBack, onChange }) {
-    let weapon = Progress.primary;
-    const render = () => {
-      this.el.dataset.screen = 'gunsmith';
-      const equipped = Progress.camo(weapon);
-      const w = WEAPONS[weapon];
-      const kills = Progress.kills(weapon);
-      this.el.innerHTML = `
-        <header class="bar">
-          <button class="back" data-act="gsBack">Done</button>
-          <h2>Gunsmith</h2>
-          <p class="kills-note"><b>${kills}</b> kills with the ${esc(w.name)}</p>
-        </header>
-        <div class="gs">
-          <div class="gs-weapons">
-            ${PRIMARY_IDS.map(id => `<button class="gs-w${id === weapon ? ' on' : ''}" data-act="gsWeapon" data-id="${id}"><b>${esc(WEAPONS[id].name)}</b><small>${esc(WEAPONS[id].role ?? '')}</small></button>`).join('')}
-          </div>
-          <div class="gs-bench">
-            <canvas class="gs-canvas"></canvas>
-            <div class="gs-title"><b>${esc(w.name)}</b><small>${esc(getCamo(equipped).name)}</small></div>
-            <div class="gs-stats">
-              ${stat('Damage', w.damage * (w.pellets ?? 1), 150)}
-              ${stat('Rate', w.rpm, 1000)}
-              ${stat('Range', w.range, 80)}
-            </div>
-          </div>
-          <div class="gs-camos">
-            ${CAMOS.map(c => camoTile(c, weapon, equipped)).join('')}
-          </div>
-        </div>`;
-      this.#startPreview(this.el.querySelector('.gs-canvas'), weapon, equipped);
-    };
-    this.on({
-      gsBack: () => onBack(),
-      gsWeapon: ({ id }) => {
-        weapon = id;
-        Progress.primary = id;
-        onChange?.();
-        render();
-      },
-      gsCamo: ({ id }) => {
-        if (!Progress.isUnlocked(weapon, id)) {
-          const c = getCamo(id);
-          this.toast(`${c.name}: ${Progress.kills(weapon)}/${c.unlockKills} kills with the ${WEAPONS[weapon].name}`);
-          return;
-        }
-        Progress.setCamo(weapon, id);
-        onChange?.();
-        render();
-      },
-    });
-    render();
-    this.show();
+  gunsmith(opts) {
+    this.#stopPreview();
+    this.screen = new Gunsmith(this, opts);
+  }
+
+  loadouts(opts) {
+    this.#stopPreview();
+    this.screen = new LoadoutsScreen(this, opts);
+  }
+
+  profile(opts) {
+    this.#stopPreview();
+    profileScreen(this, opts);
+  }
+
+  saveCode(opts) {
+    this.#stopPreview();
+    saveScreen(this, opts);
   }
 
   // Countdown ticks for a guest still reading results; the lobby repaints in full, so it needs no call of its own.
@@ -319,75 +298,10 @@ export class Menu {
     if (b) b.textContent = text;
   }
 
-  loadoutScreen(onBack, onChange) {
+  // data: outcome, scores, myTeam, localId, roster, badges, mvp, xp, level, weapons, unlocks, finalKill, rematchLabel, note.
+  results(data, handlers) {
     this.#stopPreview();
-    this.el.dataset.screen = 'loadout';
-    this.el.innerHTML = `
-      <header class="bar">
-        <button class="back" data-act="loBack">Done</button>
-        <h2>Loadout</h2>
-      </header>
-      <div class="lo-grid"></div>`;
-    this.loEditor?.dispose();
-    this.loEditor = new LoadoutEditor(this.el.querySelector('.lo-grid'), onChange);
-    this.on({ loBack: () => { this.loEditor?.dispose(); this.loEditor = null; onBack(); } });
-    this.show();
-  }
-
-  // data: outcome, scores, myTeam, roster, mvp, xp:{total, lines:[[label,amount]], level, into, span, levelUp},
-  // weapons:[{name, gained, total, nextName, nextAt}], unlocks, finalKill, rematchLabel, note.
-  results(data, { rematch, menu }) {
-    this.#stopPreview();
-    this.el.dataset.screen = 'results';
-    const { outcome, scores, myTeam, roster, mvp, xp, weapons, unlocks, finalKill: fk } = data;
-    const board = team => {
-      const rows = roster.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
-      return `<div class="rb" style="--team:${TEAMS[team].css}">
-        <div class="rb-head"><b class="rb-team">${esc(TEAMS[team].name)}</b><b class="rb-pts">${scores[team]}</b>
-          <span>K</span><span>D</span><span>A</span><span>HS</span><span class="wide">Score</span></div>
-        ${rows.map(p => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}">
-          <b>${esc(p.name)}</b><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${p.head ?? 0}</span><span class="wide">${matchScore(p)}</span>
-        </div>`).join('')}
-      </div>`;
-    };
-    const weaponRow = w => `
-      <div class="wp">
-        <div class="wp-line"><b>${esc(w.name)}</b><span>+${w.gained} kills</span></div>
-        ${w.nextAt
-          ? `<i class="xp"><i style="transform:scaleX(${Math.min(1, w.total / w.nextAt).toFixed(3)})"></i></i><small>${w.total}/${w.nextAt} to ${esc(w.nextName)}</small>`
-          : '<small>Every camo unlocked</small>'}
-      </div>`;
-    this.el.innerHTML = `
-      <div class="res-top" data-outcome="${outcome}">
-        <h2>${outcome === 'win' ? 'Victory' : outcome === 'loss' ? 'Defeat' : 'Stalemate'}</h2>
-        <span class="res-score">${scores[myTeam]}<i>-</i>${scores[1 - myTeam]}</span>
-        ${mvp ? `<div class="mvp-tag" style="--team:${TEAMS[mvp.team].css}"><span>MVP</span><b>${esc(mvp.name)}</b><small>${matchScore(mvp)} pts</small></div>` : ''}
-      </div>
-      <div class="rb-pair">${board(myTeam)}${board(1 - myTeam)}</div>
-      <div class="res-cards">
-        <div class="finalcard">
-          <canvas class="fk-canvas"></canvas>
-          <div class="fk-cap">${fk ? `Final kill<br><b>${esc(fk.byName)}</b> on <b>${esc(fk.targetName)}</b><br>${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}` : 'No final kill'}</div>
-        </div>
-        <div class="xp-card">
-          <div class="xp-head"><b>+${xp.total} XP</b><span>Level ${xp.level}${xp.levelUp ? ' up' : ''}</span></div>
-          ${xp.lines.map(([label, amount]) => `<div class="xp-row"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('')}
-          <i class="xp big"><i class="xp-fill" style="transform:scaleX(${(xp.into / xp.span).toFixed(3)})"></i></i>
-        </div>
-        <div class="wp-card">
-          <h4>Weapons</h4>
-          ${weapons.length ? weapons.map(weaponRow).join('') : '<small>No weapon kills this match</small>'}
-          ${unlocks.length ? `<div class="unlocks">${unlocks.map(u => `<span><i style="background:${hex(u.colors[0])}"></i>${esc(u.weaponName)}: ${esc(u.name)}</span>`).join('')}</div>` : ''}
-        </div>
-        <div class="res-choice">
-          <button class="route primary" data-act="resRematch"><i class="lamp"></i><b>${esc(data.rematchLabel)}</b></button>
-          <button class="route" data-act="resMenu"><i class="lamp"></i><b>Menu</b></button>
-          <p class="res-note">${esc(data.note ?? '')}</p>
-        </div>
-      </div>`;
-    this.on({ resRematch: rematch, resMenu: menu });
-    if (fk) this.#startPreview(this.el.querySelector('.fk-canvas'), fk.weapon, fk.camo);
-    this.show();
+    resultsScreen(this, data, handlers);
   }
 
   // Shown once to Safari players who have not added the game to their Home Screen.
@@ -406,12 +320,18 @@ export class Menu {
     this.on({ dismissInstall: () => { this.overlay(''); onDismiss(); } });
   }
 
-  #startPreview(canvas, weaponId, camoId) {
-    this.#stopPreview();
-    if (!canvas) return;
-    this.preview = new GunPreview(canvas);
+  // Puts the shared preview canvas inside `mount`, created the first time it is needed, and starts it turning.
+  previewMount(mount, weaponId, camoId, kit) {
+    if (!mount) return;
+    if (!this.previewCanvas) {
+      this.previewCanvas = document.createElement('canvas');
+      this.previewCanvas.className = 'preview-canvas';
+    }
+    if (this.previewCanvas.parentNode !== mount) mount.prepend(this.previewCanvas);
+    if (!this.preview) this.preview = new GunPreview(this.previewCanvas);
     this.preview.tick(0);               // Lets the preview measure the canvas, so the gun is framed for this card's shape.
-    this.preview.show(weaponId, camoId);
+    this.preview.show(weaponId, camoId, kit);
+    if (this.previewRaf) return;
     let last = performance.now();
     const tick = now => {
       this.previewRaf = requestAnimationFrame(tick);
@@ -421,38 +341,23 @@ export class Menu {
     this.previewRaf = requestAnimationFrame(tick);
   }
 
+  previewShow(weaponId, camoId, kit) {
+    this.preview?.show(weaponId, camoId, kit);
+  }
+
+  // Leaving the results screen mid-reel: a ceremony card must not land on the next screen.
+  #endReel() {
+    if (this.reel && !this.reel.dead) {
+      this.reel.cancel();
+      this.overlay('');
+    }
+    this.reel = null;
+  }
+
+  // Stops drawing and takes the canvas off the page. The context is kept for the next screen.
   #stopPreview() {
     cancelAnimationFrame(this.previewRaf);
-    this.preview?.dispose();
-    this.preview = null;
+    this.previewRaf = 0;
+    this.previewCanvas?.remove();
   }
-}
-
-// A swatch hints at the pattern family with CSS only; the real thing is on the gun in the preview.
-function swatchCss(c) {
-  const [a, b = a, d = b, e = d] = c.colors.map(hex);
-  switch (c.pattern) {
-    case 'digital': return `conic-gradient(${a} 25%, ${b} 25% 50%, ${d} 50% 75%, ${e} 75%) 0 0 / 14px 14px`;
-    case 'tiger': return `repeating-linear-gradient(112deg, ${a} 0 9px, ${b} 9px 15px, ${d} 15px 19px, ${b} 19px 25px)`;
-    case 'splinter': return `linear-gradient(127deg, ${a} 34%, transparent 34.5%), linear-gradient(58deg, ${b} 46%, ${d} 46.5% 72%, ${e} 72.5%)`;
-    case 'hex': return `radial-gradient(circle at 50% 50%, ${b} 34%, ${a} 36%) 0 0 / 12px 11px`;
-    case 'solid': return a;
-    default: return `linear-gradient(118deg, ${a}, ${b} 55%, ${d})`;
-  }
-}
-
-function stat(label, value, full) {
-  return `<div class="stat"><span>${label}</span><i><i style="transform:scaleX(${Math.min(1, value / full).toFixed(3)})"></i></i></div>`;
-}
-
-function camoTile(c, weapon, equipped) {
-  const unlocked = Progress.isUnlocked(weapon, c.id);
-  const kills = Progress.kills(weapon);
-  const swatch = swatchCss(c);
-  const progress = unlocked ? '' : `<i class="tile-bar"><i style="transform:scaleX(${Math.min(1, kills / c.unlockKills).toFixed(3)})"></i></i><small>${kills}/${c.unlockKills}</small>`;
-  return `<button class="tile${c.id === equipped ? ' on' : ''}${unlocked ? '' : ' locked'}" data-act="gsCamo" data-id="${c.id}" aria-label="${esc(c.name)}">
-    <span class="tile-swatch" style="background:${swatch}"></span>
-    <b>${esc(c.name)}</b>
-    ${progress}
-  </button>`;
 }
