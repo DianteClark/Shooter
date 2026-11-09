@@ -9,9 +9,10 @@ import { MODES } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { damageAt, headMultFor, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
-import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult } from './equipment.js';
+import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
 import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, traceShot, weaponDef } from './player.js';
+import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 
 const STEP = 1 / SIM_HZ;
@@ -68,7 +69,7 @@ const BOT_PRIMARIES = ['ar', 'burst', 'smg', 'dmr', 'pdw', 'lmg', 'shotgun', 'ar
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'smoke', 'flash'];
 const BOT_LETHALS = ['frag', 'sticky', 'frag'];
-const BOT_PERKS = [['scavenger', 'marathon'], ['ghost', 'fasthands'], ['flak', 'marathon'], ['scavenger', 'fasthands'], ['ghost', 'flak'], ['marathon', 'fasthands']];
+const BOT_PERKS = [['scavenger', 'marathon'], ['ghost', 'fasthands'], ['flak', 'strongarm'], ['scavenger', 'fasthands'], ['ghost', 'flak'], ['strongarm', 'marathon']];
 const BOT_STREAKS = [['uav', 'turret', 'gunship'], ['uav', 'strike', 'gunship'], ['uav', 'turret', 'strike'], ['turret', 'strike', 'gunship']];
 
 function round2(v) { return Math.round(v * 100) / 100; }
@@ -137,15 +138,16 @@ export class Sim {
   constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm' }) {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
     this.rng = mulberry32(seed >>> 0);
-    const def = MODES[mode] || MODES.tdm;
+    const def = mode === 'range' ? RANGE_MODE : (MODES[mode] || MODES.tdm);
     this.mode = def.id;
+    if (this.mode === 'range') roster = [...roster, ...rangeDummies(this.map)];
     this.scoreLimit = scoreLimit ?? def.scoreLimit;
     this.timeLimit = timeLimit ?? def.timeLimit;
     this.dt = STEP;
     this.time = 0;
     this.tick = 0;
     this.accum = 0;
-    this.phase = 'warmup';
+    this.phase = this.mode === 'range' ? 'live' : 'warmup';     // The range opens the moment you walk in.
     this.phaseT = WARMUP;
     this.timeLeft = this.timeLimit;
     this.scores = [0, 0];
@@ -158,6 +160,9 @@ export class Sim {
     this.turrets = [];
     this.gunships = [];
     this.nextTurretId = 1;
+    this.callouts = [];       // Sightings on their way to teammates, oldest first. See BotBrain._callOut.
+    this.calloutSeq = 0;
+    this.calledAt = null;     // Per team, per enemy index: when that enemy was last called out.
     this.eq = new EquipmentSystem(this.map);
     this.eqPlayers = [];
     this._initMode(seed);
@@ -174,6 +179,7 @@ export class Sim {
       const loadout = this._cleanLoadout({ ...r.loadout, primary: r.loadout?.primary || r.primary, camo: r.loadout?.camo || r.camo });
       return {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
+        dummy: !!r.dummy, home: r.home ?? null, humanId: null,
         primary: loadout.primary, camo: loadout.camo, loadout, pendingLoadout: null, index,
         ps: createPlayerState({ id: r.id, primary: loadout.primary, camo: loadout.camo, loadout }),
         hp: MAX_HP, alive: true, respawnT: 0, spawnProtect: 0,
@@ -189,9 +195,10 @@ export class Sim {
       };
     });
     this.byId = new Map(this.players.map(p => [p.id, p]));
-    this.spotted = [new Float32Array(n).fill(-99), new Float32Array(n).fill(-99)];
+    this.calledAt = [new Float32Array(n).fill(-99), new Float32Array(n).fill(-99)];
     this.spawnUsedAt = new Map();
-    this._emit({ t: 'phase', phase: 'warmup' });
+    this.range = this.mode === 'range' ? new RangeDirector(this) : null;
+    this._emit({ t: 'phase', phase: this.phase });
     this._spawnAll();
   }
 
@@ -245,6 +252,7 @@ export class Sim {
   _spawnAll() {
     const used = new Set();
     for (const p of this.players) {
+      if (p.dummy) { this._placeAt(p, p.home, p.home.aim); continue; }
       const list = this.map.spawns[p.team];
       let s;
       for (let tries = 0; tries < 24; tries++) {
@@ -266,7 +274,7 @@ export class Sim {
       this._metaUntil = this.tick + 2;
     }
     respawnPlayer(p.ps, s.x, s.z, aim, p.loadout);
-    p.hp = MAX_HP; p.alive = true; p.respawnT = 0; p.spawnProtect = SPAWN_PROTECT;
+    p.hp = MAX_HP; p.alive = true; p.respawnT = 0; p.spawnProtect = p.dummy ? 0 : SPAWN_PROTECT;
     p.regenT = 0; p.dmgBy.fill(0);
     p.prevReload = false; p.prevWeapon = p.ps.weapon; p.prevSliding = false; p.prevOverheated = false;
     for (let i = 0; i < HISTORY; i++) { p.hx[i] = s.x; p.hz[i] = s.z; p.hs[i] = 0; }
@@ -278,6 +286,7 @@ export class Sim {
 
   // Own side preferred; any point an enemy can see, or that was just used, is heavily penalised.
   _respawn(p) {
+    if (p.dummy) { this._placeAt(p, p.home, p.home.aim); return; }
     let best = null, bestScore = -Infinity;
     const enemyTeam = 1 - p.team;
     for (let t = 0; t < 2; t++) {
@@ -338,7 +347,7 @@ export class Sim {
   _initBots() {
     this.nav = new NavGrid(this.map);
     let stagger = 0;
-    for (const p of this.players) if (p.isBot) p.bot = new BotBrain(this, p, stagger++);
+    for (const p of this.players) if (p.isBot && !p.dummy) p.bot = new BotBrain(this, p, stagger++);
   }
 
   _tick() {
@@ -349,7 +358,7 @@ export class Sim {
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
       if (this.phaseT <= 0) this._setPhase('live');
-    } else if (this.phase === 'live') {
+    } else if (this.phase === 'live' && !this.range) {
       this.timeLeft -= STEP;
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
@@ -363,10 +372,12 @@ export class Sim {
       this._stepEquipment();
       this._stepTurrets();
       this._stepGunships();
-      if (this.mode !== 'tdm') this._stepObjectives();
+      if (this.range) this.range.step();
+      else if (this.mode !== 'tdm') this._stepObjectives();
       const players = this.players;
       for (let i = 0; i < players.length; i++) this._stepTimers(players[i]);
-      if (this.mode !== 'tdm' && this.tick % PLAN_EVERY === 0) planObjectives(this);
+      if (!this.range && this.mode !== 'tdm' && this.tick % PLAN_EVERY === 0) planObjectives(this);
+      this._expireCallouts();
       // Alternate who acts first: a bot's shot lands immediately, so a fixed order hands one team every tied duel.
       const flip = this.tick & 1, last = players.length - 1;
       for (let i = 0; i <= last; i++) {
@@ -628,10 +639,12 @@ export class Sim {
     if (msg.cmd === 'streak') return this.useStreak(id, msg.slot) !== null;
     if (msg.cmd === 'throw') return this._throw(id, msg);
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
+    if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     return false;
   }
 
-  _throw(id, { slot, ox, oz, aim }) {
+  // `dist` (optional) is where the thrower wants it to end up; the host holds it to what their arm can reach.
+  _throw(id, { slot, ox, oz, aim, dist }) {
     const p = this.byId.get(id);
     if (!p || !p.alive || this.phase !== 'live' || !Number.isFinite(aim)) return false;
     if (slot !== 'tactical' && slot !== 'lethal') return false;
@@ -639,10 +652,13 @@ export class Sim {
     if (heal && p.hp >= MAX_HP) return false;   // A stim at full health is only a misclick: keep it.
     const kind = takeEquipment(ps, slot);
     if (!kind) return false;
+    if (this.range) { ps.tacticalLeft = TACTICALS[ps.tactical].count; ps.lethalLeft = LETHALS[ps.lethal].count; }
     if (!heal) p.spawnProtect = 0;
     // Trust the phone's own hand position, unless it is implausibly far from what the host knows.
     const near = Number.isFinite(ox) && Number.isFinite(oz) && Math.hypot(ox - ps.x, oz - ps.z) <= THROW_ORIGIN_SLACK;
-    this.eq.throw(p, kind, near ? ox : ps.x, near ? oz : ps.z, aim);
+    const reach = maxThrowRange(ps.perks);
+    const want = Number.isFinite(dist) ? Math.min(dist, reach) : undefined;
+    this.eq.throw(p, kind, near ? ox : ps.x, near ? oz : ps.z, aim, want);
     return true;
   }
 
@@ -701,6 +717,7 @@ export class Sim {
     if (w.suppressed) fired.sup = 1;
     this._emit(fired);
     this._alertBots(shooter, !!w.suppressed);
+    if (this.range) this.range.onShot(shooter, shot, rays);
 
     if (this.phase !== 'live') return;
     shooter.spawnProtect = 0;      // Shooting gives up your protection.
@@ -777,6 +794,12 @@ export class Sim {
     }
   }
 
+  // Sightings older than anyone will still act on.
+  _expireCallouts() {
+    const c = this.callouts;
+    while (c.length && this.time - c[0].t > 6) c.shift();
+  }
+
   _alertBots(shooter, suppressed) {
     for (let i = 0; i < this.players.length; i++) {
       const p = this.players[i];
@@ -789,6 +812,7 @@ export class Sim {
   // `streak` is a scorestreak kind when one did this damage; `equip` is a thrown item's kind.
   _damage(target, attacker, dmg, weapon, dist, streak = null, head = false, equip = null) {
     if (!target || !target.alive || target.spawnProtect > 0 || target.team === attacker.team) return;
+    if (this.range) this.range.onDamage(target, attacker, dmg, dist, head, !!(streak || equip));
     target.hp -= dmg;
     target.regenT = REGEN_DELAY;
     // Streak damage earns no assist either, or it would feed the owner's score after all.
@@ -801,12 +825,13 @@ export class Sim {
       x: round2(target.ps.x), z: round2(target.ps.z), killed };
     if (head) hit.head = true;
     this._emit(hit);
-    if (target.bot) target.bot.onDamaged(attacker);
+    if (target.bot) target.bot.onDamaged(attacker, !!(streak || equip));
     if (killed) this._kill(target, attacker, weapon, dist, streak, head, equip);
   }
 
   _kill(target, killer, weapon, dist, streak, head, equip) {
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME;
+    if (this.range) this.range.onKill(target);
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0;
     target.lastKilledBy = killer.id;
     killer.kills++;
@@ -1173,9 +1198,177 @@ export class Sim {
     const p = this.byId.get(id);
     if (!p || p.isBot) return;
     p.isBot = true;
+    p.humanId = p.id;
     p.skill = p.skill || 'regular';
     p.ackT = 0;
     if (this.nav) p.bot = new BotBrain(this, p, p.index);
+  }
+
+  // Slots a bot is holding for someone who dropped. For matching a returning player, by name or id.
+  rejoinSlots() {
+    const out = [];
+    for (const p of this.players) {
+      if (p.isBot && !p.dummy && p.humanId !== null) out.push({ id: p.id, humanId: p.humanId, name: p.name, team: p.team, index: p.index });
+    }
+    return out;
+  }
+
+  // Gives a slot back from its bot to the human who dropped, with kills, score and streaks intact.
+  // `slot` is the old player id, the slot's index, or a name. Trystero gives a rejoining peer a new id, so pass it
+  // as `id`; the slot, and everything credited to it, moves to the new id.
+  // Returns {index, id, oldId, x, z, aim, alive, hp}, or null when no such slot is waiting. Host only: the 'rejoin'
+  // event it emits carries the change to guests, whose snapshot codec applies it with rebindPlayer().
+  humanRejoin(slot, { id = null, name = null, loadout = null } = {}) {
+    const p = typeof slot === 'number' ? this.players[slot]
+      : this.byId.get(slot) ?? this.players.find(q => q.isBot && !q.dummy && q.humanId !== null && (q.humanId === slot || q.name === slot));
+    if (!p || !p.isBot || p.dummy || p.humanId === null) return null;
+    const oldId = p.id;
+    this.rebindPlayer(oldId, id || p.id, name || p.name);
+    p.isBot = false;
+    p.bot = null;
+    p.skill = null;
+    p.humanId = null;
+    if (loadout) this.setLoadout(p.id, loadout);
+    p.ps.reloadT = 0; p.ps.reloadDur = 0; p.prevReload = false;
+    this._metaUntil = this.tick + 2;
+    const ps = p.ps;
+    if (p.alive) {
+      // The phone starts from this spot. A moment of protection, because the person holding it just got here.
+      p.spawnProtect = Math.max(p.spawnProtect, SPAWN_PROTECT);
+      p.ackX = ps.x; p.ackZ = ps.z; p.ackT = 1.5;
+      this._emit({ t: 'spawn', id: p.id, x: round2(ps.x), z: round2(ps.z), aim: round2(ps.aim) });
+    }
+    this._emit({ t: 'rejoin', oldId, id: p.id, name: p.name });
+    return { index: p.index, id: p.id, oldId, x: ps.x, z: ps.z, aim: ps.aim, alive: p.alive, hp: Math.max(0, Math.ceil(p.hp)) };
+  }
+
+  // Moves a slot to a new id and name. Host: called by humanRejoin. Guests: called when the 'rejoin' event arrives,
+  // because their copy of this class is what turns snapshot rows into player ids.
+  rebindPlayer(oldId, id, name) {
+    const p = this.byId.get(oldId);
+    if (!p) return false;
+    if (name) p.name = name;
+    if (id === oldId) return true;
+    this.byId.delete(oldId);
+    p.id = id;
+    p.ps.id = id;
+    this.byId.set(id, p);
+    for (const q of this.players) if (q.lastKilledBy === oldId) q.lastKilledBy = id;
+    if (this.lastKill) {
+      if (this.lastKill.by === oldId) this.lastKill.by = id;
+      if (this.lastKill.target === oldId) this.lastKill.target = id;
+    }
+    this.eq.rebindOwner(oldId, id);
+    return true;
+  }
+
+  // ---- Host migration ----
+
+  // Rebuilds a live host from a decoded snapshot, so the match continues where it left off: `view` is the newest
+  // GameView from decodeSnapshot, `roster` the original roster in the same order, opts {map, seed, timeLimit,
+  // scoreLimit, gone:[ids of humans now absent, e.g. the old host]}. Pass the match's own seed: hardpoint rotation
+  // order comes from it. The returned sim has no pending events. Own stats are kept for every slot; what snapshots
+  // do not hold (the holstered gun's ammo, assist credit, a strike already called) resets to defaults.
+  static fromSnapshot(view, roster, opts = {}) {
+    const seed = opts.seed ?? 1;
+    const sim = new Sim({
+      roster, map: opts.map ?? view.mapId, seed, mode: view.mode,
+      scoreLimit: opts.scoreLimit ?? view.scoreLimit, timeLimit: opts.timeLimit,
+    });
+    sim.rng = mulberry32((seed ^ Math.round(view.t * 1000)) >>> 0);
+    sim.events = [];
+    sim.time = view.t;
+    sim.tick = Math.round(view.t * SIM_HZ);
+    sim._metaUntil = sim.tick + 2;
+    sim.phase = view.phase;
+    sim.phaseT = view.phase === 'warmup' ? Math.max(0.5, WARMUP - view.t) : 0;
+    sim.timeLeft = view.timeLeft;
+    sim.scores = [view.scores[0], view.scores[1]];
+    sim.winner = view.winner;
+    sim.uav = [view.uav[0], view.uav[1]];
+    sim.lastKill = view.lastKill ? { ...view.lastKill } : null;
+    sim.firstBlood = view.players.some(p => p.kills > 0);
+    for (let i = 0; i < view.players.length && i < sim.players.length; i++) sim._restorePlayer(sim.players[i], view.players[i]);
+    sim._restoreMode(view);
+    sim._restoreStreaks(view);
+    sim.eq.restore(view.projectiles, view.smokes, id => sim.byId.get(id)?.team);
+    sim._initBots();
+    for (const id of opts.gone ?? []) sim.humanLeft(id);
+    for (const p of sim.players) if (p.bot) p.bot.resumeFromMigration();
+    return sim;
+  }
+
+  _restorePlayer(p, v) {
+    if (p.id !== v.id) this.rebindPlayer(p.id, v.id, v.name);
+    p.name = v.name;
+    if (v.isBot && !p.isBot) { p.humanId = p.id; }      // Dropped earlier, and the bot had the slot already.
+    p.isBot = !!v.isBot;
+    p.skill = p.isBot ? (p.skill || v.skill || 'regular') : null;
+    p.camo = v.camo;
+    const ps = p.ps;
+    ps.x = v.x; ps.z = v.z; ps.aim = v.aim; ps.vx = v.vx; ps.vz = v.vz;
+    ps.camo = v.camo;
+    ps.slot = v.weapon === ps.secondary ? 1 : 0;
+    if (ps.slot === 0 && v.weapon !== ps.primary && WEAPONS[v.weapon]) ps.primary = v.weapon;
+    ps.weapon = ps.slot === 0 ? ps.primary : ps.secondary;
+    ps.ammo[ps.slot] = v.ammo; ps.reserve[ps.slot] = v.reserve;
+    ps.reloadT = v.reloadT; ps.reloadDur = v.reloadDur;
+    if (weaponDef(ps).shellReload && ps.reloadT > 0) ps.shellT = weaponDef(ps).reload;
+    ps.adsT = v.adsT; ps.bloom = v.bloom;
+    ps.sprinting = v.sprinting; ps.sliding = false; ps.firingT = v.firingT;
+    ps.heat = v.heat; ps.overheated = v.overheated;
+    if (v.overheated) ps.overheatT = v.heat * (weaponDef(ps, ps.primary).heat?.lockout ?? 2);
+    ps.tacticalLeft = v.tacticalLeft; ps.lethalLeft = v.lethalLeft;
+    if (v.tactical) ps.tactical = v.tactical;
+    if (v.lethal) ps.lethal = v.lethal;
+    p.hp = v.hp; p.alive = v.alive; p.respawnT = v.respawnT;
+    p.spawnProtect = v.spawnProtect ? SPAWN_PROTECT * 0.5 : 0;
+    p.kills = v.kills; p.deaths = v.deaths; p.assists = v.assists; p.head = v.head; p.streak = v.streak;
+    const st = p.score;
+    if (v.slots.some((s, k) => st.slots[k]?.kind !== s.kind)) setStreakKinds(st, v.slots.map(s => s.kind));
+    st.score = v.score; st.capped = v.capped;
+    v.slots.forEach((s, k) => { st.slots[k].held = s.held; st.slots[k].blocked = s.blocked; });
+    for (let i = 0; i < HISTORY; i++) { p.hx[i] = ps.x; p.hz[i] = ps.z; p.hs[i] = 0; }
+    p.prevReload = ps.reloadT > 0; p.prevWeapon = ps.weapon; p.prevSliding = false; p.prevOverheated = ps.overheated;
+  }
+
+  _restoreMode(view) {
+    const zoneOf = id => this.zones.find(z => z.id === id);
+    if (this.mode === 'dom') {
+      for (const v of view.points ?? []) {
+        const z = zoneOf(v.id);
+        if (z) { z.owner = v.owner; z.cap = v.capture; z.contested = v.contested; z.taken = [v.owner === 0, v.owner === 1]; }
+      }
+    } else if (this.mode === 'hard' && view.points?.length) {
+      const v = view.points[0], z = zoneOf(v.id);
+      if (z) {
+        z.owner = v.owner; z.cap = v.capture; z.contested = v.contested;
+        z.taken = [v.owner === 0, v.owner === 1];
+        this.hardIdx = Math.max(0, this.hardOrder.indexOf(this.zones.indexOf(z)));
+        this.points[0] = z;
+        this.hardT = view.hardT || this.hardT;
+      }
+    } else if (this.mode === 'kc') {
+      this.tags = (view.tags ?? []).map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life ?? TAG_LIFE }));
+      this.nextTagId = this.tags.reduce((m, t) => Math.max(m, t.id + 1), 1);
+    }
+  }
+
+  _restoreStreaks(view) {
+    this.turrets = (view.turrets ?? []).flatMap(t => {
+      const owner = this.byId.get(t.owner);
+      if (!owner) return [];
+      return [{ id: t.id, team: t.team, owner, x: t.x, z: t.z, aim: t.aim, hp: t.hp, life: t.life ?? TURRET_LIFE, thinkT: 0, cooldown: 0.4, target: null }];
+    });
+    this.nextTurretId = this.turrets.reduce((m, t) => Math.max(m, t.id + 1), 1);
+    this.gunships = (view.gunships ?? []).flatMap(g => {
+      const owner = this.byId.get(g.owner);
+      if (!owner) return [];
+      const W = this.map.width, H = this.map.height;
+      const angle = Math.atan2((g.z - H / 2) / (H * 0.38), (g.x - W / 2) / (W * 0.42));
+      return [{ team: g.team, owner, x: g.x, z: g.z, aim: g.aim, life: g.life ?? GUNSHIP_LIFE, angle, dir: g.team === 0 ? 1 : -1,
+        pause: 1, burstLeft: 0, cooldown: 0, target: null, aimX: 0, aimZ: 0 }];
+    });
   }
 
   // ---- Views and snapshots ----
@@ -1183,7 +1376,7 @@ export class Sim {
   _playerView(p) {
     const ps = p.ps, st = p.score;
     return {
-      id: p.id, name: p.name, team: p.team, isBot: p.isBot, skill: p.skill,
+      id: p.id, name: p.name, team: p.team, isBot: p.isBot, skill: p.skill, dummy: p.dummy,
       x: ps.x, z: ps.z, aim: ps.aim, vx: ps.vx, vz: ps.vz,
       hp: Math.max(0, Math.ceil(p.hp)), alive: p.alive, respawnT: Math.max(0, p.respawnT),
       weapon: ps.weapon, camo: p.camo, ammo: ps.ammo[ps.slot], reserve: ps.reserve[ps.slot],
@@ -1214,16 +1407,17 @@ export class Sim {
   getView(localId) {
     return {
       t: this.time, phase: this.phase, timeLeft: this.timeLeft, mode: this.mode, scoreLimit: this.scoreLimit,
-      tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team })),
+      mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
+      tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life })),
       points: this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested)),
       hardT: this.mode === 'hard' ? this.hardT : 0,
       scores: [this.scores[0], this.scores[1]], winner: this.winner,
       uav: [this.uav[0], this.uav[1]],
       players: this.players.map(p => this._playerView(p)),
-      projectiles: this.eq.projectiles.map(p => ({ id: p.id, kind: p.kind, x: p.x, z: p.z, y: p.y })),
-      smokes: this.eq.smokes.map(s => ({ id: s.id, x: s.x, z: s.z, r: s.r })),
-      turrets: this.turrets.map(t => ({ id: t.id, team: t.team, owner: t.owner.id, x: t.x, z: t.z, aim: t.aim, hp: Math.ceil(t.hp) })),
-      gunships: this.gunships.map(g => ({ team: g.team, owner: g.owner.id, x: g.x, z: g.z, aim: g.aim })),
+      projectiles: this.eq.projectiles.map(p => ({ id: p.id, kind: p.kind, x: p.x, z: p.z, y: p.y, owner: p.owner, vx: p.vx, vz: p.vz, age: p.age, grounded: p.grounded, stuck: p.stuck })),
+      smokes: this.eq.smokes.map(s => ({ id: s.id, x: s.x, z: s.z, r: s.r, age: s.t })),
+      turrets: this.turrets.map(t => ({ id: t.id, team: t.team, owner: t.owner.id, x: t.x, z: t.z, aim: t.aim, hp: Math.ceil(t.hp), life: t.life })),
+      gunships: this.gunships.map(g => ({ team: g.team, owner: g.owner.id, x: g.x, z: g.z, aim: g.aim, life: g.life })),
       localId, lastKill: this.lastKill,
     };
   }
@@ -1236,7 +1430,7 @@ export class Sim {
   // Header: [time cs, phase, timeLeft ds, score0, score1, winner(-1), uav0 ds, uav1 ds, lastKill|0, meta|0,
   // projectiles|0, smokes|0, turrets|0, gunships|0, objective|0], then PLAYER_STRIDE numbers per player in roster
   // order. meta is [camos, loadout ints, mode, scoreLimit]; it goes out on change and once a second. The entity
-  // lists are flat. Objective block: kc [id*2+team, x, z ...] (ds of metres), dom [packed zone x3], hard [zone index,
+  // lists are flat. Objective block: kc [id*2+team, x, z, life ...] (ds of metres and seconds), dom [packed zone x3], hard [zone index,
   // packed zone, hardT ds]. Positions and radii of zones come from the map, which guests already have.
   encodeSnapshot() {
     const out = [
@@ -1262,7 +1456,7 @@ export class Sim {
         if (st.slots[k].blocked) blocked |= 1 << k;
       }
       const flags = (p.alive ? 1 : 0) | (ps.sprinting ? 2 : 0) | (ps.sliding ? 4 : 0) | (p.spawnProtect > 0 ? 8 : 0)
-        | (ps.perks.includes('ghost') ? 16 : 0) | (ps.overheated ? 32 : 0) | (st.capped ? 64 : 0);
+        | (ps.perks.includes('ghost') ? 16 : 0) | (ps.overheated ? 32 : 0) | (st.capped ? 64 : 0) | (p.isBot ? 128 : 0);
       out.push(
         Math.round(ps.x * 50), Math.round(ps.z * 50), Math.round(ps.aim * 100),
         Math.round(ps.vx * 5), Math.round(ps.vz * 5),
@@ -1280,7 +1474,7 @@ export class Sim {
 
   _encodeObjective() {
     if (this.mode === 'kc') {
-      return this.tags.length ? this.tags.flatMap(t => [t.id * 2 + t.team, Math.round(t.x * 10), Math.round(t.z * 10)]) : 0;
+      return this.tags.length ? this.tags.flatMap(t => [t.id * 2 + t.team, Math.round(t.x * 10), Math.round(t.z * 10), Math.round(t.life * 10)]) : 0;
     }
     if (this.mode === 'dom') return this.zones.length ? this.zones.map(packZone) : 0;
     if (this.mode === 'hard') return this.points.length ? [this.hardOrder[this.hardIdx], packZone(this.points[0]), Math.ceil(this.hardT * 10)] : 0;
@@ -1291,7 +1485,7 @@ export class Sim {
     out.tags = []; out.points = []; out.hardT = 0;
     if (!a) return;
     if (this.mode === 'kc') {
-      for (let i = 0; i < a.length; i += 3) out.tags.push({ id: a[i] >> 1, team: a[i] & 1, x: a[i + 1] / 10, z: a[i + 2] / 10 });
+      for (let i = 0; i < a.length; i += 4) out.tags.push({ id: a[i] >> 1, team: a[i] & 1, x: a[i + 1] / 10, z: a[i + 2] / 10, life: a[i + 3] / 10 });
     } else if (this.mode === 'dom') {
       for (let i = 0; i < a.length && i < this.zones.length; i++) out.points.push(this._unpackZone(this.zones[i], a[i]));
     } else if (this.mode === 'hard') {
@@ -1319,10 +1513,12 @@ export class Sim {
 
   _encodeEntities(out) {
     const P = this.eq.projectiles, S = this.eq.smokes, T = this.turrets, G = this.gunships;
-    if (P.length) out[10] = P.flatMap(p => [p.id, PROJECTILE_KINDS.indexOf(p.kind), Math.round(p.x * 10), Math.round(p.z * 10), Math.round(p.y * 10)]);
-    if (S.length) out[11] = S.flatMap(s => [s.id, Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.r * 10)]);
-    if (T.length) out[12] = T.flatMap(t => [t.id, t.owner.index, Math.round(t.x * 10), Math.round(t.z * 10), Math.round(t.aim * 20), Math.ceil(t.hp)]);
-    if (G.length) out[13] = G.flatMap(g => [g.owner.index, Math.round(g.x * 10), Math.round(g.z * 10), Math.round(g.aim * 20)]);
+    // Everything past the first few fields is only for host migration: enough to carry the object on.
+    if (P.length) out[10] = P.flatMap(p => [p.id, PROJECTILE_KINDS.indexOf(p.kind), Math.round(p.x * 10), Math.round(p.z * 10), Math.round(p.y * 10),
+      this.byId.get(p.owner)?.index ?? -1, Math.round(p.vx * 10), Math.round(p.vz * 10), Math.round(p.age * 30), (p.grounded ? 1 : 0) | (p.stuck ? 2 : 0)]);
+    if (S.length) out[11] = S.flatMap(s => [s.id, Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.r * 10), Math.round(s.t * 10)]);
+    if (T.length) out[12] = T.flatMap(t => [t.id, t.owner.index, Math.round(t.x * 10), Math.round(t.z * 10), Math.round(t.aim * 20), Math.ceil(t.hp), Math.round(t.life * 10)]);
+    if (G.length) out[13] = G.flatMap(g => [g.owner.index, Math.round(g.x * 10), Math.round(g.z * 10), Math.round(g.aim * 20), Math.round(g.life * 10)]);
   }
 
   _decodeMeta(meta) {
@@ -1352,7 +1548,7 @@ export class Sim {
         kind: s.kind, cost: s.cost, held: !!(bits & (1 << k)), blocked: !!(bits & (8 << k)),
       }));
       players[i] = {
-        id: r.id, name: r.name, team: r.team, isBot: r.isBot, skill: r.skill,
+        id: r.id, name: r.name, team: r.team, isBot: !!(flags & 128), skill: r.skill, dummy: r.dummy,
         x: d[o] / 50, z: d[o + 1] / 50, aim: d[o + 2] / 100,
         vx: d[o + 3] / 5, vz: d[o + 4] / 5,
         hp: d[o + 5], alive: !!(flags & 1), respawnT: d[o + 7] / 10,
@@ -1379,10 +1575,12 @@ export class Sim {
       t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode, scoreLimit: this.scoreLimit,
       scores: [d[3], d[4]], winner: d[5] === -1 ? null : d[5],
       uav: [d[6] / 10, d[7] / 10], players, localId, lastKill,
-      projectiles: this._decodeList(d[10], 5, (a, i) => ({ id: a[i], kind: PROJECTILE_KINDS[a[i + 1]], x: a[i + 2] / 10, z: a[i + 3] / 10, y: a[i + 4] / 10 })),
-      smokes: this._decodeList(d[11], 4, (a, i) => ({ id: a[i], x: a[i + 1] / 10, z: a[i + 2] / 10, r: a[i + 3] / 10 })),
-      turrets: this._decodeList(d[12], 6, (a, i) => ({ id: a[i], team: this.players[a[i + 1]].team, owner: this.players[a[i + 1]].id, x: a[i + 2] / 10, z: a[i + 3] / 10, aim: a[i + 4] / 20, hp: a[i + 5] })),
-      gunships: this._decodeList(d[13], 4, (a, i) => ({ team: this.players[a[i]].team, owner: this.players[a[i]].id, x: a[i + 1] / 10, z: a[i + 2] / 10, aim: a[i + 3] / 20 })),
+      mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
+      projectiles: this._decodeList(d[10], 10, (a, i) => ({ id: a[i], kind: PROJECTILE_KINDS[a[i + 1]], x: a[i + 2] / 10, z: a[i + 3] / 10, y: a[i + 4] / 10,
+        owner: this.players[a[i + 5]]?.id ?? null, vx: a[i + 6] / 10, vz: a[i + 7] / 10, age: a[i + 8] / 30, grounded: !!(a[i + 9] & 1), stuck: !!(a[i + 9] & 2) })),
+      smokes: this._decodeList(d[11], 5, (a, i) => ({ id: a[i], x: a[i + 1] / 10, z: a[i + 2] / 10, r: a[i + 3] / 10, age: a[i + 4] / 10 })),
+      turrets: this._decodeList(d[12], 7, (a, i) => ({ id: a[i], team: this.players[a[i + 1]].team, owner: this.players[a[i + 1]].id, x: a[i + 2] / 10, z: a[i + 3] / 10, aim: a[i + 4] / 20, hp: a[i + 5], life: a[i + 6] / 10 })),
+      gunships: this._decodeList(d[13], 5, (a, i) => ({ team: this.players[a[i]].team, owner: this.players[a[i]].id, x: a[i + 1] / 10, z: a[i + 2] / 10, aim: a[i + 3] / 20, life: a[i + 4] / 10 })),
     };
     this._decodeObjective(d[14], view);
     return view;

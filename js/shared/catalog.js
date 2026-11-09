@@ -25,6 +25,7 @@ export const PERKS = {
   fasthands: { id: 'fasthands', name: 'Fast Hands', desc: 'Faster swaps and reloads' },
   marathon:  { id: 'marathon',  name: 'Marathon',   desc: 'Faster sprint, quicker slide recharge' },
   flak:      { id: 'flak',      name: 'Flak',       desc: 'Take less explosive damage' },
+  strongarm: { id: 'strongarm', name: 'Strong Arm', desc: 'Throw equipment much further' },
 };
 
 export const DEFAULT_LOADOUT = Object.freeze({

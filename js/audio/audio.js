@@ -3,15 +3,30 @@
 // buffer playback, which is what keeps a firefight from stuttering on a phone.
 //
 // Graph: voices -> dry bus + far bus (lowpass) + room send -> compressor -> master -> limiter -> soft clip -> out.
-// Feedback sounds (hitmarkers, medals) join after the compressor so gunfire never ducks them.
+// Feedback sounds (hitmarkers, medals, music) join after the compressor so gunfire never ducks them.
+//
+// A gunshot is four layers. near: crack, body, low thump and the gun's own action, all one buffer. tail: the long
+// distant roar, which is what you hear from across the map. reflection: the slap off whatever the map is built
+// from, chosen by the map's theme. Near has suppressed variants, used for shots flagged `sup`.
+// Tail and reflection play at the lowest priority and are thinned out at high fire rates, so they never steal a
+// near voice and a held trigger stays one clean shot per shot.
 
-const MAX_VOICES = 26;
+import { WEAPONS } from '../shared/weapons.js';
+
+const MAX_VOICES = 32;
 const MAX_GUN_VOICES = 13;
 const GUN_WINDOW = 0.03;         // Seconds; the gunshot rate cap below applies per window.
 const GUN_WINDOW_CAP = 4;
 const SHOOTER_MIN_GAP = 0.05;    // Fast guns from other players don't need every shot rendered.
 const HEAR_RANGE = 58;
+const TAIL_RANGE = 82;           // The roar of a gunfight carries further than the bang.
 const STEP_RANGE = 24;
+const TAIL_GAP = 0.11;           // Seconds. A held trigger renders one tail per this, not one per round.
+const REFLECT_GAP = 0.13;
+const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
+const IMPACT_RANGE = 26;
+const TENSION_KILLS = 5;         // Team deathmatch and Kill Confirmed: this many short of the limit is "last kills".
+const TENSION_POINTS = 0.1;      // Objective modes: this fraction of the limit left.
 
 const SYNTH_RATE_FALLBACK = 44100;
 
@@ -81,129 +96,286 @@ function addClick(data, sr, rng, { at = 0, dur = 0.004, gain = 1, hp = 2500 }) {
   addNoise(data, sr, rng, { at, dur, gain, f0: 12000, f1: 8000, hp, decay: 3 });
 }
 
-// ---- Gun recipes. `crack` is the transient, `body` the bang, `thump` the low end, `tail` the room. ----
+// ---- Small synthesis building blocks for the new layers. ----
+
+function addMetal(data, sr, { at = 0, dur, gain, f, spread = 1, decay = 7 }) {
+  // Inharmonic partials: the ratios of a struck bar, which is what makes a click read as metal.
+  addTone(data, sr, { at, dur, gain, f0: f, f1: f * 0.985, decay, attack: 0.0004 });
+  addTone(data, sr, { at, dur: dur * 0.7, gain: gain * 0.55, f0: f * 2.76 * spread, f1: f * 2.7 * spread, decay: decay * 1.2, attack: 0.0004 });
+  addTone(data, sr, { at, dur: dur * 0.5, gain: gain * 0.3, f0: f * 5.4 * spread, f1: f * 5.2 * spread, decay: decay * 1.4, attack: 0.0004 });
+}
+
+// A mechanical action: a hard click with a little metal behind it, or a knock when thump is set.
+function addAction(data, sr, rng, { at, gain, hp = 1800, dur = 0.012, metal = 0, thump = 0 }) {
+  addClick(data, sr, rng, { at, dur, gain, hp });
+  if (metal) addMetal(data, sr, { at, dur: 0.05, gain: gain * 0.5, f: metal, decay: 8 });
+  if (thump) addTone(data, sr, { at, dur: 0.04, gain: gain * 0.6, f0: thump, f1: thump * 0.6, decay: 5 });
+}
+
+// ---- Gun recipes. `crack` is the transient, `body` the bang, `thump` the low end, `action` the gun cycling,
+// `tail` the far-field roar, `size` the reflection weight (0 light, 1 medium, 2 heavy). ----
 
 const GUNS = {
-  ar: {
-    dur: 0.62, crack: { dur: 0.005, gain: 1.1, hp: 2200 },
+  ar: { size: 1,
+    crack: { dur: 0.005, gain: 1.1, hp: 2200 },
     body: { dur: 0.12, gain: 1.15, f0: 5200, f1: 700, decay: 6 },
     thump: { dur: 0.09, gain: 0.9, f0: 150, f1: 55, decay: 5 },
-    tail: { dur: 0.5, gain: 0.26, f0: 1500, f1: 350, decay: 5.5 },
+    action: [{ at: 0.045, gain: 0.55, hp: 2600, dur: 0.008, metal: 1450 }, { at: 0.082, gain: 0.5, hp: 1800, dur: 0.01, thump: 310 }],
+    tail: { dur: 0.95, gain: 1, f0: 1500, f1: 300, decay: 4.2 },
   },
-  smg: {
-    dur: 0.36, crack: { dur: 0.003, gain: 1.15, hp: 3800 },
+  smg: { size: 0,
+    crack: { dur: 0.003, gain: 1.15, hp: 3800 },
     body: { dur: 0.06, gain: 1.05, f0: 7600, f1: 1700, decay: 6 },
     thump: { dur: 0.04, gain: 0.55, f0: 240, f1: 120, decay: 5 },
-    tail: { dur: 0.3, gain: 0.2, f0: 2600, f1: 700, decay: 7 },
+    action: [{ at: 0.03, gain: 0.5, hp: 3200, dur: 0.006, metal: 2100 }],
+    tail: { dur: 0.7, gain: 0.85, f0: 2400, f1: 620, decay: 5 },
   },
-  shotgun: {
-    dur: 1.05, crack: { dur: 0.008, gain: 1, hp: 1500 },
+  shotgun: { size: 2,
+    crack: { dur: 0.008, gain: 1, hp: 1500 },
     body: { dur: 0.24, gain: 1.5, f0: 3000, f1: 260, decay: 5 },
     thump: { dur: 0.18, gain: 1.4, f0: 105, f1: 38, decay: 4 },
-    tail: { dur: 0.75, gain: 0.32, f0: 900, f1: 180, decay: 5 },
     // Pump: back, then forward, after the bang has passed.
-    mech: [{ at: 0.42, gain: 0.5, hp: 1200, dur: 0.02 }, { at: 0.56, gain: 0.6, hp: 900, dur: 0.025 }],
+    action: [{ at: 0.42, gain: 0.55, hp: 1200, dur: 0.02, thump: 180 }, { at: 0.56, gain: 0.65, hp: 900, dur: 0.025, metal: 900, thump: 240 }],
+    tail: { dur: 1.35, gain: 1, f0: 900, f1: 170, decay: 3.8 },
   },
-  lmg: {
-    dur: 0.82, crack: { dur: 0.006, gain: 1.15, hp: 1800 },
+  lmg: { size: 2,
+    crack: { dur: 0.006, gain: 1.15, hp: 1800 },
     body: { dur: 0.16, gain: 1.35, f0: 3400, f1: 420, decay: 5.5 },
     thump: { dur: 0.13, gain: 1.25, f0: 120, f1: 44, decay: 4.5, shape: 1.2 },
-    tail: { dur: 0.65, gain: 0.3, f0: 1100, f1: 260, decay: 5 },
+    // Belt links rattling through the feed tray.
+    action: [{ at: 0.038, gain: 0.45, hp: 2000, dur: 0.012, metal: 1200 }, { at: 0.075, gain: 0.35, hp: 3000, dur: 0.006, metal: 2600 }],
+    tail: { dur: 1.2, gain: 1, f0: 1100, f1: 230, decay: 4 },
   },
-  sniper: {
-    dur: 1.9, crack: { dur: 0.004, gain: 1.4, hp: 4200 },
+  sniper: { size: 2,
+    crack: { dur: 0.004, gain: 1.4, hp: 4200 },
     body: { dur: 0.3, gain: 1.6, f0: 4200, f1: 200, decay: 5 },
     thump: { dur: 0.3, gain: 1.5, f0: 90, f1: 28, decay: 3.5, shape: 0.8 },
-    tail: { dur: 1.5, gain: 0.34, f0: 800, f1: 140, decay: 4.2 },
-    // A slapback off the far wall, then the bolt being worked.
-    echo: { at: 0.14, dur: 0.22, gain: 0.3, f0: 1600, f1: 300, decay: 5 },
-    mech: [{ at: 0.72, gain: 0.5, hp: 1500, dur: 0.018 }, { at: 0.9, gain: 0.45, hp: 1100, dur: 0.02 }],
+    // The bolt being worked, and the spent brass.
+    action: [{ at: 0.72, gain: 0.55, hp: 1500, dur: 0.018, metal: 1100 }, { at: 0.9, gain: 0.5, hp: 1100, dur: 0.02, thump: 260 }, { at: 1.05, gain: 0.2, hp: 5000, dur: 0.004, metal: 3400 }],
+    tail: { dur: 2.2, gain: 1, f0: 800, f1: 120, decay: 3.2 },
   },
-  pistol: {
-    dur: 0.42, crack: { dur: 0.004, gain: 1.15, hp: 2800 },
+  pistol: { size: 0,
+    crack: { dur: 0.004, gain: 1.15, hp: 2800 },
     body: { dur: 0.075, gain: 1, f0: 6000, f1: 1200, decay: 6 },
     thump: { dur: 0.06, gain: 0.7, f0: 200, f1: 85, decay: 5 },
-    tail: { dur: 0.32, gain: 0.2, f0: 2100, f1: 500, decay: 6.5 },
+    action: [{ at: 0.03, gain: 0.5, hp: 2600, dur: 0.008, metal: 1700 }],
+    tail: { dur: 0.8, gain: 0.85, f0: 2000, f1: 450, decay: 4.8 },
   },
   // Sharp, compressed snaps: three of these in 140 ms have to read as one clipped phrase.
-  burst: {
-    dur: 0.5, crack: { dur: 0.004, gain: 1.25, hp: 2600 },
+  burst: { size: 1,
+    crack: { dur: 0.004, gain: 1.25, hp: 2600 },
     body: { dur: 0.085, gain: 1.2, f0: 6400, f1: 900, decay: 7 },
     thump: { dur: 0.07, gain: 0.95, f0: 170, f1: 72, decay: 6, shape: 0.7 },
-    tail: { dur: 0.38, gain: 0.22, f0: 1900, f1: 420, decay: 6.5 },
     ring: { dur: 0.05, gain: 0.25, f0: 2400, f1: 1900, decay: 8 },
+    action: [{ at: 0.04, gain: 0.45, hp: 3000, dur: 0.006, metal: 1900 }],
+    tail: { dur: 0.85, gain: 0.9, f0: 1800, f1: 400, decay: 4.6 },
   },
   // A very short, buzzy rip: almost no body and no thump, so at 1200 rpm it reads as a saw, not as a rifle.
-  pdw: {
-    dur: 0.26, crack: { dur: 0.002, gain: 1.05, hp: 5200 },
+  pdw: { size: 0,
+    crack: { dur: 0.002, gain: 1.05, hp: 5200 },
     body: { dur: 0.038, gain: 0.95, f0: 9000, f1: 2600, decay: 6 },
     thump: { dur: 0.025, gain: 0.32, f0: 300, f1: 170, decay: 4, shape: 1.4 },
-    tail: { dur: 0.2, gain: 0.14, f0: 3600, f1: 1200, decay: 9 },
+    action: [{ at: 0.02, gain: 0.3, hp: 4200, dur: 0.004, metal: 2800 }],
+    tail: { dur: 0.55, gain: 0.7, f0: 3000, f1: 900, decay: 5.5 },
   },
   // A short, boomy cough with a drum rattle after it: lighter than the pump gun and built to repeat.
-  autoshot: {
-    dur: 0.62, crack: { dur: 0.007, gain: 1, hp: 1300 },
+  autoshot: { size: 2,
+    crack: { dur: 0.007, gain: 1, hp: 1300 },
     body: { dur: 0.15, gain: 1.45, f0: 2600, f1: 320, decay: 5.2 },
     thump: { dur: 0.12, gain: 1.35, f0: 112, f1: 46, decay: 4.2, shape: 1.1 },
-    tail: { dur: 0.45, gain: 0.26, f0: 1000, f1: 240, decay: 5.5 },
-    mech: [{ at: 0.2, gain: 0.45, hp: 2200, dur: 0.012 }, { at: 0.24, gain: 0.3, hp: 3000, dur: 0.008 }],
+    action: [{ at: 0.18, gain: 0.45, hp: 2200, dur: 0.012, thump: 200 }, { at: 0.22, gain: 0.3, hp: 3000, dur: 0.008, metal: 1500 }],
+    tail: { dur: 1, gain: 0.95, f0: 1000, f1: 210, decay: 4.2 },
   },
   // A tight, high crack and a clean falling ring: the sound of one deliberate round.
-  dmr: {
-    dur: 1.1, crack: { dur: 0.003, gain: 1.45, hp: 4800 },
+  dmr: { size: 1,
+    crack: { dur: 0.003, gain: 1.45, hp: 4800 },
     body: { dur: 0.14, gain: 1.4, f0: 5200, f1: 480, decay: 6 },
     thump: { dur: 0.14, gain: 1.15, f0: 125, f1: 46, decay: 4.2, shape: 0.6 },
-    tail: { dur: 0.9, gain: 0.3, f0: 1250, f1: 220, decay: 4.6 },
-    echo: { at: 0.11, dur: 0.16, gain: 0.2, f0: 1800, f1: 400, decay: 5 },
     ring: { dur: 0.22, gain: 0.3, f0: 3100, f1: 2400, decay: 7 },
+    action: [{ at: 0.06, gain: 0.45, hp: 3400, dur: 0.008, metal: 2200 }],
+    tail: { dur: 1.5, gain: 1, f0: 1200, f1: 200, decay: 3.6 },
   },
   // A huge flat boom with a metal bark on the front and a long ring: slow gun, so every shot gets to sing.
-  revolver: {
-    dur: 1.25, crack: { dur: 0.005, gain: 1.35, hp: 2400 },
+  revolver: { size: 2,
+    crack: { dur: 0.005, gain: 1.35, hp: 2400 },
     body: { dur: 0.17, gain: 1.6, f0: 3800, f1: 300, decay: 4.6 },
     thump: { dur: 0.2, gain: 1.55, f0: 98, f1: 36, decay: 3.6, shape: 1.3 },
-    tail: { dur: 1, gain: 0.3, f0: 900, f1: 170, decay: 4.4 },
     ring: { dur: 0.34, gain: 0.42, f0: 2050, f1: 1720, decay: 5.5 },
-    mech: [{ at: 0.34, gain: 0.34, hp: 2600, dur: 0.008 }],
+    action: [{ at: 0.34, gain: 0.34, hp: 2600, dur: 0.008, metal: 1500 }],
+    tail: { dur: 1.6, gain: 1, f0: 900, f1: 150, decay: 3.4 },
   },
   // Ignition: a click, a pressure thump and a long tearing hiss as the rocket leaves. The bang is the explosion event.
-  launcher: {
-    dur: 1.05, crack: { dur: 0.012, gain: 1.05, hp: 900 },
+  launcher: { size: 2,
+    crack: { dur: 0.012, gain: 1.05, hp: 900 },
     body: { dur: 0.32, gain: 1.15, f0: 1700, f1: 300, decay: 3.8 },
     thump: { dur: 0.22, gain: 1.5, f0: 80, f1: 32, decay: 3.4, shape: 1.6 },
-    tail: { dur: 0.8, gain: 0.5, f0: 6000, f1: 1500, hp: 1100, decay: 3.6 },
-    mech: [{ at: 0.86, gain: 0.3, hp: 1300, dur: 0.02 }],
+    hiss: { at: 0.05, dur: 0.75, gain: 0.5, f0: 6000, f1: 1500, hp: 1100, decay: 3.6 },
+    action: [{ at: 0.86, gain: 0.3, hp: 1300, dur: 0.02, thump: 170 }],
+    tail: { dur: 1.7, gain: 1, f0: 700, f1: 120, decay: 3.2 },
+    noSup: true,
   },
   // Scorestreak guns: a dry mechanical chatter, and a slow autocannon heard from above.
-  turret: {
-    dur: 0.4, crack: { dur: 0.004, gain: 1.2, hp: 3200 },
+  turret: { size: 1,
+    crack: { dur: 0.004, gain: 1.2, hp: 3200 },
     body: { dur: 0.07, gain: 1, f0: 4800, f1: 1500, decay: 7 },
     thump: { dur: 0.05, gain: 0.7, f0: 300, f1: 140, decay: 5, shape: 1 },
-    tail: { dur: 0.26, gain: 0.14, f0: 1800, f1: 600, decay: 8 },
-    mech: [{ at: 0.05, gain: 0.5, hp: 2400, dur: 0.006 }],
+    action: [{ at: 0.05, gain: 0.5, hp: 2400, dur: 0.006, metal: 1800 }],
+    tail: { dur: 0.6, gain: 0.8, f0: 1800, f1: 500, decay: 5 },
+    noSup: true,
   },
-  gunship: {
-    dur: 1.25, crack: { dur: 0.007, gain: 1.1, hp: 1200 },
+  gunship: { size: 2,
+    crack: { dur: 0.007, gain: 1.1, hp: 1200 },
     body: { dur: 0.22, gain: 1.45, f0: 2200, f1: 240, decay: 5 },
     thump: { dur: 0.22, gain: 1.6, f0: 88, f1: 32, decay: 3.8, shape: 1.4 },
-    tail: { dur: 1, gain: 0.34, f0: 600, f1: 120, decay: 4.2 },
-    echo: { at: 0.18, dur: 0.3, gain: 0.24, f0: 900, f1: 200, decay: 5 },
+    action: [{ at: 0.16, gain: 0.3, hp: 1600, dur: 0.012, thump: 200 }],
+    tail: { dur: 1.3, gain: 1, f0: 620, f1: 110, decay: 3.4 },
+    noSup: true,
   },
 };
 
-function renderGun(spec, sr, seed) {
-  const data = new Float32Array(Math.floor(spec.dur * sr));
+function actionLength(spec) {
+  let last = 0;
+  for (const a of spec.action) if (a.at > last) last = a.at;
+  return last;
+}
+
+// Crack, body, thump and action, without the far-field tail: that plays separately so a shot from across the map
+// can be mostly tail, and a held trigger is not a stack of long tails.
+function renderNear(spec, sr, seed) {
+  const dur = Math.max(spec.body.dur, spec.thump.dur) + 0.05 + actionLength(spec);
+  const data = new Float32Array(Math.floor(dur * sr));
   const rng = rngFrom(seed);
   addClick(data, sr, rng, spec.crack);
   addNoise(data, sr, rng, spec.body);
   addTone(data, sr, spec.thump);
-  addNoise(data, sr, rng, spec.tail);
-  if (spec.echo) addNoise(data, sr, rng, spec.echo);
   if (spec.ring) addTone(data, sr, spec.ring);
-  if (spec.mech) for (const m of spec.mech) addClick(data, sr, rng, m);
+  if (spec.hiss) addNoise(data, sr, rng, spec.hiss);
+  // A breath of room, so the near layer does not stop dead while the tail is still coming up.
+  addNoise(data, sr, rng, { dur: 0.1, gain: 0.3, f0: spec.body.f0 * 0.4, f1: spec.body.f1 * 0.6, decay: 4 });
+  for (const a of spec.action) addAction(data, sr, rng, a);
   for (let i = 0; i < data.length; i++) data[i] = softClip(data[i] * 0.85);
   return normalize(data, 0.92);
 }
+
+// A can over the muzzle: the crack and most of the bang go, a low cough of gas remains, and the gun's action,
+// no longer drowned out, becomes the loudest thing about it.
+function renderSuppressed(spec, sr, seed) {
+  const dur = Math.max(0.09, Math.min(0.4, spec.body.dur)) + 0.06 + actionLength(spec) * 0.6;
+  const data = new Float32Array(Math.floor(dur * sr));
+  const rng = rngFrom(seed);
+  addNoise(data, sr, rng, { dur: Math.max(0.05, spec.body.dur * 0.55), gain: 1.1, f0: Math.min(2600, spec.body.f0 * 0.42), f1: spec.body.f1 * 0.45, decay: 6 });
+  addNoise(data, sr, rng, { dur: 0.05, gain: 0.45, f0: 2800, f1: 900, hp: 700, decay: 7 });
+  addTone(data, sr, { dur: spec.thump.dur * 0.6, gain: spec.thump.gain * 0.38, f0: spec.thump.f0 * 1.15, f1: spec.thump.f1, decay: 6 });
+  for (const a of spec.action) addAction(data, sr, rng, { ...a, gain: a.gain * 1.35 });
+  return normalize(data, 0.8);
+}
+
+// The part that carries: no transient, all low roar and scattered far-off returns.
+function renderTail(spec, sr, seed) {
+  const t = spec.tail, data = new Float32Array(Math.floor(t.dur * sr));
+  const rng = rngFrom(seed);
+  addNoise(data, sr, rng, { dur: t.dur, gain: 1, f0: t.f0, f1: t.f1, decay: t.decay });
+  addTone(data, sr, { dur: Math.min(0.45, t.dur), gain: 0.5, f0: Math.max(60, spec.thump.f1 * 1.6), f1: spec.thump.f1 * 0.7, decay: 4, shape: 0.5 });
+  for (let i = 0; i < 7; i++) {
+    const at = 0.06 + (rng() + 1) * 0.5 * t.dur * 0.55;
+    addNoise(data, sr, rng, { at, dur: 0.1 + (rng() + 1) * 0.08, gain: 0.32 + (rng() + 1) * 0.12, f0: t.f0 * 0.8, f1: t.f1, decay: 6 });
+  }
+  return normalize(data, 0.8);
+}
+
+// ---- Reflections per map: what the surfaces are made of, in delay, tone and how many walls answer. ----
+
+const THEME_AUDIO = {
+  // Steel freight boxes: bright, quick, and it rings a little.
+  railyard: { ir: { len: 0.85, damp: 0.35, gain: 0.34 }, slaps: [[0.075, 1], [0.18, 0.55]], f0: 2400, f1: 620, metal: 1650, wash: 0.05 },
+  // Open water and a steel hull far off: a soft late return and a long wet decay.
+  harbor:   { ir: { len: 1.3,  damp: 0.18, gain: 0.3 },  slaps: [[0.16, 0.7], [0.38, 0.5]], f0: 1100, f1: 240, metal: 0, wash: 0.16 },
+  // Tight alleys of concrete: a stutter of short, bright slaps.
+  neon:     { ir: { len: 0.5,  damp: 0.55, gain: 0.38 }, slaps: [[0.028, 1], [0.058, 0.75], [0.095, 0.5], [0.15, 0.3]], f0: 3500, f1: 950, metal: 0, wash: 0.03 },
+  // Sun-baked rock and adobe: dry, one clean echo off the far wall.
+  dust:     { ir: { len: 0.55, damp: 0.14, gain: 0.22 }, slaps: [[0.2, 0.8], [0.34, 0.3]], f0: 1800, f1: 500, metal: 0, wash: 0.02 },
+};
+const SIZE_TUNE = [{ dur: 0.14, f: 1.2, gain: 0.8 }, { dur: 0.2, f: 1, gain: 1 }, { dur: 0.3, f: 0.78, gain: 1.15 }];
+
+function renderReflection(theme, size, sr, seed) {
+  const th = THEME_AUDIO[theme], tune = SIZE_TUNE[size];
+  const last = th.slaps[th.slaps.length - 1][0];
+  const data = new Float32Array(Math.floor((last + tune.dur + th.wash * 2 + 0.05) * sr));
+  const rng = rngFrom(seed);
+  for (const [at, gain] of th.slaps) {
+    addNoise(data, sr, rng, { at, dur: tune.dur, gain: gain * tune.gain, f0: th.f0 * tune.f, f1: th.f1 * tune.f, decay: 6 });
+    if (th.metal) addMetal(data, sr, { at, dur: 0.12, gain: gain * 0.28, f: th.metal * tune.f, decay: 7 });
+  }
+  if (th.wash) addNoise(data, sr, rng, { at: 0.02, dur: last + tune.dur + th.wash * 2, gain: th.wash * 3, f0: th.f0 * 0.5, f1: th.f1 * 0.6, decay: 2.6 });
+  return normalize(data, 0.7);
+}
+
+// ---- Per-weapon reload and swap foley. ----
+
+function renderFoley(id, sr, seed) {
+  const r = rngFrom(seed);
+  const def = FOLEY[id];
+  const mk = (dur, fill, peak = 0.85) => { const d = new Float32Array(Math.floor(dur * sr)); fill(d, r); return normalize(d, peak); };
+  const p = def.pitch, m = def.mass;
+  const click = (d, rr, at, gain, hp = 2000) => addClick(d, sr, rr, { at, dur: 0.008, gain, hp });
+  const slide = (d, rr, at, dur, gain, f = 2600) => addNoise(d, sr, rr, { at, dur, gain, f0: f * p, f1: f * 0.5 * p, hp: 400, decay: 4 });
+  const knock = (d, at, gain, f = 260) => addTone(d, sr, { at, dur: 0.06, gain, f0: f * p, f1: f * 0.55 * p, decay: 5, shape: 0.6 });
+
+  const out = mk(def.out || 0.28, (d, rr) => {
+    switch (def.kind) {
+      case 'belt': click(d, rr, 0, 1.1, 1400); slide(d, rr, 0.02, 0.2, 0.7, 1900); for (let i = 0; i < 5; i++) addMetal(d, sr, { at: 0.05 + i * 0.035, dur: 0.02, gain: 0.3, f: 2600 + i * 90, decay: 9 }); break;
+      case 'cylinder': click(d, rr, 0, 0.9, 2800); addMetal(d, sr, { at: 0.03, dur: 0.15, gain: 0.5, f: 1800, decay: 6 }); for (let i = 0; i < 4; i++) addClick(d, sr, rr, { at: 0.08 + i * 0.025, dur: 0.004, gain: 0.5, hp: 4500 }); break;
+      case 'tube': slide(d, rr, 0, 0.12, 0.5, 3000); break;
+      case 'rocket': click(d, rr, 0, 1, 900); knock(d, 0.02, 0.9, 170); slide(d, rr, 0.03, 0.22, 0.6, 1400); break;
+      default: click(d, rr, 0, 1, 1400 * p); knock(d, 0.012, 0.5 * m, 900); slide(d, rr, 0.03, 0.13, 0.32, 2200);
+    }
+  });
+  const inn = mk(def.in || 0.3, (d, rr) => {
+    switch (def.kind) {
+      case 'belt': slide(d, rr, 0, 0.15, 0.6, 1600); knock(d, 0.14, 1, 240); click(d, rr, 0.145, 1, 1100); for (let i = 0; i < 3; i++) addMetal(d, sr, { at: 0.18 + i * 0.03, dur: 0.02, gain: 0.25, f: 2200, decay: 9 }); break;
+      case 'tube': addNoise(d, sr, rr, { dur: 0.05, gain: 0.5, f0: 2200, f1: 700, hp: 300, decay: 4 }); knock(d, 0.04, 0.9, 330); click(d, rr, 0.045, 0.8, 1500); break;
+      case 'drum': slide(d, rr, 0, 0.12, 0.4, 1700); knock(d, 0.12, 1, 190); click(d, rr, 0.125, 1, 1000); for (let i = 0; i < 4; i++) addClick(d, sr, rr, { at: 0.17 + i * 0.02, dur: 0.005, gain: 0.5, hp: 3500 }); break;
+      case 'cylinder': for (let i = 0; i < 6; i++) addClick(d, sr, rr, { at: i * 0.025, dur: 0.005, gain: 0.5, hp: 3800 }); click(d, rr, 0.18, 1, 1600); knock(d, 0.185, 0.6, 700); break;
+      case 'rocket': slide(d, rr, 0, 0.18, 0.5, 900); knock(d, 0.17, 1, 130); click(d, rr, 0.175, 1, 800); break;
+      default: slide(d, rr, 0, 0.09, 0.3, 2000); click(d, rr, 0.08, 1, 1200 * p); knock(d, 0.085, 0.8 * m, 420); click(d, rr, 0.12, 0.6, 2200);
+    }
+  });
+  const rack = mk(def.rack || 0.3, (d, rr) => {
+    switch (def.kind) {
+      case 'bolt': click(d, rr, 0, 0.9, 1400); addNoise(d, sr, rr, { at: 0.012, dur: 0.1, gain: 0.45, f0: 2400, f1: 900, hp: 400, decay: 4 }); addMetal(d, sr, { at: 0.13, dur: 0.1, gain: 0.5, f: 900, decay: 6 }); click(d, rr, 0.135, 1.1, 1000); knock(d, 0.14, 0.7, 240); break;
+      case 'slide': click(d, rr, 0, 0.8, 2600); addNoise(d, sr, rr, { at: 0.01, dur: 0.05, gain: 0.3, f0: 3000, f1: 1200, hp: 600, decay: 4 }); click(d, rr, 0.07, 1.1, 1700); knock(d, 0.075, 0.6, 620); addMetal(d, sr, { at: 0.075, dur: 0.06, gain: 0.3, f: 1900, decay: 8 }); break;
+      case 'tube': knock(d, 0, 0.4, 200); slide(d, rr, 0, 0.03, 0.3, 1500); break;
+      case 'cylinder': click(d, rr, 0, 1, 1400); addMetal(d, sr, { at: 0.004, dur: 0.1, gain: 0.5, f: 1400, decay: 6 }); break;
+      case 'rocket': click(d, rr, 0, 1, 1100); knock(d, 0.005, 0.8, 160); slide(d, rr, 0.02, 0.1, 0.3, 700); break;
+      case 'belt': click(d, rr, 0, 1, 1200); knock(d, 0.006, 0.9, 200); addMetal(d, sr, { at: 0.02, dur: 0.12, gain: 0.4, f: 1100, decay: 6 }); click(d, rr, 0.09, 0.8, 1700); break;
+      default: click(d, rr, 0, 0.9, 1400 * p); addNoise(d, sr, rr, { at: 0.012, dur: 0.1, gain: 0.3, f0: 2600, f1: 900, hp: 500, decay: 4 }); addMetal(d, sr, { at: 0.14, dur: 0.08, gain: 0.45, f: 1200 * p, decay: 7 }); click(d, rr, 0.145, 1.1, 1000 * p); knock(d, 0.15, 0.6 * m, 300);
+    }
+  });
+  const swap = mk(def.swap || 0.24, (d, rr) => {
+    addNoise(d, sr, rr, { dur: 0.12, gain: 0.55 * m, f0: 2800, f1: 900, hp: 500, decay: 4 });    // Cloth and sling.
+    addClick(d, sr, rr, { at: 0.09, dur: 0.008, gain: 0.9, hp: 1800 * p });
+    knock(d, 0.1, 0.45 * m, 310);
+    addMetal(d, sr, { at: 0.1, dur: 0.05, gain: 0.25, f: 1350 * p, decay: 8 });
+    if (m > 0.7) knock(d, 0.14, 0.55, 150);
+  });
+  return { out, in: inn, rack, swap };
+}
+
+const FOLEY = {
+  // kind picks the sequence; pitch and mass make two rifles sound like two different objects.
+  ar:       { kind: 'mag',  pitch: 1,    mass: 0.7 },
+  smg:      { kind: 'mag',  pitch: 1.25, mass: 0.5 },
+  pdw:      { kind: 'mag',  pitch: 1.4,  mass: 0.4 },
+  burst:    { kind: 'mag',  pitch: 1.08, mass: 0.65 },
+  dmr:      { kind: 'bolt', pitch: 0.95, mass: 0.75, out: 0.3 },
+  shotgun:  { kind: 'tube', pitch: 0.9,  mass: 0.8, rack: 0.2 },
+  autoshot: { kind: 'drum', pitch: 0.85, mass: 0.95, in: 0.34 },
+  lmg:      { kind: 'belt', pitch: 0.75, mass: 1, out: 0.36, in: 0.36 },
+  sniper:   { kind: 'bolt', pitch: 0.8,  mass: 0.9 },
+  pistol:   { kind: 'slide', pitch: 1.3, mass: 0.35, rack: 0.2 },
+  revolver: { kind: 'cylinder', pitch: 1.15, mass: 0.5, out: 0.24, in: 0.28, rack: 0.14 },
+  launcher: { kind: 'rocket', pitch: 0.7, mass: 1, out: 0.32, in: 0.3, rack: 0.2 },
+};
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
 const MEDALS = {
@@ -255,11 +427,16 @@ function renderSfx(sr) {
     // The tick has to cut through gunfire, so it sits above the guns' energy.
     hit: mk(0.075, (d, r) => { addTone(d, sr, { dur: 0.05, gain: 1, f0: 2500, f1: 1900, decay: 8 }); addClick(d, sr, r, { dur: 0.003, gain: 0.8, hp: 5000 }); }),
     hitHeavy: mk(0.13, (d, r) => { addTone(d, sr, { dur: 0.085, gain: 1, f0: 1700, f1: 1100, decay: 6 }); addClick(d, sr, r, { dur: 0.005, gain: 1, hp: 3500 }); }),
-    kill: mk(0.44, (d, r) => {
-      addTone(d, sr, { dur: 0.14, gain: 0.9, f0: 1560, f1: 1300, decay: 5, shape: 0.5 });
-      addTone(d, sr, { at: 0.09, dur: 0.3, gain: 1, f0: 2080, f1: 1740, decay: 5, shape: 0.5 });
-      addNoise(d, sr, r, { dur: 0.08, gain: 0.5, f0: 4000, f1: 900, decay: 5 });
-    }),
+    // The kill confirm: a body-blow thump, a hard metal strike, then a bright two-note sting that lifts off it.
+    kill: mk(0.5, (d, r) => {
+      addTone(d, sr, { dur: 0.09, gain: 1.3, f0: 140, f1: 48, decay: 4.5, shape: 1.4 });
+      addClick(d, sr, r, { dur: 0.006, gain: 1.3, hp: 2400 });
+      addNoise(d, sr, r, { dur: 0.07, gain: 0.7, f0: 6200, f1: 1200, decay: 5 });
+      addMetal(d, sr, { at: 0.004, dur: 0.1, gain: 0.7, f: 1380, decay: 7 });
+      addTone(d, sr, { at: 0.03, dur: 0.14, gain: 0.85, f0: 1568, f1: 1500, decay: 5, shape: 0.5 });
+      addTone(d, sr, { at: 0.13, dur: 0.34, gain: 1, f0: 2349, f1: 2260, decay: 5, shape: 0.5 });
+      for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.85);
+    }, 0.95),
     assist: mk(0.16, (d) => { addTone(d, sr, { dur: 0.14, gain: 1, f0: 1320, f1: 1180, decay: 5 }); }, 0.7),
     hurt: mk(0.22, (d, r) => { addTone(d, sr, { dur: 0.2, gain: 1, f0: 150, f1: 62, decay: 5 }); addNoise(d, sr, r, { dur: 0.1, gain: 0.6, f0: 1400, f1: 300, decay: 6 }); }),
     reloadOut: mk(0.18, (d, r) => { addClick(d, sr, r, { dur: 0.006, gain: 1, hp: 1400 }); addTone(d, sr, { at: 0.012, dur: 0.05, gain: 0.5, f0: 900, f1: 500, decay: 6 }); addNoise(d, sr, r, { at: 0.03, dur: 0.1, gain: 0.3, f0: 2200, f1: 800, hp: 400, decay: 5 }); }),
@@ -371,7 +548,152 @@ function renderSfx(sr) {
       for (let n = 0; n < 2; n++) addTone(d, sr, { at: n * 0.16, dur: 0.14, gain: 0.8, f0: 660, f1: 880, decay: 4, attack: 0.006, shape: 0.8 });
       addTone(d, sr, { at: 0.34, dur: 0.24, gain: 0.8, f0: 990, decay: 4, attack: 0.006, shape: 0.8 });
     }, 0.72),
+    // A round passing close: the snap of the shockwave, then air tearing behind it.
+    whiz: mk(0.22, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 3400 });
+      addNoise(d, sr, r, { at: 0.002, dur: 0.2, gain: 0.8, f0: 9000, f1: 2600, hp: 1500, decay: 5 });
+      addTone(d, sr, { at: 0.02, dur: 0.14, gain: 0.25, f0: 2400, f1: 900, decay: 4 });
+    }, 0.75),
+    impactMetal: mk(0.24, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 4000 });
+      addMetal(d, sr, { at: 0.002, dur: 0.2, gain: 0.8, f: 2300, decay: 7 });
+    }, 0.7),
+    impactConcrete: mk(0.16, (d, r) => {
+      addClick(d, sr, r, { dur: 0.005, gain: 1.1, hp: 2600 });
+      addNoise(d, sr, r, { at: 0.003, dur: 0.14, gain: 0.8, f0: 3600, f1: 700, hp: 200, decay: 6 });
+      for (let i = 0; i < 4; i++) addClick(d, sr, r, { at: 0.03 + i * 0.022, dur: 0.003, gain: 0.3, hp: 4200 });    // Grit.
+    }, 0.7),
+    impactDirt: mk(0.14, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.12, gain: 1, f0: 1400, f1: 300, decay: 7 });
+      addTone(d, sr, { dur: 0.05, gain: 0.5, f0: 190, f1: 70, decay: 6 });
+    }, 0.65),
     steps,
+  };
+}
+
+// ---- Weather and stingers. Seamless loops, and music in small buffers so nothing streams. ----
+
+// A loop that is seamless because its head is faded into the end of its own tail.
+function loopFromFill(sr, seconds, fill, peak) {
+  const fadeLen = Math.floor(0.6 * sr);
+  const n = Math.floor(seconds * sr);
+  const raw = new Float32Array(n + fadeLen);
+  fill(raw);
+  for (let i = 0; i < fadeLen; i++) {
+    const k = i / fadeLen;
+    raw[i] = raw[i] * k + raw[n + i] * (1 - k);
+  }
+  return normalize(raw.subarray(0, n), peak);
+}
+
+function renderRain(sr, seed) {
+  const r = rngFrom(seed);
+  return loopFromFill(sr, 7, (d) => {
+    let low = 0, hi = 0, prev = 0;
+    for (let i = 0; i < d.length; i++) {
+      low += 0.72 * (r() - low);              // The hiss of it on everything.
+      hi = 0.92 * (hi + low - prev); prev = low;
+      d[i] += hi * 0.5;
+    }
+    // Individual heavy drops landing on the nearest surface.
+    for (let n = 0; n < 90; n++) {
+      const at = (r() + 1) * 0.5 * (d.length - 2200);
+      const f = 1800 + (r() + 1) * 1400, g = 0.4 + (r() + 1) * 0.3;
+      addClick(d, sr, r, { at: at / sr, dur: 0.004, gain: g * 0.5, hp: 3000 });
+      addTone(d, sr, { at: at / sr, dur: 0.018, gain: g * 0.3, f0: f, f1: f * 0.6, decay: 6 });
+    }
+  }, 0.75);
+}
+
+function renderWind(sr, seed) {
+  const r = rngFrom(seed), TAU2 = Math.PI * 2;
+  return loopFromFill(sr, 9, (d) => {
+    let low = 0, band = 0, cut = 0.02;
+    const n = d.length;
+    for (let i = 0; i < n; i++) {
+      // Gusts: slow overlapping swells, chosen as whole cycles of the loop so they cannot jump at the seam.
+      const u = i / n;
+      const gust = 0.5 + 0.28 * Math.sin(TAU2 * 2 * u) + 0.2 * Math.sin(TAU2 * 5 * u + 1.3) + 0.12 * Math.sin(TAU2 * 9 * u + 4);
+      if ((i & 63) === 0) cut = 0.012 + 0.05 * gust * gust;
+      low += cut * (r() - low);
+      band += 0.3 * (low - band);
+      d[i] += band * gust * 4;
+    }
+  }, 0.75);
+}
+
+function renderThunder(sr, seed) {
+  const d = new Float32Array(Math.floor(5.5 * sr));
+  const r = rngFrom(seed);
+  // Lightning first: a crackle high up that gives way to the long roll.
+  for (let i = 0; i < 5; i++) addClick(d, sr, r, { at: i * 0.03, dur: 0.01, gain: 0.5, hp: 1500 });
+  addNoise(d, sr, r, { at: 0.03, dur: 1.6, gain: 2, f0: 900, f1: 120, decay: 2.8 });
+  addNoise(d, sr, r, { at: 0.5, dur: 4.6, gain: 1.8, f0: 260, f1: 55, decay: 2.2 });
+  addTone(d, sr, { at: 0.1, dur: 2.4, gain: 1, f0: 60, f1: 30, decay: 2 });
+  addTone(d, sr, { at: 1.2, dur: 3.2, gain: 0.7, f0: 44, f1: 26, decay: 2 });
+  for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.7);
+  return normalize(d, 0.92);
+}
+
+const semi = n => 110 * Math.pow(2, n / 12);
+
+// One note of a brassy synth stack: the fundamental and a couple of upper partials.
+function addStab(d, sr, r, { at = 0, dur, gain, f, decay = 2.2, attack = 0.012 }) {
+  // Plain sines: a stinger is many notes long, and tanh per sample per note is where the synthesis time would go.
+  addTone(d, sr, { at, dur, gain, f0: f, decay, attack });
+  addTone(d, sr, { at, dur: dur * 0.85, gain: gain * 0.5, f0: f * 2.002, decay: decay * 1.2, attack: attack * 0.6 });
+  addTone(d, sr, { at, dur: dur * 0.6, gain: gain * 0.28, f0: f * 3.01, decay: decay * 1.5, attack: attack * 0.5 });
+}
+
+function renderStingers(sr) {
+  const mk = (dur, peak, fill) => () => {
+    const d = new Float32Array(Math.floor(dur * sr));
+    fill(d, rngFrom(5310 + Math.floor(dur * 701)));
+    for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.9);
+    return normalize(d, peak);
+  };
+  return {
+    // A rising filter sweep into a single hard power chord, then a drop.
+    matchStart: mk(1.8, 0.85, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.5, gain: 0.5, f0: 400, f1: 4000, hp: 300, decay: 0.5 });
+      addTone(d, sr, { dur: 0.5, gain: 0.4, f0: 62, f1: 110, decay: 1, attack: 0.05 });
+      const hit = 0.52;
+      addTone(d, sr, { at: hit, dur: 0.5, gain: 1.4, f0: 80, f1: 36, decay: 3.5, shape: 1.6 });
+      addClick(d, sr, r, { at: hit, dur: 0.008, gain: 1.2, hp: 1000 });
+      for (const n of [0, 7, 12, 19]) addStab(d, sr, r, { at: hit, dur: 1.2, gain: 0.5, f: semi(n), decay: 3 });
+    }),
+    // Clock-tight and uneasy: a low pedal under a tense interval, pulsing faster, ending on a question.
+    tension: mk(2.1, 0.8, (d, r) => {
+      addTone(d, sr, { dur: 2.05, gain: 0.5, f0: semi(-12), decay: 1.2, attack: 0.08, shape: 1.5 });
+      for (const n of [0, 1, 6]) addStab(d, sr, r, { dur: 2, gain: 0.3, f: semi(n), decay: 1, attack: 0.12 });
+      let t = 0, step = 0.4, i = 0;
+      while (t < 1.9) { addClick(d, sr, r, { at: t, dur: 0.006, gain: 0.7 + 0.2 * (i % 2), hp: 3200 }); t += step; step = Math.max(0.1, step * 0.8); i++; }
+    }),
+    // Under the last kills: one soft low pulse to the bar, sixteen beats that fall silent at the end so it can loop.
+    tensionLoop: mk(4, 0.7, (d, r) => {
+      const beat = 0.25;
+      for (let i = 0; i < 16; i++) {
+        const down = i % 4 === 0;
+        addTone(d, sr, { at: i * beat, dur: 0.2, gain: down ? 1 : 0.55, f0: semi(down ? -12 : -5), f1: semi(down ? -12 : -5) * 0.85, decay: 4, shape: 1.2 });
+        if (i % 2 === 1) addClick(d, sr, r, { at: i * beat, dur: 0.004, gain: 0.4, hp: 3800 });
+      }
+    }),
+    victory: mk(3.2, 0.85, (d, r) => {
+      // A major arpeggio climbing into a held, bright chord.
+      const notes = [0, 4, 7, 12, 16, 19];
+      notes.forEach((n, i) => addStab(d, sr, r, { at: i * 0.11, dur: 1.8 - i * 0.05, gain: 0.45, f: semi(n), decay: 2, attack: 0.006 }));
+      addTone(d, sr, { at: 0.6, dur: 2, gain: 0.7, f0: semi(-12), decay: 1.8 });
+      for (let i = 0; i < 3; i++) addStab(d, sr, r, { at: 0.8 + i * 0.09, dur: 0.9, gain: 0.16, f: semi(24 + notes[i % 3]), decay: 3, attack: 0.003 });
+      addNoise(d, sr, r, { at: 0.55, dur: 1.2, gain: 0.25, f0: 8000, f1: 2500, hp: 1800, decay: 2.5 });
+    }),
+    defeat: mk(3.2, 0.8, (d, r) => {
+      // Falling minor line, a low toll, and everything sinking at the end.
+      const notes = [12, 10, 7, 3, 0];
+      notes.forEach((n, i) => addStab(d, sr, r, { at: i * 0.3, dur: 1.6, gain: 0.45, f: semi(n), decay: 1.5, attack: 0.02 }));
+      for (const n of [-12, -9, -5]) addStab(d, sr, r, { at: 1.5, dur: 1.4, gain: 0.32, f: semi(n), decay: 1.3, attack: 0.05 });
+      addTone(d, sr, { dur: 3.1, gain: 0.6, f0: semi(-12) * 1.02, f1: semi(-17), decay: 1.1, attack: 0.1 });
+      addTone(d, sr, { at: 1.5, dur: 0.7, gain: 0.9, f0: 70, f1: 40, decay: 3, shape: 1.2 });
+    }),
   };
 }
 
@@ -386,15 +708,17 @@ function softClipCurve() {
   return curve;
 }
 
-function roomImpulse(ctx) {
-  const len = Math.floor(0.75 * ctx.sampleRate);
+// A room per map: length and darkness of the decay come from its surfaces.
+function roomImpulse(ctx, theme) {
+  const { len: seconds, damp } = THEME_AUDIO[theme].ir;
+  const len = Math.floor(seconds * ctx.sampleRate);
   const buf = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch), rng = rngFrom(4242 + ch * 77);
     let low = 0;
     for (let i = 0; i < len; i++) {
       const t = i / len;
-      low += 0.35 * (rng() - low);
+      low += damp * (rng() - low);
       d[i] = low * Math.pow(1 - t, 3) * (i < 180 ? i / 180 : 1);
     }
   }
@@ -417,6 +741,17 @@ export class AudioEngine {
     this.heatTickT = 0; this.prevHeat = 0; this.lastVentAt = -9;
     this.rumbleGain = null;
     this.lx = 0; this.lz = 0; this.localId = null; this.localAlive = false; this.localTeam = -1;
+    this.offline = false;
+    this.theme = null;
+    this.tailAt = new Map();       // Per shooter: when their last far tail or reflection played.
+    this.reflectAt = 0;
+    this.whizAt = 0; this.impactAt = 0;
+    this.foleyPending = new Map();   // Per player: scheduled reload sounds, cancelled if the reload stops short.
+    this.reloadAmmo = new Map();     // Per player: ammo when the reload began, to tell a finished reload from a cancelled one.
+    this.killChain = 0; this.lastKillAt = -9;
+    this.thunderT = 8; this.nextAmbRefresh = 0;
+    this.tension = false; this.stingerDone = false;
+    this.windSrc = null; this.rainSrc = null; this.tensionSrc = null;
 
     // Unlock on the first gesture, and again whenever iOS suspends audio (calls, Siri, backgrounding).
     this._onGesture = () => this.unlock();
@@ -450,9 +785,20 @@ export class AudioEngine {
     }
   }
 
+  // Test hook: drives the whole graph with an OfflineAudioContext so it can be rendered and measured.
+  useContext(ctx) {
+    this.ctx = ctx;
+    this.offline = true;
+    this._build();
+    return this.whenReady;
+  }
+
+  _running() { return this.ready && (this.offline || this.ctx.state === 'running'); }
+
   _build() {
     const ctx = this.ctx;
     const sr = ctx.sampleRate || SYNTH_RATE_FALLBACK;
+    this.whenReady = new Promise(done => { this._readyDone = done; });
 
     this.master = ctx.createGain();
     this.master.gain.value = this.volume;
@@ -470,14 +816,23 @@ export class AudioEngine {
     this.ui = ctx.createGain(); this.ui.gain.value = 0.85;      // Hitmarkers, medals: never distance-filtered.
     this.roomSend = ctx.createGain(); this.roomSend.gain.value = 1;
     this.room = ctx.createConvolver();
-    this.room.buffer = roomImpulse(ctx);
-    this.roomOut = ctx.createGain(); this.roomOut.gain.value = 0.34;
+    this.rooms = {};
+    this.applyRoom('railyard');
+    this.roomOut = ctx.createGain(); this.roomOut.gain.value = THEME_AUDIO.railyard.ir.gain;
 
     this.dry.connect(this.comp);
     this.far.connect(this.farFilter); this.farFilter.connect(this.comp);
     this.roomSend.connect(this.room); this.room.connect(this.roomOut); this.roomOut.connect(this.comp);
     this.comp.connect(this.master);
     this.ui.connect(this.master);
+    // Music sits with the feedback: it is not world sound and must not be ducked by a firefight.
+    this.music = ctx.createGain(); this.music.gain.value = 0.7;
+    this.music.connect(this.master);
+    // Weather goes through the compressor, so a firefight naturally pushes it down.
+    this.amb = ctx.createGain(); this.amb.gain.value = 0;
+    this.amb.connect(this.comp);
+    this.thunderBus = ctx.createGain(); this.thunderBus.gain.value = 0.55;
+    this.thunderBus.connect(this.comp);
     // The boost for mic mode happens at master, so the limiter and clipper still have the last word.
     this.master.connect(this.limiter);
     this.output = ctx.createWaveShaper();
@@ -486,7 +841,9 @@ export class AudioEngine {
     this.output.connect(ctx.destination);
 
     // Synthesis happens in small jobs after the gesture, so unlocking never hitches a frame.
-    this.guns = {}; this.medals = {}; this.sfx = {};
+    this.guns = {}; this.medals = {}; this.sfx = {}; this.reflect = {}; this.foley = {}; this.stingers = {};
+    this.thunder = [];
+    this.loops = {};
     const jobs = [];
     const sfx = renderSfx(sr);
     for (const k of Object.keys(sfx)) {
@@ -498,12 +855,39 @@ export class AudioEngine {
     for (const id of Object.keys(MEDALS)) jobs.push(() => { this.medals[id] = this._toBuffer(renderMedal(MEDALS[id], sr)); });
     let seed = 1234;
     for (const id of Object.keys(GUNS)) {
-      this.guns[id] = [];
+      const spec = GUNS[id], g = this.guns[id] = { near: [], sup: [], tail: null, size: spec.size };
       for (let v = 0; v < 3; v++) {
         const s = (seed += 73);
-        jobs.push(() => { this.guns[id].push(this._toBuffer(renderGun(GUNS[id], sr, s))); });
+        jobs.push(() => { g.near.push(this._toBuffer(renderNear(spec, sr, s))); });
+      }
+      if (!spec.noSup) {
+        for (let v = 0; v < 2; v++) {
+          const s = (seed += 73);
+          jobs.push(() => { g.sup.push(this._toBuffer(renderSuppressed(spec, sr, s))); });
+        }
+      }
+      const s = (seed += 73);
+      jobs.push(() => { g.tail = this._toBuffer(renderTail(spec, sr, s)); });
+    }
+    for (const theme of Object.keys(THEME_AUDIO)) {
+      this.reflect[theme] = [];
+      for (let size = 0; size < 3; size++) {
+        const s = (seed += 19);
+        jobs.push(() => { this.reflect[theme][size] = this._toBuffer(renderReflection(theme, size, sr, s)); });
       }
     }
+    for (const id of Object.keys(FOLEY)) {
+      const s = (seed += 19);
+      jobs.push(() => {
+        const r = renderFoley(id, sr, s);
+        this.foley[id] = { out: this._toBuffer(r.out), in: this._toBuffer(r.in), rack: this._toBuffer(r.rack), swap: this._toBuffer(r.swap) };
+      });
+    }
+    const stingers = renderStingers(sr);
+    for (const k of Object.keys(stingers)) jobs.push(() => { this.stingers[k] = this._toBuffer(stingers[k]()); });
+    jobs.push(() => { this.loops.rain = this._toBuffer(renderRain(sr, 77)); });
+    jobs.push(() => { this.loops.wind = this._toBuffer(renderWind(sr, 91)); });
+    for (let v = 0; v < 3; v++) jobs.push(() => { this.thunder[v] = this._toBuffer(renderThunder(sr, 4100 + v * 13)); });
     let i = 0;
     this.buildMs = 0; this.buildMaxJobMs = 0;
     const runNext = () => {
@@ -513,7 +897,7 @@ export class AudioEngine {
       const ms = performance.now() - t;
       this.buildMs += ms; this.buildMaxJobMs = Math.max(this.buildMaxJobMs, ms);
       if (i < jobs.length) setTimeout(runNext, 0);
-      else { this.ready = true; this.setMicActive(this.micActive); }
+      else { this.ready = true; this.setMicActive(this.micActive); this._readyDone(); }
     };
     setTimeout(runNext, 0);
   }
@@ -535,6 +919,9 @@ export class AudioEngine {
     this.master.gain.setTargetAtTime(this.volume * boost, now, 0.08);
     this.comp.threshold.setTargetAtTime(this.micActive ? -24 : -16, now, 0.08);
     this.comp.ratio.setTargetAtTime(this.micActive ? 9 : 6, now, 0.08);
+    // Mic mode: the master boost is meant for gunfire and callouts, so music and weather give some of it back.
+    this.music.gain.setTargetAtTime(this.micActive ? 0.34 : 0.7, now, 0.08);
+    this.thunderBus.gain.setTargetAtTime(this.micActive ? 0.25 : 0.55, now, 0.08);
   }
 
   setVolume(v) {
@@ -577,11 +964,11 @@ export class AudioEngine {
 
   // The single place sound starts. Returns false when the voice budget refuses it.
   _play(buffer, { gain = 1, pan = 0, far = 0, rate = 1, bus = null, priority = 1, gun = false, when = 0, room = 0 } = {}) {
-    if (!this.ready || !buffer || this.ctx.state !== 'running') return false;
+    if (!buffer || !this._running()) return null;
     const ctx = this.ctx, now = ctx.currentTime;
     this._reap(now);
-    if (gun && this.gunCount >= MAX_GUN_VOICES && !this._stealFor(priority, true, now)) return false;
-    if (this.voices.length >= MAX_VOICES && !this._stealFor(priority, false, now)) return false;
+    if (gun && this.gunCount >= MAX_GUN_VOICES && !this._stealFor(priority, true, now)) return null;
+    if (this.voices.length >= MAX_VOICES && !this._stealFor(priority, false, now)) return null;
 
     const src = ctx.createBufferSource();
     src.buffer = buffer;
@@ -611,9 +998,17 @@ export class AudioEngine {
     }
     src.start(when || 0);
     const start = when || now;
-    this.voices.push({ src, gain: g, priority, gun, start, end: start + buffer.duration / rate + 0.05 });
+    const voice = { src, gain: g, priority, gun, start, end: start + buffer.duration / rate + 0.05 };
+    this.voices.push(voice);
     if (gun) this.gunCount++;
-    return true;
+    return voice;
+  }
+
+  // Stops a voice that has not started yet, or fades one that has.
+  _cancel(voice, now) {
+    voice.gain.gain.setTargetAtTime(0, now, 0.008);
+    try { voice.src.stop(now + 0.04); } catch { /* already stopped */ }
+    voice.end = now + 0.04;
   }
 
   // Distance model: returns [gain, pan, far] for a world position, into shared fields.
@@ -630,6 +1025,7 @@ export class AudioEngine {
   _trackLocal(view) {
     if (!view) return;
     this.localId = view.localId;
+    if (view.theme !== this.theme) this.setTheme(view.theme);
     const players = view.players;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -650,29 +1046,89 @@ export class AudioEngine {
   _shot(e) {
     const self = e.by === this.localId;
     const now = this.ctx.currentTime;
-    const buffers = this.guns[e.weapon];
-    if (!buffers) return;
+    const g = this.guns[e.weapon];
+    if (!g) return;
+    const sup = !!e.sup && g.sup.length > 0;
+    const near = sup ? g.sup : g.near;
+    const pick = near[Math.floor(Math.random() * near.length)];
     if (self) {
-      this._play(buffers[Math.floor(Math.random() * 3)], {
-        gain: 1, rate: 0.97 + Math.random() * 0.06, priority: 4, gun: true, room: 0.22,
-      });
+      this._play(pick, { gain: sup ? 0.7 : 1, rate: 0.97 + Math.random() * 0.06, priority: 4, gun: true, room: sup ? 0.04 : 0.22 });
+      this._gunLayers(e, g, sup, true, now);
       return;
     }
     const d = this._spatial(e.ox, e.oz);
-    if (d > HEAR_RANGE) return;
+    this._whiz(e, now);
+    this._impact(e, now);
+    if (d > (sup ? 22 : HEAR_RANGE)) { if (d <= TAIL_RANGE) this._gunLayers(e, g, sup, false, now); return; }
     const last = this.lastShot.get(e.by) || 0;
-    if (now - last < SHOOTER_MIN_GAP) return;
-    // At most a few new gunshots per window: stacked identical transients are what makes a mix crackle.
-    if (now - this.windowT > GUN_WINDOW) { this.windowT = now; this.windowN = 0; }
-    if (this.windowN >= GUN_WINDOW_CAP && d > 14) return;
-    this.windowN++;
-    this.lastShot.set(e.by, now);
-    const close = d < 16;
-    this._play(buffers[Math.floor(Math.random() * 3)], {
-      gain: 0.92 * this.sGain, pan: this.sPan, far: this.sFar,
-      rate: 0.95 + Math.random() * 0.1,
-      priority: close ? 2 : 1, gun: true, room: 0.14 + 0.28 * this.sFar,
-    });
+    if (now - last >= SHOOTER_MIN_GAP) {
+      // At most a few new gunshots per window: stacked identical transients are what makes a mix crackle.
+      if (now - this.windowT > GUN_WINDOW) { this.windowT = now; this.windowN = 0; }
+      if (this.windowN < GUN_WINDOW_CAP || d <= 14) {
+        this.windowN++;
+        this.lastShot.set(e.by, now);
+        this._play(pick, {
+          gain: (sup ? 0.65 : 0.92) * this.sGain, pan: this.sPan, far: this.sFar,
+          rate: 0.95 + Math.random() * 0.1,
+          priority: d < 16 ? 2 : 1, gun: true, room: sup ? 0.04 : 0.14 + 0.28 * this.sFar,
+        });
+      }
+    }
+    this._gunLayers(e, g, sup, false, now);
+  }
+
+  // Tail and map reflection for a shot. Everything here is optional, so it runs at the bottom of the priority list.
+  _gunLayers(e, g, sup, self, now) {
+    const d = self ? 0 : this.sD, shooter = e.by;
+    if (!sup && now - (this.tailAt.get(shooter) ?? -9) >= TAIL_GAP && g.tail) {
+      this.tailAt.set(shooter, now);
+      if (self) this._play(g.tail, { gain: 0.42, rate: 0.98 + Math.random() * 0.04, priority: 0 });
+      else if (d < TAIL_RANGE) {
+        const k = d / 34;
+        // The tail falls off far more slowly than the bang, and its share of the sound grows with distance.
+        const gain = (0.55 + 0.35 * this.sFar) / (1 + k * k * Math.sqrt(k));
+        this._play(g.tail, { gain, pan: this.sPan, far: Math.max(0.55, this.sFar), rate: 0.94 + Math.random() * 0.1, priority: 0 });
+      }
+    }
+    if (sup || now - this.reflectAt < REFLECT_GAP || d > 48) return;
+    const bank = this.reflect[this.theme] || this.reflect.railyard;
+    const buf = bank && bank[g.size];
+    if (!buf) return;
+    this.reflectAt = now;
+    if (self) this._play(buf, { gain: 0.36, priority: 0 });
+    else this._play(buf, { gain: 0.4 * this.sGain, pan: this.sPan * 0.5, far: Math.max(0.3, this.sFar), priority: 0 });
+  }
+
+  // A round from someone else that passes close enough to hear.
+  _whiz(e, now) {
+    if (now - this.whizAt < 0.08 || !e.rays || !this.localAlive) return;
+    if (this._isAlly(e.by)) return;
+    const ox = e.ox, oz = e.oz;
+    for (let i = 0; i < e.rays.length; i++) {
+      const r = e.rays[i], dx = r.x - ox, dz = r.z - oz, lenSq = dx * dx + dz * dz;
+      if (lenSq < 16) continue;
+      const u = Math.max(0, Math.min(1, ((this.lx - ox) * dx + (this.lz - oz) * dz) / lenSq));
+      const px = ox + dx * u - this.lx, pz = oz + dz * u - this.lz;
+      if (px * px + pz * pz > WHIZ_RADIUS * WHIZ_RADIUS) continue;
+      this.whizAt = now;
+      this._play(this.sfx.whiz, { bus: this.ui, gain: 0.5, rate: 0.9 + Math.random() * 0.25, priority: 3, pan: Math.max(-0.7, Math.min(0.7, (this.lx - (ox + dx)) / 10)) });
+      return;
+    }
+  }
+
+  // The material the map is built from answers when a round lands near you.
+  _impact(e, now) {
+    if (now - this.impactAt < 0.05 || !e.rays || !e.rays.length) return;
+    const r = e.rays[0];
+    if (r.hit !== 'wall') return;
+    this.impactAt = now;
+    const buf = this.theme === 'railyard' ? this.sfx.impactMetal : this.theme === 'dust' ? this.sfx.impactDirt : this.sfx.impactConcrete;
+    this._world(buf, r.x, r.z, IMPACT_RANGE, { gain: 0.5, priority: 0, rate: 0.9 + Math.random() * 0.2 });
+  }
+
+  _isAlly(id) {
+    const v = this.lastView, p = v && this._posOf(v, id);
+    return !!p && p.team === this.localTeam;
   }
 
   _world(buffer, x, z, range, opts) {
@@ -691,8 +1147,9 @@ export class AudioEngine {
   }
 
   onEvents(events, view) {
-    if (!this.ready || this.ctx.state !== 'running') return;
+    if (!this._running()) return;
     this._trackLocal(view);
+    this.lastView = view;
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
@@ -704,23 +1161,19 @@ export class AudioEngine {
           else if (e.target === me) this._play(this.sfx.hurt, { bus: this.ui, priority: 5, gain: 0.85 });
           break;
         case 'kill':
-          if (e.by === me) this._play(this.sfx.kill, { bus: this.ui, priority: 5, gain: 1 });
+          if (e.by === me) this._killConfirm(e);
           else if (e.assist === me) this._play(this.sfx.assist, { bus: this.ui, priority: 4, gain: 0.8 });
           break;
         case 'medal':
           if (e.id === me) this._medal(e.medal);
           break;
-        case 'reload': {
-          const p = this._posOf(view, e.id);
-          const buf = e.stage === 'start' ? this.sfx.reloadOut : this.sfx.reloadIn;
-          if (e.id === me) this._play(buf, { bus: this.ui, priority: 3, gain: 0.7 });
-          else if (p) this._world(buf, p.x, p.z, 18, { gain: 0.5, priority: 1 });
-          break;
-        }
+        case 'reload': this._reloadFoley(e, view); break;
         case 'swap': {
           const p = this._posOf(view, e.id);
-          if (e.id === me) this._play(this.sfx.swap, { bus: this.ui, priority: 3, gain: 0.6 });
-          else if (p) this._world(this.sfx.swap, p.x, p.z, 14, { gain: 0.4, priority: 1 });
+          const f = p && this.foley[p.weapon];
+          if (!f) break;
+          if (e.id === me) this._play(f.swap, { bus: this.ui, priority: 3, gain: 0.55 });
+          else this._world(f.swap, p.x, p.z, 14, { gain: 0.4, priority: 1 });
           break;
         }
         case 'slide': {
@@ -782,10 +1235,172 @@ export class AudioEngine {
           this._streakGun('gunship', e.x, e.z, 1.5);
           break;
         case 'phase':
-          if (e.phase === 'live') this._play(this.sfx.horn, { bus: this.ui, priority: 4, gain: 0.8 });
-          else if (e.phase === 'ended') this._play(this.sfx.end, { bus: this.ui, priority: 4, gain: 0.9 });
+          this._phaseMusic(e, view);
           break;
         default: break;
+      }
+    }
+  }
+
+  // A kill chain climbs in pitch, so the third in a row feels different from the first.
+  _killConfirm(e) {
+    const now = this.ctx.currentTime;
+    this.killChain = now - this.lastKillAt < 3.5 ? Math.min(this.killChain + 1, 6) : 0;
+    this.lastKillAt = now;
+    this._play(this.sfx.kill, { bus: this.ui, priority: 5, gain: 1, rate: 1 + this.killChain * 0.05 });
+  }
+
+  _reloadFoley(e, view) {
+    const me = this.localId, p = this._posOf(view, e.id);
+    const f = p && this.foley[p.weapon];
+    if (!f) return;
+    const now = this.ctx.currentTime, wdef = WEAPONS[p.weapon];
+    const place = (buf, when, gain) => e.id === me
+      ? this._play(buf, { bus: this.ui, priority: 3, gain: gain * 0.7, when })
+      : (this._spatial(p.x, p.z) <= 18 ? this._play(buf, { gain: gain * 0.5 * this.sGain, pan: this.sPan, far: this.sFar, priority: 1, when }) : null);
+    if (e.stage !== 'start') {
+      // Whatever was still queued was for a reload that just stopped: fired through it, or it finished.
+      this._cancelFoley(e.id, now);
+      if (p.ammo > (this.reloadAmmo.get(e.id) ?? 0)) place(f.rack, 0, 0.9);
+      return;
+    }
+    this._cancelFoley(e.id, now);
+    this.reloadAmmo.set(e.id, p.ammo);
+    place(f.out, 0, 0.8);
+    const dur = p.reloadDur || (wdef ? wdef.reload : 1.5);
+    const pending = [];
+    if (wdef && wdef.shellReload) {
+      // One shell at a time, however long Fast Hands has made each one.
+      const n = Math.round(dur / wdef.reload), k = Math.abs(n - dur / wdef.reload) < 0.08 ? 1 : 0.72;
+      for (let i = 1; i <= 8; i++) {
+        const t = i * wdef.reload * k;
+        if (t >= dur) break;
+        const v = place(f.in, now + t, 0.8);
+        if (v) pending.push(v);
+      }
+    } else {
+      const v = place(f.in, now + dur * 0.55, 0.85);
+      if (v) pending.push(v);
+    }
+    if (pending.length) this.foleyPending.set(e.id, pending);
+  }
+
+  _cancelFoley(id, now) {
+    const list = this.foleyPending.get(id);
+    if (!list) return;
+    for (const v of list) if (v.start > now) this._cancel(v, now);
+    this.foleyPending.delete(id);
+  }
+
+  _phaseMusic(e, view) {
+    if (view && view.mode === 'range') return;
+    if (e.phase === 'live') {
+      this.stingerDone = false;
+      this._play(this.stingers.matchStart, { bus: this.music, priority: 5, gain: 1 });
+    } else if (e.phase === 'ended' && !this.stingerDone) {
+      this.stingerDone = true;
+      this._stopTension();
+      const won = view && view.winner !== null && view.winner === this.localTeam;
+      const lost = view && view.winner !== null && view.winner !== this.localTeam;
+      const buf = won ? this.stingers.victory : lost ? this.stingers.defeat : this.sfx.end;
+      this._play(buf, { bus: won || lost ? this.music : this.ui, priority: 5, gain: 1 });
+    }
+  }
+
+  // The last kills of a match: one stinger on the way in, then a pulse under the rest of it. The time running out
+  // counts too. Stops at the end of the match.
+  _updateTension(view) {
+    if (view.mode === 'range' || view.phase === 'ended') return;
+    const lim = view.scoreLimit || 75;
+    const margin = (view.mode === 'dom' || view.mode === 'hard') ? Math.ceil(lim * TENSION_POINTS) : TENSION_KILLS;
+    const top = Math.max(view.scores[0], view.scores[1]);
+    const closing = view.phase === 'live' && (lim - top <= margin || (view.timeLeft > 0 && view.timeLeft <= 30));
+    if (closing && !this.tension) {
+      this.tension = true;
+      this._play(this.stingers.tension, { bus: this.music, priority: 5, gain: 1 });
+      if (!this.tensionSrc && this.stingers.tensionLoop) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.stingers.tensionLoop;
+        src.loop = true;
+        const g = this.ctx.createGain();
+        g.gain.value = 0;
+        src.connect(g);
+        g.connect(this.music);
+        src.start();
+        this.tensionSrc = src;
+        this.tensionGain = g;
+      }
+    }
+    if (this.tensionGain) this._holdGain(this.tensionGain.gain, closing ? (this.micActive ? 0.1 : 0.2) : 0);
+  }
+
+  _stopTension() {
+    this.tension = false;
+    if (this.tensionGain) this.tensionGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
+  }
+
+  // Continuous beds. Rolling down unless refreshed: if the match stops calling update, the sound fades by itself
+  // instead of carrying on into the menu.
+  _holdGain(param, target) {
+    const now = this.ctx.currentTime;
+    param.cancelScheduledValues(now);
+    param.setTargetAtTime(target, now, 0.3);
+    param.setTargetAtTime(0, now + 1.5, 0.6);
+  }
+
+  _ensureLoop(srcKey, buffer, gain) {
+    if (this[srcKey] || !buffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g);
+    g.connect(this.amb);
+    src.start();
+    this[srcKey] = src;
+  }
+
+  _stopLoops() {
+    for (const k of ['windSrc', 'rainSrc']) {
+      if (this[k]) { try { this[k].stop(); } catch { /* already stopped */ } }
+      this[k] = null;
+    }
+  }
+
+  setTheme(theme) {
+    const known = THEME_AUDIO[theme] ? theme : 'railyard';
+    this.theme = known;
+    if (!this.room) return;
+    this.applyRoom(known);
+    this.roomOut.gain.value = THEME_AUDIO[known].ir.gain;
+    this._stopLoops();
+    // Which sky each map has. Matching what art.js draws: rain over the night maps, wind over the desert.
+    if (!this.ready) return;
+    if (known === 'dust') this._ensureLoop('windSrc', this.loops.wind, 1);
+    if (known === 'neon' || known === 'harbor') this._ensureLoop('rainSrc', this.loops.rain, 1);
+    if (known === 'harbor') this._ensureLoop('windSrc', this.loops.wind, 0.55);
+  }
+
+  applyRoom(theme) {
+    if (!this.rooms[theme]) this.rooms[theme] = roomImpulse(this.ctx, theme);
+    this.room.buffer = this.rooms[theme];
+  }
+
+  _updateWeather(view, dt) {
+    const now = this.ctx.currentTime;
+    if (now >= this.nextAmbRefresh) {
+      this.nextAmbRefresh = now + 0.25;
+      const base = this.theme === 'harbor' || this.theme === 'neon' ? 0.1 : this.theme === 'dust' ? 0.12 : 0;
+      this._holdGain(this.amb.gain, base * (this.micActive ? 0.45 : 1));
+    }
+    if (this.theme === 'harbor') {
+      this.thunderT -= dt;
+      if (this.thunderT <= 0 && view.phase !== 'ended') {
+        this.thunderT = 14 + Math.random() * 26;
+        this._play(this.thunder[Math.floor(Math.random() * this.thunder.length)], {
+          bus: this.thunderBus, gain: 0.45 + Math.random() * 0.4, rate: 0.9 + Math.random() * 0.2, priority: 2, pan: (Math.random() - 0.5) * 0.6,
+        });
       }
     }
   }
@@ -810,9 +1425,9 @@ export class AudioEngine {
   }
 
   _streakGun(id, x, z, gain) {
-    const buffers = this.guns[id];
-    if (!buffers || x === undefined) return;
-    this._world(buffers[Math.floor(Math.random() * 3)], x, z, HEAR_RANGE, { gain, priority: 2, room: 0.25, rate: 0.96 + Math.random() * 0.08 });
+    const g = this.guns[id];
+    if (!g || !g.near.length || x === undefined) return;
+    this._world(g.near[Math.floor(Math.random() * g.near.length)], x, z, HEAR_RANGE, { gain, priority: 2, room: 0.25, rate: 0.96 + Math.random() * 0.08 });
   }
 
   // Ticks only while the bar is climbing, so a cooling gun is quiet. Faster and higher as it nears lockout.
@@ -852,8 +1467,10 @@ export class AudioEngine {
   // Continuous sounds that come from state instead of events: footsteps, the low-health heartbeat,
   // the LMG's heat warning and the gunship overhead.
   update(view, dt) {
-    if (!this.ready || !view || this.ctx.state !== 'running') return;
+    if (!this._running() || !view) return;
     this._trackLocal(view);
+    this.lastView = view;
+    if (this.theme === null) this.setTheme(view.theme);
     const players = view.players;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -881,6 +1498,8 @@ export class AudioEngine {
 
     this._updateHeat(view, dt);
     this._updateRumble(view);
+    this._updateTension(view);
+    this._updateWeather(view, dt);
   }
 
   _step(p) {
@@ -905,7 +1524,8 @@ export class AudioEngine {
         document.removeEventListener(type, this._onGesture, { capture: true });
       }
     }
-    if (this.ctx) this.ctx.close().catch(() => {});
+    if (this.ctx) this._stopLoops();
+    if (this.ctx && !this.offline) this.ctx.close().catch(() => {});
     this.ctx = null;
     this.ready = false;
   }

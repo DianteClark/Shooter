@@ -108,9 +108,10 @@ export function takeEquipment(ps, slot) {
   return slot === 'tactical' ? ps.tactical : ps.lethal;
 }
 
-export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout } = {}) {
+// instantReload is the firing range's rule: magazines refill the moment they run dry and reserve never drains.
+export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, instantReload = false } = {}) {
   const ps = {
-    id, x: 0, z: 0, aim: 0, vx: 0, vz: 0,
+    id, x: 0, z: 0, aim: 0, vx: 0, vz: 0, instantReload,
     slot: 0, primary, secondary: SECONDARY_ID, weapon: primary, camo,
     attachments: NO_ATTACHMENTS, defs: [WEAPONS[primary], WEAPONS[SECONDARY_ID]],
     perks: [], tactical: DEFAULT_LOADOUT.tactical, lethal: DEFAULT_LOADOUT.lethal,
@@ -174,6 +175,7 @@ function startReload(ps, w) {
   const i = ps.slot;
   const missing = w.magazine - ps.ammo[i];
   if (ps.reloadT > 0 || missing <= 0) return;
+  if (ps.instantReload) { ps.ammo[i] = w.magazine; ps.shotIndex = 0; ps.burstLeft = 0; return; }
   if (ps.reserve[i] <= 0 && !w.unlimitedReserve) return;
   if (w.shellReload) {
     // reloadT / reloadDur cover the whole loop so the HUD ring stays simple; shellT paces each round.

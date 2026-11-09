@@ -1,12 +1,15 @@
 // Bot brains. A bot only ever produces an Input and goes through stepPlayer like a human, so the
 // weapon rules, sprint-to-fire and spread apply to it unchanged. It only knows what it could know:
-// what it sees (cone + hasLineOfSight), what it hears, callouts from teammates, and UAV pings.
+// what it sees (cone + hasLineOfSight), what it hears, callouts from teammates, and UAV pings. The last three are
+// never a position: each gives a rough area with an error radius, delayed and stale, that ages out.
+// Enemy positions are read in exactly four places: _perceive (with the line-of-sight gate), onGunshot, onDamaged,
+// and the UAV sweep. Nothing else may read ps.x of someone this bot cannot see.
 //
 // Thinking (perception, decisions) runs at 5-12 Hz, staggered across bots. Driving the stick, aim and
 // trigger runs every tick, which is what keeps them looking fluid.
 
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
-import { EQUIPMENT } from './equipment.js';
+import { EQUIPMENT, maxThrowRange, previewThrow } from './equipment.js';
 import { angleDiff, stepPlayer, weaponDef } from './player.js';
 
 const DEG = Math.PI / 180;
@@ -15,33 +18,33 @@ const DEG = Math.PI / 180;
 export const SKILLS = {
   recruit: {
     thinkHz: 5, reaction: [0.55, 0.95], aimError: 0.2, aimFloor: 0.085, settle: 1.15, turnRate: 5.5, lag: 0.26,
-    fov: 110 * DEG, sight: 18, hearing: 10, notice: 0.5, memory: 1.5, close: 3,
+    fov: 110 * DEG, sight: 18, hearing: 7, hearErr: 1.4, notice: 0.5, memory: 1.2, close: 3,
     retreatHp: 0, strafe: 0.15, adsUse: 0.3, flank: 0.03, holdProb: 0.15, holdTime: [1, 2.5], slide: 0.02,
-    sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
+    arcTries: 0, sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
     objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
-    fov: 130 * DEG, sight: 22, hearing: 18, notice: 0.75, memory: 3, close: 4,
+    fov: 130 * DEG, sight: 22, hearing: 10, hearErr: 1.15, notice: 0.75, memory: 2, close: 4,
     retreatHp: 30, strafe: 0.5, adsUse: 0.65, flank: 0.12, holdProb: 0.33, holdTime: [1.5, 4], slide: 0.1,
-    sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
+    arcTries: 0, sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
     objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false,
   },
   veteran: {
     thinkHz: 9, reaction: [0.24, 0.38], aimError: 0.085, aimFloor: 0.03, settle: 0.55, turnRate: 13, lag: 0.13,
-    fov: 160 * DEG, sight: 26, hearing: 26, notice: 0.92, memory: 5, close: 5,
+    fov: 160 * DEG, sight: 26, hearing: 13, hearErr: 1, notice: 0.92, memory: 3, close: 5,
     retreatHp: 42, strafe: 0.85, adsUse: 0.9, flank: 0.28, holdProb: 0.45, holdTime: [2, 5], slide: 0.3,
-    sprint: 1, callouts: true, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
+    arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
     objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true,
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
-    fov: 190 * DEG, sight: 28, hearing: 34, notice: 0.98, memory: 7, close: 6,
+    fov: 190 * DEG, sight: 28, hearing: 16, hearErr: 0.85, notice: 0.98, memory: 4, close: 6,
     retreatHp: 55, strafe: 1, adsUse: 1, flank: 0.42, holdProb: 0.5, holdTime: [2, 5.5], slide: 0.5,
-    sprint: 1, callouts: true, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
+    arcTries: 4, sprint: 1, callouts: true, calloutDelay: 1, calloutErr: 3.2, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
     objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true,
   },
@@ -70,11 +73,23 @@ const STAGES = [0.16, 0.36, 0.5, 0.64, 0.84];
 const POS = { x: 0, z: 0 };
 const TAU = Math.PI * 2;
 const PATH_POINTS = 24;
-const THROW_REACH = 12.75;      // Where a throw ends up on open ground: flight plus roll. See equipment.js.
 const TURRET_THREAT = 21;
 const TURRET_WAIT = 10;         // Seconds a bot will hold a turret looking for a good moment to drop it.
-const LANDING = { x: 0, z: 0, t: 0 };
 const SUPPRESSED_HEARING = 0.4; // Fraction of the normal hearing range for a suppressed shot.
+const HEAR_OCCLUDED = 0.6;      // Range left to hear a shot with a wall in the way.
+const HEAR_GAP = 0.45;          // A bot takes in one gunshot at a time, so a long burst cannot average away the error.
+const HEAR_ERR_BASE = 1;        // Metres of error for a sound right next to the bot, before distance adds to it.
+const HEAR_ERR_PER_M = 0.35;
+const HEAR_ERR_WALLED = 1.5;    // A sound through a wall is harder to place.
+const SIGHT_KEEP = 0.9;         // A target drops out of the free tracking below this long after last being seen.
+const AUDIBLE_SPEED = 2.2;      // Moving this fast is footsteps. Walking pace and up, matching the audio.
+const ERR_PER_S = 1.3;          // Metres an estimate blurs per second of age.
+const TOWARD_SEEN = 0.9;        // Fraction per second a stale noise estimate slides back to where the bot last saw someone.
+const UAV_PING = 1;             // Seconds between UAV updates: it is a sweep, not a live feed.
+const UAV_ERR = 1.6;
+const NADE_MAX_ERR = 3.5;       // Won't spend a grenade on anything vaguer than this.
+const CALLOUT_GAP = 1.5;        // Seconds before anyone calls out the same enemy again.
+const CALLOUT_REACH = 28;       // Metres; nobody tells the whole map.
 const DENY_REACH = 13;          // Metres a bot will go out of its way to deny its own team's tag.
 const OBJ_CHASE = 9;            // How far a bot on an objective will leave it to run down a firm contact.
 const HARD_LEAD = 8;            // Seconds before a rotation that bots who think ahead start for the next zone.
@@ -314,7 +329,10 @@ export class BotBrain {
     this.target = null; this.targetVisible = false; this.targetDist = 0;
     this.reactLeft = 0; this.trackT = 0; this.anchor = 0; this.anchorT = 0; this.wobble = this.sim.rng() * 6.28;
     this.useAds = false;
-    this.knownX = 0; this.knownZ = 0; this.knownT = -99; this.hasKnown = false;
+    this.knownX = 0; this.knownZ = 0; this.knownT = -99; this.hasKnown = false; this.knownSoft = false;
+    this.knownErr = 0; this.knownBias = 0;
+    this.heardT = -99; this.lastUavT = -99;
+    this.calloutSeq = this.sim.calloutSeq ?? 0;       // Ignore anything called out before this life.
     this.holdT = 0; this.holdAim = 0; this.holdSpot = null; this.modeT = 0;
     this.strafeT = 0; this.strafeDir = 0;
     this.burstLeft = 0; this.burstPause = 0;
@@ -351,29 +369,91 @@ export class BotBrain {
     if (this.mode !== 'cover') this._setMode('none');
   }
 
+  // After a host migration: the bot picks up the lane it is standing in instead of restarting from its spawn side.
+  // It knows nothing about the enemy, which is honest: its old head was on the other phone.
+  resumeFromMigration() {
+    const { sim, p, ps } = this;
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < sim.map.lanes.length; i++) {
+      const d = Math.abs(sim.map.lanes[i].z - ps.z);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    this.laneIdx = best;
+    const fromOwnSide = (p.team === 0 ? ps.x : sim.map.width - ps.x) / sim.map.width;
+    this.stage = 0;
+    while (this.stage < STAGES.length - 1 && STAGES[this.stage + 1] <= fromOwnSide) this.stage++;
+    this._setMode('none');
+    this.thinkT = this.interval * sim.rng();
+    this.stuckX = ps.x; this.stuckZ = ps.z;
+  }
+
   // ---- Knowledge ----
 
   // soft = shared information (callout, UAV): worth looking at, but only worth chasing if close.
-  _note(x, z, soft = false) {
-    this.knownX = x; this.knownZ = z; this.knownT = this.sim.time; this.hasKnown = true; this.knownSoft = soft;
+  // err = radius in metres of where the enemy could actually be: 0 for a clean sighting.
+  _note(x, z, soft = false, err = 0) {
+    const { sim } = this;
+    this.knownX = Math.max(0, Math.min(sim.map.width, x));
+    this.knownZ = Math.max(0, Math.min(sim.map.height, z));
+    this.knownT = sim.time; this.hasKnown = true; this.knownSoft = soft;
+    this.knownErr = err;
+    this.knownBias = (sim.rng() + sim.rng() - 1) * 0.7;    // Which side of the area this bot favours for this contact.
   }
 
+  // A point chosen uniformly from a disc of radius r around (x, z).
+  _rough(x, z, r, out) {
+    const a = this.sim.rng() * TAU, k = Math.sqrt(this.sim.rng()) * r;
+    out.x = x + Math.cos(a) * k;
+    out.z = z + Math.sin(a) * k;
+    return out;
+  }
+
+  // A shot within earshot gives a direction and a vague distance, never a position.
   onGunshot(shooter, suppressed = false) {
-    const S = this.S, ps = this.ps, q = shooter.ps;
-    if (this.targetVisible) return;
+    const { S, ps, sim } = this, q = shooter.ps;
+    if (this.targetVisible || sim.time - this.heardT < HEAR_GAP) return;
     const d = Math.hypot(q.x - ps.x, q.z - ps.z);
-    if (d > S.hearing * (suppressed ? SUPPRESSED_HEARING : 1)) return;
-    // Sound gives a position, not a perfect one.
-    const blur = 1 + d * 0.12;
-    this._note(q.x + (this.sim.rng() - 0.5) * blur, q.z + (this.sim.rng() - 0.5) * blur);
+    let range = S.hearing * (suppressed ? SUPPRESSED_HEARING : 1);
+    if (d > range) return;
+    const walled = !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z);
+    if (walled && d > range * HEAR_OCCLUDED) return;
+    this.heardT = sim.time;
+    const err = (HEAR_ERR_BASE + d * HEAR_ERR_PER_M) * S.hearErr * (walled ? HEAR_ERR_WALLED : 1);
+    this._rough(q.x, q.z, err, POS);
+    this._note(POS.x, POS.z, false, err);
   }
 
-  onDamaged(attacker) {
-    const q = attacker.ps;
-    this._note(q.x, q.z);
-    this.recentlyHitT = this.sim.time;
+  // A hit gives the direction it came from and a guess at the distance. Grenades and streaks say nothing about
+  // who sent them: their "attacker" is whoever threw or called them, possibly the other side of the map.
+  onDamaged(attacker, indirect = false) {
+    const { sim, ps } = this, q = attacker.ps;
+    this.recentlyHitT = sim.time;
     // Getting shot wakes you up: the next think is immediate, but reaction time still applies.
     this.thinkT = Math.min(this.thinkT, 0.05);
+    if (indirect) return;
+    const dx = q.x - ps.x, dz = q.z - ps.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const bearing = Math.atan2(dz, dx) + (sim.rng() + sim.rng() - 1) * 0.28;
+    const guess = d * (0.75 + 0.5 * sim.rng());
+    this._note(ps.x + Math.cos(bearing) * guess, ps.z + Math.sin(bearing) * guess, false, 1 + d * 0.22);
+  }
+
+  // Forgets on schedule, and lets a stale noise drift back toward the last place it actually saw someone.
+  // The estimate never moves toward where an enemy is now.
+  _ageKnowledge() {
+    const { sim, S } = this;
+    if (!this.hasKnown) return;
+    const age = sim.time - this.knownT;
+    if (age > S.memory) { this.hasKnown = false; return; }
+    if (this.knownErr > 0 && sim.time - this.sawT < S.memory) {
+      const k = Math.min(1, TOWARD_SEEN * this.interval);
+      this.knownX += (this.sawX - this.knownX) * k;
+      this.knownZ += (this.sawZ - this.knownZ) * k;
+    }
+  }
+
+  // Current radius of doubt about the contact, in metres. Grows until it is forgotten.
+  get _knownBlur() {
+    return this.knownErr + (this.sim.time - this.knownT) * ERR_PER_S;
   }
 
   onFlashed(dur) {
@@ -387,7 +467,7 @@ export class BotBrain {
     if (this.flashT > 0) {
       // Blind: nothing new comes in, but what it already knew is still in its head.
       this.targetVisible = false;
-      if (this.hasKnown && sim.time - this.knownT > S.memory) this.hasKnown = false;
+      this._ageKnowledge();
       return;
     }
     let best = null, bestScore = Infinity, bestD = 0;
@@ -400,15 +480,18 @@ export class BotBrain {
       const dx = q.ps.x - ps.x, dz = q.ps.z - ps.z;
       const d = Math.hypot(dx, dz);
       if (d > sightRange) continue;
-      const tracking = q === sameTarget;
-      if (!tracking && d > S.close) {
-        if (Math.abs(angleDiff(Math.atan2(dz, dx), ps.aim)) > S.fov / 2) continue;
-        if (sim.rng() > S.notice) continue;     // Looking the right way is not the same as noticing.
-      }
+      // Keeping track of someone just seen needs no cone; it stops mattering the moment they have been gone a while.
+      const tracking = q === sameTarget && sim.time - this.sawT < SIGHT_KEEP;
+      // Someone within arm's reach is noticed without looking only if they make a noise doing it.
+      const noisy = d <= S.close && (Math.hypot(q.ps.vx, q.ps.vz) >= AUDIBLE_SPEED || q.ps.firingT > 0);
+      const inCone = Math.abs(angleDiff(Math.atan2(dz, dx), ps.aim)) <= S.fov / 2;
+      if (!tracking && !noisy && !inCone) continue;
+      // Walls first, then the dice: nothing about a hidden enemy, not even whether a roll was made, reaches this bot.
       if (!hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes)) continue;
+      if (!tracking && !noisy && sim.rng() > S.notice) continue;      // Looking the right way is not the same as noticing.
       const score = d - (tracking ? 4 : 0) + q.hp * 0.03;
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
-      if (S.callouts) sim.spotted[p.team][q.index] = sim.time;
+      if (S.callouts && sim.time - sim.calledAt[p.team][q.index] > CALLOUT_GAP) this._callOut(q);
     }
 
     if (best) {
@@ -423,24 +506,50 @@ export class BotBrain {
 
     // Shared info: never targets, only somewhere to look or go.
     if (!best) {
-      if (sim.uav[p.team] > 0) this._noteNearest(1e9);
-      else if (S.callouts) this._noteNearest(sim.time - 1);
+      if (sim.uav[p.team] > 0) this._uavPing();
+      else if (S.callouts) this._hearCallouts();
     }
-    if (this.hasKnown && sim.time - this.knownT > S.memory) this.hasKnown = false;
+    this._ageKnowledge();
+    if (this.target && !this.targetVisible && sim.time - this.sawT > Math.max(S.memory, S.suppress)) this.target = null;
   }
 
-  _noteNearest(spottedSince) {
+  // The team's UAV. Sweeps once a second, so it shows where someone was a moment ago rather than where they are now.
+  _uavPing() {
     const { sim, p, ps } = this;
-    let bestD = 30, q2 = null;
-    const useUav = spottedSince === 1e9;
+    if (sim.time - this.lastUavT < UAV_PING) return;
+    this.lastUavT = sim.time;
+    let bestD = 30, near = null;
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
-      if (q.team === p.team || !q.alive) continue;
-      if (useUav ? q.ps.perks.includes('ghost') : sim.spotted[p.team][q.index] < spottedSince) continue;
+      if (q.team === p.team || !q.alive || q.dummy || q.ps.perks.includes('ghost')) continue;
       const d = Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z);
-      if (d < bestD) { bestD = d; q2 = q; }
+      if (d < bestD) { bestD = d; near = q; }
     }
-    if (q2) this._note(q2.ps.x, q2.ps.z, true);
+    if (near) this._note(near.ps.x, near.ps.z, true, UAV_ERR);
+  }
+
+  // Announced to the team: the spot and the moment, frozen. Teammates hear it later, and it never updates.
+  _callOut(q) {
+    const { sim, p } = this;
+    sim.calledAt[p.team][q.index] = sim.time;
+    sim.calloutSeq = (sim.calloutSeq ?? 0) + 1;
+    sim.callouts.push({ seq: sim.calloutSeq, team: p.team, target: q.index, x: q.ps.x, z: q.ps.z, t: sim.time, by: p });
+  }
+
+  // Takes the nearest callout old enough to have reached this bot, and only ever from a teammate.
+  _hearCallouts() {
+    const { sim, p, ps, S } = this;
+    let best = null, bestD = CALLOUT_REACH;
+    for (let i = 0; i < sim.callouts.length; i++) {
+      const c = sim.callouts[i];
+      if (c.team !== p.team || c.by === p || c.seq <= this.calloutSeq || sim.time - c.t < S.calloutDelay) continue;
+      const d = Math.hypot(c.x - ps.x, c.z - ps.z);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    if (!best) return;
+    this.calloutSeq = best.seq;
+    this._rough(best.x, best.z, S.calloutErr, POS);
+    this._note(POS.x, POS.z, true, S.calloutErr);
   }
 
   _acquire(q, d) {
@@ -523,7 +632,7 @@ export class BotBrain {
     const knownD = this.hasKnown ? Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) : Infinity;
     // A bot on an objective will not be pulled off it by a noise: only a firm contact nearby, and never once it is standing on the point.
     const worthChasing = this.hasKnown && (o
-      ? !this.knownSoft && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
+      ? !this.knownSoft && this.knownErr < 6 && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
       : !this.knownSoft || knownD < 14);
     if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt') {
       this._setMode('hunt');
@@ -574,19 +683,35 @@ export class BotBrain {
     this.streakT = between(sim.rng, 0.3, S.streakDelay);
   }
 
-  // Where a throw at this angle ends up: full distance, or the first thing it hits.
-  _landing(aim) {
+  // Where this throw would really end up, bounces and all, through the same code that flies it.
+  // Returns null when there is no throw to make.
+  _landing(kind, aim, dist) {
     const { sim, ps } = this;
-    const dirX = Math.cos(aim), dirZ = Math.sin(aim);
-    const hit = raycastMap(sim.map, ps.x, ps.z, dirX, dirZ, THROW_REACH, 'blocksBullet');
-    LANDING.t = hit ? hit.t : THROW_REACH;
-    LANDING.x = ps.x + dirX * LANDING.t; LANDING.z = ps.z + dirZ * LANDING.t;
-    return LANDING;
+    const reach = Math.min(dist, maxThrowRange(ps.perks));
+    const path = previewThrow(sim.map, ps.x, ps.z, aim, reach, kind);
+    return path && { x: path.landing.x, z: path.landing.z, t: path.landing.t, dist: reach };
   }
 
-  _throw(slot, aim) {
+  // Bots who have played this map before look for a line that gets there when the direct one comes up short:
+  // banked off a wall, or lobbed past low cover. Tries a few angles around the target, nearest first.
+  _bestThrow(kind, aim, tx, tz, radius) {
+    const { ps, S } = this;
+    const want = Math.hypot(tx - ps.x, tz - ps.z);
+    const shots = S.arcTries ?? 0;
+    let best = null, bestMiss = radius;
+    for (let i = 0; i <= shots; i++) {
+      const a = aim + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.32);
+      const land = this._landing(kind, a, want);
+      if (!land) continue;
+      const miss = Math.hypot(land.x - tx, land.z - tz);
+      if (miss < bestMiss) { bestMiss = miss; best = { ...land, aim: a, miss }; }
+    }
+    return best;
+  }
+
+  _throw(slot, aim, dist) {
     const { sim, p, ps } = this;
-    sim.applyCommand(p.id, { cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim });
+    sim.applyCommand(p.id, { cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim, dist });
   }
 
   _thinkEquipment(visible) {
@@ -596,35 +721,37 @@ export class BotBrain {
     if (this.flashT > 0 || ps.sliding) return;
 
     if (ps.tactical === 'stim' && ps.tacticalLeft > 0 && p.hp < S.stimHp && this.tacticalT <= 0) {
-      this._throw('tactical', ps.aim);
+      this._throw('tactical', ps.aim, 0);
       this.tacticalT = 4;
       return;
     }
 
-    // Everything else is thrown at someone. Only firm information counts: not a UAV blip or a callout.
-    const fresh = this.hasKnown && !this.knownSoft && sim.time - this.knownT < 3;
+    // Everything else is thrown at someone. Only firm information counts: not a UAV blip, a callout or a vague noise.
+    const fresh = this.hasKnown && !this.knownSoft && this.knownErr <= NADE_MAX_ERR && sim.time - this.knownT < 3;
     if (!visible && !fresh) return;
     const tx = visible ? this.target.ps.x : this.knownX, tz = visible ? this.target.ps.z : this.knownZ;
     const d = Math.hypot(tx - ps.x, tz - ps.z);
     const aim = Math.atan2(tz - ps.z, tx - ps.x) + gaussian(sim.rng) * S.aimFloor;
 
     if (this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
-      const land = this._landing(aim);
       const radius = EQUIPMENT[ps.lethal].blast.radius;
-      if (Math.hypot(land.x - tx, land.z - tz) < radius * 0.7 && land.t > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
+      const land = this._bestThrow(ps.lethal, aim, tx, tz, radius * 0.7);
+      if (land && Math.hypot(land.x - ps.x, land.z - ps.z) > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
         if (sim.rng() < S.nade) {
-          this._throw('lethal', aim);
+          this._throw('lethal', land.aim, land.dist);
           this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
           return;
         }
         this.nadeT = 2.5;   // Decided against it. Don't reconsider on the very next think.
+      } else {
+        this.nadeT = 0.5;   // No line right now. Looking again every think would just burn time.
       }
     }
 
     if (ps.tactical === 'flash' && visible && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 7) {
-      const land = this._landing(aim);
-      if (Math.hypot(land.x - tx, land.z - tz) < 7 && !this._teammateNear(land.x, land.z, 8)) {
-        if (sim.rng() < S.flash) this._throw('tactical', aim);
+      const land = this._bestThrow('flash', aim, tx, tz, 7);
+      if (land && !this._teammateNear(land.x, land.z, 8)) {
+        if (sim.rng() < S.flash) this._throw('tactical', land.aim, land.dist);
         this.tacticalT = between(sim.rng, 8, 15);
       }
     }
@@ -682,7 +809,7 @@ export class BotBrain {
     if (ps.tactical !== 'smoke' || ps.tacticalLeft <= 0 || this.tacticalT > 0 || !this.targetVisible || p.hp >= 60) return;
     if (Math.hypot(tx - ps.x, tz - ps.z) < 5) return;
     this.tacticalT = between(sim.rng, 8, 14);
-    if (sim.rng() < S.smoke) this._throw('tactical', Math.atan2(tz - ps.z, tx - ps.x));
+    if (sim.rng() < S.smoke) this._throw('tactical', Math.atan2(tz - ps.z, tx - ps.x), Math.hypot(tx - ps.x, tz - ps.z) * 0.6);
   }
 
   _ambush() {
@@ -1003,8 +1130,11 @@ export class BotBrain {
         this._trigger(null, Math.max(0.3, Math.hypot(this.sawX - ps.x, this.sawZ - ps.z)), desired, dt);
         I.aiming = true; I.sprint = false;
       } else if (this.hasKnown) {
-        // Pre-aim where the noise or last sighting was.
-        desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x);
+        // Checks the area the contact came from, sweeping across it. Never settles on a point it cannot have known.
+        const dist = Math.max(1, Math.hypot(this.knownX - ps.x, this.knownZ - ps.z));
+        const spread = Math.min(0.9, Math.atan2(Math.max(0.5, this._knownBlur), dist));
+        this.peek += dt * 1.8;
+        desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x) + (Math.sin(this.peek) * 0.65 + this.knownBias) * spread;
         if (this.mode === 'hold' && this.arrived) I.aiming = true;
       } else if (this.mode === 'hold' && this.arrived) {
         this.peek += dt * 1.2;

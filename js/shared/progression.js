@@ -57,6 +57,7 @@ export const UNLOCK_SCHEDULE = [
   { level: 9,  kind: 'perk',     id: 'ghost' },
   { level: 11, kind: 'tactical', id: 'stim' },
   { level: 13, kind: 'perk',     id: 'flak' },
+  { level: 6,  kind: 'perk',     id: 'strongarm' },
   { level: 15, kind: 'streak',   id: 'gunship' },
   { level: 4,  kind: 'weapon',   id: 'burst' },
   { level: 6,  kind: 'weapon',   id: 'pdw' },
