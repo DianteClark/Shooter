@@ -4,7 +4,10 @@
 
 import { PLAYER_RADIUS, SECONDARY_ID, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle, resolveCircle } from '../shared/geometry.js';
-import { WEAPONS } from '../shared/weapons.js';
+import { HEAD_RADIUS, WEAPONS } from '../shared/weapons.js';
+import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
+
+export { HEAD_RADIUS, headMultFor } from '../shared/weapons.js';
 
 const MAX_DT = 0.05;
 
@@ -28,13 +31,22 @@ export const MOVE = {
 
 const NO_SHOTS = Object.freeze([]);
 const HIT_RADIUS = PLAYER_RADIUS + 0.1;
+const SLIDE_HIT_RADIUS = HIT_RADIUS * 0.72;   // Slide dodge: a sliding player is a smaller target.
 const SHOT_INDEX_RESET = 0.26;  // Seconds off the trigger before the recoil pattern restarts.
 const BLOOM_RECOVER_DELAY = 0.09;
 const ADS_OUT_RATE = 1.35;      // Leaving ADS is quicker than entering it.
 const ADS_FULL = 0.85;          // Counts as fully aimed for adsGate weapons.
+const TOPOFF_DELAY = 1.2;       // Seconds without firing or aiming before a part-empty mag tops itself off.
+const TOPOFF_BELOW = 0.7;       // Fraction of the magazine under which that happens.
+export const FIRING_REVEAL = 1.5;   // firingT after a shot: seconds shown on the enemy minimap.
+
+const FASTHANDS_MULT = 0.72;    // Reload and swap time.
+const MARATHON_SPRINT = 1.08;
+const MARATHON_SLIDE_COOL = 0.6;
 
 const ASSIST_RANGE = 30;
 const ASSIST_CONE = 8 * Math.PI / 180;
+const ASSIST_EDGE = 1.25;       // Friction fades out between the body's edge and this multiple of it.
 const ASSIST_MAX_OFFSET = 6 * Math.PI / 180;
 
 const TAU = Math.PI * 2;
@@ -48,10 +60,45 @@ export function angleDiff(a, b) {
 
 function reserveFor(w) { return w.reserve; }
 
-export function createPlayerState({ id, primary = 'ar', camo = 'none' } = {}) {
+function hasPerk(ps, perk) { return ps.perks.includes(perk); }
+function reloadMult(ps) { return hasPerk(ps, 'fasthands') ? FASTHANDS_MULT : 1; }
+function slideCooldownOf(ps) { return MOVE.slideCooldown * (hasPerk(ps, 'marathon') ? MARATHON_SLIDE_COOL : 1); }
+
+// Takes a full normalized loadout or the older partial {primary, camo}; absent fields are left alone.
+function applyLoadout(ps, l) {
+  if (l.primary && WEAPONS[l.primary]) ps.primary = l.primary;
+  if (l.secondary && WEAPONS[l.secondary]) ps.secondary = l.secondary;
+  if (l.camo) ps.camo = l.camo;
+  if (Array.isArray(l.perks)) ps.perks = l.perks.slice();
+  if (TACTICALS[l.tactical]) ps.tactical = l.tactical;
+  if (LETHALS[l.lethal]) ps.lethal = l.lethal;
+}
+
+function refillEquipment(ps) {
+  ps.tacticalLeft = TACTICALS[ps.tactical].count;
+  ps.lethalLeft = LETHALS[ps.lethal].count;
+}
+
+function clearHeat(ps) {
+  ps.heat = 0; ps.heatIdle = 9; ps.overheated = false; ps.overheatT = 0; ps.overheatEdge = false;
+}
+
+// Spends one tactical or lethal. slot: 'tactical' | 'lethal'. Returns the kind, or null when none are left.
+// The host calls this on its copy of the player: the count is host-authoritative and not on the wire.
+export function takeEquipment(ps, slot) {
+  const key = slot === 'tactical' ? 'tacticalLeft' : 'lethalLeft';
+  if (ps[key] <= 0) return null;
+  ps[key]--;
+  return slot === 'tactical' ? ps.tactical : ps.lethal;
+}
+
+export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout } = {}) {
   const ps = {
     id, x: 0, z: 0, aim: 0, vx: 0, vz: 0,
     slot: 0, primary, secondary: SECONDARY_ID, weapon: primary, camo,
+    perks: [], tactical: DEFAULT_LOADOUT.tactical, lethal: DEFAULT_LOADOUT.lethal,
+    tacticalLeft: 0, lethalLeft: 0,
+    heat: 0, overheated: false, overheatT: 0, overheatEdge: false, firingT: 0,
     ammo: [0, 0], reserve: [0, 0],
     reloadT: 0, reloadDur: 0, adsT: 0,
     sprinting: false, sprintRecoverT: 0,
@@ -59,10 +106,14 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none' } = {}) {
     cooldown: 0, bloom: 0, shotIndex: 0,
     // Internal, not part of the wire format.
     swapT: 0, shellT: 0, sinceShot: 9, triggerDown: false, armed: false,
+    heatIdle: 9, calmT: 0,
     slideDirX: 0, slideDirZ: 0, slideSpeed: 0,
     aaOffset: 0, aaRaw: null,
   };
+  if (loadout) applyLoadout(ps, loadout);
+  ps.weapon = ps.primary;
   fillAmmo(ps);
+  refillEquipment(ps);
   return ps;
 }
 
@@ -72,15 +123,16 @@ function fillAmmo(ps) {
   ps.reserve[0] = reserveFor(a); ps.reserve[1] = reserveFor(b);
 }
 
-// Places a player at a spawn point, full ammo, every timer cleared. Optional new loadout.
+// Places a player at a spawn point, full ammo and equipment, every timer cleared.
+// Optional new loadout: a normalized loadout, {loadout}, or the older {primary, camo}.
 export function respawnPlayer(ps, x, z, aim, loadout) {
-  if (loadout) {
-    if (loadout.primary && WEAPONS[loadout.primary]) ps.primary = loadout.primary;
-    if (loadout.camo) ps.camo = loadout.camo;
-  }
+  if (loadout) applyLoadout(ps, loadout.loadout || loadout);
   ps.x = x; ps.z = z; ps.aim = aim; ps.vx = 0; ps.vz = 0;
   ps.slot = 0; ps.weapon = ps.primary;
   fillAmmo(ps);
+  refillEquipment(ps);
+  clearHeat(ps);
+  ps.firingT = 0; ps.calmT = 0;
   ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0; ps.adsT = 0;
   ps.sprinting = false; ps.sprintRecoverT = 0;
   ps.sliding = false; ps.slideT = 0; ps.slideCool = 0;
@@ -97,8 +149,8 @@ function setSlot(ps, slot) {
   ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
   ps.shotIndex = 0; ps.bloom = 0;
   ps.adsT *= 0.4;
-  ps.swapT = w.swapTime;
-  ps.cooldown = Math.max(ps.cooldown, w.swapTime);
+  ps.swapT = w.swapTime * reloadMult(ps);
+  ps.cooldown = Math.max(ps.cooldown, ps.swapT);
 }
 
 function startReload(ps, w) {
@@ -108,11 +160,12 @@ function startReload(ps, w) {
   if (ps.reserve[i] <= 0 && !w.unlimitedReserve) return;
   if (w.shellReload) {
     // reloadT / reloadDur cover the whole loop so the HUD ring stays simple; shellT paces each round.
+    const shell = w.reload * reloadMult(ps);
     const n = Math.min(missing, ps.reserve[i]);
-    ps.reloadDur = n * w.reload;
-    ps.shellT = w.reload;
+    ps.reloadDur = n * shell;
+    ps.shellT = shell;
   } else {
-    ps.reloadDur = w.reload;
+    ps.reloadDur = w.reload * reloadMult(ps);
   }
   ps.reloadT = ps.reloadDur;
   ps.shotIndex = 0;
@@ -126,7 +179,7 @@ function stepReload(ps, w, dt) {
     ps.shellT -= dt;
     while (ps.shellT <= 0 && ps.ammo[i] < w.magazine && ps.reserve[i] > 0) {
       ps.ammo[i]++; ps.reserve[i]--;
-      ps.shellT += w.reload;
+      ps.shellT += w.reload * reloadMult(ps);
     }
     if (ps.ammo[i] >= w.magazine || ps.reserve[i] <= 0) { ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0; }
     else if (ps.reloadT <= 0) ps.reloadT = ps.shellT;   // Rounding: keep going until the tube is full.
@@ -161,6 +214,33 @@ function shotInterval(w, shotIndex) {
   return 60 / rpm;
 }
 
+function isLocked(ps, w) { return w.heat !== undefined && ps.overheated; }
+
+// Runs whichever gun is in hand, so a locked LMG keeps cooling behind the pistol.
+function stepHeat(ps, dt) {
+  const h = WEAPONS[ps.primary].heat;
+  if (!h) return;
+  ps.heatIdle += dt;
+  if (ps.overheated) {
+    // The bar drains across the lockout, so the gun comes back empty and the HUD shows the wait.
+    ps.overheatT -= dt;
+    ps.heat = Math.max(0, ps.overheatT / h.lockout);
+    if (ps.overheatT <= 0) { ps.overheated = false; ps.overheatT = 0; ps.heat = 0; }
+  } else if (ps.heat > 0 && ps.heatIdle >= h.coolDelay) {
+    ps.heat = Math.max(0, ps.heat - dt / h.coolTime);
+  }
+}
+
+function addHeat(ps, h) {
+  ps.heat = Math.min(1, ps.heat + 1 / h.rounds);
+  ps.heatIdle = 0;
+  if (ps.heat >= 1 - 1e-6) {
+    ps.heat = 1; ps.overheated = true; ps.overheatT = h.lockout; ps.overheatEdge = true;
+  }
+  // Heat guns have no ordinary bloom: all their looseness comes from here, in the top of the bar.
+  ps.bloom = Math.max(0, (ps.heat - h.loosenFrom) / (1 - h.loosenFrom));
+}
+
 function fireOne(ps, w, rng) {
   const spread = currentSpread(ps, w);
   const n = w.pellets || 1;
@@ -186,7 +266,8 @@ function fireOne(ps, w, rng) {
   ps.ammo[ps.slot]--;
   ps.shotIndex++;
   ps.sinceShot = 0;
-  if (w.settle && ps.shotIndex > w.settle.after) ps.bloom = Math.max(0, ps.bloom - w.settle.recover);
+  ps.firingT = FIRING_REVEAL;
+  if (w.heat) addHeat(ps, w.heat);
   else ps.bloom = Math.min(1, ps.bloom + w.bloomPerShot * (1 - 0.4 * ps.adsT));
   if (w.boltKick !== undefined) ps.adsT = Math.min(ps.adsT, w.boltKick);
   return shot;
@@ -199,6 +280,7 @@ function stepMovement(ps, input, w, dt, map) {
   if (ps.slideCool > 0) ps.slideCool -= dt;
 
   // Sprint: broken by aiming or firing, which then costs sprintToFire before the first shot.
+  const marathon = hasPerk(ps, 'marathon');
   const wantsSprint = !!input.sprint && moveLen > 0.5 && !input.aiming && !input.fire && !ps.sliding;
   ps.sprinting = wantsSprint;
   if (ps.sprinting) ps.sprintRecoverT = w.sprintToFire;
@@ -229,9 +311,9 @@ function stepMovement(ps, input, w, dt, map) {
     }
     ps.vx = ps.slideDirX * spd;
     ps.vz = ps.slideDirZ * spd;
-    if (ps.slideT <= 0) { ps.sliding = false; ps.slideCool = MOVE.slideCooldown; }
+    if (ps.slideT <= 0) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
   } else {
-    const base = (ps.sprinting ? MOVE.sprint : MOVE.run) * w.moveMult;
+    const base = (ps.sprinting ? MOVE.sprint * (marathon ? MARATHON_SPRINT : 1) : MOVE.run) * w.moveMult;
     const speed = ps.sprinting ? base : base * (1 + (w.adsMoveMult - 1) * ps.adsT);
     const scale = moveLen > 1 ? 1 / moveLen : 1;
     const tx = mx * scale * speed, tz = mz * scale * speed;
@@ -258,13 +340,19 @@ function stepMovement(ps, input, w, dt, map) {
     ps.vz = (ps.z - oz) / dt;
     if (ps.sliding) {
       ps.slideSpeed = Math.min(ps.slideSpeed, Math.hypot(ps.vx, ps.vz) + MOVE.slideEndSpeed);
-      if (Math.hypot(ps.vx, ps.vz) < 1.2) { ps.sliding = false; ps.slideCool = MOVE.slideCooldown; }
+      if (Math.hypot(ps.vx, ps.vz) < 1.2) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
     }
   }
 
   // Facing: right stick wins; with it idle, turn to face the direction of travel.
   if (typeof input.aim === 'number') {
-    ps.aim = input.aim;
+    if (w.turnCap && (input.aiming || input.fire)) {
+      // Heavy guns swing slowly once shouldered: this is what lets a flanker beat a planted LMG.
+      const d = angleDiff(input.aim, ps.aim), lim = w.turnCap * dt;
+      ps.aim += Math.max(-lim, Math.min(lim, d));
+    } else {
+      ps.aim = input.aim;
+    }
   } else if (moveLen > 0.2) {
     const d = angleDiff(Math.atan2(mz, mx), ps.aim);
     ps.aim += Math.sign(d) * Math.min(Math.abs(d), MOVE.turnRate * dt);
@@ -276,6 +364,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   if (!(dt > 0)) return NO_SHOTS;
   if (dt > MAX_DT) dt = MAX_DT;
 
+  ps.overheatEdge = false;
   if (input.swap) setSlot(ps, ps.slot === 0 ? 1 : 0);
   if (ps.swapT > 0) ps.swapT -= dt;
 
@@ -287,27 +376,29 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   const rate = dt / w.adsTime;
   ps.adsT = wantAds ? Math.min(1, ps.adsT + rate) : Math.max(0, ps.adsT - rate * ADS_OUT_RATE);
 
-  if (input.reload) startReload(ps, w);
   stepReload(ps, w, dt);
+  stepHeat(ps, dt);
 
   ps.sinceShot += dt;
   ps.cooldown -= dt;
+  if (ps.firingT > 0) ps.firingT = Math.max(0, ps.firingT - dt);
 
   const trigger = !!input.fire;
+  ps.calmT = trigger || input.aiming ? 0 : ps.calmT + dt;
   // A press stays armed until it fires or is released, so a semi-auto pressed during sprint-out,
   // a swap or the last moments of its cycle goes off the instant the gun is ready.
   if (!trigger) ps.armed = false;
   else if (!ps.triggerDown) ps.armed = true;
   ps.triggerDown = trigger;
 
-  // Firing interrupts a shell-by-shell reload as long as something is loaded.
-  if (trigger && w.shellReload && ps.reloadT > 0 && ps.ammo[ps.slot] > 0) {
+  // Firing with rounds left cancels any reload; progress on a magazine swap is lost.
+  if (trigger && ps.reloadT > 0 && ps.ammo[ps.slot] > 0 && !isLocked(ps, w)) {
     ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
   }
 
   let shots = NO_SHOTS;
   if (trigger && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
-    for (let guard = 0; guard < 4 && ps.cooldown <= 0 && ps.ammo[ps.slot] > 0; guard++) {
+    for (let guard = 0; guard < 4 && ps.cooldown <= 0 && ps.ammo[ps.slot] > 0 && !isLocked(ps, w); guard++) {
       if (!w.auto && !ps.armed && (!w.holdRpm || ps.sinceShot < 60 / w.holdRpm)) break;
       const interval = shotInterval(w, ps.shotIndex);
       const shot = fireOne(ps, w, rng);
@@ -326,15 +417,20 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   if (ps.sinceShot > BLOOM_RECOVER_DELAY && ps.bloom > 0) ps.bloom = Math.max(0, ps.bloom - w.bloomRecover * dt);
 
   // Auto-reload on empty; if the gun is completely dry, fall through to the other one.
+  // There is no reload button, so a part-empty magazine also tops itself off in a quiet moment.
   if (ps.ammo[ps.slot] <= 0 && ps.reloadT <= 0 && ps.cooldown <= 0) {
     if (ps.reserve[ps.slot] > 0 || w.unlimitedReserve) startReload(ps, w);
     else if (ps.ammo[1 - ps.slot] > 0 || ps.reserve[1 - ps.slot] > 0) setSlot(ps, 1 - ps.slot);
+  } else if (ps.calmT >= TOPOFF_DELAY && ps.swapT <= 0 && ps.ammo[ps.slot] < w.magazine * TOPOFF_BELOW) {
+    startReload(ps, w);
   }
   return shots;
 }
 
 // Resolves a shot against walls and players. Bullets stop at the first enemy; teammates are passed
 // through when the entries carry a `team` (GameView players do), matching no-friendly-fire rules.
+// A ray that hits a player carries `target` (and `id`, the same value) and `head`: whether it passed
+// within HEAD_RADIUS of the centre. Entries may carry `sliding`, which shrinks the body but not the head.
 export function traceShot(shot, map, players, selfId) {
   const w = WEAPONS[shot.weapon];
   const range = w ? w.range : 60;
@@ -354,23 +450,27 @@ export function traceShot(shot, map, players, selfId) {
       const p = players[i];
       if (p.id === selfId || !p.alive) continue;
       if (selfTeam !== undefined && p.team === selfTeam) continue;
-      const t = rayCircle(ox, oz, dirX, dirZ, p.x, p.z, HIT_RADIUS);
+      const t = rayCircle(ox, oz, dirX, dirZ, p.x, p.z, p.sliding ? SLIDE_HIT_RADIUS : HIT_RADIUS);
       if (t >= 0 && t < bestT) { bestT = t; target = p; }
     }
     const x = ox + dirX * bestT, z = oz + dirZ * bestT;
-    if (target) rays[a] = { x, z, hit: 'player', nx: -dirX, nz: -dirZ, id: target.id };
+    if (target) {
+      const miss = Math.abs((target.x - ox) * dirZ - (target.z - oz) * dirX);
+      rays[a] = { x, z, hit: 'player', nx: -dirX, nz: -dirZ, id: target.id, target: target.id, head: miss <= HEAD_RADIUS };
+    }
     else if (wall) rays[a] = { x, z, hit: 'wall', nx: wall.nx, nz: wall.nz };
     else rays[a] = { x, z, hit: 'none', nx: 0, nz: 0 };
   }
   return rays;
 }
 
-// Stick aim -> assisted aim. Two effects near a visible enemy: friction cancels part of the
-// stick's rotation across the target, and magnetism eases the offset toward its centre.
-// All state is the offset on ps, so taking the thumb off the stick or losing the target releases it.
+// Stick aim -> assisted aim. Friction only: while the aim is over a visible enemy's body, part of the
+// stick's rotation is cancelled so it is easier to stay on target. Nothing ever moves the aim on its
+// own, so landing on the head stays the player's skill. All state is the offset on ps, so taking the
+// thumb off the stick or losing the target releases it.
 export function applyAimAssist(aim, ps, players, map, dt) {
   if (typeof aim !== 'number') { ps.aaRaw = null; return aim; }
-  let bestDelta = 0, bestAbs = ASSIST_CONE, bestRange = 0, found = false;
+  let bestAbs = ASSIST_CONE, bestEdge = 0, found = false;
   const selfTeam = selfTeamOf(ps, players);
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
@@ -379,23 +479,17 @@ export function applyAimAssist(aim, ps, players, map, dt) {
     const dx = p.x - ps.x, dz = p.z - ps.z;
     const dSq = dx * dx + dz * dz;
     if (dSq > ASSIST_RANGE * ASSIST_RANGE || dSq < 0.04) continue;
-    const delta = angleDiff(Math.atan2(dz, dx), aim + ps.aaOffset);
-    const abs = Math.abs(delta);
-    if (abs >= bestAbs) continue;
+    const abs = Math.abs(angleDiff(Math.atan2(dz, dx), aim + ps.aaOffset));
+    const edge = Math.min(ASSIST_CONE, Math.asin(Math.min(1, HIT_RADIUS / Math.sqrt(dSq))));
+    if (abs >= bestAbs || abs >= edge * ASSIST_EDGE) continue;
     if (!hasLineOfSight(map, ps.x, ps.z, p.x, p.z)) continue;
-    bestAbs = abs; bestDelta = delta; bestRange = Math.sqrt(dSq); found = true;
+    bestAbs = abs; bestEdge = edge; found = true;
   }
   const rawDelta = ps.aaRaw === null ? 0 : angleDiff(aim, ps.aaRaw);
   ps.aaRaw = aim;
   if (found) {
-    const closeness = 1 - bestAbs / ASSIST_CONE;
-    const ads = ps.adsT;
-    const friction = (0.22 + 0.26 * ads) * closeness;
-    // Far targets get slightly less pull, so long-range shots stay a skill.
-    const rangeK = bestRange > 18 ? Math.max(0.55, 1 - (bestRange - 18) / 24) : 1;
-    const pull = (2.4 + 3.2 * ads) * closeness * rangeK;
-    ps.aaOffset -= rawDelta * friction;
-    ps.aaOffset += bestDelta * Math.min(1, pull * dt);
+    const fade = bestAbs <= bestEdge ? 1 : 1 - (bestAbs - bestEdge) / (bestEdge * (ASSIST_EDGE - 1));
+    ps.aaOffset -= rawDelta * (0.32 + 0.3 * ps.adsT) * fade;
     ps.aaOffset = Math.max(-ASSIST_MAX_OFFSET, Math.min(ASSIST_MAX_OFFSET, ps.aaOffset));
   } else {
     // Release quickly so aim never feels sticky once nothing is there.
@@ -410,16 +504,17 @@ function selfTeamOf(ps, players) {
   return undefined;
 }
 
-// Wire format: one flat array. Bits in the flags value: 1 slot, 2 sprinting, 4 sliding.
+// Wire format: one flat array. Bits in the flags value: 1 slot, 2 sprinting, 4 sliding, 8 overheated.
 export function encodeHumanState(ps) {
   return [
     Math.round(ps.x * 100), Math.round(ps.z * 100), Math.round(ps.aim * 1000),
     Math.round(ps.vx * 10), Math.round(ps.vz * 10),
-    (ps.slot & 1) | (ps.sprinting ? 2 : 0) | (ps.sliding ? 4 : 0),
+    (ps.slot & 1) | (ps.sprinting ? 2 : 0) | (ps.sliding ? 4 : 0) | (ps.overheated ? 8 : 0),
     WEAPON_IDS.indexOf(ps.primary), ps.ammo[0], ps.ammo[1], ps.reserve[0], ps.reserve[1],
     Math.round(ps.reloadT * 100), Math.round(ps.reloadDur * 100),
     Math.round(ps.adsT * 100), Math.round(ps.bloom * 100),
     ps.camo,
+    Math.round(ps.heat * 100), Math.round(ps.firingT * 10),
   ];
 }
 
@@ -436,5 +531,6 @@ export function decodeHumanState(d) {
     reloadT: d[11] / 100, reloadDur: d[12] / 100,
     adsT: d[13] / 100, bloom: d[14] / 100,
     camo: d[15],
+    overheated: !!(flags & 8), heat: (d[16] || 0) / 100, firingT: (d[17] || 0) / 10,
   };
 }

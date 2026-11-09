@@ -125,6 +125,21 @@ const GUNS = {
     thump: { dur: 0.06, gain: 0.7, f0: 200, f1: 85, decay: 5 },
     tail: { dur: 0.32, gain: 0.2, f0: 2100, f1: 500, decay: 6.5 },
   },
+  // Scorestreak guns: a dry mechanical chatter, and a slow autocannon heard from above.
+  turret: {
+    dur: 0.4, crack: { dur: 0.004, gain: 1.2, hp: 3200 },
+    body: { dur: 0.07, gain: 1, f0: 4800, f1: 1500, decay: 7 },
+    thump: { dur: 0.05, gain: 0.7, f0: 300, f1: 140, decay: 5, shape: 1 },
+    tail: { dur: 0.26, gain: 0.14, f0: 1800, f1: 600, decay: 8 },
+    mech: [{ at: 0.05, gain: 0.5, hp: 2400, dur: 0.006 }],
+  },
+  gunship: {
+    dur: 1.25, crack: { dur: 0.007, gain: 1.1, hp: 1200 },
+    body: { dur: 0.22, gain: 1.45, f0: 2200, f1: 240, decay: 5 },
+    thump: { dur: 0.22, gain: 1.6, f0: 88, f1: 32, decay: 3.8, shape: 1.4 },
+    tail: { dur: 1, gain: 0.34, f0: 600, f1: 120, decay: 4.2 },
+    echo: { at: 0.18, dur: 0.3, gain: 0.24, f0: 900, f1: 200, decay: 5 },
+  },
 };
 
 function renderGun(spec, sr, seed) {
@@ -225,6 +240,64 @@ function renderSfx(sr) {
       addTone(d, sr, { dur: 1.3, gain: 0.7, f0: 294, decay: 2, attack: 0.02, shape: 1.5 });
       addTone(d, sr, { at: 0.2, dur: 1.15, gain: 0.7, f0: 220, decay: 2, attack: 0.02, shape: 1.5 });
     }, 0.75),
+    // A bright ping over a dull knock: instantly distinct from the ordinary tick, and it has to feel earned.
+    headshot: mk(0.3, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 1.2, hp: 4200 });
+      addTone(d, sr, { dur: 0.05, gain: 0.8, f0: 720, f1: 240, decay: 6, shape: 0.8 });
+      addTone(d, sr, { at: 0.006, dur: 0.26, gain: 0.95, f0: 3320, f1: 3180, decay: 6.5, attack: 0.0005 });
+      addTone(d, sr, { at: 0.006, dur: 0.16, gain: 0.5, f0: 5130, f1: 4950, decay: 7, attack: 0.0005 });
+    }),
+    heatTick: mk(0.05, (d, r) => { addTone(d, sr, { dur: 0.04, gain: 1, f0: 1500, decay: 6, shape: 1 }); addClick(d, sr, r, { dur: 0.002, gain: 0.5, hp: 4000 }); }, 0.7),
+    vent: mk(1.7, (d, r) => {
+      addClick(d, sr, r, { dur: 0.012, gain: 1.1, hp: 700 });              // The breech unlatching.
+      addTone(d, sr, { dur: 0.09, gain: 0.8, f0: 210, f1: 90, decay: 5, shape: 1 });
+      addNoise(d, sr, r, { at: 0.03, dur: 1.65, gain: 1.4, f0: 9000, f1: 3000, hp: 1700, decay: 2.6 });
+    }),
+    pin: mk(0.46, (d, r) => {
+      addClick(d, sr, r, { dur: 0.006, gain: 1, hp: 2600 });
+      addTone(d, sr, { at: 0.003, dur: 0.1, gain: 0.5, f0: 2650, f1: 2500, decay: 7 });
+      addNoise(d, sr, r, { at: 0.15, dur: 0.28, gain: 1, f0: 700, f1: 2600, hp: 300, decay: 3.2 });   // The arm coming over.
+    }, 0.8),
+    frag: mk(1.5, (d, r) => {
+      addClick(d, sr, r, { dur: 0.01, gain: 1.4, hp: 1100 });
+      addNoise(d, sr, r, { dur: 0.42, gain: 1.9, f0: 4200, f1: 180, decay: 4.5 });
+      addTone(d, sr, { dur: 0.42, gain: 1.8, f0: 100, f1: 30, decay: 3.6, shape: 1.6 });
+      addNoise(d, sr, r, { at: 0.05, dur: 1.3, gain: 0.45, f0: 900, f1: 90, decay: 3.4 });
+      for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.78);
+    }, 0.95),
+    flashBang: mk(1.0, (d, r) => {
+      addClick(d, sr, r, { dur: 0.008, gain: 1.6, hp: 2000 });
+      addNoise(d, sr, r, { dur: 0.14, gain: 1.5, f0: 9000, f1: 1500, decay: 6 });
+      addTone(d, sr, { dur: 0.1, gain: 0.8, f0: 170, f1: 70, decay: 5 });
+      addTone(d, sr, { at: 0.02, dur: 0.95, gain: 0.3, f0: 4300, f1: 3900, decay: 4 });
+    }, 0.92),
+    flashRing: mk(3.2, (d) => {
+      addTone(d, sr, { dur: 3.15, gain: 1, f0: 3480, f1: 3380, decay: 2.8, attack: 0.03 });
+      addTone(d, sr, { dur: 3.15, gain: 0.5, f0: 3530, f1: 3430, decay: 2.8, attack: 0.03 });   // The beat is the ear ringing.
+    }, 0.55),
+    smoke: mk(3, (d, r) => {
+      addClick(d, sr, r, { dur: 0.008, gain: 0.8, hp: 1000 });
+      addNoise(d, sr, r, { at: 0.02, dur: 2.95, gain: 1, f0: 5200, f1: 1800, hp: 900, decay: 1.7 });
+    }, 0.75),
+    stim: mk(0.62, (d, r) => {
+      addClick(d, sr, r, { dur: 0.005, gain: 1, hp: 1800 });
+      addNoise(d, sr, r, { dur: 0.2, gain: 0.7, f0: 7000, f1: 3000, hp: 1400, decay: 3.5 });
+      addTone(d, sr, { at: 0.1, dur: 0.48, gain: 0.8, f0: 520, f1: 1240, decay: 3, attack: 0.02, shape: 0.4 });
+      addTone(d, sr, { at: 0.2, dur: 0.38, gain: 0.5, f0: 780, f1: 1860, decay: 3.4, attack: 0.02 });
+    }, 0.75),
+    turretDeploy: mk(0.55, (d, r) => {
+      addClick(d, sr, r, { dur: 0.012, gain: 1.1, hp: 500 });
+      addTone(d, sr, { dur: 0.16, gain: 0.8, f0: 190, f1: 80, decay: 5, shape: 1 });
+      addTone(d, sr, { at: 0.16, dur: 0.3, gain: 0.5, f0: 320, f1: 720, decay: 3, attack: 0.02, shape: 1.2 });   // Servo spin-up.
+      addClick(d, sr, r, { at: 0.46, dur: 0.008, gain: 1, hp: 1600 });
+    }, 0.85),
+    // Whole cycles of every partial in exactly 2 s, so this loops without a seam.
+    rumble: mk(2, (d) => {
+      addTone(d, sr, { dur: 2, gain: 1, f0: 38, decay: 0, shape: 1.4 });
+      addTone(d, sr, { dur: 2, gain: 0.6, f0: 57, decay: 0, shape: 0.8 });
+      addTone(d, sr, { dur: 2, gain: 0.3, f0: 114, decay: 0 });
+      for (let i = 0; i < d.length; i++) d[i] *= 0.72 + 0.28 * Math.sin(2 * Math.PI * 13 * i / d.length * 2);
+    }, 0.8),
     spawn: mk(0.3, (d, r) => { addNoise(d, sr, r, { dur: 0.28, gain: 1, f0: 800, f1: 3800, hp: 500, decay: 3 }); }, 0.45),
     steps,
   };
@@ -269,6 +342,8 @@ export class AudioEngine {
     this.nextMedalAt = 0;
     this.stepState = new Map();
     this.heartT = 0;
+    this.heatTickT = 0; this.prevHeat = 0; this.lastVentAt = -9;
+    this.rumbleGain = null;
     this.lx = 0; this.lz = 0; this.localId = null; this.localAlive = false; this.localTeam = -1;
 
     // Unlock on the first gesture, and again whenever iOS suspends audio (calls, Siri, backgrounding).
@@ -552,7 +627,8 @@ export class AudioEngine {
       switch (e.t) {
         case 'shot': this._shot(e); break;
         case 'hit':
-          if (e.by === me) this._play(e.killed ? this.sfx.hitHeavy : this.sfx.hit, { bus: this.ui, priority: 5, gain: 0.8, rate: 0.98 + Math.random() * 0.04 });
+          if (e.by === me && e.head) this._play(this.sfx.headshot, { bus: this.ui, priority: 5, gain: 1, rate: 0.98 + Math.random() * 0.04 });
+          else if (e.by === me) this._play(e.killed ? this.sfx.hitHeavy : this.sfx.hit, { bus: this.ui, priority: 5, gain: 0.8, rate: 0.98 + Math.random() * 0.04 });
           else if (e.target === me) this._play(this.sfx.hurt, { bus: this.ui, priority: 5, gain: 0.85 });
           break;
         case 'kill':
@@ -591,6 +667,36 @@ export class AudioEngine {
         case 'explosion':
           this._world(this.sfx.explosion, e.x, e.z, HEAR_RANGE + 20, { gain: 2.3, priority: 4, room: 0.45 });
           break;
+        case 'throw':
+          if (e.id === me) this._play(this.sfx.pin, { bus: this.ui, priority: 3, gain: 0.75 });
+          else this._world(this.sfx.pin, e.ox, e.oz, 20, { gain: 0.7, priority: 1 });
+          break;
+        case 'bang': this._bang(e); break;
+        case 'flashed':
+          if (e.id === me) this._play(this.sfx.flashRing, { bus: this.ui, priority: 4, gain: 0.3 + 0.6 * e.amount });
+          break;
+        case 'heal': {
+          const p = this._posOf(view, e.id);
+          if (e.id === me) this._play(this.sfx.stim, { bus: this.ui, priority: 3, gain: 0.8 });
+          else if (p) this._world(this.sfx.stim, p.x, p.z, 16, { gain: 0.6, priority: 1 });
+          break;
+        }
+        case 'overheat': this._overheat(e, view); break;
+        case 'turret':
+          this._world(this.sfx.turretDeploy, e.x, e.z, HEAR_RANGE, { gain: 1.3, priority: 3, room: 0.2 });
+          break;
+        case 'turret_down':
+          this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: 1.2, priority: 3, room: 0.3, rate: 1.25 });
+          break;
+        case 'turret_shot':
+          this._streakGun('turret', e.ox, e.oz, 0.85);
+          break;
+        case 'gunship':
+          this._play(this.sfx.strike, { bus: this.ui, priority: 3, gain: e.team === this.localTeam ? 0.45 : 0.8, rate: 0.7 });
+          break;
+        case 'gunship_shot':
+          this._streakGun('gunship', e.x, e.z, 1.5);
+          break;
         case 'phase':
           if (e.phase === 'live') this._play(this.sfx.horn, { bus: this.ui, priority: 4, gain: 0.8 });
           else if (e.phase === 'ended') this._play(this.sfx.end, { bus: this.ui, priority: 4, gain: 0.9 });
@@ -600,7 +706,67 @@ export class AudioEngine {
     }
   }
 
-  // Continuous sounds that come from state instead of events: footsteps and the low-health heartbeat.
+  _bang(e) {
+    if (e.kind === 'smoke') this._world(this.sfx.smoke, e.x, e.z, 34, { gain: 1, priority: 2, room: 0.1 });
+    else if (e.kind === 'flash') this._world(this.sfx.flashBang, e.x, e.z, HEAR_RANGE, { gain: 2, priority: 4, room: 0.4 });
+    else this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: e.kind === 'sticky' ? 1.8 : 2.1, priority: 4, room: 0.4 });
+  }
+
+  // The local player's event can reach us twice (own frame, host echo), so one vent per lockout.
+  _overheat(e, view) {
+    if (e.id === this.localId) {
+      const now = this.ctx.currentTime;
+      if (now - this.lastVentAt < 1) return;
+      this.lastVentAt = now;
+      this._play(this.sfx.vent, { bus: this.ui, priority: 4, gain: 0.8 });
+      return;
+    }
+    const p = this._posOf(view, e.id);
+    if (p) this._world(this.sfx.vent, p.x, p.z, 30, { gain: 1.1, priority: 2 });
+  }
+
+  _streakGun(id, x, z, gain) {
+    const buffers = this.guns[id];
+    if (!buffers || x === undefined) return;
+    this._world(buffers[Math.floor(Math.random() * 3)], x, z, HEAR_RANGE, { gain, priority: 2, room: 0.25, rate: 0.96 + Math.random() * 0.08 });
+  }
+
+  // Ticks only while the bar is climbing, so a cooling gun is quiet. Faster and higher as it nears lockout.
+  _updateHeat(view, dt) {
+    const p = this._posOf(view, this.localId);
+    const heat = p && p.alive && p.heat ? p.heat : 0;
+    if (heat > 0.55 && heat > this.prevHeat && !p.overheated) {
+      this.heatTickT -= dt;
+      if (this.heatTickT <= 0) {
+        const k = (heat - 0.55) / 0.45;
+        this.heatTickT = 0.2 - 0.13 * k;
+        this._play(this.sfx.heatTick, { bus: this.ui, priority: 3, gain: 0.3 + 0.5 * k, rate: 1 + 0.9 * k });
+      }
+    } else if (heat <= this.prevHeat) {
+      this.heatTickT = 0;
+    }
+    this.prevHeat = heat;
+  }
+
+  // One looping source, started the first time a gunship appears and faded in and out after that.
+  _updateRumble(view) {
+    const ships = view.gunships;
+    const on = !!(ships && ships.length);
+    if (on && !this.rumbleGain) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.sfx.rumble;
+      src.loop = true;
+      this.rumbleGain = this.ctx.createGain();
+      this.rumbleGain.gain.value = 0;
+      src.connect(this.rumbleGain);
+      this.rumbleGain.connect(this.dry);
+      src.start();
+    }
+    if (this.rumbleGain) this.rumbleGain.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.5);
+  }
+
+  // Continuous sounds that come from state instead of events: footsteps, the low-health heartbeat,
+  // the LMG's heat warning and the gunship overhead.
   update(view, dt) {
     if (!this.ready || !view || this.ctx.state !== 'running') return;
     this._trackLocal(view);
@@ -628,6 +794,9 @@ export class AudioEngine {
     } else {
       this.heartT = 0;
     }
+
+    this._updateHeat(view, dt);
+    this._updateRumble(view);
   }
 
   _step(p) {
