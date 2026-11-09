@@ -15,12 +15,17 @@ const MAX_FRAME = 0.1;
 const MAX_CATCHUP_STEPS = 4;
 const END_HOLD = 4.5;              // Seconds of final-kill replay before the results screen.
 
+// The heat system flags the single step on which a gun locks up.
+function ps_overheatedEdge(ps) {
+  return ps.overheatEdge === true;
+}
+
 export class Match {
   constructor(config) {
     Object.assign(this, config);   // canvas, mapId, seed, limits, roster, ids, net, controls, hud, renderer, audio, onEnd
     this.map = MAPS[this.mapId];
     this.me = this.roster.find(r => r.id === this.localId);
-    this.ps = createPlayerState({ id: this.localId, primary: this.me.primary, camo: this.me.camo });
+    this.ps = createPlayerState({ id: this.localId, primary: this.me.primary, camo: this.me.camo, loadout: this.me.loadout });
     this.nextLoadout = null;
     this.running = false;
     this.spawned = false;
@@ -33,7 +38,7 @@ export class Match {
     this.endTimer = -1;
     this.rng = Math.random;
     this.frameEvents = [];
-    this.resolvedInput = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, reload: false, swap: false, streak: false };
+    this.resolvedInput = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
 
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
     this.sim = new Sim({
@@ -65,6 +70,7 @@ export class Match {
   // Applied the next time the local player spawns.
   setNextLoadout(loadout) {
     this.nextLoadout = loadout;
+    this.#command({ cmd: 'loadout', loadout });
   }
 
   #wireNet() {
@@ -73,7 +79,7 @@ export class Match {
     if (this.isHost) {
       net.onState((peerId, data) => this.sim.applyHumanState(peerId, decodeHumanState(data)));
       net.onShot((peerId, msg) => {
-        if (msg.useStreak) this.sim.useStreak(peerId);
+        if (msg.cmd) this.sim.applyCommand(peerId, msg);
         else this.sim.applyShot(peerId, msg, msg.age);
       });
       net.onPeerLeave(peerId => this.sim.humanLeft(peerId));
@@ -149,6 +155,7 @@ export class Match {
     // Everyone holds position through the warmup countdown, as bots do; aiming stays live.
     if (view.phase === 'warmup') {
       r.mx = 0; r.mz = 0; r.fire = false; r.sprint = false; r.slide = false;
+      r.tactical = false; r.lethal = false; r.streak = -1;
     }
     return r;
   }
@@ -168,10 +175,10 @@ export class Match {
         this.net.sendShot({ ...shot, age: INTERP_DELAY + (this.net.rtt ?? 80) / 2000 });
       }
     }
-    if (input.streak) {
-      if (this.isHost) this.sim.useStreak(this.localId);
-      else this.net.sendShot({ useStreak: true });
-    }
+    if (ps_overheatedEdge(this.ps)) this.frameEvents.push({ t: 'overheat', id: this.localId });
+    if (input.streak >= 0) this.#command({ cmd: 'streak', slot: input.streak });
+    if (input.tactical) this.#throw('tactical');
+    if (input.lethal) this.#throw('lethal');
     if (!this.isHost) {
       this.sendAccum += dt;
       if (this.sendAccum >= 1 / STATE_SEND_HZ) {
@@ -179,6 +186,16 @@ export class Match {
         this.net.sendState(encodeHumanState(this.ps));
       }
     }
+  }
+
+  #command(msg) {
+    if (this.isHost) this.sim.applyCommand(this.localId, msg);
+    else this.net.sendShot(msg);
+  }
+
+  #throw(slot) {
+    const ps = this.ps;
+    this.#command({ cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim: ps.aim });
   }
 
   // The local player is drawn from its own state so controls never lag behind the network.
@@ -191,6 +208,7 @@ export class Match {
       p.ammo = ps.ammo[ps.slot]; p.reserve = ps.reserve[ps.slot];
       p.reloadT = ps.reloadT; p.reloadDur = ps.reloadDur;
       p.adsT = ps.adsT; p.sprinting = ps.sprinting; p.sliding = ps.sliding; p.bloom = ps.bloom;
+      p.heat = ps.heat; p.overheated = ps.overheated; p.firingT = ps.firingT;
     }
     return p;
   }
