@@ -7,7 +7,7 @@ import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
 
 export const PART = { BODY: 0, GRIP: 1, METAL: 2, ACCENT: 3 };
 
-const PATTERN_IDS = { solid: 0, digital: 1, tiger: 2, splinter: 3, hex: 4, gold: 5, molten: 6, prism: 7 };
+const PATTERN_IDS = { solid: 0, digital: 1, tiger: 2, splinter: 3, hex: 4, gold: 5, molten: 6, prism: 7, carbon: 8, livewire: 9, aurora: 10, singularity: 11 };
 
 export function camoIndex(id) {
   const i = CAMOS.findIndex(c => c.id === id);
@@ -162,6 +162,58 @@ vec3 camo(int i, vec2 uv, out vec3 emit, out float gloss) {
     emit = col * 0.45;
     gloss = 0.9;
     return col * 0.7;
+  }
+  if (pat == 8) {                // Carbon: over-under weave with a thin hot pinstripe.
+    vec2 c = floor(p), f = fract(p) - 0.5;
+    float rib = mod(c.x + c.y, 2.0) < 1.0 ? abs(f.y) : abs(f.x);
+    vec3 col = mix(uCols[o], uCols[o + 1], smoothstep(0.08, 0.5, rib));
+    float stripe = step(0.93, fract(uv.x * 1.4 + uv.y * 0.6));
+    gloss = 0.5;
+    return mix(col, uCols[o + 2], stripe);
+  }
+  if (pat == 9) {                // Live Wire: arcs strike along noise contours, redrawn nine times a second.
+    float tick = floor(uTime * 9.0);
+    vec2 q = p * 0.6;
+    float a1 = 1.0 - smoothstep(0.0, 0.04, abs(vnoise(q + vec2(tick * 1.7, tick * 0.9)) - 0.5));
+    float a2 = 1.0 - smoothstep(0.0, 0.03, abs(vnoise(q * 1.7 - vec2(tick * 0.6, tick * 1.3) + 11.0) - 0.5));
+    // Some frames go dark, so it stutters like a bad contact rather than strobing evenly.
+    float live = step(0.22, h21(vec2(tick, 3.7)));
+    float arc = max(a1, a2 * 0.8) * live;
+    float surge = smoothstep(0.94, 1.0, sin(uv.x * 5.0 + uv.y * 3.0 - uTime * 7.0));
+    vec3 plate = uCols[o] * (0.8 + 0.5 * vnoise(p * 0.8 + 4.0));
+    emit = mix(uCols[o + 1], uCols[o + 2], arc * arc) * arc * 2.4 + uCols[o + 1] * surge * 0.55;
+    gloss = 0.6;
+    return plate;
+  }
+  if (pat == 10) {               // Polar Night: aurora curtains rippling over a starfield.
+    vec2 q = p;
+    float sway = vnoise(vec2(q.x * 0.7 + uTime * 0.28, uTime * 0.2)) * 2.0;
+    float curtain = pow(0.5 + 0.5 * sin(q.y * 1.7 + sway * 3.2 + uTime * 0.85), 3.0);
+    float rays = 0.55 + 0.45 * sin(q.x * 11.0 + sway * 7.0 + uTime * 1.7);
+    vec3 hue = mix(uCols[o + 1], uCols[o + 2], smoothstep(-0.7, 0.8, sin(q.x * 0.8 + sway + uTime * 0.45)));
+    float cell = h21(floor(p * 7.0));
+    float star = step(0.93, cell) * step(length(fract(p * 7.0) - 0.5), 0.2) * (0.6 + 0.4 * sin(uTime * 5.0 + cell * 40.0));
+    emit = hue * curtain * rays * 2.1 + uCols[o + 3] * star * 1.3 + hue * curtain * curtain * 0.5;
+    gloss = 0.35;
+    return uCols[o] * (0.8 + 0.6 * vnoise(p * 0.5 + 2.0));
+  }
+  if (pat == 11) {               // Event Horizon: black holes whose accretion disks spiral inward.
+    vec2 g = p * 0.5;
+    vec2 d = fract(g) - 0.5;
+    float r = length(d) * 2.0;
+    float a = atan(d.y, d.x);
+    float seed = h21(floor(g));
+    // Two arms, integer multiple of the angle so the atan seam stays hidden.
+    float spiral = 0.5 + 0.5 * sin(a * 2.0 + r * 13.0 - uTime * (3.2 + seed * 1.4) + seed * 6.28);
+    float disk = (1.0 - smoothstep(0.34, 0.98, r)) * smoothstep(0.2, 0.34, r);
+    float lensing = 1.0 - smoothstep(0.0, 0.05, abs(r - 0.32));
+    float rim = 1.0 - smoothstep(0.0, 0.03, abs(r - 0.98));
+    vec3 hot = mix(uCols[o + 1], uCols[o + 2], spiral * spiral);
+    float cell = h21(floor(p * 8.0));
+    float star = step(0.92, cell) * step(length(fract(p * 8.0) - 0.5), 0.2) * step(0.98, r) * (0.5 + 0.5 * sin(uTime * 3.0 + cell * 30.0));
+    emit = hot * disk * (0.35 + spiral * 1.9) + uCols[o + 2] * lensing * 2.6 + uCols[o + 3] * rim * 0.9 + uCols[o + 3] * star * 1.2;
+    gloss = 0.8;
+    return uCols[o] * (r < 0.3 ? 0.0 : 1.0);
   }
   return vCol;                   // Solid: the model's factory colour.
 }

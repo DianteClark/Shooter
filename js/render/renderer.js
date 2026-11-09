@@ -220,7 +220,10 @@ export class GameRenderer {
         case 'kill': {
           const r = chars.rigs.get(ev.target);
           const seen = r && (r.visible || r.team === localTeam);
-          if (seen) vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
+          if (seen) {
+            vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
+            vfx.killEffect(ev.by, ev.x, ev.z);
+          }
           if (ev.by === localId && ev.target !== localId) {
             this.killEase = 0.26;
             this.zoomPunch = 0.05;
@@ -291,7 +294,7 @@ export class GameRenderer {
     const { vfx, chars } = this;
     const r = chars.rigs.get(ev.by);
     const team = r ? r.team : 0;
-    let rgb = tracerColor(ev.camo, team);
+    let rgb = vfx.tracerRGB(ev.by, tracerColor(ev.camo, team));
     const visible = !r || r.visible || team === localTeam;
     const kick = kickOf(ev.weapon);
     // A hot barrel throws hotter tracers: the colour pushes to white-gold and the streak fattens.
@@ -505,7 +508,11 @@ export class GameRenderer {
   }
 }
 
-// Turntable for one gun, for the gunsmith and end card.
+// Turntable for one gun, for the gunsmith and end card. One instance is enough for the whole menu layer:
+// the canvas can be re-parented between screens, and each show() only rebuilds what changed.
+const KICK_DECAY = 7;
+const FRAME_EASE = 9;
+
 export class GunPreview {
   constructor(canvas) {
     this.canvas = canvas;
@@ -519,35 +526,52 @@ export class GunPreview {
     this.material = createCamoMaterial(this.time);
     this.mesh = null;
     this.spin = 0;
+    this.kick = 0;              // Fitting a part gives the gun a short shove so the change is felt.
+    this.modelKey = '';
+    this.gunKey = '';
     this.w = 0; this.h = 0;
+    this.centre = new THREE.Vector3();
+    this.goal = new THREE.Vector3();
+    this.gunW = 1; this.gunH = 1;
+    this.fitDist = 2.2;
+    this.dist = 0;
     this.show('ar', 'none');
   }
 
-  show(weaponId, camoId) {
-    if (this.mesh) {
-      this.scene.remove(this.mesh);
-      this.mesh.geometry.dispose();
-      this.mesh.dispose();
+  // attachments: a kit { optic?, barrel?, mag?, grip? }, optional. Changing only the camo re-uses the model.
+  show(weaponId, camoId, attachments) {
+    const gun = getGun(weaponId, attachments);
+    const key = gun.key ?? weaponId;
+    if (key !== this.modelKey) {
+      if (this.mesh) {
+        this.scene.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.mesh.dispose();
+      }
+      const geom = gun.geometry.clone();
+      addCamoInstanceAttributes(geom, 1);
+      this.mesh = new THREE.InstancedMesh(geom, this.material, 1);
+      this.mesh.setMatrixAt(0, new THREE.Matrix4());
+      this.mesh.frustumCulled = false;
+      this.scene.add(this.mesh);
+      geom.computeBoundingBox();
+      const box = geom.boundingBox;
+      this.goal.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2);
+      this.gunW = box.max.x - box.min.x;
+      this.gunH = box.max.y - box.min.y;
+      // Same gun, new part: ease the framing and shove the model. A different gun cuts straight to its frame.
+      if (weaponId === this.gunId && this.modelKey) this.kick = 1;
+      else { this.centre.copy(this.goal); this.dist = 0; }
+      this.gunId = weaponId;
+      this.modelKey = key;
     }
-    const proto = getGun(weaponId);
-    const geom = proto.geometry.clone();
-    addCamoInstanceAttributes(geom, 1);
+    const geom = this.mesh.geometry;
     geom.getAttribute('aCamo').setX(0, camoIndex(camoId));
+    geom.getAttribute('aCamo').needsUpdate = true;
     const accent = getCamo(camoId).tint;
     const rgb = accent !== undefined ? hexRGB(accent) : [1.0, 0.68, 0.22];
     geom.getAttribute('aAccent').setXYZ(0, rgb[0], rgb[1], rgb[2]);
-    this.mesh = new THREE.InstancedMesh(geom, this.material, 1);
-    this.mesh.setMatrixAt(0, new THREE.Matrix4());
-    this.mesh.frustumCulled = false;
-    this.scene.add(this.mesh);
-
-    // Frame the gun's bounding sphere. Long guns pull the camera back; short ones fill the card.
-    geom.computeBoundingBox();
-    const box = geom.boundingBox;
-    const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2, cz = (box.min.z + box.max.z) / 2;
-    const dx = box.max.x - box.min.x, dy = box.max.y - box.min.y;
-    this.centre = new THREE.Vector3(cx, cy, cz);
-    this.gunW = dx; this.gunH = dy;
+    geom.getAttribute('aAccent').needsUpdate = true;
     this._size();
     this._render();
   }
@@ -565,16 +589,18 @@ export class GunPreview {
     // Refit on every call: cards can be laid out after the gun is chosen, and narrow cards need more distance.
     const halfV = Math.tan(THREE.MathUtils.degToRad(11));
     this.fitDist = Math.max((this.gunW * 0.56) / (halfV * this.camera.aspect), (this.gunH * 0.62) / halfV, 2.2);
+    if (!this.dist) this.dist = this.fitDist;
   }
 
   _render() {
     this._size();
     const yaw = Math.sin(this.spin * 0.55) * 0.5;
-    const d = this.fitDist;
-    this.mesh.position.set(-this.centre.x, -this.centre.y, -this.centre.z);
-    this.mesh.rotation.set(0, 0, 0);
-    const pivot = this.scene;
-    pivot.rotation.y = yaw;
+    const d = this.dist;
+    const k = this.kick * this.kick;
+    this.mesh.position.set(-this.centre.x + k * 0.05, -this.centre.y, -this.centre.z);
+    const s = 1 + k * 0.035;
+    this.mesh.scale.set(s, s, s);
+    this.scene.rotation.y = yaw;
     this.camera.position.set(0, d * Math.sin(0.27), d * Math.cos(0.27));
     this.camera.lookAt(0, 0, 0);
     this.scene.updateMatrixWorld();
@@ -584,6 +610,11 @@ export class GunPreview {
   tick(dt) {
     this.time.value = (this.time.value + dt) % 3600;
     this.spin += dt;
+    this.kick = Math.max(0, this.kick - dt * KICK_DECAY);
+    const ease = 1 - Math.exp(-FRAME_EASE * dt);
+    this.centre.lerp(this.goal, ease);
+    this._size();
+    this.dist += (this.fitDist - this.dist) * ease;
     this._render();
   }
 
@@ -591,5 +622,6 @@ export class GunPreview {
     if (this.mesh) { this.mesh.geometry.dispose(); this.mesh.dispose(); }
     this.material.dispose();
     this.webgl.dispose();
+    this.webgl.forceContextLoss();
   }
 }

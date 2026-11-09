@@ -9,6 +9,7 @@ import {
 } from '../sim/player.js';
 import { Sim, scavengeRefill } from '../sim/sim.js';
 import { Interpolator } from './interp.js';
+import { MatchAwards } from './awards.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_FRAME = 0.1;
@@ -41,6 +42,7 @@ export class Match {
       scoreLimit: this.scoreLimit, timeLimit: this.timeLimit,
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
+    this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });
     this.interp = new Interpolator(this.isHost ? STEP * 1.5 : INTERP_DELAY);
     this.frame = this.frame.bind(this);
     this.#wireNet();
@@ -48,6 +50,7 @@ export class Match {
 
   start() {
     this.renderer.setLocal(this.localId);
+    this.renderer.vfx.setLoadouts(this.roster);
     this.controls.setEnabled(true);
     this.running = true;
     this.lastTime = performance.now();
@@ -231,6 +234,7 @@ export class Match {
       this.onEnd({
         scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId,
         myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
+        ...this.awards.finish(view),
       });
     }
   }
@@ -259,6 +263,7 @@ export class Match {
     this.hud.update(view, dt);
     this.audio.onEvents(events, view);
     this.audio.update(view, dt);
+    this.awards.onEvents(events, view);
     events.length = 0;
 
     if (view.phase === 'ended') this.#finish(view);

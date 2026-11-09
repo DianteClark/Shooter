@@ -1,8 +1,9 @@
 // Pooled, event-driven effects. Every system is a single instanced draw over a fixed typed-array
 // pool: new effects overwrite the oldest slot, nothing is allocated after construction.
 import * as THREE from 'three';
-import { GLSL_LIGHT } from './art.js';
+import { GLSL_LIGHT, hexRGB } from './art.js';
 import { MAX_POPS } from './world.js';
+import { getTracer, getKillEffect } from '../shared/camos.js';
 
 const TRACERS = 128;
 const PARTS = 520;
@@ -11,6 +12,7 @@ const SHARDS = 120;
 const FLASHES = 20;
 const BALLS = 10;
 const RINGS = 36;
+const DELAYED = 8;
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -29,6 +31,11 @@ export class VFX {
   constructor(scene) {
     this.scene = scene;
     this.dt = 0;
+    this.clock = 0;
+    this.cosmetics = new Map();    // Player id -> {tracer, killFx, rgb, cycle}, from their loadout.
+    this.cycleRGB = [1, 1, 1];
+    this.delayed = Array.from({ length: DELAYED }, () => ({ t: 0, x: 0, z: 0 }));
+    this.delayedHead = 0;
     this._buildTracers();
     this._buildParticles();
     this._buildShells();
@@ -104,6 +111,150 @@ export class VFX {
     T.t[i] = T.dur[i];
   }
 
+  /* ---------- Loadout cosmetics: tracer colours and kill effects ---------- */
+  // Renderer feeds these from the roster. Stores by value, safe to call again on a loadout change.
+  setLoadout(id, loadout) {
+    if (!loadout) return;
+    let c = this.cosmetics.get(id);
+    if (!c) this.cosmetics.set(id, c = { tracer: 'none', killFx: 'none', rgb: null, cycle: false });
+    const def = getTracer(loadout.tracer);
+    c.tracer = def.id;
+    c.killFx = getKillEffect(loadout.killFx).id;
+    c.rgb = def.color === undefined ? null : hexRGB(def.color);
+    c.cycle = !!def.cycle;
+  }
+
+  setLoadouts(players) {
+    for (let i = 0; i < players.length; i++) this.setLoadout(players[i].id, players[i].loadout);
+  }
+
+  // The colour this player's shots should use; fallback is their camo tint or team colour.
+  tracerRGB(id, fallback) {
+    const c = this.cosmetics.get(id);
+    if (!c || !c.rgb) return fallback;
+    if (!c.cycle) return c.rgb;
+    // Bright hue wheel, three phase-shifted sines. One shared array: consumers copy it out at once.
+    const out = this.cycleRGB, h = this.clock * 2.4;
+    out[0] = 0.55 + 0.45 * Math.sin(h);
+    out[1] = 0.55 + 0.45 * Math.sin(h + 2.094);
+    out[2] = 0.55 + 0.45 * Math.sin(h + 4.188);
+    return out;
+  }
+
+  // Plays the killer's kill effect at the victim. Returns false for the standard (no extra) effect.
+  killEffect(byId, x, z) {
+    switch (this.cosmetics.get(byId)?.killFx) {
+      case 'embers': this._fxEmbers(x, z); return true;
+      case 'shockring': this._fxShockRing(x, z); return true;
+      case 'shatter': this._fxShatter(x, z); return true;
+      case 'overload': this._fxOverload(x, z); return true;
+      case 'implode': this._fxImplode(x, z); return true;
+      case 'phoenix': this._fxPhoenix(x, z); return true;
+      default: return false;
+    }
+  }
+
+  _fxEmbers(x, z) {
+    for (let i = 0; i < 30; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(0.8, 4.5);
+      this.spawn(x, rand(0.4, 1.6), z, Math.cos(a) * s, rand(3, 9), Math.sin(a) * s, rand(0.5, 1.15), 0.12, 0.02, i % 3 ? FX_EMBER : FX_EMBER_HOT, 0, 6, 1.1, 0.03);
+    }
+    this.pop(x, 1.4, z, 6, FX_EMBER, 0.32);
+  }
+
+  _fxShockRing(x, z) {
+    this.ring(x, z, 0.3, 4.2, 0.34, FX_SHOCK, 1);
+    this.ring(x, z, 0.2, 2.6, 0.24, WHITE, 0.9);
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2, s = rand(14, 22);
+      this.spawn(x, 0.5, z, Math.cos(a) * s, 0.2, Math.sin(a) * s, 0.2, 0.12, 0.02, FX_SHOCK, 0, 0, 3, 0.05);
+    }
+    this.pop(x, 1.4, z, 7, FX_SHOCK, 0.24);
+  }
+
+  _fxShatter(x, z) {
+    for (let i = 0; i < 18; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(3, 10);
+      this.shard(x, rand(0.6, 1.7), z, Math.cos(a) * s, rand(4, 11), Math.sin(a) * s, i % 2 ? FX_ICE : FX_ICE_PALE);
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(1, 3);
+      this.spawn(x, rand(0.5, 1.8), z, Math.cos(a) * s, rand(0.5, 2.5), Math.sin(a) * s, rand(0.5, 0.95), 0.09, 0.01, FX_ICE_PALE, 0, 2, 1, 0);
+    }
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.14, 0.5, 2.1, FX_ICE_PALE, 0, 0, 0);
+    this.pop(x, 1.4, z, 6.5, FX_ICE, 0.26);
+  }
+
+  // Lightning from short tracer segments: each arc jitters outward in three hops.
+  _fxOverload(x, z) {
+    for (let i = 0; i < 7; i++) {
+      let px = x, py = 1.1, pz = z;
+      const a = rand(0, Math.PI * 2);
+      for (let hop = 1; hop <= 3; hop++) {
+        const r = hop * 1.05, j = a + rand(-0.5, 0.5);
+        const nx = x + Math.cos(j) * r, nz = z + Math.sin(j) * r, ny = rand(0.5, 1.9);
+        this.tracer(px, py, pz, nx, ny, nz, FX_VOLT, 0.09);
+        px = nx; py = ny; pz = nz;
+      }
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(5, 12);
+      this.spawn(x, 1.1, z, Math.cos(a) * s, rand(-1, 4), Math.sin(a) * s, rand(0.15, 0.3), 0.1, 0.02, FX_VOLT, 0, 8, 2, 0.05);
+    }
+    this.spawn(x, 1.1, z, 0, 0, 0, 0.18, 0.6, 1.6, FX_VOLT, 0, 0, 0);
+    this.pop(x, 1.4, z, 7, FX_VOLT, 0.3);
+  }
+
+  // Everything is drawn in to a point, then _stepDelayed lets it go a beat later.
+  _fxImplode(x, z) {
+    const life = 0.26;
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2, r = rand(2.6, 3.8);
+      this.spawn(x + Math.cos(a) * r, rand(0.5, 1.8), z + Math.sin(a) * r, -Math.cos(a) * (r / life), 0, -Math.sin(a) * (r / life), life, 0.1, 0.16, FX_VOID, 0, 0, 0, 0.03);
+    }
+    this.spawn(x, 1.1, z, 0, 0, 0, life, 1.5, 0.15, FX_VOID, 0, 0, 0);
+    const d = this.delayed[this.delayedHead];
+    this.delayedHead = (this.delayedHead + 1) % DELAYED;
+    d.t = life; d.x = x; d.z = z;
+  }
+
+  _implodeRelease(x, z) {
+    this.spawn(x, 1.1, z, 0, 0, 0, 0.2, 0.4, 3.0, WHITE, 0, 0, 0);
+    this.spawn(x, 1.1, z, 0, 0, 0, 0.3, 0.4, 2.2, FX_VOID, 0, 0, 0);
+    this.ring(x, z, 0.3, 5.5, 0.42, FX_VOID, 1);
+    this.ring(x, z, 0.2, 3.2, 0.3, WHITE, 0.9);
+    for (let i = 0; i < 26; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(9, 24);
+      this.spawn(x, 1.1, z, Math.cos(a) * s, rand(-1, 8), Math.sin(a) * s, rand(0.22, 0.42), 0.13, 0.02, i % 2 ? FX_VOID : WHITE, 0, 8, 2, 0.05);
+    }
+    this.pop(x, 1.6, z, 10, FX_VOID, 0.4);
+  }
+
+  // Two fire wings that sweep up and out of the body, then a rising core.
+  _fxPhoenix(x, z) {
+    for (let side = -1; side <= 1; side += 2) {
+      for (let i = 0; i < 16; i++) {
+        const k = i / 15;
+        const out = side * (0.3 + k * 2.6), y = 0.8 + Math.sin(k * Math.PI * 0.8) * 1.5 + k * 0.8;
+        this.spawn(x + out, y, z, side * (1.5 + k * 3), rand(4, 8), rand(-0.6, 0.6), rand(0.5, 0.95), 0.2 - k * 0.1, 0.02, k > 0.6 ? FX_PHOENIX_TIP : FX_PHOENIX, 0, -3, 1.4, 0.05);
+      }
+    }
+    for (let i = 0; i < 12; i++) {
+      this.spawn(x + rand(-0.25, 0.25), rand(0.5, 1.4), z + rand(-0.25, 0.25), rand(-0.6, 0.6), rand(7, 12), rand(-0.6, 0.6), rand(0.4, 0.75), 0.17, 0.02, FX_PHOENIX_TIP, 0, 0, 1.2, 0.05);
+    }
+    this.ring(x, z, 0.3, 3.4, 0.4, FX_PHOENIX, 1);
+    this.pop(x, 2.0, z, 9, FX_PHOENIX, 0.42);
+  }
+
+  _stepDelayed(dt) {
+    for (let i = 0; i < DELAYED; i++) {
+      const d = this.delayed[i];
+      if (d.t <= 0) continue;
+      d.t -= dt;
+      if (d.t <= 0) this._implodeRelease(d.x, d.z);
+    }
+  }
+
   /* ---------- Billboard particles (sparks, puffs, smoke) ---------- */
   _buildParticles() {
     const sides = 6, pos = [], rim = [];
@@ -122,6 +273,7 @@ export class VFX {
     this.partGeom = g;
     this.partMat = new THREE.ShaderMaterial({
       ...PREMULT,
+      side: THREE.DoubleSide,      // Stretched sparks wind away from the camera; culling them hid every spark.
       vertexShader: `
         attribute float aRim; attribute vec4 aP; attribute vec4 aC; attribute vec3 aAxis;
         varying vec4 vC; varying float vRim;
@@ -565,6 +717,8 @@ export class VFX {
 
   /* ---------- Per-frame simulation and buffer upload ---------- */
   step(dt) {
+    this.clock += dt;
+    this._stepDelayed(dt);
     this._stepTracers(dt);
     this._stepParticles(dt);
     this._stepPhys(this.sh, this.shellMesh, dt, true);
@@ -790,4 +944,13 @@ const SMOKE = [0.12, 0.11, 0.14];
 const FIRE = [1.0, 0.5, 0.15];
 const FIRE_POP = [0.95, 0.5, 0.22];
 const BRASS = [0.92, 0.7, 0.28];
+const FX_EMBER = [1.0, 0.42, 0.08];
+const FX_EMBER_HOT = [1.0, 0.82, 0.3];
+const FX_SHOCK = [0.35, 0.82, 1.0];
+const FX_ICE = [0.5, 0.88, 1.0];
+const FX_ICE_PALE = [0.85, 0.97, 1.0];
+const FX_VOLT = [0.72, 0.42, 1.0];
+const FX_VOID = [0.42, 0.2, 1.0];
+const FX_PHOENIX = [1.0, 0.36, 0.06];
+const FX_PHOENIX_TIP = [1.0, 0.8, 0.26];
 

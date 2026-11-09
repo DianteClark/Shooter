@@ -50,5 +50,7 @@ export function normalizeLoadout(l = {}) {
     tactical: TACTICALS[l.tactical] ? l.tactical : d.tactical,
     lethal: LETHALS[l.lethal] ? l.lethal : d.lethal,
     streaks: pick(STREAKS, l.streaks, 3, d.streaks).sort((a, b) => STREAKS[a].cost - STREAKS[b].cost),
+    tracer: l.tracer || null,
+    killFx: l.killFx || null,
   };
 }
