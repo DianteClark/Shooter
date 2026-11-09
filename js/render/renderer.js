@@ -220,6 +220,14 @@ export class GameRenderer {
   }
 
   // Low Power: fewer pixels and thinner effects, for phones that cannot hold 60 even at minimum resolution.
+  // 'auto' lets dynamic resolution decide; 'high' and 'low' pin the level.
+  setQuality(q) {
+    this.qualityPin = q;
+    if (q === 'low') this.setLowPower(true);
+    else if (q === 'high') { this.setLowPower(false); this.dynamicRes = false; }
+    else { this.setLowPower(false); this.dynamicRes = true; }
+  }
+
   setLowPower(on) {
     on = !!on;
     if (on === this.lowPower) return;

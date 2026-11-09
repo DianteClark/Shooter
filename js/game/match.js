@@ -8,9 +8,15 @@ import {
   encodeHumanState, decodeHumanState,
 } from '../sim/player.js';
 import { Sim, scavengeRefill } from '../sim/sim.js';
+import { previewThrow, maxThrowRange } from '../sim/equipment.js';
 import { Interpolator } from './interp.js';
 import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
+
+// Smallest signed rotation from b to a.
+function angleDiffSigned(a, b) {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
+}
 
 const STEP = 1 / SIM_HZ;
 const MAX_FRAME = 0.1;
@@ -78,18 +84,23 @@ export class Match {
     const net = this.net;
     if (!net) return;
     if (this.isHost) {
-      net.onState((peerId, data) => this.sim.applyHumanState(peerId, decodeHumanState(data)));
-      net.onShot((peerId, msg) => {
-        if (msg.cmd) this.sim.applyCommand(peerId, msg);
-        else this.sim.applyShot(peerId, msg, msg.age);
-      });
-      net.onPeerLeave(peerId => this.sim.humanLeft(peerId));
+      this.#wireHostHandlers();
     } else {
       net.onSnapshot(data => {
         this.interp.push(this.sim.decodeSnapshot(data, this.localId), this.now());
       });
       net.onEvents(events => this.#receiveEvents(events));
     }
+  }
+
+  #wireHostHandlers() {
+    const net = this.net;
+    net.onState((peerId, data) => this.sim.applyHumanState(peerId, decodeHumanState(data)));
+    net.onShot((peerId, msg) => {
+      if (msg.cmd) this.sim.applyCommand(peerId, msg);
+      else this.sim.applyShot(peerId, msg, msg.age);
+    });
+    net.onPeerLeave(peerId => this.sim.humanLeft(peerId));
   }
 
   now() {
@@ -149,7 +160,8 @@ export class Match {
     const moving = input.mx * input.mx + input.mz * input.mz > 0.02;
     let aim = this.lastAim;
     if (input.aim !== null && input.aim !== undefined) {
-      aim = applyAimAssist(input.aim, this.ps, view.players, this.map, this.dt);
+      const assisted = applyAimAssist(input.aim, this.ps, view.players, this.map, this.dt);
+      aim = input.aim + angleDiffSigned(assisted, input.aim) * (this.controls.aimAssist ?? 1);
     } else if (moving) {
       aim = Math.atan2(input.mz, input.mx);
     }
@@ -158,13 +170,14 @@ export class Match {
     // Everyone holds position through the warmup countdown, as bots do; aiming stays live.
     if (view.phase === 'warmup') {
       r.mx = 0; r.mz = 0; r.fire = false; r.sprint = false; r.slide = false;
-      r.tactical = false; r.lethal = false; r.streak = -1;
+      r.tactical = false; r.lethal = false; r.streak = -1; r.throwAim = null;
     }
     return r;
   }
 
   #stepLocal(input, view, dt) {
-    const shots = stepPlayer(this.ps, this.#resolveInput(input, view), dt, this.map, this.rng);
+    const r = this.#resolveInput(input, view);
+    const shots = stepPlayer(this.ps, r, dt, this.map, this.rng);
     for (const shot of shots) {
       const rays = traceShot(shot, this.map, view.players, this.localId);
       this.frameEvents.push({
@@ -179,9 +192,9 @@ export class Match {
       }
     }
     if (this.ps.overheatEdge) this.frameEvents.push({ t: 'overheat', id: this.localId });
-    if (input.streak >= 0) this.#command({ cmd: 'streak', slot: input.streak });
-    if (input.tactical) this.#throw('tactical');
-    if (input.lethal) this.#throw('lethal');
+    if (r.streak >= 0) this.#command({ cmd: 'streak', slot: r.streak });
+    if (r.tactical) this.#throw('tactical', r);
+    if (r.lethal) this.#throw('lethal', r);
     if (!this.isHost) {
       this.sendAccum += dt;
       if (this.sendAccum >= 1 / STATE_SEND_HZ) {
@@ -196,9 +209,37 @@ export class Match {
     else this.net.sendShot(msg);
   }
 
-  #throw(slot) {
+  #throw(slot, input) {
     const ps = this.ps;
-    this.#command({ cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim: ps.aim });
+    this.#command({ cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim: input.throwAim?.aim ?? ps.aim, dist: input.throwDist ?? undefined });
+  }
+
+  // While a throw is being aimed, the arc is computed by the same code the host will use for the real one.
+  #updateThrowPreview(view, input) {
+    const a = input.throwAim;
+    if (!a || !this.localAlive || view.phase === 'warmup') { view.throwPreview = null; return; }
+    const ps = this.ps;
+    const kind = a.slot === 'tactical' ? ps.tactical : ps.lethal;
+    view.throwPreview = previewThrow(this.map, ps.x, ps.z, a.aim, Math.min(a.dist, maxThrowRange(ps.perks)), kind);
+  }
+
+  // The host vanished and this device was elected: carry on from the newest snapshot.
+  promoteToHost({ goneIds = [] } = {}) {
+    const net = this.net, view = this.interp.newest;
+    if (!view) return;
+    this.sim = Sim.fromSnapshot(view, this.roster, {
+      map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds,
+    });
+    this.isHost = true;
+    this.hostId = this.localId;
+    this.interp.delay = STEP * 1.5;
+    net.onSnapshot(null);
+    net.onEvents(null);
+    this.#wireHostHandlers();
+  }
+
+  humanRejoined(id) {
+    if (this.isHost) this.sim.humanRejoin(id);
   }
 
   // The local player is drawn from its own state so controls never lag behind the network.
@@ -258,9 +299,11 @@ export class Match {
     const input = this.controls.read();
     if (this.localAlive && view.phase !== 'ended') this.#stepLocal(input, view, dt);
     this.#overlayLocal(view);
+    this.#updateThrowPreview(view, input);
 
     const events = this.frameEvents;
     this.killcam.render(view, events, dt);
+    if (this.renderer.ambient?.strikeNow) this.audio.lightning();
     this.hud.onEvents(events);
     this.hud.update(view, dt);
     this.audio.onEvents(events, view);

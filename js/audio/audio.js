@@ -920,13 +920,23 @@ export class AudioEngine {
     this.comp.threshold.setTargetAtTime(this.micActive ? -24 : -16, now, 0.08);
     this.comp.ratio.setTargetAtTime(this.micActive ? 9 : 6, now, 0.08);
     // Mic mode: the master boost is meant for gunfire and callouts, so music and weather give some of it back.
-    this.music.gain.setTargetAtTime(this.micActive ? 0.34 : 0.7, now, 0.08);
+    this.music.gain.setTargetAtTime((this.micActive ? 0.34 : 0.7) * (this.musicVolume ?? 1), now, 0.08);
     this.thunderBus.gain.setTargetAtTime(this.micActive ? 0.25 : 0.55, now, 0.08);
   }
 
   setVolume(v) {
     this.volume = v;
     this.setMicActive(this.micActive);
+  }
+
+  // A visible bolt: the next thunderclap follows it after the delay of sound crossing the yard.
+  lightning() {
+    this.thunderT = 0.2 + Math.random() * 0.7;
+  }
+
+  setMusicVolume(v) {
+    this.musicVolume = v;
+    if (this.music) this.setMicActive(this.micActive);
   }
 
   // Removes finished voices. Called before any decision that needs the live count.
