@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Render demo</title>
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #dde; font: 12px/1.4 -apple-system, system-ui, sans-serif; overflow: hidden; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #grid { display: none; position: fixed; inset: 0; overflow: auto; padding: 6px; background: #17161d; }
+  #grid .row { display: grid; grid-template-columns: 54px repeat(6, 1fr); gap: 3px; align-items: center; margin-bottom: 3px; }
+  #grid img { width: 100%; display: block; background: #23222b; border-radius: 3px; }
+  #stats { position: fixed; left: 4px; top: 2px; font: 10px monospace; color: #fff9; pointer-events: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="grid"></div>
+<div id="stats"></div>
+<script type="module">
+// Modes: ?scene=match (default), ?scene=grid, ?scene=close, ?scene=ads, ?scene=lowhp,
+// ?scene=fog, ?scene=final, ?scene=explosion. Add &static=1 to stop the clock for screenshots.
+import { GameRenderer, GunPreview } from '../js/render/renderer.js';
+import { MAPS } from '../js/shared/map.js';
+import { CAMOS } from '../js/shared/camos.js';
+import { WEAPON_IDS } from '../js/shared/constants.js';
+
+const params = new URLSearchParams(location.search);
+const scene = params.get('scene') || 'match';
+
+if (scene === 'grid') {
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('stats').style.display = 'none';
+  buildGrid();
+} else {
+  runMatch();
+}
+
+// One GunPreview context, rasterized to images: a dozen live WebGL contexts is not how the game uses it.
+function buildGrid() {
+  const grid = document.getElementById('grid');
+  grid.style.display = 'block';
+  const canvas = document.createElement('canvas');
+  canvas.width = 480; canvas.height = 240;
+  canvas.style.cssText = 'position:fixed;left:-9999px;width:240px;height:120px';
+  document.body.appendChild(canvas);
+  const preview = new GunPreview(canvas);
+  const camoIds = (params.get('camos') || 'none,ash,stalker,rust,comb,cobalt,crimson,glacier,toxin,gold,molten,prism').split(',');
+  for (const camoId of camoIds) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const label = document.createElement('div');
+    label.textContent = camoId;
+    row.appendChild(label);
+    for (const w of WEAPON_IDS) {
+      preview.show(w, camoId);
+      preview.tick(1.3);
+      const img = new Image();
+      img.src = canvas.toDataURL('image/png');
+      row.appendChild(img);
+    }
+    grid.appendChild(row);
+  }
+  window.__ready = true;
+}
+
+function makePlayers() {
+  const W = 72, H = 48;
+  const camos = ['none', 'ash', 'stalker', 'cobalt', 'gold', 'molten', 'prism', 'glacier', 'toxin', 'crimson', 'comb', 'rust'];
+  const weapons = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
+  const players = [];
+  // Cluster around mid-map so a single screenshot shows a firefight.
+  const anchors = [
+    [32, 24], [35, 16], [28, 30], [40, 22], [24, 22], [36, 32],
+    [44, 24], [41, 15], [46, 31], [50, 20], [38, 28], [33, 29],
+  ];
+  for (let i = 0; i < 12; i++) {
+    players.push({
+      id: 'p' + i, name: 'P' + i, team: i < 6 ? 0 : 1, isBot: i > 0, skill: 'regular',
+      x: anchors[i][0], z: anchors[i][1], aim: 0, vx: 0, vz: 0, hp: 100, alive: true, respawnT: 0,
+      weapon: weapons[i % 6], camo: camos[i % camos.length], ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2,
+      adsT: 0, sprinting: false, sliding: false, spawnProtect: false, kills: 0, deaths: 0, streak: 0, streakReady: null, bloom: 0,
+    });
+  }
+  return players;
+}
+
+// All six guns side by side at gameplay zoom, for judging silhouettes and camo readability.
+function lineup(players, me) {
+  me.x = 36; me.z = 31; me.aim = 0;
+  const camos = ['none', 'stalker', 'gold', 'rust', 'molten', 'prism', 'cobalt', 'toxin', 'crimson', 'glacier', 'comb', 'ash'];
+  const weapons = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    p.lineX = i < 6 ? 28 + i * 3.2 : 30.5 + (i - 6) * 2.2;
+    p.lineZ = i < 6 ? 22 : 30;
+    p.weapon = weapons[i % 6];
+    p.camo = camos[i];
+    // Second row demonstrates the animation states at inspection zoom.
+    if (i === 0) { p.lineX = 36; p.lineZ = 33; }
+    p.lineState = i >= 6 ? ['sprint', 'slide', 'reload', 'ads', 'idle', 'hurt'][i - 6] : 'idle';
+  }
+}
+
+function runMatch() {
+  const canvas = document.getElementById('game');
+  const map = MAPS.railyard;
+  const renderer = new GameRenderer(canvas, map, { dynamicRes: false });
+  renderer.setLocal('p0');
+  window.__renderer = renderer;
+  window.__events = [];
+
+  const players = makePlayers();
+  const view = {
+    t: 0, phase: 'live', timeLeft: 300, scores: [12, 10], winner: null, uav: [0, 0], players,
+    localId: 'p0', lastKill: null,
+  };
+  const me = players[0];
+  if (scene === 'ads') { me.adsT = 1; }
+  if (scene === 'lowhp') { me.hp = 22; }
+  if (scene === 'uav') { view.uav[0] = 12; }
+  if (scene === 'dead') { me.alive = false; me.hp = 0; }
+  if (scene === 'close' || scene === 'lineup') renderer.distance *= Number(params.get('zoom') || 0.34);     // Gameplay models at inspection zoom.
+  if (scene === 'lineup') lineup(players, me);
+
+  let last = performance.now();
+  let t = 0;
+  const statsEl = document.getElementById('stats');
+  let nextShot = 0;
+  const events = [];
+
+  function step(dt) {
+    t += dt;
+    view.t = t;
+    events.length = 0;
+
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (scene === 'lineup') {
+        const st = p.lineState;
+        p.x = p.lineX; p.z = p.lineZ; p.aim = -0.4;
+        p.vx = (st === 'sprint' || st === 'slide') ? 6.5 : 0; p.vz = 0;
+        p.reloadT = st === 'reload' ? 1.2 : 0;
+        p.adsT = st === 'ads' ? 1 : 0;
+        p.sprinting = st === 'sprint'; p.sliding = st === 'slide';
+        continue;
+      }
+      // Orbit the anchor slowly; everyone looks at a point east or west of them.
+      const a = t * (0.5 + i * 0.07) + i * 1.3;
+      const r = i === 0 ? 0 : 1.6;
+      const sp = i === 0 ? 0 : 3.8;
+      const ax = [32, 35, 28, 40, 24, 36, 44, 41, 46, 50, 38, 33][i];
+      const az = [24, 16, 30, 22, 22, 32, 24, 15, 31, 20, 28, 29][i];
+      p.x = ax + Math.cos(a) * r;
+      p.z = az + Math.sin(a) * r;
+      p.vx = -Math.sin(a) * sp;
+      p.vz = Math.cos(a) * sp;
+      const targetX = p.team === 0 ? 46 : 28;
+      const targetZ = 24 + Math.sin(t * 0.7 + i) * 6;
+      p.aim = Math.atan2(targetZ - p.z, targetX - p.x);
+      p.reloadT = (i === 4 && (t % 4) < 1.5) ? 1 : 0;
+      p.sprinting = i === 2;
+      p.sliding = i === 5 && (t % 3) < 0.8;
+    }
+    if (scene === 'ads') { me.aim = -0.25; }
+
+    if (t > nextShot && !['fog', 'close', 'lineup'].includes(scene)) {
+      nextShot = t + 0.09;
+      // A couple of players shoot each interval, from random positions in the cluster.
+      for (let s = 0; s < 3; s++) {
+        const i = Math.floor(Math.random() * 12);
+        const p = players[i];
+        const len = 8 + Math.random() * 22;
+        const ang = p.aim + (Math.random() - 0.5) * 0.08;
+        const hit = Math.random() < 0.4 ? 'wall' : 'none';
+        const rays = [];
+        const pellets = p.weapon === 'shotgun' ? 8 : 1;
+        for (let k = 0; k < pellets; k++) {
+          const sp = pellets > 1 ? (Math.random() - 0.5) * 0.3 : 0;
+          rays.push({ x: p.x + Math.cos(ang + sp) * len, z: p.z + Math.sin(ang + sp) * len, hit: k === 0 ? hit : 'none', nx: -Math.cos(ang), nz: -Math.sin(ang) });
+        }
+        events.push({ t: 'shot', by: p.id, weapon: p.weapon, camo: p.camo, ox: p.x, oz: p.z, aim: ang, rays });
+      }
+      if (Math.random() < 0.22) {
+        const tgt = players[Math.floor(Math.random() * 12)];
+        events.push({ t: 'hit', by: 'p0', target: tgt.id, dmg: 20, x: tgt.x, z: tgt.z, killed: false });
+      }
+    }
+    const killEvery = scene === 'final' ? 1e9 : 1.4;
+    if (Math.floor(t / killEvery) !== Math.floor((t - dt) / killEvery) && !['fog', 'lineup', 'close'].includes(scene)) {
+      const tgt = players[1 + Math.floor(Math.random() * 11)];
+      events.push({ t: 'kill', by: 'p0', target: tgt.id, weapon: 'ar', camo: 'gold', x: tgt.x, z: tgt.z, assist: null, dist: 12 });
+      if (scene === 'explosion' || Math.random() < 0.3) events.push({ t: 'explosion', x: tgt.x + 2, z: tgt.z + 1, radius: 4.5, by: 'p0' });
+    }
+    if (window.__finalAt && t > window.__finalAt) {
+      window.__finalAt = 0;
+      renderer.playFinalKill({ by: 'p7', target: 'p0', weapon: 'ar', camo: 'gold', x: players[7].x, z: players[7].z });
+    }
+    if (window.__events.length) { events.push(...window.__events); window.__events.length = 0; }
+  }
+
+  if (scene === 'final') {
+    window.__finalAt = 0.8;
+  }
+
+  // Deterministic stepping for headless screenshots: __run(n) advances n frames at 60 Hz.
+  window.__run = (frames) => {
+    for (let i = 0; i < frames; i++) {
+      step(1 / 60);
+      renderer.update(view, events, 1 / 60);
+    }
+    return renderer.getStats();
+  };
+
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (!window.__paused) {
+      step(dt);
+      renderer.update(view, events, dt);
+      const s = renderer.getStats();
+      statsEl.textContent = `calls ${s.calls}  tris ${s.triangles}  dpr ${s.dpr.toFixed(2)}`;
+    }
+    requestAnimationFrame(tick);
+  }
+  window.__ready = true;
+  if (!params.has('static')) requestAnimationFrame(tick);
+  else window.__paused = true;
+}
+</script>
+</body>
+</html>
