@@ -7,8 +7,11 @@ import { buildWorld } from './world.js';
 import { Weather } from './weather.js';
 import { FogMask, castRay } from './fog.js';
 import { Characters } from './characters.js';
-import { VFX } from './vfx.js';
+import { VFX, GUN_FX } from './vfx.js';
 import { CombatFX, GUNSHIP_Y } from './combat.js';
+import { Surfaces } from './surfaces.js';
+import { Props } from './props.js';
+import { Ambient } from './ambient.js';
 import { getGun } from './guns.js';
 import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
@@ -18,7 +21,6 @@ let WEAPONS = {};
 import('../shared/weapons.js').then(m => { WEAPONS = m.WEAPONS || {}; }).catch(() => {});
 
 const DEFAULT_KICK = { ar: 0.5, smg: 0.36, shotgun: 1.1, lmg: 0.7, sniper: 1.4, pistol: 0.45 };
-const FLASH_SIZE = { ar: 1.5, burst: 1.45, smg: 1.2, pdw: 1.15, shotgun: 2.3, autoshot: 2.1, lmg: 1.75, dmr: 1.8, sniper: 2.3, pistol: 1.3, revolver: 1.9, launcher: 2.4 };
 const TRACER_BASE = 0.13;       // Metres of half-width for a weapon whose tracerWidth is 1.
 
 function kickOf(id) {
@@ -35,20 +37,28 @@ const VFOV = 26;
 const VIEW_WIDTH = 30;        // Metres of ground across the screen at the camera target.
 const ADS_LOOK = 7.5;         // Metres of lookahead toward aim at full ADS.
 const MAX_DPR = 2;
+const MAX_DPR_LOW = 1.25;     // Low Power: a lower ceiling before dynamic resolution even starts.
 const MIN_RES = 0.6;
+const KICK_K = 240;           // Camera recoil spring: stiff with a little give, so heavy guns bounce once.
+const KICK_C = 25;
 
 const OVERLAY_VERT = `varying vec2 vP; void main(){ vP = position.xy; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const OVERLAY_FRAG = /* glsl */`
 uniform float uAlpha;
 uniform float uFlash;
 uniform float uTime;
+uniform float uBars;
 varying vec2 vP;
 void main() {
   float d = length(vP * vec2(0.86, 1.0));
   float vignette = smoothstep(0.55, 1.15, d);
   float pulse = 0.78 + 0.22 * sin(uTime * 7.0);
   float a = vignette * uAlpha * pulse + uFlash * (0.35 + 0.65 * vignette);
-  gl_FragColor = vec4(vec3(0.62, 0.02, 0.04) * a, a * 0.92);
+  // Letterbox for replays; the wide edge blends the dark in so the bars feel like lens, not UI.
+  if (uBars > 0.0 && abs(vP.y) > 1.0 - uBars) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  float edge = uBars > 0.0 ? smoothstep(1.0 - uBars - 0.42, 1.0 - uBars, abs(vP.y)) * 0.42 : 0.0;
+  a = max(a, edge);
+  gl_FragColor = vec4(vec3(0.62, 0.02, 0.04) * (a - edge) , a * 0.92);
 }`;
 
 // Frequently needed colours as arrays, kept stable so the event path allocates nothing.
@@ -73,6 +83,18 @@ function wobble(t, seed) {
   return Math.sin(t * 91.7 + seed) * 0.6 + Math.sin(t * 57.3 + seed * 1.7) * 0.4;
 }
 
+// Matches reuse one canvas. A WebGLRenderer can never fully release itself (its state keeps a few empty textures per
+// instance), so one instance lives with the canvas and each match only frees what it created.
+const WEBGL_BY_CANVAS = new WeakMap();
+function sharedWebGL(canvas) {
+  let w = WEBGL_BY_CANVAS.get(canvas);
+  if (!w) {
+    w = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, stencil: false, depth: true, powerPreference: 'high-performance' });
+    WEBGL_BY_CANVAS.set(canvas, w);
+  }
+  return w;
+}
+
 export class GameRenderer {
   // opts.dynamicRes (default true) can be disabled for repeatable screenshots.
   constructor(canvas, map, opts = {}) {
@@ -81,9 +103,7 @@ export class GameRenderer {
     this.localId = null;
     this.dynamicRes = opts.dynamicRes !== false;
 
-    const webgl = new THREE.WebGLRenderer({
-      canvas, antialias: true, alpha: false, stencil: false, depth: true, powerPreference: 'high-performance',
-    });
+    const webgl = sharedWebGL(canvas);
     this.webgl = webgl;
     webgl.autoClear = true;
     const theme = getTheme(map.theme);
@@ -109,6 +129,14 @@ export class GameRenderer {
     this.chars = new Characters(this.scene, map, this.time);
     this.vfx = new VFX(this.scene);
     this.combat = new CombatFX(this.scene, this.vfx, map, this.time);
+    this.surf = new Surfaces(map);
+    this.vfx.surf = this.surf;
+    this.vfx.setTheme(theme);
+    this.vfx.onBoom = (x, z, r) => this._boom(x, z, r);
+    this.chars.vfx = this.vfx;
+    this.chars.surf = this.surf;
+    this.props = new Props(this.scene, map, theme, this.fog.uniforms, this.vfx);
+    this.ambient = new Ambient(this.scene, map, theme, world, this.fog.uniforms, this.vfx, this.weather, this.surf);
     for (const child of this.scene.children) child.updateMatrixWorld(true);
 
     this.visionWalls = map.walls.filter(w => w.blocksVision);
@@ -117,7 +145,7 @@ export class GameRenderer {
     // Overlay for low HP and damage. A clip-space triangle, so it needs no camera.
     const og = new THREE.BufferGeometry();
     og.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
-    this.overlayU = { uAlpha: { value: 0 }, uFlash: { value: 0 }, uTime: this.time };
+    this.overlayU = { uAlpha: { value: 0 }, uFlash: { value: 0 }, uTime: this.time, uBars: { value: 0 } };
     this.overlay = new THREE.Mesh(og, new THREE.ShaderMaterial({
       vertexShader: OVERLAY_VERT, fragmentShader: OVERLAY_FRAG, uniforms: this.overlayU,
       transparent: true, depthTest: false, depthWrite: false,
@@ -133,16 +161,28 @@ export class GameRenderer {
     this.lookX = 0; this.lookZ = 0;
     this.trauma = 0;
     this.kickX = 0; this.kickZ = 0;
+    this.kickVX = 0; this.kickVZ = 0;
+    this.roll = 0; this.rollV = 0;
     this.zoomPunch = 0;
+    this.camEase = 0;             // Sprint pulls the camera back a touch, ADS pushes it in.
     this.distance = 30;
 
     // Cosmetic effects timers.
-    this.killEase = 0;
+    this.hitStop = 0;             // Seconds of near-freeze left. Visual only: the sim never hears about it.
+    this.hitEase = 0;
     this.timeScale = 1;
+    this.cine = null;             // Killcam shot description, or null during normal play.
+    this.bars = 0;
+    this.lowPower = false;
+    this.fogFrame = 0;
+    this.autoLowWindows = 0;
+    this.raisedAt = -999;         // Clock of the last resolution raise, to detect one that did not hold.
+    this.raiseWait = 3;           // Good windows required before raising again; backs off after a failed raise.
+    this._killInfo = { dirX: 0, dirZ: 0, weapon: 'ar', head: false, explosive: false };
     this.desat = 0;
     this.hurt = 0;
     this.finalKill = null;
-    this.frameStats = { calls: 0, triangles: 0, dpr: 0, geometries: 0, programs: 0 };
+    this.frameStats = { calls: 0, triangles: 0, dpr: 0, geometries: 0, programs: 0, lowPower: false };
 
     this._laserRGB = [0, 0, 0];
     this._charOpts = { localId: null, localTeam: 0, uav: false, revealAll: false };   // Reused every frame.
@@ -179,24 +219,45 @@ export class GameRenderer {
     this.webgl.setSize(this.cssW, this.cssH, false);
   }
 
+  // Low Power: fewer pixels and thinner effects, for phones that cannot hold 60 even at minimum resolution.
+  setLowPower(on) {
+    on = !!on;
+    if (on === this.lowPower) return;
+    this.lowPower = on;
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, on ? MAX_DPR_LOW : MAX_DPR);
+    this.vfx.fxScale = on ? 0.5 : 1;
+    this.weather.setDensity(on ? 0.45 : 1);
+    this.ambient.setLowPower(on);
+    this._applyRes();
+  }
+
   // Lowers the internal resolution when frames run long, restores it slowly when there is headroom.
+  // Changing the drawing buffer is itself a hitch, so a raise that does not hold makes the next one wait longer.
   _adjustResolution(dt) {
     if (!this.dynamicRes) return;
+    // A tab switch or GC pause says nothing about sustained GPU load.
+    if (dt > 0.12) return;
     this.frameAcc += dt;
     this.frameCount++;
     if (this.frameAcc < 0.6) return;
     const avg = this.frameAcc / this.frameCount;
-    this._laserRGB = [0, 0, 0];
-    this._charOpts = { localId: null, localTeam: 0, uav: false, revealAll: false };   // Reused every frame.
     this.frameAcc = 0;
     this.frameCount = 0;
-    if (avg > 1 / 50 && this.resScale > MIN_RES) {
-      this.resScale = Math.max(MIN_RES, this.resScale * 0.88);
+    if (avg > 1 / 50) {
       this.upStreak = 0;
-      this._applyRes();
-    } else if (avg < 1 / 58 && this.resScale < 1) {
-      if (++this.upStreak >= 5) {
+      if (this.resScale > MIN_RES) {
+        if (this.time.value - this.raisedAt < 6) this.raiseWait = Math.min(40, this.raiseWait * 2);
+        this.resScale = Math.max(MIN_RES, this.resScale * 0.9);
+        this._applyRes();
+      } else if (avg > 1 / 45 && ++this.autoLowWindows >= 4) {
+        this.autoLowWindows = 0;
+        this.setLowPower(true);
+      }
+    } else if (avg < 1 / 58) {
+      this.autoLowWindows = 0;
+      if (this.resScale < 1 && ++this.upStreak >= this.raiseWait) {
         this.upStreak = 0;
+        this.raisedAt = this.time.value;
         this.resScale = Math.min(1, this.resScale * 1.05);
         this._applyRes();
       }
@@ -216,32 +277,39 @@ export class GameRenderer {
           if (r && (r.visible || r.team === localTeam)) {
             vfx.bodyHit(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
-            chars.onHit(ev.target);
+            this._pushDir(ev.by, r.x, r.z);
+            chars.onHit(ev.target, this._dx, this._dz, Math.min(1, (ev.dmg || 25) / 40));
           }
           if (ev.target === localId) { this.trauma = Math.min(1, this.trauma + 0.4); this.hurt = 1; }
           break;
         }
         case 'kill': {
           const r = chars.rigs.get(ev.target);
-          const seen = r && (r.visible || r.team === localTeam);
+          // A view can report the death in the very frame the event lands, so "drawn a moment ago" counts as seen.
+          const seen = r && (r.visible || r.team === localTeam || Math.abs(this.time.value - r.posed) < 0.2);
           if (seen) {
+            const K = this._killInfo;
+            this._pushDir(ev.by, r.x, r.z);
+            K.dirX = this._dx; K.dirZ = this._dz; K.weapon = ev.weapon; K.head = !!ev.head;
+            K.explosive = ev.weapon === 'launcher' || !!ev.streak || (!!ev.equip && ev.equip !== 'flash');
+            chars.onKill(ev.target, K);
             vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
+            if (ev.head) vfx.headBurst(ev.x, ev.z);
             vfx.killEffect(ev.by, ev.x, ev.z);
           }
-          if (ev.by === localId && ev.target !== localId) {
-            this.killEase = 0.26;
-            this.zoomPunch = 0.05;
+          if (ev.by === localId && ev.target !== localId && !this.cine) {
+            // The kill freezes the picture for a few frames; bigger guns and headshots hold it longer.
+            const big = ev.weapon === 'sniper' || ev.weapon === 'revolver' || ev.weapon === 'launcher' || ev.weapon === 'dmr';
+            this.hitStop = 0.05 + (ev.head ? 0.03 : 0) + (big ? 0.04 : 0);
+            this.hitEase = 0.17;
+            this.zoomPunch = Math.max(this.zoomPunch, 0.05 + (ev.head ? 0.02 : 0));
             this.trauma = Math.min(1, this.trauma + 0.25);
           }
           break;
         }
         case 'explosion': {
-          vfx.explosion(ev.x, ev.z, ev.radius || 4);
-          const me = chars.rigs.get(localId);
-          if (me) {
-            const d = Math.hypot(me.x - ev.x, me.z - ev.z);
-            this.trauma = Math.min(1, this.trauma + Math.max(0, 1 - d / 18) * 0.85);
-          }
+          // A launcher's blast waits for its rocket to get there.
+          if (!vfx.rocketInbound(ev.x, ev.z, ev.radius || 4)) this._boom(ev.x, ev.z, ev.radius || 4);
           break;
         }
         case 'spawn': {
@@ -256,9 +324,11 @@ export class GameRenderer {
           break;
         }
         case 'swap': chars.onSwap(ev.id); break;
+        case 'throw': chars.onThrow(ev.id, ev.kind); break;
         case 'bang': {
           if (ev.kind === 'flash') vfx.flashBurst(ev.x, ev.z, ev.r || 7);
-          else if (ev.kind !== 'smoke') vfx.fragBurst(ev.x, ev.z, ev.r || 4.5);
+          else if (ev.kind !== 'smoke') { vfx.fragBurst(ev.x, ev.z, ev.r || 4.5); if (!this.cine) this.props.blast(ev.x, ev.z, (ev.r || 4.5) * 0.8); }
+          this.ambient.startle(ev.x, ev.z, 16);
           const me = chars.rigs.get(localId);
           if (me) {
             const d = Math.hypot(me.x - ev.x, me.z - ev.z);
@@ -278,6 +348,7 @@ export class GameRenderer {
         }
         case 'turret': vfx.turretDrop(ev.x, ev.z, TEAM_RGB[ev.team] || TEAM_RGB[0]); break;
         case 'turret_down': vfx.fragBurst(ev.x, ev.z, 2.2); break;
+        case 'phase': if (ev.phase === 'ended') this.hitStop = 0; break;
         case 'turret_shot': {
           vfx.tracer(ev.ox, 1.0, ev.oz, ev.x, 1.05, ev.z, TURRET_TRACER, 0.1);
           vfx.sparks(ev.x, 0.6, ev.z, 0, 0, FIRE_SPARK, 2, 6);
@@ -294,6 +365,27 @@ export class GameRenderer {
     }
   }
 
+  // Unit direction from a shooter's rig to a point, in _dx/_dz; falls back to no push if the shooter is unknown.
+  _pushDir(byId, x, z) {
+    const r = this.chars.rigs.get(byId);
+    let dx = r ? x - r.x : 0, dz = r ? z - r.z : 0;
+    const l = Math.hypot(dx, dz);
+    if (l > 0.01) { dx /= l; dz /= l; } else { dx = 0; dz = 0; }
+    this._dx = dx; this._dz = dz;
+  }
+
+  _boom(x, z, radius) {
+    this.vfx.explosion(x, z, radius);
+    if (!this.cine) this.props.blast(x, z, radius);
+    this.ambient.startle(x, z, 24);
+    const me = this.chars.rigs.get(this.localId);
+    if (me && !this.cine) {
+      const d = Math.hypot(me.x - x, me.z - z);
+      this.trauma = Math.min(1, this.trauma + Math.max(0, 1 - d / 18) * 0.85);
+      if (d < 12) this.zoomPunch = Math.max(this.zoomPunch, 0.04);
+    }
+  }
+
   _onShot(ev, localId, localTeam) {
     const { vfx, chars } = this;
     const r = chars.rigs.get(ev.by);
@@ -301,6 +393,7 @@ export class GameRenderer {
     let rgb = vfx.tracerRGB(ev.by, tracerColor(ev.camo, team));
     const visible = !r || r.visible || team === localTeam;
     const kick = kickOf(ev.weapon);
+    const G = GUN_FX[ev.weapon] || GUN_FX.ar;
     // A hot barrel throws hotter tracers: the colour pushes to white-gold and the streak fattens.
     const heat = r && r.heat > 0.05 ? r.heat : 0;
 
@@ -308,7 +401,12 @@ export class GameRenderer {
     if (r) { mx = r.muzzle[0]; my = r.muzzle[1]; mz = r.muzzle[2]; }
     else { mx = ev.ox; my = 1.2; mz = ev.oz; }
 
-    const width = tracerWidthOf(ev.weapon) * (1 + heat * 0.75);
+    let width = tracerWidthOf(ev.weapon) * (1 + heat * 0.75);
+    if (G.every && r) {
+      // Belt-fed: every few rounds is a fat tracer among thinner ball.
+      r.tracerClock = (r.tracerClock || 0) + 1;
+      if (r.tracerClock % G.every === 0) width *= 1.6; else width *= 0.7;
+    }
     if (heat > 0) {
       const hot = this._hotRGB, k = heat * heat;
       hot[0] = rgb[0] + (1 - rgb[0]) * k;
@@ -316,36 +414,64 @@ export class GameRenderer {
       hot[2] = rgb[2] + (0.42 - rgb[2]) * k;
       rgb = hot;
     }
+    const fx = this.camTarget.x, fz = this.camTarget.z;
     const rays = ev.rays;
     if (rays) {
+      const fine = rays.length > 3;
       for (let i = 0; i < rays.length; i++) {
         const ray = rays[i];
-        vfx.tracer(mx, my, mz, ray.x, 1.05, ray.z, rgb, width);
-        if (ray.hit === 'wall') vfx.wallHit(ray.x, ray.z, ray.nx || 0, ray.nz || 0);
+        if (ev.weapon === 'launcher') vfx.rocket(mx, my, mz, ray.x, 1.05, ray.z);
+        else {
+          vfx.tracer(mx, my, mz, ray.x, 1.05, ray.z, rgb, width, G.tail, G.linger, G.speed);
+          if (G.contrail) vfx.contrail(mx, my, mz, ray.x, 1.05, ray.z);
+          if (!this.cine) this.props.hitRay(ev.ox, ev.oz, ray.x, ray.z);
+          if (Math.abs(ray.x - fx) < 26 && Math.abs(ray.z - fz) < 18) {
+            if (ray.hit === 'wall') vfx.wallHit(ray.x, ray.z, ray.nx || 0, ray.nz || 0, fine);
+            else if (ray.hit === 'none' && !fine) vfx.groundHit(ray.x, ray.z);
+          }
+        }
       }
     }
+    this.ambient.startle(ev.ox, ev.oz, 7);
 
     if (visible) {
-      vfx.muzzleFlash(mx, my, mz, ev.aim, rgb, (FLASH_SIZE[ev.weapon] ?? 1) * (ev.sup ? 0.35 : 1));
-      vfx.muzzleSmoke(mx, my, mz);
+      vfx.shotFx(ev.weapon, mx, my, mz, ev.aim, rgb, !!ev.sup, r);
       vfx.pop(mx, 1.4, mz, 5 + kick * 2.2, rgb, 0.09);
-      if (r) vfx.shell(r.eject[0], r.eject[1], r.eject[2], r.ejectDir[0], r.ejectDir[1]);
     }
 
     chars.onShot(ev.by, kick);
 
     if (ev.by === localId) {
-      this.kickX -= Math.cos(ev.aim) * 0.24 * kick;
-      this.kickZ -= Math.sin(ev.aim) * 0.24 * kick;
-      this.trauma = Math.min(1, this.trauma + 0.11 * kick);
-      this.zoomPunch = Math.max(this.zoomPunch, 0.012 * kick);
+      const k = 5.2 * kick;
+      this.kickVX -= Math.cos(ev.aim) * k;
+      this.kickVZ -= Math.sin(ev.aim) * k;
+      this.rollV += (ev.aim > 0 ? 1 : -1) * kick * 0.08 * (0.6 + Math.random());
+      this.trauma = Math.min(1, this.trauma + 0.1 * kick);
+      this.zoomPunch = Math.max(this.zoomPunch, 0.014 * kick);
     }
   }
 
   _updateCamera(dt, local) {
     const map = this.map;
-    let tx = this.camTarget.x, tz = this.camTarget.z;
+    const cam = this.camera;
+    const t = this.time.value;
+    this.trauma = Math.max(0, this.trauma - dt * 2.4);
+    const shake = this.trauma * this.trauma;
 
+    // Replays hand the camera to the killcam's description of the shot.
+    if (this.cine) {
+      const c = this.cine;
+      if (cam.fov !== c.fov || cam.near !== 0.5) { cam.fov = c.fov; cam.near = 0.5; cam.far = 170; cam.updateProjectionMatrix(); }
+      const sx = wobble(t, 1.3) * shake * 0.4, sy = wobble(t, 2.9) * shake * 0.3, sz = wobble(t, 4.1) * shake * 0.4;
+      cam.position.set(c.px + sx, c.py + sy, c.pz + sz);
+      cam.lookAt(c.tx, c.ty, c.tz);
+      if (c.roll) cam.rotateZ(c.roll);
+      cam.updateMatrixWorld();
+      return;
+    }
+    if (cam.fov !== VFOV || cam.near !== 3) { cam.fov = VFOV; cam.near = 3; cam.far = 140; cam.updateProjectionMatrix(); }
+
+    let tx = this.camTarget.x, tz = this.camTarget.z;
     if (this.finalKill) {
       const f = this.finalKill;
       f.t += dt;
@@ -369,22 +495,28 @@ export class GameRenderer {
     tx = Math.max(10, Math.min(map.width - 10, tx));
     tz = Math.max(2, Math.min(map.height - 2, tz));
     this.camTarget.x = tx; this.camTarget.z = tz;
+    this.chars.focusX = tx; this.chars.focusZ = tz;
 
-    this.trauma = Math.max(0, this.trauma - dt * 2.4);
-    const shake = this.trauma * this.trauma;
-    const t = this.time.value;
     const sx = wobble(t, 1.3) * shake * 0.55;
     const sz = wobble(t, 4.1) * shake * 0.55;
 
-    this.kickX *= Math.exp(-dt * 14);
-    this.kickZ *= Math.exp(-dt * 14);
+    // Recoil on a spring, so a heavy gun overshoots once and settles instead of decaying flat.
+    this.kickVX += (-KICK_K * this.kickX - KICK_C * this.kickVX) * dt;
+    this.kickVZ += (-KICK_K * this.kickZ - KICK_C * this.kickVZ) * dt;
+    this.kickX += this.kickVX * dt;
+    this.kickZ += this.kickVZ * dt;
+    this.rollV += (-160 * this.roll - 18 * this.rollV) * dt;
+    this.roll += this.rollV * dt;
     if (!this.finalKill) this.zoomPunch *= Math.exp(-dt * 9);
 
-    const dist = this.distance * (1 - this.zoomPunch);
+    const easeGoal = local ? (local.sprinting ? 0.035 : 0) - (local.adsT || 0) * 0.025 : 0;
+    this.camEase += (easeGoal - this.camEase) * Math.min(1, dt * 5);
+    const dist = this.distance * (1 - this.zoomPunch + this.camEase);
     const cx = tx + sx + this.kickX, cz = tz + sz + this.kickZ;
-    this.camera.position.set(cx, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
-    this.camera.lookAt(cx, 0, cz);
-    this.camera.updateMatrixWorld();
+    cam.position.set(cx, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
+    cam.lookAt(cx, 0, cz);
+    if (this.roll) cam.rotateZ(this.roll);
+    cam.updateMatrixWorld();
   }
 
   // Barrel glow at the muzzle, and steam for as long as a gun is locked up.
@@ -427,31 +559,39 @@ export class GameRenderer {
     webgl.info.reset();
     const realDt = Math.min(dt, 0.05);
     this.time.value = (this.time.value + realDt) % 3600;
+    const cine = this.cine;
 
-    // Local-kill time emphasis: never touches gameplay state, only how effects and animation advance.
+    // Hit-stop and final-kill slowdown: never touches gameplay state, only how effects and animation advance.
     let scale = 1;
-    if (this.killEase > 0) { this.killEase -= realDt; scale = this.killEase > 0.12 ? 0.32 : 0.32 + 0.68 * (1 - this.killEase / 0.12); }
+    if (this.hitStop > 0) { this.hitStop -= realDt; scale = 0.04; }
+    else if (this.hitEase > 0) { this.hitEase -= realDt; scale = 0.04 + 0.96 * (1 - Math.max(0, this.hitEase) / 0.17); }
     if (this.finalKill) {
       const k = Math.min(1, this.finalKill.t / 1.1);
       scale = Math.min(scale, 1 - 0.76 * k);
     }
+    if (cine) scale = cine.rate;
     this.timeScale = scale;
     const fxDt = realDt * scale;
 
-    const localId = this.localId !== null ? this.localId : view.localId;
+    // During a replay the view belongs to the past, so nothing in it is treated as "you".
+    const localId = cine ? null : (this.localId !== null ? this.localId : view.localId);
     let local = null;
-    for (let i = 0; i < view.players.length; i++) if (view.players[i].id === localId) { local = view.players[i]; break; }
+    if (localId !== null) for (let i = 0; i < view.players.length; i++) if (view.players[i].id === localId) { local = view.players[i]; break; }
     const localTeam = local ? local.team : 0;
     const uav = !!(view.uav && view.uav[localTeam] > 0);
 
     const opts = this._charOpts;
-    opts.localId = localId; opts.localTeam = localTeam; opts.uav = uav; opts.revealAll = !!this.finalKill;
+    opts.localId = localId; opts.localTeam = localTeam; opts.uav = uav; opts.revealAll = !!this.finalKill || !!cine;
     this.chars.update(view, fxDt, opts);
     this._handleEvents(events, localId, localTeam);
     this.vfx.step(fxDt);
+    this.combat.smokeAlpha = cine ? 0.16 : 1;
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
     this._heatFx(view, fxDt, localTeam);
-    if (!this.finalKill) this._drawLaser(local);
+    if (!this.finalKill && !cine) this._drawLaser(local);
+    this.ambient.update(fxDt, this.camTarget.x, this.camTarget.z);
+    if (this.ambient.strikeNow && !cine) this.trauma = Math.min(1, this.trauma + 0.3);
+    this.props.update(fxDt, view.players, this.camTarget.x, this.camTarget.z, !cine);
     this.vfx.flushTracers();
     this.vfx.applyPops(this.world.material);
 
@@ -462,19 +602,26 @@ export class GameRenderer {
     this.hurt = Math.max(0, this.hurt - realDt * 3.4);
     this.overlayU.uAlpha.value = low * 0.72;
     this.overlayU.uFlash.value = this.hurt * 0.3;
-    this.overlay.visible = low > 0.001 || this.hurt > 0.001;
-    this.desat += ((!alive && !this.finalKill ? 0.8 : 0) - this.desat) * Math.min(1, realDt * 6);
+    this.bars += ((cine ? cine.bars : 0) - this.bars) * Math.min(1, realDt * 9);
+    if (this.bars < 0.001) this.bars = 0;
+    this.overlayU.uBars.value = this.bars;
+    this.overlay.visible = low > 0.001 || this.hurt > 0.001 || this.bars > 0;
+    const desatGoal = cine ? cine.desat : (!alive && !this.finalKill ? 0.8 : 0);
+    this.desat += (desatGoal - this.desat) * Math.min(1, realDt * 6);
     this.world.material.uniforms.uDesat.value = this.desat;
 
-    const fogOn = this.finalKill ? 0 : 1;
+    const fogOn = this.finalKill || cine ? 0 : 1;
     this.fog.uniforms.on.value += (fogOn - this.fog.uniforms.on.value) * Math.min(1, realDt * 6);
 
-    if (local) this.fog.update(local.x, local.z, realDt, view.smokes);
-    else this.fog.uniforms.on.value = 0;
+    if (local) {
+      // Low Power refreshes the vision mask every other frame; the temporal blend hides the difference.
+      this.fogFrame = (this.fogFrame + 1) & 1;
+      if (!this.lowPower || this.fogFrame === 0) this.fog.update(local.x, local.z, this.lowPower ? realDt * 2 : realDt, view.smokes);
+    } else if (!cine) this.fog.uniforms.on.value = 0;
 
     this._updateCamera(realDt, local);
-    this.world.update(realDt);
-    this.weather.update(realDt, this.camTarget.x, this.camTarget.z, this.world.material);
+    this.world.update(fxDt);
+    this.weather.update(fxDt, this.camTarget.x, this.camTarget.z, this.world.material);
     webgl.render(this.scene, this.camera);
 
     this._adjustResolution(dt);
@@ -483,7 +630,26 @@ export class GameRenderer {
     this.frameStats.dpr = this.basePixelRatio * this.resScale;
     this.frameStats.geometries = webgl.info.memory.geometries;
     this.frameStats.programs = webgl.info.programs ? webgl.info.programs.length : 0;
+    this.frameStats.lowPower = this.lowPower;
   }
+
+  // Killcam entry point. `shot` describes the camera and timing, or null to return to live play.
+  // A cut in either direction drops whatever effects were in the air from the other timeline.
+  setCinematic(shot) {
+    const was = this.cine;
+    this.cine = shot;
+    if (!!was !== !!shot) {
+      this.vfx.clear();
+      this.chars.resetTransient();
+      this.combat.reset();
+      if (!shot) this.fog.reset();
+      this.trauma = 0; this.kickX = 0; this.kickZ = 0; this.kickVX = 0; this.kickVZ = 0;
+      this.roll = 0; this.rollV = 0; this.zoomPunch = 0; this.hitStop = 0; this.hitEase = 0;
+    }
+  }
+
+  // Lets a replay add a jolt on the kill.
+  addShake(a) { this.trauma = Math.min(1, this.trauma + a); }
 
   // Render budget readout for the demo and profiling.
   getStats() { return this.frameStats; }
@@ -504,6 +670,8 @@ export class GameRenderer {
     this.chars.dispose();
     this.vfx.dispose();
     this.combat.dispose();
+    this.props.dispose();
+    this.ambient.dispose();
     this.fog.dispose();
     this.world.group.traverse(o => {
       if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); }
@@ -512,7 +680,7 @@ export class GameRenderer {
     this.overlay.material.dispose();
     this.weather.dispose();
     setThemeLighting('railyard');       // Menus and gun previews compiled afterwards use the default rig.
-    this.webgl.dispose();
+    this.webgl.renderLists.dispose();   // Lets go of this match's objects; the renderer itself stays for the next.
   }
 }
 

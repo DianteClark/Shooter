@@ -26,6 +26,9 @@ const damp = (k, dt) => 1 - Math.exp(-k * dt);
 function slotOf(slots, id) { for (let i = 0; i < slots.length; i++) if (slots[i].id === id) return slots[i]; return null; }
 const NADE_RGB = { frag: hexRGB(0xff6a1a), sticky: hexRGB(0xff2bd6), smoke: hexRGB(0x7dff96), flash: hexRGB(0xfff27a), stim: hexRGB(0x4bd18a) };
 const FALLBACK = NADE_RGB.frag;
+const BLAST_R = { frag: 4.5, sticky: 3.6, flash: 7, smoke: 3.5 };
+const WHITE_RGB = [1, 1, 1];
+const _arc = [0, 0, 0];
 
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1);
 const _e = new THREE.Euler(0, 0, 0, 'YZX');
@@ -181,6 +184,7 @@ export class CombatFX {
     this.visionWalls = map.walls.filter(w => w.blocksVision);
     this.teamRGB = TEAMS.map(t => hexRGB(t.color));
     this.trailClock = 0;
+    this.smokeAlpha = 1;             // A replay camera sits low and close, where a cloud would block the whole shot.
 
     this.solidMat = new THREE.ShaderMaterial({
       vertexShader: SOLID_VERT,
@@ -364,6 +368,65 @@ export class CombatFX {
     this.#updateSmoke(view, dt);
     this.#updateTurrets(view, dt, localX, localZ, localTeam, uav, hasLocal);
     this.#updateGunships(view, dt);
+    this.#updateThrowArc(view);
+  }
+
+  // A cut to or from a replay: forget anything that would otherwise pop or play a pickup burst.
+  reset() {
+    for (let i = 0; i < this.tagSlots.length; i++) this.tagSlots[i].id = null;
+    for (let i = 0; i < this.smokeSlots.length; i++) { this.smokeSlots[i].id = null; this.smokeSlots[i].a = 0; }
+    for (let i = 0; i < this.turretSlots.length; i++) this.turretSlots[i].id = null;
+    for (let i = 0; i < this.shipSlots.length; i++) this.shipSlots[i].active = false;
+  }
+
+  // The throw-aim preview from view.throwPreview: { points:[{x,y,z}], bounces:[{x,z}], landing:{x,z,kind} }.
+  // Beads flowing along the arc show direction; every piece rides existing batches, so it costs no draw call.
+  #updateThrowArc(view) {
+    const tp = view.throwPreview;
+    if (!tp || !tp.points || tp.points.length < 2) return;
+    const vfx = this.vfx, pts = tp.points, n = pts.length, t = this.time.value;
+    const kind = (tp.landing && tp.landing.kind) || 'frag';
+    const rgb = NADE_RGB[kind] ?? FALLBACK;
+    const SPACING = 0.42;
+    let carry = -(t * 2.2 % 1) * SPACING;     // Negative offset walks the beads forward along the path.
+    let drawn = 0;
+    for (let i = 1; i < n && drawn < 72; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const dx = b.x - a.x, dy = (b.y ?? 0) - (a.y ?? 0), dz = b.z - a.z;
+      const len = Math.hypot(dx, dy, dz);
+      if (len < 1e-4) continue;
+      let along = -carry;
+      if (along < 0) along = 0;
+      while (along <= len && drawn < 72) {
+        const k = along / len;
+        const y = Math.max(0.24, (a.y ?? 0) + dy * k + 0.08);
+        const size = 0.12 + (drawn % 2 ? 0.0 : 0.05);
+        vfx.addDot(a.x + dx * k, y, a.z + dz * k, size, rgb);
+        drawn++;
+        along += SPACING;
+      }
+      carry = along - len - SPACING;
+      if (carry < -SPACING) carry = -SPACING;
+    }
+    const bounces = tp.bounces;
+    if (bounces) {
+      for (let i = 0; i < bounces.length; i++) {
+        const b = bounces[i];
+        vfx.addRing(b.x, b.z, 0.2, 0.42, rgb, 0.85);
+        vfx.addDot(b.x, 0.3, b.z, 0.26, WHITE_RGB);
+      }
+    }
+    const end = tp.landing || pts[n - 1];
+    const radius = BLAST_R[kind] ?? 3;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 7);
+    vfx.addRing(end.x, end.z, radius - 0.14, radius, rgb, 0.65 + pulse * 0.3);
+    vfx.addRing(end.x, end.z, 0.35 + pulse * 0.1, 0.6 + pulse * 0.14, rgb, 1);
+    vfx.addDot(end.x, 0.34, end.z, 0.36 + pulse * 0.14, rgb);
+    // Tick marks at the compass points turn the ring into a clear danger zone on a phone screen.
+    for (let i = 0; i < 4; i++) {
+      const a = t * 0.8 + i * Math.PI / 2;
+      vfx.addDot(end.x + Math.cos(a) * radius, 0.26, end.z + Math.sin(a) * radius, 0.15, rgb);
+    }
   }
 
   #clear(x0, z0, x1, z1, smokes) {
@@ -514,7 +577,7 @@ export class CombatFX {
 
   #updateSmoke(view, dt) {
     const list = view.smokes, slots = this.smokeSlots;
-    for (const s of slots) s.live = false;
+    for (let i = 0; i < slots.length; i++) slots[i].live = false;
     if (list) {
       for (let i = 0; i < list.length; i++) {
         const g = list[i];
@@ -548,7 +611,7 @@ export class CombatFX {
         _q.setFromEuler(_e);
         _s.set(sc, sc * 0.82, sc);
         _m.compose(_p, _q, _s).toArray(mesh.instanceMatrix.array, n * 16);
-        alpha.setX(n, s.a);
+        alpha.setX(n, s.a * this.smokeAlpha);
         n++;
       }
     }
@@ -562,7 +625,7 @@ export class CombatFX {
     const base = this.turretBase, head = this.turretHead;
     let n = 0;
     if (list) {
-      for (const s of slots) s.touched = false;
+      for (let i = 0; i < slots.length; i++) slots[i].touched = false;
       for (let i = 0; i < list.length && n < MAX_TURRETS; i++) {
         const t = list[i];
         let slot = slotOf(slots, t.id);
@@ -594,7 +657,7 @@ export class CombatFX {
         head.geometry.attributes.aTeam.setXYZ(n, rgb[0], rgb[1], rgb[2]);
         n++;
       }
-      for (const s of slots) if (!s.touched) s.id = null;
+      for (let i = 0; i < slots.length; i++) if (!slots[i].touched) slots[i].id = null;
       base.geometry.attributes.aTeam.needsUpdate = true;
       head.geometry.attributes.aTeam.needsUpdate = true;
     }
@@ -649,7 +712,9 @@ export class CombatFX {
   }
 
   dispose() {
-    for (const m of [this.nades, this.turretBase, this.turretHead, this.gunship, this.smokeMesh, this.tagMesh, this.flagStand, this.flagCloth, this.zones, this.zoneWalls]) m.geometry.dispose();
+    const meshes = [this.nades, this.turretBase, this.turretHead, this.gunship, this.shadow, this.smokeMesh, this.tagMesh, this.flagStand, this.flagCloth, this.zones, this.zoneWalls];
+    // Each InstancedMesh holds its own instance-matrix buffer; dispose() is what releases it.
+    for (const m of meshes) { this.scene.remove(m); m.geometry.dispose(); m.dispose(); }
     for (const m of [this.solidMat, this.shadowMat, this.smokeMat, this.flagMat, this.zoneMat, this.wallMat]) m.dispose();
   }
 }

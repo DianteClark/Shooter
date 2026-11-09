@@ -10,13 +10,28 @@ import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
 import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR } from '../ui/operators.js';
+import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
+import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
+
+// weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
+let WEAPONS = {};
+import('../shared/weapons.js').then(m => { WEAPONS = m.WEAPONS || {}; }).catch(() => {});
 
 const MAX_PLAYERS = 16;
+const TAU = Math.PI * 2;
 
 const CHAR_SCALE = 1.22;
 const GUN_SCALE = 0.98;
 const GUN_SCALES = { ar: 1, smg: 1, shotgun: 1, lmg: 1, sniper: 0.86, pistol: 1.05 };
 const HIP = 0.78 * CHAR_SCALE;
+
+// How each gun sits in the hands, relative to the default hip carry: a planted LMG rides low, a tube sits on the shoulder.
+const HOLD = {
+  lmg: [-0.04, -0.13, 0.05], sniper: [-0.02, 0.05, 0], shotgun: [-0.02, -0.03, 0.02], autoshot: [-0.03, -0.05, 0.03],
+  pistol: [0.14, 0.06, -0.08], revolver: [0.14, 0.07, -0.08], launcher: [-0.3, 0.3, 0.1],
+};
+const HOLD_NONE = [0, 0, 0];
+const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke: [0.35, 0.6, 0.42], flash: [0.85, 0.8, 0.45], stim: [0.3, 0.7, 0.5] };
 
 // Operators are told apart by vertex data merged into one mesh per body part: every vertex carries the
 // variant it belongs to (aVar) and each instance says which variant to show (aOp). Vertices of other variants
@@ -255,18 +270,37 @@ function limbAttrs(g) {
   return g;
 }
 
+// One bare segment for upper arms and thighs alike; the rig sets its thickness per instance.
+function upperLimbGeometry() {
+  const b = new MeshBuilder();
+  b.setPart(2).prismX(0, 1, 0, 0, 0.1, 0.086, 6);
+  return limbAttrs(b.build());
+}
+
 function armGeometry() {
   const b = new MeshBuilder();
-  b.setPart(2).prismX(0, 0.8, 0, 0, 0.088, 0.078, 6);
+  b.setPart(2).prismX(0, 0.8, 0, 0, 0.086, 0.076, 6);
   b.setPart(0).setColor(0x202226).prismX(0.8, 1.0, 0, 0, 0.1, 0.1, 6);       // Glove.
   return limbAttrs(b.build());
 }
 
 function legGeometry() {
   const b = new MeshBuilder();
-  b.setPart(2).prismX(0, 0.7, 0, 0, 0.11, 0.095, 6);
-  b.setPart(0).setColor(0x1a1c20);
-  b.box(0.86, 0, 0.06, 0.28, 0.18, 0.2, 0.03);                               // Boot.
+  b.setPart(2).prismX(0, 1, 0, 0, 0.1, 0.086, 6);
+  return limbAttrs(b.build());
+}
+
+// Origin at the ankle, toe along +X.
+function bootGeometry() {
+  const b = new MeshBuilder();
+  b.setPart(0).setColor(0x1a1c20).box(0.09, -0.04, 0, 0.36, 0.18, 0.21, 0.03);
+  return limbAttrs(b.build());
+}
+
+// Unit box in the instance's tint, scaled to whatever the off hand is holding: magazine, drum, shell, rocket, grenade.
+function heldBoxGeometry() {
+  const b = new MeshBuilder();
+  b.setPart(2).box(0, 0, 0, 1, 1, 1, 0.08);
   return limbAttrs(b.build());
 }
 
@@ -313,16 +347,19 @@ const _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _p = new THR
 const _e = new THREE.Euler(0, 0, 0, 'YZX');
 const _gunE = new THREE.Euler(0, 0, 0, 'YZX');
 const _qGun = new THREE.Quaternion();
+const _joint = new Float32Array(3);
+const _tr = new Float32Array(12);
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 function setStretch(m, ax, ay, az, bx, by, bz, gy, gz) {
   let dx = bx - ax, dy = by - ay, dz = bz - az;
-  const len = Math.hypot(dx, dy, dz) || 1e-5;
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz) + 1e-6;
   dx /= len; dy /= len; dz /= len;
   // Z = X cross world-up; near-vertical limbs fall back to X as the reference.
   let rx = 0, ry = 1, rz = 0;
   if (Math.abs(dy) > 0.95) { rx = 1; ry = 0; }
   let zx = dy * rz - dz * ry, zy = dz * rx - dx * rz, zz = dx * ry - dy * rx;
-  const zl = Math.hypot(zx, zy, zz) || 1;
+  const zl = Math.sqrt(zx * zx + zy * zy + zz * zz) + 1e-6;
   zx /= zl; zy /= zl; zz /= zl;
   const yx = zy * dz - zz * dy, yy = zz * dx - zx * dz, yz = zx * dy - zy * dx;
   const e = m.elements;
@@ -334,12 +371,22 @@ function setStretch(m, ax, ay, az, bx, by, bz, gy, gz) {
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 
+// Spring slots on a rig: body lean and recoil rock, all under-damped so stops and shots carry weight.
+const LEAN_F = 0, LEAN_S = 1, ROCK = 2, FLINCH_F = 3, FLINCH_S = 4, SPRINGS = 5;
+
+function spring(r, i, target, k, c, dt) {
+  const x = r.sx[i];
+  r.sv[i] += (-k * (x - target) - c * r.sv[i]) * dt;
+  r.sx[i] = x + r.sv[i] * dt;
+}
+
 class Rig {
   constructor(id) {
     this.id = id;
     this.phase = 0;
     this.kick = 0;
     this.reload = 0;
+    this.reloadU = 0;
     this.slide = 0;
     this.sprint = 0;
     this.swap = 0;
@@ -357,6 +404,24 @@ class Rig {
     this.heat = 0;
     this.overheated = false;
     this.op = 0;              // Index into OPERATORS.
+    this.speed = 0;
+    this.lastAim = 0;
+    this.aimVel = 0;
+    this.sx = new Float32Array(SPRINGS);
+    this.sv = new Float32Array(SPRINGS);
+    this.seed = Math.random() * 100;
+    this.throwT = 0;          // Counts down from 1 through an overhand throw.
+    this.throwKind = 'frag';
+    this.throwHold = 0;       // 0..1 weight of the wound-up pose while the local player is aiming a throw.
+    this.down = false;        // Killed and already dismantled, while the view has yet to report it.
+    this.downT = 0;
+    this.sawDead = false;
+    this.posed = -1;          // Clock of the last frame that wrote `pose`.
+    this.pose = new Float32Array(P.COUNT * 16);    // Last drawn world matrix of every body part.
+    this.gunMesh = null;
+    this.camoI = 0;
+    this.accent = new Float32Array(3);
+    this.legRGB = null; this.armRGB = null;
   }
 }
 
@@ -384,24 +449,34 @@ export class Characters {
       scene.add(mesh);
       return mesh;
     };
-    this.torso = add(torsoGeometry(), MAX_PLAYERS);
-    this.head = add(headGeometry(), MAX_PLAYERS);
-    this.arm = add(armGeometry(), MAX_PLAYERS * 2);
-    this.leg = add(legGeometry(), MAX_PLAYERS * 2);
+    // Every dismantled body is drawn with these same meshes, hence the room for MAX_CORPSES on top of the living.
+    const cap = MAX_PLAYERS + MAX_CORPSES;
+    this.torso = add(torsoGeometry(), cap);
+    this.head = add(headGeometry(), cap);
+    this.upper = add(upperLimbGeometry(), cap * 4);      // Upper arms and thighs.
+    this.arm = add(armGeometry(), cap * 2);
+    this.leg = add(legGeometry(), cap * 2);
+    this.boot = add(bootGeometry(), cap * 2);
+    this.held = add(heldBoxGeometry(), MAX_PLAYERS);
 
     // X-ray pass, drawn after the world and before characters, so only pixels hidden by walls survive.
     const xrayMat = new THREE.ShaderMaterial({
       vertexShader: `
-        attribute vec3 aTeam; attribute vec2 aFx; attribute float aVar; attribute float aOp; varying vec3 vTeam; varying float vFade;
+        attribute vec3 aTeam; attribute vec2 aFx; varying vec3 vTeam; varying float vFade;
         void main(){
-          if (abs(aVar - aOp) > 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vTeam = vec3(0.0); vFade = 0.0; return; }
           vTeam = aTeam; vFade = aFx.x; gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position,1.0); }`,
       fragmentShader: `varying vec3 vTeam; varying float vFade; void main(){ gl_FragColor = vec4(vTeam * 0.62 * vFade, 0.6 * vFade); }`,
       depthFunc: THREE.GreaterDepth, depthWrite: false,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     });
-    const xrayOf = (src) => {
-      const m = new THREE.InstancedMesh(src.geometry, xrayMat, src.instanceMatrix.count);
+    // The silhouette through a wall is a flat tint, so one trooper shape serves every operator at a fraction of the triangles.
+    const xrayOf = (src, table) => {
+      const b = new MeshBuilder();
+      table.trooper(b);
+      const g = b.build();
+      g.setAttribute('aTeam', src.geometry.attributes.aTeam);
+      g.setAttribute('aFx', src.geometry.attributes.aFx);
+      const m = new THREE.InstancedMesh(g, xrayMat, src.instanceMatrix.count);
       m.instanceMatrix = src.instanceMatrix;
       m.frustumCulled = false;
       m.count = 0;
@@ -409,8 +484,8 @@ export class Characters {
       scene.add(m);
       return m;
     };
-    this.xrayTorso = xrayOf(this.torso);
-    this.xrayHead = xrayOf(this.head);
+    this.xrayTorso = xrayOf(this.torso, TORSOS);
+    this.xrayHead = xrayOf(this.head, HEADS);
     this.xrayMat = xrayMat;
 
     // Rings: depthTest off so a teammate behind a building still shows where they stand.
@@ -454,12 +529,18 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.arm, this.leg, this.ring, this.blob];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.ring, this.blob];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
     this.gunList = [];
     for (const id of WEAPON_IDS) this._gunMesh(getGun(id));
+
+    this.counts = { nT: 0, nU: 0, nA: 0, nL: 0, nB: 0 };
+    this.corpses = new Corpses(this);
+    this.vfx = null;           // Set by GameRenderer; the operator preview runs without effects.
+    this.surf = null;
+    this.focusX = 0; this.focusZ = 0;    // Camera focus: footfalls and small dust only happen near it.
   }
 
   // One instanced mesh per distinct gun model (weapon plus visible attachments), built the first time it is held.
@@ -467,8 +548,8 @@ export class Characters {
     let mesh = this.guns[proto.key];
     if (mesh) return mesh;
     const geom = proto.geometry.clone();
-    addCamoInstanceAttributes(geom, MAX_PLAYERS);
-    mesh = new THREE.InstancedMesh(geom, this.camoMat, MAX_PLAYERS);
+    addCamoInstanceAttributes(geom, MAX_PLAYERS + MAX_CORPSES);
+    mesh = new THREE.InstancedMesh(geom, this.camoMat, MAX_PLAYERS + MAX_CORPSES);
     mesh.frustumCulled = false;
     mesh.count = 0;
     mesh.renderOrder = 2;
@@ -494,13 +575,43 @@ export class Characters {
     return r;
   }
 
-  // Weapon kick per shot. Strength is the weapon's cosmetic kickCam.
+  // Weapon kick per shot. Strength is the weapon's cosmetic kickCam; recoil travels gun, shoulders, then hips.
   onShot(id, strength) {
     const r = this.rigs.get(id);
-    if (r) r.kick = Math.min(1.3, r.kick + 0.55 + strength * 0.5);
+    if (!r) return;
+    r.kick = Math.min(1.3, r.kick + 0.55 + strength * 0.5);
+    r.sv[ROCK] += 1.5 + strength * 3.2;
   }
-  onHit(id) { const r = this.rigs.get(id); if (r) r.flash = 1; }
+
+  // dirX/dirZ is the direction the hit pushes; strength roughly 0..1.
+  onHit(id, dirX = 0, dirZ = 0, strength = 0.6) {
+    const r = this.rigs.get(id);
+    if (!r) return;
+    r.flash = 1;
+    const c = Math.cos(r.aim), s = Math.sin(r.aim);
+    r.sv[FLINCH_F] += -(dirX * c + dirZ * s) * 7 * strength;
+    r.sv[FLINCH_S] += (-dirX * s + dirZ * c) * 7 * strength;
+  }
+
   onSwap(id) { const r = this.rigs.get(id); if (r) r.swap = 1; }
+  onThrow(id, kind) { const r = this.rigs.get(id); if (r) { r.throwT = 1; r.throwKind = kind || 'frag'; } }
+
+  // Replaces a rig with flying parts. Returns false when the rig has not been drawn recently (never seen).
+  onKill(id, info) {
+    const r = this.rigs.get(id);
+    if (!r) return false;
+    r.down = true; r.downT = 1.2; r.sawDead = false;
+    return this.corpses.spawn(r, info);
+  }
+
+  // Replays cut in and out of time, so everything that carried over from the old timeline has to go.
+  resetTransient() {
+    for (const r of this.rigs.values()) {
+      r.down = false; r.sawDead = false; r.reveal = 0; r.kick = 0; r.flash = 0; r.throwT = 0; r.swap = 0;
+      r.sx.fill(0); r.sv.fill(0); r.aimVel = 0;
+    }
+    this.corpses.clear();
+  }
 
   _writeFx(mesh, i, fade, flash, team, op, tint) {
     const a = mesh.geometry.attributes;
@@ -513,13 +624,13 @@ export class Characters {
   // Local visibility test for an enemy: centre and both shoulders, so a peeking shoulder still shows.
   _seenBy(localX, localZ, px, pz, smokes) {
     const dx = px - localX, dz = pz - localZ;
-    const len = Math.hypot(dx, dz);
+    const len = Math.sqrt(dx * dx + dz * dz);
     if (len < 0.5) return true;
     const ux = dx / len, uz = dz / len;
     for (let i = -1; i <= 1; i++) {
       const sx = px + (-uz * i * 0.35), sz = pz + (ux * i * 0.35);
       const ldx = sx - localX, ldz = sz - localZ;
-      const l = Math.hypot(ldx, ldz);
+      const l = Math.sqrt(ldx * ldx + ldz * ldz);
       if (castRay(this.visionWalls, localX, localZ, ldx / l, ldz / l, l) >= l && !smokeBlocks(smokes, localX, localZ, sx, sz)) return true;
     }
     return false;
@@ -528,8 +639,9 @@ export class Characters {
   // Rebuilds all instance buffers from the view. Writes every rig's muzzle position, used by VFX.
   update(view, dt, opts) {
     const { localId, localTeam, uav, revealAll } = opts;
-    const torso = this.torso, head = this.head, arm = this.arm, leg = this.leg;
-    let nT = 0, nA = 0, nL = 0;
+    const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
+    const vfx = this.vfx, clock = this.time.value;
+    let nT = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
     let nRing = 0;
     for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
     let localPlayer = null;
@@ -543,54 +655,128 @@ export class Characters {
       r.op = this.opById.get(p.id) ?? 0;
       const look = this.looks[r.op];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
-      if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.6); }
+      if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.75); }
+      if (r.down) {
+        // The kill event outruns the interpolated view: stay hidden until the view agrees, then until the next life.
+        r.downT -= dt;
+        if (!p.alive) r.sawDead = true;
+        if ((r.sawDead && p.alive) || r.downT <= 0) { r.down = false; r.sawDead = false; }
+      }
 
-      const speed = Math.hypot(p.vx || 0, p.vz || 0);
-      const moving = speed > 0.3;
-      r.phase += speed * dt * 2.1;
-      r.moveX += ((moving ? p.vx / speed : 0) - r.moveX) * damp(14, dt);
-      r.moveZ += ((moving ? p.vz / speed : 0) - r.moveZ) * damp(14, dt);
-      r.kick *= Math.exp(-dt * 14);
-      r.flash *= Math.exp(-dt * 18);
-      r.swap *= Math.exp(-dt * 11);
+      const vx = p.vx || 0, vz = p.vz || 0;
+      const rawSpeed = Math.sqrt(vx * vx + vz * vz);
+      const moving = rawSpeed > 0.3;
+      r.speed += (rawSpeed - r.speed) * damp(12, dt);
+      const speed = r.speed;
+      const runK = Math.min(1, speed / 4.2);
+
+      r.moveX += ((moving ? vx / rawSpeed : 0) - r.moveX) * damp(14, dt);
+      r.moveZ += ((moving ? vz / rawSpeed : 0) - r.moveZ) * damp(14, dt);
+      r.kick *= Math.exp(-dt * 13);
+      r.flash *= Math.exp(-dt * 16);
+      r.swap *= Math.exp(-dt * 9);
       const reloadTarget = p.reloadT > 0 ? 1 : 0;
-      r.reload += (reloadTarget - r.reload) * damp(12, dt);
+      r.reload += (reloadTarget - r.reload) * damp(reloadTarget ? 14 : 18, dt);
       const slideTarget = p.sliding ? 1 : 0;
       r.slide += (slideTarget - r.slide) * damp(14, dt);
       const sprintTarget = p.sprinting && !p.sliding && !(p.adsT > 0.2) ? 1 : 0;
-      r.sprint += (sprintTarget - r.sprint) * damp(10, dt);
+      r.sprint += (sprintTarget - r.sprint) * damp(9, dt);
+      if (r.throwT > 0) r.throwT = Math.max(0, r.throwT - dt / 0.5);
+      const throwAiming = view.throwPreview && p.id === localId ? 1 : 0;
+      r.throwHold += (throwAiming - r.throwHold) * damp(14, dt);
+
+      // Gait: phase is distance-locked, so a planted foot stays planted instead of skating.
+      const prevPhase = r.phase;
+      r.phase = (r.phase + speed * dt * (TAU / (2.6 + r.sprint * 0.9))) % (TAU * 512);
+      let plantLeg = -1;
+      if (speed > 3.4 && Math.floor(r.phase / Math.PI) !== Math.floor(prevPhase / Math.PI)) plantLeg = Math.floor(r.phase / Math.PI) & 1;
+
+      let da = (p.aim - r.lastAim) % TAU;
+      if (da > Math.PI) da -= TAU; else if (da < -Math.PI) da += TAU;
+      r.lastAim = p.aim;
+      const av = dt > 1e-4 ? clamp(da / dt, -14, 14) : r.aimVel;
+      r.aimVel += (av - r.aimVel) * damp(16, dt);
+
+      const aimX = Math.cos(p.aim), aimZ = Math.sin(p.aim);
+      const fwdV = (vx * aimX + vz * aimZ) / 7, sideV = (-vx * aimZ + vz * aimX) / 7;
+      spring(r, LEAN_F, fwdV * 0.2, 70, 10, dt);
+      spring(r, LEAN_S, sideV * 0.17, 70, 10, dt);
+      spring(r, ROCK, 0, 130, 15, dt);
+      spring(r, FLINCH_F, 0, 150, 15, dt);
+      spring(r, FLINCH_S, 0, 150, 15, dt);
 
       const friendly = p.team === localTeam;
       r.heat = p.heat ?? 0;
       r.overheated = !!p.overheated;
-      const seen = p.alive && (friendly || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
+      const seen = p.alive && !r.down && (friendly || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
       r.seen = seen;
       r.reveal += (seen ? 1 : -1) * dt / (seen ? 0.09 : 0.18);
       r.reveal = Math.min(1, Math.max(0, r.reveal));
-      if (!p.alive) r.reveal = 0;
+      if (!p.alive || r.down) r.reveal = 0;
       r.visible = r.reveal > 0.005;
 
       const ads = p.adsT || 0;
       const sprint = r.sprint, slide = r.slide;
-      const bob = Math.abs(Math.sin(r.phase)) * 0.07 * Math.min(1, speed / 4);
-      const y = HIP * look.h + bob - slide * 0.42;
+      const sinPhase = Math.sin(r.phase);
+      const bob = Math.abs(sinPhase) * 0.09 * runK * (1 + sprint * 0.35);
+      const breath = Math.sin(clock * 2.1 + r.seed) * 0.012 * (1 - runK);
+      const rock = r.sx[ROCK];
+      const y = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02;
+      const rightX = -aimZ, rightZ = aimX;
+      const sway = sinPhase * 0.035 * runK;
+      const bodyX = p.x + rightX * sway, bodyZ = p.z + rightZ * sway;
 
-      // Upper-body frame: origin at hips.
-      _e.set(-slide * 0.5 - r.kick * 0.03, -p.aim, -(sprint * 0.18) + slide * 0.38 + ads * 0.06 - r.kick * 0.05);
+      // A turning torso trails the aim while the gun stays on it: that gap is what reads as mass.
+      const throwActive = r.throwT > 0 ? Math.sin((1 - r.throwT) * Math.PI) : 0;
+      const lag = clamp(r.aimVel * 0.03, -0.32, 0.32) * (1 - ads * 0.7);
+      const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32;
+      const pitch = -sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F];
+      const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK;
+      _e.set(roll, -(p.aim - lag - twist), pitch);
       _q.setFromEuler(_e);
       _s.set(1, 1, 1);
-      _p.set(p.x, y, p.z);
+      _p.set(bodyX, y, bodyZ);
       _body.compose(_p, _q, _s);
 
-      // Gun pose in upper-body space: lerp hip, ADS and sprint carry; recoil is added on top.
-      const gunX = 0.34 + ads * 0.12 + sprint * -0.06 - r.kick * 0.13;
-      const gunY = 0.32 + ads * 0.2 - r.reload * 0.18 - r.swap * 0.55 - slide * 0.1;
-      const gunZ = 0.18 - ads * 0.1 + sprint * -0.04;
-      _gunE.set(
-        r.reload * 0.9 - r.swap * 0.6,
-        sprint * 1.0 + r.reload * -0.12,
-        -r.kick * 0.28 - r.reload * 0.35 - r.swap * 0.9,
-      );
+      // Gun pose in upper-body space: hip, ADS and sprint carry, then reload, swap and recoil layered on top.
+      const hold = HOLD[p.weapon] || HOLD_NONE;
+      const carry = 1 - sprint * 0.5;
+      const swap = r.swap, swapBack = Math.sin(swap * Math.PI);
+      let gunX = 0.34 + ads * 0.12 + hold[0] * carry - sprint * 0.06 - r.kick * 0.15;
+      let gunY = 0.32 + ads * 0.2 + hold[1] * carry - swap * 0.55 - slide * 0.1 + Math.sin(r.phase * 2) * 0.018 * runK + breath * 0.8;
+      let gunZ = 0.18 - ads * 0.1 + hold[2] * carry - sprint * 0.04 + sinPhase * 0.05 * sprint - lag * 0.06;
+      let gunRoll = -swap * 0.6 + sinPhase * 0.09 * sprint;
+      let gunYaw = sprint * 1.0 + swapBack * 0.35 - lag + lag * 0.15 - twist * 0.85;
+      let gunPitch = r.kick * 0.2 - swap * 0.9 + rock * 0.08;
+      gunX -= throwActive * 0.08 + r.throwHold * 0.12;
+      gunY -= throwActive * 0.2 + r.throwHold * 0.24;
+      gunRoll += throwActive * 0.5 + r.throwHold * 0.5;
+
+      let handW = 0, magOn = 0, hx = 0, hy = 0, hz = 0;
+      const R = r.reload;
+      const rel = RELOADS[p.weapon] || RELOADS.ar;
+      const lastU = r.reloadU;
+      if (p.reloadT > 0 && p.reloadDur > 0) {
+        const u = clamp(1 - p.reloadT / p.reloadDur, 0, 1);
+        if (u < r.reloadU - 0.25) r.reloadU = u;
+        r.reloadU += (u - r.reloadU) * damp(18, dt);
+      } else {
+        r.reloadU = 0;
+      }
+      if (R > 0.01) {
+        if (rel.track) sampleTrack(rel.track, r.reloadU, _tr);
+        else {
+          const shell = (WEAPONS[p.weapon] && WEAPONS[p.weapon].reload) || 0.45;
+          const inner = ((r.reloadU * p.reloadDur) / shell) % 1;
+          sampleTrack(SHELL_CYCLE, inner, _tr);
+        }
+        gunX += _tr[TK.DX] * R; gunY += _tr[TK.DY] * R; gunZ += _tr[TK.DZ] * R;
+        gunRoll += _tr[TK.ROLL] * R; gunYaw += _tr[TK.YAW] * R; gunPitch += _tr[TK.PITCH] * R;
+        handW = _tr[TK.W] * R; hx = _tr[TK.HX]; hy = _tr[TK.HY]; hz = _tr[TK.HZ];
+        magOn = R > 0.6 ? _tr[TK.MAG] : 0;
+      }
+
+      _gunE.set(gunRoll, gunYaw, gunPitch);
       _qGun.setFromEuler(_gunE);
       const gs = GUN_SCALE * (GUN_SCALES[p.weapon] || 1);
       _s.set(gs, gs, gs);
@@ -603,7 +789,8 @@ export class Characters {
       r.muzzle[0] = _v.x; r.muzzle[1] = _v.y; r.muzzle[2] = _v.z;
       _v.set(proto.eject[0], proto.eject[1], proto.eject[2]).applyMatrix4(_gun);
       r.eject[0] = _v.x; r.eject[1] = _v.y; r.eject[2] = _v.z;
-      r.ejectDir[0] = -Math.sin(p.aim); r.ejectDir[1] = Math.cos(p.aim);
+      // Brass flies out of the shooter's right, up and a little to the rear.
+      r.ejectDir[0] = -aimZ - aimX * 0.35; r.ejectDir[1] = aimX - aimZ * 0.35;
 
       if (!r.visible) continue;
 
@@ -616,14 +803,16 @@ export class Characters {
       _s.set(look.w, look.h, look.w);
       _m.copy(_body).scale(_s);
       _m.toArray(torso.instanceMatrix.array, nT * 16);
+      _m.toArray(r.pose, P.TORSO * 16);
       this._writeFx(torso, nT, fade, flash, team, r.op);
 
-      _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h + r.kick * -0.01, 0);
+      _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(1, 1, 1);
-      _e.set(0, 0, r.kick * 0.1 + slide * -0.3);
+      _e.set(-roll * 0.5 + r.sx[FLINCH_S] * 0.6, lag * 0.85 + twist * 0.5, r.kick * 0.08 + slide * -0.3 - pitch * 0.4 + r.sx[FLINCH_F] * 0.8);
       _q.setFromEuler(_e);
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(head.instanceMatrix.array, nT * 16);
+      _m.toArray(r.pose, P.HEAD * 16);
       this._writeFx(head, nT, fade, flash, team, r.op);
       nT++;
 
@@ -631,46 +820,153 @@ export class Characters {
       const gunMesh = this._gunMesh(proto);
       const gi = gunMesh.count++;
       _gun.toArray(gunMesh.instanceMatrix.array, gi * 16);
+      _gun.toArray(r.pose, P.GUN * 16);
       const ga = gunMesh.geometry.attributes;
-      ga.aCamo.setX(gi, camoIndex(p.camo));
+      const camoI = camoIndex(p.camo);
+      ga.aCamo.setX(gi, camoI);
       const tint = camoTint(p.camo);
-      if (tint >= 0) { ga.aAccent.setXYZ(gi, (tint >> 16 & 255) / 255, (tint >> 8 & 255) / 255, (tint & 255) / 255); }
-      else ga.aAccent.setXYZ(gi, team[0], team[1], team[2]);
+      let ar = team[0], ag = team[1], ab = team[2];
+      if (tint >= 0) { ar = (tint >> 16 & 255) / 255; ag = (tint >> 8 & 255) / 255; ab = (tint & 255) / 255; }
+      ga.aAccent.setXYZ(gi, ar, ag, ab);
       ga.aFx.setXY(gi, fade, flash);
       ga.aHeat.setX(gi, r.heat);
+      r.gunMesh = gunMesh; r.camoI = camoI; r.accent[0] = ar; r.accent[1] = ag; r.accent[2] = ab;
+      r.armRGB = look.sleeveRGB; r.legRGB = look.trouserRGB;
+      r.posed = clock;
 
-      // Arms: shoulder to hand. Right hand on the grip (gun origin), left on the fore point.
+      // Old magazines fall away from where the hand strips them; a revolver dumps its whole cylinder.
+      if (vfx && R > 0.5) {
+        const d = rel.mag.drop;
+        if (d >= 0 && lastU < d && r.reloadU >= d) {
+          _v.set(0.12, -0.42, 0).applyMatrix4(_gun);
+          vfx.dropMag(_v.x, _v.y, _v.z, rel.mag.rgb, rel.mag.size);
+        }
+        if (rel.mag.dump !== undefined && lastU < rel.mag.dump && r.reloadU >= rel.mag.dump) {
+          for (let k = 0; k < 6; k++) vfx.shell(r.eject[0], r.eject[1], r.eject[2], (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, 'pistol');
+        }
+      }
+
+      // Arms: shoulder to hand through a solved elbow. Right hand on the grip, left on the fore point.
       const shoulderY = 0.42 * CHAR_SCALE * look.h;
+      const armT = 1.15 * look.l;
+      const fwd = _body.elements;       // Column 0 is the body's forward axis, column 2 its right.
       for (let side = -1; side <= 1; side += 2) {
         _a.set(0.02, shoulderY, side * 0.31 * look.w).applyMatrix4(_body);
-        if (side > 0) _b.set(0, 0, 0).applyMatrix4(_gun);
-        else if (r.reload > 0.5) _b.set(0.12, -0.3, -0.05).applyMatrix4(_gun);   // Hand goes to the magazine.
-        else _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
-        setStretch(_m, _a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 1.2 * look.l, 1.2 * look.l);
+        if (side > 0) {
+          _b.set(0, 0, 0).applyMatrix4(_gun);
+        } else {
+          _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
+          if (handW > 0) { _v.set(hx, hy, hz).applyMatrix4(_gun); _b.lerp(_v, handW); }
+          const slideHand = slide * (1 - R);
+          if (slideHand > 0.01) {
+            // Off hand trails on the ground through a slide.
+            const hx2 = p.x - rightX * 0.62 - r.moveX * 0.3, hz2 = p.z - rightZ * 0.62 - r.moveZ * 0.3;
+            _v.set(hx2, 0.14, hz2); _b.lerp(_v, slideHand);
+          }
+          const throwW = Math.max(r.throwHold, r.throwT > 0 ? 1 : 0);
+          if (throwW > 0.01) {
+            // Wind-up behind the head, release high and forward, then follow through low.
+            const u = r.throwT > 0 ? 1 - r.throwT : 0;
+            const k1 = Math.min(1, u / 0.42), k2 = Math.max(0, (u - 0.42) / 0.58);
+            const bx = -0.38 + 1.0 * k1 - 0.3 * k2, by = 0.92 - 0.1 * k1 - 0.7 * k2, bz = -0.28 + 0.16 * k1 - 0.05 * k2;
+            _v.set(bx, by, bz).applyMatrix4(_body);
+            _b.lerp(_v, throwW);
+            if (u < 0.42 && nH < MAX_PLAYERS) {
+              const nade = GRENADE_RGB[r.throwKind] || GRENADE_RGB.frag;
+              _s.set(0.26, 0.3, 0.26);
+              _m.copy(_gun).scale(_s).setPosition(_b);
+              _m.toArray(held.instanceMatrix.array, nH * 16);
+              this._writeFx(held, nH, fade, flash, team, 0, nade);
+              nH++;
+            }
+          }
+          if (magOn > 0.5 && throwW < 0.5 && nH < MAX_PLAYERS) {
+            const size = rel.mag.size;
+            _s.set(size[0] * 0.9, size[1] * 0.9, size[2] * 0.9);
+            _m.copy(_gun).scale(_s).setPosition(_b);
+            _m.toArray(held.instanceMatrix.array, nH * 16);
+            this._writeFx(held, nH, fade, flash, team, 0, rel.mag.rgb);
+            nH++;
+          }
+        }
+        // Elbows hang out and down; the pole leans back so the hands read as gripping forward.
+        solveJoint(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 0.4 * look.l, 0.44 * look.l,
+          fwd[8] * side * 0.75 - fwd[0] * 0.3, -0.8, fwd[10] * side * 0.75 - fwd[2] * 0.3, _joint);
+        setStretch(_m, _a.x, _a.y, _a.z, _joint[0], _joint[1], _joint[2], armT, armT);
+        _m.toArray(upper.instanceMatrix.array, nU * 16);
+        _m.toArray(r.pose, (side > 0 ? P.UPPER_R : P.UPPER_L) * 16);
+        this._writeFx(upper, nU, fade, flash, team, 0, look.sleeveRGB);
+        nU++;
+        setStretch(_m, _joint[0], _joint[1], _joint[2], _b.x, _b.y, _b.z, armT, armT);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
+        _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
         this._writeFx(arm, nA, fade, flash, team, 0, look.sleeveRGB);
         nA++;
       }
 
-      // Legs follow travel direction, independent of aim.
-      const stride = Math.min(1, speed / 3.5) * 0.42 * (1 - slide);
-      for (let leg_i = 0; leg_i < 2; leg_i++) {
-        const side = leg_i === 0 ? -1 : 1;
-        const sw = Math.sin(r.phase + leg_i * Math.PI);
-        const lift = Math.max(0, Math.cos(r.phase + leg_i * Math.PI)) * 0.14 * Math.min(1, speed / 3);
-        const rx = -Math.sin(p.aim) * side * 0.17 * look.w, rz = Math.cos(p.aim) * side * 0.17 * look.w;
-        const hipX = p.x + rx, hipZ = p.z + rz;
-        const fwd = sw * stride;
-        let footX = p.x + rx + r.moveX * fwd, footZ = p.z + rz + r.moveZ * fwd;
-        if (slide > 0.01) {
-          footX += r.moveX * slide * 0.75;
-          footZ += r.moveZ * slide * 0.75;
+      // Legs follow travel direction, independent of aim, through a stance and a swing phase.
+      const legLen = 0.54 * look.h;
+      const legT = 1.42 * look.l;
+      const standK = 1 - Math.min(1, speed / 1.6);
+      const faceX = moving ? r.moveX : aimX, faceZ = moving ? r.moveZ : aimZ;
+      const bootYaw = Math.atan2(faceZ, faceX);
+      const strideAmp = (0.36 + 0.26 * r.sprint) * Math.min(1, speed / 3.2) * (1 - slide);
+      const duty = 0.58 - r.sprint * 0.16;
+      for (let li = 0; li < 2; li++) {
+        const side = li === 0 ? -1 : 1;
+        let u = r.phase / TAU + li * 0.5;
+        u -= Math.floor(u);
+        let off, lift = 0;
+        if (u < duty) off = strideAmp * (1 - 2 * (u / duty));
+        else {
+          const s = (u - duty) / (1 - duty), ss = s * s * (3 - 2 * s);
+          off = strideAmp * (2 * ss - 1);
+          lift = Math.sin(Math.PI * s) * (0.15 + 0.2 * r.sprint) * Math.min(1, speed / 3);
         }
-        setStretch(_m, hipX, y, hipZ, footX, 0.05 + lift, footZ, 1.45 * look.l, 1.45 * look.l);
+        const wide = 0.17 * look.w;
+        const hipX = bodyX + rightX * side * wide, hipZ = bodyZ + rightZ * side * wide;
+        // A shooter's stance when standing: left foot leads, right foot braces.
+        const stance = (side < 0 ? 0.16 : -0.14) * standK;
+        let footX = p.x + rightX * side * (wide + 0.05 * standK) + aimX * stance + r.moveX * off;
+        let footZ = p.z + rightZ * side * (wide + 0.05 * standK) + aimZ * stance + r.moveZ * off;
+        let footY = 0.13 + lift;
+        let poleX = r.moveX * 0.8 + aimX * 0.4 + rightX * side * 0.3, poleY = 0.15, poleZ = r.moveZ * 0.8 + aimZ * 0.4 + rightZ * side * 0.3;
+        if (slide > 0.01) {
+          // Lead leg kicks straight out, trail leg folds under the body with its knee to the side.
+          const dirX = r.moveX, dirZ = r.moveZ;
+          const tx = side < 0 ? hipX + dirX * 0.95 : hipX - dirX * 0.06 + rightX * 0.2;
+          const tz = side < 0 ? hipZ + dirZ * 0.95 : hipZ - dirZ * 0.06 + rightZ * 0.2;
+          footX += (tx - footX) * slide; footZ += (tz - footZ) * slide;
+          footY += (0.13 - footY) * slide;
+          if (side > 0) { poleX += (rightX * 1.0 - poleX) * slide; poleY += (0.6 - poleY) * slide; poleZ += (rightZ * 1.0 - poleZ) * slide; }
+        }
+        solveJoint(hipX, y, hipZ, footX, footY, footZ, legLen, legLen, poleX, poleY, poleZ, _joint);
+        setStretch(_m, hipX, y, hipZ, _joint[0], _joint[1], _joint[2], legT, legT);
+        _m.toArray(upper.instanceMatrix.array, nU * 16);
+        _m.toArray(r.pose, (side < 0 ? P.THIGH_L : P.THIGH_R) * 16);
+        this._writeFx(upper, nU, fade, flash, team, 0, look.trouserRGB);
+        nU++;
+        setStretch(_m, _joint[0], _joint[1], _joint[2], footX, footY, footZ, legT * 0.82, legT * 0.82);
         _m.toArray(leg.instanceMatrix.array, nL * 16);
+        _m.toArray(r.pose, (side < 0 ? P.SHIN_L : P.SHIN_R) * 16);
         this._writeFx(leg, nL, fade, flash, team, 0, look.trouserRGB);
         nL++;
+
+        _e.set(0, -bootYaw, lift * -2.2 + slide * (side < 0 ? 0.7 : -0.2));
+        _q.setFromEuler(_e);
+        _p.set(footX, footY, footZ);
+        _s.set(1.15, 1.15, 1.15);
+        _m.compose(_p, _q, _s);
+        _m.toArray(boot.instanceMatrix.array, nB * 16);
+        _m.toArray(r.pose, (side < 0 ? P.BOOT_L : P.BOOT_R) * 16);
+        this._writeFx(boot, nB, fade, flash, team, 0, null);
+        nB++;
+
+        if (li === plantLeg && vfx && Math.abs(footX - this.focusX) < 22 && Math.abs(footZ - this.focusZ) < 16) {
+          vfx.footfall(footX, footZ, r.sprint);
+        }
       }
+      if (vfx && slide > 0.5 && speed > 2 && Math.random() < dt * 45) vfx.slideTrail(p.x - r.moveX * 0.5, p.z - r.moveZ * 0.5);
 
       _p.set(p.x, 0, p.z); _q.identity();
       const local = p.id === localId;
@@ -688,9 +984,14 @@ export class Characters {
       nRing++;
     }
 
-    torso.count = nT; head.count = nT; arm.count = nA; leg.count = nL;
-    this.xrayTorso.count = nT; this.xrayHead.count = nT;
+    // No silhouettes through walls in a replay: the camera there is low, and they read as ghosts.
+    this.xrayTorso.count = revealAll ? 0 : nT; this.xrayHead.count = revealAll ? 0 : nT;
     this.ring.count = nRing; this.blob.count = nRing;
+    this.counts.nT = nT; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
+    this.corpses.step(dt, this.counts);
+    torso.count = this.counts.nT; head.count = this.counts.nT;
+    upper.count = this.counts.nU; arm.count = this.counts.nA; leg.count = this.counts.nL; boot.count = this.counts.nB;
+    held.count = nH;
     for (let i = 0; i < this.bodyMeshes.length; i++) {
       const m = this.bodyMeshes[i];
       m.instanceMatrix.needsUpdate = true;
@@ -710,10 +1011,11 @@ export class Characters {
   }
 
   dispose() {
-    for (const m of [this.torso, this.head, this.arm, this.leg, this.ring, this.blob]) {
+    for (const m of this.bodyMeshes) {
       m.geometry.dispose();
       m.dispose();
     }
+    this.xrayTorso.geometry.dispose(); this.xrayHead.geometry.dispose();
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();
   }

@@ -9,15 +9,28 @@ export const PART = { BODY: 0, GRIP: 1, METAL: 2, ACCENT: 3 };
 
 const PATTERN_IDS = { solid: 0, digital: 1, tiger: 2, splinter: 3, hex: 4, gold: 5, molten: 6, prism: 7, carbon: 8, livewire: 9, aurora: 10, singularity: 11 };
 
+// Both lookups run per soldier per frame; the Maps keep that free of closures and scans.
+const INDEX_BY_ID = new Map();
 export function camoIndex(id) {
-  const i = CAMOS.findIndex(c => c.id === id);
-  return i < 0 ? 0 : i;
+  let i = INDEX_BY_ID.get(id);
+  if (i === undefined) {
+    i = CAMOS.findIndex(c => c.id === id);
+    if (i < 0) i = 0;
+    INDEX_BY_ID.set(id, i);
+  }
+  return i;
 }
 
 // Tint used for tracers and muzzle flash, or -1 when the camo has none.
+const TINT_BY_ID = new Map();
 export function camoTint(id) {
-  const c = getCamo(id);
-  return c.tint === undefined ? -1 : c.tint;
+  let t = TINT_BY_ID.get(id);
+  if (t === undefined) {
+    const c = getCamo(id);
+    t = c.tint === undefined ? -1 : c.tint;
+    TINT_BY_ID.set(id, t);
+  }
+  return t;
 }
 
 const camoCount = CAMOS.length;

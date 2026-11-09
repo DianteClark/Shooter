@@ -2,17 +2,58 @@
 // pool: new effects overwrite the oldest slot, nothing is allocated after construction.
 import * as THREE from 'three';
 import { GLSL_LIGHT, hexRGB } from './art.js';
+import { MeshBuilder } from './meshbuild.js';
 import { MAX_POPS } from './world.js';
 import { getTracer, getKillEffect } from '../shared/camos.js';
 
-const TRACERS = 128;
-const PARTS = 520;
-const SHELLS = 48;
-const SHARDS = 120;
-const FLASHES = 20;
-const BALLS = 10;
-const RINGS = 36;
-const DELAYED = 8;
+const TRACERS = 180;
+const PARTS = 1100;
+const SHELLS = 72;
+const SHARDS = 240;
+const FLASHES = 24;
+const BALLS = 24;
+const RINGS = 56;
+const DELAYED = 12;
+const MARKS = 110;
+const ROCKETS = 6;
+const ROCKET_SPEED = 92;       // Metres per second: fast, but you still see it leave.
+
+// Per-gun firing signature. tail/linger/speed shape the tracer, flash shapes the muzzle star,
+// shell picks the casing, extra adds a family trait: T-brake jets, cylinder-gap flare, backblast.
+export const GUN_FX = {
+  ar:       { tail: 11, linger: 0.075, speed: 230, flash: [1.5, 1.1, 1.0],  shell: 'rifle' },
+  burst:    { tail: 10, linger: 0.06,  speed: 240, flash: [1.4, 1.2, 0.85], shell: 'rifle' },
+  smg:      { tail: 6,  linger: 0.04,  speed: 200, flash: [1.15, 0.8, 1.2], shell: 'pistol', jitter: 1 },
+  pdw:      { tail: 5,  linger: 0.035, speed: 200, flash: [1.05, 0.75, 1.3], shell: 'pistol', jitter: 1 },
+  shotgun:  { tail: 3.4, linger: 0.05, speed: 170, flash: [2.3, 0.75, 1.9], shell: 'hull', extra: 'blast' },
+  autoshot: { tail: 3,  linger: 0.04,  speed: 170, flash: [2.0, 0.8, 1.6],  shell: 'hull', extra: 'blast' },
+  lmg:      { tail: 13, linger: 0.09,  speed: 220, flash: [1.8, 1.0, 1.2],  shell: 'link', every: 3 },
+  dmr:      { tail: 18, linger: 0.16,  speed: 300, flash: [1.8, 1.25, 0.8], shell: 'rifle' },
+  sniper:   { tail: 70, linger: 0.46,  speed: 520, flash: [2.3, 1.5, 0.7],  shell: 'magnum', extra: 'brake', contrail: 1 },
+  pistol:   { tail: 7,  linger: 0.05,  speed: 210, flash: [1.2, 0.9, 1.0],  shell: 'pistol' },
+  revolver: { tail: 9,  linger: 0.13,  speed: 240, flash: [1.9, 0.85, 1.7], shell: null, extra: 'gap' },
+  launcher: { tail: 0,  linger: 0,     speed: 92,  flash: [2.4, 0.5, 2.2],  shell: null, extra: 'backblast' },
+};
+const GUN_FX_DEFAULT = GUN_FX.ar;
+const SHELL_LOOK = {
+  rifle:  { rgb: [0.92, 0.7, 0.28],  s: 1.0 },
+  pistol: { rgb: [0.95, 0.76, 0.34], s: 0.72 },
+  hull:   { rgb: [0.78, 0.14, 0.1],  s: 1.5 },
+  magnum: { rgb: [0.96, 0.78, 0.36], s: 1.75 },
+  link:   { rgb: [0.34, 0.33, 0.33], s: 0.9 },
+};
+
+// Impact by material: spark and chip colours, chip count, dust colour and density, and the mark left behind.
+const IMPACT = {
+  metal:    { spark: [1.0, 0.84, 0.48], sparks: 10, speed: 14, chip: null, chips: 0, dust: [0.3, 0.3, 0.32], puffs: 1, alpha: 0.28, mark: [0.05, 0.05, 0.06], glow: 0.9 },
+  wood:     { spark: [0.95, 0.66, 0.32], sparks: 1, speed: 6, chip: [0.72, 0.56, 0.32], chips: 5, dust: [0.34, 0.27, 0.18], puffs: 2, alpha: 0.5, mark: [0.1, 0.07, 0.04], glow: 0 },
+  concrete: { spark: [1.0, 0.72, 0.3], sparks: 4, speed: 10, chip: [0.56, 0.55, 0.53], chips: 3, dust: [0.33, 0.32, 0.31], puffs: 3, alpha: 0.55, mark: [0.08, 0.08, 0.09], glow: 0 },
+  neon:     { spark: [0.7, 0.45, 1.0], sparks: 6, speed: 12, chip: [0.45, 0.45, 0.6], chips: 2, dust: [0.24, 0.22, 0.32], puffs: 2, alpha: 0.42, mark: [0.05, 0.04, 0.08], glow: 0.5 },
+  rock:     { spark: [1.0, 0.76, 0.42], sparks: 2, speed: 8, chip: [0.56, 0.46, 0.36], chips: 4, dust: [0.38, 0.32, 0.24], puffs: 3, alpha: 0.55, mark: [0.14, 0.1, 0.08], glow: 0 },
+  adobe:    { spark: [1.0, 0.76, 0.42], sparks: 1, speed: 6, chip: [0.72, 0.62, 0.48], chips: 4, dust: [0.46, 0.4, 0.3], puffs: 4, alpha: 0.62, mark: [0.2, 0.15, 0.11], glow: 0 },
+  sand:     { spark: [1.0, 0.76, 0.42], sparks: 0, speed: 6, chip: [0.74, 0.65, 0.46], chips: 2, dust: [0.52, 0.45, 0.32], puffs: 5, alpha: 0.7, mark: [0.3, 0.25, 0.17], glow: 0 },
+  cloth:    { spark: [1.0, 0.76, 0.42], sparks: 0, speed: 6, chip: [0.8, 0.75, 0.62], chips: 2, dust: [0.34, 0.32, 0.27], puffs: 2, alpha: 0.4, mark: [0.2, 0.18, 0.14], glow: 0 },
+};
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -34,8 +75,13 @@ export class VFX {
     this.clock = 0;
     this.cosmetics = new Map();    // Player id -> {tracer, killFx, rgb, cycle}, from their loadout.
     this.cycleRGB = [1, 1, 1];
-    this.delayed = Array.from({ length: DELAYED }, () => ({ t: 0, x: 0, z: 0 }));
+    this.delayed = Array.from({ length: DELAYED }, () => ({ t: 0, x: 0, z: 0, r: 0, kind: 0 }));
     this.delayedHead = 0;
+    this.fxScale = 1;              // Emission multiplier: the Low Power step halves every burst.
+    this.surf = null;              // Surfaces lookup, set by GameRenderer.
+    this.dustRGB = [0.42, 0.38, 0.36];
+    this.wet = false;
+    this.onBoom = null;            // (x, z, radius) when a rocket reaches the blast it was carrying.
     this._buildTracers();
     this._buildParticles();
     this._buildShells();
@@ -44,6 +90,25 @@ export class VFX {
     this._buildBalls();
     this._buildRings();
     this._buildPops();
+    this._buildMarks();
+    this._buildRockets();
+  }
+
+  // Emission count for a burst, respecting the quality step and never below one.
+  _n(count) { return Math.max(1, Math.round(count * this.fxScale)); }
+
+  setTheme(theme) {
+    // Premultiplied: darker than the ground colour itself so overlapping puffs build to dust, not to white.
+    this.dustRGB = theme.ink && theme.ink.dirt ? theme.ink.dirt.map(c => Math.min(1, c * 0.62)) : this.dustRGB;
+    this.wet = !!theme.wet;
+  }
+
+  // Cuts to or from a replay: nothing from the old timeline should still be in the air.
+  clear() {
+    this.tr.t.fill(0); this.pp.t.fill(0); this.sh.t.fill(0); this.sd.t.fill(0); this.fl.t.fill(0); this.bl.t.fill(0);
+    this.rg.t.fill(0); this.mk.t.fill(0); this.rk.t.fill(0);
+    for (let i = 0; i < DELAYED; i++) this.delayed[i].t = 0;
+    for (let i = 0; i < MAX_POPS; i++) this.pops[i].t = 0;
   }
 
   /* ---------- Tracers ---------- */
@@ -92,11 +157,11 @@ export class VFX {
       bx: new Float32Array(TRACERS), by: new Float32Array(TRACERS), bz: new Float32Array(TRACERS),
       r: new Float32Array(TRACERS), g: new Float32Array(TRACERS), b: new Float32Array(TRACERS),
       w: new Float32Array(TRACERS), t: new Float32Array(TRACERS), dur: new Float32Array(TRACERS),
-      len: new Float32Array(TRACERS), head: 0,
+      len: new Float32Array(TRACERS), linger: new Float32Array(TRACERS), tail: new Float32Array(TRACERS), head: 0,
     };
   }
 
-  tracer(ax, ay, az, bx, by, bz, rgb, width) {
+  tracer(ax, ay, az, bx, by, bz, rgb, width, tail = 11, linger = 0.075, speed = 230) {
     const T = this.tr;
     const i = T.head;
     T.head = (i + 1) % TRACERS;
@@ -107,7 +172,9 @@ export class VFX {
     const dist = Math.hypot(bx - ax, bz - az);
     T.len[i] = dist;
     // Fast-moving bright head with a tail that lingers a beat so hits read.
-    T.dur[i] = dist / 230 + 0.075;
+    T.linger[i] = linger;
+    T.tail[i] = tail;
+    T.dur[i] = dist / speed + linger;
     T.t[i] = T.dur[i];
   }
 
@@ -215,7 +282,15 @@ export class VFX {
     this.spawn(x, 1.1, z, 0, 0, 0, life, 1.5, 0.15, FX_VOID, 0, 0, 0);
     const d = this.delayed[this.delayedHead];
     this.delayedHead = (this.delayedHead + 1) % DELAYED;
-    d.t = life; d.x = x; d.z = z;
+    d.t = life; d.x = x; d.z = z; d.kind = 0;
+  }
+
+  _secondaryBlast(x, z, r) {
+    this.fireball(x + rand(-1, 1), rand(1.2, 2.2), z + rand(-1, 1), r * 0.55, 0.3);
+    for (let i = this._n(10); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(3, 10);
+      this.spawn(x, 1.5, z, Math.cos(a) * s, rand(3, 8), Math.sin(a) * s, rand(0.4, 0.8), 0.1, 0.02, FIRE_HOT, 0, 10, 1.2, 0.02);
+    }
   }
 
   _implodeRelease(x, z) {
@@ -251,7 +326,9 @@ export class VFX {
       const d = this.delayed[i];
       if (d.t <= 0) continue;
       d.t -= dt;
-      if (d.t <= 0) this._implodeRelease(d.x, d.z);
+      if (d.t > 0) continue;
+      if (d.kind === 1) this._secondaryBlast(d.x, d.z, d.r);
+      else this._implodeRelease(d.x, d.z);
     }
   }
 
@@ -327,13 +404,122 @@ export class VFX {
     }
   }
 
-  // Impact on a surface: sparks plus a small dust cloud leaving the wall.
-  wallHit(x, z, nx, nz) {
+  // Impact on a surface, with the character of whatever was hit. `fine` thins it for shotgun pellets.
+  wallHit(x, z, nx, nz, fine = false) {
+    const mat = this.surf ? this.surf.materialAt(x, z, nx, nz) : 'concrete';
+    const I = IMPACT[mat] || IMPACT.concrete;
     const y = rand(0.5, 1.5);
-    this.sparks(x, y, z, nx, nz, WARM_SPARK, 6);
-    for (let i = 0; i < 2; i++) {
+    const k = fine ? 0.4 : 1;
+    if (I.sparks) this.sparks(x, y, z, nx, nz, I.spark, Math.ceil(this._n(I.sparks) * k), I.speed);
+    if (I.chips) {
+      for (let i = this._n(I.chips * k); i > 0; i--) {
+        const a = Math.atan2(nz, nx) + rand(-0.9, 0.9), s = rand(2.2, 7);
+        this.shard(x, y, z, Math.cos(a) * s, rand(1.5, 5.5), Math.sin(a) * s, I.chip, rand(0.3, 0.55));
+      }
+    }
+    for (let i = Math.ceil(I.puffs * k); i > 0; i--) {
       this.spawn(x + nx * 0.08, y, z + nz * 0.08, nx * rand(1, 3) + rand(-0.7, 0.7), rand(0.3, 1.3), nz * rand(1, 3) + rand(-0.7, 0.7),
-        rand(0.25, 0.45), 0.14, 0.42, DUST, 0.5, -0.8, 3.0);
+        rand(0.3, 0.55), 0.14, 0.5, I.dust, I.alpha, -0.8, 3.0);
+    }
+    if (mat === 'sand') {
+      // A punctured sandbag bleeds a thin stream of sand for a moment.
+      for (let i = 0; i < 4; i++) this.spawn(x + nx * 0.06, y - i * 0.1, z + nz * 0.06, nx * 0.15, -rand(0.4, 1.2), nz * 0.15, rand(0.4, 0.7), 0.05, 0.02, I.dust, 0.9, 7, 0.5);
+    }
+    if (I.glow > 0) this.spawn(x + nx * 0.1, y, z + nz * 0.1, 0, 0, 0, 0.08, 0.25, 0.55 * I.glow, I.spark, 0, 0, 0);
+    if (!fine || Math.random() < 0.35) this.mark(x + nx * 0.015, y, z + nz * 0.015, nx, nz, rand(0.09, 0.16), I.mark, I.glow);
+  }
+
+  // A round that ran out of range kicks up the ground; over a basin it splashes.
+  groundHit(x, z) {
+    if (this.surf && this.surf.isWater(x, z)) { this.waterSplash(x, z, 0.5); return; }
+    for (let i = 0; i < 2; i++) this.spawn(x, 0.12, z, rand(-0.8, 0.8), rand(0.6, 1.6), rand(-0.8, 0.8), rand(0.25, 0.45), 0.1, 0.34, this.dustRGB, 0.5, -0.8, 3);
+  }
+
+  waterSplash(x, z, k = 1) {
+    for (let i = this._n(9 * k); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(0.3, 1.8);
+      this.spawn(x, -0.55, z, Math.cos(a) * s, rand(2.5, 6) * (0.6 + k * 0.5), Math.sin(a) * s, rand(0.3, 0.55), 0.09, 0.03, WATER, 0.65, 15, 0.4, 0.03);
+    }
+    this.ring(x, z, 0.1, 0.9 + k * 1.5, 0.5, WATER, 0.5, -0.55);
+  }
+
+  groundThud(x, z) {
+    for (let i = 0; i < 3; i++) this.spawn(x + rand(-0.2, 0.2), 0.1, z + rand(-0.2, 0.2), rand(-0.8, 0.8), rand(0.2, 0.7), rand(-0.8, 0.8), rand(0.25, 0.4), 0.12, 0.42, this.dustRGB, 0.45, -0.4, 2.6);
+  }
+
+  // Foot plant: a scuff of whatever the map's ground is. Sprinting kicks up more.
+  footfall(x, z, sprint) {
+    if (this.wet) {
+      this.ring(x, z, 0.05, 0.3 + sprint * 0.2, 0.28, WATER, 0.38);
+      if (sprint > 0.4) for (let i = 0; i < 2; i++) this.spawn(x, 0.1, z, rand(-1, 1), rand(1.4, 2.6), rand(-1, 1), rand(0.16, 0.28), 0.05, 0.02, WATER, 0.65, 12, 0.5);
+      return;
+    }
+    const n = sprint > 0.4 ? 2 : 1;
+    for (let i = 0; i < n; i++) this.spawn(x + rand(-0.1, 0.1), 0.08, z + rand(-0.1, 0.1), rand(-0.5, 0.5), rand(0.2, 0.6), rand(-0.5, 0.5), rand(0.26, 0.42), 0.09, 0.36, this.dustRGB, 0.34, -0.3, 2.4);
+  }
+
+  // Skids and body parts both scatter small, fast things that cost almost nothing.
+  slideTrail(x, z) {
+    if (this.wet) this.spawn(x + rand(-0.2, 0.2), 0.12, z + rand(-0.2, 0.2), rand(-0.8, 0.8), rand(1.2, 2.4), rand(-0.8, 0.8), rand(0.2, 0.3), 0.06, 0.03, WATER, 0.65, 11, 0.6);
+    else this.spawn(x + rand(-0.2, 0.2), 0.12, z + rand(-0.2, 0.2), rand(-0.7, 0.7), rand(0.3, 0.8), rand(-0.7, 0.7), rand(0.3, 0.5), 0.12, 0.5, this.dustRGB, 0.45, -0.4, 2.2);
+  }
+
+  ember(x, y, z, rgb) {
+    this.spawn(x, y, z, rand(-0.5, 0.5), rand(0.2, 1.2), rand(-0.5, 0.5), rand(0.18, 0.34), 0.07, 0.015, rgb, 0, 3, 0.8);
+  }
+
+  // The full firing signature of a gun at the muzzle: flash shape, jets, smoke and the casing.
+  shotFx(weapon, x, y, z, aim, rgb, sup, r) {
+    const G = GUN_FX[weapon] || GUN_FX_DEFAULT;
+    const ca = Math.cos(aim), sa = Math.sin(aim);
+    const k = sup ? 0.35 : 1;
+    const f = G.flash;
+    const wob = G.jitter ? rand(0.75, 1.2) : 1;
+    this.muzzleFlash(x, y, z, aim, rgb, f[0] * k * wob, f[1], f[2]);
+    this.muzzleSmoke(x, y, z);
+    if (!sup) {
+      if (G.extra === 'blast') {
+        // A cone of burning powder.
+        for (let i = this._n(9); i > 0; i--) {
+          const a = aim + rand(-0.32, 0.32), s = rand(10, 22);
+          this.spawn(x, y, z, Math.cos(a) * s, rand(-0.4, 1.2), Math.sin(a) * s, rand(0.07, 0.14), 0.09, 0.02, MUZZLE_HOT, 0, 0, 7, 0.016);
+        }
+      } else if (G.extra === 'brake') {
+        // T-shaped brake: two jets out the sides and a heavy puff of grey.
+        for (let side = -1; side <= 1; side += 2) {
+          for (let i = this._n(5); i > 0; i--) {
+            const s = rand(7, 15);
+            this.spawn(x, y, z, -sa * side * s + ca * 2, rand(-0.3, 0.9), ca * side * s + sa * 2, rand(0.1, 0.2), 0.14, 0.03, MUZZLE_HOT, 0, 0, 5, 0.012);
+          }
+          this.spawn(x, y, z, -sa * side * 2.5, 0.4, ca * side * 2.5, rand(0.4, 0.7), 0.2, 0.8, DUST, 0.55, -0.6, 2.6);
+        }
+      } else if (G.extra === 'gap') {
+        // Revolvers spit fire out of the cylinder gap, either side of the frame.
+        for (let side = -1; side <= 1; side += 2) {
+          this.spawn(x - ca * 0.55, y, z - sa * 0.55, -sa * side * 3, 0.6, ca * side * 3, 0.1, 0.22, 0.08, MUZZLE_HOT, 0, 0, 2);
+        }
+      } else if (G.extra === 'backblast') {
+        // Rear of the tube: a wide gout of flame, then a wall of smoke.
+        for (let i = this._n(12); i > 0; i--) {
+          const a = aim + Math.PI + rand(-0.4, 0.4), s = rand(8, 18);
+          this.spawn(x - ca * 1.8, y, z - sa * 1.8, Math.cos(a) * s, rand(0.2, 2), Math.sin(a) * s, rand(0.16, 0.34), 0.2, 0.05, FIRE, 0, 0, 5);
+        }
+        for (let i = this._n(8); i > 0; i--) {
+          const a = aim + Math.PI + rand(-0.6, 0.6), s = rand(2, 7);
+          this.spawn(x - ca * 2, y, z - sa * 2, Math.cos(a) * s, rand(0.4, 1.4), Math.sin(a) * s, rand(0.6, 1.1), 0.3, 1.1, SMOKE_PALE, 0.6, -0.6, 3);
+        }
+      }
+    }
+    if (G.shell && r) this.shell(r.eject[0], r.eject[1], r.eject[2], r.ejectDir[0], r.ejectDir[1], G.shell);
+  }
+
+  // Sniper round: a pale corkscrew of air left hanging along the shot.
+  contrail(ax, ay, az, bx, by, bz) {
+    const n = this._n(14);
+    for (let i = 1; i <= n; i++) {
+      const k = i / n, a = k * 40;
+      this.spawn(ax + (bx - ax) * k + Math.cos(a) * 0.06, ay + (by - ay) * k + Math.sin(a) * 0.05, az + (bz - az) * k - Math.sin(a) * 0.06,
+        rand(-0.1, 0.1), rand(0.1, 0.3), rand(-0.1, 0.1), rand(0.45, 0.8), 0.05, 0.2, CONTRAIL, 0.4, -0.2, 1.2);
     }
   }
 
@@ -360,6 +546,12 @@ export class VFX {
     }
     this.spawn(x, y, z, 0, 0, 0, 0.16, 0.5, 1.9, rgb, 0, 0, 0);
     this.spawn(x, y, z, 0, 0, 0, 0.12, 0.4, 1.2, WHITE, 0, 0, 0);
+    // Hard cross of light at the moment the body comes apart.
+    for (let i = 0; i < 2; i++) {
+      const sx = i ? 44 : 0, sz = i ? 0 : 44;
+      this.spawn(x, y, z, sx, 0, sz, 0.09, 0.13, 0.02, WHITE, 0, 0, 0, 0.07);
+      this.spawn(x, y, z, -sx, 0, -sz, 0.09, 0.13, 0.02, WHITE, 0, 0, 0, 0.07);
+    }
     for (let i = 0; i < 5; i++) {
       this.spawn(x + rand(-0.3, 0.3), y - 0.4, z + rand(-0.3, 0.3), rand(-0.8, 0.8), rand(0.6, 1.5), rand(-0.8, 0.8),
         rand(0.45, 0.8), 0.32, 0.95, SMOKE, 0.75, -0.4, 1.4);
@@ -367,38 +559,74 @@ export class VFX {
     this.ring(x, z, 0.35, 1.8, 0.28, rgb, 0.9);
   }
 
+  // A big blast has an order to it: a white instant, the fireball, flying junk, a ground shock, then the smoke stack.
   explosion(x, z, radius) {
-    for (let i = 0; i < 24; i++) {
-      const a = rand(0, Math.PI * 2), s = rand(5, 20);
-      this.spawn(x, 0.6, z, Math.cos(a) * s, rand(4, 15), Math.sin(a) * s, rand(0.28, 0.65), 0.2, 0.04, FIRE, 0, 18, 1.5, 0.035);
+    const n = v => this._n(v);
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.09, radius * 1.4, radius * 0.5, WHITE, 0, 0, 0);
+    for (let i = n(4); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), o = rand(0.1, radius * 0.32);
+      this.fireball(x + Math.cos(a) * o, rand(0.7, 1.5), z + Math.sin(a) * o, radius * rand(0.55, 0.95), rand(0.34, 0.5));
     }
-    for (let i = 0; i < 12; i++) {
-      const a = rand(0, Math.PI * 2), s = rand(1, 5);
-      this.spawn(x + Math.cos(a), 0.5, z + Math.sin(a), Math.cos(a) * s, rand(1, 4), Math.sin(a) * s,
-        rand(0.8, 1.6), radius * 0.28, radius * 0.95, SMOKE, 0.82, -1.6, 1.6);
+    for (let i = n(30); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(6, 24);
+      this.spawn(x, 0.6, z, Math.cos(a) * s, rand(4, 16), Math.sin(a) * s, rand(0.28, 0.7), 0.2, 0.04, i % 3 ? FIRE : FIRE_HOT, 0, 18, 1.5, 0.035);
     }
-    this.fireball(x, 0.9, z, radius);
-    this.ring(x, z, radius * 0.2, radius * 1.6, 0.45, FIRE, 0.8);
-    this.scorch(x, z, radius * 0.72);
-    this.pop(x, 1.8, z, radius * 3.4, FIRE_POP, 0.26);
+    for (let i = n(22); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(5, 18);
+      this.shard(x, 0.7, z, Math.cos(a) * s, rand(5, 15), Math.sin(a) * s, i % 3 ? DEBRIS : FIRE_HOT, rand(0.8, 1.9));
+    }
+    // Ground shock: dust racing outward low across the floor.
+    for (let i = n(18); i > 0; i--) {
+      const a = (i / 18) * Math.PI * 2 + rand(-0.15, 0.15), s = rand(9, 15);
+      this.spawn(x + Math.cos(a) * 0.8, 0.25, z + Math.sin(a) * 0.8, Math.cos(a) * s, rand(0.4, 1.2), Math.sin(a) * s,
+        rand(0.5, 0.85), 0.5, radius * 0.5, this.dustRGB, 0.72, 0, 3.4);
+    }
+    // The smoke stack, darkest at the bottom, growing as it climbs.
+    for (let i = n(16); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(0.5, 3.2), up = rand(1.5, 5.5);
+      this.spawn(x + Math.cos(a) * rand(0, 1.3), rand(0.5, 2.2), z + Math.sin(a) * rand(0, 1.3), Math.cos(a) * s, up, Math.sin(a) * s,
+        rand(1.1, 2.3), radius * 0.28, radius * 1.05, i % 2 ? SMOKE : SMOKE_PALE, 0.86, -1.1, 1.6);
+    }
+    for (let i = n(14); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(0.5, 4);
+      this.spawn(x + rand(-1, 1), rand(0.6, 2.4), z + rand(-1, 1), Math.cos(a) * s, rand(3, 9), Math.sin(a) * s, rand(0.7, 1.5), 0.09, 0.015, FIRE_HOT, 0, 4, 1.4);
+    }
+    this.ring(x, z, radius * 0.2, radius * 1.7, 0.4, FIRE, 0.9);
+    this.ring(x, z, radius * 0.1, radius * 2.2, 0.26, WHITE, 0.65);
+    this.scorch(x, z, radius * 0.78);
+    this.pop(x, 1.8, z, radius * 3.6, FIRE_POP, 0.3);
+    this._after(0.11, x, z, radius, 1);
+  }
+
+  _after(t, x, z, r, kind) {
+    const d = this.delayed[this.delayedHead];
+    this.delayedHead = (this.delayedHead + 1) % DELAYED;
+    d.t = t; d.x = x; d.z = z; d.r = r; d.kind = kind;
   }
 
   // Grenade: tighter and more violent than an airstrike explosion, with shrapnel.
   fragBurst(x, z, radius) {
-    for (let i = 0; i < 18; i++) {
-      const a = rand(0, Math.PI * 2), s = rand(8, 26);
-      this.spawn(x, 0.5, z, Math.cos(a) * s, rand(3, 12), Math.sin(a) * s, rand(0.22, 0.42), 0.16, 0.03, FIRE, 0, 18, 1.5, 0.04);
+    const n = v => this._n(v);
+    this.spawn(x, 0.8, z, 0, 0, 0, 0.06, radius * 1.1, radius * 0.4, WHITE, 0, 0, 0);
+    for (let i = n(22); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(8, 28);
+      this.spawn(x, 0.5, z, Math.cos(a) * s, rand(3, 12), Math.sin(a) * s, rand(0.22, 0.46), 0.16, 0.03, FIRE, 0, 18, 1.5, 0.04);
     }
-    for (let i = 0; i < 16; i++) {
-      const a = rand(0, Math.PI * 2), s = rand(5, 15);
-      this.shard(x, 0.6, z, Math.cos(a) * s, rand(4, 13), Math.sin(a) * s, GRENADE_SHARD);
+    for (let i = n(20); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(6, 18);
+      this.shard(x, 0.6, z, Math.cos(a) * s, rand(4, 14), Math.sin(a) * s, GRENADE_SHARD, rand(0.5, 1.2));
     }
-    for (let i = 0; i < 8; i++) {
+    for (let i = n(12); i > 0; i--) {
+      const a = (i / 12) * Math.PI * 2, s = rand(7, 11);
+      this.spawn(x + Math.cos(a) * 0.5, 0.22, z + Math.sin(a) * 0.5, Math.cos(a) * s, rand(0.3, 1), Math.sin(a) * s, rand(0.4, 0.65), 0.34, radius * 0.42, this.dustRGB, 0.62, 0, 3.4);
+    }
+    for (let i = n(8); i > 0; i--) {
       const a = rand(0, Math.PI * 2), s = rand(1, 4);
-      this.spawn(x + Math.cos(a) * 0.5, 0.5, z + Math.sin(a) * 0.5, Math.cos(a) * s, rand(1, 3), Math.sin(a) * s, rand(0.5, 1), radius * 0.2, radius * 0.7, SMOKE, 0.7, -1.2, 1.8);
+      this.spawn(x + Math.cos(a) * 0.5, 0.5, z + Math.sin(a) * 0.5, Math.cos(a) * s, rand(1, 3), Math.sin(a) * s, rand(0.6, 1.2), radius * 0.2, radius * 0.75, SMOKE, 0.75, -1.2, 1.8);
     }
-    this.fireball(x, 0.8, z, radius * 0.85);
+    this.fireball(x, 0.8, z, radius * 0.85, 0.34);
     this.ring(x, z, radius * 0.2, radius * 1.3, 0.3, FIRE, 1);
+    this.ring(x, z, radius * 0.1, radius * 1.8, 0.2, WHITE, 0.5);
     this.scorch(x, z, radius * 0.55);
     this.pop(x, 1.6, z, radius * 3, FIRE_POP, 0.22);
   }
@@ -539,12 +767,20 @@ export class VFX {
     P.scale[i] = scale;
   }
 
-  shell(x, y, z, dirX, dirZ) {
-    this._emitPhys(this.sh, x, y, z, dirX * rand(2.2, 4.2), rand(2.5, 4.5), dirZ * rand(2.2, 4.2), 0.9, BRASS, rand(1, 1.3));
+  // Casing style from SHELL_LOOK; brass stays on the floor a little before it goes.
+  shell(x, y, z, dirX, dirZ, kind = 'rifle') {
+    const L = SHELL_LOOK[kind] || SHELL_LOOK.rifle;
+    this._emitPhys(this.sh, x, y, z, dirX * rand(2.2, 4.2), rand(2.5, 4.5), dirZ * rand(2.2, 4.2), rand(1.3, 2.2), L.rgb, L.s * rand(1, 1.3));
   }
 
-  shard(x, y, z, vx, vy, vz, rgb) {
-    this._emitPhys(this.sd, x, y, z, vx, vy, vz, rand(0.7, 1.2), rgb, rand(0.7, 1.5));
+  // Spent magazine leaving the gun: heavier, flatter fall, no spin up.
+  dropMag(x, y, z, rgb, size) {
+    const s = Math.max(size[0], size[1], size[2]) / 0.22;
+    this._emitPhys(this.sh, x, y, z, rand(-0.5, 0.5), rand(-0.4, 0.5), rand(-0.5, 0.5), 2.0, rgb, s);
+  }
+
+  shard(x, y, z, vx, vy, vz, rgb, scale = 0) {
+    this._emitPhys(this.sd, x, y, z, vx, vy, vz, rand(0.7, 1.2), rgb, scale || rand(0.7, 1.5));
   }
 
   /* ---------- Muzzle flash ---------- */
@@ -583,7 +819,8 @@ export class VFX {
     this.fl = this._physPool(FLASHES);
   }
 
-  muzzleFlash(x, y, z, aim, rgb, size) {
+  // lenK stretches the star along the barrel, widK across it.
+  muzzleFlash(x, y, z, aim, rgb, size, lenK = 1, widK = 1) {
     const P = this.fl, i = P.head;
     P.head = (i + 1) % FLASHES;
     P.x[i] = x; P.y[i] = y; P.z[i] = z;
@@ -592,6 +829,7 @@ export class VFX {
     P.scale[i] = size;
     P.qx[i] = aim;                 // Stored as yaw; flashes need no full orientation.
     P.spin[i] = rand(-0.6, 0.6);
+    P.qy[i] = lenK; P.qz[i] = widK;
     this.spawn(x, y, z, 0, 0, 0, 0.06, size * 0.9, size * 0.5, rgb, 0, 0, 0);
   }
 
@@ -627,11 +865,11 @@ export class VFX {
     this.bl = this._physPool(BALLS);
   }
 
-  fireball(x, y, z, radius) {
+  fireball(x, y, z, radius, life = 0.38) {
     const P = this.bl, i = P.head;
     P.head = (i + 1) % BALLS;
     P.x[i] = x; P.y[i] = y; P.z[i] = z;
-    P.t[i] = 0.38; P.life[i] = 0.38;
+    P.t[i] = life; P.life[i] = life;
     P.scale[i] = radius;
     P.r[i] = 1; P.g[i] = 0.72; P.b[i] = 0.28;
   }
@@ -651,15 +889,16 @@ export class VFX {
     g.instanceCount = 0;
     g.setAttribute('aP', this.rP = dyn(4, RINGS));     // x, z, rInner, rOuter
     g.setAttribute('aC', this.rC = dyn(4, RINGS));     // premultiplied rgba
+    g.setAttribute('aY', this.rY = dyn(1, RINGS));     // Height of the ring: ground, or water level in a basin.
     this.ringGeom = g;
     this.ringMat = new THREE.ShaderMaterial({
       ...PREMULT,
       vertexShader: `
-        attribute float aR; attribute vec4 aP; attribute vec4 aC;
+        attribute float aR; attribute vec4 aP; attribute vec4 aC; attribute float aY;
         varying vec4 vC; varying float vR;
         void main(){
           float r = mix(aP.z, aP.w, aR);
-          vec3 p = vec3(aP.x + position.x * r, 0.17, aP.y + position.z * r);
+          vec3 p = vec3(aP.x + position.x * r, aY, aP.y + position.z * r);
           vC = aC; vR = aR;
           gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
         }`,
@@ -672,15 +911,15 @@ export class VFX {
     this.ringMesh.renderOrder = 4;
     this.scene.add(this.ringMesh);
     const R = this.rg = { head: 0 };
-    for (const k of ['x', 'z', 'r0', 'r1', 't', 'life', 'cr', 'cg', 'cb', 'a', 'solid']) R[k] = new Float32Array(RINGS);
+    for (const k of ['x', 'z', 'r0', 'r1', 't', 'life', 'cr', 'cg', 'cb', 'a', 'solid', 'y']) R[k] = new Float32Array(RINGS);
   }
 
-  ring(x, z, r0, r1, life, rgb, a) {
+  ring(x, z, r0, r1, life, rgb, a, y = 0.17) {
     const R = this.rg, i = R.head;
     R.head = (i + 1) % RINGS;
     R.x[i] = x; R.z[i] = z; R.r0[i] = r0; R.r1[i] = r1;
     R.t[i] = life; R.life[i] = life;
-    R.cr[i] = rgb[0]; R.cg[i] = rgb[1]; R.cb[i] = rgb[2]; R.a[i] = a; R.solid[i] = 0;
+    R.cr[i] = rgb[0]; R.cg[i] = rgb[1]; R.cb[i] = rgb[2]; R.a[i] = a; R.solid[i] = 0; R.y[i] = y;
   }
 
   scorch(x, z, r) {
@@ -688,7 +927,162 @@ export class VFX {
     R.head = (i + 1) % RINGS;
     R.x[i] = x; R.z[i] = z; R.r0[i] = 0; R.r1[i] = r;
     R.t[i] = 9; R.life[i] = 9;
-    R.cr[i] = 0.05; R.cg[i] = 0.04; R.cb[i] = 0.05; R.a[i] = 0.65; R.solid[i] = 1;
+    R.cr[i] = 0.05; R.cg[i] = 0.04; R.cb[i] = 0.05; R.a[i] = 0.65; R.solid[i] = 1; R.y[i] = 0.17;
+  }
+
+  // A one-frame ground ring appended after step(); used by the throw preview, costs nothing when idle.
+  addRing(x, z, inner, outer, rgb, a) {
+    const n = this.ringGeom.instanceCount;
+    if (n >= RINGS) return;
+    this.rP.setXYZW(n, x, z, inner, outer);
+    this.rC.setXYZW(n, rgb[0] * a, rgb[1] * a, rgb[2] * a, 0);
+    this.rY.setX(n, 0.19);
+    this.ringGeom.instanceCount = n + 1;
+  }
+
+  /* ---------- Bullet marks on walls ---------- */
+  _buildMarks() {
+    const g = new THREE.InstancedBufferGeometry();
+    // A small hexagon facing +Z, re-oriented in the shader to the wall normal.
+    const pos = [];
+    for (let i = 0; i < 6; i++) {
+      const a0 = (i / 6) * Math.PI * 2, a1 = ((i + 1) / 6) * Math.PI * 2;
+      pos.push(0, 0, 0, Math.cos(a0), Math.sin(a0), 0, Math.cos(a1), Math.sin(a1), 0);
+    }
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.instanceCount = 0;
+    g.setAttribute('aP', this.mP = dyn(4, MARKS));     // xyz, size
+    g.setAttribute('aN', this.mN = dyn(4, MARKS));     // nx, nz, opacity, glow
+    g.setAttribute('aC', this.mC = dyn(3, MARKS));
+    this.markGeom = g;
+    this.markMat = new THREE.ShaderMaterial({
+      ...PREMULT,
+      vertexShader: `
+        attribute vec4 aP; attribute vec4 aN; attribute vec3 aC;
+        varying vec3 vC; varying float vA; varying float vG;
+        void main(){
+          vec3 n = vec3(aN.x, 0.0, aN.y);
+          vec3 u = normalize(cross(vec3(0.0, 1.0, 0.0), n));
+          vec3 v = vec3(0.0, 1.0, 0.0);
+          vec3 p = aP.xyz + (u * position.x + v * position.y) * aP.w;
+          vC = aC; vA = aN.z; vG = aN.w;
+          gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vC; varying float vA; varying float vG;
+        void main(){ gl_FragColor = vec4(vC * vA + vec3(1.0, 0.45, 0.12) * vG, vA); }`,
+      side: THREE.DoubleSide,
+    });
+    this.markMesh = new THREE.Mesh(g, this.markMat);
+    this.markMesh.frustumCulled = false;
+    this.markMesh.renderOrder = 3;
+    this.scene.add(this.markMesh);
+    const M = this.mk = { head: 0 };
+    for (const k of ['x', 'y', 'z', 'nx', 'nz', 's', 't', 'r', 'g', 'b', 'hot']) M[k] = new Float32Array(MARKS);
+  }
+
+  mark(x, y, z, nx, nz, size, rgb, hot) {
+    const M = this.mk, i = M.head;
+    M.head = (i + 1) % MARKS;
+    M.x[i] = x; M.y[i] = y; M.z[i] = z; M.nx[i] = nx; M.nz[i] = nz; M.s[i] = size;
+    M.t[i] = 9; M.r[i] = rgb[0]; M.g[i] = rgb[1]; M.b[i] = rgb[2]; M.hot[i] = hot;
+  }
+
+  _stepMarks(dt) {
+    const M = this.mk;
+    let n = 0;
+    for (let i = 0; i < MARKS; i++) {
+      if (M.t[i] <= 0) continue;
+      M.t[i] -= dt;
+      M.hot[i] = Math.max(0, M.hot[i] - dt * 2.2);
+      const a = Math.min(1, M.t[i] / 1.5) * 0.85;
+      this.mP.setXYZW(n, M.x[i], M.y[i], M.z[i], M.s[i]);
+      this.mN.setXYZW(n, M.nx[i], M.nz[i], a, M.hot[i] * 0.9);
+      this.mC.setXYZ(n, M.r[i], M.g[i], M.b[i]);
+      n++;
+    }
+    this.markGeom.instanceCount = n;
+    this.mP.needsUpdate = true; this.mN.needsUpdate = true; this.mC.needsUpdate = true;
+  }
+
+  /* ---------- Rockets: the launcher is hitscan in the sim, so the missile is a cosmetic racing its own blast ---------- */
+  _buildRockets() {
+    const b = new MeshBuilder();
+    b.setColor(0xffffff).prismX(-0.42, 0.34, 0, 0, 0.09, 0.09, 6);
+    b.prismX(0.34, 0.6, 0, 0, 0.09, 0.02, 6);
+    b.prismX(-0.42, -0.3, 0, 0, 0.17, 0.08, 4);
+    this.rocketMesh = this._makeSolid(b.build(), ROCKETS, 3);
+    const K = this.rk = { head: 0 };
+    for (const k of ['x', 'y', 'z', 'tx', 'ty', 'tz', 'dx', 'dy', 'dz', 't', 'boom', 'clock', 'phase']) K[k] = new Float32Array(ROCKETS);
+  }
+
+  rocket(x, y, z, tx, ty, tz) {
+    const K = this.rk, i = K.head;
+    K.head = (i + 1) % ROCKETS;
+    const dist = Math.hypot(tx - x, ty - y, tz - z) || 1;
+    K.x[i] = x; K.y[i] = y; K.z[i] = z; K.tx[i] = tx; K.ty[i] = ty; K.tz[i] = tz;
+    K.dx[i] = (tx - x) / dist; K.dy[i] = (ty - y) / dist; K.dz[i] = (tz - z) / dist;
+    K.t[i] = dist / ROCKET_SPEED; K.boom[i] = 0; K.clock[i] = 0; K.phase[i] = rand(0, 6.28);
+  }
+
+  // Claims a pending explosion for the rocket flying to it. False means the rocket already landed or never existed.
+  rocketInbound(x, z, radius) {
+    const K = this.rk;
+    for (let i = 0; i < ROCKETS; i++) {
+      if (K.t[i] <= 0 || K.boom[i] > 0) continue;
+      if (Math.abs(K.tx[i] - x) < 3 && Math.abs(K.tz[i] - z) < 3) { K.boom[i] = radius; return true; }
+    }
+    return false;
+  }
+
+  _stepRockets(dt) {
+    const K = this.rk, mesh = this.rocketMesh, e = mesh.instanceMatrix.array, aC = mesh.geometry.attributes.aC;
+    let n = 0;
+    for (let i = 0; i < ROCKETS; i++) {
+      if (K.t[i] <= 0) continue;
+      K.t[i] -= dt;
+      K.clock[i] += dt;
+      const dx = K.dx[i], dy = K.dy[i], dz = K.dz[i];
+      if (K.t[i] <= 0) {
+        if (K.boom[i] > 0 && this.onBoom) this.onBoom(K.tx[i], K.tz[i], K.boom[i]);
+        continue;
+      }
+      const step = ROCKET_SPEED * dt;
+      // A puff at least every half metre however slow the frame, so the trail never breaks up into beads.
+      const puffs = Math.min(this.fxScale < 1 ? 5 : 12, Math.ceil(step / 0.3));
+      for (let p = 0; p < puffs; p++) {
+        const k = p / puffs, cl = K.clock[i] * 60 + K.phase[i] + p * 1.3;
+        const cork = 0.05 + Math.min(1, K.clock[i] * 5) * 0.09;
+        const px = K.x[i] + dx * step * k + Math.cos(cl) * cork, py = K.y[i] + dy * step * k + Math.sin(cl) * cork, pz = K.z[i] + dz * step * k - Math.sin(cl) * cork;
+        this.spawn(px, py, pz, rand(-0.25, 0.25), rand(0.15, 0.7), rand(-0.25, 0.25), rand(0.4, 1.05), rand(0.2, 0.3), rand(0.42, 0.78), p % 2 ? SMOKE_PALE : STEAM, 0.72, -0.3, 1.6);
+        if (p % 3 === 0) this.spawn(px, py, pz, rand(-1, 1), rand(-0.5, 1), rand(-1, 1), rand(0.09, 0.2), 0.28, 0.05, FIRE, 0, 0, 2.4);
+      }
+      K.x[i] += dx * step; K.y[i] += dy * step; K.z[i] += dz * step;
+      const j = n * 16;
+      // Rocket model forward is +X; build its basis from the flight direction.
+      const lz = Math.hypot(dx, dz) || 1;
+      const zx = -dz / lz, zy = 0, zz = dx / lz;
+      const yx = zy * dz - zz * dy, yy = zz * dx - zx * dz, yz = zx * dy - zy * dx;
+      e[j] = dx * 1.5; e[j + 1] = dy * 1.5; e[j + 2] = dz * 1.5; e[j + 3] = 0;
+      e[j + 4] = yx * 1.5; e[j + 5] = yy * 1.5; e[j + 6] = yz * 1.5; e[j + 7] = 0;
+      e[j + 8] = zx * 1.5; e[j + 9] = zy * 1.5; e[j + 10] = zz * 1.5; e[j + 11] = 0;
+      e[j + 12] = K.x[i]; e[j + 13] = K.y[i]; e[j + 14] = K.z[i]; e[j + 15] = 1;
+      aC.setXYZW(n, 0.62, 0.68, 0.48, 1);
+      n++;
+    }
+    mesh.count = n;
+    mesh.instanceMatrix.needsUpdate = true;
+    aC.needsUpdate = true;
+  }
+
+  // Drawn after step() has packed everything: the engine glow rides the particle batch.
+  _rocketGlow() {
+    const K = this.rk;
+    for (let i = 0; i < ROCKETS; i++) {
+      if (K.t[i] <= 0) continue;
+      this.addDot(K.x[i] - K.dx[i] * 0.7, K.y[i] - K.dy[i] * 0.7, K.z[i] - K.dz[i] * 0.7, 0.65 + Math.random() * 0.3, FIRE);
+      this.addDot(K.x[i] - K.dx[i] * 0.9, K.y[i] - K.dy[i] * 0.9, K.z[i] - K.dz[i] * 0.9, 0.3, WHITE);
+    }
   }
 
   /* ---------- Light pops, evaluated in the world shader ---------- */
@@ -726,6 +1120,9 @@ export class VFX {
     this._stepFlashes(dt);
     this._stepBalls(dt);
     this._stepRings(dt);
+    this._stepMarks(dt);
+    this._stepRockets(dt);
+    this._rocketGlow();
     for (let i = 0; i < MAX_POPS; i++) { const p = this.pops[i]; if (p.t > 0) p.t -= dt; }
   }
 
@@ -736,11 +1133,11 @@ export class VFX {
       if (T.t[i] <= 0) continue;
       T.t[i] -= dt;
       const dur = T.dur[i], age = dur - T.t[i];
-      const travel = dur - 0.075;
+      const linger = T.linger[i], travel = Math.max(dur - linger, 1e-4);
       const headT = Math.min(1, age / travel);
-      const tailLen = 11 / Math.max(T.len[i], 0.01);
+      const tailLen = T.tail[i] / Math.max(T.len[i], 0.01);
       const tailT = Math.max(0, headT - tailLen * Math.min(1, age * 18));
-      const fade = headT < 1 ? 1 : Math.max(0, T.t[i] / 0.075);
+      const fade = headT < 1 ? 1 : Math.max(0, T.t[i] / linger);
       this.tA.setXYZ(n, T.ax[i] + (T.bx[i] - T.ax[i]) * tailT, T.ay[i] + (T.by[i] - T.ay[i]) * tailT, T.az[i] + (T.bz[i] - T.az[i]) * tailT);
       this.tB.setXYZ(n, T.ax[i] + (T.bx[i] - T.ax[i]) * headT, T.ay[i] + (T.by[i] - T.ay[i]) * headT, T.az[i] + (T.bz[i] - T.az[i]) * headT);
       this.tC.setXYZW(n, T.r[i] * fade, T.g[i] * fade, T.b[i] * fade, T.w[i]);
@@ -823,7 +1220,7 @@ export class VFX {
       const ny = aw * qy - ax * qz + ay * qw + az * qx;
       const nz = aw * qz + ax * qy - ay * qx + az * qw;
       const nw = aw * qw - ax * qx - ay * qy - az * qz;
-      const l = 1 / Math.hypot(nx, ny, nz, nw);
+      const l = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz + nw * nw);
       P.qx[i] = nx * l; P.qy[i] = ny * l; P.qz[i] = nz * l; P.qw[i] = nw * l;
       const k = P.t[i] / P.life[i];
       const sc = P.scale[i] * (isShell ? 1 : Math.min(1, k * 3));
@@ -864,9 +1261,10 @@ export class VFX {
       const a = P.qx[i], ca = Math.cos(a), sa = Math.sin(a);
       // Yaw only: flash lies on a horizontal plane along the barrel, which is the view the camera has.
       const j = n * 16;
-      e[j] = ca * sc;  e[j + 1] = 0; e[j + 2] = sa * sc;  e[j + 3] = 0;
+      const sl = sc * P.qy[i], sw = sc * P.qz[i];
+      e[j] = ca * sl;  e[j + 1] = 0; e[j + 2] = sa * sl;  e[j + 3] = 0;
       e[j + 4] = 0;    e[j + 5] = sc; e[j + 6] = 0;       e[j + 7] = 0;
-      e[j + 8] = -sa * sc; e[j + 9] = 0; e[j + 10] = ca * sc; e[j + 11] = 0;
+      e[j + 8] = -sa * sw; e[j + 9] = 0; e[j + 10] = ca * sw; e[j + 11] = 0;
       e[j + 12] = P.x[i]; e[j + 13] = P.y[i]; e[j + 14] = P.z[i]; e[j + 15] = 1;
       aC.setXYZW(n, P.r[i], P.g[i], P.b[i], 0.6 + k * 0.8);
       n++;
@@ -892,7 +1290,7 @@ export class VFX {
       e[j + 8] = 0; e[j + 9] = 0; e[j + 10] = sc; e[j + 11] = 0;
       e[j + 12] = P.x[i]; e[j + 13] = P.y[i]; e[j + 14] = P.z[i]; e[j + 15] = 1;
       const a = Math.max(0, 1 - age * 1.05);
-      aC.setXYZW(n, 1.0, 0.65 - age * 0.35, 0.22 - age * 0.18, a);
+      aC.setXYZW(n, 1.0, 0.6 - age * 0.35, 0.2 - age * 0.16, a * 0.72);
       n++;
     }
     mesh.count = n;
@@ -919,19 +1317,28 @@ export class VFX {
         const a = R.a[i] * k;
         this.rC.setXYZW(n, R.cr[i] * a, R.cg[i] * a, R.cb[i] * a, 0);
       }
+      this.rY.setX(n, R.y[i]);
       n++;
     }
     this.ringGeom.instanceCount = n;
-    this.rP.needsUpdate = true; this.rC.needsUpdate = true;
+    this.rP.needsUpdate = true; this.rC.needsUpdate = true; this.rY.needsUpdate = true;
   }
 
   dispose() {
-    for (const g of [this.tracerGeom, this.partGeom, this.ringGeom, this.shellMesh.geometry, this.shardMesh.geometry, this.flashMesh.geometry, this.ballMesh.geometry]) g.dispose();
-    for (const m of [this.tracerMat, this.partMat, this.solidMat, this.flashMat, this.ballMat, this.ringMat]) m.dispose();
+    // An InstancedMesh owns its instance-matrix buffer: without mesh.dispose() it stays on the GPU for the whole session.
+    for (const m of [this.shellMesh, this.shardMesh, this.flashMesh, this.ballMesh, this.rocketMesh]) { m.geometry.dispose(); m.dispose(); }
+    for (const g of [this.tracerGeom, this.partGeom, this.ringGeom, this.markGeom]) g.dispose();
+    for (const m of [this.tracerMat, this.partMat, this.solidMat, this.flashMat, this.ballMat, this.ringMat, this.markMat]) m.dispose();
+    for (const m of [this.tracerMesh, this.partMesh, this.ringMesh, this.markMesh, this.shellMesh, this.shardMesh, this.flashMesh, this.ballMesh, this.rocketMesh]) this.scene.remove(m);
   }
 }
 
-const WARM_SPARK = [1.0, 0.72, 0.3];
+const WATER = [0.72, 0.84, 0.98];
+const MUZZLE_HOT = [1.0, 0.74, 0.32];
+const SMOKE_PALE = [0.3, 0.29, 0.33];
+const CONTRAIL = [0.8, 0.84, 0.92];
+const DEBRIS = [0.2, 0.19, 0.2];
+const FIRE_HOT = [1.0, 0.76, 0.3];
 const GRENADE_SHARD = [0.82, 0.68, 0.5];
 const FLASH_TINT = [0.82, 0.92, 1.0];
 const FLASH_POP = [0.9, 0.96, 1.05];
@@ -943,7 +1350,6 @@ const DUST = [0.42, 0.38, 0.36];
 const SMOKE = [0.12, 0.11, 0.14];
 const FIRE = [1.0, 0.5, 0.15];
 const FIRE_POP = [0.95, 0.5, 0.22];
-const BRASS = [0.92, 0.7, 0.28];
 const FX_EMBER = [1.0, 0.42, 0.08];
 const FX_EMBER_HOT = [1.0, 0.82, 0.3];
 const FX_SHOCK = [0.35, 0.82, 1.0];

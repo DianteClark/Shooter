@@ -163,20 +163,27 @@ export class Weather {
     this.nextStrike = 4 + this.rng() * 6;
     this.strike = 0;                     // Time inside the current strike.
     this.strikeLen = 0;
+    this.pulses = 0;                     // Which flash of the current strike is showing; a new bolt each.
+    this.counts = this.group.children.map(m => m.geometry.instanceCount);
+  }
+
+  // Low Power thins each field rather than removing it, so the map keeps its weather.
+  setDensity(k) {
+    this.group.children.forEach((m, i) => { m.geometry.instanceCount = Math.ceil(this.counts[i] * k); });
   }
 
   // A strike is a quick double flash with a decaying tail, not one fade.
   _lightning(dt) {
     if (this.strikeLen <= 0) {
       this.nextStrike -= dt;
-      if (this.nextStrike <= 0) { this.strikeLen = 0.75; this.strike = 0; }
+      if (this.nextStrike <= 0) { this.strikeLen = 0.75; this.strike = 0; this.pulses = 0; }
       return 0;
     }
     this.strike += dt;
     const t = this.strike;
     let v = Math.exp(-t * 7.5);
-    if (t > 0.14) v = Math.max(v, 0.85 * Math.exp(-(t - 0.14) * 9));
-    if (t > 0.34) v = Math.max(v, 0.45 * Math.exp(-(t - 0.34) * 11));
+    if (t > 0.14) { v = Math.max(v, 0.85 * Math.exp(-(t - 0.14) * 9)); if (this.pulses < 1) this.pulses = 1; }
+    if (t > 0.34) { v = Math.max(v, 0.45 * Math.exp(-(t - 0.34) * 11)); if (this.pulses < 2) this.pulses = 2; }
     if (t >= this.strikeLen) { this.strikeLen = 0; this.nextStrike = 7 + this.rng() * 12; return 0; }
     return v;
   }

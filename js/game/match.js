@@ -10,6 +10,7 @@ import {
 import { Sim, scavengeRefill } from '../sim/sim.js';
 import { Interpolator } from './interp.js';
 import { MatchAwards } from './awards.js';
+import { Killcam } from './killcam.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_FRAME = 0.1;
@@ -21,7 +22,7 @@ export class Match {
     Object.assign(this, config);   // canvas, mapId, seed, limits, roster, ids, net, controls, hud, renderer, audio, onEnd
     this.map = MAPS[this.mapId];
     this.me = this.roster.find(r => r.id === this.localId);
-    this.ps = createPlayerState({ id: this.localId, primary: this.me.primary, camo: this.me.camo, loadout: this.me.loadout });
+    this.ps = createPlayerState({ id: this.localId, primary: this.me.primary, camo: this.me.camo, loadout: this.me.loadout, instantReload: this.mode === 'range' });
     this.nextLoadout = null;
     this.running = false;
     this.spawned = false;
@@ -42,6 +43,7 @@ export class Match {
       scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode,
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
+    this.killcam = new Killcam({ renderer: this.renderer, localId: this.localId });
     this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });
     this.interp = new Interpolator(this.isHost ? STEP * 1.5 : INTERP_DELAY);
     this.frame = this.frame.bind(this);
@@ -63,6 +65,7 @@ export class Match {
   stop() {
     this.running = false;
     this.controls.setEnabled(false);
+    this.killcam.dispose();
   }
 
   // Applied the next time the local player spawns.
@@ -224,12 +227,11 @@ export class Match {
 
   #finish(view) {
     if (this.endTimer < 0) {
-      this.endTimer = END_HOLD;
       this.controls.setEnabled(false);
-      if (view.lastKill) this.renderer.playFinalKill(view.lastKill);
+      this.endTimer = (view.lastKill && this.killcam.playFinal(view.lastKill)) || END_HOLD;
     }
     this.endTimer -= this.dt;
-    if (this.endTimer <= 0) {
+    if (this.endTimer <= 0 || this.killcam.skipped) {
       this.stop();
       this.onEnd({
         scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId,
@@ -258,7 +260,7 @@ export class Match {
     this.#overlayLocal(view);
 
     const events = this.frameEvents;
-    this.renderer.update(view, events, dt);
+    this.killcam.render(view, events, dt);
     this.hud.onEvents(events);
     this.hud.update(view, dt);
     this.audio.onEvents(events, view);
