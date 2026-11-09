@@ -68,6 +68,7 @@ export class Interpolator {
     out.tags = b.tags;
     out.points = b.points;
     out.scoreLimit = b.scoreLimit;
+    out.hardT = b.hardT;
 
     const fromById = this.newestById;
     fromById.clear();

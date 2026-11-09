@@ -2,7 +2,7 @@
 // frame with a variable dt) and bots (30 Hz on the host). No DOM, no three, no per-frame garbage:
 // the only allocations are the shot/ray objects that exist because a gun actually fired.
 
-import { PLAYER_RADIUS, SECONDARY_ID, WEAPON_IDS } from '../shared/constants.js';
+import { PLAYER_RADIUS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle, resolveCircle } from '../shared/geometry.js';
 import { HEAD_RADIUS, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
@@ -39,6 +39,7 @@ const ADS_OUT_RATE = 1.35;      // Leaving ADS is quicker than entering it.
 const ADS_FULL = 0.85;          // Counts as fully aimed for adsGate weapons.
 const TOPOFF_DELAY = 1.2;       // Seconds without firing or aiming before a part-empty mag tops itself off.
 const TOPOFF_BELOW = 0.7;       // Fraction of the magazine under which that happens.
+const DRIFT_SHOTS = 12;         // pattern.drift stops adding up after this many rounds of a string.
 export const FIRING_REVEAL = 1.5;   // firingT after a shot: seconds shown on the enemy minimap.
 
 const FASTHANDS_MULT = 0.72;    // Reload and swap time.
@@ -80,7 +81,7 @@ function slideCooldownOf(ps) { return MOVE.slideCooldown * (hasPerk(ps, 'maratho
 // Takes a full normalized loadout or the older partial {primary, camo}; absent fields are left alone.
 function applyLoadout(ps, l) {
   if (l.primary && WEAPONS[l.primary]) ps.primary = l.primary;
-  if (l.secondary && WEAPONS[l.secondary]) ps.secondary = l.secondary;
+  if (SECONDARY_IDS.includes(l.secondary)) ps.secondary = l.secondary;
   if (l.camo) ps.camo = l.camo;
   if (Array.isArray(l.perks)) ps.perks = l.perks.slice();
   if (TACTICALS[l.tactical]) ps.tactical = l.tactical;
@@ -121,7 +122,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout }
     sliding: false, slideT: 0, slideCool: 0,
     cooldown: 0, bloom: 0, shotIndex: 0,
     // Internal, not part of the wire format.
-    swapT: 0, shellT: 0, sinceShot: 9, triggerDown: false, armed: false,
+    swapT: 0, shellT: 0, sinceShot: 9, triggerDown: false, armed: false, burstLeft: 0,
     heatIdle: 9, calmT: 0,
     slideDirX: 0, slideDirZ: 0, slideSpeed: 0,
     aaOffset: 0, aaRaw: null,
@@ -153,7 +154,7 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
   ps.sprinting = false; ps.sprintRecoverT = 0;
   ps.sliding = false; ps.slideT = 0; ps.slideCool = 0;
   ps.cooldown = 0; ps.bloom = 0; ps.shotIndex = 0;
-  ps.swapT = 0; ps.sinceShot = 9; ps.triggerDown = false; ps.armed = false;
+  ps.swapT = 0; ps.sinceShot = 9; ps.triggerDown = false; ps.armed = false; ps.burstLeft = 0;
   ps.aaOffset = 0; ps.aaRaw = null;
   return ps;
 }
@@ -163,7 +164,7 @@ function setSlot(ps, slot) {
   ps.weapon = slot === 0 ? ps.primary : ps.secondary;
   const w = weaponDef(ps);
   ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
-  ps.shotIndex = 0; ps.bloom = 0;
+  ps.shotIndex = 0; ps.bloom = 0; ps.burstLeft = 0;
   ps.adsT *= 0.4;
   ps.swapT = w.swapTime * reloadMult(ps);
   ps.cooldown = Math.max(ps.cooldown, ps.swapT);
@@ -185,6 +186,7 @@ function startReload(ps, w) {
   }
   ps.reloadT = ps.reloadDur;
   ps.shotIndex = 0;
+  ps.burstLeft = 0;
 }
 
 function stepReload(ps, w, dt) {
@@ -230,6 +232,12 @@ function shotInterval(w, shotIndex) {
   return 60 / rpm;
 }
 
+// Recovery after the last round of a burst: whatever makes the gun's cadence come out at its rated rpm.
+function burstRecovery(w) {
+  const b = w.burst;
+  return Math.max(b.gap, b.count * 60 / w.rpm - (b.count - 1) * b.gap);
+}
+
 function isLocked(ps, w) { return w.heat !== undefined && ps.overheated; }
 
 // Runs whichever gun is in hand, so a locked LMG keeps cooling behind the pistol.
@@ -265,6 +273,7 @@ function fireOne(ps, w, rng) {
   if (w.pattern) {
     const p = w.pattern;
     kick = p.amp * Math.sin(ps.shotIndex * p.freq) * Math.min(1, ps.shotIndex / p.ramp) * (1 - 0.55 * ps.adsT);
+    if (p.drift) kick += p.drift * Math.min(ps.shotIndex, DRIFT_SHOTS) * (1 - 0.55 * ps.adsT);
   }
   if (n === 1) {
     angles[0] = ps.aim + kick + (rng() + rng() - 1) * spread;
@@ -272,7 +281,7 @@ function fireOne(ps, w, rng) {
     // A fan with light jitter, not pure randomness: a shotgun that randomly whiffs feels broken.
     for (let i = 0; i < n; i++) {
       const lane = ((i + 0.5) / n) * 2 - 1;
-      angles[i] = ps.aim + (lane + (rng() - 0.5) * 0.28) * spread;
+      angles[i] = ps.aim + kick + (lane + (rng() - 0.5) * 0.28) * spread;
     }
   }
   const shot = {
@@ -416,18 +425,30 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
     ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
   }
 
+  // A burst, once started, finishes whether or not the finger stayed down; sprinting abandons it.
+  if (ps.sprinting) ps.burstLeft = 0;
   let shots = NO_SHOTS;
-  if (trigger && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
+  if ((trigger || ps.burstLeft > 0) && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
     for (let guard = 0; guard < 4 && ps.cooldown <= 0 && ps.ammo[ps.slot] > 0 && !isLocked(ps, w); guard++) {
       if (!w.auto && !ps.armed && (!w.holdRpm || ps.sinceShot < 60 / w.holdRpm)) break;
-      const interval = shotInterval(w, ps.shotIndex);
+      let interval;
+      if (w.burst) {
+        if (ps.burstLeft <= 0) ps.burstLeft = w.burst.count;
+        ps.burstLeft--;
+        interval = ps.burstLeft > 0 ? w.burst.gap : burstRecovery(w);
+      } else {
+        interval = shotInterval(w, ps.shotIndex);
+      }
       const shot = fireOne(ps, w, rng);
       ps.armed = false;
       if (shots === NO_SHOTS) shots = [];
       shots.push(shot);
       ps.cooldown += interval;
+      // Each burst climbs the same way: the pattern is per burst, not per magazine.
+      if (w.burst && ps.burstLeft === 0) ps.shotIndex = 0;
       if (!w.auto) break;
     }
+    if (ps.ammo[ps.slot] <= 0) ps.burstLeft = 0;
   }
 
   // Only carry negative cooldown across a frame while actually firing, to hold the true rate.
@@ -536,6 +557,7 @@ export function encodeHumanState(ps) {
     Math.round(ps.adsT * 100), Math.round(ps.bloom * 100),
     ps.camo,
     Math.round(ps.heat * 100), Math.round(ps.firingT * 10),
+    WEAPON_IDS.indexOf(ps.secondary),
   ];
 }
 
@@ -543,10 +565,11 @@ export function decodeHumanState(d) {
   const flags = d[5];
   const slot = flags & 1;
   const primary = WEAPON_IDS[d[6]] || 'ar';
+  const secondary = WEAPON_IDS[d[18]] || SECONDARY_ID;
   return {
     x: d[0] / 100, z: d[1] / 100, aim: d[2] / 1000,
     vx: d[3] / 10, vz: d[4] / 10,
-    slot, primary, secondary: SECONDARY_ID, weapon: slot === 0 ? primary : SECONDARY_ID,
+    slot, primary, secondary, weapon: slot === 0 ? primary : secondary,
     sprinting: !!(flags & 2), sliding: !!(flags & 4),
     ammo: [d[7], d[8]], reserve: [d[9], d[10]],
     reloadT: d[11] / 100, reloadDur: d[12] / 100,

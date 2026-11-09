@@ -10,7 +10,8 @@
 // Mods are multipliers on the stat of the same name in weapons.js, except:
 //   suppressed  true: no firingT minimap reveal, muted muzzle/tracer visuals (`sup` on shot events)
 //   range       scales `range` and falloff start/end together
-//   patternAmp  scales pattern.amp
+//   patternAmp  scales pattern.amp and pattern.drift
+//   blastRadius scales explosive.radius
 //   heatRounds  scales heat.rounds, rounded
 //   heatCool    scales heat.coolTime
 // `magazine` is rounded and always moves by at least one round. A mod on a stat the gun lacks (turnCap on the
@@ -20,26 +21,31 @@
 // unlock: the weapon level (1 to 30) that unlocks it. Level ties only happen between attachments that can never
 // be on the same gun. Tracks by weapon come from trackFor(); the unlock order is ATTACHMENT_LIST.
 
+import { WEAPON_IDS } from './constants.js';
+
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
+
+// A one-round tube has nothing to extend or suppress: every gun except that one.
+const NOT_LAUNCHER = WEAPON_IDS.filter(id => id !== 'launcher');
 
 export const ATTACHMENTS = {
   // ---- Optic: precision against time to aim ----
   reflex: {
     id: 'reflex', slot: 'optic', name: 'Pinhole Reflex', unlock: 2,
     desc: 'Tighter aimed fire. Slower to aim.',
-    weapons: ['ar', 'smg', 'shotgun', 'lmg', 'pistol'],
+    weapons: ['ar', 'smg', 'shotgun', 'lmg', 'pistol', 'burst', 'pdw', 'autoshot', 'dmr', 'revolver', 'launcher'],
     mods: { adsSpread: 0.82, adsTime: 1.06 },
   },
   holo: {
     id: 'holo', slot: 'optic', name: 'Wideview Holo', unlock: 8,
     desc: 'Tighter hipfire, a touch quicker to aim. Looser aimed fire.',
-    weapons: ['ar', 'smg', 'shotgun', 'lmg', 'pistol'],
+    weapons: ['ar', 'smg', 'shotgun', 'lmg', 'pistol', 'burst', 'pdw', 'autoshot', 'dmr', 'revolver', 'launcher'],
     mods: { hipSpread: 0.88, adsTime: 0.96, adsSpread: 1.16 },
   },
   longeye: {
     id: 'longeye', slot: 'optic', name: 'Longeye 3x', unlock: 26,
     desc: 'Very tight aimed fire. Slow to aim, wide from the hip, slower while aimed, swings slower.',
-    weapons: ['ar', 'lmg'],
+    weapons: ['ar', 'lmg', 'burst', 'dmr'],
     mods: { adsSpread: 0.68, adsTime: 1.22, hipSpread: 1.2, adsMoveMult: 0.92, turnCap: 0.88 },
   },
   snapsight: {
@@ -53,9 +59,14 @@ export const ATTACHMENTS = {
   suppressor: {
     id: 'suppressor', slot: 'barrel', name: 'Hush Can', unlock: 18,
     desc: 'Firing stays off the enemy minimap and is harder to hear. Shorter range, slower to aim.',
+    weapons: NOT_LAUNCHER,
     mods: { suppressed: true, range: 0.82, adsTime: 1.05, sprintToFire: 1.08 },
     perWeapon: {
       shotgun: { suppressed: true, range: 0.75, adsTime: 1.05, sprintToFire: 1.08 },
+      autoshot: { suppressed: true, range: 0.75, adsTime: 1.05, sprintToFire: 1.08 },
+      revolver: { suppressed: true, range: 0.78, adsTime: 1.05, sprintToFire: 1.08 },
+      // Its two-shot range is the whole gun, so a can has to cost a real slice of it.
+      dmr: { suppressed: true, range: 0.72, adsTime: 1.08, sprintToFire: 1.08 },
       pistol: { suppressed: true, range: 0.78, adsTime: 1.05, sprintToFire: 1.08 },
       // Sniper falloff begins past any real sightline, so its cost has to be much larger to exist at all.
       sniper: { suppressed: true, range: 0.5, adsTime: 1.1, sprintToFire: 1.08 },
@@ -64,13 +75,13 @@ export const ATTACHMENTS = {
   longbarrel: {
     id: 'longbarrel', slot: 'barrel', name: 'Longline Barrel', unlock: 5,
     desc: 'Damage holds further out. Wider from the hip, slower to aim and move.',
-    weapons: ['ar', 'smg', 'lmg', 'pistol'],
+    weapons: ['ar', 'smg', 'lmg', 'pistol', 'burst', 'pdw', 'dmr', 'revolver'],
     mods: { range: 1.2, hipSpread: 1.12, adsTime: 1.08, moveMult: 0.98 },
   },
   compensator: {
     id: 'compensator', slot: 'barrel', name: 'Kickstop Brake', unlock: 11,
     desc: 'Far less recoil sway and bloom. Wider from the hip, slower out of a sprint.',
-    weapons: ['ar', 'smg', 'lmg', 'pistol'],
+    weapons: ['ar', 'smg', 'lmg', 'pistol', 'burst', 'pdw', 'dmr', 'revolver'],
     mods: { patternAmp: 0.72, bloomPerShot: 0.82, hipSpread: 1.1, sprintToFire: 1.12 },
   },
   heatsink: {
@@ -82,13 +93,13 @@ export const ATTACHMENTS = {
   choke: {
     id: 'choke', slot: 'barrel', name: 'Tight Choke', unlock: 5,
     desc: 'A narrower pellet fan. Slower to aim and to bring up.',
-    weapons: ['shotgun'],
+    weapons: ['shotgun', 'autoshot'],
     mods: { adsSpread: 0.7, hipSpread: 0.85, adsTime: 1.12, swapTime: 1.12 },
   },
   sawnoff: {
     id: 'sawnoff', slot: 'barrel', name: 'Sawn Barrel', unlock: 11,
     desc: 'Quicker to aim and to move. A wider fan that drops off sooner.',
-    weapons: ['shotgun'],
+    weapons: ['shotgun', 'autoshot'],
     mods: { adsTime: 0.85, moveMult: 1.04, hipSpread: 1.25, adsSpread: 1.2, range: 0.8 },
   },
   fluted: {
@@ -102,6 +113,7 @@ export const ATTACHMENTS = {
   extmag: {
     id: 'extmag', slot: 'mag', name: 'Deep Mag', unlock: 3,
     desc: 'A third more rounds. Slower reload, slower to aim, a little slower on foot.',
+    weapons: NOT_LAUNCHER,
     mods: { magazine: 1.33, reload: 1.18, adsTime: 1.06, moveMult: 0.98 },
     perWeapon: {
       lmg: { magazine: 1.3, reload: 1.12, adsTime: 1.06, moveMult: 0.97 },
@@ -112,25 +124,33 @@ export const ATTACHMENTS = {
   speedmag: {
     id: 'speedmag', slot: 'mag', name: 'Speed Mag', unlock: 9,
     desc: 'Reloads much faster. Fewer rounds.',
+    weapons: NOT_LAUNCHER,
     mods: { reload: 0.72, magazine: 0.8 },
   },
   lightmag: {
     id: 'lightmag', slot: 'mag', name: 'Feather Mag', unlock: 15,
     desc: 'Lighter on the move and quicker to aim. Fewer rounds.',
+    weapons: NOT_LAUNCHER,
     mods: { moveMult: 1.03, adsTime: 0.94, magazine: 0.87 },
+  },
+  warhead: {
+    id: 'warhead', slot: 'mag', name: 'Wide Warhead', unlock: 12,
+    desc: 'A bigger blast. A longer reload, slower to aim.',
+    weapons: ['launcher'],
+    mods: { blastRadius: 1.2, reload: 1.22, adsTime: 1.1 },
   },
 
   // ---- Grip: speed against steadiness ----
   angled: {
     id: 'angled', slot: 'grip', name: 'Angled Grip', unlock: 6,
     desc: 'Aims much faster. More recoil and bloom, slower out of a sprint.',
-    weapons: ['ar', 'smg', 'lmg', 'shotgun', 'sniper'],
+    weapons: ['ar', 'smg', 'lmg', 'shotgun', 'sniper', 'burst', 'pdw', 'autoshot', 'dmr', 'launcher'],
     mods: { adsTime: 0.85, patternAmp: 1.15, bloomPerShot: 1.12, sprintToFire: 1.08 },
   },
   vertical: {
     id: 'vertical', slot: 'grip', name: 'Vertical Foregrip', unlock: 13,
     desc: 'Steadier under sustained fire. Slower to aim, slower out of a sprint.',
-    weapons: ['ar', 'smg', 'lmg', 'shotgun'],
+    weapons: ['ar', 'smg', 'lmg', 'shotgun', 'burst', 'pdw', 'autoshot', 'dmr'],
     mods: { patternAmp: 0.75, bloomPerShot: 0.88, adsTime: 1.1, sprintToFire: 1.08 },
   },
   wrap: {
@@ -141,7 +161,7 @@ export const ATTACHMENTS = {
   brace: {
     id: 'brace', slot: 'grip', name: 'Swing Brace', unlock: 23,
     desc: 'Heavy guns swing faster and move better while aimed. Looser fire, slower on foot.',
-    weapons: ['ar', 'lmg', 'sniper', 'shotgun'],
+    weapons: ['ar', 'lmg', 'sniper', 'shotgun', 'burst', 'autoshot', 'dmr'],
     mods: { turnCap: 1.35, adsMoveMult: 1.1, hipSpread: 1.1, adsSpread: 1.14, moveMult: 0.97 },
   },
 };
@@ -285,7 +305,13 @@ function applyMods(eff, m) {
         eff.range = scaled(eff.range, k);
         eff.falloff = { ...eff.falloff, start: scaled(eff.falloff.start, k), end: scaled(eff.falloff.end, k) };
         break;
-      case 'patternAmp': if (eff.pattern) eff.pattern = { ...eff.pattern, amp: scaled(eff.pattern.amp, k) }; break;
+      case 'patternAmp':
+        if (eff.pattern) {
+          eff.pattern = { ...eff.pattern, amp: scaled(eff.pattern.amp, k) };
+          if (eff.pattern.drift) eff.pattern.drift = scaled(eff.pattern.drift, k);
+        }
+        break;
+      case 'blastRadius': if (eff.explosive) eff.explosive = { ...eff.explosive, radius: scaled(eff.explosive.radius, k) }; break;
       case 'heatRounds': if (eff.heat) eff.heat = { ...eff.heat, rounds: scaledRounds(eff.heat.rounds, k) }; break;
       case 'heatCool': if (eff.heat) eff.heat = { ...eff.heat, coolTime: scaled(eff.heat.coolTime, k) }; break;
       case 'magazine': eff.magazine = scaledRounds(eff.magazine, k); break;

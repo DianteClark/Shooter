@@ -125,6 +125,55 @@ const GUNS = {
     thump: { dur: 0.06, gain: 0.7, f0: 200, f1: 85, decay: 5 },
     tail: { dur: 0.32, gain: 0.2, f0: 2100, f1: 500, decay: 6.5 },
   },
+  // Sharp, compressed snaps: three of these in 140 ms have to read as one clipped phrase.
+  burst: {
+    dur: 0.5, crack: { dur: 0.004, gain: 1.25, hp: 2600 },
+    body: { dur: 0.085, gain: 1.2, f0: 6400, f1: 900, decay: 7 },
+    thump: { dur: 0.07, gain: 0.95, f0: 170, f1: 72, decay: 6, shape: 0.7 },
+    tail: { dur: 0.38, gain: 0.22, f0: 1900, f1: 420, decay: 6.5 },
+    ring: { dur: 0.05, gain: 0.25, f0: 2400, f1: 1900, decay: 8 },
+  },
+  // A very short, buzzy rip: almost no body and no thump, so at 1200 rpm it reads as a saw, not as a rifle.
+  pdw: {
+    dur: 0.26, crack: { dur: 0.002, gain: 1.05, hp: 5200 },
+    body: { dur: 0.038, gain: 0.95, f0: 9000, f1: 2600, decay: 6 },
+    thump: { dur: 0.025, gain: 0.32, f0: 300, f1: 170, decay: 4, shape: 1.4 },
+    tail: { dur: 0.2, gain: 0.14, f0: 3600, f1: 1200, decay: 9 },
+  },
+  // A short, boomy cough with a drum rattle after it: lighter than the pump gun and built to repeat.
+  autoshot: {
+    dur: 0.62, crack: { dur: 0.007, gain: 1, hp: 1300 },
+    body: { dur: 0.15, gain: 1.45, f0: 2600, f1: 320, decay: 5.2 },
+    thump: { dur: 0.12, gain: 1.35, f0: 112, f1: 46, decay: 4.2, shape: 1.1 },
+    tail: { dur: 0.45, gain: 0.26, f0: 1000, f1: 240, decay: 5.5 },
+    mech: [{ at: 0.2, gain: 0.45, hp: 2200, dur: 0.012 }, { at: 0.24, gain: 0.3, hp: 3000, dur: 0.008 }],
+  },
+  // A tight, high crack and a clean falling ring: the sound of one deliberate round.
+  dmr: {
+    dur: 1.1, crack: { dur: 0.003, gain: 1.45, hp: 4800 },
+    body: { dur: 0.14, gain: 1.4, f0: 5200, f1: 480, decay: 6 },
+    thump: { dur: 0.14, gain: 1.15, f0: 125, f1: 46, decay: 4.2, shape: 0.6 },
+    tail: { dur: 0.9, gain: 0.3, f0: 1250, f1: 220, decay: 4.6 },
+    echo: { at: 0.11, dur: 0.16, gain: 0.2, f0: 1800, f1: 400, decay: 5 },
+    ring: { dur: 0.22, gain: 0.3, f0: 3100, f1: 2400, decay: 7 },
+  },
+  // A huge flat boom with a metal bark on the front and a long ring: slow gun, so every shot gets to sing.
+  revolver: {
+    dur: 1.25, crack: { dur: 0.005, gain: 1.35, hp: 2400 },
+    body: { dur: 0.17, gain: 1.6, f0: 3800, f1: 300, decay: 4.6 },
+    thump: { dur: 0.2, gain: 1.55, f0: 98, f1: 36, decay: 3.6, shape: 1.3 },
+    tail: { dur: 1, gain: 0.3, f0: 900, f1: 170, decay: 4.4 },
+    ring: { dur: 0.34, gain: 0.42, f0: 2050, f1: 1720, decay: 5.5 },
+    mech: [{ at: 0.34, gain: 0.34, hp: 2600, dur: 0.008 }],
+  },
+  // Ignition: a click, a pressure thump and a long tearing hiss as the rocket leaves. The bang is the explosion event.
+  launcher: {
+    dur: 1.05, crack: { dur: 0.012, gain: 1.05, hp: 900 },
+    body: { dur: 0.32, gain: 1.15, f0: 1700, f1: 300, decay: 3.8 },
+    thump: { dur: 0.22, gain: 1.5, f0: 80, f1: 32, decay: 3.4, shape: 1.6 },
+    tail: { dur: 0.8, gain: 0.5, f0: 6000, f1: 1500, hp: 1100, decay: 3.6 },
+    mech: [{ at: 0.86, gain: 0.3, hp: 1300, dur: 0.02 }],
+  },
   // Scorestreak guns: a dry mechanical chatter, and a slow autocannon heard from above.
   turret: {
     dur: 0.4, crack: { dur: 0.004, gain: 1.2, hp: 3200 },
@@ -150,6 +199,7 @@ function renderGun(spec, sr, seed) {
   addTone(data, sr, spec.thump);
   addNoise(data, sr, rng, spec.tail);
   if (spec.echo) addNoise(data, sr, rng, spec.echo);
+  if (spec.ring) addTone(data, sr, spec.ring);
   if (spec.mech) for (const m of spec.mech) addClick(data, sr, rng, m);
   for (let i = 0; i < data.length; i++) data[i] = softClip(data[i] * 0.85);
   return normalize(data, 0.92);
@@ -166,6 +216,10 @@ const MEDALS = {
   streak3:     { notes: [[0, 0], [4, 0.08], [7, 0.16]], dur: 0.42, gain: 0.65 },
   streak5:     { notes: [[0, 0], [5, 0.08], [9, 0.16], [12, 0.24]], dur: 0.55, gain: 0.7 },
   streak10:    { notes: [[0, 0], [7, 0.07], [12, 0.14], [16, 0.21], [19, 0.28], [24, 0.36]], dur: 0.9, gain: 0.78 },
+  capture:     { notes: [[0, 0], [7, 0.1], [12, 0.2]], dur: 0.55, gain: 0.7, shape: 1 },
+  defend:      { notes: [[7, 0], [4, 0.09], [7, 0.18]], dur: 0.42, gain: 0.6, shape: 0.8 },
+  confirm:     { notes: [[9, 0], [16, 0.07]], dur: 0.3, gain: 0.6 },
+  deny:        { notes: [[4, 0], [0, 0.08]], dur: 0.3, gain: 0.5 },
 };
 
 function renderMedal(spec, sr) {
@@ -299,6 +353,24 @@ function renderSfx(sr) {
       for (let i = 0; i < d.length; i++) d[i] *= 0.72 + 0.28 * Math.sin(2 * Math.PI * 13 * i / d.length * 2);
     }, 0.8),
     spawn: mk(0.3, (d, r) => { addNoise(d, sr, r, { dur: 0.28, gain: 1, f0: 800, f1: 3800, hp: 500, decay: 3 }); }, 0.45),
+    // A dog tag on a chain: one bright, short metal clink.
+    tag: mk(0.2, (d, r) => {
+      addClick(d, sr, r, { dur: 0.003, gain: 1, hp: 3800 });
+      addTone(d, sr, { dur: 0.16, gain: 0.9, f0: 3300, f1: 3050, decay: 7, attack: 0.0005 });
+      addTone(d, sr, { at: 0.04, dur: 0.12, gain: 0.5, f0: 4700, f1: 4400, decay: 7, attack: 0.0005 });
+    }, 0.8),
+    flagTaken: mk(0.75, (d) => {
+      addTone(d, sr, { dur: 0.3, gain: 0.8, f0: 330, decay: 3, attack: 0.008, shape: 1.6 });
+      addTone(d, sr, { at: 0.16, dur: 0.55, gain: 0.8, f0: 494, decay: 3.2, attack: 0.008, shape: 1.6 });
+    }, 0.72),
+    flagLost: mk(0.75, (d) => {
+      addTone(d, sr, { dur: 0.3, gain: 0.8, f0: 330, decay: 3, attack: 0.008, shape: 1.6 });
+      addTone(d, sr, { at: 0.16, dur: 0.55, gain: 0.8, f0: 247, decay: 3.2, attack: 0.008, shape: 1.6 });
+    }, 0.72),
+    zoneMove: mk(0.6, (d) => {
+      for (let n = 0; n < 2; n++) addTone(d, sr, { at: n * 0.16, dur: 0.14, gain: 0.8, f0: 660, f1: 880, decay: 4, attack: 0.006, shape: 0.8 });
+      addTone(d, sr, { at: 0.34, dur: 0.24, gain: 0.8, f0: 990, decay: 4, attack: 0.006, shape: 0.8 });
+    }, 0.72),
     steps,
   };
 }
@@ -665,7 +737,19 @@ export class AudioEngine {
           else this._play(this.sfx.strike, { bus: this.ui, priority: 3, gain: e.team === this.localTeam ? 0.55 : 0.8 });
           break;
         case 'explosion':
-          this._world(this.sfx.explosion, e.x, e.z, HEAR_RANGE + 20, { gain: 2.3, priority: 4, room: 0.45 });
+          // A rocket is one warhead, not a line of them from the sky: the frag's punch, pitched down.
+          if (e.weapon) this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE + 10, { gain: 2.2, priority: 4, room: 0.4, rate: 0.82 });
+          else this._world(this.sfx.explosion, e.x, e.z, HEAR_RANGE + 20, { gain: 2.3, priority: 4, room: 0.45 });
+          break;
+        case 'tag':
+          if (e.by === me) this._play(this.sfx.tag, { bus: this.ui, priority: 4, gain: 0.85, rate: e.kind === 'confirm' ? 1 : 0.8 });
+          else this._world(this.sfx.tag, e.x, e.z, 16, { gain: 0.5, priority: 1, rate: e.kind === 'confirm' ? 1 : 0.8 });
+          break;
+        case 'capture':
+          this._play(e.team === this.localTeam ? this.sfx.flagTaken : this.sfx.flagLost, { bus: this.ui, priority: 4, gain: 0.7 });
+          break;
+        case 'hard_move':
+          this._play(this.sfx.zoneMove, { bus: this.ui, priority: 4, gain: 0.7 });
           break;
         case 'throw':
           if (e.id === me) this._play(this.sfx.pin, { bus: this.ui, priority: 3, gain: 0.75 });

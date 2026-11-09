@@ -19,6 +19,7 @@ export const SKILLS = {
     retreatHp: 0, strafe: 0.15, adsUse: 0.3, flank: 0.03, holdProb: 0.15, holdTime: [1, 2.5], slide: 0.02,
     sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
+    objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
@@ -26,6 +27,7 @@ export const SKILLS = {
     retreatHp: 30, strafe: 0.5, adsUse: 0.65, flank: 0.12, holdProb: 0.33, holdTime: [1.5, 4], slide: 0.1,
     sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
+    objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false,
   },
   veteran: {
     thinkHz: 9, reaction: [0.24, 0.38], aimError: 0.085, aimFloor: 0.03, settle: 0.55, turnRate: 13, lag: 0.13,
@@ -33,6 +35,7 @@ export const SKILLS = {
     retreatHp: 42, strafe: 0.85, adsUse: 0.9, flank: 0.28, holdProb: 0.45, holdTime: [2, 5], slide: 0.3,
     sprint: 1, callouts: true, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
+    objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true,
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
@@ -40,6 +43,7 @@ export const SKILLS = {
     retreatHp: 55, strafe: 1, adsUse: 1, flank: 0.42, holdProb: 0.5, holdTime: [2, 5.5], slide: 0.5,
     sprint: 1, callouts: true, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
+    objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true,
   },
 };
 
@@ -52,17 +56,29 @@ const STYLE = {
   lmg:     { pref: 20, hold: 1.6,  flank: 0.5,  advance: 2 },
   sniper:  { pref: 30, hold: 2.2,  flank: 0.3,  advance: 2 },
   pistol:  { pref: 9,  hold: 0.8,  flank: 1,    advance: 3 },
+  burst:   { pref: 17, hold: 1.1,  flank: 0.9,  advance: 3 },
+  pdw:     { pref: 6,  hold: 0.4,  flank: 1.4,  advance: 3, rush: 13 },
+  autoshot:{ pref: 4,  hold: 0.5,  flank: 1.5,  advance: 3, rush: 8 },
+  dmr:     { pref: 24, hold: 1.7,  flank: 0.5,  advance: 2 },
+  revolver:{ pref: 10, hold: 0.9,  flank: 1,    advance: 3 },
+  launcher:{ pref: 16, hold: 1,    flank: 0.6,  advance: 2 },
 };
+const SCOPED = new Set(['sniper', 'lmg', 'dmr']);
 
 // Fractions of the map width from the bot's own side, one per step of a lane advance.
 const STAGES = [0.16, 0.36, 0.5, 0.64, 0.84];
 const POS = { x: 0, z: 0 };
+const TAU = Math.PI * 2;
 const PATH_POINTS = 24;
 const THROW_REACH = 12.75;      // Where a throw ends up on open ground: flight plus roll. See equipment.js.
 const TURRET_THREAT = 21;
 const TURRET_WAIT = 10;         // Seconds a bot will hold a turret looking for a good moment to drop it.
 const LANDING = { x: 0, z: 0, t: 0 };
 const SUPPRESSED_HEARING = 0.4; // Fraction of the normal hearing range for a suppressed shot.
+const DENY_REACH = 13;          // Metres a bot will go out of its way to deny its own team's tag.
+const OBJ_CHASE = 9;            // How far a bot on an objective will leave it to run down a firm contact.
+const HARD_LEAD = 8;            // Seconds before a rotation that bots who think ahead start for the next zone.
+const OVERWATCH_MAX = 15;       // Furthest a supporting bot will stand from the edge of the zone it covers.
 
 // Full kits per gun; a bot runs one of them, cut down for its tier. Slots listed in the order they are fitted,
 // so a low tier keeps what matters most on that gun. Suppressors are listed third: veterans and elites only.
@@ -93,7 +109,27 @@ const BOT_KITS = {
   pistol: [
     { mag: 'extmag', barrel: 'compensator', optic: 'reflex', grip: 'wrap' },
   ],
+  burst: [
+    { barrel: 'compensator', optic: 'reflex', grip: 'vertical', mag: 'speedmag' },
+    { optic: 'longeye', barrel: 'longbarrel', mag: 'extmag', grip: 'angled' },
+  ],
+  pdw: [
+    { grip: 'vertical', barrel: 'compensator', mag: 'extmag', optic: 'holo' },
+    { barrel: 'suppressor', grip: 'wrap', mag: 'lightmag', optic: 'reflex' },
+  ],
+  autoshot: [
+    { barrel: 'choke', mag: 'extmag', optic: 'holo', grip: 'angled' },
+    { grip: 'wrap', barrel: 'sawnoff', mag: 'speedmag', optic: 'reflex' },
+  ],
+  dmr: [
+    { optic: 'reflex', grip: 'vertical', mag: 'extmag', barrel: 'longbarrel' },
+    { optic: 'longeye', barrel: 'suppressor', mag: 'speedmag', grip: 'brace' },
+  ],
 };
+
+// Sidearms bots carry, by roster index. Most stay on the quick pistol; a few bring something louder.
+const BOT_SECONDARIES = ['pistol', 'revolver', 'pistol', 'launcher', 'pistol', 'revolver'];
+export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
 const BOT_KIT_SLOTS = { recruit: 1, regular: 2, veteran: 3, elite: 4 };
 
 // The kit a bot of this tier carries on this gun: recruits only sometimes have one attachment, elites a full kit.
@@ -109,6 +145,146 @@ export function botAttachments(weaponId, skill, i) {
     out[slot] = kit[slot];
   }
   return out;
+}
+
+// ---- Objective planning. Runs at 2 Hz for both teams; individual brains only act on what it hands them. ----
+
+// Called by Sim while a non-TDM match is live.
+export function planObjectives(sim) {
+  for (let team = 0; team < 2; team++) {
+    const crew = [];
+    for (let i = 0; i < sim.players.length; i++) {
+      const p = sim.players[i];
+      if (!p.bot || p.team !== team || !p.alive) continue;
+      // Some bots this life just want a fight; they stay on the lane logic.
+      if (p.bot.objRoll < p.bot.S.objPlay) crew.push(p.bot);
+      else p.bot.setObjective(null);
+    }
+    if (!crew.length) continue;
+    if (sim.mode === 'kc') planTags(sim, team, crew);
+    else if (sim.mode === 'dom') planDomination(sim, team, crew);
+    else if (sim.mode === 'hard') planHardpoint(sim, team, crew);
+  }
+}
+
+// One bot per tag, the closest that knows about it. Whoever is left over keeps fighting.
+function planTags(sim, team, crew) {
+  const pairs = [];
+  for (let b = 0; b < crew.length; b++) {
+    const bot = crew[b], ps = bot.ps;
+    for (let t = 0; t < sim.tags.length; t++) {
+      const tag = sim.tags[t], d = Math.hypot(tag.x - ps.x, tag.z - ps.z);
+      const own = tag.team === team;
+      // Confirming scores; denying only prevents, so nobody crosses the map for it.
+      if (d > (own ? Math.min(bot.S.tagSight, DENY_REACH) : bot.S.tagSight)) continue;
+      // A bot in a gunfight is the wrong one to send.
+      pairs.push({ cost: d + (own ? 6 : 0) + (bot.targetVisible ? 8 : 0), bot, tag });
+    }
+  }
+  pairs.sort((a, b) => a.cost - b.cost);
+  const busy = new Set(), taken = new Set();
+  for (let i = 0; i < pairs.length; i++) {
+    const { bot, tag } = pairs[i];
+    if (busy.has(bot) || taken.has(tag)) continue;
+    busy.add(bot); taken.add(tag);
+    bot.setObjective({ key: `tag${tag.id}`, x: tag.x, z: tag.z, r: 0, role: 'collect' });
+  }
+  for (let i = 0; i < crew.length; i++) if (!busy.has(crew[i])) crew[i].setObjective(null);
+}
+
+function closestBot(free, x, z) {
+  let best = null, bestD = Infinity;
+  for (const bot of free) {
+    const d = Math.hypot(bot.ps.x - x, bot.ps.z - z);
+    if (d < bestD) { bestD = d; best = bot; }
+  }
+  return best;
+}
+
+function zoneObjective(z, role, tag = '') {
+  return { key: `${z.id}${role}${tag}`, x: z.x, z: z.z, r: z.r, role };
+}
+
+// Defenders first (flags under attack, then a quota for calm ones), then everyone else attacks.
+function planDomination(sim, team, crew) {
+  const zones = sim.points;
+  if (!zones.length) return;
+  const free = new Set(crew);
+  let quota = 0;
+  for (let i = 0; i < crew.length; i++) quota += crew[i].S.objDefend;
+  quota = Math.round(quota);
+
+  const canDefend = new Set(crew.filter(b => b.S.objDefend > 0));
+  const assignDefender = z => {
+    const bot = closestBot(free.size < canDefend.size ? free : [...free].filter(b => canDefend.has(b)), z.x, z.z);
+    if (!bot) return false;
+    bot.setObjective(zoneObjective(z, 'defend'));
+    free.delete(bot);
+    return true;
+  };
+
+  const owned = zones.filter(z => z.owner === team);
+  const targets = zones.filter(z => z.owner !== team);
+  for (let i = 0; i < owned.length; i++) {
+    const z = owned[i];
+    if (!z.contested && Math.abs(z.cap) >= 0.97) continue;    // Under attack: two go, even past the quota.
+    assignDefender(z); assignDefender(z);
+    quota -= 2;
+  }
+  for (let i = 0; i < owned.length && quota > 0; i++) {
+    const z = owned[i];
+    if (z.contested || Math.abs(z.cap) < 0.97) continue;
+    if (assignDefender(z)) quota--;
+  }
+
+  if (!targets.length) {
+    // We hold everything: some keep the flags and the rest go hunting, which is what stops a spawn flip.
+    let flip = 0;
+    for (const bot of free) {
+      if (flip++ % 2) bot.setObjective(null);
+      else bot.setObjective(zoneObjective(owned[flip % owned.length], 'defend'));
+    }
+    return;
+  }
+
+  const load = new Map();
+  for (const bot of free) {
+    let best = targets[0], bestCost = Infinity;
+    for (let i = 0; i < targets.length; i++) {
+      const z = targets[i];
+      const cost = Math.hypot(z.x - bot.ps.x, z.z - bot.ps.z) + (load.get(z) || 0) * bot.S.objSplit + (z.owner === 1 - team ? 5 : 0);
+      if (cost < bestCost) { bestCost = cost; best = z; }
+    }
+    load.set(best, (load.get(best) || 0) + 1);
+    bot.setObjective(zoneObjective(best, 'attack'));
+  }
+}
+
+// Most bots go into the zone. Long guns cover it from outside, and bots who think ahead leave for the next one early.
+function planHardpoint(sim, team, crew) {
+  const z = sim.points[0];
+  if (!z) return;
+  const free = new Set(crew);
+  if (sim.hardT <= HARD_LEAD && sim.zones.length > 1) {
+    const next = sim.nextZone;
+    let sent = 0;
+    while (sent < 2) {
+      const bot = closestBot([...free].filter(b => b.S.objRotate), next.x, next.z);
+      if (!bot) break;
+      bot.setObjective(zoneObjective(next, 'attack', 'next'));
+      free.delete(bot);
+      sent++;
+    }
+  }
+  let support = 0;
+  for (let i = 0; i < crew.length; i++) support += crew[i].S.objDefend;
+  support = Math.min(2, Math.floor(support));
+  const heavies = [...free].filter(b => b.S.objDefend > 0).sort((a, b) => b.style.hold - a.style.hold);
+  for (let i = 0; i < heavies.length && support > 0; i++, support--) {
+    heavies[i].setObjective(zoneObjective(z, 'support'));
+    free.delete(heavies[i]);
+  }
+  for (const bot of free) bot.setObjective(zoneObjective(z, 'attack'));
 }
 
 function gaussian(rng) { return (rng() + rng() + rng() + rng() - 2) / 0.577; }
@@ -157,7 +333,22 @@ export class BotBrain {
     this.turretTarget = null;
     this.style = STYLE[ps.primary] || STYLE.ar;
     this.peek = 0;
+    this.objective = null; this.objKey = null; this.objAim = 0; this.objPushRoll = false;
+    this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
     this._assignLane();
+  }
+
+  // Handed down by planObjectives; null means play the lanes. The same key keeps the bot on its current course.
+  setObjective(o) {
+    if (!o) {
+      if (!this.objective) return;
+      this.objective = null; this.objKey = null;
+      if (this.mode === 'objective') this._setMode('none');
+      return;
+    }
+    if (this.objective && this.objKey === o.key) return;
+    this.objective = o; this.objKey = o.key;
+    if (this.mode !== 'cover') this._setMode('none');
   }
 
   // ---- Knowledge ----
@@ -260,7 +451,8 @@ export class BotBrain {
     this.trackT = 0;
     this.anchor = gaussian(sim.rng);
     this.anchorT = 0.35;
-    this.useAds = (sim.rng() < S.adsUse && d > 6) || ps.weapon === 'sniper' || ps.weapon === 'lmg';
+    this.useAds = (sim.rng() < S.adsUse && d > 6) || SCOPED.has(ps.weapon);
+    this.objPushRoll = sim.rng() < S.objPush;
     this.slidIn = false;
     this.strafeT = 0;
     this.burstLeft = 0; this.burstPause = 0;
@@ -311,7 +503,7 @@ export class BotBrain {
     this.lastRetreatHp = p.hp;
 
     // A shotgun has no business in the open at range: get behind something and let them come.
-    if (visible && ps.weapon === 'shotgun' && this.targetDist > 10.5 && this.mode !== 'hold' && this.mode !== 'cover') {
+    if (visible && (ps.weapon === 'shotgun' || ps.weapon === 'autoshot') && this.targetDist > 10.5 && this.mode !== 'hold' && this.mode !== 'cover' && this.mode !== 'objective') {
       // Unless they are looking the other way, in which case this is exactly the moment to close.
       const t = this.target.ps;
       const facingUs = Math.abs(angleDiff(t.aim, Math.atan2(ps.z - t.z, ps.x - t.x))) < 0.9;
@@ -321,13 +513,21 @@ export class BotBrain {
     // Pistol when the primary runs dry mid-fight; back to the main gun when it is over.
     if (S.pistolSwap && visible && ps.slot === 0 && (ammo === 0 || ps.overheated) && this.targetDist < 14) this.wantSwap = true;
     else if (!visible && ps.slot === 1 && ps.swapT <= 0 && !ps.overheated && (ps.ammo[0] > 0 || ps.reserve[0] > 0)) this.wantSwap = true;
+    // A rocket opens a fight at range, once a life; the empty tube goes straight back on the shoulder.
+    else if (S.pistolSwap && visible && ps.slot === 0 && ps.secondary === 'launcher' && ps.ammo[1] > 0 && this.targetDist > 8 && this.targetDist < 34 && sim.rng() < 0.12) this.wantSwap = true;
+    else if (visible && ps.slot === 1 && ps.ammo[1] === 0 && ps.swapT <= 0 && ps.ammo[0] > 0) this.wantSwap = true;
 
     if (visible) return;   // drive() fights; the strategic goal stays where it was.
 
-    const worthChasing = this.hasKnown && (!this.knownSoft || Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) < 14);
+    const o = this.objective;
+    const knownD = this.hasKnown ? Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) : Infinity;
+    // A bot on an objective will not be pulled off it by a noise: only a firm contact nearby, and never once it is standing on the point.
+    const worthChasing = this.hasKnown && (o
+      ? !this.knownSoft && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
+      : !this.knownSoft || knownD < 14);
     if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt') {
       this._setMode('hunt');
-      this.modeT = 6;
+      this.modeT = o ? 3 : 6;
       this._goTo(this.knownX, this.knownZ);
     }
     if (this.mode === 'hunt') {
@@ -344,6 +544,8 @@ export class BotBrain {
         this._setMode('none');
       }
     }
+    // Pushed off the point by a fight: walk back on.
+    if (this.mode === 'objective' && this.arrived && o && !this._onObjective()) this._goObjective();
     if (this.mode === 'none') this._pickGoal();
   }
 
@@ -521,8 +723,54 @@ export class BotBrain {
     };
   }
 
+  _onObjective() {
+    const o = this.objective, ps = this.ps;
+    if (!o) return false;
+    if (o.role === 'collect') return true;      // Done when the tag goes; the next plan clears it.
+    if (o.role === 'support') return Math.hypot(this.goalX - ps.x, this.goalZ - ps.z) < 2;
+    return Math.hypot(o.x - ps.x, o.z - ps.z) <= o.r * 0.95;
+  }
+
+  _goObjective() {
+    const { p, ps, sim } = this;
+    const o = this.objective;
+    this.mode = 'objective';
+    this.peek = sim.rng() * TAU;
+    if (o.role === 'collect') { this.objAim = ps.aim; this._goTo(o.x, o.z); return; }
+    if (o.role === 'support' && this._overwatch(o)) return;
+    // A spot inside the zone, spread out; anywhere on it counts and standing in a clump is how you lose it.
+    let x = o.x, z = o.z, found = false;
+    for (let i = 0; i < 12 && !found; i++) {
+      const a = sim.rng() * TAU, r = o.r * (0.2 + 0.6 * sim.rng());
+      x = o.x + Math.cos(a) * r; z = o.z + Math.sin(a) * r;
+      found = sim.nav.isWalkable(x, z) && !this._teammateNear(x, z, 1.4);
+    }
+    // Look toward the enemy's half and sweep from there: holding a flag is mostly watching for who comes next.
+    const enemyX = p.team === 0 ? sim.map.width : 0;
+    this.objAim = Math.atan2(sim.map.height / 2 - z, enemyX - x);
+    this._goTo(x, z);
+  }
+
+  // A long-sightline spot outside the zone that can see into it. False when there is none, and the bot just goes in.
+  _overwatch(o) {
+    const { sim, ps } = this;
+    let best = null, bestScore = Infinity;
+    for (const h of sim.nav.holds) {
+      const toZone = Math.hypot(h.x - o.x, h.z - o.z);
+      if (toZone < o.r + 1 || toZone > o.r + OVERWATCH_MAX) continue;
+      if (this._teammateNear(h.x, h.z, 3) || !hasLineOfSight(sim.map, h.x, h.z, o.x, o.z)) continue;
+      const score = Math.hypot(h.x - ps.x, h.z - ps.z) * 0.5 + toZone * 0.3 + sim.rng() * 4;
+      if (score < bestScore) { bestScore = score; best = h; }
+    }
+    if (!best) return false;
+    this.objAim = Math.atan2(o.z - best.z, o.x - best.x);
+    this._goTo(best.x, best.z);
+    return true;
+  }
+
   _pickGoal() {
     const { sim, S, style } = this;
+    if (this.objective) { this._goObjective(); return; }
     const r = sim.rng();
     if (r < S.flank * style.flank && this.stage >= 1) {
       // Rotate to a different lane and push past the fight.
@@ -622,7 +870,9 @@ export class BotBrain {
     const { ps, S, input: I, sim } = this;
     const style = STYLE[ps.weapon] || STYLE.ar;
     const ux = (q.ps.x - ps.x) / d, uz = (q.ps.z - ps.z) / d;
-    const atHold = this.mode === 'hold' && this.arrived;
+    const o = this.objective;
+    const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend');
+    const atHold = (this.mode === 'hold' && this.arrived) || holdingPoint;
     let fwd = 0;
     if (!atHold) {
       if (d > style.pref + 4) fwd = 1;
@@ -642,6 +892,11 @@ export class BotBrain {
       this.strafeDir = -this.strafeDir;
       mx = ux * fwd - uz * this.strafeDir; mz = uz * fwd + ux * this.strafeDir;
       if (!sim.nav.isWalkable(ps.x + mx * 1.3, ps.z + mz * 1.3)) { mx = 0; mz = 0; }
+    }
+    // Strafe all it likes, but do not dance off the point it is holding.
+    if (holdingPoint && Math.hypot(ps.x + mx * 1.3 - o.x, ps.z + mz * 1.3 - o.z) > o.r * 0.9) {
+      this.strafeDir = -this.strafeDir;
+      mx = 0; mz = 0;
     }
     I.mx = mx; I.mz = mz;
   }
@@ -668,10 +923,12 @@ export class BotBrain {
     }
 
     if (ps.weapon === 'sniper' && ps.adsT < 0.85) fire = false;
+    if (ps.weapon === 'dmr' && d > 12 && ps.adsT < 0.7) fire = false;
     if (ps.weapon === 'shotgun' && d > 12) fire = false;
+    if (ps.weapon === 'autoshot' && d > 10) fire = false;
 
     // Burst control at range: real players stop to let the gun settle.
-    if (fire && w.auto && S.burst > 0 && d > 18 && ps.weapon !== 'lmg') {
+    if (fire && w.auto && !w.burst && S.burst > 0 && d > 18 && ps.weapon !== 'lmg') {
       if (this.burstPause > 0) { this.burstPause -= dt; fire = false; }
       else if (ps.shotIndex >= 5 + (this.burstLeft | 0)) {
         this.burstPause = between(sim.rng, 0.12, S.burst + 0.25);
@@ -724,7 +981,8 @@ export class BotBrain {
       const style = STYLE[ps.weapon];
       const rushing = style.rush && d > style.rush && this.mode !== 'cover' && this.mode !== 'hold';
       if (!rushing) this._trigger(q, d, trueAng, dt);
-      if ((this.mode === 'cover' || this.mode === 'hold') && !this.arrived) this._followPath(false);
+      const pushing = this.mode === 'objective' && !this.arrived && (d > style.pref || this.objPushRoll);
+      if ((this.mode === 'cover' || this.mode === 'hold' || pushing) && !this.arrived) this._followPath(false);
       else this._combatMove(q, d, dt);
       if (rushing) {
         I.sprint = S.sprint >= 1 || this.sprintRoll;
@@ -734,7 +992,7 @@ export class BotBrain {
       }
       I.aiming = this.useAds && this.reactLeft <= 0 && !rushing;
       // Sprinters and rushers on a close weapon don't bother scoping in.
-      if ((ps.weapon === 'smg' && d < 8) || (ps.weapon === 'shotgun' && d < 4.5)) I.aiming = false;
+      if ((ps.weapon === 'smg' && d < 8) || (ps.weapon === 'pdw' && d < 7) || (ps.weapon === 'shotgun' && d < 4.5) || (ps.weapon === 'autoshot' && d < 4.5)) I.aiming = false;
       else if (ps.weapon === 'shotgun' && this.reactLeft <= 0 && !rushing) I.aiming = true;
       // Don't sprint while fighting; left stick is already at walking pace.
     } else {
@@ -751,7 +1009,11 @@ export class BotBrain {
       } else if (this.mode === 'hold' && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.holdAim + Math.sin(this.peek) * 0.28;
-        I.aiming = ps.weapon === 'sniper' || ps.weapon === 'lmg' || S.adsUse > 0.8;
+        I.aiming = SCOPED.has(ps.weapon) || S.adsUse > 0.8;
+      } else if (this.mode === 'objective' && this.arrived) {
+        this.peek += dt * 1.2;
+        desired = this.objAim + Math.sin(this.peek) * 1.1;
+        I.aiming = SCOPED.has(ps.weapon) || S.adsUse > 0.8;
       } else if (this.moving) {
         desired = Math.atan2(I.mz, I.mx);
       }

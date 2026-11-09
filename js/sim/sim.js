@@ -2,12 +2,13 @@
 // Humans own their own movement and shots (see docs/ARCHITECTURE.md), and report them here.
 
 import { LETHALS, normalizeLoadout, SCORE, STREAK_IDS, TACTICALS } from '../shared/catalog.js';
-import { MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SCORE_LIMIT, SIM_HZ, SPAWN_PROTECT, TEAM_SIZE, TIME_LIMIT, WEAPON_IDS } from '../shared/constants.js';
+import { MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
+import { MODES } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { damageAt, headMultFor, WEAPONS } from '../shared/weapons.js';
-import { botAttachments, BotBrain } from './bots.js';
+import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult } from './equipment.js';
 import { NavGrid } from './nav.js';
 import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, traceShot, weaponDef } from './player.js';
@@ -43,6 +44,18 @@ const GUNSHIP_DAMAGE = 30, GUNSHIP_SCATTER = 1.5, GUNSHIP_BLAST = 0.85, GUNSHIP_
 const THROW_ORIGIN_SLACK = 4;    // How far a reported throw may start from where the host has that player.
 const SCAVENGE_MAGS = 1;         // Magazines of reserve per kill with Scavenger.
 
+// Modes. capture on a point runs -1 (team 0) to +1 (team 1); a flag changes hands at the extreme and goes
+// neutral when the bar crosses zero, so taking an enemy flag costs twice what taking a neutral one does.
+const TAG_RADIUS = 1.35, TAG_LIFE = 25, TAG_MAX = 16;
+const DOM_CAPTURE = 4.5;         // Seconds for one player to take a neutral flag.
+const DOM_TICK = 3;              // One point per held flag, every this many seconds.
+const DOM_DECAY = 0.12;          // Bar per second a flag recovers when nobody is on it.
+const CROWD_MAX = 3;             // Standing on a flag stops helping past this many players.
+const HARD_ROTATE = 40, HARD_TICK = 1;
+const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
+const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
+const PLAN_EVERY = 15;           // Ticks between bot objective plans.
+
 const PHASES = ['warmup', 'live', 'ended'];
 const PROJECTILE_KINDS = ['frag', 'sticky', 'smoke', 'flash'];
 const TACTICAL_IDS = Object.keys(TACTICALS);
@@ -51,7 +64,7 @@ const POS = { x: 0, z: 0, sliding: false };
 const PLAYER_STRIDE = 24;
 const META_KIT_SHIFT = 13;       // Meta int: 13 bits of equipment and streaks, then the primary's packed kit.
 const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex'];
-const BOT_PRIMARIES = ['ar', 'smg', 'lmg', 'shotgun', 'ar', 'sniper', 'smg', 'ar'];
+const BOT_PRIMARIES = ['ar', 'burst', 'smg', 'dmr', 'pdw', 'lmg', 'shotgun', 'ar', 'sniper', 'autoshot', 'smg', 'ar'];
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'smoke', 'flash'];
 const BOT_LETHALS = ['frag', 'sticky', 'frag'];
@@ -72,6 +85,11 @@ export function scavengeRefill(ps) {
     const w = weaponDef(ps, i === 0 ? ps.primary : ps.secondary);
     if (w && !w.unlimitedReserve) ps.reserve[i] = Math.min(w.reserve, ps.reserve[i] + w.magazine * SCAVENGE_MAGS);
   }
+}
+
+// One int per point: contested bit, owner + 1 in two bits, capture in hundredths offset to be positive.
+function packZone(z) {
+  return (Math.round(z.cap * 100) + 100) << 3 | (z.owner + 1) << 1 | (z.contested ? 1 : 0);
 }
 
 function mulberry32(a) {
@@ -100,7 +118,7 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE }
       const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
       const primary = BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length];
       const loadout = normalizeLoadout({
-        primary, camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
+        primary, secondary: botSecondary(i), camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
         tactical: BOT_TACTICALS[i % BOT_TACTICALS.length], lethal: BOT_LETHALS[i % BOT_LETHALS.length],
         perks: BOT_PERKS[i % BOT_PERKS.length], streaks: BOT_STREAKS[i % BOT_STREAKS.length],
       });
@@ -115,19 +133,21 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE }
 }
 
 export class Sim {
-  constructor({ roster, map, seed = 1, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, mode = 'tdm' }) {
+  // scoreLimit and timeLimit default to the mode's own, from shared/modes.js.
+  constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm' }) {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
     this.rng = mulberry32(seed >>> 0);
-    this.scoreLimit = scoreLimit;
-    this.timeLimit = timeLimit;
-    this.mode = mode;
+    const def = MODES[mode] || MODES.tdm;
+    this.mode = def.id;
+    this.scoreLimit = scoreLimit ?? def.scoreLimit;
+    this.timeLimit = timeLimit ?? def.timeLimit;
     this.dt = STEP;
     this.time = 0;
     this.tick = 0;
     this.accum = 0;
     this.phase = 'warmup';
     this.phaseT = WARMUP;
-    this.timeLeft = timeLimit;
+    this.timeLeft = this.timeLimit;
     this.scores = [0, 0];
     this.winner = null;
     this.uav = [0, 0];
@@ -140,6 +160,7 @@ export class Sim {
     this.nextTurretId = 1;
     this.eq = new EquipmentSystem(this.map);
     this.eqPlayers = [];
+    this._initMode(seed);
     this._onEqEvent = this._onEqEvent.bind(this);
     this._onEqDamage = this._onEqDamage.bind(this);
     this.pathBudget = 0;
@@ -176,6 +197,32 @@ export class Sim {
 
   _emit(e) { this.events.push(e); }
 
+  // Points are the map's, with match state added. `points` is what the view shows: every flag in Domination,
+  // only the live zone in Hardpoint.
+  _initMode(seed) {
+    this.tags = [];
+    this.nextTagId = 1;
+    const defs = (this.mode === 'dom' || this.mode === 'hard') ? this.map.points?.[this.mode] ?? [] : [];
+    this.zones = defs.map(d => ({ id: d.id, x: d.x, z: d.z, r: d.r, owner: -1, cap: 0, contested: false, taken: [false, false] }));
+    // The rotation order is the seed's: the map's list has zones on each team's side, and whichever comes first
+    // hands that team a lead the other never gets back. hardIdx is a position in this order.
+    this.hardOrder = this.zones.map((_, i) => i);
+    const shuffle = mulberry32((seed ^ 0x51ed270b) >>> 0);
+    for (let i = this.hardOrder.length - 1; i > 0; i--) {
+      const k = Math.floor(shuffle() * (i + 1)), q = this.hardOrder[i];
+      this.hardOrder[i] = this.hardOrder[k]; this.hardOrder[k] = q;
+    }
+    this.points = this.mode === 'hard' && this.zones.length ? [this.zones[this.hardOrder[0]]] : this.mode === 'dom' ? this.zones : [];
+    this.hardIdx = 0;
+    this.hardT = HARD_ROTATE;
+    this.tickT = this.mode === 'hard' ? HARD_TICK : DOM_TICK;
+    this.holdT = HOLD_TICK;
+    this._present = [0, 0];
+  }
+
+  // The zone that goes live after the current one; bots that think ahead start walking early.
+  get nextZone() { return this.zones[this.hardOrder[(this.hardIdx + 1) % this.zones.length]]; }
+
   // Line-of-sight blockers right now, for bots and streak targeting.
   get smokes() { return this.eq.smokes; }
 
@@ -183,7 +230,7 @@ export class Sim {
   _cleanLoadout(raw, fallback = null) {
     const l = normalizeLoadout(raw);
     if (!WEAPONS[l.primary]) l.primary = fallback ? fallback.primary : 'ar';
-    if (!WEAPONS[l.secondary]) l.secondary = fallback ? fallback.secondary : 'pistol';
+    if (!SECONDARY_IDS.includes(l.secondary)) l.secondary = fallback ? fallback.secondary : 'pistol';
     return l;
   }
 
@@ -243,7 +290,8 @@ export class Sim {
           if (!seen && d < 36 && hasLineOfSight(this.map, s.x, s.z, q.ps.x, q.ps.z)) seen = true;
         }
         const usedAgo = this.time - (this.spawnUsedAt.get(s) ?? -99);
-        const score = nearest + (t === p.team ? 14 : 0) - (seen ? 22 : 0) - (usedAgo < 2.5 ? 12 : 0) + this.rng() * 3;
+        const score = nearest + (t === p.team ? 14 : 0) - (seen ? 22 : 0) - (usedAgo < 2.5 ? 12 : 0) + this.rng() * 3
+          + this._spawnFlow(p, s);
         if (score > bestScore) { bestScore = score; best = s; }
       }
     }
@@ -252,6 +300,25 @@ export class Sim {
     const aim = Math.atan2(this.map.height / 2 - best.z, this.map.width / 2 - best.x);
     const facing = Math.abs(Math.cos(aim)) > 0.5 ? (best.x < this.map.width / 2 ? 0 : Math.PI) : aim;
     this._placeAt(p, best, facing);
+  }
+
+  // Objective pull on a spawn point: near what your team holds, away from what it does not, and never on top of
+  // the live hardpoint, so nobody spawns straight into a capture.
+  _spawnFlow(p, s) {
+    if (this.mode === 'dom') {
+      let score = 0;
+      for (let i = 0; i < this.zones.length; i++) {
+        const z = this.zones[i], d = Math.hypot(z.x - s.x, z.z - s.z);
+        if (z.owner === p.team && d < 26) score += (26 - d) * 0.5;
+        else if (z.owner === 1 - p.team && d < 20) score -= (20 - d) * 1.2;
+      }
+      return score;
+    }
+    if (this.mode === 'hard' && this.points.length) {
+      const z = this.points[0], d = Math.hypot(z.x - s.x, z.z - s.z);
+      return d < 15 ? -(15 - d) * 2 : d < 38 ? (38 - d) * 0.18 : 0;
+    }
+    return 0;
   }
 
   // ---- Stepping ----
@@ -296,10 +363,14 @@ export class Sim {
       this._stepEquipment();
       this._stepTurrets();
       this._stepGunships();
+      if (this.mode !== 'tdm') this._stepObjectives();
       const players = this.players;
       for (let i = 0; i < players.length; i++) this._stepTimers(players[i]);
-      for (let i = 0; i < players.length; i++) {
-        const p = players[i];
+      if (this.mode !== 'tdm' && this.tick % PLAN_EVERY === 0) planObjectives(this);
+      // Alternate who acts first: a bot's shot lands immediately, so a fixed order hands one team every tied duel.
+      const flip = this.tick & 1, last = players.length - 1;
+      for (let i = 0; i <= last; i++) {
+        const p = players[flip ? last - i : i];
         if (!p.bot || !p.alive) continue;
         const shots = p.bot.update(STEP);
         for (let s = 0; s < shots.length; s++) this.applyShot(p.id, shots[s], 0);
@@ -329,6 +400,176 @@ export class Sim {
   _setPhase(phase) {
     this.phase = phase;
     this._emit({ t: 'phase', phase });
+    if (phase === 'live' && this.mode === 'hard' && this.points.length) this._emit({ t: 'hard_move', id: this.points[0].id });
+  }
+
+  // ---- Objectives ----
+
+  _stepObjectives() {
+    if (this.mode === 'kc') this._stepTags();
+    else if (this.mode === 'dom') this._stepDomination();
+    else if (this.mode === 'hard') this._stepHardpoint();
+    // Domination ticks both teams at once, so a tie at the limit plays on until someone is ahead.
+    if (this.phase === 'live' && Math.max(this.scores[0], this.scores[1]) >= this.scoreLimit && this.scores[0] !== this.scores[1]) {
+      this._end(this.scores[0] > this.scores[1] ? 0 : 1);
+    }
+  }
+
+  _dropTag(victim) {
+    if (this.mode !== 'kc') return;
+    if (this.tags.length >= TAG_MAX) this.tags.shift();    // Oldest first: the snapshot stays bounded.
+    this.tags.push({ id: this.nextTagId++, x: victim.ps.x, z: victim.ps.z, team: victim.team, life: TAG_LIFE });
+  }
+
+  _stepTags() {
+    const tags = this.tags;
+    for (let i = tags.length - 1; i >= 0; i--) {
+      const tag = tags[i];
+      tag.life -= STEP;
+      if (tag.life <= 0) { tags.splice(i, 1); continue; }
+      for (let k = 0; k < this.players.length; k++) {
+        const p = this.players[k];
+        if (!p.alive) continue;
+        const dx = p.ps.x - tag.x, dz = p.ps.z - tag.z;
+        if (dx * dx + dz * dz > TAG_RADIUS * TAG_RADIUS) continue;
+        this._collectTag(tag, p);
+        tags.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  _collectTag(tag, p) {
+    const confirm = p.team !== tag.team;
+    if (confirm) this.scores[p.team]++;
+    addScore(p.score, confirm ? SCORE.confirm : SCORE.deny);
+    this._medal(p, confirm ? 'confirm' : 'deny');
+    // id is the tag, by the player who took it, matching the ids in view.tags.
+    this._emit({ t: 'tag', kind: confirm ? 'confirm' : 'deny', id: tag.id, x: round2(tag.x), z: round2(tag.z), by: p.id, team: p.team });
+  }
+
+  // Alive players of each team inside a zone, written into this._present.
+  _countIn(z) {
+    const n = this._present;
+    n[0] = 0; n[1] = 0;
+    for (let i = 0; i < this.players.length; i++) {
+      const p = this.players[i];
+      if (!p.alive) continue;
+      const dx = p.ps.x - z.x, dz = p.ps.z - z.z;
+      if (dx * dx + dz * dz <= z.r * z.r) n[p.team]++;
+    }
+    return n;
+  }
+
+  _onZone(p, z) {
+    const dx = p.ps.x - z.x, dz = p.ps.z - z.z;
+    return p.alive && dx * dx + dz * dz <= z.r * z.r;
+  }
+
+  // Everyone standing in the zone for this team gets the capture. Hardpoint pays each team once per zone.
+  _capture(z, team) {
+    z.owner = team;
+    // Hardpoint flips hands all the time; only a team's first time on this zone is an event.
+    if (this.mode === 'hard') {
+      if (z.taken[team]) return;
+      z.taken[team] = true;
+    }
+    this._emit({ t: 'capture', point: z.id, team });
+    for (let i = 0; i < this.players.length; i++) {
+      const p = this.players[i];
+      if (p.team !== team || !this._onZone(p, z)) continue;
+      addScore(p.score, SCORE.capture);
+      this._medal(p, 'capture');
+    }
+  }
+
+  _stepDomination() {
+    for (let i = 0; i < this.zones.length; i++) {
+      const z = this.zones[i], n = this._countIn(z);
+      z.contested = n[0] > 0 && n[1] > 0;
+      if (z.contested) continue;
+      if (n[0] > 0 || n[1] > 0) {
+        const team = n[0] > 0 ? 0 : 1, sign = team === 0 ? -1 : 1;
+        const crowd = Math.min(CROWD_MAX, n[team]);
+        z.cap += sign * STEP * (1 + 0.5 * (crowd - 1)) / DOM_CAPTURE;
+        // Crossing zero takes the flag away from whoever had it, before anyone has it again.
+        if (z.owner === 1 - team && Math.sign(z.cap) === sign) z.owner = -1;
+        if (Math.abs(z.cap) >= 1) {
+          z.cap = sign;
+          if (z.owner !== team) this._capture(z, team);
+        }
+      } else if (z.owner !== -1 || z.cap !== 0) {
+        // Nobody here: a half-taken bar drifts back to its owner, or to neutral.
+        const rest = z.owner === -1 ? 0 : (z.owner === 0 ? -1 : 1);
+        const step = DOM_DECAY * STEP;
+        z.cap = z.cap < rest ? Math.min(rest, z.cap + step) : Math.max(rest, z.cap - step);
+      }
+    }
+    this.tickT -= STEP;
+    const paying = this.tickT <= 0;
+    if (paying) {
+      this.tickT += DOM_TICK;
+      for (let i = 0; i < this.zones.length; i++) if (this.zones[i].owner !== -1) this.scores[this.zones[i].owner]++;
+      this._payHolders(this.zones);
+    }
+  }
+
+  // Personal score for standing on a point your team holds.
+  _payHolders(zones) {
+    for (let k = 0; k < zones.length; k++) {
+      const z = zones[k];
+      if (z.owner === -1 || z.contested) continue;
+      for (let i = 0; i < this.players.length; i++) {
+        const p = this.players[i];
+        if (p.team === z.owner && this._onZone(p, z)) addScore(p.score, SCORE.holdTick);
+      }
+    }
+  }
+
+  _stepHardpoint() {
+    if (!this.points.length) return;
+    this.hardT -= STEP;
+    if (this.hardT <= 0) {
+      this.hardT += HARD_ROTATE;
+      this.hardIdx = (this.hardIdx + 1) % this.zones.length;
+      const next = this.zones[this.hardOrder[this.hardIdx]];
+      next.owner = -1; next.cap = 0; next.contested = false; next.taken[0] = false; next.taken[1] = false;
+      this.points[0] = next;
+      this._emit({ t: 'hard_move', id: next.id });
+    }
+    const z = this.points[0], n = this._countIn(z);
+    z.contested = n[0] > 0 && n[1] > 0;
+    if (!z.contested) {
+      if (n[0] > 0 || n[1] > 0) {
+        const team = n[0] > 0 ? 0 : 1;
+        if (z.owner !== team) this._capture(z, team);
+      } else {
+        z.owner = -1;
+      }
+    }
+    z.cap = z.owner === -1 ? 0 : (z.owner === 0 ? -1 : 1);
+    this.tickT -= STEP;
+    if (this.tickT <= 0) {
+      this.tickT += HARD_TICK;
+      if (z.owner !== -1 && !z.contested) this.scores[z.owner]++;
+    }
+    this.holdT -= STEP;
+    if (this.holdT <= 0) { this.holdT += HOLD_TICK; this._payHolders(this.points); }
+  }
+
+  // Killing someone on or next to a point your team holds, or from on top of it, is the defend medal.
+  _checkDefend(killer, victim) {
+    for (let i = 0; i < this.points.length; i++) {
+      const z = this.points[i];
+      if (z.owner !== killer.team) continue;
+      const reach = z.r + DEFEND_REACH;
+      const near = Math.hypot(victim.ps.x - z.x, victim.ps.z - z.z) <= reach
+        || Math.hypot(killer.ps.x - z.x, killer.ps.z - z.z) <= z.r;
+      if (!near) continue;
+      addScore(killer.score, SCORE.defend);
+      this._medal(killer, 'defend');
+      return;
+    }
   }
 
   _end(winner) {
@@ -360,6 +601,7 @@ export class Sim {
     const ps = p.ps;
     ps.x = d.x; ps.z = d.z; ps.aim = d.aim; ps.vx = d.vx; ps.vz = d.vz;
     ps.slot = d.slot; ps.primary = d.primary; ps.weapon = d.weapon;
+    if (d.secondary && SECONDARY_IDS.includes(d.secondary)) ps.secondary = d.secondary;
     ps.sprinting = d.sprinting; ps.sliding = d.sliding;
     ps.ammo[0] = d.ammo[0]; ps.ammo[1] = d.ammo[1];
     ps.reserve[0] = d.reserve[0]; ps.reserve[1] = d.reserve[1];
@@ -464,6 +706,7 @@ export class Sim {
     shooter.spawnProtect = 0;      // Shooting gives up your protection.
 
     const ads = shot.ads ?? (shooter.ps.adsT >= 0.85);
+    if (w.explosive) { this._detonate(shooter, shot, rays[0], w, scratch); return; }
     if (turretHits) this._damageTurretsFromShot(turretHits, rays, shot, w, ads);
     const headMult = headMultFor(shot.weapon);
     for (let i = 0; i < rays.length; i++) {
@@ -479,6 +722,30 @@ export class Sim {
         if (j !== i) rays[j].hit = 'counted';
       }
       this._damage(this.byId.get(targetId), shooter, dmg, shot.weapon, dist, null, head);
+    }
+  }
+
+  // A rocket bursts where its ray ended, a hand's width short of whatever it hit so walls do not shadow the blast.
+  // `targets` are the same rewound positions the ray was traced against.
+  _detonate(shooter, shot, ray, w, targets) {
+    const b = w.explosive, blast = { radius: b.radius, inner: b.inner ?? 0, max: b.damage, min: b.min ?? 0 };
+    const dist = Math.hypot(ray.x - shot.ox, ray.z - shot.oz), back = Math.min(0.2, dist);
+    const x = ray.x - (ray.x - shot.ox) / Math.max(dist, 1e-6) * back;
+    const z = ray.z - (ray.z - shot.oz) / Math.max(dist, 1e-6) * back;
+    this._emit({ t: 'explosion', x: round2(x), z: round2(z), radius: b.radius, by: shooter.id, weapon: shot.weapon });
+    for (let i = 0; i < targets.length; i++) {
+      const e = targets[i];
+      if (!e.alive || e.team === shooter.team) continue;
+      const d = Math.hypot(e.x - x, e.z - z);
+      if (d >= b.radius || !hasLineOfSight(this.map, x, z, e.x, e.z)) continue;
+      const q = this.players[i];
+      this._damage(q, shooter, blastDamage(blast, d, q.ps.perks), shot.weapon, Math.hypot(e.x - shot.ox, e.z - shot.oz));
+    }
+    for (let i = this.turrets.length - 1; i >= 0; i--) {
+      const t = this.turrets[i];
+      if (t.team === shooter.team) continue;
+      const d = Math.hypot(t.x - x, t.z - z);
+      if (d < b.radius && hasLineOfSight(this.map, x, z, t.x, t.z)) this._hurtTurret(t, blastDamage(blast, d));
     }
   }
 
@@ -543,7 +810,8 @@ export class Sim {
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0;
     target.lastKilledBy = killer.id;
     killer.kills++;
-    this.scores[killer.team]++;
+    if (this.mode === 'tdm') this.scores[killer.team]++;
+    else this._dropTag(target);
 
     let assist = null, bestDmg = ASSIST_MIN_DAMAGE;
     for (let i = 0; i < this.players.length; i++) {
@@ -577,6 +845,7 @@ export class Sim {
 
     // A scorestreak's kills count for the team, but never feed the score that earned it.
     if (!streak) {
+      this._checkDefend(killer, target);
       addScore(killer.score, SCORE.kill + (head ? SCORE.headshot : 0));
       killer.streak++;
       if (killer.streak === 3) this._medal(killer, 'streak3');
@@ -944,7 +1213,10 @@ export class Sim {
 
   getView(localId) {
     return {
-      t: this.time, phase: this.phase, timeLeft: this.timeLeft, mode: this.mode,
+      t: this.time, phase: this.phase, timeLeft: this.timeLeft, mode: this.mode, scoreLimit: this.scoreLimit,
+      tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team })),
+      points: this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested)),
+      hardT: this.mode === 'hard' ? this.hardT : 0,
       scores: [this.scores[0], this.scores[1]], winner: this.winner,
       uav: [this.uav[0], this.uav[1]],
       players: this.players.map(p => this._playerView(p)),
@@ -956,15 +1228,22 @@ export class Sim {
     };
   }
 
+  // capture: -1 (team 0) to +1 (team 1). Hardpoint has no bar to fill, so it reads -1, 0 or +1 for whoever holds it.
+  _pointView(z, owner, cap, contested) {
+    return { id: z.id, x: z.x, z: z.z, r: z.r, owner, capture: cap, contested };
+  }
+
   // Header: [time cs, phase, timeLeft ds, score0, score1, winner(-1), uav0 ds, uav1 ds, lastKill|0, meta|0,
-  // projectiles|0, smokes|0, turrets|0, gunships|0], then PLAYER_STRIDE numbers per player in roster order.
-  // meta is [camos, loadout ints, mode]; it goes out on change and once a second. The four entity lists are flat.
+  // projectiles|0, smokes|0, turrets|0, gunships|0, objective|0], then PLAYER_STRIDE numbers per player in roster
+  // order. meta is [camos, loadout ints, mode, scoreLimit]; it goes out on change and once a second. The entity
+  // lists are flat. Objective block: kc [id*2+team, x, z ...] (ds of metres), dom [packed zone x3], hard [zone index,
+  // packed zone, hardT ds]. Positions and radii of zones come from the map, which guests already have.
   encodeSnapshot() {
     const out = [
       Math.round(this.time * 100), PHASES.indexOf(this.phase), Math.round(this.timeLeft * 10),
       this.scores[0], this.scores[1], this.winner === null ? -1 : this.winner,
       Math.round(this.uav[0] * 10), Math.round(this.uav[1] * 10),
-      0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, this._encodeObjective(),
     ];
     const lk = this.lastKill;
     if (lk) {
@@ -999,6 +1278,32 @@ export class Sim {
     return out;
   }
 
+  _encodeObjective() {
+    if (this.mode === 'kc') {
+      return this.tags.length ? this.tags.flatMap(t => [t.id * 2 + t.team, Math.round(t.x * 10), Math.round(t.z * 10)]) : 0;
+    }
+    if (this.mode === 'dom') return this.zones.length ? this.zones.map(packZone) : 0;
+    if (this.mode === 'hard') return this.points.length ? [this.hardOrder[this.hardIdx], packZone(this.points[0]), Math.ceil(this.hardT * 10)] : 0;
+    return 0;
+  }
+
+  _decodeObjective(a, out) {
+    out.tags = []; out.points = []; out.hardT = 0;
+    if (!a) return;
+    if (this.mode === 'kc') {
+      for (let i = 0; i < a.length; i += 3) out.tags.push({ id: a[i] >> 1, team: a[i] & 1, x: a[i + 1] / 10, z: a[i + 2] / 10 });
+    } else if (this.mode === 'dom') {
+      for (let i = 0; i < a.length && i < this.zones.length; i++) out.points.push(this._unpackZone(this.zones[i], a[i]));
+    } else if (this.mode === 'hard') {
+      out.points.push(this._unpackZone(this.zones[a[0]], a[1]));
+      out.hardT = a[2] / 10;
+    }
+  }
+
+  _unpackZone(z, n) {
+    return this._pointView(z, ((n >> 1) & 3) - 1, ((n >> 3) - 100) / 100, !!(n & 1));
+  }
+
   _encodeMeta() {
     return [
       this.players.map(p => p.camo),
@@ -1008,6 +1313,7 @@ export class Sim {
         return n | (packKit(p.kits[0]) << META_KIT_SHIFT);
       }),
       this.mode,
+      this.scoreLimit,
     ];
   }
 
@@ -1020,8 +1326,9 @@ export class Sim {
   }
 
   _decodeMeta(meta) {
-    const [camos, ints, mode] = meta;
+    const [camos, ints, mode, scoreLimit] = meta;
     this.mode = mode;
+    if (scoreLimit) this.scoreLimit = scoreLimit;
     for (let i = 0; i < this.players.length && i < camos.length; i++) {
       const p = this.players[i], n = ints[i];
       p.camo = camos[i];
@@ -1036,7 +1343,7 @@ export class Sim {
   }
 
   decodeSnapshot(d, localId) {
-    const HEAD = 14;
+    const HEAD = 15;
     if (d[9]) this._decodeMeta(d[9]);
     const players = new Array(this.players.length);
     for (let i = 0; i < this.players.length; i++) {
@@ -1068,8 +1375,8 @@ export class Sim {
       lastKill = { by: this.players[by].id, target: this.players[target].id,
         weapon: WEAPON_IDS[weapon], camo: this.players[by].camo, x: x / 10, z: z / 10 };
     }
-    return {
-      t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode,
+    const view = {
+      t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode, scoreLimit: this.scoreLimit,
       scores: [d[3], d[4]], winner: d[5] === -1 ? null : d[5],
       uav: [d[6] / 10, d[7] / 10], players, localId, lastKill,
       projectiles: this._decodeList(d[10], 5, (a, i) => ({ id: a[i], kind: PROJECTILE_KINDS[a[i + 1]], x: a[i + 2] / 10, z: a[i + 3] / 10, y: a[i + 4] / 10 })),
@@ -1077,6 +1384,8 @@ export class Sim {
       turrets: this._decodeList(d[12], 6, (a, i) => ({ id: a[i], team: this.players[a[i + 1]].team, owner: this.players[a[i + 1]].id, x: a[i + 2] / 10, z: a[i + 3] / 10, aim: a[i + 4] / 20, hp: a[i + 5] })),
       gunships: this._decodeList(d[13], 4, (a, i) => ({ team: this.players[a[i]].team, owner: this.players[a[i]].id, x: a[i + 1] / 10, z: a[i + 2] / 10, aim: a[i + 3] / 20 })),
     };
+    this._decodeObjective(d[14], view);
+    return view;
   }
 
   _decodeList(a, stride, read) {

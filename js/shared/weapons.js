@@ -9,7 +9,10 @@
 //   swapTime        seconds to bring the gun up (the pistol's whole point)
 //   bloomScale      how far full bloom widens the cone (1 + bloom * bloomScale)
 //   holdRpm         semi-autos: rate when the trigger is simply held. 0 = must release between shots.
-//   pattern         {amp, freq, ramp}: learnable side-to-side recoil, degrees-free radians, by shot index
+//   pattern         {amp, freq, ramp, drift?}: learnable side-to-side recoil by shot index, radians. drift is a
+//                   one-sided pull added per shot (up to 12 of them), which is what makes a gun buck off target
+//   burst           {count, gap}: the trigger fires `count` rounds `gap` seconds apart, committed once started.
+//                   rpm is then the gun's true cadence: the recovery after a burst is whatever makes it come out right
 //   spinup          {shots, from}: fire rate ramps from `from` x rpm to full over `shots`
 //   heat            {rounds, coolDelay, coolTime, lockout, loosenFrom}: rounds to full bar, idle seconds before
 //                   cooling, seconds full to empty, lockout at full, bar fraction past which accuracy loosens
@@ -20,6 +23,8 @@
 //   adsGate         damage multiplier applied unless fully aimed (sniper hipfire)
 //   boltKick        adsT is knocked back to this after a shot (bolt cycle costs you the scope)
 //   unlimitedReserve reloading never drains reserve, so nobody is ever left unarmed
+//   explosive       {radius, damage, inner, min}: the host detonates this shot at the end of its ray (see Sim);
+//                   full damage inside inner, linear to min at the edge. Blocked by hard cover. No self damage.
 //
 // Attachments (js/shared/attachments.js) produce an effective def with these same fields; see effectiveWeapon.
 
@@ -99,6 +104,78 @@ export const WEAPONS = {
     headMult: 1.4,
     adsTime: 0.1, sprintToFire: 0.06, swapTime: 0.15, moveMult: 1.1, adsMoveMult: 0.9,
     pellets: 1, slideFire: true, unlimitedReserve: true, kickCam: 0.4, tracerWidth: 0.8,
+  },
+
+  // Three rounds per pull, committed once started. One clean burst to the head is a kill; a body-only target
+  // needs a second one, so it pays for accuracy and loses to anything that spots it first up close.
+  burst: {
+    id: 'burst', name: 'Cadence', role: 'Pacer', auto: true,
+    damage: 29, rpm: 500, burst: { count: 3, gap: 0.07 }, magazine: 27, reserve: 135, reload: 2.1, range: 62,
+    falloff: { start: 30, end: 50, min: 0.7 },
+    adsSpread: 0.004, hipSpread: 0.05, bloomPerShot: 0.07, bloomRecover: 2.6, bloomScale: 1.4,
+    pattern: { amp: 0.008, freq: 1, ramp: 1 },
+    headMult: 1.4, turnCap: 14,
+    adsTime: 0.22, sprintToFire: 0.2, swapTime: 0.36, moveMult: 0.98, adsMoveMult: 0.55,
+    pellets: 1, kickCam: 0.55, tracerWidth: 1.05,
+  },
+
+  // The fastest kill in the game inside a room, and a fight with the muzzle everywhere else.
+  pdw: {
+    id: 'pdw', name: 'Rasp', role: 'Knife fight', auto: true,
+    damage: 20, rpm: 1200, magazine: 28, reserve: 168, reload: 1.6, range: 34,
+    falloff: { start: 9, end: 19, min: 0.45 },
+    adsSpread: 0.024, hipSpread: 0.042, bloomPerShot: 0.07, bloomRecover: 3, bloomScale: 1.6,
+    pattern: { amp: 0.028, freq: 1.75, ramp: 2, drift: 0.0028 },
+    headMult: 1.3,
+    adsTime: 0.12, sprintToFire: 0.08, swapTime: 0.24, moveMult: 1.08, adsMoveMult: 0.82,
+    pellets: 1, slideFire: true, kickCam: 0.6, tracerWidth: 0.7,
+  },
+
+  // Two shells at arm's length and nothing much past a doorway. Drum fed: one long reload, no shell-by-shell.
+  autoshot: {
+    id: 'autoshot', name: 'Squall', role: 'Doorway', auto: true,
+    damage: 11, rpm: 270, magazine: 14, reserve: 56, reload: 3.3, range: 18,
+    falloff: { start: 5, end: 11, min: 0.3 },
+    adsSpread: 0.07, hipSpread: 0.115, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
+    pattern: { amp: 0.02, freq: 1.1, ramp: 3 },
+    headMult: 1.05, turnCap: 6.5,
+    adsTime: 0.2, sprintToFire: 0.17, swapTime: 0.46, moveMult: 0.97, adsMoveMult: 0.62,
+    pellets: 7, kickCam: 0.95, tracerWidth: 0.5,
+  },
+
+  // Strict semi-auto: every round is its own trigger pull. Two to the body through mid range, and it flinches the
+  // scope a little each time, so a measured tap beats a frantic one.
+  dmr: {
+    id: 'dmr', name: 'Tallyman', role: 'Marksman', auto: false, holdRpm: 0,
+    damage: 52, rpm: 210, magazine: 12, reserve: 72, reload: 2.5, range: 72,
+    falloff: { start: 34, end: 56, min: 0.68 },
+    adsSpread: 0.0025, hipSpread: 0.09, bloomPerShot: 0.6, bloomRecover: 2.1, bloomScale: 1.2,
+    boltKick: 0.74, headMult: 1.6, turnCap: 8,
+    adsTime: 0.26, sprintToFire: 0.26, swapTime: 0.42, moveMult: 0.95, adsMoveMult: 0.5,
+    pellets: 1, kickCam: 0.85, tracerWidth: 1.3,
+  },
+
+  // Slow, heavy, and the only sidearm that ends a fight with one round: a head inside about 14 m.
+  revolver: {
+    id: 'revolver', name: 'Verdict', role: 'Sidearm', auto: false, holdRpm: 0,
+    damage: 62, rpm: 110, magazine: 6, reserve: 48, reload: 2.4, range: 46,
+    falloff: { start: 14, end: 30, min: 0.55 },
+    adsSpread: 0.006, hipSpread: 0.05, bloomPerShot: 0.7, bloomRecover: 2.2, bloomScale: 1,
+    headMult: 1.7,
+    adsTime: 0.14, sprintToFire: 0.1, swapTime: 0.2, moveMult: 1.06, adsMoveMult: 0.8,
+    pellets: 1, unlimitedReserve: true, kickCam: 1, tracerWidth: 1.15,
+  },
+
+  // One rocket, then a very long wait. Detonates at the end of its ray; `damage` here is the blast's centre.
+  launcher: {
+    id: 'launcher', name: 'Breaker', role: 'Demolition', auto: false, holdRpm: 0,
+    damage: 130, explosive: { radius: 4.4, damage: 130, inner: 1.1, min: 20 },
+    rpm: 40, magazine: 1, reserve: 3, reload: 5, range: 46,
+    falloff: { start: 99, end: 100, min: 1 },
+    adsSpread: 0.008, hipSpread: 0.07, bloomPerShot: 0.8, bloomRecover: 1.2, bloomScale: 1,
+    headMult: 1,
+    adsTime: 0.32, sprintToFire: 0.42, swapTime: 0.62, moveMult: 0.9, adsMoveMult: 0.55,
+    pellets: 1, kickCam: 1.4, tracerWidth: 2,
   },
 };
 
