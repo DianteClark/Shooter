@@ -289,7 +289,7 @@ function pack(s) {
   return [
     s.version, s.name, s.xp, s.totalXp, s.prestige, s.peakLevel, s.active,
     Object.entries(s.weapons).map(([id, w]) => [id, ...GUN_STATS.map(k => w[k]), w.owned, w.camo, w.tracer, w.killFx]),
-    s.loadouts.map(l => [l.name, l.primary, l.secondary, l.attachments, l.perks, l.tactical, l.lethal, l.streaks]),
+    s.loadouts.map(l => [l.name, l.primary, l.secondary, l.attachments, l.perks, l.tactical, l.lethal, l.streaks, l.operator]),
   ];
 }
 
@@ -306,7 +306,7 @@ function unpack(a) {
   }
   return {
     version, name, xp, totalXp, prestige, peakLevel, active, weapons,
-    loadouts: loadouts.map(l => (Array.isArray(l) ? { name: l[0], primary: l[1], secondary: l[2], attachments: l[3], perks: l[4], tactical: l[5], lethal: l[6], streaks: l[7] } : null)),
+    loadouts: loadouts.map(l => (Array.isArray(l) ? { name: l[0], primary: l[1], secondary: l[2], attachments: l[3], perks: l[4], tactical: l[5], lethal: l[6], streaks: l[7], operator: l[8] } : null)),
   };
 }
 
