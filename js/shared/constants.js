@@ -17,8 +17,24 @@ export const TEAMS = [
   { id: 1, name: 'Reapers',  color: 0xff4d3d, css: '#ff4d3d' },
 ];
 
-export const PRIMARY_IDS = ['ar', 'burst', 'smg', 'pdw', 'shotgun', 'autoshot', 'lmg', 'dmr', 'sniper'];
-export const SECONDARY_IDS = ['pistol', 'revolver', 'launcher'];
+// Display order everywhere (loadout, gunsmith): grouped by category. Ids are stable, the wire sends list indices.
+export const CATEGORIES = ['Assault', 'SMG', 'Shotgun', 'LMG', 'Marksman', 'Sniper', 'Pistol', 'Launcher'];
+const GUNS_BY_CATEGORY = {
+  Assault:  ['ar', 'burst', 'heavyar'],
+  SMG:      ['smg', 'pdw', 'tacsmg'],
+  Shotgun:  ['shotgun', 'autoshot', 'coach'],
+  LMG:      ['lmg', 'saw', 'rotary'],
+  Marksman: ['dmr', 'battle', 'lever'],
+  Sniper:   ['sniper', 'antimat', 'semisnipe'],
+  Pistol:   ['pistol', 'revolver', 'machpistol', 'deuce'],
+  Launcher: ['launcher', 'thumper'],
+};
+export const WEAPON_CATEGORY = Object.fromEntries(Object.entries(GUNS_BY_CATEGORY).flatMap(([c, ids]) => ids.map(id => [id, c])));
+// Every gun id in the given categories. Used for attachment allow-lists.
+export const idsIn = (...cats) => cats.flatMap(c => GUNS_BY_CATEGORY[c] || []);
+
+export const PRIMARY_IDS = idsIn('Assault', 'SMG', 'Shotgun', 'LMG', 'Marksman', 'Sniper');
+export const SECONDARY_IDS = idsIn('Pistol', 'Launcher');
 export const WEAPON_IDS = [...PRIMARY_IDS, ...SECONDARY_IDS];
 export const SECONDARY_ID = 'pistol';
 export const BOT_SKILLS = ['recruit', 'regular', 'veteran', 'elite'];

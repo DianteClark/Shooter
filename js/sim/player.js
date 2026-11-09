@@ -24,6 +24,7 @@ import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
 export { HEAD_RADIUS, headMultFor } from '../shared/weapons.js';
 
 const MAX_DT = 0.05;
+const MAX_STEP = 0.25;         // Metres of movement per collision pass; see stepMovement.
 
 // Movement feel. Acceleration is deliberately very high: the stick should feel directly wired to the
 // body, with only the sprint build-up and the slide giving a sense of weight.
@@ -377,10 +378,20 @@ function stepMovement(ps, input, w, dt, map) {
 
   const ox = ps.x, oz = ps.z;
   const nextX = ox + ps.vx * dt, nextZ = oz + ps.vz * dt;
-  ps.x = nextX; ps.z = nextZ;
-  resolveCircle(map, ps, PLAYER_RADIUS);
+  // A slide at a low frame rate covers more than half a body per step. Taken in one go, the centre can land inside
+  // a wall, and an L of two abutting walls (Sunken's water) then pushes it from one into the other. Substeps of
+  // MAX_STEP keep the centre outside every wall, so resolveCircle always pushes back the way the player came.
+  const steps = Math.ceil(Math.hypot(nextX - ox, nextZ - oz) / MAX_STEP) || 1;
+  let pushed = false;
+  for (let i = 1; i <= steps; i++) {
+    const tx = ps.x + (nextX - ox) / steps, tz = ps.z + (nextZ - oz) / steps;
+    ps.x = tx; ps.z = tz;
+    resolveCircle(map, ps, PLAYER_RADIUS);
+    if (ps.x !== tx || ps.z !== tz) pushed = true;
+  }
+  if (!pushed) { ps.x = nextX; ps.z = nextZ; }
   // Convert any push-out back into velocity so a wall scrubs speed instead of being pushed against.
-  if (ps.x !== nextX || ps.z !== nextZ) {
+  if (pushed) {
     ps.vx = (ps.x - ox) / dt;
     ps.vz = (ps.z - oz) / dt;
     if (ps.sliding) {
@@ -436,7 +447,9 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
     ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
   }
 
-  // A burst, once started, finishes whether or not the finger stayed down; sprinting abandons it.
+  // Every gun fires for as long as the trigger is held, at its own rpm: no gun needs a release between shots.
+  // Non-auto guns never fire twice in one frame. A burst, once started, finishes whether or not the finger stayed
+  // down; sprinting abandons it.
   if (ps.sprinting) ps.burstLeft = 0;
   let shots = NO_SHOTS;
   if ((trigger || ps.burstLeft > 0) && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
