@@ -357,3 +357,118 @@
 .res-choice { display: flex; flex-direction: column; gap: 5px; justify-content: flex-end; }
 .res-choice .route { height: 44px; font-size: 14px; padding: 0 10px; }
 .res-choice .res-note { font: 10.5px/1.15 var(--body); letter-spacing: 0; color: var(--sodium); min-height: 12px; }
+
+/* Map vote and solo picker */
+.vote-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vote-clock { flex: none; position: relative; width: 112px; height: 40px; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 4px; }
+.vote-num { font: 400 34px/1 var(--stencil); color: var(--sodium); min-height: 30px; }
+.vote-bar { display: block; width: 100%; height: 4px; background: rgba(231,234,228,.18); overflow: hidden; }
+.vote-bar i { position: absolute; inset: auto 0 0 0; height: 4px; background: var(--sodium); transform-origin: right center; transition: transform 1s linear; }
+.vote-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 4px; }
+.vote-card, .solo-map {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; text-align: left; padding: 8px 10px 9px; color: var(--chalk);
+  background: var(--steel); --cut: 11px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  transition: transform .18s cubic-bezier(.2,.8,.3,1), opacity .18s, box-shadow .18s, filter .18s;
+}
+.vc-art { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.vc-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 12%, rgba(29,35,43,.2) 38%, rgba(16,20,26,.92) 88%); }
+.vote-card > *:not(.vc-art):not(.vc-shade), .solo-map > *:not(.vc-art):not(.vc-shade) { position: relative; z-index: 1; }
+.vc-map { font: 400 33px/1 var(--stencil); text-shadow: 0 2px 4px rgba(0,0,0,.65); }
+.vc-mode { display: flex; align-items: center; gap: 6px; margin-top: 3px; font: 400 16px/1.05 var(--plate-face); }
+.vc-mode em { font: 400 13px/1 var(--stencil); font-style: normal; padding: 3px 6px 2px; background: var(--sodium); color: var(--ballast); }
+.vc-desc { margin-top: 3px; font: 11px/1.15 var(--body); letter-spacing: 0; color: var(--haze); }
+.vc-votes { display: flex; align-items: center; gap: 4px; margin-top: 7px; min-height: 20px; }
+.vc-votes i { width: 11px; height: 11px; border-radius: 50%; background: rgba(231,234,228,.18); box-shadow: inset 0 0 0 1.5px rgba(231,234,228,.25); }
+.vc-votes i.on { background: var(--sodium); box-shadow: 0 0 8px rgba(242,166,59,.7); }
+.vc-votes b { margin-left: 3px; font: 400 18px/1 var(--stencil); }
+.vote-card:active:not(:disabled) { filter: brightness(1.15); }
+.vote-card:disabled { opacity: 1; }
+.vote-card.mine { box-shadow: inset 0 0 0 3px var(--sodium); }
+.vote-card.mine::after { content: 'Your vote'; position: absolute; z-index: 1; right: 8px; top: 9px; padding: 3px 8px 2px; font: 400 13px/1 var(--stencil); background: var(--sodium); color: var(--ballast); }
+.vote-card.winner { transform: scale(1.03); box-shadow: inset 0 0 0 3px var(--go), 0 0 28px rgba(75,209,138,.5); z-index: 2; animation: vote-win .7s cubic-bezier(.2,1.2,.4,1) both; }
+.vote-card.lost { opacity: .32; filter: saturate(.3); }
+@keyframes vote-win { 0% { transform: scale(.94); } 60% { transform: scale(1.06); } 100% { transform: scale(1.03); } }
+.vote-foot { flex: none; font: 12.5px/1.2 var(--body); letter-spacing: 0; color: var(--haze); text-align: center; min-height: 18px; margin-top: 5px; }
+
+.solo { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.solo-hint { margin-left: auto; }
+.solo-maps { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.solo-map { padding: 6px 9px 7px; }
+.solo-map b { font: 400 25px/1 var(--stencil); text-shadow: 0 2px 4px rgba(0,0,0,.65); }
+.solo-map.on { box-shadow: inset 0 0 0 3px var(--sodium); }
+.solo-foot { flex: none; display: grid; grid-template-columns: 1fr 108px; gap: 6px; height: 80px; }
+.solo-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; min-width: 0; }
+.solo-mode { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; text-align: left; gap: 1px; padding: 4px 8px; background: var(--steel); min-width: 0; --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.solo-mode em { font: 400 13px/1 var(--stencil); font-style: normal; color: var(--sodium); }
+.solo-mode b { font: 400 13px/1.05 var(--plate-face); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.solo-mode small { font: 10px/1.1 var(--body); letter-spacing: 0; color: var(--haze); max-height: 22px; overflow: hidden; }
+.solo-mode.on { background: var(--chalk); color: var(--ballast); }
+.solo-mode.on small { color: #4a5660; }
+.solo-mode.on em { color: #9a5f06; }
+.solo-mode:disabled { opacity: .3; }
+.solo-start { justify-content: center; height: 100%; font-size: 17px; }
+
+/* Operators */
+.op { flex: 1; min-height: 0; display: grid; grid-template-columns: 290px 1fr; gap: 8px; margin-top: 4px; }
+.op-lo { margin-left: auto; }
+.op-bay { position: relative; min-height: 0; overflow: hidden; background: linear-gradient(170deg, #36394a, var(--steel) 55%, #29323b); --cut: 11px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.op-view { position: absolute; inset: 36px 0 78px 0; }
+.op-name { position: absolute; left: 12px; top: 8px; display: flex; flex-direction: column; gap: 1px; pointer-events: none; }
+.op-name b { font: 400 28px/1 var(--stencil); }
+.op-name small { font: 11px/1.15 var(--body); letter-spacing: 0; color: var(--sodium); }
+.op-detail { position: absolute; left: 10px; right: 10px; bottom: 9px; display: flex; flex-direction: column; gap: 4px; }
+.op-state { font: 400 14px/1.1 var(--plate-face); color: var(--chalk); }
+.op-state.ok { color: var(--go); text-align: center; }
+.op-progress { font-size: 10px; color: var(--haze); text-align: right; }
+.op-equip { justify-content: center; }
+.op-grid { min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 5px; }
+.op-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 1px; padding: 6px 10px 7px; text-align: left; background: var(--steel); overflow: hidden; --cut: 8px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.op-card b { font: 400 21px/1 var(--stencil); }
+.op-card small { font-size: 9.5px; color: var(--haze); min-height: 11px; }
+.op-card.locked b { color: var(--haze); }
+.op-card.locked small { color: var(--sodium); }
+.op-lock { position: absolute; right: 7px; top: 7px; color: var(--haze); line-height: 0; }
+.op-card.on { background: var(--chalk); color: var(--ballast); box-shadow: inset 0 0 0 2px var(--sodium); }
+.op-card.on small { color: var(--steel); }
+.op-card.on .op-lock { color: var(--steel); }
+.op-card.equipped { box-shadow: inset 3px 0 0 var(--go); }
+.op-card.equipped.on { box-shadow: inset 3px 0 0 var(--go), inset 0 0 0 2px var(--sodium); }
+
+/* Gun sheet in the loadout screen */
+.lo-swap { position: absolute; right: 7px; top: 6px; font: 400 12px/1 var(--plate-face); font-style: normal; color: var(--sodium); }
+.lo-actions { gap: 4px; }
+.lo-sec { display: flex; flex-direction: column; gap: 1px; justify-content: center; align-items: flex-start; padding: 3px 8px; text-align: left; background: var(--steel); min-height: 36px; --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.lo-sec small { font-size: 9px; color: var(--haze); }
+.lo-sec b { font: 400 14px/1 var(--plate-face); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.lo-sec:active { filter: brightness(1.2); }
+.lo-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.lo-mini .route { height: 32px; font-size: 11px; padding: 0 2px; }
+.lo-actions > .route:not(.small) { height: 38px; font-size: 14px; }
+.lo-guns { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 5px; }
+.lo-guns.secondary { grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(0, 96px); align-content: start; }
+.lo-g { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 4px 12px; text-align: left; background: var(--steel); --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.lo-g:active { filter: brightness(1.2); }
+.lo-g b { font: 400 20px/1 var(--stencil); }
+.lo-g small { font-size: 10.5px; color: var(--haze); }
+.lo-g.on { background: var(--chalk); color: var(--ballast); box-shadow: inset 0 0 0 2px var(--sodium); }
+.lo-g.on small { color: var(--steel); }
+.lo-g.locked { color: var(--haze); }
+.lo-g.locked small { color: var(--sodium); }
+.lo-g em.lock { position: absolute; right: 8px; top: 6px; font-style: normal; color: var(--haze); line-height: 0; }
+
+/* Twelve guns in the gunsmith: two columns, twelve equal hit targets. */
+.gs { grid-template-columns: 128px minmax(0, 1fr) minmax(0, 330px); }
+.gs-weapons { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 3px; }
+.gs-w { padding: 0 3px 0 7px; }
+.gs-w b { font-size: 11px; line-height: 1.02; white-space: normal; }
+.gs-w small { margin-top: 1px; }
+.gs-w.side { box-shadow: inset 0 2px 0 var(--plate); }
+.gs-w.on { transform: none; }
+.gs-w.equipped::before { left: 2px; }
+
+/* Lobby footer now carries one more button. */
+.lobby-foot { gap: 6px; }
+.lobby-foot .route.small { padding: 0 9px; font-size: 12px; }
+.lobby-foot .skills { flex-wrap: nowrap; }
+.lobby-foot .seg { padding: 0 7px; }
+.lobby-foot .route:not(.small) { padding: 0 10px; white-space: nowrap; }

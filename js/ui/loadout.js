@@ -1,12 +1,17 @@
 // The Loadouts screen: five named sets down the side, every slot of the chosen set visible at once.
 // A slot opens a picker that slides over just the slots, so a swap is two taps and never loses the rail.
 import { TACTICALS, LETHALS, PERKS, STREAKS } from '../shared/catalog.js';
+import { PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { getCamo } from '../shared/camos.js';
 import { SLOTS, ATTACHMENTS, attachmentsFor } from '../shared/attachments.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { Progress } from './progress.js';
+import { getOperator } from './operators.js';
 import { esc, lockIcon, swatchCss, levelRequirement, SLOT_LABEL, ROMAN, itemMark } from './widgets.js';
+
+const gunTable = ids => Object.fromEntries(ids.map(id => [id, WEAPONS[id]]));
+const GUN_SECTIONS = { primary: { title: 'Primary', ids: PRIMARY_IDS }, secondary: { title: 'Secondary', ids: SECONDARY_IDS } };
 
 const SECTIONS = {
   tactical: { kind: 'tactical', title: 'Tactical', table: TACTICALS },
@@ -16,18 +21,22 @@ const SECTIONS = {
 };
 
 export class LoadoutsScreen {
-  constructor(menu, { onBack, onChange, onGunsmith, onRename }) {
+  constructor(menu, { onBack, onChange, onGunsmith, onRename, onOperators }) {
     this.menu = menu;
     this.onChange = onChange;
     this.onGunsmith = onGunsmith;
     this.onRename = onRename;
+    this.onOperators = onOperators;
     this.selected = menu.lastLoadoutIndex ?? Progress.activeLoadout;
     this.sheet = null;           // { key, idx } while a picker is open.
     menu.on({
       loBack: () => { menu.lastLoadoutIndex = null; onBack(); },
       loPick: ({ i }) => { this.selected = Number(i); menu.lastLoadoutIndex = this.selected; this.render(); },
       loEquip: () => this.equip(),
-      loGun: () => this.onGunsmith(this.selected),
+      loGunsmith: () => this.onGunsmith(this.selected),
+      loOperators: () => this.onOperators(this.selected),
+      loWeapon: ({ key }) => this.openGun(key),
+      loPickGun: ({ id }) => this.chooseGun(id),
       loRename: () => this.onRename(this.selected),
       loSlot: ({ key, idx }) => this.openSheet(key, Number(idx)),
       loChoose: ({ id }) => this.choose(id),
@@ -47,6 +56,24 @@ export class LoadoutsScreen {
   openSheet(key, idx) {
     this.sheet = { key, idx };
     this.paintSheet();
+  }
+
+  openGun(key) {
+    this.sheet = { key, gun: true };
+    this.paintSheet();
+  }
+
+  // Guns are one tap from the sheet and straight back: nothing else about the loadout is touched.
+  chooseGun(id) {
+    const { key } = this.sheet;
+    if (!Progress.isItemUnlocked('weapon', id)) {
+      this.menu.toast(`${WEAPONS[id].name}: ${levelRequirement(Progress.itemUnlockLevel('weapon', id))}`);
+      return;
+    }
+    Progress.updateLoadout(this.selected, { [key]: id });
+    this.onChange?.();
+    this.sheet = null;
+    this.render();
   }
 
   closeSheet() {
@@ -78,6 +105,7 @@ export class LoadoutsScreen {
   render() {
     const m = this.menu, all = Progress.loadouts(), active = Progress.activeLoadout;
     const l = all[this.selected], kit = attachmentsFor(l, l.primary), camo = getCamo(l.camo);
+    const secondary = WEAPONS[l.secondary], operator = getOperator(l.operator);
     const isActive = this.selected === active;
     m.el.dataset.screen = 'loadouts';
     m.el.innerHTML = `
@@ -97,7 +125,7 @@ export class LoadoutsScreen {
         </div>
         <div class="lo-main">
           <div class="lo-top">
-            <button class="lo-gun" data-act="loGun">
+            <button class="lo-gun" data-act="loWeapon" data-key="primary">
               <span class="lo-gun-view"></span>
               <span class="lo-gun-text">
                 <b>${esc(WEAPONS[l.primary]?.name ?? '')}</b>
@@ -105,9 +133,15 @@ export class LoadoutsScreen {
                 <em>Lv ${Progress.weaponLevel(l.primary)}${Progress.weaponPrestige(l.primary) ? ` ${ROMAN[Progress.weaponPrestige(l.primary)]}` : ''}</em>
               </span>
               <span class="lo-kit">${SLOTS.map(s => `<i class="${kit[s] ? 'has' : ''}"><small>${SLOT_LABEL[s]}</small><b>${kit[s] ? esc(ATTACHMENTS[kit[s]].name) : 'Stock'}</b></i>`).join('')}</span>
+              <em class="lo-swap">Primary</em>
             </button>
             <div class="lo-actions">
-              <button class="route small" data-act="loRename"><b>Rename</b></button>
+              <button class="lo-sec" data-act="loWeapon" data-key="secondary"><small>Secondary</small><b>${esc(secondary?.name ?? l.secondary)}</b></button>
+              <button class="lo-sec" data-act="loOperators"><small>Operator</small><b>${esc(operator.name)}</b></button>
+              <div class="lo-mini">
+                <button class="route small" data-act="loGunsmith"><b>Gunsmith</b></button>
+                <button class="route small" data-act="loRename"><b>Rename</b></button>
+              </div>
               <button class="route ${isActive ? 'lit' : 'primary'}" data-act="loEquip" ${isActive ? 'disabled' : ''}><i class="lamp"></i><b>${isActive ? 'Equipped' : 'Equip'}</b></button>
             </div>
           </div>
@@ -138,6 +172,7 @@ export class LoadoutsScreen {
   }
 
   paintSheet(instant) {
+    if (this.sheet.gun) { this.paintGunSheet(instant); return; }
     const sheet = this.menu.el.querySelector('.lo-sheet');
     const { key, idx } = this.sheet;
     const sec = SECTIONS[key];
@@ -154,6 +189,30 @@ export class LoadoutsScreen {
             <span class="lo-tile-icon">${itemMark(item.id, item.name)}</span>
             <span class="lo-text"><b>${esc(item.name)}</b><small>${unlocked ? esc(item.desc) : esc(levelRequirement(Progress.itemUnlockLevel(sec.kind, item.id)))}</small></span>
             ${unlocked ? (key === 'streaks' ? `<em>${item.cost}</em>` : item.count ? `<em>x${item.count}</em>` : held ? '<em class="in">In use</em>' : '') : `<em class="lock">${lockIcon()}</em>`}
+          </button>`;
+        }).join('')}
+      </div>`;
+    if (instant) sheet.classList.add('open');
+    else requestAnimationFrame(() => sheet.classList.add('open'));
+  }
+
+  // Primaries take most of the room, so this grid is built to be read and hit without scrolling.
+  paintGunSheet(instant) {
+    const sheet = this.menu.el.querySelector('.lo-sheet');
+    const { key } = this.sheet;
+    const sec = GUN_SECTIONS[key], l = Progress.loadouts()[this.selected];
+    const current = l[key];
+    const table = gunTable(sec.ids);
+    sheet.innerHTML = `
+      <div class="lo-sheet-head"><b>${sec.title}</b><small>Tap to change. Gunsmith fine-tunes each gun.</small><button class="back" data-act="loClose">Close</button></div>
+      <div class="lo-guns ${key}">
+        ${sec.ids.map(id => {
+          const w = table[id], unlocked = Progress.isItemUnlocked('weapon', id), on = id === current;
+          const lv = Progress.weaponLevel(id), prestige = Progress.weaponPrestige(id);
+          return `<button class="lo-g${on ? ' on' : ''}${unlocked ? '' : ' locked'}" data-act="loPickGun" data-id="${id}">
+            <b>${esc(w.name)}</b>
+            <small>${unlocked ? `${w.role ? `${esc(w.role)} / ` : ''}Lv ${lv}${prestige ? ` ${ROMAN[prestige]}` : ''}` : esc(levelRequirement(Progress.itemUnlockLevel('weapon', id)))}</small>
+            ${unlocked ? '' : `<em class="lock">${lockIcon()}</em>`}
           </button>`;
         }).join('')}
       </div>`;

@@ -15,6 +15,8 @@
  *            tracers(w) / killEffects(w) -> [{item,unlocked,requirement}]
  *            tracer(w)  setTracer(w,id)  killFx(w)  setKillFx(w,id)
  * Challenges challenges(w) -> [{id,track,label,goal,value,done,camo}]  isMastered(w)  kills(w)  weaponStats(w)
+ * Operators  operators() -> [{op,unlocked,requirement,value,goal}]  isOperatorUnlocked(id)  setOperator(i,id) -> bool
+ *            Each loadout's operator is `loadout.operator`, in loadouts() and loadout().
  * Loadouts   loadouts() -> 5 x {name,primary,secondary,attachments:{weapon:kit},perks,tactical,lethal,streaks,camo,tracer,killFx}
  *            activeLoadout (get/set index)  loadout(primary?) -> the full loadout for a match or roster
  *            updateLoadout(i,part)  renameLoadout(i,name)  setAttachment(i,slot,id|null,weapon=loadout primary) -> bool
@@ -30,6 +32,7 @@
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
 import { PRIMARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
+import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator } from './operators.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor } from '../shared/attachments.js';
 import {
@@ -75,14 +78,22 @@ function load() {
   if (raw !== null) {
     const parsed = parse(raw);
     if (parsed) {
-      if (parsed.version === SAVE_VERSION) return sanitizeSave(parsed);
-      if (parsed.version > SAVE_VERSION) { write(BAD_KEY, raw); return sanitizeSave(parsed); }
+      if (parsed.version === SAVE_VERSION) return keepOperators(sanitizeSave(parsed), parsed);
+      if (parsed.version > SAVE_VERSION) { write(BAD_KEY, raw); return keepOperators(sanitizeSave(parsed), parsed); }
       return migrateAndStore(parsed);      // No version: the old format under the new key.
     }
     write(BAD_KEY, raw);
   }
   const v1 = parse(read(V1_KEY));
   return v1 ? migrateAndStore(v1) : blankSave();
+}
+
+// cleanLoadout (shared) keeps only the fields it knows about, so operators are re-read from the raw save here.
+function keepOperators(s, raw) {
+  if (Array.isArray(raw?.loadouts)) {
+    raw.loadouts.forEach((l, i) => { if (s.loadouts[i] && OPERATOR_IDS.includes(l?.operator)) s.loadouts[i].operator = l.operator; });
+  }
+  return s;
 }
 
 let data = load();
@@ -93,7 +104,8 @@ function save() {
 
 // Points a player earned over the whole match. PlayerView.score cannot serve here because it resets when a streak is cashed in.
 export function matchScore(p) {
-  return (p.kills ?? 0) * SCORE.kill + (p.head ?? 0) * SCORE.headshot + (p.assists ?? 0) * SCORE.assist;
+  return (p.kills ?? 0) * SCORE.kill + (p.head ?? 0) * SCORE.headshot + (p.assists ?? 0) * SCORE.assist
+    + (p.confirms ?? 0) * SCORE.confirm + (p.captures ?? 0) * SCORE.capture;
 }
 
 function gainXp(amount) {
@@ -129,6 +141,14 @@ function gatedKits(loadout) {
   return out;
 }
 
+function careerStats() {
+  const c = { level: data.peakLevel, prestige: data.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0 };
+  for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
+  return c;
+}
+
+const operatorOpen = (id, career = careerStats()) => OPERATOR_IDS.includes(id) && operatorUnlock(getOperator(id), career).unlocked;
+
 function matchLoadout(saved, primary = saved.primary) {
   const base = normalizeLoadout({ ...saved, primary, attachments: saved.attachments });
   const gear = gateLoadoutGear(base, data.peakLevel);
@@ -139,6 +159,7 @@ function matchLoadout(saved, primary = saved.primary) {
     camo: Progress.camo(primary),
     tracer: Progress.tracer(primary),
     killFx: Progress.killFx(primary),
+    operator: operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR,
   };
 }
 
@@ -314,8 +335,23 @@ export const Progress = {
 
   updateLoadout(i, part) {
     if (!validIndex(i)) return;
+    const { operator } = data.loadouts[i];
     data.loadouts[i] = cleanLoadout({ ...data.loadouts[i], ...part }, i);
+    if (operator) data.loadouts[i].operator = operator;
     save();
+  },
+
+  operators() {
+    const career = careerStats();
+    return OPERATORS.map(op => ({ op, ...operatorUnlock(op, career) }));
+  },
+  isOperatorUnlocked(id) { return operatorOpen(id); },
+
+  setOperator(i, id) {
+    if (!validIndex(i) || !operatorOpen(id)) return false;
+    data.loadouts[i].operator = id;
+    save();
+    return true;
   },
 
   renameLoadout(i, name) { this.updateLoadout(i, { name: String(name) }); },
@@ -348,6 +384,7 @@ export const Progress = {
   /* ---------- Match results (js/game/awards.js) ---------- */
   applyMatch({ xp, weapons }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel;
+    const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
 
     gainXp(xp);
@@ -362,6 +399,9 @@ export const Progress = {
     const unlocks = this.unlockSchedule()
       .filter(u => u.level > beforePeak && u.level <= data.peakLevel)
       .map(u => ({ kind: u.kind, id: u.id, name: u.name, level: u.level }));
+    for (const o of this.operators()) {
+      if (o.unlocked && !opsBefore.has(o.op.id)) unlocks.push({ kind: 'operator', id: o.op.id, name: o.op.name });
+    }
     const weaponChanges = [];
     for (const [w, before] of diffs) {
       const entry = readWeapon(w);

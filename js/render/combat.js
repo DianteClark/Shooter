@@ -1,5 +1,6 @@
 // Everything 4.0 added to the battlefield that is drawn from view state each frame: grenades in flight,
-// smoke clouds, turrets and gunships. Fixed instanced pools, nothing allocated after construction.
+// smoke clouds, turrets, gunships, and the mode objectives (dog tags, domination flags, the hardpoint zone).
+// Fixed instanced pools, nothing allocated after construction.
 // (Burst effects triggered by events live in vfx.js with the other particles.)
 import * as THREE from 'three';
 import { MeshBuilder } from './meshbuild.js';
@@ -15,6 +16,11 @@ const MAX_TURRETS = 8;
 const MAX_GUNSHIPS = 2;
 const GUNSHIP_Y = 7.5;            // Low enough to read as a craft under the fixed camera, high enough to clear walls.
 const TURRET_Y = 0.84;           // Head pivot height.
+const MAX_TAGS = 24;
+const MAX_POINTS = 6;
+const FLAG_H = 3.4;              // Pole height; tall enough to read over cover from the tilted camera.
+const NEUTRAL_RGB = [0.82, 0.85, 0.88];
+const CONTEST_RGB = [1.0, 0.84, 0.32];
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 function slotOf(slots, id) { for (let i = 0; i < slots.length; i++) if (slots[i].id === id) return slots[i]; return null; }
@@ -86,6 +92,77 @@ function gunshipGeometry() {
   return b.build();
 }
 
+// A dog tag on a loop of chain: flat enough to flash as it spins, big enough to spot at phone scale.
+function tagGeometry() {
+  const b = new MeshBuilder();
+  b.setPart(1).box(0, 0, 0, 0.42, 0.28, 0.05, 0.02);
+  b.setPart(0).setColor(0xeef2f4).box(0.02, 0, 0.032, 0.26, 0.05, 0.012);     // Stamped line: the glint on the face.
+  b.box(0.02, -0.08, 0.032, 0.17, 0.035, 0.012);
+  b.setColor(0xa9b2bb).prismZ(-0.018, 0.018, -0.25, 0.1, 0.075, 0.075, 6);    // Chain ring.
+  return b.build();
+}
+
+// Pole and foot of a domination flag; the pivot is on the ground.
+function flagStandGeometry() {
+  const b = new MeshBuilder();
+  b.setPart(0).setColor(0x2a2d33).prismY(0, 0.16, 0, 0, 0.42, 0.34, 8);
+  b.setPart(1).prismY(0.16, 0.24, 0, 0, 0.33, 0.28, 8);                       // Team collar so the base shows the owner too.
+  b.setPart(0).setColor(0x8b95a0).prismY(0.2, FLAG_H, 0, 0, 0.05, 0.04, 6);
+  b.setColor(0xd8dee4).prismY(FLAG_H, FLAG_H + 0.12, 0, 0, 0.09, 0.03, 6);
+  return b.build();
+}
+
+// A strip of cloth along +X, attached to the pole at x = 0. Six sections, so the wave reads as folds.
+function flagClothGeometry() {
+  const b = new MeshBuilder();
+  const SEG = 6, W = 1.5, TOP = FLAG_H - 0.05, BOT = TOP - 0.92;
+  for (let i = 0; i < SEG; i++) {
+    const x0 = (i / SEG) * W, x1 = ((i + 1) / SEG) * W;
+    b.setPart(1).quad([x0, BOT, 0], [x1, BOT, 0], [x1, TOP, 0], [x0, TOP, 0]);
+    b.quad([x0, TOP, 0], [x1, TOP, 0], [x1, BOT, 0], [x0, BOT, 0]);
+  }
+  return b.build();
+}
+
+// A unit disc built as a fan. aRing carries (angle 0..1, radius 0..1) so the fragment shader can draw the rim,
+// the capture arc and the marching dashes without any textures.
+function zoneDiscGeometry() {
+  const SIDES = 72, pos = [], ring = [];
+  for (let i = 0; i < SIDES; i++) {
+    const a0 = (i / SIDES) * Math.PI * 2, a1 = ((i + 1) / SIDES) * Math.PI * 2;
+    pos.push(0, 0, 0, Math.cos(a1), 0, Math.sin(a1), Math.cos(a0), 0, Math.sin(a0));
+    ring.push((i + 0.5) / SIDES, 0, (i + 1) / SIDES, 1, i / SIDES, 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aRing', new THREE.Float32BufferAttribute(ring, 2));
+  return g;
+}
+
+// An open cylinder of height 1: the shimmering wall around a hardpoint.
+function zoneWallGeometry() {
+  const SIDES = 48, pos = [], ring = [];
+  for (let i = 0; i < SIDES; i++) {
+    const a0 = (i / SIDES) * Math.PI * 2, a1 = ((i + 1) / SIDES) * Math.PI * 2;
+    const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+    pos.push(c0, 0, s0, c1, 0, s1, c1, 1, s1, c0, 0, s0, c1, 1, s1, c0, 1, s0);
+    const u0 = i / SIDES, u1 = (i + 1) / SIDES;
+    ring.push(u0, 0, u1, 0, u1, 1, u0, 0, u1, 1, u0, 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aRing', new THREE.Float32BufferAttribute(ring, 2));
+  return g;
+}
+
+function zoneInstanceAttrs(g, cap) {
+  const add = (name, n) => g.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(cap * n), n).setUsage(THREE.DynamicDrawUsage));
+  add('aOwner', 3);
+  add('aCapture', 3);
+  add('aZone', 4);      // arc 0..1 (capture progress), contested, rim width as a fraction of radius, hardpoint flag.
+  return g;
+}
+
 // A blob's place inside its cloud; golden-angle spacing so the blobs fill the circle evenly.
 function blobTable() {
   const t = [];
@@ -123,6 +200,7 @@ export class CombatFX {
     this.shadow = this.#instanced(this.gunship.geometry, MAX_GUNSHIPS, this.shadowMat, 1);
 
     this.#buildSmoke();
+    this.#buildObjectives();
 
     this.turretSlots = Array.from({ length: MAX_TURRETS }, () => ({ id: null, aim: 0, age: 0 }));
     this.shipSlots = Array.from({ length: MAX_GUNSHIPS }, () => ({ active: false, x: 0, z: 0, aim: 0, bank: 0 }));
@@ -180,8 +258,108 @@ export class CombatFX {
     this.smokeSlots = Array.from({ length: MAX_SMOKES }, () => ({ id: null, live: false, x: 0, z: 0, r: 1, a: 0 }));
   }
 
+  #buildObjectives() {
+    const uTime = this.time;
+    // Tags: the solid material already does self-lit team colour, which is exactly the glow they need.
+    this.tagMesh = this.#instanced(tagGeometry(), MAX_TAGS, this.solidMat, 3);
+    this.tagSlots = Array.from({ length: MAX_TAGS }, () => ({ id: null, x: 0, z: 0, team: 0, age: 0, seen: false, phase: 0, touched: false }));
+
+    this.flagStand = this.#instanced(flagStandGeometry(), MAX_POINTS, this.solidMat, 2);
+    this.flagMat = new THREE.ShaderMaterial({
+      uniforms: { uTime },
+      vertexShader: `
+        attribute vec3 aCol; attribute float aPart; attribute vec3 aTeam;
+        uniform float uTime;
+        varying vec3 vC;
+        void main(){
+          vec3 p = position;
+          float k = p.x / 1.5;
+          float wave = sin(uTime * 7.0 - p.x * 4.2) * 0.13 * k + sin(uTime * 3.1 - p.x * 2.3) * 0.08 * k;
+          p.z += wave;
+          p.y -= k * k * 0.1;
+          vC = aTeam * (0.82 + 0.45 * cos(uTime * 7.0 - p.x * 4.2) * k);
+          gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: 'varying vec3 vC; void main(){ gl_FragColor = vec4(vC, 1.0); }',
+      side: THREE.DoubleSide,
+    });
+    this.flagCloth = this.#instanced(flagClothGeometry(), MAX_POINTS, this.flagMat, 2);
+
+    this.zoneMat = new THREE.ShaderMaterial({
+      uniforms: { uTime },
+      vertexShader: `
+        attribute vec2 aRing; attribute vec3 aOwner; attribute vec3 aCapture; attribute vec4 aZone;
+        varying vec2 vRing; varying vec3 vOwner; varying vec3 vCapture; varying vec4 vZone;
+        void main(){
+          vRing = aRing; vOwner = aOwner; vCapture = aCapture; vZone = aZone;
+          gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vRing; varying vec3 vOwner; varying vec3 vCapture; varying vec4 vZone;
+        void main(){
+          float ang = vRing.x, rad = vRing.y, width = vZone.z, contested = vZone.y;
+          float rim = smoothstep(1.0 - width - 0.012, 1.0 - width, rad) * (1.0 - smoothstep(0.986, 1.0, rad));
+          // Marching dashes so the boundary visibly moves even on a still screen.
+          float speed = contested > 0.5 ? 2.4 : 0.8;
+          float dash = step(0.42, fract(ang * 36.0 - uTime * speed));
+          vec3 col = ang < vZone.x ? vCapture : vOwner;
+          float pulse = contested > 0.5 ? 0.55 + 0.45 * sin(uTime * 15.0) : 1.0;
+          if (contested > 0.5 && dash < 0.5) col = vec3(1.0, 0.84, 0.32);
+          float a = rim * mix(0.5, 1.0, dash) * pulse;
+          // A faint floor wash marks the inside, and the hardpoint wash breathes so the zone is obvious from afar.
+          float wash = (1.0 - rim) * (vZone.w > 0.5 ? 0.17 + 0.06 * sin(uTime * 3.4) : 0.1);
+          vec3 washCol = vOwner * 0.9;
+          gl_FragColor = a > wash ? vec4(col * a, a) : vec4(washCol * wash, wash);
+        }`,
+      transparent: true, depthWrite: false,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    });
+    const zoneGeom = zoneInstanceAttrs(zoneDiscGeometry(), MAX_POINTS);
+    this.zones = new THREE.InstancedMesh(zoneGeom, this.zoneMat, MAX_POINTS);
+    this.zones.frustumCulled = false;
+    this.zones.count = 0;
+    this.zones.renderOrder = 1;
+    this.zones.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(this.zones);
+
+    this.wallMat = new THREE.ShaderMaterial({
+      uniforms: { uTime },
+      vertexShader: `
+        attribute vec2 aRing; attribute vec3 aOwner; attribute vec4 aZone;
+        varying vec2 vRing; varying vec3 vOwner; varying float vContested;
+        void main(){
+          vRing = aRing; vOwner = aOwner; vContested = aZone.y;
+          gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vRing; varying vec3 vOwner; varying float vContested;
+        void main(){
+          float h = vRing.y;
+          float fade = pow(1.0 - h, 1.6);
+          float stripe = 0.6 + 0.4 * step(0.5, fract(vRing.x * 48.0 + uTime * 0.9));
+          float flick = vContested > 0.5 ? 0.6 + 0.4 * sin(uTime * 18.0) : 0.9;
+          float a = fade * stripe * flick * 0.82;
+          vec3 c = (vContested > 0.5 ? vec3(1.0, 0.8, 0.3) : vOwner);
+          gl_FragColor = vec4(c * a, a * 0.5);
+        }`,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    });
+    const wallGeom = zoneInstanceAttrs(zoneWallGeometry(), MAX_POINTS);
+    this.zoneWalls = new THREE.InstancedMesh(wallGeom, this.wallMat, MAX_POINTS);
+    this.zoneWalls.frustumCulled = false;
+    this.zoneWalls.count = 0;
+    this.zoneWalls.renderOrder = 6;
+    this.zoneWalls.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(this.zoneWalls);
+  }
+
   // Everything visible this frame is rebuilt from the view; slots only keep the bits of history that smooth it.
   update(view, dt, localX, localZ, localTeam, uav, hasLocal) {
+    this.#updateTags(view, dt, localX, localZ, localTeam, hasLocal);
+    this.#updatePoints(view, dt);
     this.#updateNades(view, dt, localX, localZ, hasLocal);
     this.#updateSmoke(view, dt);
     this.#updateTurrets(view, dt, localX, localZ, localTeam, uav, hasLocal);
@@ -192,6 +370,114 @@ export class CombatFX {
     const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
     if (len < 0.5) return true;
     return castRay(this.visionWalls, x0, z0, dx / len, dz / len, len) >= len && !smokeBlocks(smokes, x0, z0, x1, z1);
+  }
+
+  #updateTags(view, dt, lx, lz, localTeam, hasLocal) {
+    const list = view.tags, slots = this.tagSlots, mesh = this.tagMesh;
+    for (let i = 0; i < slots.length; i++) slots[i].touched = false;
+    if (list) {
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i];
+        let slot = slotOf(slots, t.id);
+        if (!slot) {
+          slot = slotOf(slots, null);
+          if (!slot) continue;
+          slot.id = t.id; slot.age = 0; slot.phase = (i * 2.399) % 6.28;
+        }
+        slot.touched = true;
+        slot.x = t.x; slot.z = t.z; slot.team = t.team;
+      }
+    }
+    const aTeam = mesh.geometry.attributes.aTeam;
+    const t = this.time.value;
+    let n = 0;
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      if (s.id === null) continue;
+      const rgb = this.teamRGB[s.team] ?? this.teamRGB[0];
+      if (!s.touched) {
+        // Picked up or expired: a small upward burst, seen only if the spot itself is visible.
+        if (!hasLocal || this.#clear(lx, lz, s.x, s.z, view.smokes)) {
+          for (let k = 0; k < 5; k++) {
+            const a = s.phase + k * 1.256;
+            this.vfx.spawn(s.x, 0.9, s.z, Math.cos(a) * 2.2, 3.2, Math.sin(a) * 2.2, 0.32, 0.12, 0.02, rgb, 0, 4, 0);
+          }
+        }
+        s.id = null;
+        continue;
+      }
+      s.age += dt;
+      if (hasLocal && !this.#clear(lx, lz, s.x, s.z, view.smokes)) continue;
+      const pop = Math.min(1, s.age / 0.22), scale = 1.35 * (1.25 - 0.25 * pop) * pop;
+      const y = 0.72 + Math.sin(t * 3.1 + s.phase) * 0.12;
+      _e.set(0.5, t * 2.7 + s.phase, 0.22);
+      _q.setFromEuler(_e);
+      _p.set(s.x, y, s.z);
+      _s.set(scale, scale, scale);
+      _m.compose(_p, _q, _s).toArray(mesh.instanceMatrix.array, n * 16);
+      aTeam.setXYZ(n, rgb[0], rgb[1], rgb[2]);
+      this.vfx.addDot(s.x, y, s.z, 0.46 + 0.1 * Math.sin(t * 5 + s.phase), rgb);
+      n++;
+    }
+    aTeam.needsUpdate = true;
+    mesh.count = n;
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // Domination shows flag, ring and capture arc; hardpoint swaps the flag for a tall animated boundary wall.
+  #updatePoints(view) {
+    const list = view.points;
+    const zones = this.zones, walls = this.zoneWalls, stand = this.flagStand, cloth = this.flagCloth;
+    let nZone = 0, nFlag = 0, nWall = 0;
+    if (list && list.length) {
+      const za = zones.geometry.attributes, wa = walls.geometry.attributes;
+      const sa = stand.geometry.attributes.aTeam, ca = cloth.geometry.attributes.aTeam;
+      const hard = view.mode === 'hard';
+      for (let i = 0; i < list.length && nZone < MAX_POINTS; i++) {
+        const pt = list[i], r = pt.r ?? 4;
+        // An unowned point shows chalk white. `capture` is signed by side: positive means team 1 is taking it.
+        const owner = pt.owner === 0 || pt.owner === 1 ? this.teamRGB[pt.owner] : NEUTRAL_RGB;
+        const cap = pt.capture ?? 0;
+        const capturing = this.teamRGB[cap > 0 ? 1 : 0];
+        const arc = Math.min(1, Math.abs(cap));
+        const contested = pt.contested ? 1 : 0;
+
+        _p.set(pt.x, 0.1, pt.z);
+        _q.identity();
+        _s.set(r, 1, r);
+        _m.compose(_p, _q, _s).toArray(zones.instanceMatrix.array, nZone * 16);
+        za.aOwner.setXYZ(nZone, owner[0], owner[1], owner[2]);
+        za.aCapture.setXYZ(nZone, capturing[0], capturing[1], capturing[2]);
+        const width = hard ? 0.16 : 0.09;
+        za.aZone.setXYZW(nZone, arc, contested, width, hard ? 1 : 0);
+        nZone++;
+
+        if (hard) {
+          _p.y = 0.04;
+          _s.set(r, 3.2, r);
+          _m.compose(_p, _q, _s).toArray(walls.instanceMatrix.array, nWall * 16);
+          wa.aOwner.setXYZ(nWall, owner[0], owner[1], owner[2]);
+          wa.aZone.setXYZW(nWall, 0, contested, 0, 1);
+          nWall++;
+        } else {
+          _p.y = 0;
+          _s.set(1, 1, 1);
+          _m.compose(_p, _q, _s).toArray(stand.instanceMatrix.array, nFlag * 16);
+          _m.toArray(cloth.instanceMatrix.array, nFlag * 16);
+          // Contested flags pick up the warning colour on the cloth; the stand always shows the owner.
+          const clothCol = contested ? CONTEST_RGB : owner;
+          sa.setXYZ(nFlag, owner[0], owner[1], owner[2]);
+          ca.setXYZ(nFlag, clothCol[0], clothCol[1], clothCol[2]);
+          nFlag++;
+        }
+      }
+      za.aOwner.needsUpdate = true; za.aCapture.needsUpdate = true; za.aZone.needsUpdate = true;
+      wa.aOwner.needsUpdate = true; wa.aZone.needsUpdate = true;
+      sa.needsUpdate = true; ca.needsUpdate = true;
+    }
+    zones.count = nZone; walls.count = nWall; stand.count = nFlag; cloth.count = nFlag;
+    zones.instanceMatrix.needsUpdate = true; walls.instanceMatrix.needsUpdate = true;
+    stand.instanceMatrix.needsUpdate = true; cloth.instanceMatrix.needsUpdate = true;
   }
 
   #updateNades(view, dt, lx, lz, hasLocal) {
@@ -363,8 +649,8 @@ export class CombatFX {
   }
 
   dispose() {
-    for (const m of [this.nades, this.turretBase, this.turretHead, this.gunship, this.smokeMesh]) m.geometry.dispose();
-    for (const m of [this.solidMat, this.shadowMat, this.smokeMat]) m.dispose();
+    for (const m of [this.nades, this.turretBase, this.turretHead, this.gunship, this.smokeMesh, this.tagMesh, this.flagStand, this.flagCloth, this.zones, this.zoneWalls]) m.geometry.dispose();
+    for (const m of [this.solidMat, this.shadowMat, this.smokeMat, this.flagMat, this.zoneMat, this.wallMat]) m.dispose();
   }
 }
 

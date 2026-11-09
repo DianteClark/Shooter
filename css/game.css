@@ -442,3 +442,48 @@ button {
 .rotate p { font: 15px/1.3 var(--body); letter-spacing: 0; color: var(--haze); }
 @media (orientation: portrait) { .rotate { display: flex; } }
 @media (prefers-reduced-motion: reduce) { .boxcar.arrive { animation: none; } .st-tile.pop { animation: none; } }
+
+/* Mode objectives */
+.hud[data-mode="dom"] .medals, .hud[data-mode="hard"] .medals, .hud[data-mode="kc"] .medals { left: 76%; width: 260px; }
+.obj-strip { position: absolute; left: 50%; top: calc(var(--st) + 42px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+.obj-chips { display: flex; gap: 6px; }
+.o-chip { position: relative; width: 36px; height: 36px; display: grid; place-items: center; }
+.o-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.o-track { fill: rgba(29,35,43,.85); stroke: rgba(231,234,228,.3); stroke-width: 3.5; }
+.o-arc { fill: none; stroke: var(--c, #fff); stroke-width: 4; stroke-dasharray: 87.96; stroke-dashoffset: 87.96; }
+.o-chip b, .o-mark b { position: relative; font: 400 19px/1 var(--stencil); color: var(--chalk); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.o-chip[data-owner="mine"], .o-mark[data-owner="mine"] { --c: var(--my-team); }
+.o-chip[data-owner="enemy"], .o-mark[data-owner="enemy"] { --c: var(--enemy-team); }
+.o-chip[data-owner="none"], .o-mark[data-owner="none"] { --c: #d5dade; }
+.o-chip[data-owner="mine"] .o-track, .o-mark[data-owner="mine"] .o-track { fill: color-mix(in srgb, var(--my-team) 62%, #1d232b); }
+.o-chip[data-owner="enemy"] .o-track, .o-mark[data-owner="enemy"] .o-track { fill: color-mix(in srgb, var(--enemy-team) 62%, #1d232b); }
+.o-chip[data-cap="mine"], .o-mark[data-cap="mine"] { --c: var(--my-team); }
+.o-chip[data-cap="enemy"], .o-mark[data-cap="enemy"] { --c: var(--enemy-team); }
+.contested .o-arc { stroke: #ffd24a; animation: o-contest .35s steps(2, jump-none) infinite alternate; }
+.contested .o-track { stroke: #ffd24a; }
+@keyframes o-contest { to { opacity: .35; } }
+.obj-timer { display: flex; flex-direction: column; align-items: center; padding: 2px 9px 3px; background: rgba(29,35,43,.82); }
+.obj-timer small { font-size: 9px; color: var(--haze); }
+.obj-timer b { font: 400 19px/1 var(--stencil); color: var(--chalk); }
+.obj-timer.warn { background: var(--red); animation: o-warn .45s steps(2, jump-none) infinite alternate; }
+.obj-timer.warn small, .obj-timer.warn b { color: #fff4ef; }
+@keyframes o-warn { to { opacity: .55; } }
+.hud[data-mode="hard"] .obj-chips b::before { content: 'H'; font: 400 19px/1 var(--stencil); }
+.o-mark { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; display: grid; place-items: center; transition: opacity .15s; will-change: transform; }
+.o-mark .o-ring { filter: drop-shadow(0 1px 3px rgba(0,0,0,.55)); }
+.o-arrow { position: absolute; left: 18px; top: 18px; width: 0; height: 0; margin: -7px 0 0 -7px; border: 7px solid transparent; border-left-color: var(--c); display: none; transform-origin: 7px 7px; }
+.o-mark.off { transform-origin: center; }
+.o-mark.off .o-arrow { display: block; }
+.o-mark.off b { font-size: 15px; }
+.hud[data-mode="hard"] .o-mark b::before { content: 'H'; font: 400 19px/1 var(--stencil); }
+.obj-meter { position: absolute; left: 50%; top: calc(var(--st) + 80px); transform: translateX(-50%); width: 220px; height: 22px; display: grid; place-items: center; background: rgba(29,35,43,.85); box-shadow: inset 0 0 0 1.5px rgba(231,234,228,.3); overflow: hidden; }
+.obj-meter-fill { position: absolute; inset: 0; background: var(--c, var(--my-team)); transform: scaleX(0); transform-origin: left center; transition: transform .12s linear; will-change: transform; }
+.obj-meter[data-side="mine"] { --c: var(--my-team); }
+.obj-meter[data-side="enemy"] { --c: var(--enemy-team); }
+.obj-meter[data-side="contest"] { --c: #ffd24a; animation: o-contest .4s steps(2, jump-none) infinite alternate; }
+.obj-meter b { position: relative; font: 400 16px/1 var(--stencil); color: var(--chalk); text-shadow: 0 1px 2px rgba(0,0,0,.75); }
+.obj-banner { position: absolute; left: 50%; top: calc(var(--st) + 108px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; padding: 5px 26px 7px; background: rgba(29,35,43,.82); opacity: 0; white-space: nowrap; pointer-events: none; }
+.obj-banner b { font: 400 38px/1 var(--stencil); color: var(--chalk); }
+.obj-banner small { font: 13px/1.15 var(--body); letter-spacing: 0; color: var(--haze); margin-top: 1px; }
+.obj-banner[data-side="mine"] b { color: var(--my-team); }
+.obj-banner[data-side="enemy"] b { color: var(--enemy-team); }

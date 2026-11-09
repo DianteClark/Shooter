@@ -4,13 +4,16 @@ import { GameRenderer } from './render/renderer.js';
 import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
+import { MODES } from './shared/modes.js';
 import { normalizeLoadout } from './shared/catalog.js';
-import { TEAM_SIZE, SCORE_LIMIT, TIME_LIMIT } from './shared/constants.js';
+import { TEAM_SIZE } from './shared/constants.js';
 import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore } from './ui/progress.js';
+import { voteOptions, tallyWinner, modeFits } from './ui/vote.js';
+import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
@@ -18,11 +21,15 @@ import { Voice } from './net/voice.js';
 const GAME_NAME = 'Switchyard';
 const NET_POLL_MS = 1000;
 const REMATCH_SECONDS = 15;
-const EDIT_SCREENS = ['gunsmith', 'loadouts', 'profile', 'save', 'keypad'];   // A lobby update must not pull a guest out of these.
+const VOTE_REVEAL_MS = 1700;
+const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad'];   // A lobby update must not pull a guest out of these.
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
-// Test hook: ?limit=N shortens a match. Without the parameter normal rules apply.
-const SCORE = Number(params.get('limit')) || SCORE_LIMIT;
+// Test hooks: ?limit=N shortens a match, ?vote=N shortens the vote, and ?map=&mode= skip the solo picker.
+const LIMIT_OVERRIDE = Number(params.get('limit')) || 0;
+const VOTE_SECONDS = Number(params.get('vote')) || 10;
+
+const limitsFor = mode => ({ scoreLimit: LIMIT_OVERRIDE || MODES[mode].scoreLimit, timeLimit: MODES[mode].timeLimit });
 
 document.title = GAME_NAME;
 
@@ -49,6 +56,8 @@ const app = {
   countdown: null,          // Seconds left in the rematch countdown as last announced; null when none.
   rematchWait: false,       // Guest pressed Rematch and is waiting for the host to do the same.
   soloRematch: false,       // The session is gone, so the results screen's Rematch now starts a solo match.
+  vote: null,               // { key, options, votes (host) or counts (guest), left, winner, mine }
+  soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
 };
 
 function blockIosGestures() {
@@ -87,6 +96,7 @@ function seatData() {
 function goTitle(message) {
   teardownNet();
   stopRematch();
+  stopVote();
   app.soloRematch = false;
   app.countdown = null;
   app.rematchWait = false;
@@ -115,9 +125,16 @@ menu.on({
   join: () => { needName(askCode); },
   gunsmith: () => openGunsmith(),
   loadout: () => openLoadout(),
+  operators: () => openOperators(),
   leaveLobby: () => goTitle(),
   toggleReady: () => toggleReady(),
-  start: () => startHostMatch(),
+  start: () => startVote(),
+  voteCast: ({ i }) => castVote(Number(i)),
+  voteLeave: () => goTitle(),
+  soloBack: () => menu.title(),
+  soloMap: ({ id }) => pickSoloMap(id),
+  soloMode: ({ id }) => pickSoloMode(id),
+  soloStart: () => launchSolo(app.soloPick.mapId, app.soloPick.mode),
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
   moveTeam: ({ id }) => moveTeam(id),
 });
@@ -164,11 +181,16 @@ function openGunsmith(loadoutIndex, onBack = afterEditing) {
   menu.gunsmith({ loadoutIndex, onBack, onChange: shareLoadout });
 }
 
+function openOperators(loadoutIndex, onBack = afterEditing) {
+  menu.operators({ loadoutIndex, onBack, onChange: shareLoadout });
+}
+
 function openLoadout() {
   menu.loadouts({
     onBack: afterEditing,
     onChange: shareLoadout,
     onGunsmith: i => openGunsmith(i, openLoadout),
+    onOperators: i => openOperators(i, openLoadout),
     onRename: i => menu.keypad({
       title: 'Name this loadout', value: Progress.loadouts()[i].name, max: 16, kind: 'name', doneLabel: 'Save',
       onDone: value => { Progress.renameLoadout(i, value); shareLoadout(); openLoadout(); },
@@ -221,7 +243,7 @@ function startRematchCountdown() {
     rematch.left--;
     if (rematch.left <= 0) {
       stopRematch();
-      startHostMatch();
+      startVote();
       return;
     }
     broadcastLobby();
@@ -278,6 +300,15 @@ function hostLobbyMessage(msg, from) {
       }
       break;
     }
+    case 'cast': {
+      const vote = app.vote;
+      if (vote && vote.winner === null && guest && vote.options[msg.i]) {
+        vote.votes.set(from, msg.i);
+        broadcastVote();
+        renderVote();
+      }
+      return;
+    }
     case 'ready': if (guest) guest.ready = !!msg.ready; break;
     case 'loadout': if (guest) Object.assign(guest, seatFrom(msg)); break;
     case 'team': {
@@ -303,11 +334,13 @@ function cleanBadge(b) {
 
 // Bots have no save to read, so their rank follows their skill; a little variety by seat keeps tables believable.
 const BOT_LEVEL = { recruit: 4, regular: 14, veteran: 27, elite: 42 };
-function withBadges(roster, humans) {
+function withBadges(roster, humans, seed = 0) {
   return roster.map((r, i) => {
-    if (r.badge) return r;
     const human = humans.find(h => h.id === r.id);
-    return { ...r, badge: human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 } };
+    // Bots walk through the operator list from a seed-chosen start, so a squad is mixed and differs between matches.
+    const operator = human ? cleanOperator(human.loadout?.operator) : OPERATOR_IDS[(i + seed) % OPERATOR_IDS.length];
+    const badge = r.badge ?? (human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 });
+    return { ...r, badge, operator, loadout: { ...r.loadout, operator } };
   });
 }
 
@@ -318,6 +351,7 @@ function menuShows(screen) {
 function hostSawLeave(id) {
   const h = app.lobby.humans.find(x => x.id === id);
   app.lobby.humans = app.lobby.humans.filter(x => x.id !== id);
+  if (app.vote?.votes?.delete(id)) { broadcastVote(); renderVote(); }
   if (app.inMatch) {
     app.dead.add(id);
     if (h) hud.notify(`${h.name} left, a bot took over`);
@@ -378,7 +412,10 @@ function guestLobbyMessage(msg) {
       app.countdown = msg.countdown ?? null;
       if (app.voice) updateVoiceTeam();
       if (menuShows('results')) menu.updateCountdown(app.countdown);
-      else if (!app.inMatch && !EDIT_SCREENS.includes(menu.el.dataset.screen)) renderLobby();
+      else if (!app.inMatch && !app.vote && !EDIT_SCREENS.includes(menu.el.dataset.screen)) renderLobby();
+      break;
+    case 'vote':
+      showGuestVote(msg);
       break;
     case 'start':
       // Normally the old match is long over; a guest whose final-kill hold outlasted the countdown is cut short here.
@@ -386,7 +423,7 @@ function guestLobbyMessage(msg) {
       app.countdown = null;
       app.rematchWait = false;
       beginMatch({
-        roster: msg.roster, seed: msg.seed, mapId: msg.mapId,
+        roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode,
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
         hostId: app.net.hostId, isHost: false,
       });
@@ -454,33 +491,138 @@ function updateVoiceTeam() {
   app.voice.setTeammates(app.lobby.humans.filter(h => h.team === me.team && h.id !== me.id).map(h => h.id));
 }
 
-// --- Matches ---
+// --- Solo: a direct pick of map and mode ---
 function startSolo() {
   needName(() => {
     teardownNet();
     stopRematch();
+    stopVote();
     app.soloRematch = false;
-    const id = 'local';
     app.isHost = true;
     app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed' };
-    const humans = [{ id, name: myName(), team: 0, ...seatData() }];
-    beginMatch({
-      roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE }), humans),
-      seed: randomSeed(), mapId: DEFAULT_MAP, scoreLimit: SCORE, timeLimit: TIME_LIMIT,
-      hostId: id, isHost: true, localId: id,
-    });
+    if (params.has('map') || params.has('mode')) launchSolo(params.get('map') || DEFAULT_MAP, params.get('mode') || 'tdm');
+    else renderSoloPick();
   });
 }
 
-function startHostMatch() {
+function renderSoloPick() {
+  menu.solo(app.soloPick);
+}
+
+function pickSoloMap(mapId) {
+  app.soloPick.mapId = mapId;
+  if (!modeFits(MAPS[mapId], app.soloPick.mode)) app.soloPick.mode = 'tdm';
+  renderSoloPick();
+}
+
+function pickSoloMode(mode) {
+  if (!modeFits(MAPS[app.soloPick.mapId], mode)) return;
+  app.soloPick.mode = mode;
+  renderSoloPick();
+}
+
+function launchSolo(mapId, mode) {
+  const id = 'local', seed = randomSeed();
+  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  beginMatch({
+    roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE, mode, mapId }), humans, seed),
+    seed, mapId, mode, ...limitsFor(mode),
+    hostId: id, isHost: true, localId: id,
+  });
+}
+
+// --- Map vote: the host owns the timer and the tally, and every message is the whole vote, so it needs no repair ---
+function stopVote() {
+  clearInterval(app.vote?.timer);
+  clearTimeout(app.vote?.reveal);
+  app.vote = null;
+}
+
+function startVote() {
+  if (!app.net || !app.isHost || app.vote) return;
+  stopRematch();
+  app.vote = {
+    key: `${app.code}:${Date.now()}`, options: voteOptions(), votes: new Map(), left: VOTE_SECONDS,
+    seconds: VOTE_SECONDS, winner: null, mine: null,
+    timer: setInterval(voteTick, 1000),
+  };
+  broadcastVote();
+  renderVote();
+}
+
+function voteTick() {
+  const vote = app.vote;
+  if (!vote) return;
+  vote.left--;
+  if (vote.left > 0) {
+    broadcastVote();
+    renderVote();
+    return;
+  }
+  clearInterval(vote.timer);
+  vote.winner = tallyWinner(voteCounts(vote));
+  vote.reveal = setTimeout(() => {
+    const pick = vote.options[vote.winner];
+    launchHostMatch(pick.mapId, pick.mode);
+  }, VOTE_REVEAL_MS);
+  broadcastVote();
+  renderVote();
+}
+
+// One count per option, from the ballots still seated in the room.
+function voteCounts(vote) {
+  const counts = vote.options.map(() => 0);
+  for (const [id, i] of vote.votes) if (app.lobby.humans.some(h => h.id === id)) counts[i]++;
+  return counts;
+}
+
+function broadcastVote() {
+  const vote = app.vote;
+  if (!vote || !app.net) return;
+  app.net.sendLobby({ t: 'vote', key: vote.key, options: vote.options, counts: voteCounts(vote), left: vote.left, seconds: vote.seconds, winner: vote.winner, total: app.lobby.humans.length });
+}
+
+function castVote(i) {
+  const vote = app.vote;
+  if (!vote || vote.winner !== null || !vote.options[i]) return;
+  vote.mine = i;
+  if (app.isHost) {
+    vote.votes.set(app.net.localId, i);
+    broadcastVote();
+  } else {
+    app.net.sendLobby({ t: 'cast', i });
+  }
+  renderVote();
+}
+
+function renderVote() {
+  const vote = app.vote;
+  if (!vote) return;
+  menu.vote({
+    key: vote.key, options: vote.options, left: vote.left, seconds: vote.seconds, winner: vote.winner, mine: vote.mine,
+    counts: app.isHost ? voteCounts(vote) : vote.counts, total: app.isHost ? app.lobby.humans.length : vote.total,
+  });
+}
+
+function showGuestVote(msg) {
+  // Same reasons as the 'start' case: a guest may still be on results or in the end-of-match hold.
+  endLocalMatch();
+  app.countdown = null;
+  app.rematchWait = false;
+  app.vote = { ...msg, mine: app.vote?.key === msg.key ? app.vote.mine : null };
+  renderVote();
+}
+
+function launchHostMatch(mapId, mode) {
   const net = app.net;
   if (!net) return;
-  stopRematch();
+  stopVote();
   const { humans, botSkill } = app.lobby;
   const clean = humans.map(({ id, name, team, primary, camo, loadout, badge }) => ({ id, name, team, primary, camo, loadout, badge }));
+  const seed = randomSeed();
   const payload = {
-    t: 'start', seed: randomSeed(), mapId: DEFAULT_MAP, scoreLimit: SCORE, timeLimit: TIME_LIMIT,
-    roster: withBadges(buildRoster(clean, { botSkill, teamSize: TEAM_SIZE }), clean),
+    t: 'start', seed, mapId, mode, ...limitsFor(mode),
+    roster: withBadges(buildRoster(clean, { botSkill, teamSize: TEAM_SIZE, mode, mapId }), clean, seed),
   };
   net.sendLobby(payload);
   beginMatch({ ...payload, hostId: net.localId, isHost: true });
@@ -490,16 +632,18 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, scoreLimit, timeLimit, hostId, isHost, localId }) {
+function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, isHost, localId }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
   app.dead.clear();
+  app.lastMode = mode ?? 'tdm';
+  stopVote();
   net?.resetGameHandlers();
 
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
@@ -511,8 +655,10 @@ function beginMatch({ roster, seed, mapId, scoreLimit, timeLimit, hostId, isHost
 
   const renderer = app.renderer = new GameRenderer(canvas, MAPS[mapId]);
   renderer.resize();
+  renderer.chars.setRoster(roster);
+  hud.setCamera(renderer.camera);
   app.match = new Match({
-    canvas, mapId, seed, scoreLimit, timeLimit, roster, localId: id, hostId, isHost,
+    canvas, mapId, mode, seed, scoreLimit, timeLimit, roster, localId: id, hostId, isHost,
     net, controls, hud, renderer, audio,
     onEnd: results => onMatchEnd(results),
   });
@@ -544,7 +690,9 @@ function endLocalMatch() {
 }
 
 function onMatchEnd(results) {
-  hud.showEnd(results, () => showResults(results));
+  const match = app.match;
+  // A guest can be pulled into the vote during this hold, and the old results must not land on top of it.
+  hud.showEnd(results, () => { if (app.match === match) showResults(results); });
 }
 
 // Sorts by match score, and breaks ties in favour of kills, then fewer deaths.
@@ -559,6 +707,7 @@ function pickMvp(players) {
 }
 
 function showResults(results) {
+  for (const p of results.players) Object.assign(p, hud.objectiveStats(p.id));
   endLocalMatch();
   app.rematchWait = false;
 
@@ -570,6 +719,7 @@ function showResults(results) {
   const counting = app.countdown !== null && !!app.net && !app.isHost;
   menu.results({
     outcome: drawn ? 'draw' : won ? 'win' : 'loss',
+    mode: app.lastMode,
     scores: results.scores,
     myTeam: results.myTeam,
     localId: results.localId,

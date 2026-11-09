@@ -4,7 +4,7 @@ import { WEAPON_IDS } from '../shared/constants.js';
 import { Progress } from './progress.js';
 import { esc, badgeMark, ROMAN, levelRequirement, itemMark } from './widgets.js';
 
-const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment' };
+const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator' };
 export const kindLabel = kind => KIND_LABEL[kind] ?? kind;
 
 // Confirm sheet: names what is lost and what stays. onYes runs once on the confirm button.

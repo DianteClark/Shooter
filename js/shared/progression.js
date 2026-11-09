@@ -57,6 +57,12 @@ export const UNLOCK_SCHEDULE = [
   { level: 11, kind: 'tactical', id: 'stim' },
   { level: 13, kind: 'perk',     id: 'flak' },
   { level: 15, kind: 'streak',   id: 'gunship' },
+  { level: 4,  kind: 'weapon',   id: 'burst' },
+  { level: 6,  kind: 'weapon',   id: 'pdw' },
+  { level: 8,  kind: 'weapon',   id: 'dmr' },
+  { level: 10, kind: 'weapon',   id: 'autoshot' },
+  { level: 12, kind: 'weapon',   id: 'revolver' },
+  { level: 14, kind: 'weapon',   id: 'launcher' },
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 
@@ -88,7 +94,7 @@ export function gateLoadoutGear(l, peakLevel) {
 
 /* ---------- Challenges and camo gates ---------- */
 // A longshot means a long shot for that gun: 26 m from a shotgun is not a thing that happens.
-export const LONGSHOT_DIST = { ar: 26, smg: 18, shotgun: 11, lmg: 26, sniper: 34, pistol: 18 };
+export const LONGSHOT_DIST = { ar: 26, smg: 18, shotgun: 11, lmg: 26, sniper: 34, pistol: 18, burst: 26, pdw: 16, autoshot: 10, dmr: 30, revolver: 18, launcher: 20 };
 export const LONGSHOT_DEFAULT = 26;
 export const longshotDist = weapon => LONGSHOT_DIST[weapon] ?? LONGSHOT_DEFAULT;
 
@@ -165,9 +171,12 @@ function cleanWeapon(raw) {
   return w;
 }
 
+// Fresh loadout slots only ever start on guns available from level 1.
+const BASE_PRIMARIES = ['ar', 'smg', 'shotgun', 'lmg', 'sniper'];
+
 export function cleanLoadout(raw, index) {
   const src = isObj(raw) ? raw : {};
-  const primary = PRIMARY_IDS.includes(src.primary) ? src.primary : PRIMARY_IDS[index % PRIMARY_IDS.length];
+  const primary = PRIMARY_IDS.includes(src.primary) ? src.primary : BASE_PRIMARIES[index % BASE_PRIMARIES.length];
   // Stored per weapon so a swap keeps each gun's kit; attachmentsFor reads the flat form too and drops bad ids.
   const attachments = {};
   for (const weapon of WEAPON_IDS) {
@@ -181,7 +190,7 @@ export function cleanLoadout(raw, index) {
     lethal: src.lethal ?? STARTER_GEAR.lethal,
     streaks: Array.isArray(src.streaks) ? src.streaks : STARTER_GEAR.streaks,
   });
-  return { name: text(src.name, 16) || DEFAULT_NAMES[index % DEFAULT_NAMES.length], primary, secondary, attachments, perks, tactical, lethal, streaks };
+  return { name: text(src.name, 16) || DEFAULT_NAMES[index % DEFAULT_NAMES.length], primary, secondary, attachments, perks, tactical, lethal, streaks, operator: typeof src.operator === 'string' ? src.operator : null };
 }
 
 export function blankSave() {

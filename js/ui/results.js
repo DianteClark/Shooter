@@ -91,13 +91,16 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   menu.el.dataset.screen = 'results';
   const { outcome, scores, myTeam, roster, badges, mvp, xp, level, weapons, unlocks, finalKill: fk } = data;
   const badgeOf = id => badges?.get(id) ?? null;
+  // The mode's own number takes the headshot column where the mode has one.
+  const modeHead = data.mode === 'kc' ? 'Conf' : data.mode === 'dom' || data.mode === 'hard' ? 'Cap' : 'HS';
+  const modeStat = p => (data.mode === 'kc' ? p.confirms ?? 0 : data.mode === 'dom' || data.mode === 'hard' ? p.captures ?? 0 : p.head ?? 0);
   const board = team => {
     const rows = roster.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
     return `<div class="rb" style="--team:${TEAMS[team].css}">
       <div class="rb-head"><b class="rb-team">${esc(TEAMS[team].name)}</b><b class="rb-pts">${scores[team]}</b>
-        <span>K</span><span>D</span><span>A</span><span>HS</span><span class="wide">Score</span></div>
+        <span>K</span><span>D</span><span>A</span><span>${modeHead}</span><span class="wide">Score</span></div>
       ${rows.map(p => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}">
-        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${p.head ?? 0}</span><span class="wide">${matchScore(p)}</span>
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${modeStat(p)}</span><span class="wide">${matchScore(p)}</span>
       </div>`).join('')}
     </div>`;
   };

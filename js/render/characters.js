@@ -9,6 +9,7 @@ import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
 import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
 import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
+import { OPERATORS, DEFAULT_OPERATOR } from '../ui/operators.js';
 
 const MAX_PLAYERS = 16;
 
@@ -17,22 +18,30 @@ const GUN_SCALE = 0.98;
 const GUN_SCALES = { ar: 1, smg: 1, shotgun: 1, lmg: 1, sniper: 0.86, pistol: 1.05 };
 const HIP = 0.78 * CHAR_SCALE;
 
+// Operators are told apart by vertex data merged into one mesh per body part: every vertex carries the
+// variant it belongs to (aVar) and each instance says which variant to show (aOp). Vertices of other variants
+// are thrown outside clip space, so nine operators cost the same draw calls as one.
 const CHAR_VERT = /* glsl */`
 attribute vec3 aCol;
 attribute float aPart;
+attribute float aVar;
+attribute float aOp;
 attribute vec3 aTeam;
+attribute vec3 aTint;
 attribute vec2 aFx;
 varying vec3 vCol;
 varying vec3 vLight;
 varying vec2 vFx;
 ${GLSL_LIGHT}
 void main() {
+  if (abs(aVar - aOp) > 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vCol = vec3(0.0); vLight = vec3(0.0); vFx = vec2(0.0); return; }
   mat4 world = modelMatrix * instanceMatrix;
   vec3 n = normalize(mat3(world) * normal);
   vec3 light = duskLight(n);
   vec3 lit = aCol * light;
+  if (aPart > 1.5) lit = aTint * light;
   // Team-coloured armour is nearly self-lit: it has to stay the most saturated thing on screen.
-  if (aPart > 0.5) lit = aTeam * (0.62 + 0.42 * max(0.0, n.y + 0.2)) * (0.72 + 0.28 * light);
+  else if (aPart > 0.5) lit = aTeam * (0.62 + 0.42 * max(0.0, n.y + 0.2)) * (0.72 + 0.28 * light);
   vCol = lit;
   vLight = light;
   vFx = aFx;
@@ -52,51 +61,213 @@ void main() {
 function addCharInstanceAttrs(g, capacity) {
   g.setAttribute('aTeam', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage));
   g.setAttribute('aFx', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aOp', new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage));
   return g;
 }
 
-function torsoGeometry() {
-  const b = new MeshBuilder();
-  b.setPart(0).setColor(0x2b2d33);
-  b.box(0, 0.04, 0, 0.3, 0.2, 0.42, 0.03);                 // Pelvis.
-  b.setPart(1).box(0, 0.36, 0, 0.38, 0.5, 0.56, 0.06);         // Chest block, team colour.
-  b.setPart(0).setColor(0x1f2127);
-  b.box(0.21, 0.34, 0, 0.05, 0.36, 0.4, 0.01);                 // Front plate.
-  b.setColor(0x34373f);
-  b.box(-0.24, 0.32, 0, 0.16, 0.44, 0.42, 0.04);               // Pack.
-  b.setPart(1);
-  b.box(-0.24, 0.56, 0, 0.14, 0.06, 0.4);                      // Pack top strip stays readable from above.
-  b.box(0, 0.6, 0.31, 0.3, 0.18, 0.22, 0.05);                  // Pauldrons.
-  b.box(0, 0.6, -0.31, 0.3, 0.18, 0.22, 0.05);
-  return b.build();
+// Torso and head shapes per operator, seen mostly from above: what counts is the outline of the shoulders,
+// the pack and the hat, and that a good part of every body stays team coloured. Forward is +X, up is +Y.
+const pelvis = (b, wide = 0.42, colour = 0x2b2d33) => b.setPart(0).setColor(colour).box(0, 0.04, 0, 0.3, 0.2, wide);
+const chest = (b, sx = 0.38, sy = 0.5, sz = 0.56, ch = 0.06) => b.setPart(1).box(0, 0.36, 0, sx, sy, sz, ch);
+const pauldrons = (b, sx, sy, sz, zPos = 0.31, y = 0.6) => {
+  b.setPart(1).box(0, y, zPos, sx, sy, sz, 0.04);
+  b.box(0, y, -zPos, sx, sy, sz, 0.04);
+};
+const neck = (b, colour = 0x4a3a2e) => b.setPart(0).setColor(colour).box(0, 0.05, 0, 0.2, 0.14, 0.2);
+
+const TORSOS = {
+  trooper(b) {
+    pelvis(b);
+    chest(b);
+    b.setPart(0).setColor(0x1f2127).box(0.21, 0.34, 0, 0.05, 0.36, 0.4);          // Front plate.
+    b.setColor(0x34373f).box(-0.24, 0.32, 0, 0.16, 0.44, 0.42, 0.04);             // Pack.
+    b.setPart(1).box(-0.24, 0.56, 0, 0.14, 0.06, 0.4);                            // Pack top strip reads from above.
+    pauldrons(b, 0.3, 0.18, 0.22);
+  },
+  wisp(b) {
+    pelvis(b, 0.36, 0x3a3730);
+    chest(b, 0.32, 0.46, 0.46, 0.05);
+    b.setPart(0).setColor(0x2a2820).box(0.17, 0.36, 0.1, 0.03, 0.46, 0.07);       // Bandolier.
+    b.setColor(0x6b6147).box(-0.02, 0.14, 0.27, 0.22, 0.22, 0.14);                // Hip satchel instead of a pack.
+    pauldrons(b, 0.2, 0.1, 0.16, 0.26, 0.58);
+  },
+  anvil(b) {
+    pelvis(b, 0.5, 0x24272c);
+    chest(b, 0.46, 0.54, 0.66, 0.08);
+    b.setPart(0).setColor(0x2a2d33).box(0.26, 0.36, 0, 0.07, 0.42, 0.52);         // Front plate.
+    b.setColor(0x3a3f47).prismZ(-0.26, 0.26, -0.36, 0.36, 0.26, 0.26, 8);         // Ammo drum across the back.
+    b.setPart(1).prismZ(-0.08, 0.08, -0.36, 0.36, 0.272, 0.272, 8);               // Team band around it.
+    pauldrons(b, 0.42, 0.26, 0.36, 0.41, 0.62);
+  },
+  relay(b) {
+    pelvis(b, 0.42, 0x2d3329);
+    chest(b, 0.36, 0.48, 0.52, 0.06);
+    b.setPart(0).setColor(0x3f4a3a).box(-0.29, 0.36, 0, 0.22, 0.58, 0.38, 0.03);  // Radio set.
+    b.setColor(0x181a1c).box(-0.29, 0.67, 0, 0.16, 0.05, 0.26);
+    b.prismY(0.68, 1.95, -0.34, 0.12, 0.03, 0.014, 4);                            // Mast: the unmistakable bit.
+    b.prismY(0.68, 1.3, -0.34, -0.12, 0.024, 0.012, 4);
+    b.setPart(1).box(-0.34, 1.9, 0.12, 0.12, 0.12, 0.12);
+    pauldrons(b, 0.24, 0.12, 0.18, 0.29, 0.58);
+  },
+  yarddog(b) {
+    pelvis(b, 0.44, 0x2a3442);
+    chest(b, 0.4, 0.5, 0.58, 0.05);
+    b.setPart(0).setColor(0xd9d23c);                                              // Hi-vis bands front and top.
+    b.box(0.205, 0.44, 0, 0.022, 0.07, 0.52); b.box(0.205, 0.24, 0, 0.022, 0.07, 0.52);
+    b.box(0, 0.62, 0.15, 0.34, 0.015, 0.08); b.box(0, 0.62, -0.15, 0.34, 0.015, 0.08);
+    b.setColor(0x2f3a4a).box(-0.26, 0.26, 0, 0.18, 0.34, 0.46, 0.03);             // Tool pack.
+    b.setColor(0xd9d23c).box(-0.26, 0.44, 0, 0.14, 0.03, 0.4);
+    pauldrons(b, 0.26, 0.14, 0.2, 0.32, 0.58);
+  },
+  ronin(b) {
+    pelvis(b, 0.38, 0x24232b);
+    chest(b, 0.32, 0.44, 0.48, 0.05);
+    b.setPart(0).setColor(0x1f1e25);
+    b.box(-0.21, 0.14, 0, 0.1, 0.74, 0.66);                                       // Cloak falling behind.
+    b.box(-0.06, 0.62, 0, 0.42, 0.1, 0.72, 0.03);                                 // Shoulder drape, wider than the body.
+    b.setPart(1).box(-0.06, 0.68, 0, 0.1, 0.02, 0.74);
+  },
+  ghoul(b) {
+    pelvis(b, 0.38, 0x25282a);
+    chest(b, 0.34, 0.5, 0.5, 0.05);
+    b.setPart(0).setColor(0x25282a).box(-0.2, 0.12, 0, 0.09, 0.7, 0.52);          // Long coat.
+    b.setColor(0x4a5048);
+    b.prismY(0.1, 0.62, -0.32, 0.12, 0.11, 0.11, 6); b.prismY(0.1, 0.62, -0.32, -0.12, 0.11, 0.11, 6);    // Filter canisters.
+    b.setColor(0x1a1c1e).box(-0.32, 0.64, 0, 0.1, 0.05, 0.32);
+    pauldrons(b, 0.2, 0.08, 0.14, 0.28, 0.6);
+  },
+  ram(b) {
+    pelvis(b, 0.48, 0x2d343c);
+    chest(b, 0.44, 0.52, 0.62, 0.06);
+    b.setPart(0).setColor(0x4a5560).box(0.27, 0.33, 0, 0.1, 0.54, 0.66, 0.03);    // Breaching plate, wider than the chest.
+    b.setColor(0x20252b).box(-0.25, 0.24, 0, 0.16, 0.32, 0.5);
+    pauldrons(b, 0.34, 0.2, 0.28, 0.36, 0.6);
+  },
+  monarch(b) {
+    pelvis(b, 0.42, 0x322d3d);
+    chest(b, 0.4, 0.52, 0.58, 0.06);
+    b.setPart(1).box(-0.25, 0.08, 0, 0.05, 0.82, 0.68);                           // Cape in the team colour.
+    b.setPart(0).setColor(0xd9b44a).box(-0.285, 0.47, 0, 0.02, 0.06, 0.7);        // Gold trim.
+    b.box(0.2, 0.42, 0, 0.02, 0.06, 0.44);
+    b.box(0, 0.68, 0.32, 0.3, 0.05, 0.22); b.box(0, 0.68, -0.32, 0.3, 0.05, 0.22);
+    pauldrons(b, 0.3, 0.14, 0.24, 0.32, 0.62);
+  },
+};
+
+const HEADS = {
+  trooper(b) {
+    neck(b);
+    b.setPart(1).prismY(0.1, 0.26, 0, 0, 0.25, 0.27, 8, Math.PI / 8);             // Helmet skirt.
+    b.prismY(0.26, 0.42, 0, 0, 0.27, 0.15, 8, Math.PI / 8);                       // Dome.
+    b.setPart(0).setColor(0x101215).box(0.2, 0.2, 0, 0.1, 0.1, 0.34);             // Visor recess.
+    b.setColor(0xd8fff9).box(0.255, 0.2, 0, 0.02, 0.05, 0.32);
+  },
+  wisp(b) {
+    neck(b, 0x55412f);
+    b.setColor(0x7a5c43).prismY(0.1, 0.28, 0, 0, 0.17, 0.16, 7);                  // Bare face under the brim.
+    b.setColor(0x6b6147).prismY(0.26, 0.3, 0, 0, 0.42, 0.41, 8, Math.PI / 8);     // Boonie brim, the widest part.
+    b.prismY(0.3, 0.42, 0, 0, 0.21, 0.17, 8, Math.PI / 8);
+    b.setPart(1).prismY(0.3, 0.335, 0, 0, 0.215, 0.215, 8, Math.PI / 8);
+  },
+  anvil(b) {
+    neck(b, 0x2a2d33);
+    b.setPart(1).box(0, 0.22, 0, 0.5, 0.32, 0.5, 0.03);                           // Square helm.
+    b.setPart(0).setColor(0x2a2d33).box(0, 0.4, 0, 0.32, 0.07, 0.36);
+    b.setColor(0x101215).box(0.25, 0.22, 0, 0.02, 0.1, 0.42);
+    b.setColor(0xffc96b).box(0.262, 0.22, 0, 0.012, 0.035, 0.4);
+  },
+  relay(b) {
+    neck(b);
+    b.setColor(0x7a5c43).prismY(0.1, 0.3, 0, 0, 0.18, 0.17, 7);
+    b.setPart(1).box(0.02, 0.36, 0.02, 0.36, 0.12, 0.34, 0.03);                   // Side cap, worn off-centre.
+    b.setPart(0).setColor(0x1a1c20);
+    b.box(0, 0.2, 0.2, 0.12, 0.2, 0.05);                                          // Headset cup and boom.
+    b.box(0.13, 0.15, 0.2, 0.22, 0.025, 0.025);
+  },
+  yarddog(b) {
+    neck(b);
+    b.setPart(0).setColor(0xd8dad2).prismY(0.2, 0.4, 0, 0, 0.28, 0.2, 8, Math.PI / 8);     // White hard hat.
+    b.setPart(1).prismY(0.2, 0.235, 0.05, 0, 0.36, 0.35, 8, Math.PI / 8);                  // Brim.
+    b.box(0, 0.42, 0, 0.4, 0.045, 0.07);                                                   // Ridge.
+    b.setPart(0).setColor(0xffe39a).box(0.29, 0.31, 0, 0.07, 0.09, 0.12);                  // Lamp.
+    b.setColor(0x7a5c43).prismY(0.1, 0.22, 0, 0, 0.17, 0.17, 7);
+  },
+  ronin(b) {
+    neck(b, 0x2a2930);
+    b.setColor(0x322f33).prismY(0.08, 0.22, 0, 0, 0.17, 0.17, 7);
+    b.setColor(0xa89060).prismY(0.22, 0.25, 0, 0, 0.58, 0.56, 10);                         // Conical hat: a disc from above.
+    b.prismY(0.25, 0.48, 0, 0, 0.56, 0.06, 10);
+    b.setPart(1).prismY(0.245, 0.27, 0, 0, 0.59, 0.58, 10);
+  },
+  ghoul(b) {
+    neck(b, 0x1f2224);
+    b.setPart(0).setColor(0x1f2224).prismY(0.06, 0.44, -0.03, 0, 0.3, 0.1, 7);             // Hood, peaked to the rear.
+    b.setPart(1).box(-0.02, 0.33, 0, 0.3, 0.035, 0.34);
+    b.setPart(0).setColor(0x2d3230).box(0.2, 0.16, 0, 0.12, 0.15, 0.3);                    // Mask.
+    b.setColor(0x4a5048);
+    b.prismX(0.25, 0.44, 0.13, 0.16, 0.08, 0.09, 6); b.prismX(0.25, 0.44, 0.13, -0.16, 0.08, 0.09, 6);     // Filters.
+    b.setColor(0xb7ffb0).box(0.272, 0.235, 0.08, 0.02, 0.06, 0.1); b.box(0.272, 0.235, -0.08, 0.02, 0.06, 0.1);
+  },
+  ram(b) {
+    neck(b, 0x2d343c);
+    b.setPart(1).prismY(0.1, 0.38, 0, 0, 0.27, 0.17, 8, Math.PI / 8);
+    b.setPart(0).setColor(0x9fb2c0).box(0.27, 0.2, 0, 0.06, 0.44, 0.5);                    // Full face shield.
+    b.setColor(0x20252b).box(0.1, 0.41, 0, 0.36, 0.03, 0.14);
+  },
+  monarch(b) {
+    neck(b, 0x322d3d);
+    b.setPart(0).setColor(0x8b91a0).prismY(0.1, 0.32, 0, 0, 0.26, 0.24, 8, Math.PI / 8);
+    b.prismY(0.32, 0.42, 0, 0, 0.24, 0.12, 8, Math.PI / 8);
+    b.setColor(0xd9b44a).prismY(0.25, 0.28, 0, 0, 0.27, 0.27, 8, Math.PI / 8);
+    b.setPart(1).box(-0.05, 0.52, 0, 0.62, 0.3, 0.06);                                     // Crest, running front to back.
+    b.setPart(0).setColor(0x101215).box(0.22, 0.2, 0, 0.06, 0.08, 0.32);
+    b.setColor(0xfff0c8).box(0.255, 0.2, 0, 0.012, 0.03, 0.3);
+  },
+};
+
+function variantGeometry(table) {
+  const pos = [], nor = [], col = [], par = [], vars = [];
+  OPERATORS.forEach((op, variant) => {
+    const b = new MeshBuilder();
+    (table[op.id] ?? table.trooper)(b);
+    for (const v of b.pos) pos.push(v);
+    for (const v of b.nor) nor.push(v);
+    for (const v of b.col) col.push(v);
+    for (const v of b.par) par.push(v);
+    for (let i = b.pos.length / 3; i > 0; i--) vars.push(variant);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(par, 1));
+  g.setAttribute('aVar', new THREE.Float32BufferAttribute(vars, 1));
+  return g;
 }
 
-function headGeometry() {
-  const b = new MeshBuilder();
-  b.setPart(0).setColor(0x4a3a2e).box(0, 0.05, 0, 0.2, 0.14, 0.2);          // Neck.
-  b.setPart(1).prismY(0.1, 0.26, 0, 0, 0.25, 0.27, 8, Math.PI / 8);          // Helmet skirt.
-  b.prismY(0.26, 0.42, 0, 0, 0.27, 0.15, 8, Math.PI / 8);                    // Dome.
-  b.setPart(0).setColor(0x101215);
-  b.box(0.2, 0.2, 0, 0.1, 0.1, 0.34);                                        // Visor recess.
-  b.setColor(0xd8fff9).box(0.255, 0.2, 0, 0.02, 0.05, 0.32);
-  return b.build();
+const torsoGeometry = () => variantGeometry(TORSOS);
+const headGeometry = () => variantGeometry(HEADS);
+
+// Limbs are the same mesh for everyone; part 2 takes the instance's tint and thickness comes from the rig.
+function limbAttrs(g) {
+  g.setAttribute('aVar', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  return g;
 }
 
 function armGeometry() {
   const b = new MeshBuilder();
-  b.setPart(0).setColor(0x3a3f47);
-  b.prismX(0, 0.8, 0, 0, 0.088, 0.078, 6);
-  b.setColor(0x202226).prismX(0.8, 1.0, 0, 0, 0.1, 0.1, 6);                  // Glove.
-  return b.build();
+  b.setPart(2).prismX(0, 0.8, 0, 0, 0.088, 0.078, 6);
+  b.setPart(0).setColor(0x202226).prismX(0.8, 1.0, 0, 0, 0.1, 0.1, 6);       // Glove.
+  return limbAttrs(b.build());
 }
 
 function legGeometry() {
   const b = new MeshBuilder();
-  b.setPart(0).setColor(0x363a42);
-  b.prismX(0, 0.7, 0, 0, 0.11, 0.095, 6);
-  b.setColor(0x1a1c20);
+  b.setPart(2).prismX(0, 0.7, 0, 0, 0.11, 0.095, 6);
+  b.setPart(0).setColor(0x1a1c20);
   b.box(0.86, 0, 0.06, 0.28, 0.18, 0.2, 0.03);                               // Boot.
-  return b.build();
+  return limbAttrs(b.build());
 }
 
 // Team ring around the feet: bright rim, faint fill, faceted to match everything else.
@@ -185,6 +356,7 @@ class Rig {
     this.visible = false;
     this.heat = 0;
     this.overheated = false;
+    this.op = 0;              // Index into OPERATORS.
   }
 }
 
@@ -196,6 +368,9 @@ export class Characters {
     this.rigs = new Map();
     this.visionWalls = map.walls.filter(w => w.blocksVision);
     this.teamRGB = TEAMS.map(t => hexRGB(t.color));
+    // Per-operator numbers the frame loop reads, so it never touches colour conversion or string lookups.
+    this.looks = OPERATORS.map(o => ({ ...o.look, sleeveRGB: hexRGB(o.look.sleeve), trouserRGB: hexRGB(o.look.trouser) }));
+    this.opById = new Map();
 
     const charMat = new THREE.ShaderMaterial({ vertexShader: CHAR_VERT, fragmentShader: CHAR_FRAG });
     this.charMat = charMat;
@@ -217,8 +392,10 @@ export class Characters {
     // X-ray pass, drawn after the world and before characters, so only pixels hidden by walls survive.
     const xrayMat = new THREE.ShaderMaterial({
       vertexShader: `
-        attribute vec3 aTeam; attribute vec2 aFx; varying vec3 vTeam; varying float vFade;
-        void main(){ vTeam = aTeam; vFade = aFx.x; gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position,1.0); }`,
+        attribute vec3 aTeam; attribute vec2 aFx; attribute float aVar; attribute float aOp; varying vec3 vTeam; varying float vFade;
+        void main(){
+          if (abs(aVar - aOp) > 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vTeam = vec3(0.0); vFade = 0.0; return; }
+          vTeam = aTeam; vFade = aFx.x; gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position,1.0); }`,
       fragmentShader: `varying vec3 vTeam; varying float vFade; void main(){ gl_FragColor = vec4(vTeam * 0.62 * vFade, 0.6 * vFade); }`,
       depthFunc: THREE.GreaterDepth, depthWrite: false,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
@@ -302,6 +479,15 @@ export class Characters {
     return mesh;
   }
 
+  // roster entries: { id, operator }. Called once per match, before the first update.
+  setRoster(roster) {
+    this.opById.clear();
+    for (const r of roster) {
+      const i = OPERATORS.findIndex(o => o.id === r.operator);
+      this.opById.set(r.id, i < 0 ? 0 : i);
+    }
+  }
+
   rig(id) {
     let r = this.rigs.get(id);
     if (!r) { r = new Rig(id); this.rigs.set(id, r); }
@@ -316,10 +502,12 @@ export class Characters {
   onHit(id) { const r = this.rigs.get(id); if (r) r.flash = 1; }
   onSwap(id) { const r = this.rigs.get(id); if (r) r.swap = 1; }
 
-  _writeFx(mesh, i, fade, flash, team) {
+  _writeFx(mesh, i, fade, flash, team, op, tint) {
     const a = mesh.geometry.attributes;
     a.aFx.setXY(i, fade, flash);
     a.aTeam.setXYZ(i, team[0], team[1], team[2]);
+    a.aOp.setX(i, op);
+    if (tint) a.aTint.setXYZ(i, tint[0], tint[1], tint[2]);
   }
 
   // Local visibility test for an enemy: centre and both shoulders, so a peeking shoulder still shows.
@@ -352,6 +540,8 @@ export class Characters {
       const p = view.players[pi];
       const r = this.rig(p.id);
       r.team = p.team;
+      r.op = this.opById.get(p.id) ?? 0;
+      const look = this.looks[r.op];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
       if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.6); }
 
@@ -383,7 +573,7 @@ export class Characters {
       const ads = p.adsT || 0;
       const sprint = r.sprint, slide = r.slide;
       const bob = Math.abs(Math.sin(r.phase)) * 0.07 * Math.min(1, speed / 4);
-      const y = HIP + bob - slide * 0.42;
+      const y = HIP * look.h + bob - slide * 0.42;
 
       // Upper-body frame: origin at hips.
       _e.set(-slide * 0.5 - r.kick * 0.03, -p.aim, -(sprint * 0.18) + slide * 0.38 + ads * 0.06 - r.kick * 0.05);
@@ -423,17 +613,18 @@ export class Characters {
       if (p.spawnProtect) fade *= 0.55 + 0.45 * Math.abs(Math.sin(view.t * 16));
       const flash = r.flash;
 
-      _m.copy(_body);
+      _s.set(look.w, look.h, look.w);
+      _m.copy(_body).scale(_s);
       _m.toArray(torso.instanceMatrix.array, nT * 16);
-      this._writeFx(torso, nT, fade, flash, team);
+      this._writeFx(torso, nT, fade, flash, team, r.op);
 
-      _p.set(0, 0.68 * CHAR_SCALE * 0.95 + r.kick * -0.01, 0);
+      _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h + r.kick * -0.01, 0);
       _s.set(1, 1, 1);
       _e.set(0, 0, r.kick * 0.1 + slide * -0.3);
       _q.setFromEuler(_e);
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(head.instanceMatrix.array, nT * 16);
-      this._writeFx(head, nT, fade, flash, team);
+      this._writeFx(head, nT, fade, flash, team, r.op);
       nT++;
 
       // Gun.
@@ -449,15 +640,15 @@ export class Characters {
       ga.aHeat.setX(gi, r.heat);
 
       // Arms: shoulder to hand. Right hand on the grip (gun origin), left on the fore point.
-      const shoulderY = 0.42 * CHAR_SCALE;
+      const shoulderY = 0.42 * CHAR_SCALE * look.h;
       for (let side = -1; side <= 1; side += 2) {
-        _a.set(0.02, shoulderY, side * 0.31).applyMatrix4(_body);
+        _a.set(0.02, shoulderY, side * 0.31 * look.w).applyMatrix4(_body);
         if (side > 0) _b.set(0, 0, 0).applyMatrix4(_gun);
         else if (r.reload > 0.5) _b.set(0.12, -0.3, -0.05).applyMatrix4(_gun);   // Hand goes to the magazine.
         else _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
-        setStretch(_m, _a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 1.2, 1.2);
+        setStretch(_m, _a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 1.2 * look.l, 1.2 * look.l);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
-        this._writeFx(arm, nA, fade, flash, team);
+        this._writeFx(arm, nA, fade, flash, team, 0, look.sleeveRGB);
         nA++;
       }
 
@@ -467,7 +658,7 @@ export class Characters {
         const side = leg_i === 0 ? -1 : 1;
         const sw = Math.sin(r.phase + leg_i * Math.PI);
         const lift = Math.max(0, Math.cos(r.phase + leg_i * Math.PI)) * 0.14 * Math.min(1, speed / 3);
-        const rx = -Math.sin(p.aim) * side * 0.17, rz = Math.cos(p.aim) * side * 0.17;
+        const rx = -Math.sin(p.aim) * side * 0.17 * look.w, rz = Math.cos(p.aim) * side * 0.17 * look.w;
         const hipX = p.x + rx, hipZ = p.z + rz;
         const fwd = sw * stride;
         let footX = p.x + rx + r.moveX * fwd, footZ = p.z + rz + r.moveZ * fwd;
@@ -475,9 +666,9 @@ export class Characters {
           footX += r.moveX * slide * 0.75;
           footZ += r.moveZ * slide * 0.75;
         }
-        setStretch(_m, hipX, y, hipZ, footX, 0.05 + lift, footZ, 1.45, 1.45);
+        setStretch(_m, hipX, y, hipZ, footX, 0.05 + lift, footZ, 1.45 * look.l, 1.45 * look.l);
         _m.toArray(leg.instanceMatrix.array, nL * 16);
-        this._writeFx(leg, nL, fade, flash, team);
+        this._writeFx(leg, nL, fade, flash, team, 0, look.trouserRGB);
         nL++;
       }
 
@@ -503,8 +694,11 @@ export class Characters {
     for (let i = 0; i < this.bodyMeshes.length; i++) {
       const m = this.bodyMeshes[i];
       m.instanceMatrix.needsUpdate = true;
-      m.geometry.attributes.aFx.needsUpdate = true;
-      m.geometry.attributes.aTeam.needsUpdate = true;
+      const a = m.geometry.attributes;
+      a.aFx.needsUpdate = true;
+      a.aTeam.needsUpdate = true;
+      a.aOp.needsUpdate = true;
+      a.aTint.needsUpdate = true;
     }
     for (let i = 0; i < this.gunList.length; i++) {
       const m = this.gunList[i];
@@ -523,4 +717,54 @@ export class Characters {
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();
   }
+}
+
+// One operator on a slow turntable, for the Operators screen. It draws through the WebGL context the menus already
+// own (GunPreview's), since a phone should not carry a second one just for this.
+export class OperatorPreview {
+  constructor(webgl, canvas) {
+    this.webgl = webgl;
+    this.canvas = canvas;
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(24, 1, 0.1, 40);
+    this.time = { value: 0 };
+    this.chars = new Characters(this.scene, { walls: [] }, this.time);
+    this.player = {
+      id: 'preview', team: 0, x: 0, z: 0, aim: 0.6, vx: 0, vz: 0, hp: 100, alive: true,
+      weapon: 'ar', camo: 'none', attachments: undefined, adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false,
+      spawnProtect: false, heat: 0, overheated: false,
+    };
+    this.view = { t: 0, players: [this.player], smokes: null, localId: 'preview' };
+    this.opts = { localId: 'preview', localTeam: 0, uav: false, revealAll: true };
+    this.spin = 0.7;
+    this.w = 0; this.h = 0;
+    this.show(DEFAULT_OPERATOR, 'ar', 'none', 0);
+  }
+
+  // Everything but the operator id is optional dressing; the gun shows what this loadout actually carries.
+  show(operator, weapon = 'ar', camo = 'none', team = 0, attachments) {
+    Object.assign(this.player, { team, weapon, camo, attachments });
+    this.opts.localTeam = team;
+    this.chars.setRoster([{ id: 'preview', operator }]);
+  }
+
+  tick(dt) {
+    this.time.value = (this.time.value + dt) % 3600;
+    this.view.t = this.time.value;
+    this.spin += dt * 0.7;
+    this.player.aim = this.spin;
+    this.chars.update(this.view, dt, this.opts);
+    const c = this.canvas, w = Math.max(1, c.clientWidth || 1), h = Math.max(1, c.clientHeight || 1);
+    if (w !== this.w || h !== this.h) {
+      this.w = w; this.h = h;
+      this.webgl.setSize(w, h, false);
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.position.set(0, 4.3, 8.4);
+    this.camera.lookAt(0, 1.0, 0);
+    this.webgl.render(this.scene, this.camera);
+  }
+
+  dispose() { this.chars.dispose(); }
 }

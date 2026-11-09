@@ -2,8 +2,11 @@
 // live in their own modules and share this object's actions, overlay and single gun preview.
 import { TEAMS, TEAM_SIZE } from '../shared/constants.js';
 import { GunPreview } from '../render/renderer.js';
+import { OperatorPreview } from '../render/characters.js';
 import { Progress } from './progress.js';
 import { LoadoutsScreen } from './loadout.js';
+import { OperatorsScreen } from './operatorscreen.js';
+import { voteMarkup, paintVote, soloMarkup } from './vote.js';
 import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
 import { resultsScreen } from './results.js';
@@ -33,6 +36,8 @@ export class Menu {
     root.appendChild(this.toastEl);
     this.actions = {};
     this.preview = null;           // One GunPreview for the whole menu layer, so only one WebGL context ever exists here.
+    this.opPreview = null;         // The operator turntable; shares that context and canvas.
+    this.ticking = null;           // Whichever of the two the render loop is driving right now.
     this.previewCanvas = null;
     this.previewRaf = 0;
     this.reel = null;              // The results reel, when one is running.
@@ -94,7 +99,7 @@ export class Menu {
         <div class="boxcar-ribs"></div>
         <div class="boxcar-face">
           <h1 class="wordmark">Switchyard</h1>
-          <p class="wordmark-sub">6v6 team deathmatch in a freight yard at dusk</p>
+          <p class="wordmark-sub">6v6 deathmatch and objectives, friends or bots</p>
           <button class="pcard${can ? ' ready' : ''}" data-act="profile">
             <span class="pc-badge">${badgeMark(lp.prestige, 48)}</span>
             <span class="pc-body">
@@ -113,7 +118,10 @@ export class Menu {
           <button class="route" data-act="loadout"><b>Loadouts</b></button>
           <button class="route" data-act="gunsmith"><b>Gunsmith</b></button>
         </div>
-        <button class="route small" data-act="saveCode"><b>Save code</b></button>
+        <div class="route-pair">
+          <button class="route" data-act="operators"><b>Operators</b></button>
+          <button class="route" data-act="saveCode"><b>Save code</b></button>
+        </div>
       </nav>`;
     this.show();
   }
@@ -252,10 +260,39 @@ export class Menu {
           ${SKILLS.map(([id, label]) => `<button class="seg${botSkill === id ? ' on' : ''}" ${isHost ? `data-act="botSkill" data-skill="${id}"` : 'disabled'}>${label}</button>`).join('')}
         </div>
         <button class="route small" data-act="gunsmith"><b>Gunsmith</b></button>
+        <button class="route small" data-act="operators"><b>Operators</b></button>
         <button class="route small" data-act="loadout"><b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
         ${start}
       </footer>`;
     this.show();
+  }
+
+  // The first call for a vote builds the screen, later calls for the same vote patch it.
+  vote(state) {
+    if (this.el.dataset.screen !== 'vote' || this.voteKey !== state.key) {
+      this.#stopPreview();
+      this.#endReel();
+      this.overlay('');
+      this.voteKey = state.key;
+      this.el.dataset.screen = 'vote';
+      this.el.innerHTML = voteMarkup(state);
+    }
+    paintVote(this.el, state);
+    this.show();
+  }
+
+  // Solo picks: repaint per tap is fine, nothing here animates.
+  solo(state) {
+    this.#stopPreview();
+    this.#endReel();
+    this.el.dataset.screen = 'solo';
+    this.el.innerHTML = soloMarkup(state);
+    this.show();
+  }
+
+  operators(opts) {
+    this.#stopPreview();
+    this.screen = new OperatorsScreen(this, opts);
   }
 
   gunsmith(opts) {
@@ -329,13 +366,34 @@ export class Menu {
     }
     if (this.previewCanvas.parentNode !== mount) mount.prepend(this.previewCanvas);
     if (!this.preview) this.preview = new GunPreview(this.previewCanvas);
+    this.preview.w = 0;                 // The operator turntable may have resized the shared buffer since the gun last drew.
     this.preview.tick(0);               // Lets the preview measure the canvas, so the gun is framed for this card's shape.
     this.preview.show(weaponId, camoId, kit);
+    this.ticking = this.preview;
+    this.#runPreview();
+  }
+
+  // The operator turntable, on the same canvas and context as the guns.
+  operatorMount(mount, operator, weaponId, camoId, kit) {
+    if (!mount) return;
+    if (!this.previewCanvas) {
+      this.previewCanvas = document.createElement('canvas');
+      this.previewCanvas.className = 'preview-canvas';
+    }
+    if (this.previewCanvas.parentNode !== mount) mount.prepend(this.previewCanvas);
+    if (!this.preview) this.preview = new GunPreview(this.previewCanvas);
+    this.opPreview ??= new OperatorPreview(this.preview.webgl, this.previewCanvas);
+    this.opPreview.show(operator, weaponId, camoId, 0, kit);
+    this.ticking = this.opPreview;
+    this.#runPreview();
+  }
+
+  #runPreview() {
     if (this.previewRaf) return;
     let last = performance.now();
     const tick = now => {
       this.previewRaf = requestAnimationFrame(tick);
-      this.preview.tick(Math.min(0.1, (now - last) / 1000));
+      this.ticking.tick(Math.min(0.1, (now - last) / 1000));
       last = now;
     };
     this.previewRaf = requestAnimationFrame(tick);

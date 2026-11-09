@@ -4,12 +4,13 @@ import * as THREE from 'three';
 import { TEAMS } from '../shared/constants.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
+import { Weather } from './weather.js';
 import { FogMask, castRay } from './fog.js';
 import { Characters } from './characters.js';
 import { VFX } from './vfx.js';
 import { CombatFX, GUNSHIP_Y } from './combat.js';
 import { getGun } from './guns.js';
-import { hexRGB } from './art.js';
+import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
@@ -17,7 +18,7 @@ let WEAPONS = {};
 import('../shared/weapons.js').then(m => { WEAPONS = m.WEAPONS || {}; }).catch(() => {});
 
 const DEFAULT_KICK = { ar: 0.5, smg: 0.36, shotgun: 1.1, lmg: 0.7, sniper: 1.4, pistol: 0.45 };
-const FLASH_SIZE = { ar: 1.5, smg: 1.2, shotgun: 2.3, lmg: 1.75, sniper: 2.3, pistol: 1.3 };
+const FLASH_SIZE = { ar: 1.5, burst: 1.45, smg: 1.2, pdw: 1.15, shotgun: 2.3, autoshot: 2.1, lmg: 1.75, dmr: 1.8, sniper: 2.3, pistol: 1.3, revolver: 1.9, launcher: 2.4 };
 const TRACER_BASE = 0.13;       // Metres of half-width for a weapon whose tracerWidth is 1.
 
 function kickOf(id) {
@@ -85,7 +86,9 @@ export class GameRenderer {
     });
     this.webgl = webgl;
     webgl.autoClear = true;
-    webgl.setClearColor(0x15141c, 1);
+    const theme = getTheme(map.theme);
+    setThemeLighting(theme.id);         // Programs compile lazily, so this lights all of this match.
+    webgl.setClearColor(theme.clear, 1);
     webgl.info.autoReset = false;       // One frame spans the fog pass and the main pass.
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     this.resScale = 1;
@@ -102,6 +105,7 @@ export class GameRenderer {
     const world = buildWorld(map, TEAMS, this.fog.uniforms);
     this.world = world;
     this.scene.add(world.group);
+    this.weather = new Weather(this.scene, theme);
     this.chars = new Characters(this.scene, map, this.time);
     this.vfx = new VFX(this.scene);
     this.combat = new CombatFX(this.scene, this.vfx, map, this.time);
@@ -469,6 +473,8 @@ export class GameRenderer {
     else this.fog.uniforms.on.value = 0;
 
     this._updateCamera(realDt, local);
+    this.world.update(realDt);
+    this.weather.update(realDt, this.camTarget.x, this.camTarget.z, this.world.material);
     webgl.render(this.scene, this.camera);
 
     this._adjustResolution(dt);
@@ -504,6 +510,8 @@ export class GameRenderer {
     });
     this.overlay.geometry.dispose();
     this.overlay.material.dispose();
+    this.weather.dispose();
+    setThemeLighting('railyard');       // Menus and gun previews compiled afterwards use the default rig.
     this.webgl.dispose();
   }
 }

@@ -52,10 +52,8 @@ export class Gunsmith {
   selectWeapon(id) {
     if (id === this.weapon) return;
     this.weapon = id;
-    if (PRIMARY_IDS.includes(id)) {
-      Progress.updateLoadout(this.index, { primary: id });
-      this.onChange?.();
-    }
+    Progress.updateLoadout(this.index, PRIMARY_IDS.includes(id) ? { primary: id } : { secondary: id });
+    this.onChange?.();
     this.tryAtt = this.tryCamo = this.tryFx = null;
     if (!this.available(this.slot).length) this.slot = SLOTS.find(s => this.available(s).length) ?? 'optic';
     this.paintRail();
@@ -203,7 +201,7 @@ export class Gunsmith {
         </div>
       </header>
       <div class="gs enter">
-        <div class="gs-weapons">${WEAPON_IDS.map(id => `<button class="gs-w" data-act="gsWeapon" data-id="${id}"><b>${esc(WEAPONS[id].name)}</b><small></small></button>`).join('')}</div>
+        <div class="gs-weapons">${WEAPON_IDS.map(id => `<button class="gs-w${PRIMARY_IDS.includes(id) ? '' : ' side'}" data-act="gsWeapon" data-id="${id}"><b>${esc(WEAPONS[id].name)}</b><small></small></button>`).join('')}</div>
         <div class="gs-bench">
           <div class="gs-view">
             <div class="gs-title"><b></b><small></small></div>

@@ -4,7 +4,8 @@ import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT } from '../shared/constants.js';
 import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { STREAKS, LETHALS, normalizeLoadout } from '../shared/catalog.js';
+import { STREAKS, LETHALS, SCORE, normalizeLoadout } from '../shared/catalog.js';
+import { MODES } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
@@ -26,8 +27,18 @@ const FLASH_FADE = 1.8;
 const FIRE_REVEAL = 1.5;         // Matches the sim's firingT lifetime; only shapes the minimap ping's fade.
 const BOARD_HZ = 4;
 const END_BANNER_MIN = 700;
+const OBJ_RING = 2 * Math.PI * 14;  // Circumference of the capture rings' r=14 circle, for stroke dashes.
+// Objective markers ride inside these margins, so they never sit under the score bar, the buttons or the status row.
+const MARK_PAD_L = 34;
+const MARK_PAD_R = 110;
+const MARK_PAD_T = 56;
+const MARK_PAD_B = 100;
+const MARK_Y = { dom: 4.3, hard: 3.6 };   // Metres above the ground to pin a marker: flag tip or zone wall.
+const HARD_WARN = 5;             // Seconds of warning before a hardpoint moves.
 
 const MEDALS = {
+  confirm: ['Kill Confirmed', `+${SCORE.confirm}`], deny: ['Tag Denied', `+${SCORE.deny}`],
+  capture: ['Captured', `+${SCORE.capture}`], defend: ['Defended', `+${SCORE.defend}`],
   first_blood: ['First Blood', 'Round opener'], double: ['Double Kill', '2 in quick order'], triple: ['Triple Kill', '3 in quick order'],
   fury: ['Fury Kill', '4 or more'], revenge: ['Revenge', 'Settled the score'], longshot: ['Longshot', 'From across the yard'],
   streak3: ['Three Streak', 'UAV earned'], streak5: ['Five Streak', 'Strike earned'], streak10: ['Ten Streak', 'Unbroken'],
@@ -40,6 +51,17 @@ const CALLOUT_POP = [
   { opacity: 0, transform: 'translate(-50%,-8px) scale(1)' },
 ];
 const HEAL_PULSE = [{ opacity: 0 }, { opacity: 0.9, offset: 0.2 }, { opacity: 0 }];
+
+const BANNER_POP = [
+  { opacity: 0, transform: 'translateX(-50%) scale(1.5)' },
+  { opacity: 1, transform: 'translateX(-50%) scale(1)', offset: 0.1 },
+  { opacity: 1, transform: 'translateX(-50%) scale(1)', offset: 0.82 },
+  { opacity: 0, transform: 'translate(-50%,-6px) scale(1)' },
+];
+
+// A point's letter: its id when that is already a single letter, otherwise its place in the list.
+const pointLabel = (pt, i) => (typeof pt.id === 'string' && pt.id.length === 1 ? pt.id.toUpperCase() : 'ABCDEFG'[i] ?? '?');
+const ringMarkup = '<svg class="o-ring" viewBox="-17 -17 34 34" aria-hidden="true"><circle class="o-track" r="14"/><circle class="o-arc" r="14" transform="rotate(-90)"/></svg><b></b>';
 
 const pad2 = n => (n < 10 ? '0' + n : '' + n);
 const weaponName = id => WEAPONS[id]?.name ?? (id === 'strike' ? 'Strike' : id ?? '');
@@ -62,6 +84,11 @@ export class HUD {
     this.scoreLimit = SCORE_LIMIT;
     this.timeLimit = TIME_LIMIT;
     this.badges = new Map();      // Player id -> { prestige, level }, from the match roster.
+    this.mode = 'tdm';
+    this.camera = null;           // World markers project through this; handed over once per match.
+    this.viewW = root.clientWidth || innerWidth;
+    this.viewH = root.clientHeight || innerHeight;
+    addEventListener('resize', () => { this.viewW = root.clientWidth; this.viewH = root.clientHeight; });
     this.#seedFallback();
     this.#build();
     this.#drawMapBase();
@@ -81,15 +108,20 @@ export class HUD {
   }
 
   // Call before each match.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [] } = {}) {
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm' } = {}) {
     this.map = MAPS[mapId] ?? this.map;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
+    this.mode = mode;
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     this.#seedFallback();
     this.#drawMapBase();
+    this.#buildObjectiveHud();
     this.reset();
   }
+
+  // The match renderer's camera. Markers need a world-to-screen transform and nothing else from it.
+  setCamera(camera) { this.camera = camera; }
 
   reset() {
     // Cached display values. NaN and '' can never equal a real value, so the first update writes everything.
@@ -97,9 +129,13 @@ export class HUD {
       myScore: NaN, otherScore: NaN, teamFlip: NaN, time: NaN, phase: '', hp: NaN, hpFrac: NaN, ammo: NaN, reserve: NaN,
       weapon: '', reloadFrac: NaN, reloadOn: null, low: null, hurt: null, vign: NaN, dead: null, respawn: NaN,
       protect: null, picked: -1, enemyUav: null, tag: '', heatOn: null, heat: NaN, heatLevel: '', overBanner: null,
-      score: NaN, capped: null, swapHint: null,
+      score: NaN, capped: null, swapHint: null, objState: null, objFrac: NaN, hardShown: NaN,
     };
     this.view = null;
+    this.modeBannerShown = false;
+    this.hardWarned = false;
+    this.objTally = new Map();
+    this.hardMoves = 0;
     this.mmClock = 0;
     this.hitT = 0;
     this.hitKill = false;
@@ -250,6 +286,13 @@ export class HUD {
       </div>
       <div class="over-banner"><b>Overheated</b><small>Swap to sidearm</small></div>
       <div class="board" hidden><div class="board-grid"></div><small class="board-tip">Tap the score to close</small></div>
+      <div class="obj-marks"></div>
+      <div class="obj-strip" hidden>
+        <div class="obj-chips"></div>
+        <div class="obj-timer" hidden><small>Moves in</small><b>0:30</b></div>
+      </div>
+      <div class="obj-meter" hidden><i class="obj-meter-fill"></i><b></b></div>
+      <div class="obj-banner"><b></b><small></small></div>
       <div class="callout"></div>
       <div class="notice"></div>
       <div class="spectate" hidden></div>
@@ -296,6 +339,16 @@ export class HUD {
     this.boardEl = $('.board');
     this.boardGrid = $('.board-grid');
     this.calloutEl = $('.callout');
+    this.objMarks = $('.obj-marks');
+    this.objStrip = $('.obj-strip');
+    this.objChips = $('.obj-chips');
+    this.objTimer = $('.obj-timer');
+    this.objTimerNum = $('.obj-timer b');
+    this.objMeter = $('.obj-meter');
+    this.objMeterFill = $('.obj-meter-fill');
+    this.objMeterText = $('.obj-meter b');
+    this.objBanner = $('.obj-banner');
+    this.objNodes = [];           // One entry per objective point: chip and in-world marker.
     this.flashEl = $('.flashbang');
     this.healEl = $('.heal-veil');
     this.hitX = $('.hit-x');
@@ -324,11 +377,12 @@ export class HUD {
   #buildBoard() {
     this.boardGrid.innerHTML = [0, 1].map(() => `
       <div class="lb-side">
-        <div class="lb-head"><b class="lb-team"></b><span>K</span><span>D</span><span>A</span><span>HS</span><span>Score</span></div>
+        <div class="lb-head"><b class="lb-team"></b><span>K</span><span>D</span><span>A</span><span class="lb-mode">HS</span><span>Score</span></div>
         ${[0, 1, 2, 3, 4, 5].map(() => '<div class="lb-row"><span class="lb-name"><i class="lb-bdg"></i><u class="lb-lv"></u><b></b></span><span></span><span></span><span></span><span></span><span></span></div>').join('')}
       </div>`).join('');
     this.boardSides = [...this.boardGrid.querySelectorAll('.lb-side')].map(node => ({
       team: node.querySelector('.lb-team'),
+      modeHead: node.querySelector('.lb-mode'),
       rows: [...node.querySelectorAll('.lb-row')].map(row => ({
         row, cells: row.children, name: row.querySelector('.lb-name b'), bdg: row.querySelector('.lb-bdg'), lv: row.querySelector('.lb-lv'), rank: -1,
       })),
@@ -349,7 +403,9 @@ export class HUD {
       const side = this.boardSides[s];
       side.team.textContent = `${TEAMS[team].name}  ${view.scores[team]}`;
       side.team.style.color = TEAMS[team].css;
-      const rows = view.players.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
+      const rows = view.players.filter(p => p.team === team);
+      for (const p of rows) Object.assign(p, this.objectiveStats(p.id));
+      rows.sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
       side.rows.forEach((slot, i) => {
         const p = rows[i], { row, cells } = slot;
         row.hidden = !p;
@@ -366,10 +422,17 @@ export class HUD {
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
-        cells[4].textContent = p.head ?? 0;
+        cells[4].textContent = this.#objectiveStat(p);
         cells[5].textContent = matchScore(p);
       });
     });
+  }
+
+  // Fourth score column: the mode's own number where it has one, headshots otherwise.
+  #objectiveStat(p) {
+    if (this.mode === 'kc') return p.confirms ?? 0;
+    if (this.mode === 'dom' || this.mode === 'hard') return p.captures ?? 0;
+    return p.head ?? 0;
   }
 
   #choose(index) {
@@ -430,6 +493,12 @@ export class HUD {
         if (this.boardOpen) this.toggleBoard();
       }
     }
+
+    if (view.phase === 'warmup' && !this.modeBannerShown && view.mode === this.mode) {
+      this.modeBannerShown = true;
+      this.#banner(MODES[this.mode]?.name ?? '', MODES[this.mode]?.desc ?? '', 3200);
+    }
+    this.#updateObjectives(view, me, c);
 
     this.#updateVitals(me, c, view);
     this.#updateArms(me, c);
@@ -628,14 +697,32 @@ export class HUD {
       switch (e.t) {
         case 'hit': this.#onHit(e); break;
         case 'kill': this.#onKill(e); break;
-        case 'medal': if (e.id === this.view?.localId) this.medalQueue.push(e.medal); break;
+        case 'medal': this.#onMedal(e); break;
         case 'spawn': if (e.id === this.view?.localId) { this.killer = null; this.deathPainted = false; } break;
         case 'streak': this.#onStreak(e); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
+        case 'capture': this.#onCapture(e); break;
+        case 'hard_move': this.#onHardMove(e); break;
         default: break;
       }
     }
+  }
+
+  // Every player's medals arrive, and the objective ones double as the per-player capture and confirm counts.
+  #onMedal(e) {
+    if (e.medal === 'confirm' || e.medal === 'capture') {
+      const key = e.medal === 'confirm' ? 'confirms' : 'captures';
+      const t = this.objTally.get(e.id) ?? { confirms: 0, captures: 0 };
+      t[key]++;
+      this.objTally.set(e.id, t);
+    }
+    if (e.id === this.view?.localId) this.medalQueue.push(e.medal);
+  }
+
+  // Captures and confirmations per player, tallied from medals, for the live board and the results screen.
+  objectiveStats(id) {
+    return this.objTally.get(id) ?? { confirms: 0, captures: 0 };
   }
 
   #onHit(e) {
@@ -655,6 +742,34 @@ export class HUD {
       if (head) this.#callout(kill ? 'Headshot kill' : 'Headshot');
     }
     if (e.target === localId && e.by !== localId) this.#damageFrom(e);
+  }
+
+  #onCapture(e) {
+    const view = this.view, me = view && this.#findLocal(view);
+    if (!me) return;
+    const pts = view.points ?? [];
+    const idx = pts.findIndex(p => p.id === e.point);
+    const label = idx >= 0 ? pointLabel(pts[idx], idx) : String(e.point ?? '').toUpperCase();
+    const ours = e.team === me.team;
+    if (this.mode === 'hard') return;
+    this.#banner(ours ? `${label} Captured` : `${label} Lost`, ours ? 'Hold it for points' : 'Take it back', 1500, ours ? 'mine' : 'enemy');
+    this.notify(`${ours ? '' : 'Enemy '}${TEAMS[e.team]?.name ?? 'Team'} took ${label}`);
+  }
+
+  // The sim also emits this when the match goes live; that first zone is not a move worth announcing.
+  #onHardMove() {
+    if (this.hardMoves++ === 0) return;
+    this.#banner('Hardpoint Moved', 'Find the new zone', 1500);
+    this.hardWarned = false;
+  }
+
+  // Large centred announcement for mode events. `side` tints it for the local team, the enemy or neither.
+  #banner(title, sub, duration = 1400, side = '') {
+    const el = this.objBanner;
+    el.querySelector('b').textContent = title;
+    el.querySelector('small').textContent = sub;
+    el.dataset.side = side;
+    el.animate(BANNER_POP, { duration, easing: 'ease-out' });
   }
 
   #callout(text) {
@@ -777,6 +892,12 @@ export class HUD {
   // Walls never move, so they are drawn once into an off-screen layer.
   #drawMapBase() {
     const map = this.map;
+    // The canvas follows the map's shape, so a square map is not squashed. It only changes between matches.
+    const shape = Math.round(MM_WIDTH * MM_SCALE * (map.height / map.width));
+    if (this.mmCanvas.height !== shape) {
+      this.mmCanvas.height = shape;
+      this.mmCanvas.style.height = this.mmCanvas.parentNode.style.height = `${(shape / MM_SCALE).toFixed(1)}px`;
+    }
     const W = this.mmCanvas.width, H = this.mmCanvas.height;
     const base = this.mmBase ??= document.createElement('canvas');
     base.width = W;
@@ -827,6 +948,8 @@ export class HUD {
       }
     }
 
+    this.#drawObjectivesMini(view, me, sx, sz, g, clock);
+
     for (const p of view.players) {
       if (!p.alive || p.id === me.id) continue;
       const friendly = p.team === myTeam;
@@ -868,6 +991,210 @@ export class HUD {
       g.lineTo(x + Math.cos(a - 2.5) * 7, y + Math.sin(a - 2.5) * 7);
       g.closePath();
       g.fill();
+    }
+  }
+
+  #drawObjectivesMini(view, me, sx, sz, g, clock) {
+    if (view.tags?.length) {
+      for (const t of view.tags) {
+        const friendly = t.team === me.team;
+        const x = t.x * sx, y = t.z * sz, r = friendly ? 3 : 4;
+        g.fillStyle = TEAMS[t.team]?.css ?? '#fff';
+        g.strokeStyle = friendly ? 'rgba(255,255,255,.5)' : '#fff';
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+    }
+    const points = view.points;
+    if (!points?.length) return;
+    const myTeam = me.team, hard = this.mode === 'hard';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '400 13px "Railyard Stencil", sans-serif';
+    points.forEach((pt, i) => {
+      const x = pt.x * sx, y = pt.z * sz, r = Math.max(5, (pt.r ?? 4) * sx);
+      const css = pt.owner === myTeam ? TEAMS[myTeam].css : pt.owner === 0 || pt.owner === 1 ? TEAMS[pt.owner].css : '#d5dade';
+      g.fillStyle = 'rgba(29,35,43,.72)';
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = pt.contested ? (Math.floor(clock * 6) % 2 ? '#ffd24a' : '#fff') : css;
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.stroke();
+      const cap = Math.abs(pt.capture ?? 0);
+      if (cap > 0.01) {
+        g.strokeStyle = TEAMS[(pt.capture ?? 0) > 0 ? 1 : 0].css;
+        g.lineWidth = 3.5;
+        g.beginPath();
+        g.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + cap * Math.PI * 2);
+        g.stroke();
+      }
+      if (hard) {
+        // Pulse so the single live zone is findable at a glance.
+        g.strokeStyle = 'rgba(255,255,255,.65)';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(x, y, r + (clock * 1.4 % 1) * 8, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.fillStyle = '#fff';
+      g.fillText(hard ? 'H' : pointLabel(pt, i), x, y + 0.5);
+    });
+  }
+
+  // --- Mode objectives ---
+  #buildObjectiveHud() {
+    this.objChips.textContent = '';
+    this.objMarks.textContent = '';
+    this.objNodes = [];
+    const mode = this.mode;
+    const uses = mode === 'dom' || mode === 'hard';
+    this.objStrip.hidden = !uses;
+    this.objTimer.hidden = mode !== 'hard';
+    this.el.dataset.mode = mode;
+    this.objMeter.hidden = true;
+    for (const side of this.boardSides) {
+      side.modeHead.textContent = mode === 'kc' ? 'Conf' : uses ? 'Cap' : 'HS';
+    }
+    if (!uses) return;
+    const count = mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;
+    for (let i = 0; i < count; i++) {
+      const chip = document.createElement('span');
+      chip.className = 'o-chip';
+      chip.innerHTML = ringMarkup;
+      this.objChips.appendChild(chip);
+      const mark = document.createElement('span');
+      mark.className = 'o-mark';
+      mark.innerHTML = `${ringMarkup}<i class="o-arrow"></i>`;
+      this.objMarks.appendChild(mark);
+      this.objNodes.push({
+        chip: this.#pointNode(chip),
+        mark: { ...this.#pointNode(mark), arrow: mark.querySelector('.o-arrow'), x: NaN, y: NaN, a: NaN, off: null, shown: null },
+      });
+    }
+  }
+
+  #pointNode(root) {
+    return { root, arc: root.querySelector('.o-arc'), label: root.querySelector('b'), owner: '', cap: '', dash: NaN, contested: null, text: null };
+  }
+
+  #updateObjectives(view, me, c) {
+    const points = view.points;
+    if (this.objNodes.length && points) {
+      this.#updateMarks(view, me, points);
+      const n = Math.min(points.length, this.objNodes.length);
+      for (let i = 0; i < n; i++) this.#paintPoint(this.objNodes[i].chip, points[i], i, me.team);
+    }
+    this.#updateMeter(view, me, c, points);
+    this.#updateHardTimer(view, c);
+  }
+
+  // Touches only the attributes that changed, since this runs for every chip and marker every frame.
+  #paintPoint(n, pt, i, myTeam) {
+    const owner = pt.owner === 0 || pt.owner === 1 ? (pt.owner === myTeam ? 'mine' : 'enemy') : 'none';
+    if (owner !== n.owner) { n.owner = owner; n.root.dataset.owner = owner; }
+    const capVal = pt.capture ?? 0;
+    const capSide = capVal === 0 ? '' : ((capVal > 0 ? 1 : 0) === myTeam ? 'mine' : 'enemy');
+    if (capSide !== n.cap) { n.cap = capSide; n.root.dataset.cap = capSide; }
+    const dash = Math.round((1 - Math.min(1, Math.abs(capVal))) * 40) / 40;
+    if (dash !== n.dash) { n.dash = dash; n.arc.style.strokeDashoffset = (dash * OBJ_RING).toFixed(2); }
+    const contested = !!pt.contested;
+    if (contested !== n.contested) { n.contested = contested; n.root.classList.toggle('contested', contested); }
+    const text = this.mode === 'hard' ? '' : pointLabel(pt, i);
+    if (text !== n.text) { n.text = text; n.label.textContent = text; }
+  }
+
+  // World-to-screen for the pinned objective markers; off-screen ones ride the edge and point at their target.
+  #updateMarks(view, me, points) {
+    const cam = this.camera;
+    if (!cam) return;
+    const W = this.viewW, H = this.viewH;
+    const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements;
+    const y = MARK_Y[this.mode] ?? 3;
+    const n = Math.min(points.length, this.objNodes.length);
+    for (let i = 0; i < n; i++) {
+      const pt = points[i], m = this.objNodes[i].mark;
+      this.#paintPoint(m, pt, i, me.team);
+      // Standing on it, the ring around your feet says everything a marker would.
+      const near = me.alive && Math.hypot(pt.x - me.x, pt.z - me.z) <= (pt.r ?? 4);
+      if (near !== m.shown) { m.shown = near; m.root.style.opacity = near ? '0' : '1'; }
+      if (near) continue;
+      const vx = v[0] * pt.x + v[4] * y + v[8] * pt.z + v[12], vy = v[1] * pt.x + v[5] * y + v[9] * pt.z + v[13], vz = v[2] * pt.x + v[6] * y + v[10] * pt.z + v[14];
+      const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15];
+      if (w <= 0.01) continue;
+      const nx = (p[0] * vx + p[8] * vz + p[12]) / w, ny = (p[5] * vy + p[9] * vz + p[13]) / w;
+      let sx = (nx * 0.5 + 0.5) * W, sy = (0.5 - ny * 0.5) * H;
+      const dx = sx - W / 2, dy = sy - H / 2;
+      const off = sx < MARK_PAD_L || sx > W - MARK_PAD_R || sy < MARK_PAD_T || sy > H - MARK_PAD_B;
+      let edge = 1;
+      if (off) {
+        const kx = dx > 0 ? (W - MARK_PAD_R - W / 2) / dx : dx < 0 ? (MARK_PAD_L - W / 2) / dx : Infinity;
+        const ky = dy > 0 ? (H - MARK_PAD_B - H / 2) / dy : dy < 0 ? (MARK_PAD_T - H / 2) / dy : Infinity;
+        edge = Math.min(kx, ky);
+      }
+      const px = Math.round(W / 2 + dx * edge), py = Math.round(H / 2 + dy * edge);
+      if (px !== m.x || py !== m.y) {
+        m.x = px; m.y = py;
+        m.root.style.transform = `translate3d(${px}px,${py}px,0)`;
+      }
+      if (off !== m.off) { m.off = off; m.root.classList.toggle('off', off); }
+      if (off) {
+        const a = Math.round(Math.atan2(dy, dx) * 12) / 12;
+        if (a !== m.a) { m.a = a; m.arrow.style.transform = `rotate(${a}rad) translateX(23px)`; }
+      }
+    }
+  }
+
+  // The bar under the chips: what is happening on the point the local player is standing on.
+  #updateMeter(view, me, c, points) {
+    let state = '', frac = 0, side = '';
+    if (points && me.alive) {
+      const hard = this.mode === 'hard';
+      for (let i = 0; i < points.length; i++) {
+        const pt = points[i];
+        if (Math.hypot(pt.x - me.x, pt.z - me.z) > (pt.r ?? 4)) continue;
+        const label = hard ? 'Zone' : pointLabel(pt, i);
+        const capVal = pt.capture ?? 0;
+        const mine = (capVal > 0 ? 1 : 0) === me.team;
+        if (pt.contested) { state = hard ? 'Contested' : `${label} Contested`; side = 'contest'; frac = Math.abs(capVal) || 1; }
+        else if (hard) { state = pt.owner === me.team ? 'Holding Zone' : 'Taking Zone'; side = 'mine'; frac = Math.abs(capVal) || (pt.owner === me.team ? 1 : 0); }
+        else if (Math.abs(capVal) > 0.005) { state = mine ? `Capturing ${label}` : `Losing ${label}`; side = mine ? 'mine' : 'enemy'; frac = Math.abs(capVal); }
+        else if (pt.owner !== me.team) { state = `Capturing ${label}`; side = 'mine'; frac = 0; }
+        break;
+      }
+    }
+    if (state !== c.objState) {
+      c.objState = state;
+      this.objMeter.hidden = !state;
+      this.objMeterText.textContent = state;
+      this.objMeter.dataset.side = side;
+    }
+    const shown = Math.round(frac * 40) / 40;
+    if (shown !== c.objFrac) {
+      c.objFrac = shown;
+      this.objMeterFill.style.transform = `scaleX(${shown})`;
+    }
+  }
+
+  #updateHardTimer(view, c) {
+    if (this.mode !== 'hard') return;
+    const shown = Math.max(0, Math.ceil(view.hardT ?? 0));
+    if (shown !== c.hardShown) {
+      c.hardShown = shown;
+      this.objTimerNum.textContent = `${Math.floor(shown / 60)}:${pad2(shown % 60)}`;
+      const warn = shown <= HARD_WARN;
+      this.objTimer.classList.toggle('warn', warn);
+      if (warn && shown > 0 && !this.hardWarned && view.phase === 'live') {
+        this.hardWarned = true;
+        this.#banner('Hardpoint Moving', `${shown} seconds`, 1400);
+      }
+      if (!warn) this.hardWarned = false;
     }
   }
 
