@@ -37,7 +37,17 @@ const MARK_CLEAR = 30;           // A marker's radius plus its arrow: how far a 
 const MARK_WALK = 0.05;          // Fraction of the way in per step when walking a marker clear.
 const MARK_Y = { dom: 4.3, hard: 3.6 };   // Metres above the ground to pin a marker: flag tip or zone wall.
 const HARD_WARN = 5;             // Seconds of warning before a hardpoint moves.
-const DPS_WINDOW = 2.4;          // Seconds of hits averaged into the live damage readout.
+const DPS_WINDOW = 2.4;
+const INCOMING_WARN_M = 9;       // An enemy shell landing this close gets a callout.
+const INCOMING_GAP_MS = 1500;    // A five-shell barrage is one warning, not five.
+const STATIC_FRAMES = 3;         // Pre-drawn noise frames the jammed minimap cycles through.
+// Feed wording per streak, after its name: "Enemy Airstrike inbound".
+const STREAK_VERB = {
+  uav: 'online', jammer: 'jamming radar', resupply: 'dropped', turret: 'deployed', mortar: 'firing',
+  strike: 'inbound', overwatch: 'online', chopper: 'overhead', emp: 'detonated', gunship: 'overhead',
+};
+// Enemy streaks the local player should react to right now.
+const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP!' };          // Seconds of hits averaged into the live damage readout.
 const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.
 const TIPS = [
   'Slide through a doorway to shrink as a target.',
@@ -52,7 +62,7 @@ const MEDALS = {
   capture: ['Captured', `+${SCORE.capture}`], defend: ['Defended', `+${SCORE.defend}`],
   first_blood: ['First Blood', 'Round opener'], double: ['Double Kill', '2 in quick order'], triple: ['Triple Kill', '3 in quick order'],
   fury: ['Fury Kill', '4 or more'], revenge: ['Revenge', 'Settled the score'], longshot: ['Longshot', 'From across the yard'],
-  streak3: ['Three Streak', 'UAV earned'], streak5: ['Five Streak', 'Strike earned'], streak10: ['Ten Streak', 'Unbroken'],
+  streak3: ['Three Streak', 'On a run'], streak5: ['Five Streak', 'Unstoppable'], streak10: ['Ten Streak', 'Unbroken'],
 };
 
 const CALLOUT_POP = [
@@ -860,7 +870,12 @@ export class HUD {
           }
           break;
         case 'streak': this.#onStreak(e); break;
-        case 'streak_denied': if (e.id === this.view?.localId) this.#callout(STREAK_DENY_TEXT[e.reason] ?? 'Unavailable'); break;
+        case 'streak_denied': this.#onDenied(e); break;
+        case 'incoming': this.#onIncoming(e); break;
+        case 'emp': this.#onEmp(e); break;
+        case 'pulse': this.#onPulse(e); break;
+        case 'zap': if (e.by === this.view?.localId) this.notify('Trophy stopped a grenade'); break;
+        case 'decoy': if (e.by === this.view?.localId) this.notify('Decoy firing'); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
         case 'capture': this.#onCapture(e); break;
@@ -990,8 +1005,43 @@ export class HUD {
     if (!p || !me) return;
     const friendly = p.team === me.team;
     const name = STREAKS[e.kind]?.name ?? e.kind;
-    const verb = { uav: 'UAV online', strike: `${name} inbound`, turret: `${name} deployed`, gunship: 'Gunship overhead', chopper: `${name} overhead`, emp: `${name} detonated`, jammer: `${name} active` }[e.kind] ?? `${name} called in`;
-    this.notify(`${friendly ? '' : 'Enemy '}${verb}`);
+    const verb = STREAK_VERB[e.kind] ?? 'called in';
+    this.notify(`${friendly ? '' : 'Enemy '}${name} ${verb}`);
+    // The ones that change what this player can see or do get a callout as well as a feed line.
+    if (!friendly && STREAK_WARN[e.kind]) this.#callout(STREAK_WARN[e.kind]);
+    else if (p.id === me.id) this.#callout(`${name} ${verb}`);
+  }
+
+  // The tile already says why; this makes the refusal felt at the moment of the tap.
+  #onDenied(e) {
+    if (e.id !== this.view?.localId) return;
+    const name = STREAKS[e.kind]?.name ?? e.kind;
+    this.#callout(`${name}: ${STREAK_DENY_TEXT[e.reason] ?? 'Unavailable'}`);
+  }
+
+  // Mortar shells are announced before they land; only enemy shells near this player are worth a shout.
+  #onIncoming(e) {
+    const me = this.view && this.#findLocal(this.view);
+    if (!me?.alive || e.team === me.team) return;
+    if (Math.hypot(e.x - me.x, e.z - me.z) > INCOMING_WARN_M) return;
+    const now = performance.now();
+    if (now - (this.incomingAt ?? -1e9) < INCOMING_GAP_MS) return;
+    this.incomingAt = now;
+    this.#callout('Incoming! Move');
+  }
+
+  #onEmp(e) {
+    const me = this.view && this.#findLocal(this.view);
+    if (!me || e.team !== me.team) return;
+    this.#banner('EMP', 'Your air, sentries and radar are down', 2000, 'enemy');
+  }
+
+  #onPulse(e) {
+    const me = this.view && this.#findLocal(this.view);
+    if (!me?.alive || e.by === me.id) return;
+    const owner = this.view.players.find(p => p.id === e.by);
+    if (!owner || owner.team === me.team) return;
+    if (Math.hypot(e.x - me.x, e.z - me.z) <= (e.r ?? 0)) this.#callout('Sensor: you are marked');
   }
 
   #pushFeed(html, mine = false) {
@@ -1070,6 +1120,7 @@ export class HUD {
       this.mmCanvas.style.height = this.mmCanvas.parentNode.style.height = `${(shape / MM_SCALE).toFixed(1)}px`;
     }
     const W = this.mmCanvas.width, H = this.mmCanvas.height;
+    this.staticSet = null;           // Jammed snow is drawn over this map's walls.
     const base = this.mmBase ??= document.createElement('canvas');
     base.width = W;
     base.height = H;
@@ -1093,9 +1144,20 @@ export class HUD {
     const myTeam = me.team;
     const myUav = view.uav[myTeam] > 0;
     const enemyUav = view.uav[1 - myTeam] > 0;
-    if (enemyUav !== this.cache.enemyUav) {
-      this.cache.enemyUav = enemyUav;
-      this.mmTag.hidden = !enemyUav;
+    const jammed = !!view.jammed;
+    const tag = jammed ? 'Jammed' : enemyUav ? 'Enemy UAV' : '';
+    if (tag !== this.cache.mmTag) {
+      this.cache.mmTag = tag;
+      this.mmTag.hidden = !tag;
+      this.mmTag.textContent = tag;
+      this.mmCanvas.parentNode.classList.toggle('jammed', jammed);
+    }
+    // Jammed: the radar shows snow and nothing on it can be trusted, so only the local player's own arrow stays.
+    if (jammed) {
+      const frames = this.#staticFrames();
+      g.drawImage(frames[(this.staticTick = ((this.staticTick ?? 0) + 1) % STATIC_FRAMES)], 0, 0);
+      this.#drawSelf(g, me, sx, sz);
+      return;
     }
 
     // UAV: a sweep ring expanding from the local player. Drawn before the markers so they stay crisp.
@@ -1153,6 +1215,37 @@ export class HUD {
 
     this.#drawDeployables(view, myTeam, sx, sz, g);
 
+    this.#drawSelf(g, me, sx, sz);
+  }
+
+  // Built on first use per map size; afterwards a jammed frame is a single drawImage.
+  #staticFrames() {
+    const W = this.mmCanvas.width, H = this.mmCanvas.height;
+    if (this.staticSet?.w === W && this.staticSet.h === H) return this.staticSet.frames;
+    const frames = [];
+    for (let f = 0; f < STATIC_FRAMES; f++) {
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const g = c.getContext('2d');
+      g.globalAlpha = 0.55;
+      g.drawImage(this.mmBase, 0, 0);
+      g.globalAlpha = 1;
+      const img = g.getImageData(0, 0, W, H), d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (Math.random() < 0.5) continue;
+        const v = 60 + Math.random() * 170;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+      g.putImageData(img, 0, 0);
+      g.fillStyle = 'rgba(29,35,43,.35)';
+      for (let y = f; y < H; y += 6) g.fillRect(0, y, W, 2);
+      frames.push(c);
+    }
+    this.staticSet = { w: W, h: H, frames };
+    return frames;
+  }
+
+  #drawSelf(g, me, sx, sz) {
     if (me.alive) {
       const x = me.x * sx, y = me.z * sz, a = me.aim;
       g.fillStyle = '#fff';

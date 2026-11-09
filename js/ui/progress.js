@@ -31,7 +31,7 @@
 // The rules live in js/shared/progression.js; this module owns the save and applies them.
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
 import { PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
-import { normalizeLoadout, SCORE, PERKS } from '../shared/catalog.js';
+import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator } from './operators.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor } from '../shared/attachments.js';
@@ -158,19 +158,11 @@ function gateGun(id, list, fallback) {
   return gunOpen(fallback) ? fallback : list.find(gunOpen) ?? fallback;
 }
 
-// One perk per tier, and only perks the player has reached: gateLoadoutGear knows the old two-slot shape.
-function gatePerks(perks) {
-  return perks.map((id, tier) => {
-    if (itemUnlockLevel('perk', id) <= data.peakLevel) return id;
-    return Object.values(PERKS).find(p => p.tier === tier && itemUnlockLevel('perk', p.id) <= data.peakLevel)?.id ?? id;
-  });
-}
-
 function matchLoadout(saved, wanted = saved.primary) {
   const primary = gateGun(wanted, PRIMARY_IDS, 'ar');
   const secondary = gateGun(saved.secondary, SECONDARY_IDS, 'pistol');
   const base = normalizeLoadout({ ...saved, primary, secondary, attachments: saved.attachments });
-  const gear = { ...gateLoadoutGear(base, data.peakLevel), perks: gatePerks(base.perks) };
+  const gear = gateLoadoutGear(base, data.peakLevel);    // One perk per tier, through catalog gatePerks.
   return {
     ...gear,
     name: saved.name,

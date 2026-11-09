@@ -21,11 +21,10 @@ const PANELS = {
     <div class="help-streaks">
       <div class="help-strip">${Object.values(STREAKS).map(s => `<span class="help-chip">${glyph(s.id)}<b>${esc(s.name)}</b><em>${s.cost}</em></span>`).join('')}</div>
       <ol class="help-rules">
-        <li>Kills score 100, headshots +25, assists 50. Score survives death.</li>
-        <li>You carry three streaks. Each is granted once your score reaches its cost, and they do not stack.</li>
-        <li>Once nothing left can still be earned, your score is <b>capped</b> and stops rising.</li>
-        <li>Calling a streak while capped resets score to 0 and clears all blocks.</li>
-        <li>Calling one early keeps your score, but that streak is <b>blocked</b> until the next reset.</li>
+        <li>Kills score 100, headshots +25, assists 50. <b>Dying resets your score to 0</b>, but streaks you already hold stay.</li>
+        <li>You carry three. Each is granted when your score reaches its cost. Hardline makes them 15% cheaper.</li>
+        <li>Once nothing left can be earned your score is <b>capped</b>; calling one then resets it and clears blocks. Calling early keeps your score but <b>blocks</b> that streak until the next reset.</li>
+        <li><b>Airspace</b> holds a few aircraft at once and one Gunship per team. A refused call keeps the streak and its tile says why: Already up or Airspace full.</li>
       </ol>
     </div>`,
   modes: () => `
