@@ -4,6 +4,7 @@ import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
 import { PERKS, TACTICALS, LETHALS, STREAKS, normalizeLoadout } from './catalog.js';
 import { PRIMARY_IDS, WEAPON_IDS } from './constants.js';
 import { attachmentsFor } from './attachments.js';
+import { WEAPONS } from './weapons.js';
 
 export const SAVE_VERSION = 2;
 export const MAX_LEVEL = 50;
@@ -66,7 +67,7 @@ export const UNLOCK_SCHEDULE = [
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 
-export const ITEM_TABLES = { perk: PERKS, tactical: TACTICALS, lethal: LETHALS, streak: STREAKS };
+export const ITEM_TABLES = { perk: PERKS, tactical: TACTICALS, lethal: LETHALS, streak: STREAKS, weapon: WEAPONS };
 
 // Anything added to the catalog without a schedule line is available from level 1, never accidentally hidden.
 export function itemUnlockLevel(kind, id) {
