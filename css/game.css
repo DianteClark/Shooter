@@ -487,3 +487,96 @@ button {
 .obj-banner small { font: 13px/1.15 var(--body); letter-spacing: 0; color: var(--haze); margin-top: 1px; }
 .obj-banner[data-side="mine"] b { color: var(--my-team); }
 .obj-banner[data-side="enemy"] b { color: var(--enemy-team); }
+
+/* Every tappable element shows the press the instant the finger lands (js/ui/tap.js sets .pressed). */
+.pressed:not(.scorebar) { transform: scale(.955); filter: brightness(1.28); transition: none; }
+.scorebar.pressed .sb-time, .scorebar.pressed .sb-side { filter: brightness(1.28); }
+button:disabled.pressed { transform: none; filter: none; }
+button { transition: transform .12s ease-out, filter .12s ease-out; }
+
+/* Controlled throws: a line and label that follow the thumb from the button. */
+.throw-rig { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; will-change: transform; }
+.tr-range { position: absolute; left: 0; top: 0; border-radius: 50%; border: 1.5px dashed rgba(242,166,59,.32); background: radial-gradient(circle, rgba(242,166,59,.1), transparent 70%); }
+.tr-line { position: absolute; left: 0; top: -2px; width: 1px; height: 4px; transform-origin: left center; background: linear-gradient(90deg, rgba(242,166,59,.25), var(--sodium)); will-change: transform; }
+.tr-dot { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 0 2.5px var(--sodium), 0 0 12px rgba(242,166,59,.7); will-change: transform; }
+.tr-label { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; padding: 3px 10px 4px; background: rgba(29,35,43,.88); white-space: nowrap; will-change: transform; }
+.tr-label b { font: 400 22px/1 var(--stencil); color: var(--sodium); }
+.tr-label small { font: 10px/1.1 var(--body); letter-spacing: 0; color: var(--haze); }
+.throw-rig.cancel .tr-line, .throw-rig.cancel .tr-range { opacity: .35; }
+.throw-rig.cancel .tr-dot { box-shadow: 0 0 0 2.5px var(--red); }
+.throw-rig.cancel .tr-label b { color: var(--red); }
+.throwing .tbtn:not(.down), .throwing .st-row { opacity: .4; }
+.tbtn.aiming { background: rgba(242,166,59,.32); box-shadow: inset 0 0 0 2.5px var(--sodium); transform: scale(1.06); }
+.tbtn.throw-cancel { background: rgba(255,77,61,.42); box-shadow: inset 0 0 0 2.5px var(--red); }
+.tbtn.deny { animation: btn-deny .28s; }
+@keyframes btn-deny { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+/* Left-handed: move stick right, aim and buttons left; the feed moves away from the buttons. */
+.controls.lefty .rest-l { left: auto; right: calc(var(--sr) + 118px); }
+.controls.lefty .rest-r { right: auto; left: calc(var(--sl) + 205px); }
+.controls.lefty .tbtn-slide { right: auto; left: calc(var(--sl) + 14px); }
+.controls.lefty .tbtn-swap { right: auto; left: calc(var(--sl) + 14px); }
+.controls.lefty .tbtn-tactical { right: auto; left: calc(var(--sl) + 86px); }
+.controls.lefty .tbtn-lethal { right: auto; left: calc(var(--sl) + 14px); }
+.controls.lefty .aim-hint { right: auto; left: calc(var(--sl) + 92px); text-align: left; }
+.hud.lefty .feed { left: auto; right: calc(var(--sr) + 8px); align-items: flex-end; top: calc(var(--st) + 50px); }
+.hud.lefty .minimap { left: auto; right: calc(var(--sr) + 8px); top: calc(var(--st) + 42px); }
+.hud.lefty .feed { top: calc(var(--st) + 132px); }
+.hud.lefty .corner { right: auto; left: calc(var(--sl) + 8px); }
+
+/* --- Match intro: the roster reveal over the warmup --- */
+.intro { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 18px; pointer-events: none; background: linear-gradient(90deg, rgba(29,35,43,.92), rgba(29,35,43,.55) 30%, rgba(29,35,43,.55) 70%, rgba(29,35,43,.92)); padding: calc(var(--st) + 56px) max(var(--sr), 18px) calc(var(--sb) + 76px) max(var(--sl), 18px); }
+.intro.show { display: flex; animation: intro-in .25s ease-out both; }
+@keyframes intro-in { from { opacity: 0; } }
+.in-team { width: 210px; display: flex; flex-direction: column; gap: 3px; }
+.in-team h3 { font: 400 22px/1 var(--stencil); color: var(--team); margin-bottom: 4px; }
+.in-team:last-child { text-align: right; }
+.in-team:last-child .in-row { flex-direction: row-reverse; }
+.in-row { display: flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 12px; background: rgba(47,57,68,.75); box-shadow: inset 3px 0 0 var(--team); animation: in-row .34s cubic-bezier(.2,.9,.3,1) both; animation-delay: calc(var(--i) * 75ms + 140ms); }
+.in-team:last-child .in-row { box-shadow: inset -3px 0 0 var(--team); }
+.in-row.me { background: var(--team); color: var(--ballast); }
+@keyframes in-row { from { opacity: 0; transform: translateX(-24px); } }
+.in-team:last-child .in-row { animation-name: in-row-r; }
+@keyframes in-row-r { from { opacity: 0; transform: translateX(24px); } }
+.in-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; animation: stamp-in .5s cubic-bezier(.2,.9,.3,1) .1s both; }
+@keyframes stamp-in { from { opacity: 0; transform: scale(1.7); } }
+.in-mid small { font-size: 12px; color: var(--sodium); letter-spacing: .12em; }
+.in-mid h2 { font: 400 54px/.95 var(--stencil); color: var(--chalk); text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+.in-vs { font: 400 20px/1 var(--stencil); color: var(--haze); margin: 4px 0; }
+.in-mid p { font: 12.5px/1.25 var(--body); letter-spacing: 0; color: #c8ced3; max-width: 30ch; }
+
+/* --- Streak ready: the HUD moment --- */
+.streak-hit { position: absolute; left: 50%; top: 44%; display: flex; flex-direction: column; align-items: center; padding: 8px 30px 10px; background: var(--sodium); color: var(--ballast); opacity: 0; pointer-events: none; white-space: nowrap; --cut: 12px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.streak-hit b { font: 400 42px/1 var(--stencil); }
+.streak-hit small { font-size: 11px; }
+.streak-edge { position: absolute; inset: 0; opacity: 0; pointer-events: none; box-shadow: inset 0 -44px 60px -22px rgba(242,166,59,.7); }
+
+.respawn-flash { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 56%, rgba(255,247,226,.55), rgba(75,209,138,.1) 60%, transparent); }
+
+/* Death flow: the name lands, then the count. */
+.death.show .death-head { animation: death-in .34s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes death-in { from { opacity: 0; transform: translateY(-16px) scale(1.08); } }
+.death.show .picker { animation: list-in .3s .15s both; }
+
+.board-leave { align-self: flex-end; margin-top: 4px; height: 30px; padding: 0 12px; font-size: 11px; color: var(--chalk); background: rgba(255,77,61,.55); pointer-events: auto; }
+
+/* Firing range readout */
+.range-panel { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 44px); width: 158px; padding: 6px 8px; background: rgba(29,35,43,.86); box-shadow: inset 2px 0 0 var(--sodium); display: flex; flex-direction: column; gap: 3px; pointer-events: auto; }
+.rp-head { font-size: 10px; color: var(--sodium); letter-spacing: .1em; }
+.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+.rp-grid div { display: flex; flex-direction: column; }
+.rp-grid span { font-size: 9px; color: var(--haze); }
+.rp-grid b { font: 400 18px/1 var(--stencil); }
+.rp-big { grid-column: 1 / -1; flex-direction: row !important; align-items: baseline; gap: 6px; }
+.rp-big b { font-size: 36px; color: var(--chalk); }
+.rp-reset, .range-leave { height: 32px; font-size: 11px; background: rgba(76,90,103,.9); pointer-events: auto; }
+.range-leave { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 92px); padding: 0 14px; }
+.hud.range-on .scorebar, .hud.range-on .minimap { display: none; }
+.hud.range-on .range-leave { top: calc(var(--st) + 8px); }
+.hud.range-on .feed { left: calc(var(--sl) + 176px); top: calc(var(--st) + 8px); }
+.hud.lefty .range-panel { left: auto; right: calc(var(--sr) + 8px); }
+@media (prefers-reduced-motion: reduce) { .intro.show, .in-row, .in-mid, .xp-row { animation: none; } }
+.rp-wide { grid-column: 1 / -1; }
+.rp-wide b { font-size: 15px; }
+.rp-model { grid-column: 1 / -1; font: 10px/1.1 var(--body); letter-spacing: 0; color: var(--haze); }
+.route.lit:not(.primary) { color: var(--ballast); }
+.route.lit:not(.primary) .lamp { background: var(--ballast); }

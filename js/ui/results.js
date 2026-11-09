@@ -4,7 +4,7 @@ import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
 import { matchScore } from './progress.js';
-import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, itemMark } from './widgets.js';
+import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, itemMark, countUp } from './widgets.js';
 import { kindLabel } from './prestige.js';
 
 const FILL_MS = 520;
@@ -120,25 +120,25 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   menu.el.innerHTML = `
     <div class="res-top enter" data-outcome="${outcome}">
       <h2>${outcome === 'win' ? 'Victory' : outcome === 'loss' ? 'Defeat' : 'Stalemate'}</h2>
-      <span class="res-score">${scores[myTeam]}<i>-</i>${scores[1 - myTeam]}</span>
+      <span class="res-score"><u class="rs-mine">0</u><i>-</i><u class="rs-them">0</u></span>
       ${mvp ? `<div class="mvp-tag" style="--team:${TEAMS[mvp.team].css}"><span>MVP</span><b>${esc(mvp.name)}</b><small>${matchScore(mvp)} pts</small></div>` : ''}
       <button class="back res-skip" data-act="resSkip">Skip</button>
     </div>
     <div class="rb-pair enter">${board(myTeam)}${board(1 - myTeam)}</div>
     <div class="res-cards enter">
-      <div class="finalcard">
+      <div class="finalcard${fk ? '' : ' none'}">
         <div class="fk-canvas"></div>
-        <div class="fk-cap">${fk ? `Final kill<br><b>${esc(fk.byName)}</b> on <b>${esc(fk.targetName)}</b><br>${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}` : 'No final kill'}</div>
+        <div class="fk-cap">${fk ? `Final kill<br><b>${esc(fk.byName)}</b> on <b>${esc(fk.targetName)}</b><br>${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}` : 'The last round ended without a kill'}</div>
       </div>
       <div class="xp-card">
-        <div class="xp-head"><b>+${xp?.total ?? 0} XP</b><span class="xp-lv">${badgeMark(lp.prestige ?? 0, 16)}<b class="xp-lvn">Lv ${startLevel}</b></span></div>
-        <div class="xp-lines">${(xp?.lines ?? []).map(([label, amount]) => `<div class="xp-row"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('')}</div>
+        <div class="xp-head"><b>+<u class="xp-total">0</u> XP</b><span class="xp-lv">${badgeMark(lp.prestige ?? 0, 16)}<b class="xp-lvn">Lv ${startLevel}</b></span></div>
+        <div class="xp-lines">${(xp?.lines ?? []).map(([label, amount], i) => `<div class="xp-row" style="--i:${i}"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('') || '<small class="empty">No XP this time</small>'}</div>
         <i class="xp big"><i class="xp-fill xp-player" style="transform:scaleX(0)"></i></i>
         ${lp.canPrestige ? '<small class="res-prestige">Prestige available</small>' : ''}
       </div>
       <div class="wp-card">
         <h4>Weapons</h4>
-        ${weapons.length ? weapons.map(weaponRow).join('') : '<small>No weapon kills this match</small>'}
+        ${weapons.length ? weapons.map(weaponRow).join('') : '<small class="empty">No weapon kills this match</small>'}
       </div>
       <div class="res-choice">
         <button class="route primary" data-act="resRematch"><i class="lamp"></i><b>${esc(data.rematchLabel)}</b></button>
@@ -147,6 +147,9 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       </div>
     </div>`;
   menu.on({ resRematch: rematch, resMenu: toMenu });
+  countUp(menu.el.querySelector('.rs-mine'), 0, scores[myTeam], 600);
+  countUp(menu.el.querySelector('.rs-them'), 0, scores[1 - myTeam], 600);
+  countUp(menu.el.querySelector('.xp-total'), 0, xp?.total ?? 0, 900);
   if (fk) menu.previewMount(menu.el.querySelector('.fk-canvas'), fk.weapon, fk.camo, undefined);
 
   // The reel runs over a live screen: Rematch and Menu always work, and leaving kills it.

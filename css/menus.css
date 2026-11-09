@@ -472,3 +472,57 @@
 .lobby-foot .skills { flex-wrap: nowrap; }
 .lobby-foot .seg { padding: 0 7px; }
 .lobby-foot .route:not(.small) { padding: 0 10px; white-space: nowrap; }
+
+/* --- Wave 4 polish --- */
+.routes { gap: 5px; }
+.routes .route { height: 37px; font-size: 14px; }
+.routes.tight .route { height: 33px; font-size: 13px; }
+.route-pair .route { justify-content: center; }
+.screen-wipe { position: absolute; left: 0; top: -4%; width: 26%; height: 108%; pointer-events: none; z-index: 30; transform: translate3d(-120%,0,0); background: rgba(242,166,59,.34); will-change: transform; }
+
+/* Options */
+.opt-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 0 4px; }
+.opt-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.opt-col h4 { font: 400 14px/1 var(--stencil); color: var(--sodium); margin: 6px 0 0; }
+.opt-row { display: flex; align-items: center; gap: 8px; min-height: 42px; }
+.opt-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.opt-name b { font: 400 14px/1.1 var(--plate-face); }
+.opt-name small { font: 10.5px/1.1 var(--body); letter-spacing: 0; color: var(--haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opt-step { flex: none; width: 42px; height: 40px; background: var(--steel); font: 400 24px/1 var(--stencil); --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.opt-bar { flex: none; width: 64px; height: 6px; background: rgba(231,234,228,.18); overflow: hidden; }
+.opt-bar i { display: block; height: 100%; background: var(--sodium); transform-origin: left center; transform: scaleX(0); transition: transform .12s; }
+.opt-val { flex: none; width: 42px; text-align: center; font: 400 15px/1 var(--plate-face); font-style: normal; color: var(--chalk); }
+.opt-segs { display: flex; gap: 3px; }
+.opt-toggle { width: 86px; height: 40px; position: relative; background: var(--steel); display: flex; align-items: center; justify-content: center; }
+.opt-toggle b { font: 400 14px/1 var(--plate-face); }
+.opt-toggle.on { background: var(--go); color: var(--ballast); }
+.opt-note { margin-top: auto; font: 12px/1.2 var(--body); letter-spacing: 0; color: var(--haze); }
+
+/* How to play */
+.help-tabs { display: flex; gap: 3px; margin-left: auto; }
+.help-body { flex: 1; min-height: 0; padding-top: 8px; }
+.help-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; height: 100%; align-content: start; }
+.help-card { background: var(--steel); padding: 10px 12px; min-height: 0; --cut: 8px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.help-card.wide { grid-column: 1 / -1; }
+.help-card h4 { font: 400 16px/1.05 var(--stencil); color: var(--sodium); margin-bottom: 4px; }
+.help-card p { font: 13px/1.28 var(--body); letter-spacing: 0; color: #d4d9de; }
+.help-streaks { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+.help-strip { display: flex; gap: 6px; }
+.help-chip { flex: 1; display: flex; align-items: center; gap: 6px; background: var(--steel); padding: 7px 10px; }
+.help-chip svg { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--chalk); stroke-width: 2.4; }
+.help-chip b { font: 400 13px/1 var(--plate-face); }
+.help-chip em { margin-left: auto; font: 400 15px/1 var(--stencil); font-style: normal; color: var(--sodium); }
+.help-rules { list-style: none; counter-reset: rule; display: flex; flex-direction: column; gap: 5px; }
+.help-rules li { counter-increment: rule; position: relative; padding: 7px 10px 7px 34px; font: 14px/1.2 var(--body); letter-spacing: 0; background: rgba(47,57,68,.7); }
+.help-rules li::before { content: counter(rule); position: absolute; left: 10px; top: 6px; font: 400 18px/1 var(--stencil); color: var(--sodium); }
+.help-rules b { color: var(--sodium); font-weight: 400; }
+
+/* Empty states read as a designed line, never a blank box. */
+small.empty { display: block; padding: 10px 2px; color: var(--haze); font-size: 12px; }
+
+/* Staggered entries on results */
+.xp-row { animation: list-in .28s both; animation-delay: calc(var(--i) * 70ms + 200ms); }
+@keyframes list-in { from { opacity: 0; transform: translateX(-10px); } }
+.res-score u { text-decoration: none; }
+.xp-head u { text-decoration: none; }
+.finalcard.none .fk-cap { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 10px; font-size: 12px; color: var(--haze); background: none; }

@@ -52,3 +52,17 @@ export function swatchCss(c) {
 
 // Requirement line for a locked item: consistent wording everywhere one can appear.
 export const levelRequirement = level => `Unlocks at level ${level}`;
+
+// Rolls an element's number from `from` to `to`, for results and other moments that deserve a beat.
+export function countUp(el, from, to, ms = 700, format = n => Math.round(n)) {
+  if (!el) return;
+  const t0 = performance.now();
+  const step = now => {
+    if (!el.isConnected) return;
+    const f = Math.min(1, (now - t0) / ms), eased = 1 - (1 - f) ** 3;
+    el.textContent = format(from + (to - from) * eased);
+    if (f < 1) requestAnimationFrame(step);
+  };
+  el.textContent = format(from);
+  requestAnimationFrame(step);
+}

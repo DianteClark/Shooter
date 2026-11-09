@@ -3,6 +3,7 @@ import { Match } from './game/match.js';
 import { GameRenderer } from './render/renderer.js';
 import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
+import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
 import { MODES } from './shared/modes.js';
 import { normalizeLoadout } from './shared/catalog.js';
@@ -17,19 +18,27 @@ import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
+import { installTaps } from './ui/tap.js';
+import { Options } from './ui/options.js';
 
 const GAME_NAME = 'Switchyard';
+const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
 const NET_POLL_MS = 1000;
 const REMATCH_SECONDS = 15;
 const VOTE_REVEAL_MS = 1700;
-const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad'];   // A lobby update must not pull a guest out of these.
+const REJOIN_MINUTES = 15;       // How long after dropping the title screen still offers the way back.
+const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help'];   // A lobby update must not pull a guest out of these.
+const LAST_ROOM = 'switchyard-last-room';
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
 // Test hooks: ?limit=N shortens a match, ?vote=N shortens the vote, and ?map=&mode= skip the solo picker.
 const LIMIT_OVERRIDE = Number(params.get('limit')) || 0;
 const VOTE_SECONDS = Number(params.get('vote')) || 10;
 
-const limitsFor = mode => ({ scoreLimit: LIMIT_OVERRIDE || MODES[mode].scoreLimit, timeLimit: MODES[mode].timeLimit });
+const limitsFor = mode => {
+  const m = mode === 'range' ? RANGE_MODE : MODES[mode];
+  return { scoreLimit: LIMIT_OVERRIDE || m.scoreLimit, timeLimit: m.timeLimit };
+};
 
 document.title = GAME_NAME;
 
@@ -51,11 +60,11 @@ const app = {
   netPoll: 0,
   lobby: { humans: [], botSkill: 'mixed' },
   inMatch: false,
-  dead: new Set(),          // Peers dropped during the current match; they cannot be seated back in.
+  dead: new Set(),          // Peers dropped during the current match; the same player id gets its slot back.
+  matchInfo: null,          // The current match's start message, so a returning player can be sent it again.
   rematch: null,            // Host only: { left, timer } while the auto-start countdown runs.
   countdown: null,          // Seconds left in the rematch countdown as last announced; null when none.
   rematchWait: false,       // Guest pressed Rematch and is waiting for the host to do the same.
-  soloRematch: false,       // The session is gone, so the results screen's Rematch now starts a solo match.
   vote: null,               // { key, options, votes (host) or counts (guest), left, winner, mine }
   soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
 };
@@ -65,9 +74,21 @@ function blockIosGestures() {
   document.addEventListener('gesturestart', stop, { passive: false });
   document.addEventListener('gesturechange', stop, { passive: false });
   document.addEventListener('dblclick', stop, { passive: false });
-  // Nothing in the app scrolls, so a stray drag must never rubber-band Safari's page.
-  // The one exception is the save code boxes, which need to scroll and take selection and paste.
-  document.addEventListener('touchmove', e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); }, { passive: false });
+  // Nothing in the app scrolls, so a real drag must never rubber-band Safari's page. A touch only counts as a drag
+  // past the tap slop: default-preventing the small moves inside a tap is exactly what makes iOS drop the click.
+  // The save code boxes are the exception, because they need to scroll and take selection and paste.
+  const startAt = new Map();
+  document.addEventListener('touchstart', e => { for (const t of e.changedTouches) startAt.set(t.identifier, [t.clientX, t.clientY]); }, { passive: true, capture: true });
+  const forget = e => { for (const t of e.changedTouches) startAt.delete(t.identifier); };
+  document.addEventListener('touchend', forget, { passive: true, capture: true });
+  document.addEventListener('touchcancel', forget, { passive: true, capture: true });
+  document.addEventListener('touchmove', e => {
+    if (e.target.tagName === 'TEXTAREA' || !e.cancelable) return;
+    for (const t of e.changedTouches) {
+      const at = startAt.get(t.identifier);
+      if (at && Math.hypot(t.clientX - at[0], t.clientY - at[1]) > DRAG_SLOP) { e.preventDefault(); return; }
+    }
+  }, { passive: false });
   // Safari still offers text selection on long-press through some layered elements.
   const unlessField = e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); };
   document.addEventListener('selectstart', unlessField);
@@ -97,14 +118,34 @@ function goTitle(message) {
   teardownNet();
   stopRematch();
   stopVote();
-  app.soloRematch = false;
   app.countdown = null;
   app.rematchWait = false;
   app.lobby = { humans: [], botSkill: 'mixed' };
   hud.setVisible(false);
   menu.overlay('');
-  menu.title();
+  showTitle();
   if (message) menu.toast(message);
+}
+
+// A match this device left without finishing, recent enough that its room may still be alive.
+function rejoinOffer() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAST_ROOM) || 'null');
+    if (saved?.code && Date.now() - saved.at < REJOIN_MINUTES * 60000) return { code: saved.code };
+  } catch { /* unreadable offer: nothing to show */ }
+  return null;
+}
+
+function rememberRoom(code) {
+  try { localStorage.setItem(LAST_ROOM, JSON.stringify({ code, at: Date.now() })); } catch { /* optional convenience */ }
+}
+
+function forgetRoom() {
+  try { localStorage.removeItem(LAST_ROOM); } catch { /* optional convenience */ }
+}
+
+function showTitle(opts = {}) {
+  menu.title({ ...opts, rejoin: rejoinOffer() });
 }
 
 function teardownNet() {
@@ -120,6 +161,10 @@ function teardownNet() {
 menu.on({
   profile: () => openProfile(),
   saveCode: () => openSave(),
+  options: () => openOptions(),
+  help: () => openHelp(),
+  rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
+  range: () => { needName(startRange); },
   solo: () => { startSolo(); },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
@@ -131,7 +176,7 @@ menu.on({
   start: () => startVote(),
   voteCast: ({ i }) => castVote(Number(i)),
   voteLeave: () => goTitle(),
-  soloBack: () => menu.title(),
+  soloBack: () => showTitle(),
   soloMap: ({ id }) => pickSoloMap(id),
   soloMode: ({ id }) => pickSoloMode(id),
   soloStart: () => launchSolo(app.soloPick.mapId, app.soloPick.mode),
@@ -144,7 +189,7 @@ function needName(next) {
   else editName(next);
 }
 
-function editName(next, back = () => menu.title()) {
+function editName(next, back = () => showTitle()) {
   menu.keypad({
     title: 'Choose a callsign', value: Progress.name, max: 12, kind: 'name', doneLabel: 'Save',
     hint: 'Your squad sees this in the lobby and the kill feed.',
@@ -158,13 +203,13 @@ function askCode() {
     title: 'Enter room code', max: 4, kind: 'code', doneLabel: 'Join',
     hint: 'Your host can read it to you from their lobby.',
     onDone: code => startJoining(code),
-    onCancel: () => menu.title(),
+    onCancel: () => showTitle(),
   });
 }
 
 function afterEditing() {
   if (app.net && app.lobby.humans.length) renderLobby();
-  else menu.title();
+  else showTitle();
 }
 
 // Keeps the host's seat record in step with what this player just changed.
@@ -206,6 +251,14 @@ function openProfile() {
     onRename: () => editName(() => { shareLoadout(); openProfile(); }, openProfile),
     onSave: () => openSave(openProfile),
   });
+}
+
+function openOptions() {
+  menu.options({ onBack: afterEditing, onPreviewSound: () => audio.uiClick?.() });
+}
+
+function openHelp() {
+  menu.help({ onBack: afterEditing });
 }
 
 function openSave(back = afterEditing) {
@@ -273,11 +326,35 @@ function startHosting() {
     botSkill: 'mixed',
   };
   wireSharedNet(net);
-  // A guest whose slot went to a bot cannot be seated back in, so tell it to stop waiting.
-  net.onPeerJoin(id => { if (app.dead.has(id)) net.sendLobby({ t: 'dropped' }, id); }, { persist: true });
+  wireHostNet(net);
+  renderLobby();
+}
+
+// The host's half of the session, done once at the start or at the moment of promotion.
+function wireHostNet(net) {
+  // A returning player, on the same device, gets the slot its bot is holding.
+  net.onPeerJoin(id => { if (app.inMatch && app.dead.has(id)) seatReturningPlayer(id); }, { persist: true });
   net.onPeerLeave(id => hostSawLeave(id), { persist: true });
   net.onLobby((msg, from) => hostLobbyMessage(msg, from));
-  renderLobby();
+}
+
+// True if the match roster holds this player, which is what makes a mid-match join a rejoin.
+function holdsSlot(id) {
+  return !!app.matchInfo?.roster.some(r => r.id === id && !r.isBot);
+}
+
+function seatReturningPlayer(id) {
+  if (!app.net || !holdsSlot(id)) return false;
+  app.dead.delete(id);
+  const entry = app.matchInfo.roster.find(r => r.id === id);
+  if (!app.lobby.humans.some(h => h.id === id)) {
+    app.lobby.humans.push({ id, name: entry.name, team: entry.team, ready: true, primary: entry.primary, camo: entry.camo, loadout: entry.loadout, badge: entry.badge });
+  }
+  app.match?.humanRejoined?.(id);
+  app.net.sendLobby({ ...app.matchInfo, t: 'start', rejoin: true }, id);
+  hud.notify(`${entry.name} is back`);
+  broadcastLobby();
+  return true;
 }
 
 function hostLobbyMessage(msg, from) {
@@ -286,6 +363,7 @@ function hostLobbyMessage(msg, from) {
   switch (msg.t) {
     case 'join': {
       if (app.inMatch) {
+        if (seatReturningPlayer(from)) return;
         app.net.sendLobby({ t: 'refused', reason: 'That match is already under way. Ask the host to finish first.' }, from);
         return;
       }
@@ -353,8 +431,8 @@ function hostSawLeave(id) {
   app.lobby.humans = app.lobby.humans.filter(x => x.id !== id);
   if (app.vote?.votes?.delete(id)) { broadcastVote(); renderVote(); }
   if (app.inMatch) {
-    app.dead.add(id);
-    if (h) hud.notify(`${h.name} left, a bot took over`);
+    if (holdsSlot(id)) app.dead.add(id);
+    if (h) hud.notify(`${h.name} dropped, a bot took over`);
   } else {
     broadcastLobby();
     if (menuShows('lobby')) renderLobby();
@@ -395,13 +473,15 @@ function startJoining(code) {
   });
   net.onJoinFailed(() => {
     teardownNet();
+    forgetRoom();
     menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle() });
   });
   net.onLobby(msg => guestLobbyMessage(msg));
-  net.onHostLost(left => setHostNotice(left));
-  net.onHostTick(left => setHostNotice(left));
-  net.onHostBack(() => clearHostNotice());
-  net.onHostGone(reason => hostGone(reason));
+  net.onHostLost(() => setHostNotice(true));
+  net.onHostBack(() => setHostNotice(false));
+  net.onHostChanged((id, name) => hostChanged(id, name));
+  net.onPromoted(oldHostId => becomeHost(oldHostId));
+  net.onDemoted(() => demotedHost());
 }
 
 function guestLobbyMessage(msg) {
@@ -418,6 +498,8 @@ function guestLobbyMessage(msg) {
       showGuestVote(msg);
       break;
     case 'start':
+      // A guest that never left this match hears its own rejoin announcement after a brief drop.
+      if (msg.rejoin && app.inMatch && app.matchInfo?.seed === msg.seed) break;
       // Normally the old match is long over; a guest whose final-kill hold outlasted the countdown is cut short here.
       endLocalMatch();
       app.countdown = null;
@@ -425,50 +507,66 @@ function guestLobbyMessage(msg) {
       beginMatch({
         roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode,
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
-        hostId: app.net.hostId, isHost: false,
+        hostId: app.net.hostId, isHost: false, rejoin: !!msg.rejoin,
       });
       break;
     case 'refused':
+      forgetRoom();
       goTitle(msg.reason);
-      break;
-    case 'dropped':
-      endLocalMatch();
-      goTitle('The match went on without you after your connection dropped.');
       break;
     default:
       break;
   }
 }
 
-function setHostNotice(left) {
-  const text = left > 0 ? `Host lost, waiting... ${left}` : '';
-  if (app.inMatch) {
-    hud.setNotice(text);
-  } else if (menuShows('results')) {
-    menu.resultsNote(text);
-  } else {
-    menu.overlay(`<div class="sheet slim"><div class="signal"><i></i><i></i><i></i></div><h2>Host lost, waiting...</h2><p>Returning to the menu in ${left}s if they don't come back.</p></div>`);
-  }
-}
+const HOST_LOST_TEXT = 'Host lost, switching over';
 
-function clearHostNotice() {
-  if (app.inMatch) hud.setNotice('');
-  else if (menuShows('results')) menu.updateCountdown(app.countdown);
+function setHostNotice(on) {
+  if (app.inMatch) hud.setNotice(on ? HOST_LOST_TEXT : '');
+  else if (menuShows('results')) (on ? menu.resultsNote(HOST_LOST_TEXT) : menu.updateCountdown(app.countdown));
+  else if (on) menu.overlay(`<div class="sheet slim"><div class="signal"><i></i><i></i><i></i></div><h2>Host lost</h2><p>Finding a new host. Hang on a moment.</p></div>`);
   else menu.overlay('');
 }
 
-function hostGone(reason) {
-  const message = reason === 'ended' ? 'The host ended the session.' : 'The host did not come back.';
-  // Someone reading their results keeps them; the room is gone, so Rematch becomes a fresh match against bots.
-  if (menuShows('results')) {
-    teardownNet();
-    app.soloRematch = true;
-    menu.relabelRematch('Play vs bots');
-    menu.resultsNote(message);
-    return;
+function hostChanged(id, name) {
+  setHostNotice(false);
+  stopVote();      // A vote run by the old host can never finish.
+  const n = name || 'A new player';
+  if (app.inMatch) hud.announceHost(n, false);
+  else menu.toast(`${n} is now hosting`);
+  if (!app.inMatch && !app.vote && !EDIT_SCREENS.includes(menu.el.dataset.screen) && !menuShows('results')) renderLobby();
+}
+
+// Promotion: this phone is now the room. The match continues from the last snapshot; the lobby carries over as it is.
+function becomeHost(oldHostId) {
+  const net = app.net;
+  if (!net) return;
+  setHostNotice(false);
+  app.isHost = true;
+  app.countdown = null;
+  app.rematchWait = false;
+  stopVote();
+  app.lobby.humans = app.lobby.humans.filter(h => h.id !== oldHostId);
+  const me = localHuman();
+  if (me) { me.host = true; me.ready = true; }
+  wireHostNet(net);
+  broadcastLobby();
+  if (app.inMatch) {
+    app.match?.promoteToHost?.({ goneIds: oldHostId ? [oldHostId] : [] });
+    hud.announceHost(myName(), true);
+  } else if (menuShows('results')) {
+    menu.resultsNote('You are now hosting this room');
+  } else {
+    menu.toast('The host left. You are now hosting.');
+    if (!EDIT_SCREENS.includes(menu.el.dataset.screen)) renderLobby();
   }
+}
+
+// This phone went quiet long enough for the room to move on, and has come back to find a new host.
+function demotedHost() {
+  const code = app.code;
   endLocalMatch();
-  goTitle(message);
+  goTitle(`Reconnected too late to keep hosting. Rejoin ${code} to get back in.`);
 }
 
 // Handlers needed on both sides of a session.
@@ -483,6 +581,7 @@ function wireSharedNet(net) {
   });
   hud.onMic(() => app.voice?.toggleMic());
   hud.onSpeaker(() => { if (app.voice) app.voice.setMuted(!app.voice.muted); });
+  app.voice?.setVolume(Options.get('voice'));
 }
 
 function updateVoiceTeam() {
@@ -494,14 +593,33 @@ function updateVoiceTeam() {
 // --- Solo: a direct pick of map and mode ---
 function startSolo() {
   needName(() => {
-    teardownNet();
-    stopRematch();
-    stopVote();
-    app.soloRematch = false;
-    app.isHost = true;
-    app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed' };
+    resetToSolo();
     if (params.has('map') || params.has('mode')) launchSolo(params.get('map') || DEFAULT_MAP, params.get('mode') || 'tdm');
     else renderSoloPick();
+  });
+}
+
+function resetToSolo() {
+  teardownNet();
+  stopRematch();
+  stopVote();
+  app.isHost = true;
+  app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed' };
+}
+
+function startRange() {
+  resetToSolo();
+  launchRange();
+}
+
+// The sim adds the dummies itself; the renderer still needs them on its roster to name and draw them.
+function launchRange() {
+  const id = 'local', seed = randomSeed();
+  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  beginMatch({
+    roster: withBadges(buildRoster(humans, { teamSize: 0 }), humans, seed),
+    seed, mapId: 'range', mode: 'range', ...limitsFor('range'),
+    hostId: id, isHost: true, localId: id, rangeDummies: rangeDummies(MAPS.range),
   });
 }
 
@@ -632,18 +750,20 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, isHost, localId }) {
+function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
+  app.matchInfo = { roster, seed, mapId, mode, scoreLimit, timeLimit };
+  if (net) rememberRoom(app.code);
   stopVote();
   net?.resetGameHandlers();
 
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, localId: id, intro: !rejoin });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
@@ -655,11 +775,12 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
 
   const renderer = app.renderer = new GameRenderer(canvas, MAPS[mapId]);
   renderer.resize();
-  renderer.chars.setRoster(roster);
+  renderer.setQuality?.(Options.get('quality'));
+  renderer.chars.setRoster(dummies ? [...roster, ...dummies] : roster);
   hud.setCamera(renderer.camera);
   app.match = new Match({
     canvas, mapId, mode, seed, scoreLimit, timeLimit, roster, localId: id, hostId, isHost,
-    net, controls, hud, renderer, audio,
+    net, controls, hud, renderer, audio, rejoin,
     onEnd: results => onMatchEnd(results),
   });
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
@@ -682,6 +803,7 @@ function endLocalMatch() {
   app.match?.stop();
   app.match = null;
   app.inMatch = false;
+  app.matchInfo = null;
   clearInterval(app.netPoll);
   app.renderer?.dispose();
   app.renderer = null;
@@ -706,9 +828,17 @@ function pickMvp(players) {
   return mvp;
 }
 
+// The player chose to walk away from a running match from the scoreboard.
+function leaveMatch() {
+  endLocalMatch();
+  forgetRoom();
+  goTitle();
+}
+
 function showResults(results) {
   for (const p of results.players) Object.assign(p, hud.objectiveStats(p.id));
   endLocalMatch();
+  forgetRoom();
   app.rematchWait = false;
 
   const won = results.winner === results.myTeam;
@@ -738,7 +868,7 @@ function showResults(results) {
 }
 
 function afterResults() {
-  if (app.soloRematch || !app.net) return startSolo();
+  if (!app.net) return startSolo();
   const me = localHuman();
   if (app.isHost) {
     for (const h of app.lobby.humans) h.ready = !!h.host;
@@ -753,6 +883,16 @@ function afterResults() {
   renderLobby();
 }
 
+function applyOptions(v, changed) {
+  controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
+  hud.setLefty(v.lefty);
+  controls.aimAssist = v.aimAssist;
+  if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
+  if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
+  if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
+  if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
+}
+
 // --- Startup ---
 function maybeInstallPrompt() {
   const ua = navigator.userAgent;
@@ -764,8 +904,15 @@ function maybeInstallPrompt() {
 }
 
 blockIosGestures();
-menu.title({ arrive: true });
-if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress };
+installTaps();
+hud.onLeaveMatch(leaveMatch);
+// The interpolated view does not carry the range tracker, so the readout takes it from the newest snapshot.
+hud.rangeSource = () => app.match?.interp.newest?.range ?? null;
+hud.onRangeReset(() => app.match?.sim.applyCommand(app.match.localId, { cmd: 'rangeReset' }));
+// A touch that lands with the audio engine asleep must wake it even when the action would start sound itself.
+Options.subscribe(applyOptions);
+showTitle({ arrive: true });
+if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, join: startJoining };
 maybeInstallPrompt();
 
 

@@ -35,6 +35,15 @@ const MARK_PAD_T = 56;
 const MARK_PAD_B = 100;
 const MARK_Y = { dom: 4.3, hard: 3.6 };   // Metres above the ground to pin a marker: flag tip or zone wall.
 const HARD_WARN = 5;             // Seconds of warning before a hardpoint moves.
+const DPS_WINDOW = 2.4;          // Seconds of hits averaged into the live damage readout.
+const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.
+const TIPS = [
+  'Slide through a doorway to shrink as a target.',
+  'Firing reveals you on the enemy minimap. Suppressors hide it.',
+  'Hold a grenade button and drag to place the throw.',
+  'A capped score resets when you call a streak, so call them.',
+  'Swap instead of reloading when someone is on you.',
+];
 
 const MEDALS = {
   confirm: ['Kill Confirmed', `+${SCORE.confirm}`], deny: ['Tag Denied', `+${SCORE.deny}`],
@@ -51,6 +60,15 @@ const CALLOUT_POP = [
   { opacity: 0, transform: 'translate(-50%,-8px) scale(1)' },
 ];
 const HEAL_PULSE = [{ opacity: 0 }, { opacity: 0.9, offset: 0.2 }, { opacity: 0 }];
+const SCORE_POP = [{ transform: 'scale(1.5)', color: '#fff' }, { transform: 'scale(1)' }];
+const COUNT_POP = [{ transform: 'scale(1.35)', opacity: 0.5 }, { transform: 'scale(1)', opacity: 1 }];
+const RESPAWN_FLASH = [{ opacity: 0.75 }, { opacity: 0 }];
+const STREAK_HIT = [
+  { opacity: 0, transform: 'translate(-50%,-50%) scale(2.1)', filter: 'brightness(2.6)' },
+  { opacity: 1, transform: 'translate(-50%,-50%) scale(.98)', filter: 'brightness(1)', offset: 0.13 },
+  { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.78 },
+  { opacity: 0, transform: 'translate(-50%,-62%) scale(1)' },
+];
 
 const BANNER_POP = [
   { opacity: 0, transform: 'translateX(-50%) scale(1.5)' },
@@ -74,6 +92,8 @@ function killCause(e) {
 }
 
 export class HUD {
+  #range;
+
   constructor(root) {
     this.root = root;
     this.loadoutCb = null;
@@ -98,6 +118,14 @@ export class HUD {
   // Controls owns the buttons and streak tiles so there is a single touch surface; the HUD feeds them.
   bindControls(controls) {
     this.controls = controls;
+    this.#seedFallback();
+  }
+
+  // The scoreboard's Leave button; the session flow belongs to main.js.
+  onLeaveMatch(cb) { this.leaveCb = cb; }
+
+  setLefty(on) {
+    this.el.classList.toggle('lefty', on);
   }
 
   // Tiles and buttons need something to draw before the first frame that carries real slots.
@@ -105,19 +133,53 @@ export class HUD {
     const l = normalizeLoadout(Progress.loadout());
     this.fallbackSlots = l.streaks.map(kind => ({ kind, cost: STREAKS[kind].cost, held: false, blocked: false }));
     this.fallbackEquip = { tactical: l.tactical, lethal: l.lethal };
+    this.controls?.setThrowReach((Progress.loadout().perks ?? []).includes('strongarm'));
   }
 
   // Call before each match.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm' } = {}) {
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true } = {}) {
     this.map = MAPS[mapId] ?? this.map;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
     this.mode = mode;
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
+    this.throwReachKnown = false;
     this.#seedFallback();
     this.#drawMapBase();
     this.#buildObjectiveHud();
     this.reset();
+    this.#range.prepare(mode === 'range');
+    this.el.classList.toggle('range-on', mode === 'range');
+    this.#hideIntro();
+    this.pendingIntro = intro && mode !== 'range' ? { mapId, mode, roster, localId } : null;
+  }
+
+  // onSetLoadout's sibling for the firing range's Reset.
+  onRangeReset(cb) { this.#range.onReset = cb; }
+
+  // Team roster and map name over the warmup; decorative, so it never takes a touch.
+  #showIntro(mapId, mode, roster, localId) {
+    const map = MAPS[mapId] ?? this.map;
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i>` : ''}<b>${esc(p.name)}</b></div>`;
+    const team = t => {
+      const list = roster.filter(p => p.team === t);
+      return `<div class="in-team" style="--team:${TEAMS[t].css}"><h3>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
+    };
+    const myTeam = roster.find(p => p.id === localId)?.team ?? 0;
+    this.introEl.innerHTML = `
+      ${team(myTeam)}
+      <div class="in-mid">
+        <small>${esc(MODES[mode]?.name ?? '')}</small>
+        <h2>${esc(map?.name ?? '')}</h2>
+        <span class="in-vs">VS</span>
+        <p>${esc(TIPS[Math.floor(Math.random() * TIPS.length)])}</p>
+      </div>
+      ${team(1 - myTeam)}`;
+    this.introEl.classList.add('show');
+  }
+
+  #hideIntro() {
+    this.introEl?.classList.remove('show');
   }
 
   // The match renderer's camera. Markers need a world-to-screen transform and nothing else from it.
@@ -148,6 +210,8 @@ export class HUD {
     this.boardEl.hidden = true;
     this.flashFadeLen = 1;
     this.flashEl.style.opacity = '0';
+    this.leaveArmed = false;
+    this.leaveBtn.textContent = 'Leave match';
     this.feed = [];
     this.medalQueue = [];
     this.medalClock = 0;
@@ -285,7 +349,25 @@ export class HUD {
         </div>
       </div>
       <div class="over-banner"><b>Overheated</b><small>Swap to sidearm</small></div>
-      <div class="board" hidden><div class="board-grid"></div><small class="board-tip">Tap the score to close</small></div>
+      <div class="board" hidden><div class="board-grid"></div><small class="board-tip">Tap the score to close</small><button class="board-leave" data-tap="1">Leave match</button></div>
+      <div class="range-panel" hidden>
+        <div class="rp-head">Firing Range</div>
+        <div class="rp-grid">
+          <div class="rp-big"><span>DPS</span><b class="rp-dps">0</b></div>
+          <div><span>Peak</span><b class="rp-peak">0</b></div>
+          <div><span>Accuracy</span><b class="rp-acc">--</b></div>
+          <div><span>Last TTK</span><b class="rp-ttk">--</b></div>
+          <div><span>Best TTK</span><b class="rp-best">--</b></div>
+          <div class="rp-wide"><span>Last hit</span><b class="rp-last">--</b></div>
+          <small class="rp-model"></small>
+        </div>
+        <button class="rp-reset" data-tap="1">Reset</button>
+      </div>
+      <button class="range-leave" data-tap="1" hidden>Leave range</button>
+      <div class="intro"></div>
+      <div class="streak-hit"><b></b><small></small></div>
+      <div class="respawn-flash"></div>
+      <div class="streak-edge"></div>
       <div class="obj-marks"></div>
       <div class="obj-strip" hidden>
         <div class="obj-chips"></div>
@@ -365,12 +447,31 @@ export class HUD {
     this.deathCount = $('.death-count');
     this.picks = [...el.querySelectorAll('.pick')];
     this.endEl = $('.endbanner');
+    this.introEl = $('.intro');
+    this.streakEdge = $('.streak-edge');
+    this.leaveBtn = $('.board-leave');
+    this.streakHitEl = $('.streak-hit');
+    this.respawnEl = $('.respawn-flash');
+    this.#range = new RangeReadout(el);
+    $('.range-leave').addEventListener('click', () => this.leaveCb?.());
+    this.leaveBtn.addEventListener('click', () => this.#tapLeave());
 
     this.micBtn.addEventListener('click', () => this.micCb?.());
     this.speakerBtn.addEventListener('click', () => this.speakerCb?.());
     for (const pick of this.picks) pick.addEventListener('click', () => this.#choose(Number(pick.dataset.i)));
     $('.scorebar').addEventListener('click', () => this.toggleBoard());
     this.#buildBoard();
+  }
+
+  // Two taps on purpose: a stray thumb on the open scoreboard must not end the match.
+  #tapLeave() {
+    if (!this.leaveArmed) {
+      this.leaveArmed = true;
+      this.leaveBtn.textContent = 'Tap again to leave';
+      return;
+    }
+    this.toggleBoard();
+    this.leaveCb?.();
   }
 
   // Twelve rows made once and only ever retexted, so an open board costs a few text writes a second.
@@ -393,6 +494,8 @@ export class HUD {
     this.boardOpen = !this.boardOpen;
     this.boardEl.hidden = !this.boardOpen;
     this.boardClock = 0;
+    this.leaveArmed = false;
+    this.leaveBtn.textContent = 'Leave match';
     if (this.boardOpen && this.view) this.#paintBoard(this.view);
   }
 
@@ -457,6 +560,13 @@ export class HUD {
 
   // --- Per-frame ---
   update(view, dt) {
+    // Scheduled from the first real frame: a phone can spend a second building the renderer before that.
+    if (this.pendingIntro) {
+      const { mapId, mode, roster, localId } = this.pendingIntro;
+      this.pendingIntro = null;
+      this.#showIntro(mapId, mode, roster, localId);
+    }
+    if (view.phase !== 'warmup') this.#hideIntro();  // The reveal rides the warmup, whatever speed this phone runs at.
     const previousPhase = this.cache.phase;
     this.view = view;
     const me = this.#findLocal(view);
@@ -469,11 +579,13 @@ export class HUD {
       this.#paintTeams(myTeam);
     }
     if (c.myScore !== view.scores[myTeam]) {
+      if (c.myScore < view.scores[myTeam]) this.sbMine.score.animate(SCORE_POP, { duration: 280 });
       c.myScore = view.scores[myTeam];
       this.sbMine.score.textContent = c.myScore;
       this.sbMine.fill.style.transform = `scaleX(${Math.min(1, c.myScore / this.scoreLimit)})`;
     }
     if (c.otherScore !== view.scores[other]) {
+      if (c.otherScore < view.scores[other]) this.sbTheirs.score.animate(SCORE_POP, { duration: 280 });
       c.otherScore = view.scores[other];
       this.sbTheirs.score.textContent = c.otherScore;
       this.sbTheirs.fill.style.transform = `scaleX(${Math.min(1, c.otherScore / this.scoreLimit)})`;
@@ -502,11 +614,13 @@ export class HUD {
 
     this.#updateVitals(me, c, view);
     this.#updateArms(me, c);
+    this.controls?.notePlayerAim(me.aim);
     this.#updateTiles(me, c);
     this.#updateDeath(me, c, view);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
+    this.#range.update(view.range ?? this.rangeSource?.() ?? null, dt);
 
     if (this.boardOpen) {
       this.boardClock += dt;
@@ -641,10 +755,20 @@ export class HUD {
     const slots = me.slots ?? this.fallbackSlots;
     for (let i = 0; i < 3; i++) {
       const slot = slots[i];
-      if (controls.setTile(i, slot, score)) this.medalQueue.push({ title: `${STREAKS[slot.kind]?.name ?? slot.kind} ready`, sub: 'Tap to call it in', big: true });
+      if (controls.setTile(i, slot, score)) this.#streakReady(slot.kind);
     }
     controls.setEquip('tactical', me.tactical ?? this.fallbackEquip.tactical, me.tacticalLeft ?? 0);
     controls.setEquip('lethal', me.lethal ?? this.fallbackEquip.lethal, me.lethalLeft ?? 0);
+  }
+
+  // The moment a streak comes online: a full-size card, a bright edge flash and a pulse from the tile.
+  #streakReady(kind) {
+    const name = STREAKS[kind]?.name ?? kind;
+    const el = this.streakHitEl;
+    el.querySelector('b').textContent = `${name} ready`;
+    el.querySelector('small').textContent = STREAKS[kind]?.desc ?? 'Tap its tile to call it in';
+    el.animate(STREAK_HIT, { duration: 1300, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    this.streakEdge.animate([{ opacity: 0.85 }, { opacity: 0 }], { duration: 650, easing: 'ease-out' });
   }
 
   #updateDeath(me, c, view) {
@@ -660,6 +784,7 @@ export class HUD {
     if (left !== c.respawn) {
       c.respawn = left;
       this.deathCount.textContent = left;
+      this.deathCount.animate(COUNT_POP, { duration: 320, easing: 'ease-out' });
     }
     if (this.killer?.name && !this.deathPainted) this.#paintDeathHead();
   }
@@ -698,7 +823,13 @@ export class HUD {
         case 'hit': this.#onHit(e); break;
         case 'kill': this.#onKill(e); break;
         case 'medal': this.#onMedal(e); break;
-        case 'spawn': if (e.id === this.view?.localId) { this.killer = null; this.deathPainted = false; } break;
+        case 'spawn':
+          if (e.id === this.view?.localId) {
+            this.killer = null;
+            this.deathPainted = false;
+            this.respawnEl.animate(RESPAWN_FLASH, { duration: 420, easing: 'ease-out' });
+          }
+          break;
         case 'streak': this.#onStreak(e); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
@@ -836,9 +967,18 @@ export class HUD {
     const row = document.createElement('div');
     row.className = mine ? 'f-row mine' : 'f-row';
     row.innerHTML = html;
+    row.animate([{ transform: 'translateX(-18px)', opacity: 0, filter: 'brightness(2)' }, { transform: 'none', opacity: 1, filter: 'brightness(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.9,.3,1)' });
     this.feedEl.prepend(row);
     this.feed.unshift({ row, life: FEED_LIFE });
     while (this.feed.length > FEED_ROWS) this.feed.pop().row.remove();
+  }
+
+  // A few seconds on the host's notice line, then the feed keeps a record of it.
+  announceHost(name, isMe) {
+    this.setNotice(isMe ? 'You are now the host' : `${name} is now hosting`);
+    clearTimeout(this.noticeTimer);
+    this.noticeTimer = setTimeout(() => this.setNotice(''), 2600);
+    this.notify(isMe ? 'You took over as host' : `${name} took over as host`);
   }
 
   #tickFeed(dt) {
@@ -1230,6 +1370,42 @@ export class HUD {
         g.stroke();
       }
     }
+  }
+}
+
+// The firing range's live numbers, read from the sim's own tracker (view.range).
+class RangeReadout {
+  constructor(root) {
+    this.panel = root.querySelector('.range-panel');
+    this.leave = root.querySelector('.range-leave');
+    this.nodes = Object.fromEntries(['dps', 'peak', 'ttk', 'best', 'acc', 'last', 'model'].map(k => [k, root.querySelector(`.rp-${k}`)]));
+    root.querySelector('.rp-reset').addEventListener('click', () => this.onReset?.());
+    this.clock = 0;
+    this.active = false;
+  }
+
+  prepare(active) {
+    this.active = active;
+    this.panel.hidden = !active;
+    this.leave.hidden = !active;
+    this.clock = Infinity;           // First frame paints at once.
+  }
+
+  update(r, dt) {
+    if (!this.active || !r) return;
+    this.clock += dt;
+    if (this.clock < 1 / RANGE_HZ) return;
+    this.clock = 0;
+    const n = this.nodes;
+    const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+    const secs = t => (t === null || t === undefined ? '--' : `${t.toFixed(2)}s`);
+    set(n.dps, String(Math.round(r.dps)));
+    set(n.peak, String(Math.round(r.peakDps)));
+    set(n.ttk, secs(r.lastTtk));
+    set(n.best, secs(r.bestTtk));
+    set(n.acc, r.shots ? `${Math.round(r.accuracy * 100)}%` : '--');
+    set(n.last, r.lastDamage ? `${Math.round(r.lastDamage)}${r.lastHead ? ' HS' : ''} @ ${Math.round(r.lastDist)}m` : '--');
+    set(n.model, r.model ? `${Math.round(r.model.dps)} DPS / ${r.model.ttk.toFixed(2)}s on paper` : '');
   }
 }
 

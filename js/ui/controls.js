@@ -13,7 +13,15 @@ const AIM_ZONE = 42;
 const FIRE_RING = 70;
 const FIRE_RELEASE = FIRE_RING * 0.88;
 const AIM_DEAD = 4;             // Thumb wobble under this many pixels does not rotate the player.
-const KNOB_LIMIT = FIRE_RING + 16;
+
+// Controlled throws: the thumb that pressed Tactical or Lethal keeps going and sets direction and distance.
+const THROW_HOLD_MS = 160;      // A press shorter than this, without leaving the button, is a quick throw.
+const THROW_ARM_PX = 30;        // Radius around the button's centre: leaving it starts the aim, returning cancels.
+const THROW_FULL_PX = 118;      // Drag distance from the button centre that means full range.
+const THROW_MIN_M = 2.5;        // Shortest aimed toss; a drag that barely clears the button is a lob at your feet.
+const THROW_BASE_M = 13;
+const THROW_STRONG_M = 19;
+const THROW_HELD_M = 9;         // Range when the button is held but never dragged.
 
 const BUTTONS = ['slide', 'swap', 'tactical', 'lethal'];
 const TILE_COUNT = 3;
@@ -24,9 +32,12 @@ const TILE_SLOP = 3;            // Tiles sit in a tight row; slop here would ste
 
 const LABELS = { slide: 'Slide', swap: 'Swap', tactical: 'Tactical', lethal: 'Lethal' };
 const EMPTY_ICON = { tactical: 'smoke', lethal: 'frag' };
+const THROW_SLOTS = ['tactical', 'lethal'];
+// Equipment that applies instantly has nothing to aim, so its button keeps firing on the press.
+const INSTANT = new Set(['stim']);
 
 function freshInput() {
-  return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
+  return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1, throwAim: null, throwDist: null };
 }
 
 export class Controls {
@@ -40,6 +51,15 @@ export class Controls {
     this.aimLatch = null;
     this.sprintOn = false;
     this.edge = { slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
+    this.throw = null;             // The press in aim mode: { slot, id, cx, cy, x, y, at, left, cancel }.
+    this.throwHeld = { slot: '', aim: 0, dist: 0 };    // Reused while a throw is held; returned from read().
+    this.throwReleased = null;     // The aim of a throw released since the last read, or null for a quick one.
+    this.throwMax = THROW_BASE_M;
+    this.playerAim = 0;            // Last aim the HUD saw: where a held, undragged throw goes.
+    this.fireRing = FIRE_RING;
+    this.fireRelease = FIRE_RELEASE;
+    this.knobLimit = FIRE_RING + 16;
+    this.lefty = false;
     this.buttonTouch = new Map();  // touch id -> button or tile name
     this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
     this.equip = { tactical: { kind: '', left: NaN }, lethal: { kind: '', left: NaN } };
@@ -99,6 +119,12 @@ export class Controls {
             <b class="st-cost">0</b>
           </button>`).join('')}
         </div>
+      </div>
+      <div class="throw-rig" hidden>
+        <i class="tr-range"></i>
+        <i class="tr-line"></i>
+        <i class="tr-dot"></i>
+        <span class="tr-label"><b></b><small></small></span>
       </div>`;
     this.root.appendChild(el);
     this.moveEl = el.querySelector('.stick-move');
@@ -106,6 +132,13 @@ export class Controls {
     this.moveKnob = this.moveEl.querySelector('.stick-knob');
     this.aimKnob = this.aimEl.querySelector('.stick-knob');
     this.hintEl = el.querySelector('.aim-hint');
+    this.rig = {
+      el: el.querySelector('.throw-rig'), range: el.querySelector('.tr-range'), line: el.querySelector('.tr-line'), dot: el.querySelector('.tr-dot'),
+      label: el.querySelector('.tr-label'), dist: el.querySelector('.tr-label b'), tip: el.querySelector('.tr-label small'),
+      shownDist: NaN, shownMode: '', shownSlot: '', cancelled: null, active: null,
+    };
+    this.rig.range.style.width = this.rig.range.style.height = `${THROW_FULL_PX * 2}px`;
+    this.rig.range.style.margin = `-${THROW_FULL_PX}px 0 0 -${THROW_FULL_PX}px`;
     this.buttons = {};
     for (const b of BUTTONS) this.buttons[b] = el.querySelector(`[data-btn="${b}"]`);
     this.scoreEl = el.querySelector('.st-score b');
@@ -120,6 +153,28 @@ export class Controls {
     this.tileById = id => this.tiles[TILE_IDS.indexOf(id)];
     // The lit pop plays once per grant; removing the class on animationend lets the next grant replay it.
     for (const t of this.tiles) t.node.addEventListener('animationend', e => { if (e.animationName === 'tile-pop') t.node.classList.remove('pop'); });
+  }
+
+  // Stick feel, the swapped layout and the throw reach are settings; they can change between matches.
+  // sensitivity 0.6..1.6 scales how far the aim thumb travels before it fires.
+  applyOptions({ sensitivity = 1, lefty = false } = {}) {
+    const s = Math.max(0.6, Math.min(1.6, sensitivity));
+    this.fireRing = FIRE_RING / s;
+    this.fireRelease = this.fireRing * 0.88;
+    this.knobLimit = this.fireRing + 16;
+    this.el.querySelector('.aim-ring').style.transform = `scale(${(1 / s).toFixed(3)})`;
+    this.lefty = !!lefty;
+    this.el.classList.toggle('lefty', this.lefty);
+    if (this.enabled) this.#measure();
+  }
+
+  setThrowReach(strongArm) {
+    this.throwMax = strongArm ? THROW_STRONG_M : THROW_BASE_M;
+  }
+
+  // Where the player is facing, from the HUD; a held but undragged throw goes this way.
+  notePlayerAim(aim) {
+    if (typeof aim === 'number') this.playerAim = aim;
   }
 
   // Layout is only ever measured here, never during play.
@@ -233,12 +288,12 @@ export class Controls {
       const x = t.clientX, y = t.clientY;
       const btn = this.#buttonAt(x, y);
       if (btn) {
-        this.#press(btn);
+        this.#press(btn, t.identifier, e.timeStamp);
         this.buttonTouch.set(t.identifier, btn);
         this.hintEl.hidden = true;
         continue;
       }
-      if (x < this.width / 2) {
+      if ((x < this.width / 2) !== this.lefty) {
         if (this.left.id === null) this.#grabLeft(t.identifier, x, y);
       } else if (this.right.id === null) {
         this.#grabRight(t.identifier, x, y);
@@ -246,7 +301,8 @@ export class Controls {
     }
   }
 
-  #press(btn) {
+  #press(btn, touchId, at) {
+    if (THROW_SLOTS.includes(btn) && this.#startThrow(btn, touchId, at)) return;
     const tile = this.tileById(btn);
     if (tile) {
       // Only a lit tile fires; the sim would refuse anything else anyway.
@@ -256,6 +312,67 @@ export class Controls {
       this.edge[btn] = true;
       this.buttons[btn].classList.add('down');
     }
+  }
+
+  // Returns true when the press was taken as a throw (or spent on an empty button).
+  #startThrow(slot, touchId, at) {
+    const e = this.equip[slot], b = this.buttons[slot];
+    if (INSTANT.has(e.kind)) return false;
+    b.classList.add('down');
+    if (!e.left) {
+      b.classList.remove('deny');
+      void b.offsetWidth;
+      b.classList.add('deny');
+      return true;
+    }
+    if (this.throw) return true;      // One grenade at a time; the second thumb is just pressing a button.
+    const r = this.rects[slot];
+    const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+    this.throw = { slot, id: touchId, cx, cy, x: cx, y: cy, at, left: false, cancel: false };
+    this.paintDirty = true;
+    return true;
+  }
+
+  #throwMove(x, y) {
+    const th = this.throw;
+    th.x = x; th.y = y;
+    const d = Math.hypot(x - th.cx, y - th.cy);
+    if (d >= THROW_ARM_PX) {
+      th.left = true;
+      th.cancel = false;
+    } else if (th.left) {
+      th.cancel = true;
+    }
+    this.paintDirty = true;
+  }
+
+  // The throw as of right now, or null while it is still only a press or has been cancelled.
+  #throwAim(th = this.throw, now = performance.now()) {
+    if (!th || th.cancel) return null;
+    const out = this.throwHeld;
+    if (th.left) {
+      const dx = th.x - th.cx, dy = th.y - th.cy, d = Math.hypot(dx, dy);
+      out.slot = th.slot;
+      out.aim = Math.atan2(dy, dx);
+      out.dist = THROW_MIN_M + Math.min(1, (d - THROW_ARM_PX) / (THROW_FULL_PX - THROW_ARM_PX)) * (this.throwMax - THROW_MIN_M);
+      return out;
+    }
+    if (now - th.at < THROW_HOLD_MS) return null;
+    out.slot = th.slot;
+    out.aim = this.playerAim;
+    out.dist = Math.min(THROW_HELD_M, this.throwMax);
+    return out;
+  }
+
+  // at is the release's event time, so a tap stays a tap even if the frame around it ran long.
+  #endThrow(at) {
+    const th = this.throw;
+    this.throw = null;
+    this.paintDirty = true;
+    if (th.cancel) return;
+    const aimed = this.#throwAim(th, at);
+    this.edge[th.slot] = true;
+    this.throwReleased = aimed ? { ...aimed } : null;   // null means a quick tap: current aim at default range.
   }
 
   #grabLeft(id, x, y) {
@@ -283,6 +400,8 @@ export class Controls {
         this.paintDirty = true;
       } else if (id === this.right.id) {
         this.#aimMove(t.clientX, t.clientY);
+      } else if (this.throw?.id === id) {
+        this.#throwMove(t.clientX, t.clientY);
       }
     }
   }
@@ -293,7 +412,7 @@ export class Controls {
     const dx = x - r.ox, dy = y - r.oz;
     const d = Math.hypot(dx, dy);
     if (d >= AIM_DEAD) r.aim = Math.atan2(dy, dx);
-    if (r.firing ? d < FIRE_RELEASE : d >= FIRE_RING) {
+    if (r.firing ? d < this.fireRelease : d >= this.fireRing) {
       r.firing = !r.firing;
       if (r.firing) {
         this.fireLatch = true;
@@ -306,10 +425,10 @@ export class Controls {
   #end(e) {
     if (!this.enabled) return;
     if (e.cancelable && !e.target?.closest?.('[data-tap]')) e.preventDefault();
-    for (const t of e.changedTouches) this.#drop(t.identifier);
+    for (const t of e.changedTouches) this.#drop(t.identifier, e.timeStamp);
   }
 
-  #drop(id) {
+  #drop(id, at = performance.now()) {
     if (id === this.left.id) {
       this.left.id = null;
       this.paintDirty = true;
@@ -320,6 +439,7 @@ export class Controls {
     } else {
       const btn = this.buttonTouch.get(id);
       if (btn) {
+        if (this.throw?.id === id) this.#endThrow(at);
         (this.buttons[btn] ?? this.tileById(btn).node).classList.remove('down');
         this.buttonTouch.delete(id);
       }
@@ -350,6 +470,8 @@ export class Controls {
     this.edge.streak = -1;
     for (const t of this.tiles) t.node.classList.remove('down');
     this.buttonTouch.clear();
+    this.throw = null;              // A press the game took away is not a throw.
+    this.throwReleased = null;
     this.paintDirty = true;
     this.#paint();
   }
@@ -362,6 +484,8 @@ export class Controls {
       inp.aiming = inp.fire = inp.sprint = false;
       inp.slide = inp.swap = inp.tactical = inp.lethal = false;
       inp.streak = -1;
+      inp.throwAim = null;
+      inp.throwDist = null;
       return inp;
     }
 
@@ -405,6 +529,18 @@ export class Controls {
     this.edge.slide = this.edge.swap = this.edge.tactical = this.edge.lethal = false;
     this.edge.streak = -1;
 
+    // A release beats a press in progress for this frame: the edge and the aim that launched it travel together.
+    const released = inp.tactical || inp.lethal;
+    if (released) {
+      inp.throwAim = this.throwReleased;
+      inp.throwDist = this.throwReleased?.dist ?? null;
+      this.throwReleased = null;
+    } else {
+      inp.throwAim = this.#throwAim();
+      inp.throwDist = null;
+    }
+
+    if (this.throw) this.paintDirty = true;   // The rig keeps animating the hold timer.
     if (this.paintDirty) this.#paint();
     return inp;
   }
@@ -451,7 +587,7 @@ export class Controls {
     if (rightActive) {
       ax = r.x - r.ox; ay = r.y - r.oz;
       const d = Math.hypot(ax, ay);
-      if (d > KNOB_LIMIT) { ax *= KNOB_LIMIT / d; ay *= KNOB_LIMIT / d; }
+      if (d > this.knobLimit) { ax *= this.knobLimit / d; ay *= this.knobLimit / d; }
     }
     if (ax !== last.kx || ay !== last.ky) {
       this.aimKnob.style.transform = `translate3d(${ax}px,${ay}px,0)`;
@@ -465,5 +601,48 @@ export class Controls {
       this.aimEl.classList.toggle('hot', r.firing);
       last.hot = r.firing;
     }
+    this.#paintThrow();
+  }
+
+  // The on-screen half of a controlled throw: a line from the button to the thumb, the range circle and a label.
+  // The arc in the world is the renderer's, from view.throwPreview.
+  #paintThrow() {
+    const g = this.rig, th = this.throw;
+    const aim = th ? this.#throwAim() : null;
+    const showing = !!th && (th.left || !!aim);
+    if (showing !== g.active) {
+      g.active = showing;
+      g.el.hidden = !showing;
+      this.el.classList.toggle('throwing', showing);
+    }
+    if (!th) return;
+    const b = this.buttons[th.slot];
+    if (th.cancel !== g.cancelled) {
+      g.cancelled = th.cancel;
+      g.el.classList.toggle('cancel', th.cancel);
+      b.classList.toggle('throw-cancel', th.cancel);
+    }
+    b.classList.toggle('aiming', showing);
+    if (!showing) return;
+    if (g.shownSlot !== th.slot) {
+      g.shownSlot = th.slot;
+      g.el.style.transform = `translate3d(${th.cx}px,${th.cy}px,0)`;
+    }
+    const dx = th.left ? th.x - th.cx : 0, dy = th.left ? th.y - th.cy : 0;
+    const d = Math.hypot(dx, dy), angle = Math.atan2(dy, dx);
+    g.line.style.transform = `rotate(${angle.toFixed(3)}rad) scaleX(${Math.max(0, d).toFixed(1)})`;
+    g.dot.style.transform = `translate3d(${dx}px,${dy}px,0)`;
+    const mode = th.cancel ? 'cancel' : th.left ? 'aim' : 'hold';
+    if (mode !== g.shownMode) {
+      g.shownMode = mode;
+      g.tip.textContent = mode === 'cancel' ? 'Release to cancel' : mode === 'hold' ? 'Drag to aim' : 'Back to cancel';
+    }
+    const dist = aim ? Math.round(aim.dist * 2) / 2 : NaN;
+    if (dist !== g.shownDist) {
+      g.shownDist = dist;
+      g.dist.textContent = Number.isNaN(dist) ? 'Cancel' : `${dist.toFixed(1)} m`;
+    }
+    const lx = Math.max(-th.cx + 60, Math.min(dx, this.width - th.cx - 60));
+    g.label.style.transform = `translate3d(${lx}px,${dy - 46}px,0) translateX(-50%)`;
   }
 }

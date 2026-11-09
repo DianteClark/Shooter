@@ -13,11 +13,11 @@ export class Voice {
     this.muted = false;
     this.teammates = new Set();
     this.sendingTo = new Set();
-    this.players = new Map();              // peerId -> { el, stream }
+    this.players = new Map();              // player id -> { el, stream }
     this.wantsResume = false;
 
     if (this.room) {
-      this.room.onPeerStream = (stream, peerId) => this.#addRemote(stream, peerId);
+      this.room.onPeerStream = (stream, tid) => this.#addRemote(stream, net.playerIdOf(tid));
       this.net.onPeerLeave(id => this.#removeRemote(id), { persist: true });
       this.net.onPeerJoin(id => this.#syncSending(id), { persist: true });
     }
@@ -31,7 +31,7 @@ export class Voice {
     this.onState?.(this.state, this.muted);
   }
 
-  // Peer ids on the local player's team, excluding the local player. Host and guests call this from the roster.
+  // Player ids on the local player's team, excluding the local player. Host and guests call this from the roster.
   setTeammates(ids) {
     this.teammates = new Set(ids);
     for (const peerId of this.players.keys()) {
@@ -59,9 +59,34 @@ export class Voice {
     this.#syncSending();
   }
 
+  // iOS ignores the volume property on media elements, so remote voice plays through a gain node when the audio
+  // engine is running; the element stays muted to keep the stream alive without playing it twice.
+  setVolume(v) {
+    this.volume = v;
+    for (const p of this.players.values()) this.#applyGain(p);
+  }
+
+  #applyGain(player) {
+    const v = this.volume ?? 1;
+    const ctx = this.audio?.ctx;
+    if (ctx && !player.gain) {
+      try {
+        const source = ctx.createMediaStreamSource(player.stream);
+        player.gain = ctx.createGain();
+        source.connect(player.gain).connect(ctx.destination);
+        player.el.muted = true;
+      } catch { player.gain = null; }
+    }
+    if (player.gain) player.gain.gain.value = this.muted ? 0 : v;
+    else player.el.volume = v;
+  }
+
   setMuted(muted) {
     this.muted = muted;
-    for (const { el } of this.players.values()) el.muted = muted;
+    for (const p of this.players.values()) {
+      if (p.gain) this.#applyGain(p);
+      else p.el.muted = muted;
+    }
     this.onState?.(this.state, this.muted);
     if (!muted) this.#resumePlayback();
   }
@@ -88,11 +113,17 @@ export class Voice {
     }
     const stream = this.stream;
     this.stream = null;
-    if (this.sendingTo.size) this.room.removeStream(stream, { target: [...this.sendingTo] });
+    const tids = this.#tids([...this.sendingTo]);
+    if (tids.length) this.room.removeStream(stream, { target: tids });
     this.sendingTo.clear();
     for (const track of stream.getTracks()) track.stop();
     this.audio?.setMicActive(false);
     this.#setState('off');
+  }
+
+  // The audio streams run on the transport, which knows connections rather than players.
+  #tids(ids) {
+    return ids.map(id => this.net.transportIdOf(id)).filter(Boolean);
   }
 
   #syncSending() {
@@ -107,18 +138,18 @@ export class Voice {
       if (!this.teammates.has(id) || !connected.has(id)) drop.push(id);
     }
     if (add.length) {
-      this.room.addStream(this.stream, { target: add });
+      this.room.addStream(this.stream, { target: this.#tids(add) });
       for (const id of add) this.sendingTo.add(id);
     }
     if (drop.length) {
       const live = drop.filter(id => connected.has(id));
-      if (live.length) this.room.removeStream(this.stream, { target: live });
+      if (live.length) this.room.removeStream(this.stream, { target: this.#tids(live) });
       for (const id of drop) this.sendingTo.delete(id);
     }
   }
 
   #addRemote(stream, peerId) {
-    if (!this.teammates.has(peerId)) return;
+    if (!peerId || !this.teammates.has(peerId)) return;
     this.#removeRemote(peerId);
     const el = document.createElement('audio');
     el.autoplay = true;
@@ -126,7 +157,9 @@ export class Voice {
     el.muted = this.muted;
     el.srcObject = stream;
     document.body.appendChild(el);
-    this.players.set(peerId, { el, stream });
+    const player = { el, stream, gain: null };
+    this.players.set(peerId, player);
+    this.#applyGain(player);
     this.#resumePlayback();
   }
 

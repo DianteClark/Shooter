@@ -89,11 +89,11 @@ class LocalTransport {
 
 export class LocalNet extends StarNet {
   static host(code, name) {
-    return new LocalNet(new LocalTransport(code), { code, name, isHost: true });
+    return new LocalNet(new LocalTransport(code), { code, name, isHost: true, store: sessionStorage });
   }
 
   static join(code, name) {
-    return new LocalNet(new LocalTransport(code), { code, name, isHost: false });
+    return new LocalNet(new LocalTransport(code), { code, name, isHost: false, store: sessionStorage });
   }
 
   get room() {

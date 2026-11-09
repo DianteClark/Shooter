@@ -11,6 +11,9 @@ import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
 import { resultsScreen } from './results.js';
 import { saveScreen } from './savecode.js';
+import { optionsScreen } from './optionsscreen.js';
+import { helpScreen } from './help.js';
+import { fingerDown } from './tap.js';
 import { yardBackdrop } from './yard.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
 
@@ -20,7 +23,16 @@ const QWERTY = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM-_.'];
 const CODE_CHARS = ['ABCDEFGHJKM', 'NPQRSTUVWX', 'YZ23456789'];
 
 
+const PREVIEW_MS = 30;          // Turntable frames are spaced this far apart at least.
+
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
+
+// Tap the wordmark: the yard's PA has opinions.
+const YARD_PA = [
+  'Train 44 on track 9, stand clear.', 'Attention: someone left a turret running on platform 2.',
+  'The 18:05 to Harbor is delayed by gunfire.', 'Reminder: grenades are not luggage.',
+  'Would the owner of the red boxcar please move it.', 'Track inspection cancelled due to enemy UAV.',
+];
 
 export class Menu {
   constructor(root) {
@@ -41,7 +53,9 @@ export class Menu {
     this.previewCanvas = null;
     this.previewRaf = 0;
     this.reel = null;              // The results reel, when one is running.
+    this.lastScreen = null;        // For the transition: repaints of one screen must not replay it.
 
+    this.on({ yardPa: () => this.toast(YARD_PA[(this.paCount = (this.paCount ?? -1) + 1) % YARD_PA.length]) });
     this.el.addEventListener('click', e => this.#click(e));
     this.overlayEl.addEventListener('click', e => this.#click(e));
     root.insertAdjacentHTML('beforeend', `
@@ -65,12 +79,36 @@ export class Menu {
     Object.assign(this.actions, actions);
   }
 
-  show() { this.el.classList.add('on'); }
+  show() {
+    this.el.classList.add('on');
+    this.#playEnter();
+  }
+
   hide() {
     this.#stopPreview();
     this.#endReel();
     this.el.classList.remove('on');
     this.el.textContent = '';
+    this.lastScreen = null;
+  }
+
+  // Transforms and opacity only; a tap is resolved at touchstart, so nothing moving here can make it miss.
+  #playEnter() {
+    const screen = this.el.dataset.screen;
+    if (screen === this.lastScreen) return;
+    const first = this.lastScreen === null;
+    this.lastScreen = screen;
+    this.el.animate([
+      { opacity: first ? 0 : 0.35, transform: 'translate3d(14px,0,0)' },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 190, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    const wipe = this.wipe ??= Object.assign(document.createElement('i'), { className: 'screen-wipe' });
+    this.root.appendChild(wipe);
+    wipe.getAnimations().forEach(a => a.cancel());
+    wipe.animate([
+      { transform: 'translate3d(-120%,0,0) skewX(-18deg)' },
+      { transform: `translate3d(${innerWidth * 1.3}px,0,0) skewX(-18deg)` },
+    ], { duration: 340, easing: 'cubic-bezier(.35,.0,.25,1)' });
   }
 
   toast(text) {
@@ -86,7 +124,8 @@ export class Menu {
     this.overlayEl.classList.toggle('show', !!html);
   }
 
-  title({ arrive = false } = {}) {
+  // rejoin: { code } when this device has a match it may still get back into.
+  title({ arrive = false, rejoin = null } = {}) {
     this.#stopPreview();
     this.#endReel();
     const lp = Progress.levelProgress();
@@ -98,7 +137,7 @@ export class Menu {
       <section class="boxcar${arrive ? ' arrive' : ''}">
         <div class="boxcar-ribs"></div>
         <div class="boxcar-face">
-          <h1 class="wordmark">Switchyard</h1>
+          <h1 class="wordmark" data-act="yardPa">Switchyard</h1>
           <p class="wordmark-sub">6v6 deathmatch and objectives, friends or bots</p>
           <button class="pcard${can ? ' ready' : ''}" data-act="profile">
             <span class="pc-badge">${badgeMark(lp.prestige, 48)}</span>
@@ -110,10 +149,14 @@ export class Menu {
           </button>
         </div>
       </section>
-      <nav class="routes">
+      <nav class="routes${rejoin ? ' tight' : ''}">
+        ${rejoin ? `<button class="route lit" data-act="rejoin"><i class="lamp"></i><b>Rejoin ${esc(rejoin.code)}</b></button>` : ''}
         <button class="route primary" data-act="solo"><i class="lamp"></i><b>Play vs bots</b></button>
-        <button class="route" data-act="host"><i class="lamp"></i><b>Host a match</b></button>
-        <button class="route" data-act="join"><i class="lamp"></i><b>Join with a code</b></button>
+        <div class="route-pair">
+          <button class="route" data-act="host"><i class="lamp"></i><b>Host</b></button>
+          <button class="route" data-act="join"><i class="lamp"></i><b>Join code</b></button>
+        </div>
+        <button class="route" data-act="range"><i class="lamp"></i><b>Firing range</b></button>
         <div class="route-pair">
           <button class="route" data-act="loadout"><b>Loadouts</b></button>
           <button class="route" data-act="gunsmith"><b>Gunsmith</b></button>
@@ -121,6 +164,10 @@ export class Menu {
         <div class="route-pair">
           <button class="route" data-act="operators"><b>Operators</b></button>
           <button class="route" data-act="saveCode"><b>Save code</b></button>
+        </div>
+        <div class="route-pair">
+          <button class="route" data-act="options"><b>Options</b></button>
+          <button class="route" data-act="help"><b>How to play</b></button>
         </div>
       </nav>`;
     this.show();
@@ -315,6 +362,16 @@ export class Menu {
     saveScreen(this, opts);
   }
 
+  options(opts) {
+    this.#stopPreview();
+    optionsScreen(this, opts);
+  }
+
+  help(opts) {
+    this.#stopPreview();
+    helpScreen(this, opts);
+  }
+
   // Countdown ticks for a guest still reading results; the lobby repaints in full, so it needs no call of its own.
   updateCountdown(left) {
     const n = this.el.querySelector('.auto-n');
@@ -327,12 +384,6 @@ export class Menu {
   resultsNote(text) {
     const note = this.el.querySelector('.res-note');
     if (note) note.textContent = text;
-  }
-
-  // Swaps the Rematch button's action after the host is gone: label says what it now does.
-  relabelRematch(text) {
-    const b = this.el.querySelector('[data-act="resRematch"] b');
-    if (b) b.textContent = text;
   }
 
   // data: outcome, scores, myTeam, localId, roster, badges, mvp, xp, level, weapons, unlocks, finalKill, rematchLabel, note.
@@ -388,11 +439,15 @@ export class Menu {
     this.#runPreview();
   }
 
+  // Capped well under the display rate, and skipped entirely while a finger is on a button: on a phone the WebGL
+  // frame is the heaviest work on the main thread, and touch events wait behind it.
   #runPreview() {
     if (this.previewRaf) return;
-    let last = performance.now();
+    let last = performance.now(), drawn = 0;
     const tick = now => {
       this.previewRaf = requestAnimationFrame(tick);
+      if (fingerDown() || now - drawn < PREVIEW_MS) return;
+      drawn = now;
       this.ticking.tick(Math.min(0.1, (now - last) / 1000));
       last = now;
     };
