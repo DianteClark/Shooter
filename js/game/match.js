@@ -92,8 +92,9 @@ export class Match {
 
   #receiveEvents(events) {
     for (const e of events) {
-      // Own shots were already shown the instant they were fired.
+      // Own shots and overheats were already shown the instant they happened.
       if (e.t === 'shot' && e.by === this.localId) continue;
+      if (e.t === 'overheat' && e.id === this.localId) continue;
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
