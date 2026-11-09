@@ -5,8 +5,9 @@
 // Thinking (perception, decisions) runs at 5-12 Hz, staggered across bots. Driving the stick, aim and
 // trigger runs every tick, which is what keeps them looking fluid.
 
-import { hasLineOfSight } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { WEAPONS } from '../shared/weapons.js';
+import { EQUIPMENT } from './equipment.js';
 import { angleDiff, stepPlayer } from './player.js';
 
 const DEG = Math.PI / 180;
@@ -17,25 +18,29 @@ export const SKILLS = {
     thinkHz: 5, reaction: [0.55, 0.95], aimError: 0.2, aimFloor: 0.085, settle: 1.15, turnRate: 5.5, lag: 0.26,
     fov: 110 * DEG, sight: 18, hearing: 10, notice: 0.5, memory: 1.5, close: 3,
     retreatHp: 0, strafe: 0.15, adsUse: 0.3, flank: 0.03, holdProb: 0.15, holdTime: [1, 2.5], slide: 0.02,
-    sprint: 0.6, callouts: false, coverReload: 0.1, reloadAt: 0.15, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
+    sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
+    nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
     fov: 130 * DEG, sight: 22, hearing: 18, notice: 0.75, memory: 3, close: 4,
     retreatHp: 30, strafe: 0.5, adsUse: 0.65, flank: 0.12, holdProb: 0.33, holdTime: [1.5, 4], slide: 0.1,
-    sprint: 0.9, callouts: false, coverReload: 0.5, reloadAt: 0.4, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
+    sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
+    nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
   },
   veteran: {
     thinkHz: 9, reaction: [0.24, 0.38], aimError: 0.085, aimFloor: 0.03, settle: 0.55, turnRate: 13, lag: 0.13,
     fov: 160 * DEG, sight: 26, hearing: 26, notice: 0.92, memory: 5, close: 5,
     retreatHp: 42, strafe: 0.85, adsUse: 0.9, flank: 0.28, holdProb: 0.45, holdTime: [2, 5], slide: 0.3,
-    sprint: 1, callouts: true, coverReload: 0.9, reloadAt: 0.6, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
+    sprint: 1, callouts: true, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
+    nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
     fov: 190 * DEG, sight: 28, hearing: 34, notice: 0.98, memory: 7, close: 6,
     retreatHp: 55, strafe: 1, adsUse: 1, flank: 0.42, holdProb: 0.5, holdTime: [2, 5.5], slide: 0.5,
-    sprint: 1, callouts: true, coverReload: 1, reloadAt: 0.7, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
+    sprint: 1, callouts: true, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
+    nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
   },
 };
 
@@ -54,6 +59,10 @@ const STYLE = {
 const STAGES = [0.16, 0.36, 0.5, 0.64, 0.84];
 const POS = { x: 0, z: 0 };
 const PATH_POINTS = 24;
+const THROW_REACH = 12.75;      // Where a throw ends up on open ground: flight plus roll. See equipment.js.
+const TURRET_THREAT = 21;
+const TURRET_WAIT = 10;         // Seconds a bot will hold a turret looking for a good moment to drop it.
+const LANDING = { x: 0, z: 0, t: 0 };
 
 function gaussian(rng) { return (rng() + rng() + rng() + rng() - 2) / 0.577; }
 function between(rng, a, b) { return a + (b - a) * rng(); }
@@ -64,7 +73,7 @@ export class BotBrain {
     this.p = player;
     this.ps = player.ps;
     this.S = SKILLS[player.skill] || SKILLS.regular;
-    this.input = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, reload: false, swap: false, streak: false };
+    this.input = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
     this.interval = 1 / this.S.thinkHz;
     this.thinkT = this.interval * (staggerIndex % 11) / 11;
     this.path = new Float32Array(PATH_POINTS * 2);
@@ -86,12 +95,19 @@ export class BotBrain {
     this.holdT = 0; this.holdAim = 0; this.holdSpot = null; this.modeT = 0;
     this.strafeT = 0; this.strafeDir = 0;
     this.burstLeft = 0; this.burstPause = 0;
-    this.wantReload = false; this.wantSwap = false; this.wantSlide = false;
+    this.wantSwap = false; this.wantSlide = false;
     this.lastFireFlag = false;
     this.stuckT = 0; this.stuckX = ps.x; this.stuckZ = ps.z; this.stuckN = 0; this.escapeT = 0; this.escapeX = 0; this.escapeZ = 0;
     this.sepX = 0; this.sepZ = 0;
     this.moveIntent = false;
     this.streakT = between(this.sim.rng, 0.2, this.S.streakDelay);
+    this.turretWait = 0;
+    this.nadeT = between(this.sim.rng, 2, 6);     // No grenades in the first seconds of a life: a spawn is not a fight.
+    this.tacticalT = between(this.sim.rng, 1, 4);
+    this.flashT = 0;
+    this.heatCooling = false; this.heatStop = this.S.heatStop;
+    this.sawT = -99; this.sawX = 0; this.sawZ = 0; this.suppressing = false;
+    this.turretTarget = null;
     this.style = STYLE[ps.primary] || STYLE.ar;
     this.peek = 0;
     this._assignLane();
@@ -122,8 +138,20 @@ export class BotBrain {
     this.thinkT = Math.min(this.thinkT, 0.05);
   }
 
+  onFlashed(dur) {
+    this.flashT = Math.max(this.flashT, dur);
+    this.target = null; this.targetVisible = false;
+    this.turretTarget = null;
+  }
+
   _perceive() {
     const { sim, p, ps, S } = this;
+    if (this.flashT > 0) {
+      // Blind: nothing new comes in, but what it already knew is still in its head.
+      this.targetVisible = false;
+      if (this.hasKnown && sim.time - this.knownT > S.memory) this.hasKnown = false;
+      return;
+    }
     let best = null, bestScore = Infinity, bestD = 0;
     const sameTarget = this.target;
     // Engagements stay on-screen distances; only a scoped rifle reaches further.
@@ -139,7 +167,7 @@ export class BotBrain {
         if (Math.abs(angleDiff(Math.atan2(dz, dx), ps.aim)) > S.fov / 2) continue;
         if (sim.rng() > S.notice) continue;     // Looking the right way is not the same as noticing.
       }
-      if (!hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z)) continue;
+      if (!hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes)) continue;
       const score = d - (tracking ? 4 : 0) + q.hp * 0.03;
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
       if (S.callouts) sim.spotted[p.team][q.index] = sim.time;
@@ -148,6 +176,7 @@ export class BotBrain {
     if (best) {
       if (best !== this.target || !this.targetVisible) this._acquire(best, bestD);
       this.target = best; this.targetVisible = true; this.targetDist = bestD;
+      this.sawT = sim.time; this.sawX = best.ps.x; this.sawZ = best.ps.z;
       this._note(best.ps.x, best.ps.z);
     } else {
       this.targetVisible = false;
@@ -169,7 +198,7 @@ export class BotBrain {
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive) continue;
-      if (!useUav && sim.spotted[p.team][q.index] < spottedSince) continue;
+      if (useUav ? q.ps.perks.includes('ghost') : sim.spotted[p.team][q.index] < spottedSince) continue;
       const d = Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z);
       if (d < bestD) { bestD = d; q2 = q; }
     }
@@ -211,12 +240,16 @@ export class BotBrain {
     this.sepX = sx; this.sepZ = sz;
 
     const visible = this.targetVisible;
-    const ammo = ps.ammo[ps.slot], mag = WEAPONS[ps.weapon].magazine;
+    const ammo = ps.ammo[ps.slot];
 
-    if (p.streakReady) {
-      this.streakT -= this.interval;
-      if (this.streakT <= 0) { sim.useStreak(p.id); this.streakT = between(sim.rng, 0.3, S.streakDelay); }
-    }
+    // A belt-fed gun keeps hammering the spot where someone just ducked out of sight, which is what builds heat.
+    this.suppressing = !visible && !!WEAPONS[ps.weapon].heat && !ps.overheated && !!this.target && this.target.alive
+      && sim.time - this.sawT < S.suppress && this.flashT <= 0
+      && hasLineOfSight(sim.map, ps.x, ps.z, this.sawX, this.sawZ, sim.smokes);
+
+    this._thinkStreaks(visible);
+    this._thinkEquipment(visible);
+    this._thinkTurrets(visible);
 
     // Retreat low, reload behind cover.
     if (this.mode === 'cover') {
@@ -239,11 +272,8 @@ export class BotBrain {
     }
 
     // Pistol when the primary runs dry mid-fight; back to the main gun when it is over.
-    if (S.pistolSwap && visible && ps.slot === 0 && ammo === 0 && this.targetDist < 14) this.wantSwap = true;
-    else if (!visible && ps.slot === 1 && ps.swapT <= 0 && (ps.ammo[0] > 0 || ps.reserve[0] > 0)) this.wantSwap = true;
-
-    // Reload when nothing is happening. Recruits only remember when nearly empty.
-    if (!visible && ammo / mag <= S.reloadAt && ps.reloadT <= 0) this.wantReload = true;
+    if (S.pistolSwap && visible && ps.slot === 0 && (ammo === 0 || ps.overheated) && this.targetDist < 14) this.wantSwap = true;
+    else if (!visible && ps.slot === 1 && ps.swapT <= 0 && !ps.overheated && (ps.ammo[0] > 0 || ps.reserve[0] > 0)) this.wantSwap = true;
 
     if (visible) return;   // drive() fights; the strategic goal stays where it was.
 
@@ -272,16 +302,138 @@ export class BotBrain {
 
   _setMode(m) { this.mode = m; if (m === 'none') this.arrived = false; }
 
-  _takeCover() {
+  // Uses a streak a moment after earning it. The dearest goes first, so a capped bot resets its score.
+  _thinkStreaks(visible) {
+    const { sim, p, S } = this;
+    const slots = p.score.slots;
+    let slot = -1;
+    if (S.turret === null) {            // A recruit just presses whichever button lit up first.
+      for (let i = 0; i < slots.length && slot < 0; i++) if (slots[i].held) slot = i;
+    } else {
+      for (let i = slots.length - 1; i >= 0 && slot < 0; i--) if (slots[i].held) slot = i;
+    }
+    if (slot < 0) { this.turretWait = 0; return; }
+    this.streakT -= this.interval;
+    if (this.streakT > 0) return;
+    // A turret is only worth anything where a fight is about to happen.
+    if (slots[slot].kind === 'turret' && S.turret !== null && !visible && !this.hasKnown && this.mode !== 'hold' && this.turretWait < TURRET_WAIT) {
+      this.turretWait += this.interval;
+      return;
+    }
+    sim.useStreak(p.id, slot);
+    this.turretWait = 0;
+    this.streakT = between(sim.rng, 0.3, S.streakDelay);
+  }
+
+  // Where a throw at this angle ends up: full distance, or the first thing it hits.
+  _landing(aim) {
     const { sim, ps } = this;
+    const dirX = Math.cos(aim), dirZ = Math.sin(aim);
+    const hit = raycastMap(sim.map, ps.x, ps.z, dirX, dirZ, THROW_REACH, 'blocksBullet');
+    LANDING.t = hit ? hit.t : THROW_REACH;
+    LANDING.x = ps.x + dirX * LANDING.t; LANDING.z = ps.z + dirZ * LANDING.t;
+    return LANDING;
+  }
+
+  _throw(slot, aim) {
+    const { sim, p, ps } = this;
+    sim.applyCommand(p.id, { cmd: 'throw', slot, ox: ps.x, oz: ps.z, aim });
+  }
+
+  _thinkEquipment(visible) {
+    const { sim, p, ps, S } = this;
+    this.nadeT -= this.interval;
+    this.tacticalT -= this.interval;
+    if (this.flashT > 0 || ps.sliding) return;
+
+    if (ps.tactical === 'stim' && ps.tacticalLeft > 0 && p.hp < S.stimHp && this.tacticalT <= 0) {
+      this._throw('tactical', ps.aim);
+      this.tacticalT = 4;
+      return;
+    }
+
+    // Everything else is thrown at someone. Only firm information counts: not a UAV blip or a callout.
+    const fresh = this.hasKnown && !this.knownSoft && sim.time - this.knownT < 3;
+    if (!visible && !fresh) return;
+    const tx = visible ? this.target.ps.x : this.knownX, tz = visible ? this.target.ps.z : this.knownZ;
+    const d = Math.hypot(tx - ps.x, tz - ps.z);
+    const aim = Math.atan2(tz - ps.z, tx - ps.x) + gaussian(sim.rng) * S.aimFloor;
+
+    if (this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
+      const land = this._landing(aim);
+      const radius = EQUIPMENT[ps.lethal].blast.radius;
+      if (Math.hypot(land.x - tx, land.z - tz) < radius * 0.7 && land.t > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
+        if (sim.rng() < S.nade) {
+          this._throw('lethal', aim);
+          this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
+          return;
+        }
+        this.nadeT = 2.5;   // Decided against it. Don't reconsider on the very next think.
+      }
+    }
+
+    if (ps.tactical === 'flash' && visible && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 7) {
+      const land = this._landing(aim);
+      if (Math.hypot(land.x - tx, land.z - tz) < 7 && !this._teammateNear(land.x, land.z, 8)) {
+        if (sim.rng() < S.flash) this._throw('tactical', aim);
+        this.tacticalT = between(sim.rng, 8, 15);
+      }
+    }
+  }
+
+  // Bots that know what a turret is either shoot it or get out of its line of fire.
+  _thinkTurrets(visible) {
+    const { sim, p, ps, S } = this;
+    let tu = this.turretTarget;
+    if (tu && (tu.hp <= 0 || !hasLineOfSight(sim.map, ps.x, ps.z, tu.x, tu.z, sim.smokes))) tu = this.turretTarget = null;
+    if (!S.turret || this.flashT > 0) return;
+    if (visible) { this.turretTarget = null; return; }
+
+    let nearest = null, bestD = TURRET_THREAT;
+    for (let i = 0; i < sim.turrets.length; i++) {
+      const t = sim.turrets[i];
+      if (t.team === p.team) continue;
+      const d = Math.hypot(t.x - ps.x, t.z - ps.z);
+      if (d < bestD && hasLineOfSight(sim.map, ps.x, ps.z, t.x, t.z, sim.smokes)) { bestD = d; nearest = t; }
+    }
+    if (!nearest) { this.turretTarget = null; return; }
+
+    if (S.turret === 'shoot' && p.hp > 40 && ps.ammo[ps.slot] > 0) {
+      if (this.turretTarget !== nearest) {
+        this.reactLeft = between(sim.rng, S.reaction[0], S.reaction[1]);
+        this.reactTotal = this.reactLeft;
+        this.useAds = bestD > 6;
+      }
+      this.turretTarget = nearest;
+    } else if (this.mode !== 'cover') {
+      this.turretTarget = null;
+      this._coverFrom(nearest.x, nearest.z);
+    }
+  }
+
+  _takeCover() {
     const tx = this.target && this.targetVisible ? this.target.ps.x : this.knownX;
     const tz = this.target && this.targetVisible ? this.target.ps.z : this.knownZ;
+    if (this._coverFrom(tx, tz)) this._maybeSmoke(tx, tz);
+  }
+
+  _coverFrom(tx, tz) {
+    const { sim, ps } = this;
     const c = sim.nav.findCover(ps.x, ps.z, tx, tz, sim.rng);
-    if (!c) return;
+    if (!c) return false;
     this.mode = 'cover';
     this.modeT = between(sim.rng, 4, 7);
     this._goTo(c.x, c.z);
-    if (ps.ammo[ps.slot] < WEAPONS[ps.weapon].magazine * 0.7) this.wantReload = true;
+    return true;
+  }
+
+  // Popping smoke on the way out covers a retreat. It lands short of the threat, between the two of them.
+  _maybeSmoke(tx, tz) {
+    const { sim, p, ps, S } = this;
+    if (ps.tactical !== 'smoke' || ps.tacticalLeft <= 0 || this.tacticalT > 0 || !this.targetVisible || p.hp >= 60) return;
+    if (Math.hypot(tx - ps.x, tz - ps.z) < 5) return;
+    this.tacticalT = between(sim.rng, 8, 14);
+    if (sim.rng() < S.smoke) this._throw('tactical', Math.atan2(tz - ps.z, tx - ps.x));
   }
 
   _ambush() {
@@ -388,7 +540,8 @@ export class BotBrain {
     if (sim.pathBudget <= 0) return;
     sim.pathBudget--;
     this.pathDirty = false;
-    this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS);
+    // Recruits walk straight through a turret's field of fire; everyone else takes the long way round.
+    this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS, this.S.turret ? this.p.team : -1);
     this.pathI = 0;
     if (this.pathLen === 0) this.arrived = true;
   }
@@ -454,6 +607,19 @@ export class BotBrain {
     const tol = S.fireTol + Math.atan2(0.5, Math.max(d, 1)) * 0.6;
     let fire = this.reactLeft <= 0 && offAim < tol && ps.swapT <= 0 && d <= w.range && ps.ammo[ps.slot] > 0;
 
+    // Heat discipline: let go of the trigger before the bar fills. Sometimes a bot gets greedy and pays for it.
+    if (w.heat) {
+      if (ps.overheated) fire = false;
+      else if (this.heatCooling) {
+        if (ps.heat <= S.heatResume) this.heatCooling = false;
+        else fire = false;
+      } else if (fire && ps.heat >= this.heatStop) {
+        fire = false;
+        this.heatCooling = true;
+        this.heatStop = sim.rng() < S.heatSlip ? 2 : S.heatStop + sim.rng() * 0.08;
+      }
+    }
+
     if (ps.weapon === 'sniper' && ps.adsT < 0.85) fire = false;
     if (ps.weapon === 'shotgun' && d > 12) fire = false;
 
@@ -481,7 +647,17 @@ export class BotBrain {
     const q = this.target;
     const fighting = this.targetVisible && q && q.alive;
 
-    if (fighting) {
+    const tu = this.turretTarget;
+    if (!fighting && tu && tu.hp > 0) {
+      const dx = tu.x - ps.x, dz = tu.z - ps.z;
+      const d = Math.max(0.3, Math.hypot(dx, dz));
+      const ang = Math.atan2(dz, dx);
+      if (this.reactLeft > 0) this.reactLeft -= dt;
+      desired = ang + S.aimFloor * Math.sin(this.wobble += dt * 3.1);
+      this._trigger(null, d, ang, dt);
+      I.aiming = this.useAds && this.reactLeft <= 0;
+      this.moving = this._followPath(false);
+    } else if (fighting) {
       sim.posAt(q, S.lag, POS);          // The bot aims at where it perceives the target, slightly old.
       const dx = POS.x - ps.x, dz = POS.z - ps.z;
       const d = Math.max(0.3, Math.hypot(dx, dz));
@@ -517,7 +693,11 @@ export class BotBrain {
     } else {
       this.moving = this._followPath(true);
       if (this.moving) I.sprint = I.sprint && !(this.mode === 'hunt' && S.sprint < 1);
-      if (this.hasKnown) {
+      if (this.suppressing) {
+        desired = Math.atan2(this.sawZ - ps.z, this.sawX - ps.x);
+        this._trigger(null, Math.max(0.3, Math.hypot(this.sawX - ps.x, this.sawZ - ps.z)), desired, dt);
+        I.aiming = true; I.sprint = false;
+      } else if (this.hasKnown) {
         // Pre-aim where the noise or last sighting was.
         desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x);
         if (this.mode === 'hold' && this.arrived) I.aiming = true;
@@ -552,7 +732,6 @@ export class BotBrain {
       I.aim = ps.aim;
     }
 
-    if (this.wantReload) { I.reload = true; this.wantReload = false; }
     if (this.wantSwap) { I.swap = true; this.wantSwap = false; }
     if (this.wantSlide) { I.slide = true; this.wantSlide = false; }
   }
@@ -578,6 +757,7 @@ export class BotBrain {
   update(dt) {
     const { sim, ps, input: I } = this;
     this.sprintRoll = true;
+    if (this.flashT > 0) this.flashT -= dt;
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
       this.thinkT += this.interval;
@@ -588,7 +768,7 @@ export class BotBrain {
     if (this.pathDirty) this._solvePath();
     this.drive(dt);
     const shots = stepPlayer(ps, I, dt, sim.map, sim.rng);
-    I.reload = false; I.swap = false; I.slide = false;
+    I.swap = false; I.slide = false;
     this._trackStuck(dt);
     return shots;
   }

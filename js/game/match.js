@@ -7,18 +7,13 @@ import {
   createPlayerState, respawnPlayer, stepPlayer, traceShot, applyAimAssist,
   encodeHumanState, decodeHumanState,
 } from '../sim/player.js';
-import { Sim } from '../sim/sim.js';
+import { Sim, scavengeRefill } from '../sim/sim.js';
 import { Interpolator } from './interp.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_FRAME = 0.1;
 const MAX_CATCHUP_STEPS = 4;
 const END_HOLD = 4.5;              // Seconds of final-kill replay before the results screen.
-
-// The heat system flags the single step on which a gun locks up.
-function ps_overheatedEdge(ps) {
-  return ps.overheatEdge === true;
-}
 
 export class Match {
   constructor(config) {
@@ -101,6 +96,7 @@ export class Match {
       if (e.t === 'shot' && e.by === this.localId) continue;
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
+      if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
       this.frameEvents.push(e);
     }
   }
@@ -175,7 +171,7 @@ export class Match {
         this.net.sendShot({ ...shot, age: INTERP_DELAY + (this.net.rtt ?? 80) / 2000 });
       }
     }
-    if (ps_overheatedEdge(this.ps)) this.frameEvents.push({ t: 'overheat', id: this.localId });
+    if (this.ps.overheatEdge) this.frameEvents.push({ t: 'overheat', id: this.localId });
     if (input.streak >= 0) this.#command({ cmd: 'streak', slot: input.streak });
     if (input.tactical) this.#throw('tactical');
     if (input.lethal) this.#throw('lethal');

@@ -7,6 +7,8 @@ import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 const CELL = 1;
 const CLEARANCE = PLAYER_RADIUS + 0.2;
 const SQRT2 = Math.SQRT2;
+const DANGER_COST = 6;      // Extra metres of walking a bot accepts to stay out of one cell a turret covers.
+const DANGER_RANGE = 18;
 
 export class NavGrid {
   constructor(map) {
@@ -23,6 +25,7 @@ export class NavGrid {
     this.heap = new Int32Array(n * 8);
     this.heapF = new Float32Array(n * 8);
     this.tmp = new Int32Array(n);
+    this.danger = [new Uint8Array(n), new Uint8Array(n)];   // Per team: cells covered by enemy turrets.
     this._buildBlocked();
     this.cover = [];    // Points next to vision-blocking walls.
     this.holds = [];    // Points with a long sightline, each with the best angle for each team.
@@ -96,6 +99,25 @@ export class NavGrid {
       aim: [best[0].aim, best[1].aim], sight: [best[0].sight, best[1].sight] });
   }
 
+  // Rebuilds both teams' danger maps. Called only when a turret appears or goes away.
+  paintDanger(turrets) {
+    const { w, h, map } = this;
+    this.danger[0].fill(0); this.danger[1].fill(0);
+    for (const t of turrets) {
+      const grid = this.danger[1 - t.team];
+      const i0 = Math.max(0, Math.floor(t.x - DANGER_RANGE)), i1 = Math.min(w - 1, Math.ceil(t.x + DANGER_RANGE));
+      const j0 = Math.max(0, Math.floor(t.z - DANGER_RANGE)), j1 = Math.min(h - 1, Math.ceil(t.z + DANGER_RANGE));
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const k = j * w + i;
+          if (this.blocked[k] || grid[k]) continue;
+          const cx = i + 0.5, cz = j + 0.5;
+          if (Math.hypot(cx - t.x, cz - t.z) <= DANGER_RANGE && hasLineOfSight(map, t.x, t.z, cx, cz)) grid[k] = 1;
+        }
+      }
+    }
+  }
+
   idx(x, z) {
     const i = Math.max(0, Math.min(this.w - 1, Math.floor(x / CELL)));
     const j = Math.max(0, Math.min(this.h - 1, Math.floor(z / CELL)));
@@ -130,24 +152,28 @@ export class NavGrid {
   }
 
   // True when a player-sized circle can walk the straight segment. Samples the inflated grid.
-  segmentClear(ax, az, bx, bz) {
+  // With `danger`, a straight shortcut may not cross cells that map marks and the path around avoided.
+  segmentClear(ax, az, bx, bz, danger = null) {
     const dx = bx - ax, dz = bz - az;
     const len = Math.hypot(dx, dz);
     const steps = Math.ceil(len / 0.4);
     for (let s = 1; s < steps; s++) {
       const t = s / steps;
-      if (this.blocked[this.idx(ax + dx * t, az + dz * t)]) return false;
+      const k = this.idx(ax + dx * t, az + dz * t);
+      if (this.blocked[k] || (danger && danger[k])) return false;
     }
     return true;
   }
 
   // Writes [x0,z0,x1,z1,...] of a string-pulled path into `out` and returns the point count.
   // The first point is the first thing to walk to, not the start.
-  findPath(ax, az, bx, bz, out, maxPoints) {
+  // With a `team`, routes around the cells that team's enemy turrets cover, when a detour exists.
+  findPath(ax, az, bx, bz, out, maxPoints, team = -1) {
     const w = this.w, h = this.h;
     const startCell = this.nearestFree(ax, az);
     const goalCell = this.nearestFree(bx, bz);
     const { g, parent, stamp, closed, heap, heapF, blocked } = this;
+    const danger = team >= 0 ? this.danger[team] : null;
     const id = ++this.search;
     const gx = goalCell % w, gz = (goalCell - gx) / w;
 
@@ -206,7 +232,7 @@ export class NavGrid {
           if (blocked[k] || closed[k] === id) continue;
           // No cutting corners past a blocked cell.
           if (di !== 0 && dj !== 0 && (blocked[cj * w + i] || blocked[j * w + ci])) continue;
-          const cost = base + (di !== 0 && dj !== 0 ? SQRT2 : 1);
+          const cost = base + (di !== 0 && dj !== 0 ? SQRT2 : 1) + (danger && danger[k] ? DANGER_COST : 0);
           if (stamp[k] === id && g[k] <= cost) continue;
           stamp[k] = id; g[k] = cost; parent[k] = cur;
           push(k, cost + heuristic(k));
@@ -225,7 +251,9 @@ export class NavGrid {
       let j = i - 1, lastGood = j;
       for (; j >= 0; j--) {
         const k = raw[j], cx = k % w + 0.5, cz = (k - k % w) / w + 0.5;
-        if (this.segmentClear(anchorX, anchorZ, cx, cz)) lastGood = j;
+        // Once already inside covered ground the only goal is out, so shortcuts are fine again.
+        const avoid = danger && !danger[this.idx(anchorX, anchorZ)] ? danger : null;
+        if (this.segmentClear(anchorX, anchorZ, cx, cz, avoid)) lastGood = j;
         else if (j < lastGood - 3) break;
       }
       const k = raw[lastGood];
