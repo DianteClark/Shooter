@@ -508,7 +508,7 @@ export class HUD {
       this.killer = { name: byName, color: byCss, weapon: weaponName(e.weapon) };
       this.deathPainted = false;
     }
-    if (e.by === view.localId && e.target !== view.localId && WEAPONS[e.weapon]) {
+    if (e.by === view.localId && e.target !== view.localId && !e.streak && WEAPONS[e.weapon]) {
       for (const camo of Progress.recordKill(e.weapon)) {
         this.unlocks.push({ weapon: e.weapon, camoId: camo.id });
         this.notify(`${weaponName(e.weapon)} camo unlocked: ${getCamo(camo.id).name}`);

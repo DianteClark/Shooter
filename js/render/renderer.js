@@ -473,11 +473,8 @@ export class GunPreview {
     const box = geom.boundingBox;
     const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2, cz = (box.min.z + box.max.z) / 2;
     const dx = box.max.x - box.min.x, dy = box.max.y - box.min.y;
-    const aspect = (this.w && this.h) ? this.w / this.h : 2;
-    const halfV = Math.tan(THREE.MathUtils.degToRad(11));
-    const halfH = halfV * aspect;
     this.centre = new THREE.Vector3(cx, cy, cz);
-    this.fitDist = Math.max((dx * 0.53) / halfH, (dy * 0.62) / halfV, 2.2);
+    this.gunW = dx; this.gunH = dy;
     this._size();
     this._render();
   }
@@ -492,6 +489,9 @@ export class GunPreview {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     }
+    // Refit on every call: cards can be laid out after the gun is chosen, and narrow cards need more distance.
+    const halfV = Math.tan(THREE.MathUtils.degToRad(11));
+    this.fitDist = Math.max((this.gunW * 0.56) / (halfV * this.camera.aspect), (this.gunH * 0.62) / halfV, 2.2);
   }
 
   _render() {

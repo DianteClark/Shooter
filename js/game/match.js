@@ -146,6 +146,10 @@ export class Match {
     }
     this.lastAim = aim;
     r.aim = aim;
+    // Everyone holds position through the warmup countdown, as bots do; aiming stays live.
+    if (view.phase === 'warmup') {
+      r.mx = 0; r.mz = 0; r.fire = false; r.sprint = false; r.slide = false;
+    }
     return r;
   }
 
