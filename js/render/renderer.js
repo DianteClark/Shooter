@@ -322,7 +322,7 @@ export class GameRenderer {
     }
 
     if (visible) {
-      vfx.muzzleFlash(mx, my, mz, ev.aim, rgb, FLASH_SIZE[ev.weapon] ?? 1);
+      vfx.muzzleFlash(mx, my, mz, ev.aim, rgb, (FLASH_SIZE[ev.weapon] ?? 1) * (ev.sup ? 0.35 : 1));
       vfx.muzzleSmoke(mx, my, mz);
       vfx.pop(mx, 1.4, mz, 5 + kick * 2.2, rgb, 0.09);
       if (r) vfx.shell(r.eject[0], r.eject[1], r.eject[2], r.ejectDir[0], r.ejectDir[1]);

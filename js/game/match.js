@@ -166,7 +166,7 @@ export class Match {
       const rays = traceShot(shot, this.map, view.players, this.localId);
       this.frameEvents.push({
         t: 'shot', by: this.localId, weapon: shot.weapon, camo: this.ps.camo,
-        ox: shot.ox, oz: shot.oz, aim: shot.aim, rays,
+        ox: shot.ox, oz: shot.oz, aim: shot.aim, rays, sup: shot.sup,
       });
       if (this.isHost) {
         this.sim.applyShot(this.localId, shot, this.interp.delay);

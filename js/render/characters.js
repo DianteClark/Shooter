@@ -280,18 +280,26 @@ export class Characters {
     this.bodyMeshes = [this.torso, this.head, this.arm, this.leg, this.ring, this.blob];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
-    for (const id of WEAPON_IDS) {
-      const proto = getGun(id);
-      const geom = proto.geometry.clone();
-      addCamoInstanceAttributes(geom, MAX_PLAYERS);
-      const mesh = new THREE.InstancedMesh(geom, this.camoMat, MAX_PLAYERS);
-      mesh.frustumCulled = false;
-      mesh.count = 0;
-      mesh.renderOrder = 2;
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      scene.add(mesh);
-      this.guns[id] = mesh;
-    }
+    this.scene = scene;
+    this.gunList = [];
+    for (const id of WEAPON_IDS) this._gunMesh(getGun(id));
+  }
+
+  // One instanced mesh per distinct gun model (weapon plus visible attachments), built the first time it is held.
+  _gunMesh(proto) {
+    let mesh = this.guns[proto.key];
+    if (mesh) return mesh;
+    const geom = proto.geometry.clone();
+    addCamoInstanceAttributes(geom, MAX_PLAYERS);
+    mesh = new THREE.InstancedMesh(geom, this.camoMat, MAX_PLAYERS);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.renderOrder = 2;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(mesh);
+    this.guns[proto.key] = mesh;
+    this.gunList.push(mesh);
+    return mesh;
   }
 
   rig(id) {
@@ -335,7 +343,7 @@ export class Characters {
     const torso = this.torso, head = this.head, arm = this.arm, leg = this.leg;
     let nT = 0, nA = 0, nL = 0;
     let nRing = 0;
-    for (let i = 0; i < WEAPON_IDS.length; i++) this.guns[WEAPON_IDS[i]].count = 0;
+    for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
     let localPlayer = null;
     for (let i = 0; i < view.players.length; i++) if (view.players[i].id === localId) { localPlayer = view.players[i]; break; }
     const lx = localPlayer ? localPlayer.x : 0, lz = localPlayer ? localPlayer.z : 0;
@@ -400,7 +408,7 @@ export class Characters {
       _gun.compose(_p, _qGun, _s).premultiply(_body);
 
       // Muzzle and ejection port, needed even for hidden shooters so tracers start correctly.
-      const proto = getGun(p.weapon);
+      const proto = getGun(p.weapon, p.attachments);
       _v.set(proto.muzzle[0], proto.muzzle[1], proto.muzzle[2]).applyMatrix4(_gun);
       r.muzzle[0] = _v.x; r.muzzle[1] = _v.y; r.muzzle[2] = _v.z;
       _v.set(proto.eject[0], proto.eject[1], proto.eject[2]).applyMatrix4(_gun);
@@ -429,7 +437,7 @@ export class Characters {
       nT++;
 
       // Gun.
-      const gunMesh = this.guns[p.weapon] || this.guns.ar;
+      const gunMesh = this._gunMesh(proto);
       const gi = gunMesh.count++;
       _gun.toArray(gunMesh.instanceMatrix.array, gi * 16);
       const ga = gunMesh.geometry.attributes;
@@ -498,8 +506,8 @@ export class Characters {
       m.geometry.attributes.aFx.needsUpdate = true;
       m.geometry.attributes.aTeam.needsUpdate = true;
     }
-    for (let i = 0; i < WEAPON_IDS.length; i++) {
-      const m = this.guns[WEAPON_IDS[i]];
+    for (let i = 0; i < this.gunList.length; i++) {
+      const m = this.gunList[i];
       if (m.count === 0) continue;
       m.instanceMatrix.needsUpdate = true;
       const a = m.geometry.attributes;
@@ -512,7 +520,7 @@ export class Characters {
       m.geometry.dispose();
       m.dispose();
     }
-    for (const id of WEAPON_IDS) { this.guns[id].geometry.dispose(); this.guns[id].dispose(); }
+    for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();
   }
 }
