@@ -1,44 +1,49 @@
 // Pure 2D collision and visibility helpers on the XZ plane. No allocations on hot paths
 // beyond the small result object returned by a successful raycast.
 
-// Ray vs one axis-aligned rectangle (slab test). Returns entry distance or -1.
+// Ray vs one axis-aligned rectangle (slab test). On a hit fills HIT and returns true; no allocation,
+// because this runs for every wall on every line-of-sight check.
+const HIT = { t: 0, axis: 0, sign: 0 };
 function rayRect(ox, oz, dx, dz, r) {
   let tmin = 0, tmax = Infinity, axis = -1, sign = 0;
   if (Math.abs(dx) < 1e-9) {
-    if (ox < r.x || ox > r.x + r.w) return null;
+    if (ox < r.x || ox > r.x + r.w) return false;
   } else {
     let t1 = (r.x - ox) / dx, t2 = (r.x + r.w - ox) / dx, s = -1;
     if (t1 > t2) { const q = t1; t1 = t2; t2 = q; s = 1; }
     if (t1 > tmin) { tmin = t1; axis = 0; sign = s; }
     if (t2 < tmax) tmax = t2;
-    if (tmin > tmax) return null;
+    if (tmin > tmax) return false;
   }
   if (Math.abs(dz) < 1e-9) {
-    if (oz < r.z || oz > r.z + r.d) return null;
+    if (oz < r.z || oz > r.z + r.d) return false;
   } else {
     let t1 = (r.z - oz) / dz, t2 = (r.z + r.d - oz) / dz, s = -1;
     if (t1 > t2) { const q = t1; t1 = t2; t2 = q; s = 1; }
     if (t1 > tmin) { tmin = t1; axis = 1; sign = s; }
     if (t2 < tmax) tmax = t2;
-    if (tmin > tmax) return null;
+    if (tmin > tmax) return false;
   }
-  if (axis === -1) return null;   // Origin inside the rectangle.
-  return { t: tmin, axis, sign };
+  if (axis === -1) return false;   // Origin inside the rectangle.
+  HIT.t = tmin; HIT.axis = axis; HIT.sign = sign;
+  return true;
 }
 
 // Casts against walls for which wall[flag] is true ('blocksBullet' | 'blocksVision' | 'blocksMove').
 // (dirX, dirZ) must be normalised. Returns {t,x,z,nx,nz,wall} or null when nothing is hit within maxDist.
 export function raycastMap(map, ox, oz, dirX, dirZ, maxDist, flag = 'blocksBullet') {
-  let best = null, bestT = maxDist;
-  for (const w of map.walls) {
+  let best = null, bestT = maxDist, bestAxis = 0, bestSign = 0;
+  const walls = map.walls;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
     if (!w[flag]) continue;
-    const h = rayRect(ox, oz, dirX, dirZ, w);
-    if (h && h.t < bestT) { bestT = h.t; best = { h, w }; }
+    if (rayRect(ox, oz, dirX, dirZ, w) && HIT.t < bestT) {
+      bestT = HIT.t; best = w; bestAxis = HIT.axis; bestSign = HIT.sign;
+    }
   }
   if (!best) return null;
-  const { h, w } = best;
   return { t: bestT, x: ox + dirX * bestT, z: oz + dirZ * bestT,
-           nx: h.axis === 0 ? h.sign : 0, nz: h.axis === 1 ? h.sign : 0, wall: w };
+           nx: bestAxis === 0 ? bestSign : 0, nz: bestAxis === 1 ? bestSign : 0, wall: best };
 }
 
 // True when segment a-b passes through a smoke cloud ({x,z,r}). A viewer at a inside a cloud can see out

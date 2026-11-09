@@ -1,7 +1,7 @@
 // The rules of progression as pure functions and data: no DOM, no storage, runs in node.
 // js/ui/progress.js holds the one save and applies these rules to it.
 import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
-import { PERKS, TACTICALS, LETHALS, STREAKS, normalizeLoadout } from './catalog.js';
+import { PERKS, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
 import { PRIMARY_IDS, WEAPON_IDS } from './constants.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
@@ -98,7 +98,7 @@ export function itemUnlockLevel(kind, id) {
   return UNLOCK_SCHEDULE.find(u => u.kind === kind && u.id === id)?.level ?? 1;
 }
 
-const STARTER_GEAR = { perks: ['scavenger', 'marathon'], tactical: 'smoke', lethal: 'frag', streaks: ['uav', 'turret', 'strike'] };
+const STARTER_GEAR = { perks: ['marathon', 'scavenger', 'tracker'], tactical: 'smoke', lethal: 'frag', streaks: ['uav', 'turret', 'strike'] };
 
 // Replaces anything not yet reached with what is, keeping slot counts full.
 export function gateLoadoutGear(l, peakLevel) {
@@ -110,7 +110,7 @@ export function gateLoadoutGear(l, peakLevel) {
   };
   return {
     ...l,
-    perks: fill('perk', l.perks, STARTER_GEAR.perks, 2),
+    perks: gatePerks(l.perks, id => has('perk', id)),
     streaks: fill('streak', l.streaks, STARTER_GEAR.streaks, 3).sort((a, b) => STREAKS[a].cost - STREAKS[b].cost),
     tactical: TACTICALS[l.tactical] && has('tactical', l.tactical) ? l.tactical : STARTER_GEAR.tactical,
     lethal: LETHALS[l.lethal] && has('lethal', l.lethal) ? l.lethal : STARTER_GEAR.lethal,
