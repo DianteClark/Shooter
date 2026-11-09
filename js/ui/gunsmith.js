@@ -1,27 +1,30 @@
 // The gunsmith: one bench with the live gun and its stat bars, and a panel of tabs on the thumb side.
 // Trying something never commits it. The preview and the bars follow the try; a second tap (or the button) fits it.
+// The same goes for guns: browsing the rail only changes the bench, and Equip is the one thing that changes the loadout.
 // Only the changed parts of the DOM are patched, so the canvas and its WebGL context stay put.
 import { WEAPONS } from '../shared/weapons.js';
-import { PRIMARY_IDS, WEAPON_IDS } from '../shared/constants.js';
+import { WEAPON_IDS } from '../shared/constants.js';
 import { getCamo, TRACERS, KILL_EFFECTS } from '../shared/camos.js';
 import { SLOTS, ATTACHMENTS, attachmentsFor, normalizeKit } from '../shared/attachments.js';
 import { MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE, prestigeRewards, camoRequirement } from '../shared/progression.js';
 import { Progress } from './progress.js';
-import { esc, hex, swatchCss, lockIcon, ROMAN, SLOT_LABEL } from './widgets.js';
-import { compareStats, deltaText } from './gunstats.js';
+import { esc, hex, swatchCss, lockIcon, ROMAN, SLOT_LABEL, levelRequirement } from './widgets.js';
+import { compareStats, deltaText, weaponFacts } from './gunstats.js';
+import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { prestigeWeaponNow, kindLabel } from './prestige.js';
 
 const STOCK = 'stock';
 const TABS = [['attach', 'Attach'], ['camo', 'Camo'], ['fx', 'Effects'], ['prestige', 'Prestige']];
 
 export class Gunsmith {
-  constructor(menu, { loadoutIndex = Progress.activeLoadout, onBack, onChange, onRename }) {
+  constructor(menu, { loadoutIndex = Progress.activeLoadout, weapon, onBack, onChange, onRename }) {
     this.menu = menu;
     this.index = loadoutIndex;
     this.onChange = onChange;
     this.onBack = onBack;
     this.onRename = onRename;
-    this.weapon = Progress.loadouts()[this.index].primary;
+    this.weapon = weapon && Progress.isItemUnlocked('weapon', weapon) ? weapon : Progress.loadouts()[this.index].primary;
+    this.cat = categoryOf(this.weapon);
     this.tab = 'attach';
     this.slot = 'optic';
     this.tryAtt = null;      // Attachment id or STOCK.
@@ -39,6 +42,8 @@ export class Gunsmith {
     this.menu.on({
       gsBack: () => this.onBack(),
       gsWeapon: ({ id }) => this.selectWeapon(id),
+      gsCat: ({ cat }) => this.selectCategory(cat),
+      gsEquip: () => this.equip(),
       gsTab: ({ tab }) => this.selectTab(tab),
       gsSlot: ({ slot }) => { this.slot = slot; this.tryAtt = null; this.renderPanel(); this.update(); },
       gsAtt: ({ id }) => this.tapAttachment(id),
@@ -49,11 +54,21 @@ export class Gunsmith {
     });
   }
 
+  selectCategory(cat) {
+    if (cat === this.cat) return;
+    this.cat = cat;
+    this.renderRail();
+    this.paintRail();
+  }
+
+  // Looking only: what is equipped is untouched until equip().
   selectWeapon(id) {
     if (id === this.weapon) return;
+    if (!Progress.isItemUnlocked('weapon', id)) {
+      this.menu.toast(`${WEAPONS[id]?.name ?? id}: ${levelRequirement(Progress.itemUnlockLevel('weapon', id))}`);
+      return;
+    }
     this.weapon = id;
-    Progress.updateLoadout(this.index, PRIMARY_IDS.includes(id) ? { primary: id } : { secondary: id });
-    this.onChange?.();
     this.tryAtt = this.tryCamo = this.tryFx = null;
     if (!this.available(this.slot).length) this.slot = SLOTS.find(s => this.available(s).length) ?? 'optic';
     this.paintRail();
@@ -61,6 +76,18 @@ export class Gunsmith {
     this.renderPanel();
     this.update();
   }
+
+  equip() {
+    const id = this.weapon;
+    if (!Progress.isItemUnlocked('weapon', id) || this.isEquipped) return;
+    Progress.updateLoadout(this.index, { [slotOf(id)]: id });
+    this.onChange?.();
+    this.paintRail();
+    this.paintEquip();
+    this.menu.toast(`${this.name} equipped`);
+  }
+
+  get isEquipped() { return this.loadout[slotOf(this.weapon)] === this.weapon; }
 
   selectTab(tab) {
     this.tab = tab;
@@ -117,6 +144,8 @@ export class Gunsmith {
     const c = getCamo(camo);
     this.titleName.textContent = this.name;
     this.titleCamo.textContent = c.name;
+    this.paintEquip();
+    this.paintFacts(kit);
     this.paintStats(kit);
     this.paintFoot();
     this.paintHead();
@@ -201,12 +230,17 @@ export class Gunsmith {
         </div>
       </header>
       <div class="gs enter">
-        <div class="gs-weapons">${WEAPON_IDS.map(id => `<button class="gs-w${PRIMARY_IDS.includes(id) ? '' : ' side'}" data-act="gsWeapon" data-id="${id}"><b>${esc(WEAPONS[id].name)}</b><small></small></button>`).join('')}</div>
+        <div class="gs-weapons">
+          <nav class="gs-cats">${CATEGORIES.map(c => `<button class="gs-cat" data-act="gsCat" data-cat="${c}">${c}</button>`).join('')}</nav>
+          <div class="gs-list"></div>
+        </div>
         <div class="gs-bench">
           <div class="gs-view">
             <div class="gs-title"><b></b><small></small></div>
+            <button class="route small gs-equip" data-act="gsEquip"><i class="lamp"></i><b></b></button>
           </div>
           <div class="gs-stats"></div>
+          <div class="gs-facts"></div>
         </div>
         <div class="gs-panel">
           <nav class="gs-tabs">${TABS.map(([id, label]) => `<button class="gs-tab" data-act="gsTab" data-tab="${id}">${label}</button>`).join('')}</nav>
@@ -225,9 +259,13 @@ export class Gunsmith {
     this.xpEl = $('.gs-xp');
     this.xpnEl = $('.gs-xpn');
     this.pchip = $('.gs-pchip');
-    this.rail = [...m.el.querySelectorAll('.gs-w')];
+    this.listEl = $('.gs-list');
+    this.catBtns = [...m.el.querySelectorAll('.gs-cat')];
+    this.equipBtn = $('.gs-equip');
+    this.factsEl = $('.gs-facts');
     this.tabs = [...m.el.querySelectorAll('.gs-tab')];
     m.previewMount(this.benchEl, this.weapon, Progress.camo(this.weapon), this.kit);
+    this.renderRail();
     this.paintRail();
     this.paintTabs();
     this.renderStats();
@@ -236,14 +274,50 @@ export class Gunsmith {
     m.show();
   }
 
+  // The guns of one category, each with its picture.
+  renderRail() {
+    const list = gunsIn(this.cat);
+    this.listEl.style.setProperty('--rows', Math.max(3, list.length));
+    this.listEl.innerHTML = list.map(id => {
+      const open = Progress.isItemUnlocked('weapon', id);
+      return `<button class="gs-w${open ? '' : ' locked'}" data-act="gsWeapon" data-id="${esc(id)}">
+        <span class="gs-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas></span>
+        <span class="gs-wt"><b>${esc(WEAPONS[id].name)}</b><small></small></span>
+        ${open ? '' : `<em class="lock">${lockIcon()}</em>`}
+      </button>`;
+    }).join('');
+    this.rail = [...this.listEl.querySelectorAll('.gs-w')];
+    this.menu.paintGuns(this.listEl, this.resolveThumb);
+    for (const b of this.catBtns) b.classList.toggle('on', b.dataset.cat === this.cat);
+  }
+
+  resolveThumb = id => ({ camo: Progress.camo(id), kit: attachmentsFor(this.loadout, id) });
+
   paintRail() {
     const primary = this.loadout.primary, secondary = this.loadout.secondary;
     for (const btn of this.rail) {
-      const id = btn.dataset.id;
+      const id = btn.dataset.id, open = Progress.isItemUnlocked('weapon', id);
       btn.classList.toggle('on', id === this.weapon);
       btn.classList.toggle('equipped', id === primary || id === secondary);
-      btn.querySelector('small').textContent = `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` ${ROMAN[Progress.weaponPrestige(id)]}` : ''}`;
+      btn.querySelector('small').textContent = open
+        ? `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` ${ROMAN[Progress.weaponPrestige(id)]}` : ''}`
+        : `Level ${Progress.itemUnlockLevel('weapon', id)}`;
     }
+  }
+
+  // The bench's one link to the loadout.
+  paintEquip() {
+    const b = this.equipBtn, on = this.isEquipped;
+    b.disabled = on;
+    b.classList.toggle('lit', on);
+    b.classList.toggle('primary', !on);
+    const text = on ? `${SLOT_NAME[slotOf(this.weapon)]}: equipped` : `Equip ${SLOT_NAME[slotOf(this.weapon)]}`;
+    if (b.querySelector('b').textContent !== text) b.querySelector('b').textContent = text;
+  }
+
+  paintFacts(kit) {
+    const html = weaponFacts(this.weapon, kit).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('');
+    if (this.factsHtml !== html) this.factsEl.innerHTML = this.factsHtml = html;
   }
 
   paintTabs() {

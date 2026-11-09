@@ -2,6 +2,7 @@
 import { joinRoom, selfId, pauseRelayReconnection, resumeRelayReconnection } from 'trystero';
 import { StarNet, KINDS } from './star.js';
 import { TURN_SERVERS } from './turn.js';
+import { mungeOpus } from './opus.js';
 
 const APP_ID = 'switchyard-6v6-1';
 
@@ -9,7 +10,7 @@ const APP_ID = 'switchyard-6v6-1';
 // their bufferedAmount is what tells the session a phone has fallen behind.
 const channels = new WeakMap();
 
-class TrackedPeerConnection extends RTCPeerConnection {
+export class TrackedPeerConnection extends RTCPeerConnection {
   constructor(config) {
     super(config);
     this.addEventListener('datachannel', e => channels.set(this, e.channel));
@@ -19,6 +20,23 @@ class TrackedPeerConnection extends RTCPeerConnection {
     const channel = super.createDataChannel(...args);
     channels.set(this, channel);
     return channel;
+  }
+
+  // Trystero relies on the no-argument form, where the browser would choose the SDP itself. Rewriting Opus means making
+  // the description here; if the state moved on while it was being made, the browser's own form still gets to run.
+  async setLocalDescription(description) {
+    if (description?.type === 'rollback') return super.setLocalDescription(description);
+    try {
+      const d = description?.sdp ? description : await this.#createDescription();
+      return await super.setLocalDescription({ type: d.type, sdp: mungeOpus(d.sdp) });
+    } catch (err) {
+      if (description) throw err;
+      return super.setLocalDescription();
+    }
+  }
+
+  #createDescription() {
+    return this.signalingState === 'have-remote-offer' || this.signalingState === 'have-local-pranswer' ? this.createAnswer() : this.createOffer();
   }
 }
 

@@ -27,6 +27,7 @@ class Reel {
     this.fast = false;
     this.anims = [];
     this.wake = null;
+    this.rematchLabel = 'Rematch';
   }
 
   cancel() {
@@ -80,7 +81,12 @@ class Reel {
   async stamp(html, ms = STAMP_MS) {
     if (this.dead || this.fast) return;
     const m = this.menu;
-    m.overlay(`<div class="cer" data-act="reelTap">${html}<small class="cer-tap">Tap to continue</small></div>`);
+    // A ceremony fills the screen, so it carries its own Rematch and Menu: they must work the moment results appear.
+    m.overlay(`<div class="cer" data-act="reelTap">${html}<small class="cer-tap">Tap to continue</small>
+      <div class="cer-actions">
+        <button class="route primary" data-act="resRematch"><i class="lamp"></i><b>${esc(this.rematchLabel)}</b></button>
+        <button class="route" data-act="resMenu"><i class="lamp"></i><b>Menu</b></button>
+      </div></div>`);
     m.on({ reelTap: () => this.wake?.() });
     await this.sleep(ms);
     if (!this.dead) m.overlay('');
@@ -146,7 +152,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         <p class="res-note">${esc(data.note ?? '')}</p>
       </div>
     </div>`;
-  menu.on({ resRematch: rematch, resMenu: toMenu });
+  menu.on({ resRematch: () => { menu.overlay(''); rematch(); }, resMenu: () => { menu.overlay(''); toMenu(); } });
   countUp(menu.el.querySelector('.rs-mine'), 0, scores[myTeam], 600);
   countUp(menu.el.querySelector('.rs-them'), 0, scores[1 - myTeam], 600);
   countUp(menu.el.querySelector('.xp-total'), 0, xp?.total ?? 0, 900);
@@ -156,6 +162,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const reel = new Reel(menu);
   menu.reel?.cancel();
   menu.reel = reel;
+  reel.rematchLabel = data.rematchLabel;
   menu.on({ resSkip: () => { menu.overlay(''); reel.tapThrough(); } });
   runReel(menu, reel, { lp, xpFrom, weapons, unlocks });
   menu.show();

@@ -1,5 +1,6 @@
 @import url("fonts.css");
 @import url("menus.css");
+@import url("loadout.css");
 
 /* Dusk yard: steel that has gone blue-mauve in the last light, with sodium lamps for anything that wants attention.
    Team colours come from js/shared/constants.js and are the only fully saturated colours on screen. */
@@ -17,23 +18,33 @@
   --stencil: 'Railyard Stencil', 'DIN Condensed', 'Arial Narrow', sans-serif;
   --plate-face: 'Railyard Plate', 'DIN Alternate', 'Arial Narrow', sans-serif;
   --body: 'DIN Alternate', 'Avenir Next Condensed', 'Helvetica Neue', Arial, sans-serif;
-  --st: env(safe-area-inset-top, 0px);
-  --sr: env(safe-area-inset-right, 0px);
-  --sb: env(safe-area-inset-bottom, 0px);
-  --sl: env(safe-area-inset-left, 0px);
+  /* --env-* are the device's insets; --s* what a layer actually keeps clear. Menus rebind --s* in their own scale. */
+  --env-t: env(safe-area-inset-top, 0px);
+  --env-r: env(safe-area-inset-right, 0px);
+  --env-b: env(safe-area-inset-bottom, 0px);
+  --env-l: env(safe-area-inset-left, 0px);
+  --st: var(--env-t);
+  --sr: var(--env-r);
+  --sb: var(--env-b);
+  --sl: var(--env-l);
+  --app-w: 100%;           /* Measured in js/ui/viewport.js; the percentages are for the instant before it runs. */
+  --app-h: 100%;
+  --k: 1;                  /* Menu scale. */
+  --isl: 1;                /* 1 when the island could be on that side. */
+  --isr: 1;
   --cut: 9px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body {
-  position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none;
+  position: fixed; left: 0; top: 0; width: var(--app-w); height: var(--app-h); overflow: hidden; overscroll-behavior: none;
   background: var(--ballast); color: var(--chalk);
   font-family: var(--plate-face); letter-spacing: .05em;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: none; -webkit-text-size-adjust: 100%;
 }
-canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-#ui { position: fixed; inset: 0; overflow: hidden; touch-action: none; }
+canvas#game { position: fixed; left: 0; top: 0; width: var(--app-w); height: var(--app-h); display: block; touch-action: none; }
+#ui { position: fixed; left: 0; top: 0; width: var(--app-w); height: var(--app-h); overflow: hidden; touch-action: none; }
 button {
   font: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; cursor: pointer;
   touch-action: manipulation; -webkit-touch-callout: none;
@@ -88,6 +99,7 @@ button {
 .tbtn.empty { opacity: .45; }
 .tbtn.empty .tbtn-count { background: var(--plate); color: var(--chalk); }
 .tbtn.down { transform: scale(.9); background: rgba(231,234,228,.3); }
+.tbtn.dim { opacity: .4; }
 .tbtn-slide { right: calc(var(--sr) + 14px); bottom: calc(var(--sb) + 24px); width: 74px; height: 74px; }
 .tbtn-swap { right: calc(var(--sr) + 14px); bottom: calc(var(--sb) + 108px); }
 .tbtn-tactical { right: calc(var(--sr) + 86px); bottom: calc(var(--sb) + 148px); }
@@ -119,6 +131,11 @@ button {
 .st-tile.blocked { background: rgba(29,35,43,.5); color: var(--plate); box-shadow: inset 0 0 0 1.5px rgba(76,90,103,.7); }
 .st-tile.blocked .st-fill, .st-tile.blocked .st-icon, .st-tile.blocked .st-cost { visibility: hidden; }
 .st-tile.blocked .st-lock { display: grid; }
+.st-why { position: absolute; left: 0; right: 0; bottom: 2px; font: 9px/1 var(--plate-face); letter-spacing: .02em; color: var(--ballast); text-align: center; }
+.st-tile.denied { background: rgba(242,166,59,.45); color: var(--chalk); box-shadow: inset 0 0 0 1.5px var(--sodium); }
+.st-tile.denied svg { stroke: var(--chalk); opacity: .75; }
+.st-tile.denied .st-why { color: var(--chalk); }
+.st-tile.denied .st-cost { visibility: hidden; }
 .st-tile.pop { animation: tile-pop .75s cubic-bezier(.2,.9,.3,1) both; }
 @keyframes tile-pop {
   0% { transform: translateY(0) scale(1); filter: brightness(1); }
@@ -318,9 +335,19 @@ button {
 .endbanner[data-result="loss"] b { color: var(--enemy-team, var(--red)); }
 
 /* --- Menus --- */
+/* Menus are laid out at about 845x390 and scaled to fit (see js/ui/viewport.js), so nothing here needs a size per phone.
+   The side inset is only as deep as it has to be: the full notch inset on the island's side, corner clearance on the other. */
+.menu, .overlay {
+  --st: calc(var(--env-t) / var(--k));
+  --sb: calc(var(--env-b) / var(--k));
+  --sl: calc(max(var(--env-l) * var(--isl), min(var(--env-l), 14px)) / var(--k));
+  --sr: calc(max(var(--env-r) * var(--isr), min(var(--env-r), 14px)) / var(--k));
+  left: 0; top: 0; width: calc(var(--app-w) / var(--k)); height: calc(var(--app-h) / var(--k));
+  transform-origin: 0 0; scale: var(--k);
+}
 .menu {
-  position: absolute; inset: 0; display: none; flex-direction: column; background: var(--ballast);
-  padding: calc(var(--st) + 8px) max(var(--sr), 12px) max(var(--sb), 8px) max(var(--sl), 12px);
+  position: absolute; display: none; flex-direction: column; background: var(--ballast);
+  padding: calc(var(--st) + 6px) max(var(--sr), 10px) max(calc(var(--sb) * .6), 6px) max(var(--sl), 10px);
 }
 .menu.on { display: flex; }
 
@@ -422,7 +449,7 @@ button {
 .seg.on { background: var(--chalk); color: var(--ballast); }
 
 /* Overlays */
-.overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(29,35,43,.68); padding: calc(var(--st) + 10px) calc(var(--sr) + 14px) calc(var(--sb) + 10px) calc(var(--sl) + 14px); }
+.overlay { position: absolute; display: none; align-items: center; justify-content: center; background: rgba(29,35,43,.68); padding: calc(var(--st) + 10px) calc(var(--sr) + 14px) calc(var(--sb) + 10px) calc(var(--sl) + 14px); }
 .overlay.show { display: flex; }
 .sheet { width: min(560px, 100%); padding: 16px 18px; background: var(--steel); box-shadow: inset 0 3px 0 var(--sodium); display: flex; flex-direction: column; gap: 8px; }
 .sheet.slim { align-items: center; text-align: center; }
@@ -494,9 +521,11 @@ button {
 button:disabled.pressed { transform: none; filter: none; }
 button { transition: transform .12s ease-out, filter .12s ease-out; }
 
-/* Controlled throws: a line and label that follow the thumb from the button. */
-.throw-rig { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; will-change: transform; }
-.tr-range { position: absolute; left: 0; top: 0; border-radius: 50%; border: 1.5px dashed rgba(242,166,59,.32); background: radial-gradient(circle, rgba(242,166,59,.1), transparent 70%); }
+/* Controlled throws: a line and label that follow the thumb from the button.
+   The rig is never display:none. Its layers exist from the start of the match and only their opacity changes. */
+.throw-rig { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; will-change: transform, opacity; opacity: 0; }
+.throw-rig.on { opacity: 1; }
+.tr-range { position: absolute; left: 0; top: 0; border-radius: 50%; border: 1.5px dashed rgba(242,166,59,.32); background: rgba(242,166,59,.06); }
 .tr-line { position: absolute; left: 0; top: -2px; width: 1px; height: 4px; transform-origin: left center; background: linear-gradient(90deg, rgba(242,166,59,.25), var(--sodium)); will-change: transform; }
 .tr-dot { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 0 2.5px var(--sodium), 0 0 12px rgba(242,166,59,.7); will-change: transform; }
 .tr-label { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; padding: 3px 10px 4px; background: rgba(29,35,43,.88); white-space: nowrap; will-change: transform; }
@@ -505,7 +534,6 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 .throw-rig.cancel .tr-line, .throw-rig.cancel .tr-range { opacity: .35; }
 .throw-rig.cancel .tr-dot { box-shadow: 0 0 0 2.5px var(--red); }
 .throw-rig.cancel .tr-label b { color: var(--red); }
-.throwing .tbtn:not(.down), .throwing .st-row { opacity: .4; }
 .tbtn.aiming { background: rgba(242,166,59,.32); box-shadow: inset 0 0 0 2.5px var(--sodium); transform: scale(1.06); }
 .tbtn.throw-cancel { background: rgba(255,77,61,.42); box-shadow: inset 0 0 0 2.5px var(--red); }
 .tbtn.deny { animation: btn-deny .28s; }
@@ -560,23 +588,26 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 .board-leave { align-self: flex-end; margin-top: 4px; height: 30px; padding: 0 12px; font-size: 11px; color: var(--chalk); background: rgba(255,77,61,.55); pointer-events: auto; }
 
 /* Firing range readout */
-.range-panel { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 44px); width: 158px; padding: 6px 8px; background: rgba(29,35,43,.86); box-shadow: inset 2px 0 0 var(--sodium); display: flex; flex-direction: column; gap: 3px; pointer-events: auto; }
+/* A strip along the top: thumbs own both lower corners, so nothing tall can live on the left. */
+.range-panel { position: absolute; left: 50%; top: calc(var(--st) + 6px); transform: translateX(-50%); padding: 3px 8px; background: rgba(29,35,43,.86); box-shadow: inset 0 -2px 0 var(--sodium); display: flex; flex-direction: row; align-items: center; gap: 10px; pointer-events: auto; white-space: nowrap; }
 .rp-head { font-size: 10px; color: var(--sodium); letter-spacing: .1em; }
-.rp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+.rp-grid { display: flex; align-items: center; gap: 12px; }
 .rp-grid div { display: flex; flex-direction: column; }
 .rp-grid span { font-size: 9px; color: var(--haze); }
 .rp-grid b { font: 400 18px/1 var(--stencil); }
-.rp-big { grid-column: 1 / -1; flex-direction: row !important; align-items: baseline; gap: 6px; }
-.rp-big b { font-size: 36px; color: var(--chalk); }
-.rp-reset, .range-leave { height: 32px; font-size: 11px; background: rgba(76,90,103,.9); pointer-events: auto; }
+.rp-big { flex-direction: row !important; align-items: baseline; gap: 5px; }
+.rp-big b { font-size: 30px; color: var(--chalk); }
+.rp-reset, .range-leave { height: 32px; font-size: 11px; background: rgba(76,90,103,.9); pointer-events: auto; padding: 0 10px; }
 .range-leave { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 92px); padding: 0 14px; }
 .hud.range-on .scorebar, .hud.range-on .minimap { display: none; }
 .hud.range-on .range-leave { top: calc(var(--st) + 8px); }
-.hud.range-on .feed { left: calc(var(--sl) + 176px); top: calc(var(--st) + 8px); }
-.hud.lefty .range-panel { left: auto; right: calc(var(--sr) + 8px); }
+.hud.range-on .feed { left: calc(var(--sl) + 8px); top: calc(var(--st) + 48px); }
 @media (prefers-reduced-motion: reduce) { .intro.show, .in-row, .in-mid, .xp-row { animation: none; } }
-.rp-wide { grid-column: 1 / -1; }
 .rp-wide b { font-size: 15px; }
-.rp-model { grid-column: 1 / -1; font: 10px/1.1 var(--body); letter-spacing: 0; color: var(--haze); }
+.rp-model { display: none; }
 .route.lit:not(.primary) { color: var(--ballast); }
 .route.lit:not(.primary) .lamp { background: var(--ballast); }
+
+/* The killcam banner takes the row under the score bar. */
+.killcam-on .obj-strip, .killcam-on .obj-meter, .killcam-on .obj-banner, .killcam-on .spectate { visibility: hidden; }
+.killcam-banner { background: linear-gradient(90deg, transparent, rgba(29,35,43,.72) 34%, rgba(29,35,43,.72) 66%, transparent); padding: 3px 0; }

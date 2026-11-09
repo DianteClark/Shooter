@@ -6,7 +6,8 @@ import { OperatorPreview } from '../render/characters.js';
 import { Progress } from './progress.js';
 import { LoadoutsScreen } from './loadout.js';
 import { OperatorsScreen } from './operatorscreen.js';
-import { voteMarkup, paintVote, soloMarkup } from './vote.js';
+import { voteMarkup, paintVote, soloMarkup, paintSolo } from './vote.js';
+import { followMapArt } from './mapthumb.js';
 import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
 import { resultsScreen } from './results.js';
@@ -15,6 +16,7 @@ import { optionsScreen } from './optionsscreen.js';
 import { helpScreen } from './help.js';
 import { fingerDown } from './tap.js';
 import { yardBackdrop } from './yard.js';
+import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
 
 export { esc };
@@ -323,17 +325,23 @@ export class Menu {
       this.voteKey = state.key;
       this.el.dataset.screen = 'vote';
       this.el.innerHTML = voteMarkup(state);
+      followMapArt(this.el);
     }
     paintVote(this.el, state);
     this.show();
   }
 
-  // Solo picks: repaint per tap is fine, nothing here animates.
+  // Solo picks: built once when the screen opens, then only the selection marks change.
   solo(state) {
+    if (this.el.dataset.screen === 'solo' && this.el.classList.contains('on') && this.el.querySelector('.solo')) {
+      paintSolo(this.el, state);
+      return;
+    }
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'solo';
     this.el.innerHTML = soloMarkup(state);
+    followMapArt(this.el);
     this.show();
   }
 
@@ -456,6 +464,20 @@ export class Menu {
 
   previewShow(weaponId, camoId, kit) {
     this.preview?.show(weaponId, camoId, kit);
+  }
+
+  // Redraws whichever turntable is showing, after something else has borrowed the shared buffer.
+  redrawPreview() {
+    if (this.previewCanvas?.isConnected) this.ticking?.tick(0);
+  }
+
+  // Fills every canvas[data-gun] under root with its cached picture. The preview must already be mounted.
+  paintGuns(root, resolve) {
+    (this.thumbs ??= new GunThumbs(this)).fill(root, resolve);
+  }
+
+  warmGuns(ids, resolve) {
+    (this.thumbs ??= new GunThumbs(this)).warm(ids, resolve);
   }
 
   // Leaving the results screen mid-reel: a ceremony card must not land on the next screen.

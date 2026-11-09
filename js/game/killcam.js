@@ -432,7 +432,9 @@ export class Killcam {
   #ensureUi() {
     if (this.ui || typeof document === 'undefined') return;
     const el = document.createElement('div');
-    el.style.cssText = 'position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 8px);display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;z-index:30;font-family:var(--plate-face, system-ui, sans-serif);color:#fff;text-shadow:0 1px 3px #000c;transition:opacity .15s;opacity:0';
+    // Sits under the score bar on one line. CSS hides the objective strip it would otherwise share that row with.
+    el.className = 'killcam-banner';
+    el.style.cssText = 'position:fixed;left:0;right:0;top:calc(var(--st,0px) + 44px);display:flex;flex-direction:row;justify-content:center;align-items:baseline;gap:10px;pointer-events:none;z-index:30;font-family:var(--plate-face, system-ui, sans-serif);color:#fff;text-shadow:0 1px 3px #000c;transition:opacity .15s;opacity:0';
     const title = document.createElement('div');
     title.style.cssText = 'font-size:15px;letter-spacing:.32em;text-transform:uppercase;color:#ffcf6b;padding-left:.32em';
     const who = document.createElement('div');
@@ -455,10 +457,14 @@ export class Killcam {
     this.ui.who.textContent = killer ? `Eliminated by ${killer}` : '';
     if (kind === 'final') this.ui.who.textContent = killer ? killer : '';
     this.ui.el.style.opacity = '1';
+    document.body.classList.add('killcam-on');
     this.ui.skip.style.display = '';
   }
 
-  #hideBanner() { if (this.ui) { this.ui.el.style.opacity = '0'; this.ui.skip.style.display = 'none'; } }
+  #hideBanner() {
+    document.body.classList.remove('killcam-on');
+    if (this.ui) { this.ui.el.style.opacity = '0'; this.ui.skip.style.display = 'none'; }
+  }
 
   #findName(id) {
     for (let n = 0; n < this.count; n++) {

@@ -52,3 +52,24 @@ export function compareStats(weaponId, fittedKit, tryKit) {
 export function deltaText(row) {
   return row.whole ? `${Math.abs(Math.round(row.delta))}` : `${Math.round(Math.abs(row.delta) * 100)}%`;
 }
+
+// One gun alone, for cards and the armory: { id, label, score } per bar.
+export function statBars(weaponId, kit) {
+  const def = applyAttachments(WEAPONS[weaponId], kit);
+  return statsFor(weaponId).map(s => ({ id: s.id, label: s.label, score: clamp01(s.score(s.raw(def))) }));
+}
+
+// The numbers behind the bars, as the player thinks about them.
+export function weaponFacts(weaponId, kit) {
+  const w = applyAttachments(WEAPONS[weaponId], kit);
+  const f = w.falloff;
+  const hasFalloff = f && f.start < (w.range ?? Infinity);
+  return [
+    ['Damage', w.pellets > 1 ? `${w.damage}x${w.pellets}` : `${w.damage}`],
+    ['RPM', `${Math.round(w.rpm)}`],
+    ['Mag', `${w.magazine}`],
+    ['Reload', `${(w.shellReload ? w.reload * w.magazine * 0.5 : w.reload).toFixed(1)}s`],
+    ['Falloff', hasFalloff ? `${Math.round(f.start)}-${Math.round(f.end)}m` : 'None'],
+    ['Max', `${Math.round(w.maxRange ?? w.range)}m`],
+  ];
+}

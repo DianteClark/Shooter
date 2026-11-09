@@ -1,5 +1,17 @@
 // Team voice over the Trystero mesh. The microphone is only requested when the player taps the HUD mic.
-const MIC_CONSTRAINTS = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false };
+//
+// Incoming voice plays through plain <audio> elements and never touches Web Audio. On iOS, routing a remote WebRTC stream
+// through createMediaStreamSource resamples it inside the game's AudioContext, and that is the crackle.
+import { tuneAudioSender } from './opus.js';
+
+const MIC_CONSTRAINTS = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }, video: false };
+
+// iOS makes HTMLMediaElement.volume read-only, so a level slider can only ever mean on or off there.
+export const VOICE_LEVELS_WORK = (() => {
+  const probe = document.createElement('audio');
+  probe.volume = 0.5;
+  return probe.volume === 0.5;
+})();
 
 export class Voice {
   // net may be a LocalNet or null; then voice reports 'unavailable'.
@@ -59,34 +71,30 @@ export class Voice {
     this.#syncSending();
   }
 
-  // iOS ignores the volume property on media elements, so remote voice plays through a gain node when the audio
-  // engine is running; the element stays muted to keep the stream alive without playing it twice.
-  setVolume(v) {
-    this.volume = v;
-    for (const p of this.players.values()) this.#applyGain(p);
+  // Runs after Trystero has attached the track; the peer connections come from its room object.
+  #tuneSenders() {
+    if (!this.stream || !this.room?.getPeers) return;
+    const tracks = new Set(this.stream.getAudioTracks());
+    for (const pc of Object.values(this.room.getPeers())) {
+      for (const sender of pc.getSenders?.() ?? []) if (tracks.has(sender.track)) tuneAudioSender(sender);
+    }
   }
 
-  #applyGain(player) {
+  // 0..1. Where the element's volume is read-only (iOS) anything above zero is simply on.
+  setVolume(v) {
+    this.volume = v;
+    for (const p of this.players.values()) this.#applyOutput(p);
+  }
+
+  #applyOutput(player) {
     const v = this.volume ?? 1;
-    const ctx = this.audio?.ctx;
-    if (ctx && !player.gain) {
-      try {
-        const source = ctx.createMediaStreamSource(player.stream);
-        player.gain = ctx.createGain();
-        source.connect(player.gain).connect(ctx.destination);
-        player.el.muted = true;
-      } catch { player.gain = null; }
-    }
-    if (player.gain) player.gain.gain.value = this.muted ? 0 : v;
-    else player.el.volume = v;
+    player.el.muted = this.muted || v <= 0;
+    if (VOICE_LEVELS_WORK) player.el.volume = Math.min(1, v);
   }
 
   setMuted(muted) {
     this.muted = muted;
-    for (const p of this.players.values()) {
-      if (p.gain) this.#applyGain(p);
-      else p.el.muted = muted;
-    }
+    for (const p of this.players.values()) this.#applyOutput(p);
     this.onState?.(this.state, this.muted);
     if (!muted) this.#resumePlayback();
   }
@@ -138,7 +146,8 @@ export class Voice {
       if (!this.teammates.has(id) || !connected.has(id)) drop.push(id);
     }
     if (add.length) {
-      this.room.addStream(this.stream, { target: this.#tids(add) });
+      Promise.resolve(this.room.addStream(this.stream, { target: this.#tids(add) })).catch(() => {}).then(() => this.#tuneSenders());
+      setTimeout(() => this.#tuneSenders(), 1500);     // addStream's promise covers the handshake, not every late peer.
       for (const id of add) this.sendingTo.add(id);
     }
     if (drop.length) {
@@ -154,12 +163,11 @@ export class Voice {
     const el = document.createElement('audio');
     el.autoplay = true;
     el.setAttribute('playsinline', '');
-    el.muted = this.muted;
     el.srcObject = stream;
     document.body.appendChild(el);
-    const player = { el, stream, gain: null };
+    const player = { el, stream };
     this.players.set(peerId, player);
-    this.#applyGain(player);
+    this.#applyOutput(player);
     this.#resumePlayback();
   }
 
@@ -174,7 +182,7 @@ export class Voice {
 
   #resumePlayback() {
     for (const { el } of this.players.values()) {
-      if (el.paused) el.play().catch(() => {});
+      if (el.paused && !el.muted) el.play().catch(() => {});
     }
   }
 }

@@ -1,6 +1,7 @@
 // The settings screen. Every control is a tap target (no drags), and a tap patches only its own row.
 import { Options, QUALITY_LEVELS, STEPPED } from './options.js';
 import { esc } from './widgets.js';
+import { VOICE_LEVELS_WORK } from '../net/voice.js';
 
 const stepper = key => {
   const s = STEPPED[key];
@@ -40,7 +41,11 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
         <h4>Audio</h4>
         ${stepper('sound')}
         ${stepper('music')}
-        ${stepper('voice')}
+        ${VOICE_LEVELS_WORK ? stepper('voice') : `
+        <div class="opt-row">
+          <div class="opt-name"><b>Team voice</b><small>This phone plays voice on or off</small></div>
+          <button class="opt-toggle opt-voice" data-act="optVoice"><i></i><b></b></button>
+        </div>`}
         <p class="opt-note">Settings stay on this phone and are not part of your save code.</p>
       </section>
     </div>`;
@@ -51,6 +56,11 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     const toggle = q('.opt-toggle');
     toggle.classList.toggle('on', v.lefty);
     toggle.querySelector('b').textContent = v.lefty ? 'On' : 'Off';
+    const voice = q('.opt-voice');
+    if (voice) {
+      voice.classList.toggle('on', v.voice > 0);
+      voice.querySelector('b').textContent = v.voice > 0 ? 'On' : 'Off';
+    }
     for (const row of menu.el.querySelectorAll('.opt-row[data-key]')) {
       const key = row.dataset.key, s = STEPPED[key], frac = (v[key] - s.min) / (s.max - s.min);
       row.querySelector('.opt-bar i').style.transform = `scaleX(${frac.toFixed(3)})`;
@@ -61,6 +71,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     optBack: () => onBack(),
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
+    optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));
       paint();

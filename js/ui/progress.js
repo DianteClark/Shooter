@@ -7,7 +7,7 @@
  * Badges     import { badgeSvg, prestigeName, MAX_PRESTIGE } from '../shared/progression.js'
  *            badgeSvg(prestige, size=48) -> SVG markup string, safe to inline repeatedly (no ids/defs).
  * Unlocks    itemUnlockLevel(kind,id)  isItemUnlocked(kind,id)  unlockSchedule() -> [{level,kind,id,name}]
- *            kind: 'perk'|'tactical'|'lethal'|'streak'. Weapons are never locked.
+ *            kind: 'weapon'|'perk'|'tactical'|'lethal'|'streak'. Locked guns are replaced in loadout()/loadouts().
  * Weapons    weaponLevel(w)  weaponProgress(w) -> {level,into,span,maxed,prestige}  weaponPrestige(w)
  *            canPrestigeWeapon(w)  prestigeWeapon(w) -> {ok,prestige,rewards[]}
  *            attachments(w) -> [{...attachmentDef,unlockLevel,unlocked}]  isAttachmentUnlocked(w,id)
@@ -30,8 +30,8 @@
 // access, so every read and write tolerates failure and the game simply plays without persistence.
 // The rules live in js/shared/progression.js; this module owns the save and applies them.
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
-import { PRIMARY_IDS } from '../shared/constants.js';
-import { normalizeLoadout, SCORE } from '../shared/catalog.js';
+import { PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
+import { normalizeLoadout, SCORE, PERKS } from '../shared/catalog.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator } from './operators.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor } from '../shared/attachments.js';
@@ -149,9 +149,28 @@ function careerStats() {
 
 const operatorOpen = (id, career = careerStats()) => OPERATOR_IDS.includes(id) && operatorUnlock(getOperator(id), career).unlocked;
 
-function matchLoadout(saved, primary = saved.primary) {
-  const base = normalizeLoadout({ ...saved, primary, attachments: saved.attachments });
-  const gear = gateLoadoutGear(base, data.peakLevel);
+const gunOpen = id => !!WEAPONS[id] && itemUnlockLevel('weapon', id) <= data.peakLevel;
+
+// A gun past the player's level falls back to the first one they own in that slot, so a stale save, an imported code or
+// a stray caller can never take a locked gun into a match.
+function gateGun(id, list, fallback) {
+  if (gunOpen(id)) return id;
+  return gunOpen(fallback) ? fallback : list.find(gunOpen) ?? fallback;
+}
+
+// One perk per tier, and only perks the player has reached: gateLoadoutGear knows the old two-slot shape.
+function gatePerks(perks) {
+  return perks.map((id, tier) => {
+    if (itemUnlockLevel('perk', id) <= data.peakLevel) return id;
+    return Object.values(PERKS).find(p => p.tier === tier && itemUnlockLevel('perk', p.id) <= data.peakLevel)?.id ?? id;
+  });
+}
+
+function matchLoadout(saved, wanted = saved.primary) {
+  const primary = gateGun(wanted, PRIMARY_IDS, 'ar');
+  const secondary = gateGun(saved.secondary, SECONDARY_IDS, 'pistol');
+  const base = normalizeLoadout({ ...saved, primary, secondary, attachments: saved.attachments });
+  const gear = { ...gateLoadoutGear(base, data.peakLevel), perks: gatePerks(base.perks) };
   return {
     ...gear,
     name: saved.name,

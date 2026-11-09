@@ -41,7 +41,7 @@ const PANELS = {
       <div class="help-card"><h4>Stay off the radar</h4><p>Firing marks you on the enemy minimap for a moment. A suppressor hides it.</p></div>
       <div class="help-card"><h4>Beat the big guns</h4><p>LMGs turn slowly while firing and overheat. Flank them.</p></div>
       <div class="help-card"><h4>Equipment</h4><p>${Object.values({ ...TACTICALS, ...LETHALS }).map(t => esc(t.name)).join(', ')}. Counts refill when you respawn.</p></div>
-      <div class="help-card"><h4>Perks</h4><p>${Object.values(PERKS).slice(0, 5).map(p => esc(p.name)).join(', ')}. Pick two per loadout.</p></div>
+      <div class="help-card"><h4>Perks</h4><p>${Object.values(PERKS).slice(0, 5).map(p => esc(p.name)).join(', ')}. One from each tier.</p></div>
       <div class="help-card wide"><h4>Dropped connection?</h4><p>Open the app and enter the same room code. You get your slot back from the bot holding it, with your score. If the host leaves, the next player takes over and the match carries on.</p></div>
     </div>`,
 };

@@ -20,6 +20,8 @@ import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
 import { installTaps } from './ui/tap.js';
 import { Options } from './ui/options.js';
+import { installViewport, onViewport } from './ui/viewport.js';
+import { wakeLock } from './ui/wakelock.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -69,6 +71,16 @@ const app = {
   soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
 };
 
+// The canvas size, the HUD's numbers and the touch rectangles are all derived from the visible area.
+function followViewport() {
+  installViewport();
+  onViewport(() => {
+    app.renderer?.resize();
+    controls.remeasure();
+    hud.remeasure();
+  });
+}
+
 function blockIosGestures() {
   const stop = e => e.preventDefault();
   document.addEventListener('gesturestart', stop, { passive: false });
@@ -115,6 +127,7 @@ function seatData() {
 }
 
 function goTitle(message) {
+  wakeLock.set(false);
   teardownNet();
   stopRematch();
   stopVote();
@@ -222,8 +235,8 @@ function shareLoadout() {
   else app.net.sendLobby({ t: 'loadout', ...seatData() });
 }
 
-function openGunsmith(loadoutIndex, onBack = afterEditing) {
-  menu.gunsmith({ loadoutIndex, onBack, onChange: shareLoadout });
+function openGunsmith(loadoutIndex, onBack = afterEditing, weapon) {
+  menu.gunsmith({ loadoutIndex, weapon, onBack, onChange: shareLoadout });
 }
 
 function openOperators(loadoutIndex, onBack = afterEditing) {
@@ -234,7 +247,7 @@ function openLoadout() {
   menu.loadouts({
     onBack: afterEditing,
     onChange: shareLoadout,
-    onGunsmith: i => openGunsmith(i, openLoadout),
+    onGunsmith: (i, weapon) => openGunsmith(i, openLoadout, weapon),
     onOperators: i => openOperators(i, openLoadout),
     onRename: i => menu.keypad({
       title: 'Name this loadout', value: Progress.loadouts()[i].name, max: 16, kind: 'name', doneLabel: 'Save',
@@ -316,6 +329,7 @@ function teamOpen(team, except = null) {
 }
 
 function startHosting() {
+  wakeLock.set(true);           // A host reading out the code should not watch the phone dim.
   const code = NetImpl.makeCode();
   const net = NetImpl.host(code, myName());
   app.net = net;
@@ -462,6 +476,7 @@ function toggleReady() {
 }
 
 function startJoining(code) {
+  wakeLock.set(true);
   const net = NetImpl.join(code, myName());
   app.net = net;
   app.code = code;
@@ -754,6 +769,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
+  wakeLock.set(true);
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.matchInfo = { roster, seed, mapId, mode, scoreLimit, timeLimit };
@@ -838,6 +854,7 @@ function leaveMatch() {
 function showResults(results) {
   for (const p of results.players) Object.assign(p, hud.objectiveStats(p.id));
   endLocalMatch();
+  if (!app.net) wakeLock.set(false);
   forgetRoom();
   app.rematchWait = false;
 
@@ -903,6 +920,7 @@ function maybeInstallPrompt() {
   menu.installPrompt(() => {});
 }
 
+followViewport();
 blockIosGestures();
 installTaps();
 hud.onLeaveMatch(leaveMatch);

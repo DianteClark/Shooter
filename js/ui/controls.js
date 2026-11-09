@@ -1,5 +1,6 @@
-import { STREAKS, TACTICALS, LETHALS } from '../shared/catalog.js';
+import { STREAKS, STREAK_DENY_TEXT, TACTICALS, LETHALS } from '../shared/catalog.js';
 import { icon } from './icons.js';
+import { AimFilter, wrapAngle } from './aimfilter.js';
 
 // Twin-stick touch input. Touch handlers only store numbers; read() turns them into the Input object and
 // repaints with transforms, once per frame, so a burst of touchmoves costs nothing extra.
@@ -12,7 +13,9 @@ const LEFT_DRAG = 1.3;          // Beyond this many radii the base follows the t
 const AIM_ZONE = 42;
 const FIRE_RING = 70;
 const FIRE_RELEASE = FIRE_RING * 0.88;
-const AIM_DEAD = 4;             // Thumb wobble under this many pixels does not rotate the player.
+const RELEASE_TURN = 11;        // rad/s the facing eases back to the direction of travel after the aim thumb lifts.
+const RELEASE_DONE = 0.09;      // Radians from the direction of travel at which that glide hands over to the game.
+const SWAP_MIN_PX = 150;        // Both thumbs would have to jump this far together for a swap of identities to be real.
 
 // Controlled throws: the thumb that pressed Tactical or Lethal keeps going and sets direction and distance.
 const THROW_HOLD_MS = 160;      // A press shorter than this, without leaving the button, is a quick throw.
@@ -47,6 +50,8 @@ export class Controls {
     this.input = freshInput();     // Reused every read; callers must not keep a reference across frames.
     this.left = { id: null, ox: 0, oz: 0, x: 0, y: 0 };
     this.right = { id: null, ox: 0, oz: 0, x: 0, y: 0, aim: null, firing: false };
+    this.aimFilter = new AimFilter();
+    this.glide = { on: false, aim: 0, last: 0 };    // Facing eased back after the aim thumb lifts; see read().
     this.fireLatch = false;        // A flick can cross the ring and let go between two frames.
     this.aimLatch = null;
     this.sprintOn = false;
@@ -78,8 +83,8 @@ export class Controls {
     window.addEventListener('touchmove', this.onTouchMove, opts);
     window.addEventListener('touchend', this.onTouchEnd, opts);
     window.addEventListener('touchcancel', this.onTouchEnd, opts);
-    window.addEventListener('resize', () => this.#measure());
-    window.addEventListener('orientationchange', () => this.#measure());
+    window.addEventListener('resize', () => this.remeasure());
+    window.addEventListener('orientationchange', () => this.remeasure());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.#release(); });
   }
 
@@ -115,12 +120,13 @@ export class Controls {
             <i class="st-fill"></i>
             <i class="st-ring"></i>
             <span class="st-icon"></span>
+            <small class="st-why"></small>
             <span class="st-lock">${icon('lock')}</span>
             <b class="st-cost">0</b>
           </button>`).join('')}
         </div>
       </div>
-      <div class="throw-rig" hidden>
+      <div class="throw-rig">
         <i class="tr-range"></i>
         <i class="tr-line"></i>
         <i class="tr-dot"></i>
@@ -135,7 +141,7 @@ export class Controls {
     this.rig = {
       el: el.querySelector('.throw-rig'), range: el.querySelector('.tr-range'), line: el.querySelector('.tr-line'), dot: el.querySelector('.tr-dot'),
       label: el.querySelector('.tr-label'), dist: el.querySelector('.tr-label b'), tip: el.querySelector('.tr-label small'),
-      shownDist: NaN, shownMode: '', shownSlot: '', cancelled: null, active: null,
+      shownDist: NaN, shownMode: '', shownSlot: '', cancelled: null, active: null, btn: null,
     };
     this.rig.range.style.width = this.rig.range.style.height = `${THROW_FULL_PX * 2}px`;
     this.rig.range.style.margin = `-${THROW_FULL_PX}px 0 0 -${THROW_FULL_PX}px`;
@@ -146,8 +152,8 @@ export class Controls {
     this.tiles = TILE_IDS.map(id => {
       const node = el.querySelector(`[data-btn="${id}"]`);
       return {
-        node, fill: node.querySelector('.st-fill'), iconEl: node.querySelector('.st-icon'), costEl: node.querySelector('.st-cost'),
-        kind: '', cost: NaN, frac: NaN, state: '', pulse: 0,
+        node, fill: node.querySelector('.st-fill'), iconEl: node.querySelector('.st-icon'), costEl: node.querySelector('.st-cost'), whyEl: node.querySelector('.st-why'),
+        kind: '', cost: NaN, frac: NaN, state: '', why: '', pulse: 0,
       };
     });
     this.tileById = id => this.tiles[TILE_IDS.indexOf(id)];
@@ -177,6 +183,11 @@ export class Controls {
     if (typeof aim === 'number') this.playerAim = aim;
   }
 
+  // Rotations and toolbar changes settle after the event that announces them, so main.js also calls this.
+  remeasure() {
+    if (this.enabled) this.#measure();
+  }
+
   // Layout is only ever measured here, never during play.
   #measure() {
     this.width = window.innerWidth;
@@ -200,7 +211,7 @@ export class Controls {
     else this.#release();
   }
 
-  // slot: { kind, cost, held, blocked }. score is the player's current score. Returns true when this call
+  // slot: { kind, cost, held, blocked, denied }. score is the player's current score. Returns true when this call
   // is the moment the slot became held, so the HUD can announce it.
   setTile(i, slot, score) {
     const t = this.tiles[i];
@@ -218,6 +229,13 @@ export class Controls {
     if (frac !== t.frac) {
       t.frac = frac;
       t.fill.style.transform = `scaleY(${frac})`;
+    }
+    // Held but not callable right now (airspace full, already up): the streak is kept and the tile says why.
+    const why = slot.held && slot.denied ? (STREAK_DENY_TEXT?.[slot.denied] ?? '') : '';
+    if (why !== t.why) {
+      t.why = why;
+      t.whyEl.textContent = why;
+      t.node.classList.toggle('denied', !!why);
     }
     const state = slot.held ? 'held' : slot.blocked ? 'blocked' : 'earning';
     if (state === t.state) return false;
@@ -285,6 +303,8 @@ export class Controls {
     e.preventDefault();
     this.#reconcile(e.touches);
     for (const t of e.changedTouches) {
+      // iOS reuses identifiers: a "new" finger with an id still in use means the old one ended without telling us.
+      this.#forgetStale(t.identifier);
       const x = t.clientX, y = t.clientY;
       const btn = this.#buttonAt(x, y);
       if (btn) {
@@ -296,9 +316,13 @@ export class Controls {
       if ((x < this.width / 2) !== this.lefty) {
         if (this.left.id === null) this.#grabLeft(t.identifier, x, y);
       } else if (this.right.id === null) {
-        this.#grabRight(t.identifier, x, y);
+        this.#grabRight(t.identifier, x, y, e.timeStamp);
       }
     }
+  }
+
+  #forgetStale(id) {
+    if (id === this.left.id || id === this.right.id || this.buttonTouch.has(id)) this.#drop(id, performance.now(), true);
   }
 
   #press(btn, touchId, at) {
@@ -381,10 +405,13 @@ export class Controls {
     this.paintDirty = true;
   }
 
-  #grabRight(id, x, y) {
+  #grabRight(id, x, y, t) {
     const r = this.right;
     r.id = id; r.ox = x; r.oz = y; r.x = x; r.y = y;
     r.aim = null; r.firing = false;
+    this.aimFilter.reset();
+    this.aimFilter.push(0, 0, t);
+    this.glide.on = false;
     this.paintDirty = true;
   }
 
@@ -392,6 +419,7 @@ export class Controls {
     if (!this.enabled) return;
     if (e.target?.closest?.('[data-tap]')) return;
     e.preventDefault();
+    this.#unswap(e.changedTouches);
     for (const t of e.changedTouches) {
       const id = t.identifier;
       if (id === this.left.id) {
@@ -399,24 +427,41 @@ export class Controls {
         this.left.y = t.clientY;
         this.paintDirty = true;
       } else if (id === this.right.id) {
-        this.#aimMove(t.clientX, t.clientY);
+        this.#aimMove(t.clientX, t.clientY, e.timeStamp);
       } else if (this.throw?.id === id) {
         this.#throwMove(t.clientX, t.clientY);
       }
     }
   }
 
-  #aimMove(x, y) {
+  // Two thumbs that come close can have their identifiers cross on iOS: each id then reports where the other thumb is.
+  // Both jumping onto each other's last position in the same event is the signature; the ids are put back.
+  #unswap(changed) {
+    const l = this.left, r = this.right;
+    if (l.id === null || r.id === null || changed.length < 2) return;
+    let lt = null, rt = null;
+    for (let i = 0; i < changed.length; i++) {
+      if (changed[i].identifier === l.id) lt = changed[i];
+      else if (changed[i].identifier === r.id) rt = changed[i];
+    }
+    if (!lt || !rt) return;
+    const stay = Math.hypot(lt.clientX - l.x, lt.clientY - l.y) + Math.hypot(rt.clientX - r.x, rt.clientY - r.y);
+    const cross = Math.hypot(lt.clientX - r.x, lt.clientY - r.y) + Math.hypot(rt.clientX - l.x, rt.clientY - l.y);
+    if (stay > SWAP_MIN_PX * 2 && cross < stay * 0.25) { const id = l.id; l.id = r.id; r.id = id; }
+  }
+
+  #aimMove(x, y, t) {
     const r = this.right;
     r.x = x; r.y = y;
     const dx = x - r.ox, dy = y - r.oz;
     const d = Math.hypot(dx, dy);
-    if (d >= AIM_DEAD) r.aim = Math.atan2(dy, dx);
+    r.aim = this.aimFilter.push(dx, dy, t);
     if (r.firing ? d < this.fireRelease : d >= this.fireRing) {
       r.firing = !r.firing;
       if (r.firing) {
         this.fireLatch = true;
-        this.aimLatch = r.aim;
+        // A flick can reach the ring before the filter has caught up; at this radius the raw angle is clean.
+        this.aimLatch = Math.atan2(dy, dx);
       }
     }
     this.paintDirty = true;
@@ -425,21 +470,31 @@ export class Controls {
   #end(e) {
     if (!this.enabled) return;
     if (e.cancelable && !e.target?.closest?.('[data-tap]')) e.preventDefault();
-    for (const t of e.changedTouches) this.#drop(t.identifier, e.timeStamp);
+    for (const t of e.changedTouches) this.#drop(t.identifier, e.timeStamp, e.type === 'touchcancel');
   }
 
-  #drop(id, at = performance.now()) {
+  // cancelled: the system took the finger, or it was found to be gone. Nothing it was doing should fire.
+  #drop(id, at = performance.now(), cancelled = false) {
     if (id === this.left.id) {
       this.left.id = null;
       this.paintDirty = true;
     } else if (id === this.right.id) {
+      const settled = this.aimFilter.settled(at);
       this.right.id = null;
       this.right.firing = false;
       this.paintDirty = true;
+      if (settled !== null && !cancelled) {
+        this.glide.on = true;
+        this.glide.aim = settled;
+        this.glide.last = performance.now();
+      }
     } else {
       const btn = this.buttonTouch.get(id);
       if (btn) {
-        if (this.throw?.id === id) this.#endThrow(at);
+        if (this.throw?.id === id) {
+          if (cancelled) { this.throw = null; this.paintDirty = true; }
+          else this.#endThrow(at);
+        }
         (this.buttons[btn] ?? this.tileById(btn).node).classList.remove('down');
         this.buttonTouch.delete(id);
       }
@@ -452,9 +507,9 @@ export class Controls {
       for (let i = 0; i < touches.length; i++) if (touches[i].identifier === id) return true;
       return false;
     };
-    if (this.left.id !== null && !alive(this.left.id)) this.#drop(this.left.id);
-    if (this.right.id !== null && !alive(this.right.id)) this.#drop(this.right.id);
-    for (const id of [...this.buttonTouch.keys()]) if (!alive(id)) this.#drop(id);
+    if (this.left.id !== null && !alive(this.left.id)) this.#drop(this.left.id, performance.now(), true);
+    if (this.right.id !== null && !alive(this.right.id)) this.#drop(this.right.id, performance.now(), true);
+    for (const id of [...this.buttonTouch.keys()]) if (!alive(id)) this.#drop(id, performance.now(), true);
   }
 
   #release() {
@@ -463,6 +518,7 @@ export class Controls {
     this.right.firing = false;
     this.fireLatch = false;
     this.aimLatch = null;
+    this.glide.on = false;
     for (const b of BUTTONS) {
       this.edge[b] = false;
       this.buttons[b].classList.remove('down');
@@ -517,7 +573,9 @@ export class Controls {
     const r = this.right;
     const held = r.id !== null;
     inp.aiming = held;
-    inp.aim = held ? r.aim : this.fireLatch ? this.aimLatch : null;
+    // Match turns the player to face the direction of travel whenever aim is null. A held stick must never read as
+    // null: a thumb resting inside the deadzone while the other thumb walks would snap the player round.
+    inp.aim = held ? (r.aim ?? this.playerAim) : this.fireLatch ? this.aimLatch : this.#glideAim(mx, mz);
     inp.fire = r.firing || this.fireLatch;
     this.fireLatch = false;
 
@@ -543,6 +601,26 @@ export class Controls {
     if (this.throw) this.paintDirty = true;   // The rig keeps animating the hold timer.
     if (this.paintDirty) this.#paint();
     return inp;
+  }
+
+  // After the aim thumb lifts the player keeps facing where it pointed, judged from just before the lift, and if moving
+  // turns smoothly back to the direction of travel rather than snapping there in one frame.
+  #glideAim(mx, mz) {
+    const g = this.glide;
+    if (!g.on) return null;
+    const now = performance.now(), dt = Math.min(0.1, (now - g.last) / 1000);
+    g.last = now;
+    if (mx * mx + mz * mz <= 0.02) {
+      g.on = false;
+      return g.aim;
+    }
+    const delta = wrapAngle(Math.atan2(mz, mx) - g.aim);
+    if (Math.abs(delta) < RELEASE_DONE) {
+      g.on = false;
+      return null;
+    }
+    g.aim = wrapAngle(g.aim + Math.sign(delta) * Math.min(Math.abs(delta), RELEASE_TURN * dt));
+    return g.aim;
   }
 
   // Writes only values that changed; everything is transform or a class flip.
@@ -612,18 +690,22 @@ export class Controls {
     const showing = !!th && (th.left || !!aim);
     if (showing !== g.active) {
       g.active = showing;
-      g.el.hidden = !showing;
-      this.el.classList.toggle('throwing', showing);
+      // The rig stays laid out and rasterised the whole match; this is an opacity flip, so the first throw of a match
+      // costs the same as the hundredth. The other buttons dim one by one, not through a class on their common parent.
+      g.el.classList.toggle('on', showing);
+      for (const b of BUTTONS) this.buttons[b].classList.toggle('dim', showing && b !== th?.slot);
+      if (g.btn) g.btn.classList.remove('aiming', 'throw-cancel');
+      g.btn = showing ? this.buttons[th.slot] : null;
+      if (g.btn) g.btn.classList.add('aiming');
+      g.cancelled = null;
     }
-    if (!th) return;
-    const b = this.buttons[th.slot];
+    if (!th || !showing) return;
+    const b = g.btn;
     if (th.cancel !== g.cancelled) {
       g.cancelled = th.cancel;
       g.el.classList.toggle('cancel', th.cancel);
       b.classList.toggle('throw-cancel', th.cancel);
     }
-    b.classList.toggle('aiming', showing);
-    if (!showing) return;
     if (g.shownSlot !== th.slot) {
       g.shownSlot = th.slot;
       g.el.style.transform = `translate3d(${th.cx}px,${th.cy}px,0)`;

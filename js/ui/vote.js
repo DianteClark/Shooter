@@ -10,7 +10,7 @@ export function voteMarkup(state) {
   const cards = state.options.map((o, i) => {
     const map = MAPS[o.mapId], mode = MODES[o.mode];
     return `<button class="vote-card" data-act="voteCast" data-i="${i}">
-      <span class="vc-art" style="background-image:url(${mapImage(map)})"></span>
+      <span class="vc-art" data-map="${esc(map.id)}" style="background-image:url(${mapImage(map)})"></span>
       <span class="vc-shade"></span>
       <b class="vc-map">${esc(map.name)}</b>
       <span class="vc-mode"><em>${esc(mode.short)}</em>${esc(mode.name)}</span>
@@ -66,10 +66,10 @@ export function soloMarkup({ mapId, mode }) {
       <span class="eyebrow solo-hint">Pick a map and a mode</span>
     </header>
     <div class="solo enter">
-      <div class="solo-maps">${MAP_IDS.map(id => {
+      <div class="solo-maps" style="--cols:${Math.min(4, Math.ceil(MAP_IDS.length / (MAP_IDS.length > 4 ? 2 : 1)))}">${MAP_IDS.map(id => {
         const m = MAPS[id];
         return `<button class="solo-map${id === mapId ? ' on' : ''}" data-act="soloMap" data-id="${id}">
-          <span class="vc-art" style="background-image:url(${mapImage(m)})"></span>
+          <span class="vc-art" data-map="${esc(m.id)}" style="background-image:url(${mapImage(m)})"></span>
           <span class="vc-shade"></span>
           <b>${esc(m.name)}</b>
         </button>`;
@@ -84,6 +84,18 @@ export function soloMarkup({ mapId, mode }) {
         <button class="route primary solo-start" data-act="soloStart"><i class="lamp"></i><b>Start</b></button>
       </div>
     </div>`;
+}
+
+// A tap updates the marks in place. Rebuilding the screen replayed its entrance and re-decoded every map's art, so the whole
+// picker flashed on each tap while the selection itself was invisible.
+export function paintSolo(root, { mapId, mode }) {
+  const map = MAPS[mapId];
+  for (const b of root.querySelectorAll('.solo-map')) b.classList.toggle('on', b.dataset.id === mapId);
+  for (const b of root.querySelectorAll('.solo-mode')) {
+    const usable = modeFits(map, b.dataset.id);
+    b.classList.toggle('on', b.dataset.id === mode);
+    b.disabled = !usable;
+  }
 }
 
 // Domination and Hardpoint need a map to define their points.

@@ -4,11 +4,12 @@ import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT } from '../shared/constants.js';
 import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { STREAKS, LETHALS, SCORE, normalizeLoadout } from '../shared/catalog.js';
+import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, normalizeLoadout } from '../shared/catalog.js';
 import { MODES } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
+import { safeInsets } from './viewport.js';
 
 const MINIMAP_HZ = 10;
 const MM_SCALE = 2;              // Backing-store pixels per CSS pixel; fixed so the canvas is never resized.
@@ -28,11 +29,12 @@ const FIRE_REVEAL = 1.5;         // Matches the sim's firingT lifetime; only sha
 const BOARD_HZ = 4;
 const END_BANNER_MIN = 700;
 const OBJ_RING = 2 * Math.PI * 14;  // Circumference of the capture rings' r=14 circle, for stroke dashes.
-// Objective markers ride inside these margins, so they never sit under the score bar, the buttons or the status row.
-const MARK_PAD_L = 34;
-const MARK_PAD_R = 110;
+// Objective markers ride inside the safe area plus these margins, and walk inward off anything in markObstacles.
+const MARK_PAD_X = 34;
 const MARK_PAD_T = 56;
 const MARK_PAD_B = 100;
+const MARK_CLEAR = 30;           // A marker's radius plus its arrow: how far a marker keeps from what it must not cover.
+const MARK_WALK = 0.05;          // Fraction of the way in per step when walking a marker clear.
 const MARK_Y = { dom: 4.3, hard: 3.6 };   // Metres above the ground to pin a marker: flag tip or zone wall.
 const HARD_WARN = 5;             // Seconds of warning before a hardpoint moves.
 const DPS_WINDOW = 2.4;          // Seconds of hits averaged into the live damage readout.
@@ -108,11 +110,31 @@ export class HUD {
     this.camera = null;           // World markers project through this; handed over once per match.
     this.viewW = root.clientWidth || innerWidth;
     this.viewH = root.clientHeight || innerHeight;
-    addEventListener('resize', () => { this.viewW = root.clientWidth; this.viewH = root.clientHeight; });
+    this.markObstacles = [];
+    addEventListener('resize', () => this.remeasure());
     this.#seedFallback();
     this.#build();
     this.#drawMapBase();
     this.reset();
+  }
+
+  // Rotation, toolbars, or a new match: layout-derived numbers are refreshed here and only ever read per frame.
+  remeasure() {
+    this.viewW = this.root.clientWidth;
+    this.viewH = this.root.clientHeight;
+    this.safe = safeInsets();
+    this.markObstacles = [];
+    const add = r => this.markObstacles.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom });
+    for (const r of Object.values(this.controls?.rects ?? {})) this.markObstacles.push(r);
+    add(this.el.querySelector('.minimap').getBoundingClientRect());
+    add(this.el.querySelector('.corner').getBoundingClientRect());
+  }
+
+  #markBlocked(x, y) {
+    for (const r of this.markObstacles) {
+      if (x + MARK_CLEAR > r.x0 && x - MARK_CLEAR < r.x1 && y + MARK_CLEAR > r.y0 && y - MARK_CLEAR < r.y1) return true;
+    }
+    return false;
   }
 
   // Controls owns the buttons and streak tiles so there is a single touch surface; the HUD feeds them.
@@ -133,6 +155,11 @@ export class HUD {
     const l = normalizeLoadout(Progress.loadout());
     this.fallbackSlots = l.streaks.map(kind => ({ kind, cost: STREAKS[kind].cost, held: false, blocked: false }));
     this.fallbackEquip = { tactical: l.tactical, lethal: l.lethal };
+    this.#syncThrowReach();
+  }
+
+  // Reach is a property of the loadout the player is carrying, which can change on the death screen between lives.
+  #syncThrowReach() {
     this.controls?.setThrowReach((Progress.loadout().perks ?? []).includes('strongarm'));
   }
 
@@ -143,7 +170,6 @@ export class HUD {
     this.timeLimit = timeLimit;
     this.mode = mode;
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
-    this.throwReachKnown = false;
     this.#seedFallback();
     this.#drawMapBase();
     this.#buildObjectiveHud();
@@ -151,6 +177,7 @@ export class HUD {
     this.#range.prepare(mode === 'range');
     this.el.classList.toggle('range-on', mode === 'range');
     this.#hideIntro();
+    this.remeasured = false;
     this.pendingIntro = intro && mode !== 'range' ? { mapId, mode, roster, localId } : null;
   }
 
@@ -567,6 +594,7 @@ export class HUD {
       this.#showIntro(mapId, mode, roster, localId);
     }
     if (view.phase !== 'warmup') this.#hideIntro();  // The reveal rides the warmup, whatever speed this phone runs at.
+    if (!this.remeasured) { this.remeasured = true; this.remeasure(); }
     const previousPhase = this.cache.phase;
     this.view = view;
     const me = this.#findLocal(view);
@@ -827,10 +855,12 @@ export class HUD {
           if (e.id === this.view?.localId) {
             this.killer = null;
             this.deathPainted = false;
+            this.#syncThrowReach();
             this.respawnEl.animate(RESPAWN_FLASH, { duration: 420, easing: 'ease-out' });
           }
           break;
         case 'streak': this.#onStreak(e); break;
+        case 'streak_denied': if (e.id === this.view?.localId) this.#callout(STREAK_DENY_TEXT[e.reason] ?? 'Unavailable'); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
         case 'capture': this.#onCapture(e); break;
@@ -959,7 +989,8 @@ export class HUD {
     const me = this.#findLocal(view);
     if (!p || !me) return;
     const friendly = p.team === me.team;
-    const verb = { uav: 'UAV online', strike: 'Strike inbound', turret: 'Turret deployed', gunship: 'Gunship overhead' }[e.kind] ?? `${e.kind} called in`;
+    const name = STREAKS[e.kind]?.name ?? e.kind;
+    const verb = { uav: 'UAV online', strike: `${name} inbound`, turret: `${name} deployed`, gunship: 'Gunship overhead', chopper: `${name} overhead`, emp: `${name} detonated`, jammer: `${name} active` }[e.kind] ?? `${name} called in`;
     this.notify(`${friendly ? '' : 'Enemy '}${verb}`);
   }
 
@@ -1269,14 +1300,23 @@ export class HUD {
       const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15];
       if (w <= 0.01) continue;
       const nx = (p[0] * vx + p[8] * vz + p[12]) / w, ny = (p[5] * vy + p[9] * vz + p[13]) / w;
-      let sx = (nx * 0.5 + 0.5) * W, sy = (0.5 - ny * 0.5) * H;
+      const sx = (nx * 0.5 + 0.5) * W, sy = (0.5 - ny * 0.5) * H;
       const dx = sx - W / 2, dy = sy - H / 2;
-      const off = sx < MARK_PAD_L || sx > W - MARK_PAD_R || sy < MARK_PAD_T || sy > H - MARK_PAD_B;
+      const s = this.safe;
+      const minX = (s?.left ?? 0) + MARK_PAD_X, maxX = W - (s?.right ?? 0) - MARK_PAD_X;
+      const minY = (s?.top ?? 0) + MARK_PAD_T, maxY = H - (s?.bottom ?? 0) - MARK_PAD_B;
+      let off = sx < minX || sx > maxX || sy < minY || sy > maxY;
       let edge = 1;
       if (off) {
-        const kx = dx > 0 ? (W - MARK_PAD_R - W / 2) / dx : dx < 0 ? (MARK_PAD_L - W / 2) / dx : Infinity;
-        const ky = dy > 0 ? (H - MARK_PAD_B - H / 2) / dy : dy < 0 ? (MARK_PAD_T - H / 2) / dy : Infinity;
+        const kx = dx > 0 ? (maxX - W / 2) / dx : dx < 0 ? (minX - W / 2) / dx : Infinity;
+        const ky = dy > 0 ? (maxY - H / 2) / dy : dy < 0 ? (minY - H / 2) / dy : Infinity;
         edge = Math.min(kx, ky);
+      }
+      // Walk toward the centre along the same line until clear of the buttons, the minimap and the corner chips,
+      // so the marker still points the right way.
+      for (let step = 0; step < 18 && edge > 0.1 && this.#markBlocked(W / 2 + dx * edge, H / 2 + dy * edge); step++) {
+        edge -= MARK_WALK;
+        off = true;
       }
       const px = Math.round(W / 2 + dx * edge), py = Math.round(H / 2 + dy * edge);
       if (px !== m.x || py !== m.y) {
