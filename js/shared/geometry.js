@@ -24,7 +24,13 @@ function rayRect(ox, oz, dx, dz, r) {
     if (t2 < tmax) tmax = t2;
     if (tmin > tmax) return false;
   }
-  if (axis === -1) return false;   // Origin inside the rectangle.
+  // Origin strictly inside: the ray starts in the wall, so it hits at once. On the face it is leaving.
+  if (axis === -1) {
+    if (ox <= r.x || ox >= r.x + r.w || oz <= r.z || oz >= r.z + r.d) return false;
+    HIT.t = 0; HIT.axis = Math.abs(dx) >= Math.abs(dz) ? 0 : 1;
+    HIT.sign = HIT.axis === 0 ? (-Math.sign(dx) || -1) : (-Math.sign(dz) || -1);
+    return true;
+  }
   HIT.t = tmin; HIT.axis = axis; HIT.sign = sign;
   return true;
 }
