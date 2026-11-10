@@ -59,7 +59,7 @@ button {
 .controls.live { display: block; }
 .rest { position: absolute; width: 0; height: 0; pointer-events: none; }
 .rest-l { left: calc(var(--sl) + 118px); bottom: calc(var(--sb) + 104px); }
-.rest-r { right: calc(var(--sr) + 205px); bottom: calc(var(--sb) + 132px); }
+.rest-r { right: calc(var(--sr) + 206px); bottom: calc(var(--sb) + 116px); }
 .stick { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; transition: opacity .12s; pointer-events: none; opacity: .34; }
 .stick.active { opacity: 1; }
 .stick-rim {
@@ -73,10 +73,10 @@ button {
 .stick-move.sprint .stick-rim { border-color: var(--sodium); box-shadow: 0 0 16px rgba(242,166,59,.5); }
 .stick-move.sprint .stick-knob { background: var(--sodium); }
 .aim-ring { position: absolute; left: -96px; top: -96px; width: 192px; height: 192px; overflow: visible; }
-.ring-fire { fill: rgba(29,35,43,.12); stroke: rgba(231,234,228,.72); stroke-width: 3; }
+.ring-fire { fill: rgba(29,35,43,.12); stroke: rgba(231,234,228,.72); stroke-width: 2.5; }
 .ring-zone { fill: rgba(231,234,228,.08); stroke: rgba(231,234,228,.5); stroke-width: 1.5; stroke-dasharray: 5 5; }
 .ring-ticks { stroke: rgba(231,234,228,.8); stroke-width: 3; fill: none; }
-.aim-knob { background: rgba(231,234,228,.86); left: -21px; top: -21px; width: 42px; height: 42px; }
+.aim-knob { background: rgba(231,234,228,.86); left: -17px; top: -17px; width: 34px; height: 34px; }
 .stick-aim.hot .ring-fire { stroke: var(--red); fill: rgba(255,77,61,.16); }
 .stick-aim.hot .ring-ticks { stroke: var(--red); }
 .stick-aim.hot .aim-knob { background: var(--red); box-shadow: 0 0 14px rgba(255,77,61,.8); }
@@ -540,7 +540,7 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 @keyframes btn-deny { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
 /* Left-handed: move stick right, aim and buttons left; the feed moves away from the buttons. */
 .controls.lefty .rest-l { left: auto; right: calc(var(--sr) + 118px); }
-.controls.lefty .rest-r { right: auto; left: calc(var(--sl) + 205px); }
+.controls.lefty .rest-r { right: auto; left: calc(var(--sl) + 206px); }
 .controls.lefty .tbtn-slide { right: auto; left: calc(var(--sl) + 14px); }
 .controls.lefty .tbtn-swap { right: auto; left: calc(var(--sl) + 14px); }
 .controls.lefty .tbtn-tactical { right: auto; left: calc(var(--sl) + 86px); }

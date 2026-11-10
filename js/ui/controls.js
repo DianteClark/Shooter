@@ -10,8 +10,8 @@ const SPRINT_ON = 0.92;
 const SPRINT_OFF = 0.86;
 const LEFT_DRAG = 1.3;          // Beyond this many radii the base follows the thumb, so sprint survives drift.
 
-const AIM_ZONE = 42;
-const FIRE_RING = 70;
+const AIM_ZONE = 30;
+const FIRE_RING = 52;
 const FIRE_RELEASE = FIRE_RING * 0.88;
 const RELEASE_TURN = 11;        // rad/s the facing eases back to the direction of travel after the aim thumb lifts.
 const RELEASE_DONE = 0.09;      // Radians from the direction of travel at which that glide hands over to the game.
