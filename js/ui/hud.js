@@ -254,6 +254,14 @@ const CTF_CSS = `
 .ctf-carry[data-wait="1"] small { color: var(--c-sodium); }
 @keyframes ctf-blink { to { filter: brightness(1.6); } }
 @media (prefers-reduced-motion: reduce) { .cf-side[data-state="carried"] .cf-ico, .ctf-mark[data-state="carried"] .cm-plate { animation: none; } }
+/* Scoreboard: a held slot (Sim.humanLeft). */
+.lb-row.away b, .lb-row.away span:not(.lb-name) { color: var(--c-haze); }
+.lb-row.away .lb-bdg, .lb-row.away .lb-lv { display: none; }
+.lb-away { display: inline-block; font: 400 9px/1 var(--f-plate); font-style: normal; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--c-sodium); padding: 2px 4px; box-shadow: inset 0 0 0 1px rgba(242,166,59,.55); animation: lb-away 1.6s var(--ease-inout) infinite alternate; }
+.lb-away.open { color: var(--c-go); box-shadow: inset 0 0 0 1px rgba(89,214,145,.55); animation: none; }
+@keyframes lb-away { to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .lb-away { animation: none; } }
 `;
 const SCORE_POP_LIFE = 1.4;      // Seconds the "+100" under the crosshair holds before it fades; kills inside it add up.
 const INTRO_GO_MS = 900;
@@ -1042,8 +1050,7 @@ export class HUD {
           slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : '';
         }
         slot.lv.textContent = badge?.level ?? '';
-        const id = identityOf(p.id), vet = !!id?.vet, mark = `${vet}:${id?.emblem ?? ''}`;
-        if (mark !== slot.vetOn) { slot.vetOn = mark; slot.vet.innerHTML = vetTag(vet, { short: true, emblem: id?.emblem }); }
+        this.#paintAway(slot, p);
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
@@ -1072,8 +1079,7 @@ export class HUD {
         const rank = badge?.prestige ?? -1;
         if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : ''; }
         slot.lv.textContent = badge?.level ?? '';
-        const id = identityOf(p.id), vet = !!id?.vet, mark = `${vet}:${id?.emblem ?? ''}`;
-        if (mark !== slot.vetOn) { slot.vetOn = mark; slot.vet.innerHTML = vetTag(vet, { short: true, emblem: id?.emblem }); }
+        this.#paintAway(slot, p);
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
@@ -1081,6 +1087,17 @@ export class HUD {
         cells[5].textContent = matchScore(p);
       });
     });
+  }
+
+  // The name's tag: a held slot (the player dropped; see Sim.humanLeft) says Reconnecting, or Open slot once anyone may
+  // take it; everyone else shows their Veteran mark. Rewritten only when it changes.
+  #paintAway(slot, p) {
+    const id = identityOf(p.id), vet = !!id?.vet;
+    const mark = p.away ? (p.open ? 'open' : 'away') : `${vet}:${id?.emblem ?? ''}`;
+    slot.row.classList.toggle('away', !!p.away);
+    if (mark === slot.vetOn) return;
+    slot.vetOn = mark;
+    slot.vet.innerHTML = p.away ? `<em class="lb-away${p.open ? ' open' : ''}">${p.open ? 'Open slot' : 'Reconnecting'}</em>` : vetTag(vet, { short: true, emblem: id?.emblem });
   }
 
   // Fourth score column: the mode's own number where it has one, headshots otherwise.

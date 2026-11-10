@@ -130,6 +130,7 @@ export class Match {
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
       if (e.t === 'dazed' && e.id === this.localId) applyDaze(this.ps, e.amount, e.dur);   // Stun, Gas, Shock slow you.
+      if (e.t === 'rejoin' && e.oldId !== e.id) this.#rebind(e);   // A newcomer took an open slot.
       if (e.t === 'arm' && e.id === this.localId) {   // Gun Game promotion or setback, in that gun's own camo.
         armPlayer(this.ps, e.weapon);
         this.ps.camo = this.me.loadout?.camos?.[e.weapon] ?? 'none';
@@ -265,6 +266,40 @@ export class Match {
 
   humanRejoined(id) {
     if (this.isHost) this.sim.humanRejoin(id);
+  }
+
+  // Host: whether this player id has a human slot in the match (on the field, or held for them since they dropped).
+  holdsHuman(id) {
+    const p = this.sim.byId.get(id);
+    return !!p && !p.isBot && !p.dummy;
+  }
+
+  // Host: seats a newcomer in an open held slot. Returns the slot's roster entry, now carrying the newcomer, or null.
+  claimOpenSlot(id, name, loadout, info) {
+    if (!this.isHost) return null;
+    const r = this.sim.claimOpenSlot(id, name, loadout, info);
+    if (!r) return null;
+    return this.#rebind({ oldId: r.oldId, id, name, info, loadout });
+  }
+
+  // A slot changed hands: the roster (shared with main.js's match info, which a returning player is sent) follows, and
+  // so do the guest's snapshot codec and the character art. Safe to run twice (host: claim, then its own event).
+  #rebind({ oldId, id, name, info, loadout }) {
+    const entry = this.roster.find(r => r.id === oldId) ?? this.roster.find(r => r.id === id);
+    if (!this.isHost) this.sim.rebindPlayer(oldId, id, name);
+    if (!entry) return null;
+    if (entry.id !== id) {
+      entry.id = id;
+      entry.name = name;
+      if (loadout) entry.loadout = { ...loadout };
+      if (loadout?.primary) { entry.primary = loadout.primary; entry.camo = loadout.camo ?? entry.camo; }
+      entry.badge = info?.badge ?? null;
+      entry.operator = info?.operator ?? entry.operator;
+      if (entry.loadout) Object.assign(entry.loadout, { operator: entry.operator, skin: info?.skin ?? null, emblem: info?.emblem ?? null });
+      this.renderer.chars?.setRoster(this.roster);
+      this.hud.badges?.set(id, entry.badge);
+    }
+    return entry;
   }
 
   // The local player is drawn from its own state so controls never lag behind the network.

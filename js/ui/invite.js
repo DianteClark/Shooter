@@ -130,10 +130,12 @@ function copyFallback(code, url, menu) {
 // ---- The host's lobby -----------------------------------------------------------------------------------------
 
 // Two plates for the lobby header, after the room code: Invite (share sheet) and the big code with a QR.
-export function inviteControls() {
+// listed: the room is public (shown in Browse games); the third plate switches it (main.js, action lobbyPublic).
+export function inviteControls({ listed = false } = {}) {
   return `<div class="inv-ctl">
     <button class="btn is-primary inv-share" data-act="invite" data-sound="confirm">${ico('share')}<b>Invite</b></button>
     <button class="btn inv-qr" data-act="inviteShow" aria-label="Show code and QR">${qrGlyph()}</button>
+    <button class="btn inv-listed${listed ? ' on' : ''}" data-act="lobbyPublic" aria-pressed="${listed}" aria-label="${listed ? 'Public room: listed in Browse games. Tap to make private' : 'Private room. Tap to list it in Browse games'}">${ico(listed ? 'ui:signal' : 'ui:lock')}<b>${listed ? 'Public' : 'Private'}</b></button>
   </div>`;
 }
 

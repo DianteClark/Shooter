@@ -147,18 +147,22 @@ async def respawn_run(pg, auto):
     sub = await pg.inner_text('.dg-sub')
     tag = 'on' if auto else 'off'
     await shot(pg, f'20_respawn_{tag}')
+    # The countdown starts once the killcam replay ends (or 0.8 s after death when there is none), so poll for each step.
+    async def until(js, secs):
+        for _ in range(int(secs * 5)):
+            if await pg.evaluate(js): return True
+            await pg.wait_for_timeout(200)
+        return False
+    alive = "(() => { const m = window.__game.app.match; return !!m.sim.byId.get(m.localId)?.alive; })()"
     if auto:
-        check('Respawning in' in sub, f'auto on: "{sub}"')
-        await simwait(pg, 1.6)
-        check(await ev(pg, "return me.alive;"), 'auto on: back as soon as the 2.5 s minimum ends')
+        check('Respawning in' in sub or 'After the replay' in sub, f'auto on: "{sub}"')
+        check(await until(alive, 14), 'auto on: back on its own once the countdown ends')
     else:
-        await simwait(pg, 1.7)
-        sub = await pg.inner_text('.dg-sub')
-        check('Tap now' in sub and '/ auto' in sub, f'auto off: waits for the tap ("{sub}")')
-        check(not await ev(pg, "return me.alive;"), 'auto off: still down after the minimum')
+        ready = "(() => { const t = document.querySelector('.dg-sub')?.textContent || ''; return t.includes('Tap now'); })()"
+        check(await until(ready, 14), f'auto off: waits for the tap ("{await pg.inner_text(".dg-sub")}")')
+        check(not await ev(pg, "return me.alive;"), 'auto off: still down until tapped')
         await pg.tap('.death-go')
-        await pg.wait_for_timeout(600)
-        check(await ev(pg, "return me.alive;"), 'auto off: tap respawns')
+        check(await until(alive, 3), 'auto off: tap respawns')
 
 async def main():
     srv = subprocess.Popen(['python3','-m','http.server',str(PORT)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

@@ -142,14 +142,15 @@ test('works in free-for-all and Gun Game', () => {
   }
 });
 
-test('a dropped human held by a bot respawns on the bot clock; rejoining hands the wait back', () => {
+test('a dropped human\'s slot is held off the field; rejoining spawns it, and the next death waits for a tap', () => {
   const sim = makeSim();
   const p = kill(sim, 'h1');
   sim.humanLeft('h1');
   ticks(sim, RESPAWN_TIME + 0.1);
-  assert.equal(p.alive, true, 'bot-held slot respawns');
-  kill(sim, 'h1');
+  assert.equal(p.alive, false, 'held slots never respawn on their own (see dev/sim-heldslots.mjs)');
   sim.humanRejoin('h1', { id: 'h1b' });
+  assert.equal(p.alive, true, 'back at once');
+  kill(sim, 'h1b');
   ticks(sim, RESPAWN_TIME + 1);
   assert.equal(p.alive, false, 'human again: waits');
   sim.applyCommand('h1b', { cmd: 'respawn' });
@@ -168,7 +169,8 @@ test('host migration: a dead human stays dead on the new host until they tap', (
   for (const q of next.players) if (q.id !== 'h1') q.bot = null;
   const g = next.byId.get('g1');
   assert.equal(g.alive, false);
-  assert.notEqual(next.byId.get('h1').ps.secondary, GOLDEN_ID, 'the old host is a bot now, without the Golden Gun');
+  assert.equal(next.byId.get('h1').away, true, 'the old host\'s slot is held for them, not botted');
+  assert.equal(next.byId.get('h1').ps.secondary, GOLDEN_ID, 'and keeps their Golden Gun for when they return');
   ticks(next, RESPAWN_TIME + 1);
   assert.equal(g.alive, false, 'still waiting after migration');
   next.applyCommand('g1', { cmd: 'respawn' });
@@ -280,7 +282,13 @@ test('bots never carry it: rosters, a bot taking over a human slot, and a migrat
   const h = sim.byId.get('h1');
   assert.equal(h.ps.secondary, GOLDEN_ID, 'humans keep it');
   h.ps.slot = 1; h.ps.weapon = GOLDEN_ID;
+  // Dropping holds the slot (no bot), so nothing to take; a bot given the slot by older code still loses it.
   sim.humanLeft('h1');
+  assert.equal(h.ps.secondary, GOLDEN_ID, 'a held slot keeps it');
+  sim.humanRejoin('h1');
+  h.ps.slot = 1; h.ps.weapon = GOLDEN_ID;
+  h.isBot = true; h.humanId = 'h1';
+  sim._noGoldForBots(h);
   assert.equal(h.ps.secondary, 'pistol');
   assert.equal(h.ps.weapon, 'pistol', 'was holding it: now holds the pistol');
   assert.equal(h.loadout.secondary, 'pistol');

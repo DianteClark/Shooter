@@ -72,6 +72,8 @@ const SWARM_DIVE = 1.2, SWARM_RADIUS = 3.2, SWARM_DAMAGE = 115;
 // Juggernaut (V8): armour that soaks damage before health. Blasts chew through it faster than bullets.
 const JUGG_ARMOR = STREAKS.juggernaut.armor, JUGG_BLAST = 1.5;
 
+// A human who drops mid-match keeps their slot, off the field, for this long; then anyone may take it (see humanLeft).
+export const HOLD_OPEN_SECONDS = 180;
 const THROW_ORIGIN_SLACK = 4;    // How far a reported throw may start from where the host has that player.
 const SCAVENGE_MAGS = 1;         // Magazines of reserve per kill with Scavenger.
 
@@ -325,6 +327,8 @@ export class Sim {
       return {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
+        // Held slot: the human dropped. Off the field, stats kept; `open` once nobody came back in HOLD_OPEN_SECONDS.
+        away: false, awayT: 0, open: false,
         primary: loadout.primary, camo: loadout.camo, loadout, pendingLoadout: null, index, card: loadout.card,
         windT: 0, restockT: 0, armor: 0,
         ps: createPlayerState({ id: r.id, primary: loadout.primary, camo: loadout.camo, loadout }),
@@ -422,6 +426,7 @@ export class Sim {
   }
 
   _placeAt(p, s, aim) {
+    if (p.away) return;              // A held slot stays off the field until its human (or a newcomer) takes it.
     if (p.pendingLoadout) {
       p.loadout = p.pendingLoadout; p.pendingLoadout = null;
       p.primary = p.loadout.primary; p.camo = p.loadout.camo; p.card = p.loadout.card;
@@ -638,6 +643,14 @@ export class Sim {
   }
 
   _stepTimers(p) {
+    if (p.away) {
+      p.awayT += STEP;
+      if (!p.open && p.awayT >= HOLD_OPEN_SECONDS) {
+        p.open = true;
+        this._emit({ t: 'slotOpen', id: p.id });
+      }
+      return;
+    }
     if (p.ackT > 0) p.ackT -= STEP;
     if (!p.alive) {
       if (this.snd) return;          // One life a round: the next round brings everyone back.
@@ -977,6 +990,7 @@ export class Sim {
   // Returns whether the command was accepted.
   applyCommand(id, msg) {
     if (!msg || typeof msg !== 'object') return false;
+    if (this.byId.get(id)?.away) return false;   // In flight from a phone that has since dropped.
     if (msg.cmd === 'streak') return this.useStreak(id, msg.slot) !== null;
     if (msg.cmd === 'throw') return this._throw(id, msg);
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
@@ -2048,16 +2062,30 @@ export class Sim {
     }
   }
 
-  // A human disconnected: a regular-skill bot takes over the same player.
+  // A human disconnected. The slot is held for them, not given to a bot: the player leaves the field (not drawn, not
+  // targetable, no respawn), keeps every stat, and the board shows them as reconnecting. humanRejoin gives it back;
+  // after HOLD_OPEN_SECONDS it is `open` and claimOpenSlot hands it to a newcomer. Whatever they carried drops here.
   humanLeft(id) {
     const p = this.byId.get(id);
-    if (!p || p.isBot) return;
-    p.isBot = true;
-    p.humanId = p.id;
-    p.skill = p.skill || 'regular';
+    if (!p || p.isBot || p.dummy || p.away) return;
+    const wasAlive = p.alive;
+    p.away = true;
+    p.awayT = 0;
+    p.open = false;
+    p.alive = false;
+    p.hp = 0;
+    p.respawnT = 0;
+    p.deadT = 0;
+    p.wantRespawn = false;
+    p.spawnProtect = 0;
     p.ackT = 0;
-    this._noGoldForBots(p);
-    if (this.nav) p.bot = new BotBrain(this, p, p.index);
+    p.ps.sprinting = false; p.ps.sliding = false; p.ps.vx = 0; p.ps.vz = 0;
+    if (wasAlive) {
+      // Not a death: no kill, no score. The modes only need to let go of a flag or the bomb, and notice the side's count.
+      this.snd?.onKill(p);
+      this.ctf?.onKill(p, null);
+    }
+    this._emit({ t: 'away', id: p.id });
   }
 
   // Bots never carry the Golden Gun, not even one inheriting the slot of a human who had it: it becomes the Flicker.
@@ -2073,13 +2101,34 @@ export class Sim {
     if (p.ps.secondary === GOLDEN_ID) armSecondary(p.ps, 'pistol');
   }
 
-  // Slots a bot is holding for someone who dropped. For matching a returning player, by name or id.
+  // Slots held for someone who dropped (and, from older matches, slots a bot is holding). For matching a returning
+  // player by name or id, and for the lobby list: `open` slots may go to anyone.
   rejoinSlots() {
     const out = [];
     for (const p of this.players) {
-      if (p.isBot && !p.dummy && p.humanId !== null) out.push({ id: p.id, humanId: p.humanId, name: p.name, team: p.team, index: p.index });
+      if (p.away) out.push({ id: p.id, humanId: p.id, name: p.name, team: p.team, index: p.index, open: p.open, awayT: p.awayT });
+      else if (p.isBot && !p.dummy && p.humanId !== null) out.push({ id: p.id, humanId: p.humanId, name: p.name, team: p.team, index: p.index, open: false, awayT: 0 });
     }
     return out;
+  }
+
+  // A newcomer takes an open slot: same seat (team, free-for-all colour), fresh stats under their own id and name.
+  // The side with fewer players on the field gets them first. Returns what humanRejoin returns, or null when none is open.
+  claimOpenSlot(id, name, loadout = null, info = null) {
+    if (this.byId.has(id)) return null;
+    const onField = t => this.players.reduce((n, q) => n + (q.team === t && !q.away && !q.dummy ? 1 : 0), 0);
+    let best = null;
+    for (const p of this.players) if (p.away && p.open && (!best || onField(p.team) < onField(best.team))) best = p;
+    return best ? this.humanRejoin(best.index, { id, name, loadout, fresh: true, info }) : null;
+  }
+
+  // Wipes a slot's own record for a newcomer. Team scores keep what the slot earned before.
+  _freshStats(p) {
+    p.kills = 0; p.deaths = 0; p.assists = 0; p.head = 0; p.streak = 0; p.chain = 0; p.lastKillT = -99; p.lastKilledBy = null;
+    p.plants = 0; p.defuses = 0; p.captures = 0; p.returns = 0; p.carrierKills = 0;
+    p.score = createStreakState(p.loadout.streaks, STREAKS, p.loadout.perks);
+    p.dmgBy.fill(0); p.dmgT.fill(-99);
+    for (const q of this.players) { q.dmgBy[p.index] = 0; q.dmgT[p.index] = -99; if (q.lastKilledBy === p.id) q.lastKilledBy = null; }
   }
 
   // Gives a slot back from its bot to the human who dropped, with kills, score and streaks intact.
@@ -2087,9 +2136,13 @@ export class Sim {
   // as `id`; the slot, and everything credited to it, moves to the new id.
   // Returns {index, id, oldId, x, z, aim, alive, hp}, or null when no such slot is waiting. Host only: the 'rejoin'
   // event it emits carries the change to guests, whose snapshot codec applies it with rebindPlayer().
-  humanRejoin(slot, { id = null, name = null, loadout = null } = {}) {
+  // A held slot (see humanLeft) comes back with its stats, or with none when `fresh` (a newcomer in an open slot). It
+  // spawns at once, except in Search and Destroy, where it waits for the next round like anyone out of this one.
+  // `info` rides along on the 'rejoin' event for the phones' rosters (badge, operator); the sim does not read it.
+  humanRejoin(slot, { id = null, name = null, loadout = null, fresh = false, info = null } = {}) {
     const p = typeof slot === 'number' ? this.players[slot]
-      : this.byId.get(slot) ?? this.players.find(q => q.isBot && !q.dummy && q.humanId !== null && (q.humanId === slot || q.name === slot));
+      : this.byId.get(slot) ?? this.players.find(q => (q.away || (q.isBot && q.humanId !== null)) && !q.dummy && (q.humanId === slot || q.name === slot));
+    if (p?.away) return this._returnHeld(p, { id, name, loadout, fresh, info });
     if (!p || !p.isBot || p.dummy || p.humanId === null) return null;
     const oldId = p.id;
     this.rebindPlayer(oldId, id || p.id, name || p.name);
@@ -2108,6 +2161,21 @@ export class Sim {
       this._emit({ t: 'spawn', id: p.id, x: round2(ps.x), z: round2(ps.z), aim: round2(ps.aim) });
     }
     this._emit({ t: 'rejoin', oldId, id: p.id, name: p.name });
+    return { index: p.index, id: p.id, oldId, x: ps.x, z: ps.z, aim: ps.aim, alive: p.alive, hp: Math.max(0, Math.ceil(p.hp)) };
+  }
+
+  _returnHeld(p, { id, name, loadout, fresh, info }) {
+    const oldId = p.id;
+    if (id && id !== oldId && this.byId.has(id)) return null;
+    this.rebindPlayer(oldId, id || oldId, name || p.name);
+    p.away = false; p.open = false; p.awayT = 0;
+    p.wantRespawn = false; p.deadT = 0; p.respawnT = 0;
+    if (loadout) this.setLoadout(p.id, loadout);
+    if (fresh) this._freshStats(p);
+    this._metaUntil = this.tick + 2;
+    this._emit({ t: 'rejoin', oldId, id: p.id, name: p.name, fresh: !!fresh, info: info ?? undefined });
+    if (!this.snd && this.phase !== 'ended') this._respawn(p);
+    const ps = p.ps;
     return { index: p.index, id: p.id, oldId, x: ps.x, z: ps.z, aim: ps.aim, alive: p.alive, hp: Math.max(0, Math.ceil(p.hp)) };
   }
 
@@ -2183,6 +2251,8 @@ export class Sim {
     p.name = v.name;
     if (v.isBot && !p.isBot) { p.humanId = p.id; }      // Dropped earlier, and the bot had the slot already.
     p.isBot = !!v.isBot;
+    // A held slot stays held on the new host, with as much of its clock as the snapshot carries.
+    p.away = !!v.away; p.open = !!v.open; p.awayT = v.away ? (v.awayT ?? 0) : 0;
     p.skill = p.isBot ? (p.skill || v.skill || 'regular') : null;
     p.camo = v.camo;
     const ps = p.ps;
@@ -2201,7 +2271,7 @@ export class Sim {
     ps.tacticalLeft = v.tacticalLeft; ps.lethalLeft = v.lethalLeft;
     if (v.tactical) ps.tactical = v.tactical;
     if (v.lethal) ps.lethal = v.lethal;
-    p.hp = v.hp; p.alive = v.alive; p.respawnT = v.respawnT;
+    p.hp = v.hp; p.alive = v.alive && !p.away; p.respawnT = v.respawnT;
     // Time dead is not in the snapshot: count from the death, as far as respawnT tells. A respawn request that was in
     // flight to the old host is sent again by the phone's death screen.
     p.deadT = p.alive ? 0 : Math.max(0, RESPAWN_TIME - v.respawnT); p.wantRespawn = false;
@@ -2286,6 +2356,7 @@ export class Sim {
       attachments: this._heldKit(p, ps.weapon),
       plants: p.plants ?? 0, defuses: p.defuses ?? 0,
       captures: p.captures ?? 0, returns: p.returns ?? 0, carrierKills: p.carrierKills ?? 0,
+      away: p.away, open: p.open, awayT: p.awayT,
     };
   }
 
@@ -2387,11 +2458,12 @@ export class Sim {
       }
       const flags = (p.alive ? 1 : 0) | (ps.sprinting ? 2 : 0) | (ps.sliding ? 4 : 0) | (p.spawnProtect > 0 ? 8 : 0)
         | (ps.perks.includes('ghost') ? 16 : 0) | (ps.overheated ? 32 : 0) | (st.capped ? 64 : 0) | (p.isBot ? 128 : 0)
-        | (ps.perks.includes('deadsilence') ? 256 : 0);
+        | (ps.perks.includes('deadsilence') ? 256 : 0) | (p.away ? 512 : 0) | (p.open ? 1024 : 0);
       out.push(
         Math.round(ps.x * 50), Math.round(ps.z * 50), Math.round(ps.aim * 100),
         Math.round(ps.vx * 5), Math.round(ps.vz * 5),
-        Math.max(0, Math.ceil(p.hp)), flags, Math.round(Math.max(0, p.respawnT) * 10),
+        // A held slot has no respawn clock; the field carries how long it has been held, so a new host keeps counting.
+        Math.max(0, Math.ceil(p.hp)), flags, Math.round(Math.max(0, p.away ? p.awayT : p.respawnT) * 10),
         WEAPON_IDS.indexOf(ps.weapon), ps.ammo[ps.slot], ps.reserve[ps.slot],
         Math.round(ps.reloadT * 10), Math.round(ps.reloadDur * 10),
         Math.round(ps.adsT * 20), Math.round(ps.bloom * 20),
@@ -2549,7 +2621,8 @@ export class Sim {
         id: r.id, name: r.name, team: r.team, isBot: !!(flags & 128), skill: r.skill, dummy: r.dummy,
         x: d[o] / 50, z: d[o + 1] / 50, aim: d[o + 2] / 100,
         vx: d[o + 3] / 5, vz: d[o + 4] / 5,
-        hp: d[o + 5], alive: !!(flags & 1), respawnT: d[o + 7] / 10,
+        hp: d[o + 5], alive: !!(flags & 1), respawnT: flags & 512 ? 0 : d[o + 7] / 10,
+        away: !!(flags & 512), open: !!(flags & 1024), awayT: flags & 512 ? d[o + 7] / 10 : 0,
         weapon: WEAPON_IDS[d[o + 8]], camo: r.camo, ammo: d[o + 9], reserve: d[o + 10],
         reloadT: d[o + 11] / 10, reloadDur: d[o + 12] / 10,
         adsT: d[o + 13] / 20, bloom: d[o + 14] / 20,
@@ -2604,7 +2677,7 @@ export class Sim {
     const tick = this.tick, everything = tick <= this._metaUntil, halfRate = (tick % (SNAPSHOT_EVERY * 2)) >= SNAPSHOT_EVERY;
     const humans = this._humanScratch || (this._humanScratch = []);
     humans.length = 0;
-    for (let i = 0; i < n; i++) { const q = this.players[i]; if (!q.isBot && !q.dummy) humans.push(q); }
+    for (let i = 0; i < n; i++) { const q = this.players[i]; if (!q.isBot && !q.dummy && !q.away) humans.push(q); }
     for (let i = 0; i < n; i++) {
       const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;
       const sent = p.snapSlow || (p.snapSlow = new Float64Array(PLAYER_STRIDE).fill(NaN));

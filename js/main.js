@@ -18,6 +18,9 @@ import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
+import { playerId } from './net/star.js';
+import { LobbyAnnouncer, LobbyBrowser, cleanSquad } from './net/lobbies.js';
+import { browseScreen } from './ui/browse.js';
 import { takeInvite, wireInvite, joinFromInvite, inviteJoinFailed, inviteSettled, refusal, refusalKind, showJoinProblem } from './ui/invite.js';
 import { installTaps, setTapSound } from './ui/tap.js';
 import { installScrolling, scrollerOf, canScroll } from './ui/scroll.js';
@@ -47,6 +50,8 @@ const LAST_ROOM = 'switchyard-last-room';
 const invite = takeInvite();     // Reads and strips ?join=CODE before anything else looks at the URL.
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
+// The id this device plays under, as the session will report it: Browse hides our own room and spots our held slot by it.
+const selfId = () => playerId(NetImpl === LocalNet ? sessionStorage : localStorage);
 // Test hooks: ?limit=N lowers the score limit, ?time=S the time limit, ?vote=N shortens the vote, and ?map=&mode= skip
 // the solo picker (either may be 'random').
 const LIMIT_OVERRIDE = Number(params.get('limit')) || 0;
@@ -97,6 +102,9 @@ const app = {
   lobby: { humans: [], botSkill: 'mixed' },
   inMatch: false,
   dead: new Set(),          // Peers dropped during the current match; the same player id gets its slot back.
+  public: false,            // The room is listed in Browse games (js/net/lobbies.js). Guests track it for a promotion.
+  announcer: null,          // Host of a public room: the LobbyAnnouncer.
+  browser: null,            // The Browse games screen's LobbyBrowser while it is open.
   matchInfo: null,          // The current match's start message, so a returning player can be sent it again.
   rematch: null,            // Host only: { left, timer } while the auto-start countdown runs.
   countdown: null,          // Seconds left in the rematch countdown as last announced; null when none.
@@ -214,6 +222,9 @@ function showTitle(opts = {}) {
 }
 
 function teardownNet() {
+  stopAnnouncing();
+  closeBrowse();
+  app.public = false;
   clearInterval(app.netPoll);
   app.voice?.dispose();
   app.voice = null;
@@ -237,6 +248,8 @@ menu.on({
   quickPlay: () => { needName(quickPlay); },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
+  browse: () => openBrowse(),
+  lobbyPublic: () => setPublic(!app.public),
   gunsmith: () => openGunsmith(),
   loadout: () => openLoadout(),
   operators: () => openOperators(),
@@ -324,7 +337,21 @@ function openProfile() {
 }
 
 function openOptions() {
-  menu.options({ onBack: afterEditing, onPreviewSound: () => audio.uiClick?.() });
+  menu.options({ onBack: afterEditing, onPreviewSound: () => audio.uiClick?.(), onSquad: editSquad });
+}
+
+// The squad tag: rooms announced with one are listed only to phones with the same tag (js/net/lobbies.js).
+function editSquad() {
+  menu.keypad({
+    title: 'Squad tag', value: Options.get('squad'), max: 10, kind: 'name', doneLabel: 'Save',
+    hint: 'Public rooms with this tag show only to phones with the same tag. Letters and numbers.',
+    onDone: value => {
+      Options.set('squad', cleanSquad(value));
+      if (app.announcer) { stopAnnouncing(); startAnnouncing(); }
+      openOptions();
+    },
+    onCancel: openOptions,
+  });
 }
 
 function openStats(back = afterEditing) {
@@ -360,12 +387,77 @@ function renderLobby() {
     countdown: app.isHost ? (app.rematch?.left ?? null) : app.countdown,
     rematchWait: app.rematchWait,
     ffa: ffaRoom(),
+    public: app.public,
   });
 }
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null, public: app.public });
+}
+
+// --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
+function setPublic(on) {
+  if (!app.isHost || !app.net) return;
+  app.public = !!on;
+  if (app.public) startAnnouncing(); else stopAnnouncing();
+  broadcastLobby();
+  if (menuShows('lobby')) renderLobby();
+  menu.toast(app.public ? 'Room is public: listed in Browse games' : 'Room is private: code and invites only');
+}
+
+function startAnnouncing() {
+  if (app.announcer || !app.public || !app.isHost || !app.net) return;
+  app.announcer = new LobbyAnnouncer({ squad: Options.get('squad'), getInfo: lobbyAnnouncement });
+}
+
+function stopAnnouncing() {
+  app.announcer?.stop();
+  app.announcer = null;
+}
+
+// What Browse games shows for this room (fields: js/net/lobbies.js cleanLobby), or null to stay off the list: a match
+// in progress is listed only while it holds a slot for someone who dropped or has one open.
+function lobbyAnnouncement() {
+  const net = app.net;
+  if (!net || !app.isHost || !app.public) return null;
+  const base = { code: app.code, host: myName(), pid: net.localId };
+  if (app.inMatch && app.matchInfo) {
+    const view = app.match?.interp.newest;
+    const players = (view?.players ?? []).filter(p => !p.dummy);
+    const held = players.filter(p => p.away && !p.open).map(p => p.id);
+    const open = players.filter(p => p.away && p.open).length;
+    if (!held.length && !open) return null;
+    return {
+      ...base, map: app.matchInfo.mapId, mode: app.matchInfo.mode, phase: 'match',
+      humans: players.filter(p => !p.isBot && !p.away).length, slots: players.length,
+      left: Math.round(view?.timeLeft ?? 0), open, held,
+    };
+  }
+  return {
+    ...base, map: app.vote ? null : app.lastPlayed?.mapId ?? null, mode: app.vote ? null : app.lastPlayed?.mode ?? null,
+    phase: app.vote ? 'voting' : 'lobby', humans: app.lobby.humans.length, slots: roomCap(), left: 0, open: 0, held: [],
+  };
+}
+
+// --- Browse games ---
+function openBrowse() {
+  closeBrowse();
+  const browser = app.browser = new LobbyBrowser({ squad: Options.get('squad'), selfId: selfId() });
+  browseScreen(menu, {
+    browser,
+    squad: Options.get('squad'),
+    selfId: selfId(),
+    onJoin: code => needName(() => { closeBrowse(); startJoining(code); }),
+    onCode: () => { closeBrowse(); needName(askCode); },
+    onHost: () => { closeBrowse(); needName(startHosting); },
+    onBack: () => { closeBrowse(); showTitle(); },
+  });
+}
+
+function closeBrowse() {
+  app.browser?.close();
+  app.browser = null;
 }
 
 // --- Rematch: same room and code, players land in the lobby and the host's countdown launches the next match. ---
@@ -434,13 +526,34 @@ function wireHostNet(net) {
 
 // True if the match roster holds this player, which is what makes a mid-match join a rejoin.
 function holdsSlot(id) {
+  if (app.match?.isHost) return app.match.holdsHuman(id);
   return !!app.matchInfo?.roster.some(r => r.id === id && !r.isBot);
+}
+
+// A newcomer joining a match in progress takes a slot nobody reclaimed in time (Sim.claimOpenSlot): fresh stats, no bot.
+function seatOpenSlot(id, msg) {
+  if (!app.net || !app.match?.isHost) return false;
+  const seat = seatFrom(msg);
+  const name = String(msg.name ?? '').slice(0, 12) || 'Player';
+  const operator = cleanOperator(seat.loadout?.operator);
+  const info = { badge: seat.badge, operator, skin: seat.loadout?.skin ?? null, emblem: seat.loadout?.emblem ?? null };
+  const entry = app.match.claimOpenSlot(id, name, { ...seat.loadout, operator }, info);
+  if (!entry) return false;
+  app.dead.delete(id);
+  if (!app.lobby.humans.some(h => h.id === id)) app.lobby.humans.push({ id, name, team: entry.team, ready: true, ...seat });
+  app.badges?.set(id, seat.badge);
+  app.net.sendLobby({ ...app.matchInfo, t: 'start', rejoin: true }, id);
+  hud.notify(`${name} took an open slot`);
+  broadcastLobby();
+  app.announcer?.poke();
+  return true;
 }
 
 function seatReturningPlayer(id) {
   if (!app.net || !holdsSlot(id)) return false;
-  app.dead.delete(id);
   const entry = app.matchInfo.roster.find(r => r.id === id);
+  if (!entry) return false;
+  app.dead.delete(id);
   if (!app.lobby.humans.some(h => h.id === id)) {
     app.lobby.humans.push({ id, name: entry.name, team: entry.team, ready: true, primary: entry.primary, camo: entry.camo, loadout: entry.loadout, badge: entry.badge });
   }
@@ -448,6 +561,7 @@ function seatReturningPlayer(id) {
   app.net.sendLobby({ ...app.matchInfo, t: 'start', rejoin: true }, id);
   hud.notify(`${entry.name} is back`);
   broadcastLobby();
+  app.announcer?.poke();
   return true;
 }
 
@@ -457,7 +571,7 @@ function hostLobbyMessage(msg, from) {
   switch (msg.t) {
     case 'join': {
       if (app.inMatch) {
-        if (seatReturningPlayer(from)) return;
+        if (seatReturningPlayer(from) || seatOpenSlot(from, msg)) return;
         app.net.sendLobby(refusal('started'), from);
         return;
       }
@@ -528,7 +642,8 @@ function hostSawLeave(id) {
   if (app.vote?.votes?.delete(id)) { broadcastVote(); renderVote(); }
   if (app.inMatch) {
     if (holdsSlot(id)) app.dead.add(id);
-    if (h) hud.notify(`${h.name} dropped, a bot took over`);
+    if (h) hud.notify(`${h.name} dropped, slot held`);
+    app.announcer?.poke();
   } else {
     broadcastLobby();
     if (menuShows('lobby')) renderLobby();
@@ -590,6 +705,7 @@ function guestLobbyMessage(msg) {
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
       app.countdown = msg.countdown ?? null;
+      app.public = !!msg.public;
       if (app.voice) updateVoiceTeam();
       if (menuShows('results')) menu.updateCountdown(app.countdown);
       else if (!app.inMatch && !app.vote && !EDIT_SCREENS.includes(menu.el.dataset.screen)) renderLobby();
@@ -654,6 +770,7 @@ function becomeHost(oldHostId) {
   if (me) { me.host = true; me.ready = true; }
   wireHostNet(net);
   broadcastLobby();
+  startAnnouncing();               // A public room stays listed under its new host.
   if (app.inMatch) {
     app.match?.promoteToHost?.({ goneIds: oldHostId ? [oldHostId] : [] });
     hud.announceHost(myName(), true);

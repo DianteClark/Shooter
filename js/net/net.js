@@ -4,7 +4,7 @@ import { StarNet, KINDS } from './star.js';
 import { TURN_SERVERS } from './turn.js';
 import { mungeOpus } from './opus.js';
 
-const APP_ID = 'switchyard-6v6-1';
+export const APP_ID = 'switchyard-6v6-1';
 
 // Trystero does not expose its data channels, so this subclass notes them as they appear;
 // their bufferedAmount is what tells the session a phone has fallen behind.

@@ -376,7 +376,7 @@ await test('host migration mid-round: the planted bomb keeps ticking on the new 
   assert.deepEqual(next.scores, sim.scores);
   assert.equal(next.snd.history.length, 1);
   assert.equal(next.snd.bomb.planter?.id, sim.snd.bomb.planter.id, 'the planter still gets the credit');
-  for (let i = 0; i < sim.players.length; i++) assert.equal(next.players[i].alive, sim.players[i].alive);
+  for (let i = 0; i < sim.players.length; i++) if (sim.players[i].id !== 'h1') assert.equal(next.players[i].alive, sim.players[i].alive);   // h1 left: held off the field.
   ticks(next, next.snd.bomb.fuse + 0.2);
   assert.equal(next.snd.history.at(-1).reason, 'bomb');
   assert.deepEqual(next.scores, [sim.scores[0] + 1, sim.scores[1]]);

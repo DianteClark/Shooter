@@ -79,7 +79,7 @@ A fast flick therefore hipfires before ADS ramps up. No ADS button: thumbs are b
 `js/sim/sim.js` (no DOM, no three, runs in node)
 - `buildRoster(humans,{botSkill:'recruit'|'regular'|'veteran'|'elite'|'mixed',teamSize})` fills with named bots. humans `{id,name,team,primary,camo}`. Roster entries `{id,name,team,isBot,skill,primary,camo}`
 - `new Sim({roster,map,seed,scoreLimit,timeLimit})`
-- `step(dt)`, `applyHumanState(id,decoded)`, `applyShot(id,shot,ageSeconds)` (damage by rewinding targets through a ~300 ms position history), `useStreak(id)`, `humanLeft(id)` (bot takes over), `drainEvents()`, `getView(localId)`, `encodeSnapshot()`, `decodeSnapshot(data,localId)` returns GameView
+- `step(dt)`, `applyHumanState(id,decoded)`, `applyShot(id,shot,ageSeconds)` (damage by rewinding targets through a ~300 ms position history), `useStreak(id)`, `humanLeft(id)` (slot held for rejoin, never bot-filled; opens to newcomers after 3 min, see `dev/sim-heldslots.mjs`), `drainEvents()`, `getView(localId)`, `encodeSnapshot()`, `decodeSnapshot(data,localId)` returns GameView
 - Host-only damage. Bots: four tiers by reaction time, aim error, awareness, flanking, never aimbot. Think at staggered low rates. Use `hasLineOfSight`.
 - Streaks: UAV at 3 kills (reveal enemies 20 s), Strike at 5 (line of explosions at the densest enemy cluster). Player taps to trigger (`input.streak`).
 - Scoring: first to `SCORE_LIMIT`, or best at `TIME_LIMIT`. 3 s warmup. Respawn farthest from enemies.

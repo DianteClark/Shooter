@@ -34,7 +34,7 @@ const stepper = key => {
 
 const toggle = (act, cls = '') => `<button class="opt-toggle${cls ? ' ' + cls : ''}" data-act="${act}"><i class="opt-knob"></i><b></b></button>`;
 
-export function optionsScreen(menu, { onBack, onPreviewSound }) {
+export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
   menu.el.dataset.screen = 'options';
   menu.el.innerHTML = `
     ${header({ back: 'optBack', label: 'Done', title: 'Options' })}
@@ -76,6 +76,13 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
           <div class="opt-name"><b>Team voice</b><small>Plays your squad's voice on this phone</small></div>
           ${toggle('optVoice', 'opt-voice')}
         </div>`}
+        <div class="opt-row opt-squad">
+          <div class="opt-name"><b>Squad tag</b><small>Public rooms with a tag show only to the same tag</small></div>
+          <div class="opt-squad-ctl">
+            <button class="seg opt-squad-tag" data-act="optSquad"><b></b></button>
+            <button class="opt-step opt-squad-clear" data-act="optSquadClear" aria-label="Clear squad tag">${ico('close')}</button>
+          </div>
+        </div>
         <p class="opt-note">${ico('info')}Settings stay on this phone and are not part of your save code.</p>
       </section>
     </div>`;
@@ -92,6 +99,10 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
+    const tag = q('.opt-squad-tag');
+    tag.classList.toggle('on', !!v.squad);
+    tag.querySelector('b').textContent = v.squad || 'None';
+    q('.opt-squad-clear').hidden = !v.squad;
     const toggle = q('[data-act="optLefty"]');
     toggle.classList.toggle('on', v.lefty);
     toggle.querySelector('b').textContent = v.lefty ? 'On' : 'Off';
@@ -115,6 +126,8 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
+    optSquad: () => onSquad?.(),
+    optSquadClear: () => { Options.set('squad', ''); paint(); },
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));

@@ -1,0 +1,78 @@
+/* ---- Browse games (js/ui/browse.js), the title's Browse plate, the lobby's Public switch and the squad tag row ------ */
+
+/* Title: Quick play and Range on top, Host / Join / Browse in a row of three under them. */
+.tl-grid.has-browse { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.tl-grid.has-browse > .tl-btn { grid-column: span 3; }
+.tl-grid.has-browse > .tl-third { grid-column: span 2; }
+#ui .tl-btn.tl-third { gap: var(--sp-2); padding: 0 var(--sp-2) 0 var(--sp-3); }
+#ui .tl-btn.tl-third .ico { height: 18px; }
+
+/* Lobby header: the third invite plate. */
+#ui .menu .inv-ctl .inv-listed { padding: 0 var(--sp-3); gap: var(--sp-2); }
+#ui .inv-listed .ico { color: var(--c-haze); }
+#ui .inv-listed b { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); }
+#ui .menu .inv-ctl .inv-listed.on { background: linear-gradient(172deg, #79e3aa, var(--c-go) 48%, #34b06f); color: var(--c-night); box-shadow: var(--bevel-sodium); }
+#ui .inv-listed.on .ico { color: var(--c-night); }
+#ui .inv-listed.static { flex: none; display: inline-flex; align-items: center; gap: var(--sp-2); height: 30px; padding: 0 var(--sp-3); color: var(--c-go); box-shadow: inset 0 0 0 1px rgba(89,214,145,.5); }
+#ui .inv-listed.static .ico { height: 16px; color: var(--c-go); }
+
+/* Options: squad tag. */
+.opt-squad-ctl { flex: none; display: flex; align-items: center; gap: var(--sp-1); }
+#ui .menu .opt-squad-tag { min-width: 84px; height: 34px; }
+#ui .menu .opt-squad-tag b { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); }
+#ui .opt-squad-clear[hidden] { display: none; }
+
+/* ---- The screen ---- */
+.br-tools { margin-left: auto; display: flex; align-items: center; gap: var(--sp-3); }
+.br-squad, .br-live { display: inline-flex; align-items: center; gap: var(--sp-2); height: 30px; padding: 0 var(--sp-3);
+  font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); background: rgba(16,20,26,.55); box-shadow: var(--edge); }
+#ui .br-squad .ico { height: 16px; color: var(--c-sodium); }
+.br-live .lamp { --lamp: var(--c-go); }
+.br-live[data-state="connecting"] .lamp { --lamp: var(--c-sodium); animation: br-blink 1s steps(2) infinite; }
+.br-live[data-state="offline"] .lamp { --lamp: var(--c-red); box-shadow: none; }
+@keyframes br-blink { 50% { opacity: .25; } }
+
+.br-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.br-list { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding: 2px 2px var(--sp-4); }
+.br-empty { padding-bottom: var(--sp-5); }
+#ui .br-empty .row { display: flex; gap: var(--sp-3); justify-content: center; }
+
+.br-row {
+  flex: none; position: relative; display: grid; align-items: center; gap: var(--sp-4);
+  grid-template-columns: 92px minmax(0, 1fr) 62px 150px auto; min-height: 62px; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-2);
+  background: linear-gradient(172deg, rgba(53,64,76,.94), rgba(33,40,49,.94)); box-shadow: var(--bevel), var(--edge);
+  --cut: var(--cut-md);
+}
+.br-row.is-new { animation: br-in var(--dur-slow) var(--ease-out) both; }
+@keyframes br-in { from { opacity: 0; transform: translateX(-14px); } }
+.br-row.is-off { background: linear-gradient(172deg, rgba(45,53,63,.9), rgba(30,36,44,.9)); }
+.br-row.is-old { filter: grayscale(1); opacity: .6; }
+.br-art { position: relative; width: 92px; height: 50px; display: grid; place-items: center; background: var(--c-night) center / cover no-repeat;
+  box-shadow: inset 0 0 0 1px var(--c-line-hi); --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+/* The vote cards' art class (for the snapshot swap in mapthumb.js) is absolutely placed; here it sits in the grid. */
+#ui .br-row .br-art.vc-art { position: relative; inset: auto; }
+.br-art-vote { color: var(--c-sodium); background: repeating-linear-gradient(135deg, rgba(242,166,59,.08) 0 8px, transparent 8px 16px), var(--c-night); }
+#ui .br-art-vote .ico { height: 26px; }
+.br-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.br-top { display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; }
+.br-host { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); min-width: 0; }
+.br-code { flex: none; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .14em; color: var(--c-sodium); font-style: normal; }
+.br-sub { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.br-mode { flex: none; display: inline-flex; align-items: center; gap: var(--sp-1); height: 20px; padding: 0 var(--sp-2) 0 var(--sp-1);
+  background: rgba(242,166,59,.14); color: var(--c-sodium); }
+#ui .br-mode .ico { height: 15px; }
+.br-mode b { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); }
+.br-map { font: 400 var(--fs-body)/1 var(--f-body); color: var(--c-haze); min-width: 0; }
+#ui .br-ver { font: 400 var(--fs-micro)/1.1 var(--f-body); color: var(--c-sodium-hi); }
+.br-count { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--c-chalk); }
+#ui .br-count .ico { height: 15px; color: var(--c-haze); }
+.br-count b { font: 400 var(--fs-title)/1 var(--f-stencil); }
+.br-count small { font-size: var(--fs-caption); color: var(--c-haze); }
+.br-phase { display: grid; grid-template-columns: 10px minmax(0, 1fr); align-items: center; column-gap: var(--sp-2); row-gap: 3px; min-width: 0; }
+.br-phase b { font: 400 var(--fs-caption)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-phase small { grid-column: 2; font: 400 var(--fs-micro)/1 var(--f-body); color: var(--c-haze); }
+.br-phase[data-tone="go"] .lamp { --lamp: var(--c-go); }
+.br-phase[data-tone="go"] b { color: var(--c-go); }
+.br-phase[data-tone="busy"] .lamp { --lamp: var(--c-red); }
+.br-phase[data-tone="old"] .lamp { --lamp: var(--c-haze); box-shadow: none; }
+#ui .menu .br-join { min-width: 104px; min-height: 44px; padding: 0 var(--sp-4); justify-content: center; }

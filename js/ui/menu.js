@@ -41,7 +41,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { title: 0, keypad: 1, solo: 1, searching: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { title: 0, keypad: 1, solo: 1, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -179,11 +179,12 @@ export class Menu {
             <span class="tl-hero-tx"><b>Play vs bots</b><small>Choose a map and a mode</small></span>
             ${ico('play', 'tl-go')}
           </button>
-          <div class="tl-grid">
+          <div class="tl-grid has-browse">
             <button class="tl-btn" data-act="quickPlay" data-in="rail">${ico('quick')}<b>Quick play</b></button>
             <button class="tl-btn" data-act="range" data-in="rail">${ico('range')}<b>Firing range</b></button>
-            <button class="tl-btn" data-act="host" data-in="rail">${ico('host')}<b>Host</b></button>
-            <button class="tl-btn" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
+            <button class="tl-btn tl-third" data-act="host" data-in="rail">${ico('host')}<b>Host</b></button>
+            <button class="tl-btn tl-third" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
+            <button class="tl-btn tl-third tl-browse" data-act="browse" data-in="rail">${ico('ui:signal')}<b>Browse</b></button>
           </div>
           <button class="tl-btn tl-loadout" data-act="loadout" data-in="rail">${ico('loadout')}<span><b>Loadouts</b><small>${esc(lo?.name ?? '')}${gun ? `: ${esc(gun)}` : ''}</small></span></button>
         </nav>
@@ -298,7 +299,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -341,7 +342,7 @@ export class Menu {
           <span>Room code</span>
           <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         </div>
-        ${isHost ? inviteControls() : ''}
+        ${isHost ? inviteControls({ listed }) : listed ? `<span class="inv-listed static">${ico('ui:signal')}<b>Public</b></span>` : ''}
         <p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
       </header>
