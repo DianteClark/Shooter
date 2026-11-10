@@ -971,8 +971,9 @@ body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; mar
    the button cluster and clear of Skip, and the Next life line sits under the banner, centred in what is left. */
 .killcam-on .death { background: linear-gradient(180deg, rgba(16,20,26,.0) 60%, rgba(16,20,26,.4)); }
 .killcam-on .feed { visibility: hidden; }
-/* The replay owns the screen: the Next life line and its picker come back the moment the killcam ends or is skipped. */
-.killcam-on .death-act, .killcam-on .picker { visibility: hidden; pointer-events: none; }
+/* The replay owns the screen: only the footage, its banner and Skip. The killer card, Next life and the respawn
+   countdown appear when it ends or is skipped, and the respawn wait starts then (js/ui/hud.js #respawnWait). */
+.killcam-on .death { visibility: hidden; pointer-events: none; }
 /* Tap to respawn: the button already counts down, so the replay does not need the ring as well. */
 .killcam-on .death.tap-mode .death-timer { display: none; }
 .killcam-on .death-col { top: calc(var(--st) + 88px); padding-right: 212px; }

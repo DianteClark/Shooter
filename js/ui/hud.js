@@ -1,6 +1,6 @@
 // In-match overlay. Built once; update() runs every frame and touches the DOM only when a displayed value
 // actually changes, and then only with text, a transform or a class flip.
-import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT, GOLDEN_ID } from '../shared/constants.js';
+import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT, GOLDEN_ID, RESPAWN_TIME } from '../shared/constants.js';
 import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
@@ -1972,25 +1972,26 @@ export class HUD {
       if (dead) this.#paintPicker(true);
       else this.#openPicker(false);
       this.controls?.setDown(dead);
-      this.respawnTotal = Math.max(1, me.respawnT ?? 3);
+      this.respawnTotal = RESPAWN_TIME;
       c.ring = NaN;
       if (dead) this.#paintDeathHead(view);
     }
     if (!dead) return;
     // Once the wait is over the ring has said all it can; the Respawn button carries the rest.
-    const waiting = (me.respawnT ?? 0) > 0.05;
+    const wait = this.#respawnWait(me);
+    const waiting = wait > 0.05;
     if (waiting !== c.timerOn) {
       c.timerOn = waiting;
       this.deathTimer.style.visibility = waiting ? '' : 'hidden';
     }
-    const left = Math.max(1, Math.ceil(me.respawnT ?? 0));
+    const left = Math.max(1, Math.ceil(wait));
     if (left !== c.respawn) {
       c.respawn = left;
       this.deathCount.textContent = left;
       this.deathCount.animate(COUNT_POP, { duration: 320, easing: 'ease-out' });
     }
     // The ring empties toward the respawn, in 1/40 steps so it repaints a few dozen times rather than every frame.
-    const ring = Math.round(Math.max(0, Math.min(1, (me.respawnT ?? 0) / this.respawnTotal)) * 40) / 40;
+    const ring = Math.round(Math.max(0, Math.min(1, wait / this.respawnTotal)) * 40) / 40;
     if (ring !== c.ring) {
       c.ring = ring;
       this.dtArc.style.strokeDashoffset = ((1 - ring) * DEATH_RING).toFixed(1);
@@ -2005,8 +2006,12 @@ export class HUD {
   #resetRespawn(dead, t = 0) {
     const r = this.respawn ??= { asked: false, diedAt: 0, sentAt: -99, auto: false };
     r.asked = false;
+    r.queued = false;              // Tapped before the wait was over: asked for the moment it is.
     r.diedAt = t;
     r.sentAt = -99;
+    r.deathAt = performance.now() / 1000;
+    r.sawKillcam = false;
+    r.readyAt = null;              // Local clock: when the respawn wait ends. Set once the death replay is over.
     r.auto = Options.get('autoRespawn') === true;
     this.cache.goState = '';
     this.cache.goSub = '';
@@ -2014,7 +2019,23 @@ export class HUD {
     // Auto-respawn brings you back by itself: the ring counts it down, so there is nothing to tap.
     this.goBtn.style.display = r.auto ? 'none' : '';
     this.deathEl.classList.toggle('tap-mode', !r.auto);
-    if (dead && r.auto && !this.snd) this.#askRespawn();
+  }
+
+  // Seconds left before this player may respawn. The wait starts when the death replay ends (or right away when
+  // there is none), so nobody loses respawn time to watching the killcam. Never shorter than the host's own timer.
+  #respawnWait(me) {
+    const r = this.respawn;
+    if (!r) return Math.max(0, me?.respawnT ?? 0);
+    const now = performance.now() / 1000;
+    const replaying = document.body.classList.contains('killcam-on');
+    if (replaying) r.sawKillcam = true;
+    if (r.readyAt === null) {
+      // A replay starts about half a second after the death; give it a moment to begin before assuming there is none.
+      if (r.sawKillcam && !replaying) r.readyAt = now + RESPAWN_TIME;
+      else if (!r.sawKillcam && now - r.deathAt > 0.8) r.readyAt = r.deathAt + RESPAWN_TIME;
+    }
+    const local = r.readyAt === null ? RESPAWN_TIME : Math.max(0, r.readyAt - now);
+    return Math.max(local, me?.respawnT ?? 0);
   }
 
   #askRespawn() {
@@ -2028,7 +2049,9 @@ export class HUD {
     const r = this.respawn;
     if (!r || !this.deathEl.classList.contains('show') || r.asked) return;
     this.#openPicker(false);
-    this.#askRespawn();
+    // Before the wait is over the tap is kept and sent the moment it ends (see #updateRespawn).
+    if (this.#respawnWait(this.view && this.#findLocal(this.view)) > 0.05) r.queued = true;
+    else this.#askRespawn();
     this.#updateRespawn(this.view && this.#findLocal(this.view), this.cache);
   }
 
@@ -2039,11 +2062,15 @@ export class HUD {
     if (!r || !me || me.alive) return;
     const now = performance.now() / 1000;
     if (r.asked && now - r.sentAt >= RESPAWN_RESEND) { r.sentAt = now; this.respawnCb?.({}); }
-    const wait = Math.max(0, me.respawnT ?? 0);
+    const wait = this.#respawnWait(me);
     const ready = wait <= 0.05;
-    const state = r.asked ? 'asked' : ready ? 'ready' : 'wait';
+    // Auto-respawn, or a tap made during the wait: ask the host the moment the wait is over.
+    if (ready && !r.asked && !this.snd && (r.auto || r.queued)) this.#askRespawn();
+    const queued = r.asked || r.queued || r.auto;
+    const state = queued ? 'asked' : ready ? 'ready' : 'wait';
     let sub;
-    if (r.asked) sub = ready ? 'Deploying' : `Respawning in ${Math.ceil(wait)}`;
+    if (document.body.classList.contains('killcam-on')) sub = 'After the replay';
+    else if (queued) sub = r.asked ? 'Deploying' : `Respawning in ${Math.ceil(wait)}`;
     else if (!ready) sub = `Ready in ${Math.ceil(wait)}`;
     else sub = `Tap now / auto ${Math.max(1, Math.ceil(RESPAWN_IDLE - ((this.view?.t ?? r.diedAt) - r.diedAt)))}`;
     if (sub !== c.goSub) { c.goSub = sub; this.goSub.textContent = sub; }

@@ -194,17 +194,12 @@ export class Killcam {
       const pe = this.pending;
       this.pending = null;
       if (view.phase !== 'live') return;
-      let left = 2;
       for (let i = 0; i < view.players.length; i++) {
         const p = view.players[i];
-        if (p.id === this.localId) { if (p.alive) return; left = p.respawnT || 0; }
+        if (p.id === this.localId && p.alive) return;
       }
-      const spare = left - 0.2;
-      if (spare < 0.9) return;     // Too little time left for it to read; just show the respawn screen.
+      // Played at full length: the respawn wait only starts once it is over (js/ui/hud.js #respawnWait).
       this.#begin('death', pe.ev, pe.at, pe.at - DEATH_PRE, pe.at + DEATH_POST, 1);
-      // Time-compress the window so the whole thing fits before the respawn.
-      const base = this.#integrate(this.replay);
-      this.replay.speed = base > spare ? base / spare : 1;
     }
   }
 
