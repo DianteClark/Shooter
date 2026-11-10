@@ -95,9 +95,11 @@ const app = {
   resultsAt: 0,             // When the results screen last appeared.
   voteTakeover: 0,          // Guest: timer that moves results on to a vote that opened while they were showing.
   soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
-  // The map and mode the last match was played on, as rolled when the pick was Random. Solo Rematch replays it, and the
-  // room's next vote offers it as its Rematch card: a rematch is the same yard again, never a fresh roll.
+  // The map and mode the last match was played on, as rolled. Rematch replays the halves that were chosen, and the
+  // room's next vote offers it as a Rematch card unless the winning card was Random.
   lastPlayed: null,
+  // The pick as chosen, before rolling. A Random half stays Random on Rematch, so each rematch rolls again.
+  lastPick: null,
 };
 const RESULTS_FALLBACK_MS = 2500;  // Results come up by this long after a match ends even if the end banner failed.
 
@@ -166,6 +168,7 @@ function goTitle(message) {
   app.rematchWait = false;
   app.lobby = { humans: [], botSkill: 'mixed' };
   app.lastPlayed = null;
+  app.lastPick = null;
   hud.setVisible(false);
   menu.overlay('');
   showTitle();
@@ -693,14 +696,17 @@ function pickSoloMode(mode) {
   renderSoloPick();
 }
 
-// Rematch in solo: the same map and mode again at once, the rolled ones when the pick was Random.
+// Rematch in solo: the same map and mode again at once; a half that was picked as Random rolls again.
 function rematchSolo() {
   if (app.lastMode === 'range') return startRange();
-  const last = app.lastPlayed;
-  if (!last) return startSolo();
+  const pick = app.lastPick, last = app.lastPlayed;
+  if (!pick && !last) return startSolo();
+  // A Random half rolls fresh; a chosen half is replayed as chosen.
+  const mapId = pick?.mapId === RANDOM ? RANDOM : last?.mapId ?? pick.mapId;
+  const mode = pick?.mode === RANDOM ? RANDOM : last?.mode ?? pick.mode;
   needName(() => {
     resetToSolo();
-    launchSolo(last.mapId, last.mode);
+    launchSolo(mapId, mode);
   });
 }
 
@@ -710,8 +716,14 @@ function quickPlay() {
   launchSolo(RANDOM, RANDOM);
 }
 
+// The room's last winning card was Random: its next vote offers no fixed Rematch card, only fresh options and Random.
+function isRandomPick(pick) {
+  return !!pick && (pick.mapId === RANDOM || pick.mode === RANDOM);
+}
+
 // Either half may be RANDOM; this device is the host, so it rolls here.
 function launchSolo(pickMap, pickMode) {
+  app.lastPick = { mapId: pickMap, mode: pickMode };
   const { mapId, mode } = resolvePick({ mapId: pickMap, mode: pickMode });
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
@@ -734,7 +746,7 @@ function startVote() {
   if (!app.net || !app.isHost || app.vote) return;
   stopRematch();
   app.vote = {
-    key: `${app.code}:${Date.now()}`, options: voteOptions(Math.random, app.lastPlayed), votes: new Map(), left: VOTE_SECONDS,
+    key: `${app.code}:${Date.now()}`, options: voteOptions(Math.random, isRandomPick(app.lastPick) ? null : app.lastPlayed), votes: new Map(), left: VOTE_SECONDS,
     seconds: VOTE_SECONDS, winner: null, resolved: null, mine: null,
     timer: setInterval(voteTick, 1000),
   };
@@ -754,6 +766,7 @@ function voteTick() {
   clearInterval(vote.timer);
   vote.winner = tallyWinner(voteCounts(vote));
   // A Random winner is rolled once, here on the host, and the result is what everyone is shown and sent.
+  app.lastPick = { ...vote.options[vote.winner] };
   vote.resolved = resolvePick(vote.options[vote.winner]);
   vote.reveal = setTimeout(() => {
     launchHostMatch(vote.resolved.mapId, vote.resolved.mode);

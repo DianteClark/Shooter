@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression test: every solo match ends on its results screen, and Rematch replays the same map and mode.
+"""Regression test: every solo match ends on its results screen, and Rematch after a Random pick rolls again.
 
 Run from anywhere: python3 dev/ui-results-test.py [port]. It serves the repo itself and plays short matches
 (?limit=1&time=20) back to back in one page, the way a player does:
@@ -93,12 +93,16 @@ async def main():
 
             print('Consecutive solo matches')
             st1 = await play('1 quick play (random)', tap('[data-act="quickPlay"]'))
-            st2 = await play('2 rematch replays the roll', tap('[data-act="resRematch"]'), expect=st1['last'])
+            st2 = await play('2 rematch after random rolls again', tap('[data-act="resRematch"]'))
+            pick = await pg.evaluate('window.__game.app.lastPick')
+            ok = pick and pick['mapId'] == 'random' and pick['mode'] == 'random'
+            print(f'  {"rematch kept the Random pick":<44} {"ok" if ok else "FAIL"} {pick}')
+            if not ok: failures.append(f'rematch lost the random pick: {pick}')
             shown = []
             async def start3():
                 shown.extend(await via_picker('random'))
             st3 = await play('3 picker, random map', start3)
-            await play('4 rematch, end banner + preview throw', tap('[data-act="resRematch"]'), expect=st3['last'], inject=True)
+            await play('4 rematch, end banner + preview throw', tap('[data-act="resRematch"]'), inject=True)
             await pg.evaluate("location.reload()")       # Undo the injected faults.
             await pg.wait_for_timeout(1200)
             await pg.locator('[data-act="solo"]').first.tap()   # Title -> picker, then back out through results flow below.
