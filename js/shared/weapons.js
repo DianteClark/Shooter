@@ -349,6 +349,21 @@ export const WEAPONS = {
     pellets: 1, kickCam: 1, tracerWidth: 1.6, longshot: 16,
     botUse: { pref: 13, hold: 1, flank: 0.6, advance: 2 },
   },
+
+  // ---------------- The Golden Gun ----------------
+  // The reward for maxing everything (js/shared/progression.js goldenStatus). One round, and that round kills anyone
+  // it touches inside its range: no falloff, no head needed. What keeps it fair is everything around the shot: one
+  // round per magazine and a long reload, a range a little past the other sidearms, a wide hip cone so it is an
+  // aimed gun, a light round that cover stops like any pistol's, and no attachments (attachments.js). Never on bots.
+  golden: {
+    id: 'golden', name: 'Golden Gun', role: 'One round, one kill', auto: false, golden: true,
+    damage: 200, rpm: 60, magazine: 1, reserve: 12, reload: 3.2, range: 36,
+    falloff: { start: 99, end: 100, min: 1 },
+    adsSpread: 0.004, hipSpread: 0.06, bloomPerShot: 1, bloomRecover: 1.6, bloomScale: 1,
+    adsTime: 0.2, sprintToFire: 0.14, swapTime: 0.32, moveMult: 1.04, adsMoveMult: 0.8,
+    pellets: 1, unlimitedReserve: true, kickCam: 1.3, tracerWidth: 1.5, longshot: 24,
+    botUse: { pref: 12, hold: 1, flank: 0.8, advance: 2, precise: true },
+  },
 };
 
 // Any head hit kills, at any range, from the hip, through cover. Rather than a magic number per gun, the multiplier
@@ -360,7 +375,8 @@ for (const id in WEAPONS) {
   w.category = WEAPON_CATEGORY[id];
   if (w.explosive) { w.headMult = 1; continue; }
   const pen = w.penetrate ? w.penetrate ** MAX_COVER_PIECES : 1;
-  w.headMult = Math.ceil(10 * HEAD_LETHAL_HP / (w.damage * w.falloff.min * (w.adsGate || 1) * pen)) / 10;
+  // Never below 1: a gun that already kills to the body (the Golden Gun) must not do less to the head.
+  w.headMult = Math.max(1, Math.ceil(10 * HEAD_LETHAL_HP / (w.damage * w.falloff.min * (w.adsGate || 1) * pen)) / 10);
 }
 
 // Damage of one pellet/bullet at `dist` metres. `ads` is whether the shot was fully aimed.

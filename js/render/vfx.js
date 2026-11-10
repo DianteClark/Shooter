@@ -34,7 +34,12 @@ export const GUN_FX = {
   pistol:   { tail: 7,  linger: 0.05,  speed: 210, flash: [1.2, 0.9, 1.0],  shell: 'pistol' },
   revolver: { tail: 9,  linger: 0.13,  speed: 240, flash: [1.9, 0.85, 1.7], shell: null, extra: 'gap' },
   launcher: { tail: 0,  linger: 0,     speed: 92,  flash: [2.4, 0.5, 2.2],  shell: null, extra: 'backblast' },
+  // The Golden Gun. Its tail length doubles as its tracer's signature: the renderer hands tracer() only numbers, so
+  // GOLD_TAIL is how a golden round is told apart there and drawn gold whatever the shooter's camo or tracer.
+  golden:   { tail: 26.5, linger: 0.34, speed: 360, flash: [2.3, 1.3, 1.5], shell: 'magnum', extra: 'gold' },
 };
+const GOLD_TAIL = GUN_FX.golden.tail;
+const GOLD_KILL_WINDOW = 1.2;   // Seconds a golden round's end point is remembered for its kill effect.
 const GUN_FX_DEFAULT = GUN_FX.ar;
 const SHELL_LOOK = {
   rifle:  { rgb: [0.92, 0.7, 0.28],  s: 1.0 },
@@ -188,6 +193,16 @@ export class VFX {
   }
 
   tracer(ax, ay, az, bx, by, bz, rgb, width, tail = 11, linger = 0.075, speed = 230) {
+    if (tail === GOLD_TAIL) {
+      // A golden round: a wide amber halo under a gold streak, whatever colour the renderer asked for.
+      this._goldRound(ax, ay, az, bx, by, bz);
+      this._tracer(ax, ay, az, bx, by, bz, GOLD_HALO, width * 3.2, tail, linger * 1.4, speed);
+      rgb = GOLD; width *= 1.5;
+    }
+    this._tracer(ax, ay, az, bx, by, bz, rgb, width, tail, linger, speed);
+  }
+
+  _tracer(ax, ay, az, bx, by, bz, rgb, width, tail, linger, speed) {
     const T = this.tr;
     const i = T.head;
     T.head = (i + 1) % TRACERS;
@@ -202,6 +217,48 @@ export class VFX {
     T.tail[i] = tail;
     T.dur[i] = dist / speed + linger;
     T.t[i] = T.dur[i];
+  }
+
+  /* ---------- The Golden Gun ---------- */
+  // A golden round leaves glitter hanging along its line, and its end point is kept for the kill effect: the kill
+  // event names the gun, but older renderers call killEffect without it, so a kill landing where a golden round just
+  // ended counts too.
+  _goldRound(ax, ay, az, bx, by, bz) {
+    const n = this._n(12);
+    for (let i = 1; i <= n; i++) {
+      const k = i / (n + 1);
+      this.spawn(ax + (bx - ax) * k + rand(-0.08, 0.08), ay + (by - ay) * k, az + (bz - az) * k + rand(-0.08, 0.08),
+        rand(-0.2, 0.2), rand(0.2, 0.7), rand(-0.2, 0.2), rand(0.35, 0.7), 0.07, 0.01, i % 3 ? GOLD : GOLD_PALE, 0, -0.3, 1.5);
+    }
+    const g = this.goldHit ??= { x: 0, z: 0, t: -99 };
+    g.x = bx; g.z = bz; g.t = this.clock;
+  }
+
+  _isGoldKill(x, z, weapon) {
+    if (weapon !== undefined) return weapon === 'golden';
+    const g = this.goldHit;
+    return !!g && this.clock - g.t < GOLD_KILL_WINDOW && Math.hypot(g.x - x, g.z - z) < 2.5;
+  }
+
+  // The Golden Gun's kill: a burst of gold coins, a gold shock ring, a column of light and a lingering glitter.
+  _fxGolden(x, z) {
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.16, 0.5, 3.2, WHITE, 0, 0, 0);
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.32, 0.6, 2.4, GOLD, 0, 0, 0);
+    this.ring(x, z, 0.3, 5.2, 0.4, GOLD, 1);
+    this.ring(x, z, 0.2, 3, 0.28, GOLD_PALE, 0.9);
+    for (let i = 0; i < 22; i++) {
+      const a = rand(0, Math.PI * 2), s = rand(2.5, 7);
+      this.shard(x, rand(0.8, 1.6), z, Math.cos(a) * s, rand(5, 11), Math.sin(a) * s, i % 3 ? GOLD : GOLD_PALE);
+    }
+    for (let i = 0; i < 16; i++) {
+      this.spawn(x + rand(-0.25, 0.25), rand(0.2, 0.6), z + rand(-0.25, 0.25), rand(-0.3, 0.3), rand(4, 8), rand(-0.3, 0.3),
+        rand(0.4, 0.8), 0.14, 0.03, i % 2 ? GOLD_PALE : WHITE, 0, -1, 0.8, 0.08);
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = rand(0, Math.PI * 2), r = rand(0.3, 2.2);
+      this.spawn(x + Math.cos(a) * r, rand(0.4, 2.2), z + Math.sin(a) * r, 0, rand(0.1, 0.6), 0, rand(0.8, 1.5), 0.06, 0.01, GOLD, 0, -0.2, 0.6);
+    }
+    this.pop(x, 1.4, z, 9, GOLD, 0.34);
   }
 
   /* ---------- Loadout cosmetics: tracer colours and kill effects ---------- */
@@ -234,8 +291,10 @@ export class VFX {
     return out;
   }
 
-  // Plays the killer's kill effect at the victim. Returns false for the standard (no extra) effect.
-  killEffect(byId, x, z) {
+  // Plays the killer's kill effect at the victim. Returns false for the standard (no extra) effect. A Golden Gun kill
+  // always plays the golden effect instead of the killer's own (pass the kill event's weapon when there is one).
+  killEffect(byId, x, z, weapon) {
+    if (this._isGoldKill(x, z, weapon)) { this._fxGolden(x, z); return true; }
     switch (this.cosmetics.get(byId)?.killFx) {
       case 'embers': this._fxEmbers(x, z); return true;
       case 'shockring': this._fxShockRing(x, z); return true;
@@ -501,6 +560,7 @@ export class VFX {
   // The full firing signature of a gun at the muzzle: flash shape, jets, smoke and the casing.
   shotFx(weapon, x, y, z, aim, rgb, sup, r) {
     const G = GUN_FX[weapon] || GUN_FX_DEFAULT;
+    if (G.extra === 'gold') rgb = GOLD;
     const ca = Math.cos(aim), sa = Math.sin(aim);
     const k = sup ? 0.35 : 1;
     const f = G.flash;
@@ -523,6 +583,13 @@ export class VFX {
           }
           this.spawn(x, y, z, -sa * side * 2.5, 0.4, ca * side * 2.5, rand(0.4, 0.7), 0.2, 0.8, DUST, 0.55, -0.6, 2.6);
         }
+      } else if (G.extra === 'gold') {
+        // A crown of gold sparks around the muzzle and a bright ring of gas.
+        for (let i = this._n(14); i > 0; i--) {
+          const a = aim + rand(-1.1, 1.1), s = rand(6, 16);
+          this.spawn(x, y, z, Math.cos(a) * s, rand(0.5, 3), Math.sin(a) * s, rand(0.18, 0.36), 0.08, 0.015, i % 2 ? GOLD : GOLD_PALE, 0, 4, 3, 0.03);
+        }
+        this.spawn(x, y, z, 0, 0, 0, 0.12, 0.3, 1.4, GOLD_PALE, 0, 0, 0);
       } else if (G.extra === 'gap') {
         // Revolvers spit fire out of the cylinder gap, either side of the frame.
         for (let side = -1; side <= 1; side += 2) {
@@ -1378,6 +1445,9 @@ const GRENADE_SHARD = [0.82, 0.68, 0.5];
 const FLASH_TINT = [0.82, 0.92, 1.0];
 const FLASH_POP = [0.9, 0.96, 1.05];
 const HEAD_GOLD = [1.0, 0.82, 0.22];
+const GOLD = [1.0, 0.78, 0.22];
+const GOLD_PALE = [1.0, 0.94, 0.62];
+const GOLD_HALO = [0.9, 0.5, 0.04];
 const HEAL = [0.3, 1.0, 0.56];
 const STEAM = [0.72, 0.74, 0.78];
 const WHITE = [1, 1, 1];

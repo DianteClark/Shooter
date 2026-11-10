@@ -22,7 +22,7 @@
 // unlock: the weapon level (1 to 30) that unlocks it. Level ties only happen between attachments that can never
 // be on the same gun. Tracks by weapon come from trackFor(); the unlock order is ATTACHMENT_LIST.
 
-import { WEAPON_IDS, idsIn } from './constants.js';
+import { GOLDEN_ID, WEAPON_IDS, idsIn } from './constants.js';
 
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 
@@ -300,7 +300,8 @@ export const NO_ATTACHMENTS = Object.freeze({});
 
 export function isAvailable(weaponId, attachmentId) {
   const a = ATTACHMENTS[attachmentId];
-  return !!a && (!a.weapons || a.weapons.includes(weaponId));
+  // The Golden Gun takes nothing, including the attachments with no allow-list.
+  return !!a && weaponId !== GOLDEN_ID && (!a.weapons || a.weapons.includes(weaponId));
 }
 
 // Attachments this gun can use, in unlock order; only one slot's when `slot` is given.

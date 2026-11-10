@@ -10,6 +10,9 @@ export const TEAM_SIZE = 6;
 export const SCORE_LIMIT = 75;
 export const TIME_LIMIT = 600;
 export const RESPAWN_TIME = 2.5;
+// Humans respawn when they tap Respawn (any time after RESPAWN_TIME), or on their own this long after dying, so an
+// idle phone never leaves its slot dead for good. Bots ignore both and respawn at RESPAWN_TIME as always.
+export const RESPAWN_AUTO = 10;
 export const SPAWN_PROTECT = 1.5;
 
 // Indices 0 and 1 are the two sides of every team mode. In a free-for-all each player is a side of one (team
@@ -39,12 +42,18 @@ const GUNS_BY_CATEGORY = {
   Pistol:   ['pistol', 'revolver', 'machpistol', 'deuce'],
   Launcher: ['launcher', 'thumper'],
 };
-export const WEAPON_CATEGORY = Object.fromEntries(Object.entries(GUNS_BY_CATEGORY).flatMap(([c, ids]) => ids.map(id => [id, c])));
+// The Golden Gun: a pistol-category secondary kept out of GUNS_BY_CATEGORY on purpose, so no attachment allow-list,
+// bot list or category default ever picks it up. It is the last weapon id, so every older id keeps its wire index.
+export const GOLDEN_ID = 'golden';
+export const WEAPON_CATEGORY = {
+  ...Object.fromEntries(Object.entries(GUNS_BY_CATEGORY).flatMap(([c, ids]) => ids.map(id => [id, c]))),
+  [GOLDEN_ID]: 'Pistol',
+};
 // Every gun id in the given categories. Used for attachment allow-lists.
 export const idsIn = (...cats) => cats.flatMap(c => GUNS_BY_CATEGORY[c] || []);
 
 export const PRIMARY_IDS = idsIn('Assault', 'SMG', 'Shotgun', 'LMG', 'Marksman', 'Sniper');
-export const SECONDARY_IDS = idsIn('Pistol', 'Launcher');
+export const SECONDARY_IDS = [...idsIn('Pistol', 'Launcher'), GOLDEN_ID];
 export const WEAPON_IDS = [...PRIMARY_IDS, ...SECONDARY_IDS];
 export const SECONDARY_ID = 'pistol';
 export const BOT_SKILLS = ['recruit', 'regular', 'veteran', 'elite'];

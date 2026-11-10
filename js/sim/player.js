@@ -228,6 +228,18 @@ export function armPlayer(ps, weapon) {
   return ps;
 }
 
+// Swaps the sidearm in place, full magazine. The host uses it to take the Golden Gun off a bot that inherits a human's
+// slot (bots never carry it); a player holding the sidearm keeps holding the new one.
+export function armSecondary(ps, weapon) {
+  if (!SECONDARY_IDS.includes(weapon) || ps.secondary === weapon) return ps;
+  ps.secondary = weapon;
+  refreshDefs(ps);
+  const w = ps.defs[1];
+  ps.ammo[1] = w.magazine; ps.reserve[1] = reserveFor(w);
+  if (ps.slot === 1) { ps.weapon = weapon; ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0; }
+  return ps;
+}
+
 function setSlot(ps, slot) {
   // Sleight (Fast Hands Pro): a magazine reload in progress carries on in the holster instead of being lost, and
   // swapping back picks it up where it is. Shell-fed guns load by hand, so theirs still stops.

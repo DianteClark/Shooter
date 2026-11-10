@@ -77,6 +77,11 @@ export class Match {
     this.killcam.dispose();
   }
 
+  // Tap to respawn: the host holds a dead human until they ask (or its auto-respawn timeout).
+  requestRespawn(msg = {}) {
+    this.#command({ ...msg, cmd: 'respawn' });
+  }
+
   // Cuts the end-of-match hold short so results show at once.
   endNow() {
     if (this.endTimer >= 0) this.endTimer = 0;

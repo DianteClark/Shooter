@@ -338,7 +338,7 @@ export class GameRenderer {
             chars.onKill(ev.target, K);
             vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
-            vfx.killEffect(ev.by, ev.x, ev.z);
+            vfx.killEffect(ev.by, ev.x, ev.z, ev.weapon);
           }
           if (ev.by === localId && ev.target !== localId && !this.cine) {
             // The kill freezes the picture for a few frames; bigger guns and headshots hold it longer.

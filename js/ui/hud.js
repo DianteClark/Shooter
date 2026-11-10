@@ -1,6 +1,6 @@
 // In-match overlay. Built once; update() runs every frame and touches the DOM only when a displayed value
 // actually changes, and then only with text, a transform or a class flip.
-import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT } from '../shared/constants.js';
+import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT, RESPAWN_AUTO, GOLDEN_ID } from '../shared/constants.js';
 import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
@@ -10,6 +10,7 @@ import { Progress, matchScore } from './progress.js';
 import { badgeMark, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
+import { Options } from './options.js';
 import { icon, resolveIcon } from './icons.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
 import { Footprints, heardEnemies, HEAR_RANGE } from '../sim/player.js';
@@ -40,7 +41,12 @@ const FIRE_REVEAL = 1.5;         // Matches the sim's firingT lifetime; only sha
 const BOARD_HZ = 4;
 const END_BANNER_MIN = 700;
 const OBJ_RING = 2 * Math.PI * 14;
-const DEATH_RING = 2 * Math.PI * 26;  // Circumference of the capture rings' r=14 circle, for stroke dashes.
+const DEATH_RING = 2 * Math.PI * 26;
+// Tap to respawn: while dead, a Respawn tap is sent again this often until the spawn arrives, and "hold" (automatic
+// respawn off) this often while waiting. Both are idempotent on the host, and resending covers a host migration.
+const RESPAWN_RESEND = 1;
+const HOLD_RESEND = 2;
+const GOLD_CSS = '#ffcf40';  // Circumference of the capture rings' r=14 circle, for stroke dashes.
 // Objective markers ride inside the safe area plus these margins, and walk inward off anything in markObstacles.
 const MARK_PAD_X = 34;
 const MARK_PAD_T = 56;
@@ -87,6 +93,7 @@ const MEDALS = {
   first_blood: ['First Blood', 'Round opener', 2], double: ['Double Kill', '2 in quick order', 2], triple: ['Triple Kill', '3 in quick order', 2],
   fury: ['Fury Kill', '4 or more', 3], revenge: ['Revenge', 'Settled the score', 1], longshot: ['Longshot', 'From across the yard', 1],
   streak3: ['Three Streak', 'On a run', 2], streak5: ['Five Streak', 'Unstoppable', 3], streak10: ['Ten Streak', 'Unbroken', 3],
+  golden: ['Golden Kill', 'One round, one kill', 3],
 };
 const SCORE_POP_LIFE = 1.4;      // Seconds the "+100" under the crosshair holds before it fades; kills inside it add up.
 const INTRO_GO_MS = 900;
@@ -157,6 +164,7 @@ export class HUD {
   constructor(root) {
     this.root = root;
     this.loadoutCb = null;
+    this.respawnCb = null;
     this.micCb = null;
     this.speakerCb = null;
     this.controls = null;
@@ -261,6 +269,8 @@ export class HUD {
     if (c?.buttons?.swap) c.buttons.swap.style.display = on ? 'none' : '';
     if (c?.scoreBox) c.scoreBox.style.display = on ? 'none' : '';
     this.el.querySelector('.death-next').style.display = on ? 'none' : '';
+    // The ladder strip sits where the Respawn row would; the row (and the killer card under it) steps below it.
+    this.el.querySelector('.death-act').style.marginTop = on ? '58px' : '';
   }
 
   // The Gun Game strip under the scorebar: the gun in hand, how far up the ladder, and what the next kill brings.
@@ -411,6 +421,9 @@ export class HUD {
 
   // cb(loadout), the full match loadout, whenever the player picks another one on the death screen.
   onSetLoadout(cb) { this.loadoutCb = cb; }
+  // cb(msg) sends the host a respawn command: {} is the Respawn tap, {hold: true} turns the automatic respawn off for
+  // this life (Options autoRespawn off). match: #command({ ...msg, cmd: 'respawn' }).
+  onRespawn(cb) { this.respawnCb = cb; }
   onMic(cb) { this.micCb = cb; }
   onSpeaker(cb) { this.speakerCb = cb; }
 
@@ -602,13 +615,19 @@ export class HUD {
           <b class="death-count">3</b><small>Respawn</small>
         </div>
         </div>
-        <div class="death-next">
+        <div class="death-act" style="order:-1;display:flex;align-items:stretch;justify-content:center;gap:8px;max-width:100%;pointer-events:none">
+        <div class="death-next" style="min-width:0">
           <span class="dn-now"><small>Next life</small><span class="dn-icon"></span><span class="dn-text"><b></b><small></small></span></span>
           <button class="dn-change" type="button" data-tap="1" data-sound="tab">${icon('swap', { size: 14, accent: 'currentColor' })}<b>Change</b></button>
         </div>
+        <button class="btn death-go" type="button" data-tap="respawn" data-sound="confirm" aria-label="Respawn" style="flex:none;min-width:136px;height:44px;min-height:44px;padding:0 14px 0 11px;gap:9px;justify-content:flex-start;pointer-events:auto;touch-action:manipulation;animation:pick-in .3s .16s var(--ease-out) both;--cut:var(--cut-sm);clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut))">
+          <span class="dg-ico" style="line-height:0">${icon('ui:play', { size: 16, accent: 'currentColor' })}</span>
+          <span style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0"><b style="font:400 16px/1 var(--f-stencil);letter-spacing:var(--tr-stencil)">Respawn</b><small class="dg-sub" style="font:var(--fs-micro)/1 var(--f-plate);letter-spacing:var(--tr-plate);white-space:nowrap;opacity:.8"></small></span>
+        </button>
+        </div>
         </div>
         <div class="picker" role="dialog" aria-label="Loadout for the next life">
-          <div class="pk-head"><b>Next life</b><small>Spawns with the one you pick. Respawn never waits.</small>
+          <div class="pk-head"><b>Next life</b><small>Spawns with the one you pick. Take your time: you respawn when you tap Respawn.</small>
             <button class="pk-close" type="button" data-tap="1" data-sound="back" aria-label="Close">${icon('ui:close', { size: 16 })}</button></div>
           <div class="pk-row">${Array.from({ length: LOADOUT_COUNT }, (_, i) => `
           <button class="pick" type="button" data-tap="1" data-i="${i}"><b></b><span class="pk-line"><span class="pk-icon"></span><small class="pk-gun"></small></span><small class="pk-lv"></small></button>`).join('')}</div>
@@ -694,9 +713,13 @@ export class HUD {
     this.deathEl = $('.death');
     this.deathBy = $('.death-by');
     this.deathCount = $('.death-count');
+    this.deathTimer = $('.death-timer');
     this.picks = [...el.querySelectorAll('.pick')];
     this.pickerEl = $('.picker');
     this.nextEl = $('.death-next');
+    this.goBtn = $('.death-go');
+    this.goSub = $('.dg-sub');
+    this.goBtn.addEventListener('click', () => this.#tapRespawn());
     this.nextIcon = $('.dn-icon');
     this.nextName = $('.dn-text b');
     this.nextGun = $('.dn-text small');
@@ -1249,6 +1272,8 @@ export class HUD {
     const dead = !me.alive && view.phase === 'live';
     if (dead !== c.dead) {
       c.dead = dead;
+      this.#resetRespawn(dead, view.t);
+      c.timerOn = null;
       this.deathEl.classList.toggle('show', dead);
       if (dead) this.#paintPicker(true);
       else this.#openPicker(false);
@@ -1258,6 +1283,12 @@ export class HUD {
       if (dead) this.#paintDeathHead(view);
     }
     if (!dead) return;
+    // Once the wait is over the ring has said all it can; the Respawn button carries the rest.
+    const waiting = (me.respawnT ?? 0) > 0.05;
+    if (waiting !== c.timerOn) {
+      c.timerOn = waiting;
+      this.deathTimer.style.visibility = waiting ? '' : 'hidden';
+    }
     const left = Math.max(1, Math.ceil(me.respawnT ?? 0));
     if (left !== c.respawn) {
       c.respawn = left;
@@ -1271,6 +1302,57 @@ export class HUD {
       this.dtArc.style.strokeDashoffset = ((1 - ring) * DEATH_RING).toFixed(1);
     }
     if (this.killer?.name && !this.deathPainted) this.#paintDeathHead(view);
+    this.#updateRespawn(me, c);
+  }
+
+  // A death starts a fresh wait: nothing asked yet, the automatic respawn counting from now. The countdown runs on
+  // match time (view.t), the clock the host's auto-respawn runs on, so a slow phone cannot run ahead of it.
+  #resetRespawn(dead, t = 0) {
+    const r = this.respawn ??= { asked: false, diedAt: 0, sentAt: -99, holdAt: -99, auto: true };
+    r.asked = false;
+    r.diedAt = t;
+    r.sentAt = -99; r.holdAt = -99;
+    r.auto = Options.get('autoRespawn') !== false;
+    this.cache.goState = '';
+    this.cache.goSub = '';
+    if (!dead) this.goBtn.classList.remove('pressed');
+  }
+
+  #tapRespawn() {
+    const r = this.respawn;
+    if (!r || !this.deathEl.classList.contains('show') || r.asked) return;
+    r.asked = true;
+    r.sentAt = performance.now() / 1000;
+    this.#openPicker(false);
+    this.respawnCb?.({});
+    this.#updateRespawn(this.view && this.#findLocal(this.view), this.cache);
+  }
+
+  // The Respawn button: what it will do, and the seconds before it can (or before the automatic respawn does it).
+  // Repeats any request the host may not have acted on; the host ignores duplicates.
+  #updateRespawn(me, c) {
+    const r = this.respawn;
+    if (!r || !me || me.alive) return;
+    const now = performance.now() / 1000;
+    if (r.asked && now - r.sentAt >= RESPAWN_RESEND) { r.sentAt = now; this.respawnCb?.({}); }
+    if (!r.auto && !r.asked && now - r.holdAt >= HOLD_RESEND) { r.holdAt = now; this.respawnCb?.({ hold: true }); }
+    const wait = Math.max(0, me.respawnT ?? 0);
+    const ready = wait <= 0.05;
+    const state = r.asked ? 'asked' : ready ? 'ready' : 'wait';
+    let sub;
+    if (r.asked) sub = ready ? 'Deploying' : `Deploying in ${Math.ceil(wait)}`;
+    else if (!ready) sub = `Ready in ${Math.ceil(wait)}`;
+    else if (r.auto) sub = `Tap now / auto ${Math.max(1, Math.ceil(RESPAWN_AUTO - ((this.view?.t ?? r.diedAt) - r.diedAt)))}`;
+    else sub = 'Tap when ready';
+    if (sub !== c.goSub) { c.goSub = sub; this.goSub.textContent = sub; }
+    if (state !== c.goState) {
+      c.goState = state;
+      const b = this.goBtn;
+      // Waiting: a steel plate (still tappable: the tap is kept until the wait is over). Ready: the sodium plate.
+      b.classList.toggle('is-primary', state !== 'wait');
+      b.setAttribute('aria-pressed', r.asked ? 'true' : 'false');
+      if (state === 'ready') b.animate([{ filter: 'brightness(1.9)' }, { filter: 'none' }], { duration: 420, easing: 'ease-out' });
+    }
   }
 
   // The killer card: who, with what, from how far, and how much fight they had left.
@@ -1453,7 +1535,10 @@ export class HUD {
     const mine = e.by === view.localId || e.target === view.localId;
     const causeId = e.equip ?? (typeof e.streak === 'string' ? e.streak : e.weapon);
     const art = glyph(causeId, 13, 'gl f-gun');
-    const cause = art ? `<span class="f-w" title="${esc(killCause(e))}">${art}</span>` : `<span class="f-w f-text">${esc(killCause(e))}</span>`;
+    // The Golden Gun's own feed mark: its silhouette in gold with a glint, so the whole lobby sees what happened.
+    const gold = causeId === GOLDEN_ID && !e.equip && !e.streak;
+    const goldStyle = gold ? ` style="color:${GOLD_CSS};filter:drop-shadow(0 0 4px rgba(255,207,64,.75))"` : '';
+    const cause = art ? `<span class="f-w${gold ? ' f-gold' : ''}"${goldStyle} title="${esc(killCause(e))}">${art}</span>` : `<span class="f-w f-text">${esc(killCause(e))}</span>`;
     const head = e.head ? `<span class="f-hs">${glyph('medal:headshot', 14)}</span>` : '';
     const side = byP?.team === view.players.find(p => p.id === view.localId)?.team ? 'ally' : 'foe';
     this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${esc(byName)}</em>${cause}${head}${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine, side);

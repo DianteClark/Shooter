@@ -2,7 +2,7 @@
 // Humans own their own movement and shots (see docs/ARCHITECTURE.md), and report them here.
 
 import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS, STREAK_IDS, STREAKS, TACTICALS } from '../shared/catalog.js';
-import { FFA_MAX, FFA_TEAM, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
+import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_AUTO, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
@@ -11,7 +11,7 @@ import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, armPlayer, createPlayerState, hasPro, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
+import { angleDiff, armPlayer, armSecondary, createPlayerState, hasPro, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 
@@ -311,6 +311,8 @@ export class Sim {
         windT: 0, restockT: 0,
         ps: createPlayerState({ id: r.id, primary: loadout.primary, camo: loadout.camo, loadout }),
         hp: MAX_HP, alive: true, respawnT: 0, spawnProtect: 0,
+        // Tap to respawn (humans only): seconds dead, a Respawn tap waiting, and "do not auto-respawn this life".
+        deadT: 0, wantRespawn: false, holdRespawn: false,
         kills: 0, deaths: 0, assists: 0, head: 0, streak: 0, chain: 0, lastKillT: -99,
         lastKilledBy: null, score: createStreakState(loadout.streaks, STREAKS, loadout.perks), markT: 0,
         regenT: 0, dmgBy: new Float32Array(n), dmgT: new Float32Array(n).fill(-99),
@@ -323,6 +325,7 @@ export class Sim {
       };
     });
     this.byId = new Map(this.players.map(p => [p.id, p]));
+    for (const p of this.players) if (p.isBot) this._noGoldForBots(p);
     this.calledAt = Array.from({ length: T }, () => new Float32Array(n).fill(-99));
     this.spawnUsedAt = new Map();
     this.range = this.mode === 'range' ? new RangeDirector(this) : null;
@@ -612,7 +615,8 @@ export class Sim {
     if (p.ackT > 0) p.ackT -= STEP;
     if (!p.alive) {
       p.respawnT -= STEP;
-      if (p.respawnT <= 0) this._respawn(p);
+      p.deadT += STEP;
+      if (p.respawnT <= 0 && this._readyToRespawn(p)) this._respawn(p);
       return;
     }
     if (p.spawnProtect > 0) p.spawnProtect = Math.max(0, p.spawnProtect - STEP);
@@ -620,6 +624,23 @@ export class Sim {
     if (p.regenT > 0) p.regenT -= STEP;
     else if (p.hp < MAX_HP) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
     if (hasPro(p.ps, 'bandolier')) this._restock(p);
+  }
+
+  // Bots and range targets come back the moment RESPAWN_TIME is up. A human waits on the death screen until they tap
+  // Respawn, or until RESPAWN_AUTO seconds after dying unless their phone asked to hold (auto-respawn off).
+  _readyToRespawn(p) {
+    if (p.isBot || p.dummy) return true;
+    return p.wantRespawn || (!p.holdRespawn && p.deadT >= RESPAWN_AUTO);
+  }
+
+  // The 'respawn' command. {hold:true} only turns off the automatic respawn for this life; anything else is the tap,
+  // which counts as soon as RESPAWN_TIME is up (a tap before that waits for it). Safe to repeat: phones resend it.
+  requestRespawn(id, { hold = false } = {}) {
+    const p = this.byId.get(id);
+    if (!p || p.isBot || p.dummy || p.alive) return false;
+    if (hold) p.holdRespawn = true;
+    else p.wantRespawn = true;
+    return true;
   }
 
   // Field Medic (Quick Mend Pro): a living teammate with it within MEDIC_REACH.
@@ -928,6 +949,7 @@ export class Sim {
     if (msg.cmd === 'streak') return this.useStreak(id, msg.slot) !== null;
     if (msg.cmd === 'throw') return this._throw(id, msg);
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
+    if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     return false;
   }
@@ -1137,6 +1159,7 @@ export class Sim {
 
   _kill(target, killer, weapon, dist, streak, head, equip) {
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME;
+    target.deadT = 0; target.wantRespawn = false; target.holdRespawn = false;
     if (this.range) this.range.onKill(target);
     // Scorestreak score is not touched: it persists through death (docs/V4.md rules, restored in Wave 6).
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
@@ -1174,6 +1197,7 @@ export class Sim {
     if (killer.lastKilledBy === target.id) { killer.lastKilledBy = null; this._medal(killer, 'revenge'); }
     if (!streak && !equip && dist >= (WEAPONS[weapon]?.longshot ?? LONGSHOT)) this._medal(killer, 'longshot');
     if (head) { killer.head++; this._medal(killer, 'headshot'); }
+    if (weapon === GOLDEN_ID && !streak && !equip) this._medal(killer, 'golden');
 
     killer.chain = this.time - killer.lastKillT <= CHAIN_WINDOW ? killer.chain + 1 : 1;
     killer.lastKillT = this.time;
@@ -1799,7 +1823,21 @@ export class Sim {
     p.humanId = p.id;
     p.skill = p.skill || 'regular';
     p.ackT = 0;
+    this._noGoldForBots(p);
     if (this.nav) p.bot = new BotBrain(this, p, p.index);
+  }
+
+  // Bots never carry the Golden Gun, not even one inheriting the slot of a human who had it: it becomes the Flicker.
+  // The human gets it back with their own loadout when humanRejoin is handed it.
+  _noGoldForBots(p) {
+    const swap = l => (l && l.secondary === GOLDEN_ID ? { ...l, secondary: 'pistol' } : l);
+    if (p.loadout.secondary === GOLDEN_ID) {
+      p.loadout = swap(p.loadout);
+      p.kits[1] = attachmentsFor(p.loadout, 'pistol');
+      this._metaUntil = this.tick + 2;
+    }
+    p.pendingLoadout = swap(p.pendingLoadout);
+    if (p.ps.secondary === GOLDEN_ID) armSecondary(p.ps, 'pistol');
   }
 
   // Slots a bot is holding for someone who dropped. For matching a returning player, by name or id.
@@ -1931,6 +1969,10 @@ export class Sim {
     if (v.tactical) ps.tactical = v.tactical;
     if (v.lethal) ps.lethal = v.lethal;
     p.hp = v.hp; p.alive = v.alive; p.respawnT = v.respawnT;
+    // Time dead is not in the snapshot: count from the death, as far as respawnT tells. A Respawn tap or hold that
+    // was in flight to the old host is sent again by the phone's death screen.
+    p.deadT = p.alive ? 0 : Math.max(0, RESPAWN_TIME - v.respawnT); p.wantRespawn = false; p.holdRespawn = false;
+    if (p.isBot) this._noGoldForBots(p);
     p.spawnProtect = v.spawnProtect ? SPAWN_PROTECT * 0.5 : 0;
     p.kills = v.kills; p.deaths = v.deaths; p.assists = v.assists; p.head = v.head; p.streak = v.streak;
     const st = p.score;

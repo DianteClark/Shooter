@@ -1,4 +1,4 @@
-// Twenty-four invented, deliberately oversized guns built from code. Model space, in metres: +X muzzle,
+// Twenty-five invented, deliberately oversized guns built from code. Model space, in metres: +X muzzle,
 // +Y up, +Z to the shooter's right, origin at the firing hand. The game camera sees guns mostly from
 // above, so each silhouette is designed to be unmistakable from the top as well as the side.
 // Each factory takes a normalized attachment kit, and swaps the base part the attachment replaces.
@@ -1006,9 +1006,45 @@ function thumper(a) {
   return { geometry: b.build(), muzzle: [end + 0.08, 0.14, 0], fore, eject: [0.1, 0.12, 0.25], length: end + 0.9 };
 }
 
+// The Golden Gun: a long-barrelled duelling pistol in solid gold with an ivory grip. Built only from metal and grip
+// parts, never body or accent, so no camo and no team strip can ever reach it: it is always gold, and the metal gloss
+// in the camo shader is what makes it shine as it turns. Takes no attachments (attachments.js), so `a` is ignored.
+const GOLD = 0xf0b93a, GOLD_DEEP = 0xa8701c, GOLD_PALE = 0xffe39a, IVORY = 0xeee3c6;
+function golden() {
+  const b = new MeshBuilder();
+  const gold = () => b.setPart(PART.METAL).setColor(GOLD);
+  const deep = () => b.setPart(PART.METAL).setColor(GOLD_DEEP);
+  const pale = () => b.setPart(PART.METAL).setColor(GOLD_PALE);
+  // Frame and slide in one plate, a little taller at the back where the hammer sits.
+  gold().extrude([[-0.24, 0.05], [0.42, 0.05], [0.46, 0.09], [0.46, 0.27], [0.36, 0.31], [-0.18, 0.31], [-0.24, 0.24]], -0.1, 0.1);
+  deep().box(0.1, 0.02, 0, 0.62, 0.08, 0.15, 0.02);
+  // The chamber: a fat octagonal block bulging out of both sides, readable from above like the Verdict's cylinder.
+  gold().prismX(-0.04, 0.26, 0.18, 0, 0.17, 0.17, 8, Math.PI / 8);
+  pale().prismX(-0.055, -0.04, 0.18, 0, 0.1, 0.1, 8, Math.PI / 8);
+  // Barrel twice a sidearm's length, with a rib, two engraved bands and a flared crown.
+  gold().prismX(0.44, 1.24, 0.2, 0, 0.085, 0.075, 8, Math.PI / 8);
+  deep().box(0.84, 0.29, 0, 0.78, 0.04, 0.06);
+  deep().prismX(0.66, 0.7, 0.2, 0, 0.1, 0.1, 8, Math.PI / 8);
+  deep().prismX(0.98, 1.02, 0.2, 0, 0.095, 0.095, 8, Math.PI / 8);
+  pale().prismX(1.22, 1.33, 0.2, 0, 0.09, 0.13, 8, Math.PI / 8);
+  pale().box(1.18, 0.31, 0, 0.05, 0.07, 0.03);                        // Front sight blade.
+  pale().box(0.06, 0.33, 0, 0.36, 0.03, 0.08);                        // Engraved top strap.
+  deep().box(-0.27, 0.33, 0, 0.12, 0.06, 0.07);                       // Hammer spur.
+  // Trigger guard as a thin gold loop under the frame.
+  deep().box(0.1, -0.1, 0, 0.26, 0.035, 0.06);
+  deep().box(0.22, -0.05, 0, 0.035, 0.11, 0.06);
+  // Swept ivory grip with a gold medallion set into each side and a gold butt cap.
+  b.setPart(PART.GRIP).setColor(IVORY);
+  b.extrude([[-0.22, 0.06], [0.08, 0.06], [0.04, -0.14], [-0.02, -0.36], [-0.3, -0.4], [-0.3, -0.18]], -0.095, 0.095);
+  gold().prismZ(0.09, 0.11, -0.12, -0.17, 0.06, 0.06, 8, Math.PI / 8);
+  gold().prismZ(-0.11, -0.09, -0.12, -0.17, 0.06, 0.06, 8, Math.PI / 8);
+  deep().box(-0.16, -0.4, 0, 0.32, 0.05, 0.2);
+  return { geometry: b.build(), muzzle: [1.36, 0.2, 0], fore: [-0.12, -0.2, -0.05], eject: [0.08, 0.32, 0.1], length: 1.6 };
+}
+
 const FACTORIES = {
   ar, burst, heavyar, smg, pdw, tacsmg, shotgun, autoshot, coach, lmg, saw, rotary,
-  dmr, battle, lever, sniper, antimat, semisnipe, pistol, revolver, machpistol, deuce, launcher, thumper,
+  dmr, battle, lever, sniper, antimat, semisnipe, pistol, revolver, machpistol, deuce, launcher, thumper, golden,
 };
 
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.

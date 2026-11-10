@@ -983,6 +983,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   app.match.awards.mapId = mapId;
   app.match.telemetry.mapId = mapId;
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
+  hud.onRespawn(msg => app.match?.requestRespawn(msg));
   // A respawn before the player opens the picker should still use the equipped weapon (training keeps its own kit).
   app.match.setNextLoadout(tutorial ? roster.find(r => r.id === id).loadout : Progress.loadout());
   if (tutorial) {

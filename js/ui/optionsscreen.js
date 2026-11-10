@@ -62,6 +62,10 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
           <div class="opt-name"><b>Left-handed</b><small>Mirrors the sticks and buttons</small></div>
           ${toggle('optLefty')}
         </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>Auto-respawn</b><small>Respawns you 10 s after death</small></div>
+          ${toggle('optAutoRespawn', 'opt-autorespawn')}
+        </div>
       </section>
       <section class="opt-col" data-in="up">
         <h4>${ico('sound')}Audio</h4>
@@ -85,6 +89,9 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     const td = q('.opt-touchdebug');
     td.classList.toggle('on', v.touchDebug);
     td.querySelector('b').textContent = v.touchDebug ? 'On' : 'Off';
+    const ar = q('.opt-autorespawn');
+    ar.classList.toggle('on', v.autoRespawn !== false);
+    ar.querySelector('b').textContent = v.autoRespawn !== false ? 'On' : 'Off';
     const toggle = q('[data-act="optLefty"]');
     toggle.classList.toggle('on', v.lefty);
     toggle.querySelector('b').textContent = v.lefty ? 'On' : 'Off';
@@ -105,6 +112,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     optBack: () => onBack(),
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
+    optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },

@@ -26,6 +26,11 @@
  *            Challenge rules and the Pro list live in js/shared/progression.js (PRO_CHALLENGES) and catalog.js (PRO).
  * Cards      cards() -> [{card,unlocked,equipped}]  card (get) -> equipped id  setCard(id) -> bool
  *            isVeteran()  identity() -> {pro:[ids], card, veteran}. loadout() carries `pro` and `card` to the roster.
+ * Golden     goldenStatus() -> {earned, steps:[{id,label,value,goal,done}], requirement}  goldenEarned()
+ *            goldenPending() -> true once, until markGoldenCelebrated(), when it has been earned and not yet shown
+ *            debugGrantGolden(on=true) -> bool: ?debug=1 only (window.__game.Progress), for testing
+ *            isItemUnlocked('weapon','golden') follows goldenEarned(). applyMatch, doPrestige and prestigeWeapon
+ *            report it ({kind:'weapon', id:'golden', golden:true} first in unlocks; golden:true on the prestige results).
  * Match      applyMatch(summary)  used by js/game/awards.js only.
  * Removed    recordKill(w) stays as a no-op returning []. MatchAwards counts kills now; hud.js should drop the call.
  *
@@ -40,7 +45,7 @@
 // access, so every read and write tolerates failure and the game simply plays without persistence.
 // The rules live in js/shared/progression.js; this module owns the save and applies them.
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
-import { PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
+import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator } from './operators.js';
 import { WEAPONS } from '../shared/weapons.js';
@@ -52,7 +57,7 @@ import {
   blankWeapon, blankSave, sanitizeSave, migrateV1, migrateSave, cleanLoadout, encodeSave, decodeSave, badgeSvg,
   proStatus, applyProGains, isVeteran, CARDS, CARD_IDS, cardsEarned, getCard,
   sanitizeChallengeState, challengeList, canReroll, rerollChallenge, applyChallengeTally, periodEnd, CHALLENGE_PERIODS,
-  cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX,
+  cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX, goldenStatus, GOLDEN_REQUIREMENT,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -119,6 +124,11 @@ function keepOperators(s, raw) {
 
 let data = load();
 
+// The Golden Gun's test hook only exists with ?debug=1 in the address; a flag left in a save does nothing without it.
+const DEBUG = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('debug') === '1'; } catch { return false; } })();
+const goldenEarned = () => goldenStatus(data).earned || (DEBUG && !!data.flags.goldenDebug);
+const GOLDEN_UNLOCK = () => ({ kind: 'weapon', id: GOLDEN_ID, name: WEAPONS[GOLDEN_ID].name, golden: true, req: GOLDEN_REQUIREMENT });
+
 function save() {
   write(KEY, JSON.stringify(data));
 }
@@ -143,8 +153,10 @@ const writeWeapon = w => (data.weapons[w] ??= blankWeapon());
 const activeSlot = () => data.loadouts[data.active];
 const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 
-const hasCamo = (w, camo) => readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w));
-const hasCosmetic = (w, item) => readWeapon(w).prestige >= item.prestige;
+// The Golden Gun is gold, always: no camo, tracer or kill effect but its own.
+const plainOnly = w => w === GOLDEN_ID;
+const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none' : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w)));
+const hasCosmetic = (w, item) => (plainOnly(w) ? !item.prestige : readWeapon(w).prestige >= item.prestige);
 const hasAttachment = (w, id) => {
   const level = unlockFor(w, id);
   return level !== null && readWeapon(w).peak >= level;
@@ -170,7 +182,7 @@ function careerStats() {
 
 const operatorOpen = (id, career = careerStats()) => OPERATOR_IDS.includes(id) && operatorUnlock(getOperator(id), career).unlocked;
 
-const gunOpen = id => !!WEAPONS[id] && itemUnlockLevel('weapon', id) <= data.peakLevel;
+const gunOpen = id => !!WEAPONS[id] && (id === GOLDEN_ID ? goldenEarned() : itemUnlockLevel('weapon', id) <= data.peakLevel);
 
 // A gun past the player's level falls back to the first one they own in that slot, so a stale save, an imported code or
 // a stray caller can never take a locked gun into a match.
@@ -269,10 +281,11 @@ export const Progress = {
   // Resets the level only. Unlocks read peakLevel, which never falls.
   doPrestige() {
     if (!this.canPrestige()) return { ok: false, prestige: data.prestige, badge: badgeSvg(data.prestige) };
+    const had = goldenEarned();
     data.prestige++;
     data.xp = 0;
     save();
-    return { ok: true, prestige: data.prestige, badge: badgeSvg(data.prestige) };
+    return { ok: true, prestige: data.prestige, badge: badgeSvg(data.prestige), golden: !had && goldenEarned() };
   },
 
   badge() {
@@ -281,7 +294,23 @@ export const Progress = {
 
   /* ---------- Unlocks ---------- */
   itemUnlockLevel,
-  isItemUnlocked(kind, id) { return itemUnlockLevel(kind, id) <= data.peakLevel; },
+  isItemUnlocked(kind, id) {
+    if (kind === 'weapon' && id === GOLDEN_ID) return goldenEarned();
+    return itemUnlockLevel(kind, id) <= data.peakLevel;
+  },
+
+  /* ---------- The Golden Gun ---------- */
+  goldenEarned() { return goldenEarned(); },
+  goldenStatus() { return { ...goldenStatus(data), earned: goldenEarned(), requirement: GOLDEN_REQUIREMENT }; },
+  // The armory plays the reveal once per device, the first time it opens after the gun is earned.
+  goldenPending() { return goldenEarned() && !data.flags.goldenShown; },
+  markGoldenCelebrated() { if (!data.flags.goldenShown) this.setFlag('goldenShown'); },
+  debugGrantGolden(on = true) {
+    if (!DEBUG) return false;
+    if (on) data.flags.goldenDebug = true; else { delete data.flags.goldenDebug; delete data.flags.goldenShown; }
+    save();
+    return goldenEarned();
+  },
 
   unlockSchedule() {
     return UNLOCK_SCHEDULE.map(u => ({ ...u, name: ITEM_TABLES[u.kind]?.[u.id]?.name ?? u.id }));
@@ -301,11 +330,12 @@ export const Progress = {
   // Resets that weapon's level. Attachments read peak, which never falls; challenge counters are untouched.
   prestigeWeapon(w) {
     if (!this.canPrestigeWeapon(w)) return { ok: false, prestige: readWeapon(w).prestige, rewards: [] };
+    const had = goldenEarned();
     const entry = writeWeapon(w);
     entry.prestige++;
     entry.xp = 0;
     save();
-    return { ok: true, prestige: entry.prestige, rewards: prestigeRewards(entry.prestige) };
+    return { ok: true, prestige: entry.prestige, rewards: prestigeRewards(entry.prestige), golden: !had && goldenEarned() };
   },
 
   attachments(w) {
@@ -318,7 +348,7 @@ export const Progress = {
 
   /* ---------- Cosmetics ---------- */
   camos(w) {
-    return CAMOS.map(camo => ({ camo, unlocked: hasCamo(w, camo), requirement: camoRequirement(camo) }));
+    return (plainOnly(w) ? CAMOS.slice(0, 1) : CAMOS).map(camo => ({ camo, unlocked: hasCamo(w, camo), requirement: camoRequirement(camo) }));
   },
 
   isUnlocked(w, camoId) {
@@ -339,10 +369,10 @@ export const Progress = {
   },
 
   tracers(w) {
-    return TRACERS.map(item => ({ item, unlocked: hasCosmetic(w, item), requirement: cosmeticRequirement(item) }));
+    return (plainOnly(w) ? TRACERS.slice(0, 1) : TRACERS).map(item => ({ item, unlocked: hasCosmetic(w, item), requirement: cosmeticRequirement(item) }));
   },
   killEffects(w) {
-    return KILL_EFFECTS.map(item => ({ item, unlocked: hasCosmetic(w, item), requirement: cosmeticRequirement(item) }));
+    return (plainOnly(w) ? KILL_EFFECTS.slice(0, 1) : KILL_EFFECTS).map(item => ({ item, unlocked: hasCosmetic(w, item), requirement: cosmeticRequirement(item) }));
   },
 
   tracer(w) {
@@ -470,6 +500,7 @@ export const Progress = {
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
     const cardsBefore = new Set(cardsEarned(cardCareer()));
     const proBefore = PERK_IDS.map(id => [id, proStatus(id, data.pro, data.proDone)]);
+    const goldenBefore = goldenEarned();
 
     gainXp(xp);
     for (const [w, gained] of Object.entries(weapons)) {
@@ -491,6 +522,8 @@ export const Progress = {
     const cardUnlocks = cardsEarned(cardCareer()).filter(id => !cardsBefore.has(id))
       .map(id => ({ kind: 'card', id, name: getCard(id).name, req: getCard(id).req }));
     unlocks.unshift(...proUnlocks, ...cardUnlocks);
+    // The biggest moment there is goes first of all.
+    if (!goldenBefore && goldenEarned()) unlocks.unshift(GOLDEN_UNLOCK());
     // Steps moved this match, for the results screen: [{perk, name, steps:[{label,goal,before,value,done}]}].
     const proProgress = proBefore.map(([id, was]) => {
       const now = proStatus(id, data.pro, data.proDone);

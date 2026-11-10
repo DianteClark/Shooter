@@ -340,6 +340,17 @@ const GUNS = {
     tail: { dur: 1, gain: 0.9, f0: 700, f1: 150, decay: 4 },
     noSup: true,
   },
+  // The Golden Gun: nothing else sounds like it. A hard, bright crack on a deep cannon thump, then a struck-bell chime
+  // that rings on gold well after the bang (`chime`: inharmonic bell partials) and a rising shimmer in the tail.
+  golden: { size: 2,
+    crack: { dur: 0.004, gain: 1.5, hp: 3600 },
+    body: { dur: 0.2, gain: 1.5, f0: 4600, f1: 380, decay: 4.8 },
+    thump: { dur: 0.26, gain: 1.6, f0: 92, f1: 30, decay: 3.4, shape: 1.2 },
+    chime: { at: 0.012, dur: 0.9, gain: 0.5, f: 1318, decay: 3.2 },
+    action: [{ at: 0.5, gain: 0.3, hp: 3600, dur: 0.006, metal: 2637 }],
+    tail: { dur: 1.9, gain: 1, f0: 1400, f1: 220, decay: 3.1 },
+    noSup: true,
+  },
   // Scorestreak guns: a dry mechanical chatter, and a slow autocannon heard from above.
   turret: { size: 1,
     crack: { dur: 0.004, gain: 1.2, hp: 3200 },
@@ -368,7 +379,7 @@ function actionLength(spec) {
 // Crack, body, thump and action, without the far-field tail: that plays separately so a shot from across the map
 // can be mostly tail, and a held trigger is not a stack of long tails.
 function renderNear(spec, sr, seed) {
-  const dur = Math.max(spec.body.dur, spec.thump.dur) + 0.05 + actionLength(spec);
+  const dur = Math.max(spec.body.dur, spec.thump.dur, spec.chime ? spec.chime.at + spec.chime.dur : 0) + 0.05 + actionLength(spec);
   const data = new Float32Array(Math.floor(dur * sr));
   const rng = rngFrom(seed);
   addClick(data, sr, rng, spec.crack);
@@ -376,6 +387,11 @@ function renderNear(spec, sr, seed) {
   addTone(data, sr, spec.thump);
   if (spec.ring) addTone(data, sr, spec.ring);
   if (spec.hiss) addNoise(data, sr, rng, spec.hiss);
+  if (spec.chime) {
+    // A bell, not a ring: two struck partial sets a fifth apart, so it reads as gold rather than steel.
+    addMetal(data, sr, { at: spec.chime.at, dur: spec.chime.dur, gain: spec.chime.gain, f: spec.chime.f, decay: spec.chime.decay, spread: 1.01 });
+    addMetal(data, sr, { at: spec.chime.at + 0.03, dur: spec.chime.dur * 0.8, gain: spec.chime.gain * 0.6, f: spec.chime.f * 1.5, decay: spec.chime.decay * 1.2 });
+  }
   // A breath of room, so the near layer does not stop dead while the tail is still coming up.
   addNoise(data, sr, rng, { dur: 0.1, gain: 0.3, f0: spec.body.f0 * 0.4, f1: spec.body.f1 * 0.6, decay: 4 });
   for (const a of spec.action) addAction(data, sr, rng, a);
@@ -522,11 +538,13 @@ const FOLEY = {
   machpistol:{ kind: 'slide', pitch: 1.45, mass: 0.3, rack: 0.2 },
   deuce:    { kind: 'slide', pitch: 1.18, mass: 0.42, rack: 0.2 },
   thumper:  { kind: 'cylinder', pitch: 0.7, mass: 0.9, out: 0.3, in: 0.34, rack: 0.18 },
+  // One round in, one round out: a bright, light break-open.
+  golden:   { kind: 'break', pitch: 1.3, mass: 0.45, out: 0.28, in: 0.3, rack: 0.14 },
 };
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
 // Rarer outranks commoner when medals collide.
-const MEDAL_RANK = { streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, revenge: 7, longshot: 6, streak3: 5, double: 4, capture: 3, defend: 2, confirm: 1, deny: 0 };
+const MEDAL_RANK = { golden: 13, streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, revenge: 7, longshot: 6, streak3: 5, double: 4, capture: 3, defend: 2, confirm: 1, deny: 0 };
 
 const MEDALS = {
   first_blood: { notes: [[0, 0], [7, 0.09], [12, 0.18]], dur: 0.5, gain: 0.7 },
@@ -542,6 +560,8 @@ const MEDALS = {
   defend:      { notes: [[7, 0], [4, 0.09], [7, 0.18]], dur: 0.42, gain: 0.6, shape: 0.8 },
   confirm:     { notes: [[9, 0], [16, 0.07]], dur: 0.3, gain: 0.6 },
   deny:        { notes: [[4, 0], [0, 0.08]], dur: 0.3, gain: 0.5 },
+  // A fanfare over a bell: up through the major chord to the octave, the top note held.
+  golden:      { notes: [[0, 0], [4, 0.07], [7, 0.14], [12, 0.21], [16, 0.3], [24, 0.42]], dur: 1.1, gain: 0.8, shape: 0.2 },
 };
 
 function renderMedal(spec, sr) {
@@ -1004,8 +1024,14 @@ function roomImpulse(ctx, theme) {
   return buf;
 }
 
+// The newest engine, for screens that play an outcome sound without holding the engine (see playUi).
+let current = null;
+// Plays an interface sound (uiSound kinds: unlock, levelUp, rankUp, ...) on the app's engine, if there is one yet.
+export function playUi(kind) { current?.uiSound(kind); }
+
 export class AudioEngine {
   constructor() {
+    current = this;
     this.ctx = null;
     this.ready = false;
     this.micActive = false;

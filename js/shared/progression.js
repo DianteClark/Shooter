@@ -2,7 +2,7 @@
 // js/ui/progress.js holds the one save and applies these rules to it.
 import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
 import { PERKS, PERK_IDS, PRO, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
-import { MAX_HP, PRIMARY_IDS, WEAPON_IDS, WEAPON_CATEGORY, FFA_TEAM } from './constants.js';
+import { MAX_HP, PRIMARY_IDS, WEAPON_IDS, WEAPON_CATEGORY, FFA_TEAM, GOLDEN_ID } from './constants.js';
 import { MODES, modeRules } from './modes.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
@@ -184,6 +184,29 @@ export function prestigeRewards(rank) {
 }
 
 export const cosmeticRequirement = item => (item.prestige ? `Weapon Prestige ${item.prestige} on this weapon` : '');
+
+/* ---------- The Golden Gun ---------- */
+// Earned by maxing everything there is: every perk Pro, every other weapon at Weapon Prestige MAX_WEAPON_PRESTIGE and
+// back up to MAX_WEAPON_LEVEL, and the player at Prestige MAX_PRESTIGE and MAX_LEVEL. None of these can fall once
+// reached (both prestiges stop at their max), so once earned it stays earned with no flag to keep.
+export const GOLDEN_REQ_WEAPONS = WEAPON_IDS.filter(id => id !== GOLDEN_ID);
+export const GOLDEN_REQUIREMENT = 'Max everything: every perk Pro, every weapon at max prestige and level, Prestige X at level 50';
+
+// {earned, steps:[{id, label, value, goal, done}]} for a save (sanitized shape).
+export function goldenStatus(save) {
+  const maxedGun = id => {
+    const w = save.weapons?.[id];
+    return !!w && (w.prestige ?? 0) >= MAX_WEAPON_PRESTIGE && WEAPON_CURVE.levelOf(w.xp ?? 0) >= MAX_WEAPON_LEVEL;
+  };
+  const level = levelOf(save.xp ?? 0);
+  const steps = [
+    { id: 'pro', label: 'Perks at Pro', value: PERK_IDS.filter(id => save.proDone?.includes(id)).length, goal: PERK_IDS.length },
+    { id: 'weapons', label: `Weapons at Prestige ${MAX_WEAPON_PRESTIGE}, level ${MAX_WEAPON_LEVEL}`, value: GOLDEN_REQ_WEAPONS.filter(maxedGun).length, goal: GOLDEN_REQ_WEAPONS.length },
+    { id: 'prestige', label: `Prestige ${MAX_PRESTIGE}`, value: Math.min(save.prestige ?? 0, MAX_PRESTIGE), goal: MAX_PRESTIGE },
+    { id: 'level', label: `Level ${MAX_LEVEL} at Prestige ${MAX_PRESTIGE}`, value: (save.prestige ?? 0) >= MAX_PRESTIGE ? level : 0, goal: MAX_LEVEL },
+  ].map(st => ({ ...st, done: st.value >= st.goal }));
+  return { earned: steps.every(st => st.done), steps };
+}
 
 /* ---------- Prestige names ---------- */
 // Above the cards, which are named from them when the module loads.

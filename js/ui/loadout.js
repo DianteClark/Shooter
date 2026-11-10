@@ -11,9 +11,10 @@ import { getOperator } from './operators.js';
 import { esc, swatchCss, levelRequirement, SLOT_LABEL, itemMark, weaponLevelHtml } from './widgets.js';
 import { statBars, weaponFacts } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
-import { WEAPON_IDS } from '../shared/constants.js';
+import { GOLDEN_ID, WEAPON_IDS } from '../shared/constants.js';
+import { playUi } from '../audio/audio.js';
 import { ico, backButton } from './yard.js';
-import { stagger, flash, sweep } from './motion.js';
+import { stagger, flash, sweep, pop } from './motion.js';
 import { cardHtml, cardsSheet } from './cards.js';
 
 const HERO_STATS = ['damage', 'rate', 'range', 'aimed', 'recoil', 'move', 'reload'];
@@ -30,6 +31,11 @@ const gunName = id => WEAPONS[id]?.name ?? id;
 // read as "Lv 141" or overlap.
 const levelHtml = id => weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id));
 const owned = id => Progress.isItemUnlocked('weapon', id);
+// What a locked gun asks for. The Golden Gun has no level: it asks for everything.
+const lockText = id => (id === GOLDEN_ID ? 'Max everything to earn it' : levelRequirement(Progress.itemUnlockLevel('weapon', id)));
+const GOLD = '#ffcf40';
+// The Golden Gun's card in the armory grid: a gold edge and glow over the usual plate, locked or not.
+const GOLD_CARD = `box-shadow:inset 0 0 0 2px ${GOLD},inset 0 -18px 30px -18px rgba(255,207,64,.55);`;
 
 export class LoadoutsScreen {
   constructor(menu, { onBack, onChange, onGunsmith, onRename, onOperators }) {
@@ -53,6 +59,8 @@ export class LoadoutsScreen {
       loSlot: ({ key, idx }) => this.openGear(key, Number(idx)),
       loChoose: ({ id, key }) => this.choose(key, id),
       loClose: () => this.closePanel(),
+      goldEquip: () => this.#closeGolden(true),
+      goldLater: () => this.#closeGolden(false),
       arCat: ({ cat }) => this.setCategory(cat),
       arBrowse: ({ id }) => this.browse(id),
       arEquip: () => this.equipBrowsed(),
@@ -60,6 +68,41 @@ export class LoadoutsScreen {
     });
     this.render();
     menu.show();
+    // Earned since the armory last opened: the reveal plays once, over the screen it is being earned for.
+    if (Progress.goldenPending()) setTimeout(() => this.#revealGolden(), 260);
+  }
+
+  /* ---------- The Golden Gun reveal ---------- */
+  #revealGolden() {
+    if (!Progress.goldenPending() || !this.menu.el.isConnected) return;
+    Progress.markGoldenCelebrated();
+    const w = WEAPONS[GOLDEN_ID];
+    this.menu.overlay(`
+      <div class="sheet slim gold-reveal" role="dialog" aria-label="Golden Gun unlocked" style="width:min(460px,100%);gap:10px;background:linear-gradient(170deg,#3a2f12,#17140c 70%);box-shadow:inset 0 0 0 2px ${GOLD},0 0 40px rgba(255,207,64,.35)">
+        <small style="font:var(--fs-caption)/1 var(--f-plate);letter-spacing:var(--tr-plate);color:${GOLD}">Everything maxed</small>
+        <h2 style="color:#fff4bf;text-shadow:0 0 18px rgba(255,207,64,.8)">${esc(w.name)} unlocked</h2>
+        <div class="gold-view" style="position:relative;width:100%;height:140px;overflow:hidden"></div>
+        <p style="font-size:var(--fs-body)">One round. Any body hit inside ${w.range} m is a kill. Long reload, no attachments, and cover stops it like any sidearm.</p>
+        <div class="sheet-row" style="justify-content:center;width:100%">
+          <button class="btn" data-act="goldLater">${ico('close')}<b>Later</b></button>
+          <button class="btn is-primary" data-act="goldEquip" data-sound="confirm" style="background:linear-gradient(172deg,#fff4bf,${GOLD} 45%,#b27616);color:#2a1a06">${ico('equip')}<b>Equip secondary</b></button>
+        </div>
+      </div>`);
+    const sheet = this.menu.overlayEl?.querySelector('.gold-reveal');
+    const view = sheet?.querySelector('.gold-view');
+    if (view) this.menu.previewMount(view, GOLDEN_ID, 'none');
+    playUi('unlock');
+    if (sheet) { flash(sheet, { color: 'rgba(255,207,64,.9)' }); pop(sheet.querySelector('h2')); }
+  }
+
+  #closeGolden(equip) {
+    this.menu.overlay('');
+    if (equip && owned(GOLDEN_ID)) {
+      Progress.updateLoadout(this.selected, { secondary: GOLDEN_ID });
+      this.onChange?.();
+      this.menu.toast(`${gunName(GOLDEN_ID)} equipped`);
+    }
+    this.render();
   }
 
   get loadout() { return Progress.loadouts()[this.selected]; }
@@ -232,9 +275,10 @@ export class LoadoutsScreen {
     this.ar.grid.innerHTML = list.map(id => {
       const open = owned(id), w = WEAPONS[id];
       const where = id === l.primary || id === l.secondary;
-      return `<button class="ar-card${open ? '' : ' locked'}${where ? ' equipped' : ''}" ${wide ? 'data-wide' : ''} data-act="arBrowse" data-id="${esc(id)}">
+      const gold = id === GOLDEN_ID;
+      return `<button class="ar-card${open ? '' : ' locked'}${where ? ' equipped' : ''}${gold ? ' gold' : ''}" ${wide ? 'data-wide' : ''} data-act="arBrowse" data-id="${esc(id)}"${gold ? ` style="${GOLD_CARD}"` : ''}>
         <span class="ar-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas></span>
-        <span class="ar-info"><b>${esc(w.name)}</b><small>${open ? esc(w.role ?? categoryOf(id)) : esc(levelRequirement(Progress.itemUnlockLevel('weapon', id)))}</small></span>
+        <span class="ar-info"><b${gold ? ` style="color:${GOLD}"` : ''}>${esc(w.name)}</b><small>${open ? esc(w.role ?? categoryOf(id)) : esc(lockText(id))}</small></span>
         ${open ? `<em>${levelHtml(id)}</em>` : `<em class="lock">${ico('lock')}</em>`}
         ${where ? '<u>Equipped</u>' : ''}
       </button>`;
@@ -276,7 +320,7 @@ export class LoadoutsScreen {
     const kit = this.kitOf(id), current = l[slot];
     const on = id === current;
     const camo = getCamo(Progress.camo(id));
-    a.kicker.innerHTML = open ? `<span>${esc(categoryOf(id))} /</span>${levelHtml(id)}` : esc(levelRequirement(Progress.itemUnlockLevel('weapon', id)));
+    a.kicker.innerHTML = open ? `<span>${esc(categoryOf(id))} /</span>${levelHtml(id)}` : esc(lockText(id));
     a.name.textContent = gunName(id);
     a.sub.textContent = `${SLOT_NAME[slot]} / ${camo.name}`;
     const mine = Object.fromEntries(statBars(current, this.kitOf(current)).map(b => [b.id, b.score]));
@@ -285,17 +329,21 @@ export class LoadoutsScreen {
       return `<div class="ld-bar-row" data-dir="${dir}"><span>${esc(b.label)}</span><i class="sb"><i class="sb-base" style="transform:scaleX(${b.score.toFixed(3)})"></i>${on ? '' : `<u style="left:${(was * 100).toFixed(1)}%"></u>`}</i></div>`;
     }).join('');
     a.facts.innerHTML = weaponFacts(id, kit).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('');
+    // A locked Golden Gun shows how far along the player is on each requirement instead of the bare lock.
+    if (id === GOLDEN_ID && !open) {
+      a.facts.innerHTML = Progress.goldenStatus().steps.map(st => `<div${st.done ? ` style="color:${GOLD}"` : ''}><small>${esc(st.label)}</small><b>${st.value}/${st.goal}</b></div>`).join('');
+    }
     a.equip.disabled = !open || on;
     a.equip.classList.toggle('is-go', on);
     a.equip.classList.toggle('is-primary', !on);
-    a.equip.querySelector('b').textContent = !open ? `Level ${Progress.itemUnlockLevel('weapon', id)}` : on ? 'Equipped' : `Equip ${SLOT_NAME[slot]}`;
+    a.equip.querySelector('b').textContent = !open ? (id === GOLDEN_ID ? 'Locked' : `Level ${Progress.itemUnlockLevel('weapon', id)}`) : on ? 'Equipped' : `Equip ${SLOT_NAME[slot]}`;
     a.gs.disabled = !open;
   }
 
   equipBrowsed() {
     const id = this.panel.browse;
     if (!owned(id)) {
-      this.menu.toast(`${gunName(id)}: ${levelRequirement(Progress.itemUnlockLevel('weapon', id))}`);
+      this.menu.toast(`${gunName(id)}: ${lockText(id)}`);
       return;
     }
     Progress.updateLoadout(this.selected, { [slotOf(id)]: id });
