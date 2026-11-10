@@ -20,6 +20,27 @@ import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo
 let WEAPONS = {};
 import('../shared/weapons.js').then(m => { WEAPONS = m.WEAPONS || {}; }).catch(() => {});
 
+// Shot effects for guns vfx.js has no entry for yet. Only fills gaps: an entry the VFX table already has always wins.
+const GUN_FX_FALLBACK = {
+  heavyar:    { tail: 12, linger: 0.085, speed: 230, flash: [1.7, 1.2, 1.1],   shell: 'rifle' },
+  tacsmg:     { tail: 7,  linger: 0.045, speed: 215, flash: [1.05, 0.75, 1.0], shell: 'pistol' },
+  coach:      { tail: 3.6, linger: 0.06, speed: 170, flash: [2.6, 0.8, 2.1],   shell: null, extra: 'blast' },
+  saw:        { tail: 12, linger: 0.08,  speed: 220, flash: [1.6, 1.0, 1.15],  shell: 'link', every: 4 },
+  rotary:     { tail: 9,  linger: 0.06,  speed: 230, flash: [1.4, 0.9, 1.4],   shell: 'link', every: 5, jitter: 1 },
+  battle:     { tail: 15, linger: 0.12,  speed: 280, flash: [1.8, 1.2, 0.9],   shell: 'rifle' },
+  lever:      { tail: 14, linger: 0.12,  speed: 260, flash: [1.9, 1.0, 1.4],   shell: 'rifle' },
+  antimat:    { tail: 90, linger: 0.6,   speed: 560, flash: [2.8, 1.7, 0.6],   shell: 'magnum', extra: 'brake', contrail: 1 },
+  semisnipe:  { tail: 40, linger: 0.3,   speed: 450, flash: [2.0, 1.3, 0.75],  shell: 'magnum', contrail: 1 },
+  machpistol: { tail: 5,  linger: 0.035, speed: 200, flash: [1.0, 0.7, 1.2],   shell: 'pistol', jitter: 1 },
+  deuce:      { tail: 7,  linger: 0.05,  speed: 215, flash: [1.3, 0.9, 1.0],   shell: 'pistol' },
+  // Flies as a projectile like the rocket (see _onShot); this only shapes the muzzle flash.
+  thumper:    { tail: 0,  linger: 0,     speed: 92,  flash: [1.8, 0.5, 1.6],   shell: null },
+};
+for (const id in GUN_FX_FALLBACK) if (!GUN_FX[id]) GUN_FX[id] = GUN_FX_FALLBACK[id];
+
+// Kills from these hold the hit-stop a beat longer.
+const BIG_KILL = new Set(['Sniper', 'Marksman', 'Launcher']);
+
 const DEFAULT_KICK = { ar: 0.5, smg: 0.36, shotgun: 1.1, lmg: 0.7, sniper: 1.4, pistol: 0.45 };
 const TRACER_BASE = 0.13;       // Metres of half-width for a weapon whose tracerWidth is 1.
 
@@ -299,7 +320,7 @@ export class GameRenderer {
             const K = this._killInfo;
             this._pushDir(ev.by, r.x, r.z);
             K.dirX = this._dx; K.dirZ = this._dz; K.weapon = ev.weapon; K.head = !!ev.head;
-            K.explosive = ev.weapon === 'launcher' || !!ev.streak || (!!ev.equip && ev.equip !== 'flash');
+            K.explosive = !!(WEAPONS[ev.weapon] && WEAPONS[ev.weapon].explosive) || ev.weapon === 'launcher' || !!ev.streak || (!!ev.equip && ev.equip !== 'flash');
             chars.onKill(ev.target, K);
             vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
@@ -307,7 +328,7 @@ export class GameRenderer {
           }
           if (ev.by === localId && ev.target !== localId && !this.cine) {
             // The kill freezes the picture for a few frames; bigger guns and headshots hold it longer.
-            const big = ev.weapon === 'sniper' || ev.weapon === 'revolver' || ev.weapon === 'launcher' || ev.weapon === 'dmr';
+            const big = BIG_KILL.has(WEAPONS[ev.weapon] && WEAPONS[ev.weapon].category) || ev.weapon === 'revolver';
             this.hitStop = 0.05 + (ev.head ? 0.03 : 0) + (big ? 0.04 : 0);
             this.hitEase = 0.17;
             this.zoomPunch = Math.max(this.zoomPunch, 0.05 + (ev.head ? 0.02 : 0));
@@ -408,6 +429,9 @@ export class GameRenderer {
     let mx, my, mz;
     if (r) { mx = r.muzzle[0]; my = r.muzzle[1]; mz = r.muzzle[2]; }
     else { mx = ev.ox; my = 1.2; mz = ev.oz; }
+    // Hugging a wall, the barrel reaches through it. The round left from the body (that is what the sim traced),
+    // so tracer and flash start there instead of on the far side of the wall.
+    if (r && this._wallBetween(ev.ox, ev.oz, mx, mz)) { mx = ev.ox; mz = ev.oz; }
 
     let width = tracerWidthOf(ev.weapon) * (1 + heat * 0.75);
     if (G.every && r) {
@@ -424,11 +448,13 @@ export class GameRenderer {
     }
     const fx = this.camTarget.x, fz = this.camTarget.z;
     const rays = ev.rays;
+    const explosive = ev.weapon === 'launcher' || !!(WEAPONS[ev.weapon] && WEAPONS[ev.weapon].explosive);
     if (rays) {
       const fine = rays.length > 3;
       for (let i = 0; i < rays.length; i++) {
         const ray = rays[i];
-        if (ev.weapon === 'launcher') vfx.rocket(mx, my, mz, ray.x, 1.05, ray.z);
+        // Explosive rounds fly as a projectile; the blast waits for it to arrive (see 'explosion').
+        if (explosive) vfx.rocket(mx, my, mz, ray.x, 1.05, ray.z);
         else {
           vfx.tracer(mx, my, mz, ray.x, 1.05, ray.z, rgb, width, G.tail, G.linger, G.speed);
           if (G.contrail) vfx.contrail(mx, my, mz, ray.x, 1.05, ray.z);
@@ -546,6 +572,13 @@ export class GameRenderer {
     }
   }
 
+  // True when a bullet-blocking wall lies between a shooter's body (ox, oz) and its muzzle.
+  _wallBetween(ox, oz, mx, mz) {
+    const dx = mx - ox, dz = mz - oz, l = Math.hypot(dx, dz);
+    if (l < 1e-4) return false;
+    return castRay(this.bulletWalls, ox, oz, dx / l, dz / l, l) < l - 1e-4;
+  }
+
   // Beam from the local muzzle, ending at the first bullet-blocking wall.
   _drawLaser(local) {
     const ads = local && local.alive ? local.adsT : 0;
@@ -553,7 +586,9 @@ export class GameRenderer {
     const rig = this.chars.rigs.get(local.id);
     if (!rig) return;
     const aimX = Math.cos(local.aim), aimZ = Math.sin(local.aim);
-    const mx = rig.muzzle[0], my = rig.muzzle[1], mz = rig.muzzle[2];
+    let mx = rig.muzzle[0], mz = rig.muzzle[2];
+    const my = rig.muzzle[1];
+    if (this._wallBetween(local.x, local.z, mx, mz)) { mx = local.x; mz = local.z; }
     const t = castRay(this.bulletWalls, mx, mz, aimX, aimZ, 45);
     const ex = mx + aimX * t, ez = mz + aimZ * t;
     const rgb = this._laserRGB;

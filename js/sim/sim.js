@@ -7,11 +7,11 @@ import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { MODES } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
-import { damageAt, rayDamage, WEAPONS } from '../shared/weapons.js';
+import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, traceShot, weaponDef } from './player.js';
+import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, resetScoreOnDeath, setStreakKinds, spendStreak } from './streaks.js';
 
@@ -47,6 +47,8 @@ const CHOPPER_BURST = 6, CHOPPER_GAP = 0.18, CHOPPER_PAUSE = 1, CHOPPER_DAMAGE =
 
 // A zone denial tool: it wins a corner against someone who ignores it, and loses to anyone who shoots back.
 const TURRET_LIFE = 25, TURRET_HP = 180, TURRET_RADIUS = 0.75, TURRET_RANGE = 20;
+// What a sentry round does against cover, in shotPassage terms: a rifle-class round.
+const TURRET_GUN = { range: TURRET_RANGE + 4, penetrate: 0.7 };
 const TURRET_TURN = 2.8, TURRET_THINK = 0.2, TURRET_INTERVAL = 0.26, TURRET_TOL = 0.14;
 const TURRET_DAMAGE = 11, TURRET_SPREAD = 0.05;
 const TURRET_HIT_RADIUS = PLAYER_RADIUS + 0.1, TURRET_SLIDE_RADIUS = TURRET_HIT_RADIUS * 0.72;
@@ -78,9 +80,16 @@ const PERKS_BY_TIER = [0, 1, 2].map(t => PERK_IDS.filter(id => PERKS[id].tier ==
 const GUNSHIP_KINDS = ['gunship', 'chopper'];
 const AIR_KINDS = STREAK_IDS.filter(id => STREAKS[id].air);
 const POS = { x: 0, z: 0, sliding: false };
+const TURRET_RAY = { head: false, pen: 1 };   // Scratch ray for rayDamage on a turret hit.
 const PLAYER_STRIDE = 24;
 const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex'];
-const BOT_PRIMARIES = ['ar', 'burst', 'smg', 'dmr', 'pdw', 'lmg', 'shotgun', 'ar', 'sniper', 'autoshot', 'smg', 'ar'];
+// Every primary appears. A match fields twelve consecutive entries (team 1 starts six in), from an offset picked by
+// map and mode, so each map plays with its own mix and over a session every gun turns up on the bots.
+// The first twelve are the offset-0 set (tests and callers that pass no map): the everyday guns.
+const BOT_PRIMARIES = [
+  'ar', 'burst', 'smg', 'heavyar', 'pdw', 'lmg', 'dmr', 'tacsmg', 'sniper', 'shotgun', 'battle', 'autoshot',
+  'saw', 'ar', 'coach', 'lever', 'smg', 'semisnipe', 'rotary', 'burst', 'antimat', 'pdw',
+];
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy'];
 const BOT_LETHALS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet'];
@@ -127,7 +136,15 @@ function mulberry32(a) {
 }
 
 // Fills both teams up to teamSize with named bots of varied loadouts.
-export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE } = {}) {
+// A small stable hash, so the same map and mode always deal the same guns.
+function gunOffset(mapId, mode) {
+  if (!mapId) return 0;
+  let h = 7;
+  for (const c of `${mapId}:${mode || ''}`) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h % BOT_PRIMARIES.length;
+}
+
+export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE, mapId = null, mode = null } = {}) {
   const roster = humans.map(h => {
     const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
@@ -136,7 +153,7 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE }
   for (let team = 0; team < 2; team++) {
     let count = roster.filter(r => r.team === team).length;
     // Offset the loadout cycle per team so the two sides are not mirror images.
-    weaponI = team * 3;
+    weaponI = gunOffset(mapId, mode) + team * 6;
     for (; count < teamSize; count++, n++) {
       const i = n + team;
       const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
@@ -829,7 +846,12 @@ export class Sim {
   _damageTurretsFromShot(hits, rays, shot, w, ads) {
     for (let i = 0; i < rays.length; i++) {
       const t = hits[i];
-      if (t) this._hurtTurret(t, damageAt(w, Math.hypot(rays[i].x - shot.ox, rays[i].z - shot.oz), ads));
+      if (!t) continue;
+      // Same rule as a player hit, minus the head (a sentry has none): falloff, and what cover took off the round on
+      // the way to the turret. The ray's own pen was worked out to its old end point, beyond the turret, so redo it.
+      const pen = shotPassage(this.map, shot.ox, shot.oz, rays[i].x, rays[i].z, w) || 1;
+      TURRET_RAY.pen = pen;
+      this._hurtTurret(t, rayDamage(w, TURRET_RAY, Math.hypot(rays[i].x - shot.ox, rays[i].z - shot.oz), ads));
     }
   }
 
@@ -851,6 +873,9 @@ export class Sim {
   // `streak` is a scorestreak kind when one did this damage; `equip` is a thrown item's kind.
   _damage(target, attacker, dmg, weapon, dist, streak = null, head = false, equip = null) {
     if (!target || !target.alive || target.spawnProtect > 0 || target.team === attacker.team) return;
+    // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
+    // damage dealt: in hit events, assists and the firing range readout.
+    dmg = Math.min(dmg, Math.max(0, target.hp));
     if (this.range) this.range.onDamage(target, attacker, dmg, dist, head, !!(streak || equip));
     target.hp -= dmg;
     target.regenT = target.ps.perks.includes('quickmend') ? MEND_DELAY : REGEN_DELAY;
@@ -900,7 +925,7 @@ export class Sim {
 
     if (!this.firstBlood) { this.firstBlood = true; this._medal(killer, 'first_blood'); }
     if (killer.lastKilledBy === target.id) { killer.lastKilledBy = null; this._medal(killer, 'revenge'); }
-    if (!streak && !equip && dist >= LONGSHOT) this._medal(killer, 'longshot');
+    if (!streak && !equip && dist >= (WEAPONS[weapon]?.longshot ?? LONGSHOT)) this._medal(killer, 'longshot');
     if (head) { killer.head++; this._medal(killer, 'headshot'); }
 
     killer.chain = this.time - killer.lastKillT <= CHAIN_WINDOW ? killer.chain + 1 : 1;
@@ -1242,8 +1267,24 @@ export class Sim {
       const hit = rayCircle(t.x, t.z, dirX, dirZ, q.ps.x, q.ps.z, q.ps.sliding ? TURRET_SLIDE_RADIUS : TURRET_HIT_RADIUS);
       if (hit >= 0 && hit < bestT) { bestT = hit; victim = q; }
     }
+    // The sentry fires a rifle-class round: waist-high cover takes its share like it would off anyone else's.
+    let pen = 1;
+    if (victim) {
+      pen = shotPassage(this.map, t.x, t.z, t.x + dirX * bestT, t.z + dirZ * bestT, TURRET_GUN);
+      if (pen <= 0) { victim = null; bestT = Math.min(bestT, this._coverStop(t.x, t.z, dirX, dirZ, bestT)); }
+    }
     this._emit({ t: 'turret_shot', ox: round2(t.x), oz: round2(t.z), x: round2(t.x + dirX * bestT), z: round2(t.z + dirZ * bestT) });
-    if (victim) this._damage(victim, t.owner, TURRET_DAMAGE, t.owner.ps.weapon, bestT, 'turret');
+    if (victim) this._damage(victim, t.owner, TURRET_DAMAGE * pen, t.owner.ps.weapon, bestT, 'turret');
+  }
+
+  // Where cover stops a sentry round short of `maxT` (for drawing it), found by stepping back along the ray.
+  _coverStop(x, z, dirX, dirZ, maxT) {
+    let lo = 0, hi = maxT;
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2;
+      if (shotPassage(this.map, x, z, x + dirX * mid, z + dirZ * mid, TURRET_GUN) > 0) lo = mid; else hi = mid;
+    }
+    return lo;
   }
 
   _hurtTurret(t, dmg) {

@@ -137,6 +137,19 @@ export const RELOADS = {
   revolver: { track: REVOLVER, mag: { size: [0.16, 0.16, 0.16], rgb: [0.5, 0.42, 0.22], drop: -1, dump: 0.2 } },
   launcher: { track: TUBE, mag: { size: [0.8, 0.17, 0.17], rgb: [0.3, 0.34, 0.24], drop: -1 } },
   shotgun:  { track: null, mag: { size: [0.2, 0.09, 0.09], rgb: [0.72, 0.13, 0.1], drop: -1 } },
+  // Wave 5. track null is a shell-by-shell loader (SHELL_CYCLE repeated); dump spills dumpN casings of dumpKind.
+  heavyar:  { track: RIFLE, mag: { size: [0.14, 0.4, 0.1], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  tacsmg:   { track: RIFLE, mag: { size: [0.11, 0.34, 0.08], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  battle:   { track: RIFLE, mag: { size: [0.14, 0.48, 0.09], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  coach:    { track: REVOLVER, mag: { size: [0.2, 0.09, 0.09], rgb: [0.72, 0.13, 0.1], drop: -1, dump: 0.2, dumpN: 2, dumpKind: 'hull' } },
+  saw:      { track: LMG, mag: { size: [0.3, 0.3, 0.22], rgb: [0.2, 0.22, 0.2], drop: 0.28 } },
+  rotary:   { track: LMG, mag: { size: [0.42, 0.36, 0.3], rgb: [0.24, 0.26, 0.2], drop: 0.28 } },
+  lever:    { track: null, mag: { size: [0.16, 0.06, 0.06], rgb: [0.9, 0.7, 0.3], drop: -1 } },
+  antimat:  { track: BOLT, mag: { size: [0.18, 0.3, 0.12], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  semisnipe:{ track: BOLT, mag: { size: [0.15, 0.24, 0.1], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  machpistol:{ track: PISTOL, mag: { size: [0.1, 0.4, 0.07], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  deuce:    { track: PISTOL, mag: { size: [0.1, 0.32, 0.07], rgb: BOX_MAG.rgb, drop: 0.2 } },
+  thumper:  { track: REVOLVER, mag: { size: [0.2, 0.2, 0.2], rgb: [0.35, 0.42, 0.28], drop: -1, dump: 0.2, dumpN: 4, dumpKind: 'magnum' } },
 };
 
 const sstep = t => t * t * (3 - 2 * t);

@@ -21,6 +21,8 @@ const LAUNCH = [0.55, 1.15, 1.0, 1.1, 1.0, 1.1, 0.8, 0.95, 1.05, 0.8, 0.95, 1.05
 const FORCE = {
   shotgun: [11, 5.5, 3.2], autoshot: [9.5, 4.5, 3], sniper: [13, 3.5, 2.2], dmr: [9, 3.5, 2.2], lmg: [7.5, 3, 2.4],
   revolver: [9, 3.5, 2.2], launcher: [6, 12, 6.5], ar: [6, 3.2, 2.4], burst: [6.5, 3.2, 2.4], smg: [5, 3, 2.6], pdw: [5, 3, 2.6], pistol: [5, 3, 2.2],
+  heavyar: [7, 3.3, 2.4], tacsmg: [5, 3, 2.5], coach: [12, 6, 3.4], saw: [7, 3, 2.4], rotary: [7, 3, 2.6], battle: [8, 3.5, 2.3],
+  lever: [9, 3.5, 2.2], antimat: [15, 4.5, 2.4], semisnipe: [11, 3.5, 2.2], machpistol: [4.5, 3, 2.6], deuce: [5.5, 3, 2.2], thumper: [5, 10, 6],
 };
 const FORCE_DEFAULT = FORCE.ar;
 

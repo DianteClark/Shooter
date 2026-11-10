@@ -3,6 +3,8 @@
 // the only allocations are the shot/ray objects that exist because a gun actually fired.
 //
 // RAY CONTRACT (traceShot, Wave 5). Each ray: {x, z, hit, nx, nz, ...}
+//   Cover the shooter is hugging (origin within NEAR_COVER, 1.2 m) is fired over and ignored by the ray; only cover
+//   further along counts. shotPassage applies the same rule, so bots and humans agree.
 //   hit       'player' | 'wall' | 'none'. Waist-high cover that stops a round reports 'wall' with cover:true.
 //   cover     true when the ray stopped on waist-high cover (crate, barrier, stall, sandbag, boulder).
 //   pen       damage multiplier from cover the round passed through. Only present when below 1. Multiply it in:
@@ -491,10 +493,22 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
 }
 
 // What a ray's walk across the map found. One module-level record reused per ray: traceShot is synchronous.
-const SEG = { hardT: Infinity, hardNx: 0, hardNz: 0, stopT: Infinity, stopNx: 0, stopNz: 0, count: 0, inT: [], outT: [], nx: [], nz: [] };
+const SEG = { hardT: Infinity, hardNx: 0, hardNz: 0, stopT: Infinity, stopNx: 0, stopNz: 0, count: 0, inT: [], outT: [], nx: [], nz: [], own: [] };
 
 // True for waist-high cover: blocks movement, not sight, and is not water.
 export function isWaistCover(w) { return w.blocksMove && !w.blocksBullet && w.kind !== 'water'; }
+
+// Cover at the shooter's own feet is fired over, not into: a player crouched behind a crate shoots across its top.
+// A piece counts as the shooter's own when the shot origin (the body centre) is within NEAR_COVER of it, and only
+// for the first NEAR_COVER_REACH metres of the ray, so a long barrier still stops a round that crosses it again
+// further down its length. Only cover further along the ray can stop or slow the round. Solid walls never qualify.
+export const NEAR_COVER = 1.2;
+const NEAR_COVER_REACH = 3;
+function ownCover(ox, oz, r, spanIn) {
+  if (spanIn > NEAR_COVER_REACH) return false;
+  const gx = Math.max(r.x - ox, 0, ox - (r.x + r.w)), gz = Math.max(r.z - oz, 0, oz - (r.z + r.d));
+  return gx * gx + gz * gz <= NEAR_COVER * NEAR_COVER;
+}
 
 // Entry and exit of a ray into a rectangle, closed on the near side: an origin on or inside a rectangle counts as
 // entering at t=0 (geometry.js raycastMap returns null there, which is what let a shot escape a wall it started in).
@@ -536,26 +550,33 @@ function walkRay(map, ox, oz, dx, dz, range, penetrate, overCover) {
       if (raySpan(ox, oz, dx, dz, w) && spanIn < S.hardT && spanIn < range) { S.hardT = spanIn; S.hardNx = spanNx; S.hardNz = spanNz; }
     } else if (!overCover && isWaistCover(w)) {
       if (!raySpan(ox, oz, dx, dz, w) || spanIn >= range) continue;
-      if (!penetrate) {
-        if (spanIn < S.stopT) { S.stopT = spanIn; S.stopNx = spanNx; S.stopNz = spanNz; }
-        continue;
-      }
       // Insertion sort by entry distance; a ray crosses a handful of props at most.
       let j = S.count++;
-      while (j > 0 && S.inT[j - 1] > spanIn) { S.inT[j] = S.inT[j - 1]; S.outT[j] = S.outT[j - 1]; S.nx[j] = S.nx[j - 1]; S.nz[j] = S.nz[j - 1]; j--; }
-      S.inT[j] = spanIn; S.outT[j] = spanOut; S.nx[j] = spanNx; S.nz[j] = spanNz;
+      while (j > 0 && S.inT[j - 1] > spanIn) {
+        S.inT[j] = S.inT[j - 1]; S.outT[j] = S.outT[j - 1]; S.nx[j] = S.nx[j - 1]; S.nz[j] = S.nz[j - 1]; S.own[j] = S.own[j - 1]; j--;
+      }
+      S.inT[j] = spanIn; S.outT[j] = spanOut; S.nx[j] = spanNx; S.nz[j] = spanNz; S.own[j] = ownCover(ox, oz, w, spanIn);
     }
   }
-  if (penetrate && S.count > 0) {
-    // Abutting props are one piece of cover, so a stall built from two boxes costs one penetration.
-    let w = 0;
-    for (let i = 1; i < S.count; i++) {
-      if (S.inT[i] <= S.outT[w] + 0.05) S.outT[w] = Math.max(S.outT[w], S.outT[i]);
-      else { w++; S.inT[w] = S.inT[i]; S.outT[w] = S.outT[i]; S.nx[w] = S.nx[i]; S.nz[w] = S.nz[i]; }
+  if (S.count === 0) return;
+  // Abutting props are one piece of cover, so a stall built from two boxes costs one penetration, and a stall the
+  // shooter is hugging is fired over as a whole. Own pieces are then dropped: only cover further along counts.
+  let n = 0, groupOwn = S.own[0];
+  for (let i = 1; i <= S.count; i++) {
+    if (i < S.count && S.inT[i] <= S.outT[n] + 0.05) {
+      S.outT[n] = Math.max(S.outT[n], S.outT[i]);
+      continue;
     }
-    S.count = Math.min(w + 1, MAX_COVER_PIECES + 1);
-    if (S.count > MAX_COVER_PIECES) { S.stopT = S.inT[MAX_COVER_PIECES]; S.stopNx = S.nx[MAX_COVER_PIECES]; S.stopNz = S.nz[MAX_COVER_PIECES]; S.count = MAX_COVER_PIECES; }
+    if (!groupOwn) n++;                        // Keep the finished group unless it is the shooter's own.
+    if (i < S.count) {
+      S.inT[n] = S.inT[i]; S.outT[n] = S.outT[i]; S.nx[n] = S.nx[i]; S.nz[n] = S.nz[i]; groupOwn = S.own[i];
+    }
   }
+  S.count = n;
+  if (n === 0) return;
+  // A light round stops on the first piece; a penetrating one gives out after MAX_COVER_PIECES.
+  const stopAt = penetrate ? MAX_COVER_PIECES : 0;
+  if (n > stopAt) { S.stopT = S.inT[stopAt]; S.stopNx = S.nx[stopAt]; S.stopNz = S.nz[stopAt]; S.count = stopAt; }
 }
 
 // Damage multiplier left after the pieces of cover a round entered before distance t. 1 when none.

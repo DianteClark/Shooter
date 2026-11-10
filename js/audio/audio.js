@@ -233,6 +233,113 @@ const GUNS = {
     tail: { dur: 1.7, gain: 1, f0: 700, f1: 120, decay: 3.2 },
     noSup: true,
   },
+  // ---- Wave 5 guns. Each shares its category's skeleton and differs where the gun does. ----
+  // A chesty, lower bark than the Halyard, with a heavier bolt slam: three of these kill, and it should sound it.
+  heavyar: { size: 2,
+    crack: { dur: 0.006, gain: 1.15, hp: 1900 },
+    body: { dur: 0.15, gain: 1.3, f0: 4200, f1: 520, decay: 5.4 },
+    thump: { dur: 0.12, gain: 1.1, f0: 132, f1: 48, decay: 4.6, shape: 0.9 },
+    action: [{ at: 0.05, gain: 0.5, hp: 2200, dur: 0.01, metal: 1150 }, { at: 0.095, gain: 0.55, hp: 1500, dur: 0.012, thump: 260 }],
+    tail: { dur: 1.1, gain: 1, f0: 1300, f1: 240, decay: 4 },
+  },
+  // Clean and clipped, with a faint bright ring: the SMG that sounds like it is being aimed.
+  tacsmg: { size: 0,
+    crack: { dur: 0.003, gain: 1.15, hp: 4200 },
+    body: { dur: 0.055, gain: 1, f0: 8200, f1: 2100, decay: 7 },
+    thump: { dur: 0.035, gain: 0.45, f0: 260, f1: 140, decay: 5 },
+    ring: { dur: 0.04, gain: 0.18, f0: 3600, f1: 3300, decay: 9 },
+    action: [{ at: 0.028, gain: 0.42, hp: 3600, dur: 0.005, metal: 2400 }],
+    tail: { dur: 0.6, gain: 0.8, f0: 2600, f1: 700, decay: 5.2 },
+  },
+  // Both barrels: the biggest, roundest boom of the shotguns, a low barrel ring and no pump after it.
+  coach: { size: 2,
+    crack: { dur: 0.009, gain: 1, hp: 1300 },
+    body: { dur: 0.28, gain: 1.6, f0: 2600, f1: 220, decay: 4.6 },
+    thump: { dur: 0.22, gain: 1.6, f0: 95, f1: 34, decay: 3.8, shape: 1.2 },
+    ring: { dur: 0.25, gain: 0.2, f0: 620, f1: 560, decay: 6 },
+    action: [{ at: 0.03, gain: 0.25, hp: 1500, dur: 0.01, metal: 700 }],
+    tail: { dur: 1.5, gain: 1, f0: 800, f1: 150, decay: 3.6 },
+  },
+  // Lighter than the Bulwark and quicker: a rattling chug with the belt chattering twice per round.
+  saw: { size: 1,
+    crack: { dur: 0.005, gain: 1.1, hp: 2000 },
+    body: { dur: 0.11, gain: 1.2, f0: 4200, f1: 600, decay: 6 },
+    thump: { dur: 0.09, gain: 1, f0: 140, f1: 55, decay: 5, shape: 1 },
+    action: [{ at: 0.03, gain: 0.4, hp: 2400, dur: 0.008, metal: 1600 }, { at: 0.055, gain: 0.3, hp: 3600, dur: 0.005, metal: 3000 }],
+    tail: { dur: 1, gain: 0.95, f0: 1300, f1: 280, decay: 4.2 },
+  },
+  // Each round is a tiny low pop over a rising motor whine; at 1300 rpm they fuse into the rotary's tearing buzz.
+  rotary: { size: 2,
+    crack: { dur: 0.002, gain: 0.9, hp: 3000 },
+    body: { dur: 0.03, gain: 0.9, f0: 5600, f1: 1400, decay: 5 },
+    thump: { dur: 0.04, gain: 0.85, f0: 160, f1: 90, decay: 3, shape: 1.6 },
+    ring: { dur: 0.06, gain: 0.2, f0: 900, f1: 1100, decay: 1 },
+    action: [{ at: 0.012, gain: 0.35, hp: 5000, dur: 0.003, metal: 3200 }],
+    tail: { dur: 0.9, gain: 0.95, f0: 1000, f1: 260, decay: 4.2 },
+  },
+  // A big rifle round on a semi: a hard crack, a heavy body, and a sharp metal ping off the action.
+  battle: { size: 2,
+    crack: { dur: 0.004, gain: 1.35, hp: 3600 },
+    body: { dur: 0.13, gain: 1.4, f0: 4800, f1: 420, decay: 5.6 },
+    thump: { dur: 0.13, gain: 1.25, f0: 118, f1: 44, decay: 4.4, shape: 0.9 },
+    action: [{ at: 0.05, gain: 0.5, hp: 2800, dur: 0.01, metal: 1700 }],
+    tail: { dur: 1.3, gain: 1, f0: 1100, f1: 200, decay: 3.8 },
+  },
+  // Boomy frontier bang, then the lever: down and up, both clearly heard before the next shot.
+  lever: { size: 1,
+    crack: { dur: 0.004, gain: 1.3, hp: 3000 },
+    body: { dur: 0.15, gain: 1.45, f0: 4000, f1: 360, decay: 5 },
+    thump: { dur: 0.15, gain: 1.3, f0: 110, f1: 40, decay: 4, shape: 0.7 },
+    action: [{ at: 0.3, gain: 0.5, hp: 1800, dur: 0.014, metal: 1300 }, { at: 0.4, gain: 0.6, hp: 1300, dur: 0.016, metal: 950, thump: 280 }],
+    tail: { dur: 1.4, gain: 1, f0: 1000, f1: 180, decay: 3.6 },
+  },
+  // The loudest thing in the game that is not an explosion: a muzzle-brake blast on the front, a huge low body and a
+  // long rolling tail, then the heavy bolt and a big case on the ground.
+  antimat: { size: 2,
+    crack: { dur: 0.006, gain: 1.5, hp: 3000 },
+    body: { dur: 0.42, gain: 1.8, f0: 3200, f1: 160, decay: 4.2 },
+    thump: { dur: 0.4, gain: 1.8, f0: 70, f1: 24, decay: 3, shape: 1.6 },
+    hiss: { at: 0.004, dur: 0.18, gain: 0.45, f0: 7000, f1: 2500, hp: 1800, decay: 5 },
+    action: [{ at: 1.2, gain: 0.55, hp: 1300, dur: 0.02, metal: 800 }, { at: 1.4, gain: 0.55, hp: 1000, dur: 0.022, thump: 210 }, { at: 1.62, gain: 0.25, hp: 4000, dur: 0.005, metal: 2600 }],
+    tail: { dur: 2.8, gain: 1, f0: 650, f1: 90, decay: 2.9 },
+  },
+  // A lighter sniper crack with a bright ring, and a bolt that comes back fast.
+  semisnipe: { size: 2,
+    crack: { dur: 0.003, gain: 1.4, hp: 5000 },
+    body: { dur: 0.22, gain: 1.45, f0: 5000, f1: 300, decay: 5.4 },
+    thump: { dur: 0.2, gain: 1.3, f0: 105, f1: 36, decay: 3.8, shape: 0.6 },
+    ring: { dur: 0.16, gain: 0.22, f0: 2800, f1: 2300, decay: 7 },
+    action: [{ at: 0.45, gain: 0.5, hp: 1700, dur: 0.014, metal: 1350 }, { at: 0.58, gain: 0.45, hp: 1300, dur: 0.016, thump: 290 }],
+    tail: { dur: 1.8, gain: 1, f0: 1000, f1: 150, decay: 3.4 },
+  },
+  // Thin, high and tinny: a pocket buzzsaw that spits, with a little slide ringing over almost nothing underneath.
+  machpistol: { size: 0,
+    crack: { dur: 0.002, gain: 1.1, hp: 5600 },
+    body: { dur: 0.032, gain: 0.85, f0: 11000, f1: 4200, decay: 6.5 },
+    thump: { dur: 0.02, gain: 0.22, f0: 360, f1: 220, decay: 4, shape: 1 },
+    ring: { dur: 0.03, gain: 0.32, f0: 4400, f1: 3800, decay: 8 },
+    action: [{ at: 0.014, gain: 0.45, hp: 5200, dur: 0.003, metal: 3800 }],
+    tail: { dur: 0.5, gain: 0.7, f0: 3200, f1: 1000, decay: 5.6 },
+  },
+  // A punchier pistol with a bright slide clack: two of these 75 ms apart read as one double knock.
+  deuce: { size: 0,
+    crack: { dur: 0.004, gain: 1.2, hp: 3000 },
+    body: { dur: 0.085, gain: 1.15, f0: 5400, f1: 1000, decay: 6 },
+    thump: { dur: 0.07, gain: 0.9, f0: 175, f1: 70, decay: 4.6, shape: 0.8 },
+    ring: { dur: 0.05, gain: 0.25, f0: 2300, f1: 2000, decay: 8 },
+    action: [{ at: 0.035, gain: 0.5, hp: 2900, dur: 0.007, metal: 2000 }],
+    tail: { dur: 0.75, gain: 0.85, f0: 2100, f1: 500, decay: 4.8 },
+  },
+  // A hollow tube pop, no crack and no rocket hiss, then the cylinder indexing round. The bang is the explosion event.
+  thumper: { size: 1,
+    crack: { dur: 0.01, gain: 0.6, hp: 700 },
+    body: { dur: 0.12, gain: 0.9, f0: 1400, f1: 300, decay: 5 },
+    thump: { dur: 0.16, gain: 1.6, f0: 140, f1: 70, decay: 4, shape: 0.4 },
+    ring: { dur: 0.12, gain: 0.45, f0: 320, f1: 260, decay: 6 },
+    action: [{ at: 0.3, gain: 0.35, hp: 1600, dur: 0.01, metal: 1100 }],
+    tail: { dur: 1, gain: 0.9, f0: 700, f1: 150, decay: 4 },
+    noSup: true,
+  },
   // Scorestreak guns: a dry mechanical chatter, and a slow autocannon heard from above.
   turret: { size: 1,
     crack: { dur: 0.004, gain: 1.2, hp: 3200 },
@@ -338,13 +445,16 @@ function renderFoley(id, sr, seed) {
   const p = def.pitch, m = def.mass;
   const click = (d, rr, at, gain, hp = 2000) => addClick(d, sr, rr, { at, dur: 0.008, gain, hp });
   const slide = (d, rr, at, dur, gain, f = 2600) => addNoise(d, sr, rr, { at, dur, gain, f0: f * p, f1: f * 0.5 * p, hp: 400, decay: 4 });
+  const cp = p / 1.15;   // Cylinder sounds were tuned on the revolver (pitch 1.15); this scales them for others.
   const knock = (d, at, gain, f = 260) => addTone(d, sr, { at, dur: 0.06, gain, f0: f * p, f1: f * 0.55 * p, decay: 5, shape: 0.6 });
 
   const out = mk(def.out || 0.28, (d, rr) => {
     switch (def.kind) {
       case 'belt': click(d, rr, 0, 1.1, 1400); slide(d, rr, 0.02, 0.2, 0.7, 1900); for (let i = 0; i < 5; i++) addMetal(d, sr, { at: 0.05 + i * 0.035, dur: 0.02, gain: 0.3, f: 2600 + i * 90, decay: 9 }); break;
-      case 'cylinder': click(d, rr, 0, 0.9, 2800); addMetal(d, sr, { at: 0.03, dur: 0.15, gain: 0.5, f: 1800, decay: 6 }); for (let i = 0; i < 4; i++) addClick(d, sr, rr, { at: 0.08 + i * 0.025, dur: 0.004, gain: 0.5, hp: 4500 }); break;
-      case 'tube': slide(d, rr, 0, 0.12, 0.5, 3000); break;
+      case 'cylinder': click(d, rr, 0, 0.9, 2800 * cp); addMetal(d, sr, { at: 0.03, dur: 0.15, gain: 0.5, f: 1800 * cp, decay: 6 }); for (let i = 0; i < 4; i++) addClick(d, sr, rr, { at: 0.08 + i * 0.025, dur: 0.004, gain: 0.5, hp: 4500 * cp }); break;
+      case 'tube': case 'lever': slide(d, rr, 0, 0.12, 0.5, 3000); break;
+      // Break-open: the latch, the hinge dropping, two empty cases kicked out.
+      case 'break': click(d, rr, 0, 1, 1500); addMetal(d, sr, { at: 0.02, dur: 0.12, gain: 0.45, f: 780 * p, decay: 6 }); knock(d, 0.05, 0.6, 210); for (let i = 0; i < 2; i++) { addTone(d, sr, { at: 0.16 + i * 0.05, dur: 0.05, gain: 0.35, f0: 2300 - i * 200, f1: 1600, decay: 7 }); addClick(d, sr, rr, { at: 0.16 + i * 0.05, dur: 0.004, gain: 0.5, hp: 3800 }); } break;
       case 'rocket': click(d, rr, 0, 1, 900); knock(d, 0.02, 0.9, 170); slide(d, rr, 0.03, 0.22, 0.6, 1400); break;
       default: click(d, rr, 0, 1, 1400 * p); knock(d, 0.012, 0.5 * m, 900); slide(d, rr, 0.03, 0.13, 0.32, 2200);
     }
@@ -352,9 +462,11 @@ function renderFoley(id, sr, seed) {
   const inn = mk(def.in || 0.3, (d, rr) => {
     switch (def.kind) {
       case 'belt': slide(d, rr, 0, 0.15, 0.6, 1600); knock(d, 0.14, 1, 240); click(d, rr, 0.145, 1, 1100); for (let i = 0; i < 3; i++) addMetal(d, sr, { at: 0.18 + i * 0.03, dur: 0.02, gain: 0.25, f: 2200, decay: 9 }); break;
-      case 'tube': addNoise(d, sr, rr, { dur: 0.05, gain: 0.5, f0: 2200, f1: 700, hp: 300, decay: 4 }); knock(d, 0.04, 0.9, 330); click(d, rr, 0.045, 0.8, 1500); break;
+      case 'tube': case 'lever': addNoise(d, sr, rr, { dur: 0.05, gain: 0.5, f0: 2200 * p, f1: 700 * p, hp: 300, decay: 4 }); knock(d, 0.04, 0.9, 330); click(d, rr, 0.045, 0.8, 1500 * p); break;
+      // Two shells pushed into the chambers, one after the other.
+      case 'break': for (let i = 0; i < 2; i++) { slide(d, rr, i * 0.14, 0.07, 0.4, 1800); knock(d, 0.06 + i * 0.14, 0.75, 300); click(d, rr, 0.065 + i * 0.14, 0.6, 1300); } break;
       case 'drum': slide(d, rr, 0, 0.12, 0.4, 1700); knock(d, 0.12, 1, 190); click(d, rr, 0.125, 1, 1000); for (let i = 0; i < 4; i++) addClick(d, sr, rr, { at: 0.17 + i * 0.02, dur: 0.005, gain: 0.5, hp: 3500 }); break;
-      case 'cylinder': for (let i = 0; i < 6; i++) addClick(d, sr, rr, { at: i * 0.025, dur: 0.005, gain: 0.5, hp: 3800 }); click(d, rr, 0.18, 1, 1600); knock(d, 0.185, 0.6, 700); break;
+      case 'cylinder': for (let i = 0; i < 6; i++) addClick(d, sr, rr, { at: i * 0.025, dur: 0.005, gain: 0.5, hp: 3800 * cp }); click(d, rr, 0.18, 1, 1600 * cp); knock(d, 0.185, 0.6 * m / 0.5, 700); break;
       case 'rocket': slide(d, rr, 0, 0.18, 0.5, 900); knock(d, 0.17, 1, 130); click(d, rr, 0.175, 1, 800); break;
       default: slide(d, rr, 0, 0.09, 0.3, 2000); click(d, rr, 0.08, 1, 1200 * p); knock(d, 0.085, 0.8 * m, 420); click(d, rr, 0.12, 0.6, 2200);
     }
@@ -364,7 +476,11 @@ function renderFoley(id, sr, seed) {
       case 'bolt': click(d, rr, 0, 0.9, 1400); addNoise(d, sr, rr, { at: 0.012, dur: 0.1, gain: 0.45, f0: 2400, f1: 900, hp: 400, decay: 4 }); addMetal(d, sr, { at: 0.13, dur: 0.1, gain: 0.5, f: 900, decay: 6 }); click(d, rr, 0.135, 1.1, 1000); knock(d, 0.14, 0.7, 240); break;
       case 'slide': click(d, rr, 0, 0.8, 2600); addNoise(d, sr, rr, { at: 0.01, dur: 0.05, gain: 0.3, f0: 3000, f1: 1200, hp: 600, decay: 4 }); click(d, rr, 0.07, 1.1, 1700); knock(d, 0.075, 0.6, 620); addMetal(d, sr, { at: 0.075, dur: 0.06, gain: 0.3, f: 1900, decay: 8 }); break;
       case 'tube': knock(d, 0, 0.4, 200); slide(d, rr, 0, 0.03, 0.3, 1500); break;
-      case 'cylinder': click(d, rr, 0, 1, 1400); addMetal(d, sr, { at: 0.004, dur: 0.1, gain: 0.5, f: 1400, decay: 6 }); break;
+      // The lever thrown down and back: two clean metal clacks.
+      case 'lever': click(d, rr, 0, 1, 1600); addMetal(d, sr, { at: 0.004, dur: 0.06, gain: 0.4, f: 1300, decay: 7 }); click(d, rr, 0.11, 1.1, 1200); knock(d, 0.115, 0.6, 280); break;
+      // The gun snapped shut.
+      case 'break': click(d, rr, 0, 1.2, 1100); knock(d, 0.004, 1, 190); addMetal(d, sr, { at: 0.006, dur: 0.08, gain: 0.35, f: 900, decay: 7 }); break;
+      case 'cylinder': click(d, rr, 0, 1, 1400 * cp); addMetal(d, sr, { at: 0.004, dur: 0.1, gain: 0.5, f: 1400 * cp, decay: 6 }); break;
       case 'rocket': click(d, rr, 0, 1, 1100); knock(d, 0.005, 0.8, 160); slide(d, rr, 0.02, 0.1, 0.3, 700); break;
       case 'belt': click(d, rr, 0, 1, 1200); knock(d, 0.006, 0.9, 200); addMetal(d, sr, { at: 0.02, dur: 0.12, gain: 0.4, f: 1100, decay: 6 }); click(d, rr, 0.09, 0.8, 1700); break;
       default: click(d, rr, 0, 0.9, 1400 * p); addNoise(d, sr, rr, { at: 0.012, dur: 0.1, gain: 0.3, f0: 2600, f1: 900, hp: 500, decay: 4 }); addMetal(d, sr, { at: 0.14, dur: 0.08, gain: 0.45, f: 1200 * p, decay: 7 }); click(d, rr, 0.145, 1.1, 1000 * p); knock(d, 0.15, 0.6 * m, 300);
@@ -394,6 +510,18 @@ const FOLEY = {
   pistol:   { kind: 'slide', pitch: 1.3, mass: 0.35, rack: 0.2 },
   revolver: { kind: 'cylinder', pitch: 1.15, mass: 0.5, out: 0.24, in: 0.28, rack: 0.14 },
   launcher: { kind: 'rocket', pitch: 0.7, mass: 1, out: 0.32, in: 0.3, rack: 0.2 },
+  heavyar:  { kind: 'mag',  pitch: 0.88, mass: 0.85 },
+  tacsmg:   { kind: 'mag',  pitch: 1.18, mass: 0.5 },
+  battle:   { kind: 'mag',  pitch: 0.82, mass: 0.85, out: 0.3 },
+  coach:    { kind: 'break', pitch: 0.9, mass: 0.8, out: 0.28, in: 0.32, rack: 0.14 },
+  saw:      { kind: 'belt', pitch: 0.88, mass: 0.85, out: 0.32, in: 0.32 },
+  rotary:   { kind: 'belt', pitch: 0.62, mass: 1.15, out: 0.4, in: 0.4 },
+  lever:    { kind: 'lever', pitch: 1.05, mass: 0.6, rack: 0.2 },
+  antimat:  { kind: 'bolt', pitch: 0.62, mass: 1.15, out: 0.34 },
+  semisnipe:{ kind: 'bolt', pitch: 1.0,  mass: 0.7 },
+  machpistol:{ kind: 'slide', pitch: 1.45, mass: 0.3, rack: 0.2 },
+  deuce:    { kind: 'slide', pitch: 1.18, mass: 0.42, rack: 0.2 },
+  thumper:  { kind: 'cylinder', pitch: 0.7, mass: 0.9, out: 0.3, in: 0.34, rack: 0.18 },
 };
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.

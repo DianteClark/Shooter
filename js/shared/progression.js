@@ -42,7 +42,8 @@ export const WEAPON_CURVE = makeCurve(250, 12, MAX_WEAPON_LEVEL);
 export const levelOf = PLAYER_CURVE.levelOf;
 
 /* ---------- Player level unlock schedule ---------- */
-// Level 1 fills every slot, so loadouts are always complete; the last item lands at 15.
+// Level 1 fills every slot, so loadouts are always complete. Gear tops out at 15; the Wave 5 guns run on to 22.
+// The six base guns (ar, smg, shotgun, lmg, sniper, pistol) have no line: level 1.
 export const UNLOCK_SCHEDULE = [
   { level: 1,  kind: 'perk',     id: 'scavenger' },
   { level: 1,  kind: 'perk',     id: 'marathon' },
@@ -88,8 +89,22 @@ export const UNLOCK_SCHEDULE = [
   { level: 10, kind: 'streak',   id: 'overwatch' },
   { level: 12, kind: 'streak',   id: 'chopper' },
   { level: 14, kind: 'streak',   id: 'emp' },
+  // Wave 5 guns, between the Wave 3 ones: one roughly every level from 2 to 22, the specialist ones last.
+  { level: 2,  kind: 'weapon',   id: 'tacsmg' },
+  { level: 3,  kind: 'weapon',   id: 'deuce' },
+  { level: 5,  kind: 'weapon',   id: 'heavyar' },
+  { level: 7,  kind: 'weapon',   id: 'coach' },
+  { level: 9,  kind: 'weapon',   id: 'lever' },
+  { level: 11, kind: 'weapon',   id: 'saw' },
+  { level: 13, kind: 'weapon',   id: 'machpistol' },
+  { level: 15, kind: 'weapon',   id: 'battle' },
+  { level: 17, kind: 'weapon',   id: 'semisnipe' },
+  { level: 19, kind: 'weapon',   id: 'thumper' },
+  { level: 20, kind: 'weapon',   id: 'rotary' },
+  { level: 22, kind: 'weapon',   id: 'antimat' },
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
+const V1_GRANT_LEVEL = 15;
 
 export const ITEM_TABLES = { perk: PERKS, tactical: TACTICALS, lethal: LETHALS, streak: STREAKS, weapon: WEAPONS };
 
@@ -119,9 +134,10 @@ export function gateLoadoutGear(l, peakLevel) {
 
 /* ---------- Challenges and camo gates ---------- */
 // A longshot means a long shot for that gun: 26 m from a shotgun is not a thing that happens.
-export const LONGSHOT_DIST = { ar: 26, smg: 18, shotgun: 11, lmg: 26, sniper: 34, pistol: 18, burst: 26, pdw: 16, autoshot: 10, dmr: 30, revolver: 18, launcher: 20 };
+// The distance is weapon data (`longshot` in weapons.js), so a new gun brings its own.
 export const LONGSHOT_DEFAULT = 26;
-export const longshotDist = weapon => LONGSHOT_DIST[weapon] ?? LONGSHOT_DEFAULT;
+export const longshotDist = weapon => WEAPONS[weapon]?.longshot ?? LONGSHOT_DEFAULT;
+export const LONGSHOT_DIST = Object.fromEntries(WEAPON_IDS.map(id => [id, longshotDist(id)]));
 
 export const TRACKS = [
   { track: 'kills', label: 'Kills' },
@@ -274,8 +290,9 @@ export function migrateV1(v1) {
     s.weapons[weapon] = w;
   }
 
-  // Everything a v1 player could equip stays equippable.
-  if (s.xp > 0 || totalKills > 0) s.peakLevel = Math.max(s.peakLevel, SCHEDULE_TOP);
+  // Everything a v1 player could equip stays equippable: the gear schedule as it stood (to 15). Guns added since
+  // are earned like anyone else's.
+  if (s.xp > 0 || totalKills > 0) s.peakLevel = Math.max(s.peakLevel, V1_GRANT_LEVEL);
   const primary = PRIMARY_IDS.includes(src.primary) ? src.primary : undefined;
   s.loadouts[0] = cleanLoadout({ ...(isObj(src.equipment) ? src.equipment : {}), primary, name: DEFAULT_NAMES[0] }, 0);
   return s;

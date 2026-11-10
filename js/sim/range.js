@@ -3,7 +3,7 @@
 // they carry `dummy: true` on the view, have no brain and stand back up a second after dying.
 import { MAX_HP, SIM_HZ } from '../shared/constants.js';
 import { normalizeLoadout } from '../shared/catalog.js';
-import { headMultFor, damageAt, shotsToKill } from '../shared/weapons.js';
+import { damageAt, shotsToKill } from '../shared/weapons.js';
 import { weaponDef } from './player.js';
 
 const STEP = 1 / SIM_HZ;
@@ -40,6 +40,7 @@ export class RangeDirector {
     this.lastDmg = 0;
     this.lastDist = 0;
     this.lastHead = false;
+    this.lastKill = false;
     this.lastWeapon = null;
     this.hitAt = new Map();          // dummy -> time of the first hit since it was last at full health.
   }
@@ -79,7 +80,8 @@ export class RangeDirector {
     }
   }
 
-  // Called before the damage lands, with the dummy's health still intact.
+  // Called before the damage lands, with the dummy's health still intact. `dmg` is already capped at the health the
+  // dummy had left (Sim._damage), so a lethal headshot reads as the kill it is, not as a x9 multiplier on paper.
   onDamage(target, attacker, dmg, dist, head, indirect) {
     if (!target.dummy || attacker.dummy) return;
     if (!this.hitAt.has(target) || target.hp >= MAX_HP - 1e-6) this.hitAt.set(target, this.sim.time);
@@ -89,6 +91,7 @@ export class RangeDirector {
     this.lastDmg = Math.round(dmg);
     this.lastDist = dist;
     this.lastHead = !!head;
+    this.lastKill = dmg >= target.hp - 1e-6;
     this._refreshDps();
   }
 
@@ -117,7 +120,8 @@ export class RangeDirector {
         dps: damageAt(w, dist, true) * (w.pellets || 1) * w.rpm / 60,
         ttk: (n - 1) * interval,
         shots: n,
-        headMult: headMultFor(w.id),
+        // Any head hit kills outright (explosives excepted), so the head is a one-shot, not a multiplier.
+        headShots: w.explosive ? n : 1,
       };
     }
     return {
@@ -125,6 +129,7 @@ export class RangeDirector {
       shots: this.shots, hits: this.hits, accuracy: this.shots ? this.hits / this.shots : 0,
       headshots: this.heads, kills: this.kills,
       lastDamage: this.lastDmg, lastDist: this.lastDist, lastHead: this.lastHead, lastWeapon: this.lastWeapon,
+      lastKill: this.lastKill,
       model,
     };
   }

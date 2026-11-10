@@ -12,6 +12,8 @@
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange } from './equipment.js';
 import { angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
+import { WEAPONS } from '../shared/weapons.js';
+import { isAvailable } from '../shared/attachments.js';
 
 const DEG = Math.PI / 180;
 
@@ -51,23 +53,14 @@ export const SKILLS = {
   },
 };
 
-// Preferred fighting distance per weapon, and how the weapon shifts the bot's playstyle.
+// Preferred fighting distance per weapon, and how the weapon shifts the bot's playstyle, live in each gun's
+// `botUse` (weapons.js): {pref, hold, flank, advance, rush?, scoped?, fireMax?, adsMin?}.
 // `rush`: beyond this range the gun is not worth firing, so sprint the gap instead of plinking.
-const STYLE = {
-  ar:      { pref: 15, hold: 1,    flank: 1,    advance: 3 },
-  smg:     { pref: 7,  hold: 0.55, flank: 1.3,  advance: 3, rush: 15 },
-  shotgun: { pref: 4,  hold: 0.5,  flank: 1.5,  advance: 3, rush: 9 },
-  lmg:     { pref: 20, hold: 1.6,  flank: 0.5,  advance: 2 },
-  sniper:  { pref: 30, hold: 2.2,  flank: 0.3,  advance: 2 },
-  pistol:  { pref: 9,  hold: 0.8,  flank: 1,    advance: 3 },
-  burst:   { pref: 17, hold: 1.1,  flank: 0.9,  advance: 3 },
-  pdw:     { pref: 6,  hold: 0.4,  flank: 1.4,  advance: 3, rush: 13 },
-  autoshot:{ pref: 4,  hold: 0.5,  flank: 1.5,  advance: 3, rush: 8 },
-  dmr:     { pref: 24, hold: 1.7,  flank: 0.5,  advance: 2 },
-  revolver:{ pref: 10, hold: 0.9,  flank: 1,    advance: 3 },
-  launcher:{ pref: 16, hold: 1,    flank: 0.6,  advance: 2 },
-};
-const SCOPED = new Set(['sniper', 'lmg', 'dmr']);
+// STYLE holds overrides only, for a gun whose bot behaviour should differ from its data; empty today.
+const STYLE = {};
+const DEFAULT_STYLE = { pref: 15, hold: 1, flank: 1, advance: 3 };
+function styleOf(id) { return STYLE[id] || (WEAPONS[id] && WEAPONS[id].botUse) || DEFAULT_STYLE; }
+const ADS_RANGE = 12;           // botUse.adsMin applies past this distance, or always on a gun with an adsGate.
 
 // Fractions of the map width from the bot's own side, one per step of a lane advance.
 const STAGES = [0.16, 0.36, 0.5, 0.64, 0.84];
@@ -146,19 +139,22 @@ const BOT_KITS = {
 };
 
 // Sidearms bots carry, by roster index. Most stay on the quick pistol; a few bring something louder.
-const BOT_SECONDARIES = ['pistol', 'revolver', 'pistol', 'launcher', 'pistol', 'revolver'];
+const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper', 'pistol', 'revolver'];
 export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
+// A gun without its own kits borrows its category's base gun's, minus what it cannot take.
+const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol' };
 const BOT_KIT_SLOTS = { recruit: 1, regular: 2, veteran: 3, elite: 4 };
 
 // The kit a bot of this tier carries on this gun: recruits only sometimes have one attachment, elites a full kit.
 export function botAttachments(weaponId, skill, i) {
-  const kits = BOT_KITS[weaponId];
+  const kits = BOT_KITS[weaponId] || BOT_KITS[KIT_FALLBACK[WEAPONS[weaponId]?.category]];
   if (!kits || (skill === 'recruit' && i % 2 === 1)) return {};
   const kit = kits[i % kits.length];
   const keep = BOT_KIT_SLOTS[skill] ?? 2;
   const out = {};
   let n = 0;
   for (const slot in kit) {
+    if (!isAvailable(weaponId, kit[slot])) continue;     // A borrowed kit keeps only what this gun can take.
     if (n++ >= keep) break;
     out[slot] = kit[slot];
   }
@@ -351,11 +347,10 @@ export class BotBrain {
     this.heatCooling = false; this.heatStop = this.S.heatStop;
     this.sawT = -99; this.sawX = 0; this.sawZ = 0; this.suppressing = false;
     this.turretTarget = null;
-    this.style = STYLE[ps.primary] || STYLE.ar;
+    this.style = styleOf(ps.primary);
     this.peek = 0;
     this.objective = null; this.objKey = null; this.objAim = 0; this.objPushRoll = false;
     this.canHit = true;
-    this.lastFireFlag = false;
     this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
     this._assignLane();
   }
@@ -477,7 +472,7 @@ export class BotBrain {
     let best = null, bestScore = Infinity, bestD = 0;
     const sameTarget = this.target;
     // Engagements stay on-screen distances; only a scoped rifle reaches further.
-    const sightRange = ps.weapon === 'sniper' ? S.sight + 10 : S.sight;
+    const sightRange = styleOf(ps.weapon).pref >= 28 ? S.sight + 10 : S.sight;
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive || q.spawnProtect > 0) continue;
@@ -582,7 +577,7 @@ export class BotBrain {
     this.trackT = 0;
     this.anchor = gaussian(sim.rng);
     this.anchorT = 0.35;
-    this.useAds = (sim.rng() < S.adsUse && d > 6) || SCOPED.has(ps.weapon);
+    this.useAds = (sim.rng() < S.adsUse && d > 6) || !!styleOf(ps.weapon).scoped;
     this.objPushRoll = sim.rng() < S.objPush;
     this.slidIn = false;
     this.strafeT = 0;
@@ -617,7 +612,7 @@ export class BotBrain {
     // A belt-fed gun keeps hammering the spot where someone just ducked out of sight, which is what builds heat.
     this.suppressing = !visible && !!weaponDef(ps).heat && !ps.overheated && !!this.target && this.target.alive
       && sim.time - this.sawT < S.suppress && this.flashT <= 0
-      && hasLineOfSight(sim.map, ps.x, ps.z, this.sawX, this.sawZ, sim.smokes);
+      && shotPassage(sim.map, ps.x, ps.z, this.sawX, this.sawZ, weaponDef(ps)) > 0;
 
     this._thinkStreaks(visible);
     this._thinkEquipment(visible);
@@ -642,7 +637,7 @@ export class BotBrain {
     this.lastRetreatHp = p.hp;
 
     // A shotgun has no business in the open at range: get behind something and let them come.
-    if (visible && (ps.weapon === 'shotgun' || ps.weapon === 'autoshot') && this.targetDist > 10.5 && this.mode !== 'hold' && this.mode !== 'cover' && this.mode !== 'objective') {
+    if (visible && WEAPONS[ps.weapon].category === 'Shotgun' && this.targetDist > 10.5 && this.mode !== 'hold' && this.mode !== 'cover' && this.mode !== 'objective') {
       // Unless they are looking the other way, in which case this is exactly the moment to close.
       const t = this.target.ps;
       const facingUs = Math.abs(angleDiff(t.aim, Math.atan2(ps.z - t.z, ps.x - t.x))) < 0.9;
@@ -653,7 +648,7 @@ export class BotBrain {
     if (S.pistolSwap && visible && ps.slot === 0 && (ammo === 0 || ps.overheated) && this.targetDist < 14) this.wantSwap = true;
     else if (!visible && ps.slot === 1 && ps.swapT <= 0 && !ps.overheated && (ps.ammo[0] > 0 || ps.reserve[0] > 0)) this.wantSwap = true;
     // A rocket opens a fight at range, once a life; the empty tube goes straight back on the shoulder.
-    else if (S.pistolSwap && visible && ps.slot === 0 && ps.secondary === 'launcher' && ps.ammo[1] > 0 && this.targetDist > 8 && this.targetDist < 34 && sim.rng() < 0.12) this.wantSwap = true;
+    else if (S.pistolSwap && visible && ps.slot === 0 && WEAPONS[ps.secondary].explosive && ps.ammo[1] > 0 && this.targetDist > 8 && this.targetDist < Math.min(34, WEAPONS[ps.secondary].range - 2) && sim.rng() < 0.12) this.wantSwap = true;
     else if (visible && ps.slot === 1 && ps.ammo[1] === 0 && ps.swapT <= 0 && ps.ammo[0] > 0) this.wantSwap = true;
 
     if (visible) return;   // drive() fights; the strategic goal stays where it was.
@@ -1082,7 +1077,7 @@ export class BotBrain {
 
   _combatMove(q, d, dt) {
     const { ps, S, input: I, sim } = this;
-    const style = STYLE[ps.weapon] || STYLE.ar;
+    const style = styleOf(ps.weapon);
     const ux = (q.ps.x - ps.x) / d, uz = (q.ps.z - ps.z) / d;
     const o = this.objective;
     const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend');
@@ -1117,13 +1112,14 @@ export class BotBrain {
     I.mx = mx; I.mz = mz;
   }
 
-  _trigger(q, d, perceived, dt) {
+  // (tx, tz) is where the round has to get to: the target, a turret, or a spot being suppressed.
+  _trigger(q, d, perceived, dt, tx, tz) {
     const { ps, S, input: I, sim } = this;
-    const w = weaponDef(ps);
+    const w = weaponDef(ps), bu = styleOf(ps.weapon);
     const offAim = Math.abs(angleDiff(ps.aim, perceived));
     // Tolerance widens up close, where the target covers more of the view.
     const tol = S.fireTol + Math.atan2(0.5, Math.max(d, 1)) * 0.6;
-    let fire = this.reactLeft <= 0 && offAim < tol && ps.swapT <= 0 && d <= w.range && ps.ammo[ps.slot] > 0 && (q === null || this.canHit);
+    let fire = this.reactLeft <= 0 && offAim < tol && ps.swapT <= 0 && d <= w.range && ps.ammo[ps.slot] > 0;
 
     // Heat discipline: let go of the trigger before the bar fills. Sometimes a bot gets greedy and pays for it.
     if (w.heat) {
@@ -1138,13 +1134,11 @@ export class BotBrain {
       }
     }
 
-    if (ps.weapon === 'sniper' && ps.adsT < 0.85) fire = false;
-    if (ps.weapon === 'dmr' && d > 12 && ps.adsT < 0.7) fire = false;
-    if (ps.weapon === 'shotgun' && d > 12) fire = false;
-    if (ps.weapon === 'autoshot' && d > 10) fire = false;
+    if (bu.adsMin && ps.adsT < bu.adsMin && (w.adsGate || d > ADS_RANGE)) fire = false;
+    if (bu.fireMax && d > bu.fireMax) fire = false;
 
     // Burst control at range: real players stop to let the gun settle.
-    if (fire && w.auto && !w.burst && S.burst > 0 && d > 18 && ps.weapon !== 'lmg') {
+    if (fire && w.auto && !w.burst && S.burst > 0 && d > 18 && !w.heat) {
       if (this.burstPause > 0) { this.burstPause -= dt; fire = false; }
       else if (ps.shotIndex >= 5 + (this.burstLeft | 0)) {
         this.burstPause = between(sim.rng, 0.12, S.burst + 0.25);
@@ -1153,9 +1147,10 @@ export class BotBrain {
       }
     }
 
-    // A semi-auto is tapped. Holding one also fires (at its own cadence) but a tap is the faster way to run it.
-    if (fire && !w.auto && this.lastFireFlag) fire = false;
-    this.lastFireFlag = fire;
+    // Last and only when everything else says go: can this gun's round actually get there? Seeing someone over a
+    // crate is not the same as being able to shoot them through it (and cover right at the bot's own feet is fired
+    // over, see traceShot). Semi-autos are simply held: every gun fires at its own cadence while the trigger is down.
+    if (fire && shotPassage(sim.map, ps.x, ps.z, tx, tz, w) <= 0) fire = false;
     I.fire = fire;
   }
 
@@ -1174,7 +1169,7 @@ export class BotBrain {
       const ang = Math.atan2(dz, dx);
       if (this.reactLeft > 0) this.reactLeft -= dt;
       desired = ang + S.aimFloor * Math.sin(this.wobble += dt * 3.1);
-      this._trigger(null, d, ang, dt);
+      this._trigger(null, d, ang, dt, tu.x, tu.z);
       I.aiming = this.useAds && this.reactLeft <= 0;
       this.moving = this._followPath(false);
     } else if (fighting) {
@@ -1194,9 +1189,9 @@ export class BotBrain {
       // Half way through the reaction window the head starts to come around.
       if (this.reactLeft < this.reactTotal * 0.55) desired = trueAng + err;
 
-      const style = STYLE[ps.weapon];
+      const style = styleOf(ps.weapon);
       const rushing = style.rush && d > style.rush && this.mode !== 'cover' && this.mode !== 'hold';
-      if (!rushing) this._trigger(q, d, trueAng, dt);
+      if (!rushing) this._trigger(q, d, trueAng, dt, q.ps.x, q.ps.z);
       const pushing = this.mode === 'objective' && !this.arrived && (d > style.pref || this.objPushRoll);
       if ((this.mode === 'cover' || this.mode === 'hold' || pushing) && !this.arrived) this._followPath(false);
       else this._combatMove(q, d, dt);
@@ -1208,15 +1203,15 @@ export class BotBrain {
       }
       I.aiming = this.useAds && this.reactLeft <= 0 && !rushing;
       // Sprinters and rushers on a close weapon don't bother scoping in.
-      if ((ps.weapon === 'smg' && d < 8) || (ps.weapon === 'pdw' && d < 7) || (ps.weapon === 'shotgun' && d < 4.5) || (ps.weapon === 'autoshot' && d < 4.5)) I.aiming = false;
-      else if (ps.weapon === 'shotgun' && this.reactLeft <= 0 && !rushing) I.aiming = true;
+      if (style.rush && !style.scoped && d < style.pref + 1) I.aiming = false;
+      else if (WEAPONS[ps.weapon].category === 'Shotgun' && this.reactLeft <= 0 && !rushing) I.aiming = true;
       // Don't sprint while fighting; left stick is already at walking pace.
     } else {
       this.moving = this._followPath(true);
       if (this.moving) I.sprint = I.sprint && !(this.mode === 'hunt' && S.sprint < 1);
       if (this.suppressing) {
         desired = Math.atan2(this.sawZ - ps.z, this.sawX - ps.x);
-        this._trigger(null, Math.max(0.3, Math.hypot(this.sawX - ps.x, this.sawZ - ps.z)), desired, dt);
+        this._trigger(null, Math.max(0.3, Math.hypot(this.sawX - ps.x, this.sawZ - ps.z)), desired, dt, this.sawX, this.sawZ);
         I.aiming = true; I.sprint = false;
       } else if (this.hasKnown) {
         // Checks the area the contact came from, sweeping across it. Never settles on a point it cannot have known.
@@ -1228,11 +1223,11 @@ export class BotBrain {
       } else if (this.mode === 'hold' && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.holdAim + Math.sin(this.peek) * 0.28;
-        I.aiming = SCOPED.has(ps.weapon) || S.adsUse > 0.8;
+        I.aiming = !!styleOf(ps.weapon).scoped || S.adsUse > 0.8;
       } else if (this.mode === 'objective' && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.objAim + Math.sin(this.peek) * 1.1;
-        I.aiming = SCOPED.has(ps.weapon) || S.adsUse > 0.8;
+        I.aiming = !!styleOf(ps.weapon).scoped || S.adsUse > 0.8;
       } else if (this.moving) {
         desired = Math.atan2(I.mz, I.mx);
       }

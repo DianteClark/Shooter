@@ -9,11 +9,31 @@ import { SLOTS, ATTACHMENTS, attachmentsFor, normalizeKit } from '../shared/atta
 import { MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE, prestigeRewards, camoRequirement } from '../shared/progression.js';
 import { Progress } from './progress.js';
 import { esc, hex, swatchCss, lockIcon, ROMAN, SLOT_LABEL, levelRequirement } from './widgets.js';
-import { compareStats, deltaText, weaponFacts } from './gunstats.js';
+import { compareStats, deltaText, weaponFacts, rangeStrip, RANGE_AXIS } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { prestigeWeaponNow, kindLabel } from './prestige.js';
 
 const STOCK = 'stock';
+
+// The range strip under the facts: inline styles, so the bench needs no stylesheet change to carry it.
+const RANGE_BOX = 'flex:none;padding:3px 8px 5px;background:rgba(29,35,43,.42)';
+const pct = f => `${(f * 100).toFixed(1)}%`;
+// Full damage solid, the fade as a gradient down to the floor's brightness, the floor dimmer out to the hard range,
+// and empty track past it. Ticks every 10 m on a fixed axis so guns compare at a glance.
+function rangeStripHtml(r) {
+  const floor = 0.25 + 0.6 * r.minPct / 100;
+  const hi = 'rgba(255,214,90,.95)', lo = `rgba(255,214,90,${floor.toFixed(2)})`;
+  const seg = (a, b, bg) => b > a ? `<i style="position:absolute;top:0;bottom:0;left:${pct(a)};width:${pct(b - a)};background:${bg}"></i>` : '';
+  let ticks = '';
+  for (let m = 10; m < RANGE_AXIS; m += 10) ticks += `<i style="position:absolute;top:0;bottom:0;left:${pct(m / RANGE_AXIS)};width:1px;background:rgba(0,0,0,.35)"></i>`;
+  const label = r.explosive
+    ? `Full blast anywhere to ${Math.round(r.max)}m`
+    : `100% to ${Math.round(r.full)}m, ${r.minPct}% by ${Math.round(r.fade)}m, ends ${Math.round(r.max)}m`;
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px"><small style="font-size:8px;color:var(--haze)">Damage by range</small><small style="font-size:9px;white-space:nowrap">${label}</small></div>`
+    + `<div style="position:relative;height:6px;margin-top:2px;background:rgba(255,255,255,.08);border-radius:1px;overflow:hidden">`
+    + seg(0, r.fullF, hi) + seg(r.fullF, r.fadeF, `linear-gradient(90deg,${hi},${lo})`) + seg(r.fadeF, r.maxF, lo)
+    + `<i style="position:absolute;top:0;bottom:0;left:${pct(r.maxF)};width:2px;margin-left:-1px;background:#fff"></i>` + ticks + `</div>`;
+}
 const TABS = [['attach', 'Attach'], ['camo', 'Camo'], ['fx', 'Effects'], ['prestige', 'Prestige']];
 
 export class Gunsmith {
@@ -241,6 +261,7 @@ export class Gunsmith {
           </div>
           <div class="gs-stats"></div>
           <div class="gs-facts"></div>
+          <div class="gs-range" style="${RANGE_BOX}"></div>
         </div>
         <div class="gs-panel">
           <nav class="gs-tabs">${TABS.map(([id, label]) => `<button class="gs-tab" data-act="gsTab" data-tab="${id}">${label}</button>`).join('')}</nav>
@@ -263,6 +284,7 @@ export class Gunsmith {
     this.catBtns = [...m.el.querySelectorAll('.gs-cat')];
     this.equipBtn = $('.gs-equip');
     this.factsEl = $('.gs-facts');
+    this.rangeEl = $('.gs-range');
     this.tabs = [...m.el.querySelectorAll('.gs-tab')];
     m.previewMount(this.benchEl, this.weapon, Progress.camo(this.weapon), this.kit);
     this.renderRail();
@@ -318,6 +340,8 @@ export class Gunsmith {
   paintFacts(kit) {
     const html = weaponFacts(this.weapon, kit).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('');
     if (this.factsHtml !== html) this.factsEl.innerHTML = this.factsHtml = html;
+    const strip = rangeStripHtml(rangeStrip(this.weapon, kit));
+    if (this.rangeHtml !== strip) this.rangeEl.innerHTML = this.rangeHtml = strip;
   }
 
   paintTabs() {

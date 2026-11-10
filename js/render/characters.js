@@ -22,13 +22,22 @@ const TAU = Math.PI * 2;
 
 const CHAR_SCALE = 1.22;
 const GUN_SCALE = 0.98;
-const GUN_SCALES = { ar: 1, smg: 1, shotgun: 1, lmg: 1, sniper: 0.86, pistol: 1.05 };
+// Very long guns are shrunk a touch so they do not reach a body length past the soldier; sidearms grown so they read.
+const GUN_SCALES = {
+  ar: 1, smg: 1, shotgun: 1, lmg: 1, sniper: 0.86, pistol: 1.05,
+  antimat: 0.8, semisnipe: 0.92, rotary: 0.94, battle: 0.96, machpistol: 1.05, deuce: 1.05, revolver: 1,
+};
 const HIP = 0.78 * CHAR_SCALE;
 
 // How each gun sits in the hands, relative to the default hip carry: a planted LMG rides low, a tube sits on the shoulder.
 const HOLD = {
   lmg: [-0.04, -0.13, 0.05], sniper: [-0.02, 0.05, 0], shotgun: [-0.02, -0.03, 0.02], autoshot: [-0.03, -0.05, 0.03],
   pistol: [0.14, 0.06, -0.08], revolver: [0.14, 0.07, -0.08], launcher: [-0.3, 0.3, 0.1],
+  // Wave 5: belt guns ride low (the rotary lowest, slung from the hip), bolt guns sit up at the shoulder, the
+  // bullpup is held further forward because its grip is near the back, sidearms are punched out like the pistol.
+  saw: [-0.03, -0.09, 0.04], rotary: [-0.07, -0.17, 0.08], antimat: [-0.04, 0.05, 0], semisnipe: [-0.01, 0.04, 0],
+  coach: [-0.02, -0.03, 0.02], heavyar: [0.06, 0, 0], thumper: [-0.04, -0.03, 0.03],
+  machpistol: [0.14, 0.06, -0.08], deuce: [0.14, 0.06, -0.08],
 };
 const HOLD_NONE = [0, 0, 0];
 const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke: [0.35, 0.6, 0.42], flash: [0.85, 0.8, 0.45], stim: [0.3, 0.7, 0.5] };
@@ -842,7 +851,8 @@ export class Characters {
           vfx.dropMag(_v.x, _v.y, _v.z, rel.mag.rgb, rel.mag.size);
         }
         if (rel.mag.dump !== undefined && lastU < rel.mag.dump && r.reloadU >= rel.mag.dump) {
-          for (let k = 0; k < 6; k++) vfx.shell(r.eject[0], r.eject[1], r.eject[2], (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, 'pistol');
+          const n = rel.mag.dumpN ?? 6, kind = rel.mag.dumpKind ?? 'pistol';
+          for (let k = 0; k < n; k++) vfx.shell(r.eject[0], r.eject[1], r.eject[2], (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, kind);
         }
       }
 
