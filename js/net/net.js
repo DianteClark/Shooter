@@ -10,10 +10,27 @@ export const APP_ID = 'switchyard-6v6-1';
 // their bufferedAmount is what tells the session a phone has fallen behind.
 const channels = new WeakMap();
 
+// How far the latest join got, for the failure screen: did the host answer over the relays (a peer connection was made),
+// and did any direct link come up? A connection made and then failed means the two networks would not let the phones
+// reach each other (no TURN relay to fall back on); none made means the host was never found on the relays.
+const diag = { pcs: 0, connected: 0, failed: 0 };
+export function resetJoinDiagnosis() { diag.pcs = diag.connected = diag.failed = 0; }
+export function joinDiagnosis() {
+  if (diag.connected) return 'dropped';
+  if (diag.pcs) return 'blocked';
+  return 'unseen';
+}
+
 export class TrackedPeerConnection extends RTCPeerConnection {
   constructor(config) {
     super(config);
+    diag.pcs++;
     this.addEventListener('datachannel', e => channels.set(this, e.channel));
+    this.addEventListener('iceconnectionstatechange', () => {
+      const s = this.iceConnectionState;
+      if (s === 'connected' || s === 'completed') diag.connected++;
+      else if (s === 'failed') diag.failed++;
+    });
   }
 
   createDataChannel(...args) {
@@ -87,6 +104,7 @@ export class Net extends StarNet {
   }
 
   static join(code, name) {
+    resetJoinDiagnosis();
     return new Net(new TrysteroTransport(code), { code, name, isHost: false });
   }
 

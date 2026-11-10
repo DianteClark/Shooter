@@ -15,7 +15,7 @@ import { Menu } from './ui/menu.js';
 import { Progress, matchScore } from './ui/progress.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
 import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
-import { Net } from './net/net.js';
+import { Net, joinDiagnosis } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
 import { playerId } from './net/star.js';
@@ -688,7 +688,7 @@ function startJoining(code) {
     teardownNet();
     forgetRoom();
     if (inviteJoinFailed(menu, code, { retry: () => startJoining(code), enterCode: askCode })) showTitle();
-    else menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle() });
+    else menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle(), reason: NetImpl === Net ? joinDiagnosis() : 'unseen' });
   });
   net.onLobby(msg => guestLobbyMessage(msg));
   net.onHostLost(() => setHostNotice(true));

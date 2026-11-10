@@ -275,16 +275,23 @@ export class Menu {
     this.show();
   }
 
-  notFound(code, { retry, back }) {
+  // reason (js/net/net.js joinDiagnosis): 'unseen' the host never answered; 'blocked' the host answered but no direct
+  // link could be made between the two networks; 'dropped' a link came up and then failed.
+  notFound(code, { retry, back, reason = 'unseen' }) {
+    const why = {
+      unseen: ['No room at', 'Check the code with the host, and that their lobby is still open.'],
+      blocked: ['Found the room, could not connect', 'The host answered, but your two networks would not let the phones connect directly. Try both on Wi-Fi.'],
+      dropped: ['Connection lost joining', 'The phones connected, then lost the link. Try again.'],
+    }[reason] ?? ['No room at', 'Check the code with the host, and that their lobby is still open.'];
     this.el.dataset.screen = 'searching';
     this.lastScreen = null;           // Same screen name, new state: let it enter.
     this.el.innerHTML = `
       ${header({ back: 'nfBack', title: 'Join a match' })}
       <div class="waiting is-error">
         <div class="err-mark" data-in="stamp">${ico('warn')}</div>
-        <h2 data-in="up">No room at</h2>
+        <h2 data-in="up">${esc(why[0])}</h2>
         <div class="code-tiles bad" data-in="up">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
-        <p data-in="fade">Check the code with the host, and that their lobby is still open.</p>
+        <p data-in="fade">${esc(why[1])}</p>
         <div class="row" data-in="up">
           <button class="btn" data-act="nfBack">${ico('back')}<b>Back</b></button>
           <button class="btn is-primary" data-sound="confirm" data-act="nfRetry">${ico('rejoin')}<b>Try again</b></button>
