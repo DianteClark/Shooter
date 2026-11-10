@@ -225,6 +225,11 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         ${playerBanner(mvp.id, mvp.name, { size: 168, sub: `${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${matchScore(mvp)} pts` })}
       </div>` : '';
   const modeName = MODES[data.modeId ?? data.mode]?.name ?? '';
+  // Challenges and Pro challenges get a card of their own, so Rematch and Menu always keep their column. A single row
+  // would leave that card nearly empty, so one row sits over the buttons instead, where it fits on every phone.
+  const progress = challengeStrip(data.challenges) + proProgressHtml(data.proProgress);
+  const progressRows = Math.min(3, data.challenges?.length ?? 0) + Math.min(2, data.proProgress?.length ?? 0);
+  const progCard = progressRows > 1;
 
   menu.el.innerHTML = `
     <div class="rs" data-outcome="${outcome}" style="--tone:${tone}">
@@ -235,7 +240,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
       <div class="rb-pair">${ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
-      <div class="rs-cards">
+      <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>
           <div class="fk-cap">${fk ? `<small>Final kill</small><b>${esc(fk.byName)}</b><span>on ${esc(fk.targetName)}</span><em>${art(fk.weapon, 10)}${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}</em>` : '<small>Final kill</small><span>The match ended without one</span>'}</div>
@@ -251,9 +256,9 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
           <h4>Weapons</h4>
           ${weapons.length ? `<div class="wp-list">${weapons.map(weaponRow).join('')}</div>` : '<small class="empty">No weapon kills this match</small>'}
         </div>
+        ${progCard ? `<div class="rs-card prog-card">${progress}</div>` : ''}
         <div class="res-choice">
-          ${challengeStrip(data.challenges)}
-          ${proProgressHtml(data.proProgress)}
+          ${progCard ? '' : progress}
           <button class="rs-btn primary" data-act="resRematch">${esc(data.rematchLabel)}</button>
           <button class="rs-btn" data-act="resMenu">Menu</button>
           <p class="res-note">${esc(data.note ?? '')}</p>

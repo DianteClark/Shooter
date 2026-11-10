@@ -26,7 +26,9 @@
   /* --env-* are the device's insets; --s* what a layer actually keeps clear. Menus rebind --s* in their own scale. */
   --env-t: env(safe-area-inset-top, 0px);
   --env-r: env(safe-area-inset-right, 0px);
-  --env-b: env(safe-area-inset-bottom, 0px);
+  /* --cover-b: the strip at the bottom that the browser reports as covered but the app still fills (js/ui/viewport.js). */
+  --cover-b: 0px;
+  --env-b: calc(env(safe-area-inset-bottom, 0px) + var(--cover-b));
   --env-l: env(safe-area-inset-left, 0px);
   --st: var(--env-t);
   --sr: var(--env-r);
@@ -41,15 +43,21 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-html, body {
-  position: fixed; left: 0; top: 0; width: var(--app-w); height: var(--app-h); overflow: hidden; overscroll-behavior: none;
+/* The app is sized to the measured visible area and nothing in it is position:fixed: iOS 26 clips fixed boxes to the
+   short viewport it reports, which left a band along the bottom. body is the containing block for everything. */
+html {
+  width: var(--app-w); height: var(--app-h); overflow: hidden; overscroll-behavior: none;
+  background: var(--ballast); touch-action: none;
+}
+body {
+  position: absolute; left: 0; top: 0; width: var(--app-w); height: var(--app-h); overflow: hidden; overscroll-behavior: none;
   background: var(--ballast); color: var(--chalk);
   font-family: var(--plate-face); letter-spacing: .05em;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: none; -webkit-text-size-adjust: 100%;
 }
-canvas#game { position: fixed; left: 0; top: 0; width: var(--app-w); height: var(--app-h); display: block; touch-action: none; }
-#ui { position: fixed; left: 0; top: 0; width: var(--app-w); height: var(--app-h); overflow: hidden; touch-action: none; }
+canvas#game { position: absolute; left: 0; top: 0; width: var(--app-w); height: var(--app-h); display: block; touch-action: none; }
+#ui { position: absolute; left: 0; top: 0; width: var(--app-w); height: var(--app-h); overflow: hidden; touch-action: none; }
 button {
   font: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; cursor: pointer;
   touch-action: manipulation; -webkit-touch-callout: none;
@@ -935,7 +943,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .killcam-on .death-count { position: absolute; right: 2px; top: 4px; width: 32px; height: 32px; font-size: 18px; }
 .killcam-on .death-timer small { margin: 0; order: 1; }
 .killcam-banner {
-  position: fixed; left: 50%; top: calc(var(--st) + 52px); z-index: var(--z-overlay); pointer-events: none;
+  position: absolute; left: 50%; top: calc(var(--st) + 52px); z-index: var(--z-overlay); pointer-events: none;
   display: flex; align-items: center; gap: 10px; padding: 4px 18px 5px 10px; opacity: 0; transform: translateX(-50%) translateY(-6px);
   background: linear-gradient(90deg, rgba(16,20,26,.94), rgba(16,20,26,.84)); box-shadow: var(--hud-edge);
   transition: opacity var(--dur-fast), transform var(--dur-base) var(--ease-out);
@@ -951,7 +959,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .kc-who { font: var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .kc-who:empty { display: none; }
 .killcam-skip {
-  position: fixed; right: calc(var(--env-r) + 14px); bottom: calc(var(--env-b) + 14px); z-index: var(--z-overlay); pointer-events: auto; display: none;
+  position: absolute; right: calc(var(--env-r) + 14px); bottom: calc(var(--env-b) + 14px); z-index: var(--z-overlay); pointer-events: auto; display: none;
   min-width: 76px; height: 44px; padding: 0 16px; font: 400 15px/1 var(--f-stencil); letter-spacing: .1em; color: var(--c-chalk);
   background: var(--face-steel-hi); box-shadow: var(--bevel-hi), var(--edge-hi);
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
@@ -982,6 +990,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 #ui .rs.in > .rs-cards > :nth-child(2) { animation-delay: 200ms; }
 #ui .rs.in > .rs-cards > :nth-child(3) { animation-delay: 240ms; }
 #ui .rs.in > .rs-cards > :nth-child(4) { animation-delay: 280ms; }
+#ui .rs.in > .rs-cards > :nth-child(5) { animation-delay: 320ms; }
 #ui .rs.in .rb-row { animation: rs-row var(--dur-base) var(--ease-out) both; animation-delay: calc(120ms + var(--i) * var(--stagger)); }
 @keyframes rs-rail { from { opacity: 0; transform: translate3d(-40px,0,0); } }
 @keyframes rs-up { from { opacity: 0; transform: translate3d(0,14px,0); } }
@@ -1065,8 +1074,24 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 #ui .rb-row.me { background: linear-gradient(90deg, rgba(242,166,59,.26), rgba(242,166,59,.05)); box-shadow: inset 3px 0 0 var(--c-sodium); }
 #ui .rb-row.mvp .rb-name > b { color: var(--c-gold); }
 
-/* Cards row. */
-#ui .rs-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1.15fr) minmax(0, 1fr) minmax(120px, 150px); gap: 6px; }
+/* Cards row. It takes exactly the height left under the tables (one row, never taller than its box), and every card
+   spreads its contents over that height: the screen is laid out to the measured viewport with nothing cut off at the
+   bottom and no empty plate. The tightest case is 390 design px high (844x390, 932x430, 956x440), which leaves the row
+   about 172 px; Ground War with challenges and Pro challenges is the fullest. */
+#ui .rs-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1.15fr) minmax(0, 1fr) minmax(120px, 150px); grid-template-rows: minmax(0, 1fr); gap: 6px; }
+#ui .rs-cards.has-prog { grid-template-columns: minmax(0, 112px) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 1.15fr) minmax(104px, 120px); }
+/* Five columns are narrower: the XP total steps down a size so the level stays beside it, and each weapon row puts its
+   gain under the bar instead of beside the name, so names are not cut short. */
+#ui .has-prog .xp-sum { font-size: 25px; }
+#ui .has-prog .wp { gap: 6px; }
+#ui .has-prog .wp-icon { width: 28px; }
+#ui .has-prog .wp-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 6px; row-gap: 2px; }
+#ui .has-prog .wp-line { display: contents; }
+#ui .has-prog .wp-line b { grid-row: 1; grid-column: 1; }
+#ui .has-prog .wp-line .wlv { grid-row: 1; grid-column: 2; }
+#ui .has-prog .wp-body > .rs-bar { grid-row: 2; grid-column: 1 / -1; }
+#ui .has-prog .wp-body > small { grid-row: 3; grid-column: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .has-prog .wp-gain { grid-row: 3; grid-column: 2; margin-left: 0; font-size: 9px; line-height: 1; }
 #ui .rs-card {
   position: relative; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 3px; padding: 7px 10px 8px;
   background: var(--face-steel); box-shadow: var(--bevel), var(--edge);
@@ -1089,7 +1114,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 #ui .xp-lv { display: flex; align-items: center; gap: 5px; line-height: 0; }
 #ui .xp-lvn { display: inline-block; font: 400 17px/1 var(--f-stencil); color: var(--c-chalk); }
 #ui .xp-card.levelled .xp-lvn { color: var(--c-go); }
-#ui .xp-lines { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 1px; padding-top: 2px; }
+#ui .xp-lines { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: space-evenly; gap: 1px; padding-top: 2px; }
 #ui .xp-row { display: flex; justify-content: space-between; font: var(--fs-caption)/14px var(--f-plate); letter-spacing: .03em; color: var(--c-haze); border-bottom: 1px solid var(--c-line); }
 #ui .xp-row b { font-weight: 400; color: var(--c-chalk); }
 #ui .rs.in .xp-row { animation: rs-row var(--dur-base) var(--ease-out) both; animation-delay: calc(360ms + var(--i) * 60ms); }
@@ -1099,7 +1124,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 #ui .xp-next { font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
 #ui .res-prestige { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-gold); }
 
-#ui .wp-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 5px; padding-top: 2px; }
+#ui .wp-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: space-evenly; gap: 5px; padding-top: 2px; }
 #ui .wp { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 #ui .wp-icon { flex: none; width: 36px; display: grid; place-items: center; color: var(--c-chalk); }
 #ui .wp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -1112,8 +1137,18 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 #ui .wp-gain { margin-left: auto; font-size: var(--fs-micro); color: var(--c-go); }
 #ui .wp small { font: 9px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); }
 
-#ui .res-choice { display: flex; flex-direction: column; gap: 6px; justify-content: flex-end; }
-#ui .res-choice .rs-btn.primary { min-height: 52px; }
+#ui .res-choice { min-height: 0; display: flex; flex-direction: column; gap: 6px; justify-content: flex-end; }
+/* Rematch takes the column's spare height, up to a generous plate; Menu stays a plain 44 px button under it. */
+#ui .res-choice .rs-btn.primary { flex: 1 1 52px; min-height: 52px; max-height: 92px; }
+#ui .res-note:empty { display: none; }
+
+/* Challenges and Pro challenges, one card. Labels keep to one line where the row is tight and get two where the card is
+   tall enough (the SE's 427 design px). */
+#ui .prog-card { gap: 0; justify-content: space-evenly; padding: 6px 8px 7px; container-type: size; }
+#ui .prog-card .rs-ch, #ui .prog-card .rs-pro { gap: 4px; padding: 0; background: none; box-shadow: none; }
+#ui .prog-card .rs-pro { padding-top: 6px; margin-top: 2px; box-shadow: inset 0 1px 0 var(--c-line); }
+#ui .prog-card .rs-ch-row b { -webkit-line-clamp: 1; }
+@container (min-height: 196px) { #ui .prog-card .rs-ch-row b { -webkit-line-clamp: 2; } }
 #ui .res-note { font: var(--fs-caption)/1.2 var(--f-body); color: var(--c-sodium); min-height: 14px; }
 
 /* Ceremonies: level up and each unlock take the whole screen over the results. */

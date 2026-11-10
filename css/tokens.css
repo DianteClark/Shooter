@@ -249,7 +249,7 @@
 /* Impact flash and screen wipe, also driven by motion.js. */
 .fx-flash { position: absolute; inset: 0; pointer-events: none; background: var(--fx-color, var(--c-white)); opacity: 0; z-index: 3; }
 .fx-wipe {
-  position: fixed; inset: 0 -30% 0 -30%; z-index: var(--z-transition); pointer-events: none;
+  position: absolute; inset: 0 -30% 0 -30%; z-index: var(--z-transition); pointer-events: none;
   background: linear-gradient(90deg, transparent 0, var(--c-night) 12%, var(--c-night) 88%, transparent 100%);
   transform: translateX(-110%); will-change: transform;
 }

@@ -124,6 +124,8 @@ const SCENES = {
   'results-win': menuScene('Results: win', ({ menu, results }) => menu.results(results('win'), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
   'results-loss': menuScene('Results: loss', ({ menu, results }) => menu.results(results('loss'), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
   'results-draw': menuScene('Results: draw, long names', ({ menu, results }) => menu.results(results('draw', true), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
+  // The tallest results screen: Ground War (16 a side), five XP lines, three weapons, challenges and Pro challenges.
+  'results-gw': menuScene('Results: Ground War loss, challenges, Pro', ({ menu, results }) => menu.results(results('loss', false, true), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
   'install': menuScene('Install prompt', ({ menu }) => { menu.title({}); menu.installPrompt(noop); }),
 
   'hud-live': hudScene('Live, TDM', () => {}),
@@ -205,24 +207,26 @@ async function menuFrame(scene, ui) {
   const menu = new Menu(ui);
   menu.show?.();
   const cache = {};
-  for (const o of ['win', 'loss', 'draw']) if (scene.label.toLowerCase().includes(o)) cache[o] = await fakeResults(o, scene.label.includes('long'));
+  for (const o of ['win', 'loss', 'draw']) if (scene.label.toLowerCase().includes(o)) cache[o] = await fakeResults(o, scene.label.includes('long'), scene.label.includes('Ground War'));
   await scene.fn({ menu, results: o => cache[o] });
 }
 
 // A results payload shaped like main.js's, with XP, level, weapon progress and unlocks from the real Progress
 // (applied to the in-memory save, so a level-up and its unlocks show).
-async function fakeResults(outcome, long) {
+async function fakeResults(outcome, long, groundWar = false) {
   const { Progress, matchScore } = await import('./js/ui/progress.js');
-  const roster = Array.from({ length: 12 }, (_, i) => ({
-    id: i === 0 ? 'me' : 'p' + i, name: long && i % 3 === 1 ? LONG : NAMES[i], team: i < 6 ? 0 : 1, isBot: i > 2,
-    kills: [24, 15, 12, 9, 6, 2, 18, 14, 10, 8, 5, 1][i], deaths: [8, 11, 9, 12, 13, 15, 12, 10, 14, 9, 11, 16][i],
+  const side = groundWar ? 16 : 6;
+  const roster = Array.from({ length: side * 2 }, (_, i) => ({
+    id: i === 0 ? 'me' : 'p' + i, name: long && i % 3 === 1 ? LONG : NAMES[i % NAMES.length] + (i >= NAMES.length ? i : ''), team: i < side ? 0 : 1, isBot: i > 2,
+    kills: groundWar ? 40 - i % 16 * 2 : [24, 15, 12, 9, 6, 2, 18, 14, 10, 8, 5, 1][i], deaths: groundWar ? 9 + i % 11 : [8, 11, 9, 12, 13, 15, 12, 10, 14, 9, 11, 16][i],
     assists: i % 5, head: i % 4, score: 3000 - i * 210, captures: i % 3, defends: i % 2, confirms: i % 4, denies: i % 3,
     badge: { prestige: i % 4, level: 5 + i * 4 }, weapon: ['ar', 'smg', 'sniper', 'lmg', 'shotgun', 'dmr'][i % 6],
   }));
   const lines = [['Match played', 200], ['Kills x24', 2400], ['Headshots x6', 150], ['Medals x5', 125]];
+  if (groundWar) lines.splice(3, 0, ['Assists x3', 150]);
   if (outcome === 'win') lines.push(['Win', 500]); else if (outcome === 'draw') lines.push(['Draw', 200]);
   const total = lines.reduce((a, l) => a + l[1], 0);
-  const applied = Progress.applyMatch({ xp: total + 6000, weapons: { lmg: { xp: 2600, kills: 18, head: 4 }, pistol: { xp: 400, kills: 6 } } });
+  const applied = Progress.applyMatch({ xp: total + 6000, weapons: { lmg: { xp: 2600, kills: 18, head: 4 }, pistol: { xp: 400, kills: 6 }, ...(groundWar ? { smg: { xp: 900, kills: 7 } } : {}) } });
   let mvp = roster[0];
   for (const p of roster) if ((matchScore?.(p) ?? p.score) > (matchScore?.(mvp) ?? mvp.score)) mvp = p;
   return {
@@ -231,6 +235,20 @@ async function fakeResults(outcome, long) {
     xp: { total, lines }, level: applied.level, weapons: applied.weapons, unlocks: applied.unlocks,
     finalKill: { weapon: 'sniper', camo: 'none', byName: roster[0].name, targetName: roster[7].name },
     rematchLabel: 'Rematch', note: '',
+    // A win shows the common case of a single challenge row, which sits over the buttons rather than in its own card.
+    ...(outcome === 'win' ? { challenges: [{ id: 'c0', label: 'Play 2 Free-for-All matches', icon: 'mode:ffa', before: 0, value: 1, goal: 2, fresh: false, xp: 800, period: 'daily' }] } : {}),
+    ...(groundWar ? {
+      mode: 'gwtdm', modeId: 'gwtdm', scores: [240, 250],
+      challenges: [
+        { id: 'c1', label: 'Get 200 kills', icon: 'ui:skull', before: 16, value: 40, goal: 200, fresh: false, xp: 2000, period: 'weekly' },
+        { id: 'c2', label: 'Get 90 kills with SMGs', icon: 'smg', before: 23, value: 30, goal: 90, fresh: false, xp: 1500, period: 'weekly' },
+        { id: 'c3', label: 'Get 50 headshot kills in one long week of play', icon: 'headshot', before: 11, value: 24, goal: 50, fresh: true, xp: 1200, period: 'daily' },
+      ],
+      proProgress: [
+        { perk: 'marathon', name: 'Adrenaline', done: false, steps: [{ before: 3, value: 7, goal: 10 }, { before: 0, value: 4, goal: 6 }] },
+        { perk: 'scavenger', name: 'Scavenger', done: true, steps: [{ before: 9, value: 10, goal: 10 }, { before: 5, value: 6, goal: 6 }] },
+      ],
+    } : {}),
   };
 }
 

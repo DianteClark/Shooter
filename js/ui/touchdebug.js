@@ -5,21 +5,28 @@
 //  - the controls' state line (sticks, throw, enabled, focused element);
 //  - the last 12 raw touch events (type, changedTouches ids, touches ids, target), with runs of touchmoves folded into
 //    one row, and the controls' own decisions (let go, picked up, released) and page signals (hidden, blur, focus,
-//    selection, gesture, error) between them.
+//    selection, gesture, error) between them;
+//  - every height the viewport was measured from (js/ui/viewport.js): innerWidth/Height, documentElement.client*,
+//    visualViewport, screen, 100lvh/svh/dvh, the safe-area insets, and which one the app was sized to. This is what the
+//    owner screenshots when the game does not reach the bottom edge.
 // Cheap: listeners only record numbers into a ring; the panel repaints at most ten times a second, by textContent on
 // rows built once. It never takes a touch (pointer-events: none) and sits on <body>, outside every screen's DOM.
 
+import { viewportReport } from './viewport.js';
+
 const ROWS = 12;
+const VIEW_ROWS = 5;
 const PAINT_MS = 100;
 
 const CSS = `
-.touchdebug { position: fixed; left: calc(env(safe-area-inset-left) + 6px); top: calc(env(safe-area-inset-top) + 46px);
+.touchdebug { position: absolute; left: calc(env(safe-area-inset-left) + 6px); top: calc(env(safe-area-inset-top) + 46px);
   z-index: 90; pointer-events: none; width: 372px; padding: 4px 6px 5px; background: rgba(6,8,11,.82);
   box-shadow: inset 0 0 0 1px rgba(242,166,59,.55); font: 10px/12px ui-monospace, Menlo, monospace; letter-spacing: 0;
   color: #e7eae4; white-space: pre; overflow: hidden; contain: layout paint; -webkit-user-select: none; user-select: none; }
 .touchdebug[hidden] { display: none; }
 .touchdebug .td-h { color: #f2a63b; }
 .touchdebug .td-f { color: #9fe3ff; }
+.touchdebug .td-v { color: #b8f0c0; }
 .touchdebug .td-row.cancel, .touchdebug .td-f.gone { color: #ff6d5e; }
 .touchdebug .td-row.note { color: #f2a63b; }
 .touchdebug .td-row.sig { color: #c9b8ff; }
@@ -102,6 +109,7 @@ export class TouchDebug {
     const line = cls => { const d = document.createElement('div'); d.className = cls; el.appendChild(d); return d; };
     this.head = line('td-h');
     this.state = line('td-h');
+    this.viewRows = Array.from({ length: VIEW_ROWS }, () => line('td-v'));
     this.fingerRows = Array.from({ length: 5 }, () => line('td-f'));
     this.rows = Array.from({ length: ROWS }, () => line('td-row'));
     document.body.appendChild(el);
@@ -158,7 +166,10 @@ export class TouchDebug {
     const th = c.throw ? `${c.throw.slot}#${c.throw.id}` : '-';
     const lost = [...c.lost.keys()].join(' ') || '-', spare = [...c.spare.keys()].join(' ') || '-';
     const focus = document.activeElement && document.activeElement !== document.body ? name(document.activeElement) : 'body';
-    this.state.textContent = `L ${c.left.id ?? '-'}  R ${c.right.id ?? '-'}  throw ${th}  spare ${spare}  lost ${lost}  ${c.enabled ? 'live' : 'OFF'}  focus ${focus}`;
+    this.state.textContent = `L ${c.left.id ?? '-'}${c.hold ? ' KEPT' : ''}  R ${c.right.id ?? '-'}  throw ${th}  spare ${spare}  lost ${lost}  ${c.enabled ? 'live' : 'OFF'}  focus ${focus}`;
+    let vr = [];
+    try { vr = viewportReport(); } catch (err) { vr = [`viewport: ${err?.message ?? err}`]; }
+    this.viewRows.forEach((row, k) => { row.textContent = vr[k] ?? ''; });
     const shown = new Set();
     let i = 0;
     for (const f of this.last) {

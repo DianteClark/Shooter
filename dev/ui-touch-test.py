@@ -18,6 +18,13 @@ touchcancel or touchend (the thumb comes back as a new touch and must get the st
 any more must stop walking), a touch target removed from the page under a held finger (WebKit then sends that finger's
 events to the detached node only), a thumb that landed on a HUD tap target that has since been hidden (the respawn
 picker), a focused text field left over from a menu, and the touch debug overlay itself.
+
+Part 4 (V8) runs with the match loop live, in the training match and in a normal solo match, at 932x430: the owner's
+recording of a grenade throw. The move thumb holds still at full sprint, Frag is tapped (and, separately, dragged to
+the screen edge) and released, and one frame (16 ms of event time) later iOS cancels the thumb that is still down. The
+stick must stay held and sprinting, the grenade must still go, a new thumb on the left must take the stick at once,
+and a kept stick that nothing confirms must be let go of after Controls' HOLD_MAX_MS. A touchcancel that follows no
+release (a system gesture) still lets go at once.
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -252,6 +259,10 @@ async def main():
                 await pg.screenshot(path=f'/tmp/touchdebug-{vw}x{vh}.png')
                 await S('touchend', [T], [[11, LX + 60, LY]]); await S('touchend', [[11, LX + 60, LY]], [])
                 await ctx.close()
+
+            print('V8: live match, iOS cancels the still move thumb right after a grenade release')
+            for mode in ('training', 'solo'):
+                await live_cases(browser, mode, failures, errors)
             await browser.close()
     finally:
         srv.terminate()
@@ -260,6 +271,120 @@ async def main():
         print('FAILED:', *failures, sep='\n  ')
         sys.exit(1)
     print('PASS')
+
+
+LIVE = """(() => { const c = window.__game.controls, m = window.__game.app.match;
+  return { id: c.left.id, kept: !!c.hold, active: c.moveEl.classList.contains('active'), sprint: c.moveEl.classList.contains('sprint'),
+    mx: +m.resolvedInput.mx.toFixed(2), frags: c.equip.lethal.left, thrown: window.__thrown }; })()"""
+
+
+async def live_cases(browser, mode, failures, errors):
+    vw, vh = 932, 430
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit&touchdebug=1')
+    await pg.wait_for_timeout(800)
+    await pg.evaluate("window.__game.Progress.name='Tester'")
+    await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    if mode == 'training':
+        await pg.evaluate('window.__game.tutorial()')
+    else:
+        await pg.locator('[data-act="solo"]').first.click()
+    await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=40000)
+    # Count throws the sim accepts, from the match's own event stream.
+    await pg.evaluate("""(() => { window.__thrown = 0; const m = window.__game.app.match;
+      m.awards.observe(ev => { for (const e of ev) if (e.t === 'throw' && e.id === m.localId) window.__thrown++; }); })()""")
+    cdp = await ctx.new_cdp_session(pg)
+
+    async def touch(kind, pts, ts=None):
+        msg = {'type': kind, 'touchPoints': [{'x': x, 'y': y, 'id': i} for i, (x, y) in pts.items()]}
+        if ts is not None: msg['timestamp'] = ts      # Event time, so "one frame later" holds however slow the page runs.
+        await cdp.send('Input.dispatchTouchEvent', msg)
+
+    def check(name, ok, s):
+        print(f'  {mode:<8} {name:<52} {"ok" if ok else "FAIL"} {s}')
+        if not ok: failures.append(f'{mode} {name}: {s}')
+
+    rects = await pg.evaluate('JSON.parse(JSON.stringify(window.__game.controls.rects))')
+    leth = ((rects['lethal']['x0'] + rects['lethal']['x1']) / 2, (rects['lethal']['y0'] + rects['lethal']['y1']) / 2)
+    LX, LY = vw * 0.15, vh * 0.62
+    state = lambda: pg.evaluate(LIVE)
+
+    async def sprint():
+        pts = {1: (LX, LY)}
+        await touch('touchStart', pts)
+        for k in range(6):
+            pts[1] = (LX + 14 * (k + 1), LY)
+            await touch('touchMove', pts)
+            await pg.wait_for_timeout(16)
+        await pg.wait_for_timeout(300)                # The thumb now holds perfectly still: no more moves.
+        return pts
+
+    async def throw(pts, drag):
+        # Frags are the host sim's to count; training refills them only on its own throw step.
+        await pg.evaluate('(() => { const m = window.__game.app.match, me = m.sim.byId.get(m.localId); if (me?.ps) me.ps.lethalLeft = 2; })()')
+        before = (await state())['thrown']
+        pts[3] = leth
+        await touch('touchStart', pts)
+        if drag:
+            for k in range(6):
+                pts[3] = (leth[0] + drag[0] * (k + 1) / 6, leth[1] + drag[1] * (k + 1) / 6)
+                await touch('touchMove', pts)
+                await pg.wait_for_timeout(16)
+        else:
+            await pg.wait_for_timeout(70)
+        at = time.time()
+        await touch('touchEnd', {3: pts.pop(3)}, at)
+        return at, before
+
+    for name, drag in (('quick tap Frag', None), ('drag Frag to the screen edge', (vw - leth[0] - 2, 12))):
+        pts = await sprint()
+        at, before = await throw(pts, drag)
+        await touch('touchCancel', {}, at + 0.016)    # iOS takes the still thumb one frame after the release.
+        await pg.wait_for_timeout(450)
+        s = await state()
+        check(f'{name}, thumb cancelled 16 ms later: kept', s['id'] == 1 and s['kept'] and s['active'] and s['sprint'] and s['mx'] > 0.9, s)
+        check(f'{name}: the grenade still went', s['thrown'] > before, s)
+        # The thumb lifts and lands again: the new touch takes the stick at once, with nothing in between.
+        await touch('touchStart', {7: (LX + 20, LY)})
+        await touch('touchMove', {7: (LX + 90, LY)})
+        await pg.wait_for_timeout(120)
+        s = await state()
+        check(f'{name}: a new thumb takes the kept stick', s['id'] == 7 and not s['kept'] and s['mx'] > 0.9, s)
+        await touch('touchEnd', {})
+        await pg.wait_for_timeout(200)
+        check(f'{name}: all lifted', (await state())['id'] is None, await state())
+
+    # A kept stick that nothing ever confirms is let go of.
+    pts = await sprint()
+    at, _ = await throw(pts, None)
+    await touch('touchCancel', {}, at + 0.016)
+    await pg.wait_for_timeout(3400)
+    s = await state()
+    check('kept stick with no sign of the thumb is let go (HOLD_MAX_MS)', s['id'] is None and not s['kept'] and s['mx'] == 0, s)
+
+    # Baseline: a release with no cancel after it never touches the stick.
+    pts = await sprint()
+    at, before = await throw(pts, (-120, 40))
+    await pg.wait_for_timeout(400)
+    s = await state()
+    check('release, no cancel: stick untouched, grenade thrown', s['id'] == 1 and not s['kept'] and s['mx'] > 0.9 and s['thrown'] > before, s)
+    await touch('touchEnd', {})
+    await pg.wait_for_timeout(200)
+
+    # A touchcancel that follows no release is a system gesture: the stick goes at once.
+    pts = await sprint()
+    await pg.wait_for_timeout(400)
+    await touch('touchCancel', {})
+    await pg.wait_for_timeout(150)
+    s = await state()
+    check('touchcancel with no release before it lets go', s['id'] is None and not s['kept'], s)
+    await pg.screenshot(path=f'/tmp/touch-live-{mode}.png')
+    await ctx.close()
 
 
 asyncio.run(main())
