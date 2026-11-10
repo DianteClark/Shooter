@@ -231,6 +231,15 @@
 .lamp { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-round); background: var(--lamp, var(--c-sodium)); box-shadow: 0 0 8px var(--lamp, var(--c-sodium)); }
 .rule { height: 1px; background: linear-gradient(90deg, var(--c-line-hi), transparent); }
 
+/* Weapon level plus weapon-prestige rank (widgets.weaponLevelHtml): one unbreakable unit that never wraps or overlaps.
+   Sizes follow the host's font-size, so the same markup works in a 9px card corner and a 16px hero. */
+.wlv { display: inline-flex; flex: none; align-items: center; gap: .4em; white-space: nowrap; vertical-align: middle; line-height: 1; }
+.wlv .wlv-n { font-variant-numeric: tabular-nums; }
+.wlv .wlv-p {
+  position: static; display: inline-block; flex: none; font: 400 .82em/1 var(--f-stencil); font-style: normal; letter-spacing: .04em;
+  padding: .2em .38em .14em; background: var(--c-gold); color: var(--c-night); text-shadow: none;
+}
+
 /* Light sweep: motion.js `sweep(el)` adds this child and moves it. Clipped by the host's clip-path or overflow. */
 .fx-sweep {
   position: absolute; inset: -20% auto -20% 0; width: 45%; pointer-events: none; z-index: 2;

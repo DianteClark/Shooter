@@ -6,7 +6,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
 import { matchScore } from './progress.js';
-import { esc, hex, badgeMark, badgeTag, SLOT_LABEL } from './widgets.js';
+import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, ROMAN } from './widgets.js';
 import { kindLabel } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
@@ -214,7 +214,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="wp" style="--i:${i}">
         <span class="wp-icon">${art(w.weapon, 14)}</span>
         <div class="wp-body">
-          <div class="wp-line"><b>${esc(w.name)}</b><span class="wp-lv" data-wl="${i}">Lv ${w.levelBefore}</span><span class="wp-gain">+${w.xpGained}</span></div>
+          <div class="wp-line"><b>${esc(w.name)}</b><span class="wlv"><span class="wp-lv wlv-n" data-wl="${i}">Lv ${w.levelBefore}</span>${w.prestige ? `<em class="wlv-p">${ROMAN[w.prestige] ?? w.prestige}</em>` : ''}</span><span class="wp-gain">+${w.xpGained}</span></div>
           <i class="rs-bar"><i class="rs-fill wp-fill" data-wf="${i}" style="transform:scaleX(0)"></i></i>
           <small data-wn="${i}">${w.maxed ? 'Max level' : `${Math.round(w.into)} / ${w.span} to Lv ${w.level + 1}`}</small>
         </div>

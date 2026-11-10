@@ -377,7 +377,7 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 /* Score bar: two team plates and the clock between them, the clock hanging lower like a station sign. */
 .scorebar { position: absolute; top: calc(var(--st) + 5px); left: 50%; transform: translateX(-50%); display: flex; align-items: flex-start; gap: 3px; pointer-events: auto; }
 .sb-side {
-  position: relative; width: 136px; height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 7px; overflow: hidden;
+  position: relative; width: 146px; height: 34px; padding: 0 12px; display: flex; align-items: center; gap: 7px; overflow: hidden;   /* Room for a team name beside a 3-digit objective score. */
   background: var(--hud-glass); box-shadow: var(--hud-edge);
 }
 .sb-side.mine { clip-path: polygon(14px 0, 100% 0, 100% 100%, 0 100%); padding-left: 16px; }
@@ -401,6 +401,8 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 .sb-time b.urgent { color: var(--c-sodium); }
 .sb-goal { font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
 .scorebar.pressed .sb-time, .scorebar.pressed .sb-side { filter: brightness(1.3); }
+/* An open scoreboard partly covers the throw buttons on narrower phones: they step back rather than poke out. */
+body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 
 /* Minimap: a night plate with sodium corner brackets, like a framed yard diagram on a signal-box wall. */
 .minimap {
@@ -631,7 +633,14 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
               radial-gradient(ellipse 80% 70% at center, transparent 50%, rgba(80,10,6,.35));
 }
 .death.show { display: block; }
-.death-top { position: absolute; left: 50%; top: calc(var(--st) + 72px); transform: translateX(-50%); display: flex; align-items: flex-start; gap: 10px; }
+/* Everything lives in the top half: the thumbs rest in both bottom quadrants and the button cluster, so nothing there
+   can be tapped. Top to bottom: the Next life line (the only tap target until Change opens the picker), then the
+   killer card and the respawn ring. During a death replay the killer card moves to a compact panel on the right. */
+.death-col {
+  position: absolute; left: calc(max(var(--sl), 12px) + 8px); right: calc(max(var(--sr), 12px) + 8px); top: calc(var(--st) + 50px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.death-top { display: flex; align-items: flex-start; gap: 10px; transition: opacity var(--dur-fast); }
 .death-card {
   position: relative; min-width: 250px; max-width: 360px;
   display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto auto; column-gap: 14px; padding: 8px 18px 9px 16px;
@@ -642,11 +651,11 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 .death-by { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; min-width: 0; margin: 2px 0 4px; }
 .death-by u { font: 11px/1 var(--f-plate); color: var(--c-haze); text-decoration: none; }
 .death-by em { font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); font-style: normal; color: var(--team); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-shadow: 0 0 14px color-mix(in srgb, var(--team) 40%, transparent); }
-.dc-weapon { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding-top: 5px; border-top: 1px solid var(--c-line); }
-.dc-icon { color: var(--c-chalk); }
+.dc-weapon { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; padding-top: 5px; border-top: 1px solid var(--c-line); }
+.dc-icon { flex: none; color: var(--c-chalk); }
 .dc-icon:empty { display: none; }
-.dc-wname { font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; }
-.dc-tags { margin-left: auto; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: pre; }
+.dc-wname { min-width: 0; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dc-tags { flex: none; margin-left: auto; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: pre; }
 .dc-tags.head { color: var(--c-gold); }
 .dc-left { grid-column: 1 / -1; position: relative; margin-top: 6px; height: 14px; display: flex; align-items: center; }
 .dc-left i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transform-origin: left center; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 55%, transparent), color-mix(in srgb, var(--team) 20%, transparent)); }
@@ -657,30 +666,74 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 .dt-arc { fill: none; stroke: var(--c-sodium); stroke-width: 4; stroke-dasharray: 163.4; stroke-dashoffset: 0; stroke-linecap: butt; }
 .death-count { position: relative; height: 64px; display: grid; place-items: center; font: 400 34px/1 var(--f-stencil); color: var(--c-chalk); }
 .death-timer small { font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-top: 3px; text-shadow: var(--text-lift); }
-.picker { position: absolute; left: 0; right: 0; bottom: calc(var(--sb) + 10px); display: flex; justify-content: center; gap: 6px; pointer-events: auto; align-items: center; padding: 0 max(var(--sl), 12px) 0 max(var(--sr), 12px); }
-.picker-label { font: var(--fs-micro)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-right: 4px; width: 40px; text-align: right; }
-.pick {
-  position: relative; flex: 0 1 140px; min-width: 0; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 8px; text-align: left;
-  background: var(--face-steel); box-shadow: var(--bevel), var(--edge);
+
+/* Next life: what the next spawn carries, and the one way to change it. */
+.death-next {
+  order: -1; display: flex; align-items: stretch; max-width: 100%; height: 44px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(42,51,61,.95), rgba(16,20,26,.92)); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium);
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
-.pk-icon { flex: none; color: var(--c-chalk); }
+.dn-now { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 12px; }
+.dn-now > small { flex: none; width: 34px; font: var(--fs-micro)/1.05 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
+.dn-icon { flex: none; color: var(--c-chalk); line-height: 0; }
+.dn-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dn-text b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dn-text small, .pick small { display: flex; align-items: center; gap: 6px; min-width: 0; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; }
+.dn-change {
+  flex: none; display: flex; align-items: center; gap: 6px; padding: 0 14px 0 12px; pointer-events: auto; touch-action: manipulation;
+  font: 400 14px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium-ink); background: var(--face-sodium); box-shadow: var(--bevel-sodium);
+}
+.dn-change:active { filter: brightness(1.2); }
+.dn-change:active b { transform: translateY(1px); }
+.death.picking .death-top { opacity: .2; }
+
+/* The picker: opened from Change, along the top edge, over the killer card. */
+.picker {
+  position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); display: none; z-index: 1;
+  width: min(720px, calc(100% - 2 * max(var(--sl), var(--sr), 12px) - 16px)); flex-direction: column; gap: 6px; padding: 7px 8px 8px; pointer-events: auto;
+  background: linear-gradient(180deg, rgba(42,51,61,.98), rgba(16,20,26,.97)); box-shadow: var(--hud-edge), var(--shadow-2), inset 0 2px 0 var(--c-sodium);
+  --cut: var(--cut-md); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.death.picking .picker { display: flex; animation: picker-in .2s var(--ease-out) both; }
+@keyframes picker-in { from { opacity: 0; transform: translateX(-50%) translateY(-8px); } }
+.pk-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding-left: 4px; }
+.pk-head b { flex: none; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium); }
+.pk-head small { min-width: 0; font: var(--fs-caption)/1.1 var(--f-body); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-close { flex: none; margin-left: auto; width: 44px; height: 30px; display: grid; place-items: center; color: var(--c-chalk); background: var(--face-steel-hi); box-shadow: var(--bevel-hi), var(--edge); touch-action: manipulation; --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.pk-close:active { transform: scale(.94); }
+.pk-row { display: flex; gap: 6px; }
+.pick {
+  position: relative; flex: 1 1 0; min-width: 0; height: 62px; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; padding: 0 9px; text-align: left; touch-action: manipulation;
+  background: var(--face-steel); box-shadow: var(--bevel), var(--edge); transition: transform var(--dur-instant);
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.pick:active { transform: scale(.96); }
+/* Name on its own line at full width; under it the primary's silhouette, name and level. */
+.pick > b { display: block; padding-right: 10px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pk-icon { flex: none; color: var(--c-chalk); line-height: 0; }
 .pk-icon:empty { display: none; }
-.pk-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.pick b { font: 400 14px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pick small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-gun { display: block !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dn-text small .wlv, .pk-line .wlv { flex: none; }
 .pick.on { background: var(--face-sodium); color: var(--c-sodium-ink); box-shadow: var(--bevel-sodium); }
-.pick.on small, .pick.on .pk-icon { color: rgba(42,26,6,.75); }
+.pick.on small, .pick.on .pk-icon { color: rgba(42,26,6,.78); }
 .pick.on::after { content: ''; position: absolute; right: 6px; top: 6px; width: 6px; height: 6px; background: var(--c-sodium-ink); transform: rotate(45deg); }
 .death.show .death-card { animation: death-in .38s var(--ease-snap) both; }
-.death.show .death-timer { animation: death-in .38s .08s var(--ease-snap) both; }
+.death.show .death-timer { animation: fade-in .38s .08s var(--ease-snap) both; }
+.death.show .death-next { animation: pick-in .3s .12s var(--ease-out) both; }
 @keyframes death-in { from { opacity: 0; transform: translateY(-14px) scale(1.06); } }
-.death.show .death-timer { animation-name: fade-in; }
 @keyframes fade-in { from { opacity: 0; } }
-.death.show .pick { animation: pick-in .3s var(--ease-out) both; }
-.death.show .pick:nth-of-type(2) { animation-delay: .04s; } .death.show .pick:nth-of-type(3) { animation-delay: .08s; }
-.death.show .pick:nth-of-type(4) { animation-delay: .12s; } .death.show .pick:nth-of-type(5) { animation-delay: .16s; }
-@keyframes pick-in { from { opacity: 0; transform: translateY(14px); } }
+@keyframes pick-in { from { opacity: 0; transform: translateY(-10px); } }
+
+/* Clear of the kill feed: with entries in it, the column centres in the space beside it (either side, for lefties). */
+.hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 208px); }
+.hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 208px); }
+.killcam-on .hud:has(.feed > *) .death-col { left: calc(max(var(--sl), 12px) + 8px); right: calc(max(var(--sr), 12px) + 8px); }
+
+/* Small phones: the card drops the calling card's extra height so the column stays in the top half. */
+@media (max-height: 400px) {
+  .death-by .ccard { --cw: 200px !important; }
+}
 
 /* End of match: a band right across the screen, in the winner's colour. */
 .endbanner { position: absolute; left: 0; right: 0; top: 32%; display: none; flex-direction: column; align-items: center; padding: 10px 0 14px; z-index: var(--z-overlay); }
@@ -863,8 +916,24 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 
 /* The killcam banner (js/game/killcam.js) takes the row under the score bar. */
 .killcam-on .obj-strip, .killcam-on .obj-meter, .killcam-on .obj-banner, .killcam-on .spectate { visibility: hidden; }
-.killcam-on .death-top { top: calc(var(--st) + 88px); }
-.killcam-on .picker { padding-right: calc(max(var(--sr), 12px) + 96px); }
+/* During a death replay the centre belongs to the replay: the killer card becomes a compact panel on the right, above
+   the button cluster and clear of Skip, and the Next life line sits under the banner, centred in what is left. */
+.killcam-on .death { background: linear-gradient(180deg, rgba(16,20,26,.0) 60%, rgba(16,20,26,.4)); }
+.killcam-on .feed { visibility: hidden; }
+.killcam-on .death-col { top: calc(var(--st) + 88px); padding-right: 212px; }
+.killcam-on .hud.lefty .death-col { padding-right: 0; padding-left: 212px; right: calc(var(--sr) + 140px); }
+.killcam-on .hud.lefty .death-top { right: auto; left: 0; align-items: flex-start; }
+.killcam-on .death-top { position: absolute; right: 0; top: -36px; width: 200px; flex-direction: column; align-items: flex-end; gap: 6px; }
+.killcam-on .death-card { min-width: 0; width: 100%; padding: 6px 10px 7px 12px; }
+.killcam-on .death-by .ccard { --cw: 176px !important; }
+.killcam-on .death-by .ccard .cc-tx b { font-size: 16px; }
+.killcam-on .dc-weapon { flex-wrap: wrap; row-gap: 4px; }
+.killcam-on .dc-wname { font-size: 13px; }
+.killcam-on .dc-tags { flex-basis: 100%; margin-left: 0; }
+.killcam-on .death-timer { width: auto; height: 40px; flex-direction: row; gap: 6px; padding: 0 2px 0 8px; align-items: center; background: var(--hud-glass); box-shadow: var(--hud-edge); }
+.killcam-on .death-timer svg { position: static; width: 32px; height: 32px; order: 2; }
+.killcam-on .death-count { position: absolute; right: 2px; top: 4px; width: 32px; height: 32px; font-size: 18px; }
+.killcam-on .death-timer small { margin: 0; order: 1; }
 .killcam-banner {
   position: fixed; left: 50%; top: calc(var(--st) + 52px); z-index: var(--z-overlay); pointer-events: none;
   display: flex; align-items: center; gap: 10px; padding: 4px 18px 5px 10px; opacity: 0; transform: translateX(-50%) translateY(-6px);
@@ -893,7 +962,7 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
   .intro.show, .in-row, .in-team h3, .in-card, .in-count, .in-tip, .st-tile.pop, .death.show .death-card,
-  .death.show .death-timer, .death.show .pick, .eb-band, .endbanner b, .tbtn-swap.urgent, .vignette.critical .vg-pulse, .board { animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
+  .death.show .death-timer, .death.show .death-next, .death.picking .picker, .eb-band, .endbanner b, .tbtn-swap.urgent, .vignette.critical .vg-pulse, .board { animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
   .medal { animation-name: medal-fade !important; }
   .md-sweep { display: none; }
 }
@@ -1034,9 +1103,10 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 #ui .wp { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 #ui .wp-icon { flex: none; width: 36px; display: grid; place-items: center; color: var(--c-chalk); }
 #ui .wp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-#ui .wp-line { display: flex; align-items: baseline; gap: 6px; font: var(--fs-caption)/1 var(--f-plate); letter-spacing: .03em; }
+#ui .wp-line { display: flex; align-items: center; gap: 6px; font: var(--fs-caption)/1 var(--f-plate); letter-spacing: .03em; }
 #ui .wp-line b { font: 400 13px/1 var(--f-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#ui .wp-lv { display: inline-block; color: var(--c-haze); font-size: var(--fs-micro); }
+#ui .wp-lv { display: inline-block; color: var(--c-haze); }
+#ui .wp-line .wlv { font-size: var(--fs-micro); }
 #ui .wp.up .wp-lv { color: var(--c-go); }
 #ui .wp.up .rs-fill { background: linear-gradient(180deg, #8ff0bb, var(--c-go)); }
 #ui .wp-gain { margin-left: auto; font-size: var(--fs-micro); color: var(--c-go); }

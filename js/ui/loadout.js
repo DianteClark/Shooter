@@ -8,7 +8,7 @@ import { SLOTS, ATTACHMENTS, attachmentsFor } from '../shared/attachments.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { Progress } from './progress.js';
 import { getOperator } from './operators.js';
-import { esc, swatchCss, levelRequirement, SLOT_LABEL, ROMAN, itemMark } from './widgets.js';
+import { esc, swatchCss, levelRequirement, SLOT_LABEL, itemMark, weaponLevelHtml } from './widgets.js';
 import { statBars, weaponFacts } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -26,9 +26,9 @@ const GEAR = {
 };
 
 const gunName = id => WEAPONS[id]?.name ?? id;
-// A weapon's level, with its prestige rank as a separate chip so "Lv 14" and "I" never read as "Lv 141".
-const levelText = id => `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` (${ROMAN[Progress.weaponPrestige(id)]})` : ''}`;
-const levelHtml = id => `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? `<em class="pchip">${ROMAN[Progress.weaponPrestige(id)]}</em>` : ''}`;
+// A weapon's level with its prestige rank as a separate plate (widgets.weaponLevelHtml), so "Lv 14" and "I" never
+// read as "Lv 141" or overlap.
+const levelHtml = id => weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id));
 const owned = id => Progress.isItemUnlocked('weapon', id);
 
 export class LoadoutsScreen {
@@ -276,7 +276,7 @@ export class LoadoutsScreen {
     const kit = this.kitOf(id), current = l[slot];
     const on = id === current;
     const camo = getCamo(Progress.camo(id));
-    a.kicker.textContent = open ? `${categoryOf(id)} / ${levelText(id)}` : levelRequirement(Progress.itemUnlockLevel('weapon', id));
+    a.kicker.innerHTML = open ? `<span>${esc(categoryOf(id))} /</span>${levelHtml(id)}` : esc(levelRequirement(Progress.itemUnlockLevel('weapon', id)));
     a.name.textContent = gunName(id);
     a.sub.textContent = `${SLOT_NAME[slot]} / ${camo.name}`;
     const mine = Object.fromEntries(statBars(current, this.kitOf(current)).map(b => [b.id, b.score]));

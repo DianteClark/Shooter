@@ -134,11 +134,11 @@
 .ar-pic { position: relative; flex: 1; min-height: 0; min-width: 0; }
 .ar-info { flex: none; display: flex; flex-direction: column; gap: 1px; padding: 3px 8px 5px; background: rgba(29,35,43,.5); min-width: 0; }
 .ar-card[data-wide] .ar-info { width: 112px; justify-content: center; padding: 0 10px; }
-.ar-card[data-wide] em { top: 5px; }
+.ar-card[data-wide] > em { top: 5px; }
 .ar-info b { font: 400 17px/1 var(--stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ar-info small { font-size: 9px; color: var(--haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ar-card em { position: absolute; right: 7px; top: 6px; font: 400 11px/1 var(--plate-face); font-style: normal; color: var(--chalk); }
-.ar-card em.lock { color: var(--haze); line-height: 0; }
+.ar-card > em { position: absolute; right: 7px; top: 6px; font: 400 11px/1 var(--plate-face); font-style: normal; color: var(--chalk); }
+.ar-card > em.lock { color: var(--haze); line-height: 0; }
 .ar-card u { position: absolute; left: 7px; top: 6px; text-decoration: none; font: 400 9px/1 var(--plate-face); padding: 2px 4px 1px; background: var(--go); color: var(--ballast); }
 .ar-card.on { outline: 2px solid var(--sodium); outline-offset: -2px; background: radial-gradient(70% 60% at 50% 40%, rgba(242,166,59,.3), transparent 75%), linear-gradient(170deg, #4a4a60, #3a4553 62%, #2f3944); }
 .ar-card.locked .gun-pic.ready { opacity: .42; filter: saturate(.4) brightness(.8); }
@@ -146,7 +146,7 @@
 .ar-spec { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
 .ar-view { position: relative; flex: 1; min-height: 0; overflow: hidden; background: radial-gradient(70% 65% at 50% 55%, rgba(242,166,59,.22), transparent 72%), linear-gradient(168deg, #3a3c52, var(--steel) 56%, #232b34); --cut: 11px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
 .ar-title { position: absolute; z-index: 2; left: 10px; top: 6px; display: flex; flex-direction: column; pointer-events: none; }
-.ar-title em { font: 400 9.5px/1.1 var(--plate-face); font-style: normal; color: var(--sodium); letter-spacing: .08em; }
+.ar-title > em { font: 400 9.5px/1.1 var(--plate-face); font-style: normal; color: var(--sodium); letter-spacing: .08em; }
 .ar-title b { font: 400 27px/1 var(--stencil); text-shadow: 0 2px 6px rgba(0,0,0,.5); }
 .ar-title small { font-size: 9.5px; color: var(--haze); }
 .ar-bars { flex: none; display: flex; flex-direction: column; gap: 1px; padding: 4px 7px; background: rgba(47,57,68,.55); }
@@ -183,7 +183,10 @@
 #ui .ld-hero-tag small { font: 400 var(--fs-micro)/1.2 var(--f-plate); color: var(--c-haze); }
 #ui .ld-camo { font: 400 var(--fs-micro)/1 var(--f-plate); }
 #ui .ld-hero-lv b { display: flex; align-items: center; gap: 4px; font: 400 var(--fs-title)/1 var(--f-stencil); }
-#ui .pchip { font: 400 11px/1 var(--f-stencil); font-style: normal; padding: 2px 4px 1px; background: var(--c-gold); color: var(--c-night); }
+/* Level plus prestige rank (tokens.css .wlv): sized per place so the gold plate stays legible in small rows. */
+#ui .ld-tx .wlv { font-size: 10px; }
+#ui .ar-title .wlv { font-size: 11px; color: var(--c-chalk); }
+#ui .ar-card > em .wlv { font-size: var(--fs-caption); }
 #ui .ld-swap { display: flex; align-items: center; gap: 5px; padding: 4px 8px 3px; background: rgba(16,20,26,.7); box-shadow: var(--edge); }
 #ui .ld-swap .ico { height: 12px; }
 #ui .ld-kit { background: rgba(16,20,26,.78); }
@@ -248,12 +251,12 @@
 #ui .ar-card { box-shadow: var(--bevel), var(--edge); --cut: var(--cut-md); transition: transform var(--dur-fast) var(--ease-out); }
 #ui .ar-info b { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); }
 #ui .ar-info small { font: 400 9px/1.1 var(--f-plate); letter-spacing: .04em; }
-#ui .ar-card em { display: flex; align-items: center; gap: 3px; font: 400 var(--fs-caption)/1 var(--f-stencil); }
+#ui .ar-card > em { display: flex; align-items: center; gap: 3px; font: 400 var(--fs-caption)/1 var(--f-stencil); }
 #ui .ar-card u { font: 400 9px/1 var(--f-plate); padding: 3px 5px 2px; }
 #ui .ar-card.on { outline: 0; box-shadow: var(--bevel-hi), inset 0 0 0 2px var(--c-sodium); }
 #ui .ar-card.locked { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.025) 0 5px, transparent 5px 10px), var(--c-ballast); }
 #ui .ar-view { box-shadow: var(--bevel), var(--edge); }
-#ui .ar-title em { font: 400 9.5px/1.1 var(--f-plate); }
+#ui .ar-title > em { display: flex; align-items: center; gap: .4em; font: 400 9.5px/1.1 var(--f-plate); }
 #ui .ar-title b { font: 400 28px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); text-shadow: var(--text-lift); }
 #ui .ar-title small { font: 400 9.5px/1.2 var(--f-plate); }
 #ui .ar-bars, #ui .ar-facts { background: rgba(16,20,26,.6); box-shadow: var(--edge); }

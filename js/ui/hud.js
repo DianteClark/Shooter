@@ -7,7 +7,7 @@ import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
 import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
-import { badgeMark } from './widgets.js';
+import { badgeMark, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { icon, resolveIcon } from './icons.js';
@@ -260,7 +260,7 @@ export class HUD {
     for (const t of c?.tiles ?? []) if (t?.node) t.node.style.display = on ? 'none' : '';
     if (c?.buttons?.swap) c.buttons.swap.style.display = on ? 'none' : '';
     if (c?.scoreBox) c.scoreBox.style.display = on ? 'none' : '';
-    this.el.querySelector('.picker').style.display = on ? 'none' : '';
+    this.el.querySelector('.death-next').style.display = on ? 'none' : '';
   }
 
   // The Gun Game strip under the scorebar: the gun in hand, how far up the ladder, and what the next kill brings.
@@ -397,7 +397,7 @@ export class HUD {
     this.medalsEl.textContent = '';
     for (const d of this.dmg) { d.life = 0; d.el.style.opacity = '0'; }
     this.hitEl.style.opacity = '0';
-    this.deathEl.classList.remove('show');
+    this.deathEl.classList.remove('show', 'picking');
     this.endEl.classList.remove('show');
     this.controls?.setDown(false);
     this.setNotice('');
@@ -589,6 +589,7 @@ export class HUD {
       <div class="notice"></div>
       <div class="spectate" hidden></div>
       <div class="death">
+        <div class="death-col">
         <div class="death-top">
         <div class="death-card">
           <div class="dc-kick">Killed by</div>
@@ -601,10 +602,16 @@ export class HUD {
           <b class="death-count">3</b><small>Respawn</small>
         </div>
         </div>
-        <div class="picker">
-          <span class="picker-label">Next life</span>
-          ${Array.from({ length: LOADOUT_COUNT }, (_, i) => `
-          <button class="pick" data-tap="1" data-i="${i}"><span class="pk-icon"></span><span class="pk-text"><b></b><small></small></span></button>`).join('')}
+        <div class="death-next">
+          <span class="dn-now"><small>Next life</small><span class="dn-icon"></span><span class="dn-text"><b></b><small></small></span></span>
+          <button class="dn-change" type="button" data-tap="1" data-sound="tab">${icon('swap', { size: 14, accent: 'currentColor' })}<b>Change</b></button>
+        </div>
+        </div>
+        <div class="picker" role="dialog" aria-label="Loadout for the next life">
+          <div class="pk-head"><b>Next life</b><small>Spawns with the one you pick. Respawn never waits.</small>
+            <button class="pk-close" type="button" data-tap="1" data-sound="back" aria-label="Close">${icon('ui:close', { size: 16 })}</button></div>
+          <div class="pk-row">${Array.from({ length: LOADOUT_COUNT }, (_, i) => `
+          <button class="pick" type="button" data-tap="1" data-i="${i}"><b></b><span class="pk-line"><span class="pk-icon"></span><small class="pk-gun"></small></span><small class="pk-lv"></small></button>`).join('')}</div>
         </div>
       </div>
       <div class="flashbang"></div>
@@ -688,6 +695,12 @@ export class HUD {
     this.deathBy = $('.death-by');
     this.deathCount = $('.death-count');
     this.picks = [...el.querySelectorAll('.pick')];
+    this.pickerEl = $('.picker');
+    this.nextEl = $('.death-next');
+    this.nextIcon = $('.dn-icon');
+    this.nextName = $('.dn-text b');
+    this.nextGun = $('.dn-text small');
+    this.pickDown = new Map();     // pointerId -> the card that pointer went down on; see #wirePicker.
     this.endEl = $('.endbanner');
     this.introEl = $('.intro');
     this.streakEdge = $('.streak-edge');
@@ -700,7 +713,7 @@ export class HUD {
 
     this.micBtn.addEventListener('click', () => this.micCb?.());
     this.speakerBtn.addEventListener('click', () => this.speakerCb?.());
-    for (const pick of this.picks) pick.addEventListener('click', () => this.#choose(Number(pick.dataset.i)));
+    this.#wirePicker($('.dn-change'), $('.pk-close'));
     $('.scorebar').addEventListener('click', () => this.toggleBoard());
     this.#buildBoard();
   }
@@ -815,25 +828,72 @@ export class HUD {
     return p.head ?? 0;
   }
 
+  // The death screen's loadout choice is two deliberate taps in the top half of the screen: Change, then a card. Nothing
+  // selectable sits where the thumbs rest (both bottom quadrants and the button cluster), so a thumb put down to move
+  // or aim after the respawn can never switch loadouts. A card only counts a tap whose finger went down on that same
+  // card while the picker was open: a stick touch that slides onto a card, or a press that began before the picker
+  // opened, selects nothing. Respawn never waits on the picker; it closes when the player is back.
+  #wirePicker(changeBtn, closeBtn) {
+    changeBtn.addEventListener('click', () => this.#openPicker(!this.deathEl.classList.contains('picking')));
+    closeBtn.addEventListener('click', () => this.#openPicker(false));
+    for (const pick of this.picks) {
+      pick.addEventListener('pointerdown', e => {
+        if (this.deathEl.classList.contains('picking') && performance.now() - this.pickerOpenedAt > 120) this.pickDown.set(e.pointerId, pick);
+      });
+      pick.addEventListener('click', () => {
+        // A click carries no pointerId in every engine, so the press is matched by card: any pointer that went down
+        // on this card while the picker was open.
+        let ok = false;
+        for (const [id, el] of this.pickDown) if (el === pick) { ok = true; this.pickDown.delete(id); }
+        if (ok) this.#choose(Number(pick.dataset.i));
+      });
+    }
+    this.deathEl.addEventListener('pointercancel', e => this.pickDown.delete(e.pointerId));
+  }
+
+  #openPicker(on) {
+    if (on && (!this.deathEl.classList.contains('show') || this.gun)) return;
+    this.deathEl.classList.toggle('picking', on);
+    this.pickDown.clear();
+    if (on) {
+      this.pickerOpenedAt = performance.now();
+      this.#paintPicker(true);
+    }
+  }
+
   #choose(index) {
+    const changed = index !== Progress.activeLoadout;
     Progress.activeLoadout = index;
     this.#paintPicker();
-    this.loadoutCb?.(Progress.loadout());
+    if (changed) this.loadoutCb?.(Progress.loadout());
+    // The choice shows on the picked card, then the picker folds back into the Next life line, which flashes once.
+    clearTimeout(this.pickTimer);
+    this.pickTimer = setTimeout(() => {
+      this.#openPicker(false);
+      this.nextEl.animate([{ filter: 'brightness(1.8)' }, { filter: 'none' }], { duration: 380, easing: 'ease-out' });
+    }, 220);
   }
 
   #paintPicker(relabel = false) {
+    const all = Progress.loadouts();
     if (relabel) {
-      const all = Progress.loadouts();
       this.picks.forEach((pick, i) => {
-        pick.querySelector('b').textContent = all[i].name;
-        pick.querySelector('small').textContent = weaponName(all[i].primary);
-        pick.querySelector('.pk-icon').innerHTML = glyph(all[i].primary, 16);
+        const l = all[i];
+        pick.querySelector('b').textContent = l.name;
+        pick.querySelector('.pk-gun').textContent = weaponName(l.primary);
+        pick.querySelector('.pk-lv').innerHTML = weaponLevelHtml(Progress.weaponLevel(l.primary), Progress.weaponPrestige(l.primary));
+        pick.querySelector('.pk-icon').innerHTML = glyph(l.primary, 14);
       });
+      this.cache.picked = null;
     }
     const active = Progress.activeLoadout;
     if (this.cache.picked === active) return;
     this.cache.picked = active;
     this.picks.forEach((pick, i) => pick.classList.toggle('on', i === active));
+    const l = all[active] ?? Progress.loadout();
+    this.nextName.textContent = l.name;
+    this.nextGun.innerHTML = gunLine(l.primary);
+    this.nextIcon.innerHTML = glyph(l.primary, 18);
   }
 
   // --- Per-frame ---
@@ -1190,6 +1250,8 @@ export class HUD {
     if (dead !== c.dead) {
       c.dead = dead;
       this.deathEl.classList.toggle('show', dead);
+      if (dead) this.#paintPicker(true);
+      else this.#openPicker(false);
       this.controls?.setDown(dead);
       this.respawnTotal = Math.max(1, me.respawnT ?? 3);
       c.ring = NaN;
@@ -1529,7 +1591,7 @@ export class HUD {
     if (this.endShown) return;
     this.endShown = true;
     this.endAt = performance.now();
-    this.deathEl.classList.remove('show');
+    this.deathEl.classList.remove('show', 'picking');
     if (this.ffa && view) {
       // Placement, not sides: first is a win, the podium is a good day, the rest is a loss.
       const ranked = ffaRank(view), at = ranked.findIndex(p => p.team === myTeam) + 1;
@@ -2022,6 +2084,9 @@ class RangeReadout {
     set(n.model, r.model ? `${Math.round(r.model.dps)} DPS / ${r.model.ttk.toFixed(2)}s on paper` : '');
   }
 }
+
+// A loadout's primary on one line: its name (clipped if it must be) and its level and prestige, which never clip.
+const gunLine = id => `<span class="pk-gun">${esc(weaponName(id))}</span>${weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id))}`;
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

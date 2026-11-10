@@ -8,7 +8,7 @@ import { getCamo, TRACERS, KILL_EFFECTS } from '../shared/camos.js';
 import { SLOTS, ATTACHMENTS, attachmentsFor, normalizeKit } from '../shared/attachments.js';
 import { MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE, prestigeRewards, camoRequirement } from '../shared/progression.js';
 import { Progress } from './progress.js';
-import { esc, hex, swatchCss, ROMAN, SLOT_LABEL, levelRequirement } from './widgets.js';
+import { esc, hex, swatchCss, ROMAN, SLOT_LABEL, levelRequirement, weaponLevelHtml } from './widgets.js';
 import { compareStats, deltaText, weaponFacts, rangeStrip, RANGE_AXIS } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { prestigeWeaponNow, kindLabel } from './prestige.js';
@@ -247,7 +247,6 @@ export class Gunsmith {
         <h2 class="bar-title">Gunsmith</h2>
         <span class="hdr-tag gs-lo">${ico('loadout')}${esc(this.loadout.name)}</span>
         <div class="gs-lvl">
-          <span class="gs-pchip"></span>
           <b class="gs-lvn"></b>
           <i class="xp"><i class="gs-xp"></i></i>
           <small class="gs-xpn"></small>
@@ -283,7 +282,6 @@ export class Gunsmith {
     this.lvnEl = $('.gs-lvn');
     this.xpEl = $('.gs-xp');
     this.xpnEl = $('.gs-xpn');
-    this.pchip = $('.gs-pchip');
     this.listEl = $('.gs-list');
     this.catBtns = [...m.el.querySelectorAll('.gs-cat')];
     this.equipBtn = $('.gs-equip');
@@ -326,8 +324,8 @@ export class Gunsmith {
       const id = btn.dataset.id, open = Progress.isItemUnlocked('weapon', id);
       btn.classList.toggle('on', id === this.weapon);
       btn.classList.toggle('equipped', id === primary || id === secondary);
-      btn.querySelector('small').textContent = open
-        ? `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` (${ROMAN[Progress.weaponPrestige(id)]})` : ''}`
+      btn.querySelector('small').innerHTML = open
+        ? weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id))
         : `Level ${Progress.itemUnlockLevel('weapon', id)}`;
     }
   }
@@ -355,11 +353,9 @@ export class Gunsmith {
 
   paintHead() {
     const p = Progress.weaponProgress(this.weapon);
-    this.lvnEl.textContent = `Lv ${p.level}`;
+    this.lvnEl.innerHTML = weaponLevelHtml(p.level, p.prestige);
     this.xpEl.style.transform = `scaleX(${(p.maxed ? 1 : p.into / p.span).toFixed(3)})`;
     this.xpnEl.textContent = p.maxed ? 'Max' : `${Math.round(p.into)}/${p.span}`;
-    this.pchip.textContent = p.prestige ? `Rank ${ROMAN[p.prestige]}` : '';
-    this.pchip.hidden = !p.prestige;
   }
 
   // A fresh set of rows for this weapon; afterwards only their transforms and delta text change.

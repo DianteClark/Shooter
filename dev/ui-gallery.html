@@ -137,7 +137,15 @@ const SCENES = {
   'hud-reload': hudScene('Reloading, ADS', ({ me }) => { me.ammo = 0; me.reloadT = 1.1; me.reloadDur = 2.2; me.adsT = 1; }),
   'hud-streak': hudScene('Streak ready', ({ me }) => { me.score = 1200; me.streakReady = 'uav'; me.slots = [{ kind: 'uav', cost: 1000, held: true, blocked: false }, { kind: 'turret', cost: 2100, held: true, blocked: false }, { kind: 'gunship', cost: 4800, held: false, blocked: false }]; }),
   'hud-dead': hudScene('Dead, respawn picker', ({ me, view }) => { me.alive = false; me.hp = 0; me.respawnT = 2.1; view.lastKill = { by: 'p7', target: 'me', weapon: 'sniper', camo: 'none', x: 30, z: 20 }; }, { frames: 10 }),
-  'hud-warmup': hudScene('Warmup', ({ view }) => { view.phase = 'warmup'; view.timeLeft = 600; view.scores = [0, 0]; }),
+  'hud-dead-pick': hudScene('Dead, picking next loadout', ({ me, view }) => { me.alive = false; me.hp = 0; me.respawnT = 2.1; view.lastKill = { by: 'p7', target: 'me', weapon: 'sniper', camo: 'none', x: 30, z: 20 }; setTimeout(() => document.querySelector('.dn-change')?.click(), 0); }, { frames: 10 }),
+  'hud-killcam': hudScene('Dead, death replay', ({ me, view, emit }) => {
+    me.alive = false; me.hp = 0; me.respawnT = 3.4;
+    emit({ t: 'kill', by: 'p9', target: 'me', weapon: 'sniper', camo: 'none', x: 30, z: 20, assist: null, dist: 31, head: true });
+    // The banner and Skip as js/game/killcam.js builds them.
+    document.body.insertAdjacentHTML('beforeend', '<div class="killcam-banner on" data-kind="death"><i class="kc-rec"></i><b class="kc-title">Killcam</b><span class="kc-who">Ion got you</span></div><button class="killcam-skip on">Skip</button>');
+    document.body.classList.add('killcam-on');
+  }, { frames: 10 }),
+  'hud-warmup':hudScene('Warmup', ({ view }) => { view.phase = 'warmup'; view.timeLeft = 600; view.scores = [0, 0]; }),
   'hud-dom': hudScene('Domination', ({ view }) => { view.mode = 'dom'; view.scores = [130, 112]; }, { mode: 'dom', scoreLimit: 200 }),
   'hud-hard': hudScene('Hardpoint', ({ view }) => { view.mode = 'hard'; view.scores = [88, 101]; }, { mode: 'hard', scoreLimit: 150 }),
   'hud-kc': hudScene('Kill Confirmed', ({ view }) => { view.mode = 'kc'; view.scores = [41, 40]; }, { mode: 'kc', scoreLimit: 65 }),
@@ -174,6 +182,10 @@ async function runFrame(id) {
     if (q.get('save') === 'veteran') {
       const { Progress } = await import('./js/ui/progress.js');
       Progress.addXp?.(2_000_000);
+      // Every gun at weapon prestige III and level 30: the widest level and rank marks the screens ever print.
+      const { WEAPON_IDS } = await import('./js/shared/constants.js');
+      const max = w => Progress.applyMatch({ xp: 0, weapons: { [w]: { xp: 1e7, kills: 0 } } });
+      for (const w of WEAPON_IDS) { for (let i = 0; i < 3; i++) { max(w); Progress.prestigeWeapon(w); } max(w); }
     }
     if (scene.kind === 'menu') await menuFrame(scene, ui);
     else if (scene.kind === 'hud') await hudFrame(scene, ui);

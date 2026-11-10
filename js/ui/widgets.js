@@ -26,6 +26,14 @@ export function badgeTag(badge, size = 18) {
   return `<span class="bdg">${badgeMark(badge.prestige ?? 0, size)}<b>${badge.level ?? 1}</b></span>`;
 }
 
+// A weapon's level and its weapon-prestige rank, as one unbreakable unit: "Lv 30" then a gold rank plate "III", with a
+// fixed gap so the two never touch or read as one number ("Lv 301"). Every screen that prints both uses this
+// (tokens.css, .wlv). `opts.max` swaps the number for "Max" where a row would rather say so.
+export function weaponLevelHtml(level, prestige = 0, { cls = '' } = {}) {
+  const rank = prestige ? `<em class="wlv-p" title="Weapon prestige ${prestige}">${ROMAN[prestige] ?? prestige}</em>` : '';
+  return `<span class="wlv${cls ? ` ${cls}` : ''}"><span class="wlv-n">Lv ${level}</span>${rank}</span>`;
+}
+
 // The stroked icons shared with the touch controls, plus a padlock for anything not yet earned.
 export const lockIcon = (size = 24) => icon('ui:lock', { size, cls: 'lk' });
 

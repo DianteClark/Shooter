@@ -387,6 +387,7 @@ export class Menu {
     this.#endReel();
     this.el.dataset.screen = 'solo';
     this.el.innerHTML = soloMarkup(state);
+    paintSolo(this.el, state);
     followMapArt(this.el);
     this.show();
   }

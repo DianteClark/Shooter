@@ -267,6 +267,7 @@
 #ui .car-st small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .05em; color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .car.ready .car-st small { color: var(--c-go); }
 #ui .car-crown { width: 13px; height: 13px; color: var(--c-gold); }
+#ui .car:has(.car-swap) .car-id { max-width: calc(100% - 14px); }   /* The swap mark never sits on a long name. */
 #ui .car-swap { position: absolute; right: 6px; top: 7px; width: 14px; height: 14px; color: var(--c-rail); }
 #ui .car.bot { height: 66px; align-self: auto; flex-direction: row; align-items: center; gap: var(--sp-2); background: rgba(29,35,43,.6); box-shadow: inset 0 0 0 1px var(--c-line); color: var(--c-rail); }
 #ui .car.bot .ico { height: 20px; }
@@ -327,7 +328,6 @@
 /* ==== Legacy screen rules still being rebuilt ==== */
 /* ---- Gunsmith: layout ---------------------------------------------------------------------------------------- */
 .gs-lvl { margin-left: 14px; display: flex; align-items: center; gap: 8px; }
-.gs-pchip { font: 400 12px/1 var(--stencil); color: var(--ballast); background: var(--sodium); padding: 3px 6px; }
 .gs-lvn { font: 400 18px/1 var(--stencil); }
 .gs-lvl .xp { width: 88px; }
 .gs-xpn { font-size: 10px; color: var(--haze); min-width: 56px; }
@@ -560,6 +560,10 @@
 #ui .vc-mode { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); font: 400 var(--fs-lead)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium); }
 #ui .vc-mode .ico { height: 20px; }
 #ui .vc-desc { margin-top: var(--sp-1); font: 400 var(--fs-caption)/1.2 var(--f-body); color: #b9c2c9; }
+#ui .vc-again, #ui .vc-gw { display: flex; align-items: center; gap: 4px; padding: 4px 7px 3px; white-space: nowrap; background: rgba(16,20,26,.78); box-shadow: var(--edge); color: var(--c-chalk); }
+/* Large maps say so above the name: a Ground War match is 16 v 16 and runs longer. */
+#ui .vc-gw { margin-bottom: var(--sp-1); background: var(--c-sodium); color: var(--c-sodium-ink); box-shadow: none; }
+#ui .vc-gw .ico { height: 12px; --icon-accent: currentColor; }
 #ui .vc-votes { display: flex; align-items: center; gap: 4px; min-height: 22px; padding: 3px 6px; background: rgba(16,20,26,.66); box-shadow: var(--edge); }
 #ui .vc-votes:empty { visibility: hidden; }
 #ui .vc-votes i { width: 9px; height: 9px; background: rgba(231,234,228,.18); clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
@@ -568,6 +572,7 @@
 #ui .vote-card:disabled { opacity: 1; }
 #ui .vote-card.mine { transform: translateY(-4px); }
 #ui .vote-card.mine::after { content: 'Your vote'; position: absolute; z-index: 2; right: 0; top: 0; padding: 5px 10px 4px 12px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); background: var(--c-sodium); color: var(--c-sodium-ink); clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%); }
+#ui .vote-card.mine .vc-votes { margin-top: 24px; }   /* Under the Your vote flag, never beside it. */
 #ui .vote-card.winner { transform: scale(1.04); z-index: 2; animation: vote-win .7s var(--ease-snap) both; }
 #ui .vote-card.winner .vc-art { transform: scale(1.08); }
 #ui .vote-card.lost { opacity: .3; filter: saturate(.2); transform: scale(.97); }
@@ -583,7 +588,21 @@
 #ui .solo { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 #ui .solo-quick { margin-left: auto; min-height: 38px; height: 38px; font-size: var(--fs-body); }
 #ui .solo-quick .ico { color: var(--c-sodium); }
-#ui .solo-maps { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: var(--sp-2); }
+/* Two labelled sections side by side: the standard 6v6 maps (and Random), then the large Ground War maps. */
+#ui .solo-maps { flex: 1; min-height: 0; display: flex; gap: var(--sp-3); }
+#ui .solo-sec { flex: var(--cols, 4) 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
+#ui .solo-sec.large { flex: 1.25 1 0; }
+#ui .solo-h { flex: none; display: flex; align-items: center; gap: 6px; height: 16px; margin: 0; padding-bottom: 3px; box-shadow: inset 0 -1px 0 var(--c-line-hi); white-space: nowrap; overflow: hidden; }
+#ui .solo-h .ico { height: 13px; color: var(--c-sodium); }
+#ui .solo-h b { font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
+#ui .solo-h small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+#ui .solo-sec.large .solo-h { box-shadow: inset 0 -2px 0 var(--c-sodium); }
+#ui .solo-sec.large .solo-h b { color: var(--c-sodium); }
+#ui .solo-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: var(--sp-2); }
+/* Long names ("Night Market") take a second line on narrow phones rather than an ellipsis. */
+#ui .solo-grid .sm-name { align-items: flex-end; }
+#ui .solo-grid .sm-name .ico { flex: none; margin-bottom: 2px; }
+#ui .solo-grid .sm-name b { font-size: clamp(16px, 2.5vw, 22px); line-height: .98; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 #ui .solo-map { padding: var(--sp-2) var(--sp-3) var(--sp-2); }
 #ui .solo-map:not(.on) .vc-art { filter: saturate(.75) brightness(.8); }
 #ui .solo-map.on .vc-art { transform: scale(1.06); }
@@ -593,16 +612,29 @@
 #ui .sm-tick { position: absolute !important; right: 0; top: 0; width: 30px; height: 26px; display: grid; place-items: center; background: var(--c-sodium); color: var(--c-sodium-ink); clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%); transform: translateY(-110%); transition: transform var(--dur-base) var(--ease-snap); }
 #ui .sm-tick .ico { height: 16px; }
 #ui .solo-map.on .sm-tick { transform: none; }
-#ui .solo-foot { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 176px; gap: var(--sp-2); height: 70px; }
-#ui .solo-modes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-1); min-width: 0; }
+#ui .solo-foot { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 168px; gap: var(--sp-2); height: 72px; }
+/* Two rows, as many columns as the map offers modes; sideways scroll (with a lit edge and arrow) when they outrun the
+   width, so the list never runs off the bottom of the screen. */
+#ui .solo-modes-wrap { position: relative; min-width: 0; }
+#ui .solo-modes {
+  height: 100%; display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, minmax(0, 1fr)); grid-auto-columns: minmax(104px, 1fr);
+  gap: var(--sp-1); overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity;
+}
+#ui .solo-modes::-webkit-scrollbar { display: none; }
+#ui .solo-more {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 40px; display: grid; place-items: center end; padding-right: 2px; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(16,20,26,.92) 70%); color: var(--c-sodium); transition: opacity var(--dur-fast);
+}
+#ui .solo-more .ico { height: 18px; }
+#ui .solo-modes-wrap.more .solo-more { opacity: 1; pointer-events: auto; }
 #ui .solo-mode {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; text-align: center; padding: var(--sp-1) var(--sp-1); min-width: 0;
+  display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 6px; text-align: left; padding: 0 var(--sp-2); min-width: 0; min-height: 0; scroll-snap-align: start;
   background: var(--face-steel); box-shadow: var(--bevel), var(--edge); color: var(--c-chalk);
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   transition: transform var(--dur-fast) var(--ease-out);
 }
-#ui .solo-mode .ico { height: 22px; color: var(--c-sodium); }
-#ui .solo-mode b { min-width: 0; font: 400 12px/1.1 var(--f-stencil); letter-spacing: .02em; }
+#ui .solo-mode .ico { flex: none; height: 18px; color: var(--c-sodium); }
+#ui .solo-mode b { min-width: 0; font: 400 11.5px/1.02 var(--f-stencil); letter-spacing: .02em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 #ui .solo-mode.on { background: var(--face-sodium); color: var(--c-sodium-ink); box-shadow: var(--bevel-sodium); }
 #ui .solo-mode.on .ico { color: var(--c-sodium-ink); }
 #ui .solo-mode:disabled { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.025) 0 5px, transparent 5px 10px), var(--c-ballast); color: var(--c-rail); box-shadow: var(--edge); }
@@ -689,7 +721,7 @@
 /* ---- Gunsmith: finish ------------------------------------------------------------------------------------------ */
 #ui .gs-lo { margin-left: auto; }
 #ui .gs-lvl { margin-left: var(--sp-2); }
-#ui .gs-pchip { font: 400 11px/1 var(--f-stencil); padding: 3px 5px 2px; background: var(--c-gold); color: var(--c-night); }
+#ui .gs-w small .wlv { font-size: 10px; }
 #ui .gs-lvn { font: 400 var(--fs-title)/1 var(--f-stencil); }
 #ui .gs-xpn { font: 400 var(--fs-micro)/1 var(--f-plate); color: var(--c-haze); }
 #ui .gs { margin-top: 0; gap: var(--sp-2); }

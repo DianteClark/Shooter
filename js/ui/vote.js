@@ -12,7 +12,8 @@ import { sweep, flash, enter } from './motion.js';
 
 export const RANDOM = 'random';
 const RANDOM_MODE = { short: '?', name: 'Random', desc: 'Any mode the map can host.' };
-const modeIcon = id => ico(MODES[id] ? `mode:${id}` : 'random');
+// Bare mode ids resolve through icons.js aliases, so Ground War modes borrow their rule set's icon.
+const modeIcon = id => ico(MODES[id] ? id : 'random');
 
 // A tile of four maps' art under a big question mark: the Random card in the vote and the solo picker.
 function mixArt() {
@@ -62,6 +63,7 @@ export function voteMarkup(state) {
       <span class="vc-art" data-map="${esc(map.id)}" style="background-image:url(${mapImage(map)})"></span>
       <span class="vc-shade"></span>
       <span class="vc-top">${o.again ? '<b class="vc-again t-tag">Rematch</b>' : ''}<span class="vc-votes"></span></span>
+      ${mode.large || isLarge(o.mapId) ? `<b class="vc-gw t-tag">${ico('party')}Ground War</b>` : ''}
       <b class="vc-map">${esc(map.name)}</b>
       <span class="vc-mode">${modeIcon(o.mode)}<span class="vc-mode-name">${esc(mode.name)}</span></span>
       <small class="vc-desc">${esc(mode.desc)}</small>
@@ -130,38 +132,55 @@ export function paintVote(root, state) {
 
 // Solo: every map and mode, chosen directly, each with a Random choice. Maps the map data offers no points for hide the
 // modes that need them; with a Random map every mode stays open and the roll keeps to maps that can host it.
-export function soloMarkup({ mapId, mode }) {
-  const map = MAPS[mapId];
-  const cards = MAP_IDS.length + 1;
-  return `
-    ${header({ back: 'soloBack', title: 'Play vs bots', extra: `<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
-    <div class="solo">
-      <div class="solo-maps" style="--cols:${Math.min(4, Math.ceil(cards / (cards > 4 ? 2 : 1)))}">${MAP_IDS.map(id => {
-        const m = MAPS[id];
-        return `<button class="solo-map${id === mapId ? ' on' : ''}" data-act="soloMap" data-id="${id}" data-in="up">
+// Standard 6v6 maps and large Ground War maps sit in two labelled sections, so nobody starts a 16 v 16 by accident.
+const isLarge = id => !!MAPS[id]?.large || (MAPS[id]?.modes ?? []).some(m => MODES[m]?.large);
+const mapCard = id => {
+  const m = MAPS[id];
+  return `<button class="solo-map" data-act="soloMap" data-id="${id}" data-in="up">
           <span class="vc-art" data-map="${esc(m.id)}" style="background-image:url(${mapImage(m)})"></span>
           <span class="vc-shade"></span>
           <span class="sm-tick">${ico('check')}</span>
           <span class="sm-name">${ico(`map:${id}`)}<b>${esc(m.name)}</b></span>
         </button>`;
-      }).join('')}
-        <button class="solo-map random${mapId === RANDOM ? ' on' : ''}" data-act="soloMap" data-id="${RANDOM}" data-in="up">
-          ${mixArt()}
-          <span class="vc-shade"></span>
-          <span class="sm-tick">${ico('check')}</span>
-          <span class="sm-name">${ico('random')}<b>Random</b></span>
-        </button></div>
+};
+
+export function soloMarkup({ mapId, mode }) {
+  const standard = MAP_IDS.filter(id => !isLarge(id)), large = MAP_IDS.filter(isLarge);
+  const cards = standard.length + 1;     // Random rides with the standard maps.
+  const cols = Math.min(4, Math.ceil(cards / (cards > 4 ? 2 : 1)));
+  const out = `
+    ${header({ back: 'soloBack', title: 'Play vs bots', extra: `<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
+    <div class="solo">
+      <div class="solo-maps">
+        <section class="solo-sec" style="--cols:${cols}">
+          <h3 class="solo-h">${ico('map')}<b>Standard maps</b><small>6 v 6</small></h3>
+          <div class="solo-grid">${standard.map(mapCard).join('')}
+          <button class="solo-map random" data-act="soloMap" data-id="${RANDOM}" data-in="up">
+            ${mixArt()}
+            <span class="vc-shade"></span>
+            <span class="sm-tick">${ico('check')}</span>
+            <span class="sm-name">${ico('random')}<b>Random</b></span>
+          </button></div>
+        </section>
+        ${large.length ? `<section class="solo-sec large" style="--cols:1">
+          <h3 class="solo-h">${ico('party')}<b>Ground War</b><small>16 v 16</small></h3>
+          <div class="solo-grid">${large.map(mapCard).join('')}</div>
+        </section>` : ''}
+      </div>
       <div class="solo-foot" data-in="up">
-        <div class="solo-modes">${[...MODE_IDS, RANDOM].map(id => {
-          const m = MODES[id] ?? RANDOM_MODE, usable = modeFits(map, id);
-          // Only the modes this map hosts are offered; a Random map offers them all.
-          return `<button class="solo-mode${id === mode ? ' on' : ''}" data-act="soloMode" data-id="${id}" ${usable ? '' : 'disabled hidden'}>
-            ${modeIcon(id)}<b>${esc(m.name)}</b>
-          </button>`;
-        }).join('')}</div>
-        <button class="btn is-primary solo-start" data-sound="confirm" data-act="soloStart">${ico('play')}<span><b>Start</b><small class="solo-pick">${esc(pickLine(mapId, mode))}</small></span></button>
+        <div class="solo-modes-wrap">
+          <div class="solo-modes">${[...MODE_IDS, RANDOM].map(id => {
+            const m = MODES[id] ?? RANDOM_MODE;
+            return `<button class="solo-mode${MODES[id]?.large ? ' large' : ''}" data-act="soloMode" data-id="${id}">
+              ${modeIcon(id)}<b>${esc(m.name)}</b>
+            </button>`;
+          }).join('')}</div>
+          <span class="solo-more" aria-hidden="true">${ico('next')}</span>
+        </div>
+        <button class="btn is-primary solo-start" data-sound="confirm" data-act="soloStart">${ico('play')}<span><b>Start</b><small class="solo-pick"></small></span></button>
       </div>
     </div>`;
+  return out;
 }
 
 // What Start will launch, in words: "Domination on Dust", "Any mode on Harbor".
@@ -177,13 +196,31 @@ export function paintSolo(root, { mapId, mode }) {
   const line = root.querySelector('.solo-pick');
   if (line) line.textContent = pickLine(mapId, mode);
   for (const b of root.querySelectorAll('.solo-map')) b.classList.toggle('on', b.dataset.id === mapId);
+  // Only the modes this map hosts are offered; a Random map offers them all.
   for (const b of root.querySelectorAll('.solo-mode')) {
     const usable = modeFits(map, b.dataset.id);
     b.classList.toggle('on', b.dataset.id === mode);
     b.disabled = !usable;
     b.hidden = !usable;
-
   }
+  fitModes(root);
+}
+
+// The mode list is two rows that flow into as many columns as the map offers modes. Where they outrun the width they
+// scroll sideways, and a lit edge with an arrow says so until the end is in view. Wired once per built screen.
+export function fitModes(root) {
+  const list = root.querySelector('.solo-modes'), wrap = list?.parentElement;
+  if (!list) return;
+  const mark = () => wrap.classList.toggle('more', list.scrollLeft + list.clientWidth < list.scrollWidth - 4);
+  if (!list.dataset.fit) {
+    list.dataset.fit = '1';
+    list.addEventListener('scroll', mark, { passive: true });
+    addEventListener('resize', mark, { passive: true });
+    wrap.querySelector('.solo-more').addEventListener('click', () => list.scrollBy({ left: list.clientWidth * 0.7, behavior: 'smooth' }));
+  }
+  const on = list.querySelector('.solo-mode.on:not([hidden])');
+  if (on && (on.offsetLeft < list.scrollLeft || on.offsetLeft + on.offsetWidth > list.scrollLeft + list.clientWidth)) list.scrollLeft = on.offsetLeft - 8;
+  mark();
 }
 
 // A map hosts the modes it lists whose points it defines (Ground War maps host only Ground War modes, and small maps
