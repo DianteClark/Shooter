@@ -157,7 +157,8 @@ function syncLooks(fold) {
 
 // The Golden Gun's test hook only exists with ?debug=1 in the address; a flag left in a save does nothing without it.
 const DEBUG = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('debug') === '1'; } catch { return false; } })();
-const goldenEarned = () => goldenStatus(data).earned || (DEBUG && !!data.flags.goldenDebug);
+// Once earned it stays earned, even when new guns join the requirement: the reveal having been shown proves it.
+const goldenEarned = () => goldenStatus(data).earned || !!data.flags.goldenShown || (DEBUG && !!data.flags.goldenDebug);
 const GOLDEN_UNLOCK = () => ({ kind: 'weapon', id: GOLDEN_ID, name: WEAPONS[GOLDEN_ID].name, golden: true, req: GOLDEN_REQUIREMENT });
 
 function save() {

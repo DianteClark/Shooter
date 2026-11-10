@@ -6,7 +6,7 @@ import { applyAttachments } from '../shared/attachments.js';
 const clamp01 = v => Math.max(0.02, Math.min(1, v));
 
 const recoilOf = w => ((w.pattern?.amp ?? 0) / 0.02) * 0.6 + ((w.bloomPerShot ?? 0) / 0.3) * 0.4;
-const reloadOf = w => (w.shellReload ? w.reload * w.magazine * 0.5 : w.reload);
+const reloadOf = w => (w.shellReload ? w.reload * Math.max(1, w.magazine * 0.5) : w.reload);
 const handleOf = w => w.sprintToFire + w.swapTime * 0.5;
 const moveOf = w => w.moveMult * 0.7 + w.adsMoveMult * 0.3;
 
@@ -72,7 +72,7 @@ export function weaponFacts(weaponId, kit) {
     ['Damage', w.pellets > 1 ? `${w.damage}x${w.pellets}` : `${w.damage}`],
     ['RPM', `${Math.round(w.rpm)}`],
     ['Mag', `${w.magazine}`],
-    ['Reload', `${(w.shellReload ? w.reload * w.magazine * 0.5 : w.reload).toFixed(1)}s`],
+    ['Reload', `${reloadOf(w).toFixed(1)}s`],
     ['Range', falloff ? `${Math.round(b.full)}-${Math.round(Math.min(b.fade, b.max))}/${Math.round(b.max)}m` : `${Math.round(b.max)}m`],
     coverFact(w),
   ];

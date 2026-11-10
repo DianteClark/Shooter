@@ -20,6 +20,10 @@
 //                  {t:'marked',id,by,dur}           the sim shows that enemy to the thrower's team for dur seconds
 //                  {t:'decoy',x,z,by,weapon}        one fake gunshot from a Decoy
 //                  {t:'zap',x,z,ox,oz,by}           a Trophy shooting something down
+//                  {t:'gear',kind,x,z,r,by,...}     a pop that does no blast damage (Stun, Gas, each Shock arc, a Drill
+//                                                   biting into a wall); renderers must NOT draw an explosion for it
+//                  {t:'dazed',id,amount,dur,by,kind} slowed and dragging aim for dur seconds (player.js applyDaze)
+//                  {t:'fried',x,z,by,kind}          a Shock arc destroying an enemy device of that kind
 //       onDamage(targetId, dmg, ownerId, kind)      Flak is ALREADY applied. Never called for the
 //                                                   owner or the owner's team. dmg is a whole number.
 //   eq.projectiles   live [{id,kind,x,z,y,owner,...}]  matches GameView.projectiles
@@ -34,6 +38,12 @@
 // Blank Slate (Cold Blooded Pro) players are never marked by a Sensor; players entries may carry `pro` for that.
 //
 // A Strike or other host-side explosion can share the falloff through blastDamage() and flakMult().
+//
+// V8: Stun, Gas, Shock (tacticals), Impact, Claymore, Drill (lethals).
+// - A stuck Claymore keeps its facing in vx, vz as a unit vector (and in `dir`): nothing stuck ever moves, and the
+//   facing then rides the existing snapshot and host-migration fields with no format change.
+// - A Drill that sticks to a wall bores through up to DRILL_DEPTH of solid and goes off just past the far face;
+//   previewThrow and landingOf report that point as the landing, so the HUD ring and bots aim at the real blast.
 //
 // Entries with `noThrow` (fire, bomblet) are the things a throw turns into. They live in the same list as everything
 // else, so snapshots, host migration and the renderer's grenade dots all cover them without knowing they exist.
@@ -77,6 +87,10 @@ const COLD_TRIGGER = 0.45;      // Cold Blooded: fraction of a mine's trigger ra
 const CHAIN_DELAY = 0.14;       // A mine caught in a blast goes off this much later: chains read as a ripple.
 export const THROW_QUICK = 1.35; // Fastball: flight runs this many times faster.
 const DECOY_RHYTHM = [0.11, 0.11, 0.11, 0.85, 0.11, 0.11, 1.3];   // Seconds between fake shots: short bursts, like a person.
+const TACMASK_DAZE = 0.4;       // Share of a Stun or Shock daze a Tac Mask lets through, in strength and length.
+const GAS_DAZE_EVERY = 2;       // Gas re-sends its daze every this many burn ticks, so a cloud is not an event flood.
+const DRILL_DEPTH = 1.6;        // Most solid a Drill bores through; anything thicker and it goes off on this side.
+const DRILL_OUT = 0.45;         // How far past the far face the charge goes off.
 
 // `air` is how long the throw flies before touching the ground. A rolling grenade flies 11.25 m and
 // rolls about 1.5 m more, so every kind ends up near THROW_RANGE.
@@ -97,10 +111,22 @@ export const EQUIPMENT = {
   decoy:   { fuse: 8, air: 0.75, sticks: true, quietEnd: true, decoy: { weapon: 'ar' } },
   sensor:  { fuse: 1, air: 0.75, sticks: true, sensor: { radius: 13, dur: 4 } },
   trophy:  { fuse: 16, air: 0.75, sticks: true, quietEnd: true, trophy: { radius: 6.5, charges: 2, gap: 0.3 } },
+
+  // V8. `soft` kinds announce themselves with a 'gear' event instead of a 'bang': no explosion is drawn or heard.
+  stun:     { fuse: 1.1, air: 0.75, soft: true, daze: { radius: 8, inner: 2.5, maxDur: 3.2 } },
+  gas:      { fuse: 1.5, air: 0.75, soft: true, popsOnStop: true, spawns: 'gascloud', burstR: 4.4 },
+  gascloud: { noThrow: true, as: 'gas', quietEnd: true, fuse: 8, gas: { radius: 4.4, grow: 0.9, dps: 8, daze: 0.45, dazeDur: 0.8 } },
+  shock:    { fuse: 3, air: 0.75, sticks: true, soft: true, quietEnd: true, shock: { radius: 4, first: 0.35, gap: 0.55, arcs: 3, damage: 18, daze: 0.75, dazeDur: 1.2, fry: 5 } },
+  impact:   { fuse: 4, air: 0.75, sticks: true, burstOnStick: true, contact: 0.55, blast: { radius: 4.2, inner: 1.3, max: 150, min: 20 } },
+  claymore: { fuse: 45, air: 0.62, sticks: true, quietEnd: true, faces: true, mine: { arm: 1.3, trigger: 3.6, cone: 0.6 },
+    blast: { radius: 6, inner: 2.2, max: 180, min: 45, cone: 0.85, back: 1.3 } },
+  drill:    { fuse: 2.1, air: 0.62, sticks: true, drill: true, blast: { radius: 3.9, inner: 1.3, max: 155, min: 25 } },
 };
 
 // What a Trophy will shoot at.
-const ZAPPABLE = new Set(['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet']);
+const ZAPPABLE = new Set(['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'impact', 'claymore', 'drill']);
+// What a Shock arc fries: enemy devices sitting on the map.
+const FRYABLE = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy', 'drill', 'sticky', 'shock']);
 
 // Furthest a player with these perks may throw. The host clamps with this; so should anything drawing a preview.
 export function maxThrowRange(perks) {
@@ -136,6 +162,13 @@ export function blastDamage(blast, dist, perks) {
   return Math.round((blast.min + (blast.max - blast.min) * k) * flakMult(perks));
 }
 
+// Whether v is within `half` radians of the way p faces.
+function inCone(p, v, half) {
+  let a = Math.atan2(v.z - p.z, v.x - p.x) - p.dir;
+  a = Math.atan2(Math.sin(a), Math.cos(a));
+  return Math.abs(a) <= half;
+}
+
 function ownerIdOf(owner) {
   return owner !== null && typeof owner === 'object' ? owner.id : owner;
 }
@@ -150,18 +183,22 @@ export function effectRadius(kind) {
   if (s.burstR) return s.burstR;
   if (s.sensor) return s.sensor.radius;
   if (s.direct) return s.direct.radius;
+  if (s.daze) return s.daze.radius;
+  if (s.shock) return s.shock.radius;
   return 0;
 }
 
 function makeProjectile(id, kind, owner, ox, oz, aim, dist, perks, quick = 1) {
   const v = speedFor(kind, dist);
   return { id, kind, owner, team: undefined, x: ox, z: oz, y: RELEASE_Y, arc: throwArc(dist, perks),
-    vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick, trip: 0 };
+    vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick, trip: 0,
+    dir: aim, wnx: 0, wnz: 0 };
 }
 
 // Something a burst left on the ground. A positive `delay` holds it back that many seconds.
 function makeLying(id, kind, owner, team, x, z, delay = 0) {
-  return { id, kind, owner, team, x, z, y: 0, arc: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0, quick: 1, trip: 0 };
+  return { id, kind, owner, team, x, z, y: 0, arc: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0, quick: 1, trip: 0,
+    dir: 0, wnx: 0, wnz: 0 };
 }
 
 // One tick of a live projectile. Real throws and previews both go through here, so they cannot disagree.
@@ -214,7 +251,7 @@ function sweep(map, p, spec, dt, onBounce) {
     p.x += dirX * travel; p.z += dirZ * travel;
     left -= travel / speed;
     if (onBounce) onBounce(p.x, p.z, 'wall');
-    if (spec.sticks) { p.stuck = true; p.vx = 0; p.vz = 0; return; }
+    if (spec.sticks) { p.stuck = true; p.vx = 0; p.vz = 0; p.wnx = hit.nx; p.wnz = hit.nz; return; }
     const vn = p.vx * hit.nx + p.vz * hit.nz;
     p.vx = (p.vx - (1 + WALL_RESTITUTION) * vn * hit.nx) * WALL_SCRUB;
     p.vz = (p.vz - (1 + WALL_RESTITUTION) * vn * hit.nz) * WALL_SCRUB;
@@ -304,13 +341,15 @@ function previewOnBounce(x, z) {
 }
 
 // The one projectile the previews fly. Never escapes this file.
-const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, arc: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick: 1, trip: 0 };
+const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, arc: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick: 1, trip: 0,
+  dir: 0, wnx: 0, wnz: 0 };
 function launchFlyer(kind, ox, oz, aim, dist, perks, pro) {
   const v = speedFor(kind, dist);
   FLYER.kind = kind; FLYER.x = ox; FLYER.z = oz; FLYER.y = RELEASE_Y; FLYER.arc = throwArc(dist, perks);
   FLYER.quick = throwQuick(perks, pro);
   FLYER.vx = Math.cos(aim) * v; FLYER.vz = Math.sin(aim) * v;
   FLYER.age = 0; FLYER.stuck = false; FLYER.grounded = false;
+  FLYER.dir = aim; FLYER.wnx = 0; FLYER.wnz = 0;
   return FLYER;
 }
 
@@ -337,6 +376,7 @@ export function previewThrow(map, ox, oz, aim, dist, kind, perks, pro = PREVIEW_
   }
   points.length = n; PREVIEW.bounces.length = previewBounceN;
   PREVIEW.landing.x = p.x; PREVIEW.landing.z = p.z; PREVIEW.landing.t = p.age; PREVIEW.landing.kind = kind;
+  if (spec.drill && drillExit(map, p)) { PREVIEW.landing.x = DRILL_AT.x; PREVIEW.landing.z = DRILL_AT.z; }
   PREVIEW.landing.radius = hasProIn(perks, pro, 'strongarm') ? effectRadius(kind) : 0;
   return PREVIEW;
 }
@@ -349,7 +389,41 @@ export function landingOf(map, ox, oz, aim, dist, kind, perks, pro = PREVIEW_NO_
   const p = launchFlyer(kind, ox, oz, aim, dist, perks, pro);
   for (let g = 0; g < 400; g++) if (advance(map, p, spec, STEP) || (p.stuck && spec.quietEnd)) break;
   LANDING.x = p.x; LANDING.z = p.z; LANDING.t = p.age;
+  if (spec.drill && drillExit(map, p)) { LANDING.x = DRILL_AT.x; LANDING.z = DRILL_AT.z; }
   return LANDING;
+}
+
+// Where a Drill stuck to a wall goes off: just past the far face of the solid it is in, following any solid that
+// carries straight on behind it, as long as the whole run is at most DRILL_DEPTH. Fills DRILL_AT and returns true, or
+// returns false when it is not on a wall or the wall is too thick (it then goes off where it is).
+const DRILL_AT = { x: 0, z: 0, depth: 0 };
+export function drillExit(map, p) {
+  const nx = p.wnx, nz = p.wnz;
+  if (!p.stuck || (!nx && !nz)) return false;
+  // Start just inside the face it hit, then hop from far face to far face.
+  let x = p.x - nx * (SKIN + 0.05), z = p.z - nz * (SKIN + 0.05), depth = 0;
+  for (let guard = 0; guard < 6; guard++) {
+    const w = solidAt(map, x, z);
+    if (!w) break;
+    if (ROOFED.has(w.kind)) return false;          // Buildings and the border are not thin cover.
+    const far = nx < 0 ? w.x + w.w - x : nx > 0 ? x - w.x : nz < 0 ? w.z + w.d - z : z - w.z;
+    depth += far;
+    if (depth > DRILL_DEPTH) return false;
+    x -= nx * (far + 0.02); z -= nz * (far + 0.02);
+  }
+  if (depth <= 0) return false;
+  DRILL_AT.x = x - nx * DRILL_OUT; DRILL_AT.z = z - nz * DRILL_OUT; DRILL_AT.depth = depth;
+  if (solidAt(map, DRILL_AT.x, DRILL_AT.z)) { DRILL_AT.x = x - nx * 0.05; DRILL_AT.z = z - nz * 0.05; }
+  return true;
+}
+
+function solidAt(map, x, z) {
+  const walls = map.walls;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (w.blocksMove && x > w.x && x < w.x + w.w && z > w.z && z < w.z + w.d) return w;
+  }
+  return null;
 }
 
 export class EquipmentSystem {
@@ -399,7 +473,8 @@ export class EquipmentSystem {
       const arc = u > 0.05 && u < 0.95 ? Math.max(0, (v.y - RELEASE_Y * (1 - u)) / (4 * u * (1 - u))) : ARC_RESTORE;
       this._projectiles.push({ id: v.id, kind: v.kind, owner: v.owner, team: teamOf(v.owner), x: v.x, z: v.z, y: v.y, arc,
         vx: v.vx || 0, vz: v.vz || 0, age: v.age || 0, stuck: !!v.stuck, grounded: !!v.grounded,
-        t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0, quick: 1, trip: 0 });
+        t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0, quick: 1, trip: 0,
+        dir: Math.atan2(v.vz || 0, v.vx || 0), wnx: 0, wnz: 0 });
       this._nextId = Math.max(this._nextId, v.id + 1);
     }
     for (const v of smokes || []) {
@@ -448,9 +523,17 @@ export class EquipmentSystem {
       const px = p.x, pz = p.z;
       const done = advance(this.map, p, spec, dt);
       if (spec.direct && !p.stuck && this._directHit(p, spec, px, pz, players, onDamage)) continue;
+      if (spec.contact && !p.stuck && this._contact(p, spec, px, pz, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
+      if (spec.faces && p.stuck && p.n === 0) { p.n = 1; p.vx = Math.cos(p.dir); p.vz = Math.sin(p.dir); }
+      if (spec.drill && p.stuck && p.n === 0) {
+        p.n = 1;
+        if ((p.wnx || p.wnz) && onEvent) onEvent({ t: 'gear', kind: p.kind, x: p.x, z: p.z, r: 0, by: p.owner, nx: p.wnx, nz: p.wnz });
+      }
       if (spec.mine && p.trip > 0 && (p.trip -= dt) <= 0) { this._burst(p, spec, players, onEvent, onDamage); continue; }
       if (spec.mine && p.age >= spec.mine.arm && this._tripped(p, spec, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
       if (spec.burn) this._burn(p, spec, dt, players, onDamage);
+      if (spec.gas) this._gas(p, spec, dt, players, onEvent, onDamage);
+      if (spec.shock && p.stuck && this._shock(p, spec, dt, players, onEvent, onDamage)) continue;
       if (spec.decoy && p.stuck) this._decoy(p, spec, dt, onEvent);
       if (spec.trophy && p.stuck && this._zap(p, spec, dt, players, onEvent)) continue;
       if (done) { if (!spec.quietEnd) this._burst(p, spec, players, onEvent, onDamage); }
@@ -465,7 +548,7 @@ export class EquipmentSystem {
   // Inside a burning patch that hurts `team`?
   inFire(x, z, team) {
     for (let i = 0; i < this._projectiles.length; i++) {
-      const p = this._projectiles[i], b = EQUIPMENT[p.kind].burn;
+      const p = this._projectiles[i], b = EQUIPMENT[p.kind].burn || EQUIPMENT[p.kind].gas;   // Gas too: bots walk out of both.
       if (b && p.team !== team && Math.hypot(p.x - x, p.z - z) < b.radius) return p;
     }
     return null;
@@ -488,14 +571,22 @@ export class EquipmentSystem {
       return;
     }
     if (spec.sensor) { this._sense(p, spec, players, onEvent); return; }
+    if (spec.daze) { this._stun(p, spec, players, onEvent); return; }
     if (spec.spawns) {
-      if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r: spec.burstR, by: p.owner });
+      if (onEvent) onEvent({ t: spec.soft ? 'gear' : 'bang', kind: p.kind, x: p.x, z: p.z, r: spec.burstR, by: p.owner });
       this._projectiles.push(makeLying(this._nextId++, spec.spawns, p.owner, p.team, p.x, p.z));
       return;
     }
     if (spec.scatter) this._scatter(p, spec);
     const r = spec.blast ? spec.blast.radius : spec.flash.radius;
-    if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r, by: p.owner });
+    const bang = { t: 'bang', kind: p.kind, x: p.x, z: p.z, r, by: p.owner };
+    if (spec.drill && drillExit(this.map, p)) {
+      bang.ox = p.x; bang.oz = p.z; bang.wall = 1;       // Bored through: it goes off on the far side.
+      p.x = DRILL_AT.x; p.z = DRILL_AT.z; bang.x = p.x; bang.z = p.z;
+    }
+    if (spec.faces) bang.aim = p.dir;
+    if (p.direct) bang.direct = 1;                         // Impact: went off on someone, not on the ground.
+    if (onEvent) onEvent(bang);
     if (spec.blast) this.setOffMines(p.x, p.z, r, p);
     const team = this._teamOf(p, players);
     for (let i = 0; i < players.length; i++) {
@@ -505,6 +596,7 @@ export class EquipmentSystem {
       if (d >= r) continue;
       if (spec.blast) {
         if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+        if (spec.blast.cone && d > spec.blast.back && !inCone(p, v, spec.blast.cone)) continue;   // Claymore: the front only.
         const dmg = blastDamage(spec.blast, d, v.perks);
         if (dmg > 0 && onDamage) onDamage(v.id, dmg, p.owner, spec.as || p.kind);
       } else {
@@ -548,7 +640,11 @@ export class EquipmentSystem {
       const v = players[i];
       if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
       const reach = spec.mine.trigger * (v.perks && v.perks.includes('coldblood') ? COLD_TRIGGER : 1);
-      if (Math.hypot(v.x - p.x, v.z - p.z) < reach) return true;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= reach) continue;
+      if (!spec.mine.cone) return true;
+      // Claymore: only someone in front of it, with nothing solid between, sets it off.
+      if (inCone(p, v, spec.mine.cone) && !(d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet'))) return true;
     }
     return false;
   }
@@ -605,6 +701,91 @@ export class EquipmentSystem {
     p.t = spec.trophy.gap;
     if (onEvent) onEvent({ t: 'zap', x: best.x, z: best.z, ox: p.x, oz: p.z, by: p.owner });
     return --p.charges <= 0;
+  }
+
+  // Returns true when something hit an enemy in flight (Impact goes off on them).
+  _contact(p, spec, px, pz, players) {
+    const dx = p.x - px, dz = p.z - pz, len = Math.hypot(dx, dz);
+    if (len < 1e-6) return false;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
+      const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
+      if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) <= spec.contact) { p.x = px + dx * u; p.z = pz + dz * u; p.direct = true; return true; }
+    }
+    return false;
+  }
+
+  // Stun: everyone in the blast with nothing solid between is dazed, more and longer the closer they were.
+  _stun(p, spec, players, onEvent) {
+    if (!onEvent) return;
+    const f = spec.daze;
+    onEvent({ t: 'gear', kind: p.kind, x: p.x, z: p.z, r: f.radius, by: p.owner });
+    const team = this._teamOf(p, players);
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= f.radius) continue;
+      if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+      const masked = v.perks && v.perks.includes('tacmask') ? TACMASK_DAZE : 1;
+      const amount = (d <= f.inner ? 1 : (f.radius - d) / (f.radius - f.inner)) * masked;
+      onEvent({ t: 'dazed', id: v.id, amount, dur: Math.max(0.4, amount * f.maxDur), by: p.owner, kind: p.kind });
+    }
+  }
+
+  // Gas: a cloud that grows to its radius, chips enemies inside it and keeps them dazed. Walls keep it out; a Tac Mask
+  // ignores it altogether. Damage ticks with the fire's rhythm.
+  _gas(p, spec, dt, players, onEvent, onDamage) {
+    if (p.age < 0) return;
+    p.t += dt;
+    if (p.t < BURN_TICK) return;
+    p.t -= BURN_TICK;
+    const g = spec.gas, radius = g.radius * Math.min(1, 0.35 + p.age / g.grow), daze = p.n++ % GAS_DAZE_EVERY === 0;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, p.team) || v.spawnProtect || (v.perks && v.perks.includes('tacmask'))) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= radius) continue;
+      if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+      if (onDamage) onDamage(v.id, Math.max(1, Math.round(g.dps * BURN_TICK)), p.owner, spec.as);
+      if (daze && onEvent) onEvent({ t: 'dazed', id: v.id, amount: g.daze, dur: g.dazeDur, by: p.owner, kind: spec.as });
+    }
+  }
+
+  // Shock: once stuck, arcs `arcs` times. Each arc jolts enemies in reach (damage and a daze); the first also fries
+  // every enemy device in reach. Returns true after the last arc, which uses it up.
+  _shock(p, spec, dt, players, onEvent, onDamage) {
+    const s = spec.shock;
+    if (p.n === 0 && p.t === 0) p.t = s.first;
+    p.t -= dt;
+    if (p.t > 0) return false;
+    p.t = s.gap;
+    const team = this._teamOf(p, players);
+    if (onEvent) onEvent({ t: 'gear', kind: p.kind, x: p.x, z: p.z, r: s.radius, by: p.owner, n: p.n });
+    if (p.n === 0) this._fry(p, s.radius + 0.5, team, players, onEvent);
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= s.radius) continue;
+      if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+      const masked = v.perks && v.perks.includes('tacmask') ? TACMASK_DAZE : 1;
+      if (onDamage) onDamage(v.id, s.damage, p.owner, p.kind);
+      if (onEvent) onEvent({ t: 'dazed', id: v.id, amount: s.daze * masked, dur: s.dazeDur * masked, by: p.owner, kind: p.kind });
+    }
+    return ++p.n >= s.arcs;
+  }
+
+  _fry(p, r, team, players, onEvent) {
+    const list = this._projectiles;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q === p || q.dead || !q.stuck || !FRYABLE.has(q.kind) || q.owner === p.owner || (team !== undefined && this._teamOf(q, players) === team)) continue;
+      if (Math.hypot(q.x - p.x, q.z - p.z) >= r) continue;
+      q.dead = true;
+      if (onEvent) onEvent({ t: 'fried', x: q.x, z: q.z, ox: p.x, oz: p.z, by: p.owner, kind: q.kind });
+    }
   }
 
   _stepSmokes(dt) {

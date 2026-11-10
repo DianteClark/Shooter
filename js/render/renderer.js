@@ -38,6 +38,13 @@ const GUN_FX_FALLBACK = {
   deuce:      { tail: 7,  linger: 0.05,  speed: 215, flash: [1.3, 0.9, 1.0],   shell: 'pistol' },
   // Flies as a projectile like the rocket (see _onShot); this only shapes the muzzle flash.
   thumper:    { tail: 0,  linger: 0,     speed: 92,  flash: [1.8, 0.5, 1.6],   shell: null },
+  // V8. The crossbow has no flash and no case: a slow pale streak of a bolt.
+  carbine:    { tail: 9,  linger: 0.06,  speed: 225, flash: [1.3, 0.95, 1.05], shell: 'rifle' },
+  heavysmg:   { tail: 8,  linger: 0.06,  speed: 210, flash: [1.5, 0.95, 1.3],  shell: 'pistol' },
+  slug:       { tail: 12, linger: 0.1,   speed: 250, flash: [2.1, 0.9, 1.7],   shell: 'hull' },
+  lightlmg:   { tail: 12, linger: 0.08,  speed: 225, flash: [1.6, 1.0, 1.1],   shell: 'rifle', every: 2 },
+  crossbow:   { tail: 6,  linger: 0.2,   speed: 120, flash: [0.2, 0.2, 0.2],   shell: null },
+  scatter:    { tail: 3.2, linger: 0.05, speed: 170, flash: [2.0, 0.75, 1.8],  shell: null, extra: 'blast' },
 };
 for (const id in GUN_FX_FALLBACK) if (!GUN_FX[id]) GUN_FX[id] = GUN_FX_FALLBACK[id];
 
@@ -501,7 +508,7 @@ export class GameRenderer {
     }
   }
 
-  _updateCamera(dt, local) {
+  _updateCamera(dt, local, view) {
     const map = this.map;
     const cam = this.camera;
     const t = this.time.value;
@@ -539,6 +546,15 @@ export class GameRenderer {
       this.lookZ += (leadZ - this.lookZ) * Math.min(1, dt * 9);
       tx = local.x + this.lookX;
       tz = local.z + this.lookZ;
+      // Flying your own Cruise Missile: the camera rides with it so a long flight never leaves the screen.
+      const missile = view?.gunships?.find(g => g.kind === 'missile' && g.owner === view.localId);
+      const mc = this.missileCam ?? 0;
+      this.missileCam = mc + ((missile ? 1 : 0) - mc) * Math.min(1, dt * 5);
+      if (missile) { this.missileX = missile.x; this.missileZ = missile.z; }
+      if (this.missileCam > 0.01) {
+        tx += ((this.missileX ?? tx) - tx) * this.missileCam;
+        tz += ((this.missileZ ?? tz) - tz) * this.missileCam;
+      }
     }
 
     // Keep the view inside the dressed area of the map.
@@ -706,7 +722,7 @@ export class GameRenderer {
       if (this.fogFrame === 0) this.fog.update(local.x, local.z, realDt * this.fogEvery, view.smokes);
     } else if (!cine) this.fog.uniforms.on.value = 0;
 
-    this._updateCamera(realDt, local);
+    this._updateCamera(realDt, local, view);
     this._updateCull();
     this.world.update(fxDt);
     this.weather.update(fxDt, this.camTarget.x, this.camTarget.z, this.world.material);

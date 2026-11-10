@@ -90,6 +90,19 @@ export const WEAPONS = {
     botUse: { pref: 17, hold: 1.2, flank: 0.8, advance: 2 },
   },
 
+  // V8. A short rifle you run with: fires straight out of a slide, sprints like an SMG and reaches past one, but its
+  // light round fades early and it never wins a lane against a full-length rifle.
+  carbine: {
+    id: 'carbine', name: 'Shunter', role: 'Run and gun', auto: true,
+    damage: 25, rpm: 720, magazine: 26, reserve: 156, reload: 1.9, range: 40,
+    falloff: { start: 12, end: 24, min: 0.62 }, penetrate: 0.55,
+    adsSpread: 0.009, hipSpread: 0.046, bloomPerShot: 0.08, bloomRecover: 2.8, bloomScale: 1.5,
+    pattern: { amp: 0.014, freq: 0.9, ramp: 4 }, turnCap: 16,
+    adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.3, moveMult: 1.04, adsMoveMult: 0.66,
+    pellets: 1, slideFire: true, kickCam: 0.45, tracerWidth: 0.9, longshot: 22,
+    botUse: { pref: 11, hold: 0.8, flank: 1.2, advance: 3 },
+  },
+
   // ---------------- SMG ----------------
   // Fire from the hip, on the move, out of a slide. Falls apart past its range.
   smg: {
@@ -127,6 +140,19 @@ export const WEAPONS = {
     botUse: { pref: 11, hold: 0.8, flank: 1.1, advance: 3, rush: 20, scoped: true },
   },
 
+  // V8. A slow, heavy SMG: three to the body up close and a round that goes through a crate, at the price of a lazy
+  // rate of fire (every miss costs a beat), a muzzle that climbs and feet a little slower than the other SMGs.
+  heavysmg: {
+    id: 'heavysmg', name: 'Ballast', role: 'Bruiser', auto: true,
+    damage: 34, rpm: 500, magazine: 24, reserve: 144, reload: 2.1, range: 30,
+    falloff: { start: 7, end: 15, min: 0.6 }, penetrate: 0.55,
+    adsSpread: 0.016, hipSpread: 0.05, bloomPerShot: 0.09, bloomRecover: 2.8, bloomScale: 1.4,
+    pattern: { amp: 0.012, freq: 0.8, ramp: 2, drift: 0.003 },
+    adsTime: 0.17, sprintToFire: 0.13, swapTime: 0.32, moveMult: 1.0, adsMoveMult: 0.7,
+    pellets: 1, kickCam: 0.7, tracerWidth: 1.0, longshot: 14,
+    botUse: { pref: 7, hold: 0.6, flank: 1.2, advance: 3, rush: 14 },
+  },
+
   // ---------------- Shotgun ----------------
   // A fan of pellets: one pump up close, two a little further. Loads shell by shell, fire to interrupt.
   shotgun: {
@@ -160,6 +186,18 @@ export const WEAPONS = {
     adsTime: 0.15, sprintToFire: 0.1, swapTime: 0.36, moveMult: 1.05, adsMoveMult: 0.75,
     pellets: 10, kickCam: 1.15, tracerWidth: 0.55, longshot: 9,
     botUse: { pref: 4, hold: 0.45, flank: 1.6, advance: 3, rush: 8, fireMax: 11 },
+  },
+
+  // V8. One solid slug instead of a fan: two to the body out to a dozen metres, where buckshot is spent, and it
+  // punches through cover. No one-shot at arm's length and a hip head hit is not lethal, so it has to be aimed.
+  slug: {
+    id: 'slug', name: 'Railspike', role: 'Slug thrower', auto: false,
+    damage: 58, rpm: 160, magazine: 5, reserve: 40, reload: 0.5, range: 30,
+    falloff: { start: 11, end: 21, min: 0.55 }, penetrate: 0.8,
+    adsSpread: 0.006, hipSpread: 0.034, bloomPerShot: 0.5, bloomRecover: 2.2, bloomScale: 1, turnCap: 9,
+    adsTime: 0.2, sprintToFire: 0.15, swapTime: 0.42, moveMult: 1.0, adsMoveMult: 0.66,
+    pellets: 1, shellReload: true, kickCam: 1.1, tracerWidth: 1.3, longshot: 16,
+    botUse: { pref: 9, hold: 0.7, flank: 1.2, advance: 3, rush: 16, precise: true },
   },
 
   // ---------------- LMG ----------------
@@ -204,6 +242,19 @@ export const WEAPONS = {
     botUse: { pref: 13, hold: 1.8, flank: 0.3, advance: 2, scoped: true },
   },
 
+  // V8. A box-fed light LMG: no spin-up and no heat bar, the steadiest LMG on target, but 45 rounds and then the
+  // longest magazine change outside the belt guns. Four to the body, a step behind the rifles.
+  lightlmg: {
+    id: 'lightlmg', name: 'Gantry', role: 'Box-fed', auto: true,
+    damage: 30, rpm: 600, magazine: 45, reserve: 180, reload: 3.6, range: 48,
+    falloff: { start: 20, end: 34, min: 0.73 }, penetrate: 0.7,
+    adsSpread: 0.009, hipSpread: 0.085, bloomPerShot: 0.05, bloomRecover: 2, bloomScale: 1.5,
+    pattern: { amp: 0.011, freq: 0.5, ramp: 5 }, turnCap: 6,
+    adsTime: 0.3, sprintToFire: 0.28, swapTime: 0.5, moveMult: 0.92, adsMoveMult: 0.5,
+    pellets: 1, kickCam: 0.6, tracerWidth: 1.15, longshot: 26,
+    botUse: { pref: 18, hold: 1.4, flank: 0.6, advance: 2, scoped: true },
+  },
+
   // ---------------- Marksman ----------------
   // Two to the body through mid range, and it flinches the scope a little each time, so measured beats frantic.
   dmr: {
@@ -238,6 +289,20 @@ export const WEAPONS = {
     adsTime: 0.2, sprintToFire: 0.14, swapTime: 0.32, moveMult: 1.01, adsMoveMult: 0.72,
     pellets: 1, shellReload: true, slideFire: true, kickCam: 0.95, tracerWidth: 1.25, longshot: 26,
     botUse: { pref: 14, hold: 0.9, flank: 1.1, advance: 3, precise: true },
+  },
+
+  // V8. A crossbow: silent (no minimap ping, bots barely hear it), one bolt kills inside a room when aimed, two past
+  // it. One bolt at a time, cranked back in while the sight stays up: a miss is a second and a half you do not have.
+  // No penetration: a crate stops a bolt.
+  crossbow: {
+    id: 'crossbow', name: 'Bodkin', role: 'Silent hunter', auto: false, suppressed: true,
+    damage: 110, rpm: 200, magazine: 1, reserve: 24, reload: 1.25, range: 44,
+    falloff: { start: 15, end: 30, min: 0.5 },
+    adsSpread: 0.003, hipSpread: 0.06, bloomPerShot: 0.6, bloomRecover: 2, bloomScale: 1,
+    adsGate: 0.7, turnCap: 9,
+    adsTime: 0.2, sprintToFire: 0.16, swapTime: 0.36, moveMult: 1.02, adsMoveMult: 0.7,
+    pellets: 1, shellReload: true, kickCam: 0.5, tracerWidth: 0.7, longshot: 26,
+    botUse: { pref: 13, hold: 1.1, flank: 1.1, advance: 3, scoped: true, adsMin: 0.8, precise: true },
   },
 
   // ---------------- Sniper ----------------
@@ -323,6 +388,18 @@ export const WEAPONS = {
     adsTime: 0.12, sprintToFire: 0.08, swapTime: 0.18, moveMult: 1.08, adsMoveMult: 0.86,
     pellets: 1, unlimitedReserve: true, kickCam: 0.55, tracerWidth: 0.85, longshot: 19,
     botUse: { pref: 10, hold: 0.8, flank: 1, advance: 3 },
+  },
+
+  // V8. A pocket scattergun: four shells, out in a blink, a full spread that kills at a step or two and does nothing
+  // at all past a doorway. The sidearm for a long-gun primary that cannot fight round a corner.
+  scatter: {
+    id: 'scatter', name: 'Bramble', role: 'Pocket scatter', auto: false,
+    damage: 18, rpm: 220, magazine: 4, reserve: 32, reload: 1.7, range: 11,
+    falloff: { start: 3.5, end: 8, min: 0.3 },
+    adsSpread: 0.05, hipSpread: 0.07, bloomPerShot: 0.12, bloomRecover: 2, bloomScale: 0.45, turnCap: 9,
+    adsTime: 0.12, sprintToFire: 0.08, swapTime: 0.18, moveMult: 1.08, adsMoveMult: 0.85,
+    pellets: 6, unlimitedReserve: true, kickCam: 0.95, tracerWidth: 0.5, longshot: 7,
+    botUse: { pref: 4, hold: 0.45, flank: 1.4, advance: 3, rush: 8, fireMax: 9 },
   },
 
   // ---------------- Launcher ----------------

@@ -24,13 +24,19 @@ const MAX_TURRETS = 8;
 const MAX_AIR = 4;               // Gunships and choppers in the air at once.
 const MAX_DRONES = 4;            // UAV and Overwatch drones, one of each per team.
 const MAX_DROPS = 4;
-const MAX_VEHICLES = MAX_TURRETS + MAX_AIR + MAX_DRONES + MAX_DROPS;
+const MAX_SEEKERS = 8;           // V8: cruise missiles and swarm drones (two teams' worth).
+const MAX_SUITS = 8;             // V8: Juggernaut armour drawn over a soldier.
+const MAX_VEHICLES = MAX_TURRETS + MAX_AIR + MAX_DRONES + MAX_DROPS + MAX_SEEKERS + MAX_SUITS;
+const MAX_SHADOWS = MAX_AIR + MAX_DRONES + MAX_SEEKERS;
 const MAX_MORTARS = 12;
 const MAX_MARKED = 12;
 const GUNSHIP_Y = 7.5;           // Low enough to read as a craft under the fixed camera, high enough to clear walls.
 const CHOPPER_Y = 5.6;           // The attack chopper flies lower than the gunship.
 const DRONE_Y = 12;
 const TURRET_Y = 0.84;           // Head pivot height.
+const MISSILE_Y = 1.7;           // A cruise missile skims just over waist-high cover.
+const SWARM_Y = 2.9;
+const MISSILE_SPEED = 17, MISSILE_R = 5;   // Cosmetic copies of js/sim/sim.js MISSILE_SPEED and MISSILE_RADIUS.
 const MAX_TAGS = 24;
 const MAX_POINTS = 6;
 const FLAG_H = 3.4;              // Pole height; tall enough to read over cover from the tilted camera.
@@ -42,7 +48,10 @@ const NADE_SCALE = 1.35;         // Equipment is drawn oversized, like the guns,
 const FIRE_R = 3.2, FIRE_LIFE = 5.5;
 const MORTAR_R = 4.2;
 const SUPPLY_R = 14;
-const FUSE = { frag: 1.8, sticky: 1.2, flash: 0.95, smoke: 2.2, cluster: 1.6, bomblet: 0.3, molotov: 3 };
+const FUSE = { frag: 1.8, sticky: 1.2, flash: 0.95, smoke: 2.2, cluster: 1.6, bomblet: 0.3, molotov: 3, stun: 1.1, gas: 1.5, drill: 2.1 };
+// V8 equipment (js/sim/equipment.js): gas cloud radius and life, Shock reach, Claymore trigger reach and half-cone.
+const GAS_R = 4.4, GAS_LIFE = 8, SHOCK_R = 4, CLAY_REACH = 3.6, CLAY_CONE = 0.6;
+const GAS_RGB = [0.5, 0.62, 0.22], STUN_DUST = [0.72, 0.7, 0.64];
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 function slotOf(slots, id) { for (let i = 0; i < slots.length; i++) if (slots[i].id === id) return slots[i]; return null; }
@@ -54,12 +63,15 @@ const NADE_RGB = {
   cluster: hexRGB(0xffd02a), bomblet: hexRGB(0xffd02a), hatchet: hexRGB(0xc8402e), fire: hexRGB(0xff7a20),
   smoke: hexRGB(0x7dff96), flash: hexRGB(0xfff27a), stim: hexRGB(0x4bd18a), decoy: hexRGB(0x55c8ff),
   sensor: hexRGB(0x3ce6ff), trophy: hexRGB(0x9cf0ff), bomb: hexRGB(0xff3a2a),
+  stun: hexRGB(0xfff0c8), gas: hexRGB(0xa6e22e), gascloud: hexRGB(0xa6e22e), shock: hexRGB(0x5ad2ff),
+  impact: hexRGB(0xff4a3a), claymore: hexRGB(0xff5a2a), drill: hexRGB(0xffb020),
 };
 const FALLBACK = NADE_RGB.frag;
 // Throw-preview danger ring for each kind, roughly its effect radius.
-const BLAST_R = { frag: 6.2, sticky: 4.6, flash: 7, smoke: 4.5, molotov: FIRE_R, mine: 4.4, cluster: 6, hatchet: 0.8, decoy: 2, sensor: 13, trophy: 6.5, stim: 1.5 };
+const BLAST_R = { frag: 6.2, sticky: 4.6, flash: 7, smoke: 4.5, molotov: FIRE_R, mine: 4.4, cluster: 6, hatchet: 0.8, decoy: 2, sensor: 13, trophy: 6.5, stim: 1.5,
+  stun: 8, gas: GAS_R, shock: SHOCK_R, impact: 4.2, claymore: CLAY_REACH, drill: 3.9 };
 // Deployables carry a light in the owner's team colour, so friend and foe read at a glance.
-const TEAM_LIGHT = new Set(['mine', 'sensor', 'trophy', 'decoy']);
+const TEAM_LIGHT = new Set(['mine', 'sensor', 'trophy', 'decoy', 'claymore', 'shock']);
 const WHITE_RGB = [1, 1, 1];
 // Search and Destroy: sites are sodium rings, the one with the bomb on it turns red; the bomb itself is drawn big.
 const SITE_RGB = hexRGB(0xf2a63b), PLANTED_RGB = hexRGB(0xff3a2a), DEFUSE_RGB = hexRGB(0x38b6ff);
@@ -160,10 +172,12 @@ class ModelSet {
 }
 
 // ---- Equipment models. Origin at the centre, +X is the throw direction, about 0.25 m across before scaling. ----
-const NADE_KINDS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'bomb'];
+const NADE_KINDS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'bomb',
+  'stun', 'gas', 'shock', 'impact', 'claymore', 'drill'];
 const NADE_MODEL = Object.fromEntries(NADE_KINDS.map((k, i) => [k, i]));
 // Height of the model's base below its origin, so a grounded one sits on the ground.
-const NADE_BASE = { frag: 0.16, sticky: 0.2, molotov: 0.22, mine: 0.05, cluster: 0.2, bomblet: 0.08, hatchet: 0.06, smoke: 0.2, flash: 0.18, stim: 0.07, decoy: 0.09, sensor: 0.05, trophy: 0.2, bomb: 0.06 };
+const NADE_BASE = { frag: 0.16, sticky: 0.2, molotov: 0.22, mine: 0.05, cluster: 0.2, bomblet: 0.08, hatchet: 0.06, smoke: 0.2, flash: 0.18, stim: 0.07, decoy: 0.09, sensor: 0.05, trophy: 0.2, bomb: 0.06,
+  stun: 0.19, gas: 0.2, shock: 0.06, impact: 0.17, claymore: 0.2, drill: 0.09 };
 
 function nadeModels() {
   const S = new ModelSet();
@@ -252,6 +266,52 @@ function nadeModels() {
     b.setPart(2).box(0.02, 0.097, 0, 0.12, 0.008, 0.08);
     b.prismY(0.06, 0.125, -0.09, 0.07, 0.024, 0.018, 5);
   });
+  // V8 equipment.
+  S.model(NADE_MODEL.stun, b => {       // Squat white-banded can with a fat ring cap: reads as "not a frag".
+    b.setPart(0).setColor(0x3a4048).prismY(-0.19, 0.12, 0, 0, 0.16, 0.16, 8);
+    b.setPart(1).prismY(-0.13, -0.06, 0, 0, 0.166, 0.166, 8);
+    b.prismY(0.0, 0.07, 0, 0, 0.166, 0.166, 8);
+    b.setPart(0).setColor(0x22252a).prismY(0.12, 0.18, 0, 0, 0.12, 0.1, 8);
+    b.setPart(2).prismY(0.18, 0.23, 0, 0, 0.07, 0.05, 6);
+    b.setPart(0).setColor(0xc8c8c8).prismZ(-0.02, 0.02, 0.1, 0.24, 0.05, 0.05, 6);
+  });
+  S.model(NADE_MODEL.gas, b => {        // Olive canister, lime band, a valve stub on top.
+    b.setPart(0).setColor(0x4c5a36).prismY(-0.2, 0.14, 0, 0, 0.15, 0.15, 8);
+    b.setPart(1).prismY(-0.04, 0.05, 0, 0, 0.156, 0.156, 8);
+    b.setPart(0).setColor(0x2e3238).prismY(0.14, 0.2, 0, 0, 0.11, 0.08, 6);
+    b.box(0.06, 0.24, 0, 0.12, 0.05, 0.05);
+    b.setPart(2).prismY(0.2, 0.26, -0.03, 0, 0.035, 0.03, 5);
+  });
+  S.model(NADE_MODEL.shock, b => {      // Flat puck with three prongs and a glowing coil.
+    b.setPart(0).setColor(0x2a2e34).prismY(-0.06, 0.04, 0, 0, 0.26, 0.24, 8);
+    b.setPart(1).prismY(-0.01, 0.02, 0, 0, 0.265, 0.265, 8);
+    b.setPart(0).setColor(0x5a6068);
+    for (let i = 0; i < 3; i++) { const a = i * 2.094 + 0.3; b.prismY(0.04, 0.17, Math.cos(a) * 0.16, Math.sin(a) * 0.16, 0.022, 0.012, 4); }
+    b.setPart(2).prismY(0.04, 0.1, 0, 0, 0.1, 0.08, 6);
+  });
+  S.model(NADE_MODEL.impact, b => {     // Round red-banded body with a plunger nose on +X.
+    b.setPart(0).setColor(0x40464e).prismX(-0.17, 0.1, 0, 0, 0.15, 0.15, 8);
+    b.setPart(1).prismX(-0.08, -0.02, 0, 0, 0.156, 0.156, 8);
+    b.setPart(0).setColor(0x2a2d33).prismX(0.1, 0.19, 0, 0, 0.13, 0.06, 8);
+    b.setPart(2).prismX(0.19, 0.24, 0, 0, 0.045, 0.045, 6);
+  });
+  S.model(NADE_MODEL.claymore, b => {   // A bowed charge on scissor legs, its face (+X) lit.
+    b.setPart(0).setColor(0x4a5236).box(0, 0.02, 0, 0.09, 0.26, 0.2, 0.015);
+    b.box(-0.03, 0.02, 0.17, 0.08, 0.26, 0.16, 0.015);
+    b.box(-0.03, 0.02, -0.17, 0.08, 0.26, 0.16, 0.015);
+    b.setPart(1).box(0.05, 0.03, 0, 0.012, 0.16, 0.16);
+    b.setPart(0).setColor(0x2a2d33);
+    b.prismY(-0.2, -0.1, 0.02, 0.18, 0.012, 0.02, 4); b.prismY(-0.2, -0.1, 0.02, -0.18, 0.012, 0.02, 4);
+    b.prismY(-0.2, -0.1, -0.05, 0.12, 0.012, 0.02, 4); b.prismY(-0.2, -0.1, -0.05, -0.12, 0.012, 0.02, 4);
+    b.setPart(2).box(-0.02, 0.17, 0, 0.05, 0.04, 0.05);
+  });
+  S.model(NADE_MODEL.drill, b => {      // Motor housing, a band, and a fluted bit pointing +X.
+    b.setPart(0).setColor(0x3a3f46).prismX(-0.24, 0.02, 0, 0, 0.09, 0.09, 6);
+    b.setPart(1).prismX(-0.12, -0.06, 0, 0, 0.095, 0.095, 6);
+    b.setPart(0).setColor(0xb4bcc4).prismX(0.02, 0.26, 0, 0, 0.05, 0.005, 5);
+    b.setColor(0x8a9098).prismX(0.02, 0.06, 0, 0, 0.065, 0.065, 6);
+    b.setPart(2).prismX(-0.28, -0.24, 0, 0, 0.05, 0.05, 6);
+  });
   S.model(NADE_MODEL.trophy, b => {     // Tripod, base and an interceptor dome.
     b.setPart(0).setColor(0x30353b);
     for (let i = 0; i < 3; i++) { const a = i * 2.094 + 0.5; b.prismY(-0.2, 0.02, Math.cos(a) * 0.17, Math.sin(a) * 0.17, 0.022, 0.022, 4); }
@@ -263,7 +323,7 @@ function nadeModels() {
 }
 
 // ---- Vehicle models. Origin on the ground (sentry, crate) or the airframe's centre; +X is the nose. ----
-const VEH = { gunship: 0, chopper: 1, uav: 2, overwatch: 3, crate: 4, sentry: 5 };
+const VEH = { gunship: 0, chopper: 1, uav: 2, overwatch: 3, crate: 4, sentry: 5, missile: 6, drone: 7, suit: 8 };
 
 function vehicleModels() {
   const S = new ModelSet();
@@ -371,6 +431,45 @@ function vehicleModels() {
       bb.setColor(0x4c5a67).box(-0.14, y + 0.02, 0.3, 0.32, 0.22, 0.16, 0.03);
       bb.setPart(2).box(0.5, y + 0.3, 0.16, 0.08, 0.06, 0.06);
     });
+  });
+  S.model(VEH.missile, b => {
+    // Long dark body, a bright team band and nose, four fins and a hot nozzle: reads as an arrow from straight above.
+    b.setPart(0).setColor(0x2a2e34).prismX(-1.1, 0.9, 0, 0, 0.17, 0.17, 8, Math.PI / 8);
+    b.setColor(0xd8d4c8).prismX(0.9, 1.45, 0, 0, 0.17, 0.02, 8, Math.PI / 8);
+    b.setPart(1).prismX(0.35, 0.6, 0, 0, 0.18, 0.18, 8, Math.PI / 8);
+    b.setPart(0).setColor(0x3a3f47);
+    b.box(-0.85, 0, 0, 0.4, 0.04, 0.9); b.box(-0.85, 0, 0, 0.4, 0.9, 0.04);
+    b.box(0.2, 0, 0, 0.5, 0.03, 0.62);
+    b.setPart(2).prismX(-1.3, -1.1, 0, 0, 0.1, 0.14, 8);
+  });
+  S.model(VEH.drone, b => {
+    // Small quadcopter: a body pod, four arms, a spinning rotor on each and a warhead slung underneath.
+    b.setPart(0).setColor(0x2c3036).box(0, 0, 0, 0.42, 0.14, 0.3, 0.03);
+    b.setColor(0x3a3f47);
+    b.box(0, 0, 0, 1.15, 0.05, 0.07); b.box(0, 0, 0, 0.07, 0.05, 1.15);
+    b.setColor(0x1c1f24).prismY(-0.26, -0.07, 0, 0, 0.1, 0.12, 6);
+    b.setPart(1).box(0, 0.08, 0, 0.24, 0.03, 0.18);
+    for (const [x, z] of [[0.55, 0], [-0.55, 0], [0, 0.55], [0, -0.55]]) {
+      S.rig(x, 0.06, z, 1, bb => {
+        bb.setPart(0).setColor(0x15171b).box(x, 0.06, z, 0.5, 0.015, 0.07);
+        bb.box(x, 0.06, z, 0.07, 0.015, 0.5);
+      });
+    }
+    b.setPart(2).box(0.24, 0.02, 0, 0.06, 0.06, 0.1);
+  });
+  S.model(VEH.suit, b => {
+    // Juggernaut plates, worn over the soldier at hip height and above: slab pauldrons, chest and back plates, a gorget
+    // and a visor bar. Wider than any operator, so the outline from above says "armoured" at a glance.
+    const y = 0.95;
+    b.setPart(0).setColor(0x353a40);
+    for (const z of [-0.46, 0.46]) b.box(0, y + 0.74, z, 0.5, 0.24, 0.34, 0.05);
+    b.setColor(0x2a2e33).box(0.27, y + 0.42, 0, 0.12, 0.56, 0.66, 0.04);
+    b.box(-0.3, y + 0.42, 0, 0.14, 0.6, 0.7, 0.04);
+    b.setColor(0x40464e).prismY(y + 0.72, y + 0.86, 0, 0, 0.3, 0.26, 8, Math.PI / 8);
+    b.setPart(1);
+    for (const z of [-0.46, 0.46]) b.box(0, y + 0.87, z, 0.42, 0.03, 0.22);
+    b.box(-0.3, y + 0.74, 0, 0.1, 0.04, 0.5);
+    b.setPart(2).box(0.31, y + 0.62, 0, 0.05, 0.06, 0.42);
   });
   return S.build();
 }
@@ -544,13 +643,13 @@ export class CombatFX {
     // Aircraft shadows reuse the vehicle geometry's vertices with their own instance list.
     const sg = new THREE.InstancedBufferGeometry();
     for (const k of ['position', 'aModel']) sg.setAttribute(k, this.vehicles.geometry.getAttribute(k));
-    sg.setAttribute('aShow', new THREE.InstancedBufferAttribute(new Float32Array(MAX_AIR + MAX_DRONES), 1).setUsage(THREE.DynamicDrawUsage));
+    sg.setAttribute('aShow', new THREE.InstancedBufferAttribute(new Float32Array(MAX_SHADOWS), 1).setUsage(THREE.DynamicDrawUsage));
     this.shadowMat = new THREE.ShaderMaterial({
       vertexShader: MODEL_SHADOW_VERT,
       fragmentShader: `void main(){ gl_FragColor = vec4(0.02, 0.015, 0.05, 0.55); }`,
       transparent: true, depthWrite: false,
     });
-    this.shadow = this.#mesh(new THREE.InstancedMesh(sg, this.shadowMat, MAX_AIR + MAX_DRONES), 1);
+    this.shadow = this.#mesh(new THREE.InstancedMesh(sg, this.shadowMat, MAX_SHADOWS), 1);
 
     this.#buildFire();
     this.#buildStatic();
@@ -562,6 +661,7 @@ export class CombatFX {
     this.fireSlots = Array.from({ length: MAX_FIRES }, () => ({ id: null, x: 0, z: 0, age: 0, a: 0, live: false, acc: 0, smoke: 0, pop: 0, seed: 0 }));
     this.turretSlots = Array.from({ length: MAX_TURRETS }, () => ({ id: null, aim: 0, age: 0, touched: false }));
     this.airSlots = Array.from({ length: MAX_AIR }, () => ({ active: false, kind: '', team: 0, x: 0, z: 0, aim: 0, bank: 0, pitch: 0, rotor: 0, vx: 0, vz: 0, dust: 0, y: 0 }));
+    this.seekSlots = Array.from({ length: MAX_SEEKERS }, () => ({ active: false, kind: '', team: 0, owner: null, x: 0, z: 0, aim: 0, bank: 0, rotor: 0, trail: 0, age: 0 }));
     this.dropSlots = Array.from({ length: MAX_DROPS }, () => ({ t: -1, x: 0, z: 0, team: 0, flare: 0 }));
     this.mortars = Array.from({ length: MAX_MORTARS }, () => ({ t: -1, delay: 1, x: 0, z: 0, team: 0 }));
     this.marked = Array.from({ length: MAX_MARKED }, () => ({ id: null, until: 0 }));
@@ -812,6 +912,21 @@ export class CombatFX {
           break;
         }
         case 'zap': this.#zap(ev); break;
+        case 'gear': this.#gear(ev); break;
+        case 'fried': this.#zap({ ox: ev.ox, oz: ev.oz, x: ev.x, z: ev.z }); vfx.pop(ev.x, 0.6, ev.z, 3, NADE_RGB.shock, 0.3); break;
+        case 'drone_down':
+          vfx.sparks(ev.x, SWARM_Y, ev.z, 0, 0, WHITE_RGB, 8, 6);
+          vfx.pop(ev.x, SWARM_Y, ev.z, 2, FIRE_HOT, 0.2);
+          break;
+        case 'hit':
+          // Rounds into Juggernaut armour spark off the plates instead of drawing blood.
+          if (ev.armor) vfx.sparks(ev.x, 1.5, ev.z, 0, 0, FIRE_HOT, 5, 6);
+          break;
+        case 'armor_break':
+          for (let k = 0; k < 8; k++) vfx.shard(ev.x, 1.6, ev.z, rand(-5, 5), rand(2, 6), rand(-5, 5), DIM_RGB, rand(0.8, 1.4));
+          vfx.ring(ev.x, ev.z, 0.2, 2.6, 0.35, FIRE_HOT, 0.9);
+          vfx.sparks(ev.x, 1.6, ev.z, 0, 0, FIRE_HOT, 12, 9);
+          break;
         case 'incoming': {
           let s = null;
           for (let k = 0; k < this.mortars.length; k++) if (this.mortars[k].t < 0) { s = this.mortars[k]; break; }
@@ -828,6 +943,12 @@ export class CombatFX {
               break;
             }
           } else if (ev.kind === 'emp') this.#emp(ev, localTeam);
+          else if (ev.kind === 'juggernaut' && Number.isFinite(ev.x)) {
+            const rgb = this.teamRGB[ev.team ?? 0] || this.teamRGB[0];
+            vfx.ring(ev.x, ev.z, 0.3, 3.2, 0.45, rgb, 0.9);
+            vfx.ring(ev.x, ev.z, 0.2, 1.6, 0.3, WHITE_RGB, 0.8);
+            vfx.sparks(ev.x, 1.6, ev.z, 0, 0, FIRE_HOT, 10, 6);
+          }
           else if (ev.kind === 'jammer' && ev.team !== localTeam) this.staticBurst = 1;
           break;
         }
@@ -880,10 +1001,94 @@ export class CombatFX {
       case 'bomblet':
         vfx.spawn(x, 0.6, z, 0, 0, 0, 0.08, 1.6, 0.6, NADE_RGB.cluster, 0, 0, 0);
         break;
+      case 'impact':
+        vfx.ring(x, z, 0.2, (ev.r || 4.2) * 1.05, 0.28, NADE_RGB.impact, 0.9);
+        vfx.sparks(x, 0.5, z, 1, 0, FIRE_HOT, vfx._n(10), 14);
+        vfx.sparks(x, 0.5, z, -1, 0, FIRE_HOT, vfx._n(10), 14);
+        break;
+      case 'claymore': {
+        // Most of it goes out of the face: a fan of fast pellets and dirt along its cone.
+        const aim = ev.aim ?? 0;
+        for (let i = vfx._n(26); i > 0; i--) {
+          const a = aim + rand(-0.85, 0.85), sp = rand(14, 30);
+          vfx.spawn(x, 0.4, z, Math.cos(a) * sp, rand(0.5, 3), Math.sin(a) * sp, rand(0.12, 0.26), 0.09, 0.02, FIRE_HOT, 0, 8, 1.2, 0.05);
+        }
+        for (let i = vfx._n(10); i > 0; i--) {
+          const a = aim + rand(-0.7, 0.7), sp = rand(3, 8);
+          vfx.spawn(x, 0.3, z, Math.cos(a) * sp, rand(2, 5), Math.sin(a) * sp, rand(0.5, 0.9), 0.3, 0.6, DIRT_RGB, 0.85, 14, 0.8);
+        }
+        break;
+      }
+      case 'drill':
+        // Bored through: debris blows back out of the hole on the near side too.
+        if (Number.isFinite(ev.ox)) {
+          const dx = ev.ox - x, dz = ev.oz - z, l = Math.hypot(dx, dz) || 1;
+          vfx.sparks(ev.ox, 0.6, ev.oz, dx / l, dz / l, NADE_RGB.drill, vfx._n(12), 9);
+          vfx.pop(ev.ox, 0.6, ev.oz, 1.4, NADE_RGB.drill, 0.2);
+        }
+        vfx.ring(x, z, 0.2, (ev.r || 3.9) * 1.05, 0.3, NADE_RGB.drill, 0.85);
+        break;
       case 'flash':
       case 'smoke':
       default: break;
     }
+  }
+
+  // V8 pops that are not explosions: Stun's concussion rings, Gas venting, each Shock arc, a Drill biting into a wall.
+  #gear(ev) {
+    const vfx = this.vfx, x = ev.x, z = ev.z, rgb = NADE_RGB[ev.kind] ?? FALLBACK;
+    switch (ev.kind) {
+      case 'stun':
+        vfx.ring(x, z, 0.3, ev.r || 8, 0.45, rgb, 0.9);
+        vfx.ring(x, z, 0.2, (ev.r || 8) * 0.6, 0.32, WHITE_RGB, 0.7);
+        vfx.pop(x, 0.8, z, 3.4, WHITE_RGB, 0.16);
+        vfx.spawn(x, 0.7, z, 0, 0, 0, 0.14, 2.6, 0.8, WHITE_RGB, 0, 0, 0);
+        for (let i = vfx._n(10); i > 0; i--) {
+          const a = rand(0, Math.PI * 2), sp = rand(4, 9);
+          vfx.spawn(x, 0.4, z, Math.cos(a) * sp, rand(0.2, 1), Math.sin(a) * sp, rand(0.3, 0.5), 0.25, 0.7, STUN_DUST, 0.6, 0, 3);
+        }
+        break;
+      case 'gas':
+        vfx.ring(x, z, 0.3, ev.r || GAS_R, 0.6, rgb, 0.6);
+        for (let i = vfx._n(12); i > 0; i--) {
+          const a = rand(0, Math.PI * 2), sp = rand(2, 5);
+          vfx.spawn(x, 0.3, z, Math.cos(a) * sp, rand(0.3, 1.2), Math.sin(a) * sp, rand(0.6, 1), 0.4, 1.4, GAS_RGB, 0.7, -0.3, 2);
+        }
+        break;
+      case 'shock': {
+        // A ring of jagged arcs out to the reach, brightest on the first.
+        const r = ev.r || SHOCK_R, arcs = ev.n ? 4 : 7;
+        for (let k = 0; k < arcs; k++) {
+          const a = rand(0, Math.PI * 2);
+          let px = x, pz = z, py = 0.3;
+          for (let j = 1; j <= 3; j++) {
+            const f = j / 3, nx = x + Math.cos(a) * r * f + rand(-0.4, 0.4), nz = z + Math.sin(a) * r * f + rand(-0.4, 0.4), ny = 0.3 + rand(0, 0.5);
+            vfx.tracer(px, py, pz, nx, ny, nz, ZAP_RGB, 0.06, 3, 0.14, 400);
+            px = nx; py = ny; pz = nz;
+          }
+        }
+        vfx.ring(x, z, 0.2, r, 0.25, rgb, ev.n ? 0.6 : 0.95);
+        vfx.pop(x, 0.6, z, ev.n ? 2.5 : 4, ZAP_RGB, 0.18);
+        break;
+      }
+      case 'drill':
+        vfx.sparks(x, 0.5, z, ev.nx || 0, ev.nz || 0, rgb, vfx._n(10), 8);
+        break;
+      default: break;
+    }
+  }
+
+  // Gas cloud: low, slow, rolling puffs out to the cloud's current reach, and a faint rim so its edge reads.
+  #gasPuffs(p) {
+    const vfx = this.vfx, age = p.age || 0;
+    if (age < 0 || age > GAS_LIFE) return;
+    const fade = Math.min(1, (GAS_LIFE - age) / 1.5), r = GAS_R * Math.min(1, 0.35 + age / 0.9);
+    for (let i = 0; i < 2; i++) {
+      const a = rand(0, Math.PI * 2), d = Math.sqrt(Math.random()) * r * 0.9;
+      vfx.spawn(p.x + Math.cos(a) * d, rand(0.2, 0.9), p.z + Math.sin(a) * d, rand(-0.4, 0.4), rand(0.05, 0.3), rand(-0.4, 0.4),
+        rand(1.1, 1.8), 0.6, 1.6, GAS_RGB, 0.45 * fade, -0.05, 0.6);
+    }
+    vfx.addRing(p.x, p.z, r - 0.18, r, NADE_RGB.gas, 0.22 * fade);
   }
 
   // Trophy: a jagged arc from the dome to whatever it shot down, a spark burst there, and a snap of light.
@@ -927,6 +1132,7 @@ export class CombatFX {
     for (let i = 0; i < this.smokeSlots.length; i++) { this.smokeSlots[i].id = null; this.smokeSlots[i].a = 0; }
     for (let i = 0; i < this.turretSlots.length; i++) this.turretSlots[i].id = null;
     for (let i = 0; i < this.airSlots.length; i++) this.airSlots[i].active = false;
+    for (let i = 0; i < this.seekSlots.length; i++) this.seekSlots[i].active = false;
     for (let i = 0; i < this.nadeSlots.length; i++) this.nadeSlots[i].id = null;
     for (let i = 0; i < this.fireSlots.length; i++) this.fireSlots[i].id = null;
     for (let i = 0; i < this.dropSlots.length; i++) this.dropSlots[i].t = -1;
@@ -1223,6 +1429,7 @@ export class CombatFX {
     if (list) {
       for (let i = 0; i < list.length && n < MAX_NADES; i++) {
         const p = list[i];
+        if (p.kind === 'gascloud') { if (trail) this.#gasPuffs(p); continue; }
         const model = NADE_MODEL[p.kind];
         if (model === undefined) continue;          // Burning ground has no model: see #updateFires.
         const team = this.teamOf.get(p.owner), friendly = team === localTeam;
@@ -1283,6 +1490,19 @@ export class CombatFX {
         if (FUSE[p.kind] && p.kind !== 'molotov') vfx.addDot(p.x, y + 0.36, p.z, 0.16 + li * 0.18, acc);
         else if (TEAM_LIGHT.has(p.kind) && li > 0.3) vfx.addDot(p.x, y + 0.42, p.z, 0.12 + 0.1 * li, _rgbOf(lr, lg, lb));
         if (p.kind === 'trophy' && p.stuck && friendly) vfx.addRing(p.x, p.z, 6.3, 6.5, acc, 0.25 + 0.12 * Math.sin(t * 3));
+        // V8. Claymore: two laser lines mark its cone, for both sides: seeing them is the counterplay.
+        if (p.kind === 'claymore' && p.stuck && age > 0.9) {
+          const tc = this.teamRGB[team ?? 0] ?? this.teamRGB[0];
+          for (let e = -1; e <= 1; e += 2) {
+            const a = s.yaw + e * CLAY_CONE, ca = Math.cos(a), sa = Math.sin(a);
+            for (let k = 1; k <= 7; k++) { const r = k * CLAY_REACH / 7; vfx.addDot(p.x + ca * r, 0.22, p.z + sa * r, 0.08 + (k === 7 ? 0.06 : 0), tc); }
+          }
+        }
+        if (p.kind === 'shock' && p.stuck) {
+          if (friendly) vfx.addRing(p.x, p.z, SHOCK_R - 0.15, SHOCK_R, acc, 0.3 + 0.2 * Math.sin(t * 23));
+          if (trail && Math.random() < 0.5) vfx.sparks(p.x, 0.25, p.z, rand(-1, 1), rand(-1, 1), acc, 2, 5);
+        }
+        if (p.kind === 'drill' && p.stuck && trail) vfx.sparks(p.x, 0.35, p.z, -Math.cos(s.yaw), -Math.sin(s.yaw), NADE_RGB.drill, 2, 6);
         n++;
       }
     }
@@ -1431,6 +1651,7 @@ export class CombatFX {
     let na = 0;
     if (gl) {
       for (let i = 0; i < gl.length && na < MAX_AIR; i++) {
+        if (gl[i].kind === 'missile' || gl[i].kind === 'swarm') continue;     // Drawn by #updateSeekers.
         const g = gl[i], s = aslots[na++];
         const chopper = g.kind === 'chopper';
         if (!s.active || s.kind !== (g.kind || 'gunship')) {
@@ -1509,7 +1730,7 @@ export class CombatFX {
         _e.set(0.28 * dir, -(a + dir * Math.PI / 2), 0);
         _q.setFromEuler(_e);
         this.#putVehicle(n++, over ? VEH.overwatch : VEH.uav, _q, x, y, z, 1, 1, 1, rgb, over ? [0.45, 0.85, 1] : rgb, 0.6 + 0.4 * Math.sin(t * 4 + team), 1, 0);
-        if (sn < MAX_AIR + MAX_DRONES) this.#putShadow(sn++, over ? VEH.overwatch : VEH.uav, _q, x, z, 1.05);
+        if (sn < MAX_SHADOWS) this.#putShadow(sn++, over ? VEH.overwatch : VEH.uav, _q, x, z, 1.05);
         if (over && team === localTeam) {
           // Overwatch sweeps the map for its own side: a slow radar arm from the centre.
           const sw = t * 1.3;
@@ -1518,6 +1739,9 @@ export class CombatFX {
         }
       }
     }
+
+    ({ n, sn } = this.#updateSeekers(view, dt, n, sn, localTeam));
+    n = this.#updateSuits(view, n, lx, lz, localTeam, uav, hasLocal);
 
     // Supply drops: fall under a canopy, land in a burst of dust and green, then sit until they sink away.
     const FALL = 1.25, STAY = 8;
@@ -1558,6 +1782,107 @@ export class CombatFX {
     this.shadow.count = sn;
     uploadUsed(this.shadow.instanceMatrix, sn);
     uploadUsed(this.shadow.geometry.attributes.aShow, sn);
+  }
+
+  // V8: cruise missiles and swarm drones. Both are always drawn, like the other aircraft. A missile is smoothed by
+  // flying it on at its known speed between snapshots and easing toward each new one, so it never stutters at 15 Hz.
+  #updateSeekers(view, dt, n, sn, localTeam) {
+    const vfx = this.vfx, t = this.time.value, gl = view.gunships, slots = this.seekSlots;
+    let k = 0;
+    if (gl) {
+      for (let i = 0; i < gl.length && k < slots.length && n < MAX_VEHICLES; i++) {
+        const g = gl[i];
+        if (g.kind !== 'missile' && g.kind !== 'swarm') continue;
+        const s = slots[k++];
+        if (!s.active || s.kind !== g.kind || s.owner !== g.owner) {
+          s.active = true; s.kind = g.kind; s.owner = g.owner; s.x = g.x; s.z = g.z; s.aim = g.aim; s.bank = 0; s.age = 0; s.trail = 0;
+          if (g.kind === 'missile') this.#missileLaunch(g.x, g.z, g.aim);
+        }
+        s.team = g.team; s.age += dt;
+        let d = (g.aim - s.aim) % (Math.PI * 2);
+        if (d > Math.PI) d -= Math.PI * 2;
+        if (d < -Math.PI) d += Math.PI * 2;
+        const step = d * damp(12, dt);
+        s.aim += step;
+        const rgb = this.teamRGB[g.team] ?? this.teamRGB[0], mine = g.team === localTeam;
+        if (g.kind === 'missile') {
+          s.x += Math.cos(s.aim) * MISSILE_SPEED * dt; s.z += Math.sin(s.aim) * MISSILE_SPEED * dt;
+          s.x += (g.x - s.x) * damp(7, dt); s.z += (g.z - s.z) * damp(7, dt);
+          s.bank += (Math.max(-0.7, Math.min(0.7, step / Math.max(dt, 1e-3) * 0.25)) - s.bank) * damp(6, dt);
+          const climb = Math.min(1, s.age / 0.25);
+          const y = 0.9 + (MISSILE_Y - 0.9) * climb;
+          _e.set(s.bank + s.age * 9, -s.aim, 0);
+          _q.setFromEuler(_e);
+          this.#putVehicle(n++, VEH.missile, _q, s.x, y, s.z, 1.1, 1.1, 1.1, rgb, FIRE_HOT, 0.7 + 0.3 * Math.sin(t * 40), 1, 0);
+          if (sn < MAX_SHADOWS) this.#putShadow(sn++, VEH.missile, _q, s.x, s.z, 1.1);
+          const ca = Math.cos(s.aim), sa = Math.sin(s.aim), tx = s.x - ca * 1.5, tz = s.z - sa * 1.5;
+          vfx.addDot(tx, y, tz, 0.42 + 0.12 * Math.sin(t * 50), FIRE_HOT);
+          vfx.addBeam(tx, y, tz, tx - ca * 1.6, y, tz - sa * 1.6, FIRE_RGB, 0.12);
+          s.trail -= dt;
+          if (s.trail <= 0) {
+            s.trail = 0.025;
+            vfx.spawn(tx, y, tz, -ca * 2 + rand(-0.4, 0.4), rand(0.2, 0.8), -sa * 2 + rand(-0.4, 0.4), rand(0.6, 1.0), 0.25, 0.9, SMOKE_RGB, 0.55, -0.3, 1.4);
+          }
+          // Where it would go off: the blast ring rides under it, team colour for its side and danger red for the other.
+          const ring = mine ? rgb : DANGER_RGB, pulse = 0.5 + 0.5 * Math.sin(t * 14);
+          vfx.addRing(s.x, s.z, MISSILE_R - 0.18, MISSILE_R, ring, 0.35 + 0.25 * pulse);
+          vfx.addRing(s.x, s.z, 0.5, 0.75, ring, 0.8);
+        } else {
+          s.x += (g.x - s.x) * damp(10, dt); s.z += (g.z - s.z) * damp(10, dt);
+          s.bank += (Math.max(-0.4, Math.min(0.4, step / Math.max(dt, 1e-3) * 0.15)) - s.bank) * damp(5, dt);
+          s.rotor += dt * 40;
+          const y = SWARM_Y + Math.sin(t * 3.1 + k * 1.7) * 0.18;
+          _e.set(s.bank, -s.aim, -0.18);
+          _q.setFromEuler(_e);
+          const blink = Math.sin(t * 9 + k * 2) > 0.2 ? 1 : 0.15;
+          this.#putVehicle(n++, VEH.drone, _q, s.x, y, s.z, 1.15, 1.15, 1.15, rgb, mine ? rgb : DANGER_RGB, blink, 1, s.rotor);
+          if (sn < MAX_SHADOWS) this.#putShadow(sn++, VEH.drone, _q, s.x, s.z, 1.15);
+          // A seeker eye that looks where it is heading: a thin beam to the ground ahead.
+          _rgb[0] = rgb[0] * 0.4; _rgb[1] = rgb[1] * 0.4; _rgb[2] = rgb[2] * 0.4;
+          vfx.addBeam(s.x, y - 0.2, s.z, s.x + Math.cos(s.aim) * 2.2, 0.15, s.z + Math.sin(s.aim) * 2.2, _rgb, 0.035);
+          vfx.addDot(s.x, y - 0.25, s.z, 0.16 + 0.1 * blink, mine ? rgb : DANGER_RGB);
+        }
+      }
+    }
+    // A seeker that vanished went off (the sim sends the explosion) or was knocked out by an EMP: flame and parts.
+    for (let i = k; i < slots.length; i++) {
+      const s = slots[i];
+      if (s.active && t - this.empT < 0.8) {
+        vfx.fireball(s.x, 2, s.z, 1.4, 0.4);
+        vfx.sparks(s.x, 2, s.z, 0, 0, EMP_RGB, 8, 7);
+      }
+      s.active = false;
+    }
+    return { n, sn };
+  }
+
+  #missileLaunch(x, z, aim) {
+    const vfx = this.vfx, ca = Math.cos(aim), sa = Math.sin(aim);
+    for (let i = vfx._n(12); i > 0; i--) {
+      const a = aim + Math.PI + rand(-0.9, 0.9), v = rand(2, 6);
+      vfx.spawn(x, 0.6, z, Math.cos(a) * v, rand(0.5, 2), Math.sin(a) * v, rand(0.6, 1.1), 0.4, 1.4, SMOKE_RGB, 0.6, -0.4, 1.8);
+    }
+    vfx.muzzleFlash(x + ca * 0.6, 1, z + sa * 0.6, aim, FIRE_HOT, 0.9);
+    vfx.ring(x, z, 0.3, 2.2, 0.35, FIRE_HOT, 0.7);
+  }
+
+  // Juggernaut armour over every suited soldier this player can see (teammates always, enemies in sight or on UAV).
+  #updateSuits(view, n, lx, lz, localTeam, uav, hasLocal) {
+    const ps = view.players, t = this.time.value;
+    if (!ps) return n;
+    let k = 0;
+    for (let i = 0; i < ps.length && k < MAX_SUITS && n < MAX_VEHICLES; i++) {
+      const p = ps[i];
+      if (!(p.armor > 0) || !p.alive) continue;
+      if (p.team !== localTeam && !uav && hasLocal && !this.#clear(lx, lz, p.x, p.z, view.smokes)) continue;
+      k++;
+      const rgb = this.teamRGB[p.team] ?? this.teamRGB[0];
+      _e.set(0, -p.aim, 0);
+      _q.setFromEuler(_e);
+      const low = p.armor < 100 ? (Math.sin(t * 16) > 0 ? 1 : 0.2) : 0.75;
+      this.#putVehicle(n++, VEH.suit, _q, p.x, p.sliding ? -0.5 : 0, p.z, 1.05, 1.05, 1.05, rgb, low < 1 && p.armor < 100 ? DANGER_RGB : rgb, low, 1, 0);
+    }
+    return n;
   }
 
   #dropLanded(x, z, rgb) {

@@ -183,6 +183,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, 
     heatIdle: 9, calmT: 0,
     slideDirX: 0, slideDirZ: 0, slideSpeed: 0,
     aaOffset: 0, aaRaw: null,
+    daze: 0, dazeT: 0,                              // Stun, Gas and Shock: see applyDaze.
   };
   if (loadout) applyLoadout(ps, loadout);
   ps.weapon = ps.primary;
@@ -215,6 +216,19 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
   ps.swapT = 0; ps.sinceShot = 9; ps.burstLeft = 0;
   ps.holsterT = 0; ps.holsterDur = 0;
   ps.aaOffset = 0; ps.aaRaw = null;
+  ps.daze = 0; ps.dazeT = 0;
+  return ps;
+}
+
+// Stun, Gas and Shock (js/sim/equipment.js 'dazed' events). For `dur` seconds the player moves at up to DAZE_SLOW less
+// speed and turns no faster than DAZE_TURN allows, scaled by `amount` 0..1. The stronger and the longer effect win.
+// The host calls this for bots; a human's phone calls it for its own 'dazed' events, since it owns its movement.
+const DAZE_SLOW = 0.55;
+const DAZE_TURN = [14, 2.2];   // rad/s turn cap at a faint and at a full daze.
+export function applyDaze(ps, amount, dur) {
+  if (!(amount > 0) || !(dur > 0)) return ps;
+  ps.daze = ps.dazeT > 0 ? Math.max(ps.daze, Math.min(1, amount)) : Math.min(1, amount);
+  ps.dazeT = Math.max(ps.dazeT, dur);
   return ps;
 }
 
@@ -457,7 +471,8 @@ function stepMovement(ps, input, w, dt, map) {
     ps.vz = ps.slideDirZ * spd;
     if (ps.slideT <= 0) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
   } else {
-    const base = (ps.sprinting ? MOVE.sprint * (marathon ? MARATHON_SPRINT : 1) : MOVE.run) * w.moveMult;
+    const base = (ps.sprinting ? MOVE.sprint * (marathon ? MARATHON_SPRINT : 1) : MOVE.run) * w.moveMult
+      * (ps.dazeT > 0 ? 1 - DAZE_SLOW * ps.daze : 1);
     // ADS caps the speed rather than scaling the stick: a part-pushed stick that is already slower than the ADS pace
     // loses nothing, which is what lets a player ease the stick off into ADS without crawling.
     const cap = ps.sprinting ? base : base * (1 + (w.adsMoveMult - 1) * ps.adsT);
@@ -503,7 +518,12 @@ function stepMovement(ps, input, w, dt, map) {
 
   // Facing: right stick wins; with it idle, turn to face the direction of travel.
   if (typeof input.aim === 'number') {
-    if (w.turnCap && (input.aiming || input.fire)) {
+    if (ps.dazeT > 0) {
+      // Dazed: the aim drags behind the stick, whatever the gun.
+      const cap = DAZE_TURN[0] + (DAZE_TURN[1] - DAZE_TURN[0]) * ps.daze;
+      const d = angleDiff(input.aim, ps.aim), lim = Math.min(cap, w.turnCap && (input.aiming || input.fire) ? w.turnCap : cap) * dt;
+      ps.aim += Math.max(-lim, Math.min(lim, d));
+    } else if (w.turnCap && (input.aiming || input.fire)) {
       // Heavy guns swing slowly once shouldered: this is what lets a flanker beat a planted LMG.
       const d = angleDiff(input.aim, ps.aim), lim = w.turnCap * dt;
       ps.aim += Math.max(-lim, Math.min(lim, d));
@@ -522,6 +542,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   if (dt > MAX_DT) dt = MAX_DT;
 
   ps.overheatEdge = false;
+  if (ps.dazeT > 0 && (ps.dazeT -= dt) <= 0) { ps.dazeT = 0; ps.daze = 0; }
   if (input.swap && !ps.ladder) setSlot(ps, ps.slot === 0 ? 1 : 0);
   if (ps.swapT > 0) ps.swapT -= dt;
 

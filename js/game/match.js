@@ -5,7 +5,7 @@ import { MAPS } from '../shared/map.js';
 import { SIM_HZ, SNAPSHOT_EVERY, STATE_SEND_HZ, INTERP_DELAY } from '../shared/constants.js';
 import {
   createPlayerState, respawnPlayer, stepPlayer, traceShot, applyAimAssist,
-  encodeHumanState, decodeHumanState, armPlayer,
+  encodeHumanState, decodeHumanState, armPlayer, applyDaze,
 } from '../sim/player.js';
 import { Sim, scavengeRefill } from '../sim/sim.js';
 import { previewThrow, maxThrowRange } from '../sim/equipment.js';
@@ -129,6 +129,7 @@ export class Match {
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
+      if (e.t === 'dazed' && e.id === this.localId) applyDaze(this.ps, e.amount, e.dur);   // Stun, Gas, Shock slow you.
       if (e.t === 'arm' && e.id === this.localId) {   // Gun Game promotion or setback, in that gun's own camo.
         armPlayer(this.ps, e.weapon);
         this.ps.camo = this.me.loadout?.camos?.[e.weapon] ?? 'none';
@@ -182,6 +183,11 @@ export class Match {
       aim = input.aim + angleDiffSigned(assisted, input.aim) * (this.controls.aimAssist ?? 1);
     } else if (moving) {
       aim = Math.atan2(input.mz, input.mx);
+    }
+    // Steering your own Cruise Missile: the aim stick flies it, so the gun holds fire and an idle stick keeps course.
+    if (view.gunships?.some(g => g.kind === 'missile' && g.owner === this.localId)) {
+      r.fire = false;
+      if (input.aim === null || input.aim === undefined) aim = this.lastAim;
     }
     this.lastAim = aim;
     r.aim = aim;

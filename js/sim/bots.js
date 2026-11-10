@@ -74,6 +74,7 @@ const TURRET_THREAT = 21;
 const STREAK_WAIT = 10;         // Seconds a bot will hold a streak looking for a good moment, before calling it anyway.
 const SENSOR_RANGE = 15;        // Metres of throw a bot will spend finding someone it only half knows about.
 const MINE_SPOT = 2.5;          // A mine goes this far in front of its owner.
+const SHOCK_TARGETS = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy']);   // Devices worth a Shock.
 const SUPPRESSED_HEARING = 0.4; // Fraction of the normal hearing range for a suppressed shot.
 const HEAR_OCCLUDED = 0.6;      // Range left to hear a shot with a wall in the way.
 const HEAR_GAP = 0.45;          // A bot takes in one gunshot at a time, so a long burst cannot average away the error.
@@ -142,7 +143,7 @@ const BOT_KITS = {
 };
 
 // Sidearms bots carry, dealt in turn: each one equally often, so per-gun stats compare like with like.
-const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper'];
+const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper', 'scatter'];
 export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
 // A gun without its own kits borrows its category's base gun's, minus what it cannot take.
 const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol' };
@@ -1043,6 +1044,10 @@ export class BotBrain {
       case 'resupply': return p.hp < 60 || ps.lethalLeft === 0 || ps.ammo[ps.slot] === 0;
       // Anything overhead is common knowledge; a sentry only counts once this bot has actually seen one.
       case 'emp': return this._enemyRadar() || sim.gunships.some(g => g.team !== p.team) || this.turretTarget !== null;
+      // Missile and swarm only ever go after what the team can see, so only call them when that is someone.
+      case 'missile':
+      case 'swarm': return sim._teamVisible(p.team).length > 0;
+      case 'juggernaut': return !visible || p.hp < 50;      // Suit up between fights, or to save a losing one.
       default: return true;     // Chopper, gunship: they find their own work.
     }
   }
@@ -1113,7 +1118,8 @@ export class BotBrain {
         if (sim.rng() < S.flash) this._throw('tactical', ps.aim, MINE_SPOT);
         this.tacticalT = between(sim.rng, 10, 18);
       }
-      if (ps.lethal === 'mine' && ps.lethalLeft > 0 && this.nadeT <= 0) {
+      // A Claymore faces the way it is thrown: out along the bot's own watch line.
+      if ((ps.lethal === 'mine' || ps.lethal === 'claymore') && ps.lethalLeft > 0 && this.nadeT <= 0) {
         if (sim.rng() < S.nade) this._throw('lethal', ps.aim, MINE_SPOT);
         this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
       }
@@ -1126,6 +1132,15 @@ export class BotBrain {
         if (sim.rng() < S.flash) this._throw('tactical', Math.atan2(this.knownZ - ps.z, this.knownX - ps.x), dist);
         this.tacticalT = between(sim.rng, 8, 14);
         return;
+      }
+    }
+
+    // A Shock goes at enemy devices the bot can actually see: it fries them.
+    if (ps.tactical === 'shock' && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
+      const dev = this._seenDevice();
+      if (dev) {
+        this.tacticalT = between(sim.rng, 8, 14);
+        if (sim.rng() < S.flash) { this._throw('tactical', Math.atan2(dev.z - ps.z, dev.x - ps.x) + gaussian(sim.rng) * S.aimFloor, Math.hypot(dev.x - ps.x, dev.z - ps.z)); return; }
       }
     }
 
@@ -1148,7 +1163,8 @@ export class BotBrain {
         this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
         if (sim.rng() < S.nade) { this._throw('lethal', aim, d); return; }
       }
-    } else if (ps.lethal !== 'mine' && this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
+    } else if (ps.lethal !== 'mine' && ps.lethal !== 'claymore' && this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
+      // A Drill's landing is where it goes off, past the wall it bores through, so this also finds wall shots.
       const radius = effectRadius(ps.lethal);
       const land = this._bestThrow(ps.lethal, aim, tx, tz, radius * 0.7);
       if (land && Math.hypot(land.x - ps.x, land.z - ps.z) > 4 && !this._teammateNear(land.x, land.z, radius + 1)) {
@@ -1163,6 +1179,17 @@ export class BotBrain {
       }
     }
 
+    // Stun and Shock open a fight with someone in view; Gas flushes someone dug in where the bot last saw them.
+    const opener = ps.tactical === 'stun' ? 6 : ps.tactical === 'shock' ? 3.5 : ps.tactical === 'gas' ? 4 : 0;
+    if (opener && ps.tacticalLeft > 0 && this.tacticalT <= 0 && (visible || ps.tactical === 'gas') && d > 5 && d < 15) {
+      const land = this._bestThrow(ps.tactical, aim, tx, tz, opener);
+      if (land && !this._teammateNear(land.x, land.z, opener + 1) && Math.hypot(land.x - ps.x, land.z - ps.z) > opener) {
+        if (sim.rng() < S.flash) this._throw('tactical', land.aim, land.dist);
+        this.tacticalT = between(sim.rng, 8, 15);
+        return;
+      }
+    }
+
     if (ps.tactical === 'flash' && visible && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 7) {
       const land = this._bestThrow('flash', aim, tx, tz, 7);
       if (land && !this._teammateNear(land.x, land.z, 8)) {
@@ -1170,6 +1197,20 @@ export class BotBrain {
         this.tacticalT = between(sim.rng, 8, 15);
       }
     }
+  }
+
+  // The nearest enemy device sitting on the map within a Shock's throw that this bot has a clear view of, or null.
+  _seenDevice() {
+    const { sim, p, ps } = this, list = sim.eq.projectiles;
+    let best = null, bestD = 13;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (!q.stuck || !SHOCK_TARGETS.has(q.kind) || q.team === p.team) continue;
+      const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+      if (d < 3 || d >= bestD || !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z, sim.smokes)) continue;
+      best = q; bestD = d;
+    }
+    return best;
   }
 
   // Bots that know what a turret is either shoot it or get out of its line of fire.

@@ -33,6 +33,7 @@ const GUN_SCALE = 0.98;
 const GUN_SCALES = {
   ar: 1, smg: 1, shotgun: 1, lmg: 1, sniper: 0.86, pistol: 1.05,
   antimat: 0.8, semisnipe: 0.92, rotary: 0.94, battle: 0.96, machpistol: 1.05, deuce: 1.05, revolver: 1,
+  lightlmg: 0.96, crossbow: 0.94, scatter: 1.08,
 };
 const HIP = 0.78 * CHAR_SCALE;
 
@@ -45,6 +46,8 @@ const HOLD = {
   saw: [-0.03, -0.09, 0.04], rotary: [-0.07, -0.17, 0.08], antimat: [-0.04, 0.05, 0], semisnipe: [-0.01, 0.04, 0],
   coach: [-0.02, -0.03, 0.02], heavyar: [0.06, 0, 0], thumper: [-0.04, -0.03, 0.03],
   machpistol: [0.14, 0.06, -0.08], deuce: [0.14, 0.06, -0.08],
+  // V8: the light LMG rides low like the Drover, the crossbow sits up at the shoulder, the scattergun punched out.
+  lightlmg: [-0.03, -0.08, 0.04], crossbow: [-0.01, 0.04, 0], slug: [-0.02, -0.02, 0.02], scatter: [0.14, 0.06, -0.08],
 };
 const HOLD_NONE = [0, 0, 0];
 const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke: [0.35, 0.6, 0.42], flash: [0.85, 0.8, 0.45], stim: [0.3, 0.7, 0.5] };

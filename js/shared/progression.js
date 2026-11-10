@@ -86,12 +86,22 @@ export const UNLOCK_SCHEDULE = [
   { level: 9,  kind: 'lethal',   id: 'mine' },
   { level: 12, kind: 'lethal',   id: 'cluster' },
   { level: 13, kind: 'lethal',   id: 'hatchet' },
+  // V8 equipment.
+  { level: 5,  kind: 'lethal',   id: 'impact' },
+  { level: 6,  kind: 'tactical', id: 'stun' },
+  { level: 10, kind: 'lethal',   id: 'claymore' },
+  { level: 11, kind: 'tactical', id: 'gas' },
+  { level: 15, kind: 'lethal',   id: 'drill' },
+  { level: 16, kind: 'tactical', id: 'shock' },
   { level: 3,  kind: 'streak',   id: 'jammer' },
   { level: 5,  kind: 'streak',   id: 'resupply' },
   { level: 7,  kind: 'streak',   id: 'mortar' },
   { level: 10, kind: 'streak',   id: 'overwatch' },
   { level: 12, kind: 'streak',   id: 'chopper' },
   { level: 14, kind: 'streak',   id: 'emp' },
+  { level: 6,  kind: 'streak',   id: 'missile' },
+  { level: 11, kind: 'streak',   id: 'swarm' },
+  { level: 16, kind: 'streak',   id: 'juggernaut' },
   // Wave 5 guns, between the Wave 3 ones: one roughly every level from 2 to 22, the specialist ones last.
   { level: 2,  kind: 'weapon',   id: 'tacsmg' },
   { level: 3,  kind: 'weapon',   id: 'deuce' },
@@ -105,6 +115,13 @@ export const UNLOCK_SCHEDULE = [
   { level: 19, kind: 'weapon',   id: 'thumper' },
   { level: 20, kind: 'weapon',   id: 'rotary' },
   { level: 22, kind: 'weapon',   id: 'antimat' },
+  // V8 guns, on the even levels the Wave 5 ones left free.
+  { level: 4,  kind: 'weapon',   id: 'scatter' },
+  { level: 6,  kind: 'weapon',   id: 'carbine' },
+  { level: 8,  kind: 'weapon',   id: 'slug' },
+  { level: 10, kind: 'weapon',   id: 'heavysmg' },
+  { level: 16, kind: 'weapon',   id: 'lightlmg' },
+  { level: 18, kind: 'weapon',   id: 'crossbow' },
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 const V1_GRANT_LEVEL = 15;
@@ -191,8 +208,8 @@ export const cosmeticRequirement = item => (item.prestige ? `Weapon Prestige ${i
 
 /* ---------- The Golden Gun ---------- */
 // Earned by maxing everything there is: every perk Pro, every other weapon at Weapon Prestige MAX_WEAPON_PRESTIGE and
-// back up to MAX_WEAPON_LEVEL, and the player at Prestige MAX_PRESTIGE and MAX_LEVEL. None of these can fall once
-// reached (both prestiges stop at their max), so once earned it stays earned with no flag to keep.
+// back up to MAX_WEAPON_LEVEL, and the player at Prestige MAX_PRESTIGE and MAX_LEVEL. New guns join the requirement;
+// a player who already earned it keeps it (js/ui/progress.js goldenEarned).
 export const GOLDEN_REQ_WEAPONS = WEAPON_IDS.filter(id => id !== GOLDEN_ID);
 export const GOLDEN_REQUIREMENT = 'Max everything: every perk Pro, every weapon at max prestige and level, Prestige X at level 50';
 
@@ -270,9 +287,9 @@ export function isVeteran({ prestige = 0, level = 1, pro = 0 } = {}) {
 }
 
 const BLAST_EQUIP = new Set(['frag', 'sticky', 'mine', 'cluster']);
-const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship']);
+const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm']);
 const MULTI_MEDALS = new Set(['double', 'triple', 'fury']);
-const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'gunship']);
+const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'gunship', 'missile', 'swarm']);
 const FAR_THROW = 13;            // Past the base throw range (js/sim/equipment.js THROW_RANGE): a Strong Arm throw.
 const SWAP_WINDOW = 2.5;
 const BURN_GAP = 1.5;            // Burn ticks closer together than this are one fire.
@@ -423,6 +440,9 @@ const GEAR_TRACKS = {
     decoy:  [T('uses', 15, 'Throw 15 Decoys'), T('shots', 120, 'Fake 120 shots with Decoys'), T('decoyKills', 10, 'Get 10 kills within 10 s of a Decoy'), T('decoyKills', 35, 'Get 35 kills within 10 s of a Decoy')],
     sensor: [T('uses', 15, 'Throw 15 Sensors'), T('marked', 30, 'Mark 30 enemies'), T('markKills', 10, 'Kill 10 marked enemies'), T('markKills', 35, 'Kill 35 marked enemies')],
     trophy: [T('uses', 15, 'Place 15 Trophies'), T('saves', 8, 'Stop 8 enemy throws'), T('saves', 25, 'Stop 25 enemy throws'), T('saves', 60, 'Stop 60 enemy throws')],
+    stun:   [T('uses', 20, 'Throw 20 Stuns'), T('dazed', 30, 'Stun 30 enemies'), T('dazeKills', 10, 'Kill 10 enemies you stunned'), T('dazeKills', 35, 'Kill 35 enemies you stunned')],
+    gas:    [T('uses', 15, 'Throw 15 Gas grenades'), T('dazed', 25, 'Gas 25 enemies'), T('dazeKills', 10, 'Kill 10 enemies you gassed'), T('dazeKills', 35, 'Kill 35 enemies you gassed')],
+    shock:  [T('uses', 15, 'Throw 15 Shocks'), T('fried', 8, 'Fry 8 enemy devices'), T('dazeKills', 10, 'Kill 10 enemies you shocked'), T('fried', 30, 'Fry 30 enemy devices')],
   },
   lethal: {
     frag:    [T('uses', 30, 'Throw 30 Frags'), T('kills', 25, 'Get 25 Frag kills'), T('bankKills', 5, 'Get 5 kills with a Frag banked off a wall'), T('multi', 10, 'Kill 2 or more with one Frag 10 times')],
@@ -431,6 +451,9 @@ const GEAR_TRACKS = {
     mine:    [T('uses', 15, 'Place 15 Mines'), T('kills', 10, 'Get 10 Mine kills'), T('multi', 3, 'Kill 2 or more with one Mine 3 times'), T('kills', 40, 'Get 40 Mine kills')],
     cluster: [T('uses', 20, 'Throw 20 Clusters'), T('kills', 15, 'Get 15 Cluster kills'), T('multi', 6, 'Kill 2 or more with one Cluster 6 times'), T('kills', 50, 'Get 50 Cluster kills')],
     hatchet: [T('uses', 20, 'Throw 20 Hatchets'), T('kills', 10, 'Get 10 Hatchet kills'), T('longKills', 5, 'Get 5 Hatchet kills from 12 m or more'), T('kills', 40, 'Get 40 Hatchet kills')],
+    impact:   [T('uses', 25, 'Throw 25 Impacts'), T('kills', 20, 'Get 20 Impact kills'), T('directKills', 5, 'Get 5 Impact kills on a direct hit'), T('multi', 5, 'Kill 2 or more with one Impact 5 times')],
+    claymore: [T('uses', 15, 'Place 15 Claymores'), T('kills', 10, 'Get 10 Claymore kills'), T('multi', 3, 'Kill 2 or more with one Claymore 3 times'), T('kills', 40, 'Get 40 Claymore kills')],
+    drill:    [T('uses', 20, 'Throw 20 Drills'), T('kills', 10, 'Get 10 Drill kills'), T('wallKills', 8, 'Get 8 Drill kills through a wall'), T('wallKills', 30, 'Get 30 Drill kills through a wall')],
   },
   streak: {
     uav:       [T('uses', 5, 'Call in 5 UAVs'), T('upKills', 15, 'Get 15 kills while your UAV is up'), T('uses', 20, 'Call in 20 UAVs'), T('upKills', 60, 'Get 60 kills while your UAV is up')],
@@ -443,6 +466,9 @@ const GEAR_TRACKS = {
     chopper:   [T('uses', 3, 'Call in 3 Attack Choppers'), T('kills', 10, 'Get 10 Chopper kills'), T('multi', 3, 'Get 3 Chopper multi-kills'), T('kills', 35, 'Get 35 Chopper kills')],
     emp:       [T('uses', 3, 'Call in 3 EMPs'), T('upKills', 8, 'Get 8 kills within 20 s of an EMP'), T('uses', 10, 'Call in 10 EMPs'), T('upKills', 30, 'Get 30 kills within 20 s of an EMP')],
     gunship:   [T('uses', 3, 'Call in 3 Gunships'), T('kills', 15, 'Get 15 Gunship kills'), T('multi', 4, 'Get 4 Gunship multi-kills'), T('kills', 50, 'Get 50 Gunship kills')],
+    missile:   [T('uses', 5, 'Launch 5 Cruise Missiles'), T('kills', 10, 'Get 10 Cruise Missile kills'), T('multi', 3, 'Kill 2 or more with one Cruise Missile 3 times'), T('kills', 35, 'Get 35 Cruise Missile kills')],
+    swarm:     [T('uses', 3, 'Launch 3 Drone Swarms'), T('kills', 10, 'Get 10 Drone Swarm kills'), T('multi', 3, 'Get 3 Drone Swarm multi-kills'), T('kills', 35, 'Get 35 Drone Swarm kills')],
+    juggernaut: [T('uses', 3, 'Suit up as a Juggernaut 3 times'), T('suitKills', 15, 'Get 15 kills as a Juggernaut'), T('soaked', 2500, 'Soak 2,500 damage with Juggernaut armour'), T('suitKills', 50, 'Get 50 kills as a Juggernaut')],
   },
 };
 // Operators: time, kills, a signature that fits the character, wins, then a long kill count. The roster itself lives in
@@ -609,6 +635,7 @@ export const UNLOCK_CHALLENGES = {
   'streak:chopper':  { label: 'Call in 5 scorestreaks', goal: 5, value: s => total(s, 'streak', 'uses') },
   'streak:emp':      { label: 'Call in 10 scorestreaks', goal: 10, value: s => total(s, 'streak', 'uses') },
   'streak:gunship':  { label: 'Get 15 scorestreak kills', goal: 15, value: s => total(s, 'streak', 'kills') },
+  'streak:juggernaut': { label: 'Call in 8 scorestreaks', goal: 8, value: s => total(s, 'streak', 'uses') },
 };
 
 // {label, goal, value, done} for an item's challenge in a save, or null when it has none.
@@ -644,7 +671,10 @@ const UP_SECS = { uav: 20, jammer: 15, overwatch: 25, emp: 20 };   // How long e
 const AFTER_SECS = { smoke: 9, stim: 5, decoy: 10 };                // A kill this soon after using it counts for it.
 const AFTER_STAT = { smoke: 'coverKills', stim: 'stimKills', decoy: 'decoyKills' };
 const FLASH_KILL_SECS = 4;
-const MULTI_GAP = { molotov: 1.5, mine: 0.6 };                       // Kills by one item this close are one multi-kill.
+const MULTI_GAP = { molotov: 1.5, mine: 0.6, claymore: 0.6 };       // Kills by one item this close are one multi-kill.
+const DAZE_KILL_SECS = 4;        // A kill this soon after this player stunned, gassed or shocked the victim counts for that item.
+const DAZE_RECOUNT = 3;          // Gas keeps re-dazing: the same enemy counts again only after this long.
+const BANG_KILL_SECS = 0.4;      // A Drill or Impact kill this soon after its bang belongs to that bang (wall, direct).
 const STREAK_MULTI_GAP = 1.5;
 const LONG_THROW = 12;
 const BANK_WINDOW = 3.5;         // A frag kill this soon after a banked throw is the banked frag's.
@@ -667,6 +697,8 @@ export class MasteryTracker {
     this.fragBank = false;
     this.flashed = new Map();    // enemy id -> when this player flashed them
     this.marked = new Map();     // enemy id -> until when this player's sensor shows them
+    this.dazedBy = new Map();    // enemy id -> {kind, t} this player last stunned, gassed or shocked them
+    this.bangs = {};             // Drill and Impact: when this player's last one went off, and how
     this.up = {};                // streak -> until
     this.supplyT = -99;          // A Supply Drop from this player's team, for telling it apart from a Stim
     this.supplyMine = false;
@@ -737,6 +769,17 @@ export class MasteryTracker {
           if (e.by === id) { this.add('sensor', 'marked'); this.marked.set(e.id, t + (e.dur ?? 3)); }
           break;
         case 'zap': if (e.by === id) this.add('trophy', 'saves'); break;
+        case 'dazed': {
+          if (e.by !== id || e.id === id || !TACTICALS[e.kind] || !this.#enemy(view, e.id)) break;
+          const last = this.dazedBy.get(e.id);
+          if (!last || last.kind !== e.kind || t - last.t > DAZE_RECOUNT) this.add(e.kind, 'dazed');
+          this.dazedBy.set(e.id, { kind: e.kind, t });
+          break;
+        }
+        case 'fried': if (e.by === id) this.add('shock', 'fried'); break;
+        case 'bang':
+          if (e.by === id && (e.kind === 'drill' || e.kind === 'impact')) this.bangs[e.kind] = { t, wall: !!e.wall, direct: !!e.direct };
+          break;
         case 'decoy': if (e.by === id) this.add('decoy', 'shots'); break;
         case 'streak':
           if (e.kind === 'resupply' && e.team === this.team) { this.supplyT = t; this.supplyMine = e.id === id; }
@@ -765,6 +808,10 @@ export class MasteryTracker {
     if (me) {
       if (op && me.alive && view.phase === 'live' && dt > 0) this.add(op, 'secs', dt);
       this.prevHp = me.alive ? me.hp : MAX_HP;
+      // Juggernaut: armour lost since last frame is damage soaked. Read from the view, which carries it per player.
+      const armor = me.alive ? (me.armor ?? 0) : 0;
+      if (me.alive && armor < (this.prevArmor ?? 0)) this.add('juggernaut', 'soaked', this.prevArmor - armor);
+      this.prevArmor = armor;
     }
     this.prevT = t;
   }
@@ -778,6 +825,7 @@ export class MasteryTracker {
     if (gun && (e.dist ?? 99) <= CLOSE_KILL) this.add(op, 'closeKills');
     if (gun && me?.sliding) this.add(op, 'slideKills');
     for (const [k, until] of Object.entries(this.up)) if (until >= t) this.add(k, 'upKills');
+    if ((me?.armor ?? 0) > 0 || (this.prevArmor ?? 0) > 0) this.add('juggernaut', 'suitKills');
     if (e.streak) {
       if (STREAKS[e.streak]) {
         this.add(e.streak, 'kills');
@@ -788,9 +836,17 @@ export class MasteryTracker {
     for (const k of Object.keys(AFTER_SECS)) if (t - (this.used[k] ?? -99) <= AFTER_SECS[k]) this.add(k, AFTER_STAT[k]);
     if (t - (this.flashed.get(e.target) ?? -99) <= FLASH_KILL_SECS) this.add('flash', 'flashKills');
     if ((this.marked.get(e.target) ?? -1) >= t) this.add('sensor', 'markKills');
+    const dz = this.dazedBy.get(e.target);
+    if (dz && t - dz.t <= DAZE_KILL_SECS) this.add(dz.kind, 'dazeKills');
     if (e.equip) {
       const k = e.equip;
+      if (TACTICALS[k]) { this.add(k, 'kills'); return; }      // Gas and Shock can finish someone off.
       if (!LETHALS[k]) return;
+      const bang = this.bangs[k];
+      if (bang && t - bang.t <= BANG_KILL_SECS) {
+        if (bang.wall) this.add(k, 'wallKills');
+        if (bang.direct) this.add(k, 'directKills');
+      }
       this.add(k, 'kills');
       if (this.#chained(`e:${k}`, MULTI_GAP[k] ?? 0.5)) this.add(k, 'multi');
       if ((e.dist ?? 0) >= LONG_THROW) this.add(k, 'longKills');

@@ -11,7 +11,7 @@ import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_IDLE, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
+import { angleDiff, applyDaze, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_IDLE, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 import { decodeSnd, restoreSnd, SndRules } from './snd.js';
@@ -48,6 +48,7 @@ const CHOPPER_LIFE = 20, CHOPPER_SPEED = 8, CHOPPER_HOVER = 11, CHOPPER_RANGE = 
 const CHOPPER_BURST = 6, CHOPPER_GAP = 0.18, CHOPPER_PAUSE = 1, CHOPPER_DAMAGE = 17, CHOPPER_SPREAD = 0.05, CHOPPER_LAG = 0.3;
 
 // A zone denial tool: it wins a corner against someone who ignores it, and loses to anyone who shoots back.
+const SHOCK_TURRET = 45;        // Damage each Shock arc does to an enemy Sentry in reach: three arcs nearly kill one.
 const TURRET_LIFE = 25, TURRET_HP = 180, TURRET_RADIUS = 0.75, TURRET_RANGE = 20;
 // What a sentry round does against cover, in shotPassage terms: a rifle-class round.
 const TURRET_GUN = { range: TURRET_RANGE + 4, penetrate: 0.7 };
@@ -59,6 +60,18 @@ const TURRET_HIT_RADIUS = PLAYER_RADIUS + 0.1, TURRET_SLIDE_RADIUS = TURRET_HIT_
 const GUNSHIP_LIFE = 18, GUNSHIP_ORBIT = 13, GUNSHIP_BURST = 4, GUNSHIP_GAP = 0.16, GUNSHIP_PAUSE = 2;
 const GUNSHIP_DAMAGE = 30, GUNSHIP_SCATTER = 1.5, GUNSHIP_BLAST = 0.85, GUNSHIP_LAG = 0.3, GUNSHIP_EYES = 32;
 
+// Cruise Missile (V8): flies low and fast where its owner points the aim stick; buildings stop it, low cover does not.
+// A human steers with their own aim, which the host already has; a bot steers at what its team can see.
+const MISSILE_LIFE = 4.5, MISSILE_SPEED = 17, MISSILE_TURN = 2.6, MISSILE_ARM = 0.3;
+const MISSILE_FUSE = 2.2, MISSILE_COLD_FUSE = 0.9;   // Proximity fuse; Cold Blooded has to be flown right into.
+const MISSILE_RADIUS = 5, MISSILE_DAMAGE = 150;
+// Drone Swarm (V8): three small drones that hunt what the team can see and dive on it. Slower than a slide, so breaking
+// sight and moving still saves you; each one is a single small blast.
+const SWARM_COUNT = 3, SWARM_LIFE = 18, SWARM_SPEED = 7.6, SWARM_RETARGET = 0.4, SWARM_LOITER = 4.5;
+const SWARM_DIVE = 1.2, SWARM_RADIUS = 3.2, SWARM_DAMAGE = 115;
+// Juggernaut (V8): armour that soaks damage before health. Blasts chew through it faster than bullets.
+const JUGG_ARMOR = STREAKS.juggernaut.armor, JUGG_BLAST = 1.5;
+
 const THROW_ORIGIN_SLACK = 4;    // How far a reported throw may start from where the host has that player.
 const SCAVENGE_MAGS = 1;         // Magazines of reserve per kill with Scavenger.
 
@@ -67,7 +80,7 @@ const MEDIC_REACH = 7;           // Field Medic: teammates this close regenerate
 const WIND_TIME = 2.5, WIND_TAKEN = 0.75;    // Second Wind: seconds, and the share of damage still taken.
 const RESTOCK_TIME = 30;         // Quartermaster: seconds per piece of equipment coming back.
 const HIJACK_REACH = 1.8, HIJACK_TIME = 1.5; // Hijacker: metres from an enemy Sentry, seconds held there.
-const BLAST_STREAKS = new Set(['strike', 'mortar', 'gunship']);
+const BLAST_STREAKS = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm']);
 // Bots at these tiers carry Pro on every perk they hold, and a calling card: veterans are meant to look it.
 const PRO_SKILLS = new Set(['veteran', 'elite']);
 
@@ -91,11 +104,13 @@ const FFA_SEEN = 28;             // Penalty for a point any living player can se
 const FFA_SIGHT = 34;
 
 const PHASES = ['warmup', 'live', 'ended'];
-const PROJECTILE_KINDS = ['frag', 'sticky', 'smoke', 'flash', 'molotov', 'fire', 'mine', 'cluster', 'bomblet', 'hatchet', 'decoy', 'sensor', 'trophy'];
+const PROJECTILE_KINDS = ['frag', 'sticky', 'smoke', 'flash', 'molotov', 'fire', 'mine', 'cluster', 'bomblet', 'hatchet', 'decoy', 'sensor', 'trophy',
+  'stun', 'gas', 'gascloud', 'shock', 'impact', 'claymore', 'drill'];   // V8 equipment: appended, old indices keep their numbers.
 const TACTICAL_IDS = Object.keys(TACTICALS);
 const LETHAL_IDS = Object.keys(LETHALS);
 const PERKS_BY_TIER = [0, 1, 2].map(t => PERK_IDS.filter(id => PERKS[id].tier === t));
-const GUNSHIP_KINDS = ['gunship', 'chopper'];
+// Kinds on the wire's aircraft list. 'juggernaut' rows are not aircraft: they carry a wearer's armour (see _encodeEntities).
+const GUNSHIP_KINDS = ['gunship', 'chopper', 'missile', 'swarm', 'juggernaut'];
 const AIR_KINDS = STREAK_IDS.filter(id => STREAKS[id].air);
 const POS = { x: 0, z: 0, sliding: false };
 const TURRET_RAY = { head: false, pen: 1 };   // Scratch ray for rayDamage on a turret hit.
@@ -116,18 +131,19 @@ const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember'
 // The first twelve are the offset-0 set (tests and callers that pass no map): the everyday guns.
 const BOT_PRIMARIES = [
   'ar', 'burst', 'smg', 'heavyar', 'pdw', 'lmg', 'dmr', 'tacsmg', 'sniper', 'shotgun', 'battle', 'autoshot',
-  'saw', 'coach', 'lever', 'semisnipe', 'rotary', 'antimat',
+  // V8 guns dealt between the specialists, so no one match draws all of them at once.
+  'saw', 'carbine', 'coach', 'heavysmg', 'lever', 'slug', 'semisnipe', 'lightlmg', 'rotary', 'crossbow', 'antimat',
 ];
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
-const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy'];
-const BOT_LETHALS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet'];
+const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock'];
+const BOT_LETHALS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill'];
 const BOT_PERKS = [
   ['marathon', 'scavenger', 'tracker'], ['flak', 'fasthands', 'ghost'], ['tacmask', 'strongarm', 'coldblood'],
   ['quickmend', 'hardline', 'deadsilence'], ['adrenaline', 'bandolier', 'engineer'], ['marathon', 'hardline', 'ghost'],
 ];
 const BOT_STREAKS = [
-  ['uav', 'turret', 'strike'], ['jammer', 'mortar', 'chopper'], ['uav', 'overwatch', 'gunship'],
-  ['resupply', 'strike', 'emp'], ['jammer', 'turret', 'chopper'], ['uav', 'mortar', 'gunship'],
+  ['uav', 'turret', 'strike'], ['missile', 'mortar', 'chopper'], ['uav', 'overwatch', 'gunship'],
+  ['resupply', 'swarm', 'emp'], ['jammer', 'turret', 'juggernaut'], ['missile', 'swarm', 'gunship'],
 ];
 // Recruits hold the cheap end of the list and never field anything that fights for them.
 const RECRUIT_STREAKS = ['uav', 'jammer', 'resupply'];
@@ -310,7 +326,7 @@ export class Sim {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
         primary: loadout.primary, camo: loadout.camo, loadout, pendingLoadout: null, index, card: loadout.card,
-        windT: 0, restockT: 0,
+        windT: 0, restockT: 0, armor: 0,
         ps: createPlayerState({ id: r.id, primary: loadout.primary, camo: loadout.camo, loadout }),
         hp: MAX_HP, alive: true, respawnT: 0, spawnProtect: 0,
         // Tap to respawn (humans only): seconds dead, and whether a respawn request is waiting.
@@ -1148,6 +1164,7 @@ export class Sim {
     // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
     // damage dealt: in hit events, assists and the firing range readout.
     if (target.windT > this.time && hasPro(target.ps, 'adrenaline')) dmg *= WIND_TAKEN;     // Second Wind.
+    if (target.armor > 0) dmg = this._soak(target, dmg, weapon, streak, equip);         // Juggernaut.
     dmg = Math.min(dmg, Math.max(0, target.hp));
     if (this.range) this.range.onDamage(target, attacker, dmg, dist, head, !!(streak || equip));
     target.hp -= dmg;
@@ -1164,6 +1181,7 @@ export class Sim {
     const hit = { t: 'hit', by: attacker.id, target: target.id, dmg: Math.round(dmg),
       x: round2(target.ps.x), z: round2(target.ps.z), killed };
     if (head) hit.head = true;
+    if (this._soaked) { hit.armor = true; this._soaked = false; }     // Some or all of it went into Juggernaut armour.
     // Gunfire carries its gun and range, for the per-gun stats (js/game/telemetry.js). Streaks and thrown kit do not.
     if (!streak && !equip) { hit.w = weapon; hit.dist = round2(dist); }
     else if (equip) hit.eq = equip;     // What a non-gun hit was, for Pro challenges (js/shared/progression.js).
@@ -1180,6 +1198,7 @@ export class Sim {
     if (this.range) this.range.onKill(target);
     // Scorestreak score is not touched: it persists through death (docs/V4.md rules, restored in Wave 6).
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
+    target.armor = 0;
     target.lastKilledBy = killer.id;
     killer.kills++;
     if (this.mode === 'tdm' || this.mode === 'ffa') this.scores[killer.team]++;
@@ -1252,6 +1271,7 @@ export class Sim {
     if (!target.alive) return;
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME; target.deadT = 0; target.wantRespawn = false;
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
+    target.armor = 0;
     target.dmgBy.fill(0);
     const x = round2(target.ps.x), z = round2(target.ps.z);
     this._emit({ t: 'hit', by: target.id, target: target.id, dmg: MAX_HP, x, z, killed: true, eq: equip });
@@ -1306,12 +1326,24 @@ export class Sim {
     }
     if (e.t === 'bang') {
       e.x = round2(e.x); e.z = round2(e.z);
+      if (e.ox !== undefined) { e.ox = round2(e.ox); e.oz = round2(e.oz); }     // Drill: where it bored in.
+      if (e.aim !== undefined) e.aim = round2(e.aim);                           // Claymore: which way it fired.
       if (EQUIPMENT[e.kind].blast) this._blastTurrets(e);
     } else if (e.t === 'throw') {
       e.ox = round2(e.ox); e.oz = round2(e.oz); e.aim = round2(e.aim);
     } else if (e.t === 'decoy') {
       this._alertBots({ ps: { x: e.x, z: e.z }, team: e.team }, false);
       e.x = round2(e.x); e.z = round2(e.z);
+    } else if (e.t === 'dazed') {
+      // Stun, Gas, Shock. Bots are slowed here; a human's phone applies its own (it owns its movement).
+      const p = this.byId.get(e.id);
+      if (!p || !p.alive) return;
+      if (p.bot) applyDaze(p.ps, e.amount, e.dur);
+      e.amount = round2(e.amount); e.dur = round2(e.dur);
+    } else if (e.t === 'gear' || e.t === 'fried') {
+      if (e.t === 'gear' && e.kind === 'shock') this._blastTurrets({ kind: 'shock', by: e.by, x: e.x, z: e.z, r: e.r });  // Arcs short out Sentries.
+      e.x = round2(e.x); e.z = round2(e.z);
+      if (e.ox !== undefined) { e.ox = round2(e.ox); e.oz = round2(e.oz); }
     } else if (e.t === 'pulse' || e.t === 'zap') {
       e.x = round2(e.x); e.z = round2(e.z);
     }
@@ -1334,7 +1366,7 @@ export class Sim {
       if (t.team === thrower.team) continue;
       const d = Math.hypot(t.x - bang.x, t.z - bang.z);
       if (d >= bang.r || !hasLineOfSight(this.map, bang.x, bang.z, t.x, t.z)) continue;
-      this._hurtTurret(t, blastDamage(EQUIPMENT[bang.kind].blast, d));
+      this._hurtTurret(t, EQUIPMENT[bang.kind].shock ? SHOCK_TURRET : blastDamage(EQUIPMENT[bang.kind].blast, d));
     }
   }
 
@@ -1386,6 +1418,9 @@ export class Sim {
       case 'chopper': this._launchChopper(p); break;
       case 'gunship': this._launchGunship(p); break;
       case 'emp': this._emp(p); break;
+      case 'missile': this._launchMissile(p); break;
+      case 'swarm': this._launchSwarm(p); break;
+      case 'juggernaut': this._suitUp(p); break;
     }
     return kind;
   }
@@ -1402,7 +1437,7 @@ export class Sim {
       const jamming = this.ffa ? this.jamBy[t] > 0 : this.jam[1 - t] > 0;
       n[t] = (this.uav[t] > 0 && this.overwatch[t] <= 0 ? 1 : 0) + (this.overwatch[t] > 0 ? 1 : 0) + (jamming ? 1 : 0);
     }
-    for (let i = 0; i < this.gunships.length; i++) n[this.gunships[i].team]++;
+    for (let i = 0; i < this.gunships.length; i++) if (this.gunships[i].lead !== false) n[this.gunships[i].team]++;   // A swarm is one aircraft.
     const striking = this._striking.fill(false);
     for (let i = 0; i < this.strikes.length; i++) if (this.strikes[i].kind === 'strike') striking[this.strikes[i].team] = true;
     for (let t = 0; t < T; t++) if (striking[t]) n[t]++;
@@ -1428,7 +1463,9 @@ export class Sim {
       case 'strike': return this.strikes.some(s => s.kind === 'strike' && s.team === team) ? 1 : 0;
       case 'turret': return this.turrets.reduce((n, t) => n + (t.team === team ? 1 : 0), 0);
       case 'gunship':
-      case 'chopper': return this.gunships.reduce((n, g) => n + (g.team === team && g.kind === kind ? 1 : 0), 0);
+      case 'chopper':
+      case 'missile':
+      case 'swarm': return this.gunships.reduce((n, g) => n + (g.team === team && g.kind === kind && g.lead !== false ? 1 : 0), 0);
       default: return 0;
     }
   }
@@ -1444,6 +1481,7 @@ export class Sim {
       if (this._airCount[team] >= AIR_TEAM_MAX || this._airTotal() >= AIR_TOTAL_MAX) return 'airspace';
     }
     if (kind === 'mortar' && this._teamVisible(team).length === 0) return 'no_target';
+    if (kind === 'juggernaut' && p.armor > 0) return 'limit';     // One suit at a time.
     return null;
   }
 
@@ -1686,8 +1724,15 @@ export class Sim {
     for (let i = list.length - 1; i >= 0; i--) {
       const g = list[i];
       g.life -= STEP;
-      if (g.life <= 0) { list.splice(i, 1); continue; }
+      if (g.life <= 0) {
+        if (g.kind === 'missile') this._missileBlast(g, g.x, g.z);     // Out of fuel: it dives where it is.
+        else if (g.kind === 'swarm') this._emit({ t: 'drone_down', x: round2(g.x), z: round2(g.z), team: g.team });
+        this._dropAir(i);
+        continue;
+      }
       if (g.kind === 'chopper') { this._stepChopper(g); continue; }
+      if (g.kind === 'missile') { if (this._stepMissile(g)) this._dropAir(i); continue; }
+      if (g.kind === 'swarm') { if (this._stepDrone(g)) this._dropAir(i); continue; }
       g.angle += g.dir * STEP * Math.PI * 2 / GUNSHIP_ORBIT;
       this._moveGunship(g);
       if (g.burstLeft > 0) {
@@ -1785,6 +1830,162 @@ export class Sim {
     }
     this._emit({ t: 'gunship_shot', kind: 'chopper', ox: round2(g.x), oz: round2(g.z), x: round2(g.x + dirX * bestT), z: round2(g.z + dirZ * bestT) });
     if (victim) this._damage(victim, g.owner, CHOPPER_DAMAGE, g.owner.ps.weapon, bestT, 'chopper');
+  }
+
+  // ---- V8 streaks: Cruise Missile, Drone Swarm, Juggernaut ----
+
+  // Takes an aircraft out of the list. A swarm counts once against the airspace: when its lead drone goes, the next
+  // drone of the same swarm takes over the count.
+  _dropAir(i) {
+    const g = this.gunships[i];
+    this.gunships.splice(i, 1);
+    if (g.kind === 'swarm' && g.lead) {
+      const next = this.gunships.find(o => o.kind === 'swarm' && o.owner === g.owner && o.lead === false);
+      if (next) next.lead = true;
+    }
+    this._airTick = -1;
+  }
+
+  // The nearest enemy a team can see that an automated seeker would pick out from (x, z) (Cold Blooded hides).
+  _seekerMark(team, x, z, prefer = null, avoid = null) {
+    const seen = this._teamVisible(team);
+    let best = null, bestScore = Infinity;
+    for (let i = 0; i < seen.length; i++) {
+      const q = seen[i];
+      if (!q.alive || this._coldHidden(q, x, z)) continue;
+      let score = Math.hypot(q.ps.x - x, q.ps.z - z);
+      if (q === prefer) score -= 4;                      // Stick with a chase rather than flick between two targets.
+      if (avoid && avoid(q)) score += 10;                // Spread a swarm over several targets when there are several.
+      if (score < bestScore) { bestScore = score; best = q; }
+    }
+    return best;
+  }
+
+  _launchMissile(p) {
+    let aim = p.ps.aim;
+    if (p.isBot) {
+      const q = this._seekerMark(p.team, p.ps.x, p.ps.z);
+      if (q) aim = Math.atan2(q.ps.z - p.ps.z, q.ps.x - p.ps.x);
+    }
+    const g = { kind: 'missile', team: p.team, owner: p, x: p.ps.x, z: p.ps.z, aim: wrapAngle(aim),
+      life: MISSILE_LIFE * this._engineerMult(p, ENGINEER_AIR), age: 0, target: null, retarget: 0 };
+    this.gunships.push(g);
+    this._emit({ t: 'streak', id: p.id, kind: 'missile', team: p.team, x: round2(g.x), z: round2(g.z) });
+  }
+
+  // Turns toward where its pilot points, then flies. Returns true when it went off. A human pilot steers with the aim
+  // they already send the host; a dead pilot's missile flies on straight. A bot steers at what its team can see.
+  _stepMissile(g) {
+    g.age += STEP;
+    const o = g.owner;
+    let want = g.aim;
+    if (o.isBot) {
+      g.retarget -= STEP;
+      if (g.retarget <= 0) { g.retarget = 0.3; g.target = this._seekerMark(g.team, g.x, g.z, g.target); }
+      if (g.target && g.target.alive) want = Math.atan2(g.target.ps.z - g.z, g.target.ps.x - g.x);
+    } else if (o.alive) want = o.ps.aim;
+    const lim = MISSILE_TURN * STEP;
+    g.aim = wrapAngle(g.aim + Math.max(-lim, Math.min(lim, angleDiff(want, g.aim))));
+    const dx = Math.cos(g.aim), dz = Math.sin(g.aim), step = MISSILE_SPEED * STEP;
+    const wall = raycastMap(this.map, g.x, g.z, dx, dz, step, 'blocksVision');
+    if (wall) {
+      const t = Math.max(0, wall.t - 0.4);
+      this._missileBlast(g, g.x + dx * t, g.z + dz * t);
+      return true;
+    }
+    g.x += dx * step; g.z += dz * step;
+    const W = this.map.width, H = this.map.height;
+    if (g.x < 0.5 || g.z < 0.5 || g.x > W - 0.5 || g.z > H - 0.5) {
+      this._missileBlast(g, Math.max(0.5, Math.min(W - 0.5, g.x)), Math.max(0.5, Math.min(H - 0.5, g.z)));
+      return true;
+    }
+    if (g.age < MISSILE_ARM) return false;
+    for (let i = 0; i < this.players.length; i++) {
+      const q = this.players[i];
+      if (q.team === g.team || !q.alive || q.spawnProtect > 0) continue;
+      const fuse = q.ps.perks.includes('coldblood') ? MISSILE_COLD_FUSE : MISSILE_FUSE;
+      if (Math.hypot(q.ps.x - g.x, q.ps.z - g.z) <= fuse) { this._missileBlast(g, g.x, g.z); return true; }
+    }
+    return false;
+  }
+
+  // Goes off on the next strike step, through the same blast code as the Airstrike: cover, Flak, mines, sentries.
+  _missileBlast(g, x, z) {
+    this.strikes.push({ kind: g.kind, team: g.team, by: g.owner, x, z, at: this.time,
+      radius: g.kind === 'swarm' ? SWARM_RADIUS : MISSILE_RADIUS, damage: g.kind === 'swarm' ? SWARM_DAMAGE : MISSILE_DAMAGE });
+  }
+
+  _launchSwarm(p) {
+    const life = SWARM_LIFE * this._engineerMult(p, ENGINEER_AIR);
+    for (let i = 0; i < SWARM_COUNT; i++) {
+      const a = p.ps.aim + (i - 1) * 2.1;
+      this.gunships.push({ kind: 'swarm', team: p.team, owner: p, x: p.ps.x + Math.cos(a) * 0.9, z: p.ps.z + Math.sin(a) * 0.9, aim: a,
+        life, age: 0, target: null, retarget: i * 0.12, lead: i === 0, slot: i });
+    }
+    this._emit({ t: 'streak', id: p.id, kind: 'swarm', team: p.team, x: round2(p.ps.x), z: round2(p.ps.z) });
+  }
+
+  // Chases what the team can see, over rooftops; with nothing to chase it circles its owner. Returns true on the dive.
+  _stepDrone(g) {
+    g.age += STEP;
+    g.retarget -= STEP;
+    if (g.retarget <= 0) {
+      g.retarget = SWARM_RETARGET;
+      g.target = this._seekerMark(g.team, g.x, g.z, g.target,
+        q => this.gunships.some(o => o !== g && o.kind === 'swarm' && o.owner === g.owner && o.target === q));
+    }
+    const q = g.target && g.target.alive ? g.target : null;
+    let tx, tz;
+    if (q) { tx = q.ps.x; tz = q.ps.z; }
+    else {
+      const o = g.owner, a = this.time * 1.3 + g.slot * 2.1;
+      tx = (o.alive ? o.ps.x : g.x) + Math.cos(a) * SWARM_LOITER;
+      tz = (o.alive ? o.ps.z : g.z) + Math.sin(a) * SWARM_LOITER;
+    }
+    const dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
+    if (d > 1e-3) {
+      const m = Math.min(SWARM_SPEED * STEP, d);
+      g.aim = Math.atan2(dz, dx);
+      g.x = Math.max(0.5, Math.min(this.map.width - 0.5, g.x + dx / d * m));
+      g.z = Math.max(0.5, Math.min(this.map.height - 0.5, g.z + dz / d * m));
+    }
+    if (q && g.age > 0.6 && d <= SWARM_DIVE) { this._missileBlast(g, g.x, g.z); return true; }
+    return false;
+  }
+
+  // Juggernaut: armour on top of a full health bar, for the rest of this life.
+  _suitUp(p) {
+    p.armor = JUGG_ARMOR;
+    p.hp = MAX_HP;
+    this._emit({ t: 'streak', id: p.id, kind: 'juggernaut', team: p.team, x: round2(p.ps.x), z: round2(p.ps.z) });
+  }
+
+  // Armour takes damage before health; blasts wear it down faster. Returns what is left over for health.
+  _soak(target, dmg, weapon, streak, equip) {
+    const blast = (equip && EQUIPMENT[equip]?.blast) || BLAST_STREAKS.has(streak) || (!streak && !equip && WEAPONS[weapon]?.explosive);
+    const k = blast ? JUGG_BLAST : 1;
+    const taken = Math.min(target.armor, dmg * k);
+    target.armor -= taken;
+    this._soaked = taken > 0;
+    if (target.armor < 0.5) {
+      target.armor = 0;
+      this._emit({ t: 'armor_break', id: target.id, x: round2(target.ps.x), z: round2(target.ps.z) });
+    }
+    return dmg - taken / k;
+  }
+
+  // A guest's decoded aircraft list also carries Juggernaut armour rows: those become each player's `armor`.
+  _splitSuits(view) {
+    const list = view.gunships, players = view.players;
+    for (let i = 0; i < players.length; i++) players[i].armor = 0;
+    let n = 0;
+    for (let i = 0; i < list.length; i++) {
+      const g = list[i];
+      if (g.kind !== 'juggernaut') { list[n++] = g; continue; }
+      const v = players.find(q => q.id === g.owner);
+      if (v) v.armor = Math.round(g.life);
+    }
+    list.length = n;
   }
 
   _onRoof(x, z) {
@@ -2057,8 +2258,11 @@ export class Sim {
       const W = this.map.width, H = this.map.height;
       const angle = Math.atan2((g.z - H / 2) / (H * 0.38), (g.x - W / 2) / (W * 0.42));
       return [{ kind: g.kind ?? 'gunship', team: g.team, owner, x: g.x, z: g.z, aim: g.aim, life: g.life ?? GUNSHIP_LIFE, angle, dir: g.team === 0 ? 1 : -1,
-        pause: 1, burstLeft: 0, cooldown: 0, target: null, aimX: 0, aimZ: 0, retarget: 0 }];
+        pause: 1, burstLeft: 0, cooldown: 0, target: null, aimX: 0, aimZ: 0, retarget: 0, age: 1, lead: g.kind === 'swarm' ? false : undefined }];
     });
+    // One drone per swarm leads it for the airspace count (see _dropAir).
+    for (const g of this.gunships) if (g.kind === 'swarm' && !this.gunships.some(o => o.kind === 'swarm' && o.owner === g.owner && o.lead)) g.lead = true;
+    for (const v of view.players ?? []) { const p = this.byId.get(v.id); if (p) p.armor = v.armor ?? 0; }
   }
 
   // ---- Views and snapshots ----
@@ -2068,7 +2272,7 @@ export class Sim {
     return {
       id: p.id, name: p.name, team: p.team, isBot: p.isBot, skill: p.skill, dummy: p.dummy,
       x: ps.x, z: ps.z, aim: ps.aim, vx: ps.vx, vz: ps.vz,
-      hp: Math.max(0, Math.ceil(p.hp)), alive: p.alive, respawnT: Math.max(0, p.respawnT),
+      hp: Math.max(0, Math.ceil(p.hp)), alive: p.alive, respawnT: Math.max(0, p.respawnT), armor: Math.ceil(p.armor),
       weapon: ps.weapon, camo: p.camo, ammo: ps.ammo[ps.slot], reserve: ps.reserve[ps.slot],
       reloadT: ps.reloadT, reloadDur: ps.reloadDur, adsT: ps.adsT,
       sprinting: ps.sprinting, sliding: ps.sliding, spawnProtect: p.spawnProtect > 0,
@@ -2277,7 +2481,7 @@ export class Sim {
       // tactical 3 bits, lethal 3, three streaks at 4 each, three perks at 3 each (index within its tier), then one
       // Pro bit per perk tier.
       this.players.map(p => {
-        let n = TACTICAL_IDS.indexOf(p.ps.tactical) | (LETHAL_IDS.indexOf(p.ps.lethal) << 3);
+        let n = (TACTICAL_IDS.indexOf(p.ps.tactical) & 7) | ((LETHAL_IDS.indexOf(p.ps.lethal) & 7) << 3);   // High bits: last meta entry.
         p.score.slots.forEach((s, k) => { n |= STREAK_IDS.indexOf(s.kind) << (6 + k * 4); });
         for (let t = 0; t < 3; t++) n |= Math.max(0, PERKS_BY_TIER[t].indexOf(p.ps.perks[t])) << (18 + t * 3);
         for (let t = 0; t < 3; t++) if (hasPro(p.ps, p.ps.perks[t])) n |= 1 << (27 + t);
@@ -2286,6 +2490,8 @@ export class Sim {
       this.mode,
       this.scoreLimit,
       this.players.map(p => packKit(p.kits[0])),
+      // V8: the fourth bit of the tactical (bit 0) and lethal (bit 1) index, which outgrew three bits.
+      this.players.map(p => (TACTICAL_IDS.indexOf(p.ps.tactical) >> 3 & 1) | (LETHAL_IDS.indexOf(p.ps.lethal) >> 3 & 1) << 1),
     ];
   }
 
@@ -2297,17 +2503,25 @@ export class Sim {
     if (S.length) out[11] = S.flatMap(s => [s.id, Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.r * 10), Math.round(s.t * 10)]);
     if (T.length) out[12] = T.flatMap(t => [t.id, t.owner.index, Math.round(t.x * 10), Math.round(t.z * 10), Math.round(t.aim * 20), Math.ceil(t.hp), Math.round(t.life * 10)]);
     if (G.length) out[13] = G.flatMap(g => [g.owner.index, Math.round(g.x * 10), Math.round(g.z * 10), Math.round(g.aim * 20), Math.round(g.life * 10), GUNSHIP_KINDS.indexOf(g.kind)]);
+    // Juggernaut armour rides the same list as a 'juggernaut' row (life = armour), so the player record keeps its stride.
+    for (let i = 0; i < this.players.length; i++) {
+      const p = this.players[i];
+      if (!(p.armor > 0) || !p.alive) continue;
+      if (!out[13]) out[13] = [];
+      out[13].push(p.index, Math.round(p.ps.x * 10), Math.round(p.ps.z * 10), Math.round(p.ps.aim * 20), Math.ceil(p.armor) * 10, GUNSHIP_KINDS.indexOf('juggernaut'));
+    }
   }
 
   _decodeMeta(meta) {
-    const [camos, ints, mode, scoreLimit, kits] = meta;
+    const [camos, ints, mode, scoreLimit, kits, eqHi] = meta;
     this.mode = mode;
     if (scoreLimit) this.scoreLimit = scoreLimit;
     for (let i = 0; i < this.players.length && i < camos.length; i++) {
       const p = this.players[i], n = ints[i];
       p.camo = camos[i];
-      p.ps.tactical = TACTICAL_IDS[n & 7] ?? p.ps.tactical;
-      p.ps.lethal = LETHAL_IDS[(n >> 3) & 7] ?? p.ps.lethal;
+      const hi = eqHi?.[i] ?? 0;
+      p.ps.tactical = TACTICAL_IDS[(n & 7) | (hi & 1) << 3] ?? p.ps.tactical;
+      p.ps.lethal = LETHAL_IDS[((n >> 3) & 7) | (hi >> 1 & 1) << 3] ?? p.ps.lethal;
       const perks = [0, 1, 2].map(t => PERKS_BY_TIER[t][(n >> (18 + t * 3)) & 7] ?? p.ps.perks[t]);
       const repriced = perks.includes('hardline') !== p.ps.perks.includes('hardline');
       p.ps.perks = perks;
@@ -2368,6 +2582,7 @@ export class Sim {
       gunships: this._decodeList(d[13], 6, (a, i) => ({ kind: GUNSHIP_KINDS[a[i + 5]], team: this.players[a[i]].team, owner: this.players[a[i]].id, x: a[i + 1] / 10, z: a[i + 2] / 10, aim: a[i + 3] / 20, life: a[i + 4] / 10 })),
       jam: null, overwatchT: null,
     };
+    this._splitSuits(view);
     this._decodeHead(d, view);
     this._decodeObjective(d[14], view);
     return this._applyIntel(view);

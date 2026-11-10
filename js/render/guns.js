@@ -1,4 +1,4 @@
-// Twenty-five invented, deliberately oversized guns built from code. Model space, in metres: +X muzzle,
+// Thirty-one invented, deliberately oversized guns built from code. Model space, in metres: +X muzzle,
 // +Y up, +Z to the shooter's right, origin at the firing hand. The game camera sees guns mostly from
 // above, so each silhouette is designed to be unmistakable from the top as well as the side.
 // Each factory takes a normalized attachment kit, and swaps the base part the attachment replaces.
@@ -1006,6 +1006,206 @@ function thumper(a) {
   return { geometry: b.build(), muzzle: [end + 0.08, 0.14, 0], fore, eject: [0.1, 0.12, 0.25], length: end + 0.9 };
 }
 
+// ---- V8 guns ----
+
+// Carbine (Shunter): a short rifle with a stubby box handguard, a square flash cage and an open side-folding wire
+// stock. From above: short and blunt in front, an open frame behind, which no other rifle has.
+function carbine(a) {
+  const k = kit(), b = k.b;
+  const m = magLook(a.mag), f = m.len;
+  k.body().extrude([[-0.28, -0.02], [0.36, -0.02], [0.44, 0.04], [0.44, 0.22], [0.3, 0.28], [-0.2, 0.28], [-0.28, 0.2]], -0.14, 0.14);
+  k.body2().box(0.64, 0.11, 0, 0.42, 0.22, 0.26, 0.04);                                        // Box handguard.
+  k.accent(); for (let i = 0; i < 2; i++) b.box(0.56 + i * 0.16, 0.225, 0, 0.06, 0.025, 0.27);
+  k.dark().box(0.12, 0.3, 0, 0.72, 0.04, 0.12);                                                // Short top rail.
+  k.metal().prismX(0.85, 0.98, 0.11, 0, 0.055, 0.05, 6);
+  const mx = fitBarrel(k, a.barrel, 0.98, 0.11, 0, 0.09, 0.46);
+  if (mx === null) {
+    k.dark(); for (let i = 0; i < 4; i++) { const t = i * Math.PI / 2 + Math.PI / 4; b.box(1.06, 0.11 + Math.sin(t) * 0.075, Math.cos(t) * 0.075, 0.16, 0.035, 0.035); }
+    k.metal().box(1.13, 0.11, 0, 0.03, 0.2, 0.2);                                              // Square flash cage.
+  }
+  k[m.part]().extrude([[0.02, 0], [0.22, 0], [0.22 + 0.1 * f, -0.4 * f], [0.02 + 0.1 * f, -0.44 * f]], -0.09, 0.09);
+  if (m.tab) k.accent().box(0.02 + 0.16 * f, -0.44 * f, 0, 0.18, 0.05, 0.12);
+  if (m.drum) fitDrum(k, 0.16, -0.18, 0.22);
+  if (a.optic) fitOptic(k, a.optic, 0.1, 0.32, 0.92);
+  else { k.dark().box(-0.12, 0.36, 0, 0.08, 0.1, 0.1); k.accent().box(0.36, 0.37, 0, 0.04, 0.1, 0.04); }
+  if (a.grip !== 'skelstock' && a.grip !== 'heavystock') {
+    // The folding wire stock, swung out a little to the right: two rods and a pad, open in the middle.
+    k.metal().box(-0.55, 0.2, 0.06, 0.56, 0.04, 0.04);
+    k.metal().box(-0.55, 0.0, 0.06, 0.56, 0.04, 0.04);
+    k.grip().box(-0.85, 0.1, 0.06, 0.07, 0.3, 0.2, 0.02);
+    k.accent().box(-0.3, 0.1, 0.06, 0.04, 0.24, 0.06);
+  }
+  const fore = longGunGrips(k, a, -0.04, 0.32, 0.13, 0.64, 0.0, -0.86, 0.1);
+  return { geometry: b.build(), muzzle: [mx === null ? 1.16 : mx, 0.11, 0], fore, eject: [0.1, 0.24, 0.15], length: 2.0 };
+}
+
+// Heavy SMG (Ballast): a tall slab receiver behind a fat round cooling jacket with dark vents, a straight stick
+// magazine forward of the grip and a big cocking knob on top. From above: one thick tube with a stub of a mag.
+function heavysmg(a) {
+  const k = kit(), b = k.b;
+  const m = magLook(a.mag), f = m.len;
+  k.body().extrude([[-0.3, -0.06], [0.3, -0.06], [0.34, 0.0], [0.34, 0.3], [-0.24, 0.3], [-0.3, 0.24]], -0.14, 0.14);
+  k.body2().prismX(0.34, 0.96, 0.13, 0, 0.13, 0.13, 8, Math.PI / 8);                           // Cooling jacket.
+  k.dark(); for (let i = 0; i < 4; i++) b.prismX(0.42 + i * 0.13, 0.48 + i * 0.13, 0.13, 0, 0.14, 0.14, 8, Math.PI / 8);
+  k.metal().prismX(0.96, 1.04, 0.13, 0, 0.07, 0.07, 8, Math.PI / 8);
+  const mx = fitBarrel(k, a.barrel, 1.04, 0.13, 0, 0.09, 0.4);
+  if (mx === null) k.dark().prismX(1.04, 1.12, 0.13, 0, 0.1, 0.09, 8, Math.PI / 8);
+  k.metal().prismY(0.3, 0.42, -0.1, 0, 0.06, 0.06, 8);                                         // Cocking knob.
+  k.accent().prismY(0.42, 0.45, -0.1, 0, 0.065, 0.065, 8);
+  k[m.part]().box(0.2, -0.06 - 0.25 * f, 0, 0.15, 0.5 * f, 0.12, 0.02);                       // Stick magazine.
+  if (m.tab) k.accent().box(0.2, -0.08 - 0.5 * f, 0, 0.18, 0.05, 0.14);
+  if (m.drum) fitDrum(k, 0.2, -0.12, 0.24);
+  if (a.grip === 'angled' || a.grip === 'vertical') fitForegrip(k, a.grip, 0.66, 0.0);
+  else k.grip().box(0.66, -0.14, 0, 0.13, 0.3, 0.13, 0.03);                                   // Its own thick front handle.
+  k.body().extrude([[-0.3, 0.24], [-0.3, 0.0], [-0.52, -0.06], [-0.72, -0.06], [-0.72, 0.18], [-0.52, 0.24]], -0.11, 0.11);
+  k.grip().box(-0.75, 0.06, 0, 0.06, 0.26, 0.24, 0.015);
+  if (a.optic) fitOptic(k, a.optic, 0.0, 0.3, 0.9);
+  else k.accent().box(0.22, 0.32, 0, 0.06, 0.05, 0.04);
+  pistolGrip(k, -0.1, 0.32, 0.14);
+  if (isWrap(a.grip)) fitWrap(k, -0.1, 0.32, 0.14, a.grip);
+  fitStock(k, a.grip, -0.74, 0.06);
+  return { geometry: b.build(), muzzle: [mx === null ? 1.12 : mx, 0.13, 0], fore: [0.66, -0.14, 0], eject: [0.05, 0.3, 0.15], length: 1.85 };
+}
+
+// Slug shotgun (Railspike): one fat barrel with a perforated heat shield on a long magazine tube, a deep semi-auto
+// receiver and a row of slugs along the left side. Narrow from above where the Thresher is wide.
+function slug(a) {
+  const k = kit(), b = k.b;
+  const sawn = a.barrel === 'sawnoff';
+  const end = sawn ? 0.98 : 1.32;
+  k.body().extrude([[-0.24, -0.06], [0.42, -0.06], [0.48, 0.0], [0.48, 0.28], [0.36, 0.32], [-0.18, 0.32], [-0.24, 0.24]], -0.15, 0.15);
+  k.metal().prismX(0.48, end, 0.2, 0, 0.09, 0.085, 8, Math.PI / 8);                             // The barrel.
+  k.body2().box(0.48 + (end - 0.5) / 2 + 0.01, 0.31, 0, end - 0.5, 0.05, 0.16);                // Heat shield.
+  k.dark(); for (let i = 0; i < Math.floor((end - 0.5) / 0.14); i++) b.box(0.6 + i * 0.14, 0.34, 0, 0.06, 0.02, 0.1);
+  const tube = a.mag === 'extmag' ? end - 0.04 : 0.48 + (end - 0.48) * 0.72;
+  k.dark().prismX(0.48, tube, 0.03, 0, 0.07, 0.07, 8, Math.PI / 8);                            // Magazine tube.
+  k.body2().box(0.72, 0.05, 0, 0.36, 0.17, 0.22, 0.04);                                         // Fore-end.
+  let mx;
+  if (a.barrel === 'suppressor') {
+    mx = fitBarrel(k, 'suppressor', end, 0.2, 0, 0.12, 0.5);
+  } else if (a.barrel === 'rifled') {
+    k.metal().prismX(end, end + 0.3, 0.2, 0, 0.075, 0.075, 8, Math.PI / 8);
+    k.accent().prismX(end + 0.2, end + 0.25, 0.2, 0, 0.095, 0.095, 8, Math.PI / 8);
+    mx = end + 0.31;
+  } else if (a.barrel === 'choke') {
+    k.dark().prismX(end, end + 0.16, 0.2, 0, 0.1, 0.06, 8, Math.PI / 8);
+    mx = end + 0.17;
+  } else {
+    k.accent().prismX(end - 0.06, end, 0.2, 0, 0.1, 0.1, 8, Math.PI / 8);                       // Bright crown band.
+    mx = end + 0.01;
+  }
+  // Side-saddle of slugs on the left: the speed mag doubles it.
+  const n = a.mag === 'speedmag' ? 6 : 4;
+  k.dark().box(0.12, 0.12, -0.17, 0.08 * n + 0.06, 0.16, 0.04, 0.01);
+  k.accent(); for (let i = 0; i < n; i++) b.prismY(0.06, 0.2, 0.12 - (n - 1) * 0.04 + i * 0.08, -0.2, 0.033, 0.033, 6);
+  if (a.mag === 'lightmag') k.body2().box(-0.5, 0.2, 0, 0.3, 0.06, 0.3);
+  k.body().extrude([[-0.24, 0.26], [-0.24, 0.0], [-0.52, -0.14], [-1.0, -0.18], [-1.0, 0.14], [-0.52, 0.24]], -0.12, 0.12);
+  k.grip().box(-1.03, -0.02, 0, 0.07, 0.34, 0.26, 0.02);
+  if (a.optic) fitOptic(k, a.optic, 0.1, 0.32);
+  else k.accent().box(end - 0.1, 0.36, 0, 0.04, 0.05, 0.04);
+  const fore = longGunGrips(k, a, -0.04, 0.32, 0.13, 0.72, -0.03, -1.04, -0.02);
+  return { geometry: b.build(), muzzle: [mx, 0.2, 0], fore, eject: [0.16, 0.3, 0.17], length: mx + 1.0 };
+}
+
+// Light LMG (Gantry): a rifle-sized receiver under a tall arched carry handle (the gantry), a big square box
+// magazine hanging down and left, a slim ribbed barrel and a folded bipod. The arch reads from every side.
+function lightlmg(a) {
+  const k = kit(), b = k.b;
+  const m = magLook(a.mag), f = m.len;
+  k.body().extrude([[-0.34, -0.02], [0.5, -0.02], [0.56, 0.04], [0.56, 0.24], [0.42, 0.3], [-0.26, 0.3], [-0.34, 0.2]], -0.14, 0.14);
+  k.body2().box(0.82, 0.12, 0, 0.5, 0.2, 0.22, 0.03);                                           // Handguard.
+  k.dark(); for (let i = 0; i < 3; i++) b.box(0.66 + i * 0.15, 0.225, 0, 0.07, 0.025, 0.2);
+  k.metal().prismX(1.07, 1.42, 0.12, 0, 0.055, 0.05, 8, Math.PI / 8);
+  k.dark(); for (let i = 0; i < 3; i++) b.prismX(1.12 + i * 0.09, 1.15 + i * 0.09, 0.12, 0, 0.075, 0.075, 8, Math.PI / 8);
+  const mx = fitBarrel(k, a.barrel, 1.42, 0.12, 0, 0.09, 0.48);
+  if (mx === null) k.dark().box(1.47, 0.12, 0, 0.1, 0.17, 0.17, 0.02);
+  // The arch: two legs and a top bar, with the rear sight on it unless an optic sits on the rail inside.
+  k.body2().box(-0.12, 0.42, 0, 0.06, 0.24, 0.1);
+  k.body2().box(0.4, 0.42, 0, 0.06, 0.24, 0.1);
+  k.body2().box(0.14, 0.56, 0, 0.6, 0.06, 0.12, 0.02);
+  k.accent().box(0.14, 0.6, 0, 0.18, 0.025, 0.13);
+  // Box magazine: a big square slab, canted left so it shows from above.
+  const mh = 0.36 * f;
+  k[m.part]().box(0.14, -0.02 - mh / 2, -0.12, 0.34, mh, 0.26, 0.03);
+  k.accent().box(0.14, -0.03 - mh, -0.12, 0.36, 0.035, 0.28);
+  if (m.tab) k.accent().box(0.32, -0.02 - mh / 2, -0.12, 0.03, 0.1, 0.2);
+  // Folded bipod under the handguard.
+  k.metal().box(0.98, -0.0, -0.06, 0.34, 0.03, 0.03);
+  k.metal().box(0.98, -0.0, 0.06, 0.34, 0.03, 0.03);
+  if (a.optic) fitOptic(k, a.optic, 0.14, 0.3, 0.85);
+  k.body().extrude([[-0.34, 0.24], [-0.34, 0.0], [-0.62, -0.1], [-1.0, -0.1], [-1.0, 0.2], [-0.62, 0.24]], -0.11, 0.11);
+  k.grip().box(-1.03, 0.05, 0, 0.07, 0.32, 0.24, 0.02);
+  const fore = longGunGrips(k, a, -0.06, 0.34, 0.13, 0.84, 0.02, -1.04, 0.05);
+  return { geometry: b.build(), muzzle: [mx === null ? 1.52 : mx, 0.12, 0], fore, eject: [0.0, 0.28, 0.16], length: 2.6 };
+}
+
+// Crossbow (Bodkin): a long stock and flight rail with a wide swept bow across the front and the string drawn
+// back to the latch. From above it is a T, wider than anything else in the game; the loaded bolt glows on the rail.
+function crossbow(a) {
+  const k = kit(), b = k.b;
+  const m = magLook(a.mag);
+  k.body().extrude([[-0.3, 0.0], [0.3, 0.0], [0.36, 0.06], [0.36, 0.2], [-0.22, 0.24], [-0.3, 0.18]], -0.12, 0.12);   // Trigger box.
+  k.body2().box(0.72, 0.15, 0, 0.74, 0.1, 0.14, 0.02);                                          // Flight rail.
+  k.dark().box(0.72, 0.06, 0, 0.7, 0.08, 0.1);
+  // The bow: two limbs swept back from the riser, built as lofted slabs so each tapers to its tip.
+  k.dark().box(1.1, 0.15, 0, 0.12, 0.2, 0.22, 0.03);                                            // Riser.
+  for (const sz of [-1, 1]) {
+    k.body().loft([
+      [[1.04, 0.08, sz * 0.1], [1.04, 0.22, sz * 0.1], [1.16, 0.22, sz * 0.1], [1.16, 0.08, sz * 0.1]],
+      [[0.98, 0.11, sz * 0.42], [0.98, 0.19, sz * 0.42], [1.07, 0.19, sz * 0.42], [1.07, 0.11, sz * 0.42]],
+      [[0.86, 0.125, sz * 0.62], [0.86, 0.175, sz * 0.62], [0.92, 0.175, sz * 0.62], [0.92, 0.125, sz * 0.62]],
+    ]);
+    k.metal().box(0.88, 0.15, sz * 0.64, 0.06, 0.08, 0.05);                                    // Limb tip cam.
+    // String from the tip to the latch, a thin bright strip.
+    k.accent().loft([
+      [[0.88, 0.14, sz * 0.62], [0.88, 0.16, sz * 0.62], [0.9, 0.16, sz * 0.62], [0.9, 0.14, sz * 0.62]],
+      [[0.3, 0.2, sz * 0.02], [0.3, 0.22, sz * 0.02], [0.32, 0.22, sz * 0.02], [0.32, 0.2, sz * 0.02]],
+    ]);
+  }
+  k.accent().prismX(0.3, 1.08, 0.235, 0, 0.022, 0.022, 6);                                     // The loaded bolt.
+  k.accent().box(1.1, 0.235, 0, 0.06, 0.05, 0.05);                                              // Its broadhead.
+  // Quiver under the rail: the speed mag holds more bolts, the feather mag fewer.
+  const q = a.mag === 'speedmag' ? 3 : a.mag === 'lightmag' ? 1 : 2;
+  for (let i = 0; i < q; i++) k.dark().prismX(0.4, 0.96, -0.03, -0.06 + i * 0.06, 0.02, 0.02, 6);
+  if (a.mag === 'apmag') k.metal().box(0.96, -0.03, 0, 0.06, 0.05, 0.16);
+  const mx = fitBarrel(k, a.barrel, 1.16, 0.15, 0, 0.07, 0.3);
+  if (a.optic) fitOptic(k, a.optic, 0.0, 0.24, 0.85);
+  else { k.dark().box(0.02, 0.3, 0, 0.06, 0.12, 0.1); k.accent().box(0.02, 0.36, 0, 0.07, 0.03, 0.04); }
+  k.body().extrude([[-0.3, 0.2], [-0.3, 0.02], [-0.6, -0.1], [-1.0, -0.14], [-1.0, 0.14], [-0.6, 0.2]], -0.1, 0.1);
+  k.grip().box(-1.03, 0.0, 0, 0.07, 0.3, 0.22, 0.02);
+  void m;
+  const fore = longGunGrips(k, a, -0.08, 0.3, 0.12, 0.6, 0.06, -1.04, 0.0);
+  return { geometry: b.build(), muzzle: [mx === null ? 1.16 : mx, 0.2, 0], fore, eject: [0.2, 0.3, 0.1], length: 2.3 };
+}
+
+// Pocket scattergun (Bramble): a stubby top-break pistol with one fat barrel ending in a flared bell, the hinge
+// knuckle showing at the front of the frame and a shell carrier on the grip. The bell is the tell from any side.
+function scatter(a) {
+  const k = kit(), b = k.b;
+  const m = magLook(a.mag);
+  k.body().extrude([[-0.22, 0.04], [0.22, 0.04], [0.26, 0.1], [0.26, 0.32], [-0.16, 0.36], [-0.22, 0.28]], -0.12, 0.12);
+  k.metal().prismZ(-0.13, 0.13, 0.22, 0.06, 0.05, 0.05, 8, Math.PI / 8);                        // Hinge knuckle.
+  k.body2().prismX(0.22, 0.6, 0.22, 0, 0.11, 0.11, 8, Math.PI / 8);                            // Fat barrel.
+  k.dark().box(0.4, 0.34, 0, 0.36, 0.03, 0.06);                                                 // Rib.
+  const mx = fitBarrel(k, a.barrel, 0.6, 0.22, 0, 0.12, 0.3);
+  if (mx === null) {
+    k.metal().prismX(0.6, 0.74, 0.22, 0, 0.12, 0.18, 8, Math.PI / 8);                          // Flared bell.
+    k.accent().prismX(0.73, 0.75, 0.22, 0, 0.18, 0.18, 8, Math.PI / 8);
+  }
+  k.metal().box(-0.22, 0.38, 0, 0.1, 0.06, 0.08);                                               // Hammer/latch.
+  if (a.optic) fitOptic(k, a.optic, 0.04, 0.36, 0.7);
+  pistolGrip(k, -0.04, 0.36, 0.16);
+  // Shell carrier on the grip's right side: the extended mag adds a row.
+  const rows = a.mag === 'extmag' ? 2 : 1;
+  for (let r = 0; r < rows; r++) {
+    k[m.part]().box(-0.1 - r * 0.02, -0.18 - r * 0.12, 0.1, 0.16, 0.1, 0.03);
+    k.accent(); for (let i = 0; i < 2; i++) b.prismZ(0.1, 0.15, -0.14 + i * 0.07 - r * 0.02, -0.18 - r * 0.12, 0.028, 0.028, 6);
+  }
+  if (m.tab) k.accent().box(-0.08, -0.38, 0, 0.14, 0.04, 0.1);
+  if (isWrap(a.grip)) fitWrap(k, -0.04, 0.36, 0.16, a.grip);
+  return { geometry: b.build(), muzzle: [mx === null ? 0.76 : mx, 0.22, 0], fore: [-0.1, -0.2, -0.05], eject: [0.1, 0.36, 0.1], length: 1.05 };
+}
+
 // The Golden Gun: a long-barrelled duelling pistol in solid gold with an ivory grip. Built only from metal and grip
 // parts, never body or accent, so no camo and no team strip can ever reach it: it is always gold, and the metal gloss
 // in the camo shader is what makes it shine as it turns. Takes no attachments (attachments.js), so `a` is ignored.
@@ -1045,6 +1245,7 @@ function golden() {
 const FACTORIES = {
   ar, burst, heavyar, smg, pdw, tacsmg, shotgun, autoshot, coach, lmg, saw, rotary,
   dmr, battle, lever, sniper, antimat, semisnipe, pistol, revolver, machpistol, deuce, launcher, thumper, golden,
+  carbine, heavysmg, slug, lightlmg, crossbow, scatter,
 };
 
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.

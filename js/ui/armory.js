@@ -4,6 +4,7 @@ import { CATEGORIES as ALL_CATEGORIES, PRIMARY_IDS, SECONDARY_IDS, WEAPON_IDS } 
 
 export const CATEGORIES = ALL_CATEGORIES;
 export const categoryOf = id => WEAPONS[id]?.category ?? (SECONDARY_IDS.includes(id) ? 'Pistol' : 'Assault');
-export const gunsIn = cat => WEAPON_IDS.filter(id => WEAPONS[id] && categoryOf(id) === cat);
+// The Golden Gun always last in its category, after guns added later.
+export const gunsIn = cat => WEAPON_IDS.filter(id => WEAPONS[id] && categoryOf(id) === cat).sort((a, b) => (a === 'golden') - (b === 'golden'));
 export const slotOf = id => (PRIMARY_IDS.includes(id) ? 'primary' : 'secondary');
 export const SLOT_NAME = { primary: 'Primary', secondary: 'Secondary' };

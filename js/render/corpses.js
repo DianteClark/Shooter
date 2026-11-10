@@ -23,6 +23,7 @@ const FORCE = {
   revolver: [9, 3.5, 2.2], launcher: [6, 12, 6.5], ar: [6, 3.2, 2.4], burst: [6.5, 3.2, 2.4], smg: [5, 3, 2.6], pdw: [5, 3, 2.6], pistol: [5, 3, 2.2],
   heavyar: [7, 3.3, 2.4], tacsmg: [5, 3, 2.5], coach: [12, 6, 3.4], saw: [7, 3, 2.4], rotary: [7, 3, 2.6], battle: [8, 3.5, 2.3],
   lever: [9, 3.5, 2.2], antimat: [15, 4.5, 2.4], semisnipe: [11, 3.5, 2.2], machpistol: [4.5, 3, 2.6], deuce: [5.5, 3, 2.2], thumper: [5, 10, 6],
+  carbine: [6, 3.2, 2.4], heavysmg: [6.5, 3.2, 2.5], slug: [11, 4.5, 2.6], lightlmg: [7, 3, 2.4], crossbow: [8, 2.5, 1.8], scatter: [9, 4.5, 3.2],
 };
 const FORCE_DEFAULT = FORCE.ar;
 

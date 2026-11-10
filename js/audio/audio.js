@@ -36,6 +36,8 @@ const TAIL_GAP = 0.11;           // Seconds. A held trigger renders one tail per
 const TAIL_GLOBAL_GAP = 0.05;    // And no more than one new tail per this across the whole map.
 const REFLECT_GAP = 0.13;
 const HEAR_RANGE = 58;
+// V8 lethals on the frag body: [gain, rate]. Impact is a sharp crack, Claymore a deep slam, Drill muffled by its wall.
+const V8_BANG = { impact: [1.55, 1.18], claymore: [1.85, 0.84], drill: [1.5, 1.06] };
 const STEP_RANGE = 24;
 const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
 const IMPACT_RANGE = 16;
@@ -351,6 +353,58 @@ const GUNS = {
     tail: { dur: 1.9, gain: 1, f0: 1400, f1: 220, decay: 3.1 },
     noSup: true,
   },
+  // V8. Shunter: a short barrel's sharper, flatter crack than the Halyard, with a quick bright action.
+  carbine: { size: 1,
+    crack: { dur: 0.004, gain: 1.15, hp: 2800 },
+    body: { dur: 0.09, gain: 1.1, f0: 6200, f1: 900, decay: 6.4 },
+    thump: { dur: 0.07, gain: 0.75, f0: 170, f1: 70, decay: 5 },
+    action: [{ at: 0.038, gain: 0.5, hp: 3000, dur: 0.007, metal: 1800 }],
+    tail: { dur: 0.85, gain: 0.95, f0: 1800, f1: 380, decay: 4.6 },
+  },
+  // Ballast: a fat, slow, chesty SMG thud; a big bolt slamming home under every shot.
+  heavysmg: { size: 1,
+    crack: { dur: 0.005, gain: 1, hp: 2200 },
+    body: { dur: 0.1, gain: 1.2, f0: 4200, f1: 700, decay: 5.6 },
+    thump: { dur: 0.1, gain: 1.15, f0: 125, f1: 50, decay: 4.6, shape: 1 },
+    action: [{ at: 0.05, gain: 0.55, hp: 1600, dur: 0.012, metal: 950, thump: 230 }],
+    tail: { dur: 0.95, gain: 0.95, f0: 1200, f1: 260, decay: 4.2 },
+  },
+  // Railspike: a shotgun's boom with a rifle's snap on the front, then the semi-auto action cycling, no pump.
+  slug: { size: 2,
+    crack: { dur: 0.006, gain: 1.25, hp: 2400 },
+    body: { dur: 0.22, gain: 1.5, f0: 3600, f1: 300, decay: 5 },
+    thump: { dur: 0.18, gain: 1.45, f0: 100, f1: 36, decay: 4, shape: 1 },
+    action: [{ at: 0.07, gain: 0.5, hp: 1500, dur: 0.014, metal: 820, thump: 220 }],
+    tail: { dur: 1.35, gain: 1, f0: 950, f1: 170, decay: 3.8 },
+  },
+  // Gantry: a steady mid-weight chug, firmer than the Drover, with the box feed's single clack.
+  lightlmg: { size: 2,
+    crack: { dur: 0.005, gain: 1.1, hp: 2000 },
+    body: { dur: 0.13, gain: 1.25, f0: 3800, f1: 520, decay: 5.6 },
+    thump: { dur: 0.11, gain: 1.1, f0: 130, f1: 50, decay: 4.8, shape: 1 },
+    action: [{ at: 0.042, gain: 0.45, hp: 2200, dur: 0.01, metal: 1350 }],
+    tail: { dur: 1.1, gain: 1, f0: 1200, f1: 250, decay: 4.1 },
+  },
+  // Bodkin: no gunpowder at all. A wooden thwack, the string's low twang ringing on, a hiss of the bolt leaving.
+  // Its shots are flagged `sup` (silent gun), so `quiet` makes this full sound its suppressed variant: played at the
+  // suppressed level and range, with no far-field tail.
+  crossbow: { size: 0, quiet: true,
+    crack: { dur: 0.003, gain: 0.45, hp: 1800 },
+    body: { dur: 0.05, gain: 0.7, f0: 2400, f1: 700, decay: 7 },
+    thump: { dur: 0.08, gain: 0.8, f0: 210, f1: 120, decay: 5, shape: 0.6 },
+    ring: { dur: 0.28, gain: 0.32, f0: 176, f1: 168, decay: 5 },
+    hiss: { at: 0.01, dur: 0.12, gain: 0.25, f0: 5200, f1: 2600, hp: 1800, decay: 5 },
+    action: [{ at: 0.02, gain: 0.4, hp: 1200, dur: 0.01, thump: 300 }],
+    tail: { dur: 0.3, gain: 0.35, f0: 1600, f1: 600, decay: 6 },
+  },
+  // Bramble: a short, barking blast, louder and boxier than its size, with the hinge rattling after it.
+  scatter: { size: 1,
+    crack: { dur: 0.007, gain: 1.05, hp: 1600 },
+    body: { dur: 0.18, gain: 1.45, f0: 3200, f1: 320, decay: 5.4 },
+    thump: { dur: 0.13, gain: 1.25, f0: 120, f1: 45, decay: 4.4, shape: 1 },
+    action: [{ at: 0.06, gain: 0.3, hp: 2000, dur: 0.008, metal: 1250 }],
+    tail: { dur: 1.1, gain: 0.95, f0: 1000, f1: 200, decay: 4 },
+  },
   // Scorestreak guns: a dry mechanical chatter, and a slow autocannon heard from above.
   turret: { size: 1,
     crack: { dur: 0.004, gain: 1.2, hp: 3200 },
@@ -540,6 +594,14 @@ const FOLEY = {
   thumper:  { kind: 'cylinder', pitch: 0.7, mass: 0.9, out: 0.3, in: 0.34, rack: 0.18 },
   // One round in, one round out: a bright, light break-open.
   golden:   { kind: 'break', pitch: 1.3, mass: 0.45, out: 0.28, in: 0.3, rack: 0.14 },
+  // V8. The slug gun loads tube style; the crossbow's crank and latch reuse the lever's two clacks; the scattergun
+  // breaks open like the Doublet but lighter.
+  carbine:  { kind: 'mag',  pitch: 1.12, mass: 0.6 },
+  heavysmg: { kind: 'mag',  pitch: 0.95, mass: 0.75 },
+  slug:     { kind: 'tube', pitch: 0.82, mass: 0.85, rack: 0.2 },
+  lightlmg: { kind: 'mag',  pitch: 0.8,  mass: 0.95, out: 0.34, in: 0.34 },
+  crossbow: { kind: 'lever', pitch: 0.8, mass: 0.55, rack: 0.24 },
+  scatter:  { kind: 'break', pitch: 1.15, mass: 0.55, out: 0.26, in: 0.28, rack: 0.14 },
 };
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
@@ -726,6 +788,17 @@ function renderSfx(sr) {
       for (let n = 0; n < 3; n++) addTone(d, sr, { at: n * 0.3, dur: 0.26, gain: 0.8, f0: 880, f1: 1320, decay: 6, attack: 0.01 });
     }, 0.7),
     strike: mk(1.3, (d) => { addTone(d, sr, { dur: 1.28, gain: 0.9, f0: 1500, f1: 340, decay: 0.8, attack: 0.05, shape: 0.3 }); }, 0.7),
+    // V8 Cruise Missile: an ignition crack, then a rising rocket roar.
+    missile: mk(1.2, (d, r) => {
+      addClick(d, sr, r, { dur: 0.01, gain: 1.2, hp: 700 });
+      addNoise(d, sr, r, { dur: 1.15, gain: 1.1, f0: 600, f1: 3200, hp: 200, decay: 1.6 });
+      addTone(d, sr, { dur: 1.1, gain: 0.5, f0: 90, f1: 140, decay: 1.8, shape: 1.2 });
+      for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.8);
+    }, 0.8),
+    // V8 Drone Swarm: three rotor whines spinning up, slightly detuned so they read as a swarm.
+    swarm: mk(1.1, (d) => {
+      for (let n = 0; n < 3; n++) addTone(d, sr, { at: n * 0.12, dur: 0.9, gain: 0.45, f0: 160 + n * 23, f1: 420 + n * 31, decay: 1.4, attack: 0.08, shape: 1.6 });
+    }, 0.7),
     horn: mk(0.9, (d) => {
       addTone(d, sr, { dur: 0.86, gain: 0.8, f0: 196, decay: 1.6, attack: 0.02, shape: 2 });
       addTone(d, sr, { dur: 0.86, gain: 0.5, f0: 294, decay: 1.6, attack: 0.02, shape: 2 });
@@ -793,6 +866,30 @@ function renderSfx(sr) {
       addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 4800 });
       addNoise(d, sr, r, { at: 0.002, dur: 0.14, gain: 0.8, f0: 8000, f1: 2600, hp: 2000, decay: 6 });
     }, 0.8),
+    // V8 equipment. Stun: a hollow concussion thump with a low wobble; no frag crack, so it never reads as damage.
+    stunBang: mk(1.1, (d, r) => {
+      addClick(d, sr, r, { dur: 0.01, gain: 1.2, hp: 600 });
+      addTone(d, sr, { dur: 0.5, gain: 1.6, f0: 120, f1: 38, decay: 4, shape: 1.2 });
+      addNoise(d, sr, r, { dur: 0.3, gain: 0.8, f0: 1400, f1: 200, decay: 5 });
+      addTone(d, sr, { at: 0.05, dur: 1.0, gain: 0.35, f0: 310, f1: 260, decay: 3, attack: 0.04 });
+    }, 0.9),
+    // Gas: a valve pop and a long low hiss, lower and wetter than smoke.
+    gasHiss: mk(2.6, (d, r) => {
+      addClick(d, sr, r, { dur: 0.008, gain: 0.9, hp: 900 });
+      addNoise(d, sr, r, { at: 0.02, dur: 2.55, gain: 1, f0: 2600, f1: 900, hp: 400, decay: 1.5 });
+      addTone(d, sr, { at: 0.02, dur: 0.6, gain: 0.25, f0: 180, f1: 140, decay: 3 });
+    }, 0.72),
+    // Shock: a crackling arc, several snaps over a buzz.
+    shockArc: mk(0.42, (d, r) => {
+      for (let i = 0; i < 5; i++) addClick(d, sr, r, { at: i * 0.05 + r() * 0.02, dur: 0.004, gain: 1, hp: 3500 });
+      addTone(d, sr, { dur: 0.36, gain: 0.5, f0: 120, decay: 4, shape: 1.4 });
+      addNoise(d, sr, r, { dur: 0.32, gain: 0.7, f0: 9000, f1: 3000, hp: 2500, decay: 5 });
+    }, 0.85),
+    // Drill: a motor whining up as it bites into the wall.
+    drillWhine: mk(1.4, (d, r) => {
+      addTone(d, sr, { dur: 1.35, gain: 0.7, f0: 420, f1: 980, decay: 0.8, attack: 0.03, shape: 0.8 });
+      addNoise(d, sr, r, { dur: 1.35, gain: 0.6, f0: 3200, f1: 5200, hp: 1500, decay: 0.9 });
+    }, 0.7),
     denied: mk(0.22, (d) => {
       addTone(d, sr, { dur: 0.09, gain: 1, f0: 240, decay: 3, attack: 0.002, shape: 1.6 });
       addTone(d, sr, { at: 0.11, dur: 0.09, gain: 1, f0: 200, decay: 3, attack: 0.002, shape: 1.6 });
@@ -1234,7 +1331,8 @@ export class AudioEngine {
       if (!spec.noSup) {
         for (let v = 0; v < 2; v++) {
           const s = (seed += 73);
-          jobs.push(() => { g.sup.push(this._toBuffer(renderSuppressed(spec, sr, s))); });
+          // A gun that is quiet by nature (`quiet`) keeps its own sound as its suppressed one.
+          jobs.push(() => { g.sup.push(this._toBuffer((spec.quiet ? renderNear : renderSuppressed)(spec, sr, s))); });
         }
       }
       const s = (seed += 73);
@@ -1283,7 +1381,8 @@ export class AudioEngine {
     const ctx = this.ctx, mute = ctx.createGain();
     mute.gain.value = 0;
     mute.connect(ctx.destination);
-    const list = [this.sfx.pin, this.sfx.frag, this.sfx.explosion, this.sfx.flashBang, this.sfx.flashRing, this.sfx.smoke, this.sfx.stim, this.sfx.molotov, this.sfx.pulse, this.sfx.zap];
+    const list = [this.sfx.pin, this.sfx.frag, this.sfx.explosion, this.sfx.flashBang, this.sfx.flashRing, this.sfx.smoke, this.sfx.stim, this.sfx.molotov, this.sfx.pulse, this.sfx.zap,
+      this.sfx.stunBang, this.sfx.gasHiss, this.sfx.shockArc, this.sfx.drillWhine].filter(Boolean);
     const t = ctx.currentTime;
     for (let i = 0; i < list.length; i++) {
       const src = ctx.createBufferSource();
@@ -1722,6 +1821,11 @@ export class AudioEngine {
         case 'bang': this._bang(e); break;
         case 'pulse': this._world(this.sfx.pulse, e.x, e.z, 28, { gain: 0.9, priority: PR.world }); break;
         case 'zap': this._world(this.sfx.zap, e.x, e.z, 24, { gain: 1, priority: PR.world }); break;
+        case 'gear': this._gear(e); break;
+        case 'fried': this._world(this.sfx.zap, e.x, e.z, 24, { gain: 1.2, priority: PR.world, rate: 0.7 }); break;
+        case 'dazed':
+          if (e.id === me && e.kind === 'stun') this._play(this.sfx.flashRing, { bus: this.ui, priority: PR.boom, cls: 'loud', gain: 0.15 + 0.3 * e.amount, rate: 0.45 });
+          break;
         case 'decoy': this._shot({ by: 'decoy', weapon: e.weapon, ox: e.x, oz: e.z, rays: null }); break;
         case 'flashed':
           if (e.id === me) this._play(this.sfx.flashRing, { bus: this.ui, priority: PR.boom, cls: 'loud', gain: 0.3 + 0.6 * e.amount });
@@ -1741,6 +1845,12 @@ export class AudioEngine {
           break;
         case 'turret_shot':
           this._streakGun('turret', e.ox, e.oz, 0.85);
+          break;
+        case 'armor_break':
+          this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: e.id === me ? 1.1 : 0.7, priority: PR.ui, cls: 'boom', room: 0.2, rate: 1.6 });
+          break;
+        case 'drone_down':
+          this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: 0.4, priority: PR.gun, cls: 'boom', room: 0.2, rate: 1.9 });
           break;
         case 'gunship':
           this._play(this.sfx.strike, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: e.team === this.localTeam ? 0.45 : 0.8, rate: 0.7 });
@@ -1827,6 +1937,9 @@ export class AudioEngine {
     else if (e.kind === 'jammer') { buf = this.sfx.jam; gain = mine ? 0.5 : 0.75; }
     else if (e.kind === 'resupply') { buf = this.sfx.supply; gain = mine ? 0.7 : 0.35; }
     else if (e.kind === 'emp' || e.kind === 'mortar') { buf = e.kind === 'emp' ? this.sfx.jam : this.sfx.strike; if (e.kind === 'emp') rate = 0.8; }
+    else if (e.kind === 'missile') { buf = this.sfx.missile; gain = mine ? 0.75 : 0.85; }
+    else if (e.kind === 'swarm') { buf = this.sfx.swarm; gain = mine ? 0.6 : 0.85; }
+    else if (e.kind === 'juggernaut') { buf = this.sfx.turretDeploy; gain = mine ? 0.9 : 0.5; rate = 0.7; }
     this._play(buf, { bus: this.ui, priority: PR.ui, cls: 'ui', gain, rate });
   }
 
@@ -1998,11 +2111,23 @@ export class AudioEngine {
     }
   }
 
+  // V8 equipment pops that are not explosions ('gear' events).
+  _gear(e) {
+    if (e.kind === 'stun') this._world(this.sfx.stunBang, e.x, e.z, HEAR_RANGE, { gain: 1.5, priority: PR.boom, cls: 'boom', room: 0.35 });
+    else if (e.kind === 'gas') this._world(this.sfx.gasHiss, e.x, e.z, 32, { gain: 1, priority: PR.world, room: 0.1 });
+    else if (e.kind === 'shock') this._world(this.sfx.shockArc, e.x, e.z, 26, { gain: e.n ? 0.9 : 1.2, priority: PR.world });
+    else if (e.kind === 'drill') this._world(this.sfx.drillWhine, e.x, e.z, 26, { gain: 1, priority: PR.world });
+  }
+
   _bang(e) {
     if (e.kind === 'smoke') this._world(this.sfx.smoke, e.x, e.z, 34, { gain: 1, priority: PR.world, room: 0.1 });
     else if (e.kind === 'flash') this._world(this.sfx.flashBang, e.x, e.z, HEAR_RANGE, { gain: 1.6, priority: PR.boom, cls: 'boom', room: 0.3 });
     else if (e.kind === 'molotov') this._world(this.sfx.molotov, e.x, e.z, HEAR_RANGE, { gain: 1.4, priority: PR.boom, cls: 'boom', room: 0.25 });
-    else {
+    else if (V8_BANG[e.kind]) {
+      const v = V8_BANG[e.kind];
+      this.fight = Math.min(1, this.fight + 0.5);
+      this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE, { gain: v[0], priority: PR.boom, cls: 'boom', room: 0.4, rate: v[1] });
+    } else {
       this.fight = Math.min(1, this.fight + 0.5);
       // A cluster's bomblets are small and quick: higher pitched, lower, and they share the boom cap with everything else.
       const g = e.kind === 'bomblet' ? 0.95 : e.kind === 'sticky' ? 1.45 : 1.7;
@@ -2065,7 +2190,7 @@ export class AudioEngine {
   // One looping source, started the first time a gunship appears and faded in and out after that.
   _updateRumble(view) {
     const ships = view.gunships;
-    const on = !!(ships && ships.length);
+    const on = !!(ships && ships.some(s => s.kind !== 'missile' && s.kind !== 'swarm'));   // V8 seekers have their own sounds.
     if (on && !this.rumbleGain) {
       const src = this.ctx.createBufferSource();
       src.buffer = this.sfx.rumble;

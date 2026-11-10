@@ -29,7 +29,10 @@ export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 // Launchers have nothing to extend or suppress.
 const NOT_LAUNCHER = WEAPON_IDS.filter(id => !idsIn('Launcher').includes(id));
 // A break-action holds two shells whatever you do to it, so magazine-size mods are replaced for it below.
-const NO_BREAK_ACTION = NOT_LAUNCHER.filter(id => id !== 'coach');
+// The crossbow holds one bolt the same way.
+const NO_BREAK_ACTION = NOT_LAUNCHER.filter(id => id !== 'coach' && id !== 'crossbow');
+// The box-fed LMG has no heat bar, so heat attachments would be all cost.
+const HEAT_GUNS = idsIn('LMG').filter(id => id !== 'lightlmg');
 // Copies of one per-weapon mod block across several guns.
 const each = (ids, mods) => Object.fromEntries(ids.map(id => [id, mods]));
 const SUPPRESSOR_COST = { suppressed: true, adsTime: 1.05, sprintToFire: 1.08 };
@@ -90,7 +93,8 @@ export const ATTACHMENTS = {
   suppressor: {
     id: 'suppressor', slot: 'barrel', name: 'Hush Can', unlock: 18,
     desc: 'Firing stays off the enemy minimap and is harder to hear. Shorter range, slower to aim.',
-    weapons: NOT_LAUNCHER,
+    // The crossbow is silent already.
+    weapons: NOT_LAUNCHER.filter(id => id !== 'crossbow'),
     mods: { suppressed: true, range: 0.82, adsTime: 1.05, sprintToFire: 1.08 },
     perWeapon: {
       ...each(idsIn('Shotgun'), { ...SUPPRESSOR_COST, range: 0.75 }),
@@ -116,7 +120,7 @@ export const ATTACHMENTS = {
   heatsink: {
     id: 'heatsink', slot: 'barrel', name: 'Radiator Jacket', unlock: 30,
     desc: 'Half again as many rounds before overheating. Slower to aim, swings even slower.',
-    weapons: idsIn('LMG'),
+    weapons: HEAT_GUNS,
     mods: { heatRounds: 1.5, adsTime: 1.22, turnCap: 0.85, sprintToFire: 1.1 },
   },
   choke: {
@@ -170,7 +174,7 @@ export const ATTACHMENTS = {
   shroud: {
     id: 'shroud', slot: 'barrel', name: 'Cooling Shroud', unlock: 25,
     desc: 'Sheds heat much faster. Heavier on foot, slower to aim, wider from the hip.',
-    weapons: idsIn('LMG'),
+    weapons: HEAT_GUNS,
     mods: { heatCool: 0.65, moveMult: 0.96, adsTime: 1.1, hipSpread: 1.08 },
   },
 
@@ -191,14 +195,14 @@ export const ATTACHMENTS = {
     desc: 'Reloads much faster. Fewer rounds.',
     weapons: NOT_LAUNCHER,
     mods: { reload: 0.72, magazine: 0.8 },
-    perWeapon: { coach: { reload: 0.72, moveMult: 0.97, adsTime: 1.06 } },
+    perWeapon: { coach: { reload: 0.72, moveMult: 0.97, adsTime: 1.06 }, crossbow: { reload: 0.72, moveMult: 0.97, adsTime: 1.06 } },
   },
   lightmag: {
     id: 'lightmag', slot: 'mag', name: 'Feather Mag', unlock: 15,
     desc: 'Lighter on the move and quicker to aim. Fewer rounds.',
     weapons: NOT_LAUNCHER,
     mods: { moveMult: 1.03, adsTime: 0.94, magazine: 0.87 },
-    perWeapon: { coach: { moveMult: 1.03, adsTime: 0.94, reload: 1.15 } },
+    perWeapon: { coach: { moveMult: 1.03, adsTime: 0.94, reload: 1.15 }, crossbow: { moveMult: 1.03, adsTime: 0.94, reload: 1.15 } },
   },
   warhead: {
     id: 'warhead', slot: 'mag', name: 'Wide Warhead', unlock: 12,

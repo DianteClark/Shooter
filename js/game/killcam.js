@@ -18,7 +18,7 @@ const DEATH_PRE = 1.7, DEATH_POST = 0.45;
 const FINAL_PRE = 1.7, FINAL_POST = 1.0;
 
 // Only the things the renderer reacts to; everything else stays out of the buffer.
-const KEEP = new Set(['shot', 'hit', 'kill', 'explosion', 'bang', 'swap', 'slide', 'throw', 'heal', 'overheat',
+const KEEP = new Set(['gear', 'fried', 'shot', 'hit', 'kill', 'explosion', 'bang', 'swap', 'slide', 'throw', 'heal', 'overheat',
   'turret', 'turret_down', 'turret_shot', 'gunship_shot']);
 
 const smooth = t => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };

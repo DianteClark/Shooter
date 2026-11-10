@@ -21,7 +21,7 @@ const PANELS = {
       ${stat('Headshots', 'The head is a small zone at the centre of a player. <b>Aimed in</b>, a headshot kills in one hit with any gun. <b>From the hip</b> it does 1.6&times; damage instead. Marksman rifles and snipers kill with a headshot either way. Explosives have no headshots.')}
       ${stat('Fire rate', 'Shots per minute (RPM). Every gun fires while you hold the trigger, semi-autos and snipers included, at their own pace.')}
       ${stat('Range', 'Shown as three numbers: full damage out to the first, fading to its lowest by the second, and nothing at all past the third. Bullets simply stop at the last one, so shots beyond it miss.')}
-      ${stat('Pierce', 'How much damage a round keeps after passing through <b>waist-high cover</b> such as crates and barriers. 70% means a 30 damage shot still does 21. It goes through at most two pieces. SMGs, pistols and shotguns have no pierce: crates stop them. Buildings, containers and walls stop every gun. Your own cover never counts: you can always fire over a crate you are crouched behind.')}
+      ${stat('Pierce', 'How much damage a round keeps after passing through <b>waist-high cover</b> such as crates and barriers. 70% means a 30 damage shot still does 21. It goes through at most two pieces. Most SMGs, pistols and shotguns have no pierce, nor do crossbow bolts: crates stop them. The Ballast SMG and the Railspike slug gun are the exceptions. Buildings, containers and walls stop every gun. Your own cover never counts: you can always fire over a crate you are crouched behind.')}
       ${stat('Aimed fire', 'Spread while aimed in. Lower is tighter. You aim in by holding the right stick with the move stick below about 70%; at a full push you hip-fire instead.')}
       ${stat('Hip fire', 'Spread when firing without aiming, including at a full sprint push. Each shot adds bloom, which settles back when you stop.')}
       ${stat('Recoil', 'How far the gun pulls and sways while you hold the trigger. Grips and compensators tame it.')}
@@ -49,6 +49,7 @@ const PANELS = {
         <li>You carry three. Each is granted when your score reaches its cost. Hardline makes them 15% cheaper.</li>
         <li>Once nothing left can be earned your score is <b>capped</b>; calling one then resets it and clears blocks. Calling early keeps your score but <b>blocks</b> that streak until the next reset.</li>
         <li><b>Airspace</b> holds a few aircraft at once and one Gunship per team. A refused call keeps the streak and its tile says why: Already up or Airspace full.</li>
+        <li><b>Cruise Missile</b>: it flies where your aim stick points for a few seconds and goes off near an enemy or on a building. <b>Drone Swarm</b>: three drones dive on enemies your team can see; break their sight to lose them. <b>Juggernaut</b>: 300 armour over your health until you die; explosives cut through it.</li>
       </ol>
     </div>`,
   modes: () => `
@@ -65,10 +66,12 @@ const PANELS = {
       ${card('ui:aim', 'Firing Range', 'Your loadout, dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.', true)}
     </div>`,
   tips: () => `
-    <div class="help-grid">
+    <div class="help-grid scroll-y">
       ${card('ui:eye-off', 'Stay off the radar', 'Firing marks you on the enemy minimap for a moment. A suppressor hides it.')}
       ${card('cat:LMG', 'Beat the big guns', 'LMGs turn slowly while firing and overheat. Flank them.')}
       ${card('flash', 'Equipment', `${Object.values({ ...TACTICALS, ...LETHALS }).map(t => esc(t.name)).join(', ')}. Counts refill when you respawn.`)}
+      ${card('stun', 'Stun, Gas, Shock', '<b>Stun</b> slows you and drags your aim for a few seconds. <b>Gas</b> lingers, chips health and slows anyone inside; walk out. <b>Shock</b> sticks and arcs three times, jolting players and frying mines, Claymores, Trophies, Sensors and Decoys. Tac Mask shortens stuns and ignores gas.', true)}
+      ${card('claymore', 'Impact, Claymore, Drill', '<b>Impact</b> goes off the moment it touches anything, a player included. <b>Claymore</b> faces the way you throw it and fires a cone at enemies who walk in front; its lasers give it away. <b>Drill</b> bores through thin cover and goes off on the far side: its landing ring shows where.', true)}
       ${card('ui:star', 'Perks', `${Object.values(PERKS).slice(0, 5).map(p => esc(p.name)).join(', ')}. One from each tier.`)}
       ${card('ui:refresh', 'Dropped connection?', 'Open the app and enter the same room code. You get your slot back from the bot holding it, with your score. If the host leaves, the next player takes over and the match carries on.', true)}
     </div>`,

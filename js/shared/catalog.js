@@ -17,6 +17,10 @@ export const STREAKS = {
   chopper:   { id: 'chopper',   name: 'Attack Chopper', cost: 3600, air: true, limit: 1, role: 'offense', desc: 'Flies low and hunts enemies your team can see' },
   emp:       { id: 'emp',       name: 'EMP',          cost: 4100, air: false, limit: 0, role: 'denial',  desc: 'Knocks out enemy air, sentries and radar' },
   gunship:   { id: 'gunship',   name: 'Gunship',      cost: 4800, air: true,  limit: 1, role: 'offense', desc: 'Circles the map, firing on visible enemies' },
+  // V8. Wire ids are STREAK_IDS order (4 bits in the loadout ints): new ones only ever go on the end.
+  missile:   { id: 'missile',   name: 'Cruise Missile', cost: 1800, air: true, limit: 1, role: 'offense', desc: 'Steer it with the aim stick for a few seconds, then boom' },
+  swarm:     { id: 'swarm',     name: 'Drone Swarm',  cost: 3300, air: true,  limit: 1, role: 'offense', desc: 'Three drones that dive on enemies your team can see' },
+  juggernaut: { id: 'juggernaut', name: 'Juggernaut', cost: 4400, air: false, limit: 0, role: 'support', armor: 300, desc: '300 armour over your health until you die' },
 };
 export const STREAK_IDS = Object.keys(STREAKS);
 
@@ -31,6 +35,10 @@ export const TACTICALS = {
   decoy:  { id: 'decoy',  name: 'Decoy',  count: 1, desc: 'Fakes gunfire where it lands' },
   sensor: { id: 'sensor', name: 'Sensor', count: 1, desc: 'Marks enemies near it, through walls' },
   trophy: { id: 'trophy', name: 'Trophy', count: 1, desc: 'Shoots down enemy grenades near it' },
+  // V8 equipment.
+  stun:   { id: 'stun',   name: 'Stun',   count: 2, desc: 'Slows movement and turning of enemies in the blast' },
+  gas:    { id: 'gas',    name: 'Gas',    count: 1, desc: 'Lingering cloud that slows and chips enemies. Tac Mask ignores it' },
+  shock:  { id: 'shock',  name: 'Shock',  count: 1, desc: 'Sticks and arcs three times: jolts enemies, fries their equipment' },
 };
 export const LETHALS = {
   frag:    { id: 'frag',    name: 'Frag',     count: 2, desc: 'Bounces, explodes after a fuse' },
@@ -39,6 +47,10 @@ export const LETHALS = {
   mine:    { id: 'mine',    name: 'Mine',     count: 1, desc: 'Sits still, goes off when an enemy comes close' },
   cluster: { id: 'cluster', name: 'Cluster',  count: 1, desc: 'Bursts, then scatters small bomblets' },
   hatchet: { id: 'hatchet', name: 'Hatchet',  count: 1, desc: 'Direct hit kills. Sticks where it lands' },
+  // V8 equipment.
+  impact:   { id: 'impact',   name: 'Impact',   count: 1, desc: 'Goes off the instant it touches anything' },
+  claymore: { id: 'claymore', name: 'Claymore', count: 1, desc: 'Faces where you throw it. Fires a cone at enemies who walk into it' },
+  drill:    { id: 'drill',    name: 'Drill',    count: 1, desc: 'Bores through a thin wall and blows on the far side' },
 };
 
 // One pick per tier: `perks: [tier0, tier1, tier2]`.
@@ -47,7 +59,7 @@ export const PERKS = {
   marathon:    { id: 'marathon',    tier: 0, name: 'Marathon',     desc: 'Faster sprint, quicker slide recharge' },
   flak:        { id: 'flak',        tier: 0, name: 'Flak',         desc: 'Take less explosive damage' },
   quickmend:   { id: 'quickmend',   tier: 0, name: 'Quick Mend',   desc: 'Health starts to recover sooner, and faster' },
-  tacmask:     { id: 'tacmask',     tier: 0, name: 'Tac Mask',     desc: 'Flashes wear off fast, fire hurts half as much' },
+  tacmask:     { id: 'tacmask',     tier: 0, name: 'Tac Mask',     desc: 'Flashes and stuns fade fast, fire hurts half, gas does nothing' },
   adrenaline:  { id: 'adrenaline',  tier: 0, name: 'Adrenaline',   desc: 'A gun kill restores 40 health' },
 
   scavenger:   { id: 'scavenger',   tier: 1, name: 'Scavenger',    desc: 'Refill ammo reserve from kills' },

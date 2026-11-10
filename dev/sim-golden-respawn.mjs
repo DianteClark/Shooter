@@ -187,8 +187,9 @@ test('host migration: a dead human stays dead on the new host until they tap', (
 
 /* ---------------- The Golden Gun ---------------- */
 
-test('golden is the last weapon id, a secondary, and takes no attachments', () => {
-  assert.equal(WEAPON_IDS[WEAPON_IDS.length - 1], GOLDEN_ID);
+test('golden keeps its wire index (last pre-V8 id), a secondary, and takes no attachments', () => {
+  assert.equal(WEAPON_IDS.indexOf(GOLDEN_ID), 24);   // V8 guns are appended after it (constants.js).
+  assert.ok(WEAPON_IDS.slice(25).every(id => id !== GOLDEN_ID));
   assert.ok(SECONDARY_IDS.includes(GOLDEN_ID));
   assert.equal(WEAPONS.golden.category, 'Pistol');
   assert.equal(availableFor(GOLDEN_ID).length, 0);

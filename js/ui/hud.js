@@ -64,13 +64,14 @@ const STATIC_FRAMES = 3;         // Pre-drawn noise frames the jammed minimap cy
 const STREAK_VERB = {
   uav: 'online', jammer: 'jamming radar', resupply: 'dropped', turret: 'deployed', mortar: 'firing',
   strike: 'inbound', overwatch: 'online', chopper: 'overhead', emp: 'detonated', gunship: 'overhead',
+  missile: 'launched', swarm: 'launched', juggernaut: 'suited up',
 };
 // Enemy streaks the local player should react to right now.
-const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP!' };          // Seconds of hits averaged into the live damage readout.
+const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP!', missile: 'Cruise missile inbound', swarm: 'Drone swarm: break line of sight', juggernaut: 'Enemy Juggernaut: use explosives' };          // Seconds of hits averaged into the live damage readout.
 const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.
 // Pro senses drawn by the HUD (js/shared/catalog.js PRO): footprints, the Fastball blast ring, enemy equipment.
 const PRINT_HZ = 12;             // Footprint line-of-sight checks per second; drawing still follows the camera every frame.
-const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky']);   // What Hijacker sees through walls.
+const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky', 'claymore', 'drill', 'shock']);   // What Hijacker sees through walls.
 const NO_PRO = Object.freeze([]);
 const NO_STATS = Object.freeze({});
 const FFA_FOE = '#ff6a4d';        // Free-for-all: "an enemy" when it is not one particular player (footprints, edge tints).
@@ -189,6 +190,24 @@ const SND_CSS = `
 .hud.snd-out .status { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .snd-mark[data-state="planted"] .sm-plate { animation: none; } }
 `;
+// V8 equipment: being stunned, gassed or shocked. An edge veil in the effect's colour that fades with the effect, a
+// motion of its own (stun sways, gas breathes, shock flickers) and a stencil tag, so the slowed stick is explained.
+// Transform and opacity only; the veil never takes a touch (.hud has pointer-events: none).
+const DAZE_CSS = `
+.daze-veil { position: absolute; inset: -4%; opacity: 0; pointer-events: none; will-change: opacity, transform; z-index: var(--z-overlay); }
+.daze-veil[data-kind="stun"] { background: radial-gradient(ellipse at center, transparent 30%, rgba(255,246,214,.3) 55%, rgba(255,236,190,.82)); animation: daze-sway 1.1s var(--ease-inout) infinite alternate; }
+.daze-veil[data-kind="gas"] { background: radial-gradient(ellipse at center, transparent 30%, rgba(120,190,40,.28) 55%, rgba(70,120,20,.72)); animation: daze-breathe 1.6s var(--ease-inout) infinite alternate; }
+.daze-veil[data-kind="shock"] { background: radial-gradient(ellipse at center, transparent 42%, rgba(80,200,255,.2) 62%, rgba(150,230,255,.7)); animation: daze-flicker .23s steps(2, end) infinite; }
+.daze-veil b { position: absolute; left: 50%; top: 63%; transform: translateX(-50%); padding: 3px 10px 2px; font: 13px/1 var(--f-stencil); letter-spacing: .14em; color: var(--c-night); background: var(--c-chalk); clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.daze-veil[data-kind="gas"] b { background: #b8f05a; }
+.daze-veil[data-kind="shock"] b { background: #9ce6ff; }
+@keyframes daze-sway { from { transform: rotate(-1.2deg) scale(1.02); } to { transform: rotate(1.2deg) scale(1.05); } }
+@keyframes daze-breathe { from { transform: scale(1); } to { transform: scale(1.06); } }
+@keyframes daze-flicker { 0% { transform: scale(1.01); } 100% { transform: scale(1.04) translateX(3px); } }
+@media (prefers-reduced-motion: reduce) { .daze-veil { animation: none !important; } }
+`;
+const DAZE_TAG = { stun: 'STUNNED', gas: 'GAS', shock: 'SHOCKED' };
+
 // The Capture the Flag layer: both flags' status under the scorebar, a marker over each flag (or its carrier) with the
 // distance to it, and the carrier's own strip. Team colour says whose flag; the plate's state says what is happening.
 const CTF_CSS = `
@@ -558,6 +577,8 @@ export class HUD {
     this.boardEl.hidden = true;
     this.flashFadeLen = 1;
     this.flashEl.style.opacity = '0';
+    this.dazeT = 0;
+    this.dazeEl.style.opacity = '0';
     this.leaveArmed = false;
     this.leaveBtn.textContent = 'Leave match';
     this.feed = [];
@@ -723,8 +744,8 @@ export class HUD {
       </div>
       <div class="status">
         <div class="vitals">
-          <div class="hp-line"><span class="protect" hidden>Spawn shield</span><span class="hp-num">100</span></div>
-          <i class="hp-track"><i class="hp-loss"></i><i class="hp-fill"></i><i class="hp-ticks"></i></i>
+          <div class="hp-line"><span class="protect" hidden>Spawn shield</span><span class="hp-armor-num" hidden style="font:400 var(--fs-title)/1 var(--f-stencil);color:var(--c-sodium);text-shadow:var(--text-lift)"></span><span class="hp-num">100</span></div>
+          <i class="hp-track"><i class="hp-loss"></i><i class="hp-fill"></i><i class="hp-ticks"></i><i class="hp-armor" style="position:absolute;left:0;right:0;top:0;height:40%;background:var(--c-sodium);transform-origin:left center;transform:scaleX(0)"></i></i>
         </div>
         <div class="arms">
           <i class="heat" hidden><i class="heat-fill"></i></i>
@@ -816,6 +837,7 @@ export class HUD {
         </div>
       </div>
       <div class="flashbang"></div>
+      <div class="daze-veil"><b></b></div>
       <div class="heal-veil"></div>
       <div class="endbanner"><i class="eb-band"></i><b></b><small></small></div>`;
     this.root.appendChild(el);
@@ -847,6 +869,8 @@ export class HUD {
     this.speakerBtn = $('.chip-btn.speaker');
     this.hpNum = $('.hp-num');
     this.hpFill = $('.hp-fill');
+    this.armorFill = $('.hp-armor');
+    this.armorNum = $('.hp-armor-num');     // V8 Juggernaut: a sodium band over the health bar, scaled to the armour left.
     this.protectEl = $('.protect');
     this.vitals = $('.vitals');
     this.heatEl = $('.heat');
@@ -867,6 +891,9 @@ export class HUD {
     this.objBanner = $('.obj-banner');
     this.objNodes = [];           // One entry per objective point: chip and in-world marker.
     this.flashEl = $('.flashbang');
+    this.dazeEl = $('.daze-veil');
+    this.dazeTag = this.dazeEl.querySelector('b');
+    this.dazeT = 0; this.dazeLen = 1; this.dazeAmt = 1;
     this.healEl = $('.heal-veil');
     this.hitX = $('.hit-x');
     this.armsName = $('.arms-name span');
@@ -916,7 +943,7 @@ export class HUD {
     if (!document.getElementById('snd-hud-style')) {
       const st = document.createElement('style');
       st.id = 'snd-hud-style';
-      st.textContent = SND_CSS + CTF_CSS;
+      st.textContent = SND_CSS + CTF_CSS + DAZE_CSS;
       document.head.appendChild(st);
     }
     const ctfSide = k => { const root = $(`.cf-side.${k}`); return { root, word: root.querySelector('b'), sub: root.querySelector('small'), key: '' }; };
@@ -1814,6 +1841,13 @@ export class HUD {
       c.vign = veil;
       this.vignette.style.opacity = veil;
     }
+    const armor = me.alive ? Math.max(0, Math.ceil(me.armor ?? 0)) : 0;
+    if (armor !== c.armor) {
+      c.armor = armor;
+      this.armorFill.style.transform = `scaleX(${Math.min(1, armor / STREAKS.juggernaut.armor)})`;
+      this.armorNum.hidden = armor <= 0;
+      this.armorNum.textContent = `+${armor}`;
+    }
     const protect = me.alive && me.spawnProtect && view.phase !== 'warmup';
     if (protect !== c.protect) {
       c.protect = protect;
@@ -2053,6 +2087,10 @@ export class HUD {
       this.flashT = Math.max(0, this.flashT - dt);
       this.flashEl.style.opacity = Math.min(1, this.flashT / this.flashFadeLen).toFixed(3);
     }
+    if (this.dazeT > 0) {
+      this.dazeT = Math.max(0, this.dazeT - dt);
+      this.dazeEl.style.opacity = Math.min(1, this.dazeT / Math.min(0.6, this.dazeLen) * this.dazeAmt).toFixed(3);
+    }
     for (const d of this.dmg) {
       if (d.life <= 0) continue;
       d.life = Math.max(0, d.life - dt);
@@ -2084,11 +2122,13 @@ export class HUD {
         case 'zap': if (e.by === this.view?.localId) this.notify('Trophy stopped a grenade'); break;
         case 'decoy': if (e.by === this.view?.localId) this.notify('Decoy firing'); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
+        case 'dazed': if (e.id === this.view?.localId) this.#onDazed(e); break;
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
         case 'capture': this.#onCapture(e); break;
         case 'hard_move': this.#onHardMove(e); break;
         case 'pro': if (e.id === this.view?.localId) this.#onPro(e.perk); break;
         case 'hijack': this.#onHijack(e); break;
+        case 'armor_break': if (e.id === this.view?.localId) this.#callout('Armour broken'); break;
         case 'arm': this.#onArm(e); break;
         case 'snd': this.#onSnd(e); break;
         case 'ctf': this.#onCtf(e); break;
@@ -2173,6 +2213,15 @@ export class HUD {
     const hold = FLASH_HOLD * amount, fade = FLASH_FADE * Math.max(0.3, amount);
     this.flashFadeLen = fade;
     this.flashT = Math.max(this.flashT, hold + fade);
+  }
+
+  // Stun, Gas, Shock on the local player. The phone's own movement is slowed by match.js (player.js applyDaze).
+  #onDazed(e) {
+    const kind = DAZE_TAG[e.kind] ? e.kind : 'stun';
+    if (this.dazeEl.dataset.kind !== kind) { this.dazeEl.dataset.kind = kind; this.dazeTag.textContent = DAZE_TAG[kind]; }
+    this.dazeLen = Math.max(0.3, e.dur ?? 1);
+    this.dazeT = Math.max(this.dazeT, this.dazeLen);
+    this.dazeAmt = Math.max(0.45, Math.min(1, e.amount ?? 1));
   }
 
   #damageFrom(e) {
