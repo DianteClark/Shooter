@@ -8,6 +8,7 @@
 //   anyone who would rather play from the Home Screen icon.
 // - The link is single use from the page's point of view: `join` and `t` are stripped as soon as they are read, so
 //   a reload, or a Home Screen bookmark made from this tab, never rejoins.
+import { PUBLIC_LOBBIES } from '../net/lobbies.js';
 import { encodeQR, qrSvgPath } from '../../vendor/qrcode.js';
 import { esc } from './widgets.js';
 import { ico } from './yard.js';
@@ -135,7 +136,7 @@ export function inviteControls({ listed = false } = {}) {
   return `<div class="inv-ctl">
     <button class="btn is-primary inv-share" data-act="invite" data-sound="confirm">${ico('share')}<b>Invite</b></button>
     <button class="btn inv-qr" data-act="inviteShow" aria-label="Show code and QR">${qrGlyph()}</button>
-    <button class="btn inv-listed${listed ? ' on' : ''}" data-act="lobbyPublic" aria-pressed="${listed}" aria-label="${listed ? 'Public room: listed in Browse games. Tap to make private' : 'Private room. Tap to list it in Browse games'}">${ico(listed ? 'ui:signal' : 'ui:lock')}<b>${listed ? 'Public' : 'Private'}</b></button>
+    ${PUBLIC_LOBBIES ? `<button class="btn inv-listed${listed ? ' on' : ''}" data-act="lobbyPublic" aria-pressed="${listed}" aria-label="${listed ? 'Public room: listed in Browse games. Tap to make private' : 'Private room. Tap to list it in Browse games'}">${ico(listed ? 'ui:signal' : 'ui:lock')}<b>${listed ? 'Public' : 'Private'}</b></button>` : ''}
   </div>`;
 }
 

@@ -3,6 +3,7 @@
 //
 // Transitions: a screen change fades the layer in and walks every element marked data-in="<pose>" onto the screen in
 // document order (motion.js stagger). Repaints of the same screen never replay it.
+import { PUBLIC_LOBBIES } from '../net/lobbies.js';
 import { TEAMS, TEAM_SIZE } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { GunPreview } from '../render/renderer.js';
@@ -179,12 +180,12 @@ export class Menu {
             <span class="tl-hero-tx"><b>Play vs bots</b><small>Choose a map and a mode</small></span>
             ${ico('play', 'tl-go')}
           </button>
-          <div class="tl-grid has-browse">
+          <div class="tl-grid${PUBLIC_LOBBIES ? ' has-browse' : ''}">
             <button class="tl-btn" data-act="quickPlay" data-in="rail">${ico('quick')}<b>Quick play</b></button>
             <button class="tl-btn" data-act="range" data-in="rail">${ico('range')}<b>Firing range</b></button>
-            <button class="tl-btn tl-third" data-act="host" data-in="rail">${ico('host')}<b>Host</b></button>
-            <button class="tl-btn tl-third" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
-            <button class="tl-btn tl-third tl-browse" data-act="browse" data-in="rail">${ico('ui:signal')}<b>Browse</b></button>
+            <button class="tl-btn${PUBLIC_LOBBIES ? ' tl-third' : ''}" data-act="host" data-in="rail">${ico('host')}<b>Host</b></button>
+            <button class="tl-btn${PUBLIC_LOBBIES ? ' tl-third' : ''}" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
+            ${PUBLIC_LOBBIES ? `<button class="tl-btn tl-third tl-browse" data-act="browse" data-in="rail">${ico('ui:signal')}<b>Browse</b></button>` : ''}
           </div>
           <button class="tl-btn tl-loadout" data-act="loadout" data-in="rail">${ico('loadout')}<span><b>Loadouts</b><small>${esc(lo?.name ?? '')}${gun ? `: ${esc(gun)}` : ''}</small></span></button>
         </nav>

@@ -11,6 +11,8 @@
 import { createEvent, defaultRelayUrls, subscribe } from 'trystero';
 import { APP_ID } from './net.js';
 
+// Off until a TURN relay is set up (js/net/turn.js): across networks the list finds rooms that phones then cannot reach.
+export const PUBLIC_LOBBIES = false;
 export const APP_VERSION = '8.3';      // Rooms from another version are listed greyed out: the two builds may not agree.
 export const ANNOUNCE_MS = 5000;
 export const STALE_MS = 15000;
