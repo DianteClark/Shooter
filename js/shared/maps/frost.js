@@ -1,7 +1,7 @@
 // Snowbound rail depot at night. The tracks run north-south, across the push: each row of parked wagons is a
 // line to break through at its couplings, so fights go wagon to wagon, gap to gap, with the signal box and
 // its loading platform as the open middle everyone has to cross.
-import { bombSites, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, flagBases, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 76, H = 46;
@@ -61,6 +61,9 @@ function build() {
 
   // Search and Destroy (see bombSites). Both between the far wagon rows, at the north and south ends of the track corridor, so attackers have to break a coupling to reach either.
   points.snd = bombSites({ x: 55, z: 4 }, { x: 55.5, z: 36.5 });
+
+  // Capture the Flag (see flagBases). In front of the long wagon wall that screens the spawns, between the near wagon rows.
+  points.ctf = flagBases(W, H, { x: 12, z: 23 });
 
   return { id: 'frost', name: 'Frostline', theme: 'frost', width: W, height: H, walls, spawns, lanes, nav, points };
 }

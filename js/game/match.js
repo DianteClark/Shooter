@@ -12,6 +12,7 @@ import { previewThrow, maxThrowRange } from '../sim/equipment.js';
 import { Interpolator } from './interp.js';
 import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
+import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
 
 // Smallest signed rotation from b to a.
@@ -194,6 +195,7 @@ export class Match {
 
   #stepLocal(input, view, dt) {
     const r = this.#resolveInput(input, view);
+    this.ps.noSlide = ctfCarrying(view, this.localId);   // A flag carrier cannot slide.
     const shots = stepPlayer(this.ps, r, dt, this.map, this.rng);
     for (const shot of shots) {
       const rays = traceShot(shot, this.map, view.players, this.localId);

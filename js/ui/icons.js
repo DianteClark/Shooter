@@ -331,6 +331,8 @@ const SQUARE = {
   })(),
   // Search and Destroy: the bomb, under the diamond that marks a site.
   'mode:snd': { f: [R(3.5, 15, 25, 14, 2)], h: [R(7, 18.5, 11, 6, 1)], a: [O(23, 22, 2.5), P(16, 1.5, 22, 7.5, 16, 13.5, 10, 7.5)] },
+  // Capture the Flag: two stands facing each other across the yard, the near flag lit.
+  'mode:ctf': { f: [R(4, 3, 3, 25), R(25, 3, 3, 25), R(1.5, 27, 29, 3, 1)], b: [P(25, 11, 14, 15.5, 25, 20)], a: [P(7, 4, 18, 8.5, 7, 13)] },
   // Gun Game: a ladder, its top rung lit.
   'mode:gun': { f: [R(5, 2, 3.4, 28, 1), R(23.6, 2, 3.4, 28, 1), R(8.4, 12, 15.2, 2.8), R(8.4, 18.5, 15.2, 2.8), R(8.4, 25, 15.2, 2.8)], a: [R(8.4, 5, 15.2, 3.4)] },
 
@@ -368,6 +370,17 @@ const SQUARE = {
   'medal:defuse': { f: [R(4, 17, 24, 12, 2)], h: [R(7.5, 20, 10, 5.5, 1)], a: [bar(7, 8.5, 12.5, 13.5, 3.4), bar(11, 13.5, 24, 2, 3.4)] },
   'medal:clutch': { f: [O(14, 11, 5.6), P(3.5, 30, 6, 22.5, 10, 19.5, 18, 19.5, 22, 22.5, 24.5, 30)], a: [star(25, 7, 6, 2.6, 5)] },
   'medal:defend': { f: [shield], h: [shieldIn], a: [R(12, 9.5, 2, 13), P(14, 9.5, 21.5, 9.5, 19.5, 12.5, 21.5, 15.5, 14, 15.5)] },
+  // Capture the Flag. The pennant is the accent throughout, so it takes a team colour where the HUD sets one.
+  // Taken: the flag lifted off its stand, an arrow up beside it.
+  'medal:flag_take': { f: [R(5, 6, 3.2, 20), R(1.5, 28, 11, 2.5), bar(23, 7, 23, 22, 3.2), P(17, 11, 23, 3.5, 29, 11)], a: [P(8.2, 7, 20, 11, 8.2, 15)] },
+  // Captured: the flag planted on its stand, a star struck over it.
+  'medal:flag_capture': { f: [R(6, 3, 3.2, 24), R(2, 26.5, 12, 3.5, 1), star(23, 23, 7.5, 3.2)], a: [P(9.2, 4, 27, 4, 22.5, 9.5, 27, 15, 9.2, 15)] },
+  // Returned: the flag with an arrow turning back to its stand.
+  'medal:flag_return': { f: [R(5, 3, 3.2, 24), R(1.5, 26.5, 11, 3.5, 1), P(14, 22.5, 20, 17, 20, 28)], s: [P(19, 22.5, 26, 22.5, 28, 20.5, 28, 14, 26, 12)], a: [P(8.2, 4, 22, 8, 8.2, 12)] },
+  // Carrier killed: a fallen flag, its pennant struck through.
+  'medal:carrier_kill': { f: [bar(4, 28, 26, 6, 3.2)], a: [P(24.5, 7.5, 28.5, 19.5, 17, 15.5)], s: [P(15, 20, 27, 30), P(27, 20, 15, 30)] },
+  // Flag defense: the defend shield with the pennant on it.
+  'medal:flag_defend': { f: [shield], h: [shieldIn], a: [R(11, 9, 2.4, 14), P(13.4, 9, 22.5, 12, 13.4, 15)], b: [R(9, 23, 14, 2.4)] },
 
   // ---- Fallback: a dark signal lamp. ----
   unknown: { f: [O(16, 16, 12.5)], h: [O(16, 16, 9)], a: [O(16, 16, 4.5)] },
@@ -380,8 +393,8 @@ const CATEGORY_WEAPON = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'l
 const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
-  strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd',
+  strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Menu vocabulary (js/ui/yard.js names).

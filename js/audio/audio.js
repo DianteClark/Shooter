@@ -544,7 +544,7 @@ const FOLEY = {
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
 // Rarer outranks commoner when medals collide.
-const MEDAL_RANK = { golden: 13, streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, revenge: 7, longshot: 6, streak3: 5, double: 4, capture: 3, defend: 2, confirm: 1, deny: 0 };
+const MEDAL_RANK = { golden: 13, flag_capture: 12.5, streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, carrier_kill: 7.5, flag_take: 7.2, revenge: 7, longshot: 6, streak3: 5, flag_return: 4.5, double: 4, capture: 3, defend: 2, flag_defend: 2, confirm: 1, deny: 0 };
 
 const MEDALS = {
   first_blood: { notes: [[0, 0], [7, 0.09], [12, 0.18]], dur: 0.5, gain: 0.7 },
@@ -565,6 +565,12 @@ const MEDALS = {
   defuse:      { notes: [[7, 0], [12, 0.08], [16, 0.16], [19, 0.24]], dur: 0.6, gain: 0.72, shape: 0.6 },
   clutch:      { notes: [[0, 0], [7, 0.09], [12, 0.18], [19, 0.3]], dur: 0.85, gain: 0.78, shape: 0.4 },
   golden:      { notes: [[0, 0], [4, 0.07], [7, 0.14], [12, 0.21], [16, 0.3], [24, 0.42]], dur: 1.1, gain: 0.8, shape: 0.2 },
+  // Capture the Flag: the take is a call to run (a rising fourth), the capture the biggest fanfare in the mode.
+  flag_take:   { notes: [[0, 0], [5, 0.08], [10, 0.16]], dur: 0.5, gain: 0.72, shape: 1.1 },
+  flag_capture: { notes: [[0, 0], [4, 0.08], [7, 0.16], [12, 0.26], [16, 0.36]], dur: 0.95, gain: 0.8, shape: 0.5 },
+  flag_return: { notes: [[7, 0], [2, 0.09], [7, 0.18]], dur: 0.45, gain: 0.62, shape: 0.8 },
+  carrier_kill: { notes: [[-2, 0], [5, 0.07], [10, 0.14]], dur: 0.48, gain: 0.7, shape: 1.3 },
+  flag_defend: { notes: [[7, 0], [4, 0.09], [7, 0.18]], dur: 0.42, gain: 0.6, shape: 0.8 },
 };
 
 function renderMedal(spec, sr) {
@@ -872,6 +878,28 @@ function renderSfx(sr) {
     }, 0.8),
     pickup: mk(0.22, (d, r) => { addClick(d, sr, r, { dur: 0.006, gain: 0.8, hp: 1200 }); addTone(d, sr, { at: 0.01, dur: 0.18, gain: 0.8, f0: 880, f1: 1320, decay: 6 }); }, 0.7),
     drop: mk(0.22, (d, r) => { addClick(d, sr, r, { dur: 0.008, gain: 1, hp: 800 }); addTone(d, sr, { at: 0.01, dur: 0.18, gain: 0.8, f0: 990, f1: 520, decay: 6 }); }, 0.7),
+    // Capture the Flag. A klaxon pair when your flag is taken (an alarm, not a fanfare), a bright two-note horn when
+    // your team takes theirs, a bell for a return, and a low drum hit with a horn over it for a capture.
+    flagAlarm: mk(0.75, (d) => {
+      addTone(d, sr, { dur: 0.3, gain: 0.8, f0: 660, f1: 520, decay: 2.5, shape: 1.5 });
+      addTone(d, sr, { at: 0.34, dur: 0.36, gain: 0.85, f0: 660, f1: 500, decay: 2.5, shape: 1.5 });
+    }, 0.85),
+    flagHorn: mk(0.6, (d) => {
+      addTone(d, sr, { dur: 0.2, gain: 0.75, f0: 523, decay: 3, shape: 1.1 });
+      addTone(d, sr, { at: 0.16, dur: 0.4, gain: 0.85, f0: 784, decay: 2.6, shape: 1.1 });
+    }, 0.8),
+    flagBell: mk(0.7, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 0.7, hp: 2600 });
+      addTone(d, sr, { dur: 0.65, gain: 0.8, f0: 1175, decay: 4.5 });
+      addTone(d, sr, { dur: 0.5, gain: 0.35, f0: 2350, decay: 6 });
+    }, 0.75),
+    flagCapture: mk(1.2, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.25, gain: 0.9, f0: 900, f1: 120, decay: 7 });
+      addTone(d, sr, { dur: 0.45, gain: 1, f0: 110, f1: 55, decay: 4, shape: 1.2 });
+      addTone(d, sr, { at: 0.12, dur: 0.9, gain: 0.7, f0: 392, decay: 2.2, shape: 0.9 });
+      addTone(d, sr, { at: 0.12, dur: 0.9, gain: 0.55, f0: 587, decay: 2.2, shape: 0.9 });
+      addTone(d, sr, { at: 0.12, dur: 0.9, gain: 0.45, f0: 784, decay: 2.2, shape: 0.9 });
+    }, 0.9),
   };
 }
 
@@ -1724,6 +1752,7 @@ export class AudioEngine {
           this._phaseMusic(e, view);
           break;
         case 'snd': this._snd(e, view); break;
+        case 'ctf': this._ctf(e, view); break;
         default: break;
       }
     }
@@ -1744,6 +1773,20 @@ export class AudioEngine {
           this._play(won ? this.stingers.victory : this.stingers.defeat, { bus: this.music, priority: PR.own, cls: 'loud', gain: 0.55, rate: 1.3 });
         }
         break;
+      default: break;
+    }
+  }
+
+  // Capture the Flag moments, heard by everyone (they are the match's news), and voiced from the local team's side:
+  // an alarm when your flag goes, a horn when theirs does, a bell when one comes home, the big hit for a capture.
+  _ctf(e, view) {
+    const ui = { bus: this.ui, priority: PR.ui, cls: 'ui' };
+    const ours = e.team === this.localTeam;           // Whose flag it is.
+    switch (e.kind) {
+      case 'take': this._play(ours ? this.sfx.flagAlarm : this.sfx.flagHorn, { ...ui, gain: ours ? 0.75 : 0.65 }); break;
+      case 'drop': this._play(this.sfx.drop, { ...ui, gain: 0.55 }); break;
+      case 'return': this._play(this.sfx.flagBell, { ...ui, gain: ours ? 0.7 : 0.45, rate: ours ? 1 : 0.84 }); break;
+      case 'capture': this._play(this.sfx.flagCapture, { ...ui, gain: ours ? 0.6 : 0.9, rate: ours ? 0.8 : 1 }); break;
       default: break;
     }
   }

@@ -15,6 +15,7 @@ import { angleDiff, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 import { decodeSnd, restoreSnd, SndRules } from './snd.js';
+import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -81,7 +82,7 @@ const HARD_ROTATE = 40, HARD_TICK = 1;
 const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
 const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
 const PLAN_EVERY = 15;           // Ticks between bot objective plans.
-const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd']);
+const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd', 'ctf']);
 
 // Free-for-all spawning: anywhere open on the map, as far from everyone as it can get.
 const FFA_GRID = 5;              // Metres between candidate spawn points sampled over open ground.
@@ -354,6 +355,8 @@ export class Sim {
     // Search and Destroy shows its two bomb sites as points; nobody ever owns one.
     this.points = this.mode === 'hard' && this.zones.length ? [this.zones[this.hardOrder[0]]] : this.mode === 'dom' || this.mode === 'snd' ? this.zones : [];
     this.snd = this.mode === 'snd' ? new SndRules(this) : null;
+    // Capture the Flag keeps its two flags to itself (js/sim/ctf.js); the view shows them as view.ctf, not as points.
+    this.ctf = this.mode === 'ctf' ? new CtfRules(this) : null;
     this.hardIdx = 0;
     this.hardT = HARD_ROTATE;
     this.tickT = this.mode === 'hard' ? HARD_TICK : DOM_TICK;
@@ -529,6 +532,7 @@ export class Sim {
   // Objective pull on a spawn point: near what your team holds, away from what it does not, and never on top of
   // the live hardpoint, so nobody spawns straight into a capture.
   _spawnFlow(p, s) {
+    if (this.ctf) return this.ctf.spawnFlow(p, s);
     if (this.mode === 'dom') {
       let score = 0;
       for (let i = 0; i < this.zones.length; i++) {
@@ -687,6 +691,7 @@ export class Sim {
 
   _stepObjectives() {
     if (this.snd) { this.snd.step(STEP); return; }
+    if (this.ctf) { this.ctf.step(STEP); return; }      // Captures end the match themselves.
     if (this.mode === 'kc') this._stepTags();
     else if (this.mode === 'dom') this._stepDomination();
     else if (this.mode === 'hard') this._stepHardpoint();
@@ -1238,7 +1243,8 @@ export class Sim {
     }
 
     this.snd?.onKill(target);
-    if (!this.snd && this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
+    this.ctf?.onKill(target, killer);
+    if (!this.snd && !this.ctf && this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
   }
 
   // A death with nobody to credit: a Search and Destroy attacker caught in their own bomb. Counts as a death only.
@@ -1251,6 +1257,7 @@ export class Sim {
     this._emit({ t: 'hit', by: target.id, target: target.id, dmg: MAX_HP, x, z, killed: true, eq: equip });
     this._emit({ t: 'kill', by: target.id, target: target.id, weapon: target.ps.weapon, camo: target.camo, x, z, assist: null, dist: 0, equip, vw: target.ps.weapon });
     this.snd?.onKill(target);
+    this.ctf?.onKill(target, null);
   }
 
   _medal(p, medal) { this._emit({ t: 'medal', id: p.id, medal }); }
@@ -2009,6 +2016,7 @@ export class Sim {
   }
 
   _restoreMode(view) {
+    if (this.ctf) { restoreCtf(this.ctf, view); return; }
     if (this.snd) {
       restoreSnd(this.snd, view);
       // Nobody with the bomb, or anybody back from the dead: the snapshot's own alive flags are the truth.
@@ -2073,6 +2081,7 @@ export class Sim {
       pro: ps.perks.filter(id => ps.pro.includes(id)), card: p.card ?? null,
       attachments: this._heldKit(p, ps.weapon),
       plants: p.plants ?? 0, defuses: p.defuses ?? 0,
+      captures: p.captures ?? 0, returns: p.returns ?? 0, carrierKills: p.carrierKills ?? 0,
     };
   }
 
@@ -2093,10 +2102,12 @@ export class Sim {
 
   getView(localId) {
     const snd = this.snd ? this.snd.view() : null;
+    const ctf = this.ctf ? this.ctf.view() : null;
     const points = this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested));
     if (snd) points.snd = snd;
+    if (ctf) points.ctf = ctf;
     return this._applyIntel({
-      t: this.time, phase: this.phase, snd, timeLeft: this.timeLeft, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
+      t: this.time, phase: this.phase, snd, ctf, timeLeft: this.timeLeft, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
       tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life })),
       points,
@@ -2223,6 +2234,7 @@ export class Sim {
 
   _encodeObjective() {
     if (this.snd) return this.snd.encode();
+    if (this.ctf) return this.ctf.encode();
     if (this.mode === 'kc') {
       return this.tags.length ? this.tags.flatMap(t => [t.id * 2 + t.team, Math.round(t.x * 10), Math.round(t.z * 10), Math.round(t.life * 10)]) : 0;
     }
@@ -2237,6 +2249,11 @@ export class Sim {
       // The sites never change; the round state rides on the list as well as on the view (see sndOf in snd.js).
       out.points = this.zones.map(z => this._pointView(z, -1, 0, false));
       out.snd = out.points.snd = decodeSnd(this, a, out.players);
+      return;
+    }
+    if (this.mode === 'ctf') {
+      // The flags ride on the (empty) point list as well as on the view (see ctfOf in ctf.js).
+      out.ctf = out.points.ctf = decodeCtf(this, a || null, out.players);
       return;
     }
     if (!a) return;

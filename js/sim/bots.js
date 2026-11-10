@@ -174,11 +174,13 @@ export function planObjectives(sim) {
       const p = sim.players[i];
       if (!p.bot || p.team !== team || !p.alive) continue;
       // Some bots this life just want a fight; they stay on the lane logic. A round of Search and Destroy needs everyone.
-      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd) crew.push(p.bot);
+      // A flag carrier always plays the flag, whatever this life's roll said.
+      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd || sim.ctf?.isCarrier(p)) crew.push(p.bot);
       else p.bot.setObjective(null);
     }
     if (!crew.length) continue;
     if (sim.snd) { planSnd(sim, team, crew); continue; }
+    if (sim.ctf) { planCtf(sim, team, crew); continue; }
     if (sim.mode === 'kc') planTags(sim, team, crew);
     else if (sim.mode === 'dom') planDomination(sim, team, crew);
     else if (sim.mode === 'hard') planHardpoint(sim, team, crew);
@@ -344,6 +346,178 @@ function planSnd(sim, team, crew) {
   });
 }
 
+// ---- Capture the Flag. Both flags are public knowledge: where they stand, who carries one (the carrier shows on the
+// enemy minimap) and where a dropped one lies. The planner deals out roles each plan, by tier:
+//   runner    our carrier heads home, better tiers by the lane where the team has seen the fewest enemies lately;
+//             with our own flag gone, they wait at home for it to come back
+//   returner  the nearest one or two to our dropped flag touch it home
+//   chaser    our flag is out: hunt the carrier. Veterans and elites all go and cut them off ahead; lower tiers send
+//             the nearest one or two, straight at them
+//   escort    veterans and elites walk ahead of our runner
+//   defender  a quota from objDefend holds our flag (recruits never stay home)
+//   attacker  everyone else goes for their flag: the nearest touches it, the rest crowd its base
+
+const CTF_ESCORT_LEAD = 5;       // Metres ahead of the runner, toward home, that escorts walk.
+const CTF_CUT = 7;               // Metres ahead of the enemy runner, toward their base, that a good chaser aims for.
+const CTF_ROUTE_DONE = 7;        // A runner this close to its route's waypoint heads straight home.
+const CTF_DANGER = 9;
+const CTF_RUN_FIGHT = 9;         // A runner turns to fight only someone closer than this.            // Seconds a sighting keeps a lane marked as dangerous for a runner.
+
+// Where a moving target is, rounded, so an objective key only changes when the target has moved a few metres.
+const cell = (x, z, k = 5) => `${Math.round(x / k)}_${Math.round(z / k)}`;
+
+function ctfPlan(sim, team) {
+  const plans = sim.ctf.plan ??= [{ route: null, seen: [] }, { route: null, seen: [] }];
+  return plans[team];
+}
+
+// Sightings this team's bots have made or been told about lately: the runner's map of where not to go.
+function ctfDanger(sim, team, crew, plan) {
+  const seen = plan.seen;
+  for (let i = seen.length - 1; i >= 0; i--) if (sim.time - seen[i].t > CTF_DANGER) seen.splice(i, 1);
+  for (const bot of crew) {
+    if (bot.targetVisible && bot.target) seen.push({ x: bot.target.ps.x, z: bot.target.ps.z, t: sim.time });
+    else if (bot.hasKnown && !bot.knownSoft && sim.time - bot.knownT < 2) seen.push({ x: bot.knownX, z: bot.knownZ, t: sim.time });
+  }
+  for (const c of sim.callouts) if (c.team === team && sim.time - c.t < 3) seen.push({ x: c.x, z: c.z, t: c.t });
+  if (seen.length > 40) seen.splice(0, seen.length - 40);
+  return seen;
+}
+
+// The runner's road home: a waypoint in the middle of the safest lane, then the flag. Recruits and regulars just take
+// the shortest way; veterans and elites pick the lane with the fewest recent sightings between them and home.
+function ctfRunObjective(sim, team, bot, plan, crew) {
+  const ctf = sim.ctf, home = ctf.bases[team], ps = bot.ps;
+  const direct = { key: 'run-home', x: home.x, z: home.z, r: 1.2, role: 'run', commit: true };
+  const lanes = sim.map.lanes ?? [];
+  if (!bot.S.objRotate || lanes.length < 2) return direct;
+  let route = plan.route;
+  if (!route || route.id !== bot.p.id) {
+    const seen = ctfDanger(sim, team, crew, plan);
+    const midX = (ps.x + home.x) / 2;
+    let best = null, bestCost = Infinity;
+    for (const lane of lanes) {
+      let danger = 0;
+      for (const s of seen) {
+        // Only what lies between the runner and home counts.
+        if ((s.x - home.x) * (ps.x - home.x) < 0 || Math.abs(s.x - home.x) > Math.abs(ps.x - home.x) + 4) continue;
+        if (Math.abs(s.z - lane.z) < 7) danger++;
+      }
+      const at = walkable(sim, midX, lane.z);
+      const cost = danger * 14 + Math.hypot(at.x - ps.x, at.z - ps.z) + Math.hypot(home.x - at.x, home.z - at.z) + sim.rng() * 4;
+      if (cost < bestCost) { bestCost = cost; best = { id: bot.p.id, lane: lane.id ?? lane.z, x: at.x, z: at.z, done: false }; }
+    }
+    route = plan.route = best;
+  }
+  if (!route || route.done) return direct;
+  // Past the waypoint (or closer to home than it already): straight home.
+  if (Math.hypot(route.x - ps.x, route.z - ps.z) < CTF_ROUTE_DONE || Math.hypot(home.x - ps.x, home.z - ps.z) < Math.hypot(home.x - route.x, home.z - route.z)) {
+    route.done = true;
+    return direct;
+  }
+  return { key: `run-${route.lane}`, x: route.x, z: route.z, r: 2.5, role: 'run', commit: true };
+}
+
+function planCtf(sim, team, crew) {
+  const ctf = sim.ctf, own = ctf.flags[team], foe = ctf.flags[1 - team];
+  const home = ctf.bases[team], away = ctf.bases[1 - team];
+  const plan = ctfPlan(sim, team);
+  const free = new Set(crew.slice().sort((a, b) => a.p.index - b.p.index));
+  const take = (bot, o) => { bot.setObjective(o); free.delete(bot); };
+  const nearest = (x, z, pick = () => true) => closestBot([...free].filter(pick), x, z);
+
+  // Our runner.
+  const runner = foe.state === 'carried' ? foe.carrier : null;
+  if (!runner || plan.route?.id !== runner.id) plan.route = null;
+  if (runner?.bot && free.has(runner.bot)) {
+    if (own.state === 'home') take(runner.bot, ctfRunObjective(sim, team, runner.bot, plan, crew));
+    else take(runner.bot, { key: 'run-wait', x: home.x, z: home.z, r: 4, role: 'defend' });
+  }
+
+  // Our flag on the ground: the nearest go and touch it home; a good team sends a second.
+  if (own.state === 'dropped') {
+    const key = `ret${cell(own.x, own.z, 2)}`;
+    const a = nearest(own.x, own.z);
+    if (a) take(a, { key, x: own.x, z: own.z, r: 0, role: 'collect', commit: true });
+    const b = nearest(own.x, own.z, q => q.S.objRotate);
+    if (b) take(b, { key: `${key}b`, x: own.x, z: own.z, r: 0, role: 'collect' });
+  }
+  // Their flag on the ground: the nearest picks it up.
+  if (foe.state === 'dropped') {
+    const a = nearest(foe.x, foe.z);
+    if (a) take(a, { key: `grab${cell(foe.x, foe.z, 2)}`, x: foe.x, z: foe.z, r: 0, role: 'collect', commit: true });
+  }
+
+  // Our flag in their hands: run the carrier down.
+  if (own.state === 'carried' && own.carrier) {
+    const c = own.carrier.ps;
+    const dx = away.x - c.x, dz = away.z - c.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const lead = Math.min(CTF_CUT, d);
+    const cut = walkable(sim, c.x + dx / d * lead, c.z + dz / d * lead);
+    let plain = 0;
+    for (const bot of [...free].sort((a, b) => Math.hypot(a.ps.x - c.x, a.ps.z - c.z) - Math.hypot(b.ps.x - c.x, b.ps.z - c.z))) {
+      if (bot.S.objRotate) {
+        // Whoever is already behind the runner closes on them; whoever is ahead cuts the road home.
+        const ahead = (bot.ps.x - c.x) * dx + (bot.ps.z - c.z) * dz > 0;
+        const at = ahead ? cut : walkable(sim, c.x, c.z);
+        take(bot, { key: `chase${ahead ? 'c' : 'r'}${cell(at.x, at.z)}`, x: at.x, z: at.z, r: 2, role: 'attack' });
+      } else if (plain++ < 2) {
+        take(bot, { key: `chase${cell(c.x, c.z)}`, x: c.x, z: c.z, r: 2.5, role: 'attack' });
+      }
+    }
+  }
+
+  // Escorts for our runner, from the tiers that think about it.
+  if (runner && own.state === 'home') {
+    const r = runner.ps, dx = home.x - r.x, dz = home.z - r.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const at = walkable(sim, r.x + dx / d * Math.min(CTF_ESCORT_LEAD, d), r.z + dz / d * Math.min(CTF_ESCORT_LEAD, d));
+    let n = 0;
+    for (const bot of [...free]) {
+      if (bot.S.objPush < 0.5 || n >= 2) continue;
+      take(bot, { key: `esc${cell(at.x, at.z, 6)}`, x: at.x, z: at.z, r: 3.5, role: 'attack' });
+      n++;
+    }
+  }
+
+  // Home guard. Recruits never stay back; better tiers keep one or two on the flag while it is home.
+  if (own.state === 'home') {
+    let quota = 0;
+    for (const bot of crew) quota += bot.S.objDefend;
+    quota = Math.min(2, Math.round(quota));
+    while (quota-- > 0) {
+      const bot = nearest(home.x, home.z, q => q.S.objDefend > 0);
+      if (!bot) break;
+      take(bot, { key: 'guard', x: home.x, z: home.z, r: 5, role: 'defend' });
+    }
+  }
+
+  // Everyone else goes for their flag. With it already on its way home, they push the middle instead.
+  const forFlag = foe.state === 'home';
+  for (const bot of [...free]) {
+    if (!forFlag) { take(bot, null); continue; }
+    take(bot, ctfFlank(sim, bot, away) ?? { key: 'take', x: away.x, z: away.z, r: 0, role: 'collect', commit: true });
+  }
+}
+
+// Some attackers flank: once a life, by tier (the flank trait, doubled), a bot picks one of the outer lanes and walks
+// it to a waypoint past the middle before turning in on the flag, so a team does not all queue down the shortest road
+// into the same fight. Null once there (or for a bot going straight in).
+const CTF_FLANK_STAGE = 0.58;    // Fraction of the way from home to the enemy flag where the flank waypoint sits.
+function ctfFlank(sim, bot, away) {
+  const lanes = sim.map.lanes ?? [], ps = bot.ps;
+  if (lanes.length < 3) return null;
+  if (bot.ctfLife !== bot.lifeT) {
+    bot.ctfLife = bot.lifeT;
+    bot.ctfLane = sim.rng() < bot.S.flank * 2 ? (sim.rng() < 0.5 ? 0 : lanes.length - 1) : -1;
+  }
+  if (bot.ctfLane < 0) return null;
+  const home = sim.ctf.bases[bot.p.team], span = away.x - home.x;
+  const at = walkable(sim, home.x + span * CTF_FLANK_STAGE, lanes[bot.ctfLane].z);
+  // Past the waypoint, or close to it: straight in from here.
+  if ((ps.x - home.x) / span >= CTF_FLANK_STAGE - 0.05 || Math.hypot(at.x - ps.x, at.z - ps.z) < 6) { bot.ctfLane = -1; return null; }
+  return { key: `flank${bot.ctfLane}`, x: at.x, z: at.z, r: 3, role: 'attack', commit: true };
+}
+
 function closestBot(free, x, z) {
   let best = null, bestD = Infinity;
   for (const bot of free) {
@@ -490,6 +664,7 @@ export class BotBrain {
     this.objective = null; this.objKey = null; this.objAim = 0; this.objPushRoll = false;
     this.canHit = true;
     this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
+    this.lifeT = this.sim.time;                   // When this life began: plans made once a life key on it.
     this._assignLane();
   }
 
@@ -774,9 +949,9 @@ export class BotBrain {
       this.modeT -= this.interval;
       const healed = p.hp >= 82 && ps.reloadT <= 0;
       if (this.modeT <= 0 || healed || (this.arrived && visible && this.targetDist < 7)) this._setMode('none');
-    } else if (S.retreatHp > 0 && p.hp < S.retreatHp && (visible || this.hasKnown) && p.hp < this.lastRetreatHp) {
+    } else if (S.retreatHp > 0 && p.hp < S.retreatHp && (visible || this.hasKnown) && p.hp < this.lastRetreatHp && !this.objective?.commit) {
       this._takeCover();
-    } else if (visible && this.targetDist > 8 && (ammo === 0 || ps.reloadT > 0) && sim.rng() < S.coverReload) {
+    } else if (visible && this.targetDist > 8 && (ammo === 0 || ps.reloadT > 0) && sim.rng() < S.coverReload && !this.objective?.commit) {
       this._takeCover();
     }
     this.lastRetreatHp = p.hp;
@@ -801,7 +976,7 @@ export class BotBrain {
     const o = this.objective;
     const knownD = this.hasKnown ? Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) : Infinity;
     // A bot on an objective will not be pulled off it by a noise: only a firm contact nearby, and never once it is standing on the point.
-    const worthChasing = this.hasKnown && (o
+    const worthChasing = this.hasKnown && !o?.commit && (o
       ? !this.knownSoft && this.knownErr < 6 && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
       : !this.knownSoft || knownD < 14);
     if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt') {
@@ -1383,9 +1558,13 @@ export class BotBrain {
       if (this.reactLeft < this.reactTotal * 0.55) desired = trueAng + err;
 
       const style = styleOf(ps.weapon);
-      const rushing = style.rush && d > style.rush && this.mode !== 'cover' && this.mode !== 'hold';
+      // A flag runner with distance in hand does not stop to shoot back: it sprints for home, only turning to fight
+      // someone close enough to catch it.
+      const running = this.mode === 'objective' && !this.arrived && this.objective?.role === 'run' && d > CTF_RUN_FIGHT;
+      const rushing = running || (style.rush && d > style.rush && this.mode !== 'cover' && this.mode !== 'hold');
       if (!rushing) this._trigger(q, d, trueAng, dt, q.ps.x, q.ps.z);
-      const pushing = this.mode === 'objective' && !this.arrived && (d > style.pref || this.objPushRoll);
+      // A committed objective (a flag run, a flag grab) never stops to trade shots: it fights on the move.
+      const pushing = this.mode === 'objective' && !this.arrived && (d > style.pref || this.objPushRoll || !!this.objective?.commit);
       if ((this.mode === 'cover' || this.mode === 'hold' || pushing) && !this.arrived) this._followPath(false);
       else this._combatMove(q, d, dt);
       if (rushing) {

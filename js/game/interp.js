@@ -73,6 +73,7 @@ export class Interpolator {
     out.hardT = b.hardT;
     out.range = b.range;
     out.snd = b.snd;
+    out.ctf = b.ctf;
 
     const fromById = this.newestById;
     fromById.clear();

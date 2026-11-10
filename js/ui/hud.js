@@ -5,7 +5,7 @@ import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
-import { GUN_LADDER, isFfa, MODES, modeRules, SND } from '../shared/modes.js';
+import { GUN_LADDER, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
@@ -16,6 +16,7 @@ import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.
 import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
 import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
+import { ctfOf } from '../sim/ctf.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
 // for that id, so callers can fall back to words.
@@ -71,6 +72,7 @@ const RANGE_HZ = 6;              // The readout repaints this often; it would be
 const PRINT_HZ = 12;             // Footprint line-of-sight checks per second; drawing still follows the camera every frame.
 const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky']);   // What Hijacker sees through walls.
 const NO_PRO = Object.freeze([]);
+const NO_STATS = Object.freeze({});
 const FFA_FOE = '#ff6a4d';        // Free-for-all: "an enemy" when it is not one particular player (footprints, edge tints).
 const ORDINAL = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 // Free-for-all standings: score, then fewer deaths, then more kills (the sim's own order for the winner).
@@ -95,6 +97,9 @@ const MEDALS = {
   streak3: ['Three Streak', 'On a run', 2], streak5: ['Five Streak', 'Unstoppable', 3], streak10: ['Ten Streak', 'Unbroken', 3],
   golden: ['Golden Kill', 'One round, one kill', 3],
   plant: ['Bomb Planted', 'Now hold it', 2], defuse: ['Bomb Defused', 'Saved the site', 3], clutch: ['Clutch', 'Won it alone', 3],
+  flag_take: ['Flag Taken', `+${CTF.score.take}`, 2], flag_capture: ['Flag Captured', `+${CTF.score.capture}`, 3],
+  flag_return: ['Flag Returned', `+${CTF.score.ret}`, 1], carrier_kill: ['Carrier Killed', `+${CTF.score.carrierKill}`, 2],
+  flag_defend: ['Flag Defense', `+${CTF.score.defend}`, 1],
 };
 
 // Search and Destroy wording. Why a round ended, from the winner's side and the loser's.
@@ -181,6 +186,53 @@ const SND_CSS = `
 .hud.snd-on .medals { top: calc(var(--st) + 66px); }
 .hud.snd-out .status { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .snd-mark[data-state="planted"] .sm-plate { animation: none; } }
+`;
+// The Capture the Flag layer: both flags' status under the scorebar, a marker over each flag (or its carrier) with the
+// distance to it, and the carrier's own strip. Team colour says whose flag; the plate's state says what is happening.
+const CTF_CSS = `
+.hud .ctf-ui { display: none; }
+.hud.ctf-on .ctf-ui:not([hidden]) { display: flex; }
+.hud.ctf-on .sb-track { display: none; }
+.hud.ctf-on .snd-pips { display: flex; }
+.hud.ctf-on .medals { top: calc(var(--st) + 70px); }
+.ctf-status { position: absolute; left: 50%; top: calc(var(--st) + 43px); transform: translateX(-50%); gap: 4px; pointer-events: none; }
+.cf-side { display: flex; align-items: center; gap: 6px; width: 148px; height: 24px; padding: 0 8px; background: var(--hud-glass-lo);
+  box-shadow: var(--hud-edge), inset 0 -2px 0 var(--team); --cut: var(--cut-xs);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.cf-side.theirs { flex-direction: row-reverse; text-align: right; }
+.cf-ico { flex: none; color: var(--team); line-height: 0; --icon-accent: currentColor; }
+.cf-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cf-txt b { font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; }
+.cf-txt small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 112px; }
+.cf-side[data-state="carried"] { background: color-mix(in srgb, var(--team) 34%, rgba(16,20,26,.82)); }
+.cf-side[data-state="carried"] .cf-txt small { color: #fff; }
+.cf-side[data-state="carried"] .cf-ico { animation: ctf-blink .6s steps(2, jump-none) infinite alternate; }
+.cf-side[data-state="dropped"] .cf-txt b { color: var(--c-sodium); }
+.ctf-marks { position: absolute; inset: 0; pointer-events: none; }
+.ctf-mark { position: absolute; left: 0; top: 0; width: 0; height: 0; display: block; }
+.ctf-mark[hidden] { display: none; }
+.ctf-mark .cm-plate { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: grid; place-items: center; color: #fff; line-height: 0;
+  --icon-accent: currentColor; background: var(--team); box-shadow: 0 0 0 2px rgba(16,20,26,.8), 0 0 12px color-mix(in srgb, var(--team) 60%, transparent);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
+.ctf-mark small { position: absolute; left: -50px; width: 100px; top: 18px; text-align: center; font: 400 12px/1.1 var(--f-stencil);
+  letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: 0 1px 2px rgba(0,0,0,.95); white-space: nowrap; }
+.ctf-mark small u { display: block; text-decoration: none; font: var(--fs-micro)/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.ctf-mark[data-state="carried"] .cm-plate { animation: ctf-blink .6s steps(2, jump-none) infinite alternate; }
+.ctf-mark[data-state="carried"] small { color: #fff; }
+.ctf-mark[data-state="dropped"] .cm-plate { background: rgba(16,20,26,.88); color: var(--team); box-shadow: 0 0 0 2px var(--team), 0 0 12px color-mix(in srgb, var(--team) 60%, transparent); }
+.ctf-mark[data-state="dropped"] small { color: var(--c-sodium); }
+.ctf-mark .sm-arrow { display: none; }
+.ctf-mark.off .sm-arrow { display: block; }
+.ctf-carry { position: absolute; left: 50%; bottom: calc(var(--sb) + 92px); transform: translateX(-50%); align-items: center; gap: 10px; pointer-events: none;
+  padding: 6px 14px 7px 12px; color: var(--enemy-team); --icon-accent: currentColor; background: var(--hud-glass);
+  box-shadow: var(--hud-edge), inset 0 -2px 0 var(--enemy-team); --cut: var(--cut-sm);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.ctf-carry span { display: flex; flex-direction: column; gap: 3px; }
+.ctf-carry b { font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; }
+.ctf-carry small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; }
+.ctf-carry[data-wait="1"] small { color: var(--c-sodium); }
+@keyframes ctf-blink { to { filter: brightness(1.6); } }
+@media (prefers-reduced-motion: reduce) { .cf-side[data-state="carried"] .cf-ico, .ctf-mark[data-state="carried"] .cm-plate { animation: none; } }
 `;
 const SCORE_POP_LIFE = 1.4;      // Seconds the "+100" under the crosshair holds before it fades; kills inside it add up.
 const INTRO_GO_MS = 900;
@@ -331,6 +383,7 @@ export class HUD {
     this.ffa = isFfa(mode);             // Every player for themselves: scorebar, board and banners rank players.
     this.gun = this.mode === 'gun';
     this.snd = this.mode === 'snd';           // Search and Destroy: rounds, the bomb, spectating instead of respawns.
+    this.ctf = this.mode === 'ctf';           // Capture the Flag: both flags' status, markers and the carrier's strip.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
@@ -339,10 +392,11 @@ export class HUD {
     this.#buildObjectiveHud();
     this.sbGoal.textContent = this.gun ? `${scoreLimit} guns` : `to ${scoreLimit}`;
     this.el.classList.toggle('snd-on', this.snd);
-    for (const pips of this.sndEl.pips) pips.innerHTML = this.snd ? '<i></i>'.repeat(scoreLimit) : '';
+    this.el.classList.toggle('ctf-on', this.ctf);
+    for (const pips of this.sndEl.pips) pips.innerHTML = this.snd || this.ctf ? '<i></i>'.repeat(scoreLimit) : '';
     spectate.reset();
     this.boardMode.textContent = MODES[mode]?.name ?? '';
-    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : `first to ${scoreLimit}`}`;
+    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : this.ctf ? `first to ${scoreLimit} captures` : `first to ${scoreLimit}`}`;
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
@@ -429,7 +483,8 @@ export class HUD {
     const half = Math.ceil(roster.length / 2);
     const roundTime = `${Math.floor(this.timeLimit / 60)}:${pad2(this.timeLimit % 60)}`;
     const rules = this.gun ? `${GUN_LADDER.length} guns<i></i>${minutes} min`
-      : this.snd ? `First to ${this.scoreLimit} rounds<i></i>${roundTime} a round` : `First to ${this.scoreLimit}<i></i>${minutes} min`;
+      : this.snd ? `First to ${this.scoreLimit} rounds<i></i>${roundTime} a round`
+      : this.ctf ? `First to ${this.scoreLimit} captures<i></i>${minutes} min` : `First to ${this.scoreLimit}<i></i>${minutes} min`;
     this.introEl.innerHTML = `
       ${this.ffa ? field(roster.slice(0, half), 'ours', 'Every player') : team(myTeam, 'ours')}
       <div class="in-mid">
@@ -481,6 +536,7 @@ export class HUD {
       score: NaN, capped: null, swapHint: null, objState: null, objFrac: NaN, hardShown: NaN,
       gunLevel: NaN, rival: null, place: '',
       sndAlive: '', sndRole: '', sndBig: '', sndCount: NaN, sndRing: '', sndRingFrac: NaN, sndCarry: null, sndSpec: null, sndLife: '', sndPips: '',
+      ctfCarry: '', ctfShown: null,
     };
     this.sndLast = null;
     this.view = null;
@@ -519,6 +575,9 @@ export class HUD {
     this.wasOut = false;
     for (const m of this.sndEl.marks) { m.shown = false; m.root.hidden = true; m.state = ''; m.text = null; }
     for (const k of ['ring', 'carry', 'spec', 'big']) this.sndEl[k].hidden = true;
+    for (const m of this.ctfEl.marks) { m.shown = false; m.root.hidden = true; m.state = ''; m.text = null; }
+    for (const sd of this.ctfEl.sides) sd.key = '';
+    this.ctfEl.carry.hidden = true;
     this.endEl.classList.remove('show');
     this.controls?.setDown(false);
     this.setNotice('');
@@ -718,6 +777,9 @@ export class HUD {
       <div class="snd-ring snd-ui" hidden><svg viewBox="-32 -32 64 64" aria-hidden="true"><circle class="sr-track" r="26"/><circle class="sr-arc" r="26" transform="rotate(-90)"/></svg><span class="sr-ico">${icon('bomb', { size: 18, accent: 'currentColor' })}</span><b></b><small></small></div>
       <div class="snd-carry snd-ui" hidden>${icon('bomb', { size: 26, accent: 'currentColor' })}<span><b>You have the bomb</b><small>Stand still on A or B to plant</small></span></div>
       <button class="snd-spec snd-ui" type="button" data-tap="1" data-sound="tab" hidden><i class="ss-arrow">&lsaquo;</i><span><small class="ss-kick">Spectating</small><b class="ss-name"></b><small class="ss-left"></small></span><i class="ss-arrow">&rsaquo;</i></button>
+      <div class="ctf-status ctf-ui">${['mine', 'theirs'].map(k => `<div class="cf-side ${k}"><i class="cf-ico">${icon('ui:flag', { size: 16 })}</i><span class="cf-txt"><b></b><small></small></span></div>`).join('')}</div>
+      <div class="ctf-marks ctf-ui">${['mine', 'theirs'].map(k => `<span class="ctf-mark ${k}" hidden><span class="cm-plate">${icon('ui:flag', { size: 18 })}</span><i class="sm-arrow"></i><small></small></span>`).join('')}</div>
+      <div class="ctf-carry ctf-ui" hidden>${icon('ui:flag', { size: 26 })}<span><b>You have their flag</b><small></small></span></div>
       <div class="snd-big snd-ui" hidden><small class="sbg-kick"></small><b></b><small class="sbg-sub"></small><span class="sbg-count"></span></div>
       <div class="death">
         <div class="death-col">
@@ -852,9 +914,16 @@ export class HUD {
     if (!document.getElementById('snd-hud-style')) {
       const st = document.createElement('style');
       st.id = 'snd-hud-style';
-      st.textContent = SND_CSS;
+      st.textContent = SND_CSS + CTF_CSS;
       document.head.appendChild(st);
     }
+    const ctfSide = k => { const root = $(`.cf-side.${k}`); return { root, word: root.querySelector('b'), sub: root.querySelector('small'), key: '' }; };
+    this.ctfEl = {
+      status: $('.ctf-status'),
+      sides: [ctfSide('mine'), ctfSide('theirs')],
+      marks: ['mine', 'theirs'].map(k => { const root = $(`.ctf-mark.${k}`); return { root, label: root.querySelector('small'), arrow: root.querySelector('.sm-arrow'), x: NaN, y: NaN, a: NaN, off: null, state: '', text: null, shown: false }; }),
+      carry: $('.ctf-carry'), carryWord: $('.ctf-carry b'), carrySub: $('.ctf-carry small'),
+    };
     this.sndEl = {
       alive: $('.snd-alive'), mine: $('.sa-side.mine'), theirs: $('.sa-side.theirs'), round: $('.sa-round'), role: $('.sa-role'),
       marks: [...el.querySelectorAll('.snd-mark')].map(root => ({ root, label: root.querySelector('small'), arrow: root.querySelector('.sm-arrow'), x: NaN, y: NaN, a: NaN, off: null, state: '', text: null, shown: false })),
@@ -984,6 +1053,7 @@ export class HUD {
   // Fourth score column: the mode's own number where it has one, headshots otherwise.
   #objectiveStat(p) {
     if (this.snd) return `${p.plants ?? 0}/${p.defuses ?? 0}`;
+    if (this.ctf) return `${p.captures ?? 0}/${p.returns ?? 0}/${p.carrierKills ?? 0}`;
     if (this.mode === 'kc') return p.confirms ?? 0;
     if (this.mode === 'dom' || this.mode === 'hard') return p.captures ?? 0;
     return p.head ?? 0;
@@ -1098,7 +1168,7 @@ export class HUD {
       this.sbMine.score.textContent = c.myScore;
       this.sbMine.fill.style.transform = `scaleX(${Math.min(1, c.myScore / this.scoreLimit)})`;
     }
-    if (this.snd) this.#sndPips(myTeam, view, c);
+    if (this.snd || this.ctf) this.#sndPips(myTeam, view, c);
     if (c.otherScore !== view.scores[other]) {
       if (c.otherScore < view.scores[other]) this.sbTheirs.score.animate(SCORE_POP, { duration: 280 });
       c.otherScore = view.scores[other];
@@ -1151,6 +1221,7 @@ export class HUD {
     this.#updateTiles(me, c);
     if (this.snd) this.#updateSnd(view, me, c, snd);
     else this.#updateDeath(me, c, view);
+    if (this.ctf) this.#updateCtf(view, me, c);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -1454,6 +1525,155 @@ export class HUD {
     g.lineWidth = 2;
     g.fillRect(x - 4.5, y - 3.5, 9, 7);
     g.strokeRect(x - 4.5, y - 3.5, 9, 7);
+  }
+
+  // ---- Capture the Flag ----
+  // Both flags' status under the scorebar (yours on the left), a marker over each flag or its carrier with the distance
+  // to it, and the strip that tells a carrier what to do.
+  #updateCtf(view, me, c) {
+    const ctf = ctfOf(view);
+    if (!ctf) return;
+    const ended = view.phase === 'ended' || this.introOn;
+    const name = id => view.players.find(p => p.id === id)?.name ?? '?';
+    // Nothing of this layer over the intro card.
+    if (c.ctfShown !== !this.introOn) { c.ctfShown = !this.introOn; this.ctfEl.status.hidden = this.introOn; }
+    for (let k = 0; k < 2; k++) {
+      const t = k === 0 ? me.team : 1 - me.team, f = ctf.flags[t], side = this.ctfEl.sides[k];
+      const secs = Math.ceil(f.returnT ?? 0);
+      const ownHome = ctf.flags[me.team].state === 'home';
+      const key = `${t}|${f.state}|${f.carrier}|${f.state === 'dropped' ? secs : ''}|${ownHome}`;
+      if (key === side.key) continue;
+      side.key = key;
+      side.root.style.setProperty('--team', TEAMS[t].css);
+      side.root.dataset.state = f.state;
+      const mine = t === me.team;
+      side.word.textContent = f.state === 'home' ? (mine ? 'Your flag' : 'Their flag')
+        : f.state === 'carried' ? (mine ? 'Flag taken' : f.carrier === me.id ? 'You have it' : 'Flag taken') : 'Dropped';
+      side.sub.textContent = f.state === 'home' ? 'At base'
+        : f.state === 'carried' ? (f.carrier === me.id ? (ownHome ? 'Run it home' : 'Hold it, yours is out') : `by ${name(f.carrier)}`) : `Returns in ${secs}s`;
+    }
+    this.#ctfMarks(view, me, ctf, ended, name);
+    // The carrier's strip: where to take it, or that it has to wait for the own flag to come home.
+    const carrying = !ended && me.alive && ctf.flags[1 - me.team].carrier === me.id;
+    const own = ctf.flags[me.team];
+    const carry = carrying ? (own.state === 'home' ? 'run' : 'wait') : '';
+    if (carry !== c.ctfCarry) {
+      c.ctfCarry = carry;
+      this.ctfEl.carry.hidden = !carry;
+      this.ctfEl.carry.dataset.wait = carry === 'wait' ? '1' : '';
+      this.ctfEl.carrySub.textContent = carry === 'wait' ? 'Your flag is gone: it has to be home to score' : 'Take it to your flag. No sliding with it';
+    }
+  }
+
+  // One marker per flag. On its stand it reads Defend or Take; carried, it rides over the carrier (Kill for the enemy who
+  // has yours, Escort for a teammate with theirs, hidden over yourself, when your own flag's marker says Capture
+  // instead); dropped, it shows Return or Take and the seconds left before it goes home.
+  #ctfMarks(view, me, ctf, ended, name) {
+    for (let k = 0; k < 2; k++) {
+      const t = k === 0 ? me.team : 1 - me.team, f = ctf.flags[t], m = this.ctfEl.marks[k], mine = t === me.team;
+      // Pinned over the pennant, not on it, so the flag itself stays in view under its marker.
+      let x = f.x, z = f.z, show = !ended && !!this.camera, word = '', y = f.state === 'home' ? 5 : 3.4;
+      if (f.state === 'carried') {
+        const p = view.players.find(q => q.id === f.carrier);
+        if (p) { x = p.x; z = p.z; }
+        y = 3.8;
+        if (f.carrier === me.id) show = false;
+        word = mine ? `Kill ${name(f.carrier)}` : `Escort ${name(f.carrier)}`;
+      } else if (f.state === 'dropped') {
+        word = `${mine ? 'Return' : 'Take'} ${Math.ceil(f.returnT ?? 0)}s`;
+      } else {
+        const carrying = ctf.flags[1 - me.team].carrier === me.id;
+        word = mine ? (carrying ? 'Capture' : 'Defend') : 'Take';
+      }
+      const d = Math.hypot(x - me.x, z - me.z);
+      // Standing on it, the flag itself is the marker.
+      if (me.alive && f.state !== 'carried' && d <= CTF.reach + 1.5) show = false;
+      const text = `${word}|${Math.round(d)}`;
+      if (text !== m.text) {
+        m.text = text;
+        m.label.innerHTML = `${esc(word)}<u>${Math.round(d)} m</u>`;
+      }
+      const state = f.state;
+      if (state !== m.state || m.team !== t) {
+        m.state = state; m.team = t;
+        m.root.dataset.state = state;
+        m.root.style.setProperty('--team', TEAMS[t].css);
+      }
+      this.#sndMark(m, show, x, y, z);
+    }
+  }
+
+  // Feed, banners and callouts for the flag moments, worded from the local player's side.
+  #onCtf(e) {
+    const view = this.view, me = view && this.#findLocal(view);
+    if (!me) return;
+    const p = e.id ? view.players.find(q => q.id === e.id) : null;
+    const who = p ? `<em style="color:${TEAMS[p.team]?.css ?? '#fff'}">${esc(p.name)}</em>` : '';
+    const ours = e.team === me.team;                  // Whose flag it is.
+    const self = e.id === me.id;
+    switch (e.kind) {
+      case 'take':
+        this.#pushFeed(`${who}<span class="f-note">${e.from === 'field' ? 'picked up' : 'took'} ${ours ? 'your' : 'the enemy'} flag</span>`, self, ours ? 'foe' : 'ally');
+        // Your own take, capture or return already has its medal (and the carrier strip): no banner on top of it.
+        if (self) break;
+        if (ours) this.#banner('Your flag is taken', `${p?.name ?? 'They'} has it: stop them`, 1700, 'enemy');
+        else this.#banner('Flag taken', `${p?.name ?? 'A teammate'} has their flag`, 1500, 'mine');
+        break;
+      case 'drop':
+        this.#callout(ours ? 'Your flag is down: touch it to return it' : 'Their flag is down: pick it up');
+        break;
+      case 'return':
+        if (e.id) this.#pushFeed(`${who}<span class="f-note">returned ${ours ? 'your' : 'their'} flag</span>`, self, ours ? 'ally' : 'foe');
+        if (self) break;
+        this.#banner('Flag returned', ours ? (e.auto ? 'Your flag is back at base' : `${p?.name ?? 'A teammate'} brought it home`) : 'Their flag is back at base', 1400, ours ? 'mine' : 'enemy');
+        break;
+      case 'capture': {
+        this.#pushFeed(`${who}<span class="f-note">captured ${ours ? 'your' : 'the enemy'} flag</span>`, self, ours ? 'foe' : 'ally');
+        // The event carries the score after this capture; the view may be a snapshot behind it.
+        const sc = e.score ?? view.scores ?? [0, 0];
+        const mineN = sc[me.team] ?? 0, theirN = sc[1 - me.team] ?? 0;
+        this.#banner(ours ? 'Flag lost' : self ? `${mineN} to ${theirN}` : 'Flag captured', ours ? `They scored. ${theirN} to ${mineN}` : self ? 'You scored' : `${p?.name ?? 'Your team'} scored. ${mineN} to ${theirN}`, 2000, ours ? 'enemy' : 'mine');
+        break;
+      }
+      default: break;
+    }
+  }
+
+  // Minimap: each flag in its team's colour on its stand (a hollow stand when it is away), a dropped flag with its
+  // return clock as a shrinking ring, and both carriers ringed.
+  #drawCtfMini(view, me, sx, sz, g, clock) {
+    const ctf = ctfOf(view);
+    if (!ctf) return;
+    for (const f of ctf.flags) {
+      const css = TEAMS[f.team].css;
+      const bx = f.baseX * sx, by = f.baseZ * sz;
+      // The stand: a ring, filled while the flag is on it.
+      g.strokeStyle = css; g.lineWidth = 2;
+      g.fillStyle = f.state === 'home' ? css : 'rgba(16,20,26,.75)';
+      g.beginPath(); g.arc(bx, by, 6, 0, Math.PI * 2); g.fill(); g.stroke();
+      let x = f.x, z = f.z;
+      if (f.state === 'carried') {
+        const p = view.players.find(q => q.id === f.carrier);
+        if (p) { x = p.x; z = p.z; }
+        const pulse = (clock * 1.5) % 1;
+        g.strokeStyle = css; g.lineWidth = 2; g.globalAlpha = 1 - pulse;
+        g.beginPath(); g.arc(x * sx, z * sz, 6 + pulse * 9, 0, Math.PI * 2); g.stroke();
+        g.globalAlpha = 1;
+      } else if (f.state === 'dropped') {
+        const k = Math.max(0, Math.min(1, (f.returnT ?? 0) / CTF.returnTime));
+        g.strokeStyle = '#f2a63b'; g.lineWidth = 2.5;
+        g.beginPath(); g.arc(x * sx, z * sz, 8, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); g.stroke();
+      }
+      this.#flagGlyph(g, x * sx, z * sz, css);
+    }
+  }
+
+  // A small pennant on a pole, centred on (x, y).
+  #flagGlyph(g, x, y, css) {
+    g.fillStyle = '#e7eae4';
+    g.fillRect(x - 3, y - 8, 1.6, 13);
+    g.fillStyle = css; g.strokeStyle = '#101418'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(x - 1.5, y - 8); g.lineTo(x + 7, y - 5); g.lineTo(x - 1.5, y - 1.5); g.closePath(); g.fill(); g.stroke();
   }
 
   // ---- Pro senses over the world ----
@@ -1868,6 +2088,7 @@ export class HUD {
         case 'hijack': this.#onHijack(e); break;
         case 'arm': this.#onArm(e); break;
         case 'snd': this.#onSnd(e); break;
+        case 'ctf': this.#onCtf(e); break;
         default: break;
       }
     }
@@ -1884,8 +2105,10 @@ export class HUD {
     if (e.id === this.view?.localId) this.medalQueue.push(e.medal);
   }
 
-  // Captures and confirmations per player, tallied from medals, for the live board and the results screen.
+  // Captures and confirmations per player, tallied from medals, for the live board and the results screen. Capture the
+  // Flag's own counts (captures, returns, carrier kills) come with the view from the host, so nothing overrides them.
   objectiveStats(id) {
+    if (this.ctf) return NO_STATS;
     return this.objTally.get(id) ?? { confirms: 0, captures: 0 };
   }
 
@@ -2132,8 +2355,11 @@ export class HUD {
     // Search and Destroy: the score in rounds and how the last one went.
     const last = this.snd ? sndOf(view)?.history?.at(-1) : null;
     const tally = this.snd && view?.scores ? `${view.scores[myTeam]} rounds to ${view.scores[1 - myTeam]}` : '';
+    const caps = this.ctf && view?.scores ? `${view.scores[myTeam]} ${view.scores[myTeam] === 1 ? 'capture' : 'captures'} to ${view.scores[1 - myTeam]}` : '';
     this.endEl.querySelector('small').textContent = last ? `${tally}. ${SND_WHY[last.reason]?.[last.winner === myTeam ? 0 : 1] ?? ''}`
+      : caps ? (drawn ? `Level at ${caps}` : caps)
       : drawn ? 'Neither side broke through' : won ? 'The yard is yours' : 'The yard is lost';
+    this.ctfEl.carry.hidden = true;
     this.sndEl.big.hidden = true;
     this.endEl.classList.add('show');
   }
@@ -2211,7 +2437,10 @@ export class HUD {
     }
 
     if (this.snd) this.#drawSndMini(view, me, sx, sz, g, clock);
+    else if (this.ctf) this.#drawCtfMini(view, me, sx, sz, g, clock);
     else this.#drawObjectivesMini(view, me, sx, sz, g, clock);
+    // A flag carrier shows on the enemy minimap wherever they are (the price of carrying it).
+    const ctf = this.ctf ? ctfOf(view) : null;
     // Out for the round, you see what the teammate you watch sees.
     const eyeId = this.snd && !me.alive ? spectate.target(view, me.id) : null;
     const eye = eyeId ? view.players.find(p => p.id === eyeId) ?? me : me;
@@ -2219,7 +2448,8 @@ export class HUD {
     for (const p of view.players) {
       if (!p.alive || p.id === me.id) continue;
       const friendly = p.team === myTeam;
-      const seen = friendly || (myUav && !p.ghost) || (eye.alive && hasLineOfSight(this.map, eye.x, eye.z, p.x, p.z, view.smokes));
+      const seen = friendly || (myUav && !p.ghost) || (ctf && (ctf.flags[0].carrier === p.id || ctf.flags[1].carrier === p.id))
+        || (eye.alive && hasLineOfSight(this.map, eye.x, eye.z, p.x, p.z, view.smokes));
       const firing = !seen && (p.firingT ?? 0) > 0;
       if (!seen && !firing) continue;
       const x = p.x * sx, y = p.z * sz;
@@ -2400,7 +2630,7 @@ export class HUD {
     this.el.dataset.mode = mode;
     this.objMeter.hidden = true;
     for (const side of this.boardSides) {
-      side.modeHead.textContent = mode === 'kc' ? 'Conf' : uses ? 'Cap' : mode === 'snd' ? 'P/D' : 'HS';
+      side.modeHead.textContent = mode === 'kc' ? 'Conf' : uses ? 'Cap' : mode === 'snd' ? 'P/D' : mode === 'ctf' ? 'C/R/K' : 'HS';
     }
     if (!uses) return;
     const count = mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;

@@ -125,7 +125,7 @@ export class MatchAwards {
       .filter(g => g.kills > 0 || g.secs >= GUN_SECONDS)
       .sort((a, b) => b.kills - a.kills || b.secs - a.secs)
       .slice(0, HISTORY_GUNS);
-    const objective = (this.medals.capture ?? 0) + (this.medals.confirm ?? 0);
+    const objective = (this.medals.capture ?? 0) + (this.medals.confirm ?? 0) + (this.medals.flag_capture ?? 0) + (this.medals.flag_return ?? 0);
     const players = (view?.players ?? []).filter(p => !p.dummy);
     const team = me?.team ?? this.team ?? 0;
     // Team modes: ours and theirs. A free-for-all: mine and the best other score.

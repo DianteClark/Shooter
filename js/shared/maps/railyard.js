@@ -1,5 +1,5 @@
 // Freight yard at dusk: three lanes split by sheds and container rows.
-import { bombSites, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, flagBases, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 72, H = 48;
@@ -51,6 +51,9 @@ function build() {
 
   // Search and Destroy (see bombSites). A sits in the north lane past the container stacks, B behind the south sheds: both a long walk for attackers down their lane, with the signal box splitting any rotation through the middle.
   points.snd = bombSites({ x: 57, z: 6.5 }, { x: 57, z: 39.5 });
+
+  // Capture the Flag (see flagBases). At the head of the middle lane, between the two sheds and in front of the spawn screens: every run home crosses the signal box.
+  points.ctf = flagBases(W, H, { x: 15, z: 24 });
 
   return { id: 'railyard', name: 'Railyard', theme: 'railyard', width: W, height: H, walls, spawns, lanes, nav, points };
 }

@@ -1,6 +1,6 @@
 // Desert outpost. Rock shelves funnel the flanks into arroyos around a walled courtyard: longer
 // fights across open sand, with the courtyard as the fortified close-range middle.
-import { bombSites, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, flagBases, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 84, H = 52;
@@ -54,6 +54,9 @@ function build() {
 
   // Search and Destroy (see bombSites). A in the north arroyo under the rock shelf, B on the open southern sand: one close fight, one long one.
   points.snd = bombSites({ x: 63.5, z: 10 }, { x: 62.5, z: 47.5 });
+
+  // Capture the Flag (see flagBases). In the gap between the two rock shelves, in front of the spawns: the arroyos either side are the flanks.
+  points.ctf = flagBases(W, H, { x: 14.5, z: 26.5 });
 
   return { id: 'dust', name: 'Dust', theme: 'dust', width: W, height: H, walls, spawns, lanes, nav, points };
 }

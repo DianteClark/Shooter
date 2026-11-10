@@ -174,6 +174,9 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, 
     sprinting: false, sprintRecoverT: 0,
     sliding: false, slideT: 0, slideCool: 0,
     cooldown: 0, bloom: 0, shotIndex: 0,
+    // Capture the Flag: a flag carrier cannot slide (js/sim/ctf.js). The host sets it on bots; a human's phone sets it
+    // on its own state from the view (see ctfCarrying).
+    noSlide: false,
     // Internal, not part of the wire format.
     swapT: 0, shellT: 0, sinceShot: 9, burstLeft: 0,
     holsterT: 0, holsterSlot: 0, holsterDur: 0,   // Fast Hands Pro: a reload finishing on the holstered gun.
@@ -428,7 +431,7 @@ function stepMovement(ps, input, w, dt, map) {
   else if (ps.sprintRecoverT > 0) ps.sprintRecoverT -= dt;
 
   const speedNow = Math.hypot(ps.vx, ps.vz);
-  if (input.slide && !ps.sliding && ps.slideCool <= 0 && speedNow >= MOVE.slideMinSpeed) {
+  if (input.slide && !ps.noSlide && !ps.sliding && ps.slideCool <= 0 && speedNow >= MOVE.slideMinSpeed) {
     ps.sliding = true;
     ps.slideT = MOVE.slideDuration;
     ps.slideDirX = ps.vx / speedNow;

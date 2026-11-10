@@ -1,5 +1,5 @@
 // Game modes. Each is a rule set the sim applies on top of ordinary combat.
-//   rules     which rule set the sim runs: 'tdm' | 'kc' | 'dom' | 'hard' | 'ffa' | 'gun' | 'snd'. Ground War modes reuse the 6v6
+//   rules     which rule set the sim runs: 'tdm' | 'kc' | 'dom' | 'hard' | 'ffa' | 'gun' | 'snd' | 'ctf'. Ground War modes reuse the 6v6
 //             rules on a bigger field, so everything keyed to a rule set (HUD flags, bot plans, scoring) works unchanged.
 //   teamSize  players per team in a full match; bots fill up to it.
 //   large     needs a Ground War map: small maps never offer it.
@@ -26,6 +26,7 @@ export const MODES = {
   gwdom: { id: 'gwdom', rules: 'dom',  teamSize: 16, large: true, name: 'Ground War Domination', short: 'GW DOM', scoreLimit: 400, timeLimit: 900, desc: '16 v 16, five flags. More flags, faster points.' },
   ffa:   { id: 'ffa',   rules: 'ffa',  teamSize: 1, ffa: true, players: 8, largePlayers: 12, everyMap: true, name: 'Free-for-All', short: 'FFA', scoreLimit: 30, timeLimit: 600, desc: 'Every player for themselves. Most kills takes it.' },
   snd:   { id: 'snd',   rules: 'snd',  teamSize: 6,  rounds: true, name: 'Search and Destroy', short: 'S&D', scoreLimit: 4, timeLimit: 120, desc: 'One life a round. Plant the bomb or stop it. First to 4 rounds.' },
+  ctf:   { id: 'ctf',   rules: 'ctf',  teamSize: 6,  name: 'Capture the Flag', short: 'CTF', scoreLimit: 3, timeLimit: 600, desc: 'Take their flag home to yours. Yours has to be home to score. First to 3.' },
   gun:   { id: 'gun',   rules: 'gun',  teamSize: 1, ffa: true, players: 8, largePlayers: 12, everyMap: true, name: 'Gun Game', short: 'GUN', scoreLimit: GUN_LADDER.length, timeLimit: 600, desc: `A new gun every kill, ${GUN_LADDER.length} to the Verdict. A Hatchet knocks you back one.` },
 };
 export const MODE_IDS = Object.keys(MODES);
@@ -44,6 +45,17 @@ export const SND = {
   defuseReach: 1.7,    // A defender this close to a planted bomb can defuse it.
   still: 0.9,          // Faster than this (m/s) counts as moving, which stops a plant or defuse.
 };
+// Capture the Flag rules. Times in seconds, distances in metres, score in personal (scorestreak) points. The sim runs
+// them (js/sim/ctf.js); the HUD, renderer and audio read the same numbers.
+export const CTF = {
+  reach: 1.8,          // A player this close to a flag touches it: takes an enemy flag, returns their own dropped one,
+                       // and a carrier this close to their own flag at home scores.
+  returnTime: 15,      // A dropped flag nobody touches goes home on its own after this long.
+  defend: 9,           // A kill this close to your own flag (at home or dropped) is a flag defense.
+  score: { take: 150, capture: 300, ret: 100, carrierKill: 150, defend: 50 },
+};
+export const CTF_STATES = ['home', 'carried', 'dropped'];
+
 // Why a round ended, in the order the snapshot carries them.
 export const SND_REASONS = ['elim', 'bomb', 'defuse', 'time'];
 
@@ -74,6 +86,7 @@ export function modeFitsMap(map, mode) {
   if (rules === 'dom') return !!map.points?.dom?.length;
   if (rules === 'hard') return !!map.points?.hard?.length;
   if (rules === 'snd') return map.points?.snd?.length === 2;
+  if (rules === 'ctf') return map.points?.ctf?.length === 2;
   return true;
 }
 

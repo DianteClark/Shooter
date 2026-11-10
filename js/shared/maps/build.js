@@ -72,3 +72,10 @@ export function symmetricPoints(W, H, a, b, hardPairs) {
 export function bombSites(a, b, r = 3.2) {
   return [{ id: 'A', x: a.x, z: a.z, r: a.r ?? r }, { id: 'B', x: b.x, z: b.z, r: b.r ?? r }];
 }
+
+// Capture the Flag: each team's flag stand, at its own end just in front of its spawns (a flag among the spawn points
+// could never be taken). `a` is team 0's (west); team 1's is its 180-degree image, so both sides walk the same
+// distance through the same picture.
+export function flagBases(W, H, a) {
+  return [{ id: 'F0', team: 0, x: a.x, z: a.z }, { id: 'F1', team: 1, x: +(W - a.x).toFixed(4), z: +(H - a.z).toFixed(4) }];
+}

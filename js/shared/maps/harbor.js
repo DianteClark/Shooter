@@ -1,6 +1,6 @@
 // Storm-lashed night docks. Two flooded basins with moored ships split the map into three long
 // strips: north quay, the central causeway and south quay. Water stops feet, not bullets or eyes.
-import { bombSites, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, flagBases, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 80, H = 48;
@@ -53,6 +53,9 @@ function build() {
 
   // Search and Destroy (see bombSites). One on each quay, beyond the crane legs and the box line: the basins keep them apart, so a rotation goes back around the warehouses.
   points.snd = bombSites({ x: 64.5, z: 6 }, { x: 63, z: 41.5 });
+
+  // Capture the Flag (see flagBases). On the strip between the warehouses, in front of the quay wall that screens the spawns: the basins either side leave the middle strip or the long way round the quays.
+  points.ctf = flagBases(W, H, { x: 11, z: 24 });
 
   return { id: 'harbor', name: 'Harbor', theme: 'harbor', width: W, height: H, walls, spawns, lanes, nav, points, decor };
 }

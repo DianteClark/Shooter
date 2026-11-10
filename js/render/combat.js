@@ -12,8 +12,9 @@ import { prewarm } from './vfx.js';
 import { TEAMS } from '../shared/constants.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { uploadUsed } from './dynbuf.js';
-import { SND } from '../shared/modes.js';
+import { SND, CTF } from '../shared/modes.js';
 import { sndOf } from '../sim/snd.js';
+import { ctfOf } from '../sim/ctf.js';
 
 const MAX_NADES = 18;
 const MAX_FIRES = 6;
@@ -63,6 +64,11 @@ const WHITE_RGB = [1, 1, 1];
 // Search and Destroy: sites are sodium rings, the one with the bomb on it turns red; the bomb itself is drawn big.
 const SITE_RGB = hexRGB(0xf2a63b), PLANTED_RGB = hexRGB(0xff3a2a), DEFUSE_RGB = hexRGB(0x38b6ff);
 const BOMB_SCALE = 2.3;
+// Capture the Flag: the stand keeps its place and its team collar; the flag itself is drawn wherever it is. On a
+// carrier's back it is a short pole over the shoulder; on the ground it leans where it fell, inside its return ring.
+const CARRY_SCALE = 0.6, CARRY_BACK = 0.38, CARRY_Y = 0.5;
+const DROP_SCALE = 0.62, DROP_LEAN = 0.32;
+const DIM_RGB = [0.16, 0.18, 0.21];
 const FIRE_RGB = [1.0, 0.5, 0.15], FIRE_HOT = [1.0, 0.78, 0.32], SMOKE_RGB = [0.1, 0.09, 0.1];
 const GLASS_RGB = [0.62, 0.8, 0.6], DIRT_RGB = [0.22, 0.19, 0.16];
 const SENSOR_RGB = NADE_RGB.sensor, ZAP_RGB = [0.62, 0.92, 1.0], EMP_RGB = [0.55, 0.78, 1.0], HEAL_RGB = [0.3, 1.0, 0.56];
@@ -761,6 +767,7 @@ export class CombatFX {
     const ps = view.players;
     if (ps) for (let i = 0; i < ps.length; i++) { this.teamOf.set(ps[i].id, ps[i].team); this.posOf.set(ps[i].id, ps[i]); }
     this.#updateTags(view, dt, localX, localZ, localTeam, hasLocal);
+    this.lastCtf = view.mode === 'ctf' ? ctfOf(view) : null;
     this.#updatePoints(view, dt);
     this.#updateNades(view, dt, localX, localZ, localTeam, hasLocal);
     this.#updateFires(view, dt, localX, localZ, hasLocal);
@@ -780,6 +787,7 @@ export class CombatFX {
       const ev = events[i];
       switch (ev.t) {
         case 'bang': this.#bangExtras(ev); break;
+        case 'ctf': this.#flagBurst(ev); break;
         case 'pulse': {
           const mine = this.teamOf.get(ev.by) === localTeam;
           vfx.ring(ev.x, ev.z, 0.3, ev.r || 13, 0.9, SENSOR_RGB, mine ? 0.95 : 0.5);
@@ -1037,6 +1045,7 @@ export class CombatFX {
 
   // Domination shows flag, ring and capture arc; hardpoint swaps the flag for a tall animated boundary wall.
   #updatePoints(view) {
+    if (view.mode === 'ctf') { this.#updateFlags(view); return; }
     const list = view.points;
     const zones = this.zones, walls = this.zoneWalls, stand = this.flagStand, cloth = this.flagCloth;
     let nZone = 0, nFlag = 0, nWall = 0;
@@ -1104,6 +1113,102 @@ export class CombatFX {
     zones.count = nZone; walls.count = nWall; stand.count = nFlag; cloth.count = nFlag;
     uploadUsed(zones.instanceMatrix, nZone); uploadUsed(walls.instanceMatrix, nWall);
     uploadUsed(stand.instanceMatrix, nFlag); uploadUsed(cloth.instanceMatrix, nFlag);
+  }
+
+  // Both flag stands with their capture rings, and both flags: on the stand, on a carrier's back, or dropped with a ring
+  // whose lit arc is the time left before it goes home. Flags are public knowledge in this mode, so fog never hides
+  // one, and a carrier is ringed in their own colour so the eye finds them in a crowd.
+  #updateFlags(view) {
+    const ctf = ctfOf(view);
+    const zones = this.zones, stand = this.flagStand, cloth = this.flagCloth, walls = this.zoneWalls;
+    let nZone = 0, nStand = 0, nCloth = 0;
+    if (ctf) {
+      const za = zones.geometry.attributes, sa = stand.geometry.attributes.aTeam, ca = cloth.geometry.attributes.aTeam;
+      const t = this.time.value;
+      const putStand = (x, z, rgb, scale, lean, yaw, y = 0) => {
+        _e.set(0, yaw, lean); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(scale, scale, scale);
+        _m.compose(_p, _q, _s).toArray(stand.instanceMatrix.array, nStand * 16);
+        sa.setXYZ(nStand, rgb[0], rgb[1], rgb[2]);
+        nStand++;
+      };
+      const putCloth = rgb => {
+        _m.toArray(cloth.instanceMatrix.array, nCloth * 16);
+        ca.setXYZ(nCloth, rgb[0], rgb[1], rgb[2]);
+        nCloth++;
+      };
+      const putRing = (x, z, r, rim, arcRgb, arc, width) => {
+        _p.set(x, 0.1, z); _q.identity(); _s.set(r, 1, r);
+        _m.compose(_p, _q, _s).toArray(zones.instanceMatrix.array, nZone * 16);
+        za.aOwner.setXYZ(nZone, rim[0], rim[1], rim[2]);
+        za.aCapture.setXYZ(nZone, arcRgb[0], arcRgb[1], arcRgb[2]);
+        za.aZone.setXYZW(nZone, arc, 0, width, 0);
+        nZone++;
+      };
+      for (const f of ctf.flags) {
+        const rgb = this.teamRGB[f.team] ?? this.teamRGB[0];
+        const bx = f.baseX ?? f.x, bz = f.baseZ ?? f.z;
+        // The stand and its ring stay put whatever happens to the flag; an empty stand is dimmed.
+        const home = f.state === 'home';
+        putRing(bx, bz, CTF.reach, home ? rgb : DIM_RGB, rgb, home ? 1 : 0, 0.12);
+        putStand(bx, bz, home ? rgb : DIM_RGB, 1, 0, 0);
+        if (home) {
+          putCloth(rgb);
+          this.vfx.addDot(bx, FLAG_H + 0.1, bz, 0.22 + 0.06 * Math.sin(t * 4 + f.team * 2), rgb);
+          continue;
+        }
+        if (f.state === 'carried') {
+          const p = this.posOf.get(f.carrier);
+          if (!p || p.alive === false) continue;
+          // Over the back: behind the carrier, leaning back from where they face.
+          const a = p.aim ?? 0, x = p.x - Math.cos(a) * CARRY_BACK, z = p.z - Math.sin(a) * CARRY_BACK;
+          putStand(x, z, rgb, CARRY_SCALE, -0.22, Math.PI - a, CARRY_Y);
+          putCloth(rgb);
+          this.vfx.addRing(p.x, p.z, 0.75, 0.95, rgb, 0.55 + 0.3 * Math.sin(t * 7));
+          this.vfx.addDot(x, CARRY_Y + FLAG_H * CARRY_SCALE + 0.1, z, 0.3 + 0.08 * Math.sin(t * 9), rgb);
+          continue;
+        }
+        // Dropped: leaning where it fell, the ring's lit arc running down with the return clock.
+        const left = Math.max(0, Math.min(1, (f.returnT ?? 0) / CTF.returnTime));
+        putRing(f.x, f.z, CTF.reach, DIM_RGB, rgb, left, 0.16);
+        putStand(f.x, f.z, rgb, DROP_SCALE, DROP_LEAN, 0.7 + f.team * Math.PI);
+        putCloth(rgb);
+        if ((t * 2) % 1 < 0.5) this.vfx.addDot(f.x, 0.4, f.z, 0.34, rgb);
+      }
+      uploadUsed(za.aOwner, nZone); uploadUsed(za.aCapture, nZone); uploadUsed(za.aZone, nZone);
+      uploadUsed(sa, nStand); uploadUsed(ca, nCloth);
+    }
+    zones.count = nZone; stand.count = nStand; cloth.count = nCloth; walls.count = 0;
+    uploadUsed(zones.instanceMatrix, nZone);
+    uploadUsed(stand.instanceMatrix, nStand); uploadUsed(cloth.instanceMatrix, nCloth);
+  }
+
+  // A flag event's burst at the stand: a capture is the big one, in the scoring team's colour.
+  #flagBurst(ev) {
+    const ctf = this.lastCtf, f = ctf?.flags?.[ev.team];
+    const vfx = this.vfx;
+    if (ev.kind === 'capture') {
+      const scorer = 1 - ev.team, rgb = this.teamRGB[scorer] ?? WHITE_RGB;
+      const b = ctf?.flags?.[scorer], x = b?.baseX ?? ev.x, z = b?.baseZ ?? ev.z;
+      vfx.ring(x, z, 0.4, 7.5, 0.7, rgb, 1);
+      vfx.ring(x, z, 0.2, 4.2, 0.5, WHITE_RGB, 0.9);
+      vfx.pop(x, 1.6, z, 3.4, rgb, 0.45);
+      for (let k = 0; k < 22; k++) {
+        const a = k * 0.2856, sp = rand(3, 7.5);
+        vfx.spawn(x, 1.2, z, Math.cos(a) * sp, rand(4, 9), Math.sin(a) * sp, rand(0.6, 1.1), 0.22, 0.04, k % 3 ? rgb : WHITE_RGB, 0, 9, 0.5);
+      }
+      return;
+    }
+    const rgb = this.teamRGB[ev.team] ?? WHITE_RGB;
+    if (ev.kind === 'return') {
+      const x = f?.baseX ?? ev.x, z = f?.baseZ ?? ev.z;
+      if (x === undefined) return;
+      vfx.ring(x, z, 0.3, 3.4, 0.5, rgb, 0.9);
+      vfx.pop(x, 1.8, z, 1.6, rgb, 0.3);
+    } else if (ev.kind === 'take' && ev.x !== undefined) {
+      vfx.ring(ev.x, ev.z, 0.2, 2.6, 0.4, rgb, 0.8);
+    } else if (ev.kind === 'drop' && ev.x !== undefined) {
+      vfx.ring(ev.x, ev.z, 0.2, 2, 0.35, rgb, 0.7);
+    }
   }
 
   #updateNades(view, dt, lx, lz, localTeam, hasLocal) {

@@ -1,7 +1,7 @@
 // Unfinished tower top at sunset, forty floors up. An open concrete slab on a grid of steel columns, with
 // half-built block walls, pallet stacks and two open light wells in the slab: lots of partial cover and
 // thin columns to peek past, so fights are mid-range and from every angle. The wells stop feet, not bullets.
-import { bombSites, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, flagBases, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 68, H = 44;
@@ -67,6 +67,9 @@ function build() {
 
   // Search and Destroy (see bombSites). A among the north blockwork, B on the slab beside the far light well: the lift core blocks the line between them.
   points.snd = bombSites({ x: 45, z: 4.5 }, { x: 53, z: 30.5 });
+
+  // Capture the Flag (see flagBases). On the roof in front of the parapet block, beside the near light well.
+  points.ctf = flagBases(W, H, { x: 10, z: 22 });
 
   return { id: 'topside', name: 'Topside', theme: 'topside', width: W, height: H, walls, spawns, lanes, nav, points };
 }
