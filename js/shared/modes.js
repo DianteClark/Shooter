@@ -65,6 +65,10 @@ export const firstModeFor = map => mapModes(map).find(id => modeFitsMap(map, id)
 // the death screen does not replace it.
 export function gunLoadout(level, base = {}) {
   const l = normalizeLoadout({ ...base, ...GUN_KIT, primary: GUN_LADDER[Math.max(0, Math.min(GUN_LADDER.length - 1, level))] });
+  // Each rung wears that gun's own cosmetics, never the camo of the gun the player picked before the match.
+  l.camo = l.camos?.[l.primary] ?? 'none';
+  l.tracer = l.tracers?.[l.primary] ?? null;
+  l.killFx = l.killFxs?.[l.primary] ?? null;
   l.streaks = [];
   l.pro = [];
   l.ladder = true;

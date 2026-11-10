@@ -123,7 +123,10 @@ export class Match {
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
-      if (e.t === 'arm' && e.id === this.localId) armPlayer(this.ps, e.weapon);   // Gun Game promotion or setback.
+      if (e.t === 'arm' && e.id === this.localId) {   // Gun Game promotion or setback, in that gun's own camo.
+        armPlayer(this.ps, e.weapon);
+        this.ps.camo = this.me.loadout?.camos?.[e.weapon] ?? 'none';
+      }
       this.frameEvents.push(e);
     }
   }

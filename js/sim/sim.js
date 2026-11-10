@@ -852,6 +852,8 @@ export class Sim {
     p.primary = gun;
     p.kits[0] = attachmentsFor(p.loadout, gun);
     armPlayer(p.ps, gun);
+    p.camo = p.ps.camo = p.loadout.camo;      // The rung's own camo (see gunLoadout).
+    this._metaUntil = this.tick + 2;
     p.prevWeapon = gun;
     if (p.bot) p.bot.onArmed();
     if (announce) {

@@ -179,6 +179,18 @@ function gateGun(id, list, fallback) {
   return gunOpen(fallback) ? fallback : list.find(gunOpen) ?? fallback;
 }
 
+// Every weapon's own camo, tracer and kill effect, for modes that change your gun mid-match (Gun Game).
+function weaponCosmetics() {
+  const camos = {}, tracers = {}, killFxs = {};
+  for (const w of WEAPON_IDS) {
+    const c = Progress.camo(w), t = Progress.tracer(w), k = Progress.killFx(w);
+    if (c && c !== 'none') camos[w] = c;
+    if (t && t !== 'none') tracers[w] = t;
+    if (k && k !== 'none') killFxs[w] = k;
+  }
+  return { camos, tracers, killFxs };
+}
+
 function matchLoadout(saved, wanted = saved.primary) {
   const primary = gateGun(wanted, PRIMARY_IDS, 'ar');
   const secondary = gateGun(saved.secondary, SECONDARY_IDS, 'pistol');
@@ -191,6 +203,7 @@ function matchLoadout(saved, wanted = saved.primary) {
     camo: Progress.camo(primary),
     tracer: Progress.tracer(primary),
     killFx: Progress.killFx(primary),
+    ...weaponCosmetics(),
     operator: operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR,
     pro: data.proDone.slice(),
     card: equippedCard(),

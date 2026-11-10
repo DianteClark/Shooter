@@ -123,6 +123,17 @@ function pickPerks(list) {
   return out;
 }
 
+// Keeps a {weaponId: cosmeticId} map of short string ids and nothing else; it arrives from other players.
+function cosmeticMap(m) {
+  const out = {};
+  if (!m || typeof m !== 'object') return out;
+  for (const k of Object.keys(m).slice(0, 64)) {
+    const v = m[k];
+    if (typeof k === 'string' && k.length <= 24 && typeof v === 'string' && v.length <= 24) out[k] = v;
+  }
+  return out;
+}
+
 // Fills gaps and removes unknown ids, so old saves and peers on another version cannot break a match.
 export function normalizeLoadout(l = {}) {
   const d = DEFAULT_LOADOUT;
@@ -143,6 +154,10 @@ export function normalizeLoadout(l = {}) {
     tracer: l.tracer || null,
     killFx: l.killFx || null,
     operator: l.operator || null,
+    // Per-weapon cosmetics ({weaponId: id}), for modes that hand out other guns mid-match (Gun Game).
+    camos: cosmeticMap(l.camos),
+    tracers: cosmeticMap(l.tracers),
+    killFxs: cosmeticMap(l.killFxs),
     // Identity that travels with the loadout through lobby and roster, so no other message has to change.
     pro: Array.isArray(l.pro) ? PERK_IDS.filter(id => l.pro.includes(id)) : [],
     card: typeof l.card === 'string' && CARD_ID.test(l.card) ? l.card : null,
