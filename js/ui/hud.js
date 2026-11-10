@@ -10,6 +10,14 @@ import { Progress, matchScore } from './progress.js';
 import { badgeMark } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
+import { icon, resolveIcon } from './icons.js';
+
+// One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
+// for that id, so callers can fall back to words.
+export function glyph(id, size = 20, cls = 'gl') {
+  if (id == null || resolveIcon(id) === 'unknown') return '';
+  return icon(id, { size, cls });
+}
 
 const MINIMAP_HZ = 10;
 const MM_SCALE = 2;              // Backing-store pixels per CSS pixel; fixed so the canvas is never resized.
@@ -28,7 +36,8 @@ const FLASH_FADE = 1.8;
 const FIRE_REVEAL = 1.5;         // Matches the sim's firingT lifetime; only shapes the minimap ping's fade.
 const BOARD_HZ = 4;
 const END_BANNER_MIN = 700;
-const OBJ_RING = 2 * Math.PI * 14;  // Circumference of the capture rings' r=14 circle, for stroke dashes.
+const OBJ_RING = 2 * Math.PI * 14;
+const DEATH_RING = 2 * Math.PI * 26;  // Circumference of the capture rings' r=14 circle, for stroke dashes.
 // Objective markers ride inside the safe area plus these margins, and walk inward off anything in markObstacles.
 const MARK_PAD_X = 34;
 const MARK_PAD_T = 56;
@@ -57,13 +66,17 @@ const TIPS = [
   'Swap instead of reloading when someone is on you.',
 ];
 
+// [title, line under it, tier]. Tier sets the plate: 1 steel, 2 sodium, 3 sodium with hazard stripes.
 const MEDALS = {
-  confirm: ['Kill Confirmed', `+${SCORE.confirm}`], deny: ['Tag Denied', `+${SCORE.deny}`],
-  capture: ['Captured', `+${SCORE.capture}`], defend: ['Defended', `+${SCORE.defend}`],
-  first_blood: ['First Blood', 'Round opener'], double: ['Double Kill', '2 in quick order'], triple: ['Triple Kill', '3 in quick order'],
-  fury: ['Fury Kill', '4 or more'], revenge: ['Revenge', 'Settled the score'], longshot: ['Longshot', 'From across the yard'],
-  streak3: ['Three Streak', 'On a run'], streak5: ['Five Streak', 'Unstoppable'], streak10: ['Ten Streak', 'Unbroken'],
+  confirm: ['Kill Confirmed', `+${SCORE.confirm}`, 1], deny: ['Tag Denied', `+${SCORE.deny}`, 1],
+  capture: ['Captured', `+${SCORE.capture}`, 1], defend: ['Defended', `+${SCORE.defend}`, 1],
+  headshot: ['Headshot', `+${SCORE.headshot}`, 1],
+  first_blood: ['First Blood', 'Round opener', 2], double: ['Double Kill', '2 in quick order', 2], triple: ['Triple Kill', '3 in quick order', 2],
+  fury: ['Fury Kill', '4 or more', 3], revenge: ['Revenge', 'Settled the score', 1], longshot: ['Longshot', 'From across the yard', 1],
+  streak3: ['Three Streak', 'On a run', 2], streak5: ['Five Streak', 'Unstoppable', 3], streak10: ['Ten Streak', 'Unbroken', 3],
 };
+const SCORE_POP_LIFE = 1.4;      // Seconds the "+100" under the crosshair holds before it fades; kills inside it add up.
+const INTRO_GO_MS = 900;
 
 const CALLOUT_POP = [
   { opacity: 0, transform: 'translateX(-50%) scale(1.8)' },
@@ -74,12 +87,34 @@ const CALLOUT_POP = [
 const HEAL_PULSE = [{ opacity: 0 }, { opacity: 0.9, offset: 0.2 }, { opacity: 0 }];
 const SCORE_POP = [{ transform: 'scale(1.5)', color: '#fff' }, { transform: 'scale(1)' }];
 const COUNT_POP = [{ transform: 'scale(1.35)', opacity: 0.5 }, { transform: 'scale(1)', opacity: 1 }];
+const GO_FLASH = [
+  { opacity: 0, transform: 'translate(-50%,-50%) scale(2.2)' },
+  { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.18 },
+  { opacity: 1, transform: 'translate(-50%,-50%) scale(1.04)', offset: 0.6 },
+  { opacity: 0, transform: 'translate(-50%,-50%) scale(1.25)' },
+];
+const HP_KNOCK = [{ transform: 'translateX(-3px)' }, { transform: 'translateX(2px)', offset: 0.4 }, { transform: 'none' }];
+const ARMS_SWAP = [{ opacity: 0.2, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }];
+const SCORE_POP_IN = [
+  { opacity: 0, transform: 'translateY(6px) scale(.6)' },
+  { opacity: 1, transform: 'translateY(0) scale(1.18)', offset: 0.06 },
+  { opacity: 1, transform: 'translateY(0) scale(1)', offset: 0.14 },
+  { opacity: 1, transform: 'translateY(0) scale(1)', offset: 0.8 },
+  { opacity: 0, transform: 'translateY(-10px) scale(1)' },
+];
+const SCORE_POP_BUMP = [
+  { opacity: 1, transform: 'scale(1.35)' },
+  { opacity: 1, transform: 'scale(1)', offset: 0.1 },
+  { opacity: 1, transform: 'scale(1)', offset: 0.8 },
+  { opacity: 0, transform: 'translateY(-10px) scale(1)' },
+];
+const HIT_PUNCH = [{ rotate: '14deg' }, { rotate: '0deg' }];
 const RESPAWN_FLASH = [{ opacity: 0.75 }, { opacity: 0 }];
 const STREAK_HIT = [
-  { opacity: 0, transform: 'translate(-50%,-50%) scale(2.1)', filter: 'brightness(2.6)' },
-  { opacity: 1, transform: 'translate(-50%,-50%) scale(.98)', filter: 'brightness(1)', offset: 0.13 },
-  { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.78 },
-  { opacity: 0, transform: 'translate(-50%,-62%) scale(1)' },
+  { opacity: 0, transform: 'translate(-50%,0) scale(1.9)', filter: 'brightness(2.4)' },
+  { opacity: 1, transform: 'translate(-50%,0) scale(.97)', filter: 'brightness(1)', offset: 0.13 },
+  { opacity: 1, transform: 'translate(-50%,0) scale(1)', offset: 0.8 },
+  { opacity: 0, transform: 'translate(-50%,-14px) scale(1)' },
 ];
 
 const BANNER_POP = [
@@ -183,6 +218,9 @@ export class HUD {
     this.#seedFallback();
     this.#drawMapBase();
     this.#buildObjectiveHud();
+    this.sbGoal.textContent = `to ${scoreLimit}`;
+    this.boardMode.textContent = MODES[mode]?.name ?? '';
+    this.boardGoal.textContent = `${this.map?.name ?? ''}, first to ${scoreLimit}`;
     this.reset();
     this.#range.prepare(mode === 'range');
     this.el.classList.toggle('range-on', mode === 'range');
@@ -194,29 +232,55 @@ export class HUD {
   // onSetLoadout's sibling for the firing range's Reset.
   onRangeReset(cb) { this.#range.onReset = cb; }
 
-  // Team roster and map name over the warmup; decorative, so it never takes a touch.
+  // Team roster and map name over the warmup; decorative, so it never takes a touch. The countdown under the map card
+  // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
   #showIntro(mapId, mode, roster, localId) {
     const map = MAPS[mapId] ?? this.map;
-    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i>` : ''}<b>${esc(p.name)}</b></div>`;
-    const team = t => {
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${esc(p.name)}</b>${p.isBot ? '<small>Bot</small>' : ''}</div>`;
+    const team = (t, side) => {
       const list = roster.filter(p => p.team === t);
-      return `<div class="in-team" style="--team:${TEAMS[t].css}"><h3>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
+      return `<div class="in-team ${side}" style="--team:${TEAMS[t].css}"><h3><i></i>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
     };
     const myTeam = roster.find(p => p.id === localId)?.team ?? 0;
+    const m = MODES[mode];
+    const minutes = Math.round(this.timeLimit / 60);
     this.introEl.innerHTML = `
-      ${team(myTeam)}
+      ${team(myTeam, 'ours')}
       <div class="in-mid">
-        <small>${esc(MODES[mode]?.name ?? '')}</small>
-        <h2>${esc(map?.name ?? '')}</h2>
-        <span class="in-vs">VS</span>
-        <p>${esc(TIPS[Math.floor(Math.random() * TIPS.length)])}</p>
+        <div class="in-card">
+          <div class="in-pic" style="background-image:url(assets/maps/${esc(map?.id ?? mapId)}.jpg)"></div>
+          <div class="in-mode">${glyph(`mode:${mode}`, 15, 'gl in-mode-icon')}<span>${esc(m?.name ?? '')}</span></div>
+          <h2>${esc(map?.name ?? '')}</h2>
+          <p class="in-rules">First to ${this.scoreLimit}<i></i>${minutes} min</p>
+        </div>
+        <div class="in-count"><b>3</b></div>
+        <p class="in-tip">${esc(m?.desc ?? TIPS[Math.floor(Math.random() * TIPS.length)])}</p>
       </div>
-      ${team(1 - myTeam)}`;
+      ${team(1 - myTeam, 'theirs')}`;
+    this.introCount = this.introEl.querySelector('.in-count b');
+    this.introShown = 3;
     this.introEl.classList.add('show');
+    this.introOn = true;
+    this.controls?.el.classList.add('intro-on');
+    this.modeBannerShown = true;      // The card already says what the mode is.
   }
 
-  #hideIntro() {
-    this.introEl?.classList.remove('show');
+  // 3, 2, 1 under the map card; each new number lands with a stamp.
+  #tickIntro(view) {
+    if (!this.introOn || !this.introCount) return;
+    const left = Math.max(1, Math.ceil(3 - (view.t ?? 0)));
+    if (left === this.introShown) return;
+    this.introShown = left;
+    this.introCount.textContent = left;
+    this.introCount.animate(COUNT_POP, { duration: 380, easing: 'cubic-bezier(.2,.9,.3,1)' });
+  }
+
+  #hideIntro(go = false) {
+    if (!this.introOn) return;
+    this.introOn = false;
+    this.introEl.classList.remove('show');
+    this.controls?.el.classList.remove('intro-on');
+    if (go) this.goEl.animate(GO_FLASH, { duration: INTRO_GO_MS, easing: 'cubic-bezier(.2,.9,.3,1)' });
   }
 
   // The match renderer's camera. Markers need a world-to-screen transform and nothing else from it.
@@ -339,54 +403,60 @@ export class HUD {
     const el = this.el = document.createElement('div');
     el.className = 'hud';
     el.innerHTML = `
-      <div class="vignette"></div>
+      <div class="vignette"><i class="vg-pulse"></i></div>
       <div class="scorebar" data-tap="1">
         <div class="sb-side mine">
-          <b class="sb-name"></b><b class="sb-score">0</b>
+          <i class="sb-lamp"></i><b class="sb-name"></b><b class="sb-score">0</b>
           <i class="sb-track"><i class="sb-fill"></i></i>
         </div>
-        <div class="sb-time"><b>10:00</b></div>
+        <div class="sb-time"><b>10:00</b><small class="sb-goal"></small></div>
         <div class="sb-side theirs">
-          <b class="sb-score">0</b><b class="sb-name"></b>
+          <b class="sb-score">0</b><b class="sb-name"></b><i class="sb-lamp"></i>
           <i class="sb-track"><i class="sb-fill"></i></i>
         </div>
       </div>
       <div class="minimap">
         <canvas width="${MM_WIDTH * MM_SCALE}" height="${Math.round(MM_WIDTH * MM_SCALE * 2 / 3)}"></canvas>
+        <i class="mm-corner tl"></i><i class="mm-corner br"></i>
         <span class="mm-tag" hidden>Enemy UAV</span>
       </div>
       <div class="feed"></div>
       <div class="medals"></div>
       <div class="hit">
-        <svg class="hit-x" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-14 -14l9 9M14 -14l-9 9M-14 14l9 -9M14 14l-9 -9" /></svg>
+        <svg class="hit-x" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-15 -15l8 8M15 -15l-8 8M-15 15l8 -8M15 15l-8 -8" /></svg>
         <svg class="hit-skull" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M0 -17C-11 -17 -16 -10 -16 -3C-16 3 -13 6 -10 8L-9 14H-5V10H-2V14H2V10H5V14H9L10 8C13 6 16 3 16 -3C16 -10 11 -17 0 -17ZM-9 -6A4.5 4.5 0 1 1 -9 3A4.5 4.5 0 1 1 -9 -6ZM9 -6A4.5 4.5 0 1 1 9 3A4.5 4.5 0 1 1 9 -6ZM0 2L3 7H-3Z" fill-rule="evenodd"/></svg>
       </div>
-      ${[0, 1, 2, 3].map(() => '<svg class="dmg" viewBox="-110 -110 220 220" aria-hidden="true"><path d="M-46 -94 A105 105 0 0 1 46 -94 L39 -80 A90 90 0 0 0 -39 -80 Z" /></svg>').join('')}
+      <div class="score-pop"><b>+100</b><small></small></div>
+      ${[0, 1, 2, 3].map(() => '<svg class="dmg" viewBox="-110 -110 220 220" aria-hidden="true"><path class="dmg-arc" d="M-50 -96 A108 108 0 0 1 50 -96 L40 -78 A88 88 0 0 0 -40 -78 Z" /><path class="dmg-tip" d="M-9 -100 L0 -110 L9 -100 Z" /></svg>').join('')}
       <div class="corner">
         <div class="net-chip" hidden><i class="bars"><i></i><i></i><i></i></i><span>--</span></div>
         <button class="chip-btn speaker" data-tap="1" hidden aria-label="Mute team voice">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM17 8.5a5 5 0 0 1 0 7M20 6a9 9 0 0 1 0 12" /></svg>
+          ${glyph('ui:volume', 19)}
         </button>
         <button class="chip-btn mic" data-tap="1" data-state="hidden" hidden aria-label="Team voice">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM6 11v1a6 6 0 0 0 12 0v-1M12 18v3M8.5 21h7" /></svg>
+          ${glyph('ui:mic', 19)}
           <span class="mic-tag"></span>
         </button>
       </div>
       <div class="status">
         <div class="vitals">
-          <span class="hp-num">100</span>
-          <i class="hp-track"><i class="hp-fill"></i></i>
-          <span class="protect" hidden>Protected</span>
+          <div class="hp-line"><span class="protect" hidden>Spawn shield</span><span class="hp-num">100</span></div>
+          <i class="hp-track"><i class="hp-loss"></i><i class="hp-fill"></i><i class="hp-ticks"></i></i>
         </div>
         <div class="arms">
           <i class="heat" hidden><i class="heat-fill"></i></i>
-          <div class="arms-name"><span></span></div>
-          <div class="arms-count"><b class="ammo">30</b><span class="reserve">/150</span></div>
+          <div class="arms-top"><span class="arms-icon"></span><span class="arms-name"><span></span></span></div>
+          <div class="arms-count"><b class="ammo">30</b><span class="reserve">150</span></div>
+          <i class="mag"><i class="mag-fill"></i></i>
           <i class="reload-track"><i class="reload-fill"></i></i>
         </div>
       </div>
       <div class="over-banner"><b>Overheated</b><small>Swap to sidearm</small></div>
-      <div class="board" hidden><div class="board-grid"></div><small class="board-tip">Tap the score to close</small><button class="board-leave" data-tap="1">Leave match</button></div>
+      <div class="board" hidden>
+        <div class="board-top"><b class="board-mode"></b><span class="board-goal"></span></div>
+        <div class="board-grid"></div>
+        <div class="board-foot"><small class="board-tip">Tap the score to close</small><button class="board-leave" data-tap="1">Leave match</button></div>
+      </div>
       <div class="range-panel" hidden>
         <div class="rp-head">Firing Range</div>
         <div class="rp-grid">
@@ -402,7 +472,8 @@ export class HUD {
       </div>
       <button class="range-leave" data-tap="1" hidden>Leave range</button>
       <div class="intro"></div>
-      <div class="streak-hit"><b></b><small></small></div>
+      <div class="go-flash"><b>Go</b></div>
+      <div class="streak-hit"><span class="sh-icon"></span><span class="sh-text"><b></b><small></small></span></div>
       <div class="respawn-flash"></div>
       <div class="streak-edge"></div>
       <div class="obj-marks"></div>
@@ -416,19 +487,27 @@ export class HUD {
       <div class="notice"></div>
       <div class="spectate" hidden></div>
       <div class="death">
-        <div class="death-head">
+        <div class="death-top">
+        <div class="death-card">
+          <div class="dc-kick">Killed by</div>
           <div class="death-by"></div>
-          <div class="death-count">3</div>
+          <div class="dc-weapon"><span class="dc-icon"></span><b class="dc-wname"></b><small class="dc-tags"></small></div>
+          <div class="dc-left" hidden></div>
+        </div>
+        <div class="death-timer">
+          <svg viewBox="-30 -30 60 60" aria-hidden="true"><circle class="dt-track" r="26"/><circle class="dt-arc" r="26" transform="rotate(-90)"/></svg>
+          <b class="death-count">3</b><small>Respawn</small>
+        </div>
         </div>
         <div class="picker">
           <span class="picker-label">Next life</span>
           ${Array.from({ length: LOADOUT_COUNT }, (_, i) => `
-          <button class="pick" data-tap="1" data-i="${i}"><b></b><small></small></button>`).join('')}
+          <button class="pick" data-tap="1" data-i="${i}"><span class="pk-icon"></span><span class="pk-text"><b></b><small></small></span></button>`).join('')}
         </div>
       </div>
       <div class="flashbang"></div>
       <div class="heal-veil"></div>
-      <div class="endbanner"><b></b><small></small></div>`;
+      <div class="endbanner"><i class="eb-band"></i><b></b><small></small></div>`;
     this.root.appendChild(el);
 
     const $ = sel => el.querySelector(sel);
@@ -472,6 +551,21 @@ export class HUD {
     this.healEl = $('.heal-veil');
     this.hitX = $('.hit-x');
     this.armsName = $('.arms-name span');
+    this.armsIcon = $('.arms-icon');
+    this.magFill = $('.mag-fill');
+    this.hpLoss = $('.hp-loss');
+    this.scorePop = $('.score-pop');
+    this.scorePopNum = $('.score-pop b');
+    this.scorePopWhy = $('.score-pop small');
+    this.goEl = $('.go-flash');
+    this.sbGoal = $('.sb-goal');
+    this.boardMode = $('.board-mode');
+    this.boardGoal = $('.board-goal');
+    this.dcIcon = $('.dc-icon');
+    this.dcName = $('.dc-wname');
+    this.dcTags = $('.dc-tags');
+    this.dcLeft = $('.dc-left');
+    this.dtArc = $('.dt-arc');
     this.ammoEl = $('.ammo');
     this.reserveEl = $('.reserve');
     this.reloadTrack = $('.reload-track');
@@ -587,6 +681,7 @@ export class HUD {
       this.picks.forEach((pick, i) => {
         pick.querySelector('b').textContent = all[i].name;
         pick.querySelector('small').textContent = weaponName(all[i].primary);
+        pick.querySelector('.pk-icon').innerHTML = glyph(all[i].primary, 16);
       });
     }
     const active = Progress.activeLoadout;
@@ -603,7 +698,8 @@ export class HUD {
       this.pendingIntro = null;
       this.#showIntro(mapId, mode, roster, localId);
     }
-    if (view.phase !== 'warmup') this.#hideIntro();  // The reveal rides the warmup, whatever speed this phone runs at.
+    if (view.phase !== 'warmup') this.#hideIntro(view.phase === 'live');  // The reveal rides the warmup.
+    else this.#tickIntro(view);
     if (!this.remeasured) { this.remeasured = true; this.remeasure(); }
     const previousPhase = this.cache.phase;
     this.view = view;
@@ -629,11 +725,19 @@ export class HUD {
       this.sbTheirs.fill.style.transform = `scaleX(${Math.min(1, c.otherScore / this.scoreLimit)})`;
     }
 
+    const lead = c.myScore > c.otherScore ? 'mine' : c.otherScore > c.myScore ? 'theirs' : '';
+    if (lead !== c.lead) {
+      c.lead = lead;
+      this.sbMine.root.classList.toggle('lead', lead === 'mine');
+      this.sbTheirs.root.classList.toggle('lead', lead === 'theirs');
+    }
+
     const shown = view.phase === 'warmup' ? Math.ceil(view.timeLeft) : Math.max(0, Math.ceil(view.timeLeft));
     if (c.time !== shown) {
       c.time = shown;
       this.timeEl.textContent = `${pad2(Math.floor(shown / 60))}:${pad2(shown % 60)}`;
       this.timeEl.classList.toggle('urgent', view.phase === 'live' && shown <= 30);
+      if (view.phase === 'live' && shown <= 10 && shown > 0) this.timeEl.animate(COUNT_POP, { duration: 300, easing: 'ease-out' });
     }
 
     if (view.phase !== previousPhase) {
@@ -693,13 +797,24 @@ export class HUD {
   #updateVitals(me, c, view) {
     const hp = Math.max(0, Math.ceil(me.hp));
     if (hp !== c.hp) {
+      const was = Number.isNaN(c.hp) ? hp : c.hp;
       c.hp = hp;
       this.hpNum.textContent = hp;
       this.hpFill.style.transform = `scaleX(${hp / MAX_HP})`;
+      // The chunk just lost hangs for a beat as a pale trail, then drains: damage reads as an amount, not a flicker.
+      this.hpLossAnim?.cancel();
+      if (hp < was && me.alive) {
+        this.hpLossAnim = this.hpLoss.animate([{ transform: `scaleX(${was / MAX_HP})` }, { transform: `scaleX(${hp / MAX_HP})` }],
+          { duration: 420, delay: 260, easing: 'ease-in', fill: 'both' });
+        this.vitals.animate(HP_KNOCK, { duration: 220, easing: 'ease-out' });
+      } else {
+        this.hpLoss.style.transform = `scaleX(${hp / MAX_HP})`;
+      }
       const hurt = hp > 0 && hp <= MAX_HP * 0.35;
       if (hurt !== c.hurt) {
         c.hurt = hurt;
         this.vitals.classList.toggle('hurt', hurt);
+        this.vignette.classList.toggle('critical', hurt && me.alive);
       }
     }
     const veil = me.alive && hp <= MAX_HP * 0.5 ? Math.round((1 - hp / (MAX_HP * 0.5)) * 20) / 20 : 0;
@@ -721,15 +836,22 @@ export class HUD {
       this.armsName.textContent = weaponName(me.weapon);
       c.magazine = effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
       c.tag = null;                // The status line may need to return to the weapon's name.
+      this.armsIcon.innerHTML = glyph(me.weapon, 15);
+      // Rounds as notches when they can be counted at a glance; a belt-fed gun gets a plain gauge.
+      this.arms.style.setProperty('--mag', c.magazine <= 40 ? c.magazine : 1);
+      if (c.weaponSeen) this.arms.animate(ARMS_SWAP, { duration: 260, easing: 'cubic-bezier(.2,.9,.3,1)' });
+      c.weaponSeen = true;
+      c.ammo = NaN;
     }
     if (me.ammo !== c.ammo) {
       c.ammo = me.ammo;
       this.ammoEl.textContent = me.ammo;
+      this.magFill.style.transform = `scaleX(${Math.min(1, me.ammo / (c.magazine || 1))})`;
     }
     if (me.reserve !== c.reserve) {
       c.reserve = me.reserve;
       // Sidearms carry unlimited reserve, reported as a huge number.
-      this.reserveEl.textContent = me.reserve > 900 ? '/inf' : `/${me.reserve}`;
+      this.reserveEl.textContent = me.reserve > 900 ? '\u221e' : `${me.reserve}`;
     }
     const reloading = me.reloadT > 0 && me.reloadDur > 0;
     if (reloading !== c.reloadOn) {
@@ -803,6 +925,7 @@ export class HUD {
   #streakReady(kind) {
     const name = STREAKS[kind]?.name ?? kind;
     const el = this.streakHitEl;
+    el.querySelector('.sh-icon').innerHTML = glyph(kind, 34);
     el.querySelector('b').textContent = `${name} ready`;
     el.querySelector('small').textContent = STREAKS[kind]?.desc ?? 'Tap its tile to call it in';
     el.animate(STREAK_HIT, { duration: 1300, easing: 'cubic-bezier(.2,.9,.3,1)' });
@@ -815,7 +938,9 @@ export class HUD {
       c.dead = dead;
       this.deathEl.classList.toggle('show', dead);
       this.controls?.setDown(dead);
-      if (dead) this.#paintDeathHead();
+      this.respawnTotal = Math.max(1, me.respawnT ?? 3);
+      c.ring = NaN;
+      if (dead) this.#paintDeathHead(view);
     }
     if (!dead) return;
     const left = Math.max(1, Math.ceil(me.respawnT ?? 0));
@@ -824,15 +949,36 @@ export class HUD {
       this.deathCount.textContent = left;
       this.deathCount.animate(COUNT_POP, { duration: 320, easing: 'ease-out' });
     }
-    if (this.killer?.name && !this.deathPainted) this.#paintDeathHead();
+    // The ring empties toward the respawn, in 1/40 steps so it repaints a few dozen times rather than every frame.
+    const ring = Math.round(Math.max(0, Math.min(1, (me.respawnT ?? 0) / this.respawnTotal)) * 40) / 40;
+    if (ring !== c.ring) {
+      c.ring = ring;
+      this.dtArc.style.strokeDashoffset = ((1 - ring) * DEATH_RING).toFixed(1);
+    }
+    if (this.killer?.name && !this.deathPainted) this.#paintDeathHead(view);
   }
 
-  #paintDeathHead() {
+  // The killer card: who, with what, from how far, and how much fight they had left.
+  #paintDeathHead(view) {
     const k = this.killer;
     this.deathPainted = !!k?.name;
+    const card = this.deathEl.querySelector('.death-card');
+    card.style.setProperty('--team', k?.color ?? 'var(--haze)');
     this.deathBy.innerHTML = k?.name
-      ? `<em style="color:${k.color}">${esc(k.name)}</em><span>got you with the ${esc(k.weapon)}</span>`
-      : '<span>Eliminated</span>';
+      ? `${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 22)}</i><u>${k.badge.level ?? ''}</u>` : ''}<em>${esc(k.name)}</em>`
+      : '<em>Eliminated</em>';
+    this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : 'Killed by') : 'Down';
+    this.dcIcon.innerHTML = k ? glyph(k.icon, 20) : '';
+    this.dcName.textContent = k?.weapon ?? '';
+    const tags = [];
+    if (k?.head) tags.push('Headshot');
+    if (k?.dist) tags.push(`${Math.round(k.dist)} m`);
+    this.dcTags.textContent = tags.join('   ');
+    this.dcTags.classList.toggle('head', !!k?.head);
+    const killer = k && view?.players.find(p => p.id === k.id);
+    const hp = killer?.alive ? Math.ceil(killer.hp) : null;
+    this.dcLeft.hidden = hp === null || k.self;
+    if (hp !== null) this.dcLeft.innerHTML = `<i style="transform:scaleX(${(hp / MAX_HP).toFixed(2)})"></i><span>Left on ${hp} HP</span>`;
   }
 
   #decayEffects(dt) {
@@ -915,7 +1061,7 @@ export class HUD {
         this.hitHead = head;
         this.hitEl.classList.toggle('head', head);
       }
-      if (head) this.#callout(kill ? 'Headshot kill' : 'Headshot');
+      if (head || kill) this.hitEl.animate(HIT_PUNCH, { duration: 160, easing: 'ease-out' });
     }
     if (e.target === localId && e.by !== localId) this.#damageFrom(e);
   }
@@ -984,10 +1130,20 @@ export class HUD {
     const tgtName = tgtP?.name ?? '?';
     const byCss = TEAMS[byP?.team ?? 0].css, tgtCss = TEAMS[tgtP?.team ?? 1].css;
     const mine = e.by === view.localId || e.target === view.localId;
-    this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${esc(byName)}</em><span class="f-w">${esc(killCause(e))}</span>${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine);
+    const causeId = e.equip ?? (typeof e.streak === 'string' ? e.streak : e.weapon);
+    const art = glyph(causeId, 13, 'gl f-gun');
+    const cause = art ? `<span class="f-w" title="${esc(killCause(e))}">${art}</span>` : `<span class="f-w f-text">${esc(killCause(e))}</span>`;
+    const head = e.head ? `<span class="f-hs">${glyph('medal:headshot', 14)}</span>` : '';
+    const side = byP?.team === view.players.find(p => p.id === view.localId)?.team ? 'ally' : 'foe';
+    this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${esc(byName)}</em>${cause}${head}${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine, side);
+    if (e.by === view.localId && e.target !== view.localId) this.#scorePop(SCORE.kill + (e.head ? SCORE.headshot : 0), e.head ? 'Headshot' : 'Kill');
+    else if (e.assist === view.localId) this.#scorePop(SCORE.assist, 'Assist');
 
     if (e.target === view.localId) {
-      this.killer = { name: byName, color: byCss, weapon: killCause(e) };
+      this.killer = {
+        id: e.by, name: byName, color: byCss, weapon: killCause(e), icon: e.equip ?? (typeof e.streak === 'string' ? e.streak : e.weapon),
+        head: !!e.head, dist: e.streak || e.equip ? 0 : e.dist, badge: this.badges.get(e.by) ?? null, self: e.by === e.target,
+      };
       this.deathPainted = false;
     }
   }
@@ -1044,9 +1200,21 @@ export class HUD {
     if (Math.hypot(e.x - me.x, e.z - me.z) <= (e.r ?? 0)) this.#callout('Sensor: you are marked');
   }
 
-  #pushFeed(html, mine = false) {
+  // "+100" under the crosshair, off to one side so it never sits on the target. Kills close together add up.
+  #scorePop(points, why) {
+    const now = performance.now();
+    const fresh = now - (this.popAt ?? -1e9) > SCORE_POP_LIFE * 1000;
+    this.popAt = now;
+    this.popSum = fresh ? points : (this.popSum ?? 0) + points;
+    this.scorePopNum.textContent = `+${this.popSum}`;
+    this.scorePopWhy.textContent = why;
+    this.scorePopAnim?.cancel();
+    this.scorePopAnim = this.scorePop.animate(fresh ? SCORE_POP_IN : SCORE_POP_BUMP, { duration: SCORE_POP_LIFE * 1000 + 300, easing: 'cubic-bezier(.2,.9,.3,1)' });
+  }
+
+  #pushFeed(html, mine = false, side = '') {
     const row = document.createElement('div');
-    row.className = mine ? 'f-row mine' : 'f-row';
+    row.className = `f-row${mine ? ' mine' : ''}${side ? ' ' + side : ''}`;
     row.innerHTML = html;
     row.animate([{ transform: 'translateX(-18px)', opacity: 0, filter: 'brightness(2)' }, { transform: 'none', opacity: 1, filter: 'brightness(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.9,.3,1)' });
     this.feedEl.prepend(row);
@@ -1086,14 +1254,15 @@ export class HUD {
   // id is a medal id, or a ready-made { title, sub, big } card such as a streak coming online.
   #stamp(id) {
     const card = typeof id === 'object' ? id : null;
-    const [title, sub] = card ? [card.title, card.sub] : MEDALS[id] ?? [String(id).replace(/_/g, ' '), ''];
+    const [title, sub, tier] = card ? [card.title, card.sub, card.big ? 3 : 2] : MEDALS[id] ?? [String(id).replace(/_/g, ' '), '', 1];
+    const art = card ? '' : glyph(`medal:${id}`, 32);
     const node = document.createElement('div');
-    node.className = `medal${card?.big || id === 'first_blood' || id === 'streak5' || id === 'streak10' ? ' big' : ''}`;
-    node.innerHTML = `<b>${esc(title)}</b><small>${esc(sub)}</small>`;
-    node.style.setProperty('--tilt', `${(Math.random() * 7 - 3.5).toFixed(1)}deg`);
+    node.className = `medal t${tier}`;
+    node.innerHTML = `${art ? `<span class="md-icon">${art}</span>` : ''}<span class="md-text"><b>${esc(title)}</b><small>${esc(sub)}</small></span><i class="md-sweep"></i>`;
+    node.style.setProperty('--tilt', `${(Math.random() * 5 - 2.5).toFixed(1)}deg`);
     node.style.animationDuration = `${MEDAL_LIFE}s`;
-    node.addEventListener('animationend', () => node.remove(), { once: true });
-    while (this.medalsEl.childElementCount >= 3) this.medalsEl.firstElementChild.remove();
+    node.addEventListener('animationend', e => { if (e.target === node) node.remove(); });
+    while (this.medalsEl.childElementCount >= 2) this.medalsEl.firstElementChild.remove();
     this.medalsEl.appendChild(node);
   }
 

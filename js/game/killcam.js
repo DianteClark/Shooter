@@ -432,39 +432,36 @@ export class Killcam {
 
   #ensureUi() {
     if (this.ui || typeof document === 'undefined') return;
+    // Sits under the score bar on one line (css/game.css, .killcam-banner). CSS hides the objective strip it would
+    // otherwise share that row with.
     const el = document.createElement('div');
-    // Sits under the score bar on one line. CSS hides the objective strip it would otherwise share that row with.
     el.className = 'killcam-banner';
-    el.style.cssText = 'position:fixed;left:0;right:0;top:calc(var(--st,0px) + 44px);display:flex;flex-direction:row;justify-content:center;align-items:baseline;gap:10px;pointer-events:none;z-index:30;font-family:var(--plate-face, system-ui, sans-serif);color:#fff;text-shadow:0 1px 3px #000c;transition:opacity .15s;opacity:0';
-    const title = document.createElement('div');
-    title.style.cssText = 'font-size:15px;letter-spacing:.32em;text-transform:uppercase;color:#ffcf6b;padding-left:.32em';
-    const who = document.createElement('div');
-    who.style.cssText = 'font-size:12px;letter-spacing:.12em;opacity:.9';
+    el.innerHTML = '<i class="kc-rec"></i><b class="kc-title"></b><span class="kc-who"></span>';
     const skip = document.createElement('button');
     skip.type = 'button';
-    skip.textContent = 'SKIP';
-    skip.style.cssText = 'position:fixed;right:calc(env(safe-area-inset-right,0px) + 14px);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);pointer-events:auto;min-width:72px;height:44px;padding:0 14px;font:inherit;font-size:13px;letter-spacing:.2em;color:#fff;background:#0009;border:1px solid #fff5;border-radius:8px;touch-action:manipulation;-webkit-tap-highlight-color:transparent';
+    skip.className = 'killcam-skip';
+    skip.textContent = 'Skip';
     skip.addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); this.skip(); });
-    el.append(title, who, skip);
-    (this.root || document.body).appendChild(el);
-    this.ui = { el, title, who, skip };
+    const root = this.root || document.body;
+    root.append(el, skip);
+    this.ui = { el, title: el.querySelector('.kc-title'), who: el.querySelector('.kc-who'), skip };
   }
 
   #showBanner(kind, ev) {
     this.#ensureUi();
     if (!this.ui) return;
     const killer = this.#findName(ev.by);
+    this.ui.el.dataset.kind = kind;
     this.ui.title.textContent = kind === 'final' ? 'Final Kill' : 'Killcam';
-    this.ui.who.textContent = killer ? `Eliminated by ${killer}` : '';
-    if (kind === 'final') this.ui.who.textContent = killer ? killer : '';
-    this.ui.el.style.opacity = '1';
+    this.ui.who.textContent = kind === 'final' ? killer : killer ? `${killer} got you` : '';
+    this.ui.el.classList.add('on');
     document.body.classList.add('killcam-on');
-    this.ui.skip.style.display = '';
+    this.ui.skip.classList.add('on');
   }
 
   #hideBanner() {
     document.body.classList.remove('killcam-on');
-    if (this.ui) { this.ui.el.style.opacity = '0'; this.ui.skip.style.display = 'none'; }
+    if (this.ui) { this.ui.el.classList.remove('on'); this.ui.skip.classList.remove('on'); }
   }
 
   #findName(id) {

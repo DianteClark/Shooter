@@ -126,7 +126,7 @@ export class Controls {
       </button>`).join('')}
       <div class="streaks">
         <div class="st-score"><span>Score</span><b>0</b></div>
-        <div class="st-row">
+        <div class="stk-row">
         ${TILE_IDS.map((t, i) => `
           <button class="st-tile" data-btn="${t}" data-slot="${i}" aria-label="Streak ${i + 1}">
             <i class="st-fill"></i>

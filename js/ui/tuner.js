@@ -8,6 +8,7 @@
 import {
   GROUPS, TUNABLES, TUNABLE, TUNING, setTune, resetTune, onTune, isTuned, tunedCount, exportTuning, importTuning,
 } from '../shared/tuning.js';
+import { icon } from './icons.js';
 
 const LONG_PRESS_MS = 550;
 const LONG_PRESS_SLOP = 14;
@@ -65,7 +66,7 @@ class Tuner {
         <span class="tn-count"></span>
         <button class="tn-hbtn" data-tn="dock" aria-label="Move panel">Move</button>
         <button class="tn-hbtn" data-tn="min" aria-label="Collapse panel"><i class="tn-chev"></i></button>
-        <button class="tn-hbtn tn-x" data-tn="close" aria-label="Close">×</button>
+        <button class="tn-hbtn tn-x" data-tn="close" aria-label="Close">${icon('ui:close', { size: 18 })}</button>
       </header>
       <div class="tn-body">
         ${GROUPS.map(g => `
