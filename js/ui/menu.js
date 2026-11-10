@@ -3,7 +3,8 @@
 //
 // Transitions: a screen change fades the layer in and walks every element marked data-in="<pose>" onto the screen in
 // document order (motion.js stagger). Repaints of the same screen never replay it.
-import { PUBLIC_LOBBIES } from '../net/lobbies.js';
+import { PUBLIC_LOBBIES, APP_VERSION } from '../net/lobbies.js';
+import { BUILD } from '../build.js';
 import { TEAMS, TEAM_SIZE } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { GunPreview } from '../render/renderer.js';
@@ -171,7 +172,7 @@ export class Menu {
       <section class="ttl-left${rejoin ? ' has-rejoin' : ''}${arrive ? ' arrive' : ''}">
         <div class="brand" data-in="left">
           <h1 class="wordmark" data-act="yardPa"><span>Switchyard</span><i class="wm-shine" aria-hidden="true">Switchyard</i></h1>
-          <p class="wm-sub"><i class="wm-bar" aria-hidden="true"></i>Six a side, with friends or bots</p>
+          <p class="wm-sub"><i class="wm-bar" aria-hidden="true"></i>Six a side, with friends or bots<small class="wm-build" style="margin-left:10px;opacity:.55;font:10px/1 ui-monospace,Menlo,monospace;letter-spacing:0">v${APP_VERSION} · ${BUILD}</small></p>
         </div>
         <nav class="ttl-nav">
           ${rejoin ? `<button class="tl-rejoin" data-act="rejoin" data-in="rail">${ico('rejoin')}<span><b>Rejoin ${esc(rejoin.code)}</b><small>Your last match may still be running</small></span></button>` : ''}
