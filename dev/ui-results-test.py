@@ -55,6 +55,10 @@ async def main():
             await pg.goto(f'http://localhost:{PORT}/?debug=1&bots=elite&limit=1&time=20')
             await pg.wait_for_timeout(900)
             await pg.evaluate("window.__game.Progress.name='Tester'")
+            # The first-run training offer would cover the title; it is shown once, so a reload clears it.
+            await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
+            await pg.reload()
+            await pg.wait_for_timeout(1200)
 
             bad = await pg.evaluate(PICKS)
             print('random picks and vote cards valid:', 'ok' if not bad else f'FAIL {bad}')
@@ -110,8 +114,8 @@ async def main():
             await pg.locator('[data-act="soloMap"][data-id="harvest"]').first.tap()
             await pg.wait_for_timeout(300)
             gw_modes = await pg.evaluate("[...document.querySelectorAll('.solo-mode')].filter(b => !b.hidden).map(b => b.dataset.id)")
-            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'random'} and 'gwtdm' in gw_modes
-            print(f'  {"harvest offers only Ground War modes":<44} {"ok" if ok else "FAIL"} {gw_modes}')
+            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
+            print(f'  {"harvest offers no 6v6 team modes":<44} {"ok" if ok else "FAIL"} {gw_modes}')
             if not ok: failures.append(f'harvest modes {gw_modes}')
             st5 = await play('5 harvest ground war', tap('[data-act="soloStart"]'))
             if st5['last'] and st5['last']['mapId'] != 'harvest': failures.append(f'harvest not played: {st5}')

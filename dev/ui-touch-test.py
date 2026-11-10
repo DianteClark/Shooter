@@ -53,6 +53,10 @@ async def main():
                 await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit&touchdebug=1')
                 await pg.wait_for_timeout(800)
                 await pg.evaluate("window.__game.Progress.name='Tester'")
+                # The first-run training offer would cover the title; it is shown once, so a reload clears it.
+                await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
+                await pg.reload()
+                await pg.wait_for_timeout(1200)
                 await pg.locator('[data-act="solo"]').first.click()
                 await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=30000)
                 await pg.evaluate(SYNTH)
