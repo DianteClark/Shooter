@@ -65,3 +65,10 @@ export function symmetricPoints(W, H, a, b, hardPairs) {
     hard,
   };
 }
+
+// Search and Destroy: the two bomb sites, both on the east (team 1 spawn) half. Attackers always set out from the west
+// spawns and defenders from the east; the teams trade ends at halftime, so each side attacks the same two sites from
+// the same direction and the 180-degree map needs no second pair. A is the northern site, B the southern one.
+export function bombSites(a, b, r = 3.2) {
+  return [{ id: 'A', x: a.x, z: a.z, r: a.r ?? r }, { id: 'B', x: b.x, z: b.z, r: b.r ?? r }];
+}

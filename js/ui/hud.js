@@ -1,11 +1,11 @@
 // In-match overlay. Built once; update() runs every frame and touches the DOM only when a displayed value
 // actually changes, and then only with text, a transform or a class flip.
-import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT, RESPAWN_AUTO, GOLDEN_ID } from '../shared/constants.js';
+import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT, GOLDEN_ID } from '../shared/constants.js';
 import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
-import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
+import { GUN_LADDER, isFfa, MODES, modeRules, SND } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
@@ -13,8 +13,9 @@ import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
 import { icon, resolveIcon } from './icons.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
-import { Footprints, heardEnemies, HEAR_RANGE } from '../sim/player.js';
+import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
 import { effectRadius } from '../sim/equipment.js';
+import { sndOf, spectate } from '../sim/snd.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
 // for that id, so callers can fall back to words.
@@ -42,10 +43,9 @@ const BOARD_HZ = 4;
 const END_BANNER_MIN = 700;
 const OBJ_RING = 2 * Math.PI * 14;
 const DEATH_RING = 2 * Math.PI * 26;
-// Tap to respawn: while dead, a Respawn tap is sent again this often until the spawn arrives, and "hold" (automatic
-// respawn off) this often while waiting. Both are idempotent on the host, and resending covers a host migration.
+// Respawn: while dead, a respawn request (the tap, or the one sent at death with auto-respawn on) is sent again this
+// often until the spawn arrives. It is idempotent on the host, and resending covers a host migration.
 const RESPAWN_RESEND = 1;
-const HOLD_RESEND = 2;
 const GOLD_CSS = '#ffcf40';  // Circumference of the capture rings' r=14 circle, for stroke dashes.
 // Objective markers ride inside the safe area plus these margins, and walk inward off anything in markObstacles.
 const MARK_PAD_X = 34;
@@ -94,7 +94,94 @@ const MEDALS = {
   fury: ['Fury Kill', '4 or more', 3], revenge: ['Revenge', 'Settled the score', 1], longshot: ['Longshot', 'From across the yard', 1],
   streak3: ['Three Streak', 'On a run', 2], streak5: ['Five Streak', 'Unstoppable', 3], streak10: ['Ten Streak', 'Unbroken', 3],
   golden: ['Golden Kill', 'One round, one kill', 3],
+  plant: ['Bomb Planted', 'Now hold it', 2], defuse: ['Bomb Defused', 'Saved the site', 3], clutch: ['Clutch', 'Won it alone', 3],
 };
+
+// Search and Destroy wording. Why a round ended, from the winner's side and the loser's.
+const SND_WHY = {
+  elim: ['Enemy team eliminated', 'Your team was eliminated'],
+  bomb: ['The bomb detonated', 'The bomb detonated'],
+  defuse: ['The bomb was defused', 'The bomb was defused'],
+  time: ['Time ran out before a plant', 'Time ran out before a plant'],
+};
+const SND_RING = 2 * Math.PI * 26;
+// The S&D layer's own rules. Values come from the shared tokens; it lives here because it is part of the HUD's markup.
+const SND_CSS = `
+.hud .snd-ui { display: none; }
+.hud.snd-on .snd-ui:not([hidden]) { display: flex; }
+.hud.snd-on .sb-track { display: none; }
+.snd-pips { position: absolute; left: 18px; right: 18px; bottom: 1px; height: 4px; gap: 3px; }
+.hud.snd-on .snd-pips { display: flex; }
+.theirs .snd-pips { flex-direction: row-reverse; }
+.snd-pips i { flex: 1; background: rgba(231,234,228,.3); transform: skewX(-24deg); }
+.snd-pips i.on { background: var(--team); box-shadow: 0 0 6px var(--team); }
+.snd-alive { position: absolute; left: 50%; top: calc(var(--st) + 43px); transform: translateX(-50%); align-items: center; gap: 8px;
+  padding: 3px 8px; pointer-events: none; background: var(--hud-glass-lo); box-shadow: var(--hud-edge); }
+.sa-side { display: flex; gap: 2px; }
+.sa-side.theirs { flex-direction: row-reverse; }
+.sa-p { position: relative; width: 14px; height: 16px; display: grid; place-items: center; color: var(--team); line-height: 0; transition: opacity var(--dur-fast); }
+.sa-p.dead { opacity: .22; color: var(--c-haze); }
+.sa-p.me::after { content: ''; position: absolute; left: 2px; right: 2px; bottom: -2px; height: 2px; background: var(--c-chalk); }
+.sa-p .sa-bomb { position: absolute; right: -5px; top: -5px; color: var(--c-sodium); filter: drop-shadow(0 0 3px rgba(242,166,59,.8)); }
+.sa-mid { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 52px; }
+.sa-mid b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
+.sa-mid small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
+.sa-mid small[data-role="defend"] { color: var(--c-blue, #38b6ff); }
+.hud.snd-on .death-col, .hud.snd-on .picker { top: calc(var(--st) + 72px); }
+.death.snd-buy, .death.snd-spec { background: none; pointer-events: none; }
+.death.snd-buy .death-top, .death.snd-spec .death-top, .death.snd-buy .death-go, .death.snd-spec .death-go { display: none !important; }
+.snd-marks { position: absolute; inset: 0; pointer-events: none; }
+.snd-mark { position: absolute; left: 0; top: 0; width: 0; height: 0; display: block; }
+.snd-mark[hidden] { display: none; }
+.sm-plate { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: grid; place-items: center;
+  font: 400 17px/1 var(--f-stencil); color: var(--c-sodium-ink, #2a1a06); background: var(--c-sodium); transform: rotate(45deg);
+  box-shadow: 0 0 0 2px rgba(16,20,26,.75), 0 0 12px rgba(242,166,59,.55); }
+.sm-plate > * { transform: rotate(-45deg); line-height: 0; }
+.snd-mark small { position: absolute; left: -40px; width: 80px; top: 19px; text-align: center; font: 400 12px/1 var(--f-stencil);
+  letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: 0 1px 2px rgba(0,0,0,.9); white-space: nowrap; }
+.snd-mark[data-state="dim"] { opacity: .55; }
+.snd-mark[data-state="dim"] .sm-plate { background: var(--c-plate, #3a434d); color: var(--c-chalk); box-shadow: 0 0 0 2px rgba(16,20,26,.75); }
+.snd-mark[data-state="planted"] .sm-plate { background: var(--c-red, #ff4d3d); color: #fff; animation: snd-blink .5s steps(2, jump-none) infinite alternate; box-shadow: 0 0 0 2px rgba(16,20,26,.75), 0 0 16px rgba(255,77,61,.8); }
+.snd-mark[data-state="planted"] small { color: #ffb3a8; font-size: 15px; }
+.snd-mark.bomb .sm-plate { background: rgba(16,20,26,.85); color: var(--c-sodium); box-shadow: 0 0 0 2px var(--c-sodium), 0 0 10px rgba(242,166,59,.5); }
+.sm-arrow { position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; display: none; }
+.sm-arrow::before { content: ''; position: absolute; inset: 0; background: var(--c-chalk); clip-path: polygon(0 0, 100% 50%, 0 100%, 30% 50%); }
+.snd-mark.off .sm-arrow { display: block; }
+@keyframes snd-blink { to { filter: brightness(1.5); } }
+.snd-ring { position: absolute; left: 50%; top: 69%; transform: translate(-50%, -50%); flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.snd-ring svg { width: 52px; height: 52px; overflow: visible; }
+.sr-track { fill: rgba(16,20,26,.8); stroke: rgba(231,234,228,.18); stroke-width: 5; }
+.sr-arc { fill: none; stroke: var(--rc, var(--c-sodium)); stroke-width: 5; stroke-dasharray: 163.4; stroke-dashoffset: 163.4; }
+.sr-ico { position: absolute; top: 15px; color: var(--rc, var(--c-sodium)); line-height: 0; }
+.snd-ring b { font: 400 18px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.snd-ring small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-shadow: var(--text-lift); }
+.snd-ring[data-kind="defuse"] { --rc: var(--c-blue, #38b6ff); }
+.snd-ring[data-kind="enemy"] { --rc: var(--c-red, #ff4d3d); }
+.snd-carry, .snd-spec { position: absolute; left: 50%; bottom: calc(var(--sb) + 10px); transform: translateX(-50%); align-items: center; gap: 10px;
+  padding: 6px 14px 7px 12px; background: var(--hud-glass); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium);
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.snd-carry { pointer-events: none; color: var(--c-sodium); }
+.snd-carry span, .snd-spec span { display: flex; flex-direction: column; gap: 3px; }
+.snd-carry b, .snd-spec b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; }
+.snd-carry small, .snd-spec small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; }
+.snd-spec { pointer-events: auto; touch-action: manipulation; min-height: 44px; min-width: 220px; justify-content: space-between; box-shadow: var(--hud-edge), inset 0 -2px 0 var(--my-team); }
+.snd-spec .ss-arrow { flex: none; color: var(--c-chalk); font: 400 22px/1 var(--f-stencil); padding: 0 4px; }
+.snd-spec b { color: var(--my-team); }
+.snd-spec:active { filter: brightness(1.3); }
+.snd-big { position: absolute; left: 0; right: 0; top: 33%; flex-direction: column; align-items: center; pointer-events: none; z-index: var(--z-hud-alert);
+  padding: 8px 0 10px; background: linear-gradient(90deg, transparent, rgba(16,20,26,.86) 22%, rgba(16,20,26,.86) 78%, transparent); }
+.snd-big .sbg-kick { font: var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
+.snd-big b { font: 400 46px/1 var(--f-stencil); letter-spacing: .05em; color: var(--sb-c, var(--c-chalk)); margin-top: 3px;
+  text-shadow: 0 0 22px color-mix(in srgb, var(--sb-c, #fff) 40%, transparent), 0 3px 0 rgba(0,0,0,.5); }
+.snd-big .sbg-sub { font: var(--fs-body)/1.15 var(--f-body); color: var(--c-haze); margin-top: 4px; }
+.snd-big .sbg-count { margin-top: 6px; font: 400 26px/1 var(--f-stencil); color: var(--c-chalk); }
+.snd-big[data-side="mine"] { --sb-c: var(--my-team); }
+.snd-big[data-side="enemy"] { --sb-c: var(--enemy-team); }
+.snd-big[data-side="gold"] { --sb-c: var(--c-gold, #ffcf40); }
+.hud.snd-on .medals { top: calc(var(--st) + 66px); }
+.hud.snd-out .status { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .snd-mark[data-state="planted"] .sm-plate { animation: none; } }
+`;
 const SCORE_POP_LIFE = 1.4;      // Seconds the "+100" under the crosshair holds before it fades; kills inside it add up.
 const INTRO_GO_MS = 900;
 
@@ -153,6 +240,7 @@ const weaponName = id => WEAPONS[id]?.name ?? (id === 'strike' ? 'Strike' : id ?
 
 // What the feed names for a kill: a gun id alone would credit the gun for a grenade or streak kill.
 function killCause(e) {
+  if (e.equip === 'bomb') return 'Bomb';
   if (e.equip) return LETHALS[e.equip]?.name ?? e.equip;
   if (typeof e.streak === 'string') return STREAKS[e.streak]?.name ?? e.streak;
   return weaponName(e.weapon);
@@ -242,6 +330,7 @@ export class HUD {
     this.mode = modeRules(mode);        // The rule set it plays by, e.g. 'dom'.
     this.ffa = isFfa(mode);             // Every player for themselves: scorebar, board and banners rank players.
     this.gun = this.mode === 'gun';
+    this.snd = this.mode === 'snd';           // Search and Destroy: rounds, the bomb, spectating instead of respawns.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
@@ -249,11 +338,15 @@ export class HUD {
     this.#drawMapBase();
     this.#buildObjectiveHud();
     this.sbGoal.textContent = this.gun ? `${scoreLimit} guns` : `to ${scoreLimit}`;
+    this.el.classList.toggle('snd-on', this.snd);
+    for (const pips of this.sndEl.pips) pips.innerHTML = this.snd ? '<i></i>'.repeat(scoreLimit) : '';
+    spectate.reset();
     this.boardMode.textContent = MODES[mode]?.name ?? '';
-    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : `first to ${scoreLimit}`}`;
+    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : `first to ${scoreLimit}`}`;
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
+    this.#sndControls(this.snd);
     this.reset();
     this.#range.prepare(mode === 'range');
     this.el.classList.toggle('range-on', mode === 'range');
@@ -271,6 +364,14 @@ export class HUD {
     this.el.querySelector('.death-next').style.display = on ? 'none' : '';
     // The ladder strip sits where the Respawn row would; the row (and the killer card under it) steps below it.
     this.el.querySelector('.death-act').style.marginTop = on ? '58px' : '';
+  }
+
+  // Search and Destroy has no scorestreaks, so their tiles and the score counter go; everything else stays.
+  #sndControls(on) {
+    const c = this.controls;
+    if (!on || !c) return;
+    for (const t of c.tiles ?? []) if (t?.node) t.node.style.display = 'none';
+    if (c.scoreBox) c.scoreBox.style.display = 'none';
   }
 
   // The Gun Game strip under the scorebar: the gun in hand, how far up the ladder, and what the next kill brings.
@@ -326,7 +427,9 @@ export class HUD {
     const field = (list, side, title) => `<div class="in-team ${side}" style="--team:var(--c-sodium)"><h3><i></i>${esc(title)}</h3>${list.map((p, i) =>
       `<div style="--team:${TEAMS[p.team]?.css ?? '#fff'}">${row(p, i)}</div>`).join('')}</div>`;
     const half = Math.ceil(roster.length / 2);
-    const rules = this.gun ? `${GUN_LADDER.length} guns<i></i>${minutes} min` : `First to ${this.scoreLimit}<i></i>${minutes} min`;
+    const roundTime = `${Math.floor(this.timeLimit / 60)}:${pad2(this.timeLimit % 60)}`;
+    const rules = this.gun ? `${GUN_LADDER.length} guns<i></i>${minutes} min`
+      : this.snd ? `First to ${this.scoreLimit} rounds<i></i>${roundTime} a round` : `First to ${this.scoreLimit}<i></i>${minutes} min`;
     this.introEl.innerHTML = `
       ${this.ffa ? field(roster.slice(0, half), 'ours', 'Every player') : team(myTeam, 'ours')}
       <div class="in-mid">
@@ -377,7 +480,9 @@ export class HUD {
       protect: null, picked: -1, enemyUav: null, tag: '', heatOn: null, heat: NaN, heatLevel: '', overBanner: null,
       score: NaN, capped: null, swapHint: null, objState: null, objFrac: NaN, hardShown: NaN,
       gunLevel: NaN, rival: null, place: '',
+      sndAlive: '', sndRole: '', sndBig: '', sndCount: NaN, sndRing: '', sndRingFrac: NaN, sndCarry: null, sndSpec: null, sndLife: '', sndPips: '',
     };
+    this.sndLast = null;
     this.view = null;
     this.modeBannerShown = false;
     this.hardWarned = false;
@@ -407,7 +512,13 @@ export class HUD {
     this.medalsEl.textContent = '';
     for (const d of this.dmg) { d.life = 0; d.el.style.opacity = '0'; }
     this.hitEl.style.opacity = '0';
-    this.deathEl.classList.remove('show', 'picking');
+    this.deathEl.classList.remove('show', 'picking', 'snd-buy', 'snd-spec');
+    this.nextEl.querySelector('.dn-now > small').textContent = 'Next life';
+    this.pickerEl.querySelector('.pk-head b').textContent = 'Next life';
+    this.pickerEl.querySelector('.pk-head small').textContent = 'Spawns with the one you pick. Take your time: you respawn when you tap Respawn.';
+    this.wasOut = false;
+    for (const m of this.sndEl.marks) { m.shown = false; m.root.hidden = true; m.state = ''; m.text = null; }
+    for (const k of ['ring', 'carry', 'spec', 'big']) this.sndEl[k].hidden = true;
     this.endEl.classList.remove('show');
     this.controls?.setDown(false);
     this.setNotice('');
@@ -421,8 +532,9 @@ export class HUD {
 
   // cb(loadout), the full match loadout, whenever the player picks another one on the death screen.
   onSetLoadout(cb) { this.loadoutCb = cb; }
-  // cb(msg) sends the host a respawn command: {} is the Respawn tap, {hold: true} turns the automatic respawn off for
-  // this life (Options autoRespawn off). match: #command({ ...msg, cmd: 'respawn' }).
+  // cb(msg) sends the host a respawn command ({}): the Respawn tap, or with Options autoRespawn on the request made at
+  // the moment of death, which the host honours as soon as the minimum respawn time is up.
+  // match: #command({ ...msg, cmd: 'respawn' }).
   onRespawn(cb) { this.respawnCb = cb; }
   onMic(cb) { this.micCb = cb; }
   onSpeaker(cb) { this.speakerCb = cb; }
@@ -517,12 +629,12 @@ export class HUD {
       <div class="scorebar" data-tap="1">
         <div class="sb-side mine">
           <i class="sb-lamp"></i><b class="sb-name"></b><b class="sb-score">0</b>
-          <i class="sb-track"><i class="sb-fill"></i></i>
+          <i class="sb-track"><i class="sb-fill"></i></i><i class="snd-pips"></i>
         </div>
         <div class="sb-time"><b>10:00</b><small class="sb-goal"></small></div>
         <div class="sb-side theirs">
           <b class="sb-score">0</b><b class="sb-name"></b><i class="sb-lamp"></i>
-          <i class="sb-track"><i class="sb-fill"></i></i>
+          <i class="sb-track"><i class="sb-fill"></i></i><i class="snd-pips"></i>
         </div>
       </div>
       <div class="minimap">
@@ -601,6 +713,12 @@ export class HUD {
       <div class="callout"></div>
       <div class="notice"></div>
       <div class="spectate" hidden></div>
+      <div class="snd-alive snd-ui"><div class="sa-side mine"></div><div class="sa-mid"><b class="sa-round"></b><small class="sa-role"></small></div><div class="sa-side theirs"></div></div>
+      <div class="snd-marks snd-ui">${['A', 'B', 'bomb'].map(k => `<span class="snd-mark${k === 'bomb' ? ' bomb' : ''}" hidden><span class="sm-plate"><span>${k === 'bomb' ? icon('bomb', { size: 18, accent: 'currentColor' }) : k}</span></span><i class="sm-arrow"></i><small></small></span>`).join('')}</div>
+      <div class="snd-ring snd-ui" hidden><svg viewBox="-32 -32 64 64" aria-hidden="true"><circle class="sr-track" r="26"/><circle class="sr-arc" r="26" transform="rotate(-90)"/></svg><span class="sr-ico">${icon('bomb', { size: 18, accent: 'currentColor' })}</span><b></b><small></small></div>
+      <div class="snd-carry snd-ui" hidden>${icon('bomb', { size: 26, accent: 'currentColor' })}<span><b>You have the bomb</b><small>Stand still on A or B to plant</small></span></div>
+      <button class="snd-spec snd-ui" type="button" data-tap="1" data-sound="tab" hidden><i class="ss-arrow">&lsaquo;</i><span><small class="ss-kick">Spectating</small><b class="ss-name"></b><small class="ss-left"></small></span><i class="ss-arrow">&rsaquo;</i></button>
+      <div class="snd-big snd-ui" hidden><small class="sbg-kick"></small><b></b><small class="sbg-sub"></small><span class="sbg-count"></span></div>
       <div class="death">
         <div class="death-col">
         <div class="death-top">
@@ -731,6 +849,25 @@ export class HUD {
     this.streakHitEl = $('.streak-hit');
     this.respawnEl = $('.respawn-flash');
     this.#range = new RangeReadout(el);
+    if (!document.getElementById('snd-hud-style')) {
+      const st = document.createElement('style');
+      st.id = 'snd-hud-style';
+      st.textContent = SND_CSS;
+      document.head.appendChild(st);
+    }
+    this.sndEl = {
+      alive: $('.snd-alive'), mine: $('.sa-side.mine'), theirs: $('.sa-side.theirs'), round: $('.sa-round'), role: $('.sa-role'),
+      marks: [...el.querySelectorAll('.snd-mark')].map(root => ({ root, label: root.querySelector('small'), arrow: root.querySelector('.sm-arrow'), x: NaN, y: NaN, a: NaN, off: null, state: '', text: null, shown: false })),
+      ring: $('.snd-ring'), ringArc: $('.sr-arc'), ringText: $('.snd-ring b'), ringSub: $('.snd-ring small'),
+      carry: $('.snd-carry'), spec: $('.snd-spec'), specName: $('.ss-name'), specLeft: $('.ss-left'),
+      big: $('.snd-big'), bigKick: $('.sbg-kick'), bigTitle: $('.snd-big b'), bigSub: $('.sbg-sub'), bigCount: $('.sbg-count'),
+      pips: [sides[0].querySelector('.snd-pips'), sides[1].querySelector('.snd-pips')],
+    };
+    this.sndEl.spec.addEventListener('click', () => {
+      if (!this.view) return;
+      spectate.cycle(this.view, this.view.localId, 1);
+      this.cache.sndSpec = null;
+    });
     $('.range-leave').addEventListener('click', () => this.leaveCb?.());
     this.leaveBtn.addEventListener('click', () => this.#tapLeave());
 
@@ -846,6 +983,7 @@ export class HUD {
 
   // Fourth score column: the mode's own number where it has one, headshots otherwise.
   #objectiveStat(p) {
+    if (this.snd) return `${p.plants ?? 0}/${p.defuses ?? 0}`;
     if (this.mode === 'kc') return p.confirms ?? 0;
     if (this.mode === 'dom' || this.mode === 'hard') return p.captures ?? 0;
     return p.head ?? 0;
@@ -960,6 +1098,7 @@ export class HUD {
       this.sbMine.score.textContent = c.myScore;
       this.sbMine.fill.style.transform = `scaleX(${Math.min(1, c.myScore / this.scoreLimit)})`;
     }
+    if (this.snd) this.#sndPips(myTeam, view, c);
     if (c.otherScore !== view.scores[other]) {
       if (c.otherScore < view.scores[other]) this.sbTheirs.score.animate(SCORE_POP, { duration: 280 });
       c.otherScore = view.scores[other];
@@ -974,12 +1113,21 @@ export class HUD {
       this.sbTheirs.root.classList.toggle('lead', lead === 'theirs');
     }
 
-    const shown = view.phase === 'warmup' ? Math.ceil(view.timeLeft) : Math.max(0, Math.ceil(view.timeLeft));
+    const snd = this.snd ? sndOf(view) : null;
+    // A planted bomb's fuse replaces the round clock.
+    const planted = snd?.bomb.state === 'planted';
+    const shown = planted ? Math.ceil(snd.fuse) : view.phase === 'warmup' ? Math.ceil(view.timeLeft) : Math.max(0, Math.ceil(view.timeLeft));
+    if (this.snd && c.sndGoal !== (planted ? 'Bomb' : `Round ${snd?.round ?? 1}`)) {
+      c.sndGoal = planted ? 'Bomb' : `Round ${snd?.round ?? 1}`;
+      this.sbGoal.textContent = c.sndGoal;
+      this.sbGoal.style.color = planted ? 'var(--c-red, #ff4d3d)' : '';
+      c.time = NaN;
+    }
     if (c.time !== shown) {
       c.time = shown;
       this.timeEl.textContent = `${pad2(Math.floor(shown / 60))}:${pad2(shown % 60)}`;
-      this.timeEl.classList.toggle('urgent', view.phase === 'live' && shown <= 30);
-      if (view.phase === 'live' && shown <= 10 && shown > 0) this.timeEl.animate(COUNT_POP, { duration: 300, easing: 'ease-out' });
+      this.timeEl.classList.toggle('urgent', (view.phase === 'live' && shown <= 30 && snd?.state !== 'post') || planted);
+      if ((view.phase === 'live' && shown <= 10 && shown > 0 && snd?.state !== 'post') || planted) this.timeEl.animate(COUNT_POP, { duration: 300, easing: 'ease-out' });
     }
 
     if (view.phase !== previousPhase) {
@@ -990,7 +1138,7 @@ export class HUD {
       }
     }
 
-    if (view.phase === 'warmup' && !this.modeBannerShown && view.mode === this.mode) {
+    if (view.phase === 'warmup' && !this.modeBannerShown && view.mode === this.mode && !this.snd) {
       this.modeBannerShown = true;
       this.#banner(MODES[this.modeId]?.name ?? '', MODES[this.modeId]?.desc ?? '', 3200);
     }
@@ -1001,7 +1149,8 @@ export class HUD {
     this.#updateArms(me, c);
     this.controls?.notePlayerAim(me.aim);
     this.#updateTiles(me, c);
-    this.#updateDeath(me, c, view);
+    if (this.snd) this.#updateSnd(view, me, c, snd);
+    else this.#updateDeath(me, c, view);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -1021,6 +1170,290 @@ export class HUD {
       this.#drawMinimap(view, me);
     }
     this.#updateProLayer(view, me, dt);
+  }
+
+  // ---- Search and Destroy ----
+  // Rounds instead of a kill count: the pips under each side of the scorebar fill one per round won.
+  #sndPips(myTeam, view, c) {
+    const key = `${myTeam}:${view.scores[myTeam]}:${view.scores[1 - myTeam]}`;
+    if (key === c.sndPips) return;
+    c.sndPips = key;
+    [view.scores[myTeam], view.scores[1 - myTeam]].forEach((won, s) => {
+      const pips = this.sndEl.pips[s].children;
+      for (let i = 0; i < pips.length; i++) pips[i].classList.toggle('on', i < won);
+    });
+  }
+
+  // Everything the mode adds, once a frame. Each part writes the DOM only when what it shows has changed.
+  #updateSnd(view, me, c, snd) {
+    if (!snd) return;
+    const attacking = me.team === snd.attackers;
+    this.#sndAlive(view, me, c, snd, attacking);
+    this.#sndBig(view, me, c, snd, attacking);
+    this.#sndLife(view, me, c, snd);
+    this.#sndRing(view, me, c, snd);
+    const carry = me.alive && snd.carrier === me.id && snd.state !== 'post' && view.phase !== 'ended';
+    if (carry !== c.sndCarry) { c.sndCarry = carry; this.sndEl.carry.hidden = !carry; }
+    this.#sndMarks(view, me, snd, attacking);
+  }
+
+  // The strip under the scorebar: a figure per player, dimmed when out; the bomb on whoever carries it, for the
+  // attackers only (defenders never learn who has it). In the middle, this side's job this round.
+  #sndAlive(view, me, c, snd, attacking) {
+    const mine = [], theirs = [];
+    for (const p of view.players) (p.team === me.team ? mine : theirs).push(p);
+    const sig = list => list.map(p => `${p.alive ? 1 : 0}${attacking && snd.carrier === p.id ? 'b' : ''}${p.id === me.id ? 'm' : ''}`).join('');
+    const key = `${me.team}|${sig(mine)}|${sig(theirs)}|${snd.round}|${attacking}`;
+    if (key === c.sndAlive) return;
+    c.sndAlive = key;
+    const row = (list, team) => list.map(p => `<i class="sa-p${p.alive ? '' : ' dead'}${p.id === me.id ? ' me' : ''}" style="--team:${TEAMS[team].css}">${icon('ui:user', { size: 14 })}${attacking && team === me.team && snd.carrier === p.id ? `<span class="sa-bomb">${icon('bomb', { size: 10, accent: 'currentColor' })}</span>` : ''}</i>`).join('');
+    this.sndEl.mine.innerHTML = row(mine, me.team);
+    this.sndEl.theirs.innerHTML = row(theirs, 1 - me.team);
+    const alive = list => list.filter(p => p.alive).length;
+    this.sndEl.round.textContent = `${alive(mine)} v ${alive(theirs)}`;
+    this.sndEl.role.textContent = attacking ? 'Attack' : 'Defend';
+    this.sndEl.role.dataset.role = attacking ? 'attack' : 'defend';
+  }
+
+  // The centre plate between rounds. Freeze: the round, this side's job and the countdown (with halftime and match
+  // point called out). Post: who took the round and why. Hidden while the round is being played.
+  #sndBig(view, me, c, snd, attacking) {
+    let key = '';
+    let kick = '', title = '', sub = '', side = '';
+    const need = (view.scoreLimit ?? 4) - 1;
+    if (snd.state === 'freeze' && !this.introOn && view.phase !== 'ended') {
+      const point = view.scores[0] === need || view.scores[1] === need;
+      kick = snd.round === SND.halftime + 1 ? 'Halftime: sides switched' : point ? `Round ${snd.round}  /  Match point` : `Round ${snd.round}`;
+      title = attacking ? 'Attack' : 'Defend';
+      sub = attacking ? 'Plant the bomb at A or B' : 'Stop the bomb: defend A and B';
+      side = point ? 'gold' : 'mine';
+      key = `f${snd.round}`;
+    } else if (snd.state === 'post' && view.phase !== 'ended') {
+      const last = snd.history.at(-1);
+      if (last) {
+        const won = last.winner === me.team;
+        kick = `Round ${snd.round}`;
+        title = won ? 'Round won' : 'Round lost';
+        sub = SND_WHY[last.reason]?.[won ? 0 : 1] ?? '';
+        side = won ? 'mine' : 'enemy';
+        key = `p${snd.round}`;
+      }
+    }
+    const big = this.sndEl;
+    if (key !== c.sndBig) {
+      c.sndBig = key;
+      big.big.hidden = !key;
+      if (key) {
+        big.bigKick.textContent = kick;
+        big.bigTitle.textContent = title;
+        big.bigSub.textContent = sub;
+        big.big.dataset.side = side;
+        big.big.animate([{ opacity: 0, transform: 'scale(1.18)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.9,.3,1)' });
+      }
+      c.sndCount = NaN;
+    }
+    const count = key && snd.state === 'freeze' ? Math.max(1, Math.ceil(snd.clock)) : 0;
+    if (count !== c.sndCount) {
+      c.sndCount = count;
+      big.bigCount.textContent = count ? String(count) : '';
+      if (count) big.bigCount.animate(COUNT_POP, { duration: 320, easing: 'ease-out' });
+    }
+  }
+
+  // Alive: nothing here. Out for the round: the Spectating plate (tap to switch teammate) and the next round's loadout
+  // line. Freeze, from the second round on: the loadout line alone, the buy-in moment (a pick applies at once).
+  #sndLife(view, me, c, snd) {
+    const out = !me.alive && view.phase !== 'ended' && snd.state !== 'freeze';
+    const buy = me.alive && snd.state === 'freeze' && snd.round > 1 && view.phase === 'warmup';
+    const life = out ? 'spec' : buy ? 'buy' : '';
+    if (life !== c.sndLife) {
+      c.sndLife = life;
+      const d = this.deathEl;
+      d.classList.toggle('show', !!life);
+      d.classList.toggle('snd-buy', life === 'buy');
+      d.classList.toggle('snd-spec', life === 'spec');
+      if (!life) this.#openPicker(false);
+      else this.#paintPicker(true);
+      this.nextEl.querySelector('.dn-now > small').textContent = life === 'buy' ? 'This round' : 'Next round';
+      this.pickerEl.querySelector('.pk-head b').textContent = life === 'buy' ? 'This round' : 'Next round';
+      this.pickerEl.querySelector('.pk-head small').textContent = life === 'buy'
+        ? 'Changes your kit now, until the round starts.' : 'You carry it from the next round.';
+      this.controls?.setDown(out);
+      this.el.classList.toggle('snd-out', out);
+      if (out && !this.wasOut) spectate.reset();
+      this.wasOut = out;
+    }
+    const watch = out ? spectate.target(view, me.id) : null;
+    const left = out ? view.players.filter(p => p.team === me.team && p.alive).length : 0;
+    const key = out ? `${watch}|${left}` : '';
+    if (key !== c.sndSpec) {
+      c.sndSpec = key;
+      this.sndEl.spec.hidden = !out;
+      if (out) {
+        const p = watch && view.players.find(q => q.id === watch);
+        this.sndEl.specName.textContent = p ? p.name : 'Team eliminated';
+        this.sndEl.specLeft.textContent = left ? `${left} teammate${left === 1 ? '' : 's'} left${left > 1 ? '  /  tap to switch' : ''}` : 'Waiting for the next round';
+      }
+    }
+  }
+
+  // The plant or defuse ring, for whoever is doing it when that is you or the teammate you watch; an enemy defusing
+  // your bomb shows too, if you can see them.
+  #sndRing(view, me, c, snd) {
+    const eye = me.alive ? me.id : spectate.target(view, me.id);
+    const act = snd.plant ? { ...snd.plant, kind: 'plant' } : snd.defuse ? { ...snd.defuse, kind: 'defuse' } : null;
+    let kind = '', text = '', sub = '';
+    if (act && act.id === eye) {
+      kind = act.kind;
+      const who = act.id === me.id ? '' : `${view.players.find(p => p.id === act.id)?.name ?? ''}: `;
+      text = `${who}${act.kind === 'plant' ? `Planting ${act.site ?? ''}` : 'Defusing'}`;
+      sub = 'Hold still. Moving or a hit starts over';
+    }
+    const key = `${kind}|${text}`;
+    if (key !== c.sndRing) {
+      c.sndRing = key;
+      this.sndEl.ring.hidden = !kind;
+      this.sndEl.ring.dataset.kind = kind;
+      this.sndEl.ringText.textContent = text;
+      this.sndEl.ringSub.textContent = sub;
+      c.sndRingFrac = NaN;
+    }
+    if (!kind) return;
+    const frac = Math.round(act.t * 60) / 60;
+    if (frac !== c.sndRingFrac) {
+      c.sndRingFrac = frac;
+      this.sndEl.ringArc.style.strokeDashoffset = ((1 - frac) * SND_RING).toFixed(1);
+    }
+  }
+
+  // Site letters and the bomb, pinned over the world. A planted site turns red and counts its fuse down; the bomb shows
+  // where both sides know it is (dropped), and over the carrier for the attackers.
+  #sndMarks(view, me, snd, attacking) {
+    const cam = this.camera, marks = this.sndEl.marks, b = snd.bomb;
+    const sites = view.points ?? [];
+    const ended = view.phase === 'ended' || this.introOn;     // Nothing pinned over the intro card.
+    for (let i = 0; i < 2; i++) {
+      const m = marks[i], pt = sites[i];
+      if (!pt || ended) { this.#sndMark(m, false); continue; }
+      const planted = b.state === 'planted' && b.site === pt.id;
+      const other = b.state === 'planted' && !planted;
+      const state = planted ? 'planted' : other ? 'dim' : 'site';
+      const text = planted ? `0:${pad2(Math.max(0, Math.ceil(snd.fuse)))}` : other ? '' : attacking ? 'Plant' : 'Defend';
+      if (state !== m.state) { m.state = state; m.root.dataset.state = state; }
+      if (text !== m.text) { m.text = text; m.label.textContent = text; }
+      // Standing on it, the ring at your feet says everything a marker would (the fuse is on the scorebar too).
+      const near = me.alive && Math.hypot(pt.x - me.x, pt.z - me.z) <= pt.r;
+      this.#sndMark(m, !near && !!cam, pt.x, 3.2, pt.z);
+    }
+    const m = marks[2];
+    let bx = null, bz = null, text = '';
+    if (!ended && b.state === 'dropped') { bx = b.x; bz = b.z; text = attacking ? 'Pick up' : 'Bomb'; }
+    else if (!ended && b.state === 'carried' && attacking && snd.carrier !== me.id) {
+      const p = view.players.find(q => q.id === snd.carrier);
+      if (p?.alive) { bx = p.x; bz = p.z; text = p.name; }
+    }
+    if (text !== m.text) { m.text = text; m.label.textContent = text; }
+    this.#sndMark(m, bx !== null && !!cam, bx, 2.7, bz);
+  }
+
+  // Projects one marker; off-screen it rides the edge of the safe area and points at its target, walking inward
+  // until clear of the buttons and minimap like the objective markers do.
+  #sndMark(m, show, x, y, z) {
+    if (show !== m.shown) { m.shown = show; m.root.hidden = !show; }
+    if (!show) return;
+    const cam = this.camera, W = this.viewW, H = this.viewH;
+    const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements;
+    const vx = v[0] * x + v[4] * y + v[8] * z + v[12], vy = v[1] * x + v[5] * y + v[9] * z + v[13], vz = v[2] * x + v[6] * y + v[10] * z + v[14];
+    const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15];
+    if (w <= 0.01) return;
+    const sx = ((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * W, sy = (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * H;
+    const dx = sx - W / 2, dy = sy - H / 2, s = this.safe;
+    const minX = (s?.left ?? 0) + MARK_PAD_X, maxX = W - (s?.right ?? 0) - MARK_PAD_X;
+    const minY = (s?.top ?? 0) + MARK_PAD_T + 36, maxY = H - (s?.bottom ?? 0) - MARK_PAD_B;
+    let off = sx < minX || sx > maxX || sy < minY || sy > maxY, edge = 1;
+    if (off) {
+      const kx = dx > 0 ? (maxX - W / 2) / dx : dx < 0 ? (minX - W / 2) / dx : Infinity;
+      const ky = dy > 0 ? (maxY - H / 2) / dy : dy < 0 ? (minY - H / 2) / dy : Infinity;
+      edge = Math.min(kx, ky);
+    }
+    for (let step = 0; step < 18 && edge > 0.1 && this.#markBlocked(W / 2 + dx * edge, H / 2 + dy * edge); step++) { edge -= MARK_WALK; off = true; }
+    const px = Math.round(W / 2 + dx * edge), py = Math.round(H / 2 + dy * edge);
+    if (px !== m.x || py !== m.y) { m.x = px; m.y = py; m.root.style.transform = `translate3d(${px}px,${py}px,0)`; }
+    if (off !== m.off) { m.off = off; m.root.classList.toggle('off', off); }
+    if (off) {
+      const a = Math.round(Math.atan2(dy, dx) * 12) / 12;
+      if (a !== m.a) { m.a = a; m.arrow.style.transform = `rotate(${a}rad) translateX(24px)`; }
+    }
+  }
+
+  // Round events: the feed and callouts. The big plate and the strip follow the state on their own.
+  #onSnd(e) {
+    const view = this.view, me = view && this.#findLocal(view);
+    if (!me) return;
+    const snd = sndOf(view);
+    const attackers = snd?.attackers ?? 0;
+    const name = id => view.players.find(p => p.id === id)?.name ?? '?';
+    const css = id => TEAMS[view.players.find(p => p.id === id)?.team ?? 0]?.css ?? '#fff';
+    const ally = id => view.players.find(p => p.id === id)?.team === me.team;
+    const who = id => `<em style="color:${css(id)}">${esc(name(id))}</em>`;
+    switch (e.kind) {
+      case 'pickup':
+        if (e.id === me.id) this.#callout('You have the bomb');
+        else if (me.team === attackers) this.#pushFeed(`${who(e.id)}<span class="f-note">has the bomb</span>`, false, 'ally');
+        break;
+      case 'drop':
+        if (me.team === attackers) this.#callout('Bomb dropped: pick it up');
+        else this.#callout('They dropped the bomb');
+        break;
+      case 'planted':
+        this.#pushFeed(`${who(e.id)}<span class="f-note">planted the bomb at ${esc(e.site)}</span>`, e.id === me.id, ally(e.id) ? 'ally' : 'foe');
+        this.#banner(`Bomb planted at ${e.site}`, me.team === attackers ? 'Defend it until it goes off' : `Defuse it: ${SND.fuse} seconds`, 1800, me.team === attackers ? 'mine' : 'enemy');
+        break;
+      case 'defused':
+        this.#pushFeed(`${who(e.id)}<span class="f-note">defused the bomb</span>`, e.id === me.id, ally(e.id) ? 'ally' : 'foe');
+        break;
+      case 'end':
+        if (e.clutch) this.#pushFeed(`${who(e.clutch)}<span class="f-note">clutched the round</span>`, e.clutch === me.id, ally(e.clutch) ? 'ally' : 'foe');
+        break;
+      case 'round':
+        spectate.reset();
+        break;
+      default: break;
+    }
+  }
+
+  // Minimap: the two sites (red when the bomb is on one) and the bomb wherever this player is allowed to know it is.
+  #drawSndMini(view, me, sx, sz, g, clock) {
+    const snd = sndOf(view);
+    if (!snd) return;
+    const b = snd.bomb;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '400 13px "Railyard Stencil", sans-serif';
+    for (const pt of view.points ?? []) {
+      const x = pt.x * sx, y = pt.z * sz, r = Math.max(6, pt.r * sx);
+      const planted = b.state === 'planted' && b.site === pt.id;
+      g.fillStyle = planted ? `rgba(255,77,61,${0.35 + 0.3 * (Math.floor(clock * 4) % 2)})` : 'rgba(29,35,43,.72)';
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = planted ? '#ff4d3d' : '#f2a63b';
+      g.lineWidth = 2.5;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#fff';
+      g.fillText(pt.id, x, y + 0.5);
+    }
+    let bx = null, bz = null;
+    if (b.state === 'dropped' || b.state === 'planted') { bx = b.x; bz = b.z; }
+    else if (b.state === 'carried' && me.team === snd.attackers) {
+      const p = view.players.find(q => q.id === snd.carrier);
+      if (p) { bx = p.x; bz = p.z; }
+    }
+    if (bx === null) return;
+    const x = bx * sx, y = bz * sz;
+    g.fillStyle = b.state === 'planted' ? '#ff4d3d' : '#f2a63b';
+    g.strokeStyle = '#101418';
+    g.lineWidth = 2;
+    g.fillRect(x - 4.5, y - 3.5, 9, 7);
+    g.strokeRect(x - 4.5, y - 3.5, 9, 7);
   }
 
   // ---- Pro senses over the world ----
@@ -1305,45 +1738,50 @@ export class HUD {
     this.#updateRespawn(me, c);
   }
 
-  // A death starts a fresh wait: nothing asked yet, the automatic respawn counting from now. The countdown runs on
-  // match time (view.t), the clock the host's auto-respawn runs on, so a slow phone cannot run ahead of it.
+  // A death starts a fresh wait. With auto-respawn on, the request goes to the host at once, so the player is back the
+  // moment the minimum respawn time ends; with it off they tap (or the host's idle fallback brings them back). The
+  // countdowns run on match time (view.t), the clock the host runs on, so a slow phone cannot run ahead of it.
   #resetRespawn(dead, t = 0) {
-    const r = this.respawn ??= { asked: false, diedAt: 0, sentAt: -99, holdAt: -99, auto: true };
+    const r = this.respawn ??= { asked: false, diedAt: 0, sentAt: -99, auto: false };
     r.asked = false;
     r.diedAt = t;
-    r.sentAt = -99; r.holdAt = -99;
-    r.auto = Options.get('autoRespawn') !== false;
+    r.sentAt = -99;
+    r.auto = Options.get('autoRespawn') === true;
     this.cache.goState = '';
     this.cache.goSub = '';
     if (!dead) this.goBtn.classList.remove('pressed');
+    if (dead && r.auto && !this.snd) this.#askRespawn();
+  }
+
+  #askRespawn() {
+    const r = this.respawn;
+    r.asked = true;
+    r.sentAt = performance.now() / 1000;
+    this.respawnCb?.({});
   }
 
   #tapRespawn() {
     const r = this.respawn;
     if (!r || !this.deathEl.classList.contains('show') || r.asked) return;
-    r.asked = true;
-    r.sentAt = performance.now() / 1000;
     this.#openPicker(false);
-    this.respawnCb?.({});
+    this.#askRespawn();
     this.#updateRespawn(this.view && this.#findLocal(this.view), this.cache);
   }
 
-  // The Respawn button: what it will do, and the seconds before it can (or before the automatic respawn does it).
+  // The Respawn button: what it will do, and the seconds before it can (or before the respawn happens by itself).
   // Repeats any request the host may not have acted on; the host ignores duplicates.
   #updateRespawn(me, c) {
     const r = this.respawn;
     if (!r || !me || me.alive) return;
     const now = performance.now() / 1000;
     if (r.asked && now - r.sentAt >= RESPAWN_RESEND) { r.sentAt = now; this.respawnCb?.({}); }
-    if (!r.auto && !r.asked && now - r.holdAt >= HOLD_RESEND) { r.holdAt = now; this.respawnCb?.({ hold: true }); }
     const wait = Math.max(0, me.respawnT ?? 0);
     const ready = wait <= 0.05;
     const state = r.asked ? 'asked' : ready ? 'ready' : 'wait';
     let sub;
-    if (r.asked) sub = ready ? 'Deploying' : `Deploying in ${Math.ceil(wait)}`;
+    if (r.asked) sub = ready ? 'Deploying' : `Respawning in ${Math.ceil(wait)}`;
     else if (!ready) sub = `Ready in ${Math.ceil(wait)}`;
-    else if (r.auto) sub = `Tap now / auto ${Math.max(1, Math.ceil(RESPAWN_AUTO - ((this.view?.t ?? r.diedAt) - r.diedAt)))}`;
-    else sub = 'Tap when ready';
+    else sub = `Tap now / auto ${Math.max(1, Math.ceil(RESPAWN_IDLE - ((this.view?.t ?? r.diedAt) - r.diedAt)))}`;
     if (sub !== c.goSub) { c.goSub = sub; this.goSub.textContent = sub; }
     if (state !== c.goState) {
       c.goState = state;
@@ -1429,6 +1867,7 @@ export class HUD {
         case 'pro': if (e.id === this.view?.localId) this.#onPro(e.perk); break;
         case 'hijack': this.#onHijack(e); break;
         case 'arm': this.#onArm(e); break;
+        case 'snd': this.#onSnd(e); break;
         default: break;
       }
     }
@@ -1690,7 +2129,12 @@ export class HUD {
     const won = winner === myTeam, drawn = winner === null || winner === undefined;
     this.endEl.dataset.result = drawn ? 'draw' : won ? 'win' : 'loss';
     this.endEl.querySelector('b').textContent = drawn ? 'Stalemate' : won ? 'Victory' : 'Defeat';
-    this.endEl.querySelector('small').textContent = drawn ? 'Neither side broke through' : won ? 'The yard is yours' : 'The yard is lost';
+    // Search and Destroy: the score in rounds and how the last one went.
+    const last = this.snd ? sndOf(view)?.history?.at(-1) : null;
+    const tally = this.snd && view?.scores ? `${view.scores[myTeam]} rounds to ${view.scores[1 - myTeam]}` : '';
+    this.endEl.querySelector('small').textContent = last ? `${tally}. ${SND_WHY[last.reason]?.[last.winner === myTeam ? 0 : 1] ?? ''}`
+      : drawn ? 'Neither side broke through' : won ? 'The yard is yours' : 'The yard is lost';
+    this.sndEl.big.hidden = true;
     this.endEl.classList.add('show');
   }
 
@@ -1766,12 +2210,16 @@ export class HUD {
       }
     }
 
-    this.#drawObjectivesMini(view, me, sx, sz, g, clock);
+    if (this.snd) this.#drawSndMini(view, me, sx, sz, g, clock);
+    else this.#drawObjectivesMini(view, me, sx, sz, g, clock);
+    // Out for the round, you see what the teammate you watch sees.
+    const eyeId = this.snd && !me.alive ? spectate.target(view, me.id) : null;
+    const eye = eyeId ? view.players.find(p => p.id === eyeId) ?? me : me;
 
     for (const p of view.players) {
       if (!p.alive || p.id === me.id) continue;
       const friendly = p.team === myTeam;
-      const seen = friendly || (myUav && !p.ghost) || (me.alive && hasLineOfSight(this.map, me.x, me.z, p.x, p.z, view.smokes));
+      const seen = friendly || (myUav && !p.ghost) || (eye.alive && hasLineOfSight(this.map, eye.x, eye.z, p.x, p.z, view.smokes));
       const firing = !seen && (p.firingT ?? 0) > 0;
       if (!seen && !firing) continue;
       const x = p.x * sx, y = p.z * sz;
@@ -1952,7 +2400,7 @@ export class HUD {
     this.el.dataset.mode = mode;
     this.objMeter.hidden = true;
     for (const side of this.boardSides) {
-      side.modeHead.textContent = mode === 'kc' ? 'Conf' : uses ? 'Cap' : 'HS';
+      side.modeHead.textContent = mode === 'kc' ? 'Conf' : uses ? 'Cap' : mode === 'snd' ? 'P/D' : 'HS';
     }
     if (!uses) return;
     const count = mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;
@@ -2055,7 +2503,7 @@ export class HUD {
   // The bar under the chips: what is happening on the point the local player is standing on.
   #updateMeter(view, me, c, points) {
     let state = '', frac = 0, side = '';
-    if (points && me.alive) {
+    if (points && me.alive && !this.snd) {
       const hard = this.mode === 'hard';
       for (let i = 0; i < points.length; i++) {
         const pt = points[i];

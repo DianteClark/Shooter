@@ -63,7 +63,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
           ${toggle('optLefty')}
         </div>
         <div class="opt-row">
-          <div class="opt-name"><b>Auto-respawn</b><small>Respawns you 10 s after death</small></div>
+          <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
           ${toggle('optAutoRespawn', 'opt-autorespawn')}
         </div>
       </section>
@@ -90,8 +90,8 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     td.classList.toggle('on', v.touchDebug);
     td.querySelector('b').textContent = v.touchDebug ? 'On' : 'Off';
     const ar = q('.opt-autorespawn');
-    ar.classList.toggle('on', v.autoRespawn !== false);
-    ar.querySelector('b').textContent = v.autoRespawn !== false ? 'On' : 'Off';
+    ar.classList.toggle('on', v.autoRespawn === true);
+    ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
     const toggle = q('[data-act="optLefty"]');
     toggle.classList.toggle('on', v.lefty);
     toggle.querySelector('b').textContent = v.lefty ? 'On' : 'Off';

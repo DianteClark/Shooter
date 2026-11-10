@@ -561,6 +561,9 @@ const MEDALS = {
   confirm:     { notes: [[9, 0], [16, 0.07]], dur: 0.3, gain: 0.6 },
   deny:        { notes: [[4, 0], [0, 0.08]], dur: 0.3, gain: 0.5 },
   // A fanfare over a bell: up through the major chord to the octave, the top note held.
+  plant:       { notes: [[-5, 0], [0, 0.1], [7, 0.2]], dur: 0.55, gain: 0.7, shape: 1.2 },
+  defuse:      { notes: [[7, 0], [12, 0.08], [16, 0.16], [19, 0.24]], dur: 0.6, gain: 0.72, shape: 0.6 },
+  clutch:      { notes: [[0, 0], [7, 0.09], [12, 0.18], [19, 0.3]], dur: 0.85, gain: 0.78, shape: 0.4 },
   golden:      { notes: [[0, 0], [4, 0.07], [7, 0.14], [12, 0.21], [16, 0.3], [24, 0.42]], dur: 1.1, gain: 0.8, shape: 0.2 },
 };
 
@@ -853,6 +856,22 @@ function renderSfx(sr) {
       addTone(d, sr, { dur: 0.05, gain: 0.5, f0: 190, f1: 70, decay: 6 });
     }, 0.65),
     steps,
+    // Search and Destroy. The bomb's beep is one hard square-ish chirp that cuts through a firefight; the plant and
+    // defuse ticks are keypad presses; the rest are short stings for the moments that turn a round.
+    bombBeep: mk(0.09, (d) => { addTone(d, sr, { dur: 0.08, gain: 1, f0: 2093, decay: 9, shape: 1.6 }); }, 0.75),
+    padTick: mk(0.06, (d, r) => { addClick(d, sr, r, { dur: 0.004, gain: 0.9, hp: 3000 }); addTone(d, sr, { dur: 0.045, gain: 0.7, f0: 1175, decay: 12 }); }, 0.6),
+    planted: mk(0.9, (d, r) => {
+      addClick(d, sr, r, { dur: 0.006, gain: 1, hp: 1500 });
+      addTone(d, sr, { dur: 0.12, gain: 0.8, f0: 2093, decay: 6, shape: 1.4 });
+      addTone(d, sr, { at: 0.16, dur: 0.12, gain: 0.8, f0: 2093, decay: 6, shape: 1.4 });
+      addTone(d, sr, { at: 0.3, dur: 0.55, gain: 0.9, f0: 98, f1: 55, decay: 3, shape: 1.3 });
+    }, 0.85),
+    defused: mk(0.8, (d, r) => {
+      addClick(d, sr, r, { dur: 0.008, gain: 1.1, hp: 900 });
+      addTone(d, sr, { at: 0.01, dur: 0.5, gain: 0.9, f0: 1568, f1: 392, decay: 4, shape: 0.6 });
+    }, 0.8),
+    pickup: mk(0.22, (d, r) => { addClick(d, sr, r, { dur: 0.006, gain: 0.8, hp: 1200 }); addTone(d, sr, { at: 0.01, dur: 0.18, gain: 0.8, f0: 880, f1: 1320, decay: 6 }); }, 0.7),
+    drop: mk(0.22, (d, r) => { addClick(d, sr, r, { dur: 0.008, gain: 1, hp: 800 }); addTone(d, sr, { at: 0.01, dur: 0.18, gain: 0.8, f0: 990, f1: 520, decay: 6 }); }, 0.7),
   };
 }
 
@@ -1704,7 +1723,55 @@ export class AudioEngine {
         case 'phase':
           this._phaseMusic(e, view);
           break;
+        case 'snd': this._snd(e, view); break;
         default: break;
+      }
+    }
+  }
+
+  // Search and Destroy moments. The round's end gets a short version of the match stingers; the match's own end still
+  // plays the full one from the phase change.
+  _snd(e, view) {
+    const me = this.localId, ui = { bus: this.ui, priority: PR.ui, cls: 'ui' };
+    switch (e.kind) {
+      case 'planted': this._play(this.sfx.planted, { ...ui, gain: 0.95 }); this.bombBeepT = 0; break;
+      case 'defused': this._play(this.sfx.defused, { ...ui, gain: 0.95 }); break;
+      case 'pickup': if (e.id === me || this._isAlly(e.id)) this._play(this.sfx.pickup, { ...ui, gain: e.id === me ? 0.9 : 0.5 }); break;
+      case 'drop': if (this.localTeam === view?.snd?.attackers || this.localTeam === view?.points?.snd?.attackers) this._play(this.sfx.drop, { ...ui, gain: 0.6 }); break;
+      case 'end':
+        if (view && view.phase !== 'ended') {
+          const won = e.winner === this.localTeam;
+          this._play(won ? this.stingers.victory : this.stingers.defeat, { bus: this.music, priority: PR.own, cls: 'loud', gain: 0.55, rate: 1.3 });
+        }
+        break;
+      default: break;
+    }
+  }
+
+  // The planted bomb beeps faster as the fuse runs out (once a second at plant, about eight at the end), loud enough
+  // to hear across the map and louder close by. A plant or defuse in progress ticks like a keypad.
+  _updateSnd(view, dt) {
+    const snd = view.snd ?? view.points?.snd;
+    if (!snd || view.phase === 'ended') return;
+    const b = snd.bomb;
+    if (b.state === 'planted' && snd.fuse > 0) {
+      const k = 1 - Math.min(1, snd.fuse / 40);
+      const gap = 1 / (1 + 7 * k * k);
+      this.bombBeepT = (this.bombBeepT ?? 0) - dt;
+      if (this.bombBeepT <= 0) {
+        this.bombBeepT = gap;
+        const d = Math.hypot(b.x - this.lx, b.z - this.lz);
+        this._play(this.sfx.bombBeep, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.35 + 0.55 * Math.max(0, 1 - d / 30) });
+      }
+    }
+    const act = snd.plant ?? snd.defuse;
+    if (act) {
+      this.padT = (this.padT ?? 0) - dt;
+      if (this.padT <= 0) {
+        this.padT = snd.plant ? 0.32 : 0.22;
+        const p = this._posOf(view, act.id);
+        if (act.id === this.localId) this._play(this.sfx.padTick, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.7 });
+        else if (p) this._world(this.sfx.padTick, p.x, p.z, 14, { gain: 0.6, priority: PR.gun });
       }
     }
   }
@@ -1790,10 +1857,12 @@ export class AudioEngine {
   _updateTension(view) {
     if (view.mode === 'range' || view.phase === 'ended') return;
     const lim = view.scoreLimit || 75;
-    const margin = (view.mode === 'dom' || view.mode === 'hard') ? Math.ceil(lim * TENSION_POINTS) : TENSION_KILLS;
+    // Search and Destroy: scores are rounds, and the round clock runs out every round, so only match point counts.
+    const rounds = view.mode === 'snd';
+    const margin = rounds ? 1 : (view.mode === 'dom' || view.mode === 'hard') ? Math.ceil(lim * TENSION_POINTS) : TENSION_KILLS;
     let top = 0;
     for (let i = 0; i < view.scores.length; i++) if (view.scores[i] > top) top = view.scores[i];   // Two teams, or every FFA player.
-    const closing = view.phase === 'live' && (lim - top <= margin || (view.timeLeft > 0 && view.timeLeft <= 30));
+    const closing = view.phase === 'live' && (lim - top <= margin || (!rounds && view.timeLeft > 0 && view.timeLeft <= 30));
     if (closing && !this.tension) {
       this.tension = true;
       this._play(this.stingers.tension, { bus: this.music, priority: PR.boom, cls: 'loud', gain: 1 });
@@ -2004,6 +2073,7 @@ export class AudioEngine {
     this._updateHeat(view, dt);
     this._updateRumble(view);
     this._updateTension(view);
+    this._updateSnd(view, dt);
     this._updateWeather(view, dt);
   }
 

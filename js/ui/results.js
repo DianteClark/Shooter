@@ -124,8 +124,10 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const badgeOf = id => badges?.get(id) ?? null;
   // The mode's own number takes the headshot column where the mode has one.
   const rules = modeRules(data.modeId ?? data.mode);      // Ground War modes keep the columns of their rule set.
-  const modeHead = rules === 'kc' ? 'Conf' : rules === 'dom' || rules === 'hard' ? 'Cap' : 'HS';
-  const modeStat = p => (rules === 'kc' ? p.confirms ?? 0 : rules === 'dom' || rules === 'hard' ? p.captures ?? 0 : p.head ?? 0);
+  // Search and Destroy: plants and defuses, as "plants/defuses".
+  const modeHead = rules === 'kc' ? 'Conf' : rules === 'dom' || rules === 'hard' ? 'Cap' : rules === 'snd' ? 'P/D' : 'HS';
+  const modeStat = p => (rules === 'kc' ? p.confirms ?? 0 : rules === 'dom' || rules === 'hard' ? p.captures ?? 0
+    : rules === 'snd' ? `${p.plants ?? 0}/${p.defuses ?? 0}` : p.head ?? 0);
   let [word, line] = OUTCOME[outcome] ?? OUTCOME.draw;
   const winTeam = outcome === 'win' ? myTeam : outcome === 'loss' ? 1 - myTeam : null;
   let tone = TEAMS[winTeam]?.css ?? 'var(--c-sodium)';      // A free-for-all sets its own below.
@@ -225,6 +227,14 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         ${playerBanner(mvp.id, mvp.name, { size: 168, sub: `${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${matchScore(mvp)} pts` })}
       </div>` : '';
   const modeName = MODES[data.modeId ?? data.mode]?.name ?? '';
+  // Search and Destroy: one chip per round in the order played, in the colour of the side that took it, marked with
+  // how (wipe, detonation, defuse, time). data.snd is the match's final S&D state when the match passes it on.
+  const ROUND_ICON = { elim: 'ui:skull', bomb: 'bomb', defuse: 'medal:defuse', time: 'ui:clock' };
+  const ROUND_WORD = { elim: 'Eliminated', bomb: 'Detonated', defuse: 'Defused', time: 'Time' };
+  const history = rules === 'snd' ? data.snd?.history ?? [] : [];
+  const roundStrip = history.length ? `<span class="rs-rounds" style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle">${history.map((h, i) =>
+    `<i title="Round ${i + 1}: ${ROUND_WORD[h.reason] ?? ''}" style="width:14px;height:14px;display:grid;place-items:center;line-height:0;color:#fff;--icon-accent:currentColor;background:${TEAMS[h.winner]?.css};box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);opacity:${h.winner === myTeam ? 1 : 0.75}">${art(ROUND_ICON[h.reason], 10)}</i>`).join('')}</span>` : '';
+  if (rules === 'snd' && !ffa) line = outcome === 'win' ? `Won ${mineNum} rounds to ${themNum}` : outcome === 'loss' ? `Lost ${mineNum} rounds to ${themNum}` : line;
   // Challenges and Pro challenges get a card of their own, so Rematch and Menu always keep their column. A single row
   // would leave that card nearly empty, so one row sits over the buttons instead, where it fits on every phone.
   const progress = challengeStrip(data.challenges) + proProgressHtml(data.proProgress);
@@ -234,7 +244,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   menu.el.innerHTML = `
     <div class="rs" data-outcome="${outcome}" style="--tone:${tone}">
       <div class="rs-top">
-        <div class="rs-word"><h2>${esc(word)}</h2><small>${esc(modeName)}</small></div>
+        <div class="rs-word"><h2>${esc(word)}</h2><small>${esc(modeName)}${roundStrip}</small></div>
         <span class="rs-score"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>

@@ -234,6 +234,7 @@ const SQUARE = {
   'ui:new': { a: [star(16, 16, 14.5, 9.5, 8, -90)], h: [], f: [] },
   'ui:dot': { a: [O(16, 16, 6)] },
   'ui:crate': { f: [R(3, 7, 26, 20, 2)], h: [R(6.5, 10.5, 19, 5.5), R(6.5, 18, 19, 5.5)], a: [R(14, 3.5, 4, 25)] },
+  'ui:chat': { f: [R(2.5, 4, 27, 18, 3), P(7.5, 21, 7.5, 29, 16, 21)], h: [R(8, 11.5, 3.6, 3.6), R(14.2, 11.5, 3.6, 3.6), R(20.4, 11.5, 3.6, 3.6)] },
   'ui:headset': { s: [P(6, 19, 6, 12, 10.5, 6, 21.5, 6, 26, 12, 26, 19)], f: [R(3, 16, 7, 11, 2), R(22, 16, 7, 11, 2)], sw: 3 },
   'ui:skull': { f: [P(6, 13, 9, 5, 16, 3, 23, 5, 26, 13, 24, 21, 21, 22, 21, 28, 11, 28, 11, 22, 8, 21)], h: [O(11.8, 13.5, 3), O(20.2, 13.5, 3), P(16, 17.5, 18, 20.5, 14, 20.5), R(13.8, 24, 1.6, 4), R(16.6, 24, 1.6, 4)] },
   'ui:loadout': merge(xform(fit(WEAPON_SPECS.ar, 30, 12, 0), (x, y) => [x + 1, y + 2]), back(xform(fit(WEAPON_SPECS.pistol, 13, 11, 0), (x, y) => [x + 17, y + 18]))),
@@ -328,6 +329,8 @@ const SQUARE = {
     const arrow = [P(19, 4, 28, 4, 28, 13), bar(15.5, 16.5, 24, 8, 3.4)];
     return { f: [0, 90, 180, 270].flatMap(d => arrow.map(p => rot(p, d))), a: [O(16, 16, 3.6)] };
   })(),
+  // Search and Destroy: the bomb, under the diamond that marks a site.
+  'mode:snd': { f: [R(3.5, 15, 25, 14, 2)], h: [R(7, 18.5, 11, 6, 1)], a: [O(23, 22, 2.5), P(16, 1.5, 22, 7.5, 16, 13.5, 10, 7.5)] },
   // Gun Game: a ladder, its top rung lit.
   'mode:gun': { f: [R(5, 2, 3.4, 28, 1), R(23.6, 2, 3.4, 28, 1), R(8.4, 12, 15.2, 2.8), R(8.4, 18.5, 15.2, 2.8), R(8.4, 25, 15.2, 2.8)], a: [R(8.4, 5, 15.2, 3.4)] },
 
@@ -340,6 +343,10 @@ const SQUARE = {
   'map:sunken': { f: [R(11.5, 3, 9, 14, [1, 1, 0, 0])], h: [R(13.8, 6, 4.4, 3.4)], s: [P(2, 19.5, 6, 16.5, 10, 19.5, 14, 16.5, 18, 19.5, 22, 16.5, 26, 19.5, 30, 16.5)], as: [P(2, 26.5, 6, 23.5, 10, 26.5, 14, 23.5, 18, 26.5, 22, 23.5, 26, 26.5, 30, 23.5)], sw: 2.6 },
   'map:harvest': { f: [P(3, 28, 3, 15, 10.5, 8, 18, 15, 18, 28), R(20.5, 9, 4.5, 19, [2.2, 2.2, 0, 0]), R(26, 13, 4, 15, [2, 2, 0, 0])], h: [R(8, 19, 5, 9)], a: [R(1.5, 28, 29, 2)] },
   'map:topside': { f: [P(2, 29.5, 2, 16, 8, 16, 8, 10, 15, 10, 15, 19, 20, 19, 20, 6.5, 26.5, 6.5, 26.5, 29.5, 30, 29.5, 30, 29.5), R(22.5, 1.5, 1.6, 5)], h: [R(10, 13, 3, 3), R(21.8, 10, 3, 3), R(21.8, 16, 3, 3), R(4, 20, 2.5, 3)], a: [O(23.3, 2, 1.6)] },
+
+  // ---- Search and Destroy ----
+  // The bomb: a charge block with a readout window, a wire to the detonator and its lamp.
+  bomb: { f: [R(3, 11, 26, 16, 2), R(20, 6, 3, 5)], h: [R(6.5, 14.5, 12, 6.5, 1), R(6.5, 23, 19, 1.6)], a: [O(24, 17.5, 2.6), R(8.5, 16.5, 4, 2.5), R(13.5, 16.5, 3, 2.5)] },
 
   // ---- Medals ----
   // A gold coin with a four-point star struck through it: the Golden Gun's kill.
@@ -357,6 +364,9 @@ const SQUARE = {
   'medal:confirm': { f: [tag(4, 2, 15, 21)], h: [O(11.5, 6.5, 1.7), R(7, 11, 9, 1.6), R(7, 14.5, 9, 1.6)], a: [P(13.5, 23.5, 17, 20, 20.5, 23.5, 26.5, 17.5, 30, 21, 20.5, 30.5)] },
   'medal:deny': { f: [tag(4, 2, 15, 21)], h: [O(11.5, 6.5, 1.7), R(7, 11, 9, 1.6), R(7, 14.5, 9, 1.6)], a: [bar(17, 19, 29, 30.5, 3.6), bar(29, 19, 17, 30.5, 3.6)] },
   'medal:capture': { f: [R(6, 3, 3.2, 25), R(3, 27, 12, 3)], a: [P(9.2, 4, 28, 4, 23.5, 10, 28, 16, 9.2, 16)] },
+  'medal:plant': { f: [R(4, 18, 24, 11, 2)], h: [R(7.5, 21, 10, 5, 1)], a: [O(22.5, 23.5, 2.3), P(16, 16, 9.5, 9.5, 13.5, 9.5, 13.5, 2, 18.5, 2, 18.5, 9.5, 22.5, 9.5)] },
+  'medal:defuse': { f: [R(4, 17, 24, 12, 2)], h: [R(7.5, 20, 10, 5.5, 1)], a: [bar(7, 8.5, 12.5, 13.5, 3.4), bar(11, 13.5, 24, 2, 3.4)] },
+  'medal:clutch': { f: [O(14, 11, 5.6), P(3.5, 30, 6, 22.5, 10, 19.5, 18, 19.5, 22, 22.5, 24.5, 30)], a: [star(25, 7, 6, 2.6, 5)] },
   'medal:defend': { f: [shield], h: [shieldIn], a: [R(12, 9.5, 2, 13), P(14, 9.5, 21.5, 9.5, 19.5, 12.5, 21.5, 15.5, 14, 15.5)] },
 
   // ---- Fallback: a dark signal lamp. ----
@@ -369,9 +379,9 @@ const CATEGORY_WEAPON = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'l
 // Aliases: older callers, and the obvious synonyms screens will reach for.
 const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
-  star: 'ui:star', mic: 'ui:mic', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
-  strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun',
+  star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
+  strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Menu vocabulary (js/ui/yard.js names).
@@ -442,6 +452,7 @@ export const ICON_GROUPS = {
   streaks: ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship'],
   tacticals: ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy'],
   lethals: ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet'],
+  objectives: ['bomb'],
   perks: ['marathon', 'flak', 'quickmend', 'tacmask', 'adrenaline', 'scavenger', 'fasthands', 'strongarm', 'bandolier', 'hardline', 'ghost', 'coldblood', 'deadsilence', 'tracker', 'engineer'],
   slots: ['optic', 'barrel', 'mag', 'grip'],
   modes: Object.keys(SQUARE).filter(k => k.startsWith('mode:')),

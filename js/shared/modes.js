@@ -1,10 +1,11 @@
 // Game modes. Each is a rule set the sim applies on top of ordinary combat.
-//   rules     which rule set the sim runs: 'tdm' | 'kc' | 'dom' | 'hard' | 'ffa' | 'gun'. Ground War modes reuse the 6v6
+//   rules     which rule set the sim runs: 'tdm' | 'kc' | 'dom' | 'hard' | 'ffa' | 'gun' | 'snd'. Ground War modes reuse the 6v6
 //             rules on a bigger field, so everything keyed to a rule set (HUD flags, bot plans, scoring) works unchanged.
 //   teamSize  players per team in a full match; bots fill up to it.
 //   large     needs a Ground War map: small maps never offer it.
 //   ffa       every player for themselves (see TEAMS in constants.js): `players` in a full match on an ordinary map,
 //             `largePlayers` on a Ground War map. `everyMap` modes are offered on every map, Ground War ones included.
+//   rounds    Search and Destroy: scoreLimit is rounds to win, timeLimit the length of one round (see SND below).
 import { normalizeLoadout } from './catalog.js';
 
 // Gun Game: one rung per kill, about one gun per category on the way, sidearms last. The final kill has to be made with
@@ -24,9 +25,27 @@ export const MODES = {
   gwtdm: { id: 'gwtdm', rules: 'tdm',  teamSize: 16, large: true, name: 'Ground War TDM', short: 'GW TDM', scoreLimit: 250, timeLimit: 900, desc: '16 v 16 on a big map. First team to the kill limit.' },
   gwdom: { id: 'gwdom', rules: 'dom',  teamSize: 16, large: true, name: 'Ground War Domination', short: 'GW DOM', scoreLimit: 400, timeLimit: 900, desc: '16 v 16, five flags. More flags, faster points.' },
   ffa:   { id: 'ffa',   rules: 'ffa',  teamSize: 1, ffa: true, players: 8, largePlayers: 12, everyMap: true, name: 'Free-for-All', short: 'FFA', scoreLimit: 30, timeLimit: 600, desc: 'Every player for themselves. Most kills takes it.' },
+  snd:   { id: 'snd',   rules: 'snd',  teamSize: 6,  rounds: true, name: 'Search and Destroy', short: 'S&D', scoreLimit: 4, timeLimit: 120, desc: 'One life a round. Plant the bomb or stop it. First to 4 rounds.' },
   gun:   { id: 'gun',   rules: 'gun',  teamSize: 1, ffa: true, players: 8, largePlayers: 12, everyMap: true, name: 'Gun Game', short: 'GUN', scoreLimit: GUN_LADDER.length, timeLimit: 600, desc: `A new gun every kill, ${GUN_LADDER.length} to the Verdict. A Hatchet knocks you back one.` },
 };
 export const MODE_IDS = Object.keys(MODES);
+
+// Search and Destroy round rules. Times in seconds, distances in metres. The sim runs them (js/sim/sim.js), the HUD
+// and audio read the same numbers for their countdowns.
+export const SND = {
+  freeze: 6,           // Pre-round hold at the spawns: the moment to change loadout. The first round's covers the intro.
+  post: 5,             // After a round is decided, before the next one's freeze.
+  halftime: 3,         // Sides swap after this many rounds.
+  plant: 4,            // Seconds standing still on a site with the bomb.
+  defuse: 6,           // Seconds standing still at the planted bomb. Interrupted means starting again.
+  fuse: 40,            // Planted bomb timer.
+  blast: 9,            // Detonation kills everyone this close.
+  pickup: 1.3,         // An attacker this close to a dropped bomb picks it up.
+  defuseReach: 1.7,    // A defender this close to a planted bomb can defuse it.
+  still: 0.9,          // Faster than this (m/s) counts as moving, which stops a plant or defuse.
+};
+// Why a round ended, in the order the snapshot carries them.
+export const SND_REASONS = ['elim', 'bomb', 'defuse', 'time'];
 
 // The rule set behind a mode id; unknown ids (and 'range') pass through.
 export const modeRules = id => MODES[id]?.rules ?? id;
@@ -54,6 +73,7 @@ export function modeFitsMap(map, mode) {
   const rules = MODES[mode].rules;
   if (rules === 'dom') return !!map.points?.dom?.length;
   if (rules === 'hard') return !!map.points?.hard?.length;
+  if (rules === 'snd') return map.points?.snd?.length === 2;
   return true;
 }
 

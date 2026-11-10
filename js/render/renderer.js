@@ -16,7 +16,8 @@ import { getGun } from './guns.js';
 import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
 import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
-import { TUNING } from '../shared/tuning.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
+import { TUNING } from '../shared/tuning.js';
+import { spectate } from '../sim/snd.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
 let WEAPONS = {};
@@ -123,6 +124,7 @@ export class GameRenderer {
     this.canvas = canvas;
     this.map = map;
     this.localId = null;
+    this.watching = null;         // The teammate being spectated (Search and Destroy), or null.
     this.dynamicRes = opts.dynamicRes !== false;
 
     const webgl = sharedWebGL(canvas);
@@ -651,7 +653,14 @@ export class GameRenderer {
     const fxDt = realDt * scale;
 
     // During a replay the view belongs to the past, so nothing in it is treated as "you".
-    const localId = cine ? null : (this.localId !== null ? this.localId : view.localId);
+    let localId = cine ? null : (this.localId !== null ? this.localId : view.localId);
+    // Search and Destroy: out for the round, you see through a living teammate's eyes (js/sim/snd.js spectate): the
+    // camera follows them and the fog of war is theirs.
+    if (localId !== null) {
+      const watch = spectate.target(view, localId);
+      if (watch !== this.watching) { this.watching = watch; this.fog.reset(); this.lookX = 0; this.lookZ = 0; }
+      if (watch) localId = watch;
+    }
     let local = null;
     if (localId !== null) for (let i = 0; i < view.players.length; i++) if (view.players[i].id === localId) { local = view.players[i]; break; }
     const localTeam = local ? local.team : 0;

@@ -12,6 +12,8 @@ import { prewarm } from './vfx.js';
 import { TEAMS } from '../shared/constants.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { uploadUsed } from './dynbuf.js';
+import { SND } from '../shared/modes.js';
+import { sndOf } from '../sim/snd.js';
 
 const MAX_NADES = 18;
 const MAX_FIRES = 6;
@@ -50,7 +52,7 @@ const NADE_RGB = {
   frag: hexRGB(0xff6a1a), sticky: hexRGB(0xff2bd6), molotov: hexRGB(0xffa020), mine: hexRGB(0xff3a2a),
   cluster: hexRGB(0xffd02a), bomblet: hexRGB(0xffd02a), hatchet: hexRGB(0xc8402e), fire: hexRGB(0xff7a20),
   smoke: hexRGB(0x7dff96), flash: hexRGB(0xfff27a), stim: hexRGB(0x4bd18a), decoy: hexRGB(0x55c8ff),
-  sensor: hexRGB(0x3ce6ff), trophy: hexRGB(0x9cf0ff),
+  sensor: hexRGB(0x3ce6ff), trophy: hexRGB(0x9cf0ff), bomb: hexRGB(0xff3a2a),
 };
 const FALLBACK = NADE_RGB.frag;
 // Throw-preview danger ring for each kind, roughly its effect radius.
@@ -58,6 +60,9 @@ const BLAST_R = { frag: 6.2, sticky: 4.6, flash: 7, smoke: 4.5, molotov: FIRE_R,
 // Deployables carry a light in the owner's team colour, so friend and foe read at a glance.
 const TEAM_LIGHT = new Set(['mine', 'sensor', 'trophy', 'decoy']);
 const WHITE_RGB = [1, 1, 1];
+// Search and Destroy: sites are sodium rings, the one with the bomb on it turns red; the bomb itself is drawn big.
+const SITE_RGB = hexRGB(0xf2a63b), PLANTED_RGB = hexRGB(0xff3a2a), DEFUSE_RGB = hexRGB(0x38b6ff);
+const BOMB_SCALE = 2.3;
 const FIRE_RGB = [1.0, 0.5, 0.15], FIRE_HOT = [1.0, 0.78, 0.32], SMOKE_RGB = [0.1, 0.09, 0.1];
 const GLASS_RGB = [0.62, 0.8, 0.6], DIRT_RGB = [0.22, 0.19, 0.16];
 const SENSOR_RGB = NADE_RGB.sensor, ZAP_RGB = [0.62, 0.92, 1.0], EMP_RGB = [0.55, 0.78, 1.0], HEAL_RGB = [0.3, 1.0, 0.56];
@@ -149,10 +154,10 @@ class ModelSet {
 }
 
 // ---- Equipment models. Origin at the centre, +X is the throw direction, about 0.25 m across before scaling. ----
-const NADE_KINDS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy'];
+const NADE_KINDS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'bomb'];
 const NADE_MODEL = Object.fromEntries(NADE_KINDS.map((k, i) => [k, i]));
 // Height of the model's base below its origin, so a grounded one sits on the ground.
-const NADE_BASE = { frag: 0.16, sticky: 0.2, molotov: 0.22, mine: 0.05, cluster: 0.2, bomblet: 0.08, hatchet: 0.06, smoke: 0.2, flash: 0.18, stim: 0.07, decoy: 0.09, sensor: 0.05, trophy: 0.2 };
+const NADE_BASE = { frag: 0.16, sticky: 0.2, molotov: 0.22, mine: 0.05, cluster: 0.2, bomblet: 0.08, hatchet: 0.06, smoke: 0.2, flash: 0.18, stim: 0.07, decoy: 0.09, sensor: 0.05, trophy: 0.2, bomb: 0.06 };
 
 function nadeModels() {
   const S = new ModelSet();
@@ -233,6 +238,13 @@ function nadeModels() {
     b.prismY(0.0, 0.22, 0, 0, 0.07, 0.07, 6);
     b.setPart(1).prismY(0.22, 0.28, 0, 0, 0.08, 0.2, 6);
     b.setPart(2).prismY(0.28, 0.34, 0, 0, 0.06, 0.04, 6);
+  });
+  S.model(NADE_MODEL.bomb, b => {       // The S&D charge: wrapped blocks, taped bands, a lit readout and its lamp.
+    b.setPart(0).setColor(0x5a4a34).box(0, 0, 0, 0.34, 0.12, 0.22, 0.015);
+    b.setColor(0x2b2e33).box(0.02, 0.075, 0, 0.17, 0.04, 0.13, 0.01);
+    b.setPart(1).box(-0.11, 0.0, 0, 0.035, 0.126, 0.226); b.box(0.13, 0.0, 0, 0.03, 0.126, 0.226);
+    b.setPart(2).box(0.02, 0.097, 0, 0.12, 0.008, 0.08);
+    b.prismY(0.06, 0.125, -0.09, 0.07, 0.024, 0.018, 5);
   });
   S.model(NADE_MODEL.trophy, b => {     // Tripod, base and an interceptor dome.
     b.setPart(0).setColor(0x30353b);
@@ -1032,8 +1044,23 @@ export class CombatFX {
       const za = zones.geometry.attributes, wa = walls.geometry.attributes;
       const sa = stand.geometry.attributes.aTeam, ca = cloth.geometry.attributes.aTeam;
       const hard = view.mode === 'hard';
+      const snd = view.mode === 'snd' ? sndOf(view) : null;
       for (let i = 0; i < list.length && nZone < MAX_POINTS; i++) {
         const pt = list[i], r = pt.r ?? 4;
+        if (view.mode === 'snd') {
+          // A bomb site: a sodium ring, red with the bomb on it; the arc is a plant or defuse in progress there.
+          const planted = snd?.bomb?.state === 'planted' && snd.bomb.site === pt.id;
+          const col = planted ? PLANTED_RGB : SITE_RGB;
+          const arc = snd?.plant?.site === pt.id ? snd.plant.t : planted && snd.defuse ? snd.defuse.t : 0;
+          _p.set(pt.x, 0.1, pt.z); _q.identity(); _s.set(r, 1, r);
+          _m.compose(_p, _q, _s).toArray(zones.instanceMatrix.array, nZone * 16);
+          za.aOwner.setXYZ(nZone, col[0], col[1], col[2]);
+          const fill = planted ? DEFUSE_RGB : WHITE_RGB;
+          za.aCapture.setXYZ(nZone, fill[0], fill[1], fill[2]);
+          za.aZone.setXYZW(nZone, arc, planted ? 1 : 0, 0.11, 0);
+          nZone++;
+          continue;
+        }
         // An unowned point shows chalk white. `capture` is signed by side: positive means team 1 is taking it.
         const owner = pt.owner === 0 || pt.owner === 1 ? this.teamRGB[pt.owner] : NEUTRAL_RGB;
         const cap = pt.capture ?? 0;
@@ -1155,9 +1182,35 @@ export class CombatFX {
       }
     }
     for (let i = 0; i < slots.length; i++) if (!slots[i].touched) slots[i].id = null;
+    if (n < MAX_NADES) n = this.#sndBomb(view, n, t);
     mesh.count = n;
     uploadUsed(mesh.instanceMatrix, n);
     uploadUsed(aShow, n); uploadUsed(aAcc, n); uploadUsed(aLight, n);
+  }
+
+  // The Search and Destroy bomb, when it is on the ground: dropped (a slow blink) or planted (a blink that quickens as the
+  // fuse runs down, with the blast radius marked round it). Carried, it is on someone's back and the HUD says whose.
+  // Both sides know where a dropped or planted bomb is, so fog never hides it. Returns the next free instance.
+  #sndBomb(view, n, t) {
+    const snd = sndOf(view), b = snd?.bomb;
+    if (!b || (b.state !== 'dropped' && b.state !== 'planted' && b.state !== 'defused')) return n;
+    const mesh = this.nades, g = mesh.geometry, planted = b.state === 'planted';
+    _q.setFromAxisAngle(_axisY, 0.4);
+    _p.set(b.x, NADE_BASE.bomb * BOMB_SCALE, b.z);
+    _s.set(BOMB_SCALE, BOMB_SCALE, BOMB_SCALE);
+    _m.compose(_p, _q, _s).toArray(mesh.instanceMatrix.array, n * 16);
+    g.attributes.aShow.setX(n, NADE_MODEL.bomb);
+    const acc = NADE_RGB.bomb;
+    g.attributes.aAcc.setXYZ(n, acc[0], acc[1], acc[2]);
+    // Beeps per second climb from 1 to about 8 as the fuse runs out; the lamp flashes with each one.
+    const rate = planted ? 1 + 7 * Math.pow(1 - Math.min(1, snd.fuse / SND.fuse), 2) : 0.5;
+    const on = b.state === 'defused' ? 0 : (t * rate) % 1 < 0.35 ? 1 : 0.08;
+    const lamp = b.state === 'defused' ? DEFUSE_RGB : planted ? PLANTED_RGB : SITE_RGB;
+    g.attributes.aLight.setXYZW(n, lamp[0], lamp[1], lamp[2], on);
+    if (on > 0.5) this.vfx.addDot(b.x, 0.5, b.z, planted ? 0.45 : 0.3, lamp);
+    if (planted) this.vfx.addRing(b.x, b.z, SND.blast - 0.25, SND.blast, PLANTED_RGB, 0.18 + 0.22 * on * Math.min(1, 12 / Math.max(1, snd.fuse)));
+    else if (b.state === 'dropped') this.vfx.addRing(b.x, b.z, 1.0, 1.2, SITE_RGB, 0.35 + 0.25 * Math.sin(t * 4));
+    return n + 1;
   }
 
   // Molotov fire: a noisy burning disc on the ground, flame tongues, smoke and a flickering light.

@@ -72,6 +72,7 @@ export class Interpolator {
     out.scoreLimit = b.scoreLimit;
     out.hardT = b.hardT;
     out.range = b.range;
+    out.snd = b.snd;
 
     const fromById = this.newestById;
     fromById.clear();

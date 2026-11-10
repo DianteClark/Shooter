@@ -12,7 +12,6 @@ export const TIME_LIMIT = 600;
 export const RESPAWN_TIME = 2.5;
 // Humans respawn when they tap Respawn (any time after RESPAWN_TIME), or on their own this long after dying, so an
 // idle phone never leaves its slot dead for good. Bots ignore both and respawn at RESPAWN_TIME as always.
-export const RESPAWN_AUTO = 10;
 export const SPAWN_PROTECT = 1.5;
 
 // Indices 0 and 1 are the two sides of every team mode. In a free-for-all each player is a side of one (team

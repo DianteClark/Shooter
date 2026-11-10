@@ -2,7 +2,7 @@
 // Humans own their own movement and shots (see docs/ARCHITECTURE.md), and report them here.
 
 import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS, STREAK_IDS, STREAKS, TACTICALS } from '../shared/catalog.js';
-import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_AUTO, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
+import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
@@ -11,9 +11,10 @@ import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, armPlayer, armSecondary, createPlayerState, hasPro, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
+import { angleDiff, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_IDLE, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
+import { decodeSnd, restoreSnd, SndRules } from './snd.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -80,7 +81,7 @@ const HARD_ROTATE = 40, HARD_TICK = 1;
 const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
 const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
 const PLAN_EVERY = 15;           // Ticks between bot objective plans.
-const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard']);
+const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd']);
 
 // Free-for-all spawning: anywhere open on the map, as far from everyone as it can get.
 const FFA_GRID = 5;              // Metres between candidate spawn points sampled over open ground.
@@ -311,8 +312,8 @@ export class Sim {
         windT: 0, restockT: 0,
         ps: createPlayerState({ id: r.id, primary: loadout.primary, camo: loadout.camo, loadout }),
         hp: MAX_HP, alive: true, respawnT: 0, spawnProtect: 0,
-        // Tap to respawn (humans only): seconds dead, a Respawn tap waiting, and "do not auto-respawn this life".
-        deadT: 0, wantRespawn: false, holdRespawn: false,
+        // Tap to respawn (humans only): seconds dead, and whether a respawn request is waiting.
+        deadT: 0, wantRespawn: false,
         kills: 0, deaths: 0, assists: 0, head: 0, streak: 0, chain: 0, lastKillT: -99,
         lastKilledBy: null, score: createStreakState(loadout.streaks, STREAKS, loadout.perks), markT: 0,
         regenT: 0, dmgBy: new Float32Array(n), dmgT: new Float32Array(n).fill(-99),
@@ -340,7 +341,7 @@ export class Sim {
   _initMode(seed) {
     this.tags = [];
     this.nextTagId = 1;
-    const defs = (this.mode === 'dom' || this.mode === 'hard') ? this.map.points?.[this.mode] ?? [] : [];
+    const defs = (this.mode === 'dom' || this.mode === 'hard' || this.mode === 'snd') ? this.map.points?.[this.mode] ?? [] : [];
     this.zones = defs.map(d => ({ id: d.id, x: d.x, z: d.z, r: d.r, owner: -1, cap: 0, contested: false, taken: [false, false] }));
     // The rotation order is the seed's: the map's list has zones on each team's side, and whichever comes first
     // hands that team a lead the other never gets back. hardIdx is a position in this order.
@@ -350,7 +351,9 @@ export class Sim {
       const k = Math.floor(shuffle() * (i + 1)), q = this.hardOrder[i];
       this.hardOrder[i] = this.hardOrder[k]; this.hardOrder[k] = q;
     }
-    this.points = this.mode === 'hard' && this.zones.length ? [this.zones[this.hardOrder[0]]] : this.mode === 'dom' ? this.zones : [];
+    // Search and Destroy shows its two bomb sites as points; nobody ever owns one.
+    this.points = this.mode === 'hard' && this.zones.length ? [this.zones[this.hardOrder[0]]] : this.mode === 'dom' || this.mode === 'snd' ? this.zones : [];
+    this.snd = this.mode === 'snd' ? new SndRules(this) : null;
     this.hardIdx = 0;
     this.hardT = HARD_ROTATE;
     this.tickT = this.mode === 'hard' ? HARD_TICK : DOM_TICK;
@@ -369,6 +372,8 @@ export class Sim {
     const l = normalizeLoadout(raw);
     if (!WEAPONS[l.primary]) l.primary = fallback ? fallback.primary : 'ar';
     if (!SECONDARY_IDS.includes(l.secondary)) l.secondary = fallback ? fallback.secondary : 'pistol';
+    // Search and Destroy has no scorestreaks: one life a round leaves no room to earn them fairly.
+    if (this.mode === 'snd') l.streaks = [];
     return l;
   }
 
@@ -382,6 +387,7 @@ export class Sim {
 
   _spawnAll() {
     if (this.ffa) { this._ffaSpawnAll(); return; }
+    if (this.snd) { this.snd.startRound(); return; }
     const used = new Set();
     for (const p of this.players) {
       if (p.dummy) { this._placeAt(p, p.home, p.home.aim); continue; }
@@ -567,7 +573,7 @@ export class Sim {
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
       if (this.phaseT <= 0) this._setPhase('live');
-    } else if (this.phase === 'live' && !this.range) {
+    } else if (this.phase === 'live' && !this.range && !this.snd) {
       this.timeLeft -= STEP;
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
@@ -614,6 +620,7 @@ export class Sim {
   _stepTimers(p) {
     if (p.ackT > 0) p.ackT -= STEP;
     if (!p.alive) {
+      if (this.snd) return;          // One life a round: the next round brings everyone back.
       p.respawnT -= STEP;
       p.deadT += STEP;
       if (p.respawnT <= 0 && this._readyToRespawn(p)) this._respawn(p);
@@ -626,20 +633,20 @@ export class Sim {
     if (hasPro(p.ps, 'bandolier')) this._restock(p);
   }
 
-  // Bots and range targets come back the moment RESPAWN_TIME is up. A human waits on the death screen until they tap
-  // Respawn, or until RESPAWN_AUTO seconds after dying unless their phone asked to hold (auto-respawn off).
+  // Bots and range targets come back the moment RESPAWN_TIME is up. A human comes back once they have asked (a
+  // Respawn tap, or the request their phone sends at the moment of death when auto-respawn is on) and RESPAWN_TIME is
+  // up, or on their own RESPAWN_IDLE seconds after dying, so an idle phone never keeps its slot dead.
   _readyToRespawn(p) {
     if (p.isBot || p.dummy) return true;
-    return p.wantRespawn || (!p.holdRespawn && p.deadT >= RESPAWN_AUTO);
+    return p.wantRespawn || p.deadT >= RESPAWN_IDLE;
   }
 
-  // The 'respawn' command. {hold:true} only turns off the automatic respawn for this life; anything else is the tap,
-  // which counts as soon as RESPAWN_TIME is up (a tap before that waits for it). Safe to repeat: phones resend it.
+  // The 'respawn' command: the request counts as soon as RESPAWN_TIME is up (one sent earlier waits for it). Safe to
+  // repeat: phones resend it. An older phone's {hold:true} is accepted and changes nothing: holding is the default now.
   requestRespawn(id, { hold = false } = {}) {
     const p = this.byId.get(id);
-    if (!p || p.isBot || p.dummy || p.alive) return false;
-    if (hold) p.holdRespawn = true;
-    else p.wantRespawn = true;
+    if (!p || p.isBot || p.dummy || p.alive || this.snd) return false;
+    if (!hold) p.wantRespawn = true;
     return true;
   }
 
@@ -672,12 +679,14 @@ export class Sim {
   _setPhase(phase) {
     this.phase = phase;
     this._emit({ t: 'phase', phase });
+    if (phase === 'live' && this.snd) this.snd.onLive();
     if (phase === 'live' && this.mode === 'hard' && this.points.length) this._emit({ t: 'hard_move', id: this.points[0].id });
   }
 
   // ---- Objectives ----
 
   _stepObjectives() {
+    if (this.snd) { this.snd.step(STEP); return; }
     if (this.mode === 'kc') this._stepTags();
     else if (this.mode === 'dom') this._stepDomination();
     else if (this.mode === 'hard') this._stepHardpoint();
@@ -939,6 +948,7 @@ export class Sim {
     const p = this.byId.get(id);
     if (!p || !loadout || typeof loadout !== 'object' || this.ladder) return false;     // Gun Game deals the loadouts.
     p.pendingLoadout = this._cleanLoadout(loadout, p.loadout);
+    this.snd?.onLoadout(p);
     return true;
   }
 
@@ -1129,6 +1139,7 @@ export class Sim {
   // `streak` is a scorestreak kind when one did this damage; `equip` is a thrown item's kind.
   _damage(target, attacker, dmg, weapon, dist, streak = null, head = false, equip = null) {
     if (!target || !target.alive || target.spawnProtect > 0 || target.team === attacker.team) return;
+    if (this.snd && !this.snd.combat) return;       // Between rounds nothing hurts.
     // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
     // damage dealt: in hit events, assists and the firing range readout.
     if (target.windT > this.time && hasPro(target.ps, 'adrenaline')) dmg *= WIND_TAKEN;     // Second Wind.
@@ -1154,12 +1165,13 @@ export class Sim {
     else hit.st = streak;
     this._emit(hit);
     if (target.bot) target.bot.onDamaged(attacker, !!(streak || equip));
+    this.snd?.onDamaged(target);
     if (killed) this._kill(target, attacker, weapon, dist, streak, head, equip);
   }
 
   _kill(target, killer, weapon, dist, streak, head, equip) {
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME;
-    target.deadT = 0; target.wantRespawn = false; target.holdRespawn = false;
+    target.deadT = 0; target.wantRespawn = false;
     if (this.range) this.range.onKill(target);
     // Scorestreak score is not touched: it persists through death (docs/V4.md rules, restored in Wave 6).
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
@@ -1225,7 +1237,20 @@ export class Sim {
       if (!equip && hasPro(killer.ps, 'adrenaline')) { killer.windT = this.time + WIND_TIME; this._proEvent(killer, 'adrenaline'); }
     }
 
-    if (this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
+    this.snd?.onKill(target);
+    if (!this.snd && this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
+  }
+
+  // A death with nobody to credit: a Search and Destroy attacker caught in their own bomb. Counts as a death only.
+  _selfKill(target, equip) {
+    if (!target.alive) return;
+    target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME; target.deadT = 0; target.wantRespawn = false;
+    target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
+    target.dmgBy.fill(0);
+    const x = round2(target.ps.x), z = round2(target.ps.z);
+    this._emit({ t: 'hit', by: target.id, target: target.id, dmg: MAX_HP, x, z, killed: true, eq: equip });
+    this._emit({ t: 'kill', by: target.id, target: target.id, weapon: target.ps.weapon, camo: target.camo, x, z, assist: null, dist: 0, equip, vw: target.ps.weapon });
+    this.snd?.onKill(target);
   }
 
   _medal(p, medal) { this._emit({ t: 'medal', id: p.id, medal }); }
@@ -1312,7 +1337,7 @@ export class Sim {
   // Refusing keeps the streak; a human hears why through a streak_denied event, a bot would only be spamming it.
   useStreak(id, slot) {
     const p = this.byId.get(id);
-    if (!p || this.phase !== 'live' || !p.alive) return null;
+    if (!p || this.phase !== 'live' || !p.alive || this.snd) return null;
     const slots = p.score.slots;
     if (slot === undefined) {
       for (let i = slots.length - 1; i >= 0 && slot === undefined; i--) if (slots[i].held) slot = i;
@@ -1917,7 +1942,7 @@ export class Sim {
     sim.tick = Math.round(view.t * SIM_HZ);
     sim._metaUntil = sim.tick + 2;
     sim.phase = view.phase;
-    sim.phaseT = view.phase === 'warmup' ? Math.max(0.5, WARMUP - view.t) : 0;
+    sim.phaseT = view.phase === 'warmup' ? Math.max(0.5, WARMUP - view.t) : 0;     // S&D restores its own freeze clock.
     sim.timeLeft = view.timeLeft;
     const copy = (from, to) => { for (let t = 0; t < to.length; t++) to[t] = from?.[t] ?? 0; };
     copy(view.scores, sim.scores);
@@ -1969,9 +1994,9 @@ export class Sim {
     if (v.tactical) ps.tactical = v.tactical;
     if (v.lethal) ps.lethal = v.lethal;
     p.hp = v.hp; p.alive = v.alive; p.respawnT = v.respawnT;
-    // Time dead is not in the snapshot: count from the death, as far as respawnT tells. A Respawn tap or hold that
-    // was in flight to the old host is sent again by the phone's death screen.
-    p.deadT = p.alive ? 0 : Math.max(0, RESPAWN_TIME - v.respawnT); p.wantRespawn = false; p.holdRespawn = false;
+    // Time dead is not in the snapshot: count from the death, as far as respawnT tells. A respawn request that was in
+    // flight to the old host is sent again by the phone's death screen.
+    p.deadT = p.alive ? 0 : Math.max(0, RESPAWN_TIME - v.respawnT); p.wantRespawn = false;
     if (p.isBot) this._noGoldForBots(p);
     p.spawnProtect = v.spawnProtect ? SPAWN_PROTECT * 0.5 : 0;
     p.kills = v.kills; p.deaths = v.deaths; p.assists = v.assists; p.head = v.head; p.streak = v.streak;
@@ -1984,6 +2009,12 @@ export class Sim {
   }
 
   _restoreMode(view) {
+    if (this.snd) {
+      restoreSnd(this.snd, view);
+      // Nobody with the bomb, or anybody back from the dead: the snapshot's own alive flags are the truth.
+      this.lastKill = null;
+      return;
+    }
     const zoneOf = id => this.zones.find(z => z.id === id);
     if (this.mode === 'dom') {
       for (const v of view.points ?? []) {
@@ -2041,6 +2072,7 @@ export class Sim {
       ghost: ps.perks.includes('ghost'), quiet: ps.perks.includes('deadsilence'),
       pro: ps.perks.filter(id => ps.pro.includes(id)), card: p.card ?? null,
       attachments: this._heldKit(p, ps.weapon),
+      plants: p.plants ?? 0, defuses: p.defuses ?? 0,
     };
   }
 
@@ -2060,11 +2092,14 @@ export class Sim {
   }
 
   getView(localId) {
+    const snd = this.snd ? this.snd.view() : null;
+    const points = this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested));
+    if (snd) points.snd = snd;
     return this._applyIntel({
-      t: this.time, phase: this.phase, timeLeft: this.timeLeft, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
+      t: this.time, phase: this.phase, snd, timeLeft: this.timeLeft, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
       tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life })),
-      points: this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested)),
+      points,
       hardT: this.mode === 'hard' ? this.hardT : 0,
       scores: this.scores.slice(), winner: this.winner, ffa: this.ffa,
       uav: this.uav.slice(),
@@ -2187,6 +2222,7 @@ export class Sim {
   }
 
   _encodeObjective() {
+    if (this.snd) return this.snd.encode();
     if (this.mode === 'kc') {
       return this.tags.length ? this.tags.flatMap(t => [t.id * 2 + t.team, Math.round(t.x * 10), Math.round(t.z * 10), Math.round(t.life * 10)]) : 0;
     }
@@ -2197,6 +2233,12 @@ export class Sim {
 
   _decodeObjective(a, out) {
     out.tags = []; out.points = []; out.hardT = 0;
+    if (this.mode === 'snd') {
+      // The sites never change; the round state rides on the list as well as on the view (see sndOf in snd.js).
+      out.points = this.zones.map(z => this._pointView(z, -1, 0, false));
+      out.snd = out.points.snd = decodeSnd(this, a, out.players);
+      return;
+    }
     if (!a) return;
     if (this.mode === 'kc') {
       for (let i = 0; i < a.length; i += 4) out.tags.push({ id: a[i] >> 1, team: a[i] & 1, x: a[i + 1] / 10, z: a[i + 2] / 10, life: a[i + 3] / 10 });

@@ -14,6 +14,7 @@ import { effectRadius, landingOf, maxThrowRange } from './equipment.js';
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { isAvailable } from '../shared/attachments.js';
+import { SND } from '../shared/modes.js';
 
 const DEG = Math.PI / 180;
 
@@ -172,11 +173,12 @@ export function planObjectives(sim) {
     for (let i = 0; i < sim.players.length; i++) {
       const p = sim.players[i];
       if (!p.bot || p.team !== team || !p.alive) continue;
-      // Some bots this life just want a fight; they stay on the lane logic.
-      if (p.bot.objRoll < p.bot.S.objPlay) crew.push(p.bot);
+      // Some bots this life just want a fight; they stay on the lane logic. A round of Search and Destroy needs everyone.
+      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd) crew.push(p.bot);
       else p.bot.setObjective(null);
     }
     if (!crew.length) continue;
+    if (sim.snd) { planSnd(sim, team, crew); continue; }
     if (sim.mode === 'kc') planTags(sim, team, crew);
     else if (sim.mode === 'dom') planDomination(sim, team, crew);
     else if (sim.mode === 'hard') planHardpoint(sim, team, crew);
@@ -206,6 +208,140 @@ function planTags(sim, team, crew) {
     bot.setObjective({ key: `tag${tag.id}`, x: tag.x, z: tag.z, r: 0, role: 'collect' });
   }
   for (let i = 0; i < crew.length; i++) if (!busy.has(crew[i])) crew[i].setObjective(null);
+}
+
+// ---- Search and Destroy. The planner knows what each side would know: attackers always know where their bomb is;
+// defenders only once it is dropped or planted, and where the attack is from what their own bots have seen or been
+// told (sightings, callouts, being shot at). Each team keeps a little memory between plans in sim.snd.plan[team].
+
+const SITE_HEAT = 18;            // Metres from a site within which a contact says "they are going there".
+const INTEL_KEEP = 9;            // Seconds a defending team keeps acting on the last word about a site.
+const ESCORT_LEAD = 5;           // Escorts walk this far ahead of the carrier, toward the site.
+const FLEE_FUSE = 7;             // Seconds left on the fuse when anyone not defusing gets clear of the blast.
+
+function sndPlan(sim, team) {
+  const plans = sim.snd.plan ??= [{}, {}];
+  const plan = plans[team];
+  if (plan.round !== sim.snd.round) { plan.round = sim.snd.round; plan.site = Math.floor(sim.rng() * sim.snd.sites.length); plan.hot = -1; plan.hotT = -99; }
+  return plan;
+}
+
+function nearestSite(sites, x, z, maxD = Infinity) {
+  let best = -1, bestD = maxD;
+  for (let i = 0; i < sites.length; i++) {
+    const d = Math.hypot(sites[i].x - x, sites[i].z - z);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+// A walkable spot near (x, z), for objectives placed by arithmetic.
+function walkable(sim, x, z) {
+  if (sim.nav.isWalkable(x, z)) return { x, z };
+  const k = sim.nav.nearestFree(x, z);
+  return { x: k % sim.nav.w + 0.5, z: Math.floor(k / sim.nav.w) + 0.5 };
+}
+
+function planSnd(sim, team, crew) {
+  const snd = sim.snd;
+  if (snd.state !== 'live') return;
+  const plan = sndPlan(sim, team), sites = snd.sites, bomb = snd.bomb;
+  const attacking = team === snd.attackers;
+  const order = crew.slice().sort((a, b) => a.p.index - b.p.index);
+
+  // A live bomb close to going off: everyone clear of it, apart from a defuser who will finish in time.
+  if (bomb.state === 'planted' && bomb.fuse < FLEE_FUSE) {
+    for (const bot of order) {
+      const df = snd.defuse;
+      if (!attacking && df.p === bot.p && SND.defuse - df.t < bomb.fuse - 0.2) { bot.setObjective({ key: 'defuse', x: bomb.x, z: bomb.z, r: SND.defuseReach * 0.6, role: 'defuse' }); continue; }
+      const dx = bot.ps.x - bomb.x, dz = bot.ps.z - bomb.z, d = Math.max(0.5, Math.hypot(dx, dz));
+      const away = walkable(sim, bomb.x + dx / d * (SND.blast + 6), bomb.z + dz / d * (SND.blast + 6));
+      bot.setObjective({ key: 'flee', x: away.x, z: away.z, r: 2.5, role: 'attack' });
+    }
+    return;
+  }
+
+  if (attacking) {
+    if (bomb.state === 'planted') {
+      // Hold the bomb: overwatch spots that see it, or a ring around it.
+      order.forEach((bot, i) => bot.setObjective({ key: `guard${i % 2}`, x: bomb.x, z: bomb.z, r: i % 2 ? 3 : 6, role: i % 2 ? 'defend' : 'support' }));
+      return;
+    }
+    const carrier = bomb.state === 'carried' ? bomb.carrier : null;
+    // A human with the bomb decides the site; the escort follows wherever they head.
+    if (carrier && !carrier.bot) plan.site = nearestSite(sites, carrier.ps.x, carrier.ps.z);
+    const site = sites[plan.site];
+    let fetcher = null;
+    if (bomb.state === 'dropped') {
+      let bestD = Infinity;
+      for (const bot of order) {
+        const d = Math.hypot(bot.ps.x - bomb.x, bot.ps.z - bomb.z);
+        if (d < bestD) { bestD = d; fetcher = bot; }
+      }
+      fetcher?.setObjective({ key: `bomb${Math.round(bomb.x)}_${Math.round(bomb.z)}`, x: bomb.x, z: bomb.z, r: 0, role: 'collect' });
+    }
+    const near = carrier && Math.hypot(carrier.ps.x - site.x, carrier.ps.z - site.z) < 14;
+    let entry = 0;
+    for (const bot of order) {
+      if (bot === fetcher) continue;
+      if (bot.p === carrier) { bot.setObjective({ key: `plant${site.id}`, x: site.x, z: site.z, r: site.r * 0.75, role: 'plant' }); continue; }
+      // Better players clear the site ahead of the bomb; the rest walk it in.
+      if (!carrier || near || (bot.S.objPush >= 0.5 && entry++ < 2)) {
+        bot.setObjective({ key: `site${site.id}`, x: site.x, z: site.z, r: site.r + 4, role: 'attack' });
+        continue;
+      }
+      const dx = site.x - carrier.ps.x, dz = site.z - carrier.ps.z, d = Math.max(0.5, Math.hypot(dx, dz));
+      const at = walkable(sim, carrier.ps.x + dx / d * ESCORT_LEAD, carrier.ps.z + dz / d * ESCORT_LEAD);
+      bot.setObjective({ key: `esc${Math.round(at.x / 6)}_${Math.round(at.z / 6)}`, x: at.x, z: at.z, r: 3.5, role: 'attack' });
+    }
+    return;
+  }
+
+  // Defending.
+  if (bomb.state === 'planted') {
+    // Retake: everyone converges on the bomb; whoever is closest defuses once nobody is shooting at them, or when it
+    // cannot wait any longer.
+    let defuser = null, bestD = Infinity;
+    for (const bot of order) {
+      const d = Math.hypot(bot.ps.x - bomb.x, bot.ps.z - bomb.z);
+      if (d < bestD) { bestD = d; defuser = bot; }
+    }
+    for (const bot of order) {
+      if (bot === defuser) {
+        const quiet = !bot.targetVisible && sim.time - bot.sawT > 1.2 && sim.time - (bot.recentlyHitT ?? -9) > 1.5;
+        const late = bomb.fuse < SND.defuse + 3;
+        if (quiet || late || snd.defuse.p === bot.p) { bot.setObjective({ key: 'defuse', x: bomb.x, z: bomb.z, r: SND.defuseReach * 0.6, role: 'defuse' }); continue; }
+      }
+      bot.setObjective({ key: 'retake', x: bomb.x, z: bomb.z, r: 6, role: 'attack' });
+    }
+    return;
+  }
+  // Word about where the attack is going: what this team's bots see, have heard, or were told.
+  const heat = [0, 0];
+  for (const bot of order) {
+    let x = null, z = null;
+    if (bot.targetVisible && bot.target) { x = bot.target.ps.x; z = bot.target.ps.z; }
+    else if (bot.hasKnown && !bot.knownSoft && sim.time - bot.knownT < 3) { x = bot.knownX; z = bot.knownZ; }
+    if (x === null) continue;
+    const s = nearestSite(sites, x, z, SITE_HEAT);
+    if (s >= 0) heat[s]++;
+  }
+  for (const c of sim.callouts) {
+    if (c.team !== team || sim.time - c.t > 4) continue;
+    const s = nearestSite(sites, c.x, c.z, SITE_HEAT);
+    if (s >= 0) heat[s] += 0.5;
+  }
+  if (bomb.state === 'dropped') { const s = nearestSite(sites, bomb.x, bomb.z, SITE_HEAT * 1.5); if (s >= 0) heat[s] += 2; }
+  const hot = heat[0] > heat[1] ? 0 : heat[1] > heat[0] ? 1 : -1;
+  if (hot >= 0) { plan.hot = hot; plan.hotT = sim.time; }
+  else if (sim.time - plan.hotT > INTEL_KEEP) plan.hot = -1;
+  // A split, one anchor per site; on word about a site the rest rotate to it, if they are the kind that rotates.
+  order.forEach((bot, i) => {
+    let s = i % sites.length;
+    if (i >= sites.length && plan.hot >= 0 && bot.S.objRotate) s = plan.hot;
+    const site = sites[s];
+    bot.setObjective({ key: `def${site.id}`, x: site.x, z: site.z, r: site.r + 4, role: 'defend' });
+  });
 }
 
 function closestBot(free, x, z) {
@@ -357,6 +493,13 @@ export class BotBrain {
     this._assignLane();
   }
 
+  // Which end of the map this bot fights from: 0 is the west. In Search and Destroy the attackers always set out from
+  // the west, whichever team they are this half.
+  get side() {
+    const snd = this.sim.snd;
+    return snd ? snd.sideOf(this.p.team) : this.p.team;
+  }
+
   // Handed down by planObjectives; null means play the lanes. The same key keeps the bot on its current course.
   setObjective(o) {
     if (!o) {
@@ -380,7 +523,7 @@ export class BotBrain {
       if (d < bestD) { bestD = d; best = i; }
     }
     this.laneIdx = best;
-    const fromOwnSide = (p.team === 0 ? ps.x : sim.map.width - ps.x) / sim.map.width;
+    const fromOwnSide = (this.side === 0 ? ps.x : sim.map.width - ps.x) / sim.map.width;
     this.stage = 0;
     while (this.stage < STAGES.length - 1 && STAGES[this.stage + 1] <= fromOwnSide) this.stage++;
     this._setMode('none');
@@ -942,7 +1085,7 @@ export class BotBrain {
     const W = sim.map.width;
     const f = STAGES[Math.min(stage, STAGES.length - 1)];
     return {
-      x: (p.team === 0 ? f : 1 - f) * W + (sim.rng() - 0.5) * 2,
+      x: (this.side === 0 ? f : 1 - f) * W + (sim.rng() - 0.5) * 2,
       z: sim.map.lanes[this.laneIdx].z + (sim.rng() - 0.5) * 7,
     };
   }
@@ -970,7 +1113,7 @@ export class BotBrain {
       found = sim.nav.isWalkable(x, z) && !this._teammateNear(x, z, 1.4);
     }
     // Look toward the enemy's half and sweep from there: holding a flag is mostly watching for who comes next.
-    const enemyX = p.team === 0 ? sim.map.width : 0;
+    const enemyX = this.side === 0 ? sim.map.width : 0;
     this.objAim = Math.atan2(sim.map.height / 2 - z, enemyX - x);
     this._goTo(x, z);
   }
@@ -1043,7 +1186,7 @@ export class BotBrain {
   // Which way a hold looks. Team modes look toward the enemy's side; a free-for-all takes the better of the two.
   _holdSide(h) {
     const { sim, p } = this;
-    return !sim.ffa ? p.team : h.sight[0] >= h.sight[1] ? 0 : 1;
+    return !sim.ffa ? this.side : h.sight[0] >= h.sight[1] ? 0 : 1;
   }
 
   // Goes to a nearby spot with a good sightline and watches down it for a few seconds.
@@ -1057,7 +1200,7 @@ export class BotBrain {
       if (!sim.ffa && Math.abs(h.z - laneZ) > 9) continue;    // Holding is part of playing this lane, not leaving it.
       if (this._teammateNear(h.x, h.z, 3)) continue;
       // Stay on our side of the action; a hold point deep in enemy ground is just a bad position.
-      const depth = sim.ffa ? 0 : (p.team === 0 ? h.x : sim.map.width - h.x) / sim.map.width;
+      const depth = sim.ffa ? 0 : (this.side === 0 ? h.x : sim.map.width - h.x) / sim.map.width;
       const score = d * 0.5 - h.sight[side] * 0.25 + (depth > 0.72 ? 8 : 0) + sim.rng() * 6;
       if (score < bestScore) { bestScore = score; best = h; }
     }
@@ -1127,7 +1270,7 @@ export class BotBrain {
     const style = styleOf(ps.weapon);
     const ux = (q.ps.x - ps.x) / d, uz = (q.ps.z - ps.z) / d;
     const o = this.objective;
-    const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend');
+    const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend' || o.role === 'plant' || o.role === 'defuse');
     const atHold = (this.mode === 'hold' && this.arrived) || holdingPoint;
     let fwd = 0;
     // A wall of crates between us that this gun cannot punch through: get an angle by closing in.

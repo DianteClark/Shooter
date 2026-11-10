@@ -832,7 +832,7 @@ const HIP_ADS = 0.3;             // ADS blend below this when the kill lands: fi
 const CAT_PLURAL = { Assault: 'assault rifles', SMG: 'SMGs', Shotgun: 'shotguns', LMG: 'LMGs', Sniper: 'sniper rifles', Pistol: 'pistols' };
 const CAT_GOAL = { Assault: [15, 90], SMG: [15, 90], Shotgun: [12, 70], LMG: [15, 80], Sniper: [8, 45], Pistol: [6, 35] };
 const BASE_GUNS = { ar: 12, smg: 12, shotgun: 10, lmg: 12, sniper: 6, pistol: 5 };
-const TEAM_RULES = new Set(['tdm', 'kc', 'dom', 'hard']);
+const TEAM_RULES = new Set(['tdm', 'kc', 'dom', 'hard', 'snd']);    // Search and Destroy has its own rows above.
 
 const def = (period, key, family, stat, goal, xp, icon, label) => ({ id: `${period === 'daily' ? 'd' : 'w'}.${key}`, period, family, stat, goal, xp, icon, label });
 
@@ -858,6 +858,9 @@ function buildPool() {
     d('dom', 'mode', 'won:dom', 1, 1800, 'mode:dom', 'Win a Domination match'),
     d('hard', 'mode', 'played:hard', 2, 1500, 'mode:hard', 'Play 2 Hardpoint matches'),
     d('kc', 'mode', 'played:kc', 2, 1500, 'mode:kc', 'Play 2 Kill Confirmed matches'),
+    d('plant', 'obj', 'plants', 2, 2000, 'medal:plant', 'Plant the bomb 2 times in Search and Destroy'),
+    d('defuse', 'obj', 'defuses', 1, 2000, 'medal:defuse', 'Defuse the bomb in Search and Destroy'),
+    d('snd', 'mode', 'won:snd', 1, 1800, 'mode:snd', 'Win a Search and Destroy match'),
     w('kills', 'kills', 'kills', 200, 6000, 'ui:skull', 'Get 200 kills'),
     w('head', 'head', 'head', 50, 7000, 'medal:headshot', 'Get 50 headshot kills'),
     w('long', 'long', 'long', 25, 7000, 'medal:longshot', 'Get 25 longshot kills'),
@@ -869,6 +872,8 @@ function buildPool() {
     w('wins', 'wins', 'wins', 10, 7500, 'ui:cup', 'Win 10 matches'),
     w('played', 'wins', 'played', 15, 6000, 'ui:play', 'Play 15 matches'),
     w('capture', 'obj', 'captures', 25, 7000, 'medal:capture', 'Capture 25 flags or zones'),
+    w('bomb', 'obj', 'bombs', 10, 7000, 'medal:plant', 'Plant or defuse the bomb 10 times'),
+    w('clutch', 'obj', 'clutches', 2, 7500, 'medal:clutch', 'Clutch 2 Search and Destroy rounds'),
     w('assist', 'team', 'assists', 40, 6000, 'ui:party', 'Get 40 assists'),
     w('hip', 'style', 'hipKills', 60, 6000, 'ui:aim', 'Get 60 kills from the hip'),
   ];
@@ -1055,6 +1060,8 @@ export class ChallengeTally {
           else if (e.medal === 'streak3' || e.medal === 'streak5') this.add(e.medal);
           else if (e.medal === 'capture') this.add('captures');
           else if (e.medal === 'confirm') this.add('confirms');
+          else if (e.medal === 'plant' || e.medal === 'defuse') { this.add(`${e.medal}s`); this.add('bombs'); }
+          else if (e.medal === 'clutch') this.add('clutches');
           break;
         case 'slide': if (e.id === id) this.add('slides'); break;
         case 'throw': if (e.id === id) this.add('throws'); break;

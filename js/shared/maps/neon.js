@@ -1,6 +1,6 @@
 // Night market. Blocks of shophouses leave a mesh of four-metre alleys; stalls clutter the crossings,
 // so fights are short, close and corner to corner.
-import { rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 60, H = 44;
@@ -40,6 +40,9 @@ function build() {
     { x: 20, z: 22, r: 3.6 },
     { x: 30, z: 22, r: 3.8 },
     [{ x: 30, z: 7.5, r: 3.4 }, { x: 15.5, z: 7.5, r: 3.4 }]);
+
+  // Search and Destroy (see bombSites). Two alley crossings in the far blocks, smaller to fit the four-metre lanes; the kiosk staggers stop either one seeing the other.
+  points.snd = bombSites({ x: 40, z: 8.3 }, { x: 42.5, z: 35.5 }, 2.8);
 
   return { id: 'neon', name: 'Night Market', theme: 'neon', width: W, height: H, walls, spawns, lanes, nav, points };
 }

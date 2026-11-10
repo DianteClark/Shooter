@@ -2,9 +2,9 @@
 // Exits non-zero on the first failed check, printing what failed.
 import assert from 'node:assert/strict';
 import { Sim, buildRoster } from '../js/sim/sim.js';
-import { createPlayerState, encodeHumanState, decodeHumanState, shotPassage, traceShot } from '../js/sim/player.js';
+import { RESPAWN_IDLE, createPlayerState, encodeHumanState, decodeHumanState, shotPassage, traceShot } from '../js/sim/player.js';
 import { WEAPONS, shotsToKill } from '../js/shared/weapons.js';
-import { GOLDEN_ID, RESPAWN_TIME, RESPAWN_AUTO, SECONDARY_IDS, WEAPON_IDS, SIM_HZ, PLAYER_RADIUS } from '../js/shared/constants.js';
+import { GOLDEN_ID, RESPAWN_TIME, SECONDARY_IDS, WEAPON_IDS, SIM_HZ, PLAYER_RADIUS } from '../js/shared/constants.js';
 import { availableFor, normalizeKit } from '../js/shared/attachments.js';
 import { goldenStatus, blankSave, MAX_PRESTIGE, MAX_WEAPON_PRESTIGE, WEAPON_CURVE, PLAYER_CURVE, GOLDEN_REQ_WEAPONS } from '../js/shared/progression.js';
 import { PERK_IDS, normalizeLoadout } from '../js/shared/catalog.js';
@@ -71,27 +71,40 @@ test('an early tap is kept and honoured the moment the minimum time is up', () =
   assert.equal(p.alive, true, 'right after RESPAWN_TIME');
 });
 
-test('idle human auto-respawns at RESPAWN_AUTO, not before', () => {
+test('auto-respawn on: the request sent at death respawns the moment RESPAWN_TIME is up', () => {
   const sim = makeSim();
   const p = kill(sim, 'h1');
-  ticks(sim, RESPAWN_AUTO - 0.2);
-  assert.equal(p.alive, false);
-  ticks(sim, 0.4);
-  assert.equal(p.alive, true);
+  sim.applyCommand('h1', { cmd: 'respawn' });         // What the HUD sends at death with the option on.
+  ticks(sim, RESPAWN_TIME - 0.1);
+  assert.equal(p.alive, false, 'not before the minimum');
+  ticks(sim, 0.2);
+  assert.equal(p.alive, true, 'right at the minimum, no 10 s wait');
 });
 
-test('hold turns the auto-respawn off for that life only', () => {
+test('auto-respawn off: waits for the tap, idle fallback at RESPAWN_IDLE (20 s)', () => {
+  assert.equal(RESPAWN_IDLE, 20);
   const sim = makeSim();
   const p = kill(sim, 'h1');
-  sim.applyCommand('h1', { cmd: 'respawn', hold: true });
-  ticks(sim, RESPAWN_AUTO + 5);
-  assert.equal(p.alive, false, 'still waiting with hold');
+  ticks(sim, 10.5);
+  assert.equal(p.alive, false, 'no auto-respawn at the old 10 s');
+  ticks(sim, RESPAWN_IDLE - 10.5 - 0.2);
+  assert.equal(p.alive, false);
+  ticks(sim, 0.4);
+  assert.equal(p.alive, true, 'idle fallback');
+});
+
+test('an old phone sending hold changes nothing; the tap still works', () => {
+  const sim = makeSim();
+  const p = kill(sim, 'h1');
+  assert.equal(sim.applyCommand('h1', { cmd: 'respawn', hold: true }), true);
+  ticks(sim, RESPAWN_TIME + 1);
+  assert.equal(p.alive, false, 'hold is not a request');
   sim.applyCommand('h1', { cmd: 'respawn' });
   ticks(sim, STEP);
   assert.equal(p.alive, true);
-  kill(sim, 'h1');                       // Next life: hold is gone, so auto applies again.
-  ticks(sim, RESPAWN_AUTO + 0.2);
-  assert.equal(p.alive, true);
+  kill(sim, 'h1');
+  ticks(sim, RESPAWN_IDLE + 0.2);
+  assert.equal(p.alive, true, 'idle fallback still applies');
 });
 
 test('a tap from a previous life does not carry into the next death', () => {
@@ -167,8 +180,8 @@ test('host migration: a dead human stays dead on the new host until they tap', (
   const view2 = next.decodeSnapshot(next.encodeSnapshot(), 'g1');
   const third = Sim.fromSnapshot(view2, roster, { map: 'railyard', seed: 7 });
   for (const q of third.players) q.bot = null;
-  ticks(third, RESPAWN_AUTO + 0.2);
-  assert.equal(third.byId.get('g1').alive, true, 'auto-respawn still applies after migration');
+  ticks(third, RESPAWN_IDLE + 0.2);
+  assert.equal(third.byId.get('g1').alive, true, 'idle fallback still applies after migration');
   assert.ok(g2);
 });
 

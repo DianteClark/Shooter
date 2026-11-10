@@ -5,7 +5,7 @@ const KEY = 'switchyard-options';
 export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['potato', 'Potato']];
 
 export const OPTION_DEFAULTS = Object.freeze({
-  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1, fps: false, touchDebug: false, autoRespawn: true,
+  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1, fps: false, touchDebug: false, autoRespawn: false,
 });
 
 // Slider-style settings: unit is the on-screen step, and what the bar and label report.

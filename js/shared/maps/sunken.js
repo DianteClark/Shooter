@@ -1,7 +1,7 @@
 // Flooded jungle ruin on a grey, steaming morning. A moat rings the walled temple island in the middle and you
 // cross it on four broken causeways, so the map plays as king of the hill: the island courtyard holds the
 // centre, the causeways are the chokepoints, and the banks are thick with fig trunks and fallen masonry.
-import { wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
+import { bombSites, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
 function build() {
   const W = 72, H = 48;
@@ -62,6 +62,9 @@ function build() {
     { x: 18, z: 36, r: 3.8 },
     { x: 36, z: 24, r: 6 },
     [{ x: 33.5, z: 13.5, r: 3.6 }, { x: 31.5, z: 23.5, r: 3.6 }]);
+
+  // Search and Destroy (see bombSites). On the far bank either side of the moat, reached over the causeways; the temple island is the rotation and the fight between them.
+  points.snd = bombSites({ x: 54, z: 10.5 }, { x: 54, z: 40 });
 
   return { id: 'sunken', name: 'Sunken', theme: 'sunken', width: W, height: H, walls, spawns, lanes, nav, points };
 }

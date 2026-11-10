@@ -307,6 +307,7 @@ export class Match {
     this.onEnd({
       scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode,
       myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
+      snd: view.snd ?? view.points?.snd ?? null,
       ...awards,
     });
   }
