@@ -65,6 +65,31 @@ export const PERKS = {
 export const PERK_IDS = Object.keys(PERKS);
 export const HARDLINE_MULT = 0.85;
 
+// Pro: what a perk adds once its challenges are done (js/shared/progression.js PRO_CHALLENGES). Always a related extra
+// ability, never a bigger number on the main effect. There is no toggle: a Pro perk is always Pro. The behaviour lives in
+// the sim (js/sim/player.js, equipment.js, sim.js) or, for the senses, in what the HUD draws; `where` says which.
+// A loadout's `pro` lists every perk its owner has Pro on; hasPro (js/sim/player.js) also needs the perk equipped.
+export const PRO = {
+  marathon:    { name: 'Run and Load',    desc: 'Reloads run 35% faster while you sprint', where: 'player' },
+  flak:        { name: 'Shock Absorber',  desc: 'Blast damage no longer pauses your health regen', where: 'sim' },
+  quickmend:   { name: 'Field Medic',     desc: 'Teammates within 7 m heal at your Quick Mend pace', where: 'sim' },
+  tacmask:     { name: 'Spotter',         desc: 'Enemies you flash show on your team\'s minimap while blinded', where: 'sim' },
+  adrenaline:  { name: 'Second Wind',     desc: 'Take 25% less damage for 2.5 s after a gun kill', where: 'sim' },
+  scavenger:   { name: 'Pack Rat',        desc: 'Kills also restore one lethal, or a tactical when lethals are full', where: 'sim' },
+  fasthands:   { name: 'Sleight',         desc: 'Swapping mid-reload finishes that reload in the holster', where: 'player' },
+  strongarm:   { name: 'Fastball',        desc: 'Throws fly 35% faster, and your aim shows the blast radius', where: 'equipment' },
+  bandolier:   { name: 'Quartermaster',   desc: 'Spent equipment comes back, one piece every 30 s', where: 'sim' },
+  hardline:    { name: 'Team Player',     desc: 'Assists count as kills toward your scorestreaks', where: 'sim' },
+  ghost:       { name: 'Phantom',         desc: 'Your gunfire never pings you on the enemy minimap', where: 'sim' },
+  coldblood:   { name: 'Blank Slate',     desc: 'Sensors and Tracker hits cannot mark you', where: 'sim' },
+  deadsilence: { name: 'Keen Ears',       desc: 'Sprinting enemies within 14 m ping your minimap', where: 'hud' },
+  tracker:     { name: 'Footprints',      desc: 'See enemy footprints from the last 4 s wherever you have sight', where: 'hud' },
+  engineer:    { name: 'Hijacker',        desc: 'See enemy equipment through walls; stand at an enemy Sentry for 1.5 s to take it', where: 'sim' },
+};
+
+// Calling card ids are data in js/shared/progression.js (CARDS); a loadout only carries the id, checked there.
+const CARD_ID = /^[a-z0-9_-]{1,24}$/;
+
 // A streak's cost for a player, as a whole multiple of 10. Hardline lowers it.
 export function streakCost(id, perks) {
   const base = STREAKS[id].cost;
@@ -118,5 +143,8 @@ export function normalizeLoadout(l = {}) {
     tracer: l.tracer || null,
     killFx: l.killFx || null,
     operator: l.operator || null,
+    // Identity that travels with the loadout through lobby and roster, so no other message has to change.
+    pro: Array.isArray(l.pro) ? PERK_IDS.filter(id => l.pro.includes(id)) : [],
+    card: typeof l.card === 'string' && CARD_ID.test(l.card) ? l.card : null,
   };
 }

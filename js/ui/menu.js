@@ -22,6 +22,7 @@ import { fingerDown } from './tap.js';
 import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
+import { vetOf, vetTag } from './cards.js';
 import { play, enter, sweep, shake, reducedMotion, DUR } from './motion.js';
 
 export { esc };
@@ -306,7 +307,7 @@ export class Menu {
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           cells += `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
             <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}<b>${esc(h.name)}</b></span>
-            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}<small>${self ? 'You, ' : ''}${h.badge ? `Lv ${h.badge.level} ` : ''}${status}</small></span>
+            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge?.level })}<small>${self ? 'You, ' : ''}${status}</small></span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
         } else {

@@ -323,6 +323,7 @@ const SQUARE = {
   'map:dust': { a: [O(22, 9.5, 5.2)], f: [P(1.5, 22, 9.5, 16, 17.5, 21, 23.5, 17.5, 30.5, 22, 30.5, 29, 1.5, 29)] },
   'map:frost': { f: [P(1.5, 28.5, 12, 9, 17.5, 18, 21.5, 13, 30.5, 28.5)], a: [P(12, 9, 15.7, 15.8, 13.8, 14.6, 12, 16.4, 10.2, 14.6, 8.3, 15.8), P(21.5, 13, 24.3, 17.4, 22.6, 16.6, 21, 18, 19.8, 16.9)] },
   'map:sunken': { f: [R(11.5, 3, 9, 14, [1, 1, 0, 0])], h: [R(13.8, 6, 4.4, 3.4)], s: [P(2, 19.5, 6, 16.5, 10, 19.5, 14, 16.5, 18, 19.5, 22, 16.5, 26, 19.5, 30, 16.5)], as: [P(2, 26.5, 6, 23.5, 10, 26.5, 14, 23.5, 18, 26.5, 22, 23.5, 26, 26.5, 30, 23.5)], sw: 2.6 },
+  'map:harvest': { f: [P(3, 28, 3, 15, 10.5, 8, 18, 15, 18, 28), R(20.5, 9, 4.5, 19, [2.2, 2.2, 0, 0]), R(26, 13, 4, 15, [2, 2, 0, 0])], h: [R(8, 19, 5, 9)], a: [R(1.5, 28, 29, 2)] },
   'map:topside': { f: [P(2, 29.5, 2, 16, 8, 16, 8, 10, 15, 10, 15, 19, 20, 19, 20, 6.5, 26.5, 6.5, 26.5, 29.5, 30, 29.5, 30, 29.5), R(22.5, 1.5, 1.6, 5)], h: [R(10, 13, 3, 3), R(21.8, 10, 3, 3), R(21.8, 16, 3, 3), R(4, 20, 2.5, 3)], a: [O(23.3, 2, 1.6)] },
 
   // ---- Medals ----
@@ -353,8 +354,8 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard',
-  railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom',
+  railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Menu vocabulary (js/ui/yard.js names).
   bots: 'ui:bot', rejoin: 'ui:refresh', load: 'ui:download', export: 'ui:share', equip: 'ui:check', team: 'ui:party',

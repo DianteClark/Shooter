@@ -46,7 +46,12 @@ export class Surfaces {
   // The material struck at a wall surface; the probe steps a little inside along the inverse normal.
   materialAt(x, z, nx, nz) {
     const w = this.wallAt(x - nx * 0.08, z - nz * 0.08) || this.wallAt(x, z);
-    return w ? (MATERIAL[w.kind] || 'concrete') : 'concrete';
+    if (!w) return 'concrete';
+    // Harvest dresses a few kinds as something softer than they are by default.
+    if (w.hedge) return 'cloth';
+    if (w.plank || w.bale || w.hay || w.vine) return 'wood';
+    if (w.stone || w.well) return 'rock';
+    return MATERIAL[w.kind] || 'concrete';
   }
 
   // True when a point at height y is inside something solid.

@@ -4,13 +4,16 @@ import { TEAMS, MAX_HP, SCORE_LIMIT, TIME_LIMIT } from '../shared/constants.js';
 import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, normalizeLoadout } from '../shared/catalog.js';
-import { MODES } from '../shared/modes.js';
+import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
+import { MODES, modeRules } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { icon, resolveIcon } from './icons.js';
+import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
+import { Footprints, heardEnemies, HEAR_RANGE } from '../sim/player.js';
+import { effectRadius } from '../sim/equipment.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
 // for that id, so callers can fall back to words.
@@ -58,6 +61,11 @@ const STREAK_VERB = {
 // Enemy streaks the local player should react to right now.
 const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP!' };          // Seconds of hits averaged into the live damage readout.
 const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.
+// Pro senses drawn by the HUD (js/shared/catalog.js PRO): footprints, the Fastball blast ring, enemy equipment.
+const PRINT_HZ = 12;             // Footprint line-of-sight checks per second; drawing still follows the camera every frame.
+const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky']);   // What Hijacker sees through walls.
+const NO_PRO = Object.freeze([]);
+const PRO_LINE = { scavenger: '+1 equipment', bandolier: 'Equipment restocked', adrenaline: '25% less damage', engineer: 'The Sentry is yours' };
 const TIPS = [
   'Slide through a doorway to shrink as a target.',
   'Firing reveals you on the enemy minimap. Suppressors hide it.',
@@ -173,6 +181,10 @@ export class HUD {
     for (const r of Object.values(this.controls?.rects ?? {})) this.markObstacles.push(r);
     add(this.el.querySelector('.minimap').getBoundingClientRect());
     add(this.el.querySelector('.corner').getBoundingClientRect());
+    // The Pro layer is drawn at CSS pixels: a few thin shapes do not need the phone's full pixel ratio.
+    this.proCanvas.width = Math.max(1, Math.round(this.viewW));
+    this.proCanvas.height = Math.max(1, Math.round(this.viewH));
+    this.proDrawn = true;
   }
 
   #markBlocked(x, y) {
@@ -213,8 +225,11 @@ export class HUD {
     this.map = MAPS[mapId] ?? this.map;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
-    this.mode = mode;
+    this.modeId = mode;                 // As picked, e.g. 'gwdom'.
+    this.mode = modeRules(mode);        // The rule set it plays by, e.g. 'dom'.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
+    setRosterIdentity(roster);
+    this.prints.reset();
     this.#seedFallback();
     this.#drawMapBase();
     this.#buildObjectiveHud();
@@ -236,7 +251,7 @@ export class HUD {
   // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
   #showIntro(mapId, mode, roster, localId) {
     const map = MAPS[mapId] ?? this.map;
-    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${esc(p.name)}</b>${p.isBot ? '<small>Bot</small>' : ''}</div>`;
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${esc(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot ? '<small>Bot</small>' : ''}</div>`;
     const team = (t, side) => {
       const list = roster.filter(p => p.team === t);
       return `<div class="in-team ${side}" style="--team:${TEAMS[t].css}"><h3><i></i>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
@@ -379,6 +394,27 @@ export class HUD {
   }
 
   // Short line in the kill feed for things that are not kills.
+  // A Pro ability just fired for the local player: a short gold plate under the score bar.
+  #onPro(perk) {
+    const p = PRO[perk];
+    if (!p) return;
+    this.proToast.querySelector('b').textContent = p.name;
+    this.proToast.querySelector('small').textContent = PRO_LINE[perk] ?? '';
+    this.proToast.getAnimations().forEach(a => a.cancel());
+    this.proToast.animate([
+      { opacity: 0, transform: 'translate(-50%, 6px) scale(.92)' }, { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: 0.12 },
+      { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: 0.8 }, { opacity: 0, transform: 'translate(-50%, -4px) scale(1)' },
+    ], { duration: 1700, easing: 'ease-out' });
+  }
+
+  #onHijack(e) {
+    const view = this.view;
+    if (!view) return;
+    const p = view.players.find(q => q.id === e.by);
+    const mine = e.by === view.localId;
+    this.#pushFeed(`<em style="color:${TEAMS[p?.team ?? e.team].css}">${esc(p?.name ?? '?')}</em><span class="f-note">hijacked a Sentry</span>`, mine, p?.team === this.#findLocal(view)?.team ? 'ally' : 'foe');
+  }
+
   notify(text) {
     this.#pushFeed(`<span class="f-note">${esc(text)}</span>`);
   }
@@ -403,6 +439,8 @@ export class HUD {
     const el = this.el = document.createElement('div');
     el.className = 'hud';
     el.innerHTML = `
+      <canvas class="pro-layer"></canvas>
+      <div class="pro-toast"><b></b><small></small></div>
       <div class="vignette"><i class="vg-pulse"></i></div>
       <div class="scorebar" data-tap="1">
         <div class="sb-side mine">
@@ -512,6 +550,14 @@ export class HUD {
 
     const $ = sel => el.querySelector(sel);
     this.vignette = $('.vignette');
+    this.proCanvas = $('.pro-layer');
+    this.proCtx = this.proCanvas.getContext('2d');
+    this.proToast = $('.pro-toast');
+    this.prints = new Footprints();
+    this.printList = [];
+    this.printClock = 0;
+    this.proDrawn = false;
+    this.heard = [];
     const sides = el.querySelectorAll('.sb-side');
     this.sbMine = { root: sides[0], score: sides[0].querySelector('.sb-score'), name: sides[0].querySelector('.sb-name'), fill: sides[0].querySelector('.sb-fill') };
     this.sbTheirs = { root: sides[1], score: sides[1].querySelector('.sb-score'), name: sides[1].querySelector('.sb-name'), fill: sides[1].querySelector('.sb-fill') };
@@ -610,13 +656,14 @@ export class HUD {
     this.boardGrid.innerHTML = [0, 1].map(() => `
       <div class="lb-side">
         <div class="lb-head"><b class="lb-team"></b><span>K</span><span>D</span><span>A</span><span class="lb-mode">HS</span><span>Score</span></div>
-        ${[0, 1, 2, 3, 4, 5].map(() => '<div class="lb-row"><span class="lb-name"><i class="lb-bdg"></i><u class="lb-lv"></u><b></b></span><span></span><span></span><span></span><span></span><span></span></div>').join('')}
+        ${[0, 1, 2, 3, 4, 5].map(() => '<div class="lb-row"><span class="lb-name"><i class="lb-bdg"></i><u class="lb-lv"></u><b></b><i class="lb-vet"></i></span><span></span><span></span><span></span><span></span><span></span></div>').join('')}
       </div>`).join('');
     this.boardSides = [...this.boardGrid.querySelectorAll('.lb-side')].map(node => ({
       team: node.querySelector('.lb-team'),
       modeHead: node.querySelector('.lb-mode'),
       rows: [...node.querySelectorAll('.lb-row')].map(row => ({
         row, cells: row.children, name: row.querySelector('.lb-name b'), bdg: row.querySelector('.lb-bdg'), lv: row.querySelector('.lb-lv'), rank: -1,
+        vet: row.querySelector('.lb-vet'), vetOn: null,
       })),
     }));
   }
@@ -653,6 +700,8 @@ export class HUD {
           slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : '';
         }
         slot.lv.textContent = badge?.level ?? '';
+        const vet = !!identityOf(p.id)?.vet;
+        if (vet !== slot.vetOn) { slot.vetOn = vet; slot.vet.innerHTML = vetTag(vet, { short: true }); }
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
@@ -750,7 +799,7 @@ export class HUD {
 
     if (view.phase === 'warmup' && !this.modeBannerShown && view.mode === this.mode) {
       this.modeBannerShown = true;
-      this.#banner(MODES[this.mode]?.name ?? '', MODES[this.mode]?.desc ?? '', 3200);
+      this.#banner(MODES[this.modeId]?.name ?? '', MODES[this.modeId]?.desc ?? '', 3200);
     }
     this.#updateObjectives(view, me, c);
 
@@ -776,6 +825,89 @@ export class HUD {
     if (this.mmClock >= 1 / MINIMAP_HZ) {
       this.mmClock = 0;
       this.#drawMinimap(view, me);
+    }
+    this.#updateProLayer(view, me, dt);
+  }
+
+  // ---- Pro senses over the world ----
+  // Footprints (Tracker Pro), the Fastball blast ring (Strong Arm Pro) and enemy equipment through walls (Hijacker,
+  // Engineer Pro). One canvas at CSS pixels; cleared only when something was drawn, so it costs nothing otherwise.
+  #updateProLayer(view, me, dt) {
+    const pro = me.pro ?? NO_PRO;
+    const g = this.proCtx, cam = this.camera;
+    if (this.proDrawn) { g.clearRect(0, 0, this.proCanvas.width, this.proCanvas.height); this.proDrawn = false; }
+    if (!cam || !me.alive || view.phase === 'ended' || pro.length === 0) return;
+    const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements, W = this.viewW, H = this.viewH;
+    const P = this.projected ??= { x: 0, y: 0 };
+    const project = (x, y, z) => {
+      const vx = v[0] * x + v[4] * y + v[8] * z + v[12], vy = v[1] * x + v[5] * y + v[9] * z + v[13], vz = v[2] * x + v[6] * y + v[10] * z + v[14];
+      const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15];
+      if (w <= 0.01) return null;
+      P.x = ((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * W;
+      P.y = (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * H;
+      return P;
+    };
+    if (pro.includes('tracker')) {
+      this.prints.update(view, me, view.t);
+      this.printClock += dt;
+      if (this.printClock >= 1 / PRINT_HZ) { this.printClock = 0; this.printList = this.prints.visible(this.map, me, view.t, view.smokes).slice(); }
+      const enemy = TEAMS[1 - me.team].css;
+      for (const f of this.printList) {
+        const a = project(f.x, 0.03, f.z);
+        if (!a) continue;
+        const x0 = a.x, y0 = a.y;
+        const b = project(f.x + Math.cos(f.a) * 0.3, 0.03, f.z + Math.sin(f.a) * 0.3);
+        if (!b) continue;
+        const ang = Math.atan2(b.y - y0, b.x - x0), len = Math.hypot(b.x - x0, b.y - y0);
+        g.globalAlpha = 0.85 * (1 - (1 - f.k) * (1 - f.k));
+        g.fillStyle = enemy;
+        g.beginPath();
+        g.ellipse(x0, y0, Math.max(4.5, len * 0.9), Math.max(2.4, len * 0.5), ang, 0, Math.PI * 2);
+        g.fill();
+        this.proDrawn = true;
+      }
+      g.globalAlpha = 1;
+    }
+    // The preview reports the radius when given the Pro list; the HUD knows it either way.
+    const land = view.throwPreview?.landing;
+    const radius = land ? land.radius || (pro.includes('strongarm') ? effectRadius(land.kind) : 0) : 0;
+    if (radius > 0) {
+      g.beginPath();
+      for (let i = 0; i <= 32; i++) {
+        const t = i / 32 * Math.PI * 2, q = project(land.x + Math.cos(t) * radius, 0.05, land.z + Math.sin(t) * radius);
+        if (!q) continue;
+        if (i === 0) g.moveTo(q.x, q.y); else g.lineTo(q.x, q.y);
+      }
+      g.fillStyle = 'rgba(255,215,94,.13)';
+      g.fill();
+      g.setLineDash([7, 5]);
+      g.lineWidth = 2;
+      g.strokeStyle = 'rgba(255,215,94,.9)';
+      g.stroke();
+      g.setLineDash([]);
+      this.proDrawn = true;
+    }
+    if (pro.includes('engineer') && view.projectiles?.length) {
+      const pulse = 0.65 + 0.35 * Math.sin(view.t * 6);
+      for (const q of view.projectiles) {
+        if (!SEEN_GEAR.has(q.kind) || !q.stuck) continue;
+        const owner = view.players.find(o => o.id === q.owner);
+        if (!owner || owner.team === me.team) continue;
+        const a = project(q.x, 0.4, q.z);
+        if (!a) continue;
+        const r = 7;
+        g.globalAlpha = pulse;
+        g.strokeStyle = TEAMS[owner.team].css;
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.moveTo(a.x, a.y - r); g.lineTo(a.x + r, a.y); g.lineTo(a.x, a.y + r); g.lineTo(a.x - r, a.y);
+        g.closePath();
+        g.stroke();
+        g.fillStyle = '#fff';
+        g.fillRect(a.x - 1.5, a.y - 1.5, 3, 3);
+        this.proDrawn = true;
+      }
+      g.globalAlpha = 1;
     }
   }
 
@@ -964,8 +1096,11 @@ export class HUD {
     this.deathPainted = !!k?.name;
     const card = this.deathEl.querySelector('.death-card');
     card.style.setProperty('--team', k?.color ?? 'var(--haze)');
+    // The killer's calling card carries their name; badge, level and the Veteran tag ride under it.
+    const who = k?.name ? identityOf(k.id) : null;
     this.deathBy.innerHTML = k?.name
-      ? `${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 22)}</i><u>${k.badge.level ?? ''}</u>` : ''}<em>${esc(k.name)}</em>`
+      ? `${cardHtml(who?.card ?? 'yard', { size: 236, title: k.name, sub: '' })}
+         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 16)}</i><u>Lv ${k.badge.level ?? ''}</u>` : ''}${vetTag(!!who?.vet)}</span>`
       : '<em>Eliminated</em>';
     this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : 'Killed by') : 'Down';
     this.dcIcon.innerHTML = k ? glyph(k.icon, 20) : '';
@@ -1026,6 +1161,8 @@ export class HUD {
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
         case 'capture': this.#onCapture(e); break;
         case 'hard_move': this.#onHardMove(e); break;
+        case 'pro': if (e.id === this.view?.localId) this.#onPro(e.perk); break;
+        case 'hijack': this.#onHijack(e); break;
         default: break;
       }
     }
@@ -1383,8 +1520,51 @@ export class HUD {
     }
 
     this.#drawDeployables(view, myTeam, sx, sz, g);
+    this.#drawProMini(view, me, sx, sz, g, clock);
 
     this.#drawSelf(g, me, sx, sz);
+  }
+
+  // Keen Ears (Dead Silence Pro): a sprinting enemy in earshot is a sound ring, not a position. Hijacker (Engineer Pro):
+  // enemy equipment as small hollow diamonds.
+  #drawProMini(view, me, sx, sz, g, clock) {
+    const pro = me.pro ?? NO_PRO;
+    if (pro.includes('deadsilence') && me.alive) {
+      const heard = heardEnemies(view, me, this.heard);
+      g.lineWidth = 1.6;
+      for (const p of heard) {
+        const k = (clock * 1.6 + p.x * 0.07) % 1;
+        g.strokeStyle = TEAMS[p.team].css;
+        g.globalAlpha = 0.9 * (1 - k);
+        g.beginPath();
+        g.arc(p.x * sx, p.z * sz, 3 + k * 9, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+      if (heard.length) {
+        // The edge of earshot, faintly, so the player learns what the ring means.
+        g.strokeStyle = 'rgba(231,234,228,.18)';
+        g.setLineDash([3, 4]);
+        g.beginPath();
+        g.arc(me.x * sx, me.z * sz, HEAR_RANGE * sx, 0, Math.PI * 2);
+        g.stroke();
+        g.setLineDash([]);
+      }
+    }
+    if (pro.includes('engineer') && view.projectiles?.length) {
+      for (const q of view.projectiles) {
+        if (!SEEN_GEAR.has(q.kind) || !q.stuck) continue;
+        const owner = view.players.find(o => o.id === q.owner);
+        if (!owner || owner.team === me.team) continue;
+        const x = q.x * sx, y = q.z * sz;
+        g.strokeStyle = TEAMS[owner.team].css;
+        g.lineWidth = 1.8;
+        g.beginPath();
+        g.moveTo(x, y - 4); g.lineTo(x + 4, y); g.lineTo(x, y + 4); g.lineTo(x - 4, y);
+        g.closePath();
+        g.stroke();
+      }
+    }
   }
 
   // Built on first use per map size; afterwards a jammed frame is a single drawImage.

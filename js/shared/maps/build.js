@@ -18,7 +18,8 @@ export function rotated(walls, W, H, list) {
     walls.push(wall(x, z, w, d, h, kind, extra));
     const e = extra ? { ...extra } : undefined;
     if (e && e.bow) e.bow = -e.bow;
-    walls.push(wall(W - x - w, H - z - d, w, d, h, kind, e));
+    // Rounded so float noise in the image never makes two touching walls overlap.
+    walls.push(wall(+(W - x - w).toFixed(4), +(H - z - d).toFixed(4), w, d, h, kind, e));
   }
 }
 

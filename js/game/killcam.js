@@ -11,7 +11,7 @@ const HZ = 30;                         // Recording rate; replays interpolate be
 const SECONDS = 8;                     // Long enough to hold a whole death replay while newer frames keep arriving.
 const FRAMES = HZ * SECONDS;
 const EVENT_SLOTS = 1500;              // A loud 6v6 fires about 100 rounds a second.
-const MAX_PLAYERS = 16;
+const MAX_PLAYERS = 34;                // Ground War: 16 a side, and room to spare.
 
 const DEATH_DELAY = 0.4;               // The player sees their own death first.
 const DEATH_PRE = 1.7, DEATH_POST = 0.45;
@@ -115,7 +115,9 @@ export class Killcam {
 
   dispose() {
     if (this.replay) this.#stop();
-    if (this.ui) { this.ui.el.remove(); this.ui = null; }
+    // Both nodes go: a Skip button left on <body> by every match piled up, each still wired to a finished match.
+    if (this.ui) { this.ui.el.remove(); this.ui.skip.remove(); this.ui = null; }
+    document.body?.classList.remove('killcam-on');
   }
 
   /* ---------- Recording ---------- */

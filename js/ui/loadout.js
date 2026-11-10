@@ -1,7 +1,7 @@
 // The Loadouts screen, laid out like a Call of Duty create-a-class: the five sets across the top, the primary as a large
 // hero with its camo and attachments, and everything else in dense rows beside it. Guns open the Armory, a full panel with
 // a category rail, a card with a real picture of every gun and a live preview; nothing changes until Equip.
-import { TACTICALS, LETHALS, PERKS, PERK_TIERS, STREAKS, streakCost } from '../shared/catalog.js';
+import { TACTICALS, LETHALS, PERKS, PERK_TIERS, PRO, STREAKS, streakCost } from '../shared/catalog.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { getCamo } from '../shared/camos.js';
 import { SLOTS, ATTACHMENTS, attachmentsFor } from '../shared/attachments.js';
@@ -14,6 +14,7 @@ import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { ico, backButton } from './yard.js';
 import { stagger, flash, sweep } from './motion.js';
+import { cardHtml, cardsSheet } from './cards.js';
 
 const HERO_STATS = ['damage', 'rate', 'range', 'aimed', 'recoil', 'move', 'reload'];
 
@@ -46,6 +47,7 @@ export class LoadoutsScreen {
       loEquip: () => this.equip(),
       loGunsmith: () => this.onGunsmith(this.selected, this.loadout.primary),
       loOperators: () => this.onOperators(this.selected),
+      loCards: () => cardsSheet(menu, { onChange: () => this.onChange?.(), onClose: () => this.render() }),
       loWeapon: ({ key }) => this.openArmory(key),
       loRename: () => this.onRename(this.selected),
       loSlot: ({ key, idx }) => this.openGear(key, Number(idx)),
@@ -104,6 +106,7 @@ export class LoadoutsScreen {
               <span class="ld-camo"><i class="sw" style="background:${swatchCss(camo)}"></i>${esc(camo.name)}</span>
             </span>
             <span class="ld-hero-lv"><b>${levelHtml(l.primary)}</b><i class="xp"><i style="transform:scaleX(${(prog.maxed ? 1 : prog.into / prog.span).toFixed(3)})"></i></i></span>
+            <span class="ld-cardpin" data-act="loCards" role="button" aria-label="Calling card">${cardHtml(Progress.card, { size: 150, sub: 'Calling card' })}</span>
             <em class="ld-swap">${ico('swap')}Change weapon</em>
             <span class="ld-kit">${SLOTS.map(s => `<i class="${kit[s] ? 'has' : ''}">
               <span class="ld-kit-ico">${itemMark(s, SLOT_LABEL[s])}</span>
@@ -151,9 +154,10 @@ export class LoadoutsScreen {
   tile(key, idx, id, head) {
     const item = GEAR[key].table[id];
     if (!item) return '';
-    return `<button class="ld-tile" data-act="loSlot" data-key="${key}" data-idx="${idx}">
+    const pro = key === 'perks' && Progress.isPro(id);
+    return `<button class="ld-tile${pro ? ' is-pro' : ''}" data-act="loSlot" data-key="${key}" data-idx="${idx}">
       <span class="ld-ico">${itemMark(id, item.name)}</span>
-      <span class="ld-tx"><small>${esc(head)}</small><b>${esc(item.name)}</b></span>
+      <span class="ld-tx"><small>${esc(head)}${pro ? '<i class="pro-chip">Pro</i>' : ''}</small><b>${esc(item.name)}</b></span>
       ${item.count ? `<em>x${item.count}</em>` : ''}
     </button>`;
   }
@@ -318,6 +322,7 @@ export class LoadoutsScreen {
     if (key === 'perks') {
       hint = 'One from each tier';
       cls = 'tiers';
+      this.panel.focus ??= l.perks[0];
       body = PERK_TIERS.map((name, tier) => column(name, 'perks', Object.values(PERKS).filter(p => p.tier === tier), id => l.perks[tier] === id)).join('');
     } else if (key === 'streaks') {
       hint = 'Pick three. Earn them by scoring without dying';
@@ -332,18 +337,37 @@ export class LoadoutsScreen {
     }
     this.panelEl.innerHTML = `
       <div class="ld-sheet">
-        <div class="ld-sheet-head"><b>${esc(title)}</b><small>${esc(hint)}</small><button class="btn is-primary" data-act="loClose" data-sound="confirm">${ico('check')}<b>Done</b></button></div>
+        <div class="ld-sheet-head"><b>${esc(title)}</b>${key === 'perks' ? this.proDetail(this.panel.focus) : `<small>${esc(hint)}</small>`}<button class="btn is-primary" data-act="loClose" data-sound="confirm">${ico('check')}<b>Done</b></button></div>
         <div class="pk-cols ${cls}">${body}</div>
       </div>`;
   }
 
   option(key, item, on, tag) {
     const sec = GEAR[key], open = Progress.isItemUnlocked(sec.kind, item.id);
-    return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
+    const perk = key === 'perks', pro = perk && Progress.isPro(item.id);
+    return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}${pro ? ' is-pro' : ''}${perk && this.panel?.focus === item.id ? ' focus' : ''}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
       <span class="ld-ico">${itemMark(item.id, item.name)}</span>
-      <span class="ld-tx"><b>${esc(item.name)}</b><small>${open ? esc(item.desc) : esc(levelRequirement(Progress.itemUnlockLevel(sec.kind, item.id)))}</small></span>
+      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}</b><small>${open ? esc(item.desc) : esc(levelRequirement(Progress.itemUnlockLevel(sec.kind, item.id)))}</small></span>
       ${open ? (tag ? `<em>${tag}</em>` : '') : `<em class="lock">${ico('lock')}</em>`}
+      ${perk && open ? this.proStrip(item.id) : ''}
     </button>`;
+  }
+
+  // Pro progress along a perk card's bottom edge: one segment per challenge step, gold once Pro.
+  proStrip(id) {
+    const st = Progress.proStatus(id);
+    return `<span class="pro-strip${st.done ? ' done' : ''}">${st.steps.map(c => `<i style="--f:${(c.value / c.goal).toFixed(3)}"></i>`).join('')}</span>`;
+  }
+
+  // The focused perk's Pro: what it adds and how far along each step is. Lives in the sheet head.
+  proDetail(id) {
+    const st = Progress.proStatus(id), perk = PERKS[id];
+    const fmt = n => Math.floor(n).toLocaleString('en-US');
+    return `<div class="pk-pro${st.done ? ' done' : ''}">
+      <div class="pk-pro-top"><i class="pro-chip">${st.done ? 'Pro' : 'Pro locked'}</i><b>${esc(perk.name)}: ${esc(PRO[id].name)}</b></div>
+      <small class="pk-pro-desc">${esc(PRO[id].desc)}</small>
+      ${st.done ? '' : `<div class="pk-pro-steps">${st.steps.map(c => `<span class="${c.done ? 'ok' : ''}"><small>${esc(c.label)}</small><u>${fmt(c.value)}/${fmt(c.goal)}</u><i style="--f:${(c.value / c.goal).toFixed(3)}"></i></span>`).join('')}</div>`}
+    </div>`;
   }
 
   // Perks and equipment stay open so a whole set can be picked in one visit.
@@ -356,6 +380,7 @@ export class LoadoutsScreen {
     if (key === 'perks') {
       const list = [...l.perks];
       list[PERKS[id].tier] = id;
+      this.panel.focus = id;
       Progress.updateLoadout(this.selected, { perks: list });
     } else if (key === 'streaks') {
       // The tile that opened this is the one being replaced; tapping a held streak moves that aim to it instead.

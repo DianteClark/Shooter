@@ -12,6 +12,12 @@ Part 2 replays the ways iOS Safari's own touch stream goes out of step, which Ch
 TouchEvents: a touchstart that iOS swallows because another finger lifted in the same instant (WebKit drops it; the
 finger then reports only moves), a touchstart whose `touches` list leaves out the move thumb, and a touchcancel for
 fingers that then keep sending moves. The move stick must recover on the very next move each time.
+
+Part 3 (V7) covers what else on iOS can take a thumb away: a system gesture that swallows every finger without a single
+touchcancel or touchend (the thumb comes back as a new touch and must get the stick at once, and a stick nobody reports
+any more must stop walking), a touch target removed from the page under a held finger (WebKit then sends that finger's
+events to the detached node only), a thumb that landed on a HUD tap target that has since been hidden (the respawn
+picker), a focused text field left over from a menu, and the touch debug overlay itself.
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -22,8 +28,8 @@ ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '
 
 # Synthetic touch events, built the way WebKit fills them in.
 SYNTH = """
-window.__synth = (type, changed, touches) => {
-  const target = document.querySelector('.controls');
+window.__synth = (type, changed, touches, sel) => {
+  const target = sel === 'tgt' ? window.__tgt : document.querySelector(sel || '.controls');
   const mk = ([id, x, y]) => new Touch({ identifier: id, target, clientX: x, clientY: y, pageX: x, pageY: y });
   const ev = new TouchEvent(type, { bubbles: true, cancelable: true, composed: true, changedTouches: changed.map(mk), touches: touches.map(mk), targetTouches: touches.map(mk) });
   target.dispatchEvent(ev);
@@ -44,7 +50,7 @@ async def main():
                 pg = await ctx.new_page()
                 pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
                 pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
-                await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit')
+                await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit&touchdebug=1')
                 await pg.wait_for_timeout(800)
                 await pg.evaluate("window.__game.Progress.name='Tester'")
                 await pg.locator('[data-act="solo"]').first.click()
@@ -161,6 +167,86 @@ async def main():
                 print(f'  {vw}x{vh} {"orphan on a button stays a button":<46} {"ok" if ok else "FAIL"} {s}')
                 if not ok: failures.append(f'{vw}x{vh} orphan on a button: {s}')
                 await S('touchend', [[31, tac[0], tac[1]]], [])
+
+                print('V7: swallowed fingers, removed targets, hidden HUD taps, focus, overlay')
+                S4 = lambda kind, ch, all_, sel: pg.evaluate('([k,c,t,s]) => window.__synth(k,c,t,s)', [kind, ch, all_, sel])
+                # 7. A system gesture swallows all three fingers: no touchcancel, no touchend, ever. The thumb lifts and lands
+                #    again as a new touch; it must take the move stick at once, not be parked as a spare.
+                await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                await S('touchstart', [R], [[11, LX + 60, LY], R])
+                await S('touchstart', [T], [[11, LX + 60, LY], R, T])
+                await pg.wait_for_timeout(200)
+                await S('touchstart', [[41, LX, LY]], [[41, LX, LY]])
+                await S('touchmove', [[41, LX + 62, LY]], [[41, LX + 62, LY]])
+                s = await stick(); check('thumb back after a swallowed gesture', s)
+                if s['id'] != 41: failures.append(f'{vw}x{vh} swallowed gesture: stick not on the new thumb {s}')
+                await S('touchend', [[41, LX + 62, LY]], [])
+                check('  ... lifted', await stick(), moving=False)
+
+                # 8. A stick whose finger no list names any more stops walking, while the other thumb keeps reporting.
+                await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                await S('touchstart', [R], [[11, LX + 60, LY], R])
+                await pg.wait_for_timeout(300)
+                for k in range(3): await S('touchmove', [[12, RX + k, RY]], [[12, RX + k, RY]])
+                check('unreported move thumb is let go', await stick(), moving=False)
+                await S('touchend', [[12, RX, RY]], [])
+
+                # 9. The element under the move thumb is removed mid-press. WebKit keeps sending that finger's events to
+                #    the detached node; they never reach window, so the controls listen on the node itself.
+                await pg.evaluate("""(() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:0;top:0;width:50%;height:100%';
+                  document.querySelector('.controls').appendChild(d); window.__tgt = d; })()""")
+                await S4('touchstart', [L], [L], 'tgt')
+                await pg.evaluate('window.__tgt.remove()')
+                for k in range(4): await S4('touchmove', [[11, LX + 20 + k * 14, LY]], [[11, LX + 20 + k * 14, LY]], 'tgt')
+                check('target removed under the move thumb', await stick())
+                await S4('touchend', [[11, LX + 62, LY]], [], 'tgt')
+                check('  ... lifted on the detached node', await stick(), moving=False)
+
+                # 10. iOS's way when it removes a target: touchcancel to every finger, which then keep moving.
+                await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                await S('touchstart', [R], [[11, LX + 60, LY], R]); await S('touchstart', [T], [[11, LX + 60, LY], R, T])
+                await S('touchcancel', [[11, LX + 60, LY], R, T], [])
+                await S('touchmove', [[11, LX + 64, LY], [12, RX + 3, RY]], [[11, LX + 64, LY], [12, RX + 3, RY]])
+                s = await stick(); check('touchcancel to all three, thumbs keep moving', s)
+                if s['right'] != 12: failures.append(f'{vw}x{vh} aim stick not recovered after cancel-all: {s}')
+                await S('touchend', [[11, LX + 64, LY], [12, RX + 3, RY]], [])
+                check('  ... lifted', await stick(), moving=False)
+
+                # 11. A thumb that landed on a HUD tap target (the respawn picker) which has since been hidden plays on.
+                await pg.evaluate("""(() => { const b = document.createElement('button'); b.dataset.tap = '1';
+                  b.style.cssText = 'position:fixed;left:0;bottom:0;width:40%;height:80px;z-index:50';
+                  document.body.appendChild(b); window.__tgt = b; })()""")
+                await S4('touchstart', [L], [L], 'tgt')
+                s = await stick(); ok = s['id'] is None
+                print(f'  {vw}x{vh} {"visible HUD tap target is left alone":<46} {"ok" if ok else "FAIL"} {s}')
+                if not ok: failures.append(f'{vw}x{vh} HUD tap grabbed the stick: {s}')
+                await pg.evaluate("window.__tgt.style.display = 'none'")
+                for k in range(4): await S4('touchmove', [[11, LX + 20 + k * 14, LY]], [[11, LX + 20 + k * 14, LY]], 'tgt')
+                check('thumb on a hidden HUD tap target plays on', await stick())
+                await S4('touchend', [[11, LX + 62, LY]], [], 'tgt')
+                await pg.evaluate('window.__tgt.remove()')
+
+                # 12. A text field focused in a menu is let go of by the first touch of play.
+                await pg.evaluate("""(() => { const t = document.createElement('textarea'); t.style.cssText = 'position:fixed;left:-50px;top:0;width:10px;height:10px';
+                  document.body.appendChild(t); t.focus(); window.__tgt = t; })()""")
+                await S('touchstart', [L], [L])
+                focus = await pg.evaluate('document.activeElement === document.body || document.activeElement === null')
+                print(f'  {vw}x{vh} {"focused field blurred by play":<46} {"ok" if focus else "FAIL"}')
+                if not focus: failures.append(f'{vw}x{vh} focus kept')
+                await S('touchend', [L], [])
+                await pg.evaluate('window.__tgt.remove()')
+
+                # 13. The overlay: up, never a touch target, naming fingers and owners and logging events.
+                await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                await S('touchstart', [T], [[11, LX + 60, LY], T])
+                await pg.wait_for_timeout(250)
+                ov = await pg.evaluate("""(() => { const el = document.querySelector('.touchdebug'); if (!el) return null;
+                  return { pe: getComputedStyle(el).pointerEvents, text: el.innerText, shown: !el.hidden }; })()""")
+                ok = bool(ov) and ov['pe'] == 'none' and ov['shown'] and '#11' in ov['text'] and ' L ' in ov['text'] and 'throw:' in ov['text'] and 'start' in ov['text']
+                print(f'  {vw}x{vh} {"touch debug overlay":<46} {"ok" if ok else "FAIL"}')
+                if not ok: failures.append(f'{vw}x{vh} overlay: {ov}')
+                await pg.screenshot(path=f'/tmp/touchdebug-{vw}x{vh}.png')
+                await S('touchend', [T], [[11, LX + 60, LY]]); await S('touchend', [[11, LX + 60, LY]], [])
                 await ctx.close()
             await browser.close()
     finally:

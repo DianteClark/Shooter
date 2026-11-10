@@ -40,6 +40,7 @@ export class Match {
     this.sendAccum = 0;
     this.lastAim = 0;
     this.endTimer = -1;
+    this.ended = false;            // Set once results have been handed to onEnd.
     this.rng = Math.random;
     this.frameEvents = [];
     this.resolvedInput = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
@@ -227,7 +228,7 @@ export class Match {
     if (!a || !this.localAlive || view.phase === 'warmup') { view.throwPreview = null; return; }
     const ps = this.ps;
     const kind = a.slot === 'tactical' ? ps.tactical : ps.lethal;
-    view.throwPreview = previewThrow(this.map, ps.x, ps.z, a.aim, Math.min(a.dist, maxThrowRange(ps.perks)), kind, ps.perks);
+    view.throwPreview = previewThrow(this.map, ps.x, ps.z, a.aim, Math.min(a.dist, maxThrowRange(ps.perks)), kind, ps.perks, ps.pro);
   }
 
   // The host vanished and this device was elected: carry on from the newest snapshot.
@@ -274,20 +275,31 @@ export class Match {
   }
 
   #finish(view) {
+    if (this.ended) return;
     if (this.endTimer < 0) {
       this.controls.setEnabled(false);
-      this.endTimer = (view.lastKill && this.killcam.playFinal(view.lastKill)) || END_HOLD;
+      let hold = 0;
+      try { hold = (view.lastKill && this.killcam.playFinal(view.lastKill)) || 0; } catch (err) { console.error('final kill replay', err); }
+      this.endTimer = hold || END_HOLD;
     }
     this.endTimer -= this.dt;
-    if (this.endTimer <= 0 || this.killcam.skipped) {
-      this.stop();
-      this.telemetry.finish(view);
-      this.onEnd({
-        scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId,
-        myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
-        ...this.awards.finish(view),
-      });
-    }
+    if (this.endTimer <= 0 || this.killcam.skipped) this.#close(view);
+  }
+
+  // The match is over: stop, save, and hand the results on, exactly once. Nothing here may stand between the end of a
+  // match and its results screen, so stats and awards failing costs only their own part of the results.
+  #close(view) {
+    if (this.ended) return;
+    this.ended = true;
+    try { this.stop(); } catch (err) { this.running = false; console.error('match stop', err); }
+    try { this.telemetry.finish(view); } catch (err) { console.error('match stats', err); }
+    let awards = {};
+    try { awards = this.awards.finish(view) ?? {}; } catch (err) { console.error('match awards', err); }
+    this.onEnd({
+      scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode,
+      myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
+      ...awards,
+    });
   }
 
   frame() {
@@ -310,16 +322,19 @@ export class Match {
     this.#updateThrowPreview(view, input);
 
     const events = this.frameEvents;
-    this.killcam.render(view, events, dt);
-    if (this.renderer.ambient?.strikeNow) this.audio.lightning();
-    this.hud.onEvents(events);
-    this.hud.update(view, dt);
-    this.audio.onEvents(events, view);
-    this.audio.update(view, dt);
-    this.awards.onEvents(events, view);
-    this.telemetry.onEvents(events, view);
-    events.length = 0;
-
-    if (view.phase === 'ended') this.#finish(view);
+    try {
+      this.killcam.render(view, events, dt);
+      if (this.renderer.ambient?.strikeNow) this.audio.lightning();
+      this.hud.onEvents(events);
+      this.hud.update(view, dt);
+      this.audio.onEvents(events, view);
+      this.audio.update(view, dt);
+      this.awards.onEvents(events, view);
+      this.telemetry.onEvents(events, view);
+    } finally {
+      events.length = 0;
+      // A frame that throws while drawing the end (the final replay, a HUD readout) must still let the match end.
+      if (view.phase === 'ended') this.#finish(view);
+    }
   }
 }

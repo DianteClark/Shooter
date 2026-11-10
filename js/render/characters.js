@@ -18,7 +18,12 @@ import { uploadUsed } from './dynbuf.js';
 let WEAPONS = {};
 import('../shared/weapons.js').then(m => { WEAPONS = m.WEAPONS || {}; }).catch(() => {});
 
-const MAX_PLAYERS = 16;
+const MAX_PLAYERS = 34;      // Ground War is 16 v 16; two spare for a dummy or a late join.
+const CULL_MARGIN = 3;       // Metres outside the camera's ground footprint a soldier is still posed and drawn.
+// Past this distance from the camera's focus (the outer part of the screen) a soldier's torso and head are drawn from a
+// single-variant mesh: the operator-merged ones carry nine variants' triangles per instance. Hysteresis stops flicker.
+const LOD_FAR = 13, LOD_BACK = 11.5;
+const FULL_MAX = 10;         // And only the ten nearest the focus get the full meshes, however many crowd the screen.
 const TAU = Math.PI * 2;
 
 const CHAR_SCALE = 1.22;
@@ -272,6 +277,14 @@ function variantGeometry(table) {
 }
 
 const torsoGeometry = () => variantGeometry(TORSOS);
+// The distance LOD's torso or head: the trooper alone, so every instance costs one variant's triangles.
+function liteGeometry(table) {
+  const b = new MeshBuilder();
+  table.trooper(b);
+  const g = b.build();
+  g.setAttribute('aVar', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  return g;
+}
 const headGeometry = () => variantGeometry(HEADS);
 
 // Limbs are the same mesh for everyone; part 2 takes the instance's tint and thickness comes from the rig.
@@ -416,6 +429,7 @@ class Rig {
     this.op = 0;              // Index into OPERATORS.
     this.speed = 0;
     this.lastAim = 0;
+    this.lite = false;        // Drawn with the distance LOD last frame.
     this.aimVel = 0;
     this.sx = new Float32Array(SPRINGS);
     this.sv = new Float32Array(SPRINGS);
@@ -496,6 +510,10 @@ export class Characters {
     };
     this.xrayTorso = xrayOf(this.torso, TORSOS);
     this.xrayHead = xrayOf(this.head, HEADS);
+    this.torsoLite = add(liteGeometry(TORSOS), cap);
+    this.headLite = add(liteGeometry(HEADS), cap);
+    this.xrayTorsoLite = xrayOf(this.torsoLite, TORSOS);
+    this.xrayHeadLite = xrayOf(this.headLite, HEADS);
     this.xrayMat = xrayMat;
 
     // Rings: depthTest off so a teammate behind a building still shows where they stand.
@@ -539,18 +557,38 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.ring, this.blob];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.ring, this.blob, this.torsoLite, this.headLite];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
     this.gunList = [];
     for (const id of WEAPON_IDS) this._gunMesh(getGun(id));
 
-    this.counts = { nT: 0, nU: 0, nA: 0, nL: 0, nB: 0 };
+    this.counts = { nT: 0, nTL: 0, nU: 0, nA: 0, nL: 0, nB: 0 };
     this.corpses = new Corpses(this);
     this.vfx = null;           // Set by GameRenderer; the operator preview runs without effects.
     this.surf = null;
     this.focusX = 0; this.focusZ = 0;    // Camera focus: footfalls and small dust only happen near it.
+    // Ground rectangle the camera sees, written by GameRenderer each frame. Soldiers outside it are not posed or
+    // drawn at all: with 32 players most of the map is off screen, and posing is most of a soldier's cost.
+    this.cull = { on: false, x0: 0, x1: 0, z0: 0, z1: 0 };
+    this._lodD = new Float32Array(MAX_PLAYERS + 2);
+  }
+
+  // Squared focus distance inside which a soldier may be drawn in full this frame: the FULL_MAX-th nearest on screen.
+  _fullReach(view, localId) {
+    const d = this._lodD, c = this.cull;
+    let n = 0;
+    for (let i = 0; i < view.players.length && n < d.length; i++) {
+      const p = view.players[i];
+      if (!p.alive || p.id === localId) continue;
+      if (c.on && (p.x < c.x0 - CULL_MARGIN || p.x > c.x1 + CULL_MARGIN || p.z < c.z0 - CULL_MARGIN || p.z > c.z1 + CULL_MARGIN)) continue;
+      const dx = p.x - this.focusX, dz = p.z - this.focusZ, v = dx * dx + dz * dz;
+      let j = n++;
+      while (j > 0 && d[j - 1] > v) { d[j] = d[j - 1]; j--; }
+      d[j] = v;
+    }
+    return n > FULL_MAX ? d[FULL_MAX - 1] : Infinity;
   }
 
   // One instanced mesh per distinct gun model (weapon plus visible attachments), built the first time it is held.
@@ -651,7 +689,8 @@ export class Characters {
     const { localId, localTeam, uav, revealAll } = opts;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
-    let nT = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
+    let nT = 0, nTL = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
+    const fullReach = this._fullReach(view, localId);
     let nRing = 0;
     for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
     let localPlayer = null;
@@ -671,6 +710,16 @@ export class Characters {
         r.downT -= dt;
         if (!p.alive) r.sawDead = true;
         if ((r.sawDead && p.alive) || r.downT <= 0) { r.down = false; r.sawDead = false; }
+      }
+      const cull = this.cull;
+      if (cull.on && p.id !== localId && (p.x < cull.x0 - CULL_MARGIN || p.x > cull.x1 + CULL_MARGIN || p.z < cull.z0 - CULL_MARGIN || p.z > cull.z1 + CULL_MARGIN)) {
+        // Off screen: keep what events read (where the muzzle is, roughly) and let it fade back in when it shows.
+        const ax = Math.cos(p.aim), az = Math.sin(p.aim);
+        r.muzzle[0] = p.x + ax * 0.95; r.muzzle[1] = 1.25; r.muzzle[2] = p.z + az * 0.95;
+        r.eject[0] = p.x; r.eject[1] = 1.2; r.eject[2] = p.z;
+        r.lastAim = p.aim; r.aimVel = 0;
+        r.seen = false; r.reveal = 0; r.visible = false;
+        continue;
       }
 
       const vx = p.vx || 0, vz = p.vz || 0;
@@ -810,21 +859,25 @@ export class Characters {
       if (p.spawnProtect) fade *= 0.55 + 0.45 * Math.abs(Math.sin(view.t * 16));
       const flash = r.flash;
 
+      const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz;
+      r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > (r.lite ? LOD_BACK * LOD_BACK : LOD_FAR * LOD_FAR));
+      const tMesh = r.lite ? this.torsoLite : torso, hMesh = r.lite ? this.headLite : head;
+      const ti = r.lite ? nTL++ : nT, op = r.lite ? 0 : r.op;
       _s.set(look.w, look.h, look.w);
       _m.copy(_body).scale(_s);
-      _m.toArray(torso.instanceMatrix.array, nT * 16);
+      _m.toArray(tMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.TORSO * 16);
-      this._writeFx(torso, nT, fade, flash, team, r.op);
+      this._writeFx(tMesh, ti, fade, flash, team, op);
 
       _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(1, 1, 1);
       _e.set(-roll * 0.5 + r.sx[FLINCH_S] * 0.6, lag * 0.85 + twist * 0.5, r.kick * 0.08 + slide * -0.3 - pitch * 0.4 + r.sx[FLINCH_F] * 0.8);
       _q.setFromEuler(_e);
       _m.compose(_p, _q, _s).premultiply(_body);
-      _m.toArray(head.instanceMatrix.array, nT * 16);
+      _m.toArray(hMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.HEAD * 16);
-      this._writeFx(head, nT, fade, flash, team, r.op);
-      nT++;
+      this._writeFx(hMesh, ti, fade, flash, team, op);
+      if (!r.lite) nT++;
 
       // Gun.
       const gunMesh = this._gunMesh(proto);
@@ -997,10 +1050,12 @@ export class Characters {
 
     // No silhouettes through walls in a replay: the camera there is low, and they read as ghosts.
     this.xrayTorso.count = revealAll ? 0 : nT; this.xrayHead.count = revealAll ? 0 : nT;
+    this.xrayTorsoLite.count = revealAll ? 0 : nTL; this.xrayHeadLite.count = revealAll ? 0 : nTL;
     this.ring.count = nRing; this.blob.count = nRing;
-    this.counts.nT = nT; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
+    this.counts.nT = nT; this.counts.nTL = nTL; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
     this.corpses.step(dt, this.counts);
     torso.count = this.counts.nT; head.count = this.counts.nT;
+    this.torsoLite.count = this.counts.nTL; this.headLite.count = this.counts.nTL;
     upper.count = this.counts.nU; arm.count = this.counts.nA; leg.count = this.counts.nL; boot.count = this.counts.nB;
     held.count = nH;
     // Only the instances drawn this frame are sent; the x-ray meshes share torso and head buffers.
@@ -1025,6 +1080,7 @@ export class Characters {
       m.dispose();
     }
     this.xrayTorso.geometry.dispose(); this.xrayHead.geometry.dispose();
+    this.xrayTorsoLite.geometry.dispose(); this.xrayHeadLite.geometry.dispose();
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();
   }

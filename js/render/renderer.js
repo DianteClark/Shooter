@@ -215,6 +215,7 @@ export class GameRenderer {
     };
 
     this._laserRGB = [0, 0, 0];
+    this._cullV = new THREE.Vector3();
     this._charOpts = { localId: null, localTeam: 0, uav: false, revealAll: false };   // Reused every frame.
     this._hotRGB = [0, 0, 0];
     this.steamClock = 0;
@@ -585,6 +586,20 @@ export class GameRenderer {
     }
   }
 
+  // The ground rectangle under the four screen corners, for culling soldiers next frame. A camera that sees the horizon
+  // (a low replay shot) turns culling off.
+  _updateCull() {
+    const cam = this.camera, c = this.chars.cull, v = this._cullV, o = cam.position;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let i = 0; i < 4; i++) {
+      v.set(i & 1 ? 1 : -1, i & 2 ? 1 : -1, 0.5).unproject(cam).sub(o);
+      if (v.y > -0.05 * v.length()) { c.on = false; return; }
+      const t = -o.y / v.y, x = o.x + v.x * t, z = o.z + v.z * t;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    c.on = true; c.x0 = x0; c.x1 = x1; c.z0 = z0; c.z1 = z1;
+  }
+
   // True when a bullet-blocking wall lies between a shooter's body (ox, oz) and its muzzle.
   _wallBetween(ox, oz, mx, mz) {
     const dx = mx - ox, dz = mz - oz, l = Math.hypot(dx, dz);
@@ -683,6 +698,7 @@ export class GameRenderer {
     } else if (!cine) this.fog.uniforms.on.value = 0;
 
     this._updateCamera(realDt, local);
+    this._updateCull();
     this.world.update(fxDt);
     this.weather.update(fxDt, this.camTarget.x, this.camTarget.z, this.world.material);
     webgl.render(this.scene, this.camera);

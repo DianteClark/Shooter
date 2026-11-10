@@ -1,0 +1,169 @@
+/* Calling cards, the Veteran tag and gold Pro trim (V7). Cards are drawn by js/ui/cards.js; everything inside a card
+   scales from --cw, its width in px, so the same markup serves the kill feed card, results and the picker. */
+
+.ccard {
+  position: relative; display: block; flex: none; width: var(--cw); height: calc(var(--cw) * .2667); overflow: hidden;
+  color: var(--c-chalk); text-align: left; line-height: 1;
+  --cut: calc(var(--cw) * .034); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.ccard .cc-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ccard .cc-em {
+  position: absolute; left: 3.6%; top: 12%; height: 76%; aspect-ratio: 1; display: grid; place-items: center;
+  background: rgba(10,13,17,.42); box-shadow: inset 0 0 0 1px rgba(231,234,228,.14);
+  --c: calc(var(--cw) * .02); clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c));
+}
+.ccard .cc-em > svg { display: block; max-width: 86%; max-height: 86%; width: auto; height: auto; }
+.ccard .cc-swatch { width: 62%; aspect-ratio: 1; transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(255,255,255,.4); }
+.ccard .cc-tx { position: absolute; left: 27%; right: 5%; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: calc(var(--cw) * .012); min-width: 0; }
+.ccard .cc-tx b {
+  font: 400 calc(var(--cw) * .078)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 0 rgba(0,0,0,.6), 0 0 10px rgba(0,0,0,.45);
+}
+.ccard .cc-tx small {
+  font: 400 max(9px, calc(var(--cw) * .04))/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: rgba(231,234,228,.78);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 0 rgba(0,0,0,.6);
+}
+.ccard.gold .cc-tx small { color: #ffe9a8; }
+.ccard.locked .cc-bg, .ccard.locked .cc-em { filter: grayscale(.9) brightness(.5); }
+.ccard.locked .cc-tx b { color: var(--c-haze); }
+.ccard.locked .cc-tx small { color: var(--c-sodium); }
+.ccard .cc-lock { position: absolute; right: 5%; top: 14%; color: var(--c-haze); line-height: 0; }
+.ccard .cc-on { position: absolute; right: 0; top: 0; padding: 3px 4px 4px 6px; background: var(--c-sodium); color: var(--c-ballast); line-height: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 22% 100%); }
+
+/* ---- Veteran / Recruit tag ---- */
+.vet-tag {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px 1px; font: 400 9px/1 var(--f-plate);
+  font-style: normal; letter-spacing: .1em; text-transform: uppercase; text-decoration: none;
+  color: var(--c-haze); background: rgba(231,234,228,.1); box-shadow: inset 0 0 0 1px rgba(231,234,228,.12);
+}
+.vet-tag svg { width: 8px; height: 8px; display: block; }
+.vet-tag u { text-decoration: none; font-variant-numeric: tabular-nums; }
+.vet-tag.vet { color: #2a1a06; background: linear-gradient(180deg, #ffe39a, #e5a536); box-shadow: 0 0 6px rgba(255,214,94,.35); }
+.vet-tag.short { padding: 1px 3px 0; font-size: 8px; letter-spacing: .06em; }
+
+/* ---- Gold Pro trim: perk tiles and picker cards ---- */
+#ui .ld-tile.is-pro, #ui .pk-card.is-pro { box-shadow: var(--bevel), inset 0 0 0 1.5px var(--c-gold), 0 0 0 0 transparent; }
+#ui .pk-card.is-pro.on { box-shadow: var(--bevel-hi), inset 0 0 0 2px var(--c-gold); }
+#ui .pk-card.is-pro.on::after { background: var(--c-gold); }
+#ui .ld-tile.is-pro .ld-ico, #ui .pk-card.is-pro .ld-ico { color: var(--c-gold); }
+.pro-chip {
+  display: inline-block; padding: 1px 3px 0; margin-left: 4px; vertical-align: 1px; font: 400 8px/1 var(--f-plate); letter-spacing: .1em;
+  color: #2a1a06; background: linear-gradient(180deg, #ffe39a, #e5a536); font-style: normal;
+}
+#ui .ld-tile .ld-tx small .pro-chip { vertical-align: 0; }
+
+/* Progress toward Pro along a perk card's bottom edge: one segment per step; all gold once Pro. */
+#ui .pk-card .pro-strip { position: absolute; left: 10px; right: 14px; bottom: 2px; height: 3px; display: flex; gap: 3px; pointer-events: none; }
+#ui .pk-card .pro-strip i { position: relative; flex: 1; background: rgba(231,234,228,.13); overflow: hidden; }
+#ui .pk-card .pro-strip i::after { content: ''; position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--f)); }
+#ui .pk-card .pro-strip.done i::after { background: var(--c-gold); }
+#ui .pk-card.focus { outline: 1px dashed rgba(255,215,94,.7); outline-offset: -3px; }
+
+/* The focused perk's Pro, in the sheet head between the title and Done. */
+#ui .ld-sheet-head .pk-pro { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: auto auto; column-gap: 10px; row-gap: 2px; align-items: center; padding: 3px 8px; background: rgba(29,35,43,.7); box-shadow: inset 2px 0 0 var(--c-sodium); }
+#ui .pk-pro.done { box-shadow: inset 2px 0 0 var(--c-gold), inset 0 0 0 1px rgba(255,215,94,.3); grid-template-columns: minmax(0, 1fr); }
+.pk-pro-top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pk-pro-top .pro-chip { margin: 0; flex: none; }
+.pk-pro:not(.done) .pk-pro-top .pro-chip { background: rgba(231,234,228,.16); color: var(--c-haze); }
+.pk-pro-top b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-pro.done .pk-pro-top b { color: var(--c-gold); }
+#ui .pk-pro-desc { grid-column: 1; font: 400 10.5px/1.15 var(--f-body); letter-spacing: 0; color: #c9cfd4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pk-pro-steps { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pk-pro-steps > span { position: relative; display: flex; align-items: baseline; gap: 4px; padding-bottom: 3px; min-width: 0; }
+#ui .pk-pro-steps small { flex: 1; min-width: 0; font: 400 10px/1.1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-pro-steps u { flex: none; font: 400 10px/1 var(--f-plate); text-decoration: none; color: var(--c-haze); font-variant-numeric: tabular-nums; }
+.pk-pro-steps i { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(231,234,228,.14); }
+.pk-pro-steps i::after { content: ''; position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--f)); }
+.pk-pro-steps .ok u { color: var(--c-gold); }
+.pk-pro-steps .ok i::after { background: var(--c-gold); }
+
+/* Loadouts: the calling card, pinned in the hero's free top-right corner under the weapon level. Player-wide, not
+   per loadout; tapping it opens the picker. */
+#ui .ld-cardpin { position: absolute; z-index: 3; right: 10px; top: 34px; line-height: 0; transition: transform var(--dur-fast) var(--ease-out); box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+#ui .ld-cardpin:active { transform: scale(.96); }
+
+/* ---- Card picker ---- */
+#ui .overlay.show:has(.cards-sheet) { padding: 0; background: var(--face-dusk); }
+.cards-sheet {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px;
+  padding: calc(var(--st, 0px) + 8px) calc(var(--sr, 0px) + 12px) calc(var(--sb, 0px) + 8px) calc(var(--sl, 0px) + 12px);
+}
+.cs-head { flex: none; display: flex; align-items: center; gap: 12px; }
+.cs-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cs-title b { font: 400 24px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.cs-title small { font: 400 11px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.cs-now { margin-left: auto; }
+#ui .cs-done { min-height: 38px; }
+.cs-tabs { flex: none; display: flex; gap: 3px; }
+.cs-tab { display: flex; align-items: baseline; gap: 6px; padding: 7px 10px 6px; background: rgba(47,57,68,.85); color: var(--c-chalk); }
+.cs-tab b { font: 400 13px/1 var(--f-plate); letter-spacing: var(--tr-plate); }
+.cs-tab small { font: 400 10px/1 var(--f-plate); color: var(--c-haze); }
+.cs-tab.on { background: var(--c-chalk); color: var(--c-ballast); }
+.cs-tab.on small { color: var(--c-steel); }
+.cs-grid {
+  flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 6px; align-content: start; justify-items: center;
+}
+.cs-cell { padding: 0; background: none; line-height: 0; transition: transform var(--dur-fast) var(--ease-out); }
+.cs-cell:active { transform: scale(.97); }
+.cs-cell.on .ccard { outline: 2px solid var(--c-sodium); outline-offset: -2px; }
+
+/* ---- Killer card banner and results ---- */
+.death-by:has(.ccard) { flex-direction: column; align-items: flex-start; gap: 4px; }
+.death-by .ccard { margin-top: 2px; box-shadow: inset 0 -3px 0 var(--team); }
+.death-by .ccard .cc-tx b { font-size: 22px; }
+.dc-vet { display: flex; align-items: center; gap: 6px; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.dc-vet u { text-decoration: none; }
+.lb-vet { flex: none; line-height: 0; margin-left: 2px; }
+.lb-vet:empty { display: none; }
+#ui .rs-mvp:has(.ccard) { padding: 4px 6px 4px 10px; }
+#ui .rs-mvp .ccard { grid-row: 1 / span 2; }
+
+/* Results: Pro steps this match moved. Each bar shows where the step was (dim) and where it is now. */
+#ui .rs-pro { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; background: rgba(29,35,43,.75); box-shadow: inset 2px 0 0 var(--c-gold); }
+#ui .rs-pro-h { font: 400 9px/1 var(--f-plate); letter-spacing: .12em; color: var(--c-gold); text-transform: uppercase; }
+#ui .rs-pro-row { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 5px; row-gap: 3px; align-items: center; color: var(--c-chalk); }
+#ui .rs-pro-row .ico { grid-row: 1 / span 2; height: 16px; }
+#ui .rs-pro-row b { font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .rs-pro-row.done b { color: var(--c-gold); }
+.rs-pro-bars { display: flex; gap: 3px; }
+.rs-pro-bars i { position: relative; flex: 1; height: 4px; background: rgba(231,234,228,.12); overflow: hidden; }
+.rs-pro-bars i::before, .rs-pro-bars i::after { content: ''; position: absolute; inset: 0; transform-origin: left; }
+.rs-pro-bars i::after { background: var(--c-sodium); transform: scaleX(var(--f)); }
+.rs-pro-bars i::before { z-index: 1; background: rgba(255,255,255,.35); transform: scaleX(var(--a)); }
+.rs-pro-row.done .rs-pro-bars i::after { background: var(--c-gold); }
+
+/* Results ceremonies: a Pro perk gets gold rays and a gold stamp; a calling card is shown full size. */
+#ui .rx-cer:has(.rx-pro) { background: radial-gradient(ellipse 60% 60% at 50% 46%, #4a3a12, var(--c-night) 72%); }
+#ui .rx-cer:has(.rx-pro) .rx-rays { background: repeating-conic-gradient(rgba(255,215,94,.42) 0 8deg, transparent 8deg 20deg); opacity: .6; }
+#ui .rx-pro .rx-kick { color: var(--c-gold); }
+#ui .rx-pro h2 { color: #fff4bf; text-shadow: 0 3px 0 rgba(0,0,0,.5), 0 0 26px rgba(255,215,94,.45); }
+#ui .rx-pro small { max-width: 44ch; line-height: 1.25; white-space: normal; color: #e9dcb4; }
+#ui .rx-mark.rx-pro-mark { position: relative; color: var(--c-gold); }
+#ui .rx-pro-mark .pro-chip { position: absolute; right: -14px; bottom: 4px; margin: 0; padding: 3px 6px 2px; font-size: 13px; }
+#ui .rx-cardwin .rx-mark { min-height: 0; margin: 6px 0 8px; }
+#ui .rx-cardwin .rx-kick { font-size: 15px; }
+
+/* Pro abilities drawn over the world (footprints, blast radius, enemy equipment). Never takes a touch. */
+.pro-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.pro-toast {
+  position: absolute; left: 50%; top: calc(var(--st, 0px) + 112px); transform: translateX(-50%); z-index: var(--z-hud-alert);
+  display: flex; align-items: center; gap: 6px; padding: 5px 10px 4px; pointer-events: none; opacity: 0;
+  font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #2a1a06; background: linear-gradient(180deg, #ffe39a, #e5a536);
+  --cut: 6px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.pro-toast small { font: 400 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); opacity: .8; }
+
+@media (prefers-reduced-motion: reduce) { .cs-cell { transition: none; } }
+
+/* ---- Service record ---- */
+#ui .pf-rankname .vet-tag { margin-left: 6px; vertical-align: 2px; }
+#ui .pf-callcard { align-self: flex-start; padding: 0; margin: 6px 0 2px; background: none; line-height: 0; position: relative; z-index: 1; transition: transform var(--dur-fast) var(--ease-out); }
+#ui .pf-callcard:active { transform: scale(.97); }
+.pf-pro { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); gap: 3px; }
+.pf-pro span { position: relative; display: grid; place-items: center; height: 30px; background: rgba(47,57,68,.7); color: var(--c-rail); }
+#ui .pf-pro span .ico { height: 18px; }
+.pf-pro span i { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px; background: rgba(231,234,228,.12); }
+.pf-pro span i::after { content: ''; position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--f)); }
+.pf-pro span.on { color: var(--c-gold); background: rgba(255,215,94,.12); box-shadow: inset 0 0 0 1px rgba(255,215,94,.55); --icon-accent: #fff4bf; }
+.pf-pro span.on i { display: none; }

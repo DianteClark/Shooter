@@ -1,12 +1,15 @@
 // The player screen (rank ladder, prestige) and the prestige confirm and ceremony shared with weapons.
-import { MAX_PRESTIGE, MAX_LEVEL, prestigeName } from '../shared/progression.js';
+import { MAX_PRESTIGE, MAX_LEVEL, prestigeName, getCard } from '../shared/progression.js';
 import { WEAPON_IDS } from '../shared/constants.js';
+import { PERK_IDS, PERKS, PRO } from '../shared/catalog.js';
+import { cardHtml, cardsSheet, vetTag } from './cards.js';
+import { icon } from './icons.js';
 import { Progress } from './progress.js';
 import { esc, badgeMark, ROMAN, levelRequirement } from './widgets.js';
 import { ico, header } from './yard.js';
 import { rollNumber } from './motion.js';
 
-const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator' };
+const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator', pro: 'Pro perk', card: 'Calling card' };
 export const kindLabel = kind => KIND_LABEL[kind] ?? kind;
 
 // Confirm sheet: names what is lost and what stays. onYes runs once on the confirm button.
@@ -75,13 +78,14 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
         <div class="pf-card${can ? ' ready' : ''}" data-in="left">
           <div class="pf-badge">${badgeMark(p, 96)}</div>
           <div class="pf-id">
-            <span class="pf-rankname">${esc(prestigeName(p))}</span>
+            <span class="pf-rankname">${esc(prestigeName(p))}${vetTag(Progress.isVeteran())}</span>
             <button class="pf-name" data-act="pfRename"><b>${esc(Progress.name || 'Rookie')}</b>${ico('edit')}</button>
           </div>
           <div class="pf-level">
             <span class="pf-lvbig"><small>Level</small><b class="pf-lvn">${lp.level}</b></span>
             <span class="pf-xp"><small>${lp.maxed ? 'Maximum level' : `${Math.round(lp.into).toLocaleString('en-US')} / ${lp.span.toLocaleString('en-US')} XP`}</small><i class="xp big"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i></span>
           </div>
+          <button class="pf-callcard" data-act="pfCards" aria-label="Calling card">${cardHtml(Progress.card, { size: 236, sub: 'Calling card: tap to change' })}</button>
           <div class="pf-actions">
             <button class="btn ${can ? 'is-primary' : ''}" data-act="pfPrestige" ${can ? '' : 'disabled'}>${ico(can ? 'prestige' : 'lock')}<b>${can ? 'Enter prestige' : esc(hint)}</b></button>
             <button class="btn" data-act="pfSave">${ico('save')}<b>Save code</b></button>
@@ -100,6 +104,14 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
             <div class="pf-career">${careerStats().map(([label, value, icon]) => `<div>${ico(icon)}<b>${value}</b><small>${label}</small></div>`).join('')}</div>
           </section>
           <section data-in="up">
+            <h4>${ico('star')}Pro perks<small>${Progress.proPerks().length} of ${PERK_IDS.length}</small></h4>
+            <div class="pf-pro">${PERK_IDS.map(id => {
+              const on = Progress.isPro(id), st = Progress.proStatus(id);
+              const frac = st.steps.reduce((a, c) => a + c.value / c.goal, 0) / st.steps.length;
+              return `<span class="${on ? 'on' : ''}" title="${esc(`${PERKS[id].name} Pro: ${PRO[id].name}`)}" style="--f:${frac.toFixed(3)}">${icon(id, { size: 22 })}<i></i></span>`;
+            }).join('')}</div>
+          </section>
+          <section data-in="up">
             <h4>${ico('unlock')}Next unlocks</h4>
             <div class="pf-next">
               ${upcoming.length ? upcoming.map(u => `<div class="pf-item">${ico(u.id)}<span><b>${esc(u.name)}</b><small>${esc(levelRequirement(u.level))}</small></span></div>`).join('') : `<p class="pf-done">${ico('check')}Every perk, tactical, lethal and streak is unlocked.</p>`}
@@ -110,6 +122,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     rollNumber(menu.el.querySelector('.pf-lvn'), lp.level, { from: Math.max(1, lp.level - 6), duration: 600 });
   };
   menu.on({
+    pfCards: () => cardsSheet(menu, { onChange: () => onChange?.(), onClose: render }),
     pfBack: onBack,
     pfRename: onRename,
     pfSave: onSave,
@@ -127,6 +140,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
           kicker: `Prestige ${r.prestige} of ${MAX_PRESTIGE}`,
           title: prestigeName(r.prestige),
           sub: 'Level reset. Everything you earned stays yours.',
+          rewards: [{ kind: 'card', name: getCard(`prestige-${r.prestige}`).name }],
           onDone: render,
         });
       },

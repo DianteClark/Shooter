@@ -1,12 +1,12 @@
 // The rules of progression as pure functions and data: no DOM, no storage, runs in node.
 // js/ui/progress.js holds the one save and applies these rules to it.
 import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
-import { PERKS, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
-import { PRIMARY_IDS, WEAPON_IDS } from './constants.js';
+import { PERKS, PERK_IDS, PRO, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
+import { MAX_HP, PRIMARY_IDS, WEAPON_IDS } from './constants.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;     // 3: Pro perk progress and the calling card (V7). 2 still loads and imports.
 export const MAX_LEVEL = 50;
 export const MAX_PRESTIGE = 10;
 export const MAX_WEAPON_LEVEL = 30;
@@ -184,6 +184,248 @@ export function prestigeRewards(rank) {
 
 export const cosmeticRequirement = item => (item.prestige ? `Weapon Prestige ${item.prestige} on this weapon` : '');
 
+/* ---------- Prestige names ---------- */
+// Above the cards, which are named from them when the module loads.
+const PRESTIGE_NAMES = ['Yard Hand', 'Brakeman', 'Coupler', 'Signalman', 'Switchman', 'Dispatcher', 'Conductor', 'Engineer', 'Yardmaster', 'Roadmaster', 'Sovereign of the Yard'];
+
+export const prestigeName = rank => PRESTIGE_NAMES[Math.min(MAX_PRESTIGE, Math.max(0, Math.floor(Number(rank)) || 0))];
+
+// Card colours per prestige rank, after each rank's badge: ground, mid, light, accent.
+const PRESTIGE_ART = [
+  ['#2a2016', '#6b5030', '#f3dfa4', '#e0a23a'], ['#1e2830', '#4d5a64', '#f3dfa4', '#e8c26a'],
+  ['#0f2224', '#1a7f7a', '#bff6ee', '#3dffa0'], ['#14243a', '#2f6f9e', '#d8eeff', '#ffb347'],
+  ['#1e1030', '#7a2d8c', '#f0d6ff', '#ffe08a'], ['#141e34', '#2a3a55', '#e8fbff', '#d4a040'],
+  ['#2a120c', '#c4562e', '#ffd98a', '#ffb37a'], ['#0e2a1e', '#2a8562', '#ffe59a', '#ff5a7a'],
+  ['#28102c', '#8c2f6e', '#ffd27a', '#7ae8ff'], ['#170838', '#7a4dff', '#fff4bf', '#ffcf40'],
+];
+
+/* ---------- Pro perks (V7) ---------- */
+// Each perk turns Pro (js/shared/catalog.js PRO) when every step of its challenge is done. Steps count only while the
+// perk is equipped, in any match, bots included. Goals were set from bot matches (each mixed-skill bot's per-match rate
+// of the stat, times about six) so focused use finishes a perk in roughly five to eight matches; a strong player is
+// faster. `stat` names come from ProTracker below.
+export const PRO_CHALLENGES = {
+  marathon:    [{ stat: 'sprintM', goal: 3000, label: 'Sprint 3,000 m' }, { stat: 'slides', goal: 50, label: 'Slide 50 times' }],
+  flak:        [{ stat: 'blastHits', goal: 10, label: 'Survive 10 explosive hits' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  quickmend:   [{ stat: 'regenHp', goal: 900, label: 'Regenerate 900 health' }, { stat: 'lowKills', goal: 8, label: 'Get 8 kills under half health' }],
+  tacmask:     [{ stat: 'shrugged', goal: 10, label: 'Shrug off 10 flashes or fires' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  adrenaline:  [{ stat: 'woundedKills', goal: 22, label: 'Get 22 gun kills while hurt' }, { stat: 'multi', goal: 15, label: 'Get 15 multi-kills' }],
+  scavenger:   [{ stat: 'kills', goal: 70, label: 'Scavenge from 70 kills' }, { stat: 'streak3', goal: 6, label: 'Get 6 three-kill streaks' }],
+  fasthands:   [{ stat: 'reloads', goal: 25, label: 'Reload 25 times' }, { stat: 'swapKills', goal: 8, label: 'Get 8 kills just after a swap' }],
+  strongarm:   [{ stat: 'farThrows', goal: 15, label: 'Throw past 13 m 15 times' }, { stat: 'equipKills', goal: 5, label: 'Get 5 lethal equipment kills' }],
+  bandolier:   [{ stat: 'throws', goal: 45, label: 'Throw 45 pieces of equipment' }, { stat: 'bothKit', goal: 9, label: 'Use tactical and lethal in one life 9 times' }],
+  hardline:    [{ stat: 'streaksCalled', goal: 5, label: 'Call in 5 scorestreaks' }, { stat: 'assists', goal: 18, label: 'Get 18 assists' }],
+  ghost:       [{ stat: 'uavSec', goal: 180, label: 'Stay alive 3 min under enemy UAV' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  coldblood:   [{ stat: 'enemyStreaks', goal: 8, label: 'Be alive for 8 enemy scorestreaks' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  deadsilence: [{ stat: 'flankKills', goal: 7, label: 'Get 7 kills from the side or behind' }, { stat: 'closeKills', goal: 15, label: 'Get 15 kills within 8 m' }],
+  tracker:     [{ stat: 'hits', goal: 160, label: 'Land 160 hits' }, { stat: 'assists', goal: 18, label: 'Get 18 assists' }],
+  engineer:    [{ stat: 'deploys', goal: 8, label: 'Make 8 Trophy saves or Sentry and aircraft calls' }, { stat: 'kills', goal: 50, label: 'Get 50 kills' }],
+};
+export const PRO_STATS = [...new Set(Object.values(PRO_CHALLENGES).flatMap(list => list.map(c => c.stat)))];
+
+// {perk, name, desc, steps:[{stat,label,goal,value,done}], done} from one save's counters and the list of finished perks.
+export function proStatus(perk, progress = {}, done = []) {
+  const counts = progress[perk] ?? {};
+  const finished = done.includes(perk);
+  const steps = (PRO_CHALLENGES[perk] ?? []).map(c => {
+    const value = finished ? c.goal : Math.min(c.goal, counts[c.stat] ?? 0);
+    return { stat: c.stat, label: c.label, goal: c.goal, value, done: value >= c.goal };
+  });
+  return { perk, name: PRO[perk]?.name ?? perk, desc: PRO[perk]?.desc ?? '', steps, done: finished || steps.every(c => c.done) };
+}
+
+// Veteran / Recruit: the tag in lobby, intro and scoreboard. Tunable here and nowhere else.
+export const VETERAN = { prestige: 1, level: 30, pro: 5 };
+export function isVeteran({ prestige = 0, level = 1, pro = 0 } = {}) {
+  const n = Array.isArray(pro) ? pro.length : pro;
+  return prestige >= VETERAN.prestige || level >= VETERAN.level || n >= VETERAN.pro;
+}
+
+const BLAST_EQUIP = new Set(['frag', 'sticky', 'mine', 'cluster']);
+const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship']);
+const MULTI_MEDALS = new Set(['double', 'triple', 'fury']);
+const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'gunship']);
+const FAR_THROW = 13;            // Past the base throw range (js/sim/equipment.js THROW_RANGE): a Strong Arm throw.
+const SWAP_WINDOW = 2.5;
+const BURN_GAP = 1.5;            // Burn ticks closer together than this are one fire.
+const CLOSE_KILL = 8;
+const FLANK = 1.3;               // Radians between a victim's aim and the way to the killer: a kill from the side or behind.
+
+// Counts what one player did in one match, for the Pro challenges. Pure: no DOM, no storage, runs in node.
+// Feed onEvents(events, view) every frame with that player's view (its `t` is the clock). gains() returns
+// {perk: {stat: n}} for the perks that were equipped when each thing happened; setPerks() whenever the loadout in use
+// changes (MatchAwards does it at each spawn). `raw` holds every stat regardless of perks.
+export class ProTracker {
+  constructor(localId, perks = []) {
+    this.id = localId;
+    this.raw = Object.fromEntries(PRO_STATS.map(k => [k, 0]));
+    this.byPerk = {};
+    this.setPerks(perks);
+    this.prevT = null; this.prevHp = MAX_HP; this.prevX = null; this.prevZ = 0; this.wasAlive = false;
+    this.swapT = -99; this.burnT = -99;
+    this.life = { tactical: false, lethal: false, both: false };
+  }
+
+  setPerks(perks) { this.perks = (perks ?? []).filter(id => PRO_CHALLENGES[id]); }
+
+  add(stat, n = 1) {
+    if (!(n > 0) || !(stat in this.raw)) return;
+    this.raw[stat] += n;
+    for (const perk of this.perks) {
+      if (!PRO_CHALLENGES[perk].some(c => c.stat === stat)) continue;
+      const g = this.byPerk[perk] ??= {};
+      g[stat] = (g[stat] ?? 0) + n;
+    }
+  }
+
+  gains() { return this.byPerk; }
+
+  onEvents(events, view) {
+    const id = this.id, me = view?.players?.find(p => p.id === id);
+    const t = view?.t ?? 0, dt = this.prevT === null ? 0 : Math.min(0.25, Math.max(0, t - this.prevT));
+    let healed = false, spawned = false;
+    for (const e of events) {
+      switch (e.t) {
+        case 'kill':
+          if (e.assist === id) this.add('assists');
+          if (e.by !== id || e.target === id) break;
+          this.add('kills');
+          if (e.streak) break;
+          if (e.equip) { if (LETHALS[e.equip]) this.add('equipKills'); break; }
+          if (this.prevHp < MAX_HP) this.add('woundedKills');
+          if (this.prevHp <= MAX_HP / 2) this.add('lowKills');
+          if ((e.dist ?? 99) <= CLOSE_KILL) this.add('closeKills');
+          if (t - this.swapT <= SWAP_WINDOW) this.add('swapKills');
+          if (me) {
+            const v = view.players.find(p => p.id === e.target);
+            if (v) {
+              const toKiller = Math.atan2(me.z - v.z, me.x - v.x);
+              let d = Math.abs(toKiller - v.aim) % (Math.PI * 2);
+              if (d > Math.PI) d = Math.PI * 2 - d;
+              if (d >= FLANK) this.add('flankKills');
+            }
+          }
+          break;
+        case 'hit':
+          if (e.by === id && e.target !== id && e.w) this.add('hits');
+          if (e.target === id && !e.killed) {
+            if (BLAST_EQUIP.has(e.eq) || BLAST_STREAK.has(e.st)) this.add('blastHits');
+            if (e.eq === 'molotov') { if (t - this.burnT > BURN_GAP) this.add('shrugged'); this.burnT = t; }
+          }
+          break;
+        case 'flashed': if (e.id === id) this.add('shrugged'); break;
+        case 'zap': if (e.by === id) this.add('deploys'); break;
+        case 'medal':
+          if (e.id !== id) break;
+          if (MULTI_MEDALS.has(e.medal)) this.add('multi');
+          if (e.medal === 'streak3') this.add('streak3');
+          break;
+        case 'slide': if (e.id === id) this.add('slides'); break;
+        case 'reload': if (e.id === id && e.stage === 'start') this.add('reloads'); break;
+        case 'swap': if (e.id === id) this.swapT = t; break;
+        case 'heal': if (e.id === id) healed = true; break;
+        case 'spawn':
+          if (e.id === id) { spawned = true; this.life.tactical = this.life.lethal = this.life.both = false; }
+          break;
+        case 'throw': {
+          if (e.id !== id) break;
+          this.add('throws');
+          if ((e.dist ?? 0) > FAR_THROW) this.add('farThrows');
+          const L = this.life;
+          if (TACTICALS[e.kind]) L.tactical = true; else if (LETHALS[e.kind]) L.lethal = true;
+          if (L.tactical && L.lethal && !L.both) { L.both = true; this.add('bothKit'); }
+          break;
+        }
+        case 'streak':
+          if (e.id !== id) {
+            if (me?.alive && e.team !== me.team) this.add('enemyStreaks');
+            break;
+          }
+          this.add('streaksCalled');
+          if (DEPLOY_STREAKS.has(e.kind)) this.add('deploys');
+          break;
+      }
+    }
+    if (me) {
+      if (me.alive && this.wasAlive && !spawned) {
+        if (me.hp > this.prevHp && !healed) this.add('regenHp', me.hp - this.prevHp);
+        if (me.sprinting && this.prevX !== null) {
+          const d = Math.hypot(me.x - this.prevX, me.z - this.prevZ);
+          if (d < 3) this.add('sprintM', d);       // More than this in a frame is a respawn or a stall.
+        }
+        if (dt > 0) {
+          const enemy = 1 - me.team;
+          if ((view.uav?.[enemy] ?? 0) > 0) this.add('uavSec', dt);
+        }
+      }
+      this.prevHp = me.alive ? me.hp : MAX_HP;
+      this.prevX = me.x; this.prevZ = me.z;
+      this.wasAlive = me.alive;
+    }
+    this.prevT = t;
+  }
+}
+
+// Adds one match's gains into a save's counters. Returns the perks that just turned Pro.
+export function applyProGains(save, gains) {
+  const fresh = [];
+  for (const [perk, stats] of Object.entries(gains ?? {})) {
+    if (!PRO_CHALLENGES[perk] || save.proDone.includes(perk)) continue;
+    const counts = save.pro[perk] ??= {};
+    for (const [stat, n] of Object.entries(stats)) {
+      if (PRO_STATS.includes(stat) && Number.isFinite(n) && n > 0) counts[stat] = Math.min(COUNT_MAX, Math.round(((counts[stat] ?? 0) + n) * 10) / 10);
+    }
+    if (proStatus(perk, save.pro, save.proDone).done) { save.proDone.push(perk); fresh.push(perk); }
+  }
+  return fresh;
+}
+
+/* ---------- Calling cards (V7) ---------- */
+// Banners shown on the killer card and in results. Pure data: the art is drawn by js/ui/cards.js from `art`, so a new
+// card is one line here. `need(c)` reads a career summary (see cardCareer in js/ui/progress.js):
+// {prestige, peakLevel, level, pro:[perks], kills, head, long, slide, clean, mastered, camos:Set}.
+// `art`: {p: pattern, c: [ground, mid, light, accent], e: emblem} with the emblem an icon id, `badge:<rank>` or a camo.
+const card = (id, name, group, req, need, art) => ({ id, name, group, req, need, art });
+export const CARD_GROUPS = ['Starter', 'Pro', 'Prestige', 'Mastery', 'Career'];
+const PRO_ART = {
+  marathon: ['rails', '#1d3b2f', '#2f7a55', '#b7f5cf'], flak: ['plates', '#3a2a1c', '#7a5530', '#ffcf8a'],
+  quickmend: ['cross', '#14323a', '#21747e', '#9ff2ea'], tacmask: ['hex', '#262a3a', '#4f5a85', '#c9d3ff'],
+  adrenaline: ['pulse', '#3a1414', '#a12b2b', '#ff9a8a'], scavenger: ['crates', '#2e2a18', '#6c6430', '#efe08a'],
+  fasthands: ['speed', '#1a2a3e', '#2c5f9e', '#a8d4ff'], strongarm: ['arc', '#30200f', '#8a4d14', '#ffc06a'],
+  bandolier: ['belts', '#2b2216', '#6b5434', '#f0d39a'], hardline: ['chevrons', '#2a1838', '#6a3a8e', '#e2b8ff'],
+  ghost: ['fog', '#151a22', '#3d4a5c', '#d6e2f0'], coldblood: ['frost', '#0f2233', '#2a6e99', '#bfefff'],
+  deadsilence: ['waves', '#16161e', '#3a3a50', '#c6c6e6'], tracker: ['prints', '#24200f', '#5e5426', '#f5e7a0'],
+  engineer: ['circuit', '#12261c', '#2b6b4a', '#9dffc8'],
+};
+export const CARDS = [
+  card('yard', 'Switchyard', 'Starter', 'Every player starts with it', () => true, { p: 'hazard', c: ['#1d232b', '#39424d', '#c8ccd2', '#ff9f1c'], e: 'ui:flag' }),
+  ...PERK_IDS.map(perk => card(`pro-${perk}`, PRO[perk].name, 'Pro', `${PERKS[perk].name} Pro`, c => c.pro.includes(perk),
+    { p: PRO_ART[perk][0], c: [PRO_ART[perk][1], PRO_ART[perk][2], PRO_ART[perk][3], '#ffd659'], e: perk, gold: true })),
+  ...Array.from({ length: MAX_PRESTIGE }, (_, i) => i + 1).map(n => card(`prestige-${n}`, prestigeName(n), 'Prestige', `Prestige ${n}`, c => c.prestige >= n,
+    { p: n >= 8 ? 'rays' : n >= 5 ? 'chevrons' : 'rails', c: PRESTIGE_ART[n - 1], e: `badge:${n}` })),
+  card('camo-gold', 'Sovereign', 'Mastery', 'Sovereign camo on any weapon', c => c.camos.has('gold'), { p: 'rays', c: ['#3a2a08', '#b27616', '#fff4bf', '#ffd659'], e: 'camo:gold', gold: true }),
+  card('mastery-5', 'Armorer', 'Mastery', 'Master 5 weapons', c => c.mastered >= 5, { p: 'plates', c: ['#2a2410', '#7a6420', '#ffe9a0', '#ffd659'], e: 'ui:gunsmith', gold: true }),
+  card('camo-molten', 'Molten Core', 'Mastery', 'Molten Core camo on any weapon', c => c.camos.has('molten'), { p: 'pulse', c: ['#1a0d0a', '#a3270a', '#ffd23f', '#ff4a0a'], e: 'camo:molten', gold: true }),
+  card('camo-prism', 'Prism', 'Mastery', 'Prism camo on any weapon', c => c.camos.has('prism'), { p: 'speed', c: ['#1c0c2a', '#5a2a9e', '#18e8ff', '#ff2bd6'], e: 'camo:prism', gold: true }),
+  card('kills-100', 'Blooded', 'Career', '100 gun kills', c => c.kills >= 100, { p: 'rails', c: ['#2a1416', '#6e2a30', '#ffb0a8', '#ff5a4a'], e: 'ui:skull' }),
+  card('kills-1000', 'Thousand Yard', 'Career', '1,000 gun kills', c => c.kills >= 1000, { p: 'chevrons', c: ['#2e0e12', '#8e1a26', '#ffd0c8', '#ff3040'], e: 'ui:skull', gold: true }),
+  card('head-250', 'Dead Eye', 'Career', '250 headshots', c => c.head >= 250, { p: 'rings', c: ['#101c24', '#22475c', '#bfe6ff', '#ff9f1c'], e: 'medal:headshot' }),
+  card('long-100', 'Long Haul', 'Career', '100 longshots', c => c.long >= 100, { p: 'speed', c: ['#13202a', '#2a4a62', '#cfe8ff', '#7cc8ff'], e: 'medal:longshot' }),
+  card('slide-100', 'Low Rider', 'Career', '100 slide kills', c => c.slide >= 100, { p: 'waves', c: ['#1a1830', '#3e3a7a', '#d8d4ff', '#9a8cff'], e: 'slide' }),
+  card('clean-250', 'Bare Hands', 'Career', '250 equipment-free kills', c => c.clean >= 250, { p: 'plates', c: ['#1e2328', '#4a545e', '#e6ecf2', '#9aa4ad'], e: 'ui:aim' }),
+  card('level-30', 'Thirty Up', 'Career', 'Reach level 30', c => c.peakLevel >= 30, { p: 'hazard', c: ['#24180a', '#5c3c14', '#ffd9a0', '#ff9f1c'], e: 'ui:rank' }),
+  card('pro-5', 'Pro Shop', 'Career', 'Earn 5 Pro perks', c => c.pro.length >= 5, { p: 'circuit', c: ['#221a08', '#6a5214', '#fff0b8', '#ffd659'], e: 'ui:star', gold: true }),
+  card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }),
+  card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' }),
+];
+export const CARD_IDS = CARDS.map(c => c.id);
+export const getCard = id => CARDS.find(c => c.id === id) ?? CARDS[0];
+
+// Ids of every card a career has earned.
+export function cardsEarned(career) {
+  return CARDS.filter(c => c.need(career)).map(c => c.id);
+}
+
 /* ---------- Save shape ---------- */
 const DEFAULT_NAMES = ['Assault', 'Rush', 'Breach', 'Suppress', 'Overwatch'];
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -238,7 +480,24 @@ export function blankSave() {
   return {
     version: SAVE_VERSION, name: '', flags: {}, xp: 0, totalXp: 0, prestige: 0, peakLevel: 1,
     weapons: {}, loadouts: Array.from({ length: LOADOUT_COUNT }, (_, i) => cleanLoadout(null, i)), active: 0,
+    pro: {}, proDone: [], card: 'yard',
   };
+}
+
+// Pro counters: {perk: {stat: n}} for known perks and the stats their challenges use; finished perks as a list.
+function cleanPro(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const perk of PERK_IDS) {
+    if (!isObj(raw[perk])) continue;
+    const counts = {};
+    for (const c of PRO_CHALLENGES[perk]) {
+      const v = raw[perk][c.stat];
+      if (Number.isFinite(v) && v > 0) counts[c.stat] = Math.min(COUNT_MAX, Math.round(v * 10) / 10);
+    }
+    if (Object.keys(counts).length) out[perk] = counts;
+  }
+  return out;
 }
 
 // Turns anything at all into a valid save: bad fields become defaults, good fields survive.
@@ -262,7 +521,20 @@ export function sanitizeSave(raw) {
     for (let i = 0; i < LOADOUT_COUNT; i++) if (raw.loadouts[i] !== undefined) s.loadouts[i] = cleanLoadout(raw.loadouts[i], i);
   }
   s.active = Math.min(LOADOUT_COUNT - 1, count(raw.active));
+  s.pro = cleanPro(raw.pro);
+  // A perk stays Pro once earned, even if its goals are retuned later; one whose counters already meet them is Pro too.
+  const listed = Array.isArray(raw.proDone) ? raw.proDone : [];
+  s.proDone = PERK_IDS.filter(id => listed.includes(id) || proStatus(id, s.pro, []).done);
+  s.card = CARD_IDS.includes(raw.card) ? raw.card : 'yard';
   return s;
+}
+
+// Any stored save, of any version this build knows, to the current shape. v1 has no version field; v2 lacks only
+// the Pro and card fields, which sanitizeSave fills with defaults.
+export function migrateSave(raw) {
+  if (!isObj(raw)) return blankSave();
+  if (!Number.isFinite(raw.version)) return migrateV1(raw);
+  return sanitizeSave(raw);
 }
 
 // v1: {name, primary, camoByWeapon, kills, xp, flags, equipment}. Keeps name, XP, kills and every camo the
@@ -298,7 +570,7 @@ export function migrateV1(v1) {
   return s;
 }
 
-/* ---------- Export code: "SY2.<base64url>.<checksum>" ---------- */
+/* ---------- Export code: "SY3.<base64url>.<checksum>" (SY2 codes still import) ---------- */
 const CODE_MAX = 32768;
 
 function fnv1a(str) {
@@ -330,6 +602,8 @@ function pack(s) {
     s.version, s.name, s.xp, s.totalXp, s.prestige, s.peakLevel, s.active,
     Object.entries(s.weapons).map(([id, w]) => [id, ...GUN_STATS.map(k => w[k]), w.owned, w.camo, w.tracer, w.killFx]),
     s.loadouts.map(l => [l.name, l.primary, l.secondary, l.attachments, l.perks, l.tactical, l.lethal, l.streaks, l.operator]),
+    PERK_IDS.filter(id => s.pro?.[id]).map(id => [id, PRO_CHALLENGES[id].map(c => s.pro[id][c.stat] ?? 0)]),
+    s.proDone ?? [], s.card ?? 'yard',
   ];
 }
 
@@ -344,9 +618,16 @@ function unpack(a) {
     [w.owned, w.camo, w.tracer, w.killFx] = g.slice(GUN_STATS.length + 1);
     weapons[g[0]] = w;
   }
+  // v3 tail: Pro counters by step, finished perks, the calling card. A v2 code simply has none of it.
+  const pro = {};
+  for (const row of Array.isArray(a[9]) ? a[9] : []) {
+    if (!Array.isArray(row) || !PRO_CHALLENGES[row[0]] || !Array.isArray(row[1])) continue;
+    pro[row[0]] = Object.fromEntries(PRO_CHALLENGES[row[0]].map((c, i) => [c.stat, row[1][i]]));
+  }
   return {
     version, name, xp, totalXp, prestige, peakLevel, active, weapons,
     loadouts: loadouts.map(l => (Array.isArray(l) ? { name: l[0], primary: l[1], secondary: l[2], attachments: l[3], perks: l[4], tactical: l[5], lethal: l[6], streaks: l[7], operator: l[8] } : null)),
+    pro, proDone: a[10], card: a[11],
   };
 }
 
@@ -360,7 +641,8 @@ export function decodeSave(code) {
   if (typeof code !== 'string' || code.length > CODE_MAX) return { ok: false, error: 'format' };
   const m = /^SY(\d+)\.([A-Za-z0-9_-]+)\.([0-9a-z]+)$/.exec(code.trim());
   if (!m) return { ok: false, error: 'format' };
-  if (Number(m[1]) !== SAVE_VERSION) return { ok: false, error: 'version' };
+  const version = Number(m[1]);
+  if (version < 2 || version > SAVE_VERSION) return { ok: false, error: 'version' };
   if (fnv1a(m[2]) !== m[3]) return { ok: false, error: 'checksum' };
   let parsed;
   try {
@@ -368,16 +650,13 @@ export function decodeSave(code) {
   } catch {
     return { ok: false, error: 'data' };
   }
-  if (!parsed || parsed.version !== SAVE_VERSION) return { ok: false, error: 'data' };
+  if (!parsed || parsed.version !== version) return { ok: false, error: 'data' };
   return { ok: true, save: sanitizeSave(parsed) };
 }
 
 /* ---------- Prestige badges ---------- */
 // Procedural flat-polygon emblems in a railway idiom. No gradients or filters, so no ids or defs: the same
 // badge can appear many times in a page, and it stays legible at kill-feed size.
-const PRESTIGE_NAMES = ['Recruit', 'Brakeman', 'Coupler', 'Signalman', 'Switchman', 'Dispatcher', 'Conductor', 'Engineer', 'Yardmaster', 'Roadmaster', 'Sovereign of the Yard'];
-
-export const prestigeName = rank => PRESTIGE_NAMES[Math.min(MAX_PRESTIGE, Math.max(0, count(rank)))];
 
 const f1 = v => Math.round(v * 10) / 10;
 const pts = list => list.map(p => `${f1(p[0])},${f1(p[1])}`).join(' ');

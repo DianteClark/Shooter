@@ -86,6 +86,7 @@ export const FIRING_REVEAL = 1.5;   // firingT after a shot: seconds shown on th
 const FASTHANDS_MULT = 0.72;    // Reload and swap time.
 const MARATHON_SPRINT = 1.08;
 const MARATHON_SLIDE_COOL = 0.6;
+export const MARATHON_PRO_RELOAD = 1.35;   // Run and Load: reload clock speed while sprinting.
 
 // Assist range, reach (scales ASSIST_CONE and ASSIST_EDGE), slowdown (scales the friction) and strength (scales
 // ASSIST_MAX_OFFSET) are tunables; these are their values at 1x.
@@ -117,6 +118,10 @@ function refreshDefs(ps) {
 }
 
 function hasPerk(ps, perk) { return ps.perks.includes(perk); }
+
+// A Pro ability works while its perk is equipped and its owner has earned Pro on it. `ps.pro` is the owner's whole list
+// (from loadout.pro), so a loadout change on the death screen needs nothing else to keep Pro right.
+export function hasPro(ps, perk) { return ps.perks.includes(perk) && ps.pro.includes(perk); }
 function reloadMult(ps) { return hasPerk(ps, 'fasthands') ? FASTHANDS_MULT : 1; }
 function slideCooldownOf(ps) { return MOVE.slideCooldown * (hasPerk(ps, 'marathon') ? MARATHON_SLIDE_COOL : 1); }
 
@@ -126,6 +131,7 @@ function applyLoadout(ps, l) {
   if (SECONDARY_IDS.includes(l.secondary)) ps.secondary = l.secondary;
   if (l.camo) ps.camo = l.camo;
   if (Array.isArray(l.perks)) ps.perks = l.perks.slice();
+  if (Array.isArray(l.pro)) ps.pro = l.pro.slice();
   if (TACTICALS[l.tactical]) ps.tactical = l.tactical;
   if (LETHALS[l.lethal]) ps.lethal = l.lethal;
   if (l.attachments && typeof l.attachments === 'object') ps.attachments = l.attachments;
@@ -156,7 +162,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, 
     id, x: 0, z: 0, aim: 0, vx: 0, vz: 0, instantReload,
     slot: 0, primary, secondary: SECONDARY_ID, weapon: primary, camo,
     attachments: NO_ATTACHMENTS, defs: [WEAPONS[primary], WEAPONS[SECONDARY_ID]],
-    perks: [], tactical: DEFAULT_LOADOUT.tactical, lethal: DEFAULT_LOADOUT.lethal,
+    perks: [], pro: [], tactical: DEFAULT_LOADOUT.tactical, lethal: DEFAULT_LOADOUT.lethal,
     tacticalLeft: 0, lethalLeft: 0,
     heat: 0, overheated: false, overheatT: 0, overheatEdge: false, firingT: 0,
     ammo: [0, 0], reserve: [0, 0],
@@ -166,6 +172,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, 
     cooldown: 0, bloom: 0, shotIndex: 0,
     // Internal, not part of the wire format.
     swapT: 0, shellT: 0, sinceShot: 9, burstLeft: 0,
+    holsterT: 0, holsterSlot: 0, holsterDur: 0,   // Fast Hands Pro: a reload finishing on the holstered gun.
     heatIdle: 9, calmT: 0,
     slideDirX: 0, slideDirZ: 0, slideSpeed: 0,
     aaOffset: 0, aaRaw: null,
@@ -198,15 +205,24 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
   ps.sliding = false; ps.slideT = 0; ps.slideCool = 0;
   ps.cooldown = 0; ps.bloom = 0; ps.shotIndex = 0;
   ps.swapT = 0; ps.sinceShot = 9; ps.burstLeft = 0;
+  ps.holsterT = 0; ps.holsterDur = 0;
   ps.aaOffset = 0; ps.aaRaw = null;
   return ps;
 }
 
 function setSlot(ps, slot) {
+  // Sleight (Fast Hands Pro): a magazine reload in progress carries on in the holster instead of being lost, and
+  // swapping back picks it up where it is. Shell-fed guns load by hand, so theirs still stops.
+  const carry = ps.reloadT > 0 && !weaponDef(ps).shellReload && hasPro(ps, 'fasthands');
+  const resume = ps.holsterT > 0 && ps.holsterSlot === slot;
+  const resumeT = ps.holsterT, resumeDur = ps.holsterDur;
+  if (carry) { ps.holsterT = ps.reloadT; ps.holsterDur = ps.reloadDur; ps.holsterSlot = ps.slot; }
+  else if (resume) ps.holsterT = 0;
   ps.slot = slot;
   ps.weapon = slot === 0 ? ps.primary : ps.secondary;
   const w = weaponDef(ps);
   ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0;
+  if (resume) { ps.reloadT = resumeT; ps.reloadDur = resumeDur; }
   ps.shotIndex = 0; ps.bloom = 0; ps.burstLeft = 0;
   ps.adsT *= 0.4;
   ps.swapT = w.swapTime * reloadMult(ps);
@@ -233,8 +249,22 @@ function startReload(ps, w) {
   ps.burstLeft = 0;
 }
 
+// The holstered gun's reload under Sleight: no animation to wait on, only the clock, then the magazine.
+function stepHolster(ps, dt) {
+  if (ps.holsterT <= 0) return;
+  ps.holsterT -= dt;
+  if (ps.holsterT > 0) return;
+  ps.holsterT = 0; ps.holsterDur = 0;
+  const i = ps.holsterSlot, w = weaponDef(ps, i === 0 ? ps.primary : ps.secondary);
+  const got = w.unlimitedReserve ? w.magazine - ps.ammo[i] : Math.min(w.magazine - ps.ammo[i], ps.reserve[i]);
+  ps.ammo[i] += got;
+  if (!w.unlimitedReserve) ps.reserve[i] -= got;
+}
+
 function stepReload(ps, w, dt) {
   if (ps.reloadT <= 0) return;
+  // Run and Load (Marathon Pro): the reload clock runs fast while sprinting.
+  if (ps.sprinting && hasPro(ps, 'marathon')) dt *= MARATHON_PRO_RELOAD;
   const i = ps.slot;
   ps.reloadT -= dt;
   if (w.shellReload) {
@@ -467,6 +497,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   ps.adsT = ps.adsT < room ? Math.min(room, ps.adsT + rate) : Math.max(room, ps.adsT - rate * ADS_OUT_RATE);
 
   stepReload(ps, w, dt);
+  stepHolster(ps, dt);
   stepHeat(ps, dt);
 
   ps.sinceShot += dt;
@@ -771,4 +802,83 @@ export function decodeHumanState(d) {
     camo: d[15],
     overheated: !!(flags & 8), heat: (d[16] || 0) / 100, firingT: (d[17] || 0) / 10,
   };
+}
+
+// ---- Pro senses: what Keen Ears and Footprints let a player perceive. Pure, run wherever the view is (the HUD). ----
+
+export const HEAR_RANGE = 14;          // Keen Ears (Dead Silence Pro): metres a sprinting enemy is heard from.
+
+// Enemies the local player hears: alive, sprinting, within HEAR_RANGE, and not running Dead Silence themselves (a view
+// player's `quiet`). Fills and returns `out`.
+export function heardEnemies(view, me, out = []) {
+  out.length = 0;
+  if (!me || !me.alive) return out;
+  for (let i = 0; i < view.players.length; i++) {
+    const p = view.players[i];
+    if (p.team === me.team || !p.alive || !p.sprinting || p.quiet) continue;
+    if (Math.hypot(p.x - me.x, p.z - me.z) <= HEAR_RANGE) out.push(p);
+  }
+  return out;
+}
+
+export const PRINT_LIFE = 4;           // Footprints (Tracker Pro): seconds a print stays on the ground.
+export const PRINT_STRIDE = 1.15;      // Metres between prints.
+export const PRINT_RANGE = 30;         // Metres from the player a print can be seen at.
+const PRINT_MAX = 160;
+
+// Enemy footprints. update() every frame with the view; prints are left where enemies walked, alternating feet, and
+// fade over PRINT_LIFE. Only prints the player has line of sight to are returned by visible(), so they lead round
+// corners without seeing through them. Fixed pool; no allocation once warm.
+export class Footprints {
+  constructor() {
+    this.pool = Array.from({ length: PRINT_MAX }, () => ({ x: 0, z: 0, a: 0, t: -99, side: 1 }));
+    this.next = 0;
+    this.last = new Map();       // Enemy id -> {x, z, side} of their last print.
+    this.out = [];
+  }
+
+  reset() {
+    for (const p of this.pool) p.t = -99;
+    this.last.clear();
+  }
+
+  update(view, me, now) {
+    if (!me) return;
+    for (let i = 0; i < view.players.length; i++) {
+      const p = view.players[i];
+      if (p.team === me.team) continue;
+      let l = this.last.get(p.id);
+      if (!l) this.last.set(p.id, l = { x: p.x, z: p.z, side: 1 });
+      if (!p.alive) { l.x = p.x; l.z = p.z; continue; }
+      const dx = p.x - l.x, dz = p.z - l.z, d = Math.hypot(dx, dz);
+      if (d < PRINT_STRIDE) continue;
+      // A jump this long is a respawn or a teleport, not a walk.
+      if (d < PRINT_STRIDE * 6) {
+        const f = this.pool[this.next];
+        this.next = (this.next + 1) % PRINT_MAX;
+        const a = Math.atan2(dz, dx);
+        l.side = -l.side;
+        f.x = p.x + Math.cos(a + Math.PI / 2) * 0.16 * l.side;
+        f.z = p.z + Math.sin(a + Math.PI / 2) * 0.16 * l.side;
+        f.a = a; f.t = now; f.side = l.side;
+      }
+      l.x = p.x; l.z = p.z;
+    }
+  }
+
+  // Prints still fresh, within PRINT_RANGE and in sight of `me`. Each carries `k`, 1 when new and 0 at PRINT_LIFE.
+  visible(map, me, now, smokes) {
+    const out = this.out;
+    out.length = 0;
+    if (!me || !me.alive) return out;
+    for (let i = 0; i < PRINT_MAX; i++) {
+      const f = this.pool[i], age = now - f.t;
+      if (age < 0 || age >= PRINT_LIFE) continue;
+      if (Math.hypot(f.x - me.x, f.z - me.z) > PRINT_RANGE) continue;
+      if (!hasLineOfSight(map, me.x, me.z, f.x, f.z, smokes)) continue;
+      f.k = 1 - age / PRINT_LIFE;
+      out.push(f);
+    }
+    return out;
+  }
 }

@@ -3,6 +3,7 @@
 @import url("fonts.css");
 @import url("menus.css");
 @import url("loadout.css");
+@import url("cards.css");
 
 /* Dusk yard: steel that has gone blue-mauve in the last light, with sodium lamps for anything that wants attention.
    Team colours come from js/shared/constants.js and are the only fully saturated colours on screen. */

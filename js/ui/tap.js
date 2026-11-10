@@ -71,7 +71,22 @@ function current(p) {
   return null;
 }
 
+// A press whose finger is in no touch list any more lost its touchend (iOS drops them when a system gesture takes the
+// finger). Left in place it would keep fingerDown() true for good, and the menu turntables would never draw again.
+function prune(touches) {
+  for (const [id, p] of presses) {
+    let alive = false;
+    for (let i = 0; i < touches.length; i++) if (touches[i].identifier === id) { alive = true; break; }
+    if (!alive) { presses.delete(id); setPressed(p, false); }
+  }
+}
+
+// Shown on screen: a control hidden while the finger was down (the respawn picker as the player comes back) must not
+// fire when that finger lifts.
+const shown = el => el.getClientRects().length > 0;
+
 function start(e) {
+  if (presses.size) prune(e.touches);
   for (const t of e.changedTouches) {
     const target = t.target?.nodeType === 1 ? t.target : t.target?.parentElement;
     const el = target?.closest?.(TAPPABLE);
@@ -106,7 +121,7 @@ function end(e) {
     if (!el) continue;
     const over = inside(p.rect, p.x, p.y) || inside(el.getBoundingClientRect(), p.x, p.y);
     setPressed(p, false);
-    if (!over || !usable(el)) continue;
+    if (!over || !usable(el) || !shown(el)) continue;
     if (e.cancelable) e.preventDefault();
     lastFire = { at: performance.now(), x: p.x, y: p.y };
     el.click();

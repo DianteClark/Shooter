@@ -20,8 +20,9 @@ const RELEASE_DONE = 0.09;      // Radians from the direction of travel at which
 const SWAP_MIN_PX = 150;        // Both thumbs would have to jump this far together for a swap of identities to be real.
 
 // Controlled throws: the thumb that pressed Tactical or Lethal keeps going and sets direction and distance.
-const THROW_HOLD_MS = 160;
-const MISSING_DROP_MS = 250;    // How long a stick's finger must be absent from touch lists before it is let go.      // A press shorter than this, without leaving the button, is a quick throw.
+const THROW_HOLD_MS = 160;      // A press shorter than this, without leaving the button, is a quick throw.
+const MISSING_DROP_MS = 250;    // How long a held finger must go unseen in every touch list before it is let go.
+const TAKEOVER_MS = 120;        // A new thumb on a stick whose finger has gone unseen this long takes the stick at once.
 const THROW_ARM_PX = 30;        // Radius around the button's centre: leaving it starts the aim, returning cancels.
 const THROW_FULL_PX = 118;      // Drag distance from the button centre that means full range.
 const THROW_MIN_M = 2.5;        // Shortest aimed toss; a drag that barely clears the button is a lob at your feet.
@@ -42,6 +43,21 @@ const THROW_SLOTS = ['tactical', 'lethal'];
 // Equipment that applies instantly has nothing to aim, so its button keeps firing on the press.
 const INSTANT = new Set(['stim']);
 
+const nodeName = n => (n?.nodeType === 1 ? n.tagName.toLowerCase() + (n.classList[0] ? '.' + n.classList[0] : '') : String(n?.nodeName ?? n));
+
+// A HUD element with its own tap, still on screen. Hidden ones (the respawn picker once the player is back) do not
+// count: a thumb that landed on one keeps playing.
+function hudTap(target) {
+  const el = target?.closest?.('[data-tap]');
+  return !!el && el.getClientRects().length > 0;
+}
+const onTuner = target => !!target?.closest?.('.tuner');
+
+function inList(list, id) {
+  for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return true;
+  return false;
+}
+
 function freshInput() {
   return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1, throwAim: null, throwDist: null };
 }
@@ -59,7 +75,8 @@ export class Controls {
     this.aimLatch = null;
     this.sprintOn = false;
     this.edge = { slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
-    this.missing = { left: 0, right: 0 };   // When each stick's finger was first absent from a touch list.
+    this.seen = { left: 0, right: 0 };      // When each stick's finger last appeared in any touch list.
+    this.buttonSeen = new Map();   // touch id -> when that button finger last appeared in a touch list.
     this.throw = null;             // The press in aim mode: { slot, id, cx, cy, x, y, at, left, cancel }.
     this.throwHeld = { slot: '', aim: 0, dist: 0 };    // Reused while a throw is held; returned from read().
     this.throwReleased = null;     // The aim of a throw released since the last read, or null for a quick one.
@@ -74,7 +91,10 @@ export class Controls {
     this.buttonTouch = new Map();  // touch id -> button or tile name
     // iOS's touch stream is not always whole (see #adopt). These two let a finger it lost track of be picked up again.
     this.lost = new Map();         // touch id -> { side, ox, oz }: a stick let go of without that finger's touchend
-    this.spare = new Set();        // Fingers that started but hold nothing: a third finger beside a held stick.
+    this.spare = new Map();        // touch id -> 'stick' | 'button': fingers that hold nothing. A 'stick' spare (a second
+                                   // finger beside a held stick) takes that stick when it frees up; a 'button' one never does.
+    this.watched = new WeakSet();  // Touch targets with listeners of their own; see #watch.
+    this.debug = null;             // (text) => void while the touch debug overlay is on (js/ui/touchdebug.js).
     this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
     this.equip = { tactical: { kind: '', left: NaN }, lethal: { kind: '', left: NaN } };
     this.scoreCache = { score: NaN, capped: null };
@@ -87,9 +107,19 @@ export class Controls {
     this.#applyTuning();
     onTune(key => { if (key === null || key === 'fireRing' || key === 'leftSize') this.#applyTuning(); });
     this.tuner = mountTuner(this.root);
-    this.onTouchStart = e => this.#start(e);
-    this.onTouchMove = e => this.#move(e);
-    this.onTouchEnd = e => this.#end(e);
+    this.handled = new WeakSet();  // Events the window listeners took, so a node listener never runs one twice.
+    this.onTouchStart = e => { this.handled.add(e); this.#start(e); };
+    this.onTouchMove = e => { this.handled.add(e); this.#move(e); };
+    this.onTouchEnd = e => { this.handled.add(e); this.#end(e); };
+    // An event whose target has left the document travels to that node alone: it never reaches window. These run only
+    // for such events; while the target is attached the window listeners above have them.
+    this.onDetached = e => {
+      // A target removed while its own event was on the way reaches here after window already had it.
+      if (e.target?.isConnected !== false || this.handled.has(e)) return;
+      this.debug?.(`detached ${e.type} on ${nodeName(e.target)}`);
+      if (e.type === 'touchmove') this.#move(e);
+      else this.#end(e);
+    };
     const opts = { passive: false, capture: true };
     window.addEventListener('touchstart', this.onTouchStart, opts);
     window.addEventListener('touchmove', this.onTouchMove, opts);
@@ -97,7 +127,11 @@ export class Controls {
     window.addEventListener('touchcancel', this.onTouchEnd, opts);
     window.addEventListener('resize', () => this.remeasure());
     window.addEventListener('orientationchange', () => this.remeasure());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.#release(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) return;
+      this.debug?.('release: page hidden');
+      this.#release();
+    });
   }
 
   #build() {
@@ -120,7 +154,7 @@ export class Controls {
       <i class="rest rest-l"></i><i class="rest rest-r"></i>
       ${BUTTONS.map(b => `
       <button class="tbtn tbtn-${b}" data-btn="${b}" aria-label="${LABELS[b]}">
-        ${icon(EMPTY_ICON[b] ?? b)}
+        <span class="tbtn-icon" style="display:contents">${icon(EMPTY_ICON[b] ?? b)}</span>
         <span class="tbtn-label">${LABELS[b]}</span>
         ${b in EMPTY_ICON ? '<b class="tbtn-count">0</b>' : ''}
       </button>`).join('')}
@@ -250,11 +284,47 @@ export class Controls {
   }
 
   setEnabled(on) {
+    if (this.enabled !== on) this.debug?.(on ? 'controls on' : 'controls off (release)');
     this.enabled = on;
     this.el.classList.toggle('live', on);
     this.tuner.setLive(on);
-    if (on) this.#measure();
-    else this.#release();
+    if (on) {
+      this.#calm();
+      this.#measure();
+    } else {
+      this.#release();
+    }
+  }
+
+  // A focused field or a live text selection arms iOS's editing gestures (three-finger undo and the edit menu), which
+  // take every finger on the glass with a touchcancel. Nothing in a match is editable, so neither may outlive a menu.
+  #calm() {
+    const a = document.activeElement;
+    if (a && a !== document.body && typeof a.blur === 'function') a.blur();
+    try { document.getSelection()?.removeAllRanges(); } catch { /* nothing selected */ }
+  }
+
+  // Who holds a finger, for the touch debug overlay: L, R, throw:<slot>, btn:<name>, spare, lost:<side> or ''.
+  ownerOf(id) {
+    if (id === this.left.id) return 'L';
+    if (id === this.right.id) return 'R';
+    if (this.throw?.id === id) return `throw:${this.throw.slot}`;
+    const b = this.buttonTouch.get(id);
+    if (b) return `btn:${b}`;
+    const lost = this.lost.get(id);
+    if (lost) return `lost:${lost.side === 'left' ? 'L' : 'R'}`;
+    const spare = this.spare.get(id);
+    if (spare) return spare === 'stick' ? 'spare' : 'spare:btn';
+    return '';
+  }
+
+  // Ids this layer believes are down, for the overlay to flag the ones no touch list mentions any more.
+  heldIds() {
+    const out = [];
+    if (this.left.id !== null) out.push(this.left.id);
+    if (this.right.id !== null) out.push(this.right.id);
+    for (const id of this.buttonTouch.keys()) out.push(id);
+    return out;
   }
 
   // slot: { kind, cost, held, blocked, denied }. score is the player's current score. Returns true when this call
@@ -305,7 +375,8 @@ export class Controls {
     const e = this.equip[which], b = this.buttons[which];
     if (kind && e.kind !== kind) {
       e.kind = kind;
-      b.querySelector('svg').outerHTML = icon(kind);
+      // Into a stable wrapper: nothing under a finger is ever replaced, only its contents.
+      b.querySelector('.tbtn-icon').innerHTML = icon(kind);
       b.querySelector('.tbtn-label').textContent = (which === 'tactical' ? TACTICALS : LETHALS)[kind]?.name ?? kind;
     }
     if (e.left !== left) {
@@ -341,17 +412,19 @@ export class Controls {
     return null;
   }
 
+  // Per finger, never per event: one event may carry a HUD tap and a stick finger at once.
   #start(e) {
     if (!this.enabled) return;
-    const target = e.target;
-    // HUD elements with their own taps (mic, weapon picker) must keep their click.
-    if (target?.closest?.('[data-tap]') || target?.closest?.('.tuner')) return;
-    e.preventDefault();
-    this.#reconcile(e.touches, e.timeStamp);
-    this.#revive(e.touches, e.timeStamp);
+    const at = e.timeStamp;
+    this.#seeList(e.touches, at);
+    this.#reconcile(e.touches, at);
+    this.#revive(e.touches, at);
+    let ours = false, tuner = false;
     for (const t of e.changedTouches) {
-      // The tuning panel's own touches; the panel never covers the screen, so a thumb beside it still plays.
-      if (t.target?.closest?.('.tuner')) continue;
+      if (onTuner(t.target)) { tuner = true; continue; }   // The tuning panel's own touches; it never covers the screen.
+      if (hudTap(t.target)) continue;                       // HUD elements with their own taps (mic, weapon picker).
+      ours = true;
+      this.#watch(t.target);
       // iOS reuses identifiers: a "new" finger with an id still in use means the old one ended without telling us.
       this.#forgetStale(t.identifier);
       this.lost.delete(t.identifier);
@@ -359,67 +432,107 @@ export class Controls {
       const x = t.clientX, y = t.clientY;
       const btn = this.#buttonAt(x, y);
       if (btn) {
-        this.#press(btn, t.identifier, e.timeStamp);
+        this.#press(btn, t.identifier, at);
         this.buttonTouch.set(t.identifier, btn);
+        this.buttonSeen.set(t.identifier, at);
         this.hintEl.hidden = true;
         continue;
       }
       if ((x < this.width / 2) !== this.lefty) {
-        if (this.left.id === null) this.#grabLeft(t.identifier, x, y);
-        else this.#keep(this.spare, t.identifier);
-      } else if (this.right.id === null) {
-        this.#grabRight(t.identifier, x, y, e.timeStamp);
+        if (this.left.id !== null && this.#gone('left', e.touches, at)) this.#takeOver('left', at);
+        if (this.left.id === null) this.#grabLeft(t.identifier, x, y, at);
+        else this.#keep(this.spare, t.identifier, 'stick');
       } else {
-        this.#keep(this.spare, t.identifier);
+        if (this.right.id !== null && this.#gone('right', e.touches, at)) this.#takeOver('right', at);
+        if (this.right.id === null) this.#grabRight(t.identifier, x, y, at);
+        else this.#keep(this.spare, t.identifier, 'stick');
       }
+    }
+    if (ours && !tuner) {
+      e.preventDefault();
+      // A focused field arms iOS's three-finger editing gestures; a match never has one.
+      if (document.activeElement && document.activeElement !== document.body) this.#calm();
     }
   }
 
-  // Bounded: a finger whose touchend iOS never sent must not leave an entry behind for the rest of the session.
-  #keep(set, id, value) {
-    if (set.size >= 16) set.delete(set.keys().next().value);
-    if (value === undefined) set.add(id);
-    else set.set(id, value);
+  // A stick whose finger is missing from this list and has not been seen for a moment: the thumb was lifted without
+  // its touchend reaching us (a system gesture took it), and the thumb landing now is the same thumb, re-planted.
+  #gone(side, touches, at) {
+    const id = this[side].id;
+    return !inList(touches, id) && at - this.seen[side] >= TAKEOVER_MS;
   }
 
-  // A finger reporting a move that holds nothing. iOS sends these in two ways, and both used to leave the stick dead
+  #takeOver(side, at) {
+    this.debug?.(`${side === 'left' ? 'L' : 'R'} #${this[side].id} unseen ${Math.round(at - this.seen[side])}ms: new thumb takes it`);
+    this.#drop(this[side].id, at, true);
+  }
+
+  // A touch target that leaves the document takes the rest of its finger's events with it (see onDetached), so each
+  // one gets listeners of its own, once.
+  #watch(target) {
+    if (!target || typeof target.addEventListener !== 'function' || this.watched.has(target)) return;
+    this.watched.add(target);
+    const opts = { passive: false };
+    target.addEventListener('touchmove', this.onDetached, opts);
+    target.addEventListener('touchend', this.onDetached, opts);
+    target.addEventListener('touchcancel', this.onDetached, opts);
+  }
+
+  // Bounded: a finger whose touchend iOS never sent must not leave an entry behind for the rest of the session.
+  #keep(map, id, value) {
+    if (map.size >= 16) map.delete(map.keys().next().value);
+    map.set(id, value);
+  }
+
+  // A finger reporting a move that holds nothing. iOS sends these in three ways, and each used to leave the stick dead
   // under a thumb that was still on the glass, typically right as a throw is released:
   //  - its touchstart was never delivered (WebKit drops a touchstart that lands in the same instant another finger
   //    lifts, such as the thumb re-planting as the grenade finger lets go);
-  //  - the stick was let go of by inference (a `touches` list that left the thumb out, an identifier that looked
-  //    reused, a touchcancel) and the finger then kept moving, which proves it was there all along.
-  // A lost stick resumes with its own base; a never-seen finger takes a free stick from where it is now, never a button.
+  //  - the stick was let go of by inference (a finger unseen in touch lists, an identifier that looked reused, a
+  //    touchcancel) and the finger then kept moving, which proves it was there all along;
+  //  - it landed beside a held stick (a spare), and that stick has since been let go of.
+  // A lost stick resumes with its own base; any other finger takes a free stick from where it is now, never a button.
   #adopt(t, at) {
     const id = t.identifier, x = t.clientX, y = t.clientY;
-    if (this.buttonTouch.has(id) || this.spare.has(id)) return;
-    if (t.target?.closest?.('[data-tap]') || t.target?.closest?.('.tuner')) return;
+    if (this.buttonTouch.has(id) || this.spare.get(id) === 'button') return;
+    if (onTuner(t.target) || hudTap(t.target)) return;
     const was = this.lost.get(id);
     this.lost.delete(id);
     if (was) {
       if (was.side === 'left' && this.left.id === null) {
-        this.#grabLeft(id, was.ox, was.oz);
+        this.#grabLeft(id, was.ox, was.oz, at);
         this.left.x = x; this.left.y = y;
+        this.debug?.(`L picked up again by #${id}`);
       } else if (was.side === 'right' && this.right.id === null) {
         this.#grabRight(id, was.ox, was.oz, at);
         this.#aimMove(x, y, at);
+        this.debug?.(`R picked up again by #${id}`);
       } else {
-        this.#keep(this.spare, id);
+        this.#keep(this.spare, id, 'stick');
       }
       return;
     }
-    if (this.#buttonAt(x, y)) return this.#keep(this.spare, id);
-    if ((x < this.width / 2) !== this.lefty) {
-      if (this.left.id === null) this.#grabLeft(id, x, y);
-      else this.#keep(this.spare, id);
-    } else if (this.right.id === null) {
+    const spare = this.spare.has(id);
+    if (!spare && this.#buttonAt(x, y)) return this.#keep(this.spare, id, 'button');
+    const leftSide = (x < this.width / 2) !== this.lefty;
+    if (leftSide && this.left.id === null) {
+      this.spare.delete(id);
+      this.#grabLeft(id, x, y, at);
+      this.debug?.(`L taken by ${spare ? 'spare' : 'unseen'} #${id}`);
+    } else if (!leftSide && this.right.id === null) {
+      this.spare.delete(id);
       this.#grabRight(id, x, y, at);
-    } else {
-      this.#keep(this.spare, id);
+      this.debug?.(`R taken by ${spare ? 'spare' : 'unseen'} #${id}`);
+    } else if (!spare) {
+      this.#keep(this.spare, id, 'stick');
     }
   }
 
   #forgetStale(id) {
-    if (id === this.left.id || id === this.right.id || this.buttonTouch.has(id)) this.#drop(id, performance.now(), true);
+    if (id === this.left.id || id === this.right.id || this.buttonTouch.has(id)) {
+      this.debug?.(`#${id} reused while held: old finger dropped`);
+      this.#drop(id, performance.now(), true);
+    }
   }
 
   #press(btn, touchId, at) {
@@ -496,16 +609,16 @@ export class Controls {
     this.throwReleased = aimed ? { ...aimed } : null;   // null means a quick tap: current aim at default range.
   }
 
-  #grabLeft(id, x, y) {
+  #grabLeft(id, x, y, at = performance.now()) {
     const l = this.left;
-    this.missing.left = 0;
+    this.seen.left = at;
     l.id = id; l.ox = x; l.oz = y; l.x = x; l.y = y;
     this.paintDirty = true;
   }
 
   #grabRight(id, x, y, t) {
     const r = this.right;
-    this.missing.right = 0;
+    this.seen.right = t;
     r.id = id; r.ox = x; r.oz = y; r.x = x; r.y = y;
     r.aim = null; r.firing = false;
     this.aimFilter.reset();
@@ -516,10 +629,12 @@ export class Controls {
 
   #move(e) {
     if (!this.enabled) return;
-    if (e.target?.closest?.('[data-tap]') || e.target?.closest?.('.tuner')) return;
-    e.preventDefault();
-    this.#revive(e.touches, e.timeStamp);
+    const at = e.timeStamp;
+    this.#seeList(e.touches, at);
+    this.#reconcile(e.touches, at);
+    this.#revive(e.touches, at);
     this.#unswap(e.changedTouches);
+    let tuner = false;
     for (const t of e.changedTouches) {
       const id = t.identifier;
       if (id === this.left.id) {
@@ -527,13 +642,16 @@ export class Controls {
         this.left.y = t.clientY;
         this.paintDirty = true;
       } else if (id === this.right.id) {
-        this.#aimMove(t.clientX, t.clientY, e.timeStamp);
+        this.#aimMove(t.clientX, t.clientY, at);
       } else if (this.throw?.id === id) {
         this.#throwMove(t.clientX, t.clientY);
+      } else if (onTuner(t.target)) {
+        tuner = true;
       } else {
-        this.#adopt(t, e.timeStamp);
+        this.#adopt(t, at);
       }
     }
+    if (!tuner && e.cancelable) e.preventDefault();
   }
 
   // Two thumbs that come close can have their identifiers cross on iOS: each id then reports where the other thumb is.
@@ -571,9 +689,12 @@ export class Controls {
 
   #end(e) {
     if (!this.enabled) return;
-    if (e.cancelable && !e.target?.closest?.('[data-tap]')) e.preventDefault();
-    for (const t of e.changedTouches) this.#drop(t.identifier, e.timeStamp, e.type === 'touchcancel');
-    this.#revive(e.touches, e.timeStamp);
+    if (e.cancelable && !hudTap(e.target) && !onTuner(e.target)) e.preventDefault();
+    const at = e.timeStamp, cancelled = e.type === 'touchcancel';
+    if (cancelled) this.debug?.(`touchcancel ${[...e.changedTouches].map(t => `#${t.identifier}`).join(' ')}`);
+    for (const t of e.changedTouches) this.#drop(t.identifier, at, cancelled);
+    this.#seeList(e.touches, at);
+    this.#revive(e.touches, at);
   }
 
   // cancelled: the system took the finger, or it was found to be gone. Nothing it was doing should fire.
@@ -583,6 +704,7 @@ export class Controls {
     if (id === this.left.id) {
       if (cancelled) this.#keep(this.lost, id, { side: 'left', ox: this.left.ox, oz: this.left.oz });
       this.left.id = null;
+      this.sprintOn = false;
       this.paintDirty = true;
     } else if (id === this.right.id) {
       if (cancelled) this.#keep(this.lost, id, { side: 'right', ox: this.right.ox, oz: this.right.oz });
@@ -604,29 +726,42 @@ export class Controls {
         }
         (this.buttons[btn] ?? this.tileById(btn).node).classList.remove('down');
         this.buttonTouch.delete(id);
-        if (cancelled) this.#keep(this.spare, id);   // A button finger that turns out to be alive stays a button press.
+        this.buttonSeen.delete(id);
+        if (cancelled) this.#keep(this.spare, id, 'button');   // A button finger that turns out to be alive stays a button press.
       }
     }
   }
 
-  // iOS occasionally loses a touchend when a system gesture steals the finger, so a stick whose finger is missing
-  // from the live touch list is let go. But iOS also sends a quick tap's touchstart with a stale list that omits a
-  // thumb resting perfectly still on a stick, and a still thumb sends no moves to win it back. So a stick is only
-  // given up once its finger has been missing from lists for a while; a single odd list changes nothing.
-  #reconcile(touches, at = performance.now()) {
-    const alive = id => {
-      for (let i = 0; i < touches.length; i++) if (touches[i].identifier === id) return true;
-      return false;
+  // Every finger named in a touch list is alive right now.
+  #seeList(touches, at) {
+    const l = this.left.id, r = this.right.id;
+    for (let i = 0; i < touches.length; i++) {
+      const id = touches[i].identifier;
+      if (id === l) this.seen.left = at;
+      else if (id === r) this.seen.right = at;
+      else if (this.buttonSeen.has(id)) this.buttonSeen.set(id, at);
+    }
+  }
+
+  // iOS can lose a touchend when a system gesture steals a finger, and then sends nothing more for it: a stick left held
+  // by such a finger walks the player on by itself and refuses the thumb that comes back. So a held finger that goes
+  // unseen in every touch list for MISSING_DROP_MS is let go of (as cancelled, so a later move can still reclaim it).
+  // Any event's list counts: with two thumbs down, moves arrive constantly. One odd list changes nothing.
+  #reconcile(touches, at) {
+    const check = side => {
+      const id = this[side].id;
+      if (id === null || inList(touches, id) || at - this.seen[side] < MISSING_DROP_MS) return;
+      this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} unseen ${Math.round(at - this.seen[side])}ms: let go`);
+      this.#drop(id, at, true);
     };
-    const check = (side, id) => {
-      if (id === null) return;
-      if (alive(id)) { this.missing[side] = 0; return; }
-      if (!this.missing[side]) { this.missing[side] = at; return; }
-      if (at - this.missing[side] >= MISSING_DROP_MS) { this.missing[side] = 0; this.#drop(id, at, true); }
-    };
-    check('left', this.left.id);
-    check('right', this.right.id);
-    for (const id of [...this.buttonTouch.keys()]) if (!alive(id)) this.#drop(id, at, true);
+    check('left');
+    check('right');
+    for (const [id, seenAt] of this.buttonSeen) {
+      if (!inList(touches, id) && at - seenAt >= MISSING_DROP_MS) {
+        this.debug?.(`btn #${id} unseen: let go`);
+        this.#drop(id, at, true);
+      }
+    }
   }
 
   // A finger in the live list that a stick was let go of by inference takes its stick back at once, moving or not.
@@ -641,7 +776,6 @@ export class Controls {
   #release() {
     this.left.id = null;
     this.right.id = null;
-    this.missing.left = this.missing.right = 0;
     this.right.firing = false;
     this.fireLatch = false;
     this.aimLatch = null;
@@ -653,6 +787,7 @@ export class Controls {
     this.edge.streak = -1;
     for (const t of this.tiles) t.node.classList.remove('down');
     this.buttonTouch.clear();
+    this.buttonSeen.clear();
     this.lost.clear();              // Nothing is picked up again across a pause or a match boundary.
     this.spare.clear();
     this.throw = null;              // A press the game took away is not a throw.

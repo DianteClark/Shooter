@@ -5,7 +5,7 @@ import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
-import { MODES } from './shared/modes.js';
+import { MODES, firstModeFor } from './shared/modes.js';
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE } from './shared/constants.js';
 import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
@@ -23,6 +23,7 @@ import { Options } from './ui/options.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
 import { PerfOverlay } from './ui/perf.js';
+import { TouchDebug } from './ui/touchdebug.js';
 import { statsScreen } from './ui/stats.js';
 import { installFrameClock } from './render/quality.js';
 import { MenuBackdrop } from './ui/backdrop.js';
@@ -94,7 +95,11 @@ const app = {
   resultsAt: 0,             // When the results screen last appeared.
   voteTakeover: 0,          // Guest: timer that moves results on to a vote that opened while they were showing.
   soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
+  // The map and mode the last match was played on, as rolled when the pick was Random. Solo Rematch replays it, and the
+  // room's next vote offers it as its Rematch card: a rematch is the same yard again, never a fresh roll.
+  lastPlayed: null,
 };
+const RESULTS_FALLBACK_MS = 2500;  // Results come up by this long after a match ends even if the end banner failed.
 
 // The canvas size, the HUD's numbers and the touch rectangles are all derived from the visible area.
 function followViewport() {
@@ -160,6 +165,7 @@ function goTitle(message) {
   app.countdown = null;
   app.rematchWait = false;
   app.lobby = { humans: [], botSkill: 'mixed' };
+  app.lastPlayed = null;
   hud.setVisible(false);
   menu.overlay('');
   showTitle();
@@ -677,7 +683,7 @@ function renderSoloPick() {
 function pickSoloMap(mapId) {
   if (mapId !== RANDOM && !MAPS[mapId]) return;
   app.soloPick.mapId = mapId;
-  if (!modeFits(MAPS[mapId], app.soloPick.mode)) app.soloPick.mode = 'tdm';
+  if (!modeFits(MAPS[mapId], app.soloPick.mode)) app.soloPick.mode = mapId === RANDOM ? RANDOM : firstModeFor(MAPS[mapId]);
   renderSoloPick();
 }
 
@@ -685,6 +691,17 @@ function pickSoloMode(mode) {
   if (!modeFits(MAPS[app.soloPick.mapId], mode)) return;
   app.soloPick.mode = mode;
   renderSoloPick();
+}
+
+// Rematch in solo: the same map and mode again at once, the rolled ones when the pick was Random.
+function rematchSolo() {
+  if (app.lastMode === 'range') return startRange();
+  const last = app.lastPlayed;
+  if (!last) return startSolo();
+  needName(() => {
+    resetToSolo();
+    launchSolo(last.mapId, last.mode);
+  });
 }
 
 // Quick play: one tap from the title or the picker, a random map and a random mode it can host.
@@ -699,7 +716,7 @@ function launchSolo(pickMap, pickMode) {
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
   beginMatch({
-    roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE, mode, mapId, seed }), humans, seed),
+    roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', mode, mapId, seed }), humans, seed),
     seed, mapId, mode, ...limitsFor(mode),
     hostId: id, isHost: true, localId: id,
   });
@@ -717,7 +734,7 @@ function startVote() {
   if (!app.net || !app.isHost || app.vote) return;
   stopRematch();
   app.vote = {
-    key: `${app.code}:${Date.now()}`, options: voteOptions(), votes: new Map(), left: VOTE_SECONDS,
+    key: `${app.code}:${Date.now()}`, options: voteOptions(Math.random, app.lastPlayed), votes: new Map(), left: VOTE_SECONDS,
     seconds: VOTE_SECONDS, winner: null, resolved: null, mine: null,
     timer: setInterval(voteTick, 1000),
   };
@@ -826,7 +843,7 @@ function launchHostMatch(mapId, mode) {
   const seed = randomSeed();
   const payload = {
     t: 'start', seed, mapId, mode, ...limitsFor(mode),
-    roster: withBadges(buildRoster(clean, { botSkill, teamSize: TEAM_SIZE, mode, mapId, seed }), clean, seed),
+    roster: withBadges(buildRoster(clean, { botSkill, mode, mapId, seed }), clean, seed),
   };
   net.sendLobby(payload);
   beginMatch({ ...payload, hostId: net.localId, isHost: true });
@@ -843,6 +860,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   wakeLock.set(true);
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
+  app.lastPlayed = mode === 'range' ? null : { mapId, mode };
   app.matchInfo = { roster, seed, mapId, mode, scoreLimit, timeLimit };
   if (net) rememberRoom(app.code);
   stopVote();
@@ -902,7 +920,16 @@ function endLocalMatch() {
 function onMatchEnd(results) {
   const match = app.match;
   // A guest can be pulled into the vote during this hold, and the old results must not land on top of it.
-  hud.showEnd(results, () => { if (app.match === match) showResults(results); });
+  let done = false;
+  const show = () => {
+    if (done || app.match !== match) return;
+    done = true;
+    showResults(results);
+  };
+  try { hud.showEnd(results, show); } catch (err) { console.error('end banner', err); show(); }
+  // The banner's timer is the normal way in; this one makes sure no failure on the way can leave a finished match
+  // frozen on screen with no results.
+  setTimeout(show, RESULTS_FALLBACK_MS);
 }
 
 // Sorts by match score, and breaks ties in favour of kills, then fewer deaths.
@@ -924,7 +951,9 @@ function leaveMatch() {
 }
 
 function showResults(results) {
-  for (const p of results.players) Object.assign(p, hud.objectiveStats(p.id));
+  try {
+    for (const p of results.players) Object.assign(p, hud.objectiveStats(p.id));
+  } catch (err) { console.error('objective stats', err); }
   endLocalMatch();
   if (!app.net) wakeLock.set(false);
   forgetRoom();
@@ -936,30 +965,37 @@ function showResults(results) {
   const killer = lastKill && results.players.find(p => p.id === lastKill.by);
   const victim = lastKill && results.players.find(p => p.id === lastKill.target);
   const counting = app.countdown !== null && !!app.net && !app.isHost;
-  menu.results({
-    outcome: drawn ? 'draw' : won ? 'win' : 'loss',
-    mode: app.lastMode,
-    scores: results.scores,
-    myTeam: results.myTeam,
-    localId: results.localId,
-    roster: results.players,
-    badges: app.badges,
-    mvp: pickMvp(results.players),
-    // XP, level changes and unlocks were already applied to the save by MatchAwards.finish.
-    xp: results.xp,
-    level: results.level,
-    weapons: results.weapons ?? [],
-    unlocks: results.unlocks ?? [],
-    finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
-    rematchLabel: 'Rematch',
-    note: counting ? `Rematch starts in ${app.countdown}` : '',
-  }, { rematch: () => afterResults(), menu: () => goTitle() });
+  try {
+    menu.results({
+      outcome: drawn ? 'draw' : won ? 'win' : 'loss',
+      mode: app.lastMode,
+      modeId: results.modeId,
+      scores: results.scores,
+      myTeam: results.myTeam,
+      localId: results.localId,
+      roster: results.players,
+      badges: app.badges,
+      mvp: pickMvp(results.players),
+      // XP, level changes and unlocks were already applied to the save by MatchAwards.finish.
+      xp: results.xp,
+      level: results.level,
+      weapons: results.weapons ?? [],
+      unlocks: results.unlocks ?? [],
+      finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
+      rematchLabel: 'Rematch',
+      note: counting ? `Rematch starts in ${app.countdown}` : '',
+    }, { rematch: () => afterResults(), menu: () => goTitle() });
+  } catch (err) {
+    // Whatever broke, the screen with Rematch and Menu still comes up.
+    console.error('results screen', err);
+    menu.show();
+  }
   app.resultsAt = performance.now();
   voteBehindResults();
 }
 
 function afterResults() {
-  if (!app.net) return startSolo();
+  if (!app.net) return rematchSolo();
   if (app.vote && !app.isHost) return renderVote();   // The host has already opened the next vote.
   const me = localHuman();
   if (app.isHost) {
@@ -985,6 +1021,7 @@ function applyOptions(v, changed) {
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
   backdrop.quality = v.quality;
   if (!changed || changed === 'fps') perf.setVisible(v.fps || FPS_PARAM);
+  if (!changed || changed === 'touchDebug') touchDebug.setEnabled(v.touchDebug || TOUCHDEBUG_PARAM);
 }
 
 // --- Startup ---
@@ -1001,6 +1038,8 @@ function maybeInstallPrompt() {
 installFrameClock();
 const FPS_PARAM = params.get('fps') === '1';
 const perf = new PerfOverlay(document.body, () => app.renderer?.getStats() ?? null);
+const TOUCHDEBUG_PARAM = params.get('touchdebug') === '1';
+const touchDebug = new TouchDebug(controls);
 followViewport();
 blockIosGestures();
 installTaps();

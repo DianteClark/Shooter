@@ -1,8 +1,10 @@
 // Watches the local player's events through one match and turns them into progression at the end.
 // Lead: new MatchAwards({localId,team,loadout}) at match start, onEvents(events,view) every frame,
 // finish(view) once when the match ends. Merge the return value into the results passed to onEnd.
+// Pro challenges are counted here too (ProTracker), for the perks in use at each spawn; the result carries `proProgress`
+// and Pro perks and calling cards earned in `unlocks` (kinds 'pro' and 'card', first in the list).
 import { Progress } from '../ui/progress.js';
-import { MATCH_XP, WEAPON_XP, longshotDist } from '../shared/progression.js';
+import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker } from '../shared/progression.js';
 
 export class MatchAwards {
   constructor({ localId, team, loadout }) {
@@ -20,6 +22,7 @@ export class MatchAwards {
     this.medalCount = 0;
     this.weapons = {};             // weapon id -> {xp,kills,head,long,slide,clean}
     this.usedEquipment = false;    // This life, for equipment-free kills.
+    this.pro = new ProTracker(localId, loadout?.perks ?? Progress.loadout().perks);
     this.result = null;
   }
 
@@ -42,6 +45,7 @@ export class MatchAwards {
   }
 
   onEvents(events, view) {
+    this.pro.onEvents(events, view);
     for (const e of events) {
       switch (e.t) {
         case 'kill':
@@ -52,7 +56,8 @@ export class MatchAwards {
           if (e.id === this.localId) { this.medals[e.medal] = (this.medals[e.medal] ?? 0) + 1; this.medalCount++; }
           break;
         case 'spawn':
-          if (e.id === this.localId) this.usedEquipment = false;
+          // A loadout picked on the death screen applies from this spawn, and so do its perks' challenges.
+          if (e.id === this.localId) { this.usedEquipment = false; this.pro.setPerks(Progress.loadout().perks); }
           break;
         case 'throw':
         case 'heal':
@@ -76,12 +81,13 @@ export class MatchAwards {
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
     const total = lines.reduce((sum, l) => sum + l[1], 0);
 
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons });
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains() });
     this.result = {
       xp: { total, lines },
       level: applied.level,
       weapons: applied.weapons,
       unlocks: applied.unlocks,
+      proProgress: applied.proProgress,
       medals: { ...this.medals },
       stats: {
         kills: this.kills, headshots: this.headshots, longshots: this.longshots, slideKills: this.slideKills,

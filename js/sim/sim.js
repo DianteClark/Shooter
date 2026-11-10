@@ -2,16 +2,16 @@
 // Humans own their own movement and shots (see docs/ARCHITECTURE.md), and report them here.
 
 import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS, STREAK_IDS, STREAKS, TACTICALS } from '../shared/catalog.js';
-import { MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
+import { MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
-import { MODES } from '../shared/modes.js';
+import { MODES, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
+import { angleDiff, createPlayerState, hasPro, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 
@@ -60,6 +60,15 @@ const GUNSHIP_DAMAGE = 30, GUNSHIP_SCATTER = 1.5, GUNSHIP_BLAST = 0.85, GUNSHIP_
 const THROW_ORIGIN_SLACK = 4;    // How far a reported throw may start from where the host has that player.
 const SCAVENGE_MAGS = 1;         // Magazines of reserve per kill with Scavenger.
 
+// Pro abilities (js/shared/catalog.js PRO). A `{t:'pro', id, perk}` event goes out to humans when one visibly fires.
+const MEDIC_REACH = 7;           // Field Medic: teammates this close regenerate at the Quick Mend rate.
+const WIND_TIME = 2.5, WIND_TAKEN = 0.75;    // Second Wind: seconds, and the share of damage still taken.
+const RESTOCK_TIME = 30;         // Quartermaster: seconds per piece of equipment coming back.
+const HIJACK_REACH = 1.8, HIJACK_TIME = 1.5; // Hijacker: metres from an enemy Sentry, seconds held there.
+const BLAST_STREAKS = new Set(['strike', 'mortar', 'gunship']);
+// Bots at these tiers carry Pro on every perk they hold, and a calling card: veterans are meant to look it.
+const PRO_SKILLS = new Set(['veteran', 'elite']);
+
 // Modes. capture on a point runs -1 (team 0) to +1 (team 1); a flag changes hands at the extreme and goes
 // neutral when the bar crosses zero, so taking an enemy flag costs twice what taking a neutral one does.
 const TAG_RADIUS = 1.35, TAG_LIFE = 25, TAG_MAX = 16;
@@ -82,7 +91,16 @@ const AIR_KINDS = STREAK_IDS.filter(id => STREAKS[id].air);
 const POS = { x: 0, z: 0, sliding: false };
 const TURRET_RAY = { head: false, pen: 1 };   // Scratch ray for rayDamage on a turret hit.
 const PLAYER_STRIDE = 24;
-const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex'];
+// Snapshot interest (see _packPlayers). Fields of a player record that change rarely: reserve, reloadDur, kills, deaths,
+// assists, streak, score, streak/equipment bits, headshots. They go out when they change and in a slow rotation.
+const SNAP_HEAD = 16;
+const SLOW_FIELDS = [10, 12, 15, 16, 17, 18, 19, 20, 23];
+const IS_SLOW = Array.from({ length: PLAYER_STRIDE }, (_, k) => SLOW_FIELDS.includes(k));
+const SLOW_REPEAT = 6;           // Ticks a changed slow block keeps going out, so one dropped snapshot cannot lose it.
+const SLOW_ROTATE = 15;          // Every player's slow block is refreshed once per this many snapshots anyway.
+const FAR_SEND = 40;             // Metres from every human past which a quiet player goes out at half rate.
+const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex',
+  'Flint', 'Moth', 'Raze', 'Talon', 'Grit', 'Lark', 'Husk', 'Vane', 'Cobb', 'Wren', 'Briar', 'Slate', 'Knell', 'Jinx', 'Sorrel', 'Thane'];   // 32: a full Ground War match never repeats one.
 // Every primary exactly once. A match fields twelve consecutive entries (team 1 starts six in) from an offset picked
 // by seed, or by map and mode, so over a session every gun is carried by bots equally often: the per-gun stats
 // (js/game/telemetry.js) compare guns by kills per carrier-minute, and a gun listed twice would just look strong.
@@ -146,8 +164,10 @@ function gunOffset(mapId, mode, seed) {
 }
 
 // Fills both teams up to teamSize with named bots of varied loadouts. Each team's bots take consecutive primaries and
-// one of each sidearm in turn, so a full team of six carries every secondary once.
-export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE, mapId = null, mode = null, seed = null } = {}) {
+// one of each sidearm in turn, so a full team of six carries every secondary once. teamSize defaults to the mode's own
+// (16 for Ground War, see shared/modes.js), or TEAM_SIZE when no mode is given.
+export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId = null, mode = null, seed = null } = {}) {
+  teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(h => {
     const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
@@ -169,6 +189,10 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE, 
         perks: BOT_PERKS[i % BOT_PERKS.length],
         streaks: skill === 'recruit' ? RECRUIT_STREAKS : BOT_STREAKS[i % BOT_STREAKS.length],
       });
+      if (PRO_SKILLS.has(skill)) {
+        loadout.pro = loadout.perks.slice();
+        loadout.card = `pro-${loadout.perks[skill === 'elite' ? 2 : i % 3]}`;
+      }
       roster.push({
         id: `bot${n}`, name: BOT_NAMES[nameI++ % BOT_NAMES.length], team, isBot: true,
         skill,
@@ -185,7 +209,9 @@ export class Sim {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
     this.rng = mulberry32(seed >>> 0);
     const def = mode === 'range' ? RANGE_MODE : (MODES[mode] || MODES.tdm);
-    this.mode = def.id;
+    // `mode` is the rule set everything keys on ('dom' for Ground War Domination too); modeId is the mode as picked.
+    this.mode = def.rules ?? def.id;
+    this.modeId = def.id;
     if (this.mode === 'range') roster = [...roster, ...rangeDummies(this.map)];
     this.scoreLimit = scoreLimit ?? def.scoreLimit;
     this.timeLimit = timeLimit ?? def.timeLimit;
@@ -233,7 +259,8 @@ export class Sim {
       return {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
-        primary: loadout.primary, camo: loadout.camo, loadout, pendingLoadout: null, index,
+        primary: loadout.primary, camo: loadout.camo, loadout, pendingLoadout: null, index, card: loadout.card,
+        windT: 0, restockT: 0,
         ps: createPlayerState({ id: r.id, primary: loadout.primary, camo: loadout.camo, loadout }),
         hp: MAX_HP, alive: true, respawnT: 0, spawnProtect: 0,
         kills: 0, deaths: 0, assists: 0, head: 0, streak: 0, chain: 0, lastKillT: -99,
@@ -320,7 +347,7 @@ export class Sim {
   _placeAt(p, s, aim) {
     if (p.pendingLoadout) {
       p.loadout = p.pendingLoadout; p.pendingLoadout = null;
-      p.primary = p.loadout.primary; p.camo = p.loadout.camo;
+      p.primary = p.loadout.primary; p.camo = p.loadout.camo; p.card = p.loadout.card;
       p.kits[0] = attachmentsFor(p.loadout, p.loadout.primary);
       p.kits[1] = attachmentsFor(p.loadout, p.loadout.secondary);
       setStreakKinds(p.score, p.loadout.streaks, STREAKS, p.loadout.perks);
@@ -466,8 +493,35 @@ export class Sim {
     if (p.spawnProtect > 0) p.spawnProtect = Math.max(0, p.spawnProtect - STEP);
     if (p.markT > 0) p.markT -= STEP;
     if (p.regenT > 0) p.regenT -= STEP;
-    else if (p.hp < MAX_HP) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') ? MEND_RATE : REGEN_RATE) * STEP);
+    else if (p.hp < MAX_HP) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
+    if (hasPro(p.ps, 'bandolier')) this._restock(p);
   }
+
+  // Field Medic (Quick Mend Pro): a living teammate with it within MEDIC_REACH.
+  _nearMedic(p) {
+    for (let i = 0; i < this.players.length; i++) {
+      const q = this.players[i];
+      if (q === p || q.team !== p.team || !q.alive || !hasPro(q.ps, 'quickmend')) continue;
+      if (Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) <= MEDIC_REACH) return true;
+    }
+    return false;
+  }
+
+  // Quartermaster (Bandolier Pro): while anything is spent, one piece comes back every RESTOCK_TIME, lethal first.
+  _restock(p) {
+    const ps = p.ps, maxT = TACTICALS[ps.tactical].count + 1, maxL = LETHALS[ps.lethal].count + 1;
+    if (ps.tacticalLeft >= maxT && ps.lethalLeft >= maxL) { p.restockT = 0; return; }
+    p.restockT += STEP;
+    if (p.restockT < RESTOCK_TIME) return;
+    p.restockT = 0;
+    if (ps.lethalLeft < maxL) ps.lethalLeft++; else ps.tacticalLeft++;
+    this._proEvent(p, 'bandolier');
+  }
+
+  _proEvent(p, perk) { if (!p.isBot) this._emit({ t: 'pro', id: p.id, perk }); }
+
+  // Blank Slate (Cold Blooded Pro) cannot be marked by anything: Sensors, Tracker hits or a Spotter's flash.
+  _markable(q) { return !hasPro(q.ps, 'coldblood'); }
 
   _setPhase(phase) {
     this.phase = phase;
@@ -811,6 +865,7 @@ export class Sim {
     const x = ray.x - (ray.x - shot.ox) / Math.max(dist, 1e-6) * back;
     const z = ray.z - (ray.z - shot.oz) / Math.max(dist, 1e-6) * back;
     this._emit({ t: 'explosion', x: round2(x), z: round2(z), radius: b.radius, by: shooter.id, weapon: shot.weapon });
+    this.eq.setOffMines(x, z, b.radius);
     for (let i = 0; i < targets.length; i++) {
       const e = targets[i];
       if (!e.alive || e.team === shooter.team) continue;
@@ -880,11 +935,14 @@ export class Sim {
     if (!target || !target.alive || target.spawnProtect > 0 || target.team === attacker.team) return;
     // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
     // damage dealt: in hit events, assists and the firing range readout.
+    if (target.windT > this.time && hasPro(target.ps, 'adrenaline')) dmg *= WIND_TAKEN;     // Second Wind.
     dmg = Math.min(dmg, Math.max(0, target.hp));
     if (this.range) this.range.onDamage(target, attacker, dmg, dist, head, !!(streak || equip));
     target.hp -= dmg;
-    target.regenT = target.ps.perks.includes('quickmend') ? MEND_DELAY : REGEN_DELAY;
-    if (!streak && !equip && attacker.ps.perks.includes('tracker')) target.markT = MARK_TIME;
+    // Shock Absorber (Flak Pro): blasts do not reset the regen delay.
+    const blast = (equip && EQUIPMENT[equip]?.blast) || BLAST_STREAKS.has(streak) || (!streak && !equip && WEAPONS[weapon]?.explosive);
+    if (!(blast && hasPro(target.ps, 'flak'))) target.regenT = target.ps.perks.includes('quickmend') ? MEND_DELAY : REGEN_DELAY;
+    if (!streak && !equip && attacker.ps.perks.includes('tracker') && this._markable(target)) target.markT = MARK_TIME;
     // Streak damage earns no assist either, or it would feed the owner's score after all.
     if (!streak) {
       target.dmgBy[attacker.index] += dmg;
@@ -896,6 +954,8 @@ export class Sim {
     if (head) hit.head = true;
     // Gunfire carries its gun and range, for the per-gun stats (js/game/telemetry.js). Streaks and thrown kit do not.
     if (!streak && !equip) { hit.w = weapon; hit.dist = round2(dist); }
+    else if (equip) hit.eq = equip;     // What a non-gun hit was, for Pro challenges (js/shared/progression.js).
+    else hit.st = streak;
     this._emit(hit);
     if (target.bot) target.bot.onDamaged(attacker, !!(streak || equip));
     if (killed) this._kill(target, attacker, weapon, dist, streak, head, equip);
@@ -918,7 +978,8 @@ export class Sim {
       const done = target.dmgBy[i];
       if (done >= bestDmg && this.time - target.dmgT[i] < ASSIST_WINDOW) { bestDmg = done; assist = q; }
     }
-    if (assist) { assist.assists++; addScore(assist.score, SCORE.assist); }
+    // Team Player (Hardline Pro): an assist is worth a kill toward scorestreaks.
+    if (assist) { assist.assists++; addScore(assist.score, hasPro(assist.ps, 'hardline') ? SCORE.kill : SCORE.assist); }
     target.dmgBy.fill(0);
 
     // weapon stays a real gun id even for streaks and grenades, so consumers need no special case.
@@ -957,13 +1018,23 @@ export class Sim {
       if (killer.ps.perks.includes('scavenger')) {
         scavengeRefill(killer.ps);
         if (!killer.isBot) this._emit({ t: 'scavenge', id: killer.id });
+        if (hasPro(killer.ps, 'scavenger') && this._packRat(killer.ps)) this._proEvent(killer, 'scavenger');
       }
+      if (!equip && hasPro(killer.ps, 'adrenaline')) { killer.windT = this.time + WIND_TIME; this._proEvent(killer, 'adrenaline'); }
     }
 
     if (this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
   }
 
   _medal(p, medal) { this._emit({ t: 'medal', id: p.id, medal }); }
+
+  // Pack Rat (Scavenger Pro): one lethal back, or a tactical if lethals are full. False when both are full.
+  _packRat(ps) {
+    const extra = ps.perks.includes('bandolier') ? 1 : 0;
+    if (ps.lethalLeft < LETHALS[ps.lethal].count + extra) { ps.lethalLeft++; return true; }
+    if (ps.tacticalLeft < TACTICALS[ps.tactical].count + extra) { ps.tacticalLeft++; return true; }
+    return false;
+  }
 
   // ---- Equipment ----
 
@@ -972,8 +1043,8 @@ export class Sim {
     list.length = players.length;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
-      const e = list[i] || (list[i] = { id: p.id, team: p.team, x: 0, z: 0, alive: false, perks: null, spawnProtect: false });
-      e.id = p.id; e.x = p.ps.x; e.z = p.ps.z; e.alive = p.alive; e.perks = p.ps.perks; e.spawnProtect = p.spawnProtect > 0;
+      const e = list[i] || (list[i] = { id: p.id, team: p.team, x: 0, z: 0, alive: false, perks: null, pro: null, spawnProtect: false });
+      e.id = p.id; e.x = p.ps.x; e.z = p.ps.z; e.alive = p.alive; e.perks = p.ps.perks; e.pro = p.ps.pro; e.spawnProtect = p.spawnProtect > 0;
     }
     this.eq.step(STEP, list, this._onEqEvent, this._onEqDamage);
   }
@@ -987,14 +1058,16 @@ export class Sim {
       return;
     }
     if (e.t === 'flashed') {
-      const p = this.byId.get(e.id);
+      const p = this.byId.get(e.id), by = this.byId.get(e.by);
       if (p && p.bot) p.bot.onFlashed(e.dur);
-      this._emit({ t: 'flashed', id: e.id, amount: round2(e.amount), dur: round2(e.dur) });
+      // Spotter (Tac Mask Pro): whoever you blind is on your team's minimap until they can see again.
+      if (p && by && p.team !== by.team && hasPro(by.ps, 'tacmask') && this._markable(p)) p.markT = Math.max(p.markT, e.dur);
+      this._emit({ t: 'flashed', id: e.id, amount: round2(e.amount), dur: round2(e.dur), by: e.by });
       return;
     }
     if (e.t === 'marked') {
       const q = this.byId.get(e.id);
-      if (q && q.alive) q.markT = Math.max(q.markT, e.dur);
+      if (q && q.alive && this._markable(q)) q.markT = Math.max(q.markT, e.dur);
       return;
     }
     if (e.t === 'bang') {
@@ -1238,6 +1311,7 @@ export class Sim {
       const t = list[i];
       t.life -= STEP;
       if (t.life <= 0) { this._removeTurret(t); continue; }
+      if (this._stepHijack(t)) continue;
       t.cooldown -= STEP;
       t.thinkT -= STEP;
       if (t.thinkT <= 0) { t.thinkT = TURRET_THINK; t.target = this._turretTarget(t); }
@@ -1251,6 +1325,26 @@ export class Sim {
         this._turretFire(t);
       }
     }
+  }
+
+  // Hijacker (Engineer Pro): an enemy standing at the sentry for HIJACK_TIME takes it over, with the life it has left.
+  // It keeps shooting at them while they work. Returns true on the tick it changes hands.
+  _stepHijack(t) {
+    let who = null;
+    for (let i = 0; i < this.players.length; i++) {
+      const q = this.players[i];
+      if (q.team === t.team || !q.alive || !hasPro(q.ps, 'engineer')) continue;
+      if (Math.hypot(q.ps.x - t.x, q.ps.z - t.z) <= HIJACK_REACH) { who = q; break; }
+    }
+    if (!who) { t.hackT = 0; t.hackBy = null; return false; }
+    t.hackT = t.hackBy === who ? (t.hackT ?? 0) + STEP : STEP;
+    t.hackBy = who;
+    if (t.hackT < HIJACK_TIME) return false;
+    t.team = who.team; t.owner = who; t.target = null; t.hackT = 0; t.hackBy = null;
+    this.nav?.paintDanger(this.turrets);
+    this._emit({ t: 'hijack', id: t.id, by: who.id, team: who.team, x: round2(t.x), z: round2(t.z) });
+    this._proEvent(who, 'engineer');
+    return true;
   }
 
   _turretTarget(t) {
@@ -1482,6 +1576,7 @@ export class Sim {
       this.strikes.splice(i, 1);
       this._emit({ t: 'explosion', x: round2(s.x), z: round2(s.z), radius: s.radius, by: s.by.id });
       if (s.kind === 'mortar' && this._onRoof(s.x, s.z)) continue;    // Spent on the roof.
+      this.eq.setOffMines(s.x, s.z, s.radius);
       for (const q of this.players) {
         if (q.team === s.team || !q.alive) continue;
         const d = Math.hypot(q.ps.x - s.x, q.ps.z - s.z);
@@ -1579,7 +1674,7 @@ export class Sim {
   static fromSnapshot(view, roster, opts = {}) {
     const seed = opts.seed ?? 1;
     const sim = new Sim({
-      roster, map: opts.map ?? view.mapId, seed, mode: view.mode,
+      roster, map: opts.map ?? view.mapId, seed, mode: view.modeId ?? view.mode,
       scoreLimit: opts.scoreLimit ?? view.scoreLimit, timeLimit: opts.timeLimit,
     });
     sim.rng = mulberry32((seed ^ Math.round(view.t * 1000)) >>> 0);
@@ -1694,12 +1789,16 @@ export class Sim {
       kills: p.kills, deaths: p.deaths, assists: p.assists, head: p.head, streak: p.streak,
       bloom: ps.bloom, score: st.score, capped: st.capped,
       slots: st.slots.map(s => ({ kind: s.kind, cost: s.cost, held: s.held, blocked: s.blocked, denied: this.streakDenied(p, s.kind) })),
-      heat: ps.heat, overheated: ps.overheated, firingT: Math.max(ps.firingT, p.markT),
+      heat: ps.heat, overheated: ps.overheated, firingT: Math.max(this._firingReveal(ps), p.markT),
       tacticalLeft: ps.tacticalLeft, lethalLeft: ps.lethalLeft, tactical: ps.tactical, lethal: ps.lethal,
       ghost: ps.perks.includes('ghost'), quiet: ps.perks.includes('deadsilence'),
+      pro: ps.perks.filter(id => ps.pro.includes(id)), card: p.card ?? null,
       attachments: this._heldKit(p, ps.weapon),
     };
   }
+
+  // Phantom (Ghost Pro): gunfire never shows on the enemy minimap. Marks from Tracker and the rest still do.
+  _firingReveal(ps) { return hasPro(ps, 'ghost') ? 0 : ps.firingT; }
 
   // The kit on the gun a player is holding, for the gun model. Stable object per kit.
   _heldKit(p, weapon) {
@@ -1715,7 +1814,7 @@ export class Sim {
 
   getView(localId) {
     return this._applyIntel({
-      t: this.time, phase: this.phase, timeLeft: this.timeLeft, mode: this.mode, scoreLimit: this.scoreLimit,
+      t: this.time, phase: this.phase, timeLeft: this.timeLeft, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
       tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life })),
       points: this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested)),
@@ -1799,10 +1898,10 @@ export class Sim {
         Math.round(ps.adsT * 20), Math.round(ps.bloom * 20),
         p.kills, p.deaths, p.assists, p.streak,
         st.score, held | (blocked << 3) | (ps.tacticalLeft << 6) | (ps.lethalLeft << 9) | (denied << 12),
-        Math.round(ps.heat * 20), Math.round(Math.max(ps.firingT, p.markT) * 10), p.head,
+        Math.round(ps.heat * 20), Math.round(Math.max(this._firingReveal(ps), p.markT) * 10), p.head,
       );
     }
-    return out;
+    return this._packPlayers(out);
   }
 
   _encodeObjective() {
@@ -1834,11 +1933,13 @@ export class Sim {
   _encodeMeta() {
     return [
       this.players.map(p => p.camo),
-      // tactical 3 bits, lethal 3, three streaks at 4 each, three perks at 3 each (index within its tier).
+      // tactical 3 bits, lethal 3, three streaks at 4 each, three perks at 3 each (index within its tier), then one
+      // Pro bit per perk tier.
       this.players.map(p => {
         let n = TACTICAL_IDS.indexOf(p.ps.tactical) | (LETHAL_IDS.indexOf(p.ps.lethal) << 3);
         p.score.slots.forEach((s, k) => { n |= STREAK_IDS.indexOf(s.kind) << (6 + k * 4); });
         for (let t = 0; t < 3; t++) n |= Math.max(0, PERKS_BY_TIER[t].indexOf(p.ps.perks[t])) << (18 + t * 3);
+        for (let t = 0; t < 3; t++) if (hasPro(p.ps, p.ps.perks[t])) n |= 1 << (27 + t);
         return n;
       }),
       this.mode,
@@ -1869,6 +1970,7 @@ export class Sim {
       const perks = [0, 1, 2].map(t => PERKS_BY_TIER[t][(n >> (18 + t * 3)) & 7] ?? p.ps.perks[t]);
       const repriced = perks.includes('hardline') !== p.ps.perks.includes('hardline');
       p.ps.perks = perks;
+      p.ps.pro = perks.filter((id, t) => (n >> (27 + t)) & 1);
       const kinds = p.score.slots.map((s, k) => STREAK_IDS[(n >> (6 + k * 4)) & 15] ?? s.kind);
       if (repriced || kinds.some((kind, k) => kind !== p.score.slots[k].kind)) setStreakKinds(p.score, kinds, STREAKS, perks);
       // A guest's roster goes stale if someone changes loadout mid-match, and only the gun model cares.
@@ -1879,6 +1981,7 @@ export class Sim {
 
   decodeSnapshot(d, localId) {
     const HEAD = 16;
+    d = this._unpackPlayers(d);
     if (d[9]) this._decodeMeta(d[9]);
     const players = new Array(this.players.length);
     for (let i = 0; i < this.players.length; i++) {
@@ -1902,6 +2005,7 @@ export class Sim {
         tactical: r.ps.tactical, lethal: r.ps.lethal,
         heat: d[o + 21] / 20, overheated: !!(flags & 32), firingT: d[o + 22] / 10, head: d[o + 23],
         ghost: !!(flags & 16), quiet: !!(flags & 256),
+        pro: r.ps.pro, card: r.card ?? null,
         attachments: this._decodedKit(r, WEAPON_IDS[d[o + 8]]),
       };
     }
@@ -1912,7 +2016,7 @@ export class Sim {
         weapon: WEAPON_IDS[weapon], camo: this.players[by].camo, x: x / 10, z: z / 10 };
     }
     const view = {
-      t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode, scoreLimit: this.scoreLimit,
+      t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
       scores: [d[3], d[4]], winner: d[5] === -1 ? null : d[5],
       uav: [d[6] / 10, d[7] / 10], players, localId, lastKill,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
@@ -1933,5 +2037,59 @@ export class Sim {
     const out = new Array(a.length / stride);
     for (let i = 0; i < out.length; i++) out[i] = read(a, i * stride);
     return out;
+  }
+
+  // Snapshot interest management. Rewrites the flat PLAYER_STRIDE records after the header as, per player, a code
+  // then fields: 0 = nothing (the guest keeps what it had), 1 = the fast fields, 3 = fast and slow fields. A player
+  // far from every human, not firing and not just spawned or killed goes out at half rate (7.5 Hz); the slow fields go
+  // out only when they change (for SLOW_REPEAT ticks) and in a rotation. With 32 players this about halves a snapshot.
+  _packPlayers(full) {
+    const n = this.players.length, out = full.slice(0, SNAP_HEAD);
+    const tick = this.tick, everything = tick <= this._metaUntil, halfRate = (tick % (SNAPSHOT_EVERY * 2)) >= SNAPSHOT_EVERY;
+    const humans = this._humanScratch || (this._humanScratch = []);
+    humans.length = 0;
+    for (let i = 0; i < n; i++) { const q = this.players[i]; if (!q.isBot && !q.dummy) humans.push(q); }
+    for (let i = 0; i < n; i++) {
+      const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;
+      const sent = p.snapSlow || (p.snapSlow = new Float64Array(PLAYER_STRIDE).fill(NaN));
+      let changed = false;
+      for (let k = 0; k < SLOW_FIELDS.length; k++) {
+        const f = SLOW_FIELDS[k];
+        if (sent[f] !== full[o + f]) { sent[f] = full[o + f]; changed = true; }
+      }
+      if (changed) p.snapSlowUntil = tick + SLOW_REPEAT;
+      const slow = everything || tick <= p.snapSlowUntil || ((tick >> 1) + i) % SLOW_ROTATE === 0;
+      let skip = !everything && !slow && halfRate && humans.length > 0 && p.snapAlive === p.alive && !(full[o + 22] > 0);
+      if (skip) {
+        for (let h = 0; h < humans.length; h++) {
+          const q = humans[h].ps;
+          if (Math.abs(q.x - p.ps.x) < FAR_SEND && Math.abs(q.z - p.ps.z) < FAR_SEND) { skip = false; break; }
+        }
+      }
+      if (skip) { out.push(0); continue; }
+      p.snapAlive = p.alive;
+      out.push(slow ? 3 : 1);
+      for (let k = 0; k < PLAYER_STRIDE; k++) if (slow || !IS_SLOW[k]) out.push(full[o + k]);
+    }
+    return out;
+  }
+
+  // The inverse, into a per-sim cache of each player's last known record. A player not yet heard from reads as dead,
+  // so a guest that joins mid-match never draws someone at the map origin.
+  _unpackPlayers(d) {
+    const n = this.players.length;
+    const cache = this._snapCache || (this._snapCache = this.players.map(() => new Float64Array(PLAYER_STRIDE)));
+    const known = this._snapKnown || (this._snapKnown = new Uint8Array(n));
+    const full = d.slice(0, SNAP_HEAD);
+    let o = SNAP_HEAD;
+    for (let i = 0; i < n; i++) {
+      const code = d[o++], c = cache[i];
+      if (code) {
+        for (let k = 0; k < PLAYER_STRIDE; k++) if (code === 3 || !IS_SLOW[k]) c[k] = d[o++];
+        known[i] = 1;
+      }
+      for (let k = 0; k < PLAYER_STRIDE; k++) full.push(known[i] ? c[k] : (k === 6 ? 0 : c[k]));
+    }
+    return full;
   }
 }

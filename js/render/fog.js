@@ -50,6 +50,11 @@ const SMOKE_RAYS = 18;      // Rays across one cloud; enough that its edge reads
 const JITTER_TEXELS = [[2.0, 0.7], [-2.0, -0.7], [-0.7, 2.0], [0.7, -2.0], [1.3, -1.3], [-1.3, 1.3]];
 const SETTLE_FRAMES = 45;   // Frames without a change after which the temporal blend has converged (to ~1/1000).
 const MARGIN = 2;           // Metres of mask beyond the map edge.
+// Big maps get a mask that covers a window around the viewer instead of the whole map: the camera shows about
+// 36 x 18 m plus aim lookahead, so a 72 x 56 m window that recentres once the viewer is 9 m off its centre always
+// covers the screen. Only walls touching the window take part in the sweep, which keeps it as cheap as a small map.
+const WINDOW_W = 72, WINDOW_H = 56, WINDOW_SLACK = 9;
+const WINDOW_ABOVE = 100 * 70;   // Masks up to this many square metres just cover the whole map.
 
 export class FogMask {
   constructor(map, webgl, { texelsPerMetre = 8, passes = JITTER_TEXELS.length } = {}) {
@@ -58,15 +63,24 @@ export class FogMask {
     this.walls = map.walls.filter(w => w.blocksVision);
     const W = map.width, H = map.height;
     const nw = this.walls.length;
-    this.bounds = { x: -MARGIN, z: -MARGIN, w: W + 2 * MARGIN, h: H + 2 * MARGIN };
-    const xf = new THREE.Vector4(1 / this.bounds.w, 1 / this.bounds.h, -this.bounds.x / this.bounds.w, -this.bounds.z / this.bounds.h);
+    this.full = { x: -MARGIN, z: -MARGIN, w: W + 2 * MARGIN, h: H + 2 * MARGIN };
+    this.windowed = this.full.w * this.full.h > WINDOW_ABOVE;
+    this.bounds = this.windowed ? { x: this.full.x, z: this.full.z, w: WINDOW_W, h: WINDOW_H } : { ...this.full };
+    const xf = new THREE.Vector4();
     this.rt = null;
     this.uniforms = { tex: { value: null }, xf: { value: xf }, on: { value: 1 } };
+    this._setXf();
 
-    // Walls as flat arrays for the sweep's inner loop.
+    // Walls as flat arrays for the sweep's inner loop: every vision wall, and the ones in play for the current window
+    // (n of them, first in the same arrays' active copies).
+    this.wx0 = new Float32Array(nw); this.wz0 = new Float32Array(nw);
+    this.wx1 = new Float32Array(nw); this.wz1 = new Float32Array(nw);
+    this.walls.forEach((w, i) => { this.wx0[i] = w.x; this.wz0[i] = w.z; this.wx1[i] = w.x + w.w; this.wz1[i] = w.z + w.d; });
     this.x0 = new Float32Array(nw); this.z0 = new Float32Array(nw);
     this.x1 = new Float32Array(nw); this.z1 = new Float32Array(nw);
-    this.walls.forEach((w, i) => { this.x0[i] = w.x; this.z0[i] = w.z; this.x1[i] = w.x + w.w; this.z1[i] = w.z + w.d; });
+    this.n = 0;
+    this.winX = Infinity; this.winZ = Infinity;      // Window centre; Infinity until the first update places it.
+    this._activate();
     // At most three rays per corner (see _sweep), a ring of fixed rays, and the smoke fans.
     const maxRays = nw * 4 * 3 + 8 + MAX_SMOKES * SMOKE_RAYS;
     this.angles = new Float32Array(maxRays);
@@ -168,14 +182,45 @@ export class FogMask {
     this.still = 0;
   }
 
+  _setXf() {
+    const b = this.bounds;
+    this.uniforms.xf.value.set(1 / b.w, 1 / b.h, -b.x / b.w, -b.z / b.h);
+  }
+
+  // Copies the walls that touch the mask's current bounds into the active arrays.
+  _activate() {
+    const b = this.bounds, x0 = b.x, z0 = b.z, x1 = b.x + b.w, z1 = b.z + b.h;
+    let n = 0;
+    for (let i = 0; i < this.wx0.length; i++) {
+      if (this.wx1[i] < x0 || this.wx0[i] > x1 || this.wz1[i] < z0 || this.wz0[i] > z1) continue;
+      this.x0[n] = this.wx0[i]; this.z0[n] = this.wz0[i]; this.x1[n] = this.wx1[i]; this.z1[n] = this.wz1[i];
+      n++;
+    }
+    this.n = n;
+  }
+
+  // Windowed masks follow the viewer. Moving the window repaints the mask whole (the polygon is unchanged, so this
+  // never shows) and swaps the active walls.
+  _follow(px, pz) {
+    if (!this.windowed || (Math.abs(px - this.winX) < WINDOW_SLACK && Math.abs(pz - this.winZ) < WINDOW_SLACK)) return;
+    const f = this.full, b = this.bounds;
+    this.winX = px; this.winZ = pz;
+    b.x = Math.max(f.x, Math.min(f.x + f.w - b.w, px - b.w / 2));
+    b.z = Math.max(f.z, Math.min(f.z + f.h - b.h, pz - b.h / 2));
+    this._setXf();
+    this._activate();
+    this.reset();
+    this.winX = px; this.winZ = pz;
+  }
+
   // Distance to the nearest vision wall along a normalised ray, or maxDist; this.hit gets its index or -1.
   // Same slab test as castRay, over flat arrays with the divisions hoisted out of the loop.
   _cast(ox, oz, dx, dz, maxDist) {
-    const { x0, z0, x1, z1 } = this;
+    const { x0, z0, x1, z1, n } = this;
     const flatX = Math.abs(dx) < 1e-9, flatZ = Math.abs(dz) < 1e-9;
     const ix = flatX ? 0 : 1 / dx, iz = flatZ ? 0 : 1 / dz;
     let best = maxDist, bestI = -1;
-    for (let i = 0; i < x0.length; i++) {
+    for (let i = 0; i < n; i++) {
       let t0 = 0, t1 = best;
       if (flatX) {
         if (ox < x0[i] || ox > x1[i]) continue;
@@ -204,12 +249,15 @@ export class FogMask {
   _sweep(px, pz, smokes) {
     const { x0, z0, x1, z1, angles, ax, az, touched } = this;
     const smokeN = smokes ? Math.min(smokes.length, MAX_SMOKES) : 0;
+    const walls = this.n;
+    // Rays never need to reach past the mask's far corner.
+    const b = this.bounds, reach = Math.hypot(Math.max(px - b.x, b.x + b.w - px), Math.max(pz - b.z, b.z + b.h - pz)) + 1;
     let n = 0;
     // Only corners that can shape the polygon get rays. Seen from outside a box, the corner diagonally away from the
     // viewer is always hidden behind the box, and the corner facing the viewer is hit head on, so it needs one ray;
     // the two silhouette corners get a ray a hair to either side as well, so shadows stay exactly on wall edges.
     // This is a little over half the rays of three per corner, with the same polygon.
-    for (let i = 0; i < x0.length; i++) {
+    for (let i = 0; i < walls; i++) {
       const rx = px < x0[i] ? -1 : px > x1[i] ? 1 : 0;
       const rz = pz < z0[i] ? -1 : pz > z1[i] ? 1 : 0;
       for (let c = 0; c < 4; c++) {
@@ -243,7 +291,7 @@ export class FogMask {
     touched.fill(0);
     for (let i = 0; i < n; i++) {
       const dx = Math.cos(angles[i]), dz = Math.sin(angles[i]);
-      let t = this._cast(px, pz, dx, dz, 300);
+      let t = this._cast(px, pz, dx, dz, reach);
       const hit = this.hit;
       let blockedBySmoke = false;
       for (let s = 0; s < smokeN; s++) {
@@ -267,6 +315,7 @@ export class FogMask {
   // Sweeps, fills the mesh, and blends it into the mask. Call once per frame (or every other frame on low steps,
   // with dt covering both).
   update(px, pz, dt, smokes) {
+    this._follow(px, pz);
     const hasSmoke = !!smokes && smokes.length > 0;
     // Clouds grow and drift, so their shadow must be recomputed even for a standing player.
     if (hasSmoke || this.hadSmoke || px !== this.lastX || pz !== this.lastZ || !this._n) {
@@ -283,7 +332,7 @@ export class FogMask {
         P[v++] = this.ax[i]; P[v++] = 0; P[v++] = this.az[i];
       }
       // Any wall a ray touched is revealed whole, so roofs of visible walls are not fogged.
-      for (let i = 0; i < this.walls.length; i++) {
+      for (let i = 0; i < this.n; i++) {
         if (!this.touched[i]) continue;
         const x0 = this.x0[i], x1 = this.x1[i], z0 = this.z0[i], z1 = this.z1[i];
         P[v++] = x0; P[v++] = 0; P[v++] = z0;

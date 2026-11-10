@@ -49,6 +49,10 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
           <div class="opt-name"><b>Performance overlay</b><small>Frame rate, 1% low, CPU or GPU bound, quality step</small></div>
           ${toggle('optFps', 'opt-fps')}
         </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>Touch debug</b><small>Shows every finger and the last touch events. Screenshot it when a control misbehaves</small></div>
+          ${toggle('optTouchDebug', 'opt-touchdebug')}
+        </div>
       </section>
       <section class="opt-col" data-in="up">
         <h4>${ico('controls')}Controls</h4>
@@ -78,6 +82,9 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     const fps = q('.opt-fps');
     fps.classList.toggle('on', v.fps);
     fps.querySelector('b').textContent = v.fps ? 'On' : 'Off';
+    const td = q('.opt-touchdebug');
+    td.classList.toggle('on', v.touchDebug);
+    td.querySelector('b').textContent = v.touchDebug ? 'On' : 'Off';
     const toggle = q('[data-act="optLefty"]');
     toggle.classList.toggle('on', v.lefty);
     toggle.querySelector('b').textContent = v.lefty ? 'On' : 'Off';
@@ -99,6 +106,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
+    optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));

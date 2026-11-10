@@ -4,7 +4,7 @@
 // Random: either half of a pick (or both) may be RANDOM. Whoever is hosting turns it into a real map and mode with
 // resolvePick before the match starts, and only that resolved pair is ever sent, so every phone plays the same map.
 import { MAPS, MAP_IDS, DEFAULT_MAP } from '../shared/map.js';
-import { MODES, MODE_IDS } from '../shared/modes.js';
+import { MODES, MODE_IDS, modeFitsMap, firstModeFor } from '../shared/modes.js';
 import { esc } from './widgets.js';
 import { mapImage, followMapArt } from './mapthumb.js';
 import { ico, header } from './yard.js';
@@ -31,7 +31,10 @@ function allPairs() {
 // mode is no likelier than one that hosts two; then a mode that map can host. A fixed half is kept as it is.
 export function resolvePick({ mapId, mode }, random = Math.random) {
   const fits = allPairs().filter(p => (mapId === RANDOM || p.mapId === mapId) && (mode === RANDOM || p.mode === mode));
-  if (!fits.length) return { mapId: MAPS[mapId] ? mapId : DEFAULT_MAP, mode: 'tdm' };
+  if (!fits.length) {
+    const map = MAPS[mapId] ? mapId : DEFAULT_MAP;
+    return { mapId: map, mode: firstModeFor(MAPS[map]) };
+  }
   const maps = [...new Set(fits.map(p => p.mapId))];
   const map = maps[Math.floor(random() * maps.length)];
   const modes = fits.filter(p => p.mapId === map);
@@ -55,10 +58,10 @@ export function voteMarkup(state) {
     </button>`;
     }
     const map = MAPS[o.mapId], mode = MODES[o.mode];
-    return `<button class="vote-card" data-act="voteCast" data-i="${i}" data-in="up">
+    return `<button class="vote-card${o.again ? ' again' : ''}" data-act="voteCast" data-i="${i}" data-in="up">
       <span class="vc-art" data-map="${esc(map.id)}" style="background-image:url(${mapImage(map)})"></span>
       <span class="vc-shade"></span>
-      <span class="vc-top"><span class="vc-votes"></span></span>
+      <span class="vc-top">${o.again ? '<b class="vc-again t-tag">Rematch</b>' : ''}<span class="vc-votes"></span></span>
       <b class="vc-map">${esc(map.name)}</b>
       <span class="vc-mode">${modeIcon(o.mode)}<span class="vc-mode-name">${esc(mode.name)}</span></span>
       <small class="vc-desc">${esc(mode.desc)}</small>
@@ -151,7 +154,8 @@ export function soloMarkup({ mapId, mode }) {
       <div class="solo-foot" data-in="up">
         <div class="solo-modes">${[...MODE_IDS, RANDOM].map(id => {
           const m = MODES[id] ?? RANDOM_MODE, usable = modeFits(map, id);
-          return `<button class="solo-mode${id === mode ? ' on' : ''}" data-act="soloMode" data-id="${id}" ${usable ? '' : 'disabled'}>
+          // Only the modes this map hosts are offered; a Random map offers them all.
+          return `<button class="solo-mode${id === mode ? ' on' : ''}" data-act="soloMode" data-id="${id}" ${usable ? '' : 'disabled hidden'}>
             ${modeIcon(id)}<b>${esc(m.name)}</b>
           </button>`;
         }).join('')}</div>
@@ -177,26 +181,31 @@ export function paintSolo(root, { mapId, mode }) {
     const usable = modeFits(map, b.dataset.id);
     b.classList.toggle('on', b.dataset.id === mode);
     b.disabled = !usable;
+    b.hidden = !usable;
 
   }
 }
 
-// Domination and Hardpoint need a map to define their points. A Random map or mode always fits: the roll sees to it.
+// A map hosts the modes it lists whose points it defines (Ground War maps host only Ground War modes, and small maps
+// never do). A Random map or mode always fits: the roll keeps to valid pairs.
 export function modeFits(map, mode) {
   if (!map || mode === RANDOM) return true;
-  if (mode === 'dom') return !!map.points?.dom?.length;
-  if (mode === 'hard') return !!map.points?.hard?.length;
-  return true;
+  return modeFitsMap(map, mode);
 }
 
 // Three distinct map and mode pairs, spreading across maps and modes before repeating either, then the Random card.
-export function voteOptions(random = Math.random) {
-  const pairs = allPairs();
+// After a match, `again` (the map and mode just played, as rolled if it came from Random) takes the first card, marked
+// as the rematch, so a room can play the same yard again; the other two are fresh.
+export function voteOptions(random = Math.random, again = null) {
+  const pairs = allPairs().filter(p => !again || p.mapId !== again.mapId || p.mode !== again.mode);
   for (let i = pairs.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
   }
   const out = [], usedMaps = new Set(), usedModes = new Set();
+  const replay = again && MAPS[again.mapId] && MODES[again.mode] && modeFits(MAPS[again.mapId], again.mode)
+    ? { mapId: again.mapId, mode: again.mode, again: true } : null;
+  if (replay) { out.push(replay); usedMaps.add(replay.mapId); usedModes.add(replay.mode); }
   const pick = test => {
     for (const p of pairs) {
       if (out.length === 3) return;

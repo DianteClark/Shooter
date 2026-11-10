@@ -194,6 +194,36 @@ THEMES.sunken = {
   ] },
 };
 
+// Farming valley on a clear autumn morning: low gold sun from the east, long shadows west, a haze over the fields.
+// The barns are an old oxblood and the tractors a faded green, both kept dull so neither reads as a team colour.
+THEMES.harvest = {
+  id: 'harvest',
+  light: { dir: norm([0.66, 0.5, 0.46]), sun: [1.04, 0.80, 0.52], sky: [0.42, 0.45, 0.54], amb: [0.31, 0.30, 0.32] },
+  clear: 0x2e3330,
+  fog: [0.44, 0.48, 0.54], fogSeam: [0.20, 0.13, 0.04], desatTint: [0.88, 0.86, 0.8],
+  shadow: { col: [0.40, 0.40, 0.54], strength: 0.62, len: 1.3 },
+  lamp: [0.3, 0.2, 0.08],
+  water: { deep: [0.07, 0.11, 0.1], shallow: [0.16, 0.22, 0.18], glint: [0.85, 0.78, 0.58] },
+  ink: ink({
+    ground: 0x857a5e, asphalt: 0x786c58, dirt: 0x6a5e4a, gravel: 0x807868,
+    roof: 0x4c4f58, wall: 0xc2b7a0, wallB: 0xb3a98f, trim: 0x3c332b,
+    concrete: 0xaba392, crate: 0x9a7a4c, crateD: 0x5c4a30,
+    rail: 0x7f8690, tie: 0x3f3530, hazardY: 0xa8873a, hazardK: 0x2a2620,
+    paint: 0xd8cfb0, glow: 0xffd89a, glowCool: 0xd4e6ff,
+    wheat: 0x9a8a60, wheatD: 0x887a54, earth: 0x655748, earthD: 0x54483b, grass: 0x666d50, grassD: 0x565c44,
+    hedge: 0x46603a, hedgeD: 0x334a2c, hedgeL: 0x5c7444, hay: 0xb8a170, hayD: 0x988456,
+    stone: 0x9d9686, stoneD: 0x7a7365, plank: 0x7a3c30, plankD: 0x55291f, timber: 0x6a5039, timberD: 0x4a382a,
+    slate: 0x4a4e58, white: 0xd2cab6, vine: 0x5c7a38, vineD: 0x405a2a, grape: 0x553049,
+    tractor: 0x52703e, tyre: 0x26241f, steel: 0x6e737a, rust: 0x8a5a3a, reed: 0x7c8a4c, bark: 0x5a4636, leaf: 0x58703c,
+  }),
+  containers: [0x7a4a36, 0x5a6a44, 0x8a7a4a],
+  weather: { fields: [
+    { kind: 'mote', count: 110, box: [42, 6, 32], vel: [-0.6, 0.15, 0.3], size: 0.09, col: [1.0, 0.86, 0.55], alpha: 0.55 },
+    { kind: 'streak', count: 40, box: [40, 3, 30], vel: [-5, 0.05, 1.0], len: 1.4, width: 0.02, col: [0.95, 0.85, 0.6], alpha: 0.12 },
+    { kind: 'mote', count: 20, box: [48, 2.5, 36], vel: [-0.8, 0.02, 0.2], size: 4.2, col: [0.86, 0.86, 0.8], alpha: 0.05 },
+  ] },
+};
+
 export const getTheme = id => THEMES[id] || THEMES.railyard;
 
 // Railyard defaults, kept for anything that wants them statically.

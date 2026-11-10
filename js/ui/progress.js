@@ -22,6 +22,10 @@
  *            updateLoadout(i,part)  renameLoadout(i,name)  setAttachment(i,slot,id|null,weapon=loadout primary) -> bool
  *            setEquipment(part)  (edits the active loadout)
  * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'}
+ * Pro        proStatus(perk) -> {perk,name,desc,steps:[{stat,label,goal,value,done}],done}  isPro(perk)  proPerks() -> [ids]
+ *            Challenge rules and the Pro list live in js/shared/progression.js (PRO_CHALLENGES) and catalog.js (PRO).
+ * Cards      cards() -> [{card,unlocked,equipped}]  card (get) -> equipped id  setCard(id) -> bool
+ *            isVeteran()  identity() -> {pro:[ids], card, veteran}. loadout() carries `pro` and `card` to the roster.
  * Match      applyMatch(summary)  used by js/game/awards.js only.
  * Removed    recordKill(w) stays as a no-op returning []. MatchAwards counts kills now; hud.js should drop the call.
  */
@@ -39,8 +43,11 @@ import {
   SAVE_VERSION, LOADOUT_COUNT, MAX_LEVEL, MAX_PRESTIGE, MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE,
   PLAYER_CURVE, WEAPON_CURVE, UNLOCK_SCHEDULE, ITEM_TABLES, levelOf, itemUnlockLevel, gateLoadoutGear,
   challengesFor, isMastered, camoGateOpen, camoRequirement, cosmeticRequirement, prestigeRewards,
-  blankWeapon, blankSave, sanitizeSave, migrateV1, cleanLoadout, encodeSave, decodeSave, badgeSvg,
+  blankWeapon, blankSave, sanitizeSave, migrateV1, migrateSave, cleanLoadout, encodeSave, decodeSave, badgeSvg,
+  proStatus, applyProGains, isVeteran, CARDS, CARD_IDS, cardsEarned, getCard,
 } from '../shared/progression.js';
+import { PERK_IDS, PERKS } from '../shared/catalog.js';
+import { WEAPON_IDS } from '../shared/constants.js';
 
 export { levelOf };
 
@@ -80,6 +87,12 @@ function load() {
     if (parsed) {
       if (parsed.version === SAVE_VERSION) return keepOperators(sanitizeSave(parsed), parsed);
       if (parsed.version > SAVE_VERSION) { write(BAD_KEY, raw); return keepOperators(sanitizeSave(parsed), parsed); }
+      if (Number.isFinite(parsed.version)) {
+        // An older versioned save (v2): every field carries over, the new ones start at their defaults.
+        const s = keepOperators(migrateSave(parsed), parsed);
+        write(KEY, JSON.stringify(s));
+        return s;
+      }
       return migrateAndStore(parsed);      // No version: the old format under the new key.
     }
     write(BAD_KEY, raw);
@@ -171,7 +184,22 @@ function matchLoadout(saved, wanted = saved.primary) {
     tracer: Progress.tracer(primary),
     killFx: Progress.killFx(primary),
     operator: operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR,
+    pro: data.proDone.slice(),
+    card: equippedCard(),
   };
+}
+
+// What the calling cards are judged on. Mastery camos count on any weapon.
+const MASTERY_CAMOS = CAMOS.filter(c => c.mastery);
+function cardCareer() {
+  const c = careerStats();
+  const camos = new Set();
+  for (const camo of MASTERY_CAMOS) if (WEAPON_IDS.some(w => hasCamo(w, camo))) camos.add(camo.id);
+  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos };
+}
+
+function equippedCard() {
+  return cardsEarned(cardCareer()).includes(data.card) ? data.card : 'yard';
 }
 
 function weaponDiffBase(w) {
@@ -379,6 +407,26 @@ export const Progress = {
     return true;
   },
 
+  /* ---------- Pro perks ---------- */
+  proStatus(perk) { return proStatus(perk, data.pro, data.proDone); },
+  isPro(perk) { return data.proDone.includes(perk); },
+  proPerks() { return data.proDone.slice(); },
+
+  /* ---------- Calling cards and Veteran ---------- */
+  cards() {
+    const earned = new Set(cardsEarned(cardCareer())), on = equippedCard();
+    return CARDS.map(card => ({ card, unlocked: earned.has(card.id), equipped: card.id === on }));
+  },
+  get card() { return equippedCard(); },
+  setCard(id) {
+    if (!CARD_IDS.includes(id) || !cardsEarned(cardCareer()).includes(id)) return false;
+    data.card = id;
+    save();
+    return true;
+  },
+  isVeteran() { return isVeteran({ prestige: data.prestige, level: levelOf(data.xp), pro: data.proDone }); },
+  identity() { return { pro: data.proDone.slice(), card: equippedCard(), veteran: this.isVeteran() }; },
+
   /* ---------- Save code ---------- */
   exportCode() { return encodeSave(data); },
 
@@ -393,10 +441,14 @@ export const Progress = {
   },
 
   /* ---------- Match results (js/game/awards.js) ---------- */
-  applyMatch({ xp, weapons }) {
+  // `pro` is ProTracker.gains(): {perk: {stat: n}}. Pro perks and calling cards earned here come back in `unlocks`
+  // ({kind:'pro', id:perk, name, desc} and {kind:'card', id, name, req}), Pro first: they are the bigger moment.
+  applyMatch({ xp, weapons, pro }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel;
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
+    const cardsBefore = new Set(cardsEarned(cardCareer()));
+    const proBefore = PERK_IDS.map(id => [id, proStatus(id, data.pro, data.proDone)]);
 
     gainXp(xp);
     for (const [w, gained] of Object.entries(weapons)) {
@@ -405,6 +457,7 @@ export const Progress = {
       entry.peak = Math.max(entry.peak, WEAPON_CURVE.levelOf(entry.xp));
       for (const k of ['kills', 'head', 'long', 'slide', 'clean']) entry[k] += gained[k] ?? 0;
     }
+    const freshPro = applyProGains(data, pro);
     save();
 
     const unlocks = this.unlockSchedule()
@@ -413,6 +466,16 @@ export const Progress = {
     for (const o of this.operators()) {
       if (o.unlocked && !opsBefore.has(o.op.id)) unlocks.push({ kind: 'operator', id: o.op.id, name: o.op.name });
     }
+    const proUnlocks = freshPro.map(id => ({ kind: 'pro', id, name: `${PERKS[id].name} Pro`, desc: proStatus(id, data.pro, data.proDone).desc }));
+    const cardUnlocks = cardsEarned(cardCareer()).filter(id => !cardsBefore.has(id))
+      .map(id => ({ kind: 'card', id, name: getCard(id).name, req: getCard(id).req }));
+    unlocks.unshift(...proUnlocks, ...cardUnlocks);
+    // Steps moved this match, for the results screen: [{perk, name, steps:[{label,goal,before,value,done}]}].
+    const proProgress = proBefore.map(([id, was]) => {
+      const now = proStatus(id, data.pro, data.proDone);
+      if (was.done || now.steps.every((c, i) => c.value === was.steps[i].value)) return null;
+      return { perk: id, name: PERKS[id].name, done: now.done, steps: now.steps.map((c, i) => ({ ...c, before: was.steps[i].value })) };
+    }).filter(Boolean);
     const weaponChanges = [];
     for (const [w, before] of diffs) {
       const entry = readWeapon(w);
@@ -432,6 +495,7 @@ export const Progress = {
       level: { before: beforeLevel, after: levelOf(data.xp), ...this.levelProgress(), canPrestige: this.canPrestige() },
       weapons: weaponChanges,
       unlocks,
+      proProgress,
     };
   },
 

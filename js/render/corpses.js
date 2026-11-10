@@ -101,7 +101,7 @@ export class Corpses {
   // Steps every body and appends its instances after the living soldiers' in the shared buffers.
   step(dt, n) {
     const chars = this.chars, surf = chars.surf, vfx = chars.vfx;
-    const { torso, head, upper, arm, leg, boot } = chars;
+    const { upper, arm, leg, boot } = chars;
     for (let c = 0; c < MAX_CORPSES; c++) {
       if (this.life[c] <= 0) continue;
       this.life[c] -= dt;
@@ -111,7 +111,6 @@ export class Corpses {
       const fade = left < 0.6 ? Math.max(0, left / 0.6) : 1;
       const flash = age < 0.14 ? 1 - age / 0.14 : 0;
       const team = chars.teamRGB[this.team[c]] || chars.teamRGB[0];
-      const op = this.op[c];
       this.trail[c] -= dt;
       const trailing = this.trail[c] > 0 && vfx && Math.random() < 0.5;
 
@@ -158,8 +157,10 @@ export class Corpses {
 
         let mesh, slot, op2 = 0, tint = null;
         switch (p) {
-          case PART.TORSO: mesh = torso; slot = n.nT; op2 = op; break;
-          case PART.HEAD: mesh = head; slot = n.nT; op2 = op; break;
+          // Bodies in pieces draw from the single-variant meshes: nobody reads an operator off a flying torso, and a
+          // Ground War brawl can leave a dozen of them about.
+          case PART.TORSO: mesh = chars.torsoLite; slot = n.nTL; break;
+          case PART.HEAD: mesh = chars.headLite; slot = n.nTL; break;
           case PART.UPPER_R: case PART.UPPER_L: mesh = upper; slot = n.nU++; tint = this.armRGB[c]; break;
           case PART.THIGH_L: case PART.THIGH_R: mesh = upper; slot = n.nU++; tint = this.legRGB[c]; break;
           case PART.FORE_R: case PART.FORE_L: mesh = arm; slot = n.nA++; tint = this.armRGB[c]; break;
@@ -199,7 +200,7 @@ export class Corpses {
         // Team-coloured embers stream off the severed ends for the first moments.
         if (trailing && p >= PART.HEAD && p !== PART.GUN) vfx.ember(nx, ny, nz, team);
       }
-      n.nT++;
+      n.nTL++;
     }
   }
 }

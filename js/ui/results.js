@@ -3,18 +3,20 @@
 // ends the wait in progress. Rematch and Menu work from the first frame.
 import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { MODES } from '../shared/modes.js';
+import { MODES, modeRules } from '../shared/modes.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
 import { matchScore } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, SLOT_LABEL } from './widgets.js';
 import { kindLabel } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
+import { playerBanner, proProgressHtml, unlockStamp } from './cards.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
 const UNLOCK_MS = 1250;
 const HERO_MS = 1500;           // The outcome word holds the screen this long before the tables take over.
+const BOARD_ROWS = 6;           // Rows per team table, the last one a "+N more" line on bigger teams.
 
 const OUTCOME = {
   win: ['Victory', 'The yard is yours'],
@@ -117,14 +119,24 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const { outcome, scores, myTeam, roster, badges, mvp, xp, level, weapons, unlocks, finalKill: fk } = data;
   const badgeOf = id => badges?.get(id) ?? null;
   // The mode's own number takes the headshot column where the mode has one.
-  const modeHead = data.mode === 'kc' ? 'Conf' : data.mode === 'dom' || data.mode === 'hard' ? 'Cap' : 'HS';
-  const modeStat = p => (data.mode === 'kc' ? p.confirms ?? 0 : data.mode === 'dom' || data.mode === 'hard' ? p.captures ?? 0 : p.head ?? 0);
+  const rules = modeRules(data.modeId ?? data.mode);      // Ground War modes keep the columns of their rule set.
+  const modeHead = rules === 'kc' ? 'Conf' : rules === 'dom' || rules === 'hard' ? 'Cap' : 'HS';
+  const modeStat = p => (rules === 'kc' ? p.confirms ?? 0 : rules === 'dom' || rules === 'hard' ? p.captures ?? 0 : p.head ?? 0);
   const [word, line] = OUTCOME[outcome] ?? OUTCOME.draw;
   const winTeam = outcome === 'win' ? myTeam : outcome === 'loss' ? 1 - myTeam : null;
   const tone = winTeam === null ? 'var(--c-sodium)' : TEAMS[winTeam].css;
 
   const board = (team, side) => {
-    const rows = roster.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
+    const ranked = roster.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
+    // Ground War fields 16 a side; the table keeps the 6v6 height so the cards below stay on screen: the leaders, you
+    // wherever you placed, and a count of the rest.
+    let rows = ranked, rest = 0;
+    if (ranked.length > BOARD_ROWS) {
+      const mine = ranked.findIndex(p => p.id === data.localId);
+      rows = ranked.slice(0, mine >= BOARD_ROWS - 1 ? BOARD_ROWS - 2 : BOARD_ROWS - 1);
+      if (mine >= rows.length) rows.push(ranked[mine]);
+      rest = ranked.length - rows.length;
+    }
     const won = winTeam === team;
     return `<div class="rb ${side}${won ? ' won' : ''}" style="--team:${TEAMS[team].css}">
       <div class="rb-head"><b class="rb-team">${esc(TEAMS[team].name)}</b><b class="rb-pts">${scores[team]}</b>
@@ -132,6 +144,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       ${rows.map((p, i) => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}" style="--i:${i}">
         <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b>${p.id === mvp?.id ? `<i class="rb-star">${art('ui:star', 11)}</i>` : ''}</span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${modeStat(p)}</span><span class="wide">${matchScore(p)}</span>
       </div>`).join('')}
+      ${rest ? `<div class="rb-row" style="--i:${rows.length}"><span class="rb-name"><b>+${rest} more</b></span></div>` : ''}
     </div>`;
   };
 
@@ -150,10 +163,9 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const mvpCard = mvp ? `
       <div class="rs-mvp" style="--team:${TEAMS[mvp.team].css}">
         <span class="rs-mvp-tag">${art('ui:star', 12)}MVP</span>
-        <span class="rs-mvp-name">${badgeTag(badgeOf(mvp.id), 16)}<b>${esc(mvp.name)}</b></span>
-        <small>${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${matchScore(mvp)} pts</small>
+        ${playerBanner(mvp.id, mvp.name, { size: 168, sub: `${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${matchScore(mvp)} pts` })}
       </div>` : '';
-  const modeName = MODES[data.mode]?.name ?? '';
+  const modeName = MODES[data.modeId ?? data.mode]?.name ?? '';
 
   menu.el.innerHTML = `
     <div class="rs" data-outcome="${outcome}" style="--tone:${tone}">
@@ -181,6 +193,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
           ${weapons.length ? `<div class="wp-list">${weapons.map(weaponRow).join('')}</div>` : '<small class="empty">No weapon kills this match</small>'}
         </div>
         <div class="res-choice">
+          ${proProgressHtml(data.proProgress)}
           <button class="rs-btn primary" data-act="resRematch">${esc(data.rematchLabel)}</button>
           <button class="rs-btn" data-act="resMenu">Menu</button>
           <p class="res-note">${esc(data.note ?? '')}</p>
@@ -194,7 +207,11 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       </div>
     </div>`;
   menu.on({ resRematch: () => { menu.overlay(''); rematch(); }, resMenu: () => { menu.overlay(''); toMenu(); } });
-  if (fk) menu.previewMount(menu.el.querySelector('.fk-canvas'), fk.weapon, fk.camo, undefined);
+  // The screen is up before anything that could fail: the turntable needs WebGL, which a phone can refuse or lose.
+  menu.show();
+  if (fk) {
+    try { menu.previewMount(menu.el.querySelector('.fk-canvas'), fk.weapon, fk.camo, undefined); } catch (err) { console.error('final kill preview', err); }
+  }
 
   // The reel runs over a live screen: Rematch and Menu always work, and leaving kills it.
   const reel = new Reel(menu);
@@ -205,8 +222,12 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     resSkip: () => { menu.overlay(''); reel.tapThrough(); },
     resHero: () => reel.wake?.(),
   });
-  runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTeam, xp });
-  menu.show();
+  runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTeam, xp }).catch(err => {
+    // A reel that fails partway still leaves the whole screen readable.
+    console.error('results reel', err);
+    menu.el.querySelector('.rs-hero')?.remove();
+    menu.el.querySelector('.rs')?.classList.add('in');
+  });
 }
 
 function totalPlayerXp(lp) {
@@ -228,8 +249,10 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTea
   else {
     await reel.sleep(HERO_MS);
     if (reel.dead) return;
-    const out = hero.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(1.06)' }], { duration: reel.fast ? 60 : 320, easing: 'cubic-bezier(.55,0,.85,.35)', fill: 'forwards' });
-    await out.finished.catch(() => {});
+    const ms = reel.fast ? 60 : 320;
+    const out = hero.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(1.06)' }], { duration: ms, easing: 'cubic-bezier(.55,0,.85,.35)', fill: 'forwards' });
+    // An animation the page stops ticking (backgrounded, throttled) never settles; the tables must still come.
+    await Promise.race([out.finished.catch(() => {}), new Promise(res => setTimeout(res, ms + 400))]);
     hero.remove();
   }
   if (reel.dead) return;
@@ -281,6 +304,8 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTea
 }
 
 function unlockCard(u) {
+  const special = unlockStamp(u);     // Pro perks and calling cards have their own ceremony (js/ui/cards.js).
+  if (special) return special;
   let mark;
   if (u.kind === 'camo') {
     const c = (u.colors ?? [0x888888]).map(hex);

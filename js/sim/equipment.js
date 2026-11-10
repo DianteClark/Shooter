@@ -25,6 +25,13 @@
 //   eq.projectiles   live [{id,kind,x,z,y,owner,...}]  matches GameView.projectiles
 //   eq.smokes        live [{id,x,z,r,a}]               pass straight to hasLineOfSight / smokeBlocks; a = opacity 0..1
 //   eq.reset()       drops everything in flight (between rounds)
+//   eq.setOffMines(x, z, r)   any explosion of radius r at (x, z): every mine in reach with a clear line goes off a
+//                    moment later, whoever owns it. Grenade blasts call this themselves, so mines chain; the sim calls
+//                    it for rockets, airstrikes and mortars.
+//
+// Pro (js/shared/catalog.js PRO): Fastball (Strong Arm Pro) flies a throw THROW_QUICK times faster to the same spot,
+// so it lands and goes off sooner; previewThrow/landingOf take the thrower's `pro` list too and report the blast radius.
+// Blank Slate (Cold Blooded Pro) players are never marked by a Sensor; players entries may carry `pro` for that.
 //
 // A Strike or other host-side explosion can share the falloff through blastDamage() and flakMult().
 //
@@ -67,6 +74,8 @@ const ENGINEER_TROPHY = 1;      // Extra shots a Trophy gets with the Engineer p
 const TACMASK_FLASH = 0.4;      // Share of a flash a Tac Mask lets through, in both strength and length.
 const TACMASK_FIRE = 0.5;
 const COLD_TRIGGER = 0.45;      // Cold Blooded: fraction of a mine's trigger radius that still sets it off.
+const CHAIN_DELAY = 0.14;       // A mine caught in a blast goes off this much later: chains read as a ripple.
+export const THROW_QUICK = 1.35; // Fastball: flight runs this many times faster.
 const DECOY_RHYTHM = [0.11, 0.11, 0.11, 0.85, 0.11, 0.11, 1.3];   // Seconds between fake shots: short bursts, like a person.
 
 // `air` is how long the throw flies before touching the ground. A rolling grenade flies 11.25 m and
@@ -109,6 +118,13 @@ export function arcHeight(u, arc) {
   return RELEASE_Y * (1 - u) + arc * 4 * u * (1 - u);
 }
 
+const hasProIn = (perks, pro, id) => !!(perks && pro && perks.includes(id) && pro.includes(id));
+
+// Flight speed-up for a thrower's perks and Pro list: Fastball, or 1.
+export function throwQuick(perks, pro) {
+  return hasProIn(perks, pro, 'strongarm') ? THROW_QUICK : 1;
+}
+
 export function flakMult(perks) {
   return perks && perks.includes('flak') ? FLAK_MULT : 1;
 }
@@ -137,20 +153,22 @@ export function effectRadius(kind) {
   return 0;
 }
 
-function makeProjectile(id, kind, owner, ox, oz, aim, dist, perks) {
+function makeProjectile(id, kind, owner, ox, oz, aim, dist, perks, quick = 1) {
   const v = speedFor(kind, dist);
   return { id, kind, owner, team: undefined, x: ox, z: oz, y: RELEASE_Y, arc: throwArc(dist, perks),
-    vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
+    vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick, trip: 0 };
 }
 
 // Something a burst left on the ground. A positive `delay` holds it back that many seconds.
 function makeLying(id, kind, owner, team, x, z, delay = 0) {
-  return { id, kind, owner, team, x, z, y: 0, arc: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0 };
+  return { id, kind, owner, team, x, z, y: 0, arc: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0, quick: 1, trip: 0 };
 }
 
 // One tick of a live projectile. Real throws and previews both go through here, so they cannot disagree.
 // `onBounce` is optional; returns true once the thing has gone off.
+// Fastball runs the flight's clock faster; once down, time is time again.
 function advance(map, p, spec, dt, onBounce) {
+  if (p.quick > 1 && !p.grounded) dt *= p.quick;
   p.age += dt;
   fly(map, p, spec, dt, onBounce);
   const stopped = spec.popsOnStop && p.grounded && Math.hypot(p.vx, p.vz) < STOPPED_SPEED;
@@ -286,23 +304,26 @@ function previewOnBounce(x, z) {
 }
 
 // The one projectile the previews fly. Never escapes this file.
-const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, arc: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
-function launchFlyer(kind, ox, oz, aim, dist, perks) {
+const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, arc: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick: 1, trip: 0 };
+function launchFlyer(kind, ox, oz, aim, dist, perks, pro) {
   const v = speedFor(kind, dist);
   FLYER.kind = kind; FLYER.x = ox; FLYER.z = oz; FLYER.y = RELEASE_Y; FLYER.arc = throwArc(dist, perks);
+  FLYER.quick = throwQuick(perks, pro);
   FLYER.vx = Math.cos(aim) * v; FLYER.vz = Math.sin(aim) * v;
   FLYER.age = 0; FLYER.stuck = false; FLYER.grounded = false;
   return FLYER;
 }
 
 // The exact path of the throw `eq.throw(.., ox, oz, aim, dist)` would make, ticked forward with no one in the way.
-// Returns { points:[{x,z,y}], bounces:[{x,z}], landing:{x,z,t,kind} }, or null for stim and unknown kinds.
+// Returns { points:[{x,z,y}], bounces:[{x,z}], landing:{x,z,t,kind,radius} }, or null for stim and unknown kinds.
 // `landing` is where it goes off (or stops, for smoke). Callers clamp `dist` with maxThrowRange(perks) and pass the
-// thrower's perks, which set the arc's height. The result is reused by the next call: read it now, or copy it.
-export function previewThrow(map, ox, oz, aim, dist, kind, perks) {
+// thrower's perks, which set the arc's height, and Pro list. `landing.radius` is the effect's radius for a Fastball
+// thrower (the HUD rings it) and 0 otherwise. The result is reused by the next call: read it now, or copy it.
+const PREVIEW_NO_PRO = [];
+export function previewThrow(map, ox, oz, aim, dist, kind, perks, pro = PREVIEW_NO_PRO) {
   const spec = EQUIPMENT[kind];
   if (!spec || spec.instant || spec.noThrow) return null;
-  const p = launchFlyer(kind, ox, oz, aim, dist, perks);
+  const p = launchFlyer(kind, ox, oz, aim, dist, perks, pro);
   const points = PREVIEW.points;
   let n = 0;
   previewBounceN = 0;
@@ -316,15 +337,16 @@ export function previewThrow(map, ox, oz, aim, dist, kind, perks) {
   }
   points.length = n; PREVIEW.bounces.length = previewBounceN;
   PREVIEW.landing.x = p.x; PREVIEW.landing.z = p.z; PREVIEW.landing.t = p.age; PREVIEW.landing.kind = kind;
+  PREVIEW.landing.radius = hasProIn(perks, pro, 'strongarm') ? effectRadius(kind) : 0;
   return PREVIEW;
 }
 
 // Where a throw ends up, and nothing else. Returns a shared {x,z,t}, or null for stim and unknown kinds.
 const LANDING = { x: 0, z: 0, t: 0 };
-export function landingOf(map, ox, oz, aim, dist, kind, perks) {
+export function landingOf(map, ox, oz, aim, dist, kind, perks, pro = PREVIEW_NO_PRO) {
   const spec = EQUIPMENT[kind];
   if (!spec || spec.instant || spec.noThrow) return null;
-  const p = launchFlyer(kind, ox, oz, aim, dist, perks);
+  const p = launchFlyer(kind, ox, oz, aim, dist, perks, pro);
   for (let g = 0; g < 400; g++) if (advance(map, p, spec, STEP) || (p.stuck && spec.quietEnd)) break;
   LANDING.x = p.x; LANDING.z = p.z; LANDING.t = p.age;
   return LANDING;
@@ -360,7 +382,8 @@ export class EquipmentSystem {
     if (spec.noThrow) return null;
     this._pending.push({ t: 'throw', id, kind, ox, oz, aim, dist: Number.isFinite(dist) ? dist : THROW_RANGE });
     const perks = owner !== null && typeof owner === 'object' ? owner.ps?.perks : null;
-    const p = makeProjectile(this._nextId++, kind, id, ox, oz, aim, dist, perks);
+    const pro = owner !== null && typeof owner === 'object' ? owner.ps?.pro : null;
+    const p = makeProjectile(this._nextId++, kind, id, ox, oz, aim, dist, perks, throwQuick(perks, pro));
     p.team = owner !== null && typeof owner === 'object' ? owner.team : undefined;
     if (spec.trophy) p.charges = spec.trophy.charges + (perks && perks.includes('engineer') ? ENGINEER_TROPHY : 0);
     this._projectiles.push(p);
@@ -376,7 +399,7 @@ export class EquipmentSystem {
       const arc = u > 0.05 && u < 0.95 ? Math.max(0, (v.y - RELEASE_Y * (1 - u)) / (4 * u * (1 - u))) : ARC_RESTORE;
       this._projectiles.push({ id: v.id, kind: v.kind, owner: v.owner, team: teamOf(v.owner), x: v.x, z: v.z, y: v.y, arc,
         vx: v.vx || 0, vz: v.vz || 0, age: v.age || 0, stuck: !!v.stuck, grounded: !!v.grounded,
-        t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0 });
+        t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0, quick: 1, trip: 0 });
       this._nextId = Math.max(this._nextId, v.id + 1);
     }
     for (const v of smokes || []) {
@@ -390,6 +413,20 @@ export class EquipmentSystem {
     for (let i = 0; i < this._projectiles.length; i++) {
       const p = this._projectiles[i], spec = EQUIPMENT[p.kind];
       if ((spec.mine || spec.trophy || spec.decoy || spec.sensor) && (p.team ?? teamOf(p.owner)) === team) p.dead = true;
+    }
+  }
+
+  // Sympathetic detonation. Mines whose centre is inside the blast, with nothing solid between, are tripped; each goes
+  // off CHAIN_DELAY later and its own blast trips the next. Unarmed mines count: the blast does not care.
+  setOffMines(x, z, r, except = null) {
+    const list = this._projectiles;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q === except || q.dead || q.trip > 0 || !EQUIPMENT[q.kind].mine) continue;
+      const d = Math.hypot(q.x - x, q.z - z);
+      if (d >= r) continue;
+      if (d > 1e-3 && raycastMap(this.map, x, z, (q.x - x) / d, (q.z - z) / d, d, 'blocksBullet')) continue;
+      q.trip = CHAIN_DELAY;
     }
   }
 
@@ -411,6 +448,7 @@ export class EquipmentSystem {
       const px = p.x, pz = p.z;
       const done = advance(this.map, p, spec, dt);
       if (spec.direct && !p.stuck && this._directHit(p, spec, px, pz, players, onDamage)) continue;
+      if (spec.mine && p.trip > 0 && (p.trip -= dt) <= 0) { this._burst(p, spec, players, onEvent, onDamage); continue; }
       if (spec.mine && p.age >= spec.mine.arm && this._tripped(p, spec, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
       if (spec.burn) this._burn(p, spec, dt, players, onDamage);
       if (spec.decoy && p.stuck) this._decoy(p, spec, dt, onEvent);
@@ -458,6 +496,7 @@ export class EquipmentSystem {
     if (spec.scatter) this._scatter(p, spec);
     const r = spec.blast ? spec.blast.radius : spec.flash.radius;
     if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r, by: p.owner });
+    if (spec.blast) this.setOffMines(p.x, p.z, r, p);
     const team = this._teamOf(p, players);
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
@@ -543,7 +582,9 @@ export class EquipmentSystem {
     onEvent({ t: 'pulse', kind: p.kind, x: p.x, z: p.z, r: radius, by: p.owner });
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
-      if (this._enemyOf(p, v, p.team) && Math.hypot(v.x - p.x, v.z - p.z) < radius) onEvent({ t: 'marked', id: v.id, by: p.owner, dur });
+      if (!this._enemyOf(p, v, p.team) || Math.hypot(v.x - p.x, v.z - p.z) >= radius) continue;
+      if (hasProIn(v.perks, v.pro, 'coldblood')) continue;     // Blank Slate.
+      onEvent({ t: 'marked', id: v.id, by: p.owner, dur });
     }
   }
 
