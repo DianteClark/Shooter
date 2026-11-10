@@ -928,6 +928,10 @@ export class HUD {
     this.nextEl = $('.death-next');
     this.goBtn = $('.death-go');
     this.goSub = $('.dg-sub');
+    // Respawn is the killer card's footer, full card width: not beside Change, where two sodium buttons read as one,
+    // and kept over the card so it stays clear of where the aim thumb rests.
+    this.deathEl.querySelector('.death-card')?.append(this.goBtn);
+    Object.assign(this.goBtn.style, { gridColumn: '1 / -1', marginTop: '8px', width: '100%', height: '44px', justifyContent: 'center' });
     this.goBtn.addEventListener('click', () => this.#tapRespawn());
     this.nextIcon = $('.dn-icon');
     this.nextName = $('.dn-text b');
@@ -2007,6 +2011,8 @@ export class HUD {
     this.cache.goState = '';
     this.cache.goSub = '';
     if (!dead) this.goBtn.classList.remove('pressed');
+    // Auto-respawn brings you back by itself: the ring counts it down, so there is nothing to tap.
+    this.goBtn.style.display = r.auto ? 'none' : '';
     if (dead && r.auto && !this.snd) this.#askRespawn();
   }
 
