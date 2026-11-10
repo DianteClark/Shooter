@@ -297,6 +297,7 @@
 .vote-bar { display: block; width: 100%; height: 4px; background: rgba(231,234,228,.18); overflow: hidden; }
 .vote-bar i { position: absolute; inset: auto 0 0 0; height: 4px; background: var(--sodium); transform-origin: right center; transition: transform 1s linear; }
 .vote-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 4px; }
+.vote-cards.with-random { grid-template-columns: repeat(3, 1fr) .72fr; }
 .vote-card, .solo-map {
   position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; text-align: left; padding: 8px 10px 9px; color: var(--chalk);
   background: var(--steel); --cut: 11px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
@@ -304,7 +305,14 @@
 }
 .vc-art { position: absolute; inset: 0; background-size: cover; background-position: center; }
 .vc-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 12%, rgba(29,35,43,.2) 38%, rgba(16,20,26,.92) 88%); }
-.vote-card > *:not(.vc-art):not(.vc-shade), .solo-map > *:not(.vc-art):not(.vc-shade) { position: relative; z-index: 1; }
+.vote-card > *:not(.vc-art):not(.vc-shade):not(.vc-mix):not(.vc-q), .solo-map > *:not(.vc-art):not(.vc-shade):not(.vc-mix):not(.vc-q) { position: relative; z-index: 1; }
+/* Random: four maps tiled and dimmed under a stencilled question mark. */
+.vc-mix { position: absolute; inset: 0; display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: 2px; background: var(--ballast); }
+.vc-mix .vc-art { position: relative; inset: auto; filter: saturate(.35) brightness(.62); }
+.vc-q { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font: 400 74px/1 var(--stencil); font-style: normal; color: var(--sodium); text-shadow: 0 3px 10px rgba(0,0,0,.7); pointer-events: none; }
+.solo-map .vc-q { top: 8%; font-size: 52px; }
+.vote-card.random .vc-map { font-size: 28px; }
+.vote-card.rolled .vc-map { font-size: 26px; }
 .vc-map { font: 400 33px/1 var(--stencil); text-shadow: 0 2px 4px rgba(0,0,0,.65); }
 .vc-mode { display: flex; align-items: center; gap: 6px; margin-top: 3px; font: 400 16px/1.05 var(--plate-face); }
 .vc-mode em { font: 400 13px/1 var(--stencil); font-style: normal; padding: 3px 6px 2px; background: var(--sodium); color: var(--ballast); }
@@ -318,6 +326,7 @@
 .vote-card.mine::after { content: 'Your vote'; position: absolute; z-index: 1; right: 8px; top: 9px; padding: 3px 8px 2px; font: 400 13px/1 var(--stencil); background: var(--sodium); color: var(--ballast); }
 .vote-card.winner { transform: scale(1.03); z-index: 2; animation: vote-win .7s cubic-bezier(.2,1.2,.4,1) both; }
 .vote-card.lost { opacity: .32; filter: saturate(.3); }
+.vote-card:last-child { transform-origin: right center; }   /* Its win pop must not run off the screen edge. */
 @keyframes vote-win { 0% { transform: scale(.94); } 60% { transform: scale(1.06); } 100% { transform: scale(1.03); } }
 .vote-foot { flex: none; font: 12.5px/1.2 var(--body); letter-spacing: 0; color: var(--haze); text-align: center; min-height: 18px; margin-top: 5px; }
 
@@ -327,7 +336,11 @@
 .solo-map { padding: 6px 9px 7px; }
 .solo-map b { font: 400 25px/1 var(--stencil); text-shadow: 0 2px 4px rgba(0,0,0,.65); }
 .solo-foot { flex: none; display: grid; grid-template-columns: 1fr 108px; gap: 6px; height: 80px; }
-.solo-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; min-width: 0; }
+.solo-modes { display: grid; grid-template-columns: repeat(4, 1fr) 66px; gap: 4px; min-width: 0; }
+.solo-mode[data-id="random"] small { display: none; }
+.solo-mode[data-id="random"] { align-items: center; padding: 4px; }
+.solo-mode[data-id="random"] em { font-size: 24px; }
+.solo-quick { flex: none; height: 32px; padding: 0 14px; margin-left: 10px; font-size: 13px; }
 .solo-mode { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; text-align: left; gap: 1px; padding: 4px 8px; background: var(--steel); min-width: 0; --cut: 7px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
 .solo-mode em { font: 400 13px/1 var(--stencil); font-style: normal; color: var(--sodium); }
 .solo-mode b { font: 400 13px/1.05 var(--plate-face); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }

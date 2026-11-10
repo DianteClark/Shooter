@@ -76,6 +76,11 @@ export class Match {
     this.killcam.dispose();
   }
 
+  // Cuts the end-of-match hold short so results show at once.
+  endNow() {
+    if (this.endTimer >= 0) this.endTimer = 0;
+  }
+
   // Applied the next time the local player spawns.
   setNextLoadout(loadout) {
     this.nextLoadout = loadout;

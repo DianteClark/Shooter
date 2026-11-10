@@ -70,6 +70,9 @@ export class Controls {
     this.leftRadius = TUNING.leftSize;
     this.lefty = false;
     this.buttonTouch = new Map();  // touch id -> button or tile name
+    // iOS's touch stream is not always whole (see #adopt). These two let a finger it lost track of be picked up again.
+    this.lost = new Map();         // touch id -> { side, ox, oz }: a stick let go of without that finger's touchend
+    this.spare = new Set();        // Fingers that started but hold nothing: a third finger beside a held stick.
     this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
     this.equip = { tactical: { kind: '', left: NaN }, lethal: { kind: '', left: NaN } };
     this.scoreCache = { score: NaN, capped: null };
@@ -348,6 +351,8 @@ export class Controls {
       if (t.target?.closest?.('.tuner')) continue;
       // iOS reuses identifiers: a "new" finger with an id still in use means the old one ended without telling us.
       this.#forgetStale(t.identifier);
+      this.lost.delete(t.identifier);
+      this.spare.delete(t.identifier);
       const x = t.clientX, y = t.clientY;
       const btn = this.#buttonAt(x, y);
       if (btn) {
@@ -358,9 +363,55 @@ export class Controls {
       }
       if ((x < this.width / 2) !== this.lefty) {
         if (this.left.id === null) this.#grabLeft(t.identifier, x, y);
+        else this.#keep(this.spare, t.identifier);
       } else if (this.right.id === null) {
         this.#grabRight(t.identifier, x, y, e.timeStamp);
+      } else {
+        this.#keep(this.spare, t.identifier);
       }
+    }
+  }
+
+  // Bounded: a finger whose touchend iOS never sent must not leave an entry behind for the rest of the session.
+  #keep(set, id, value) {
+    if (set.size >= 16) set.delete(set.keys().next().value);
+    if (value === undefined) set.add(id);
+    else set.set(id, value);
+  }
+
+  // A finger reporting a move that holds nothing. iOS sends these in two ways, and both used to leave the stick dead
+  // under a thumb that was still on the glass, typically right as a throw is released:
+  //  - its touchstart was never delivered (WebKit drops a touchstart that lands in the same instant another finger
+  //    lifts, such as the thumb re-planting as the grenade finger lets go);
+  //  - the stick was let go of by inference (a `touches` list that left the thumb out, an identifier that looked
+  //    reused, a touchcancel) and the finger then kept moving, which proves it was there all along.
+  // A lost stick resumes with its own base; a never-seen finger takes a free stick from where it is now, never a button.
+  #adopt(t, at) {
+    const id = t.identifier, x = t.clientX, y = t.clientY;
+    if (this.buttonTouch.has(id) || this.spare.has(id)) return;
+    if (t.target?.closest?.('[data-tap]') || t.target?.closest?.('.tuner')) return;
+    const was = this.lost.get(id);
+    this.lost.delete(id);
+    if (was) {
+      if (was.side === 'left' && this.left.id === null) {
+        this.#grabLeft(id, was.ox, was.oz);
+        this.left.x = x; this.left.y = y;
+      } else if (was.side === 'right' && this.right.id === null) {
+        this.#grabRight(id, was.ox, was.oz, at);
+        this.#aimMove(x, y, at);
+      } else {
+        this.#keep(this.spare, id);
+      }
+      return;
+    }
+    if (this.#buttonAt(x, y)) return this.#keep(this.spare, id);
+    if ((x < this.width / 2) !== this.lefty) {
+      if (this.left.id === null) this.#grabLeft(id, x, y);
+      else this.#keep(this.spare, id);
+    } else if (this.right.id === null) {
+      this.#grabRight(id, x, y, at);
+    } else {
+      this.#keep(this.spare, id);
     }
   }
 
@@ -473,6 +524,8 @@ export class Controls {
         this.#aimMove(t.clientX, t.clientY, e.timeStamp);
       } else if (this.throw?.id === id) {
         this.#throwMove(t.clientX, t.clientY);
+      } else {
+        this.#adopt(t, e.timeStamp);
       }
     }
   }
@@ -517,11 +570,15 @@ export class Controls {
   }
 
   // cancelled: the system took the finger, or it was found to be gone. Nothing it was doing should fire.
+  // A stick dropped that way is remembered, so that a later move from the same finger picks it up again (#adopt).
   #drop(id, at = performance.now(), cancelled = false) {
+    if (!cancelled) { this.lost.delete(id); this.spare.delete(id); }
     if (id === this.left.id) {
+      if (cancelled) this.#keep(this.lost, id, { side: 'left', ox: this.left.ox, oz: this.left.oz });
       this.left.id = null;
       this.paintDirty = true;
     } else if (id === this.right.id) {
+      if (cancelled) this.#keep(this.lost, id, { side: 'right', ox: this.right.ox, oz: this.right.oz });
       const settled = this.aimFilter.settled(at);
       this.right.id = null;
       this.right.firing = false;
@@ -540,6 +597,7 @@ export class Controls {
         }
         (this.buttons[btn] ?? this.tileById(btn).node).classList.remove('down');
         this.buttonTouch.delete(id);
+        if (cancelled) this.#keep(this.spare, id);   // A button finger that turns out to be alive stays a button press.
       }
     }
   }
@@ -569,6 +627,8 @@ export class Controls {
     this.edge.streak = -1;
     for (const t of this.tiles) t.node.classList.remove('down');
     this.buttonTouch.clear();
+    this.lost.clear();              // Nothing is picked up again across a pause or a match boundary.
+    this.spare.clear();
     this.throw = null;              // A press the game took away is not a throw.
     this.throwReleased = null;
     this.paintDirty = true;

@@ -26,6 +26,7 @@ const CLAIM_WAIT_MS = 2500;         // How long a peer waits for the chosen succ
 const JOIN_TIMEOUT_MS = 20000;      // Public Nostr relays can take several seconds to pair two peers.
 const MAX_BUFFERED = 24 * 1024;     // Channel backlog beyond which droppable traffic is skipped.
 const MAX_INFLIGHT = 2;             // Sends the transport has not finished yet, per peer.
+const OWED_RETRY_MS = 150;          // How soon a skipped snapshot or state is offered again (see #sendDroppable).
 const RTT_SMOOTHING = 0.25;
 
 // Stable for the device, so a reload or a closed tab can retake its slot. Tabs on one machine share localStorage, so
@@ -56,6 +57,7 @@ export class StarNet {
     this.status = isHost ? 'open' : 'connecting';   // open | connecting | connected | host-lost | closed
     this.rtt = null;                                // Milliseconds to the host; null on the host itself.
     this.dropped = 0;                               // Snapshots and states skipped because a channel was backed up.
+    this.owedTimer = 0;                             // Pending re-offer of skipped snapshots and states.
 
     this.known = new Map();          // player id -> { tid, name, isHost, hidden, heard, rtt, inflight, linked }
     this.pidOf = new Map();          // transport id -> player id
@@ -163,6 +165,7 @@ export class StarNet {
     clearInterval(this.pingTimer);
     clearTimeout(this.joinTimer);
     clearTimeout(this.electTimer);
+    clearTimeout(this.owedTimer);
     for (const t of this.leaveTimers.values()) clearTimeout(t);
     for (const p of this.pings.values()) { clearTimeout(p.timer); p.resolve(null); }
     this.pings.clear();
@@ -194,6 +197,9 @@ export class StarNet {
   }
 
   // Newest-wins traffic: a late snapshot is worse than a missing one, because the channels are reliable and ordered.
+  // A skipped one is still owed, though: the newest a peer missed is offered again shortly, and dropped for good only
+  // when a newer one goes out. Otherwise the last snapshot before the host stops sending, which at the end of a match
+  // is the one that says 'ended', could be skipped on a busy channel and leave that guest in a match that never ends.
   #sendDroppable(kind, data, targets) {
     let ready = null;
     for (const id of targets) {
@@ -201,8 +207,11 @@ export class StarNet {
       if (!peer) continue;
       if (peer.inflight >= MAX_INFLIGHT || this.transport.buffered(peer.tid) > MAX_BUFFERED) {
         this.dropped++;
+        (peer.owed ??= new Map()).set(kind, data);
+        this.#retryOwed();
         continue;
       }
+      peer.owed?.delete(kind);
       (ready ??= []).push(peer.tid);
       peer.inflight++;
     }
@@ -216,6 +225,19 @@ export class StarNet {
     const sent = this.transport.send(kind, data, ready);
     if (sent?.then) sent.then(done, done);
     else done();
+  }
+
+  #retryOwed() {
+    if (this.owedTimer || this.status === 'closed') return;
+    this.owedTimer = setTimeout(() => {
+      this.owedTimer = 0;
+      if (this.status === 'closed') return;
+      for (const [id, peer] of this.known) {
+        if (!peer.owed?.size) continue;
+        if (!peer.linked) { peer.owed.clear(); continue; }
+        for (const [kind, data] of [...peer.owed]) this.#sendDroppable(kind, data, [id]);
+      }
+    }, OWED_RETRY_MS);
   }
 
   #hi(extra = {}) {

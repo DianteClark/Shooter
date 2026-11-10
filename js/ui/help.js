@@ -11,7 +11,7 @@ const glyph = id => (ITEM_ICONS[id] ? `<svg class="item-svg" viewBox="0 0 32 32"
 const PANELS = {
   controls: () => `
     <div class="help-grid">
-      <div class="help-card"><h4>Left thumb</h4><p>Drag anywhere on the left half to move. Push all the way to sprint.</p></div>
+      <div class="help-card"><h4>Left thumb</h4><p>Drag anywhere on the left half to move. Push all the way to sprint. While firing, a full push keeps you hip-firing at full speed; ease below about 70% to settle into aiming down sights.</p></div>
       <div class="help-card"><h4>Right thumb</h4><p>Touch and hold to aim. Push past the outer ring to fire. Let go and you are back to hip fire.</p></div>
       <div class="help-card"><h4>Slide</h4><p>Tap while moving. You are a smaller target while you slide.</p></div>
       <div class="help-card"><h4>Swap</h4><p>Switches to your sidearm. Reloads are automatic, so swap when you are out.</p></div>
@@ -21,7 +21,7 @@ const PANELS = {
     <div class="help-streaks">
       <div class="help-strip">${Object.values(STREAKS).map(s => `<span class="help-chip">${glyph(s.id)}<b>${esc(s.name)}</b><em>${s.cost}</em></span>`).join('')}</div>
       <ol class="help-rules">
-        <li>Kills score 100, headshots +25, assists 50. <b>Dying resets your score to 0</b>, but streaks you already hold stay.</li>
+        <li>Kills score 100, headshots +25, assists 50. <b>Your score carries through death</b>, and streaks you already hold stay. Costs are high, so streaks still take real play.</li>
         <li>You carry three. Each is granted when your score reaches its cost. Hardline makes them 15% cheaper.</li>
         <li>Once nothing left can be earned your score is <b>capped</b>; calling one then resets it and clears blocks. Calling early keeps your score but <b>blocks</b> that streak until the next reset.</li>
         <li><b>Airspace</b> holds a few aircraft at once and one Gunship per team. A refused call keeps the streak and its tile says why: Already up or Airspace full.</li>

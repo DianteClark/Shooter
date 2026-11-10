@@ -100,6 +100,7 @@ export class Killcam {
   // Slow replay of the match's last kill from the killer's side. Returns its length in seconds, or 0
   // if that kill is not in the buffer (a very long hold, or a kill never received): the caller holds as before.
   playFinal(lastKill) {
+    this.skipped = false;   // A skipped death replay must not end the final hold.
     this.pending = null;
     if (this.replay) this.#stop();
     this.recording = false;       // Nothing newer than the final moments is wanted, and the buffer must stop rolling.

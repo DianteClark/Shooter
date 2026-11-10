@@ -13,7 +13,7 @@ import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore } from './ui/progress.js';
-import { voteOptions, tallyWinner, modeFits } from './ui/vote.js';
+import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
 import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
@@ -31,18 +31,21 @@ const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a
 const NET_POLL_MS = 1000;
 const REMATCH_SECONDS = 15;
 const VOTE_REVEAL_MS = 1700;
+const RESULTS_MIN_MS = 6000;     // A guest's results stay up at least this long before a vote the host started takes over.
 const REJOIN_MINUTES = 15;       // How long after dropping the title screen still offers the way back.
 const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats'];   // A lobby update must not pull a guest out of these.
 const LAST_ROOM = 'switchyard-last-room';
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
-// Test hooks: ?limit=N shortens a match, ?vote=N shortens the vote, and ?map=&mode= skip the solo picker.
+// Test hooks: ?limit=N lowers the score limit, ?time=S the time limit, ?vote=N shortens the vote, and ?map=&mode= skip
+// the solo picker (either may be 'random').
 const LIMIT_OVERRIDE = Number(params.get('limit')) || 0;
+const TIME_OVERRIDE = Number(params.get('time')) || 0;
 const VOTE_SECONDS = Number(params.get('vote')) || 10;
 
 const limitsFor = mode => {
   const m = mode === 'range' ? RANGE_MODE : MODES[mode];
-  return { scoreLimit: LIMIT_OVERRIDE || m.scoreLimit, timeLimit: m.timeLimit };
+  return { scoreLimit: LIMIT_OVERRIDE || m.scoreLimit, timeLimit: TIME_OVERRIDE || m.timeLimit };
 };
 
 document.title = GAME_NAME;
@@ -70,7 +73,9 @@ const app = {
   rematch: null,            // Host only: { left, timer } while the auto-start countdown runs.
   countdown: null,          // Seconds left in the rematch countdown as last announced; null when none.
   rematchWait: false,       // Guest pressed Rematch and is waiting for the host to do the same.
-  vote: null,               // { key, options, votes (host) or counts (guest), left, winner, mine }
+  vote: null,               // { key, options, votes (host) or counts (guest), left, winner, resolved, mine }
+  resultsAt: 0,             // When the results screen last appeared.
+  voteTakeover: 0,          // Guest: timer that moves results on to a vote that opened while they were showing.
   soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
 };
 
@@ -193,6 +198,7 @@ menu.on({
   rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
   range: () => { needName(startRange); },
   solo: () => { startSolo(); },
+  quickPlay: () => { needName(quickPlay); },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
   gunsmith: () => openGunsmith(),
@@ -661,6 +667,7 @@ function renderSoloPick() {
 }
 
 function pickSoloMap(mapId) {
+  if (mapId !== RANDOM && !MAPS[mapId]) return;
   app.soloPick.mapId = mapId;
   if (!modeFits(MAPS[mapId], app.soloPick.mode)) app.soloPick.mode = 'tdm';
   renderSoloPick();
@@ -672,7 +679,15 @@ function pickSoloMode(mode) {
   renderSoloPick();
 }
 
-function launchSolo(mapId, mode) {
+// Quick play: one tap from the title or the picker, a random map and a random mode it can host.
+function quickPlay() {
+  resetToSolo();
+  launchSolo(RANDOM, RANDOM);
+}
+
+// Either half may be RANDOM; this device is the host, so it rolls here.
+function launchSolo(pickMap, pickMode) {
+  const { mapId, mode } = resolvePick({ mapId: pickMap, mode: pickMode });
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
   beginMatch({
@@ -686,6 +701,7 @@ function launchSolo(mapId, mode) {
 function stopVote() {
   clearInterval(app.vote?.timer);
   clearTimeout(app.vote?.reveal);
+  clearTimeout(app.voteTakeover);
   app.vote = null;
 }
 
@@ -694,7 +710,7 @@ function startVote() {
   stopRematch();
   app.vote = {
     key: `${app.code}:${Date.now()}`, options: voteOptions(), votes: new Map(), left: VOTE_SECONDS,
-    seconds: VOTE_SECONDS, winner: null, mine: null,
+    seconds: VOTE_SECONDS, winner: null, resolved: null, mine: null,
     timer: setInterval(voteTick, 1000),
   };
   broadcastVote();
@@ -712,9 +728,10 @@ function voteTick() {
   }
   clearInterval(vote.timer);
   vote.winner = tallyWinner(voteCounts(vote));
+  // A Random winner is rolled once, here on the host, and the result is what everyone is shown and sent.
+  vote.resolved = resolvePick(vote.options[vote.winner]);
   vote.reveal = setTimeout(() => {
-    const pick = vote.options[vote.winner];
-    launchHostMatch(pick.mapId, pick.mode);
+    launchHostMatch(vote.resolved.mapId, vote.resolved.mode);
   }, VOTE_REVEAL_MS);
   broadcastVote();
   renderVote();
@@ -730,7 +747,7 @@ function voteCounts(vote) {
 function broadcastVote() {
   const vote = app.vote;
   if (!vote || !app.net) return;
-  app.net.sendLobby({ t: 'vote', key: vote.key, options: vote.options, counts: voteCounts(vote), left: vote.left, seconds: vote.seconds, winner: vote.winner, total: app.lobby.humans.length });
+  app.net.sendLobby({ t: 'vote', key: vote.key, options: vote.options, counts: voteCounts(vote), left: vote.left, seconds: vote.seconds, winner: vote.winner, resolved: vote.resolved, total: app.lobby.humans.length });
 }
 
 function castVote(i) {
@@ -750,18 +767,46 @@ function renderVote() {
   const vote = app.vote;
   if (!vote) return;
   menu.vote({
-    key: vote.key, options: vote.options, left: vote.left, seconds: vote.seconds, winner: vote.winner, mine: vote.mine,
+    key: vote.key, options: vote.options, left: vote.left, seconds: vote.seconds, winner: vote.winner, resolved: vote.resolved ?? null, mine: vote.mine,
     counts: app.isHost ? voteCounts(vote) : vote.counts, total: app.isHost ? app.lobby.humans.length : vote.total,
   });
 }
 
 function showGuestVote(msg) {
-  // Same reasons as the 'start' case: a guest may still be on results or in the end-of-match hold.
-  endLocalMatch();
   app.countdown = null;
   app.rematchWait = false;
   app.vote = { ...msg, mine: app.vote?.key === msg.key ? app.vote.mine : null };
+  if (resultsFirst()) return;
+  endLocalMatch();
   renderVote();
+}
+
+// A host can be back in the lobby and start the next vote while a guest is still in the end-of-match hold: the host
+// skipped its own final kill, or its hold ran shorter. The vote used to end the guest's match on the spot, so that guest
+// never saw results (and never banked the match's XP). Now the hold is cut short instead, results come up, and the vote
+// takes over once they have had RESULTS_MIN_MS; the results screen's main button opens the vote before then.
+// Returns true while the vote has to wait.
+function resultsFirst() {
+  const match = app.match;
+  if (app.inMatch && match && match.endTimer >= 0) {
+    match.endNow();   // Match ends a hold with a skipped final replay on its next frame.
+    return true;
+  }
+  if (app.inMatch && match && match.interp.newest?.phase === 'ended') return true;   // Its hold begins this frame.
+  if (menuShows('results') && performance.now() - app.resultsAt < RESULTS_MIN_MS) {
+    voteBehindResults();
+    return true;
+  }
+  return false;
+}
+
+function voteBehindResults() {
+  if (!app.vote || app.isHost) return;
+  menu.resultsNote(app.vote.winner === null ? 'The next vote is open' : 'Next match starting');
+  clearTimeout(app.voteTakeover);
+  app.voteTakeover = setTimeout(() => {
+    if (app.vote && !app.isHost && menuShows('results')) renderVote();
+  }, Math.max(0, RESULTS_MIN_MS - (performance.now() - app.resultsAt)));
 }
 
 function launchHostMatch(mapId, mode) {
@@ -900,10 +945,13 @@ function showResults(results) {
     rematchLabel: 'Rematch',
     note: counting ? `Rematch starts in ${app.countdown}` : '',
   }, { rematch: () => afterResults(), menu: () => goTitle() });
+  app.resultsAt = performance.now();
+  voteBehindResults();
 }
 
 function afterResults() {
   if (!app.net) return startSolo();
+  if (app.vote && !app.isHost) return renderVote();   // The host has already opened the next vote.
   const me = localHuman();
   if (app.isHost) {
     for (const h of app.lobby.humans) h.ready = !!h.host;

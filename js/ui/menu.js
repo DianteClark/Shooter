@@ -158,7 +158,10 @@ export class Menu {
           <button class="route" data-act="host"><i class="lamp"></i><b>Host</b></button>
           <button class="route" data-act="join"><i class="lamp"></i><b>Join code</b></button>
         </div>
-        <button class="route" data-act="range"><i class="lamp"></i><b>Firing range</b></button>
+        <div class="route-pair">
+          <button class="route" data-act="quickPlay"><i class="lamp"></i><b>Quick play</b></button>
+          <button class="route" data-act="range"><i class="lamp"></i><b>Firing range</b></button>
+        </div>
         <div class="route-pair">
           <button class="route" data-act="loadout"><b>Loadouts</b></button>
           <button class="route" data-act="gunsmith"><b>Gunsmith</b></button>
