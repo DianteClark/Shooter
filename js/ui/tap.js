@@ -16,6 +16,22 @@ const GHOST_PX = 44;
 const presses = new Map();     // touch id -> press
 let lastFire = { at: -1e9, x: 0, y: 0 };
 let installed = false;
+let soundFn = null;            // (kind, el) => void; set by the app with setTapSound. See below.
+
+// Every tap gets a sound. The kind comes from the element: data-sound="back|confirm|deny|tab|tick|none", else
+// 'back' for back/close actions, else 'tap'. A tap on a disabled or aria-disabled control plays 'deny'.
+export function setTapSound(fn) { soundFn = fn; }
+function soundKind(el) {
+  const k = el.getAttribute('data-sound');
+  if (k) return k;
+  if (el.disabled || el.getAttribute('aria-disabled') === 'true') return 'deny';
+  const act = (el.getAttribute('data-act') ?? '') + ' ' + (el.getAttribute('data-tap') ?? '');
+  return /\b(back|close|cancel|leave)\b/.test(act) ? 'back' : 'tap';
+}
+function sound(el, kind = soundKind(el)) {
+  if (!soundFn || kind === 'none') return;
+  try { soundFn(kind, el); } catch { /* sound must never break a tap */ }
+}
 
 // True while a finger is on any button; the preview loop yields the main thread for these moments.
 export const fingerDown = () => presses.size > 0;
@@ -59,6 +75,7 @@ function start(e) {
   for (const t of e.changedTouches) {
     const target = t.target?.nodeType === 1 ? t.target : t.target?.parentElement;
     const el = target?.closest?.(TAPPABLE);
+    if (el?.isConnected && !usable(el)) { sound(el, 'deny'); continue; }
     if (!usable(el) || el.tagName === 'TEXTAREA') continue;
     const r = el.getBoundingClientRect();
     const p = { el, key: keyOf(el), x: t.clientX, y: t.clientY, rect: r, at: performance.now(), over: true };
@@ -106,12 +123,18 @@ function cancel(e) {
 }
 
 function dropGhost(e) {
-  if (!e.isTrusted) return;
-  const near = Math.abs(e.clientX - lastFire.x) < GHOST_PX && Math.abs(e.clientY - lastFire.y) < GHOST_PX;
-  if (near && performance.now() - lastFire.at < GHOST_MS) {
-    e.preventDefault();
-    e.stopImmediatePropagation();
+  if (e.isTrusted) {
+    const near = Math.abs(e.clientX - lastFire.x) < GHOST_PX && Math.abs(e.clientY - lastFire.y) < GHOST_PX;
+    if (near && performance.now() - lastFire.at < GHOST_MS) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
   }
+  // Both the touch path (el.click()) and a real mouse click arrive here exactly once per tap.
+  const t = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
+  const el = t?.closest?.(TAPPABLE);
+  if (el && el.tagName !== 'TEXTAREA') sound(el);
 }
 
 export function installTaps(target = window) {

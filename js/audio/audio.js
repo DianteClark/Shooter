@@ -554,6 +554,91 @@ function renderMedal(spec, sr) {
   return normalize(data, 0.85);
 }
 
+// ---- Interface sounds. Small engineered hardware: latches, detents, relays. Short, dry, and pitched above the
+// guns so they read without being loud. They play on their own bus under the gameplay mix (see AudioEngine.ui*). ----
+function renderUiSounds(sr) {
+  const mk = (dur, seed, fill, peak = 0.8) => () => {
+    const d = new Float32Array(Math.floor(dur * sr));
+    fill(d, rngFrom(seed));
+    return normalize(d, peak);
+  };
+  const note = semi => 440 * Math.pow(2, semi / 12);
+  return {
+    // A detent: hard click with a short metal ring. Every ordinary tap.
+    tap: mk(0.06, 301, (d, r) => {
+      addClick(d, sr, r, { dur: 0.0025, gain: 1, hp: 3200 });
+      addMetal(d, sr, { at: 0.001, dur: 0.035, gain: 0.35, f: 2350, decay: 9 });
+      addTone(d, sr, { dur: 0.018, gain: 0.35, f0: 1700, f1: 1350, decay: 6 });
+    }, 0.7),
+    // Back: the same detent, lower, with a falling step. Reads as "out".
+    back: mk(0.09, 302, (d, r) => {
+      addClick(d, sr, r, { dur: 0.003, gain: 0.9, hp: 1800 });
+      addTone(d, sr, { dur: 0.04, gain: 0.55, f0: 980, f1: 720, decay: 5 });
+      addTone(d, sr, { at: 0.035, dur: 0.05, gain: 0.45, f0: 660, f1: 520, decay: 5 });
+    }, 0.65),
+    // Confirm: a latch closing, then two clean lamp tones going up.
+    confirm: mk(0.26, 303, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 1500 });
+      addTone(d, sr, { dur: 0.03, gain: 0.6, f0: 210, f1: 140, decay: 5 });
+      addTone(d, sr, { at: 0.02, dur: 0.12, gain: 0.55, f0: note(7), decay: 5, attack: 0.003, shape: 0.4 });
+      addTone(d, sr, { at: 0.08, dur: 0.18, gain: 0.6, f0: note(14), decay: 5, attack: 0.003, shape: 0.4 });
+    }, 0.75),
+    // Deny: two dull relay buzzes. Never shrill: it is heard often.
+    deny: mk(0.2, 304, (d, r) => {
+      for (const at of [0, 0.09]) {
+        addTone(d, sr, { at, dur: 0.07, gain: 0.8, f0: 156, f1: 148, decay: 3, attack: 0.002, shape: 3 });
+        addNoise(d, sr, r, { at, dur: 0.05, gain: 0.25, f0: 900, f1: 500, decay: 4 });
+      }
+    }, 0.6),
+    // Tab: a plate sliding a notch along a rail.
+    tab: mk(0.08, 305, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.05, gain: 0.7, f0: 5200, f1: 1800, hp: 900, decay: 4 });
+      addClick(d, sr, r, { at: 0.045, dur: 0.003, gain: 0.9, hp: 2600 });
+      addMetal(d, sr, { at: 0.046, dur: 0.03, gain: 0.25, f: 1900, decay: 9 });
+    }, 0.6),
+    // Slider tick: a single tiny detent, played at a pitch that follows the value.
+    tick: mk(0.025, 306, (d, r) => {
+      addClick(d, sr, r, { dur: 0.0015, gain: 1, hp: 5000 });
+      addTone(d, sr, { dur: 0.015, gain: 0.5, f0: 3100, f1: 2900, decay: 7 });
+    }, 0.55),
+    // Unlock: a heavy latch springs, then a bright three-note shimmer.
+    unlock: mk(0.75, 307, (d, r) => {
+      addClick(d, sr, r, { dur: 0.006, gain: 1.2, hp: 1200 });
+      addTone(d, sr, { dur: 0.06, gain: 0.9, f0: 180, f1: 90, decay: 4, shape: 1 });
+      addMetal(d, sr, { at: 0.004, dur: 0.12, gain: 0.5, f: 1250, decay: 6 });
+      [[7, 0.07], [12, 0.15], [19, 0.23]].forEach(([semi, at]) => {
+        addTone(d, sr, { at, dur: 0.5, gain: 0.5, f0: note(semi), decay: 5, attack: 0.004, shape: 0.3 });
+        addTone(d, sr, { at, dur: 0.3, gain: 0.15, f0: note(semi) * 2.01, decay: 7 });
+      });
+      addNoise(d, sr, r, { at: 0.15, dur: 0.4, gain: 0.08, f0: 9000, f1: 6000, hp: 5000, decay: 5 });
+    }, 0.8),
+    // Level up: thump, then a rising major arpeggio that lands on a held fifth.
+    levelUp: mk(1.0, 308, (d, r) => {
+      addTone(d, sr, { dur: 0.12, gain: 1, f0: 120, f1: 60, decay: 4, shape: 1.2 });
+      addClick(d, sr, r, { dur: 0.004, gain: 0.8, hp: 1500 });
+      [[0, 0.03], [4, 0.11], [7, 0.19], [12, 0.27]].forEach(([semi, at], i) => {
+        addTone(d, sr, { at, dur: i === 3 ? 0.7 : 0.3, gain: i === 3 ? 0.65 : 0.5, f0: note(semi), decay: i === 3 ? 3.5 : 5, attack: 0.004, shape: 0.5 });
+      });
+      addTone(d, sr, { at: 0.27, dur: 0.7, gain: 0.3, f0: note(19), decay: 3.5, attack: 0.01, shape: 0.3 });
+    }, 0.85),
+    // Rank up (prestige, weapon mastery): a low slam, a chord stab, and a long climb.
+    rankUp: mk(1.6, 309, (d, r) => {
+      addTone(d, sr, { dur: 0.3, gain: 1.2, f0: 90, f1: 42, decay: 3.5, shape: 1.6 });
+      addNoise(d, sr, r, { dur: 0.25, gain: 0.5, f0: 2400, f1: 300, decay: 4 });
+      addMetal(d, sr, { at: 0.005, dur: 0.4, gain: 0.45, f: 620, decay: 4 });
+      for (const semi of [-12, -5, 0, 4]) addTone(d, sr, { at: 0.02, dur: 0.6, gain: 0.3, f0: note(semi), decay: 3, attack: 0.008, shape: 0.8 });
+      [[7, 0.28], [12, 0.36], [16, 0.44], [19, 0.52], [24, 0.6]].forEach(([semi, at], i) => {
+        addTone(d, sr, { at, dur: i === 4 ? 0.95 : 0.35, gain: i === 4 ? 0.6 : 0.42, f0: note(semi), decay: i === 4 ? 3 : 5, attack: 0.004, shape: 0.5 });
+      });
+      for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.9);
+    }, 0.9),
+  };
+}
+// Minimum spacing per sound, so a thumb dragging across a list does not machine-gun.
+const UI_GAP = { tap: 0.03, back: 0.05, confirm: 0.08, deny: 0.12, tab: 0.04, tick: 0.035, unlock: 0.2, levelUp: 0.4, rankUp: 0.6 };
+const UI_LEVEL = 0.42;          // Under gameplay: the loudest UI sound sits well below a nearby gunshot.
+const UI_VOICES = 3;
+
 function renderSfx(sr) {
   const seed = 9137;
   // Each entry is a thunk, so synthesis can be spread over several small jobs.
@@ -1001,6 +1086,11 @@ export class AudioEngine {
 
     this.master = ctx.createGain();
     this.master.gain.value = this.volume;
+    // Interface sounds: straight to master, after the compressor, so gunfire never pumps them.
+    this.uiBus = ctx.createGain();
+    this.uiBus.gain.value = UI_LEVEL * (this.uiVolumeScale ?? 1);
+    this.uiBus.connect(this.master);
+    this.uiBufs = {}; this.uiAt = {}; this.uiLive = [];
     this.limiter = ctx.createDynamicsCompressor();
     this.limiter.threshold.value = -1.5; this.limiter.knee.value = 0;
     this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.08;
@@ -1097,6 +1187,9 @@ export class AudioEngine {
     jobs.push(() => { this.loops.wind = this._toBuffer(renderWind(sr, 91)); });
     jobs.push(() => { this.loops.farFire = this._toBuffer(renderDistantFire(sr, 133)); });
     for (let v = 0; v < 3; v++) jobs.push(() => { this.thunder[v] = this._toBuffer(renderThunder(sr, 4100 + v * 13)); });
+    // Interface sounds first: the player is in a menu when audio unlocks.
+    const uiSounds = renderUiSounds(sr);
+    jobs.unshift(...Object.keys(uiSounds).map(k => () => { this.uiBufs[k] = this._toBuffer(uiSounds[k]()); }));
     let i = 0;
     this.buildMs = 0; this.buildMaxJobMs = 0;
     const runNext = () => {
@@ -1152,6 +1245,47 @@ export class AudioEngine {
 
   // The iOS voice-chat audio session ducks everything playing while the mic is open; push the mix up to meet it.
   // The limiter and clipper after master hold the increase safe.
+  // ---- Interface sounds. Touch has no hover, so the set is about taps and outcomes. ----
+  // kind: tap | back | confirm | deny | tab | tick | unlock | levelUp | rankUp. `pitch` shifts playback rate
+  // (a slider passes its value so the ticks climb). Safe to call before audio is unlocked: it does nothing.
+  uiSound(kind = 'tap', { pitch = 1, gain = 1 } = {}) {
+    if (kind === 'click') kind = 'tap';   // The menu's name for an ordinary tap.
+    const ctx = this.ctx, buf = this.uiBufs?.[kind];
+    if (!ctx || !buf || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+    if (now - (this.uiAt[kind] ?? -9) < (UI_GAP[kind] ?? 0.03)) return;
+    this.uiAt[kind] = now;
+    this.uiLive = this.uiLive.filter(v => v.end > now);
+    if (this.uiLive.length >= UI_VOICES) {
+      const old = this.uiLive.shift();
+      old.g.gain.setTargetAtTime(0, now, 0.006);
+      try { old.src.stop(now + 0.03); } catch { /* already stopped */ }
+    }
+    const src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = buf;
+    src.playbackRate.value = pitch;
+    g.gain.value = gain;
+    src.connect(g); g.connect(this.uiBus);
+    src.start(now);
+    this.uiLive.push({ src, g, end: now + buf.duration / pitch });
+  }
+  uiClick() { this.uiSound('tap'); }
+  uiTap() { this.uiSound('tap'); }
+  uiBack() { this.uiSound('back'); }
+  uiConfirm() { this.uiSound('confirm'); }
+  uiDeny() { this.uiSound('deny'); }
+  uiTab() { this.uiSound('tab'); }
+  // t in 0..1: where the slider is. Ticks rise across about an octave.
+  uiTick(t = 0.5) { this.uiSound('tick', { pitch: 0.8 + Math.max(0, Math.min(1, t)) * 0.8 }); }
+  uiUnlock() { this.uiSound('unlock'); }
+  uiLevelUp() { this.uiSound('levelUp'); }
+  uiRankUp() { this.uiSound('rankUp'); }
+  // Interface level relative to its default, 0..1.5, for an options slider.
+  setUiVolume(v) {
+    this.uiVolumeScale = Math.max(0, Math.min(1.5, v));
+    if (this.uiBus) this.uiBus.gain.value = UI_LEVEL * this.uiVolumeScale;
+  }
+
   setMicActive(active) {
     this.micActive = !!active;
     if (!this.ready) return;

@@ -1,6 +1,9 @@
 // Small markup helpers shared by every screen outside a match, and by the HUD's badges.
 import { badgeSvg } from '../shared/progression.js';
-import { ITEM_ICONS } from './icons.js';
+import { icon, hasIcon, resolveIcon } from './icons.js';
+import { rollNumber } from './motion.js';
+import { ATTACHMENTS } from '../shared/attachments.js';
+import { CAMOS } from '../shared/camos.js';
 
 export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const hex = n => '#' + n.toString(16).padStart(6, '0');
@@ -24,13 +27,21 @@ export function badgeTag(badge, size = 18) {
 }
 
 // The stroked icons shared with the touch controls, plus a padlock for anything not yet earned.
-export const lockIcon = () => `<svg class="lk" viewBox="0 0 32 32" aria-hidden="true">${ITEM_ICONS.lock}</svg>`;
+export const lockIcon = (size = 24) => icon('ui:lock', { size, cls: 'lk' });
 
-// An item's stroked icon, or a stencilled diamond of its initials for items without one (perks, attachments).
-export function itemMark(id, name) {
-  return ITEM_ICONS[id]
-    ? `<svg class="item-svg" viewBox="0 0 32 32" aria-hidden="true">${ITEM_ICONS[id]}</svg>`
-    : `<span class="perk-mark">${esc(String(name ?? id).slice(0, 2))}</span>`;
+// Re-exported so screens can take everything markup-related from one place.
+export { icon, hasIcon };
+
+// An item's icon: weapons as a square-fitted silhouette, attachments by their slot, anything unknown as the
+// neutral lamp. `name` is kept for older callers and used as the accessible label only when asked.
+export function itemMark(id, name, { size = 24, slot } = {}) {
+  let key = resolveIcon(id);
+  if (key === 'unknown') {
+    const s = slot ?? ATTACHMENTS[id]?.slot;
+    if (s) key = resolveIcon(s);
+    else if (CAMOS.some(c => c.id === id)) key = 'ui:camo';
+  }
+  return icon(key, { size, square: true, cls: 'item-svg' });
 }
 
 // A swatch hints at the pattern family with CSS only; the real thing is on the gun in the preview.
@@ -53,16 +64,7 @@ export function swatchCss(c) {
 // Requirement line for a locked item: consistent wording everywhere one can appear.
 export const levelRequirement = level => `Unlocks at level ${level}`;
 
-// Rolls an element's number from `from` to `to`, for results and other moments that deserve a beat.
+// Rolls an element's number from `from` to `to`. Kept for older callers; new code uses motion.rollNumber.
 export function countUp(el, from, to, ms = 700, format = n => Math.round(n)) {
-  if (!el) return;
-  const t0 = performance.now();
-  const step = now => {
-    if (!el.isConnected) return;
-    const f = Math.min(1, (now - t0) / ms), eased = 1 - (1 - f) ** 3;
-    el.textContent = format(from + (to - from) * eased);
-    if (f < 1) requestAnimationFrame(step);
-  };
-  el.textContent = format(from);
-  requestAnimationFrame(step);
+  return rollNumber(el, to, { from, duration: ms, format });
 }

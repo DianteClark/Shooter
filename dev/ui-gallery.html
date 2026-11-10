@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Switchyard UI gallery</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<!-- Root-relative, so modules that load assets by relative URL (map art, thumbnails) resolve as they do in the game. -->
+<base href="../">
+<!--
+  Every menu screen and HUD state, rendered by the real modules with fake data, at chosen iPhone sizes side by side.
+
+  Shell:  dev/ui-gallery.html                 pick scenes and sizes; frames load one at a time.
+          ?scenes=title,lobby-host&sizes=se,16pm   preselect.  &zoom=0.6   frame scale.
+  Frame:  dev/ui-gallery.html?frame=<scene>&size=<size id>    one scene, full size (what each iframe loads).
+          &save=fresh|veteran   which fake save the menus read (in-memory; the real save is never touched).
+          &gl=1                 HUD scenes over the live WebGL renderer instead of the map art.
+          &wait=<ms>            settle time before __ready (default 900; the results reel uses 4500).
+  Frames set window.__ready = true when settled, and record errors in window.__errors (Playwright reads both).
+-->
+<script>
+// Frames run against an in-memory save so the gallery can pose any progression state and never touches the real one.
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('frame')) return;
+  const mem = new Map();
+  const store = {
+    getItem: k => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => { mem.set(k, String(v)); },
+    removeItem: k => { mem.delete(k); }, clear: () => mem.clear(), key: i => [...mem.keys()][i] ?? null,
+    get length() { return mem.size; },
+  };
+  try { Object.defineProperty(window, 'localStorage', { value: store, configurable: true }); } catch { /* falls back to the real one */ }
+  window.__errors = [];
+  addEventListener('error', e => window.__errors.push(String(e.message)));
+  addEventListener('unhandledrejection', e => window.__errors.push(String(e.reason?.message ?? e.reason)));
+})();
+</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.min.js", "trystero": "./vendor/trystero.min.js" } }</script>
+<link rel="stylesheet" href="css/fonts.css">
+<style id="shell-css">
+  .shell { margin: 0; background: #10141a; color: #e7eae4; font: 13px/1.3 'DIN Alternate', 'Avenir Next Condensed', Arial, sans-serif; }
+  .shell header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 14px; background: #1d232b; box-shadow: 0 1px 0 rgba(231,234,228,.14); }
+  .shell h1 { margin: 0; font: 400 20px/1 'Railyard Stencil', sans-serif; letter-spacing: .04em; }
+  .shell fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .shell legend { float: left; margin-right: 6px; color: #97a5b0; }
+  .shell label { display: inline-flex; gap: 4px; align-items: center; padding: 3px 7px; background: #2a333d; cursor: pointer; }
+  .shell label:has(input:checked) { background: #f2a63b; color: #2a1a06; }
+  .shell input[type=checkbox] { display: none; }
+  .shell button { font: inherit; padding: 4px 10px; background: #35404c; color: inherit; border: 0; cursor: pointer; }
+  .shell .grid { display: flex; flex-direction: column; gap: 22px; padding: 16px 14px 60px; }
+  .shell .row h2 { margin: 0 0 6px; font: 400 15px/1 'Railyard Plate', sans-serif; letter-spacing: .08em; color: #f2a63b; }
+  .shell .row .frames { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .shell figure { margin: 0; }
+  .shell figcaption { color: #97a5b0; font-size: 11px; margin-top: 3px; }
+  .shell .box { position: relative; overflow: hidden; background: #000; box-shadow: 0 0 0 1px #4c5a67; }
+  .shell .box iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
+  .shell .err { color: #ff4d3d; }
+  /* The iPhone's own furniture, drawn over the frame so safe areas can be judged: island and home indicator. */
+  .shell .island { position: absolute; top: 50%; width: 4.4%; aspect-ratio: 37 / 126; transform: translateY(-50%); background: #000; border-radius: 20px; z-index: 2; pointer-events: none; }
+  .shell .home { position: absolute; bottom: 1.5%; left: 50%; width: 22%; height: 1.2%; transform: translateX(-50%); background: rgba(255,255,255,.75); border-radius: 3px; z-index: 2; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<script type="module">
+const q = new URLSearchParams(location.search);
+
+// Landscape CSS sizes and safe areas of the iPhones we ship for. `isl`: inset of the island side (and the rounded
+// corner side, which iOS reports the same); `b`: home indicator.
+const SIZES = {
+  se:   { label: 'SE 667x375',         w: 667, h: 375, isl: 0,  b: 0,  island: false },
+  mini: { label: '13 mini 812x375',    w: 812, h: 375, isl: 50, b: 21, island: false },
+  p13:  { label: '13/14 844x390',      w: 844, h: 390, isl: 47, b: 21, island: false },
+  p15:  { label: '15/16 852x393',      w: 852, h: 393, isl: 59, b: 21, island: true },
+  p16p: { label: '16 Pro 874x402',     w: 874, h: 402, isl: 62, b: 21, island: true },
+  plus: { label: '14 Plus 926x428',    w: 926, h: 428, isl: 47, b: 21, island: false },
+  p16pl:{ label: '16 Plus 932x430',    w: 932, h: 430, isl: 59, b: 21, island: true },
+  pm:   { label: '16 Pro Max 956x440', w: 956, h: 440, isl: 62, b: 21, island: true },
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Scenes. Each one builds a state with the real modules. Menus: Menu + its screens. HUD: HUD + Controls over the map art.
+// ---------------------------------------------------------------------------------------------------------------------
+const NAMES = ['Rookie', 'Bravo', 'Atlas', 'Cinder', 'Dusk', 'Echo', 'Fang', 'Ghost', 'Hex', 'Ion', 'Jinx', 'Kilo'];
+const LONG = 'Maximilian_Featherstonehaugh';
+const noop = () => {};
+
+const menuScene = (label, fn, opts = {}) => ({ group: 'Menus', label, kind: 'menu', fn, ...opts });
+const hudScene = (label, fn, opts = {}) => ({ group: 'HUD', label, kind: 'hud', fn, ...opts });
+
+function fakeHumans(n, { long = false, host = 'me' } = {}) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: i === 0 ? 'me' : 'h' + i, name: long && i % 2 ? LONG.slice(0, 16) : NAMES[i], team: i % 2,
+    primary: ['ar', 'smg', 'sniper', 'lmg', 'shotgun', 'dmr'][i % 6], camo: 'none', ready: i % 3 !== 2,
+    badge: { prestige: i % 4, level: 1 + i * 7 },
+  })).map(h => (h.id === host ? { ...h, host: true } : h));
+}
+
+const SCENES = {
+  'title': menuScene('Title', ({ menu }) => menu.title({})),
+  'title-rejoin': menuScene('Title, rejoin offer', ({ menu }) => menu.title({ rejoin: { code: 'K7QX' } })),
+  'title-toast': menuScene('Title, toast', ({ menu }) => { menu.title({}); menu.toast('Save loaded'); }),
+  'keypad-name': menuScene('Keypad: name', ({ menu }) => menu.keypad({ title: 'Your name', value: 'Rookie', max: 16, kind: 'name', onDone: noop, onCancel: noop })),
+  'keypad-code': menuScene('Keypad: room code', ({ menu }) => menu.keypad({ title: 'Join a room', value: 'K7', max: 4, kind: 'code', hint: 'Ask the host for the four letters', onDone: noop, onCancel: noop, doneLabel: 'Join' })),
+  'searching': menuScene('Searching', ({ menu }) => menu.searching('K7QX', noop)),
+  'not-found': menuScene('Room not found', ({ menu }) => menu.notFound('K7QX', { retry: noop, back: noop })),
+  'solo': menuScene('Solo: map and mode', ({ menu }) => menu.solo({ mapId: 'railyard', mode: 'tdm' })),
+  'lobby-host': menuScene('Lobby: host', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(4), botSkill: 'regular', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),
+  'lobby-guest': menuScene('Lobby: guest, countdown', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(3, { host: 'h1' }), botSkill: 'veteran', isHost: false, localId: 'me', hostId: 'h1', countdown: 4, rematchWait: false })),
+  'lobby-full': menuScene('Lobby: 12, long names', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }), botSkill: 'elite', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),
+  'vote': menuScene('Map vote', async ({ menu }) => {
+    const { voteOptions } = await import('./js/ui/vote.js');
+    menu.vote({ key: 1, options: voteOptions(() => 0.37), left: 11, seconds: 15, winner: null, resolved: null, mine: 1, counts: [1, 2, 0], total: 4 });
+  }),
+  'loadouts': menuScene('Loadouts', ({ menu }) => menu.loadouts({ onBack: noop, onChange: noop, onGunsmith: noop, onOperators: noop, onRename: noop }), { gl: true }),
+  'gunsmith': menuScene('Gunsmith', ({ menu }) => menu.gunsmith({ loadoutIndex: 0, weapon: 'ar', onBack: noop, onChange: noop }), { gl: true }),
+  'operators': menuScene('Operators', ({ menu }) => menu.operators({ loadoutIndex: 0, onBack: noop, onChange: noop }), { gl: true }),
+  'profile': menuScene('Profile', ({ menu }) => menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop })),
+  'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),
+  'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
+  'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
+  'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop }); }),
+  'results-win': menuScene('Results: win', ({ menu, results }) => menu.results(results('win'), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
+  'results-loss': menuScene('Results: loss', ({ menu, results }) => menu.results(results('loss'), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
+  'results-draw': menuScene('Results: draw, long names', ({ menu, results }) => menu.results(results('draw', true), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
+  'install': menuScene('Install prompt', ({ menu }) => { menu.title({}); menu.installPrompt(noop); }),
+
+  'hud-live': hudScene('Live, TDM', () => {}),
+  'hud-feed': hudScene('Kill feed and medals', ({ emit }) => {
+    emit({ t: 'kill', by: 'me', target: 'p7', weapon: 'lmg', camo: 'none', x: 40, z: 22, assist: null, dist: 9 });
+    emit({ t: 'medal', id: 'me', medal: 'double' });
+    emit({ t: 'kill', by: 'p8', target: 'p2', weapon: 'sniper', camo: 'none', x: 30, z: 22, assist: null, dist: 30 });
+    emit({ t: 'kill', by: 'p3', target: 'p9', weapon: 'shotgun', camo: 'none', x: 30, z: 22, assist: 'p4', dist: 3 });
+  }, { frames: 20 }),
+  'hud-hurt': hudScene('Low health, taking fire', ({ me, emit }) => { me.hp = 22; emit({ t: 'hit', by: 'p7', target: 'me', dmg: 30, x: me.x, z: me.z, killed: false }); }, { frames: 8 }),
+  'hud-reload': hudScene('Reloading, ADS', ({ me }) => { me.ammo = 0; me.reloadT = 1.1; me.reloadDur = 2.2; me.adsT = 1; }),
+  'hud-streak': hudScene('Streak ready', ({ me }) => { me.score = 1200; me.streakReady = 'uav'; me.slots = [{ kind: 'uav', cost: 1000, held: true, blocked: false }, { kind: 'turret', cost: 2100, held: true, blocked: false }, { kind: 'gunship', cost: 4800, held: false, blocked: false }]; }),
+  'hud-dead': hudScene('Dead, respawn picker', ({ me, view }) => { me.alive = false; me.hp = 0; me.respawnT = 2.1; view.lastKill = { by: 'p7', target: 'me', weapon: 'sniper', camo: 'none', x: 30, z: 20 }; }, { frames: 10 }),
+  'hud-warmup': hudScene('Warmup', ({ view }) => { view.phase = 'warmup'; view.timeLeft = 600; view.scores = [0, 0]; }),
+  'hud-dom': hudScene('Domination', ({ view }) => { view.mode = 'dom'; view.scores = [130, 112]; }, { mode: 'dom', scoreLimit: 200 }),
+  'hud-hard': hudScene('Hardpoint', ({ view }) => { view.mode = 'hard'; view.scores = [88, 101]; }, { mode: 'hard', scoreLimit: 150 }),
+  'hud-kc': hudScene('Kill Confirmed', ({ view }) => { view.mode = 'kc'; view.scores = [41, 40]; }, { mode: 'kc', scoreLimit: 65 }),
+  'hud-board': hudScene('Scoreboard', ({ hud }) => hud.toggleBoard?.()),
+  'hud-final': hudScene('Last kills, max values', ({ view, me }) => { view.scores = [74, 74]; view.timeLeft = 9; me.kills = 99; me.deaths = 99; me.score = 9990; me.ammo = 150; me.reserve = 999; }),
+
+  'icons': { group: 'System', label: 'Icon sheet', kind: 'sheet', fn: iconSheet },
+  'tokens': { group: 'System', label: 'Tokens and plates', kind: 'sheet', fn: tokenSheet },
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Frame mode
+// ---------------------------------------------------------------------------------------------------------------------
+async function runFrame(id) {
+  const size = SIZES[q.get('size')] ?? SIZES.p13;
+  const scene = SCENES[id];
+  document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="css/game.css">');
+  document.getElementById('shell-css').remove();
+  const root = document.documentElement;
+  // Safe areas: iOS reports the island inset on both long sides in landscape, plus the home indicator.
+  root.style.setProperty('--env-l', size.isl + 'px');
+  root.style.setProperty('--env-r', size.isl + 'px');
+  root.style.setProperty('--env-b', size.b + 'px');
+  const ui = document.getElementById('ui');
+  try {
+    if (!scene) throw new Error('No scene ' + id);
+    await new Promise(r => (document.readyState === 'complete' ? r() : addEventListener('load', r, { once: true })));
+    await document.fonts.ready;
+    const { installViewport } = await import('./js/ui/viewport.js');
+    installViewport();
+    const { installTaps, setTapSound } = await import('./js/ui/tap.js');
+    installTaps();
+    setTapSound(kind => console.log('ui sound', kind));
+    if (q.get('save') === 'veteran') {
+      const { Progress } = await import('./js/ui/progress.js');
+      Progress.addXp?.(2_000_000);
+    }
+    if (scene.kind === 'menu') await menuFrame(scene, ui);
+    else if (scene.kind === 'hud') await hudFrame(scene, ui);
+    else await scene.fn(ui);
+  } catch (e) {
+    window.__errors.push(String(e?.stack ?? e));
+    ui.insertAdjacentHTML('beforeend', `<pre style="position:fixed;inset:auto 0 0 0;z-index:999;margin:0;padding:6px;background:#a52a1f;color:#fff;font:11px monospace;white-space:pre-wrap">${String(e?.stack ?? e).replace(/</g, '&lt;')}</pre>`);
+  }
+  // Let entrances settle before anyone screenshots. Timed sequences (the results reel) ask for longer; &wait= overrides.
+  await new Promise(r => setTimeout(r, Number(q.get('wait') ?? scene?.settle ?? 900)));
+  window.__ready = true;
+}
+
+async function menuFrame(scene, ui) {
+  if (!scene.gl) document.getElementById('game').remove();
+  const { Menu } = await import('./js/ui/menu.js');
+  const menu = new Menu(ui);
+  menu.show?.();
+  const cache = {};
+  for (const o of ['win', 'loss', 'draw']) if (scene.label.toLowerCase().includes(o)) cache[o] = await fakeResults(o, scene.label.includes('long'));
+  await scene.fn({ menu, results: o => cache[o] });
+}
+
+// A results payload shaped like main.js's, with XP, level, weapon progress and unlocks from the real Progress
+// (applied to the in-memory save, so a level-up and its unlocks show).
+async function fakeResults(outcome, long) {
+  const { Progress, matchScore } = await import('./js/ui/progress.js');
+  const roster = Array.from({ length: 12 }, (_, i) => ({
+    id: i === 0 ? 'me' : 'p' + i, name: long && i % 3 === 1 ? LONG : NAMES[i], team: i < 6 ? 0 : 1, isBot: i > 2,
+    kills: [24, 15, 12, 9, 6, 2, 18, 14, 10, 8, 5, 1][i], deaths: [8, 11, 9, 12, 13, 15, 12, 10, 14, 9, 11, 16][i],
+    assists: i % 5, head: i % 4, score: 3000 - i * 210, captures: i % 3, defends: i % 2, confirms: i % 4, denies: i % 3,
+    badge: { prestige: i % 4, level: 5 + i * 4 }, weapon: ['ar', 'smg', 'sniper', 'lmg', 'shotgun', 'dmr'][i % 6],
+  }));
+  const lines = [['Match played', 200], ['Kills x24', 2400], ['Headshots x6', 150], ['Medals x5', 125]];
+  if (outcome === 'win') lines.push(['Win', 500]); else if (outcome === 'draw') lines.push(['Draw', 200]);
+  const total = lines.reduce((a, l) => a + l[1], 0);
+  const applied = Progress.applyMatch({ xp: total + 6000, weapons: { lmg: { xp: 2600, kills: 18, head: 4 }, pistol: { xp: 400, kills: 6 } } });
+  let mvp = roster[0];
+  for (const p of roster) if ((matchScore?.(p) ?? p.score) > (matchScore?.(mvp) ?? mvp.score)) mvp = p;
+  return {
+    outcome, mode: 'tdm', scores: outcome === 'win' ? [75, 61] : outcome === 'loss' ? [58, 75] : [70, 70], myTeam: 0, localId: 'me',
+    roster, players: roster, badges: new Map(roster.map(r => [r.id, r.badge])), mvp,
+    xp: { total, lines }, level: applied.level, weapons: applied.weapons, unlocks: applied.unlocks,
+    finalKill: { weapon: 'sniper', camo: 'none', byName: roster[0].name, targetName: roster[7].name },
+    rematchLabel: 'Rematch', note: '',
+  };
+}
+
+async function hudFrame(scene, ui) {
+  const mapId = q.get('map') ?? 'railyard';
+  const canvas = document.getElementById('game');
+  const useGl = q.get('gl') === '1';
+  if (!useGl) {
+    canvas.remove();
+    document.body.style.background = `#1d232b url(assets/maps/${mapId}.jpg) center / cover`;
+  }
+  const [{ HUD }, { Controls }] = await Promise.all([import('./js/ui/hud.js'), import('./js/ui/controls.js')]);
+  const controls = new Controls(ui);
+  const hud = new HUD(ui);
+  hud.bindControls?.(controls);
+  const weapons = ['lmg', 'smg', 'shotgun', 'ar', 'sniper', 'dmr', 'burst', 'pdw', 'rotary', 'lever', 'pistol', 'launcher'];
+  const anchors = [[36, 24], [40, 18], [28, 30], [40, 26], [24, 22], [33, 30], [44, 24], [41, 15], [46, 31], [50, 20], [37, 21], [33, 29]];
+  const players = anchors.map((a, i) => ({
+    id: i === 0 ? 'me' : 'p' + i, name: i === 5 ? LONG : NAMES[i], team: i < 6 ? 0 : 1, isBot: i > 0, skill: 'regular',
+    x: a[0], z: a[1], aim: -0.4, vx: 0, vz: 0, hp: 100, alive: true, respawnT: 0, weapon: weapons[i], camo: 'none',
+    ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2, adsT: 0, sprinting: false, sliding: false, spawnProtect: false,
+    kills: (11 - i) * 2, deaths: i, streak: 0, streakReady: null, bloom: 0, badge: { prestige: i % 4, level: 10 + i * 3 },
+    score: 400, capped: false, slots: [{ kind: 'uav', cost: 1000, held: false, blocked: false }, { kind: 'turret', cost: 2100, held: false, blocked: false }, { kind: 'gunship', cost: 4800, held: false, blocked: false }],
+    heat: 0, overheated: false, head: 11 - i, assists: i * 2, firingT: 0, tacticalLeft: 2, lethalLeft: 2, tactical: 'smoke', lethal: 'frag',
+  }));
+  const view = {
+    t: 0, phase: 'live', timeLeft: 312, scores: [42, 37], winner: null, uav: [0, 0], players, localId: 'me', lastKill: null,
+    projectiles: [], smokes: [], turrets: [], gunships: [], mode: scene.mode ?? 'tdm', theme: mapId,
+  };
+  hud.prepare?.({ mapId, scoreLimit: scene.scoreLimit ?? 75, roster: players, mode: view.mode, localId: 'me', intro: false });
+  hud.setVisible?.(true);
+  controls.setEnabled?.(true);
+  let renderer = null;
+  if (useGl) {
+    const [{ GameRenderer }, { MAPS }] = await Promise.all([import('./js/render/renderer.js'), import('./js/shared/map.js')]);
+    renderer = new GameRenderer(canvas, MAPS[mapId], { dynamicRes: false });
+    renderer.setLocal('me');
+  }
+  const events = [];
+  const step = dt => { view.t += dt; renderer?.update(view, events, dt); hud.onEvents(events); hud.update(view, dt); events.length = 0; };
+  step(1 / 60);
+  await scene.fn({ hud, controls, view, me: players[0], players, emit: e => events.push(e) });
+  // A fixed number of frames, so the pose is the same on every run. Then a slow idle loop keeps timers honest.
+  for (let i = 0; i < (scene.frames ?? 4); i++) { step(1 / 60); await new Promise(r => requestAnimationFrame(r)); }
+  window.__hud = { hud, view, step };
+}
+
+// ---- System sheets ----
+// The sheets live outside #ui, so screen CSS (which sizes `.ico` for its own layouts) does not restyle them.
+function sheetRoot(ui) {
+  document.getElementById('game').remove();
+  const el = document.createElement('div');
+  el.className = 'gallery-sheet';
+  ui.replaceWith(el);
+  return el;
+}
+async function iconSheet(ui) {
+  ui = sheetRoot(ui);
+  const { icon, ICON_GROUPS } = await import('./js/ui/icons.js');
+  ui.style.cssText = 'position:absolute;inset:0;overflow:auto;pointer-events:auto;padding:calc(var(--sl) * 0 + 10px);background:var(--c-ballast);';
+  let h = '';
+  for (const [g, ids] of Object.entries(ICON_GROUPS)) {
+    h += `<div class="t-label" style="margin:8px 0 4px">${g}</div><div style="display:flex;flex-wrap:wrap;gap:4px">`;
+    for (const id of ids) {
+      const wide = g === 'weapons';
+      h += `<div class="plate" style="--cut:6px;display:flex;align-items:center;gap:6px;padding:4px 6px;color:var(--c-chalk)" title="${id}">
+        ${icon(id, { size: 20 })}${icon(id, { size: wide ? 32 : 48 })}
+        <span class="plate is-sodium" style="--cut:4px;padding:3px;--icon-accent:currentColor">${icon(id, { size: 20 })}</span></div>`;
+    }
+    h += '</div>';
+  }
+  ui.innerHTML = h;
+}
+
+async function tokenSheet(ui) {
+  ui = sheetRoot(ui);
+  const { icon } = await import('./js/ui/icons.js');
+  const { stagger, sweep, rollNumber } = await import('./js/ui/motion.js');
+  ui.style.cssText = 'position:absolute;inset:0;overflow:auto;pointer-events:auto;padding:10px calc(var(--sr) + 10px) 10px calc(var(--sl) + 10px);background:var(--face-dusk);color:var(--c-chalk)';
+  const sw = ['night', 'ballast', 'steel', 'steel-hi', 'plate', 'rail', 'haze', 'chalk', 'dusk', 'sodium', 'sodium-hi', 'sodium-lo', 'blue', 'red', 'go', 'gold'];
+  ui.innerHTML = `
+    <div class="grain" style="display:grid;grid-template-columns:1.1fr 1fr;gap:var(--sp-5)">
+      <section style="display:flex;flex-direction:column;gap:var(--sp-3)" data-in>
+        <div class="t-mega t-num" id="roll">0</div>
+        <div class="t-screen">SWITCHYARD</div>
+        <div class="t-heading">LOADOUT 3</div>
+        <div class="t-title">HALYARD MK II</div>
+        <div class="t-label">ALL-ROUNDER</div>
+        <p class="t-body" style="max-width:36em;color:var(--c-haze)">Body text in the condensed face. A sentence explains, in plain words, what this does and why it matters.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${sw.map(c => `<span style="width:34px;height:22px;background:var(--c-${c});box-shadow:var(--edge)" title="${c}"></span>`).join('')}</div>
+      </section>
+      <section style="display:flex;flex-direction:column;gap:var(--sp-3)">
+        <div style="display:flex;gap:var(--sp-3);flex-wrap:wrap">
+          <button class="btn is-primary" id="primary">${icon('ui:play', { size: 18, accent: 'currentColor' })}DEPLOY</button>
+          <button class="btn">${icon('ui:back', { size: 18 })}BACK</button>
+          <button class="btn is-danger">LEAVE</button>
+          <button class="btn is-quiet">SKIP</button>
+          <button class="btn" disabled>${icon('ui:lock', { size: 16 })}LOCKED</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-3)">
+          <div class="plate rivets" style="--cut:var(--cut-md);padding:var(--sp-4);display:flex;gap:8px;align-items:center">${icon('ar', { size: 20 })}<span class="t-title">STEEL</span></div>
+          <div class="plate is-focus" style="--cut:var(--cut-md);padding:var(--sp-4)"><span class="t-title">FOCUS</span></div>
+          <div class="plate is-sodium" style="--cut:var(--cut-md);padding:var(--sp-4);--icon-accent:currentColor;display:flex;gap:8px;align-items:center">${icon('uav', { size: 22 })}<span class="t-title">READY</span></div>
+          <div class="plate is-blue" style="--cut:var(--cut-md);padding:var(--sp-4)"><span class="t-title">VANGUARD</span></div>
+          <div class="plate is-red" style="--cut:var(--cut-md);padding:var(--sp-4)"><span class="t-title">REAPERS</span></div>
+          <div class="plate is-locked" style="--cut:var(--cut-md);padding:var(--sp-4);display:flex;gap:6px;align-items:center">${icon('ui:lock', { size: 16 })}<span class="t-label">LEVEL 26</span></div>
+        </div>
+        <div class="plate is-glass hazard-edge" style="--cut:var(--cut-lg);padding:var(--sp-5) var(--sp-4) var(--sp-4)"><span class="t-label">GLASS PLATE OVER THE WORLD, HAZARD EDGE</span></div>
+        <div class="rule"></div>
+        <div style="display:flex;gap:var(--sp-3);align-items:center"><span class="lamp"></span><span class="lamp" style="--lamp:var(--c-blue)"></span><span class="lamp" style="--lamp:var(--c-red)"></span><span class="lamp" style="--lamp:var(--c-go)"></span><span class="t-tag">SIGNAL LAMPS</span></div>
+      </section>
+    </div>`;
+  stagger(ui.querySelectorAll('section > *'), 'rail');
+  rollNumber(ui.querySelector('#roll'), 12450, { from: 0 });
+  sweep(ui.querySelector('#primary'), { delay: 300 });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------------------------------------------------
+function runShell() {
+  document.body.className = 'shell';
+  document.getElementById('game').remove();
+  document.getElementById('ui').remove();
+  const picked = new Set((q.get('scenes') ?? 'title,lobby-host,hud-live,hud-feed').split(','));
+  const sizes = new Set((q.get('sizes') ?? 'se,p13,pm').split(','));
+  let zoom = Number(q.get('zoom') ?? 0.5);
+  const save = q.get('save') ?? 'fresh';
+  const groups = {};
+  for (const [id, s] of Object.entries(SCENES)) (groups[s.group] ??= []).push([id, s]);
+  document.body.insertAdjacentHTML('beforeend', `
+    <header>
+      <h1>UI GALLERY</h1>
+      <fieldset><legend>Sizes</legend>${Object.entries(SIZES).map(([id, s]) => `<label><input type="checkbox" name="size" value="${id}" ${sizes.has(id) ? 'checked' : ''}>${s.label}</label>`).join('')}</fieldset>
+      ${Object.entries(groups).map(([g, list]) => `<fieldset><legend>${g}</legend>${list.map(([id, s]) => `<label><input type="checkbox" name="scene" value="${id}" ${picked.has(id) ? 'checked' : ''}>${s.label}</label>`).join('')}</fieldset>`).join('')}
+      <fieldset><legend>Save</legend><label><input type="checkbox" name="save" value="veteran" ${save === 'veteran' ? 'checked' : ''}>Veteran</label></fieldset>
+      <fieldset><legend>Zoom</legend><input type="range" min="0.25" max="1" step="0.05" value="${zoom}" name="zoom"></fieldset>
+      <button id="all">All scenes</button><button id="go">Render</button>
+    </header>
+    <main class="grid"></main>`);
+  const grid = document.querySelector('.grid');
+  const checked = name => [...document.querySelectorAll(`input[name=${name}]:checked`)].map(i => i.value);
+  document.getElementById('all').onclick = () => { document.querySelectorAll('input[name=scene]').forEach(i => { i.checked = true; }); render(); };
+  document.getElementById('go').onclick = render;
+  document.querySelector('input[name=zoom]').oninput = e => { zoom = Number(e.target.value); document.querySelectorAll('.box').forEach(fitBox); };
+
+  function fitBox(box) {
+    const s = SIZES[box.dataset.size], f = box.querySelector('iframe');
+    box.style.width = s.w * zoom + 'px'; box.style.height = s.h * zoom + 'px';
+    f.style.transform = `scale(${zoom})`;
+  }
+
+  // Frames load one after another: a dozen WebGL contexts at once would stall the page.
+  let queue = [], loading = false;
+  function pump() {
+    if (loading || !queue.length) return;
+    loading = true;
+    const { box, src } = queue.shift();
+    const f = box.querySelector('iframe');
+    const doneLoad = () => {
+      const tick = () => {
+        let ready = false, errs = [];
+        try { ready = f.contentWindow.__ready; errs = f.contentWindow.__errors ?? []; } catch { ready = true; }
+        if (!ready) return setTimeout(tick, 100);
+        if (errs.length) box.parentElement.querySelector('figcaption').insertAdjacentHTML('beforeend', ` <span class="err">${errs.length} error(s): ${errs[0].slice(0, 120).replace(/</g, '&lt;')}</span>`);
+        loading = false;
+        pump();
+      };
+      tick();
+    };
+    f.addEventListener('load', doneLoad, { once: true });
+    f.src = src;
+  }
+
+  function render() {
+    const scenes = checked('scene'), sz = checked('size'), vet = checked('save').length ? 'veteran' : 'fresh';
+    history.replaceState(null, '', `dev/ui-gallery.html?scenes=${scenes.join(',')}&sizes=${sz.join(',')}&zoom=${zoom}&save=${vet}`);
+    queue = []; loading = false;
+    grid.innerHTML = scenes.map(id => `
+      <section class="row"><h2>${SCENES[id].label.toUpperCase()}</h2><div class="frames">${sz.map(s => `
+        <figure>
+          <div class="box" data-size="${s}">${SIZES[s].island ? '<i class="island" style="left:1.2%"></i>' : ''}${SIZES[s].b ? '<i class="home"></i>' : ''}
+            <iframe width="${SIZES[s].w}" height="${SIZES[s].h}" loading="eager" title="${id} ${s}"></iframe></div>
+          <figcaption>${SIZES[s].label}</figcaption>
+        </figure>`).join('')}</div></section>`).join('');
+    grid.querySelectorAll('.box').forEach(box => {
+      fitBox(box);
+      const id = box.closest('.row').querySelector('iframe').title.split(' ')[0];
+      queue.push({ box, src: `dev/ui-gallery.html?frame=${box.querySelector('iframe').title.split(' ')[0]}&size=${box.dataset.size}&save=${vet}` });
+    });
+    pump();
+  }
+  render();
+}
+
+if (q.has('frame')) runFrame(q.get('frame'));
+else runShell();
+</script>
+</body>
+</html>

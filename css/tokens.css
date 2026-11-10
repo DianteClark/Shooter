@@ -1,0 +1,254 @@
+/* Switchyard design tokens: "Switchyard after dark". The single source for colour, type, spacing, plates, light and
+   motion. Every screen and the HUD read these; no one-off values. Imported first by css/game.css.
+
+   Legacy names (--ballast, --sodium, --stencil, --cut ...) are still defined by game.css with the same values, so the
+   old screens keep working while they are rebuilt. New work uses the namespaced tokens below.
+   Durations here are mirrored in js/ui/motion.js (DUR, EASE) for scripted animation. */
+
+:root {
+  /* ---- Colour: the yard at dusk ------------------------------------------------------------------------------- */
+  /* Darks, deepest first: night ballast under everything, then steel plates, then lit edges. */
+  --c-night: #10141a;          /* Behind everything: modal scrims, letterbox, the gap between plates. */
+  --c-ballast: #1d232b;        /* Screen ground. */
+  --c-steel: #2a333d;          /* Resting plate. */
+  --c-steel-hi: #35404c;       /* Raised / focused plate. */
+  --c-plate: #4c5a67;          /* Rails, dividers, empty meter track, disabled fill. */
+  --c-rail: #6f7e8b;           /* Secondary icons, inactive tab text. */
+  --c-haze: #97a5b0;           /* Secondary text. Minimum for readable text on steel. */
+  --c-chalk: #e7eae4;          /* Primary text. */
+  --c-white: #fbfcf8;          /* Peak highlights only: flashes, roll-up final frame. */
+  --c-dusk: #3c3650;           /* The sky: mauve tint for backdrops and parallax layers. */
+  --c-dusk-lo: #241f33;
+
+  /* Sodium lamp: the hero accent. Anything that wants the thumb. */
+  --c-sodium: #f2a63b;
+  --c-sodium-hi: #ffc76a;      /* Lit face of a sodium plate, focus sweep. */
+  --c-sodium-lo: #b8701c;      /* Shadow side of a sodium plate, pressed state. */
+  --c-sodium-ink: #2a1a06;     /* Text on sodium. */
+  --c-sodium-glow: rgba(242, 166, 59, .45);
+
+  /* Signal lamps: teams. The only fully saturated colours besides sodium. */
+  --c-blue: #38b6ff;           /* Vanguard, team 0, "us" in every match. */
+  --c-blue-lo: #1d6d9e;
+  --c-blue-glow: rgba(56, 182, 255, .45);
+  --c-red: #ff4d3d;            /* Reapers, team 1, "them". Also damage and destructive actions. */
+  --c-red-lo: #a52a1f;
+  --c-red-glow: rgba(255, 77, 61, .45);
+  --c-go: #4bd18a;             /* Ready, success, unlocked. */
+  --c-go-lo: #23804f;
+  --c-gold: #ffd75e;           /* Mastery, prestige, top of the table. */
+
+  /* Translucent layers for anything drawn over the game world. */
+  --c-scrim: rgba(16, 20, 26, .72);
+  --c-scrim-lo: rgba(16, 20, 26, .45);
+  --c-glass: rgba(29, 35, 43, .62);        /* HUD plates over the world. Never backdrop-filtered in a match. */
+  --c-line: rgba(231, 234, 228, .14);      /* Hairline on steel. */
+  --c-line-hi: rgba(231, 234, 228, .32);
+
+  /* ---- Type ----------------------------------------------------------------------------------------------- */
+  /* Stencil: titles and big numerals (caps and digits only). Plate: small caps labels, still legible at 10 px.
+     Body: the condensed system face for sentences. */
+  --f-stencil: 'Railyard Stencil', 'DIN Condensed', 'Arial Narrow', sans-serif;
+  --f-plate: 'Railyard Plate', 'DIN Alternate', 'Arial Narrow', sans-serif;
+  --f-body: 'DIN Alternate', 'Avenir Next Condensed', 'Roboto Condensed', 'Helvetica Neue', Arial, sans-serif;
+
+  /* Scale: a fourth (1.333) from 13 px body, rounded to whole pixels. Sizes are for a 390 pt tall phone;
+     menus multiply by their own --k. */
+  --fs-micro: 10px;            /* Plate tags on tiles, unit suffixes. Plate face only. */
+  --fs-caption: 11px;          /* Secondary labels, table heads. */
+  --fs-body: 13px;
+  --fs-lead: 15px;             /* Button text, list item names. */
+  --fs-title: 18px;            /* Card titles. */
+  --fs-heading: 24px;          /* Panel headings. */
+  --fs-screen: 32px;           /* Screen titles. */
+  --fs-display: 44px;          /* Hero numbers: score, level. */
+  --fs-mega: 72px;             /* Result banner, countdown. */
+
+  --lh-tight: 1;               /* Stencil numerals and titles. */
+  --lh-snug: 1.15;
+  --lh-body: 1.3;
+  --tr-stencil: .04em;         /* Stencil wants a little air between bridged glyphs. */
+  --tr-plate: .08em;           /* Plate labels at 10-11 px. */
+  --tr-body: 0;
+
+  /* ---- Space: 4 px grid -------------------------------------------------------------------------------------- */
+  --sp-0: 2px;
+  --sp-1: 4px;
+  --sp-2: 6px;
+  --sp-3: 8px;
+  --sp-4: 12px;
+  --sp-5: 16px;
+  --sp-6: 20px;
+  --sp-7: 24px;
+  --sp-8: 32px;
+  --sp-9: 48px;
+  --tap-min: 44px;             /* Smallest thing a thumb is asked to hit. */
+
+  /* ---- Plates: cut corners, never rounded. Bigger plate, bigger cut. ----------------------------------------- */
+  --cut-xs: 4px;               /* Chips, tags. */
+  --cut-sm: 7px;               /* Buttons, tiles. */
+  --cut-md: 10px;              /* Cards. */
+  --cut-lg: 14px;              /* Panels. */
+  --cut-xl: 22px;              /* Screen frames, hero banners. */
+  --radius-round: 50%;         /* Only for things that are physically round: sticks, lamps, rivets. */
+
+  /* Bevels are inset, so they survive clip-path. Top lip catches the lamp, bottom lip sinks into ballast. */
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, .10), inset 0 -2px 0 rgba(0, 0, 0, .32);
+  --bevel-hi: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 -2px 0 rgba(0, 0, 0, .35);
+  --bevel-pressed: inset 0 2px 0 rgba(0, 0, 0, .38), inset 0 -1px 0 rgba(255, 255, 255, .06);
+  --bevel-sodium: inset 0 1px 0 rgba(255, 236, 196, .7), inset 0 -2px 0 rgba(110, 58, 6, .55);
+  --edge: inset 0 0 0 1px var(--c-line);
+  --edge-hi: inset 0 0 0 1px var(--c-line-hi);
+  --ring-focus: inset 0 0 0 2px var(--c-sodium);
+
+  /* Outer shadows: only on unclipped elements (or as filter: drop-shadow on a wrapper of a clipped one). */
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, .35), 0 2px 6px rgba(0, 0, 0, .3);
+  --shadow-2: 0 2px 0 rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .42);
+  --shadow-3: 0 3px 0 rgba(0, 0, 0, .4), 0 14px 36px rgba(0, 0, 0, .55);
+  --glow-sodium: 0 0 18px var(--c-sodium-glow);
+  --glow-blue: 0 0 18px var(--c-blue-glow);
+  --glow-red: 0 0 18px var(--c-red-glow);
+  --text-lift: 0 1px 0 rgba(0, 0, 0, .55), 0 0 6px rgba(0, 0, 0, .5);   /* Text over the game world. */
+
+  /* Materials. Grain is a 96 px tile of static noise: put it on a pseudo-element at low opacity, never animate it. */
+  --tex-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='96' height='96' filter='url(%23n)'/%3E%3C/svg%3E");
+  --tex-hazard: repeating-linear-gradient(-45deg, var(--c-sodium) 0 6px, var(--c-night) 6px 12px);
+  --tex-hazard-red: repeating-linear-gradient(-45deg, var(--c-red) 0 6px, var(--c-night) 6px 12px);
+  --tex-brushed: repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px);
+  --tex-rivets: radial-gradient(circle at 50% 50%, rgba(231,234,228,.34) 0 1.3px, rgba(0,0,0,.45) 1.6px 2.2px, transparent 2.5px);
+  /* Steel plate faces: lit from the top-left, as if the lamp is above the yard. */
+  --face-steel: linear-gradient(172deg, #333d48 0%, var(--c-steel) 45%, #252d36 100%);
+  --face-steel-hi: linear-gradient(172deg, #3e4a57 0%, var(--c-steel-hi) 45%, #2d3640 100%);
+  --face-sodium: linear-gradient(172deg, var(--c-sodium-hi) 0%, var(--c-sodium) 48%, #e08f25 100%);
+  --face-blue: linear-gradient(172deg, #6ccaff 0%, var(--c-blue) 48%, #2a93d1 100%);
+  --face-red: linear-gradient(172deg, #ff7b6d 0%, var(--c-red) 48%, #d93a2c 100%);
+  --face-dusk: linear-gradient(180deg, #2b2640 0%, var(--c-ballast) 62%, var(--c-night) 100%);
+
+  /* ---- Motion ------------------------------------------------------------------------------------------------ */
+  --dur-instant: 70ms;         /* Pressed state. Must feel like hardware. */
+  --dur-fast: 140ms;           /* Toggles, tab swaps, hover-free state changes. */
+  --dur-base: 220ms;           /* Panels, list entrances (per item). */
+  --dur-slow: 360ms;           /* Screen transitions. */
+  --dur-epic: 700ms;           /* Results, unlocks, rank-up: one orchestrated moment per screen. */
+  --stagger: 35ms;             /* Delay between siblings in an entrance. */
+  --ease-out: cubic-bezier(.16, .84, .3, 1);       /* Default: arrives fast, settles. */
+  --ease-in: cubic-bezier(.55, 0, .85, .35);        /* Leaving. */
+  --ease-inout: cubic-bezier(.6, 0, .3, 1);
+  --ease-snap: cubic-bezier(.3, 1.55, .45, 1);      /* Overshoot for pops, stamps and medals. */
+  --ease-heavy: cubic-bezier(.7, 0, .2, 1);         /* Plates sliding on rails: slow start, hard stop. */
+
+  /* ---- Layers ------------------------------------------------------------------------------------------------ */
+  --z-world: 0;
+  --z-hud: 10;                 /* Score, feed, minimap. */
+  --z-controls: 20;            /* Sticks and buttons sit above HUD readouts. */
+  --z-hud-alert: 25;           /* Medals, callouts, damage edges. */
+  --z-overlay: 30;             /* Respawn, scoreboard, pause. */
+  --z-menu: 40;                /* Full-screen menus. */
+  --z-sheet: 50;               /* Sheets and dialogs over a menu. */
+  --z-toast: 60;
+  --z-transition: 70;          /* Screen wipe. */
+  --z-debug: 90;
+}
+
+/* Reduced motion: everything that moves arrives at once. Opacity fades stay, at the fast duration. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-base: 100ms; --dur-slow: 120ms; --dur-epic: 160ms; --stagger: 0ms;
+    --ease-snap: var(--ease-out);
+  }
+}
+
+/* ======================================================================================================================
+   Primitives. Small, composable classes for the shared look. Screens add their own layout around them.
+   ==================================================================================================================== */
+
+/* Cut-corner plate. Set --cut on the element (default --cut-sm). `.cut` clips top-left and bottom-right, the
+   house shape; `.cut-tl`, `.cut-br`, `.cut-4` for the others. The chamfer glint is a 1.5 px lit line on the cut edge. */
+.cut, .plate, .btn { --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.cut-tl { clip-path: polygon(var(--cut, 7px) 0, 100% 0, 100% 100%, 0 100%, 0 var(--cut, 7px)); }
+.cut-br { clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut, 7px)), calc(100% - var(--cut, 7px)) 100%, 0 100%); }
+.cut-4 { clip-path: polygon(var(--cut, 7px) 0, calc(100% - var(--cut, 7px)) 0, 100% var(--cut, 7px), 100% calc(100% - var(--cut, 7px)), calc(100% - var(--cut, 7px)) 100%, var(--cut, 7px) 100%, 0 calc(100% - var(--cut, 7px)), 0 var(--cut, 7px)); }
+
+/* A steel plate: face, bevel, chamfer glint. Variants change the face only. */
+.plate {
+  position: relative; color: var(--c-chalk);
+  background:
+    linear-gradient(135deg, transparent calc(var(--cut) * .7071 - .5px), var(--c-line-hi) calc(var(--cut) * .7071 - .5px) calc(var(--cut) * .7071 + 1px), transparent calc(var(--cut) * .7071 + 1px)),
+    var(--face-steel);
+  box-shadow: var(--bevel), var(--edge);
+}
+.plate.is-raised, .plate.is-focus { background: var(--face-steel-hi); box-shadow: var(--bevel-hi), var(--edge-hi); }
+.plate.is-focus { box-shadow: var(--bevel-hi), var(--ring-focus); }
+.plate.is-sodium { background: var(--face-sodium); color: var(--c-sodium-ink); box-shadow: var(--bevel-sodium); }
+.plate.is-blue { background: var(--face-blue); color: var(--c-night); box-shadow: var(--bevel-sodium); }
+.plate.is-red { background: var(--face-red); color: var(--c-night); box-shadow: var(--bevel-sodium); }
+.plate.is-glass { background: var(--c-glass); box-shadow: var(--edge); }
+.plate.is-locked { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.025) 0 5px, transparent 5px 10px), var(--c-ballast); color: var(--c-rail); box-shadow: var(--edge); }
+
+/* Button: a plate with a press. tap.js adds .pressed on touchstart; the scale is instant, the release eases. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: var(--tap-min); padding: 0 var(--sp-5);
+  font: 400 var(--fs-lead)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk);
+  background: var(--face-steel); box-shadow: var(--bevel), var(--edge);
+  transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out);
+  -webkit-user-select: none; user-select: none; touch-action: manipulation;
+}
+.btn.is-primary { background: var(--face-sodium); color: var(--c-sodium-ink); box-shadow: var(--bevel-sodium); }
+.btn.is-danger { background: var(--face-red); color: var(--c-night); box-shadow: var(--bevel-sodium); }
+.btn.is-quiet { background: transparent; box-shadow: var(--edge); color: var(--c-haze); }
+/* .press opts any other tappable into the same feedback (only on elements not positioned by transform). */
+.btn.pressed, .plate.pressed, .press.pressed { transform: scale(.96); filter: brightness(.86); transition-duration: var(--dur-instant); }
+.btn:disabled, .btn[aria-disabled="true"] { background: var(--c-ballast); color: var(--c-rail); box-shadow: var(--edge); }
+.btn svg, .ico { flex: none; display: block; }
+:focus-visible { outline: 2px solid var(--c-sodium); outline-offset: 2px; }
+
+/* Text roles. Stencil and plate faces are caps-only by design; body text is sentence case. */
+.t-mega    { font: 400 var(--fs-mega)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.t-display { font: 400 var(--fs-display)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); font-variant-numeric: tabular-nums; }
+.t-screen  { font: 400 var(--fs-screen)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.t-heading { font: 400 var(--fs-heading)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.t-title   { font: 400 var(--fs-title)/var(--lh-snug) var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.t-label   { font: 400 var(--fs-caption)/var(--lh-snug) var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.t-tag     { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); }
+.t-body    { font: 400 var(--fs-body)/var(--lh-body) var(--f-body); }
+.t-lead    { font: 400 var(--fs-lead)/var(--lh-body) var(--f-body); }
+.t-num     { font-variant-numeric: tabular-nums; }
+.t-clip    { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* Long names. */
+
+/* Details. */
+.hazard { background: var(--tex-hazard); }
+.hazard-edge { position: relative; }
+.hazard-edge::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--tex-hazard); pointer-events: none; }
+.rivets { position: relative; }
+.rivets::after {   /* Four rivets, inset from the corners. */
+  content: ''; position: absolute; inset: 5px; pointer-events: none;
+  background: var(--tex-rivets) 0 0 / 8px 8px no-repeat, var(--tex-rivets) 100% 0 / 8px 8px no-repeat,
+              var(--tex-rivets) 0 100% / 8px 8px no-repeat, var(--tex-rivets) 100% 100% / 8px 8px no-repeat;
+}
+.grain { position: relative; isolation: isolate; }
+.grain::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--tex-grain); opacity: .07; pointer-events: none; }
+.lamp { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-round); background: var(--lamp, var(--c-sodium)); box-shadow: 0 0 8px var(--lamp, var(--c-sodium)); }
+.rule { height: 1px; background: linear-gradient(90deg, var(--c-line-hi), transparent); }
+
+/* Light sweep: motion.js `sweep(el)` adds this child and moves it. Clipped by the host's clip-path or overflow. */
+.fx-sweep {
+  position: absolute; inset: -20% auto -20% 0; width: 45%; pointer-events: none; z-index: 2;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 240, 210, .0) 20%, rgba(255, 240, 210, .28) 50%, rgba(255, 240, 210, 0) 80%, transparent 100%);
+  transform: translateX(-120%) skewX(-12deg); will-change: transform; mix-blend-mode: normal;
+}
+/* Impact flash and screen wipe, also driven by motion.js. */
+.fx-flash { position: absolute; inset: 0; pointer-events: none; background: var(--fx-color, var(--c-white)); opacity: 0; z-index: 3; }
+.fx-wipe {
+  position: fixed; inset: 0 -30% 0 -30%; z-index: var(--z-transition); pointer-events: none;
+  background: linear-gradient(90deg, transparent 0, var(--c-night) 12%, var(--c-night) 88%, transparent 100%);
+  transform: translateX(-110%); will-change: transform;
+}
+.fx-wipe::before, .fx-wipe::after { content: ''; position: absolute; top: 0; bottom: 0; width: 10px; background: var(--tex-hazard); }
+.fx-wipe::before { left: 12%; }
+.fx-wipe::after { right: 12%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-sweep { display: none; }
+  .btn { transition: none; }
+}
