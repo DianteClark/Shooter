@@ -20,7 +20,8 @@ const RELEASE_DONE = 0.09;      // Radians from the direction of travel at which
 const SWAP_MIN_PX = 150;        // Both thumbs would have to jump this far together for a swap of identities to be real.
 
 // Controlled throws: the thumb that pressed Tactical or Lethal keeps going and sets direction and distance.
-const THROW_HOLD_MS = 160;      // A press shorter than this, without leaving the button, is a quick throw.
+const THROW_HOLD_MS = 160;
+const MISSING_DROP_MS = 250;    // How long a stick's finger must be absent from touch lists before it is let go.      // A press shorter than this, without leaving the button, is a quick throw.
 const THROW_ARM_PX = 30;        // Radius around the button's centre: leaving it starts the aim, returning cancels.
 const THROW_FULL_PX = 118;      // Drag distance from the button centre that means full range.
 const THROW_MIN_M = 2.5;        // Shortest aimed toss; a drag that barely clears the button is a lob at your feet.
@@ -58,6 +59,7 @@ export class Controls {
     this.aimLatch = null;
     this.sprintOn = false;
     this.edge = { slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
+    this.missing = { left: 0, right: 0 };   // When each stick's finger was first absent from a touch list.
     this.throw = null;             // The press in aim mode: { slot, id, cx, cy, x, y, at, left, cancel }.
     this.throwHeld = { slot: '', aim: 0, dist: 0 };    // Reused while a throw is held; returned from read().
     this.throwReleased = null;     // The aim of a throw released since the last read, or null for a quick one.
@@ -345,7 +347,8 @@ export class Controls {
     // HUD elements with their own taps (mic, weapon picker) must keep their click.
     if (target?.closest?.('[data-tap]') || target?.closest?.('.tuner')) return;
     e.preventDefault();
-    this.#reconcile(e.touches);
+    this.#reconcile(e.touches, e.timeStamp);
+    this.#revive(e.touches, e.timeStamp);
     for (const t of e.changedTouches) {
       // The tuning panel's own touches; the panel never covers the screen, so a thumb beside it still plays.
       if (t.target?.closest?.('.tuner')) continue;
@@ -495,12 +498,14 @@ export class Controls {
 
   #grabLeft(id, x, y) {
     const l = this.left;
+    this.missing.left = 0;
     l.id = id; l.ox = x; l.oz = y; l.x = x; l.y = y;
     this.paintDirty = true;
   }
 
   #grabRight(id, x, y, t) {
     const r = this.right;
+    this.missing.right = 0;
     r.id = id; r.ox = x; r.oz = y; r.x = x; r.y = y;
     r.aim = null; r.firing = false;
     this.aimFilter.reset();
@@ -513,6 +518,7 @@ export class Controls {
     if (!this.enabled) return;
     if (e.target?.closest?.('[data-tap]') || e.target?.closest?.('.tuner')) return;
     e.preventDefault();
+    this.#revive(e.touches, e.timeStamp);
     this.#unswap(e.changedTouches);
     for (const t of e.changedTouches) {
       const id = t.identifier;
@@ -567,6 +573,7 @@ export class Controls {
     if (!this.enabled) return;
     if (e.cancelable && !e.target?.closest?.('[data-tap]')) e.preventDefault();
     for (const t of e.changedTouches) this.#drop(t.identifier, e.timeStamp, e.type === 'touchcancel');
+    this.#revive(e.touches, e.timeStamp);
   }
 
   // cancelled: the system took the finger, or it was found to be gone. Nothing it was doing should fire.
@@ -602,20 +609,39 @@ export class Controls {
     }
   }
 
-  // iOS occasionally loses a touchend when a system gesture steals the finger.
-  #reconcile(touches) {
+  // iOS occasionally loses a touchend when a system gesture steals the finger, so a stick whose finger is missing
+  // from the live touch list is let go. But iOS also sends a quick tap's touchstart with a stale list that omits a
+  // thumb resting perfectly still on a stick, and a still thumb sends no moves to win it back. So a stick is only
+  // given up once its finger has been missing from lists for a while; a single odd list changes nothing.
+  #reconcile(touches, at = performance.now()) {
     const alive = id => {
       for (let i = 0; i < touches.length; i++) if (touches[i].identifier === id) return true;
       return false;
     };
-    if (this.left.id !== null && !alive(this.left.id)) this.#drop(this.left.id, performance.now(), true);
-    if (this.right.id !== null && !alive(this.right.id)) this.#drop(this.right.id, performance.now(), true);
-    for (const id of [...this.buttonTouch.keys()]) if (!alive(id)) this.#drop(id, performance.now(), true);
+    const check = (side, id) => {
+      if (id === null) return;
+      if (alive(id)) { this.missing[side] = 0; return; }
+      if (!this.missing[side]) { this.missing[side] = at; return; }
+      if (at - this.missing[side] >= MISSING_DROP_MS) { this.missing[side] = 0; this.#drop(id, at, true); }
+    };
+    check('left', this.left.id);
+    check('right', this.right.id);
+    for (const id of [...this.buttonTouch.keys()]) if (!alive(id)) this.#drop(id, at, true);
+  }
+
+  // A finger in the live list that a stick was let go of by inference takes its stick back at once, moving or not.
+  #revive(touches, at) {
+    if (!this.lost.size) return;
+    for (let i = 0; i < touches.length; i++) {
+      const t = touches[i];
+      if (this.lost.has(t.identifier)) this.#adopt(t, at);
+    }
   }
 
   #release() {
     this.left.id = null;
     this.right.id = null;
+    this.missing.left = this.missing.right = 0;
     this.right.firing = false;
     this.fireLatch = false;
     this.aimLatch = null;

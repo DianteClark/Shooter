@@ -144,6 +144,16 @@ async def main():
                 await S('touchend', [[11, LX + 66, LY]], [])
                 check('  ... lifted', await stick(), moving=False)
 
+                # 6. Quick tap with a perfectly still move thumb: iOS sends the tap with a stale list missing the thumb,
+                #    and a still thumb sends no moves that could win the stick back. The stick must just stay.
+                for still_list_end in (False, True):
+                    await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                    await S('touchstart', [T], [T])
+                    await S('touchend', [T], [] if still_list_end else [[11, LX + 60, LY]])
+                    check('quick tap, still thumb, stale list' + (' x2' if still_list_end else ''), await stick())
+                    await S('touchend', [[11, LX + 60, LY]], [])
+                    check('  ... lifted', await stick(), moving=False)
+
                 # 5. A finger that starts on a button and whose start was swallowed never becomes a stick.
                 await S('touchmove', [[31, tac[0], tac[1]]], [[31, tac[0], tac[1]]])
                 s = await pg.evaluate('(() => { const c = window.__game.controls; return { left: c.left.id, right: c.right.id }; })()')
