@@ -171,6 +171,31 @@ async def main():
                     await S('touchend', [[11, LX + 60, LY]], [])
                     check('  ... lifted', await stick(), moving=False)
 
+                # 6b. The move thumb really lifts, but iOS's touchend still lists it, and so does every later event from the
+                #     aim thumb. The stick must stop walking anyway, and a re-planted thumb must take it.
+                await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                await S('touchstart', [R], [[11, LX + 60, LY], R])
+                await S('touchend', [[11, LX + 60, LY]], [[11, LX + 60, LY], R])
+                for k in range(4):
+                    await pg.wait_for_timeout(70)
+                    await S('touchmove', [[12, RX + k, RY]], [[11, LX + 60, LY], [12, RX + k, RY]])
+                check('lifted thumb still in stale lists stops', await stick(), moving=False)
+                await S('touchstart', [[43, LX, LY]], [[11, LX + 60, LY], [12, RX, RY], [43, LX, LY]])
+                await S('touchmove', [[43, LX + 62, LY]], [[43, LX + 62, LY], [12, RX, RY]])
+                s = await stick(); check('  ... re-planted thumb takes the stick', s)
+                if s['id'] != 43: failures.append(f'{vw}x{vh} stale list: new thumb did not take the stick {s}')
+                await S('touchend', [[43, LX + 62, LY], [12, RX, RY]], [])
+
+                # 6c. The same contradicted touchend, but the thumb keeps moving: it was there all along and keeps the stick.
+                await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                await S('touchend', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+                for k in range(4):
+                    await pg.wait_for_timeout(70)
+                    await S('touchmove', [[11, LX + 60 + k, LY]], [[11, LX + 60 + k, LY]])
+                check('contradicted touchend, thumb still moving', await stick())
+                await S('touchend', [[11, LX + 63, LY]], [])
+                check('  ... lifted', await stick(), moving=False)
+
                 # 5. A finger that starts on a button and whose start was swallowed never becomes a stick.
                 await S('touchmove', [[31, tac[0], tac[1]]], [[31, tac[0], tac[1]]])
                 s = await pg.evaluate('(() => { const c = window.__game.controls; return { left: c.left.id, right: c.right.id }; })()')

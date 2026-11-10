@@ -30,7 +30,14 @@ const TAKEOVER_MS = 120;        // A new thumb on a stick whose finger has gone 
 // event is iOS cancelling the remaining thumb, and iOS sends nothing more for a touch it has cancelled, so letting go of
 // the stick there can never be undone. Inside this window the stick is kept instead.
 const COLLATERAL_MS = 150;
-const HOLD_MAX_MS = 3000;       // A kept stick that nothing confirms is let go of after this long.
+const HOLD_MAX_MS = 1500;       // A kept stick that nothing confirms is let go of after this long (it walks on by itself
+                                // until then if the thumb was really lifted, so this is kept short).
+// A touchend for a stick finger whose own touch list still names it. Older code trusted the list and kept the stick, but
+// iOS can keep sending that stale list on every later event from the other thumb, so the stick never let go: the player
+// walked on by itself and a re-planted thumb only became a spare. Now the list alone proves nothing for such a finger;
+// only a move of its own does, and without one inside this window the stick is let go of (and picked up again by the
+// finger's next move, from the same base).
+const SUSPECT_MS = 180;
 const THROW_ARM_PX = 30;        // Radius around the button's centre: leaving it starts the aim, returning cancels.
 const THROW_FULL_PX = 118;      // Drag distance from the button centre that means full range.
 const THROW_MIN_M = 2.5;        // Shortest aimed toss; a drag that barely clears the button is a lob at your feet.
@@ -86,6 +93,7 @@ export class Controls {
     this.seen = { left: 0, right: 0 };      // When each stick's finger last appeared in any touch list.
     this.lastRelease = -Infinity;  // Event time of the last finger lifted normally (touchend), whoever held it.
     this.hold = null;              // { at, id } while the move stick is kept through a cancel right after a release.
+    this.suspect = new Map();      // stick touch id -> event time of a touchend its own touch list contradicted.
     this.buttonSeen = new Map();   // touch id -> when that button finger last appeared in a touch list.
     this.throw = null;             // The press in aim mode: { slot, id, cx, cy, x, y, at, left, cancel }.
     this.throwHeld = { slot: '', aim: 0, dist: 0 };    // Reused while a throw is held; returned from read().
@@ -470,7 +478,8 @@ export class Controls {
   #gone(side, touches, at) {
     const id = this[side].id;
     // A stick kept through a cancel has no finger iOS will report: the next thumb on that side takes it at once.
-    if (side === 'left' && this.hold && !inList(touches, id)) return true;
+    // Likewise one whose touchend arrived (see SUSPECT_MS) or that was kept through a cancel: its list entries are stale.
+    if (this.suspect.has(id) || (side === 'left' && this.hold)) return true;
     return !inList(touches, id) && at - this.seen[side] >= TAKEOVER_MS;
   }
 
@@ -625,6 +634,7 @@ export class Controls {
     const l = this.left;
     this.seen.left = at;
     this.hold = null;
+    this.suspect.delete(id);
     l.id = id; l.ox = x; l.oz = y; l.x = x; l.y = y;
     this.paintDirty = true;
   }
@@ -632,6 +642,7 @@ export class Controls {
   #grabRight(id, x, y, t) {
     const r = this.right;
     this.seen.right = t;
+    this.suspect.delete(id);
     r.id = id; r.ox = x; r.oz = y; r.x = x; r.y = y;
     r.aim = null; r.firing = false;
     this.aimFilter.reset();
@@ -651,10 +662,12 @@ export class Controls {
     for (const t of e.changedTouches) {
       const id = t.identifier;
       if (id === this.left.id) {
+        this.#confirm('left', id, at);
         this.left.x = t.clientX;
         this.left.y = t.clientY;
         this.paintDirty = true;
       } else if (id === this.right.id) {
+        this.#confirm('right', id, at);
         this.#aimMove(t.clientX, t.clientY, at);
       } else if (this.throw?.id === id) {
         this.#throwMove(t.clientX, t.clientY);
@@ -708,14 +721,15 @@ export class Controls {
     for (const t of e.changedTouches) {
       const id = t.identifier;
       // An event that ends a stick finger while its own list still names it contradicts itself: the finger is down.
-      if ((id === this.left.id || id === this.right.id) && inList(e.touches, id)) {
-        this.debug?.(`${e.type} for #${id}, still listed: kept`);
+      if ((id === this.left.id || id === this.right.id) && inList(e.touches, id) && !this.suspect.has(id)) {
+        this.suspect.set(id, performance.now());
+        this.debug?.(`${e.type} for #${id}, still listed: kept until it moves`);
         continue;
       }
       // iOS cancelling the move thumb just after another finger lifted (a grenade released, a button let go). The thumb
       // is still down, and no event will ever say so again: keep the stick as it is. See COLLATERAL_MS.
       if (cancelled && id === this.left.id && at - this.lastRelease <= COLLATERAL_MS && !document.hidden) {
-        this.hold = { at, id };
+        this.hold = { at: performance.now(), id };   // Page clock: read() times it out against performance.now().
         this.debug?.(`L #${id} kept through a touchcancel ${Math.round(at - this.lastRelease)}ms after a release`);
         continue;
       }
@@ -730,14 +744,16 @@ export class Controls {
   // A stick dropped that way is remembered, so that a later move from the same finger picks it up again (#adopt).
   #drop(id, at = performance.now(), cancelled = false) {
     if (!cancelled) { this.lost.delete(id); this.spare.delete(id); }
+    // A finger whose list entries were found stale may only come back by moving, never by being listed (#revive).
+    const moveOnly = this.suspect.delete(id) || (id === this.left.id && !!this.hold);
     if (id === this.left.id) {
-      if (cancelled) this.#keep(this.lost, id, { side: 'left', ox: this.left.ox, oz: this.left.oz });
+      if (cancelled) this.#keep(this.lost, id, { side: 'left', ox: this.left.ox, oz: this.left.oz, moveOnly });
       this.left.id = null;
       this.hold = null;
       this.sprintOn = false;
       this.paintDirty = true;
     } else if (id === this.right.id) {
-      if (cancelled) this.#keep(this.lost, id, { side: 'right', ox: this.right.ox, oz: this.right.oz });
+      if (cancelled) this.#keep(this.lost, id, { side: 'right', ox: this.right.ox, oz: this.right.oz, moveOnly });
       const settled = this.aimFilter.settled(at);
       this.right.id = null;
       this.right.firing = false;
@@ -762,12 +778,22 @@ export class Controls {
     }
   }
 
+  // A stick finger that moved: alive beyond doubt, whatever was believed about it.
+  #confirm(side, id, at) {
+    this.seen[side] = at;
+    if (this.suspect.delete(id)) this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} moved after its touchend: kept`);
+    if (side === 'left' && this.hold) { this.hold = null; this.debug?.(`L #${id} moved after a cancel: kept`); }
+  }
+
   // Every finger named in a touch list is alive right now.
   #seeList(touches, at) {
     const l = this.left.id, r = this.right.id;
     for (let i = 0; i < touches.length; i++) {
       const id = touches[i].identifier;
-      if (id === l) { this.seen.left = at; this.hold = null; }   // Listed again: alive, nothing to keep any more.
+      // Listed: alive, unless this finger's list entries are already known to be stale (a contradicted touchend, or a
+      // stick kept through a cancel). Those count only by moving (#confirm).
+      if (this.suspect.has(id) || (id === l && this.hold)) continue;
+      if (id === l) this.seen.left = at;
       else if (id === r) this.seen.right = at;
       else if (this.buttonSeen.has(id)) this.buttonSeen.set(id, at);
     }
@@ -780,7 +806,15 @@ export class Controls {
   #reconcile(touches, at) {
     const check = side => {
       const id = this[side].id;
-      if (id === null || inList(touches, id) || at - this.seen[side] < MISSING_DROP_MS) return;
+      if (id === null) return;
+      const ended = this.suspect.get(id);
+      if (ended !== undefined) {
+        if (performance.now() - ended < SUSPECT_MS) return;
+        this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} ended and never moved again: let go`);
+        this.#drop(id, at, true);
+        return;
+      }
+      if (inList(touches, id) || at - this.seen[side] < MISSING_DROP_MS) return;
       // A stick kept through a cancel is missing from every list by definition; only a new thumb, its own end or
       // HOLD_MAX_MS let go of it.
       if (side === 'left' && this.hold) return;
@@ -802,7 +836,8 @@ export class Controls {
     if (!this.lost.size) return;
     for (let i = 0; i < touches.length; i++) {
       const t = touches[i];
-      if (this.lost.has(t.identifier)) this.#adopt(t, at);
+      const lost = this.lost.get(t.identifier);
+      if (lost && !lost.moveOnly) this.#adopt(t, at);
     }
   }
 
@@ -823,6 +858,7 @@ export class Controls {
     this.buttonTouch.clear();
     this.buttonSeen.clear();
     this.lost.clear();              // Nothing is picked up again across a pause or a match boundary.
+    this.suspect.clear();
     this.spare.clear();
     this.throw = null;              // A press the game took away is not a throw.
     this.throwReleased = null;
@@ -847,6 +883,17 @@ export class Controls {
     if (this.hold && performance.now() - this.hold.at > HOLD_MAX_MS) {
       this.debug?.(`L #${l.id} kept ${HOLD_MAX_MS}ms with no sign of the thumb: let go`);
       this.#drop(l.id, performance.now(), true);
+    }
+    // A stick whose touchend arrived and that has not moved since: let go even if no other finger sends an event.
+    if (this.suspect.size) {
+      const now = performance.now();
+      for (const side of ['left', 'right']) {
+        const id = this[side].id, ended = id === null ? undefined : this.suspect.get(id);
+        if (ended !== undefined && now - ended >= SUSPECT_MS) {
+          this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} ended and never moved again: let go`);
+          this.#drop(id, now, true);
+        }
+      }
     }
     let mx = 0, mz = 0;
     if (l.id !== null) {
