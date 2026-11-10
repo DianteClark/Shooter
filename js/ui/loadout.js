@@ -15,6 +15,7 @@ import { GOLDEN_ID, WEAPON_IDS } from '../shared/constants.js';
 import { playUi } from '../audio/audio.js';
 import { ico, backButton } from './yard.js';
 import { stagger, flash, sweep, pop } from './motion.js';
+import { masteryPips, masteryDetail } from './mastery.js';
 
 const HERO_STATS = ['damage', 'rate', 'range', 'aimed', 'recoil', 'move', 'reload'];
 
@@ -33,6 +34,8 @@ const owned = id => Progress.isItemUnlocked('weapon', id);
 // What a locked gun asks for. The Golden Gun has no level: it asks for everything.
 const lockText = id => (id === GOLDEN_ID ? 'Max everything to earn it' : levelRequirement(Progress.itemUnlockLevel('weapon', id)));
 const GOLD = '#ffcf40';
+// What a locked perk, piece of equipment or streak still needs: its level, or the challenge after it.
+const lockOf = (kind, id) => Progress.lockText(kind, id) || levelRequirement(Progress.itemUnlockLevel(kind, id));
 // The Golden Gun's card in the armory grid: a gold edge and glow over the usual plate, locked or not.
 const GOLD_CARD = `box-shadow:inset 0 0 0 2px ${GOLD},inset 0 -18px 30px -18px rgba(255,207,64,.55);`;
 
@@ -199,6 +202,7 @@ export class LoadoutsScreen {
       <span class="ld-ico">${itemMark(id, item.name)}</span>
       <span class="ld-tx"><small>${esc(head)}${pro ? '<i class="pro-chip">Pro</i>' : ''}</small><b>${esc(item.name)}</b></span>
       ${item.count ? `<em>x${item.count}</em>` : ''}
+      ${key === 'perks' ? '' : masteryPips(Progress.mastery(id))}
     </button>`;
   }
 
@@ -207,6 +211,7 @@ export class LoadoutsScreen {
     return `<button class="ld-tile ld-op" data-act="loOperators">
       <span class="ld-ico">${ico('operator')}</span>
       <span class="ld-tx"><small>Operator</small><b>${esc(op.name)}</b></span>
+      ${masteryPips(Progress.mastery(op.id))}
     </button>`;
   }
 
@@ -352,7 +357,9 @@ export class LoadoutsScreen {
 
   /* ---------- Perks, equipment, streaks ---------- */
   openGear(key, idx) {
-    this.panel = { type: 'gear', key, idx };
+    const l = this.loadout;
+    // The mastery shown in the sheet head follows the item under the thumb, starting with the one in the slot.
+    this.panel = { type: 'gear', key, idx, focus: key === 'perks' ? undefined : key === 'streaks' ? l.streaks[idx] : l[key] };
     this.paintPanel();
   }
 
@@ -382,7 +389,7 @@ export class LoadoutsScreen {
     }
     this.panelEl.innerHTML = `
       <div class="ld-sheet">
-        <div class="ld-sheet-head"><b>${esc(title)}</b>${key === 'perks' ? this.proDetail(this.panel.focus) : `<small>${esc(hint)}</small>`}<button class="btn is-primary" data-act="loClose" data-sound="confirm">${ico('check')}<b>Done</b></button></div>
+        <div class="ld-sheet-head"><b>${esc(title)}</b>${key === 'perks' ? this.proDetail(this.panel.focus) : this.panel.focus ? masteryDetail(this.panel.focus) : `<small>${esc(hint)}</small>`}<button class="btn is-primary" data-act="loClose" data-sound="confirm">${ico('check')}<b>Done</b></button></div>
         <div class="pk-cols ${cls}">${body}</div>
       </div>`;
   }
@@ -390,11 +397,12 @@ export class LoadoutsScreen {
   option(key, item, on, tag) {
     const sec = GEAR[key], open = Progress.isItemUnlocked(sec.kind, item.id);
     const perk = key === 'perks', pro = perk && Progress.isPro(item.id);
-    return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}${pro ? ' is-pro' : ''}${perk && this.panel?.focus === item.id ? ' focus' : ''}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
+    return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}${pro ? ' is-pro' : ''}${this.panel?.focus === item.id ? ' focus' : ''}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
       <span class="ld-ico">${itemMark(item.id, item.name)}</span>
-      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}</b><small>${open ? esc(item.desc) : esc(levelRequirement(Progress.itemUnlockLevel(sec.kind, item.id)))}</small></span>
+      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}</b><small>${open ? esc(item.desc) : esc(lockOf(sec.kind, item.id))}</small></span>
       ${open ? (tag ? `<em>${tag}</em>` : '') : `<em class="lock">${ico('lock')}</em>`}
       ${perk && open ? this.proStrip(item.id) : ''}
+      ${!perk && open ? masteryPips(Progress.mastery(item.id)) : ''}
     </button>`;
   }
 
@@ -419,9 +427,10 @@ export class LoadoutsScreen {
   choose(key, id) {
     const sec = GEAR[key], l = this.loadout;
     if (!Progress.isItemUnlocked(sec.kind, id)) {
-      this.menu.toast(`${sec.table[id].name}: ${levelRequirement(Progress.itemUnlockLevel(sec.kind, id))}`);
+      this.menu.toast(`${sec.table[id].name}: ${lockOf(sec.kind, id)}`);
       return;
     }
+    if (key !== 'perks') this.panel.focus = id;
     if (key === 'perks') {
       const list = [...l.perks];
       list[PERKS[id].tier] = id;
@@ -432,6 +441,7 @@ export class LoadoutsScreen {
       const list = [...l.streaks];
       if (list.includes(id)) {
         this.panel.idx = list.indexOf(id);
+        this.paintGear();
         return;
       }
       list[this.panel.idx] = id;

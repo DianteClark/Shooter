@@ -2,12 +2,13 @@
 import { MAX_PRESTIGE, MAX_LEVEL, prestigeName, getCard } from '../shared/progression.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { PERK_IDS, PERKS, PRO } from '../shared/catalog.js';
-import { cardHtml, cardsSheet, vetTag } from './cards.js';
+import { cardHtml, cardsSheet, vetTag, currentEmblem } from './cards.js';
 import { icon } from './icons.js';
 import { Progress } from './progress.js';
 import { esc, badgeMark, ROMAN, levelRequirement } from './widgets.js';
 import { ico, header } from './yard.js';
 import { rollNumber } from './motion.js';
+import { masteryScreen, masteryTotals } from './mastery.js';
 
 const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator', pro: 'Pro perk', card: 'Calling card' };
 export const kindLabel = kind => KIND_LABEL[kind] ?? kind;
@@ -73,12 +74,12 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     const hint = peaked ? 'Top rank' : lp.level >= MAX_LEVEL ? 'Prestige' : `Prestige at ${MAX_LEVEL}`;
     const frac = lp.maxed ? 1 : lp.into / lp.span;
     menu.el.innerHTML = `
-      ${header({ back: 'pfBack', label: 'Done', title: 'Service record' })}
+      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: masteryButton() })}
       <div class="pf">
         <div class="pf-card${can ? ' ready' : ''}" data-in="left">
           <div class="pf-badge">${badgeMark(p, 96)}</div>
           <div class="pf-id">
-            <span class="pf-rankname">${esc(prestigeName(p))}${vetTag(Progress.isVeteran())}</span>
+            <span class="pf-rankname">${esc(prestigeName(p))}${vetTag(Progress.isVeteran(), { emblem: currentEmblem() })}</span>
             <button class="pf-name" data-act="pfRename"><b>${esc(Progress.name || 'Rookie')}</b>${ico('edit')}</button>
           </div>
           <div class="pf-level">
@@ -114,7 +115,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
           <section data-in="up">
             <h4>${ico('unlock')}Next unlocks</h4>
             <div class="pf-next">
-              ${upcoming.length ? upcoming.map(u => `<div class="pf-item">${ico(u.id)}<span><b>${esc(u.name)}</b><small>${esc(levelRequirement(u.level))}</small></span></div>`).join('') : `<p class="pf-done">${ico('check')}Every perk, tactical, lethal and streak is unlocked.</p>`}
+              ${upcoming.length ? upcoming.map(u => `<div class="pf-item">${ico(u.id)}<span><b>${esc(u.name)}</b><small>${esc(Progress.lockText(u.kind, u.id) || levelRequirement(u.level))}</small></span></div>`).join('') : `<p class="pf-done">${ico('check')}Every perk, tactical, lethal and streak is unlocked.</p>`}
             </div>
           </section>
         </div>
@@ -124,6 +125,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
   menu.on({
     pfCards: () => cardsSheet(menu, { onChange: () => onChange?.(), onClose: render }),
     pfBack: onBack,
+    pfMastery: () => masteryScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
     pfRename: onRename,
     pfSave: onSave,
     pfPrestige: () => confirmPrestige(menu, {
@@ -148,6 +150,12 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
   });
   render();
   menu.show();
+}
+
+// The way into the Mastery screen, in the header: tiers done across every track and weapon ladder.
+function masteryButton() {
+  const { done, of } = masteryTotals();
+  return `<button class="btn pf-mastery" data-act="pfMastery">${ico('star')}<b>Mastery</b><small>${done}/${of}</small></button>`;
 }
 
 // Big totals in the space of a tile: 9,870 stays as it is, 200,000 reads 200K, 3,400,000 reads 3.4M.

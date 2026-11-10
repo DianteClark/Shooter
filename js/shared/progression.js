@@ -7,7 +7,9 @@ import { MODES, modeRules } from './modes.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 
-export const SAVE_VERSION = 3;     // 3: Pro perk progress and the calling card (V7). 2 still loads and imports.
+// 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
+// progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
+export const SAVE_VERSION = 4;
 export const MAX_LEVEL = 50;
 export const MAX_PRESTIGE = 10;
 export const MAX_WEAPON_LEVEL = 30;
@@ -116,9 +118,10 @@ export function itemUnlockLevel(kind, id) {
 
 const STARTER_GEAR = { perks: ['marathon', 'scavenger', 'tracker'], tactical: 'smoke', lethal: 'frag', streaks: ['uav', 'turret', 'strike'] };
 
-// Replaces anything not yet reached with what is, keeping slot counts full.
-export function gateLoadoutGear(l, peakLevel) {
-  const has = (kind, id) => itemUnlockLevel(kind, id) <= peakLevel;
+// Replaces anything not yet reached with what is, keeping slot counts full. `open` is the player's peak level, or a
+// function (kind, id) -> bool when unlocks also depend on challenges (itemOpen below).
+export function gateLoadoutGear(l, open) {
+  const has = typeof open === 'function' ? open : (kind, id) => itemUnlockLevel(kind, id) <= open;
   const fill = (kind, picked, starter, n) => {
     const out = [...new Set((picked || []).filter(id => ITEM_TABLES[kind][id] && has(kind, id)))].slice(0, n);
     for (const id of starter) if (out.length < n && !out.includes(id)) out.push(id);
@@ -166,14 +169,15 @@ export function isMastered(w) {
 // The rule for one camo on one weapon, ignoring grandfathered ownership.
 export function camoGateOpen(camo, w) {
   if (camo.prestige) return (w.prestige ?? 0) >= camo.prestige;
-  if (camo.mastery) return isMastered(w) && (w.kills ?? 0) >= (camo.masteryKills ?? 0);
+  // Mastery camos sit at the end of the weapon ladder (v4); ones earned before it existed are in `owned`.
+  if (camo.mastery) return isMastered(w) && ladderDone(w) && (w.kills ?? 0) >= (camo.masteryKills ?? 0);
   if (camo.chal) return (w[camo.chal.track] ?? 0) >= camo.chal.goal;
   return true;
 }
 
 export function camoRequirement(camo) {
   if (camo.prestige) return `Weapon Prestige ${camo.prestige} on this weapon`;
-  if (camo.mastery) return camo.masteryKills ? `Mastery and ${camo.masteryKills} kills` : 'Complete every challenge on this weapon';
+  if (camo.mastery) return camo.masteryKills ? `Mastery and ${camo.masteryKills} kills` : 'Every challenge and the mastery ladder on this weapon';
   if (camo.chal) return `${camo.chal.goal} ${TRACK_LABEL[camo.chal.track]}`;
   return '';
 }
@@ -404,6 +408,405 @@ export function applyProGains(save, gains) {
   return fresh;
 }
 
+/* ---------- Mastery tracks (save v4, docs/PROGRESSION.md) ---------- */
+// Every tactical, lethal, scorestreak and operator has a track of sequential tiers. Each tier is one challenge on a
+// cumulative counter of that item; a tier only completes once the one before it has, and a completed tier stays
+// completed even if its goal is retuned later. Counters are kept per track as {stat: n}; MasteryTracker below counts
+// them from the event stream. Goals were set like the Pro ones: a track's first tier is a match or two of using it,
+// the last one a long project.
+const T = (stat, goal, label) => ({ stat, goal, label });
+const GEAR_TRACKS = {
+  tactical: {
+    smoke:  [T('uses', 25, 'Throw 25 Smokes'), T('coverKills', 10, 'Get 10 kills within 9 s of a Smoke'), T('uses', 75, 'Throw 75 Smokes'), T('coverKills', 40, 'Get 40 kills within 9 s of a Smoke')],
+    flash:  [T('uses', 20, 'Throw 20 Flashes'), T('blinded', 30, 'Blind 30 enemies'), T('flashKills', 10, 'Kill 10 enemies you flashed'), T('flashKills', 35, 'Kill 35 enemies you flashed')],
+    stim:   [T('uses', 20, 'Use 20 Stims'), T('stimKills', 12, 'Get 12 kills within 5 s of a Stim'), T('uses', 60, 'Use 60 Stims'), T('stimKills', 40, 'Get 40 kills within 5 s of a Stim')],
+    decoy:  [T('uses', 15, 'Throw 15 Decoys'), T('shots', 120, 'Fake 120 shots with Decoys'), T('decoyKills', 10, 'Get 10 kills within 10 s of a Decoy'), T('decoyKills', 35, 'Get 35 kills within 10 s of a Decoy')],
+    sensor: [T('uses', 15, 'Throw 15 Sensors'), T('marked', 30, 'Mark 30 enemies'), T('markKills', 10, 'Kill 10 marked enemies'), T('markKills', 35, 'Kill 35 marked enemies')],
+    trophy: [T('uses', 15, 'Place 15 Trophies'), T('saves', 8, 'Stop 8 enemy throws'), T('saves', 25, 'Stop 25 enemy throws'), T('saves', 60, 'Stop 60 enemy throws')],
+  },
+  lethal: {
+    frag:    [T('uses', 30, 'Throw 30 Frags'), T('kills', 25, 'Get 25 Frag kills'), T('bankKills', 5, 'Get 5 kills with a Frag banked off a wall'), T('multi', 10, 'Kill 2 or more with one Frag 10 times')],
+    sticky:  [T('uses', 20, 'Throw 20 Stickies'), T('kills', 20, 'Get 20 Sticky kills'), T('longKills', 5, 'Get 5 Sticky kills from 12 m or more'), T('multi', 5, 'Kill 2 or more with one Sticky 5 times')],
+    molotov: [T('uses', 20, 'Throw 20 Molotovs'), T('kills', 12, 'Get 12 Molotov kills'), T('multi', 4, 'Burn 2 or more at once 4 times'), T('kills', 40, 'Get 40 Molotov kills')],
+    mine:    [T('uses', 15, 'Place 15 Mines'), T('kills', 10, 'Get 10 Mine kills'), T('multi', 3, 'Kill 2 or more with one Mine 3 times'), T('kills', 40, 'Get 40 Mine kills')],
+    cluster: [T('uses', 20, 'Throw 20 Clusters'), T('kills', 15, 'Get 15 Cluster kills'), T('multi', 6, 'Kill 2 or more with one Cluster 6 times'), T('kills', 50, 'Get 50 Cluster kills')],
+    hatchet: [T('uses', 20, 'Throw 20 Hatchets'), T('kills', 10, 'Get 10 Hatchet kills'), T('longKills', 5, 'Get 5 Hatchet kills from 12 m or more'), T('kills', 40, 'Get 40 Hatchet kills')],
+  },
+  streak: {
+    uav:       [T('uses', 5, 'Call in 5 UAVs'), T('upKills', 15, 'Get 15 kills while your UAV is up'), T('uses', 20, 'Call in 20 UAVs'), T('upKills', 60, 'Get 60 kills while your UAV is up')],
+    jammer:    [T('uses', 5, 'Call in 5 Jammers'), T('upKills', 10, 'Get 10 kills while your Jammer is up'), T('uses', 15, 'Call in 15 Jammers'), T('upKills', 40, 'Get 40 kills while your Jammer is up')],
+    resupply:  [T('uses', 5, 'Call in 5 Supply Drops'), T('supplied', 10, 'Resupply 10 teammates'), T('uses', 15, 'Call in 15 Supply Drops'), T('supplied', 40, 'Resupply 40 teammates')],
+    turret:    [T('uses', 5, 'Deploy 5 Sentries'), T('kills', 10, 'Get 10 Sentry kills'), T('multi', 3, 'Get 3 Sentry multi-kills'), T('kills', 40, 'Get 40 Sentry kills')],
+    mortar:    [T('uses', 5, 'Call in 5 Mortar Teams'), T('kills', 10, 'Get 10 Mortar kills'), T('multi', 3, 'Get 3 Mortar multi-kills'), T('kills', 40, 'Get 40 Mortar kills')],
+    strike:    [T('uses', 5, 'Call in 5 Airstrikes'), T('kills', 10, 'Get 10 Airstrike kills'), T('multi', 4, 'Get 4 Airstrike multi-kills'), T('kills', 40, 'Get 40 Airstrike kills')],
+    overwatch: [T('uses', 3, 'Call in 3 Overwatches'), T('upKills', 10, 'Get 10 kills during Overwatch'), T('uses', 12, 'Call in 12 Overwatches'), T('upKills', 40, 'Get 40 kills during Overwatch')],
+    chopper:   [T('uses', 3, 'Call in 3 Attack Choppers'), T('kills', 10, 'Get 10 Chopper kills'), T('multi', 3, 'Get 3 Chopper multi-kills'), T('kills', 35, 'Get 35 Chopper kills')],
+    emp:       [T('uses', 3, 'Call in 3 EMPs'), T('upKills', 8, 'Get 8 kills within 20 s of an EMP'), T('uses', 10, 'Call in 10 EMPs'), T('upKills', 30, 'Get 30 kills within 20 s of an EMP')],
+    gunship:   [T('uses', 3, 'Call in 3 Gunships'), T('kills', 15, 'Get 15 Gunship kills'), T('multi', 4, 'Get 4 Gunship multi-kills'), T('kills', 50, 'Get 50 Gunship kills')],
+  },
+};
+// Operators: time, kills, a signature that fits the character, wins, then a long kill count. The roster itself lives in
+// js/ui/operators.js, which imports the card registry (cardbook.js), which imports this file: so the ids and names are
+// repeated here rather than imported. An operator added there needs a line here to get a track.
+const MASTERY_OPERATORS = [['trooper', 'Trooper'], ['wisp', 'Wisp'], ['anvil', 'Anvil'], ['relay', 'Relay'], ['yarddog', 'Yard Dog'],
+  ['ronin', 'Ronin'], ['ghoul', 'Ghoul'], ['ram', 'Ram'], ['monarch', 'Monarch']];
+const OPERATOR_SIGNATURE = {
+  trooper: T('multi', 15, 'Get 15 multi-kills'),
+  wisp: T('slideKills', 20, 'Get 20 kills while sliding'),
+  anvil: T('hurtKills', 40, 'Get 40 kills while hurt'),
+  relay: T('assists', 40, 'Get 40 assists'),
+  yarddog: T('obj', 20, 'Capture, confirm, plant or defuse 20 times'),
+  ronin: T('long', 25, 'Get 25 longshots'),
+  ghoul: T('head', 40, 'Get 40 headshots'),
+  ram: T('closeKills', 50, 'Get 50 kills within 8 m'),
+  monarch: T('streak5', 10, 'Reach a 5-kill streak 10 times'),
+};
+const operatorTiers = (id, name) => [
+  T('secs', 900, `Play 15 minutes as ${name}`), T('kills', 50, `Get 50 kills as ${name}`),
+  OPERATOR_SIGNATURE[id] ?? T('assists', 40, 'Get 40 assists'), T('wins', 10, `Win 10 matches as ${name}`), T('kills', 300, `Get 300 kills as ${name}`),
+];
+
+// Rewards by tier. Gear (4 tiers): XP, bronze badge, calling card, gold badge and XP. Operators (5 tiers): XP, bronze
+// badge, skin, calling card, mastery skin with the gold badge and XP. Skin ids are the operator roster's own
+// (js/ui/operators.js SKINS: 'skin:<op>-3', 'skin:<op>-5'); cards are rows in CARDS; badges are drawn by js/ui/mastery.js.
+function trackRewards(kind, item, name, tier, count) {
+  const op = kind === 'operator', out = [];
+  if (tier === 1) out.push({ kind: 'xp', xp: 1000, name: '1,000 XP' });
+  if (tier === 2) out.push({ kind: 'badge', id: `badge:${item}-1`, name: `${name} bronze badge` });
+  if (op && (tier === 3 || tier === 5)) out.push({ kind: 'skin', id: `skin:${item}-${tier}`, name: `${name} ${tier === 5 ? 'mastery' : 'elite'} skin` });
+  if (tier === (op ? 4 : 3)) out.push({ kind: 'card', id: `card:mastery-${item}`, name: `${name} Master` });
+  if (tier === count) out.push({ kind: 'badge', id: `badge:${item}-2`, name: `${name} gold badge` }, { kind: 'xp', xp: op ? 5000 : 3000, name: `${op ? '5,000' : '3,000'} XP` });
+  return out;
+}
+
+// Every stat a track keeps: its tiers' stats plus uses and kills, which the unlock challenges total across tracks.
+function makeTrack(kind, item, name, icon, tiers, rewards) {
+  const list = tiers.map((c, i) => ({ ...c, tier: i + 1, rewards: rewards(i + 1, tiers.length) }));
+  return { id: item, kind, item, name, icon, tiers: list, stats: [...new Set(['uses', 'kills', ...tiers.map(c => c.stat)])] };
+}
+
+const KIND_TABLE = { tactical: TACTICALS, lethal: LETHALS, streak: STREAKS };
+export const MASTERY_KINDS = ['tactical', 'lethal', 'streak', 'operator'];
+export const MASTERY_TRACKS = [
+  ...['tactical', 'lethal', 'streak'].flatMap(kind => Object.keys(KIND_TABLE[kind]).map(id => {
+    const name = KIND_TABLE[kind][id].name;
+    // An item added to the catalog without a line above still gets a plain track, never a missing one.
+    const tiers = GEAR_TRACKS[kind][id] ?? [T('uses', 20, `Use ${name} 20 times`), T('uses', 50, `Use ${name} 50 times`), T('uses', 100, `Use ${name} 100 times`), T('uses', 200, `Use ${name} 200 times`)];
+    return makeTrack(kind, id, name, id, tiers, (tier, n) => trackRewards(kind, id, name, tier, n));
+  })),
+  ...MASTERY_OPERATORS.map(([id, name]) => makeTrack('operator', id, name, 'ui:operator', operatorTiers(id, name), (tier, n) => trackRewards('operator', id, name, tier, n))),
+];
+const TRACK_BY_ID = new Map(MASTERY_TRACKS.map(t => [t.id, t]));
+export const getTrack = id => TRACK_BY_ID.get(id) ?? null;
+
+// The weapon ladder: five tiers after weapon level 30, counted only once the gun has reached it. Finishing it opens the
+// mastery camos (with every camo challenge, as before).
+export const WEAPON_LADDER = [
+  T('kills', 100, 'Get 100 kills past level 30'), T('hurt', 30, 'Get 30 kills while hurt'), T('multi', 15, 'Get 15 multi-kills'),
+  T('run5', 5, 'Get 5 kills in one life, 5 times'), T('kills', 300, 'Get 300 kills past level 30'),
+];
+const LADDER_XP = [2000, 3000, 4000, 5000, 6000];
+const LADDER_STATS = [...new Set(WEAPON_LADDER.map(c => c.stat))];
+const ladderTracks = new Map();
+export function ladderTrack(w) {
+  let t = ladderTracks.get(w);
+  if (t) return t;
+  const name = WEAPONS[w]?.name ?? w;
+  t = makeTrack('weapon', w, name, w, WEAPON_LADDER, (tier, n) => [
+    { kind: 'xp', xp: LADDER_XP[tier - 1], name: `${LADDER_XP[tier - 1].toLocaleString('en-US')} XP` },
+    ...(tier === 2 ? [{ kind: 'badge', id: `badge:${w}-1`, name: `${name} bronze badge` }] : []),
+    ...(tier === n ? [{ kind: 'badge', id: `badge:${w}-2`, name: `${name} gold badge` }, { kind: 'card', id: `card:mastery-${w}`, name: `${name} Master` }, { kind: 'camos', name: 'Mastery camos open' }] : []),
+  ]);
+  t.id = `gun:${w}`;
+  t.stats = LADDER_STATS;
+  ladderTracks.set(w, t);
+  return t;
+}
+export const ladderDone = w => (w?.ladT ?? 0) >= WEAPON_LADDER.length;
+
+// A counter entry, {s:{stat:n}, t:tiers}, raised to every tier its counters already meet, in order.
+function advance(track, entry) {
+  let t = Math.min(track.tiers.length, entry.t ?? 0);
+  while (t < track.tiers.length && (entry.s?.[track.tiers[t].stat] ?? 0) >= track.tiers[t].goal) t++;
+  entry.t = t;
+  return entry;
+}
+
+// {id, kind, item, name, icon, tier, count, tiers:[{stat,goal,label,tier,rewards,value,done}], next, maxed}.
+export function trackStatus(track, entry = {}) {
+  const t = Math.min(track.tiers.length, entry.t ?? 0), s = entry.s ?? {};
+  const tiers = track.tiers.map((c, i) => ({ ...c, value: i < t ? c.goal : Math.min(c.goal, Math.floor(s[c.stat] ?? 0)), done: i < t }));
+  return { id: track.id, kind: track.kind, item: track.item, name: track.name, icon: track.icon, tier: t, count: tiers.length, tiers, next: tiers[t] ?? null, maxed: t >= tiers.length };
+}
+
+const weaponEntry = w => ({ s: w?.lad ?? {}, t: w?.ladT ?? 0 });
+export const ladderStatus = (id, w) => ({ ...trackStatus(ladderTrack(id), weaponEntry(w)), open: (w?.peak ?? 1) >= MAX_WEAPON_LEVEL });
+
+// Every reward id a save has earned from mastery: 'card:mastery-frag', 'skin:anvil-3', 'badge:frag-1', ...
+export function masteryRewards(save) {
+  const out = new Set();
+  const collect = (track, t) => { for (const c of track.tiers.slice(0, t)) for (const r of c.rewards) if (r.id) out.add(r.id); };
+  for (const track of MASTERY_TRACKS) collect(track, save.mastery?.[track.id]?.t ?? 0);
+  for (const [w, entry] of Object.entries(save.weapons ?? {})) if (WEAPONS[w] && entry.ladT) collect(ladderTrack(w), entry.ladT);
+  return out;
+}
+
+// The skins an operator's track grants, in tier order.
+export const operatorSkins = op => (getTrack(op)?.tiers ?? []).flatMap(c => c.rewards.filter(r => r.kind === 'skin').map(r => ({ id: r.id, tier: c.tier, name: r.name })));
+
+// Adds one match's MasteryTracker gains into a save. Weapon ladder gains only count for guns at level 30 or past it.
+// Returns {moved, ups, xp}: moved is one row per track that moved, for the results strip:
+//   {id, kind, item, name, icon, label, goal, before, value, tierBefore, tier, count, up}
+// (label/goal/before/value describe the tier that was current at the start); ups is one entry per tier gained:
+//   {kind:'mastery', id, track, trackKind, item, name, icon, tier, count, label, rewards:[...]}; xp is what they pay.
+export function applyMasteryGains(save, gains = {}) {
+  const moved = [], ups = [];
+  const add = (track, entry, stats) => {
+    const before = trackStatus(track, entry);
+    let any = false;
+    for (const [stat, n] of Object.entries(stats ?? {})) {
+      if (!track.stats.includes(stat) || !Number.isFinite(n) || n <= 0) continue;
+      entry.s[stat] = Math.min(COUNT_MAX, Math.round(((entry.s[stat] ?? 0) + n) * 10) / 10);
+      any = true;
+    }
+    if (!any) return;
+    advance(track, entry);
+    const after = trackStatus(track, entry);
+    const cur = before.next;
+    if (cur && (after.tiers[before.tier].value > cur.value || after.tier > before.tier)) {
+      moved.push({ id: track.id, kind: track.kind, item: track.item, name: track.name, icon: track.icon, label: cur.label, goal: cur.goal,
+        before: cur.value, value: after.tiers[before.tier].value, tierBefore: before.tier, tier: after.tier, count: after.count, up: after.tier - before.tier });
+    }
+    for (let k = before.tier; k < after.tier; k++) {
+      const c = track.tiers[k];
+      ups.push({ kind: 'mastery', id: `${track.id}:${k + 1}`, track: track.id, trackKind: track.kind, item: track.item, name: track.name, icon: track.icon, tier: k + 1, count: track.tiers.length, label: c.label, rewards: c.rewards });
+    }
+  };
+  for (const [id, stats] of Object.entries(gains.tracks ?? {})) {
+    const track = getTrack(id);
+    if (track) add(track, save.mastery[id] ??= { s: {}, t: 0 }, stats);
+  }
+  for (const [w, stats] of Object.entries(gains.weapons ?? {})) {
+    const entry = save.weapons[w];
+    if (!WEAPONS[w] || !entry || entry.peak < MAX_WEAPON_LEVEL) continue;
+    const box = { s: entry.lad ??= {}, t: entry.ladT ?? 0 };
+    add(ladderTrack(w), box, stats);
+    entry.ladT = box.t;
+  }
+  const xp = ups.reduce((n, u) => n + u.rewards.reduce((m, r) => m + (r.xp ?? 0), 0), 0);
+  return { moved, ups, xp };
+}
+
+/* ---------- Unlock challenges ---------- */
+// A few late items need a small challenge on top of their level, read from the mastery counters. Level 1 gear never
+// has one, so a new player always has a full loadout. Saves from before v4 keep anything their level had opened
+// (`granted`, filled by the migration).
+const total = (save, kind, stat) => MASTERY_TRACKS.filter(t => t.kind === kind).reduce((n, t) => n + (save.mastery?.[t.id]?.s?.[stat] ?? 0), 0);
+export const UNLOCK_CHALLENGES = {
+  'lethal:cluster':  { label: 'Get 10 Frag kills', goal: 10, value: s => s.mastery?.frag?.s?.kills ?? 0 },
+  'lethal:hatchet':  { label: 'Get 15 lethal equipment kills', goal: 15, value: s => total(s, 'lethal', 'kills') },
+  'tactical:trophy': { label: 'Throw 40 tactical equipment', goal: 40, value: s => total(s, 'tactical', 'uses') },
+  'streak:chopper':  { label: 'Call in 5 scorestreaks', goal: 5, value: s => total(s, 'streak', 'uses') },
+  'streak:emp':      { label: 'Call in 10 scorestreaks', goal: 10, value: s => total(s, 'streak', 'uses') },
+  'streak:gunship':  { label: 'Get 15 scorestreak kills', goal: 15, value: s => total(s, 'streak', 'kills') },
+};
+
+// {label, goal, value, done} for an item's challenge in a save, or null when it has none.
+export function unlockChallenge(save, kind, id) {
+  const c = UNLOCK_CHALLENGES[`${kind}:${id}`];
+  if (!c) return null;
+  const granted = save.granted?.includes(`${kind}:${id}`);
+  const value = granted ? c.goal : Math.min(c.goal, Math.floor(c.value(save)));
+  return { label: c.label, goal: c.goal, value, done: value >= c.goal };
+}
+
+export function itemOpen(save, kind, id) {
+  if (itemUnlockLevel(kind, id) > (save.peakLevel ?? 1)) return false;
+  return unlockChallenge(save, kind, id)?.done ?? true;
+}
+
+// Before v4: everything a level had opened stays open, and mastery camos earned under the old rule stay earned.
+function grandfather(s) {
+  for (const key of Object.keys(UNLOCK_CHALLENGES)) {
+    const [kind, id] = key.split(':');
+    if (itemUnlockLevel(kind, id) <= s.peakLevel && !s.granted.includes(key)) s.granted.push(key);
+  }
+  for (const w of Object.values(s.weapons)) {
+    for (const c of CAMOS) {
+      if (c.mastery && isMastered(w) && (w.kills ?? 0) >= (c.masteryKills ?? 0) && !w.owned.includes(c.id)) w.owned.push(c.id);
+    }
+  }
+  return s;
+}
+
+/* ---------- Counting mastery in a match ---------- */
+const UP_SECS = { uav: 20, jammer: 15, overwatch: 25, emp: 20 };   // How long each counts as "up" for upKills.
+const AFTER_SECS = { smoke: 9, stim: 5, decoy: 10 };                // A kill this soon after using it counts for it.
+const AFTER_STAT = { smoke: 'coverKills', stim: 'stimKills', decoy: 'decoyKills' };
+const FLASH_KILL_SECS = 4;
+const MULTI_GAP = { molotov: 1.5, mine: 0.6 };                       // Kills by one item this close are one multi-kill.
+const STREAK_MULTI_GAP = 1.5;
+const LONG_THROW = 12;
+const BANK_WINDOW = 3.5;         // A frag kill this soon after a banked throw is the banked frag's.
+const OBJ_MEDALS = new Set(['capture', 'confirm', 'plant', 'defuse', 'flag_capture', 'flag_return']);
+
+// Counts one match for the mastery tracks and the weapon ladder. Pure, like ProTracker: feed onEvents(events, view)
+// every frame; setLoadout(loadout) at each spawn (the operator in use); finish({won}) once. gains() is
+// {tracks: {trackId: {stat: n}}, weapons: {weaponId: {stat: n}}}. `bounced(throwEvent)` says whether a throw banked off
+// a wall (awards.js runs the throw through the shared throw preview); without it banked kills are not counted.
+export class MasteryTracker {
+  constructor(localId, { loadout = null, bounced = null } = {}) {
+    this.id = localId;
+    this.bounced = bounced;
+    this.tracks = {};
+    this.weapons = {};
+    this.op = null;
+    this.setLoadout(loadout);
+    this.t = 0; this.prevT = null; this.prevHp = MAX_HP; this.team = null;
+    this.used = {};              // item -> last time used; frag also keeps whether it banked
+    this.fragBank = false;
+    this.flashed = new Map();    // enemy id -> when this player flashed them
+    this.marked = new Map();     // enemy id -> until when this player's sensor shows them
+    this.up = {};                // streak -> until
+    this.supplyT = -99;          // A Supply Drop from this player's team, for telling it apart from a Stim
+    this.supplyMine = false;
+    this.killT = -99;
+    this.chain = {};
+    this.life = {};              // weapon -> kills this life
+    this.lastGun = null; this.lastGunT = -99;
+  }
+
+  setLoadout(l) { this.op = l?.operator ?? null; }
+
+  add(track, stat, n = 1) {
+    if (!(n > 0) || !track) return;
+    const g = this.tracks[track] ??= {};
+    g[stat] = (g[stat] ?? 0) + n;
+  }
+
+  addGun(w, stat, n = 1) {
+    const g = this.weapons[w] ??= {};
+    g[stat] = (g[stat] ?? 0) + n;
+  }
+
+  // True when this kill makes a run of kills by one source a multi-kill (once per run).
+  #chained(key, gap) {
+    const c = this.chain[key];
+    if (c && this.t - c.t <= gap) { c.t = this.t; c.n++; return c.n === 2; }
+    this.chain[key] = { t: this.t, n: 1 };
+    return false;
+  }
+
+  #enemy(view, id) {
+    const p = view?.players?.find(q => q.id === id);
+    return !!p && p.team !== this.team;
+  }
+
+  gains() { return { tracks: this.tracks, weapons: this.weapons }; }
+
+  finish({ won = false } = {}) {
+    if (won) this.add(this.op, 'wins');
+    return this.gains();
+  }
+
+  onEvents(events, view) {
+    const id = this.id, me = view?.players?.find(p => p.id === id) ?? null;
+    const t = typeof view?.t === 'number' ? view.t : this.t;
+    const dt = this.prevT === null ? 0 : Math.min(0.25, Math.max(0, t - this.prevT));
+    this.t = t;
+    if (me) this.team = me.team;
+    const op = this.op;
+    for (const e of events) {
+      switch (e.t) {
+        case 'throw':
+          if (e.id !== id || !(TACTICALS[e.kind] || LETHALS[e.kind])) break;
+          this.add(e.kind, 'uses');
+          this.used[e.kind] = t;
+          if (e.kind === 'frag') this.fragBank = !!this.bounced?.(e);
+          break;
+        case 'heal':
+          // A Stim has no throw: it is a heal of this player that no kill (Adrenaline) or Supply Drop explains.
+          if (e.id === id) {
+            if (t - this.killT > 0.3 && t - this.supplyT > 0.6) { this.add('stim', 'uses'); this.used.stim = t; }
+          } else if (t - this.supplyT <= 0.6 && this.supplyMine && !this.#enemy(view, e.id)) this.add('resupply', 'supplied');
+          break;
+        case 'flashed':
+          if (e.by === id && e.id !== id && this.#enemy(view, e.id)) { this.add('flash', 'blinded'); this.flashed.set(e.id, t); }
+          break;
+        case 'marked':
+          if (e.by === id) { this.add('sensor', 'marked'); this.marked.set(e.id, t + (e.dur ?? 3)); }
+          break;
+        case 'zap': if (e.by === id) this.add('trophy', 'saves'); break;
+        case 'decoy': if (e.by === id) this.add('decoy', 'shots'); break;
+        case 'streak':
+          if (e.kind === 'resupply' && e.team === this.team) { this.supplyT = t; this.supplyMine = e.id === id; }
+          if (e.id !== id || !STREAKS[e.kind]) break;
+          this.add(e.kind, 'uses');
+          if (UP_SECS[e.kind]) this.up[e.kind] = t + UP_SECS[e.kind];
+          break;
+        case 'medal':
+          if (e.id !== id) break;
+          if (MULTI_MEDALS.has(e.medal)) {
+            this.add(op, 'multi');
+            if (this.lastGun && t - this.lastGunT <= 0.5) this.addGun(this.lastGun, 'multi');
+          }
+          if (e.medal === 'streak5') this.add(op, 'streak5');
+          if (e.medal === 'longshot') this.add(op, 'long');
+          if (OBJ_MEDALS.has(e.medal)) this.add(op, 'obj');
+          break;
+        case 'spawn': if (e.id === id) this.life = {}; break;
+        case 'kill':
+          if (e.assist === id) this.add(op, 'assists');
+          if (e.target === id) this.life = {};
+          if (e.by === id && e.target !== id) this.#kill(e, me);
+          break;
+      }
+    }
+    if (me) {
+      if (op && me.alive && view.phase === 'live' && dt > 0) this.add(op, 'secs', dt);
+      this.prevHp = me.alive ? me.hp : MAX_HP;
+    }
+    this.prevT = t;
+  }
+
+  #kill(e, me) {
+    const t = this.t, op = this.op, gun = !e.streak && !e.equip;
+    this.killT = t;
+    this.add(op, 'kills');
+    if (this.prevHp < MAX_HP) this.add(op, 'hurtKills');
+    if (e.head) this.add(op, 'head');
+    if (gun && (e.dist ?? 99) <= CLOSE_KILL) this.add(op, 'closeKills');
+    if (gun && me?.sliding) this.add(op, 'slideKills');
+    for (const [k, until] of Object.entries(this.up)) if (until >= t) this.add(k, 'upKills');
+    if (e.streak) {
+      if (STREAKS[e.streak]) {
+        this.add(e.streak, 'kills');
+        if (this.#chained(`s:${e.streak}`, STREAK_MULTI_GAP)) this.add(e.streak, 'multi');
+      }
+      return;
+    }
+    for (const k of Object.keys(AFTER_SECS)) if (t - (this.used[k] ?? -99) <= AFTER_SECS[k]) this.add(k, AFTER_STAT[k]);
+    if (t - (this.flashed.get(e.target) ?? -99) <= FLASH_KILL_SECS) this.add('flash', 'flashKills');
+    if ((this.marked.get(e.target) ?? -1) >= t) this.add('sensor', 'markKills');
+    if (e.equip) {
+      const k = e.equip;
+      if (!LETHALS[k]) return;
+      this.add(k, 'kills');
+      if (this.#chained(`e:${k}`, MULTI_GAP[k] ?? 0.5)) this.add(k, 'multi');
+      if ((e.dist ?? 0) >= LONG_THROW) this.add(k, 'longKills');
+      if (k === 'frag' && this.fragBank && t - (this.used.frag ?? -99) <= BANK_WINDOW) this.add('frag', 'bankKills');
+      return;
+    }
+    const w = e.weapon;
+    if (!WEAPONS[w]) return;
+    this.addGun(w, 'kills');
+    if (this.prevHp < MAX_HP) this.addGun(w, 'hurt');
+    this.life[w] = (this.life[w] ?? 0) + 1;
+    if (this.life[w] === 5) this.addGun(w, 'run5');
+    this.lastGun = w; this.lastGunT = t;
+  }
+}
+
 /* ---------- Calling cards (V7) ---------- */
 // Banners shown on the killer card and in results. Pure data: the art is drawn by js/ui/cards.js from `art`, so a new
 // card is one line here. `need(c)` reads a career summary (see cardCareer in js/ui/progress.js):
@@ -420,6 +823,13 @@ const PRO_ART = {
   ghost: ['fog', '#151a22', '#3d4a5c', '#d6e2f0'], coldblood: ['frost', '#0f2233', '#2a6e99', '#bfefff'],
   deadsilence: ['waves', '#16161e', '#3a3a50', '#c6c6e6'], tracker: ['prints', '#24200f', '#5e5426', '#f5e7a0'],
   engineer: ['circuit', '#12261c', '#2b6b4a', '#9dffc8'],
+};
+// Default art for the mastery cards by kind: the item's own icon on a pattern in that kind's colours.
+const MASTERY_CARD_ART = {
+  tactical: t => ({ p: 'fog', c: ['#14222a', '#2f5868', '#cfeef6', '#7ae8ff'], e: t.icon, gold: true }),
+  lethal: t => ({ p: 'plates', c: ['#2a1810', '#7a3a1c', '#ffd2a8', '#ff7a3a'], e: t.icon, gold: true }),
+  streak: t => ({ p: 'chevrons', c: ['#181a30', '#3a3f7a', '#d8dcff', '#ffcf40'], e: t.icon, gold: true }),
+  operator: () => ({ p: 'rails', c: ['#1e2018', '#4e553a', '#eef2d8', '#ff9f1c'], e: 'ui:operator', gold: true }),
 };
 export const CARDS = [
   card('yard', 'Switchyard', 'Starter', 'Every player starts with it', () => true, { p: 'hazard', c: ['#1d232b', '#39424d', '#c8ccd2', '#ff9f1c'], e: 'ui:flag' }),
@@ -441,6 +851,11 @@ export const CARDS = [
   card('pro-5', 'Pro Shop', 'Career', 'Earn 5 Pro perks', c => c.pro.length >= 5, { p: 'circuit', c: ['#221a08', '#6a5214', '#fff0b8', '#ffd659'], e: 'ui:star', gold: true }),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' }),
+  // One per mastery track, granted at its card tier (docs/PROGRESSION.md). `c.rewards` is masteryRewards(save).
+  ...MASTERY_TRACKS.map(t => {
+    const r = t.tiers.flatMap(c => c.rewards.map(x => ({ ...x, tier: c.tier }))).find(x => x.kind === 'card');
+    return card(r.id.slice(5), r.name, 'Mastery', `${t.name} mastery tier ${r.tier}`, c => !!c.rewards?.has(r.id), MASTERY_CARD_ART[t.kind](t));
+  }),
 ];
 export const CARD_IDS = CARDS.map(c => c.id);
 export const getCard = id => CARDS.find(c => c.id === id) ?? CARDS[0];
@@ -461,7 +876,7 @@ const text = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 const idText = v => (typeof v === 'string' && v.length <= 24 && !UNSAFE_KEYS.has(v) ? v : '');
 
 export function blankWeapon() {
-  return { xp: 0, peak: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, owned: [], camo: 'none', tracer: 'none', killFx: 'none' };
+  return { xp: 0, peak: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, owned: [], camo: 'none', tracer: 'none', killFx: 'none', lad: {}, ladT: 0 };
 }
 
 function cleanWeapon(raw) {
@@ -475,7 +890,65 @@ function cleanWeapon(raw) {
   w.camo = CAMOS.some(c => c.id === raw.camo) ? raw.camo : 'none';
   w.tracer = TRACERS.some(t => t.id === raw.tracer) ? raw.tracer : 'none';
   w.killFx = KILL_EFFECTS.some(k => k.id === raw.killFx) ? raw.killFx : 'none';
+  // The ladder (v4): counters for its stats and the tiers done, which never fall.
+  w.lad = cleanCounts(raw.lad, LADDER_STATS);
+  w.ladT = count(raw.ladT, WEAPON_LADDER.length);
+  if (w.peak >= MAX_WEAPON_LEVEL) w.ladT = advance({ tiers: WEAPON_LADDER }, { s: w.lad, t: w.ladT }).t;
   return w;
+}
+
+// {stat: n} for the listed stats, positive finite values only, at one decimal.
+function cleanCounts(raw, stats) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const k of stats) if (Number.isFinite(raw[k]) && raw[k] > 0) out[k] = Math.min(COUNT_MAX, Math.round(raw[k] * 10) / 10);
+  return out;
+}
+
+// Mastery: {track: {s, t}} for known tracks; tiers never fall, and counters that already meet a goal complete it.
+function cleanMastery(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const track of MASTERY_TRACKS) {
+    const r = raw[track.id];
+    if (!isObj(r)) continue;
+    const entry = advance(track, { s: cleanCounts(r.s, track.stats), t: count(r.t, track.tiers.length) });
+    if (entry.t || Object.keys(entry.s).length) out[track.id] = entry;
+  }
+  return out;
+}
+
+// Skin ids look like 'skin:<operator>-<tier>' and must name the operator they are filed under; whether one exists and
+// is earned is for js/ui/progress.js, which can see the roster.
+const SHORT_ID = /^[a-z0-9_:.-]{1,40}$/i;
+const OPERATOR_IDS_HERE = new Set(MASTERY_OPERATORS.map(o => o[0]));
+function cleanSkins(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const op of Object.keys(raw)) {
+    const id = raw[op];
+    if (OPERATOR_IDS_HERE.has(op) && typeof id === 'string' && SHORT_ID.test(id) && id.startsWith(`skin:${op}-`)) out[op] = id;
+  }
+  return out;
+}
+
+// Lifetime counts: short keys, whole positive numbers, a bounded number of keys.
+const LIFE_KEY = /^[a-z0-9_.:-]{1,40}$/i;
+function cleanLife(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const k of Object.keys(raw).slice(0, 400)) if (LIFE_KEY.test(k) && !UNSAFE_KEYS.has(k) && Number.isFinite(raw[k]) && raw[k] > 0) out[k] = count(raw[k]);
+  return out;
+}
+
+// Adds one match's counts into the lifetime totals.
+export function addLife(save, counts = {}) {
+  const life = save.life ??= {};
+  for (const [k, n] of Object.entries(counts)) {
+    if (!LIFE_KEY.test(k) || UNSAFE_KEYS.has(k) || !Number.isFinite(n) || n <= 0) continue;
+    if (!(k in life) && Object.keys(life).length >= 400) continue;
+    life[k] = Math.min(COUNT_MAX, (life[k] ?? 0) + Math.round(n));
+  }
 }
 
 // Fresh loadout slots only ever start on guns available from level 1.
@@ -505,6 +978,11 @@ export function blankSave() {
     version: SAVE_VERSION, name: '', flags: {}, xp: 0, totalXp: 0, prestige: 0, peakLevel: 1,
     weapons: {}, loadouts: Array.from({ length: LOADOUT_COUNT }, (_, i) => cleanLoadout(null, i)), active: 0,
     pro: {}, proDone: [], card: 'yard',
+    mastery: {}, granted: [],
+    // Looks (save v4): the skin worn per operator and the player-card emblem, checked against what is earned where
+    // they are read (js/ui/progress.js); `life` is the lifetime sum of every match's ChallengeTally counts plus
+    // map:<id> and mapwon:<id>, for the map, mode and career cards.
+    skins: {}, emblem: null, life: {},
   };
 }
 
@@ -550,15 +1028,22 @@ export function sanitizeSave(raw) {
   const listed = Array.isArray(raw.proDone) ? raw.proDone : [];
   s.proDone = PERK_IDS.filter(id => listed.includes(id) || proStatus(id, s.pro, []).done);
   s.card = CARD_IDS.includes(raw.card) ? raw.card : 'yard';
+  s.mastery = cleanMastery(raw.mastery);
+  s.granted = Array.isArray(raw.granted) ? Object.keys(UNLOCK_CHALLENGES).filter(k => raw.granted.includes(k)) : [];
+  s.skins = cleanSkins(raw.skins);
+  s.emblem = typeof raw.emblem === 'string' && SHORT_ID.test(raw.emblem) ? raw.emblem : null;
+  s.life = cleanLife(raw.life);
   return s;
 }
 
-// Any stored save, of any version this build knows, to the current shape. v1 has no version field; v2 lacks only
-// the Pro and card fields, which sanitizeSave fills with defaults.
+// Any stored save, of any version this build knows, to the current shape. v1 has no version field; v2 lacks the Pro
+// and card fields and v3 the mastery ones, which sanitizeSave fills with defaults; anything before v4 is grandfathered
+// into the v4 unlock rules so nothing it had is lost.
 export function migrateSave(raw) {
   if (!isObj(raw)) return blankSave();
   if (!Number.isFinite(raw.version)) return migrateV1(raw);
-  return sanitizeSave(raw);
+  const s = sanitizeSave(raw);
+  return raw.version < 4 ? grandfather(s) : s;
 }
 
 // v1: {name, primary, camoByWeapon, kills, xp, flags, equipment}. Keeps name, XP, kills and every camo the
@@ -591,10 +1076,10 @@ export function migrateV1(v1) {
   if (s.xp > 0 || totalKills > 0) s.peakLevel = Math.max(s.peakLevel, V1_GRANT_LEVEL);
   const primary = PRIMARY_IDS.includes(src.primary) ? src.primary : undefined;
   s.loadouts[0] = cleanLoadout({ ...(isObj(src.equipment) ? src.equipment : {}), primary, name: DEFAULT_NAMES[0] }, 0);
-  return s;
+  return grandfather(s);
 }
 
-/* ---------- Export code: "SY3.<base64url>.<checksum>" (SY2 codes still import) ---------- */
+/* ---------- Export code: "SY4.<base64url>.<checksum>" (SY2 and SY3 codes still import) ---------- */
 const CODE_MAX = 32768;
 
 function fnv1a(str) {
@@ -624,10 +1109,13 @@ const GUN_STATS = ['xp', 'peak', 'prestige', 'kills', 'head', 'long', 'slide', '
 function pack(s) {
   return [
     s.version, s.name, s.xp, s.totalXp, s.prestige, s.peakLevel, s.active,
-    Object.entries(s.weapons).map(([id, w]) => [id, ...GUN_STATS.map(k => w[k]), w.owned, w.camo, w.tracer, w.killFx]),
+    Object.entries(s.weapons).map(([id, w]) => [id, ...GUN_STATS.map(k => w[k]), w.owned, w.camo, w.tracer, w.killFx, LADDER_STATS.map(k => w.lad?.[k] ?? 0), w.ladT ?? 0]),
     s.loadouts.map(l => [l.name, l.primary, l.secondary, l.attachments, l.perks, l.tactical, l.lethal, l.streaks, l.operator]),
     PERK_IDS.filter(id => s.pro?.[id]).map(id => [id, PRO_CHALLENGES[id].map(c => s.pro[id][c.stat] ?? 0)]),
     s.proDone ?? [], s.card ?? 'yard',
+    // v4 tail: mastery counters by track (stats in the track's order), grandfathered unlocks, skins, emblem, lifetime.
+    MASTERY_TRACKS.filter(t => s.mastery?.[t.id]).map(t => [t.id, s.mastery[t.id].t, t.stats.map(k => s.mastery[t.id].s[k] ?? 0)]),
+    s.granted ?? [], Object.entries(s.skins ?? {}), s.emblem ?? null, Object.entries(s.life ?? {}),
   ];
 }
 
@@ -639,7 +1127,9 @@ function unpack(a) {
     if (!Array.isArray(g) || !idText(g[0])) continue;
     const w = {};
     GUN_STATS.forEach((k, i) => { w[k] = g[i + 1]; });
-    [w.owned, w.camo, w.tracer, w.killFx] = g.slice(GUN_STATS.length + 1);
+    let ladder;
+    [w.owned, w.camo, w.tracer, w.killFx, ladder, w.ladT] = g.slice(GUN_STATS.length + 1);
+    if (Array.isArray(ladder)) w.lad = Object.fromEntries(LADDER_STATS.map((k, i) => [k, ladder[i]]));
     weapons[g[0]] = w;
   }
   // v3 tail: Pro counters by step, finished perks, the calling card. A v2 code simply has none of it.
@@ -648,8 +1138,17 @@ function unpack(a) {
     if (!Array.isArray(row) || !PRO_CHALLENGES[row[0]] || !Array.isArray(row[1])) continue;
     pro[row[0]] = Object.fromEntries(PRO_CHALLENGES[row[0]].map((c, i) => [c.stat, row[1][i]]));
   }
+  const mastery = {};
+  for (const row of Array.isArray(a[12]) ? a[12] : []) {
+    const track = Array.isArray(row) ? getTrack(row[0]) : null;
+    if (!track || !Array.isArray(row[2])) continue;
+    mastery[track.id] = { t: row[1], s: Object.fromEntries(track.stats.map((k, i) => [k, row[2][i]])) };
+  }
   return {
-    version, name, xp, totalXp, prestige, peakLevel, active, weapons,
+    version, name, xp, totalXp, prestige, peakLevel, active, weapons, mastery, granted: a[13],
+    skins: Array.isArray(a[14]) ? Object.fromEntries(a[14].filter(e => Array.isArray(e) && typeof e[0] === 'string' && !UNSAFE_KEYS.has(e[0]))) : {},
+    emblem: a[15],
+    life: Array.isArray(a[16]) ? Object.fromEntries(a[16].filter(e => Array.isArray(e) && typeof e[0] === 'string' && !UNSAFE_KEYS.has(e[0]))) : {},
     loadouts: loadouts.map(l => (Array.isArray(l) ? { name: l[0], primary: l[1], secondary: l[2], attachments: l[3], perks: l[4], tactical: l[5], lethal: l[6], streaks: l[7], operator: l[8] } : null)),
     pro, proDone: a[10], card: a[11],
   };
@@ -675,7 +1174,7 @@ export function decodeSave(code) {
     return { ok: false, error: 'data' };
   }
   if (!parsed || parsed.version !== version) return { ok: false, error: 'data' };
-  return { ok: true, save: sanitizeSave(parsed) };
+  return { ok: true, save: migrateSave(parsed) };
 }
 
 /* ---------- Prestige badges ---------- */

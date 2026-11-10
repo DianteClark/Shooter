@@ -14,6 +14,7 @@ import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { prestigeWeaponNow, kindLabel } from './prestige.js';
 import { ico, backButton } from './yard.js';
 import { flash, pop, stagger } from './motion.js';
+import { masteryBadge } from './mastery.js';
 
 const STOCK = 'stock';
 
@@ -36,7 +37,8 @@ function rangeStripHtml(r) {
     + seg(0, r.fullF, hi) + seg(r.fullF, r.fadeF, `linear-gradient(90deg,${hi},${lo})`) + seg(r.fadeF, r.maxF, lo)
     + `<i style="position:absolute;top:0;bottom:0;left:${pct(r.maxF)};width:2px;margin-left:-1px;background:#fff"></i>` + ticks + `</div>`;
 }
-const TABS = [['attach', 'Attach', 'optic'], ['camo', 'Camo', 'camo'], ['fx', 'Effects', 'new'], ['prestige', 'Prestige', 'prestige']];
+const TABS = [['attach', 'Attach', 'optic'], ['camo', 'Camo', 'camo'], ['fx', 'Effects', 'new'], ['mastery', 'Mastery', 'star'], ['prestige', 'Prestige', 'prestige']];
+const REWARD_ICON = { xp: 'star', badge: 'star', card: 'flag', camos: 'camo' };
 
 export class Gunsmith {
   constructor(menu, { loadoutIndex = Progress.activeLoadout, weapon, onBack, onChange, onRename }) {
@@ -392,6 +394,7 @@ export class Gunsmith {
     if (this.tab === 'attach') this.renderAttach();
     else if (this.tab === 'camo') this.renderCamos();
     else if (this.tab === 'fx') this.renderFx();
+    else if (this.tab === 'mastery') this.renderMastery();
     else this.renderPrestige();
     this.paintPanelState();
   }
@@ -462,6 +465,27 @@ export class Gunsmith {
     this.bodyEl.innerHTML = `
       <h4>Tracer</h4>${grid('tracer', Progress.tracers(w))}
       <h4>Kill effect</h4>${grid('killFx', Progress.killEffects(w))}`;
+  }
+
+  // The ladder past level 30: five goals in order, what each pays, and the mastery camos at the end of it.
+  renderMastery() {
+    const st = Progress.weaponLadder(this.weapon), lv = Progress.weaponLevel(this.weapon);
+    const chal = Progress.challenges(this.weapon), chalDone = chal.filter(c => c.done).length;
+    this.bodyEl.innerHTML = `
+      <h4>Mastery ladder <small>${st.open ? `tier ${st.tier} of ${st.count}` : `opens at level ${MAX_WEAPON_LEVEL}`}</small></h4>
+      <div class="gs-ladder${st.open ? '' : ' locked'}">
+        ${st.tiers.map((c, i) => {
+          const state = c.done ? 'done' : st.open && i === st.tier ? 'now' : 'later';
+          const f = c.done ? 1 : state === 'now' ? c.value / c.goal : 0;
+          return `<div class="gl-row ${state}">
+            <span class="gl-n">${ROMAN[i + 1]}</span>
+            <span class="gl-goal"><b>${esc(c.label)}</b><i class="m-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i></span>
+            <span class="gl-rw">${c.rewards.map(r => `<i title="${esc(r.name)}">${r.kind === 'badge' ? masteryBadge(this.weapon, Number(r.id.slice(-1)), { size: 16 }) : ico(REWARD_ICON[r.kind] ?? 'star')}</i>`).join('')}<small>${state === 'now' ? `${c.value}/${c.goal}` : c.done ? 'Done' : c.rewards.find(r => r.xp) ? `+${c.rewards.find(r => r.xp).xp.toLocaleString('en-US')}` : ''}</small></span>
+          </div>`;
+        }).join('')}
+      </div>
+      <p class="wp-note">${st.maxed ? (chalDone === chal.length ? 'Ladder done: the mastery camos are yours to earn.' : `Ladder done. Camo challenges ${chalDone}/${chal.length} open the mastery camos.`)
+        : st.open ? 'Each tier counts only past level 30. The last one opens the mastery camos.' : `Reach level ${MAX_WEAPON_LEVEL} to start the ladder. Now level ${lv}.`}</p>`;
   }
 
   renderPrestige() {
@@ -545,7 +569,8 @@ export class Gunsmith {
         const c = getCamo(Progress.camo(this.weapon)), all = Progress.challenges(this.weapon);
         const done = all.filter(x => x.done).length;
         title = c.name;
-        desc = `Challenges ${done}/${all.length}. Finish them all for mastery camos.`;
+        const lad = Progress.weaponLadder(this.weapon);
+        desc = `Challenges ${done}/${all.length}, mastery ladder ${lad.tier}/${lad.count}. Both open the mastery camos.`;
       } else {
         const c = getCamo(id), locked = !Progress.isUnlocked(this.weapon, id);
         title = c.name;
@@ -573,6 +598,10 @@ export class Gunsmith {
         else if ((t.kind === 'tracer' ? Progress.tracer(this.weapon) : Progress.killFx(this.weapon)) === t.id) desc = 'Equipped on this weapon.';
         else { desc = 'Tap again to apply.'; action = 'Apply'; enabled = true; }
       }
+    } else if (this.tab === 'mastery') {
+      const st = Progress.weaponLadder(this.weapon);
+      title = st.maxed ? 'Mastered' : st.open ? `Tier ${ROMAN[st.tier + 1]}: ${st.next.label}` : 'Mastery ladder';
+      desc = st.maxed ? 'Every tier on this weapon is done.' : st.open ? `${st.next.value} of ${st.next.goal}` : `Opens at weapon level ${MAX_WEAPON_LEVEL}`;
     } else {
       const w = this.weapon, cur = Progress.weaponPrestige(w), can = Progress.canPrestigeWeapon(w);
       title = can ? `Rank ${ROMAN[cur + 1]} ready` : cur >= MAX_WEAPON_PRESTIGE ? 'Top rank' : 'Prestige';

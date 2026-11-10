@@ -10,6 +10,7 @@ import { castRay } from '../render/fog.js';
 import { setThemeLighting } from '../render/art.js';
 import { MAPS, MAP_IDS } from '../shared/map.js';
 import { OPERATOR_IDS } from './operators.js';
+import { currentSkin } from './cards.js';
 
 const ROTATION_KEY = 'switchyard-backdrop';
 const FADE_MS = 900;                 // The yard fades up from black once its first frame is drawn.
@@ -184,7 +185,7 @@ export class MenuBackdrop {
     const op = this.loadout?.operator ?? OPERATOR_IDS[0];
     const seed = (this.mapId?.length ?? 0) + 3;
     return [
-      { id: 'bd-hero', operator: op },
+      { id: 'bd-hero', operator: op, skin: this.loadout?.skin ?? currentSkin(op) },
       { id: 'bd-mate0', operator: OPERATOR_IDS[seed % OPERATOR_IDS.length] },
       { id: 'bd-mate1', operator: OPERATOR_IDS[(seed + 4) % OPERATOR_IDS.length] },
     ];

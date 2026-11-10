@@ -258,3 +258,146 @@
 #ui .hs-stats .ico { height: 15px; }
 #ui .hs-bar .hs-stats { margin-left: auto; }
 #ui .hs-bar .hs-count + .hs-stats { margin-left: 0; }
+
+/* ---- Mastery (save v4): badges, pips and chips where items are picked, the Mastery screen, the gunsmith ladder,
+   the results strip and the tier-up card. js/ui/mastery.js. ------------------------------------------------------- */
+.mb { position: relative; flex: none; width: var(--mb); height: var(--mb); display: inline-grid; place-items: center; color: var(--c-haze); line-height: 0; }
+.mb > svg:first-child { position: absolute; inset: 0; width: 100%; height: 100%; }
+#ui .mb > .ico { position: relative; width: auto; max-width: 66%; }
+.mb.g1 { color: #f2c08a; }
+.mb.g2 { color: #fff1b0; filter: drop-shadow(0 0 4px rgba(255,214,89,.45)); }
+
+/* Tier pips along a picker card's bottom edge (mirrors the Pro strip), and inline in mastery cards. */
+.m-pips { display: flex; gap: 3px; height: 3px; pointer-events: none; }
+.m-pips i { position: relative; flex: 1; background: rgba(231,234,228,.13); overflow: hidden; }
+.m-pips i::after { content: ''; position: absolute; inset: 0; background: var(--c-blue, #4aa8ff); transform-origin: left; transform: scaleX(var(--f)); }
+.m-pips.done i::after { background: var(--c-gold); }
+#ui .pk-card > .m-pips, #ui .ld-tile > .m-pips { position: absolute; left: 10px; right: 14px; bottom: 2px; }
+.m-chip { display: inline-flex; flex-direction: column; gap: 3px; min-width: 70px; }
+.m-chip b { font: 400 9.5px/1 var(--f-plate); letter-spacing: .08em; text-transform: uppercase; color: var(--c-haze); }
+.m-chip.done b { color: var(--c-gold); }
+.m-bar { position: relative; display: block; height: 4px; background: rgba(231,234,228,.12); overflow: hidden; }
+.m-bar > i { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; }
+
+/* Loadout sheet head: the focused item's mastery, in the place the Pro detail takes for perks. */
+#ui .ld-sheet-head .m-detail { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); column-gap: 10px; row-gap: 3px; align-items: center; padding: 3px 8px; background: rgba(29,35,43,.7); box-shadow: inset 2px 0 0 var(--c-blue, #4aa8ff); }
+#ui .m-detail.done { box-shadow: inset 2px 0 0 var(--c-gold); }
+.m-detail-top { grid-row: 1 / span 2; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; align-items: center; min-width: 0; }
+.m-detail-top .mb { grid-row: 1 / span 2; }
+#ui .m-detail-top b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .m-detail-top em { font: 400 9.5px/1 var(--f-plate); font-style: normal; letter-spacing: .08em; text-transform: uppercase; color: var(--c-haze); }
+#ui .m-detail.done .m-detail-top em { color: var(--c-gold); }
+.m-detail-goal { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; row-gap: 2px; align-items: baseline; min-width: 0; }
+#ui .m-detail-goal small { font: 400 10px/1.1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .m-detail-goal u { text-decoration: none; font: 400 10px/1 var(--f-plate); color: var(--c-sodium); }
+.m-detail-goal .m-bar { grid-column: 1 / span 2; height: 3px; }
+.m-detail-rw { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+#ui .m-detail-done { grid-column: 2; font: 400 10px/1.2 var(--f-body); color: var(--c-haze); }
+
+/* Reward chips: XP, badge, card, skin, camos. */
+.m-rw { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px 2px 3px; min-width: 0; background: rgba(16,20,26,.55); box-shadow: inset 0 0 0 1px var(--c-line, rgba(231,234,228,.12)); color: var(--c-haze); }
+#ui .m-rw .ico { height: 12px; width: auto; flex: none; color: var(--c-sodium); }
+#ui .m-rw small { font: 400 9px/1 var(--f-plate); letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+.m-rw.got { color: var(--c-chalk); box-shadow: inset 0 0 0 1px rgba(255,214,89,.45); }
+.m-rw.k-card .ico, .m-rw.k-skin .ico { color: var(--c-gold); }
+
+/* ---- The Mastery screen --------------------------------------------------------------------------------------- */
+#ui .menu[data-screen="mastery"] { gap: var(--sp-2); --menu-scrim: radial-gradient(110% 90% at 30% 0%, rgba(32,40,62,.95), rgba(16,20,26,.97) 70%); }
+.m-wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: var(--sp-4); }
+.m-side { min-height: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.m-total { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); background: var(--face-steel); box-shadow: var(--bevel), var(--edge), inset 3px 0 0 var(--c-gold); --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.m-total b { font: 400 34px/1 var(--f-stencil); color: var(--c-gold); }
+.m-total b small { font-size: 16px; }
+.m-total span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+#ui .m-total span small { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
+.m-total .m-bar > i { background: var(--c-gold); }
+.m-tabs { display: flex; flex-direction: column; gap: 4px; }
+.m-tab { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 34px; padding: 0 var(--sp-3); color: var(--c-haze); background: rgba(29,35,43,.75); box-shadow: var(--edge); --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); transition: transform var(--dur-fast) var(--ease-out); }
+.m-tab b { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); }
+#ui .m-tab small { font: 400 var(--fs-caption)/1 var(--f-plate); color: var(--c-rail, #8a96a0); }
+.m-tab.on { color: var(--c-night); background: var(--face-sodium, var(--c-sodium)); box-shadow: var(--bevel-sodium, none); }
+#ui .m-tab.on small { color: rgba(16,20,26,.75); }
+.m-tab:active { transform: scale(.97); }
+.m-case { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; padding: var(--sp-2); background: rgba(16,20,26,.45); box-shadow: inset 0 0 0 1px var(--c-line, rgba(231,234,228,.1)); overflow: hidden; }
+#ui .m-case > small { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+.m-case-grid { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+#ui .m-case-grid em { font: 400 10.5px/1.25 var(--f-body); font-style: normal; color: var(--c-rail, #8a96a0); }
+.m-grid { min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 64px; gap: var(--sp-2); padding-bottom: var(--sp-3); }
+.m-card { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); text-align: left; color: var(--c-chalk); background: var(--face-steel); box-shadow: var(--bevel), var(--edge); --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); transition: transform var(--dur-fast) var(--ease-out); }
+.m-card:active { transform: scale(.98); }
+.m-card.done { box-shadow: var(--bevel), inset 0 0 0 1.5px rgba(255,214,89,.6); }
+.m-card.locked { opacity: .62; }
+.m-card-tx { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.m-card-tx b { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .m-card-tx small { font: 400 11px/1.1 var(--f-body); color: #c9cfd4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-card-prog { display: flex; align-items: center; gap: 6px; }
+.m-card-prog .m-pips { flex: 1; height: 4px; }
+.m-card-prog u { text-decoration: none; font: 400 10px/1 var(--f-plate); color: var(--c-sodium); white-space: nowrap; }
+.m-card-tier { font: 400 24px/1 var(--f-stencil); font-style: normal; color: var(--c-chalk); }
+.m-card-tier small { font-size: 12px; color: var(--c-haze); }
+.m-card.done .m-card-tier { color: var(--c-gold); }
+
+/* The detail sheet: every tier of a track. */
+#ui .m-sheet { width: min(620px, 100%); max-height: 100%; gap: var(--sp-2); padding: var(--sp-5) var(--sp-5) var(--sp-4); }
+.m-sheet-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-3); }
+#ui .m-sheet-head small { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+#ui .m-sheet-head h2 { font-size: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-sheet-head em { font: 400 var(--fs-body)/1 var(--f-plate); font-style: normal; color: var(--c-sodium); white-space: nowrap; }
+#ui .m-sheet-note { display: flex; align-items: center; gap: 6px; font-size: var(--fs-body); }
+#ui .m-tiers { min-height: 0; display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+#ui .m-tier { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; gap: var(--sp-3); min-height: 44px; padding: 4px var(--sp-3) 4px 0; background: rgba(16,20,26,.45); box-shadow: inset 0 0 0 1px var(--c-line, rgba(231,234,228,.1)); }
+.m-tier-n { align-self: stretch; display: grid; place-items: center; font: 400 15px/1 var(--f-stencil); color: var(--c-haze); background: rgba(231,234,228,.06); }
+.m-tier-goal { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ui .m-tier-goal b { font: 400 12.5px/1.15 var(--f-body); color: var(--c-chalk); }
+.m-tier-goal > span { display: flex; align-items: center; gap: 6px; }
+.m-tier-goal .m-bar { flex: 1; }
+.m-tier-goal u { text-decoration: none; font: 400 10px/1 var(--f-plate); color: var(--c-haze); white-space: nowrap; }
+.m-tier-rw { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; min-width: 0; }
+.m-tier.done .m-tier-n { color: var(--c-night); background: var(--c-gold); }
+.m-tier.done .m-bar > i { background: var(--c-gold); }
+.m-tier.now { box-shadow: inset 0 0 0 1.5px var(--c-sodium); }
+.m-tier.now .m-tier-n { color: var(--c-sodium); }
+.m-tier.now u { color: var(--c-sodium); }
+.m-tier.later { opacity: .7; }
+
+/* ---- Gunsmith: the mastery ladder tab ---------------------------------------------------------------------- */
+.gs-ladder { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+.gl-row { flex: 1; min-height: 0; max-height: 40px; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding-right: 6px; background: rgba(16,20,26,.45); }
+.gl-n { align-self: stretch; display: grid; place-items: center; font: 400 12px/1 var(--f-stencil); color: var(--c-haze); background: rgba(231,234,228,.06); }
+.gl-goal { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ui .gl-goal b { font: 400 10.5px/1.1 var(--f-body); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-goal .m-bar { height: 3px; }
+.gl-rw { display: flex; align-items: center; gap: 3px; }
+.gl-rw > i { display: grid; place-items: center; line-height: 0; color: var(--c-sodium); }
+#ui .gl-rw .ico { height: 12px; width: auto; }
+#ui .gl-rw small { min-width: 38px; text-align: right; font: 400 9.5px/1 var(--f-plate); color: var(--c-haze); }
+.gl-row.done .gl-n { color: var(--c-night); background: var(--c-gold); }
+.gl-row.done .m-bar > i { background: var(--c-gold); }
+.gl-row.now { box-shadow: inset 0 0 0 1px var(--c-sodium); }
+#ui .gl-row.now small { color: var(--c-sodium); }
+.gs-ladder.locked .gl-row { opacity: .6; }
+
+/* ---- Results: the strip and the tier-up card -------------------------------------------------------------- */
+#ui .rs-mastery { box-shadow: inset 2px 0 0 var(--c-gold); }
+#ui .rs-mastery .rs-ch-h { color: var(--c-gold); }
+#ui .rs-mastery .rs-ch-row b em { font-style: normal; color: var(--c-gold); }
+#ui .rs-mastery .rs-ch-row.done b, #ui .rs-mastery .rs-ch-row.done small { color: var(--c-gold); }
+#ui .rs-mastery .rs-ch-row.done .rs-ch-bar::after { background: var(--c-gold); }
+#ui .rx-mastery { gap: 5px; }
+#ui .rx-mastery .rx-kick { color: var(--c-gold); }
+#ui .rx-mastery h2 { font-size: 46px; }
+#ui .rx-m-mark { position: relative; min-height: 0; }
+.rx-m-tier { position: absolute; right: -10px; bottom: -4px; padding: 3px 7px; font: 400 18px/1 var(--f-stencil); font-style: normal; color: var(--c-night); background: var(--c-gold); }
+#ui .rx-m-card { display: block; margin-top: 4px; animation: rx-stamp .45s .25s var(--ease-snap) both; }
+.rx-m-rw { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-top: 2px; }
+#ui .rx-m-rw .m-rw small { font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { #ui .rx-m-card { animation: none; } }
+/* Service record header: the way into the Mastery screen. */
+#ui .pf-mastery { margin-left: auto; min-height: 36px; padding: 0 var(--sp-3); gap: 6px; }
+#ui .pf-mastery small { font: 400 var(--fs-caption)/1 var(--f-plate); color: var(--c-gold); }
+/* Gunsmith: five tabs with the Mastery one, so each stacks its icon over a smaller label to fit one row. */
+#ui .gs-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#ui .gs-tab { flex-direction: column; gap: 2px; font-size: 10px; min-width: 0; }
+#ui .gs-tab .ico { height: 13px; }
+#ui .gs-tab b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ui .rs-mastery .rs-ch-h .ico { height: 10px; width: auto; }

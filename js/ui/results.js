@@ -5,13 +5,14 @@ import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
-import { matchScore } from './progress.js';
+import { matchScore, Progress } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, ROMAN } from './widgets.js';
 import { kindLabel } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
 import { playerBanner, proProgressHtml, unlockStamp } from './cards.js';
 import { challengeStamp, challengeStrip } from './challenges.js';
+import { masteryStamp, masteryStrip } from './mastery.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
@@ -242,8 +243,10 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   }
   // Challenges and Pro challenges get a card of their own, so Rematch and Menu always keep their column. A single row
   // would leave that card nearly empty, so one row sits over the buttons instead, where it fits on every phone.
-  const progress = challengeStrip(data.challenges) + proProgressHtml(data.proProgress);
-  const progressRows = Math.min(3, data.challenges?.length ?? 0) + Math.min(2, data.proProgress?.length ?? 0);
+  // Mastery tracks that moved: main.js may pass them as data.mastery; MatchAwards also leaves them with Progress.
+  const mastery = data.mastery ?? Progress.lastMastery();
+  const progress = challengeStrip(data.challenges) + proProgressHtml(data.proProgress) + masteryStrip(mastery);
+  const progressRows = Math.min(3, data.challenges?.length ?? 0) + Math.min(2, data.proProgress?.length ?? 0) + Math.min(3, mastery?.length ?? 0);
   const progCard = progressRows > 1;
 
   menu.el.innerHTML = `
@@ -384,7 +387,8 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, them
 }
 
 function unlockCard(u) {
-  const special = unlockStamp(u) ?? challengeStamp(u);     // Pro perks and calling cards have their own ceremony (js/ui/cards.js).
+  // Pro perks and calling cards have their own ceremony (js/ui/cards.js), mastery tiers theirs (js/ui/mastery.js).
+  const special = unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u);
   if (special) return special;
   let mark;
   if (u.kind === 'camo') {
@@ -396,7 +400,7 @@ function unlockCard(u) {
     mark = `<span class="rx-mark${isGun ? ' gun' : ''}">${art(id, isGun ? 56 : 84) || art('ui:new', 84)}</span>`;
   }
   const label = u.kind === 'weapon' ? 'Weapon' : kindLabel(u.kind);
-  const sub = u.weaponName ? `${u.slot ? `${SLOT_LABEL[u.slot] ?? ''} for ` : 'For '}${u.weaponName}` : u.level ? `Level ${u.level} reward` : '';
+  const sub = u.weaponName ? `${u.slot ? `${SLOT_LABEL[u.slot] ?? ''} for ` : 'For '}${u.weaponName}` : u.level ? `Level ${u.level} reward` : u.req ? `Challenge done: ${u.req}` : '';
   return `
     <div class="rx-card rx-unlock">
       ${mark}

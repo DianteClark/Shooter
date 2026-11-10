@@ -1011,8 +1011,8 @@ export class HUD {
           slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : '';
         }
         slot.lv.textContent = badge?.level ?? '';
-        const vet = !!identityOf(p.id)?.vet;
-        if (vet !== slot.vetOn) { slot.vetOn = vet; slot.vet.innerHTML = vetTag(vet, { short: true }); }
+        const id = identityOf(p.id), vet = !!id?.vet, mark = `${vet}:${id?.emblem ?? ''}`;
+        if (mark !== slot.vetOn) { slot.vetOn = mark; slot.vet.innerHTML = vetTag(vet, { short: true, emblem: id?.emblem }); }
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
@@ -1041,8 +1041,8 @@ export class HUD {
         const rank = badge?.prestige ?? -1;
         if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : ''; }
         slot.lv.textContent = badge?.level ?? '';
-        const vet = !!identityOf(p.id)?.vet;
-        if (vet !== slot.vetOn) { slot.vetOn = vet; slot.vet.innerHTML = vetTag(vet, { short: true }); }
+        const id = identityOf(p.id), vet = !!id?.vet, mark = `${vet}:${id?.emblem ?? ''}`;
+        if (mark !== slot.vetOn) { slot.vetOn = mark; slot.vet.innerHTML = vetTag(vet, { short: true, emblem: id?.emblem }); }
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
@@ -2026,7 +2026,7 @@ export class HUD {
     const who = k?.name ? identityOf(k.id) : null;
     this.deathBy.innerHTML = k?.name
       ? `${cardHtml(who?.card ?? 'yard', { size: 236, title: k.name, sub: '' })}
-         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 16)}</i><u>Lv ${k.badge.level ?? ''}</u>` : ''}${vetTag(!!who?.vet)}</span>`
+         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 16)}</i><u>Lv ${k.badge.level ?? ''}</u>` : ''}${vetTag(!!who?.vet, { emblem: who?.emblem })}</span>`
       : '<em>Eliminated</em>';
     this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : 'Killed by') : 'Down';
     this.dcIcon.innerHTML = k ? glyph(k.icon, 20) : '';

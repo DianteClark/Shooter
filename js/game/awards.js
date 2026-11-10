@@ -5,16 +5,23 @@
 // and Pro perks and calling cards earned in `unlocks` (kinds 'pro' and 'card', first in the list).
 // Daily and weekly challenges (ChallengeTally) are settled here as well: their XP is part of the match's XP lines, and the
 // result carries `challenges` (what moved, see applyChallengeTally). The match also goes into the history (`history`).
+// Mastery (MasteryTracker): every tactical, lethal, streak and operator track and each gun's ladder past level 30. Tiers
+// finished pay XP as a line of the match, come back first in `unlocks` (kind 'mastery'), and `mastery` lists what moved.
 // `practice = true` (the tutorial) makes finish() record and pay nothing. observe(fn) hands fn(events, view) every
 // frame's events after the awards have seen them, for the tutorial's prompts.
 import { Progress, Challenges, MatchHistory, matchScore } from '../ui/progress.js';
-import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally } from '../shared/progression.js';
+import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally, MasteryTracker } from '../shared/progression.js';
+import { landingOf, maxThrowRange } from '../sim/equipment.js';
+import { MAPS } from '../shared/map.js';
 import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa } from '../shared/modes.js';
 
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const GUN_SECONDS = 3;           // Held at least this long counts as a gun used, for the history.
 const HISTORY_GUNS = 4;
+// A throw banked off a wall ends up off its aim line, or well short of where it was thrown on open ground.
+const BANK_SIDE = 0.75;
+const BANK_SHORT = 1.5;
 
 export class MatchAwards {
   constructor({ localId, team, loadout }) {
@@ -34,6 +41,7 @@ export class MatchAwards {
     this.usedEquipment = false;    // This life, for equipment-free kills.
     this.pro = new ProTracker(localId, loadout?.perks ?? Progress.loadout().perks);
     this.tally = new ChallengeTally(localId);
+    this.mastery = new MasteryTracker(localId, { loadout: loadout ?? Progress.loadout(), bounced: e => this.#banked(e) });
     this.held = {};                // weapon id -> seconds in hand while alive in the live phase
     this.live = 0;
     this.lastT = null;
@@ -45,6 +53,18 @@ export class MatchAwards {
   }
 
   observe(fn) { this.observers.push(fn); }
+
+  // Runs a throw through the shared throw preview on this match's map (the same flight the sim flies).
+  #banked(e) {
+    const map = MAPS[this.mapId];
+    if (!map) return false;
+    const perks = Progress.loadout().perks;
+    const dist = Math.min(e.dist ?? 0, maxThrowRange(perks));
+    const end = landingOf(map, e.ox, e.oz, e.aim, dist, e.kind, perks, Progress.proPerks());
+    if (!end) return false;
+    const dx = end.x - e.ox, dz = end.z - e.oz, c = Math.cos(e.aim), s = Math.sin(e.aim);
+    return Math.abs(-dx * s + dz * c) > BANK_SIDE || dx * c + dz * s < dist - BANK_SHORT;
+  }
 
   #bucket(weapon) {
     return this.weapons[weapon] ??= { xp: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0 };
@@ -78,9 +98,10 @@ export class MatchAwards {
 
   onEvents(events, view) {
     if (this.result) return;
+    this.#clock(view);
     this.pro.onEvents(events, view);
     this.tally.onEvents(events, view);
-    this.#clock(view);
+    try { this.mastery.onEvents(events, view); } catch (err) { console.error('mastery', err); }
     for (const e of events) {
       switch (e.t) {
         case 'kill':
@@ -92,7 +113,12 @@ export class MatchAwards {
           break;
         case 'spawn':
           // A loadout picked on the death screen applies from this spawn, and so do its perks' challenges.
-          if (e.id === this.localId) { this.usedEquipment = false; this.pro.setPerks(Progress.loadout().perks); }
+          if (e.id === this.localId) {
+            this.usedEquipment = false;
+            const l = Progress.loadout();
+            this.pro.setPerks(l.perks);
+            this.mastery.setLoadout(l);
+          }
           break;
         case 'throw':
         case 'heal':
@@ -154,7 +180,8 @@ export class MatchAwards {
     const won = place !== null ? place === 1 : view?.winner === this.team;
     const drawn = place === null && (view?.winner === null || view?.winner === undefined);
     if (this.practice) {
-      this.result = { xp: { total: 0, lines: [] }, weapons: [], unlocks: [], proProgress: [], challenges: [], medals: { ...this.medals }, stats: {}, practice: true };
+      Progress.lastMastery([]);
+      this.result = { xp: { total: 0, lines: [] }, weapons: [], unlocks: [], proProgress: [], challenges: [], mastery: [], medals: { ...this.medals }, stats: {}, practice: true };
       return this.result;
     }
     const lines = [['Match played', MATCH_XP.played]];
@@ -165,18 +192,27 @@ export class MatchAwards {
     if (won) lines.push(['Win', MATCH_XP.win]);
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
     // Challenges settle first so the XP they pay is part of this match's total. A failure here costs only them.
-    let challenges = [];
+    let challenges = [], tallied = null;
     try {
-      const settled = Challenges.apply(this.tally.finish({ won, place }));
+      tallied = this.tally.finish({ won, place });
+      const settled = Challenges.apply(tallied);
       challenges = settled.moved;
       for (const period of ['daily', 'weekly']) {
         const done = challenges.filter(c => c.fresh && c.period === period);
         if (done.length) lines.push([`${period === 'daily' ? 'Daily' : 'Weekly'} challenge${done.length > 1 ? ` x${done.length}` : ''}`, done.reduce((n, c) => n + c.xp, 0)]);
       }
     } catch (err) { console.error('challenges', err); }
+    // Mastery tiers this match finishes pay their XP here too; the save itself changes in applyMatch.
+    let mastery = {};
+    try {
+      mastery = this.mastery.finish({ won });
+      const tierXp = Progress.masteryXp(mastery);
+      if (tierXp > 0) lines.push(['Mastery tiers', tierXp]);
+    } catch (err) { console.error('mastery', err); mastery = {}; }
     const total = lines.reduce((sum, l) => sum + l[1], 0);
 
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains() });
+    // Lifetime totals take the same counts the challenges do, plus where it was played and whether it was won.
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life: tallied ?? this.tally.counts(), mapId: this.mapId, won });
     const outcome = won ? 'win' : drawn ? 'draw' : 'loss';
     let history = null;
     try { history = MatchHistory.add(this.#historyEntry(view, me, outcome, place, total, applied.level, challenges)); } catch (err) { console.error('match history', err); }
@@ -186,6 +222,7 @@ export class MatchAwards {
       weapons: applied.weapons,
       unlocks: applied.unlocks,
       proProgress: applied.proProgress,
+      mastery: applied.mastery,
       challenges,
       place,
       history,

@@ -9,7 +9,7 @@ import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
 import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
 import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
-import { OPERATORS, DEFAULT_OPERATOR } from '../ui/operators.js';
+import { OPERATORS, DEFAULT_OPERATOR, SKINS, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
@@ -25,6 +25,7 @@ const CULL_MARGIN = 3;       // Metres outside the camera's ground footprint a s
 const LOD_FAR = 13, LOD_BACK = 11.5;
 const FULL_MAX = 10;         // And only the ten nearest the focus get the full meshes, however many crowd the screen.
 const TAU = Math.PI * 2;
+const NO_GEAR = [0, 0, 0, 0];
 
 const CHAR_SCALE = 1.22;
 const GUN_SCALE = 0.98;
@@ -49,13 +50,18 @@ const HOLD_NONE = [0, 0, 0];
 const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke: [0.35, 0.6, 0.42], flash: [0.85, 0.8, 0.45], stim: [0.3, 0.7, 0.5] };
 
 // Operators are told apart by vertex data merged into one mesh per body part: every vertex carries the
-// variant it belongs to (aVar) and each instance says which variant to show (aOp). Vertices of other variants
+// variant it belongs to (aVar) and each instance says which variant to show (aOp.x). Vertices of other variants
 // are thrown outside clip space, so nine operators cost the same draw calls as one.
+// Skins ride on the same instances: aOp.y is the gear slot plus 4 x the glow mode, aSkin the gear recolour (rgb,
+// strength) and, on torsos and heads, aTint the accent colour (zero keeps the baked one). aVar's upper part is the
+// vertex tag (see tag() below).
 const CHAR_VERT = /* glsl */`
+uniform float uTime;
 attribute vec3 aCol;
 attribute float aPart;
 attribute float aVar;
-attribute float aOp;
+attribute vec2 aOp;
+attribute vec4 aSkin;
 attribute vec3 aTeam;
 attribute vec3 aTint;
 attribute vec2 aFx;
@@ -64,14 +70,48 @@ varying vec3 vLight;
 varying vec2 vFx;
 ${GLSL_LIGHT}
 void main() {
-  if (abs(aVar - aOp) > 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vCol = vec3(0.0); vLight = vec3(0.0); vFx = vec2(0.0); return; }
+  float tag = floor(aVar / 16.0 + 0.001);
+  float variant = aVar - tag * 16.0;
+  float slot = mod(aOp.y, 4.0);
+  float glow = floor(aOp.y / 4.0 + 0.001);
+  float showM = mod(floor(tag / 4.0), 4.0);
+  float hideM = floor(tag / 16.0);
+  // Bit k-1 of a mask is gear slot k (1 elite, 2 mastery).
+  float inShow = slot < 0.5 ? 0.0 : mod(floor(showM / slot), 2.0);
+  float inHide = slot < 0.5 ? 0.0 : mod(floor(hideM / slot), 2.0);
+  if (abs(variant - aOp.x) > 0.5 || (showM > 0.5 && inShow < 0.5) || inHide > 0.5) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vCol = vec3(0.0); vLight = vec3(0.0); vFx = vec2(0.0); return;
+  }
   mat4 world = modelMatrix * instanceMatrix;
   vec3 n = normalize(mat3(world) * normal);
   vec3 light = duskLight(n);
-  vec3 lit = aCol * light;
+  float acc = mod(tag, 2.0), keep = mod(floor(tag / 2.0), 2.0);
+  vec3 base = aCol;
+  float emit = 0.0;
+  if (aPart < 0.5) {
+    if (acc > 0.5) {
+      if (aTint.r + aTint.g + aTint.b > 0.0) base = aTint;
+      emit = glow;
+    } else if (keep < 0.5 && aSkin.a > 0.0) {
+      // Gear takes the skin colour, keeping each piece's own light or dark against the issue kit's middle grey.
+      float l = dot(aCol, vec3(0.3, 0.59, 0.11));
+      base = mix(aCol, aSkin.rgb * clamp(l * 4.2, 0.6, 1.7), aSkin.a);
+    }
+  }
+  vec3 lit = base * light;
   if (aPart > 1.5) lit = aTint * light;
   // Team-coloured armour is nearly self-lit: it has to stay the most saturated thing on screen.
   else if (aPart > 0.5) lit = aTeam * (0.62 + 0.42 * max(0.0, n.y + 0.2)) * (0.72 + 0.28 * light);
+  else if (emit > 0.5) {
+    // Self-lit accents: 1 steady, 2 pulsing, 3 cycling through the prism colours along the body.
+    vec3 e = base;
+    if (emit > 2.5) e = mix(0.55 + 0.45 * cos(6.2832 * (uTime * 0.45 + position.y * 1.4 + position.z * 1.8 + vec3(0.0, 0.33, 0.67))), base, 0.2);
+    float k = emit > 1.5 ? 0.85 + 0.4 * sin(uTime * 4.0 + position.y * 7.0) : 1.0;
+    lit = e * 1.2 * k;
+  } else if (glow > 1.5 && keep < 0.5 && aSkin.a > 0.0) {
+    // Mastery gear catches a glint that runs up the body.
+    lit += aSkin.rgb * 0.35 * pow(max(0.0, sin(uTime * 1.6 - position.y * 5.0 + position.x * 3.0)), 8.0);
+  }
   vCol = lit;
   vLight = light;
   vFx = aFx;
@@ -91,20 +131,51 @@ void main() {
 function addCharInstanceAttrs(g, capacity) {
   g.setAttribute('aTeam', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage));
   g.setAttribute('aFx', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2).setUsage(THREE.DynamicDrawUsage));
-  g.setAttribute('aOp', new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aOp', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aSkin', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage));
   g.setAttribute('aTint', new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage));
   return g;
 }
 
 // Torso and head shapes per operator, seen mostly from above: what counts is the outline of the shoulders,
 // the pack and the hat, and that a good part of every body stays team coloured. Forward is +X, up is +Y.
+//
+// Skins (js/ui/operators.js) work through vertex tags, set with tag(): ACC pieces (visors, lenses, lamps, hi-vis, trim)
+// take the skin's accent colour and glow; KEEP pieces (faces) are never recoloured; every other part-0 piece takes the
+// skin's gear colour. ELITE / MASTERY pieces exist only with that gear slot, NO_ELITE / NO_MASTERY ones are dropped
+// with it. All of it is merged into the same meshes, so a skin costs no draw call.
+const ACC = 1, KEEP = 2, ELITE = 4, MASTERY = 8, NO_ELITE = 16, NO_MASTERY = 32;
+function tag(b, t, draw) {
+  const from = b.pos.length / 3;
+  draw();
+  (b.tags ??= []).push([from, b.pos.length / 3, t]);
+}
+
 const pelvis = (b, wide = 0.42, colour = 0x2b2d33) => b.setPart(0).setColor(colour).box(0, 0.04, 0, 0.3, 0.2, wide);
 const chest = (b, sx = 0.38, sy = 0.5, sz = 0.56, ch = 0.06) => b.setPart(1).box(0, 0.36, 0, sx, sy, sz, ch);
 const pauldrons = (b, sx, sy, sz, zPos = 0.31, y = 0.6) => {
   b.setPart(1).box(0, y, zPos, sx, sy, sz, 0.04);
   b.box(0, y, -zPos, sx, sy, sz, 0.04);
 };
-const neck = (b, colour = 0x4a3a2e) => b.setPart(0).setColor(colour).box(0, 0.05, 0, 0.2, 0.14, 0.2);
+const neck = (b, colour = 0x4a3a2e) => tag(b, colour === 0x4a3a2e || colour === 0x55412f ? KEEP : 0, () => b.setPart(0).setColor(colour).box(0, 0.05, 0, 0.2, 0.14, 0.2));
+const face = (b, colour, ...prism) => tag(b, KEEP, () => b.setPart(0).setColor(colour).prismY(...prism));
+
+// The mastery set every tier-5 skin wears: a lit core on the chest, a light down the back and two shoulder bars.
+function masteryTorso(b, front, back, shoulderZ, top) {
+  tag(b, ACC | MASTERY, () => {
+    b.setPart(0).setColor(0xffe08a);
+    b.prismX(front, front + 0.035, 0.4, 0, 0.11, 0.11, 4);
+    b.box(back, 0.34, 0, 0.03, 0.42, 0.07);
+    b.box(0, top, shoulderZ, 0.24, 0.03, 0.06); b.box(0, top, -shoulderZ, 0.24, 0.03, 0.06);
+  });
+}
+// And a ring of lights over the head, which is what reads from the top-down camera.
+function halo(b, y, r) {
+  tag(b, ACC | MASTERY, () => {
+    b.setPart(0).setColor(0xffe08a);
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; b.box(Math.cos(a) * r, y, Math.sin(a) * r, 0.06, 0.03, 0.06); }
+  });
+}
 
 const TORSOS = {
   trooper(b) {
@@ -114,6 +185,8 @@ const TORSOS = {
     b.setColor(0x34373f).box(-0.24, 0.32, 0, 0.16, 0.44, 0.42, 0.04);             // Pack.
     b.setPart(1).box(-0.24, 0.56, 0, 0.14, 0.06, 0.4);                            // Pack top strip reads from above.
     pauldrons(b, 0.3, 0.18, 0.22);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0x5dff7a).box(-0.24, 0.62, 0.13, 0.07, 0.06, 0.07));   // IR strobe.
+    masteryTorso(b, 0.236, -0.33, 0.31, 0.7);
   },
   wisp(b) {
     pelvis(b, 0.36, 0x3a3730);
@@ -121,6 +194,8 @@ const TORSOS = {
     b.setPart(0).setColor(0x2a2820).box(0.17, 0.36, 0.1, 0.03, 0.46, 0.07);       // Bandolier.
     b.setColor(0x6b6147).box(-0.02, 0.14, 0.27, 0.22, 0.22, 0.14);                // Hip satchel instead of a pack.
     pauldrons(b, 0.2, 0.1, 0.16, 0.26, 0.58);
+    tag(b, ELITE, () => b.setPart(0).setColor(0x4c5a32).box(-0.17, 0.42, 0, 0.06, 0.5, 0.5));   // Ghillie drape.
+    masteryTorso(b, 0.19, -0.17, 0.26, 0.64);
   },
   anvil(b) {
     pelvis(b, 0.5, 0x24272c);
@@ -129,6 +204,8 @@ const TORSOS = {
     b.setColor(0x3a3f47).prismZ(-0.26, 0.26, -0.36, 0.36, 0.26, 0.26, 8);         // Ammo drum across the back.
     b.setPart(1).prismZ(-0.08, 0.08, -0.36, 0.36, 0.272, 0.272, 8);               // Team band around it.
     pauldrons(b, 0.42, 0.26, 0.36, 0.41, 0.62);
+    tag(b, ELITE, () => b.setPart(0).setColor(0x2a2d33).box(0.3, 0.2, 0, 0.05, 0.2, 0.6));       // Bulwark skirt plate.
+    masteryTorso(b, 0.295, -0.63, 0.41, 0.77);
   },
   relay(b) {
     pelvis(b, 0.42, 0x2d3329);
@@ -138,17 +215,22 @@ const TORSOS = {
     b.prismY(0.68, 1.95, -0.34, 0.12, 0.03, 0.014, 4);                            // Mast: the unmistakable bit.
     b.prismY(0.68, 1.3, -0.34, -0.12, 0.024, 0.012, 4);
     b.setPart(1).box(-0.34, 1.9, 0.12, 0.12, 0.12, 0.12);
+    tag(b, ACC, () => b.setPart(0).setColor(0x7a8a70).box(-0.401, 0.45, 0, 0.012, 0.08, 0.2));   // Radio dial.
     pauldrons(b, 0.24, 0.12, 0.18, 0.29, 0.58);
+    masteryTorso(b, 0.19, -0.41, 0.29, 0.66);
   },
   yarddog(b) {
     pelvis(b, 0.44, 0x2a3442);
     chest(b, 0.4, 0.5, 0.58, 0.05);
-    b.setPart(0).setColor(0xd9d23c);                                              // Hi-vis bands front and top.
-    b.box(0.205, 0.44, 0, 0.022, 0.07, 0.52); b.box(0.205, 0.24, 0, 0.022, 0.07, 0.52);
-    b.box(0, 0.62, 0.15, 0.34, 0.015, 0.08); b.box(0, 0.62, -0.15, 0.34, 0.015, 0.08);
-    b.setColor(0x2f3a4a).box(-0.26, 0.26, 0, 0.18, 0.34, 0.46, 0.03);             // Tool pack.
-    b.setColor(0xd9d23c).box(-0.26, 0.44, 0, 0.14, 0.03, 0.4);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xd9d23c);                                            // Hi-vis bands front and top.
+      b.box(0.205, 0.44, 0, 0.022, 0.07, 0.52); b.box(0.205, 0.24, 0, 0.022, 0.07, 0.52);
+      b.box(0, 0.62, 0.15, 0.34, 0.015, 0.08); b.box(0, 0.62, -0.15, 0.34, 0.015, 0.08);
+    });
+    b.setPart(0).setColor(0x2f3a4a).box(-0.26, 0.26, 0, 0.18, 0.34, 0.46, 0.03);  // Tool pack.
+    tag(b, ACC, () => b.setPart(0).setColor(0xd9d23c).box(-0.26, 0.44, 0, 0.14, 0.03, 0.4));
     pauldrons(b, 0.26, 0.14, 0.2, 0.32, 0.58);
+    masteryTorso(b, 0.22, -0.36, 0.32, 0.66);
   },
   ronin(b) {
     pelvis(b, 0.38, 0x24232b);
@@ -157,6 +239,8 @@ const TORSOS = {
     b.box(-0.21, 0.14, 0, 0.1, 0.74, 0.66);                                       // Cloak falling behind.
     b.box(-0.06, 0.62, 0, 0.42, 0.1, 0.72, 0.03);                                 // Shoulder drape, wider than the body.
     b.setPart(1).box(-0.06, 0.68, 0, 0.1, 0.02, 0.74);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff3a2a).box(0.165, 0.2, 0, 0.02, 0.05, 0.4));    // Red obi.
+    masteryTorso(b, 0.17, -0.27, 0.3, 0.7);
   },
   ghoul(b) {
     pelvis(b, 0.38, 0x25282a);
@@ -165,23 +249,31 @@ const TORSOS = {
     b.setColor(0x4a5048);
     b.prismY(0.1, 0.62, -0.32, 0.12, 0.11, 0.11, 6); b.prismY(0.1, 0.62, -0.32, -0.12, 0.11, 0.11, 6);    // Filter canisters.
     b.setColor(0x1a1c1e).box(-0.32, 0.64, 0, 0.1, 0.05, 0.32);
+    tag(b, ACC, () => { b.setPart(0).setColor(0xb7ffb0); b.box(-0.32, 0.4, 0.231, 0.08, 0.04, 0.012); b.box(-0.32, 0.4, -0.231, 0.08, 0.04, 0.012); });   // Canister gauges.
     pauldrons(b, 0.2, 0.08, 0.14, 0.28, 0.6);
+    masteryTorso(b, 0.18, -0.44, 0.28, 0.66);
   },
   ram(b) {
     pelvis(b, 0.48, 0x2d343c);
     chest(b, 0.44, 0.52, 0.62, 0.06);
     b.setPart(0).setColor(0x4a5560).box(0.27, 0.33, 0, 0.1, 0.54, 0.66, 0.03);    // Breaching plate, wider than the chest.
     b.setColor(0x20252b).box(-0.25, 0.24, 0, 0.16, 0.32, 0.5);
+    tag(b, ELITE, () => b.setPart(0).setColor(0x20252b).box(-0.25, 0.5, 0, 0.2, 0.2, 0.4));    // Siege charge pack.
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xffb000).box(-0.25, 0.61, 0, 0.16, 0.02, 0.3));
     pauldrons(b, 0.34, 0.2, 0.28, 0.36, 0.6);
+    masteryTorso(b, 0.32, -0.34, 0.36, 0.72);
   },
   monarch(b) {
     pelvis(b, 0.42, 0x322d3d);
     chest(b, 0.4, 0.52, 0.58, 0.06);
     b.setPart(1).box(-0.25, 0.08, 0, 0.05, 0.82, 0.68);                           // Cape in the team colour.
-    b.setPart(0).setColor(0xd9b44a).box(-0.285, 0.47, 0, 0.02, 0.06, 0.7);        // Gold trim.
-    b.box(0.2, 0.42, 0, 0.02, 0.06, 0.44);
-    b.box(0, 0.68, 0.32, 0.3, 0.05, 0.22); b.box(0, 0.68, -0.32, 0.3, 0.05, 0.22);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xd9b44a).box(-0.285, 0.47, 0, 0.02, 0.06, 0.7);      // Gold trim.
+      b.box(0.2, 0.42, 0, 0.02, 0.06, 0.44);
+      b.box(0, 0.68, 0.32, 0.3, 0.05, 0.22); b.box(0, 0.68, -0.32, 0.3, 0.05, 0.22);
+    });
     pauldrons(b, 0.3, 0.14, 0.24, 0.32, 0.62);
+    masteryTorso(b, 0.215, -0.29, 0.32, 0.72);
   },
 };
 
@@ -190,82 +282,157 @@ const HEADS = {
     neck(b);
     b.setPart(1).prismY(0.1, 0.26, 0, 0, 0.25, 0.27, 8, Math.PI / 8);             // Helmet skirt.
     b.prismY(0.26, 0.42, 0, 0, 0.27, 0.15, 8, Math.PI / 8);                       // Dome.
-    b.setPart(0).setColor(0x101215).box(0.2, 0.2, 0, 0.1, 0.1, 0.34);             // Visor recess.
-    b.setColor(0xd8fff9).box(0.255, 0.2, 0, 0.02, 0.05, 0.32);
+    tag(b, NO_ELITE | NO_MASTERY, () => b.setPart(0).setColor(0x101215).box(0.2, 0.2, 0, 0.1, 0.1, 0.34));   // Visor recess.
+    tag(b, ACC | NO_ELITE | NO_MASTERY, () => b.setPart(0).setColor(0xd8fff9).box(0.255, 0.2, 0, 0.02, 0.05, 0.32));
+    tag(b, ELITE, () => {                                                         // Night vision on a mount, balaclava under.
+      b.setPart(0).setColor(0x1a1c20).box(0.19, 0.18, 0, 0.1, 0.14, 0.32);
+      b.setColor(0x23262b).box(0.22, 0.36, 0, 0.1, 0.07, 0.14);
+      b.setColor(0x2a2d33).prismX(0.22, 0.38, 0.3, 0.07, 0.045, 0.045, 6).prismX(0.22, 0.38, 0.3, -0.07, 0.045, 0.045, 6);
+    });
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0x5dff7a).prismX(0.38, 0.4, 0.3, 0.07, 0.04, 0.04, 6).prismX(0.38, 0.4, 0.3, -0.07, 0.04, 0.04, 6));
+    tag(b, ACC | MASTERY, () => b.setPart(0).setColor(0xffe08a).box(0.17, 0.2, 0, 0.2, 0.09, 0.5));   // Wrap visor.
+    tag(b, MASTERY, () => b.setPart(0).setColor(0x8a8f98).box(-0.02, 0.45, 0, 0.36, 0.07, 0.05));      // Crest fin.
+    halo(b, 0.62, 0.24);
   },
   wisp(b) {
     neck(b, 0x55412f);
-    b.setColor(0x7a5c43).prismY(0.1, 0.28, 0, 0, 0.17, 0.16, 7);                  // Bare face under the brim.
-    b.setColor(0x6b6147).prismY(0.26, 0.3, 0, 0, 0.42, 0.41, 8, Math.PI / 8);     // Boonie brim, the widest part.
-    b.prismY(0.3, 0.42, 0, 0, 0.21, 0.17, 8, Math.PI / 8);
-    b.setPart(1).prismY(0.3, 0.335, 0, 0, 0.215, 0.215, 8, Math.PI / 8);
+    face(b, 0x7a5c43, 0.1, 0.28, 0, 0, 0.17, 0.16, 7);                            // Bare face under the brim.
+    tag(b, NO_ELITE, () => {
+      b.setPart(0).setColor(0x6b6147).prismY(0.26, 0.3, 0, 0, 0.42, 0.41, 8, Math.PI / 8);   // Boonie brim, the widest part.
+      b.prismY(0.3, 0.42, 0, 0, 0.21, 0.17, 8, Math.PI / 8);
+      b.setPart(1).prismY(0.3, 0.335, 0, 0, 0.215, 0.215, 8, Math.PI / 8);
+    });
+    tag(b, ELITE, () => {                                                         // Hood and scarf instead of the hat.
+      b.setPart(1).prismY(0.12, 0.38, -0.03, 0, 0.23, 0.12, 7);
+      b.setPart(0).setColor(0x6b6147).box(0.13, 0.15, 0, 0.12, 0.1, 0.3);
+    });
+    tag(b, ACC | ELITE | MASTERY, () => b.setPart(0).setColor(0xffd08a).box(0.17, 0.24, 0, 0.04, 0.06, 0.28));   // Goggles.
+    halo(b, 0.58, 0.24);
   },
   anvil(b) {
     neck(b, 0x2a2d33);
     b.setPart(1).box(0, 0.22, 0, 0.5, 0.32, 0.5, 0.03);                           // Square helm.
     b.setPart(0).setColor(0x2a2d33).box(0, 0.4, 0, 0.32, 0.07, 0.36);
-    b.setColor(0x101215).box(0.25, 0.22, 0, 0.02, 0.1, 0.42);
-    b.setColor(0xffc96b).box(0.262, 0.22, 0, 0.012, 0.035, 0.4);
+    tag(b, NO_ELITE, () => b.setPart(0).setColor(0x101215).box(0.25, 0.22, 0, 0.02, 0.1, 0.42));
+    tag(b, ACC | NO_ELITE, () => b.setPart(0).setColor(0xffc96b).box(0.262, 0.22, 0, 0.012, 0.035, 0.4));
+    tag(b, ELITE, () => b.setPart(0).setColor(0x101215).box(0.25, 0.2, 0, 0.02, 0.22, 0.4));
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff4a2a).box(0.262, 0.25, 0, 0.012, 0.04, 0.36).box(0.262, 0.15, 0, 0.012, 0.14, 0.05));   // T-visor.
+    tag(b, ELITE, () => b.setPart(1).box(-0.02, 0.47, 0, 0.4, 0.09, 0.06));       // Fin.
+    halo(b, 0.62, 0.3);
   },
   relay(b) {
     neck(b);
-    b.setColor(0x7a5c43).prismY(0.1, 0.3, 0, 0, 0.18, 0.17, 7);
-    b.setPart(1).box(0.02, 0.36, 0.02, 0.36, 0.12, 0.34, 0.03);                   // Side cap, worn off-centre.
+    face(b, 0x7a5c43, 0.1, 0.3, 0, 0, 0.18, 0.17, 7);
+    tag(b, NO_ELITE, () => b.setPart(1).box(0.02, 0.36, 0.02, 0.36, 0.12, 0.34, 0.03));   // Side cap, worn off-centre.
+    tag(b, ELITE, () => {                                                         // Helmet with twin whip antennas.
+      b.setPart(1).prismY(0.24, 0.4, 0, 0, 0.21, 0.12, 8, Math.PI / 8);
+      b.setPart(0).setColor(0x181a1c).prismY(0.3, 0.78, -0.08, 0.1, 0.014, 0.008, 4).prismY(0.3, 0.7, -0.08, -0.1, 0.014, 0.008, 4);
+    });
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xffcc33).box(-0.08, 0.79, 0.1, 0.04, 0.04, 0.04).box(-0.08, 0.71, -0.1, 0.04, 0.04, 0.04));
     b.setPart(0).setColor(0x1a1c20);
     b.box(0, 0.2, 0.2, 0.12, 0.2, 0.05);                                          // Headset cup and boom.
     b.box(0.13, 0.15, 0.2, 0.22, 0.025, 0.025);
+    tag(b, ACC | MASTERY, () => b.setPart(0).setColor(0xffe08a).box(0.165, 0.24, 0, 0.03, 0.05, 0.3));   // Eye bar.
+    halo(b, 0.62, 0.24);
   },
   yarddog(b) {
     neck(b);
-    b.setPart(0).setColor(0xd8dad2).prismY(0.2, 0.4, 0, 0, 0.28, 0.2, 8, Math.PI / 8);     // White hard hat.
-    b.setPart(1).prismY(0.2, 0.235, 0.05, 0, 0.36, 0.35, 8, Math.PI / 8);                  // Brim.
-    b.box(0, 0.42, 0, 0.4, 0.045, 0.07);                                                   // Ridge.
-    b.setPart(0).setColor(0xffe39a).box(0.29, 0.31, 0, 0.07, 0.09, 0.12);                  // Lamp.
-    b.setColor(0x7a5c43).prismY(0.1, 0.22, 0, 0, 0.17, 0.17, 7);
+    tag(b, NO_ELITE, () => {
+      b.setPart(0).setColor(0xd8dad2).prismY(0.2, 0.4, 0, 0, 0.28, 0.2, 8, Math.PI / 8);   // White hard hat.
+      b.setPart(1).prismY(0.2, 0.235, 0.05, 0, 0.36, 0.35, 8, Math.PI / 8);                // Brim.
+      b.box(0, 0.42, 0, 0.4, 0.045, 0.07);                                                 // Ridge.
+    });
+    tag(b, ACC | NO_ELITE, () => b.setPart(0).setColor(0xffe39a).box(0.29, 0.31, 0, 0.07, 0.09, 0.12));   // Lamp.
+    tag(b, ELITE, () => {                                                         // Beanie, ear defenders, headband lamp.
+      b.setPart(1).prismY(0.2, 0.37, 0, 0, 0.2, 0.13, 7).box(0, 0.39, 0, 0.09, 0.07, 0.09);
+      b.setPart(0).setColor(0x2a2e36).box(0, 0.2, 0.19, 0.13, 0.13, 0.07).box(0, 0.2, -0.19, 0.13, 0.13, 0.07);
+    });
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0x39ff9a).box(0.19, 0.27, 0, 0.05, 0.06, 0.1));
+    face(b, 0x7a5c43, 0.1, 0.22, 0, 0, 0.17, 0.17, 7);
+    halo(b, 0.62, 0.26);
   },
   ronin(b) {
     neck(b, 0x2a2930);
-    b.setColor(0x322f33).prismY(0.08, 0.22, 0, 0, 0.17, 0.17, 7);
-    b.setColor(0xa89060).prismY(0.22, 0.25, 0, 0, 0.58, 0.56, 10);                         // Conical hat: a disc from above.
-    b.prismY(0.25, 0.48, 0, 0, 0.56, 0.06, 10);
-    b.setPart(1).prismY(0.245, 0.27, 0, 0, 0.59, 0.58, 10);
+    b.setPart(0).setColor(0x322f33).prismY(0.08, 0.22, 0, 0, 0.17, 0.17, 7);
+    tag(b, NO_ELITE, () => {
+      b.setPart(0).setColor(0xa89060).prismY(0.22, 0.25, 0, 0, 0.58, 0.56, 10);              // Conical hat: a disc from above.
+      b.prismY(0.25, 0.48, 0, 0, 0.56, 0.06, 10);
+      b.setPart(1).prismY(0.245, 0.27, 0, 0, 0.59, 0.58, 10);
+    });
+    tag(b, ELITE, () => {                                                         // Horned half-mask and a topknot.
+      b.setPart(0).setColor(0x7a1a1a).box(0.17, 0.17, 0, 0.06, 0.2, 0.3);
+      b.setColor(0x1a1a1e).prismY(0.1, 0.3, -0.01, 0, 0.18, 0.15, 7);
+      b.setColor(0xd8d0c0).prismY(0.26, 0.48, 0.04, 0.12, 0.045, 0.008, 5).prismY(0.26, 0.48, 0.04, -0.12, 0.045, 0.008, 5);
+      b.setPart(1).prismY(0.28, 0.42, -0.1, 0, 0.08, 0.04, 6);
+    });
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff3a2a).box(0.204, 0.22, 0.07, 0.012, 0.03, 0.07).box(0.204, 0.22, -0.07, 0.012, 0.03, 0.07));
+    tag(b, ACC | MASTERY, () => b.setPart(0).setColor(0xffe08a).box(0.172, 0.17, 0, 0.012, 0.03, 0.22));    // Lit mouth slit.
+    halo(b, 0.66, 0.22);
   },
   ghoul(b) {
     neck(b, 0x1f2224);
-    b.setPart(0).setColor(0x1f2224).prismY(0.06, 0.44, -0.03, 0, 0.3, 0.1, 7);             // Hood, peaked to the rear.
-    b.setPart(1).box(-0.02, 0.33, 0, 0.3, 0.035, 0.34);
+    tag(b, NO_ELITE, () => {
+      b.setPart(0).setColor(0x1f2224).prismY(0.06, 0.44, -0.03, 0, 0.3, 0.1, 7);           // Hood, peaked to the rear.
+      b.setPart(1).box(-0.02, 0.33, 0, 0.3, 0.035, 0.34);
+    });
+    tag(b, ELITE, () => b.setPart(1).prismY(0.12, 0.4, -0.02, 0, 0.25, 0.12, 8, Math.PI / 8));   // Rebreather dome.
     b.setPart(0).setColor(0x2d3230).box(0.2, 0.16, 0, 0.12, 0.15, 0.3);                    // Mask.
     b.setColor(0x4a5048);
     b.prismX(0.25, 0.44, 0.13, 0.16, 0.08, 0.09, 6); b.prismX(0.25, 0.44, 0.13, -0.16, 0.08, 0.09, 6);     // Filters.
-    b.setColor(0xb7ffb0).box(0.272, 0.235, 0.08, 0.02, 0.06, 0.1); b.box(0.272, 0.235, -0.08, 0.02, 0.06, 0.1);
+    tag(b, ACC | NO_ELITE, () => b.setPart(0).setColor(0xb7ffb0).box(0.272, 0.235, 0.08, 0.02, 0.06, 0.1).box(0.272, 0.235, -0.08, 0.02, 0.06, 0.1));
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff2a3a).prismX(0.25, 0.29, 0.25, 0, 0.085, 0.085, 8));   // One big lens.
+    halo(b, 0.62, 0.24);
   },
   ram(b) {
     neck(b, 0x2d343c);
     b.setPart(1).prismY(0.1, 0.38, 0, 0, 0.27, 0.17, 8, Math.PI / 8);
-    b.setPart(0).setColor(0x9fb2c0).box(0.27, 0.2, 0, 0.06, 0.44, 0.5);                    // Full face shield.
-    b.setColor(0x20252b).box(0.1, 0.41, 0, 0.36, 0.03, 0.14);
+    tag(b, NO_ELITE, () => b.setPart(0).setColor(0x9fb2c0).box(0.27, 0.2, 0, 0.06, 0.44, 0.5));   // Full face shield.
+    tag(b, ELITE, () => {                                                         // Shield raised, chin guard down.
+      b.setPart(0).setColor(0x9fb2c0).box(0.08, 0.42, 0, 0.3, 0.04, 0.5);
+      b.setColor(0x20252b).box(0.21, 0.08, 0, 0.1, 0.1, 0.34);
+    });
+    tag(b, KEEP | ELITE, () => b.setPart(0).setColor(0x7a5c43).box(0.2, 0.2, 0, 0.06, 0.12, 0.24));
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xffb000).box(0.27, 0.3, 0.16, 0.04, 0.05, 0.05));
+    tag(b, ACC | MASTERY, () => b.setPart(0).setColor(0xffe08a).box(0.302, 0.24, 0, 0.012, 0.05, 0.42));   // Lit sight slit.
+    b.setPart(0).setColor(0x20252b).box(0.1, 0.41, 0, 0.36, 0.03, 0.14);
+    halo(b, 0.62, 0.28);
   },
   monarch(b) {
     neck(b, 0x322d3d);
     b.setPart(0).setColor(0x8b91a0).prismY(0.1, 0.32, 0, 0, 0.26, 0.24, 8, Math.PI / 8);
     b.prismY(0.32, 0.42, 0, 0, 0.24, 0.12, 8, Math.PI / 8);
-    b.setColor(0xd9b44a).prismY(0.25, 0.28, 0, 0, 0.27, 0.27, 8, Math.PI / 8);
-    b.setPart(1).box(-0.05, 0.52, 0, 0.62, 0.3, 0.06);                                     // Crest, running front to back.
+    tag(b, ACC, () => b.setPart(0).setColor(0xd9b44a).prismY(0.25, 0.28, 0, 0, 0.27, 0.27, 8, Math.PI / 8));
+    tag(b, NO_ELITE, () => b.setPart(1).box(-0.05, 0.52, 0, 0.62, 0.3, 0.06));            // Crest, running front to back.
+    tag(b, ELITE, () => {                                                         // A crown of spikes instead.
+      b.setPart(1);
+      for (let i = 0; i < 7; i++) { const a = (i / 7) * TAU; b.prismY(0.36, 0.6, Math.cos(a) * 0.17, Math.sin(a) * 0.17, 0.05, 0.006, 4); }
+    });
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xb04aff).box(0.22, 0.4, 0, 0.04, 0.05, 0.05));
     b.setPart(0).setColor(0x101215).box(0.22, 0.2, 0, 0.06, 0.08, 0.32);
-    b.setColor(0xfff0c8).box(0.255, 0.2, 0, 0.012, 0.03, 0.3);
+    tag(b, ACC, () => b.setPart(0).setColor(0xfff0c8).box(0.255, 0.2, 0, 0.012, 0.03, 0.3));
+    halo(b, 0.76, 0.26);
   },
 };
 
+// Every vertex's tag: the OR of the tag() ranges around it.
+function vertexTags(b) {
+  const n = b.pos.length / 3, out = new Uint8Array(n);
+  for (const [from, to, t] of b.tags ?? []) for (let i = from; i < to; i++) out[i] |= t;
+  return out;
+}
+
+// aVar carries the variant (operator index, 0..15) plus 16 x the vertex tag; the shader splits them.
 function variantGeometry(table) {
   const pos = [], nor = [], col = [], par = [], vars = [];
   OPERATORS.forEach((op, variant) => {
     const b = new MeshBuilder();
     (table[op.id] ?? table.trooper)(b);
+    const tags = vertexTags(b);
     for (const v of b.pos) pos.push(v);
     for (const v of b.nor) nor.push(v);
     for (const v of b.col) col.push(v);
     for (const v of b.par) par.push(v);
-    for (let i = b.pos.length / 3; i > 0; i--) vars.push(variant);
+    for (let i = 0; i < tags.length; i++) vars.push(variant + 16 * tags[i]);
   });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -277,12 +444,28 @@ function variantGeometry(table) {
 }
 
 const torsoGeometry = () => variantGeometry(TORSOS);
-// The distance LOD's torso or head: the trooper alone, so every instance costs one variant's triangles.
+// The trooper's issue kit alone, without any gear-slot pieces: the distance LOD (every instance costs one variant's
+// triangles, recolour and accents still apply) and the x-ray silhouette.
 function liteGeometry(table) {
   const b = new MeshBuilder();
   table.trooper(b);
-  const g = b.build();
-  g.setAttribute('aVar', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  const tags = vertexTags(b);
+  const keep = [], pos = [], nor = [], col = [], par = [], vars = [];
+  for (let i = 0; i < tags.length; i++) if (!(tags[i] & (ELITE | MASTERY))) keep.push(i);
+  // MeshBuilder emits whole triangles in order and gear pieces are whole boxes and prisms, so this keeps whole faces.
+  for (const i of keep) {
+    pos.push(b.pos[i * 3], b.pos[i * 3 + 1], b.pos[i * 3 + 2]);
+    nor.push(b.nor[i * 3], b.nor[i * 3 + 1], b.nor[i * 3 + 2]);
+    col.push(b.col[i * 3], b.col[i * 3 + 1], b.col[i * 3 + 2]);
+    par.push(b.par[i]);
+    vars.push(16 * (tags[i] & (ACC | KEEP)));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(par, 1));
+  g.setAttribute('aVar', new THREE.Float32BufferAttribute(vars, 1));
   return g;
 }
 const headGeometry = () => variantGeometry(HEADS);
@@ -459,9 +642,20 @@ export class Characters {
     this.teamRGB = TEAMS.map(t => hexRGB(t.color));
     // Per-operator numbers the frame loop reads, so it never touches colour conversion or string lookups.
     this.looks = OPERATORS.map(o => ({ ...o.look, sleeveRGB: hexRGB(o.look.sleeve), trouserRGB: hexRGB(o.look.trouser) }));
+    // Per-skin instance data, likewise precomputed. `lite` is what the distance LOD gets: no gear slot (its mesh has
+    // none of the gear pieces), the same colours and glow.
+    this.skinLooks = SKINS.map(k => {
+      const gear = k.gear != null ? [...hexRGB(k.gear), 1] : [0, 0, 0, 0];
+      const acc = k.accent != null ? hexRGB(k.accent) : [0, 0, 0];
+      const look = { gear, acc, pack: k.slot + 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser) };
+      look.lite = { ...look, pack: 4 * k.glow };
+      return look;
+    });
+    this.baseSkin = OPERATORS.map(o => getSkin(`skin:${o.id}-base`).index);
     this.opById = new Map();
+    this.skinById = new Map();
 
-    const charMat = new THREE.ShaderMaterial({ vertexShader: CHAR_VERT, fragmentShader: CHAR_FRAG });
+    const charMat = new THREE.ShaderMaterial({ vertexShader: CHAR_VERT, fragmentShader: CHAR_FRAG, uniforms: { uTime: time } });
     this.charMat = charMat;
     const add = (geom, cap) => {
       addCharInstanceAttrs(geom, cap);
@@ -495,9 +689,7 @@ export class Characters {
     });
     // The silhouette through a wall is a flat tint, so one trooper shape serves every operator at a fraction of the triangles.
     const xrayOf = (src, table) => {
-      const b = new MeshBuilder();
-      table.trooper(b);
-      const g = b.build();
+      const g = liteGeometry(table);
       g.setAttribute('aTeam', src.geometry.attributes.aTeam);
       g.setAttribute('aFx', src.geometry.attributes.aFx);
       const m = new THREE.InstancedMesh(g, xrayMat, src.instanceMatrix.count);
@@ -608,12 +800,17 @@ export class Characters {
     return mesh;
   }
 
-  // roster entries: { id, operator }. Called once per match, before the first update.
+  // roster entries: { id, operator, skin?, loadout?: {skin}, isBot? }. Called once per match, before the first update.
+  // A human's skin comes with their loadout (any id is checked against their operator); bots dress by their id.
   setRoster(roster) {
     this.opById.clear();
+    this.skinById.clear();
     for (const r of roster) {
-      const i = OPERATORS.findIndex(o => o.id === r.operator);
-      this.opById.set(r.id, i < 0 ? 0 : i);
+      const i = Math.max(0, OPERATORS.findIndex(o => o.id === r.operator));
+      const op = OPERATORS[i].id;
+      const wanted = r.skin ?? r.loadout?.skin ?? (r.isBot ? botSkin(op, r.id) : null);
+      this.opById.set(r.id, i);
+      this.skinById.set(r.id, getSkin(cleanSkin(wanted, op)).index);
     }
   }
 
@@ -661,12 +858,17 @@ export class Characters {
     this.corpses.clear();
   }
 
-  _writeFx(mesh, i, fade, flash, team, op, tint) {
+  // `skin` is a skinLooks entry for torsos and heads; limbs, boots, held items and corpse parts pass none, which
+  // writes the issue look so a slot never keeps a previous instance's accent or gear colour.
+  _writeFx(mesh, i, fade, flash, team, op, tint, skin) {
     const a = mesh.geometry.attributes;
     a.aFx.setXY(i, fade, flash);
     a.aTeam.setXYZ(i, team[0], team[1], team[2]);
-    a.aOp.setX(i, op);
+    a.aOp.setXY(i, op, skin ? skin.pack : 0);
+    const g = skin ? skin.gear : NO_GEAR;
+    a.aSkin.setXYZW(i, g[0], g[1], g[2], g[3]);
     if (tint) a.aTint.setXYZ(i, tint[0], tint[1], tint[2]);
+    else a.aTint.setXYZ(i, 0, 0, 0);
   }
 
   // Local visibility test for an enemy: centre and both shoulders, so a peeking shoulder still shows.
@@ -703,6 +905,7 @@ export class Characters {
       r.team = p.team;
       r.op = this.opById.get(p.id) ?? 0;
       const look = this.looks[r.op];
+      const sk = this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
       if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.75); }
       if (r.down) {
@@ -867,7 +1070,7 @@ export class Characters {
       _m.copy(_body).scale(_s);
       _m.toArray(tMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.TORSO * 16);
-      this._writeFx(tMesh, ti, fade, flash, team, op);
+      this._writeFx(tMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
 
       _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(1, 1, 1);
@@ -876,7 +1079,7 @@ export class Characters {
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.HEAD * 16);
-      this._writeFx(hMesh, ti, fade, flash, team, op);
+      this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
       if (!r.lite) nT++;
 
       // Gun.
@@ -894,7 +1097,7 @@ export class Characters {
       ga.aFx.setXY(gi, fade, flash);
       ga.aHeat.setX(gi, r.heat);
       r.gunMesh = gunMesh; r.camoI = camoI; r.accent[0] = ar; r.accent[1] = ag; r.accent[2] = ab;
-      r.armRGB = look.sleeveRGB; r.legRGB = look.trouserRGB;
+      r.armRGB = sk.sleeveRGB; r.legRGB = sk.trouserRGB;
       r.posed = clock;
 
       // Old magazines fall away from where the hand strips them; a revolver dumps its whole cylinder.
@@ -959,12 +1162,12 @@ export class Characters {
         setStretch(_m, _a.x, _a.y, _a.z, _joint[0], _joint[1], _joint[2], armT, armT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side > 0 ? P.UPPER_R : P.UPPER_L) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, look.sleeveRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], _b.x, _b.y, _b.z, armT, armT);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
         _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
-        this._writeFx(arm, nA, fade, flash, team, 0, look.sleeveRGB);
+        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB);
         nA++;
       }
 
@@ -1008,12 +1211,12 @@ export class Characters {
         setStretch(_m, hipX, y, hipZ, _joint[0], _joint[1], _joint[2], legT, legT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side < 0 ? P.THIGH_L : P.THIGH_R) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, look.trouserRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], footX, footY, footZ, legT * 0.82, legT * 0.82);
         _m.toArray(leg.instanceMatrix.array, nL * 16);
         _m.toArray(r.pose, (side < 0 ? P.SHIN_L : P.SHIN_R) * 16);
-        this._writeFx(leg, nL, fade, flash, team, 0, look.trouserRGB);
+        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB);
         nL++;
 
         _e.set(0, -bootYaw, lift * -2.2 + slide * (side < 0 ? 0.7 : -0.2));
@@ -1063,7 +1266,7 @@ export class Characters {
       const m = this.bodyMeshes[i], n = m.count;
       uploadUsed(m.instanceMatrix, n);
       const a = m.geometry.attributes;
-      uploadUsed(a.aFx, n); uploadUsed(a.aTeam, n); uploadUsed(a.aOp, n); uploadUsed(a.aTint, n);
+      uploadUsed(a.aFx, n); uploadUsed(a.aTeam, n); uploadUsed(a.aOp, n); uploadUsed(a.aTint, n); uploadUsed(a.aSkin, n);
     }
     for (let i = 0; i < this.gunList.length; i++) {
       const m = this.gunList[i], n = m.count;
@@ -1108,11 +1311,13 @@ export class OperatorPreview {
     this.show(DEFAULT_OPERATOR, 'ar', 'none', 0);
   }
 
-  // Everything but the operator id is optional dressing; the gun shows what this loadout actually carries.
+  // Everything but the operator is optional dressing; the gun shows what this loadout actually carries. `operator` is an
+  // operator id or a skin id ('skin:anvil-5'), which brings its operator with it.
   show(operator, weapon = 'ar', camo = 'none', team = 0, attachments) {
     Object.assign(this.player, { team, weapon, camo, attachments });
     this.opts.localTeam = team;
-    this.chars.setRoster([{ id: 'preview', operator }]);
+    const skin = getSkin(operator);
+    this.chars.setRoster([{ id: 'preview', operator: skin ? skin.operator : operator, skin: skin?.id }]);
   }
 
   tick(dt) {
@@ -1128,8 +1333,8 @@ export class OperatorPreview {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     }
-    this.camera.position.set(0, 4.3, 8.4);
-    this.camera.lookAt(0, 1.0, 0);
+    this.camera.position.set(0, 3.7, 7.2);
+    this.camera.lookAt(0, 0.95, 0);
     this.webgl.render(this.scene, this.camera);
   }
 

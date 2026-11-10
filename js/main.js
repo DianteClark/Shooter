@@ -512,7 +512,9 @@ function withBadges(roster, humans, seed = 0) {
     // Bots walk through the operator list from a seed-chosen start, so a squad is mixed and differs between matches.
     const operator = human ? cleanOperator(human.loadout?.operator) : OPERATOR_IDS[(i + seed) % OPERATOR_IDS.length];
     const badge = r.badge ?? (human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 });
-    return { ...r, badge, operator, loadout: { ...r.loadout, operator } };
+    // The sim's loadout cleaning drops cosmetics it does not use; carry the player's skin and emblem across it.
+    const looks = human ? { skin: human.loadout?.skin ?? null, emblem: human.loadout?.emblem ?? null } : {};
+    return { ...r, badge, operator, loadout: { ...r.loadout, operator, ...looks } };
   });
 }
 
@@ -1110,6 +1112,7 @@ function showResults(results) {
       finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
       rematchLabel: 'Rematch',
       snd: results.snd,
+      mastery: results.mastery,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
     }, { rematch: () => afterResults(), menu: () => goTitle() });
   } catch (err) {

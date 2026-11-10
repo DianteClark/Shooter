@@ -31,7 +31,18 @@
  *            debugGrantGolden(on=true) -> bool: ?debug=1 only (window.__game.Progress), for testing
  *            isItemUnlocked('weapon','golden') follows goldenEarned(). applyMatch, doPrestige and prestigeWeapon
  *            report it ({kind:'weapon', id:'golden', golden:true} first in unlocks; golden:true on the prestige results).
- * Match      applyMatch(summary)  used by js/game/awards.js only.
+ * Mastery    mastery(trackId) / masteryAll(kind?) -> trackStatus shape (js/shared/progression.js), tracks: every tactical,
+ *            lethal, streak and operator id.   weaponLadder(w) -> the same plus `open` (weapon level 30 reached)
+ *            unlockChallenge(kind,id) -> {label,goal,value,done}|null   lockText(kind,id) -> what a locked item needs
+ *            hasReward(id)  rewards() -> Set ('card:..','skin:..','badge:..')  badges() -> [{id,item,grade,name,kind}]
+ *            skins(op) -> [{id:'skin:<op>-3'|'skin:<op>-5',tier,name,unlocked,requirement}] (the operator
+ *            store in js/ui/operators.js keeps which skin is worn; hasReward is its `granted`)
+ *            masteryXp(gains) -> XP the tiers those gains finish would pay (dry run)   lastMastery() -> last match's moved rows
+ * Looks      operatorSkin(op) -> skin id|null  setOperatorSkin(op, id|null) -> bool (any earned skin of that operator)
+ *            emblem() -> earned emblem id|null  setEmblem(id|null) -> bool   loadout() carries `skin` and `emblem`.
+ *            Stored in the save (and its codes); js/ui/operators.js's own store is kept as a mirror.
+ * Lifetime   lifetime() -> {stat: n} every match's ChallengeTally counts plus map:<id>, mapwon:<id>
+ * Match      applyMatch(summary)  used by js/game/awards.js only. Summary may carry `mastery` (MasteryTracker.gains()).
  * Removed    recordKill(w) stays as a no-op returning []. MatchAwards counts kills now; hud.js should drop the call.
  *
  * Challenges (own versioned key; rules in js/shared/progression.js)
@@ -47,7 +58,8 @@
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
 import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
-import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator } from './operators.js';
+import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
+import { getEmblem, emblemUnlocked } from './emblems.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor } from '../shared/attachments.js';
 import {
@@ -58,6 +70,8 @@ import {
   proStatus, applyProGains, isVeteran, CARDS, CARD_IDS, cardsEarned, getCard,
   sanitizeChallengeState, challengeList, canReroll, rerollChallenge, applyChallengeTally, periodEnd, CHALLENGE_PERIODS,
   cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX, goldenStatus, GOLDEN_REQUIREMENT,
+  MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
+  unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -123,6 +137,23 @@ function keepOperators(s, raw) {
 }
 
 let data = load();
+syncLooks(true);
+
+// Skins and the emblem used to live only in js/ui/operators.js's own store (switchyard.custom.v1). The save is the real
+// home now, so they sync and travel in save codes; that store stays a mirror, since cards.js still reads it. On load a
+// pick only the mirror has is folded into the save; after an import the save's picks are pushed to the mirror.
+function syncLooks(fold) {
+  let changed = false;
+  for (const op of OPERATOR_IDS) {
+    const local = localSkin(op);
+    if (fold && local && !data.skins[op] && getSkin(local)?.tier !== 'base') { data.skins[op] = getSkin(local).id; changed = true; }
+    else if (!fold && (data.skins[op] ?? null) !== local) setLocalSkin(op, data.skins[op] ?? null);
+  }
+  const em = equippedEmblem();
+  if (fold && em && !data.emblem) { data.emblem = em; changed = true; }
+  else if (data.emblem && data.emblem !== em) setEmblemChoice(data.emblem);
+  if (changed) save();
+}
 
 // The Golden Gun's test hook only exists with ?debug=1 in the address; a flag left in a save does nothing without it.
 const DEBUG = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('debug') === '1'; } catch { return false; } })();
@@ -132,6 +163,9 @@ const GOLDEN_UNLOCK = () => ({ kind: 'weapon', id: GOLDEN_ID, name: WEAPONS[GOLD
 function save() {
   write(KEY, JSON.stringify(data));
 }
+
+const isOpen = (kind, id) => itemOpen(data, kind, id);
+let lastMastery = [];
 
 // Points a player earned over the whole match. PlayerView.score cannot serve here because it resets when a streak is cashed in.
 export function matchScore(p) {
@@ -182,7 +216,7 @@ function careerStats() {
 
 const operatorOpen = (id, career = careerStats()) => OPERATOR_IDS.includes(id) && operatorUnlock(getOperator(id), career).unlocked;
 
-const gunOpen = id => !!WEAPONS[id] && (id === GOLDEN_ID ? goldenEarned() : itemUnlockLevel('weapon', id) <= data.peakLevel);
+const gunOpen = id => !!WEAPONS[id] && (id === GOLDEN_ID ? goldenEarned() : isOpen('weapon', id));
 
 // A gun past the player's level falls back to the first one they own in that slot, so a stale save, an imported code or
 // a stray caller can never take a locked gun into a match.
@@ -207,7 +241,7 @@ function matchLoadout(saved, wanted = saved.primary) {
   const primary = gateGun(wanted, PRIMARY_IDS, 'ar');
   const secondary = gateGun(saved.secondary, SECONDARY_IDS, 'pistol');
   const base = normalizeLoadout({ ...saved, primary, secondary, attachments: saved.attachments });
-  const gear = gateLoadoutGear(base, data.peakLevel);    // One perk per tier, through catalog gatePerks.
+  const gear = gateLoadoutGear(base, isOpen);    // One perk per tier, through catalog gatePerks.
   return {
     ...gear,
     name: saved.name,
@@ -217,6 +251,8 @@ function matchLoadout(saved, wanted = saved.primary) {
     killFx: Progress.killFx(primary),
     ...weaponCosmetics(),
     operator: operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR,
+    skin: equippedSkin(operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR),
+    emblem: currentEmblemId(),
     pro: data.proDone.slice(),
     card: equippedCard(),
   };
@@ -228,8 +264,30 @@ function cardCareer() {
   const c = careerStats();
   const camos = new Set();
   for (const camo of MASTERY_CAMOS) if (WEAPON_IDS.some(w => hasCamo(w, camo))) camos.add(camo.id);
-  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos };
+  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos, rewards: masteryRewards(data) };
 }
+
+// The career the operator skins and emblems are judged on (js/ui/operators.js skinUnlock, js/ui/emblems.js).
+function looksCareer() {
+  const c = cardCareer(), camoOn = {};
+  for (const camo of MASTERY_CAMOS) camoOn[camo.id] = WEAPON_IDS.filter(w => hasCamo(w, camo)).length;
+  return { ...c, level: data.peakLevel, life: data.life, camoOn, granted: id => c.rewards.has(id) };
+}
+
+// The skin worn on an operator: the saved pick while it is still earned, else null (the issue look).
+function equippedSkin(op) {
+  const skin = getSkin(data.skins[op]);
+  return skin && skin.operator === op && skin.tier !== 'base' && skinUnlock(skin, looksCareer()).unlocked ? skin.id : null;
+}
+
+function currentEmblemId() {
+  if (equippedEmblem() !== data.emblem) { data.emblem = equippedEmblem(); save(); }   // Picked through the mirror.
+  const e = getEmblem(data.emblem);
+  return e && emblemUnlocked(e, looksCareer()).unlocked ? e.id : null;
+}
+
+// Gated items that are open now, as 'kind:id', to find the ones a match opened.
+const openGated = () => new Set(Object.keys(UNLOCK_CHALLENGES).filter(k => isOpen(...k.split(':'))));
 
 function equippedCard() {
   return cardsEarned(cardCareer()).includes(data.card) ? data.card : 'yard';
@@ -296,7 +354,80 @@ export const Progress = {
   itemUnlockLevel,
   isItemUnlocked(kind, id) {
     if (kind === 'weapon' && id === GOLDEN_ID) return goldenEarned();
-    return itemUnlockLevel(kind, id) <= data.peakLevel;
+    return isOpen(kind, id);
+  },
+  unlockChallenge(kind, id) { return unlockChallenge(data, kind, id); },
+  // What a locked item still needs, in one line: the level first, then its challenge with the count so far.
+  lockText(kind, id) {
+    const level = itemUnlockLevel(kind, id);
+    if (level > data.peakLevel) {
+      const c = unlockChallenge(data, kind, id);
+      return c ? `Level ${level}, then ${c.label.charAt(0).toLowerCase()}${c.label.slice(1)}` : `Reach level ${level}`;
+    }
+    const c = unlockChallenge(data, kind, id);
+    return c && !c.done ? `${c.label} (${c.value}/${c.goal})` : '';
+  },
+
+  /* ---------- Mastery ---------- */
+  mastery(id) {
+    const track = getTrack(id);
+    return track ? trackStatus(track, data.mastery[id]) : null;
+  },
+  masteryAll(kind) {
+    return MASTERY_TRACKS.filter(t => !kind || t.kind === kind).map(t => trackStatus(t, data.mastery[t.id]));
+  },
+  weaponLadder(w) { return ladderStatus(w, readWeapon(w)); },
+  hasReward(id) { return masteryRewards(data).has(id); },
+  rewards() { return masteryRewards(data); },
+  // Emblem badges earned: {id, item, grade (1 bronze, 2 gold), name, kind}, best grade per item only.
+  badges() {
+    const got = masteryRewards(data), out = new Map();
+    const tracks = [...MASTERY_TRACKS.map(t => [t, t.tiers]), ...WEAPON_IDS.filter(w => readWeapon(w).ladT).map(w => { const s = this.weaponLadder(w); return [s, s.tiers]; })];
+    for (const [t, tiers] of tracks) {
+      for (const c of tiers) for (const r of c.rewards) {
+        if (r.kind !== 'badge' || !got.has(r.id)) continue;
+        const grade = Number(r.id.slice(r.id.lastIndexOf('-') + 1));
+        if ((out.get(t.item)?.grade ?? 0) < grade) out.set(t.item, { id: r.id, item: t.item, grade, name: r.name, kind: t.kind });
+      }
+    }
+    return [...out.values()];
+  },
+  // Any skin of that operator that is earned (field skins by their career rule, mastery ones by their tier); null or
+  // a base id goes back to the issue look.
+  operatorSkin(op) { return equippedSkin(op); },
+  setOperatorSkin(op, id) {
+    const skin = id === null ? null : getSkin(id);
+    if (!OPERATOR_IDS.includes(op) || (id !== null && (!skin || skin.operator !== op))) return false;
+    if (skin && skin.tier !== 'base' && !skinUnlock(skin, looksCareer()).unlocked) return false;
+    if (!skin || skin.tier === 'base') delete data.skins[op]; else data.skins[op] = skin.id;
+    setLocalSkin(op, data.skins[op] ?? null);
+    save();
+    return true;
+  },
+  emblem() { return currentEmblemId(); },
+  setEmblem(id) {
+    const e = id === null ? null : getEmblem(id);
+    if (id !== null && (!e || !emblemUnlocked(e, looksCareer()).unlocked)) return false;
+    data.emblem = e ? e.id : null;
+    setEmblemChoice(data.emblem);
+    save();
+    return true;
+  },
+  // Lifetime totals of every match's challenge counts (kills, plants, won:dom, played:ctf, ...) plus map:<id> (played
+  // there) and mapwon:<id>, for the map, mode and career cards.
+  lifetime() { return { ...data.life }; },
+  skins(op) {
+    const got = masteryRewards(data);
+    return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));
+  },
+  // What the tiers these gains would finish pay, without touching the save (MatchAwards adds it to the match XP).
+  masteryXp(gains) {
+    const copy = { mastery: structuredClone(data.mastery), weapons: structuredClone(data.weapons) };
+    return applyMasteryGains(copy, gains).xp;
+  },
+  lastMastery(list) {
+    if (Array.isArray(list)) lastMastery = list;
+    return lastMastery;
   },
 
   /* ---------- The Golden Gun ---------- */
@@ -487,6 +618,7 @@ export const Progress = {
     write(BAK_KEY, JSON.stringify(data));
     // Hints already shown are about this device, not the player, so they stay.
     data = { ...result.save, flags: data.flags };
+    syncLooks(false);
     save();
     return { ok: true };
   },
@@ -494,14 +626,19 @@ export const Progress = {
   /* ---------- Match results (js/game/awards.js) ---------- */
   // `pro` is ProTracker.gains(): {perk: {stat: n}}. Pro perks and calling cards earned here come back in `unlocks`
   // ({kind:'pro', id:perk, name, desc} and {kind:'card', id, name, req}), Pro first: they are the bigger moment.
-  applyMatch({ xp, weapons, pro }) {
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel;
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
     const cardsBefore = new Set(cardsEarned(cardCareer()));
     const proBefore = PERK_IDS.map(id => [id, proStatus(id, data.pro, data.proDone)]);
     const goldenBefore = goldenEarned();
+    const gatedBefore = openGated();
 
+    // Mastery first, so the ladder only counts for guns that were already level 30 when the match began.
+    const tiers = applyMasteryGains(data, mastery ?? {});
+    addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
+    lastMastery = tiers.moved;
     gainXp(xp);
     for (const [w, gained] of Object.entries(weapons)) {
       const entry = writeWeapon(w);
@@ -513,15 +650,23 @@ export const Progress = {
     save();
 
     const unlocks = this.unlockSchedule()
-      .filter(u => u.level > beforePeak && u.level <= data.peakLevel)
+      .filter(u => u.level > beforePeak && u.level <= data.peakLevel && isOpen(u.kind, u.id))
       .map(u => ({ kind: u.kind, id: u.id, name: u.name, level: u.level }));
     for (const o of this.operators()) {
       if (o.unlocked && !opsBefore.has(o.op.id)) unlocks.push({ kind: 'operator', id: o.op.id, name: o.op.name });
     }
     const proUnlocks = freshPro.map(id => ({ kind: 'pro', id, name: `${PERKS[id].name} Pro`, desc: proStatus(id, data.pro, data.proDone).desc }));
-    const cardUnlocks = cardsEarned(cardCareer()).filter(id => !cardsBefore.has(id))
+    // A mastery card shows inside its tier's ceremony, so it gets no second one.
+    const viaTier = new Set(tiers.ups.flatMap(u => u.rewards.filter(r => r.kind === 'card').map(r => r.id.slice(5))));
+    const cardUnlocks = cardsEarned(cardCareer()).filter(id => !cardsBefore.has(id) && !viaTier.has(id))
       .map(id => ({ kind: 'card', id, name: getCard(id).name, req: getCard(id).req }));
-    unlocks.unshift(...proUnlocks, ...cardUnlocks);
+    // Items a challenge just opened (their level was already reached), with the level unlocks.
+    for (const k of openGated()) {
+      if (gatedBefore.has(k) || unlocks.some(u => `${u.kind}:${u.id}` === k)) continue;
+      const [kind, id] = k.split(':');
+      unlocks.push({ kind, id, name: ITEM_TABLES[kind]?.[id]?.name ?? id, req: UNLOCK_CHALLENGES[k].label });
+    }
+    unlocks.unshift(...proUnlocks, ...tiers.ups, ...cardUnlocks);
     // The biggest moment there is goes first of all.
     if (!goldenBefore && goldenEarned()) unlocks.unshift(GOLDEN_UNLOCK());
     // Steps moved this match, for the results screen: [{perk, name, steps:[{label,goal,before,value,done}]}].
@@ -550,6 +695,7 @@ export const Progress = {
       weapons: weaponChanges,
       unlocks,
       proProgress,
+      mastery: tiers.moved,
     };
   },
 

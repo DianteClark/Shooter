@@ -314,7 +314,7 @@ export class Menu {
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           cells += `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
             <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}<b>${esc(h.name)}</b></span>
-            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge?.level })}<small>${self ? 'You, ' : ''}${status}</small></span>
+            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge?.level, emblem: h.loadout?.emblem })}<small>${self ? 'You, ' : ''}${status}</small></span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
         } else {
