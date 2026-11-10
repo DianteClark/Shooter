@@ -28,6 +28,12 @@
  *            isVeteran()  identity() -> {pro:[ids], card, veteran}. loadout() carries `pro` and `card` to the roster.
  * Match      applyMatch(summary)  used by js/game/awards.js only.
  * Removed    recordKill(w) stays as a no-op returning []. MatchAwards counts kills now; hud.js should drop the call.
+ *
+ * Challenges (own versioned key; rules in js/shared/progression.js)
+ *            Challenges.list(period) -> [{id,period,label,icon,goal,xp,value,done}]  period: 'daily'|'weekly'
+ *            Challenges.endsAt(period) -> ms   canReroll()   reroll(id) -> new id | null
+ *            Challenges.apply(counts) -> {moved, xp}   used by js/game/awards.js only; it pays the XP through applyMatch.
+ * History    MatchHistory.list() -> newest first, at most 20 (cleanHistoryEntry shape)   add(entry)   clear()
  */
 
 // Everything that outlives a match, in one versioned localStorage save. Private browsing can throw on any
@@ -45,6 +51,8 @@ import {
   challengesFor, isMastered, camoGateOpen, camoRequirement, cosmeticRequirement, prestigeRewards,
   blankWeapon, blankSave, sanitizeSave, migrateV1, migrateSave, cleanLoadout, encodeSave, decodeSave, badgeSvg,
   proStatus, applyProGains, isVeteran, CARDS, CARD_IDS, cardsEarned, getCard,
+  sanitizeChallengeState, challengeList, canReroll, rerollChallenge, applyChallengeTally, periodEnd, CHALLENGE_PERIODS,
+  cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -501,4 +509,58 @@ export const Progress = {
 
   // Kills are counted once by MatchAwards at match end now.
   recordKill() { return []; },
+};
+
+/* ---------- Daily and weekly challenges ---------- */
+// Kept apart from the save: they turn over every day and have no place in a save code. A bad or old store simply
+// starts the current day's set again.
+const CHALLENGE_KEY = 'switchyard.challenges';
+let challengeState = null;
+
+function challenges(now = new Date()) {
+  // Re-read through sanitize on every visit so a set that went stale while the app sat open turns over.
+  challengeState = sanitizeChallengeState(challengeState ?? parse(read(CHALLENGE_KEY)), now);
+  return challengeState;
+}
+
+const saveChallenges = () => write(CHALLENGE_KEY, JSON.stringify(challengeState));
+
+export const Challenges = {
+  list(period, now = new Date()) { return challengeList(challenges(now), period); },
+  all(now = new Date()) { return Object.fromEntries(CHALLENGE_PERIODS.map(p => [p, this.list(p, now)])); },
+  endsAt(period, now = new Date()) { return periodEnd(period, now); },
+  canReroll(now = new Date()) { return canReroll(challenges(now), now); },
+  reroll(id, now = new Date()) {
+    const next = rerollChallenge(challenges(now), id, now);
+    if (next) saveChallenges();
+    return next;
+  },
+  // One match's ChallengeTally counts. Returns {moved, xp}; the caller pays the XP.
+  apply(counts, now = new Date()) {
+    const out = applyChallengeTally(challenges(now), counts, now);
+    if (out.moved.length) saveChallenges();
+    return out;
+  },
+  // Tests and the gallery: forget the stored state.
+  reset() { challengeState = null; try { localStorage.removeItem(CHALLENGE_KEY); } catch { /* ignore */ } },
+};
+
+/* ---------- Match history ---------- */
+const HISTORY_KEY = 'switchyard.history';
+let historyCache = null;
+
+const history = () => (historyCache ??= cleanHistory(parse(read(HISTORY_KEY))));
+
+export const MatchHistory = {
+  list() { return history().list.slice(); },
+  add(entry) {
+    const e = cleanHistoryEntry(entry);
+    if (!e) return null;
+    const h = history();
+    h.list.unshift(e);
+    h.list.length = Math.min(h.list.length, HISTORY_MAX);
+    write(HISTORY_KEY, JSON.stringify({ v: HISTORY_VERSION, list: h.list }));
+    return e;
+  },
+  clear() { historyCache = { v: HISTORY_VERSION, list: [] }; try { localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ } },
 };

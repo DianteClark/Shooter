@@ -315,6 +315,13 @@ const SQUARE = {
   'mode:kc': { f: [R(7, 3, 18, 26, 5)], h: [O(16, 8, 2), R(10.5, 14, 11, 2), R(10.5, 18, 11, 2), R(10.5, 22, 7, 2)] },
   'mode:dom': { b: [R(3, 13, 2.4, 16), P(5.4, 13, 11.5, 13, 10, 16, 11.5, 19, 5.4, 19), R(21.6, 13, 2.4, 16), P(24, 13, 30, 13, 28.5, 16, 30, 19, 24, 19)], f: [R(13, 4, 2.8, 25)], a: [P(15.8, 4, 25, 4, 22.5, 8, 25, 12, 15.8, 12)] },
   'mode:hard': { s: [P(3, 10, 3, 3, 10, 3), P(22, 3, 29, 3, 29, 10), P(3, 22, 3, 29, 10, 29), P(22, 29, 29, 29, 29, 22)], a: [P(16, 8.5, 23.5, 16, 16, 23.5, 8.5, 16)], sw: 3.2 },
+  // Free-for-all: four arrows breaking outward from one point, nobody on anybody's side.
+  'mode:ffa': (() => {
+    const arrow = [P(19, 4, 28, 4, 28, 13), bar(15.5, 16.5, 24, 8, 3.4)];
+    return { f: [0, 90, 180, 270].flatMap(d => arrow.map(p => rot(p, d))), a: [O(16, 16, 3.6)] };
+  })(),
+  // Gun Game: a ladder, its top rung lit.
+  'mode:gun': { f: [R(5, 2, 3.4, 28, 1), R(23.6, 2, 3.4, 28, 1), R(8.4, 12, 15.2, 2.8), R(8.4, 18.5, 15.2, 2.8), R(8.4, 25, 15.2, 2.8)], a: [R(8.4, 5, 15.2, 3.4)] },
 
   // ---- Maps ----
   'map:railyard': { f: [R(2.5, 6, 27, 15, 1), O(9, 23.5, 3.2), O(23, 23.5, 3.2), R(1, 27.5, 30, 2.5)], h: [R(11.5, 9, 9, 9), R(5, 9, 4, 2), R(23, 9, 4, 2)], a: [R(15, 9, 2, 9)] },
@@ -354,7 +361,7 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Menu vocabulary (js/ui/yard.js names).

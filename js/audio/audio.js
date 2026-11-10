@@ -1765,7 +1765,8 @@ export class AudioEngine {
     if (view.mode === 'range' || view.phase === 'ended') return;
     const lim = view.scoreLimit || 75;
     const margin = (view.mode === 'dom' || view.mode === 'hard') ? Math.ceil(lim * TENSION_POINTS) : TENSION_KILLS;
-    const top = Math.max(view.scores[0], view.scores[1]);
+    let top = 0;
+    for (let i = 0; i < view.scores.length; i++) if (view.scores[i] > top) top = view.scores[i];   // Two teams, or every FFA player.
     const closing = view.phase === 'live' && (lim - top <= margin || (view.timeLeft > 0 && view.timeLeft <= 30));
     if (closing && !this.tension) {
       this.tension = true;

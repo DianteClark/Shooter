@@ -1,4 +1,5 @@
-// How to play, as four tabs so nothing scrolls at 390 px tall. Everything here restates rules that live in the sim;
+// How to play, as four tabs so nothing scrolls at 390 px tall. The Training button replays the guided match
+// (js/game/tutorial.js) whenever the player wants it. Everything here restates rules that live in the sim;
 // the streak section is the one players ask about most.
 import { STREAKS, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
 import { esc } from './widgets.js';
@@ -47,11 +48,12 @@ const PANELS = {
     </div>`,
 };
 
-export function helpScreen(menu, { onBack }) {
+export function helpScreen(menu, { onBack, onTutorial }) {
   let tab = 'controls';
   menu.el.dataset.screen = 'help';
+  const training = onTutorial ? `<button class="btn is-primary help-tut" data-sound="confirm" data-act="helpTutorial">${ico('play')}<b>Training</b></button>` : '';
   menu.el.innerHTML = `
-    ${header({ back: 'helpBack', title: 'How to play', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>` })}
+    ${header({ back: 'helpBack', title: 'How to play', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
     <div class="help-body"></div>`;
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];
@@ -62,6 +64,7 @@ export function helpScreen(menu, { onBack }) {
   };
   menu.on({
     helpBack: () => onBack(),
+    helpTutorial: () => onTutorial?.(),
     helpTab: ({ tab: next }) => { tab = next; paint(); },
   });
   paint();

@@ -25,7 +25,9 @@ export class NavGrid {
     this.heap = new Int32Array(n * 8);
     this.heapF = new Float32Array(n * 8);
     this.tmp = new Int32Array(n);
-    this.danger = [new Uint8Array(n), new Uint8Array(n)];   // Per team: cells covered by enemy turrets.
+    // Per team: cells covered by enemy turrets. A free-for-all (team 2 and up, see TEAMS) shares the first grid, painted
+    // with every sentry on the map: there, everyone's turret is someone else's problem.
+    this.danger = [new Uint8Array(n), new Uint8Array(n)];
     this._buildBlocked();
     this.cover = [];    // Points next to vision-blocking walls.
     this.holds = [];    // Points with a long sightline, each with the best angle for each team.
@@ -104,7 +106,7 @@ export class NavGrid {
     const { w, h, map } = this;
     this.danger[0].fill(0); this.danger[1].fill(0);
     for (const t of turrets) {
-      const grid = this.danger[1 - t.team];
+      const grid = this.danger[t.team > 1 ? 0 : 1 - t.team];
       const i0 = Math.max(0, Math.floor(t.x - DANGER_RANGE)), i1 = Math.min(w - 1, Math.ceil(t.x + DANGER_RANGE));
       const j0 = Math.max(0, Math.floor(t.z - DANGER_RANGE)), j1 = Math.min(h - 1, Math.ceil(t.z + DANGER_RANGE));
       for (let j = j0; j <= j1; j++) {
@@ -173,7 +175,7 @@ export class NavGrid {
     const startCell = this.nearestFree(ax, az);
     const goalCell = this.nearestFree(bx, bz);
     const { g, parent, stamp, closed, heap, heapF, blocked } = this;
-    const danger = team >= 0 ? this.danger[team] : null;
+    const danger = team >= 0 ? this.danger[team > 1 ? 0 : team] : null;
     const id = ++this.search;
     const gx = goalCell % w, gz = (goalCell - gx) / w;
 

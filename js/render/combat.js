@@ -1338,13 +1338,14 @@ export class CombatFX {
 
     // UAV and Overwatch drones circling the map, one per team for each that is up.
     const cx = this.map.width / 2, cz = this.map.height / 2, R = Math.min(this.map.width, this.map.height) * 0.42;
-    for (let team = 0; team < 2; team++) {
+    const teams = Math.max(2, view.uav?.length ?? 0, view.overwatchT?.length ?? 0);   // FFA: one per player.
+    for (let team = 0; team < teams; team++) {
       const rgb = this.teamRGB[team] ?? this.teamRGB[0];
       const up = [view.uav && view.uav[team] > 0, view.overwatchT && view.overwatchT[team] > 0];
       for (let k = 0; k < 2; k++) {
         if (!up[k] || n >= MAX_VEHICLES) continue;
         const over = k === 1, dir = over ? -1 : 1;
-        const a = t * (over ? 0.16 : 0.24) * dir + team * Math.PI + (over ? 1.3 : 0);
+        const a = t * (over ? 0.16 : 0.24) * dir + team * (teams > 2 ? 2.39996 : Math.PI) + (over ? 1.3 : 0);
         const r = R * (over ? 1.15 : 0.9);
         const x = cx + Math.cos(a) * r * 1.3, z = cz + Math.sin(a) * r, y = DRONE_Y + (over ? 2 : 0);
         _e.set(0.28 * dir, -(a + dir * Math.PI / 2), 0);

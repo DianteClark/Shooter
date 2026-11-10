@@ -2,16 +2,16 @@
 // Humans own their own movement and shots (see docs/ARCHITECTURE.md), and report them here.
 
 import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS, STREAK_IDS, STREAKS, TACTICALS } from '../shared/catalog.js';
-import { MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
+import { FFA_MAX, FFA_TEAM, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
-import { MODES, teamSizeFor } from '../shared/modes.js';
+import { GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, createPlayerState, hasPro, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
+import { angleDiff, armPlayer, createPlayerState, hasPro, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 
@@ -80,6 +80,13 @@ const HARD_ROTATE = 40, HARD_TICK = 1;
 const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
 const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
 const PLAN_EVERY = 15;           // Ticks between bot objective plans.
+const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard']);
+
+// Free-for-all spawning: anywhere open on the map, as far from everyone as it can get.
+const FFA_GRID = 5;              // Metres between candidate spawn points sampled over open ground.
+const FFA_FAR = 40;              // Past this, more distance from the nearest player is worth nothing more.
+const FFA_SEEN = 28;             // Penalty for a point any living player can see from within FFA_SIGHT.
+const FFA_SIGHT = 34;
 
 const PHASES = ['warmup', 'live', 'ended'];
 const PROJECTILE_KINDS = ['frag', 'sticky', 'smoke', 'flash', 'molotov', 'fire', 'mine', 'cluster', 'bomblet', 'hatchet', 'decoy', 'sensor', 'trophy'];
@@ -167,6 +174,7 @@ function gunOffset(mapId, mode, seed) {
 // one of each sidearm in turn, so a full team of six carries every secondary once. teamSize defaults to the mode's own
 // (16 for Ground War, see shared/modes.js), or TEAM_SIZE when no mode is given.
 export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId = null, mode = null, seed = null } = {}) {
+  if (MODES[mode]?.ffa) return buildFfaRoster(humans, { botSkill, mapId, mode, seed, players: teamSize });
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(h => {
     const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
@@ -182,17 +190,7 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId
     for (; count < teamSize; count++, n++) {
       const i = n + team;
       const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
-      const primary = BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length];
-      const loadout = normalizeLoadout({
-        primary, secondary: botSecondary(sideI++), camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
-        tactical: BOT_TACTICALS[i % BOT_TACTICALS.length], lethal: BOT_LETHALS[i % BOT_LETHALS.length],
-        perks: BOT_PERKS[i % BOT_PERKS.length],
-        streaks: skill === 'recruit' ? RECRUIT_STREAKS : BOT_STREAKS[i % BOT_STREAKS.length],
-      });
-      if (PRO_SKILLS.has(skill)) {
-        loadout.pro = loadout.perks.slice();
-        loadout.card = `pro-${loadout.perks[skill === 'elite' ? 2 : i % 3]}`;
-      }
+      const loadout = botLoadout(BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length], sideI++, skill, i);
       roster.push({
         id: `bot${n}`, name: BOT_NAMES[nameI++ % BOT_NAMES.length], team, isBot: true,
         skill,
@@ -200,6 +198,43 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId
       });
     }
   }
+  return roster;
+}
+
+// One bot loadout, dealt the same way for teams and free-for-all. `i` staggers equipment, perks and streaks.
+function botLoadout(primary, side, skill, i) {
+  const loadout = normalizeLoadout({
+    primary, secondary: botSecondary(side), camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
+    tactical: BOT_TACTICALS[i % BOT_TACTICALS.length], lethal: BOT_LETHALS[i % BOT_LETHALS.length],
+    perks: BOT_PERKS[i % BOT_PERKS.length],
+    streaks: skill === 'recruit' ? RECRUIT_STREAKS : BOT_STREAKS[i % BOT_STREAKS.length],
+  });
+  if (PRO_SKILLS.has(skill)) {
+    loadout.pro = loadout.perks.slice();
+    loadout.card = `pro-${loadout.perks[skill === 'elite' ? 2 : i % 3]}`;
+  }
+  return loadout;
+}
+
+// Free-for-all: every player is a side of one, team FFA_TEAM + roster index (see TEAMS in constants.js), and bots fill
+// up to the mode's field for the map (more on a Ground War map). In Gun Game everyone starts on the ladder's first rung.
+function buildFfaRoster(humans, { botSkill, mapId, mode, seed, players }) {
+  const total = Math.min(FFA_MAX, Math.max(humans.length, players || playersFor(mode, MAPS[mapId])));
+  const gun = MODES[mode].rules === 'gun';
+  const roster = humans.slice(0, FFA_MAX).map(h => {
+    let loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
+    if (gun) loadout = gunLoadout(0, loadout);
+    return { id: h.id, name: h.name, team: 0, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
+  });
+  const offset = gunOffset(mapId, mode, seed);
+  let weaponI = offset % BOT_PRIMARIES.length, sideI = offset >>> 5;
+  for (let n = 0; roster.length < total; n++) {
+    const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
+    let loadout = botLoadout(BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length], sideI++, skill, n);
+    if (gun) loadout = gunLoadout(0, loadout);
+    roster.push({ id: `bot${n}`, name: BOT_NAMES[n % BOT_NAMES.length], team: 0, isBot: true, skill, primary: loadout.primary, camo: loadout.camo, loadout });
+  }
+  roster.forEach((r, i) => { r.team = FFA_TEAM + i; });
   return roster;
 }
 
@@ -212,8 +247,16 @@ export class Sim {
     // `mode` is the rule set everything keys on ('dom' for Ground War Domination too); modeId is the mode as picked.
     this.mode = def.rules ?? def.id;
     this.modeId = def.id;
+    this.ffa = !!def.ffa;
+    this.ladder = this.mode === 'gun';      // Gun Game: scores are rungs climbed, and the rung is the loadout.
+    this.objective = OBJECTIVE_RULES.has(this.mode);
     if (this.mode === 'range') roster = [...roster, ...rangeDummies(this.map)];
+    // Each free-for-all player is a side of one. buildRoster already deals these; a roster from elsewhere gets them here.
+    if (this.ffa) roster = roster.slice(0, FFA_MAX).map((r, i) => (r.team === FFA_TEAM + i ? r : { ...r, team: FFA_TEAM + i }));
+    // Everything kept per team (scores, radar, jamming, sight lists) is sized for every side there is.
+    const T = this.teamCount = this.ffa ? FFA_TEAM + roster.length : 2;
     this.scoreLimit = scoreLimit ?? def.scoreLimit;
+    if (this.ladder) this.scoreLimit = Math.min(this.scoreLimit, GUN_LADDER.length);
     this.timeLimit = timeLimit ?? def.timeLimit;
     this.dt = STEP;
     this.time = 0;
@@ -222,11 +265,12 @@ export class Sim {
     this.phase = this.mode === 'range' ? 'live' : 'warmup';     // The range opens the moment you walk in.
     this.phaseT = WARMUP;
     this.timeLeft = this.timeLimit;
-    this.scores = [0, 0];
+    this.scores = new Array(T).fill(0);
     this.winner = null;
-    this.uav = [0, 0];
-    this.jam = [0, 0];        // Seconds that team's radar is jammed.
-    this.overwatch = [0, 0];  // Seconds of advanced UAV for that team (uav is held up alongside it).
+    this.uav = new Array(T).fill(0);
+    this.jam = new Array(T).fill(0);        // Seconds that team's radar is jammed.
+    this.jamBy = new Array(T).fill(0);      // Seconds left on a Jammer this team called (free-for-all airspace counts it).
+    this.overwatch = new Array(T).fill(0);  // Seconds of advanced UAV for that team (uav is held up alongside it).
     this.lastKill = null;
     this.firstBlood = false;
     this.events = [];
@@ -248,14 +292,18 @@ export class Sim {
     this._encodes = 0;
     this._metaUntil = 2;      // Tick up to which every snapshot carries the camo and loadout block.
     this._scratch = [];
-    this._airCount = [0, 0];  // Air streaks up per team, recounted when a tick asks.
+    this._airCount = new Array(T).fill(0);  // Air streaks up per team, recounted when a tick asks.
+    this._striking = new Array(T).fill(false);
     this._airTick = -1;
-    this._visible = [[], []]; // Enemies each team can currently see or has on radar.
-    this._visibleTick = [-99, -99];
+    this._visible = Array.from({ length: T }, () => []); // Enemies each team can currently see or has on radar.
+    this._visibleTick = new Array(T).fill(-99);
+    this._ffaPts = null;      // Free-for-all spawn candidates, see _ffaPoints.
+    this.hot = null;          // The last kill's place and time.
 
     const n = roster.length;
     this.players = roster.map((r, index) => {
-      const loadout = this._cleanLoadout({ ...r.loadout, primary: r.loadout?.primary || r.primary, camo: r.loadout?.camo || r.camo });
+      let loadout = this._cleanLoadout({ ...r.loadout, primary: r.loadout?.primary || r.primary, camo: r.loadout?.camo || r.camo });
+      if (this.ladder) loadout = gunLoadout(0, loadout);
       return {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
@@ -275,7 +323,7 @@ export class Sim {
       };
     });
     this.byId = new Map(this.players.map(p => [p.id, p]));
-    this.calledAt = [new Float32Array(n).fill(-99), new Float32Array(n).fill(-99)];
+    this.calledAt = Array.from({ length: T }, () => new Float32Array(n).fill(-99));
     this.spawnUsedAt = new Map();
     this.range = this.mode === 'range' ? new RangeDirector(this) : null;
     this._emit({ t: 'phase', phase: this.phase });
@@ -330,6 +378,7 @@ export class Sim {
   // ---- Spawning ----
 
   _spawnAll() {
+    if (this.ffa) { this._ffaSpawnAll(); return; }
     const used = new Set();
     for (const p of this.players) {
       if (p.dummy) { this._placeAt(p, p.home, p.home.aim); continue; }
@@ -366,9 +415,84 @@ export class Sim {
     this._emit({ t: 'spawn', id: p.id, x: s.x, z: s.z, aim: round2(aim) });
   }
 
+  // Free-for-all opening: everyone on a different team spawn point, spread over both ends, as far apart as they go.
+  _ffaSpawnAll() {
+    const pool = this.map.spawns.flat(), taken = [];
+    const order = this.players.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const k = Math.floor(this.rng() * (i + 1)), q = order[i]; order[i] = order[k]; order[k] = q; }
+    for (const i of order) {
+      let best = pool[0], bestD = -1;
+      for (const s of pool) {
+        let d = Infinity;
+        for (const t of taken) d = Math.min(d, Math.hypot(t.x - s.x, t.z - s.z));
+        d += this.rng() * 2;
+        if (d > bestD) { bestD = d; best = s; }
+      }
+      taken.push(best);
+      this._placeAt(this.players[i], best, this._faceMiddle(best));
+    }
+  }
+
+  // Where a free-for-all player may spawn: every team spawn point, plus open ground sampled across the whole map once the
+  // nav grid exists (host only), kept to cells a player can walk to from the spawns and clear of walls by a cell.
+  _ffaPoints() {
+    if (this._ffaPts && (this._ffaPts.full || !this.nav)) return this._ffaPts;
+    const pts = this.map.spawns.flat().map(s => ({ x: s.x, z: s.z }));
+    pts.full = false;
+    const nav = this.nav;
+    if (nav) {
+      const { w, h, blocked } = nav, reach = new Uint8Array(w * h);
+      const stack = [nav.nearestFree(pts[0].x, pts[0].z)];
+      reach[stack[0]] = 1;
+      while (stack.length) {
+        const k = stack.pop(), i = k % w, j = (k - i) / w;
+        if (i > 0 && !blocked[k - 1] && !reach[k - 1]) { reach[k - 1] = 1; stack.push(k - 1); }
+        if (i < w - 1 && !blocked[k + 1] && !reach[k + 1]) { reach[k + 1] = 1; stack.push(k + 1); }
+        if (j > 0 && !blocked[k - w] && !reach[k - w]) { reach[k - w] = 1; stack.push(k - w); }
+        if (j < h - 1 && !blocked[k + w] && !reach[k + w]) { reach[k + w] = 1; stack.push(k + w); }
+      }
+      const open = (i, j) => i > 0 && j > 0 && i < w - 1 && j < h - 1 && reach[j * w + i] && reach[j * w + i - 1] && reach[j * w + i + 1] && reach[(j - 1) * w + i] && reach[(j + 1) * w + i];
+      for (let z = FFA_GRID / 2; z < this.map.height; z += FFA_GRID) {
+        for (let x = FFA_GRID / 2; x < this.map.width; x += FFA_GRID) {
+          const i = Math.floor(x), j = Math.floor(z);
+          if (!open(i, j)) continue;
+          const px = i + 0.5, pz = j + 0.5;
+          if (pts.some(q => Math.abs(q.x - px) < 3 && Math.abs(q.z - pz) < 3)) continue;
+          pts.push({ x: px, z: pz });
+        }
+      }
+      pts.full = true;
+    }
+    return (this._ffaPts = pts);
+  }
+
+  // Facing the middle of the map from wherever this is.
+  _faceMiddle(s) { return Math.atan2(this.map.height / 2 - s.z, this.map.width / 2 - s.x); }
+
+  // Free-for-all respawn: the open point farthest from every living player, avoiding any one of them can see and any
+  // used a moment ago. Distance stops counting past FFA_FAR, so it is not always the same far corner.
+  _ffaRespawn(p) {
+    let best = null, bestScore = -Infinity;
+    for (const s of this._ffaPoints()) {
+      let nearest = FFA_FAR, seen = false;
+      for (const q of this.players) {
+        if (q === p || !q.alive) continue;
+        const d = Math.hypot(q.ps.x - s.x, q.ps.z - s.z);
+        if (d < nearest) nearest = d;
+        if (!seen && d < FFA_SIGHT && hasLineOfSight(this.map, s.x, s.z, q.ps.x, q.ps.z)) seen = true;
+      }
+      const usedAgo = this.time - (this.spawnUsedAt.get(s) ?? -99);
+      const score = nearest - (seen ? FFA_SEEN : 0) - (usedAgo < 3 ? 12 : 0) + this.rng() * 4;
+      if (score > bestScore) { bestScore = score; best = s; }
+    }
+    this.spawnUsedAt.set(best, this.time);
+    this._placeAt(p, best, this._faceMiddle(best));
+  }
+
   // Own side preferred; any point an enemy can see, or that was just used, is heavily penalised.
   _respawn(p) {
     if (p.dummy) { this._placeAt(p, p.home, p.home.aim); return; }
+    if (this.ffa) { this._ffaRespawn(p); return; }
     let best = null, bestScore = -Infinity;
     const enemyTeam = 1 - p.team;
     for (let t = 0; t < 2; t++) {
@@ -444,14 +568,15 @@ export class Sim {
       this.timeLeft -= STEP;
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
-        this._end(this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1));
+        this._end(this.ffa ? this._ffaLeader(true) : this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1));
       }
     }
 
     if (this.phase === 'live') {
-      for (let t = 0; t < 2; t++) {
+      for (let t = 0; t < this.teamCount; t++) {
         if (this.uav[t] > 0) this.uav[t] = Math.max(0, this.uav[t] - STEP);
         if (this.jam[t] > 0) this.jam[t] = Math.max(0, this.jam[t] - STEP);
+        if (this.jamBy[t] > 0) this.jamBy[t] = Math.max(0, this.jamBy[t] - STEP);
         if (this.overwatch[t] > 0) this.overwatch[t] = Math.max(0, this.overwatch[t] - STEP);
       }
       this._stepMortars();
@@ -460,10 +585,10 @@ export class Sim {
       this._stepTurrets();
       this._stepGunships();
       if (this.range) this.range.step();
-      else if (this.mode !== 'tdm') this._stepObjectives();
+      else if (this.objective) this._stepObjectives();
       const players = this.players;
       for (let i = 0; i < players.length; i++) this._stepTimers(players[i]);
-      if (!this.range && this.mode !== 'tdm' && this.tick % PLAN_EVERY === 0) planObjectives(this);
+      if (!this.range && this.objective && this.tick % PLAN_EVERY === 0) planObjectives(this);
       this._expireCallouts();
       // Alternate who acts first: a bot's shot lands immediately, so a fixed order hands one team every tied duel.
       const flip = this.tick & 1, last = players.length - 1;
@@ -703,6 +828,51 @@ export class Sim {
     this._setPhase('ended');
   }
 
+  // Free-for-all standings: score, then fewer deaths, then more kills. Returns the leader's team; with `strict`, null
+  // when the top two cannot be told apart (the time ran out on a dead heat).
+  _ffaLeader(strict = false) {
+    const ranked = this.players.filter(p => !p.dummy).sort((a, b) => this._ffaOrder(a, b));
+    if (!ranked.length) return null;
+    if (strict && ranked.length > 1 && this._ffaOrder(ranked[0], ranked[1]) === 0) return null;
+    return ranked[0].team;
+  }
+
+  _ffaOrder(a, b) {
+    return (this.scores[b.team] - this.scores[a.team]) || (a.deaths - b.deaths) || (b.kills - a.kills);
+  }
+
+  // ---- Gun Game ----
+
+  // Puts a player's loadout on a rung. The gun in hand changes too (see armPlayer); `announce` tells everyone, and the
+  // player's own phone, which owns a human's gun, arms itself from that event.
+  _setRung(p, level, announce = true, by = null) {
+    const gun = GUN_LADDER[Math.max(0, Math.min(GUN_LADDER.length - 1, level))];
+    p.loadout = gunLoadout(level, p.loadout);
+    p.pendingLoadout = null;
+    p.primary = gun;
+    p.kits[0] = attachmentsFor(p.loadout, gun);
+    armPlayer(p.ps, gun);
+    p.prevWeapon = gun;
+    if (p.bot) p.bot.onArmed();
+    if (announce) {
+      const e = { t: 'arm', id: p.id, weapon: gun, level };
+      if (by) e.by = by;          // Set back by this player's thrown kill.
+      this._emit(e);
+    }
+  }
+
+  // One rung up for every kill; the kill made on the last rung wins (see the limit check in _kill). Killed by anything
+  // thrown, the victim drops a rung.
+  _climb(killer, victim, equip) {
+    const up = this.scores[killer.team] + 1;
+    this.scores[killer.team] = up;
+    if (up < this.scoreLimit) this._setRung(killer, up);
+    if (equip && victim !== killer && this.scores[victim.team] > 0) {
+      const down = --this.scores[victim.team];
+      this._setRung(victim, down, true, killer.id);
+    }
+  }
+
   // Past position of a player. Writes into out and returns it, to avoid garbage.
   posAt(p, age, out) {
     const back = Math.min(age, MAX_REWIND) * SIM_HZ;
@@ -735,6 +905,8 @@ export class Sim {
     ps.adsT = d.adsT; ps.bloom = d.bloom;
     ps.heat = d.heat ?? 0; ps.overheated = !!d.overheated; ps.firingT = d.firingT ?? 0;
     p.primary = d.primary;
+    // Gun Game: the host hands out the gun. A phone a moment behind a promotion must not hand the old one back.
+    if (this.ladder) { ps.primary = p.loadout.primary; ps.slot = 0; ps.weapon = ps.primary; p.primary = ps.primary; }
     if (d.camo && d.camo !== p.camo) { p.camo = d.camo; ps.camo = d.camo; this._metaUntil = this.tick + 2; }
     this._diffFx(p);
   }
@@ -742,7 +914,7 @@ export class Sim {
   // Takes effect at the next spawn. Score and held streaks carry over; see setStreakKinds.
   setLoadout(id, loadout) {
     const p = this.byId.get(id);
-    if (!p || !loadout || typeof loadout !== 'object') return false;
+    if (!p || !loadout || typeof loadout !== 'object' || this.ladder) return false;     // Gun Game deals the loadouts.
     p.pendingLoadout = this._cleanLoadout(loadout, p.loadout);
     return true;
   }
@@ -968,7 +1140,8 @@ export class Sim {
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
     target.lastKilledBy = killer.id;
     killer.kills++;
-    if (this.mode === 'tdm') this.scores[killer.team]++;
+    if (this.mode === 'tdm' || this.mode === 'ffa') this.scores[killer.team]++;
+    else if (this.ladder) this._climb(killer, target, equip);
     else this._dropTag(target);
 
     let assist = null, bestDmg = ASSIST_MIN_DAMAGE;
@@ -991,6 +1164,9 @@ export class Sim {
     kill.vw = target.ps.weapon;     // What the victim was holding: per-gun deaths in the stats.
     this._emit(kill);
     this.lastKill = { by: killer.id, target: target.id, weapon, camo: killer.camo, x: kill.x, z: kill.z };
+    // Where the fighting just was, for free-for-all bots looking for some (BotBrain._roam).
+    const hot = this.hot ??= { x: 0, z: 0, t: 0 };
+    hot.x = target.ps.x; hot.z = target.ps.z; hot.t = this.time;
 
     if (!this.firstBlood) { this.firstBlood = true; this._medal(killer, 'first_blood'); }
     if (killer.lastKilledBy === target.id) { killer.lastKilledBy = null; this._medal(killer, 'revenge'); }
@@ -1136,7 +1312,8 @@ export class Sim {
         this._emit({ t: 'streak', id, kind, team: p.team });
         break;
       case 'jammer':
-        this.jam[1 - p.team] = JAM_TIME;
+        for (let t = 0; t < this.teamCount; t++) if (this._hostile(t, p.team)) this.jam[t] = JAM_TIME;
+        this.jamBy[p.team] = JAM_TIME;
         this._emit({ t: 'streak', id, kind, team: p.team });
         break;
       case 'overwatch':
@@ -1161,21 +1338,33 @@ export class Sim {
   _countAir() {
     if (this._airTick === this.tick) return;
     this._airTick = this.tick;
-    const n = this._airCount;
-    for (let t = 0; t < 2; t++) {
-      n[t] = (this.uav[t] > 0 && this.overwatch[t] <= 0 ? 1 : 0) + (this.overwatch[t] > 0 ? 1 : 0) + (this.jam[1 - t] > 0 ? 1 : 0);
+    const n = this._airCount, T = this.teamCount;
+    for (let t = 0; t < T; t++) {
+      // A team's own Jammer: in team modes it is the jam on the other side, in a free-for-all its own clock.
+      const jamming = this.ffa ? this.jamBy[t] > 0 : this.jam[1 - t] > 0;
+      n[t] = (this.uav[t] > 0 && this.overwatch[t] <= 0 ? 1 : 0) + (this.overwatch[t] > 0 ? 1 : 0) + (jamming ? 1 : 0);
     }
     for (let i = 0; i < this.gunships.length; i++) n[this.gunships[i].team]++;
-    const striking = [false, false];
+    const striking = this._striking.fill(false);
     for (let i = 0; i < this.strikes.length; i++) if (this.strikes[i].kind === 'strike') striking[this.strikes[i].team] = true;
-    for (let t = 0; t < 2; t++) if (striking[t]) n[t]++;
+    for (let t = 0; t < T; t++) if (striking[t]) n[t]++;
   }
+
+  // Air streaks up across the whole map.
+  _airTotal() {
+    let sum = 0;
+    for (let t = 0; t < this.teamCount; t++) sum += this._airCount[t];
+    return sum;
+  }
+
+  // Whether two sides are enemies. Every side but your own is, in team modes and free-for-all alike.
+  _hostile(a, b) { return a !== b; }
 
   // How many of one streak a team has running right now.
   _activeCount(team, kind) {
     switch (kind) {
       case 'uav': return this.uav[team] > 0 ? 1 : 0;
-      case 'jammer': return this.jam[1 - team] > 0 ? 1 : 0;
+      case 'jammer': return (this.ffa ? this.jamBy[team] > 0 : this.jam[1 - team] > 0) ? 1 : 0;
       case 'overwatch': return this.overwatch[team] > 0 ? 1 : 0;
       case 'mortar': return this.mortars.reduce((n, m) => n + (m.team === team ? 1 : 0), 0);
       case 'strike': return this.strikes.some(s => s.kind === 'strike' && s.team === team) ? 1 : 0;
@@ -1194,7 +1383,7 @@ export class Sim {
     if (def.limit > 0 && this._activeCount(team, kind) >= def.limit) return 'limit';
     if (def.air) {
       this._countAir();
-      if (this._airCount[team] >= AIR_TEAM_MAX || this._airCount[0] + this._airCount[1] >= AIR_TOTAL_MAX) return 'airspace';
+      if (this._airCount[team] >= AIR_TEAM_MAX || this._airTotal() >= AIR_TOTAL_MAX) return 'airspace';
     }
     if (kind === 'mortar' && this._teamVisible(team).length === 0) return 'no_target';
     return null;
@@ -1280,17 +1469,21 @@ export class Sim {
   }
 
   // Everything electronic the enemy has dies, and their radar stays down a moment after.
+  // In a free-for-all that is every other player.
   _emp(p) {
-    const enemy = 1 - p.team;
-    for (let i = this.turrets.length - 1; i >= 0; i--) if (this.turrets[i].team === enemy) this._removeTurret(this.turrets[i]);
-    for (let i = this.gunships.length - 1; i >= 0; i--) if (this.gunships[i].team === enemy) this.gunships.splice(i, 1);
-    this.strikes = this.strikes.filter(s => !(s.team === enemy && s.kind === 'strike'));
-    this.uav[enemy] = 0; this.overwatch[enemy] = 0;
-    this.jam[enemy] = Math.max(this.jam[enemy], EMP_JAM_TIME);
-    this.eq.clearDeployed(enemy, id => this.byId.get(id)?.team);
+    const own = p.team, teamOf = id => this.byId.get(id)?.team;
+    for (let i = this.turrets.length - 1; i >= 0; i--) if (this.turrets[i].team !== own) this._removeTurret(this.turrets[i]);
+    for (let i = this.gunships.length - 1; i >= 0; i--) if (this.gunships[i].team !== own) this.gunships.splice(i, 1);
+    this.strikes = this.strikes.filter(s => !(s.team !== own && s.kind === 'strike'));
+    this._emit({ t: 'streak', id: p.id, kind: 'emp', team: own });
+    for (let enemy = 0; enemy < this.teamCount; enemy++) {
+      if (enemy === own) continue;
+      this.uav[enemy] = 0; this.overwatch[enemy] = 0; this.jamBy[enemy] = 0;
+      this.jam[enemy] = Math.max(this.jam[enemy], EMP_JAM_TIME);
+      this.eq.clearDeployed(enemy, teamOf);
+      if (!this.ffa || this.players.some(q => q.team === enemy)) this._emit({ t: 'emp', team: enemy });
+    }
     this._airTick = -1;
-    this._emit({ t: 'streak', id: p.id, kind: 'emp', team: p.team });
-    this._emit({ t: 'emp', team: enemy });
   }
 
   _placeTurret(p) {
@@ -1415,7 +1608,8 @@ export class Sim {
 
   // Comes in from the map edge behind its owner.
   _launchChopper(p) {
-    const g = { kind: 'chopper', team: p.team, owner: p, x: p.team === 0 ? 2 : this.map.width - 2, z: p.ps.z, aim: p.team === 0 ? 0 : Math.PI,
+    const west = this.ffa ? p.ps.x < this.map.width / 2 : p.team === 0;     // A free-for-all chopper uses the nearer edge.
+    const g = { kind: 'chopper', team: p.team, owner: p, x: west ? 2 : this.map.width - 2, z: p.ps.z, aim: west ? 0 : Math.PI,
       life: CHOPPER_LIFE * this._engineerMult(p, ENGINEER_AIR), angle: 0, dir: 1, pause: 1, burstLeft: 0, cooldown: 0, target: null, aimX: 0, aimZ: 0, retarget: 0 };
     this.gunships.push(g);
     this._emit({ t: 'streak', id: p.id, kind: 'chopper', team: p.team });
@@ -1685,16 +1879,25 @@ export class Sim {
     sim.phase = view.phase;
     sim.phaseT = view.phase === 'warmup' ? Math.max(0.5, WARMUP - view.t) : 0;
     sim.timeLeft = view.timeLeft;
-    sim.scores = [view.scores[0], view.scores[1]];
+    const copy = (from, to) => { for (let t = 0; t < to.length; t++) to[t] = from?.[t] ?? 0; };
+    copy(view.scores, sim.scores);
     sim.winner = view.winner;
-    sim.uav = [view.uav[0], view.uav[1]];
-    sim.jam = view.jam ? [view.jam[0], view.jam[1]] : [0, 0];
-    sim.overwatch = view.overwatchT ? [view.overwatchT[0], view.overwatchT[1]] : [0, 0];
+    copy(view.uav, sim.uav);
+    copy(view.jam, sim.jam);
+    copy(view.overwatchT, sim.overwatch);
     sim.lastKill = view.lastKill ? { ...view.lastKill } : null;
     sim.firstBlood = view.players.some(p => p.kills > 0);
     for (let i = 0; i < view.players.length && i < sim.players.length; i++) sim._restorePlayer(sim.players[i], view.players[i]);
     sim._restoreMode(view);
     sim._restoreStreaks(view);
+    // Gun Game: everyone back on the rung their score says, with the ammo the snapshot had.
+    if (sim.ladder) {
+      for (const p of sim.players) {
+        const ammo = p.ps.ammo[0];
+        sim._setRung(p, sim.scores[p.team], false);
+        if (p.alive) p.ps.ammo[0] = Math.min(ammo, p.ps.defs[0].magazine);
+      }
+    }
     sim.eq.restore(view.projectiles, view.smokes, id => sim.byId.get(id)?.team);
     sim._initBots();
     for (const id of opts.gone ?? []) sim.humanLeft(id);
@@ -1819,15 +2022,15 @@ export class Sim {
       tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life })),
       points: this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested)),
       hardT: this.mode === 'hard' ? this.hardT : 0,
-      scores: [this.scores[0], this.scores[1]], winner: this.winner,
-      uav: [this.uav[0], this.uav[1]],
+      scores: this.scores.slice(), winner: this.winner, ffa: this.ffa,
+      uav: this.uav.slice(),
       players: this.players.map(p => this._playerView(p)),
       projectiles: this.eq.projectiles.map(p => ({ id: p.id, kind: p.kind, x: p.x, z: p.z, y: p.y, owner: p.owner, vx: p.vx, vz: p.vz, age: p.age, grounded: p.grounded, stuck: p.stuck })),
       smokes: this.eq.smokes.map(s => ({ id: s.id, x: s.x, z: s.z, r: s.r, age: s.t })),
       turrets: this.turrets.map(t => ({ id: t.id, team: t.team, owner: t.owner.id, x: t.x, z: t.z, aim: t.aim, hp: Math.ceil(t.hp), life: t.life })),
       gunships: this.gunships.map(g => ({ kind: g.kind, team: g.team, owner: g.owner.id, x: g.x, z: g.z, aim: g.aim, life: g.life })),
       localId, lastKill: this.lastKill,
-      jam: [this.jam[0], this.jam[1]], overwatchT: [this.overwatch[0], this.overwatch[1]],
+      jam: this.jam.slice(), overwatchT: this.overwatch.slice(),
     });
   }
 
@@ -1840,7 +2043,8 @@ export class Sim {
     const team = me.team;
     if (view.jam[team] > 0) {
       view.jammed = true;
-      view.uav = team === 0 ? [0, view.uav[1]] : [view.uav[0], 0];
+      view.uav = view.uav.slice();
+      view.uav[team] = 0;
       for (let i = 0; i < view.players.length; i++) if (view.players[i].team !== team) view.players[i].firingT = 0;
     }
     if (view.overwatchT[team] > 0) {
@@ -1856,12 +2060,13 @@ export class Sim {
   }
 
   // Header: [time cs, phase, timeLeft ds, score0, score1, winner(-1), uav0 ds, uav1 ds, lastKill|0, meta|0,
-  // projectiles|0, smokes|0, turrets|0, gunships|0, objective|0], then PLAYER_STRIDE numbers per player in roster
-  // order. meta is [camos, loadout ints, mode, scoreLimit]; it goes out on change and once a second. The entity
+  // projectiles|0, smokes|0, turrets|0, gunships|0, objective|0, jam|0], then PLAYER_STRIDE numbers per player in roster
+  // order. A free-for-all has a side per player: score0 is then the list of every player's score in roster order
+  // (score1 0), uav0 the list of their UAV ds or 0 when none is up (uav1 0), and jam is [jam ds..., overwatch ds...]. meta is [camos, loadout ints, mode, scoreLimit]; it goes out on change and once a second. The entity
   // lists are flat. Objective block: kc [id*2+team, x, z, life ...] (ds of metres and seconds), dom [packed zone x3], hard [zone index,
   // packed zone, hardT ds]. Positions and radii of zones come from the map, which guests already have.
   encodeSnapshot() {
-    const out = [
+    const out = this.ffa ? this._ffaHead() : [
       Math.round(this.time * 100), PHASES.indexOf(this.phase), Math.round(this.timeLeft * 10),
       this.scores[0], this.scores[1], this.winner === null ? -1 : this.winner,
       Math.round(this.uav[0] * 10), Math.round(this.uav[1] * 10),
@@ -1902,6 +2107,39 @@ export class Sim {
       );
     }
     return this._packPlayers(out);
+  }
+
+  // The free-for-all header: same slots, with per-player lists where team modes have a pair (see encodeSnapshot).
+  _ffaHead() {
+    const ds = v => Math.round(v * 10), n = this.players.length, side = a => a.slice(FFA_TEAM, FFA_TEAM + n);
+    const radar = this.uav.some(v => v > 0) ? side(this.uav).map(ds) : 0;
+    const jams = this.jam.some(v => v > 0) || this.overwatch.some(v => v > 0) ? [...side(this.jam), ...side(this.overwatch)].map(ds) : 0;
+    return [
+      Math.round(this.time * 100), PHASES.indexOf(this.phase), Math.round(this.timeLeft * 10),
+      side(this.scores), 0, this.winner === null ? -1 : this.winner,
+      radar, 0, 0, 0, 0, 0, 0, 0, 0, jams,
+    ];
+  }
+
+  // Per-team arrays back out of a header, team modes and free-for-all alike.
+  _decodeHead(d, view) {
+    const T = this.teamCount;
+    if (!this.ffa) {
+      view.scores = [d[3], d[4]];
+      view.uav = [d[6] / 10, d[7] / 10];
+      view.jam = d[15] ? [d[15][0] / 10, d[15][1] / 10] : [0, 0];
+      view.overwatchT = d[15] ? [d[15][2] / 10, d[15][3] / 10] : [0, 0];
+      return;
+    }
+    const n = this.players.length, side = (list, k = 1, at = 0) => {
+      const out = new Array(T).fill(0);
+      if (list) for (let i = 0; i < n; i++) out[FFA_TEAM + i] = (list[at + i] ?? 0) / k;
+      return out;
+    };
+    view.scores = side(d[3]);
+    view.uav = side(d[6] || null, 10);
+    view.jam = side(d[15] || null, 10);
+    view.overwatchT = side(d[15] || null, 10, n);
   }
 
   _encodeObjective() {
@@ -2017,17 +2255,17 @@ export class Sim {
     }
     const view = {
       t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
-      scores: [d[3], d[4]], winner: d[5] === -1 ? null : d[5],
-      uav: [d[6] / 10, d[7] / 10], players, localId, lastKill,
+      scores: null, winner: d[5] === -1 ? null : d[5], ffa: this.ffa,
+      uav: null, players, localId, lastKill,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
       projectiles: this._decodeList(d[10], 10, (a, i) => ({ id: a[i], kind: PROJECTILE_KINDS[a[i + 1]], x: a[i + 2] / 10, z: a[i + 3] / 10, y: a[i + 4] / 10,
         owner: this.players[a[i + 5]]?.id ?? null, vx: a[i + 6] / 10, vz: a[i + 7] / 10, age: a[i + 8] / 30, grounded: !!(a[i + 9] & 1), stuck: !!(a[i + 9] & 2) })),
       smokes: this._decodeList(d[11], 5, (a, i) => ({ id: a[i], x: a[i + 1] / 10, z: a[i + 2] / 10, r: a[i + 3] / 10, age: a[i + 4] / 10 })),
       turrets: this._decodeList(d[12], 7, (a, i) => ({ id: a[i], team: this.players[a[i + 1]].team, owner: this.players[a[i + 1]].id, x: a[i + 2] / 10, z: a[i + 3] / 10, aim: a[i + 4] / 20, hp: a[i + 5], life: a[i + 6] / 10 })),
       gunships: this._decodeList(d[13], 6, (a, i) => ({ kind: GUNSHIP_KINDS[a[i + 5]], team: this.players[a[i]].team, owner: this.players[a[i]].id, x: a[i + 1] / 10, z: a[i + 2] / 10, aim: a[i + 3] / 20, life: a[i + 4] / 10 })),
-      jam: d[15] ? [d[15][0] / 10, d[15][1] / 10] : [0, 0],
-      overwatchT: d[15] ? [d[15][2] / 10, d[15][3] / 10] : [0, 0],
+      jam: null, overwatchT: null,
     };
+    this._decodeHead(d, view);
     this._decodeObjective(d[14], view);
     return this._applyIntel(view);
   }

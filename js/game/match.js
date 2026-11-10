@@ -5,7 +5,7 @@ import { MAPS } from '../shared/map.js';
 import { SIM_HZ, SNAPSHOT_EVERY, STATE_SEND_HZ, INTERP_DELAY } from '../shared/constants.js';
 import {
   createPlayerState, respawnPlayer, stepPlayer, traceShot, applyAimAssist,
-  encodeHumanState, decodeHumanState,
+  encodeHumanState, decodeHumanState, armPlayer,
 } from '../sim/player.js';
 import { Sim, scavengeRefill } from '../sim/sim.js';
 import { previewThrow, maxThrowRange } from '../sim/equipment.js';
@@ -123,6 +123,7 @@ export class Match {
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
+      if (e.t === 'arm' && e.id === this.localId) armPlayer(this.ps, e.weapon);   // Gun Game promotion or setback.
       this.frameEvents.push(e);
     }
   }

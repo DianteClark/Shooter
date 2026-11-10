@@ -1,0 +1,46 @@
+/* ---- Invites: lobby controls, the code + QR sheet, join problems, and the Safari note (js/ui/invite.js) ---------- */
+#ui .inv-ctl { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
+#ui .menu .inv-ctl .btn { min-height: 44px; }
+#ui .menu .inv-share { padding: 0 var(--sp-5) 0 var(--sp-4); }
+#ui .menu .inv-qr { width: 46px; padding: 0; justify-content: center; }
+#ui .inv-qr .ico { height: 22px; }
+
+#ui .sheet.inv-sheet { width: min(660px, 100%); flex-direction: row; align-items: stretch; gap: var(--sp-6); }
+.inv-qrwrap { flex: none; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); }
+.inv-qrcode { display: block; width: 196px; height: 196px; box-shadow: 0 0 0 3px var(--c-sodium); }
+#ui .inv-qrwrap small { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
+.inv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3); justify-content: center; }
+.inv-code { display: flex; gap: var(--sp-2); }
+.inv-code b {
+  width: 64px; height: 76px; display: grid; place-items: center; font: 400 58px/1 var(--f-stencil); color: var(--c-sodium);
+  background: var(--c-night); box-shadow: inset 0 0 0 1px var(--c-line-hi), inset 0 -4px 0 var(--c-sodium);
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+#ui .inv-main p b { color: var(--c-chalk); font-weight: 600; }
+#ui .sheet .inv-link { font: 400 var(--fs-body)/1.3 var(--f-body); color: var(--c-chalk); background: var(--c-night); padding: var(--sp-2) var(--sp-3); word-break: break-all; user-select: all; -webkit-user-select: all; }
+#ui .inv-sheet .sheet-row { justify-content: flex-start; flex-wrap: wrap; }
+
+#ui .sheet.inv-problem { width: min(470px, 100%); }
+#ui .inv-problem .err-mark.soft { color: var(--c-sodium); background: rgba(242,166,59,.12); box-shadow: inset 0 0 0 2px rgba(242,166,59,.5); }
+#ui .inv-problem .sheet-row { justify-content: center; flex-wrap: wrap; }
+#ui .inv-problem .inv-wait { font: 400 var(--fs-body)/1.3 var(--f-body); color: var(--c-go); }
+
+/* Lives in <body>, outside the scaled menu layer, so it is sized in plain px and keeps to the safe area. Top centre: the
+   searching screen is empty there, and in the lobby it clears the Leave button; it goes by itself after a few seconds. */
+.inv-note {
+  position: fixed; z-index: 100; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 8px); transform: translateX(-50%);
+  width: min(600px, calc(100vw - 32px)); display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px;
+  font: 400 14px/1.25 var(--f-body); color: var(--c-chalk);
+  background: linear-gradient(172deg, #3e4a57, #262f39); box-shadow: inset 4px 0 0 var(--c-blue), var(--edge), var(--shadow-2);
+  animation: inv-note-in var(--dur-base) var(--ease-out) both;
+}
+.inv-note > span { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.inv-note .ico { flex: none; width: auto; height: 20px; color: var(--c-blue); }
+.inv-note b { font-weight: 600; }
+.inv-note-code { font: 400 17px/1 var(--f-stencil); letter-spacing: .08em; color: var(--c-sodium); }
+.inv-note button { flex: none; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 12px; color: var(--c-chalk); background: rgba(16,20,26,.55); box-shadow: var(--edge); font: 400 13px/1 var(--f-plate); letter-spacing: var(--tr-plate); }
+.inv-note button .ico { color: currentColor; height: 16px; }
+.inv-note .inv-note-x { width: 40px; padding: 0; justify-content: center; }
+.inv-note button.pressed { transform: scale(.94); }
+.inv-note.out { opacity: 0; transition: opacity var(--dur-base) var(--ease-in); }
+@keyframes inv-note-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }

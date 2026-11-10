@@ -12,10 +12,20 @@ export const TIME_LIMIT = 600;
 export const RESPAWN_TIME = 2.5;
 export const SPAWN_PROTECT = 1.5;
 
+// Indices 0 and 1 are the two sides of every team mode. In a free-for-all each player is a side of one (team
+// FFA_TEAM + roster index), so every `team !== myTeam` check already reads "hostile" and TEAMS[team] is that player's
+// own colour in the world, the feed and the minimap. These avoid the two team colours, so no FFA player reads as a side.
 export const TEAMS = [
   { id: 0, name: 'Vanguard', color: 0x38b6ff, css: '#38b6ff' },
   { id: 1, name: 'Reapers',  color: 0xff4d3d, css: '#ff4d3d' },
+  ...[
+    ['Amber', 0xffc21a], ['Lime', 0x8cf03c], ['Magenta', 0xff3fd2], ['Teal', 0x1fe0c4],
+    ['Orange', 0xff8a1f], ['Violet', 0x9d6bff], ['Rose', 0xff8fb4], ['Mint', 0xb4ffd8],
+    ['Chalk', 0xf2f0e6], ['Cobalt', 0x4d6dff], ['Olive', 0xc9d24a], ['Copper', 0xd9774a],
+  ].map(([name, color], i) => ({ id: i + 2, name, color, css: '#' + color.toString(16).padStart(6, '0') })),
 ];
+export const FFA_TEAM = 2;                         // First free-for-all colour slot in TEAMS.
+export const FFA_MAX = TEAMS.length - FFA_TEAM;    // Players a free-for-all can colour apart: 12.
 
 // Display order everywhere (loadout, gunsmith): grouped by category. Ids are stable, the wire sends list indices.
 export const CATEGORIES = ['Assault', 'SMG', 'Shotgun', 'LMG', 'Marksman', 'Sniper', 'Pistol', 'Launcher'];

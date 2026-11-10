@@ -5,7 +5,7 @@ import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
-import { MODES, modeRules } from '../shared/modes.js';
+import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
@@ -65,6 +65,11 @@ const RANGE_HZ = 6;              // The readout repaints this often; it would be
 const PRINT_HZ = 12;             // Footprint line-of-sight checks per second; drawing still follows the camera every frame.
 const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky']);   // What Hijacker sees through walls.
 const NO_PRO = Object.freeze([]);
+const FFA_FOE = '#ff6a4d';        // Free-for-all: "an enemy" when it is not one particular player (footprints, edge tints).
+const ORDINAL = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+// Free-for-all standings: score, then fewer deaths, then more kills (the sim's own order for the winner).
+const ffaRank = (view, list = view.players) => list.filter(p => !p.dummy).sort((a, b) =>
+  ((view.scores[b.team] ?? 0) - (view.scores[a.team] ?? 0)) || (a.deaths - b.deaths) || (b.kills - a.kills));
 const PRO_LINE = { scavenger: '+1 equipment', bandolier: 'Equipment restocked', adrenaline: '25% less damage', engineer: 'The Sentry is yours' };
 const TIPS = [
   'Slide through a doorway to shrink as a target.',
@@ -227,21 +232,69 @@ export class HUD {
     this.timeLimit = timeLimit;
     this.modeId = mode;                 // As picked, e.g. 'gwdom'.
     this.mode = modeRules(mode);        // The rule set it plays by, e.g. 'dom'.
+    this.ffa = isFfa(mode);             // Every player for themselves: scorebar, board and banners rank players.
+    this.gun = this.mode === 'gun';
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
     this.#seedFallback();
     this.#drawMapBase();
     this.#buildObjectiveHud();
-    this.sbGoal.textContent = `to ${scoreLimit}`;
+    this.sbGoal.textContent = this.gun ? `${scoreLimit} guns` : `to ${scoreLimit}`;
     this.boardMode.textContent = MODES[mode]?.name ?? '';
-    this.boardGoal.textContent = `${this.map?.name ?? ''}, first to ${scoreLimit}`;
+    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : `first to ${scoreLimit}`}`;
+    this.el.classList.toggle('ffa-on', this.ffa);
+    this.gunEl.hidden = !this.gun;
+    this.#oneGunControls(this.gun);
     this.reset();
     this.#range.prepare(mode === 'range');
     this.el.classList.toggle('range-on', mode === 'range');
     this.#hideIntro();
     this.remeasured = false;
     this.pendingIntro = intro && mode !== 'range' ? { mapId, mode, roster, localId } : null;
+  }
+
+  // Gun Game: no scorestreaks and nothing to swap to, so their buttons go; the death screen has no loadouts to offer.
+  #oneGunControls(on) {
+    const c = this.controls;
+    for (const t of c?.tiles ?? []) if (t?.node) t.node.style.display = on ? 'none' : '';
+    if (c?.buttons?.swap) c.buttons.swap.style.display = on ? 'none' : '';
+    if (c?.scoreBox) c.scoreBox.style.display = on ? 'none' : '';
+    this.el.querySelector('.picker').style.display = on ? 'none' : '';
+  }
+
+  // The Gun Game strip under the scorebar: the gun in hand, how far up the ladder, and what the next kill brings.
+  #updateGun(view, me, c) {
+    if (!this.gun) return;
+    const level = Math.max(0, Math.min(GUN_LADDER.length - 1, view.scores[me.team] ?? 0));
+    if (level === c.gunLevel) return;
+    const up = level > c.gunLevel;
+    const first = Number.isNaN(c.gunLevel);
+    c.gunLevel = level;
+    const gun = GUN_LADDER[level], next = GUN_LADDER[level + 1];
+    this.gunEl.querySelector('.gr-icon').innerHTML = glyph(gun, 18);
+    this.gunEl.querySelector('.gr-n').textContent = `${level + 1}/${GUN_LADDER.length}`;
+    this.gunEl.querySelector('.gr-name').textContent = weaponName(gun);
+    this.gunEl.querySelector('.gr-next').innerHTML = next
+      ? `<small>Next</small>${glyph(next, 12)}<span>${esc(weaponName(next))}</span>`
+      : '<small class="gr-final">Final gun: one kill wins</small>';
+    const pips = this.gunEl.querySelector('.gr-pips');
+    pips.innerHTML = GUN_LADDER.map((_, i) => `<i style="flex:1;height:3px;background:${i < level ? 'var(--c-sodium)' : i === level ? '#fff' : 'rgba(231,234,228,.18)'}"></i>`).join('');
+    if (!first) this.gunEl.animate(up ? SCORE_POP_IN : HP_KNOCK, { duration: up ? 520 : 300, easing: 'cubic-bezier(.2,.9,.3,1)' });
+  }
+
+  // A Gun Game rung change for the local player: the gun is already in hand; this says why.
+  #onArm(e) {
+    if (e.id !== this.view?.localId || !this.gun) return;
+    const name = weaponName(e.weapon);
+    if (e.by) {
+      const by = this.view.players.find(p => p.id === e.by);
+      this.#banner('Set back', `${by?.name ?? 'Someone'} knocked you down to the ${name}`, 1600, 'enemy');
+    } else if (e.level === GUN_LADDER.length - 1) {
+      this.#banner('Final gun', `${name}: one kill wins it`, 1600, 'mine');
+    } else {
+      this.#callout(`${name}  ${e.level + 1}/${GUN_LADDER.length}`);
+    }
   }
 
   // onSetLoadout's sibling for the firing range's Reset.
@@ -259,19 +312,24 @@ export class HUD {
     const myTeam = roster.find(p => p.id === localId)?.team ?? 0;
     const m = MODES[mode];
     const minutes = Math.round(this.timeLimit / 60);
+    // Free-for-all: everyone in their own colour, split across both sides of the card. Nobody is on your side.
+    const field = (list, side, title) => `<div class="in-team ${side}" style="--team:var(--c-sodium)"><h3><i></i>${esc(title)}</h3>${list.map((p, i) =>
+      `<div style="--team:${TEAMS[p.team]?.css ?? '#fff'}">${row(p, i)}</div>`).join('')}</div>`;
+    const half = Math.ceil(roster.length / 2);
+    const rules = this.gun ? `${GUN_LADDER.length} guns<i></i>${minutes} min` : `First to ${this.scoreLimit}<i></i>${minutes} min`;
     this.introEl.innerHTML = `
-      ${team(myTeam, 'ours')}
+      ${this.ffa ? field(roster.slice(0, half), 'ours', 'Every player') : team(myTeam, 'ours')}
       <div class="in-mid">
         <div class="in-card">
           <div class="in-pic" style="background-image:url(assets/maps/${esc(map?.id ?? mapId)}.jpg)"></div>
           <div class="in-mode">${glyph(`mode:${mode}`, 15, 'gl in-mode-icon')}<span>${esc(m?.name ?? '')}</span></div>
           <h2>${esc(map?.name ?? '')}</h2>
-          <p class="in-rules">First to ${this.scoreLimit}<i></i>${minutes} min</p>
+          <p class="in-rules">${rules}</p>
         </div>
         <div class="in-count"><b>3</b></div>
         <p class="in-tip">${esc(m?.desc ?? TIPS[Math.floor(Math.random() * TIPS.length)])}</p>
       </div>
-      ${team(1 - myTeam, 'theirs')}`;
+      ${this.ffa ? field(roster.slice(half), 'theirs', 'for themselves') : team(1 - myTeam, 'theirs')}`;
     this.introCount = this.introEl.querySelector('.in-count b');
     this.introShown = 3;
     this.introEl.classList.add('show');
@@ -308,6 +366,7 @@ export class HUD {
       weapon: '', reloadFrac: NaN, reloadOn: null, low: null, hurt: null, vign: NaN, dead: null, respawn: NaN,
       protect: null, picked: -1, enemyUav: null, tag: '', heatOn: null, heat: NaN, heatLevel: '', overBanner: null,
       score: NaN, capped: null, swapHint: null, objState: null, objFrac: NaN, hardShown: NaN,
+      gunLevel: NaN, rival: null, place: '',
     };
     this.view = null;
     this.modeBannerShown = false;
@@ -427,7 +486,7 @@ export class HUD {
 
   // Shows the end banner, then calls onDone once the player has had a moment to read it.
   showEnd(results, onDone) {
-    this.#showEndBanner(results.winner, results.myTeam);
+    this.#showEndBanner(results.winner, results.myTeam, results.players ? { ...this.view, players: results.players, scores: results.scores } : this.view);
     const wait = Math.max(0, END_BANNER_MIN - (performance.now() - this.endAt));
     setTimeout(() => {
       this.endEl.classList.remove('show');
@@ -519,6 +578,11 @@ export class HUD {
         <div class="obj-chips"></div>
         <div class="obj-timer" hidden><small>Moves in</small><b>0:30</b></div>
       </div>
+      <div class="gun-rung" hidden style="position:absolute;left:50%;top:calc(var(--st) + 50px);transform:translateX(-50%);min-width:210px;padding:5px 12px 6px;background:var(--hud-glass);box-shadow:var(--hud-edge);clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%,0 8px);pointer-events:none;display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;align-items:center;gap:7px;color:var(--c-chalk)"><span class="gr-icon" style="color:#fff"></span><b class="gr-name" style="font:400 15px/1 var(--f-stencil);letter-spacing:var(--tr-stencil)"></b><b class="gr-n" style="margin-left:auto;font:400 15px/1 var(--f-stencil);color:var(--c-sodium);font-variant-numeric:tabular-nums"></b></div>
+        <div class="gr-pips" style="display:flex;gap:2px"></div>
+        <div class="gr-next" style="display:flex;align-items:center;gap:5px;font:400 var(--fs-caption)/1 var(--f-plate);letter-spacing:var(--tr-plate);color:rgba(231,234,228,.75)"></div>
+      </div>
       <div class="obj-meter" hidden><i class="obj-meter-fill"></i><b></b></div>
       <div class="obj-banner"><b></b><small></small></div>
       <div class="callout"></div>
@@ -589,6 +653,7 @@ export class HUD {
     this.objTimer = $('.obj-timer');
     this.objTimerNum = $('.obj-timer b');
     this.objMeter = $('.obj-meter');
+    this.gunEl = $('.gun-rung');
     this.objMeterFill = $('.obj-meter-fill');
     this.objMeterText = $('.obj-meter b');
     this.objBanner = $('.obj-banner');
@@ -680,6 +745,7 @@ export class HUD {
   #paintBoard(view) {
     const me = this.#findLocal(view);
     if (!me) return;
+    if (this.ffa) { this.#paintFfaBoard(view, me); return; }
     [me.team, 1 - me.team].forEach((team, s) => {
       const side = this.boardSides[s];
       side.team.textContent = `${TEAMS[team].name}  ${view.scores[team]}`;
@@ -693,6 +759,7 @@ export class HUD {
         if (!p) return;
         row.classList.toggle('me', p.id === me.id);
         slot.name.textContent = p.name;
+        slot.name.style.color = '';
         const badge = this.badges.get(p.id);
         const rank = badge?.prestige ?? -1;
         if (rank !== slot.rank) {
@@ -706,6 +773,36 @@ export class HUD {
         cells[2].textContent = p.deaths;
         cells[3].textContent = p.assists ?? 0;
         cells[4].textContent = this.#objectiveStat(p);
+        cells[5].textContent = matchScore(p);
+      });
+    });
+  }
+
+  // Free-for-all: one ranked list over both halves (12 rows, the largest field), each row in that player's colour.
+  #paintFfaBoard(view, me) {
+    const ranked = ffaRank(view);
+    const per = this.boardSides[0].rows.length;
+    this.boardSides.forEach((side, s) => {
+      side.team.textContent = s === 0 ? `Standings  ${ORDINAL(ranked.indexOf(me) + 1)}` : '';
+      side.team.style.color = s === 0 ? TEAMS[me.team].css : '';
+      side.modeHead.textContent = this.gun ? 'Gun' : 'HS';
+      side.rows.forEach((slot, i) => {
+        const at = s * per + i, p = ranked[at], { row, cells } = slot;
+        row.hidden = !p;
+        if (!p) return;
+        row.classList.toggle('me', p.id === me.id);
+        slot.name.textContent = `${at + 1}. ${p.name}`;
+        slot.name.style.color = TEAMS[p.team]?.css ?? '';
+        const badge = this.badges.get(p.id);
+        const rank = badge?.prestige ?? -1;
+        if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : ''; }
+        slot.lv.textContent = badge?.level ?? '';
+        const vet = !!identityOf(p.id)?.vet;
+        if (vet !== slot.vetOn) { slot.vetOn = vet; slot.vet.innerHTML = vetTag(vet, { short: true }); }
+        cells[1].textContent = p.kills;
+        cells[2].textContent = p.deaths;
+        cells[3].textContent = p.assists ?? 0;
+        cells[4].textContent = this.gun ? `${Math.min(GUN_LADDER.length, (view.scores[p.team] ?? 0) + 1)}` : p.head ?? 0;
         cells[5].textContent = matchScore(p);
       });
     });
@@ -755,9 +852,22 @@ export class HUD {
     const me = this.#findLocal(view);
     if (!me) return;
     const c = this.cache;
-    const myTeam = me.team, other = 1 - myTeam;
-
-    if (c.teamFlip !== myTeam) {
+    const myTeam = me.team;
+    // Free-for-all: the other half of the scorebar is whoever you are chasing, the leader, or second place while you lead.
+    let other = 1 - myTeam;
+    if (this.ffa) {
+      const ranked = ffaRank(view);
+      const rival = ranked[0] === me ? ranked[1] : ranked[0];
+      other = rival?.team ?? myTeam;
+      if (c.rival !== (rival?.id ?? null) || c.teamFlip !== myTeam) {
+        c.rival = rival?.id ?? null;
+        c.teamFlip = myTeam;
+        c.otherScore = NaN;
+        this.#paintFfaBar(me, rival, ranked[0] === me);
+      }
+      const place = ORDINAL(ranked.indexOf(me) + 1);
+      if (place !== c.place) { c.place = place; this.sbMine.name.textContent = place; }
+    } else if (c.teamFlip !== myTeam) {
       c.teamFlip = myTeam;
       this.#paintTeams(myTeam);
     }
@@ -792,7 +902,7 @@ export class HUD {
     if (view.phase !== previousPhase) {
       c.phase = view.phase;
       if (view.phase === 'ended' && !this.endShown) {
-        this.#showEndBanner(view.winner, myTeam);
+        this.#showEndBanner(view.winner, myTeam, view);
         if (this.boardOpen) this.toggleBoard();
       }
     }
@@ -802,6 +912,7 @@ export class HUD {
       this.#banner(MODES[this.modeId]?.name ?? '', MODES[this.modeId]?.desc ?? '', 3200);
     }
     this.#updateObjectives(view, me, c);
+    this.#updateGun(view, me, c);
 
     this.#updateVitals(me, c, view);
     this.#updateArms(me, c);
@@ -851,7 +962,7 @@ export class HUD {
       this.prints.update(view, me, view.t);
       this.printClock += dt;
       if (this.printClock >= 1 / PRINT_HZ) { this.printClock = 0; this.printList = this.prints.visible(this.map, me, view.t, view.smokes).slice(); }
-      const enemy = TEAMS[1 - me.team].css;
+      const enemy = this.ffa ? FFA_FOE : TEAMS[1 - me.team].css;
       for (const f of this.printList) {
         const a = project(f.x, 0.03, f.z);
         if (!a) continue;
@@ -914,6 +1025,16 @@ export class HUD {
   #findLocal(view) {
     for (const p of view.players) if (p.id === view.localId) return p;
     return null;
+  }
+
+  // Your own colour on the left; the rival's name and colour on the right, marked as the leader when they are.
+  #paintFfaBar(me, rival, leading) {
+    const mine = TEAMS[me.team]?.css ?? '#fff', theirs = rival ? TEAMS[rival.team]?.css ?? FFA_FOE : FFA_FOE;
+    this.sbTheirs.name.textContent = rival ? `${leading ? '2nd ' : 'Lead '}${rival.name}` : '';
+    this.sbMine.root.style.setProperty('--team', mine);
+    this.sbTheirs.root.style.setProperty('--team', theirs);
+    this.el.style.setProperty('--my-team', mine);
+    this.el.style.setProperty('--enemy-team', FFA_FOE);
   }
 
   #paintTeams(myTeam) {
@@ -1163,6 +1284,7 @@ export class HUD {
         case 'hard_move': this.#onHardMove(e); break;
         case 'pro': if (e.id === this.view?.localId) this.#onPro(e.perk); break;
         case 'hijack': this.#onHijack(e); break;
+        case 'arm': this.#onArm(e); break;
         default: break;
       }
     }
@@ -1403,11 +1525,21 @@ export class HUD {
     this.medalsEl.appendChild(node);
   }
 
-  #showEndBanner(winner, myTeam) {
+  #showEndBanner(winner, myTeam, view = this.view) {
     if (this.endShown) return;
     this.endShown = true;
     this.endAt = performance.now();
     this.deathEl.classList.remove('show');
+    if (this.ffa && view) {
+      // Placement, not sides: first is a win, the podium is a good day, the rest is a loss.
+      const ranked = ffaRank(view), at = ranked.findIndex(p => p.team === myTeam) + 1;
+      const won = winner === myTeam, leader = ranked[0];
+      this.endEl.dataset.result = won ? 'win' : winner === null || winner === undefined ? 'draw' : at <= 3 ? 'draw' : 'loss';
+      this.endEl.querySelector('b').textContent = won ? '1st place' : at ? `${ORDINAL(at)} place` : 'Match over';
+      this.endEl.querySelector('small').textContent = won ? (this.gun ? 'Through every gun' : 'Last one standing') : `${leader?.name ?? 'Someone'} took the yard`;
+      this.endEl.classList.add('show');
+      return;
+    }
     const won = winner === myTeam, drawn = winner === null || winner === undefined;
     this.endEl.dataset.result = drawn ? 'draw' : won ? 'win' : 'loss';
     this.endEl.querySelector('b').textContent = drawn ? 'Stalemate' : won ? 'Victory' : 'Defeat';
@@ -1449,7 +1581,7 @@ export class HUD {
     g.drawImage(this.mmBase, 0, 0);
     const myTeam = me.team;
     const myUav = view.uav[myTeam] > 0;
-    const enemyUav = view.uav[1 - myTeam] > 0;
+    const enemyUav = this.ffa ? view.uav.some((v, t) => t !== myTeam && v > 0) : view.uav[1 - myTeam] > 0;
     const jammed = !!view.jammed;
     const tag = jammed ? 'Jammed' : enemyUav ? 'Enemy UAV' : '';
     if (tag !== this.cache.mmTag) {

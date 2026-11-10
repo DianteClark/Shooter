@@ -3,7 +3,7 @@
 // ends the wait in progress. Rematch and Menu work from the first frame.
 import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { MODES, modeRules } from '../shared/modes.js';
+import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
 import { matchScore } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, SLOT_LABEL } from './widgets.js';
@@ -11,6 +11,7 @@ import { kindLabel } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
 import { playerBanner, proProgressHtml, unlockStamp } from './cards.js';
+import { challengeStamp, challengeStrip } from './challenges.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
@@ -23,6 +24,9 @@ const OUTCOME = {
   loss: ['Defeat', 'The yard is lost'],
   draw: ['Stalemate', 'Neither side broke through'],
 };
+
+const ORDINAL = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+const FFA_LINE = { 1: 'Nobody else came close', 2: 'One short of the top', 3: 'On the podium' };
 
 const fillFrac = p => (p.maxed ? 1 : p.into / p.span);
 const art = (id, size, cls = '') => (id != null && resolveIcon(id) !== 'unknown' ? icon(id, { size, cls }) : '');
@@ -122,9 +126,64 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const rules = modeRules(data.modeId ?? data.mode);      // Ground War modes keep the columns of their rule set.
   const modeHead = rules === 'kc' ? 'Conf' : rules === 'dom' || rules === 'hard' ? 'Cap' : 'HS';
   const modeStat = p => (rules === 'kc' ? p.confirms ?? 0 : rules === 'dom' || rules === 'hard' ? p.captures ?? 0 : p.head ?? 0);
-  const [word, line] = OUTCOME[outcome] ?? OUTCOME.draw;
+  let [word, line] = OUTCOME[outcome] ?? OUTCOME.draw;
   const winTeam = outcome === 'win' ? myTeam : outcome === 'loss' ? 1 - myTeam : null;
-  const tone = winTeam === null ? 'var(--c-sodium)' : TEAMS[winTeam].css;
+  let tone = TEAMS[winTeam]?.css ?? 'var(--c-sodium)';      // A free-for-all sets its own below.
+
+  // Free-for-all: placement, not sides. Standings by the mode's score, then fewer deaths, then kills.
+  const ffa = isFfa(data.modeId ?? data.mode), gun = rules === 'gun';
+  const scoreOf = p => scores?.[p.team] ?? 0;
+  const ranked = ffa ? roster.filter(p => !p.dummy).sort((a, b) => scoreOf(b) - scoreOf(a) || a.deaths - b.deaths || b.kills - a.kills) : [];
+  const me = ranked.find(p => p.id === data.localId);
+  const place = me ? ranked.indexOf(me) + 1 : 0;
+  // The pair of numbers by the outcome word: yours against your team's rival, or in a free-for-all against the best
+  // score that is not yours.
+  let mineNum = scores?.[myTeam] ?? 0, themNum = scores?.[1 - myTeam] ?? 0, mineCss = TEAMS[myTeam]?.css, themCss = TEAMS[1 - myTeam]?.css;
+  const shown = p => (gun ? `${Math.min(GUN_LADDER.length, scoreOf(p))}/${GUN_LADDER.length}` : `${scoreOf(p)}`);
+  if (ffa) {
+    const rival = ranked[0] === me ? ranked[1] : ranked[0];
+    word = place ? `${ORDINAL(place)} place` : 'Match over';
+    line = place === 1 ? (outcome === 'draw' ? 'Tied at the top' : gun ? 'Through every gun to the Verdict' : FFA_LINE[1]) : FFA_LINE[place] ?? `${ranked[0]?.name ?? 'Someone'} took the yard`;
+    tone = place === 1 ? 'var(--c-gold)' : place <= 3 ? 'var(--c-sodium)' : TEAMS[ranked[0]?.team]?.css ?? 'var(--c-sodium)';
+    mineNum = me ? scoreOf(me) : 0; themNum = rival ? scoreOf(rival) : 0;
+    mineCss = TEAMS[myTeam]?.css; themCss = rival ? TEAMS[rival.team]?.css : 'var(--c-haze)';
+  }
+
+  // A podium for the top three, in their own colours, the winner raised in the middle.
+  const podium = () => {
+    const step = [ranked[1], ranked[0], ranked[2]];
+    const heights = [62, 86, 46];
+    return `<div class="rb ours rs-podium" style="--team:var(--c-gold);display:flex;flex-direction:column">
+      <div class="rb-head" style="grid-template-columns:1fr"><b class="rb-team">Podium</b></div>
+      <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);align-items:end;gap:6px;padding:6px 10px 0">
+        ${step.map((p, k) => p ? `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${k};height:auto;display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:0;background:none;box-shadow:none">
+          <span style="text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${TEAMS[p.team]?.css}">${badgeTag(badgeOf(p.id), 12)}<b style="font-weight:400">${esc(p.name)}</b></span>
+          <span style="text-align:center;font:400 15px/1 var(--f-stencil);color:var(--c-chalk)">${shown(p)}</span>
+          <i style="display:flex;align-items:flex-start;justify-content:center;height:${heights[k]}px;padding-top:5px;background:linear-gradient(180deg, color-mix(in srgb, ${TEAMS[p.team]?.css} 70%, transparent), color-mix(in srgb, ${TEAMS[p.team]?.css} 18%, transparent));box-shadow:inset 0 2px 0 ${TEAMS[p.team]?.css};font:400 20px/1 var(--f-stencil);font-style:normal;color:#fff">${[2, 1, 3][k]}</i>
+        </div>` : '<div></div>').join('')}
+      </div>
+    </div>`;
+  };
+
+  // Every player ranked: the leaders, you wherever you placed, and a count of the rest, in the 6v6 table's height.
+  const standings = () => {
+    let rows = ranked.map((p, i) => [p, i + 1]), rest = 0;
+    if (rows.length > BOARD_ROWS) {
+      const mine = place - 1;
+      const keep = rows.slice(0, mine >= BOARD_ROWS - 1 ? BOARD_ROWS - 2 : BOARD_ROWS - 1);
+      if (mine >= keep.length) keep.push(rows[mine]);
+      rest = rows.length - keep.length;
+      rows = keep;
+    }
+    return `<div class="rb theirs" style="--team:${TEAMS[myTeam]?.css}">
+      <div class="rb-head"><b class="rb-team">Standings</b><b class="rb-pts"></b>
+        <span>K</span><span>D</span><span>A</span><span>${gun ? 'Gun' : 'HS'}</span><span class="wide">${gun ? 'Score' : 'Kills'}</span></div>
+      ${rows.map(([p, n], i) => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}" style="--i:${i}">
+        <span class="rb-name"><u style="text-decoration:none;min-width:2.3ch;color:var(--c-haze)">${ORDINAL(n)}</u><i style="flex:none;width:7px;height:7px;background:${TEAMS[p.team]?.css}"></i>${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${gun ? Math.min(GUN_LADDER.length, scoreOf(p) + 1) : p.head ?? 0}</span><span class="wide">${gun ? matchScore(p) : scoreOf(p)}</span>
+      </div>`).join('')}
+      ${rest ? `<div class="rb-row" style="--i:${rows.length}"><span class="rb-name"><b>+${rest} more</b></span></div>` : ''}
+    </div>`;
+  };
 
   const board = (team, side) => {
     const ranked = roster.filter(p => p.team === team).sort((a, b) => matchScore(b) - matchScore(a) || a.deaths - b.deaths);
@@ -161,7 +220,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         </div>
       </div>`;
   const mvpCard = mvp ? `
-      <div class="rs-mvp" style="--team:${TEAMS[mvp.team].css}">
+      <div class="rs-mvp" style="--team:${TEAMS[mvp.team]?.css ?? 'var(--c-sodium)'}">
         <span class="rs-mvp-tag">${art('ui:star', 12)}MVP</span>
         ${playerBanner(mvp.id, mvp.name, { size: 168, sub: `${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${matchScore(mvp)} pts` })}
       </div>` : '';
@@ -171,11 +230,11 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     <div class="rs" data-outcome="${outcome}" style="--tone:${tone}">
       <div class="rs-top">
         <div class="rs-word"><h2>${esc(word)}</h2><small>${esc(modeName)}</small></div>
-        <span class="rs-score"><u class="rs-mine" style="color:${TEAMS[myTeam].css}">0</u><i></i><u class="rs-them" style="color:${TEAMS[1 - myTeam].css}">0</u></span>
+        <span class="rs-score"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
-      <div class="rb-pair">${board(myTeam, 'ours')}${board(1 - myTeam, 'theirs')}</div>
+      <div class="rb-pair">${ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
       <div class="rs-cards">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>
@@ -193,6 +252,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
           ${weapons.length ? `<div class="wp-list">${weapons.map(weaponRow).join('')}</div>` : '<small class="empty">No weapon kills this match</small>'}
         </div>
         <div class="res-choice">
+          ${challengeStrip(data.challenges)}
           ${proProgressHtml(data.proProgress)}
           <button class="rs-btn primary" data-act="resRematch">${esc(data.rematchLabel)}</button>
           <button class="rs-btn" data-act="resMenu">Menu</button>
@@ -202,7 +262,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rs-hero" data-act="resHero">
         <i class="rs-hero-band"></i>
         <h1>${esc(word)}</h1>
-        <p class="rs-hero-score"><u style="color:${TEAMS[myTeam].css}">${scores[myTeam]}</u><i></i><u style="color:${TEAMS[1 - myTeam].css}">${scores[1 - myTeam]}</u></p>
+        <p class="rs-hero-score"><u style="color:${mineCss}">${mineNum}</u><i></i><u style="color:${themCss}">${themNum}</u></p>
         <small>${esc(line)}</small>
       </div>
     </div>`;
@@ -222,7 +282,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     resSkip: () => { menu.overlay(''); reel.tapThrough(); },
     resHero: () => reel.wake?.(),
   });
-  runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTeam, xp }).catch(err => {
+  runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, themNum, xp }).catch(err => {
     // A reel that fails partway still leaves the whole screen readable.
     console.error('results reel', err);
     menu.el.querySelector('.rs-hero')?.remove();
@@ -239,7 +299,7 @@ function weaponFrom(w) {
   return beforeState(WEAPON_CURVE, total, w.xpGained, w.levelBefore);
 }
 
-async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTeam, xp }) {
+async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, themNum, xp }) {
   const q = sel => menu.el.querySelector(sel);
   const root = q('.rs');
 
@@ -257,8 +317,8 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTea
   }
   if (reel.dead) return;
   root.classList.add('in');
-  rollNumber(q('.rs-mine'), scores[myTeam], { from: 0, duration: 600 });
-  rollNumber(q('.rs-them'), scores[1 - myTeam], { from: 0, duration: 600 });
+  rollNumber(q('.rs-mine'), mineNum, { from: 0, duration: 600 });
+  rollNumber(q('.rs-them'), themNum, { from: 0, duration: 600 });
   rollNumber(q('.xp-total'), xp?.total ?? 0, { from: 0, duration: 900, delay: 300 });
   await reel.sleep(520);
   if (reel.dead) return;
@@ -304,7 +364,7 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, scores, myTea
 }
 
 function unlockCard(u) {
-  const special = unlockStamp(u);     // Pro perks and calling cards have their own ceremony (js/ui/cards.js).
+  const special = unlockStamp(u) ?? challengeStamp(u);     // Pro perks and calling cards have their own ceremony (js/ui/cards.js).
   if (special) return special;
   let mark;
   if (u.kind === 'camo') {

@@ -2,6 +2,7 @@
   "name": "Switchyard",
   "short_name": "Switchyard",
   "description": "6v6 team deathmatch in a freight yard at dusk.",
+  "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

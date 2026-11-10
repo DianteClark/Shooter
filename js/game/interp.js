@@ -66,6 +66,7 @@ export class Interpolator {
     out.gunships = b.gunships;
     out.mode = b.mode;
     out.modeId = b.modeId;
+    out.mapId = b.mapId;
     out.tags = b.tags;
     out.points = b.points;
     out.scoreLimit = b.scoreLimit;

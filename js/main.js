@@ -5,7 +5,7 @@ import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
-import { MODES, firstModeFor } from './shared/modes.js';
+import { MODES, firstModeFor, isFfa, playersFor } from './shared/modes.js';
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE } from './shared/constants.js';
 import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
@@ -18,6 +18,7 @@ import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
+import { takeInvite, wireInvite, joinFromInvite, inviteJoinFailed, inviteSettled, refusal, refusalKind, showJoinProblem } from './ui/invite.js';
 import { installTaps, setTapSound } from './ui/tap.js';
 import { Options } from './ui/options.js';
 import { installViewport, onViewport } from './ui/viewport.js';
@@ -26,6 +27,9 @@ import { PerfOverlay } from './ui/perf.js';
 import { TouchDebug } from './ui/touchdebug.js';
 import { statsScreen } from './ui/stats.js';
 import { installFrameClock } from './render/quality.js';
+import { Tutorial, tutorialRoster, TUTORIAL_MAP, TUTORIAL_MODE, TUTORIAL_LIMITS } from './game/tutorial.js';
+import { challengeUnlock } from './ui/challenges.js';
+import { ico } from './ui/yard.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 
 const GAME_NAME = 'Switchyard';
@@ -35,8 +39,9 @@ const REMATCH_SECONDS = 15;
 const VOTE_REVEAL_MS = 1700;
 const RESULTS_MIN_MS = 6000;     // A guest's results stay up at least this long before a vote the host started takes over.
 const REJOIN_MINUTES = 15;       // How long after dropping the title screen still offers the way back.
-const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats'];   // A lobby update must not pull a guest out of these.
+const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats', 'challenges', 'history'];   // A lobby update must not pull a guest out of these.
 const LAST_ROOM = 'switchyard-last-room';
+const invite = takeInvite();     // Reads and strips ?join=CODE before anything else looks at the URL.
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
 // Test hooks: ?limit=N lowers the score limit, ?time=S the time limit, ?vote=N shortens the vote, and ?map=&mode= skip
@@ -58,6 +63,7 @@ const controls = new Controls(uiRoot);
 const hud = new HUD(uiRoot);
 hud.bindControls(controls);
 const menu = new Menu(uiRoot);
+wireInvite(menu, () => app.code);
 const audio = new AudioEngine();
 const backdrop = new MenuBackdrop(canvas);
 
@@ -212,6 +218,8 @@ menu.on({
   options: () => openOptions(),
   stats: () => openStats(),
   help: () => openHelp(),
+  challenges: () => menu.challenges({ onBack: afterEditing }),
+  history: () => openHistory(),
   rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
   range: () => { needName(startRange); },
   solo: () => { startSolo(); },
@@ -307,12 +315,17 @@ function openOptions() {
   menu.options({ onBack: afterEditing, onPreviewSound: () => audio.uiClick?.() });
 }
 
-function openStats() {
-  statsScreen(menu, { onBack: afterEditing });
+function openStats(back = afterEditing) {
+  statsScreen(menu, { onBack: back });
+}
+
+function openHistory() {
+  menu.history({ onBack: afterEditing, onStats: () => openStats(openHistory) });
 }
 
 function openHelp() {
-  menu.help({ onBack: afterEditing });
+  // Training is solo; from a lobby it would walk out of the room, so it is only offered from the title.
+  menu.help({ onBack: afterEditing, onTutorial: app.net ? null : () => startTutorial() });
 }
 
 function openSave(back = afterEditing) {
@@ -334,6 +347,7 @@ function renderLobby() {
     localId: app.net.localId, hostId: app.net.hostId,
     countdown: app.isHost ? (app.rematch?.left ?? null) : app.countdown,
     rematchWait: app.rematchWait,
+    ffa: ffaRoom(),
   });
 }
 
@@ -365,7 +379,20 @@ function stopRematch() {
   app.rematch = null;
 }
 
+// The mode the room is playing, or played last: what the lobby's seats and voice follow until the next vote picks.
+const roomMode = () => app.matchInfo?.mode ?? app.lastPlayed?.mode ?? null;
+const ffaRoom = () => isFfa(roomMode());
+
+// Humans the room can seat: both teams in full, or a free-for-all's whole field on its map.
+function roomCap() {
+  if (!ffaRoom()) return TEAM_SIZE * 2;
+  const mapId = app.matchInfo?.mapId ?? app.lastPlayed?.mapId;
+  return playersFor(roomMode(), MAPS[mapId] ?? null);
+}
+
 function teamOpen(team, except = null) {
+  // A free-for-all has no sides (buildRoster deals everyone their own); only the room's size matters.
+  if (ffaRoom()) return app.lobby.humans.filter(h => h.id !== except).length < roomCap();
   return app.lobby.humans.filter(h => h.team === team && h.id !== except).length < TEAM_SIZE;
 }
 
@@ -419,12 +446,12 @@ function hostLobbyMessage(msg, from) {
     case 'join': {
       if (app.inMatch) {
         if (seatReturningPlayer(from)) return;
-        app.net.sendLobby({ t: 'refused', reason: 'That match is already under way. Ask the host to finish first.' }, from);
+        app.net.sendLobby(refusal('started'), from);
         return;
       }
       if (!guest) {
-        if (humans.length >= TEAM_SIZE * 2) {
-          app.net.sendLobby({ t: 'refused', reason: 'That room is full.' }, from);
+        if (humans.length >= roomCap()) {
+          app.net.sendLobby(refusal('full'), from);
           return;
         }
         // Friends default to the same side; overflow goes to the other team.
@@ -498,6 +525,7 @@ function moveTeam(id) {
   const humans = app.lobby.humans, h = humans.find(x => x.id === id);
   if (!h) return;
   const next = 1 - h.team;
+  if (ffaRoom()) return;               // Everyone for themselves: there is no other team to move to.
   if (app.isHost) {
     if (!teamOpen(next, id)) return menu.toast(`${h.name} can't move: that team is full.`);
     h.team = next;
@@ -530,7 +558,8 @@ function startJoining(code) {
   net.onJoinFailed(() => {
     teardownNet();
     forgetRoom();
-    menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle() });
+    if (inviteJoinFailed(menu, code, { retry: () => startJoining(code), enterCode: askCode })) showTitle();
+    else menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle() });
   });
   net.onLobby(msg => guestLobbyMessage(msg));
   net.onHostLost(() => setHostNotice(true));
@@ -543,6 +572,7 @@ function startJoining(code) {
 function guestLobbyMessage(msg) {
   switch (msg.t) {
     case 'state':
+      inviteSettled();
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
       app.countdown = msg.countdown ?? null;
@@ -566,10 +596,13 @@ function guestLobbyMessage(msg) {
         hostId: app.net.hostId, isHost: false, rejoin: !!msg.rejoin,
       });
       break;
-    case 'refused':
+    case 'refused': {
+      const code = app.code;
       forgetRoom();
-      goTitle(msg.reason);
+      goTitle();
+      showJoinProblem(menu, { why: refusalKind(msg), reason: msg.reason, code, retry: () => startJoining(code), enterCode: askCode });
       break;
+    }
     default:
       break;
   }
@@ -643,7 +676,9 @@ function wireSharedNet(net) {
 function updateVoiceTeam() {
   const me = localHuman();
   if (!app.voice || !me) return;
-  app.voice.setTeammates(app.lobby.humans.filter(h => h.team === me.team && h.id !== me.id).map(h => h.id));
+  // A free-for-all has no squad: voice goes to every human in the room.
+  const ffa = ffaRoom();
+  app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id && (ffa || h.team === me.team)).map(h => h.id));
 }
 
 // --- Solo: a direct pick of map and mode ---
@@ -677,6 +712,48 @@ function launchRange() {
     seed, mapId: 'range', mode: 'range', ...limitsFor('range'),
     hostId: id, isHost: true, localId: id, rangeDummies: rangeDummies(MAPS.range),
   });
+}
+
+// --- Tutorial: a guided practice match on Railyard (js/game/tutorial.js). Pays and records nothing. ---
+function startTutorial() {
+  Progress.setFlag('tutorialOffered');
+  resetToSolo();
+  const id = 'local', seed = randomSeed();
+  const human = { id, name: myName(), team: 0, ...seatData() };
+  const roster = withBadges(tutorialRoster(human), [human], seed);
+  beginMatch({
+    roster, seed, mapId: TUTORIAL_MAP, mode: TUTORIAL_MODE, ...TUTORIAL_LIMITS,
+    hostId: id, isHost: true, localId: id, intro: false, tutorial: true,
+  });
+}
+
+function finishTutorial(completed) {
+  if (completed) Progress.setFlag('tutorialDone');
+  endLocalMatch();
+  goTitle();
+  if (!completed) { menu.toast('Training is in How to play any time'); return; }
+  menu.overlay(`
+    <div class="sheet tut-offer tut-after">
+      <div class="tut-offer-mark" aria-hidden="true">${ico('check')}</div>
+      <div class="tut-offer-body">
+        <span class="tut-offer-kick">Training complete</span>
+        <h2>You are ready for the yard</h2>
+        <p>Bots come in four skills. Daily challenges on the title pay extra XP for every match you play.</p>
+        <div class="sheet-row">
+          <button class="btn" data-act="tutMenu">${ico('ui:home')}<b>Menu</b></button>
+          <button class="btn is-primary" data-sound="confirm" data-act="tutPlay">${ico('bots')}<b>Play vs bots</b></button>
+        </div>
+      </div>
+    </div>`);
+  menu.on({ tutMenu: () => menu.overlay(''), tutPlay: () => { menu.overlay(''); startSolo(); } });
+}
+
+// First run only, and never for anyone who has already played: a returning player is never held up by it.
+function maybeOfferTutorial() {
+  if (Progress.flag('tutorialOffered') || Progress.flag('tutorialDone') || Progress.totalXp > 0) return false;
+  Progress.setFlag('tutorialOffered');
+  menu.tutorialOffer({ onStart: () => startTutorial(), onSkip: () => menu.toast('Training is in How to play any time') });
+  return true;
 }
 
 function renderSoloPick() {
@@ -866,7 +943,7 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null }) {
+function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
@@ -882,12 +959,12 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   backdrop.stop();
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, localId: id, intro: !rejoin });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, localId: id, intro });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
   updateVoiceTeam();
-  if (!Progress.flag('aimHint')) {
+  if (!Progress.flag('aimHint') && !tutorial) {
     controls.showAimHint(true);
     Progress.setFlag('aimHint');
   }
@@ -902,9 +979,16 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
     net, controls, hud, renderer, audio, rejoin,
     onEnd: results => onMatchEnd(results),
   });
+  // The interpolated view does not carry the map id; history and gun stats need it.
+  app.match.awards.mapId = mapId;
+  app.match.telemetry.mapId = mapId;
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
-  // A respawn before the player opens the picker should still use the equipped weapon.
-  app.match.setNextLoadout(Progress.loadout());
+  // A respawn before the player opens the picker should still use the equipped weapon (training keeps its own kit).
+  app.match.setNextLoadout(tutorial ? roster.find(r => r.id === id).loadout : Progress.loadout());
+  if (tutorial) {
+    app.tutorial = new Tutorial({ match: app.match, root: uiRoot, audio, onFinish: done => finishTutorial(done) });
+    app.tutorial.start();
+  }
   app.match.start();
 
   clearInterval(app.netPoll);
@@ -921,6 +1005,8 @@ function endLocalMatch() {
   if (!app.inMatch) return;
   app.match?.stop();
   app.match = null;
+  app.tutorial?.dispose();
+  app.tutorial = null;
   app.inMatch = false;
   app.matchInfo = null;
   clearInterval(app.netPoll);
@@ -932,6 +1018,8 @@ function endLocalMatch() {
 
 function onMatchEnd(results) {
   const match = app.match;
+  // Training ran out of clock before it was done: it ends as a skip, with no results screen.
+  if (app.tutorial) { finishTutorial(false); return; }
   // A guest can be pulled into the vote during this hold, and the old results must not land on top of it.
   let done = false;
   const show = () => {
@@ -993,7 +1081,10 @@ function showResults(results) {
       xp: results.xp,
       level: results.level,
       weapons: results.weapons ?? [],
-      unlocks: results.unlocks ?? [],
+      // Finished challenges get their stamp in the reel first; `challenges` is everything that moved (js/ui/challenges.js).
+      unlocks: [...(results.challenges ?? []).filter(c => c.fresh).map(challengeUnlock), ...(results.unlocks ?? [])],
+      challenges: results.challenges ?? [],
+      proProgress: results.proProgress ?? [],
       finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
       rematchLabel: 'Rematch',
       note: counting ? `Rematch starts in ${app.countdown}` : '',
@@ -1065,7 +1156,10 @@ hud.onRangeReset(() => app.match?.sim.applyCommand(app.match.localId, { cmd: 'ra
 // A touch that lands with the audio engine asleep must wake it even when the action would start sound itself.
 Options.subscribe(applyOptions);
 showTitle({ arrive: true });
-if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, backdrop, join: startJoining };
-maybeInstallPrompt();
+// Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
+const offeredTutorial = !invite && maybeOfferTutorial();
+if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, backdrop, join: startJoining, tutorial: startTutorial };
+if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
+else if (!offeredTutorial) maybeInstallPrompt();
 
 

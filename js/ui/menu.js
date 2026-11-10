@@ -16,8 +16,11 @@ import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
 import { resultsScreen } from './results.js';
 import { saveScreen } from './savecode.js';
+import { inviteControls } from './invite.js';
 import { optionsScreen } from './optionsscreen.js';
 import { helpScreen } from './help.js';
+import { challengesScreen, titleChallenges } from './challenges.js';
+import { historyScreen } from './history.js';
 import { fingerDown } from './tap.js';
 import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
@@ -36,7 +39,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { title: 0, keypad: 1, solo: 1, searching: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { title: 0, keypad: 1, solo: 1, searching: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -191,8 +194,9 @@ export class Menu {
           <i class="xp"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
         </span>
       </button>
+      ${titleChallenges()}
       <nav class="ttl-sec">
-        ${[['gunsmith', 'gunsmith', 'Gunsmith'], ['operators', 'operator', 'Operators'], ['stats', 'stats', 'Stats'], ['options', 'options', 'Options'], ['help', 'help', 'How to play'], ['saveCode', 'save', 'Save code']]
+        ${[['gunsmith', 'gunsmith', 'Gunsmith'], ['operators', 'operator', 'Operators'], ['history', 'ui:clock', 'History'], ['options', 'options', 'Options'], ['help', 'help', 'How to play'], ['saveCode', 'save', 'Save code']]
           .map(([act, icon, label]) => `<button class="chip" data-act="${act}" data-in="up">${ico(icon)}<b>${label}</b></button>`).join('')}
       </nav>`;
     this.show();
@@ -286,12 +290,13 @@ export class Menu {
     this.show();
   }
 
-  // state: { code, humans:[{id,name,team,ready,primary,badge,host}], botSkill, isHost, localId, countdown, rematchWait }
+  // state: { code, humans:[{id,name,team,ready,primary,badge,host}], botSkill, isHost, localId, countdown, rematchWait, ffa }
+  // ffa: the room is playing a free-for-all, so there are no teams to swap between.
   lobby(state) {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -303,7 +308,7 @@ export class Menu {
         const h = cars[i];
         if (h) {
           const self = h.id === localId;
-          const can = isHost || self;
+          const can = !ffa && (isHost || self);
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           cells += `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
             <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}<b>${esc(h.name)}</b></span>
@@ -334,7 +339,8 @@ export class Menu {
           <span>Room code</span>
           <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         </div>
-        <p class="room-tip">${isHost ? (counting ? 'Tap a player to swap teams.' : 'Read this code to your friends. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>
+        ${isHost ? inviteControls() : ''}
+        <p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
       </header>
       <div class="yard-lines">
@@ -418,6 +424,36 @@ export class Menu {
   help(opts) {
     this.#stopPreview();
     helpScreen(this, opts);
+  }
+
+  challenges(opts) {
+    this.#stopPreview();
+    challengesScreen(this, opts);
+  }
+
+  history(opts) {
+    this.#stopPreview();
+    historyScreen(this, opts);
+  }
+
+  // First run only: a sheet over the title offering the guided match. Either answer closes it for good (main.js
+  // records that); How to play keeps the way back in.
+  tutorialOffer({ onStart, onSkip }) {
+    this.overlay(`
+      <div class="sheet tut-offer">
+        <div class="tut-offer-mark" aria-hidden="true">${ico('ui:aim')}</div>
+        <div class="tut-offer-body">
+          <span class="tut-offer-kick">New to the yard?</span>
+          <h2>Take a two-minute training run</h2>
+          <p>Move, aim and fire, slide, throw and call in a streak, against targets first and then bots that shoot back. Skip it any time.</p>
+          <div class="sheet-row">
+            <button class="btn" data-act="tutSkip">${ico('close')}<b>Not now</b></button>
+            <button class="btn is-primary" data-sound="confirm" data-act="tutStart">${ico('play')}<b>Start training</b></button>
+          </div>
+          <small class="tut-offer-note">${ico('info')}It stays in How to play.</small>
+        </div>
+      </div>`);
+    this.on({ tutStart: () => { this.overlay(''); onStart(); }, tutSkip: () => { this.overlay(''); onSkip(); } });
   }
 
   // Countdown ticks for a guest still reading results; the lobby repaints in full, so it needs no call of its own.

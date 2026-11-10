@@ -2,7 +2,8 @@
 // js/ui/progress.js holds the one save and applies these rules to it.
 import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
 import { PERKS, PERK_IDS, PRO, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
-import { MAX_HP, PRIMARY_IDS, WEAPON_IDS } from './constants.js';
+import { MAX_HP, PRIMARY_IDS, WEAPON_IDS, WEAPON_CATEGORY, FFA_TEAM } from './constants.js';
+import { MODES, modeRules } from './modes.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 
@@ -789,4 +790,319 @@ export function badgeSvg(prestige = 0, size = 48) {
   const rank = Math.min(MAX_PRESTIGE, Math.max(0, count(prestige)));
   const px = Math.max(8, count(size, 512));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${px}" height="${px}" role="img" aria-label="${prestigeName(rank)}">${BADGES[rank]()}</svg>`;
+}
+
+/* ---------- Daily and weekly challenges (V7 round 2) ---------- */
+// Three daily and three weekly XP goals, drawn from one pool with a seed made of the local date, so a set stays the same
+// all day (or all week, from Monday) on this phone, however often the game is opened. Every match counts, bots included;
+// the firing range and the tutorial do not. ChallengeTally counts one match from the event stream, applyChallengeTally
+// adds it to the stored state at the end and says what moved; js/ui/progress.js keeps the state, js/ui/challenges.js
+// draws it. Goals were set from per-match rates against mixed bots: a daily is one to three matches of play that
+// leans toward it, a weekly about a dozen.
+export const CHALLENGE_VERSION = 1;
+export const CHALLENGE_COUNT = 3;
+export const CHALLENGE_PERIODS = ['daily', 'weekly'];
+const CLOSE_RANGE = 8;           // Metres: a close-quarters kill (same as the Dead Silence Pro step).
+const HIP_ADS = 0.3;             // ADS blend below this when the kill lands: fired from the hip.
+
+// Categories with a gun at level 1, so a fresh player can always do the category goal of the day.
+const CAT_PLURAL = { Assault: 'assault rifles', SMG: 'SMGs', Shotgun: 'shotguns', LMG: 'LMGs', Sniper: 'sniper rifles', Pistol: 'pistols' };
+const CAT_GOAL = { Assault: [15, 90], SMG: [15, 90], Shotgun: [12, 70], LMG: [15, 80], Sniper: [8, 45], Pistol: [6, 35] };
+const BASE_GUNS = { ar: 12, smg: 12, shotgun: 10, lmg: 12, sniper: 6, pistol: 5 };
+const TEAM_RULES = new Set(['tdm', 'kc', 'dom', 'hard']);
+
+const def = (period, key, family, stat, goal, xp, icon, label) => ({ id: `${period === 'daily' ? 'd' : 'w'}.${key}`, period, family, stat, goal, xp, icon, label });
+
+function buildPool() {
+  const d = (...a) => def('daily', ...a), w = (...a) => def('weekly', ...a);
+  const pool = [
+    d('kills', 'kills', 'kills', 25, 1500, 'ui:skull', 'Get 25 kills'),
+    d('head', 'head', 'head', 8, 2000, 'medal:headshot', 'Get 8 headshot kills'),
+    d('long', 'long', 'long', 5, 2000, 'medal:longshot', 'Get 5 longshot kills'),
+    d('slide', 'slide', 'slideKills', 4, 2000, 'slide', 'Get 4 kills while sliding'),
+    d('hip', 'style', 'hipKills', 10, 1500, 'ui:aim', 'Get 10 kills from the hip'),
+    d('close', 'style', 'closeKills', 10, 1500, 'cat:Shotgun', 'Get 10 kills within 8 m'),
+    d('assist', 'team', 'assists', 6, 1500, 'ui:party', 'Get 6 assists'),
+    d('equip', 'equip', 'equipKills', 2, 2000, 'frag', 'Get 2 kills with lethal equipment'),
+    d('throws', 'equip', 'throws', 10, 1200, 'smoke', 'Throw 10 pieces of equipment'),
+    d('called', 'streak', 'streaksCalled', 2, 2000, 'uav', 'Call in 2 scorestreaks'),
+    d('streak3', 'streak', 'streak3', 2, 2000, 'medal:streak3', 'Get 2 three-kill streaks'),
+    d('multi', 'multi', 'multi', 3, 2000, 'medal:double', 'Get 3 multi-kills'),
+    d('wins', 'wins', 'wins', 2, 2000, 'ui:cup', 'Win 2 matches'),
+    d('played', 'wins', 'played', 3, 1500, 'ui:play', 'Play 3 matches'),
+    d('capture', 'obj', 'captures', 4, 2000, 'medal:capture', 'Capture 4 flags or zones'),
+    d('confirm', 'obj', 'confirms', 8, 2000, 'medal:confirm', 'Confirm 8 kills in Kill Confirmed'),
+    d('dom', 'mode', 'won:dom', 1, 1800, 'mode:dom', 'Win a Domination match'),
+    d('hard', 'mode', 'played:hard', 2, 1500, 'mode:hard', 'Play 2 Hardpoint matches'),
+    d('kc', 'mode', 'played:kc', 2, 1500, 'mode:kc', 'Play 2 Kill Confirmed matches'),
+    w('kills', 'kills', 'kills', 200, 6000, 'ui:skull', 'Get 200 kills'),
+    w('head', 'head', 'head', 50, 7000, 'medal:headshot', 'Get 50 headshot kills'),
+    w('long', 'long', 'long', 25, 7000, 'medal:longshot', 'Get 25 longshot kills'),
+    w('slide', 'slide', 'slideKills', 20, 7000, 'slide', 'Get 20 kills while sliding'),
+    w('equip', 'equip', 'equipKills', 12, 6500, 'frag', 'Get 12 kills with lethal equipment'),
+    w('called', 'streak', 'streaksCalled', 12, 7000, 'uav', 'Call in 12 scorestreaks'),
+    w('streak5', 'streak', 'streak5', 3, 7500, 'medal:streak5', 'Get 3 five-kill streaks'),
+    w('multi', 'multi', 'multi', 15, 6500, 'medal:double', 'Get 15 multi-kills'),
+    w('wins', 'wins', 'wins', 10, 7500, 'ui:cup', 'Win 10 matches'),
+    w('played', 'wins', 'played', 15, 6000, 'ui:play', 'Play 15 matches'),
+    w('capture', 'obj', 'captures', 25, 7000, 'medal:capture', 'Capture 25 flags or zones'),
+    w('assist', 'team', 'assists', 40, 6000, 'ui:party', 'Get 40 assists'),
+    w('hip', 'style', 'hipKills', 60, 6000, 'ui:aim', 'Get 60 kills from the hip'),
+  ];
+  for (const [cat, [dg, wg]] of Object.entries(CAT_GOAL)) {
+    pool.push(d(`cat.${cat}`, 'gun', `cat:${cat}`, dg, 1800, `cat:${cat}`, `Get ${dg} kills with ${CAT_PLURAL[cat]}`));
+    pool.push(w(`cat.${cat}`, 'gun', `cat:${cat}`, wg, 6500, `cat:${cat}`, `Get ${wg} kills with ${CAT_PLURAL[cat]}`));
+  }
+  for (const [gun, goal] of Object.entries(BASE_GUNS)) {
+    pool.push(d(`gun.${gun}`, 'gun', `gun:${gun}`, goal, 1800, gun, `Get ${goal} kills with the ${WEAPONS[gun].name}`));
+  }
+  // Modes beyond the four team rule sets (Free-for-All, Gun Game, ...) join the pool when they exist. A free-for-all
+  // also brings a placing goal.
+  const extra = new Map();
+  for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules)) extra.set(m.rules, m);
+  for (const [rules, m] of extra) {
+    pool.push(d(`mode.${rules}`, 'mode', `played:${rules}`, 2, 1500, `mode:${m.id}`, `Play 2 ${m.name} matches`));
+    if (m.ffa || rules === 'ffa') pool.push(w(`top3.${rules}`, 'mode', 'top3', 5, 6500, `mode:${m.id}`, `Finish top 3 in ${m.name} 5 times`));
+  }
+  return pool;
+}
+
+export const CHALLENGE_POOL = buildPool();
+const POOL_BY_ID = new Map(CHALLENGE_POOL.map(c => [c.id, c]));
+export const getChallenge = id => POOL_BY_ID.get(id) ?? null;
+
+// Local calendar, not UTC: a daily turns over at the player's own midnight, a weekly at Monday 00:00.
+const pad = n => String(n).padStart(2, '0');
+const dateKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export function weekStart(now = new Date()) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+export const dayKey = (now = new Date()) => dateKey(now);
+export const periodKey = (period, now = new Date()) => (period === 'weekly' ? `W${dateKey(weekStart(now))}` : `D${dateKey(now)}`);
+
+// When the current set is replaced, as a timestamp.
+export function periodEnd(period, now = new Date()) {
+  const d = period === 'weekly' ? weekStart(now) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() + (period === 'weekly' ? 7 : 1));
+  return d.getTime();
+}
+
+function hash32(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The pool for a period in the seed's order. Same key, same order, on every device.
+function shuffled(period, key) {
+  const list = CHALLENGE_POOL.filter(c => c.period === period);
+  const rng = seeded(hash32(key));
+  for (let i = list.length - 1; i > 0; i--) {
+    const k = Math.floor(rng() * (i + 1));
+    [list[i], list[k]] = [list[k], list[i]];
+  }
+  return list;
+}
+
+// `count` ids for a period's key: no two from one family (no kills-and-more-kills days), none of `exclude`.
+export function drawChallenges(period, key, { count = CHALLENGE_COUNT, exclude = [], families = [] } = {}) {
+  const used = new Set(families), out = [];
+  for (const c of shuffled(period, key)) {
+    if (out.length >= count) break;
+    if (exclude.includes(c.id) || used.has(c.family)) continue;
+    used.add(c.family);
+    out.push(c.id);
+  }
+  return out;
+}
+
+const blankPeriod = (period, now) => {
+  const key = periodKey(period, now);
+  return { key, ids: drawChallenges(period, key), prog: {}, done: [], retired: [] };
+};
+
+export function blankChallengeState(now = new Date()) {
+  return { v: CHALLENGE_VERSION, daily: blankPeriod('daily', now), weekly: blankPeriod('weekly', now), reroll: '' };
+}
+
+// Anything to a valid state for `now`. A period whose key has passed starts over; a stored set whose challenges
+// left the pool (a later build) is redrawn rather than shown half empty.
+export function sanitizeChallengeState(raw, now = new Date()) {
+  const s = blankChallengeState(now);
+  if (!isObj(raw) || raw.v !== CHALLENGE_VERSION) return s;
+  for (const period of CHALLENGE_PERIODS) {
+    const r = raw[period];
+    if (!isObj(r) || r.key !== s[period].key || !Array.isArray(r.ids)) continue;
+    const ids = r.ids.filter(id => getChallenge(id)?.period === period);
+    if (ids.length !== CHALLENGE_COUNT) continue;
+    const prog = {};
+    for (const id of ids) prog[id] = Math.min(getChallenge(id).goal, count(r.prog?.[id]));
+    s[period] = {
+      key: r.key, ids, prog,
+      done: ids.filter(id => prog[id] >= getChallenge(id).goal),
+      retired: Array.isArray(r.retired) ? r.retired.filter(id => getChallenge(id)?.period === period).slice(0, 20) : [],
+    };
+  }
+  s.reroll = typeof raw.reroll === 'string' && raw.reroll === dayKey(now) ? raw.reroll : '';
+  return s;
+}
+
+// [{...definition, value, done}] for one period, in display order.
+export function challengeList(state, period) {
+  const p = state[period];
+  return p.ids.map(id => {
+    const c = getChallenge(id), value = Math.min(c.goal, p.prog[id] ?? 0);
+    return { ...c, value, done: value >= c.goal };
+  });
+}
+
+export const canReroll = (state, now = new Date()) => state.reroll !== dayKey(now);
+
+// Swaps one unfinished challenge for a fresh draw from the same period. One reroll a day, daily or weekly. The new
+// one is seeded from the period key and the swaps so far, so it is the same on a second look. Returns the new id or null.
+export function rerollChallenge(state, id, now = new Date()) {
+  const period = getChallenge(id)?.period;
+  if (!period || !canReroll(state, now)) return null;
+  const p = state[period];
+  const i = p.ids.indexOf(id);
+  if (i < 0 || p.done.includes(id)) return null;
+  const others = p.ids.filter(x => x !== id);
+  const [next] = drawChallenges(period, `${p.key}:r${p.retired.length + 1}`, {
+    count: 1, exclude: [...p.ids, ...p.retired], families: others.map(x => getChallenge(x).family),
+  });
+  if (!next) return null;
+  p.retired.push(id);
+  p.ids[i] = next;
+  delete p.prog[id];
+  p.prog[next] = 0;
+  state.reroll = dayKey(now);
+  return next;
+}
+
+// Counts what the local player did in one match, for the challenges. Pure, like ProTracker: feed onEvents(events,
+// view) every frame, then finish({won, place}) once. counts() is {stat: n}.
+export class ChallengeTally {
+  constructor(localId) {
+    this.id = localId;
+    this.n = {};
+    this.rules = null;
+  }
+
+  add(stat, k = 1) { this.n[stat] = (this.n[stat] ?? 0) + k; }
+
+  onEvents(events, view) {
+    const id = this.id;
+    const mode = view?.modeId ?? view?.mode;
+    if (mode) this.rules = modeRules(mode);
+    let me = null;
+    for (const e of events) {
+      switch (e.t) {
+        case 'kill': {
+          if (e.assist === id) this.add('assists');
+          if (e.by !== id || e.target === id) break;
+          this.add('kills');
+          if (e.streak) { this.add('streakKills'); break; }
+          if (e.equip) { if (LETHALS[e.equip]) this.add('equipKills'); break; }
+          me ??= view?.players?.find(p => p.id === id) ?? {};
+          const cat = WEAPON_CATEGORY[e.weapon];
+          if (cat) this.add(`cat:${cat}`);
+          this.add(`gun:${e.weapon}`);
+          if (e.head) this.add('head');
+          if ((e.dist ?? 0) >= longshotDist(e.weapon)) this.add('long');
+          if ((e.dist ?? 99) <= CLOSE_RANGE) this.add('closeKills');
+          if (me.sliding) this.add('slideKills');
+          if ((me.adsT ?? 1) < HIP_ADS) this.add('hipKills');
+          break;
+        }
+        case 'medal':
+          if (e.id !== id) break;
+          if (MULTI_MEDALS.has(e.medal)) this.add('multi');
+          else if (e.medal === 'streak3' || e.medal === 'streak5') this.add(e.medal);
+          else if (e.medal === 'capture') this.add('captures');
+          else if (e.medal === 'confirm') this.add('confirms');
+          break;
+        case 'slide': if (e.id === id) this.add('slides'); break;
+        case 'throw': if (e.id === id) this.add('throws'); break;
+        case 'streak': if (e.id === id) this.add('streaksCalled'); break;
+      }
+    }
+  }
+
+  finish({ won = false, place = null } = {}) {
+    const rules = this.rules ?? 'tdm';
+    this.add('played');
+    this.add(`played:${rules}`);
+    if (won) { this.add('wins'); this.add(`won:${rules}`); }
+    if (place !== null && place <= 3) this.add('top3');
+    return this.n;
+  }
+
+  counts() { return this.n; }
+}
+
+// Adds one match into the state (already rolled over to `now`). Returns the challenges that moved, in display order,
+// daily first: [{id, period, label, icon, goal, xp, before, value, done, fresh}], and the XP the finished ones pay.
+export function applyChallengeTally(state, counts, now = new Date()) {
+  const moved = [];
+  let xp = 0;
+  for (const period of CHALLENGE_PERIODS) {
+    const p = state[period];
+    for (const id of p.ids) {
+      const c = getChallenge(id);
+      const gain = counts?.[c.stat] ?? 0;
+      const before = Math.min(c.goal, p.prog[id] ?? 0);
+      if (!(gain > 0) || before >= c.goal) continue;
+      const value = Math.min(c.goal, before + Math.round(gain));
+      p.prog[id] = value;
+      const fresh = value >= c.goal;
+      if (fresh) { p.done.push(id); xp += c.xp; }
+      moved.push({ id, period, label: c.label, icon: c.icon, goal: c.goal, xp: c.xp, before, value, done: fresh, fresh });
+    }
+  }
+  return { moved, xp };
+}
+
+/* ---------- Match history (V7 round 2) ---------- */
+// The last HISTORY_MAX matches, newest first, built by MatchAwards at the end of each match and kept by
+// js/ui/progress.js. Versioned: a store from another version starts over.
+export const HISTORY_VERSION = 1;
+export const HISTORY_MAX = 20;
+const RESULTS = ['win', 'loss', 'draw'];
+
+// Anything to one valid entry, or null.
+export function cleanHistoryEntry(raw) {
+  if (!isObj(raw) || !Number.isFinite(raw.at)) return null;
+  const n = v => count(v, 1e6);
+  const guns = Array.isArray(raw.guns) ? raw.guns.filter(g => isObj(g) && WEAPONS[g.id]).slice(0, 6)
+    .map(g => ({ id: g.id, kills: n(g.kills), head: n(g.head), secs: n(g.secs) })) : [];
+  const done = Array.isArray(raw.challenges) ? raw.challenges.filter(c => isObj(c) && getChallenge(c.id))
+    .slice(0, 6).map(c => ({ id: c.id, xp: n(c.xp) })) : [];
+  return {
+    at: raw.at, map: idText(raw.map) || 'railyard', mode: idText(raw.mode) || 'tdm',
+    result: RESULTS.includes(raw.result) ? raw.result : 'draw',
+    place: Number.isFinite(raw.place) ? n(raw.place) : null, field: n(raw.field),
+    team: Number.isFinite(raw.team) ? n(raw.team) : 0,
+    scores: Array.isArray(raw.scores) ? raw.scores.slice(0, 2).map(n) : [0, 0],
+    kills: n(raw.kills), deaths: n(raw.deaths), assists: n(raw.assists), score: n(raw.score),
+    head: n(raw.head), long: n(raw.long), medals: n(raw.medals), obj: n(raw.obj),
+    xp: n(raw.xp), level: Math.max(1, n(raw.level)), levelUp: !!raw.levelUp, mvp: !!raw.mvp,
+    bots: n(raw.bots), humans: n(raw.humans), secs: n(raw.secs), guns, challenges: done,
+  };
+}
+
+export function cleanHistory(raw) {
+  if (!isObj(raw) || raw.v !== HISTORY_VERSION || !Array.isArray(raw.list)) return { v: HISTORY_VERSION, list: [] };
+  return { v: HISTORY_VERSION, list: raw.list.map(cleanHistoryEntry).filter(Boolean).slice(0, HISTORY_MAX) };
 }

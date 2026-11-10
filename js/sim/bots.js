@@ -492,7 +492,7 @@ export class BotBrain {
       if (!tracking && !noisy && sim.rng() > S.notice) continue;      // Looking the right way is not the same as noticing.
       const score = d - (tracking ? 4 : 0) + q.hp * 0.03;
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
-      if (S.callouts && sim.time - sim.calledAt[p.team][q.index] > CALLOUT_GAP) this._callOut(q);
+      if (S.callouts && !sim.ffa && sim.time - sim.calledAt[p.team][q.index] > CALLOUT_GAP) this._callOut(q);
     }
 
     if (best) {
@@ -714,20 +714,33 @@ export class BotBrain {
   _streakMoment(kind, visible) {
     const { sim, p, ps } = this;
     if (this.streakWait >= STREAK_WAIT) return true;
-    const enemy = 1 - p.team;
     const busy = visible || this.hasKnown;
     switch (kind) {
       case 'uav':
       case 'overwatch': return !visible;
-      case 'jammer': return sim.radarUp(enemy) || busy;
+      case 'jammer': return this._enemyRadar() || busy;
       case 'turret': return busy || this.mode === 'hold';
       case 'mortar':
       case 'strike': return busy;
       case 'resupply': return p.hp < 60 || ps.lethalLeft === 0 || ps.ammo[ps.slot] === 0;
       // Anything overhead is common knowledge; a sentry only counts once this bot has actually seen one.
-      case 'emp': return sim.radarUp(enemy) || sim.gunships.some(g => g.team === enemy) || this.turretTarget !== null;
+      case 'emp': return this._enemyRadar() || sim.gunships.some(g => g.team !== p.team) || this.turretTarget !== null;
       default: return true;     // Chopper, gunship: they find their own work.
     }
+  }
+
+  // Anyone hostile has a radar up: the other team, or in a free-for-all any other player.
+  _enemyRadar() {
+    const { sim, p } = this;
+    for (let t = 0; t < sim.teamCount; t++) if (t !== p.team && sim.radarUp(t)) return true;
+    return false;
+  }
+
+  // Gun Game moved this bot to a new gun: fight the way the new gun wants, from the next think.
+  onArmed() {
+    this.style = styleOf(this.ps.primary);
+    this.useAds = !!this.style.scoped;
+    this.wantSwap = false;
   }
 
   // Where this throw would really end up, bounces and all, through the same code that flies it.
@@ -982,6 +995,7 @@ export class BotBrain {
   _pickGoal() {
     const { sim, S, style } = this;
     if (this.objective) { this._goObjective(); return; }
+    if (sim.ffa) { this._roam(); return; }
     const r = sim.rng();
     if (r < S.flank * style.flank && this.stage >= 1) {
       // Rotate to a different lane and push past the fight.
@@ -1001,25 +1015,56 @@ export class BotBrain {
     this._goTo(g.x, g.z);
   }
 
+  // Free-for-all: no sides and no front line, so no lanes to push. A bot wanders the map looking for a fight: toward
+  // the last kill it could have heard about some of the time, to a held angle some of the time, otherwise anywhere
+  // open that is a fair walk from here, so the field keeps mixing instead of settling into corners.
+  _roam() {
+    const { sim, ps, S, style } = this;
+    const r = sim.rng();
+    if (r < S.holdProb * style.hold * 0.8 && this._goHold()) return;
+    const hot = sim.hot;
+    if (hot && sim.time - hot.t < 8 && r < 0.55 && Math.hypot(hot.x - ps.x, hot.z - ps.z) < 45) {
+      this.mode = 'advance';
+      this._goTo(hot.x + (sim.rng() - 0.5) * 10, hot.z + (sim.rng() - 0.5) * 10);
+      return;
+    }
+    const W = sim.map.width, H = sim.map.height;
+    let x = ps.x, z = ps.z;
+    for (let i = 0; i < 10; i++) {
+      x = W * (0.08 + 0.84 * sim.rng());
+      z = H * (0.08 + 0.84 * sim.rng());
+      const d = Math.hypot(x - ps.x, z - ps.z);
+      if (d > 14 && d < 50 && sim.nav.isWalkable(x, z)) break;
+    }
+    this.mode = 'advance';
+    this._goTo(x, z);
+  }
+
+  // Which way a hold looks. Team modes look toward the enemy's side; a free-for-all takes the better of the two.
+  _holdSide(h) {
+    const { sim, p } = this;
+    return !sim.ffa ? p.team : h.sight[0] >= h.sight[1] ? 0 : 1;
+  }
+
   // Goes to a nearby spot with a good sightline and watches down it for a few seconds.
   _goHold() {
     const { sim, p, ps, S } = this;
     let best = null, bestScore = Infinity;
     const laneZ = sim.map.lanes[this.laneIdx].z;
     for (const h of sim.nav.holds) {
-      const d = Math.hypot(h.x - ps.x, h.z - ps.z);
-      if (d > 11 || h.sight[p.team] < 12) continue;
-      if (Math.abs(h.z - laneZ) > 9) continue;    // Holding is part of playing this lane, not leaving it.
+      const d = Math.hypot(h.x - ps.x, h.z - ps.z), side = this._holdSide(h);
+      if (d > 11 || h.sight[side] < 12) continue;
+      if (!sim.ffa && Math.abs(h.z - laneZ) > 9) continue;    // Holding is part of playing this lane, not leaving it.
       if (this._teammateNear(h.x, h.z, 3)) continue;
       // Stay on our side of the action; a hold point deep in enemy ground is just a bad position.
-      const depth = (p.team === 0 ? h.x : sim.map.width - h.x) / sim.map.width;
-      const score = d * 0.5 - h.sight[p.team] * 0.25 + (depth > 0.72 ? 8 : 0) + sim.rng() * 6;
+      const depth = sim.ffa ? 0 : (p.team === 0 ? h.x : sim.map.width - h.x) / sim.map.width;
+      const score = d * 0.5 - h.sight[side] * 0.25 + (depth > 0.72 ? 8 : 0) + sim.rng() * 6;
       if (score < bestScore) { bestScore = score; best = h; }
     }
     if (!best) return false;
     this.mode = 'hold';
     this.holdSpot = best;
-    this.holdAim = best.aim[p.team];
+    this.holdAim = best.aim[this._holdSide(best)];
     this.holdT = between(sim.rng, S.holdTime[0], S.holdTime[1]);
     this._goTo(best.x, best.z);
     return true;

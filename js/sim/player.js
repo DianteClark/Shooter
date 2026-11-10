@@ -135,6 +135,7 @@ function applyLoadout(ps, l) {
   if (TACTICALS[l.tactical]) ps.tactical = l.tactical;
   if (LETHALS[l.lethal]) ps.lethal = l.lethal;
   if (l.attachments && typeof l.attachments === 'object') ps.attachments = l.attachments;
+  if (l.ladder) ps.ladder = true;
   refreshDefs(ps);
 }
 
@@ -159,7 +160,7 @@ export function takeEquipment(ps, slot) {
 // instantReload is the firing range's rule: magazines refill the moment they run dry and reserve never drains.
 export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, instantReload = false } = {}) {
   const ps = {
-    id, x: 0, z: 0, aim: 0, vx: 0, vz: 0, instantReload,
+    id, x: 0, z: 0, aim: 0, vx: 0, vz: 0, instantReload, ladder: false,
     slot: 0, primary, secondary: SECONDARY_ID, weapon: primary, camo,
     attachments: NO_ATTACHMENTS, defs: [WEAPONS[primary], WEAPONS[SECONDARY_ID]],
     perks: [], pro: [], tactical: DEFAULT_LOADOUT.tactical, lethal: DEFAULT_LOADOUT.lethal,
@@ -192,8 +193,9 @@ function fillAmmo(ps) {
 
 // Places a player at a spawn point, full ammo and equipment, every timer cleared.
 // Optional new loadout: a normalized loadout, {loadout}, or the older {primary, camo}.
+// A Gun Game player (`ps.ladder`) keeps the gun the host gave them: a loadout picked on the death screen waits.
 export function respawnPlayer(ps, x, z, aim, loadout) {
-  if (loadout) applyLoadout(ps, loadout.loadout || loadout);
+  if (loadout && !(ps.ladder && !(loadout.loadout || loadout).ladder)) applyLoadout(ps, loadout.loadout || loadout);
   ps.x = x; ps.z = z; ps.aim = aim; ps.vx = 0; ps.vz = 0;
   ps.slot = 0; ps.weapon = ps.primary;
   fillAmmo(ps);
@@ -207,6 +209,22 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
   ps.swapT = 0; ps.sinceShot = 9; ps.burstLeft = 0;
   ps.holsterT = 0; ps.holsterDur = 0;
   ps.aaOffset = 0; ps.aaRaw = null;
+  return ps;
+}
+
+// Gun Game: the host moved this player to another gun (a kill up, a thrown kill down). It goes straight into their
+// hands, loaded, whatever they were doing; there is nothing to swap to. On a human's phone, call it for the `arm` event.
+export function armPlayer(ps, weapon) {
+  if (!WEAPONS[weapon]) return ps;
+  ps.primary = weapon;
+  refreshDefs(ps);
+  const w = ps.defs[0];
+  ps.slot = 0; ps.weapon = weapon;
+  ps.ammo[0] = w.magazine; ps.reserve[0] = reserveFor(w);
+  clearHeat(ps);
+  ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0; ps.holsterT = 0; ps.holsterDur = 0;
+  ps.shotIndex = 0; ps.bloom = 0; ps.burstLeft = 0; ps.adsT *= 0.4;
+  ps.swapT = w.swapTime; ps.cooldown = Math.max(ps.cooldown, ps.swapT);
   return ps;
 }
 
@@ -483,7 +501,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   if (dt > MAX_DT) dt = MAX_DT;
 
   ps.overheatEdge = false;
-  if (input.swap) setSlot(ps, ps.slot === 0 ? 1 : 0);
+  if (input.swap && !ps.ladder) setSlot(ps, ps.slot === 0 ? 1 : 0);
   if (ps.swapT > 0) ps.swapT -= dt;
 
   let w = weaponDef(ps);

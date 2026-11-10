@@ -6,7 +6,8 @@
 //   this.telemetry = new MatchTelemetry({ localId });
 //   this.telemetry.onEvents(events, view);    every frame, with the same events and view the HUD gets
 //   this.telemetry.finish(view);              once when the match ends; saves, returns the match record (or null)
-// The firing range and matches with no gunfire record nothing.
+// The firing range, practice matches (the tutorial sets `practice = true`) and matches with no gunfire record nothing.
+// main.js also sets `mapId` at the start, since the interpolated view does not carry it.
 //
 // Three scopes per gun: a = everyone in the match, h = human players only, m = the local player only.
 // Each gun's numbers in a scope are one flat array, laid out by FIELDS.
@@ -62,6 +63,7 @@ export class MatchTelemetry {
     this.live = 0;                             // Seconds of live phase.
     this.mapId = null;
     this.mode = null;
+    this.practice = false;
     this.result = undefined;
   }
 
@@ -163,6 +165,7 @@ export class MatchTelemetry {
   // the same result and save nothing more.
   finish(view) {
     if (this.result !== undefined) return this.result;
+    if (this.practice) return (this.result = null);
     if (view) this.onEvents([], view);
     let shots = 0;
     for (const gun in this.scopes.a) shots += this.scopes.a[gun][F.shots];
