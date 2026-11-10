@@ -13,7 +13,8 @@
 // among the still linked, not backgrounded peers takes over and announces it with a higher epoch. Two peers can reach
 // different conclusions while links flap, so a claim with a higher epoch, or the same epoch and a lower id, wins.
 
-export const KINDS = ['hi', 'lob', 'snp', 'evt', 'sta', 'sho', 'bye', 'bg', 'png', 'pog'];
+export const KINDS = ['hi', 'lob', 'snp', 'evt', 'sta', 'sho', 'bye', 'bg', 'png', 'pog', 'cht'];
+const CHAT_MAX_BYTES = 96;          // A quick-chat message is a callout index and a position; anything bigger is junk.
 
 const PING_MS = 2000;
 const PING_TIMEOUT_MS = 3000;
@@ -68,7 +69,7 @@ export class StarNet {
     this.electTimer = null;
     this.skipped = new Set();        // Successors that never announced themselves during this election.
 
-    this.cbs = { lobby: null, snapshot: null, events: null, state: null, shot: null };
+    this.cbs = { lobby: null, snapshot: null, events: null, state: null, shot: null, chat: null };
     this.join = [];
     this.leaves = [];
     this.life = { hostLost: null, hostBack: null, hostChanged: null, promoted: null, demoted: null, joinFailed: null, connected: null, background: null };
@@ -119,6 +120,15 @@ export class StarNet {
 
   sendShot(s) { if (this.#hostLinked()) this.#send('sho', s, [this.hostId]); }
   onShot(cb) { this.cbs.shot = cb; }
+
+  // Quick chat (js/ui/quickchat.js). Not gameplay, so it skips the star: it goes straight to the teammates named (player
+  // ids), over the same mesh voice uses, and any known peer may send one. Survives resetGameHandlers; QuickChat owns it.
+  sendChat(d, targets) {
+    if (this.status === 'closed') return;
+    const to = targets.filter(id => this.known.get(id)?.linked);
+    this.#send('cht', d, to);
+  }
+  onChat(cb) { this.cbs.chat = cb; }
 
   // { persist: true } keeps a handler across resetGameHandlers(); Match's handlers are per-match.
   onPeerJoin(cb, { persist = false } = {}) { this.join.push({ cb, persist }); }
@@ -304,6 +314,11 @@ export class StarNet {
     if (kind === 'bg') {
       peer.hidden = !!data;
       this.life.background?.(peerId, peer.hidden);
+      return;
+    }
+
+    if (kind === 'cht') {
+      if (data && typeof data === 'object' && JSON.stringify(data).length <= CHAT_MAX_BYTES) this.cbs.chat?.(peerId, data);
       return;
     }
 

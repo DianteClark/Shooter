@@ -273,12 +273,12 @@ export function cardsSheet(menu, { onClose, onChange } = {}) {
           <div class="cs-now">${cardHtml(on.id, { size: 's', sub: 'Equipped' })}</div>
           <button class="btn is-primary cs-done" data-act="csDone" data-sound="confirm">${icon('ui:check', { size: 18, accent: 'currentColor' })}<b>Done</b></button>
         </div>
-        <nav class="cs-tabs">${['All', ...CARD_GROUPS].map(g => {
+        <nav class="cs-tabs scroll-x">${['All', ...CARD_GROUPS].map(g => {
           const n = g === 'All' ? have : list.filter(x => x.card.group === g && x.unlocked).length;
           const of = g === 'All' ? list.length : list.filter(x => x.card.group === g).length;
           return `<button class="cs-tab${g === group ? ' on' : ''}" data-act="csGroup" data-g="${g}" data-sound="tab"><b>${g}</b><small>${n}/${of}</small></button>`;
         }).join('')}</nav>
-        <div class="cs-grid">${shown.map(x => `
+        <div class="cs-grid scroll-y">${shown.map(x => `
           <button class="cs-cell${x.unlocked ? '' : ' locked'}${x.equipped ? ' on' : ''}" data-act="csPick" data-id="${x.card.id}" ${x.unlocked ? '' : 'data-sound="deny"'}>
             ${cardHtml(x.card.id, { size: 228, locked: !x.unlocked, equipped: x.equipped, sub: x.card.req })}
           </button>`).join('')}</div>
@@ -328,7 +328,7 @@ export function unlockStamp(u) {
     return `<div class="rx-card rx-unlock rx-cardwin">
       <span class="rx-kick">New calling card</span>
       <span class="rx-mark">${cardHtml(u.id, { size: 360, sub: u.req })}</span>
-      <small>Equip it from your loadout or service record</small>
+      <small>Equip it from your service record</small>
     </div>`;
   }
   return null;

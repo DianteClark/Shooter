@@ -79,11 +79,6 @@
 .pk-pro-steps .ok u { color: var(--c-gold); }
 .pk-pro-steps .ok i::after { background: var(--c-gold); }
 
-/* Loadouts: the calling card, pinned in the hero's free top-right corner under the weapon level. Player-wide, not
-   per loadout; tapping it opens the picker. */
-#ui .ld-cardpin { position: absolute; z-index: 3; right: 10px; top: 34px; line-height: 0; transition: transform var(--dur-fast) var(--ease-out); box-shadow: 0 3px 10px rgba(0,0,0,.35); }
-#ui .ld-cardpin:active { transform: scale(.96); }
-
 /* ---- Card picker ---- */
 #ui .overlay.show:has(.cards-sheet) { padding: 0; background: var(--face-dusk); }
 .cards-sheet {

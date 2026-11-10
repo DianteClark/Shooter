@@ -15,7 +15,6 @@ import { GOLDEN_ID, WEAPON_IDS } from '../shared/constants.js';
 import { playUi } from '../audio/audio.js';
 import { ico, backButton } from './yard.js';
 import { stagger, flash, sweep, pop } from './motion.js';
-import { cardHtml, cardsSheet } from './cards.js';
 
 const HERO_STATS = ['damage', 'rate', 'range', 'aimed', 'recoil', 'move', 'reload'];
 
@@ -53,7 +52,6 @@ export class LoadoutsScreen {
       loEquip: () => this.equip(),
       loGunsmith: () => this.onGunsmith(this.selected, this.loadout.primary),
       loOperators: () => this.onOperators(this.selected),
-      loCards: () => cardsSheet(menu, { onChange: () => this.onChange?.(), onClose: () => this.render() }),
       loWeapon: ({ key }) => this.openArmory(key),
       loRename: () => this.onRename(this.selected),
       loSlot: ({ key, idx }) => this.openGear(key, Number(idx)),
@@ -149,7 +147,6 @@ export class LoadoutsScreen {
               <span class="ld-camo"><i class="sw" style="background:${swatchCss(camo)}"></i>${esc(camo.name)}</span>
             </span>
             <span class="ld-hero-lv"><b>${levelHtml(l.primary)}</b><i class="xp"><i style="transform:scaleX(${(prog.maxed ? 1 : prog.into / prog.span).toFixed(3)})"></i></i></span>
-            <span class="ld-cardpin" data-act="loCards" role="button" aria-label="Calling card">${cardHtml(Progress.card, { size: 150, sub: 'Calling card' })}</span>
             <em class="ld-swap">${ico('swap')}Change weapon</em>
             <span class="ld-kit">${SLOTS.map(s => `<i class="${kit[s] ? 'has' : ''}">
               <span class="ld-kit-ico">${itemMark(s, SLOT_LABEL[s])}</span>

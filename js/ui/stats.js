@@ -23,19 +23,6 @@ const COLUMNS = [
 const num = (v, d) => v === null || v === undefined ? '-' : v.toFixed(d);
 const pct = v => v === null || v === undefined ? '-' : `${Math.round(v * 100)}%`;
 
-// Drag to scroll: the app blocks native touch scrolling outside text fields (see main.js), so the table moves itself.
-function dragScroll(el) {
-  let y0 = 0, s0 = 0, id = null;
-  el.addEventListener('touchstart', e => {
-    const t = e.changedTouches[0];
-    id = t.identifier; y0 = t.clientY; s0 = el.scrollTop;
-  }, { passive: true });
-  el.addEventListener('touchmove', e => {
-    for (const t of e.changedTouches) if (t.identifier === id) el.scrollTop = s0 - (t.clientY - y0);
-  }, { passive: true });
-  el.addEventListener('touchend', () => { id = null; }, { passive: true });
-}
-
 export function statsScreen(menu, { onBack }) {
   const state = { scope: 'a', cat: 'All', sort: 'kills', open: null, code: null };
   menu.el.dataset.screen = 'stats';
@@ -69,7 +56,7 @@ export function statsScreen(menu, { onBack }) {
           <span class="st-gun">Gun</span>
           ${COLUMNS.map(c => `<button class="st-h${state.sort === c.key ? ' on' : ''}" data-act="stSort" data-k="${c.key}">${c.label}${state.sort === c.key ? ico('down', 'st-arrow') : ''}</button>`).join('')}
         </div>
-        <div class="st-body">
+        <div class="st-body scroll-y">
           ${empty || scopeEmpty ? `<div class="st-empty">${ico('stats')}<b>${empty ? 'No matches recorded yet' : `No matches with ${SCOPE_LABEL[state.scope].toLowerCase()} in them yet`}</b><p>${empty ? 'Play a match and every gun used in it shows up here.' : 'Switch to Everyone to see all recorded matches.'}</p></div>` : rows.map(r => `
           <button class="st-row${state.open === r.id ? ' open' : ''}" data-act="stRow" data-id="${r.id}">
             <span class="st-gun">${ico(r.id, 'st-ico', 14)}<b>${esc(WEAPONS[r.id].name)}</b><small>${esc(WEAPON_CATEGORY[r.id])}</small></span>
@@ -91,7 +78,7 @@ export function statsScreen(menu, { onBack }) {
           <button class="btn is-primary" data-sound="confirm" data-act="stExport"${empty ? ' disabled' : ''}>${ico('export')}<b>Export code</b></button>`}
       </footer>`;
     const body = menu.el.querySelector('.st-body');
-    if (body) { dragScroll(body); body.scrollTop = state.scroll || 0; }
+    if (body) body.scrollTop = state.scroll || 0;
   };
   const keepScroll = () => { state.scroll = menu.el.querySelector('.st-body')?.scrollTop || 0; };
 

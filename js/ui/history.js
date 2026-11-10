@@ -80,14 +80,6 @@ function detail(e) {
   </div>`;
 }
 
-// Drag to scroll: the app blocks native touch scrolling outside text fields (see main.js), so the list moves itself.
-function dragScroll(el) {
-  let y0 = 0, s0 = 0, id = null;
-  el.addEventListener('touchstart', e => { const t = e.changedTouches[0]; id = t.identifier; y0 = t.clientY; s0 = el.scrollTop; }, { passive: true });
-  el.addEventListener('touchmove', e => { for (const t of e.changedTouches) if (t.identifier === id) el.scrollTop = s0 - (t.clientY - y0); }, { passive: true });
-  el.addEventListener('touchend', () => { id = null; }, { passive: true });
-}
-
 export function historyScreen(menu, { onBack, onStats }) {
   const list = MatchHistory.list();
   let open = 0;
@@ -98,12 +90,10 @@ export function historyScreen(menu, { onBack, onStats }) {
     ${list.length ? `<div class="hs-split">
       <div class="hs-list" data-in="up">
         <div class="hs-row hs-head"><i></i><span></span><span class="hs-where">Match</span><span class="hs-res">Result</span><span class="hs-kda">K/D/A</span><span class="hs-score">Score</span><span class="hs-xp">XP</span></div>
-        <div class="hs-body">${list.map((e, i) => row(e, i, i === open)).join('')}</div>
+        <div class="hs-body scroll-y">${list.map((e, i) => row(e, i, i === open)).join('')}</div>
       </div>
       <div class="hs-detail" data-in="right">${detail(list[open])}</div>
     </div>` : `<div class="hs-empty" data-in="up">${ico('ui:clock')}<b>No matches yet</b><p>Every match you finish, against bots or friends, lands here with how it went.</p></div>`}`;
-  const body = menu.el.querySelector('.hs-body');
-  if (body) dragScroll(body);
   menu.on({
     hsBack: () => onBack(),
     hsStats: () => onStats?.(),

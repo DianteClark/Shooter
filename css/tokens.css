@@ -203,6 +203,14 @@
 .btn svg, .ico { flex: none; display: block; }
 :focus-visible { outline: 2px solid var(--c-sodium); outline-offset: 2px; }
 
+/* Lists that scroll natively (js/ui/scroll.js): the compositor tracks the thumb, flings and bounces at the list's own
+   edges; contain keeps the bounce from reaching the page. Children keep touch-action: manipulation, which allows pan.
+   The scrollbar is hidden: the content's cut-off edge says there is more. */
+.scroll-y, .scroll-x { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; scrollbar-width: none; }
+.scroll-y { overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
+.scroll-x { overflow-x: auto; overflow-y: hidden; touch-action: pan-x; }
+.scroll-y::-webkit-scrollbar, .scroll-x::-webkit-scrollbar { display: none; }
+
 /* Text roles. Stencil and plate faces are caps-only by design; body text is sentence case. */
 .t-mega    { font: 400 var(--fs-mega)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); }
 .t-display { font: 400 var(--fs-display)/var(--lh-tight) var(--f-stencil); letter-spacing: var(--tr-stencil); font-variant-numeric: tabular-nums; }

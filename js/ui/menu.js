@@ -11,6 +11,7 @@ import { Progress } from './progress.js';
 import { LoadoutsScreen } from './loadout.js';
 import { OperatorsScreen } from './operatorscreen.js';
 import { voteMarkup, paintVote, soloMarkup, paintSolo } from './vote.js';
+import { botMatchSummary } from './botsettings.js';
 import { followMapArt } from './mapthumb.js';
 import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
@@ -22,6 +23,7 @@ import { helpScreen } from './help.js';
 import { challengesScreen, titleChallenges } from './challenges.js';
 import { historyScreen } from './history.js';
 import { fingerDown } from './tap.js';
+import { scrolling } from './scroll.js';
 import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
@@ -381,15 +383,30 @@ export class Menu {
   solo(state) {
     if (this.el.dataset.screen === 'solo' && this.el.classList.contains('on') && this.el.querySelector('.solo')) {
       paintSolo(this.el, state);
+      this.#paintBotMatch(state);
       return;
     }
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'solo';
     this.el.innerHTML = soloMarkup(state);
+    // The mode strip scrolls natively; the bot match settings sit between it and Start.
+    this.el.querySelector('.solo-modes')?.classList.add('scroll-x');
+    this.el.querySelector('.solo-start')?.insertAdjacentHTML('beforebegin', `<button class="btn solo-bots" data-act="soloBots" aria-label="Bot match settings">${ico('bot')}<span><b></b><small></small></span></button>`);
+    this.#paintBotMatch(state);
     paintSolo(this.el, state);
     followMapArt(this.el);
     this.show();
+  }
+
+  // The settings button's two lines: difficulty, then sides and limits for the picked mode.
+  #paintBotMatch(state) {
+    const btn = this.el.querySelector('.solo-bots');
+    if (!btn) return;
+    const s = botMatchSummary(state);
+    btn.querySelector('b').textContent = s.top;
+    btn.querySelector('small').textContent = s.sub;
+    btn.classList.toggle('custom', !!s.custom);
   }
 
   operators(opts) {
@@ -524,14 +541,14 @@ export class Menu {
     this.#runPreview();
   }
 
-  // Capped well under the display rate, and skipped entirely while a finger is on a button: on a phone the WebGL
-  // frame is the heaviest work on the main thread, and touch events wait behind it.
+  // Capped well under the display rate, and skipped entirely while a finger is on a button or a list is moving: on a
+  // phone the WebGL frame is the heaviest work on the main thread, and touch events and scroll events wait behind it.
   #runPreview() {
     if (this.previewRaf) return;
     let last = performance.now(), drawn = 0;
     const tick = now => {
       this.previewRaf = requestAnimationFrame(tick);
-      if (fingerDown() || now - drawn < PREVIEW_MS) return;
+      if (fingerDown() || scrolling() || now - drawn < PREVIEW_MS) return;
       drawn = now;
       this.ticking.tick(Math.min(0.1, (now - last) / 1000));
       last = now;

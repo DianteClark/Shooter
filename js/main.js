@@ -20,6 +20,7 @@ import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
 import { takeInvite, wireInvite, joinFromInvite, inviteJoinFailed, inviteSettled, refusal, refusalKind, showJoinProblem } from './ui/invite.js';
 import { installTaps, setTapSound } from './ui/tap.js';
+import { installScrolling, scrollerOf, canScroll } from './ui/scroll.js';
 import { Options } from './ui/options.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
@@ -30,6 +31,8 @@ import { installFrameClock } from './render/quality.js';
 import { Tutorial, tutorialRoster, TUTORIAL_MAP, TUTORIAL_MODE, TUTORIAL_LIMITS } from './game/tutorial.js';
 import { challengeUnlock } from './ui/challenges.js';
 import { ico } from './ui/yard.js';
+import { BotMatch, botMatchSheet } from './ui/botsettings.js';
+import { QuickChat } from './ui/quickchat.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 
 const GAME_NAME = 'Switchyard';
@@ -65,6 +68,7 @@ hud.bindControls(controls);
 const menu = new Menu(uiRoot);
 wireInvite(menu, () => app.code);
 const audio = new AudioEngine();
+const quickChat = new QuickChat(hud, { audio });
 const backdrop = new MenuBackdrop(canvas);
 
 // Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
@@ -125,11 +129,17 @@ function blockIosGestures() {
   document.addEventListener('gesturestart', stop, { passive: false });
   document.addEventListener('gesturechange', stop, { passive: false });
   document.addEventListener('dblclick', stop, { passive: false });
-  // Nothing in the app scrolls, so a real drag must never rubber-band Safari's page. A touch only counts as a drag
-  // past the tap slop: default-preventing the small moves inside a tap is exactly what makes iOS drop the click.
-  // The save code boxes are the exception, because they need to scroll and take selection and paste.
+  // A real drag must never rubber-band Safari's page. A touch only counts as a drag past the tap slop:
+  // default-preventing the small moves inside a tap is exactly what makes iOS drop the click.
+  // Two exceptions scroll natively: the save code boxes (they also take selection and paste), and any touch that began
+  // in a list (scroll.js) with something to scroll. Those lists contain their own overscroll, so the page stays put.
   const startAt = new Map();
-  document.addEventListener('touchstart', e => { for (const t of e.changedTouches) startAt.set(t.identifier, [t.clientX, t.clientY]); }, { passive: true, capture: true });
+  document.addEventListener('touchstart', e => {
+    for (const t of e.changedTouches) {
+      const list = scrollerOf(t.target);
+      startAt.set(t.identifier, [t.clientX, t.clientY, canScroll(list)]);
+    }
+  }, { passive: true, capture: true });
   const forget = e => { for (const t of e.changedTouches) startAt.delete(t.identifier); };
   document.addEventListener('touchend', forget, { passive: true, capture: true });
   document.addEventListener('touchcancel', forget, { passive: true, capture: true });
@@ -137,6 +147,7 @@ function blockIosGestures() {
     if (e.target.tagName === 'TEXTAREA' || !e.cancelable) return;
     for (const t of e.changedTouches) {
       const at = startAt.get(t.identifier);
+      if (at?.[2]) continue;
       if (at && Math.hypot(t.clientX - at[0], t.clientY - at[1]) > DRAG_SLOP) { e.preventDefault(); return; }
     }
   }, { passive: false });
@@ -238,6 +249,7 @@ menu.on({
   soloMap: ({ id }) => pickSoloMap(id),
   soloMode: ({ id }) => pickSoloMode(id),
   soloStart: () => launchSolo(app.soloPick.mapId, app.soloPick.mode),
+  soloBots: () => botMatchSheet(menu, app.soloPick, { onChange: renderSoloPick }),
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
   moveTeam: ({ id }) => moveTeam(id),
 });
@@ -804,9 +816,15 @@ function launchSolo(pickMap, pickMode) {
   const { mapId, mode } = resolvePick({ mapId: pickMap, mode: pickMode });
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  // The picker's bot match settings (js/ui/botsettings.js); ?bots= and the limit test hooks still win.
+  const set = BotMatch.resolve(mode, MAPS[mapId]);
+  const botSkill = params.get('bots') || set.skill;
+  // Teams: `bots` on the enemy side, and your side fills around you to the same size. Free-for-all counts seats.
+  const roster = buildRoster(humans, { botSkill, mode, mapId, seed, teamSize: isFfa(mode) ? set.players : set.bots });
   beginMatch({
-    roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', mode, mapId, seed }), humans, seed),
-    seed, mapId, mode, ...limitsFor(mode),
+    roster: withBadges(roster, humans, seed),
+    seed, mapId, mode,
+    scoreLimit: LIMIT_OVERRIDE || set.scoreLimit, timeLimit: TIME_OVERRIDE || set.timeLimit,
     hostId: id, isHost: true, localId: id,
   });
 }
@@ -964,6 +982,8 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
   updateVoiceTeam();
+  // Callouts need someone to hear them: friends, or bots on your side. Not in training or on the range.
+  quickChat.start({ net, roster, localId: id, mapId, mode, ffa: isFfa(mode), enabled: !tutorial && mode !== 'range' });
   if (!Progress.flag('aimHint') && !tutorial) {
     controls.showAimHint(true);
     Progress.setFlag('aimHint');
@@ -1013,6 +1033,7 @@ function endLocalMatch() {
   clearInterval(app.netPoll);
   app.renderer?.dispose();
   app.renderer = null;
+  quickChat.stop();
   hud.setVisible(false);
   controls.setEnabled(false);
 }
@@ -1088,6 +1109,7 @@ function showResults(results) {
       proProgress: results.proProgress ?? [],
       finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
       rematchLabel: 'Rematch',
+      snd: results.snd,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
     }, { rematch: () => afterResults(), menu: () => goTitle() });
   } catch (err) {
@@ -1147,6 +1169,7 @@ const TOUCHDEBUG_PARAM = params.get('touchdebug') === '1';
 const touchDebug = new TouchDebug(controls);
 followViewport();
 blockIosGestures();
+installScrolling();
 installTaps();
 // One sound per tap, chosen by tap.js from the element (data-sound, back-ish actions, disabled controls).
 setTapSound(kind => audio.uiSound?.(kind));
@@ -1159,7 +1182,7 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, backdrop, join: startJoining, tutorial: startTutorial };
+if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial) maybeInstallPrompt();
 

@@ -6,6 +6,9 @@
 // So a touch-started tap does not depend on it at all: the press is resolved on touchstart, the action fires on
 // touchend, and the touchend is default-prevented so that the browser cannot synthesise a second one.
 // Mouse clicks and textareas keep their ordinary browser behaviour.
+// Buttons inside a native-scrolling list (scroll.js) are stricter: travel past SCROLL_SLOP or any scroll of the list
+// drops the press, and the touch that stops a fling never presses anything.
+import { scrollerOf, canScroll, coasting, onListScroll, SCROLL_SLOP } from './scroll.js';
 
 export const TAPPABLE = 'button,[data-act],[data-tap]';
 const SLOP = 26;               // A release this far outside the pressed element still counts; thumbs roll.
@@ -92,8 +95,12 @@ function start(e) {
     const el = target?.closest?.(TAPPABLE);
     if (el?.isConnected && !usable(el)) { sound(el, 'deny'); continue; }
     if (!usable(el) || el.tagName === 'TEXTAREA') continue;
+    // Only a list with something to scroll makes the press stricter; a short one behaves like any other screen.
+    let list = scrollerOf(el);
+    if (list && !canScroll(list)) list = null;
+    if (list && coasting(list)) continue;
     const r = el.getBoundingClientRect();
-    const p = { el, key: keyOf(el), x: t.clientX, y: t.clientY, rect: r, at: performance.now(), over: true };
+    const p = { el, key: keyOf(el), x: t.clientX, y: t.clientY, x0: t.clientX, y0: t.clientY, rect: r, at: performance.now(), over: true, list };
     presses.set(t.identifier, p);
     setPressed(p, true);
   }
@@ -104,6 +111,7 @@ function move(e) {
     const p = presses.get(t.identifier);
     if (!p) continue;
     p.x = t.clientX; p.y = t.clientY;
+    if (p.list && Math.hypot(p.x - p.x0, p.y - p.y0) > SCROLL_SLOP) { drop(t.identifier, p); continue; }
     const over = inside(p.rect, p.x, p.y);
     if (over === p.over) continue;
     p.over = over;
@@ -128,6 +136,11 @@ function end(e) {
   }
 }
 
+function drop(id, p) {
+  presses.delete(id);
+  p.el.classList.remove('pressed');
+}
+
 function cancel(e) {
   for (const t of e.changedTouches) {
     const p = presses.get(t.identifier);
@@ -135,6 +148,11 @@ function cancel(e) {
     presses.delete(t.identifier);
     setPressed(p, false);
   }
+}
+
+// The list moved under a held finger (native scroll, a fling, or a programmatic scroll): that finger is scrolling.
+function listScrolled(sc) {
+  for (const [id, p] of presses) if (p.list === sc || (p.list && sc.contains(p.list))) drop(id, p);
 }
 
 function dropGhost(e) {
@@ -160,4 +178,5 @@ export function installTaps(target = window) {
   target.addEventListener('touchend', end, { passive: false, capture: true });
   target.addEventListener('touchcancel', cancel, { passive: true, capture: true });
   target.addEventListener('click', dropGhost, { capture: true });
+  onListScroll(listScrolled);
 }
