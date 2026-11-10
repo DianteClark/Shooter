@@ -368,7 +368,7 @@ export class LoadoutsScreen {
     const column = (title, k, items, isOn, note) => `
       <div class="pk-col">
         ${title ? `<h4>${esc(title)}</h4>` : ''}
-        <div class="pk-list">${items.map(item => this.option(k, item, isOn(item.id), note?.(item))).join('')}</div>
+        <div class="pk-list scroll-y">${items.map(item => this.option(k, item, isOn(item.id), note?.(item))).join('')}</div>
       </div>`;
     let body = '', title = GEAR[key].title, hint = '', cls = '';
     if (key === 'perks') {
