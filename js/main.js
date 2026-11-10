@@ -37,6 +37,7 @@ import { ico } from './ui/yard.js';
 import { BotMatch, botMatchSheet } from './ui/botsettings.js';
 import { QuickChat } from './ui/quickchat.js';
 import { MenuBackdrop } from './ui/backdrop.js';
+import { Updater, BUILD } from './ui/updater.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -71,6 +72,9 @@ const controls = new Controls(uiRoot);
 const hud = new HUD(uiRoot);
 hud.bindControls(controls);
 const menu = new Menu(uiRoot);
+// "Update ready" on the title screen when the site has a newer build than this (often stale Home Screen) copy.
+const updater = new Updater({ canShow: () => !app.inMatch && menu.el.dataset.screen === 'title' });
+new MutationObserver(() => updater.paint()).observe(menu.el, { attributes: true, attributeFilter: ['data-screen'] });
 wireInvite(menu, () => app.code);
 const audio = new AudioEngine();
 const quickChat = new QuickChat(hud, { audio });
@@ -393,7 +397,7 @@ function renderLobby() {
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null, public: app.public });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
 }
 
 // --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
@@ -570,6 +574,7 @@ function hostLobbyMessage(msg, from) {
   let guest = humans.find(h => h.id === from);
   switch (msg.t) {
     case 'join': {
+      if (msg.build !== BUILD) menu.toast(`${String(msg.name ?? 'A player').slice(0, 12)} is on a different version. Both reopen the game to match.`, 'warn');
       if (app.inMatch) {
         if (seatReturningPlayer(from) || seatOpenSlot(from, msg)) return;
         app.net.sendLobby(refusal('started'), from);
@@ -682,7 +687,7 @@ function startJoining(code) {
   menu.searching(code, () => goTitle());
   wireSharedNet(net);
   net.onConnected(() => {
-    net.sendLobby({ t: 'join', name: myName(), ...seatData() });
+    net.sendLobby({ t: 'join', name: myName(), build: BUILD, ...seatData() });
   });
   net.onJoinFailed(() => {
     teardownNet();
@@ -701,6 +706,7 @@ function startJoining(code) {
 function guestLobbyMessage(msg) {
   switch (msg.t) {
     case 'state':
+      if (msg.build !== BUILD && app.buildWarned !== app.code) { app.buildWarned = app.code; menu.toast('The host is on a different version. Both reopen the game to match.', 'warn'); }
       inviteSettled();
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
@@ -1085,6 +1091,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   const id = localId ?? net?.localId;
   app.inMatch = true;
   wakeLock.set(true);
+  updater.paint();
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.lastPlayed = mode === 'range' ? null : { mapId, mode };
@@ -1302,7 +1309,7 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
+if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial) maybeInstallPrompt();
 
