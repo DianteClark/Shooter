@@ -6,12 +6,33 @@ import { esc } from './widgets.js';
 import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
 
-const TABS = [['controls', 'Controls', 'controls'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info']];
+const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Weapons', 'cat:Assault'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info']];
 
 // One help card: an icon, a stencil heading and a sentence or two.
 const card = (icon, title, body, wide = false) => `<div class="help-card${wide ? ' wide' : ''}"><h4>${ico(icon)}<span>${esc(title)}</span></h4><p>${body}</p></div>`;
 
+// One weapon stat: what the bar in the Gunsmith measures and what it means in a fight.
+const stat = (name, body) => `<div class="help-stat"><dt>${esc(name)}</dt><dd>${body}</dd></div>`;
+
 const PANELS = {
+  weapons: () => `
+    <dl class="help-stats scroll-y">
+      ${stat('Damage', 'Damage of one shot at close range. Shotguns show all pellets together. Everyone has 100 health, which comes back on its own a few seconds after you stop taking hits.')}
+      ${stat('Headshots', 'The head is a small zone at the centre of a player. <b>Aimed in</b>, a headshot kills in one hit with any gun. <b>From the hip</b> it does 1.6&times; damage instead. Marksman rifles and snipers kill with a headshot either way. Explosives have no headshots.')}
+      ${stat('Fire rate', 'Shots per minute (RPM). Every gun fires while you hold the trigger, semi-autos and snipers included, at their own pace.')}
+      ${stat('Range', 'Shown as three numbers: full damage out to the first, fading to its lowest by the second, and nothing at all past the third. Bullets simply stop at the last one, so shots beyond it miss.')}
+      ${stat('Pierce', 'How much damage a round keeps after passing through <b>waist-high cover</b> such as crates and barriers. 70% means a 30 damage shot still does 21. It goes through at most two pieces. SMGs, pistols and shotguns have no pierce: crates stop them. Buildings, containers and walls stop every gun. Your own cover never counts: you can always fire over a crate you are crouched behind.')}
+      ${stat('Aimed fire', 'Spread while aimed in. Lower is tighter. You aim in by holding the right stick with the move stick below about 70%; at a full push you hip-fire instead.')}
+      ${stat('Hip fire', 'Spread when firing without aiming, including at a full sprint push. Each shot adds bloom, which settles back when you stop.')}
+      ${stat('Recoil', 'How far the gun pulls and sways while you hold the trigger. Grips and compensators tame it.')}
+      ${stat('Aim speed', 'Time to get fully aimed in. Until then the gun fires as hip fire, and a headshot is not yet a one-hit kill.')}
+      ${stat('Handling', 'Sprint-to-fire delay and swap time together: how quickly you can shoot after sprinting or switching guns. A slide pays off most of the sprint delay.')}
+      ${stat('Mobility', 'Move speed with the gun out, and how much aiming slows you.')}
+      ${stat('Magazine and reload', 'Rounds before a reload, and its time. Reloads are automatic when empty, and top up after a short pause if you are low. Firing cancels a top-up.')}
+      ${stat('Swing speed', 'Heavy guns turn slowly while aiming or firing: a flanker can get round you. Light guns have no limit.')}
+      ${stat('Heat (LMGs)', 'Rounds in a long burst before the barrel overheats and locks for about two seconds. Fire in bursts to let it cool. You can still swap to your sidearm.')}
+      ${stat('Blast radius (launchers)', 'Metres an explosion reaches. Damage is highest at the centre and falls off to the edge. Walls block it.')}
+    </dl>`,
   controls: () => `
     <div class="help-grid">
       ${card('marathon', 'Left thumb', 'Drag anywhere on the left half to move. Push all the way to sprint. While firing, a full push keeps you hip-firing at full speed; ease below about 70% to settle into aiming down sights.')}
@@ -31,12 +52,17 @@ const PANELS = {
       </ol>
     </div>`,
   modes: () => `
-    <div class="help-grid">
+    <div class="help-grid scroll-y">
       ${card('mode:tdm', 'Team Deathmatch', 'First team to the kill limit wins.')}
       ${card('mode:kc', 'Kill Confirmed', 'Collect enemy tags to score. Grab your own team\'s to deny.')}
       ${card('mode:dom', 'Domination', 'Hold the three flags. More flags, faster points.')}
       ${card('mode:hard', 'Hardpoint', 'One zone at a time. Hold it to score, and it moves.')}
-      ${card('ui:aim', 'Firing Range', 'Your loadout, stationary and strafing dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.', true)}
+      ${card('mode:snd', 'Search and Destroy', 'One life per round, first to 4 rounds. Attackers plant the bomb at A or B; defenders stop them or defuse it. Out? You spectate your team.')}
+      ${card('mode:ctf', 'Capture the Flag', 'Take the enemy flag home to score, first to 3. Your own flag must be home. Touch a dropped flag of yours to return it.')}
+      ${card('mode:ffa', 'Free-for-All', 'Everyone for themselves. Most kills wins.')}
+      ${card('mode:gun', 'Gun Game', 'Every kill moves you to the next gun. A kill with the last one wins. A thrown kill knocks the victim back a gun.')}
+      ${card('mode:gwtdm', 'Ground War', '16 v 16 on the large map, as Team Deathmatch or five-flag Domination.')}
+      ${card('ui:aim', 'Firing Range', 'Your loadout, dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.', true)}
     </div>`,
   tips: () => `
     <div class="help-grid">

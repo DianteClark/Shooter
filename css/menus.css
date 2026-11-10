@@ -878,6 +878,14 @@
 #ui .help-card h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font: 400 var(--fs-title)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 #ui .help-card h4 .ico { height: 26px; color: var(--c-sodium); }
 #ui .help-card p { font: 400 var(--fs-body)/1.32 var(--f-body); color: #d0d6db; }
+/* A grid that scrolls sizes its rows to their text instead of squeezing them into the screen. */
+#ui .help-grid.scroll-y { grid-auto-rows: max-content; }
+/* Weapon stats: a scrolling glossary, two columns of term and explanation. */
+#ui .help-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); height: 100%; margin: 0; align-content: start; }
+#ui .help-stat { padding: 8px 12px 9px; background: rgba(29,35,43,.72); box-shadow: var(--edge); }
+#ui .help-stat dt { font: 400 var(--fs-lead)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium); margin-bottom: 4px; }
+#ui .help-stat dd { margin: 0; font: 400 var(--fs-caption)/1.35 var(--f-body); color: #d0d6db; }
+#ui .help-stat b, #ui .help-card b { color: var(--c-chalk); font-weight: 600; }
 #ui .help-streaks { display: flex; flex-direction: column; gap: var(--sp-2); height: 100%; }
 #ui .help-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-1); }
 #ui .help-chip {
