@@ -771,9 +771,14 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pick-in { from { opacity: 0; transform: translateY(-10px); } }
 
-/* Clear of the kill feed: with entries in it, the column centres in the space beside it (either side, for lefties). */
-.hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 208px); }
-.hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 208px); }
+/* Clear of the kill feed: only phones too narrow to centre the column beside it shift it over (either side, for lefties). */
+@media (max-width: 760px) {
+  .hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 208px); }
+  .hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 208px); }
+}
+/* The respawn ring hangs to the right of the killer card, so the card itself sits on the column's centre line. */
+.death-top { position: relative; }
+body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; margin-left: 10px; }
 .killcam-on .hud:has(.feed > *) .death-col { left: calc(max(var(--sl), 12px) + 8px); right: calc(max(var(--sr), 12px) + 8px); }
 
 /* Small phones: the card drops the calling card's extra height so the column stays in the top half. */
