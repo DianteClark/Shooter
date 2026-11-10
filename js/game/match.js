@@ -12,6 +12,7 @@ import { previewThrow, maxThrowRange } from '../sim/equipment.js';
 import { Interpolator } from './interp.js';
 import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
+import { MatchTelemetry } from './telemetry.js';
 
 // Smallest signed rotation from b to a.
 function angleDiffSigned(a, b) {
@@ -49,6 +50,7 @@ export class Match {
       scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode,
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
+    this.telemetry = new MatchTelemetry({ localId: this.localId });
     this.killcam = new Killcam({ renderer: this.renderer, localId: this.localId });
     this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });
     this.interp = new Interpolator(this.isHost ? STEP * 1.5 : INTERP_DELAY);
@@ -274,6 +276,7 @@ export class Match {
     this.endTimer -= this.dt;
     if (this.endTimer <= 0 || this.killcam.skipped) {
       this.stop();
+      this.telemetry.finish(view);
       this.onEnd({
         scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId,
         myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
@@ -309,6 +312,7 @@ export class Match {
     this.audio.onEvents(events, view);
     this.audio.update(view, dt);
     this.awards.onEvents(events, view);
+    this.telemetry.onEvents(events, view);
     events.length = 0;
 
     if (view.phase === 'ended') this.#finish(view);

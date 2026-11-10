@@ -1,0 +1,38 @@
+/* Stats screen (js/ui/stats.js): a dense per-gun table that fits a landscape phone, header to footer. */
+.menu[data-screen="stats"] { gap: 5px; }
+.st-bar { gap: 10px; }
+.st-bar h2 { font-size: 26px; white-space: nowrap; }
+.st-segs, .st-cats { display: flex; gap: 3px; }
+.st-segs .seg { height: 32px; }
+.st-count { margin-left: auto; font: 11px/1 var(--body); letter-spacing: 0; color: var(--haze); white-space: nowrap; }
+.st-cats { flex-wrap: nowrap; overflow: hidden; }
+.st-cats .seg { flex: 1; height: 28px; padding: 0 4px; font-size: 11px; white-space: nowrap; }
+
+.st-table { flex: 1; min-height: 0; display: flex; flex-direction: column; background: rgba(47,57,68,.35); }
+.st-row {
+  display: grid; grid-template-columns: minmax(96px, 1.6fr) repeat(7, minmax(40px, 1fr)); align-items: center;
+  width: 100%; min-height: 30px; padding: 0 8px; text-align: right; background: none; color: var(--chalk);
+  font: 400 13px/1 var(--plate-face); border-bottom: 1px solid rgba(76,90,103,.45);
+}
+.st-row > span.on { color: var(--sodium); }
+.st-row.open { background: var(--steel); }
+.st-gun { display: flex; align-items: baseline; gap: 6px; text-align: left; min-width: 0; }
+.st-gun b { font-weight: 400; white-space: nowrap; }
+.st-gun small { font: 9.5px/1 var(--body); letter-spacing: 0; color: var(--haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-head { flex: none; min-height: 30px; background: var(--steel); color: var(--haze); font-size: 11px; }
+.st-h { height: 30px; padding: 0; text-align: right; font: inherit; color: var(--haze); background: none; }
+.st-h.on { color: var(--sodium); box-shadow: inset 0 -2px 0 var(--sodium); }
+.st-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.st-empty { padding: 22px 12px; font: 14px/1.3 var(--body); letter-spacing: 0; color: var(--haze); text-align: center; }
+.st-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 10px 8px; background: var(--steel); font: 11px/1.2 var(--body); letter-spacing: 0; color: var(--haze); }
+.st-detail em { display: flex; flex-direction: column; align-items: center; font: 400 14px/1 var(--plate-face); font-style: normal; color: var(--chalk); }
+.st-detail em small { font: 9px/1 var(--body); color: var(--haze); margin-bottom: 2px; }
+
+.st-foot { flex: none; display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.st-foot p { flex: 1; min-width: 0; font: 10.5px/1.2 var(--body); letter-spacing: 0; color: var(--haze); }
+.st-foot .route { flex: none; padding: 0 14px; }
+.st-code {
+  flex: 1; min-width: 0; height: 40px; resize: none; padding: 4px 6px; border: 0; background: var(--ballast);
+  box-shadow: inset 0 0 0 1px var(--plate); color: var(--chalk); font: 10px/1.2 ui-monospace, Menlo, monospace;
+  user-select: text; -webkit-user-select: text; word-break: break-all;
+}

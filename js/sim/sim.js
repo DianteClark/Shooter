@@ -83,12 +83,13 @@ const POS = { x: 0, z: 0, sliding: false };
 const TURRET_RAY = { head: false, pen: 1 };   // Scratch ray for rayDamage on a turret hit.
 const PLAYER_STRIDE = 24;
 const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex'];
-// Every primary appears. A match fields twelve consecutive entries (team 1 starts six in), from an offset picked by
-// map and mode, so each map plays with its own mix and over a session every gun turns up on the bots.
+// Every primary exactly once. A match fields twelve consecutive entries (team 1 starts six in) from an offset picked
+// by seed, or by map and mode, so over a session every gun is carried by bots equally often: the per-gun stats
+// (js/game/telemetry.js) compare guns by kills per carrier-minute, and a gun listed twice would just look strong.
 // The first twelve are the offset-0 set (tests and callers that pass no map): the everyday guns.
 const BOT_PRIMARIES = [
   'ar', 'burst', 'smg', 'heavyar', 'pdw', 'lmg', 'dmr', 'tacsmg', 'sniper', 'shotgun', 'battle', 'autoshot',
-  'saw', 'ar', 'coach', 'lever', 'smg', 'semisnipe', 'rotary', 'burst', 'antimat', 'pdw',
+  'saw', 'coach', 'lever', 'semisnipe', 'rotary', 'antimat',
 ];
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy'];
@@ -135,31 +136,35 @@ function mulberry32(a) {
   };
 }
 
-// Fills both teams up to teamSize with named bots of varied loadouts.
-// A small stable hash, so the same map and mode always deal the same guns.
-function gunOffset(mapId, mode) {
-  if (!mapId) return 0;
+// A small stable hash, so the same map and mode (or the same seed) always deal the same guns. With a seed the deal
+// rotates match to match even on one map; without one it is fixed per map and mode.
+function gunOffset(mapId, mode, seed) {
+  if (!mapId && seed == null) return 0;
   let h = 7;
-  for (const c of `${mapId}:${mode || ''}`) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return h % BOT_PRIMARIES.length;
+  for (const c of `${mapId || ''}:${mode || ''}:${seed ?? ''}`) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h;
 }
 
-export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE, mapId = null, mode = null } = {}) {
+// Fills both teams up to teamSize with named bots of varied loadouts. Each team's bots take consecutive primaries and
+// one of each sidearm in turn, so a full team of six carries every secondary once.
+export function buildRoster(humans, { botSkill = 'mixed', teamSize = TEAM_SIZE, mapId = null, mode = null, seed = null } = {}) {
   const roster = humans.map(h => {
     const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
   });
   let nameI = 0, weaponI = 0, n = 0;
+  const offset = gunOffset(mapId, mode, seed);
   for (let team = 0; team < 2; team++) {
     let count = roster.filter(r => r.team === team).length;
     // Offset the loadout cycle per team so the two sides are not mirror images.
-    weaponI = gunOffset(mapId, mode) + team * 6;
+    weaponI = offset % BOT_PRIMARIES.length + team * 6;
+    let sideI = (offset >>> 5) + team * 3;
     for (; count < teamSize; count++, n++) {
       const i = n + team;
       const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
       const primary = BOT_PRIMARIES[weaponI++ % BOT_PRIMARIES.length];
       const loadout = normalizeLoadout({
-        primary, secondary: botSecondary(i), camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
+        primary, secondary: botSecondary(sideI++), camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
         tactical: BOT_TACTICALS[i % BOT_TACTICALS.length], lethal: BOT_LETHALS[i % BOT_LETHALS.length],
         perks: BOT_PERKS[i % BOT_PERKS.length],
         streaks: skill === 'recruit' ? RECRUIT_STREAKS : BOT_STREAKS[i % BOT_STREAKS.length],
@@ -889,6 +894,8 @@ export class Sim {
     const hit = { t: 'hit', by: attacker.id, target: target.id, dmg: Math.round(dmg),
       x: round2(target.ps.x), z: round2(target.ps.z), killed };
     if (head) hit.head = true;
+    // Gunfire carries its gun and range, for the per-gun stats (js/game/telemetry.js). Streaks and thrown kit do not.
+    if (!streak && !equip) { hit.w = weapon; hit.dist = round2(dist); }
     this._emit(hit);
     if (target.bot) target.bot.onDamaged(attacker, !!(streak || equip));
     if (killed) this._kill(target, attacker, weapon, dist, streak, head, equip);
@@ -920,6 +927,7 @@ export class Sim {
     if (streak) kill.streak = streak;
     if (equip) kill.equip = equip;
     if (head) kill.head = true;
+    kill.vw = target.ps.weapon;     // What the victim was holding: per-gun deaths in the stats.
     this._emit(kill);
     this.lastKill = { by: killer.id, target: target.id, weapon, camo: killer.camo, x: kill.x, z: kill.z };
 

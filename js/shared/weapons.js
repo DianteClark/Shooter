@@ -32,9 +32,13 @@
 //   penetrate       damage kept per piece of waist-high cover a round passes through (0..1). Absent: the round is a
 //                   light round and cover stops it. Solid walls stop everything.
 //   longshot        metres at which a kill with this gun counts as a longshot
-//   botUse          compact hint for bots: {pref, hold, flank, advance, rush?, scoped?, fireMax?, adsMin?}.
+//   botUse          compact hint for bots: {pref, hold, flank, advance, rush?, scoped?, fireMax?, adsMin?, precise?}.
 //                   pref/hold/flank/advance/rush mean what they do in bots.js STYLE; scoped: always aims in;
-//                   fireMax: do not fire beyond this; adsMin: do not fire below this adsT at range.
+//                   fireMax: do not fire beyond this; adsMin: do not fire below this adsT at range; precise: a one- or
+//                   two-shot gun, so only pull the trigger with the sights on the body (bots.js _trigger).
+//
+// Wave 6 balance pass: numbers below were tuned from mirrored bot matches (equal carriers per gun, every map, mode
+// and tier) to keep each gun within its category's median kills per carrier-minute; see the Stats screen for live data.
 //
 // Attachments (js/shared/attachments.js) produce an effective def with these same fields; see effectiveWeapon.
 
@@ -79,7 +83,7 @@ export const WEAPONS = {
     id: 'heavyar', name: 'Drayman', role: 'Heavy hitter', auto: true,
     damage: 36, rpm: 480, magazine: 25, reserve: 125, reload: 2.5, range: 50,
     falloff: { start: 20, end: 34, min: 0.72 }, penetrate: 0.8,
-    adsSpread: 0.0055, hipSpread: 0.07, bloomPerShot: 0.15, bloomRecover: 2, bloomScale: 1.5,
+    adsSpread: 0.0055, hipSpread: 0.07, bloomPerShot: 0.13, bloomRecover: 2, bloomScale: 1.5,
     pattern: { amp: 0.009, freq: 0.5, ramp: 3, drift: 0.0026 }, turnCap: 11,
     adsTime: 0.27, sprintToFire: 0.24, swapTime: 0.42, moveMult: 0.95, adsMoveMult: 0.5,
     pellets: 1, kickCam: 0.85, tracerWidth: 1.25, longshot: 28,
@@ -127,9 +131,9 @@ export const WEAPONS = {
   // A fan of pellets: one pump up close, two a little further. Loads shell by shell, fire to interrupt.
   shotgun: {
     id: 'shotgun', name: 'Thresher', role: 'Breach', auto: false,
-    damage: 15, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 15,
+    damage: 18, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 15,
     falloff: { start: 5, end: 10, min: 0.3 },
-    adsSpread: 0.055, hipSpread: 0.1, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
+    adsSpread: 0.05, hipSpread: 0.088, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
     adsTime: 0.17, sprintToFire: 0.14, swapTime: 0.42, moveMult: 1.02, adsMoveMult: 0.68,
     pellets: 8, shellReload: true, kickCam: 1, tracerWidth: 0.55, longshot: 10,
     botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 12 },
@@ -138,7 +142,7 @@ export const WEAPONS = {
   // Two shells at arm's length and nothing much past a doorway. Drum fed: one long reload, no shell-by-shell.
   autoshot: {
     id: 'autoshot', name: 'Squall', role: 'Doorway', auto: true,
-    damage: 11, rpm: 270, magazine: 14, reserve: 56, reload: 3.3, range: 12,
+    damage: 14, rpm: 300, magazine: 14, reserve: 56, reload: 3, range: 12,
     falloff: { start: 4, end: 8, min: 0.3 },
     adsSpread: 0.07, hipSpread: 0.115, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
     pattern: { amp: 0.02, freq: 1.1, ramp: 3 }, turnCap: 6.5,
@@ -150,7 +154,7 @@ export const WEAPONS = {
   // Both barrels, quickly, then a full break-open reload. Two chances to end a fight and no third.
   coach: {
     id: 'coach', name: 'Doublet', role: 'Ambush', auto: false,
-    damage: 13, rpm: 280, magazine: 2, reserve: 30, reload: 2.1, range: 14,
+    damage: 14, rpm: 280, magazine: 2, reserve: 30, reload: 2.1, range: 14,
     falloff: { start: 5, end: 9, min: 0.35 },
     adsSpread: 0.04, hipSpread: 0.075, bloomPerShot: 0.1, bloomRecover: 2.2, bloomScale: 0.4, turnCap: 8,
     adsTime: 0.15, sprintToFire: 0.1, swapTime: 0.36, moveMult: 1.05, adsMoveMult: 0.75,
@@ -176,12 +180,12 @@ export const WEAPONS = {
   // The LMG that can walk. No spin-up and a lighter swing, paid for with damage and a much shorter belt of heat.
   saw: {
     id: 'saw', name: 'Drover', role: 'Mobile support', auto: true,
-    damage: 26, rpm: 800, magazine: 60, reserve: 180, reload: 3.2, range: 42,
-    falloff: { start: 16, end: 28, min: 0.66 }, penetrate: 0.65,
+    damage: 25, rpm: 700, magazine: 60, reserve: 180, reload: 3.2, range: 42,
+    falloff: { start: 14, end: 26, min: 0.66 }, penetrate: 0.65,
     adsSpread: 0.015, hipSpread: 0.075, bloomPerShot: 0, bloomRecover: 1.8, bloomScale: 1.5,
-    heat: { rounds: 26, coolDelay: 0.3, coolTime: 1.7, lockout: 1.7, loosenFrom: 0.7 }, turnCap: 5,
+    heat: { rounds: 21, coolDelay: 0.3, coolTime: 1.7, lockout: 1.7, loosenFrom: 0.7 }, turnCap: 5,
     pattern: { amp: 0.016, freq: 0.75, ramp: 4 },
-    adsTime: 0.27, sprintToFire: 0.24, swapTime: 0.48, moveMult: 0.95, adsMoveMult: 0.55,
+    adsTime: 0.3, sprintToFire: 0.24, swapTime: 0.48, moveMult: 0.95, adsMoveMult: 0.55,
     pellets: 1, kickCam: 0.55, tracerWidth: 1.05, longshot: 24,
     botUse: { pref: 14, hold: 1.1, flank: 0.9, advance: 3, scoped: true },
   },
@@ -192,8 +196,8 @@ export const WEAPONS = {
     damage: 20, rpm: 1300, magazine: 150, reserve: 300, reload: 5, range: 38,
     falloff: { start: 14, end: 26, min: 0.55 }, penetrate: 0.6,
     adsSpread: 0.03, hipSpread: 0.11, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.3,
-    spinup: { shots: 14, from: 0.45 },
-    heat: { rounds: 90, coolDelay: 0.5, coolTime: 3, lockout: 2.6, loosenFrom: 0.8 }, turnCap: 1.7,
+    spinup: { shots: 12, from: 0.55 },
+    heat: { rounds: 90, coolDelay: 0.5, coolTime: 3, lockout: 2.6, loosenFrom: 0.8 }, turnCap: 2,
     pattern: { amp: 0.018, freq: 2.4, ramp: 6 },
     adsTime: 0.45, sprintToFire: 0.46, swapTime: 0.78, moveMult: 0.78, adsMoveMult: 0.42,
     pellets: 1, kickCam: 0.6, tracerWidth: 1.1, longshot: 22,
@@ -204,21 +208,21 @@ export const WEAPONS = {
   // Two to the body through mid range, and it flinches the scope a little each time, so measured beats frantic.
   dmr: {
     id: 'dmr', name: 'Tallyman', role: 'Marksman', auto: false,
-    damage: 52, rpm: 190, magazine: 12, reserve: 72, reload: 2.5, range: 58,
+    damage: 52, rpm: 200, magazine: 12, reserve: 72, reload: 2.5, range: 58,
     falloff: { start: 26, end: 42, min: 0.68 }, penetrate: 0.8,
     adsSpread: 0.0025, hipSpread: 0.09, bloomPerShot: 0.6, bloomRecover: 2.1, bloomScale: 1.2,
-    boltKick: 0.74, turnCap: 8,
+    boltKick: 0.78, turnCap: 8,
     adsTime: 0.26, sprintToFire: 0.26, swapTime: 0.42, moveMult: 0.95, adsMoveMult: 0.5,
     pellets: 1, kickCam: 0.85, tracerWidth: 1.3, longshot: 30,
-    botUse: { pref: 24, hold: 1.7, flank: 0.5, advance: 2, scoped: true, adsMin: 0.7 },
+    botUse: { pref: 24, hold: 1.7, flank: 0.5, advance: 2, scoped: true, adsMin: 0.7, precise: true },
   },
 
   // A fast semi with a big magazine. Three to the body, no flinch: it keeps a target pinned rather than deleting it.
   battle: {
     id: 'battle', name: 'Foreman', role: 'Pressure', auto: false,
-    damage: 40, rpm: 330, magazine: 20, reserve: 100, reload: 2.3, range: 52,
+    damage: 39, rpm: 310, magazine: 20, reserve: 100, reload: 2.3, range: 52,
     falloff: { start: 22, end: 36, min: 0.7 }, penetrate: 0.75,
-    adsSpread: 0.004, hipSpread: 0.075, bloomPerShot: 0.22, bloomRecover: 2.6, bloomScale: 1.3,
+    adsSpread: 0.004, hipSpread: 0.075, bloomPerShot: 0.26, bloomRecover: 2.6, bloomScale: 1.3,
     pattern: { amp: 0.006, freq: 0.8, ramp: 2, drift: 0.0012 }, turnCap: 10,
     adsTime: 0.24, sprintToFire: 0.22, swapTime: 0.38, moveMult: 0.97, adsMoveMult: 0.55,
     pellets: 1, kickCam: 0.7, tracerWidth: 1.2, longshot: 27,
@@ -233,7 +237,7 @@ export const WEAPONS = {
     adsSpread: 0.004, hipSpread: 0.032, bloomPerShot: 0.55, bloomRecover: 2.8, bloomScale: 1.1, turnCap: 13,
     adsTime: 0.2, sprintToFire: 0.14, swapTime: 0.32, moveMult: 1.01, adsMoveMult: 0.72,
     pellets: 1, shellReload: true, slideFire: true, kickCam: 0.95, tracerWidth: 1.25, longshot: 26,
-    botUse: { pref: 14, hold: 0.9, flank: 1.1, advance: 3 },
+    botUse: { pref: 14, hold: 0.9, flank: 1.1, advance: 3, precise: true },
   },
 
   // ---------------- Sniper ----------------
@@ -246,7 +250,7 @@ export const WEAPONS = {
     adsGate: 0.42, boltKick: 0.45, turnCap: 4.5,
     adsTime: 0.4, sprintToFire: 0.4, swapTime: 0.6, moveMult: 0.9, adsMoveMult: 0.38,
     pellets: 1, kickCam: 1.2, tracerWidth: 1.6, longshot: 34,
-    botUse: { pref: 30, hold: 2.2, flank: 0.3, advance: 2, scoped: true, adsMin: 0.85 },
+    botUse: { pref: 30, hold: 2.2, flank: 0.3, advance: 2, scoped: true, adsMin: 0.85, precise: true },
   },
 
   // Anti-materiel. One body shot anywhere it reaches and through cover almost untouched. A very long time to aim,
@@ -256,10 +260,10 @@ export const WEAPONS = {
     damage: 175, rpm: 30, magazine: 4, reserve: 20, reload: 4.2, range: 88,
     falloff: { start: 60, end: 80, min: 0.8 }, penetrate: 0.95,
     adsSpread: 0.0012, hipSpread: 0.24, bloomPerShot: 0.8, bloomRecover: 0.8, bloomScale: 1,
-    adsGate: 0.4, boltKick: 0.3, turnCap: 2.8,
-    adsTime: 0.58, sprintToFire: 0.55, swapTime: 0.8, moveMult: 0.82, adsMoveMult: 0.34,
+    adsGate: 0.4, boltKick: 0.3, turnCap: 3.1,
+    adsTime: 0.52, sprintToFire: 0.55, swapTime: 0.8, moveMult: 0.82, adsMoveMult: 0.34,
     pellets: 1, kickCam: 1.7, tracerWidth: 2, longshot: 38,
-    botUse: { pref: 32, hold: 2.5, flank: 0.2, advance: 2, scoped: true, adsMin: 0.85 },
+    botUse: { pref: 32, hold: 2.5, flank: 0.2, advance: 2, scoped: true, adsMin: 0.85, precise: true },
   },
 
   // A carbine-weight bolt gun for people who keep moving. One body shot inside a room, two beyond it, scoped in a blink.
@@ -271,14 +275,14 @@ export const WEAPONS = {
     adsGate: 0.55, boltKick: 0.3, turnCap: 7,
     adsTime: 0.23, sprintToFire: 0.26, swapTime: 0.44, moveMult: 0.98, adsMoveMult: 0.6,
     pellets: 1, kickCam: 1, tracerWidth: 1.4, longshot: 28,
-    botUse: { pref: 16, hold: 1.2, flank: 0.9, advance: 3, scoped: true, adsMin: 0.85 },
+    botUse: { pref: 16, hold: 1.2, flank: 0.9, advance: 3, scoped: true, adsMin: 0.85, precise: true },
   },
 
   // ---------------- Pistol ----------------
   // Out in a blink, moves at full speed.
   pistol: {
     id: 'pistol', name: 'Flicker', role: 'Sidearm', auto: false,
-    damage: 36, rpm: 370, magazine: 12, reserve: 96, reload: 1.25, range: 30,
+    damage: 38, rpm: 400, magazine: 12, reserve: 96, reload: 1.25, range: 30,
     falloff: { start: 10, end: 20, min: 0.6 },
     adsSpread: 0.012, hipSpread: 0.03, bloomPerShot: 0.13, bloomRecover: 3.5, bloomScale: 1.1,
     adsTime: 0.1, sprintToFire: 0.06, swapTime: 0.15, moveMult: 1.1, adsMoveMult: 0.9,
@@ -289,9 +293,9 @@ export const WEAPONS = {
   // Slow, heavy, two to the body close in. Every shot lands with weight and costs a beat.
   revolver: {
     id: 'revolver', name: 'Verdict', role: 'Hand cannon', auto: false,
-    damage: 62, rpm: 110, magazine: 6, reserve: 48, reload: 2.4, range: 34,
+    damage: 62, rpm: 125, magazine: 6, reserve: 48, reload: 2.4, range: 34,
     falloff: { start: 12, end: 22, min: 0.55 },
-    adsSpread: 0.006, hipSpread: 0.05, bloomPerShot: 0.7, bloomRecover: 2.2, bloomScale: 1,
+    adsSpread: 0.006, hipSpread: 0.042, bloomPerShot: 0.7, bloomRecover: 2.2, bloomScale: 1,
     adsTime: 0.14, sprintToFire: 0.1, swapTime: 0.2, moveMult: 1.06, adsMoveMult: 0.8,
     pellets: 1, unlimitedReserve: true, kickCam: 1, tracerWidth: 1.15, longshot: 18,
     botUse: { pref: 10, hold: 0.9, flank: 1, advance: 3 },
@@ -300,7 +304,7 @@ export const WEAPONS = {
   // A pocket hose. Empties in a second and a half, climbs away from you, and saves your life at three metres.
   machpistol: {
     id: 'machpistol', name: 'Gnat', role: 'Panic button', auto: true,
-    damage: 17, rpm: 1000, magazine: 20, reserve: 160, reload: 1.35, range: 22,
+    damage: 16, rpm: 960, magazine: 20, reserve: 160, reload: 1.35, range: 22,
     falloff: { start: 6, end: 13, min: 0.5 },
     adsSpread: 0.03, hipSpread: 0.04, bloomPerShot: 0.08, bloomRecover: 3, bloomScale: 1.5,
     pattern: { amp: 0.03, freq: 1.5, ramp: 2, drift: 0.0035 },
@@ -337,8 +341,8 @@ export const WEAPONS = {
   // Four small bombs in quick order. Nowhere near a rocket per hit, but it clears a lane or a doorway.
   thumper: {
     id: 'thumper', name: 'Bombard', role: 'Area denial', auto: false,
-    damage: 78, explosive: { radius: 3.2, damage: 78, inner: 0.9, min: 14 },
-    rpm: 80, magazine: 4, reserve: 8, reload: 3.9, range: 30,
+    damage: 84, explosive: { radius: 3.2, damage: 84, inner: 1.1, min: 18 },
+    rpm: 100, magazine: 4, reserve: 8, reload: 3.9, range: 30,
     falloff: { start: 99, end: 100, min: 1 },
     adsSpread: 0.012, hipSpread: 0.075, bloomPerShot: 0.5, bloomRecover: 1.6, bloomScale: 1,
     adsTime: 0.26, sprintToFire: 0.34, swapTime: 0.5, moveMult: 0.94, adsMoveMult: 0.6,

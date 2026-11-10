@@ -61,6 +61,8 @@ const STYLE = {};
 const DEFAULT_STYLE = { pref: 15, hold: 1, flank: 1, advance: 3 };
 function styleOf(id) { return STYLE[id] || (WEAPONS[id] && WEAPONS[id].botUse) || DEFAULT_STYLE; }
 const ADS_RANGE = 12;           // botUse.adsMin applies past this distance, or always on a gun with an adsGate.
+const PRECISE_BODY = 0.5;       // botUse.precise: metres either side of the target's centre the sights must be inside...
+const PRECISE_SLOP = 0.25;      // ...plus this fraction of the tier's usual trigger tolerance (worse bots still jerk it).
 
 // Fractions of the map width from the bot's own side, one per step of a lane advance.
 const STAGES = [0.16, 0.36, 0.5, 0.64, 0.84];
@@ -138,8 +140,8 @@ const BOT_KITS = {
   ],
 };
 
-// Sidearms bots carry, by roster index. Most stay on the quick pistol; a few bring something louder.
-const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper', 'pistol', 'revolver'];
+// Sidearms bots carry, dealt in turn: each one equally often, so per-gun stats compare like with like.
+const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper'];
 export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
 // A gun without its own kits borrows its category's base gun's, minus what it cannot take.
 const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol' };
@@ -1117,8 +1119,11 @@ export class BotBrain {
     const { ps, S, input: I, sim } = this;
     const w = weaponDef(ps), bu = styleOf(ps.weapon);
     const offAim = Math.abs(angleDiff(ps.aim, perceived));
-    // Tolerance widens up close, where the target covers more of the view.
-    const tol = S.fireTol + Math.atan2(0.5, Math.max(d, 1)) * 0.6;
+    // Tolerance widens up close, where the target covers more of the view. A gun that kills in one or two rounds
+    // (botUse.precise) waits for the sights to cross the body instead of firing whenever it is roughly on: the bot
+    // aim error is the same for every gun, so without this a one-shot rifle wastes its bolt on near misses.
+    const tol = bu.precise ? Math.atan2(PRECISE_BODY, Math.max(d, 1)) + S.fireTol * PRECISE_SLOP
+      : S.fireTol + Math.atan2(0.5, Math.max(d, 1)) * 0.6;
     let fire = this.reactLeft <= 0 && offAim < tol && ps.swapT <= 0 && d <= w.range && ps.ammo[ps.slot] > 0;
 
     // Heat discipline: let go of the trigger before the bar fills. Sometimes a bot gets greedy and pays for it.
