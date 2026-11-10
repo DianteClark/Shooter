@@ -81,6 +81,9 @@ export function adsRoomFor(moveLen) {
 const TOPOFF_DELAY = 1.2;       // Seconds without firing or aiming before a part-empty mag tops itself off.
 const TOPOFF_BELOW = 0.7;       // Fraction of the magazine under which that happens.
 const DRIFT_SHOTS = 12;         // pattern.drift stops adding up after this many rounds of a string.
+// A dead human who neither taps Respawn nor has auto-respawn on comes back on their own this long after dying, so an
+// idle phone never leaves its slot dead for good. Shared by the host (sim.js) and the death screen (hud.js).
+export const RESPAWN_IDLE = 20;
 export const FIRING_REVEAL = 1.5;   // firingT after a shot: seconds shown on the enemy minimap.
 
 const FASTHANDS_MULT = 0.72;    // Reload and swap time.
@@ -414,9 +417,12 @@ function stepMovement(ps, input, w, dt, map) {
 
   if (ps.slideCool > 0) ps.slideCool -= dt;
 
-  // Sprint: broken by aiming or firing, which then costs sprintToFire before the first shot.
+  // Sprint: broken by firing, or by aiming down sights, which then cost sprintToFire before the first shot. A thumb
+  // resting on the aim stick is only aiming down sights when the move stick leaves room for it (see adsRoom): at full
+  // move stick it just steers, so it must not drop a sprint to a run.
   const marathon = hasPerk(ps, 'marathon');
-  const wantsSprint = !!input.sprint && moveLen > 0.5 && !input.aiming && !input.fire && !ps.sliding;
+  const adsIntent = !!input.aiming && moveLen < ADS_STICK_NONE;
+  const wantsSprint = !!input.sprint && moveLen > 0.5 && !adsIntent && !input.fire && !ps.sliding;
   ps.sprinting = wantsSprint;
   if (ps.sprinting) ps.sprintRecoverT = w.sprintToFire;
   else if (ps.sprintRecoverT > 0) ps.sprintRecoverT -= dt;
