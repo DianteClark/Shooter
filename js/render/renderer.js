@@ -15,6 +15,7 @@ import { Ambient } from './ambient.js';
 import { getGun } from './guns.js';
 import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
+import { TUNING } from '../shared/tuning.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
 let WEAPONS = {};
@@ -476,12 +477,12 @@ export class GameRenderer {
     chars.onShot(ev.by, kick);
 
     if (ev.by === localId) {
-      const k = 5.2 * kick;
+      const k = 5.2 * kick * TUNING.camKick;
       this.kickVX -= Math.cos(ev.aim) * k;
       this.kickVZ -= Math.sin(ev.aim) * k;
       this.rollV += (ev.aim > 0 ? 1 : -1) * kick * 0.08 * (0.6 + Math.random());
       this.trauma = Math.min(1, this.trauma + 0.1 * kick);
-      this.zoomPunch = Math.max(this.zoomPunch, 0.014 * kick);
+      this.zoomPunch = Math.max(this.zoomPunch, 0.014 * kick * TUNING.camKick);
     }
   }
 
@@ -518,7 +519,7 @@ export class GameRenderer {
     } else if (local) {
       const aimX = Math.cos(local.aim), aimZ = Math.sin(local.aim);
       const ads = local.adsT || 0;
-      const leadX = aimX * ADS_LOOK * ads, leadZ = aimZ * ADS_LOOK * ads * 0.85;
+      const leadX = aimX * TUNING.camLook * ads, leadZ = aimZ * TUNING.camLook * ads * 0.85;
       this.lookX += (leadX - this.lookX) * Math.min(1, dt * 9);
       this.lookZ += (leadZ - this.lookZ) * Math.min(1, dt * 9);
       tx = local.x + this.lookX;
@@ -531,8 +532,8 @@ export class GameRenderer {
     this.camTarget.x = tx; this.camTarget.z = tz;
     this.chars.focusX = tx; this.chars.focusZ = tz;
 
-    const sx = wobble(t, 1.3) * shake * 0.55;
-    const sz = wobble(t, 4.1) * shake * 0.55;
+    const sx = wobble(t, 1.3) * shake * 0.55 * TUNING.camShake;
+    const sz = wobble(t, 4.1) * shake * 0.55 * TUNING.camShake;
 
     // Recoil on a spring, so a heavy gun overshoots once and settles instead of decaying flat.
     this.kickVX += (-KICK_K * this.kickX - KICK_C * this.kickVX) * dt;
@@ -545,7 +546,7 @@ export class GameRenderer {
 
     const easeGoal = local ? (local.sprinting ? 0.035 : 0) - (local.adsT || 0) * 0.025 : 0;
     this.camEase += (easeGoal - this.camEase) * Math.min(1, dt * 5);
-    const dist = this.distance * (1 - this.zoomPunch + this.camEase);
+    const dist = this.distance * TUNING.camZoom * (1 - this.zoomPunch + this.camEase);
     const cx = tx + sx + this.kickX, cz = tz + sz + this.kickZ;
     cam.position.set(cx, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
     cam.lookAt(cx, 0, cz);

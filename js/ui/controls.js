@@ -1,18 +1,20 @@
 import { STREAKS, STREAK_DENY_TEXT, TACTICALS, LETHALS } from '../shared/catalog.js';
 import { icon } from './icons.js';
 import { AimFilter, wrapAngle } from './aimfilter.js';
+import { TUNING, onTune } from '../shared/tuning.js';
+import { mountTuner } from './tuner.js';
 
 // Twin-stick touch input. Touch handlers only store numbers; read() turns them into the Input object and
 // repaints with transforms, once per frame, so a burst of touchmoves costs nothing extra.
-const LEFT_RADIUS = 64;
+// Live tunables (js/shared/tuning.js): move stick radius (leftSize), sprint threshold (sprintAt), fire ring radius
+// (fireRing). Changing one re-measures and repaints the sticks; see #applyTuning.
 const LEFT_DEAD = 0.07;
-const SPRINT_ON = 0.92;
-const SPRINT_OFF = 0.86;
+const SPRINT_HYST = 0.06;       // Sprint drops this far below the threshold that started it.
 const LEFT_DRAG = 1.3;          // Beyond this many radii the base follows the thumb, so sprint survives drift.
 
-const AIM_ZONE = 30;
-const FIRE_RING = 52;
-const FIRE_RELEASE = FIRE_RING * 0.88;
+const AIM_ZONE = 30;            // Drawn only: the dashed inner ring, a hint of where aiming starts.
+const FIRE_RELEASE_FRAC = 0.88;
+const KNOB_OVER = 16;           // The aim knob may travel this far past the fire ring.
 const RELEASE_TURN = 11;        // rad/s the facing eases back to the direction of travel after the aim thumb lifts.
 const RELEASE_DONE = 0.09;      // Radians from the direction of travel at which that glide hands over to the game.
 const SWAP_MIN_PX = 150;        // Both thumbs would have to jump this far together for a swap of identities to be real.
@@ -61,9 +63,11 @@ export class Controls {
     this.throwReleased = null;     // The aim of a throw released since the last read, or null for a quick one.
     this.throwMax = THROW_BASE_M;
     this.playerAim = 0;            // Last aim the HUD saw: where a held, undragged throw goes.
-    this.fireRing = FIRE_RING;
-    this.fireRelease = FIRE_RELEASE;
-    this.knobLimit = FIRE_RING + 16;
+    this.sensitivity = 1;
+    this.fireRing = TUNING.fireRing;
+    this.fireRelease = this.fireRing * FIRE_RELEASE_FRAC;
+    this.knobLimit = this.fireRing + KNOB_OVER;
+    this.leftRadius = TUNING.leftSize;
     this.lefty = false;
     this.buttonTouch = new Map();  // touch id -> button or tile name
     this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
@@ -75,6 +79,9 @@ export class Controls {
     this.last = { lx: NaN, ly: NaN, rx: NaN, ry: NaN, kx: NaN, ky: NaN, lkx: NaN, lky: NaN, la: false, ra: false, hot: false, sprint: false };
 
     this.#build();
+    this.#applyTuning();
+    onTune(key => { if (key === null || key === 'fireRing' || key === 'leftSize') this.#applyTuning(); });
+    this.tuner = mountTuner(this.root);
     this.onTouchStart = e => this.#start(e);
     this.onTouchMove = e => this.#move(e);
     this.onTouchEnd = e => this.#end(e);
@@ -97,10 +104,10 @@ export class Controls {
         <div class="stick-knob"></div>
       </div>
       <div class="stick stick-aim" data-stick="right">
-        <svg class="aim-ring" viewBox="-96 -96 192 192" aria-hidden="true">
-          <circle class="ring-fire" r="${FIRE_RING}" />
-          <circle class="ring-zone" r="${AIM_ZONE}" />
-          <path class="ring-ticks" d="M0 -${FIRE_RING + 4}V-${FIRE_RING + 15}M0 ${FIRE_RING + 4}V${FIRE_RING + 15}M-${FIRE_RING + 4} 0H-${FIRE_RING + 15}M${FIRE_RING + 4} 0H${FIRE_RING + 15}" />
+        <svg class="aim-ring" aria-hidden="true">
+          <circle class="ring-fire" />
+          <circle class="ring-zone" />
+          <path class="ring-ticks" />
         </svg>
         <div class="stick-knob aim-knob"></div>
       </div>
@@ -137,6 +144,8 @@ export class Controls {
     this.aimEl = el.querySelector('.stick-aim');
     this.moveKnob = this.moveEl.querySelector('.stick-knob');
     this.aimKnob = this.aimEl.querySelector('.stick-knob');
+    this.moveRim = this.moveEl.querySelector('.stick-rim');
+    this.ringSvg = this.aimEl.querySelector('.aim-ring');
     this.hintEl = el.querySelector('.aim-hint');
     this.rig = {
       el: el.querySelector('.throw-rig'), range: el.querySelector('.tr-range'), line: el.querySelector('.tr-line'), dot: el.querySelector('.tr-dot'),
@@ -164,14 +173,45 @@ export class Controls {
   // Stick feel, the swapped layout and the throw reach are settings; they can change between matches.
   // sensitivity 0.6..1.6 scales how far the aim thumb travels before it fires.
   applyOptions({ sensitivity = 1, lefty = false } = {}) {
-    const s = Math.max(0.6, Math.min(1.6, sensitivity));
-    this.fireRing = FIRE_RING / s;
-    this.fireRelease = this.fireRing * 0.88;
-    this.knobLimit = this.fireRing + 16;
-    this.el.querySelector('.aim-ring').style.transform = `scale(${(1 / s).toFixed(3)})`;
+    this.sensitivity = Math.max(0.6, Math.min(1.6, sensitivity));
     this.lefty = !!lefty;
     this.el.classList.toggle('lefty', this.lefty);
+    this.#applyTuning();
+  }
+
+  // Stick geometry from the tuning registry and the sensitivity option. The ring is redrawn at its true pixel size
+  // (no CSS scale, so the stroke stays crisp), the move rim resized, and the knobs repainted against the new limits.
+  #applyTuning() {
+    const ring = TUNING.fireRing / this.sensitivity;
+    this.fireRing = ring;
+    this.fireRelease = ring * FIRE_RELEASE_FRAC;
+    this.knobLimit = ring + KNOB_OVER;
+    const zone = Math.min(AIM_ZONE, ring * 0.6);
+    const half = Math.ceil(ring + 20);
+    const svg = this.ringSvg;
+    svg.setAttribute('viewBox', `${-half} ${-half} ${half * 2} ${half * 2}`);
+    svg.style.left = svg.style.top = `${-half}px`;
+    svg.style.width = svg.style.height = `${half * 2}px`;
+    svg.querySelector('.ring-fire').setAttribute('r', ring.toFixed(1));
+    svg.querySelector('.ring-zone').setAttribute('r', zone.toFixed(1));
+    const a = (ring + 4).toFixed(1), b = (ring + 15).toFixed(1);
+    svg.querySelector('.ring-ticks').setAttribute('d', `M0 -${a}V-${b}M0 ${a}V${b}M-${a} 0H-${b}M${a} 0H${b}`);
+
+    const lr = this.leftRadius = TUNING.leftSize;
+    const rim = this.moveRim.style;
+    rim.left = rim.top = `${-lr}px`;
+    rim.width = rim.height = `${lr * 2}px`;
+
+    // A held aim thumb is judged against the new ring at once rather than on its next move.
+    const r = this.right;
+    if (r.id !== null) {
+      const d = Math.hypot(r.x - r.ox, r.y - r.oz);
+      if (r.firing ? d < this.fireRelease : d >= this.fireRing) r.firing = !r.firing;
+    }
+    this.last.kx = this.last.lkx = NaN;   // Force the knobs to repaint against the new limits.
+    this.paintDirty = true;
     if (this.enabled) this.#measure();
+    this.#paint();
   }
 
   setThrowReach(strongArm) {
@@ -207,6 +247,7 @@ export class Controls {
   setEnabled(on) {
     this.enabled = on;
     this.el.classList.toggle('live', on);
+    this.tuner.setLive(on);
     if (on) this.#measure();
     else this.#release();
   }
@@ -299,10 +340,12 @@ export class Controls {
     if (!this.enabled) return;
     const target = e.target;
     // HUD elements with their own taps (mic, weapon picker) must keep their click.
-    if (target?.closest?.('[data-tap]')) return;
+    if (target?.closest?.('[data-tap]') || target?.closest?.('.tuner')) return;
     e.preventDefault();
     this.#reconcile(e.touches);
     for (const t of e.changedTouches) {
+      // The tuning panel's own touches; the panel never covers the screen, so a thumb beside it still plays.
+      if (t.target?.closest?.('.tuner')) continue;
       // iOS reuses identifiers: a "new" finger with an id still in use means the old one ended without telling us.
       this.#forgetStale(t.identifier);
       const x = t.clientX, y = t.clientY;
@@ -417,7 +460,7 @@ export class Controls {
 
   #move(e) {
     if (!this.enabled) return;
-    if (e.target?.closest?.('[data-tap]')) return;
+    if (e.target?.closest?.('[data-tap]') || e.target?.closest?.('.tuner')) return;
     e.preventDefault();
     this.#unswap(e.changedTouches);
     for (const t of e.changedTouches) {
@@ -550,19 +593,22 @@ export class Controls {
     if (l.id !== null) {
       let dx = l.x - l.ox, dy = l.y - l.oz;
       let d = Math.hypot(dx, dy);
-      const reach = LEFT_RADIUS * LEFT_DRAG;
+      const radius = this.leftRadius;
+      const reach = radius * LEFT_DRAG;
       if (d > reach) {
         const pull = (d - reach) / d;
         l.ox += dx * pull; l.oz += dy * pull;
         dx = l.x - l.ox; dy = l.y - l.oz;
         d = reach;
       }
-      const len = Math.min(d / LEFT_RADIUS, 1);
+      const len = Math.min(d / radius, 1);
       if (len > LEFT_DEAD && d > 0) {
         mx = (dx / d) * len;
         mz = (dy / d) * len;
       }
-      this.sprintOn = this.sprintOn ? len >= SPRINT_OFF : len >= SPRINT_ON;
+      // A threshold of 1 still needs to be reachable: len tops out at exactly 1.
+      const on = Math.min(TUNING.sprintAt, 0.999);
+      this.sprintOn = this.sprintOn ? len >= on - SPRINT_HYST : len >= on;
     } else {
       this.sprintOn = false;
     }
@@ -640,7 +686,8 @@ export class Controls {
     if (leftActive) {
       kx = l.x - l.ox; ky = l.y - l.oz;
       const d = Math.hypot(kx, ky);
-      if (d > LEFT_RADIUS) { kx *= LEFT_RADIUS / d; ky *= LEFT_RADIUS / d; }
+      const lr = this.leftRadius;
+      if (d > lr) { kx *= lr / d; ky *= lr / d; }
     }
     if (kx !== last.lkx || ky !== last.lky) {
       this.moveKnob.style.transform = `translate3d(${kx}px,${ky}px,0)`;

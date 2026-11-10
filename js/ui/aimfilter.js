@@ -9,10 +9,13 @@
 //  3. An angular backlash band sized from the pixel noise at the current radius: wobble that cannot be told from noise
 //     moves nothing, real motion moves the aim by what exceeds the band. It is about 9 degrees just outside the deadzone
 //     and under 1 at the fire ring.
-const ENGAGE_PX = 8;           // Leaving the deadzone needs this radius...
-const RELEASE_PX = 4.5;        // ...and re-entering it this one.
+// The deadzone (TUNING.aimDeadzone, 8 px by default) and the smoothing strength (TUNING.aimSmoothing) are live
+// tunables, read on every sample.
+import { TUNING } from '../shared/tuning.js';
+
+const RELEASE_FRAC = 0.56;     // Re-entering the deadzone needs this fraction of the radius that left it.
 const NOISE_PX = 1.3;
-const MIN_CUTOFF_HZ = 6;
+const MIN_CUTOFF_HZ = 6;       // At smoothing 1. Smoothing divides both terms: 2x halves the cutoff, 0 is raw.
 const BETA = 0.022;            // Extra cutoff per px/s of thumb speed.
 const SPEED_CUTOFF_HZ = 20;    // Smoothing on the speed estimate itself.
 const GLITCH_SPEED = 7;        // px/ms. Beyond any thumb: a single sample this fast is a tracking glitch.
@@ -75,7 +78,8 @@ export class AimFilter {
     const dtS = dt / 1000;
     const inst = jump / dtS;
     this.speed += (inst - this.speed) * alphaFor(SPEED_CUTOFF_HZ, dtS);
-    const a = alphaFor(MIN_CUTOFF_HZ + BETA * this.speed, dtS);
+    const sm = TUNING.aimSmoothing;
+    const a = sm > 0 ? alphaFor((MIN_CUTOFF_HZ + BETA * this.speed) / sm, dtS) : 1;
     this.fx += (dx - this.fx) * a;
     this.fy += (dy - this.fy) * a;
     this.rx = dx; this.ry = dy;
@@ -89,7 +93,8 @@ export class AimFilter {
   }
 
   #update(d, dt) {
-    if (this.engaged ? d < RELEASE_PX : d < ENGAGE_PX) {
+    const engagePx = TUNING.aimDeadzone;
+    if (this.engaged ? d < engagePx * RELEASE_FRAC : d < engagePx) {
       this.engaged = false;
       return;
     }
@@ -103,7 +108,7 @@ export class AimFilter {
       const delta = wrapAngle(target - this.angle);
       const excess = Math.abs(delta) - band;
       if (excess > 0) {
-        const span = Math.min(1, (d - ENGAGE_PX) / (SLEW_FAR_PX - ENGAGE_PX));
+        const span = Math.max(0, Math.min(1, (d - engagePx) / Math.max(1, SLEW_FAR_PX - engagePx)));
         const limit = (SLEW_NEAR + (SLEW_FAR - SLEW_NEAR) * span) * (dt / 1000);
         this.angle = wrapAngle(this.angle + Math.sign(delta) * Math.min(excess, limit));
       }

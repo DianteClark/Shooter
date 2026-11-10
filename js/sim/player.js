@@ -22,6 +22,7 @@ import { hasLineOfSight, rayCircle, resolveCircle } from '../shared/geometry.js'
 import { HEAD_RADIUS, MAX_COVER_PIECES, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
 import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
+import { TUNING, onTune } from '../shared/tuning.js';
 
 export { HEAD_RADIUS, headMultFor } from '../shared/weapons.js';
 
@@ -30,21 +31,35 @@ const MAX_STEP = 0.25;         // Metres of movement per collision pass; see ste
 
 // Movement feel. Acceleration is deliberately very high: the stick should feel directly wired to the
 // body, with only the sprint build-up and the slide giving a sense of weight.
+// run, sprint, accel and the slide's boost, duration and cooldown are live tunables: their defaults live in
+// js/shared/tuning.js and syncMove copies the current values in, so every reader of MOVE sees the tuned feel.
 export const MOVE = {
-  run: 5.6,
-  sprint: 7.9,
-  accel: 75,
+  run: 0,
+  sprint: 0,
+  accel: 0,
   decel: 62,
   sprintAccel: 26,       // Only the part of the speed above a run builds slowly.
   turnRate: 16,          // rad/s, facing toward movement when the right stick is idle.
   slideMinSpeed: 3.6,
-  slideBoost: 11.6,      // Entry speed, or 1.25x current speed if that is higher.
-  slideDuration: 0.58,
+  slideBoost: 0,         // Entry speed, or 1.25x current speed if that is higher.
+  slideDuration: 0,
   slideEndSpeed: 4.6,
   slideSteer: 2.2,       // rad/s of direction change the left stick can still apply mid-slide.
-  slideCooldown: 1.15,   // Starts when the slide ends.
+  slideCooldown: 0,      // Starts when the slide ends.
   slideRecoverMult: 0.4, // Sliding pays off most of the sprint-to-fire delay.
 };
+const DEFAULT_ACCEL = 75;  // decel follows accel in proportion, so a heavier feel brakes heavier too.
+function syncMove() {
+  MOVE.run = TUNING.run;
+  MOVE.sprint = TUNING.sprint;
+  MOVE.accel = TUNING.accel;
+  MOVE.decel = 62 * TUNING.accel / DEFAULT_ACCEL;
+  MOVE.slideBoost = TUNING.slideBoost;
+  MOVE.slideDuration = TUNING.slideDuration;
+  MOVE.slideCooldown = TUNING.slideCooldown;
+}
+syncMove();
+onTune(syncMove);
 
 const NO_SHOTS = Object.freeze([]);
 const HIT_RADIUS = PLAYER_RADIUS + 0.1;
@@ -62,7 +77,8 @@ const FASTHANDS_MULT = 0.72;    // Reload and swap time.
 const MARATHON_SPRINT = 1.08;
 const MARATHON_SLIDE_COOL = 0.6;
 
-const ASSIST_RANGE = 30;
+// Assist range, reach (scales ASSIST_CONE and ASSIST_EDGE), slowdown (scales the friction) and strength (scales
+// ASSIST_MAX_OFFSET) are tunables; these are their values at 1x.
 const ASSIST_CONE = 8 * Math.PI / 180;
 const ASSIST_EDGE = 1.25;       // Friction fades out between the body's edge and this multiple of it.
 const ASSIST_MAX_OFFSET = 6 * Math.PI / 180;
@@ -238,7 +254,7 @@ export function currentSpread(ps, w = weaponDef(ps)) {
   const speed = Math.hypot(ps.vx, ps.vz);
   s *= 1 + 0.55 * (1 - ads) * Math.min(1, speed / MOVE.run);
   if (ps.sliding && !w.slideFire) s *= 1.7;
-  return s;
+  return s * TUNING.spread;
 }
 
 function shotInterval(w, shotIndex) {
@@ -292,6 +308,7 @@ function fireOne(ps, w, rng) {
     const p = w.pattern;
     kick = p.amp * Math.sin(ps.shotIndex * p.freq) * Math.min(1, ps.shotIndex / p.ramp) * (1 - 0.55 * ps.adsT);
     if (p.drift) kick += p.drift * Math.min(ps.shotIndex, DRIFT_SHOTS) * (1 - 0.55 * ps.adsT);
+    kick *= TUNING.recoil;
   }
   if (n === 1) {
     angles[0] = ps.aim + kick + (rng() + rng() - 1) * spread;
@@ -431,7 +448,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
 
   // ADS blocked by sprinting, swapping and magazine reloads; a shell-fed gun can stay up.
   const wantAds = !!input.aiming && !ps.sprinting && ps.swapT <= 0 && (ps.reloadT <= 0 || !!w.shellReload);
-  const rate = dt / w.adsTime;
+  const rate = dt / (w.adsTime * TUNING.adsTime);
   ps.adsT = wantAds ? Math.min(1, ps.adsT + rate) : Math.max(0, ps.adsT - rate * ADS_OUT_RATE);
 
   stepReload(ps, w, dt);
@@ -669,7 +686,10 @@ export function traceShot(shot, map, players, selfId, def) {
 // thumb off the stick or losing the target releases it.
 export function applyAimAssist(aim, ps, players, map, dt) {
   if (typeof aim !== 'number') { ps.aaRaw = null; return aim; }
-  let bestAbs = ASSIST_CONE, bestEdge = 0, found = false;
+  const reach = TUNING.assistReach, range = TUNING.assistRange;
+  const cone = ASSIST_CONE * reach, zone = Math.max(1.05, ASSIST_EDGE * reach);
+  const maxOffset = ASSIST_MAX_OFFSET * TUNING.assist;
+  let bestAbs = cone, bestEdge = 0, found = false;
   const selfTeam = selfTeamOf(ps, players);
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
@@ -677,19 +697,21 @@ export function applyAimAssist(aim, ps, players, map, dt) {
     if (selfTeam !== undefined && p.team === selfTeam) continue;
     const dx = p.x - ps.x, dz = p.z - ps.z;
     const dSq = dx * dx + dz * dz;
-    if (dSq > ASSIST_RANGE * ASSIST_RANGE || dSq < 0.04) continue;
+    if (dSq > range * range || dSq < 0.04) continue;
     const abs = Math.abs(angleDiff(Math.atan2(dz, dx), aim + ps.aaOffset));
-    const edge = Math.min(ASSIST_CONE, Math.asin(Math.min(1, HIT_RADIUS / Math.sqrt(dSq))));
-    if (abs >= bestAbs || abs >= edge * ASSIST_EDGE) continue;
+    const edge = Math.min(cone, Math.asin(Math.min(1, HIT_RADIUS / Math.sqrt(dSq))));
+    if (abs >= bestAbs || abs >= edge * zone) continue;
     if (!hasLineOfSight(map, ps.x, ps.z, p.x, p.z)) continue;
     bestAbs = abs; bestEdge = edge; found = true;
   }
   const rawDelta = ps.aaRaw === null ? 0 : angleDiff(aim, ps.aaRaw);
   ps.aaRaw = aim;
   if (found) {
-    const fade = bestAbs <= bestEdge ? 1 : 1 - (bestAbs - bestEdge) / (bestEdge * (ASSIST_EDGE - 1));
-    ps.aaOffset -= rawDelta * (0.32 + 0.3 * ps.adsT) * fade;
-    ps.aaOffset = Math.max(-ASSIST_MAX_OFFSET, Math.min(ASSIST_MAX_OFFSET, ps.aaOffset));
+    const fade = bestAbs <= bestEdge ? 1 : 1 - (bestAbs - bestEdge) / (bestEdge * (zone - 1));
+    // Capped below 1: a full cancel would glue the aim to the target and the stick could not pull it off.
+    const friction = Math.min(0.9, (0.32 + 0.3 * ps.adsT) * TUNING.assistSlow);
+    ps.aaOffset -= rawDelta * friction * fade;
+    ps.aaOffset = Math.max(-maxOffset, Math.min(maxOffset, ps.aaOffset));
   } else {
     // Release quickly so aim never feels sticky once nothing is there.
     ps.aaOffset *= Math.max(0, 1 - 9 * dt);
