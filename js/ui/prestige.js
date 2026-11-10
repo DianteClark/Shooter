@@ -70,7 +70,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     const can = Progress.canPrestige();
     const peaked = p >= MAX_PRESTIGE;
     const upcoming = Progress.unlockSchedule().filter(u => !Progress.isItemUnlocked(u.kind, u.id)).slice(0, 4);
-    const hint = peaked ? 'Highest rank reached' : lp.level >= MAX_LEVEL ? `Prestige to ${prestigeName(p + 1)}` : `Prestige at level ${MAX_LEVEL}`;
+    const hint = peaked ? 'Top rank' : lp.level >= MAX_LEVEL ? 'Prestige' : `Prestige at ${MAX_LEVEL}`;
     const frac = lp.maxed ? 1 : lp.into / lp.span;
     menu.el.innerHTML = `
       ${header({ back: 'pfBack', label: 'Done', title: 'Service record' })}
@@ -85,7 +85,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
             <span class="pf-lvbig"><small>Level</small><b class="pf-lvn">${lp.level}</b></span>
             <span class="pf-xp"><small>${lp.maxed ? 'Maximum level' : `${Math.round(lp.into).toLocaleString('en-US')} / ${lp.span.toLocaleString('en-US')} XP`}</small><i class="xp big"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i></span>
           </div>
-          <button class="pf-callcard" data-act="pfCards" aria-label="Calling card">${cardHtml(Progress.card, { size: 236, sub: 'Calling card: tap to change' })}</button>
+          <button class="pf-callcard" data-act="pfCards" aria-label="Calling card">${cardHtml(Progress.card, { size: 220, sub: 'Tap to change' })}</button>
           <div class="pf-actions">
             <button class="btn ${can ? 'is-primary' : ''}" data-act="pfPrestige" ${can ? '' : 'disabled'}>${ico(can ? 'prestige' : 'lock')}<b>${can ? 'Enter prestige' : esc(hint)}</b></button>
             <button class="btn" data-act="pfSave">${ico('save')}<b>Save code</b></button>

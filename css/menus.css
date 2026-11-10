@@ -457,8 +457,19 @@
 .pf-lvbig b { font: 400 var(--fs-display)/1 var(--f-stencil); color: var(--c-chalk); font-variant-numeric: tabular-nums; min-width: 2ch; }
 .pf-xp { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding-bottom: 6px; }
 .pf-xp small { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); text-align: right; }
-#ui .pf-actions { margin-top: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
-#ui .pf-actions .btn { width: 100%; }
+#ui .pf-actions { margin-top: auto; display: flex; flex-direction: row; gap: var(--sp-2); }
+#ui .pf-actions .btn { flex: 1 1 0; min-width: 0; }
+#ui .pf-actions .btn[data-act="pfPrestige"] { flex-grow: 1.3; }
+#ui .pf-actions .btn { padding-left: 8px; padding-right: 8px; gap: 6px; }
+#ui .pf-actions .btn b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Short screens: the identity column must fit without scrolling. */
+@media (max-height: 420px) {
+  #ui .pf-card { gap: var(--sp-2); padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4); }
+  #ui .pf-id { min-height: 72px; padding-right: 84px; }
+  #ui .pf-badge svg { width: 72px; height: 72px; }
+  .pf-lvbig b { font-size: 44px; }
+  #ui .pf-actions .btn b { font-size: 13px; }
+}
 #ui .pf-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
 #ui .pf-side section { display: flex; flex-direction: column; gap: var(--sp-2); }
 #ui .pf-side h4 { display: flex; align-items: center; gap: var(--sp-2); font: 400 var(--fs-lead)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }

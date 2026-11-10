@@ -22,6 +22,8 @@
 .ccard .cc-tx small {
   font: 400 max(9px, calc(var(--cw) * .04))/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: rgba(231,234,228,.78);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 0 rgba(0,0,0,.6);
+  /* A backing plate keeps the caption readable over busy card art (stripes, hazard bands). */
+  align-self: flex-start; max-width: 100%; padding: 2px 5px 1px; background: rgba(12,15,19,.62);
 }
 .ccard.gold .cc-tx small { color: #ffe9a8; }
 .ccard.locked .cc-bg, .ccard.locked .cc-em { filter: grayscale(.9) brightness(.5); }
