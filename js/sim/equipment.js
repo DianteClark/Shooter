@@ -72,7 +72,8 @@ const ARC_BASE = 0.6, ARC_PER_M = 0.07;
 const ARC_BASE_STRONG = 1.2, ARC_PER_M_STRONG = 0.16;
 const ARC_RESTORE = 1.9;        // A projectile carried over by host migration with no arc of its own.
 const ROOFED = new Set(['building', 'shop', 'adobe', 'tent', 'border']);
-const SKIN = 0.12;              // Kept between a projectile and any wall, so the next ray starts clear of it.
+const SKIN = 0.12;
+const DEVICE_R = 0.45;           // Footprint of a device left lying (mine, claymore, trophy...): it must sit fully on open ground.              // Kept between a projectile and any wall, so the next ray starts clear of it.
 const WALL_RESTITUTION = 0.5;
 const WALL_SCRUB = 0.85;        // Speed kept along the wall after a bounce.
 const LAND_SPEED_KEEP = 0.5;
@@ -201,6 +202,8 @@ function makeLying(id, kind, owner, team, x, z, delay = 0) {
     dir: 0, wnx: 0, wnz: 0 };
 }
 
+const isDevice = spec => !!(spec.mine || spec.trophy || spec.sensor || spec.decoy);
+
 // One tick of a live projectile. Real throws and previews both go through here, so they cannot disagree.
 // `onBounce` is optional; returns true once the thing has gone off.
 // Fastball runs the flight's clock faster; once down, time is time again.
@@ -220,7 +223,12 @@ function fly(map, p, spec, dt, onBounce) {
       p.y = 0;
       p.grounded = true;
       if (onBounce) onBounce(p.x, p.z, 'land');
-      if (spec.sticks) { p.stuck = true; p.vx = 0; p.vz = 0; return; }
+      if (spec.sticks) {
+        // A device coming down on a crate, container or building rolls off the edge to open ground, whole and in
+        // view, instead of sitting inside the object. Shared with the preview, so the landing ring agrees.
+        if (isDevice(spec)) resolveCircle(map, p, DEVICE_R);
+        p.stuck = true; p.vx = 0; p.vz = 0; return;
+      }
       p.vx *= LAND_SPEED_KEEP; p.vz *= LAND_SPEED_KEEP;
       resolveCircle(map, p, SKIN);     // Coming down on a crate puts it beside the crate.
     } else {
@@ -251,7 +259,9 @@ function sweep(map, p, spec, dt, onBounce) {
     p.x += dirX * travel; p.z += dirZ * travel;
     left -= travel / speed;
     if (onBounce) onBounce(p.x, p.z, 'wall');
-    if (spec.sticks) { p.stuck = true; p.vx = 0; p.vz = 0; p.wnx = hit.nx; p.wnz = hit.nz; return; }
+    // Devices left lying (mines, claymores, trophies, sensors, decoys) do not stick to a wall's face: they bounce off and
+    // come down on open ground, where the whole thing is in view. Grenades that stick (sticky, molotov...) still do.
+    if (spec.sticks && !isDevice(spec)) { p.stuck = true; p.vx = 0; p.vz = 0; p.wnx = hit.nx; p.wnz = hit.nz; return; }
     const vn = p.vx * hit.nx + p.vz * hit.nz;
     p.vx = (p.vx - (1 + WALL_RESTITUTION) * vn * hit.nx) * WALL_SCRUB;
     p.vz = (p.vz - (1 + WALL_RESTITUTION) * vn * hit.nz) * WALL_SCRUB;

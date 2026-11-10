@@ -2013,6 +2013,7 @@ export class HUD {
     if (!dead) this.goBtn.classList.remove('pressed');
     // Auto-respawn brings you back by itself: the ring counts it down, so there is nothing to tap.
     this.goBtn.style.display = r.auto ? 'none' : '';
+    this.deathEl.classList.toggle('tap-mode', !r.auto);
     if (dead && r.auto && !this.snd) this.#askRespawn();
   }
 
