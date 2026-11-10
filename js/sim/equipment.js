@@ -5,8 +5,11 @@
 //   eq.throw(owner, kind, ox, oz, aim, dist)  owner is a player id, or {id, team}. kind: any id in EQUIPMENT that a
 //                                        loadout can hold. dist (optional, metres) is where it should end up on open
 //                                        ground; absent means the default range. Does not check counts: the caller does.
-//   previewThrow(map, ox, oz, aim, dist, kind)   the same throw run forward: polyline, bounces and landing.
-//   landingOf(map, ox, oz, aim, dist, kind)      just the landing of that throw, with no allocation (the bots' version).
+//   previewThrow(map, ox, oz, aim, dist, kind, perks)   the same throw run forward: polyline, bounces and landing.
+//   landingOf(map, ox, oz, aim, dist, kind, perks)      just the landing of that throw, with no allocation (bots).
+//                                        perks: the thrower's perk list. Strong Arm throws higher as well as further,
+//                                        so a preview without the thrower's perks does not match a Strong Arm throw.
+//   throwArc(dist, perks), arcHeight(u, arc)   the height profile every throw flies; see HEIGHT PROFILE below.
 //   eq.step(dt, players, onEvent, onDamage)
 //       players    [{id, team, x, z, alive, perks?, spawnProtect?}], the flat shape traceShot takes.
 //       onEvent(e) {t:'throw',id,kind,ox,oz,aim}    queued by throw(), delivered on the next step
@@ -38,7 +41,20 @@ export const FLAK_MULT = 0.55;
 
 const THROW_SPEED = 15;
 const STEP = 1 / SIM_HZ;                 // The host integrates throws at this rate, and so does the preview.
-const ARC_HEIGHT = 1.9;
+
+// HEIGHT PROFILE. A throw leaves the hand at RELEASE_Y and comes down at the end of its `air` time along
+//   y(u) = RELEASE_Y (1 - u) + arc 4u(1 - u),   u = age / air
+// `arc` grows with the distance asked for, and grows faster with Strong Arm. In flight a throw clears any wall whose
+// top (`h`) is below the arc where it crosses the wall's face; it lands beyond if it still has the distance. ROOFED
+// kinds (buildings and the map border) stop a throw at any height: nothing is lobbed over a building or out of the map.
+// Base throws top out near 2.1 m at full range, under every wall and container, so they still only clear waist-high
+// cover and low rocks. Strong Arm tops out near 3.9 m at 13 m and 4.8 m at 19 m: from a few metres back it lobs over
+// walls and containers (the tallest are 3.3 m), never over buildings.
+const RELEASE_Y = 1.1;
+const ARC_BASE = 0.6, ARC_PER_M = 0.07;
+const ARC_BASE_STRONG = 1.2, ARC_PER_M_STRONG = 0.16;
+const ARC_RESTORE = 1.9;        // A projectile carried over by host migration with no arc of its own.
+const ROOFED = new Set(['building', 'shop', 'adobe', 'tent', 'border']);
 const SKIN = 0.12;              // Kept between a projectile and any wall, so the next ray starts clear of it.
 const WALL_RESTITUTION = 0.5;
 const WALL_SCRUB = 0.85;        // Speed kept along the wall after a bounce.
@@ -82,6 +98,17 @@ export function maxThrowRange(perks) {
   return perks && perks.includes('strongarm') ? STRONGARM_RANGE : THROW_RANGE;
 }
 
+export function throwArc(dist, perks) {
+  const strong = !!(perks && perks.includes('strongarm'));
+  const d = Math.max(MIN_THROW, Math.min(strong ? STRONGARM_RANGE : THROW_RANGE, Number.isFinite(dist) ? dist : THROW_RANGE));
+  return strong ? ARC_BASE_STRONG + d * ARC_PER_M_STRONG : ARC_BASE + d * ARC_PER_M;
+}
+
+// Height of a throw at fraction u of its air time.
+export function arcHeight(u, arc) {
+  return RELEASE_Y * (1 - u) + arc * 4 * u * (1 - u);
+}
+
 export function flakMult(perks) {
   return perks && perks.includes('flak') ? FLAK_MULT : 1;
 }
@@ -110,15 +137,15 @@ export function effectRadius(kind) {
   return 0;
 }
 
-function makeProjectile(id, kind, owner, ox, oz, aim, dist) {
+function makeProjectile(id, kind, owner, ox, oz, aim, dist, perks) {
   const v = speedFor(kind, dist);
-  return { id, kind, owner, team: undefined, x: ox, z: oz, y: 1.1,
+  return { id, kind, owner, team: undefined, x: ox, z: oz, y: RELEASE_Y, arc: throwArc(dist, perks),
     vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
 }
 
 // Something a burst left on the ground. A positive `delay` holds it back that many seconds.
 function makeLying(id, kind, owner, team, x, z, delay = 0) {
-  return { id, kind, owner, team, x, z, y: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0 };
+  return { id, kind, owner, team, x, z, y: 0, arc: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0 };
 }
 
 // One tick of a live projectile. Real throws and previews both go through here, so they cannot disagree.
@@ -142,7 +169,7 @@ function fly(map, p, spec, dt, onBounce) {
       p.vx *= LAND_SPEED_KEEP; p.vz *= LAND_SPEED_KEEP;
       resolveCircle(map, p, SKIN);     // Coming down on a crate puts it beside the crate.
     } else {
-      p.y = 1.1 * (1 - u) + ARC_HEIGHT * 4 * u * (1 - u);
+      p.y = arcHeight(u, p.arc);
     }
   }
   if (p.grounded) {
@@ -154,15 +181,16 @@ function fly(map, p, spec, dt, onBounce) {
   sweep(map, p, spec, dt, onBounce);
 }
 
-// In flight it clears waist-high cover; on the ground, crates and barriers stop it too.
+// In flight it clears waist-high cover and anything lower than the arc (see HEIGHT PROFILE); on the ground, crates
+// and barriers stop it too.
 function sweep(map, p, spec, dt, onBounce) {
-  const flag = p.grounded ? 'blocksMove' : 'blocksBullet';
   let left = dt;
   for (let guard = 0; guard < 4 && left > 1e-5; guard++) {
     const speed = Math.hypot(p.vx, p.vz);
     if (speed < 1e-3) return;
     const dirX = p.vx / speed, dirZ = p.vz / speed, reach = speed * left;
-    const hit = raycastMap(map, p.x, p.z, dirX, dirZ, reach + SKIN, flag);
+    const hit = p.grounded ? raycastMap(map, p.x, p.z, dirX, dirZ, reach + SKIN, 'blocksMove')
+      : airHit(map, p, spec, dirX, dirZ, reach + SKIN, speed, p.age - left);
     if (!hit) { p.x += dirX * reach; p.z += dirZ * reach; return; }
     const travel = Math.max(0, Math.min(reach, hit.t - SKIN));
     p.x += dirX * travel; p.z += dirZ * travel;
@@ -175,6 +203,45 @@ function sweep(map, p, spec, dt, onBounce) {
   }
 }
 
+// The first wall a throw in the air meets along this ray: a solid whose top is at or above the arc where the ray
+// crosses its face, or any ROOFED solid. `age0` is the projectile's age at the ray's start. A throw already over a
+// wall's footprint is above it and carries on; if it comes down there, landing puts it beside the wall. Fills AIR_HIT.
+const AIR_HIT = { t: 0, nx: 0, nz: 0 };
+function airHit(map, p, spec, dx, dz, maxT, speed, age0) {
+  let best = maxT, found = false, bx = 0, bz = 0;
+  const walls = map.walls;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (!w.blocksBullet) continue;
+    // Slab entry from outside; an origin on or inside the rectangle means the throw is over it.
+    let tmin = -Infinity, tmax = Infinity, nx = 0, nz = 0;
+    if (Math.abs(dx) < 1e-9) {
+      if (p.x <= w.x || p.x >= w.x + w.w) continue;
+    } else {
+      let t1 = (w.x - p.x) / dx, t2 = (w.x + w.w - p.x) / dx, sgn = -1;
+      if (t1 > t2) { const q = t1; t1 = t2; t2 = q; sgn = 1; }
+      tmin = t1; tmax = t2; nx = sgn;
+    }
+    if (Math.abs(dz) < 1e-9) {
+      if (p.z <= w.z || p.z >= w.z + w.d) continue;
+    } else {
+      let t1 = (w.z - p.z) / dz, t2 = (w.z + w.d - p.z) / dz, sgn = -1;
+      if (t1 > t2) { const q = t1; t1 = t2; t2 = q; sgn = 1; }
+      if (t1 > tmin) { tmin = t1; nx = 0; nz = sgn; }
+      if (t2 < tmax) tmax = t2;
+    }
+    if (tmin > tmax || tmin < 0 || tmin >= best) continue;
+    if (!ROOFED.has(w.kind) && w.h !== undefined) {
+      const u = Math.min(1, (age0 + tmin / speed) / spec.air);
+      if (arcHeight(u, p.arc) > w.h) continue;
+    }
+    best = tmin; found = true; bx = nx; bz = nz;
+  }
+  if (!found) return null;
+  AIR_HIT.t = best; AIR_HIT.nx = bx; AIR_HIT.nz = bz;
+  return AIR_HIT;
+}
+
 // Throw speed for "end up `dist` metres away on open ground". Worked out by flying each kind once at load across
 // a ladder of speeds, so the answer includes roll and fuse without having to be derived for each kind.
 const OPEN_GROUND = { walls: [], width: 1e7, height: 1e7 };
@@ -184,7 +251,7 @@ for (const kind of Object.keys(EQUIPMENT)) {
   if (EQUIPMENT[kind].instant || EQUIPMENT[kind].noThrow) continue;
   const spec = EQUIPMENT[kind], reach = new Float32Array(SPEED_COUNT);
   for (let i = 0; i < SPEED_COUNT; i++) {
-    const p = { x: 5e6, z: 5e6, y: 1.1, vx: SPEED_MIN + i * SPEED_STEP, vz: 0, age: 0, stuck: false, grounded: false };
+    const p = { x: 5e6, z: 5e6, y: RELEASE_Y, arc: 0, vx: SPEED_MIN + i * SPEED_STEP, vz: 0, age: 0, stuck: false, grounded: false };
     for (let g = 0; g < 400 && !advance(OPEN_GROUND, p, spec, STEP); g++);
     reach[i] = p.x - 5e6;
   }
@@ -219,10 +286,10 @@ function previewOnBounce(x, z) {
 }
 
 // The one projectile the previews fly. Never escapes this file.
-const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
-function launchFlyer(kind, ox, oz, aim, dist) {
+const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, arc: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0 };
+function launchFlyer(kind, ox, oz, aim, dist, perks) {
   const v = speedFor(kind, dist);
-  FLYER.kind = kind; FLYER.x = ox; FLYER.z = oz; FLYER.y = 1.1;
+  FLYER.kind = kind; FLYER.x = ox; FLYER.z = oz; FLYER.y = RELEASE_Y; FLYER.arc = throwArc(dist, perks);
   FLYER.vx = Math.cos(aim) * v; FLYER.vz = Math.sin(aim) * v;
   FLYER.age = 0; FLYER.stuck = false; FLYER.grounded = false;
   return FLYER;
@@ -230,12 +297,12 @@ function launchFlyer(kind, ox, oz, aim, dist) {
 
 // The exact path of the throw `eq.throw(.., ox, oz, aim, dist)` would make, ticked forward with no one in the way.
 // Returns { points:[{x,z,y}], bounces:[{x,z}], landing:{x,z,t,kind} }, or null for stim and unknown kinds.
-// `landing` is where it goes off (or stops, for smoke). Callers clamp `dist` with maxThrowRange(perks).
-// The result is reused by the next call: read it now, or copy it.
-export function previewThrow(map, ox, oz, aim, dist, kind) {
+// `landing` is where it goes off (or stops, for smoke). Callers clamp `dist` with maxThrowRange(perks) and pass the
+// thrower's perks, which set the arc's height. The result is reused by the next call: read it now, or copy it.
+export function previewThrow(map, ox, oz, aim, dist, kind, perks) {
   const spec = EQUIPMENT[kind];
   if (!spec || spec.instant || spec.noThrow) return null;
-  const p = launchFlyer(kind, ox, oz, aim, dist);
+  const p = launchFlyer(kind, ox, oz, aim, dist, perks);
   const points = PREVIEW.points;
   let n = 0;
   previewBounceN = 0;
@@ -254,10 +321,10 @@ export function previewThrow(map, ox, oz, aim, dist, kind) {
 
 // Where a throw ends up, and nothing else. Returns a shared {x,z,t}, or null for stim and unknown kinds.
 const LANDING = { x: 0, z: 0, t: 0 };
-export function landingOf(map, ox, oz, aim, dist, kind) {
+export function landingOf(map, ox, oz, aim, dist, kind, perks) {
   const spec = EQUIPMENT[kind];
   if (!spec || spec.instant || spec.noThrow) return null;
-  const p = launchFlyer(kind, ox, oz, aim, dist);
+  const p = launchFlyer(kind, ox, oz, aim, dist, perks);
   for (let g = 0; g < 400; g++) if (advance(map, p, spec, STEP) || (p.stuck && spec.quietEnd)) break;
   LANDING.x = p.x; LANDING.z = p.z; LANDING.t = p.age;
   return LANDING;
@@ -292,9 +359,9 @@ export class EquipmentSystem {
     }
     if (spec.noThrow) return null;
     this._pending.push({ t: 'throw', id, kind, ox, oz, aim, dist: Number.isFinite(dist) ? dist : THROW_RANGE });
-    const p = makeProjectile(this._nextId++, kind, id, ox, oz, aim, dist);
-    p.team = owner !== null && typeof owner === 'object' ? owner.team : undefined;
     const perks = owner !== null && typeof owner === 'object' ? owner.ps?.perks : null;
+    const p = makeProjectile(this._nextId++, kind, id, ox, oz, aim, dist, perks);
+    p.team = owner !== null && typeof owner === 'object' ? owner.team : undefined;
     if (spec.trophy) p.charges = spec.trophy.charges + (perks && perks.includes('engineer') ? ENGINEER_TROPHY : 0);
     this._projectiles.push(p);
     return p;
@@ -304,7 +371,10 @@ export class EquipmentSystem {
   restore(projectiles, smokes, teamOf) {
     for (const v of projectiles || []) {
       if (!EQUIPMENT[v.kind] || EQUIPMENT[v.kind].instant) continue;
-      this._projectiles.push({ id: v.id, kind: v.kind, owner: v.owner, team: teamOf(v.owner), x: v.x, z: v.z, y: v.y,
+      // The arc is not on the wire; one in flight is worked back out of its height and age.
+      const air = EQUIPMENT[v.kind].air, u = air ? (v.age || 0) / air : 0;
+      const arc = u > 0.05 && u < 0.95 ? Math.max(0, (v.y - RELEASE_Y * (1 - u)) / (4 * u * (1 - u))) : ARC_RESTORE;
+      this._projectiles.push({ id: v.id, kind: v.kind, owner: v.owner, team: teamOf(v.owner), x: v.x, z: v.z, y: v.y, arc,
         vx: v.vx || 0, vz: v.vz || 0, age: v.age || 0, stuck: !!v.stuck, grounded: !!v.grounded,
         t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0 });
       this._nextId = Math.max(this._nextId, v.id + 1);

@@ -68,6 +68,16 @@ const SHOT_INDEX_RESET = 0.26;  // Seconds off the trigger before the recoil pat
 const BLOOM_RECOVER_DELAY = 0.09;
 const ADS_OUT_RATE = 1.35;      // Leaving ADS is quicker than entering it.
 const ADS_FULL = 0.85;          // Counts as fully aimed for adsGate weapons.
+// Run-and-gun. The aim stick being down is all `aiming` says, and a thumb is on it for every shot and often rests there
+// between fights. With ADS following it alone, any sustained fire (and a resting thumb) put the player in full ADS and
+// at adsMoveMult pace, 0.42 to 0.82 of a run: a walk. So the move stick decides the stance as well: up to ADS_STICK_FULL
+// of its travel the player can aim all the way in; from there to ADS_STICK_NONE the room for ADS fades to nothing, so
+// a full-stick player shoots from the hip at a run, and easing the stick off is how to settle into ADS.
+export const ADS_STICK_FULL = 0.7;
+export const ADS_STICK_NONE = 0.9;
+export function adsRoomFor(moveLen) {
+  return Math.max(0, Math.min(1, (ADS_STICK_NONE - moveLen) / (ADS_STICK_NONE - ADS_STICK_FULL)));
+}
 const TOPOFF_DELAY = 1.2;       // Seconds without firing or aiming before a part-empty mag tops itself off.
 const TOPOFF_BELOW = 0.7;       // Fraction of the magazine under which that happens.
 const DRIFT_SHOTS = 12;         // pattern.drift stops adding up after this many rounds of a string.
@@ -379,9 +389,12 @@ function stepMovement(ps, input, w, dt, map) {
     if (ps.slideT <= 0) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
   } else {
     const base = (ps.sprinting ? MOVE.sprint * (marathon ? MARATHON_SPRINT : 1) : MOVE.run) * w.moveMult;
-    const speed = ps.sprinting ? base : base * (1 + (w.adsMoveMult - 1) * ps.adsT);
-    const scale = moveLen > 1 ? 1 / moveLen : 1;
-    const tx = mx * scale * speed, tz = mz * scale * speed;
+    // ADS caps the speed rather than scaling the stick: a part-pushed stick that is already slower than the ADS pace
+    // loses nothing, which is what lets a player ease the stick off into ADS without crawling.
+    const cap = ps.sprinting ? base : base * (1 + (w.adsMoveMult - 1) * ps.adsT);
+    let scale = (moveLen > 1 ? 1 / moveLen : 1) * base;
+    if (Math.min(moveLen, 1) * base > cap) scale = cap / moveLen;
+    const tx = mx * scale, tz = mz * scale;
     const dx = tx - ps.vx, dz = tz - ps.vz;
     const dLen = Math.hypot(dx, dz);
     if (dLen > 1e-6) {
@@ -447,9 +460,11 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   stepMovement(ps, input, w, dt, map);
 
   // ADS blocked by sprinting, swapping and magazine reloads; a shell-fed gun can stay up.
+  // How far in it can go also depends on the move stick; see adsRoomFor.
   const wantAds = !!input.aiming && !ps.sprinting && ps.swapT <= 0 && (ps.reloadT <= 0 || !!w.shellReload);
   const rate = dt / (w.adsTime * TUNING.adsTime);
-  ps.adsT = wantAds ? Math.min(1, ps.adsT + rate) : Math.max(0, ps.adsT - rate * ADS_OUT_RATE);
+  const room = wantAds ? adsRoomFor(Math.hypot(input.mx || 0, input.mz || 0)) : 0;
+  ps.adsT = ps.adsT < room ? Math.min(room, ps.adsT + rate) : Math.max(room, ps.adsT - rate * ADS_OUT_RATE);
 
   stepReload(ps, w, dt);
   stepHeat(ps, dt);

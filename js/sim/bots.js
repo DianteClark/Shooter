@@ -11,7 +11,7 @@
 
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange } from './equipment.js';
-import { angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
+import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { isAvailable } from '../shared/attachments.js';
 
@@ -734,7 +734,7 @@ export class BotBrain {
   // Returns null when there is no throw to make. The landing object is shared; copy what you keep.
   _landing(kind, aim, dist) {
     const { sim, ps } = this;
-    return landingOf(sim.map, ps.x, ps.z, aim, Math.min(dist, maxThrowRange(ps.perks)), kind);
+    return landingOf(sim.map, ps.x, ps.z, aim, Math.min(dist, maxThrowRange(ps.perks)), kind, ps.perks);
   }
 
   // Bots who have played this map before look for a line that gets there when the direct one comes up short:
@@ -1295,7 +1295,12 @@ export class BotBrain {
     this.sprintRoll = this.sprintLucky !== false;
     if (this.pathDirty) this._solvePath();
     this.drive(dt);
+    // A bot that wants ADS eases its move stick into the ADS stance (see adsRoomFor) instead of strafing at full stick
+    // from the hip. The stick is put back afterwards so the scaling can never compound across ticks.
+    const mx = I.mx, mz = I.mz, len = Math.hypot(mx, mz);
+    if (I.aiming && !I.sprint && len > ADS_STICK_FULL) { I.mx = mx * ADS_STICK_FULL / len; I.mz = mz * ADS_STICK_FULL / len; }
     const shots = stepPlayer(ps, I, dt, sim.map, sim.rng);
+    I.mx = mx; I.mz = mz;
     I.swap = false; I.slide = false;
     this._trackStuck(dt);
     return shots;

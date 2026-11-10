@@ -222,7 +222,7 @@ export class Match {
     if (!a || !this.localAlive || view.phase === 'warmup') { view.throwPreview = null; return; }
     const ps = this.ps;
     const kind = a.slot === 'tactical' ? ps.tactical : ps.lethal;
-    view.throwPreview = previewThrow(this.map, ps.x, ps.z, a.aim, Math.min(a.dist, maxThrowRange(ps.perks)), kind);
+    view.throwPreview = previewThrow(this.map, ps.x, ps.z, a.aim, Math.min(a.dist, maxThrowRange(ps.perks)), kind, ps.perks);
   }
 
   // The host vanished and this device was elected: carry on from the newest snapshot.

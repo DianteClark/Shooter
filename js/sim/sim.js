@@ -13,7 +13,7 @@ import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from
 import { NavGrid } from './nav.js';
 import { angleDiff, createPlayerState, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
-import { addScore, createStreakState, resetScoreOnDeath, setStreakKinds, spendStreak } from './streaks.js';
+import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -904,8 +904,8 @@ export class Sim {
   _kill(target, killer, weapon, dist, streak, head, equip) {
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME;
     if (this.range) this.range.onKill(target);
+    // Scorestreak score is not touched: it persists through death (docs/V4.md rules, restored in Wave 6).
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
-    resetScoreOnDeath(target.score);
     target.lastKilledBy = killer.id;
     killer.kills++;
     if (this.mode === 'tdm') this.scores[killer.team]++;

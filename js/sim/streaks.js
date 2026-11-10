@@ -1,11 +1,11 @@
-// Scorestreak rules (docs/V4.md, with Wave 5's reset on death), as a small state machine with no dependency on the match:
+// Scorestreak rules (docs/V4.md; Wave 6 restored score persisting through death), as a small state machine with no
+// dependency on the match:
 //   1. As score rises, a slot that is not held and not blocked is granted when score reaches its cost.
 //   2. If no slot is left that can still be earned above the current score, score is capped and stops.
 //   3. Using a streak while capped: score resets to 0 and all blocks clear.
 //   4. Using a streak while not capped: no reset. If score is already at or past that streak's cost,
 //      that slot is blocked until the next reset.
-//   5. Dying: score resets to 0 and all blocks clear. Held streaks stay held, so a player who still has
-//      everything comes back capped at 0, and rule 3 is what starts them earning again.
+// Dying changes nothing here: score, held streaks and blocks all carry into the next life.
 //
 // Invariant the rules rely on: an empty, unblocked slot always costs more than the current score.
 
@@ -65,13 +65,6 @@ export function spendStreak(st, slot) {
     s.blocked = true;
   }
   return true;
-}
-
-// Rule 5. Nothing held is touched.
-export function resetScoreOnDeath(st) {
-  st.score = 0;
-  for (let i = 0; i < st.slots.length; i++) st.slots[i].blocked = false;
-  st.capped = !hasEarnable(st);
 }
 
 // Swaps in a new set of streaks (and the perks that price them) without resetting progress. A kept streak keeps

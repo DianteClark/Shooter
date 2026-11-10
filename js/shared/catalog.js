@@ -4,18 +4,19 @@ export const SCORE = { kill: 100, headshot: 25, assist: 50, confirm: 50, deny: 2
 
 // `air` streaks count against the airspace limit. `limit` is how many of that streak one team may have up at once.
 // `role` is display information only: 'intel', 'offense', 'support' or 'denial'.
-// Costs are set against measured bot matches, with score resetting on death.
+// Costs are set against measured bot matches with score persisting through death (Wave 6): a good player earns about
+// one mid-list streak a match (turret to overwatch), the top of the list rarely. See the earn-rate test in the report.
 export const STREAKS = {
-  uav:       { id: 'uav',       name: 'UAV',          cost: 500,  air: true,  limit: 1, role: 'intel',   desc: 'Reveals enemies on the minimap for 20 s' },
-  jammer:    { id: 'jammer',    name: 'Jammer',       cost: 600,  air: true,  limit: 1, role: 'denial',  desc: 'Blanks the enemy minimap and UAV for 15 s' },
-  resupply:  { id: 'resupply',  name: 'Supply Drop',  cost: 750,  air: false, limit: 0, role: 'support', desc: 'Heals and re-arms everyone on your team near you' },
-  turret:    { id: 'turret',    name: 'Sentry',       cost: 900,  air: false, limit: 2, role: 'offense', desc: 'Automated gun at your position' },
-  mortar:    { id: 'mortar',    name: 'Mortar Team',  cost: 1100,  air: false, limit: 1, role: 'offense', desc: 'Five shells on enemies your team can see' },
-  strike:    { id: 'strike',    name: 'Airstrike',    cost: 1300, air: true,  limit: 1, role: 'offense', desc: 'Line of explosions on the enemy' },
-  overwatch: { id: 'overwatch', name: 'Overwatch',    cost: 1450, air: true,  limit: 1, role: 'intel',   desc: 'Advanced UAV for 25 s. Reveals Ghost too' },
-  chopper:   { id: 'chopper',   name: 'Attack Chopper', cost: 1600, air: true, limit: 1, role: 'offense', desc: 'Flies low and hunts enemies your team can see' },
-  emp:       { id: 'emp',       name: 'EMP',          cost: 1800, air: false, limit: 0, role: 'denial',  desc: 'Knocks out enemy air, sentries and radar' },
-  gunship:   { id: 'gunship',   name: 'Gunship',      cost: 2200, air: true,  limit: 1, role: 'offense', desc: 'Circles the map, firing on visible enemies' },
+  uav:       { id: 'uav',       name: 'UAV',          cost: 1000, air: true,  limit: 1, role: 'intel',   desc: 'Reveals enemies on the minimap for 20 s' },
+  jammer:    { id: 'jammer',    name: 'Jammer',       cost: 1200, air: true,  limit: 1, role: 'denial',  desc: 'Blanks the enemy minimap and UAV for 15 s' },
+  resupply:  { id: 'resupply',  name: 'Supply Drop',  cost: 1500, air: false, limit: 0, role: 'support', desc: 'Heals and re-arms everyone on your team near you' },
+  turret:    { id: 'turret',    name: 'Sentry',       cost: 2100, air: false, limit: 2, role: 'offense', desc: 'Automated gun at your position' },
+  mortar:    { id: 'mortar',    name: 'Mortar Team',  cost: 2500, air: false, limit: 1, role: 'offense', desc: 'Five shells on enemies your team can see' },
+  strike:    { id: 'strike',    name: 'Airstrike',    cost: 2800, air: true,  limit: 1, role: 'offense', desc: 'Line of explosions on the enemy' },
+  overwatch: { id: 'overwatch', name: 'Overwatch',    cost: 3100, air: true,  limit: 1, role: 'intel',   desc: 'Advanced UAV for 25 s. Reveals Ghost too' },
+  chopper:   { id: 'chopper',   name: 'Attack Chopper', cost: 3600, air: true, limit: 1, role: 'offense', desc: 'Flies low and hunts enemies your team can see' },
+  emp:       { id: 'emp',       name: 'EMP',          cost: 4100, air: false, limit: 0, role: 'denial',  desc: 'Knocks out enemy air, sentries and radar' },
+  gunship:   { id: 'gunship',   name: 'Gunship',      cost: 4800, air: true,  limit: 1, role: 'offense', desc: 'Circles the map, firing on visible enemies' },
 };
 export const STREAK_IDS = Object.keys(STREAKS);
 
