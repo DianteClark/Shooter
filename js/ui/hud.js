@@ -133,8 +133,10 @@ const SND_CSS = `
 .sa-mid small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
 .sa-mid small[data-role="defend"] { color: var(--c-blue, #38b6ff); }
 .hud.snd-on .death-col, .hud.snd-on .picker { top: calc(var(--st) + 72px); }
-.death.snd-buy, .death.snd-spec { background: none; pointer-events: none; }
-.death.snd-buy .death-top, .death.snd-spec .death-top, .death.snd-buy .death-go, .death.snd-spec .death-go { display: none !important; }
+.death.snd-life-buy, .death.snd-life-spec { background: none; pointer-events: none; }
+.death.snd-life-buy .death-top, .death.snd-life-spec .death-top, .death.snd-life-buy .death-go, .death.snd-life-spec .death-go { display: none !important; }
+/* During a death replay the Next round line drops below the killcam banner and the alive strip. */
+.killcam-on .hud.snd-on .death-col { top: calc(var(--st) + 96px); }
 .snd-marks { position: absolute; inset: 0; pointer-events: none; }
 .snd-mark { position: absolute; left: 0; top: 0; width: 0; height: 0; display: block; }
 .snd-mark[hidden] { display: none; }
@@ -568,7 +570,7 @@ export class HUD {
     this.medalsEl.textContent = '';
     for (const d of this.dmg) { d.life = 0; d.el.style.opacity = '0'; }
     this.hitEl.style.opacity = '0';
-    this.deathEl.classList.remove('show', 'picking', 'snd-buy', 'snd-spec');
+    this.deathEl.classList.remove('show', 'picking', 'snd-life-buy', 'snd-life-spec');
     this.nextEl.querySelector('.dn-now > small').textContent = 'Next life';
     this.pickerEl.querySelector('.pk-head b').textContent = 'Next life';
     this.pickerEl.querySelector('.pk-head small').textContent = 'Spawns with the one you pick. Take your time: you respawn when you tap Respawn.';
@@ -1341,8 +1343,9 @@ export class HUD {
       c.sndLife = life;
       const d = this.deathEl;
       d.classList.toggle('show', !!life);
-      d.classList.toggle('snd-buy', life === 'buy');
-      d.classList.toggle('snd-spec', life === 'spec');
+      // Not 'snd-spec': that is the Spectating button's class, and the death screen would take its layout.
+      d.classList.toggle('snd-life-buy', life === 'buy');
+      d.classList.toggle('snd-life-spec', life === 'spec');
       if (!life) this.#openPicker(false);
       else this.#paintPicker(true);
       this.nextEl.querySelector('.dn-now > small').textContent = life === 'buy' ? 'This round' : 'Next round';
