@@ -1,5 +1,5 @@
 // Trystero transport (Nostr signalling, WebRTC data channels) behind the star session in star.js.
-import { joinRoom, selfId, pauseRelayReconnection, resumeRelayReconnection } from 'trystero';
+import { joinRoom, selfId, pauseRelayReconnection, resumeRelayReconnection, getRelaySockets } from 'trystero';
 import { StarNet, KINDS } from './star.js';
 import { TURN_SERVERS } from './turn.js';
 import { mungeOpus } from './opus.js';
@@ -10,25 +10,30 @@ export const APP_ID = 'switchyard-6v6-1';
 // their bufferedAmount is what tells the session a phone has fallen behind.
 const channels = new WeakMap();
 
-// How far the latest join got, for the failure screen: did the host answer over the relays (a peer connection was made),
-// and did any direct link come up? A connection made and then failed means the two networks would not let the phones
-// reach each other (no TURN relay to fall back on); none made means the host was never found on the relays.
-const diag = { pcs: 0, connected: 0, failed: 0 };
-export function resetJoinDiagnosis() { diag.pcs = diag.connected = diag.failed = 0; }
+// How far the latest join got, for the failure screen. Trystero prepares a pool of offers before it has heard from
+// anyone, so a connection existing proves nothing; what proves the other phone answered over the relays is a remote
+// description arriving. answered and no link: the networks would not let the phones reach each other. Link up and then
+// lost: dropped. No answer: the host was never found (relays, wrong code, or the host's phone not listening).
+const diag = { answered: 0, connected: 0, failed: 0, checking: 0 };
+export function resetJoinDiagnosis() { diag.answered = diag.connected = diag.failed = diag.checking = 0; }
 export function joinDiagnosis() {
-  if (diag.connected) return 'dropped';
-  if (diag.pcs) return 'blocked';
-  return 'unseen';
+  const kind = diag.connected ? 'dropped' : diag.answered ? 'blocked' : 'unseen';
+  let relays = '?';
+  try {
+    const socks = Object.values(getRelaySockets?.() ?? {});
+    relays = `${socks.filter(s => s?.readyState === 1).length}/${socks.length}`;
+  } catch { /* not exposed */ }
+  return { kind, detail: `relays ${relays} · answered ${diag.answered} · checking ${diag.checking} · linked ${diag.connected} · failed ${diag.failed}` };
 }
 
 export class TrackedPeerConnection extends RTCPeerConnection {
   constructor(config) {
     super(config);
-    diag.pcs++;
     this.addEventListener('datachannel', e => channels.set(this, e.channel));
     this.addEventListener('iceconnectionstatechange', () => {
       const s = this.iceConnectionState;
-      if (s === 'connected' || s === 'completed') diag.connected++;
+      if (s === 'checking') diag.checking++;
+      else if (s === 'connected' || s === 'completed') diag.connected++;
       else if (s === 'failed') diag.failed++;
     });
   }
@@ -41,6 +46,11 @@ export class TrackedPeerConnection extends RTCPeerConnection {
 
   // Trystero relies on the no-argument form, where the browser would choose the SDP itself. Rewriting Opus means making
   // the description here; if the state moved on while it was being made, the browser's own form still gets to run.
+  setRemoteDescription(description) {
+    if (description?.type) diag.answered++;
+    return super.setRemoteDescription(description);
+  }
+
   async setLocalDescription(description) {
     if (description?.type === 'rollback') return super.setLocalDescription(description);
     try {

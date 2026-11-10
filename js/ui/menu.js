@@ -277,7 +277,7 @@ export class Menu {
 
   // reason (js/net/net.js joinDiagnosis): 'unseen' the host never answered; 'blocked' the host answered but no direct
   // link could be made between the two networks; 'dropped' a link came up and then failed.
-  notFound(code, { retry, back, reason = 'unseen' }) {
+  notFound(code, { retry, back, reason = 'unseen', detail = '' }) {
     const why = {
       unseen: ['No room at', 'Check the code with the host, and that their lobby is still open.'],
       blocked: ['Found the room, could not connect', 'The host answered, but your two networks would not let the phones connect directly. Try both on Wi-Fi.'],
@@ -292,6 +292,7 @@ export class Menu {
         <h2 data-in="up">${esc(why[0])}</h2>
         <div class="code-tiles bad" data-in="up">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         <p data-in="fade">${esc(why[1])}</p>
+        ${detail ? `<small class="nf-detail" data-in="fade" style="opacity:.6;font:11px/1.2 ui-monospace,Menlo,monospace">${esc(detail)}</small>` : ''}
         <div class="row" data-in="up">
           <button class="btn" data-act="nfBack">${ico('back')}<b>Back</b></button>
           <button class="btn is-primary" data-sound="confirm" data-act="nfRetry">${ico('rejoin')}<b>Try again</b></button>

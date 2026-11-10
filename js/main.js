@@ -688,7 +688,7 @@ function startJoining(code) {
     teardownNet();
     forgetRoom();
     if (inviteJoinFailed(menu, code, { retry: () => startJoining(code), enterCode: askCode })) showTitle();
-    else menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle(), reason: NetImpl === Net ? joinDiagnosis() : 'unseen' });
+    else menu.notFound(code, { retry: () => startJoining(code), back: () => goTitle(), ...(NetImpl === Net ? (({ kind, detail }) => ({ reason: kind, detail }))(joinDiagnosis()) : {}) });
   });
   net.onLobby(msg => guestLobbyMessage(msg));
   net.onHostLost(() => setHostNotice(true));
