@@ -117,6 +117,83 @@ export const THEMES = {
   },
 };
 
+// Snowbound rail depot at night: a cold moon high in the north-west, sodium yard lamps, snow coming in on the wind.
+THEMES.frost = {
+  id: 'frost',
+  light: { dir: norm([-0.36, 0.8, 0.46]), sun: [0.34, 0.42, 0.60], sky: [0.27, 0.32, 0.47], amb: [0.19, 0.22, 0.32] },
+  clear: 0x080d16,
+  fog: [0.30, 0.38, 0.56], fogSeam: [0.06, 0.12, 0.22], desatTint: [0.76, 0.84, 0.96],
+  shadow: { col: [0.40, 0.46, 0.66], strength: 0.5, len: 0.75 },
+  lamp: [0.62, 0.36, 0.12],
+  ink: ink({
+    ground: 0x96a2b4, asphalt: 0x4c4f58, dirt: 0x737b8c, gravel: 0x585d6b,
+    roof: 0xbcc7d6, wall: 0x6f5850, wallB: 0x56606c, trim: 0x2c2e36,
+    concrete: 0x868d98, crate: 0x8a6e4c, crateD: 0x4e3e2c,
+    rail: 0x9aa4b2, tie: 0x3b3431, hazardY: 0xa8892f, hazardK: 0x22252c,
+    paint: 0xc0c6cc, glow: 0xffbe6c, glowCool: 0xc8e0ff,
+    snow: 0xd2dce8, snowD: 0xa9b6c8, ice: 0x8db2d2, coal: 0x2a2a2e, timber: 0x4a3a2e,
+  }),
+  containers: [0x7a3a2e, 0x3e566a, 0x5f524a, 0x6a6236, 0x34503f],
+  weather: { fields: [
+    { kind: 'mote', count: 280, box: [40, 12, 32], vel: [1.6, -2.4, 0.5], size: 0.11, col: [0.92, 0.96, 1.0], alpha: 0.75 },
+    { kind: 'streak', count: 110, box: [38, 4, 30], vel: [7.5, -0.9, 1.2], len: 1.1, width: 0.022, col: [0.86, 0.92, 1.0], alpha: 0.22 },
+    { kind: 'mote', count: 18, box: [44, 3, 34], vel: [3.2, 0.02, 0.6], size: 3.4, col: [0.78, 0.86, 0.98], alpha: 0.05 },
+  ] },
+};
+
+// Unfinished tower top at sunset: the sun low in the west, long shadows across the slab, the city a long way down.
+THEMES.topside = {
+  id: 'topside',
+  light: { dir: norm([-0.84, 0.42, 0.34]), sun: [1.08, 0.66, 0.38], sky: [0.36, 0.34, 0.45], amb: [0.29, 0.27, 0.32] },
+  clear: 0x1c1420,
+  fog: [0.50, 0.42, 0.58], fogSeam: [0.26, 0.11, 0.05], desatTint: [0.88, 0.78, 0.86],
+  shadow: { col: [0.44, 0.34, 0.52], strength: 0.68, len: 1.45 },
+  lamp: [0.22, 0.15, 0.06],
+  void: true,                  // Water rects are holes in the slab, not water.
+  ink: ink({
+    ground: 0x8e8a84, asphalt: 0x7b7772, dirt: 0x958a76, gravel: 0x6e6a68,
+    roof: 0x6a6e76, wall: 0x9d958b, wallB: 0x868079, trim: 0x3d393c,
+    concrete: 0x9a958e, crate: 0x9a7a4c, crateD: 0x5c4a30,
+    rail: 0x8a8f96, tie: 0x3f3530, hazardY: 0xd2a030, hazardK: 0x26242a,
+    paint: 0xd8c8a0, glow: 0xffd49a, glowCool: 0xcfe0ff,
+    steel: 0x56606c, steelD: 0x363c46, primer: 0xa4522e, tarp: 0x2f6494, board: 0xd6cfc2, rebar: 0x6e4634,
+    brick: 0x9a5038, crane: 0xd49a1e, glass: 0x2a3446,
+  }),
+  containers: [0x3e6a8a, 0x8a4634, 0xa8853c],
+  weather: { fields: [
+    { kind: 'mote', count: 110, box: [40, 7, 32], vel: [3.2, 0.25, 0.9], size: 0.1, col: [1.0, 0.78, 0.5], alpha: 0.45 },
+    { kind: 'streak', count: 50, box: [38, 3, 30], vel: [12, 0.1, 2.2], len: 2.2, width: 0.02, col: [0.98, 0.84, 0.66], alpha: 0.14 },
+  ] },
+};
+
+// Flooded jungle ruin on a grey, steaming morning: soft high light, drizzle on the moat, mist in the trees.
+THEMES.sunken = {
+  id: 'sunken',
+  light: { dir: norm([-0.3, 0.86, 0.42]), sun: [0.54, 0.57, 0.46], sky: [0.36, 0.42, 0.39], amb: [0.26, 0.29, 0.27] },
+  clear: 0x111b16,
+  fog: [0.38, 0.50, 0.46], fogSeam: [0.08, 0.18, 0.10], desatTint: [0.78, 0.86, 0.80],
+  shadow: { col: [0.34, 0.44, 0.38], strength: 0.56, len: 0.6 },
+  lamp: [0.34, 0.22, 0.08],
+  wet: 0.45, sheen: norm([0.1, 0.9, -0.42]), sheenCol: [0.42, 0.52, 0.46],
+  water: { deep: [0.04, 0.10, 0.08], shallow: [0.11, 0.21, 0.15], glint: [0.5, 0.64, 0.54] },
+  ink: ink({
+    ground: 0x5a5c44, asphalt: 0x6e6d62, dirt: 0x4f4536, gravel: 0x67665a,
+    roof: 0x55604a, wall: 0x7a7a66, wallB: 0x6a705c, trim: 0x383a30,
+    concrete: 0x878774, crate: 0x7a6044, crateD: 0x4a3a28,
+    rail: 0x6a6a60, tie: 0x3a3228, hazardY: 0x9a8a40, hazardK: 0x262a22,
+    paint: 0xb0b090, glow: 0xffae5a, glowCool: 0xcfe8d0,
+    rock: 0x7f7c6c, rockD: 0x625f52, rockL: 0x9a9684, moss: 0x52653a, mossD: 0x3c4c2c,
+    leaf: 0x3a5a2c, leafD: 0x2a4022, bark: 0x5a4a38, vine: 0x4a7a36, bloom: 0xc84a6a,
+  }),
+  containers: [0x5a5a44, 0x4a5a4a, 0x6a5a40],
+  weather: { fields: [
+    { kind: 'rain', count: 170, box: [36, 14, 28], vel: [-0.8, -14, 0.8], len: 0.6, width: 0.012, col: [0.78, 0.88, 0.82], alpha: 0.2 },
+    { kind: 'ripple', count: 60, box: [34, 1, 26], life: 0.7, size: 0.55, col: [0.75, 0.88, 0.8], alpha: 0.26 },
+    { kind: 'mote', count: 46, box: [36, 4, 28], vel: [0.25, 0.18, 0.1], size: 0.09, col: [0.9, 1.0, 0.55], alpha: 0.7 },
+    { kind: 'mote', count: 22, box: [44, 3, 34], vel: [0.7, 0.03, 0.25], size: 3.6, col: [0.72, 0.84, 0.78], alpha: 0.06 },
+  ] },
+};
+
 export const getTheme = id => THEMES[id] || THEMES.railyard;
 
 // Railyard defaults, kept for anything that wants them statically.

@@ -57,6 +57,28 @@ const IMPACT = {
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
+// A pool with no instances issues no draw call, so the GPU only builds its pipeline (and on iOS, finishes compiling
+// its shaders) the first time something is in it: the first throw, the first blast. That is a visible hitch. During
+// the first frames of a match every pool listed here draws one invisible instance instead: slot 0 of an instanced
+// mesh is a zero matrix, and a fresh attribute pool is all zeros (zero size, zero alpha), so nothing shows.
+const NOOP = () => {};
+export function prewarm(objects, frames = 3) {
+  for (const o of objects) {
+    let left = frames;
+    o.onBeforeRender = function () {
+      if (this.isInstancedMesh) { if (this.count === 0) { this.count = 1; this._warming = true; } }
+      else if (this.geometry.isInstancedBufferGeometry && this.geometry.instanceCount === 0) { this.geometry.instanceCount = 1; this._warming = true; }
+    };
+    o.onAfterRender = function () {
+      if (this._warming) {
+        if (this.isInstancedMesh) this.count = 0; else this.geometry.instanceCount = 0;
+        this._warming = false;
+      }
+      if (--left <= 0) { this.onBeforeRender = NOOP; this.onAfterRender = NOOP; }
+    };
+  }
+}
+
 // Premultiplied blending lets one draw mix additive glow (alpha 0) with solid smoke (alpha 1).
 const PREMULT = {
   transparent: true, depthWrite: false,
@@ -92,6 +114,8 @@ export class VFX {
     this._buildPops();
     this._buildMarks();
     this._buildRockets();
+    for (const m of [this.shellMesh, this.shardMesh, this.flashMesh, this.ballMesh, this.rocketMesh]) m.instanceMatrix.array.fill(0);
+    prewarm([this.tracerMesh, this.partMesh, this.shellMesh, this.shardMesh, this.flashMesh, this.ballMesh, this.ringMesh, this.markMesh, this.rocketMesh]);
   }
 
   // Emission count for a burst, respecting the quality step and never below one.
@@ -101,6 +125,7 @@ export class VFX {
     // Premultiplied: darker than the ground colour itself so overlapping puffs build to dust, not to white.
     this.dustRGB = theme.ink && theme.ink.dirt ? theme.ink.dirt.map(c => Math.min(1, c * 0.62)) : this.dustRGB;
     this.wet = !!theme.wet;
+    this.voidWater = !!theme.void;      // Topside's 'water' is a hole in the slab: things drop, nothing splashes.
   }
 
   // Cuts to or from a replay: nothing from the old timeline should still be in the air.
@@ -436,6 +461,10 @@ export class VFX {
   }
 
   waterSplash(x, z, k = 1) {
+    if (this.voidWater) {
+      for (let i = this._n(4 * k); i > 0; i--) this.spawn(x + rand(-0.3, 0.3), -0.2, z + rand(-0.3, 0.3), rand(-0.5, 0.5), rand(-1.5, -0.4), rand(-0.5, 0.5), rand(0.4, 0.7), 0.12, 0.4, this.dustRGB, 0.5, 4, 1.5);
+      return;
+    }
     for (let i = this._n(9 * k); i > 0; i--) {
       const a = rand(0, Math.PI * 2), s = rand(0.3, 1.8);
       this.spawn(x, -0.55, z, Math.cos(a) * s, rand(2.5, 6) * (0.6 + k * 0.5), Math.sin(a) * s, rand(0.3, 0.55), 0.09, 0.03, WATER, 0.65, 15, 0.4, 0.03);
@@ -876,7 +905,7 @@ export class VFX {
 
   /* ---------- Ground rings and scorch marks ---------- */
   _buildRings() {
-    const sides = 14, pos = [], rad = [], off = [];
+    const sides = 28, pos = [], rad = [], off = [];
     for (let i = 0; i < sides; i++) {
       const a0 = (i / sides) * Math.PI * 2, a1 = ((i + 1) / sides) * Math.PI * 2;
       const q = (ang, r, cross) => { pos.push(Math.cos(ang), 0, Math.sin(ang)); rad.push(r); off.push(cross); };

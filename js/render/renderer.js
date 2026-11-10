@@ -8,7 +8,7 @@ import { Weather } from './weather.js';
 import { FogMask, castRay } from './fog.js';
 import { Characters } from './characters.js';
 import { VFX, GUN_FX } from './vfx.js';
-import { CombatFX, GUNSHIP_Y } from './combat.js';
+import { CombatFX, GUNSHIP_Y, CHOPPER_Y } from './combat.js';
 import { Surfaces } from './surfaces.js';
 import { Props } from './props.js';
 import { Ambient } from './ambient.js';
@@ -384,7 +384,7 @@ export class GameRenderer {
           break;
         }
         case 'gunship_shot': {
-          vfx.tracer(ev.ox, GUNSHIP_Y, ev.oz, ev.x, 1.05, ev.z, GUNSHIP_TRACER, 0.16);
+          vfx.tracer(ev.ox, ev.kind === 'chopper' ? CHOPPER_Y - 0.4 : GUNSHIP_Y, ev.oz, ev.x, 1.05, ev.z, GUNSHIP_TRACER, 0.16);
           vfx.sparks(ev.x, 0.5, ev.z, 0, 0, FIRE_SPARK, 4, 8);
           vfx.pop(ev.x, 1.2, ev.z, 3, GUNSHIP_TRACER, 0.1);
           break;
@@ -627,6 +627,7 @@ export class GameRenderer {
     opts.localId = localId; opts.localTeam = localTeam; opts.uav = uav; opts.revealAll = !!this.finalKill || !!cine;
     this.chars.update(view, fxDt, opts);
     this._handleEvents(events, localId, localTeam);
+    this.combat.onEvents(events, localId, localTeam);
     this.vfx.step(fxDt);
     this.combat.smokeAlpha = cine ? 0.16 : 1;
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);

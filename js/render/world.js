@@ -287,7 +287,8 @@ const scale = (c, k) => c.map(v => v * k);
 // off-map views. Grid lines snap to basin edges so basins are clean rectangular holes.
 function ground(ctx) {
   const { b, map, theme, noise, rnd, W, H } = ctx;
-  const pad = 28, cell = 1.5;
+  // A rooftop has nothing around it at ground level: the slab stops just under its own parapet.
+  const pad = theme.void ? 1.6 : 28, cell = 1.5;
   const nx = Math.ceil((W + pad * 2) / cell), nz = Math.ceil((H + pad * 2) / cell);
   const xs = [], zs = [], fixedX = new Set(), fixedZ = new Set();
   for (let i = 0; i <= nx; i++) xs.push(-pad + i * cell);
@@ -297,7 +298,7 @@ function ground(ctx) {
     for (const v of [w.x, w.x + w.w]) { const k = Math.round((v + pad) / cell); xs[k] = v; fixedX.add(k); }
     for (const v of [w.z, w.z + w.d]) { const k = Math.round((v + pad) / cell); zs[k] = v; fixedZ.add(k); }
   }
-  const amp = theme.id === 'dust' ? 0.28 : 0.12;
+  const amp = theme.id === 'dust' ? 0.28 : theme.id === 'frost' ? 0.2 : theme.void ? 0.03 : 0.12;
   const pts = [];
   for (let j = 0; j <= nz; j++) {
     const row = [];
@@ -369,6 +370,49 @@ function groundShader(ctx) {
       ctx.groundWet = puddle ? 1 : gutter ? 0.8 : 0.6;
       if (puddle) return scale(INK.asphalt, 0.6);
       return scale(gutter ? INK.gravel : INK.ground, 0.8 + noise(x * 0.9, z * 0.9) * 0.28 + (rnd() - 0.5) * 0.06);
+    };
+  }
+  if (theme.id === 'frost') {
+    // Snow, with dark ballast down every track and ploughed slush along the lanes.
+    const tracks = ctx.tracks;
+    return p => {
+      const [x, , z] = p;
+      if (!inMap(x, z)) return scale(INK.ground, 0.8 + noise(x * 0.15, z * 0.15) * 0.18);
+      let dT = 99;
+      for (const tx of tracks) dT = Math.min(dT, Math.abs(x - tx));
+      if (dT < 1.6) return scale(INK.gravel, 0.84 + noise(x * 1.3, z * 1.3) * 0.26 + (rnd() - 0.5) * 0.06);
+      const ploughed = laneDist(z) < 1.5 && noise(x * 0.2, z * 0.2) > 0.32;
+      return scale(ploughed ? INK.dirt : INK.ground, 0.9 + noise(x * 0.6, z * 0.6) * 0.16 + (rnd() - 0.5) * 0.04);
+    };
+  }
+  if (theme.id === 'topside') {
+    // Poured slab: bays of slightly different concrete, with dust and cement stains.
+    return p => {
+      const [x, , z] = p;
+      if (!inMap(x, z)) return scale(INK.concrete, 0.66);
+      const bay = (Math.floor(x / 11.33) + Math.floor(z / 11)) % 2;
+      const stain = noise(x * 0.22 + 4, z * 0.22) > 0.63;
+      const base = stain ? INK.dirt : bay ? INK.ground : INK.asphalt;
+      return scale(base, 0.93 + noise(x * 0.7, z * 0.7) * 0.13 + (rnd() - 0.5) * 0.04);
+    };
+  }
+  if (theme.id === 'sunken') {
+    // Moss and leaf litter on the banks, worn paving inside the moat ring, mud and puddles at the water.
+    const waters = map.walls.filter(w => w.kind === 'water');
+    const ring = waters.reduce((r, w) => [Math.min(r[0], w.x), Math.min(r[1], w.z), Math.max(r[2], w.x + w.w), Math.max(r[3], w.z + w.d)], [W, H, 0, 0]);
+    const toWater = (x, z) => { let d = 99; for (const w of waters) d = Math.min(d, Math.hypot(Math.max(w.x - x, 0, x - w.x - w.w), Math.max(w.z - z, 0, z - w.z - w.d))); return d; };
+    return p => {
+      const [x, , z] = p;
+      if (!inMap(x, z)) { ctx.groundWet = 0.2; return scale(INK.ground, 0.62 + noise(x * 0.2, z * 0.2) * 0.22); }
+      const paved = x > ring[0] && x < ring[2] && z > ring[1] && z < ring[3];
+      const dW = toWater(x, z);
+      const puddle = noise(x * 0.4 + 7, z * 0.4) > 0.66;
+      ctx.groundWet = puddle ? 1 : dW < 1.4 ? 0.7 : 0.15;
+      if (puddle) return scale(INK.dirt, 0.55);
+      let base = paved ? ((Math.floor(x / 1.5) + Math.floor(z / 1.5)) % 3 === 0 ? INK.gravel : INK.asphalt)
+        : dW < 1.4 ? INK.dirt : noise(x * 0.12 + 2, z * 0.12) > 0.62 ? INK.moss : INK.ground;
+      if (paved && noise(x * 0.5, z * 0.5 + 9) > 0.66) base = INK.moss;
+      return scale(base, 0.92 + noise(x * 0.8, z * 0.8) * 0.14 + (rnd() - 0.5) * 0.04);
     };
   }
   // dust: warm sand with ripples, darker packed tracks down the lanes.
@@ -517,6 +561,7 @@ function quayEdges(ctx, w) {
 function waterMesh(ctx, fogUniforms) {
   const { map, theme } = ctx;
   const pos = [];
+  if (!theme.water) return null;          // A void is a hole, drawn by its dresser.
   for (const w of map.walls) {
     if (w.kind !== 'water') continue;
     const y = WATER_Y;
@@ -1187,6 +1232,1046 @@ function dustDecor(ctx) {
   for (let i = 0; i < 26; i++) b.prismY(0, 0.5 + rnd() * 0.4, -6 + rnd() * (W + 12), H + 1.5 + rnd() * 3, 0.5, 0.08, 5, rnd() * 3);
 }
 
+// ---- Sky -----------------------------------------------------------------------------------------------
+
+// A ring of additive gradient quads around the map, close enough to stay inside the camera's far plane, so a
+// high camera sees a horizon instead of the clear colour. `sky` is {low, mid, high, warm, warmDir:[x,z]}: the
+// horizon band is tinted toward `warm` on the side the light comes from. Costs no draw call (glow batch).
+function skyRing(ctx, sky) {
+  const { glow, W, H } = ctx;
+  const cx = W / 2, cz = H / 2, R = Math.max(W, H) * 0.5 + 34, N = 28;
+  const y0 = sky.y0 ?? -30, y1 = sky.y1 ?? 10, y2 = sky.y2 ?? 60;
+  const wd = sky.warmDir || [-1, 0], wl = Math.hypot(wd[0], wd[1]);
+  const band = a => {
+    const k = Math.max(0, (Math.cos(a) * wd[0] + Math.sin(a) * wd[1]) / wl);
+    const t = k * k;
+    return [sky.mid[0] + (sky.warm[0] - sky.mid[0]) * t, sky.mid[1] + (sky.warm[1] - sky.mid[1]) * t, sky.mid[2] + (sky.warm[2] - sky.mid[2]) * t];
+  };
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+    const p0 = [cx + Math.cos(a0) * R * 1.25, cz + Math.sin(a0) * R], p1 = [cx + Math.cos(a1) * R * 1.25, cz + Math.sin(a1) * R];
+    const m0 = band(a0), m1 = band(a1);
+    glow.quad([p0[0], y0, p0[1]], [p0[0], y1, p0[1]], [p1[0], y1, p1[1]], [p1[0], y0, p1[1]], sky.low, m0, m1, sky.low);
+    glow.quad([p0[0], y1, p0[1]], [p0[0], y2, p0[1]], [p1[0], y2, p1[1]], [p1[0], y1, p1[1]], m0, sky.high, sky.high, m1);
+  }
+}
+
+// ---- Frostline ------------------------------------------------------------------------------------------
+
+// x of every track centre-line: each row of wagons standing north-south sits on one.
+function frostTracks(map) {
+  const xs = [];
+  for (const w of map.walls) {
+    if (!w.wagon || w.across) continue;
+    const cx = Math.round((w.x + w.w / 2) * 100) / 100;
+    if (!xs.includes(cx)) xs.push(cx);
+  }
+  return xs;
+}
+
+// Snow lying on top of something: a slab slightly inside the top face, lumpy at the ends.
+function snowCap(b, x, y, z, w, d, k = 1) {
+  b.setColor(scale(INK.snow, k));
+  box3(b, x + 0.06, y, z + 0.06, w - 0.12, 0.1, d - 0.12, 0.04);
+  b.setColor(scale(INK.snow, k * 1.04));
+  box3(b, x + w * 0.2, y + 0.08, z + d * 0.2, w * 0.6, 0.07, d * 0.6, 0.03);
+}
+
+function frostLights(ctx) {
+  const { lamps, glow, W, H } = ctx;
+  const sodium = [1.0, 0.62, 0.26];
+  // Yard masts stand just off the map; their pools are what lights the snow between the wagons.
+  ctx.masts = [];
+  for (let x = 9; x < W; x += 17) {
+    ctx.masts.push([x, -1.1], [W - x, H + 1.1]);
+    lamps.push({ x, z: 3.5, r: 12 }, { x: W - x, z: H - 3.5, r: 12 });
+    glow.halo(x, 3.5, 8.5, scale(sodium, 0.17));
+    glow.halo(W - x, H - 3.5, 8.5, scale(sodium, 0.17));
+  }
+  for (const w of ctx.map.walls) if (w.landmark) {
+    lamps.push({ x: w.x + w.w / 2, z: w.z + w.d + 2, r: 8, col: [0.42, 0.3, 0.14] });
+    glow.halo(w.x + w.w / 2, w.z + w.d + 1.6, 5, scale(sodium, 0.1));
+  }
+}
+
+function frostPaint(ctx) {
+  const { b, map, rnd, W, H } = ctx;
+  const blocked = (x, z, pad = 0.2) => map.walls.some(w => w.kind !== 'border' && x > w.x - pad && x < w.x + w.w + pad && z > w.z - pad && z < w.z + w.d + pad);
+  // Rails and sleepers down every track, running out under the snow beyond the yard.
+  for (const tx of ctx.tracks) {
+    for (let z = -6; z < H + 6; z += 1.05) {
+      if (blocked(tx, z)) continue;
+      b.setColor(INK.tie);
+      box3(b, tx - 1.15, 0.02, z, 2.3, 0.1, 0.32);
+    }
+    for (const dx of [-0.72, 0.72]) {
+      b.setColor(INK.rail);
+      let start = null;
+      for (let z = -26; z < H + 26.5; z += 0.5) {
+        const free = !blocked(tx + dx, z, 0.05);
+        if (free && start === null) start = z;
+        if (!free && start !== null) { box3(b, tx + dx - 0.06, 0.1, start, 0.12, 0.08, z - start); start = null; }
+      }
+      if (start !== null) box3(b, tx + dx - 0.06, 0.1, start, 0.12, 0.08, H + 26 - start);
+    }
+  }
+  // Drifts banked against the windward (north-west) faces of anything solid.
+  for (const w of map.walls) {
+    if (!w.blocksVision || w.kind === 'border') continue;
+    b.setColor(scale(INK.snow, 0.92));
+    for (let x = w.x - 0.3; x < w.x + w.w; x += 0.9) if (rnd() < 0.8) b.groundRect(x, w.z - 0.55 - rnd() * 0.25, 0.8, 0.5, 0.05);
+    for (let z = w.z; z < w.z + w.d; z += 0.9) if (rnd() < 0.8) b.groundRect(w.x - 0.55 - rnd() * 0.25, z, 0.5, 0.8, 0.05);
+  }
+  // Boot prints and tyre ruts in the slush along the lanes.
+  b.setColor(scale(INK.asphalt, 0.95));
+  for (const lane of map.lanes) {
+    let zc = lane.z - 0.7;
+    for (let x = 1; x < W - 1; x += 0.8) {
+      zc += (rnd() - 0.5) * 0.25; zc += (lane.z - 0.7 - zc) * 0.05;
+      if (blocked(x, zc) || rnd() < 0.15) continue;
+      b.groundRect(x, zc - 0.08, 0.7, 0.16, 0.04);
+      b.groundRect(x, zc + 1.3, 0.7, 0.16, 0.04);
+    }
+  }
+}
+
+// Bogies, frame and buffers. Local frame: u along the wagon, v across it.
+function wagonRunningGear(b, L, T) {
+  for (const u of [1.25, L - 1.25]) {
+    b.setColor(0x1d1f25);
+    box3(b, u - 0.95, 0.14, 0.3, 1.9, 0.36, T - 0.6);
+    b.setColor(0x2b2d33);
+    // One wheel showing each side of a bogie is all the top-down camera can tell apart.
+    b.prismZ(0.08, 0.3, u, 0.36, 0.4, 0.4, 6);
+    b.prismZ(T - 0.3, T - 0.08, u, 0.36, 0.4, 0.4, 6);
+  }
+  b.setColor(0x24262c);
+  box3(b, 0.1, 0.5, 0.25, L - 0.2, 0.28, T - 0.5);
+  b.setColor(0x3a3d44);
+  for (const u of [0.0, L - 0.16]) for (const v of [0.45, T - 0.75]) box3(b, u, 0.56, v, 0.16, 0.2, 0.3);
+}
+
+function wagon(ctx, w) {
+  const { b, rnd } = ctx;
+  const across = !!w.across;
+  const L = across ? w.w : w.d, T = across ? w.d : w.w, h = w.h;
+  // Lay the local frame onto the footprint: u runs along the wagon, v across it.
+  b.matrix = across ? new THREE.Matrix4().makeTranslation(w.x, 0, w.z)
+    : new THREE.Matrix4().makeTranslation(w.x + w.w, 0, w.z).multiply(new THREE.Matrix4().makeRotationY(-Math.PI / 2));
+  wagonRunningGear(b, L, T);
+  const base = hexRGB(CONTAINER_COLORS[Math.floor(rnd() * CONTAINER_COLORS.length)]);
+  if (w.wagon === 'tank') {
+    const r = Math.min(T / 2 - 0.06, (h - 0.82) / 2), cy = 0.8 + r;
+    b.setColor(scale(base, 0.55));
+    b.prismX(0.45, L - 0.45, cy, T / 2, r, r, 10, Math.PI / 10);
+    b.prismX(0.12, 0.45, cy, T / 2, r * 0.62, r, 10, Math.PI / 10);
+    b.prismX(L - 0.45, L - 0.12, cy, T / 2, r, r * 0.62, 10, Math.PI / 10);
+    b.setColor(scale(base, 0.7));
+    for (const u of [L * 0.3, L * 0.7]) b.prismX(u - 0.07, u + 0.07, cy, T / 2, r + 0.03, r + 0.03, 10, Math.PI / 10);
+    b.setColor(0x34363c);
+    b.prismY(cy + r - 0.1, cy + r + 0.3, L / 2, T / 2, 0.36, 0.3, 8);
+    b.setColor(INK.hazardY);
+    box3(b, 0.5, cy - 0.12, -0.02, 1.0, 0.24, 0.04);
+    box3(b, L - 1.5, cy - 0.12, T - 0.02, 1.0, 0.24, 0.04);
+    b.setColor(INK.snow);
+    box3(b, 0.7, cy + r - 0.06, T / 2 - 0.42, L - 1.4, 0.1, 0.84, 0.04);
+    box3(b, L / 2 - 0.3, cy + r + 0.28, T / 2 - 0.3, 0.6, 0.06, 0.6);
+  } else if (w.wagon === 'loco') {
+    const red = [0.5, 0.15, 0.12];
+    b.setColor(red);
+    box3(b, 1.0, 0.8, 0.4, L - 3.2, 1.55, T - 0.8, 0.06);
+    b.setColor(INK.hazardY);
+    box3(b, 1.0, 0.8, 0.36, L - 3.2, 0.22, T - 0.72);
+    b.setColor(scale(red, 0.85));
+    box3(b, L - 2.25, 0.8, 0.12, 2.1, h - 0.8, T - 0.24, 0.05);
+    b.setColor(0x2a2c32);
+    box3(b, L - 2.35, h - 0.08, 0.05, 2.3, 0.12, T - 0.1);
+    emissive(b, () => {
+      b.setColor(scale(INK.glow, 0.85));
+      box3(b, L - 2.0, h - 1.1, -0.02, 1.6, 0.55, 0.04);
+      box3(b, L - 2.0, h - 1.1, T - 0.02, 1.6, 0.55, 0.04);
+      b.setColor([1, 0.96, 0.82]);
+      box3(b, -0.02, 1.7, T / 2 - 0.5, 0.04, 0.22, 0.22);
+      box3(b, -0.02, 1.7, T / 2 + 0.28, 0.04, 0.22, 0.22);
+      b.setColor([1, 0.2, 0.15]);
+      box3(b, L - 0.02, 1.2, 0.3, 0.04, 0.16, 0.16);
+    });
+    b.setColor(0x24262c);
+    b.prismY(2.35, 2.75, 2.0, T / 2, 0.14, 0.12, 6);
+    // Hazard chevrons on both ends.
+    for (const u of [0.02, L - 0.06]) for (let k = 0; k < 4; k++) {
+      b.setColor(k % 2 ? INK.hazardK : INK.hazardY);
+      box3(b, u, 0.62, 0.3 + k * (T - 0.6) / 4, 0.04, 0.16, (T - 0.6) / 4);
+    }
+    snowCap(b, 1.0, 2.35, 0.4, L - 3.2, T - 0.8);
+    snowCap(b, L - 2.3, h + 0.04, 0.05, 2.2, T - 0.1);
+    ctx.glow.streak(across ? w.x - 0.3 : w.x + w.w / 2, across ? w.z + w.d / 2 : w.z - 0.3, 1.6, 4, [0.22, 0.2, 0.15], 0.08);
+  } else {
+    // Box wagon: ribbed sides, a sliding door each side, snow on the roof.
+    b.setColor(base);
+    box3(b, 0.1, 0.78, 0.06, L - 0.2, h - 0.95, T - 0.12);
+    b.setColor(scale(base, 1.16));
+    for (let u = 0.4; u < L - 0.3; u += 0.95) {
+      box3(b, u, 0.82, 0.02, 0.1, h - 1.05, 0.05);
+      box3(b, u, 0.82, T - 0.07, 0.1, h - 1.05, 0.05);
+    }
+    b.setColor(scale(base, 0.68));
+    box3(b, L / 2 - 0.85, 0.86, 0.0, 1.7, h - 1.2, 0.07);
+    box3(b, L / 2 - 0.85, 0.86, T - 0.07, 1.7, h - 1.2, 0.07);
+    b.setColor(0xd2cab8);
+    box3(b, 0.6, h - 0.75, -0.01, 1.1, 0.32, 0.03);
+    box3(b, L - 1.7, h - 0.75, T - 0.02, 1.1, 0.32, 0.03);
+    b.setColor(scale(base, 0.8));
+    box3(b, 0.04, h - 0.2, 0.02, L - 0.08, 0.14, T - 0.04);
+    snowCap(b, 0.04, h - 0.07, 0.02, L - 0.08, T - 0.04);
+    // Icicles along the eaves of the long, camera-facing side.
+    b.setColor(INK.ice);
+    for (let u = 0.6; u < L - 0.4; u += 0.9 + rnd() * 0.7) b.prismY(h - 0.55 - rnd() * 0.3, h - 0.2, u, T + 0.01, 0.0, 0.05, 3);
+  }
+  b.matrix = null;
+}
+
+// Snowbank: lumpy mound of ploughed snow, nothing sticking out of its footprint.
+function snowbank(ctx, w) {
+  const { b, rnd } = ctx;
+  const long = w.w >= w.d, L = long ? w.w : w.d, T = long ? w.d : w.w;
+  const n = Math.max(2, Math.round(L / 0.8));
+  for (let i = 0; i < n; i++) {
+    const s = (i + 0.5) * (L / n), r = T * (0.42 + rnd() * 0.08), top = w.h * (0.75 + rnd() * 0.25);
+    b.setColor(scale(INK.snow, 0.9 + rnd() * 0.12));
+    const cx = long ? w.x + s : w.x + w.w / 2, cz = long ? w.z + w.d / 2 : w.z + s;
+    b.prismY(0, top * 0.6, cx, cz, Math.min(r * 1.15, T / 2), r, 7, rnd());
+    b.prismY(top * 0.6, top, cx, cz, r, r * 0.35, 7, rnd());
+  }
+}
+
+function frostWall(ctx, w) {
+  concreteWall(ctx.b, w);
+  snowCap(ctx.b, w.x - 0.04, w.h, w.z - 0.04, w.w + 0.08, w.d + 0.08);
+}
+
+function frostCrate(ctx, w) {
+  crate(ctx.b, w, ctx.rnd);
+  snowCap(ctx.b, w.x, w.h, w.z, w.w, w.d);
+}
+
+function frostBarrier(ctx, w) {
+  barrier(ctx.b, w);
+  const long = w.w >= w.d;
+  ctx.b.setColor(INK.snow);
+  if (long) box3(ctx.b, w.x + 0.1, w.h, w.z + w.d * 0.3, w.w - 0.2, 0.08, w.d * 0.4);
+  else box3(ctx.b, w.x + w.w * 0.3, w.h, w.z + 0.1, w.w * 0.4, 0.08, w.d - 0.2);
+}
+
+// Pitched roof along the long axis, with snow on it.
+function snowRoof(b, x, y, z, w, d, rise, over = 0.25) {
+  const ew = w >= d;
+  b.setColor(INK.roof);
+  if (ew) {
+    b.loft([
+      [[x - over, y, z - over], [x - over, y + rise, z + d / 2], [x - over, y, z + d + over]],
+      [[x + w + over, y, z - over], [x + w + over, y + rise, z + d / 2], [x + w + over, y, z + d + over]],
+    ]);
+  } else {
+    b.loft([
+      [[x - over, y, z - over], [x + w / 2, y + rise, z - over], [x + w + over, y, z - over]],
+      [[x - over, y, z + d + over], [x + w / 2, y + rise, z + d + over], [x + w + over, y, z + d + over]],
+    ]);
+  }
+}
+
+function frostBuilding(ctx, w) {
+  const { b, glow, lamps } = ctx;
+  const { x, z, w: bw, d: bd, h } = w;
+  if (w.landmark) {
+    // Signal box: brick locking room below, a glazed cabin above with the lever frame lit inside.
+    b.setColor(INK.wall);
+    box3(b, x, 0, z, bw, h * 0.5, bd);
+    b.setColor(scale(INK.wall, 0.8));
+    box3(b, x - 0.05, 0, z - 0.05, bw + 0.1, 0.4, bd + 0.1);
+    b.setColor(INK.timber);
+    box3(b, x - 0.12, h * 0.5, z - 0.12, bw + 0.24, h * 0.5 - 0.35, bd + 0.24);
+    emissive(b, () => {
+      b.setColor(INK.glow);
+      for (const [fx, fz, fw, fd] of [[x + 0.3, z + bd + 0.12, bw - 0.6, 0.04], [x + 0.3, z - 0.16, bw - 0.6, 0.04], [x - 0.16, z + 0.3, 0.04, bd - 0.6], [x + bw + 0.12, z + 0.3, 0.04, bd - 0.6]]) {
+        box3(b, fx, h * 0.5 + 0.35, fz, fw, h * 0.32, fd);
+      }
+    });
+    b.setColor(INK.timber);
+    for (let u = 0.3; u < bw - 0.1; u += 1.1) box3(b, x + u, h * 0.5 + 0.3, z + bd + 0.1, 0.12, h * 0.36, 0.1);
+    snowRoof(b, x - 0.1, h - 0.35, z - 0.1, bw + 0.2, bd + 0.2, 1.1);
+    b.setColor(INK.snow);
+    box3(b, x - 0.2, h + 0.6, z + bd / 2 - 0.15, bw + 0.4, 0.14, 0.3);
+    // Name board and a chimney.
+    b.setColor(0x1f2a3a);
+    box3(b, x + bw / 2 - 1.2, h * 0.5 - 0.1, z + bd + 0.12, 2.4, 0.4, 0.05);
+    b.setColor(scale(INK.wall, 0.9));
+    box3(b, x + bw - 1.1, h - 0.2, z + 0.8, 0.6, 1.8, 0.6);
+    glow.streak(x + bw / 2, z + bd + 0.3, 3.5, 4.5, scale(INK.glow, 0.14), 0.08);
+    return;
+  }
+  if (w.stage) {
+    // Coal stage: a timber trestle with a heap of coal on it, and a chute.
+    b.setColor(INK.timber);
+    box3(b, x, 0, z, bw, h * 0.55, bd);
+    b.setColor(scale(INK.timber, 1.25));
+    for (let u = 0.3; u < bw; u += 0.9) box3(b, x + u, 0, z + bd, 0.16, h * 0.55, 0.06);
+    b.setColor(INK.coal);
+    b.prismY(h * 0.55, h, x + bw / 2, z + bd / 2, Math.min(bw, bd) * 0.62, Math.min(bw, bd) * 0.18, 7, 0.3);
+    b.setColor(INK.snow);
+    b.prismY(h - 0.05, h + 0.06, x + bw / 2, z + bd / 2, Math.min(bw, bd) * 0.2, Math.min(bw, bd) * 0.05, 7, 0.3);
+    b.setColor(scale(INK.timber, 0.7));
+    box3(b, x + bw * 0.3, h * 0.35, z + bd, 1.0, 0.16, 0.9);
+    return;
+  }
+  if (w.tower) {
+    // Water tower: brick base, riveted tank, conical snow-covered roof, and the filling arm.
+    b.setColor(INK.wall);
+    box3(b, x + 0.15, 0, z + 0.15, bw - 0.3, 1.9, bd - 0.3);
+    b.setColor(0x3a4450);
+    b.prismY(1.9, h - 0.1, x + bw / 2, z + bd / 2, bw / 2, bw / 2, 10, Math.PI / 10);
+    b.setColor(0x2e3640);
+    for (const y of [2.3, 2.9]) b.prismY(y, y + 0.07, x + bw / 2, z + bd / 2, bw / 2 + 0.03, bw / 2 + 0.03, 10, Math.PI / 10);
+    b.setColor(INK.snow);
+    b.prismY(h - 0.1, h + 0.9, x + bw / 2, z + bd / 2, bw / 2 + 0.1, 0.12, 10, Math.PI / 10);
+    b.setColor(0x24262c);
+    box3(b, x + bw - 0.2, h - 0.8, z + bd / 2 - 0.1, 1.2, 0.2, 0.2);
+    return;
+  }
+  // Relay hut and the lamp-room sheds: brick or concrete, a snowy pitched roof, one lit window.
+  b.setColor(w.hut ? INK.concrete : INK.wall);
+  box3(b, x, 0, z, bw, h - 0.4, bd);
+  b.setColor(INK.trim);
+  box3(b, x - 0.04, 0, z - 0.04, bw + 0.08, 0.3, bd + 0.08);
+  snowRoof(b, x, h - 0.4, z, bw, bd, 0.65, 0.18);
+  if (w.hut) {
+    b.setColor(0x31404e);
+    box3(b, x + bw / 2 - 0.35, 0, z + bd + 0.01, 0.7, 1.7, 0.05);
+    emissive(b, () => { b.setColor([1, 0.22, 0.16]); box3(b, x + bw - 0.4, h - 0.8, z + bd + 0.02, 0.16, 0.16, 0.04); });
+  } else {
+    emissive(b, () => { b.setColor(INK.glow); box3(b, x + bw + 0.01, 1.2, z + bd / 2 - 0.5, 0.04, 0.6, 1.0); });
+    lamps.push({ x: x + bw + 1.5, z: z + bd / 2, r: 4.5, col: [0.32, 0.22, 0.1] });
+  }
+}
+
+function frostBorder(ctx, w) {
+  border(ctx.b, w);
+  snowCap(ctx.b, w.x - 0.2, w.h + 0.3, w.z - 0.2, w.w + 0.4, w.d + 0.4, 0.95);
+}
+
+function pine(b, x, z, hgt, rnd) {
+  b.setColor(INK.timber);
+  b.prismY(0, hgt * 0.25, x, z, 0.18, 0.14, 4);
+  const tiers = 3;
+  for (let i = 0; i < tiers; i++) {
+    const y0 = hgt * (0.18 + i * 0.24), y1 = y0 + hgt * 0.42, r = hgt * (0.3 - i * 0.07);
+    b.setColor([0.12, 0.2, 0.2]);
+    b.prismY(y0, y1, x, z, r, 0.02, 6, rnd() * 3);
+    b.setColor(scale(INK.snow, 0.9));
+    b.prismY(y1 - hgt * 0.16, y1 - hgt * 0.06, x, z, r * 0.42, r * 0.14, 5, rnd() * 3);
+  }
+}
+
+function frostDecor(ctx) {
+  const { b, glow, rnd, W, H } = ctx;
+  // Yard lamp masts.
+  for (const [x, z] of ctx.masts) {
+    const s = z < 0 ? 1 : -1;
+    b.setColor(0x3c424c);
+    b.prismY(4, 8.2, x, z, 0.14, 0.1, 6);
+    b.setColor(0x2c3038);
+    box3(b, x - 0.9, 8.1, z + (s > 0 ? -0.2 : -0.25), 1.8, 0.14, 0.45);
+    emissive(b, () => { b.setColor([1.0, 0.72, 0.4]); box3(b, x - 0.75, 8.0, z + (s > 0 ? 0.1 : -0.36), 1.5, 0.06, 0.26); });
+  }
+  // A long freight standing on the through road north of the yard, and a goods shed south.
+  for (let x = -24; x < W + 20; x += 9.4) {
+    const c = hexRGB(CONTAINER_COLORS[Math.floor(rnd() * CONTAINER_COLORS.length)]);
+    b.setColor(scale(c, 0.62));
+    box3(b, x, 0.7, -7.4, 8.8, 2.4, 2.6);
+    b.setColor(scale(INK.snow, 0.85));
+    box3(b, x + 0.1, 3.1, -7.3, 8.6, 0.12, 2.4);
+    b.setColor(0x1d1f25);
+    box3(b, x + 0.6, 0.1, -7.1, 7.6, 0.6, 2.0);
+  }
+  b.setColor(scale(INK.wall, 0.55));
+  box3(b, -8, 0, H + 6, W + 16, 4.5, 8);
+  snowRoof(b, -8, 4.5, H + 6, W + 16, 8, 1.6);
+  emissive(b, () => {
+    b.setColor(scale(INK.glow, 0.7));
+    for (let x = -4; x < W + 6; x += 6.5) box3(b, x, 1.6, H + 5.98, 1.6, 1.0, 0.04);
+  });
+  for (let x = -4; x < W + 6; x += 6.5) glow.streak(x + 0.8, H + 5.2, 1.6, -3, scale(INK.glow, 0.08), 0.08);
+  skyRing(ctx, { low: [0.03, 0.05, 0.09], mid: [0.08, 0.12, 0.2], warm: [0.2, 0.26, 0.38], high: [0.01, 0.02, 0.05], warmDir: [-0.4, -1], y0: -6, y1: 8, y2: 50 });
+  // Snowed-in pines round the edges.
+  for (let i = 0; i < 52; i++) {
+    const side = i % 4;
+    const t = rnd();
+    let x, z;
+    if (side === 0) { x = -26 + t * (W + 52); z = -11 - rnd() * 14; }
+    else if (side === 1) { x = -26 + t * (W + 52); z = H + 15 + rnd() * 12; }
+    else if (side === 2) { x = -5 - rnd() * 18; z = -8 + t * (H + 16); }
+    else { x = W + 5 + rnd() * 18; z = -8 + t * (H + 16); }
+    pine(b, x, z, 4 + rnd() * 4.5, rnd);
+  }
+}
+
+// ---- Topside -------------------------------------------------------------------------------------------
+
+const VOID_FLOOR = -3.4;        // The floor below, seen through a light well.
+const STREET_Y = -46;           // The city, a long way down.
+
+function topsideLights(ctx) {
+  const { map, lamps, glow, W, H } = ctx;
+  // Work lights on stands: weak against the low sun, but they warm the shadow side of the cores.
+  ctx.workLights = [];
+  for (const w of map.walls) {
+    if (w.kind !== 'building') continue;
+    const x = w.x + w.w / 2, z = w.z + w.d + 1.2;
+    if (z > H - 1) continue;
+    ctx.workLights.push([x, z - 0.6]);
+    lamps.push({ x, z: z + 1, r: 6 });
+    glow.halo(x, z + 0.6, 3.6, [0.12, 0.09, 0.05]);
+  }
+}
+
+function topsidePaint(ctx) {
+  const { b, map, rnd, W, H } = ctx;
+  const blocked = (x, z, pad = 0.2) => map.walls.some(w => w.kind !== 'border' && x > w.x - pad && x < w.x + w.w + pad && z > w.z - pad && z < w.z + w.d + pad);
+  // Saw-cut pour joints, and the setting-out chalk lines the next floor will be built on.
+  b.setColor(scale(INK.ground, 0.62));
+  for (let x = 11.33; x < W - 1; x += 11.33) for (let z = 0.3; z < H; z += 0.9) if (!blocked(x, z)) b.groundRect(x - 0.04, z, 0.08, 0.8, 0.03);
+  for (let z = 11; z < H - 1; z += 11) for (let x = 0.3; x < W; x += 0.9) if (!blocked(x, z)) b.groundRect(x, z - 0.04, 0.8, 0.08, 0.03);
+  b.setColor(scale(INK.paint, 0.9));
+  for (const w of map.walls) {
+    if (!w.column) continue;
+    const cx = w.x + w.w / 2, cz = w.z + w.d / 2;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (let s = 0.9; s < 3.2; s += 0.5) {
+        const x = cx + dx * s, z = cz + dz * s;
+        if (!blocked(x, z, 0.05)) b.groundRect(x - (dz ? 0.02 : 0.2), z - (dx ? 0.02 : 0.2), dz ? 0.04 : 0.4, dx ? 0.04 : 0.4, 0.035);
+      }
+    }
+  }
+  // Offcuts lying flat: planks, a sheet of ply, a tangle of tie wire.
+  for (let i = 0; i < 46; i++) {
+    const x = 2 + rnd() * (W - 4), z = 2 + rnd() * (H - 4);
+    if (blocked(x, z, 0.6)) continue;
+    const k = rnd();
+    if (k < 0.5) { b.setColor(scale(INK.crate, 0.8 + rnd() * 0.3)); b.groundRect(x, z, rnd() < 0.5 ? 1.6 : 0.16, rnd() < 0.5 ? 0.16 : 1.6, 0.05); }
+    else if (k < 0.75) { b.setColor(scale(INK.board, 0.8)); b.groundRect(x, z, 1.2, 0.8, 0.045); }
+    else { b.setColor(INK.rebar); b.groundRect(x, z, 0.9, 0.05, 0.05); b.groundRect(x + 0.2, z - 0.3, 0.05, 0.8, 0.05); }
+  }
+}
+
+// Steel column: an I-section with a primed foot, base plate and the stubs of tomorrow's beams.
+function steelColumn(ctx, w) {
+  const { b } = ctx;
+  const { x, z, w: cw, d: cd, h } = w;
+  b.setColor(scale(INK.concrete, 0.85));
+  box3(b, x - 0.12, 0, z - 0.12, cw + 0.24, 0.14, cd + 0.24);
+  for (const [y0, y1, c] of [[0.14, 1.0, INK.primer], [1.0, h, INK.steel]]) {
+    b.setColor(c);
+    box3(b, x, y0, z, cw, y1 - y0, 0.16);
+    box3(b, x, y0, z + cd - 0.16, cw, y1 - y0, 0.16);
+    b.setColor(scale(c, 0.78));
+    box3(b, x + cw / 2 - 0.07, y0, z + 0.16, 0.14, y1 - y0, cd - 0.32);
+  }
+  b.setColor(INK.steelD);
+  box3(b, x - 0.05, h, z - 0.05, cw + 0.1, 0.1, cd + 0.1);
+  box3(b, x + cw, h - 0.5, z + cd / 2 - 0.12, 0.5, 0.4, 0.24);
+  box3(b, x + cw / 2 - 0.12, h - 0.5, z + cd, 0.24, 0.4, 0.5);
+}
+
+// Half-built blockwork: courses of block with a stepped top where the gang stopped for the day.
+function blockwork(ctx, w) {
+  const { b, rnd } = ctx;
+  const { x, z, w: bw, d: bd, h } = w;
+  const long = bw >= bd, L = long ? bw : bd;
+  const course = 0.4, n = Math.floor(h / course);
+  for (let i = 0; i < n; i++) {
+    b.setColor(scale(i % 2 ? INK.wall : INK.wallB, 0.96 + rnd() * 0.08));
+    const y = i * course;
+    box3(b, x, y, z, bw, course - 0.03, bd);
+    b.setColor(scale(INK.wall, 0.7));
+    box3(b, x + (long ? 0 : -0.01), y + course - 0.03, z + (long ? -0.01 : 0), bw + (long ? 0 : 0.02), 0.03, bd + (long ? 0.02 : 0));
+  }
+  // The top course runs only part of the way; a few loose blocks wait on it.
+  const top = n * course, part = L * (0.4 + rnd() * 0.3);
+  b.setColor(INK.wall);
+  if (long) box3(b, x, top, z, part, h - top + 0.2, bd); else box3(b, x, top, z, bw, h - top + 0.2, part);
+  b.setColor(INK.rebar);
+  for (let s = 0.3; s < L; s += 0.8) {
+    if (long) b.prismY(top, top + 0.7, x + s, z + bd / 2, 0.025, 0.025, 4);
+    else b.prismY(top, top + 0.7, x + bw / 2, z + s, 0.025, 0.025, 4);
+  }
+}
+
+// Palletised material: plasterboard under a blue tarp, or rebar bundles on timber bearers.
+function materialStack(ctx, w) {
+  const { b, rnd } = ctx;
+  const { x, z, w: sw, d: sd, h } = w;
+  const long = sw >= sd;
+  b.setColor(INK.crate);
+  box3(b, x + 0.05, 0, z + 0.05, sw - 0.1, 0.16, sd - 0.1);
+  if (w.stack === 'rebar') {
+    const layers = 5, lh = (h - 0.2) / layers;
+    for (let i = 0; i < layers; i++) {
+      const y = 0.16 + i * lh;
+      b.setColor(INK.crateD);
+      if (long) for (const u of [0.4, sw - 0.6]) box3(b, x + u, y, z + 0.05, 0.2, 0.1, sd - 0.1);
+      else for (const u of [0.4, sd - 0.6]) box3(b, x + 0.05, y, z + u, sw - 0.1, 0.1, 0.2);
+      const n = Math.max(2, Math.floor((long ? sd : sw) / 0.45));
+      for (let k = 0; k < n; k++) {
+        b.setColor(scale(INK.rebar, 0.85 + rnd() * 0.3));
+        const off = (k + 0.5) * ((long ? sd : sw) - 0.1) / n + 0.05;
+        if (long) b.prismX(x, x + sw, y + 0.1 + lh * 0.4, z + off, lh * 0.42, lh * 0.42, 5, rnd());
+        else b.prismZ(z, z + sd, x + off, y + 0.1 + lh * 0.4, lh * 0.42, lh * 0.42, 5, rnd());
+      }
+    }
+    return;
+  }
+  const layers = 4, lh = (h - 0.2) / layers;
+  for (let i = 0; i < layers; i++) {
+    const y = 0.16 + i * lh, inset = (i % 2) * 0.04;
+    b.setColor(scale(INK.board, 0.9 + (i % 2) * 0.08));
+    box3(b, x + 0.08 + inset, y, z + 0.08 + inset, sw - 0.16 - inset * 2, lh - 0.04, sd - 0.16 - inset * 2);
+    b.setColor(INK.crateD);
+    box3(b, x + 0.08, y + lh - 0.04, z + 0.08, sw - 0.16, 0.04, sd - 0.16);
+  }
+  // The tarp is thrown over the top and hangs down the north and east faces.
+  b.setColor(INK.tarp);
+  box3(b, x + 0.02, h - 0.06, z + 0.02, sw - 0.04, 0.08, sd - 0.04);
+  box3(b, x + 0.02, h * 0.45, z - 0.01, sw - 0.04, h * 0.55 - 0.04, 0.05);
+  box3(b, x + sw - 0.04, h * 0.55, z + 0.02, 0.05, h * 0.45 - 0.04, sd - 0.04);
+  b.setColor(INK.hazardY);
+  if (long) for (const u of [0.25, 0.7]) box3(b, x + sw * u, h + 0.02, z, 0.08, 0.03, sd);
+  else for (const u of [0.25, 0.7]) box3(b, x, h + 0.02, z + sd * u, sw, 0.03, 0.08);
+}
+
+// A pallet of bricks wrapped in film.
+function brickPallet(ctx, w) {
+  const { b } = ctx;
+  const { x, z, w: pw, d: pd, h } = w;
+  b.setColor(INK.crate);
+  box3(b, x + 0.05, 0, z + 0.05, pw - 0.1, 0.15, pd - 0.1);
+  b.setColor(INK.brick);
+  box3(b, x + 0.08, 0.15, z + 0.08, pw - 0.16, h - 0.17, pd - 0.16);
+  b.setColor(scale(INK.brick, 0.72));
+  for (let y = 0.3; y < h - 0.05; y += 0.16) {
+    box3(b, x + 0.07, y, z + pd - 0.1, pw - 0.14, 0.025, 0.03);
+    box3(b, x + pw - 0.1, y, z + 0.07, 0.03, 0.025, pd - 0.14);
+  }
+  b.setColor([0.78, 0.82, 0.86]);
+  box3(b, x + 0.1, h - 0.03, z + 0.1, pw - 0.2, 0.03, pd - 0.2);
+}
+
+// Rooftop plant: a galvanised box with two fan grilles on top.
+function plantUnit(ctx, w) {
+  const { b } = ctx;
+  const { x, z, w: uw, d: ud, h } = w;
+  b.setColor([0.56, 0.6, 0.64]);
+  box3(b, x + 0.04, 0.1, z + 0.04, uw - 0.08, h - 0.12, ud - 0.08, 0.04);
+  b.setColor(0x34383e);
+  box3(b, x, 0, z, uw, 0.12, ud);
+  const long = uw >= ud;
+  for (const k of [0.28, 0.72]) {
+    const cx = long ? x + uw * k : x + uw / 2, cz = long ? z + ud / 2 : z + ud * k;
+    const r = Math.min(long ? ud : uw, (long ? uw : ud) / 2) * 0.36;
+    b.setColor(0x2a2d33);
+    b.prismY(h - 0.02, h + 0.03, cx, cz, r, r, 10);
+    b.setColor([0.44, 0.48, 0.52]);
+    box3(b, cx - r, h + 0.03, cz - 0.03, r * 2, 0.03, 0.06);
+    box3(b, cx - 0.03, h + 0.03, cz - r, 0.06, 0.03, r * 2);
+  }
+  b.setColor(0x3a3e44);
+  b.prismX(x - 0.3, x + 0.04, 0.5, z + ud / 2, 0.12, 0.12, 6);
+}
+
+function topsideBarrier(ctx, w) {
+  if (w.plant) plantUnit(ctx, w); else barrier(ctx.b, w);
+}
+
+// Light well: the cut slab face, a hazard edge, a guard rail, and the dim floor below.
+function lightWell(ctx, w) {
+  const { b, rnd } = ctx;
+  const { x, z, w: vw, d: vd } = w;
+  b.setColor(scale(INK.concrete, 0.55));
+  b.quad([x, 0, z], [x + vw, 0, z], [x + vw, VOID_FLOOR, z], [x, VOID_FLOOR, z], [x + vw / 2, -1, z - 1]);
+  b.quad([x + vw, 0, z + vd], [x, 0, z + vd], [x, VOID_FLOOR, z + vd], [x + vw, VOID_FLOOR, z + vd], [x + vw / 2, -1, z + vd + 1]);
+  b.quad([x, 0, z + vd], [x, 0, z], [x, VOID_FLOOR, z], [x, VOID_FLOOR, z + vd], [x - 1, -1, z + vd / 2]);
+  b.quad([x + vw, 0, z], [x + vw, 0, z + vd], [x + vw, VOID_FLOOR, z + vd], [x + vw, VOID_FLOOR, z], [x + vw + 1, -1, z + vd / 2]);
+  b.setColor(scale(INK.concrete, 0.3));
+  b.groundRect(x - 0.5, z - 0.5, vw + 1, vd + 1, VOID_FLOOR);
+  // Clutter on the floor below and a work lamp down there, so the hole has depth.
+  for (let i = 0; i < 4; i++) {
+    b.setColor(scale(i % 2 ? INK.board : INK.crate, 0.4));
+    box3(b, x + 0.4 + rnd() * (vw - 1.4), VOID_FLOOR, z + 0.4 + rnd() * (vd - 1.4), 0.6 + rnd() * 0.5, 0.3 + rnd() * 0.4, 0.6 + rnd() * 0.5);
+  }
+  emissive(b, () => { b.setColor(scale(INK.glow, 0.6)); box3(b, x + vw * 0.5, VOID_FLOOR + 1.6, z + 0.05, 0.4, 0.16, 0.1); });
+  ctx.glow.halo(x + vw / 2, z + 0.9, 1.8, [0.1, 0.07, 0.03], VOID_FLOOR + 0.04, 10);
+  // Hazard edge and guard rail. The rail is visual: the hole already stops feet.
+  const edge = (x0, z0, x1, z1) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(L / 0.5));
+    const dx = (x1 - x0) / L, dz = (z1 - z0) / L;
+    for (let i = 0; i < n; i++) {
+      b.setColor(i % 2 ? INK.hazardK : INK.hazardY);
+      const s = (i / n) * L, e = ((i + 1) / n) * L;
+      const ax = x0 + dx * s, az = z0 + dz * s, bx = x0 + dx * e, bz = z0 + dz * e;
+      box3(b, Math.min(ax, bx) - (dz ? 0.08 : 0), 0, Math.min(az, bz) - (dx ? 0.08 : 0), Math.abs(bx - ax) + (dz ? 0.16 : 0), 0.06, Math.abs(bz - az) + (dx ? 0.16 : 0));
+    }
+    b.setColor(INK.hazardY);
+    for (let s = 0; s <= L + 0.01; s += L / Math.max(1, Math.round(L / 1.6))) b.prismY(0, 1.0, x0 + dx * s, z0 + dz * s, 0.04, 0.04, 4);
+    b.setColor([0.86, 0.3, 0.2]);
+    box3(b, Math.min(x0, x1) - 0.03, 0.96, Math.min(z0, z1) - 0.03, Math.abs(x1 - x0) + 0.06, 0.06, Math.abs(z1 - z0) + 0.06);
+    b.setColor([0.9, 0.88, 0.84]);
+    box3(b, Math.min(x0, x1) - 0.02, 0.5, Math.min(z0, z1) - 0.02, Math.abs(x1 - x0) + 0.04, 0.05, Math.abs(z1 - z0) + 0.04);
+  };
+  edge(x, z, x + vw, z); edge(x + vw, z, x + vw, z + vd); edge(x, z + vd, x + vw, z + vd); edge(x, z, x, z + vd);
+}
+
+// Concrete cores: the lift core in the middle, and the stair cores the teams spawn behind.
+function topsideCore(ctx, w) {
+  const { b, glow } = ctx;
+  const { x, z, w: cw, d: cd, h } = w;
+  b.setColor(INK.concrete);
+  box3(b, x, 0, z, cw, h, cd);
+  b.setColor(scale(INK.concrete, 0.86));
+  for (let y = 0.9; y < h; y += 0.9) box3(b, x - 0.02, y, z - 0.02, cw + 0.04, 0.04, cd + 0.04);
+  // Formwork and props around the top where the next lift will be poured.
+  b.setColor(INK.crate);
+  box3(b, x - 0.1, h - 0.1, z - 0.1, cw + 0.2, 0.5, 0.12);
+  box3(b, x - 0.1, h - 0.1, z + cd - 0.02, cw + 0.2, 0.5, 0.12);
+  box3(b, x - 0.1, h - 0.1, z, 0.12, 0.5, cd);
+  box3(b, x + cw - 0.02, h - 0.1, z, 0.12, 0.5, cd);
+  b.setColor(INK.rebar);
+  for (let u = 0.4; u < cw - 0.2; u += 0.6) b.prismY(h, h + 1.1, x + u, z + 0.25, 0.03, 0.03, 4);
+  b.setColor(0x2c2f36);
+  box3(b, x + cw / 2 - 0.6, 0, z + cd + 0.01, 1.2, 2.1, 0.05);
+  if (w.landmark) {
+    // Hoist cage up the south face, and the lift car's light in the shaft.
+    b.setColor(INK.crane);
+    for (const u of [cw * 0.2, cw * 0.2 + 1.6]) b.prismY(0, h + 1.6, x + u, z + cd + 0.12, 0.06, 0.06, 4);
+    for (let y = 0.5; y < h + 1.6; y += 0.8) box3(b, x + cw * 0.2, y, z + cd + 0.08, 1.6, 0.06, 0.08);
+    emissive(b, () => { b.setColor(INK.glow); box3(b, x + cw * 0.2 + 0.2, 1.0, z + cd + 0.02, 1.2, 1.6, 0.04); });
+    glow.streak(x + cw * 0.2 + 0.8, z + cd + 0.2, 1.6, 3, [0.16, 0.12, 0.06], 0.05);
+    b.setColor(INK.hazardY);
+    box3(b, x + 0.2, h + 0.4, z + 0.2, cw - 0.4, 0.04, 0.3);
+  } else {
+    b.setColor(INK.hazardY);
+    box3(b, x + cw / 2 - 0.7, 2.1, z + cd + 0.01, 1.4, 0.12, 0.06);
+  }
+}
+
+// The parapet at the slab edge, and the tower's glass face falling away to the street outside it.
+function topsideEdge(ctx, w) {
+  const { b, W, H } = ctx;
+  const { x, z, w: bw, d: bd } = w;
+  const long = bw > bd;
+  b.setColor(scale(INK.concrete, 0.8));
+  box3(b, x, 0, z, bw, 0.5, bd);
+  // Edge protection: yellow posts with mesh panels.
+  const L = long ? bw : bd, n = Math.round(L / 2.4);
+  for (let i = 0; i <= n; i++) {
+    const s = (i / n) * L;
+    b.setColor(INK.hazardY);
+    if (long) box3(b, x + s - 0.05, 0.5, z + bd * 0.4, 0.1, 1.1, 0.1); else box3(b, x + bd * 0.4, 0.5, z + s - 0.05, 0.1, 1.1, 0.1);
+  }
+  b.setColor([0.3, 0.32, 0.36]);
+  if (long) { box3(b, x, 0.55, z + bd * 0.45, bw, 1.0, 0.03); box3(b, x, 1.55, z + bd * 0.4, bw, 0.06, 0.12); }
+  else { box3(b, x + bw * 0.45, 0.55, z, 0.03, 1.0, bd); box3(b, x + bw * 0.4, 1.55, z, 0.12, 0.06, bd); }
+  // The facade: curtain wall down to the street, mullions and a band of lit floors.
+  const out = long ? (z < H / 2 ? [0, -1] : [0, 1]) : (x < W / 2 ? [-1, 0] : [1, 0]);
+  const fx = out[0] < 0 ? x : out[0] > 0 ? x + bw : x, fz = out[1] < 0 ? z : out[1] > 0 ? z + bd : z;
+  b.setColor(INK.glass);
+  if (long) b.quad([x, 0, fz], [x + bw, 0, fz], [x + bw, STREET_Y, fz], [x, STREET_Y, fz], [x + bw / 2, -20, fz - out[1]]);
+  else b.quad([fx, 0, z], [fx, 0, z + bd], [fx, STREET_Y, z + bd], [fx, STREET_Y, z], [fx - out[0], -20, z + bd / 2]);
+  b.setColor(scale(INK.steel, 0.7));
+  for (let y = -0.6; y > STREET_Y; y -= 3.4) {
+    if (long) box3(b, x, y - 0.25, fz + (out[1] > 0 ? 0 : -0.2), bw, 0.25, 0.2);
+    else box3(b, fx + (out[0] > 0 ? 0 : -0.2), y - 0.25, z, 0.2, 0.25, bd);
+  }
+  emissive(b, () => {
+    for (let y = -4.4; y > STREET_Y + 4; y -= 3.4) {
+      for (let s = 0.6; s < L - 1; s += 2.2) {
+        if (((y * 7 + s * 13) | 0) % 5 > 1) continue;
+        b.setColor(scale(INK.glow, 0.35));
+        if (long) box3(b, x + s, y, fz + (out[1] > 0 ? 0.01 : -0.05), 1.6, 1.4, 0.04);
+        else box3(b, fx + (out[0] > 0 ? 0.01 : -0.05), y, z + s, 0.04, 1.4, 1.6);
+      }
+    }
+  });
+}
+
+function topsideWall(ctx, w) {
+  if (w.block) blockwork(ctx, w);
+  else { concreteWall(ctx.b, w); }
+}
+
+function topsideDecor(ctx) {
+  const { b, glow, rnd, W, H } = ctx;
+  for (const [x, z] of ctx.workLights) {
+    b.setColor(0x2c2f36);
+    for (const a of [0, 2.1, 4.2]) b.prismY(0, 1.8, x + Math.cos(a) * 0.25, z + Math.sin(a) * 0.25, 0.03, 0.03, 4);
+    b.prismY(1.8, 2.6, x, z, 0.04, 0.04, 4);
+    b.setColor(INK.hazardY);
+    box3(b, x - 0.3, 2.5, z - 0.12, 0.6, 0.36, 0.24);
+    emissive(b, () => { b.setColor([1, 0.92, 0.7]); box3(b, x - 0.25, 2.55, z + 0.12, 0.5, 0.26, 0.03); });
+  }
+  // The city: streets far below with traffic streaks, and the tops of lesser towers.
+  b.setColor([0.08, 0.07, 0.1]);
+  box3(b, -90, STREET_Y - 0.5, -90, W + 180, 0.5, H + 180);
+  emissive(b, () => {
+    for (let k = -4; k < 6; k++) {
+      const zs = H / 2 + k * 15, xs = W / 2 + k * 17;
+      b.setColor(rnd() < 0.5 ? [0.9, 0.6, 0.3] : [0.5, 0.12, 0.1]);
+      box3(b, -90, STREET_Y, zs, W + 180, 0.02, 0.3);
+      b.setColor([0.95, 0.85, 0.6]);
+      box3(b, xs, STREET_Y, -90, 0.3, 0.02, H + 180);
+    }
+  });
+  const towers = [];
+  for (let i = 0; i < 46; i++) {
+    const a = rnd() * Math.PI * 2, r = 46 + rnd() * 48;
+    const cx = W / 2 + Math.cos(a) * r * 1.2, cz = H / 2 + Math.sin(a) * r;
+    if (cx > -14 && cx < W + 14 && cz > -14 && cz < H + 14) continue;
+    const tw = 9 + rnd() * 9, td = 8 + rnd() * 8, top = -8 - rnd() * 26;
+    towers.push([cx - tw / 2, cz - td / 2, tw, td, top]);
+  }
+  for (const [tx, tz, tw, td, top] of towers) {
+    b.setColor(scale([0.32, 0.3, 0.36], 0.7 + rnd() * 0.5));
+    box3(b, tx, STREET_Y, tz, tw, top - STREET_Y, td);
+    b.setColor(scale(INK.concrete, 0.55));
+    box3(b, tx + 1, top, tz + 1, tw * 0.35, 1.2, td * 0.3);
+    emissive(b, () => {
+      b.setColor(scale(INK.glow, 0.32 + rnd() * 0.2));
+      for (let y = top - 2; y > top - 22 && y > STREET_Y + 2; y -= 2.6) {
+        if (rnd() < 0.4) box3(b, tx + 0.6, y, tz + td + 0.01, tw - 1.2, 0.5, 0.04);
+      }
+      b.setColor([1, 0.2, 0.15]);
+      box3(b, tx + tw / 2, top + 1.2, tz + td / 2, 0.25, 0.25, 0.25);
+    });
+  }
+  skyRing(ctx, { low: [0.14, 0.06, 0.08], mid: [0.5, 0.2, 0.16], warm: [1.15, 0.58, 0.2], high: [0.12, 0.06, 0.2], warmDir: [-1, -0.25], y0: STREET_Y, y1: 4, y2: 60 });
+  // A tower crane standing off the north-east corner, its jib swung away over the street.
+  const cx = W + 7, cz = -7, mastTop = 15;
+  b.setColor(INK.crane);
+  for (const [ox, oz] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) b.prismY(STREET_Y, mastTop, cx + ox, cz + oz, 0.1, 0.1, 4);
+  for (let y = -2; y < mastTop; y += 1.6) { box3(b, cx - 0.7, y, cz - 0.75, 1.4, 0.08, 0.08); box3(b, cx - 0.75, y, cz - 0.7, 0.08, 0.08, 1.4); }
+  box3(b, cx - 26, mastTop, cz - 0.5, 34, 0.7, 1.0);
+  b.setColor(scale(INK.crane, 0.8));
+  for (let x = cx - 25; x < cx + 8; x += 1.4) box3(b, x, mastTop + 0.05, cz - 0.55, 0.08, 0.6, 1.1);
+  b.setColor(0x3a3f47);
+  box3(b, cx + 4, mastTop - 1.2, cz - 1.2, 3.6, 1.6, 2.4);
+  box3(b, cx - 1.2, mastTop - 1.6, cz + 0.8, 1.4, 1.4, 1.2);
+  b.setColor(0x20242a);
+  box3(b, cx - 18, 2, cz - 0.04, 0.08, mastTop - 2, 0.08);
+  b.setColor(hexRGB(CONTAINER_COLORS[1]));
+  box3(b, cx - 19.5, 1.0, cz - 1, 3, 1.0, 2);
+  emissive(b, () => { b.setColor([1, 0.2, 0.15]); box3(b, cx - 26, mastTop + 0.75, cz - 0.15, 0.3, 0.3, 0.3); box3(b, cx - 0.15, mastTop + 2.4, cz - 0.15, 0.3, 0.3, 0.3); });
+  b.setColor(INK.crane);
+  b.prismY(mastTop, mastTop + 2.4, cx, cz, 0.5, 0.1, 4, Math.PI / 4);
+}
+
+// ---- Sunken --------------------------------------------------------------------------------------------
+
+function sunkenLights(ctx) {
+  const { map, lamps, glow } = ctx;
+  const fire = [1.0, 0.56, 0.2];
+  // Braziers stand in the water at the corners of every causeway, where nobody can walk into them,
+  // and on the shrine's lowest step.
+  ctx.braziers = [];
+  const statues = map.walls.filter(w => w.ruin === 'statue');
+  for (const q of map.walls) {
+    if (q.kind !== 'water') continue;
+    for (const [cx, cz, ix, iz] of [[q.x, q.z, 1, 1], [q.x + q.w, q.z, -1, 1], [q.x, q.z + q.d, 1, -1], [q.x + q.w, q.z + q.d, -1, -1]]) {
+      if (statues.some(s => Math.hypot(s.x + s.w / 2 - cx, s.z + s.d / 2 - cz) < 3.4)) ctx.braziers.push([cx + ix * 0.35, cz + iz * 0.35, WATER_Y + 0.1]);
+    }
+  }
+  for (const w of map.walls) if (w.landmark) ctx.braziers.push([w.x + 0.2, w.z + w.d - 0.2, 0.55], [w.x + w.w - 0.2, w.z + 0.2, 0.55]);
+  for (const [x, z] of ctx.braziers) {
+    lamps.push({ x, z, r: 5, col: [0.42, 0.24, 0.08] });
+    glow.halo(x, z, 2.8, scale(fire, 0.12));
+  }
+}
+
+function sunkenPaint(ctx) {
+  const { b, map, rnd, W, H } = ctx;
+  const blocked = (x, z, pad = 0.25) => map.walls.some(w => w.kind !== 'border' && x > w.x - pad && x < w.x + w.w + pad && z > w.z - pad && z < w.z + w.d + pad);
+  // Leaf litter: little flat flakes in three greens, a few fallen blooms.
+  for (let i = 0; i < 420; i++) {
+    const x = rnd() * W, z = rnd() * H;
+    if (blocked(x, z, 0.05)) continue;
+    const k = rnd();
+    b.setColor(k < 0.08 ? INK.bloom : k < 0.45 ? INK.leaf : k < 0.75 ? INK.leafD : scale(INK.dirt, 1.25));
+    const a = rnd() * 6.28, r = 0.12 + rnd() * 0.12, y = 0.05;
+    b.tri([x + Math.cos(a) * r, y, z + Math.sin(a) * r], [x + Math.cos(a + 2.4) * r * 0.6, y, z + Math.sin(a + 2.4) * r * 0.6], [x + Math.cos(a - 2.4) * r * 0.6, y, z + Math.sin(a - 2.4) * r * 0.6]);
+  }
+  // Roots snaking out from every fig trunk.
+  b.setColor(INK.bark);
+  for (const w of map.walls) {
+    if (!w.tree) continue;
+    const cx = w.x + w.w / 2, cz = w.z + w.d / 2;
+    for (let k = 0; k < 6; k++) {
+      let a = k * 1.047 + rnd() * 0.5, x = cx + Math.cos(a) * w.w * 0.5, z = cz + Math.sin(a) * w.d * 0.5;
+      for (let s = 0; s < 5; s++) {
+        const nx = x + Math.cos(a) * 0.5, nz = z + Math.sin(a) * 0.5;
+        if (blocked(nx, nz, 0) && s > 0) break;
+        b.quad([x, 0.06, z], [nx, 0.06, nz], [nx + Math.sin(a) * 0.08, 0.06, nz - Math.cos(a) * 0.08], [x + Math.sin(a) * 0.14, 0.06, z - Math.cos(a) * 0.14]);
+        x = nx; z = nz; a += (rnd() - 0.5) * 0.8;
+      }
+    }
+  }
+  // Lily pads on the moat.
+  for (const w of map.walls) {
+    if (w.kind !== 'water') continue;
+    const n = Math.round(w.w * w.d / 6);
+    for (let i = 0; i < n; i++) {
+      const x = w.x + 0.5 + rnd() * (w.w - 1), z = w.z + 0.5 + rnd() * (w.d - 1);
+      b.setColor(scale(INK.leaf, 0.7 + rnd() * 0.3));
+      b.prismY(WATER_Y + 0.02, WATER_Y + 0.04, x, z, 0.3 + rnd() * 0.25, 0.3, 7, rnd() * 3);
+      if (rnd() < 0.2) { b.setColor(INK.bloom); b.prismY(WATER_Y + 0.04, WATER_Y + 0.14, x, z, 0.1, 0.04, 5); }
+    }
+  }
+}
+
+// Mossy stone embankment round the moat: the stone face, coping blocks, ferns at the edge.
+function sunkenBank(ctx, w) {
+  const { b, rnd } = ctx;
+  const lip = (x0, z0, x1, z1) => {
+    b.setColor(scale(INK.rockD, 0.75));
+    const ox = x0 === x1 ? (x0 === w.x ? -1 : 1) : 0;
+    const oz = z0 === z1 ? (z0 === w.z ? -1 : 1) : 0;
+    b.quad([x0, 0.02, z0], [x1, 0.02, z1], [x1, WATER_Y - 0.6, z1], [x0, WATER_Y - 0.6, z0], [(x0 + x1) / 2 + ox, -0.3, (z0 + z1) / 2 + oz]);
+    const t = 0.36;
+    const cx = x0 === x1 ? (x0 === w.x ? x0 - t : x0) : Math.min(x0, x1);
+    const cz = z0 === z1 ? (z0 === w.z ? z0 - t : z0) : Math.min(z0, z1);
+    const lw = x0 === x1 ? t : Math.abs(x1 - x0), ld = z0 === z1 ? t : Math.abs(z1 - z0);
+    const L = Math.max(lw, ld), n = Math.max(1, Math.round(L / 0.8));
+    for (let i = 0; i < n; i++) {
+      const s = (i / n) * L, e = ((i + 1) / n) * L, k = 0.85 + rnd() * 0.25;
+      const top = 0.1 + rnd() * 0.08;
+      b.setColor(scale(rnd() < 0.3 ? INK.moss : INK.rock, k));
+      if (lw > ld) box3(b, cx + s, 0.0, cz, e - s - 0.04, top, t);
+      else box3(b, cx, 0.0, cz + s, t, top, e - s - 0.04);
+    }
+  };
+  lip(w.x, w.z, w.x + w.w, w.z);
+  lip(w.x + w.w, w.z, w.x + w.w, w.z + w.d);
+  lip(w.x + w.w, w.z + w.d, w.x, w.z + w.d);
+  lip(w.x, w.z + w.d, w.x, w.z);
+}
+
+// Stone courses with moss on top and vines down the camera-facing side; the top is broken, never above w.h.
+function ruinWall(ctx, w) {
+  const { b, rnd } = ctx;
+  const { x, z, w: rw, d: rd, h } = w;
+  const long = rw >= rd, L = long ? rw : rd;
+  const n = Math.max(1, Math.round(L / 1.1));
+  for (let i = 0; i < n; i++) {
+    const s = (i / n) * L, e = ((i + 1) / n) * L;
+    const top = h * (0.72 + rnd() * 0.28);
+    const courses = Math.max(2, Math.round(top / 0.7));
+    for (let c = 0; c < courses; c++) {
+      const y0 = (c / courses) * top, y1 = ((c + 1) / courses) * top;
+      b.setColor(scale(c % 2 ? INK.rock : INK.rockD, 0.92 + rnd() * 0.16));
+      const off = (c % 2) * 0.03;
+      if (long) box3(b, x + s + 0.02, y0, z + off, e - s - 0.04, y1 - y0 - 0.03, rd - off * 2);
+      else box3(b, x + off, y0, z + s + 0.02, rw - off * 2, y1 - y0 - 0.03, e - s - 0.04);
+    }
+    if (rnd() < 0.5) {
+      b.setColor(scale(INK.moss, 0.9 + rnd() * 0.2));
+      const m = 0.3 + rnd() * 0.4;
+      if (long) box3(b, x + s + (e - s) * rnd() * (1 - m), top - 0.03, z + 0.06, (e - s) * m, 0.08, rd - 0.12);
+      else box3(b, x + 0.06, top - 0.03, z + s + (e - s) * rnd() * (1 - m), rw - 0.12, 0.08, (e - s) * m);
+    }
+    if (rnd() < 0.55) {
+      b.setColor(INK.vine);
+      const vx = long ? x + s + (e - s) * rnd() : x + rw, vz = long ? z + rd : z + s + (e - s) * rnd();
+      box3(b, vx - 0.06, top * (0.2 + rnd() * 0.3), vz - 0.01, 0.12, top * 0.6, 0.04);
+    }
+  }
+}
+
+function ruinPillar(ctx, w) {
+  const { b } = ctx;
+  const { x, z, w: pw, d: pd, h } = w;
+  const cx = x + pw / 2, cz = z + pd / 2, r = Math.min(pw, pd) / 2;
+  b.setColor(INK.rockD);
+  box3(b, x, 0, z, pw, 0.35, pd);
+  if (w.ruin === 'statue') {
+    // A squat guardian on a plinth: body, head and the stubs of folded arms.
+    b.setColor(INK.rock);
+    box3(b, x + 0.05, 0.35, z + 0.05, pw - 0.1, 0.9, pd - 0.1);
+    b.setColor(INK.rockL);
+    box3(b, x + 0.12, 1.25, z + 0.12, pw - 0.24, 0.9, pd - 0.24, 0.06);
+    box3(b, x + 0.02, 1.55, z + 0.25, pw - 0.04, 0.24, pd - 0.5);
+    b.setColor(INK.rock);
+    box3(b, x + 0.16, 2.15, z + 0.16, pw - 0.32, 0.6, pd - 0.32, 0.05);
+    b.setColor(INK.moss);
+    box3(b, x + 0.2, h - 0.08, z + 0.2, pw - 0.4, 0.1, pd - 0.4);
+    emissive(b, () => { b.setColor([0.4, 1.0, 0.7]); box3(b, x + pw / 2 - 0.2, 2.4, z + pd - 0.17, 0.12, 0.08, 0.03); box3(b, x + pw / 2 + 0.08, 2.4, z + pd - 0.17, 0.12, 0.08, 0.03); });
+    return;
+  }
+  b.setColor(INK.rock);
+  b.prismY(0.35, h - 0.45, cx, cz, r * 0.82, r * 0.74, 8, Math.PI / 8);
+  b.setColor(INK.rockD);
+  for (let y = 0.9; y < h - 0.6; y += 0.7) b.prismY(y, y + 0.05, cx, cz, r * 0.84, r * 0.84, 8, Math.PI / 8);
+  b.setColor(INK.rockL);
+  box3(b, x, h - 0.45, z, pw, 0.35, pd);
+  b.setColor(INK.moss);
+  box3(b, x + 0.06, h - 0.1, z + 0.06, pw - 0.12, 0.1, pd - 0.12);
+}
+
+// Strangler fig: buttress roots and a fat trunk inside the footprint, a modest canopy on top.
+function figTree(ctx, w) {
+  const { b, rnd } = ctx;
+  const { x, z, w: tw, d: td, h } = w;
+  const cx = x + tw / 2, cz = z + td / 2, r = Math.min(tw, td) / 2;
+  b.setColor(INK.bark);
+  for (let k = 0; k < 5; k++) {
+    const a = k * 1.2566 + rnd() * 0.4;
+    const ex = cx + Math.cos(a) * r * 0.92, ez = cz + Math.sin(a) * r * 0.92;
+    b.loft([
+      [[cx - 0.12, 0, cz - 0.12], [ex, 0, ez], [cx + 0.12, 0, cz + 0.12]],
+      [[cx - 0.1, h * 0.45, cz - 0.1], [cx + Math.cos(a) * 0.3, h * 0.45, cz + Math.sin(a) * 0.3], [cx + 0.1, h * 0.45, cz + 0.1]],
+    ]);
+  }
+  b.setColor(scale(INK.bark, 1.12));
+  b.prismY(0, h, cx, cz, r * 0.55, r * 0.38, 7, rnd());
+  b.setColor(INK.vine);
+  b.prismY(0.4, h * 0.9, cx + r * 0.3, cz + r * 0.3, 0.07, 0.05, 4);
+  // Canopy: two stacked faceted clumps, kept close over the trunk so it never hides a player for long.
+  const cr = r * 1.4;
+  b.setColor(INK.leafD);
+  b.prismY(h - 0.5, h + 0.25, cx, cz, cr * 0.6, cr, 7, rnd());
+  b.setColor(INK.leaf);
+  b.prismY(h + 0.25, h + 0.85, cx, cz, cr, cr * 0.45, 7, rnd());
+  b.setColor(scale(INK.leaf, 1.2));
+  b.prismY(h + 0.85, h + 1.05, cx, cz, cr * 0.45, cr * 0.1, 7, rnd());
+}
+
+function sunkenRock(ctx, w) {
+  if (w.tree) return figTree(ctx, w);
+  if (w.ruin === true) return ruinWall(ctx, w);
+  if (w.ruin) return ruinPillar(ctx, w);
+  rockWall(ctx, w);
+}
+
+// Fallen carved blocks, or the toppled head of an idol.
+function fallenStone(ctx, w) {
+  const { b, rnd } = ctx;
+  const { x, z, w: sw, d: sd, h } = w;
+  if (w.idol) {
+    b.setColor(INK.rockL);
+    box3(b, x + 0.1, 0, z + 0.05, sw - 0.2, h - 0.1, sd - 0.1, 0.12);
+    b.setColor(INK.rockD);
+    box3(b, x + sw * 0.25, h * 0.45, z + sd - 0.07, sw * 0.18, h * 0.18, 0.04);
+    box3(b, x + sw * 0.57, h * 0.45, z + sd - 0.07, sw * 0.18, h * 0.18, 0.04);
+    box3(b, x + sw * 0.35, h * 0.12, z + sd - 0.07, sw * 0.3, h * 0.12, 0.04);
+    b.setColor(INK.moss);
+    box3(b, x + 0.2, h - 0.12, z + 0.15, sw - 0.6, 0.1, sd - 0.3);
+    return;
+  }
+  const long = sw >= sd, L = long ? sw : sd;
+  const n = Math.max(1, Math.round(L / 1.2));
+  for (let i = 0; i < n; i++) {
+    const s = (i / n) * L, e = ((i + 1) / n) * L, top = h * (0.7 + rnd() * 0.3);
+    b.setColor(scale(INK.rockL, 0.85 + rnd() * 0.2));
+    if (long) box3(b, x + s + 0.04, 0, z + 0.03, e - s - 0.08, top, sd - 0.06, 0.06);
+    else box3(b, x + 0.03, 0, z + s + 0.04, sw - 0.06, top, e - s - 0.08, 0.06);
+    b.setColor(INK.moss);
+    if (long) box3(b, x + s + 0.1, top - 0.02, z + 0.1, (e - s) * 0.6, 0.06, sd - 0.2);
+    else box3(b, x + 0.1, top - 0.02, z + s + 0.1, sw - 0.2, 0.06, (e - s) * 0.6);
+  }
+}
+
+// The shrine: a stepped base and a small temple on top, its doorway lit from inside.
+function shrine(ctx, w) {
+  const { b, glow } = ctx;
+  const { x, z, w: sw, d: sd, h } = w;
+  const steps = 3;
+  for (let i = 0; i < steps; i++) {
+    const inset = i * 0.35, y0 = i * 0.55;
+    b.setColor(scale(i % 2 ? INK.rockD : INK.rock, 1.0));
+    box3(b, x + inset, y0, z + inset, sw - inset * 2, 0.55, sd - inset * 2);
+    b.setColor(INK.moss);
+    box3(b, x + inset + 0.05, y0 + 0.53, z + inset + 0.05, sw - inset * 2 - 0.1, 0.05, 0.25);
+  }
+  const y0 = steps * 0.55, inset = steps * 0.35 + 0.1;
+  b.setColor(INK.rockL);
+  box3(b, x + inset, y0, z + inset, sw - inset * 2, h - y0, sd - inset * 2);
+  b.setColor(INK.rockD);
+  box3(b, x + inset - 0.15, h - 0.15, z + inset - 0.15, sw - inset * 2 + 0.3, 0.25, sd - inset * 2 + 0.3);
+  b.setColor(INK.rock);
+  b.prismY(h + 0.1, h + 1.1, x + sw / 2, z + sd / 2, Math.min(sw, sd) / 2 - inset, 0.2, 4, Math.PI / 4);
+  b.setColor(0x1a1612);
+  box3(b, x + sw / 2 - 0.4, y0, z + sd - inset - 0.02, 0.8, 1.2, 0.05);
+  emissive(b, () => { b.setColor([1.0, 0.62, 0.26]); box3(b, x + sw / 2 - 0.25, y0 + 0.1, z + sd - inset, 0.5, 0.8, 0.03); });
+  glow.streak(x + sw / 2, z + sd + 0.1, 1.2, 2.4, [0.2, 0.11, 0.04], 0.07);
+  b.setColor(INK.vine);
+  box3(b, x + inset + 0.3, y0, z + sd - inset - 0.01, 0.12, h - y0 - 0.3, 0.04);
+  box3(b, x + sw - inset - 0.6, y0 + 0.3, z + sd - inset - 0.01, 0.12, h - y0 - 0.6, 0.04);
+}
+
+function sunkenWall(ctx, w) { ruinWall(ctx, { ...w }); }
+
+// The jungle closes in at the edge of the map: broken rock and thick growth, never tidy.
+function jungleEdge(ctx, w) {
+  const { b, rnd } = ctx;
+  ridge(ctx, w);
+  const long = w.w > w.d, L = long ? w.w : w.d;
+  for (let s = 0.5; s < L; s += 1.6 + rnd() * 1.2) {
+    const cx = long ? w.x + s : w.x + w.w / 2, cz = long ? w.z + w.d / 2 : w.z + s, r = 0.9 + rnd() * 0.8;
+    b.setColor(rnd() < 0.5 ? INK.leaf : INK.leafD);
+    b.prismY(w.h * 0.6, w.h + 0.6 + rnd() * 0.8, cx, cz, r, r * 0.3, 6, rnd() * 3);
+  }
+}
+
+function jungleTree(b, x, z, hgt, cr, rnd) {
+  b.setColor(INK.bark);
+  b.prismY(0, hgt, x, z, 0.5, 0.3, 6, rnd());
+  b.setColor(INK.leafD);
+  b.prismY(hgt - 1.2, hgt + 0.6, x, z, cr * 0.5, cr, 7, rnd() * 3);
+  b.setColor(INK.leaf);
+  b.prismY(hgt + 0.6, hgt + 1.8, x, z, cr, cr * 0.35, 7, rnd() * 3);
+}
+
+function sunkenDecor(ctx) {
+  const { b, glow, rnd, W, H } = ctx;
+  for (const [x, z, y] of ctx.braziers) {
+    b.setColor(INK.rockD);
+    b.prismY(y, 0.8, x, z, 0.22, 0.16, 6);
+    b.setColor(0x2a2622);
+    b.prismY(0.8, 1.05, x, z, 0.18, 0.34, 6);
+    emissive(b, () => { b.setColor([1.0, 0.6, 0.22]); b.prismY(1.05, 1.35, x, z, 0.26, 0.05, 5); });
+  }
+  // A great stepped pyramid swallowed by the forest north of the map, and canopy all round.
+  const px = W / 2 - 11, pz = -30;
+  for (let i = 0; i < 6; i++) {
+    const k = i * 1.6;
+    b.setColor(scale(i % 2 ? INK.rockD : INK.rock, 0.8));
+    box3(b, px + k, i * 1.8, pz + k, 22 - k * 2, 1.8, 18 - k * 2);
+    b.setColor(scale(INK.moss, 0.85));
+    box3(b, px + k + 0.2, i * 1.8 + 1.75, pz + k + 0.2, 22 - k * 2 - 0.4, 0.1, 1.2);
+  }
+  b.setColor(scale(INK.rock, 0.85));
+  box3(b, px + 8.5, 10.8, pz + 7.5, 5, 3, 3);
+  b.setColor(scale(INK.rock, 0.7));
+  box3(b, px + 9.6, 0, pz + 16.9, 2.8, 10.8, 1.2);
+  for (let i = 0; i < 64; i++) {
+    const side = i % 4, t = rnd();
+    let x, z;
+    if (side === 0) { x = -26 + t * (W + 52); z = -6 - rnd() * 18; if (x > px - 2 && x < px + 24 && z < -10) continue; }
+    else if (side === 1) { x = -26 + t * (W + 52); z = H + 5 + rnd() * 16; }
+    else if (side === 2) { x = -5 - rnd() * 18; z = -8 + t * (H + 16); }
+    else { x = W + 5 + rnd() * 18; z = -8 + t * (H + 16); }
+    jungleTree(b, x, z, 4 + rnd() * 5, 2.2 + rnd() * 2, rnd);
+  }
+  skyRing(ctx, { low: [0.1, 0.14, 0.12], mid: [0.2, 0.26, 0.23], warm: [0.3, 0.34, 0.28], high: [0.07, 0.1, 0.1], warmDir: [-0.3, -1], y0: -4, y1: 10, y2: 50 });
+  // Mist pools in the low ground beside the moat, as soft additive glow.
+  for (const w of ctx.map.walls) if (w.kind === 'water') glow.halo(w.x + w.w / 2, w.z + w.d / 2, Math.max(w.w, w.d) * 0.55, [0.035, 0.05, 0.045], WATER_Y + 0.05, 12);
+}
+
 // ---- Railyard ------------------------------------------------------------------------------------------
 
 function building(b, w, rnd, lamps) {
@@ -1501,6 +2586,9 @@ const DRESS = {
   harbor: { ...RAILYARD_DRESS, building: warehouse, water: quayEdges, hull: ship, crane: craneLeg },
   neon: { ...RAILYARD_DRESS, shop, stall, wall: neonWall, border: tenement },
   dust: { ...RAILYARD_DRESS, rock: rockWall, boulder, adobe, tent, sandbag: sandbags, wall: adobeScreen, border: ridge },
+  frost: { ...RAILYARD_DRESS, container: wagon, building: frostBuilding, wall: frostWall, crate: frostCrate, barrier: frostBarrier, sandbag: snowbank, border: frostBorder },
+  topside: { ...RAILYARD_DRESS, crane: steelColumn, building: topsideCore, wall: topsideWall, container: materialStack, crate: brickPallet, barrier: topsideBarrier, water: lightWell, border: topsideEdge },
+  sunken: { ...RAILYARD_DRESS, rock: sunkenRock, boulder: fallenStone, building: shrine, water: sunkenBank, wall: sunkenWall, border: jungleEdge },
 };
 
 const THEME_STAGES = {
@@ -1515,6 +2603,9 @@ const THEME_STAGES = {
   harbor: { lights: harborLights, paint: harborPaint, decor: harborDecor },
   neon: { lights: neonLights, paint: neonPaint, decor: neonDecor },
   dust: { lights: () => {}, paint: dustPaint, decor: dustDecor },
+  frost: { lights: frostLights, paint: frostPaint, decor: frostDecor },
+  topside: { lights: topsideLights, paint: topsidePaint, decor: topsideDecor },
+  sunken: { lights: sunkenLights, paint: sunkenPaint, decor: sunkenDecor },
 };
 
 // Sun shadows and contact darkening: per-vertex strength a, drawn with multiply blending.
@@ -1576,7 +2667,7 @@ export function buildWorld(map, teams, fogUniforms) {
   const glow = new GlowList();
   const timeU = { value: 0 };
   const flashU = { value: 0 };
-  const ctx = { b, sb, glow, map, theme, W, H, lamps, timeU, flashU, rnd: mulberry(7321), noise: makeNoise(991), groundWet: 0 };
+  const ctx = { b, sb, glow, map, theme, W, H, lamps, timeU, flashU, rnd: mulberry(7321), noise: makeNoise(991), groundWet: 0, tracks: frostTracks(map) };
 
   // Lights come first: the ground and walls bake them in as they are generated.
   const stages = THEME_STAGES[theme.id];
@@ -1651,6 +2742,9 @@ const THUMB_STYLE = {
   harbor: { ground: '#3c434c', solid: '#7f93a8', low: '#566070', water: '#16324d', edge: '#10151c', hull: '#a8b0b6' },
   neon: { ground: '#2c2a36', solid: '#7a6090', low: '#544a68', edge: '#120f1c', accent: '#ff2e9e' },
   dust: { ground: '#a08f72', solid: '#6e5a42', low: '#8f7c5e', edge: '#3c2f22' },
+  frost: { ground: '#9aa6b8', solid: '#4f5a6c', low: '#c8d2e0', edge: '#151b26' },
+  topside: { ground: '#8a847e', solid: '#4c4a52', low: '#a8865a', water: '#1a1418', edge: '#241a22' },
+  sunken: { ground: '#4f5c3e', solid: '#8a8a72', low: '#6c6c58', water: '#18342c', edge: '#121a14' },
 };
 
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is

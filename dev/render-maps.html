@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map shots</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #game { display: block; }
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js", "trystero": "../vendor/trystero.min.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="module">
+// Renders one map with the real GameRenderer, for the vote/picker art and for review.
+//   ?map=<id>        which map (default railyard)
+//   &shot=art        the box-art angle (default), or 'play' for the normal gameplay camera on the local player,
+//                    or 'top' for a whole-map overview.
+//   &w=960&h=540     canvas size in CSS pixels (rendered at device pixel ratio 1).
+// window.capture(w, h, quality) downsamples the frame and returns a JPEG data URL.
+import { MAPS } from '../js/shared/map.js';
+import { GameRenderer } from '../js/render/renderer.js';
+
+const params = new URLSearchParams(location.search);
+const map = MAPS[params.get('map') || 'railyard'];
+const shot = params.get('shot') || 'art';
+const W = +(params.get('w') || 960), H = +(params.get('h') || 540);
+const canvas = document.getElementById('game');
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+
+// Where each map's picture is taken from: the point of interest (usually the landmark), the camera's bearing
+// (0 = from the south, as in play; negative swings it west), elevation and distance, and where the fight is staged.
+const ART = {
+  railyard: { focus: [36, 24], az: -0.42, el: 36, dist: 36, fov: 38, fight: [29.5, 23.5] },
+  harbor:   { focus: [40, 22], az: -0.3, el: 38, dist: 38, fov: 38, fight: [33, 25] },
+  neon:     { focus: [30, 22], az: -0.35, el: 40, dist: 32, fov: 38, fight: [27, 22] },
+  dust:     { focus: [42, 25], az: -0.5, el: 34, dist: 38, fov: 38, fight: [35, 27] },
+  frost:    { focus: [37, 22], az: -0.4, el: 36, dist: 34, fov: 38, fight: [31, 26] },
+  topside:  { focus: [33, 21], az: -0.55, el: 34, dist: 36, fov: 40, fight: [28, 30] },
+  sunken:   { focus: [36, 23], az: -0.35, el: 40, dist: 34, fov: 38, fight: [36, 29] },
+};
+
+function freeSpot(x, z) {
+  // Nudges a point out of any wall or water so nobody is posed inside the scenery.
+  for (let r = 0; r < 8; r += 0.5) {
+    for (let a = 0; a < 6.28; a += 0.7) {
+      const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+      if (!map.walls.some(w => px > w.x - 0.7 && px < w.x + w.w + 0.7 && pz > w.z - 0.7 && pz < w.z + w.d + 0.7)) return [px, pz];
+    }
+  }
+  return [x, z];
+}
+
+function makePlayers(cx, cz) {
+  const weapons = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
+  const camos = ['none', 'stalker', 'gold', 'cobalt', 'molten', 'ash'];
+  const players = [];
+  for (let i = 0; i < 12; i++) {
+    const team = i < 6 ? 0 : 1, k = i % 6;
+    // Two loose squads facing each other across the middle of the map.
+    const [x, z] = freeSpot(cx + (team ? 4.8 : -4.8) + ((k * 7) % 5 - 2) * 1.1, cz + (k - 2.5) * 1.8);
+    players.push({
+      id: 'p' + i, name: 'P' + i, team, isBot: true, skill: 'regular', x, z, aim: team ? Math.PI + (k - 2.5) * 0.08 : (k - 2.5) * -0.08,
+      vx: 0, vz: 0, hp: 100, alive: true, respawnT: 0, weapon: weapons[k], camo: camos[k], ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2,
+      adsT: k % 2, sprinting: false, sliding: false, spawnProtect: false, kills: 0, deaths: 0, streak: 0, streakReady: null, bloom: 0,
+      score: 0, capped: false, slots: [], heat: 0, overheated: false, head: 0, assists: 0, firingT: 0, tacticalLeft: 1, lethalLeft: 1,
+      tactical: 'smoke', lethal: 'frag',
+    });
+  }
+  return players;
+}
+
+const r = new GameRenderer(canvas, map, { dynamicRes: false });
+r.webgl.setPixelRatio(1);
+r.basePixelRatio = 1;
+r.resize();
+const art = ART[map.id] || ART.railyard;
+const players = makePlayers(art.fight[0], art.fight[1]);
+const view = {
+  t: 0, phase: 'live', timeLeft: 300, scores: [0, 0], winner: null, uav: [0, 0], players, localId: 'p0', lastKill: null,
+  projectiles: [], smokes: [], turrets: [], gunships: [], mode: 'tdm', tags: [], points: [], jam: [0, 0], overwatchT: [0, 0],
+};
+if (shot === 'play') r.setLocal('p0');
+else {
+  const top = shot === 'top';
+  const el = art.el * Math.PI / 180, cosE = Math.cos(el);
+  r.setCinematic(top ? {
+    px: map.width * 0.5, py: 78, pz: map.height * 0.98, tx: map.width * 0.5, ty: 0, tz: map.height * 0.5, fov: 44, rate: 1, bars: 0, desat: 0, roll: 0,
+  } : {
+    px: art.focus[0] + Math.sin(art.az) * cosE * art.dist, py: Math.sin(el) * art.dist, pz: art.focus[1] + Math.cos(art.az) * cosE * art.dist,
+    tx: art.focus[0], ty: 0, tz: art.focus[1], fov: art.fov, rate: 1, bars: 0, desat: 0, roll: 0,
+  });
+}
+
+// A few seconds of a firefight, so the weather has filled in and tracers are in the air.
+let seed = 1;
+const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+function step(frames, fire) {
+  for (let f = 0; f < frames; f++) {
+    view.t += 1 / 60;
+    const ev = [];
+    if (fire && f % 7 === 0) {
+      const p = players[Math.floor(rand() * 12)];
+      const d = 9 + rand() * 6;
+      ev.push({ t: 'shot', by: p.id, weapon: p.weapon, camo: p.camo, ox: p.x, oz: p.z, aim: p.aim,
+        rays: [{ x: p.x + Math.cos(p.aim) * d, z: p.z + Math.sin(p.aim) * d, hit: 'none', nx: 0, nz: 0 }] });
+    }
+    r.update(view, ev, 1 / 60);
+  }
+}
+step(200, true);
+window.step = step;
+
+const out = document.createElement('canvas');
+window.capture = (w = 480, h = 270, q = 0.8) => {
+  step(1, false);
+  out.width = w; out.height = h;
+  const g = out.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(canvas, 0, 0, w, h);
+  // A soft vignette pulls the eye to the middle of the picture.
+  const v = g.createRadialGradient(w / 2, h * 0.52, h * 0.32, w / 2, h * 0.52, w * 0.62);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,0.42)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, w, h);
+  return out.toDataURL('image/jpeg', q);
+};
+window.stats = () => ({ ...r.getStats(), worldTris: r.world.tris });
+window.ready = true;
+</script>
+</body>
+</html>

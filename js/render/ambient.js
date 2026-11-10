@@ -9,6 +9,9 @@ const LIFE = {
   harbor:   { flock: 13, ground: 10, col: [0.82, 0.86, 0.9], size: 0.46, flockY: 9.5, vents: 3 },
   neon:     { flock: 0, ground: 0, col: [0.1, 0.1, 0.14], size: 0.4, flockY: 8, vents: 6 },
   dust:     { flock: 5, ground: 5, col: [0.22, 0.17, 0.13], size: 0.62, flockY: 11, vents: 0, devils: 3 },
+  frost:    { flock: 6, ground: 6, col: [0.07, 0.07, 0.09], size: 0.44, flockY: 9.5, vents: 3 },
+  topside:  { flock: 11, ground: 9, col: [0.42, 0.44, 0.5], size: 0.4, flockY: 7, vents: 0 },
+  sunken:   { flock: 8, ground: 0, col: [0.9, 0.93, 0.88], size: 0.66, flockY: 10, vents: 0 },
 };
 const NONE = { flock: 0, ground: 0, col: [0, 0, 0], size: 0.5, flockY: 8, vents: 0 };
 

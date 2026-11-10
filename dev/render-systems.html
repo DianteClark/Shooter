@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Systems visuals</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #game { display: block; width: 100vw; height: 100vh; }
+  #stats { position: fixed; left: 4px; top: 2px; font: 10px monospace; color: #fff9; pointer-events: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js", "trystero": "../vendor/trystero.min.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="stats"></div>
+<script type="module">
+// Every Wave 5 system on screen at once, driven by a scripted view and event stream, for review and budgets.
+//   ?map=<id>          map (default frost)
+//   &zoom=0.5          camera distance multiplier, for looking at models up close
+//   &busy=1            the full load: everything below, all the time (for draw-call and triangle peaks)
+//   &jam=1             the local team is jammed (static on screen)
+//   &look=nades|fire|air|drop   a close camera on one part of the scene, gameplay tilt, fog off
+//   &quiet=2           nothing happens for the first 2 s, then everything starts at once (first-use hitch test)
+//   &nowarm=1          undo the pool pre-warm, for comparison
+//   &static=1          freeze the clock between frames for screenshots (step with window.run)
+// window.run(frames) advances; window.stats() returns the renderer's budget numbers.
+import { MAPS } from '../js/shared/map.js';
+import { GameRenderer } from '../js/render/renderer.js';
+
+const params = new URLSearchParams(location.search);
+const map = MAPS[params.get('map') || 'frost'];
+const busy = params.get('busy') === '1';
+const canvas = document.getElementById('game');
+const r = new GameRenderer(canvas, map, { dynamicRes: false });
+r.setLocal('p0');
+if (params.get('zoom')) r.distance *= +params.get('zoom');
+window.r = r;
+if (params.get('nowarm') === '1') r.scene.traverse(o => { delete o.onBeforeRender; delete o.onAfterRender; });
+const quiet = +(params.get('quiet') || 0);
+
+// The renderer forwards events to CombatFX once its owner wires it up; until then this page does it.
+const forwards = GameRenderer.prototype._handleEvents.toString().includes('combat.onEvents');
+
+const W = map.width, H = map.height, cx = W / 2, cz = H / 2;
+function free(x, z) {
+  for (let rad = 0; rad < 9; rad += 0.5) for (let a = 0; a < 6.28; a += 0.6) {
+    const px = x + Math.cos(a) * rad, pz = z + Math.sin(a) * rad;
+    if (px > 1 && pz > 1 && px < W - 1 && pz < H - 1 && !map.walls.some(w => px > w.x - 0.8 && px < w.x + w.w + 0.8 && pz > w.z - 0.8 && pz < w.z + w.d + 0.8)) return [px, pz];
+  }
+  return [x, z];
+}
+const [ox, oz] = free(cx - 6, cz + 4);       // Where the local player stands; the action is staged around it.
+
+const weapons = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
+const players = [];
+for (let i = 0; i < 12; i++) {
+  const team = i < 6 ? 0 : 1;
+  const [x, z] = i === 0 ? [ox, oz] : free(ox + (team ? 9 : -3) + (i % 3) * 2, oz - 5 + (i % 6) * 2);
+  players.push({ id: 'p' + i, name: 'P' + i, team, isBot: i > 0, skill: 'regular', x, z, aim: team ? Math.PI : 0, vx: 0, vz: 0, hp: 100, alive: true,
+    respawnT: 0, weapon: weapons[i % 6], camo: 'none', ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2, adsT: 0, sprinting: false, sliding: false,
+    spawnProtect: false, kills: 0, deaths: 0, streak: 0, streakReady: null, bloom: 0, score: 0, capped: false, slots: [], heat: 0, overheated: false,
+    head: 0, assists: 0, firingT: 0, tacticalLeft: 1, lethalLeft: 1, tactical: 'sensor', lethal: 'frag' });
+}
+const view = {
+  t: 0, phase: 'live', timeLeft: 300, scores: [0, 0], winner: null, uav: [0, 0], players, localId: 'p0', lastKill: null,
+  projectiles: [], smokes: [], turrets: [], gunships: [], mode: 'tdm', tags: [], points: [], jam: [0, 0], overwatchT: [0, 0],
+  jammed: params.get('jam') === '1',
+};
+
+// Thrown things: each loops between a throw and a landed state; deployables stay planted.
+const KINDS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'smoke', 'flash', 'decoy', 'sensor', 'trophy', 'bomblet'];
+let nextId = 1;
+const nades = KINDS.map((kind, i) => {
+  const [x, z] = free(ox + 2 + (i % 4) * 2.4, oz - 4 + Math.floor(i / 4) * 2.6);
+  return { kind, owner: i % 2 ? 'p7' : 'p1', hx: x, hz: z, period: 2.4 + (i % 3) * 0.4, phase: i * 0.37, id: nextId++ };
+});
+const [fx, fz] = free(ox + 6, oz + 5);
+const [mx, mz] = free(ox + 10, oz - 1);
+const LOOK = { nades: [ox + 5.6, oz - 2.6, 9], fire: [fx, fz, 13], air: [ox + 6, oz - 3, 16], drop: [ox - 4, oz - 2, 10], mortar: [ox + 6, oz + 2, 14] };
+const look = LOOK[params.get('look')];
+if (look) {
+  const tilt = 55 * Math.PI / 180;
+  r.setCinematic({ px: look[0], py: Math.sin(tilt) * look[2], pz: look[1] + Math.cos(tilt) * look[2], tx: look[0], ty: 0, tz: look[1], fov: 30, rate: 1, bars: 0, desat: 0, roll: 0 });
+}
+let t = 0, lastEvent = {};
+function every(key, period, offset = 0) {
+  const k = Math.floor((t + offset) / period);
+  if (lastEvent[key] === k) return false;
+  lastEvent[key] = k;
+  return true;
+}
+
+function frame(dt) {
+  if (quiet && t + dt < quiet) {
+    t += dt; view.t = t;
+    view.projectiles.length = 0; view.smokes.length = 0; view.turrets = []; view.gunships = []; view.uav = [0, 0]; view.overwatchT = [0, 0];
+    r.update(view, [], dt);
+    return [];
+  }
+  t += dt;
+  view.t = t;
+  const ev = [];
+  // Equipment.
+  view.projectiles.length = 0;
+  for (const n of nades) {
+    const k = ((t + n.phase) % n.period) / n.period;
+    const planted = ['mine', 'sensor', 'trophy', 'decoy', 'sticky', 'hatchet'].includes(n.kind);
+    if (busy || k < 0.45 || planted) {
+      const flying = k < 0.45 && !(busy && planted);
+      const f = flying ? k / 0.45 : 1;
+      const sx = n.hx - 7, sz = n.hz + 1;
+      view.projectiles.push({ id: flying ? n.id : n.id + 1000, kind: n.kind, x: sx + (n.hx - sx) * f, z: sz + (n.hz - sz) * f, y: flying ? 1.4 + Math.sin(f * Math.PI) * 2.2 : 0,
+        owner: n.owner, vx: flying ? 9 : 0, vz: 0, age: flying ? k * n.period : (k - 0.45) * n.period, grounded: !flying && !planted, stuck: !flying && planted });
+    }
+  }
+  const fireAge = busy ? 2 : (t % 7);
+  if (busy || fireAge < 5.5) view.projectiles.push({ id: 900 + Math.floor(t / 7), kind: 'fire', x: fx, z: fz, y: 0, owner: 'p7', vx: 0, vz: 0, age: fireAge, grounded: true, stuck: true });
+  view.smokes.length = 0;
+  view.smokes.push({ id: 1, x: ox - 7, z: oz - 6, r: 4.5, age: 3 });
+  // Sentries, aircraft and drones.
+  view.turrets = [
+    { id: 1, team: 0, owner: 'p0', x: ox - 2.5, z: oz + 2.5, aim: Math.sin(t * 0.7) * 1.2, hp: 180, life: 20 },
+    { id: 2, team: 1, owner: 'p7', x: mx, z: mz, aim: Math.PI + Math.sin(t * 0.9) * 0.8, hp: 180, life: busy ? 20 : 2.5 },
+  ];
+  view.gunships = [
+    { kind: 'gunship', team: 0, owner: 'p0', x: cx + Math.cos(t * 0.45) * 13, z: cz + Math.sin(t * 0.45) * 9, aim: t * 0.45 + Math.PI / 2, life: 10 },
+    { kind: 'chopper', team: 1, owner: 'p7', x: ox + 6 + Math.sin(t * 0.5) * 5, z: oz - 3 + Math.cos(t * 0.33) * 2, aim: Math.PI + Math.sin(t * 0.5) * 0.6, life: 10 },
+  ];
+  view.uav = [12, 0];
+  view.overwatchT = [8, 8];
+  // Events.
+  if (every('bang', busy ? 0.9 : 1.6)) {
+    const kinds = ['frag', 'molotov', 'sticky', 'mine', 'cluster', 'bomblet', 'flash'];
+    const kind = kinds[Math.floor(t / 1.6) % kinds.length];
+    const [bx, bz] = free(ox + 4 + Math.random() * 8, oz - 6 + Math.random() * 10);
+    ev.push({ t: 'bang', kind, x: bx, z: bz, r: 4.5, by: 'p7' });
+  }
+  if (every('pulse', 3.1, 0.5)) {
+    const s = nades.find(n => n.kind === 'sensor');
+    ev.push({ t: 'pulse', kind: 'sensor', x: s.hx, z: s.hz, r: 13, by: 'p1' });
+    ev.push({ t: 'marked', id: 'p8', by: 'p1', dur: 4 }, { t: 'marked', id: 'p9', by: 'p1', dur: 4 });
+  }
+  if (every('zap', 1.7, 0.3)) { const s = nades.find(n => n.kind === 'trophy'); ev.push({ t: 'zap', ox: s.hx, oz: s.hz, x: s.hx + 3, z: s.hz - 2, by: 'p7' }); }
+  if (every('decoy', 0.35)) { const s = nades.find(n => n.kind === 'decoy'); ev.push({ t: 'decoy', x: s.hx, z: s.hz, by: 'p1', team: 0, weapon: 'ar' }); }
+  if (every('mortar', busy ? 0.7 : 4.2, 1)) ev.push({ t: 'incoming', kind: 'mortar', x: ox + 3 + Math.random() * 6, z: oz + Math.random() * 4, delay: 1.4, team: 1 });
+  if (every('drop', 11, 2)) { const [dx, dz] = free(ox - 4, oz - 2); ev.push({ t: 'streak', id: 'p0', kind: 'resupply', team: 0, x: dx, z: dz }); }
+  if (!busy && every('emp', 13, 9)) ev.push({ t: 'streak', id: 'p7', kind: 'emp', team: 1 }, { t: 'emp', team: 0 });
+  if (every('chop', 0.18)) { const g = view.gunships[1]; ev.push({ t: 'gunship_shot', kind: 'chopper', ox: g.x, oz: g.z, x: ox + Math.random() * 3, z: oz + Math.random() * 3 }); }
+  if (every('turret', 0.26)) { const tu = view.turrets[0]; ev.push({ t: 'turret_shot', ox: tu.x, oz: tu.z, x: tu.x + Math.cos(tu.aim) * 12, z: tu.z + Math.sin(tu.aim) * 12 }); }
+  if (every('shot', 0.12)) {
+    const p = players[1 + Math.floor(Math.random() * 11)];
+    ev.push({ t: 'shot', by: p.id, weapon: p.weapon, camo: p.camo, ox: p.x, oz: p.z, aim: p.aim, rays: [{ x: p.x + Math.cos(p.aim) * 14, z: p.z + Math.sin(p.aim) * 14, hit: 'none', nx: 0, nz: 0 }] });
+  }
+  if (busy && every('boom', 2.3)) ev.push({ t: 'explosion', x: ox + 8, z: oz + 2, radius: 4.5, by: 'p7' });
+  r.update(view, ev, dt);
+  if (!forwards) r.combat.onEvents(ev, 'p0', 0);
+  return ev;
+}
+
+// Frame timing: the longest frame inside each window, so a first-use hitch shows up as a spike.
+window.run = (frames, dt = 1 / 60) => {
+  let worst = 0, sum = 0;
+  for (let i = 0; i < frames; i++) {
+    const a = performance.now();
+    frame(dt);
+    const d = performance.now() - a;
+    worst = Math.max(worst, d); sum += d;
+  }
+  return { worst, mean: sum / frames };
+};
+let peak = { calls: 0, triangles: 0 };
+window.stats = () => { const s = r.getStats(); return { calls: s.calls, triangles: s.triangles, programs: s.programs, geometries: s.geometries, peakCalls: peak.calls, peakTris: peak.triangles }; };
+window.trackPeak = frames => {
+  for (let i = 0; i < frames; i++) {
+    frame(1 / 60);
+    const s = r.getStats();
+    if (s.calls > peak.calls) peak.calls = s.calls;
+    if (s.triangles > peak.triangles) peak.triangles = s.triangles;
+  }
+  return peak;
+};
+window.ready = true;
+if (params.get('static') !== '1') {
+  let last = performance.now();
+  const statsEl = document.getElementById('stats');
+  const loop = now => {
+    frame(Math.min(0.05, (now - last) / 1000)); last = now;
+    const s = r.getStats();
+    statsEl.textContent = `calls ${s.calls} tris ${s.triangles}`;
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
