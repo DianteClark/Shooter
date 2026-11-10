@@ -11,6 +11,7 @@ import { GLSL_LIGHT, hexRGB } from './art.js';
 import { prewarm } from './vfx.js';
 import { TEAMS } from '../shared/constants.js';
 import { smokeBlocks } from '../shared/geometry.js';
+import { uploadUsed } from './dynbuf.js';
 
 const MAX_NADES = 18;
 const MAX_FIRES = 6;
@@ -1017,9 +1018,9 @@ export class CombatFX {
       this.vfx.addDot(s.x, y, s.z, 0.46 + 0.1 * Math.sin(t * 5 + s.phase), rgb);
       n++;
     }
-    aTeam.needsUpdate = true;
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
+    uploadUsed(aTeam, n);
+    uploadUsed(mesh.instanceMatrix, n);
   }
 
   // Domination shows flag, ring and capture arc; hardpoint swaps the flag for a tall animated boundary wall.
@@ -1069,13 +1070,13 @@ export class CombatFX {
           nFlag++;
         }
       }
-      za.aOwner.needsUpdate = true; za.aCapture.needsUpdate = true; za.aZone.needsUpdate = true;
-      wa.aOwner.needsUpdate = true; wa.aZone.needsUpdate = true;
-      sa.needsUpdate = true; ca.needsUpdate = true;
+      uploadUsed(za.aOwner, nZone); uploadUsed(za.aCapture, nZone); uploadUsed(za.aZone, nZone);
+      uploadUsed(wa.aOwner, nWall); uploadUsed(wa.aZone, nWall);
+      uploadUsed(sa, nFlag); uploadUsed(ca, nFlag);
     }
     zones.count = nZone; walls.count = nWall; stand.count = nFlag; cloth.count = nFlag;
-    zones.instanceMatrix.needsUpdate = true; walls.instanceMatrix.needsUpdate = true;
-    stand.instanceMatrix.needsUpdate = true; cloth.instanceMatrix.needsUpdate = true;
+    uploadUsed(zones.instanceMatrix, nZone); uploadUsed(walls.instanceMatrix, nWall);
+    uploadUsed(stand.instanceMatrix, nFlag); uploadUsed(cloth.instanceMatrix, nFlag);
   }
 
   #updateNades(view, dt, lx, lz, localTeam, hasLocal) {
@@ -1155,8 +1156,8 @@ export class CombatFX {
     }
     for (let i = 0; i < slots.length; i++) if (!slots[i].touched) slots[i].id = null;
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    aShow.needsUpdate = true; aAcc.needsUpdate = true; aLight.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(aShow, n); uploadUsed(aAcc, n); uploadUsed(aLight, n);
   }
 
   // Molotov fire: a noisy burning disc on the ground, flame tongues, smoke and a flickering light.
@@ -1207,8 +1208,8 @@ export class CombatFX {
       if (s.pop <= 0 && k > 0.2) { s.pop = 0.5; vfx.pop(s.x, 1.2, s.z, FIRE_R * 2.6 * k, FIRE_RGB, 0.55); }
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    aF.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(aF, n);
   }
 
   // Writes one vehicle instance. light is [r,g,b] with brightness li; fold/turn feed the parachute and rotor rigs.
@@ -1392,12 +1393,12 @@ export class CombatFX {
 
     const mesh = this.vehicles, g = mesh.geometry;
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    g.attributes.aShow.needsUpdate = true; g.attributes.aAcc.needsUpdate = true;
-    g.attributes.aLight.needsUpdate = true; g.attributes.aFx.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(g.attributes.aShow, n); uploadUsed(g.attributes.aAcc, n);
+    uploadUsed(g.attributes.aLight, n); uploadUsed(g.attributes.aFx, n);
     this.shadow.count = sn;
-    this.shadow.instanceMatrix.needsUpdate = true;
-    this.shadow.geometry.attributes.aShow.needsUpdate = true;
+    uploadUsed(this.shadow.instanceMatrix, sn);
+    uploadUsed(this.shadow.geometry.attributes.aShow, sn);
   }
 
   #dropLanded(x, z, rgb) {
@@ -1517,8 +1518,8 @@ export class CombatFX {
       }
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    alpha.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(alpha, n);
   }
 
   dispose() {

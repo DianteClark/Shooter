@@ -1,0 +1,30 @@
+/* Performance overlay (js/ui/perf.js). Fixed size and strict containment: its text changes never cause layout
+   outside the box, and the box itself never resizes. */
+.perf {
+  position: fixed;
+  /* Top right, under the net and voice icons: clear of both sticks, the scoreboard and the kill feed. */
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+  top: calc(env(safe-area-inset-top, 0px) + 46px);
+  width: 250px;
+  height: 66px;
+  contain: strict;
+  z-index: 60;
+  pointer-events: none;
+  padding: 3px 6px;
+  box-sizing: border-box;
+  background: rgba(8, 10, 14, .62);
+  color: #e7eae4;
+  font: 10px/12px ui-monospace, Menlo, monospace;
+  white-space: pre;
+  overflow: hidden;
+}
+.perf[hidden] { display: none; }
+.perf.idle { visibility: hidden; }
+.perf div { height: 12px; overflow: hidden; text-overflow: clip; }
+.perf .perf-dim { color: #9aa3ae; }
+
+/* Options: six quality steps get their own full-width row under the label. */
+.opt-row.opt-quality { flex-wrap: wrap; row-gap: 4px; }
+.opt-quality .opt-name { flex-basis: 100%; }
+.opt-quality .opt-segs { flex-basis: 100%; }
+.opt-quality .seg { flex: 1; min-width: 0; padding: 0 2px; height: 32px; }

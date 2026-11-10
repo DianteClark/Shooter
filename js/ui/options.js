@@ -1,10 +1,11 @@
 // Player settings, stored on this device apart from the progression save so a save code never overrides them.
 const KEY = 'switchyard-options';
 
-export const QUALITY_LEVELS = [['auto', 'Auto'], ['high', 'High'], ['low', 'Low Power']];
+// Ids match QUALITY_STEPS in js/render/quality.js. 'high' and 'low' keep their meaning from older saves.
+export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['potato', 'Potato']];
 
 export const OPTION_DEFAULTS = Object.freeze({
-  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1,
+  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1, fps: false,
 });
 
 // Slider-style settings: unit is the on-screen step, and what the bar and label report.

@@ -2,6 +2,17 @@
 import { Options, QUALITY_LEVELS, STEPPED } from './options.js';
 import { esc } from './widgets.js';
 import { VOICE_LEVELS_WORK } from '../net/voice.js';
+import { deviceProfile, savedAutoStep, QUALITY_STEPS } from '../render/quality.js';
+
+const stepLabel = id => QUALITY_STEPS.find(s => s.id === id)?.label ?? id;
+
+// What Auto will start from on this phone: the step it settled on last match, else the device guess.
+function autoNote() {
+  const saved = savedAutoStep();
+  if (saved) return `Auto starts at ${stepLabel(saved)}, where it settled last match`;
+  const p = deviceProfile(null);
+  return `Auto starts at ${stepLabel(p.step)} on this phone, then adapts`;
+}
 
 const stepper = key => {
   const s = STEPPED[key];
@@ -25,9 +36,13 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     <div class="opt-cols enter">
       <section class="opt-col">
         <h4>Graphics</h4>
-        <div class="opt-row">
-          <div class="opt-name"><b>Quality</b><small>Low Power saves battery and heat</small></div>
+        <div class="opt-row opt-quality">
+          <div class="opt-name"><b>Quality</b><small>${esc(autoNote())}. Lower steps save battery and heat.</small></div>
           <div class="opt-segs">${QUALITY_LEVELS.map(([id, label]) => `<button class="seg" data-act="optQuality" data-id="${id}">${label}</button>`).join('')}</div>
+        </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>Performance overlay</b><small>Frame rate, 1% low, CPU or GPU bound, quality step</small></div>
+          <button class="opt-toggle opt-fps" data-act="optFps"><i></i><b></b></button>
         </div>
         <h4>Controls</h4>
         ${stepper('sensitivity')}
@@ -53,7 +68,10 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
   const paint = () => {
     const v = Options.values;
     for (const b of menu.el.querySelectorAll('[data-act="optQuality"]')) b.classList.toggle('on', b.dataset.id === v.quality);
-    const toggle = q('.opt-toggle');
+    const fps = q('.opt-fps');
+    fps.classList.toggle('on', v.fps);
+    fps.querySelector('b').textContent = v.fps ? 'On' : 'Off';
+    const toggle = q('[data-act="optLefty"]');
     toggle.classList.toggle('on', v.lefty);
     toggle.querySelector('b').textContent = v.lefty ? 'On' : 'Off';
     const voice = q('.opt-voice');
@@ -71,6 +89,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     optBack: () => onBack(),
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
+    optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));

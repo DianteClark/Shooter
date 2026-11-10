@@ -15,6 +15,7 @@ import { Ambient } from './ambient.js';
 import { getGun } from './guns.js';
 import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
+import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
 import { TUNING } from '../shared/tuning.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
@@ -58,9 +59,7 @@ const TILT = THREE.MathUtils.degToRad(55);
 const VFOV = 26;
 const VIEW_WIDTH = 30;        // Metres of ground across the screen at the camera target.
 const ADS_LOOK = 7.5;         // Metres of lookahead toward aim at full ADS.
-const MAX_DPR = 2;
-const MAX_DPR_LOW = 1.25;     // Low Power: a lower ceiling before dynamic resolution even starts.
-const MIN_RES = 0.6;
+const MAX_DPR = 2;            // Gun previews in the menus.
 const KICK_K = 240;           // Camera recoil spring: stiff with a little give, so heavy guns bounce once.
 const KICK_C = 25;
 
@@ -118,7 +117,8 @@ function sharedWebGL(canvas) {
 }
 
 export class GameRenderer {
-  // opts.dynamicRes (default true) can be disabled for repeatable screenshots.
+  // opts.dynamicRes (default true) can be disabled for repeatable screenshots: quality then stays on the pinned step
+  // ('high' unless setQuality says otherwise) and never adapts.
   constructor(canvas, map, opts = {}) {
     this.canvas = canvas;
     this.map = map;
@@ -135,6 +135,7 @@ export class GameRenderer {
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     this.resScale = 1;
     webgl.setPixelRatio(this.basePixelRatio);
+    this.cssW = 1; this.cssH = 1;
 
     this.fog = new FogMask(map, webgl);
     this.time = { value: 0 };
@@ -195,26 +196,35 @@ export class GameRenderer {
     this.timeScale = 1;
     this.cine = null;             // Killcam shot description, or null during normal play.
     this.bars = 0;
-    this.lowPower = false;
     this.fogFrame = 0;
-    this.autoLowWindows = 0;
-    this.raisedAt = -999;         // Clock of the last resolution raise, to detect one that did not hold.
-    this.raiseWait = 3;           // Good windows required before raising again; backs off after a failed raise.
+    this.fogEvery = 1;
+    this.stepI = -1;              // Index into QUALITY_STEPS.
+    this.qualityMode = 'high';    // 'auto' or the pinned step id.
+    this.governor = null;         // Auto only.
+    this.profile = null;
+    this.lastNow = 0;
+    this.selfMs = 0;              // This renderer's own update time last frame, the fallback when no frame clock runs.
     this._killInfo = { dirX: 0, dirZ: 0, weapon: 'ar', head: false, explosive: false };
     this.desat = 0;
     this.hurt = 0;
     this.finalKill = null;
-    this.frameStats = { calls: 0, triangles: 0, dpr: 0, geometries: 0, programs: 0, lowPower: false };
+    this.frameStats = {
+      calls: 0, triangles: 0, dpr: 0, geometries: 0, programs: 0, lowPower: false,
+      step: 'high', stepLabel: 'High', auto: false, resScale: 1, fogTexels: 8, thermal: false, heat: 0, cap30: false,
+      renderMs: 0, reason: '', profile: null,
+    };
 
     this._laserRGB = [0, 0, 0];
     this._charOpts = { localId: null, localTeam: 0, uav: false, revealAll: false };   // Reused every frame.
     this._hotRGB = [0, 0, 0];
     this.steamClock = 0;
-    this.frameAcc = 0;
-    this.frameCount = 0;
-    this.upStreak = 0;
 
     this.resize();
+    this._applyStep(stepIndex('high'));
+    if (this.dynamicRes) this.setQuality('auto');
+    // Every program now, hidden objects included, so no quality step or first sighting ever compiles mid-match.
+    this.fog.compile();
+    webgl.compile(this.scene, this.camera);
   }
 
   setLocal(id) {
@@ -241,59 +251,61 @@ export class GameRenderer {
     this.webgl.setSize(this.cssW, this.cssH, false);
   }
 
-  // Low Power: fewer pixels and thinner effects, for phones that cannot hold 60 even at minimum resolution.
-  // 'auto' lets dynamic resolution decide; 'high' and 'low' pin the level.
+  // q: 'auto', or a step id from QUALITY_STEPS ('ultra' .. 'potato'). Auto starts from the step it settled on last
+  // match, else from this phone's profile, and then adapts; a named step stays put at full resolution.
   setQuality(q) {
-    this.qualityPin = q;
-    if (q === 'low') this.setLowPower(true);
-    else if (q === 'high') { this.setLowPower(false); this.dynamicRes = false; }
-    else { this.setLowPower(false); this.dynamicRes = true; }
+    const pinned = stepIndex(q);
+    this.profile = this.profile || deviceProfile(this.webgl.getContext());
+    this.frameStats.profile = this.profile;
+    if (q === 'auto' && this.dynamicRes) {
+      const saved = savedAutoStep();
+      const start = Math.max(AUTO_CEILING, stepIndex(saved || this.profile.step));
+      this.qualityMode = 'auto';
+      this.resScale = 1;
+      this.governor = new Governor(this, start);
+    } else {
+      this.qualityMode = pinned >= 0 ? q : 'high';
+      this.governor = null;
+      this.resScale = 1;
+      this._applyStep(pinned >= 0 ? pinned : stepIndex('high'));
+      this._applyRes();
+    }
   }
 
-  setLowPower(on) {
-    on = !!on;
-    if (on === this.lowPower) return;
-    this.lowPower = on;
-    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, on ? MAX_DPR_LOW : MAX_DPR);
-    this.vfx.fxScale = on ? 0.5 : 1;
-    this.weather.setDensity(on ? 0.45 : 1);
-    this.ambient.setLowPower(on);
+  // Governor host interface.
+  get step() { return this.stepI; }
+  get maxDpr() { return this.basePixelRatio; }
+  get effectiveDpr() { return this.basePixelRatio * this.resScale; }
+  setStep(i) { this._applyStep(i); }
+  setResScale(s) {
+    if (Math.abs(s - this.resScale) < 1e-4) return;
+    this.resScale = s;
     this._applyRes();
   }
 
-  // Lowers the internal resolution when frames run long, restores it slowly when there is headroom.
-  // Changing the drawing buffer is itself a hitch, so a raise that does not hold makes the next one wait longer.
-  _adjustResolution(dt) {
-    if (!this.dynamicRes) return;
-    // A tab switch or GC pause says nothing about sustained GPU load.
-    if (dt > 0.12) return;
-    this.frameAcc += dt;
-    this.frameCount++;
-    if (this.frameAcc < 0.6) return;
-    const avg = this.frameAcc / this.frameCount;
-    this.frameAcc = 0;
-    this.frameCount = 0;
-    if (avg > 1 / 50) {
-      this.upStreak = 0;
-      if (this.resScale > MIN_RES) {
-        if (this.time.value - this.raisedAt < 6) this.raiseWait = Math.min(40, this.raiseWait * 2);
-        this.resScale = Math.max(MIN_RES, this.resScale * 0.9);
-        this._applyRes();
-      } else if (avg > 1 / 45 && ++this.autoLowWindows >= 4) {
-        this.autoLowWindows = 0;
-        this.setLowPower(true);
-      }
-    } else if (avg < 1 / 58) {
-      this.autoLowWindows = 0;
-      if (this.resScale < 1 && ++this.upStreak >= this.raiseWait) {
-        this.upStreak = 0;
-        this.raisedAt = this.time.value;
-        this.resScale = Math.min(1, this.resScale * 1.05);
-        this._applyRes();
-      }
-    } else {
-      this.upStreak = 0;
-    }
+  // Sizes, counts and visibility only: see quality.js.
+  _applyStep(i) {
+    i = Math.max(0, Math.min(QUALITY_STEPS.length - 1, i));
+    if (i === this.stepI) return;
+    this.stepI = i;
+    const q = QUALITY_STEPS[i];
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q.dpr);
+    this._applyRes();
+    this.fog.setDensity(q.fogTexels);
+    this.fog.setPasses(q.fogPasses);
+    this.fogEvery = q.fogEvery;
+    this.vfx.fxScale = q.fx;
+    this.weather.setDensity(q.weather);
+    this.ambient.setLowPower(!q.ambient);
+    this.chars.blob.visible = q.blobs;
+    if (this.world.decals) this.world.decals.visible = q.shadows;
+    this.props.setDensity(q.props);
+    const corpses = this.chars.corpses;
+    corpses.limit = q.corpses;
+    if (corpses.head >= q.corpses) corpses.head = 0;
+    const st = this.frameStats;
+    st.step = q.id; st.stepLabel = q.label; st.fogTexels = q.fogTexels;
+    st.lowPower = i >= stepIndex('low');
   }
 
   _handleEvents(events, localId, localTeam) {
@@ -600,6 +612,12 @@ export class GameRenderer {
 
   update(view, events, dt) {
     const webgl = this.webgl;
+    const startMs = performance.now();
+    if (this.governor) {
+      // The interval is measured here rather than taken from dt, which the match clamps.
+      if (this.lastNow) this.governor.frame(startMs - this.lastNow, frameClock.count ? frameClock.lastWork : this.selfMs);
+    }
+    this.lastNow = startMs;
     webgl.info.reset();
     const realDt = Math.min(dt, 0.05);
     this.time.value = (this.time.value + realDt) % 3600;
@@ -659,9 +677,9 @@ export class GameRenderer {
     this.fog.uniforms.on.value += (fogOn - this.fog.uniforms.on.value) * Math.min(1, realDt * 6);
 
     if (local) {
-      // Low Power refreshes the vision mask every other frame; the temporal blend hides the difference.
-      this.fogFrame = (this.fogFrame + 1) & 1;
-      if (!this.lowPower || this.fogFrame === 0) this.fog.update(local.x, local.z, this.lowPower ? realDt * 2 : realDt, view.smokes);
+      // Low steps refresh the vision mask every other frame; the temporal blend hides the difference.
+      this.fogFrame = (this.fogFrame + 1) % this.fogEvery;
+      if (this.fogFrame === 0) this.fog.update(local.x, local.z, realDt * this.fogEvery, view.smokes);
     } else if (!cine) this.fog.uniforms.on.value = 0;
 
     this._updateCamera(realDt, local);
@@ -669,13 +687,21 @@ export class GameRenderer {
     this.weather.update(fxDt, this.camTarget.x, this.camTarget.z, this.world.material);
     webgl.render(this.scene, this.camera);
 
-    this._adjustResolution(dt);
-    this.frameStats.calls = webgl.info.render.calls;
-    this.frameStats.triangles = webgl.info.render.triangles;
-    this.frameStats.dpr = this.basePixelRatio * this.resScale;
-    this.frameStats.geometries = webgl.info.memory.geometries;
-    this.frameStats.programs = webgl.info.programs ? webgl.info.programs.length : 0;
-    this.frameStats.lowPower = this.lowPower;
+    const st = this.frameStats;
+    st.calls = webgl.info.render.calls;
+    st.triangles = webgl.info.render.triangles;
+    st.dpr = this.basePixelRatio * this.resScale;
+    st.resScale = this.resScale;
+    st.geometries = webgl.info.memory.geometries;
+    st.programs = webgl.info.programs ? webgl.info.programs.length : 0;
+    const g = this.governor;
+    st.auto = !!g;
+    st.thermal = g ? g.thermal : false;
+    st.heat = g ? g.lastRatio : 0;
+    st.cap30 = g ? g.cap30 : false;
+    st.reason = g ? g.reason : '';
+    this.selfMs = performance.now() - startMs;
+    st.renderMs = this.selfMs;
   }
 
   // Killcam entry point. `shot` describes the camera and timing, or null to return to live play.
@@ -712,6 +738,9 @@ export class GameRenderer {
   }
 
   dispose() {
+    // A match long enough to judge leaves its settled step for the next one, unless the phone was hot.
+    const g = this.governor;
+    if (g && g.clock > 45 && !g.thermal) saveAutoStep(QUALITY_STEPS[this.stepI].id);
     this.chars.dispose();
     this.vfx.dispose();
     this.combat.dispose();

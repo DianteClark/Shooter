@@ -32,6 +32,7 @@ export class Corpses {
   constructor(chars) {
     this.chars = chars;
     this.head = 0;                 // Next corpse slot; the oldest body is overwritten when the pool is full.
+    this.limit = MAX_CORPSES;      // Bodies kept at once; the quality step lowers it. Slots past it finish their fade.
     this.life = new Float32Array(MAX_CORPSES);
     this.maxLife = new Float32Array(MAX_CORPSES);
     this.age = new Float32Array(MAX_CORPSES);
@@ -55,7 +56,7 @@ export class Corpses {
     // A rig that has not been drawn in a moment has no pose worth launching.
     if (r.posed < 0 || Math.abs(chars.time.value - r.posed) > 0.6) return false;
     const c = this.head;
-    this.head = (c + 1) % MAX_CORPSES;
+    this.head = (c + 1) % this.limit;
     this.life[c] = this.maxLife[c] = rand(2.3, 2.9);
     this.age[c] = 0;
     this.team[c] = r.team; this.op[c] = r.op; this.camo[c] = r.camoI;

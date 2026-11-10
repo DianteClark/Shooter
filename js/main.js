@@ -22,6 +22,9 @@ import { installTaps } from './ui/tap.js';
 import { Options } from './ui/options.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
+import { PerfOverlay } from './ui/perf.js';
+import { statsScreen } from './ui/stats.js';
+import { installFrameClock } from './render/quality.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -29,7 +32,7 @@ const NET_POLL_MS = 1000;
 const REMATCH_SECONDS = 15;
 const VOTE_REVEAL_MS = 1700;
 const REJOIN_MINUTES = 15;       // How long after dropping the title screen still offers the way back.
-const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help'];   // A lobby update must not pull a guest out of these.
+const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats'];   // A lobby update must not pull a guest out of these.
 const LAST_ROOM = 'switchyard-last-room';
 const params = new URLSearchParams(location.search);
 const NetImpl = params.get('net') === 'local' ? LocalNet : Net;
@@ -159,6 +162,16 @@ function forgetRoom() {
 
 function showTitle(opts = {}) {
   menu.title({ ...opts, rejoin: rejoinOffer() });
+  // The title markup belongs to the menu module; Stats joins the Options / How to play row from here.
+  const help = menu.el.querySelector('.route[data-act="help"]');
+  if (help && !menu.el.querySelector('[data-act="stats"]')) {
+    const stats = document.createElement('button');
+    stats.className = 'route';
+    stats.dataset.act = 'stats';
+    stats.innerHTML = '<b>Stats</b>';
+    help.before(stats);
+    help.parentNode.style.gridTemplateColumns = '1fr 0.8fr 1.2fr';   // Three in the row that was a pair.
+  }
 }
 
 function teardownNet() {
@@ -175,6 +188,7 @@ menu.on({
   profile: () => openProfile(),
   saveCode: () => openSave(),
   options: () => openOptions(),
+  stats: () => openStats(),
   help: () => openHelp(),
   rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
   range: () => { needName(startRange); },
@@ -268,6 +282,10 @@ function openProfile() {
 
 function openOptions() {
   menu.options({ onBack: afterEditing, onPreviewSound: () => audio.uiClick?.() });
+}
+
+function openStats() {
+  statsScreen(menu, { onBack: afterEditing });
 }
 
 function openHelp() {
@@ -632,7 +650,7 @@ function launchRange() {
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
   beginMatch({
-    roster: withBadges(buildRoster(humans, { teamSize: 0 }), humans, seed),
+    roster: withBadges(buildRoster(humans, { teamSize: 0, seed }), humans, seed),
     seed, mapId: 'range', mode: 'range', ...limitsFor('range'),
     hostId: id, isHost: true, localId: id, rangeDummies: rangeDummies(MAPS.range),
   });
@@ -658,7 +676,7 @@ function launchSolo(mapId, mode) {
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
   beginMatch({
-    roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE, mode, mapId }), humans, seed),
+    roster: withBadges(buildRoster(humans, { botSkill: params.get('bots') || 'mixed', teamSize: TEAM_SIZE, mode, mapId, seed }), humans, seed),
     seed, mapId, mode, ...limitsFor(mode),
     hostId: id, isHost: true, localId: id,
   });
@@ -755,7 +773,7 @@ function launchHostMatch(mapId, mode) {
   const seed = randomSeed();
   const payload = {
     t: 'start', seed, mapId, mode, ...limitsFor(mode),
-    roster: withBadges(buildRoster(clean, { botSkill, teamSize: TEAM_SIZE, mode, mapId }), clean, seed),
+    roster: withBadges(buildRoster(clean, { botSkill, teamSize: TEAM_SIZE, mode, mapId, seed }), clean, seed),
   };
   net.sendLobby(payload);
   beginMatch({ ...payload, hostId: net.localId, isHost: true });
@@ -908,6 +926,7 @@ function applyOptions(v, changed) {
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
+  if (!changed || changed === 'fps') perf.setVisible(v.fps || FPS_PARAM);
 }
 
 // --- Startup ---
@@ -920,6 +939,10 @@ function maybeInstallPrompt() {
   menu.installPrompt(() => {});
 }
 
+// Times every frame's script work for the Auto quality governor and the performance overlay.
+installFrameClock();
+const FPS_PARAM = params.get('fps') === '1';
+const perf = new PerfOverlay(document.body, () => app.renderer?.getStats() ?? null);
 followViewport();
 blockIosGestures();
 installTaps();

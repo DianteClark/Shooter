@@ -2728,7 +2728,7 @@ export function buildWorld(map, teams, fogUniforms) {
   if (glow.pos.length) addFogMesh(glow.build(), GLOW_VERT, GLOW_FRAG, 5, true);
 
   return {
-    group, material, tris, lamps,
+    group, material, tris, lamps, decals,
     drawCalls: group.children.length,
     // Advances the world's shader clock (signs, water, wet sheen). Lightning writes uFlash through Weather.
     update(dt) { timeU.value = (timeU.value + dt) % 3600; },

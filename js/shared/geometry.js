@@ -57,7 +57,8 @@ export function raycastMap(map, ox, oz, dirX, dirZ, maxDist, flag = 'blocksBulle
 export function smokeBlocks(smokes, ax, az, bx, bz) {
   if (!smokes || !smokes.length) return false;
   const dx = bx - ax, dz = bz - az, lenSq = dx * dx + dz * dz;
-  for (const s of smokes) {
+  for (let i = 0; i < smokes.length; i++) {
+    const s = smokes[i];
     if ((ax - s.x) ** 2 + (az - s.z) ** 2 <= s.r * s.r) continue;
     const u = lenSq > 0 ? Math.max(0, Math.min(1, ((s.x - ax) * dx + (s.z - az) * dz) / lenSq)) : 0;
     const px = ax + dx * u - s.x, pz = az + dz * u - s.z;
@@ -88,7 +89,9 @@ export function rayCircle(ox, oz, dirX, dirZ, cx, cz, radius) {
 export function resolveCircle(map, pos, radius) {
   for (let pass = 0; pass < 3; pass++) {
     let moved = false;
-    for (const w of map.walls) {
+    const walls = map.walls;
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i];
       if (!w.blocksMove) continue;
       const nx = Math.max(w.x, Math.min(pos.x, w.x + w.w));
       const nz = Math.max(w.z, Math.min(pos.z, w.z + w.d));

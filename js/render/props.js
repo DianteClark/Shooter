@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { MeshBuilder } from './meshbuild.js';
 import { GLSL_LIGHT } from './art.js';
+import { uploadUsed } from './dynbuf.js';
 
 const MAX_PROPS = 40;
 const CRATE = 0, BARREL = 1, SIGN = 2, CONE = 3, JAR = 4;
@@ -121,12 +122,15 @@ export class Props {
     this.dead = new Float32Array(n);    // Seconds until a broken prop may return; 0 = standing.
     this.pop = new Float32Array(n).fill(1);    // Scale-in when regrown.
     this.signRGB = new Float32Array(n * 3);
+    this.off = new Uint8Array(n);       // Thinned out by the quality step: not drawn, not hit, not bumped.
+    this.keep = new Float32Array(n);    // Stable per-prop rank, so thinning removes the same props every time.
     for (let i = 0; i < n; i++) {
       this.x[i] = spots[i].x; this.z[i] = spots[i].z;
       this.kind[i] = list[Math.floor(rnd() * list.length)];
       this.rot[i] = this.kind[i] === SIGN ? spots[i].face : rnd() * Math.PI * 2;
       this.scale[i] = 0.9 + rnd() * 0.3;
       this.hp[i] = HP[this.kind[i]];
+      this.keep[i] = (Math.imul(i + 1, 2654435761) >>> 0) / 4294967296;   // A hash, so the seeded layout stays as it was.
       const c = this.neon ? this.neon[Math.floor(rnd() * this.neon.length)] : [1.0, 0.72, 0.28];
       this.signRGB[i * 3] = c[0]; this.signRGB[i * 3 + 1] = c[1]; this.signRGB[i * 3 + 2] = c[2];
     }
@@ -156,6 +160,12 @@ export class Props {
     this.clock = 0;
   }
 
+  // Quality step: keeps about this fraction of the props (0..1). Only changes counts, never the material.
+  setDensity(k) {
+    for (let i = 0; i < this.count; i++) this.off[i] = this.keep[i] >= k ? 1 : 0;
+    this.dirty = true;
+  }
+
   // Bullet path as a ground segment. Each ray breaks at most one prop, the first along it.
   hitRay(ax, az, bx, bz) {
     if (!this.count) return;
@@ -163,7 +173,7 @@ export class Props {
     if (len2 < 1e-4) return;
     let best = -1, bestT = 2;
     for (let i = 0; i < this.count; i++) {
-      if (this.dead[i] > 0) continue;
+      if (this.dead[i] > 0 || this.off[i]) continue;
       const t = Math.max(0, Math.min(1, ((this.x[i] - ax) * dx + (this.z[i] - az) * dz) / len2));
       const ex = ax + dx * t - this.x[i], ez = az + dz * t - this.z[i];
       const r = RADIUS[this.kind[i]];
@@ -186,7 +196,7 @@ export class Props {
   // Anything inside the radius is destroyed outright.
   blast(x, z, radius) {
     for (let i = 0; i < this.count; i++) {
-      if (this.dead[i] > 0) continue;
+      if (this.dead[i] > 0 || this.off[i]) continue;
       const dx = this.x[i] - x, dz = this.z[i] - z;
       if (dx * dx + dz * dz < radius * radius) this.break(i);
     }
@@ -250,7 +260,7 @@ export class Props {
         const q = players[p];
         if (!q.alive) continue;
         for (let i = 0; i < this.count; i++) {
-          if (this.dead[i] > 0) continue;
+          if (this.dead[i] > 0 || this.off[i]) continue;
           const dx = this.x[i] - q.x, dz = this.z[i] - q.z, r = RADIUS[this.kind[i]] + 0.34;
           if (dx * dx + dz * dz < r * r) this.break(i, true);
         }
@@ -281,7 +291,7 @@ export class Props {
   #write() {
     for (let m = 0; m < 5; m++) if (this.meshes[m]) this.meshes[m].count = 0;
     for (let i = 0; i < this.count; i++) {
-      if (this.dead[i] > 0) continue;
+      if (this.dead[i] > 0 || this.off[i]) continue;
       const k = this.kind[i], sh = this.shake[i], mesh = this.meshes[k];
       const n = mesh.count++;
       const wob = sh > 0 ? Math.sin(this.clock * 40) * sh * 0.16 : 0;
@@ -304,9 +314,9 @@ export class Props {
     for (let m = 0; m < 5; m++) {
       const mesh = this.meshes[m];
       if (!mesh) continue;
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.geometry.attributes.aFx.needsUpdate = true;
-      mesh.geometry.attributes.aGlow.needsUpdate = true;
+      uploadUsed(mesh.instanceMatrix, mesh.count);
+      uploadUsed(mesh.geometry.attributes.aFx, mesh.count);
+      uploadUsed(mesh.geometry.attributes.aGlow, mesh.count);
     }
   }
 

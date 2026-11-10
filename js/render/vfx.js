@@ -5,6 +5,7 @@ import { GLSL_LIGHT, hexRGB } from './art.js';
 import { MeshBuilder } from './meshbuild.js';
 import { MAX_POPS } from './world.js';
 import { getTracer, getKillEffect } from '../shared/camos.js';
+import { uploadUsed } from './dynbuf.js';
 
 const TRACERS = 180;
 const PARTS = 1100;
@@ -1031,7 +1032,7 @@ export class VFX {
       n++;
     }
     this.markGeom.instanceCount = n;
-    this.mP.needsUpdate = true; this.mN.needsUpdate = true; this.mC.needsUpdate = true;
+    uploadUsed(this.mP, n); uploadUsed(this.mN, n); uploadUsed(this.mC, n);
   }
 
   /* ---------- Rockets: the launcher is hitscan in the sim, so the missile is a cosmetic racing its own blast ---------- */
@@ -1100,8 +1101,8 @@ export class VFX {
       n++;
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    aC.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(aC, n);
   }
 
   // Drawn after step() has packed everything: the engine glow rides the particle batch.
@@ -1185,9 +1186,16 @@ export class VFX {
     this.tracerN = n + 1;
   }
 
+  // Last call before the frame is drawn: tracers, beams and one-frame dots have all been appended by now,
+  // so this is where the batches learn how much of their buffers to send.
   flushTracers() {
-    this.tracerGeom.instanceCount = this.tracerN;
-    this.tA.needsUpdate = true; this.tB.needsUpdate = true; this.tC.needsUpdate = true;
+    const n = this.tracerN;
+    this.tracerGeom.instanceCount = n;
+    uploadUsed(this.tA, n); uploadUsed(this.tB, n); uploadUsed(this.tC, n);
+    const p = this.partGeom.instanceCount;
+    uploadUsed(this.pP, p); uploadUsed(this.pC, p); uploadUsed(this.pA, p);
+    const r = this.ringGeom.instanceCount;
+    uploadUsed(this.rP, r); uploadUsed(this.rC, r); uploadUsed(this.rY, r);
   }
 
   // Appends a one-frame glow directly to the buffer, after step() has packed the live particles.
@@ -1222,8 +1230,7 @@ export class VFX {
       }
       n++;
     }
-    this.partGeom.instanceCount = n;
-    this.pP.needsUpdate = true; this.pC.needsUpdate = true; this.pA.needsUpdate = true;
+    this.partGeom.instanceCount = n;      // Uploaded in flushTracers, after the frame's dots are appended.
   }
 
   _stepPhys(P, mesh, dt, isShell) {
@@ -1273,8 +1280,8 @@ export class VFX {
       n++;
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    aC.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(aC, n);
   }
 
   _stepFlashes(dt) {
@@ -1299,8 +1306,8 @@ export class VFX {
       n++;
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    aC.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(aC, n);
   }
 
   _stepBalls(dt) {
@@ -1323,8 +1330,8 @@ export class VFX {
       n++;
     }
     mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    aC.needsUpdate = true;
+    uploadUsed(mesh.instanceMatrix, n);
+    uploadUsed(aC, n);
   }
 
   _stepRings(dt) {
@@ -1349,8 +1356,7 @@ export class VFX {
       this.rY.setX(n, R.y[i]);
       n++;
     }
-    this.ringGeom.instanceCount = n;
-    this.rP.needsUpdate = true; this.rC.needsUpdate = true; this.rY.needsUpdate = true;
+    this.ringGeom.instanceCount = n;      // Uploaded in flushTracers: addRing can still append this frame.
   }
 
   dispose() {

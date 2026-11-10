@@ -12,6 +12,7 @@ import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR } from '../ui/operators.js';
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
+import { uploadUsed } from './dynbuf.js';
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -1002,21 +1003,19 @@ export class Characters {
     torso.count = this.counts.nT; head.count = this.counts.nT;
     upper.count = this.counts.nU; arm.count = this.counts.nA; leg.count = this.counts.nL; boot.count = this.counts.nB;
     held.count = nH;
+    // Only the instances drawn this frame are sent; the x-ray meshes share torso and head buffers.
     for (let i = 0; i < this.bodyMeshes.length; i++) {
-      const m = this.bodyMeshes[i];
-      m.instanceMatrix.needsUpdate = true;
+      const m = this.bodyMeshes[i], n = m.count;
+      uploadUsed(m.instanceMatrix, n);
       const a = m.geometry.attributes;
-      a.aFx.needsUpdate = true;
-      a.aTeam.needsUpdate = true;
-      a.aOp.needsUpdate = true;
-      a.aTint.needsUpdate = true;
+      uploadUsed(a.aFx, n); uploadUsed(a.aTeam, n); uploadUsed(a.aOp, n); uploadUsed(a.aTint, n);
     }
     for (let i = 0; i < this.gunList.length; i++) {
-      const m = this.gunList[i];
-      if (m.count === 0) continue;
-      m.instanceMatrix.needsUpdate = true;
+      const m = this.gunList[i], n = m.count;
+      if (n === 0) continue;
+      uploadUsed(m.instanceMatrix, n);
       const a = m.geometry.attributes;
-      a.aFx.needsUpdate = true; a.aCamo.needsUpdate = true; a.aAccent.needsUpdate = true; a.aHeat.needsUpdate = true;
+      uploadUsed(a.aFx, n); uploadUsed(a.aCamo, n); uploadUsed(a.aAccent, n); uploadUsed(a.aHeat, n);
     }
   }
 

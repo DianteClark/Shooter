@@ -2,6 +2,7 @@
 // low-res mask, with temporal smoothing, and world materials sample the mask by world position.
 // Uses its own allocation-free slab raycast; same rules as raycastMap(..,'blocksVision').
 import * as THREE from 'three';
+import { uploadUsed } from './dynbuf.js';
 
 // Distance to the nearest flagged wall along a normalised ray, or maxDist. hitWall (out) gets its index.
 export function castRay(walls, ox, oz, dx, dz, maxDist, hitOut = null) {
@@ -44,49 +45,44 @@ void main() { gl_Position = vec4((position.xz * uXf.xy + uXf.zw + uJit) * 2.0 - 
 const MAX_SMOKES = 6;       // CombatFX pools the same number of clouds.
 const SMOKE_RAYS = 18;      // Rays across one cloud; enough that its edge reads as round in the mask.
 
-const JITTER_TEXELS = [[2.0, 0.7], [-0.7, 2.0], [-2.0, -0.7], [0.7, -2.0], [1.3, -1.3], [-1.3, 1.3]];
+// The first n offsets are used when the quality step asks for n passes, so every prefix stays balanced around the
+// true edge (opposite pairs first).
+const JITTER_TEXELS = [[2.0, 0.7], [-2.0, -0.7], [-0.7, 2.0], [0.7, -2.0], [1.3, -1.3], [-1.3, 1.3]];
+const SETTLE_FRAMES = 45;   // Frames without a change after which the temporal blend has converged (to ~1/1000).
+const MARGIN = 2;           // Metres of mask beyond the map edge.
 
 export class FogMask {
-  constructor(map, webgl) {
+  constructor(map, webgl, { texelsPerMetre = 8, passes = JITTER_TEXELS.length } = {}) {
     this.map = map;
     this.webgl = webgl;
     this.walls = map.walls.filter(w => w.blocksVision);
     const W = map.width, H = map.height;
-
-    // Mask covers the map plus a small margin. Eight texels per metre keeps polygon edges smooth
-    // without MSAA; MSAA would invalidate the previous frame that the temporal blend relies on.
-    const m = 2;
-    this.bounds = { x: -m, z: -m, w: W + 2 * m, h: H + 2 * m };
-    const rw = Math.ceil(this.bounds.w * 8), rh = Math.ceil(this.bounds.h * 8);
-    this.rt = new THREE.WebGLRenderTarget(rw, rh, {
-      depthBuffer: false, stencilBuffer: false,
-      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
-      generateMipmaps: false,
-    });
+    const nw = this.walls.length;
+    this.bounds = { x: -MARGIN, z: -MARGIN, w: W + 2 * MARGIN, h: H + 2 * MARGIN };
     const xf = new THREE.Vector4(1 / this.bounds.w, 1 / this.bounds.h, -this.bounds.x / this.bounds.w, -this.bounds.z / this.bounds.h);
-    this.uniforms = { tex: { value: this.rt.texture }, xf: { value: xf }, on: { value: 1 } };
+    this.rt = null;
+    this.uniforms = { tex: { value: null }, xf: { value: xf }, on: { value: 1 } };
 
-    // Rays go at each corner, and a hair to either side of it, so shadows stay exactly on wall edges.
-    this.cornerX = new Float32Array(this.walls.length * 4);
-    this.cornerZ = new Float32Array(this.walls.length * 4);
-    this.walls.forEach((w, i) => {
-      this.cornerX[i * 4] = w.x; this.cornerZ[i * 4] = w.z;
-      this.cornerX[i * 4 + 1] = w.x + w.w; this.cornerZ[i * 4 + 1] = w.z;
-      this.cornerX[i * 4 + 2] = w.x + w.w; this.cornerZ[i * 4 + 2] = w.z + w.d;
-      this.cornerX[i * 4 + 3] = w.x; this.cornerZ[i * 4 + 3] = w.z + w.d;
-    });
-    const maxRays = this.walls.length * 4 * 3 + 8 + MAX_SMOKES * SMOKE_RAYS;
+    // Walls as flat arrays for the sweep's inner loop.
+    this.x0 = new Float32Array(nw); this.z0 = new Float32Array(nw);
+    this.x1 = new Float32Array(nw); this.z1 = new Float32Array(nw);
+    this.walls.forEach((w, i) => { this.x0[i] = w.x; this.z0[i] = w.z; this.x1[i] = w.x + w.w; this.z1[i] = w.z + w.d; });
+    // At most three rays per corner (see _sweep), a ring of fixed rays, and the smoke fans.
+    const maxRays = nw * 4 * 3 + 8 + MAX_SMOKES * SMOKE_RAYS;
     this.angles = new Float32Array(maxRays);
     this.maxRays = maxRays;
     this.hadSmoke = false;
     this.ax = new Float32Array(maxRays);
     this.az = new Float32Array(maxRays);
-    this.touched = new Uint8Array(this.walls.length);
-    this.hit = [-1];
+    this.touched = new Uint8Array(nw);
+    this.hit = -1;
     this.lastX = 1e9; this.lastZ = 1e9;
+    this.still = 0;             // Frames since the polygon last changed.
+    this.snap = true;           // Next draw replaces the mask instead of easing into it.
+    this.raysCast = 0;          // Rays in the last sweep, for profiling.
 
     // One fan triangle per ray, then two triangles per touched wall.
-    const maxVerts = maxRays * 3 + this.walls.length * 6;
+    const maxVerts = maxRays * 3 + nw * 6;
     this.positions = new Float32Array(maxVerts * 3);
     const geo = new THREE.BufferGeometry();
     const attr = new THREE.BufferAttribute(this.positions, 3);
@@ -100,11 +96,11 @@ export class FogMask {
     this.kBlack = { value: 0.2 };
     this.kPoly = { value: 0.2 };
     const uXf = { value: xf };
-    this.polys = JITTER_TEXELS.map(([jx, jy]) => {
+    this.polys = JITTER_TEXELS.map(() => {
       const mat = new THREE.ShaderMaterial({
         vertexShader: MASK_VERT,
         fragmentShader: `uniform float uK; void main(){ gl_FragColor = vec4(uK, uK, uK, 1.0); }`,
-        uniforms: { uXf, uK: this.kPoly, uJit: { value: new THREE.Vector2(jx / rw, jy / rh) } },
+        uniforms: { uXf, uK: this.kPoly, uJit: { value: new THREE.Vector2() } },
         depthTest: false, depthWrite: false, transparent: true,
         blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
         side: THREE.DoubleSide,
@@ -132,19 +128,101 @@ export class FogMask {
     this.scene.updateMatrixWorld(true);
     this.camera = new THREE.Camera();
 
-    webgl.setRenderTarget(this.rt);
-    webgl.setClearColor(0x000000, 1);
-    webgl.clear(true, false, false);
-    webgl.setRenderTarget(null);
+    this.passes = 0;
+    this.setPasses(passes);
+    this.setDensity(texelsPerMetre);
+  }
+
+  // Mask resolution in texels per metre. Reallocates the target (a texture, never a shader) and repaints it whole
+  // on the next update, so a quality change costs one allocation and no visible fade.
+  setDensity(texelsPerMetre) {
+    if (texelsPerMetre === this.density) return;
+    this.density = texelsPerMetre;
+    const rw = Math.ceil(this.bounds.w * texelsPerMetre), rh = Math.ceil(this.bounds.h * texelsPerMetre);
+    // Linear filtering at a few texels per metre keeps polygon edges smooth without MSAA; MSAA would invalidate
+    // the previous frame that the temporal blend relies on.
+    const rt = new THREE.WebGLRenderTarget(rw, rh, {
+      depthBuffer: false, stencilBuffer: false,
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+      generateMipmaps: false,
+    });
+    // Hidden until the first update paints it, rather than showing an uninitialised texture.
+    const r = this.webgl, saved = r.getRenderTarget();
+    r.setRenderTarget(rt);
+    r.setClearColor(0x000000, 1);
+    r.clear(true, false, false);
+    r.setRenderTarget(saved);
+    if (this.rt) this.rt.dispose();
+    this.rt = rt;
+    this.uniforms.tex.value = rt.texture;
+    for (let i = 0; i < this.polys.length; i++) this.polys[i].material.uniforms.uJit.value.set(JITTER_TEXELS[i][0] / rw, JITTER_TEXELS[i][1] / rh);
+    this.reset();
+  }
+
+  // Soft-edge passes (1..6). Fewer passes is a harder penumbra and less fill.
+  setPasses(n) {
+    n = Math.max(1, Math.min(JITTER_TEXELS.length, n | 0));
+    if (n === this.passes) return;
+    this.passes = n;
+    for (let i = 0; i < this.polys.length; i++) this.polys[i].visible = i < n;
+    this.still = 0;
+  }
+
+  // Distance to the nearest vision wall along a normalised ray, or maxDist; this.hit gets its index or -1.
+  // Same slab test as castRay, over flat arrays with the divisions hoisted out of the loop.
+  _cast(ox, oz, dx, dz, maxDist) {
+    const { x0, z0, x1, z1 } = this;
+    const flatX = Math.abs(dx) < 1e-9, flatZ = Math.abs(dz) < 1e-9;
+    const ix = flatX ? 0 : 1 / dx, iz = flatZ ? 0 : 1 / dz;
+    let best = maxDist, bestI = -1;
+    for (let i = 0; i < x0.length; i++) {
+      let t0 = 0, t1 = best;
+      if (flatX) {
+        if (ox < x0[i] || ox > x1[i]) continue;
+      } else {
+        let a = (x0[i] - ox) * ix, b = (x1[i] - ox) * ix;
+        if (a > b) { const q = a; a = b; b = q; }
+        if (a > t0) t0 = a;
+        if (b < t1) t1 = b;
+        if (t0 > t1) continue;
+      }
+      if (flatZ) {
+        if (oz < z0[i] || oz > z1[i]) continue;
+      } else {
+        let a = (z0[i] - oz) * iz, b = (z1[i] - oz) * iz;
+        if (a > b) { const q = a; a = b; b = q; }
+        if (a > t0) t0 = a;
+        if (b < t1) t1 = b;
+        if (t0 > t1) continue;
+      }
+      if (t0 > 0 && t0 < best) { best = t0; bestI = i; }
+    }
+    this.hit = bestI;
+    return best;
   }
 
   _sweep(px, pz, smokes) {
-    const { cornerX, cornerZ, angles, ax, az, walls, touched, hit } = this;
+    const { x0, z0, x1, z1, angles, ax, az, touched } = this;
     const smokeN = smokes ? Math.min(smokes.length, MAX_SMOKES) : 0;
     let n = 0;
-    for (let i = 0; i < cornerX.length; i++) {
-      const a = Math.atan2(cornerZ[i] - pz, cornerX[i] - px);
-      angles[n++] = a - 0.0015; angles[n++] = a; angles[n++] = a + 0.0015;
+    // Only corners that can shape the polygon get rays. Seen from outside a box, the corner diagonally away from the
+    // viewer is always hidden behind the box, and the corner facing the viewer is hit head on, so it needs one ray;
+    // the two silhouette corners get a ray a hair to either side as well, so shadows stay exactly on wall edges.
+    // This is a little over half the rays of three per corner, with the same polygon.
+    for (let i = 0; i < x0.length; i++) {
+      const rx = px < x0[i] ? -1 : px > x1[i] ? 1 : 0;
+      const rz = pz < z0[i] ? -1 : pz > z1[i] ? 1 : 0;
+      for (let c = 0; c < 4; c++) {
+        const sx = c === 0 || c === 3 ? -1 : 1, sz = c < 2 ? -1 : 1;
+        let rays = 3;
+        if (rx !== 0 || rz !== 0) {
+          if (rx === 0 ? sz === -rz : rz === 0 ? sx === -rx : sx === -rx && sz === -rz) continue;
+          if (sx === rx && sz === rz) rays = 1;
+        }
+        const a = Math.atan2((sz < 0 ? z0[i] : z1[i]) - pz, (sx < 0 ? x0[i] : x1[i]) - px);
+        if (rays === 1) angles[n++] = a;
+        else { angles[n++] = a - 0.0015; angles[n++] = a; angles[n++] = a + 0.0015; }
+      }
     }
     // A few fixed rays guarantee full coverage even if corners end up degenerate.
     for (let i = 0; i < 8; i++) angles[n++] = -Math.PI + (i / 8) * Math.PI * 2;
@@ -162,11 +240,11 @@ export class FogMask {
     // Spare slots sort to the end, so one fixed-size in-place sort serves any ray count.
     angles.fill(Infinity, n);
     angles.sort();
-    const list = angles;
     touched.fill(0);
     for (let i = 0; i < n; i++) {
-      const dx = Math.cos(list[i]), dz = Math.sin(list[i]);
-      let t = castRay(walls, px, pz, dx, dz, 300, hit);
+      const dx = Math.cos(angles[i]), dz = Math.sin(angles[i]);
+      let t = this._cast(px, pz, dx, dz, 300);
+      const hit = this.hit;
       let blockedBySmoke = false;
       for (let s = 0; s < smokeN; s++) {
         const c = smokes[s], fx = c.x - px, fz = c.z - pz;
@@ -176,16 +254,18 @@ export class FogMask {
         const enter = along - Math.sqrt(c.r * c.r - off2) + c.r * 0.35;
         if (enter < t) { t = enter; blockedBySmoke = true; }
       }
-      if (hit[0] >= 0 && !blockedBySmoke) touched[hit[0]] = 1;
+      if (hit >= 0 && !blockedBySmoke) touched[hit] = 1;
       // Extend just past the hit so the base of the wall is inside the polygon.
       const e = t + 0.35;
       ax[i] = px + dx * e;
       az[i] = pz + dz * e;
     }
+    this.raysCast = n;
     return n;
   }
 
-  // Sweeps, fills the mesh, and blends it into the mask. Call once per frame.
+  // Sweeps, fills the mesh, and blends it into the mask. Call once per frame (or every other frame on low steps,
+  // with dt covering both).
   update(px, pz, dt, smokes) {
     const hasSmoke = !!smokes && smokes.length > 0;
     // Clouds grow and drift, so their shadow must be recomputed even for a standing player.
@@ -197,7 +277,7 @@ export class FogMask {
       const P = this.positions;
       let v = 0;
       for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
+        const j = i + 1 < n ? i + 1 : 0;
         P[v++] = px;       P[v++] = 0; P[v++] = pz;
         P[v++] = this.ax[j]; P[v++] = 0; P[v++] = this.az[j];
         P[v++] = this.ax[i]; P[v++] = 0; P[v++] = this.az[i];
@@ -205,8 +285,7 @@ export class FogMask {
       // Any wall a ray touched is revealed whole, so roofs of visible walls are not fogged.
       for (let i = 0; i < this.walls.length; i++) {
         if (!this.touched[i]) continue;
-        const w = this.walls[i];
-        const x0 = w.x, x1 = w.x + w.w, z0 = w.z, z1 = w.z + w.d;
+        const x0 = this.x0[i], x1 = this.x1[i], z0 = this.z0[i], z1 = this.z1[i];
         P[v++] = x0; P[v++] = 0; P[v++] = z0;
         P[v++] = x1; P[v++] = 0; P[v++] = z0;
         P[v++] = x1; P[v++] = 0; P[v++] = z1;
@@ -214,12 +293,17 @@ export class FogMask {
         P[v++] = x1; P[v++] = 0; P[v++] = z1;
         P[v++] = x0; P[v++] = 0; P[v++] = z1;
       }
-      this.posAttr.needsUpdate = true;
+      uploadUsed(this.posAttr, v / 3);
       this.geo.setDrawRange(0, v / 3);
+      this.still = 0;
+    } else if (++this.still > SETTLE_FRAMES && !this.snap) {
+      // Nothing moved and the blend has converged: the mask is already what another draw would make it.
+      return;
     }
-    const k = 1 - Math.exp(-Math.min(dt, 0.05) * 16);
+    const k = this.snap ? 1 : 1 - Math.exp(-Math.min(dt, 0.05) * 16);
+    this.snap = false;
     this.kBlack.value = k;
-    this.kPoly.value = k / JITTER_TEXELS.length;
+    this.kPoly.value = k / this.passes;
     const r = this.webgl;
     const savedRT = r.getRenderTarget();
     const savedAuto = r.autoClear;
@@ -230,8 +314,16 @@ export class FogMask {
     r.autoClear = savedAuto;
   }
 
+  // Compiles the mask programs now rather than on the first frame.
+  compile() {
+    const r = this.webgl, saved = r.getRenderTarget();
+    r.setRenderTarget(this.rt);
+    r.compile(this.scene, this.camera);
+    r.setRenderTarget(saved);
+  }
+
   // Instant snap, for spawn. Paints fully rather than easing from the previous position.
-  reset() { this.lastX = 1e9; this._n = 0; }
+  reset() { this.lastX = 1e9; this._n = 0; this.snap = true; this.still = 0; }
 
   dispose() {
     this.rt.dispose();
