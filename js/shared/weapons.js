@@ -106,8 +106,8 @@ export const WEAPONS = {
   // The fastest kill in the game inside a room, and a fight with the muzzle everywhere else.
   pdw: {
     id: 'pdw', name: 'Rasp', role: 'Knife fight', auto: true,
-    damage: 20, rpm: 1200, magazine: 28, reserve: 168, reload: 1.6, range: 22,
-    falloff: { start: 6, end: 13, min: 0.45 },
+    damage: 20, rpm: 1050, magazine: 28, reserve: 168, reload: 1.6, range: 26,
+    falloff: { start: 8, end: 15, min: 0.45 },
     adsSpread: 0.024, hipSpread: 0.042, bloomPerShot: 0.07, bloomRecover: 3, bloomScale: 1.6,
     pattern: { amp: 0.028, freq: 1.75, ramp: 2, drift: 0.0028 },
     adsTime: 0.12, sprintToFire: 0.08, swapTime: 0.24, moveMult: 1.08, adsMoveMult: 0.82,
@@ -131,9 +131,9 @@ export const WEAPONS = {
   // A fan of pellets: one pump up close, two a little further. Loads shell by shell, fire to interrupt.
   shotgun: {
     id: 'shotgun', name: 'Thresher', role: 'Breach', auto: false,
-    damage: 18, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 15,
+    damage: 22, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 15,
     falloff: { start: 5, end: 10, min: 0.3 },
-    adsSpread: 0.05, hipSpread: 0.088, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
+    adsSpread: 0.042, hipSpread: 0.075, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
     adsTime: 0.17, sprintToFire: 0.14, swapTime: 0.42, moveMult: 1.02, adsMoveMult: 0.68,
     pellets: 8, shellReload: true, kickCam: 1, tracerWidth: 0.55, longshot: 10,
     botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 12 },
@@ -142,9 +142,9 @@ export const WEAPONS = {
   // Two shells at arm's length and nothing much past a doorway. Drum fed: one long reload, no shell-by-shell.
   autoshot: {
     id: 'autoshot', name: 'Squall', role: 'Doorway', auto: true,
-    damage: 14, rpm: 300, magazine: 14, reserve: 56, reload: 3, range: 12,
+    damage: 17, rpm: 300, magazine: 14, reserve: 56, reload: 3, range: 12,
     falloff: { start: 4, end: 8, min: 0.3 },
-    adsSpread: 0.07, hipSpread: 0.115, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
+    adsSpread: 0.06, hipSpread: 0.1, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
     pattern: { amp: 0.02, freq: 1.1, ramp: 3 }, turnCap: 6.5,
     adsTime: 0.2, sprintToFire: 0.17, swapTime: 0.46, moveMult: 0.97, adsMoveMult: 0.62,
     pellets: 7, kickCam: 0.95, tracerWidth: 0.5, longshot: 8,
@@ -154,9 +154,9 @@ export const WEAPONS = {
   // Both barrels, quickly, then a full break-open reload. Two chances to end a fight and no third.
   coach: {
     id: 'coach', name: 'Doublet', role: 'Ambush', auto: false,
-    damage: 14, rpm: 280, magazine: 2, reserve: 30, reload: 2.1, range: 14,
+    damage: 17, rpm: 280, magazine: 2, reserve: 30, reload: 2.1, range: 14,
     falloff: { start: 5, end: 9, min: 0.35 },
-    adsSpread: 0.04, hipSpread: 0.075, bloomPerShot: 0.1, bloomRecover: 2.2, bloomScale: 0.4, turnCap: 8,
+    adsSpread: 0.035, hipSpread: 0.065, bloomPerShot: 0.1, bloomRecover: 2.2, bloomScale: 0.4, turnCap: 8,
     adsTime: 0.15, sprintToFire: 0.1, swapTime: 0.36, moveMult: 1.05, adsMoveMult: 0.75,
     pellets: 10, kickCam: 1.15, tracerWidth: 0.55, longshot: 9,
     botUse: { pref: 4, hold: 0.45, flank: 1.6, advance: 3, rush: 8, fireMax: 11 },
@@ -329,7 +329,7 @@ export const WEAPONS = {
   // One rocket, then a very long wait. Detonates at the end of its ray; `damage` here is the blast's centre.
   launcher: {
     id: 'launcher', name: 'Breaker', role: 'Demolition', auto: false,
-    damage: 130, explosive: { radius: 4.4, damage: 130, inner: 1.1, min: 20 },
+    damage: 130, explosive: { radius: 3.6, damage: 130, inner: 1.1, min: 20 },
     rpm: 40, magazine: 1, reserve: 3, reload: 5, range: 40,
     falloff: { start: 99, end: 100, min: 1 },
     adsSpread: 0.008, hipSpread: 0.07, bloomPerShot: 0.8, bloomRecover: 1.2, bloomScale: 1,
@@ -389,8 +389,17 @@ export function damageAt(w, dist, ads = true) {
 }
 
 // Damage of one traced ray that hit a player. The whole rule in one place: falloff, head and cover.
+// A head hit kills outright only when aimed in, or from a marksman rifle or sniper. A hip-fire head hit does
+// HIP_HEAD_MULT, so spraying from the hip is no lottery and fire rate stops deciding every fight.
+export const HIP_HEAD_MULT = 1.6;
+const ALWAYS_LETHAL_HEAD = new Set(['Marksman', 'Sniper']);
+export function headMultAt(w, ads) {
+  if (ads || ALWAYS_LETHAL_HEAD.has(w.category)) return headMultFor(w.id);
+  return Math.min(headMultFor(w.id), HIP_HEAD_MULT);
+}
+
 export function rayDamage(w, ray, dist, ads = true) {
-  return damageAt(w, dist, ads) * (ray.head ? headMultFor(w.id) : 1) * (ray.pen ?? 1);
+  return damageAt(w, dist, ads) * (ray.head ? headMultAt(w, ads) : 1) * (ray.pen ?? 1);
 }
 
 // A gun's real stats with a kit fitted. Memoised: an empty kit returns the plain def, equal kits the same object.
@@ -406,7 +415,7 @@ export function headMultFor(weaponId) {
 
 // Rounds needed to deal `hp` at `dist`, assuming every pellet lands. A head hit is always 1, except on explosives.
 export function shotsToKill(w, dist, hp = 100, ads = true, head = false) {
-  return Math.ceil(hp / (damageAt(w, dist, ads) * (w.pellets || 1) * (head ? headMultFor(w.id) : 1)));
+  return Math.ceil(hp / (damageAt(w, dist, ads) * (w.pellets || 1) * (head ? headMultAt(w, ads) : 1)));
 }
 
 // The numbers the Gunsmith shows: full damage to falloff.start, down to falloff.min at falloff.end, nothing past range.
