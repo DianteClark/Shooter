@@ -8,10 +8,12 @@ import { SLOTS, ATTACHMENTS, attachmentsFor } from '../shared/attachments.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { Progress } from './progress.js';
 import { getOperator } from './operators.js';
-import { esc, lockIcon, swatchCss, levelRequirement, SLOT_LABEL, ROMAN, itemMark } from './widgets.js';
+import { esc, swatchCss, levelRequirement, SLOT_LABEL, ROMAN, itemMark } from './widgets.js';
 import { statBars, weaponFacts } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { WEAPON_IDS } from '../shared/constants.js';
+import { ico, backButton } from './yard.js';
+import { stagger, flash, sweep } from './motion.js';
 
 const HERO_STATS = ['damage', 'rate', 'range', 'aimed', 'recoil', 'move', 'reload'];
 
@@ -23,7 +25,9 @@ const GEAR = {
 };
 
 const gunName = id => WEAPONS[id]?.name ?? id;
-const levelText = id => `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` ${ROMAN[Progress.weaponPrestige(id)]}` : ''}`;
+// A weapon's level, with its prestige rank as a separate chip so "Lv 14" and "I" never read as "Lv 141".
+const levelText = id => `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` (${ROMAN[Progress.weaponPrestige(id)]})` : ''}`;
+const levelHtml = id => `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? `<em class="pchip">${ROMAN[Progress.weaponPrestige(id)]}</em>` : ''}`;
 const owned = id => Progress.isItemUnlocked('weapon', id);
 
 export class LoadoutsScreen {
@@ -64,6 +68,7 @@ export class LoadoutsScreen {
     Progress.activeLoadout = this.selected;
     this.onChange?.();
     this.render();
+    sweep(this.menu.el.querySelector('.ld-hero'));
     this.menu.toast(`${this.loadout.name} equipped`);
   }
 
@@ -80,13 +85,13 @@ export class LoadoutsScreen {
     const prog = Progress.weaponProgress(l.primary);
     m.el.innerHTML = `
       <header class="bar ld-bar">
-        <button class="back" data-act="loBack">Done</button>
-        <h2>Loadouts</h2>
+        ${backButton('loBack', 'Done')}
+        <h2 class="bar-title">Loadouts</h2>
         <nav class="ld-tabs">${all.slice(0, LOADOUT_COUNT).map((x, i) => `
           <button class="ld-tab${i === this.selected ? ' on' : ''}${i === active ? ' active' : ''}" data-act="loPick" data-i="${i}">
             <i class="lamp"></i><b>${esc(x.name)}</b><small>${esc(gunName(x.primary))}</small>
           </button>`).join('')}</nav>
-        <button class="route ld-equip ${isActive ? 'lit' : 'primary'}" data-act="loEquip" ${isActive ? 'disabled' : ''}><i class="lamp"></i><b>${isActive ? 'Equipped' : 'Equip'}</b></button>
+        <button class="btn ld-equip ${isActive ? 'is-go' : 'is-primary'}" data-act="loEquip" data-sound="confirm" ${isActive ? 'disabled' : ''}>${ico(isActive ? 'ready' : 'equip')}<b>${isActive ? 'Equipped' : 'Equip'}</b></button>
       </header>
       <div class="ld${this.entered ? '' : ' enter'}">
         <section class="ld-left">
@@ -98,8 +103,8 @@ export class LoadoutsScreen {
               <small>${esc(categoryOf(l.primary))}${WEAPONS[l.primary]?.role ? ` / ${esc(WEAPONS[l.primary].role)}` : ''}</small>
               <span class="ld-camo"><i class="sw" style="background:${swatchCss(camo)}"></i>${esc(camo.name)}</span>
             </span>
-            <span class="ld-hero-lv"><b>${levelText(l.primary)}</b><i class="xp"><i style="transform:scaleX(${(prog.maxed ? 1 : prog.into / prog.span).toFixed(3)})"></i></i></span>
-            <em class="ld-swap">Change weapon</em>
+            <span class="ld-hero-lv"><b>${levelHtml(l.primary)}</b><i class="xp"><i style="transform:scaleX(${(prog.maxed ? 1 : prog.into / prog.span).toFixed(3)})"></i></i></span>
+            <em class="ld-swap">${ico('swap')}Change weapon</em>
             <span class="ld-kit">${SLOTS.map(s => `<i class="${kit[s] ? 'has' : ''}">
               <span class="ld-kit-ico">${itemMark(s, SLOT_LABEL[s])}</span>
               <span><small>${SLOT_LABEL[s]}</small><b>${kit[s] ? esc(ATTACHMENTS[kit[s]].name) : 'Stock'}</b></span>
@@ -108,10 +113,10 @@ export class LoadoutsScreen {
           <div class="ld-sub">
             <button class="ld-side" data-act="loWeapon" data-key="secondary">
               <span class="ld-side-pic"><canvas class="gun-pic" data-gun="${esc(l.secondary)}"></canvas></span>
-              <span class="ld-tx"><small>Secondary / ${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelText(l.secondary)}</small></span>
+              <span class="ld-tx"><small>Secondary / ${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelHtml(l.secondary)}</small></span>
             </button>
-            <button class="ld-act" data-act="loGunsmith"><b>Gunsmith</b><small>Camo, parts, prestige</small></button>
-            <button class="ld-act" data-act="loRename"><b>Rename</b><small>${esc(l.name)}</small></button>
+            <button class="ld-act" data-act="loGunsmith">${ico('gunsmith')}<b>Gunsmith</b><small>Camo, parts, prestige</small></button>
+            <button class="ld-act" data-act="loRename">${ico('edit')}<b>Rename</b><small>${esc(l.name)}</small></button>
           </div>
         </section>
         <section class="ld-right">
@@ -126,6 +131,7 @@ export class LoadoutsScreen {
         </section>
         <div class="ld-panel"></div>
       </div>`;
+    if (!this.entered) stagger(m.el.querySelectorAll('.ld-hero, .ld-sub > *, .ld-stats, .ld-row'), 'up', { delay: 60, step: 30 });
     this.entered = true;
     this.panelEl = m.el.querySelector('.ld-panel');
     if (this.panel) this.paintPanel(true);
@@ -155,7 +161,7 @@ export class LoadoutsScreen {
   operatorTile(l) {
     const op = getOperator(l.operator);
     return `<button class="ld-tile ld-op" data-act="loOperators">
-      <span class="ld-ico"><span class="perk-mark">${esc(op.name.slice(0, 2))}</span></span>
+      <span class="ld-ico">${ico('operator')}</span>
       <span class="ld-tx"><small>Operator</small><b>${esc(op.name)}</b></span>
     </button>`;
   }
@@ -181,8 +187,8 @@ export class LoadoutsScreen {
     this.panelEl.innerHTML = `
       <div class="ar">
         <nav class="ar-rail">
-          <button class="back" data-act="loClose">Back</button>
-          ${CATEGORIES.map(c => `<button class="ar-cat" data-act="arCat" data-cat="${c}"><b>${c}</b><small></small></button>`).join('')}
+          ${backButton('loClose')}
+          ${CATEGORIES.map(c => `<button class="ar-cat" data-act="arCat" data-cat="${c}">${ico(`cat:${c}`)}<b>${c}</b><small></small></button>`).join('')}
         </nav>
         <div class="ar-grid"></div>
         <aside class="ar-spec">
@@ -192,8 +198,8 @@ export class LoadoutsScreen {
           <div class="ar-bars"></div>
           <div class="ar-facts"></div>
           <div class="ar-cta">
-            <button class="route small" data-act="arGunsmith"><b>Gunsmith</b></button>
-            <button class="route small primary ar-equip" data-act="arEquip"><b></b></button>
+            <button class="btn" data-act="arGunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
+            <button class="btn is-primary ar-equip" data-act="arEquip" data-sound="confirm">${ico('equip')}<b></b></button>
           </div>
         </aside>
       </div>`;
@@ -225,7 +231,7 @@ export class LoadoutsScreen {
       return `<button class="ar-card${open ? '' : ' locked'}${where ? ' equipped' : ''}" ${wide ? 'data-wide' : ''} data-act="arBrowse" data-id="${esc(id)}">
         <span class="ar-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas></span>
         <span class="ar-info"><b>${esc(w.name)}</b><small>${open ? esc(w.role ?? categoryOf(id)) : esc(levelRequirement(Progress.itemUnlockLevel('weapon', id)))}</small></span>
-        ${open ? `<em>${levelText(id)}</em>` : `<em class="lock">${lockIcon()}</em>`}
+        ${open ? `<em>${levelHtml(id)}</em>` : `<em class="lock">${ico('lock')}</em>`}
         ${where ? '<u>Equipped</u>' : ''}
       </button>`;
     }).join('');
@@ -276,9 +282,9 @@ export class LoadoutsScreen {
     }).join('');
     a.facts.innerHTML = weaponFacts(id, kit).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('');
     a.equip.disabled = !open || on;
-    a.equip.classList.toggle('lit', on);
-    a.equip.classList.toggle('primary', !on);
-    a.equip.firstElementChild.textContent = !open ? `Level ${Progress.itemUnlockLevel('weapon', id)}` : on ? 'Equipped' : `Equip ${SLOT_NAME[slot]}`;
+    a.equip.classList.toggle('is-go', on);
+    a.equip.classList.toggle('is-primary', !on);
+    a.equip.querySelector('b').textContent = !open ? `Level ${Progress.itemUnlockLevel('weapon', id)}` : on ? 'Equipped' : `Equip ${SLOT_NAME[slot]}`;
     a.gs.disabled = !open;
   }
 
@@ -326,7 +332,7 @@ export class LoadoutsScreen {
     }
     this.panelEl.innerHTML = `
       <div class="ld-sheet">
-        <div class="ld-sheet-head"><b>${esc(title)}</b><small>${esc(hint)}</small><button class="route small primary" data-act="loClose"><b>Done</b></button></div>
+        <div class="ld-sheet-head"><b>${esc(title)}</b><small>${esc(hint)}</small><button class="btn is-primary" data-act="loClose" data-sound="confirm">${ico('check')}<b>Done</b></button></div>
         <div class="pk-cols ${cls}">${body}</div>
       </div>`;
   }
@@ -336,7 +342,7 @@ export class LoadoutsScreen {
     return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
       <span class="ld-ico">${itemMark(item.id, item.name)}</span>
       <span class="ld-tx"><b>${esc(item.name)}</b><small>${open ? esc(item.desc) : esc(levelRequirement(Progress.itemUnlockLevel(sec.kind, item.id)))}</small></span>
-      ${open ? (tag ? `<em>${tag}</em>` : '') : `<em class="lock">${lockIcon()}</em>`}
+      ${open ? (tag ? `<em>${tag}</em>` : '') : `<em class="lock">${ico('lock')}</em>`}
     </button>`;
   }
 

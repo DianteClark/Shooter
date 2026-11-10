@@ -1,6 +1,10 @@
 // Every screen outside a match. Templates driven by main.js through this small object; the larger screens
 // live in their own modules and share this object's actions, overlay and single gun preview.
+//
+// Transitions: a screen change fades the layer in and walks every element marked data-in="<pose>" onto the screen in
+// document order (motion.js stagger). Repaints of the same screen never replay it.
 import { TEAMS, TEAM_SIZE } from '../shared/constants.js';
+import { WEAPONS } from '../shared/weapons.js';
 import { GunPreview } from '../render/renderer.js';
 import { OperatorPreview } from '../render/characters.js';
 import { Progress } from './progress.js';
@@ -15,19 +19,23 @@ import { saveScreen } from './savecode.js';
 import { optionsScreen } from './optionsscreen.js';
 import { helpScreen } from './help.js';
 import { fingerDown } from './tap.js';
-import { yardBackdrop } from './yard.js';
+import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
+import { play, enter, sweep, shake, reducedMotion, DUR } from './motion.js';
 
 export { esc };
 
 const QWERTY = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM-_.'];
 const CODE_CHARS = ['ABCDEFGHJKM', 'NPQRSTUVWX', 'YZ23456789'];
 
-
 const PREVIEW_MS = 30;          // Turntable frames are spaced this far apart at least.
+const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch the lamp this often.
 
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
+
+// How deep each screen sits, so a move toward the title plays as "back".
+const DEPTH = { title: 0, keypad: 1, solo: 1, searching: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -56,16 +64,15 @@ export class Menu {
     this.previewRaf = 0;
     this.reel = null;              // The results reel, when one is running.
     this.lastScreen = null;        // For the transition: repaints of one screen must not replay it.
+    this.onScreen = null;          // main.js: called with the screen name whenever a different screen comes up.
+    this.sweepTimer = 0;
 
     this.on({ yardPa: () => this.toast(YARD_PA[(this.paCount = (this.paCount ?? -1) + 1) % YARD_PA.length]) });
     this.el.addEventListener('click', e => this.#click(e));
     this.overlayEl.addEventListener('click', e => this.#click(e));
     root.insertAdjacentHTML('beforeend', `
       <div class="rotate">
-        <svg viewBox="0 0 120 80" aria-hidden="true">
-          <rect x="44" y="10" width="32" height="60" rx="5" />
-          <path d="M18 54a30 30 0 0 1 16-30M26 18l9 5-5 9" />
-        </svg>
+        <div class="rotate-phone" aria-hidden="true">${ico('phone')}</div>
         <b>Turn your phone sideways</b>
         <p>Switchyard plays in landscape.</p>
       </div>`);
@@ -73,7 +80,8 @@ export class Menu {
 
   #click(e) {
     const el = e.target.closest('[data-act]');
-    if (!el || el.disabled) return;
+    if (!el) return;
+    if (el.disabled) return;
     this.actions[el.dataset.act]?.(el.dataset, el);
   }
 
@@ -89,6 +97,7 @@ export class Menu {
   hide() {
     this.#stopPreview();
     this.#endReel();
+    clearInterval(this.sweepTimer);
     this.el.classList.remove('on');
     this.el.textContent = '';
     this.lastScreen = null;
@@ -98,32 +107,44 @@ export class Menu {
   #playEnter() {
     const screen = this.el.dataset.screen;
     if (screen === this.lastScreen) return;
-    const first = this.lastScreen === null;
+    const prev = this.lastScreen;
     this.lastScreen = screen;
-    this.el.animate([
-      { opacity: first ? 0 : 0.35, transform: 'translate3d(14px,0,0)' },
-      { opacity: 1, transform: 'none' },
-    ], { duration: 190, easing: 'cubic-bezier(.2,.8,.2,1)' });
-    const wipe = this.wipe ??= Object.assign(document.createElement('i'), { className: 'screen-wipe' });
-    this.root.appendChild(wipe);
-    wipe.getAnimations().forEach(a => a.cancel());
-    wipe.animate([
-      { transform: 'translate3d(-120%,0,0) skewX(-18deg)' },
-      { transform: `translate3d(${innerWidth * 1.3}px,0,0) skewX(-18deg)` },
-    ], { duration: 340, easing: 'cubic-bezier(.35,.0,.25,1)' });
+    clearInterval(this.sweepTimer);
+    this.onScreen?.(screen);
+    const back = prev !== null && (DEPTH[screen] ?? 1) < (DEPTH[prev] ?? 1);
+    this.el.dataset.dir = back ? 'back' : 'forward';
+    play(this.el, [{ opacity: prev === null ? 0 : 0.4 }, { opacity: 1 }], { duration: DUR.fast, fill: 'none' });
+    this.stagger(this.el, back ? 60 : 40);
   }
 
-  toast(text) {
+  // Walks every [data-in] element under root onto the screen, in document order.
+  stagger(root, delay = 0) {
+    const items = [...root.querySelectorAll('[data-in]')];
+    items.forEach((el, i) => enter(el, el.dataset.in || 'up', { delay: delay + Math.min(i, 12) * DUR.stagger, duration: DUR.base + 40 }));
+  }
+
+  toast(text, tone = '') {
     this.toastEl.textContent = text;
+    this.toastEl.dataset.tone = tone;
     this.toastEl.classList.remove('show');
     void this.toastEl.offsetWidth;      // Restart the fade; menus only, never during play.
     this.toastEl.classList.add('show');
+  }
+
+  // A refused tap: the element shakes and the toast says why. (tap.js has already played the tap's sound.)
+  deny(el, text) {
+    if (el) shake(el, { strength: 5, duration: 260 });
+    if (text) this.toast(text, 'warn');
   }
 
   // Blocking message on top of whatever is showing. text empty clears it.
   overlay(html) {
     this.overlayEl.innerHTML = html || '';
     this.overlayEl.classList.toggle('show', !!html);
+    if (html) {
+      const sheet = this.overlayEl.firstElementChild;
+      if (sheet && !sheet.classList.contains('cer')) enter(sheet, 'scale', { duration: DUR.base });
+    }
   }
 
   // rejoin: { code } when this device has a match it may still get back into.
@@ -133,49 +154,55 @@ export class Menu {
     const lp = Progress.levelProgress();
     const can = Progress.canPrestige();
     const name = Progress.name || 'Rookie';
+    const lo = Progress.loadouts()[Progress.activeLoadout];
+    const gun = WEAPONS[lo?.primary]?.name ?? '';
+    const frac = lp.maxed ? 1 : lp.into / lp.span;
     this.el.dataset.screen = 'title';
     this.el.innerHTML = `
       ${yardBackdrop()}
-      <section class="boxcar${arrive ? ' arrive' : ''}">
-        <div class="boxcar-ribs"></div>
-        <div class="boxcar-face">
-          <h1 class="wordmark" data-act="yardPa">Switchyard</h1>
-          <p class="wordmark-sub">6v6 deathmatch and objectives, friends or bots</p>
-          <button class="pcard${can ? ' ready' : ''}" data-act="profile">
-            <span class="pc-badge">${badgeMark(lp.prestige, 48)}</span>
-            <span class="pc-body">
-              <span class="pc-top"><b class="pc-name">${esc(name)}</b><span class="pc-lv">Level ${lp.level}${lp.prestige ? ` <em>${ROMAN[lp.prestige]}</em>` : ''}</span></span>
-              <i class="xp"><i style="transform:scaleX(${(lp.maxed ? 1 : lp.into / lp.span).toFixed(3)})"></i></i>
-              <small class="pc-sub">${can ? 'Prestige available' : lp.maxed ? 'Maximum level' : `${Math.round(lp.into)} / ${lp.span} XP`}</small>
-            </span>
+      <div class="ttl-shade" aria-hidden="true"></div>
+      <section class="ttl-left${rejoin ? ' has-rejoin' : ''}${arrive ? ' arrive' : ''}">
+        <div class="brand" data-in="left">
+          <h1 class="wordmark" data-act="yardPa"><span>Switchyard</span><i class="wm-shine" aria-hidden="true">Switchyard</i></h1>
+          <p class="wm-sub"><i class="wm-bar" aria-hidden="true"></i>Six a side, with friends or bots</p>
+        </div>
+        <nav class="ttl-nav">
+          ${rejoin ? `<button class="tl-rejoin" data-act="rejoin" data-in="rail">${ico('rejoin')}<span><b>Rejoin ${esc(rejoin.code)}</b><small>Your last match may still be running</small></span></button>` : ''}
+          <button class="tl-hero is-primary" data-sound="confirm" data-act="solo" data-in="rail">
+            <span class="tl-hero-ico">${ico('bots')}</span>
+            <span class="tl-hero-tx"><b>Play vs bots</b><small>Choose a map and a mode</small></span>
+            ${ico('play', 'tl-go')}
           </button>
-        </div>
+          <div class="tl-grid">
+            <button class="tl-btn" data-act="quickPlay" data-in="rail">${ico('quick')}<b>Quick play</b></button>
+            <button class="tl-btn" data-act="range" data-in="rail">${ico('range')}<b>Firing range</b></button>
+            <button class="tl-btn" data-act="host" data-in="rail">${ico('host')}<b>Host</b></button>
+            <button class="tl-btn" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
+          </div>
+          <button class="tl-btn tl-loadout" data-act="loadout" data-in="rail">${ico('loadout')}<span><b>Loadouts</b><small>${esc(lo?.name ?? '')}${gun ? `: ${esc(gun)}` : ''}</small></span></button>
+        </nav>
       </section>
-      <nav class="routes${rejoin ? ' tight' : ''}">
-        ${rejoin ? `<button class="route lit" data-act="rejoin"><i class="lamp"></i><b>Rejoin ${esc(rejoin.code)}</b></button>` : ''}
-        <button class="route primary" data-act="solo"><i class="lamp"></i><b>Play vs bots</b></button>
-        <div class="route-pair">
-          <button class="route" data-act="host"><i class="lamp"></i><b>Host</b></button>
-          <button class="route" data-act="join"><i class="lamp"></i><b>Join code</b></button>
-        </div>
-        <div class="route-pair">
-          <button class="route" data-act="quickPlay"><i class="lamp"></i><b>Quick play</b></button>
-          <button class="route" data-act="range"><i class="lamp"></i><b>Firing range</b></button>
-        </div>
-        <div class="route-pair">
-          <button class="route" data-act="loadout"><b>Loadouts</b></button>
-          <button class="route" data-act="gunsmith"><b>Gunsmith</b></button>
-        </div>
-        <div class="route-pair">
-          <button class="route" data-act="operators"><b>Operators</b></button>
-          <button class="route" data-act="saveCode"><b>Save code</b></button>
-        </div>
-        <div class="route-pair">
-          <button class="route" data-act="options"><b>Options</b></button>
-          <button class="route" data-act="help"><b>How to play</b></button>
-        </div>
+      <button class="pcard${can ? ' ready' : ''}" data-act="profile" data-in="right">
+        <span class="pc-badge">${badgeMark(lp.prestige, 46)}</span>
+        <span class="pc-body">
+          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}</span>
+          <span class="pc-lv"><b>Level <u class="pc-lvn">${lp.level}</u></b><small>${can ? 'Prestige ready' : lp.maxed ? 'Max level' : `${Math.round(lp.into).toLocaleString('en-US')} / ${lp.span.toLocaleString('en-US')} XP`}</small></span>
+          <i class="xp"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
+        </span>
+      </button>
+      <nav class="ttl-sec">
+        ${[['gunsmith', 'gunsmith', 'Gunsmith'], ['operators', 'operator', 'Operators'], ['stats', 'stats', 'Stats'], ['options', 'options', 'Options'], ['help', 'help', 'How to play'], ['saveCode', 'save', 'Save code']]
+          .map(([act, icon, label]) => `<button class="chip" data-act="${act}" data-in="up">${ico(icon)}<b>${label}</b></button>`).join('')}
       </nav>`;
     this.show();
+    const hero = this.el.querySelector('.tl-hero'), mark = this.el.querySelector('.wordmark');
+    sweep(mark, { delay: arrive ? 700 : 350, duration: DUR.epic + 300 });
+    sweep(hero, { delay: arrive ? 1100 : 600 });
+    this.sweepTimer = setInterval(() => {
+      if (!hero.isConnected) return clearInterval(this.sweepTimer);
+      sweep(hero);
+      setTimeout(() => mark.isConnected && sweep(mark, { duration: DUR.epic + 300 }), 900);
+    }, SWEEP_EVERY_MS);
   }
 
   // Both the callsign and room code entry use this, so the iOS keyboard never covers the screen.
@@ -184,33 +211,33 @@ export class Menu {
     let current = value;
     const rows = kind === 'code' ? CODE_CHARS : QWERTY;
     this.el.dataset.screen = 'keypad';
+    this.el.dataset.kind = kind;
     const paint = () => {
-      const slots = kind === 'code'
-        ? Array.from({ length: max }, (_, i) => `<span class="slot">${esc(current[i] ?? '')}</span>`).join('')
-        : `<span class="slot wide">${esc(current) || '&nbsp;'}<i class="caret"></i></span>`;
-      this.el.querySelector('.kp-entry').innerHTML = slots;
+      const entry = this.el.querySelector('.kp-entry');
+      entry.innerHTML = kind === 'code'
+        ? Array.from({ length: max }, (_, i) => `<span class="slot${i === current.length ? ' next' : ''}${current[i] ? ' full' : ''}">${esc(current[i] ?? '')}</span>`).join('')
+        : `<span class="slot wide"><b>${esc(current)}</b><i class="caret"></i></span><small class="kp-count${current.length >= max ? ' max' : ''}">${current.length}/${max}</small>`;
       const done = this.el.querySelector('[data-act="kpDone"]');
       done.disabled = kind === 'code' ? current.length !== max : current.trim().length === 0;
+      this.el.querySelector('[data-act="kpDel"]').disabled = !current.length;
     };
     this.el.innerHTML = `
-      <header class="bar">
-        <button class="back" data-act="kpCancel">Back</button>
-        <h2>${esc(title)}</h2>
-      </header>
+      ${header({ back: 'kpCancel', title })}
       <div class="kp">
-        <div class="kp-entry"></div>
-        ${hint ? `<p class="kp-hint">${esc(hint)}</p>` : ''}
+        <div class="kp-entry" data-in="scale"></div>
+        ${hint ? `<p class="kp-hint" data-in="fade">${esc(hint)}</p>` : ''}
         <div class="keys">
-          ${rows.map(row => `<div class="key-row">${[...row].map(c => `<button class="key" data-act="kpKey" data-k="${esc(c)}">${esc(c)}</button>`).join('')}</div>`).join('')}
-          <div class="key-row keys-actions">
-            <button class="key del" data-act="kpDel">Delete</button>
-            <button class="key done" data-act="kpDone">${esc(doneLabel)}</button>
+          ${rows.map(row => `<div class="key-row" data-in="up">${[...row].map(c => `<button class="key" data-act="kpKey" data-k="${esc(c)}">${esc(c)}</button>`).join('')}</div>`).join('')}
+          <div class="key-row keys-actions" data-in="up">
+            <button class="key del" data-act="kpDel">${ico('back')}<b>Delete</b></button>
+            <button class="key done is-primary" data-sound="confirm" data-act="kpDone">${ico('check')}<b>${esc(doneLabel)}</b></button>
           </div>
         </div>
       </div>`;
     this.on({
-      kpKey: ({ k }) => {
-        if (current.length < max) current += k;
+      kpKey: (_, el) => {
+        if (current.length >= max) { this.deny(this.el.querySelector('.kp-entry')); return; }
+        current += _.k;
         paint();
       },
       kpDel: () => {
@@ -228,11 +255,12 @@ export class Menu {
     this.#stopPreview();
     this.el.dataset.screen = 'searching';
     this.el.innerHTML = `
+      ${header({ back: 'cancelSearch', label: 'Cancel', title: 'Join a match' })}
       <div class="waiting">
-        <div class="signal"><i></i><i></i><i></i></div>
-        <h2>Looking for room <b>${esc(code)}</b></h2>
-        <p>Keep the host on their lobby screen. This can take a few seconds.</p>
-        <button class="route small" data-act="cancelSearch"><b>Cancel</b></button>
+        <div class="radar" data-in="scale" aria-hidden="true"><i></i><i></i><i></i>${ico('signal')}</div>
+        <h2 data-in="up">Looking for room</h2>
+        <div class="code-tiles" data-in="up">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
+        <p data-in="fade">Keep the host on their lobby screen. This can take a few seconds.</p>
       </div>`;
     this.on({ cancelSearch: onCancel });
     this.show();
@@ -240,20 +268,24 @@ export class Menu {
 
   notFound(code, { retry, back }) {
     this.el.dataset.screen = 'searching';
+    this.lastScreen = null;           // Same screen name, new state: let it enter.
     this.el.innerHTML = `
-      <div class="waiting">
-        <h2 class="bad">No room at <b>${esc(code)}</b></h2>
-        <p>Check the code with the host, and that their lobby is still open.</p>
-        <div class="row">
-          <button class="route small" data-act="nfBack"><b>Back</b></button>
-          <button class="route small primary" data-act="nfRetry"><b>Try again</b></button>
+      ${header({ back: 'nfBack', title: 'Join a match' })}
+      <div class="waiting is-error">
+        <div class="err-mark" data-in="stamp">${ico('warn')}</div>
+        <h2 data-in="up">No room at</h2>
+        <div class="code-tiles bad" data-in="up">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
+        <p data-in="fade">Check the code with the host, and that their lobby is still open.</p>
+        <div class="row" data-in="up">
+          <button class="btn" data-act="nfBack">${ico('back')}<b>Back</b></button>
+          <button class="btn is-primary" data-sound="confirm" data-act="nfRetry">${ico('rejoin')}<b>Try again</b></button>
         </div>
       </div>`;
     this.on({ nfBack: back, nfRetry: retry });
     this.show();
   }
 
-  // state: { code, humans:[{id,name,team,ready,primary}], botSkill, isHost, localId, notice }
+  // state: { code, humans:[{id,name,team,ready,primary,badge,host}], botSkill, isHost, localId, countdown, rematchWait }
   lobby(state) {
     this.#stopPreview();
     this.#endReel();
@@ -262,6 +294,7 @@ export class Menu {
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
+    const skillName = (SKILLS.find(([id]) => id === botSkill) ?? SKILLS[4])[1];
     const train = team => {
       const cars = humans.filter(h => h.team === team);
       let cells = '';
@@ -270,50 +303,53 @@ export class Menu {
         if (h) {
           const self = h.id === localId;
           const can = isHost || self;
-          cells += `<button class="car human${self ? ' self' : ''}${h.ready ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
-            <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 20) : ''}<b>${esc(h.name)}</b></span>
-            <small>${h.badge ? `Lv ${h.badge.level} / ` : ''}${h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready'}</small>
-            <i class="wheels"></i>
+          const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
+          cells += `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
+            <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}<b>${esc(h.name)}</b></span>
+            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}<small>${self ? 'You, ' : ''}${h.badge ? `Lv ${h.badge.level} ` : ''}${status}</small></span>
+            ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
         } else {
-          cells += '<div class="car bot"><small>Bot</small><i class="wheels"></i></div>';
+          cells += `<div class="car bot">${ico('bots')}<small>Bot<br><em>${esc(skillName)}</em></small></div>`;
         }
       }
-      return `<div class="train" style="--team:${TEAMS[team].css}">
-        <h3>${esc(TEAMS[team].name)}</h3>
+      return `<div class="train" style="--team:${TEAMS[team].css}" data-in="rail">
+        <h3><i class="lamp"></i>${esc(TEAMS[team].name)}<small>${cars.length}/${TEAM_SIZE}</small></h3>
         <div class="consist">${cells}</div>
       </div>`;
     };
     const isReady = me?.ready;
     const start = isHost
-      ? `<button class="route primary" data-act="start" ${counting || allReady ? '' : 'disabled'}><i class="lamp"></i><b>${counting ? 'Start now' : allReady ? 'Start match' : 'Waiting for ready'}</b></button>`
+      ? `<button class="btn is-primary lb-go" data-sound="confirm" data-act="start" ${counting || allReady ? '' : 'disabled'}>${ico(counting || allReady ? 'play' : 'wait')}<b>${counting ? 'Start now' : allReady ? 'Start match' : 'Waiting for ready'}</b></button>`
       : counting
-        ? '<div class="route primary lit static"><i class="lamp"></i><b>Rematch</b></div>'
+        ? `<div class="btn is-primary lb-go static">${ico('play')}<b>Rematch soon</b></div>`
         : rematchWait
-          ? '<div class="route static"><i class="lamp"></i><b>Waiting for host</b></div>'
-          : `<button class="route primary${isReady ? ' lit' : ''}" data-act="toggleReady"><i class="lamp"></i><b>${isReady ? 'Ready' : 'Tap when ready'}</b></button>`;
+          ? `<div class="btn lb-go static">${ico('wait')}<b>Waiting for host</b></div>`
+          : `<button class="btn lb-go ${isReady ? 'is-go' : 'is-primary'}" data-act="toggleReady">${ico(isReady ? 'ready' : 'check')}<b>${isReady ? 'Ready' : 'Tap when ready'}</b></button>`;
     this.el.innerHTML = `
-      <header class="bar">
-        <button class="back" data-act="leaveLobby">Leave</button>
+      <header class="bar lb-bar" data-in="down">
+        ${backButton('leaveLobby', 'Leave')}
         <div class="room">
           <span>Room code</span>
-          <b>${esc(code)}</b>
+          <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         </div>
+        <p class="room-tip">${isHost ? (counting ? 'Tap a player to swap teams.' : 'Read this code to your friends. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
-        <p class="room-tip">${isHost ? (counting ? 'Tap a player to swap teams.' : 'Read this code to friends. Tap a player to swap teams.') : 'Tap your name to swap teams.'}</p>
       </header>
       <div class="yard-lines">
         ${train(0)}
         ${train(1)}
       </div>
-      <footer class="lobby-foot">
-        <div class="skills">
-          <span>Bots</span>
-          ${SKILLS.map(([id, label]) => `<button class="seg${botSkill === id ? ' on' : ''}" ${isHost ? `data-act="botSkill" data-skill="${id}"` : 'disabled'}>${label}</button>`).join('')}
+      <footer class="lobby-foot" data-in="up">
+        <div class="skills${isHost ? '' : ' fixed'}">
+          <span>${ico('bots')}Bots</span>
+          ${isHost
+            ? SKILLS.map(([id, label]) => `<button class="seg${botSkill === id ? ' on' : ''}" data-act="botSkill" data-skill="${id}">${label}</button>`).join('')
+            : `<b class="seg on">${esc(skillName)}</b>`}
         </div>
-        <button class="route small" data-act="gunsmith"><b>Gunsmith</b></button>
-        <button class="route small" data-act="operators"><b>Operators</b></button>
-        <button class="route small" data-act="loadout"><b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
+        <button class="chip" data-act="loadout">${ico('loadout')}<b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
+        <button class="chip" data-act="gunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
+        <button class="chip" data-act="operators">${ico('operator')}<b>Operators</b></button>
         ${start}
       </footer>`;
     this.show();
@@ -406,15 +442,15 @@ export class Menu {
   // Shown once to Safari players who have not added the game to their Home Screen.
   installPrompt(onDismiss) {
     this.overlay(`
-      <div class="sheet">
-        <h2>Add to Home Screen</h2>
-        <p>Switchyard is built to run full screen, with no browser bars in the way of your thumbs.</p>
-        <ol>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M6 11H4v10h16V11h-2" /></svg>Tap the Share button in Safari</li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM12 8v8M8 12h8" /></svg>Choose Add to Home Screen</li>
-          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l6 6L20 6" /></svg>Open Switchyard from its new icon</li>
+      <div class="sheet install">
+        <div class="sheet-head">${ico('phone')}<h2>Add to Home Screen</h2></div>
+        <p>Switchyard runs full screen from your Home Screen, with no browser bars in the way of your thumbs.</p>
+        <ol class="steps">
+          <li><span class="step-n">1</span>${ico('share')}<span>Tap <b>Share</b> in Safari</span></li>
+          <li><span class="step-n">2</span>${ico('plus')}<span>Choose <b>Add to Home Screen</b></span></li>
+          <li><span class="step-n">3</span>${ico('play')}<span>Open Switchyard from its new icon</span></li>
         </ol>
-        <button class="route small primary" data-act="dismissInstall"><b>Keep playing in Safari</b></button>
+        <div class="sheet-row"><button class="btn is-primary" data-sound="confirm" data-act="dismissInstall">${ico('check')}<b>Got it</b></button></div>
       </div>`);
     this.on({ dismissInstall: () => { this.overlay(''); onDismiss(); } });
   }

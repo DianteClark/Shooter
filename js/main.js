@@ -18,13 +18,14 @@ import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
 import { Net } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
-import { installTaps } from './ui/tap.js';
+import { installTaps, setTapSound } from './ui/tap.js';
 import { Options } from './ui/options.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
 import { PerfOverlay } from './ui/perf.js';
 import { statsScreen } from './ui/stats.js';
 import { installFrameClock } from './render/quality.js';
+import { MenuBackdrop } from './ui/backdrop.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -57,6 +58,22 @@ const hud = new HUD(uiRoot);
 hud.bindControls(controls);
 const menu = new Menu(uiRoot);
 const audio = new AudioEngine();
+const backdrop = new MenuBackdrop(canvas);
+
+// Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
+// keep it moving. Nothing of the backdrop exists while a match owns the canvas.
+const STILL_SCREENS = new Set(['loadouts', 'gunsmith', 'operators', 'results']);
+menu.onScreen = screen => {
+  uiRoot.dataset.menu = screen;
+  if (app.inMatch) return;
+  if (screen === 'results') return;            // The match renderer has only just let go; the next screen builds it.
+  if (STILL_SCREENS.has(screen)) backdrop.still();
+  else {
+    backdrop.setLoadout(myLoadout());
+    backdrop.live();
+  }
+};
+backdrop.onReady = ready => uiRoot.classList.toggle('yard-live', ready);
 
 const app = {
   net: null,
@@ -84,6 +101,7 @@ function followViewport() {
   installViewport();
   onViewport(() => {
     app.renderer?.resize();
+    backdrop.resize();
     controls.remeasure();
     hud.remeasure();
   });
@@ -167,16 +185,6 @@ function forgetRoom() {
 
 function showTitle(opts = {}) {
   menu.title({ ...opts, rejoin: rejoinOffer() });
-  // The title markup belongs to the menu module; Stats joins the Options / How to play row from here.
-  const help = menu.el.querySelector('.route[data-act="help"]');
-  if (help && !menu.el.querySelector('[data-act="stats"]')) {
-    const stats = document.createElement('button');
-    stats.className = 'route';
-    stats.dataset.act = 'stats';
-    stats.innerHTML = '<b>Stats</b>';
-    help.before(stats);
-    help.parentNode.style.gridTemplateColumns = '1fr 0.8fr 1.2fr';   // Three in the row that was a pair.
-  }
 }
 
 function teardownNet() {
@@ -563,7 +571,7 @@ const HOST_LOST_TEXT = 'Host lost, switching over';
 function setHostNotice(on) {
   if (app.inMatch) hud.setNotice(on ? HOST_LOST_TEXT : '');
   else if (menuShows('results')) (on ? menu.resultsNote(HOST_LOST_TEXT) : menu.updateCountdown(app.countdown));
-  else if (on) menu.overlay(`<div class="sheet slim"><div class="signal"><i></i><i></i><i></i></div><h2>Host lost</h2><p>Finding a new host. Hang on a moment.</p></div>`);
+  else if (on) menu.overlay(`<div class="sheet slim"><div class="radar small" aria-hidden="true"><i></i><i></i><i></i></div><h2>Host lost</h2><p>Finding a new host for the room. Hang on a moment.</p></div>`);
   else menu.overlay('');
 }
 
@@ -840,6 +848,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   stopVote();
   net?.resetGameHandlers();
 
+  backdrop.stop();
   menu.hide();
   menu.overlay('');
   hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, localId: id, intro: !rejoin });
@@ -974,6 +983,7 @@ function applyOptions(v, changed) {
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
+  backdrop.quality = v.quality;
   if (!changed || changed === 'fps') perf.setVisible(v.fps || FPS_PARAM);
 }
 
@@ -994,6 +1004,8 @@ const perf = new PerfOverlay(document.body, () => app.renderer?.getStats() ?? nu
 followViewport();
 blockIosGestures();
 installTaps();
+// One sound per tap, chosen by tap.js from the element (data-sound, back-ish actions, disabled controls).
+setTapSound(kind => audio.uiSound?.(kind));
 hud.onLeaveMatch(leaveMatch);
 // The interpolated view does not carry the range tracker, so the readout takes it from the newest snapshot.
 hud.rangeSource = () => app.match?.interp.newest?.range ?? null;
@@ -1001,7 +1013,7 @@ hud.onRangeReset(() => app.match?.sim.applyCommand(app.match.localId, { cmd: 'ra
 // A touch that lands with the audio engine asleep must wake it even when the action would start sound itself.
 Options.subscribe(applyOptions);
 showTitle({ arrive: true });
-if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, join: startJoining };
+if (params.has('debug')) window.__game = { app, hud, controls, menu, Progress, backdrop, join: startJoining };
 maybeInstallPrompt();
 
 

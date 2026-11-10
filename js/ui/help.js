@@ -1,25 +1,27 @@
 // How to play, as four tabs so nothing scrolls at 390 px tall. Everything here restates rules that live in the sim;
 // the streak section is the one players ask about most.
 import { STREAKS, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
-import { ITEM_ICONS } from './icons.js';
 import { esc } from './widgets.js';
+import { ico, header } from './yard.js';
+import { stagger } from './motion.js';
 
-const TABS = [['controls', 'Controls'], ['streaks', 'Streaks'], ['modes', 'Modes'], ['tips', 'Tips']];
+const TABS = [['controls', 'Controls', 'controls'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info']];
 
-const glyph = id => (ITEM_ICONS[id] ? `<svg class="item-svg" viewBox="0 0 32 32" aria-hidden="true">${ITEM_ICONS[id]}</svg>` : '');
+// One help card: an icon, a stencil heading and a sentence or two.
+const card = (icon, title, body, wide = false) => `<div class="help-card${wide ? ' wide' : ''}"><h4>${ico(icon)}<span>${esc(title)}</span></h4><p>${body}</p></div>`;
 
 const PANELS = {
   controls: () => `
     <div class="help-grid">
-      <div class="help-card"><h4>Left thumb</h4><p>Drag anywhere on the left half to move. Push all the way to sprint. While firing, a full push keeps you hip-firing at full speed; ease below about 70% to settle into aiming down sights.</p></div>
-      <div class="help-card"><h4>Right thumb</h4><p>Touch and hold to aim. Push past the outer ring to fire. Let go and you are back to hip fire.</p></div>
-      <div class="help-card"><h4>Slide</h4><p>Tap while moving. You are a smaller target while you slide.</p></div>
-      <div class="help-card"><h4>Swap</h4><p>Switches to your sidearm. Reloads are automatic, so swap when you are out.</p></div>
-      <div class="help-card wide"><h4>Tactical and Lethal</h4><p>Tap to throw where you are aiming. Hold and drag from the button to set direction and distance: an arc shows where it lands. Drag back onto the button to cancel.</p></div>
+      ${card('marathon', 'Left thumb', 'Drag anywhere on the left half to move. Push all the way to sprint. While firing, a full push keeps you hip-firing at full speed; ease below about 70% to settle into aiming down sights.')}
+      ${card('ui:aim', 'Right thumb', 'Touch and hold to aim. Push past the outer ring to fire. Let go and you are back to hip fire.')}
+      ${card('slide', 'Slide', 'Tap while moving. You are a smaller target while you slide.')}
+      ${card('swap', 'Swap', 'Switches to your sidearm. Reloads are automatic, so swap when you are out.')}
+      ${card('frag', 'Tactical and lethal', 'Tap to throw where you are aiming. Hold and drag from the button to set direction and distance: an arc shows where it lands. Drag back onto the button to cancel.', true)}
     </div>`,
   streaks: () => `
     <div class="help-streaks">
-      <div class="help-strip">${Object.values(STREAKS).map(s => `<span class="help-chip">${glyph(s.id)}<b>${esc(s.name)}</b><em>${s.cost}</em></span>`).join('')}</div>
+      <div class="help-strip">${Object.values(STREAKS).map(s => `<span class="help-chip">${ico(s.id)}<b>${esc(s.name)}</b><em>${s.cost}</em></span>`).join('')}</div>
       <ol class="help-rules">
         <li>Kills score 100, headshots +25, assists 50. <b>Your score carries through death</b>, and streaks you already hold stay. Costs are high, so streaks still take real play.</li>
         <li>You carry three. Each is granted when your score reaches its cost. Hardline makes them 15% cheaper.</li>
@@ -29,19 +31,19 @@ const PANELS = {
     </div>`,
   modes: () => `
     <div class="help-grid">
-      <div class="help-card"><h4>Team Deathmatch</h4><p>First team to the kill limit wins.</p></div>
-      <div class="help-card"><h4>Kill Confirmed</h4><p>Collect enemy tags to score. Grab your own team's to deny.</p></div>
-      <div class="help-card"><h4>Domination</h4><p>Hold the three flags. More flags, faster points.</p></div>
-      <div class="help-card"><h4>Hardpoint</h4><p>One zone at a time. Hold it to score, and it moves.</p></div>
-      <div class="help-card wide"><h4>Firing Range</h4><p>Your loadout, stationary and strafing dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.</p></div>
+      ${card('mode:tdm', 'Team Deathmatch', 'First team to the kill limit wins.')}
+      ${card('mode:kc', 'Kill Confirmed', 'Collect enemy tags to score. Grab your own team\'s to deny.')}
+      ${card('mode:dom', 'Domination', 'Hold the three flags. More flags, faster points.')}
+      ${card('mode:hard', 'Hardpoint', 'One zone at a time. Hold it to score, and it moves.')}
+      ${card('ui:aim', 'Firing Range', 'Your loadout, stationary and strafing dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.', true)}
     </div>`,
   tips: () => `
     <div class="help-grid">
-      <div class="help-card"><h4>Stay off the radar</h4><p>Firing marks you on the enemy minimap for a moment. A suppressor hides it.</p></div>
-      <div class="help-card"><h4>Beat the big guns</h4><p>LMGs turn slowly while firing and overheat. Flank them.</p></div>
-      <div class="help-card"><h4>Equipment</h4><p>${Object.values({ ...TACTICALS, ...LETHALS }).map(t => esc(t.name)).join(', ')}. Counts refill when you respawn.</p></div>
-      <div class="help-card"><h4>Perks</h4><p>${Object.values(PERKS).slice(0, 5).map(p => esc(p.name)).join(', ')}. One from each tier.</p></div>
-      <div class="help-card wide"><h4>Dropped connection?</h4><p>Open the app and enter the same room code. You get your slot back from the bot holding it, with your score. If the host leaves, the next player takes over and the match carries on.</p></div>
+      ${card('ui:eye-off', 'Stay off the radar', 'Firing marks you on the enemy minimap for a moment. A suppressor hides it.')}
+      ${card('cat:LMG', 'Beat the big guns', 'LMGs turn slowly while firing and overheat. Flank them.')}
+      ${card('flash', 'Equipment', `${Object.values({ ...TACTICALS, ...LETHALS }).map(t => esc(t.name)).join(', ')}. Counts refill when you respawn.`)}
+      ${card('ui:star', 'Perks', `${Object.values(PERKS).slice(0, 5).map(p => esc(p.name)).join(', ')}. One from each tier.`)}
+      ${card('ui:refresh', 'Dropped connection?', 'Open the app and enter the same room code. You get your slot back from the bot holding it, with your score. If the host leaves, the next player takes over and the match carries on.', true)}
     </div>`,
 };
 
@@ -49,17 +51,13 @@ export function helpScreen(menu, { onBack }) {
   let tab = 'controls';
   menu.el.dataset.screen = 'help';
   menu.el.innerHTML = `
-    <header class="bar">
-      <button class="back" data-act="helpBack">Back</button>
-      <h2>How to play</h2>
-      <nav class="help-tabs">${TABS.map(([id, label]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${label}</button>`).join('')}</nav>
-    </header>
+    ${header({ back: 'helpBack', title: 'How to play', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>` })}
     <div class="help-body"></div>`;
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];
   const paint = () => {
     body.innerHTML = PANELS[tab]();
-    body.firstElementChild.classList.add('enter');
+    stagger(body.querySelectorAll('.help-card, .help-chip, .help-rules li'), 'up', { step: 25, max: 12 });
     for (const t of tabs) t.classList.toggle('on', t.dataset.tab === tab);
   };
   menu.on({

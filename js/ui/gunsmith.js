@@ -8,10 +8,12 @@ import { getCamo, TRACERS, KILL_EFFECTS } from '../shared/camos.js';
 import { SLOTS, ATTACHMENTS, attachmentsFor, normalizeKit } from '../shared/attachments.js';
 import { MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE, prestigeRewards, camoRequirement } from '../shared/progression.js';
 import { Progress } from './progress.js';
-import { esc, hex, swatchCss, lockIcon, ROMAN, SLOT_LABEL, levelRequirement } from './widgets.js';
+import { esc, hex, swatchCss, ROMAN, SLOT_LABEL, levelRequirement } from './widgets.js';
 import { compareStats, deltaText, weaponFacts, rangeStrip, RANGE_AXIS } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { prestigeWeaponNow, kindLabel } from './prestige.js';
+import { ico, backButton } from './yard.js';
+import { flash, pop, stagger } from './motion.js';
 
 const STOCK = 'stock';
 
@@ -34,7 +36,7 @@ function rangeStripHtml(r) {
     + seg(0, r.fullF, hi) + seg(r.fullF, r.fadeF, `linear-gradient(90deg,${hi},${lo})`) + seg(r.fadeF, r.maxF, lo)
     + `<i style="position:absolute;top:0;bottom:0;left:${pct(r.maxF)};width:2px;margin-left:-1px;background:#fff"></i>` + ticks + `</div>`;
 }
-const TABS = [['attach', 'Attach'], ['camo', 'Camo'], ['fx', 'Effects'], ['prestige', 'Prestige']];
+const TABS = [['attach', 'Attach', 'optic'], ['camo', 'Camo', 'camo'], ['fx', 'Effects', 'new'], ['prestige', 'Prestige', 'prestige']];
 
 export class Gunsmith {
   constructor(menu, { loadoutIndex = Progress.activeLoadout, weapon, onBack, onChange, onRename }) {
@@ -187,6 +189,7 @@ export class Gunsmith {
     const target = def ? (fitted === id ? null : id) : null;
     if (!Progress.setAttachment(this.index, this.slot, target, this.weapon)) return;
     this.onChange?.();
+    flash(this.benchEl, { color: 'var(--c-sodium-hi)', peak: 0.18 });
     this.tryAtt = null;
     this.paintPanelState();
     this.update();
@@ -201,6 +204,7 @@ export class Gunsmith {
     }
     Progress.setCamo(this.weapon, id);
     this.onChange?.();
+    flash(this.benchEl, { color: 'var(--c-sodium-hi)', peak: 0.22 });
     this.tryCamo = null;
     this.paintPanelState();
     this.update();
@@ -239,9 +243,9 @@ export class Gunsmith {
     m.el.dataset.screen = 'gunsmith';
     m.el.innerHTML = `
       <header class="bar">
-        <button class="back" data-act="gsBack">Done</button>
-        <h2>Gunsmith</h2>
-        <span class="eyebrow gs-lo">Loadout: ${esc(this.loadout.name)}</span>
+        ${backButton('gsBack', 'Done')}
+        <h2 class="bar-title">Gunsmith</h2>
+        <span class="hdr-tag gs-lo">${ico('loadout')}${esc(this.loadout.name)}</span>
         <div class="gs-lvl">
           <span class="gs-pchip"></span>
           <b class="gs-lvn"></b>
@@ -251,20 +255,20 @@ export class Gunsmith {
       </header>
       <div class="gs enter">
         <div class="gs-weapons">
-          <nav class="gs-cats">${CATEGORIES.map(c => `<button class="gs-cat" data-act="gsCat" data-cat="${c}">${c}</button>`).join('')}</nav>
+          <nav class="gs-cats">${CATEGORIES.map(c => `<button class="gs-cat" data-act="gsCat" data-cat="${c}">${ico(`cat:${c}`)}<b>${c}</b></button>`).join('')}</nav>
           <div class="gs-list"></div>
         </div>
         <div class="gs-bench">
           <div class="gs-view">
             <div class="gs-title"><b></b><small></small></div>
-            <button class="route small gs-equip" data-act="gsEquip"><i class="lamp"></i><b></b></button>
+            <button class="btn gs-equip" data-act="gsEquip" data-sound="confirm">${ico('equip')}<b></b></button>
           </div>
           <div class="gs-stats"></div>
           <div class="gs-facts"></div>
           <div class="gs-range" style="${RANGE_BOX}"></div>
         </div>
         <div class="gs-panel">
-          <nav class="gs-tabs">${TABS.map(([id, label]) => `<button class="gs-tab" data-act="gsTab" data-tab="${id}">${label}</button>`).join('')}</nav>
+          <nav class="gs-tabs">${TABS.map(([id, label, icon]) => `<button class="gs-tab" data-act="gsTab" data-tab="${id}" data-sound="tab">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>
           <div class="gs-body"></div>
           <div class="gs-foot"></div>
         </div>
@@ -294,6 +298,7 @@ export class Gunsmith {
     this.renderPanel();
     this.update();
     m.show();
+    stagger(m.el.querySelectorAll('.gs-weapons, .gs-bench, .gs-panel'), 'up', { delay: 60, step: 50 });
   }
 
   // The guns of one category, each with its picture.
@@ -305,7 +310,7 @@ export class Gunsmith {
       return `<button class="gs-w${open ? '' : ' locked'}" data-act="gsWeapon" data-id="${esc(id)}">
         <span class="gs-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas></span>
         <span class="gs-wt"><b>${esc(WEAPONS[id].name)}</b><small></small></span>
-        ${open ? '' : `<em class="lock">${lockIcon()}</em>`}
+        ${open ? '' : `<em class="lock">${ico('lock')}</em>`}
       </button>`;
     }).join('');
     this.rail = [...this.listEl.querySelectorAll('.gs-w')];
@@ -322,7 +327,7 @@ export class Gunsmith {
       btn.classList.toggle('on', id === this.weapon);
       btn.classList.toggle('equipped', id === primary || id === secondary);
       btn.querySelector('small').textContent = open
-        ? `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` ${ROMAN[Progress.weaponPrestige(id)]}` : ''}`
+        ? `Lv ${Progress.weaponLevel(id)}${Progress.weaponPrestige(id) ? ` (${ROMAN[Progress.weaponPrestige(id)]})` : ''}`
         : `Level ${Progress.itemUnlockLevel('weapon', id)}`;
     }
   }
@@ -331,8 +336,8 @@ export class Gunsmith {
   paintEquip() {
     const b = this.equipBtn, on = this.isEquipped;
     b.disabled = on;
-    b.classList.toggle('lit', on);
-    b.classList.toggle('primary', !on);
+    b.classList.toggle('is-go', on);
+    b.classList.toggle('is-primary', !on);
     const text = on ? `${SLOT_NAME[slotOf(this.weapon)]}: equipped` : `Equip ${SLOT_NAME[slotOf(this.weapon)]}`;
     if (b.querySelector('b').textContent !== text) b.querySelector('b').textContent = text;
   }
@@ -402,7 +407,7 @@ export class Gunsmith {
         ${SLOTS.map(s => {
           const opts = this.available(s);
           const fitted = kit[s] ? ATTACHMENTS[kit[s]].name : opts.length ? 'Stock' : 'None';
-          return `<button class="att-slot${s === this.slot ? ' on' : ''}${kit[s] ? ' fitted' : ''}" data-act="gsSlot" data-slot="${s}" ${opts.length ? '' : 'disabled'}><small>${SLOT_LABEL[s]}</small><b>${esc(fitted)}</b></button>`;
+          return `<button class="att-slot${s === this.slot ? ' on' : ''}${kit[s] ? ' fitted' : ''}" data-act="gsSlot" data-slot="${s}" data-sound="tab" ${opts.length ? '' : 'disabled'}>${ico(s)}<span><small>${SLOT_LABEL[s]}</small><b>${esc(fitted)}</b></span></button>`;
         }).join('')}
       </div>
       <div class="att-opts">
@@ -410,7 +415,7 @@ export class Gunsmith {
         ${this.available(this.slot).map(a => `
           <button class="att-opt${a.unlocked ? '' : ' locked'}" data-act="gsAtt" data-id="${a.id}">
             <b>${esc(a.name)}</b>
-            <em class="tag">${a.unlocked ? '' : `${lockIcon()}Level ${a.unlockLevel}`}</em>
+            <em class="tag">${a.unlocked ? '' : `${ico('lock')}Level ${a.unlockLevel}`}</em>
           </button>`).join('')}
       </div>`;
   }
@@ -426,7 +431,7 @@ export class Gunsmith {
       return `<button class="tile${unlocked ? '' : ' locked'}" data-act="gsCamo" data-id="${camo.id}" aria-label="${esc(camo.name)}">
         <span class="tile-swatch" style="background:${swatchCss(camo)}"></span>
         ${tag}
-        ${unlocked ? '' : `<span class="tile-lk">${lockIcon()}</span>`}
+        ${unlocked ? '' : `<span class="tile-lk">${ico('lock')}</span>`}
         ${count}
         ${c && !unlocked ? `<i class="tile-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>` : ''}
       </button>`;
@@ -576,12 +581,12 @@ export class Gunsmith {
       const w = this.weapon, cur = Progress.weaponPrestige(w), can = Progress.canPrestigeWeapon(w);
       title = can ? `Rank ${ROMAN[cur + 1]} ready` : cur >= MAX_WEAPON_PRESTIGE ? 'Top rank' : 'Prestige';
       desc = '';
-      foot.innerHTML = `<div class="foot-text"><b>${esc(title)}</b></div><button class="route primary" data-act="gsPrestige" ${can ? '' : 'disabled'}><i class="lamp"></i><b>Prestige</b></button>`;
+      foot.innerHTML = `<div class="foot-text"><b>${esc(title)}</b></div><button class="btn is-primary" data-act="gsPrestige" data-sound="confirm" ${can ? '' : 'disabled'}>${ico('prestige')}<b>Prestige</b></button>`;
       return;
     }
     foot.innerHTML = `
       <div class="foot-text"><b>${esc(title)}</b><small>${esc(desc)}</small></div>
-      ${action ? `<button class="route ${enabled ? 'primary' : ''}" data-act="gsApply" ${enabled ? '' : 'disabled'}><b>${esc(action)}</b></button>` : ''}`;
+      ${action ? `<button class="btn ${enabled ? 'is-primary' : ''}" data-act="gsApply" data-sound="confirm" ${enabled ? '' : 'disabled'}>${ico(enabled ? (action === 'Remove' ? 'close' : 'check') : 'lock')}<b>${esc(action)}</b></button>` : ''}`;
   }
 
   // Bench effect: a streak of the tried tracer colour, or a ring for a kill effect, on transforms only.

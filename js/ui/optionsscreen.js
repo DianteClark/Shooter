@@ -1,6 +1,8 @@
 // The settings screen. Every control is a tap target (no drags), and a tap patches only its own row.
 import { Options, QUALITY_LEVELS, STEPPED } from './options.js';
 import { esc } from './widgets.js';
+import { ico, header } from './yard.js';
+import { pop } from './motion.js';
 import { VOICE_LEVELS_WORK } from '../net/voice.js';
 import { deviceProfile, savedAutoStep, QUALITY_STEPS } from '../render/quality.js';
 
@@ -14,54 +16,59 @@ function autoNote() {
   return `Auto starts at ${stepLabel(p.step)} on this phone, then adapts`;
 }
 
+const NOTCHES = 10;
+
 const stepper = key => {
   const s = STEPPED[key];
   return `
     <div class="opt-row" data-key="${key}">
       <div class="opt-name"><b>${esc(s.label)}</b>${s.hint ? `<small>${esc(s.hint)}</small>` : ''}</div>
-      <button class="opt-step" data-act="optStep" data-key="${key}" data-d="-1" aria-label="Less">&minus;</button>
-      <i class="opt-bar"><i></i></i>
-      <em class="opt-val"></em>
-      <button class="opt-step" data-act="optStep" data-key="${key}" data-d="1" aria-label="More">+</button>
+      <div class="opt-stepper">
+        <button class="opt-step" data-act="optStep" data-key="${key}" data-d="-1" aria-label="Less">${ico('minus')}</button>
+        <i class="opt-bar">${'<i></i>'.repeat(NOTCHES)}</i>
+        <button class="opt-step" data-act="optStep" data-key="${key}" data-d="1" aria-label="More">${ico('plus')}</button>
+        <em class="opt-val"></em>
+      </div>
     </div>`;
 };
+
+const toggle = (act, cls = '') => `<button class="opt-toggle${cls ? ' ' + cls : ''}" data-act="${act}"><i class="opt-knob"></i><b></b></button>`;
 
 export function optionsScreen(menu, { onBack, onPreviewSound }) {
   menu.el.dataset.screen = 'options';
   menu.el.innerHTML = `
-    <header class="bar">
-      <button class="back" data-act="optBack">Done</button>
-      <h2>Options</h2>
-    </header>
-    <div class="opt-cols enter">
-      <section class="opt-col">
-        <h4>Graphics</h4>
+    ${header({ back: 'optBack', label: 'Done', title: 'Options' })}
+    <div class="opt-cols">
+      <section class="opt-col" data-in="up">
+        <h4>${ico('graphics')}Graphics</h4>
         <div class="opt-row opt-quality">
           <div class="opt-name"><b>Quality</b><small>${esc(autoNote())}. Lower steps save battery and heat.</small></div>
           <div class="opt-segs">${QUALITY_LEVELS.map(([id, label]) => `<button class="seg" data-act="optQuality" data-id="${id}">${label}</button>`).join('')}</div>
         </div>
         <div class="opt-row">
           <div class="opt-name"><b>Performance overlay</b><small>Frame rate, 1% low, CPU or GPU bound, quality step</small></div>
-          <button class="opt-toggle opt-fps" data-act="optFps"><i></i><b></b></button>
+          ${toggle('optFps', 'opt-fps')}
         </div>
-        <h4>Controls</h4>
+      </section>
+      <section class="opt-col" data-in="up">
+        <h4>${ico('controls')}Controls</h4>
         ${stepper('sensitivity')}
         ${stepper('aimAssist')}
         <div class="opt-row">
           <div class="opt-name"><b>Left-handed</b><small>Mirrors the sticks and buttons</small></div>
-          <button class="opt-toggle" data-act="optLefty"><i></i><b></b></button>
+          ${toggle('optLefty')}
         </div>
       </section>
-      <section class="opt-col">
-        <h4>Audio</h4>
+      <section class="opt-col" data-in="up">
+        <h4>${ico('sound')}Audio</h4>
         ${stepper('sound')}
         ${stepper('music')}
         ${VOICE_LEVELS_WORK ? stepper('voice') : `
         <div class="opt-row">
-          <div class="opt-name"><b>Team voice</b><small>This phone plays voice on or off</small></div>
-          <button class="opt-toggle opt-voice" data-act="optVoice"><i></i><b></b></button>
+          <div class="opt-name"><b>Team voice</b><small>Plays your squad's voice on this phone</small></div>
+          ${toggle('optVoice', 'opt-voice')}
         </div>`}
-        <p class="opt-note">Settings stay on this phone and are not part of your save code.</p>
+        <p class="opt-note">${ico('info')}Settings stay on this phone and are not part of your save code.</p>
       </section>
     </div>`;
   const q = sel => menu.el.querySelector(sel);
@@ -81,8 +88,10 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     }
     for (const row of menu.el.querySelectorAll('.opt-row[data-key]')) {
       const key = row.dataset.key, s = STEPPED[key], frac = (v[key] - s.min) / (s.max - s.min);
-      row.querySelector('.opt-bar i').style.transform = `scaleX(${frac.toFixed(3)})`;
+      const lit = Math.round(frac * NOTCHES);
+      row.querySelectorAll('.opt-bar i').forEach((n, i) => n.classList.toggle('on', i < lit));
       row.querySelector('.opt-val').textContent = s.text(v[key]);
+      for (const b of row.querySelectorAll('.opt-step')) b.disabled = b.dataset.d < 0 ? v[key] <= s.min + 1e-6 : v[key] >= s.max - 1e-6;
     }
   };
   menu.on({
@@ -94,6 +103,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound }) {
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));
       paint();
+      pop(menu.el.querySelector(`.opt-row[data-key="${key}"] .opt-val`), { scale: 1.25 });
       if (key === 'sound') onPreviewSound?.();
     },
   });

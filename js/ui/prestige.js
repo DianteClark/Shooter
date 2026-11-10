@@ -2,23 +2,25 @@
 import { MAX_PRESTIGE, MAX_LEVEL, prestigeName } from '../shared/progression.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { Progress } from './progress.js';
-import { esc, badgeMark, ROMAN, levelRequirement, itemMark } from './widgets.js';
+import { esc, badgeMark, ROMAN, levelRequirement } from './widgets.js';
+import { ico, header } from './yard.js';
+import { rollNumber } from './motion.js';
 
 const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator' };
 export const kindLabel = kind => KIND_LABEL[kind] ?? kind;
 
 // Confirm sheet: names what is lost and what stays. onYes runs once on the confirm button.
-export function confirmPrestige(menu, { title, loses, keeps, confirmLabel, onYes }) {
+export function confirmPrestige(menu, { title, loses, keeps, confirmLabel, onYes, danger = false }) {
   menu.overlay(`
     <div class="sheet confirm">
-      <h2>${esc(title)}</h2>
+      <div class="sheet-head">${ico(danger ? 'warn' : 'prestige')}<h2>${esc(title)}</h2></div>
       <div class="cf-cols">
-        <div><b class="bad">Resets</b><p>${esc(loses)}</p></div>
-        <div><b class="good">Stays</b><p>${esc(keeps)}</p></div>
+        <div class="cf-lose"><b>${ico('minus')}Resets</b><p>${esc(loses)}</p></div>
+        <div class="cf-keep"><b>${ico('check')}Stays</b><p>${esc(keeps)}</p></div>
       </div>
-      <div class="cf-row">
-        <button class="route small" data-act="cfNo"><b>Not yet</b></button>
-        <button class="route small primary" data-act="cfYes"><i class="lamp"></i><b>${esc(confirmLabel)}</b></button>
+      <div class="sheet-row">
+        <button class="btn" data-act="cfNo">${ico('close')}<b>Not yet</b></button>
+        <button class="btn ${danger ? 'is-danger' : 'is-primary'}" data-act="cfYes">${ico(danger ? 'load' : 'prestige')}<b>${esc(confirmLabel)}</b></button>
       </div>
     </div>`);
   menu.on({
@@ -65,38 +67,47 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     const can = Progress.canPrestige();
     const peaked = p >= MAX_PRESTIGE;
     const upcoming = Progress.unlockSchedule().filter(u => !Progress.isItemUnlocked(u.kind, u.id)).slice(0, 4);
-    const hint = peaked ? 'Highest rank reached' : lp.level >= MAX_LEVEL ? `Prestige to ${prestigeName(p + 1)}` : `Reach level ${MAX_LEVEL} to prestige`;
+    const hint = peaked ? 'Highest rank reached' : lp.level >= MAX_LEVEL ? `Prestige to ${prestigeName(p + 1)}` : `Prestige at level ${MAX_LEVEL}`;
+    const frac = lp.maxed ? 1 : lp.into / lp.span;
     menu.el.innerHTML = `
-      <header class="bar">
-        <button class="back" data-act="pfBack">Done</button>
-        <h2>Service Record</h2>
-      </header>
-      <div class="pf enter">
-        <div class="pf-card">
-          <div class="pf-badge">${badgeMark(p, 88)}</div>
+      ${header({ back: 'pfBack', label: 'Done', title: 'Service record' })}
+      <div class="pf">
+        <div class="pf-card${can ? ' ready' : ''}" data-in="left">
+          <div class="pf-badge">${badgeMark(p, 96)}</div>
           <div class="pf-id">
-            <span class="eyebrow">${esc(prestigeName(p))}</span>
-            <button class="pf-name" data-act="pfRename"><b>${esc(Progress.name || 'Rookie')}</b><small>Change</small></button>
-            <div class="pf-level"><b>Level ${lp.level}</b><small>${lp.maxed ? 'Maximum level' : `${Math.round(lp.into)} / ${lp.span} XP`}</small></div>
-            <i class="xp big"><i style="transform:scaleX(${(lp.maxed ? 1 : lp.into / lp.span).toFixed(3)})"></i></i>
+            <span class="pf-rankname">${esc(prestigeName(p))}</span>
+            <button class="pf-name" data-act="pfRename"><b>${esc(Progress.name || 'Rookie')}</b>${ico('edit')}</button>
           </div>
-          <button class="route ${can ? 'primary' : ''}" data-act="pfPrestige" ${can ? '' : 'disabled'}><i class="lamp"></i><b>${can ? 'Enter Prestige' : esc(hint)}</b></button>
-          <button class="route small" data-act="pfSave"><b>Save code</b></button>
+          <div class="pf-level">
+            <span class="pf-lvbig"><small>Level</small><b class="pf-lvn">${lp.level}</b></span>
+            <span class="pf-xp"><small>${lp.maxed ? 'Maximum level' : `${Math.round(lp.into).toLocaleString('en-US')} / ${lp.span.toLocaleString('en-US')} XP`}</small><i class="xp big"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i></span>
+          </div>
+          <div class="pf-actions">
+            <button class="btn ${can ? 'is-primary' : ''}" data-act="pfPrestige" ${can ? '' : 'disabled'}>${ico(can ? 'prestige' : 'lock')}<b>${can ? 'Enter prestige' : esc(hint)}</b></button>
+            <button class="btn" data-act="pfSave">${ico('save')}<b>Save code</b></button>
+          </div>
         </div>
         <div class="pf-side">
-          <h4>Rank ladder <small>${p} / ${MAX_PRESTIGE}</small></h4>
-          <div class="pf-ladder">
-            ${Array.from({ length: MAX_PRESTIGE + 1 }, (_, i) => `
-              <div class="pf-rank${i === p ? ' on' : ''}${i > p ? ' locked' : ''}">${badgeMark(i, 42)}<small>${i ? ROMAN[i] : 'Start'}</small></div>`).join('')}
-          </div>
-          <h4>Career</h4>
-          <div class="pf-career">${careerStats().map(([label, value]) => `<div><b>${value}</b><small>${label}</small></div>`).join('')}</div>
-          <h4>Next unlocks</h4>
-          <div class="pf-next">
-            ${upcoming.length ? upcoming.map(u => `<div class="pf-item">${itemMark(u.id, u.name)}<span><b>${esc(u.name)}</b><small>${esc(levelRequirement(u.level))}</small></span></div>`).join('') : '<p class="pf-done">Every perk, tactical, lethal and streak is unlocked.</p>'}
-          </div>
+          <section data-in="up">
+            <h4>${ico('rank')}Rank ladder<small>${p} of ${MAX_PRESTIGE}</small></h4>
+            <div class="pf-ladder" style="--n:${MAX_PRESTIGE + 1}">
+              ${Array.from({ length: MAX_PRESTIGE + 1 }, (_, i) => `
+                <div class="pf-rank${i === p ? ' on' : ''}${i > p ? ' locked' : ''}">${badgeMark(i, 30)}<small>${i ? ROMAN[i] : 'Start'}</small></div>`).join('')}
+            </div>
+          </section>
+          <section data-in="up">
+            <h4>${ico('stats')}Career</h4>
+            <div class="pf-career">${careerStats().map(([label, value, icon]) => `<div>${ico(icon)}<b>${value}</b><small>${label}</small></div>`).join('')}</div>
+          </section>
+          <section data-in="up">
+            <h4>${ico('unlock')}Next unlocks</h4>
+            <div class="pf-next">
+              ${upcoming.length ? upcoming.map(u => `<div class="pf-item">${ico(u.id)}<span><b>${esc(u.name)}</b><small>${esc(levelRequirement(u.level))}</small></span></div>`).join('') : `<p class="pf-done">${ico('check')}Every perk, tactical, lethal and streak is unlocked.</p>`}
+            </div>
+          </section>
         </div>
       </div>`;
+    rollNumber(menu.el.querySelector('.pf-lvn'), lp.level, { from: Math.max(1, lp.level - 6), duration: 600 });
   };
   menu.on({
     pfBack: onBack,
@@ -125,10 +136,17 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
   menu.show();
 }
 
+// Big totals in the space of a tile: 9,870 stays as it is, 200,000 reads 200K, 3,400,000 reads 3.4M.
+const compact = n => (n < 10000 ? n.toLocaleString('en-US') : n < 1e6 ? `${Math.round(n / 1000)}K` : `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)}M`);
+
 function careerStats() {
   const sum = key => WEAPON_IDS.reduce((total, w) => total + Progress.weaponStats(w)[key], 0);
   const mastered = WEAPON_IDS.filter(w => Progress.isMastered(w)).length;
-  return [['Total XP', Progress.totalXp.toLocaleString('en-US')], ['Gun kills', sum('kills')], ['Headshots', sum('head')], ['Longshots', sum('long')], ['Mastered', `${mastered}/${WEAPON_IDS.length}`]];
+  return [
+    ['Total XP', compact(Progress.totalXp), 'star'], ['Gun kills', sum('kills').toLocaleString('en-US'), 'skull'],
+    ['Headshots', sum('head').toLocaleString('en-US'), 'medal:headshot'], ['Longshots', sum('long').toLocaleString('en-US'), 'medal:longshot'],
+    ['Mastered', `${mastered}/${WEAPON_IDS.length}`, 'camo'],
+  ];
 }
 
 export function prestigeWeaponNow(menu, w, name, { onDone, mountGun }) {
