@@ -6,7 +6,10 @@ import { esc } from './widgets.js';
 import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
 
-const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Weapons', 'cat:Assault'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info']];
+const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info']];
+
+// One piece of equipment: its job, what it does, and what beats it (catalog.js job / desc / counter).
+const gear = kind => t => `<div class="help-stat"><dt>${esc(t.name)} <small>${kind}: ${esc(t.job ?? '')}</small></dt><dd>${esc(t.desc)}. <b>Counter:</b> ${esc(t.counter ?? '')}.</dd></div>`;
 
 // One help card: an icon, a stencil heading and a sentence or two.
 const card = (icon, title, body, wide = false) => `<div class="help-card${wide ? ' wide' : ''}"><h4>${ico(icon)}<span>${esc(title)}</span></h4><p>${body}</p></div>`;
@@ -37,6 +40,13 @@ const PANELS = {
       ${stat('Settling (Stanchion)', 'Its first rounds scatter and every round after lands tighter, until a long burst is the most accurate automatic fire there is. Stop firing and it has to settle again. The Flywheel does the same with fire rate: it starts slow and winds up.')}
       ${stat('Heat rifle (Kiln)', 'Works like an LMG heat bar on a rifle: no bloom at all and a 75-round magazine, but hold it down and it locks. Short strings.')}
       ${stat('Melee (Gaff, Maul)', 'Sidearm-slot weapons with no ammunition and no sound. A swing reaches about three metres along your aim and throws you a step forward. The Gaff kills in two quick swings, the Maul in one slow one.')}
+    </dl>`,
+  gear: () => `
+    <dl class="help-stats scroll-y">
+      ${stat('How it works', 'One tactical and one lethal. Tap to throw where you aim, or hold and drag from the button to place it. Counts refill when you respawn. Devices left on the ground (mines, Claymores, Tripwires, Satchels, Sensors, Trophies, Medpacks, Decoys) can be <b>shot</b>; a Bulwark takes a couple of magazines, or two grenades. Shock and Blackout fry them, a Trophy shoots down grenades.')}
+      ${stat('Satchel', 'Throw it, then tap Lethal again: the button turns red and reads Detonate. It stays armed until it goes off, is shot, or a minute passes.')}
+      ${Object.values(TACTICALS).map(gear('Tactical')).join('')}
+      ${Object.values(LETHALS).map(gear('Lethal')).join('')}
     </dl>`,
   controls: () => `
     <div class="help-grid">
@@ -74,7 +84,7 @@ const PANELS = {
     <div class="help-grid scroll-y">
       ${card('ui:eye-off', 'Stay off the radar', 'Firing marks you on the enemy minimap for a moment. A suppressor hides it.')}
       ${card('cat:LMG', 'Beat the big guns', 'LMGs turn slowly while firing and overheat. Flank them.')}
-      ${card('flash', 'Equipment', `${Object.values({ ...TACTICALS, ...LETHALS }).map(t => esc(t.name)).join(', ')}. Counts refill when you respawn.`)}
+      ${card('flash', 'Equipment', `${Object.keys(TACTICALS).length} tacticals and ${Object.keys(LETHALS).length} lethals, each with a job and a counter: see the Gear tab. Counts refill when you respawn.`)}
       ${card('stun', 'Stun, Gas, Shock', '<b>Stun</b> slows you and drags your aim for a few seconds. <b>Gas</b> lingers, chips health and slows anyone inside; walk out. <b>Shock</b> sticks and arcs three times, jolting players and frying mines, Claymores, Trophies, Sensors and Decoys. Tac Mask shortens stuns and ignores gas.', true)}
       ${card('claymore', 'Impact, Claymore, Drill', '<b>Impact</b> goes off the moment it touches anything, a player included. <b>Claymore</b> faces the way you throw it and fires a cone at enemies who walk in front; its lasers give it away. <b>Drill</b> bores through thin cover and goes off on the far side: its landing ring shows where.', true)}
       ${card('ui:star', 'Perks', `${Object.values(PERKS).slice(0, 5).map(p => esc(p.name)).join(', ')}. One from each tier.`)}
@@ -87,7 +97,7 @@ export function helpScreen(menu, { onBack, onTutorial }) {
   menu.el.dataset.screen = 'help';
   const training = onTutorial ? `<button class="btn is-primary help-tut" data-sound="confirm" data-act="helpTutorial">${ico('play')}<b>Training</b></button>` : '';
   menu.el.innerHTML = `
-    ${header({ back: 'helpBack', title: 'How to play', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
+    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
     <div class="help-body"></div>`;
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];

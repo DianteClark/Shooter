@@ -45,6 +45,19 @@
 // - A Drill that sticks to a wall bores through up to DRILL_DEPTH of solid and goes off just past the far face;
 //   previewThrow and landingOf report that point as the landing, so the HUD ring and bots aim at the real blast.
 //
+// Gear wave (2026-11): Snapshot, Blackout, Bulwark, Tagger, Medpack (tacticals), Satchel ('charge'), Thermite,
+// Tripwire, Crawler, Shiv (lethals); Sensor reworked into a planted pinger, Sticky and Tagger stick to people.
+//   more onEvent shapes  {t:'stuck',id,by,kind}         a Sticky or Tagger landed on player id
+//                        {t:'jammed',id,by,dur}         a Blackout caught that enemy: no equipment, no minimap
+//                        {t:'heal',id,amount,by,kind}   a Medpack tick (kind 'medpack'); Stim has no by/kind
+//                        {t:'pickup',id,kind}           the owner walked over their Shiv and takes it back
+//                        {t:'popped',kind,x,z,by}       a device destroyed by gunfire or burnt out (no blast)
+//   eq.detonate(ownerId)  sets off that owner's armed Satchels; returns how many. eq.remoteOf(ownerId) -> count.
+//   eq.shootDevices(...)  / eq.shootCover(...)  gunfire against enemy devices and Bulwarks (sim.applyShot).
+//   syncCover(map, list)  keeps a waist-high wall in map.walls for every standing Bulwark (host and guests alike).
+//   tripBeam(map, x, z, vx, vz, out)  a Tripwire's beam from its wire fields (renderer and bots draw/avoid it).
+// Players entries may also carry `aim` (Shiv back hits) and `room` (has space for one more of its own lethal).
+//
 // Entries with `noThrow` (fire, bomblet) are the things a throw turns into. They live in the same list as everything
 // else, so snapshots, host migration and the renderer's grenade dots all cover them without knowing they exist.
 
@@ -97,7 +110,7 @@ const DRILL_OUT = 0.45;         // How far past the far face the charge goes off
 // rolls about 1.5 m more, so every kind ends up near THROW_RANGE.
 export const EQUIPMENT = {
   frag:   { fuse: 1.8, air: 0.75, blast: { radius: 6.2, inner: 1.4, max: 135, min: 15 } },
-  sticky: { fuse: 1.2, air: THROW_RANGE / THROW_SPEED, sticks: true, blast: { radius: 4.6, inner: 1.6, max: 165, min: 20 } },
+  sticky: { fuse: 1.2, air: THROW_RANGE / THROW_SPEED, sticks: true, attach: { contact: 0.6, hold: 1.1 }, blast: { radius: 4.6, inner: 1.6, max: 165, min: 20 } },
   flash:  { fuse: 0.95, air: 0.75, flash: { radius: 12, inner: 3, maxDur: 3.2 } },
   smoke:  { fuse: 2.2, air: 0.75, popsOnStop: true, cloud: { radius: 4.5, life: 9, grow: 0.8, fade: 1.8 } },
   stim:   { instant: true, heal: MAX_HP },
@@ -110,24 +123,44 @@ export const EQUIPMENT = {
   hatchet: { fuse: 1.3, air: 0.62, sticks: true, quietEnd: true, direct: { radius: 0.62, damage: DIRECT_DAMAGE } },
 
   decoy:   { fuse: 8, air: 0.75, sticks: true, quietEnd: true, decoy: { weapon: 'ar' } },
-  sensor:  { fuse: 1, air: 0.75, sticks: true, sensor: { radius: 13, dur: 4 } },
-  trophy:  { fuse: 16, air: 0.75, sticks: true, quietEnd: true, trophy: { radius: 6.5, charges: 2, gap: 0.3 } },
+  // Reworked: a planted pinger, not a one-off pulse (the one-off is now Snapshot).
+  sensor:  { fuse: 20, air: 0.75, sticks: true, quietEnd: true, sensor: { radius: 10, dur: 1.6, every: 2.5, first: 0.6 } },
+  trophy:  { fuse: 16, air: 0.75, sticks: true, quietEnd: true, trophy: { radius: 6.5, charges: 3, gap: 0.3 } },
 
   // V8. `soft` kinds announce themselves with a 'gear' event instead of a 'bang': no explosion is drawn or heard.
   stun:     { fuse: 1.1, air: 0.75, soft: true, daze: { radius: 8, inner: 2.5, maxDur: 3.2 } },
   gas:      { fuse: 1.5, air: 0.75, soft: true, popsOnStop: true, spawns: 'gascloud', burstR: 4.4 },
   gascloud: { noThrow: true, as: 'gas', quietEnd: true, fuse: 8, gas: { radius: 4.4, grow: 0.9, dps: 8, daze: 0.45, dazeDur: 0.8 } },
   shock:    { fuse: 3, air: 0.75, sticks: true, soft: true, quietEnd: true, shock: { radius: 4, first: 0.35, gap: 0.55, arcs: 3, damage: 18, daze: 0.75, dazeDur: 1.2, fry: 5 } },
-  impact:   { fuse: 4, air: 0.75, sticks: true, burstOnStick: true, contact: 0.55, blast: { radius: 4.2, inner: 1.3, max: 150, min: 20 } },
+  impact:   { fuse: 4, air: 0.75, sticks: true, burstOnStick: true, contact: 0.55, blast: { radius: 4.2, inner: 1.0, max: 130, min: 20 } },   // Gear wave: no fuse to dodge, so a softer blast.
   claymore: { fuse: 45, air: 0.62, sticks: true, quietEnd: true, faces: true, mine: { arm: 1.3, trigger: 3.6, cone: 0.6 },
     blast: { radius: 6, inner: 2.2, max: 180, min: 45, cone: 0.85, back: 1.3 } },
   drill:    { fuse: 2.1, air: 0.62, sticks: true, drill: true, blast: { radius: 3.9, inner: 1.3, max: 155, min: 25 } },
+
+  // Gear wave. Tacticals.
+  snapshot: { fuse: 0.9, air: 0.75, popsOnStop: true, snap: { radius: 12, dur: 3 } },
+  blackout: { fuse: 1.0, air: 0.75, soft: true, emp: { radius: 7, dur: 6 } },
+  bulwark:  { fuse: 25, air: 0.62, sticks: true, quietEnd: true, faces: true, cover: { half: 1.25, thick: 0.2, h: 1.1, hp: 700, blastMult: 4 } },
+  tagger:   { fuse: 1.0, air: 0.4, sticks: true, tag: { contact: 0.55, dur: 8, radius: 5.5, surfDur: 3 } },
+  medpack:  { fuse: 15, air: 0.62, sticks: true, quietEnd: true, medic: { radius: 3.5, every: 0.5, amount: 7 } },
+  // Lethals.
+  charge:   { fuse: 60, air: 0.75, sticks: true, quietEnd: true, remote: { arm: 0.35, keep: 2 }, blast: { radius: 5.6, inner: 1.8, max: 175, min: 30 } },
+  thermite: { fuse: 7.6, air: 0.62, sticks: true, quietEnd: true, therm: { melt: 2.6, coverDps: 160 }, burn: { radius: 2.4, dps: 46 } },
+  tripwire: { fuse: 50, air: 0.62, sticks: true, quietEnd: true, trip: { arm: 1.2, len: 7, width: 0.45, cold: 2 }, blast: { radius: 3.4, inner: 1.2, max: 165, min: 40 } },
+  crawler:  { fuse: 7, air: 0.75, crawl: { arm: 0.8, speed: 4.2, seek: 8, contact: 0.85 }, blast: { radius: 3.6, inner: 1.0, max: 125, min: 25 } },
+  shiv:     { fuse: 25, air: 0.36, sticks: true, quietEnd: true, direct: { radius: 0.5, damage: 60, back: DIRECT_DAMAGE, cone: 1.2 }, pickup: 1.3 },
 };
 
 // What a Trophy will shoot at.
-const ZAPPABLE = new Set(['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'impact', 'claymore', 'drill']);
-// What a Shock arc fries: enemy devices sitting on the map.
-const FRYABLE = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy', 'drill', 'sticky', 'shock']);
+const ZAPPABLE = new Set(['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'impact', 'claymore', 'drill',
+  'charge', 'thermite', 'tripwire', 'crawler', 'shiv']);
+// What a Shock arc, a Blackout or Thermite fries: enemy devices sitting on the map.
+const FRYABLE = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy', 'drill', 'sticky', 'shock', 'charge', 'tripwire', 'crawler', 'medpack', 'tagger']);
+// What gunfire destroys: enemy devices on the ground (a Bulwark has health instead, see shootCover).
+export const SHOOTABLE = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy', 'shock', 'charge', 'tripwire', 'crawler', 'medpack', 'tagger']);
+const DEVICE_HIT_R = 0.42;       // A bullet passing this close to a device's centre hits it.
+const COLD_MARK = 0.5;           // Cold Blooded: recon marks (Sensor, Snapshot, Tagger) last this share (sim.js applies it).
+export { COLD_MARK };
 
 // Furthest a player with these perks may throw. The host clamps with this; so should anything drawing a preview.
 export function maxThrowRange(perks) {
@@ -186,6 +219,12 @@ export function effectRadius(kind) {
   if (s.direct) return s.direct.radius;
   if (s.daze) return s.daze.radius;
   if (s.shock) return s.shock.radius;
+  if (s.snap) return s.snap.radius;
+  if (s.emp) return s.emp.radius;
+  if (s.burn) return s.burn.radius;
+  if (s.tag) return s.tag.radius;
+  if (s.medic) return s.medic.radius;
+  if (s.cover) return s.cover.half;
   return 0;
 }
 
@@ -193,16 +232,16 @@ function makeProjectile(id, kind, owner, ox, oz, aim, dist, perks, quick = 1) {
   const v = speedFor(kind, dist);
   return { id, kind, owner, team: undefined, x: ox, z: oz, y: RELEASE_Y, arc: throwArc(dist, perks),
     vx: Math.cos(aim) * v, vz: Math.sin(aim) * v, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick, trip: 0,
-    dir: aim, wnx: 0, wnz: 0 };
+    dir: aim, wnx: 0, wnz: 0, attached: null, hp: 0, land: -1, boom: false, x0: 0, z0: 0, x1: 0, z1: 0 };
 }
 
 // Something a burst left on the ground. A positive `delay` holds it back that many seconds.
 function makeLying(id, kind, owner, team, x, z, delay = 0) {
   return { id, kind, owner, team, x, z, y: 0, arc: 0, vx: 0, vz: 0, age: -delay, stuck: true, grounded: true, t: 0, n: 0, charges: 0, quick: 1, trip: 0,
-    dir: 0, wnx: 0, wnz: 0 };
+    dir: 0, wnx: 0, wnz: 0, attached: null, hp: 0, land: -1, boom: false, x0: 0, z0: 0, x1: 0, z1: 0 };
 }
 
-const isDevice = spec => !!(spec.mine || spec.trophy || spec.sensor || spec.decoy);
+const isDevice = spec => !!(spec.mine || spec.trophy || spec.sensor || spec.decoy || spec.cover || spec.medic);
 
 // One tick of a live projectile. Real throws and previews both go through here, so they cannot disagree.
 // `onBounce` is optional; returns true once the thing has gone off.
@@ -352,7 +391,7 @@ function previewOnBounce(x, z) {
 
 // The one projectile the previews fly. Never escapes this file.
 const FLYER = { id: 0, kind: '', owner: null, team: undefined, x: 0, z: 0, y: 0, arc: 0, vx: 0, vz: 0, age: 0, stuck: false, grounded: false, t: 0, n: 0, charges: 0, quick: 1, trip: 0,
-  dir: 0, wnx: 0, wnz: 0 };
+  dir: 0, wnx: 0, wnz: 0, attached: null, hp: 0, land: -1, boom: false, x0: 0, z0: 0, x1: 0, z1: 0 };
 function launchFlyer(kind, ox, oz, aim, dist, perks, pro) {
   const v = speedFor(kind, dist);
   FLYER.kind = kind; FLYER.x = ox; FLYER.z = oz; FLYER.y = RELEASE_Y; FLYER.arc = throwArc(dist, perks);
@@ -443,6 +482,7 @@ export class EquipmentSystem {
     this._smokes = [];
     this._pending = [];   // Events raised by throw(), delivered on the next step.
     this._nextId = 1;
+    syncCover(map, null);  // A Bulwark wall left on this (shared) map by an earlier match goes.
   }
 
   get projectiles() { return this._projectiles; }
@@ -452,6 +492,7 @@ export class EquipmentSystem {
     this._projectiles.length = 0;
     this._smokes.length = 0;
     this._pending.length = 0;
+    syncCover(this.map, null);
   }
 
   // Returns the new projectile, or null for stim (no projectile) and unknown kinds.
@@ -470,6 +511,7 @@ export class EquipmentSystem {
     const p = makeProjectile(this._nextId++, kind, id, ox, oz, aim, dist, perks, throwQuick(perks, pro));
     p.team = owner !== null && typeof owner === 'object' ? owner.team : undefined;
     if (spec.trophy) p.charges = spec.trophy.charges + (perks && perks.includes('engineer') ? ENGINEER_TROPHY : 0);
+    if (spec.remote) this._limitRemotes(id, spec.remote.keep - 1);
     this._projectiles.push(p);
     return p;
   }
@@ -484,7 +526,7 @@ export class EquipmentSystem {
       this._projectiles.push({ id: v.id, kind: v.kind, owner: v.owner, team: teamOf(v.owner), x: v.x, z: v.z, y: v.y, arc,
         vx: v.vx || 0, vz: v.vz || 0, age: v.age || 0, stuck: !!v.stuck, grounded: !!v.grounded,
         t: 0, n: 0, charges: EQUIPMENT[v.kind].trophy ? EQUIPMENT[v.kind].trophy.charges : 0, quick: 1, trip: 0,
-        dir: Math.atan2(v.vz || 0, v.vx || 0), wnx: 0, wnz: 0 });
+        dir: Math.atan2(v.vz || 0, v.vx || 0), wnx: 0, wnz: 0, attached: null, hp: 0, land: -1, boom: false, x0: 0, z0: 0, x1: 0, z1: 0 });
       this._nextId = Math.max(this._nextId, v.id + 1);
     }
     for (const v of smokes || []) {
@@ -497,8 +539,85 @@ export class EquipmentSystem {
   clearDeployed(team, teamOf) {
     for (let i = 0; i < this._projectiles.length; i++) {
       const p = this._projectiles[i], spec = EQUIPMENT[p.kind];
-      if ((spec.mine || spec.trophy || spec.decoy || spec.sensor) && (p.team ?? teamOf(p.owner)) === team) p.dead = true;
+      if ((spec.mine || spec.trophy || spec.decoy || spec.sensor || spec.remote || spec.trip || spec.medic || spec.crawl || spec.cover)
+        && (p.team ?? teamOf(p.owner)) === team) p.dead = true;
     }
+  }
+
+  // Satchel: the owner's second tap. Every armed charge of theirs goes off on the next step. Returns how many.
+  detonate(ownerId) {
+    let n = 0;
+    for (let i = 0; i < this._projectiles.length; i++) {
+      const p = this._projectiles[i], spec = EQUIPMENT[p.kind];
+      if (!spec.remote || p.dead || p.owner !== ownerId || !p.stuck || p.land < 0 || p.age - p.land < spec.remote.arm) continue;
+      p.boom = true; n++;
+    }
+    return n;
+  }
+
+  // How many live Satchels this owner has on the map (armed or not).
+  remoteOf(ownerId) {
+    let n = 0;
+    for (let i = 0; i < this._projectiles.length; i++) {
+      const p = this._projectiles[i];
+      if (EQUIPMENT[p.kind].remote && !p.dead && p.owner === ownerId) n++;
+    }
+    return n;
+  }
+
+  // Keeps at most `keep` Satchels per owner: throwing one more retires the oldest, quietly.
+  _limitRemotes(ownerId, keep) {
+    let n = this.remoteOf(ownerId);
+    for (let i = 0; i < this._projectiles.length && n > keep; i++) {
+      const p = this._projectiles[i];
+      if (EQUIPMENT[p.kind].remote && !p.dead && p.owner === ownerId) { p.dead = true; n--; }
+    }
+  }
+
+  // Gunfire against enemy devices: the nearest SHOOTABLE one within DEVICE_HIT_R of the ray before `len` is destroyed.
+  // Returns the popped projectile or null. `team` is the shooter's; their own devices (and teammates') are safe.
+  shootDevices(ox, oz, dx, dz, len, team, shooterId, onEvent) {
+    let best = null, bestT = len + 0.2;
+    const list = this._projectiles;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q.dead || q.attached !== null || !SHOOTABLE.has(q.kind) || !(q.stuck || q.grounded)) continue;
+      if (q.owner === shooterId || (team !== undefined && q.team === team)) continue;
+      const t = rayCircleT(ox, oz, dx, dz, q.x, q.z, DEVICE_HIT_R);
+      if (t >= 0 && t < bestT) { bestT = t; best = q; }
+    }
+    if (!best) return null;
+    best.dead = true;
+    if (onEvent) onEvent({ t: 'popped', kind: best.kind, x: best.x, z: best.z, by: shooterId, src: 'gun' });
+    return best;
+  }
+
+  // Gunfire against an enemy Bulwark: `dmg` off the first one the ray crosses before `len`, unless the shooter is right
+  // behind it (then they are firing over it, the same rule waist-high cover follows). Returns true when one was hit.
+  shootCover(ox, oz, dx, dz, len, team, shooterId, dmg, onEvent) {
+    const list = this._projectiles;
+    let best = null, bestT = len + 0.15;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q.dead || !EQUIPMENT[q.kind].cover || !q.stuck || q.n === 0) continue;
+      if (q.owner === shooterId || (team !== undefined && q.team === team)) continue;
+      const r = coverRect(q, EQUIPMENT[q.kind].cover, RECT);
+      const t = raySlab(ox, oz, dx, dz, r);
+      if (t < 0 || t >= bestT) continue;
+      if (t < 1.2 && Math.max(r.x - ox, 0, ox - r.x - r.w) ** 2 + Math.max(r.z - oz, 0, oz - r.z - r.d) ** 2 < 1.44) continue;
+      bestT = t; best = q;
+    }
+    if (!best) return false;
+    this._hurtCover(best, dmg, shooterId, onEvent);
+    return true;
+  }
+
+  _hurtCover(q, dmg, by, onEvent, src = 'gun') {
+    if (q.dead) return;
+    q.hp -= dmg;
+    if (q.hp > 0) return;
+    q.dead = true;
+    if (onEvent) onEvent({ t: 'popped', kind: q.kind, x: q.x, z: q.z, by, src });
   }
 
   // Sympathetic detonation. Mines whose centre is inside the blast, with nothing solid between, are tripped; each goes
@@ -530,18 +649,40 @@ export class EquipmentSystem {
     for (let i = 0; i < list.length; i++) {
       const p = list[i], spec = EQUIPMENT[p.kind];
       if (p.dead) continue;
-      const px = p.x, pz = p.z;
+      if (p.attached !== null && !this._follow(p, players)) {
+        if (spec.tag) { p.dead = true; continue; }      // A Tagger dies with its carrier.
+        p.attached = null;                               // A Sticky drops where they fell.
+      }
+      const px = p.x, pz = p.z, was = p.stuck;
       const done = advance(this.map, p, spec, dt);
-      if (spec.direct && !p.stuck && this._directHit(p, spec, px, pz, players, onDamage)) continue;
+      if ((p.grounded || p.stuck) && p.land < 0) p.land = p.age;
+      // Hits on people are checked on the tick's whole path, including the tick it came down on them.
+      if (spec.direct && !was && this._directHit(p, spec, px, pz, players, onDamage)) { if (!spec.pickup) continue; }
       if (spec.contact && !p.stuck && this._contact(p, spec, px, pz, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
-      if (spec.faces && p.stuck && p.n === 0) { p.n = 1; p.vx = Math.cos(p.dir); p.vz = Math.sin(p.dir); }
+      if ((spec.attach || spec.tag) && !was && p.attached === null) this._stick(p, spec, px, pz, players, onEvent);
+      if (spec.faces && p.stuck && p.n === 0) {
+        p.n = 1; p.vx = Math.cos(p.dir); p.vz = Math.sin(p.dir);
+        if (spec.cover) {
+          // A Bulwark squares up to the nearest axis (walls are axis-aligned), exactly, so every peer builds the same wall.
+          p.hp = spec.cover.hp;
+          if (Math.abs(p.vx) >= Math.abs(p.vz)) { p.vx = Math.sign(p.vx) || 1; p.vz = 0; } else { p.vx = 0; p.vz = Math.sign(p.vz) || 1; }
+          p.dir = Math.atan2(p.vz, p.vx);
+        }
+      }
+      if (spec.remote && p.boom) { this._burst(p, spec, players, onEvent, onDamage); continue; }
+      if (spec.trip && p.stuck && this._tripwire(p, spec, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
+      if (spec.crawl && p.grounded && !done && this._crawl(p, spec, dt, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
+      if (spec.therm && p.stuck) this._thermite(p, spec, dt, players, onEvent);
+      if (spec.sensor && p.stuck) this._pinger(p, spec, dt, players, onEvent);
+      if (spec.medic && p.stuck) this._medic(p, spec, dt, players, onEvent);
+      if (spec.pickup && p.stuck && this._pickup(p, spec, players, onEvent)) continue;
       if (spec.drill && p.stuck && p.n === 0) {
         p.n = 1;
         if ((p.wnx || p.wnz) && onEvent) onEvent({ t: 'gear', kind: p.kind, x: p.x, z: p.z, r: 0, by: p.owner, nx: p.wnx, nz: p.wnz });
       }
       if (spec.mine && p.trip > 0 && (p.trip -= dt) <= 0) { this._burst(p, spec, players, onEvent, onDamage); continue; }
       if (spec.mine && p.age >= spec.mine.arm && this._tripped(p, spec, players)) { this._burst(p, spec, players, onEvent, onDamage); continue; }
-      if (spec.burn) this._burn(p, spec, dt, players, onDamage);
+      if (spec.burn && p.stuck) this._burn(p, spec, dt, players, onDamage);
       if (spec.gas) this._gas(p, spec, dt, players, onEvent, onDamage);
       if (spec.shock && p.stuck && this._shock(p, spec, dt, players, onEvent, onDamage)) continue;
       if (spec.decoy && p.stuck) this._decoy(p, spec, dt, onEvent);
@@ -550,6 +691,7 @@ export class EquipmentSystem {
       else list[w++] = p;
     }
     list.length = w;
+    syncCover(this.map, list);
 
     this._stepSmokes(dt);
   }
@@ -559,7 +701,7 @@ export class EquipmentSystem {
   inFire(x, z, team) {
     for (let i = 0; i < this._projectiles.length; i++) {
       const p = this._projectiles[i], b = EQUIPMENT[p.kind].burn || EQUIPMENT[p.kind].gas;   // Gas too: bots walk out of both.
-      if (b && p.team !== team && Math.hypot(p.x - x, p.z - z) < b.radius) return p;
+      if (b && p.stuck && !p.dead && p.team !== team && Math.hypot(p.x - x, p.z - z) < b.radius) return p;
     }
     return null;
   }
@@ -580,7 +722,9 @@ export class EquipmentSystem {
       if (onEvent) onEvent({ t: 'bang', kind: p.kind, x: p.x, z: p.z, r: spec.cloud.radius, by: p.owner });
       return;
     }
-    if (spec.sensor) { this._sense(p, spec, players, onEvent); return; }
+    if (spec.snap) { this._sense(p, spec.snap.radius, spec.snap.dur, players, onEvent); return; }
+    if (spec.tag) { if (p.attached === null) this._sense(p, spec.tag.radius, spec.tag.surfDur, players, onEvent); return; }
+    if (spec.emp) { this._blackout(p, spec, players, onEvent); return; }
     if (spec.daze) { this._stun(p, spec, players, onEvent); return; }
     if (spec.spawns) {
       if (onEvent) onEvent({ t: spec.soft ? 'gear' : 'bang', kind: p.kind, x: p.x, z: p.z, r: spec.burstR, by: p.owner });
@@ -596,9 +740,11 @@ export class EquipmentSystem {
     }
     if (spec.faces) bang.aim = p.dir;
     if (p.direct) bang.direct = 1;                         // Impact: went off on someone, not on the ground.
+    if (p.attached !== null) bang.on = p.attached;          // Sticky: went off on someone.
     if (onEvent) onEvent(bang);
     if (spec.blast) this.setOffMines(p.x, p.z, r, p);
     const team = this._teamOf(p, players);
+    if (spec.blast) this._blastCover(p, spec.blast, team, onEvent);
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
@@ -639,7 +785,15 @@ export class EquipmentSystem {
       if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
       const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
       if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) > spec.direct.radius) continue;
-      if (onDamage) onDamage(v.id, spec.direct.damage, p.owner, p.kind);
+      // Shiv: a hit in the back (the target facing the way the blade flies) is the kill; anything else is a wound.
+      let dmg = spec.direct.damage;
+      if (spec.direct.back && Number.isFinite(v.aim)) {
+        let a = v.aim - Math.atan2(dz, dx);
+        a = Math.atan2(Math.sin(a), Math.cos(a));
+        if (Math.abs(a) <= spec.direct.cone) dmg = spec.direct.back;
+      }
+      if (onDamage) onDamage(v.id, dmg, p.owner, p.kind);
+      if (spec.pickup) { p.stuck = true; p.grounded = true; p.vx = 0; p.vz = 0; p.x = v.x; p.z = v.z; p.land = p.age; }
       return true;
     }
     return false;
@@ -671,7 +825,7 @@ export class EquipmentSystem {
       if (d >= radius) continue;
       if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
       const k = v.perks && v.perks.includes('tacmask') ? TACMASK_FIRE : 1;
-      if (onDamage) onDamage(v.id, Math.max(1, Math.round(dps * BURN_TICK * k)), p.owner, spec.as);
+      if (onDamage) onDamage(v.id, Math.max(1, Math.round(dps * BURN_TICK * k)), p.owner, spec.as || p.kind);
     }
   }
 
@@ -682,15 +836,188 @@ export class EquipmentSystem {
     if (onEvent) onEvent({ t: 'decoy', x: p.x, z: p.z, by: p.owner, team: p.team, weapon: spec.decoy.weapon });
   }
 
-  _sense(p, spec, players, onEvent) {
+  // A recon reading (Sensor ping, Snapshot, a Tagger dart on the ground): every enemy in reach, through walls.
+  _sense(p, radius, dur, players, onEvent) {
     if (!onEvent) return;
-    const { radius, dur } = spec.sensor;
     onEvent({ t: 'pulse', kind: p.kind, x: p.x, z: p.z, r: radius, by: p.owner });
+    const team = this._teamOf(p, players);
     for (let i = 0; i < players.length; i++) {
       const v = players[i];
-      if (!this._enemyOf(p, v, p.team) || Math.hypot(v.x - p.x, v.z - p.z) >= radius) continue;
+      if (!this._enemyOf(p, v, team) || Math.hypot(v.x - p.x, v.z - p.z) >= radius) continue;
       if (hasProIn(v.perks, v.pro, 'coldblood')) continue;     // Blank Slate.
-      onEvent({ t: 'marked', id: v.id, by: p.owner, dur });
+      onEvent({ t: 'marked', id: v.id, by: p.owner, dur, kind: p.kind });
+    }
+  }
+
+  // Sensor: once planted, a ping every `every` seconds until its fuse runs out.
+  _pinger(p, spec, dt, players, onEvent) {
+    const s = spec.sensor;
+    if (p.n === 0) { p.n = 1; p.t = s.first; }
+    p.t -= dt;
+    if (p.t > 0) return;
+    p.t += s.every;
+    this._sense(p, s.radius, s.dur, players, onEvent);
+  }
+
+  // Sticky and Tagger: a throw that touches an enemy in flight sticks to them and rides along.
+  _stick(p, spec, px, pz, players, onEvent) {
+    const reach = spec.attach ? spec.attach.contact : spec.tag.contact;
+    const dx = p.x - px, dz = p.z - pz, len = Math.hypot(dx, dz);
+    if (len < 1e-6) return;
+    const team = p.team;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
+      const u = Math.max(0, Math.min(1, ((v.x - px) * dx + (v.z - pz) * dz) / (len * len)));
+      if (Math.hypot(px + dx * u - v.x, pz + dz * u - v.z) > reach) continue;
+      p.attached = v.id; p.stuck = true; p.grounded = true; p.vx = 0; p.vz = 0; p.x = v.x; p.z = v.z;
+      if (spec.attach) p.age = Math.min(p.age, spec.fuse - spec.attach.hold);   // Time to know it, not to shake it.
+      else p.age = spec.fuse - spec.tag.dur;
+      if (onEvent) {
+        onEvent({ t: 'stuck', id: v.id, by: p.owner, kind: p.kind });
+        if (spec.tag && !hasProIn(v.perks, v.pro, 'coldblood')) onEvent({ t: 'marked', id: v.id, by: p.owner, dur: spec.tag.dur, kind: p.kind });
+      }
+      return;
+    }
+  }
+
+  // Keeps an attached throw on its carrier. False once the carrier is dead or gone: it drops where they fell.
+  _follow(p, players) {
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (v.id !== p.attached) continue;
+      if (!v.alive) return false;
+      p.x = v.x; p.z = v.z;
+      return true;
+    }
+    return false;
+  }
+
+  // Blackout: fries enemy devices in reach and jams every enemy it catches with nothing solid between.
+  _blackout(p, spec, players, onEvent) {
+    if (!onEvent) return;
+    const e = spec.emp, team = this._teamOf(p, players);
+    onEvent({ t: 'gear', kind: p.kind, x: p.x, z: p.z, r: e.radius, by: p.owner });
+    this._fry(p, e.radius, team, players, onEvent);
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, team) || v.spawnProtect) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= e.radius) continue;
+      if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+      onEvent({ t: 'jammed', id: v.id, by: p.owner, dur: e.dur });
+    }
+  }
+
+  // Medpack: every `every` seconds, a little health to each living teammate (and the owner) in reach and in view.
+  _medic(p, spec, dt, players, onEvent) {
+    const m = spec.medic;
+    p.t -= dt;
+    if (p.t > 0 || !onEvent) return;
+    p.t += m.every;
+    const team = this._teamOf(p, players);
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!v.alive || !(v.id === p.owner || (team !== undefined && v.team === team))) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d >= m.radius) continue;
+      if (d > 1e-3 && raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksBullet')) continue;
+      onEvent({ t: 'heal', id: v.id, amount: m.amount, by: p.owner, kind: p.kind });
+    }
+  }
+
+  // Thermite: fries enemy devices it can reach once lit, and keeps eating into any enemy Bulwark in reach.
+  _thermite(p, spec, dt, players, onEvent) {
+    const th = spec.therm, team = this._teamOf(p, players);
+    if (p.n === 0) {
+      p.n = 1;
+      if (onEvent) onEvent({ t: 'gear', kind: p.kind, x: p.x, z: p.z, r: spec.burn.radius, by: p.owner });
+      this._fry(p, th.melt, team, players, onEvent);
+    }
+    const list = this._projectiles;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i], c = EQUIPMENT[q.kind].cover;
+      if (!c || q.dead || q.n === 0 || (team !== undefined && q.team === team)) continue;
+      const r = coverRect(q, c, RECT);
+      const gx = Math.max(r.x - p.x, 0, p.x - r.x - r.w), gz = Math.max(r.z - p.z, 0, p.z - r.z - r.d);
+      if (gx * gx + gz * gz < th.melt * th.melt) this._hurtCover(q, th.coverDps * dt, p.owner, onEvent, p.kind);
+    }
+  }
+
+  // Tripwire: once armed, an enemy across the beam sets it off where they cross. Cold Blooded only trips it close in.
+  // The beam is set up the first tick it is stuck: off a wall it runs out along the wall's normal; on open ground it
+  // runs both ways across the throw. Its direction rides vx, vz (unit for one-way, half length for both ways).
+  _tripwire(p, spec, players) {
+    const t = spec.trip;
+    if (p.n === 0) {
+      p.n = 1;
+      if (!(p.vx || p.vz)) {
+        if (p.wnx || p.wnz) { p.vx = p.wnx; p.vz = p.wnz; }
+        else { p.vx = -Math.sin(p.dir) * 0.5; p.vz = Math.cos(p.dir) * 0.5; }
+      }
+      const b = tripBeam(this.map, p.x, p.z, p.vx, p.vz, BEAM);
+      p.x0 = b.x0; p.z0 = b.z0; p.x1 = b.x1; p.z1 = b.z1;
+    }
+    if (p.age - Math.max(0, p.land) < t.arm) return false;
+    const dx = p.x1 - p.x0, dz = p.z1 - p.z0, l2 = dx * dx + dz * dz;
+    if (l2 < 1e-6) return false;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
+      const u = Math.max(0, Math.min(1, ((v.x - p.x0) * dx + (v.z - p.z0) * dz) / l2));
+      const cx = p.x0 + dx * u, cz = p.z0 + dz * u;
+      if (Math.hypot(v.x - cx, v.z - cz) > t.width) continue;
+      if (v.perks && v.perks.includes('coldblood') && Math.hypot(v.x - p.x, v.z - p.z) > t.cold) continue;
+      p.x = cx; p.z = cz;
+      return true;
+    }
+    return false;
+  }
+
+  // Crawler: once armed, scuttles after the nearest enemy in reach that it has a clear line to, and goes off on
+  // contact. With nobody in reach it sits and waits for its fuse. Movement rides the normal ground roll (fly).
+  _crawl(p, spec, dt, players) {
+    const c = spec.crawl;
+    if (p.land < 0 || p.age - p.land < c.arm) return false;
+    let best = null, bestD = c.seek;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (!this._enemyOf(p, v, p.team) || v.spawnProtect) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d <= c.contact) return true;
+      if (d >= bestD) continue;
+      if (raycastMap(this.map, p.x, p.z, (v.x - p.x) / d, (v.z - p.z) / d, d, 'blocksMove')) continue;
+      best = v; bestD = d;
+    }
+    if (!best) { p.vx = 0; p.vz = 0; return false; }
+    const k = (c.speed + ROLL_DECEL * dt) / bestD;     // The roll takes ROLL_DECEL off each tick; this puts it back.
+    p.vx = (best.x - p.x) * k; p.vz = (best.z - p.z) * k;
+    p.dir = Math.atan2(p.vz, p.vx);
+    return false;
+  }
+
+  // Shiv: the owner walking over one they threw takes it back, if they have room for it.
+  _pickup(p, spec, players, onEvent) {
+    if (p.age < 0.5) return false;
+    for (let i = 0; i < players.length; i++) {
+      const v = players[i];
+      if (v.id !== p.owner) continue;
+      if (!v.alive || !v.room || Math.hypot(v.x - p.x, v.z - p.z) > spec.pickup) return false;
+      if (onEvent) onEvent({ t: 'pickup', id: v.id, kind: p.kind });
+      return true;
+    }
+    return false;
+  }
+
+  // A blast against enemy Bulwarks in reach: explosives are what cover is weak to.
+  _blastCover(p, blast, team, onEvent) {
+    const list = this._projectiles;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i], c = EQUIPMENT[q.kind].cover;
+      if (!c || q.dead || q.n === 0 || q.owner === p.owner || (team !== undefined && q.team === team)) continue;
+      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      if (d >= blast.radius) continue;
+      this._hurtCover(q, blastDamage(blast, d) * c.blastMult, p.owner, onEvent, p.kind);
     }
   }
 
@@ -794,7 +1121,7 @@ export class EquipmentSystem {
       if (q === p || q.dead || !q.stuck || !FRYABLE.has(q.kind) || q.owner === p.owner || (team !== undefined && this._teamOf(q, players) === team)) continue;
       if (Math.hypot(q.x - p.x, q.z - p.z) >= r) continue;
       q.dead = true;
-      if (onEvent) onEvent({ t: 'fried', x: q.x, z: q.z, ox: p.x, oz: p.z, by: p.owner, kind: q.kind });
+      if (onEvent) onEvent({ t: 'fried', x: q.x, z: q.z, ox: p.x, oz: p.z, by: p.owner, kind: q.kind, src: p.kind });
     }
   }
 
@@ -814,5 +1141,92 @@ export class EquipmentSystem {
       list[w++] = s;
     }
     list.length = w;
+  }
+}
+
+// ---- Gear wave helpers ----
+
+const RECT = { x: 0, z: 0, w: 0, d: 0 };
+// The footprint of a standing Bulwark: long across the way it was thrown, thin along it. Axis-aligned, because every
+// wall in the game is: a throw that is more east-west than north-south gives a north-south shield, and so on.
+function coverRect(p, c, out) {
+  const alongX = Math.abs(p.vx) >= Math.abs(p.vz);
+  const hw = alongX ? c.thick : c.half, hd = alongX ? c.half : c.thick;
+  out.x = p.x - hw; out.z = p.z - hd; out.w = hw * 2; out.d = hd * 2;
+  return out;
+}
+
+// Ray entry distance into a rectangle, or -1. An origin inside counts as 0.
+function raySlab(ox, oz, dx, dz, r) {
+  let t0 = 0, t1 = Infinity;
+  if (Math.abs(dx) < 1e-9) { if (ox < r.x || ox > r.x + r.w) return -1; }
+  else {
+    let a = (r.x - ox) / dx, b = (r.x + r.w - ox) / dx;
+    if (a > b) { const q = a; a = b; b = q; }
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+  }
+  if (Math.abs(dz) < 1e-9) { if (oz < r.z || oz > r.z + r.d) return -1; }
+  else {
+    let a = (r.z - oz) / dz, b = (r.z + r.d - oz) / dz;
+    if (a > b) { const q = a; a = b; b = q; }
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+  }
+  return t0 <= t1 ? t0 : -1;
+}
+
+function rayCircleT(ox, oz, dx, dz, cx, cz, r) {
+  const fx = cx - ox, fz = cz - oz, along = fx * dx + fz * dz;
+  if (along < 0) return -1;
+  const perp = fx * fx + fz * fz - along * along;
+  return perp > r * r ? -1 : along;
+}
+
+// A Tripwire's beam from its wire fields: (vx, vz) of length about 1 runs one way out from the anchor (it is stuck to a
+// wall), about 0.5 runs both ways (it lies on open ground). Clipped by anything that blocks movement. Fills `out`.
+const BEAM = { x0: 0, z0: 0, x1: 0, z1: 0 };
+export function tripBeam(map, x, z, vx, vz, out = BEAM) {
+  const len = EQUIPMENT.tripwire.trip.len, l = Math.hypot(vx, vz) || 1, dx = vx / l, dz = vz / l;
+  const reach = (dirX, dirZ, max) => { const h = raycastMap(map, x, z, dirX, dirZ, max, 'blocksMove'); return h ? Math.max(0, h.t - 0.05) : max; };
+  if (l > 0.75) {
+    out.x0 = x; out.z0 = z;
+    const r = reach(dx, dz, len);
+    out.x1 = x + dx * r; out.z1 = z + dz * r;
+  } else {
+    const a = reach(-dx, -dz, len / 2), b = reach(dx, dz, len / 2);
+    out.x0 = x - dx * a; out.z0 = z - dz * a; out.x1 = x + dx * b; out.z1 = z + dz * b;
+  }
+  return out;
+}
+
+// Keeps one waist-high wall in map.walls per standing Bulwark in `list` (null clears them all). Walls are keyed by
+// projectile id, so the host (from its own list) and a guest (from each decoded snapshot) converge on the same set;
+// maps are shared module objects, so every match also clears what an earlier one left. Bulwarks count as waist-high
+// cover everywhere (player.js isWaistCover) with `proof` set: no round pierces one, and a player right behind it fires over it.
+let coverGen = 0;
+export function syncCover(map, list) {
+  if (!map || !map.walls) return;
+  const live = map._cover || (map._cover = new Map());
+  const gen = ++coverGen;
+  let seen = 0;
+  if (list) {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i], c = EQUIPMENT[p.kind]?.cover;
+      if (!c || p.dead || !p.stuck || !(p.vx || p.vz)) continue;
+      let w = live.get(p.id);
+      if (!w) {
+        const r = coverRect(p, c, RECT);
+        w = { x: r.x, z: r.z, w: r.w, d: r.d, h: c.h, kind: 'bulwark', blocksMove: true, blocksBullet: false, blocksVision: false, proof: true, coverId: p.id, gen };
+        live.set(p.id, w);
+        map.walls.push(w);
+      }
+      w.gen = gen; seen++;
+    }
+  }
+  if (seen === live.size) return;
+  for (const [id, w] of live) {
+    if (w.gen === gen) continue;
+    live.delete(id);
+    const k = map.walls.indexOf(w);
+    if (k >= 0) map.walls.splice(k, 1);
   }
 }

@@ -74,6 +74,8 @@ export class Interpolator {
     out.range = b.range;
     out.snd = b.snd;
     out.ctf = b.ctf;
+    // Radar state per viewer (sim.js _applyIntel): a Jammer, a Blackout on the local player, an enemy Overwatch.
+    out.jammed = b.jammed; out.overwatched = b.overwatched;
 
     const fromById = this.newestById;
     fromById.clear();

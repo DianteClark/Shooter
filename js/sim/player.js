@@ -635,7 +635,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
 }
 
 // What a ray's walk across the map found. One module-level record reused per ray: traceShot is synchronous.
-const SEG = { hardT: Infinity, hardNx: 0, hardNz: 0, stopT: Infinity, stopNx: 0, stopNz: 0, count: 0, inT: [], outT: [], nx: [], nz: [], own: [] };
+const SEG = { hardT: Infinity, hardNx: 0, hardNz: 0, stopT: Infinity, stopNx: 0, stopNz: 0, count: 0, inT: [], outT: [], nx: [], nz: [], own: [], proof: [] };
 
 // True for waist-high cover: blocks movement, not sight, and is not water.
 export function isWaistCover(w) { return w.blocksMove && !w.blocksBullet && w.kind !== 'water'; }
@@ -695,29 +695,32 @@ function walkRay(map, ox, oz, dx, dz, range, penetrate, overCover) {
       // Insertion sort by entry distance; a ray crosses a handful of props at most.
       let j = S.count++;
       while (j > 0 && S.inT[j - 1] > spanIn) {
-        S.inT[j] = S.inT[j - 1]; S.outT[j] = S.outT[j - 1]; S.nx[j] = S.nx[j - 1]; S.nz[j] = S.nz[j - 1]; S.own[j] = S.own[j - 1]; j--;
+        S.inT[j] = S.inT[j - 1]; S.outT[j] = S.outT[j - 1]; S.nx[j] = S.nx[j - 1]; S.nz[j] = S.nz[j - 1]; S.own[j] = S.own[j - 1]; S.proof[j] = S.proof[j - 1]; j--;
       }
       S.inT[j] = spanIn; S.outT[j] = spanOut; S.nx[j] = spanNx; S.nz[j] = spanNz; S.own[j] = ownCover(ox, oz, w, spanIn);
+      S.proof[j] = !!w.proof;          // A Bulwark (js/sim/equipment.js): waist-high, but no round goes through it.
     }
   }
   if (S.count === 0) return;
   // Abutting props are one piece of cover, so a stall built from two boxes costs one penetration, and a stall the
   // shooter is hugging is fired over as a whole. Own pieces are then dropped: only cover further along counts.
-  let n = 0, groupOwn = S.own[0];
+  let n = 0, groupOwn = S.own[0], groupProof = S.proof[0];
   for (let i = 1; i <= S.count; i++) {
     if (i < S.count && S.inT[i] <= S.outT[n] + 0.05) {
       S.outT[n] = Math.max(S.outT[n], S.outT[i]);
+      groupProof = groupProof || S.proof[i];
       continue;
     }
-    if (!groupOwn) n++;                        // Keep the finished group unless it is the shooter's own.
+    if (!groupOwn) { S.proof[n] = groupProof; n++; }   // Keep the finished group unless it is the shooter's own.
     if (i < S.count) {
-      S.inT[n] = S.inT[i]; S.outT[n] = S.outT[i]; S.nx[n] = S.nx[i]; S.nz[n] = S.nz[i]; groupOwn = S.own[i];
+      S.inT[n] = S.inT[i]; S.outT[n] = S.outT[i]; S.nx[n] = S.nx[i]; S.nz[n] = S.nz[i]; groupOwn = S.own[i]; groupProof = S.proof[i];
     }
   }
   S.count = n;
   if (n === 0) return;
-  // A light round stops on the first piece; a penetrating one gives out after MAX_COVER_PIECES.
-  const stopAt = penetrate ? MAX_COVER_PIECES : 0;
+  // A light round stops on the first piece; a penetrating one gives out after MAX_COVER_PIECES, or at a proof piece.
+  let stopAt = penetrate ? MAX_COVER_PIECES : 0;
+  for (let i = 0; i < stopAt && i < n; i++) if (S.proof[i]) { stopAt = i; break; }
   if (n > stopAt) { S.stopT = S.inT[stopAt]; S.stopNx = S.nx[stopAt]; S.stopNz = S.nz[stopAt]; S.count = stopAt; }
 }
 

@@ -28,29 +28,44 @@ export const STREAK_IDS = Object.keys(STREAKS);
 export const STREAK_DENY_REASONS = ['limit', 'airspace', 'no_target'];
 export const STREAK_DENY_TEXT = { limit: 'Already up', airspace: 'Airspace full', no_target: 'No target' };
 
+// Equipment. Ids are on the wire and in saves by position (js/sim/sim.js TACTICAL_IDS, LETHAL_IDS, 4 bits each): never
+// reorder, only append, at most 16 per slot. `job` is the one-line role the loadout shows; `counter` is what beats it
+// (Help lists both). Behaviour lives in js/sim/equipment.js under the same id.
 export const TACTICALS = {
-  smoke:  { id: 'smoke',  name: 'Smoke',  count: 2, desc: 'Cloud that blocks line of sight' },
-  flash:  { id: 'flash',  name: 'Flash',  count: 2, desc: 'Blinds enemies in the blast' },
-  stim:   { id: 'stim',   name: 'Stim',   count: 1, desc: 'Instant heal' },
-  decoy:  { id: 'decoy',  name: 'Decoy',  count: 1, desc: 'Fakes gunfire where it lands' },
-  sensor: { id: 'sensor', name: 'Sensor', count: 1, desc: 'Marks enemies near it, through walls' },
-  trophy: { id: 'trophy', name: 'Trophy', count: 1, desc: 'Shoots down enemy grenades near it' },
+  smoke:  { id: 'smoke',  name: 'Smoke',  count: 2, job: 'Cover a crossing', counter: 'Snapshot, Sensor and Tagger see through it', desc: 'Cloud that blocks line of sight for 9 s' },
+  flash:  { id: 'flash',  name: 'Flash',  count: 2, job: 'Blind, then push', counter: 'Tac Mask; a wall between you and it', desc: 'Whites out the screens of enemies who can see it go off' },
+  stim:   { id: 'stim',   name: 'Stim',   count: 1, job: 'Win the next fight', counter: 'Burst damage before they use it', desc: 'Instant full heal' },
+  decoy:  { id: 'decoy',  name: 'Decoy',  count: 1, job: 'Fake a flank', counter: 'Shoot it; it never moves', desc: 'Fakes gunfire where it lands, on enemy minimaps too' },
+  sensor: { id: 'sensor', name: 'Sensor', count: 1, job: 'Watch a lane', counter: 'Shoot it, Shock or Blackout; Cold Blooded', desc: 'Planted: pings enemies within 10 m every 2.5 s, through walls' },
+  trophy: { id: 'trophy', name: 'Trophy', count: 1, job: 'Stop grenades', counter: 'Shoot it, Shock or Blackout; throw three', desc: 'Shoots down three enemy grenades and devices near it' },
   // V8 equipment.
-  stun:   { id: 'stun',   name: 'Stun',   count: 2, desc: 'Slows movement and turning of enemies in the blast' },
-  gas:    { id: 'gas',    name: 'Gas',    count: 1, desc: 'Lingering cloud that slows and chips enemies. Tac Mask ignores it' },
-  shock:  { id: 'shock',  name: 'Shock',  count: 1, desc: 'Sticks and arcs three times: jolts enemies, fries their equipment' },
+  stun:   { id: 'stun',   name: 'Stun',   count: 2, job: 'Slow a defender', counter: 'Tac Mask; a wall', desc: 'Slows movement and turning of enemies in the blast' },
+  gas:    { id: 'gas',    name: 'Gas',    count: 1, job: 'Flush a camper', counter: 'Tac Mask ignores it; walk out', desc: 'Lingering cloud that slows and chips enemies' },
+  shock:  { id: 'shock',  name: 'Shock',  count: 1, job: 'Clear devices', counter: 'Shoot it; Tac Mask; stay out of reach', desc: 'Sticks and arcs three times: jolts enemies, fries their devices' },
+  // Gear wave (2026-11). Appended: old ids keep their wire numbers.
+  snapshot: { id: 'snapshot', name: 'Snapshot', count: 1, job: 'Instant recon', counter: 'Cold Blooded halves it, Blank Slate ignores it', desc: 'Pops on landing: shows every enemy within 12 m through walls for 3 s' },
+  blackout: { id: 'blackout', name: 'Blackout', count: 1, job: 'Shut down kit', counter: 'Engineer is immune; stay out of the 7 m', desc: 'EMP burst: enemies in it lose equipment and minimap for 6 s, devices die' },
+  bulwark:  { id: 'bulwark',  name: 'Bulwark',  count: 1, job: 'Instant cover', counter: 'Explosives wreck it; two magazines break it; flank', desc: 'Waist-high shield where it lands. Shoot over it. Lasts 25 s' },
+  tagger:   { id: 'tagger',   name: 'Tagger',   count: 1, job: 'Track one target', counter: 'Blank Slate ignores it, Cold Blooded halves it', desc: 'Dart that sticks to an enemy and shows them to your team for 8 s' },
+  medpack:  { id: 'medpack',  name: 'Medpack',  count: 1, job: 'Heal the squad', counter: 'Shoot it, Shock or Blackout', desc: 'Heals you and teammates within 3.5 m for 15 s' },
 };
 export const LETHALS = {
-  frag:    { id: 'frag',    name: 'Frag',     count: 2, desc: 'Bounces, explodes after a fuse' },
-  sticky:  { id: 'sticky',  name: 'Sticky',   count: 1, desc: 'Sticks where it lands, short fuse' },
-  molotov: { id: 'molotov', name: 'Molotov',  count: 1, desc: 'Burning ground that denies an area' },
-  mine:    { id: 'mine',    name: 'Mine',     count: 1, desc: 'Sits still, goes off when an enemy comes close' },
-  cluster: { id: 'cluster', name: 'Cluster',  count: 1, desc: 'Bursts, then scatters small bomblets' },
-  hatchet: { id: 'hatchet', name: 'Hatchet',  count: 1, desc: 'Direct hit kills. Sticks where it lands' },
+  frag:    { id: 'frag',    name: 'Frag',     count: 2, job: 'Clear a room', counter: 'Flak; Trophy; run when it lands', desc: 'Bounces off walls, explodes after a 1.8 s fuse' },
+  sticky:  { id: 'sticky',  name: 'Sticky',   count: 1, job: 'Stick a target', counter: 'Flak survives it; Trophy', desc: 'Sticks to walls and to enemies it hits. Short fuse' },
+  molotov: { id: 'molotov', name: 'Molotov',  count: 1, job: 'Burn a wide area', counter: 'Tac Mask halves the burn; wait 5 s', desc: 'Bursts into a wide pool of fire for 5 s' },
+  mine:    { id: 'mine',    name: 'Mine',     count: 1, job: 'Guard a spot', counter: 'Shoot it; Cold Blooded; Shock', desc: 'Goes off when an enemy comes within 2.4 m, any direction' },
+  cluster: { id: 'cluster', name: 'Cluster',  count: 1, job: 'Saturate an area', counter: 'Flak; Trophy; keep moving', desc: 'Bursts, then scatters four bomblets around it' },
+  hatchet: { id: 'hatchet', name: 'Hatchet',  count: 1, job: 'One-hit kill', counter: 'Strafe; it is slow to arrive', desc: 'Direct hit kills anywhere. Arcs, sticks where it lands' },
   // V8 equipment.
-  impact:   { id: 'impact',   name: 'Impact',   count: 1, desc: 'Goes off the instant it touches anything' },
-  claymore: { id: 'claymore', name: 'Claymore', count: 1, desc: 'Faces where you throw it. Fires a cone at enemies who walk into it' },
-  drill:    { id: 'drill',    name: 'Drill',    count: 1, desc: 'Bores through a thin wall and blows on the far side' },
+  impact:   { id: 'impact',   name: 'Impact',   count: 1, job: 'No fuse to run from', counter: 'Flak; Trophy; cover', desc: 'Goes off the instant it touches anything' },
+  claymore: { id: 'claymore', name: 'Claymore', count: 1, job: 'Lock a doorway', counter: 'Its laser cone is visible: go around or shoot it', desc: 'Faces where you throw it. Fires a cone at enemies who walk into it' },
+  drill:    { id: 'drill',    name: 'Drill',    count: 1, job: 'Through cover', counter: 'Flak; move off the wall it bites', desc: 'Bores through a thin wall and blows on the far side' },
+  // Gear wave (2026-11). Appended: old ids keep their wire numbers.
+  charge:   { id: 'charge',   name: 'Satchel',  count: 1, job: 'Remote blast', counter: 'Shoot it, Shock or Blackout; kill the owner', desc: 'Sticks where it lands. Tap Lethal again to set it off' },
+  thermite: { id: 'thermite', name: 'Thermite', count: 1, job: 'Deny a doorway', counter: 'Tac Mask halves the burn; wait it out', desc: 'Sticks and burns white-hot in a tight circle for 7 s. Melts devices' },
+  tripwire: { id: 'tripwire', name: 'Tripwire', count: 1, job: 'Trap a lane', counter: 'Its beam is visible; shoot the anchor', desc: 'Stick it to a wall: a laser beam across the lane blows on whoever breaks it' },
+  crawler:  { id: 'crawler',  name: 'Crawler',  count: 1, job: 'Hunt a camper', counter: 'Sprint away; shoot it; Trophy', desc: 'Lands, then scuttles after the nearest enemy it can see and blows' },
+  shiv:     { id: 'shiv',     name: 'Shiv',     count: 2, job: 'Quiet finisher', counter: 'Face it: only a hit in the back kills', desc: 'Fast throwing knife: 60 damage, a kill in the back. Pick it back up' },
 };
 
 // One pick per tier: `perks: [tier0, tier1, tier2]`.
@@ -69,10 +84,10 @@ export const PERKS = {
   hardline:    { id: 'hardline',    tier: 1, name: 'Hardline',     desc: 'Scorestreaks cost 15% less' },
 
   ghost:       { id: 'ghost',       tier: 2, name: 'Ghost',        desc: 'Hidden from enemy UAV' },
-  coldblood:   { id: 'coldblood',   tier: 2, name: 'Cold Blooded', desc: 'Sentries, aircraft, mortars and mines ignore you until you are close' },
+  coldblood:   { id: 'coldblood',   tier: 2, name: 'Cold Blooded', desc: 'Sentries, aircraft, mortars and mines ignore you until close; recon marks fade twice as fast' },
   deadsilence: { id: 'deadsilence', tier: 2, name: 'Dead Silence', desc: 'Your footsteps make no sound' },
   tracker:     { id: 'tracker',     tier: 2, name: 'Tracker',      desc: 'Enemies you hit stay on your team\'s minimap for 4 s' },
-  engineer:    { id: 'engineer',    tier: 2, name: 'Engineer',     desc: 'Your sentries, aircraft and Trophy last longer' },
+  engineer:    { id: 'engineer',    tier: 2, name: 'Engineer',     desc: 'Your sentries, aircraft and Trophy last longer; Blackout cannot jam you' },
 };
 export const PERK_IDS = Object.keys(PERKS);
 export const HARDLINE_MULT = 0.85;
@@ -93,7 +108,7 @@ export const PRO = {
   bandolier:   { name: 'Quartermaster',   desc: 'Spent equipment comes back, one piece every 30 s', where: 'sim' },
   hardline:    { name: 'Team Player',     desc: 'Assists count as kills toward your scorestreaks', where: 'sim' },
   ghost:       { name: 'Phantom',         desc: 'Your gunfire never pings you on the enemy minimap', where: 'sim' },
-  coldblood:   { name: 'Blank Slate',     desc: 'Sensors and Tracker hits cannot mark you', where: 'sim' },
+  coldblood:   { name: 'Blank Slate',     desc: 'Sensors, Snapshots, Taggers and Tracker hits cannot mark you', where: 'sim' },
   deadsilence: { name: 'Keen Ears',       desc: 'Sprinting enemies within 14 m ping your minimap', where: 'hud' },
   tracker:     { name: 'Footprints',      desc: 'See enemy footprints from the last 4 s wherever you have sight', where: 'hud' },
   engineer:    { name: 'Hijacker',        desc: 'See enemy equipment through walls; stand at an enemy Sentry for 1.5 s to take it', where: 'sim' },

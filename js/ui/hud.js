@@ -71,7 +71,7 @@ const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', morta
 const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.
 // Pro senses drawn by the HUD (js/shared/catalog.js PRO): footprints, the Fastball blast ring, enemy equipment.
 const PRINT_HZ = 12;             // Footprint line-of-sight checks per second; drawing still follows the camera every frame.
-const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky', 'claymore', 'drill', 'shock']);   // What Hijacker sees through walls.
+const SEEN_GEAR = new Set(['mine', 'trophy', 'sensor', 'decoy', 'sticky', 'claymore', 'drill', 'shock', 'charge', 'tripwire', 'crawler', 'medpack', 'bulwark', 'thermite']);   // What Hijacker sees through walls.
 const NO_PRO = Object.freeze([]);
 const NO_STATS = Object.freeze({});
 const FFA_FOE = '#ff6a4d';        // Free-for-all: "an enemy" when it is not one particular player (footprints, edge tints).
@@ -1968,6 +1968,8 @@ export class HUD {
     }
     controls.setEquip('tactical', me.tactical ?? this.fallbackEquip.tactical, me.tacticalLeft ?? 0);
     controls.setEquip('lethal', me.lethal ?? this.fallbackEquip.lethal, me.lethalLeft ?? 0);
+    controls.setJammed?.(!!me.jammedSelf);
+    controls.setDetonate?.(me.lethal === 'charge' && me.alive && !!this.view?.projectiles?.some(q => q.kind === 'charge' && q.owner === me.id && q.stuck));
   }
 
   // The moment a streak comes online: a full-size card, a bright edge flash and a pulse from the tile.
@@ -2173,7 +2175,10 @@ export class HUD {
         case 'emp': this.#onEmp(e); break;
         case 'pulse': this.#onPulse(e); break;
         case 'zap': if (e.by === this.view?.localId) this.notify('Trophy stopped a grenade'); break;
-        case 'decoy': if (e.by === this.view?.localId) this.notify('Decoy firing'); break;
+        case 'decoy': if (e.by === this.view?.localId) this.notify('Decoy firing'); else this.#fakePing(e); break;
+        case 'stuck': if (e.id === this.view?.localId) this.#banner(e.kind === 'tagger' ? 'Tagged' : 'Stuck!', e.kind === 'tagger' ? 'The enemy can see you for 8 s' : 'Get it away from your team', 1100, 'enemy'); break;
+        case 'jammed': if (e.id === this.view?.localId) this.notify('Blackout: equipment and radar down'); break;
+        case 'pickup': if (e.id === this.view?.localId) this.notify('Shiv recovered'); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
         case 'dazed': if (e.id === this.view?.localId) this.#onDazed(e); break;
         case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
@@ -2266,6 +2271,17 @@ export class HUD {
     const hold = FLASH_HOLD * amount, fade = FLASH_FADE * Math.max(0.3, amount);
     this.flashFadeLen = fade;
     this.flashT = Math.max(this.flashT, hold + fade);
+  }
+
+  // Decoy: an enemy decoy's fake shot shows on this minimap as a gunfire ping, the same as a real one.
+  #fakePing(e) {
+    const me = this.view && this.#findLocal(this.view);
+    if (!me || e.team === me.team) return;
+    const list = this.fakePings ??= [];
+    const old = list.find(f => Math.hypot(f.x - e.x, f.z - e.z) < 1);
+    if (old) { old.t = performance.now(); return; }
+    if (list.length >= 6) list.shift();
+    list.push({ x: e.x, z: e.z, team: e.team ?? 0, t: performance.now() });
   }
 
   // Stun, Gas, Shock on the local player. The phone's own movement is slowed by match.js (player.js applyDaze).
@@ -2578,6 +2594,22 @@ export class HUD {
         g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y);
         g.closePath();
         g.fill();
+      }
+    }
+
+    // Decoy pings: drawn exactly like a gunfire ping, which is the point.
+    if (this.fakePings?.length) {
+      const now = performance.now();
+      this.fakePings = this.fakePings.filter(f => now - f.t < FIRE_REVEAL * 1000);
+      for (const f of this.fakePings) {
+        const k = 1 - (now - f.t) / (FIRE_REVEAL * 1000);
+        g.strokeStyle = TEAMS[f.team]?.css ?? TEAMS[0].css;
+        g.globalAlpha = 0.35 + 0.65 * k;
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.arc(f.x * sx, f.z * sz, 4 + (1 - k) * 8, 0, Math.PI * 2);
+        g.stroke();
+        g.globalAlpha = 1;
       }
     }
 
