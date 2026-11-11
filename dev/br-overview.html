@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Giant map overview</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js", "trystero": "../vendor/trystero.min.js" } }</script>
+<script type="module">
+// Top-down overview of a giant map (docs/BR.md: the battle royale's big map and drop map), driven by
+// dev/br-overview.mjs: every tile built, no fog, an orthographic camera straight down, north up, the map's edges at
+// the image's edges. window.capture(size, quality) returns a JPEG data URL.
+import * as THREE from 'three';
+import { MAPS } from '../js/shared/map.js';
+import { GameRenderer } from '../js/render/renderer.js';
+
+const params = new URLSearchParams(location.search);
+const map = MAPS[params.get('map') || 'frontier'];
+const S = +(params.get('px') || 2048);
+const canvas = document.getElementById('game');
+canvas.style.width = S + 'px'; canvas.style.height = S + 'px';
+const r = new GameRenderer(canvas, map, { dynamicRes: false });
+r.setQuality('ultra');
+r.webgl.setPixelRatio(1);
+r.webgl.setSize(S, S, false);
+r.world.buildAll();
+r.fog.uniforms.on.value = 0;
+const cam = new THREE.OrthographicCamera(-map.width / 2, map.width / 2, map.height / 2, -map.height / 2, 1, 600);
+cam.position.set(map.width / 2, 300, map.height / 2);
+cam.up.set(0, 0, -1);
+cam.lookAt(map.width / 2, 0, map.height / 2);
+cam.updateMatrixWorld(true);
+r.webgl.render(r.scene, cam);
+const out = document.createElement('canvas');
+window.capture = (size = 1024, q = 0.86) => {
+  r.webgl.render(r.scene, cam);
+  out.width = size; out.height = size;
+  const g = out.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(canvas, 0, 0, size, size);
+  return out.toDataURL('image/jpeg', q);
+};
+window.ready = true;
+</script>
+</body>
+</html>

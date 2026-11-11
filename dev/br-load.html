@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Giant map load</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js", "trystero": "../vendor/trystero.min.js" } }</script>
+<script type="module">
+// Battle royale map load, dev only (driven by dev/br-render.mjs): what a host phone does before the first frame of a
+// match on a giant map, step by step (sim with nav and bots, renderer, first frame), then the frame cost walking
+// between places. ?map=frontier&q=low
+import { MAPS } from '../js/shared/map.js';
+import { Sim, buildRoster } from '../js/sim/sim.js';
+import { GameRenderer } from '../js/render/renderer.js';
+
+const params = new URLSearchParams(location.search);
+const map = MAPS[params.get('map') || 'frontier'];
+const canvas = document.getElementById('game');
+canvas.style.width = '852px'; canvas.style.height = '393px';
+const T = {};
+let t = performance.now();
+const lap = k => { const n = performance.now(); T[k] = +(n - t).toFixed(1); t = n; };
+const roster = buildRoster([], { botSkill: 'regular', teamSize: 16, mapId: map.id, mode: 'gwtdm', seed: 5 });
+const sim = new Sim({ roster, map, seed: 5, mode: 'gwtdm', timeLimit: 3600, scoreLimit: 9999 });
+lap('simNew');
+sim.step(1 / 30);
+lap('simFirstTick');
+const r = new GameRenderer(canvas, map, { dynamicRes: false });
+r.setQuality(params.get('q') || 'low');
+r.resize();
+lap('renderer');
+r.setLocal(sim.players[0].id);
+let view = sim.getView(sim.players[0].id);
+// ?hold=1 waits for window.first() (for a profiler to attach before the first frame).
+window.first = () => {
+  t = performance.now();
+  r.update(view, [], 1 / 60);
+  r.webgl.getContext().readPixels(0, 0, 1, 1, 6408, 5121, new Uint8Array(4));
+  lap('firstFrame');
+  T.total = +Object.values(T).reduce((a, b) => a + b, 0).toFixed(1);
+  T.tilesFirst = r.world.stats?.built;
+  window.load = T;
+  window.r = r;
+};
+if (!params.has('hold')) window.first();
+window.ready = true;
+
+// Frames while the local player is carried between places: frame time and what streaming costs.
+window.walk = (frames = 240) => {
+  const me = sim.players[0];
+  const pois = map.br?.pois ?? map.points.dom;
+  const times = [];
+  let calls = 0, tris = 0, worst = 0;
+  for (let i = 0; i < frames; i++) {
+    for (let k = 0; k < 2; k++) sim.step(1 / 60);
+    const p = pois[Math.floor(i / 60) % pois.length];
+    me.ps.x += (p.x - me.ps.x) * 0.05; me.ps.z += (p.z - me.ps.z) * 0.05;
+    view = sim.getView(me.id);
+    const a = performance.now();
+    r.update(view, sim.drainEvents(), 1 / 60);
+    r.webgl.getContext().readPixels(0, 0, 1, 1, 6408, 5121, new Uint8Array(4));
+    const ms = performance.now() - a;
+    times.push(ms); worst = Math.max(worst, ms);
+    const st = r.getStats(); calls += st.calls; tris += st.triangles;
+  }
+  times.sort((a, b) => a - b);
+  let geo = 0; r.world.group.traverse(m => { if (m.isMesh) for (const a of Object.values(m.geometry.attributes)) geo += a.array.byteLength; });
+  return { median: times[frames >> 1], p95: times[Math.floor(frames * 0.95)], worst, calls: calls / frames, tris: tris / frames, geoMB: geo / 1048576, stats: r.world.stats ?? { built: 0, buildMs: 0, maxTileMs: 0, dropped: 0 } };
+};
+</script>
+</body>
+</html>
