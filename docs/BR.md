@@ -77,7 +77,7 @@ Rules module `BrRules`, owned by the Sim when the rule set is `br` (hooks: the `
 sides: team `FFA_TEAM + squad`; humans fill squads first in lobby order (friends together), bots fill to 32. Numbers live
 in `BR` (js/shared/modes.js).
 - Start: everyone aboard the transport for `BR.warmup` (7 s, drop map up), then it flies a random line through the middle
-  third at 30 m/s. Jump (button on the drop map and the HUD), 6.5 s steerable glide at 14 m/s, landing pushed clear of
+  third at 30 m/s. Jump (button on the drop map and the HUD), 7.5 s steerable glide at 16 m/s, landing pushed clear of
   walls. Anyone aboard at 94% of the line is thrown out. Bot squads pick places along the line by tier (hot drops: a
   place already picked weighs 0.3x per squad); bots in a human's squad jump with their human and glide to them.
 - Loot: the seed builds the table on every phone (`br.loot` spots: a floor roll of gun 34%, ammo 26, plate 16, medkit 8,
@@ -90,9 +90,9 @@ in `BR` (js/shared/modes.js).
   drops). Two hands; an empty hand is fists (the Gaff). Everyone starts with fists and a common pistol.
 - Armor: 3 plates of 50; one tap plates you up, 1.1 s a plate, cancelled by firing or a hit. Plates take gunfire and
   blasts first; the circle ignores them. Medkit 2.6 s to full health.
-- Circle: 7 phases (wait/shrink seconds, radius as a share of the map, damage per second): 70/50 0.38 1, 50/40 0.27 2,
-  40/35 0.18 4, 35/30 0.11 7, 30/25 0.06 10, 25/20 0.03 15, 20/25 0 25. The first wait starts when the transport has
-  crossed. Each next centre lies inside the current circle, weighted by `br.circleBias`. A full match is 6-9 minutes.
+- Circle: 7 phases (wait/shrink seconds, radius as a share of the map, damage per second): 130/60 0.40 1, 110/65 0.28 4,
+  90/55 0.18 8, 60/45 0.11 12, 45/35 0.06 16, 35/30 0.03 20, 25/40 0 25. The first wait starts when the transport has
+  crossed. Each next centre lies inside the current circle, weighted by `br.circleBias`. A full match is 9-14 minutes.
 - Downs (squads only): lethal damage downs you while a teammate is up: crawl at 0.32 speed, no gun, bleed out in 30 s,
   finished by more damage. A teammate standing within 1.9 m (not firing, not running) revives in 4 s to 35 health; a
   self-revive kit takes 5 s. A squad is out once nobody in it is up (anyone still down dies then); placement is squads
@@ -116,3 +116,33 @@ in `BR` (js/shared/modes.js).
   downs, revives, wipes, tick budget, snapshot bytes), `python3 dev/ui-br-test.py [port]` (picker to results in a
   browser, screenshots), `python3 dev/ui-br-net-test.py [port]` (two tabs over ?net=local: one squad, guns to the guest,
   loot mirror, drop and rejoin).
+
+## Second pass (br2)
+- Pacing: matches run 9-14 sim minutes (before: 4-7), about 30% of deaths in the first three minutes (before: 63-89%),
+  some circle deaths (before: none), 2-4 squads when the final circles start. How: most squads land at least ~70 m from
+  every other squad (`HOT_DROP` per squad size: a few pick a contested tier 1 place on purpose, never three to a place;
+  duos and solos also land at loot spots between places); a squad loots together round its place and the squad's middle
+  and stays there through the first wait (`LOOT_DWELL`, settles in once half have a long gun); a looting bot sees less
+  (`LOOT_SIGHT`, `BotBrain.sightK`); nobody third-parties while the first circle waits, then `JOIN_FIGHT` by phase times
+  the squad's `aggro` (late on squads mostly hold); holds are chosen near the squad, on a ring inside the next circle
+  (edge squads, `plan.late` > 0.65, sit just outside it, `EDGE_RING`), and kept until the circle moves them; the first
+  circle only moves a squad when its edge comes near; greedy squads (`plan.late` > 0.6) shrug the circle off until
+  someone drops under `GREEDY_HP` and do not heal in it, which is where most circle deaths come from. Downed teammates
+  are not pushed away by squad separation (more revives). `node dev/sim-br.mjs --pacing=N` prints the numbers per seed;
+  the full run checks them over 12 matches.
+- Squad size in friend rooms (js/ui/br-squad.js): Quads/Duos/Solos, the host's call (`app.lobby.brSquad`, sent with the
+  lobby state and the vote), shown in the lobby header once the room plays BR and under the vote cards while a BR card
+  is up (the cards' names follow it); a winning BR card plays the mode of that size (`brMode`). `buildBrRoster` keeps
+  each lobby side together: whole squads first, then the remainders packed largest first.
+- Host migration: every human guest gets a backup in its BR block (half the players every 1.5 s: packs, guns with
+  rarity and kit, both hands' rounds, ammo pouch, fists, downs, use timers, drop plans while airborne; the rules' clock and
+  the shrink's start). `Sim.fromSnapshot(..., { br: guestRules })` calls `BrRules.restore`: circle, the guest's loot
+  mirror (same ids), packs, plates, downs, squads out, stats; held humans stay on the field.
+- Inventory: fists are a third slot (HUD slots over the ammo readout; `brSlot` on the phone, `{act:'fists'}` to the
+  host; the gun put away keeps its rounds in `br.stash`). Ammo for guns you do not hold goes in a pouch (`POUCH_CAP`),
+  tops up a gun of that type when taken or brought back, the old gun's spare rounds go in it, and it drops on death.
+- Visuals and clarity: crawl pose for downed players and a kneel for the reviver (characters.js), revive bars over both
+  and on the reviver's HUD, parafoil canopies, the minimap zoomed to 120 m round you with the circle and a line in to the
+  next circle (the full map is still a tap away), squad panel top right under 667 px, the down panel under your
+  character; landing pings (tap the map: `{act:'ping'}` → `brping`), the kill leader named and shown on the maps every
+  30 s, a "Final circles" callout. Tests: `python3 dev/ui-br-visuals.py [port]` (staged crawl, revive, canopy, minimap).

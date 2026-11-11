@@ -2629,8 +2629,16 @@ export class HUD {
 
   #drawMinimap(view, me) {
     const g = this.mm;
-    const sx = this.mmX, sz = this.mmZ;
-    g.drawImage(this.mmBase, 0, 0);
+    let sx = this.mmX, sz = this.mmZ;
+    // Battle royale: the minimap shows your surroundings, not the whole 400 m map (js/ui/br-hud.js); everything below
+    // draws in map metres times sx, so a translate and a bigger scale are all it takes.
+    const zoom = this.br && this.brHud.on ? this.brHud.miniWindow(view, me, this.mmCanvas.width, this.mmCanvas.height) : null;
+    if (zoom) { this.brHud.drawMiniBase(g, zoom); g.save(); g.translate(-zoom.ox * zoom.k, -zoom.oz * zoom.k); sx = sz = zoom.k; }
+    else g.drawImage(this.mmBase, 0, 0);
+    try { this.#drawMinimapLayers(view, me, g, sx, sz); } finally { if (zoom) g.restore(); }
+  }
+
+  #drawMinimapLayers(view, me, g, sx, sz) {
     const myTeam = me.team;
     const myUav = view.uav[myTeam] > 0;
     const enemyUav = this.ffa ? view.uav.some((v, t) => t !== myTeam && v > 0) : view.uav[1 - myTeam] > 0;

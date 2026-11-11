@@ -245,15 +245,34 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId
 // matter for cosmetics: the rules hand out what everyone carries (js/sim/br.js).
 function buildBrRoster(humans, { botSkill, mode }) {
   const m = MODES[mode], squad = m.squad, total = m.players;
-  const order = humans.slice(0, total).map((h, i) => ({ h, i })).sort((a, b) => (a.h.team ?? 0) - (b.h.team ?? 0) || a.i - b.i);
-  const roster = order.map(({ h }, i) => {
+  // Friends (a lobby side) stay together: each side is cut into whole squads, and the remainders are packed into
+  // squads with room, largest first, so a side is only split when it is bigger than a squad.
+  const sides = new Map();
+  humans.slice(0, total).forEach(h => { const t = h.team ?? 0; if (!sides.has(t)) sides.set(t, []); sides.get(t).push(h); });
+  const squads = [], rest = [];
+  for (const t of [...sides.keys()].sort((a, b) => a - b)) {
+    const list = sides.get(t);
+    for (let i = 0; i < list.length; i += squad) (list.length - i >= squad ? squads : rest).push(list.slice(i, i + squad));
+  }
+  rest.sort((a, b) => b.length - a.length);
+  const open = [];
+  for (const part of rest) {
+    const into = open.find(sq => sq.length + part.length <= squad);
+    if (into) into.push(...part); else { const sq = [...part]; squads.push(sq); open.push(sq); }
+  }
+  const roster = [];
+  squads.forEach((sq, k) => sq.forEach(h => {
     const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
-    return { id: h.id, name: h.name, team: FFA_TEAM + Math.floor(i / squad), isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
-  });
-  for (let n = 0; roster.length < total; n++) {
+    roster.push({ id: h.id, name: h.name, team: FFA_TEAM + k, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout });
+  }));
+  const seats = Array.from({ length: Math.ceil(total / squad) }, (_, k) => squad - (squads[k]?.length ?? 0));
+  for (let n = 0, k = 0; roster.length < total; n++) {
+    while (k < seats.length && seats[k] <= 0) k++;
+    if (k >= seats.length) break;
+    seats[k]--;
     const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
     const loadout = normalizeLoadout({ primary: 'ar', secondary: 'pistol', camo: 'none' });
-    roster.push({ id: `bot${n}`, name: BOT_NAMES[n % BOT_NAMES.length], team: FFA_TEAM + Math.floor(roster.length / squad), isBot: true, skill, primary: 'ar', camo: 'none', loadout });
+    roster.push({ id: `bot${n}`, name: BOT_NAMES[n % BOT_NAMES.length], team: FFA_TEAM + k, isBot: true, skill, primary: 'ar', camo: 'none', loadout });
   }
   return roster;
 }
@@ -2415,6 +2434,7 @@ export class Sim {
     sim.firstBlood = view.players.some(p => p.kills > 0);
     for (let i = 0; i < view.players.length && i < sim.players.length; i++) sim._restorePlayer(sim.players[i], view.players[i]);
     sim._restoreMode(view);
+    sim.br?.restore(view, opts.br ?? null);       // Battle royale: circle, loot mirror, packs (js/sim/br.js).
     sim._restoreStreaks(view);
     // Gun Game: everyone back on the rung their score says, with the ammo the snapshot had.
     if (sim.ladder) {
