@@ -38,8 +38,6 @@ const DEG = Math.PI / 180;
 //   topOff      lets the sights down between fights so a part-empty magazine refills (player.js TOPOFF_*)
 //   overpeek    walks out of a held angle at what it sees, into the open
 //   peekCover   fights a mid-range duel from beside cover, stepping back behind it to reload and heal (mode 'peek')
-//   routeSense  how much a close gun (and, a quarter as much, anyone flanking) routes round long sight lines (nav.js
-//               openness): the way in that a player who knows the map takes, so first contact comes at its range
 export const SKILLS = {
   recruit: {
     thinkHz: 5, reaction: [0.55, 0.95], aimError: 0.2, aimFloor: 0.085, settle: 1.15, turnRate: 5.5, lag: 0.26,
@@ -48,7 +46,7 @@ export const SKILLS = {
     arcTries: 0, sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
     objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false, dodge: 0.3,
-    routeSense: 0, trade: 0.15, tradeReach: 16, preaim: 0.08, footsteps: 0.3, tunnel: 0.55, spreadOut: 0, topOff: 0, overpeek: 0.45, peekCover: 0,
+    trade: 0.15, tradeReach: 16, preaim: 0.08, footsteps: 0.3, tunnel: 0.55, spreadOut: 0, topOff: 0, overpeek: 0.45, peekCover: 0,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
@@ -57,7 +55,7 @@ export const SKILLS = {
     arcTries: 0, sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
     objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false, dodge: 0.6,
-    routeSense: 0.35, trade: 0.4, tradeReach: 21, preaim: 0.4, footsteps: 0.5, tunnel: 0.3, spreadOut: 0.4, topOff: 0.4, overpeek: 0.2, peekCover: 0.3,
+    trade: 0.4, tradeReach: 21, preaim: 0.4, footsteps: 0.5, tunnel: 0.3, spreadOut: 0.4, topOff: 0.4, overpeek: 0.2, peekCover: 0.3,
   },
   veteran: {
     thinkHz: 9, reaction: [0.26, 0.42], aimError: 0.09, aimFloor: 0.036, settle: 0.6, turnRate: 13, lag: 0.14,
@@ -66,7 +64,7 @@ export const SKILLS = {
     arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
     objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true, dodge: 0.85,
-    routeSense: 0.75, trade: 0.65, tradeReach: 26, preaim: 0.75, footsteps: 0.7, tunnel: 0.12, spreadOut: 0.75, topOff: 0.85, overpeek: 0.07, peekCover: 0.6,
+    trade: 0.65, tradeReach: 26, preaim: 0.75, footsteps: 0.7, tunnel: 0.12, spreadOut: 0.75, topOff: 0.85, overpeek: 0.07, peekCover: 0.6,
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
@@ -75,7 +73,7 @@ export const SKILLS = {
     arcTries: 4, sprint: 1, callouts: true, calloutDelay: 1, calloutErr: 3.2, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
     objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true, dodge: 0.95,
-    routeSense: 1, trade: 0.85, tradeReach: 30, preaim: 0.92, footsteps: 0.85, tunnel: 0.04, spreadOut: 0.95, topOff: 1, overpeek: 0.02, peekCover: 0.8,
+    trade: 0.85, tradeReach: 30, preaim: 0.92, footsteps: 0.85, tunnel: 0.04, spreadOut: 0.95, topOff: 1, overpeek: 0.02, peekCover: 0.8,
   },
 };
 
@@ -203,7 +201,8 @@ const STEP_HOLD = [1.2, 2.6];   // Seconds a bot that hears someone coming holds
 const CROWD = 7, CROWD_MAX = 2; // Metres around a contact, and how many teammates already hunting it make it crowded.
 const SIDE_STEP = 8;            // How far to one side a crowded hunt swings out.
 const PEEK_COVER = 6, PEEK_STEP = 2.4, PEEK_MIN = 9, PEEK_MAX = 40, PEEK_JIGGLE = 1.2, PEEK_TIME = 14, PEEK_REST = 4;
-const LOOK_REACH = 9;           // Holds within this distance lend their sight line to a bot pre-aiming on the move.
+const LOOK_REACH = 9;           // Holds within this distance lend their sight line to a bot pre-aiming on the move...
+const LOOK_AGAIN = 4;           // ...looked up again once it has walked this far (metres, along the axes).
 
 // How open a spot is: the mean clear sight line from it, metres, capped at EXPOSE_MAX. A yard reads high, a doorway low.
 function exposureAt(map, x, z) {
@@ -800,7 +799,7 @@ export class BotBrain {
     this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
     this.lifeT = this.sim.time;                   // When this life began: plans made once a life key on it.
     this.peekCover = null; this.peekSpot = null; this.peekIn = false; this.peekRoll = false; this.peekRestT = 0;
-    this.overpeek = false; this.lookAng = null; this.topOffNow = false;
+    this.overpeek = false; this.lookAng = null; this.lookX = 0; this.lookZ = 0; this.topOffNow = false; this.preaimOn = false;
     this._assignLane();
   }
 
@@ -1110,7 +1109,11 @@ export class BotBrain {
   think() {
     const { sim, p, ps, S } = this;
     this._perceive();
-    this.lookAng = sim.rng() < S.preaim ? this._laneLook() : null;
+    // Pre-aim only matters on the move with nothing to look at; the lane is looked up again after a few metres.
+    if (!this.preaimOn || this.targetVisible || this.hasKnown || !this.moving) this.lookAng = null;
+    else if (this.lookAng === null || Math.abs(ps.x - this.lookX) + Math.abs(ps.z - this.lookZ) > LOOK_AGAIN) {
+      this.lookAng = this._laneLook(); this.lookX = ps.x; this.lookZ = ps.z;
+    }
     this.topOffNow = sim.rng() < S.topOff;
 
     // Separation so teammates don't walk in single file or stack in a doorway.
@@ -1997,6 +2000,7 @@ export class BotBrain {
 
   _goTo(x, z) {
     this.goalX = x; this.goalZ = z;
+    this.preaimOn = this.sim.rng() < this.S.preaim;     // Decided per walk, so the eyes do not flick every think.
     this.arrived = false;
     this.pathDirty = true;
   }
@@ -2007,8 +2011,7 @@ export class BotBrain {
     sim.pathBudget--;
     this.pathDirty = false;
     // Recruits walk straight through a turret's field of fire; everyone else takes the long way round.
-    const shy = this.S.routeSense * (this.style.rush ? 1 : this.mode === 'flank' ? 0.5 : 0);
-    this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS, this.S.turret ? this.p.team : -1, shy);
+    this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS, this.S.turret ? this.p.team : -1);
     this.pathPartial = sim.nav.partial;      // Only a big map's capped search leaves it set: see _followPath.
     this.pathI = 0;
     // A fresh path means somewhere to go. The solve can lag _goTo by a tick or two (path budget), and the old path's
