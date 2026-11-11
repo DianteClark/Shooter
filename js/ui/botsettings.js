@@ -10,6 +10,7 @@ import { MAPS } from '../shared/map.js';
 import { RANDOM } from './vote.js';
 import { esc } from './widgets.js';
 import { ico } from './yard.js';
+import { modsRows, setSoloMods, soloMods, toggleMod } from './modifiers.js';
 
 const KEY = 'switchyard-botmatch';
 export const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
@@ -158,6 +159,7 @@ export function botMatchSheet(menu, pick, { onChange } = {}) {
           <span class="bm-segs">${SKILLS.map(([id, name]) => `<button class="bm-seg${id === saved.skill ? ' on' : ''}" data-act="bmSkill" data-skill="${id}" data-sound="tab">${name}</button>`).join('')}</span>
         </div>
         ${rows || '<p class="bm-note">A random mode plays with that mode\'s own settings. Pick a mode to change them.</p>'}
+        ${mode && MODES[mode].br ? '' : `<p class="bm-mods-h">Modifiers</p>${modsRows(soloMods(), mode)}`}
         ${mode ? `<button class="bm-reset" data-act="bmReset"${resolve(mode, map).custom ? '' : ' disabled'}>${ico('refresh')}<b>Defaults for ${esc(MODES[mode].short ?? MODES[mode].name)}</b></button>` : ''}
       </div>`);
   };
@@ -181,6 +183,7 @@ export function botMatchSheet(menu, pick, { onChange } = {}) {
   menu.on({
     bmDone: () => { menu.overlay(''); onChange?.(); },
     bmSkill: ({ skill }) => { setSkill(skill); paint(); onChange?.(); },
+    modToggle: ({ id }) => { setSoloMods(toggleMod(soloMods(), id)); paint(); onChange?.(); },
     bmStep: ({ key, dir }) => step(key, Number(dir)),
     bmReset: () => { if (mode) { delete saved.modes[mode]; store(); } paint(); onChange?.(); },
   });

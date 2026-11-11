@@ -7,6 +7,8 @@ import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
 import { GUN_LADDER, isBr, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
 import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
+import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
+import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMark, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
@@ -370,12 +372,16 @@ export class HUD {
     this.#seedFallback();
     this.#build();
     this.brHud = new BrHud(this);
+    this.modeHud = new ModeHud(this);
     this.#drawMapBase();
     this.reset();
   }
 
   // Battle royale buttons (jump, take, plate, med, self-revive) reach the match through this.
   onBrCommand(cb) { this.brHud.onCommand(cb); }
+
+  // A mode banner, for the modes' own layers (js/ui/mode-hud.js).
+  banner(title, sub, duration, side) { this.#banner(title, sub, duration, side); }
 
   // A row in the kill feed, for the modes' own layers (js/ui/br-hud.js).
   pushFeed(html, mine = false, side = '') { this.#pushFeed(html, mine, side); }
@@ -430,12 +436,15 @@ export class HUD {
   }
 
   // Call before each match.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true } = {}) {
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [] } = {}) {
     this.map = MAPS[mapId] ?? this.map;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
     this.modeId = mode;                 // As picked, e.g. 'gwdom'.
-    this.mode = modeRules(mode);        // The rule set it plays by, e.g. 'dom'.
+    // The rule set it plays by, e.g. 'dom'; a modes-overhaul mode is drawn as the rule set it looks like (its `look`),
+    // and its own layer (this.modeHud) says the rest.
+    this.mode = MODES[mode]?.look ?? modeRules(mode);
+    this.modeHud.prepare(mode, mods);
     this.ffa = isFfa(mode);             // Every player for themselves: scorebar, board and banners rank players.
     this.gun = this.mode === 'gun';
     this.snd = this.mode === 'snd';           // Search and Destroy: rounds, the bomb, spectating instead of respawns.
@@ -452,7 +461,7 @@ export class HUD {
     this.el.classList.toggle('ctf-on', this.ctf);
     for (const pips of this.sndEl.pips) pips.innerHTML = this.snd || this.ctf ? '<i></i>'.repeat(scoreLimit) : '';
     spectate.reset();
-    this.boardMode.textContent = MODES[mode]?.name ?? '';
+    this.boardMode.textContent = playlistName(mode, mods);
     this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : this.ctf ? `first to ${scoreLimit} captures` : `first to ${scoreLimit}`}`;
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
@@ -1140,6 +1149,7 @@ export class HUD {
 
   // Fourth score column: the mode's own number where it has one, headshots otherwise.
   #objectiveStat(p) {
+    if (this.modeHud.on) return this.modeHud.stat(p);
     if (this.snd) return `${p.plants ?? 0}/${p.defuses ?? 0}`;
     if (this.ctf) return `${p.captures ?? 0}/${p.returns ?? 0}/${p.carrierKills ?? 0}`;
     if (this.mode === 'kc') return p.confirms ?? 0;
@@ -1311,6 +1321,7 @@ export class HUD {
     else if (this.br) this.brHud.update(view, me, dt);
     else this.#updateDeath(me, c, view);
     if (this.ctf) this.#updateCtf(view, me, c);
+    this.modeHud.update(view, me);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -2199,6 +2210,7 @@ export class HUD {
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       if (this.br) this.brHud.onEvent(e, this.view);
+      this.modeHud.onEvent(e, this.view);
       switch (e.t) {
         case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
         case 'hit': this.#onHit(e); break;
@@ -2712,6 +2724,7 @@ export class HUD {
     this.#drawDeployables(view, myTeam, sx, sz, g);
     this.#drawProMini(view, me, sx, sz, g, clock);
     if (this.br) this.brHud.drawMini(g, view, me, sx, sz);
+    this.modeHud.drawMini(g, view, me, sx, sz, clock);
 
     this.#drawSelf(g, me, sx, sz);
   }
@@ -2860,14 +2873,15 @@ export class HUD {
     const mode = this.mode;
     const uses = mode === 'dom' || mode === 'hard';
     this.objStrip.hidden = !uses;
-    this.objTimer.hidden = mode !== 'hard';
+    this.objTimer.hidden = mode !== 'hard' || this.modeHud.on;     // Headquarters keeps its clock on its own plate.
     this.el.dataset.mode = mode;
     this.objMeter.hidden = true;
     for (const side of this.boardSides) {
-      side.modeHead.textContent = mode === 'kc' ? 'Conf' : uses ? 'Cap' : mode === 'snd' ? 'P/D' : mode === 'ctf' ? 'C/R/K' : 'HS';
+      side.modeHead.textContent = this.modeHud.on ? this.modeHud.head() : mode === 'kc' ? 'Conf' : uses ? 'Cap' : mode === 'snd' ? 'P/D' : mode === 'ctf' ? 'C/R/K' : 'HS';
     }
     if (!uses) return;
-    const count = mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;
+    // Control's zones and Grind's banks are two; Domination has the map's flags.
+    const count = this.modeHud.on && mode === 'dom' ? 2 : mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;
     for (let i = 0; i < count; i++) {
       const chip = document.createElement('span');
       chip.className = 'o-chip';
@@ -2979,6 +2993,8 @@ export class HUD {
         else if (hard) { state = pt.owner === me.team ? 'Holding Zone' : 'Taking Zone'; side = 'mine'; frac = Math.abs(capVal) || (pt.owner === me.team ? 1 : 0); }
         else if (Math.abs(capVal) > 0.005) { state = mine ? `Capturing ${label}` : `Losing ${label}`; side = mine ? 'mine' : 'enemy'; frac = Math.abs(capVal); }
         else if (pt.owner !== me.team) { state = `Capturing ${label}`; side = 'mine'; frac = 0; }
+        const own = this.modeHud.meter(view, me, pt);
+        if (own) [state, frac, side] = own;
         break;
       }
     }
@@ -2996,7 +3012,7 @@ export class HUD {
   }
 
   #updateHardTimer(view, c) {
-    if (this.mode !== 'hard') return;
+    if (this.mode !== 'hard' || this.modeHud.on) return;
     const shown = Math.max(0, Math.ceil(view.hardT ?? 0));
     if (shown !== c.hardShown) {
       c.hardShown = shown;

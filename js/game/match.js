@@ -60,7 +60,7 @@ export class Match {
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
     this.sim = new Sim({
       roster: this.roster, map: this.map, seed: this.seed,
-      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode,
+      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode, mods: this.mods ?? [],
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
     this.telemetry = new MatchTelemetry({ localId: this.localId });
@@ -357,7 +357,7 @@ export class Match {
     const net = this.net, view = this.interp.newest;
     if (!view) return;
     this.sim = Sim.fromSnapshot(view, this.roster, {
-      map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds,
+      map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds, mods: this.mods ?? [],
     });
     this.isHost = true;
     this.hostId = this.localId;
@@ -459,8 +459,9 @@ export class Match {
     let awards = {};
     try { awards = this.awards.finish(view) ?? {}; } catch (err) { console.error('match awards', err); }
     this.onEnd({
-      scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode,
-      myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
+      scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode, mods: this.mods ?? [],
+      // The side at the end: Infected moves players between sides during the match.
+      myTeam: view.players.find(p => p.id === this.localId)?.team ?? this.me.team, players: view.players.map(p => ({ ...p })),
       snd: view.snd ?? view.points?.snd ?? null,
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       ...awards,

@@ -36,6 +36,8 @@ import { Tutorial, tutorialRoster, TUTORIAL_MAP, TUTORIAL_MODE, TUTORIAL_LIMITS 
 import { challengeUnlock } from './ui/challenges.js';
 import { ico } from './ui/yard.js';
 import { BotMatch, botMatchSheet } from './ui/botsettings.js';
+import { modsSheet, soloMods } from './ui/modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
+import { cleanMods, featured } from './shared/playlist.js';
 import { QuickChat } from './ui/quickchat.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Updater, BUILD } from './ui/updater.js';
@@ -251,6 +253,11 @@ menu.on({
   range: () => { needName(startRange); },
   solo: () => { startSolo(); },
   quickPlay: () => { needName(quickPlay); },
+  featured: () => { needName(playFeatured); },
+  lobbyMods: () => {
+    if (!app.isHost) return;
+    modsSheet(menu, { mods: app.lobby.mods ?? [], onChange: list => { app.lobby.mods = list; broadcastLobby(); renderLobby(); } });
+  },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
   browse: () => openBrowse(),
@@ -393,12 +400,13 @@ function renderLobby() {
     rematchWait: app.rematchWait,
     ffa: ffaRoom(),
     public: app.public,
+    mods: app.lobby.mods ?? [],
   });
 }
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
 }
 
 // --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
@@ -516,6 +524,7 @@ function startHosting() {
   app.lobby = {
     humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...seatData() }],
     botSkill: 'mixed',
+    mods: [],
   };
   wireSharedNet(net);
   wireHostNet(net);
@@ -713,6 +722,7 @@ function guestLobbyMessage(msg) {
       inviteSettled();
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
+      app.lobby.mods = cleanMods(msg.mods);
       app.countdown = msg.countdown ?? null;
       app.public = !!msg.public;
       if (app.voice) updateVoiceTeam();
@@ -730,7 +740,7 @@ function guestLobbyMessage(msg) {
       app.countdown = null;
       app.rematchWait = false;
       beginMatch({
-        roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode,
+        roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode),
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
         hostId: app.net.hostId, isHost: false, rejoin: !!msg.rejoin,
       });
@@ -835,7 +845,7 @@ function resetToSolo() {
   stopRematch();
   stopVote();
   app.isHost = true;
-  app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed' };
+  app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed', mods: [] };
 }
 
 function startRange() {
@@ -923,8 +933,15 @@ function rematchSolo() {
   const mode = pick?.mode === RANDOM ? RANDOM : last?.mode ?? pick.mode;
   needName(() => {
     resetToSolo();
-    launchSolo(mapId, mode);
+    launchSolo(mapId, mode, pick?.mods ?? soloMods());
   });
+}
+
+// Today's featured playlist (js/shared/playlist.js): its mode and modifiers on a random map that hosts it.
+function playFeatured() {
+  const f = featured();
+  resetToSolo();
+  launchSolo(RANDOM, f.mode, f.mods);
 }
 
 // Quick play: one tap from the title or the picker, a random map and a random mode it can host.
@@ -939,8 +956,9 @@ function isRandomPick(pick) {
 }
 
 // Either half may be RANDOM; this device is the host, so it rolls here.
-function launchSolo(pickMap, pickMode) {
-  app.lastPick = { mapId: pickMap, mode: pickMode };
+// `mods` are the modifiers to play with: the picker's own unless a featured playlist brings its own.
+function launchSolo(pickMap, pickMode, mods = soloMods()) {
+  app.lastPick = { mapId: pickMap, mode: pickMode, mods };
   // Dev only: ?debug=1&map=<giant map>&mode=tdm plays a battle royale map under a team mode it does not list, to look
   // round it and test it before (or beside) its own mode.
   const devGiant = params.has('debug') && MAPS[pickMap]?.size === 'giant' && MODES[pickMode];
@@ -954,7 +972,7 @@ function launchSolo(pickMap, pickMode) {
   const roster = buildRoster(humans, { botSkill, mode, mapId, seed, teamSize: isFfa(mode) ? set.players : set.bots });
   beginMatch({
     roster: withBadges(roster, humans, seed),
-    seed, mapId, mode,
+    seed, mapId, mode, mods: cleanMods(mods, mode),
     scoreLimit: LIMIT_OVERRIDE || set.scoreLimit, timeLimit: TIME_OVERRIDE || set.timeLimit,
     hostId: id, isHost: true, localId: id,
   });
@@ -1081,7 +1099,7 @@ function launchHostMatch(mapId, mode) {
   const clean = humans.map(({ id, name, team, primary, camo, loadout, badge }) => ({ id, name, team, primary, camo, loadout, badge }));
   const seed = randomSeed();
   const payload = {
-    t: 'start', seed, mapId, mode, ...limitsFor(mode),
+    t: 'start', seed, mapId, mode, mods: cleanMods(app.lobby.mods, mode), ...limitsFor(mode),
     roster: withBadges(buildRoster(clean, { botSkill, mode, mapId, seed }), clean, seed),
   };
   net.sendLobby(payload);
@@ -1092,7 +1110,7 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false }) {
+function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
@@ -1101,7 +1119,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.lastPlayed = mode === 'range' ? null : { mapId, mode };
-  app.matchInfo = { roster, seed, mapId, mode, scoreLimit, timeLimit };
+  app.matchInfo = { roster, seed, mapId, mode, mods, scoreLimit, timeLimit };
   if (net) rememberRoom(app.code);
   stopVote();
   net?.resetGameHandlers();
@@ -1109,7 +1127,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   backdrop.stop();
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, localId: id, intro });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
@@ -1127,7 +1145,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   renderer.chars.setRoster(dummies ? [...roster, ...dummies] : roster);
   hud.setCamera(renderer.camera);
   app.match = new Match({
-    canvas, mapId, mode, seed, scoreLimit, timeLimit, roster, localId: id, hostId, isHost,
+    canvas, mapId, mode, mods, seed, scoreLimit, timeLimit, roster, localId: id, hostId, isHost,
     net, controls, hud, renderer, audio, rejoin,
     onEnd: results => onMatchEnd(results),
   });
@@ -1226,6 +1244,7 @@ function showResults(results) {
       outcome: drawn ? 'draw' : won ? 'win' : 'loss',
       mode: app.lastMode,
       modeId: results.modeId,
+      mods: results.mods ?? [],
       scores: results.scores,
       myTeam: results.myTeam,
       localId: results.localId,

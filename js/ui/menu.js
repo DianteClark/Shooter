@@ -31,6 +31,7 @@ import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
 import { vetOf, vetTag } from './cards.js';
 import { play, enter, sweep, shake, reducedMotion, DUR } from './motion.js';
+import { featuredButton, modsChip } from './modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
 
 export { esc };
 
@@ -188,6 +189,7 @@ export class Menu {
             <button class="tl-btn${PUBLIC_LOBBIES ? ' tl-third' : ''}" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
             ${PUBLIC_LOBBIES ? `<button class="tl-btn tl-third tl-browse" data-act="browse" data-in="rail">${ico('ui:signal')}<b>Browse</b></button>` : ''}
           </div>
+          ${featuredButton()}
           <button class="tl-btn tl-loadout" data-act="loadout" data-in="rail">${ico('loadout')}<span><b>Loadouts</b><small>${esc(lo?.name ?? '')}${gun ? `: ${esc(gun)}` : ''}</small></span></button>
         </nav>
       </section>
@@ -309,7 +311,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [] } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -368,6 +370,7 @@ export class Menu {
             : `<b class="seg on">${esc(skillName)}</b>`}
         </div>
         <button class="chip" data-act="loadout">${ico('loadout')}<b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
+        ${modsChip(mods, { fixed: !isHost })}
         <button class="chip" data-act="gunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
         <button class="chip" data-act="operators">${ico('operator')}<b>Operators</b></button>
         ${start}

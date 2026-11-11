@@ -82,6 +82,13 @@ const PANELS = {
       ${card('mode:ffa', 'Free-for-All', 'Everyone for themselves. Most kills wins.')}
       ${card('mode:gun', 'Gun Game', 'Every kill moves you to the next gun. A kill with the last one wins. A thrown kill knocks the victim back a gun.')}
       ${card('mode:gwtdm', 'Ground War', '16 v 16 on the large map, as Team Deathmatch or five-flag Domination.')}
+      ${card('mode:hq', 'Headquarters', 'Capture the HQ by standing in it, then hold it: it scores a point a second, but <b>your team cannot respawn while it stands</b>. The other side destroys it by standing in it. It moves after a while either way.')}
+      ${card('mode:ko', 'Kill Order', 'Each team has one marked VIP, shown to everyone. Only killing the enemy VIP scores. VIPs take less damage; guard yours.')}
+      ${card('mode:inf', 'Infected', 'One player starts infected, with blades. Anyone they kill joins them. Survivors win if any are left when the clock runs out.')}
+      ${card('mode:oic', 'One in the Chamber', 'Everyone has a pistol with one round and a blade. The round kills on any hit, a kill gives it back, and you have five lives. Last one standing wins.')}
+      ${card('mode:ctl', 'Control', 'Rounds of attack and defence over zones A and B; sides swap every round. Attackers take both zones, defenders hold them until time runs out. Each team has a pool of lives.')}
+      ${card('mode:grind', 'Grind', 'Kills drop tags. Pick up enemy tags and carry them to bank A or B to score. Die and you drop everything you carry.')}
+      ${card('ui:options', 'Modifiers', '<b>Hardcore</b>: a third of the health, no minimap. <b>Snipers Only</b>, <b>Melee Only</b>, <b>No Streaks</b>. Set them in Play vs bots (the settings button) or in a friend lobby. A <b>Featured</b> pairing changes every day.', true)}
       ${card('mode:br', 'Battle Royale', '32 players in squads of four (or duos, or solos); friends share a squad and bots fill the rest. Ride the transport and tap <b>Jump</b> over where you want to land, then steer the glide. You start with fists and a pistol: walk over loot to take ammo, armor plates, medkits and equipment, and tap to swap for a better gun (rarer colours handle better and carry more attachments). Tap <b>Plate</b> to fill your three armor slots. Stay inside the circle: it shrinks in seven phases and hurts more each time. Downed in a squad? Crawl to a teammate; standing next to you brings you back. Last squad standing wins.', true)}
       ${card('ui:aim', 'Firing Range', 'Your loadout, dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.', true)}
     </div>`,
