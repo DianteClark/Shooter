@@ -149,7 +149,7 @@ const SCENES = {
   'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
-  'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop }); }),
+  'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop }); }),
   // Leaderboards: a played-in save, three friends (one with a long tag, one from last week) and the pool.
   'boards': menuScene('Boards: everyone', ({ menu }) => boardsScene(menu, 'everyone', 'level')),
   'boards-friends': menuScene('Boards: friends', ({ menu }) => boardsScene(menu, 'friends', 'kills')),
