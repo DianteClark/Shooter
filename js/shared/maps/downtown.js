@@ -39,7 +39,7 @@ function build() {
     [39, 15.5, 2, 2, 6, 'crane', { towerCrane: true }],
     frame(35, 26.5), frame(39.5, 26.5), frame(44, 26.5), frame(35, 31), frame(44, 31),
     stack(35, 16.5, 2.4, 3.4), stack(42.5, 20.5, 3.2, 2.2), [36, 21.4, 2.6, 1.2, 1.0, 'barrier', { jersey: true }],
-    pallet(40.5, 31.2), pallet(43.6, 14.6), [36.4, 32.4, 3.2, 1.2, 1.1, 'crate', { pallet: true }],
+    pallet(40.5, 31.2), pallet(43.6, 14.6), [36.9, 32.4, 2.8, 1.2, 1.1, 'crate', { pallet: true }],
 
     // ---- Street z 20-28.
     car(14, 21.6), kiosk(51, 21.2), car(56.5, 25.2),
