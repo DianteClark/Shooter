@@ -224,7 +224,10 @@ export class MatchAwards {
     const total = lines.reduce((sum, l) => sum + l[1], 0);
 
     // Lifetime totals take the same counts the challenges do, plus where it was played and whether it was won.
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life: tallied ?? this.tally.counts(), mapId: this.mapId, won });
+    // Career totals for the leaderboards: kills and deaths as the scoreboard has them, a battle royale's placing.
+    const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
+    const career = { kills: me?.kills ?? this.kills, deaths: me?.deaths ?? 0, br: !!view?.br, place: brPlace };
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life: tallied ?? this.tally.counts(), mapId: this.mapId, won, career });
     const outcome = won ? 'win' : drawn ? 'draw' : 'loss';
     let history = null;
     try { history = MatchHistory.add(this.#historyEntry(view, me, outcome, place, total, applied.level, challenges)); } catch (err) { console.error('match history', err); }
