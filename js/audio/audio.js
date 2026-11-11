@@ -440,6 +440,16 @@ const GUNS = {
 };
 
 // ---- Voices for guns with no recipe above: the class's voice, re-pitched and re-weighted for this gun. ----
+// A swung weapon: air, not powder. A short band of moving noise and the faint thud of the arm stopping. `quiet`
+// makes it its own suppressed variant, so it never rings the room or shows up as a gunshot.
+const MELEE_VOICE = { size: 0, quiet: true,
+  crack: { dur: 0.002, gain: 0.08, hp: 2500 },
+  body: { dur: 0.16, gain: 0.9, f0: 900, f1: 3400, decay: 3.2 },
+  thump: { dur: 0.06, gain: 0.35, f0: 150, f1: 90, decay: 6, shape: 0.5 },
+  hiss: { at: 0.02, dur: 0.12, gain: 0.35, f0: 3000, f1: 6500, hp: 2000, decay: 4 },
+  action: [],
+  tail: { dur: 0.12, gain: 0.08, f0: 1200, f1: 500, decay: 8 },
+};
 const CLASS_VOICE = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher' };
 const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -463,6 +473,11 @@ function deriveVoice(id, def, cls) {
   if (cls === 'Shotgun' && (def.pellets || 1) === 1) baseId = 'slug';
   if (cls === 'Launcher' && def.range < 45) baseId = 'thumper';
   if (cls === 'Pistol' && def.rpm >= 700) baseId = 'machpistol';
+  if (cls === 'Melee') {
+    // A heavy club swings lower and longer than a knife.
+    const w = weightOf(id, def);
+    return scaleVoice(MELEE_VOICE, (1.25 + 0.06 * idHash(id)) / Math.pow(Math.max(0.3, w) / 0.3, 0.45), clampN(0.8 + 0.5 * w, 0.8, 1.5));
+  }
   const base = GUNS[baseId];
   // Heavier than the class's reference gun: lower and longer. Lighter: higher and shorter. The id's own hash moves
   // the pitch a few percent more, so two derived guns of equal weight still differ.
@@ -688,6 +703,7 @@ const FOLEY = {
 // A gun with no entry reloads with its class's kind of action, pitched by its weight (heavier is lower).
 function deriveFoley(id, def, cls) {
   const w = weightOf(id, def);
+  if (cls === 'Melee') return { kind: 'slide', pitch: 1.4, mass: 0.2, rack: 0.1 };     // Barely a sound: a hand shifting its grip.
   const kind = def.shellReload ? (cls === 'Shotgun' ? 'tube' : 'lever')
     : cls === 'LMG' ? (def.magazine >= 75 ? 'belt' : 'mag') : cls === 'Sniper' ? 'bolt' : cls === 'Launcher' ? 'rocket'
     : cls === 'Pistol' ? (def.magazine <= 8 && def.rpm <= 220 ? 'cylinder' : 'slide') : cls === 'Shotgun' ? 'drum' : 'mag';
@@ -1329,6 +1345,7 @@ export class AudioEngine {
     this.lx = 0; this.lz = 0; this.localId = null; this.localAlive = false; this.localTeam = -1;
     this.offline = false;
     this.theme = null;
+    this.themeAsked = null;          // The theme last asked for, known or not: see _trackLocal.
     this.tailAt = new Map();       // Per shooter: when their last far tail or reflection played.
     this.reflectAt = 0;
     this.whizAt = 0; this.impactAt = 0;
@@ -1518,7 +1535,8 @@ export class AudioEngine {
         this.buildMs += ms; this.buildMaxJobMs = Math.max(this.buildMaxJobMs, ms);
       } while (i < jobs.length && performance.now() - t0 < 4);
       if (i < jobs.length) setTimeout(runNext, 0);
-      else { this._startFarLayer(); this._warmThrowBuffers(); this.ready = true; this.setMicActive(this.micActive); this._readyDone(); }
+      else { this._startFarLayer(); this._warmThrowBuffers(); this.ready = true; if (this.theme !== null) this.setTheme(this.themeAsked);   // The weather loops wait for the buffers.
+        this.setMicActive(this.micActive); this._readyDone(); }
     };
     setTimeout(runNext, 0);
   }
@@ -1736,8 +1754,12 @@ export class AudioEngine {
   _trackLocal(view) {
     if (!view) return;
     this.localId = view.localId;
-    if (view.theme !== this.theme) this.setTheme(view.theme);
     if (view.mapId !== this.mapId) { this.mapId = view.mapId; this.map = MAPS[view.mapId] || null; this.occluded.clear(); }
+    // The interpolated view carries the map id but not its theme, so the theme comes from the map. Compared with
+    // what was last asked for, not with what it resolved to: comparing against the resolved name re-applied the room
+    // (a new convolver impulse, the weather loops stopped) on every call of every frame, on every map.
+    const theme = view.theme || (this.map && this.map.theme) || null;
+    if (theme !== this.themeAsked) this.setTheme(theme);
     const players = view.players;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -1917,7 +1939,9 @@ export class AudioEngine {
       this.fight = Math.min(1, this.fight + 0.15);
       // How it goes by depends on the round: a rifle bullet cracks, a pistol or shotgun load buzzes past low.
       // Closer is louder.
-      const cls = classOf(e.weapon), near = 1 - 0.5 * Math.sqrt(px * px + pz * pz) / WHIZ_RADIUS;
+      const cls = classOf(e.weapon);
+      if (cls === 'Melee') return;                          // A blade does not go past your ear.
+      const near = 1 - 0.5 * Math.sqrt(px * px + pz * pz) / WHIZ_RADIUS;
       const pan = Math.max(-0.7, Math.min(0.7, (this.lx - (ox + dx)) / 10));
       if (cls === 'Sniper' || cls === 'Marksman') this._play(this.sfx.crack, { bus: this.ui, gain: 0.75 * near, rate: 0.92 + Math.random() * 0.16, priority: PR.threat, cls: 'ui', pan });
       else if (cls === 'SMG' || cls === 'Pistol' || cls === 'Shotgun') this._play(this.sfx.whiz, { bus: this.ui, gain: 0.42 * near, rate: 0.68 + Math.random() * 0.14, priority: PR.threat, cls: 'ui', pan });
@@ -2305,6 +2329,7 @@ export class AudioEngine {
 
   setTheme(theme) {
     const known = THEME_AUDIO[theme] ? theme : 'railyard';
+    this.themeAsked = theme || null;
     this.theme = known;
     if (!this.room) return;
     this.applyRoom(known);
@@ -2405,12 +2430,14 @@ export class AudioEngine {
   _updateHeat(view, dt) {
     const p = this._posOf(view, this.localId);
     const heat = p && p.alive && p.heat ? p.heat : 0;
-    if (heat > 0.55 && heat > this.prevHeat && !p.overheated) {
+    // A charge gun (def.charge) shows its charge on the same bar: it winds up from the start, higher and tighter.
+    const def = heat > 0 ? WEAPONS[p.weapon] : null, charge = !!(def && def.charge), floor = charge ? 0.06 : 0.55;
+    if (heat > floor && heat > this.prevHeat && !p.overheated) {
       this.heatTickT -= dt;
       if (this.heatTickT <= 0) {
-        const k = (heat - 0.55) / 0.45;
-        this.heatTickT = 0.2 - 0.13 * k;
-        this._play(this.sfx.heatTick, { bus: this.ui, priority: PR.gun, cls: 'foley', gain: 0.3 + 0.5 * k, rate: 1 + 0.9 * k });
+        const k = Math.min(1, (heat - floor) / (1 - floor));
+        this.heatTickT = charge ? 0.075 - 0.035 * k : 0.2 - 0.13 * k;
+        this._play(this.sfx.heatTick, { bus: this.ui, priority: PR.gun, cls: 'foley', gain: charge ? 0.22 + 0.3 * k : 0.3 + 0.5 * k, rate: charge ? 1.5 + 1.6 * k : 1 + 0.9 * k });
       }
     } else if (heat <= this.prevHeat) {
       this.heatTickT = 0;
@@ -2441,7 +2468,7 @@ export class AudioEngine {
     if (!this._running() || !view) { impactBus.n = 0; return; }
     this._trackLocal(view);
     this.lastView = view;
-    if (this.theme === null) this.setTheme(view.theme);
+    if (this.theme === null) this.setTheme(this.themeAsked);
     const players = view.players;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];

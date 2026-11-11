@@ -18,7 +18,7 @@ import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo
 import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
 import { TUNING } from '../shared/tuning.js';
 import { spectate } from '../sim/snd.js';
-import { feelMotion } from './feel.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
+import { feelMotion } from './feel.js';   // Reduced motion scales the camera kick a gun adds.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
 let WEAPONS = {};
@@ -494,7 +494,7 @@ export class GameRenderer {
 
     if (visible) {
       vfx.shotFx(ev.weapon, mx, my, mz, ev.aim, rgb, !!ev.sup, r);
-      vfx.pop(mx, 1.4, mz, (5 + kick * 2.2) * (ev.sup ? 0.5 : G.light), rgb, 0.09);
+      if (G.light > 0) vfx.pop(mx, 1.4, mz, (5 + kick * 2.2) * (ev.sup ? 0.5 : G.light), rgb, 0.09);
     }
 
     chars.onShot(ev.by, kick, ev.weapon);

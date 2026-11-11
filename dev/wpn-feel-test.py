@@ -15,6 +15,17 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8205
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else '/tmp/wpn-feel'
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--autoplay-policy=no-user-gesture-required']
+# Guns no table in the game has heard of, appended to weapons.js as it is served: the 14 new guns arrive the same
+# way. One with only a category, one with no category at all (classed by its numbers), one that names a gun to take
+# after and overrides a little, and a melee weapon.
+UNKNOWN = """
+;(() => { const mk = (from, id, over) => { WEAPONS[id] = { ...WEAPONS[from], id, name: id, ...over }; };
+  mk('burst', 'zzrifle', { category: 'Assault', kickCam: 0.95, rpm: 520, auto: true, burst: undefined });
+  mk('sniper', 'zznocat', { category: undefined });
+  mk('smg', 'zzlike', { category: 'SMG', feel: { like: 'pdw', voice: { pitch: 1.2 }, fx: { shape: 'cross' }, recoil: { twist: 1.4 } } });
+  mk('pistol', 'zzblade', { category: 'Melee', melee: true, suppressed: true, range: 2.7, rpm: 190, kickCam: 0.3 });
+})();
+"""
 CLASS_PICK = {'Assault': 'ar', 'SMG': 'smg', 'Shotgun': 'shotgun', 'LMG': 'lmg', 'Marksman': 'dmr', 'Sniper': 'sniper', 'Pistol': 'revolver', 'Launcher': 'launcher'}
 
 SETUP = """(async () => {
@@ -33,6 +44,7 @@ SETUP = """(async () => {
   a._play = (buf, opt) => { for (const k in a.sfx) if (a.sfx[k] === buf) count('sfx:' + k); for (const id in a.foley) for (const s in a.foley[id]) if (a.foley[id][s] === buf) count('foley:' + s); return play(buf, opt); };
   wrap(v, '_flash', 'flash'); wrap(v, '_tracer', 'tracer'); wrap(v, 'shell', 'shell'); wrap(v, 'spawn', 'part'); wrap(v, 'rocket', 'rocket');
   wrap(v, 'wallHit', 'wallHit'); wrap(v, 'groundHit', 'groundHit'); wrap(v, 'mark', 'mark'); wrap(v, 'contrail', 'contrail');
+  T.themeSets = 0; const setTheme = a.setTheme.bind(a); a.setTheme = t => { T.themeSets++; return setTheme(t); };
   const onEv = a.onEvents.bind(a);
   a.onEvents = (ev, view) => { for (const e of ev) if (e.t === 'shot' && e.by === m.localId) count('shot'); return onEv(ev, view); };
   const read = m.controls.read.bind(m.controls);
@@ -52,7 +64,7 @@ FIRE = """async ([id, frames]) => {
   for (let i = 0; i < frames; i++) { T.step(); const p = T.pools(); for (const k in p) peak[k] = Math.max(peak[k], p[k]); }
   T.fire = false;
   const g = a.guns[id], fx = v.gunFx(id), f = a.foley[id];
-  return { n: T.n, peak, voice: !!g && g.near.length === 3 && !!g.tail, sup: g ? g.sup.length : 0, foley: !!f && !!f.out && !!f.in && !!f.rack && !!f.swap,
+  return { cls: (await import('/js/render/feel.js')).classOf(id), n: T.n, peak, voice: !!g && g.near.length === 3 && !!g.tail, sup: g ? g.sup.length : 0, foley: !!f && !!f.out && !!f.in && !!f.rack && !!f.swap,
     fx: { shape: fx.shape, shell: fx.shell, tail: fx.tail, skip: fx.skip }, dur: g ? +g.near[0].duration.toFixed(3) : 0 };
 }"""
 
@@ -71,6 +83,10 @@ async def main():
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
             ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True, device_scale_factor=2)
             pg = await ctx.new_page()
+            async def with_unknown(route):
+                resp = await route.fetch()
+                await route.fulfill(response=resp, body=(await resp.text()) + UNKNOWN)
+            await pg.route('**/js/shared/weapons.js', with_unknown)
             pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
             pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
             await pg.goto(f'http://localhost:{PORT}/?debug=1')
@@ -85,14 +101,14 @@ async def main():
             await pg.evaluate(SETUP)
             await pg.wait_for_function('window.__game.app.match.audio.ready === true', timeout=120000)
             ids = await pg.evaluate('Object.keys(window.__t.W)')
-            cats = await pg.evaluate('Object.fromEntries(Object.entries(window.__t.W).map(([k, w]) => [k, w.category]))')
+            cats = await pg.evaluate('Object.fromEntries(Object.entries(window.__t.W).map(([k, w]) => [k, w.category || "-"]))')
             expl = await pg.evaluate('Object.fromEntries(Object.entries(window.__t.W).map(([k, w]) => [k, !!w.explosive || k === "launcher"]))')
             for _ in range(3): await pg.evaluate('window.__t.step()')
             print(f'{len(ids)} guns')
             for gid in ids:
                 r = await pg.evaluate(FIRE, [gid, 14])
                 n = r['n']
-                line = f"{gid:11s} {cats[gid]:9s} shots {n.get('shot', 0):2d} own {n.get('play:own', 0):2d} tail {n.get('play:tail', 0)} flash {n.get('flash', 0):2d} tracer {n.get('tracer', 0):2d} rocket {n.get('rocket', 0)} shell {n.get('shell', 0):2d} parts {n.get('part', 0):3d} shape {r['fx']['shape']:5s} near {r['dur']}s sup {r['sup']} peak {r['peak']}"
+                line = f"{gid:11s} {r['cls']:9s} shots {n.get('shot', 0):2d} own {n.get('play:own', 0):2d} tail {n.get('play:tail', 0)} flash {n.get('flash', 0):2d} tracer {n.get('tracer', 0):2d} rocket {n.get('rocket', 0)} shell {n.get('shell', 0):2d} parts {n.get('part', 0):3d} shape {r['fx']['shape']:5s} near {r['dur']}s sup {r['sup']} peak {r['peak']}"
                 print(line)
                 bad = []
                 if n.get('shot', 0) < 1: bad.append('never fired')
@@ -102,8 +118,11 @@ async def main():
                 if r['fx']['shape'] != 'none' and n.get('flash', 0) < 1: bad.append('no muzzle flash')
                 if expl[gid]:
                     if n.get('rocket', 0) < 1: bad.append('no projectile')
-                elif n.get('tracer', 0) < 1: bad.append('no tracer')
-                if n.get('part', 0) < 1: bad.append('no particles')
+                elif r['fx']['tail'] > 0 and n.get('tracer', 0) < 1: bad.append('no tracer')
+                elif r['fx']['tail'] <= 0 and n.get('tracer', 0) > 0: bad.append('a tracer from a gun that throws no round')
+                if r['cls'] != 'Melee' and n.get('part', 0) < 1: bad.append('no particles')
+                want = {'zzrifle': ('Assault', 'star'), 'zznocat': ('Sniper', 'cross'), 'zzlike': ('SMG', 'cross'), 'zzblade': ('Melee', 'none')}.get(gid)
+                if want and (r['cls'], r['fx']['shape']) != want: bad.append(f"unknown gun resolved to {r['cls']}/{r['fx']['shape']}, wanted {want}")
                 if bad: failures.append(f'{gid}: {", ".join(bad)}')
                 # Let the pools drain so the next gun starts clean.
                 for _ in range(4): await pg.evaluate('window.__t.step(0.1)')
@@ -114,11 +133,15 @@ async def main():
                 if k in seen: failures.append(f'{gid} and {seen[k]} share a voice')
                 seen[k] = gid
             print(f'distinct voices: {len(seen)} of {len(sigs)}')
+            # The room (convolver impulse, weather loops) is applied when the map changes, never per frame.
+            sets = await pg.evaluate('window.__t.themeSets')
+            print('room applied', sets, 'times')
+            if sets > 2: failures.append(f'audio room re-applied {sets} times in one match')
 
             # Reload stages, low ammo and dry fire, with the range's instant reload off.
             r = await pg.evaluate("""(async () => { const T = window.__t, m = window.__game.app.match; m.ps.instantReload = false;
               T.n = {}; T.arm('ar'); m.ps.ammo[0] = 4; m.ps.reserve[0] = 60; T.fire = true;
-              for (let i = 0; i < 12; i++) T.step();                 // Last rounds, then the automatic reload starts.
+              for (let i = 0; i < 12; i++) { T.step(); await new Promise(r => setTimeout(r, 34)); }   // Last rounds in real time (the layer is rate-limited on the audio clock), then the automatic reload starts.
               const low = { ...T.n };
               for (let i = 0; i < 80; i++) T.step();                 // Through the reload (trigger still held).
               const reload = { ...T.n, ammo: m.ps.ammo[0] }; T.n = {}; T.fire = false;

@@ -570,7 +570,8 @@ export class VFX {
     const kind = this.groundKind, G = GROUND[kind];
     impactBus.push(kind, x, z);
     const rgb = kind === 'snow' ? SNOW_RGB : this.dustRGB;
-    for (let i = Math.max(1, Math.round(G.puffs * Math.min(1, this.fxScale + 0.25))); i > 0; i--) {
+    // The Low steps never throw more than the two puffs they always did.
+    for (let i = this.fxScale <= 0.5 ? Math.min(2, G.puffs) : Math.max(1, Math.round(G.puffs * Math.min(1, this.fxScale + 0.25))); i > 0; i--) {
       this.spawn(x, 0.12, z, rand(-0.8, 0.8), rand(0.6, 1.6) * G.rise, rand(-0.8, 0.8), rand(0.25, 0.45), 0.1, 0.34, rgb, G.alpha, -0.8, 3);
     }
     if (kind === 'water') {
@@ -654,6 +655,8 @@ export class VFX {
       }
     }
     if (shape !== 'none') this.muzzleSmoke(x, y, z);
+    // A swung weapon: one thin pale slash across the aim, where a flash would be.
+    if (G.extra === 'swing') this._flash(x, y, z, aim + 1.5708, WHITE, 1.0, 1.7, 0.22);
     if (r) this._barrelHeat(r, G);
     if (!sup) {
       if (G.extra === 'blast') {
@@ -707,6 +710,7 @@ export class VFX {
   // the local player fired it. Applies the gun's tint, thins other players' tracers on the Low steps (`skip`),
   // lays the sniper contrail and stirs any smoke cloud the round crosses.
   gunTracer(G, by, i, local, ax, ay, az, bx, by2, bz, rgb, width) {
+    if (!(G.tail > 0)) return;          // A blade, or anything else that throws no round.
     this._stirSmoke(ax, az, bx, bz);
     if (!local && this.fxScale <= 0.5 && G.skip > 1 && G.tail !== GOLD_TAIL && (this.tracerSeq++ % G.skip) !== 0) return;
     const t = G.tint, c = this.cosmetics.get(by);
@@ -723,7 +727,7 @@ export class VFX {
   // A round through a smoke cloud drags a curl of it along its line: the only trace of a shot you cannot see.
   _stirSmoke(ax, az, bx, bz) {
     const clouds = this.smokeClouds;
-    if (!clouds || this.swirls >= SMOKE_SWIRLS) return;
+    if (!clouds || this.fxScale <= 0.5 || this.swirls >= SMOKE_SWIRLS) return;
     const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
     if (len2 < 1) return;
     for (let i = 0; i < clouds.length; i++) {
@@ -754,7 +758,7 @@ export class VFX {
     const hot = Math.max(0, (r.fxHot || 0) - idle * BARREL_COOL) + G.heatPerShot;
     r.fxHot = Math.min(2.2, hot);
     r.fxShotAt = this.clock;
-    if (hot < 1 || this.fxScale < 0.5) return;
+    if (hot < 1 || this.fxScale <= 0.5) return;        // No barrel smoke on the Low steps: the glow alone says it.
     const S = this.smokers;
     let slot = null;
     for (let i = 0; i < SMOKERS; i++) { if (S[i].rig === r) { slot = S[i]; break; } if (!slot && S[i].t <= 0) slot = S[i]; }

@@ -6,6 +6,7 @@
 // or to silence. Now a missing entry is derived here from the gun's definition in js/shared/weapons.js:
 //
 //   def.category          picks the class skeleton (Assault, SMG, Shotgun, LMG, Marksman, Sniper, Pistol, Launcher).
+//   def.melee             a blade or a club, whatever its category: a swish and a slash, no flash, tracer or brass.
 //   def.kickCam, damage,  scale it: heavier guns flash bigger, sound lower and longer, kick further.
 //     rpm, range, pellets,
 //     explosive, heat,
@@ -35,6 +36,7 @@ export function idHash(id) {
 // The class a gun belongs to. Its category when it has one; otherwise what its numbers say it is.
 export function classOf(id, def = WEAPONS[id]) {
   if (!def) return 'Assault';
+  if (def.melee) return 'Melee';
   if (CLASSES.includes(def.category)) return def.category;
   if (def.explosive) return 'Launcher';
   if ((def.pellets || 1) > 1) return 'Shotgun';
@@ -90,11 +92,13 @@ const CLASS_FX = {
   Sniper:   { tail: 60,  linger: 0.42,  speed: 500, flash: [2.3, 1.5, 0.7],   shell: 'magnum', shape: 'cross', tint: [1, 1, 1, 0.34],       skip: 1, smoke: 1,  light: 1.7, extra: 'brake', contrail: 1 },
   Pistol:   { tail: 7,   linger: 0.05,  speed: 210, flash: [1.2, 0.9, 1.0],   shell: 'pistol', shape: 'spit',  tint: [1, 0.9, 0.66, 0.1],   skip: 1, smoke: 6,  light: 0.8 },
   Launcher: { tail: 0,   linger: 0,     speed: 92,  flash: [2.2, 0.5, 2.0],   shell: null,     shape: 'fan',   tint: [1, 1, 1, 0],          skip: 1, smoke: 1,  light: 1.6, extra: 'backblast' },
+  Melee:    { tail: 0,   linger: 0,     speed: 100, flash: [0.2, 0.2, 0.2],   shell: null,     shape: 'none',  tint: [1, 1, 1, 0],          skip: 1, smoke: 1e9, light: 0, extra: 'swing' },
 };
 const TRAITS = ['shape', 'tint', 'skip', 'smoke', 'light'];
 
 export function deriveFx(id, def, cls) {
   const C = CLASS_FX[cls] || CLASS_FX.Assault;
+  if (cls === 'Melee') return { ...C };
   const w = weightOf(id, def), k = 0.78 + 0.42 * w;
   const out = { ...C, flash: [C.flash[0] * k, C.flash[1], C.flash[2]] };
   if (cls === 'Shotgun' && (def.pellets || 1) === 1) {
@@ -140,6 +144,7 @@ const CLASS_RECOIL = {
   Sniper:   { back: 1.7, climb: 1.6, twist: 0.1 },
   Pistol:   { back: 0.5, climb: 2.3, twist: 0.35 },
   Launcher: { back: 1.6, climb: 0.5, twist: 0.3 },
+  Melee:    { back: -1.8, climb: -0.9, twist: 1.3 },      // A swing goes forward and down, and rolls the wrist.
 };
 const RECOIL = {};
 export function recoilOf(id) {
@@ -147,14 +152,14 @@ export function recoilOf(id) {
   if (r) return r;
   const def = WEAPONS[id];
   const like = likeOf(def);
-  const base = CLASS_RECOIL[classOf(like && WEAPONS[like] ? like : id, like && WEAPONS[like] ? WEAPONS[like] : def)];
+  const base = CLASS_RECOIL[def && def.melee ? 'Melee' : classOf(like && WEAPONS[like] ? like : id, like && WEAPONS[like] ? WEAPONS[like] : def)] || CLASS_RECOIL.Assault;
   r = RECOIL[id] = { ...base, ...(def && def.feel && def.feel.recoil) };
   return r;
 }
 
 // ---- How a gun sits in the hands and how it reloads (characters.js HOLD / GUN_SCALES, anim.js RELOADS) ------------
 const CLASS_HOLD = {
-  LMG: [-0.03, -0.09, 0.04], Sniper: [-0.02, 0.05, 0], Shotgun: [-0.02, -0.03, 0.02], Pistol: [0.14, 0.06, -0.08], Launcher: [-0.3, 0.3, 0.1],
+  LMG: [-0.03, -0.09, 0.04], Sniper: [-0.02, 0.05, 0], Shotgun: [-0.02, -0.03, 0.02], Pistol: [0.14, 0.06, -0.08], Melee: [0.14, 0.06, -0.08], Launcher: [-0.3, 0.3, 0.1],
 };
 export const deriveHold = (id, def, cls) => CLASS_HOLD[cls];
 export const deriveScale = (id, def, cls) => (cls === 'Sniper' ? 0.88 : cls === 'Pistol' ? 1.05 : undefined);
@@ -168,6 +173,7 @@ export function reloadLike(id, def, cls) {
     case 'LMG': return 'saw';
     case 'Marksman': return 'dmr';
     case 'Sniper': return 'sniper';
+    case 'Melee': return 'pistol';
     case 'Pistol': return def.magazine <= 8 && def.rpm <= 220 ? 'revolver' : 'pistol';
     case 'Launcher': return 'launcher';
     default: return 'ar';
