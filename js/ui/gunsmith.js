@@ -444,7 +444,7 @@ export class Gunsmith {
     let html = '';
     if (a) {
       const deltas = attachmentDeltas(WEAPONS[this.weapon], id);
-      html = `<ul class="att-dl">${a.kind ? `<li class="kd">${kindChip(a)}</li>` : ''}${deltas.map(d => `<li class="${d.key === 'note' ? 'note' : d.better ? 'up' : 'down'}">${esc(d.label)}${d.key === 'note' ? '' : ` <b>${deltaLabel(d)}</b>`}</li>`).join('')}</ul>`;
+      html = `<ul class="att-dl">${a.kind ? `<li class="kd">${kindChip(a)}</li>` : ''}${deltas.map(d => `<li class="${d.key === 'note' ? `note${d.better === true ? ' up' : d.better === false ? ' down' : ''}` : d.better ? 'up' : 'down'}">${esc(d.label)}${d.key === 'note' ? '' : ` <b>${deltaLabel(d)}</b>`}</li>`).join('')}</ul>`;
     }
     if (this.infoHtml !== html) { this.infoEl.innerHTML = this.infoHtml = html; this.infoEl.hidden = !html; }
   }

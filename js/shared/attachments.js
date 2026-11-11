@@ -404,6 +404,7 @@ export const MOD_INFO = {
   blastRadius:  { label: 'Blast radius',       better: 1 },
   bloomRecover: { label: 'Settle speed',       better: 1 },
   reserve:      { label: 'Spare ammo',         better: 1 },
+  suppressed:   { label: 'Suppressed',         better: 1 },
   // V11 identity keys: signature attachments and conversion kits only.
   damage:       { label: 'Damage',             better: 1 },
   rpm:          { label: 'Fire rate',          better: 1 },
@@ -680,7 +681,7 @@ export function attachmentDeltas(weaponDef, attachmentId) {
     out.push({ key, label, from, to, pct, whole: !!whole, better: (to - from) * better > 0 });
   }
   out.sort((x, y) => Math.abs(y.pct) - Math.abs(x.pct));
-  for (const n of a.notes || []) out.unshift({ key: 'note', label: n, better: null });
+  for (const n of [...(a.notes || [])].reverse()) out.unshift(typeof n === 'string' ? { key: 'note', label: n, better: null } : { key: 'note', label: n.text, better: n.better });
   if (!a.notes && modsFor(weaponDef.id, attachmentId).suppressed) out.unshift({ key: 'note', label: 'Suppressed: off the minimap', better: true });
   return out;
 }

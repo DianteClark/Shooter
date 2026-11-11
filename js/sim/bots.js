@@ -15,7 +15,7 @@ import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam 
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
-import { isAvailable } from '../shared/attachments.js';
+import { isAvailable, availableFor } from '../shared/attachments.js';
 import { SND } from '../shared/modes.js';
 
 const DEG = Math.PI / 180;
@@ -196,17 +196,25 @@ const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg'
 const BOT_KIT_SLOTS = { recruit: 1, regular: 2, veteran: 3, elite: 4 };
 
 // The kit a bot of this tier carries on this gun: recruits only sometimes have one attachment, elites a full kit.
+// V11: a bot that knows the gun uses what was made for it. Regulars fit the gun's first signature attachment on every
+// other life of the deal (i), veterans always, elites every signature; a veteran or elite on one deal in three runs
+// the gun's conversion kit instead (its `set.botUse` changes how the bot fights with it). The class kit fills the
+// slots that are left, up to the tier's count, so a tier never carries more parts than before.
 export function botAttachments(weaponId, skill, i) {
+  const own = availableFor(weaponId).filter(a => a.kind);
+  const sigs = own.filter(a => a.kind === 'sig'), conv = own.find(a => a.kind === 'kit');
   const kits = BOT_KITS[weaponId] || BOT_KITS[KIT_FALLBACK[WEAPONS[weaponId]?.category]];
-  if (!kits || (skill === 'recruit' && i % 2 === 1)) return {};
-  const kit = kits[i % kits.length];
+  if (skill === 'recruit' && i % 2 === 1) return {};
   const keep = BOT_KIT_SLOTS[skill] ?? 2;
   const out = {};
   let n = 0;
-  for (const slot in kit) {
-    if (!isAvailable(weaponId, kit[slot])) continue;     // A borrowed kit keeps only what this gun can take.
-    if (n++ >= keep) break;
-    out[slot] = kit[slot];
+  const fit = (slot, id) => { if (n < keep && !out[slot] && isAvailable(weaponId, id)) { out[slot] = id; n++; } };
+  if (conv && (skill === 'veteran' || skill === 'elite') && i % 3 === 2) fit(conv.slot, conv.id);
+  const nSig = skill === 'elite' ? sigs.length : skill === 'veteran' ? 1 : skill === 'regular' && i % 2 === 0 ? 1 : 0;
+  for (const a of sigs.slice(0, nSig)) fit(a.slot, a.id);
+  if (kits) {
+    const kit = kits[i % kits.length];
+    for (const slot in kit) fit(slot, kit[slot]);     // A borrowed kit keeps only what this gun can take.
   }
   return out;
 }

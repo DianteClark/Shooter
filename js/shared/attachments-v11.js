@@ -10,7 +10,8 @@
 //         settleFrom, spinupShots, spinupFrom, chargeTime, burstGap, boltKick, adsGate, lunge, falloffMin, heatLockout).
 // set:    fields replaced outright, applied before the mods (fire mode, pellets, falloff, botUse...). A field set to
 //         undefined is removed (a kit that takes the bolt kick or the wind-up away).
-// notes:  what `set` does, in words, for the gunsmith (mode changes have no number to show).
+// notes:  what `set` does, in words, for the gunsmith (mode changes have no number to show): a string (neither better
+//         nor worse) or {text, better}.
 // look:   the part the gun model draws for it, as {slot: existing attachment id}. Uses parts each gun's own model
 //         already knows how to fit, so nothing floats; a kit may also fill an empty slot's look.
 
@@ -60,7 +61,7 @@ const LIST = [
     'An integrally suppressed Shunter: stealth without the Hush Can\'s weight.',
     'Suppressed with no handling cost. Shorter range and a slower rate of fire.',
     { suppressed: true, range: 0.75, rpm: 0.93 },
-    { notes: ['Suppressed: off the minimap'], look: { barrel: 'suppressor' } }),
+    { notes: [{ text: 'Suppressed: off the minimap', better: true }], look: { barrel: 'suppressor' } }),
 
   sig('s_lightwheel', 'rampar', 'grip', 'Light Flywheel', 7,
     'Takes the sting out of the Flywheel\'s slow first rounds.',
@@ -91,7 +92,7 @@ const LIST = [
     { magazine: 2, rpm: 0.92, reload: 1.55, moveMult: 0.95, adsTime: 1.1 },
     { notes: ['72-round drum'], look: { mag: 'drummag' } }),
 
-  sig('s_rattle', 'pdw', 'mag', 'Rattle Spring', 16,
+  sig('s_rattle', 'pdw', 'mag', 'Rattle Spring', 27,
     'Makes the fastest kill in a room faster still.',
     'Fires faster. Much more recoil sway, fewer rounds.',
     { rpm: 1.08, patternAmp: 1.3, magazine: 0.86 }, { look: { mag: 'speedmag' } }),
@@ -100,7 +101,7 @@ const LIST = [
     'Damage holds up better past 14 m. Wider from the hip, slower out of a sprint.',
     { falloffMin: 1.2, range: 1.1, hipSpread: 1.1, sprintToFire: 1.1 }, { look: { barrel: 'compensator' } }),
 
-  sig('s_needlesight', 'tacsmg', 'optic', 'Needle Sight', 16,
+  sig('s_needlesight', 'tacsmg', 'optic', 'Needle Sight', 25,
     'Makes the SMG you aim even more of a laser.',
     'Tighter aimed fire, quicker to aim. Very wide from the hip, slower while aimed.',
     { adsSpread: 0.75, adsTime: 0.92, hipSpread: 1.3, adsMoveMult: 0.85 }, { look: { optic: 'reflex' } }),
@@ -109,7 +110,7 @@ const LIST = [
     'Damage holds further and fades less. Wide from the hip, slower on foot.',
     { range: 1.15, falloffMin: 1.12, hipSpread: 1.25, moveMult: 0.97 }, { look: { barrel: 'longbarrel' } }),
 
-  sig('s_ramrounds', 'heavysmg', 'mag', 'Ram Rounds', 16,
+  sig('s_ramrounds', 'heavysmg', 'mag', 'Ram Rounds', 25,
     'The bruiser that shoots through the crate you hide behind.',
     'Keeps more damage through cover. Slower fire, fewer rounds.',
     { penetrate: 1.35, rpm: 0.92, magazine: 0.85 }, { look: { mag: 'apmag' } }),
@@ -122,15 +123,15 @@ const LIST = [
     'Trades the Murmur\'s silence for real reach.',
     'No longer suppressed: shows on the minimap and is loud. Reaches much further and fades less.',
     { range: 1.3, falloffMin: 1.15 },
-    { set: { suppressed: false }, notes: ['Not suppressed: shows on the minimap'], look: { barrel: 'compensator' } }),
+    { set: { suppressed: false }, notes: [{ text: 'Not suppressed: shows on the minimap', better: false }], look: { barrel: 'compensator' } }),
 
-  sig('s_gyro', 'drumsmg', 'grip', 'Hopper Gyro', 16,
+  sig('s_gyro', 'drumsmg', 'grip', 'Hopper Gyro', 25,
     'Keeps a 64-round pan on target to the last round.',
     'Much less bloom and sway. Heavier on foot, slower out of a sprint.',
     { bloomPerShot: 0.7, patternAmp: 0.8, moveMult: 0.96, sprintToFire: 1.15 }, { look: { grip: 'vertical' } }),
 
   // ---------------- Shotgun ----------------
-  sig('s_breachpump', 'shotgun', 'grip', 'Breach Pump', 14,
+  sig('s_breachpump', 'shotgun', 'grip', 'Breach Pump', 27,
     'A second shell before they recover from the first.',
     'Pumps faster. Slower to swap, slower on foot.',
     { rpm: 1.15, swapTime: 1.1, moveMult: 0.97 }, { look: { grip: 'angled' } }),
@@ -147,7 +148,7 @@ const LIST = [
       notes: ['Fires a single slug'], look: { barrel: 'rifled' },
     }),
 
-  sig('s_runnerchoke', 'autoshot', 'barrel', 'Runner\'s Choke', 14,
+  sig('s_runnerchoke', 'autoshot', 'barrel', 'Runner\'s Choke', 26,
     'Tightens the Squall\'s fan for the shot you take on the run.',
     'Tighter from the hip, a little more reach. Fires slower.',
     { hipSpread: 0.85, range: 1.08, rpm: 0.88 }, { look: { barrel: 'choke' } }),
@@ -156,7 +157,7 @@ const LIST = [
     'More shells. A long reload, heavier on foot.',
     { magazine: 1.6, reload: 1.3, moveMult: 0.95 }, { look: { mag: 'extmag' } }),
 
-  sig('s_twintriggers', 'coach', 'grip', 'Twin Triggers', 14,
+  sig('s_twintriggers', 'coach', 'grip', 'Twin Triggers', 26,
     'Both barrels before they can turn.',
     'The second barrel follows much faster. Wider fan, slower reload.',
     { rpm: 1.6, hipSpread: 1.15, adsSpread: 1.1, reload: 1.15 }, { look: { grip: 'wrap' } }),
@@ -166,7 +167,7 @@ const LIST = [
     { range: 1.25, adsSpread: 0.85, hipSpread: 1.1 },
     { set: { pellets: 6, damage: 30 }, notes: ['Six heavy pellets'], look: { mag: 'speedmag' } }),
 
-  sig('s_sabot', 'slug', 'mag', 'Sabot Slugs', 14,
+  sig('s_sabot', 'slug', 'mag', 'Sabot Slugs', 27,
     'Railspike at its best: through cover and down a lane.',
     'Keeps more damage through cover and reaches further. Fewer shells, slower reload.',
     { penetrate: 1.15, range: 1.15, magazine: 0.67, reload: 1.1 }, { look: { mag: 'speedmag' } }),
@@ -183,12 +184,12 @@ const LIST = [
       notes: ['Fires buckshot'], look: { mag: 'extmag' },
     }),
 
-  sig('s_boxtwelve', 'magshot', 'mag', 'Box Twelve', 14,
+  sig('s_boxtwelve', 'magshot', 'mag', 'Box Twelve', 26,
     'Twelve shells in a box: the shotgun that never pauses.',
     'Half again as many shells. Slower reload, heavier, slower to aim.',
     { magazine: 1.5, reload: 1.25, moveMult: 0.96, adsTime: 1.06 }, { look: { mag: 'extmag' } }),
 
-  sig('s_needlechoke', 'flechette', 'barrel', 'Needle Choke', 14,
+  sig('s_needlechoke', 'flechette', 'barrel', 'Needle Choke', 26,
     'Flechettes keep their bite much further down the sights.',
     'Damage fades far less and reaches further, tighter aimed. Wide from the hip, slower to aim.',
     { falloffMin: 1.4, range: 1.2, adsSpread: 0.8, hipSpread: 1.25, adsTime: 1.08 }, { look: { barrel: 'choke' } }),
@@ -300,7 +301,7 @@ const LIST = [
   sig('s_hollowpoint', 'hushdmr', 'mag', 'Hollow Points', 19,
     'Hits harder in the open; cover now stops it.',
     'More damage per round. Cover stops every round, fewer rounds.',
-    { damage: 1.12, magazine: 0.8 }, { set: { penetrate: undefined }, notes: ['Cover stops it'], look: { mag: 'speedmag' } }),
+    { damage: 1.12, magazine: 0.8 }, { set: { penetrate: undefined }, notes: [{ text: 'Cover stops every round', better: false }], look: { mag: 'speedmag' } }),
 
   // ---------------- Sniper ----------------
   sig('s_heavybolt', 'sniper', 'grip', 'Heavy Bolt', 16,
@@ -314,9 +315,9 @@ const LIST = [
     { notes: ['Semi-automatic'], look: { mag: 'extmag' } }),
 
   sig('s_siege', 'antimat', 'mag', 'Siege Rounds', 16,
-    'Monolith through two crates and out the other side.',
-    'Keeps more damage through cover. Fewer rounds, slower reload.',
-    { penetrate: 1.15, magazine: 0.75, reload: 1.15 }, { look: { mag: 'apmag' } }),
+    'A Monolith round that kills unaimed, for the rusher who gets too close.',
+    'Hip and half-aimed shots hit much harder. Fewer rounds, slower reload, less reach.',
+    { adsGate: 1.45, magazine: 0.75, reload: 1.15, range: 0.85 }, { look: { mag: 'apmag' } }),
   sig('s_monobrake', 'antimat', 'barrel', 'Monolith Brake', M1,
     'Stay on the scope after the shot.',
     'Firing knocks you far less out of the scope. Slower to aim, heavier on foot.',
@@ -350,12 +351,12 @@ const LIST = [
     { damage: 1.15, chargeTime: 1.6, moveMult: 0.96 }, { look: { barrel: 'heavybarrel' } }),
 
   // ---------------- Pistol ----------------
-  sig('s_snapholster', 'pistol', 'grip', 'Snap Holster', 10,
+  sig('s_snapholster', 'pistol', 'grip', 'Snap Holster', 24,
     'The swap that wins the fight your primary started.',
     'Comes up and fires out of a sprint much faster. Looser aimed fire, shorter range.',
     { swapTime: 0.6, sprintToFire: 0.8, adsSpread: 1.25, range: 0.85 }, { look: { grip: 'wrap' } }),
 
-  sig('s_speedloader', 'revolver', 'mag', 'Speedloader', 10,
+  sig('s_speedloader', 'revolver', 'mag', 'Speedloader', 25,
     'All six back in one motion.',
     'Reloads much faster. Heavier on foot, slower to swap.',
     { reload: 0.6, moveMult: 0.97, swapTime: 1.15 }, { look: { mag: 'speedmag' } }),
@@ -364,7 +365,7 @@ const LIST = [
     'Much less kick and bloom. Fires slower, slower to swap.',
     { patternAmp: 0.7, bloomPerShot: 0.7, rpm: 0.9, swapTime: 1.15 }, { look: { barrel: 'ported' } }),
 
-  sig('s_gnatstock', 'machpistol', 'grip', 'Gnat Stock', 10,
+  sig('s_gnatstock', 'machpistol', 'grip', 'Gnat Stock', 25,
     'A panic button you can aim.',
     'Much less sway, tighter aimed fire. Slow to swap, a little slower on foot.',
     { patternAmp: 0.65, adsSpread: 0.8, swapTime: 1.35, moveMult: 0.98 }, { look: { grip: 'knurl' } }),
@@ -374,37 +375,37 @@ const LIST = [
     'Fires three-round bursts with a bigger magazine. Less damage per round.',
     { damage: 0.84, rpm: 1.1, magazine: 1.29 },
     { set: { burst: { count: 3, gap: 0.065 } }, notes: ['Fires three-round bursts'], look: { grip: 'wrap' } }),
-  sig('s_longslide', 'deuce', 'barrel', 'Long Slide', 13,
+  sig('s_longslide', 'deuce', 'barrel', 'Long Slide', 26,
     'A double tap that lands together further out.',
     'Reaches further, the pair lands closer together. Slower to swap and out of a sprint.',
     { range: 1.15, burstGap: 0.85, swapTime: 1.2, sprintToFire: 1.15 }, { look: { barrel: 'longbarrel' } }),
 
-  sig('s_spreader', 'scatter', 'barrel', 'Bramble Spreader', 10,
+  sig('s_spreader', 'scatter', 'barrel', 'Bramble Spreader', 25,
     'More pellets, wider: a doorway gun that cannot miss.',
     'Eight pellets in a wider fan. Shorter reach.',
     { hipSpread: 1.25, adsSpread: 1.2, range: 0.85 },
     { set: { pellets: 8, damage: 14.5 }, notes: ['Eight pellets'], look: { barrel: 'compensator' } }),
 
-  sig('s_crossfire', 'akimbo', 'grip', 'Crossfire Grips', 10,
+  sig('s_crossfire', 'akimbo', 'grip', 'Crossfire Grips', 25,
     'Both guns on one point.',
     'Tighter from the hip. Fires slower, slower to swap.',
     { hipSpread: 0.85, rpm: 0.9, swapTime: 1.15 }, { look: { grip: 'wrap' } }),
 
-  sig('s_framingdrive', 'nailer', 'mag', 'Framing Drive', 10,
+  sig('s_framingdrive', 'nailer', 'mag', 'Framing Drive', 25,
     'Heavier nails: fewer to finish.',
     'More damage per nail. Fires slower, fewer nails.',
     { damage: 1.15, rpm: 0.85, magazine: 0.75 }, { look: { mag: 'speedmag' } }),
 
   // ---------------- Launcher ----------------
-  sig('s_twintube', 'launcher', 'mag', 'Twin Tube', 13,
+  sig('s_twintube', 'launcher', 'mag', 'Twin Tube', 24,
     'Two rockets before a reload.',
     'A second rocket. A much longer reload, heavier on foot.',
     { magazine: 2, reload: 1.6, moveMult: 0.93 }, { look: { mag: 'warhead' } }),
-  sig('s_pumpdrum', 'thumper', 'mag', 'Pump Drum', 13,
+  sig('s_pumpdrum', 'thumper', 'mag', 'Pump Drum', 24,
     'Six grenades for holding a room.',
     'More grenades. Slower reload, heavier on foot.',
     { magazine: 1.5, reload: 1.3, moveMult: 0.96 }, { look: { mag: 'warhead' } }),
-  sig('s_tightpack', 'salvo', 'barrel', 'Tight Pack', 13,
+  sig('s_tightpack', 'salvo', 'barrel', 'Tight Pack', 24,
     'All three rockets on one doorway.',
     'Rockets leave closer together and fly truer. Smaller blasts.',
     { burstGap: 0.6, adsSpread: 0.8, blastRadius: 0.85 }, { look: { barrel: 'longtube' } }),

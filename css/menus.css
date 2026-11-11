@@ -842,6 +842,8 @@
 #ui .att-dl li.down::before { content: '\25BC'; color: var(--c-red); }
 #ui .att-dl li.note { color: var(--c-sodium); }
 #ui .att-dl li.note::before { content: '\25C6'; color: var(--c-sodium); }
+#ui .att-dl li.note.up::before { content: '\25B2'; color: var(--c-go); }
+#ui .att-dl li.note.down::before { content: '\25BC'; color: var(--c-red); }
 #ui .att-dl li.up b { color: var(--c-go); font-weight: 400; }
 #ui .att-dl li.down b { color: var(--c-red); font-weight: 400; }
 #ui .gl-att { display: inline; margin-left: 6px; font: 400 9.5px/1 var(--f-plate); color: var(--c-sodium); }

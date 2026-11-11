@@ -3,6 +3,8 @@
 // the streak section is the one players ask about most.
 import { STREAKS, STREAK_ROLE_NAME, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
 import { esc } from './widgets.js';
+import { ATTACHMENTS } from '../shared/attachments.js';
+import { WEAPONS } from '../shared/weapons.js';
 import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
 
@@ -40,6 +42,9 @@ const PANELS = {
       ${stat('Settling (Stanchion)', 'Its first rounds scatter and every round after lands tighter, until a long burst is the most accurate automatic fire there is. Stop firing and it has to settle again. The Flywheel does the same with fire rate: it starts slow and winds up.')}
       ${stat('Heat rifle (Kiln)', 'Works like an LMG heat bar on a rifle: no bloom at all and a 75-round magazine, but hold it down and it locks. Short strings.')}
       ${stat('Melee (Gaff, Maul)', 'Sidearm-slot weapons with no ammunition and no sound. A swing reaches about three metres along your aim and throws you a step forward. The Gaff kills in two quick swings, the Maul in one slow one.')}
+      ${stat('Attachments', 'Four slots: optic, barrel, magazine, grip, one part each. Every part gives something and costs something: the Gunsmith lists exactly what it moves, green for better and red for worse. Parts unlock as the gun levels up; a few open on its mastery ladder after level 30.')}
+      ${stat('Signature attachments', 'Made for one gun and leaning into what it already does: a longer belt for the Stanchion, a faster wind-up for the Flywheel, a hair trigger for the Foreman. Marked <b>Signature</b> in the Gunsmith.')}
+      ${stat('Conversion kits', `One slot that changes how a gun plays, at a real price. Marked <b>Kit</b> in the Gunsmith. ${Object.values(ATTACHMENTS).filter(a => a.kind === 'kit').map(a => `<b>${esc(a.name)}</b> (${esc(WEAPONS[a.weapons[0]].name)}): ${esc(a.for)}`).join(' ')}`)}
     </dl>`,
   gear: () => `
     <dl class="help-stats scroll-y">
