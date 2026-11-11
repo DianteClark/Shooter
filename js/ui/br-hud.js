@@ -14,7 +14,7 @@
 import { BR, MODES } from '../shared/modes.js';
 import { MAX_HP, TEAMS, WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { BR_KIND, itemName } from '../sim/br.js';
+import { BR_KIND, itemName, AMMO_TYPES } from '../sim/br.js';
 import { spectate } from '../sim/snd.js';
 import { esc } from './widgets.js';
 import { icon } from './icons.js';
@@ -105,6 +105,19 @@ const CSS = `
 .br-map-close { height: 36px; border: 0; padding: 0 14px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
 .hud.br-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
 .hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
+/* Hands: both guns and fists as three slots over the ammo readout, and the ammo pouch (rounds for guns not in hand). */
+.br-hands { position: absolute; left: 0; bottom: calc(100% + 4px); display: flex; gap: 3px; align-items: flex-end; pointer-events: auto; }
+.br-slot { position: relative; width: 50px; height: 30px; border: 0; padding: 2px 3px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  color: var(--c-chalk); background: linear-gradient(180deg, rgba(42,51,61,.9), rgba(16,20,26,.85)); box-shadow: var(--hud-edge), inset 0 2px 0 var(--rar, rgba(231,234,228,.25));
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px); }
+.br-slot small { font: 9px/1 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.br-slot.on { background: linear-gradient(180deg, rgba(74,62,30,.95), rgba(32,28,16,.9)); box-shadow: var(--hud-edge), inset 0 2px 0 var(--rar, var(--c-sodium)), inset 0 -2px 0 var(--c-sodium); }
+.br-slot.on small { color: var(--c-chalk); }
+.br-slot.empty { opacity: .45; }
+.br-slot:active { filter: brightness(1.4); }
+.br-slot.fist { width: 38px; }
+.br-pouch { display: flex; flex-direction: column; gap: 1px; margin-left: 3px; font: 9px/1.05 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); text-shadow: var(--text-lift); white-space: nowrap; }
+.br-pouch b { color: var(--c-chalk); font-weight: 400; }
 `;
 
 export class BrHud {
@@ -149,6 +162,13 @@ export class BrHud {
         </div>
       </div>`;
     hud.el.appendChild(el);
+    // The hand slots sit on the ammo readout, so they move with it (left-handed layouts too).
+    this.handsEl = document.createElement('div');
+    this.handsEl.className = 'br-hands';
+    this.handsEl.hidden = true;
+    this.handsEl.innerHTML = [0, 1, 2].map(k => `<button class="br-slot${k === 2 ? ' fist' : ''}" data-tap="1" data-k="${k}"><span class="gi"></span><small></small></button>`).join('') + '<div class="br-pouch"></div>';
+    hud.el.querySelector('.arms')?.appendChild(this.handsEl);
+    for (const b of this.handsEl.querySelectorAll('.br-slot')) b.addEventListener('click', e => { e.stopPropagation(); this.cmd?.('slot', { k: Number(b.dataset.k) }); });
     const $ = s => el.querySelector(s);
     this.$ = $;
     this.aliveEl = $('.br-alive b'); this.squadsEl = $('.br-squads b');
@@ -190,6 +210,7 @@ export class BrHud {
   prepare(on, { map, roster, localId, mode }) {
     this.on = on;
     this.el.hidden = !on;
+    this.handsEl.hidden = true;
     this.hud.el.classList.toggle('br-on', on);
     this.hud.el.classList.remove('br-down-on');
     if (!on) return;
@@ -287,11 +308,41 @@ export class BrHud {
       }
     }
 
+    this.#hands(view, me, inv, air);
     // A ground gun in reach while both hands hold guns: tap to swap the one in hand for it.
     this.#take(view, me, air);
     this.#squad(view, me);
     this.#downed(view, me, inv);
     this.#out(view, me);
+  }
+
+  // Three slots: each hand's gun (rarity on top, rounds in it / spare) and fists. The one in use is lit.
+  #hands(view, me, inv, air) {
+    const ps = view.brPs, st = view.brStash;
+    const show = !!ps && me.alive && !me.downed && !air;
+    if (this.c.handsOn !== show) { this.c.handsOn = show; this.handsEl.hidden = !show; }
+    if (!show) return;
+    const gun = s => (st?.slot === s ? { def: st.def, ammo: st.ammo, res: st.res } : ps.defs[s]?.id !== 'knife' ? { def: ps.defs[s], ammo: ps.ammo[s], res: ps.reserve[s] } : null);
+    const g0 = gun(0), g1 = gun(1);
+    const fists = ps.weapon === 'knife';
+    const pouch = inv?.pouch ?? null;
+    const key = `${g0?.def.id}|${g0?.def.rarity}|${g0?.ammo}|${g0?.res}|${g1?.def.id}|${g1?.def.rarity}|${g1?.ammo}|${g1?.res}|${ps.slot}|${fists}|${pouch}`;
+    if (this.c.hands === key) return;
+    this.c.hands = key;
+    const btns = this.handsEl.querySelectorAll('.br-slot');
+    [g0, g1].forEach((g, s) => {
+      const b = btns[s];
+      b.classList.toggle('on', !fists && ps.slot === s && !!g);
+      b.classList.toggle('empty', !g);
+      b.style.setProperty('--rar', g ? BR.rarityCss[g.def.rarity ?? 0] : 'rgba(231,234,228,.18)');
+      b.querySelector('.gi').innerHTML = g ? icon(g.def.id, { size: 14 }) : '';
+      b.querySelector('small').textContent = !g ? 'Empty' : g.res > 900 || g.def.unlimitedReserve ? `${g.ammo}` : `${g.ammo}/${g.res}`;
+    });
+    btns[2].classList.toggle('on', fists);
+    if (!btns[2].dataset.done) { btns[2].dataset.done = '1'; btns[2].querySelector('.gi').innerHTML = icon('knife', { size: 14 }); btns[2].querySelector('small').textContent = 'Fists'; }
+    const P = ['Light', 'Rifle', 'Shell', 'Heavy', 'Rocket'];
+    this.handsEl.querySelector('.br-pouch').innerHTML = pouch ? pouch.map((n, t) => (n > 0 ? `<span>${P[t]} <b>${n}</b></span>` : '')).join('') : '';
+    void AMMO_TYPES;
   }
 
   #plates(me) {

@@ -45,6 +45,10 @@ export const AMMO_TYPES = ['light', 'rifle', 'shell', 'heavy', 'rocket'];
 export const AMMO_NAMES = { light: 'Light ammo', rifle: 'Rifle ammo', shell: 'Shells', heavy: 'Heavy ammo', rocket: 'Rockets' };
 const AMMO_OF = { SMG: 'light', Pistol: 'light', Assault: 'rifle', LMG: 'rifle', Shotgun: 'shell', Marksman: 'heavy', Sniper: 'heavy', Launcher: 'rocket' };
 const AMMO_PACK = { light: 40, rifle: 45, shell: 12, heavy: 14, rocket: 2 };
+// The ammo pouch: rounds for guns you are not holding are kept, up to these, and top up a gun of that type when you take
+// one (docs/BR.md "Inventory").
+export const POUCH_CAP = { light: 120, rifle: 135, shell: 36, heavy: 42, rocket: 4 };
+const POUCH_CAPS = AMMO_TYPES.map(t => POUCH_CAP[t]);
 export const ammoOf = id => AMMO_OF[WEAPON_CATEGORY[id]] ?? null;
 const TACTICAL_IDS = Object.keys(TACTICALS), LETHAL_IDS = Object.keys(LETHALS);
 const EQUIP_CAP = 3;
@@ -349,6 +353,7 @@ export class BrRules {
       p.br = {
         armor: 0, plates: 0, meds: 0, kits: 0, guns: [null, null], useK: null, useT: 0, useDur: 0,
         reviveT: 0, downedBy: null, downWeapon: null, out: false, place: 0, dmg: 0, revives: 0, knocks: 0,
+        pouch: [0, 0, 0, 0, 0], stash: null,      // Ammo kept by type; the gun put away while fists are out {slot, ammo, res}.
         glideT: 0, deathT: 0, jumpAt: 0.5, dropX: p0.x, dropZ: p0.z, follow: null, landed: false,
       };
       this._startKit(p);
@@ -376,11 +381,24 @@ export class BrRules {
   _camo(p, id) { return p.isBot ? 'none' : (p.loadout?.camos?.[id] ?? 'none'); }
 
   _invGuns(p) {
-    const ps = p.ps;
     return [0, 1].map(s => {
       const g = p.br.guns[s];
-      return g ? [WEAPON_IDS.indexOf(g.id), g.r, packKit(g.kit), ps.ammo[s], ps.reserve[s]] : null;
+      return g ? [WEAPON_IDS.indexOf(g.id), g.r, packKit(g.kit), this._ammoIn(p, s), this._resIn(p, s)] : null;
     });
+  }
+
+  // A hand's gun is held unless it is put away for fists (stash). Its rounds live in the stash meanwhile.
+  _held(p, s) { return !!p.br.guns[s] && p.br.stash?.slot !== s; }
+  _ammoIn(p, s) { return p.br.stash?.slot === s ? p.br.stash.ammo : p.ps.ammo[s]; }
+  _resIn(p, s) { return p.br.stash?.slot === s ? p.br.stash.res : p.ps.reserve[s]; }
+
+  // Rounds into the pouch for their type, up to its cap. Returns what did not fit.
+  _toPouch(p, type, n) {
+    const t = AMMO_TYPES.indexOf(type);
+    if (t < 0 || n <= 0) return n;
+    const k = Math.max(0, Math.min(n, POUCH_CAPS[t] - p.br.pouch[t]));
+    p.br.pouch[t] += k;
+    return n - k;
   }
 
   // ---- Commands from a phone ----
@@ -404,8 +422,38 @@ export class BrRules {
       case 'med': return this._startUse(p, 'med');
       case 'self': return this._startUse(p, 'self');
       case 'cancel': p.br.useK = null; return true;
+      case 'fists': return this._fists(p, msg);
     }
     return false;
+  }
+
+  // Fists as the third slot: the gun in a hand is put away (its rounds kept) and fists come out; again, and it is back.
+  // The phone does it at once and tells the host, with the rounds it put away.
+  _fists(p, msg) {
+    const b = p.br, ps = p.ps;
+    if (p.brAir || p.downed) return false;
+    if (msg.on) {
+      const slot = msg.slot === 1 ? 1 : 0, g = b.guns[slot];
+      if (!g || b.stash) return false;
+      const def = brDef(g.id, g.kit, g.r);
+      b.stash = { slot, ammo: Math.max(0, Math.min(def.magazine, msg.ammo | 0)), res: Math.max(0, Math.min(brAmmoCap(def), msg.res | 0)) };
+      brArm(ps, slot, KNIFE);
+      ps.slot = slot; ps.weapon = KNIFE;
+    } else {
+      const st = b.stash;
+      if (!st) return false;
+      b.stash = null;
+      const g = b.guns[st.slot];
+      if (!g) return true;
+      brArm(ps, st.slot, g.id, g.kit, g.r, st.ammo, st.res);
+      ps.slot = st.slot; ps.weapon = g.id;
+      // The pouch tops the gun back up.
+      const t = AMMO_TYPES.indexOf(ammoOf(g.id)), def = ps.defs[st.slot];
+      const n = t >= 0 && !def.unlimitedReserve ? Math.min(b.pouch[t], brAmmoCap(def) - ps.reserve[st.slot]) : 0;
+      if (n > 0) { b.pouch[t] -= n; ps.reserve[st.slot] += n; if (!p.isBot) this.sim._emit({ t: 'bramm', id: p.id, slot: st.slot, n }); }
+    }
+    this.sim._metaUntil = this.sim.tick + 2;
+    return true;
   }
 
   _startUse(p, kind) {
@@ -667,7 +715,7 @@ export class BrRules {
     p.ackX = ps.x; p.ackZ = ps.z; p.ackT = 1.5;
     if (p.alive) {
       sim._emit({ t: 'spawn', id: p.id, x: Math.round(ps.x * 100) / 100, z: Math.round(ps.z * 100) / 100, aim: Math.round(ps.aim * 100) / 100 });
-      sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p), air: p.brAir, glideT: p.br.glideT });
+      sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p), air: p.brAir, glideT: p.br.glideT, fists: p.br.stash ? p.br.stash.slot : -1 });
     }
   }
 
@@ -751,10 +799,11 @@ export class BrRules {
         const type = AMMO_TYPES[it.v];
         let left = it.n;
         for (const s of [ps.slot, 1 - ps.slot]) {
-          if (!left || !b.guns[s] || ammoOf(b.guns[s].id) !== type) continue;
+          if (!left || !this._held(p, s) || ammoOf(b.guns[s].id) !== type) continue;
           const got = brAmmo(ps, s, left);
           if (got > 0) { left -= got; if (!p.isBot) sim._emit({ t: 'bramm', id: p.id, slot: s, n: got }); }
         }
+        left = this._toPouch(p, type, left);       // The rest is kept for a gun of that type.
         if (left === it.n) return;
         if (left > 0) { it.n = left; this._removeItem(it); this._addItem({ ...it, kit: NO_ATTACHMENTS }); return; }
         took = true; break;
@@ -805,13 +854,21 @@ export class BrRules {
     if (slot !== 0 && slot !== 1) slot = !b.guns[0] ? 0 : !b.guns[1] ? 1 : ps.slot;
     const old = b.guns[slot];
     const id = WEAPON_IDS[it.v];
+    const oldAmmo = this._ammoIn(p, slot), oldRes = this._resIn(p, slot);
+    if (b.stash?.slot === slot) b.stash = null;
     this._removeItem(it);
     if (old) {
-      this._addItem({ kind: K.gun, v: WEAPON_IDS.indexOf(old.id), r: old.r, n: 1, kit: old.kit, ammo: ps.ammo[slot], res: ps.reserve[slot],
+      // The old gun goes down with its magazine; its spare rounds go in the pouch, as far as they fit.
+      const keep = brDef(old.id).unlimitedReserve ? oldRes : this._toPouch(p, ammoOf(old.id), oldRes);
+      this._addItem({ kind: K.gun, v: WEAPON_IDS.indexOf(old.id), r: old.r, n: 1, kit: old.kit, ammo: oldAmmo, res: keep,
         x: it.x, z: it.z });
     }
     const def = brDef(id, it.kit, it.r);
-    const ammo = it.ammo ?? def.magazine, res = it.res ?? def.magazine * (1 + (it.r >> 1));
+    const ammo = it.ammo ?? def.magazine;
+    let res = it.res ?? def.magazine * (1 + (it.r >> 1));
+    // Topped up from the pouch.
+    const pt = AMMO_TYPES.indexOf(ammoOf(id));
+    if (pt >= 0 && !def.unlimitedReserve) { const n = Math.max(0, Math.min(b.pouch[pt], brAmmoCap(def) - res)); b.pouch[pt] -= n; res += n; }
     b.guns[slot] = { id, r: it.r, kit: it.kit };
     brArm(ps, slot, id, it.kit, it.r, ammo, res);
     p.kits[slot] = it.kit;
@@ -853,11 +910,14 @@ export class BrRules {
     for (let s = 0; s < 2; s++) {
       const g = b.guns[s];
       if (!g) continue;
-      drops.push({ kind: K.gun, v: WEAPON_IDS.indexOf(g.id), r: g.r, n: 1, kit: g.kit, ammo: ps.ammo[s], res: 0 });
-      const type = ammoOf(g.id);
-      if (type && ps.reserve[s] > 0) drops.push({ kind: K.ammo, v: AMMO_TYPES.indexOf(type), r: 0, n: Math.min(ps.reserve[s], AMMO_PACK[type] * 3) });
+      drops.push({ kind: K.gun, v: WEAPON_IDS.indexOf(g.id), r: g.r, n: 1, kit: g.kit, ammo: this._ammoIn(p, s), res: 0 });
+      const type = ammoOf(g.id), res = this._resIn(p, s);
+      if (type && res > 0 && !brDef(g.id).unlimitedReserve) b.pouch[AMMO_TYPES.indexOf(type)] += res;
       b.guns[s] = null;
     }
+    b.stash = null;
+    b.pouch.forEach((n, t) => { if (n > 0) drops.push({ kind: K.ammo, v: t, r: 0, n: Math.min(n, AMMO_PACK[AMMO_TYPES[t]] * 3) }); });
+    b.pouch = [0, 0, 0, 0, 0];
     if (b.plates) drops.push({ kind: K.plate, v: 0, r: 0, n: b.plates });
     if (b.meds) drops.push({ kind: K.med, v: 0, r: 0, n: 1 });
     if (b.kits) drops.push({ kind: K.kit, v: 0, r: 4, n: 1 });
@@ -1227,7 +1287,8 @@ export class BrRules {
   _inv(p) {
     const b = p?.br;
     if (!b) return 0;
-    return [b.plates, b.meds, b.kits, USE_KINDS.indexOf(b.useK), Math.ceil(b.useT * 10), Math.ceil(b.useDur * 10), b.guns[0]?.r ?? -1, b.guns[1]?.r ?? -1];
+    return [b.plates, b.meds, b.kits, USE_KINDS.indexOf(b.useK), Math.ceil(b.useT * 10), Math.ceil(b.useDur * 10), b.guns[0]?.r ?? -1, b.guns[1]?.r ?? -1,
+      b.pouch, b.stash ? b.stash.slot : -1];
   }
 
   _stats() {
@@ -1271,9 +1332,10 @@ export class BrRules {
       const b = p.br, ps = p.ps;
       if (!b) return 0;
       const g = s => (b.guns[s] ? [WEAPON_IDS.indexOf(b.guns[s].id), b.guns[s].r, packKit(b.guns[s].kit)] : 0);
-      return [b.plates, b.meds, b.kits, g(0), g(1), ps.ammo[0], ps.reserve[0], ps.ammo[1], ps.reserve[1], idx(b.downedBy), USE_KINDS.indexOf(b.useK),
+      void ps;
+      return [b.plates, b.meds, b.kits, g(0), g(1), this._ammoIn(p, 0), this._resIn(p, 0), this._ammoIn(p, 1), this._resIn(p, 1), idx(b.downedBy), USE_KINDS.indexOf(b.useK),
         Math.round(b.useT * 10), Math.round(b.glideT * 10), Math.round(b.jumpAt * 1000), Math.round(b.dropX), Math.round(b.dropZ), idx(b.follow),
-        b.revives, Math.round(b.dmg), b.knocks, Math.round(b.deathT * 10)];
+        b.revives, Math.round(b.dmg), b.knocks, Math.round(b.deathT * 10), b.pouch, b.stash ? b.stash.slot : -1];
     });
     return [Math.round(this.t * 10), r1(this.from.x), r1(this.from.z), r1(this.from.r), this.dropsPlanned ? 1 : 0, per];
   }
@@ -1341,6 +1403,14 @@ export class BrRules {
         b.useDur = b.useK === 'plate' ? BR.plateTime : b.useK === 'med' ? BR.medTime : b.useK === 'self' ? BR.selfRevive : 0;
         b.glideT = e[12] / 10; b.jumpAt = e[13] / 1000; b.dropX = e[14]; b.dropZ = e[15]; b.follow = byIndex(e[16]);
         b.revives = e[17]; b.dmg = e[18]; b.knocks = e[19]; b.deathT = e[20] / 10;
+        if (Array.isArray(e[21])) b.pouch = e[21].slice(0, 5);
+        b.stash = null;
+        const fs = e[22] ?? -1;
+        if ((fs === 0 || fs === 1) && b.guns[fs]) {
+          b.stash = { slot: fs, ammo: ps.ammo[fs], res: ps.reserve[fs] };
+          brArm(ps, fs, KNIFE);
+          if (weapon === KNIFE || ps.slot === fs) { ps.slot = fs; ps.weapon = KNIFE; }
+        }
       }
       if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * 3; b.offZ = Math.sin(a) * 3; }
     });
@@ -1375,7 +1445,7 @@ export class BrRules {
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
     V.circle = this.circle; V.next = this.next; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.squadsLeft = squads; V.alive = alive; V.items = this.items; V.stats = this.stats; V.t = this.t;
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]] } : null;
+    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1 } : null;
     V.squad = this.squad;
     view.br = V;
   }
@@ -1397,7 +1467,7 @@ export class BrRules {
     V.stats = sim.tick % 30 === 0 || sim.phase === 'ended' || !V.stats ? this._stats() : V.stats;
     const me = sim.byId.get(view.localId);
     const inv = me && this._inv(me);
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]] } : null;
+    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1 } : null;
     view.br = V;
   }
 

@@ -135,6 +135,34 @@ async def main():
             back = await guest.evaluate(f"[{G}.match.brAir, {G}.match.ps.primary, {G}.match.localAlive, {G}.match.sim.br.items.filter(Boolean).length]")
             check(back[0] == 0 and back[1] == 'ar' and back[2], f'the guest rejoined into its own character ({back})')
             await guest.screenshot(path=f'{OUT}/net-guest-rejoined.png')
+            # Host migration: the host gives the guest two plates and a medkit, someone on another squad goes down, and a
+            # supply cache opens. Once a backup has gone out (every 3 s) the host's tab closes and the guest carries on.
+            await host.evaluate(f"""(() => {{ const sim = {G}.match.sim, g = sim.byId.get('{gid}'); g.br.plates = 2; g.br.meds = 1;
+              const foe = sim.players.find(p => p.team !== g.team && p.alive && p.isBot && !p.brAir && sim.players.some(q => q !== p && q.team === p.team && q.alive && !q.brAir));
+              if (foe) {{ foe.spawnProtect = 0; sim._damage(foe, g, 400, 'ar', 10); }}
+              const c = sim.br._addItem({{ kind: 7, v: 1, r: 3, n: 1, x: g.ps.x + 0.5, z: g.ps.z }}); sim.br._openChest(c); }})()""")
+            await guest.wait_for_timeout(4500)
+            before = await host.evaluate(f"""(() => {{ const sim = {G}.match.sim, b = sim.br; return {{ phase: b.phase, state: b.state, r: b.circle.r, nx: b.next.x, items: b.items.filter(Boolean).length,
+              downed: sim.players.filter(p => p.downed).map(p => p.id), plates: sim.byId.get('{gid}').br.plates }}; }})()""")
+            mirror = await guest.evaluate(f'{G}.match.sim.br.items.filter(Boolean).length')
+            pages['list'] = [guest]
+            await host.close()
+            await guest.wait_for_function(f'{G}.isHost && {G}.match?.isHost', timeout=60000)
+            after = await guest.evaluate(f"""(() => {{ const sim = {G}.match.sim, b = sim.br; return {{ phase: b.phase, state: b.state, r: b.circle.r, nx: b.next.x, items: b.items.filter(Boolean).length,
+              downed: sim.players.filter(p => p.downed).map(p => p.id), plates: sim.byId.get('{gid}').br.plates, auth: b.authority, tick: sim.tick, away: !!sim.byId.get('{hid}').away,
+              hostAlive: sim.byId.get('{hid}').alive, hostBot: !!sim.byId.get('{hid}').bot }}; }})()""")
+            print('     before', before)
+            print('     after ', after)
+            check(after['auth'] and after['phase'] == before['phase'] and abs(after['nx'] - before['nx']) < 0.5 and abs(after['r'] - before['r']) < 8, 'the new host restored the circle')
+            check(abs(after['items'] - mirror) <= 4, f"the new host kept the loot on the ground and the opened cache ({after['items']} / {mirror} mirrored, {before['items']} on the old host)")
+            check(after['plates'] == before['plates'], f"the new host kept the guest's plates ({after['plates']})")
+            check(set(before['downed']) <= set(after['downed']) or len(after['downed']) >= len(before['downed']) - 1, f"downs carried over ({before['downed']} -> {after['downed']})")
+            check(after['away'] and not after['hostBot'], 'the old host is held, never bot-driven')
+            t0 = after['tick']
+            await guest.wait_for_timeout(2000)
+            t1 = await guest.evaluate(f'{G}.match.sim.tick')
+            check(t1 > t0 + 20, f'the match runs on the new host ({t0} -> {t1})')
+            await guest.screenshot(path=f'{OUT}/net-migrated.png')
             juggler.cancel()
             await browser.close()
     except Exception as err:

@@ -15,7 +15,7 @@ import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore } from './ui/progress.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
-import { brMode, cleanSquad } from './ui/br-squad.js';
+import { brMode, cleanSquad as cleanBrSquad } from './ui/br-squad.js';
 import { cleanOperator, botOperator } from './ui/operators.js';
 import { Net, joinDiagnosis } from './net/net.js';
 import { LocalNet } from './net/local.js';
@@ -402,7 +402,7 @@ function renderLobby() {
 // Battle royale squad size for the room (js/ui/br-squad.js): the host's call, shown on the lobby and the vote.
 function setBrSquad(n) {
   if (!app.isHost || !app.net || app.vote?.winner != null) return;
-  app.lobby.brSquad = cleanSquad(Number(n));
+  app.lobby.brSquad = cleanBrSquad(Number(n));
   broadcastLobby();
   if (app.vote) { broadcastVote(); renderVote(); } else if (menuShows('lobby')) renderLobby();
 }
@@ -724,7 +724,7 @@ function guestLobbyMessage(msg) {
       inviteSettled();
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
-      app.lobby.brSquad = cleanSquad(msg.brSquad);
+      app.lobby.brSquad = cleanBrSquad(msg.brSquad);
       app.countdown = msg.countdown ?? null;
       app.public = !!msg.public;
       if (app.voice) updateVoiceTeam();

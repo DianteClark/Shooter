@@ -152,7 +152,7 @@ async def main():
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
-            for vw, vh in ((852, 393), (667, 375)):
+            for vw, vh in ((852, 393), (667, 375), (640, 360)):
                 await run(browser, vw, vh, failures, errors)
             await browser.close()
     finally:

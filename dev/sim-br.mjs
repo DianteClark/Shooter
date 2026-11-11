@@ -4,7 +4,7 @@
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
-import { SIM_HZ, MAX_HP } from '../js/shared/constants.js';
+import { SIM_HZ, MAX_HP, WEAPON_IDS, WEAPON_CATEGORY } from '../js/shared/constants.js';
 import { BR_KIND } from '../js/sim/br.js';
 import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
@@ -114,6 +114,23 @@ function units() {
   check(me.br.plates === 2 && !sim.br.items[plate.id], `plates picked up by walking over them`);
   check(me.br.guns[0]?.r === 4 && me.ps.weapon === me.br.guns[0].id, 'gun into the empty hand, and in hand');
   check(sim.drainEvents().some(e => e.t === 'brgive' && e.id === 'h1'), 'gun handed to the phone (brgive)');
+  // The ammo pouch keeps rounds for guns not in hand, and tops up a gun of that type when one is taken.
+  const shellsBefore = me.br.pouch[2];
+  sim.br._addItem({ kind: BR_KIND.ammo, v: 2, r: 0, n: 12, x: me.ps.x, z: me.ps.z });
+  for (let i = 0; i < 4; i++) sim.step(STEP);
+  check(me.br.pouch[2] === shellsBefore + 12, `shells for a gun not held go in the pouch (${me.br.pouch[2]})`);
+  const shotgun = WEAPON_IDS.find(id => WEAPON_CATEGORY[id] === 'Shotgun');
+  const sg = sim.br._addItem({ kind: BR_KIND.gun, v: WEAPON_IDS.indexOf(shotgun), r: 0, n: 1, x: me.ps.x, z: me.ps.z, kit: {} });
+  const resBefore = sim.byId.get('h1').ps.reserve[1];
+  sim.applyCommand('h1', { cmd: 'br', act: 'take', item: sg.id, slot: 1 });
+  check(me.br.guns[1]?.id === shotgun && me.br.pouch[2] < shellsBefore + 12, `a taken gun tops up from the pouch (pouch ${me.br.pouch})`);
+  void resBefore;
+  // Fists: the third slot puts the gun in hand away with its rounds, and brings it back.
+  me.ps.slot = 0; me.ps.weapon = me.ps.primary;
+  const held = me.ps.weapon, mag = me.ps.ammo[0];
+  check(sim.applyCommand('h1', { cmd: 'br', act: 'fists', on: 1, slot: 0, ammo: mag, res: me.ps.reserve[0] }) && me.ps.weapon === 'knife' && me.br.stash?.slot === 0, 'fists out, gun put away');
+  check(sim.br._invGuns(me)[0][3] === mag, 'the put-away gun keeps its rounds');
+  check(sim.applyCommand('h1', { cmd: 'br', act: 'fists', on: 0 }) && me.ps.weapon === held && me.ps.ammo[0] === mag && !me.br.stash, 'and back to the gun');
   sim.applyCommand('h1', { cmd: 'br', act: 'plate' });
   for (let i = 0; i < SIM_HZ * BR.plateTime * 2 + 4; i++) sim.step(STEP);
   check(me.br.armor === 100 && me.br.plates === 0, `two plates on (${me.br.armor})`);
