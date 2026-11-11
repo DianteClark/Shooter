@@ -121,8 +121,8 @@ const CSS = `
 .br-pouch b { color: var(--c-chalk); font-weight: 400; }
 .br-hands-col { display: flex; flex-direction: column; gap: 2px; }
 .br-pouch { flex-direction: row; gap: 7px; margin-left: 1px; }
-/* Reviving a teammate: your own bar, under the circle chips. */
-.br-reviving { position: absolute; left: 50%; bottom: calc(var(--sb) + 112px); transform: translateX(-50%); width: 190px; padding: 6px 10px 7px; text-align: center;
+/* Reviving a teammate: your own bar, under the circle chips (clear of the Take button). */
+.br-reviving { position: absolute; left: 50%; top: calc(var(--st) + 80px); transform: translateX(-50%); width: 190px; padding: 6px 10px 7px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 .br-reviving b { display: block; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #7be08a; }
 .br-reviving i { display: block; height: 5px; margin-top: 5px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
