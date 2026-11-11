@@ -110,6 +110,8 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 70) {{ p.ps.x = 3; p.ps.z = 3; }}
       for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) {{ p.ps.x = me.ps.x + 6; p.ps.z = me.ps.z; p.brAir = 0; }}
+      // The fight just before may already have downed us: a second lethal hit then finishes, which is the rule, not a bug.
+      if (me.downed) {{ me.downed = false; me.hp = 100; }}
       me.br.armor = 0; sim._damage(me, foe, 999, 'ar', 10); }})()""")
     await pg.wait_for_timeout(900)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed")

@@ -329,3 +329,148 @@ Each match record carries `b: BUILD` (js/build.js). The export code is unchanged
 `~b:<build>=<matches>.<live>,...` and, when there is more than one build, each build's own rows as `~a@<build>:...`.
 Decoders from before skip both; old codes decode as before (no `byBuild`). `decodeStatsCode(code).byBuild[build]` is
 an aggregate per build, `buildsOf(agg)` lists them newest first. Matches saved before this read as build `?`.
+
+## Attachments wave (ROADMAP item 10)
+
+Owner: "I'd like each weapon to feel like it offers something and with its attachments it can mean more."
+Data in js/shared/attachments-v11.js, appended to ATTACHMENTS after every older id (attachments.js), so packKit's
+slot lists, SY4 codes and wire indices keep their meaning. 66 signature attachments (`kind: 'sig'`, made for one gun)
+and 12 conversion kits (`kind: 'kit'`, one slot that changes how a gun plays); 121 attachments in all.
+
+**Rules.** Every signature or kit names one gun (`weapons: [id]`), has a `for` line (what it is for) and a `desc`
+(what it changes), and gives something and costs something on that gun (dev/sim-attachments.mjs checks every
+gun-attachment pair, the 43 older attachments included, from the effective def). Only signatures and kits may touch
+a gun's identity: damage, rpm, settle, wind-up, charge, burst gap, bolt kick, unaimed damage (adsGate), lunge, damage
+at range (falloffMin), overheat lockout (`IDENTITY_MODS`), or replace fields outright with `set` (fire mode, pellets,
+falloff, suppression, bot behaviour). A kit that changes damage re-derives the head multiplier, so "any aimed head hit
+kills" still holds; the full-auto Tallyman takes Foreman's `headMax: 2.4` so it cannot one-tap heads at 400 rpm.
+
+**Unlocks.** `unlock` 1-30 is a weapon level; 31-35 is mastery ladder tier I-V (`LADDER_BASE`, `unlockMet`,
+`unlockLabel`). Signatures fill each gun's empty levels so every gun gets something new at least every six levels
+(launchers seven); 17 second signatures open at Mastery I. Progress.hasAttachment reads the ladder tier; the results
+screen reports ladder unlocks; the Gunsmith's Mastery tab names the part each tier opens.
+
+**Models.** `look: {slot: id}` draws a signature or kit as a part the gun's own model already fits (js/render/guns.js
+`modelKit`), so nothing floats or clips; a kit may also fill an empty slot's look. 73 of 78 change the model; the two
+blade pairs and Barbed Darts (the Thistle draws no magazine) do not.
+
+**Wire.** packKit keeps the low 16 bits (4 a slot) exactly as before; a part past the 15th of its slot leaves its
+nibble empty or past an older build's list (so an older build sees stock) and puts its whole index in the high part, 7
+bits a slot (an exact integer below 2^44 in the JSON snapshot).
+
+**Battle royale loot** (js/sim/br.js `_rollGun`): class parts by rarity as before (botAttachments with `own: false`);
+an epic gun carries one of its signature attachments 35% of the time, a legendary one 50%, and only a legendary can roll
+its conversion kit (20% when the gun has one). dev/sim-attachments.mjs checks the rates and that every rolled part is
+legal and survives the BR wire. dev/sim-br.mjs now checks revives over all squad matches together: bots carrying
+signatures change the deal, and seed 11 alone gave 0 revives (dev itself gives 1-9 over seeds 11-14).
+
+**Gunsmith.** The option list scrolls (30 px rows) and keeps the tried or fitted part in view; signatures and kits
+carry a Signature/Kit chip; locks read "Level 12" or "Mastery I" and the foot names the requirement; the foot shows
+what the part is for; a strip lists every number it moves on this gun (green up, red down, mode changes as notes),
+from `attachmentDeltas`. The bench now shows the kit kept for any gun, equipped or not (`Progress.kitFor`).
+
+**Bots.** botAttachments: regulars fit the gun's first signature on every other deal, veterans always, elites every
+signature; veterans and elites run the gun's kit one deal in three. A kit's `set.botUse` changes how the bot fights
+with it (a slug-barrel Thresher plays at 10 m, not 4). The tier's part count is unchanged.
+
+**Balance method.** `node dev/best-builds.mjs` finds each gun's strongest legal build greedily (every slot in turn,
+two passes, every part unlocked) by duel win rate against a fixed stock field (4, 10, 20, 35, 55 m, aware and both
+flanks, same seed for every candidate); output dev/out/best-builds.json. `node dev/balance-sim.mjs --builds=...` then
+plays mirrored matches with every gun carrying its best build; `node dev/kd-combine.mjs` adds seeds up. A duel proxy
+cannot see stealth, cover or a lane, so a few duel-best builds play worse than stock in matches (Squall's first search
+picked Runner's Choke; an 8-trial rerun did not); those are trade-offs that matches punish, not over-strong builds.
+
+Results, mirrored, 4 seeds x 2 rounds, best builds on every primary (stock in brackets, same seeds): all 34 primaries 0.82-1.22 (stock 0.79-1.24, five outside 0.85-1.20). Just outside, inside
+the +-0.06 a gun's 1,400 kills and deaths carry: Bulwark 1.22 (1.17 the run before; canted dot and Hush Can), Murmur
+0.84 (stock 0.79) and Ballast 0.82 (stock 0.83, both weak without attachments). Biggest lifts from a best build:
+Thistle 0.86 -> 1.11 (Needle Choke, Barbed Darts), Lancet 0.96 -> 1.12, Flywheel 0.92 -> 1.02, Prospector 0.97 -> 1.05;
+biggest drops (duel-best, match-worse): Shunter 1.10 -> 0.98, Doublet 0.97 -> 0.85, Lodestone 1.12 -> 1.00.
+
+Changes made from those runs: Gantry 565 rpm (was 580; best build 1.25), Ballast full damage to 10 m (was 9; stock and
+best build 0.83-0.84), Needle Choke falloff x1.3 (was 1.4), Capacitor Bank charge x0.72 (was 0.65) and slower to aim
+(Lodestone 1.23), Hollow Points keeps half its pierce instead of none (Nightjar 0.81 with it), Sabot Slugs 5 shells
+(was 4), Siege Rounds reworked (Monolith's pierce was already at the cap), Twin Tube reload x2 and slower swap.
+Most-picked parts in best builds: Canted Dot 7 of 23 guns that take it, Speed Mag 6/34, Holo 5/29: no part is in every
+best build. Sidearms (`--sidearms`, not a target): pistols 0.87-1.16 with best builds; launchers were already above
+the band stock (Breaker 1.44, Bombard 1.43) and stay there.
+
+| Class | Gun | Part | Kind | Slot | Gives | Costs | Unlock |
+|---|---|---|---|---|---|---|---|
+| Assault | Halyard | Trueline Upper | Sig | barrel | recoil sway -22%, settle speed +15% | fire rate -6%, time to aim +4% | Level 7 |
+| Assault | Halyard | Match Mags | Sig | mag | settle speed +25%, recoil sway -12% | magazine -5, reload +6% | Mastery I |
+| Assault | Halyard | Tri-Burst Group | Kit | grip | Fires three-round bursts, recoil sway -40%, bloom per shot -30%, aimed spread -22% | fire rate -18%, hip spread +12%, sprint to fire +6% | Level 25 |
+| Assault | Cadence | Metronome Spring | Sig | grip | gap in a burst -30% | recoil sway +30%, bloom per shot +20% | Level 7 |
+| Assault | Cadence | Open Bolt | Kit | grip | Full auto: no bursts, fire rate +25% | bloom per shot +40%, aimed spread +30%, damage -7% | Level 25 |
+| Assault | Drayman | Mule Rounds | Sig | mag | damage +8% | magazine -5, fire rate -12%, reload +10% | Level 7 |
+| Assault | Shunter | Dash Sling | Sig | grip | swap time -25%, sprint to fire -20% | recoil sway +22%, aimed spread +15% | Level 7 |
+| Assault | Shunter | Whisper Barrel | Kit | barrel | Suppressed: off the minimap | range -25%, fire rate -7% | Level 25 |
+| Assault | Flywheel | Light Flywheel | Sig | grip | rounds to wind up -4, starting fire rate +25% | fire rate -8% | Level 7 |
+| Assault | Flywheel | Heavy Flywheel | Sig | grip | fire rate +8% | rounds to wind up +4, starting fire rate -15% | Mastery I |
+| Assault | Kiln | Kiln Baffles | Sig | barrel | overheat lockout -45% | rounds to overheat -3, time to aim +5% | Level 7 |
+| Assault | Kiln | Firebrick Liner | Sig | mag | rounds to overheat +5 | cooling time +35%, move speed -3% | Mastery I |
+| SMG | Skitter | Featherweight Frame | Sig | grip | sprint to fire -15%, move speed +3% | recoil sway +20%, range -15% | Level 16 |
+| SMG | Skitter | Hive Drum | Kit | mag | 72-round drum, magazine +36 | reload +55%, time to aim +10%, fire rate -8%, move speed -5% | Level 26 |
+| SMG | Rasp | Rattle Spring | Sig | mag | fire rate +8% | recoil sway +30%, magazine -4 | Level 27 |
+| SMG | Rasp | Burr Muzzle | Sig | barrel | damage at range +20%, range +10% | hip spread +10%, sprint to fire +10% | Level 24 |
+| SMG | Stitch | Needle Sight | Sig | optic | aimed spread -25%, time to aim -8% | hip spread +30%, move speed aimed -15% | Level 25 |
+| SMG | Stitch | Suture Barrel | Sig | barrel | range +15%, damage at range +12% | hip spread +25%, move speed -3% | Mastery I |
+| SMG | Ballast | Ram Rounds | Sig | mag | damage through cover +35% | magazine -4, fire rate -8% | Level 25 |
+| SMG | Murmur | Muffled Bolt | Sig | grip | sprint to fire -15%, move speed aimed +10% | range -10%, fire rate -6% | Level 16 |
+| SMG | Murmur | Open Muzzle | Kit | barrel | range +30%, damage at range +15% | Not suppressed: shows on the minimap | Level 26 |
+| SMG | Hopper | Hopper Gyro | Sig | grip | bloom per shot -30%, recoil sway -20% | sprint to fire +15%, move speed -4% | Level 25 |
+| Shotgun | Thresher | Breach Pump | Sig | grip | fire rate +15% | swap time +10%, move speed -3% | Level 27 |
+| Shotgun | Thresher | Slug Barrel | Kit | barrel | Fires a single slug, range +150%, damage through cover +100%, damage at range +83%, aimed spread -81%, hip spread -17% | damage -60% | Level 24 |
+| Shotgun | Squall | Runner's Choke | Sig | barrel | hip spread -15%, range +8% | fire rate -12% | Level 26 |
+| Shotgun | Squall | Squall Drum | Sig | mag | magazine +8 | reload +30%, move speed -5% | Mastery I |
+| Shotgun | Doublet | Twin Triggers | Sig | grip | fire rate +60% | hip spread +15%, reload +15%, aimed spread +10% | Level 26 |
+| Shotgun | Doublet | Buck and Ball | Sig | mag | Six heavy pellets, range +25%, aimed spread -15% | hip spread +10%, damage -10% | Mastery I |
+| Shotgun | Railspike | Sabot Slugs | Sig | mag | range +15%, damage through cover +15% | magazine -1, reload +10% | Level 27 |
+| Shotgun | Railspike | Buckshot Tube | Kit | mag | Fires buckshot, damage +92% | aimed spread +567%, hip spread +132%, damage through cover -100%, damage at range -45%, range -40% | Level 24 |
+| Shotgun | Trammel | Box Twelve | Sig | mag | magazine +4 | reload +25%, time to aim +6%, move speed -4% | Level 26 |
+| Shotgun | Thistle | Needle Choke | Sig | barrel | damage at range +30%, aimed spread -20%, range +15% | hip spread +25%, time to aim +8% | Level 26 |
+| Shotgun | Thistle | Barbed Darts | Sig | mag | damage +11% | magazine -1, reload +10% | Mastery I |
+| LMG | Bulwark | Pre-Spun Motor | Sig | grip | starting fire rate +30% | rounds to overheat -4 | Level 14 |
+| LMG | Bulwark | Assault Box | Kit | mag | No wind-up, swing speed +30%, time to aim -15%, move speed +8% | magazine -50, rounds to overheat -7, hip spread +10% | Level 22 |
+| LMG | Drover | Drover Sling | Sig | grip | move speed aimed +20%, move speed +2% | rounds to overheat -3, recoil sway +15% | Level 14 |
+| LMG | Drover | Quick-Change Barrel | Sig | barrel | overheat lockout -45% | rounds to overheat -3, time to aim +5% | Mastery I |
+| LMG | Millrace | Light Barrels | Sig | barrel | swing speed +25%, rounds to wind up -3 | fire rate -12%, rounds to overheat -8 | Level 14 |
+| LMG | Millrace | Overdrive Motor | Sig | mag | fire rate +10% | rounds to overheat -16, swing speed -10% | Mastery I |
+| LMG | Gantry | Gantry 75 Box | Sig | mag | magazine +30 | reload +30%, time to aim +6%, move speed -4% | Level 14 |
+| LMG | Stanchion | Long Belt | Sig | mag | magazine +41 | reload +35%, move speed -5% | Level 14 |
+| LMG | Stanchion | Bedded Receiver | Sig | grip | unsettled spread -28%, rounds to settle -3 | move speed aimed -15%, swap time +15% | Mastery I |
+| Marksman | Tallyman | Tally Cheekpiece | Sig | optic | scope kept per shot +20% | time to aim +8%, move speed -3% | Level 19 |
+| Marksman | Tallyman | Runaway Sear | Kit | grip | Full auto, fire rate +120%, magazine +8, bloom per shot -50% | aimed spread +60%, damage -27% | Level 25 |
+| Marksman | Foreman | Hair Trigger | Sig | grip | fire rate +15% | bloom per shot +35%, hip spread +10% | Level 19 |
+| Marksman | Foreman | Pin Barrel | Sig | barrel | range +12%, damage at range +10% | fire rate -10%, time to aim +6% | Mastery I |
+| Marksman | Prospector | Loop Lever | Sig | grip | fire rate +20% | aimed spread +20%, time to aim +5% | Level 19 |
+| Marksman | Prospector | Scatter Loads | Kit | mag | Fires buckshot, damage +67% | aimed spread +650%, damage through cover -100%, range -57%, hip spread +56%, damage at range -50% | Level 25 |
+| Marksman | Bodkin | Broadhead Bolts | Sig | mag | unaimed damage +25%, damage +10% | reload +20%, range -20% | Level 19 |
+| Marksman | Bodkin | Recurve Limbs | Sig | grip | range +25% | time to aim +10%, move speed -3% | Mastery I |
+| Marksman | Tandem | Lockstep Sear | Sig | grip | gap in a burst -40% | recoil sway +30%, bloom per shot +20% | Level 19 |
+| Marksman | Nightjar | Hollow Points | Sig | mag | damage +12% | damage through cover -50%, magazine -1 | Level 19 |
+| Sniper | Lancet | Heavy Bolt | Sig | grip | scope kept per shot +60% | fire rate -12% | Level 16 |
+| Sniper | Lancet | Self-Loader | Kit | mag | Semi-automatic, fire rate +120%, scope kept per shot +100%, magazine +3 | aimed spread +35%, damage -22% | Level 25 |
+| Sniper | Monolith | Siege Rounds | Sig | mag | unaimed damage +45% | magazine -1, range -15%, reload +15% | Level 16 |
+| Sniper | Monolith | Monolith Brake | Sig | barrel | scope kept per shot +50% | time to aim +6%, move speed -4% | Mastery I |
+| Sniper | Kestrel | Hot Chamber | Sig | grip | fire rate +25% | aimed spread +30% | Level 16 |
+| Sniper | Kestrel | Kestrel Eye | Sig | optic | time to aim -15%, unaimed damage +15% | aimed spread +40%, range -20% | Mastery I |
+| Sniper | Harrier | Stripper Clips | Sig | mag | reload -30% | swap time +10%, move speed -3% | Level 16 |
+| Sniper | Harrier | Wing Bolt | Sig | grip | fire rate +12% | aimed spread +20% | Mastery I |
+| Sniper | Lodestone | Capacitor Bank | Sig | mag | charge time -28% | magazine -1, reload +15%, time to aim +8% | Level 16 |
+| Sniper | Lodestone | Overcharge Coil | Sig | barrel | damage +15% | charge time +60%, move speed -4% | Mastery I |
+| Pistol | Flicker | Snap Holster | Sig | grip | swap time -40%, sprint to fire -20% | aimed spread +25%, range -15% | Level 24 |
+| Pistol | Verdict | Speedloader | Sig | mag | reload -40% | swap time +15%, move speed -3% | Level 25 |
+| Pistol | Verdict | Heavy Frame | Sig | barrel | bloom per shot -30% | swap time +15%, fire rate -10% | Mastery I |
+| Pistol | Gnat | Gnat Stock | Sig | grip | recoil sway -35%, aimed spread -20% | swap time +35%, move speed -2% | Level 25 |
+| Pistol | Deuce | Triple Tap | Kit | grip | Fires three-round bursts, magazine +4, gap in a burst -13%, fire rate +10% | damage -16% | Level 22 |
+| Pistol | Deuce | Long Slide | Sig | barrel | gap in a burst -15%, range +15% | swap time +20%, sprint to fire +15% | Level 26 |
+| Pistol | Bramble | Bramble Spreader | Sig | barrel | Eight pellets, damage +7% | hip spread +25%, aimed spread +20%, range -15% | Level 25 |
+| Pistol | Magpies | Crossfire Grips | Sig | grip | hip spread -15% | swap time +15%, fire rate -10% | Level 25 |
+| Pistol | Tacker | Framing Drive | Sig | mag | damage +14% | magazine -8, fire rate -15% | Level 25 |
+| Launcher | Breaker | Twin Tube | Sig | mag | magazine +1 | reload +100%, swap time +25%, move speed -7% | Level 24 |
+| Launcher | Bombard | Pump Drum | Sig | mag | magazine +2 | reload +30%, move speed -4% | Level 24 |
+| Launcher | Ripple | Tight Pack | Sig | barrel | gap in a burst -40%, aimed spread -20% | blast radius -15% | Level 24 |
+| Melee | Gaff | Serrated Hook | Sig | barrel | range +20% | move speed -3% | Level 5 |
+| Melee | Gaff | Lunge Strap | Sig | grip | lunge +30% | fire rate -15% | Level 15 |
+| Melee | Maul | Iron Head | Sig | barrel | damage +15%, range +15% | fire rate -18%, move speed -4% | Level 5 |
+| Melee | Maul | Ash Haft | Sig | grip | fire rate +30%, move speed +3% | damage -22%, range -12% | Level 15 |

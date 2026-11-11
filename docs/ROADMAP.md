@@ -16,11 +16,12 @@ on every push, keep 2% of weekly usage for bugs.
    which the bot-only rig did not show. Rerun the rig with streaks, equipment, Mixed skill and the human-like thumb.
    Pass 2 done (bal2): `--realistic` rig preset, Foreman head cap, shotgun/SMG/sniper help, build tag in stats; see
    docs/WEAPONS-OVERHAUL.md "Pass 2". Open: equipment costs shotguns and snipers 0.2-0.3 K/D in real lobbies.
-7. IN PROGRESS: battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
+7. DONE (1111-8): battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
    the regions, loot rarities, closing circle, revives, bots that loot, rotate and fight like players.
 8. DONE (1111-4). Scorestreaks overhaul.
 9. DONE (modes). Game modes overhaul (docs/MODES.md): Headquarters, Kill Order, Infected, One in the Chamber, Control,
    Grind, Ground War HQ and Kill Order; modifiers (Hardcore, Snipers Only, Melee Only, No Streaks); a daily featured playlist.
-10. Attachments wave: signature attachments per gun, conversion kits, unlocked through each gun's mastery.
+10. DONE (atts). Attachments wave: 66 signature attachments, 12 conversion kits, unlocked through weapon levels and the
+    mastery ladder; best-build balance rig (dev/best-builds.mjs). docs/WEAPONS-OVERHAUL.md "Attachments wave".
 11. DONE (ops). Operators overhaul: 27 operators (18 new, nine of them women) from a parametric parts kit, builds in the
     shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.

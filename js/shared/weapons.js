@@ -48,7 +48,7 @@
 //
 // Attachments (js/shared/attachments.js) produce an effective def with these same fields; see effectiveWeapon.
 
-import { applyAttachments } from './attachments.js';
+import { applyAttachments, setAfterApply } from './attachments.js';
 import { MAX_HP, WEAPON_CATEGORY } from './constants.js';
 import { V10_WEAPONS } from './weapons-v10.js';
 
@@ -153,8 +153,9 @@ export const WEAPONS = {
   // rate of fire (every miss costs a beat), a muzzle that climbs and feet a little slower than the other SMGs.
   heavysmg: {
     id: 'heavysmg', name: 'Ballast', role: 'Bruiser', auto: true,
+    // V11 attachments wave: full damage to 10 m (was 9); stock and best build both ran 0.83-0.84 in mirrored play.
     damage: 36, rpm: 590, magazine: 26, reserve: 144, reload: 2.1, range: 30,
-    falloff: { start: 9, end: 18, min: 0.64 }, penetrate: 0.55,
+    falloff: { start: 10, end: 18, min: 0.64 }, penetrate: 0.55,
     adsSpread: 0.016, hipSpread: 0.044, bloomPerShot: 0.09, bloomRecover: 2.8, bloomScale: 1.4,
     pattern: { amp: 0.012, freq: 0.8, ramp: 2, drift: 0.003 },
     adsTime: 0.17, sprintToFire: 0.13, swapTime: 0.32, moveMult: 1.02, adsMoveMult: 0.7,
@@ -258,7 +259,8 @@ export const WEAPONS = {
   // longest magazine change outside the belt guns. Four to the body, a step behind the rifles.
   lightlmg: {
     id: 'lightlmg', name: 'Gantry', role: 'Box-fed', auto: true,
-    damage: 30, rpm: 580, magazine: 45, reserve: 180, reload: 3.6, range: 48,
+    // V11 attachments wave: 565 rpm (was 580); its best build (reflex, vertical grip) ran 1.25 in mirrored play.
+    damage: 30, rpm: 565, magazine: 45, reserve: 180, reload: 3.6, range: 48,
     falloff: { start: 20, end: 34, min: 0.73 }, penetrate: 0.7,
     adsSpread: 0.009, hipSpread: 0.085, bloomPerShot: 0.05, bloomRecover: 2, bloomScale: 1.5,
     pattern: { amp: 0.011, freq: 0.5, ramp: 5 }, turnCap: 6,
@@ -461,14 +463,23 @@ Object.assign(WEAPONS, V10_WEAPONS);   // The V10 arsenal lives in weapons-v10.j
 // is derived from each gun's weakest possible round (full falloff, un-aimed, through the most cover). The 1.25
 // margin is headroom for perks that reduce damage. Explosives stay at 1: splash is not a headshot.
 const HEAD_LETHAL_HP = MAX_HP * 1.25;
+function deriveHeadMult(w) {
+  if (w.explosive) return 1;
+  const pen = w.penetrate ? w.penetrate ** MAX_COVER_PIECES : 1;
+  // Never below 1: a gun that already kills to the body (the Golden Gun) must not do less to the head.
+  return Math.max(1, Math.ceil(10 * HEAD_LETHAL_HP / (w.damage * w.falloff.min * (w.adsGate || 1) * pen)) / 10);
+}
 for (const id in WEAPONS) {
   const w = WEAPONS[id];
   w.category = WEAPON_CATEGORY[id];
-  if (w.explosive) { w.headMult = 1; continue; }
-  const pen = w.penetrate ? w.penetrate ** MAX_COVER_PIECES : 1;
-  // Never below 1: a gun that already kills to the body (the Golden Gun) must not do less to the head.
-  w.headMult = Math.max(1, Math.ceil(10 * HEAD_LETHAL_HP / (w.damage * w.falloff.min * (w.adsGate || 1) * pen)) / 10);
+  w.headMult = deriveHeadMult(w);
 }
+// V11: a signature attachment or kit that changes damage, pellets, falloff or cover keeps the same rule.
+setAfterApply((eff, base) => {
+  if (eff.damage !== base.damage || eff.falloff.min !== base.falloff.min || eff.adsGate !== base.adsGate || eff.penetrate !== base.penetrate) {
+    eff.headMult = deriveHeadMult(eff);
+  }
+});
 
 // Damage of one pellet/bullet at `dist` metres. `ads` is whether the shot was fully aimed.
 export function damageAt(w, dist, ads = true) {
@@ -487,7 +498,8 @@ const ALWAYS_LETHAL_HEAD = new Set(['Marksman', 'Sniper']);
 // headMax (Pass 2) caps a gun's head multiplier at every stance: a fast precise gun whose head hit would otherwise be a
 // one-tap kill at any range (Foreman) needs a second round.
 export function headMultAt(w, ads) {
-  const m = ads || ALWAYS_LETHAL_HEAD.has(w.category) ? headMultFor(w.id) : Math.min(headMultFor(w.id), HIP_HEAD_MULT);
+  const hm = w.headMult ?? headMultFor(w.id);   // An effective def carries its own (a kit may have re-derived it).
+  const m = ads || ALWAYS_LETHAL_HEAD.has(w.category) ? hm : Math.min(hm, HIP_HEAD_MULT);
   return w.headMax ? Math.min(m, w.headMax) : m;
 }
 

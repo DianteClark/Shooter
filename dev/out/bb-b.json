@@ -1,0 +1,161 @@
+{
+ "burst": {
+  "kit": {
+   "optic": "holo",
+   "mag": "speedmag"
+  },
+  "score": 0.57,
+  "stock": 0.5,
+  "evals": 57
+ },
+ "smg": {
+  "kit": {
+   "optic": "canted",
+   "grip": "wrap"
+  },
+  "score": 0.6296296296296297,
+  "stock": 0.5537037037037037,
+  "evals": 47
+ },
+ "tacsmg": {
+  "kit": {
+   "optic": "ghostring",
+   "barrel": "compensator",
+   "mag": "drummag",
+   "grip": "wrap"
+  },
+  "score": 0.6233333333333333,
+  "stock": 0.55,
+  "evals": 47
+ },
+ "autoshot": {
+  "kit": {
+   "optic": "ghostring",
+   "barrel": "s_runnerchoke",
+   "grip": "brace"
+  },
+  "score": 0.46296296296296297,
+  "stock": 0.4111111111111111,
+  "evals": 41
+ },
+ "lmg": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "suppressor"
+  },
+  "score": 0.5555555555555556,
+  "stock": 0.4425925925925926,
+  "evals": 53
+ },
+ "rotary": {
+  "kit": {
+   "optic": "holo",
+   "grip": "wrap"
+  },
+  "score": 0.5466666666666666,
+  "stock": 0.44666666666666666,
+  "evals": 53
+ },
+ "battle": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "floated",
+   "mag": "speedmag",
+   "grip": "s_hairtrigger"
+  },
+  "score": 0.4666666666666667,
+  "stock": 0.3925925925925926,
+  "evals": 57
+ },
+ "sniper": {
+  "kit": {},
+  "score": 0.6074074074074074,
+  "stock": 0.6074074074074074,
+  "evals": 20
+ },
+ "semisnipe": {
+  "kit": {
+   "optic": "steady",
+   "barrel": "heavybarrel",
+   "mag": "apmag"
+  },
+  "score": 0.6366666666666667,
+  "stock": 0.59,
+  "evals": 39
+ },
+ "heavysmg": {
+  "kit": {
+   "optic": "pointdot",
+   "mag": "drummag"
+  },
+  "score": 0.525,
+  "stock": 0.5033333333333333,
+  "evals": 45
+ },
+ "lightlmg": {
+  "kit": {
+   "optic": "reflex",
+   "grip": "vertical"
+  },
+  "score": 0.55,
+  "stock": 0.46,
+  "evals": 47
+ },
+ "rampar": {
+  "kit": {
+   "optic": "holo",
+   "barrel": "heavybarrel",
+   "mag": "satchel",
+   "grip": "s_lightwheel"
+  },
+  "score": 0.5766666666666667,
+  "stock": 0.49666666666666665,
+  "evals": 57
+ },
+ "hushsmg": {
+  "kit": {
+   "optic": "pointdot"
+  },
+  "score": 0.5566666666666666,
+  "stock": 0.5483333333333333,
+  "evals": 45
+ },
+ "magshot": {
+  "kit": {
+   "optic": "reflex",
+   "barrel": "rifled",
+   "mag": "extmag",
+   "grip": "handstop"
+  },
+  "score": 0.4666666666666667,
+  "stock": 0.4066666666666667,
+  "evals": 39
+ },
+ "beltlmg": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "longbarrel"
+  },
+  "score": 0.5016666666666667,
+  "stock": 0.4583333333333333,
+  "evals": 49
+ },
+ "hushdmr": {
+  "kit": {
+   "optic": "canted",
+   "mag": "s_hollowpoint"
+  },
+  "score": 0.5666666666666667,
+  "stock": 0.5166666666666667,
+  "evals": 53
+ },
+ "rail": {
+  "kit": {
+   "mag": "s_capacitor",
+   "grip": "angled"
+  },
+  "score": 0.68,
+  "stock": 0.6033333333333334,
+  "evals": 37
+ }
+}
