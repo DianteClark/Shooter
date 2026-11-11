@@ -36,7 +36,7 @@ export function mpMarkup({ tab }) {
       ${modes.length ? `<section class="mp-modes-col">
         <h3 class="mp-h">${ico('mode:dom')}<b>Modes</b><small>Tick one or more</small></h3>
         <div class="mp-modes">${modes.map(id => `
-          <button class="mp-mode" data-act="mpMode" data-id="${id}" data-in="up">${ico(id)}<b>${esc(MODES[id].name.replace('Ground War ', 'GW '))}</b><i class="mp-tick">${ico('check')}</i></button>`).join('')}
+          <button class="mp-mode" data-act="mpMode" data-id="${id}" data-in="up">${ico(id)}<b>${esc(MODES[id].name.replace('Ground War ', 'GW ')).replace('Headquarters', 'Head&shy;quarters')}</b><i class="mp-tick">${ico('check')}</i></button>`).join('')}
         </div>
       </section>` : ''}
       <footer class="mp-foot" data-in="up">
