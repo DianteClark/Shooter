@@ -113,6 +113,7 @@ function sideLine(mode, bots) {
 
 export function botMatchSummary({ mapId, mode }) {
   if (mode === RANDOM || !MODES[mode]) return { top: skillName(saved.skill), sub: 'Mode defaults' };
+  if (MODES[mode].br) return { top: skillName(saved.skill), sub: `${MODES[mode].players} players · ${MODES[mode].squad === 1 ? 'solos' : `squads of ${MODES[mode].squad}`}` };
   const r = resolve(mode, MAPS[mapId] ?? null);
   const sides = !r.bots ? 'No bots' : isFfa(mode) ? `${r.bots + 1} players` : `${Math.max(1, r.bots)}v${r.bots}`;
   const limit = MODES[mode].rounds ? `${r.scoreLimit} rds` : r.scoreLimit;
@@ -137,7 +138,8 @@ export function botMatchSheet(menu, pick, { onChange } = {}) {
 
   const paint = () => {
     let rows = '';
-    if (mode) {
+    if (mode && MODES[mode].br) rows = `<p class="bm-note">${MODES[mode].players} players: you, and bots in every other seat. The circle sets the length; difficulty is the only setting.</p>`;
+    else if (mode) {
       const r = resolve(mode, map), top = maxBots(mode, map);
       const ss = scoreSteps(mode), ts = timeSteps(mode);
       const si = ss.indexOf(r.scoreLimit), ti = ts.indexOf(r.timeLimit);

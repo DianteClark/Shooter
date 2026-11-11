@@ -1167,7 +1167,7 @@ export class BrRules {
     if (ch) ch.reverse();
     if (guest) this.sentTo.set(guest.id, this.seq);
     out.push(ch ? ch.flat() : 0);
-    out.push(sim.tick % 30 === 0 || sim.phase === 'ended' ? this._stats() : 0);
+    out.push(sim.tick % 90 === 0 || sim.phase === 'ended' ? this._stats() : 0);   // For the results screen: rarely.
     return out;
   }
 

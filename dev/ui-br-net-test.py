@@ -43,6 +43,16 @@ async def main():
             await host.wait_for_function(f'{G}.code')
             code = await host.evaluate(f'{G}.code')
             guest = await page('guest')
+            # Two tabs in one window: only the one in front gets animation frames, and the host's match runs on them.
+            # Hand the front back and forth so both keep running.
+            pages = {'list': [host, guest]}
+            async def juggle():
+                while True:
+                    for pg in list(pages['list']):
+                        try: await pg.bring_to_front()
+                        except Exception: pass
+                        await asyncio.sleep(0.12)
+            juggler = asyncio.create_task(juggle())
             await guest.evaluate(f"window.__game.join('{code}')")
             await host.wait_for_function(f'{G}.lobby.humans.length === 2', timeout=60000)
             await guest.wait_for_selector('[data-act="toggleReady"]', timeout=10000)
@@ -107,17 +117,25 @@ async def main():
             await guest.screenshot(path=f'{OUT}/net-guest-ground.png')
             await host.screenshot(path=f'{OUT}/net-host-ground.png')
             # The guest drops: the character stays standing, nobody drives it.
+            pages['list'] = [host]
+            pid = await guest.evaluate("sessionStorage.getItem('switchyard-player')")
             await guest.close()
             await host.wait_for_function(f"{G}.match.sim.byId.get('{gid}').away", timeout=60000)
             st = await host.evaluate(f"(() => {{ const p = {G}.match.sim.byId.get('{gid}'); return [p.alive, !!p.bot, p.isBot]; }})()")
             check(st[0] and not st[1] and not st[2], f'held slot: standing, not bot-driven ({st})')
+            # The same phone coming back: the same player id (a tab keeps it in sessionStorage under ?net=local).
             guest = await page('guest2')
+            await guest.evaluate(f"sessionStorage.setItem('switchyard-player', '{pid}')")
+            await guest.reload()
+            await guest.wait_for_timeout(1500)
+            pages['list'] = [host, guest]
             await guest.evaluate(f"window.__game.join('{code}')")
-            await guest.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=30000)
+            await guest.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=90000)
             await guest.wait_for_timeout(2500)
             back = await guest.evaluate(f"[{G}.match.brAir, {G}.match.ps.primary, {G}.match.localAlive, {G}.match.sim.br.items.filter(Boolean).length]")
             check(back[0] == 0 and back[1] == 'ar' and back[2], f'the guest rejoined into its own character ({back})')
             await guest.screenshot(path=f'{OUT}/net-guest-rejoined.png')
+            juggler.cancel()
             await browser.close()
     except Exception as err:
         fails.append(f'exception: {str(err)[:300]}')
