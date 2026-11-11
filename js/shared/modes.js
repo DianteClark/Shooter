@@ -53,6 +53,8 @@ export const MODES = {
   exq:   { id: 'exq',   rules: 'ex', teamSize: 4, squad: 4, ex: true, large: true, players: 16, name: 'Extraction', short: 'EXF', scoreLimit: 1, timeLimit: 900, desc: 'Four squads of four. Take contracts, fight the patrols, and get out on the helicopter to keep what you earned.' },
   exd:   { id: 'exd',   rules: 'ex', teamSize: 2, squad: 2, ex: true, large: true, players: 16, name: 'Extraction Duos', short: 'EXF 2', scoreLimit: 1, timeLimit: 900, desc: 'Eight pairs. Take contracts, fight the patrols, and get out on the helicopter to keep what you earned.' },
   gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 12, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
+  // Infected on a huge map: 32 players, two start infected (`inf` overrides INF in js/sim/inf.js; tuned in dev/sim-modes-v10.mjs).
+  gwinf: { id: 'gwinf', rules: 'inf',  teamSize: 16, large: true, everyHuge: true, inf: { firsts: 2, holds: 2, spawnNear: 120, respawn: 5 }, name: 'Ground War Infected', short: 'GW INF', scoreLimit: 32, timeLimit: 300, desc: '32 players, two start infected. Killed by them, you join them. Survive the clock.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 

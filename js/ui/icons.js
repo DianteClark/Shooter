@@ -465,7 +465,7 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',

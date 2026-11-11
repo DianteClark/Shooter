@@ -6,7 +6,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { GUN_LADDER, isFfa, MODES, modeRules, EX, CONTRACT_NAMES } from '../shared/modes.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
 import { matchScore, Progress } from './progress.js';
-import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, ROMAN } from './widgets.js';
+import { esc, hex, badgeMark, badgeTag, nameHtml, SLOT_LABEL, ROMAN } from './widgets.js';
 import { kindLabel } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
@@ -215,15 +215,24 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head"><b class="rb-team">${solo ? 'You' : 'Your squad'}</b><b class="rb-pts">${ORDINAL(myPlace)}</b>
         <span>K</span><span title="Downs">Dn</span><span title="Revives">Rv</span><span title="Damage">Dmg</span><span class="wide">Alive</span></div>
       ${mates.map((p, i) => { const st = brStat(p); return `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${i}">
-        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${st[2]}</span><span>${st[1]}</span><span>${st[0]}</span><span class="wide">${mmss(st[4])}</span>
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${nameHtml(p.name)}</b></span><span>${p.kills}</span><span>${st[2]}</span><span>${st[1]}</span><span>${st[0]}</span><span class="wide">${mmss(st[4])}</span>
       </div>`; }).join('')}
     </div>`;
+  };
+  // A squad's names; a clan squad wears its tag once, before them all.
+  const squadNames = ms => {
+    const tags = ms.map(p => /^\[([A-Z]{2,4})\] /.exec(p.name)?.[1] ?? null);
+    if (ms.length > 1 && tags[0] && tags.every(t => t === tags[0])) return `<i class="ctag">${tags[0]}</i> ${ms.map(p => esc(p.name.slice(tags[0].length + 3))).join(', ')}`;
+    return ms.map(p => nameHtml(p.name)).join(', ');
   };
   const brSquads = () => {
     const rows = squadTeams.map(t => {
       const ms = roster.filter(p => p.team === t);
-      const place = ms.reduce((m, p) => Math.max(m, p.place || 0), 0) || (t === (outcome === 'win' ? myTeam : null) ? 1 : squadTeams.length);
-      return { t, ms, place, kills: ms.reduce((n, p) => n + p.kills, 0) };
+      const placed = ms.reduce((m, p) => Math.max(m, p.place || 0), 0);
+      // Left early (data.early): squads not out yet are still playing, listed first.
+      const live = !!data.early && !placed && t !== myTeam;
+      const place = placed || (live ? 0 : t === (outcome === 'win' ? myTeam : null) ? 1 : squadTeams.length);
+      return { t, ms, place, live, kills: ms.reduce((n, p) => n + p.kills, 0) };
     }).sort((a, b) => a.place - b.place);
     let shownRows = rows.slice(0, BOARD_ROWS - 1);
     const mine = rows.find(r => r.t === myTeam);
@@ -232,7 +241,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head"><b class="rb-team">${solo ? 'Standings' : 'Squads'}</b><b class="rb-pts"></b>
         <span></span><span></span><span></span><span>K</span><span class="wide">Place</span></div>
       ${shownRows.map((r, i) => `<div class="rb-row${r.t === myTeam ? ' me' : ''}" style="--i:${i}">
-        <span class="rb-name" style="grid-column:span 4"><i style="flex:none;width:7px;height:7px;background:${TEAMS[r.t]?.css}"></i><b>${esc(r.ms.map(p => p.name).join(', '))}</b></span><span>${r.kills}</span><span class="wide">${ORDINAL(r.place)}</span>
+        <span class="rb-name" style="grid-column:span 4"><i style="flex:none;width:7px;height:7px;background:${TEAMS[r.t]?.css}"></i><b>${squadNames(r.ms)}</b></span><span>${r.kills}</span><span class="wide">${r.live ? 'In' : ORDINAL(r.place)}</span>
       </div>`).join('')}
       ${rows.length > shownRows.length ? `<div class="rb-row" style="--i:${shownRows.length}"><span class="rb-name"><b>+${rows.length - shownRows.length} more</b></span></div>` : ''}
     </div>`;
@@ -246,7 +255,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head" style="grid-template-columns:1fr"><b class="rb-team">Podium</b></div>
       <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);align-items:end;gap:6px;padding:6px 10px 0">
         ${step.map((p, k) => p ? `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${k};height:auto;display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:0;background:none;box-shadow:none">
-          <span style="text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${TEAMS[p.team]?.css}">${badgeTag(badgeOf(p.id), 12)}<b style="font-weight:400">${esc(p.name)}</b></span>
+          <span style="text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${TEAMS[p.team]?.css}">${badgeTag(badgeOf(p.id), 12)}<b style="font-weight:400">${nameHtml(p.name)}</b></span>
           <span style="text-align:center;font:400 15px/1 var(--f-stencil);color:var(--c-chalk)">${shown(p)}</span>
           <i style="display:flex;align-items:flex-start;justify-content:center;height:${heights[k]}px;padding-top:5px;background:linear-gradient(180deg, color-mix(in srgb, ${TEAMS[p.team]?.css} 70%, transparent), color-mix(in srgb, ${TEAMS[p.team]?.css} 18%, transparent));box-shadow:inset 0 2px 0 ${TEAMS[p.team]?.css};font:400 20px/1 var(--f-stencil);font-style:normal;color:#fff">${[2, 1, 3][k]}</i>
         </div>` : '<div></div>').join('')}
@@ -268,7 +277,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head"><b class="rb-team">Standings</b><b class="rb-pts"></b>
         <span>K</span><span>D</span><span>A</span><span>${gun ? 'Gun' : ownCol ? ownCol.head : 'HS'}</span><span class="wide">${gun ? 'Score' : 'Kills'}</span></div>
       ${rows.map(([p, n], i) => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}" style="--i:${i}">
-        <span class="rb-name"><u style="text-decoration:none;min-width:2.3ch;color:var(--c-haze)">${ORDINAL(n)}</u><i style="flex:none;width:7px;height:7px;background:${TEAMS[p.team]?.css}"></i>${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${gun ? Math.min(GUN_LADDER.length, scoreOf(p) + 1) : ownCol ? ownCol.stat(p) : p.head ?? 0}</span><span class="wide">${gun ? matchScore(p) : scoreOf(p)}</span>
+        <span class="rb-name"><u style="text-decoration:none;min-width:2.3ch;color:var(--c-haze)">${ORDINAL(n)}</u><i style="flex:none;width:7px;height:7px;background:${TEAMS[p.team]?.css}"></i>${badgeTag(badgeOf(p.id), 14)}<b>${nameHtml(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${gun ? Math.min(GUN_LADDER.length, scoreOf(p) + 1) : ownCol ? ownCol.stat(p) : p.head ?? 0}</span><span class="wide">${gun ? matchScore(p) : scoreOf(p)}</span>
       </div>`).join('')}
       ${rest ? `<div class="rb-row" style="--i:${rows.length}"><span class="rb-name"><b>+${rest} more</b></span></div>` : ''}
     </div>`;
@@ -290,7 +299,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head"><b class="rb-team">${esc(TEAMS[team].name)}</b><b class="rb-pts">${scores[team]}</b>
         <span>K</span><span>D</span><span>A</span><span>${modeHead}</span><span class="wide">Score</span></div>
       ${rows.map((p, i) => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}" style="--i:${i}">
-        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b>${p.id === mvp?.id ? `<i class="rb-star">${art('ui:star', 11)}</i>` : ''}</span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${modeStat(p)}</span><span class="wide">${matchScore(p)}</span>
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${nameHtml(p.name)}</b>${p.id === mvp?.id ? `<i class="rb-star">${art('ui:star', 11)}</i>` : ''}</span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${modeStat(p)}</span><span class="wide">${matchScore(p)}</span>
       </div>`).join('')}
       ${rest ? `<div class="rb-row" style="--i:${rows.length}"><span class="rb-name"><b>+${rest} more</b></span></div>` : ''}
     </div>`;

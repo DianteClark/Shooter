@@ -23,7 +23,7 @@ export const MP_TABS = [
 export const MP_TAB_IDS = MP_TABS.filter(t => !t.soon).map(t => t.id);
 
 const STANDARD_MODES = ['tdm', 'dom', 'kc', 'hard', 'hq', 'snd', 'ctf', 'ffa', 'ko', 'ctl', 'grind', 'gun', 'inf', 'oic'];
-const GROUND_WAR_MODES = ['gwtdm', 'gwdom', 'gwhq', 'gwko'];
+const GROUND_WAR_MODES = ['gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf'];
 const short = ids => ids.map(id => MODES[id].short).join(', ');
 
 const PLAYLISTS = {
@@ -34,6 +34,7 @@ const PLAYLISTS = {
   ],
   groundwar: [
     { id: 'gwqp', name: 'Quick Play: Ground War', icon: 'quick', modes: GROUND_WAR_MODES },
+    { id: 'gwparty', name: 'Ground War Party', icon: 'party', modes: ['gwinf', 'gwko'] },
   ],
   br: [
     { id: 'quads', name: 'Quads', icon: 'mode:br', modes: ['br'], sub: '8 squads of four' },

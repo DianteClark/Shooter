@@ -146,3 +146,21 @@ in `BR` (js/shared/modes.js).
   next circle (the full map is still a tap away), squad panel top right under 667 px, the down panel under your
   character; landing pings (tap the map: `{act:'ping'}` → `brping`), the kill leader named and shown on the maps every
   30 s, a "Final circles" callout. Tests: `python3 dev/ui-br-visuals.py [port]` (staged crawl, revive, canopy, minimap).
+
+## Owner fixes (ROADMAP item 18)
+- The drop: gliders hang in the air (js/render/characters.js `glideRig`): height from the glide clock (the local player's
+  own `glideT`; anyone else's counted from when the view first shows them gliding), `GLIDE_ALT` 14 m at the jump (the
+  transport's height), no stride, a shrinking shadow and their team ring on the ground below. The camera rides your own
+  glide down (renderer: aboard it waits at the jump height, then follows the descent, level with the ground on landing).
+  On touch-down the canopy folds away in 0.3 s (br-fx reads the rig's `chute`), the body dips into the legs and dust kicks
+  up. Everyone's glides read the same.
+- Ground guns: the take prompt sits in the gap between the vitals and the aim stick's ring, just over the plate and
+  medkit buttons (measured per screen size, `#placeTake`), and says what the tap does to which hand: "Swap primary for"
+  (the hand you hold, or the hand fists are out in) or "Pick up as secondary", then the gun in its rarity colour. The tap
+  sends that slot. Out of rounds altogether (magazine, reserve and the pouch's rounds of its type, after the usual
+  fall-through to a loaded other gun) the fists come out on their own a moment later (`Match.#brDry`).
+- Out of the match: watching a teammate still in (Next teammate, Leave); squad out, Spectate or Leave. Spectate watches
+  anyone left (`spectate.any`), Next player and Next squad; the plate becomes a strip at the bottom. Leave
+  (`Match.leaveNow`) goes to results at once (no banner, `results.early`: a loss, your place, squads still in listed as
+  "In"); a guest's phone just stops following; a host with other people in the room keeps simulating the match, drawing
+  nothing (`headless`), until it ends for them (Rematch waits for it; going to the title ends it, as leaving a room does).

@@ -11,7 +11,7 @@ import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRAC
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
-import { badgeMark, weaponLevelHtml } from './widgets.js';
+import { badgeMark, nameHtml, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
@@ -428,6 +428,8 @@ export class HUD {
 
   // The scoreboard's Leave button; the session flow belongs to main.js.
   onLeaveMatch(cb) { this.leaveCb = cb; }
+  // Battle royale, out of the match: Leave goes to the results now (js/ui/br-hud.js); main.js decides what that means.
+  onBrLeave(cb) { this.brLeaveCb = cb; }
 
   setLefty(on) {
     this.el.classList.toggle('lefty', on);
@@ -560,7 +562,7 @@ export class HUD {
   // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
   #showIntro(mapId, mode, roster, localId) {
     const map = MAPS[mapId] ?? this.map;
-    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${esc(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${nameHtml(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
     const team = (t, side) => {
       const list = roster.filter(p => p.team === t);
       return `<div class="in-team ${side}" style="--team:${TEAMS[t].css}"><h3><i></i>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
@@ -1107,7 +1109,7 @@ export class HUD {
         row.hidden = !p;
         if (!p) return;
         row.classList.toggle('me', p.id === me.id);
-        slot.name.textContent = p.name;
+        if (slot.nameKey !== p.name) { slot.nameKey = p.name; slot.name.innerHTML = nameHtml(p.name); }
         slot.name.style.color = '';
         const badge = this.badges.get(p.id);
         const rank = badge?.prestige ?? -1;
@@ -1139,7 +1141,8 @@ export class HUD {
         row.hidden = !p;
         if (!p) return;
         row.classList.toggle('me', p.id === me.id);
-        slot.name.textContent = `${at + 1}. ${p.name}`;
+        const nk = `${at + 1}|${p.name}`;
+        if (slot.nameKey !== nk) { slot.nameKey = nk; slot.name.innerHTML = `${at + 1}. ${nameHtml(p.name)}`; }
         slot.name.style.color = TEAMS[p.team]?.css ?? '';
         const badge = this.badges.get(p.id);
         const rank = badge?.prestige ?? -1;
@@ -2418,7 +2421,7 @@ export class HUD {
     const cause = art ? `<span class="f-w${gold ? ' f-gold' : ''}"${goldStyle} title="${esc(killCause(e))}">${art}</span>` : `<span class="f-w f-text">${esc(killCause(e))}</span>`;
     const head = e.head ? `<span class="f-hs">${glyph('medal:headshot', 14)}</span>` : '';
     const side = byP?.team === view.players.find(p => p.id === view.localId)?.team ? 'ally' : 'foe';
-    this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${esc(byName)}</em>${cause}${head}${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${esc(tgtName)}</em>`, mine, side);
+    this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${nameHtml(byName)}</em>${cause}${head}${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${nameHtml(tgtName)}</em>`, mine, side);
     if (e.by === view.localId && e.target !== view.localId) this.#scorePop(SCORE.kill + (e.head ? SCORE.headshot : 0), e.head ? 'Headshot' : 'Kill');
     else if (e.assist === view.localId) this.#scorePop(SCORE.assist, 'Assist');
 

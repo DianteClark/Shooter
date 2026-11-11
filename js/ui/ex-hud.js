@@ -110,6 +110,8 @@ const CSS = `
 .ex-held.won b { color: #8ff09c; }
 .ex-held .what { font: 400 18px/1.1 var(--f-stencil); color: var(--c-sodium); margin-top: 4px; }
 .ex-held small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-top: 6px; }
+.ex-held .acts { display: flex; gap: 8px; justify-content: center; }
+.ex-held .ex-leave { color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
 .ex-held button { margin-top: 10px; height: 36px; padding: 0 14px; border: 0; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-chalk);
   clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 .ex-lives-note { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
@@ -180,7 +182,7 @@ export class ExHud {
       ${'<div class="ex-tag" hidden><span></span></div>'.repeat(TAGS)}
       <div class="ex-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div></div>
       <div class="ex-rev" hidden><b>Reviving</b><i><i></i></i></div>
-      <div class="ex-held" hidden><b></b><div class="what"></div><small></small><button data-tap="1" class="ex-spec-next" hidden>Next teammate</button></div>
+      <div class="ex-held" hidden><b></b><div class="what"></div><small></small><div class="acts"><button data-tap="1" class="ex-spec-next" hidden>Next teammate</button><button data-tap="1" class="ex-leave">Leave</button></div></div>
       <div class="ex-offers" hidden data-tap="1"><h3>Contract phone<small>Take one: it replaces the contract your squad has now</small></h3><div class="ex-offer-row"></div><button class="close" data-tap="1">Close</button></div>
       <div class="ex-map" hidden data-tap="1">
         <div class="ex-map-frame"><canvas width="${MAP_PX}" height="${MAP_PX}"></canvas></div>
@@ -216,6 +218,8 @@ export class ExHud {
     act($('.ex-map-close'), () => this.toggleMap(false));
     this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl) this.toggleMap(false); });
     act($('.ex-spec-next'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1); });
+    // Out for good: results now for this phone (main.js leaveBrEarly, the battle royale's own Leave), the match goes on.
+    act($('.ex-leave'), () => this.hud.brLeaveCb?.());
     this.c = {};
     this.phone = null;
   }
@@ -490,7 +494,7 @@ export class ExHud {
     this.heldEl.classList.toggle('won', lifted || !!squad?.extracted);
     this.heldEl.querySelector('b').textContent = lifted ? 'Extracted' : squad?.extracted ? 'Squad got out' : 'Out of lives';
     this.heldEl.querySelector('.what').textContent = lifted || squad?.extracted ? `${banked.length} contract${banked.length === 1 ? '' : 's'} banked` : `${squad?.pot?.length ?? 0} contracts pending`;
-    this.heldEl.querySelector('small').textContent = w ? `Watching ${w.name}.${!squad?.extracted ? ' If anyone in your squad gets out, the pot is banked for you too.' : ''}` : 'Results come up when the match ends. You can leave from the scoreboard.';
+    this.heldEl.querySelector('small').textContent = w ? `Watching ${w.name}.${!squad?.extracted ? ' If anyone in your squad gets out, the pot is banked for you too: stay to keep that chance.' : ' Leave whenever you like: it is banked.'}` : 'Leave for your results, or watch until the match ends.';
     const mates = view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length;
     this.heldEl.querySelector('.ex-spec-next').hidden = mates < 2;
   }

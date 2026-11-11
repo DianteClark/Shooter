@@ -19,7 +19,7 @@ import { exAmmo } from '../sim/extract.js';
 import { objOf } from '../sim/rules.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { unpackKit } from '../shared/attachments.js';
-import { brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
+import { AMMO_TYPES, ammoOf, brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
 
 // Smallest signed rotation from b to a.
 function angleDiffSigned(a, b) {
@@ -104,6 +104,21 @@ export class Match {
   }
 
   isPractice() { return this.mode === 'range' || !!this.training || !!this.practice; }
+
+  // Battle royale, out of it: results for this phone now, while the match goes on for everyone else. `headless` (a host
+  // with other people still playing): the sim keeps running and sending snapshots, nothing is drawn, and `onLateEnd`
+  // fires when the match does end (no second set of results or awards). Otherwise the match stops here for this phone.
+  // A player out before their squad is placed takes the place the squad holds now.
+  leaveNow({ headless = false } = {}) {
+    const view = this.interp.newest;
+    if (this.ended || !view) return false;
+    const me = view.players.find(p => p.id === this.localId);
+    const place = me && !me.place && view.br ? view.br.squadsLeft ?? 0 : 0;     // (Extraction: no place; the squad's banked pot counts.)
+    const v = place ? { ...view, players: view.players.map(p => (p === me ? { ...p, place } : p)) } : view;
+    this.headless = headless; this.early = true;
+    this.#close(v);
+    return true;
+  }
 
   // Cuts the end-of-match hold short so results show at once.
   endNow() {
@@ -237,6 +252,17 @@ export class Match {
     this.#command({ cmd: 'ex', act, ...extra });
   }
 
+  // Battle royale: the gun in hand has nothing left anywhere (magazine, reserve, and the pouch's rounds of its type): a
+  // moment after the last shot, out come the fists, as if their slot were tapped (the gun is kept, and comes back topped up
+  // from the pouch when its slot is tapped once rounds are found).
+  #brDry(view, dt) {
+    const ps = this.ps, def = ps.defs?.[ps.slot];
+    const t = def && ps.weapon !== 'knife' && !def.unlimitedReserve ? AMMO_TYPES.indexOf(ammoOf(def.id)) : -1;
+    const dry = t >= 0 && ps.ammo[ps.slot] <= 0 && ps.reserve[ps.slot] <= 0 && !(view.br?.inv?.pouch?.[t] > 0);
+    this.brDryT = dry ? (this.brDryT ?? 0) + dt : 0;
+    if (this.brDryT > 0.35) { this.brDryT = 0; this.brSlot(2); }
+  }
+
   // Battle royale commands from the HUD: jump, take (a ground gun), plate, med, self (revive kit), cancel.
   brCommand(act, extra = {}) {
     if (!this.br) return;
@@ -351,6 +377,7 @@ export class Match {
       const me = view.players.find(p => p.id === this.localId);
       if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
       if (me?.downed) downedInput(r);
+      else this.#brDry(view, dt);
     } else if (this.ex) {
       const me = view.players.find(p => p.id === this.localId);
       if (me?.downed) downedInput(r);
@@ -483,7 +510,7 @@ export class Match {
       p.reloadT = ps.reloadT; p.reloadDur = ps.reloadDur;
       p.adsT = ps.adsT; p.sprinting = ps.sprinting; p.sliding = ps.sliding; p.bloom = ps.bloom;
       p.heat = ps.heat; p.overheated = ps.overheated; p.firingT = ps.firingT;
-      if (this.br) p.air = this.brAir;
+      if (this.br) { p.air = this.brAir; p.glideT = this.brAir === 2 ? this.glideT : undefined; }
     }
     return p;
   }
@@ -514,7 +541,8 @@ export class Match {
   #close(view) {
     if (this.ended) return;
     this.ended = true;
-    try { this.stop(); } catch (err) { this.running = false; console.error('match stop', err); }
+    if (this.headless) { this.controls.setEnabled(false); this.hud.setVisible?.(false); }
+    else try { this.stop(); } catch (err) { this.running = false; console.error('match stop', err); }
     try { this.telemetry.finish(view); } catch (err) { console.error('match stats', err); }
     let awards = {};
     try { awards = this.awards.finish(view) ?? {}; } catch (err) { console.error('match awards', err); }
@@ -525,6 +553,7 @@ export class Match {
       snd: view.snd ?? view.points?.snd ?? null,
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
+      early: !!this.early,
       ...awards,
     });
   }
@@ -538,6 +567,11 @@ export class Match {
     this.lastTime = nowMs;
 
     if (this.isHost) this.#stepHost(dt);
+    if (this.headless) {          // Left early as the host (leaveNow): keep the match going for the others, draw nothing.
+      this.frameEvents.length = 0;
+      if (this.sim?.phase === 'ended' && !this.lateEnded) { this.lateEnded = true; this.onLateEnd?.(); }
+      return;
+    }
     this.#syncLifeFromAuthority();
 
     const view = this.interp.sample(this.now());
