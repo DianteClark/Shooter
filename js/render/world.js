@@ -11,6 +11,7 @@ import jungle from './themes/jungle.js';
 import arctic from './themes/arctic.js';
 import * as coast from './themes/coast.js';
 import * as industrial from './themes/industrial.js';
+import * as frontier from './themes/frontier.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
@@ -3212,6 +3213,8 @@ function buildDecals(map, theme) {
 }
 
 export function buildWorld(map, teams, fogUniforms) {
+  // Giant battle royale maps stream their tiles in as the camera comes near (js/render/themes/frontier.js).
+  if (map.size === 'giant') return frontier.buildGiantWorld(map, fogUniforms, INTERNALS);
   const theme = getTheme(map.theme);
   INK = theme.ink;
   CONTAINER_COLORS = theme.containers;
@@ -3402,6 +3405,15 @@ const THUMB_STYLE = {
   arctic: arctic.thumb,
   pier: coast.pier.thumb,
   foundry: industrial.foundry.thumb,
+  frontier: frontier.thumb,
+};
+
+// What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a
+// region's palette, as buildWorld does for the whole map.
+const INTERNALS = {
+  DRESS, THEME_STAGES, KIT, GlowList, makeBake, mulberry, makeNoise, packWorld, floatAttrs, buildDecals, createWorldMaterial,
+  SIGN_VERT, SIGN_FRAG, GLOW_VERT, GLOW_FRAG, WATER_VERT, WATER_FRAG, rockMass,
+  setPalette(theme) { INK = theme.ink; CONTAINER_COLORS = theme.containers; },
 };
 
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is

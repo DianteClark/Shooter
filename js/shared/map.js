@@ -21,13 +21,17 @@ import canopy from './maps/canopy.js';
 import riverbend from './maps/riverbend.js';
 import expedition from './maps/expedition.js';
 import icebreaker from './maps/icebreaker.js';
+import frontier from './maps/br-frontier.js';
 import { MODE_IDS, MODES } from './modes.js';
 
-export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, icebreaker, range };
+export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, icebreaker, range, frontier };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // What the vote and match setup offer. The firing range is reached from its own menu entry only.
-export const MAP_IDS = Object.keys(MAPS).filter(id => !MAPS[id].hidden);
+// Giant battle royale maps (docs/BR.md) are never in a 6v6 or Ground War rotation, the solo picker's size sections or
+// the menu backdrop: the battle royale mode lists them itself (BR_MAP_IDS).
+export const MAP_IDS = Object.keys(MAPS).filter(id => !MAPS[id].hidden && MAPS[id].size !== 'giant');
+export const BR_MAP_IDS = Object.keys(MAPS).filter(id => MAPS[id].size === 'giant');
 export const DEFAULT_MAP = 'railyard';
 
 // Size tiers (docs/MAPS-OVERHAUL.md), smallest first. A map without `size` counts as medium. `label` heads the picker

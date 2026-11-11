@@ -728,6 +728,7 @@ export class GameRenderer {
 
     this._updateCamera(realDt, local, view);
     this._updateCull();
+    this.world.setCutters?.(view.players, local);
     // A replay's camera can look anywhere, so it gets every tile; frustum culling still applies.
     this.world.setView(this.camera, this.camTarget.x, this.camTarget.z, cine || this.finalKill ? Infinity : this.worldCut);
     this.world.update(fxDt);
