@@ -341,8 +341,9 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
     const seats = base.filter(r => r.isBot);
     const picks = draw(seats.length);
     return base.map(r => {
-      if (!r.isBot) return r;
-      const k = seats.indexOf(r), e = poolBotEntry(Number(r.id.slice(3)), r.team, picks[k], botSkill, seed);
+      const k = seats.indexOf(r);
+      if (!r.isBot || !picks[k]) return r;      // A filtered draw (tests) can run short: the seat keeps a dealt bot.
+      const e = poolBotEntry(Number(r.id.slice(3)), r.team, picks[k], botSkill, seed);
       if (m.rules === 'gun') { const g = gunLoadout(0, e.loadout); Object.assign(e, { loadout: { ...g, skin: e.skin, emblem: e.loadout.emblem }, primary: g.primary, camo: g.camo }); }
       if (m.rules === 'br') Object.assign(e, { primary: r.primary, loadout: { ...r.loadout, operator: e.operator, skin: e.skin, emblem: e.loadout.emblem, card: e.loadout.card } });
       return e;
