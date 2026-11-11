@@ -71,6 +71,10 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
         <h4>${ico('sound')}Audio</h4>
         ${stepper('sound')}
         ${stepper('music')}
+        <div class="opt-row">
+          <div class="opt-name"><b>Music in matches</b><small>Off: menus, match stings and the battle royale flight only</small></div>
+          ${toggle('optMatchMusic', 'opt-matchmusic')}
+        </div>
         ${VOICE_LEVELS_WORK ? stepper('voice') : `
         <div class="opt-row">
           <div class="opt-name"><b>Team voice</b><small>Plays your squad's voice on this phone</small></div>
@@ -99,6 +103,9 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
+    const mm = q('.opt-matchmusic');
+    mm.classList.toggle('on', v.matchMusic === true);
+    mm.querySelector('b').textContent = v.matchMusic === true ? 'On' : 'Off';
     const tag = q('.opt-squad-tag');
     tag.classList.toggle('on', !!v.squad);
     tag.querySelector('b').textContent = v.squad || 'None';
@@ -124,6 +131,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
+    optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optSquad: () => onSquad?.(),
