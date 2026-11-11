@@ -8,6 +8,7 @@ import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
+import { V10_BOT_PRIMARIES } from '../shared/weapons-v10.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange } from './equipment.js';
 import { NavGrid } from './nav.js';
@@ -136,6 +137,7 @@ const BOT_PRIMARIES = [
   // V8 guns dealt between the specialists, so no one match draws all of them at once.
   'saw', 'carbine', 'coach', 'heavysmg', 'lever', 'slug', 'semisnipe', 'lightlmg', 'rotary', 'crossbow', 'antimat',
 ];
+BOT_PRIMARIES.push(...V10_BOT_PRIMARIES);   // V10 guns join the rotation after the older ones.
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 const BOT_TACTICALS = ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock'];
 const BOT_LETHALS = ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill'];

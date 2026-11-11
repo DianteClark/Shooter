@@ -27,6 +27,9 @@ const STATS = [
   // Damage kept through a piece of waist-high cover. Light rounds have no row: cover simply stops them.
   { id: 'pen', label: 'Penetration', only: w => !!w.penetrate, raw: w => w.penetrate, score: r => r, better: 1 },
   { id: 'blast', label: 'Blast radius', only: w => !!w.explosive, raw: w => w.explosive.radius, score: r => r / 6, better: 1 },
+  // V10: spare ammunition (the Ammo Satchel moves it; sidearms and blades never run out) and a charge gun's hold time.
+  { id: 'reserve', label: 'Spare ammo', only: w => !w.unlimitedReserve, raw: w => w.reserve, score: r => Math.sqrt(r / 320), better: 1, whole: true },
+  { id: 'charge', label: 'Charge time', only: w => !!w.charge, raw: w => w.charge.time, score: r => 1 - r / 1.2, better: -1 },
 ];
 
 // The rows a weapon shows: heavy-gun rows only exist on the guns they concern.
@@ -68,6 +71,7 @@ export function weaponFacts(weaponId, kit) {
   const w = applyAttachments(WEAPONS[weaponId], kit);
   const b = rangeBands(w);
   const falloff = b.full < b.max;
+  if (w.melee) return [['Damage', `${w.damage}`], ['Swings', `${Math.round(w.rpm)}/min`], ['Reach', `${w.range.toFixed(1)}m`], ['Lunge', w.lunge ? 'Yes' : 'No'], ['Noise', 'Silent'], ['Ammo', 'None']];
   return [
     ['Damage', w.pellets > 1 ? `${w.damage}x${w.pellets}` : `${w.damage}`],
     ['RPM', `${Math.round(w.rpm)}`],

@@ -5,6 +5,7 @@
 import { MeshBuilder } from './meshbuild.js';
 import { PART } from './camo-shader.js';
 import { kitKey, normalizeKit, NO_ATTACHMENTS } from '../shared/attachments.js';
+import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
 
 const C = {
   body:  0x424852,
@@ -37,6 +38,7 @@ function pistolGrip(k, x = -0.02, drop = 0.34, w = 0.13) {
 
 // Bracket and sight on the rail. x,y = rail centre and rail top. s scales it for small guns.
 function fitOptic(k, id, x, y, s = 1) {
+  if (fitOpticV10(k, id, x, y, s)) return;   // V10 optics (guns-v10.js).
   if (id === 'reflex') {
     // An open square: the frame is what reads at phone size.
     k.dark().box(x, y + 0.035 * s, 0, 0.3 * s, 0.07 * s, 0.19 * s);
@@ -144,11 +146,12 @@ function fitBarrel(k, id, x, y, z, r, len = 0.5) {
     k.dark().box(x + 0.13, y, z, 0.045, r * 2.25, r * 3.05);
     return x + 0.21;
   }
-  return null;
+  return fitBarrelV10(k, id, x, y, z, r, len);   // V10 barrels (guns-v10.js), or null: the gun's own muzzle stays.
 }
 
 // Stubby angled grip, plain vertical post, or a wide swing brace sticking out to the side.
 function fitForegrip(k, id, x, y) {
+  if (fitForegripV10(k, id, x, y)) return;   // V10 grips (guns-v10.js).
   if (id === 'angled') {
     k.grip().extrude([[x - 0.16, y], [x + 0.16, y], [x + 0.03, y - 0.22], [x - 0.09, y - 0.22]], -0.07, 0.07);
   } else if (id === 'vertical') {
@@ -198,6 +201,7 @@ const MAG_LOOK = {
   drummag:  { len: 0.45, part: 'dark', drum: true },
   apmag:    { len: 1, part: 'metal', tab: true },
 };
+Object.assign(MAG_LOOK, V10_MAG_LOOK);
 const MAG_BASE = { len: 1, part: 'dark' };
 const magLook = id => MAG_LOOK[id] || MAG_BASE;
 
@@ -1247,6 +1251,9 @@ const FACTORIES = {
   dmr, battle, lever, sniper, antimat, semisnipe, pistol, revolver, machpistol, deuce, launcher, thumper, golden,
   carbine, heavysmg, slug, lightlmg, crossbow, scatter,
 };
+
+// The V10 arsenal's models live in guns-v10.js and are built from the same shared parts.
+Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, longGunGrips }));
 
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.
 const cache = new Map();

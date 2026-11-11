@@ -32,6 +32,10 @@ const PANELS = {
       ${stat('Swing speed', 'Heavy guns turn slowly while aiming or firing: a flanker can get round you. Light guns have no limit.')}
       ${stat('Heat (LMGs)', 'Rounds in a long burst before the barrel overheats and locks for about two seconds. Fire in bursts to let it cool. You can still swap to your sidearm.')}
       ${stat('Blast radius (launchers)', 'Metres an explosion reaches. Damage is highest at the centre and falls off to the edge. Walls block it.')}
+      ${stat('Charge shot (Lodestone)', 'Hold the trigger: the bar fills for about half a second and the round then leaves by itself. Let go early and the charge drains away. Keep the sights on the target while it fills.')}
+      ${stat('Settling (Stanchion)', 'Its first rounds scatter and every round after lands tighter, until a long burst is the most accurate automatic fire there is. Stop firing and it has to settle again. The Flywheel does the same with fire rate: it starts slow and winds up.')}
+      ${stat('Heat rifle (Kiln)', 'Works like an LMG heat bar on a rifle: no bloom at all and a 75-round magazine, but hold it down and it locks. Short strings.')}
+      ${stat('Melee (Gaff, Maul)', 'Sidearm-slot weapons with no ammunition and no sound. A swing reaches about three metres along your aim and throws you a step forward. The Gaff kills in two quick swings, the Maul in one slow one.')}
     </dl>`,
   controls: () => `
     <div class="help-grid">

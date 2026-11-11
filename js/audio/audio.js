@@ -18,6 +18,7 @@
 // near voice and a held trigger stays one clean shot per shot.
 
 import { WEAPONS } from '../shared/weapons.js';
+import { fillV10 } from '../shared/weapons-v10.js';
 
 const MAX_VOICES = 26;
 // Priority. A new voice can only replace something strictly lower, so the top of this list always plays.
@@ -1357,6 +1358,8 @@ export class AudioEngine {
         this.foley[id] = { out: this._toBuffer(r.out), in: this._toBuffer(r.in), rack: this._toBuffer(r.rack), swap: this._toBuffer(r.swap) };
       });
     }
+    // V10 guns share an older gun's rendered shot and reload sounds (weapons-v10.js V10_LIKE): no extra buffers.
+    jobs.push(() => { fillV10(this.guns, 'sound'); fillV10(this.foley, 'sound'); });
     const stingers = renderStingers(sr);
     for (const k of Object.keys(stingers)) jobs.push(() => { this.stingers[k] = this._toBuffer(stingers[k]()); });
     jobs.push(() => { this.loops.rain = this._toBuffer(renderRain(sr, 77)); });
