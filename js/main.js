@@ -940,7 +940,10 @@ function isRandomPick(pick) {
 // Either half may be RANDOM; this device is the host, so it rolls here.
 function launchSolo(pickMap, pickMode) {
   app.lastPick = { mapId: pickMap, mode: pickMode };
-  const { mapId, mode } = resolvePick({ mapId: pickMap, mode: pickMode });
+  // Dev only: ?debug=1&map=<giant map>&mode=tdm plays a battle royale map under a team mode it does not list, to look
+  // round it and test it before (or beside) its own mode.
+  const devGiant = params.has('debug') && MAPS[pickMap]?.size === 'giant' && MODES[pickMode];
+  const { mapId, mode } = devGiant ? { mapId: pickMap, mode: pickMode } : resolvePick({ mapId: pickMap, mode: pickMode });
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
   // The picker's bot match settings (js/ui/botsettings.js); ?bots= and the limit test hooks still win.

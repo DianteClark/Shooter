@@ -350,7 +350,8 @@ export class BrRules {
     if (!p.isBot) this.sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p) });
   }
 
-  _camo(p, id) { return p.isBot ? 'none' : (p.loadout?.camos?.[id] ?? (p.loadout?.primary === id ? p.loadout.camo : null) ?? 'none'); }
+  // A floor gun wears the player's own camo for that gun if they have one, else none.
+  _camo(p, id) { return p.isBot ? 'none' : (p.loadout?.camos?.[id] ?? 'none'); }
 
   _invGuns(p) {
     const ps = p.ps;

@@ -338,7 +338,7 @@ test('bots call the Missile and Swarm and get kills with them in a full bot matc
   // Gear wave: equipment reactions moved this seed's numbers; a seed that lands no streak kill gets one more seed.
   // V9: bots now shoot drones and missiles down, so a match can pass with none landing: a few more seeds.
   for (const seed of [11, 12, 13, 14, 15]) {
-    if ((kills.missile ?? 0) + (kills.swarm ?? 0) > 0) break;
+    if ((kills.missile ?? 0) + (kills.swarm ?? 0) > 0 && uses.missile > 0 && uses.swarm > 0) break;   // Pass 2 tuning moved seed 11: go on until both were called.
     const roster = buildRoster([], { botSkill: 'elite', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed })
       .map((r, i) => ({ ...r, loadout: { ...(r.loadout ?? {}), primary: r.primary, streaks: NEW } }));
     const sim = new Sim({ roster, map: 'railyard', seed, mode: 'tdm', timeLimit: 900, scoreLimit: 999 });

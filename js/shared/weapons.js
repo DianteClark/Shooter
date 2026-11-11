@@ -20,6 +20,7 @@
 //   heat            {rounds, coolDelay, coolTime, lockout, loosenFrom}: rounds to full bar, idle seconds before
 //                   cooling, seconds full to empty, lockout at full, bar fraction past which accuracy loosens
 //   headMult        damage multiplier for a head hit. Derived at the bottom of this file: any head hit kills.
+//   headMax         Pass 2: caps headMult at every stance (see headMultAt), for a gun whose head hit should not kill alone
 //   turnCap         max rad/s of aim rotation while aiming or firing; absent = uncapped
 //   shellReload     reload is one round at a time, and firing interrupts it
 //   slideFire       no spread penalty while sliding
@@ -62,7 +63,7 @@ export const WEAPONS = {
   // All-rounder. Wins at mid range; the recoil curve rewards players who learn it.
   ar: {
     id: 'ar', name: 'Halyard', role: 'All-rounder', auto: true,
-    damage: 27, rpm: 680, magazine: 30, reserve: 150, reload: 2.05, range: 48,
+    damage: 27, rpm: 670, magazine: 30, reserve: 150, reload: 2.05, range: 48,
     falloff: { start: 16, end: 32, min: 0.68 }, penetrate: 0.7,
     adsSpread: 0.0075, hipSpread: 0.052, bloomPerShot: 0.1, bloomRecover: 2.4, bloomScale: 1.5,
     pattern: { amp: 0.012, freq: 0.62, ramp: 5 }, turnCap: 15,
@@ -88,7 +89,7 @@ export const WEAPONS = {
   heavyar: {
     id: 'heavyar', name: 'Drayman', role: 'Heavy hitter', auto: true,
     damage: 36, rpm: 480, magazine: 25, reserve: 125, reload: 2.5, range: 50,
-    falloff: { start: 20, end: 34, min: 0.72 }, penetrate: 0.8,
+    falloff: { start: 18, end: 34, min: 0.72 }, penetrate: 0.8,
     adsSpread: 0.0055, hipSpread: 0.07, bloomPerShot: 0.13, bloomRecover: 2, bloomScale: 1.5,
     pattern: { amp: 0.009, freq: 0.5, ramp: 3, drift: 0.0026 }, turnCap: 11,
     adsTime: 0.27, sprintToFire: 0.24, swapTime: 0.42, moveMult: 0.95, adsMoveMult: 0.5,
@@ -127,9 +128,9 @@ export const WEAPONS = {
   // past a dozen metres it is spent.
   pdw: {
     id: 'pdw', name: 'Rasp', role: 'Knife fight', auto: true,
-    damage: 25, rpm: 1050, magazine: 28, reserve: 168, reload: 1.6, range: 26,
-    falloff: { start: 7, end: 14, min: 0.42 },
-    adsSpread: 0.024, hipSpread: 0.042, bloomPerShot: 0.07, bloomRecover: 3, bloomScale: 1.6,
+    damage: 26, rpm: 1050, magazine: 28, reserve: 168, reload: 1.6, range: 26,
+    falloff: { start: 9, end: 14, min: 0.45 },
+    adsSpread: 0.024, hipSpread: 0.038, bloomPerShot: 0.07, bloomRecover: 3, bloomScale: 1.6,
     pattern: { amp: 0.028, freq: 1.75, ramp: 2, drift: 0.0028 },
     adsTime: 0.12, sprintToFire: 0.08, swapTime: 0.24, moveMult: 1.08, adsMoveMult: 0.82,
     pellets: 1, slideFire: true, kickCam: 0.6, tracerWidth: 0.7, longshot: 13,
@@ -167,9 +168,9 @@ export const WEAPONS = {
   shotgun: {
     id: 'shotgun', name: 'Thresher', role: 'Breach', auto: false,
     damage: 22, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 16,
-    falloff: { start: 7.5, end: 13.5, min: 0.3 },
+    falloff: { start: 9, end: 13.5, min: 0.3 },
     adsSpread: 0.036, hipSpread: 0.06, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
-    adsTime: 0.17, sprintToFire: 0.1, swapTime: 0.42, moveMult: 1.04, adsMoveMult: 0.68,
+    adsTime: 0.17, sprintToFire: 0.1, swapTime: 0.42, moveMult: 1.09, adsMoveMult: 0.68,
     pellets: 8, shellReload: true, kickCam: 1, tracerWidth: 0.55, longshot: 10,
     botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 12, precise: true },
   },
@@ -179,10 +180,10 @@ export const WEAPONS = {
   autoshot: {
     id: 'autoshot', name: 'Squall', role: 'Doorway', auto: true,
     damage: 17, rpm: 320, magazine: 14, reserve: 56, reload: 2.4, range: 13,
-    falloff: { start: 5.5, end: 11, min: 0.3 },
+    falloff: { start: 7, end: 11.5, min: 0.3 },
     adsSpread: 0.055, hipSpread: 0.075, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
     pattern: { amp: 0.02, freq: 1.1, ramp: 3 }, turnCap: 6.5,
-    adsTime: 0.2, sprintToFire: 0.11, swapTime: 0.46, moveMult: 1.02, adsMoveMult: 0.78,
+    adsTime: 0.2, sprintToFire: 0.11, swapTime: 0.46, moveMult: 1.08, adsMoveMult: 0.78,
     pellets: 8, slideFire: true, kickCam: 0.95, tracerWidth: 0.5, longshot: 8,
     botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 11, precise: true },
   },
@@ -192,9 +193,9 @@ export const WEAPONS = {
   coach: {
     id: 'coach', name: 'Doublet', role: 'Ambush', auto: false,
     damage: 20, rpm: 280, magazine: 2, reserve: 30, reload: 1.6, range: 15,
-    falloff: { start: 7.5, end: 12, min: 0.35 },
+    falloff: { start: 8.5, end: 12.5, min: 0.35 },
     adsSpread: 0.035, hipSpread: 0.065, bloomPerShot: 0.1, bloomRecover: 2.2, bloomScale: 0.4, turnCap: 8,
-    adsTime: 0.15, sprintToFire: 0.06, swapTime: 0.36, moveMult: 1.07, adsMoveMult: 0.75,
+    adsTime: 0.15, sprintToFire: 0.06, swapTime: 0.36, moveMult: 1.12, adsMoveMult: 0.75,
     pellets: 10, kickCam: 1.15, tracerWidth: 0.55, longshot: 9,
     botUse: { pref: 4, hold: 0.45, flank: 1.6, advance: 3, rush: 8, fireMax: 11, precise: true },
   },
@@ -219,7 +220,7 @@ export const WEAPONS = {
     falloff: { start: 18, end: 38, min: 0.72 }, penetrate: 0.75,
     adsSpread: 0.014, hipSpread: 0.095, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.7,
     spinup: { shots: 9, from: 0.68 },
-    heat: { rounds: 30, coolDelay: 0.4, coolTime: 2.5, lockout: 2.5, loosenFrom: 0.75 }, turnCap: 2.4,
+    heat: { rounds: 30, coolDelay: 0.4, coolTime: 2.5, lockout: 2.5, loosenFrom: 0.75 }, turnCap: 2.6,
     pattern: { amp: 0.014, freq: 0.34, ramp: 8 },
     adsTime: 0.4, sprintToFire: 0.34, swapTime: 0.62, moveMult: 0.82, adsMoveMult: 0.42,
     pellets: 1, kickCam: 0.72, tracerWidth: 1.25, longshot: 28,
@@ -282,10 +283,10 @@ export const WEAPONS = {
   // A fast semi with a big magazine. Three to the body, no flinch: it keeps a target pinned rather than deleting it.
   battle: {
     id: 'battle', name: 'Foreman', role: 'Pressure', auto: false,
-    damage: 38, rpm: 280, magazine: 18, reserve: 100, reload: 2.3, range: 52,
+    damage: 39, rpm: 305, magazine: 20, reserve: 100, reload: 2.1, range: 52,
     falloff: { start: 22, end: 36, min: 0.7 }, penetrate: 0.75,
-    adsSpread: 0.004, hipSpread: 0.085, bloomPerShot: 0.26, bloomRecover: 2.6, bloomScale: 1.3,
-    pattern: { amp: 0.006, freq: 0.8, ramp: 2, drift: 0.0012 }, turnCap: 10,
+    adsSpread: 0.004, hipSpread: 0.085, bloomPerShot: 0.21, bloomRecover: 2.6, bloomScale: 1.3,
+    pattern: { amp: 0.006, freq: 0.8, ramp: 2, drift: 0.0012 }, turnCap: 10, headMax: 2.4,
     adsTime: 0.24, sprintToFire: 0.22, swapTime: 0.38, moveMult: 0.97, adsMoveMult: 0.55,
     pellets: 1, kickCam: 0.7, tracerWidth: 1.2, longshot: 27,
     botUse: { pref: 20, hold: 1.3, flank: 0.7, advance: 2, scoped: true },
@@ -345,11 +346,11 @@ export const WEAPONS = {
   // A carbine-weight bolt gun for people who keep moving. One body shot inside a room, two beyond it, scoped in a blink.
   semisnipe: {
     id: 'semisnipe', name: 'Kestrel', role: 'Quickscope', auto: false,
-    damage: 104, rpm: 62, magazine: 6, reserve: 36, reload: 2.5, range: 58,
-    falloff: { start: 18, end: 28, min: 0.6 }, penetrate: 0.8,
+    damage: 104, rpm: 68, magazine: 6, reserve: 36, reload: 2.5, range: 58,
+    falloff: { start: 20, end: 28, min: 0.6 }, penetrate: 0.8,
     adsSpread: 0.002, hipSpread: 0.14, bloomPerShot: 0.55, bloomRecover: 1.5, bloomScale: 1,
-    adsGate: 0.55, boltKick: 0.3, turnCap: 7,
-    adsTime: 0.21, sprintToFire: 0.26, swapTime: 0.44, moveMult: 0.98, adsMoveMult: 0.6,
+    adsGate: 0.6, boltKick: 0.3, turnCap: 7,
+    adsTime: 0.19, sprintToFire: 0.26, swapTime: 0.44, moveMult: 0.98, adsMoveMult: 0.6,
     pellets: 1, kickCam: 1, tracerWidth: 1.4, longshot: 28,
     botUse: { pref: 16, hold: 1.2, flank: 0.9, advance: 3, scoped: true, adsMin: 0.85, precise: true, sight: 4 },
   },
@@ -483,9 +484,11 @@ export function damageAt(w, dist, ads = true) {
 // HIP_HEAD_MULT, so spraying from the hip is no lottery and fire rate stops deciding every fight.
 export const HIP_HEAD_MULT = 1.6;
 const ALWAYS_LETHAL_HEAD = new Set(['Marksman', 'Sniper']);
+// headMax (Pass 2) caps a gun's head multiplier at every stance: a fast precise gun whose head hit would otherwise be a
+// one-tap kill at any range (Foreman) needs a second round.
 export function headMultAt(w, ads) {
-  if (ads || ALWAYS_LETHAL_HEAD.has(w.category)) return headMultFor(w.id);
-  return Math.min(headMultFor(w.id), HIP_HEAD_MULT);
+  const m = ads || ALWAYS_LETHAL_HEAD.has(w.category) ? headMultFor(w.id) : Math.min(headMultFor(w.id), HIP_HEAD_MULT);
+  return w.headMax ? Math.min(m, w.headMax) : m;
 }
 
 export function rayDamage(w, ray, dist, ads = true) {

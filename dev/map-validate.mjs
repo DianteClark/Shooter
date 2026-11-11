@@ -13,8 +13,13 @@
 //              objective's counterpart (the same point for a shared one): within 10%
 //   sight      the longest clear sight line from walkable ground, and the share of long ones, against the tier
 //   bots       a bot-only match per mode the map hosts: kills, objective events, bots stuck pushing into a wall
+//   giant      (size 'giant', battle royale maps, docs/BR.md) the br contract (places, loot, caches, circle bias),
+//              every place, loot spot and cache reachable, no sealed rooms (every room floor reachable), door gaps at
+//              least 2 m; no fairness check (nobody spawns in teams); sight sampled coarser; instead of the mode's own
+//              match (the sim cannot host 'br' here) a 32-bot free roam under Ground War TDM rules for 120 s
+//              (--seconds doubles) for stuck bots and the host's tick cost (fails over 4 ms mean)
 // Exits non-zero if any map fails a hard check (fields, nav, gaps, fair, bots); sight lines are reported, not failed.
-import { MAPS, MAP_IDS, sizeOf, REGIONS } from '../js/shared/map.js';
+import { MAPS, MAP_IDS, BR_MAP_IDS, sizeOf, REGIONS } from '../js/shared/map.js';
 import { MODES, mapModes, modeFitsMap, playersFor, isFfa, teamSizeFor } from '../js/shared/modes.js';
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { NavGrid } from '../js/sim/nav.js';
@@ -27,17 +32,20 @@ const QUICK = args.includes('--quick'), ASCII = args.includes('--ascii'), ARGS_A
 const SECONDS = Number(opt('seconds', 60));
 const ONLY_MODES = opt('modes', null)?.split(',');
 const ids = args.filter(a => !a.startsWith('--'));
-const todo = ids.length ? ids : MAP_IDS;
+const todo = ids.length ? ids : [...MAP_IDS, ...BR_MAP_IDS];
 
 const GAP = 2 * PLAYER_RADIUS + 0.1;           // Narrower than this and a player cannot get through (or only by luck).
 const TOUCH = 0.05;                            // Closer than this counts as touching: no gap at all.
 const FOOTPRINT = { small: [[46, 58], [30, 38]], medium: [[64, 84], [42, 52]], large: [[92, 112], [56, 70]], huge: [[120, 150], [72, 92]] };
 const STANDARD = ['tdm', 'kc', 'dom', 'hard', 'snd', 'ctf', 'ffa', 'gun'];
-const SIGHT = { small: 25, medium: 40, large: 50, huge: 60 };   // Longest line the tier is built around.
+const SIGHT = { small: 25, medium: 40, large: 50, huge: 60, giant: 80 };   // Longest line the tier is built around.
 
 // ---- Checks ---------------------------------------------------------------------------------------------------------
 
+const isGiant = map => map.size === 'giant';
+
 function checkFields(map, size, out) {
+  if (isGiant(map)) return checkGiantFields(map, out);
   if (!map.size) out.warn.push('no size field (counts as medium)');
   if (!map.region) out.warn.push('no region field');
   else if (!REGIONS[map.region]) out.fail.push(`unknown region '${map.region}'`);
@@ -54,6 +62,56 @@ function checkFields(map, size, out) {
   const spawnCount = map.spawns.flat().length;
   if (seats && spawnCount < seats) out.fail.push(`${spawnCount} spawns for ${seats} free-for-all players`);
   out.info.push(`${size} ${map.region ?? '-'} ${map.width}x${map.height}, ${map.walls.length} walls, modes ${hosts.join(' ')}`);
+}
+
+// The battle royale contract (docs/BR.md).
+function checkGiantFields(map, out) {
+  const br = map.br;
+  if (map.width < 380 || map.width > 480 || map.height < 380 || map.height > 480) out.fail.push(`footprint ${map.width} x ${map.height} outside giant (380-480)`);
+  if (!(map.modes?.length === 1 && map.modes[0] === 'br') || !map.large) out.fail.push("giant map must list modes ['br'] and large: true");
+  if (!br) { out.fail.push('no br block'); return; }
+  const n = (k, lo, hi) => { const c = br[k]?.length ?? 0; if (c < lo || c > hi) out.fail.push(`br.${k}: ${c} (wants ${lo}-${hi})`); return c; };
+  n('pois', 12, 18); n('loot', 500, 900); n('chests', 30, 60);
+  for (const p of br.pois) if (!p.id || !p.name || !(p.r > 0) || !REGIONS[p.region] || ![1, 2, 3].includes(p.tier)) out.fail.push(`poi ${p.id}: bad fields`);
+  const inside = l => l.x > 0 && l.z > 0 && l.x < map.width && l.z < map.height;
+  if (!br.loot.every(l => inside(l) && [1, 2, 3].includes(l.tier) && typeof l.indoor === 'boolean')) out.fail.push('loot spot with bad fields');
+  if (!(br.drop === null || (br.drop?.from && br.drop?.to))) out.fail.push('br.drop must be null or {from, to}');
+  const indoor = br.loot.filter(l => l.indoor).length;
+  if (indoor * 2 < br.loot.length) out.fail.push(`only ${indoor} of ${br.loot.length} loot spots indoors`);
+  const tiers = [1, 2, 3].map(t => br.loot.filter(l => l.tier === t).length);
+  out.info.push(`giant ${map.width}x${map.height}, ${map.walls.length} walls, ${br.pois.length} places, loot ${br.loot.length} (${indoor} indoors; tiers ${tiers.join('/')}), ${br.chests.length} caches, ${map.roofs?.length ?? 0} buildings`);
+}
+
+// Battle royale reachability: every place, loot spot and cache, every room's floor (no sealed rooms) and door widths.
+function checkGiant(map, nav, reach, out) {
+  const br = map.br;
+  for (const p of br.pois) if (!reachableNear(nav, reach, p.x, p.z, Math.min(6, p.r))) out.fail.push(`poi ${p.id} unreachable`);
+  const lost = [...br.loot, ...br.chests].filter(l => !reachableNear(nav, reach, l.x, l.z, 0.6));
+  if (lost.length) out.fail.push(`${lost.length} loot spots/caches unreachable: ${lost.slice(0, 6).map(l => `(${l.x}, ${l.z})`).join(' ')}`);
+  const sealed = (map.rooms ?? []).filter(r => r.bld !== undefined).filter(r => {
+    for (let z = r.z + 0.5; z < r.z + r.d; z += 1) for (let x = r.x + 0.5; x < r.x + r.w; x += 1) if (reach[cellOf(nav, x, z)]) return false;
+    return true;
+  });
+  if (sealed.length) out.fail.push(`${sealed.length} sealed rooms: ${sealed.slice(0, 6).map(r => `(${r.x}, ${r.z})`).join(' ')}`);
+  // Door gaps: consecutive pieces of one building on one wall line, with nothing between them, at least 2 m apart.
+  const byLine = new Map();
+  for (const w of map.walls) {
+    if (w.bld === undefined) continue;
+    const horiz = w.w >= w.d;
+    const key = `${w.bld}:${horiz ? 'h' : 'v'}:${horiz ? w.z : w.x}`;
+    if (!byLine.has(key)) byLine.set(key, []);
+    byLine.get(key).push(horiz ? [w.x, w.x + w.w] : [w.z, w.z + w.d]);
+  }
+  let narrow = 0, doors = 0;
+  for (const list of byLine.values()) {
+    list.sort((a, b) => a[0] - b[0]);
+    for (let i = 1; i < list.length; i++) {
+      const g = list[i][0] - list[i - 1][1];
+      if (g > 0.05) { doors++; if (g < 2) narrow++; }
+    }
+  }
+  if (narrow) out.fail.push(`${narrow} door gaps narrower than 2 m`);
+  out.info.push(`giant: ${br.pois.length} places, ${br.loot.length + br.chests.length} loot spots and caches, ${(map.rooms ?? []).filter(r => r.bld !== undefined).length} rooms all reachable; ${doors} doorways`);
 }
 
 // Walkable cells reachable from a point (4-neighbour, like the sim's free-for-all spawn search).
@@ -213,10 +271,10 @@ function checkFair(map, nav, out) {
   if (rows.length) out.info.push(`fair (team 0/1 metres): ${rows.join(', ')}`);
 }
 
-function checkSight(map, nav, reach, size, out) {
+function checkSight(map, nav, reach, size, out, step = 2) {
   const N = 24, cap = 140;
   let longest = 0, at = null, long = 0, rays = 0;
-  for (let z = 1; z < map.height; z += 2) for (let x = 1; x < map.width; x += 2) {
+  for (let z = 1; z < map.height; z += step) for (let x = 1; x < map.width; x += step) {
     if (!reach[cellOf(nav, x, z)]) continue;
     for (let i = 0; i < N; i++) {
       const a = (i / N) * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a);
@@ -286,6 +344,42 @@ function botMatch(map, mode, out) {
   if (perBot > 4) out.fail.push(`${mode}: bots stuck ${perBot.toFixed(1)} s per bot per minute`);
 }
 
+// A giant map's bot check: 32 bots, 16 v 16 under Ground War TDM rules, spread over the places, for 120 s.
+function freeRoam(map, out) {
+  const seconds = SECONDS * 2, seed = 1234;
+  const roster = buildRoster([], { botSkill: 'regular', teamSize: 16, mapId: map.id, mode: 'gwtdm', seed });
+  const sim = new Sim({ roster, map, seed, mode: 'gwtdm', timeLimit: 3600, scoreLimit: 9999 });
+  const STEP = 1 / SIM_HZ;
+  const hist = new Map(), stuck = new Map();
+  let kills = 0, cpu = 0, live = 0, worst = 0;
+  const end = Math.round((3.2 + seconds) * SIM_HZ);
+  for (let tick = 0; tick < end; tick++) {
+    const c = process.cpuUsage();
+    sim.step(STEP);
+    const cu = process.cpuUsage(c), ms = (cu.user + cu.system) / 1000;
+    if (sim.phase === 'live' && tick > 1) { cpu += ms; live++; worst = Math.max(worst, ms); }
+    for (const e of sim.drainEvents()) if (e.t === 'kill') kills++;
+    if (tick % SIM_HZ === 0 && sim.phase === 'live') {
+      for (const p of sim.players) {
+        const h = hist.get(p.id) ?? [];
+        h.push({ x: p.ps.x, z: p.ps.z, push: Math.hypot(p.bot.input.mx, p.bot.input.mz), alive: p.alive });
+        if (h.length > 5) h.shift();
+        hist.set(p.id, h);
+        if (h.length === 5 && h.every(s => s.alive && s.push > 0.5) && Math.hypot(h[4].x - h[0].x, h[4].z - h[0].z) < 0.6) {
+          const key = `${Math.round(p.ps.x)},${Math.round(p.ps.z)}`;
+          stuck.set(key, (stuck.get(key) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  const spots = [...stuck.entries()].sort((a, b) => b[1] - a[1]);
+  const total = spots.reduce((a, [, n]) => a + n, 0);
+  const mean = cpu / live;
+  out.info.push(`bots free roam (32, gwtdm rules) ${seconds}s kills ${kills}, stuck ${total}${spots.length ? ` at ${spots.slice(0, 5).map(([k, n]) => `(${k})x${n}`).join(' ')}` : ''}, tick ${mean.toFixed(2)} ms mean, ${worst.toFixed(1)} worst (CPU)`);
+  if (total / 32 / (seconds / 60) > 4) out.fail.push(`free roam: bots stuck ${(total / 32 / (seconds / 60)).toFixed(1)} s per bot per minute`);
+  if (mean > 4) out.fail.push(`free roam: host tick ${mean.toFixed(2)} ms mean (budget 4)`);
+}
+
 // ---- Output ------------------------------------------------------------------------------------------------------
 
 function print(out) {
@@ -326,16 +420,18 @@ for (const id of todo) {
   const map = MAPS[id];
   if (!map) { console.log(`?? ${id}: not a registered map`); failed++; continue; }
   const out = { id, fail: [], warn: [], info: [] };
-  const size = sizeOf(map);
+  const size = isGiant(map) ? 'giant' : sizeOf(map);
   checkFields(map, size, out);
   const nav = new NavGrid(map);
   const reach = flood(nav, map.spawns[0][0]);
   checkNav(map, nav, reach, out);
   checkGaps(map, out);
-  checkFair(map, nav, out);
-  checkSight(map, nav, reach, size, out);
+  if (isGiant(map)) checkGiant(map, nav, reach, out);
+  else checkFair(map, nav, out);
+  checkSight(map, nav, reach, size, out, isGiant(map) ? 6 : 2);
   if (ASCII) console.log(ascii(map, nav, reach));
-  if (!QUICK) for (const mode of mapModes(map)) {
+  if (!QUICK && isGiant(map)) freeRoam(map, out);
+  else if (!QUICK) for (const mode of mapModes(map)) {
     if (!modeFitsMap(map, mode) || (ONLY_MODES && !ONLY_MODES.includes(mode))) continue;
     botMatch(map, mode, out);
   }

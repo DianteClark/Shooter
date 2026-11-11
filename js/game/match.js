@@ -403,6 +403,13 @@ export class Match {
   #overlayLocal(view) {
     const ps = this.ps, p = view.players.find(q => q.id === this.localId);
     if (!p) return null;
+    // Each gun wears its own camo: the loadout's camo belongs to the primary only, so a swap to the sidearm (or any
+    // other gun) must not carry it over. The host learns the change from the state this client sends.
+    if (ps.weapon !== this.camoWeapon) {
+      this.camoWeapon = ps.weapon;
+      const lo = this.me.loadout;
+      ps.camo = lo?.camos?.[ps.weapon] ?? (ps.weapon === (lo?.primary ?? this.me.primary) ? (lo?.camo ?? this.me.camo ?? 'none') : 'none');
+    }
     if (this.localAlive) {
       p.x = ps.x; p.z = ps.z; p.aim = ps.aim; p.vx = ps.vx; p.vz = ps.vz;
       p.weapon = ps.weapon; p.camo = ps.camo;

@@ -44,3 +44,30 @@ lands. Both stick to this map contract:
   stays down or idle, never bot-driven). Late joiners cannot drop in after the jump.
 - Phones: the 32-player match must hold 60 fps on Low on the reference profile with the tiled world; the host's sim must
   stay under 4 ms per tick average.
+
+## The map: Frontier (`frontier`, js/shared/maps/br-frontier.js)
+400 x 400 m, `size: 'giant'`, `modes: ['br']`, `large: true`, `region: 'mixed'`, `theme: 'frontier'`. Registered in
+js/shared/map.js but kept out of `MAP_IDS` (votes, rolls, solo picker sections, backdrop, cardbook); `BR_MAP_IDS`
+lists giant maps for the mode. 17 places (`br.pois`), tier 1: Downtown, Central Station (metro), Steel Mill
+(industrial), Jungle Temple; tier 2: Freight Yard, Fishing Port, Frozen Ship, Polar Station, Harvest Farms, Canyon Dam,
+Oasis Town, Airfield, River Village; tier 3: Lighthouse Point, Grain Co-op, Radio Hill, Quarry. A river from the south
+edge to the north-east sea has six crossings (z 70, 122, 200, 244, 324 and a ford at 384); the arctic ridge and both
+canyon rims have two passes each; roads join every place to two or more neighbours.
+- `br.loot` about 560 spots (about 380 indoors, `indoor: true`), `br.chests` 44 (three per tier 1 place, two per tier 2,
+  one per tier 3, ten out in the open), `br.drop: null`, `br.circleBias` the places by tier plus five open spots.
+- Extra fields the mode can use: `roofs` (every enterable building: `{ id, x, z, w, d, h, style, region }`; a point
+  inside one is indoors, and a mortar or gunship round over one could be spent on it), `rooms` (floors; `bld` is the
+  roof id), `zones`, `roads`, `rails`, `regionSeeds` (with `regionField` from br-kit.js: the region of any point).
+  `spawns` (two teams of 16 at the places), `lanes` and `nav` exist only so team modes and bots can run on it for tests.
+- Building kit (js/shared/maps/br-kit.js `Plan.building`): 0.5 m walls (`bwall`, `bld`), 2.4 m door gaps (two or more
+  per building, never on the end of the inside wall), waist-high window sills (`window`, see and shoot over), an inside
+  wall with a doorway when the long side is 11 m or more, furniture flush with the walls (`furn`: table, counter or a
+  head-high shelf), loot on a 1.8 m lattice clear of walls and doorways.
+- Rendering (js/render/themes/frontier.js): tiles of 32 m built near the camera on demand (urgent within 20 m, the rest
+  within the cut + 24 m at 5 ms a frame), dropped past 190 m. Roofs dissolve round the local player and up to three
+  teammates within 30 m (`world.setCutters`, called by the renderer). `world.buildAll()` builds everything (the overview).
+- Art: assets/maps/frontier.jpg (card) and assets/maps/frontier-overview.jpg (1024 x 1024, north up, edge to edge:
+  map x = px / 1024 * 400) for the big map and the drop map; dev/br-overview.mjs remakes it.
+- Testing: `?debug=1&map=frontier&mode=tdm` plays it under a team mode (dev path in main.js); `node dev/map-validate.mjs
+  frontier` checks the contract, reachability, sealed rooms, door widths and a 32-bot free roam;
+  `node dev/br-render.mjs` measures load and frames.

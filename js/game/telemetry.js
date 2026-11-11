@@ -15,6 +15,7 @@
 import { MAPS } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { WEAPONS } from '../shared/weapons.js';
+import { BUILD } from '../build.js';
 
 export const STATS_VERSION = 1;
 const STORE_KEY = 'switchyard.gunstats';
@@ -22,6 +23,8 @@ const MAX_MATCHES = 40;          // Newest matches kept one by one; older ones a
 const FIGHT_RESET = 7;           // Seconds without a hit after which a target has healed and a new fight starts.
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const PICK_SECONDS = 3;          // Held at least this long in a match counts as picking the gun.
+const MAX_BUILDS = 6;            // Builds the archive keeps apart; older ones fold into UNKNOWN_BUILD.
+export const UNKNOWN_BUILD = '?';  // Matches recorded before records carried their build.
 
 // Damage by distance: buckets ending at these ranges (metres); the last one is open.
 export const DIST_EDGES = [5, 10, 20, 30, 45];
@@ -272,7 +275,8 @@ export class MatchTelemetry {
       for (const gun in this.scopes[s]) out[gun] = this.scopes[s][gun].map(v => Math.round(v));
       g[s] = out;
     }
-    const record = { at: Date.now(), map: this.mapId, mode: this.mode, live: Math.round(this.live), pm, g };
+    // b: the build that played the match (js/build.js), so an export can tell builds apart (see encodeStatsCode).
+    const record = { at: Date.now(), b: BUILD, map: this.mapId, mode: this.mode, live: Math.round(this.live), pm, g };
     GunStats.add(record);
     return (this.result = record);
   }
@@ -284,8 +288,37 @@ function emptyAggregate() {
   return { matches: 0, live: 0, pm: { a: 0, h: 0, m: 0 }, g: { a: {}, h: {}, m: {} } };
 }
 
-// Adds a match record (or another aggregate) into an aggregate.
+// Adds a match record (or another aggregate) into an aggregate. An aggregate also keeps the same numbers split by the
+// build that played them, in byBuild: {build: aggregate, with `last` = newest match time}. A record without a build
+// (saved before builds were recorded) and an aggregate without byBuild count as UNKNOWN_BUILD.
 function fold(agg, rec) {
+  foldNumbers(agg, rec);
+  const by = agg.byBuild || (agg.byBuild = {});
+  const into = (b, src) => {
+    const sub = by[b] || (by[b] = { ...emptyAggregate(), last: 0 });
+    foldNumbers(sub, src);
+    sub.last = Math.max(sub.last, src.at || src.last || 0);
+  };
+  if (rec.byBuild) for (const b in rec.byBuild) into(b, rec.byBuild[b]);
+  else if (rec.matches === undefined) into(rec.b || UNKNOWN_BUILD, rec);
+  else if (rec.matches) into(UNKNOWN_BUILD, rec);
+  return agg;
+}
+
+// The archive keeps MAX_BUILDS builds apart at most: the ones with the oldest newest match fold into UNKNOWN_BUILD.
+function capBuilds(agg) {
+  const by = agg.byBuild;
+  if (!by) return;
+  const keys = Object.keys(by).filter(b => b !== UNKNOWN_BUILD).sort((x, y) => by[y].last - by[x].last);
+  for (const b of keys.slice(MAX_BUILDS)) {
+    const sub = by[UNKNOWN_BUILD] || (by[UNKNOWN_BUILD] = { ...emptyAggregate(), last: 0 });
+    foldNumbers(sub, by[b]);
+    sub.last = Math.max(sub.last, by[b].last);
+    delete by[b];
+  }
+}
+
+function foldNumbers(agg, rec) {
   agg.matches += rec.matches ?? 1;
   agg.live += rec.live || 0;
   for (const s of SCOPES) {
@@ -319,6 +352,11 @@ function read() {
   if (!data || data.v !== STATS_VERSION || !Array.isArray(data.recent) || !validAggregate(data.archive)) {
     data = { v: STATS_VERSION, archive: emptyAggregate(), recent: [] };
   }
+  // An archive saved before builds were recorded: everything in it so far is of an unknown build.
+  if (!data.archive.byBuild && data.archive.matches) {
+    const { byBuild, ...numbers } = data.archive;
+    data.archive.byBuild = { [UNKNOWN_BUILD]: { ...structuredClone(numbers), last: 0 } };
+  }
   cache = data;
   return data;
 }
@@ -332,6 +370,7 @@ export const GunStats = {
     const data = read();
     data.recent.push(record);
     while (data.recent.length > MAX_MATCHES) fold(data.archive, data.recent.shift());
+    capBuilds(data.archive);
     write(data);
   },
 
@@ -406,15 +445,41 @@ function stanceOf(r) {
 // ---- Export code ----
 // SYS1~<matches>.<live s>~<scope>:<pm>:<gun>=<f0>.<f1>...;<gun>=...~<scope>:... with every number in base 36.
 // Only characters that survive any chat app. decodeStatsCode reverses it.
+// Pass 2, appended and optional: which builds played the matches.
+//   ~b:<build>=<matches>.<live s>,<build>=...      every build in the totals, newest first ('?' = before builds were recorded)
+//   ~<scope>@<build>:<pm>:<guns>                   that build's own rows, only when there is more than one build
+// A decoder from before this skips both (their scope is not a, h or m), so every code reads everywhere; a code from
+// before this simply has no byBuild.
+
+const buildKey = b => String(b).replace(/[^\w.?-]/g, '') || UNKNOWN_BUILD;
+// Newest first: by newest match for a live aggregate, by listed order for a decoded one.
+const newestFirst = by => Object.keys(by).filter(b => by[b].matches)
+  .sort((x, y) => (by[y].last ?? -by[y].order ?? 0) - (by[x].last ?? -by[x].order ?? 0));
+
+function scopeBody(agg, s) {
+  return Object.keys(agg.g[s]).sort()
+    .map(gun => `${gun}=${agg.g[s][gun].map(v => Math.max(0, Math.round(v)).toString(36)).join('.')}`).join(';');
+}
 
 export function encodeStatsCode(agg) {
   const parts = [`SYS${STATS_VERSION}`, `${agg.matches.toString(36)}.${Math.round(agg.live).toString(36)}`];
-  for (const s of SCOPES) {
-    const guns = Object.keys(agg.g[s]).sort()
-      .map(gun => `${gun}=${agg.g[s][gun].map(v => Math.max(0, Math.round(v)).toString(36)).join('.')}`);
-    parts.push(`${s}:${(agg.pm[s] || 0).toString(36)}:${guns.join(';')}`);
+  for (const s of SCOPES) parts.push(`${s}:${(agg.pm[s] || 0).toString(36)}:${scopeBody(agg, s)}`);
+  const by = agg.byBuild;
+  const builds = by ? newestFirst(by) : [];
+  if (builds.length) {
+    parts.push(`b:${builds.map(b => `${buildKey(b)}=${by[b].matches.toString(36)}.${Math.round(by[b].live).toString(36)}`).join(',')}`);
+    if (builds.length > 1) for (const b of builds) for (const s of SCOPES) {
+      parts.push(`${s}@${buildKey(b)}:${(by[b].pm[s] || 0).toString(36)}:${scopeBody(by[b], s)}`);
+    }
   }
   return parts.join('~');
+}
+
+// The builds a code's matches came from, newest first: [{build, matches}]. Empty for a code from before builds.
+export function buildsOf(agg) {
+  const by = agg?.byBuild;
+  if (!by) return [];
+  return newestFirst(by).map(b => ({ build: b, matches: by[b].matches }));
 }
 
 // Returns the aggregate an export code was made from, or null if it is not one.
@@ -425,17 +490,40 @@ export function decodeStatsCode(code) {
     const [m, live] = parts[1].split('.').map(x => parseInt(x, 36));
     const agg = emptyAggregate();
     agg.matches = m; agg.live = live;
-    for (const p of parts.slice(2)) {
-      const [s, pm, body] = p.split(':');
-      if (!SCOPES.includes(s)) continue;
-      agg.pm[s] = parseInt(pm, 36);
-      if (!body) continue;
+    const readBody = (dst, body) => {
+      if (!body) return;
       for (const item of body.split(';')) {
         const [gun, nums] = item.split('=');
         const row = newRow(), vals = nums.split('.');
         for (let i = 0; i < NF && i < vals.length; i++) row[i] = parseInt(vals[i], 36) || 0;
-        agg.g[s][gun] = row;
+        dst[gun] = row;
       }
+    };
+    let listed = null;
+    for (const p of parts.slice(2)) {
+      const [key, pm, body] = p.split(':');
+      if (key === 'b') {
+        // pm holds the build list here.
+        listed = pm.split(',').filter(Boolean).map((item, order) => {
+          const [b, nums] = item.split('=');
+          const [bm, bl] = (nums || '').split('.').map(x => parseInt(x, 36) || 0);
+          return { b, bm, bl, order };
+        });
+        agg.byBuild = {};
+        for (const { b, bm, bl, order } of listed) agg.byBuild[b] = { ...emptyAggregate(), matches: bm, live: bl, order };
+        continue;
+      }
+      const [s, b] = key.split('@');
+      if (!SCOPES.includes(s)) continue;
+      const dst = b === undefined ? agg : agg.byBuild?.[b];
+      if (!dst) continue;
+      dst.pm[s] = parseInt(pm, 36);
+      readBody(dst.g[s], body);
+    }
+    // One build: its rows are the totals.
+    if (listed && listed.length === 1) {
+      const sub = agg.byBuild[listed[0].b];
+      for (const s of SCOPES) { sub.pm[s] = agg.pm[s]; for (const gun in agg.g[s]) sub.g[s][gun] = agg.g[s][gun].slice(); }
     }
     return agg;
   } catch { return null; }
