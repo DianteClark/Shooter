@@ -98,6 +98,8 @@ export const BR = {
   pickup: 1.5,           // Auto pickup reach.
   take: 2.4,             // A ground gun this close can be tapped to swap.
   chestReach: 1.7,
+  // Match XP on top of the usual lines: placement (scaled from last to first), each revive, each minute alive.
+  xp: { place: 1000, revive: 150, minute: 40 },
   rarity: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
   rarityName: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'],
   rarityCss: ['#c9cbc4', '#59d36b', '#3fa0ff', '#b05cff', '#ffb21a'],

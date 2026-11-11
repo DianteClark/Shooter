@@ -457,7 +457,7 @@ export class HUD {
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
-    this.#sndControls(this.snd);
+    this.#sndControls(this.snd || this.br);   // Battle royale has no scorestreaks either.
     this.reset();
     this.#range.prepare(mode === 'range');
     this.el.classList.toggle('range-on', mode === 'range');

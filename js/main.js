@@ -1239,6 +1239,7 @@ function showResults(results) {
       finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
       rematchLabel: 'Rematch',
       snd: results.snd,
+      br: results.br,
       mastery: results.mastery,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
     }, { rematch: () => afterResults(), menu: () => goTitle() });

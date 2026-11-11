@@ -221,6 +221,15 @@ export class BrRules {
     this.stats = null;               // Guest: the latest stats block.
     this.view = { plane: null, circle: null, next: null, phase: 0, state: 'wait', timer: 0, squadsLeft: 0, alive: 0, inv: null, items: this.items, stats: null, pois: def.pois, rules: this };
     sim.phaseT = BR.warmup;
+    this._fillView();
+  }
+
+  // The view object's shared fields, from this copy's state.
+  _fillView() {
+    const V = this.view;
+    V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
+    V.circle = { ...this.circle }; V.next = { ...this.next }; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
+    V.items = this.items; V.t = this.t; V.squad = this.squad;
   }
 
   // ---- Loot table ----
@@ -1166,7 +1175,7 @@ export class BrRules {
   // per-player fields on view.players.
   decode(a, view) {
     const players = view.players;
-    if (!a) { view.br = this.view; return; }
+    if (!a) { this._fillView(); view.br = this.view; return; }
     const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats] = a;
     this.plane.f = f / 1000;
     this.plane.fx = fx; this.plane.fz = fz; this.plane.tx = tx; this.plane.tz = tz;

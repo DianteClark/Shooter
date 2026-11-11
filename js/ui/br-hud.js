@@ -27,7 +27,7 @@ const CSS = `
 .br-ui { position: absolute; inset: 0; pointer-events: none; }
 .br-ui [data-tap] { pointer-events: auto; }
 .hud.br-on .scorebar, .hud.br-on .obj-strip, .hud.br-on .gun-rung { display: none !important; }
-.hud.br-on .feed { top: calc(var(--st) + 182px); }
+.hud.br-on .feed { top: calc(var(--st) + 134px); }
 .hud.br-on .death { display: none !important; }
 .br-top { position: absolute; left: 50%; top: calc(var(--st) + 6px); transform: translateX(-50%); display: flex; align-items: stretch; gap: 4px; }
 .br-chip { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 54px; height: 40px; padding: 0 9px;
@@ -63,12 +63,12 @@ const CSS = `
 .br-hint { position: absolute; left: 50%; bottom: calc(var(--sb) + 76px); transform: translateX(-50%); padding: 6px 12px; font: 13px/1.2 var(--f-plate);
   letter-spacing: var(--tr-plate); color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.75)); white-space: nowrap; text-align: center; }
 .br-hint b { font: 400 16px/1 var(--f-stencil); color: var(--c-sodium); display: block; margin-bottom: 3px; }
-.br-take { position: absolute; left: 50%; bottom: calc(var(--sb) + 62px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px;
+.br-take { position: absolute; left: 50%; bottom: calc(var(--sb) + 104px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px;
   border: 0; color: #fff; background: linear-gradient(180deg, rgba(42,51,61,.95), rgba(16,20,26,.92)); box-shadow: var(--hud-edge), inset 3px 0 0 var(--rar);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); white-space: nowrap; }
 .br-take b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
 .br-take small { font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
-.br-squad { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 92px); display: flex; flex-direction: column; gap: 3px; width: 118px; }
+.br-squad { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 84px; }
 .br-mate { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 1px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team); }
 .br-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .br-mate em { font: 9px/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-haze); }
@@ -103,7 +103,7 @@ const CSS = `
 .br-map-side .br-jump { position: static; transform: none; }
 .br-map-close { height: 36px; border: 0; padding: 0 14px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
 .hud.br-on .minimap { cursor: pointer; }
-.hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 8px); top: calc(var(--st) + 132px); }
+.hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
 `;
 
 export class BrHud {
@@ -318,23 +318,24 @@ export class BrHud {
         if (d < bestD) { bestD = d; best = it; }
       }
     }
-    // An empty hand fills itself by walking over a gun: the button is for swapping.
-    const handsFull = me.weapon !== 'knife';
-    const id = best && handsFull ? best.id : null;
-    if (id === this.takeId) return;
-    this.takeId = id;
+    // An empty hand also fills itself by walking over a gun; with both full, the tap swaps the gun in your hand.
+    const inv = view.br.inv;
+    const handsFull = !!inv && inv.rarity[0] >= 0 && inv.rarity[1] >= 0;
+    const id = best ? best.id : null;
+    if (id === this.takeId && handsFull === this.takeFull) return;
+    this.takeId = id; this.takeFull = handsFull;
     this.takeBtn.hidden = id === null;
     if (id === null) return;
     const gun = WEAPON_IDS[best.v], r = best.r;
     this.takeBtn.style.setProperty('--rar', BR.rarityCss[r]);
     this.takeBtn.querySelector('.ti').innerHTML = icon(gun, { size: 18 });
-    this.takeBtn.querySelector('b').textContent = `Take ${WEAPONS[gun]?.name ?? 'gun'}`;
-    this.takeBtn.querySelector('small').textContent = `${BR.rarityName[r]}  /  swaps the gun in your hand`;
+    this.takeBtn.querySelector('b').textContent = `${handsFull ? 'Swap for' : 'Pick up'} ${WEAPONS[gun]?.name ?? 'gun'}`;
+    this.takeBtn.querySelector('small').textContent = handsFull ? `${BR.rarityName[r]}  /  drops the gun in your hand` : `${BR.rarityName[r]}  /  into your empty hand`;
   }
 
   #squad(view, me) {
     const mates = view.players.filter(p => p.team === me.team && p.id !== me.id);
-    const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}`).join(';');
+    const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
     this.squadEl.innerHTML = mates.map(p => {
