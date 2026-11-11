@@ -6,21 +6,27 @@ import { MeshBuilder } from './meshbuild.js';
 import { MAX_POPS } from './world.js';
 import { getTracer, getKillEffect } from '../shared/camos.js';
 import { uploadUsed } from './dynbuf.js';
+import { completeFx, impactBus } from './feel.js';
 
 const TRACERS = 180;
 const PARTS = 1100;
 const SHELLS = 72;
 const SHARDS = 240;
-const FLASHES = 24;
+const FLASHES = 64;                // A shaped flash is up to three stars, and 32 guns can be firing.
 const BALLS = 24;
-const RINGS = 56;
+const RINGS = 80;
 const DELAYED = 12;
 const MARKS = 110;
 const ROCKETS = 6;
+const BARREL_COOL = 0.3;           // Barrel heat lost per second between rounds (1 = smoking).
+const SMOKERS = 8;                // Barrels trailing smoke at once.
+const SMOKE_SWIRLS = 6;           // Rounds per frame that may stir a smoke cloud.
 const ROCKET_SPEED = 92;       // Metres per second: fast, but you still see it leave.
 
 // Per-gun firing signature. tail/linger/speed shape the tracer, flash shapes the muzzle star,
 // shell picks the casing, extra adds a family trait: T-brake jets, cylinder-gap flare, backblast.
+// A gun with no entry here gets one derived from its class and stats, and every entry gets its class traits
+// (flash silhouette, tracer tint and frequency, barrel smoke): see completeFx in feel.js.
 export const GUN_FX = {
   ar:       { tail: 11, linger: 0.075, speed: 230, flash: [1.5, 1.1, 1.0],  shell: 'rifle' },
   burst:    { tail: 10, linger: 0.06,  speed: 240, flash: [1.4, 1.2, 0.85], shell: 'rifle' },
@@ -37,7 +43,29 @@ export const GUN_FX = {
   // The Golden Gun. Its tail length doubles as its tracer's signature: the renderer hands tracer() only numbers, so
   // GOLD_TAIL is how a golden round is told apart there and drawn gold whatever the shooter's camo or tracer.
   golden:   { tail: 26.5, linger: 0.34, speed: 360, flash: [2.3, 1.3, 1.5], shell: 'magnum', extra: 'gold' },
+  // Wave 5.
+  heavyar:    { tail: 12, linger: 0.085, speed: 230, flash: [1.7, 1.2, 1.1],   shell: 'rifle' },
+  tacsmg:     { tail: 7,  linger: 0.045, speed: 215, flash: [1.05, 0.75, 1.0], shell: 'pistol' },
+  coach:      { tail: 3.6, linger: 0.06, speed: 170, flash: [2.6, 0.8, 2.1],   shell: null, extra: 'blast' },
+  saw:        { tail: 12, linger: 0.08,  speed: 220, flash: [1.6, 1.0, 1.15],  shell: 'link', every: 4 },
+  rotary:     { tail: 9,  linger: 0.06,  speed: 230, flash: [1.4, 0.9, 1.4],   shell: 'link', every: 5, jitter: 1 },
+  battle:     { tail: 15, linger: 0.12,  speed: 280, flash: [1.8, 1.2, 0.9],   shell: 'rifle' },
+  lever:      { tail: 14, linger: 0.12,  speed: 260, flash: [1.9, 1.0, 1.4],   shell: 'rifle' },
+  antimat:    { tail: 90, linger: 0.6,   speed: 560, flash: [2.8, 1.7, 0.6],   shell: 'magnum', extra: 'brake', contrail: 1 },
+  semisnipe:  { tail: 40, linger: 0.3,   speed: 450, flash: [2.0, 1.3, 0.75],  shell: 'magnum', contrail: 1 },
+  machpistol: { tail: 5,  linger: 0.035, speed: 200, flash: [1.0, 0.7, 1.2],   shell: 'pistol', jitter: 1 },
+  deuce:      { tail: 7,  linger: 0.05,  speed: 215, flash: [1.3, 0.9, 1.0],   shell: 'pistol' },
+  // Flies as a projectile like the rocket (see the renderer's _onShot); this only shapes the muzzle flash.
+  thumper:    { tail: 0,  linger: 0,     speed: 92,  flash: [1.8, 0.5, 1.6],   shell: null },
+  // V8. The crossbow has no flash and no case: a slow pale streak of a bolt.
+  carbine:    { tail: 9,  linger: 0.06,  speed: 225, flash: [1.3, 0.95, 1.05], shell: 'rifle' },
+  heavysmg:   { tail: 8,  linger: 0.06,  speed: 210, flash: [1.5, 0.95, 1.3],  shell: 'pistol' },
+  slug:       { tail: 12, linger: 0.1,   speed: 250, flash: [2.1, 0.9, 1.7],   shell: 'hull' },
+  lightlmg:   { tail: 12, linger: 0.08,  speed: 225, flash: [1.6, 1.0, 1.1],   shell: 'rifle', every: 2 },
+  crossbow:   { tail: 6,  linger: 0.2,   speed: 120, flash: [0.2, 0.2, 0.2],   shell: null, smoke: 1e9, tint: [1, 1, 1, 0] },
+  scatter:    { tail: 3.2, linger: 0.05, speed: 170, flash: [2.0, 0.75, 1.8],  shell: null, extra: 'blast' },
 };
+completeFx(GUN_FX);
 const GOLD_TAIL = GUN_FX.golden.tail;
 const GOLD_KILL_WINDOW = 1.2;   // Seconds a golden round's end point is remembered for its kill effect.
 const GUN_FX_DEFAULT = GUN_FX.ar;
@@ -58,8 +86,19 @@ const IMPACT = {
   rock:     { spark: [1.0, 0.76, 0.42], sparks: 2, speed: 8, chip: [0.56, 0.46, 0.36], chips: 4, dust: [0.38, 0.32, 0.24], puffs: 3, alpha: 0.55, mark: [0.14, 0.1, 0.08], glow: 0 },
   adobe:    { spark: [1.0, 0.76, 0.42], sparks: 1, speed: 6, chip: [0.72, 0.62, 0.48], chips: 4, dust: [0.46, 0.4, 0.3], puffs: 4, alpha: 0.62, mark: [0.2, 0.15, 0.11], glow: 0 },
   sand:     { spark: [1.0, 0.76, 0.42], sparks: 0, speed: 6, chip: [0.74, 0.65, 0.46], chips: 2, dust: [0.52, 0.45, 0.32], puffs: 5, alpha: 0.7, mark: [0.3, 0.25, 0.17], glow: 0 },
+  snow:     { spark: [0.9, 0.95, 1.0], sparks: 0, speed: 6, chip: [0.86, 0.9, 0.96], chips: 3, dust: [0.62, 0.66, 0.72], puffs: 4, alpha: 0.6, mark: [0.36, 0.4, 0.46], glow: 0 },
+  ice:      { spark: [0.8, 0.93, 1.0], sparks: 3, speed: 9, chip: [0.72, 0.86, 0.96], chips: 5, dust: [0.5, 0.58, 0.66], puffs: 1, alpha: 0.35, mark: [0.3, 0.38, 0.46], glow: 0.2 },
   cloth:    { spark: [1.0, 0.76, 0.42], sparks: 0, speed: 6, chip: [0.8, 0.75, 0.62], chips: 2, dust: [0.34, 0.32, 0.27], puffs: 2, alpha: 0.4, mark: [0.2, 0.18, 0.14], glow: 0 },
 };
+
+// What a round kicks up from the floor, by the map's ground: dust colour scale, puffs, alpha, and the scar it leaves.
+const GROUND = {
+  dirt:  { puffs: 2, alpha: 0.5,  rise: 1.1, mark: [0.07, 0.06, 0.05], a: 0.4 },
+  sand:  { puffs: 4, alpha: 0.62, rise: 1.5, mark: [0.2, 0.16, 0.1],   a: 0.3 },
+  snow:  { puffs: 4, alpha: 0.6,  rise: 1.3, mark: [0.3, 0.33, 0.4],   a: 0.35 },
+  water: { puffs: 1, alpha: 0.35, rise: 0.9, mark: null,               a: 0 },      // Wet ground: a puddle splash.
+};
+const SNOW_RGB = [0.66, 0.7, 0.76];
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -110,6 +149,12 @@ export class VFX {
     this.dustRGB = [0.42, 0.38, 0.36];
     this.wet = false;
     this.onBoom = null;            // (x, z, radius) when a rocket reaches the blast it was carrying.
+    this.groundKind = 'dirt';
+    this.smokeClouds = null;       // CombatFX's live smoke slots ({id, x, z, r, a}); rounds through them stir the smoke.
+    this.swirls = 0;               // Smoke swirls spent this frame.
+    this.smokers = Array.from({ length: SMOKERS }, () => ({ rig: null, t: 0, next: 0, k: 0 }));
+    this.tracerSeq = 0;
+    this._tint = [0, 0, 0];
     this._buildTracers();
     this._buildParticles();
     this._buildShells();
@@ -132,6 +177,8 @@ export class VFX {
     this.dustRGB = theme.ink && theme.ink.dirt ? theme.ink.dirt.map(c => Math.min(1, c * 0.62)) : this.dustRGB;
     this.wet = !!theme.wet;
     this.voidWater = !!theme.void;      // Topside's 'water' is a hole in the slab: things drop, nothing splashes.
+    const ink = theme.ink || {};
+    this.groundKind = ink.snow ? 'snow' : theme.wet > 0.6 ? 'water' : (ink.sand || theme.id === 'dust' || theme.id === 'desert') ? 'sand' : 'dirt';
   }
 
   // Cuts to or from a replay: nothing from the old timeline should still be in the air.
@@ -140,6 +187,7 @@ export class VFX {
     this.rg.t.fill(0); this.mk.t.fill(0); this.rk.t.fill(0);
     for (let i = 0; i < DELAYED; i++) this.delayed[i].t = 0;
     for (let i = 0; i < MAX_POPS; i++) this.pops[i].t = 0;
+    for (let i = 0; i < SMOKERS; i++) { this.smokers[i].rig = null; this.smokers[i].t = 0; }
   }
 
   /* ---------- Tracers ---------- */
@@ -491,8 +539,10 @@ export class VFX {
 
   // Impact on a surface, with the character of whatever was hit. `fine` thins it for shotgun pellets.
   wallHit(x, z, nx, nz, fine = false) {
-    const mat = this.surf ? this.surf.materialAt(x, z, nx, nz) : 'concrete';
+    let mat = this.surf ? this.surf.materialAt(x, z, nx, nz) : 'concrete';
+    if (mat === 'sand' && this.groundKind === 'snow') mat = 'snow';     // Arctic maps bank snow where others stack bags.
     const I = IMPACT[mat] || IMPACT.concrete;
+    if (!fine || Math.random() < 0.3) impactBus.push(mat, x, z);
     const y = rand(0.5, 1.5);
     const k = fine ? 0.4 : 1;
     if (I.sparks) this.sparks(x, y, z, nx, nz, I.spark, Math.ceil(this._n(I.sparks) * k), I.speed);
@@ -506,8 +556,8 @@ export class VFX {
       this.spawn(x + nx * 0.08, y, z + nz * 0.08, nx * rand(1, 3) + rand(-0.7, 0.7), rand(0.3, 1.3), nz * rand(1, 3) + rand(-0.7, 0.7),
         rand(0.3, 0.55), 0.14, 0.5, I.dust, I.alpha, -0.8, 3.0);
     }
-    if (mat === 'sand') {
-      // A punctured sandbag bleeds a thin stream of sand for a moment.
+    if (mat === 'sand' || mat === 'snow') {
+      // A punctured sandbag bleeds a thin stream of sand for a moment; a snowbank sheds powder the same way.
       for (let i = 0; i < 4; i++) this.spawn(x + nx * 0.06, y - i * 0.1, z + nz * 0.06, nx * 0.15, -rand(0.4, 1.2), nz * 0.15, rand(0.4, 0.7), 0.05, 0.02, I.dust, 0.9, 7, 0.5);
     }
     if (I.glow > 0) this.spawn(x + nx * 0.1, y, z + nz * 0.1, 0, 0, 0, 0.08, 0.25, 0.55 * I.glow, I.spark, 0, 0, 0);
@@ -516,8 +566,29 @@ export class VFX {
 
   // A round that ran out of range kicks up the ground; over a basin it splashes.
   groundHit(x, z) {
-    if (this.surf && this.surf.isWater(x, z)) { this.waterSplash(x, z, 0.5); return; }
-    for (let i = 0; i < 2; i++) this.spawn(x, 0.12, z, rand(-0.8, 0.8), rand(0.6, 1.6), rand(-0.8, 0.8), rand(0.25, 0.45), 0.1, 0.34, this.dustRGB, 0.5, -0.8, 3);
+    if (this.surf && this.surf.isWater(x, z)) { impactBus.push('water', x, z); this.waterSplash(x, z, 0.5); return; }
+    const kind = this.groundKind, G = GROUND[kind];
+    impactBus.push(kind, x, z);
+    const rgb = kind === 'snow' ? SNOW_RGB : this.dustRGB;
+    // The Low steps never throw more than the two puffs they always did.
+    for (let i = this.fxScale <= 0.5 ? Math.min(2, G.puffs) : Math.max(1, Math.round(G.puffs * Math.min(1, this.fxScale + 0.25))); i > 0; i--) {
+      this.spawn(x, 0.12, z, rand(-0.8, 0.8), rand(0.6, 1.6) * G.rise, rand(-0.8, 0.8), rand(0.25, 0.45), 0.1, 0.34, rgb, G.alpha, -0.8, 3);
+    }
+    if (kind === 'water') {
+      this.ring(x, z, 0.05, 0.5, 0.3, WATER, 0.4);
+      this.spawn(x, 0.1, z, rand(-0.6, 0.6), rand(1.6, 2.8), rand(-0.6, 0.6), rand(0.16, 0.28), 0.05, 0.02, WATER, 0.65, 12, 0.5);
+    } else if (this.fxScale >= 0.75) {
+      this.groundMark(x, z, rand(0.1, 0.17), G.mark, G.a);      // The scar the round leaves in the floor.
+    }
+  }
+
+  // A small flat scar on the ground: a solid disc in the ring batch that fades over a few seconds.
+  groundMark(x, z, r, rgb, a) {
+    const R = this.rg, i = R.head;
+    R.head = (i + 1) % RINGS;
+    R.x[i] = x; R.z[i] = z; R.r0[i] = 0; R.r1[i] = r;
+    R.t[i] = 5; R.life[i] = 5;
+    R.cr[i] = rgb[0]; R.cg[i] = rgb[1]; R.cb[i] = rgb[2]; R.a[i] = a; R.solid[i] = 1; R.y[i] = 0.165;
   }
 
   waterSplash(x, z, k = 1) {
@@ -565,8 +636,28 @@ export class VFX {
     const k = sup ? 0.35 : 1;
     const f = G.flash;
     const wob = G.jitter ? rand(0.75, 1.2) : 1;
-    this.muzzleFlash(x, y, z, aim, rgb, f[0] * k * wob, f[1], f[2]);
-    this.muzzleSmoke(x, y, z);
+    const size = f[0] * k * wob;
+    // The silhouette of the flash is the gun's class, readable from above: see `shape` in feel.js. The extra
+    // stars are the first thing the Low steps drop, and a suppressor leaves only a flicker.
+    const shape = G.shape, rich = !sup && this.fxScale > 0.5;
+    if (shape !== 'none') {
+      this.muzzleFlash(x, y, z, aim, rgb, size, shape === 'jet' ? f[1] * 1.25 : f[1], shape === 'jet' ? f[2] * 0.8 : f[2]);
+      if (rich) {
+        if (shape === 'fan') {
+          this._flash(x, y, z, aim + 0.55, rgb, size * 0.62, f[1] * 1.1, f[2] * 0.6);
+          this._flash(x, y, z, aim - 0.55, rgb, size * 0.62, f[1] * 1.1, f[2] * 0.6);
+        } else if (shape === 'cross') {
+          this._flash(x, y, z, aim + 1.5708, rgb, size * 0.55, 0.9, 0.45);
+          this._flash(x, y, z, aim - 1.5708, rgb, size * 0.55, 0.9, 0.45);
+        } else if (shape === 'jet') {
+          this._flash(x, y, z, aim, MUZZLE_HOT, size * 0.5, 0.55, 1.5);       // A short bright collar at the crown.
+        }
+      }
+    }
+    if (shape !== 'none') this.muzzleSmoke(x, y, z);
+    // A swung weapon: one thin pale slash across the aim, where a flash would be.
+    if (G.extra === 'swing') this._flash(x, y, z, aim + 1.5708, WHITE, 1.0, 1.7, 0.22);
+    if (r) this._barrelHeat(r, G);
     if (!sup) {
       if (G.extra === 'blast') {
         // A cone of burning powder.
@@ -607,7 +698,117 @@ export class VFX {
         }
       }
     }
-    if (G.shell && r) this.shell(r.eject[0], r.eject[1], r.eject[2], r.ejectDir[0], r.ejectDir[1], G.shell);
+    // Brass: every case on the higher steps, a share of them on the Low ones (the pool is capped either way).
+    if (G.shell && r && (this.fxScale >= 0.75 || Math.random() < this.fxScale)) this.shell(r.eject[0], r.eject[1], r.eject[2], r.ejectDir[0], r.ejectDir[1], G.shell);
+  }
+
+  /* ---------- Per-gun tracers, barrel heat and smoke ---------- */
+  // The shot-effect entry for a weapon id. Every weapon in WEAPONS has one (hand-made, or derived by feel.js).
+  gunFx(weapon) { return GUN_FX[weapon] || GUN_FX_DEFAULT; }
+
+  // One round's tracer, drawn the way its gun draws them. `i` is the ray's index in the shot and `local` whether
+  // the local player fired it. Applies the gun's tint, thins other players' tracers on the Low steps (`skip`),
+  // lays the sniper contrail and stirs any smoke cloud the round crosses.
+  gunTracer(G, by, i, local, ax, ay, az, bx, by2, bz, rgb, width) {
+    if (!(G.tail > 0)) return;          // A blade, or anything else that throws no round.
+    this._stirSmoke(ax, az, bx, bz);
+    if (!local && this.fxScale <= 0.5 && G.skip > 1 && G.tail !== GOLD_TAIL && (this.tracerSeq++ % G.skip) !== 0) return;
+    const t = G.tint, c = this.cosmetics.get(by);
+    if (t && t[3] > 0 && !(c && c.rgb)) {
+      // The shooter's colour still leads (it says whose round this is); the gun only warms or whitens it.
+      const m = this._tint, a = t[3];
+      m[0] = rgb[0] + (t[0] - rgb[0]) * a; m[1] = rgb[1] + (t[1] - rgb[1]) * a; m[2] = rgb[2] + (t[2] - rgb[2]) * a;
+      rgb = m;
+    }
+    this.tracer(ax, ay, az, bx, by2, bz, rgb, width, G.tail, G.linger, G.speed);
+    if (G.contrail && (local || this.fxScale > 0.5)) this.contrail(ax, ay, az, bx, by2, bz);
+  }
+
+  // A round through a smoke cloud drags a curl of it along its line: the only trace of a shot you cannot see.
+  _stirSmoke(ax, az, bx, bz) {
+    const clouds = this.smokeClouds;
+    if (!clouds || this.fxScale <= 0.5 || this.swirls >= SMOKE_SWIRLS) return;
+    const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+    if (len2 < 1) return;
+    for (let i = 0; i < clouds.length; i++) {
+      const c = clouds[i];
+      if (c.id === null || c.a < 0.3) continue;
+      const u = Math.max(0, Math.min(1, ((c.x - ax) * dx + (c.z - az) * dz) / len2));
+      const px = ax + dx * u, pz = az + dz * u;
+      const off2 = (px - c.x) * (px - c.x) + (pz - c.z) * (pz - c.z);
+      if (off2 > c.r * c.r) continue;
+      const inv = 1 / Math.sqrt(len2), ux = dx * inv, uz = dz * inv;
+      const half = Math.sqrt(c.r * c.r - off2);
+      this.swirls++;
+      // Where it leaves the cloud, pulled out along the shot, plus a bright thread through the middle.
+      const ex = px + ux * Math.min(half, Math.sqrt(len2) * (1 - u)), ez = pz + uz * Math.min(half, Math.sqrt(len2) * (1 - u));
+      for (let k = this._n(3); k > 0; k--) {
+        this.spawn(ex + rand(-0.15, 0.15), rand(0.9, 1.3), ez + rand(-0.15, 0.15), ux * rand(3, 7) - uz * rand(-1, 1), rand(0.1, 0.6), uz * rand(3, 7) + ux * rand(-1, 1),
+          rand(0.45, 0.8), 0.22, 0.75, SMOKE_STIR, 0.42, -0.2, 3.2);
+      }
+      this.spawn(px, 1.1, pz, ux * 2, 0.1, uz * 2, 0.22, 0.12, 0.5, SMOKE_STIR, 0.3, 0, 2);
+      return;
+    }
+  }
+
+  // Sustained fire heats the barrel. Each round adds the gun's share (1 / `smoke` rounds); it cools between shots.
+  // Past full, the barrel is registered to trail smoke once the firing stops, and glows (see barrelGlow).
+  _barrelHeat(r, G) {
+    const idle = this.clock - (r.fxShotAt ?? -99);
+    const hot = Math.max(0, (r.fxHot || 0) - idle * BARREL_COOL) + G.heatPerShot;
+    r.fxHot = Math.min(2.2, hot);
+    r.fxShotAt = this.clock;
+    if (hot < 1 || this.fxScale <= 0.5) return;        // No barrel smoke on the Low steps: the glow alone says it.
+    const S = this.smokers;
+    let slot = null;
+    for (let i = 0; i < SMOKERS; i++) { if (S[i].rig === r) { slot = S[i]; break; } if (!slot && S[i].t <= 0) slot = S[i]; }
+    if (!slot) return;
+    slot.rig = r; slot.t = 0.9 + Math.min(1, hot - 1) * 1.1; slot.k = Math.min(1, hot - 0.6);
+  }
+
+  // 0..0.7: how far a barrel glows from sustained fire alone. Guns with a real heat stat add their own on top.
+  barrelGlow(r) {
+    const hot = r.fxHot;
+    if (!hot) return 0;
+    const now = hot - (this.clock - r.fxShotAt) * BARREL_COOL;
+    return now <= 1 ? 0 : Math.min(0.7, (now - 1) * 0.7);
+  }
+
+  _stepSmokers(dt) {
+    const S = this.smokers;
+    for (let i = 0; i < SMOKERS; i++) {
+      const s = S[i];
+      if (s.t <= 0) continue;
+      const r = s.rig;
+      if (this.clock - r.fxShotAt < 0.14) continue;          // Still firing: the smoke comes when the gun goes quiet.
+      s.t -= dt;
+      if (s.t <= 0 || !r.visible) { s.t = 0; s.rig = null; continue; }
+      s.next -= dt;
+      if (s.next > 0) continue;
+      s.next = 0.075;
+      const m = r.muzzle;
+      this.spawn(m[0], m[1], m[2], rand(-0.25, 0.25), rand(0.9, 1.7), rand(-0.25, 0.25), rand(0.55, 0.95), 0.07, 0.34 + 0.2 * s.k, BARREL_SMOKE, 0.22 + 0.16 * s.k, -0.5, 1.6);
+    }
+  }
+
+  /* ---------- Hit feedback in the world ---------- */
+  // The local player's kill, confirmed where it happened: a thin ring snapping outward and a few rising ticks.
+  // Gold for a headshot. Sits under the killer's own kill effect, so it never replaces a cosmetic.
+  killConfirm(x, z, head) {
+    const rgb = head ? HEAD_GOLD : WHITE;
+    this.ring(x, z, 0.35, 1.9, 0.26, rgb, 0.85, 0.2);
+    if (this.fxScale <= 0.5) return;
+    this.ring(x, z, 0.2, 1.1, 0.18, rgb, 0.5, 0.2);
+    for (let i = 0; i < 4; i++) {
+      const a = i * 1.5708 + 0.7854;
+      this.spawn(x + Math.cos(a) * 0.5, 1.2, z + Math.sin(a) * 0.5, Math.cos(a) * 2.2, 2.6, Math.sin(a) * 2.2, 0.26, 0.11, 0.02, rgb, 0, 3, 2.4, 0.05);
+    }
+  }
+
+  // A round that went into armour: hard white-blue sparks thrown back at the shooter and a flat ping of light.
+  armorHit(x, z, dirX, dirZ) {
+    this.sparks(x, 1.2, z, -dirX, -dirZ, ARMOR_SPARK, this._n(7), 13);
+    this.spawn(x, 1.2, z, 0, 0, 0, 0.09, 0.2, 0.7, ARMOR_SPARK, 0, 0, 0);
   }
 
   // Sniper round: a pale corkscrew of air left hanging along the shot.
@@ -918,6 +1119,12 @@ export class VFX {
 
   // lenK stretches the star along the barrel, widK across it.
   muzzleFlash(x, y, z, aim, rgb, size, lenK = 1, widK = 1) {
+    this._flash(x, y, z, aim, rgb, size, lenK, widK);
+    this.spawn(x, y, z, 0, 0, 0, 0.06, size * 0.9, size * 0.5, rgb, 0, 0, 0);
+  }
+
+  // One star in the flash batch, with no glow of its own: the extra lobes of a shaped flash.
+  _flash(x, y, z, aim, rgb, size, lenK, widK) {
     const P = this.fl, i = P.head;
     P.head = (i + 1) % FLASHES;
     P.x[i] = x; P.y[i] = y; P.z[i] = z;
@@ -927,7 +1134,6 @@ export class VFX {
     P.qx[i] = aim;                 // Stored as yaw; flashes need no full orientation.
     P.spin[i] = rand(-0.6, 0.6);
     P.qy[i] = lenK; P.qz[i] = widK;
-    this.spawn(x, y, z, 0, 0, 0, 0.06, size * 0.9, size * 0.5, rgb, 0, 0, 0);
   }
 
   /* ---------- Fireballs ---------- */
@@ -1209,6 +1415,8 @@ export class VFX {
   /* ---------- Per-frame simulation and buffer upload ---------- */
   step(dt) {
     this.clock += dt;
+    this.swirls = 0;
+    this._stepSmokers(dt);
     this._stepDelayed(dt);
     this._stepTracers(dt);
     this._stepParticles(dt);
@@ -1451,6 +1659,9 @@ const GOLD_HALO = [0.9, 0.5, 0.04];
 const HEAL = [0.3, 1.0, 0.56];
 const STEAM = [0.72, 0.74, 0.78];
 const WHITE = [1, 1, 1];
+const SMOKE_STIR = [0.5, 0.5, 0.54];
+const BARREL_SMOKE = [0.4, 0.4, 0.43];
+const ARMOR_SPARK = [0.78, 0.9, 1.0];
 const DUST = [0.42, 0.38, 0.36];
 const SMOKE = [0.12, 0.11, 0.14];
 const FIRE = [1.0, 0.5, 0.15];

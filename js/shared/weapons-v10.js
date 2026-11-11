@@ -250,7 +250,8 @@ export const V10_UNLOCKS = [
 ].map(([level, id]) => ({ level, kind: 'weapon', id }));
 
 // Which existing gun each new one borrows from, per table that is keyed by weapon id:
-//   sound  audio.js GUNS and FOLEY (shot and reload sounds)      fx     vfx.js GUN_FX (tracer, flash, casing)
+//   sound  (no longer read: audio.js derives every gun's voice and foley from its class, see js/render/feel.js)
+//   fx     (no longer read: vfx.js derives every gun's tracer, flash and casing the same way)
 //   reload anim.js RELOADS (hands and magazine)                  hold   characters.js HOLD and GUN_SCALES (carry)
 //   force  corpses.js FORCE (how hard a kill throws the body)
 // One id for all of them unless a table needs another.

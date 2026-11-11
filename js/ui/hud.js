@@ -297,6 +297,19 @@ const SCORE_POP_BUMP = [
   { opacity: 0, transform: 'translateY(-10px) scale(1)' },
 ];
 const HIT_PUNCH = [{ rotate: '14deg' }, { rotate: '0deg' }];
+// Hitmarker variants, on top of the base marker in game.css (white X; gold for a head; skull for a kill):
+//   .armor  the round went into Juggernaut armour: sodium brackets closing in instead of an X
+//   .weak   the round lost damage going through cover first: a thinner, greyer, smaller X
+// Their size also follows the damage of the hit (see #onHit), so a sniper round lands harder than an SMG's.
+const HIT_CSS = `
+.hit-armor { display: none; }
+.hit-armor path { fill: none; stroke: var(--c-sodium, #f2a63b); stroke-width: 3.2; stroke-linecap: square; stroke-linejoin: miter; }
+.hit.armor:not(.kill) .hit-x { display: none; }
+.hit.armor:not(.kill) .hit-armor { display: block; }
+.hit.weak:not(.kill):not(.head) .hit-x path { stroke: #b9c0c8; stroke-width: 2.2; stroke-dasharray: 5 3; }
+`;
+const REDUCED_MOTION = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+const COVER_HIT_WINDOW = 0.3;    // Seconds after one of your rounds passed through cover that a hit counts as reduced.
 const RESPAWN_FLASH = [{ opacity: 0.75 }, { opacity: 0 }];
 const STREAK_HIT = [
   { opacity: 0, transform: 'translate(-50%,0) scale(1.9)', filter: 'brightness(2.4)' },
@@ -577,6 +590,8 @@ export class HUD {
     this.hitT = 0;
     this.hitKill = false;
     this.hitHead = false;
+    this.hitArmor = false; this.hitWeak = false; this.hitScale = 1;
+    this.coverShotT = -9; this.clockT = 0;
     this.hitLife = HIT_LIFE;
     this.flashT = 0;
     this.flashLen = 1;
@@ -736,6 +751,7 @@ export class HUD {
       <div class="medals"></div>
       <div class="hit">
         <svg class="hit-x" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-15 -15l8 8M15 -15l-8 8M-15 15l8 -8M15 15l-8 -8" /></svg>
+        <svg class="hit-armor" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-16 -8V-16H-8M8 -16H16V-8M16 8V16H8M-8 16H-16V8M-5 0H5M0 -5V5" /></svg>
         <svg class="hit-skull" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M0 -17C-11 -17 -16 -10 -16 -3C-16 3 -13 6 -10 8L-9 14H-5V10H-2V14H2V10H5V14H9L10 8C13 6 16 3 16 -3C16 -10 11 -17 0 -17ZM-9 -6A4.5 4.5 0 1 1 -9 3A4.5 4.5 0 1 1 -9 -6ZM9 -6A4.5 4.5 0 1 1 9 3A4.5 4.5 0 1 1 9 -6ZM0 2L3 7H-3Z" fill-rule="evenodd"/></svg>
       </div>
       <div class="score-pop"><b>+100</b><small></small></div>
@@ -955,7 +971,7 @@ export class HUD {
     if (!document.getElementById('snd-hud-style')) {
       const st = document.createElement('style');
       st.id = 'snd-hud-style';
-      st.textContent = SND_CSS + CTF_CSS + DAZE_CSS;
+      st.textContent = SND_CSS + CTF_CSS + DAZE_CSS + HIT_CSS;
       document.head.appendChild(st);
     }
     const ctfSide = k => { const root = $(`.cf-side.${k}`); return { root, word: root.querySelector('b'), sub: root.querySelector('small'), key: '' }; };
@@ -2130,11 +2146,12 @@ export class HUD {
   }
 
   #decayEffects(dt) {
+    this.clockT += dt;
     if (this.hitT > 0) {
       this.hitT = Math.max(0, this.hitT - dt);
       const f = this.hitT / this.hitLife;
       this.hitEl.style.opacity = Math.min(1, f * 2);
-      this.hitEl.style.transform = `translate3d(-50%,-50%,0) scale(${1 + (1 - f) * 0.35})`;
+      this.hitEl.style.transform = `translate3d(-50%,-50%,0) scale(${(this.hitScale * (1 + (1 - f) * 0.35)).toFixed(3)})`;
     }
     if (this.flashT > 0) {
       this.flashT = Math.max(0, this.flashT - dt);
@@ -2156,6 +2173,7 @@ export class HUD {
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       switch (e.t) {
+        case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
         case 'hit': this.#onHit(e); break;
         case 'kill': this.#onKill(e); break;
         case 'medal': this.#onMedal(e); break;
@@ -2208,6 +2226,15 @@ export class HUD {
     return this.objTally.get(id) ?? { confirms: 0, captures: 0 };
   }
 
+  // One of the local player's rounds reached a player through cover (the ray carries `pen` below 1): the hit
+  // event that follows within a moment is marked as reduced.
+  #onOwnShot(e) {
+    for (let i = 0; i < e.rays.length; i++) {
+      const r = e.rays[i];
+      if (r.hit === 'player' && r.pen < 1) { this.coverShotT = this.clockT; return; }
+    }
+  }
+
   #onHit(e) {
     const localId = this.view?.localId;
     if (e.by === localId) {
@@ -2222,7 +2249,13 @@ export class HUD {
         this.hitHead = head;
         this.hitEl.classList.toggle('head', head);
       }
-      if (head || kill) this.hitEl.animate(HIT_PUNCH, { duration: 160, easing: 'ease-out' });
+      // Armour soaked it, or cover took some of it off first: the marker says so (see HIT_CSS).
+      const armor = !!e.armor, weak = !armor && this.clockT - this.coverShotT < COVER_HIT_WINDOW;
+      if (this.hitArmor !== armor) { this.hitArmor = armor; this.hitEl.classList.toggle('armor', armor); }
+      if (this.hitWeak !== weak) { this.hitWeak = weak; this.hitEl.classList.toggle('weak', weak); }
+      // A heavy round lands a bigger marker than a light one: 0.85x for a graze up to 1.25x for a sniper hit.
+      this.hitScale = kill ? 1 : Math.max(0.85, Math.min(1.25, 0.8 + (e.dmg || 25) / 110)) * (weak ? 0.85 : 1);
+      if ((head || kill || armor) && !REDUCED_MOTION.matches) this.hitEl.animate(HIT_PUNCH, { duration: 160, easing: 'ease-out' });
     }
     if (e.target === localId && e.by !== localId) this.#damageFrom(e);
   }

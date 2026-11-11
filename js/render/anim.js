@@ -1,6 +1,7 @@
 // Procedural animation data: reload tracks per weapon family, and the two-bone solver the limbs use.
 // A reload is authored as a list of key poses over progress 0..1 and sampled into a shared array,
 // so a soldier mid-reload costs a few multiplies and allocates nothing.
+import { fillGaps, reloadLike } from './feel.js';
 
 import { fillV10 } from '../shared/weapons-v10.js';
 
@@ -161,6 +162,9 @@ export const RELOADS = {
   scatter:  { track: REVOLVER, mag: { size: [0.16, 0.08, 0.08], rgb: [0.72, 0.13, 0.1], drop: -1, dump: 0.2, dumpN: 1, dumpKind: 'hull' } },
 };
 fillV10(RELOADS, 'reload');   // V10 guns reload like their nearest older gun.
+
+// A gun with no entry (a new one) reloads like the gun it names in `feel.like`, or like its class: see feel.js.
+fillGaps(RELOADS, (id, def, cls) => RELOADS[reloadLike(id, def, cls)]);
 
 const sstep = t => t * t * (3 - 2 * t);
 
