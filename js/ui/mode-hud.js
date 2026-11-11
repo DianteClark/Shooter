@@ -159,7 +159,7 @@ export class ModeHud {
         extra: dz ? bar : `<span class="mh-num">${clock(o.t)}</span>`,
       });
     }
-    this.#waitFor(!me.alive && held && mine ? 'HQ standing' : '', 'No respawn until it falls or moves. Watch the clock.');
+    this.#waitFor(!me.alive && held && mine ? 'HQ standing' : '', `No respawn until it falls, or it moves in ${clock(o.t)}`);
     this.#hideTags();
   }
 

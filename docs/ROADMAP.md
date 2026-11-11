@@ -19,7 +19,8 @@ on every push, keep 2% of weekly usage for bugs.
 7. IN PROGRESS: battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
    the regions, loot rarities, closing circle, revives, bots that loot, rotate and fight like players.
 8. DONE (1111-4). Scorestreaks overhaul.
-9. Game modes overhaul (new modes built on the new maps).
+9. DONE (modes). Game modes overhaul (docs/MODES.md): Headquarters, Kill Order, Infected, One in the Chamber, Control,
+   Grind, Ground War HQ and Kill Order; modifiers (Hardcore, Snipers Only, Melee Only, No Streaks); a daily featured playlist.
 10. Attachments wave: signature attachments per gun, conversion kits, unlocked through each gun's mastery.
 11. DONE (ops). Operators overhaul: 27 operators (18 new, nine of them women) from a parametric parts kit, builds in the
     shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.
