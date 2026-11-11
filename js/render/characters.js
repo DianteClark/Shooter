@@ -993,7 +993,7 @@ export class Characters {
     // the nearest teammate standing over them.
     const revivers = this._revivers || (this._revivers = new Map());
     revivers.clear();
-    if (view.br) {
+    if (view.br || (view.obj ?? view.points?.obj)?.ex) {     // Extraction squads go down and get picked up too.
       for (const d of view.players) {
         if (!d.alive || !d.downed || !(d.reviveK > 0.01)) continue;
         let best = null, bd = 2.6;

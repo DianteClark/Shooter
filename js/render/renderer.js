@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { TEAMS } from '../shared/constants.js';
 import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
+import { ExFx } from './ex-fx.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
 import { Weather } from './weather.js';
@@ -364,6 +365,7 @@ export class GameRenderer {
         }
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
+        case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
         case 'explosion': {
           // A launcher's blast waits for its rocket to get there.
           if (!vfx.rocketInbound(ev.x, ev.z, ev.radius || 4)) this._boom(ev.x, ev.z, ev.radius || 4);
@@ -699,6 +701,7 @@ export class GameRenderer {
     this.combat.smokeAlpha = cine ? 0.16 : 1;
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
     if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z);
+    if ((view.obj ?? view.points?.obj)?.ex) (this.exFx ??= new ExFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, localTeam);
     this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill && !cine) this._drawLaser(local);
     this.ambient.update(fxDt, this.camTarget.x, this.camTarget.z);
@@ -796,6 +799,7 @@ export class GameRenderer {
     if (g && g.clock > 45 && !g.thermal) saveAutoStep(QUALITY_STEPS[this.stepI].id);
     this.chars.dispose();
     this.brFx?.dispose();
+    this.exFx?.dispose(); this.exFx = null;
     this.vfx.dispose();
     this.combat.dispose();
     this.props.dispose();

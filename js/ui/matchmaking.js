@@ -2,7 +2,7 @@
 // options of the pre-match vote, and who fills the seats. Pure data and functions; js/ui/playscreens.js draws them and
 // js/main.js runs the search, the vote and the match.
 //
-//   MP_TABS                          Standard, Ground War, Battle Royale, and a disabled Extraction (coming later)
+//   MP_TABS                          Standard, Ground War, Battle Royale, Extraction (Quads and Duos on Frontier)
 //   playlistsFor(tab)                [{id, name, sub, modes, mods, featured?, icon}] the tab's playlists
 //   modesFor(tab)                    the single modes a player can tick on that tab (none on Battle Royale)
 //   resolveSelection(tab, sel)       {modes, mods, name} for a pick: one playlist, or one or more ticked modes
@@ -18,7 +18,7 @@ export const MP_TABS = [
   { id: 'standard', name: 'Standard', note: '6 v 6', icon: 'mode:tdm' },
   { id: 'groundwar', name: 'Ground War', note: '16 v 16', icon: 'party' },
   { id: 'br', name: 'Battle Royale', note: '32 players', icon: 'mode:br' },
-  { id: 'extraction', name: 'Extraction', note: 'Coming soon', icon: 'lock', soon: true },
+  { id: 'extraction', name: 'Extraction', note: '16 players', icon: 'mode:ex' },
 ];
 export const MP_TAB_IDS = MP_TABS.filter(t => !t.soon).map(t => t.id);
 
@@ -39,6 +39,11 @@ const PLAYLISTS = {
     { id: 'quads', name: 'Quads', icon: 'mode:br', modes: ['br'], sub: '8 squads of four' },
     { id: 'duos', name: 'Duos', icon: 'mode:br', modes: ['brduo'], sub: '16 pairs' },
     { id: 'solos', name: 'Solos', icon: 'mode:br', modes: ['brsolo'], sub: '32 alone' },
+  ],
+  // Extraction (docs/EXTRACT.md): squads only, never solos.
+  extraction: [
+    { id: 'exquads', name: 'Quads', icon: 'mode:ex', modes: ['exq'], sub: '4 squads of four, AI patrols' },
+    { id: 'exduos', name: 'Duos', icon: 'mode:ex', modes: ['exd'], sub: '8 pairs, AI patrols' },
   ],
 };
 
@@ -70,7 +75,7 @@ export function resolveSelection(tab, sel) {
 // Battle Royale the giant ones.
 function tabMaps(tab) {
   if (tab === 'groundwar') return MAP_IDS.filter(id => tierOf(id) === 'huge');
-  if (tab === 'br') return BR_PICK.filter(id => !MAPS[id].devMap);
+  if (tab === 'br' || tab === 'extraction') return BR_PICK.filter(id => !MAPS[id].devMap);
   return MAP_IDS.filter(id => tierOf(id) !== 'huge');
 }
 const tabWeight = tab => (tab === 'standard' ? t => SIZES[t]?.weight ?? 0 : () => 1);
@@ -95,7 +100,7 @@ export function mpVoteOptions(tab, modes, random = Math.random) {
 
 // How many players a match in this tab seats, for the lobby line and the vote's ballots.
 export function lobbySize(tab, modes) {
-  if (tab === 'br') return MODES[modes[0]]?.players ?? 32;
+  if (tab === 'br' || tab === 'extraction') return MODES[modes[0]]?.players ?? 32;
   if (tab === 'groundwar') return 32;
   return modes.some(m => !MODES[m]?.ffa) ? 12 : 8;
 }

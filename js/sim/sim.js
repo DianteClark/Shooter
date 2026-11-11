@@ -304,7 +304,9 @@ function buildExRoster(humans, { botSkill, mode }) {
   });
   for (let i = 0; i < EX.aiSlots; i++) {
     const loadout = normalizeLoadout({ primary: 'ar', secondary: 'pistol', camo: 'none', operator: 'ghoul' });
-    roster.push({ id: `ai${i}`, name: 'Patrol', team: EX_AI_TEAM, isBot: true, ai: true, skill: 'regular', primary: 'ar', camo: 'none', loadout });
+    const commander = i < 4;      // js/sim/extract.js COMMANDERS: the first seats are the high-value targets'.
+    roster.push({ id: `ai${i}`, name: commander ? 'Commander' : 'Patrol', team: EX_AI_TEAM, isBot: true, ai: true, skill: 'regular', primary: 'ar', camo: 'none',
+      operator: commander ? 'marshal' : 'ghoul', badge: { prestige: 0, level: 0 }, loadout: { ...loadout, operator: commander ? 'marshal' : 'ghoul' } });
   }
   return roster;
 }

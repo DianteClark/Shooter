@@ -17,6 +17,7 @@ import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
+import { getCamo } from '../shared/camos.js';
 
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const GUN_SECONDS = 3;           // Held at least this long counts as a gun used, for the history.
@@ -249,7 +250,7 @@ export class MatchAwards {
       // Exclusive unlock progress this match, and anything it opened.
       const after = Progress.lifetime();
       ex.unlocks = EX_UNLOCKS.map((u, i) => ({ ...exUnlockStatus(u, after), before: ex.before[i].value }));
-      for (const u of ex.unlocks) if (u.done && !ex.before.find(b => b.id === u.id)?.done && !applied.unlocks.some(x => `${x.kind}:${x.id}` === u.id)) applied.unlocks.push({ kind: u.kind, id: u.item, name: u.name, req: u.label });
+      for (const u of ex.unlocks) if (u.done && !ex.before.find(b => b.id === u.id)?.done && !applied.unlocks.some(x => `${x.kind}:${x.id}` === u.id)) applied.unlocks.push({ kind: u.kind, id: u.item, name: u.name, req: u.label, ...(u.kind === 'camo' ? { colors: getCamo(u.item).colors, weaponName: 'every gun' } : {}) });
     }
     const outcome = exWon !== null ? (exWon ? 'win' : 'loss') : won ? 'win' : drawn ? 'draw' : 'loss';
     let history = null;

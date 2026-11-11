@@ -408,12 +408,15 @@ export const spectate = {
   // The id to watch, or null when there is nothing to spectate (alive, between rounds' freeze, not S&D, team wiped).
   target(view, localId) {
     const snd = sndOf(view);
+    // Extraction: only with the squad's lives spent, or once lifted out (js/sim/extract.js).
+    const ex = view?.obj?.ex ? view.obj : view?.points?.obj?.ex ? view.points.obj : null;
     // Search and Destroy between rounds, or a battle royale squad member who is out (js/sim/br.js).
-    if ((!snd && !view?.br) || snd?.state === 'freeze' || view.phase === 'ended') return null;
+    if ((!snd && !view?.br && !ex) || snd?.state === 'freeze' || view.phase === 'ended') return null;
     const players = view.players;
     let me = null;
     for (let i = 0; i < players.length; i++) if (players[i].id === localId) { me = players[i]; break; }
     if (!me || me.alive) return null;
+    if (ex && !me.out && (ex.squads?.find(s => s.team === me.team)?.lives ?? 0) > 0) return null;
     let first = null;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];

@@ -3,7 +3,7 @@
 // ends the wait in progress. Rematch and Menu work from the first frame.
 import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { GUN_LADDER, isFfa, MODES, modeRules } from '../shared/modes.js';
+import { GUN_LADDER, isFfa, MODES, modeRules, EX, CONTRACT_NAMES } from '../shared/modes.js';
 import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
 import { matchScore, Progress } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, ROMAN } from './widgets.js';
@@ -172,6 +172,43 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     mineNum = myPlace; themNum = squadTeams.length; mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
   }
   const mmss = ds => { const s = Math.round(ds / 10); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  // Extraction (js/sim/extract.js): out or not, what the squad banked or lost, and the exclusive unlocks' progress.
+  // data.ex is this phone's pay (js/game/awards.js); data.exView the match's final squads and per-roster [revives, downs].
+  const exr = rules === 'ex';
+  const exSquadView = exr ? data.exView?.squads?.find(s => s.team === myTeam) ?? null : null;
+  if (exr) {
+    const out = !!(data.ex?.extracted ?? exSquadView?.extracted);
+    const banked = data.ex?.banked ?? exSquadView?.banked ?? [], lost = data.ex?.lost ?? [];
+    word = out ? 'Extracted' : 'Missing in action';
+    line = out ? `${banked.length} contract${banked.length === 1 ? '' : 's'} banked for the squad` : lost.length ? `${lost.length} contract${lost.length === 1 ? '' : 's'} lost: nobody got out` : 'Nobody in the squad got out';
+    tone = out ? 'var(--c-gold)' : 'var(--c-haze)';
+    mineNum = banked.length; themNum = banked.length + lost.length; mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
+  }
+  const exStat = p => data.exView?.stats?.[roster.indexOf(p)] ?? [0, 0];
+  const exSquad = () => {
+    const mates = roster.filter(p => p.team === myTeam && !p.ai);
+    return `<div class="rb ours${exSquadView?.extracted ? ' won' : ''}" style="--team:${TEAMS[myTeam]?.css}">
+      <div class="rb-head"><b class="rb-team">Your squad</b><b class="rb-pts">${exSquadView?.extracted ? 'Out' : ''}</b>
+        <span>K</span><span>D</span><span title="Downs dealt">Dn</span><span title="Revives">Rv</span><span class="wide">State</span></div>
+      ${mates.map((p, i) => { const st = exStat(p); return `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${i}">
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${st[1]}</span><span>${st[0]}</span><span class="wide">${p.out ? 'Lifted' : p.alive ? 'Left' : 'Down'}</span>
+      </div>`; }).join('')}
+    </div>`;
+  };
+  const exRewards = () => {
+    const banked = data.ex?.banked ?? exSquadView?.banked ?? [], lost = data.ex?.lost ?? [];
+    const rows = [...banked.map(c => ({ c, ok: true })), ...lost.map(c => ({ c, ok: false }))];
+    const unl = (data.ex?.unlocks ?? []).filter(u => !u.done || u.before < u.goal).sort((a, b) => (b.value - b.before) - (a.value - a.before) || b.value / b.goal - a.value / a.goal).slice(0, 3);
+    const lines = rows.slice(0, 4).map(({ c, ok }, i) => `<div class="rb-row" style="--i:${i}">
+        <span class="rb-name" style="grid-column:span 4">${art(`ex:${c.type}`, 13)}<b style="${ok ? '' : 'text-decoration:line-through;opacity:.55'}">${esc(CONTRACT_NAMES[c.type] ?? c.type)}</b></span><span>T${c.tier}</span><span class="wide" style="color:${ok ? 'var(--c-gold)' : 'var(--c-haze)'}">${ok ? `+${(EX.reward.xp[c.tier] ?? 0).toLocaleString('en-US')}` : 'Lost'}</span></div>`);
+    if (rows.length > 4) lines.push(`<div class="rb-row" style="--i:4"><span class="rb-name"><b>+${rows.length - 4} more</b></span></div>`);
+    const bars = unl.map((u, i) => `<div class="rb-row" style="--i:${lines.length + i}"><span class="rb-name" style="grid-column:span 5" title="${esc(u.label)}">${art(u.kind === 'camo' ? 'ui:camo' : u.kind === 'operator' ? 'ui:operator' : u.item, 13)}<b>${esc(u.name)}</b><small style="margin-left:6px;color:var(--c-haze);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.label)}</small></span><span class="wide" style="color:${u.value > u.before ? 'var(--c-gold)' : 'var(--c-haze)'}">${u.value}/${u.goal}</span></div>`);
+    return `<div class="rb theirs" style="--team:var(--c-gold)">
+      <div class="rb-head"><b class="rb-team">Contracts</b><b class="rb-pts"></b><span></span><span></span><span></span><span></span><span class="wide">XP</span></div>
+      ${lines.join('') || '<div class="rb-row" style="--i:0"><span class="rb-name"><b>No contracts finished</b></span></div>'}
+      ${bars.join('')}
+    </div>`;
+  };
   const brSquad = () => {
     const mates = roster.filter(p => p.team === myTeam);
     return `<div class="rb ours${outcome === 'win' ? ' won' : ''}" style="--team:${TEAMS[myTeam]?.css}">
@@ -307,7 +344,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
-      <div class="rb-pair">${br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
+      <div class="rb-pair">${exr ? exSquad() + exRewards() : br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>

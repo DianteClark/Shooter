@@ -14,7 +14,9 @@ import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
-import { BR, isBr } from '../shared/modes.js';
+import { BR, isBr, isEx } from '../shared/modes.js';
+import { exAmmo } from '../sim/extract.js';
+import { objOf } from '../sim/rules.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { unpackKit } from '../shared/attachments.js';
 import { brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
@@ -52,6 +54,8 @@ export class Match {
     // host hands it, and crawls when down. brAir: 1 aboard, 2 gliding, 0 on the ground.
     this.br = isBr(this.mode);
     this.brAir = this.br ? 1 : 0;
+    // Extraction (js/sim/extract.js): this phone crawls when down and takes the primary ammo the host hands it.
+    this.ex = isEx(this.mode);
     this.glideT = 0;
     this.planeF = 0;
     this.brWeapon = null;
@@ -147,6 +151,7 @@ export class Match {
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) { this.localAlive = false; this.brStash = null; }
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
+      if (e.t === 'exammo' && e.id === this.localId) exAmmo(this.ps, e.mags);
       // Modes overhaul: a side change (Infected) keeps this device's codec right before the spawn that follows it, and
       // a One in the Chamber kill hands the bullet back to the phone that owns the gun.
       if (e.t === 'team') { const p = this.sim.byId.get(e.id); if (p) p.team = e.team; }
@@ -224,6 +229,12 @@ export class Match {
       return;
     }
     if (ps.slot !== k) this.brSwapWant = true;      // The ordinary swap, on the next step.
+  }
+
+  // Extraction commands from the HUD: call (the helicopter, standing in an open zone), take (a contract at a phone).
+  exCommand(act, extra = {}) {
+    if (!this.ex) return;
+    this.#command({ cmd: 'ex', act, ...extra });
   }
 
   // Battle royale commands from the HUD: jump, take (a ground gun), plate, med, self (revive kit), cancel.
@@ -339,6 +350,9 @@ export class Match {
       if (this.#brAirStep(r, view, dt)) { this.#sendState(dt); return; }
       const me = view.players.find(p => p.id === this.localId);
       if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
+      if (me?.downed) downedInput(r);
+    } else if (this.ex) {
+      const me = view.players.find(p => p.id === this.localId);
       if (me?.downed) downedInput(r);
     }
     this.audio.trigger = r.fire;                          // The dry-fire click needs to know the trigger is held.
@@ -510,6 +524,7 @@ export class Match {
       myTeam: view.players.find(p => p.id === this.localId)?.team ?? this.me.team, players: view.players.map(p => ({ ...p })),
       snd: view.snd ?? view.points?.snd ?? null,
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
+      exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
       ...awards,
     });
   }

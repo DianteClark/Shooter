@@ -19,7 +19,7 @@ const tabsNav = (act, tabs, on) => `<nav class="mp-tabs">${tabs.map(t => `<butto
 /* ---------- Multiplayer ---------- */
 // state: { tab, sel: {playlist, modes} }
 export function mpMarkup({ tab }) {
-  const lists = playlistsFor(tab), modes = modesFor(tab), br = tab === 'br';
+  const lists = playlistsFor(tab), modes = modesFor(tab), br = tab === 'br' || tab === 'extraction';
   return `
     ${header({ back: 'mpBack', title: 'Multiplayer', cls: 'mp-bar', extra: tabsNav('mpTab', MP_TABS, tab) })}
     <div class="mp${br ? ' mp-br' : ''}" data-tab="${tab}">
@@ -40,7 +40,7 @@ export function mpMarkup({ tab }) {
         </div>
       </section>` : ''}
       <footer class="mp-foot" data-in="up">
-        <p class="mp-note">${ico('bots')}<span>${br ? '32 players a drop. Bots fill the seats nobody takes.' : 'Bots fill the seats nobody takes. The lobby votes on the map.'}</span></p>
+        <p class="mp-note">${ico('bots')}<span>${tab === 'extraction' ? '16 players on Frontier with your own loadout. Bots fill the squads; AI patrols hold the map.' : br ? '32 players a drop. Bots fill the seats nobody takes.' : 'Bots fill the seats nobody takes. The lobby votes on the map.'}</span></p>
         <button class="btn is-primary mp-find" data-act="mpFind" data-sound="confirm">${ico('play')}<span><b>Find match</b><small class="mp-pick"></small></span></button>
       </footer>
     </div>`;

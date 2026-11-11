@@ -5,8 +5,9 @@ import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
-import { GUN_LADDER, isBr, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
+import { GUN_LADDER, isBr, isEx, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
 import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
+import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
@@ -86,7 +87,7 @@ const NO_STATS = Object.freeze({});
 const FFA_FOE = '#ff6a4d';        // Free-for-all: "an enemy" when it is not one particular player (footprints, edge tints).
 const ORDINAL = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 // Free-for-all standings: score, then fewer deaths, then more kills (the sim's own order for the winner).
-const ffaRank = (view, list = view.players) => list.filter(p => !p.dummy).sort((a, b) =>
+const ffaRank = (view, list = view.players) => list.filter(p => !p.dummy && !p.ai).sort((a, b) =>
   ((view.scores[b.team] ?? 0) - (view.scores[a.team] ?? 0)) || (a.deaths - b.deaths) || (b.kills - a.kills));
 const PRO_LINE = { scavenger: '+1 equipment', bandolier: 'Equipment restocked', adrenaline: '25% less damage', engineer: 'The Sentry is yours' };
 const TIPS = [
@@ -379,6 +380,7 @@ export class HUD {
     this.#seedFallback();
     this.#build();
     this.brHud = new BrHud(this);
+    this.exHud = new ExHud(this);
     this.modeHud = new ModeHud(this);
     this.#drawMapBase();
     this.reset();
@@ -386,6 +388,8 @@ export class HUD {
 
   // Battle royale buttons (jump, take, plate, med, self-revive) reach the match through this.
   onBrCommand(cb) { this.brHud.onCommand(cb); }
+  // Extraction buttons (call exfil, take a contract at a phone).
+  onExCommand(cb) { this.exHud.onCommand(cb); }
 
   // A mode banner, for the modes' own layers (js/ui/mode-hud.js).
   banner(title, sub, duration, side) { this.#banner(title, sub, duration, side); }
@@ -458,6 +462,7 @@ export class HUD {
     this.snd = this.mode === 'snd';           // Search and Destroy: rounds, the bomb, spectating instead of respawns.
     this.ctf = this.mode === 'ctf';           // Capture the Flag: both flags' status, markers and the carrier's strip.
     this.br = isBr(mode);                     // Battle royale: its own layer replaces the scorebar and death screen.
+    this.ex = isEx(mode);                     // Extraction: its own layer replaces the scorebar; respawns go on until the lives do.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
@@ -474,7 +479,7 @@ export class HUD {
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
-    this.#sndControls(this.snd || this.br);   // Battle royale has no scorestreaks either.
+    this.#sndControls(this.snd || this.br || this.ex);   // Battle royale and extraction have no scorestreaks either.
     this.reset();
     const practice = mode === 'range' || !!training;
     this.#range.prepare(practice, { training: !!training });
@@ -483,9 +488,10 @@ export class HUD {
     this.#hideIntro();
     this.remeasured = false;
     // Battle royale opens on its drop map instead of the team card.
-    this.pendingIntro = intro && mode !== 'range' && !this.br ? { mapId, mode, roster, localId } : null;
+    this.pendingIntro = intro && mode !== 'range' && !this.br && !this.ex ? { mapId, mode, roster, localId } : null;
     this.brHud.prepare(this.br, { map: this.map, roster, localId, mode });
-    if (this.br) {
+    this.exHud.prepare(this.ex, { map: this.map, roster, localId, mode });
+    if (this.br || this.ex) {
       const mine = TEAMS[roster.find(r => r.id === localId)?.team ?? 2]?.css ?? '#38b6ff';
       this.el.style.setProperty('--my-team', mine);
       this.el.style.setProperty('--enemy-team', TEAMS[1].css);
@@ -1088,7 +1094,7 @@ export class HUD {
   #paintBoard(view) {
     const me = this.#findLocal(view);
     if (!me) return;
-    if (this.ffa || this.br) { this.#paintFfaBoard(view, me); return; }
+    if (this.ffa || this.br || this.ex) { this.#paintFfaBoard(view, me); return; }
     [me.team, 1 - me.team].forEach((team, s) => {
       const side = this.boardSides[s];
       side.team.textContent = `${TEAMS[team].name}  ${view.scores[team]}`;
@@ -1332,7 +1338,10 @@ export class HUD {
     this.#updateTiles(me, c);
     if (this.snd) this.#updateSnd(view, me, c, snd);
     else if (this.br) this.brHud.update(view, me, dt);
-    else this.#updateDeath(me, c, view);
+    else {
+      if (this.ex) this.exHud.update(view, me, dt);
+      this.#updateDeath(me, c, view);
+    }
     if (this.ctf) this.#updateCtf(view, me, c);
     this.modeHud.update(view, me);
     this.#decayEffects(dt);
@@ -2223,6 +2232,7 @@ export class HUD {
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       if (this.br) this.brHud.onEvent(e, this.view);
+      if (this.ex) this.exHud.onEvent(e, this.view);
       this.modeHud.onEvent(e, this.view);
       switch (e.t) {
         case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
@@ -2581,6 +2591,11 @@ export class HUD {
       this.endEl.classList.add('show');
       return;
     }
+    if (this.ex) {
+      this.exHud.endBanner(this.endEl, winner, myTeam, view);
+      this.endEl.classList.add('show');
+      return;
+    }
     if (this.ffa && view) {
       // Placement, not sides: first is a win, the podium is a good day, the rest is a loss.
       const ranked = ffaRank(view), at = ranked.findIndex(p => p.team === myTeam) + 1;
@@ -2639,8 +2654,9 @@ export class HUD {
     let sx = this.mmX, sz = this.mmZ;
     // Battle royale: the minimap shows your surroundings, not the whole 400 m map (js/ui/br-hud.js); everything below
     // draws in map metres times sx, so a translate and a bigger scale are all it takes.
-    const zoom = this.br && this.brHud.on ? this.brHud.miniWindow(view, me, this.mmCanvas.width, this.mmCanvas.height) : null;
-    if (zoom) { this.brHud.drawMiniBase(g, zoom); g.save(); g.translate(-zoom.ox * zoom.k, -zoom.oz * zoom.k); sx = sz = zoom.k; }
+    const zoomer = this.br && this.brHud.on ? this.brHud : this.ex && this.exHud.on ? this.exHud : null;
+    const zoom = zoomer ? zoomer.miniWindow(view, me, this.mmCanvas.width, this.mmCanvas.height) : null;
+    if (zoom) { zoomer.drawMiniBase(g, zoom); g.save(); g.translate(-zoom.ox * zoom.k, -zoom.oz * zoom.k); sx = sz = zoom.k; }
     else g.drawImage(this.mmBase, 0, 0);
     try { this.#drawMinimapLayers(view, me, g, sx, sz); } finally { if (zoom) g.restore(); }
   }
@@ -2692,7 +2708,7 @@ export class HUD {
     // A flag carrier shows on the enemy minimap wherever they are (the price of carrying it).
     const ctf = this.ctf ? ctfOf(view) : null;
     // Out for the round, you see what the teammate you watch sees.
-    const eyeId = (this.snd || this.br) && !me.alive ? spectate.target(view, me.id) : null;
+    const eyeId = (this.snd || this.br || this.ex) && !me.alive ? spectate.target(view, me.id) : null;
     const eye = eyeId ? view.players.find(p => p.id === eyeId) ?? me : me;
 
     for (const p of view.players) {
@@ -2718,7 +2734,7 @@ export class HUD {
         g.fillRect(x - 3.5, y - 3.5, 7, 7);
       } else {
         const r = myUav ? 5.5 + Math.sin(clock * 8 + x) * 1.3 : 5;
-        g.fillStyle = TEAMS[p.team].css;
+        g.fillStyle = p.ai ? AI_CSS : TEAMS[p.team].css;      // Extraction's AI patrols: one colour, apart from the squads.
         g.beginPath();
         g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y);
         g.closePath();
@@ -2745,6 +2761,7 @@ export class HUD {
     this.#drawDeployables(view, myTeam, sx, sz, g);
     this.#drawProMini(view, me, sx, sz, g, clock);
     if (this.br) this.brHud.drawMini(g, view, me, sx, sz);
+    if (this.ex) this.exHud.drawMini(g, view, me, sx, sz);
     this.modeHud.drawMini(g, view, me, sx, sz, clock);
 
     this.#drawSelf(g, me, sx, sz);
