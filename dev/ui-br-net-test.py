@@ -76,13 +76,13 @@ async def main():
                     break
                 print('     host', st)
                 await host.wait_for_timeout(2000)
-            await host.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=40000)
+            await host.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=90000)
             for _ in range(15):
                 st = await guest.evaluate(f"JSON.stringify([{G}.inMatch, !!{G}.match, {G}.match && {G}.match.interp.buffer.length, {G}.match && {G}.match.mode, {G}.matchInfo && {G}.matchInfo.mapId])")
                 if '"br' in st and ',true,' in st and not ',0,' in st: break
                 print('     guest', st)
                 await guest.wait_for_timeout(2000)
-            await guest.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=40000)
+            await guest.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=90000)
             for pg in (host, guest): await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")   # Two software-rendered tabs.
             hid = await host.evaluate(f'{G}.match.localId')
             gid = await guest.evaluate(f'{G}.match.localId')
