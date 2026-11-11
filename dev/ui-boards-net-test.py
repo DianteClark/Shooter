@@ -33,7 +33,7 @@ async def main():
                 pg.on('console', lambda m: errors.append(f'{tag}: {m.text}') if m.type == 'error' else None)
                 pg.on('pageerror', lambda e: errors.append(f'{tag}: PAGEERR {e}'))
                 await pg.goto(URL)
-                await pg.wait_for_timeout(900)
+                await pg.wait_for_function("!!window.__game?.Progress", timeout=30000)
                 await pg.evaluate(f"window.__game.Progress.name='{name}'; window.__game.Progress.setFlag('tutorialOffered')")
                 await pg.reload()
                 await pg.wait_for_timeout(1000)
@@ -68,13 +68,15 @@ async def main():
             await host.locator('[data-act="start"]').first.click()
             await host.wait_for_function(f'{G}.vote?.options', timeout=10000)
             for pg in pages:      # A vote nobody casts resolves by itself after a few seconds (?vote=5).
-                try: await pg.locator('.vote-card[data-i="0"]').click(timeout=3000)
+                # Every friend vote carries a Battle Royale card; a clock-ended match needs a timed mode.
+                try: await pg.locator('.vote-card').filter(has_not_text='Battle Royale').first.click(timeout=3000)
                 except Exception: pass
             await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=30000)
             await guest.wait_for_function(f'{G}.inMatch', timeout=30000)
             for pg in pages: await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")
             await host.wait_for_timeout(2500)
-            await host.evaluate(f"{G}.match.sim.timeLeft = 0.2")
+            # Any mode the vote landed on (rounds, battle royale): end it outright.
+            await host.evaluate(f"(() => {{ const s = {G}.match.sim; if (s.phase !== 'ended') s._end(0); }})()")
             for pg in pages:
                 await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'results'", timeout=40000)
             await host.wait_for_timeout(9000)      # The results reel plays out before the test leaves the screen.

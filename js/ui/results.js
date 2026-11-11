@@ -398,6 +398,7 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, them
 
   // Player XP, then the level-up moment.
   const bar = q('.xp-player'), label = q('.xp-lvn');
+  if (!bar || !label) return;       // The screen was replaced while the reel played.
   bar.style.transform = `scaleX(${xpFrom.frac.toFixed(3)})`;
   const to = { level: lp.level, frac: lp.maxed ? 1 : lp.into / lp.span };
   await reel.climb(bar, label, xpFrom, to);

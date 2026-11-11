@@ -61,7 +61,7 @@ on every push, keep 2% of weekly usage for bugs.
     DONE (bots): docs/BOTS.md. 200 seeded profiles (js/shared/botpool.js), a fifth locked; matchmaking by rating and
     level into `buildRoster(..., { pool })`; `careerAt(profile, date)` for item 16; bots trade, hear footsteps, peek
     from cover, pre-aim lanes; weak bots tunnel and overpeek; SMGs fight to 72% of their range.
-16. Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
+16. DONE (1111-13). Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
     saved "as of" that match; boards for level, kills, K/D, wins, BR wins/top 5, extractions, mastery, weekly.
     DONE (boards). Save v4 gains `career` (appended, defaults; old saves and SY4 codes seed it from the lifetime tally,
     and a code with nothing new re-exports unchanged): matches, kills, team wins, BR matches/wins/top 5, extractions
