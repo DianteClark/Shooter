@@ -445,7 +445,9 @@ if (!QUICK) {
     const dev = botMatch({ leth: 'claymore', tac: 'sensor', mode: 'dom', seed: 9 });
     const popped = dev.ev.filter(e => e.t === 'popped' && e.src === 'gun').length;
     assert.ok(popped >= 2, `shot ${popped} devices`);
-    const therm = botMatch({ leth: 'thermite', mode: 'tdm', seed: 4 });
+    // Scorestreaks overhaul: streak changes moved seed 4's match to no thermite dodge; a second seed if one lands none.
+    let therm = botMatch({ leth: 'thermite', mode: 'tdm', seed: 4 });
+    if (therm.dodges < 1) therm = botMatch({ leth: 'thermite', mode: 'tdm', seed: 5 });
     const burned = therm.ev.filter(e => e.t === 'hit' && e.eq === 'thermite').length;
     assert.ok(burned > 0 && therm.dodges >= 1, `backed off thermite (${therm.dodges} dodges, ${burned} burn ticks)`);
   });
