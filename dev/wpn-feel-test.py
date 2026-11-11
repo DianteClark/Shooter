@@ -26,7 +26,7 @@ UNKNOWN = """
   mk('pistol', 'zzblade', { category: 'Melee', melee: true, suppressed: true, range: 2.7, rpm: 190, kickCam: 0.3 });
 })();
 """
-CLASS_PICK = {'Assault': 'ar', 'SMG': 'smg', 'Shotgun': 'shotgun', 'LMG': 'lmg', 'Marksman': 'dmr', 'Sniper': 'sniper', 'Pistol': 'revolver', 'Launcher': 'launcher'}
+CLASS_PICK = {'Assault': 'ar', 'SMG': 'smg', 'Shotgun': 'shotgun', 'LMG': 'lmg', 'Marksman': 'dmr', 'Sniper': 'sniper', 'Pistol': 'revolver', 'Launcher': 'launcher', 'Melee': 'knife'}
 
 SETUP = """(async () => {
   // Audio synthesis runs in zero-delay timers; a software-rendered page starves those, so run them back to back.

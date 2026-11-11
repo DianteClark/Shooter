@@ -3,6 +3,8 @@
 // so a soldier mid-reload costs a few multiplies and allocates nothing.
 import { fillGaps, reloadLike } from './feel.js';
 
+import { fillV10 } from '../shared/weapons-v10.js';
+
 // Row layout of a track. Gun offsets are in upper-body space; the hand target is in gun space.
 export const T = { U: 0, DX: 1, DY: 2, DZ: 3, ROLL: 4, YAW: 5, PITCH: 6, HX: 7, HY: 8, HZ: 9, W: 10, MAG: 11 };
 const STRIDE = 12;
@@ -159,6 +161,7 @@ export const RELOADS = {
   crossbow: { track: null, mag: { size: [0.5, 0.04, 0.04], rgb: [0.9, 0.85, 0.7], drop: -1 } },
   scatter:  { track: REVOLVER, mag: { size: [0.16, 0.08, 0.08], rgb: [0.72, 0.13, 0.1], drop: -1, dump: 0.2, dumpN: 1, dumpKind: 'hull' } },
 };
+fillV10(RELOADS, 'reload');   // V10 guns reload like their nearest older gun.
 
 // A gun with no entry (a new one) reloads like the gun it names in `feel.like`, or like its class: see feel.js.
 fillGaps(RELOADS, (id, def, cls) => RELOADS[reloadLike(id, def, cls)]);

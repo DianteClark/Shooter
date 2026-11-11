@@ -549,8 +549,8 @@ export class Gunsmith {
       const kit = this.kit, id = this.tryAtt;
       if (id === null) {
         const name = kit[this.slot] ? ATTACHMENTS[kit[this.slot]].name : 'Stock';
-        title = `${SLOT_LABEL[this.slot]}: ${name}`;
-        desc = kit[this.slot] ? ATTACHMENTS[kit[this.slot]].desc : 'Tap an attachment to try it on the bench.';
+        title = WEAPONS[this.weapon]?.melee ? 'No attachments' : `${SLOT_LABEL[this.slot]}: ${name}`;
+        desc = kit[this.slot] ? ATTACHMENTS[kit[this.slot]].desc : WEAPONS[this.weapon]?.melee ? 'Melee weapons take no attachments. Camos, effects and mastery still apply.' : 'Tap an attachment to try it on the bench.';
       } else if (id === STOCK) {
         title = 'Stock';
         desc = `Run without a ${SLOT_LABEL[this.slot].toLowerCase()} attachment.`;

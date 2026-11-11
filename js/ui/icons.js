@@ -14,6 +14,8 @@
 // API: icon(id, {size, color, accent, square, title, cls}) -> SVG markup string. Unknown ids get a neutral fallback.
 //      ICON_IDS lists every id; ITEM_ICONS (id -> inner markup on the 32 grid) is kept for older callers.
 
+import { v10Icons } from './icons-v10.js';
+
 // ---- Geometry. Polygons are flat [x, y, x, y, ...] arrays. ----------------------------------------------------------
 
 // Chamfered rectangle. `c` is one chamfer for all corners or [tl, tr, br, bl].
@@ -164,6 +166,7 @@ const WEAPON_SPECS = {
   },
   thumper: { f: [P(1, 8, 10, 8, 10, 13, 2, 15.5), R(10, 7, 7, 6), R(16, 4, 12, 12, 3), R(28, 6, 17, 6, [0, 0.8, 0.8, 0]), R(44, 5, 3.4, 8, 0.6), grip(12, 12.8, 4, 6, 1.6), R(30, 3.8, 1.6, 2.2)], h: [R(18.2, 7.2, 7.6, 1.3), R(18.2, 9.6, 7.6, 1.3), R(18.2, 12, 7.6, 1.3)] },
 };
+Object.assign(WEAPON_SPECS, v10Icons({ P, R, O, bar, grip }));   // The V10 arsenal's icons (icons-v10.js).
 
 // ---- Square icons on the 32 grid. ------------------------------------------------------------------------------
 
@@ -407,7 +410,7 @@ const SQUARE = {
 };
 
 // Categories: each is its family's archetype, fitted to the square at a climb.
-const CATEGORY_WEAPON = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher' };
+const CATEGORY_WEAPON = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher', Melee: 'knife' };
 
 // Aliases: older callers, and the obvious synonyms screens will reach for.
 const ALIAS = {

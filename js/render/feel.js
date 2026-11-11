@@ -106,7 +106,8 @@ export function deriveFx(id, def, cls) {
     out.tail = 12; out.linger = 0.1; out.speed = 250; out.extra = undefined; out.shape = 'star';
   }
   if (cls === 'LMG') out.every = def.rpm >= 1000 ? 5 : def.rpm >= 760 ? 4 : 3;
-  if (cls === 'Launcher' && def.explosive && def.range < 45) out.extra = undefined;   // A tube pop, not a rocket.
+  if (cls === 'Launcher' && def.explosive && def.range < 45 && !def.burst) out.extra = undefined;   // A tube pop, not a rocket (a burst-firing pod throws rockets).
+  if (def.charge) { out.tint = [0.55, 0.85, 1, 0.45]; out.extra = 'brake'; }   // A coil round: a cold blue-white streak.
   if (cls !== 'Launcher' && cls !== 'Sniper') {
     // Reach shows in the streak: a long-barrelled gun throws a longer, faster one.
     const reach = clamp((def.range || 40) / 45, 0.7, 1.5);

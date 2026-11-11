@@ -35,11 +35,17 @@ function player(id, team, x, z, aim, weapon, camo, attachments) {
 }
 
 // The next map in the rotation, so each launch opens on a different yard.
+// Small and medium maps only: a menu must never cost what a 16 v 16 map does, or the phone is warm before a match starts.
+const MENU_MAPS = MAP_IDS.filter(id => { const s = MAPS[id].size ?? 'medium'; return s === 'small' || s === 'medium'; });
 function nextMapId() {
   let i = 0;
   try { i = (Number(localStorage.getItem(ROTATION_KEY)) || 0) + 1; localStorage.setItem(ROTATION_KEY, String(i)); } catch { /* fixed map */ }
-  return MAP_IDS[i % MAP_IDS.length];
+  return MENU_MAPS[i % MENU_MAPS.length];
 }
+// The backdrop is slow drift behind menus: 30 frames a second is plenty, and after IDLE_MS without a touch it holds a
+// still frame until the next one. Both keep the phone cool for the match.
+const FRAME_MS = 1000 / 30 - 3;
+const IDLE_MS = 40000;
 
 // Where the operator stands: open ground with room for the camera to swing round its south side, and a backdrop of
 // structure behind (north) so the frame is never an empty field. Deterministic per map.
@@ -226,7 +232,9 @@ export class MenuBackdrop {
   }
 
   #frame = now => {
+    if (now - this.touched > IDLE_MS) { this.raf = 0; return; }          // Resting: #wake starts it again.
     this.raf = requestAnimationFrame(this.#frame);
+    if (this.last && now - this.last < FRAME_MS) return;
     const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 1 / 60;
     this.last = now;
     this.clock += dt;
@@ -252,6 +260,13 @@ export class MenuBackdrop {
 
   #run() {
     if (this.raf || document.hidden || !this.renderer) return;
+    this.touched = performance.now();
+    if (!this.wakeBound) {
+      this.wakeBound = true;
+      const wake = () => { this.touched = performance.now(); if (this.state === 'live') this.#run(); };
+      window.addEventListener('touchstart', wake, { passive: true, capture: true });
+      window.addEventListener('mousedown', wake, { passive: true, capture: true });
+    }
     this.last = 0;
     this.raf = requestAnimationFrame(this.#frame);
   }

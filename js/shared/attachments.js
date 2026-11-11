@@ -23,6 +23,7 @@
 // be on the same gun. Tracks by weapon come from trackFor(); the unlock order is ATTACHMENT_LIST.
 
 import { GOLDEN_ID, WEAPON_IDS, idsIn } from './constants.js';
+import { V10_DENY } from './weapons-v10.js';
 
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 
@@ -271,7 +272,63 @@ export const ATTACHMENTS = {
     weapons: idsIn('Assault', 'LMG', 'Marksman', 'Sniper'),
     mods: { patternAmp: 0.7, bloomPerShot: 0.8, moveMult: 0.95, sprintToFire: 1.2, swapTime: 1.15 },
   },
+
+  // ---- V10: two more per slot. Appended, so every older attachment keeps its place in packKit's slot lists. ----
+  steady: {
+    id: 'steady', slot: 'optic', name: 'Steady Glass', unlock: 4,
+    desc: 'The sights settle much sooner after each shot. Slower to aim and slower while aimed.',
+    weapons: idsIn('LMG', 'Marksman', 'Sniper'),
+    mods: { bloomRecover: 1.4, bloomPerShot: 0.9, adsTime: 1.1, adsMoveMult: 0.9 },
+  },
+  ghostring: {
+    id: 'ghostring', slot: 'optic', name: 'Ghost Ring', unlock: 19,
+    desc: 'Aims faster and moves faster while aimed. Looser aimed fire, a little less reach.',
+    weapons: idsIn('Assault', 'SMG', 'Shotgun', 'Pistol'),
+    mods: { adsTime: 0.88, adsMoveMult: 1.1, adsSpread: 1.2, range: 0.95 },
+  },
+  breacher: {
+    id: 'breacher', slot: 'barrel', name: 'Breacher Muzzle', unlock: 4,
+    desc: 'Fires much sooner out of a sprint, swaps faster, tighter from the hip. Shorter range, looser aimed fire.',
+    weapons: idsIn('SMG', 'Shotgun', 'Pistol'),
+    mods: { sprintToFire: 0.75, swapTime: 0.9, hipSpread: 0.94, range: 0.85, adsSpread: 1.15 },
+  },
+  floated: {
+    id: 'floated', slot: 'barrel', name: 'Free-Float Barrel', unlock: 28,
+    desc: 'Tighter aimed fire that settles sooner. Wide from the hip, slower to swap and to carry.',
+    weapons: idsIn('Assault', 'LMG', 'Marksman', 'Sniper'),
+    mods: { adsSpread: 0.85, bloomRecover: 1.2, hipSpread: 1.2, swapTime: 1.12, moveMult: 0.98 },
+  },
+  satchel: {
+    id: 'satchel', slot: 'mag', name: 'Ammo Satchel', unlock: 29,
+    desc: 'Half again as much spare ammunition. Slower on foot, to swap and out of a sprint.',
+    // Sidearm pistols never run out and blades have nothing to carry.
+    weapons: WEAPON_IDS.filter(id => !idsIn('Pistol', 'Melee').includes(id)),
+    mods: { reserve: 1.5, moveMult: 0.97, swapTime: 1.1, sprintToFire: 1.06 },
+  },
+  tapedmag: {
+    id: 'tapedmag', slot: 'mag', name: 'Taped Mags', unlock: 12,
+    desc: 'Reloads faster without giving up a round. Slower to aim and swap, wider from the hip.',
+    weapons: idsIn('Assault', 'LMG', 'Marksman'),
+    mods: { reload: 0.8, adsTime: 1.08, swapTime: 1.1, hipSpread: 1.1 },
+  },
+  bipod: {
+    id: 'bipod', slot: 'grip', name: 'Folding Bipod', unlock: 7,
+    desc: 'Planted: far less sway and tighter aimed fire. Nearly rooted while aimed, slow to swing and to aim.',
+    weapons: idsIn('LMG', 'Marksman', 'Sniper'),
+    mods: { patternAmp: 0.6, adsSpread: 0.9, bloomRecover: 1.2, adsMoveMult: 0.7, turnCap: 0.8, adsTime: 1.12 },
+  },
+  handstop: {
+    id: 'handstop', slot: 'grip', name: 'Hand Stop', unlock: 30,
+    desc: 'Tighter from the hip and the cone closes sooner after firing. Slower to aim, slower while aimed.',
+    weapons: idsIn('Assault', 'SMG', 'Shotgun', 'Marksman'),
+    mods: { hipSpread: 0.86, bloomRecover: 1.15, adsTime: 1.06, adsMoveMult: 0.94 },
+  },
 };
+// V10 guns: exclusions a category allow-list cannot express (weapons-v10.js V10_DENY), taken out of every list above.
+for (const a of Object.values(ATTACHMENTS)) {
+  const no = WEAPON_IDS.filter(id => V10_DENY[id] && (V10_DENY[id] === '*' || V10_DENY[id].includes(a.id)));
+  if (no.length) a.weapons = (a.weapons || WEAPON_IDS).filter(id => !no.includes(id));
+}
 
 // Every attachment in level-track order. Stable table order breaks ties.
 export const ATTACHMENT_LIST = Object.values(ATTACHMENTS).sort((a, b) => a.unlock - b.unlock);
@@ -295,6 +352,8 @@ export const MOD_INFO = {
   heatRounds:   { label: 'Rounds to overheat', better: 1 },
   penetrate:    { label: 'Damage through cover', better: 1 },
   blastRadius:  { label: 'Blast radius',       better: 1 },
+  bloomRecover: { label: 'Settle speed',       better: 1 },
+  reserve:      { label: 'Spare ammo',         better: 1 },
 };
 
 const SLOT_IDS = SLOTS.map(slot => Object.values(ATTACHMENTS).filter(a => a.slot === slot).map(a => a.id));
@@ -426,6 +485,7 @@ function applyMods(eff, m) {
       case 'heatRounds': if (eff.heat) eff.heat = { ...eff.heat, rounds: scaledRounds(eff.heat.rounds, k) }; break;
       case 'heatCool': if (eff.heat) eff.heat = { ...eff.heat, coolTime: scaled(eff.heat.coolTime, k) }; break;
       case 'magazine': eff.magazine = scaledRounds(eff.magazine, k); break;
+      case 'reserve': eff.reserve = scaledRounds(eff.reserve, k); break;
       default: if (typeof eff[key] === 'number') eff[key] = scaled(eff[key], k);
     }
   }

@@ -471,7 +471,8 @@ function scaleVoice(spec, pitch, len) {
 function deriveVoice(id, def, cls) {
   let baseId = CLASS_VOICE[cls] || 'ar';
   if (cls === 'Shotgun' && (def.pellets || 1) === 1) baseId = 'slug';
-  if (cls === 'Launcher' && def.range < 45) baseId = 'thumper';
+  // A short-range tube is a grenade pop, unless it fires in bursts: a pod of small rockets, each with its own hiss.
+  if (cls === 'Launcher' && def.range < 45 && !def.burst) baseId = 'thumper';
   if (cls === 'Pistol' && def.rpm >= 700) baseId = 'machpistol';
   if (cls === 'Melee') {
     // A heavy club swings lower and longer than a knife.
@@ -486,7 +487,10 @@ function deriveVoice(id, def, cls) {
   let len = clampN(Math.pow(heavy, 0.4), 0.75, 1.3);
   // A fast gun's body must be over before the next round, or a held trigger smears into noise.
   if (def.rpm > 450) len = Math.min(len, Math.max(0.5, (60 / def.rpm) * 1.6 / base.body.dur));
+  if (def.burst && def.burst.gap) len = Math.min(len, Math.max(0.5, def.burst.gap * 1.6 / base.body.dur));
   const spec = scaleVoice(base, pitch, len);
+  // A charged round (def.charge) leaves as a coil discharge: a falling electric whine over the class's report.
+  if (def.charge) spec.ring = { dur: 0.42, gain: 0.5, f0: 5200 * pitch, f1: 650 * pitch, decay: 3.6 };
   if (def.explosive) spec.noSup = true;
   return spec;
 }
@@ -1055,6 +1059,12 @@ function renderSfx(sr) {
       addNoise(d, sr, r, { at: 0.002, dur: 0.2, gain: 0.8, f0: 9000, f1: 2600, hp: 1500, decay: 5 });
       addTone(d, sr, { at: 0.02, dur: 0.14, gain: 0.25, f0: 2400, f1: 900, decay: 4 });
     }, 0.75),
+    // A swung weapon landing on a body: a dull body blow under a short wet slap. A heavy club plays it lower.
+    meleeHit: mk(0.2, (d, r) => {
+      addTone(d, sr, { dur: 0.12, gain: 1.2, f0: 160, f1: 55, decay: 5, shape: 1.2 });
+      addNoise(d, sr, r, { dur: 0.06, gain: 0.7, f0: 2400, f1: 600, decay: 7 });
+      addClick(d, sr, r, { dur: 0.004, gain: 0.6, hp: 1800 });
+    }, 0.8),
     impactMetal: mk(0.24, (d, r) => {
       addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 4000 });
       addMetal(d, sr, { at: 0.002, dur: 0.2, gain: 0.8, f: 2300, decay: 7 });
@@ -2005,6 +2015,15 @@ export class AudioEngine {
     this._play(this.sfx.hit, { bus: this.ui, priority: PR.hit, cls: 'ui', gain: 0.8, rate: 0.98 + Math.random() * 0.04 });
   }
 
+  // A blade or a club connecting. Heard by everyone near it, louder for the two people involved.
+  _meleeHit(e) {
+    const b = this.sfx.meleeHit;
+    if (!b) return;
+    const rate = 1.35 / Math.max(0.75, Math.sqrt(weightOf(e.w) / 0.3));
+    if (e.by === this.localId || e.target === this.localId) this._play(b, { bus: this.ui, priority: PR.hit, cls: 'foley', gain: 0.9, rate });
+    else this._world(b, e.x, e.z, FOLEY_RANGE, { gain: 0.7, priority: PR.gun, cls: 'foley', rate });
+  }
+
   onEvents(events, view) {
     if (!this._running()) return;
     this._trackLocal(view);
@@ -2015,6 +2034,7 @@ export class AudioEngine {
       switch (e.t) {
         case 'shot': this._shot(e); break;
         case 'hit':
+          if (e.w && WEAPONS[e.w] && WEAPONS[e.w].melee) this._meleeHit(e);
           if (e.by === me) this._hitSound(e);
           else if (e.target === me) { this.fight = 1; this._play(this.sfx.hurt, { bus: this.ui, priority: PR.threat, cls: 'ui', gain: 0.85 }); }
           break;

@@ -7,6 +7,7 @@ import { getGun } from './guns.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex, camoTint } from './camo-shader.js';
 import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
 import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
+import { fillV10 } from '../shared/weapons-v10.js';
 import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR, SKINS, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
@@ -51,6 +52,7 @@ const HOLD = {
   lightlmg: [-0.03, -0.08, 0.04], crossbow: [-0.01, 0.04, 0], slug: [-0.02, -0.02, 0.02], scatter: [0.14, 0.06, -0.08],
 };
 const HOLD_NONE = [0, 0, 0];
+fillV10(HOLD, 'hold'); fillV10(GUN_SCALES, 'hold');   // V10 guns are carried like their nearest older gun.
 // Guns with no entry above (new ones) sit and scale the way their class does: see feel.js.
 fillGaps(HOLD, deriveHold);
 fillGaps(GUN_SCALES, deriveScale);

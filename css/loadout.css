@@ -266,3 +266,5 @@
 #ui .ar-cta .btn:disabled.is-go { background: linear-gradient(172deg, #79e3aa, var(--c-go) 48%, #34b06f); color: var(--c-night); }
 #ui .gun-pic { transition: opacity var(--dur-base) var(--ease-out); }
 #ui .ld-sub { grid-template-columns: minmax(0, 1fr) 116px 104px; }
+/* A long gun's model reaches under its own name: a scrim keeps the name readable over it. */
+.ar-title { left: 0; right: 0; top: 0; padding: 6px 10px 16px; background: linear-gradient(180deg, rgba(18,22,28,.86), rgba(18,22,28,.6) 62%, transparent); }
