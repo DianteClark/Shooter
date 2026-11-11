@@ -1,4 +1,4 @@
-// Infected, the host side (mode 'inf'). When the match goes live one player is infected (team 1) and everyone else is
+// Infected, the host side (mode 'inf'). When the match goes live one player in twelve is infected (team 1) and everyone else is
 // a survivor (team 0), whatever side they started on. A survivor who dies for any reason joins the infected and
 // respawns as one. The infected carry the Gaff with Shivs to throw, and come back quickly; survivors
 // keep their own guns without scorestreaks. Survivors win if any of them are left when the clock runs out; the
@@ -12,7 +12,7 @@
 import { addScore } from './streaks.js';
 import { alive, chaseObjective, decodeStats, encodeStats, restoreStats, zoneObjective, makeZones } from './mode-kit.js';
 
-export const INF = { respawn: 2.5, tick: 10, tickScore: 25, infectScore: 100, surviveScore: 500, regroup: 35 };
+export const INF = { perFirst: 12, alpha: 0.5, respawn: 2.5, tick: 10, tickScore: 25, infectScore: 100, surviveScore: 500, regroup: 35 };
 const STATS = ['infections', 'survived'];
 const KIT = { primary: 'knife', secondary: 'knife', lethal: 'shiv', tactical: 'smoke', attachments: {}, perks: ['marathon', 'fasthands', 'deadsilence'], pro: [], streaks: [] };
 
@@ -39,13 +39,18 @@ export class InfRules {
     const sim = this.sim, pool = sim.players.filter(p => !p.dummy && !p.away);
     this.started = true;
     for (const p of pool) if (p.team !== 0) this._setTeam(p, 0);
-    const first = pool[Math.floor(sim.rng() * pool.length)];
-    if (!first) return;
-    this._infect(first, null);
-    this.first = first;
-    sim._emit({ t: 'inf', kind: 'first', id: first.id });
-    sim._medal(first, 'first_infected');
-    sim._respawn(first);
+    // One infected for every INF.perFirst players; at least one.
+    const n = Math.max(1, Math.min(pool.length - 1, Math.round(pool.length / INF.perFirst)));
+    for (let k = 0; k < n; k++) {
+      const left = pool.filter(p => p.team === 0);
+      const first = left[Math.floor(sim.rng() * left.length)];
+      if (!first) break;
+      this._infect(first, null);
+      this.first ??= first;
+      sim._emit({ t: 'inf', kind: 'first', id: first.id });
+      sim._medal(first, 'first_infected');
+      sim._respawn(first);
+    }
     this._count();
   }
 
@@ -87,6 +92,12 @@ export class InfRules {
     }
     const left = this._count();
     if (left === 0 && sim.phase === 'live') { sim.lastKill ??= null; sim._end(1); }
+  }
+
+  // While the infection is down to one player, that one (the alpha) takes INF.alpha of the damage: a lone blade against
+  // eleven guns would rarely get going.
+  damage(target, attacker, dmg) {
+    return target.team === 1 && this.started && this.sim.scores[1] <= 1 ? dmg * INF.alpha : dmg;
   }
 
   onKill(target, killer, info) {

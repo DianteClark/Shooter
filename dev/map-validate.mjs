@@ -341,7 +341,8 @@ function botMatch(map, mode, out) {
   const hist = new Map();
   let tick = 0;
   // Flag runs are rarer than fights: Capture the Flag gets twice as long to show one.
-  const seconds = MODES[mode].rules === 'ctf' || MODES[mode].rules === 'ctl' ? SECONDS * 2 : SECONDS;
+  // Flag runs, Control rounds and the first infections are slower to show than a fight.
+  const seconds = ['ctf', 'ctl', 'inf'].includes(MODES[mode].rules) ? SECONDS * 2 : SECONDS;
   const end = Math.round((3.2 + seconds) * SIM_HZ);
   const t0 = performance.now();
   for (; tick < end && sim.phase !== 'ended'; tick++) {
@@ -380,7 +381,7 @@ function botMatch(map, mode, out) {
   out.info.push(`bots ${line}`);
   if (kills === 0) out.fail.push(`${mode}: no kills in ${seconds} s`);
   // Bots take flags and plant bombs rarely enough that a quiet minute is not a map fault on its own: reported only.
-  if (objective === 0) (rules === 'snd' || rules === 'ctf' || rules === 'ctl' || rules === 'oic' || rules === 'ko' ? out.warn : out.fail).push(`${mode}: no objective activity in ${seconds} s`);
+  if (objective === 0) (rules === 'snd' || rules === 'ctf' || rules === 'ctl' || rules === 'oic' || rules === 'ko' || rules === 'inf' ? out.warn : out.fail).push(`${mode}: no objective activity in ${seconds} s`);
   // Stuck-seconds per bot per minute: a little is a bot waiting at a corner; a lot is a trap.
   const perBot = stuckTotal / sim.players.length / (seconds / 60);
   if (perBot > 4) out.fail.push(`${mode}: bots stuck ${perBot.toFixed(1)} s per bot per minute`);
