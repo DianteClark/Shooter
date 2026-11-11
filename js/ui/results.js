@@ -191,7 +191,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head"><b class="rb-team">Your squad</b><b class="rb-pts">${exSquadView?.extracted ? 'Out' : ''}</b>
         <span>K</span><span>D</span><span title="Downs dealt">Dn</span><span title="Revives">Rv</span><span class="wide">State</span></div>
       ${mates.map((p, i) => { const st = exStat(p); return `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${i}">
-        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${st[1]}</span><span>${st[0]}</span><span class="wide">${p.out ? 'Lifted' : p.alive ? 'Left' : 'Down'}</span>
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${st[1]}</span><span>${st[0]}</span><span class="wide">${p.out ? 'Lifted' : p.alive ? 'Behind' : 'Dead'}</span>
       </div>`; }).join('')}
     </div>`;
   };

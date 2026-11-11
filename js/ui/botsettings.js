@@ -115,6 +115,7 @@ function sideLine(mode, bots) {
 export function botMatchSummary({ mapId, mode }) {
   if (mode === RANDOM || !MODES[mode]) return { top: skillName(saved.skill), sub: 'Mode defaults' };
   if (MODES[mode].br) return { top: skillName(saved.skill), sub: `${MODES[mode].players} players · ${MODES[mode].squad === 1 ? 'solos' : `squads of ${MODES[mode].squad}`}` };
+  if (MODES[mode].ex) return { top: skillName(saved.skill), sub: `${MODES[mode].players} players · squads of ${MODES[mode].squad} · AI patrols` };
   const r = resolve(mode, MAPS[mapId] ?? null);
   const sides = !r.bots ? 'No bots' : isFfa(mode) ? `${r.bots + 1} players` : `${Math.max(1, r.bots)}v${r.bots}`;
   const limit = MODES[mode].rounds ? `${r.scoreLimit} rds` : r.scoreLimit;
@@ -140,6 +141,7 @@ export function botMatchSheet(menu, pick, { onChange } = {}) {
   const paint = () => {
     let rows = '';
     if (mode && MODES[mode].br) rows = `<p class="bm-note">${MODES[mode].players} players: you, and bots in every other seat. The circle sets the length; difficulty is the only setting.</p>`;
+    else if (mode && MODES[mode].ex) rows = `<p class="bm-note">${MODES[mode].players} players in squads of ${MODES[mode].squad}: you, and bots in every other seat, against AI patrols. 15 minutes; difficulty is the only setting.</p>`;
     else if (mode) {
       const r = resolve(mode, map), top = maxBots(mode, map);
       const ss = scoreSteps(mode), ts = timeSteps(mode);
@@ -159,7 +161,7 @@ export function botMatchSheet(menu, pick, { onChange } = {}) {
           <span class="bm-segs">${SKILLS.map(([id, name]) => `<button class="bm-seg${id === saved.skill ? ' on' : ''}" data-act="bmSkill" data-skill="${id}" data-sound="tab">${name}</button>`).join('')}</span>
         </div>
         ${rows || '<p class="bm-note">A random mode plays with that mode\'s own settings. Pick a mode to change them.</p>'}
-        ${mode && MODES[mode].br ? '' : `<p class="bm-mods-h">Modifiers</p>${modsRows(soloMods(), mode)}`}
+        ${mode && (MODES[mode].br || MODES[mode].ex) ? '' : `<p class="bm-mods-h">Modifiers</p>${modsRows(soloMods(), mode)}`}
         ${mode ? `<button class="bm-reset" data-act="bmReset"${resolve(mode, map).custom ? '' : ' disabled'}>${ico('refresh')}<b>Defaults for ${esc(MODES[mode].short ?? MODES[mode].name)}</b></button>` : ''}
       </div>`);
   };
