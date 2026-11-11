@@ -144,7 +144,7 @@ test('unlock levels are spread through the level curve, one gun per level', () =
 test('each has an icon, stat bars, facts, and joins the bot rotations and Gun Game', () => {
   for (const id of NEW) {
     assert.ok(hasIcon(id), `${id} icon`);
-    assert.ok(statBars(id).length >= 11 && statBars(id).every(b => b.score >= 0 && b.score <= 1), `${id} stat bars`);
+    assert.ok(statBars(id).length >= (WEAPONS[id].melee ? 5 : 11) && statBars(id).every(b => b.score >= 0 && b.score <= 1), `${id} stat bars`);
     assert.equal(weaponFacts(id).length, 6);
   }
   assert.ok(hasIcon('cat:Melee'));

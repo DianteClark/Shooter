@@ -33,9 +33,11 @@ const STATS = [
 ];
 
 // The rows a weapon shows: heavy-gun rows only exist on the guns they concern.
+// V10: a blade has no sights, recoil or magazine, so those rows are left out for it.
+const NOT_MELEE = new Set(['aimed', 'hip', 'recoil', 'aimspeed', 'mag', 'reload']);
 export function statsFor(weaponId) {
   const def = WEAPONS[weaponId];
-  return STATS.filter(s => !s.only || s.only(def));
+  return STATS.filter(s => (!s.only || s.only(def)) && !(def.melee && NOT_MELEE.has(s.id)));
 }
 
 // { base, next, delta, better, whole, changed } per stat: base is the fitted kit, next the kit being tried.

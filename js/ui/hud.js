@@ -1892,7 +1892,9 @@ export class HUD {
     }
     if (me.ammo !== c.ammo) {
       c.ammo = me.ammo;
-      this.ammoEl.textContent = me.ammo;
+      const blade = !!WEAPONS[me.weapon]?.melee;   // V10: a blade has no rounds to count.
+      this.ammoEl.textContent = blade ? '\u221e' : me.ammo;
+      this.reserveEl.style.display = blade ? 'none' : '';
       this.magFill.style.transform = `scaleX(${Math.min(1, me.ammo / (c.magazine || 1))})`;
     }
     if (me.reserve !== c.reserve) {
