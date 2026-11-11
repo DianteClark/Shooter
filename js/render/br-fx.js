@@ -11,11 +11,44 @@ import { BR } from '../shared/modes.js';
 import { TEAMS } from '../shared/constants.js';
 import { BR_KIND } from '../sim/br.js';
 
-const GLOW_MAX = 200, LOOT_MAX = 180, CHEST_MAX = 24, BEAM_MAX = 60, CHUTE_MAX = 32, RING_MAX = 16;
+const GLOW_MAX = 200, LOOT_MAX = 180, CHEST_MAX = 24, BEAM_MAX = 60, CHUTE_MAX = 32, RING_MAX = 16, BAR_MAX = 16, PING_MAX = 8;
 const NEAR = 38;              // Metres around the camera target that loot is drawn.
 const KIND_TINT = { [BR_KIND.ammo]: 0x9aa58a, [BR_KIND.plate]: 0x3fa0ff, [BR_KIND.med]: 0xf2f0e6, [BR_KIND.kit]: 0xffb21a, [BR_KIND.lethal]: 0xff6a3a, [BR_KIND.tactical]: 0x8cf0d0 };
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
+const _qs = new THREE.Quaternion(), _ax = new THREE.Vector3(1, 0, 0);
+
+// A parafoil: a wide arched wing of cells (alternate cells a shade darker), a little thickness at the front, and four
+// cords down to the harness at the origin. One non-indexed geometry with vertex colours, tinted per instance by team.
+function canopyGeometry() {
+  const pos = [], col = [];
+  const tri = (a, b, c, k) => { pos.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) col.push(k, k, k); };
+  const quad = (a, b, c, d, k) => { tri(a, b, c, k); tri(a, c, d, k); };
+  const CELLS = 9, SPAN = 4.2, CHORD = 1.5, H = 3.6;
+  const at = (u, f) => {       // u -1..1 across the span, f 0 (front) .. 1 (back)
+    const x = u * SPAN / 2, y = H - u * u * 0.9 + Math.sin(f * Math.PI) * 0.18, z = (f - 0.4) * CHORD;
+    return [z, y, x];          // Span across the flight direction (local z), chord along it (local x).
+  };
+  for (let i = 0; i < CELLS; i++) {
+    const u0 = -1 + 2 * i / CELLS, u1 = -1 + 2 * (i + 1) / CELLS, k = i % 2 ? 0.78 : 1;
+    for (let j = 0; j < 3; j++) {
+      const f0 = j / 3, f1 = (j + 1) / 3;
+      quad(at(u0, f0), at(u1, f0), at(u1, f1), at(u0, f1), k);
+    }
+    // The open front of the cell, a band hanging under the leading edge.
+    const a = at(u0, 0), b = at(u1, 0);
+    quad(a, b, [b[0], b[1] - 0.22, b[2]], [a[0], a[1] - 0.22, a[2]], k * 0.6);
+  }
+  // Cords: thin strips from the wing's underside to the harness.
+  for (const u of [-0.85, -0.35, 0.35, 0.85]) {
+    const top = at(u, 0.35), w = 0.03;
+    quad([top[0] - w, top[1], top[2]], [top[0] + w, top[1], top[2]], [w, 1.2, 0], [-w, 1.2, 0], 0.25);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
 
 function wallTexture() {
   const c = document.createElement('canvas');
@@ -79,7 +112,15 @@ export class BrFx {
     this.chests = inst(new THREE.BoxGeometry(1.15, 0.72, 0.8), new THREE.MeshBasicMaterial({ color: 0xc8962e }), CHEST_MAX);
     this.beams = inst(new THREE.CylinderGeometry(0.09, 0.2, 4, 6, 1, true).translate(0, 2, 0),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }), BEAM_MAX);
-    this.chutes = inst(new THREE.SphereGeometry(1.7, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2.2), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }), CHUTE_MAX);
+    this.chutes = inst(canopyGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: THREE.DoubleSide }), CHUTE_MAX);
+    // Revive progress over the downed player and whoever is picking them up: a dark bar and its fill.
+    const bar = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    this.barBg = inst(bar, new THREE.MeshBasicMaterial({ color: 0x10141a, transparent: true, opacity: 0.75, depthWrite: false, depthTest: false }), BAR_MAX);
+    this.barFill = inst(bar.clone(), new THREE.MeshBasicMaterial({ color: 0x59d36b, depthWrite: false, depthTest: false }), BAR_MAX);
+    this.barBg.renderOrder = 8; this.barFill.renderOrder = 9;
+    // Landing pings: a teammate's chosen spot, a beam and a ring for a few seconds (js/ui/br-hud.js sends them).
+    this.pingRings = inst(new THREE.RingGeometry(1.1, 1.5, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), PING_MAX);
+    this.pingList = [];
     this.rings = inst(new THREE.RingGeometry(0.7, 0.95, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.8, depthWrite: false }), RING_MAX);
     this.near = [];
     // A chest's lid flies when it opens: a short pop drawn as a beam burst.
@@ -87,6 +128,9 @@ export class BrFx {
   }
 
   onChest(x, z) { this.pops.push({ x, z, t: 0 }); }
+
+  // A squadmate's landing ping: shown for a while where it was put.
+  ping(x, z, color = 0xffc24a) { this.pingList.push({ x, z, t: 0, color }); if (this.pingList.length > PING_MAX) this.pingList.shift(); }
 
   update(view, dt, camX, camZ) {
     const br = view.br;
@@ -158,7 +202,9 @@ export class BrFx {
       if (!p.alive) continue;
       if (Math.abs(p.x - camX) > 50 || Math.abs(p.z - camZ) > 40) continue;
       if (p.air === 2 && nP < CHUTE_MAX) {
-        V.set(p.x, 3.3, p.z); Q.setFromAxisAngle(UP, p.aim); S.set(1, 0.8, 1);
+        // The wing faces the way the glide goes and swings a little under it.
+        V.set(p.x, 0.4, p.z); Q.setFromAxisAngle(UP, -p.aim); S.set(1, 1, 1);
+        Q.multiply(_qs.setFromAxisAngle(_ax, Math.sin(t * 1.7 + p.x) * 0.08));
         this.chutes.setMatrixAt(nP, M4.compose(V, Q, S));
         this.chutes.setColorAt(nP++, C.setHex(TEAMS[p.team]?.color ?? 0xffffff));
       }
@@ -169,6 +215,47 @@ export class BrFx {
       }
     }
     this.chutes.count = nP; this.rings.count = nR;
+    // Revive bars over both players.
+    let nBar = 0;
+    for (const d of view.players) {
+      if (!d.alive || !d.downed || !(d.reviveK > 0.01) || nBar >= BAR_MAX - 1) continue;
+      if (Math.abs(d.x - camX) > 50 || Math.abs(d.z - camZ) > 40) continue;
+      let helper = null, bd = 2.6;
+      for (const q of view.players) {
+        if (q === d || q.team !== d.team || !q.alive || q.downed || q.air) continue;
+        const k = Math.hypot(q.x - d.x, q.z - d.z);
+        if (k < bd) { bd = k; helper = q; }
+      }
+      for (const at of helper ? [d, helper] : [d]) {
+        const k = Math.max(0.02, Math.min(1, d.reviveK));
+        V.set(at.x, 2.4, at.z - 1.05); Q.identity(); S.set(1.5, 1, 0.2);
+        this.barBg.setMatrixAt(nBar, M4.compose(V, Q, S));
+        V.set(at.x - 0.72 + 0.72 * k, 2.42, at.z - 1.05); S.set(1.44 * k, 1, 0.13);
+        this.barFill.setMatrixAt(nBar++, M4.compose(V, Q, S));
+      }
+    }
+    this.barBg.count = nBar; this.barFill.count = nBar;
+    this.barBg.instanceMatrix.needsUpdate = true; this.barFill.instanceMatrix.needsUpdate = true;
+    // Landing pings.
+    let nPing = 0;
+    for (let i = this.pingList.length - 1; i >= 0; i--) {
+      const g = this.pingList[i];
+      g.t += dt;
+      if (g.t > 9) { this.pingList.splice(i, 1); continue; }
+      const k = 1 + (g.t * 1.6 % 1) * 0.6;
+      V.set(g.x, 0.08, g.z); Q.identity(); S.set(k, 1, k);
+      this.pingRings.setMatrixAt(nPing, M4.compose(V, Q, S));
+      this.pingRings.setColorAt(nPing++, C.setHex(g.color));
+      if (nB < BEAM_MAX) {
+        V.set(g.x, 0, g.z); S.set(2.2, 4, 2.2);
+        this.beams.setMatrixAt(nB, M4.compose(V, Q, S));
+        this.beams.setColorAt(nB++, C.setHex(g.color));
+      }
+    }
+    this.pingRings.count = nPing;
+    this.pingRings.instanceMatrix.needsUpdate = true;
+    if (this.pingRings.instanceColor) this.pingRings.instanceColor.needsUpdate = true;
+    if (nPing) { this.beams.count = nB; this.beams.instanceMatrix.needsUpdate = true; if (this.beams.instanceColor) this.beams.instanceColor.needsUpdate = true; }
     this.chutes.instanceMatrix.needsUpdate = true;
     if (this.chutes.instanceColor) this.chutes.instanceColor.needsUpdate = true;
     this.rings.instanceMatrix.needsUpdate = true;

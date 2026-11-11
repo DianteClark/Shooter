@@ -683,6 +683,9 @@ class Rig {
     this.camoI = 0;
     this.accent = new Float32Array(3);
     this.legRGB = null; this.armRGB = null;
+    this.crawl = 0;           // Battle royale: 0..1 into the downed crawl.
+    this.kneel = 0;           // 0..1 down on one knee, reviving someone at (kneelX, kneelZ).
+    this.kneelX = 0; this.kneelZ = 0;
   }
 }
 
@@ -986,6 +989,22 @@ export class Characters {
     let localPlayer = null;
     for (let i = 0; i < view.players.length; i++) if (view.players[i].id === localId) { localPlayer = view.players[i]; break; }
     const lx = localPlayer ? localPlayer.x : 0, lz = localPlayer ? localPlayer.z : 0;
+    // Battle royale revives: who is kneeling over whom. The wire has the downed player's progress only, so the reviver is
+    // the nearest teammate standing over them.
+    const revivers = this._revivers || (this._revivers = new Map());
+    revivers.clear();
+    if (view.br) {
+      for (const d of view.players) {
+        if (!d.alive || !d.downed || !(d.reviveK > 0.01)) continue;
+        let best = null, bd = 2.6;
+        for (const q of view.players) {
+          if (q === d || q.team !== d.team || !q.alive || q.downed || q.air) continue;
+          const k = Math.hypot(q.x - d.x, q.z - d.z);
+          if (k < bd) { bd = k; best = q; }
+        }
+        if (best) revivers.set(best.id, d);
+      }
+    }
 
     for (let pi = 0; pi < view.players.length; pi++) {
       const p = view.players[pi];
@@ -1036,6 +1055,11 @@ export class Characters {
       if (r.throwT > 0) r.throwT = Math.max(0, r.throwT - dt / 0.5);
       const throwAiming = view.throwPreview && p.id === localId ? 1 : 0;
       r.throwHold += (throwAiming - r.throwHold) * damp(14, dt);
+      r.crawl += ((p.downed && p.alive ? 1 : 0) - r.crawl) * damp(8, dt);
+      const patient = revivers.get(p.id);
+      if (patient) { r.kneelX = patient.x; r.kneelZ = patient.z; }
+      r.kneel += ((patient ? 1 : 0) - r.kneel) * damp(10, dt);
+      const crawl = r.crawl, kneel = r.kneel;
 
       // Gait: phase is distance-locked, so a planted foot stays planted instead of skating.
       const prevPhase = r.phase;
@@ -1074,7 +1098,9 @@ export class Characters {
       const bob = Math.abs(sinPhase) * 0.09 * runK * (1 + sprint * 0.35);
       const breath = Math.sin(clock * 2.1 + r.seed) * 0.012 * (1 - runK);
       const rock = r.sx[ROCK];
-      const y = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02;
+      // Downed: flat on the ground, face first. Reviving: down on one knee.
+      const stand = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02 - kneel * 0.36;
+      const y = stand + (0.3 + Math.sin(r.phase * 2) * 0.02 - stand) * crawl;
       const rightX = -aimZ, rightZ = aimX;
       const sway = sinPhase * 0.035 * runK;
       const bodyX = p.x + rightX * sway, bodyZ = p.z + rightZ * sway;
@@ -1083,7 +1109,7 @@ export class Characters {
       const throwActive = r.throwT > 0 ? Math.sin((1 - r.throwT) * Math.PI) : 0;
       const lag = clamp(r.aimVel * 0.03, -0.32, 0.32) * (1 - ads * 0.7);
       const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32;
-      const pitch = -sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F];
+      const pitch = -sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - crawl * 1.38 - kneel * 0.32;
       const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK;
       _e.set(roll, -(p.aim - lag - twist), pitch);
       _q.setFromEuler(_e);
@@ -1154,7 +1180,7 @@ export class Characters {
 
       _gunE.set(gunRoll, gunYaw, gunPitch);
       _qGun.setFromEuler(_gunE);
-      const gs = GUN_SCALE * (GUN_SCALES[p.weapon] || 1);
+      const gs = GUN_SCALE * (GUN_SCALES[p.weapon] || 1) * (1 - crawl * 0.999);   // No gun in hand while down.
       _s.set(gs, gs, gs);
       _p.set(gunX, gunY, gunZ);
       _gun.compose(_p, _qGun, _s).premultiply(_body);
@@ -1273,6 +1299,17 @@ export class Characters {
             nH++;
           }
         }
+        if (crawl > 0.01) {
+          // Hand over hand along the ground ahead, in step with the crawl.
+          const reach = 0.5 + Math.sin(r.phase + (side > 0 ? 0 : Math.PI)) * 0.22;
+          _v.set(p.x + aimX * reach + rightX * side * 0.3, 0.08, p.z + aimZ * reach + rightZ * side * 0.3);
+          _b.lerp(_v, crawl);
+        }
+        if (kneel > 0.01 && side < 0) {
+          // The free hand on the teammate being picked up.
+          _v.set(r.kneelX, 0.32, r.kneelZ);
+          _b.lerp(_v, kneel * 0.85);
+        }
         // Elbows hang out and down; the pole leans back so the hands read as gripping forward.
         solveJoint(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 0.4 * look.l, 0.44 * look.l,
           fwd[8] * side * 0.75 - fwd[0] * 0.3, -0.8, fwd[10] * side * 0.75 - fwd[2] * 0.3, _joint);
@@ -1323,6 +1360,14 @@ export class Characters {
           footX += (tx - footX) * slide; footZ += (tz - footZ) * slide;
           footY += (0.13 - footY) * slide;
           if (side > 0) { poleX += (rightX * 1.0 - poleX) * slide; poleY += (0.6 - poleY) * slide; poleZ += (rightZ * 1.0 - poleZ) * slide; }
+        }
+        if (crawl > 0.01) {
+          // Legs trail out behind, pushing off in turn.
+          const push = Math.sin(r.phase + (side > 0 ? Math.PI : 0)) * 0.16;
+          footX += (hipX - aimX * (0.95 + push) + rightX * side * 0.08 - footX) * crawl;
+          footZ += (hipZ - aimZ * (0.95 + push) + rightZ * side * 0.08 - footZ) * crawl;
+          footY += (0.1 - footY) * crawl;
+          poleX *= 1 - crawl; poleZ *= 1 - crawl; poleY += (-0.8 - poleY) * crawl;     // Knees toward the ground.
         }
         solveJoint(hipX, y, hipZ, footX, footY, footZ, legLen, legLen, poleX, poleY, poleZ, _joint);
         setStretch(_m, hipX, y, hipZ, _joint[0], _joint[1], _joint[2], legT, legT);

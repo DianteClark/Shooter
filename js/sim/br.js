@@ -26,7 +26,7 @@
 // Events: {t:'brjump', id, x, z}, {t:'brland', id}, {t:'brgive', id, slot, w, r, kit, ammo, res}, {t:'bramm', id, slot,
 // n}, {t:'brinv', id, guns}, {t:'brpick', id, kind}, {t:'brchest', x, z}, {t:'down', by, target, weapon, x, z},
 // {t:'revive', id, by}, {t:'bruse', id, kind, done?}, {t:'brplate', id, broke?}, {t:'brsquad', team, place},
-// {t:'brphase', phase, state}.
+// {t:'brphase', phase, state}, {t:'brping', id, team, x, z}.
 
 import { BR, MODES } from '../shared/modes.js';
 import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../shared/constants.js';
@@ -423,6 +423,14 @@ export class BrRules {
       case 'self': return this._startUse(p, 'self');
       case 'cancel': p.br.useK = null; return true;
       case 'fists': return this._fists(p, msg);
+      case 'ping': {
+        // A landing spot (or any spot) for the squad, at most every 1.5 s.
+        const x = +msg.x, z = +msg.z;
+        if (!Number.isFinite(x) || !Number.isFinite(z) || sim.time - (p.br.pingT ?? -9) < 1.5) return false;
+        p.br.pingT = sim.time;
+        sim._emit({ t: 'brping', id: p.id, team: p.team, x: Math.round(Math.max(0, Math.min(sim.map.width, x)) * 10) / 10, z: Math.round(Math.max(0, Math.min(sim.map.height, z)) * 10) / 10 });
+        return true;
+      }
     }
     return false;
   }
