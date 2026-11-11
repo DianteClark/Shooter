@@ -164,7 +164,7 @@
 #ui .pf-rankname .vet-tag { margin-left: 6px; vertical-align: 2px; }
 #ui .pf-callcard { align-self: flex-start; padding: 0; margin: 6px 0 2px; background: none; line-height: 0; position: relative; z-index: 1; transition: transform var(--dur-fast) var(--ease-out); }
 #ui .pf-callcard:active { transform: scale(.97); }
-.pf-pro { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); gap: 3px; }
+.pf-pro { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; }   /* One row: every perk, Hard Target (Extraction) the sixteenth. */
 .pf-pro span { position: relative; display: grid; place-items: center; height: 30px; background: rgba(47,57,68,.7); color: var(--c-rail); }
 #ui .pf-pro span .ico { height: 18px; }
 .pf-pro span i { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px; background: rgba(231,234,228,.12); }
