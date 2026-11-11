@@ -32,7 +32,7 @@ import { BR, MODES } from '../shared/modes.js';
 import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { LETHALS, TACTICALS } from '../shared/catalog.js';
-import { applyAttachments, kitKey, NO_ATTACHMENTS, packKit, unpackKit, normalizeKit } from '../shared/attachments.js';
+import { applyAttachments, availableFor, kitKey, NO_ATTACHMENTS, packKit, unpackKit, normalizeKit } from '../shared/attachments.js';
 import { resolveCircle } from '../shared/geometry.js';
 import { botAttachments } from './bots.js';
 import { stepPlayer } from './player.js';
@@ -64,6 +64,10 @@ const FLOOR_ROLL = [['gun', 34], ['ammo', 26], ['plate', 16], ['med', 8], ['leth
 const RARITY_HANDLING = 0.04;
 const KIT_SKILL = [null, 'regular', 'regular', 'veteran', 'elite'];
 const KIT_KEEP = [0, 1, 2, 3, 4];
+// V11 attachments wave: the gun's own parts on floor loot. An epic gun sometimes carries one of its signature
+// attachments, a legendary one more often, and only a legendary can roll its conversion kit. Class parts fill the rest.
+const SIG_CHANCE = [0, 0, 0, 0.35, 0.5];
+const CONV_CHANCE = [0, 0, 0, 0, 0.2];
 const CHANGE_REPEAT = 1.2;       // Seconds a loot change keeps riding along in snapshots.
 const CELL = 8;                  // Loot grid cell, metres.
 const PLAN_EVERY = 15;           // Ticks between squad plans (0.5 s).
@@ -239,10 +243,17 @@ export class BrRules {
     const r = pickW(rng, RARITY_ROLL[tier] ?? RARITY_ROLL[3]);
     let kit = NO_ATTACHMENTS;
     if (r > 0) {
-      const raw = botAttachments(id, KIT_SKILL[r], Math.floor(rng() * 3) * 2);
+      const raw = botAttachments(id, KIT_SKILL[r], Math.floor(rng() * 3) * 2, { own: false });
       const keep = {};
       let n = 0;
       for (const s in raw) if (n++ < KIT_KEEP[r]) keep[s] = raw[s];
+      if (r >= 3) {
+        const own = availableFor(id).filter(a => a.kind);
+        const sigs = own.filter(a => a.kind === 'sig'), conv = own.find(a => a.kind === 'kit');
+        const sigRoll = rng(), convRoll = rng(), pick = rng();
+        if (sigs.length && sigRoll < SIG_CHANCE[r]) { const a = sigs[Math.floor(pick * sigs.length) % sigs.length]; keep[a.slot] = a.id; }
+        if (conv && convRoll < CONV_CHANCE[r]) keep[conv.slot] = conv.id;
+      }
       kit = normalizeKit(id, keep);
     }
     return { kind: K.gun, v: WEAPON_IDS.indexOf(id), r, n: 1, kit };

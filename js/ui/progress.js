@@ -20,6 +20,7 @@
  * Loadouts   loadouts() -> 5 x {name,primary,secondary,attachments:{weapon:kit},perks,tactical,lethal,streaks,camo,tracer,killFx}
  *            activeLoadout (get/set index)  loadout(primary?) -> the full loadout for a match or roster
  *            updateLoadout(i,part)  renameLoadout(i,name)  setAttachment(i,slot,id|null,weapon=loadout primary) -> bool
+ *            kitFor(i,weapon) -> the unlocked kit loadout i keeps for any gun, equipped or not
  *            setEquipment(part)  (edits the active loadout)
  * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'}
  * Pro        proStatus(perk) -> {perk,name,desc,steps:[{stat,label,goal,value,done}],done}  isPro(perk)  proPerks() -> [ids]
@@ -61,7 +62,7 @@ import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
 import { getEmblem, emblemUnlocked } from './emblems.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor } from '../shared/attachments.js';
+import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor, unlockMet } from '../shared/attachments.js';
 import {
   SAVE_VERSION, LOADOUT_COUNT, MAX_LEVEL, MAX_PRESTIGE, MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE,
   PLAYER_CURVE, WEAPON_CURVE, UNLOCK_SCHEDULE, ITEM_TABLES, levelOf, itemUnlockLevel, gateLoadoutGear,
@@ -192,9 +193,10 @@ const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 const plainOnly = w => w === GOLDEN_ID;
 const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none' : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w)));
 const hasCosmetic = (w, item) => (plainOnly(w) ? !item.prestige : readWeapon(w).prestige >= item.prestige);
+// V11: an unlock above 30 is a mastery ladder tier (attachments.js LADDER_BASE), met by the gun's ladT.
 const hasAttachment = (w, id) => {
   const level = unlockFor(w, id);
-  return level !== null && readWeapon(w).peak >= level;
+  return level !== null && unlockMet(level, readWeapon(w));
 };
 
 // Only what the player can use actually goes into a match, so a stale selection simply falls back.
@@ -299,6 +301,7 @@ function weaponDiffBase(w) {
   return {
     level: WEAPON_CURVE.levelOf(before.xp),
     peak: before.peak,
+    ladT: before.ladT ?? 0,
     camos: new Set(CAMOS.filter(c => hasCamo(w, c)).map(c => c.id)),
   };
 }
@@ -473,7 +476,7 @@ export const Progress = {
   attachments(w) {
     return availableFor(w).map(a => {
       const unlockLevel = unlockFor(w, a.id);
-      return { ...a, unlockLevel, unlocked: readWeapon(w).peak >= unlockLevel };
+      return { ...a, unlockLevel, unlocked: unlockMet(unlockLevel, readWeapon(w)) };
     });
   },
   isAttachmentUnlocked(w, id) { return hasAttachment(w, id); },
@@ -579,12 +582,21 @@ export const Progress = {
   renameLoadout(i, name) { this.updateLoadout(i, { name: String(name) }); },
   setEquipment(part) { this.updateLoadout(data.active, part); },
 
+  // The kit loadout i keeps for any gun, equipped or not, minus anything locked. loadouts() only carries the kits of
+  // the guns in the loadout (it is what goes into a match); the gunsmith browses every gun.
+  kitFor(i, weapon) {
+    if (!validIndex(i)) return normalizeKit(weapon, null);
+    const fitted = attachmentsFor(data.loadouts[i], weapon), kit = {};
+    for (const slot of SLOTS) if (fitted[slot] && hasAttachment(weapon, fitted[slot])) kit[slot] = fitted[slot];
+    return normalizeKit(weapon, kit);
+  },
+
   setAttachment(i, slot, id, weapon) {
     if (!validIndex(i) || !SLOTS.includes(slot)) return false;
     const l = data.loadouts[i];
     const gun = weapon ?? l.primary;
     if (id !== null && (ATTACHMENTS[id]?.slot !== slot || !hasAttachment(gun, id))) return false;
-    const kit = { ...attachmentsFor(l, gun) };
+    const kit = { ...this.kitFor(i, gun) };
     if (id === null) delete kit[slot]; else kit[slot] = id;
     this.updateLoadout(i, { attachments: { ...l.attachments, [gun]: kit } });
     return true;
@@ -681,7 +693,7 @@ export const Progress = {
       const entry = readWeapon(w);
       const name = WEAPONS[w]?.name ?? w;
       for (const a of availableFor(w)) {
-        if (a.unlock > before.peak && a.unlock <= entry.peak) unlocks.push({ kind: 'attachment', id: a.id, name: a.name, slot: a.slot, weapon: w, weaponName: name });
+        if (!unlockMet(a.unlock, before) && unlockMet(a.unlock, entry)) unlocks.push({ kind: 'attachment', id: a.id, name: a.name, slot: a.slot, weapon: w, weaponName: name });
       }
       for (const c of CAMOS) {
         if (!before.camos.has(c.id) && hasCamo(w, c)) unlocks.push({ kind: 'camo', id: c.id, name: c.name, colors: c.colors, weapon: w, weaponName: name });

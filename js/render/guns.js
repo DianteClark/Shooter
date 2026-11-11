@@ -4,7 +4,7 @@
 // Each factory takes a normalized attachment kit, and swaps the base part the attachment replaces.
 import { MeshBuilder } from './meshbuild.js';
 import { PART } from './camo-shader.js';
-import { kitKey, normalizeKit, NO_ATTACHMENTS } from '../shared/attachments.js';
+import { kitKey, normalizeKit, NO_ATTACHMENTS, ATTACHMENTS, SLOTS } from '../shared/attachments.js';
 import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
 
 const C = {
@@ -1260,9 +1260,24 @@ const cache = new Map();
 // Stable kit object -> Map(weaponId -> gun). Kits are canonical objects, so a per-frame call does no string work.
 const byKit = new WeakMap();
 
+// V11: a signature attachment or conversion kit is drawn as the part named by its `look` (attachments-v11.js), one the
+// gun's own factory already knows how to fit, so a new id never floats or clips. A kit may also fill an empty slot.
+export function modelKit(kit) {
+  let out = null;
+  for (const s of SLOTS) if (ATTACHMENTS[kit[s]]?.kind) { out ??= { ...kit }; delete out[s]; }
+  if (!out) return kit;
+  for (const s of SLOTS) {
+    const look = ATTACHMENTS[kit[s]]?.look;
+    if (!look) continue;
+    if (look[s]) out[s] = look[s];
+    for (const ls in look) if (ls !== s && !out[ls]) out[ls] = look[ls];
+  }
+  return out;
+}
+
 function build(id, kit, key) {
   const make = FACTORIES[id] || FACTORIES.ar;
-  const g = make(kit);
+  const g = make(modelKit(kit));
   g.geometry.computeBoundingBox();
   g.geometry.computeBoundingSphere();
   g.key = key;
