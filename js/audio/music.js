@@ -12,7 +12,7 @@
 //        stings -> stingBus -> out;   out -> engine.music (the engine's music bus: volume, mic mode) -> master -> limiter.
 // Loops of one group share a clock, so a layer joins in time with the underscore it sits on.
 // Nothing here allocates per frame: frame() compares a few flags and touches the graph only when one changes.
-import { TRACKS, BUILD_ORDER, MUSIC_RATE, renderTrack } from './music-synth.js';
+import { TRACKS, BUILD_ORDER, MUSIC_RATE, renderTrack, releaseScratch } from './music-synth.js';
 
 const FADE = 1.2;              // Seconds: a scene crossfade.
 const IDLE_MS = 75000;         // Title screen untouched this long: the calm variant.
@@ -96,7 +96,7 @@ export class Music {
       do {
         if (!it) {
           if (ti >= BUILD_ORDER.length) {
-            this.built = true; this.buildWallMs = performance.now() - t0; this._builtDone();
+            this.built = true; this.buildWallMs = performance.now() - t0; releaseScratch(); this._builtDone();
             return;
           }
           it = renderTrack(TRACKS[BUILD_ORDER[ti]]);

@@ -42,11 +42,22 @@ class SVF {
   }
 }
 
+// Scratch arrays (the reverb send and its working buffers), kept between stems so a build does not keep handing
+// megabytes to the garbage collector. releaseScratch() lets them go when the build is over.
+const scratch = [];
+function getScratch(k, n) {
+  if (!scratch[k] || scratch[k].length < n) scratch[k] = new Float32Array(n);
+  const a = scratch[k].subarray(0, n);
+  a.fill(0);
+  return a;
+}
+export function releaseScratch() { scratch.length = 0; }
+
 // ---- The canvas an arrangement is drawn on: dry signal plus a reverb send. ----
 class Canvas {
   constructor(n, loop, sr, seed) {
     this.n = n; this.loop = loop; this.sr = sr;
-    this.d = new Float32Array(n); this.w = new Float32Array(n);
+    this.d = new Float32Array(n); this.w = getScratch(0, n);
     this.send = 0; this.r = rngFrom(seed);
   }
 }
@@ -607,7 +618,7 @@ const SLICE = 6000;       // Samples of effect processing between yields.
 // Reverb on the send: six damped combs (two passes round a loop, so the tail wraps), and a dotted-eighth echo.
 function* reverb(c, wet, spb) {
   const { n, loop, sr, w, d } = c;
-  const out = new Float32Array(n), y = new Float32Array(n);
+  const out = getScratch(1, n), y = getScratch(2, n);
   const passes = loop ? 2 : 1;
   for (const ms of [31.1, 36.7, 41.3, 44.9, 50.3, 56.9]) {
     const D = Math.round(ms * sr / 1000), fb = 0.83, damp = 0.35;
@@ -647,7 +658,8 @@ function* finish(c, peak) {
   const a = Math.exp(-TAU * 28 / sr);
   let px = 0, py = 0;
   const passes = loop ? 2 : 1;
-  const tmp = loop ? new Float32Array(d) : d;
+  let tmp = d;
+  if (loop) { tmp = getScratch(1, n); tmp.set(d); }
   for (let k = 0; k < n * passes; k++) {
     const j = k % n, x = tmp[j];
     py = a * (py + x - px); px = x;
