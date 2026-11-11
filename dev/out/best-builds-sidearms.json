@@ -1,0 +1,89 @@
+{
+ "pistol": {
+  "kit": {
+   "optic": "pointdot",
+   "grip": "s_snapholster"
+  },
+  "score": 0.6866666666666666,
+  "stock": 0.64,
+  "evals": 31
+ },
+ "revolver": {
+  "kit": {
+   "optic": "pointdot",
+   "barrel": "longbarrel"
+  },
+  "score": 0.44,
+  "stock": 0.41333333333333333,
+  "evals": 33
+ },
+ "machpistol": {
+  "kit": {
+   "optic": "reflex"
+  },
+  "score": 0.58,
+  "stock": 0.5,
+  "evals": 31
+ },
+ "deuce": {
+  "kit": {
+   "barrel": "s_longslide",
+   "mag": "lightmag"
+  },
+  "score": 0.64,
+  "stock": 0.54,
+  "evals": 33
+ },
+ "launcher": {
+  "kit": {
+   "optic": "holo",
+   "mag": "s_twintube",
+   "grip": "wrap"
+  },
+  "score": 0.4722222222222222,
+  "stock": 0.3111111111111111,
+  "evals": 19
+ },
+ "thumper": {
+  "kit": {},
+  "score": 0.30833333333333335,
+  "stock": 0.30833333333333335,
+  "evals": 10
+ },
+ "scatter": {
+  "kit": {
+   "optic": "reflex",
+   "barrel": "compensator",
+   "grip": "knurl"
+  },
+  "score": 0.4533333333333333,
+  "stock": 0.4066666666666667,
+  "evals": 31
+ },
+ "akimbo": {
+  "kit": {
+   "barrel": "longbarrel"
+  },
+  "score": 0.6233333333333333,
+  "stock": 0.5333333333333333,
+  "evals": 23
+ },
+ "nailer": {
+  "kit": {
+   "optic": "reflex",
+   "mag": "speedmag"
+  },
+  "score": 0.5388888888888889,
+  "stock": 0.5222222222222223,
+  "evals": 29
+ },
+ "salvo": {
+  "kit": {
+   "optic": "holo",
+   "grip": "angled"
+  },
+  "score": 0.45,
+  "stock": 0.36666666666666664,
+  "evals": 19
+ }
+}

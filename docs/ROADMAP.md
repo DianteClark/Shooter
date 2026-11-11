@@ -20,5 +20,6 @@ on every push, keep 2% of weekly usage for bugs.
    the regions, loot rarities, closing circle, revives, bots that loot, rotate and fight like players.
 8. DONE (1111-4). Scorestreaks overhaul.
 9. Game modes overhaul (new modes built on the new maps).
-10. Attachments wave: signature attachments per gun, conversion kits, unlocked through each gun's mastery.
+10. DONE (atts). Attachments wave: 66 signature attachments, 12 conversion kits, unlocked through weapon levels and the
+    mastery ladder; best-build balance rig (dev/best-builds.mjs). docs/WEAPONS-OVERHAUL.md "Attachments wave".
 11. Operators overhaul: many more unlockable operators including female operators; mastery for them.

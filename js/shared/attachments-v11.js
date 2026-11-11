@@ -299,9 +299,9 @@ const LIST = [
     { burstGap: 0.6, patternAmp: 1.3, bloomPerShot: 1.2 }, { look: { grip: 'vertical' } }),
 
   sig('s_hollowpoint', 'hushdmr', 'mag', 'Hollow Points', 19,
-    'Hits harder in the open; cover now stops it.',
-    'More damage per round. Cover stops every round, fewer rounds.',
-    { damage: 1.15, magazine: 0.9 }, { set: { penetrate: undefined }, notes: [{ text: 'Cover stops every round', better: false }], look: { mag: 'speedmag' } }),
+    'Hits harder in the open; cover takes much more of it.',
+    'More damage per round. Keeps far less through cover, fewer rounds.',
+    { damage: 1.12, penetrate: 0.5, magazine: 0.9 }, { look: { mag: 'speedmag' } }),
 
   // ---------------- Sniper ----------------
   sig('s_heavybolt', 'sniper', 'grip', 'Heavy Bolt', 16,
@@ -343,8 +343,8 @@ const LIST = [
 
   sig('s_capacitor', 'rail', 'mag', 'Capacitor Bank', 16,
     'Lets the round go before they finish their peek.',
-    'Charges much faster. Fewer rounds, slower reload, a little less damage.',
-    { chargeTime: 0.65, magazine: 0.75, reload: 1.15, damage: 0.92 }, { look: { mag: 'speedmag' } }),
+    'Charges much faster. Fewer rounds, slower reload, slower to aim.',
+    { chargeTime: 0.72, magazine: 0.75, reload: 1.15, adsTime: 1.08 }, { look: { mag: 'speedmag' } }),
   sig('s_overcharge', 'rail', 'barrel', 'Overcharge Coil', M1,
     'A heavier slug that drops anything at any range.',
     'More damage. Much longer charge, heavier on foot.',
@@ -399,8 +399,8 @@ const LIST = [
   // ---------------- Launcher ----------------
   sig('s_twintube', 'launcher', 'mag', 'Twin Tube', 24,
     'Two rockets before a reload.',
-    'A second rocket. A much longer reload, heavier on foot.',
-    { magazine: 2, reload: 1.6, moveMult: 0.93 }, { look: { mag: 'warhead' } }),
+    'A second rocket. A much longer reload, heavier on foot, slower to bring up.',
+    { magazine: 2, reload: 2, moveMult: 0.93, swapTime: 1.25 }, { look: { mag: 'warhead' } }),
   sig('s_pumpdrum', 'thumper', 'mag', 'Pump Drum', 24,
     'Six grenades for holding a room.',
     'More grenades. Slower reload, heavier on foot.',

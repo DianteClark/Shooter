@@ -191,11 +191,10 @@
  "autoshot": {
   "kit": {
    "optic": "ghostring",
-   "barrel": "s_runnerchoke",
-   "grip": "brace"
+   "grip": "wrap"
   },
-  "score": 0.46296296296296297,
-  "stock": 0.4111111111111111,
+  "score": 0.4766666666666667,
+  "stock": 0.4488888888888889,
   "evals": 41
  },
  "lmg": {
@@ -303,21 +302,19 @@
  },
  "hushdmr": {
   "kit": {
-   "optic": "steady",
-   "barrel": "compensator",
-   "mag": "s_hollowpoint",
-   "grip": "handstop"
+   "optic": "canted",
+   "mag": "s_hollowpoint"
   },
-  "score": 0.5866666666666667,
+  "score": 0.5666666666666667,
   "stock": 0.5166666666666667,
   "evals": 53
  },
  "rail": {
   "kit": {
-   "mag": "s_capacitor",
-   "grip": "angled"
+   "mag": "apmag",
+   "grip": "heavystock"
   },
-  "score": 0.68,
+  "score": 0.6266666666666667,
   "stock": 0.6033333333333334,
   "evals": 37
  }
