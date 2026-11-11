@@ -27,7 +27,7 @@ on every push, keep 2% of weekly usage for bugs.
     shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.
 
 ## Owner's next wave (2026-11-11 morning)
-12. Quick fixes: calling card progress bars; results screen challenges scroll; duplicate names across guns, perks,
+12. DONE (fixes). Quick fixes: calling card progress bars; results screen challenges scroll; duplicate names across guns, perks,
     equipment, streaks and operators (e.g. Bulwark gun and Bulwark tactical); operators screen text.
     Name audit (fixes): every display name across guns, attachments, perks, equipment, streaks, operators and their
     skins, maps, modes, medals, calling cards, emblems, camos, tracers and kill effects; ids unchanged. Renamed:
@@ -44,8 +44,13 @@ on every push, keep 2% of weekly usage for bugs.
     Last Gun Standing (the S&D card keeps it); emblems Whiteout -> Frostbite, Prism -> Refraction, Live Wire -> Spark
     Gap. The Harrier (id `scout`) clashes with nothing (the streak is Recon Drone). Left on purpose: each prestige
     rank's calling card is named after its rank, and signature attachments carry their gun's name (Kiln Baffles).
-13. Gunsmith overhaul: weapon classes as big tiles in a horizontal scroller on top, that class's guns as big cards in a
+13. DONE (fixes). Gunsmith overhaul: weapon classes as big tiles in a horizontal scroller on top, that class's guns as big cards in a
     vertical scroller below; attachments list with smooth native scrolling; nothing cramped or overflowing.
+    Built as two views in js/ui/gunsmith.js: pick (class tiles in a snapping .scroll-x strip, gun cards with picture,
+    level and mastery steps in a .scroll-y grid) and bench (preview, bars, facts; tabs with the slots in a column beside
+    a native .scroll-y parts list, 44 px rows, Signature/Kit chips and the delta strip kept). Opened from a loadout's
+    Gunsmith button it starts on that gun's bench ("Guns" goes back to the pick view, "Done" leaves). Guarded by
+    dev/ui-overflow-test.py (every menu and the gunsmith at 667x375 and 852x393, plus touch drags on its scrollers).
 14. Multiplayer restructure: "Play vs bots" becomes Multiplayer with tabs Standard / Ground War / Battle Royale (later the
     extraction mode); you pick a mode or mix and get a match; map is random or a vote of 2-3. Custom has two tabs:
     Match (map, mode, bots, difficulty, modifiers; friends can join) and Training (the range, or any map with N bots,

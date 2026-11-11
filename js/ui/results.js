@@ -315,7 +315,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         </div>
         <div class="rs-card xp-card">
           <div class="xp-head"><b class="xp-sum">+<u class="xp-total">0</u><small>XP</small></b><span class="xp-lv">${badgeMark(lp.prestige ?? 0, 22)}<b class="xp-lvn">Lv ${startLevel}</b></span></div>
-          <div class="xp-lines">${(xp?.lines ?? []).map(([label, amount], i) => `<div class="xp-row" style="--i:${i}"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('') || '<small class="empty">No XP this time</small>'}</div>
+          <div class="xp-lines scroll-y">${(xp?.lines ?? []).map(([label, amount], i) => `<div class="xp-row" style="--i:${i}"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('') || '<small class="empty">No XP this time</small>'}</div>
           <i class="rs-bar big"><i class="rs-fill xp-player" style="transform:scaleX(0)"></i></i>
           <small class="xp-next">${lp.maxed ? 'Maximum level' : `${Math.round(lp.into)} / ${lp.span} to Lv ${lp.level + 1}`}</small>
           ${lp.canPrestige ? '<small class="res-prestige">Prestige available</small>' : ''}

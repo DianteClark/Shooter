@@ -500,6 +500,7 @@ export class Gunsmith {
       </div>
       <div class="att-info"></div>`;
     this.infoEl = this.bodyEl.querySelector('.att-info');
+    this.infoHtml = null;     // A fresh box: paintInfo must fill (or hide) it whatever the last one held.
     this.optsEl = this.bodyEl.querySelector('.att-opts');
   }
 
