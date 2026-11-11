@@ -15,6 +15,8 @@ const LIFE = {
   metro:    { flock: 0, ground: 4, col: [0.12, 0.12, 0.15], size: 0.4, flockY: 8, vents: 6 },
   subway:   { flock: 0, ground: 0, col: [0, 0, 0], size: 0.4, flockY: 8, vents: 3 },
   desert:   { flock: 5, ground: 5, col: [0.22, 0.17, 0.13], size: 0.62, flockY: 11, vents: 0, devils: 3 },
+  jungle:   { flock: 10, ground: 0, col: [0.12, 0.1, 0.08], size: 0.5, flockY: 11, vents: 0 },
+  arctic:   { flock: 5, ground: 4, col: [0.06, 0.06, 0.08], size: 0.44, flockY: 9.5, vents: 3 },
 };
 const NONE = { flock: 0, ground: 0, col: [0, 0, 0], size: 0.5, flockY: 8, vents: 0 };
 

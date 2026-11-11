@@ -13,9 +13,15 @@ import overpass from './maps/overpass.js';
 import downtown from './maps/downtown.js';
 import oasis from './maps/oasis.js';
 import canyon from './maps/canyon.js';
+
+import ruins from './maps/ruins.js';
+import canopy from './maps/canopy.js';
+import riverbend from './maps/riverbend.js';
+import expedition from './maps/expedition.js';
+import icebreaker from './maps/icebreaker.js';
 import { MODE_IDS, MODES } from './modes.js';
 
-export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, range, turnstile, overpass, downtown, oasis, canyon };
+export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, range, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, icebreaker };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // What the vote and match setup offer. The firing range is reached from its own menu entry only.

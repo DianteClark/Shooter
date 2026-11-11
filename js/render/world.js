@@ -7,6 +7,8 @@ import { MeshBuilder } from './meshbuild.js';
 import { hexRGB, lightAt, getTheme } from './art.js';
 import * as metroTheme from './themes/metro.js';
 import * as desertTheme from './themes/desert.js';
+import jungle from './themes/jungle.js';
+import arctic from './themes/arctic.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const WATER_Y = -0.62;       // Basin surface, below the quay.
@@ -339,6 +341,7 @@ function groundShader(ctx) {
   const inMap = (x, z) => x > 0 && x < W && z > 0 && z < H;
   const laneDist = z => { let d = 99; for (const l of map.lanes) d = Math.min(d, Math.abs(z - l.z)); return d; };
   ctx.groundWet = 0;
+  if (THEME_STAGES[theme.id].ground) return THEME_STAGES[theme.id].ground(ctx);   // Theme modules shade their own.
   if (theme.id === 'railyard') {
     return p => {
       const [x, , z] = p;
@@ -3124,6 +3127,8 @@ const DRESS = {
   sunken: { ...RAILYARD_DRESS, rock: sunkenRock, boulder: fallenStone, building: shrine, water: sunkenBank, wall: sunkenWall, border: jungleEdge },
   harvest: { ...RAILYARD_DRESS, wall: harvestWall, barrier: harvestBarrier, crate: roundBale, container: harvestContainer, building: harvestBuilding, water: pondBank, border: hedgeBorder },
   metro: metroTheme.dress, subway: metroTheme.dress, desert: desertTheme.dress,
+  jungle: jungle.dress(RAILYARD_DRESS),
+  arctic: arctic.dress({ ...RAILYARD_DRESS, container: wagon, building: frostBuilding, wall: frostWall, crate: frostCrate, barrier: frostBarrier, sandbag: snowbank, border: frostBorder }),
 };
 
 const THEME_STAGES = {
@@ -3143,6 +3148,8 @@ const THEME_STAGES = {
   sunken: { lights: sunkenLights, paint: sunkenPaint, decor: sunkenDecor },
   harvest: { lights: () => {}, paint: harvestPaint, decor: harvestDecor },
   metro: metroTheme.stage, subway: metroTheme.stage, desert: desertTheme.stage,
+  jungle: jungle.stage,
+  arctic: arctic.stage({ lights: frostLights, paint: frostPaint, decor: frostDecor }),
 };
 
 // Sun shadows and contact darkening: per-vertex strength a, drawn with multiply blending.
@@ -3284,6 +3291,8 @@ const THUMB_STYLE = {
   sunken: { ground: '#4f5c3e', solid: '#8a8a72', low: '#6c6c58', water: '#18342c', edge: '#121a14' },
   harvest: { ground: '#9a8a58', solid: '#6e4a3c', low: '#c0a462', water: '#2c4a44', edge: '#2a2418' },
   metro: metroTheme.thumb, subway: metroTheme.thumbSubway, desert: desertTheme.thumb,
+  jungle: jungle.thumb,
+  arctic: arctic.thumb,
 };
 
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is
