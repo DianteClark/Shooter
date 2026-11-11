@@ -27,7 +27,7 @@ import { MODES } from '../js/shared/modes.js';
 import { OPERATORS, SKINS, getSkin } from '../js/ui/operators.js';
 import { EMBLEMS } from '../js/ui/emblems.js';
 
-const { BOT_POOL, formRating, pickPoolBots, careerAt, humanRating, tierOf, POOL_EPOCH, HUMAN_BASE, STYLES, TIER_RATING } = Pool;
+const { BOT_POOL, formRating, pickPoolBots, careerAt, humanRating, tierOf, POOL_EPOCH, EXTRACTION_LAUNCH, HUMAN_BASE, STYLES, TIER_RATING } = Pool;
 let failed = 0;
 const ok = (cond, label, info = '') => { console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${label}${info ? `: ${info}` : ''}`); if (!cond) failed++; };
 const DAY = 86400000;
@@ -206,7 +206,8 @@ ok(mono, 'every total non-decreasing over two years', where);
 const a = careerAt(BOT_POOL[7], new Date(POOL_EPOCH + 100 * DAY)), b = careerAt(BOT_POOL[7], POOL_EPOCH + 100 * DAY);
 ok(JSON.stringify(a) === JSON.stringify(b), 'a Date and its time give the same career');
 ok(BOT_POOL.every(p => { const c = careerAt(p, POOL_EPOCH - DAY); return c.kills === Math.floor(p.base.kills) && c.matches === p.base.matches; }), 'before the epoch: the base career');
-ok(BOT_POOL.every(p => careerAt(p, POOL_EPOCH + 400 * DAY).extractions === 0), 'no extractions before the mode exists');
+ok(BOT_POOL.every(p => careerAt(p, EXTRACTION_LAUNCH - DAY).extractions === 0), 'no extractions before the mode exists');
+ok(BOT_POOL.filter(p => careerAt(p, POOL_EPOCH + 400 * DAY).extractions > 0).length > 100, 'extractions pile up once it does (EXTRACTION_LAUNCH)');
 const yr = BOT_POOL.map(p => careerAt(p, POOL_EPOCH + 365 * DAY));
 ok(yr.every(c => c.level >= 1 && c.level <= MAX_LEVEL && c.prestige >= 0 && c.prestige <= MAX_PRESTIGE && c.wins <= c.matches && c.brWins <= c.brTop5 && c.brTop5 <= c.brMatches), 'levels, prestige and wins in range');
 const strong = BOT_POOL.filter(p => p.skill.mu > 0.75), weak = BOT_POOL.filter(p => p.skill.mu < 0.25);

@@ -33,8 +33,8 @@ export const POOL_SEED = 0x5717c4a2;
 // Day zero of careers. Fixed: changing it would change every bot's career at every date.
 export const POOL_EPOCH = Date.UTC(2026, 10, 1);
 const DAY = 86400000;
-// The day extraction mode (ROADMAP item 17) went live; null until it ships, so extractions stay 0. Set it once, never move it.
-export const EXTRACTION_LAUNCH = null;
+// The day extraction mode (ROADMAP item 17) went live (2026-11-11); before it extractions stay 0. Set once, never move it.
+export const EXTRACTION_LAUNCH = Date.UTC(2026, 10, 11);
 
 export const TIERS = ['recruit', 'regular', 'veteran', 'elite'];
 // Where each tier sits on the rating scale; bots.js interpolates SKILLS between them (skillAt).
