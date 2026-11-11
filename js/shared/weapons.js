@@ -48,7 +48,7 @@
 //
 // Attachments (js/shared/attachments.js) produce an effective def with these same fields; see effectiveWeapon.
 
-import { applyAttachments } from './attachments.js';
+import { applyAttachments, setAfterApply } from './attachments.js';
 import { MAX_HP, WEAPON_CATEGORY } from './constants.js';
 import { V10_WEAPONS } from './weapons-v10.js';
 
@@ -461,14 +461,23 @@ Object.assign(WEAPONS, V10_WEAPONS);   // The V10 arsenal lives in weapons-v10.j
 // is derived from each gun's weakest possible round (full falloff, un-aimed, through the most cover). The 1.25
 // margin is headroom for perks that reduce damage. Explosives stay at 1: splash is not a headshot.
 const HEAD_LETHAL_HP = MAX_HP * 1.25;
+function deriveHeadMult(w) {
+  if (w.explosive) return 1;
+  const pen = w.penetrate ? w.penetrate ** MAX_COVER_PIECES : 1;
+  // Never below 1: a gun that already kills to the body (the Golden Gun) must not do less to the head.
+  return Math.max(1, Math.ceil(10 * HEAD_LETHAL_HP / (w.damage * w.falloff.min * (w.adsGate || 1) * pen)) / 10);
+}
 for (const id in WEAPONS) {
   const w = WEAPONS[id];
   w.category = WEAPON_CATEGORY[id];
-  if (w.explosive) { w.headMult = 1; continue; }
-  const pen = w.penetrate ? w.penetrate ** MAX_COVER_PIECES : 1;
-  // Never below 1: a gun that already kills to the body (the Golden Gun) must not do less to the head.
-  w.headMult = Math.max(1, Math.ceil(10 * HEAD_LETHAL_HP / (w.damage * w.falloff.min * (w.adsGate || 1) * pen)) / 10);
+  w.headMult = deriveHeadMult(w);
 }
+// V11: a signature attachment or kit that changes damage, pellets, falloff or cover keeps the same rule.
+setAfterApply((eff, base) => {
+  if (eff.damage !== base.damage || eff.falloff.min !== base.falloff.min || eff.adsGate !== base.adsGate || eff.penetrate !== base.penetrate) {
+    eff.headMult = deriveHeadMult(eff);
+  }
+});
 
 // Damage of one pellet/bullet at `dist` metres. `ads` is whether the shot was fully aimed.
 export function damageAt(w, dist, ads = true) {
@@ -487,7 +496,8 @@ const ALWAYS_LETHAL_HEAD = new Set(['Marksman', 'Sniper']);
 // headMax (Pass 2) caps a gun's head multiplier at every stance: a fast precise gun whose head hit would otherwise be a
 // one-tap kill at any range (Foreman) needs a second round.
 export function headMultAt(w, ads) {
-  const m = ads || ALWAYS_LETHAL_HEAD.has(w.category) ? headMultFor(w.id) : Math.min(headMultFor(w.id), HIP_HEAD_MULT);
+  const hm = w.headMult ?? headMultFor(w.id);   // An effective def carries its own (a kit may have re-derived it).
+  const m = ads || ALWAYS_LETHAL_HEAD.has(w.category) ? hm : Math.min(hm, HIP_HEAD_MULT);
   return w.headMax ? Math.min(m, w.headMax) : m;
 }
 

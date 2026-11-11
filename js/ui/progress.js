@@ -61,7 +61,7 @@ import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
 import { getEmblem, emblemUnlocked } from './emblems.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor } from '../shared/attachments.js';
+import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor, unlockMet } from '../shared/attachments.js';
 import {
   SAVE_VERSION, LOADOUT_COUNT, MAX_LEVEL, MAX_PRESTIGE, MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE,
   PLAYER_CURVE, WEAPON_CURVE, UNLOCK_SCHEDULE, ITEM_TABLES, levelOf, itemUnlockLevel, gateLoadoutGear,
@@ -192,9 +192,10 @@ const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 const plainOnly = w => w === GOLDEN_ID;
 const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none' : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w)));
 const hasCosmetic = (w, item) => (plainOnly(w) ? !item.prestige : readWeapon(w).prestige >= item.prestige);
+// V11: an unlock above 30 is a mastery ladder tier (attachments.js LADDER_BASE), met by the gun's ladT.
 const hasAttachment = (w, id) => {
   const level = unlockFor(w, id);
-  return level !== null && readWeapon(w).peak >= level;
+  return level !== null && unlockMet(level, readWeapon(w));
 };
 
 // Only what the player can use actually goes into a match, so a stale selection simply falls back.
@@ -299,6 +300,7 @@ function weaponDiffBase(w) {
   return {
     level: WEAPON_CURVE.levelOf(before.xp),
     peak: before.peak,
+    ladT: before.ladT ?? 0,
     camos: new Set(CAMOS.filter(c => hasCamo(w, c)).map(c => c.id)),
   };
 }
@@ -473,7 +475,7 @@ export const Progress = {
   attachments(w) {
     return availableFor(w).map(a => {
       const unlockLevel = unlockFor(w, a.id);
-      return { ...a, unlockLevel, unlocked: readWeapon(w).peak >= unlockLevel };
+      return { ...a, unlockLevel, unlocked: unlockMet(unlockLevel, readWeapon(w)) };
     });
   },
   isAttachmentUnlocked(w, id) { return hasAttachment(w, id); },
@@ -681,7 +683,7 @@ export const Progress = {
       const entry = readWeapon(w);
       const name = WEAPONS[w]?.name ?? w;
       for (const a of availableFor(w)) {
-        if (a.unlock > before.peak && a.unlock <= entry.peak) unlocks.push({ kind: 'attachment', id: a.id, name: a.name, slot: a.slot, weapon: w, weaponName: name });
+        if (!unlockMet(a.unlock, before) && unlockMet(a.unlock, entry)) unlocks.push({ kind: 'attachment', id: a.id, name: a.name, slot: a.slot, weapon: w, weaponName: name });
       }
       for (const c of CAMOS) {
         if (!before.camos.has(c.id) && hasCamo(w, c)) unlocks.push({ kind: 'camo', id: c.id, name: c.name, colors: c.colors, weapon: w, weaponName: name });

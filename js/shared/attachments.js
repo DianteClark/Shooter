@@ -16,7 +16,12 @@
 //   heatCool    scales heat.coolTime
 //   penetrate   scales penetrate (damage kept through cover), capped; a gun without it stays a light round
 // `magazine` is rounded and always moves by at least one round. A mod on a stat the gun lacks (turnCap on the
-// SMG) does nothing. damage and rpm are never modded: attachments change how a gun handles, not how it kills.
+// SMG) does nothing. General attachments never mod damage or rpm: they change how a gun handles, not how it kills.
+// V11 (attachments-v11.js) adds signature attachments (kind 'sig') and conversion kits (kind 'kit'), one gun each,
+// which may also touch the gun's identity: damage, rpm, settleShots/settleFrom, spinupShots/spinupFrom, chargeTime,
+// burstGap, boltKick, adsGate, lunge, falloffMin, heatLockout (all multipliers), and `set` (fields replaced outright,
+// before the mods: fire mode, pellets, falloff...). See applyMods. Their `unlock` may be 31-35: mastery ladder tier
+// I-V (LADDER_BASE + tier) rather than a weapon level.
 //
 // weapons: allow-list of weapon ids (absent = every gun). perWeapon: mods replaced per weapon, merged over mods.
 // unlock: the weapon level (1 to 30) that unlocks it. Level ties only happen between attachments that can never
@@ -24,6 +29,7 @@
 
 import { GOLDEN_ID, WEAPON_IDS, idsIn } from './constants.js';
 import { V10_DENY } from './weapons-v10.js';
+import { V11_ATTACHMENTS } from './attachments-v11.js';
 
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 
@@ -324,14 +330,58 @@ export const ATTACHMENTS = {
     mods: { hipSpread: 0.86, bloomRecover: 1.15, adsTime: 1.06, adsMoveMult: 0.94 },
   },
 };
+// What each general attachment is for, one line, for the gunsmith. Signature attachments and kits carry their own.
+const PURPOSE = {
+  reflex: 'Steadier aimed shots for mid-range duels.', holo: 'A wider view for hip-fire and quick close fights.',
+  longeye: 'Holding a long lane down the sights.', snapsight: 'Quickscoping at the ranges most fights happen.',
+  canted: 'Getting the first shot off out of a sprint.', pointdot: 'Fighting from the hip without aiming.',
+  hunter: 'The longest, most patient shots.', reticle: 'Winning trades at the edge of the gun\'s range.',
+  suppressor: 'Staying off the enemy minimap while you flank.', longbarrel: 'Pushing the damage range out.',
+  compensator: 'Long strings that stay on target.', heatsink: 'Holding the trigger down longer.',
+  choke: 'One-shot kills a step further out.', sawnoff: 'Moving and firing in tight rooms.',
+  fluted: 'A lighter sniper for moving between spots.', longtube: 'Hitting what is further away.',
+  stub: 'A handier gun for close quarters.', ported: 'A sidearm that stays on target.',
+  rifled: 'Aimed shotgun shots that carry further.', heavybarrel: 'Mid and long range, steadier and further.',
+  shroud: 'Getting back to firing sooner after heat.', breacher: 'Firing the instant you round a corner.',
+  floated: 'Precise aimed fire at range.', extmag: 'More shooting between reloads.',
+  speedmag: 'Getting back in the fight faster.', lightmag: 'A lighter gun for moving and aiming.',
+  warhead: 'Catching groups in the blast.', shaped: 'Quicker, smaller rockets.',
+  drummag: 'Holding a room without reloading.', apmag: 'Shooting through cover.',
+  satchel: 'Long matches without picking up ammo.', tapedmag: 'Quick reloads without losing rounds.',
+  angled: 'Getting aimed in first.', vertical: 'Controlling long strings.', wrap: 'Swapping and sprinting into fights.',
+  brace: 'Turning heavy guns onto flankers.', knurl: 'A quick draw and quick aim.',
+  skelstock: 'Strafing while aimed.', heavystock: 'The steadiest sustained fire.',
+  steady: 'Settling between precise shots.', ghostring: 'Moving fast with the sights up.',
+  bipod: 'Holding an angle and never missing.', handstop: 'Hip-fire that recovers fast.',
+};
+for (const id in PURPOSE) ATTACHMENTS[id].for = PURPOSE[id];
+
+// V11: signature attachments and conversion kits, appended after every older id (packKit's slot lists depend on it).
+Object.assign(ATTACHMENTS, V11_ATTACHMENTS);
+
 // V10 guns: exclusions a category allow-list cannot express (weapons-v10.js V10_DENY), taken out of every list above.
+// Signature attachments and kits name their one gun themselves, so the blanket exclusions (blades) skip them.
 for (const a of Object.values(ATTACHMENTS)) {
+  if (a.kind) continue;
   const no = WEAPON_IDS.filter(id => V10_DENY[id] && (V10_DENY[id] === '*' || V10_DENY[id].includes(a.id)));
   if (no.length) a.weapons = (a.weapons || WEAPON_IDS).filter(id => !no.includes(id));
 }
 
 // Every attachment in level-track order. Stable table order breaks ties.
 export const ATTACHMENT_LIST = Object.values(ATTACHMENTS).sort((a, b) => a.unlock - b.unlock);
+
+// An `unlock` above LADDER_BASE is a mastery ladder tier (progression.js WEAPON_LADDER), not a weapon level.
+export const LADDER_BASE = 30;
+export const isLadderUnlock = level => level > LADDER_BASE;
+const ROMAN_TIER = ['', 'I', 'II', 'III', 'IV', 'V'];
+// Short label for a lock: "Level 12" or "Mastery I".
+export function unlockLabel(level) {
+  return level > LADDER_BASE ? `Mastery ${ROMAN_TIER[level - LADDER_BASE] ?? level - LADDER_BASE}` : `Level ${level}`;
+}
+// Whether a gun's progress opens this unlock level: { peak, ladT } as stored per weapon in the save.
+export function unlockMet(level, { peak = 1, ladT = 0 } = {}) {
+  return level > LADDER_BASE ? ladT >= level - LADDER_BASE : peak >= level;
+}
 
 // What each mod key means, for gunsmith UI and tests. better: 1 means a higher multiplier helps the player, -1 lower.
 export const MOD_INFO = {
@@ -354,10 +404,29 @@ export const MOD_INFO = {
   blastRadius:  { label: 'Blast radius',       better: 1 },
   bloomRecover: { label: 'Settle speed',       better: 1 },
   reserve:      { label: 'Spare ammo',         better: 1 },
+  // V11 identity keys: signature attachments and conversion kits only.
+  damage:       { label: 'Damage',             better: 1 },
+  rpm:          { label: 'Fire rate',          better: 1 },
+  settleShots:  { label: 'Rounds to settle',   better: -1 },
+  settleFrom:   { label: 'Unsettled spread',   better: -1 },
+  spinupShots:  { label: 'Rounds to wind up',  better: -1 },
+  spinupFrom:   { label: 'Starting fire rate', better: 1 },
+  chargeTime:   { label: 'Charge time',        better: -1 },
+  burstGap:     { label: 'Gap in a burst',     better: -1 },
+  boltKick:     { label: 'Scope kept per shot', better: 1 },
+  adsGate:      { label: 'Unaimed damage',     better: 1 },
+  lunge:        { label: 'Lunge',              better: 1 },
+  falloffMin:   { label: 'Damage at range',    better: 1 },
+  heatLockout:  { label: 'Overheat lockout',   better: -1 },
 };
+// Mod keys only a signature attachment or kit may use.
+export const IDENTITY_MODS = new Set(['damage', 'rpm', 'settleShots', 'settleFrom', 'spinupShots', 'spinupFrom', 'chargeTime',
+  'burstGap', 'boltKick', 'adsGate', 'lunge', 'falloffMin', 'heatLockout']);
 
 const SLOT_IDS = SLOTS.map(slot => Object.values(ATTACHMENTS).filter(a => a.slot === slot).map(a => a.id));
-const KIT_BITS = 4;     // Per slot in packKit: room for 15 options a slot.
+const KIT_BITS = 4;     // Per slot in packKit's low 16 bits: the first 15 options of each slot, as every older build reads it.
+const EXT_BITS = 7;     // V11: per slot above bit 16, the whole index (up to 127) of an option past the first 15.
+const EXT_BASE = 1 << 16;
 
 export const NO_ATTACHMENTS = Object.freeze({});
 
@@ -440,17 +509,28 @@ export function kitKey(kit) {
   return k === '|||' ? '' : k;
 }
 
-// Kit to/from one small int, for the snapshot's meta block.
+// Kit to/from one integer, for the snapshot's meta block. The low 16 bits are the old format (4 bits a slot) and
+// still mean the same kit; an option past the 15th in its slot leaves its nibble empty (an older build sees stock)
+// and puts its whole index in the high part, 7 bits a slot, so the number stays an exact integer (< 2^44) in JSON.
 export function packKit(kit) {
-  let n = 0;
-  for (let i = 0; i < SLOTS.length; i++) n |= (SLOT_IDS[i].indexOf(kit[SLOTS[i]]) + 1) << (i * KIT_BITS);
-  return n;
+  let lo = 0, hi = 0;
+  for (let i = 0; i < SLOTS.length; i++) {
+    const idx = SLOT_IDS[i].indexOf(kit[SLOTS[i]]) + 1;
+    if (idx < 16) lo |= idx << (i * KIT_BITS);
+    else hi += idx * 2 ** (i * EXT_BITS);
+  }
+  return lo + hi * EXT_BASE;
 }
 
 export function unpackKit(weaponId, n) {
   const obj = {};
+  const lo = n % EXT_BASE;
+  let hi = Math.floor(n / EXT_BASE);
   for (let i = 0; i < SLOTS.length; i++) {
-    const id = SLOT_IDS[i][((n >>> (i * KIT_BITS)) & ((1 << KIT_BITS) - 1)) - 1];
+    const ext = hi % (1 << EXT_BITS);
+    hi = Math.floor(hi / (1 << EXT_BITS));
+    const idx = ext || ((lo >>> (i * KIT_BITS)) & ((1 << KIT_BITS) - 1));
+    const id = SLOT_IDS[i][idx - 1];
     if (id) obj[SLOTS[i]] = id;
   }
   return normalizeKit(weaponId, obj);
@@ -465,10 +545,30 @@ function scaledRounds(v, k) {
   return n;
 }
 
+// `set` (V11 kits): fields replaced outright. undefined removes the field (no bolt kick, no wind-up).
+function applySet(eff, set) {
+  for (const key in set) {
+    if (set[key] === undefined) delete eff[key];
+    else eff[key] = set[key];
+  }
+}
+
 function applyMods(eff, m) {
   for (const key in m) {
     const k = m[key];
     switch (key) {
+      case 'settleShots': if (eff.settle) eff.settle = { ...eff.settle, shots: Math.max(1, Math.round(eff.settle.shots * k)) }; break;
+      case 'settleFrom': if (eff.settle) eff.settle = { ...eff.settle, from: Math.max(1, eff.settle.from * k) }; break;
+      case 'spinupShots': if (eff.spinup) eff.spinup = { ...eff.spinup, shots: Math.max(1, Math.round(eff.spinup.shots * k)) }; break;
+      case 'spinupFrom': if (eff.spinup) eff.spinup = { ...eff.spinup, from: Math.min(1, eff.spinup.from * k) }; break;
+      case 'chargeTime': if (eff.charge) eff.charge = { ...eff.charge, time: eff.charge.time * k }; break;
+      case 'burstGap': if (eff.burst) eff.burst = { ...eff.burst, gap: eff.burst.gap * k }; break;
+      case 'boltKick': if (eff.boltKick !== undefined) eff.boltKick = Math.min(1, eff.boltKick * k); break;
+      case 'adsGate': if (eff.adsGate) eff.adsGate = Math.min(1, eff.adsGate * k); break;
+      case 'falloffMin': eff.falloff = { ...eff.falloff, min: Math.min(1, eff.falloff.min * k) }; break;
+      case 'heatLockout': if (eff.heat) eff.heat = { ...eff.heat, lockout: eff.heat.lockout * k }; break;
+      case 'lunge': if (eff.lunge) eff.lunge *= k; break;
+      case 'damage': eff.damage = Math.round(eff.damage * k * 2) / 2; break;   // Half points, so kill counts read cleanly.
       case 'suppressed': eff.suppressed = !!k; break;
       case 'range':
         eff.range = scaled(eff.range, k);
@@ -493,6 +593,11 @@ function applyMods(eff, m) {
 
 const EFFECTIVE = new WeakMap();  // base def -> Map(key -> effective def)
 
+// weapons.js re-derives what depends on damage (the head multiplier) once a kit has changed it. A hook rather than an
+// import, because weapons.js imports this file.
+let afterApply = null;
+export function setAfterApply(fn) { afterApply = fn; }
+
 // The stats a gun really has with `attachments` on (a raw or normalized kit). Memoised: equal kits on the same
 // base def return the same frozen object, and an empty kit returns the base def itself, so stat reads and
 // identity checks stay cheap. Damage and fire rate are never touched.
@@ -507,10 +612,75 @@ export function applyAttachments(weaponDef, attachments) {
     eff = { ...weaponDef, kit };
     for (let i = 0; i < SLOTS.length; i++) {
       const id = kit[SLOTS[i]];
+      if (id && ATTACHMENTS[id].set) applySet(eff, ATTACHMENTS[id].set);
+    }
+    for (let i = 0; i < SLOTS.length; i++) {
+      const id = kit[SLOTS[i]];
       if (id) applyMods(eff, modsFor(weaponDef.id, id));
     }
+    if (afterApply) afterApply(eff, weaponDef);
     Object.freeze(eff);
     byKey.set(key, eff);
   }
   return eff;
+}
+
+// ---- What one attachment changes on one gun, for the gunsmith and tests ----
+
+// [label, read(def), better] for every number an attachment can move. Read from the effective def, so a perWeapon
+// replacement, a `set` and the rounding of whole numbers all show as they really play.
+const DELTA_FIELDS = [
+  ['damage', 'Damage', w => w.damage * (w.pellets || 1), 1],
+  ['rpm', 'Fire rate', w => w.rpm, 1],
+  ['magazine', 'Magazine', w => w.magazine, 1, true],
+  ['reload', 'Reload', w => w.reload, -1],
+  ['range', 'Range', w => w.range, 1],
+  ['falloffMin', 'Damage at range', w => w.falloff.min, 1],
+  ['adsSpread', 'Aimed spread', w => w.adsSpread, -1],
+  ['hipSpread', 'Hip spread', w => w.hipSpread, -1],
+  ['bloomPerShot', 'Bloom per shot', w => w.bloomPerShot, -1],
+  ['bloomRecover', 'Settle speed', w => w.bloomRecover, 1],
+  ['patternAmp', 'Recoil sway', w => w.pattern?.amp, -1],
+  ['adsTime', 'Time to aim', w => w.adsTime, -1],
+  ['sprintToFire', 'Sprint to fire', w => w.sprintToFire, -1],
+  ['swapTime', 'Swap time', w => w.swapTime, -1],
+  ['moveMult', 'Move speed', w => w.moveMult, 1],
+  ['adsMoveMult', 'Move speed aimed', w => w.adsMoveMult, 1],
+  ['turnCap', 'Swing speed', w => w.turnCap, 1],
+  ['heatRounds', 'Rounds to overheat', w => w.heat?.rounds, 1, true],
+  ['heatCool', 'Cooling time', w => w.heat?.coolTime, -1],
+  ['heatLockout', 'Overheat lockout', w => w.heat?.lockout, -1],
+  ['penetrate', 'Damage through cover', w => w.penetrate ?? 0, 1],
+  ['blastRadius', 'Blast radius', w => w.explosive?.radius, 1],
+  ['reserve', 'Spare ammo', w => (w.unlimitedReserve ? undefined : w.reserve), 1, true],
+  ['settleShots', 'Rounds to settle', w => w.settle?.shots, -1, true],
+  ['settleFrom', 'Unsettled spread', w => w.settle?.from, -1],
+  ['spinupShots', 'Rounds to wind up', w => w.spinup?.shots, -1, true],
+  ['spinupFrom', 'Starting fire rate', w => w.spinup?.from, 1],
+  ['chargeTime', 'Charge time', w => w.charge?.time, -1],
+  ['burstGap', 'Gap in a burst', w => w.burst?.gap, -1],
+  ['boltKick', 'Scope kept per shot', w => w.boltKick, 1],
+  ['adsGate', 'Unaimed damage', w => w.adsGate, 1],
+  ['lunge', 'Lunge', w => w.lunge, 1],
+];
+
+// [{key, label, from, to, pct, whole, better}] for every number `attachmentId` moves on this gun, biggest first, plus
+// the notes of a kit's mode change ({key:'note', label}). Empty for an attachment the gun cannot take.
+export function attachmentDeltas(weaponDef, attachmentId) {
+  const a = ATTACHMENTS[attachmentId];
+  if (!a || !isAvailable(weaponDef.id, attachmentId)) return [];
+  const eff = applyAttachments(weaponDef, { [a.slot]: attachmentId });
+  const out = [];
+  for (const [key, label, read, better, whole] of DELTA_FIELDS) {
+    const from = read(weaponDef), to = read(eff);
+    if (from === to || (from === undefined && to === undefined)) continue;
+    if (typeof from !== 'number' || typeof to !== 'number') continue;
+    const pct = from ? (to - from) / Math.abs(from) : (to > 0 ? 1 : -1);
+    if (whole ? Math.round(to) === Math.round(from) : Math.abs(pct) < 0.005) continue;
+    out.push({ key, label, from, to, pct, whole: !!whole, better: (to - from) * better > 0 });
+  }
+  out.sort((x, y) => Math.abs(y.pct) - Math.abs(x.pct));
+  for (const n of a.notes || []) out.unshift({ key: 'note', label: n, better: null });
+  if (!a.notes && modsFor(weaponDef.id, attachmentId).suppressed) out.unshift({ key: 'note', label: 'Suppressed: off the minimap', better: true });
+  return out;
 }

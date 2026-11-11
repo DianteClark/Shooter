@@ -363,7 +363,8 @@ test('Gaff and Maul: reach three metres and no further, the Gaff lunges and the 
     if (w.lunge) assert.ok(moved > 0.6 && moved < 3.2, `${id} carried ${moved.toFixed(2)} m`);
     else assert.ok(Math.abs(moved) < 0.3, `${id} swings in place: ${moved.toFixed(2)} m`);   // The Maul is an overhead swing, not a charge.
     assert.ok(Math.hypot(ps.vx, ps.vz) < 0.2, 'and stops');
-    assert.equal(availableFor(id).length, 0, `${id} takes no attachments`);
+    // V11: a blade takes only its own signature attachments, never the gun attachments.
+    assert.ok(availableFor(id).every(a => a.kind === 'sig' && a.weapons.length === 1), `${id} takes only its own signatures`);
     assert.equal(normalizeKit(id, { grip: 'wrap', mag: 'extmag' }), normalizeKit(id, null));
   }
   assert.ok(WEAPONS.knife.moveMult > Math.max(...WEAPON_IDS.filter(i => i !== 'knife').map(i => WEAPONS[i].moveMult)), 'nothing runs faster than the Gaff');
@@ -375,7 +376,8 @@ test('eight new attachments: appended, real trade-offs, fit old and new guns, no
   // Slot lists only grow at the end, so the kit ints older builds send still mean the same kit.
   assert.equal(packKit({ optic: 'reflex', barrel: 'shroud', mag: 'apmag', grip: 'heavystock' }), 30673);
   assert.equal(packKit({ optic: 'reticle', barrel: 'suppressor', mag: 'extmag', grip: 'angled' }), 4376);
-  for (const slot of SLOTS) assert.ok(Object.values(ATTACHMENTS).filter(a => a.slot === slot).length <= 15, `${slot} fits 4 bits`);
+  // V11: past 15 a slot's options ride the high bits (7 a slot); the old low 16 bits are untouched.
+  for (const slot of SLOTS) assert.ok(Object.values(ATTACHMENTS).filter(a => a.slot === slot).length <= 127, `${slot} fits 7 bits`);
   for (const id of NEW_ATTACHMENTS) {
     const a = ATTACHMENTS[id];
     assert.ok(a && a.name && a.desc && a.unlock >= 1 && a.unlock <= 30, id);
@@ -402,7 +404,7 @@ test('new guns take their class kit; class exclusions hold', () => {
   for (const id of NEW.filter(g => !WEAPONS[g].melee)) {
     const slots = new Set(availableFor(id).map(a => a.slot));
     assert.ok(slots.size >= 3, `${id} has ${slots.size} slots`);
-    for (const a of availableFor(id)) {
+    for (const a of availableFor(id).filter(x => !x.kind)) {   // V11 signatures and kits are meant to touch these.
       const eff = applyAttachments(WEAPONS[id], { [a.slot]: a.id });
       assert.equal(eff.damage, WEAPONS[id].damage); assert.equal(eff.rpm, WEAPONS[id].rpm);
       assert.ok(eff.magazine >= 1 && eff.range > 0);
