@@ -562,7 +562,9 @@ export function cardHtml(id, { size = 'm', title, sub, locked = false, equipped 
   const name = title ?? card.name;
   const line2 = sub ?? card.group;
   const anim = art.anim && !locked ? ` a-${art.anim}` : '';
-  return `<span class="ccard${art.gold ? ' gold' : ''}${anim}${locked ? ' locked' : ''}${equipped ? ' equipped' : ''}${cls ? ' ' + cls : ''}" style="--cw:${w}px" data-card="${esc(card.id)}">
+  // A long name steps the title down a size rather than lose its end.
+  const long = name.length > 18 ? ' long' : name.length > 14 ? ' longish' : '';
+  return `<span class="ccard${long}${art.gold ? ' gold' : ''}${anim}${locked ? ' locked' : ''}${equipped ? ' equipped' : ''}${cls ? ' ' + cls : ''}" style="--cw:${w}px" data-card="${esc(card.id)}">
     ${groundSvg(card)}${anim ? '<i class="cc-fx" aria-hidden="true"></i>' : ''}
     <span class="cc-em">${emblem(card, Math.round(w * 0.2))}</span>
     <span class="cc-tx"><b>${esc(name)}</b>${line2 ? `<small>${esc(line2)}</small>` : ''}</span>

@@ -169,6 +169,9 @@
   --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
 #ui .ld-tab b { font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); }
+/* Fixes: loadout names are never cut; when five do not fit, the tab strip scrolls sideways (native .scroll-x). */
+#ui .ld-tabs.scroll-x { display: flex; overflow-x: auto; }
+#ui .ld-tabs .ld-tab { flex: 1 0 auto; min-width: 76px; max-width: 150px; }
 #ui .ld-tab small { font: 400 9px/1 var(--f-plate); letter-spacing: .04em; }
 #ui .ld-tab .lamp { left: 6px; width: 6px; height: 6px; margin-top: -3px; --lamp: var(--c-plate); box-shadow: none; }
 #ui .ld-tab.active .lamp { --lamp: var(--c-go); box-shadow: 0 0 6px var(--c-go); }

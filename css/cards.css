@@ -25,6 +25,8 @@
   /* A backing plate keeps the caption readable over busy card art (stripes, hazard bands). */
   align-self: flex-start; max-width: 100%; padding: 2px 5px 1px; background: rgba(12,15,19,.62);
 }
+.ccard.longish .cc-tx b { font-size: calc(var(--cw) * .068); }
+.ccard.long .cc-tx b { font-size: calc(var(--cw) * .058); }
 .ccard.gold .cc-tx small { color: #ffe9a8; }
 .ccard.locked .cc-bg, .ccard.locked .cc-em { filter: grayscale(.9) brightness(.5); }
 .ccard.locked .cc-tx b { color: var(--c-haze); }
