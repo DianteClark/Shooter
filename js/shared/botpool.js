@@ -57,7 +57,56 @@ Gearhead Spanner TorqueSpec Socket_Set PalletJack Forklift Hardhat SteelToe Lunc
 Longshore Stevedore Bollard Hawser Mooring BilgeRat Tugboat Drydock Portside Starboard Breakwater Foghorn Drizzle Hailstone
 Thunderhead Crosswind Tailwind Updraft Fuzzbox Wavelength Dialtone BusySignal Payphone Walkie OverAndOut Copy_That TenFour
 Alleycat Yardcat Pigeon Starling Crowbar Badger Mongoose Jackal Stoat Weasel Ferret Raccoon Bullfrog Snapper Gecko Lynx Bobcat
-Mantis Hornet Cicada Firefly Ridge Talon Gully Quill Tarn Onyx Brine Wick Sorrel Lark Husk Briar Knell Jinx Thatch`.split(/\s+/);
+Mantis Hornet Cicada Firefly Ridge Talon Gully Quill Tarn Onyx Brine Wick Sorrel Lark Husk Briar Knell Jinx Thatch
+GravelPit TrackWalker NightOwl SteamHead CoalChute TiePlate FishPlate Clinker Firebox Tender9 Waybill Consist FlickShot
+StrafeKing PeekQueen CrouchSpam AimDuke lowping_lou HighPing Rubberband Desync TickRate FrameDrop VsyncVic PacketLoss Netcode
+Hitreg OneClip ReloadRita SoloQueue DuoQueue Lobbyist AfkAndy brb_snack GG_Gus Osprey Heron Plover Shrike Magpie Jackdaw Vole
+Marten Otter Pika Dingo Caracal Ocelot Adder Krait Sleet Gale Monsoon Flux Grommet Sprocket Piston Camshaft Gasket Bushing
+Lugnut Ratchet Hacksaw Spirit_Lvl Sawhorse Toolbox Overalls NightBus LastTrain RedEye_Flt SignalLost Neon_Nora Asphalt
+Underpass Overgrowth Slipstream Backdraft Kickback Rebound Tumbleweed Halfmoon Sundown Daybreak Lowtide Sandbar Shoal Jetsam
+Flotsam Barnacle Pike_Line Minnow Axolotl Pangolin Wombat Quokka Tapir Yak_Attack Bison Moose_Juice Whippet`.split(/\s+/);
+
+// ---- Clans and regular duos (ROADMAP item 19) ----
+// Players from p200 on joined with the clans (the first 200 are untouched: their profiles and careers are exactly as they
+// were). A clan: a tag (2-4 capitals, shown as "[TAG] Name"), a name, a skill profile and its members by profile index.
+// `skill` shapes the members who joined with the clan (p200 on): 'stacked' plays like elites (a third locked there),
+// 'weak' like recruits, 'average' as anyone. Older members were picked for clans that suit them. Members queue together:
+// pickPoolBots pulls clanmates (and a duo's partner) into the same lobby, and buildRoster seats a party on one side.
+// Append only, like TAGS: never move a member or change a tag (leaderboards show them).
+export const CLAN_ERA = 200;
+const CLAN_DATA = [
+  { tag: 'VXN', name: 'Vexen', skill: 'stacked', members: [6, 73, 86, 262, 269, 298] },
+  { tag: 'ZPHR', name: 'Zephyr Rail', skill: 'stacked', members: [60, 84, 203, 204, 210] },
+  { tag: 'KJX', name: 'Kojax', skill: 'stacked', members: [31, 58, 245, 274] },
+  { tag: 'QZR', name: 'Quazar', skill: 'stacked', members: [11, 136, 157, 207, 236, 237, 276] },
+  { tag: 'OXB', name: 'Oxbow Yard', skill: 'average', members: [83, 125, 179, 228, 255, 256, 261, 265] },
+  { tag: 'BRQ', name: 'Barquentine', skill: 'average', members: [37, 164, 186, 264, 295] },
+  { tag: 'TWZ', name: 'Twelve Zero', skill: 'average', members: [97, 200, 205, 270] },
+  { tag: 'LNTN', name: 'Lantana', skill: 'average', members: [100, 214, 241, 251, 281, 285] },
+  { tag: 'GRVL', name: 'Gravel Crew', skill: 'average', members: [40, 216, 222, 268, 288] },
+  { tag: 'HXL', name: 'Hexle', skill: 'average', members: [61, 240, 275] },
+  { tag: 'DSKR', name: 'Daskara', skill: 'average', members: [45, 140, 226, 259] },
+  { tag: 'PYLN', name: 'Pylon Set', skill: 'average', members: [19, 158, 235, 260, 280, 296] },
+  { tag: 'RKTY', name: 'Rickety', skill: 'weak', members: [89, 147, 206, 215, 254] },
+  { tag: 'NPPR', name: 'Nappers', skill: 'average', members: [21, 119, 201] },
+  { tag: 'YDG', name: 'Yodel Gang', skill: 'average', members: [7, 213, 246, 284, 290, 293, 294] },
+  { tag: 'CNDR', name: 'Cinder Club', skill: 'average', members: [49, 231, 244, 258] },
+  { tag: 'SPKS', name: 'Sparks', skill: 'average', members: [70, 141, 217, 249, 271] },
+  { tag: 'FRST', name: 'First Shift', skill: 'average', members: [53, 165, 233] },
+  { tag: 'MOTH', name: 'Moth Hour', skill: 'average', members: [20, 224, 225, 279] },
+  { tag: 'TRSL', name: 'Trestle', skill: 'average', members: [25, 229, 234, 243, 272, 286] },
+  { tag: 'GLMR', name: 'Gloamers', skill: 'average', members: [135, 202, 252, 287, 292] },
+  { tag: 'ZZZ', name: 'Snooze', skill: 'weak', members: [15, 90, 219, 299] },
+  { tag: 'HWL', name: 'Howl', skill: 'average', members: [134, 149, 248] },
+];
+// Two players who nearly always queue together (no tag).
+const DUO_DATA = [[55, 78], [17, 42], [66, 122], [69, 129], [34, 39], [143, 155], [238, 250], [239, 253], [221, 263], [223, 257], [278, 282], [247, 291]];
+const pid = i => `p${String(i).padStart(3, '0')}`;
+export const CLANS = Object.freeze(CLAN_DATA.map(c => Object.freeze({ tag: c.tag, name: c.name, skill: c.skill, members: Object.freeze(c.members.map(pid)) })));
+export const DUOS = Object.freeze(DUO_DATA.map(d => Object.freeze(d.map(pid))));
+const CLAN_BY_INDEX = new Map(), DUO_BY_ID = new Map();
+CLAN_DATA.forEach((c, k) => c.members.forEach(i => CLAN_BY_INDEX.set(i, CLANS[k])));
+for (const d of DUOS) { DUO_BY_ID.set(d[0], d[1]); DUO_BY_ID.set(d[1], d[0]); }
 
 // ---- Deterministic randomness ----
 function mulberry32(a) {
@@ -182,9 +231,17 @@ function buildProfile(index) {
   while (streaks.length < 3) streaks.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
   streaks.sort((a, b) => STREAKS[a].cost - STREAKS[b].cost);
 
-  // Skill. mu is where they usually play; form how far a night can swing them.
+  // Skill. mu is where they usually play; form how far a night can swing them. A clan's own recruits (CLAN_ERA on)
+  // follow its skill profile.
   let locked = null, mu, form;
-  if (rng() < LOCK_SHARE) {
+  const clanSkill = index >= CLAN_ERA ? CLAN_BY_INDEX.get(index)?.skill ?? 'average' : 'average';
+  if (clanSkill === 'stacked') {
+    if (rng() < 0.34) { locked = 'elite'; mu = LOCK_RATING.elite; form = 0; }
+    else { mu = 0.74 + rng() * 0.2; form = 0.05 + rng() * 0.06; }
+  } else if (clanSkill === 'weak') {
+    if (rng() < 0.3) { locked = 'recruit'; mu = LOCK_RATING.recruit; form = 0; }
+    else { mu = 0.06 + rng() * 0.22; form = 0.06 + rng() * 0.08; }
+  } else if (rng() < LOCK_SHARE) {
     locked = pickW(rng, LOCK_TIERS);
     mu = LOCK_RATING[locked]; form = 0;
   } else {
@@ -313,6 +370,28 @@ export const BOT_POOL = Object.freeze(TAGS.map((_, i) => buildProfile(i)));
 const BY_ID = new Map(BOT_POOL.map(p => [p.id, p]));
 export const profileById = id => BY_ID.get(id) ?? null;
 
+// The clan a profile (or profile id) belongs to, { tag, name, skill, members: [ids] }, or null for a loner.
+export function clanOf(profile) {
+  const p = typeof profile === 'string' ? BY_ID.get(profile) : profile;
+  return p ? CLAN_BY_INDEX.get(p.index) ?? null : null;
+}
+// A regular duo's other half (profile id), or null.
+export const duoOf = profile => DUO_BY_ID.get(typeof profile === 'string' ? profile : profile?.id) ?? null;
+// How a profile shows in lobbies, scoreboards, the killfeed and results: "[VXN] Name", or just the name.
+export function displayName(profile) {
+  const c = clanOf(profile);
+  return c ? `[${c.tag}] ${profile.name}` : profile.name;
+}
+// Who a profile queues with: its clanmates or its duo partner (ids, itself left out), or null.
+function partyOf(p) {
+  const c = CLAN_BY_INDEX.get(p.index);
+  if (c) return c.members.filter(id => id !== p.id);
+  const d = DUO_BY_ID.get(p.id);
+  return d ? [d] : null;
+}
+// How often a clan member or duo drawn into a lobby brings friends along, and how many (up to the party cap).
+const CLAN_PULL = 0.72, DUO_PULL = 0.85;
+
 // ---- Form and matchmaking ----
 
 // This match's rating for a profile. Locked: their tier, always. Otherwise mu plus a roll of their form, with the odd
@@ -352,9 +431,11 @@ const RECENT_KEEP = 2;
 // Draws `count` distinct bots for a match. target: the humans' mean rating (humanRating); level: their mean rank as
 // {level, prestige}; spread: how far from the target a draw may wander (sigma, on the 0..1 scale); exclude: profile
 // ids already seated; recent: the previous lobbies' ids (defaults to this phone's memory). Returns
-// [{ profile, rating, tier, badge: {level, prestige} }] in draw order. Deterministic for a seed and inputs.
-// locked: only profiles locked at that tier (tests and the balance rig).
-export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = null, spread = 0.17, exclude = [], recent = null, date = Date.now(), remember = true, locked = null } = {}) {
+// [{ profile, rating, tier, badge: {level, prestige}, party }] in draw order. Deterministic for a seed and inputs.
+// locked: only profiles locked at that tier (tests and the balance rig). party: the largest group that queues together
+// in this mode (1: nobody brings friends); a drawn clan member or duo often pulls clanmates in with them, and every
+// player of one group carries the same `party` number (null alone), so buildRoster can seat them together.
+export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = null, spread = 0.17, exclude = [], recent = null, date = Date.now(), remember = true, locked = null, party = 1 } = {}) {
   const rng = mulberry32(hash32('lobby', seed));
   const lastIds = new Set((recent ?? RECENT).flat());
   const taken = new Set(exclude);
@@ -378,15 +459,43 @@ export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = nul
     cand.push({ p, w });
   }
   const out = [];
-  while (out.length < count && cand.length) {
-    let total = 0;
-    for (const c of cand) total += c.w;
-    let x = rng() * total, k = cand.length - 1;
-    for (let i = 0; i < cand.length; i++) if ((x -= cand[i].w) < 0) { k = i; break; }
-    const { p } = cand.splice(k, 1)[0];
+  const take = (p, group, apart = null) => {
     const rating = formRating(p, seed);
     const c = careerAt(p, date);
-    out.push({ profile: p, rating, tier: tierOf(rating), badge: { prestige: c.prestige, level: c.level } });
+    out.push({ profile: p, rating, tier: tierOf(rating), badge: { prestige: c.prestige, level: c.level }, party: group, apart });
+  };
+  const pickFrom = list => {
+    let total = 0;
+    for (const c of list) total += c.w;
+    let x = rng() * total, k = list.length - 1;
+    for (let i = 0; i < list.length; i++) if ((x -= list[i].w) < 0) { k = i; break; }
+    return k;
+  };
+  // One party per clan (or duo) in a lobby: a clanmate drawn later joins it while it has room; past the cap they queued
+  // on their own (`apart`: the party they are not with, so they are seated against it).
+  let groups = 0;
+  const partyBy = new Map();       // clan tag or duo key -> { id, size }
+  while (out.length < count && cand.length) {
+    const { p } = cand.splice(pickFrom(cand), 1)[0];
+    // Friends online with them: clanmates (a few, never more than the party cap or the seats left) or the duo partner.
+    const friends = party > 1 && !locked ? partyOf(p) : null;
+    const key = friends ? CLAN_BY_INDEX.get(p.index)?.tag ?? [p.id, ...friends].sort().join() : null;
+    const has = key ? partyBy.get(key) : null;
+    if (has && has.size >= party) { take(p, null, has.id); continue; }
+    const room = Math.min(party - 1 - (has?.size ?? 0), count - out.length - 1);
+    const roll = friends && room > 0 ? rng() : 1;
+    let mates = [];
+    if (roll < (friends?.length === 1 && !CLAN_BY_INDEX.has(p.index) ? DUO_PULL : CLAN_PULL)) {
+      const near = cand.filter(c => friends.includes(c.p.id));
+      const want = Math.min(near.length, 1 + Math.floor(rng() * room));
+      for (let k = 0; k < want; k++) mates.push(near.splice(pickFrom(near), 1)[0]);
+      mates = mates.filter(Boolean);
+    }
+    let group = has ? has.id : null;
+    if (mates.length && group === null) { group = groups++; partyBy.set(key, { id: group, size: 0 }); }
+    if (group !== null) partyBy.get(key).size += 1 + mates.length;
+    take(p, group);
+    for (const m of mates) { cand.splice(cand.indexOf(m), 1); take(m.p, group); }
   }
   if (remember && (recent === null)) {
     RECENT.unshift(out.map(o => o.profile.id));

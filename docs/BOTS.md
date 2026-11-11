@@ -20,6 +20,28 @@ profiles, drawn into each match by matchmaking, each playing at a per-match form
 - Play style changes how a bot plays (`STYLES[style].lean`: flank, hold, objective, push, sprint, slide multipliers in
   `skillAt`), never how well it aims or how fast it reacts.
 
+## Clans, duos and loners (ROADMAP item 19)
+- The pool is 300: p000-p199 exactly as before (profiles and careers; dev/sim-botpool.mjs checks a digest of both),
+  p200-p299 appended with the clans (`CLAN_ERA`). Tags stay append only; nothing else about the first 200 moved
+  (`POOL_SEED`, `POOL_EPOCH`, `rates()`).
+- 23 clans of 3-8 (`CLANS`: `{ tag, name, skill, members }`, members as profile ids). Tags are 2-4 capitals, invented
+  (no well-known organisation's acronym, nothing offensive). `skill`: four 'stacked' clans (VXN, ZPHR, KJX, QZR: their
+  own recruits play like elites, a third locked elite; older members picked from the pool's strong players), two 'weak'
+  (RKTY, ZZZ), the rest 'average'. 12 regular duos (`DUOS`, no tag). 164 loners.
+- `clanOf(profile | id)` (the clan or null), `duoOf(profile | id)` (the partner's id or null), `displayName(profile)`
+  ("[VXN] Name"; the roster name of a pool bot). For leaderboards: show `clanOf(p)?.tag` before `p.name`.
+- Queueing together: `pickPoolBots({ party })` (default 1: nobody brings friends). A drawn clan member brings 1..cap-1
+  clanmates along 72% of the time, a duo its partner 85%; one party per clan a lobby, later clanmates join it until the
+  cap, past it they queued alone and are seated against it (`apart`). Entries carry `party` (a number, or null).
+  `buildRoster` passes the mode's cap (`partyCap`: a BR squad, 4 on a 6v6 side, 6 in Ground War, 3 into a
+  free-for-all lobby) and seats each party on one side (`seatParties`: parties first, still evening ratings) or in one BR
+  squad (`seatBrParties`, an empty squad first).
+- Measured (dev/sim-botpool.mjs): TDM, 88% of clan players drawn come with a clanmate, 100% of clanmate pairs on one
+  side, never more than 4 of a clan on a side; Ground War 93% / 97%; BR 95% of pairs in one squad; free-for-all 77%
+  share a lobby; every clan turns up in TDM and Ground War over 120 / 40 lobbies; duos together 90%.
+- UI: `nameHtml(name)` (js/ui/widgets.js) draws the tag as a small plate before the name (`.ctag`, css/tokens.css) in
+  the intro roster, scoreboard, killfeed, results and BR squad panel and feed; elsewhere the name reads "[VXN] Name".
+
 ## Matchmaking
 - `buildRoster(humans, { ..., pool })` (js/sim/sim.js): with `pool` ({ target, level, spread, recent, date, locked }
   or `true`) bots are drawn from the pool instead of dealt. Without it, rosters are exactly as before (tests and

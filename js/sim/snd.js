@@ -405,6 +405,7 @@ export function sndOf(view) {
 // exactly what that teammate can see. Nothing here touches the sim; it is per-phone state over the views it is given.
 export const spectate = {
   pick: null,          // The teammate chosen by tapping, or null for the first one alive.
+  any: false,          // Battle royale, squad out and Spectate chosen: anyone still alive can be watched (squad by squad).
   // The id to watch, or null when there is nothing to spectate (alive, between rounds' freeze, not S&D, team wiped).
   target(view, localId) {
     const snd = sndOf(view);
@@ -421,17 +422,29 @@ export const spectate = {
       if (p.id === this.pick) return p.id;
       first ??= p.id;
     }
+    if (first === null && this.any && view.br) {
+      for (let i = 0; i < players.length; i++) {
+        const p = players[i];
+        if (!p.alive || p.id === localId || p.air === 1) continue;
+        if (p.id === this.pick) return p.id;
+        first ??= p.id;
+      }
+    }
     return first;
   },
   // The next (or previous) living teammate after whoever is watched now.
-  cycle(view, localId, step = 1) {
+  // `squad`: on to the first player of the next squad instead (battle royale, watching anyone).
+  cycle(view, localId, step = 1, squad = false) {
     const now = this.target(view, localId);
     const me = view.players.find(p => p.id === localId);
-    const list = view.players.filter(p => me && p.team === me.team && p.alive && p.id !== localId);
+    let list = view.players.filter(p => me && p.team === me.team && p.alive && p.id !== localId);
+    if (!list.length && this.any && view.br) list = view.players.filter(p => p.alive && p.id !== localId && p.air !== 1).sort((a, b) => a.team - b.team);
     if (!list.length) return null;
     const i = Math.max(0, list.findIndex(p => p.id === now));
-    this.pick = list[(i + step + list.length) % list.length].id;
+    let j = (i + step + list.length) % list.length;
+    if (squad) { const t = list[i].team; for (let k = 1; k < list.length && list[j].team === t; k++) j = (i + step * (k + 1) + list.length) % list.length; }
+    this.pick = list[j].id;
     return this.pick;
   },
-  reset() { this.pick = null; },
+  reset() { this.pick = null; this.any = false; },
 };
