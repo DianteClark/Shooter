@@ -395,8 +395,11 @@ async def live_cases(browser, mode, failures, errors):
     # Baseline: a release with no cancel after it never touches the stick.
     pts = await sprint()
     at, before = await throw(pts, (-120, 40))
-    await pg.wait_for_timeout(400)
-    s = await state()
+    # The host sim counts the throw on its own tick: under load that can take longer than a frame or two.
+    for _ in range(20):
+        await pg.wait_for_timeout(100)
+        s = await state()
+        if s['thrown'] > before: break
     check('release, no cancel: stick untouched, grenade thrown', s['id'] == 1 and not s['kept'] and s['mx'] > 0.9 and s['thrown'] > before, s)
     await touch('touchEnd', {})
     await pg.wait_for_timeout(200)

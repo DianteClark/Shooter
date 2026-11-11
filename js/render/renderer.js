@@ -17,8 +17,8 @@ import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
 import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
 import { TUNING } from '../shared/tuning.js';
-import { fillV10 } from '../shared/weapons-v10.js';
 import { spectate } from '../sim/snd.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
+import { feelMotion } from './feel.js';   // Reduced motion scales the camera kick a gun adds.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
 let WEAPONS = {};
@@ -48,7 +48,6 @@ const GUN_FX_FALLBACK = {
   scatter:    { tail: 3.2, linger: 0.05, speed: 170, flash: [2.0, 0.75, 1.8],  shell: null, extra: 'blast' },
 };
 for (const id in GUN_FX_FALLBACK) if (!GUN_FX[id]) GUN_FX[id] = GUN_FX_FALLBACK[id];
-fillV10(GUN_FX, 'fx');   // V10 guns borrow a tracer and flash until vfx.js gives them their own.
 
 // Kills from these hold the hit-stop a beat longer.
 const BIG_KILL = new Set(['Sniper', 'Marksman', 'Launcher']);
@@ -448,7 +447,8 @@ export class GameRenderer {
     let rgb = vfx.tracerRGB(ev.by, tracerColor(ev.camo, team));
     const visible = !r || r.visible || team === localTeam;
     const kick = kickOf(ev.weapon);
-    const G = GUN_FX[ev.weapon] || GUN_FX.ar;
+    const G = vfx.gunFx(ev.weapon);       // Hand-made or derived from the gun's class: see feel.js.
+    const local = ev.by === localId;
     // A hot barrel throws hotter tracers: the colour pushes to white-gold and the streak fattens.
     const heat = r && r.heat > 0.05 ? r.heat : 0;
 
@@ -482,8 +482,7 @@ export class GameRenderer {
         // Explosive rounds fly as a projectile; the blast waits for it to arrive (see 'explosion').
         if (explosive) vfx.rocket(mx, my, mz, ray.x, 1.05, ray.z);
         else {
-          vfx.tracer(mx, my, mz, ray.x, 1.05, ray.z, rgb, width, G.tail, G.linger, G.speed);
-          if (G.contrail) vfx.contrail(mx, my, mz, ray.x, 1.05, ray.z);
+          vfx.gunTracer(G, ev.by, i, local, mx, my, mz, ray.x, 1.05, ray.z, rgb, width);
           if (!this.cine) this.props.hitRay(ev.ox, ev.oz, ray.x, ray.z);
           if (Math.abs(ray.x - fx) < 26 && Math.abs(ray.z - fz) < 18) {
             if (ray.hit === 'wall') vfx.wallHit(ray.x, ray.z, ray.nx || 0, ray.nz || 0, fine);
@@ -496,18 +495,20 @@ export class GameRenderer {
 
     if (visible) {
       vfx.shotFx(ev.weapon, mx, my, mz, ev.aim, rgb, !!ev.sup, r);
-      vfx.pop(mx, 1.4, mz, 5 + kick * 2.2, rgb, 0.09);
+      if (G.light > 0) vfx.pop(mx, 1.4, mz, (5 + kick * 2.2) * (ev.sup ? 0.5 : G.light), rgb, 0.09);
     }
 
-    chars.onShot(ev.by, kick);
+    chars.onShot(ev.by, kick, ev.weapon);
 
-    if (ev.by === localId) {
-      const k = 5.2 * kick * TUNING.camKick;
+    if (local) {
+      // The system's reduce-motion setting scales the whole kick down, under the player's own Camera kick slider.
+      const motion = feelMotion();
+      const k = 5.2 * kick * TUNING.camKick * motion;
       this.kickVX -= Math.cos(ev.aim) * k;
       this.kickVZ -= Math.sin(ev.aim) * k;
-      this.rollV += (ev.aim > 0 ? 1 : -1) * kick * 0.08 * (0.6 + Math.random());
-      this.trauma = Math.min(1, this.trauma + 0.1 * kick);
-      this.zoomPunch = Math.max(this.zoomPunch, 0.014 * kick * TUNING.camKick);
+      this.rollV += (ev.aim > 0 ? 1 : -1) * kick * 0.08 * (0.6 + Math.random()) * motion;
+      this.trauma = Math.min(1, this.trauma + 0.1 * kick * motion);
+      this.zoomPunch = Math.max(this.zoomPunch, 0.014 * kick * TUNING.camKick * motion);
     }
   }
 

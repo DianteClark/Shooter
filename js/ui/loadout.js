@@ -399,7 +399,7 @@ export class LoadoutsScreen {
     const perk = key === 'perks', pro = perk && Progress.isPro(item.id);
     return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}${pro ? ' is-pro' : ''}${this.panel?.focus === item.id ? ' focus' : ''}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
       <span class="ld-ico">${itemMark(item.id, item.name)}</span>
-      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}</b><small>${open ? esc(item.desc) : esc(lockOf(sec.kind, item.id))}</small></span>
+      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}${item.job ? `<i class="job-chip">${esc(item.job)}</i>` : ''}</b><small>${open ? esc(item.desc) : esc(lockOf(sec.kind, item.id))}</small></span>
       ${open ? (tag ? `<em>${tag}</em>` : '') : `<em class="lock">${ico('lock')}</em>`}
       ${perk && open ? this.proStrip(item.id) : ''}
       ${!perk && open ? masteryPips(Progress.mastery(item.id)) : ''}

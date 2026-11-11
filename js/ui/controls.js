@@ -395,13 +395,32 @@ export class Controls {
       e.kind = kind;
       // Into a stable wrapper: nothing under a finger is ever replaced, only its contents.
       b.querySelector('.tbtn-icon').innerHTML = icon(kind);
-      b.querySelector('.tbtn-label').textContent = (which === 'tactical' ? TACTICALS : LETHALS)[kind]?.name ?? kind;
+      b.querySelector('.tbtn-label').textContent = which === 'lethal' && this.detonate ? 'Detonate' : (which === 'tactical' ? TACTICALS : LETHALS)[kind]?.name ?? kind;
     }
     if (e.left !== left) {
       e.left = left;
       b.querySelector('.tbtn-count').textContent = left ?? 0;
       b.classList.toggle('empty', !left);
     }
+  }
+
+  // Satchel: with one armed on the map, Lethal is the detonator: an instant press, relabelled, lit red.
+  setDetonate(on) {
+    on = !!on;
+    if (this.detonate === on) return;
+    this.detonate = on;
+    const b = this.buttons.lethal, e = this.equip.lethal;
+    b.classList.toggle('detonate', on);
+    b.querySelector('.tbtn-label').textContent = on ? 'Detonate' : (LETHALS[e.kind]?.name ?? e.kind);
+  }
+
+  // Blackout: both equipment buttons go dim while the player's kit is jammed (the host refuses throws anyway).
+  setJammed(on) {
+    on = !!on;
+    if (this.jammed === on) return;
+    this.jammed = on;
+    this.buttons.tactical.classList.toggle('dim', on);
+    this.buttons.lethal.classList.toggle('dim', on);
   }
 
   // Lights Swap when the current gun has nothing left to fire.
@@ -572,7 +591,7 @@ export class Controls {
   // Returns true when the press was taken as a throw (or spent on an empty button).
   #startThrow(slot, touchId, at) {
     const e = this.equip[slot], b = this.buttons[slot];
-    if (INSTANT.has(e.kind)) return false;
+    if (INSTANT.has(e.kind) || (slot === 'lethal' && this.detonate)) return false;
     b.classList.add('down');
     if (!e.left) {
       b.classList.remove('deny');

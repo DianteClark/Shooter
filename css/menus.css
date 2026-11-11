@@ -878,7 +878,7 @@
 
 /* ---- How to play --------------------------------------------------------------------------------------------- */
 #ui .help-tabs { display: flex; gap: 2px; margin-left: auto; }
-#ui .help-tabs .seg { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 36px; }
+#ui .help-tabs .seg { display: flex; align-items: center; gap: 5px; padding: 0 8px; height: 36px; }
 #ui .help-tabs .seg .ico { height: 16px; }
 #ui .help-tabs .seg b { font-weight: 400; }
 #ui .help-body { flex: 1; min-height: 0; padding-top: 0; }

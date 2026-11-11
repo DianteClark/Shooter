@@ -10,7 +10,7 @@
 // trigger runs every tick, which is what keeps them looking fluid.
 
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
-import { effectRadius, landingOf, maxThrowRange } from './equipment.js';
+import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam } from './equipment.js';
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
@@ -31,7 +31,7 @@ export const SKILLS = {
     retreatHp: 0, strafe: 0.15, adsUse: 0.3, flank: 0.03, holdProb: 0.15, holdTime: [1, 2.5], slide: 0.02,
     arcTries: 0, sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
-    objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false,
+    objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false, dodge: 0.3,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
@@ -39,7 +39,7 @@ export const SKILLS = {
     retreatHp: 30, strafe: 0.5, adsUse: 0.65, flank: 0.12, holdProb: 0.33, holdTime: [1.5, 4], slide: 0.1,
     arcTries: 0, sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
-    objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false,
+    objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false, dodge: 0.6,
   },
   veteran: {
     thinkHz: 9, reaction: [0.26, 0.42], aimError: 0.09, aimFloor: 0.036, settle: 0.6, turnRate: 13, lag: 0.14,
@@ -47,7 +47,7 @@ export const SKILLS = {
     retreatHp: 42, strafe: 0.85, adsUse: 0.9, flank: 0.28, holdProb: 0.45, holdTime: [2, 5], slide: 0.3,
     arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
-    objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true,
+    objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true, dodge: 0.85,
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
@@ -55,7 +55,7 @@ export const SKILLS = {
     retreatHp: 55, strafe: 1, adsUse: 1, flank: 0.42, holdProb: 0.5, holdTime: [2, 5.5], slide: 0.5,
     arcTries: 4, sprint: 1, callouts: true, calloutDelay: 1, calloutErr: 3.2, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
-    objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true,
+    objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true, dodge: 0.95,
   },
 };
 
@@ -88,7 +88,15 @@ const TURRET_THREAT = 21;
 const STREAK_WAIT = 10;         // Seconds a bot will hold a streak looking for a good moment, before calling it anyway.
 const SENSOR_RANGE = 15;        // Metres of throw a bot will spend finding someone it only half knows about.
 const MINE_SPOT = 2.5;          // A mine goes this far in front of its owner.
-const SHOCK_TARGETS = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy']);   // Devices worth a Shock.
+const SHOCK_TARGETS = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy', 'charge', 'tripwire', 'medpack']);   // Devices worth a Shock or Blackout.
+// Gear wave. What a bot plants where it means to stay, and what it does about the other side's kit.
+const PLACED_LETHALS = new Set(['mine', 'claymore', 'charge', 'tripwire']);
+const PLACE_SPOT = { mine: MINE_SPOT, claymore: MINE_SPOT, charge: 6, tripwire: 3.5 };
+const CHARGE_REACH = 4.2;       // An enemy this close to a bot's own armed Satchel is worth setting it off.
+const RUN_FROM = new Set(['frag', 'sticky', 'cluster', 'bomblet', 'impact', 'drill', 'charge', 'crawler', 'molotov', 'thermite']);
+const DODGE_SECS = 1.7;         // A fused grenade with more than this left is not yet worth running from.
+const DEVICE_SEE = 14;          // Metres at which a bot notices an enemy device it has a line to.
+const DANGER_DEVICES = new Set(['claymore', 'mine', 'tripwire', 'charge', 'crawler']);
 const SUPPRESSED_HEARING = 0.4; // Fraction of the normal hearing range for a suppressed shot.
 const HEAR_OCCLUDED = 0.6;      // Range left to hear a shot with a wall in the way.
 const HEAR_GAP = 0.45;          // A bot takes in one gunshot at a time, so a long burst cannot average away the error.
@@ -972,6 +980,7 @@ export class BotBrain {
     this._thinkStreaks(visible);
     this._thinkEquipment(visible);
     this._thinkTurrets(visible);
+    this._thinkThreats(visible);
 
     // Burning ground is a problem you can see, whichever side lit it.
     if (this.mode !== 'cover') {
@@ -1164,21 +1173,47 @@ export class BotBrain {
       return;
     }
 
-    // Things that are placed, not aimed: a Trophy and a Mine go down where the bot means to stay.
+    // A Satchel on the map is a trigger to watch: set it off the moment someone walks onto it.
+    if (ps.lethal === 'charge' && this._chargeReady()) { this._throw('lethal', ps.aim, 0); return; }
+
+    // Things that are placed, not aimed: they go down where the bot means to stay (a point, a flag, a site, a hold).
     if (this._dugIn) {
-      if (ps.tactical === 'trophy' && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
-        if (sim.rng() < S.flash) this._throw('tactical', ps.aim, MINE_SPOT);
+      const tac = ps.tactical;
+      if ((tac === 'trophy' || tac === 'sensor' || tac === 'bulwark' || (tac === 'medpack' && (p.hp < 80 || this._teammateNear(ps.x, ps.z, 5))))
+        && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
+        // A Sensor goes out ahead to watch the approach; a Bulwark goes a step forward, facing the same way.
+        const at = tac === 'sensor' ? 7 : tac === 'bulwark' ? 1.8 : tac === 'medpack' ? 1.2 : MINE_SPOT;
+        if (sim.rng() < S.flash + 0.2) this._throw('tactical', ps.aim, at);
         this.tacticalT = between(sim.rng, 10, 18);
       }
-      // A Claymore faces the way it is thrown: out along the bot's own watch line.
-      if ((ps.lethal === 'mine' || ps.lethal === 'claymore') && ps.lethalLeft > 0 && this.nadeT <= 0) {
-        if (sim.rng() < S.nade) this._throw('lethal', ps.aim, MINE_SPOT);
+      // A Claymore faces the way it is thrown: out along the bot's own watch line. A Tripwire on open ground strings
+      // its beam across that line; a Satchel goes further out, where the approach is.
+      if (PLACED_LETHALS.has(ps.lethal) && ps.lethalLeft > 0 && this.nadeT <= 0) {
+        if (sim.rng() < S.nade + 0.15) this._throw('lethal', ps.aim + gaussian(sim.rng) * 0.15, PLACE_SPOT[ps.lethal]);
         this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
       }
     }
 
-    // A vague contact is exactly when a Sensor earns its keep.
-    if (ps.tactical === 'sensor' && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible && this.hasKnown) {
+    // Hurt and out of the fight: a Medpack at the bot's feet.
+    if (ps.tactical === 'medpack' && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible && p.hp < 55) {
+      this._throw('tactical', ps.aim, 1.2);
+      this.tacticalT = between(sim.rng, 6, 10);
+      return;
+    }
+
+    // Recon before a push: on the way to an objective with nobody in sight, a Snapshot or Sensor goes onto it.
+    const o = this.objective;
+    if ((ps.tactical === 'snapshot' || ps.tactical === 'sensor') && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible
+      && o && this.mode === 'objective' && !this.arrived) {
+      const d = Math.hypot(o.x - ps.x, o.z - ps.z);
+      if (d > 7 && d < maxThrowRange(ps.perks) + 3) {
+        this.tacticalT = between(sim.rng, 8, 14);
+        if (sim.rng() < S.flash + 0.2) { this._throw('tactical', Math.atan2(o.z - ps.z, o.x - ps.x), d - 2); return; }
+      }
+    }
+
+    // A vague contact is exactly when a Snapshot (or a Sensor) earns its keep.
+    if ((ps.tactical === 'sensor' || ps.tactical === 'snapshot') && ps.tacticalLeft > 0 && this.tacticalT <= 0 && !visible && this.hasKnown) {
       const dist = Math.hypot(this.knownX - ps.x, this.knownZ - ps.z);
       if (dist < SENSOR_RANGE && dist > 4) {
         if (sim.rng() < S.flash) this._throw('tactical', Math.atan2(this.knownZ - ps.z, this.knownX - ps.x), dist);
@@ -1187,8 +1222,8 @@ export class BotBrain {
       }
     }
 
-    // A Shock goes at enemy devices the bot can actually see: it fries them.
-    if (ps.tactical === 'shock' && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
+    // A Shock or a Blackout goes at enemy devices the bot can actually see: it fries them.
+    if ((ps.tactical === 'shock' || ps.tactical === 'blackout') && ps.tacticalLeft > 0 && this.tacticalT <= 0) {
       const dev = this._seenDevice();
       if (dev) {
         this.tacticalT = between(sim.rng, 8, 14);
@@ -1209,13 +1244,45 @@ export class BotBrain {
       if (sim.rng() < S.flash) { this._throw('tactical', aim + (sim.rng() < 0.5 ? -1 : 1) * 1.1, 9); return; }
     }
 
-    if (ps.lethal === 'hatchet') {
-      // Thrown flat at someone it can see, inside the range it can actually hit from.
-      if (this.nadeT <= 0 && ps.lethalLeft > 0 && visible && d < 11 && d > 2.5) {
-        this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
+    // Pre-push: someone firm but out of sight a few metres round a corner gets a Flash or Stun first.
+    if ((ps.tactical === 'flash' || ps.tactical === 'stun') && !visible && fresh && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 5 && d < 14
+      && this.mode !== 'cover') {
+      const land = this._bestThrow(ps.tactical, aim, tx, tz, 4);
+      if (land && !this._teammateNear(land.x, land.z, 7)) {
+        this.tacticalT = between(sim.rng, 8, 15);
+        if (sim.rng() < S.flash) { this._throw('tactical', land.aim, land.dist); return; }
+      }
+    }
+
+    // A Tagger is a dart: thrown flat at someone in view, close enough to land it.
+    if (ps.tactical === 'tagger' && visible && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 4 && d < 14) {
+      this.tacticalT = between(sim.rng, 8, 14);
+      if (sim.rng() < S.flash + 0.2) { this._throw('tactical', aim, d + 1); return; }
+    }
+    // A Blackout goes where the enemy is, to strip their kit before the push.
+    if (ps.tactical === 'blackout' && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 6 && d < 15) {
+      const land = this._bestThrow('blackout', aim, tx, tz, 5);
+      if (land && Math.hypot(land.x - ps.x, land.z - ps.z) > 7.5) {
+        this.tacticalT = between(sim.rng, 9, 15);
+        if (sim.rng() < S.flash) { this._throw('tactical', land.aim, land.dist); return; }
+      }
+    }
+    // A Bulwark in an open gunfight: instant cover between the bot and the shooter.
+    if (ps.tactical === 'bulwark' && visible && ps.tacticalLeft > 0 && this.tacticalT <= 0 && d > 9 && this.mode !== 'cover' && p.hp < 90) {
+      this.tacticalT = between(sim.rng, 10, 16);
+      if (sim.rng() < S.flash + 0.2) { this._throw('tactical', aim, 1.8); return; }
+    }
+
+    if (ps.lethal === 'hatchet' || ps.lethal === 'shiv') {
+      // Thrown flat at someone it can see, inside the range it can actually hit from. A Shiv wants a turned back.
+      const reach = ps.lethal === 'shiv' ? 12 : 11;
+      const back = ps.lethal !== 'shiv' || Math.abs(angleDiff(this.target?.ps.aim ?? 0, Math.atan2(tz - ps.z, tx - ps.x))) < 1.1 || p.hp < 50;
+      if (this.nadeT <= 0 && ps.lethalLeft > 0 && visible && d < reach && d > 2.5 && back) {
+        this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]) * (ps.lethal === 'shiv' ? 0.5 : 1);
         if (sim.rng() < S.nade) { this._throw('lethal', aim, d); return; }
       }
-    } else if (ps.lethal !== 'mine' && ps.lethal !== 'claymore' && this.nadeT <= 0 && ps.lethalLeft > 0 && d > 6) {
+    } else if (!PLACED_LETHALS.has(ps.lethal) || (ps.lethal === 'charge' && visible && !sim.eq.remoteOf(p.id))) {
+      if (this.nadeT > 0 || ps.lethalLeft <= 0 || d <= 6) return this._thinkTacOpeners(visible, d, aim, tx, tz);
       // A Drill's landing is where it goes off, past the wall it bores through, so this also finds wall shots.
       const radius = effectRadius(ps.lethal);
       const land = this._bestThrow(ps.lethal, aim, tx, tz, radius * 0.7);
@@ -1230,7 +1297,11 @@ export class BotBrain {
         this.nadeT = 0.5;   // No line right now. Looking again every think would just burn time.
       }
     }
+    this._thinkTacOpeners(visible, d, aim, tx, tz);
+  }
 
+  _thinkTacOpeners(visible, d, aim, tx, tz) {
+    const { sim, ps, S } = this;
     // Stun and Shock open a fight with someone in view; Gas flushes someone dug in where the bot last saw them.
     const opener = ps.tactical === 'stun' ? 6 : ps.tactical === 'shock' ? 3.5 : ps.tactical === 'gas' ? 4 : 0;
     if (opener && ps.tacticalLeft > 0 && this.tacticalT <= 0 && (visible || ps.tactical === 'gas') && d > 5 && d < 15) {
@@ -1248,6 +1319,105 @@ export class BotBrain {
         if (sim.rng() < S.flash) this._throw('tactical', land.aim, land.dist);
         this.tacticalT = between(sim.rng, 8, 15);
       }
+    }
+  }
+
+  // An armed Satchel of this bot's with an enemy on it (seen, or right on top of it) and no teammate in the blast.
+  _chargeReady() {
+    const { sim, p, ps } = this, list = sim.eq.projectiles;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (c.kind !== 'charge' || c.owner !== p.id || !c.stuck || c.land < 0 || c.age - c.land < 0.4) continue;
+      if (this._teammateNear(c.x, c.z, 4.5) || Math.hypot(c.x - ps.x, c.z - ps.z) < 4) continue;
+      for (let k = 0; k < sim.players.length; k++) {
+        const q = sim.players[k];
+        if (!q.alive || q.team === p.team || q.spawnProtect > 0) continue;
+        const d = Math.hypot(q.ps.x - c.x, q.ps.z - c.z);
+        if (d < 2 || (d < CHARGE_REACH && hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes))) return true;
+      }
+    }
+    return false;
+  }
+
+  // The team's recon (Sensor, Snapshot, Tagger) put an enemy on the map: a firm fix, if it is anywhere near.
+  onMarked(q) {
+    const { ps } = this;
+    if (!q || !q.alive || Math.hypot(q.ps.x - ps.x, q.ps.z - ps.z) > 32) return;
+    if (this.targetVisible && this.target === q) return;
+    this._note(q.ps.x, q.ps.z, false, 1.2);
+  }
+
+  // Gear wave. Reacting to the other side's equipment: run from a grenade about to go off, get out of a claymore's
+  // cone or off a tripwire's beam, and shoot devices the bot can see (the tiers that shoot sentries do this too).
+  _thinkThreats(visible) {
+    const { sim, p, ps, S } = this, list = sim.eq.projectiles;
+    // A committed objective (a flag run, a grab, a plant) does not stop for kit, the same way it does not retreat.
+    if (this.objective?.commit || !list.length) return;
+    let threat = null, worst = 0;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q.dead || q.owner === p.id || q.team === p.team) continue;
+      const spec = EQUIPMENT[q.kind];
+      const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+      let danger = 0;
+      if (RUN_FROM.has(q.kind) && q.attached === null) {
+        const r = (spec.blast ? spec.blast.radius : spec.burn ? spec.burn.radius + 0.6 : 3.2) + 0.6;
+        const left = spec.remote || spec.crawl ? 0 : spec.fuse - q.age;
+        if (d < r && left < DODGE_SECS && (q.grounded || q.stuck)) danger = (r - d) / r + (spec.remote ? 0.2 : 0.5);
+      } else if (q.kind === 'claymore' && q.stuck && d < 5) {
+        const a = Math.atan2(ps.z - q.z, ps.x - q.x) - Math.atan2(q.vz, q.vx);
+        if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.75) danger = 0.6;
+      } else if (q.kind === 'tripwire' && q.stuck && d < 8) {
+        const b = tripBeam(sim.map, q.x, q.z, q.vx, q.vz);
+        const dx = b.x1 - b.x0, dz = b.z1 - b.z0, l2 = dx * dx + dz * dz || 1;
+        const u = Math.max(0, Math.min(1, ((ps.x - b.x0) * dx + (ps.z - b.z0) * dz) / l2));
+        if (Math.hypot(ps.x - b.x0 - dx * u, ps.z - b.z0 - dz * u) < 1.6) danger = 0.5;
+      }
+      if (danger <= worst) continue;
+      // Only what the bot could know about: in view, or right next to it.
+      if (d > 3 && !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z, sim.smokes)) continue;
+      worst = danger; threat = q;
+    }
+    if (threat) {
+      if (this.dodgeId !== threat.id) { this.dodgeId = threat.id; this.dodgeRoll = sim.rng() < S.dodge; }
+      if (this.dodgeRoll && !(this.mode === 'cover' && this.dodgeFrom === threat.id)) {
+        this.dodgeFrom = threat.id;
+        if (!this._coverFrom(threat.x, threat.z)) {
+          const a = Math.atan2(ps.z - threat.z, ps.x - threat.x);
+          this.mode = 'cover'; this.modeT = 2;
+          this._goTo(ps.x + Math.cos(a) * 7, ps.z + Math.sin(a) * 7);
+        }
+      }
+    }
+    this._thinkDevices(visible);
+  }
+
+  // A visible enemy device worth killing: the shooting tiers put rounds into it between fights (see drive: it rides
+  // the sentry target), and a bot that will not shoot it steps back out of its reach instead.
+  _thinkDevices(visible) {
+    const { sim, p, ps, S } = this, list = sim.eq.projectiles;
+    if (visible || this.flashT > 0 || (this.turretTarget && this.turretTarget !== this.devTarget)) return;
+    const dev = this.devTarget ??= { x: 0, z: 0, p: null, get hp() { return this.p && !this.p.dead ? 1 : 0; } };
+    if (this.turretTarget === dev && dev.hp > 0) return;
+    let best = null, bestD = DEVICE_SEE;
+    for (let i = 0; i < list.length; i++) {
+      const q = list[i];
+      if (q.dead || !SHOOTABLE.has(q.kind) || q.attached !== null || !(q.stuck || q.grounded) || q.owner === p.id || q.team === p.team) continue;
+      const d = Math.hypot(q.x - ps.x, q.z - ps.z);
+      if (d >= bestD || d < 1.5 || !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z, sim.smokes)) continue;
+      best = q; bestD = d;
+    }
+    if (!best) { if (this.turretTarget === dev) this.turretTarget = null; return; }
+    if (S.turret === 'shoot' || (S.turret === 'cover' && sim.rng() < 0.5)) {
+      dev.p = best; dev.x = best.x; dev.z = best.z;
+      if (this.turretTarget !== dev) {
+        this.reactLeft = between(sim.rng, S.reaction[0], S.reaction[1]);
+        this.reactTotal = this.reactLeft;
+        this.useAds = bestD > 7;
+      }
+      this.turretTarget = dev;
+    } else if (DANGER_DEVICES.has(best.kind) && bestD < 5 && this.mode !== 'cover') {
+      this._coverFrom(best.x, best.z);
     }
   }
 

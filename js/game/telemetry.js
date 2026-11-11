@@ -50,7 +50,13 @@ export const FIELDS = [
   'adsHits',    // hits from shots of each kind
   'hipHits',
   'coneShots',  // shots fired while an enemy was in front of the muzzle: in range, in sight, within CONE of the aim
+  // Gear wave, appended the same way. Equipment has rows of its own, keyed `eq:<kind>` (EQ_PREFIX) beside the guns,
+  // reusing the fields that mean the same thing: shots = thrown or used, hits/dmg = hits it did, kills = kills it got,
+  // picks = player-matches that carried it. `effects` is enemies it affected without damage (flashed, stunned, gassed,
+  // marked, jammed, stuck), plus heal ticks for a Medpack and catches for a Trophy.
+  'effects',
 ];
+export const EQ_PREFIX = 'eq:';
 const F = Object.fromEntries(FIELDS.map((k, i) => [k, i]));
 const NF = FIELDS.length;
 export const SCOPES = ['a', 'h', 'm'];
@@ -129,6 +135,7 @@ export class MatchTelemetry {
       if (!v.alive || !v.weapon || v.dummy) continue;
       const p = this.#player(v);
       p.held[v.weapon] = (p.held[v.weapon] || 0) + dt;
+      if (v.tactical) { p.kitT = v.tactical; p.kitL = v.lethal; }
       this.#add(v.id, v.weapon, F.heldS, dt);
     }
   }
@@ -147,6 +154,7 @@ export class MatchTelemetry {
         case 'hit': this.#onHit(e); break;
         case 'kill': this.#onKill(e, view); break;
         case 'spawn': this.fights.delete(e.id); break;
+        default: this.#onGear(e); break;
       }
     }
   }
@@ -181,8 +189,27 @@ export class MatchTelemetry {
     }
   }
 
+  // Equipment rows (see EQ_PREFIX). Effects count once per enemy per event.
+  #onGear(e) {
+    switch (e.t) {
+      case 'throw': this.#add(e.id, EQ_PREFIX + e.kind, F.shots, 1); break;
+      case 'flashed': this.#add(e.by, EQ_PREFIX + 'flash', F.effects, 1); break;
+      case 'dazed': if (e.kind) this.#add(e.by, EQ_PREFIX + e.kind, F.effects, 1); break;
+      case 'marked': this.#add(e.by, EQ_PREFIX + (e.kind || 'sensor'), F.effects, 1); break;
+      case 'jammed': this.#add(e.by, EQ_PREFIX + 'blackout', F.effects, 1); break;
+      case 'stuck': this.#add(e.by, EQ_PREFIX + e.kind, F.effects, 1); break;
+      case 'zap': this.#add(e.by, EQ_PREFIX + 'trophy', F.effects, 1); break;
+      case 'heal': if (e.kind) this.#add(e.by, EQ_PREFIX + e.kind, F.effects, 1); break;
+    }
+  }
+
   #onHit(e) {
-    if (!e.w) return;                 // A streak or thrown kit: not gunplay.
+    if (e.eq) {                       // Thrown kit: its own row.
+      this.#add(e.by, EQ_PREFIX + e.eq, F.hits, 1);
+      this.#add(e.by, EQ_PREFIX + e.eq, F.dmg, e.dmg || 0);
+      return;
+    }
+    if (!e.w) return;                 // A streak: not gunplay.
     const by = e.by, gun = e.w, dmg = e.dmg || 0;
     this.#add(by, gun, F.hits, 1);
     if (this.lastAds.has(by)) this.#add(by, gun, this.lastAds.get(by) ? F.adsHits : F.hipHits, 1);
@@ -208,6 +235,7 @@ export class MatchTelemetry {
     this.#add(e.target, vw, F.deaths, 1);
     const f = this.fights.get(e.target);
     this.fights.delete(e.target);
+    if (e.equip && e.by !== e.target) this.#add(e.by, EQ_PREFIX + e.equip, F.kills, 1);
     if (e.streak || e.equip) return;
     this.#add(e.by, e.weapon, F.kills, 1);
     if (e.head) this.#add(e.by, e.weapon, F.headKills, 1);
@@ -236,6 +264,7 @@ export class MatchTelemetry {
         if (p.held[gun] < PICK_SECONDS) continue;
         this.#add(id, gun, F.picks, 1);
       }
+      if (p.kitT) { this.#add(id, EQ_PREFIX + p.kitT, F.picks, 1); this.#add(id, EQ_PREFIX + p.kitL, F.picks, 1); }
     }
     const g = {};
     for (const s of SCOPES) {
@@ -345,6 +374,17 @@ export function gunRows(agg, scope, ids) {
       // V10 split; null for rows recorded before it (see FIELDS). split = shots that have a stance recorded.
       ...stanceOf(r),
     };
+  });
+}
+
+// One row per piece of equipment in a scope: uses, kills, hits, damage and effects, per carrier and per use.
+export function gearRows(agg, scope, ids) {
+  const g = agg.g[scope] || {};
+  return ids.map(id => {
+    const r = g[EQ_PREFIX + id] || newRow();
+    const uses = r[F.shots], kills = r[F.kills], picks = r[F.picks];
+    return { id, uses, kills, hits: r[F.hits], dmg: r[F.dmg], effects: r[F.effects] || 0, picks,
+      killsPerUse: uses ? kills / uses : null, usesPerPick: picks ? uses / picks : null };
   });
 }
 

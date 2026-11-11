@@ -94,6 +94,17 @@ export const UNLOCK_SCHEDULE = [
   { level: 11, kind: 'tactical', id: 'gas' },
   { level: 15, kind: 'lethal',   id: 'drill' },
   { level: 16, kind: 'tactical', id: 'shock' },
+  // Gear wave (2026-11): one new piece most levels from 3 to 17, so every few levels opens something to try.
+  { level: 3,  kind: 'lethal',   id: 'shiv' },
+  { level: 4,  kind: 'tactical', id: 'medpack' },
+  { level: 6,  kind: 'lethal',   id: 'thermite' },
+  { level: 7,  kind: 'tactical', id: 'snapshot' },
+  { level: 8,  kind: 'lethal',   id: 'crawler' },
+  { level: 9,  kind: 'tactical', id: 'bulwark' },
+  { level: 10, kind: 'lethal',   id: 'charge' },
+  { level: 12, kind: 'tactical', id: 'tagger' },
+  { level: 13, kind: 'lethal',   id: 'tripwire' },
+  { level: 17, kind: 'tactical', id: 'blackout' },
   { level: 3,  kind: 'streak',   id: 'jammer' },
   { level: 5,  kind: 'streak',   id: 'resupply' },
   { level: 7,  kind: 'streak',   id: 'mortar' },
@@ -445,6 +456,12 @@ const GEAR_TRACKS = {
     stun:   [T('uses', 20, 'Throw 20 Stuns'), T('dazed', 30, 'Stun 30 enemies'), T('dazeKills', 10, 'Kill 10 enemies you stunned'), T('dazeKills', 35, 'Kill 35 enemies you stunned')],
     gas:    [T('uses', 15, 'Throw 15 Gas grenades'), T('dazed', 25, 'Gas 25 enemies'), T('dazeKills', 10, 'Kill 10 enemies you gassed'), T('dazeKills', 35, 'Kill 35 enemies you gassed')],
     shock:  [T('uses', 15, 'Throw 15 Shocks'), T('fried', 8, 'Fry 8 enemy devices'), T('dazeKills', 10, 'Kill 10 enemies you shocked'), T('fried', 30, 'Fry 30 enemy devices')],
+    // Gear wave.
+    snapshot: [T('uses', 15, 'Throw 15 Snapshots'), T('marked', 30, 'Reveal 30 enemies'), T('markKills', 10, 'Kill 10 enemies you revealed'), T('markKills', 35, 'Kill 35 enemies you revealed')],
+    blackout: [T('uses', 15, 'Throw 15 Blackouts'), T('jammed', 25, 'Jam 25 enemies'), T('jamKills', 10, 'Kill 10 enemies you jammed'), T('fried', 25, 'Destroy 25 enemy devices with Blackout')],
+    bulwark:  [T('uses', 15, 'Deploy 15 Bulwarks'), T('coverKills', 10, 'Get 10 kills within 12 s of a Bulwark'), T('uses', 50, 'Deploy 50 Bulwarks'), T('coverKills', 40, 'Get 40 kills within 12 s of a Bulwark')],
+    tagger:   [T('uses', 15, 'Throw 15 Taggers'), T('tagged', 10, 'Stick a Tagger on 10 enemies'), T('markKills', 10, 'Kill 10 enemies you tagged'), T('markKills', 35, 'Kill 35 enemies you tagged')],
+    medpack:  [T('uses', 15, 'Drop 15 Medpacks'), T('healed', 800, 'Heal 800 health'), T('mates', 500, 'Heal teammates for 500 health'), T('healed', 4000, 'Heal 4,000 health')],
   },
   lethal: {
     frag:    [T('uses', 30, 'Throw 30 Frags'), T('kills', 25, 'Get 25 Frag kills'), T('bankKills', 5, 'Get 5 kills with a Frag banked off a wall'), T('multi', 10, 'Kill 2 or more with one Frag 10 times')],
@@ -456,6 +473,12 @@ const GEAR_TRACKS = {
     impact:   [T('uses', 25, 'Throw 25 Impacts'), T('kills', 20, 'Get 20 Impact kills'), T('directKills', 5, 'Get 5 Impact kills on a direct hit'), T('multi', 5, 'Kill 2 or more with one Impact 5 times')],
     claymore: [T('uses', 15, 'Place 15 Claymores'), T('kills', 10, 'Get 10 Claymore kills'), T('multi', 3, 'Kill 2 or more with one Claymore 3 times'), T('kills', 40, 'Get 40 Claymore kills')],
     drill:    [T('uses', 20, 'Throw 20 Drills'), T('kills', 10, 'Get 10 Drill kills'), T('wallKills', 8, 'Get 8 Drill kills through a wall'), T('wallKills', 30, 'Get 30 Drill kills through a wall')],
+    // Gear wave.
+    charge:   [T('uses', 20, 'Plant 20 Satchels'), T('kills', 15, 'Get 15 Satchel kills'), T('multi', 4, 'Kill 2 or more with one Satchel 4 times'), T('kills', 45, 'Get 45 Satchel kills')],
+    thermite: [T('uses', 20, 'Throw 20 Thermites'), T('kills', 10, 'Get 10 Thermite kills'), T('melted', 10, 'Melt 10 enemy devices or Bulwarks'), T('kills', 35, 'Get 35 Thermite kills')],
+    tripwire: [T('uses', 15, 'Set 15 Tripwires'), T('kills', 10, 'Get 10 Tripwire kills'), T('multi', 3, 'Kill 2 or more with one Tripwire 3 times'), T('kills', 35, 'Get 35 Tripwire kills')],
+    crawler:  [T('uses', 20, 'Throw 20 Crawlers'), T('kills', 15, 'Get 15 Crawler kills'), T('multi', 4, 'Kill 2 or more with one Crawler 4 times'), T('kills', 45, 'Get 45 Crawler kills')],
+    shiv:     [T('uses', 25, 'Throw 25 Shivs'), T('kills', 10, 'Get 10 Shiv kills'), T('backKills', 8, 'Get 8 Shiv kills in the back'), T('kills', 40, 'Get 40 Shiv kills')],
   },
   streak: {
     uav:       [T('uses', 5, 'Call in 5 UAVs'), T('upKills', 15, 'Get 15 kills while your UAV is up'), T('uses', 20, 'Call in 20 UAVs'), T('upKills', 60, 'Get 60 kills while your UAV is up')],
@@ -634,6 +657,7 @@ export const UNLOCK_CHALLENGES = {
   'lethal:cluster':  { label: 'Get 10 Frag kills', goal: 10, value: s => s.mastery?.frag?.s?.kills ?? 0 },
   'lethal:hatchet':  { label: 'Get 15 lethal equipment kills', goal: 15, value: s => total(s, 'lethal', 'kills') },
   'tactical:trophy': { label: 'Throw 40 tactical equipment', goal: 40, value: s => total(s, 'tactical', 'uses') },
+  'tactical:blackout': { label: 'Throw 60 tactical equipment', goal: 60, value: s => total(s, 'tactical', 'uses') },
   'streak:chopper':  { label: 'Call in 5 scorestreaks', goal: 5, value: s => total(s, 'streak', 'uses') },
   'streak:emp':      { label: 'Call in 10 scorestreaks', goal: 10, value: s => total(s, 'streak', 'uses') },
   'streak:gunship':  { label: 'Get 15 scorestreak kills', goal: 15, value: s => total(s, 'streak', 'kills') },
@@ -670,10 +694,12 @@ function grandfather(s) {
 
 /* ---------- Counting mastery in a match ---------- */
 const UP_SECS = { uav: 20, jammer: 15, overwatch: 25, emp: 20 };   // How long each counts as "up" for upKills.
-const AFTER_SECS = { smoke: 9, stim: 5, decoy: 10 };                // A kill this soon after using it counts for it.
-const AFTER_STAT = { smoke: 'coverKills', stim: 'stimKills', decoy: 'decoyKills' };
+const AFTER_SECS = { smoke: 9, stim: 5, decoy: 10, bulwark: 12 };                // A kill this soon after using it counts for it.
+const AFTER_STAT = { smoke: 'coverKills', stim: 'stimKills', decoy: 'decoyKills', bulwark: 'coverKills' };
+const JAM_KILL_SECS = 6;         // Blackout: a kill on an enemy this player jammed, while they are jammed.
+const MEDPACK_TICK = 7;          // Health per Medpack heal event (js/sim/equipment.js medpack.medic.amount).
 const FLASH_KILL_SECS = 4;
-const MULTI_GAP = { molotov: 1.5, mine: 0.6, claymore: 0.6 };       // Kills by one item this close are one multi-kill.
+const MULTI_GAP = { molotov: 1.5, mine: 0.6, claymore: 0.6, thermite: 1.5, tripwire: 0.6, charge: 0.6, crawler: 0.6 };       // Kills by one item this close are one multi-kill.
 const DAZE_KILL_SECS = 4;        // A kill this soon after this player stunned, gassed or shocked the victim counts for that item.
 const DAZE_RECOUNT = 3;          // Gas keeps re-dazing: the same enemy counts again only after this long.
 const BANG_KILL_SECS = 0.4;      // A Drill or Impact kill this soon after its bang belongs to that bang (wall, direct).
@@ -698,7 +724,9 @@ export class MasteryTracker {
     this.used = {};              // item -> last time used; frag also keeps whether it banked
     this.fragBank = false;
     this.flashed = new Map();    // enemy id -> when this player flashed them
-    this.marked = new Map();     // enemy id -> until when this player's sensor shows them
+    this.marked = new Map();     // enemy id -> {until, kind}: this player's recon (Sensor, Snapshot, Tagger) shows them
+    this.jammed = new Map();     // enemy id -> until when this player's Blackout jams them
+    this.backT = -99;            // When this player last landed a Shiv in someone's back
     this.dazedBy = new Map();    // enemy id -> {kind, t} this player last stunned, gassed or shocked them
     this.bangs = {};             // Drill and Impact: when this player's last one went off, and how
     this.up = {};                // streak -> until
@@ -760,16 +788,27 @@ export class MasteryTracker {
           break;
         case 'heal':
           // A Stim has no throw: it is a heal of this player that no kill (Adrenaline) or Supply Drop explains.
-          if (e.id === id) {
+          if (e.kind) {                 // Medpack ticks carry their kind and owner.
+            if (e.by === id && TACTICALS[e.kind]) { this.add(e.kind, 'healed', MEDPACK_TICK); if (e.id !== id) this.add(e.kind, 'mates', MEDPACK_TICK); }
+          } else if (e.id === id) {
             if (t - this.killT > 0.3 && t - this.supplyT > 0.6) { this.add('stim', 'uses'); this.used.stim = t; }
           } else if (t - this.supplyT <= 0.6 && this.supplyMine && !this.#enemy(view, e.id)) this.add('resupply', 'supplied');
           break;
         case 'flashed':
           if (e.by === id && e.id !== id && this.#enemy(view, e.id)) { this.add('flash', 'blinded'); this.flashed.set(e.id, t); }
           break;
-        case 'marked':
-          if (e.by === id) { this.add('sensor', 'marked'); this.marked.set(e.id, t + (e.dur ?? 3)); }
+        case 'marked': {
+          const k = TACTICALS[e.kind] ? e.kind : 'sensor';
+          if (e.by === id && this.#enemy(view, e.id)) {
+            const was = this.marked.get(e.id);
+            if (!was || was.kind !== k || was.until < t) this.add(k, 'marked');    // A planted Sensor re-pings: one count per sighting.
+            this.marked.set(e.id, { until: t + (e.dur ?? 3), kind: k });
+          }
           break;
+        }
+        case 'jammed': if (e.by === id) { this.add('blackout', 'jammed'); this.jammed.set(e.id, t + JAM_KILL_SECS); } break;
+        case 'stuck': if (e.by === id && e.kind === 'tagger') this.add('tagger', 'tagged'); break;
+        case 'hit': if (e.by === id && e.eq === 'shiv' && e.dmg >= MAX_HP) this.backT = t; break;
         case 'zap': if (e.by === id) this.add('trophy', 'saves'); break;
         case 'dazed': {
           if (e.by !== id || e.id === id || !TACTICALS[e.kind] || !this.#enemy(view, e.id)) break;
@@ -778,7 +817,8 @@ export class MasteryTracker {
           this.dazedBy.set(e.id, { kind: e.kind, t });
           break;
         }
-        case 'fried': if (e.by === id) this.add('shock', 'fried'); break;
+        case 'fried': if (e.by === id) this.add(e.src === 'thermite' ? 'thermite' : e.src === 'blackout' ? 'blackout' : 'shock', e.src === 'thermite' ? 'melted' : 'fried'); break;
+        case 'popped': if (e.by === id && e.src === 'thermite') this.add('thermite', 'melted'); break;
         case 'bang':
           if (e.by === id && (e.kind === 'drill' || e.kind === 'impact')) this.bangs[e.kind] = { t, wall: !!e.wall, direct: !!e.direct };
           break;
@@ -837,7 +877,10 @@ export class MasteryTracker {
     }
     for (const k of Object.keys(AFTER_SECS)) if (t - (this.used[k] ?? -99) <= AFTER_SECS[k]) this.add(k, AFTER_STAT[k]);
     if (t - (this.flashed.get(e.target) ?? -99) <= FLASH_KILL_SECS) this.add('flash', 'flashKills');
-    if ((this.marked.get(e.target) ?? -1) >= t) this.add('sensor', 'markKills');
+    const mk = this.marked.get(e.target);
+    if (mk && mk.until >= t) this.add(mk.kind, 'markKills');
+    if ((this.jammed.get(e.target) ?? -1) >= t) this.add('blackout', 'jamKills');
+    if (e.equip === 'shiv' && t - this.backT <= 0.3) this.add('shiv', 'backKills');
     const dz = this.dazedBy.get(e.target);
     if (dz && t - dz.t <= DAZE_KILL_SECS) this.add(dz.kind, 'dazeKills');
     if (e.equip) {

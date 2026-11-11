@@ -295,6 +295,12 @@ const SQUARE = {
   stun: { f: [R(10, 13.5, 12, 15.5, 1), R(12, 10, 8, 3.5, 0.6)], h: [R(12, 18, 8, 2), R(12, 22.5, 8, 2)], as: [arc(16, 9, 11.5, 200, 340)], a: [star(5.5, 5.5, 3.2, 1.2, 4), star(16, 2.6, 2.6, 1, 4), star(26.5, 5.5, 3.2, 1.2, 4)], sw: 2 },
   gas: { f: [R(9.5, 14, 13, 15.5, 1.5), R(12, 10.5, 8, 3.5, 0.6), R(18, 7, 3, 3.5)], h: [O(16, 21.5, 3.6)], a: [O(16, 21.5, 2), O(24.5, 5, 3), O(28.5, 11, 2), O(20.5, 2.5, 1.6)] },
   shock: { f: [P(3, 21.5, 16, 16, 29, 21.5, 29, 25, 16, 30.5, 3, 25)], h: [P(9, 22.6, 16, 19.8, 23, 22.6, 16, 25.4)], a: [P(19, 1, 9, 13.5, 15, 13.5, 11.5, 21, 23.5, 9.5, 17.5, 9.5, 21.5, 1)] },
+  // Gear wave: a can with a lens and its flash; an EMP puck and its bolt; a shield on legs; a dart; a med case.
+  snapshot: { f: [R(5, 11, 22, 16, 1.5), R(11, 7.5, 10, 3.5, 0.6)], h: [O(16, 19, 5.2)], a: [O(16, 19, 3), star(26, 5, 4, 1.4, 4)] },
+  blackout: { f: [O(16, 17, 12)], h: [O(16, 17, 9.4)], a: [P(18.5, 5, 10, 18.5, 15, 18.5, 12.5, 29, 22, 15, 17, 15, 19.5, 5)] },
+  bulwark: { f: [P(2.5, 6, 29.5, 6, 29.5, 20, 16, 25, 2.5, 20), bar(7, 21, 5, 30, 2.6), bar(25, 21, 27, 30, 2.6)], h: [R(5.5, 9, 21, 2)], a: [R(5.5, 12.5, 21, 3)] },
+  tagger: rotSpec({ f: [P(5, 14, 21, 14, 21, 18, 5, 18), P(21, 12.5, 30.5, 16, 21, 19.5)], h: [R(8, 15.2, 9, 1.6)], a: [P(5, 14, 1, 9, 9, 14), P(5, 18, 1, 23, 9, 18)] }, -35),
+  medpack: { f: [R(3.5, 10, 25, 18, 2), R(12, 6, 8, 3.5, 0.6)], h: [R(14, 13, 4, 12), R(10, 17, 12, 4)], a: [R(14.8, 13.8, 2.4, 10.4), R(10.8, 17.8, 10.4, 2.4)] },
 
   // ---- Lethals ----
   frag: { f: [O(15, 19.5, 10), R(11.5, 7, 7, 4, 0.6), P(18.5, 6.5, 23, 6.5, 25.5, 9.5, 25.5, 19, 22.5, 19, 22.5, 10, 18.5, 10), O(8.5, 6.5, 3.8)], h: [R(8, 16, 14, 1.8), R(8, 21, 14, 1.8), O(8.5, 6.5, 1.9)] },
@@ -307,6 +313,12 @@ const SQUARE = {
   impact: { f: [O(13, 19.5, 9.5), R(10, 5.5, 6, 4.5, 0.6), R(11.5, 3, 3, 2.5)], h: [R(7, 18.6, 12, 1.8)], a: [star(25.5, 7.5, 5.5, 2, 6)] },
   claymore: { f: [P(4, 23, 16, 19, 28, 23, 28, 27.5, 16, 23.5, 4, 27.5), bar(8, 26, 6.5, 30.5, 2.2), bar(24, 26, 25.5, 30.5, 2.2)], a: [P(16, 17.5, 4, 2.5, 28, 2.5)], ah: [P(16, 13, 9.5, 5, 22.5, 5)] },
   drill: { b: [R(17, 2, 5.5, 28)], f: [R(1.5, 10.5, 10.5, 11, 1), R(12, 13, 3, 6), P(15, 12.5, 23, 14.5, 23, 17.5, 15, 19.5)], h: [R(4, 13.5, 5.5, 1.6), R(4, 16.8, 5.5, 1.6)], a: [P(23, 13.5, 30.5, 16, 23, 18.5)] },
+  // Gear wave: a charge with its aerial; a canister throwing sparks; a wall anchor and its beam; a legged puck; a knife.
+  charge: { f: [R(3, 13, 24, 15, 1.5), bar(21, 13, 25.5, 4.5, 2.2)], h: [R(6, 16, 9, 9)], a: [O(26, 3.8, 2.6), R(17.5, 17.5, 7, 3)] },
+  thermite: { f: [R(10, 13, 12, 17, 1.5), R(12, 9.5, 8, 3.5, 0.6)], h: [R(12, 18, 8, 2), R(12, 22.5, 8, 2)], a: [star(16, 4.6, 4.6, 1.6, 6), O(6, 9, 1.6), O(26, 9, 1.6)] },
+  tripwire: { b: [R(1, 2, 4.5, 28)], f: [R(5, 11, 8, 10, 1)], h: [R(7, 13.5, 4, 5)], a: [R(13, 15, 5, 2.2), R(19.5, 15, 5, 2.2), R(26, 15, 5, 2.2)] },
+  crawler: { f: [O(16, 16, 8.5), bar(10, 11, 3.5, 5, 2.6), bar(22, 11, 28.5, 5, 2.6), bar(10, 21, 3.5, 27, 2.6), bar(22, 21, 28.5, 27, 2.6)], h: [O(16, 16, 5)], a: [O(16, 16, 3)] },
+  shiv: rotSpec({ f: [R(2, 13.5, 9, 5, 1), R(11, 12, 2, 8), P(13, 13.5, 24, 13.5, 30.5, 16, 24, 18.5, 13, 18.5)], h: [R(4, 15.2, 5, 1.6)], a: [P(13, 18.5, 24, 18.5, 30.5, 16, 24, 17, 13, 17)] }, -40),
 
   // ---- Perks: Body ----
   marathon: { f: [P(6, 17, 9.5, 8.5, 15, 8.5, 17, 14, 26.5, 16.5, 30, 20.5, 30, 25.5, 6, 25.5)], h: [R(8, 21.5, 20, 1.8), R(11.5, 11, 3, 1.4), R(12.5, 13.6, 3, 1.4)], s: [P(1.5, 12, 4.5, 12), P(1, 17.5, 3, 17.5)], sw: 2.6 },
@@ -486,8 +498,8 @@ export const ICON_GROUPS = {
   weapons: Object.keys(WEAPON_SPECS),
   categories: Object.keys(CATEGORY_WEAPON).map(c => 'cat:' + c),
   streaks: ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut'],
-  tacticals: ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock'],
-  lethals: ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill'],
+  tacticals: ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock', 'snapshot', 'blackout', 'bulwark', 'tagger', 'medpack'],
+  lethals: ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill', 'charge', 'thermite', 'tripwire', 'crawler', 'shiv'],
   objectives: ['bomb'],
   perks: ['marathon', 'flak', 'quickmend', 'tacmask', 'adrenaline', 'scavenger', 'fasthands', 'strongarm', 'bandolier', 'hardline', 'ghost', 'coldblood', 'deadsilence', 'tracker', 'engineer'],
   slots: ['optic', 'barrel', 'mag', 'grip'],

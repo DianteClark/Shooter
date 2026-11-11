@@ -3,7 +3,8 @@
 // Mount like the options screen: statsScreen(menu, { onBack }).
 import { CATEGORIES, WEAPON_CATEGORY, WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { DIST_LABELS, GunStats, gunRows } from '../game/telemetry.js';
+import { DIST_LABELS, GunStats, gunRows, gearRows } from '../game/telemetry.js';
+import { TACTICALS, LETHALS } from '../shared/catalog.js';
 import { esc } from './widgets.js';
 import { ico, backButton } from './yard.js';
 
@@ -20,6 +21,18 @@ const COLUMNS = [
   { key: 'kpm', label: 'K/min', fmt: r => num(r.kpm, 2) },
 ];
 
+// The Gear tab: one row per tactical and lethal (telemetry's eq: rows).
+const GEAR_TAB = 'Gear';
+const GEAR_IDS = [...Object.keys(TACTICALS), ...Object.keys(LETHALS)];
+const GEAR_COLUMNS = [
+  { key: 'uses', label: 'Uses', fmt: r => r.uses },
+  { key: 'kills', label: 'Kills', fmt: r => r.kills },
+  { key: 'killsPerUse', label: 'K/use', fmt: r => num(r.killsPerUse, 2) },
+  { key: 'dmg', label: 'Dmg', fmt: r => r.dmg },
+  { key: 'effects', label: 'Effect', fmt: r => r.effects },
+  { key: 'usesPerPick', label: 'Use/c', fmt: r => num(r.usesPerPick, 1) },
+];
+
 const num = (v, d) => v === null || v === undefined ? '-' : v.toFixed(d);
 const pct = v => v === null || v === undefined ? '-' : `${Math.round(v * 100)}%`;
 
@@ -29,9 +42,11 @@ export function statsScreen(menu, { onBack }) {
 
   const paint = () => {
     const agg = GunStats.totals();
+    const gear = state.cat === GEAR_TAB, cols = gear ? GEAR_COLUMNS : COLUMNS;
+    if (!cols.some(c => c.key === state.sort)) state.sort = cols[0].key;
     const ids = WEAPON_IDS.filter(id => state.cat === 'All' || WEAPON_CATEGORY[id] === state.cat);
-    const col = COLUMNS.find(c => c.key === state.sort);
-    const rows = gunRows(agg, state.scope, ids).sort((a, b) => {
+    const col = cols.find(c => c.key === state.sort);
+    const rows = (gear ? gearRows(agg, state.scope, GEAR_IDS) : gunRows(agg, state.scope, ids)).sort((a, b) => {
       const va = a[state.sort], vb = b[state.sort];
       if (va === null && vb === null) return b.kills - a.kills;
       if (va === null) return 1;
@@ -49,15 +64,19 @@ export function statsScreen(menu, { onBack }) {
           `<button class="seg${state.scope === s ? ' on' : ''}" data-act="stScope" data-s="${s}">${ico(SCOPE_ICON[s])}${l}</button>`).join('')}</div>
         <small class="st-count">${ico('timer')}${agg.matches} match${agg.matches === 1 ? '' : 'es'}</small>
       </header>
-      <div class="st-cats"${first ? ' data-in="fade"' : ''}>${['All', ...CATEGORIES].map(c =>
-        `<button class="seg${state.cat === c ? ' on' : ''}" data-act="stCat" data-c="${c}">${c === 'All' ? '' : ico(`cat:${c}`)}<b>${c}</b></button>`).join('')}</div>
+      <div class="st-cats"${first ? ' data-in="fade"' : ''}>${['All', ...CATEGORIES, GEAR_TAB].map(c =>
+        `<button class="seg${state.cat === c ? ' on' : ''}" data-act="stCat" data-c="${c}">${c === 'All' ? '' : c === GEAR_TAB ? ico('frag') : ico(`cat:${c}`)}<b>${c}</b></button>`).join('')}</div>
       <div class="st-table"${first ? ' data-in="up"' : ''}>
         <div class="st-row st-head">
-          <span class="st-gun">Gun</span>
-          ${COLUMNS.map(c => `<button class="st-h${state.sort === c.key ? ' on' : ''}" data-act="stSort" data-k="${c.key}">${c.label}${state.sort === c.key ? ico('down', 'st-arrow') : ''}</button>`).join('')}
+          <span class="st-gun">${gear ? 'Equipment' : 'Gun'}</span>
+          ${cols.map(c => `<button class="st-h${state.sort === c.key ? ' on' : ''}" data-act="stSort" data-k="${c.key}">${c.label}${state.sort === c.key ? ico('down', 'st-arrow') : ''}</button>`).join('')}
         </div>
         <div class="st-body scroll-y">
-          ${empty || scopeEmpty ? `<div class="st-empty">${ico('stats')}<b>${empty ? 'No matches recorded yet' : `No matches with ${SCOPE_LABEL[state.scope].toLowerCase()} in them yet`}</b><p>${empty ? 'Play a match and every gun used in it shows up here.' : 'Switch to Everyone to see all recorded matches.'}</p></div>` : rows.map(r => `
+          ${gear && !(empty || scopeEmpty) ? rows.map(r => `
+          <div class="st-row">
+            <span class="st-gun">${ico(r.id, 'st-ico', 14)}<b>${esc((TACTICALS[r.id] ?? LETHALS[r.id]).name)}</b><small>${TACTICALS[r.id] ? 'Tactical' : 'Lethal'}</small></span>
+            ${cols.map(c => `<span class="${state.sort === c.key ? 'on' : ''}">${c.fmt(r)}</span>`).join('')}
+          </div>`).join('') : empty || scopeEmpty ? `<div class="st-empty">${ico('stats')}<b>${empty ? 'No matches recorded yet' : `No matches with ${SCOPE_LABEL[state.scope].toLowerCase()} in them yet`}</b><p>${empty ? 'Play a match and every gun used in it shows up here.' : 'Switch to Everyone to see all recorded matches.'}</p></div>` : rows.map(r => `
           <button class="st-row${state.open === r.id ? ' open' : ''}" data-act="stRow" data-id="${r.id}">
             <span class="st-gun">${ico(r.id, 'st-ico', 14)}<b>${esc(WEAPONS[r.id].name)}</b><small>${esc(WEAPON_CATEGORY[r.id])}</small></span>
             ${COLUMNS.map(c => `<span class="${state.sort === c.key ? 'on' : ''}">${c.fmt(r)}</span>`).join('')}
