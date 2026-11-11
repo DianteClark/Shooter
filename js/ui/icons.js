@@ -442,6 +442,17 @@ const SQUARE = {
   // Flag defense: the defend shield with the pennant on it.
   'medal:flag_defend': { f: [shield], h: [shieldIn], a: [R(11, 9, 2.4, 14), P(13.4, 9, 22.5, 12, 13.4, 15)], b: [R(9, 23, 14, 2.4)] },
 
+  // ---- Extraction (docs/EXTRACT.md): the mode, its contracts, and the items only it pays for. ----
+  'mode:ex': { f: [P(6, 9, 20, 9, 26, 12, 26, 16, 22, 18, 9, 18, 6, 15), R(2, 4, 28, 2.4, 1), R(14.8, 6, 2.4, 3), R(9, 20, 3, 4), R(19, 20, 3, 4), R(6, 23.5, 20, 2.4, 1)], h: [P(19, 11, 23.5, 12.5, 23.5, 14.5, 19, 14.5)], a: [P(13, 27, 19, 27, 16, 31)] },
+  'ex:intel': { f: [R(3, 10, 26, 17, 2), P(11, 10, 11, 6, 13, 4, 19, 4, 21, 6, 21, 10, 18.5, 10, 18.5, 6.8, 13.5, 6.8, 13.5, 10)], h: [R(3, 16, 26, 1.8)], a: [R(14, 14, 4, 5, 1)] },
+  'ex:hvt': { f: [O(16, 16, 12.5)], h: [O(16, 16, 9.5)], b: [O(16, 16, 9.5)], s: [P(16, 1, 16, 9), P(16, 23, 16, 31), P(1, 16, 9, 16), P(23, 16, 31, 16)], a: [O(16, 16, 3.4)], sw: 3 },
+  'ex:cache': { f: [R(3, 11, 26, 17, 1.5)], h: [R(6, 14, 20, 1.8), R(6, 22, 20, 1.8)], a: [R(12.5, 4, 7, 9, 1), R(15, 1, 2, 3)] },
+  'ex:hack': { f: [R(3, 4, 26, 18, 1.5), R(10, 24, 12, 2.6), R(13.5, 22, 5, 2.4)], h: [R(6, 7, 20, 12)], a: [P(8, 9.5, 12, 12.5, 8, 15.5), R(13.5, 14, 6, 2)] },
+  'ex:escort': { f: [R(5, 9, 22, 11, 2), R(9, 5, 14, 5, [2, 2, 0, 0]), O(9.5, 23.5, 3.6), O(22.5, 23.5, 3.6)], h: [O(9.5, 23.5, 1.4), O(22.5, 23.5, 1.4)], a: [R(12, 12, 8, 3)] },
+  'ex:lives': { f: [P(16, 28, 4, 16, 4, 9, 9, 4, 14, 4, 16, 7, 18, 4, 23, 4, 28, 9, 28, 16)], h: [R(14.5, 10, 3, 10), R(10, 13.5, 12, 3)] },
+  blackbird: { f: [P(16, 3, 19, 11, 30, 21, 30, 24, 19, 21, 18, 27, 21, 30, 11, 30, 14, 27, 13, 21, 2, 24, 2, 21, 13, 11)], a: [R(14.5, 7, 3, 5, 1)], h: [P(14, 16, 18, 16, 17.5, 19, 14.5, 19)] },
+  vulture: { f: [P(10, 12, 22, 12, 29, 17, 29, 21, 26, 24, 12, 24, 10, 20.5), R(1.5, 14.5, 9, 3.2), P(1, 9.5, 4.5, 9.5, 4.5, 17.2, 1, 17.2), R(3, 7, 27, 2.6, 1.3), R(15, 9.5, 2.4, 3), R(9, 27, 18, 2.2)], h: [P(21.5, 14, 25.5, 17.5, 25.5, 19, 20.5, 19, 20.5, 14)], a: [R(12, 24.5, 9, 2.4)] },
+  hardtarget: { f: [O(19, 5.5, 3.2), P(13, 10, 21, 10, 24, 15, 28, 16.5, 27, 19.5, 22, 18, 20, 21, 24, 25, 22, 29, 16, 24, 14, 26, 9, 28, 8, 25, 12, 22, 14, 17, 11, 19, 8, 17)], a: [P(1, 8, 6, 8, 3.5, 12), P(1, 14, 6, 14, 3.5, 18), P(1, 20, 6, 20, 3.5, 24)] },
   // ---- Fallback: a dark signal lamp. ----
   unknown: { f: [O(16, 16, 12.5)], h: [O(16, 16, 9)], a: [O(16, 16, 4.5)] },
 };
@@ -454,7 +465,8 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex',
+  intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).
@@ -530,11 +542,11 @@ export const ICON_GROUPS = {
   weapons: Object.keys(WEAPON_SPECS),
   categories: Object.keys(CATEGORY_WEAPON).map(c => 'cat:' + c),
   streaks: ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut',
-    'sweep', 'recon', 'airdrop', 'plates', 'hound', 'dome', 'bombrun', 'rover'],
+    'sweep', 'recon', 'airdrop', 'plates', 'hound', 'dome', 'bombrun', 'rover', 'blackbird', 'vulture'],
   tacticals: ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock', 'snapshot', 'blackout', 'bulwark', 'tagger', 'medpack'],
   lethals: ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill', 'charge', 'thermite', 'tripwire', 'crawler', 'shiv'],
   objectives: ['bomb'],
-  perks: ['marathon', 'flak', 'quickmend', 'tacmask', 'adrenaline', 'scavenger', 'fasthands', 'strongarm', 'bandolier', 'hardline', 'ghost', 'coldblood', 'deadsilence', 'tracker', 'engineer'],
+  perks: ['marathon', 'flak', 'quickmend', 'tacmask', 'adrenaline', 'scavenger', 'fasthands', 'strongarm', 'bandolier', 'hardline', 'ghost', 'coldblood', 'deadsilence', 'tracker', 'engineer', 'hardtarget'],
   slots: ['optic', 'barrel', 'mag', 'grip'],
   modes: Object.keys(SQUARE).filter(k => k.startsWith('mode:')),
   maps: Object.keys(SQUARE).filter(k => k.startsWith('map:')),

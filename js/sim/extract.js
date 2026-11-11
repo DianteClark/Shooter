@@ -139,7 +139,7 @@ export class ExtractRules {
       contract: null, taken: 0, nextAt: 0, insert: null,
       // A bot squad's temper: aggro (third parties, contesting exfils) and greed (0: out at the first window with a
       // few contracts, 1: through to the second, 2: the final exfil).
-      plan: { kind: 'contract', since: 0, site: -1, aggro: 0.3 + 0.5 * this.rng(), greed: [0, 1, 1, 2, 2][Math.floor(this.rng() * 5)] },
+      plan: { kind: 'contract', since: 0, site: -1, aggro: 0.3 + 0.5 * this.rng(), greed: [0, 1, 1, 2, 2, 2][Math.floor(this.rng() * 6)] },
     }));
     this._buildSites(map);
     this.contracts = [];                // Every contract ever dealt (active ones are on their squad).
@@ -1165,7 +1165,7 @@ export class ExtractRules {
       // Greedy early, careful late: a full pot, a second window with something to show, or a squad running out.
       if (this.t >= EX.final.open - 20) want = true;
       else if (s.extracted) want = true;
-      else if (potN >= 7) want = true;
+      else if (potN >= 9) want = true;
       else if (potN >= 3 + (plan.greed ? 0 : 1) && this.window >= plan.greed) want = true;
       else if (potN >= 1 && (s.lives <= 1 || (members.length <= Math.ceil(this.squadSize / 2) && s.lives <= 2))) want = true;
     }
@@ -1178,7 +1178,7 @@ export class ExtractRules {
         if ((e.state !== 2 && e.state !== 3) || e.caller === s.team || e.final) continue;
         if (plan.weighed?.has(`${e.i}:${Math.round(e.timer)}`) || plan.weighed?.has(`${e.i}`)) continue;
         (plan.weighed ??= new Set()).add(`${e.i}`);
-        if (Math.hypot(e.x - ax, e.z - az) < 130 && bots.length >= 2 && this.rng() < plan.aggro * 0.6) { plan.contest = { site: e.i, until: this.t + 70 }; contest = e; }
+        if (Math.hypot(e.x - ax, e.z - az) < 140 && bots.length >= 2 && this.rng() < 0.2 + plan.aggro * 0.5) { plan.contest = { site: e.i, until: this.t + 70 }; contest = e; }
       }
     }
     if (contest && contest.state !== 2 && contest.state !== 3) { plan.contest = null; contest = null; }
@@ -1236,8 +1236,9 @@ export class ExtractRules {
         return;
       }
       if (contest) {
-        const o = spread(i, contest.state === 3 && s.pot.length ? contest.r * 0.4 : contest.r + 6);
-        bot.setObjective({ key: `xc:${contest.i}:${contest.state}:${i}`, role: contest.state === 3 && s.pot.length ? 'defend' : 'collect', x: contest.x + o.dx, z: contest.z + o.dz, r: 2 });
+        // Into the zone once it is down: to take the ride with our own pot, or just to stop theirs.
+        const o = spread(i, contest.state === 3 ? contest.r * 0.45 : contest.r + 8);
+        bot.setObjective({ key: `xc:${contest.i}:${contest.state}:${i}`, role: contest.state === 3 ? 'defend' : 'collect', x: contest.x + o.dx, z: contest.z + o.dz, r: 2 });
         return;
       }
       if (fight) {
@@ -1387,7 +1388,7 @@ export class ExtractRules {
       return [s.team, s.lives, s.taken, s.extracted, (s.done ? 1 : 0) | (s.wiped ? 2 : 0), s.pot.map(d => packDone(d.type, d.tier)), s.banked.map(d => packDone(d.type, d.tier)),
         c ? [c.id, T.indexOf(c.type), c.tier, c.poi, r1(c.ax), r1(c.az), r1(c.dx), r1(c.dz), c.carrier] : 0];
     });
-    return [this.ver, this.window, sq, this.sim.players.map(p => (p.ex ? [p.ex.revives, p.ex.knocks] : 0))];
+    return [this.ver, this.window, sq, this.sim.players.map(p => (p.ex ? [p.ex.revives, p.ex.knocks] : 0)), this.exfils.map(e => e.caller)];
   }
 
   decode(a, out) {
@@ -1429,7 +1430,8 @@ export class ExtractRules {
   }
 
   _readSlow(slow) {
-    const [ver, win, sq, stats] = slow;
+    const [ver, win, sq, stats, callers] = slow;
+    (callers || []).forEach((c, i) => { if (this.exfils[i]) this.exfils[i].caller = c; });
     if (ver === this.readVer && this.squads.size) { /* same as before */ }
     this.readVer = ver;
     this.window = win;
@@ -1527,7 +1529,7 @@ export class ExtractRules {
         if (c && ce && ce[0] === c.id) { c.fuse = ce[1] / 10; c.back = ce[2] / 10; c.pi = 0; c.path = null; c.group = ce[4] >= 0 ? ce[4] : undefined; c.wave = !!ce[5]; c.prog = ce[6] / 1000; }
         if (c) { c.team = s.team; c.back ??= 0; c.def ??= 0; if (c.type === 'escort') c.path = null; this.contracts.push(c); }
       });
-      exf.forEach((e, i) => { if (this.exfils[i]) { this.exfils[i].caller = e[0]; this.exfils[i].waved = !!e[1]; } });
+      exf.forEach((e, i) => { if (this.exfils[i]) this.exfils[i].waved = !!e[1]; });     // Callers ride the full block.
     } else {
       for (const d of this.groupDefs) this._makeGroup({ ...d, state: 'asleep' });
     }

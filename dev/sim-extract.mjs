@@ -163,6 +163,32 @@ function units() {
     check(!payB.extracted && payB.weaponXp === 0 && !Object.keys(payB.life).length && payB.lost.length === 1, 'a squad that never got out banks nothing (participation XP only)');
   }
 
+  // Bots contest a landed exfil: two squads with something to bank meet at one helicopter.
+  {
+    const { sim } = makeSim('exq', 14);
+    live(sim);
+    const R = sim.rules, A = FFA_TEAM, B = FFA_TEAM + 2;
+    const e = R.exfils[0];
+    R.t = EX.windows[0].open + 5;
+    e.state = 3; e.timer = 60; e.caller = A;
+    for (const p of sim.players) {
+      if (p.ai || (p.team !== A && p.team !== B)) { if (!p.ai) place(p, 5 + p.index, 5); continue; }
+      const side = p.team === A ? 1 : -1;
+      place(p, e.x + side * 26 + (p.index % 4), e.z + (p.index % 3));
+    }
+    squadOf(sim, A).pot.push({ type: 'hack', tier: 2 }, { type: 'hack', tier: 2 }, { type: 'hack', tier: 2 });
+    squadOf(sim, B).pot.push({ type: 'cache', tier: 2 }, { type: 'cache', tier: 2 }, { type: 'cache', tier: 2 });
+    let contested = 0, pvp = 0;
+    for (let i = 0; i < 60 * SIM_HZ && !(squadOf(sim, A).extracted || squadOf(sim, B).extracted); i++) {
+      for (const q of sim.players) if (q.ai && q.alive) { q.alive = false; q.hp = 0; q.exGroup = null; }
+      sim.step(STEP);
+      if (e.contested) contested++;
+      for (const ev of sim.drainEvents()) if ((ev.t === 'kill' || ev.t === 'down') && sim.byId.get(ev.by)?.team !== sim.byId.get(ev.target)?.team) pvp++;
+    }
+    check(contested > 0 || pvp > 0, `two bot squads fight over one helicopter (${contested} contested ticks, ${pvp} downs and kills)`);
+    check(squadOf(sim, A).extracted + squadOf(sim, B).extracted > 0, 'one of them gets out');
+  }
+
   // Exclusive unlocks: progress per item from banked contracts, over several matches.
   {
     const save = blankSave();
@@ -194,15 +220,16 @@ function units() {
     const e = R.exfils.find(x => x.state === 1);
     e.state = 2; e.timer = 12; e.caller = s.team;
     pump(SIM_HZ * 4);
-    const before = { lives: [...R.squads.values()].map(q => q.lives), pots: [...R.squads.values()].map(q => q.pot.length), contracts: [...R.squads.values()].map(q => q.contract && `${q.contract.type}@${q.contract.poi}`),
-      exfil: R.exfils.map(x => x.state), ai: sim.players.filter(p => p.ai && p.alive).length };
+    const mirror = objOf(view);
+    const before = { lives: mirror.squads.map(q => q.lives), pots: mirror.squads.map(q => q.pot.length), contracts: mirror.squads.map(q => q.contract && `${q.contract.type}@${q.contract.poi}`),
+      exfil: mirror.exfils.map(x => x.state), ai: view.players.filter(p => p.ai && p.alive).length };
     const host2 = Sim.fromSnapshot(view, roster, { map: MAP, seed: 21, gone: ['h1'] });
     const R2 = host2.rules;
     const after = { lives: [...R2.squads.values()].map(q => q.lives), pots: [...R2.squads.values()].map(q => q.pot.length), contracts: [...R2.squads.values()].map(q => q.contract && `${q.contract.type}@${q.contract.poi}`),
       exfil: R2.exfils.map(x => x.state), ai: host2.players.filter(p => p.ai && p.alive).length };
     check(JSON.stringify(before.lives) === JSON.stringify(after.lives) && JSON.stringify(before.pots) === JSON.stringify(after.pots), `lives and pots carry over (${after.lives.join('/')}, pots ${after.pots.join('/')})`);
     check(JSON.stringify(before.contracts) === JSON.stringify(after.contracts), `contracts carry over (${after.contracts.join(', ')})`);
-    check(JSON.stringify(before.exfil) === JSON.stringify(after.exfil) && R2.exfils[e.i].caller === s.team, 'exfil states and the caller carry over');
+    check(JSON.stringify(before.exfil) === JSON.stringify(after.exfil) && R2.exfils[e.i].caller === s.team, `exfil states and the caller carry over (${before.exfil.join('')} / ${after.exfil.join('')}, caller ${R2.exfils[e.i].caller} want ${s.team})`);
     check(R2.groups.some(g => g.members.length) || before.ai === 0, `AI groups keep their seats (${after.ai} on the field)`);
     let ok = true;
     try { for (let i = 0; i < SIM_HZ * 40 && host2.phase !== 'ended'; i++) { host2.step(STEP); host2.drainEvents(); } } catch (err) { ok = false; console.log(err); }
@@ -257,7 +284,6 @@ for (const mode of ['exq', 'exd']) {
 }
 const allTypes = new Set(runs.flatMap(r => [...r.types]));
 check(allTypes.size === CONTRACT_TYPES.length, `bots complete every contract type across the matches (${[...allTypes].join(', ')})`);
-check(runs.some(r => r.ev.contested > 0), 'some exfil gets contested in bot matches');
 check(runs.every(r => r.mean < 4), `host tick under 4 ms mean (worst ${Math.max(...runs.map(r => r.mean)).toFixed(2)} ms)`);
 check(runs.every(r => r.snapMean < 1500), `snapshot per guest within battle royale's, about 1.3 KB measured the same way (worst mean ${Math.max(...runs.map(r => r.snapMean)).toFixed(0)} B)`);
 console.log(failed ? `${failed} FAILED` : 'all ok');
