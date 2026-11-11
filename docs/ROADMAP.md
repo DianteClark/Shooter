@@ -7,8 +7,8 @@ on every push, keep 2% of weekly usage for bugs.
 
 1. Maps overhaul: DONE (1110-8). 20 maps, six regions, four sizes. docs/MAPS-OVERHAUL.md.
 2. Weapons part 1: DONE (1110-10). 16 new guns incl. Melee, 8 attachments, balance, aim assist. docs/WEAPONS-OVERHAUL.md.
-3. Weapons part 2, look and sound: IN PROGRESS (branch wpn-feel).
-4. Lethals and tacticals overhaul: new items, identities, counters, mastery, bots that use them well.
+3. Weapons part 2, look and sound: DONE (1111-1).
+4. DONE (1111-2). Lethals and tacticals overhaul: new items, identities, counters, mastery, bots that use them well.
 5. Engine performance (the BR prerequisites in docs/BR-PERF.md): spatial grid for walls, nav and bot thinking budgets,
    chunked world rendering with distance culling, snapshot interest management. Speeds every existing map too.
 6. Balance follow-up from real stats (docs/stats-2026-11-10-c.txt): in real lobbies Foreman is still far ahead
