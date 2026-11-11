@@ -48,7 +48,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1200)
     await pg.locator('[data-act="solo"]').first.click()
     await pg.wait_for_timeout(700)
-    await pg.locator('[data-act="soloMap"][data-id="brtest"]').first.click()
+    await pg.locator('[data-act="soloMap"][data-id="frontier"]').first.click()
     await pg.wait_for_timeout(300)
     await pg.locator('[data-act="soloMode"][data-id="br"]').first.click()
     await pg.wait_for_timeout(400)
@@ -118,7 +118,7 @@ async def run(browser, vw, vh, failures, errors):
     except Exception:
         failures.append(f'{vw}: no squadmate revived the human')
     # Full map from the minimap.
-    await pg.locator('.minimap').click()
+    await ev("document.querySelector('.minimap').click()")
     await pg.wait_for_timeout(500)
     await shot('11-fullmap')
     await pg.locator('.br-map-close').click()

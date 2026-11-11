@@ -24,7 +24,8 @@ const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)
 const MAP_PX = 640;          // Backing pixels of the big map.
 
 const CSS = `
-.br-ui { position: absolute; inset: 0; pointer-events: none; }
+.br-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
+.br-ui .br-map { z-index: var(--z-overlay); }
 .br-ui [data-tap] { pointer-events: auto; }
 .hud.br-on .scorebar, .hud.br-on .obj-strip, .hud.br-on .gun-rung { display: none !important; }
 .hud.br-on .feed { top: calc(var(--st) + 134px); }
@@ -102,7 +103,7 @@ const CSS = `
 .br-map-side p { margin: 0; font: 12px/1.35 var(--f-body); color: var(--c-haze); }
 .br-map-side .br-jump { position: static; transform: none; }
 .br-map-close { height: 36px; border: 0; padding: 0 14px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
-.hud.br-on .minimap { cursor: pointer; }
+.hud.br-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
 .hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
 `;
 
@@ -462,6 +463,10 @@ export class BrHud {
     const map = this.map, c = document.createElement('canvas');
     c.width = c.height = MAP_PX;
     const g = c.getContext('2d'), s = MAP_PX / Math.max(map.width, map.height);
+    // A map with a painted overview (assets/maps/<id>-overview.jpg, north up, edge to edge) uses it once it loads.
+    const img = new Image();
+    img.onload = () => { g.drawImage(img, 0, 0, MAP_PX, MAP_PX); g.fillStyle = 'rgba(10,13,17,.18)'; g.fillRect(0, 0, MAP_PX, MAP_PX); };
+    if (!map.devMap) img.src = `assets/maps/${map.id}-overview.jpg`;
     g.fillStyle = '#33402f'; g.fillRect(0, 0, MAP_PX, MAP_PX);
     for (const r of map.rooms ?? []) { g.fillStyle = '#5a5240'; g.fillRect(r.x * s, r.z * s, r.w * s, r.d * s); }
     for (const w of map.walls) {

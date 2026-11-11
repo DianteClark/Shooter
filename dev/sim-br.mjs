@@ -1,6 +1,6 @@
 // Battle royale headless test (docs/BR.md): full 32-player bot matches on the dev BR map, with rule checks.
 //   node dev/sim-br.mjs            quads, duos and solos, plus the unit checks
-//   node dev/sim-br.mjs --quick    one quads match and the unit checks
+//   node dev/sim-br.mjs --quick    one quads match and the unit checks (--map=brtest for the test map)
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
@@ -10,7 +10,7 @@ import { BR_KIND } from '../js/sim/br.js';
 const STEP = 1 / SIM_HZ;
 const args = process.argv.slice(2);
 const QUICK = args.includes('--quick');
-const MAP = MAPS[(args.find(a => a.startsWith('--map=')) ?? '--map=brtest').slice(6)];
+const MAP = MAPS[(args.find(a => a.startsWith('--map=')) ?? '--map=frontier').slice(6)];   // --map=brtest: the small stand-in.
 let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed++; console.log(`  FAIL ${msg}`); } else console.log(`  ok   ${msg}`); };
 
