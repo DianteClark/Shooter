@@ -1015,7 +1015,7 @@
   gap: var(--sp-3); align-content: start; padding: 0 1px var(--sp-4);
 }
 #ui .gs-gun {
-  position: relative; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding: 0 0 var(--sp-3); text-align: left;
+  position: relative; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding: 0; text-align: left;
   color: var(--c-chalk); background: radial-gradient(80% 70% at 50% 30%, rgba(242,166,59,.13), transparent 72%), var(--face-steel); box-shadow: var(--bevel), var(--edge);
   --cut: var(--cut-md); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   transition: transform var(--dur-fast) var(--ease-out); touch-action: manipulation;
@@ -1024,10 +1024,16 @@
 #ui .gs-gun .gs-eq { position: absolute; left: var(--sp-3); top: var(--sp-2); padding: 3px 6px 2px; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .08em; font-style: normal; color: var(--c-night); background: var(--c-go); }
 #ui .gs-gun .gs-lk { position: absolute; right: var(--sp-3); top: var(--sp-2); line-height: 0; color: var(--c-haze); }
 #ui .gs-gun .gs-lk .ico { height: 15px; }
+/* The picture sits inset in its own box; the name under it; level and mastery on a footer band at the card's foot. */
+#ui .gs-gun .gs-pic .gun-pic { left: var(--sp-4); top: var(--sp-2); width: calc(100% - 2 * var(--sp-4)); height: calc(100% - var(--sp-2) - var(--sp-1)); }
 #ui .gs-gn { display: flex; align-items: baseline; gap: var(--sp-3); padding: 0 var(--sp-4); min-width: 0; }
 #ui .gs-gn b { flex: 1; min-width: 0; font: 400 var(--fs-title)/1.1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .gs-glv { flex: none; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .06em; color: var(--c-haze); white-space: nowrap; }
-#ui .gs-gm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-4); }
+#ui .gs-gm {
+  margin-top: auto; display: grid; grid-template-columns: auto auto minmax(24px, 1fr) auto; align-items: center; gap: var(--sp-2);
+  padding: 7px var(--sp-4) 7px; background: rgba(8,10,12,.42); box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+#ui .gs-gm .gs-glv { color: var(--c-chalk); padding-right: var(--sp-2); box-shadow: 1px 0 0 rgba(255,255,255,.1); }
 #ui .gs-gm small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .06em; color: var(--c-haze); white-space: nowrap; }
 #ui .gs-gm .m-bar > i { background: var(--c-gold); }
 #ui .gs-gun.on { background: var(--face-steel-hi); box-shadow: var(--bevel-hi), inset 0 0 0 2px var(--c-sodium); }

@@ -1,5 +1,6 @@
 // The bot player pool (js/shared/botpool.js) and its matchmaking. node dev/sim-botpool.mjs
-//   pool       deterministic (a fresh process builds the identical pool), 150-200 profiles, unique ids and tags, tags
+//   pool       deterministic (a fresh process builds the identical pool), 250-320 profiles (the first 200 and their
+//              careers exactly as before the clans), unique ids and tags, tags
 //              short and plain, no tag clashes with any gun, attachment, perk, equipment, streak, operator, skin, map,
 //              mode, medal, card, emblem, camo, tracer or kill effect name
 //   profiles   every gun, sidearm, perk, item, streak, operator, skin, card, emblem and camo exists; styles and locks
@@ -9,7 +10,10 @@
 //              seldom repeat; rosters for TDM, FFA, Gun Game, Ground War and battle royale; even teams; Custom's tier override
 //   careerAt   deterministic, every total non-decreasing over two years of dates, sane rates, cheap
 //   skillAt    the tiers at their ratings, and everything between them in between
+//   clans      20-25 clans of 3-8 with 2-4 capital tags, regular duos, loners; skill profiles; clanmates queue together
+//              (same lobby, same side or squad, within the mode's party cap) and clans turn up across modes
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as Pool from '../js/shared/botpool.js';
@@ -42,7 +46,11 @@ const fresh = execFileSync(process.execPath, ['--input-type=module', '-e', `impo
 ok(fresh === digest, 'a fresh process builds the identical pool');
 const src = readFileSync(here, 'utf8');
 ok(!/Math\.random/.test(src), 'no Math.random in the pool');
-ok(BOT_POOL.length >= 150 && BOT_POOL.length <= 200, 'pool size', BOT_POOL.length);
+ok(BOT_POOL.length >= 250 && BOT_POOL.length <= 320, 'pool size', BOT_POOL.length);
+// The first 200 (before the clans) and their careers, as they were: leaderboards already show them.
+const first = BOT_POOL.slice(0, 200), at200 = new Date(POOL_EPOCH + 200 * DAY);
+const firstHash = createHash('sha256').update(JSON.stringify(first) + JSON.stringify(first.map(p => careerAt(p, at200)))).digest('hex').slice(0, 16);
+ok(firstHash === 'd74e12f356dded4d', 'the first 200 profiles and their careers are unchanged', firstHash);
 ok(new Set(BOT_POOL.map(p => p.id)).size === BOT_POOL.length, 'ids unique');
 const norm = s => s.toLowerCase().replace(/[^a-z]/g, '');
 const names = BOT_POOL.map(p => p.name);
@@ -66,7 +74,7 @@ const medals = hud.slice(hud.indexOf('const MEDALS = {'), hud.indexOf('};', hud.
 for (const m of medals.matchAll(/['"]([A-Z][^'"]{2,30})['"]/g)) add(m[1]);
 const words = t => t.replace(/([a-z])([A-Z])/g, '$1 $2').split(/[^A-Za-z]+/).filter(Boolean).map(w => w.toLowerCase());
 const clashes = [];
-for (const t of names) {
+for (const t of [...names, ...Pool.CLANS.map(c => c.name)]) {
   const n = norm(t), tw = words(t);
   for (const it of items) {
     const k = norm(it), single = !/[\s-]/.test(it);
@@ -219,6 +227,58 @@ ok(ms < 60, 'the whole pool two years on is cheap', `${ms.toFixed(1)} ms`);
 const nowC = BOT_POOL.map(p => careerAt(p, POOL_EPOCH + 10 * DAY));
 const prest = nowC.map(c => c.prestige);
 ok(prest.filter(v => v === 0).length > 10 && prest.filter(v => v === MAX_PRESTIGE).length < BOT_POOL.length * 0.4, 'levels spread at launch', `${prest.filter(v => v === 0).length} unprestiged, ${prest.filter(v => v === MAX_PRESTIGE).length} at the top`);
+
+// ---- Clans ----
+console.log('clans');
+const { CLANS, DUOS, clanOf, clanInfo, duoOf, displayName, profileById } = Pool;
+ok(CLANS.length >= 20 && CLANS.length <= 25, '20-25 clans', CLANS.length);
+ok(CLANS.every(c => c.members.length >= 3 && c.members.length <= 8), 'each of 3-8 players');
+ok(CLANS.every(c => /^[A-Z]{2,4}$/.test(c.tag)) && new Set(CLANS.map(c => c.tag)).size === CLANS.length, 'tags: 2-4 capitals, unique');
+ok(new Set(CLANS.map(c => norm(c.name))).size === CLANS.length && CLANS.every(c => !names.some(n => norm(n) === norm(c.name))), 'clan names unique and no player\'s tag');
+const grouped = [...CLANS.flatMap(c => c.members), ...DUOS.flat()];
+ok(new Set(grouped).size === grouped.length && grouped.every(id => profileById(id)), 'nobody in two clans, or in a clan and a duo; every member exists');
+ok(DUOS.length >= 8 && DUOS.every(d => duoOf(d[0]) === d[1] && duoOf(d[1]) === d[0] && !clanOf(d[0])), 'regular duos', DUOS.length);
+const loners = BOT_POOL.filter(p => !clanOf(p) && !duoOf(p));
+ok(loners.length > BOT_POOL.length * 0.4, 'plenty of loners', loners.length);
+ok(CLANS.every(c => c.members.every(id => clanInfo(id) === c && clanOf(profileById(id)) === c.tag && clanOf(id) === c.tag)), 'clanOf (the tag) and clanInfo (the clan), by profile or id');
+ok(clanOf(loners[0]) === null && clanInfo(loners[0]) === null, '...null for a loner');
+ok(displayName(profileById(CLANS[0].members[0])) === `[${CLANS[0].tag}] ${profileById(CLANS[0].members[0]).name}` && displayName(loners[0]) === loners[0].name, 'display name: "[TAG] Name"');
+const muOf = kind => mean(CLANS.filter(c => c.skill === kind).flatMap(c => c.members.map(id => profileById(id).skill.mu)));
+ok(CLANS.filter(c => c.skill === 'stacked').length >= 3 && CLANS.filter(c => c.skill === 'weak').length >= 1, 'a few stacked clans, one or two weak');
+ok(muOf('stacked') > 0.8 && muOf('weak') < 0.25 && muOf('average') > 0.35 && muOf('average') < 0.65, 'clan skill profiles', `stacked ${muOf('stacked').toFixed(2)}, average ${muOf('average').toFixed(2)}, weak ${muOf('weak').toFixed(2)}`);
+// Queueing together: across many Multiplayer lobbies, a clan player drawn mostly has a clanmate on their side.
+const sideRates = (mode, mapId, n, cap) => {
+  let withMate = 0, clanBots = 0, over = 0, sameSide = 0, pairs = 0;
+  const seen = new Set();
+  for (let k = 0; k < n; k++) {
+    const r = buildRoster([human], { mode, mapId, seed: 7000 + k, pool: { ...pool, date } });
+    for (const e of r) {
+      const c = e.pool && clanInfo(e.pool);
+      if (!c) continue;
+      seen.add(c.tag); clanBots++;
+      const mates = r.filter(q => q !== e && q.pool && clanInfo(q.pool) === c);
+      if (mates.length) withMate++;
+      for (const q of mates) { pairs++; if (q.team === e.team) sameSide++; }
+      if (mates.filter(q => q.team === e.team).length + 1 > cap) over++;
+    }
+  }
+  return { withMate: withMate / Math.max(1, clanBots), same: sameSide / Math.max(1, pairs), over, clans: seen.size };
+};
+const tdmC = sideRates('tdm', 'pier', 120, 4), gwC = sideRates('gwtdm', 'harvest', 40, 6), brC = sideRates('br', null, 40, 4), ffaC = sideRates('ffa', 'pier', 60, 99);
+ok(tdmC.withMate > 0.45 && tdmC.same > 0.85, 'TDM: clan players mostly come with clanmates, on their side', `${(tdmC.withMate * 100).toFixed(0)}% with a clanmate, ${(tdmC.same * 100).toFixed(0)}% of pairs on one side`);
+ok(gwC.withMate > 0.5 && gwC.same > 0.75, 'Ground War: the same', `${(gwC.withMate * 100).toFixed(0)}%, ${(gwC.same * 100).toFixed(0)}%`);
+ok(brC.same > 0.85, 'battle royale: a clan party fills one squad', `${(brC.same * 100).toFixed(0)}% of pairs in one squad`);
+ok(tdmC.over === 0, 'never more of a clan on a 6v6 side than the party cap (4)');
+ok(ffaC.withMate > 0.3, 'free-for-all: clanmates still share a lobby', `${(ffaC.withMate * 100).toFixed(0)}%`);
+ok(tdmC.clans >= 18 && gwC.clans >= 15 && brC.clans >= 15 && ffaC.clans >= 12, 'clans turn up across modes over time', `TDM ${tdmC.clans}, GW ${gwC.clans}, BR ${brC.clans}, FFA ${ffaC.clans} of ${CLANS.length}`);
+let duoTogether = 0, duoSeen = 0;
+for (let k = 0; k < 200; k++) {
+  const r = buildRoster([human], { mode: 'gwtdm', mapId: 'harvest', seed: 9000 + k, pool: { ...pool, date } });
+  for (const e of r) if (e.pool && duoOf(e.pool)) { duoSeen++; if (r.some(q => q.pool === duoOf(e.pool) && q.team === e.team)) duoTogether++; }
+}
+ok(duoTogether / Math.max(1, duoSeen) > 0.5, 'duos mostly queue together', `${duoTogether}/${duoSeen}`);
+const plain = pickPoolBots({ count: 11, seed: 77, recent: [], date });
+ok(plain.every(b => b.party === null), 'party 1 (the default): nobody brings friends');
 
 // ---- skillAt and humanRating ----
 console.log('skillAt');

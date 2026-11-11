@@ -8,6 +8,7 @@ import { createCamoMaterial, addCamoInstanceAttributes, camoIndex, camoTint } fr
 import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
 import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
 import { fillV10 } from '../shared/weapons-v10.js';
+import { BR } from '../shared/modes.js';
 import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR, SKINS, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
@@ -629,6 +630,32 @@ function setStretch(m, ax, ay, az, bx, by, bz, gy, gz) {
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 
+// Battle royale glide, per rig: the height comes from the glide clock (the local player's own, `p.glideT`; anyone else's
+// counted down from when the view first shows them gliding), falling a little faster near the ground. The moment it
+// reaches the ground (or the view says landed, whichever comes first) the canopy folds away, a landing dip plays and dust
+// kicks up. A rejoin mid-glide starts the clock at the top: a short wrong height, never a wrong landing.
+export const GLIDE_ALT = 14;        // The transport flies at this height (js/render/br-fx.js): a glide starts level with it.
+function glideRig(r, p, dt, vfx, fx, fz) {
+  const air = p.alive ? p.air ?? 0 : 0;
+  if (air === 2) {
+    r.glide = p.glideT ?? (r.air === 2 ? Math.max(0, r.glide - dt) : BR.glide);
+    const k = Math.max(0, Math.min(1, r.glide / BR.glide));
+    r.alt = GLIDE_ALT * Math.pow(k, 1.2);
+    if (r.air !== 2) { r.chute = 1; r.landT = 0; }
+  } else r.alt = 0;
+  // Down: the canopy goes, the dip plays once.
+  if (r.alt <= 0 && r.chute > 0) {
+    if (r.chute === 1 && r.air === 2 && p.alive) {
+      r.landT = 1;
+      if (vfx && Math.abs(p.x - fx) < 26 && Math.abs(p.z - fz) < 18) { vfx.groundThud(p.x, p.z); vfx.ring(p.x, p.z, 0.2, 1.7, 0.45, vfx.dustRGB, 0.45); }
+    }
+    r.chute = Math.max(0, r.chute - dt / 0.3);
+  }
+  if (r.landT > 0) r.landT = Math.max(0, r.landT - dt / 0.55);
+  if (air === 1 || !p.alive) { r.chute = 0; r.landT = 0; }
+  r.air = air;
+}
+
 // Spring slots on a rig: body lean and recoil rock, all under-damped so stops and shots carry weight.
 const LEAN_F = 0, LEAN_S = 1, ROCK = 2, FLINCH_F = 3, FLINCH_S = 4, SPRINGS = 5;
 
@@ -668,6 +695,9 @@ class Rig {
     this.lastAim = 0;
     this.lite = false;        // Drawn with the distance LOD last frame.
     this.aimVel = 0;
+    // Battle royale glide (glideRig): height above the ground, the canopy's open amount (1 open .. 0 folded away),
+    // the landing dip (1 at touch-down .. 0), and the air state seen last frame.
+    this.alt = 0; this.chute = 0; this.landT = 0; this.air = 0; this.glide = 0;
     this.sx = new Float32Array(SPRINGS);
     this.sv = new Float32Array(SPRINGS);
     this.seed = Math.random() * 100;
@@ -1014,6 +1044,7 @@ export class Characters {
       const look = this.looks[r.op];
       const sk = this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
+      if (view.br) glideRig(r, p, dt, vfx, this.focusX, this.focusZ); else r.alt = r.chute = r.landT = 0;
       if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.75); }
       if (r.down) {
         // The kill event outruns the interpolated view: stay hidden until the view agrees, then until the next life.
@@ -1033,7 +1064,7 @@ export class Characters {
       }
 
       const vx = p.vx || 0, vz = p.vz || 0;
-      const rawSpeed = Math.sqrt(vx * vx + vz * vz);
+      const rawSpeed = r.alt > 0.05 ? 0 : Math.sqrt(vx * vx + vz * vz);     // Hanging under a canopy: no stride.
       const moving = rawSpeed > 0.3;
       r.speed += (rawSpeed - r.speed) * damp(12, dt);
       const speed = r.speed;
@@ -1085,7 +1116,7 @@ export class Characters {
       r.heat = p.heat ?? 0;
       r.overheated = !!p.overheated;
       // Battle royale: nobody aboard the transport is drawn (js/sim/br.js).
-      const seen = p.alive && !r.down && p.air !== 1 && (friendly || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
+      const seen = p.alive && !r.down && p.air !== 1 && (friendly || r.alt > 0.5 || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
       r.seen = seen;
       r.reveal += (seen ? 1 : -1) * dt / (seen ? 0.09 : 0.18);
       r.reveal = Math.min(1, Math.max(0, r.reveal));
@@ -1100,7 +1131,9 @@ export class Characters {
       const rock = r.sx[ROCK];
       // Downed: flat on the ground, face first. Reviving: down on one knee.
       const stand = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02 - kneel * 0.36;
-      const y = stand + (0.3 + Math.sin(r.phase * 2) * 0.02 - stand) * crawl;
+      // Touch-down: the body drops into the legs and comes back up (the feet stay planted, so the knees take it).
+      const dip = r.landT > 0 ? Math.sin(Math.PI * Math.min(1, (1 - r.landT) * 1.6)) * 0.42 * Math.min(1, r.landT * 3) : 0;
+      const y = stand + (0.3 + Math.sin(r.phase * 2) * 0.02 - stand) * crawl + r.alt - dip;
       const rightX = -aimZ, rightZ = aimX;
       const sway = sinPhase * 0.035 * runK;
       const bodyX = p.x + rightX * sway, bodyZ = p.z + rightZ * sway;
@@ -1109,7 +1142,7 @@ export class Characters {
       const throwActive = r.throwT > 0 ? Math.sin((1 - r.throwT) * Math.PI) : 0;
       const lag = clamp(r.aimVel * 0.03, -0.32, 0.32) * (1 - ads * 0.7);
       const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32;
-      const pitch = -sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - crawl * 1.38 - kneel * 0.32;
+      const pitch = dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - crawl * 1.38 - kneel * 0.32;
       const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK;
       _e.set(roll, -(p.aim - lag - twist), pitch);
       _q.setFromEuler(_e);
@@ -1350,7 +1383,7 @@ export class Characters {
         const stance = (side < 0 ? 0.16 : -0.14) * standK;
         let footX = p.x + rightX * side * (wide + 0.05 * standK) + aimX * stance + r.moveX * off;
         let footZ = p.z + rightZ * side * (wide + 0.05 * standK) + aimZ * stance + r.moveZ * off;
-        let footY = 0.13 + lift;
+        let footY = 0.13 + lift + (r.alt > 0 ? r.alt - 0.06 + Math.sin(clock * 2.4 + side) * 0.05 : 0);
         let poleX = r.moveX * 0.8 + aimX * 0.4 + rightX * side * 0.3, poleY = 0.15, poleZ = r.moveZ * 0.8 + aimZ * 0.4 + rightZ * side * 0.3;
         if (slide > 0.01) {
           // Lead leg kicks straight out, trail leg folds under the body with its knee to the side.
@@ -1405,7 +1438,8 @@ export class Characters {
       _m.toArray(this.ring.instanceMatrix.array, nRing * 16);
       this.ring.geometry.attributes.aFx.setXY(nRing, r.reveal, local ? 1 : 0);
       this.ring.geometry.attributes.aTeam.setXYZ(nRing, team[0], team[1], team[2]);
-      _s.set(0.9, 1, 0.9);
+      const shade = 0.9 / (1 + r.alt * 0.06);       // The shadow shrinks the higher a glider is.
+      _s.set(shade, 1, shade);
       _m.compose(_p, _q, _s);
       _m.toArray(this.blob.instanceMatrix.array, nRing * 16);
       this.blob.geometry.attributes.aFx.setXY(nRing, r.reveal, 0);

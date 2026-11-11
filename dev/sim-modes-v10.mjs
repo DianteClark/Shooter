@@ -50,7 +50,7 @@ const OBJECTIVE = {
 await test('table: new modes appended after the old ones, each with rules, sizes and a one-line description', () => {
   const at = MODE_IDS.indexOf('hq');
   assert.ok(at > MODE_IDS.indexOf('gun'));
-  for (const id of [...NEW, 'gwhq', 'gwko']) {
+  for (const id of [...NEW, 'gwhq', 'gwko', 'gwinf']) {
     const m = MODES[id];
     assert.ok(m && m.rules && m.name && m.desc && m.short, id);
     assert.ok(m.desc.length < 90, `${id} description fits one line`);
@@ -61,9 +61,9 @@ await test('maps: 6v6 modes on every small, medium and large map, never on huge 
   for (const id of MAP_IDS) {
     const map = MAPS[id], size = map.large ? 'huge' : map.size ?? 'medium';
     for (const m of NEW) assert.equal(modeFitsMap(map, m), size !== 'huge', `${m} on ${id} (${size})`);
-    for (const m of ['gwhq', 'gwko']) assert.equal(modeFitsMap(map, m), size === 'huge', `${m} on ${id}`);
+    for (const m of ['gwhq', 'gwko', 'gwinf']) assert.equal(modeFitsMap(map, m), size === 'huge', `${m} on ${id}`);
   }
-  for (const id in MAPS) if (MAPS[id].size === 'giant') for (const m of [...NEW, 'gwhq', 'gwko']) assert.ok(!mapModes(MAPS[id]).includes(m) || !modeFitsMap(MAPS[id], m), `${m} on ${id}`);
+  for (const id in MAPS) if (MAPS[id].size === 'giant') for (const m of [...NEW, 'gwhq', 'gwko', 'gwinf']) assert.ok(!mapModes(MAPS[id]).includes(m) || !modeFitsMap(MAPS[id], m), `${m} on ${id}`);
 });
 
 /* ---------------- Every mode to an end on two sizes ---------------- */
@@ -77,6 +77,7 @@ const PLAN = {
   grind: [['railyard', 900], ['icebreaker', 900]],
   gwhq: [['harvest', 1000]],
   gwko: [['downtown', 1000]],
+  gwinf: [['expedition', 1000]],
 };
 for (const mode in PLAN) {
   for (const [map, cap] of QUICK ? PLAN[mode].slice(0, 1) : PLAN[mode]) {
@@ -111,6 +112,16 @@ await test('hq: the side holding the HQ cannot respawn; destroying it brings the
   sim.rules._destroy(1 - own);
   run(sim, 4);
   assert.ok(p.alive || sim.phase === 'ended', 'back once it is gone');
+});
+
+await test('gwinf: two infected at the start of a 32-player match; they respawn near the survivors, who split over holds', () => {
+  const { sim } = makeSim('gwinf', 'harvest');
+  run(sim, 6);
+  assert.equal(sim.players.length, 32);
+  assert.equal(sim.scores[1], 2);
+  assert.equal(sim.scores[0], 30);
+  run(sim, 50);
+  assert.equal(new Set(sim.rules.camps).size, 2, 'two survivor holds');
 });
 
 await test('ko: only the enemy VIP scores, and a new VIP is named at once', () => {

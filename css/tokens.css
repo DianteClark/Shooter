@@ -241,6 +241,7 @@
 
 /* Weapon level plus weapon-prestige rank (widgets.weaponLevelHtml): one unbreakable unit that never wraps or overlaps.
    Sizes follow the host's font-size, so the same markup works in a 9px card corner and a 16px hero. */
+.ctag { font: 400 .74em/1 var(--f-plate); font-style: normal; letter-spacing: .03em; opacity: .7; vertical-align: .08em; }
 .wlv { display: inline-flex; flex: none; align-items: center; gap: .4em; white-space: nowrap; vertical-align: middle; line-height: 1; }
 .wlv .wlv-n { font-variant-numeric: tabular-nums; }
 .wlv .wlv-p {
