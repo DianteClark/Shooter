@@ -42,6 +42,9 @@ import { ico } from './ui/yard.js';
 import { BotMatch, botMatchSheet } from './ui/botsettings.js';
 import { modsSheet, soloMods } from './ui/modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
 import { cleanMods } from './shared/playlist.js';
+// Seasons and ranked (docs/SEASONS.md).
+import { seasonUnlocks } from './ui/season.js';
+import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
 import { QuickChat } from './ui/quickchat.js';
 // Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
 import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
@@ -203,7 +206,7 @@ function myLoadout() {
 // What every human carries in the lobby and into the roster.
 function seatData() {
   const loadout = myLoadout();
-  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: Progress.badge() };
+  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...Progress.badge(), rk: Progress.rankCode() } };
 }
 
 function goTitle(message) {
@@ -291,6 +294,8 @@ menu.on({
   options: () => openOptions(),
   stats: () => openStats(),
   boards: () => openBoards(),
+  season: () => openSeason(),
+  lobbyRanked: () => setLobbyRanked(!app.lobby.ranked),
   help: () => openHelp(),
   challenges: () => menu.challenges({ onBack: afterEditing }),
   history: () => openHistory(),
@@ -442,6 +447,11 @@ function openStats(back = afterEditing) {
   statsScreen(menu, { onBack: back, onBoards: () => openBoards(() => openStats(back)) });
 }
 
+// The Season screen (js/ui/season.js): the track, the weekly sets and ranked; Play Ranked searches the Ranked playlist.
+function openSeason(back = afterEditing) {
+  menu.season({ onBack: back, onPlayRanked: () => needName(() => findMatch('standard', { playlist: 'ranked', modes: [] })) });
+}
+
 function openBoards(back = afterEditing) {
   boardsScreen(menu, { onBack: back, myId: app.net?.localId ?? selfId() });
 }
@@ -480,6 +490,7 @@ function renderLobby() {
     mods: app.lobby.mods ?? [],
     custom: app.lobby.custom ?? null,
     br: isBr(roomMode()), brSquad: app.lobby.brSquad ?? 4,
+    ranked: rankedRoom(), rankedOn: !!app.lobby.ranked, rankedFull: (app.lobby.humans ?? []).length >= RANKED_PARTY,
   });
 }
 
@@ -493,7 +504,7 @@ function setBrSquad(n) {
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], custom: app.lobby.custom ?? null, brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], custom: app.lobby.custom ?? null, brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD, ...(app.lobby.ranked ? { ranked: true } : {}) });
 }
 
 // --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
@@ -729,7 +740,7 @@ function seatFrom(msg) {
 
 function cleanBadge(b) {
   const n = (v, max, min) => Math.min(max, Math.max(min, Math.floor(Number(v)) || min));
-  return { prestige: n(b?.prestige, MAX_PRESTIGE, 0), level: n(b?.level, MAX_LEVEL, 1) };
+  return { prestige: n(b?.prestige, MAX_PRESTIGE, 0), level: n(b?.level, MAX_LEVEL, 1), rk: cleanCode(b?.rk) };
 }
 
 // Matchmaking for the bot player pool (js/shared/botpool.js): where the humans in this match sit, so the bots drawn
@@ -845,6 +856,7 @@ function guestLobbyMessage(msg) {
       app.lobby.mods = cleanMods(msg.mods);
       app.lobby.custom = msg.custom && typeof msg.custom === 'object' ? msg.custom : null;
       app.lobby.brSquad = cleanBrSquad(msg.brSquad);
+      app.lobby.ranked = msg.ranked === true;
       app.countdown = msg.countdown ?? null;
       app.public = !!msg.public;
       if (app.voice) updateVoiceTeam();
@@ -867,7 +879,7 @@ function guestLobbyMessage(msg) {
       beginMatch({
         roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode),
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
-        hostId: app.net.hostId, isHost: false, rejoin: !!msg.rejoin,
+        hostId: app.net.hostId, isHost: false, rejoin: !!msg.rejoin, ranked: msg.ranked === true && !msg.rejoin ? {} : null,
       });
       break;
     case 'refused': {
@@ -1080,11 +1092,11 @@ function findMatch(tab, sel) {
 
 // The pre-match lobby: the same vote screen a friend room uses, with the other players' ballots coming in as it runs.
 function startMpVote(tab, r, size) {
-  const options = mpVoteOptions(tab, r.modes);
+  const options = mpVoteOptions(tab, r.modes, Math.random, { ranked: !!r.ranked });
   if (!options.length) { renderMp(); menu.toast('No map hosts that pick', 'warn'); return; }
   app.vote = {
     solo: true, key: `mp:${Date.now()}`, options, votes: new Map(), left: MP_VOTE_SECONDS, seconds: MP_VOTE_SECONDS,
-    winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name,
+    winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name, ranked: !!r.ranked,
     timer: setInterval(mpVoteTick, 1000),
   };
   renderVote();
@@ -1101,20 +1113,46 @@ function mpVoteTick() {
   clearInterval(vote.timer);
   vote.winner = tallyWinner(voteCounts(vote));
   vote.resolved = { mapId: vote.options[vote.winner].mapId, mode: vote.options[vote.winner].mode };
-  vote.reveal = setTimeout(() => launchMp(vote.resolved.mapId, vote.resolved.mode, vote.mods), VOTE_REVEAL_MS);
+  vote.reveal = setTimeout(() => launchMp(vote.resolved.mapId, vote.resolved.mode, vote.mods, vote.ranked), VOTE_REVEAL_MS);
   renderVote();
 }
 
-function launchMp(mapId, mode, mods = []) {
+function launchMp(mapId, mode, mods = [], ranked = false) {
   stopVote();
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  // Ranked looks for players near this player's rating (their SR once placed), in a narrower band, with no modifiers.
+  const pool = poolFor(humans), rating = pool.target;
+  if (ranked) Object.assign(pool, { target: rankedTarget(Progress.ranked(), rating), spread: RANKED_SPREAD });
   // ?bots= is a test hook; players always get the seam's default.
-  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool: poolFor(humans) });
+  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool });
   beginMatch({
-    roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: cleanMods(mods, mode), ...limitsFor(mode),
-    hostId: id, isHost: true, localId: id,
+    roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: ranked ? [] : cleanMods(mods, mode), ...limitsFor(mode),
+    hostId: id, isHost: true, localId: id, ranked: ranked ? { rating } : null,
   });
+}
+
+// Ranked context for MatchAwards: the opposing side's average SR (bots by this match's rating, humans by the middle
+// of their division) and this player's rating for placements.
+function rankedContext(roster, localId, ctx) {
+  const me = roster.find(r => r.id === localId);
+  const them = roster.filter(r => r.team !== me?.team);
+  const srs = them.map(r => (r.isBot || r.pool ? ratingToSr(r.rating ?? 0.3) : codeSr(cleanCode(r.badge?.rk)))).filter(v => Number.isFinite(v));
+  return { lobby: srs.length ? Math.round(srs.reduce((a, b) => a + b, 0) / srs.length) : null, rating: ctx?.rating ?? poolFor([{ id: localId, badge: Progress.badge() }]).target };
+}
+
+// A friend room plays Ranked only when the host opts in and every seat is a human (RANKED_PARTY): no bots, a fixed
+// ruleset, no custom settings or modifiers. Each phone moves its own player's rating.
+function rankedRoom() {
+  const hs = app.lobby.humans ?? [];
+  return !!app.lobby.ranked && !app.lobby.custom && hs.length >= RANKED_PARTY && [0, 1].every(t => hs.filter(h => h.team === t).length === RANKED_PARTY / 2);
+}
+function setLobbyRanked(on) {
+  if (!app.isHost || !app.net) return;
+  app.lobby.ranked = !!on;
+  broadcastLobby();
+  renderLobby();
+  if (on && !rankedRoom()) menu.toast(`Ranked rooms need all ${RANKED_PARTY} seats filled by players, ${RANKED_PARTY / 2} a side`, 'warn');
 }
 
 function resetToSolo() {
@@ -1268,8 +1306,9 @@ function startVote() {
   if (!app.net || !app.isHost || app.vote) return;
   stopRematch();
   if (app.lobby.custom) return launchCustomRoom();
+  const ranked = rankedRoom();
   app.vote = {
-    key: `${app.code}:${Date.now()}`, options: voteOptions(Math.random, isRandomPick(app.lastPick) ? null : app.lastPlayed), votes: new Map(), left: VOTE_SECONDS,
+    key: `${app.code}:${Date.now()}`, options: ranked ? mpVoteOptions('standard', RANKED_RULES.modes, Math.random, { ranked: true }) : voteOptions(Math.random, isRandomPick(app.lastPick) ? null : app.lastPlayed), votes: new Map(), left: VOTE_SECONDS,
     seconds: VOTE_SECONDS, winner: null, resolved: null, mine: null,
     timer: setInterval(voteTick, 1000),
   };
@@ -1390,19 +1429,20 @@ function launchHostMatch(mapId, mode, custom = null) {
   const roster = custom
     ? buildRoster(clean, { botSkill: custom.botSkill, mode, mapId, seed, teamSize: custom.teamSize ?? null, pool: poolFor(clean) })
     : pickBotsForMatch({ humans: clean, mode, mapId, seed, pool: poolFor(clean) });
+  const ranked = !custom && rankedRoom() && RANKED_RULES.modes.includes(mode);
   const payload = {
-    t: 'start', seed, mapId, mode, mods: cleanMods(app.lobby.mods, mode), ...limits,
-    roster: withBadges(roster, clean, seed),
+    t: 'start', seed, mapId, mode, mods: ranked ? [] : cleanMods(app.lobby.mods, mode), ...limits,
+    roster: withBadges(roster, clean, seed), ...(ranked ? { ranked: true } : {}),
   };
   net.sendLobby(payload);
-  beginMatch({ ...payload, hostId: net.localId, isHost: true });
+  beginMatch({ ...payload, hostId: net.localId, isHost: true, ranked: ranked ? {} : null });
 }
 
 function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null }) {
+function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null, ranked = null }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
@@ -1443,6 +1483,9 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   });
   // The interpolated view does not carry the map id; history and gun stats need it.
   app.match.awards.mapId = mapId;
+  // Ranked (the Ranked playlist, or a full friend room the host made ranked): the rating moves at the end.
+  if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
+  app.matchInfo.ranked = !!ranked;
   app.match.telemetry.mapId = mapId;
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
   hud.onRespawn(msg => app.match?.requestRespawn(msg));
@@ -1550,7 +1593,7 @@ function showResults(results) {
       level: results.level,
       weapons: results.weapons ?? [],
       // Finished challenges get their stamp in the reel first; `challenges` is everything that moved (js/ui/challenges.js).
-      unlocks: [...(results.challenges ?? []).filter(c => c.fresh).map(challengeUnlock), ...(results.unlocks ?? [])],
+      unlocks: [...seasonUnlocks(results.season, results.ranked), ...(results.challenges ?? []).filter(c => c.fresh).map(challengeUnlock), ...(results.unlocks ?? [])],
       challenges: results.challenges ?? [],
       proProgress: results.proProgress ?? [],
       finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
@@ -1558,6 +1601,8 @@ function showResults(results) {
       snd: results.snd,
       br: results.br,
       mastery: results.mastery,
+      season: results.season ?? null,
+      ranked: results.ranked ?? null,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
     }, { rematch: () => afterResults(), menu: () => goTitle() });
   } catch (err) {

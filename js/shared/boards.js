@@ -15,6 +15,9 @@ import * as Pool from './botpool.js';
 import { CARD_IDS, MAX_LEVEL, MAX_PRESTIGE, MASTERY_TOTAL, weekStart, periodKey, dayKey } from './progression.js';
 import { OPERATOR_IDS, getSkin } from '../ui/operators.js';
 import { cleanEmblem } from '../ui/emblems.js';
+// Seasons and ranked (docs/SEASONS.md): the Season view ranks the season's window, the Ranked category everyone's SR.
+import { seasonAt, TIER_XP, TRACK_TIERS } from './seasons.js';
+import { ratingToSr, division, PLACEMENTS, SR_MAX } from './ranked.js';
 
 export const CARD_VERSION = 1;
 export const FRIENDS_MAX = 100;
@@ -45,6 +48,11 @@ export function cleanCard(raw) {
   c.kdm = Math.min(c.kdm, c.m); c.kdk = Math.min(c.kdk, c.k);
   if (c.op && getSkin(raw.skin)?.operator === c.op) c.skin = getSkin(raw.skin).id;
   if (isObj(raw.wk) && typeof raw.wk.key === 'string' && /^W\d{4}-\d{2}-\d{2}$/.test(raw.wk.key)) c.wk = { key: raw.wk.key, k: num(raw.wk.k), w: num(raw.wk.w) };
+  // Seasons (optional; older phones send none): this season's window, track tier and SR (-1 unranked).
+  if (isObj(raw.sn) && typeof raw.sn.key === 'string' && /^(pre|S\d{1,3}(R\d{1,4})?)$/.test(raw.sn.key)) {
+    c.sn = { key: raw.sn.key, m: num(raw.sn.m), k: num(raw.sn.k), d: num(raw.sn.d), w: num(raw.sn.w), brw: num(raw.sn.brw), br5: num(raw.sn.br5),
+      t: Math.min(TRACK_TIERS, num(raw.sn.t)), sr: Number.isFinite(raw.sn.sr) && raw.sn.sr >= 0 ? Math.min(SR_MAX, num(raw.sn.sr)) : -1 };
+  }
   return c;
 }
 
@@ -108,12 +116,25 @@ export function poolWindow(from, to) {
   });
 }
 
+// A pool bot's ranked SR this season (-1: not placed), from its usual rating and how many ranked matches the season
+// window gives it: about 60% play ranked, each a steady share of their matches; the more they play the higher they
+// climb (to +700), and a per-season roll (+-250) spreads them. A function of the date alone, like careerAt.
+const unit = (...parts) => Pool.hash32(...parts) / 4294967296;
+export function botSr(p, win, key) {
+  if (unit('ranked', p.id) > 0.62) return -1;
+  const games = Math.floor(win.m * (0.15 + 0.45 * unit('rkshare', p.id)));
+  if (games < PLACEMENTS) return -1;
+  const mu = p.skill.locked ? Pool.TIER_RATING[p.skill.locked] : p.skill.mu;
+  return Math.max(0, Math.min(SR_MAX, Math.round(ratingToSr(mu) - 250 + Math.min(700, games * 5) + (unit('rksr', p.id, key) - 0.5) * 500)));
+}
+
 // Every pool bot (however many the pool holds) as an entry on `now`'s date, cached per day.
 let poolCache = { key: null, list: null };
 export function poolEntries(now = Date.now()) {
   const d = new Date(now), key = `${dayKey(d)}|${periodKey('weekly', d)}`;
   if (poolCache.key === key) return poolCache.list;
   const wkKey = periodKey('weekly', d), today = boardDay(d), week = poolWindow(weekStart(d), d);
+  const season = seasonAt(d), sw = poolWindow(season.startsAt, d);
   const list = Pool.BOT_POOL.map((p, i) => {
     const c = Pool.careerAt(p, today);
     return entryOf(p.id, 'pool', {
@@ -122,6 +143,8 @@ export function poolEntries(now = Date.now()) {
       kdm: c.matches, kdk: c.kills, d: c.deaths, mst: botMastery(p, c.matches),
       wk: { key: wkKey, k: week[i].k, w: week[i].w },
       op: p.operator, skin: p.skin, card: p.card, emblem: p.emblem, clan: clanOf(p),
+      sn: { key: season.key, m: sw[i].m, k: sw[i].k, d: sw[i].d, w: sw[i].w, brw: sw[i].brw, br5: sw[i].br5,
+        t: Math.min(TRACK_TIERS, Math.floor(sw[i].xp / TIER_XP)), sr: botSr(p, sw[i], season.key) },
     });
   });
   poolCache = { key, list };
@@ -143,10 +166,25 @@ export const CATEGORIES = [
   { id: 'mastery', label: 'Mastery', icon: 'flag', value: e => e.mst, fmt: fmtInt },
   { id: 'wkills', label: 'Week kills', icon: 'skull', weekly: true, value: (e, wk) => weekly(e, wk).k, fmt: fmtInt },
   { id: 'wwins', label: 'Week wins', icon: 'cup', weekly: true, value: (e, wk) => weekly(e, wk).w, fmt: fmtInt },
+  // Seasons: the ranked ladder (this ranked season's SR, placed players only) and the season track's tier.
+  { id: 'ranked', label: 'Ranked', icon: 'rank', value: e => e.sn?.sr ?? -1, eligible: e => (e.sn?.sr ?? -1) >= 0, tie: e => e.sn?.w ?? 0,
+    fmt: v => `${division(v).name} · ${fmtInt(v)}`, rule: 'Placed this season' },
+  { id: 'tier', label: 'Tier', icon: 'star', seasonOnly: true, value: e => e.sn?.t ?? 0, tie: e => e.xp, fmt: fmtInt },
 ];
+// What each view offers: the Season view ranks the season's window, so career-long categories stay out of it.
+const NOT_IN_SEASON = new Set(['level', 'mastery', 'wkills', 'wwins', 'extract']);
+export const categoriesFor = view => CATEGORIES.filter(c => (view === 'season' ? !NOT_IN_SEASON.has(c.id) : !c.seasonOnly));
 export const CATEGORY_IDS = CATEGORIES.map(c => c.id);
 export const getCategory = id => CATEGORIES.find(c => c.id === id) ?? CATEGORIES[0];
-export const VIEWS = ['everyone', 'friends', 'around'];
+export const VIEWS = ['everyone', 'friends', 'around', 'season'];
+export const SEASON_KD_MIN = 10;
+
+// An entry as the season window sees it: the season's numbers in the career fields (a card from another season, or
+// none, counts as nothing yet this season). Looks, level and the ranked SR stay.
+function seasonal(e, key) {
+  const sn = e.sn?.key === key ? e.sn : { key, m: 0, k: 0, d: 0, w: 0, brw: 0, br5: 0, t: 0, sr: -1 };
+  return { ...e, m: sn.m, k: sn.k, w: sn.w, brw: sn.brw, br5: sn.br5, kdm: sn.m, kdk: sn.k, d: sn.d, sn, seasonView: true };
+}
 
 // Ranks entries on a category: highest first; ties share a rank (1, 2, 2, 4), ordered by the category's tie-break and
 // then the name and id so every phone lists them alike. Entries the category does not admit (K/D under the minimum)
@@ -156,6 +194,7 @@ export function rankEntries(entries, catId, now = Date.now()) {
   const rows = [], unranked = [];
   for (const e of entries) {
     if (cat.eligible && !cat.eligible(e)) { unranked.push(e); continue; }
+    if (cat.id === 'kd' && e.seasonView && e.kdm < SEASON_KD_MIN) { unranked.push(e); continue; }
     rows.push({ e, value: cat.value(e, wk), tie: cat.tie ? cat.tie(e) : 0 });
   }
   rows.sort((a, b) => b.value - a.value || b.tie - a.tie || (a.e.name < b.e.name ? -1 : a.e.name > b.e.name ? 1 : 0) || (a.e.id < b.e.id ? -1 : 1));
@@ -169,15 +208,21 @@ export function rankEntries(entries, catId, now = Date.now()) {
 export function buildBoard({ me, myId = 'me', friends = [], cat = 'level', view = 'everyone', now = Date.now() }) {
   const mine = entryOf(myId, 'me', cleanCard(me) ?? cleanCard({ v: CARD_VERSION, name: 'Rookie' }));
   const pals = friends.map(f => entryOf(f.id, 'friend', f.card, { asOf: f.at }));
-  const entries = view === 'friends' ? [mine, ...pals] : [mine, ...pals, ...poolEntries(now)];
-  const c = getCategory(cat);
+  let entries = view === 'friends' ? [mine, ...pals] : [mine, ...pals, ...poolEntries(now)];
+  const key = seasonAt(new Date(now)).key;
+  entries = entries.map(e => (e.sn && e.sn.key !== key ? { ...e, sn: null } : e));      // Another season's numbers say nothing now.
+  if (view === 'season') entries = entries.map(e => seasonal(e, key));
+  const c = categoriesFor(view).find(x => x.id === cat) ?? categoriesFor(view)[0];
   const { rows, unranked } = rankEntries(entries, c.id, now);
   for (const r of rows) r.text = c.fmt(r.value, r.e);
   let at = rows.findIndex(r => r.e.kind === 'me');
   let list = rows, note = null;
   if (at < 0 && unranked.some(e => e.kind === 'me')) {
-    const left = KD_MIN_MATCHES - mine.kdm;
-    note = `Play ${left} more match${left === 1 ? '' : 'es'} to rank on K/D`;
+    if (c.id === 'ranked') note = 'Finish your placement matches to rank here';
+    else {
+      const me2 = unranked.find(e => e.kind === 'me'), left = (view === 'season' ? SEASON_KD_MIN : KD_MIN_MATCHES) - me2.kdm;
+      note = `Play ${left} more match${left === 1 ? '' : 'es'} to rank on K/D`;
+    }
   }
   if (view === 'around') {
     if (at < 0) list = [];

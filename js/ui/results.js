@@ -15,6 +15,7 @@ import { challengeStamp, challengeStrip } from './challenges.js';
 import { modeColumn } from './mode-hud.js';
 import { playlistName } from '../shared/playlist.js';
 import { masteryStamp, masteryStrip } from './mastery.js';
+import { seasonStrip, seasonStamp } from './season.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
@@ -295,8 +296,9 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const mastery = data.mastery ?? Progress.lastMastery();
   // Every row is shown: the card scrolls natively when they outgrow it. Calling cards closest to done come last.
   const reach = data.challenges?.length || data.proProgress?.length || mastery?.length ? cardsInReach(3) : [];
-  const progress = challengeStrip(data.challenges, Infinity) + proProgressHtml(data.proProgress, Infinity) + masteryStrip(mastery, Infinity) + cardsStrip(reach);
-  const progressRows = (data.challenges?.length ?? 0) + (data.proProgress?.length ?? 0) + (mastery?.length ?? 0) + reach.length;
+  // Seasons (js/ui/season.js): the track's tier move and the rank's, first.
+  const progress = seasonStrip(data.season, data.ranked) + challengeStrip(data.challenges, Infinity) + proProgressHtml(data.proProgress, Infinity) + masteryStrip(mastery, Infinity) + cardsStrip(reach);
+  const progressRows = (data.season ? 2 : 0) + (data.ranked ? 1 : 0) + (data.challenges?.length ?? 0) + (data.proProgress?.length ?? 0) + (mastery?.length ?? 0) + reach.length;
   const progCard = progressRows > 1;
 
   menu.el.innerHTML = `
@@ -446,7 +448,7 @@ function cardsStrip(list) {
 
 function unlockCard(u) {
   // Pro perks and calling cards have their own ceremony (js/ui/cards.js), mastery tiers theirs (js/ui/mastery.js).
-  const special = unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u);
+  const special = unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u) ?? seasonStamp(u);
   if (special) return special;
   let mark;
   if (u.kind === 'camo') {

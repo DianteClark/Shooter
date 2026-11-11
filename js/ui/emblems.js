@@ -5,6 +5,8 @@
 // The player's pick is stored by js/ui/operators.js (equippedEmblem / setEmblemChoice); the picker is a tab of the
 // calling card sheet (js/ui/cards.js), opened from the service record.
 
+import { SEASON_DEFS, seasonEmblems, rankedEmblems } from '../shared/season-items.js';
+
 const f1 = v => Math.round(v * 10) / 10;
 const pts = list => list.map(p => `${f1(p[0])},${f1(p[1])}`).join(' ');
 const poly = (list, fill, extra = '') => `<polygon points="${pts(list)}" fill="${fill}"${extra}/>`;
@@ -81,15 +83,22 @@ const ROWS = [
 
 export const EMBLEMS = ROWS.map(([id, name, plateKind, rim, colours, glyph, rule]) => ({ id, name, plate: plateKind, rim, colours, glyph, rule }));
 export const EMBLEM_IDS = EMBLEMS.map(e => e.id);
-const BY_ID = new Map(EMBLEMS.map(e => [e.id, e]));
+// Seasons (docs/SEASONS.md): each season's 40 track emblems and 7 ranked crests. Kept out of EMBLEMS, which the bot
+// pool draws from by index (js/shared/botpool.js): appending there would change every bot's emblem.
+const seasonRow = (season, track) => ([id, name, plateKind, rim, colours, glyph]) => ({ id, name, plate: plateKind, rim, colours, glyph,
+  season, rule: { grant: true, label: track ? `${season} reward track` : `${season} ranked reward` } });
+export const SEASON_EMBLEMS = SEASON_DEFS.flatMap(d => [...seasonEmblems(d).map(seasonRow(d.id, true)), ...rankedEmblems(d).map(seasonRow(d.id, false))]);
+export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS];
+const BY_ID = new Map(ALL_EMBLEMS.map(e => [e.id, e]));
 export const getEmblem = id => BY_ID.get(id) ?? null;
 export const cleanEmblem = id => (BY_ID.has(id) ? id : null);
 
 const fmt = v => Number(v).toLocaleString('en-US');
 export function emblemUnlocked(e, c) {
   const r = e.rule;
-  if (c.granted?.(`emblem:${e.id}`)) return { unlocked: true, requirement: 'Earned on a mastery track' };
+  if (c.granted?.(`emblem:${e.id}`)) return { unlocked: true, requirement: e.season ? r.label : 'Earned on a mastery track' };
   if (r.starter) return { unlocked: true, requirement: 'Starter emblem' };
+  if (r.grant) return { unlocked: false, requirement: r.label };
   if (r.level) return { unlocked: c.level >= r.level, requirement: `Reach level ${r.level}` };
   if (r.prestige) return { unlocked: c.prestige >= r.prestige, requirement: `Reach prestige ${r.prestige}` };
   if (r.pro) return { unlocked: (c.pro?.length ?? 0) >= r.pro, requirement: `Earn ${r.pro} Pro perks` };

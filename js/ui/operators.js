@@ -9,7 +9,8 @@
 //   equippedEmblem() / setEmblemChoice(id)                  the player-card emblem (js/ui/emblems.js draws it)
 // Mastery skins are equipped through Progress (operatorSkin / setOperatorSkin); js/ui/cards.js wraps both paths.
 // The local picks live in their own small save (STORE_KEY) so this module needs nothing from Progress.
-import './cardbook.js';     // Registers the extra calling cards before progress.js reads the save (it imports this file).
+import './cardbook.js';
+import { SEASON_DEFS } from '../shared/season-items.js';     // Registers the extra calling cards before progress.js reads the save (it imports this file).
 
 // The first nine are modelled by hand in characters.js (TORSOS / HEADS). Every operator after them is assembled from
 // the parts kit (js/render/operator-kit.js): `kit` picks one part per slot, and `look` carries the build the shader
@@ -132,6 +133,8 @@ export const cleanOperator = id => (OPERATOR_IDS.includes(id) ? id : DEFAULT_OPE
 export function operatorUnlock(op, career) {
   const u = op.unlock;
   if (!u) return { unlocked: true, requirement: 'Available from the start', value: 1, goal: 1 };
+  // A season's reward track can open a locked operator early (career.granted is Progress.hasReward).
+  if (op.id && career.granted?.(`operator:${op.id}`)) return { unlocked: true, requirement: 'Earned on a season track', value: 1, goal: 1 };
   if (u.level) return { unlocked: career.level >= u.level, requirement: `Reach level ${u.level}`, value: Math.min(career.level, u.level), goal: u.level };
   if (u.prestige) return { unlocked: career.prestige >= u.prestige, requirement: `Reach prestige rank ${u.prestige}`, value: Math.min(career.prestige, u.prestige), goal: u.prestige };
   if (u.life) {
@@ -180,6 +183,7 @@ export const SKIN_TIERS = {
   3:     { label: 'Elite', slot: 1, order: 3 },
   4:     { label: 'Specialist', slot: 1, order: 4 },
   5:     { label: 'Mastery', slot: 2, order: 5 },
+  season: { label: 'Season', slot: 1, order: 6 },
 };
 const STAT_LABEL = { kills: 'gun kills', head: 'headshots', long: 'longshots', slide: 'slide kills', clean: 'equipment-free kills' };
 
@@ -270,6 +274,15 @@ export const SKINS = OPERATORS.flatMap(op => [
       glow: tier === 4 ? Math.max(1, glow) : glow, gear, sleeve, trouser, accent, unlock: rule ?? { grant: true } };
   }),
 ]);
+// Seasons (docs/SEASONS.md): each season's skin set, `skin:<operator>-s<n>`, earned on its reward track. Appended after
+// every operator's own skins, so the indices the renderer packs only grow.
+for (const def of SEASON_DEFS) {
+  for (const [op, name, [gear, sleeve, trouser, accent, glow]] of def.skins) {
+    if (!OPERATORS.some(o => o.id === op)) continue;
+    SKINS.push({ id: `skin:${op}-s${def.n}`, operator: op, tier: 'season', name, slot: glow >= 2 ? 2 : 1, glow, gear, sleeve, trouser, accent,
+      season: def.id, unlock: { season: def.id, label: `Season ${def.n} reward track` } });
+  }
+}
 SKINS.forEach((s, i) => { s.index = i; });
 const SKIN_BY_ID = new Map(SKINS.map(s => [s.id, s]));
 
@@ -279,7 +292,7 @@ export const skinsFor = operator => SKINS.filter(s => s.operator === operator);
 export const baseSkin = operator => `skin:${cleanOperator(operator)}-base`;
 // A skin id from a peer or a save only counts when it belongs to the operator it arrives with; null is the issue look.
 export const cleanSkin = (id, operator) => (getSkin(id)?.operator === operator ? getSkin(id).id : baseSkin(operator));
-export const isGrantSkin = skin => !!skin?.unlock?.grant;
+export const isGrantSkin = skin => !!(skin?.unlock?.grant || skin?.unlock?.season);
 
 // `career` is the operator career plus `granted(id)` (Progress.hasReward). Grant skins are unlocked only by their
 // mastery tier; field skins by their career rule (or a grant, should one ever be given).
@@ -288,6 +301,7 @@ export function skinUnlock(skin, career) {
   if (!u) return { unlocked: true, requirement: 'Comes with the operator', value: 1, goal: 1 };
   if (career.granted?.(skin.id)) return { unlocked: true, requirement: 'Earned', value: 1, goal: 1 };
   if (u.grant) return { unlocked: false, requirement: `${getOperator(skin.operator).name} mastery tier ${skin.tier}`, value: 0, goal: 1 };
+  if (u.season) return { unlocked: false, requirement: u.label, value: 0, goal: 1 };
   if (u.life) return operatorUnlock({ unlock: u }, career);
   if (u.stat) return { ...operatorUnlock({ unlock: { ...u, label: STAT_LABEL[u.stat] ?? u.stat } }, career), requirement: `${u.goal.toLocaleString('en-US')} ${STAT_LABEL[u.stat] ?? u.stat}` };
   return operatorUnlock({ unlock: u }, career);

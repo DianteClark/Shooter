@@ -15,6 +15,7 @@ import { CARDS, CARD_IDS, CARD_GROUPS } from '../shared/progression.js';
 import { WEAPON_IDS, CATEGORIES, GOLDEN_ID } from '../shared/constants.js';
 import { MAPS, MAP_IDS } from '../shared/map.js';
 import { WEAPONS } from '../shared/weapons.js';
+import { SEASON_DEFS, seasonCards, rankedCards, trackRewards } from '../shared/season-items.js';
 
 const NONE = { cats: {}, life: {}, mastered: 0, masteredIn: {}, masteredSet: new Set(), catSize: {}, camoOn: {}, granted: () => false };
 let source = () => NONE;
@@ -127,3 +128,11 @@ export function registerCards(list) {
 }
 registerCards(EXTRA);
 export const EXTRA_CARD_IDS = EXTRA.map(c => c.id);
+
+// Seasons (docs/SEASONS.md): each season's 40 track cards (group Season) and 7 ranked division cards (group Ranked),
+// granted through the save's season block (Progress.hasReward). `season` lets the picker hide other seasons' locked ones.
+const tierOf = (def, id) => trackRewards(def).find(r => r.own === `card:${id}`)?.tier ?? 0;
+registerCards(SEASON_DEFS.flatMap(def => [
+  ...seasonCards(def).map(c => ({ ...card(c.id, c.name, 'Season', `Season ${def.n} reward track, tier ${tierOf(def, c.id)}`, () => extras().granted(`card:${c.id}`), c.art), season: def.id })),
+  ...rankedCards(def).map(c => ({ ...card(c.id, c.name, 'Ranked', `Reach ${c.name.slice(def.name.length + 1)} in Season ${def.n} Ranked`, () => extras().granted(`card:${c.id}`), c.art), season: def.id })),
+]));

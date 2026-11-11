@@ -9,9 +9,13 @@
 //   chal: {track, goal}    a challenge: `goal` of track kills|head|long|slide|clean.
 //   mastery: true          every challenge on the weapon complete, plus masteryKills if set.
 //   prestige: n            weapon prestige n on that weapon.
+//   season: 'S1'           a season's reward track (js/shared/season-items.js); appended below, owned through the save's
+//                          season block (js/ui/progress.js), hidden before that season starts.
 // unlockKills is the v1 kill threshold and is read only by the save migration, so saves keep what they earned.
 //
 // Append new camos at the end. Index order is what snapshots and the shader uniform array use.
+import { SEASON_DEFS, seasonCamos } from './season-items.js';
+
 export const CAMOS = [
   { id: 'none',    name: 'Factory',     pattern: 'solid',    colors: [0x3b4048],                               scale: 1.0,                 tier: 0, unlockKills: 0 },
   { id: 'ash',     name: 'Ash Grid',    pattern: 'digital',  colors: [0x6b6f73, 0x30343a, 0xb6b4ab, 0x1a1c20], scale: 9.0,                 tier: 1, unlockKills: 25,   chal: { track: 'kills', goal: 25 } },
@@ -32,6 +36,8 @@ export const CAMOS = [
   { id: 'aurora',  name: 'Polar Night', pattern: 'aurora',   colors: [0x060a1c, 0x1fff9a, 0xc23dff, 0xf4fbff], scale: 4.0, animated: true, tier: 4, tint: 0x4dffb0, prestige: 2 },
   { id: 'horizon', name: 'Event Horizon', pattern: 'singularity', colors: [0x05030a, 0xff7a1a, 0xfff0c2, 0x4d2bff], scale: 7.0, animated: true, tier: 4, tint: 0xffa040, prestige: 3 },
 ];
+// Seasons (docs/SEASONS.md): every season's camos go on the end, in season order, so indices only ever grow.
+for (const def of SEASON_DEFS) CAMOS.push(...seasonCamos(def));
 
 const BY_ID = new Map(CAMOS.map(c => [c.id, c]));
 

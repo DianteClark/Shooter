@@ -79,6 +79,8 @@ import {
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { cleanFriends, seeFriend } from '../shared/boards.js';
 import { WEAPON_IDS } from '../shared/constants.js';
+import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP } from '../shared/seasons.js';
+import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
 
 export { levelOf };
 
@@ -194,7 +196,27 @@ const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 
 // The Golden Gun is gold, always: no camo, tracer or kill effect but its own.
 const plainOnly = w => w === GOLDEN_ID;
-const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none' : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w)));
+const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none'
+  : camo.season ? seasonOwned(data.season).has(`camo:${camo.id}`)
+  : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w)));
+// Every reward id granted: mastery tracks plus the season tracks and ranked (js/shared/seasons.js).
+function allRewards() {
+  const set = new Set(masteryRewards(data));
+  for (const id of seasonOwned(data.season)) set.add(id);
+  return set;
+}
+// A season cosmetic shows in a picker once owned, or while its season runs; never before its season starts.
+const seasonShown = (season, owned) => owned || (season === seasonAt().def?.id);
+// The season block rolled to today: a new season claims the old track's reached tiers and pays its ranked rewards first.
+let lastRollover = null;
+function seasonNow(now = new Date()) {
+  const r = rollover(data.season, now);
+  if (r.changed) {
+    if (r.claimed.length || r.ranked) lastRollover = r;
+    save();
+  }
+  return data.season;
+}
 const hasCosmetic = (w, item) => (plainOnly(w) ? !item.prestige : readWeapon(w).prestige >= item.prestige);
 // V11: an unlock above 30 is a mastery ladder tier (attachments.js LADDER_BASE), met by the gun's ladT.
 const hasAttachment = (w, id) => {
@@ -215,7 +237,7 @@ function gatedKits(loadout) {
 }
 
 function careerStats() {
-  const c = { level: data.peakLevel, prestige: data.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {} };
+  const c = { level: data.peakLevel, prestige: data.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id) };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
 }
@@ -272,7 +294,7 @@ function cardCareer() {
   for (const camo of MASTERY_CAMOS) if (WEAPON_IDS.some(w => hasCamo(w, camo))) camos.add(camo.id);
   const trackTiers = {};
   for (const [id, e] of Object.entries(data.mastery ?? {})) trackTiers[id] = e?.t ?? 0;
-  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, proCounts: data.pro, trackTiers, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos, rewards: masteryRewards(data) };
+  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, proCounts: data.pro, trackTiers, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos, rewards: allRewards() };
 }
 
 // The career the operator skins and emblems are judged on (js/ui/operators.js skinUnlock, js/ui/emblems.js).
@@ -395,8 +417,8 @@ export const Progress = {
     return MASTERY_TRACKS.filter(t => !kind || t.kind === kind).map(t => trackStatus(t, data.mastery[t.id]));
   },
   weaponLadder(w) { return ladderStatus(w, readWeapon(w)); },
-  hasReward(id) { return masteryRewards(data).has(id); },
-  rewards() { return masteryRewards(data); },
+  hasReward(id) { return masteryRewards(data).has(id) || seasonOwned(data.season).has(id); },
+  rewards() { return allRewards(); },
   // Emblem badges earned: {id, item, grade (1 bronze, 2 gold), name, kind}, best grade per item only.
   badges() {
     const got = masteryRewards(data), out = new Map();
@@ -497,7 +519,8 @@ export const Progress = {
 
   /* ---------- Cosmetics ---------- */
   camos(w) {
-    return (plainOnly(w) ? CAMOS.slice(0, 1) : CAMOS).map(camo => ({ camo, unlocked: hasCamo(w, camo), requirement: camoRequirement(camo) }));
+    return (plainOnly(w) ? CAMOS.slice(0, 1) : CAMOS).map(camo => ({ camo, unlocked: hasCamo(w, camo), requirement: camoRequirement(camo) }))
+      .filter(c => !c.camo.season || (!dateLocked('camo', c.camo.id) && seasonShown(c.camo.season, c.unlocked)));
   },
 
   isUnlocked(w, camoId) {
@@ -624,7 +647,7 @@ export const Progress = {
   /* ---------- Calling cards and Veteran ---------- */
   cards() {
     const career = cardCareer(), earned = new Set(cardsEarned(career)), on = equippedCard();
-    return CARDS.map(card => {
+    return CARDS.filter(card => !card.season || seasonShown(card.season, earned.has(card.id))).map(card => {
       const unlocked = earned.has(card.id);
       return { card, unlocked, equipped: card.id === on, progress: unlocked ? null : cardProgress(card, career) };
     });
@@ -744,7 +767,40 @@ export const Progress = {
       m: c.m, k: c.k, w: c.w, brm: c.brm, brw: c.brw, br5: c.br5, ex: c.ex, kdm: c.kdm, kdk: c.kdk, d: c.d,
       mst: masteryCompleted(data), wk: { key: wk.key, k: wk.k, w: wk.w },
       op: lo.operator ?? null, skin: lo.skin ?? null, card: equippedCard(), emblem: currentEmblemId(),
+      // Seasons: this season's window (the Season boards) and the ranked standing.
+      sn: (() => { const st = seasonNow(now), sn = st.sn; return { key: sn.key, m: sn.m, k: sn.k, d: sn.d, w: sn.w, brw: sn.brw, br5: sn.br5, t: tierProgress(st.xp).tier, sr: placed(st.rk) ? st.rk.sr : -1 }; })(),
     };
+  },
+
+  /* ---------- Seasons and ranked (js/shared/seasons.js, js/shared/ranked.js, docs/SEASONS.md) ---------- */
+  // { info: seasonAt(), xp, st, tier, into, span, maxed, claimed, claimable, ranked: {...rk, placed, division, code} }
+  season(now = new Date()) {
+    const st = seasonNow(now), info = seasonAt(now), tp = tierProgress(st.xp);
+    return { info, xp: st.xp, stars: st.st, ...tp, claimed: st.c, claimable: info.def ? Math.max(0, tp.tier - st.c) : 0, ranked: this.ranked(now) };
+  },
+  ranked(now = new Date()) {
+    const rk = seasonNow(now).rk, p = placed(rk);
+    return { ...rk, placed: p, placements: PLACEMENTS, division: p ? division(rk.sr) : null, code: codeOf(rk) };
+  },
+  rankCode() { return codeOf(seasonNow().rk); },
+  weekly(now = new Date()) { return weeklyStatus(seasonNow(now), now); },
+  // Claims every reached tier: the rewards, tier order, each { tier, kind, id, own, fresh }.
+  claimSeason(now = new Date()) {
+    seasonNow(now);
+    const list = claimTiers(data.season);
+    if (list.length) save();
+    return list;
+  },
+  // A rollover since the last look (claimed tiers and ranked rewards of the season that ended), once.
+  takeRollover() { const r = lastRollover; lastRollover = null; return r; },
+  // One finished match (js/game/awards.js): the track, the weekly sets and, for a ranked match, the rating.
+  // m: { xp, counts, career, ranked: null | { outcome, perf, lobby, rating } }. Returns { track, ranked }.
+  applySeasonMatch(m, now = new Date()) {
+    const st = seasonNow(now);
+    const track = applySeasonMatch(st, { xp: m.xp, counts: { ...(m.counts ?? {}), ...(m.ranked ? { ranked: 1 } : {}) }, career: m.career }, now);
+    const ranked = m.ranked ? applyRanked(st.rk, m.ranked) : null;
+    save();
+    return { track: track ? { ...track, tierXp: TIER_XP } : null, ranked: ranked ? { ...ranked, rk: { ...st.rk }, placements: PLACEMENTS } : null };
   },
 };
 

@@ -30,6 +30,17 @@
     get length() { return mem.size; },
   };
   try { Object.defineProperty(window, 'localStorage', { value: store, configurable: true }); } catch { /* falls back to the real one */ }
+  // Seasons (docs/SEASONS.md): &date=YYYY-MM-DD runs the frame on that local date; season scenes default to a day in
+  // Season 1 (week 3, the Cold Snap event on).
+  const day = q.get('date') ?? (/^(season|boards-season|boards-ranked|results-season|mp-ranked|title-season)/.test(q.get('frame') ?? '') ? '2026-12-02' : null);
+  if (day) {
+    const Real = Date, offset = new Real(`${day}T12:00:00`).getTime() - Real.now();
+    class FakeDate extends Real {
+      constructor(...a) { if (a.length) super(...a); else super(Real.now() + offset); }
+      static now() { return Real.now() + offset; }
+    }
+    window.Date = FakeDate;
+  }
   window.__errors = [];
   addEventListener('error', e => window.__errors.push(String(e.message)));
   addEventListener('unhandledrejection', e => window.__errors.push(String(e.reason?.message ?? e.reason)));
@@ -151,6 +162,16 @@ const SCENES = {
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop }); }),
   // Leaderboards: a played-in save, three friends (one with a long tag, one from last week) and the pool.
+  // Seasons and ranked: a played-in season (tiers claimed and some to claim, placed in ranked), on a day in Season 1.
+  'title-season': menuScene('Title, in Season 1', async ({ menu }) => { await seedSeason(); menu.title({}); }),
+  'season-track': menuScene('Season: track', async ({ menu }) => { await seedSeason(); menu.season({ onBack: noop, onPlayRanked: noop, tab: 'track' }); }),
+  'season-weekly': menuScene('Season: weekly', async ({ menu }) => { await seedSeason(); menu.season({ onBack: noop, onPlayRanked: noop, tab: 'weekly' }); }),
+  'season-ranked': menuScene('Season: ranked', async ({ menu }) => { await seedSeason(); menu.season({ onBack: noop, onPlayRanked: noop, tab: 'ranked' }); }),
+  'season-pre': menuScene('Season: preseason track', async ({ menu }) => { menu.season({ onBack: noop, onPlayRanked: noop, tab: 'track' }); }),
+  'mp-ranked': menuScene('Multiplayer: Ranked and the event', async ({ menu }) => { await seedSeason(); menu.multiplayer({ tab: 'standard', sel: { playlist: 'ranked', modes: [] } }); }),
+  'boards-season': menuScene('Boards: season', async ({ menu }) => { await seedSeason(); await boardsScene(menu, 'season', 'kills'); }),
+  'boards-ranked': menuScene('Boards: ranked', async ({ menu }) => { await seedSeason(); await boardsScene(menu, 'everyone', 'ranked'); }),
+  'results-season': menuScene('Results: win, ranked and track', async ({ menu, results }) => { const r = await seedSeason(); menu.results({ ...results('win'), season: r.track, ranked: r.ranked, unlocks: [...r.unlocks, ...results('win').unlocks] }, { rematch: noop, menu: noop }); }, { gl: true, settle: 4500 }),
   'boards': menuScene('Boards: everyone', ({ menu }) => boardsScene(menu, 'everyone', 'level')),
   'boards-friends': menuScene('Boards: friends', ({ menu }) => boardsScene(menu, 'friends', 'kills')),
   'boards-around': menuScene('Boards: around me', ({ menu }) => boardsScene(menu, 'around', 'wkills')),
@@ -248,6 +269,22 @@ async function runFrame(id) {
   // Let entrances settle before anyone screenshots. Timed sequences (the results reel) ask for longer; &wait= overrides.
   await new Promise(r => setTimeout(r, Number(q.get('wait') ?? scene?.settle ?? 900)));
   window.__ready = true;
+}
+
+// A season played in: 16 matches (12 of them ranked: placed, then a few more), some tiers claimed, some waiting.
+// Returns the last match's season result, for the results scene.
+async function seedSeason() {
+  const { Progress } = await import('./js/ui/progress.js');
+  const { seasonUnlocks } = await import('./js/ui/season.js');
+  let last = null;
+  for (let i = 0; i < 16; i++) {
+    const won = i % 3 !== 1;
+    last = Progress.applySeasonMatch({ xp: 9000, counts: { kills: 18, head: 5, wins: won ? 1 : 0, played: 1, captures: 3, assists: 4, 'played:hard': 1, 'cat:Assault': 9 },
+      career: { kills: 18, deaths: 12, won }, ranked: i < 12 ? { outcome: won ? 'win' : 'loss', perf: 0.35, lobby: 2500, rating: 0.48 } : null });
+    if (i === 9) Progress.claimSeason();
+  }
+  last = Progress.applySeasonMatch({ xp: 9500, counts: { kills: 22, wins: 1, played: 1 }, career: { kills: 22, deaths: 9, won: true }, ranked: { outcome: 'win', perf: 0.8, lobby: 2600, rating: 0.48 } });
+  return { ...last, unlocks: seasonUnlocks(last.track, last.ranked) };
 }
 
 async function boardsScene(menu, view, cat) {
