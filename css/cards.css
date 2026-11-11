@@ -217,15 +217,15 @@
 .es-lock { position: absolute; right: 7px; top: 7px; color: var(--c-haze); line-height: 0; }
 .es-cell.on { background: var(--face-steel-hi); box-shadow: var(--bevel-hi), inset 0 0 0 2px var(--c-sodium); }
 
-/* ---- Operator skins: a swatch column down the turntable's right edge ---- */
-#ui .op-bay.has-skins .op-view { right: 44px; }
+/* ---- Operator skins: a swatch row along the foot of the turntable (six of them since the operators wave) ---- */
+#ui .op-bay.has-skins .op-view { top: 56px; bottom: 114px; }
 #ui .op-name .op-skinname { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); }
 #ui .op-name .op-skinname u { text-decoration: none; padding: 1px 4px 0; font-size: 9px; color: var(--c-ballast); background: var(--c-haze); }
 #ui .op-name .op-mchip:empty { display: none; }
 #ui .op-name .op-mchip { margin-top: 3px; align-self: flex-start; }
-.op-skins { position: absolute; right: 6px; top: 50px; bottom: 66px; z-index: 2; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+.op-skins { position: absolute; left: 6px; right: 6px; bottom: 66px; z-index: 2; display: flex; flex-direction: row; justify-content: center; gap: 5px; }
 .op-skin {
-  position: relative; width: 40px; height: 44px; padding: 0; display: flex; flex-direction: column; align-items: stretch;
+  position: relative; flex: 0 1 40px; min-width: 0; height: 44px; padding: 0; display: flex; flex-direction: column; align-items: stretch;
   background: rgba(16,20,26,.72); box-shadow: var(--edge); color: var(--c-chalk);
   --cut: 5px; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   transition: transform var(--dur-fast) var(--ease-out);

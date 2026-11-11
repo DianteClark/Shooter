@@ -143,6 +143,30 @@ export function operatorUnlock(op, career) {
 }
 export const isFemale = op => getOperator(op?.id ?? op).voice === F;
 
+// The bots' wardrobe for one match: every operator once before any repeats, in a seeded order that alternates women and
+// men, so even a small lobby is mixed and no two matches line up the same. `botOperator(seed, i)` is seat i's.
+const botOrders = new Map();
+export function botOrder(seed) {
+  const key = (Math.floor(Number(seed)) || 0) >>> 0;
+  let order = botOrders.get(key);
+  if (order) return order;
+  let h = (key ^ 0x9e3779b9) >>> 0;
+  const rnd = () => { h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0; h = (h + 0x6d2b79f5) >>> 0; return ((h ^ (h >>> 13)) >>> 0) / 4294967296; };
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const women = shuffle(OPERATORS.filter(o => o.voice === F).map(o => o.id)), men = shuffle(OPERATORS.filter(o => o.voice !== F).map(o => o.id));
+  order = [];
+  const first = rnd() < 0.5;
+  while (women.length || men.length) {
+    const a = first ? women : men, b = first ? men : women;
+    if (a.length) order.push(a.pop());
+    if (b.length) order.push(b.pop());
+  }
+  if (botOrders.size > 32) botOrders.clear();
+  botOrders.set(key, order);
+  return order;
+}
+export const botOperator = (seed, i) => { const o = botOrder(seed); return o[((i % o.length) + o.length) % o.length]; };
+
 /* ---------- Skins ---------- */
 // Ids follow the mastery reward ids (docs/PROGRESSION.md): `skin:<operator>-2` .. `-5` are granted by the operator's
 // mastery track at those tiers; `skin:<operator>-field` is earned by career numbers; `skin:<operator>-base` is the issue
