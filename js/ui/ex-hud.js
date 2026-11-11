@@ -427,6 +427,7 @@ export class ExHud {
       const kx = dx ? ((dx > 0 ? W - mx : mx) - cx) / dx : Infinity, ky = dy ? ((dy > 0 ? bottom : top) - cy) / dy : Infinity;
       const s = Math.min(kx, ky);
       sx = cx + dx * s; sy = cy + dy * s;
+      if (sx > W - 210 && sy < 150) sy = 150;      // Under the contract card, not on it.
     }
     sx = Math.round(sx); sy = Math.round(sy);
     t.root.hidden = false;
