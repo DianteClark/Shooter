@@ -213,6 +213,7 @@ export class BrHud {
     if (!auto && open) this.mapManual = true;
     if (!open) this.mapManual = false;
     this.mapAuto = auto && open;
+    if (open) this.hud.controls?.showAimHint(false);    // The first-match aim hint would sit over the map.
   }
 
   update(view, me, dt) {
@@ -496,9 +497,11 @@ export class BrHud {
     for (const poi of br.pois ?? []) {
       const x = poi.x * s, y = poi.z * s;
       g.font = `${poi.tier === 1 ? 20 : 16}px Oswald, "Arial Narrow", sans-serif`;
-      g.lineWidth = 4; g.strokeStyle = 'rgba(10,13,17,.85)'; g.strokeText(poi.name.toUpperCase(), x, y);
+      const half = g.measureText(poi.name.toUpperCase()).width / 2 + 4;
+      const lx = Math.max(half, Math.min(MAP_PX - half, x));
+      g.lineWidth = 4; g.strokeStyle = 'rgba(10,13,17,.85)'; g.strokeText(poi.name.toUpperCase(), lx, y);
       g.fillStyle = poi.tier === 1 ? '#ffc24a' : poi.tier === 2 ? '#f2f0e6' : '#b8bfb6';
-      g.fillText(poi.name.toUpperCase(), x, y);
+      g.fillText(poi.name.toUpperCase(), lx, y);
     }
     // Flight line and transport.
     if (br.plane.f < 1) {

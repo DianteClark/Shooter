@@ -187,7 +187,7 @@ function build() {
   const circleBias = pois.map(p => ({ x: p.x, z: p.z, w: p.tier === 1 ? 2 : 1 }));
 
   return {
-    id: 'brtest', name: 'Proving Grounds', theme: 'harvest', size: 'giant', region: 'mixed', width: SIZE, height: SIZE,
+    id: 'brtest', name: 'Proving Grounds', theme: 'harvest', size: 'huge', hidden: true, region: 'mixed', width: SIZE, height: SIZE,
     walls, spawns, lanes, nav, rooms, points: { dom: [], hard: [] },
     modes: ['br', 'brduo', 'brsolo'], large: true, devMap: true,
     br: { pois, loot, chests, drop: null, circleBias },

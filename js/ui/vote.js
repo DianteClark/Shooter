@@ -23,7 +23,7 @@ function mixArt() {
 
 // Battle royale maps (giant, kept out of MAP_IDS): the real ones, and the dev test map only with ?brtest.
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('brtest');
-const BR_PICK = BR_MAP_IDS.filter(id => !MAPS[id].devMap || DEBUG);
+const BR_PICK = [...BR_MAP_IDS.filter(id => !MAPS[id].devMap), ...(DEBUG ? Object.keys(MAPS).filter(id => MAPS[id].devMap && MAPS[id].br) : [])];
 const PICK_IDS = [...MAP_IDS, ...BR_PICK];
 
 // Every playable map and mode pair.

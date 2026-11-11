@@ -640,6 +640,7 @@ export class BrRules {
   // The human is back: the phone is told where it stands and what it carries.
   onRejoin(p) {
     const sim = this.sim, ps = p.ps;
+    this.sentTo.delete(p.id);         // A fresh phone has none of the loot changes yet.
     p.ackX = ps.x; p.ackZ = ps.z; p.ackT = 1.5;
     if (p.alive) {
       sim._emit({ t: 'spawn', id: p.id, x: Math.round(ps.x * 100) / 100, z: Math.round(ps.z * 100) / 100, aim: Math.round(ps.aim * 100) / 100 });

@@ -64,6 +64,8 @@ async def run(browser, vw, vh, failures, errors):
     await shot('04-glide')
     await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=15000)
     await pg.wait_for_timeout(600)
+    # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
+    await ev(f"{G}.match.sim.byId.get({G}.match.localId).spawnProtect = 999")
     # Loot: walk (teleport) over the nearest few items, then stand by a ground gun.
     took = await ev(f"""(async () => {{
       const m = {G}.match, rules = m.sim.br, out = [];
@@ -102,6 +104,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1800)
     await shot('08-fight')
     await ev('window.__fight = false')
+    await ev(f"{G}.match.sim.byId.get({G}.match.localId).spawnProtect = 0")
     # Down, then a squadmate's revive (the squad bots come for you).
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 70) {{ p.ps.x = 3; p.ps.z = 3; }}
