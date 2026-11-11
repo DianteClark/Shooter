@@ -64,6 +64,7 @@ export class Interpolator {
     out.smokes = b.smokes;
     out.turrets = b.turrets;
     out.gunships = b.gunships;
+    out.deploys = b.deploys; out.drones = b.drones; out.empLock = b.empLock;   // V9 scorestreaks (sim/streaks-v9.js).
     out.mode = b.mode;
     out.modeId = b.modeId;
     out.mapId = b.mapId;

@@ -1,7 +1,7 @@
 // The Loadouts screen, laid out like a Call of Duty create-a-class: the five sets across the top, the primary as a large
 // hero with its camo and attachments, and everything else in dense rows beside it. Guns open the Armory, a full panel with
 // a category rail, a card with a real picture of every gun and a live preview; nothing changes until Equip.
-import { TACTICALS, LETHALS, PERKS, PERK_TIERS, PRO, STREAKS, streakCost } from '../shared/catalog.js';
+import { TACTICALS, LETHALS, PERKS, PERK_TIERS, PRO, STREAKS, STREAK_ROLE_NAME, streakCost } from '../shared/catalog.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { getCamo } from '../shared/camos.js';
 import { SLOTS, ATTACHMENTS, attachmentsFor } from '../shared/attachments.js';
@@ -399,7 +399,7 @@ export class LoadoutsScreen {
     const perk = key === 'perks', pro = perk && Progress.isPro(item.id);
     return `<button class="pk-card${on ? ' on' : ''}${open ? '' : ' locked'}${pro ? ' is-pro' : ''}${this.panel?.focus === item.id ? ' focus' : ''}" data-act="loChoose" data-key="${key}" data-id="${item.id}">
       <span class="ld-ico">${itemMark(item.id, item.name)}</span>
-      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}${item.job ? `<i class="job-chip">${esc(item.job)}</i>` : ''}</b><small>${open ? esc(item.desc) : esc(lockOf(sec.kind, item.id))}</small></span>
+      <span class="ld-tx"><b>${esc(item.name)}${pro ? '<i class="pro-chip">Pro</i>' : ''}${item.job ? `<i class="job-chip">${esc(item.job)}</i>` : ''}${key === 'streaks' && item.role ? `<i class="job-chip role-chip role-${item.role}">${esc(STREAK_ROLE_NAME[item.role] ?? item.role)}</i>` : ''}</b><small>${open ? esc(item.desc) : esc(lockOf(sec.kind, item.id))}</small>${key === 'streaks' && open && item.counter ? `<small class="ctr">Counter: ${esc(item.counter)}</small>` : ''}</span>
       ${open ? (tag ? `<em>${tag}</em>` : '') : `<em class="lock">${ico('lock')}</em>`}
       ${perk && open ? this.proStrip(item.id) : ''}
       ${!perk && open ? masteryPips(Progress.mastery(item.id)) : ''}

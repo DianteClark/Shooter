@@ -1,32 +1,43 @@
 // Everything a loadout can contain. Adding an item is one line of data here plus its behaviour in the sim.
 
-export const SCORE = { kill: 100, headshot: 25, assist: 50, confirm: 50, deny: 25, capture: 100, defend: 50, holdTick: 10 };
+export const SCORE = { kill: 100, headshot: 25, assist: 50, confirm: 50, deny: 25, capture: 100, defend: 50, holdTick: 10, shootdown: 100, destroy: 50 };
 
 // `air` streaks count against the airspace limit. `limit` is how many of that streak one team may have up at once.
 // `role` is display information only: 'intel', 'offense', 'support' or 'denial'.
 // Costs are set against measured bot matches with score persisting through death (Wave 6): a good player earns about
 // one mid-list streak a match (turret to overwatch), the top of the list rarely. See the earn-rate test in the report.
 export const STREAKS = {
-  uav:       { id: 'uav',       name: 'UAV',          cost: 1000, air: true,  limit: 1, role: 'intel',   desc: 'Reveals enemies on the minimap for 20 s' },
-  jammer:    { id: 'jammer',    name: 'Jammer',       cost: 1200, air: true,  limit: 1, role: 'denial',  desc: 'Blanks the enemy minimap and UAV for 15 s' },
-  resupply:  { id: 'resupply',  name: 'Supply Drop',  cost: 1500, air: false, limit: 0, role: 'support', desc: 'Heals and re-arms everyone on your team near you' },
-  turret:    { id: 'turret',    name: 'Sentry',       cost: 2100, air: false, limit: 2, role: 'offense', desc: 'Automated gun at your position' },
-  mortar:    { id: 'mortar',    name: 'Mortar Team',  cost: 2500, air: false, limit: 1, role: 'offense', desc: 'Five shells on enemies your team can see' },
-  strike:    { id: 'strike',    name: 'Airstrike',    cost: 2800, air: true,  limit: 1, role: 'offense', desc: 'Line of explosions on the enemy' },
-  overwatch: { id: 'overwatch', name: 'Overwatch',    cost: 3100, air: true,  limit: 1, role: 'intel',   desc: 'Advanced UAV for 25 s. Reveals Ghost too' },
-  chopper:   { id: 'chopper',   name: 'Attack Chopper', cost: 3600, air: true, limit: 1, role: 'offense', desc: 'Flies low and hunts enemies your team can see' },
-  emp:       { id: 'emp',       name: 'EMP',          cost: 4100, air: false, limit: 0, role: 'denial',  desc: 'Knocks out enemy air, sentries and radar' },
-  gunship:   { id: 'gunship',   name: 'Gunship',      cost: 4800, air: true,  limit: 1, role: 'offense', desc: 'Circles the map, firing on visible enemies' },
-  // V8. Wire ids are STREAK_IDS order (4 bits in the loadout ints): new ones only ever go on the end.
-  missile:   { id: 'missile',   name: 'Cruise Missile', cost: 1800, air: true, limit: 1, role: 'offense', desc: 'Steer it with the aim stick for a few seconds, then boom' },
-  swarm:     { id: 'swarm',     name: 'Drone Swarm',  cost: 3300, air: true,  limit: 1, role: 'offense', desc: 'Three drones that dive on enemies your team can see' },
-  juggernaut: { id: 'juggernaut', name: 'Juggernaut', cost: 4400, air: false, limit: 0, role: 'support', armor: 300, desc: '300 armour over your health until you die' },
+  uav:       { id: 'uav',       name: 'UAV',          cost: 1000, air: true,  limit: 1, role: 'intel',   desc: 'Reveals enemies on the minimap for 20 s', counter: 'Ghost hides you; Jammer, EMP' },
+  jammer:    { id: 'jammer',    name: 'Jammer',       cost: 1200, air: true,  limit: 1, role: 'denial',  desc: 'Blanks the enemy minimap and UAV for 15 s', counter: 'Overwatch shrugs it off; EMP' },
+  resupply:  { id: 'resupply',  name: 'Supply Drop',  cost: 1500, air: false, limit: 0, role: 'support', desc: 'Heals and re-arms everyone on your team near you', counter: 'Catch them before it lands' },
+  turret:    { id: 'turret',    name: 'Sentry',       cost: 2000, air: false, limit: 2, role: 'offense', desc: 'Automated gun at your position for 30 s', counter: 'Shoot it, explosives, Shock; Cold Blooded; Hijacker' },
+  mortar:    { id: 'mortar',    name: 'Mortar Team',  cost: 2400, air: false, limit: 1, role: 'offense', desc: 'Five shells on enemies your team can see', counter: 'Roofs stop shells; keep moving; Cold Blooded' },
+  strike:    { id: 'strike',    name: 'Airstrike',    cost: 2800, air: true,  limit: 1, role: 'offense', desc: 'Line of explosions on the enemy', counter: 'Buildings, Flak, Aegis Dome; EMP before it lands' },
+  overwatch: { id: 'overwatch', name: 'Overwatch',    cost: 3100, air: true,  limit: 1, role: 'intel',   desc: 'Advanced UAV for 30 s. Reveals Ghost too; Jammers cannot blank it', counter: 'EMP' },
+  chopper:   { id: 'chopper',   name: 'Attack Chopper', cost: 3600, air: true, limit: 1, role: 'offense', desc: 'Flies low and hunts enemies your team can see', counter: 'Shoot it down, launchers best; buildings; EMP' },
+  emp:       { id: 'emp',       name: 'EMP',          cost: 4000, air: false, limit: 0, role: 'denial',  desc: 'Downs enemy air and sentries, blanks radar; enemy streaks offline 12 s', counter: 'Engineer: your machines survive damaged, your kit stays up' },
+  gunship:   { id: 'gunship',   name: 'Gunship',      cost: 4600, air: true,  limit: 1, role: 'offense', desc: 'Circles over the fight, firing on visible enemies', counter: 'Shoot it down, launchers best; stay under roofs; EMP' },
+  // V8. Wire ids are STREAK_IDS order (5 bits a slot on the wire since V9): new ones only ever go on the end.
+  missile:   { id: 'missile',   name: 'Cruise Missile', cost: 1800, air: true, limit: 1, role: 'offense', desc: 'Steer it with the aim stick for a few seconds, then boom', counter: 'Shoot it down; buildings; Cold Blooded must be flown into' },
+  swarm:     { id: 'swarm',     name: 'Drone Swarm',  cost: 3300, air: true,  limit: 1, role: 'offense', desc: 'Three drones that dive on enemies your team can see', counter: 'Break line of sight; shoot the drones; Cold Blooded' },
+  juggernaut: { id: 'juggernaut', name: 'Juggernaut', cost: 4400, air: false, limit: 0, role: 'support', armor: 300, desc: '300 armour over your health until you die', counter: 'Explosives strip armour fast' },
+  // V9 (scorestreaks overhaul, 2026-11). Appended: old ids keep their wire numbers.
+  sweep:     { id: 'sweep',     name: 'Sonar Sweep',  cost: 800,  air: false, limit: 1, role: 'intel',   desc: 'Two sonar pulses: enemies within 36 m of you show on your team\'s map', counter: 'Ghost hides you; Cold Blooded halves it' },
+  recon:     { id: 'recon',     name: 'Recon Drone',  cost: 1400, air: true,  limit: 1, role: 'intel',   desc: 'Fly it with the aim stick for 12 s: marks enemies it passes over, through walls', counter: 'Shoot it down; Cold Blooded halves marks; Blank Slate' },
+  airdrop:   { id: 'airdrop',   name: 'Airdrop',      cost: 1700, air: false, limit: 1, role: 'support', desc: 'A crate lands by you. Stand on it to open: a random scorestreak, called at once', counter: 'Steal it (stand on it longer) or shoot it to pieces' },
+  plates:    { id: 'plates',    name: 'Plate Drop',   cost: 2000, air: false, limit: 0, role: 'support', armor: 100, desc: 'You and teammates within 14 m get 100 armour plates', counter: 'Explosives strip plates fast' },
+  hound:     { id: 'hound',     name: 'Wingman',      cost: 2300, air: true,  limit: 1, role: 'offense', desc: 'A gun drone that flies at your shoulder for 30 s and shoots enemies near you', counter: 'Shoot it down; walls; Cold Blooded until close; EMP' },
+  dome:      { id: 'dome',      name: 'Aegis Dome',   cost: 2600, air: false, limit: 1, role: 'support', desc: 'A 6 m bubble for 20 s: enemy grenades and streak blasts cannot reach your team inside', counter: 'Walk in and fight; shoot the emitter; Shock, Blackout, EMP' },
+  bombrun:   { id: 'bombrun',   name: 'Carpet Line',  cost: 3000, air: true,  limit: 1, role: 'offense', desc: 'Drag the aim stick to draw a line, let go: bombs walk along it', counter: 'Get off the red line; buildings, Flak, Aegis Dome' },
+  rover:     { id: 'rover',     name: 'Rover',        cost: 3400, air: false, limit: 1, role: 'offense', desc: 'Armed ground robot that drives at enemies your team can see for 25 s', counter: 'Shoot it, explosives, Shock; Hijacker takes it' },
 };
 export const STREAK_IDS = Object.keys(STREAKS);
 
 // What a tile says when its streak is held but cannot be called right now. Slot `denied` and streak_denied `reason`.
-export const STREAK_DENY_REASONS = ['limit', 'airspace', 'no_target'];
-export const STREAK_DENY_TEXT = { limit: 'Already up', airspace: 'Airspace full', no_target: 'No target' };
+export const STREAK_DENY_REASONS = ['limit', 'airspace', 'no_target', 'emp'];
+export const STREAK_DENY_TEXT = { limit: 'Already up', airspace: 'Airspace full', no_target: 'No target', emp: 'EMP' };
+// What the loadout and Help call each `role`.
+export const STREAK_ROLE_NAME = { intel: 'Intel', denial: 'Denial', offense: 'Lethal', support: 'Support' };
 
 // Equipment. Ids are on the wire and in saves by position (js/sim/sim.js TACTICAL_IDS, LETHAL_IDS, 4 bits each): never
 // reorder, only append, at most 16 per slot. `job` is the one-line role the loadout shows; `counter` is what beats it

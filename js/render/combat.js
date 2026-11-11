@@ -16,6 +16,7 @@ import { SND, CTF } from '../shared/modes.js';
 import { sndOf } from '../sim/snd.js';
 import { ctfOf } from '../sim/ctf.js';
 import { EquipmentFX } from './equipment-fx.js';   // Gear wave equipment (2026-11): models, beams, burns, rings.
+import { StreaksFX } from './streaks-fx.js';       // Scorestreaks overhaul (2026-11): new machines, domes, shoot-downs.
 
 const MAX_NADES = 18;
 const MAX_FIRES = 6;
@@ -640,6 +641,7 @@ export class CombatFX {
     });
     this.nades = this.#modelMesh(nadeModels(), MAX_NADES, 3);
     this.gear = new EquipmentFX(this, { ModelSet, NADE_RGB, BLAST_R });
+    this.streakFx = new StreaksFX(this, { ModelSet });
     this.vehicles = this.#modelMesh(vehicleModels(), MAX_VEHICLES, 2);
 
     // Aircraft shadows reuse the vehicle geometry's vertices with their own instance list.
@@ -874,6 +876,7 @@ export class CombatFX {
     this.#updatePoints(view, dt);
     this.#updateNades(view, dt, localX, localZ, localTeam, hasLocal);
     this.gear.update(view, dt, localX, localZ, localTeam, hasLocal);
+    this.streakFx.update(view, dt, localX, localZ, localTeam, uav, hasLocal);
     this.#updateFires(view, dt, localX, localZ, hasLocal);
     this.#updateSmoke(view, dt);
     this.#updateVehicles(view, dt, localX, localZ, localTeam, uav, hasLocal);
@@ -887,6 +890,7 @@ export class CombatFX {
   onEvents(events, localId, localTeam) {
     if (!events) return;
     this.gear.onEvents(events, localId, localTeam);
+    this.streakFx.onEvents(events, localId, localTeam);
     const vfx = this.vfx;
     for (let i = 0; i < events.length; i++) {
       const ev = events[i];
@@ -1156,6 +1160,7 @@ export class CombatFX {
     for (let i = 0; i < this.marked.length; i++) this.marked[i].id = null;
     this.staticBurst = 0; this.staticAmt = 0;
     this.gear.reset();
+    this.streakFx.reset();
   }
 
   // The throw-aim preview from view.throwPreview: { points:[{x,y,z}], bounces:[{x,z}], landing:{x,z,kind} }.
@@ -2028,6 +2033,7 @@ export class CombatFX {
     // Each InstancedMesh holds its own instance-matrix buffer; dispose() is what releases it.
     for (const m of meshes) { this.scene.remove(m); m.geometry.dispose(); m.dispose(); }
     this.gear.dispose();
+    this.streakFx.dispose();
     this.scene.remove(this.staticMesh);
     this.staticMesh.geometry.dispose();
     for (const m of [this.solidMat, this.modelMat, this.shadowMat, this.fireMat, this.staticMat, this.smokeMat, this.flagMat, this.zoneMat, this.wallMat]) m.dispose();

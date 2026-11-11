@@ -70,8 +70,8 @@ function wallAhead(map) {
 
 test('three new streaks, appended so old wire ids keep their numbers', () => {
   assert.deepEqual(STREAK_IDS.slice(0, 10), ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship']);
-  assert.deepEqual(STREAK_IDS.slice(10), NEW);
-  assert.ok(STREAK_IDS.length <= 16, 'streak ids fit the 4 bits per slot in the loadout ints');
+  assert.deepEqual(STREAK_IDS.slice(10, 13), NEW);   // V9 appended more after these (dev/sim-streaks-v9.mjs).
+  assert.ok(STREAK_IDS.length <= 32, 'streak ids fit the 5 bits per slot on the wire (V9)');
   for (const id of NEW) {
     const s = STREAKS[id];
     assert.ok(s.cost >= 1000 && s.cost <= 4800, `${id} cost in the existing range`);
@@ -336,7 +336,8 @@ test('Search and Destroy keeps streaks off; Gun Game has none', () => {
 test('bots call the Missile and Swarm and get kills with them in a full bot match', () => {
   const uses = {}, kills = {};
   // Gear wave: equipment reactions moved this seed's numbers; a seed that lands no streak kill gets one more seed.
-  for (const seed of [11, 12]) {
+  // V9: bots now shoot drones and missiles down, so a match can pass with none landing: a few more seeds.
+  for (const seed of [11, 12, 13, 14, 15]) {
     if ((kills.missile ?? 0) + (kills.swarm ?? 0) > 0) break;
     const roster = buildRoster([], { botSkill: 'elite', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed })
       .map((r, i) => ({ ...r, loadout: { ...(r.loadout ?? {}), primary: r.primary, streaks: NEW } }));

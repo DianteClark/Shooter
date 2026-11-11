@@ -283,6 +283,16 @@ const SQUARE = {
   missile: rotSpec({ f: [R(5, 13.5, 18, 5, 2), P(23, 13.5, 29.5, 16, 23, 18.5), P(5, 13.5, 2, 8.5, 9.5, 13.5), P(5, 18.5, 2, 23.5, 9.5, 18.5)], h: [R(16, 13.5, 2, 5)], a: [P(4.5, 14, 0, 16, 4.5, 18)] }, -40),
   swarm: { f: [R(13, 5.5, 6, 3.6, 1), O(11, 4.5, 2.2), O(21, 4.5, 2.2), R(5, 19.5, 6, 3.6, 1), O(3, 18.5, 2.2), O(13, 18.5, 2.2), R(21, 19.5, 6, 3.6, 1), O(19, 18.5, 2.2), O(29, 18.5, 2.2)], a: [O(16, 11.5, 1.4), O(8, 25.5, 1.4), O(24, 25.5, 1.4)] },
   juggernaut: { f: [P(9, 2.5, 23, 2.5, 25.5, 13, 22, 16.5, 10, 16.5, 6.5, 13), R(1, 16, 9.5, 8, 2), R(21.5, 16, 9.5, 8, 2), R(9, 17.5, 14, 12.5, 1.5)], h: [R(9.5, 8.5, 13, 3.4)], a: [R(10.5, 9.2, 11, 2)] },
+  // V9: sonar rings from a point with two blips; a quadcopter with a lens and its view cone; a crate under a canopy;
+  // a plate carrier; a gun drone; a shield dome on its emitter; a line of falling bombs; a wheeled gun robot.
+  sweep: { f: [O(16, 26, 2.8)], s: [arcPts(16, 26, 8, 200, 340, 9), arcPts(16, 26, 15, 205, 335, 13), arcPts(16, 26, 22, 210, 330, 17)], a: [O(8.5, 12.5, 2.2), O(23, 7.5, 2.2)], sw: 2.4 },
+  recon: { f: [R(10.5, 6, 11, 7, 2), bar(5, 4, 27, 4, 2.2), O(5, 4, 3.2), O(27, 4, 3.2)], h: [O(16, 9.5, 2)], b: [P(16, 13, 4, 30, 28, 30)], a: [O(10, 25, 1.8), O(21, 22, 1.8)] },
+  airdrop: { b: [P(3, 12, 6, 5.5, 16, 2, 26, 5.5, 29, 12)], s: [P(4, 12.5, 11, 19), P(28, 12.5, 21, 19), P(16, 12.5, 16, 19)], f: [R(9.5, 18.5, 13, 11.5, 1)], h: [R(11.5, 20.5, 9, 7.5)], a: [R(14.6, 21.5, 2.8, 5.5)], sw: 1.8 },
+  plates: { f: [P(7, 3, 12, 3, 16, 7, 20, 3, 25, 3, 27.5, 9, 26, 29.5, 6, 29.5, 4.5, 9)], h: [R(9.5, 12.5, 13, 6, 1), R(9.5, 20.5, 13, 6, 1)], a: [R(11, 14, 10, 3), R(11, 22, 10, 3)] },
+  hound: { f: [P(9, 12, 13, 9, 21, 9, 24, 12.5, 21, 16, 13, 16), bar(3, 7, 29, 7, 2), O(3.5, 7, 3), O(28.5, 7, 3), R(15, 16, 2.6, 5), R(15, 20, 13, 2.8, 1)], a: [P(28, 18, 31.5, 21.4, 28, 24.5)], h: [O(16.8, 12.5, 1.5)] },
+  dome: { b: [P(3, 26, 4.5, 18, 9, 11.5, 16, 8.5, 23, 11.5, 27.5, 18, 29, 26)], s: [arcPts(16, 26, 13, 180, 360, 15)], f: [R(2, 26, 28, 3.4, 1), R(13, 22, 6, 4.5, [1.5, 1.5, 0, 0])], a: [O(16, 20.5, 1.8)], sw: 2.4 },
+  bombrun: { s: [P(3, 29, 29, 3)], f: [rotPts(R(4.5, 15, 6, 4, 2), 10.5, 17, -45), rotPts(R(11.5, 8, 6, 4, 2), 14.5, 10, -45), rotPts(R(18.5, 1.5, 6, 4, 2), 21.5, 3.5, -45)], a: [O(26, 27, 3), O(9, 26, 2), O(25, 18, 1.8)], sw: 1.6 },
+  rover: { f: [R(4, 15.5, 24, 7, 1.5), R(10, 9, 11, 6.5, 1.5), R(21, 10.5, 9.5, 2.6), O(8.5, 25, 3.6), O(16, 25, 3.6), O(23.5, 25, 3.6)], h: [O(8.5, 25, 1.4), O(16, 25, 1.4), O(23.5, 25, 1.4)], a: [R(12, 10.8, 4, 2.6, 0.6)] },
 
   // ---- Tacticals ----
   smoke: { b: [O(8.5, 9, 6), O(16.5, 6.5, 6), O(24, 10, 5)], f: [R(10.5, 13, 11, 16.5, 1), R(11.5, 9.5, 9, 3.5, 0.6), P(20.5, 9, 23.5, 9, 24.5, 18, 22, 19)], h: [R(12.5, 17, 7, 2)] },
@@ -497,7 +507,8 @@ export function icon(id, { size = 24, color, accent, square = false, title, cls 
 export const ICON_GROUPS = {
   weapons: Object.keys(WEAPON_SPECS),
   categories: Object.keys(CATEGORY_WEAPON).map(c => 'cat:' + c),
-  streaks: ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut'],
+  streaks: ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut',
+    'sweep', 'recon', 'airdrop', 'plates', 'hound', 'dome', 'bombrun', 'rover'],
   tacticals: ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock', 'snapshot', 'blackout', 'bulwark', 'tagger', 'medpack'],
   lethals: ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill', 'charge', 'thermite', 'tripwire', 'crawler', 'shiv'],
   objectives: ['bomb'],
@@ -520,3 +531,15 @@ export const ITEM_ICONS = new Proxy({}, {
   },
   has(_, id) { const k = resolveIcon(id); return k !== 'unknown' && !WEAPON_SPECS[k]; },
 });
+
+// V9 streak icons: an open polyline along a circular arc (degrees, SVG y down), and a polygon turned about a point.
+function arcPts(cx, cy, r, a0, a1, n) {
+  const out = [];
+  for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; out.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+  return out;
+}
+function rotPts(pts, cx, cy, deg) {
+  const a = deg * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), out = [];
+  for (let i = 0; i < pts.length; i += 2) { const x = pts[i] - cx, y = pts[i + 1] - cy; out.push(cx + x * c - y * sn, cy + x * sn + y * c); }
+  return out;
+}

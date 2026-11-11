@@ -114,6 +114,15 @@ export const UNLOCK_SCHEDULE = [
   { level: 6,  kind: 'streak',   id: 'missile' },
   { level: 11, kind: 'streak',   id: 'swarm' },
   { level: 16, kind: 'streak',   id: 'juggernaut' },
+  // V9 streaks (2026-11), spread up the curve: a cheap intel pick early, the heavy machines late.
+  { level: 2,  kind: 'streak',   id: 'sweep' },
+  { level: 4,  kind: 'streak',   id: 'airdrop' },
+  { level: 8,  kind: 'streak',   id: 'recon' },
+  { level: 9,  kind: 'streak',   id: 'plates' },
+  { level: 13, kind: 'streak',   id: 'hound' },
+  { level: 18, kind: 'streak',   id: 'dome' },
+  { level: 20, kind: 'streak',   id: 'bombrun' },
+  { level: 24, kind: 'streak',   id: 'rover' },
   // Wave 5 guns, between the Wave 3 ones: one roughly every level from 2 to 22, the specialist ones last.
   { level: 2,  kind: 'weapon',   id: 'tacsmg' },
   { level: 3,  kind: 'weapon',   id: 'deuce' },
@@ -300,9 +309,9 @@ export function isVeteran({ prestige = 0, level = 1, pro = 0 } = {}) {
 }
 
 const BLAST_EQUIP = new Set(['frag', 'sticky', 'mine', 'cluster']);
-const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm']);
+const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm', 'bombrun']);
 const MULTI_MEDALS = new Set(['double', 'triple', 'fury']);
-const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'gunship', 'missile', 'swarm']);
+const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'gunship', 'missile', 'swarm', 'recon', 'hound', 'rover', 'dome']);
 const FAR_THROW = 13;            // Past the base throw range (js/sim/equipment.js THROW_RANGE): a Strong Arm throw.
 const SWAP_WINDOW = 2.5;
 const BURN_GAP = 1.5;            // Burn ticks closer together than this are one fire.
@@ -494,6 +503,15 @@ const GEAR_TRACKS = {
     missile:   [T('uses', 5, 'Launch 5 Cruise Missiles'), T('kills', 10, 'Get 10 Cruise Missile kills'), T('multi', 3, 'Kill 2 or more with one Cruise Missile 3 times'), T('kills', 35, 'Get 35 Cruise Missile kills')],
     swarm:     [T('uses', 3, 'Launch 3 Drone Swarms'), T('kills', 10, 'Get 10 Drone Swarm kills'), T('multi', 3, 'Get 3 Drone Swarm multi-kills'), T('kills', 35, 'Get 35 Drone Swarm kills')],
     juggernaut: [T('uses', 3, 'Suit up as a Juggernaut 3 times'), T('suitKills', 15, 'Get 15 kills as a Juggernaut'), T('soaked', 2500, 'Soak 2,500 damage with Juggernaut armour'), T('suitKills', 50, 'Get 50 kills as a Juggernaut')],
+    // V9.
+    sweep:     [T('uses', 5, 'Call in 5 Sonar Sweeps'), T('marked', 20, 'Reveal 20 enemies with Sonar Sweep'), T('markKills', 10, 'Kill 10 enemies your Sweep revealed'), T('markKills', 40, 'Kill 40 enemies your Sweep revealed')],
+    recon:     [T('uses', 5, 'Fly 5 Recon Drones'), T('marked', 25, 'Mark 25 enemies with a Recon Drone'), T('markKills', 10, 'Kill 10 enemies your drone marked'), T('marked', 120, 'Mark 120 enemies with a Recon Drone')],
+    airdrop:   [T('uses', 5, 'Call in 5 Airdrops'), T('opened', 5, 'Open 5 of your own Airdrops'), T('stolen', 3, 'Steal 3 enemy Airdrops'), T('uses', 25, 'Call in 25 Airdrops')],
+    plates:    [T('uses', 5, 'Call in 5 Plate Drops'), T('supplied', 10, 'Plate up 10 teammates'), T('soaked', 1500, 'Soak 1,500 damage with plates'), T('supplied', 50, 'Plate up 50 teammates')],
+    hound:     [T('uses', 5, 'Deploy 5 Wingmen'), T('kills', 8, 'Get 8 Wingman kills'), T('multi', 2, 'Get 2 Wingman multi-kills'), T('kills', 35, 'Get 35 Wingman kills')],
+    dome:      [T('uses', 5, 'Raise 5 Aegis Domes'), T('saves', 8, 'Shoot down 8 enemy throws with a Dome'), T('uses', 20, 'Raise 20 Aegis Domes'), T('saves', 40, 'Shoot down 40 enemy throws with a Dome')],
+    bombrun:   [T('uses', 5, 'Draw 5 Carpet Lines'), T('kills', 10, 'Get 10 Carpet Line kills'), T('multi', 4, 'Get 4 Carpet Line multi-kills'), T('kills', 40, 'Get 40 Carpet Line kills')],
+    rover:     [T('uses', 3, 'Deploy 3 Rovers'), T('kills', 10, 'Get 10 Rover kills'), T('multi', 3, 'Get 3 Rover multi-kills'), T('kills', 35, 'Get 35 Rover kills')],
   },
 };
 // Operators: time, kills, a signature that fits the character, wins, then a long kill count. The roster itself lives in
@@ -662,6 +680,8 @@ export const UNLOCK_CHALLENGES = {
   'streak:emp':      { label: 'Call in 10 scorestreaks', goal: 10, value: s => total(s, 'streak', 'uses') },
   'streak:gunship':  { label: 'Get 15 scorestreak kills', goal: 15, value: s => total(s, 'streak', 'kills') },
   'streak:juggernaut': { label: 'Call in 8 scorestreaks', goal: 8, value: s => total(s, 'streak', 'uses') },
+  'streak:dome':     { label: 'Call in 12 scorestreaks', goal: 12, value: s => total(s, 'streak', 'uses') },
+  'streak:rover':    { label: 'Get 25 scorestreak kills', goal: 25, value: s => total(s, 'streak', 'kills') },
 };
 
 // {label, goal, value, done} for an item's challenge in a save, or null when it has none.
@@ -693,7 +713,7 @@ function grandfather(s) {
 }
 
 /* ---------- Counting mastery in a match ---------- */
-const UP_SECS = { uav: 20, jammer: 15, overwatch: 25, emp: 20 };   // How long each counts as "up" for upKills.
+const UP_SECS = { uav: 20, jammer: 15, overwatch: 30, emp: 20 };   // How long each counts as "up" for upKills.
 const AFTER_SECS = { smoke: 9, stim: 5, decoy: 10, bulwark: 12 };                // A kill this soon after using it counts for it.
 const AFTER_STAT = { smoke: 'coverKills', stim: 'stimKills', decoy: 'decoyKills', bulwark: 'coverKills' };
 const JAM_KILL_SECS = 6;         // Blackout: a kill on an enemy this player jammed, while they are jammed.
@@ -798,7 +818,7 @@ export class MasteryTracker {
           if (e.by === id && e.id !== id && this.#enemy(view, e.id)) { this.add('flash', 'blinded'); this.flashed.set(e.id, t); }
           break;
         case 'marked': {
-          const k = TACTICALS[e.kind] ? e.kind : 'sensor';
+          const k = TACTICALS[e.kind] || STREAKS[e.kind] ? e.kind : 'sensor';     // Recon Drone and Sonar Sweep mark too.
           if (e.by === id && this.#enemy(view, e.id)) {
             const was = this.marked.get(e.id);
             if (!was || was.kind !== k || was.until < t) this.add(k, 'marked');    // A planted Sensor re-pings: one count per sighting.
@@ -806,10 +826,19 @@ export class MasteryTracker {
           }
           break;
         }
-        case 'jammed': if (e.by === id) { this.add('blackout', 'jammed'); this.jammed.set(e.id, t + JAM_KILL_SECS); } break;
+        case 'jammed': if (e.by === id && e.kind !== 'emp') { this.add('blackout', 'jammed'); this.jammed.set(e.id, t + JAM_KILL_SECS); } break;
         case 'stuck': if (e.by === id && e.kind === 'tagger') this.add('tagger', 'tagged'); break;
         case 'hit': if (e.by === id && e.eq === 'shiv' && e.dmg >= MAX_HP) this.backT = t; break;
-        case 'zap': if (e.by === id) this.add('trophy', 'saves'); break;
+        case 'zap': if (e.by === id) this.add(e.kind === 'dome' ? 'dome' : 'trophy', 'saves'); break;
+        // V9: Airdrops opened and stolen, plates handed out.
+        case 'crate_open':
+          if (e.owner === id && e.id === id) this.add('airdrop', 'opened');
+          if (e.id === id && e.stolen) this.add('airdrop', 'stolen');
+          break;
+        case 'plates':
+          if (e.by === id && e.id !== id) this.add('plates', 'supplied');
+          if (e.id === id) this.platesOwn = e.by === id;     // Plates soaked count for the Plate Drop that gave them.
+          break;
         case 'dazed': {
           if (e.by !== id || e.id === id || !TACTICALS[e.kind] || !this.#enemy(view, e.id)) break;
           const last = this.dazedBy.get(e.id);
@@ -854,6 +883,9 @@ export class MasteryTracker {
       const armor = me.alive ? (me.armor ?? 0) : 0;
       if (me.alive && armor < (this.prevArmor ?? 0)) this.add('juggernaut', 'soaked', this.prevArmor - armor);
       this.prevArmor = armor;
+      const plates = me.alive ? (me.plates ?? 0) : 0;
+      if (me.alive && this.platesOwn && plates < (this.prevPlates ?? 0)) this.add('plates', 'soaked', this.prevPlates - plates);
+      this.prevPlates = plates;
     }
     this.prevT = t;
   }
