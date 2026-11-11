@@ -28,7 +28,7 @@ function row(r, i, open) {
     <span class="bd-rank t-num">${r.rank}</span>
     <span class="bd-em">${emblemHtml(e.emblem, { size: 18 }) || ''}</span>
     <span class="bd-bdg">${badgeMark(e.prestige, 16)}<u>${e.level}</u></span>
-    <span class="bd-name"><b>${esc(e.name)}</b>${e.kind === 'friend' ? `<i class="bd-pal" title="Friend">${ico('ui:user', '', 12)}</i>` : ''}${e.kind === 'me' ? '<small>You</small>' : ''}</span>
+    <span class="bd-name">${e.clan ? `<em class="bd-clan">[${esc(e.clan)}]</em>` : ''}<b>${esc(e.name)}</b>${e.kind === 'friend' ? `<i class="bd-pal" title="Friend">${ico('ui:user', '', 12)}</i>` : ''}${e.kind === 'me' ? '<small>You</small>' : ''}</span>
     <span class="bd-val t-num">${esc(r.text)}</span>
   </button>`;
 }
@@ -41,7 +41,7 @@ function detail(r, cat, now) {
   const stat = (label, value, on) => `<span class="bdd-stat${on ? ' on' : ''}"><b class="t-num">${value}</b><small>${label}</small></span>`;
   const sub = e.kind === 'friend' ? `Friend · as of ${dateText(e.asOf)}` : e.kind === 'me' ? 'You' : `${e.prestige ? `Prestige ${e.prestige} · ` : ''}Level ${e.level}`;
   return `<div class="bdd">
-    <div class="bdd-card">${cardHtml(e.card, { size: 196, title: e.name, sub })}</div>
+    <div class="bdd-card">${cardHtml(e.card, { size: 196, title: e.clan ? `[${e.clan}] ${e.name}` : e.name, sub })}</div>
     <div class="bdd-who">
       <span class="bdd-rank"><small>Rank</small><b class="t-num">${r.rank}</b></span>
       <span class="bdd-op">${ico('operator', '', 14)}<b>${esc(op ? op.name : 'Operator')}</b>${skin && skin.tier !== 'base' ? `<small>${esc(skin.name)}</small>` : ''}</span>

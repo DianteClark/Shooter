@@ -6,11 +6,12 @@
 //   pool    the 200 bot players (js/shared/botpool.js) through careerAt(profile, now): the same on every phone, since
 //           it depends only on the date. They look like players: their tag, badge, card, emblem and operator.
 // entry: { id, kind, name, level, prestige, xp, m, k, w, brm, brw, br5, ex, kdm, kdk, d, mst, wk: {key, k, w},
-//          op, skin, card, emblem, asOf (friends: ms) }. Field meanings as recordCareer (js/shared/progression.js).
+//          op, skin, card, emblem, clan (pool: clanOf(profile) once the clans branch exports it, else null),
+//          asOf (friends: ms) }. Field meanings as recordCareer (js/shared/progression.js).
 //
 // Bots you played against do not get a bump from that match: it would live only on the phones that were there, so
 // two friends' boards would disagree about the same bot. Their careers stay a function of the date alone.
-import { BOT_POOL, careerAt, hash32 } from './botpool.js';
+import * as Pool from './botpool.js';
 import { CARD_IDS, MAX_LEVEL, MAX_PRESTIGE, MASTERY_TOTAL, weekStart, periodKey, dayKey } from './progression.js';
 import { OPERATOR_IDS, getSkin } from '../ui/operators.js';
 import { cleanEmblem } from '../ui/emblems.js';
@@ -84,27 +85,43 @@ export const weekOf = (e, now = Date.now()) => weekly(e, periodKey('weekly', new
 // Mastery for a bot: no tracks to read, so a steady share of their matches, set by their id and usual skill; never
 // falls (matches never do) and never passes what there is to finish.
 function botMastery(p, matches) {
-  const rate = (0.0015 + 0.012 * (hash32('mastery', p.id) / 4294967296)) * (0.5 + p.skill.mu);
+  const rate = (0.0015 + 0.012 * (Pool.hash32('mastery', p.id) / 4294967296)) * (0.5 + p.skill.mu);
   return Math.min(MASTERY_TOTAL(), Math.floor(matches * rate));
 }
 
-// Every pool bot as an entry on `now`'s date, cached per day (careerAt runs one loop step a week, twice per bot).
+// The clan tag a pool profile plays under ("[TAG] Name" on the board), if the pool has clans.
+const clanOf = p => { const t = typeof Pool.clanOf === 'function' ? Pool.clanOf(p) : null; return typeof t === 'string' && /^[A-Z0-9]{2,4}$/.test(t) ? t : null; };
+
+// Careers move by whole days. The board reads a local calendar date as that day in UTC, so every phone on the same
+// date gets the same rows, wherever it is.
+export const boardDay = x => { const d = new Date(x); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+
+// What each pool bot did between two dates (ms, read through boardDay): the weekly boards use this week's Monday to
+// today; a seasonal board (ROADMAP item 22) is the same call with the season's start and min(today, end).
+// Returns [{ m, k, d, w, brw, br5, ex, xp }] in BOT_POOL order.
+export function poolWindow(from, to) {
+  const a = boardDay(from), b = Math.max(a, boardDay(to));
+  return Pool.BOT_POOL.map(p => {
+    const c = Pool.careerAt(p, b), was = Pool.careerAt(p, a);
+    return { m: c.matches - was.matches, k: c.kills - was.kills, d: c.deaths - was.deaths, w: (c.wins - was.wins) + (c.brWins - was.brWins),
+      brw: c.brWins - was.brWins, br5: c.brTop5 - was.brTop5, ex: c.extractions - was.extractions, xp: c.xp - was.xp };
+  });
+}
+
+// Every pool bot (however many the pool holds) as an entry on `now`'s date, cached per day.
 let poolCache = { key: null, list: null };
 export function poolEntries(now = Date.now()) {
   const d = new Date(now), key = `${dayKey(d)}|${periodKey('weekly', d)}`;
   if (poolCache.key === key) return poolCache.list;
-  // Careers move by whole days. The board reads the local calendar date as that day in UTC, so every phone on the same
-  // date gets the same rows, wherever it is; the week from this Monday's date the same way.
-  const utc = x => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
-  const wkKey = periodKey('weekly', d), from = utc(weekStart(d)), today = utc(d);
-  const list = BOT_POOL.map(p => {
-    const c = careerAt(p, today), was = careerAt(p, from);
+  const wkKey = periodKey('weekly', d), today = boardDay(d), week = poolWindow(weekStart(d), d);
+  const list = Pool.BOT_POOL.map((p, i) => {
+    const c = Pool.careerAt(p, today);
     return entryOf(p.id, 'pool', {
       name: p.name, level: c.level, prestige: c.prestige, xp: c.xp,
       m: c.matches, k: c.kills, w: c.wins, brm: c.brMatches, brw: c.brWins, br5: c.brTop5, ex: c.extractions,
       kdm: c.matches, kdk: c.kills, d: c.deaths, mst: botMastery(p, c.matches),
-      wk: { key: wkKey, k: c.kills - was.kills, w: (c.wins - was.wins) + (c.brWins - was.brWins) },
-      op: p.operator, skin: p.skin, card: p.card, emblem: p.emblem,
+      wk: { key: wkKey, k: week[i].k, w: week[i].w },
+      op: p.operator, skin: p.skin, card: p.card, emblem: p.emblem, clan: clanOf(p),
     });
   });
   poolCache = { key, list };

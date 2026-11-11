@@ -121,7 +121,8 @@ console.log('ranking');
   ok(kdBoard.me === -1 && /22 more matches/.test(kdBoard.note), 'under the minimum: unranked, with how many matches to go', kdBoard.note);
   ok(kdBoard.rows[0].e.id === 'Pann' && kdBoard.rows[0].e.kind === 'friend', 'a friend ranks among the pool');
   const all = B.buildBoard({ me: meCard, friends: pals, cat: 'kills' });
-  ok(all.total === 202 && all.rows.length === 202 && all.rows[all.me].e.kind === 'me', 'Everyone: you, friends and the 200 pool players', all.total);
+  const { BOT_POOL: POOL } = await import('../js/shared/botpool.js');
+  ok(all.total === POOL.length + 2 && all.rows.length === POOL.length + 2 && all.rows[all.me].e.kind === 'me', `Everyone: you, friends and the whole pool (${POOL.length})`, all.total);
   ok(all.rows.every((r, i) => !i || r.value <= all.rows[i - 1].value), 'sorted highest first');
   const fr = B.buildBoard({ me: meCard, friends: pals, cat: 'kills', view: 'friends' });
   ok(fr.rows.length === 2 && fr.rows[0].rank === 1 && fr.rows[1].e.kind === 'me' && fr.rows[1].rank === 2, 'Friends: you and them, ranked among yourselves');
@@ -136,7 +137,10 @@ console.log('ranking');
   ok(pool.every(p => p.mst >= 0 && p.mst <= P.MASTERY_TOTAL()), 'pool mastery within what there is to finish');
   ok(pool.every(p => p.ex === 0), 'no extractions before the mode launches');
   const { BOT_POOL } = await import('../js/shared/botpool.js');
-  ok(pool.length === 200 && pool.every((p, i) => p.name === BOT_POOL[i].name && p.card === BOT_POOL[i].card && p.emblem === BOT_POOL[i].emblem), 'pool rows wear the tag, card and emblem they wear in lobbies');
+  ok(pool.length === BOT_POOL.length && pool.every((p, i) => p.name === BOT_POOL[i].name && p.card === BOT_POOL[i].card && p.emblem === BOT_POOL[i].emblem), 'pool rows wear the tag, card and emblem they wear in lobbies');
+  ok(pool.every(p => p.clan === null || /^[A-Z0-9]{2,4}$/.test(p.clan)), 'clan tags only from clanOf, when the pool has it');
+  const wkStart = P.weekStart(new Date()), win = B.poolWindow(wkStart, Date.now());
+  ok(win.length === BOT_POOL.length && win.every((w, i) => w.k === pool[i].wk.k), 'poolWindow (the hook for seasonal boards) gives the weekly numbers for this week');
 }
 
 // ---- Pool: identical for two phones on the same date ----

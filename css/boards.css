@@ -33,6 +33,7 @@
 .bd-bdg u { text-decoration: none; font: 400 var(--fs-caption)/1 var(--f-plate); color: var(--c-haze); }
 .bd-name { min-width: 0; display: flex; align-items: center; gap: 6px; }
 .bd-name b { min-width: 0; font: 400 var(--fs-lead)/1.1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bd-clan { flex: none; font: 400 var(--fs-caption)/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-haze); }
 .bd-name small { flex: none; padding: 2px 5px; font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-sodium-ink); background: var(--c-sodium); }
 .bd-pal { flex: none; display: grid; place-items: center; width: 18px; height: 18px; color: var(--c-blue); background: rgba(80,150,255,.14); box-shadow: inset 0 0 0 1px rgba(80,150,255,.45); }
 #ui .bd-pal .ico { height: 12px; }

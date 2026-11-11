@@ -1350,8 +1350,9 @@ function pack(s) {
     // v4 tail: mastery counters by track (stats in the track's order), grandfathered unlocks, skins, emblem, lifetime.
     MASTERY_TRACKS.filter(t => s.mastery?.[t.id]).map(t => [t.id, s.mastery[t.id].t, t.stats.map(k => s.mastery[t.id].s[k] ?? 0)]),
     s.granted ?? [], Object.entries(s.skins ?? {}), s.emblem ?? null, Object.entries(s.life ?? {}),
-    // Appended (boards): the career totals, keyed; a code without it seeds them from the lifetime tally.
-    s.career ?? null,
+    // Appended (boards): the career totals, keyed. Left off while they say no more than the lifetime tally does (a
+    // code without them seeds them from it), so a code from before them re-exports to the very same code.
+    ...(s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? [s.career] : []),
   ];
 }
 
