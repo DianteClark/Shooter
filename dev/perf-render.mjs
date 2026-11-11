@@ -1,6 +1,7 @@
 // Drives dev/perf-render.html in headless Chromium (SwiftShader: a CPU rasteriser, so frame times only compare runs on
 // this machine; draw calls and triangles are exact) at 852 x 393, on Low and High. See docs/BR-PERF.md, "After".
 //   node dev/perf-render.mjs [--port=8223] [--root=/path/to/checkout] [--maps=range,railyard,...] [--q=low,high]
+//                            [--extra=ops:mix,crowd:1]  a mixed operator roster crowded round the player
 //                            [--shots=/tmp/perf]   screenshots of each map on its first quality step
 // --root serves another checkout (an older commit) with this script's page, so before and after run the same page.
 import { createServer } from 'node:http';
@@ -18,6 +19,7 @@ const ROOT = resolve(opt('root', HERE));
 const MAPS = opt('maps', 'range,railyard,pier,foundry,downtown,expedition,giant').split(',');
 const STEPS = opt('q', 'low,high').split(',');
 const SHOTS = opt('shots', null);
+const EXTRA = opt('extra', '');   // More page parameters, e.g. --extra=ops:mix,crowd:1 (a 16v16 roster round the player)
 
 async function loadPlaywright() {
   try { return await import('playwright'); } catch { /* fall through to the global install */ }
@@ -50,7 +52,7 @@ try {
       const errors = [];
       page.on('pageerror', e => errors.push(e.message));
       page.on('console', m => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text()); });
-      await page.goto(`http://127.0.0.1:${PORT}/dev/perf-render.html?map=${id}&q=${q}`, { waitUntil: 'commit' });
+      await page.goto(`http://127.0.0.1:${PORT}/dev/perf-render.html?map=${id}&q=${q}${EXTRA ? '&' + EXTRA.split(',').map(kv => kv.replace(':', '=')).join('&') : ''}`, { waitUntil: 'commit' });
       await page.waitForFunction('window.ready === true', null, { timeout: 600000 });
       const r = await page.evaluate(() => window.measure(30));
       if (SHOTS && q === STEPS[0]) await page.screenshot({ path: `${SHOTS}/render-${id}-${q}.png` });

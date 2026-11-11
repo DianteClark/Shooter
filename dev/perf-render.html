@@ -13,6 +13,8 @@
 // quality step and reports draw calls, triangles and frame time. Driven by dev/perf-render.mjs.
 //   ?map=pier         a registered map, or giant (dev/br-map.mjs, &density=1)
 //   &q=low            quality step (quality.js)
+//   &ops=mix          give the players a mixed operator roster (every operator in turn, skins by id, as bots dress)
+//   &crowd=1          stand everyone in rings round the local player, so the most soldiers get full detail
 // window.measure(frames) returns { ms (median frame), cpuMs (mean renderer.update), calls, triangles, worldTris, ... }.
 import * as THREE from 'three';
 import { GameRenderer } from '../js/render/renderer.js';
@@ -42,11 +44,20 @@ const players = spawns.map((s, i) => ({
   score: 0, capped: false, slots: [], heat: 0, overheated: false, head: 0, assists: 0, firingT: 0, tacticalLeft: 1,
   lethalLeft: 1, tactical: 'smoke', lethal: 'frag',
 }));
+if (params.get('crowd')) players.forEach((p, i) => {
+  if (!i) return;
+  const a = i * 2.4, rad = 2.5 + (i % 4) * 2.2;
+  p.ring = [a, rad];
+});
 const view = {
   t: 0, phase: 'live', timeLeft: 300, scores: [0, 0], winner: null, uav: [0, 0], players, localId: 'p0', lastKill: null,
   projectiles: [], smokes: [], turrets: [], gunships: [], mode: 'tdm', tags: [], points: [], jam: [0, 0], overwatchT: [0, 0],
 };
 r.setLocal('p0');
+if (params.get('ops')) {
+  const { OPERATOR_IDS } = await import('../js/ui/operators.js');
+  r.chars.setRoster(players.map((p, i) => ({ id: p.id, operator: OPERATOR_IDS[i % OPERATOR_IDS.length], isBot: true })));
+}
 const gl = r.webgl.getContext();
 const PIXEL = new Uint8Array(4);
 
@@ -56,6 +67,7 @@ function frame() {
   const me = players[0];
   const rad = Math.min(40, map.width * 0.3, map.height * 0.3);
   me.x = map.width / 2 + Math.cos(view.t * 0.3) * rad; me.z = map.height / 2 + Math.sin(view.t * 0.3) * rad;
+  for (const p of players) if (p.ring) { p.x = me.x + Math.cos(p.ring[0]) * p.ring[1]; p.z = me.z + Math.sin(p.ring[0]) * p.ring[1]; p.aim = p.ring[0] + view.t; }
   const a = performance.now();
   r.update(view, [], 1 / 60);
   const cpu = performance.now() - a;
