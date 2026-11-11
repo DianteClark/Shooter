@@ -3133,6 +3133,7 @@ export class Sim {
     const full = this._snapFull, codes = this._snapCodes, n = this.players.length;
     const out = full.slice(0, SNAP_HEAD);
     if (this.br) out[14] = this.br.encodeFor(g);      // Own inventory and the loot changes this guest has not had.
+    else if (this.rules?.encodeFor) out[14] = this.rules.encodeFor(g);     // Extraction: own contract in full, backups to humans.
     const gx = g.ps.x, gz = g.ps.z, uav = this.uav[g.team] > 0, phase = this.tick >> 1;
     for (let i = 0; i < n; i++) {
       const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;

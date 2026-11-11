@@ -1371,16 +1371,34 @@ export class ExtractRules {
       this.sentVer = this.ver; this.sentTick = sim.tick;
     }
     // One snapshot in BACKUP_EVERY / SNAPSHOT_EVERY carries the backup (counted per encode: snapshots go out on even ticks).
+    // With per-guest snapshots (encodeFor) only phones with a human on them get it: any of them may become the host.
     this._enc = ((this._enc ?? 0) + 1) % (BACKUP_EVERY / 2);
-    const backup = this._enc === 0 ? this.backup() : 0;
+    this._bk = this._enc === 0 ? this.backup() : 0;
+    const backup = sim.interest ? 0 : this._bk;
     // Ammo on the ground: its own small block, on a change (at most every 6 ticks) and with the full block.
     let loot = 0;
     if ((this.lootVer !== this.sentLoot && sim.tick - (this.lootTick ?? -99) >= 6) || slow) {
       loot = [[...this.boxDown.keys()], this.drops.flatMap(d => [d.id, r1(d.x), r1(d.z)])];
       this.sentLoot = this.lootVer; this.lootTick = sim.tick;
     }
-    return [Math.round(this.t * 10), players, sites, cons, slow, backup, loot];
+    this._block = [Math.round(this.t * 10), players.some(Boolean) ? players : 0, sites, cons, slow, backup, loot];
+    return this._block;
   }
+
+  // One guest's cut of the block: its own squad's contract in full, the others' only as far as the world shows them
+  // (where a case or an asset is, whether a charge is set), and the migration backup for a human's phone.
+  encodeFor(g) {
+    const b = this._block ?? this.encode();
+    const cons = b[3].map((f, k) => {
+      if (!f) return 0;
+      const s = this._squadList()[k];
+      if (s.team === g.team) return f;
+      const c = s.contract;
+      return c.type === 'intel' || c.type === 'escort' ? [f[0], 0, f[2], f[3]] : c.type === 'cache' && c.state === 1 ? f.slice(0, 2) : [f[0]];
+    });
+    return [b[0], b[1], b[2], cons, b[4], !g.isBot && this._bk ? this._bk : b[5], b[6]];
+  }
+  _squadList() { return this._sl ??= [...this.squads.values()]; }
 
   _slow() {
     const sq = [...this.squads.values()].map(s => {
@@ -1417,12 +1435,12 @@ export class ExtractRules {
       for (const s of this.squads.values()) {
         const c = s.contract, f = cons?.[k++];
         if (!c || !f) continue;
-        c.state = f[0] & 15; c.prog = f[1] / 1000; c.moving = c.contested = f[0] >= 16;
+        c.state = f[0] & 15; c.prog = (f[1] ?? 0) / 1000; c.moving = c.contested = f[0] >= 16;
         if (f.length >= 4 && (c.type === 'intel' || c.type === 'escort')) { c.x = f[2] / 10; c.z = f[3] / 10; }
         c.def = (f[4] ?? 0) / 100;
         if (c.type === 'cache' && c.state === 1) c.fuse = (1 - c.prog) * EX.fuse;
       }
-      this._players = players;
+      this._players = players || [];
     }
     const players = this._players ?? [];
     for (let i = 0; i < out.players.length; i++) {
