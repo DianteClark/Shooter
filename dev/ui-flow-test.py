@@ -257,16 +257,18 @@ async def main():
             check('damage readout on a bot', ro['lastDamage'] == 30 and panel['shown'] and panel['head'] == 'Training' and '30' in panel['last'], (ro['lastDamage'], panel))
 
             async def drill(kind, secs=3.0):
+                """Each bot's path length (sampled, so a strafe's turns count) and how much closer it got to the player."""
                 await pg.evaluate(f"window.__game.app.match.sim.training.behaviour = '{kind}'")
-                start = await pg.evaluate("window.__game.app.match.sim.players.filter(p => p.isBot && p.alive).map(p => [p.id, p.ps.x, p.ps.z, Math.hypot(p.ps.x - window.__game.app.match.sim.byId.get('local').ps.x, p.ps.z - window.__game.app.match.sim.byId.get('local').ps.z)])")
-                await pg.wait_for_timeout(int(secs * 1000))
-                end = await pg.evaluate("Object.fromEntries(window.__game.app.match.sim.players.filter(p => p.isBot && p.alive).map(p => [p.id, [p.ps.x, p.ps.z, Math.hypot(p.ps.x - window.__game.app.match.sim.byId.get('local').ps.x, p.ps.z - window.__game.app.match.sim.byId.get('local').ps.z)]]))")
-                moved, closer = [], []
-                for bid, x, z, d in start:
-                    if bid in end:
-                        moved.append(((end[bid][0] - x) ** 2 + (end[bid][1] - z) ** 2) ** .5)
-                        closer.append(d - end[bid][2])
-                return moved, closer
+                pos = "Object.fromEntries((s => s.players.filter(p => p.isBot && p.alive).map(p => [p.id, [p.ps.x, p.ps.z, Math.hypot(p.ps.x - s.byId.get('local').ps.x, p.ps.z - s.byId.get('local').ps.z)]]))(window.__game.app.match.sim))"
+                first = prev = await pg.evaluate(pos)
+                path = {k: 0.0 for k in first}
+                for _ in range(int(secs / 0.25)):
+                    await pg.wait_for_timeout(250)
+                    cur = await pg.evaluate(pos)
+                    for k in path:
+                        if k in cur and k in prev: path[k] += ((cur[k][0] - prev[k][0]) ** 2 + (cur[k][1] - prev[k][1]) ** 2) ** .5
+                    prev = cur
+                return [path[k] for k in path if k in prev], [first[k][2] - prev[k][2] for k in first if k in prev]
 
             # Keep the player safe and still while the bots act.
             await pg.evaluate("(() => { const sim = window.__game.app.match.sim; for (const p of sim.players) if (p.isBot) p.spawnProtect = 0; })()")
