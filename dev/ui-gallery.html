@@ -115,6 +115,16 @@ const SCENES = {
   }),
   'loadouts': menuScene('Loadouts', ({ menu }) => menu.loadouts({ onBack: noop, onChange: noop, onGunsmith: noop, onOperators: noop, onRename: noop }), { gl: true }),
   'gunsmith': menuScene('Gunsmith', ({ menu }) => menu.gunsmith({ loadoutIndex: 0, weapon: 'ar', onBack: noop, onChange: noop }), { gl: true }),
+  // V11: &gun=dmr&slot=grip&try=k_runaway&fit=barrel:s_pinbarrel,mag:extmag opens a gun with parts fitted and one being tried.
+  'gunsmith-try': menuScene('Gunsmith: trying an attachment', async ({ menu }) => {
+    const gun = q.get('gun') ?? 'dmr';
+    const { Progress } = await import('./js/ui/progress.js');
+    for (const pair of (q.get('fit') ?? '').split(',').filter(Boolean)) { const [slot, id] = pair.split(':'); Progress.setAttachment(0, slot, id, gun); }
+    menu.gunsmith({ loadoutIndex: 0, weapon: gun, onBack: noop, onChange: noop });
+    const gs = menu.screen;
+    if (q.get('slot')) { gs.slot = q.get('slot'); gs.tryAtt = null; gs.renderPanel(); gs.update(); }
+    if (q.get('try')) gs.tapAttachment(q.get('try'));
+  }, { gl: true }),
   'operators': menuScene('Operators', ({ menu }) => menu.operators({ loadoutIndex: 0, onBack: noop, onChange: noop }), { gl: true }),
   'profile': menuScene('Profile', ({ menu }) => menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop })),
   'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),

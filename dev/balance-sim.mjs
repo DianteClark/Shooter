@@ -10,6 +10,8 @@
 //            --trials=3 (duels per pairing, distance and scenario) --no-matches --no-duels --kits (bot attachments)
 //            --streaks --equipment (both off by default: this measures guns) --json=out.json --compare=before.json
 //            --assist=0.8 (human: Options aim-assist slider) --thumb=key:value,... (override THUMB fields)
+//            --builds=dev/out/best-builds.json (V11: every gun carries the kit dev/best-builds.mjs found strongest, both
+//            sides of the mirror, instead of none or --kits)
 //
 // REALISTIC (--realistic, Pass 2): what a real lobby is, as opposed to a gun lab. Rosters come from the game's own
 // buildRoster (js/sim/sim.js) with Mixed skill, so bots draw their primaries, kits, perks, equipment and streaks the way
@@ -106,10 +108,11 @@ function foldRows(dst, src) {
   }
 }
 
+const BUILDS = opt('builds', null) ? JSON.parse(readFileSync(opt('builds'), 'utf8')) : null;
 function loadoutFor(gun, skill, i) {
   return normalizeLoadout({
     primary: gun, secondary: gun === 'pistol' ? 'revolver' : 'pistol',
-    attachments: has('kits') ? { [gun]: botAttachments(gun, skill, i) } : {},
+    attachments: BUILDS ? { [gun]: BUILDS[gun]?.kit ?? {} } : has('kits') ? { [gun]: botAttachments(gun, skill, i) } : {},
   });
 }
 

@@ -195,7 +195,7 @@ const LIST = [
   sig('s_barbed', 'flechette', 'mag', 'Barbed Darts', M1,
     'Heavier darts: fewer needed to finish the job.',
     'More damage per dart. Fewer shells, slower to load.',
-    { damage: 1.1, magazine: 0.8, reload: 1.1 }, { look: { mag: 'speedmag' } }),
+    { damage: 1.1, magazine: 0.8, reload: 1.1 }),
 
   // ---------------- LMG ----------------
   sig('s_prespun', 'lmg', 'grip', 'Pre-Spun Motor', 14,

@@ -20,6 +20,7 @@
  * Loadouts   loadouts() -> 5 x {name,primary,secondary,attachments:{weapon:kit},perks,tactical,lethal,streaks,camo,tracer,killFx}
  *            activeLoadout (get/set index)  loadout(primary?) -> the full loadout for a match or roster
  *            updateLoadout(i,part)  renameLoadout(i,name)  setAttachment(i,slot,id|null,weapon=loadout primary) -> bool
+ *            kitFor(i,weapon) -> the unlocked kit loadout i keeps for any gun, equipped or not
  *            setEquipment(part)  (edits the active loadout)
  * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'}
  * Pro        proStatus(perk) -> {perk,name,desc,steps:[{stat,label,goal,value,done}],done}  isPro(perk)  proPerks() -> [ids]
@@ -581,12 +582,21 @@ export const Progress = {
   renameLoadout(i, name) { this.updateLoadout(i, { name: String(name) }); },
   setEquipment(part) { this.updateLoadout(data.active, part); },
 
+  // The kit loadout i keeps for any gun, equipped or not, minus anything locked. loadouts() only carries the kits of
+  // the guns in the loadout (it is what goes into a match); the gunsmith browses every gun.
+  kitFor(i, weapon) {
+    if (!validIndex(i)) return normalizeKit(weapon, null);
+    const fitted = attachmentsFor(data.loadouts[i], weapon), kit = {};
+    for (const slot of SLOTS) if (fitted[slot] && hasAttachment(weapon, fitted[slot])) kit[slot] = fitted[slot];
+    return normalizeKit(weapon, kit);
+  },
+
   setAttachment(i, slot, id, weapon) {
     if (!validIndex(i) || !SLOTS.includes(slot)) return false;
     const l = data.loadouts[i];
     const gun = weapon ?? l.primary;
     if (id !== null && (ATTACHMENTS[id]?.slot !== slot || !hasAttachment(gun, id))) return false;
-    const kit = { ...attachmentsFor(l, gun) };
+    const kit = { ...this.kitFor(i, gun) };
     if (id === null) delete kit[slot]; else kit[slot] = id;
     this.updateLoadout(i, { attachments: { ...l.attachments, [gun]: kit } });
     return true;

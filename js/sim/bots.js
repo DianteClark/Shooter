@@ -75,7 +75,11 @@ export const SKILLS = {
 // STYLE holds overrides only, for a gun whose bot behaviour should differ from its data; empty today.
 const STYLE = {};
 const DEFAULT_STYLE = { pref: 15, hold: 1, flank: 1, advance: 3 };
-function styleOf(id) { return STYLE[id] || (WEAPONS[id] && WEAPONS[id].botUse) || DEFAULT_STYLE; }
+// V11: with `ps`, the gun as fitted: a conversion kit can change how a bot should fight with it (a slug barrel on a pump).
+function styleOf(id, ps) {
+  const d = ps ? weaponDef(ps, id) : WEAPONS[id];
+  return STYLE[id] || (d && d.botUse) || DEFAULT_STYLE;
+}
 const ADS_RANGE = 12;           // botUse.adsMin applies past this distance, or always on a gun with an adsGate.
 const PRECISE_BODY = 0.5;       // botUse.precise: metres either side of the target's centre the sights must be inside...
 const PRECISE_SLOP = 0.25;      // ...plus this fraction of the tier's usual trigger tolerance (worse bots still jerk it).
@@ -702,7 +706,7 @@ export class BotBrain {
     this.heatCooling = false; this.heatStop = this.S.heatStop;
     this.sawT = -99; this.sawX = 0; this.sawZ = 0; this.suppressing = false;
     this.turretTarget = null;
-    this.style = styleOf(ps.primary);
+    this.style = styleOf(ps.primary, ps);
     this.plink = false; this.closeN = 0;
     this.peek = 0;
     this.objective = null; this.objKey = null; this.objAim = 0; this.objPushRoll = false;
@@ -836,7 +840,7 @@ export class BotBrain {
     let best = null, bestScore = Infinity, bestD = 0;
     const sameTarget = this.target;
     // Engagements stay on-screen distances; a scoped rifle reaches further by what its botUse.sight says.
-    const sightRange = S.sight + (styleOf(ps.weapon).sight || 0);
+    const sightRange = S.sight + (styleOf(ps.weapon, ps).sight || 0);
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive || q.spawnProtect > 0) continue;
@@ -941,7 +945,7 @@ export class BotBrain {
     this.trackT = 0;
     this.anchor = gaussian(sim.rng);
     this.anchorT = 0.35;
-    this.useAds = (sim.rng() < S.adsUse && d > 6) || !!styleOf(ps.weapon).scoped;
+    this.useAds = (sim.rng() < S.adsUse && d > 6) || !!styleOf(ps.weapon, ps).scoped;
     this.objPushRoll = sim.rng() < S.objPush;
     this.slidIn = false;
     this.strafeT = 0;
@@ -1005,7 +1009,7 @@ export class BotBrain {
 
     // A close gun has no business crossing the open at someone who is looking at it: work in through cover, and
     // failing that get behind something and let them come.
-    const bu = styleOf(ps.weapon);
+    const bu = styleOf(ps.weapon, ps);
     this.plink = false;
     if (visible && bu.rush && this.targetDist > bu.rush + CLOSE_DASH && this.mode !== 'hold' && this.mode !== 'cover' && this.mode !== 'close'
       && !(this.mode === 'objective' && (this.arrived || this.objective?.commit))) {
@@ -1125,7 +1129,7 @@ export class BotBrain {
 
   // Gun Game moved this bot to a new gun: fight the way the new gun wants, from the next think.
   onArmed() {
-    this.style = styleOf(this.ps.primary);
+    this.style = styleOf(this.ps.primary, this.ps);
     this.useAds = !!this.style.scoped;
     this.wantSwap = false;
   }
@@ -1789,7 +1793,7 @@ export class BotBrain {
 
   _combatMove(q, d, dt) {
     const { ps, S, input: I, sim } = this;
-    const style = styleOf(ps.weapon);
+    const style = styleOf(ps.weapon, ps);
     const ux = (q.ps.x - ps.x) / d, uz = (q.ps.z - ps.z) / d;
     const o = this.objective;
     const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend' || o.role === 'plant' || o.role === 'defuse');
@@ -1828,7 +1832,7 @@ export class BotBrain {
   // (tx, tz) is where the round has to get to: the target, a turret, or a spot being suppressed.
   _trigger(q, d, perceived, dt, tx, tz) {
     const { ps, S, input: I, sim } = this;
-    const w = weaponDef(ps), bu = styleOf(ps.weapon);
+    const w = weaponDef(ps), bu = styleOf(ps.weapon, ps);
     const offAim = Math.abs(angleDiff(ps.aim, perceived));
     // Tolerance widens up close, where the target covers more of the view. A gun that kills in one or two rounds
     // (botUse.precise) waits for the sights to cross the body instead of firing whenever it is roughly on: the bot
@@ -1905,7 +1909,7 @@ export class BotBrain {
       // Half way through the reaction window the head starts to come around.
       if (this.reactLeft < this.reactTotal * 0.55) desired = trueAng + err;
 
-      const style = styleOf(ps.weapon);
+      const style = styleOf(ps.weapon, ps);
       // A flag runner with distance in hand does not stop to shoot back: it sprints for home, only turning to fight
       // someone close enough to catch it.
       const running = this.mode === 'objective' && !this.arrived && this.objective?.role === 'run' && d > CTF_RUN_FIGHT;
@@ -1945,11 +1949,11 @@ export class BotBrain {
       } else if ((this.mode === 'hold' || this.mode === 'close') && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.holdAim + Math.sin(this.peek) * 0.28;
-        I.aiming = !!styleOf(ps.weapon).scoped || S.adsUse > 0.8;
+        I.aiming = !!styleOf(ps.weapon, ps).scoped || S.adsUse > 0.8;
       } else if (this.mode === 'objective' && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.objAim + Math.sin(this.peek) * 1.1;
-        I.aiming = !!styleOf(ps.weapon).scoped || S.adsUse > 0.8;
+        I.aiming = !!styleOf(ps.weapon, ps).scoped || S.adsUse > 0.8;
       } else if (this.moving) {
         desired = Math.atan2(I.mz, I.mx);
       }

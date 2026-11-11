@@ -819,6 +819,32 @@
 #ui .att-opt.trying.locked b { color: var(--c-haze); }
 #ui .att-opt.trying .tag { color: var(--c-sodium); }
 #ui .att-opt.locked { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.025) 0 5px, transparent 5px 10px), var(--c-ballast); }
+/* V11: the option list scrolls instead of squashing; signature and kit chips; what a part is for and what it moves. */
+#ui .att-opts { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+#ui .att-opts::-webkit-scrollbar { display: none; }
+#ui .att-opt { flex: none; height: 30px; max-height: none; justify-content: flex-start; }
+#ui .att-opt b { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ui .att-opt .tag { margin-left: auto; }
+#ui .kind { flex: none; padding: 2px 4px 1px; font: 400 8.5px/1 var(--f-plate); letter-spacing: .06em; text-transform: uppercase; color: var(--c-night); background: var(--c-sodium); }
+#ui .kind.kit { background: var(--c-chalk); }
+#ui .att-opt.is-sig { box-shadow: var(--bevel), var(--edge), inset -2px 0 0 var(--c-sodium); }
+#ui .att-opt.is-kit { box-shadow: var(--bevel), var(--edge), inset -2px 0 0 var(--c-chalk); }
+#ui .att-opt.fitted.is-sig, #ui .att-opt.fitted.is-kit { box-shadow: var(--bevel), inset 3px 0 0 var(--c-go); }
+#ui .att-info { flex: none; display: flex; flex-direction: column; gap: 3px; padding: 4px 6px 5px; background: rgba(16,20,26,.55); box-shadow: var(--edge); }
+#ui .att-info[hidden] { display: none; }
+#ui .att-why { display: flex; align-items: center; gap: 5px; margin: 0; font: 400 10.5px/1.15 var(--f-body); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .att-why .kind { font-size: 8px; }
+#ui .att-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 7px; margin: 0; padding: 0; list-style: none; max-height: 40px; overflow: hidden; }
+#ui .att-dl li.kd::before { display: none; }
+#ui .att-dl li { font: 400 9.5px/12px var(--f-plate); color: var(--c-haze); white-space: nowrap; }
+#ui .att-dl li::before { display: inline-block; width: 8px; font-size: 8px; }
+#ui .att-dl li.up::before { content: '\25B2'; color: var(--c-go); }
+#ui .att-dl li.down::before { content: '\25BC'; color: var(--c-red); }
+#ui .att-dl li.note { color: var(--c-sodium); }
+#ui .att-dl li.note::before { content: '\25C6'; color: var(--c-sodium); }
+#ui .att-dl li.up b { color: var(--c-go); font-weight: 400; }
+#ui .att-dl li.down b { color: var(--c-red); font-weight: 400; }
+#ui .gl-att { display: inline; margin-left: 6px; font: 400 9.5px/1 var(--f-plate); color: var(--c-sodium); }
 #ui .tile { box-shadow: var(--edge); --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
 #ui .tile-lk .ico { height: 14px; }
 #ui .tile.on { outline: 0; box-shadow: inset 0 0 0 2px var(--c-go); }

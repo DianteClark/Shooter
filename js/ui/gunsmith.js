@@ -5,8 +5,8 @@
 import { WEAPONS } from '../shared/weapons.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { getCamo, TRACERS, KILL_EFFECTS } from '../shared/camos.js';
-import { SLOTS, ATTACHMENTS, attachmentsFor, normalizeKit } from '../shared/attachments.js';
-import { MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE, prestigeRewards, camoRequirement } from '../shared/progression.js';
+import { SLOTS, ATTACHMENTS, attachmentsFor, normalizeKit, attachmentDeltas, unlockLabel, LADDER_BASE } from '../shared/attachments.js';
+import { MAX_WEAPON_LEVEL, MAX_WEAPON_PRESTIGE, prestigeRewards, camoRequirement, WEAPON_LADDER } from '../shared/progression.js';
 import { Progress } from './progress.js';
 import { esc, hex, swatchCss, ROMAN, SLOT_LABEL, levelRequirement, weaponLevelHtml } from './widgets.js';
 import { compareStats, deltaText, weaponFacts, rangeStrip, RANGE_AXIS } from './gunstats.js';
@@ -17,6 +17,20 @@ import { flash, pop, stagger } from './motion.js';
 import { masteryBadge } from './mastery.js';
 
 const STOCK = 'stock';
+
+// V11: the kind chip on a signature attachment or conversion kit, and what a lock asks for.
+const KIND_LABEL = { sig: 'Signature', kit: 'Kit' };
+const kindChip = a => (a.kind ? `<span class="kind ${a.kind}">${KIND_LABEL[a.kind]}</span>` : '');
+function lockRequirement(level) {
+  if (level <= LADDER_BASE) return `reach weapon level ${level}`;
+  const tier = level - LADDER_BASE;
+  return `mastery tier ${ROMAN[tier]}: ${WEAPON_LADDER[tier - 1]?.label ?? ''}`.replace(/: $/, '');
+}
+// "+20%", "-3" for whole numbers.
+function deltaLabel(d) {
+  if (d.whole) { const n = Math.round(d.to) - Math.round(d.from); return `${n > 0 ? '+' : ''}${n}`; }
+  return `${d.pct > 0 ? '+' : ''}${Math.round(d.pct * 100)}%`;
+}
 
 // The range strip under the facts: inline styles, so the bench needs no stylesheet change to carry it.
 const RANGE_BOX = 'flex:none;padding:3px 8px 5px;background:rgba(29,35,43,.42)';
@@ -59,7 +73,7 @@ export class Gunsmith {
   }
 
   get loadout() { return Progress.loadouts()[this.index]; }
-  get kit() { return attachmentsFor(this.loadout, this.weapon); }
+  get kit() { return Progress.kitFor(this.index, this.weapon); }
   get name() { return WEAPONS[this.weapon]?.name ?? this.weapon; }
 
   bindActions() {
@@ -186,7 +200,7 @@ export class Gunsmith {
     const id = this.tryAtt;
     if (id === null) return;
     const def = id === STOCK ? null : this.available(this.slot).find(a => a.id === id);
-    if (def && !def.unlocked) { this.menu.toast(`${def.name}: reach weapon level ${def.unlockLevel}`); return; }
+    if (def && !def.unlocked) { this.menu.toast(`${def.name}: ${lockRequirement(def.unlockLevel)}`); return; }
     const fitted = this.kit[this.slot];
     const target = def ? (fitted === id ? null : id) : null;
     if (!Progress.setAttachment(this.index, this.slot, target, this.weapon)) return;
@@ -318,7 +332,7 @@ export class Gunsmith {
     for (const b of this.catBtns) b.classList.toggle('on', b.dataset.cat === this.cat);
   }
 
-  resolveThumb = id => ({ camo: Progress.camo(id), kit: attachmentsFor(this.loadout, id) });
+  resolveThumb = id => ({ camo: Progress.camo(id), kit: Progress.kitFor(this.index, id) });
 
   paintRail() {
     const primary = this.loadout.primary, secondary = this.loadout.secondary;
@@ -401,6 +415,7 @@ export class Gunsmith {
 
   renderAttach() {
     const kit = this.kit;
+    this.shownOpt = null;
     this.bodyEl.innerHTML = `
       <div class="att-slots">
         ${SLOTS.map(s => {
@@ -412,11 +427,26 @@ export class Gunsmith {
       <div class="att-opts">
         <button class="att-opt" data-act="gsAtt" data-id="${STOCK}"><b>Stock</b><em class="tag"></em></button>
         ${this.available(this.slot).map(a => `
-          <button class="att-opt${a.unlocked ? '' : ' locked'}" data-act="gsAtt" data-id="${a.id}">
-            <b>${esc(a.name)}</b>
-            <em class="tag">${a.unlocked ? '' : `${ico('lock')}Level ${a.unlockLevel}`}</em>
+          <button class="att-opt${a.unlocked ? '' : ' locked'}${a.kind ? ` is-${a.kind}` : ''}" data-act="gsAtt" data-id="${a.id}">
+            <b>${esc(a.name)}</b>${kindChip(a)}
+            <em class="tag">${a.unlocked ? '' : `${ico('lock')}${unlockLabel(a.unlockLevel)}`}</em>
           </button>`).join('')}
-      </div>`;
+      </div>
+      <div class="att-info"></div>`;
+    this.infoEl = this.bodyEl.querySelector('.att-info');
+  }
+
+  // V11: what the part under the thumb (tried, else fitted) is for, and every number it moves on this gun.
+  paintInfo() {
+    if (this.tab !== 'attach' || !this.infoEl) return;
+    const id = this.tryAtt === null ? this.kit[this.slot] ?? null : this.tryAtt === STOCK ? null : this.tryAtt;
+    const a = id && ATTACHMENTS[id];
+    let html = '';
+    if (a) {
+      const deltas = attachmentDeltas(WEAPONS[this.weapon], id);
+      html = `<ul class="att-dl">${a.kind ? `<li class="kd">${kindChip(a)}</li>` : ''}${deltas.map(d => `<li class="${d.key === 'note' ? 'note' : d.better ? 'up' : 'down'}">${esc(d.label)}${d.key === 'note' ? '' : ` <b>${deltaLabel(d)}</b>`}</li>`).join('')}</ul>`;
+    }
+    if (this.infoHtml !== html) { this.infoEl.innerHTML = this.infoHtml = html; this.infoEl.hidden = !html; }
   }
 
   renderCamos() {
@@ -475,11 +505,12 @@ export class Gunsmith {
       <h4>Mastery ladder <small>${st.open ? `tier ${st.tier} of ${st.count}` : `opens at level ${MAX_WEAPON_LEVEL}`}</small></h4>
       <div class="gs-ladder${st.open ? '' : ' locked'}">
         ${st.tiers.map((c, i) => {
+          const parts = Progress.attachments(this.weapon).filter(a => a.unlockLevel === LADDER_BASE + i + 1);
           const state = c.done ? 'done' : st.open && i === st.tier ? 'now' : 'later';
           const f = c.done ? 1 : state === 'now' ? c.value / c.goal : 0;
           return `<div class="gl-row ${state}">
             <span class="gl-n">${ROMAN[i + 1]}</span>
-            <span class="gl-goal"><b>${esc(c.label)}</b><i class="m-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i></span>
+            <span class="gl-goal"><b>${esc(c.label)}${parts.map(a => `<small class="gl-att">+ ${esc(a.name)}</small>`).join('')}</b><i class="m-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i></span>
             <span class="gl-rw">${c.rewards.map(r => `<i title="${esc(r.name)}">${r.kind === 'badge' ? masteryBadge(this.weapon, Number(r.id.slice(-1)), { size: 16 }) : ico(REWARD_ICON[r.kind] ?? 'star')}</i>`).join('')}<small>${state === 'now' ? `${c.value}/${c.goal}` : c.done ? 'Done' : c.rewards.find(r => r.xp) ? `+${c.rewards.find(r => r.xp).xp.toLocaleString('en-US')}` : ''}</small></span>
           </div>`;
         }).join('')}
@@ -512,12 +543,16 @@ export class Gunsmith {
     const body = this.bodyEl;
     if (this.tab === 'attach') {
       const kit = this.kit;
+      this.paintInfo();
       for (const b of body.querySelectorAll('.att-opt')) {
         const id = b.dataset.id;
         const fitted = kit[this.slot] === id || (id === STOCK && !kit[this.slot]);
         b.classList.toggle('fitted', fitted);
         b.classList.toggle('trying', this.tryAtt === id);
       }
+      // Keep the part under the thumb (tried, else fitted) in view in a list that scrolls.
+      const cur = body.querySelector('.att-opt.trying') ?? body.querySelector('.att-opt.fitted');
+      if (cur && cur.dataset.id !== this.shownOpt) { this.shownOpt = cur.dataset.id; cur.scrollIntoView({ block: 'nearest' }); }
       for (const b of body.querySelectorAll('.att-slot')) {
         const s = b.dataset.slot;
         b.classList.toggle('on', s === this.slot);
@@ -549,8 +584,9 @@ export class Gunsmith {
       const kit = this.kit, id = this.tryAtt;
       if (id === null) {
         const name = kit[this.slot] ? ATTACHMENTS[kit[this.slot]].name : 'Stock';
-        title = WEAPONS[this.weapon]?.melee ? 'No attachments' : `${SLOT_LABEL[this.slot]}: ${name}`;
-        desc = kit[this.slot] ? ATTACHMENTS[kit[this.slot]].desc : WEAPONS[this.weapon]?.melee ? 'Melee weapons take no attachments. Camos, effects and mastery still apply.' : 'Tap an attachment to try it on the bench.';
+        const none = !SLOTS.some(sl => this.available(sl).length);
+        title = none ? 'No attachments' : `${SLOT_LABEL[this.slot]}: ${name}`;
+        desc = kit[this.slot] ? ATTACHMENTS[kit[this.slot]].for ?? ATTACHMENTS[kit[this.slot]].desc : none ? 'This weapon takes no attachments. Camos, effects and mastery still apply.' : 'Tap an attachment to try it on the bench.';
       } else if (id === STOCK) {
         title = 'Stock';
         desc = `Run without a ${SLOT_LABEL[this.slot].toLowerCase()} attachment.`;
@@ -558,8 +594,8 @@ export class Gunsmith {
       } else {
         const def = this.available(this.slot).find(a => a.id === id);
         title = def.name;
-        desc = def.desc;
-        if (!def.unlocked) { action = `Level ${def.unlockLevel}`; enabled = false; }
+        desc = def.for ?? def.desc;
+        if (!def.unlocked) { action = unlockLabel(def.unlockLevel); enabled = false; desc = `Locked: ${lockRequirement(def.unlockLevel)}.`; }
         else if (kit[this.slot] === id) { action = 'Remove'; enabled = true; }
         else { action = 'Fit'; enabled = true; }
       }
