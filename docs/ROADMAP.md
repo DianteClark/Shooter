@@ -67,3 +67,19 @@ on every push, keep 2% of weekly usage for bugs.
     AI patrols harder toward the centre; contracts (intel, HVT, cache, hack, escort); own loadouts; only ammo loot; no
     streaks; respawn timer but a shared squad life pool, then spectate; must exfil to bank rewards (one squadmate out is
     enough); rewards are mastery progress plus exclusive streaks, weapons, perks and operators.
+
+## Owner's wave (2026-11-11 afternoon), approved "full force"
+18. Owner fixes: Infected Ground War (two starting infected); gunsmith gun cards' level/XP bar at the bottom of the card,
+    clear of the picture; BR: parachute folds on landing, visible glide descent and a landing animation instead of
+    spawning on the ground; BR pickup prompt bottom-centre (not over the aim stick), naming the slot it replaces, and
+    auto-swap to melee when out of ammo; wiped BR players choose Spectate or Leave.
+19. Clans: grow the bot pool to about 300 (append, never reorder); 20-25 fake clans of 3-8 with shared tags, some
+    stacked, some average, members queue together and share a team; regular duos; loners. Clan tags on leaderboards.
+20. Bug sweep (every mode and screen at both sizes, saves, friend lobbies) and a phone performance pass (with the
+    owner's Performance overlay screenshots).
+21. Ranked: placements, divisions, seasonal resets, matched against the bot pool and friends.
+22. Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
+    mode/event, ranked reset, seasonal boards. Ship two seasons ahead per update, content date-locked; if updates stop,
+    "Season Replay" rotates past seasons. Season 1 with the framework.
+23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
+24. Music: synthesised menu and match music.
