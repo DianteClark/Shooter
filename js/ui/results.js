@@ -182,6 +182,12 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       </div>`; }).join('')}
     </div>`;
   };
+  // A squad's names; a clan squad wears its tag once, before them all.
+  const squadNames = ms => {
+    const tags = ms.map(p => /^\[([A-Z]{2,4})\] /.exec(p.name)?.[1] ?? null);
+    if (ms.length > 1 && tags[0] && tags.every(t => t === tags[0])) return `<i class="ctag">${tags[0]}</i> ${ms.map(p => esc(p.name.slice(tags[0].length + 3))).join(', ')}`;
+    return ms.map(p => nameHtml(p.name)).join(', ');
+  };
   const brSquads = () => {
     const rows = squadTeams.map(t => {
       const ms = roster.filter(p => p.team === t);
@@ -198,7 +204,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rb-head"><b class="rb-team">${solo ? 'Standings' : 'Squads'}</b><b class="rb-pts"></b>
         <span></span><span></span><span></span><span>K</span><span class="wide">Place</span></div>
       ${shownRows.map((r, i) => `<div class="rb-row${r.t === myTeam ? ' me' : ''}" style="--i:${i}">
-        <span class="rb-name" style="grid-column:span 4"><i style="flex:none;width:7px;height:7px;background:${TEAMS[r.t]?.css}"></i><b>${r.ms.map(p => nameHtml(p.name)).join(', ')}</b></span><span>${r.kills}</span><span class="wide">${r.live ? 'In' : ORDINAL(r.place)}</span>
+        <span class="rb-name" style="grid-column:span 4"><i style="flex:none;width:7px;height:7px;background:${TEAMS[r.t]?.css}"></i><b>${squadNames(r.ms)}</b></span><span>${r.kills}</span><span class="wide">${r.live ? 'In' : ORDINAL(r.place)}</span>
       </div>`).join('')}
       ${rows.length > shownRows.length ? `<div class="rb-row" style="--i:${shownRows.length}"><span class="rb-name"><b>+${rows.length - shownRows.length} more</b></span></div>` : ''}
     </div>`;

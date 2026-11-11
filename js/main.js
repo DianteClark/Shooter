@@ -1571,6 +1571,7 @@ function showResults(results) {
       rematchLabel: app.lastPick?.mp && !app.net ? 'Next match' : 'Rematch',
       snd: results.snd,
       br: results.br,
+      early: !!results.early,
       mastery: results.mastery,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
     }, { rematch: () => afterResults(), menu: () => goTitle() });
