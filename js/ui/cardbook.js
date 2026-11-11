@@ -39,7 +39,7 @@ const card = (id, name, group, req, need, art) => ({ id, name, group, req, need:
 const MAP_ART = {
   railyard: ['Hump Yard', 'signals', ['#1d1a16', '#4a3e30', '#ffd9a0', '#ff9f1c']],
   harbor:   ['Dockside', 'cranes', ['#0f1a22', '#24465a', '#bfe2f2', '#ffb03a']],
-  neon:     ['Night Market', 'neon', ['#120a1c', '#3a1a4e', '#ffd2f4', '#ff2bd6']],
+  neon:     ['Neon Lights', 'neon', ['#120a1c', '#3a1a4e', '#ffd2f4', '#ff2bd6']],
   dust:     ['Dust Devil', 'dunes', ['#2a1e12', '#7a5630', '#ffe4b0', '#ff8a2a']],
   frost:    ['Whiteout', 'shards', ['#14202a', '#3c5c72', '#eaf6ff', '#7cd8ff']],
   topside:  ['Rooftop', 'skyline', ['#161a26', '#323a54', '#d6dcf2', '#ffcf4a']],
@@ -102,7 +102,7 @@ const EXTRA = [
   card('multi-100', 'Clean Sweep', 'Career', '100 multi-kills', () => life('multi') >= 100, { p: 'burst', c: ['#1e0e14', '#5a1e36', '#ffd0e4', '#ff3fd2'], e: 'medal:triple' }),
   card('streaks-100', 'Call It In', 'Career', 'Call in 100 scorestreaks', () => life('streaksCalled') >= 100, { p: 'arc', c: ['#10161e', '#2a3a4e', '#d8e6f4', '#ff9f1c'], e: 'strike' }),
   card('equip-150', 'Demolition', 'Career', '150 lethal equipment kills', () => life('equipKills') >= 150, { p: 'blast', c: ['#1a1408', '#4e3a14', '#ffe8b0', '#ffb02a'], e: 'frag' }),
-  card('assists-500', 'Wingman', 'Career', '500 assists', () => life('assists') >= 500, { p: 'link', c: ['#0e161e', '#22384a', '#cfe8ff', '#38b6ff'], e: 'ui:party' }),
+  card('assists-500', 'Right Hand', 'Career', '500 assists', () => life('assists') >= 500, { p: 'link', c: ['#0e161e', '#22384a', '#cfe8ff', '#38b6ff'], e: 'ui:party' }),
   card('top3-50', 'Podium', 'Career', 'Finish top three 50 times', () => life('top3') >= 50, { p: 'podium', c: ['#16140e', '#3e3a24', '#f2ead0', '#ffd659'], e: 'ui:cup' }),
   card('hip-500', 'From the Hip', 'Career', '500 hip-fire kills', () => life('hipKills') >= 500, { p: 'speed', c: ['#1c120c', '#4e301c', '#ffd8b8', '#ff8a1f'], e: 'ui:aim' }),
   // One card per gun, for mastering it (every camo challenge and the ladder). Separate from the mastery-<item> cards

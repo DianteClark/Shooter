@@ -253,7 +253,7 @@ export function goldenStatus(save) {
 
 /* ---------- Prestige names ---------- */
 // Above the cards, which are named from them when the module loads.
-const PRESTIGE_NAMES = ['Yard Hand', 'Brakeman', 'Coupler', 'Signalman', 'Switchman', 'Dispatcher', 'Conductor', 'Engineer', 'Yardmaster', 'Roadmaster', 'Sovereign of the Yard'];
+const PRESTIGE_NAMES = ['Yard Hand', 'Brakeman', 'Coupler', 'Signalman', 'Switchman', 'Dispatcher', 'Conductor', 'Engine Driver', 'Yardmaster', 'Roadmaster', 'Sovereign of the Yard'];
 
 export const prestigeName = rank => PRESTIGE_NAMES[Math.min(MAX_PRESTIGE, Math.max(0, Math.floor(Number(rank)) || 0))];
 
@@ -468,7 +468,7 @@ const GEAR_TRACKS = {
     // Gear wave.
     snapshot: [T('uses', 15, 'Throw 15 Snapshots'), T('marked', 30, 'Reveal 30 enemies'), T('markKills', 10, 'Kill 10 enemies you revealed'), T('markKills', 35, 'Kill 35 enemies you revealed')],
     blackout: [T('uses', 15, 'Throw 15 Blackouts'), T('jammed', 25, 'Jam 25 enemies'), T('jamKills', 10, 'Kill 10 enemies you jammed'), T('fried', 25, 'Destroy 25 enemy devices with Blackout')],
-    bulwark:  [T('uses', 15, 'Deploy 15 Bulwarks'), T('coverKills', 10, 'Get 10 kills within 12 s of a Bulwark'), T('uses', 50, 'Deploy 50 Bulwarks'), T('coverKills', 40, 'Get 40 kills within 12 s of a Bulwark')],
+    bulwark:  [T('uses', 15, 'Deploy 15 Ramparts'), T('coverKills', 10, 'Get 10 kills within 12 s of a Rampart'), T('uses', 50, 'Deploy 50 Ramparts'), T('coverKills', 40, 'Get 40 kills within 12 s of a Rampart')],
     tagger:   [T('uses', 15, 'Throw 15 Taggers'), T('tagged', 10, 'Stick a Tagger on 10 enemies'), T('markKills', 10, 'Kill 10 enemies you tagged'), T('markKills', 35, 'Kill 35 enemies you tagged')],
     medpack:  [T('uses', 15, 'Drop 15 Medpacks'), T('healed', 800, 'Heal 800 health'), T('mates', 500, 'Heal teammates for 500 health'), T('healed', 4000, 'Heal 4,000 health')],
   },
@@ -484,7 +484,7 @@ const GEAR_TRACKS = {
     drill:    [T('uses', 20, 'Throw 20 Drills'), T('kills', 10, 'Get 10 Drill kills'), T('wallKills', 8, 'Get 8 Drill kills through a wall'), T('wallKills', 30, 'Get 30 Drill kills through a wall')],
     // Gear wave.
     charge:   [T('uses', 20, 'Plant 20 Satchels'), T('kills', 15, 'Get 15 Satchel kills'), T('multi', 4, 'Kill 2 or more with one Satchel 4 times'), T('kills', 45, 'Get 45 Satchel kills')],
-    thermite: [T('uses', 20, 'Throw 20 Thermites'), T('kills', 10, 'Get 10 Thermite kills'), T('melted', 10, 'Melt 10 enemy devices or Bulwarks'), T('kills', 35, 'Get 35 Thermite kills')],
+    thermite: [T('uses', 20, 'Throw 20 Thermites'), T('kills', 10, 'Get 10 Thermite kills'), T('melted', 10, 'Melt 10 enemy devices or Ramparts'), T('kills', 35, 'Get 35 Thermite kills')],
     tripwire: [T('uses', 15, 'Set 15 Tripwires'), T('kills', 10, 'Get 10 Tripwire kills'), T('multi', 3, 'Kill 2 or more with one Tripwire 3 times'), T('kills', 35, 'Get 35 Tripwire kills')],
     crawler:  [T('uses', 20, 'Throw 20 Crawlers'), T('kills', 15, 'Get 15 Crawler kills'), T('multi', 4, 'Kill 2 or more with one Crawler 4 times'), T('kills', 45, 'Get 45 Crawler kills')],
     shiv:     [T('uses', 25, 'Throw 25 Shivs'), T('kills', 10, 'Get 10 Shiv kills'), T('backKills', 8, 'Get 8 Shiv kills in the back'), T('kills', 40, 'Get 40 Shiv kills')],
@@ -995,10 +995,10 @@ export const CARDS = [
     { p: PRO_ART[perk][0], c: [PRO_ART[perk][1], PRO_ART[perk][2], PRO_ART[perk][3], '#ffd659'], e: perk, gold: true })),
   ...Array.from({ length: MAX_PRESTIGE }, (_, i) => i + 1).map(n => card(`prestige-${n}`, prestigeName(n), 'Prestige', `Prestige ${n}`, c => c.prestige >= n,
     { p: n >= 8 ? 'rays' : n >= 5 ? 'chevrons' : 'rails', c: PRESTIGE_ART[n - 1], e: `badge:${n}` })),
-  card('camo-gold', 'Sovereign', 'Mastery', 'Sovereign camo on any weapon', c => c.camos.has('gold'), { p: 'rays', c: ['#3a2a08', '#b27616', '#fff4bf', '#ffd659'], e: 'camo:gold', gold: true }),
+  card('camo-gold', 'Gold Standard', 'Mastery', 'Sovereign camo on any weapon', c => c.camos.has('gold'), { p: 'rays', c: ['#3a2a08', '#b27616', '#fff4bf', '#ffd659'], e: 'camo:gold', gold: true }),
   card('mastery-5', 'Armorer', 'Mastery', 'Master 5 weapons', c => c.mastered >= 5, { p: 'plates', c: ['#2a2410', '#7a6420', '#ffe9a0', '#ffd659'], e: 'ui:gunsmith', gold: true }),
-  card('camo-molten', 'Molten Core', 'Mastery', 'Molten Core camo on any weapon', c => c.camos.has('molten'), { p: 'pulse', c: ['#1a0d0a', '#a3270a', '#ffd23f', '#ff4a0a'], e: 'camo:molten', gold: true }),
-  card('camo-prism', 'Prism', 'Mastery', 'Prism camo on any weapon', c => c.camos.has('prism'), { p: 'speed', c: ['#1c0c2a', '#5a2a9e', '#18e8ff', '#ff2bd6'], e: 'camo:prism', gold: true }),
+  card('camo-molten', 'Meltdown', 'Mastery', 'Molten Core camo on any weapon', c => c.camos.has('molten'), { p: 'pulse', c: ['#1a0d0a', '#a3270a', '#ffd23f', '#ff4a0a'], e: 'camo:molten', gold: true }),
+  card('camo-prism', 'Kaleidoscope', 'Mastery', 'Prism camo on any weapon', c => c.camos.has('prism'), { p: 'speed', c: ['#1c0c2a', '#5a2a9e', '#18e8ff', '#ff2bd6'], e: 'camo:prism', gold: true }),
   card('kills-100', 'Blooded', 'Career', '100 gun kills', c => c.kills >= 100, { p: 'rails', c: ['#2a1416', '#6e2a30', '#ffb0a8', '#ff5a4a'], e: 'ui:skull' }),
   card('kills-1000', 'Thousand Yard', 'Career', '1,000 gun kills', c => c.kills >= 1000, { p: 'chevrons', c: ['#2e0e12', '#8e1a26', '#ffd0c8', '#ff3040'], e: 'ui:skull', gold: true }),
   card('head-250', 'Dead Eye', 'Career', '250 headshots', c => c.head >= 250, { p: 'rings', c: ['#101c24', '#22475c', '#bfe6ff', '#ff9f1c'], e: 'medal:headshot' }),

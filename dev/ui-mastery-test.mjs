@@ -57,7 +57,7 @@ test('operators wave: 27 operators, the first nine in their old order, women and
     if (op.kit) for (const slot of ['core', 'face']) assert.ok(op.kit[slot], `${op.id} ${slot}`);
   }
   // The old skins keep their ids and names.
-  assert.equal(getSkin('skin:trooper-5').name, 'Sovereign');
+  assert.equal(getSkin('skin:trooper-5').name, 'Imperial');
   assert.equal(getSkin('skin:ghoul-field').glow, 1);
   const career = { level: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: {} };
   const get = id => OPERATORS.find(o => o.id === id);

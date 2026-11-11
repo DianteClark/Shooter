@@ -48,7 +48,7 @@ const PANELS = {
     </dl>`,
   gear: () => `
     <dl class="help-stats scroll-y">
-      ${stat('How it works', 'One tactical and one lethal. Tap to throw where you aim, or hold and drag from the button to place it. Counts refill when you respawn. Devices left on the ground (mines, Claymores, Tripwires, Satchels, Sensors, Trophies, Medpacks, Decoys) can be <b>shot</b>; a Bulwark takes a couple of magazines, or two grenades. Shock and Blackout fry them, a Trophy shoots down grenades.')}
+      ${stat('How it works', 'One tactical and one lethal. Tap to throw where you aim, or hold and drag from the button to place it. Counts refill when you respawn. Devices left on the ground (mines, Claymores, Tripwires, Satchels, Sensors, Trophies, Medpacks, Decoys) can be <b>shot</b>; a Rampart takes a couple of magazines, or two grenades. Shock and Blackout fry them, a Trophy shoots down grenades.')}
       ${stat('Satchel', 'Throw it, then tap Lethal again: the button turns red and reads Detonate. It stays armed until it goes off, is shot, or a minute passes.')}
       ${Object.values(TACTICALS).map(gear('Tactical')).join('')}
       ${Object.values(LETHALS).map(gear('Lethal')).join('')}
