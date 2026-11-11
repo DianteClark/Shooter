@@ -2,6 +2,7 @@
 //   node dev/render-snapshots.mjs                 every map in MAP_IDS
 //   node dev/render-snapshots.mjs frost sunken    just these
 //   node dev/render-snapshots.mjs --review        also writes full-size PNGs to /tmp/map-art/ for checking
+//   node dev/render-snapshots.mjs --port=8172     serve on this port (default: any free one)
 // Needs Playwright and Chrome (the same setup as docs/ARCHITECTURE.md). Serves the repo itself on a free port.
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -15,6 +16,7 @@ const OUT = join(ROOT, 'assets', 'maps');
 const MAX_BYTES = 60 * 1024;
 const args = process.argv.slice(2);
 const review = args.includes('--review');
+const PORT = Number(args.find(a => a.startsWith('--port='))?.split('=')[1] ?? 0);
 
 async function loadPlaywright() {
   try { return await import('playwright'); } catch { /* fall through to the global install */ }
@@ -33,7 +35,7 @@ function serve() {
       res.end(body);
     } catch { res.writeHead(404); res.end(); }
   });
-  return new Promise(ok => server.listen(0, '127.0.0.1', () => ok(server)));
+  return new Promise(ok => server.listen(PORT, '127.0.0.1', () => ok(server)));
 }
 
 const { MAP_IDS } = await import(join(ROOT, 'js/shared/map.js'));

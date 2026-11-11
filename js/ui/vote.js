@@ -3,7 +3,7 @@
 //
 // Random: either half of a pick (or both) may be RANDOM. Whoever is hosting turns it into a real map and mode with
 // resolvePick before the match starts, and only that resolved pair is ever sent, so every phone plays the same map.
-import { MAPS, MAP_IDS, DEFAULT_MAP } from '../shared/map.js';
+import { MAPS, MAP_IDS, DEFAULT_MAP, SIZES, SIZE_IDS, sizeOf, regionName } from '../shared/map.js';
 import { MODES, MODE_IDS, modeFitsMap, firstModeFor } from '../shared/modes.js';
 import { esc } from './widgets.js';
 import { mapImage, followMapArt } from './mapthumb.js';
@@ -28,8 +28,11 @@ function allPairs() {
   return pairs;
 }
 
-// A pick whose map, mode or both are RANDOM, made real. The map is drawn first and evenly, so a map that hosts every
-// mode is no likelier than one that hosts two; then a mode that map can host. A fixed half is kept as it is.
+// A pick whose map, mode or both are RANDOM, made real. The map is drawn first, by size tier (SIZES in map.js: small,
+// medium and large share the roll by their weights, each tier's share split evenly between its maps), so a tier with
+// many maps is no likelier than its weight and a map that hosts every mode is no likelier than one that hosts two. Huge
+// maps weigh nothing, so they only come up when the mode asked for is a Ground War mode that nothing else hosts. Then a
+// mode that map can host. A fixed half is kept as it is.
 export function resolvePick({ mapId, mode }, random = Math.random) {
   const fits = allPairs().filter(p => (mapId === RANDOM || p.mapId === mapId) && (mode === RANDOM || p.mode === mode));
   if (!fits.length) {
@@ -37,9 +40,22 @@ export function resolvePick({ mapId, mode }, random = Math.random) {
     return { mapId: map, mode: firstModeFor(MAPS[map]) };
   }
   const maps = [...new Set(fits.map(p => p.mapId))];
-  const map = maps[Math.floor(random() * maps.length)];
+  const map = weightedMap(maps, random);
   const modes = fits.filter(p => p.mapId === map);
   return modes[Math.floor(random() * modes.length)];
+}
+
+// One of `maps`, by size tier weight. When every candidate weighs nothing (only huge maps fit), evenly.
+// `weight(tier)` overrides the tiers' weights (the vote gives Ground War a small share).
+export function weightedMap(maps, random = Math.random, weight = t => SIZES[t].weight) {
+  const per = {};
+  for (const id of maps) per[tierOf(id)] = (per[tierOf(id)] ?? 0) + 1;
+  const weights = maps.map(id => { const t = tierOf(id); return weight(t) / per[t]; });
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (!(total > 0)) return maps[Math.floor(random() * maps.length)];
+  let r = random() * total;
+  for (let i = 0; i < maps.length; i++) if ((r -= weights[i]) < 0) return maps[i];
+  return maps[maps.length - 1];
 }
 
 export const isRandom = pick => pick?.mapId === RANDOM || pick?.mode === RANDOM;
@@ -132,40 +148,40 @@ export function paintVote(root, state) {
 
 // Solo: every map and mode, chosen directly, each with a Random choice. Maps the map data offers no points for hide the
 // modes that need them; with a Random map every mode stays open and the roll keeps to maps that can host it.
-// Standard 6v6 maps and large Ground War maps sit in two labelled sections, so nobody starts a 16 v 16 by accident.
-const isLarge = id => !!MAPS[id]?.large || (MAPS[id]?.modes ?? []).some(m => MODES[m]?.large);
+// Maps sit in one labelled section per size tier (Small, Medium, Large, then Huge for 16 v 16, so nobody starts a
+// Ground War by accident), in a column that scrolls once there are more than fit; Random stands beside it, always in view.
+const isLarge = id => !!MAPS[id]?.large || sizeOf(MAPS[id]) === 'huge' || (MAPS[id]?.modes ?? []).some(m => MODES[m]?.large);
+const tierOf = id => (isLarge(id) ? 'huge' : sizeOf(MAPS[id]));
 const mapCard = id => {
-  const m = MAPS[id];
+  const m = MAPS[id], region = regionName(m);
   return `<button class="solo-map" data-act="soloMap" data-id="${id}" data-in="up">
           <span class="vc-art" data-map="${esc(m.id)}" style="background-image:url(${mapImage(m)})"></span>
           <span class="vc-shade"></span>
+          ${region ? `<span class="sm-region t-tag" data-region="${esc(m.region)}">${esc(region)}</span>` : ''}
           <span class="sm-tick">${ico('check')}</span>
           <span class="sm-name">${ico(`map:${id}`)}<b>${esc(m.name)}</b></span>
         </button>`;
 };
 
 export function soloMarkup({ mapId, mode }) {
-  const standard = MAP_IDS.filter(id => !isLarge(id)), large = MAP_IDS.filter(isLarge);
-  const cards = standard.length + 1;     // Random rides with the standard maps.
-  const cols = Math.min(4, Math.ceil(cards / (cards > 4 ? 2 : 1)));
+  const sections = SIZE_IDS.map(t => ({ t, ids: MAP_IDS.filter(id => tierOf(id) === t) })).filter(s => s.ids.length);
   const out = `
     ${header({ back: 'soloBack', title: 'Play vs bots', extra: `<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
     <div class="solo">
       <div class="solo-maps">
-        <section class="solo-sec" style="--cols:${cols}">
-          <h3 class="solo-h">${ico('map')}<b>Standard maps</b><small>6 v 6</small></h3>
-          <div class="solo-grid">${standard.map(mapCard).join('')}
-          <button class="solo-map random" data-act="soloMap" data-id="${RANDOM}" data-in="up">
-            ${mixArt()}
-            <span class="vc-shade"></span>
-            <span class="sm-tick">${ico('check')}</span>
-            <span class="sm-name">${ico('random')}<b>Random</b></span>
-          </button></div>
-        </section>
-        ${large.length ? `<section class="solo-sec large" style="--cols:1">
-          <h3 class="solo-h">${ico('party')}<b>Ground War</b><small>16 v 16</small></h3>
-          <div class="solo-grid">${large.map(mapCard).join('')}</div>
-        </section>` : ''}
+        <button class="solo-map random" data-act="soloMap" data-id="${RANDOM}" data-in="up">
+          ${mixArt()}
+          <span class="vc-shade"></span>
+          <span class="sm-tick">${ico('check')}</span>
+          <span class="sm-name">${ico('random')}<b>Random</b></span>
+          <small class="sm-sub">Small to large</small>
+        </button>
+        <div class="solo-scroll scroll-y">${sections.map(({ t, ids }) => `
+          <section class="solo-sec tier-${t}">
+            <h3 class="solo-h">${ico(t === 'huge' ? 'party' : 'map')}<b>${SIZES[t].label}</b><small>${t === 'huge' ? '16 v 16' : SIZES[t].note}</small><i>${ids.length}</i></h3>
+            <div class="solo-grid">${ids.map(mapCard).join('')}</div>
+          </section>`).join('')}
+        </div>
       </div>
       <div class="solo-foot" data-in="up">
         <div class="solo-modes-wrap">
@@ -196,6 +212,13 @@ export function paintSolo(root, { mapId, mode }) {
   const line = root.querySelector('.solo-pick');
   if (line) line.textContent = pickLine(mapId, mode);
   for (const b of root.querySelectorAll('.solo-map')) b.classList.toggle('on', b.dataset.id === mapId);
+  // The picked map in view when the screen opens on it (a later pick was tapped, so it already is).
+  const scroller = root.querySelector('.solo-scroll'), on = scroller?.querySelector('.solo-map.on');
+  if (on && !scroller.dataset.shown) {
+    scroller.dataset.shown = '1';
+    const top = on.offsetTop - scroller.offsetTop, h = scroller.clientHeight;
+    if (top < scroller.scrollTop || top + on.offsetHeight > scroller.scrollTop + h) scroller.scrollTop = Math.max(0, top - 24);
+  }
   // Only the modes this map hosts are offered; a Random map offers them all.
   for (const b of root.querySelectorAll('.solo-mode')) {
     const usable = modeFits(map, b.dataset.id);
@@ -230,27 +253,37 @@ export function modeFits(map, mode) {
   return modeFitsMap(map, mode);
 }
 
-// Three distinct map and mode pairs, spreading across maps and modes before repeating either, then the Random card.
-// After a match, `again` (the map and mode just played, as rolled if it came from Random) takes the first card, marked
-// as the rematch, so a room can play the same yard again; the other two are fresh.
+// A vote's tier weights: as a roll's, plus a small share for a Ground War card.
+const VOTE_WEIGHT = t => (t === 'huge' ? 0.06 : SIZES[t].weight);
+
+// Three map and mode pairs on three different maps, spread across size tiers and modes before repeating either, then
+// the Random card. After a match, `again` (the map and mode just played, as rolled if it came from Random) takes the
+// first card, marked as the rematch, so a room can play the same yard again; the other two are fresh. Huge maps come
+// in only through the Ground War modes they host, as before.
 export function voteOptions(random = Math.random, again = null) {
   const pairs = allPairs().filter(p => !again || p.mapId !== again.mapId || p.mode !== again.mode);
   for (let i = pairs.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
   }
-  const out = [], usedMaps = new Set(), usedModes = new Set();
+  // Within the shuffle, a map's place follows its tier's weight, so a tier with many maps does not crowd the vote.
+  const tier = p => tierOf(p.mapId);
+  const out = [], usedMaps = new Set(), usedModes = new Set(), usedTiers = new Set();
+  const take = p => { out.push(p); usedMaps.add(p.mapId); usedModes.add(p.mode); usedTiers.add(tier(p)); };
   const replay = again && MAPS[again.mapId] && MODES[again.mode] && modeFits(MAPS[again.mapId], again.mode)
     ? { mapId: again.mapId, mode: again.mode, again: true } : null;
-  if (replay) { out.push(replay); usedMaps.add(replay.mapId); usedModes.add(replay.mode); }
+  if (replay) take(replay);
   const pick = test => {
-    for (const p of pairs) {
-      if (out.length === 3) return;
-      if (!out.includes(p) && test(p)) { out.push(p); usedMaps.add(p.mapId); usedModes.add(p.mode); }
+    while (out.length < 3) {
+      const open = pairs.filter(p => !usedMaps.has(p.mapId) && test(p));
+      if (!open.length) return;
+      const mapId = weightedMap([...new Set(open.map(p => p.mapId))], random, VOTE_WEIGHT);
+      take(open.find(p => p.mapId === mapId));
     }
   };
-  pick(p => !usedMaps.has(p.mapId) && !usedModes.has(p.mode));
-  pick(p => !usedMaps.has(p.mapId));
+  pick(p => !usedTiers.has(tier(p)) && !usedModes.has(p.mode));
+  pick(p => !usedTiers.has(tier(p)));
+  pick(p => !usedModes.has(p.mode));
   pick(() => true);
   out.push({ mapId: RANDOM, mode: RANDOM });
   return out;

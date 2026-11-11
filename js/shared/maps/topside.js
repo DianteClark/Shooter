@@ -28,13 +28,13 @@ function build() {
     [13.5, 9, 5, 0.8, 2.6, 'wall', { block: true }],
     [13.5, 3.5, 0.8, 5.5, 2.6, 'wall', { block: true }],
     [19.2, 33, 0.8, 4.8, 2.6, 'wall', { block: true }],
-    [19.5, 13.5, 3.6, 2.2, 2.4, 'container', { stack: 'rebar' }],
+    [19.3, 13.5, 3.6, 2.2, 2.4, 'container', { stack: 'rebar' }],
     [23, 22.5, 0.8, 6, 2.6, 'wall', { block: true }],
     [23.8, 27.7, 3, 0.8, 2.6, 'wall', { block: true }],
     [14, 33, 5.2, 0.8, 2.6, 'wall', { block: true }],
     [24, 12.5, 4, 0.8, 2.6, 'wall', { block: true }],
     [28.5, 9.5, 3.2, 0.8, 2.6, 'wall', { block: true }],
-    [29.5, 32, 0.8, 4.5, 2.6, 'wall', { block: true }],
+    [29.5, 32.6, 0.8, 3.9, 2.6, 'wall', { block: true }],
     [17, 39.5, 0.8, 4.5, 2.6, 'wall', { block: true }],
 
     // Pallet stacks of plasterboard and rebar: tall, solid.
@@ -71,7 +71,7 @@ function build() {
   // Capture the Flag (see flagBases). On the roof in front of the parapet block, beside the near light well.
   points.ctf = flagBases(W, H, { x: 10, z: 22 });
 
-  return { id: 'topside', name: 'Topside', theme: 'topside', width: W, height: H, walls, spawns, lanes, nav, points };
+  return { id: 'topside', name: 'Topside', theme: 'topside', size: 'medium', region: 'industrial', width: W, height: H, walls, spawns, lanes, nav, points };
 }
 
 export default build();
