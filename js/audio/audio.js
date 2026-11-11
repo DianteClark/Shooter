@@ -16,14 +16,25 @@
 // from, chosen by the map's theme. Near has suppressed variants, used for shots flagged `sup`.
 // Tail and reflection play at the lowest priority and are thinned out at high fire rates, so they never steal a
 // near voice and a held trigger stays one clean shot per shot.
+//
+// Every weapon in WEAPONS has a voice and reload foley: the hand-made recipes below, or ones derived from the gun's
+// class and weight (deriveVoice, deriveFoley), so a new gun is never silent. On top of the shot itself: the local
+// gun's timbre thins as the magazine runs out and the bolt locks on the last round, a dry trigger clicks, a wall
+// between you and a gun muffles it (one cached ray per shooter), near misses snap or buzz by the class of round,
+// and what a round strikes is voiced by its material (the renderer reports it through feel.js's impactBus).
 
 import { WEAPONS } from '../shared/weapons.js';
+import { MAPS } from '../shared/map.js';
+import { raycastMap } from '../shared/geometry.js';
+import { fillGaps, classOf, weightOf, idHash, impactBus } from '../render/feel.js';
 
 const MAX_VOICES = 26;
 // Priority. A new voice can only replace something strictly lower, so the top of this list always plays.
 const PR = { own: 7, threat: 6, hit: 5, boom: 4, gunNear: 3, ui: 3, world: 2, gun: 1, step: 1, tail: 0 };
 // Hard caps: never more than this many voices of a class at once. The far layer is not a voice: it is one loop.
-const CLASS_CAP = { own: 3, threat: 4, gun: 3, tail: 3, reflect: 1, boom: 3, impact: 2, foley: 2, step: 2, world: 3, ui: 3, medal: 1, loud: 2 };
+// `ammo` is the local gun's magazine talking (low-ammo ring, bolt lock, dry click): its own small class, so reload
+// foley can never crowd it out.
+const CLASS_CAP = { own: 3, threat: 4, gun: 3, tail: 3, reflect: 1, boom: 3, impact: 2, foley: 2, ammo: 2, step: 2, world: 3, ui: 3, medal: 1, loud: 2 };
 
 const THREAT_RANGE = 14;         // An enemy gun this close is a threat, not background.
 const FAR_CULL = 30;             // Other players' guns past this distance get no voice of their own.
@@ -40,6 +51,10 @@ const HEAR_RANGE = 58;
 const V8_BANG = { impact: [1.55, 1.18], claymore: [1.85, 0.84], drill: [1.5, 1.06] };
 const STEP_RANGE = 24;
 const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
+const OCCLUDE_RECHECK = 0.3;     // Seconds a shooter's "is there a wall between us" answer is kept.
+const OCCLUDE_GAIN = 0.6;        // A gun behind a wall: this much of its level, and most of its top end gone.
+const LOW_AMMO_SHARE = 0.2;      // The last fifth of a magazine sounds emptier, round by round.
+const DRY_REPEAT = 0.45;         // Seconds between clicks while the trigger is held on an empty gun.
 const IMPACT_RANGE = 16;
 const FOLEY_RANGE = 12;
 const HIT_GAP = 0.05;            // Hitmarkers: one per this, however fast the gun.
@@ -424,6 +439,55 @@ const GUNS = {
   },
 };
 
+// ---- Voices for guns with no recipe above: the class's voice, re-pitched and re-weighted for this gun. ----
+const CLASS_VOICE = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher' };
+const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+// A copy of a recipe shifted by `pitch` (all its frequencies) and `len` (body, thump and tail lengths).
+function scaleVoice(spec, pitch, len) {
+  const f = (o, keys) => { const c = { ...o }; for (const k of keys) if (c[k]) c[k] *= pitch; return c; };
+  const out = { ...spec };
+  out.crack = f(spec.crack, ['hp']);
+  out.body = f(spec.body, ['f0', 'f1']); out.body.dur *= len;
+  out.thump = f(spec.thump, ['f0', 'f1']); out.thump.dur *= len;
+  if (spec.ring) out.ring = f(spec.ring, ['f0', 'f1']);
+  if (spec.hiss) out.hiss = f(spec.hiss, ['f0', 'f1', 'hp']);
+  if (spec.chime) out.chime = f(spec.chime, ['f']);
+  out.action = spec.action.map(a => f(a, ['hp', 'metal', 'thump']));
+  out.tail = f(spec.tail, ['f0', 'f1']); out.tail.dur *= len;
+  return out;
+}
+
+function deriveVoice(id, def, cls) {
+  let baseId = CLASS_VOICE[cls] || 'ar';
+  if (cls === 'Shotgun' && (def.pellets || 1) === 1) baseId = 'slug';
+  if (cls === 'Launcher' && def.range < 45) baseId = 'thumper';
+  if (cls === 'Pistol' && def.rpm >= 700) baseId = 'machpistol';
+  const base = GUNS[baseId];
+  // Heavier than the class's reference gun: lower and longer. Lighter: higher and shorter. The id's own hash moves
+  // the pitch a few percent more, so two derived guns of equal weight still differ.
+  const heavy = clampN(weightOf(id, def) / weightOf(baseId), 0.55, 1.7);
+  const pitch = (1 + 0.08 * idHash(id)) / Math.pow(heavy, 0.35);
+  let len = clampN(Math.pow(heavy, 0.4), 0.75, 1.3);
+  // A fast gun's body must be over before the next round, or a held trigger smears into noise.
+  if (def.rpm > 450) len = Math.min(len, Math.max(0.5, (60 / def.rpm) * 1.6 / base.body.dur));
+  const spec = scaleVoice(base, pitch, len);
+  if (def.explosive) spec.noSup = true;
+  return spec;
+}
+fillGaps(GUNS, deriveVoice);
+// def.feel.voice: `pitch` re-tunes whatever the gun ended up with; any other key replaces or extends that layer.
+for (const id in WEAPONS) {
+  const over = WEAPONS[id].feel && WEAPONS[id].feel.voice;
+  if (!over || !GUNS[id]) continue;
+  let spec = over.pitch ? scaleVoice(GUNS[id], over.pitch, over.len || 1) : { ...GUNS[id] };
+  for (const k in over) {
+    if (k === 'pitch' || k === 'len') continue;
+    spec[k] = over[k] && typeof over[k] === 'object' && !Array.isArray(over[k]) ? { ...spec[k], ...over[k] } : over[k];
+  }
+  GUNS[id] = spec;
+}
+
 function actionLength(spec) {
   let last = 0;
   for (const a of spec.action) if (a.at > last) last = a.at;
@@ -495,6 +559,18 @@ const THEME_AUDIO = {
 // like Dust.
 THEME_AUDIO.metro = THEME_AUDIO.neon;
 THEME_AUDIO.desert = THEME_AUDIO.dust;
+// Snow swallows sound: a short, dull room and one soft return.
+THEME_AUDIO.arctic = { ir: { len: 0.45, damp: 0.12, gain: 0.18 }, slaps: [[0.11, 0.6]], f0: 1400, f1: 360, metal: 0, wash: 0.02 };
+// Leaves and trunks: no hard slap, a soft scatter of small returns.
+THEME_AUDIO.jungle = { ir: { len: 0.7, damp: 0.2, gain: 0.26 }, slaps: [[0.06, 0.55], [0.13, 0.45], [0.24, 0.3]], f0: 1700, f1: 420, metal: 0, wash: 0.1 };
+// Indoors under a steel roof: the longest, brightest room in the game, and it rings.
+THEME_AUDIO.foundry = { ir: { len: 1.4, damp: 0.4, gain: 0.4 }, slaps: [[0.05, 1], [0.12, 0.8], [0.21, 0.5]], f0: 2600, f1: 600, metal: 1200, wash: 0.1 };
+// Open fields: almost nothing comes back, and what does is late.
+THEME_AUDIO.harvest = { ir: { len: 0.6, damp: 0.16, gain: 0.16 }, slaps: [[0.27, 0.55], [0.46, 0.22]], f0: 1500, f1: 400, metal: 0, wash: 0.03 };
+THEME_AUDIO.frost = THEME_AUDIO.arctic;
+THEME_AUDIO.pier = THEME_AUDIO.harbor;
+THEME_AUDIO.sunken = THEME_AUDIO.harbor;
+THEME_AUDIO.topside = THEME_AUDIO.railyard;
 THEME_AUDIO.subway = { ir: { len: 1.1, damp: 0.45, gain: 0.36 }, slaps: [[0.04, 1], [0.09, 0.7], [0.16, 0.45]], f0: 2800, f1: 700, metal: 900, wash: 0.08 };
 const SIZE_TUNE = [{ dur: 0.14, f: 1.2, gain: 0.8 }, { dur: 0.2, f: 1, gain: 1 }, { dur: 0.3, f: 0.78, gain: 1.15 }];
 
@@ -608,6 +684,19 @@ const FOLEY = {
   crossbow: { kind: 'lever', pitch: 0.8, mass: 0.55, rack: 0.24 },
   scatter:  { kind: 'break', pitch: 1.15, mass: 0.55, out: 0.26, in: 0.28, rack: 0.14 },
 };
+
+// A gun with no entry reloads with its class's kind of action, pitched by its weight (heavier is lower).
+function deriveFoley(id, def, cls) {
+  const w = weightOf(id, def);
+  const kind = def.shellReload ? (cls === 'Shotgun' ? 'tube' : 'lever')
+    : cls === 'LMG' ? (def.magazine >= 75 ? 'belt' : 'mag') : cls === 'Sniper' ? 'bolt' : cls === 'Launcher' ? 'rocket'
+    : cls === 'Pistol' ? (def.magazine <= 8 && def.rpm <= 220 ? 'cylinder' : 'slide') : cls === 'Shotgun' ? 'drum' : 'mag';
+  const out = { kind, pitch: clampN(1.32 - 0.5 * w + 0.06 * idHash(id), 0.6, 1.5), mass: clampN(0.3 + 0.6 * w, 0.3, 1.15) };
+  if (kind === 'belt' || kind === 'rocket') { out.out = 0.34; out.in = 0.34; }
+  if (kind === 'tube' || kind === 'lever' || kind === 'slide') out.rack = 0.2;
+  return out;
+}
+fillGaps(FOLEY, deriveFoley, 'foley');
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
 // Rarer outranks commoner when medals collide.
@@ -963,6 +1052,51 @@ function renderSfx(sr) {
       addNoise(d, sr, r, { dur: 0.12, gain: 1, f0: 1400, f1: 300, decay: 7 });
       addTone(d, sr, { dur: 0.05, gain: 0.5, f0: 190, f1: 70, decay: 6 });
     }, 0.65),
+    // Wood: a hollow knock and the crack of splinters, no ring.
+    impactWood: mk(0.17, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 0.8, hp: 1800 });
+      addTone(d, sr, { dur: 0.07, gain: 1, f0: 420, f1: 250, decay: 6, shape: 0.8 });
+      addNoise(d, sr, r, { at: 0.004, dur: 0.09, gain: 0.6, f0: 2600, f1: 800, hp: 500, decay: 7 });
+      for (let i = 0; i < 3; i++) addClick(d, sr, r, { at: 0.035 + i * 0.03, dur: 0.003, gain: 0.35, hp: 3000 });
+    }, 0.68),
+    // Snow: a soft, dead pat with a little squeak of packed powder.
+    impactSnow: mk(0.15, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.13, gain: 1, f0: 900, f1: 220, decay: 6 });
+      addNoise(d, sr, r, { at: 0.01, dur: 0.06, gain: 0.3, f0: 5200, f1: 2400, hp: 2200, decay: 6 });
+      addTone(d, sr, { dur: 0.04, gain: 0.35, f0: 150, f1: 70, decay: 6 });
+    }, 0.55),
+    // Water: the slap of the surface, then the splash falling back in.
+    impactWater: mk(0.3, (d, r) => {
+      addClick(d, sr, r, { dur: 0.005, gain: 0.7, hp: 1200 });
+      addTone(d, sr, { dur: 0.06, gain: 0.7, f0: 520, f1: 180, decay: 5 });
+      addNoise(d, sr, r, { at: 0.01, dur: 0.26, gain: 0.8, f0: 4200, f1: 1100, hp: 700, decay: 4 });
+      for (let i = 0; i < 4; i++) addTone(d, sr, { at: 0.08 + i * 0.04, dur: 0.03, gain: 0.2, f0: 900 + i * 260, f1: 1400 + i * 260, decay: 5 });
+    }, 0.6),
+    // A supersonic round going past: the shockwave is a hard double snap, nothing like a gunshot.
+    crack: mk(0.16, (d, r) => {
+      addClick(d, sr, r, { dur: 0.003, gain: 1.3, hp: 4200 });
+      addClick(d, sr, r, { at: 0.006, dur: 0.003, gain: 0.8, hp: 3000 });
+      addNoise(d, sr, r, { at: 0.002, dur: 0.05, gain: 0.9, f0: 11000, f1: 3600, hp: 2200, decay: 6 });
+      addNoise(d, sr, r, { at: 0.03, dur: 0.12, gain: 0.3, f0: 5000, f1: 1500, hp: 900, decay: 5 });
+    }, 0.8),
+    // The trigger on an empty chamber: one small, dry, unmistakable click.
+    dry: mk(0.07, (d, r) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 3200 });
+      addMetal(d, sr, { at: 0.001, dur: 0.035, gain: 0.45, f: 2900, decay: 9 });
+      addClick(d, sr, r, { at: 0.018, dur: 0.003, gain: 0.4, hp: 5000 });
+    }, 0.6),
+    // The last round gone: the bolt locking back on an empty magazine.
+    empty: mk(0.12, (d, r) => {
+      addClick(d, sr, r, { dur: 0.006, gain: 1, hp: 1500 });
+      addMetal(d, sr, { at: 0.002, dur: 0.09, gain: 0.6, f: 1250, decay: 7 });
+      addTone(d, sr, { at: 0.002, dur: 0.04, gain: 0.5, f0: 330, f1: 200, decay: 6 });
+    }, 0.7),
+    // Laid over the gun's own shot in the last rounds of a magazine: the spring and follower ringing in a nearly
+    // empty box. Played higher and louder with every round, so the ear counts the magazine down.
+    lowAmmo: mk(0.09, (d, r) => {
+      addMetal(d, sr, { dur: 0.08, gain: 0.8, f: 1900, spread: 1.03, decay: 8 });
+      addClick(d, sr, r, { dur: 0.003, gain: 0.5, hp: 5200 });
+    }, 0.6),
     steps,
     // Search and Destroy. The bomb's beep is one hard square-ish chirp that cuts through a firefight; the plant and
     // defuse ticks are keypad presses; the rest are short stings for the moments that turn a round.
@@ -1198,6 +1332,10 @@ export class AudioEngine {
     this.tailAt = new Map();       // Per shooter: when their last far tail or reflection played.
     this.reflectAt = 0;
     this.whizAt = 0; this.impactAt = 0;
+    this.map = null; this.mapId = null;
+    this.occluded = new Map();       // Shooter id -> { at, v }: whether a wall stands between them and the listener.
+    this.trigger = false;            // Set by the match each frame: the local fire input. Drives the dry-fire click.
+    this.dryHeld = false; this.dryT = 0;
     this.foleyPending = new Map();   // Per player: scheduled reload sounds, cancelled if the reload stops short.
     this.reloadAmmo = new Map();     // Per player: ammo when the reload began, to tell a finished reload from a cancelled one.
     this.killChain = 0; this.lastKillAt = -9;
@@ -1370,10 +1508,15 @@ export class AudioEngine {
     this.buildMs = 0; this.buildMaxJobMs = 0;
     const runNext = () => {
       if (!this.ctx) return;
-      const t = performance.now();
-      jobs[i++]();
-      const ms = performance.now() - t;
-      this.buildMs += ms; this.buildMaxJobMs = Math.max(this.buildMaxJobMs, ms);
+      // A few milliseconds of jobs per turn, not one: most are well under a millisecond, and one per timer tick
+      // left a busy phone without its gun sounds for the first seconds of a match.
+      const t0 = performance.now();
+      do {
+        const t = performance.now();
+        jobs[i++]();
+        const ms = performance.now() - t;
+        this.buildMs += ms; this.buildMaxJobMs = Math.max(this.buildMaxJobMs, ms);
+      } while (i < jobs.length && performance.now() - t0 < 4);
       if (i < jobs.length) setTimeout(runNext, 0);
       else { this._startFarLayer(); this._warmThrowBuffers(); this.ready = true; this.setMicActive(this.micActive); this._readyDone(); }
     };
@@ -1594,6 +1737,7 @@ export class AudioEngine {
     if (!view) return;
     this.localId = view.localId;
     if (view.theme !== this.theme) this.setTheme(view.theme);
+    if (view.mapId !== this.mapId) { this.mapId = view.mapId; this.map = MAPS[view.mapId] || null; this.occluded.clear(); }
     const players = view.players;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
@@ -1622,7 +1766,8 @@ export class AudioEngine {
     if (self) {
       this.fight = Math.min(1, this.fight + 0.1);
       this.duckUntil = now + 0.16;
-      this._play(pick, { gain: sup ? 0.7 : 0.95, rate: 0.97 + Math.random() * 0.06, priority: PR.own, cls: 'own', bus: this.own, room: sup ? 0.04 : 0.12 });
+      const low = this._lowAmmo(e, now);
+      this._play(pick, { gain: sup ? 0.7 : 0.95, rate: 0.97 + Math.random() * 0.06 + low * 0.05, priority: PR.own, cls: 'own', bus: this.own, room: sup ? 0.04 : 0.12 });
       this._gunLayers(e, g, sup, true, now);
       return;
     }
@@ -1642,14 +1787,88 @@ export class AudioEngine {
       if (this.windowN < GUN_WINDOW_CAP || threat) {
         this.windowN++;
         this.lastShot.set(e.by, now);
+        // A wall between you and the gun takes its top end and some of its level; the room carries more of it.
+        const occ = this._occluded(e.by, e.ox, e.oz, now) ? 1 : 0;
+        if (occ) { this.sGain *= d < 6 ? 0.8 : OCCLUDE_GAIN; this.sFar = Math.min(1, this.sFar + 0.5); }
         this._play(pick, {
           gain: (sup ? 0.65 : threat ? 0.85 : 0.55) * this.sGain, pan: this.sPan, far: this.sFar,
           rate: 0.95 + Math.random() * 0.1, cls: threat ? 'threat' : 'gun',
-          priority: threat ? PR.threat : (d < 22 ? PR.gunNear : PR.gun), room: sup ? 0.04 : 0.06 + 0.14 * this.sFar,
+          priority: threat ? PR.threat : (d < 22 ? PR.gunNear : PR.gun), room: sup ? 0.04 : 0.06 + 0.14 * this.sFar + 0.08 * occ,
         });
         this._gunLayers(e, g, sup, false, now);
       }
     }
+  }
+
+  // Whether a wall stands between the listener and a shooter. One ray, kept per shooter for OCCLUDE_RECHECK
+  // seconds: a held trigger costs a ray three times a second, not one per round.
+  _occluded(id, x, z, now) {
+    const map = this.map;
+    if (!map) return false;
+    let c = this.occluded.get(id);
+    if (!c) this.occluded.set(id, c = { at: -9, v: false });
+    if (now - c.at < OCCLUDE_RECHECK) return c.v;
+    c.at = now;
+    const dx = x - this.lx, dz = z - this.lz, len = Math.hypot(dx, dz);
+    c.v = len > 1.5 && raycastMap(map, this.lx, this.lz, dx / len, dz / len, len, 'blocksVision') !== null;
+    return c.v;
+  }
+
+  // The local gun in the last rounds of its magazine. Returns 0..1 (how near empty) so the shot itself can be
+  // pitched up a touch; layers the follower's ring over it, and the bolt locking back when the last round goes.
+  _lowAmmo(e, now) {
+    const p = this.lastView && this._posOf(this.lastView, this.localId), def = WEAPONS[e.weapon];
+    if (!p || !def || !(def.magazine >= 5) || typeof p.ammo !== 'number') return 0;
+    const lowN = Math.min(8, Math.max(2, Math.round(def.magazine * LOW_AMMO_SHARE)));
+    if (p.ammo > lowN) return 0;
+    const k = 1 - p.ammo / lowN;
+    if (now - (this.lowAmmoAt ?? -9) >= 0.045) {
+      this.lowAmmoAt = now;
+      this._play(this.sfx.lowAmmo, { bus: this.ui, priority: PR.gun, cls: 'ammo', gain: 0.22 + 0.38 * k, rate: 0.85 + 0.55 * k });
+    }
+    if (p.ammo <= 0 && !def.shellReload) this._play(this.sfx.empty, { bus: this.ui, priority: PR.ui, cls: 'ammo', gain: 0.6, rate: 1.25 - 0.4 * Math.min(1, weightOf(e.weapon, def)), when: now + 0.05 });
+    return k;
+  }
+
+  // The trigger pulled on an empty gun (mid-reload, or with nothing left at all): a click, once per pull, and
+  // again every DRY_REPEAT seconds while it is held with no reload running.
+  _updateDryFire(view, dt) {
+    const held = !!this.trigger;
+    const p = held ? this._posOf(view, this.localId) : null;
+    if (p && p.alive && p.ammo === 0 && view.phase === 'live' && !p.overheated) {
+      this.dryT -= dt;
+      if (!this.dryHeld || (this.dryT <= 0 && !(p.reloadT > 0))) {
+        this.dryT = DRY_REPEAT;
+        this._play(this.sfx.dry, { bus: this.ui, priority: PR.ui, cls: 'ammo', gain: 0.55, rate: 0.95 + Math.random() * 0.1 });
+      }
+    }
+    this.dryHeld = held;
+  }
+
+  // What rounds struck this frame, as the renderer saw it (feel.js impactBus): voiced by material, nearest first
+  // come first served, rate-limited like every other impact.
+  _drainImpacts(now) {
+    const B = impactBus;
+    for (let i = 0; i < B.n; i++) {
+      if (now - this.impactAt < 0.045) break;
+      const mat = B.mat[i];
+      let buf = this.sfx.impactConcrete, rate = 1, gain = 0.34;
+      switch (mat) {
+        case 'metal': buf = this.sfx.impactMetal; break;
+        case 'wood': buf = this.sfx.impactWood; gain = 0.4; break;
+        case 'sand': case 'dirt': buf = this.sfx.impactDirt; gain = 0.4; break;
+        case 'cloth': buf = this.sfx.impactDirt; rate = 1.35; gain = 0.28; break;
+        case 'snow': buf = this.sfx.impactSnow; gain = 0.45; break;
+        case 'ice': buf = this.sfx.impactConcrete; rate = 1.45; break;
+        case 'water': buf = this.sfx.impactWater; gain = 0.4; break;
+        case 'rock': case 'adobe': rate = 0.84; break;
+        default: break;
+      }
+      if (this._spatial(B.x[i], B.z[i]) > IMPACT_RANGE) continue;
+      this.impactAt = now;
+      this._play(buf, { gain: gain * this.sGain, pan: this.sPan, far: this.sFar, priority: PR.tail, cls: 'impact', rate: rate * (0.9 + Math.random() * 0.2) });
+    }
+    B.n = 0;
   }
 
   // A gun out past the discrete range just pushes the one far layer up a little.
@@ -1696,14 +1915,21 @@ export class AudioEngine {
       if (px * px + pz * pz > WHIZ_RADIUS * WHIZ_RADIUS) continue;
       this.whizAt = now;
       this.fight = Math.min(1, this.fight + 0.15);
-      this._play(this.sfx.whiz, { bus: this.ui, gain: 0.5, rate: 0.9 + Math.random() * 0.25, priority: PR.threat, cls: 'ui', pan: Math.max(-0.7, Math.min(0.7, (this.lx - (ox + dx)) / 10)) });
+      // How it goes by depends on the round: a rifle bullet cracks, a pistol or shotgun load buzzes past low.
+      // Closer is louder.
+      const cls = classOf(e.weapon), near = 1 - 0.5 * Math.sqrt(px * px + pz * pz) / WHIZ_RADIUS;
+      const pan = Math.max(-0.7, Math.min(0.7, (this.lx - (ox + dx)) / 10));
+      if (cls === 'Sniper' || cls === 'Marksman') this._play(this.sfx.crack, { bus: this.ui, gain: 0.75 * near, rate: 0.92 + Math.random() * 0.16, priority: PR.threat, cls: 'ui', pan });
+      else if (cls === 'SMG' || cls === 'Pistol' || cls === 'Shotgun') this._play(this.sfx.whiz, { bus: this.ui, gain: 0.42 * near, rate: 0.68 + Math.random() * 0.14, priority: PR.threat, cls: 'ui', pan });
+      else this._play(this.sfx.whiz, { bus: this.ui, gain: 0.55 * near, rate: 0.92 + Math.random() * 0.25, priority: PR.threat, cls: 'ui', pan });
       return;
     }
   }
 
   // The material the map is built from answers when a round lands near you.
   _impact(e, now) {
-    if (now - this.impactAt < 0.05 || !e.rays || !e.rays.length) return;
+    // With a renderer attached the real material arrives through the impact bus instead (_drainImpacts).
+    if (impactBus.live || now - this.impactAt < 0.05 || !e.rays || !e.rays.length) return;
     const r = e.rays[0];
     if (r.hit !== 'wall') return;
     this.impactAt = now;
@@ -2212,7 +2438,7 @@ export class AudioEngine {
   // Continuous sounds that come from state instead of events: footsteps, the low-health heartbeat,
   // the LMG's heat warning and the gunship overhead.
   update(view, dt) {
-    if (!this._running() || !view) return;
+    if (!this._running() || !view) { impactBus.n = 0; return; }
     this._trackLocal(view);
     this.lastView = view;
     if (this.theme === null) this.setTheme(view.theme);
@@ -2241,6 +2467,8 @@ export class AudioEngine {
       this.heartT = 0;
     }
 
+    this._drainImpacts(this.ctx.currentTime);
+    this._updateDryFire(view, dt);
     this._updateDucks(dt);
     this._updateMedals(this.ctx.currentTime);
     this._updateHeat(view, dt);

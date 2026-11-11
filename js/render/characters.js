@@ -13,6 +13,7 @@ import { OPERATORS, DEFAULT_OPERATOR, SKINS, getSkin, cleanSkin, botSkin } from 
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
+import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -50,6 +51,10 @@ const HOLD = {
   lightlmg: [-0.03, -0.08, 0.04], crossbow: [-0.01, 0.04, 0], slug: [-0.02, -0.02, 0.02], scatter: [0.14, 0.06, -0.08],
 };
 const HOLD_NONE = [0, 0, 0];
+// Guns with no entry above (new ones) sit and scale the way their class does: see feel.js.
+fillGaps(HOLD, deriveHold);
+fillGaps(GUN_SCALES, deriveScale);
+const RECOIL_NONE = { back: 1, climb: 1, twist: 0.25 };
 const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke: [0.35, 0.6, 0.42], flash: [0.85, 0.8, 0.45], stim: [0.3, 0.7, 0.5] };
 
 // Operators are told apart by vertex data merged into one mesh per body part: every vertex carries the
@@ -594,6 +599,8 @@ class Rig {
     this.id = id;
     this.phase = 0;
     this.kick = 0;
+    this.kickRoll = 0; this.kickSide = 1; this.recoil = null;   // Per-gun recoil shape, set by onShot.
+    this.fxHot = 0; this.fxShotAt = -99;                         // Barrel heat from sustained fire (VFX owns these).
     this.reload = 0;
     this.reloadU = 0;
     this.slide = 0;
@@ -824,11 +831,16 @@ export class Characters {
   }
 
   // Weapon kick per shot. Strength is the weapon's cosmetic kickCam; recoil travels gun, shoulders, then hips.
-  onShot(id, strength) {
+  // `weapon` picks the recoil profile (feel.js): a pistol flips its muzzle, a shotgun drives the shoulder back,
+  // an SMG chatters about its barrel. The arms are solved to the gun every frame, so they take the recoil with it.
+  onShot(id, strength, weapon) {
     const r = this.rigs.get(id);
     if (!r) return;
     r.kick = Math.min(1.3, r.kick + 0.55 + strength * 0.5);
     r.sv[ROCK] += 1.5 + strength * 3.2;
+    const R = r.recoil = weapon ? recoilOf(weapon) : RECOIL_NONE;
+    r.kickSide = -(r.kickSide || 1);
+    r.kickRoll = (r.kickRoll || 0) + r.kickSide * R.twist * (0.25 + strength * 0.3);
   }
 
   // dirX/dirZ is the direction the hit pushes; strength roughly 0..1.
@@ -938,6 +950,7 @@ export class Characters {
       r.moveX += ((moving ? vx / rawSpeed : 0) - r.moveX) * damp(14, dt);
       r.moveZ += ((moving ? vz / rawSpeed : 0) - r.moveZ) * damp(14, dt);
       r.kick *= Math.exp(-dt * 13);
+      if (r.kickRoll) r.kickRoll *= Math.exp(-dt * 16);
       r.flash *= Math.exp(-dt * 16);
       r.swap *= Math.exp(-dt * 9);
       const reloadTarget = p.reloadT > 0 ? 1 : 0;
@@ -1007,12 +1020,13 @@ export class Characters {
       const hold = HOLD[p.weapon] || HOLD_NONE;
       const carry = 1 - sprint * 0.5;
       const swap = r.swap, swapBack = Math.sin(swap * Math.PI);
-      let gunX = 0.34 + ads * 0.12 + hold[0] * carry - sprint * 0.06 - r.kick * 0.15;
+      const rec = r.recoil || RECOIL_NONE;
+      let gunX = 0.34 + ads * 0.12 + hold[0] * carry - sprint * 0.06 - r.kick * 0.15 * rec.back;
       let gunY = 0.32 + ads * 0.2 + hold[1] * carry - swap * 0.55 - slide * 0.1 + Math.sin(r.phase * 2) * 0.018 * runK + breath * 0.8;
       let gunZ = 0.18 - ads * 0.1 + hold[2] * carry - sprint * 0.04 + sinPhase * 0.05 * sprint - lag * 0.06;
-      let gunRoll = -swap * 0.6 + sinPhase * 0.09 * sprint;
+      let gunRoll = -swap * 0.6 + sinPhase * 0.09 * sprint + (r.kickRoll || 0);
       let gunYaw = sprint * 1.0 + swapBack * 0.35 - lag + lag * 0.15 - twist * 0.85;
-      let gunPitch = r.kick * 0.2 - swap * 0.9 + rock * 0.08;
+      let gunPitch = r.kick * 0.2 * rec.climb - swap * 0.9 + rock * 0.08;
       gunX -= throwActive * 0.08 + r.throwHold * 0.12;
       gunY -= throwActive * 0.2 + r.throwHold * 0.24;
       gunRoll += throwActive * 0.5 + r.throwHold * 0.5;
@@ -1098,7 +1112,8 @@ export class Characters {
       if (tint >= 0) { ar = (tint >> 16 & 255) / 255; ag = (tint >> 8 & 255) / 255; ab = (tint & 255) / 255; }
       ga.aAccent.setXYZ(gi, ar, ag, ab);
       ga.aFx.setXY(gi, fade, flash);
-      ga.aHeat.setX(gi, r.heat);
+      // Barrel glow: the gun's own heat stat, or what sustained fire alone has put into the barrel.
+      ga.aHeat.setX(gi, vfx ? Math.max(r.heat, vfx.barrelGlow(r)) : r.heat);
       r.gunMesh = gunMesh; r.camoI = camoI; r.accent[0] = ar; r.accent[1] = ag; r.accent[2] = ab;
       r.armRGB = sk.sleeveRGB; r.legRGB = sk.trouserRGB;
       r.posed = clock;

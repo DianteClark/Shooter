@@ -761,6 +761,7 @@ export class CombatFX {
     this.scene.add(this.smokeMesh);
     this.blobs = blobTable();
     this.smokeSlots = Array.from({ length: MAX_SMOKES }, () => ({ id: null, live: false, x: 0, z: 0, r: 1, a: 0 }));
+    this.vfx.smokeClouds = this.smokeSlots;      // Rounds fired through a cloud stir it (VFX.gunTracer).
   }
 
   #buildObjectives() {
@@ -886,6 +887,17 @@ export class CombatFX {
     for (let i = 0; i < events.length; i++) {
       const ev = events[i];
       switch (ev.t) {
+        // Hit feedback in the world for the local player's own rounds: armour throws sparks back, a kill is
+        // confirmed with a ring where it happened.
+        case 'hit': {
+          if (ev.by !== localId || !ev.armor) break;
+          const me = this.posOf.get(localId);
+          let dx = me ? ev.x - me.x : 0, dz = me ? ev.z - me.z : 0;
+          const l = Math.hypot(dx, dz) || 1;
+          vfx.armorHit(ev.x, ev.z, dx / l, dz / l);
+          break;
+        }
+        case 'kill': if (ev.by === localId && ev.target !== localId) vfx.killConfirm(ev.x, ev.z, !!ev.head); break;
         case 'bang': this.#bangExtras(ev); break;
         case 'ctf': this.#flagBurst(ev); break;
         case 'pulse': {

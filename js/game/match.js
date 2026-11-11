@@ -202,6 +202,7 @@ export class Match {
 
   #stepLocal(input, view, dt) {
     const r = this.#resolveInput(input, view);
+    this.audio.trigger = r.fire;                          // The dry-fire click needs to know the trigger is held.
     this.ps.noSlide = ctfCarrying(view, this.localId);   // A flag carrier cannot slide.
     const shots = stepPlayer(this.ps, r, dt, this.map, this.rng);
     for (const shot of shots) {
