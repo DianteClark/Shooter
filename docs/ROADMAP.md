@@ -16,7 +16,7 @@ on every push, keep 2% of weekly usage for bugs.
    which the bot-only rig did not show. Rerun the rig with streaks, equipment, Mixed skill and the human-like thumb.
    Pass 2 done (bal2): `--realistic` rig preset, Foreman head cap, shotgun/SMG/sniper help, build tag in stats; see
    docs/WEAPONS-OVERHAUL.md "Pass 2". Open: equipment costs shotguns and snipers 0.2-0.3 K/D in real lobbies.
-7. IN PROGRESS: battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
+7. DONE (1111-8): battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
    the regions, loot rarities, closing circle, revives, bots that loot, rotate and fight like players.
 8. DONE (1111-4). Scorestreaks overhaul.
 9. Game modes overhaul (new modes built on the new maps).
