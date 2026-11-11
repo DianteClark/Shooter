@@ -74,7 +74,7 @@ function report(r) {
   console.log(`${r.mode}: ${r.minutes.toFixed(1)} sim min, winner team ${r.winner} (${r.alive.length} alive), tick mean ${r.mean.toFixed(2)} ms p99 ${r.p99.toFixed(1)} worst ${r.worst.toFixed(1)}, first tick ${r.startMs.toFixed(0)} ms`);
   console.log(`  pacing: deaths by 3-min bin ${r.bins.join('/')}, ${(r.early * 100).toFixed(0)}% in the first 3 min, circle deaths ${sim.br.zoneDeaths ?? 0}, squads at the final circles ${r.finalSquads}`);
   console.log(`  events ${JSON.stringify(ev)}, loot taken ${r.removed}/${sim.br.items.length}, snapshot per guest ${r.snapMean.toFixed(0)} B mean ${r.snapMax} B max`);
-  check(sim.phase === 'ended' && r.minutes < 12, `${r.mode}: one squad wins inside 12 sim minutes`);
+  check(sim.phase === 'ended' && r.minutes < 14.5, `${r.mode}: one squad wins before the last circle closes (14.5 sim minutes)`);
   check(r.alive.every(p => p.team === r.winner), `${r.mode}: everyone alive is on the winning squad`);
   check(ev.landed >= 30, `${r.mode}: everyone jumped and landed`);
   check(r.removed > 60 && ev.brgive > 20, `${r.mode}: loot picked up (guns ${ev.brgive})`);
@@ -263,6 +263,21 @@ for (const [i, mode] of modes.entries()) {
   const r = runMatch(mode, 11 + i);
   report(r);
   results.push(r);
+}
+// Pacing (docs/BR.md "Pacing"), over these matches and three more seeds per mode: matches run 9-14 minutes, kills are
+// spread out (no more than ~45% in the first three minutes), the circle kills someone now and then, and two to four
+// squads are still in when the final circles start (the circle at 18% of the map, phase 3).
+if (!QUICK) {
+  const all = [...results];
+  for (const mode of modes) for (let i = 0; i < 3; i++) all.push(runMatch(mode, 101 + i * 7));
+  const mean = f => all.reduce((a, r) => a + f(r), 0) / all.length;
+  const mins = mean(r => r.minutes), early = mean(r => r.early), circle = all.reduce((a, r) => a + (r.sim.br.zoneDeaths ?? 0), 0);
+  const fin = mean(r => r.phaseSquads[2] ?? 1);
+  console.log(`pacing over ${all.length} matches: ${mins.toFixed(1)} min mean (${Math.min(...all.map(r => r.minutes)).toFixed(1)}-${Math.max(...all.map(r => r.minutes)).toFixed(1)}), ${(early * 100).toFixed(0)}% of deaths in the first 3 min, ${circle} circle deaths, ${fin.toFixed(1)} squads at the final circles`);
+  check(mins >= 9 && mins <= 14, `pacing: matches average 9-14 sim minutes (${mins.toFixed(1)})`);
+  check(early <= 0.45, `pacing: at most 45% of deaths in the first three minutes (${(early * 100).toFixed(0)}%)`);
+  check(circle >= 1, `pacing: some circle deaths (${circle})`);
+  check(fin >= 2 && fin <= 4.5, `pacing: 2-4 squads contest the final circles (${fin.toFixed(1)})`);
 }
 const squads = results.filter(r => r.sim.br.downs);
 if (squads.length) check(squads.reduce((n, r) => n + r.ev.revive, 0) > 0, `squad matches: revives (${squads.map(r => r.ev.revive).join(', ')})`);

@@ -288,6 +288,10 @@
 #ui .br-size .seg { padding: 0 10px; }
 #ui .br-size.fixed .seg { display: grid; place-items: center; padding: 0 12px; clip-path: none; }
 #ui .vote-cards + .br-size { justify-content: center; margin-top: var(--sp-2); }
+@media (max-width: 760px) {
+  #ui .lb-bar .br-size > span { display: none; }
+  #ui .lb-bar .br-size .seg { padding: 0 7px; }
+}
 #ui .lb-go { min-width: 168px; height: 46px; }
 
 /* ---- Sheets, toast, rotate ----------------------------------------------------------------------------------- */

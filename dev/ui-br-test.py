@@ -90,6 +90,16 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(500)
     rar = await ev(f"{G}.match.sim.byId.get({G}.match.localId).br.guns.some(g => g && g.r === 4)")
     if not rar: failures.append(f'{vw}: Take did not swap in the legendary gun')
+    # Fists: the third slot puts the gun away, and its own slot brings it back.
+    await pg.locator('.br-slot[data-k="2"]').click()
+    await pg.wait_for_timeout(400)
+    fist = await ev(f"[{G}.match.ps.weapon, {G}.match.sim.byId.get({G}.match.localId).br.stash?.slot ?? -1]")
+    await shot('06b-fists')
+    if fist[0] != 'knife' or fist[1] < 0: failures.append(f'{vw}: fists slot did not put the gun away ({fist})')
+    await pg.locator(f'.br-slot[data-k="{fist[1]}"]').click()
+    await pg.wait_for_timeout(400)
+    back = await ev(f"[{G}.match.ps.weapon, {G}.match.sim.byId.get({G}.match.localId).br.stash]")
+    if back[0] == 'knife' or back[1] is not None: failures.append(f'{vw}: the gun did not come back from fists ({back})')
     await pg.locator('.br-plate').click()
     await pg.wait_for_timeout(1500)
     await shot('07-plating')
@@ -116,16 +126,29 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(900)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed")
     if not downed: failures.append(f'{vw}: not downed')
+    await pg.wait_for_timeout(600)
     await shot('09-downed')
+    # Crawl a little (the pose reads moving), then the squadmate's revive: bars over both, captured part way.
+    try:
+        await pg.wait_for_function(f'({G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).reviveK ?? 0) > 0.35', timeout=20000)
+        await shot('09b-reviving')
+    except Exception:
+        failures.append(f'{vw}: no revive in progress seen')
     try:
         await pg.wait_for_function(f'!{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed', timeout=20000)
         await pg.wait_for_timeout(400)
         await shot('10-revived')
     except Exception:
         failures.append(f'{vw}: no squadmate revived the human')
-    # Full map from the minimap.
+    # The zoomed minimap, then the full map from it, and a landing ping put on it.
+    await pg.locator('.minimap').screenshot(path=f'{OUT}/10b-minimap-{vw}x{vh}.png')
     await ev("document.querySelector('.minimap').click()")
     await pg.wait_for_timeout(500)
+    box = await pg.locator('.br-map canvas').bounding_box()
+    await pg.mouse.click(box['x'] + box['width'] * 0.55, box['y'] + box['height'] * 0.45)
+    await pg.wait_for_timeout(600)
+    pings = await ev(f"{G}.match.hud.brHud.pings.length")
+    if pings < 1: failures.append(f'{vw}: a tap on the map put no ping')
     await shot('11-fullmap')
     await pg.locator('.br-map-close').click()
     # The end: every other squad finished off on the host.
@@ -144,6 +167,42 @@ async def run(browser, vw, vh, failures, errors):
     await ctx.close()
 
 
+async def lobby_shots(browser, vw, vh, failures, errors):
+    # A friend room: the squad size option on the lobby (once the room plays BR) and under the vote cards.
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'lobby {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'lobby {vw}: PAGEERR {e}'))
+    ev = lambda js: pg.evaluate(js)
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local&vote=30')
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="host"]').first.click()
+    await pg.wait_for_function(f'{G}.code')
+    await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: 'frontier' }}")
+    await pg.locator('[data-act="botSkill"]').first.click()
+    await pg.wait_for_timeout(500)
+    if await pg.locator('.br-size').count() == 0: failures.append(f'lobby {vw}: no squad size option after a BR match')
+    await pg.locator('.br-size [data-n="2"]').click()
+    await pg.wait_for_timeout(400)
+    await pg.screenshot(path=f'{OUT}/20-lobby-squads-{vw}x{vh}.png')
+    if await ev(f'{G}.lobby.brSquad') != 2: failures.append(f'lobby {vw}: Duos not picked')
+    await pg.locator('[data-act="start"]').first.click()
+    await pg.wait_for_function(f'{G}.vote?.options', timeout=10000)
+    await pg.wait_for_timeout(1200)
+    await pg.screenshot(path=f'{OUT}/21-vote-squads-{vw}x{vh}.png')
+    names = await ev("[...document.querySelectorAll('.vote-card .vc-mode-name')].map(n => n.textContent)")
+    if 'BR Duos' not in names: failures.append(f'lobby {vw}: the BR vote card does not say BR Duos ({names})')
+    await pg.locator('.br-size [data-n="1"]').click()
+    await pg.wait_for_timeout(400)
+    names = await ev("[...document.querySelectorAll('.vote-card .vc-mode-name')].map(n => n.textContent)")
+    if 'BR Solos' not in names: failures.append(f'lobby {vw}: Solos on the vote did not change the card ({names})')
+    print(f'lobby {vw}x{vh}: vote cards {names}')
+    await ctx.close()
+
+
 async def main():
     os.makedirs(OUT, exist_ok=True)
     srv = subprocess.Popen(['python3', '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -152,6 +211,8 @@ async def main():
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
+            for vw, vh in ((852, 393), (667, 375), (640, 360)):
+                await lobby_shots(browser, vw, vh, failures, errors)
             for vw, vh in ((852, 393), (667, 375), (640, 360)):
                 await run(browser, vw, vh, failures, errors)
             await browser.close()

@@ -28,9 +28,10 @@ export function paintVoteSquad(root, state) {
   const brCards = state.options.map((o, i) => (MODES[o.mode]?.br ? i : -1)).filter(i => i >= 0);
   const cards = root.querySelectorAll('.vote-card');
   for (const i of brCards) {
-    const name = cards[i]?.querySelector('.vc-mode-name');
-    const want = MODES[brMode(state.options[i].mode, state.brSquad)].name;
-    if (name && name.textContent !== want) name.textContent = want;
+    const name = cards[i]?.querySelector('.vc-mode-name'), desc = cards[i]?.querySelector('.vc-desc');
+    const m = MODES[brMode(state.options[i].mode, state.brSquad)];
+    if (name && name.textContent !== m.name) name.textContent = m.name;
+    if (desc && desc.textContent !== m.desc) desc.textContent = m.desc;
   }
   let el = root.querySelector('.br-size');
   if (!brCards.length || state.brSquad === undefined) { el?.remove(); return; }
