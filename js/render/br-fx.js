@@ -116,7 +116,7 @@ export class BrFx {
     // Revive progress over the downed player and whoever is picking them up: a dark bar and its fill.
     const bar = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     this.barBg = inst(bar, new THREE.MeshBasicMaterial({ color: 0x0a0d11, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, toneMapped: false }), BAR_MAX);
-    this.barFill = inst(bar.clone(), new THREE.MeshBasicMaterial({ color: 0x7dff8f, depthWrite: false, depthTest: false, toneMapped: false, fog: false }), BAR_MAX);
+    this.barFill = inst(bar.clone(), new THREE.MeshBasicMaterial({ color: 0x7dff8f, transparent: true, opacity: 1, depthWrite: false, depthTest: false, toneMapped: false, fog: false }), BAR_MAX);
     this.barBg.renderOrder = 8; this.barFill.renderOrder = 9;
     // Landing pings: a teammate's chosen spot, a beam and a ring for a few seconds (js/ui/br-hud.js sends them).
     this.pingRings = inst(new THREE.RingGeometry(1.1, 1.5, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), PING_MAX);

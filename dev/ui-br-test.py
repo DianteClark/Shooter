@@ -123,7 +123,9 @@ async def run(browser, vw, vh, failures, errors):
       window.__mates = sim.players.filter(p => p.team === me.team && p !== me).map(p => [p.alive, p.downed, p.hp | 0]);
       // The fight just before may already have downed us: a second lethal hit then finishes, which is the rule, not a bug.
       if (me.downed) {{ me.downed = false; me.hp = 100; }}
-      me.br.armor = 0; sim._damage(me, foe, 999, 'ar', 10); }})()""")
+      me.br.armor = 0; sim._damage(me, foe, 999, 'ar', 10);
+      // Down, and kept safe from everyone else while the squad comes: the test is the revive, not a third party.
+      me.spawnProtect = 999; for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }} }})()""")
     await pg.wait_for_timeout(900)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed")
     if not downed: failures.append(f'{vw}: not downed (squadmates {await ev("JSON.stringify(window.__mates)")}, me alive {await ev(f"{G}.match.sim.byId.get({G}.match.localId).alive")})')
