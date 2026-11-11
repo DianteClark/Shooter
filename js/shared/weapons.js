@@ -283,7 +283,7 @@ export const WEAPONS = {
   // A fast semi with a big magazine. Three to the body, no flinch: it keeps a target pinned rather than deleting it.
   battle: {
     id: 'battle', name: 'Foreman', role: 'Pressure', auto: false,
-    damage: 39, rpm: 305, magazine: 20, reserve: 100, reload: 2.3, range: 52,
+    damage: 39, rpm: 305, magazine: 20, reserve: 100, reload: 2.1, range: 52,
     falloff: { start: 22, end: 36, min: 0.7 }, penetrate: 0.75,
     adsSpread: 0.004, hipSpread: 0.085, bloomPerShot: 0.21, bloomRecover: 2.6, bloomScale: 1.3,
     pattern: { amp: 0.006, freq: 0.8, ramp: 2, drift: 0.0012 }, turnCap: 10, headMax: 2.4,
