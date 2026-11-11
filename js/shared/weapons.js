@@ -349,7 +349,7 @@ export const WEAPONS = {
     damage: 104, rpm: 68, magazine: 6, reserve: 36, reload: 2.5, range: 58,
     falloff: { start: 20, end: 28, min: 0.6 }, penetrate: 0.8,
     adsSpread: 0.002, hipSpread: 0.14, bloomPerShot: 0.55, bloomRecover: 1.5, bloomScale: 1,
-    adsGate: 0.65, boltKick: 0.3, turnCap: 7,
+    adsGate: 0.6, boltKick: 0.3, turnCap: 7,
     adsTime: 0.19, sprintToFire: 0.26, swapTime: 0.44, moveMult: 0.98, adsMoveMult: 0.6,
     pellets: 1, kickCam: 1, tracerWidth: 1.4, longshot: 28,
     botUse: { pref: 16, hold: 1.2, flank: 0.9, advance: 3, scoped: true, adsMin: 0.85, precise: true, sight: 4 },

@@ -54,24 +54,24 @@ One line per gun (identity; what changed):
 - **Drayman** (`heavyar`, sim K/D 1.23 -> 0.99): slow heavy AR, four to the body out to 35 m. Changed: unchanged; it was weak only against the old LMGs, snipers and Foreman. Pass 2: full damage to 18 m (was 20): top of the realistic table (1.22).
 - **Shunter** (`carbine`, sim K/D 1.06 -> 1.00): the AR that moves like an SMG and fires out of a slide. Changed: unchanged.
 - **Skitter** (`smg`, sim K/D 0.90 -> 0.91): fastest feet, the SMG that still bites at 20 m. Changed: 22->23 damage, 950->980 rpm, 32->36 rounds, full damage to 12 m (was 8) and 60% past 20 m, tighter hip, faster out of a sprint.
-- **Rasp** (`pdw`, sim K/D 0.77 -> 0.88): fastest kill in a room: four rounds inside 7 m, spent past 14 m. Changed: over-nerf undone where it matters: 20->25 damage, but falloff starts at 7 m and bottoms at 42%, so it does not come back as a mid-range gun. Pass 2: full damage to 8 m (was 7) and 45% past 14 m (was 42%), hip 0.042 -> 0.038: 0.76 in realistic lobbies.
+- **Rasp** (`pdw`, sim K/D 0.77 -> 0.88): fastest kill in a room: four rounds inside 7 m, spent past 14 m. Changed: over-nerf undone where it matters: 20->25 damage, but falloff starts at 7 m and bottoms at 42%, so it does not come back as a mid-range gun. Pass 2: 26 damage (was 25), full damage to 9 m (was 7) and 45% past 14 m (was 42%), hip 0.042 -> 0.038: still four rounds in a room, spent past 14 m. Realistic 0.66 -> 0.79.
 - **Stitch** (`tacsmg`, sim K/D 0.93 -> 0.97): the SMG you aim: a laser down the sights, poor from the hip. Changed: 24->25 damage, 780->800 rpm, falloff to 24 m at 62%: four to the body out to 12 m; bots close to 22 m before plinking.
 - **Ballast** (`heavysmg`, sim K/D 0.72 -> 0.93): slow bruiser SMG: three to the body, goes through crates. Changed: 34->36 damage, 500->560 rpm, 24->26 rounds, full damage to 9 m, tighter hip, a touch faster on foot.
-- **Thresher** (`shotgun`, sim K/D 0.67 -> 0.98): the dependable pump: one shell kills to 7 m, seven shells loaded singly. Changed: damage untouched; one-shot range 5->7 m (falloff 7/13), tighter fan, sprint-to-fire 0.14->0.10 s, faster feet. Pass 2: one-shot range 7.5 -> 8 m, feet 1.04 -> 1.06: shotgun bots die on the way in (60% of their deaths are past 10 m), so quicker feet over more damage.
-- **Squall** (`autoshot`, sim K/D 0.47 -> 0.89): the shotgun you run with: three shells a second from the hip and out of a slide. Changed: 8 light pellets (was 7), 320 rpm, falloff 5.5/11 (was 4/8), hip fan 0.1->0.075, fires out of a slide, sprint-to-fire 0.17->0.11 s, moves at 1.02 (was 0.97) and keeps moving while aimed, reload 3->2.4 s. Pass 2: falloff 6/11.5 (was 5.5/11), feet 1.02 -> 1.05.
-- **Doublet** (`coach`, sim K/D 0.67 -> 0.90): ambush gun: hardest hit in the class, quickest out of a sprint, two shells then nothing. Changed: 17->20 per pellet so half the fan kills inside 7.5 m, falloff 7.5/12, sprint-to-fire 0.06 s, reload 2.1->1.6 s, faster feet. Pass 2: falloff end 12 -> 12.5 m, feet 1.07 -> 1.09.
+- **Thresher** (`shotgun`, sim K/D 0.67 -> 0.98): the dependable pump: one shell kills to 7 m, seven shells loaded singly. Changed: damage untouched; one-shot range 5->7 m (falloff 7/13), tighter fan, sprint-to-fire 0.14->0.10 s, faster feet. Pass 2: one-shot range 7.5 -> 9 m, feet 1.04 -> 1.09. Shotgun bots die on the way in (about 60% of their deaths are past 10 m), so reach and feet, not more damage.
+- **Squall** (`autoshot`, sim K/D 0.47 -> 0.89): the shotgun you run with: three shells a second from the hip and out of a slide. Changed: 8 light pellets (was 7), 320 rpm, falloff 5.5/11 (was 4/8), hip fan 0.1->0.075, fires out of a slide, sprint-to-fire 0.17->0.11 s, moves at 1.02 (was 0.97) and keeps moving while aimed, reload 3->2.4 s. Pass 2: falloff 7/11.5 (was 5.5/11), feet 1.02 -> 1.08.
+- **Doublet** (`coach`, sim K/D 0.67 -> 0.90): ambush gun: hardest hit in the class, quickest out of a sprint, two shells then nothing. Changed: 17->20 per pellet so half the fan kills inside 7.5 m, falloff 7.5/12, sprint-to-fire 0.06 s, reload 2.1->1.6 s, faster feet. Pass 2: falloff 8.5/12.5 (was 7.5/12), feet 1.07 -> 1.12.
 - **Railspike** (`slug`, sim K/D 0.75 -> 0.91): one aimed slug: two to the body out to 13 m, through cover. Changed: 58->62 damage, 160->220 rpm, 6 rounds, falloff 13/24, quicker to aim and strafes while aimed; bots take it to 20 m.
 - **Bulwark** (`lmg`, sim K/D 1.37 -> 1.17): wall of fire down a long lane once it is spun up. Changed: was 1.37: 32->29 damage, 720->660 rpm, full damage to 18 m (was 22), heat after 30 rounds (was 40) with a longer lockout, slower feet. Pass 2: turns at 2.6 rad/s (was 2.4): 0.76 in realistic lobbies, where flanks come from Mixed bots. A 2.9 turn plus quicker ADS pushed it to 1.30 mirrored, so only the turn.
 - **Drover** (`saw`, sim K/D 1.37 -> 1.10): the LMG that can walk. Changed: was 1.37: 700->640 rpm, a little more aimed spread, heat after 19 rounds (was 21).
 - **Millrace** (`rotary`, sim K/D 1.21 -> 1.13): area denial: highest rate of fire, turns like a freight car. Changed: 1300->1200 rpm, heat after 80 rounds (was 90).
 - **Gantry** (`lightlmg`, sim K/D 1.16 -> 1.14): box-fed light LMG, an AR with a 45-round box and tight sights. Changed: 600->580 rpm only; its 20% accuracy in the owner data was bots spraying at range, fixed by the bot changes.
 - **Tallyman** (`dmr`, sim K/D 1.11 -> 1.02): two to the body through mid range, flinches the target. Changed: unchanged; sees 2 m further down its scope.
-- **Foreman** (`battle`, sim K/D 1.27 -> 1.00): fast semi that keeps a target pinned at 25-45 m. Changed: was the best primary (owner 1.68, sim 1.27): 39->38 damage, 310->280 rpm, 20->18 rounds, worse from the hip; still three to the body. Pass 2: `headMax: 2.2`, a head hit is never a kill on its own at any stance (it was always lethal, as a Marksman rifle: 61% of the owner's Foreman kills and 64% of bots' were head kills at up to 280 rpm). Paid back on the body so it still pins: 39 damage (still three to the body), 295 rpm (was 280), less bloom per shot (0.26 -> 0.21), 20 rounds. The headshot cap is the lever that a careful, aimed-in tapping human feels most.
+- **Foreman** (`battle`, sim K/D 1.27 -> 1.00): fast semi that keeps a target pinned at 25-45 m. Changed: was the best primary (owner 1.68, sim 1.27): 39->38 damage, 310->280 rpm, 20->18 rounds, worse from the hip; still three to the body. Pass 2: `headMax: 2.4`: a head hit is never a kill on its own at any stance (as a Marksman rifle it always was: 61% of the owner's Foreman kills and 64% of bots' were head kills, at up to 280 rpm). Paid back on the body so it still pins: 39 damage (still three to the body), 305 rpm (was 280), bloom per shot 0.26 -> 0.21, 20 rounds, reload 2.1 s. The head cap is the lever an aimed-in tapping human feels most.
 - **Prospector** (`lever`, sim K/D 0.85 -> 0.94): two-shot skirmisher carried at the hip and on the move. Changed: 68->72 damage, 120->150 rpm, less bloom per shot, quicker to aim and to load.
 - **Bodkin** (`crossbow`, sim K/D 0.86 -> 0.90): silent one-bolt hunter. Changed: one-bolt range 15->18 m, reload 1.25->0.95 s, quicker to aim.
 - **Lancet** (`sniper`, sim K/D 1.59 -> 1.08): overwatch: erases anyone when fully aimed, at 35 m and beyond. Changed: was 1.59 in the sim: 46->38 rpm, the bolt throws the scope further off (boltKick 0.45->0.3), slower to aim and on foot; bots see 4 m past normal down its scope instead of 10.
 - **Monolith** (`antimat`, sim K/D 1.29 -> 1.09): one body shot anywhere it reaches, through cover; owns 35 m+. Changed: stats unchanged; bot scope reach 10->7 m. Its weakness in the owner data was dying to rushers, which the engagement-distance changes address.
-- **Kestrel** (`semisnipe`, sim K/D 0.91 -> 1.04): the quickscope bolt gun for people who keep moving. Changed: one-shot range 16->18 m, aims in 0.21 s (was 0.23), bots see 4 m further down its scope. Pass 2: 68 rpm (was 62), one-shot range 20 m (was 18), aims in 0.19 s (was 0.21), hip shots do 65% (was 55%): it was 0.59 in realistic lobbies against 1.08 mirrored.
+- **Kestrel** (`semisnipe`, sim K/D 0.91 -> 1.04): the quickscope bolt gun for people who keep moving. Changed: one-shot range 16->18 m, aims in 0.21 s (was 0.23), bots see 4 m further down its scope. Pass 2: 68 rpm (was 62), one-shot range 20 m (was 18), aims in 0.19 s (was 0.21), hip shots 60% (was 55%). Realistic 0.59 -> 0.64 only: see Pass 2 below.
 - Sidearms and launchers: untouched except **Verdict** (`revolver`): 125->140 rpm, reload 2.4->2.1 s (0.72 -> 0.84 in
   `--sidearms`, where sidearms are carried as the main gun against each other; that table is noisier and is not a target).
 
@@ -243,3 +243,89 @@ Trammel 0.84, Murmur 0.84. Known gap: on the small maps (Pier, Turnstile) SMGs r
 reverse of what the size should favour: bots hold the long lanes there. Look at bot play on small maps, not gun stats.
 Tuned from their first numbers: Trammel, Thistle, Murmur, Hopper, Harrier, Lodestone up; Kiln, Stanchion, Bulwark,
 Tallyman, Monolith down a touch; Ballast and Thresher up a touch.
+
+## Pass 2: real lobbies (ROADMAP item 6)
+
+The owner's 7 matches on the new build (docs/stats-2026-11-10-c.txt minus -b) had Foreman at 2.25 (owner 3.52, 88-25,
+83% aimed, 61% head kills, 73% of its damage past 20 m) and shotguns at 0.17-0.68, where the mirrored rig had every
+primary at 0.81-1.15.
+
+### The realistic preset
+`node dev/balance-sim.mjs --realistic` (header of that file): rosters from the game's own buildRoster with Mixed skill,
+so bots draw guns, kits, perks, equipment and streaks as in a match (not mirrored); streaks and equipment on; maps and
+modes drawn like Quick Play (size-tier weights, every mode but Gun Game); the mode's own limits, capped at 300 s; one
+human-like thumb carrying the gun under test. It also reports how bots holding each gun die (streak/kit, inside 10 m).
+The thumb now aims in for 80% of fights with a `scoped` gun (`settleLong`; owner: 83% on Foreman) and sees the
+camera's ADS lead (`adsLook` 7.5 m); `tapAll` is an option for a careful tapper.
+
+### Did it reproduce the owner? Partly
+- Shotguns, yes: 0.58-0.69 in realistic lobbies against 0.96 mirrored. The difference is the lobby, mostly equipment:
+  the same class mirrored with `--equipment` drops by 0.2-0.3, with `--streaks` alone it does not move. Snipers show
+  the same equipment drop (Lancet 1.06 -> 0.77, Kestrel 1.00 -> 0.89, Lodestone 0.90 -> 0.76). Streak kills are not
+  credited to guns (sim.js flags `streak`/`equip`, telemetry skips them), so that is not it.
+- Foreman, no: 1.00-1.15 for bots and no thumb edge (0.6-0.7 like its classmates) at any thumb setting tried (longer
+  sight, always aimed, tapping), on Quick Play maps or on Ground War maps. What the rig cannot model is a player
+  who holds long sight lines at 25-45 m aimed in. Also the 7 matches cannot have been dealt by this code: none of the
+  10 V10 bot primaries (Flywheel, Kiln, Trammel...) appears in them, which under buildRoster happens about once in
+  1,500 seven-match runs. They came from another build, which is why stats now carry the build (below).
+- Foreman was nerfed anyway, where the owner's data points (head kills of a fast precise gun), see its line above.
+
+### Other Pass 2 changes (V10 guns)
+Hopper 24 damage, 920 rpm, full damage to 11 m at 55%; Trammel one-shot range 7.5 m, feet 1.08; Thistle full damage to
+13 m, feet 1.03; Tandem 290 rpm, bloom 0.18, full damage to 25 m at 75%; Nightjar 52 damage, 255 rpm, 72% at range;
+Harrier 130 rpm, aims in 0.21 s; Lodestone charge 0.3 s, reload 2.8 s, aims in 0.32 s; Kiln 605 rpm. Bulwark turns at
+2.6 rad/s. Halyard 670 rpm; Drayman full damage to 18 m.
+
+### Results (2 seeds x 3 rounds x 6 Quick Play lobbies x 8 thumb guns = 288 realistic lobbies; mirrored 4 seeds x 2)
+Realistic "before" is the pre-Pass-2 guns on dev 6d8b388, "after" is on dev dbe1804 (the streak overhaul moved
+lobbies a little too). K/D: realistic before -> after | mirrored before -> after.
+```
+Halyard     0.94 -> 0.90 | 1.01 -> 1.09
+Cadence     1.07 -> 1.07 | 1.01 -> 1.02
+Drayman     1.06 -> 1.02 | 1.15 -> 1.10
+Shunter     1.06 -> 1.09 | 1.11 -> 1.10
+Flywheel    0.82 -> 0.83 | 0.92 -> 0.92
+Kiln        0.96 -> 0.95 | 1.14 -> 1.08
+Skitter     0.83 -> 0.84 | 0.94 -> 0.90
+Rasp        0.66 -> 0.79 | 0.91 -> 0.93
+Stitch      0.80 -> 0.84 | 0.98 -> 0.94
+Ballast     0.88 -> 0.78 | 0.81 -> 0.83
+Murmur      0.94 -> 0.96 | 0.84 -> 0.79
+Hopper      0.85 -> 0.92 | 0.81 -> 0.95
+Thresher    0.65 -> 0.69 | 0.97 -> 0.89
+Squall      0.58 -> 0.66 | 0.97 -> 1.03
+Doublet     0.69 -> 0.76 | 0.96 -> 0.97
+Railspike   0.86 -> 0.82 | 0.91 -> 0.90
+Trammel     0.67 -> 0.70 | 0.84 -> 0.86
+Thistle     0.69 -> 0.71 | 0.86 -> 0.86
+Bulwark     1.08 -> 1.17 | 1.14 -> 1.14
+Drover      1.03 -> 1.03 | 1.15 -> 1.14
+Millrace    0.86 -> 0.88 | 1.19 -> 1.14
+Gantry      0.98 -> 1.03 | 1.18 -> 1.18
+Stanchion   0.81 -> 0.78 | 1.15 -> 1.15
+Tallyman    0.82 -> 0.76 | 1.20 -> 1.18
+Foreman     1.15 -> 0.89 | 1.00 -> 0.85
+Prospector  0.90 -> 0.89 | 1.00 -> 0.97
+Bodkin      0.81 -> 0.77 | 0.96 -> 0.81
+Tandem      0.86 -> 0.89 | 1.00 -> 1.09
+Nightjar    1.07 -> 1.02 | 0.96 -> 1.07
+Lancet      0.83 -> 0.75 | 1.08 -> 0.96
+Monolith    0.87 -> 0.87 | 1.18 -> 1.20
+Kestrel     0.59 -> 0.64 | 1.08 -> 1.24 (1.14 once hip shots went 65% -> 60%; focused run)
+Harrier     0.81 -> 0.84 | 1.06 -> 1.07
+Lodestone   0.69 -> 0.72 | 0.82 -> 1.12
+```
+Mirrored: all 34 primaries 0.79-1.20 (Murmur 0.79 untouched, noise). Realistic: the mean bot gun K/D is about 0.88
+(deaths to streaks and kit count, kills by them do not), so 0.80 is close to par. Still under 0.80: the five pellet
+shotguns (0.66-0.76), Kestrel 0.64, Lodestone 0.72, Lancet 0.75, Tallyman, Bodkin, Ballast, Stanchion (0.76-0.78).
+Their mirrored numbers have little room left (Kestrel 1.14-1.24, Monolith 1.20), so the rest of the gap is for the
+equipment side: what bots throw at a stationary long gun and at a shotgun closing in.
+Thumb (human-like) K/D by gun, before -> after: Halyard 0.82 -> 0.68, Rasp 0.71 -> 0.69, Squall 0.65 -> 0.76,
+Doublet 0.92 -> 0.86, Bulwark 0.64 -> 0.66, Tallyman 0.61 -> 0.84, Foreman 0.71 -> 0.60, Kestrel 0.63 -> 0.63 (about 270
+deaths each, so +-0.08). No gun puts the thumb near 2x its classmates; a shotgun thumb is not helpless.
+
+### Build tag in stats (js/game/telemetry.js)
+Each match record carries `b: BUILD` (js/build.js). The export code is unchanged up front and appends
+`~b:<build>=<matches>.<live>,...` and, when there is more than one build, each build's own rows as `~a@<build>:...`.
+Decoders from before skip both; old codes decode as before (no `byBuild`). `decodeStatsCode(code).byBuild[build]` is
+an aggregate per build, `buildsOf(agg)` lists them newest first. Matches saved before this read as build `?`.
