@@ -976,7 +976,7 @@ export class BotBrain {
     let sx = 0, sz = 0;
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
-      if (q === p || q.team !== p.team || !q.alive) continue;
+      if (q === p || q.team !== p.team || !q.alive || q.downed) continue;     // A downed teammate is someone to stand over.
       const dx = ps.x - q.ps.x, dz = ps.z - q.ps.z, dSq = dx * dx + dz * dz;
       if (dSq > 6.25 || dSq < 1e-4) continue;
       const k = (2.5 - Math.sqrt(dSq)) / 2.5 / Math.sqrt(dSq);

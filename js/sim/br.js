@@ -78,8 +78,10 @@ const THIRD_PARTY = 75;          // Metres a geared bot squad will go to join a 
 // aggro); and how long a squad keeps to its first place before it moves on.
 const HOT_DROP = [0, 0.06, 0.08, 0.1, 0.1];
 const DROP_GAP = 70;
-const JOIN_FIGHT = [0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.7];
+const JOIN_FIGHT = [0, 0.15, 0.3, 0.25, 0.2, 0.15, 0.15];   // Late on, squads mostly hold and let fights come.
 const LOOT_DWELL = 50;
+const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
+const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
 const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
 
 function mulberry32(a) {
@@ -1010,17 +1012,20 @@ export class BrRules {
     // Late rotators (plan.late near 1) leave it until the shrink is under way; the rest move with time to spare.
     const late = plan.late ?? 0.5;
     // The first circle hurts so little that nobody leaves good loot for it before it moves.
-    const closing = this.phase === 0 && this.state === 'wait' ? false : (this.state === 'shrink' && (late < 0.75 || toNext > n.r * 0.4)) || this.timer < walk * (1.3 - late) + 8 * (1 - late);
+    // While it shrinks, a squad moves once the edge comes near (they stagger as it sweeps across the map).
+    const closing = this.phase === 0 ? Math.hypot(ax - c.x, az - c.z) > c.r - 25 : (this.state === 'shrink' && (late < 0.75 || toNext > n.r * 0.4)) || this.timer < walk * (1.3 - late) + 8 * (1 - late);
     const geared = bots.every(p => this._geared(p));
     let kind = 'loot';
-    if (outsideNow || (closing && toNext > 0)) kind = 'rotate';
+    // A greedy squad (late, from phase 1) shrugs the circle off until it starts to hurt; sometimes it leaves it too late.
+    const shrugs = late > 0.6 && this.phase >= 1 && this.state !== 'final' && bots.every(q => q.hp > GREEDY_HP);
+    if ((outsideNow && !shrugs) || (closing && toNext > 0 && !shrugs)) kind = 'rotate';
     else if (geared || this.phase >= 2) kind = 'hold';
     // A fight nearby, inside where we need to be: sometimes worth taking a piece of. Each burst of gunfire is weighed
     // once. Nobody goes looking for trouble while the first circle waits; later, keener and further.
     let fight = plan.fight && sim.time - plan.fight.t < NOISE_KEEP ? plan.fight : null;
     const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1);
     if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= 3) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
-      const reach = THIRD_PARTY * Math.min(1, 0.4 + this.phase * 0.15);
+      const reach = THIRD_PARTY * Math.min(0.7, 0.4 + this.phase * 0.1);
       for (let i = this.noise.length - 1; i >= 0; i--) {
         const s = this.noise[i];
         if (s.team === team || s.weighed?.has(team)) continue;
@@ -1041,20 +1046,23 @@ export class BrRules {
       plan.circle = this.phase;
     } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && Math.hypot(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
       // A squad holds where it is while that stays inside the next circle: it does not wander between holds.
-      plan.spot = this._holdSpot(n, ax, az);
+      plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62);
       plan.circle = this.phase; plan.since = sim.time;
     } else if (kind === 'fight') {
       const d = Math.hypot(fight.x - ax, fight.z - az);
       plan.spot = this._walkable(fight.x + (ax - fight.x) / d * 16, fight.z + (az - fight.z) / d * 16);
     }
 
+    let sqx = 0, sqz = 0;
+    for (const q of bots) { sqx += q.ps.x / bots.length; sqz += q.ps.z / bots.length; }
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
       bot.sightK = 1;
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
         if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
-        else if (b.meds > 0 && p.hp < 60) this._startUse(p, 'med');
+        // (A greedy squad sitting in the circle's damage does not think to heal until it heads in.)
+        else if (b.meds > 0 && p.hp < 60 && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)) this._startUse(p, 'med');
       }
       // A teammate down nearby comes first, unless there is a fight in view.
       const mate = downed.length && !bot.targetVisible ? downed.reduce((m, q) => {
@@ -1077,15 +1085,20 @@ export class BrRules {
         continue;
       }
       if (kind === 'loot' || (kind === 'hold' && !this._geared(p))) {
+        // The squad loots together: round the middle of the place and the squad (so a teammate is near enough to pick
+        // you up), or round its hold once the circle has a say.
         const poi = plan.poi;
-        const t = this._lootTarget(p, kind === 'loot' ? Math.max(16, Math.min(40, (poi?.r ?? 30) + 6)) : 22, poi && kind === 'loot' ? poi.x : p.ps.x, poi && kind === 'loot' ? poi.z : p.ps.z);
+        let lx = sqx, lz = sqz, lr = 18;
+        if (kind === 'loot' && poi) { lx = (poi.x + sqx) / 2; lz = (poi.z + sqz) / 2; lr = Math.max(16, Math.min(28, poi.r + 6)); }
+        else if (plan.spot) { lx = plan.spot.x; lz = plan.spot.z; }
+        const t = this._lootTarget(p, lr, lx, lz);
         if (t) { bot.setObjective(t); bot.sightK = LOOT_SIGHT[Math.min(this.phase, 2)]; continue; }
         // Nothing left here: the squad moves to the nearest quiet place it has not been, inside the next circle; while
         // the first circle waits it stays put a while first (a squad with a gun each settles in instead).
         const dwell = this.phase === 0 && this.state === 'wait' ? LOOT_DWELL : 6;
         if (kind === 'loot' && sim.time - plan.since > dwell && !(this.phase === 0 && this.state === 'wait' && bots.filter(q => this._heldScore(q, 0) >= 2.2 || this._heldScore(q, 1) >= 2.2).length * 2 >= bots.length)) {
           (plan.visited || (plan.visited = new Set())).add(plan.poi?.id);
-          plan.poi = this._nextPoi(team, ax, az, n, plan.visited, this.phase === 0 ? 120 : Infinity);
+          plan.poi = this._nextPoi(team, ax, az, n, plan.visited, this.phase === 0 ? 90 : Infinity);
           plan.since = sim.time;
         }
       }
@@ -1108,21 +1121,27 @@ export class BrRules {
   }
 
   // A good place to sit out the wait inside the next circle: late in the match a roofless room or a hold with cover.
-  _holdSpot(n, ax, az) {
-    const sim = this.sim, rooms = sim.map.rooms ?? [];
+  // ringK: where in the next circle (a share of its radius) the squad likes to sit; edge players sit just outside it and
+  // run in as it shrinks, which sometimes goes wrong.
+  _holdSpot(n, ax, az, ringK = 0.62) {
+    const sim = this.sim, rooms = sim.map.rooms ?? [], c = this.circle;
+    const early = this.phase === 0 && this.state === 'wait';     // The first circle is far off: settle in where you are.
     let best = null, bestS = -Infinity;
     for (const r of rooms) {
       const x = r.x + r.w / 2, z = r.z + r.d / 2;
       const dc = Math.hypot(x - n.x, z - n.z);
-      if (dc > n.r * 0.85) continue;
-      const s = -Math.hypot(x - ax, z - az) * 0.12 - dc * 0.02 + sim.rng() * 2;
+      if ((dc > n.r * Math.max(0.85, ringK + 0.1) || Math.hypot(x - c.x, z - c.z) > c.r * 0.9) && !early) continue;
+      // Late on, a ring inside the edge on our side rather than the middle, where every squad would meet.
+      const ring = this.phase >= 1 ? Math.abs(dc / Math.max(1, n.r) - ringK) * 8 : 0;
+      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring + sim.rng() * 2;
       if (s > bestS) { bestS = s; best = { x, z }; }
     }
     if (!best) {
-      const ix = sim.nav.holdIndex, k = ix.near(n.x, n.z, Math.max(10, n.r * 0.8));
+      const ix = sim.nav.holdIndex, k = ix.near(n.x, n.z, Math.max(10, n.r * Math.max(0.8, ringK + 0.12)));
       for (let q = 0; q < k; q++) {
         const h = sim.nav.holds[ix.out[q]];
-        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 + sim.rng() * 2;
+        const ring = this.phase >= 1 ? Math.abs(Math.hypot(h.x - n.x, h.z - n.z) / Math.max(1, n.r) - ringK) * 8 : 0;
+        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring + sim.rng() * 2;
         if (s > bestS) { bestS = s; best = { x: h.x, z: h.z }; }
       }
     }

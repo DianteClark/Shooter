@@ -78,12 +78,12 @@ export const BR = {
   // The circle: phase i waits `wait`, then shrinks over `shrink` to radius `r` (a share of the map's width). Damage per
   // second outside it is `dps` while phase i is the one shrinking or held. Plates do not stop it.
   phases: [
-    { wait: 120, shrink: 60, r: 0.4, dps: 1 },
-    { wait: 70, shrink: 50, r: 0.27, dps: 2 },
-    { wait: 55, shrink: 45, r: 0.18, dps: 4 },
-    { wait: 45, shrink: 40, r: 0.11, dps: 7 },
-    { wait: 40, shrink: 30, r: 0.06, dps: 10 },
-    { wait: 30, shrink: 25, r: 0.03, dps: 15 },
+    { wait: 130, shrink: 60, r: 0.4, dps: 1 },
+    { wait: 110, shrink: 65, r: 0.28, dps: 4 },
+    { wait: 90, shrink: 55, r: 0.18, dps: 8 },
+    { wait: 60, shrink: 45, r: 0.11, dps: 12 },
+    { wait: 45, shrink: 35, r: 0.06, dps: 16 },
+    { wait: 35, shrink: 30, r: 0.03, dps: 20 },
     { wait: 25, shrink: 40, r: 0, dps: 25 },
   ],
   downHp: 100,           // A downed player's bleed bar; lethal damage while downed finishes them.

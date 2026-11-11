@@ -29,7 +29,8 @@ function runMatch(mode, seed) {
   const snapBytes = [];
   const guests = sim.players.slice(0, 7);
   const killT = [];                             // Live seconds of each death (kills, circle, bleed-outs).
-  let liveT0 = null, finalSquads = null, finalPhase = 4;       // Pretend seven of them are guests, for the per-guest snapshot size.
+  let liveT0 = null, finalSquads = null, finalPhase = 4;
+  const phaseSquads = [];                       // Squads in as each circle phase begins.       // Pretend seven of them are guests, for the per-guest snapshot size.
   let tick = 0;
   const maxTicks = SIM_HZ * 60 * 14;
   while (sim.phase !== 'ended' && tick < maxTicks) {
@@ -40,6 +41,7 @@ function runMatch(mode, seed) {
     if (sim.phase === 'live' && liveT0 === null) liveT0 = sim.time;
     // Squads still in when the final circles start (phase finalPhase's wait).
     if (finalSquads === null && sim.br.phase >= finalPhase) finalSquads = sim.br._squadsIn().size;
+    if (sim.br.phase > phaseSquads.length) phaseSquads.push(sim.br._squadsIn().size);
     if (sim.phase === 'live' && tick > SIM_HZ * 12) times.push((cu.user + cu.system) / 1000);
     if (tick % 2 === 0 && sim.phase === 'live') {
       for (const g of guests) snapBytes.push(JSON.stringify(sim.encodeSnapshotFor(g.id)).length);
@@ -62,7 +64,7 @@ function runMatch(mode, seed) {
   const early = killT.filter(t => t < 180).length / Math.max(1, killT.length);
   const bins = [0, 0, 0, 0];                    // Deaths in 0-3, 3-6, 6-9, 9+ minutes.
   for (const t of killT) bins[Math.min(3, Math.floor(t / 180))]++;
-  return { sim, mode, early, bins, finalSquads: finalSquads ?? 0, minutes: sim.time / 60, mean, p99: times[Math.floor(times.length * 0.99)], worst: times[times.length - 1], startMs, ev, winner, alive, snapMean, snapMax: Math.max(...snapBytes), removed };
+  return { sim, mode, early, bins, phaseSquads, finalSquads: finalSquads ?? 0, minutes: sim.time / 60, mean, p99: times[Math.floor(times.length * 0.99)], worst: times[times.length - 1], startMs, ev, winner, alive, snapMean, snapMax: Math.max(...snapBytes), removed };
 }
 
 function report(r) {
@@ -159,7 +161,7 @@ if (PACING) {
     const rs = [];
     for (let i = 0; i < n; i++) rs.push(runMatch(mode, 101 + i * 7));
     const avg = f => rs.reduce((a, r) => a + f(r), 0) / rs.length;
-    console.log(`${mode}: minutes ${rs.map(r => r.minutes.toFixed(1)).join(' ')} | early ${rs.map(r => (r.early * 100).toFixed(0)).join(' ')}% | circle deaths ${rs.map(r => r.sim.br.zoneDeaths ?? 0).join(' ')} | final squads ${rs.map(r => r.finalSquads).join(' ')} | tick ${avg(r => r.mean).toFixed(2)} ms | snap ${avg(r => r.snapMean).toFixed(0)} B`);
+    console.log(`${mode}: minutes ${rs.map(r => r.minutes.toFixed(1)).join(' ')} | early ${rs.map(r => (r.early * 100).toFixed(0)).join(' ')}% | circle deaths ${rs.map(r => r.sim.br.zoneDeaths ?? 0).join(' ')} | squads by phase ${rs.map(r => r.phaseSquads.join('/')).join(' ')} | tick ${avg(r => r.mean).toFixed(2)} ms | snap ${avg(r => r.snapMean).toFixed(0)} B`);
   }
   process.exit(0);
 }
