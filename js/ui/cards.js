@@ -47,6 +47,7 @@ setCareerExtras(() => {
   return {
     ...c, level: Progress.prestige > 0 ? 50 : Progress.level, prestige: Progress.prestige, pro: Progress.proPerks(),
     cats, masteredIn, masteredSet, mastered: masteredSet.size, catSize: CAT_SIZE, camoOn,
+    chal: w => { const l = Progress.challenges(w); return [l.filter(c => c.done).length, l.length]; },
     life: Progress.lifetime?.() ?? {}, granted: id => !!Progress.hasReward?.(id),
   };
 });
@@ -570,6 +571,19 @@ export function cardHtml(id, { size = 'm', title, sub, locked = false, equipped 
   </span>`;
 }
 
+// The bar under a card still being earned, like every other progress bar in the game: sodium fill and value/goal.
+const fmtN = v => v.toLocaleString('en-US');
+export function cardProgressHtml({ value, goal }) {
+  const f = Math.max(0, Math.min(1, value / goal));
+  return `<span class="cc-prog"><i class="cc-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i><small>${fmtN(value)}/${fmtN(goal)}</small></span>`;
+}
+
+// Locked cards nearest to done, for the results screen: [{card, progress}], the closest first.
+export function cardsInReach(max = 3) {
+  return Progress.cards().filter(x => x.progress && x.progress.value > 0)
+    .sort((a, b) => b.progress.value / b.progress.goal - a.progress.value / a.progress.goal).slice(0, max);
+}
+
 /* ---------- Picker ---------- */
 // Full-screen sheet over whatever screen opened it, with two views: calling cards by group, then emblems. Tap an
 // earned item to equip it; a locked one says what earns it.
@@ -595,7 +609,7 @@ export function cardsSheet(menu, { onClose, onChange, tab = 'cards' } = {}) {
         }).join('')}</nav>
         <div class="cs-grid scroll-y">${shown.map(x => `
           <button class="cs-cell${x.unlocked ? '' : ' locked'}${x.equipped ? ' on' : ''}" data-act="csPick" data-id="${x.card.id}" ${x.unlocked ? '' : 'data-sound="deny"'}>
-            ${cardHtml(x.card.id, { size: 228, locked: !x.unlocked, equipped: x.equipped, sub: x.card.req })}
+            ${cardHtml(x.card.id, { size: 228, locked: !x.unlocked, equipped: x.equipped, sub: x.card.req })}${x.progress ? cardProgressHtml(x.progress) : ''}
           </button>`).join('')}</div>`;
   };
   const renderEmblems = () => {

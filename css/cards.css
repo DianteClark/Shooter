@@ -101,7 +101,12 @@
   flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 6px; align-content: start; justify-items: center;
 }
-.cs-cell { padding: 0; background: none; line-height: 0; transition: transform var(--dur-fast) var(--ease-out); }
+.cs-cell { padding: 0; background: none; line-height: 0; transition: transform var(--dur-fast) var(--ease-out); display: flex; flex-direction: column; gap: 3px; }
+/* Progress under a card still being earned (cards.js cardProgressHtml): a thin sodium bar with the count beside it. */
+.cc-prog { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; line-height: 1; }
+.cc-prog .cc-bar { position: relative; flex: 1; min-width: 0; height: 4px; background: rgba(231,234,228,.14); overflow: hidden; }
+.cc-prog .cc-bar > i { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; }
+.cc-prog small { flex: none; font: 400 10px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cs-cell:active { transform: scale(.97); }
 .cs-cell.on .ccard { outline: 2px solid var(--c-sodium); outline-offset: -2px; }
 

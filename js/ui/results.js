@@ -10,7 +10,7 @@ import { esc, hex, badgeMark, badgeTag, SLOT_LABEL, ROMAN } from './widgets.js';
 import { kindLabel } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
-import { playerBanner, proProgressHtml, unlockStamp } from './cards.js';
+import { playerBanner, proProgressHtml, unlockStamp, cardHtml, cardProgressHtml, cardsInReach } from './cards.js';
 import { challengeStamp, challengeStrip } from './challenges.js';
 import { modeColumn } from './mode-hud.js';
 import { playlistName } from '../shared/playlist.js';
@@ -293,8 +293,10 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   // would leave that card nearly empty, so one row sits over the buttons instead, where it fits on every phone.
   // Mastery tracks that moved: main.js may pass them as data.mastery; MatchAwards also leaves them with Progress.
   const mastery = data.mastery ?? Progress.lastMastery();
-  const progress = challengeStrip(data.challenges) + proProgressHtml(data.proProgress) + masteryStrip(mastery);
-  const progressRows = Math.min(3, data.challenges?.length ?? 0) + Math.min(2, data.proProgress?.length ?? 0) + Math.min(3, mastery?.length ?? 0);
+  // Every row is shown: the card scrolls natively when they outgrow it. Calling cards closest to done come last.
+  const reach = data.challenges?.length || data.proProgress?.length || mastery?.length ? cardsInReach(3) : [];
+  const progress = challengeStrip(data.challenges, Infinity) + proProgressHtml(data.proProgress, Infinity) + masteryStrip(mastery, Infinity) + cardsStrip(reach);
+  const progressRows = (data.challenges?.length ?? 0) + (data.proProgress?.length ?? 0) + (mastery?.length ?? 0) + reach.length;
   const progCard = progressRows > 1;
 
   menu.el.innerHTML = `
@@ -322,7 +324,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
           <h4>Weapons</h4>
           ${weapons.length ? `<div class="wp-list">${weapons.map(weaponRow).join('')}</div>` : '<small class="empty">No weapon kills this match</small>'}
         </div>
-        ${progCard ? `<div class="rs-card prog-card">${progress}</div>` : ''}
+        ${progCard ? `<div class="rs-card prog-card scroll-y">${progress}</div>` : ''}
         <div class="res-choice">
           ${progCard ? '' : progress}
           <button class="rs-btn primary" data-act="resRematch">${esc(data.rematchLabel)}</button>
@@ -432,6 +434,13 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, them
   const primary = q('.res-choice .primary');
   if (primary) sweep(primary);
   reel.dead = true;              // Finished: nothing left for a later screen to cancel.
+}
+
+// Calling cards still being earned, closest first: a sliver of the card, its name and its progress bar.
+function cardsStrip(list) {
+  if (!list.length) return '';
+  return `<div class="rs-ch rs-cc"><small class="rs-ch-h">${art('ui:flag', 10)}Calling cards</small>${list.map(({ card, progress }) => `
+    <div class="rs-cc-row">${cardHtml(card.id, { size: 64, title: '', sub: '', locked: true })}<b>${esc(card.name)}</b>${cardProgressHtml(progress)}</div>`).join('')}</div>`;
 }
 
 function unlockCard(u) {

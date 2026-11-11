@@ -33,7 +33,8 @@ export const careerExtras = () => extras();
 const n = v => (Number.isFinite(v) ? v : 0);
 const life = key => n(extras().life[key]);
 const fmt = v => v.toLocaleString('en-US');
-const card = (id, name, group, req, need, art) => ({ id, name, group, req, need: () => { try { return !!need(); } catch { return false; } }, art });
+// `prog()` -> [value, goal]: how far a locked card is, for its progress bar (Progress.cards()).
+const card = (id, name, group, req, need, art, prog) => ({ id, name, group, req, need: () => { try { return !!need(); } catch { return false; } }, art, ...(prog ? { prog } : {}) });
 
 // Per map: the map's own pattern and palette, earned by winning there.
 const MAP_ART = {
@@ -84,33 +85,34 @@ const MOLTEN = ['#1a0a06', '#8a200a', '#ffd23f', '#ff4a0a'];
 const EXTRA = [
   ...MAP_IDS.filter(id => MAP_ART[id]).map(id => {
     const [name, p, c] = MAP_ART[id];
-    return card(`map-${id}`, name, 'Maps', `Win ${MAP_WINS} matches on ${MAPS[id].name}`, () => life(`mapwon:${id}`) >= MAP_WINS, { p, c, e: `map:${id}` });
+    return card(`map-${id}`, name, 'Maps', `Win ${MAP_WINS} matches on ${MAPS[id].name}`, () => life(`mapwon:${id}`) >= MAP_WINS, { p, c, e: `map:${id}` }, () => [life(`mapwon:${id}`), MAP_WINS]);
   }),
-  ...MODE_CARDS.map(([id, name, req, stat, goal, p, c, e]) => card(id, name, 'Modes', req, () => life(stat) >= goal, { p, c, e })),
+  ...MODE_CARDS.map(([id, name, req, stat, goal, p, c, e]) => card(id, name, 'Modes', req, () => life(stat) >= goal, { p, c, e }, () => [life(stat), goal])),
   ...CATEGORIES.filter(cat => CAT_ART[cat]).map(cat => {
     const [name, goal, p, c] = CAT_ART[cat];
-    return card(`arms-${cat.toLowerCase()}`, name, 'Arms', `${fmt(goal)} kills with ${CAT_PLURAL[cat]}`, () => n(extras().cats[cat]) >= goal, { p, c, e: `cat:${cat}` });
+    return card(`arms-${cat.toLowerCase()}`, name, 'Arms', `${fmt(goal)} kills with ${CAT_PLURAL[cat]}`, () => n(extras().cats[cat]) >= goal, { p, c, e: `cat:${cat}` }, () => [n(extras().cats[cat]), goal]);
   }),
   // Animated tiers: gold sweeps, prism cycles, molten breathes. These are the cards people should notice.
-  card('gilt-10', 'Gilt Arsenal', 'Mastery', 'Sovereign camo on 10 weapons', () => n(extras().camoOn.gold) >= 10, { p: 'facets', c: GOLD, e: 'camo:gold', gold: true, anim: 'gold' }),
-  card('prism-5', 'Prismatic', 'Mastery', 'Prism camo on 5 weapons', () => n(extras().camoOn.prism) >= 5, { p: 'speed', c: PRISM, e: 'camo:prism', gold: true, anim: 'prism' }),
-  card('molten-5', 'Foundry Heart', 'Mastery', 'Molten Core camo on 5 weapons', () => n(extras().camoOn.molten) >= 5, { p: 'pulse', c: MOLTEN, e: 'camo:molten', gold: true, anim: 'molten' }),
+  card('gilt-10', 'Gilt Arsenal', 'Mastery', 'Sovereign camo on 10 weapons', () => n(extras().camoOn.gold) >= 10, { p: 'facets', c: GOLD, e: 'camo:gold', gold: true, anim: 'gold' }, () => [n(extras().camoOn.gold), 10]),
+  card('prism-5', 'Prismatic', 'Mastery', 'Prism camo on 5 weapons', () => n(extras().camoOn.prism) >= 5, { p: 'speed', c: PRISM, e: 'camo:prism', gold: true, anim: 'prism' }, () => [n(extras().camoOn.prism), 5]),
+  card('molten-5', 'Foundry Heart', 'Mastery', 'Molten Core camo on 5 weapons', () => n(extras().camoOn.molten) >= 5, { p: 'pulse', c: MOLTEN, e: 'camo:molten', gold: true, anim: 'molten' }, () => [n(extras().camoOn.molten), 5]),
   ...['Assault', 'SMG', 'Sniper', 'Shotgun'].map(cat => card(`master-${cat.toLowerCase()}`, `${CAT_ART[cat][0]} Gold`, 'Mastery', `Master every ${CAT_PLURAL[cat].replace(/s$/, '')}`,
     () => { const x = extras(); return n(x.catSize[cat]) > 0 && n(x.masteredIn[cat]) >= n(x.catSize[cat]); },
-    { p: 'facets', c: cat === 'Sniper' ? PRISM : GOLD, e: `cat:${cat}`, gold: true, anim: cat === 'Sniper' ? 'prism' : 'gold' })),
+    { p: 'facets', c: cat === 'Sniper' ? PRISM : GOLD, e: `cat:${cat}`, gold: true, anim: cat === 'Sniper' ? 'prism' : 'gold' },
+    () => [n(extras().masteredIn[cat]), n(extras().catSize[cat])])),
   // Career odds and ends that the V7 set does not cover.
-  card('multi-100', 'Clean Sweep', 'Career', '100 multi-kills', () => life('multi') >= 100, { p: 'burst', c: ['#1e0e14', '#5a1e36', '#ffd0e4', '#ff3fd2'], e: 'medal:triple' }),
-  card('streaks-100', 'Call It In', 'Career', 'Call in 100 scorestreaks', () => life('streaksCalled') >= 100, { p: 'arc', c: ['#10161e', '#2a3a4e', '#d8e6f4', '#ff9f1c'], e: 'strike' }),
-  card('equip-150', 'Demolition', 'Career', '150 lethal equipment kills', () => life('equipKills') >= 150, { p: 'blast', c: ['#1a1408', '#4e3a14', '#ffe8b0', '#ffb02a'], e: 'frag' }),
-  card('assists-500', 'Right Hand', 'Career', '500 assists', () => life('assists') >= 500, { p: 'link', c: ['#0e161e', '#22384a', '#cfe8ff', '#38b6ff'], e: 'ui:party' }),
-  card('top3-50', 'Podium', 'Career', 'Finish top three 50 times', () => life('top3') >= 50, { p: 'podium', c: ['#16140e', '#3e3a24', '#f2ead0', '#ffd659'], e: 'ui:cup' }),
-  card('hip-500', 'From the Hip', 'Career', '500 hip-fire kills', () => life('hipKills') >= 500, { p: 'speed', c: ['#1c120c', '#4e301c', '#ffd8b8', '#ff8a1f'], e: 'ui:aim' }),
+  card('multi-100', 'Clean Sweep', 'Career', '100 multi-kills', () => life('multi') >= 100, { p: 'burst', c: ['#1e0e14', '#5a1e36', '#ffd0e4', '#ff3fd2'], e: 'medal:triple' }, () => [life('multi'), 100]),
+  card('streaks-100', 'Call It In', 'Career', 'Call in 100 scorestreaks', () => life('streaksCalled') >= 100, { p: 'arc', c: ['#10161e', '#2a3a4e', '#d8e6f4', '#ff9f1c'], e: 'strike' }, () => [life('streaksCalled'), 100]),
+  card('equip-150', 'Demolition', 'Career', '150 lethal equipment kills', () => life('equipKills') >= 150, { p: 'blast', c: ['#1a1408', '#4e3a14', '#ffe8b0', '#ffb02a'], e: 'frag' }, () => [life('equipKills'), 150]),
+  card('assists-500', 'Right Hand', 'Career', '500 assists', () => life('assists') >= 500, { p: 'link', c: ['#0e161e', '#22384a', '#cfe8ff', '#38b6ff'], e: 'ui:party' }, () => [life('assists'), 500]),
+  card('top3-50', 'Podium', 'Career', 'Finish top three 50 times', () => life('top3') >= 50, { p: 'podium', c: ['#16140e', '#3e3a24', '#f2ead0', '#ffd659'], e: 'ui:cup' }, () => [life('top3'), 50]),
+  card('hip-500', 'From the Hip', 'Career', '500 hip-fire kills', () => life('hipKills') >= 500, { p: 'speed', c: ['#1c120c', '#4e301c', '#ffd8b8', '#ff8a1f'], e: 'ui:aim' }, () => [life('hipKills'), 500]),
   // One card per gun, for mastering it (every camo challenge and the ladder). Separate from the mastery-<item> cards
   // that the equipment, streak and operator tracks grant (docs/PROGRESSION.md), which cards.js restyles.
   ...WEAPON_IDS.filter(w => w !== GOLDEN_ID).map((w, i) => {
     const anim = i % 3 === 2 ? 'prism' : 'gold';
     return card(`gun-${w}`, `${WEAPONS[w]?.name ?? w} Master`, 'Mastery', `Master the ${WEAPONS[w]?.name ?? w}`, () => !!extras().masteredSet?.has(w),
-      { p: anim === 'prism' ? 'speed' : 'rays', c: anim === 'prism' ? PRISM : GOLD, e: w, gold: true, anim });
+      { p: anim === 'prism' ? 'speed' : 'rays', c: anim === 'prism' ? PRISM : GOLD, e: w, gold: true, anim }, () => extras().chal?.(w) ?? [0, 1]);
   }),
 ];
 
