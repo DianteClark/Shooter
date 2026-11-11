@@ -190,10 +190,16 @@ export class Match {
       aim = Math.atan2(input.mz, input.mx);
     }
     // Steering your own Cruise Missile: the aim stick flies it, so the gun holds fire and an idle stick keeps course.
-    if (view.gunships?.some(g => g.kind === 'missile' && g.owner === this.localId)) {
+    // V9: the Scout Drone and the Carpet Line reticle fly the same way; letting go of the stick drops a Carpet Line.
+    const pilot = view.gunships?.find(g => g.kind === 'missile' && g.owner === this.localId)
+      ?? view.drones?.find(g => (g.kind === 'recon' || g.kind === 'reticle') && g.owner === this.localId);
+    if (pilot) {
       r.fire = false;
-      if (input.aim === null || input.aim === undefined) aim = this.lastAim;
-    }
+      const idle = input.aim === null || input.aim === undefined;
+      if (idle) aim = this.lastAim;
+      if (pilot.kind === 'reticle' && idle && this.pilotHeld) this.#command({ cmd: 'aimdone' });
+      this.pilotHeld = !idle;
+    } else this.pilotHeld = false;
     this.lastAim = aim;
     r.aim = aim;
     // Everyone holds position through the warmup countdown, as bots do; aiming stays live.

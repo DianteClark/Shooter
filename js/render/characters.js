@@ -644,6 +644,8 @@ class Rig {
   }
 }
 
+const smooth01 = t => t * t * (3 - 2 * t);
+
 export class Characters {
   constructor(scene, map, time) {
     this.scene = scene;
@@ -840,6 +842,16 @@ export class Characters {
     if (!r) return;
     r.kick = Math.min(1.3, r.kick + 0.55 + strength * 0.5);
     r.sv[ROCK] += 1.5 + strength * 3.2;
+    const def = weapon ? WEAPONS[weapon] : null;
+    if (def && def.melee) {
+      // Melee swings instead of kicking: a timed arc the gun pose follows (see SWINGS), alternating sides for a blade.
+      r.swingSide = def.swing === 'overhead' ? 1 : -(r.swingSide || 1);
+      r.swingKind = def.swing === 'overhead' ? 'overhead' : 'slash';
+      r.swingT = 0;
+      r.swingDur = def.swing === 'overhead' ? 0.62 : 0.26;
+      r.sv[ROCK] += 1 + strength;
+      return;
+    }
     const R = r.recoil = weapon ? recoilOf(weapon) : RECOIL_NONE;
     r.kickSide = -(r.kickSide || 1);
     r.kickRoll = (r.kickRoll || 0) + r.kickSide * R.twist * (0.25 + strength * 0.3);
@@ -952,6 +964,7 @@ export class Characters {
       r.moveX += ((moving ? vx / rawSpeed : 0) - r.moveX) * damp(14, dt);
       r.moveZ += ((moving ? vz / rawSpeed : 0) - r.moveZ) * damp(14, dt);
       r.kick *= Math.exp(-dt * 13);
+      if (r.swingT !== undefined && r.swingT < 1) r.swingT = Math.min(1, r.swingT + dt / (r.swingDur || 0.3));
       if (r.kickRoll) r.kickRoll *= Math.exp(-dt * 16);
       r.flash *= Math.exp(-dt * 16);
       r.swap *= Math.exp(-dt * 9);
@@ -1029,6 +1042,28 @@ export class Characters {
       let gunRoll = -swap * 0.6 + sinPhase * 0.09 * sprint + (r.kickRoll || 0);
       let gunYaw = sprint * 1.0 + swapBack * 0.35 - lag + lag * 0.15 - twist * 0.85;
       let gunPitch = r.kick * 0.2 * rec.climb - swap * 0.9 + rock * 0.08;
+      if (r.swingT !== undefined && r.swingT < 1) {
+        // u 0..1 through the swing: a wind-up, a fast strike through the target, a slow recovery.
+        const u = r.swingT, side = r.swingSide || 1;
+        const wind = u < 0.32 ? smooth01(u / 0.32) : 1;
+        const hit = u < 0.32 ? 0 : u < 0.5 ? smooth01((u - 0.32) / 0.18) : 1;
+        const back = u < 0.5 ? 0 : smooth01((u - 0.5) / 0.5);
+        if (r.swingKind === 'overhead') {
+          // Up over the shoulder, then down in front: the head of the sledge travels an arc over the operator's head.
+          const lift = wind * (1 - hit), drive = hit * (1 - back);
+          gunPitch += lift * 1.9 - drive * 0.9;
+          gunY += lift * 0.42 - drive * 0.1;
+          gunX += -lift * 0.22 + drive * 0.2;
+          gunYaw += lift * 0.5 - drive * 0.15;
+          gunRoll += lift * 0.25;
+        } else {
+          // Across the body, wide to one side and through to the other.
+          const sweep = wind * (1 - hit) - hit * (1 - back);
+          gunYaw += sweep * 1.25 * side;
+          gunX += hit * (1 - back) * 0.14;
+          gunRoll += sweep * 0.5 * side;
+        }
+      }
       gunX -= throwActive * 0.08 + r.throwHold * 0.12;
       gunY -= throwActive * 0.2 + r.throwHold * 0.24;
       gunRoll += throwActive * 0.5 + r.throwHold * 0.5;

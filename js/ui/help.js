@@ -1,7 +1,7 @@
 // How to play, as four tabs so nothing scrolls at 390 px tall. The Training button replays the guided match
 // (js/game/tutorial.js) whenever the player wants it. Everything here restates rules that live in the sim;
 // the streak section is the one players ask about most.
-import { STREAKS, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
+import { STREAKS, STREAK_ROLE_NAME, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
 import { esc } from './widgets.js';
 import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
@@ -57,15 +57,19 @@ const PANELS = {
       ${card('frag', 'Tactical and lethal', 'Tap to throw where you are aiming. Hold and drag from the button to set direction and distance: an arc shows where it lands. Drag back onto the button to cancel.', true)}
     </div>`,
   streaks: () => `
-    <div class="help-streaks">
-      <div class="help-strip">${Object.values(STREAKS).map(s => `<span class="help-chip">${ico(s.id)}<b>${esc(s.name)}</b><em>${s.cost}</em></span>`).join('')}</div>
+    <div class="help-streaks scroll-y">
+      <div class="help-counters">${Object.values(STREAKS).sort((a, b) => a.cost - b.cost).map(s => `<span class="help-ctr role-${s.role}">${ico(s.id)}<b>${esc(s.name)}<em>${s.cost}</em></b><i>${esc(STREAK_ROLE_NAME[s.role] ?? '')}</i><small>${esc(s.counter ?? '')}</small></span>`).join('')}</div>
       <ol class="help-rules">
         <li>Kills score 100, headshots +25, assists 50. <b>Your score carries through death</b>, and streaks you already hold stay. Costs are high, so streaks still take real play.</li>
         <li>You carry three. Each is granted when your score reaches its cost. Hardline makes them 15% cheaper.</li>
         <li>Once nothing left can be earned your score is <b>capped</b>; calling one then resets it and clears blocks. Calling early keeps your score but <b>blocks</b> that streak until the next reset.</li>
-        <li><b>Airspace</b> holds a few aircraft at once and one Gunship per team. A refused call keeps the streak and its tile says why: Already up or Airspace full.</li>
-        <li><b>Cruise Missile</b>: it flies where your aim stick points for a few seconds and goes off near an enemy or on a building. <b>Drone Swarm</b>: three drones dive on enemies your team can see; break their sight to lose them. <b>Juggernaut</b>: 300 armour over your health until you die; explosives cut through it.</li>
+        <li><b>Airspace</b> holds a few aircraft at once (more in Ground War) and one of each kind per team. A refused call keeps the streak and its tile says why: Already up, Airspace full, or EMP.</li>
+        <li><b>Shoot it down.</b> Every aircraft but the UAVs can be shot out of the sky, and launchers hit them four times as hard. Sentries, Rovers, Domes and crates break under fire too. Bringing one down pays streak score.</li>
+        <li><b>Piloted</b>: the Cruise Missile and Recon Drone fly where your aim stick points; you keep walking with the other thumb. <b>Carpet Line</b>: hold the aim stick to drag the red reticle, let go to drop bombs along the line you drew.</li>
+        <li><b>Airdrop</b>: stand on the crate to open a random streak. Enemies can stand on it longer to steal it. <b>Aegis Dome</b>: grenades and streak blasts cannot hurt your team inside; bullets still can. <b>Plate Drop</b>: 100 armour for everyone near you.</li>
+        <li><b>EMP</b> downs enemy aircraft and machines and locks enemy streaks for 12 s. An <b>Engineer</b>'s machines survive it, damaged, and their kit stays up.</li>
       </ol>
+
     </div>`,
   modes: () => `
     <div class="help-grid scroll-y">

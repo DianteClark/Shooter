@@ -9,6 +9,7 @@
 // Thinking (perception, decisions) runs at 5-12 Hz, staggered across bots. Driving the stick, aim and
 // trigger runs every tick, which is what keeps them looking fluid.
 
+import { streakMoment, thinkAir, thinkStrikes } from './bot-streaks.js';
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam } from './equipment.js';
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
@@ -981,6 +982,8 @@ export class BotBrain {
     this._thinkEquipment(visible);
     this._thinkTurrets(visible);
     this._thinkThreats(visible);
+    thinkAir(this, visible);       // V9: shoot down aircraft, kill Rovers, Domes and crates (js/sim/bot-streaks.js).
+    thinkStrikes(this, visible);   // V9: out from under an announced strike; open Airdrops.
 
     // Burning ground is a problem you can see, whichever side lit it.
     if (this.mode !== 'cover') {
@@ -1109,7 +1112,7 @@ export class BotBrain {
       case 'missile':
       case 'swarm': return sim._teamVisible(p.team).length > 0;
       case 'juggernaut': return !visible || p.hp < 50;      // Suit up between fights, or to save a losing one.
-      default: return true;     // Chopper, gunship: they find their own work.
+      default: return streakMoment(this, kind, visible);     // V9 kinds, chopper, gunship (js/sim/bot-streaks.js).
     }
   }
 
