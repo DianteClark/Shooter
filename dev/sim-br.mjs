@@ -6,6 +6,7 @@ import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
 import { SIM_HZ, MAX_HP } from '../js/shared/constants.js';
 import { BR_KIND } from '../js/sim/br.js';
+import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
 const STEP = 1 / SIM_HZ;
 const args = process.argv.slice(2);
@@ -166,6 +167,27 @@ if (PACING) {
   process.exit(0);
 }
 
+// ---- Squad size from the lobby option, friends kept together ----
+function squadUnits() {
+  console.log('squad sizes');
+  check(brMode('br', 2) === 'brduo' && brMode('brduo', 1) === 'brsolo' && brMode('brsolo', 4) === 'br' && brMode('tdm', 2) === 'tdm' && cleanSquad(7) === 4, 'lobby option picks the mode (quads, duos, solos)');
+  const lobby = (n, sides) => Array.from({ length: n }, (_, i) => ({ id: `h${i}`, name: `H${i}`, team: sides[i] }));
+  const teamsOf = (r, ids) => new Set(r.filter(p => ids.includes(p.id)).map(p => p.team));
+  const size = r => { const m = new Map(); for (const p of r) m.set(p.team, (m.get(p.team) ?? 0) + 1); return [...m.values()]; };
+  for (const [mode, sq] of [['br', 4], ['brduo', 2], ['brsolo', 1]]) {
+    // Two friend groups of three: in quads each keeps its own squad; in duos each splits once; in solos all alone.
+    const r = buildRoster(lobby(6, [0, 0, 0, 1, 1, 1]), { botSkill: 'mixed', mode, mapId: MAP.id, seed: 5 });
+    check(r.length === 32 && size(r).every(n => n === sq) && size(r).length === 32 / sq, `${mode}: 32 players in squads of ${sq}`);
+    const a = teamsOf(r, ['h0', 'h1', 'h2']), b = teamsOf(r, ['h3', 'h4', 'h5']);
+    const together = sq === 4 ? a.size === 1 && b.size === 1 && [...a][0] !== [...b][0] : sq === 2 ? a.size === 2 && b.size === 2 : a.size === 3;
+    check(together, `${mode}: friends kept together where they fit (${a.size}+${b.size} squads)`);
+  }
+  // Uneven sides pack: 2 + 2 + 1 humans in quads share squads without splitting a pair.
+  const r = buildRoster(lobby(5, [0, 0, 1, 1, 1]), { botSkill: 'mixed', mode: 'br', mapId: MAP.id, seed: 5 });
+  check(teamsOf(r, ['h0', 'h1']).size === 1 && teamsOf(r, ['h2', 'h3', 'h4']).size === 1, 'quads: a pair and a trio each stay whole');
+}
+
+squadUnits();
 units();
 const modes = QUICK ? ['br'] : ['br', 'brduo', 'brsolo'];
 const results = [];

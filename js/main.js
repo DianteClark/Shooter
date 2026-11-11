@@ -15,6 +15,7 @@ import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore } from './ui/progress.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
+import { brMode, cleanSquad } from './ui/br-squad.js';
 import { cleanOperator, botOperator } from './ui/operators.js';
 import { Net, joinDiagnosis } from './net/net.js';
 import { LocalNet } from './net/local.js';
@@ -269,6 +270,7 @@ menu.on({
   soloStart: () => launchSolo(app.soloPick.mapId, app.soloPick.mode),
   soloBots: () => botMatchSheet(menu, app.soloPick, { onChange: renderSoloPick }),
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
+  brSquad: ({ n }) => setBrSquad(n),
   moveTeam: ({ id }) => moveTeam(id),
 });
 
@@ -393,12 +395,21 @@ function renderLobby() {
     rematchWait: app.rematchWait,
     ffa: ffaRoom(),
     public: app.public,
+    br: isBr(roomMode()), brSquad: app.lobby.brSquad ?? 4,
   });
+}
+
+// Battle royale squad size for the room (js/ui/br-squad.js): the host's call, shown on the lobby and the vote.
+function setBrSquad(n) {
+  if (!app.isHost || !app.net || app.vote?.winner != null) return;
+  app.lobby.brSquad = cleanSquad(Number(n));
+  broadcastLobby();
+  if (app.vote) { broadcastVote(); renderVote(); } else if (menuShows('lobby')) renderLobby();
 }
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
 }
 
 // --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
@@ -713,6 +724,7 @@ function guestLobbyMessage(msg) {
       inviteSettled();
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
+      app.lobby.brSquad = cleanSquad(msg.brSquad);
       app.countdown = msg.countdown ?? null;
       app.public = !!msg.public;
       if (app.voice) updateVoiceTeam();
@@ -994,6 +1006,7 @@ function voteTick() {
   // A Random winner is rolled once, here on the host, and the result is what everyone is shown and sent.
   app.lastPick = { ...vote.options[vote.winner] };
   vote.resolved = resolvePick(vote.options[vote.winner]);
+  vote.resolved = { ...vote.resolved, mode: brMode(vote.resolved.mode, app.lobby.brSquad) };   // Quads, duos or solos.
   vote.reveal = setTimeout(() => {
     launchHostMatch(vote.resolved.mapId, vote.resolved.mode);
   }, VOTE_REVEAL_MS);
@@ -1011,7 +1024,7 @@ function voteCounts(vote) {
 function broadcastVote() {
   const vote = app.vote;
   if (!vote || !app.net) return;
-  app.net.sendLobby({ t: 'vote', key: vote.key, options: vote.options, counts: voteCounts(vote), left: vote.left, seconds: vote.seconds, winner: vote.winner, resolved: vote.resolved, total: app.lobby.humans.length });
+  app.net.sendLobby({ t: 'vote', key: vote.key, options: vote.options, counts: voteCounts(vote), left: vote.left, seconds: vote.seconds, winner: vote.winner, resolved: vote.resolved, total: app.lobby.humans.length, brSquad: app.lobby.brSquad ?? 4 });
 }
 
 function castVote(i) {
@@ -1033,6 +1046,7 @@ function renderVote() {
   menu.vote({
     key: vote.key, options: vote.options, left: vote.left, seconds: vote.seconds, winner: vote.winner, resolved: vote.resolved ?? null, mine: vote.mine,
     counts: app.isHost ? voteCounts(vote) : vote.counts, total: app.isHost ? app.lobby.humans.length : vote.total,
+    brSquad: app.isHost ? app.lobby.brSquad ?? 4 : vote.brSquad ?? 4, isHost: app.isHost,
   });
 }
 
