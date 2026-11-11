@@ -115,6 +115,11 @@ const SCENES = {
   }),
   'loadouts': menuScene('Loadouts', ({ menu }) => menu.loadouts({ onBack: noop, onChange: noop, onGunsmith: noop, onOperators: noop, onRename: noop }), { gl: true }),
   'gunsmith': menuScene('Gunsmith', ({ menu }) => menu.gunsmith({ loadoutIndex: 0, weapon: 'ar', onBack: noop, onChange: noop }), { gl: true }),
+  // V12: the pick view (classes across the top, guns below); &cat=Sniper opens on a class.
+  'gunsmith-pick': menuScene('Gunsmith: classes and guns', ({ menu }) => {
+    menu.gunsmith({ loadoutIndex: 0, onBack: noop, onChange: noop });
+    if (q.get('cat')) menu.screen.selectCategory(q.get('cat'));
+  }, { gl: true }),
   // V11: &gun=dmr&slot=grip&try=k_runaway&fit=barrel:s_pinbarrel,mag:extmag opens a gun with parts fitted and one being tried.
   'gunsmith-try': menuScene('Gunsmith: trying an attachment', async ({ menu }) => {
     const gun = q.get('gun') ?? 'dmr';
@@ -230,6 +235,7 @@ async function menuFrame(scene, ui) {
   if (!scene.gl) document.getElementById('game').remove();
   const { Menu } = await import('./js/ui/menu.js');
   const menu = new Menu(ui);
+  window.__menu = menu;   // Tests drive the screen through it (dev/ui-overflow-test.py).
   menu.show?.();
   const cache = {};
   for (const o of ['win', 'loss', 'draw']) if (scene.label.toLowerCase().includes(o)) cache[o] = await fakeResults(o, scene.label.includes('long'), scene.label.includes('Ground War'));
