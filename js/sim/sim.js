@@ -3,7 +3,7 @@
 
 import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS, STREAK_IDS, STREAKS, TACTICALS } from '../shared/catalog.js';
 import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, rayCircle } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, rayCircle, wallsInBox, wallScratch } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
@@ -126,6 +126,14 @@ const IS_SLOW = Array.from({ length: PLAYER_STRIDE }, (_, k) => SLOW_FIELDS.incl
 const SLOW_REPEAT = 6;           // Ticks a changed slow block keeps going out, so one dropped snapshot cannot lose it.
 const SLOW_ROTATE = 15;          // Every player's slow block is refreshed once per this many snapshots anyway.
 const FAR_SEND = 40;             // Metres from every human past which a quiet player goes out at half rate.
+// Per-guest interest (encodeSnapshotFor): a player more than INTEREST_FAR metres from the guest (on either axis) gets
+// a position-only record every INTEREST_EVERY-th snapshot only (5 Hz); far shot events (eventsFor) are not sent. Maps
+// up to INTEREST_AREA square metres (every map in the rotation) leave it off: a guest there can see most of the map.
+const INTEREST_AREA = 40000;
+const POS_FIELDS = [0, 1, 2, 5, 6];      // A far player's keyframe (code 2): position, aim, hp, flags.
+const INTEREST_FAR = 60;
+const INTEREST_EVERY = 3;
+const EVENT_FAR = 150;
 const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex',
   'Flint', 'Moth', 'Raze', 'Talon', 'Grit', 'Lark', 'Husk', 'Vane', 'Cobb', 'Wren', 'Briar', 'Slate', 'Knell', 'Jinx', 'Sorrel', 'Thane'];   // 32: a full Ground War match never repeats one.
 // Every primary exactly once. A match fields twelve consecutive entries (team 1 starts six in) from an offset picked
@@ -311,6 +319,8 @@ export class Sim {
     this._onEqDamage = this._onEqDamage.bind(this);
     this.pathBudget = 0;
     this.nav = null;     // Built on first step; guests only decode snapshots and never need it.
+    // Per-guest snapshots (encodeSnapshotFor, eventsFor): on for maps past INTEREST_AREA only; see setInterest.
+    this.interest = this.map.width * this.map.height > INTEREST_AREA;
     this._encodes = 0;
     this._metaUntil = 2;      // Tick up to which every snapshot carries the camo and loadout block.
     this._scratch = [];
@@ -2005,7 +2015,10 @@ export class Sim {
   }
 
   _onRoof(x, z) {
-    for (const w of this.map.walls) {
+    const walls = this.map.walls, near = this._roofScratch = wallScratch(this.map, this._roofScratch);
+    const n = wallsInBox(this.map, x, z, x, z, near);
+    for (let k = 0; k < n; k++) {
+      const w = walls[near[k]];
       if (w.blocksVision && x >= w.x && x <= w.x + w.w && z >= w.z && z <= w.z + w.d) return true;
     }
     return false;
@@ -2474,7 +2487,7 @@ export class Sim {
         Math.round(ps.heat * 20), Math.round(Math.max(this._firingReveal(ps), p.markT) * 10), p.head,
       );
     }
-    return this._packPlayers(out);
+    return (this._lastBroadcast = this._packPlayers(out));
   }
 
   // The free-for-all header: same slots, with per-player lists where team modes have a pair (see encodeSnapshot).
@@ -2671,15 +2684,19 @@ export class Sim {
   }
 
   // Snapshot interest management. Rewrites the flat PLAYER_STRIDE records after the header as, per player, a code
-  // then fields: 0 = nothing (the guest keeps what it had), 1 = the fast fields, 3 = fast and slow fields. A player
-  // far from every human, not firing and not just spawned or killed goes out at half rate (7.5 Hz); the slow fields go
-  // out only when they change (for SLOW_REPEAT ticks) and in a rotation. With 32 players this about halves a snapshot.
+  // then fields: 0 = nothing (the guest keeps what it had), 1 = the fast fields, 3 = fast and slow fields, 2 = position
+  // only (encodeSnapshotFor, big maps). A player far from every human, not firing and not just spawned or killed goes
+  // out at half rate (7.5 Hz); the slow fields go out only when they change (for SLOW_REPEAT ticks) and in a rotation.
+  // With 32 players this about halves a snapshot.
   _packPlayers(full) {
     const n = this.players.length, out = full.slice(0, SNAP_HEAD);
     const tick = this.tick, everything = tick <= this._metaUntil, halfRate = (tick % (SNAPSHOT_EVERY * 2)) >= SNAPSHOT_EVERY;
     const humans = this._humanScratch || (this._humanScratch = []);
     humans.length = 0;
     for (let i = 0; i < n; i++) { const q = this.players[i]; if (!q.isBot && !q.dummy && !q.away) humans.push(q); }
+    // What each player got, kept with the records for encodeSnapshotFor.
+    const codes = this._snapCodes && this._snapCodes.length === n ? this._snapCodes : (this._snapCodes = new Uint8Array(n));
+    this._snapFull = full; this._snapTick = tick;
     for (let i = 0; i < n; i++) {
       const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;
       const sent = p.snapSlow || (p.snapSlow = new Float64Array(PLAYER_STRIDE).fill(NaN));
@@ -2697,13 +2714,55 @@ export class Sim {
           if (Math.abs(q.x - p.ps.x) < FAR_SEND && Math.abs(q.z - p.ps.z) < FAR_SEND) { skip = false; break; }
         }
       }
-      if (skip) { out.push(0); continue; }
+      if (skip) { out.push(0); codes[i] = 0; continue; }
       p.snapAlive = p.alive;
       out.push(slow ? 3 : 1);
+      codes[i] = slow ? 3 : 1;
       for (let k = 0; k < PLAYER_STRIDE; k++) if (slow || !IS_SLOW[k]) out.push(full[o + k]);
     }
     return out;
   }
+
+  // Interest management for big maps: this tick's snapshot as one guest needs it. Same format as encodeSnapshot, so
+  // guests decode it as ever. Teammates, anyone near the guest, anyone firing or marked, and every enemy while the
+  // guest's team runs a UAV go out as in the broadcast snapshot. Anyone else more than INTEREST_FAR metres away gets a
+  // position-only record (code 2: position, aim, hp, flags) every INTEREST_EVERY-th snapshot and nothing in between.
+  // Slow blocks always go out (their repeat and rotation assume every snapshot carries them). With interest off, or for
+  // an id that is not a player, it is the broadcast snapshot.
+  encodeSnapshotFor(guestId) {
+    if (this._snapTick !== this.tick || !this._snapFull) this.encodeSnapshot();
+    const g = this.byId.get(guestId);
+    if (!this.interest || !g) return this._lastBroadcast;
+    const full = this._snapFull, codes = this._snapCodes, n = this.players.length;
+    const out = full.slice(0, SNAP_HEAD);
+    const gx = g.ps.x, gz = g.ps.z, uav = this.uav[g.team] > 0, phase = this.tick >> 1;
+    for (let i = 0; i < n; i++) {
+      const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;
+      let code = codes[i];
+      if (code === 1 && p !== g && !(uav && p.team !== g.team) && !(full[o + 22] > 0)
+        && (Math.abs(p.ps.x - gx) > INTEREST_FAR || Math.abs(p.ps.z - gz) > INTEREST_FAR)) code = (phase + i) % INTEREST_EVERY ? 0 : 2;
+      out.push(code);
+      if (code === 2) for (let k = 0; k < POS_FIELDS.length; k++) out.push(full[o + POS_FIELDS[k]]);
+      else if (code) for (let k = 0; k < PLAYER_STRIDE; k++) if (code === 3 || !IS_SLOW[k]) out.push(full[o + k]);
+    }
+    return out;
+  }
+
+  // Interest management for big maps: the events one guest needs. Shots fired more than EVENT_FAR metres from the guest
+  // by anyone not on their team are left out (nothing of them is on that guest's screen); every other event goes.
+  eventsFor(guestId, events) {
+    const g = this.byId.get(guestId);
+    if (!this.interest || !g) return events;
+    const out = [];
+    for (const e of events) {
+      if (e.t === 'shot' && Math.hypot(e.ox - g.ps.x, e.oz - g.ps.z) > EVENT_FAR && this.byId.get(e.by)?.team !== g.team) continue;
+      out.push(e);
+    }
+    return out;
+  }
+
+  // Interest management on or off, whatever the map's size says.
+  setInterest(on) { this.interest = !!on; }
 
   // The inverse, into a per-sim cache of each player's last known record. A player not yet heard from reads as dead,
   // so a guest that joins mid-match never draws someone at the map origin.
@@ -2715,7 +2774,11 @@ export class Sim {
     let o = SNAP_HEAD;
     for (let i = 0; i < n; i++) {
       const code = d[o++], c = cache[i];
-      if (code) {
+      if (code === 2) {
+        for (let k = 0; k < POS_FIELDS.length; k++) c[POS_FIELDS[k]] = d[o++];
+        c[3] = 0; c[4] = 0;               // No velocity sent: interpolation alone moves a far player.
+        known[i] = 1;
+      } else if (code) {
         for (let k = 0; k < PLAYER_STRIDE; k++) if (code === 3 || !IS_SLOW[k]) c[k] = d[o++];
         known[i] = 1;
       }

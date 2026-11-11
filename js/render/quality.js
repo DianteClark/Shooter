@@ -6,13 +6,14 @@
 // fogTexels: vision mask texels per metre. fogPasses: soft-edge passes (1..6). fogEvery: mask refresh every N frames.
 // fx: particle emission multiplier. weather: fraction of rain/snow/dust instances. ambient: birds and dust devils.
 // blobs: soldier contact shadows. shadows: the baked sun-shadow decal layer. props: fraction of breakable props kept.
-// corpses: dismantled bodies kept at once.
+// corpses: dismantled bodies kept at once. cut: metres from the camera target past which world tiles are not drawn even
+// when in view (only maps big enough to be tiled have tiles, see world.js; play never shows that far).
 export const QUALITY_STEPS = [
-  { id: 'ultra',  label: 'Ultra',  dpr: 3,    fogTexels: 8, fogPasses: 6, fogEvery: 1, fx: 1,    weather: 1,    ambient: true,  blobs: true,  shadows: true,  props: 1,    corpses: 12 },
-  { id: 'high',   label: 'High',   dpr: 2,    fogTexels: 8, fogPasses: 6, fogEvery: 1, fx: 1,    weather: 1,    ambient: true,  blobs: true,  shadows: true,  props: 1,    corpses: 12 },
-  { id: 'medium', label: 'Medium', dpr: 1.6,  fogTexels: 6, fogPasses: 4, fogEvery: 1, fx: 0.75, weather: 0.7,  ambient: true,  blobs: true,  shadows: true,  props: 0.75, corpses: 8 },
-  { id: 'low',    label: 'Low',    dpr: 1.3,  fogTexels: 5, fogPasses: 2, fogEvery: 2, fx: 0.5,  weather: 0.45, ambient: false, blobs: true,  shadows: true,  props: 0.5,  corpses: 5 },
-  { id: 'potato', label: 'Potato', dpr: 1,    fogTexels: 4, fogPasses: 2, fogEvery: 2, fx: 0.3,  weather: 0.2,  ambient: false, blobs: false, shadows: false, props: 0,    corpses: 3 },
+  { id: 'ultra',  label: 'Ultra',  dpr: 3,    fogTexels: 8, fogPasses: 6, fogEvery: 1, fx: 1,    weather: 1,    ambient: true,  blobs: true,  shadows: true,  props: 1,    corpses: 12, cut: Infinity },
+  { id: 'high',   label: 'High',   dpr: 2,    fogTexels: 8, fogPasses: 6, fogEvery: 1, fx: 1,    weather: 1,    ambient: true,  blobs: true,  shadows: true,  props: 1,    corpses: 12, cut: Infinity },
+  { id: 'medium', label: 'Medium', dpr: 1.6,  fogTexels: 6, fogPasses: 4, fogEvery: 1, fx: 0.75, weather: 0.7,  ambient: true,  blobs: true,  shadows: true,  props: 0.75, corpses: 8,  cut: Infinity },
+  { id: 'low',    label: 'Low',    dpr: 1.3,  fogTexels: 5, fogPasses: 2, fogEvery: 2, fx: 0.5,  weather: 0.45, ambient: false, blobs: true,  shadows: true,  props: 0.5,  corpses: 5,  cut: 60 },
+  { id: 'potato', label: 'Potato', dpr: 1,    fogTexels: 4, fogPasses: 2, fogEvery: 2, fx: 0.3,  weather: 0.2,  ambient: false, blobs: false, shadows: false, props: 0,    corpses: 3,  cut: 60 },
 ];
 export const stepIndex = id => QUALITY_STEPS.findIndex(s => s.id === id);
 // Auto never climbs above High on its own: Ultra is native resolution, which costs heat for little gain at arm's length.

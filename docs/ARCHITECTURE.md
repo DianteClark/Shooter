@@ -84,6 +84,34 @@ A fast flick therefore hipfires before ADS ramps up. No ADS button: thumbs are b
 - Streaks: UAV at 3 kills (reveal enemies 20 s), Strike at 5 (line of explosions at the densest enemy cluster). Player taps to trigger (`input.streak`).
 - Scoring: first to `SCORE_LIMIT`, or best at `TIME_LIMIT`. 3 s warmup. Respawn farthest from enemies.
 
+### Engine performance (docs/BR-PERF.md, "After")
+- `js/shared/geometry.js` keeps `map.walls` as the source of truth and indexes it with a wall grid (8 m cells, built
+  on first use per walls array and cached; maps are static). `raycastMap`, `hasLineOfSight` and `resolveCircle` go
+  through it and return exactly what the old loops over every wall returned (`dev/perf-geometry.mjs` proves it). For
+  other wall loops: `wallsInBox(map, x0, z0, x1, z1, out)` and `wallsOnRay(map, ox, oz, dx, dz, maxT, out)` fill an
+  Int32Array (`wallScratch(map, prev)`) with the indices, ascending, of every wall that may touch the box or segment,
+  and return the count; loop over those in that order with the old body and nothing changes. `player.js` walkRay,
+  `equipment.js` airHit/solidAt, `sim.js` _onRoof and `render/fog.js` castRay (lists of 64+ walls) do.
+- `js/sim/nav.js` `NavGrid`: blocked cells and tactical points are built per wall, not per cell x wall. `coverIndex` /
+  `holdIndex` (`PointIndex.near(x, z, r)` fills `.out` with list indices, ascending) let bots scan only nearby cover and
+  holds. `big` is true past 40,000 cells (none of today's maps): `findPath` then routes over a sector graph (16 m
+  squares split into connected regions) and runs the fine A* only in the sectors along that route, capped at 4,000
+  cells; a capped search returns the way to the closest cell it reached and sets `partial`, and the bot plans the next
+  leg when it gets there. On big maps a bot with no enemy within 75 m and no human within 100 m thinks at a third of
+  its rate (`bots.js` _quiet).
+- `js/sim/sim.js` interest management, on when the map is over 40,000 m^2 (`sim.interest`, `setInterest(bool)`):
+  `encodeSnapshotFor(guestId)` is the snapshot for one guest (players more than 60 m from them get a position-only
+  record, code 2, every third snapshot and nothing in between; teammates near them, anyone firing, every enemy under
+  the guest's UAV, and slow blocks go out as ever) and `eventsFor(guestId, events)` drops shots fired more than 150 m
+  from the guest by the other side. `decodeSnapshot` reads code 2. The host's match loop sends per guest when
+  `sim.interest` is on: `net.sendSnapshot(d, target)`, `net.sendEvents(e, target)` and `net.guests` (linked guests).
+- `js/render/world.js` packs the world mesh (position Float32, `aCol` normalised Uint16 x4 over COL_RANGE, `aNP`
+  normalised Int8 x4: normal and wet amount): 24 bytes a vertex instead of 40. Maps over 5,000 m^2 (large, huge,
+  bigger) cut every static layer (world, decals, signs, glow) into 32 m tiles; `world.chunks` lists them and
+  `world.setView(camera, x, z, cut)` (called by the renderer each frame) hides tiles whose box is outside the frustum
+  or further than `cut` from the camera target (quality step `cut`: 60 m on Low and Potato, none above; replays get
+  none). Small and medium maps keep one mesh per layer. `world.decals` is a Group.
+
 `js/audio/audio.js`: `class AudioEngine { unlock(); onEvents(events,view); setMicActive(bool); update(view,dt); hit markers, medals etc. }`. Synthesized via Web Audio (layered transient + body + tail per gun, no files). Mix must survive iOS mic-on volume drop (compressor; louder when mic active). Distance attenuation from `view.localId`.
 
 ### Art
@@ -105,7 +133,7 @@ Match config: `{ canvas, mapId, seed, scoreLimit, timeLimit, roster, localId, ho
 `js/ui/controls.js`: `class Controls { constructor(root); read(); setEnabled(b); showAimHint(...)}` twin-stick, floating left stick; left stick past 92% sprints.
 `js/ui/hud.js`: `class HUD { constructor(root); update(view,dt); onEvents(events); setSpectate(...); showEnd(results,onDone); onSetLoadout(cb) }` scores, timer, ammo, kill feed, medals, hitmarkers, damage direction, minimap, streak button, respawn screen with weapon picker, voice mic button.
 `js/ui/progress.js`: localStorage (try/catch) weapon kills, camo unlocks.
-`js/net/net.js`: `class Net { ...; static host(code,name); static join(code,name); peers; localId; sendLobby(o); onLobby(cb); sendSnapshot(d); onSnapshot(cb); sendEvents(e); onEvents(cb); sendState(d); onState(cb(peerId,d)); sendShot(s); onShot(cb(peerId,s)); onPeerJoin(cb); onPeerLeave(cb); ping(peerId); leave(); }`
+`js/net/net.js`: `class Net { ...; static host(code,name); static join(code,name); peers; guests; localId; sendLobby(o); onLobby(cb); sendSnapshot(d, target?); onSnapshot(cb); sendEvents(e, target?); onEvents(cb); sendState(d); onState(cb(peerId,d)); sendShot(s); onShot(cb(peerId,s)); onPeerJoin(cb); onPeerLeave(cb); ping(peerId); leave(); }`
 Also `js/net/local.js` : same interface over BroadcastChannel (query `?net=local`) so two tabs can test without WebRTC. And `null` net for solo.
 `js/net/voice.js`: team voice via Trystero audio streams; opt-in toggle.
 

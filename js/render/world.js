@@ -13,6 +13,13 @@ import * as coast from './themes/coast.js';
 import * as industrial from './themes/industrial.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
+const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
+// Static geometry is cut into CHUNK x CHUNK metre tiles (by triangle centre) so the camera only draws the tiles in
+// view, on maps of more than CHUNK_ABOVE square metres (large and huge maps, and anything bigger). Small and medium
+// maps stay one mesh per layer: the camera sees most of them, so tiles would add draw calls and save few triangles.
+const CHUNK = 32;
+const CHUNK_ABOVE = 5000;
+const VIEW_M = new THREE.Matrix4(), VIEW_F = new THREE.Frustum();
 const WATER_Y = -0.62;       // Basin surface, below the quay.
 
 // Palette of the map being built. Generation is synchronous and one map at a time.
@@ -43,9 +50,11 @@ function makeNoise(seed) {
   };
 }
 
+// The world's vertices are packed (see packWorld): aCol is the baked colour over COL_RANGE in normalised Uint16, aNP the
+// face normal in xyz and the wet amount (aPart) in w, normalised Int8.
 const VERT = /* glsl */`
-attribute vec3 aCol;
-attribute float aPart;
+attribute vec4 aCol;
+attribute vec4 aNP;
 uniform vec4 uFogXf;
 varying vec3 vCol;
 varying vec3 vWorld;
@@ -53,13 +62,13 @@ varying vec3 vN;
 varying vec2 vFogUv;
 varying float vWet;
 void main() {
-  vCol = aCol;
-  vWet = aPart;
-  vN = normal;
+  vCol = aCol.rgb * ${COL_RANGE.toFixed(1)};
+  vWet = aNP.w;
+  vN = aNP.xyz;
   vec4 w = modelMatrix * vec4(position, 1.0);
   vWorld = w.xyz;
   // Vertical faces sample the mask just in front of themselves so a lit wall face matches lit ground.
-  vec2 p = w.xz + normal.xz * 0.45;
+  vec2 p = w.xz + aNP.xz * 0.45;
   vFogUv = p * uFogXf.xy + uFogXf.zw;
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
@@ -3198,10 +3207,7 @@ function buildDecals(map, theme) {
     band(w.x, w.z, w.x, w.z + w.d, -e, 0);
     band(w.x + w.w, w.z + w.d, w.x + w.w, w.z, e, 0);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('aStr', new THREE.Float32BufferAttribute(str, 1));
-  return g;
+  return [{ name: 'position', data: pos, size: 3 }, { name: 'aStr', data: str, size: 1 }];
 }
 
 export function buildWorld(map, teams, fogUniforms) {
@@ -3234,9 +3240,25 @@ export function buildWorld(map, teams, fogUniforms) {
   const material = createWorldMaterial(fogUniforms, theme);
   material.uniforms.uTime = timeU;
   material.uniforms.uFlash = flashU;
-  const world = new THREE.Mesh(b.build(), material);
-  world.frustumCulled = false;
-  group.add(world);
+  const tile = W * H > CHUNK_ABOVE ? CHUNK : Infinity;
+  const chunks = [];           // Every tiled mesh, for the renderer's distance cut (see setView).
+  // One mesh per tile per layer. A layer that ends up in one piece (a small map) is exactly the old merged mesh.
+  const addLayer = (attrs, mat, order, parent = group) => {
+    const parts = splitTiles(attrs, tile);
+    for (const geo of parts) {
+      const m = new THREE.Mesh(geo, mat);
+      m.renderOrder = order;
+      m.matrixAutoUpdate = false;
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+      // Tiles are culled by setView against their boxes, which fit a flat tile far tighter than three's spheres.
+      m.frustumCulled = false;
+      if (parts.length > 1) chunks.push(m);
+      parent.add(m);
+    }
+    return parts.length;
+  };
+  addLayer(packWorld(b), material, 0);
 
   const decalMat = new THREE.ShaderMaterial({
     vertexShader: `attribute float aStr; varying float vS; void main(){ vS = aStr; gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0); }`,
@@ -3250,13 +3272,14 @@ export function buildWorld(map, teams, fogUniforms) {
     blendDst: THREE.ZeroFactor,
     side: THREE.DoubleSide,
   });
-  const decals = new THREE.Mesh(buildDecals(map, theme), decalMat);
-  decals.frustumCulled = false;
-  decals.renderOrder = -1;
+  // The decal layer is a group, so the quality step can switch every tile of it at once.
+  const decals = new THREE.Group();
+  const decalAttrs = buildDecals(map, theme);
+  addLayer(decalAttrs, decalMat, -1, decals);
   group.add(decals);
 
-  let tris = b.pos.length / 9 + decals.geometry.getAttribute('position').count / 3;
-  const addFogMesh = (geo, vs, fs, order, transparent) => {
+  let tris = b.pos.length / 9 + decalAttrs[0].data.length / 9;
+  const addFogMesh = (attrs, vs, fs, order, transparent) => {
     const mat = new THREE.ShaderMaterial({
       vertexShader: vs, fragmentShader: fs,
       uniforms: { uFogTex: fogUniforms.tex, uFogXf: fogUniforms.xf, uFogOn: fogUniforms.on, uTime: timeU },
@@ -3264,23 +3287,102 @@ export function buildWorld(map, teams, fogUniforms) {
       ...(transparent ? { blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor } : {}),
       side: transparent ? THREE.DoubleSide : THREE.FrontSide,
     });
-    const m = new THREE.Mesh(geo, mat);
-    m.frustumCulled = false;
-    m.renderOrder = order;
-    group.add(m);
-    tris += geo.getAttribute('position').count / 3;
+    addLayer(attrs, mat, order);
+    tris += attrs[0].data.length / 9;
   };
   const water = waterMesh(ctx, fogUniforms);
   if (water) { group.add(water); tris += 2 * map.walls.filter(w => w.kind === 'water').length; }
-  if (sb.pos.length) addFogMesh(sb.build(), SIGN_VERT, SIGN_FRAG, 0, false);
-  if (glow.pos.length) addFogMesh(glow.build(), GLOW_VERT, GLOW_FRAG, 5, true);
+  if (sb.pos.length) addFogMesh(floatAttrs(sb), SIGN_VERT, SIGN_FRAG, 0, false);
+  if (glow.pos.length) addFogMesh([{ name: 'position', data: glow.pos, size: 3 }, { name: 'aCol', data: glow.col, size: 3 }], GLOW_VERT, GLOW_FRAG, 5, true);
+  group.updateMatrixWorld(true);
 
   return {
-    group, material, tris, lamps, decals,
+    group, material, tris, lamps, decals, chunks,
     drawCalls: group.children.length,
     // Advances the world's shader clock (signs, water, wet sheen). Lightning writes uFlash through Weather.
     update(dt) { timeU.value = (timeU.value + dt) % 3600; },
+    // Culls the tiles: hidden when their box is outside the camera's frustum, or when their footprint is more than
+    // `cut` metres from (x, z) (Infinity: no cut). The camera only shows about 30 x 25 m around its target in play,
+    // so a cut of 60 m only ever drops what a low replay angle or the far horizon would have drawn.
+    setView(camera, x, z, cut) {
+      if (!chunks.length) return;
+      VIEW_M.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      VIEW_F.setFromProjectionMatrix(VIEW_M);
+      const c2 = cut * cut;
+      for (let i = 0; i < chunks.length; i++) {
+        const bb = chunks[i].geometry.boundingBox;
+        let on = VIEW_F.intersectsBox(bb);
+        if (on && cut !== Infinity) {
+          const dx = Math.max(bb.min.x - x, 0, x - bb.max.x), dz = Math.max(bb.min.z - z, 0, z - bb.max.z);
+          on = dx * dx + dz * dz < c2;
+        }
+        chunks[i].visible = on;
+      }
+    },
   };
+}
+
+// The world builder's attributes, packed: position stays Float32 (12 bytes a vertex), colour goes to normalised
+// Uint16 over COL_RANGE (8 with padding), normal and wet amount to one normalised Int8 vec4 (4): 24 bytes a vertex
+// instead of 40. Strides stay multiples of four, which Metal wants.
+function packWorld(b) {
+  const n = b.pos.length / 3;
+  const col = new Uint16Array(n * 4), np = new Int8Array(n * 4);
+  for (let v = 0; v < n; v++) {
+    for (let c = 0; c < 3; c++) {
+      col[v * 4 + c] = Math.round(Math.max(0, Math.min(1, b.col[v * 3 + c] / COL_RANGE)) * 65535);
+      np[v * 4 + c] = Math.round(Math.max(-1, Math.min(1, b.nor[v * 3 + c])) * 127);
+    }
+    np[v * 4 + 3] = Math.round(Math.max(-1, Math.min(1, b.par[v])) * 127);
+  }
+  return [
+    { name: 'position', data: b.pos, size: 3 },
+    { name: 'aCol', data: col, size: 4, normalized: true },
+    { name: 'aNP', data: np, size: 4, normalized: true },
+  ];
+}
+
+// A MeshBuilder's attributes as they always were (Float32), for the layers whose shaders read them that way.
+function floatAttrs(b) {
+  return [
+    { name: 'position', data: b.pos, size: 3 }, { name: 'normal', data: b.nor, size: 3 },
+    { name: 'aCol', data: b.col, size: 3 }, { name: 'aPart', data: b.par, size: 1 },
+  ];
+}
+
+// Splits non-indexed triangles ([{name, data, size, normalized}], the first being position) into one geometry per
+// tile x tile square, by triangle centre. tile = Infinity gives one geometry with every triangle, in order.
+function splitTiles(attrs, tile) {
+  const pos = attrs[0].data, triCount = pos.length / 9;
+  const slot = new Int32Array(triCount);
+  const slots = new Map(), counts = [];
+  for (let t = 0; t < triCount; t++) {
+    let k = 0;
+    if (tile !== Infinity) {
+      const cx = (pos[t * 9] + pos[t * 9 + 3] + pos[t * 9 + 6]) / 3, cz = (pos[t * 9 + 2] + pos[t * 9 + 5] + pos[t * 9 + 8]) / 3;
+      k = (Math.floor(cz / tile) + 512) * 1024 + Math.floor(cx / tile) + 512;
+    }
+    let sl = slots.get(k);
+    if (sl === undefined) { sl = counts.length; slots.set(k, sl); counts.push(0); }
+    slot[t] = sl;
+    counts[sl]++;
+  }
+  const geos = counts.map(() => new THREE.BufferGeometry());
+  const fill = new Int32Array(counts.length);
+  for (const a of attrs) {
+    const per = 3 * a.size, src = a.data;
+    const Ctor = src instanceof Int8Array ? Int8Array : src instanceof Uint16Array ? Uint16Array : Float32Array;
+    const dst = counts.map(c => new Ctor(c * per));
+    fill.fill(0);
+    for (let t = 0; t < triCount; t++) {
+      const sl = slot[t], d = dst[sl];
+      let o = fill[sl];
+      for (let q = t * per, e = q + per; q < e; q++) d[o++] = src[q];
+      fill[sl] = o;
+    }
+    dst.forEach((d, i) => geos[i].setAttribute(a.name, new THREE.BufferAttribute(d, a.size, !!a.normalized)));
+  }
+  return geos;
 }
 
 // ---- Map vote thumbnail ----------------------------------------------------------------------------------

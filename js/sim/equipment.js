@@ -49,7 +49,7 @@
 // else, so snapshots, host migration and the renderer's grenade dots all cover them without knowing they exist.
 
 import { MAX_HP, SIM_HZ } from '../shared/constants.js';
-import { hasLineOfSight, raycastMap, resolveCircle } from '../shared/geometry.js';
+import { hasLineOfSight, raycastMap, resolveCircle, wallsInBox, wallsOnRay, wallScratch } from '../shared/geometry.js';
 
 export const THROW_RANGE = 13;           // Base maximum, and where a quick tap lands.
 export const STRONGARM_RANGE = 19;       // Maximum with the Strong Arm perk.
@@ -272,11 +272,13 @@ function sweep(map, p, spec, dt, onBounce) {
 // crosses its face, or any ROOFED solid. `age0` is the projectile's age at the ray's start. A throw already over a
 // wall's footprint is above it and carries on; if it comes down there, landing puts it beside the wall. Fills AIR_HIT.
 const AIR_HIT = { t: 0, nx: 0, nz: 0 };
+let AIR_NEAR = null, SOLID_NEAR = null;
 function airHit(map, p, spec, dx, dz, maxT, speed, age0) {
   let best = maxT, found = false, bx = 0, bz = 0;
-  const walls = map.walls;
-  for (let i = 0; i < walls.length; i++) {
-    const w = walls[i];
+  const walls = map.walls, near = AIR_NEAR = wallScratch(map, AIR_NEAR);
+  const count = wallsOnRay(map, p.x, p.z, dx, dz, maxT, near);    // The walls along the ray, in wall order.
+  for (let q = 0; q < count; q++) {
+    const w = walls[near[q]];
     if (!w.blocksBullet) continue;
     // Slab entry from outside; an origin on or inside the rectangle means the throw is over it.
     let tmin = -Infinity, tmax = Infinity, nx = 0, nz = 0;
@@ -428,9 +430,10 @@ export function drillExit(map, p) {
 }
 
 function solidAt(map, x, z) {
-  const walls = map.walls;
-  for (let i = 0; i < walls.length; i++) {
-    const w = walls[i];
+  const walls = map.walls, near = SOLID_NEAR = wallScratch(map, SOLID_NEAR);
+  const count = wallsInBox(map, x, z, x, z, near);
+  for (let q = 0; q < count; q++) {
+    const w = walls[near[q]];
     if (w.blocksMove && x > w.x && x < w.x + w.w && z > w.z && z < w.z + w.d) return w;
   }
   return null;

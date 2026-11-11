@@ -3,12 +3,27 @@
 // Uses its own allocation-free slab raycast; same rules as raycastMap(..,'blocksVision').
 import * as THREE from 'three';
 import { uploadUsed } from './dynbuf.js';
+import { wallsOnRay } from '../shared/geometry.js';
 
 // Distance to the nearest flagged wall along a normalised ray, or maxDist. hitWall (out) gets its index.
+// A long wall list (a big map) is searched through the wall grid (js/shared/geometry.js): only the walls along the ray,
+// in list order, which finds exactly what the full pass finds.
+const GRID_FROM = 64;
+const GRID_VIEWS = new WeakMap();
+let RAY_NEAR = new Int32Array(64);
 export function castRay(walls, ox, oz, dx, dz, maxDist, hitOut = null) {
   let best = maxDist;
   let bestI = -1;
-  for (let i = 0; i < walls.length; i++) {
+  let n = walls.length, near = null;
+  if (n >= GRID_FROM && maxDist < Infinity) {
+    let view = GRID_VIEWS.get(walls);
+    if (!view) GRID_VIEWS.set(walls, view = { walls, width: 0, height: 0 });
+    if (RAY_NEAR.length < n) RAY_NEAR = new Int32Array(n);
+    near = RAY_NEAR;
+    n = wallsOnRay(view, ox, oz, dx, dz, maxDist, near);
+  }
+  for (let m = 0; m < n; m++) {
+    const i = near ? near[m] : m;
     const r = walls[i];
     let t0 = 0, t1 = best;
     if (Math.abs(dx) < 1e-9) {
@@ -285,9 +300,9 @@ export class FogMask {
         angles[n++] = a;
       }
     }
-    // Spare slots sort to the end, so one fixed-size in-place sort serves any ray count.
-    angles.fill(Infinity, n);
-    angles.sort();
+    // Only the rays cast this sweep are sorted: the array is sized for every vision wall on the map, which on a big
+    // map with a windowed mask is many times what the window holds.
+    angles.subarray(0, n).sort();
     touched.fill(0);
     for (let i = 0; i < n; i++) {
       const dx = Math.cos(angles[i]), dz = Math.sin(angles[i]);

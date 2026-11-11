@@ -8,7 +8,9 @@
 //                                         build is left out), top 25
 // Times are CPU time (process.cpuUsage), so a busy machine inflates them less than wall clock would; p95 and max are
 // wall clock per tick.
-// The renderer half is dev/br-render.html, driven by dev/br-render.mjs.
+// The renderer half was dev/br-render.html (superseded by dev/perf-render.mjs). Since the engine performance pass the
+// engine's raycastMap and resolveCircle are themselves grid-backed, so "brute" below is no longer brute force: see
+// dev/perf-geometry.mjs for the before/after comparison, and dev/perf-sim.mjs for tick costs.
 import { brMap } from './br-map.mjs';
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { NavGrid } from '../js/sim/nav.js';

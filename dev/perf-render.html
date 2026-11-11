@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Render cost</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js", "trystero": "../vendor/trystero.min.js" } }</script>
+<script type="module">
+// Engine performance (docs/BR-PERF.md, "After"), dev only. Renders one map with the real GameRenderer on a pinned
+// quality step and reports draw calls, triangles and frame time. Driven by dev/perf-render.mjs.
+//   ?map=pier         a registered map, or giant (dev/br-map.mjs, &density=1)
+//   &q=low            quality step (quality.js)
+// window.measure(frames) returns { ms (median frame), cpuMs (mean renderer.update), calls, triangles, worldTris, ... }.
+import * as THREE from 'three';
+import { GameRenderer } from '../js/render/renderer.js';
+import { brMap } from './br-map.mjs';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 852), H = +(params.get('h') || 393);
+const canvas = document.getElementById('game');
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+const mapId = params.get('map') || 'harvest';
+const map = mapId === 'giant' ? brMap({ density: +(params.get('density') || 1) }) : (await import('../js/shared/map.js')).MAPS[mapId];
+
+const t0 = performance.now();
+const r = new GameRenderer(canvas, map, { dynamicRes: false });
+r.setQuality(params.get('q') || 'low');
+r.resize();
+const buildMs = performance.now() - t0;
+const worldTris = r.world.tris;
+
+// Up to 32 players at the map's spawn points; the local player walks a circle through the middle of the map.
+const spawns = map.spawns.flat().slice(0, 32);
+const players = spawns.map((s, i) => ({
+  id: 'p' + i, name: 'P' + i, team: i % 2, isBot: true, skill: 'regular', x: s.x, z: s.z, aim: s.aim, vx: 0, vz: 0, hp: 100,
+  alive: true, respawnT: 0, weapon: 'ar', camo: 'none', ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2, adsT: 0,
+  sprinting: false, sliding: false, spawnProtect: false, kills: 0, deaths: 0, streak: 0, streakReady: null, bloom: 0,
+  score: 0, capped: false, slots: [], heat: 0, overheated: false, head: 0, assists: 0, firingT: 0, tacticalLeft: 1,
+  lethalLeft: 1, tactical: 'smoke', lethal: 'frag',
+}));
+const view = {
+  t: 0, phase: 'live', timeLeft: 300, scores: [0, 0], winner: null, uav: [0, 0], players, localId: 'p0', lastKill: null,
+  projectiles: [], smokes: [], turrets: [], gunships: [], mode: 'tdm', tags: [], points: [], jam: [0, 0], overwatchT: [0, 0],
+};
+r.setLocal('p0');
+const gl = r.webgl.getContext();
+const PIXEL = new Uint8Array(4);
+
+function frame() {
+  view.t += 1 / 60;
+  // The local player walks a slow circle through the middle, so the camera and fog keep moving.
+  const me = players[0];
+  const rad = Math.min(40, map.width * 0.3, map.height * 0.3);
+  me.x = map.width / 2 + Math.cos(view.t * 0.3) * rad; me.z = map.height / 2 + Math.sin(view.t * 0.3) * rad;
+  const a = performance.now();
+  r.update(view, [], 1 / 60);
+  const cpu = performance.now() - a;
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, PIXEL);     // Waits for the frame: finish() alone may not.
+  return [cpu, performance.now() - a];
+}
+
+window.measure = (n = 120) => {
+  for (let i = 0; i < 10; i++) frame();
+  let cpu = 0, all = 0, calls = 0, tris = 0;
+  const times = [];
+  for (let i = 0; i < n; i++) {
+    const [c, t] = frame();
+    cpu += c; all += t; times.push(t);
+    const st = r.getStats();
+    calls += st.calls; tris += st.triangles;
+  }
+  let geoBytes = 0, meshes = 0;
+  r.world.group.traverse(m => { if (!m.isMesh) return; meshes++; for (const a of Object.values(m.geometry.attributes)) geoBytes += a.array.byteLength; });
+  return { map: mapId, walls: map.walls.length, buildMs, worldTris, meshes, ms: times.sort((a, b) => a - b)[n >> 1], cpuMs: cpu / n,
+    calls: calls / n, triangles: tris / n, geoMB: geoBytes / 1048576, dpr: r.getStats().dpr };
+};
+window.ready = true;
+</script>
+</body>
+</html>

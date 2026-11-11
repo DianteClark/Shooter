@@ -162,13 +162,17 @@ export class Match {
       this.sim.step(STEP);
       this.tick++;
       const events = this.sim.drainEvents();
+      // Big maps send each guest its own cut of the events and snapshot (sim interest management).
+      const perGuest = this.net && this.sim.interest ? this.net.guests : null;
       if (events.length) {
-        this.net?.sendEvents(events);
+        if (perGuest) for (const id of perGuest) { const own = this.sim.eventsFor(id, events); if (own.length) this.net.sendEvents(own, id); }
+        else this.net?.sendEvents(events);
         this.#receiveEvents(events);
       }
       this.#pushHostView();
       if (this.net && this.tick % SNAPSHOT_EVERY === 0) {
-        this.net.sendSnapshot(this.sim.encodeSnapshot());
+        if (perGuest) for (const id of perGuest) this.net.sendSnapshot(this.sim.encodeSnapshotFor(id), id);
+        else this.net.sendSnapshot(this.sim.encodeSnapshot());
       }
     }
   }

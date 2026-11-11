@@ -312,6 +312,7 @@ export class GameRenderer {
     this.chars.blob.visible = q.blobs;
     if (this.world.decals) this.world.decals.visible = q.shadows;
     this.props.setDensity(q.props);
+    this.worldCut = q.cut;
     const corpses = this.chars.corpses;
     corpses.limit = q.corpses;
     if (corpses.head >= q.corpses) corpses.head = 0;
@@ -726,6 +727,8 @@ export class GameRenderer {
 
     this._updateCamera(realDt, local, view);
     this._updateCull();
+    // A replay's camera can look anywhere, so it gets every tile; frustum culling still applies.
+    this.world.setView(this.camera, this.camTarget.x, this.camTarget.z, cine || this.finalKill ? Infinity : this.worldCut);
     this.world.update(fxDt);
     this.weather.update(fxDt, this.camTarget.x, this.camTarget.z, this.world.material);
     webgl.render(this.scene, this.camera);

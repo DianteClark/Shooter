@@ -113,6 +113,8 @@ const CLOSE_GAIN = 1.5;         // ...which has to be at least this much nearer 
 const CLOSE_DASH = 2;           // Metres past `rush` that are simply charged, whoever is looking.
 const CORNER_SIGHT = 15;        // A corner worth holding with a close gun sees no further than this on average.
 const EXPOSE_RAYS = 12, EXPOSE_MAX = 30;
+// Thinking budget on big maps (NavGrid.big): a bot with nothing near it thinks QUIET_SLOWDOWN times less often.
+const QUIET_ENEMY = 75, QUIET_HUMAN = 100, QUIET_SLOWDOWN = 3;
 
 // How open a spot is: the mean clear sight line from it, metres, capped at EXPOSE_MAX. A yard reads high, a doorway low.
 function exposureAt(map, x, z) {
@@ -667,7 +669,7 @@ export class BotBrain {
     this.mode = 'none';
     this.laneIdx = -1;
     this.stage = 0;
-    this.pathLen = 0; this.pathI = 0; this.pathDirty = false; this.arrived = false;
+    this.pathLen = 0; this.pathI = 0; this.pathDirty = false; this.arrived = false; this.pathPartial = false;
     this.goalX = ps.x; this.goalZ = ps.z;
     this.target = null; this.targetVisible = false; this.targetDist = 0;
     this.reactLeft = 0; this.trackT = 0; this.anchor = 0; this.anchorT = 0; this.wobble = this.sim.rng() * 6.28;
@@ -1337,7 +1339,9 @@ export class BotBrain {
     const { sim, ps } = this;
     const here = Math.hypot(tx - ps.x, tz - ps.z);
     let best = null, bestScore = Infinity;
-    for (const c of sim.nav.cover) {
+    const ix = sim.nav.coverIndex, n = ix.near(ps.x, ps.z, CLOSE_REACH);
+    for (let q = 0; q < n; q++) {
+      const c = sim.nav.cover[ix.out[q]];
       const d = Math.hypot(c.x - ps.x, c.z - ps.z);
       if (d > CLOSE_REACH || d < 1.5) continue;
       const left = Math.hypot(tx - c.x, tz - c.z);
@@ -1424,7 +1428,9 @@ export class BotBrain {
   _overwatch(o) {
     const { sim, ps } = this;
     let best = null, bestScore = Infinity;
-    for (const h of sim.nav.holds) {
+    const ix = sim.nav.holdIndex, n = ix.near(o.x, o.z, o.r + OVERWATCH_MAX);
+    for (let q = 0; q < n; q++) {
+      const h = sim.nav.holds[ix.out[q]];
       const toZone = Math.hypot(h.x - o.x, h.z - o.z);
       if (toZone < o.r + 1 || toZone > o.r + OVERWATCH_MAX) continue;
       if (this._teammateNear(h.x, h.z, 3) || !hasLineOfSight(sim.map, h.x, h.z, o.x, o.z)) continue;
@@ -1497,7 +1503,9 @@ export class BotBrain {
     const { sim, ps, S } = this;
     const laneZ = sim.map.lanes[this.laneIdx].z, W = sim.map.width;
     let best = null, bestScore = Infinity;
-    for (const c of sim.nav.cover) {
+    const ix = sim.nav.coverIndex, n = ix.near(ps.x, ps.z, 12);
+    for (let q = 0; q < n; q++) {
+      const c = sim.nav.cover[ix.out[q]];
       const d = Math.hypot(c.x - ps.x, c.z - ps.z);
       if (d > 12 || d < 2) continue;
       if (!sim.ffa && Math.abs(c.z - laneZ) > 11) continue;
@@ -1526,7 +1534,9 @@ export class BotBrain {
     if (this.style.rush && this.style.corner !== false) return this._goCorner();
     let best = null, bestScore = Infinity;
     const laneZ = sim.map.lanes[this.laneIdx].z;
-    for (const h of sim.nav.holds) {
+    const ix = sim.nav.holdIndex, n = ix.near(ps.x, ps.z, 11);
+    for (let q = 0; q < n; q++) {
+      const h = sim.nav.holds[ix.out[q]];
       const d = Math.hypot(h.x - ps.x, h.z - ps.z), side = this._holdSide(h);
       if (d > 11 || h.sight[side] < 12) continue;
       if (!sim.ffa && Math.abs(h.z - laneZ) > 9) continue;    // Holding is part of playing this lane, not leaving it.
@@ -1568,6 +1578,7 @@ export class BotBrain {
     this.pathDirty = false;
     // Recruits walk straight through a turret's field of fire; everyone else takes the long way round.
     this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS, this.S.turret ? this.p.team : -1);
+    this.pathPartial = sim.nav.partial;      // Only a big map's capped search leaves it set: see _followPath.
     this.pathI = 0;
     // A fresh path means somewhere to go. The solve can lag _goTo by a tick or two (path budget), and the old path's
     // end reached in between must not leave the bot standing on 'arrived' with a whole new route ahead of it.
@@ -1584,7 +1595,11 @@ export class BotBrain {
     let dx = wx - ps.x, dz = wz - ps.z, d = Math.hypot(dx, dz);
     if (d < 0.75) {
       this.pathI++;
-      if (this.pathI >= this.pathLen) { this.arrived = true; return false; }
+      if (this.pathI >= this.pathLen) {
+        // The end of the first leg of a long route is not the goal: plan the next leg from here.
+        if (this.pathPartial) { this.pathPartial = false; this.pathLen = 0; this.pathDirty = true; return true; }
+        this.arrived = true; return false;
+      }
       wx = path[this.pathI * 2]; wz = path[this.pathI * 2 + 1];
       dx = wx - ps.x; dz = wz - ps.z; d = Math.hypot(dx, dz);
     }
@@ -1811,13 +1826,29 @@ export class BotBrain {
     if (this.stuckN >= 4) { this.stuckN = 0; this._setMode('none'); this.hasKnown = false; }
   }
 
+  // Big maps only: no living enemy within QUIET_ENEMY metres and no human within QUIET_HUMAN, and not shot at lately.
+  // Nothing it could see, hear or be seen by is near, so thinking less often changes nothing anyone can notice.
+  _quiet() {
+    const { sim, p, ps } = this;
+    if (sim.time - this.heardT < 3 || this.hasKnown) return false;
+    for (let i = 0; i < sim.players.length; i++) {
+      const q = sim.players[i];
+      if (q === p || !q.alive) continue;
+      const dx = q.ps.x - ps.x, dz = q.ps.z - ps.z, dSq = dx * dx + dz * dz;
+      if (q.team !== p.team && dSq < QUIET_ENEMY * QUIET_ENEMY) return false;
+      if (!q.isBot && dSq < QUIET_HUMAN * QUIET_HUMAN) return false;
+    }
+    return true;
+  }
+
   update(dt) {
     const { sim, ps, input: I } = this;
     this.sprintRoll = true;
     if (this.flashT > 0) this.flashT -= dt;
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
-      this.thinkT += this.interval;
+      // On a big map a bot nowhere near anyone (see _quiet) thinks at a third of its rate; it still walks every tick.
+      this.thinkT += sim.nav.big && this._quiet() ? this.interval * QUIET_SLOWDOWN : this.interval;
       if (this.S.sprint < 1) this.sprintLucky = sim.rng() < this.S.sprint;
       this.think();
     }

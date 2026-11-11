@@ -109,10 +109,13 @@ export class StarNet {
   }
   onLobby(cb) { this.cbs.lobby = cb; }
 
-  sendSnapshot(d) { this.#sendDroppable('snp', d, this.#guests()); }
+  // `target` (a guest's id) sends to that guest only: the host's per-guest snapshots on big maps (sim interest).
+  sendSnapshot(d, target) { this.#sendDroppable('snp', d, target ? [target] : this.#guests()); }
   onSnapshot(cb) { this.cbs.snapshot = cb; }
 
-  sendEvents(e) { this.#send('evt', e, this.#guests()); }
+  sendEvents(e, target) { this.#send('evt', e, target ? [target] : this.#guests()); }
+  // Linked guests' ids (host side), for per-guest sends.
+  get guests() { return this.#guests(); }
   onEvents(cb) { this.cbs.events = cb; }
 
   sendState(d) { if (this.#hostLinked()) this.#sendDroppable('sta', d, [this.hostId]); }

@@ -18,7 +18,7 @@
 // you can see over a crate that an SMG cannot shoot through.
 
 import { PLAYER_RADIUS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS } from '../shared/constants.js';
-import { hasLineOfSight, rayCircle, resolveCircle } from '../shared/geometry.js';
+import { hasLineOfSight, rayCircle, resolveCircle, wallsOnRay, wallScratch } from '../shared/geometry.js';
 import { HEAD_RADIUS, MAX_COVER_PIECES, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
 import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
@@ -682,12 +682,17 @@ function raySpan(ox, oz, dx, dz, r) {
 
 // Walks one ray across every wall. Fills SEG: where a solid stops it (hardT) and, depending on the round, where
 // waist-high cover stops it (stopT) and the pieces of cover it passes through before that.
+let RAY_WALLS = null;
 function walkRay(map, ox, oz, dx, dz, range, penetrate, overCover) {
   const S = SEG;
   S.hardT = Infinity; S.stopT = Infinity; S.count = 0;
+  // Only the walls along the ray, in wall order (the wall grid in geometry.js): the same pieces the old loop over
+  // every wall found, met in the same order.
   const walls = map.walls;
-  for (let i = 0; i < walls.length; i++) {
-    const w = walls[i];
+  RAY_WALLS = wallScratch(map, RAY_WALLS);
+  const nw = wallsOnRay(map, ox, oz, dx, dz, range, RAY_WALLS);
+  for (let q = 0; q < nw; q++) {
+    const w = walls[RAY_WALLS[q]];
     if (w.blocksBullet) {
       if (raySpan(ox, oz, dx, dz, w) && spanIn < S.hardT && spanIn < range) { S.hardT = spanIn; S.hardNx = spanNx; S.hardNz = spanNz; }
     } else if (!overCover && isWaistCover(w)) {
