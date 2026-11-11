@@ -518,7 +518,11 @@ const GEAR_TRACKS = {
 // js/ui/operators.js, which imports the card registry (cardbook.js), which imports this file: so the ids and names are
 // repeated here rather than imported. An operator added there needs a line here to get a track.
 const MASTERY_OPERATORS = [['trooper', 'Trooper'], ['wisp', 'Wisp'], ['anvil', 'Anvil'], ['relay', 'Relay'], ['yarddog', 'Yard Dog'],
-  ['ronin', 'Ronin'], ['ghoul', 'Ghoul'], ['ram', 'Ram'], ['monarch', 'Monarch']];
+  ['ronin', 'Ronin'], ['ghoul', 'Ghoul'], ['ram', 'Ram'], ['monarch', 'Monarch'],
+  // Operators wave (roadmap 11), in js/ui/operators.js order.
+  ['sparrow', 'Sparrow'], ['coyote', 'Coyote'], ['vesper', 'Vesper'], ['wren', 'Wren'], ['ox', 'Ox'], ['morse', 'Morse'],
+  ['cipher', 'Cipher'], ['harrow', 'Harrow'], ['sable', 'Sable'], ['marshal', 'Marshal'], ['flint', 'Flint'], ['nyx', 'Nyx'],
+  ['halcyon', 'Halcyon'], ['tinker', 'Tinker'], ['rook', 'Rook'], ['mako', 'Mako'], ['seraph', 'Seraph'], ['warden', 'Warden']];
 const OPERATOR_SIGNATURE = {
   trooper: T('multi', 15, 'Get 15 multi-kills'),
   wisp: T('slideKills', 20, 'Get 20 kills while sliding'),
@@ -529,6 +533,24 @@ const OPERATOR_SIGNATURE = {
   ghoul: T('head', 40, 'Get 40 headshots'),
   ram: T('closeKills', 50, 'Get 50 kills within 8 m'),
   monarch: T('streak5', 10, 'Reach a 5-kill streak 10 times'),
+  sparrow: T('assists', 40, 'Get 40 assists'),
+  coyote: T('long', 25, 'Get 25 longshots'),
+  vesper: T('head', 40, 'Get 40 headshots'),
+  wren: T('multi', 15, 'Get 15 multi-kills'),
+  ox: T('hurtKills', 40, 'Get 40 kills while hurt'),
+  morse: T('assists', 40, 'Get 40 assists'),
+  cipher: T('obj', 20, 'Capture, confirm, plant or defuse 20 times'),
+  harrow: T('long', 25, 'Get 25 longshots'),
+  sable: T('slideKills', 20, 'Get 20 kills while sliding'),
+  marshal: T('streak5', 10, 'Reach a 5-kill streak 10 times'),
+  flint: T('obj', 20, 'Capture, confirm, plant or defuse 20 times'),
+  nyx: T('closeKills', 50, 'Get 50 kills within 8 m'),
+  halcyon: T('hurtKills', 40, 'Get 40 kills while hurt'),
+  tinker: T('obj', 20, 'Capture, confirm, plant or defuse 20 times'),
+  rook: T('closeKills', 50, 'Get 50 kills within 8 m'),
+  mako: T('head', 40, 'Get 40 headshots'),
+  seraph: T('multi', 15, 'Get 15 multi-kills'),
+  warden: T('streak5', 10, 'Reach a 5-kill streak 10 times'),
 };
 const operatorTiers = (id, name) => [
   T('secs', 900, `Play 15 minutes as ${name}`), T('kills', 50, `Get 50 kills as ${name}`),
@@ -536,13 +558,16 @@ const operatorTiers = (id, name) => [
 ];
 
 // Rewards by tier. Gear (4 tiers): XP, bronze badge, calling card, gold badge and XP. Operators (5 tiers): XP, bronze
-// badge, skin, calling card, mastery skin with the gold badge and XP. Skin ids are the operator roster's own
-// (js/ui/operators.js SKINS: 'skin:<op>-3', 'skin:<op>-5'); cards are rows in CARDS; badges are drawn by js/ui/mastery.js.
+// badge and veteran skin, elite skin, calling card and specialist skin, mastery skin with the gold badge and XP. Skin ids
+// are the operator roster's own (js/ui/operators.js SKINS: 'skin:<op>-2' .. 'skin:<op>-5'); the tier 2 and 4 skins came
+// with the operators wave, and saves past those tiers have them at once (rewards are read from the tiers reached).
+// Cards are rows in CARDS; badges are drawn by js/ui/mastery.js.
+const OP_SKIN_NAME = { 2: 'veteran', 3: 'elite', 4: 'specialist', 5: 'mastery' };
 function trackRewards(kind, item, name, tier, count) {
   const op = kind === 'operator', out = [];
   if (tier === 1) out.push({ kind: 'xp', xp: 1000, name: '1,000 XP' });
   if (tier === 2) out.push({ kind: 'badge', id: `badge:${item}-1`, name: `${name} bronze badge` });
-  if (op && (tier === 3 || tier === 5)) out.push({ kind: 'skin', id: `skin:${item}-${tier}`, name: `${name} ${tier === 5 ? 'mastery' : 'elite'} skin` });
+  if (op && tier >= 2) out.push({ kind: 'skin', id: `skin:${item}-${tier}`, name: `${name} ${OP_SKIN_NAME[tier]} skin` });
   if (tier === (op ? 4 : 3)) out.push({ kind: 'card', id: `card:mastery-${item}`, name: `${name} Master` });
   if (tier === count) out.push({ kind: 'badge', id: `badge:${item}-2`, name: `${name} gold badge` }, { kind: 'xp', xp: op ? 5000 : 3000, name: `${op ? '5,000' : '3,000'} XP` });
   return out;
@@ -1705,6 +1730,13 @@ export class ChallengeTally {
           break;
         case 'slide': if (e.id === id) this.add('slides'); break;
         case 'throw': if (e.id === id) this.add('throws'); break;
+        case 'snd': {
+          // A Search and Destroy round won by this player's side (operator challenges read it from the lifetime tally).
+          if (e.kind !== 'end' || e.winner == null) break;
+          me ??= view?.players?.find(p => p.id === id) ?? {};
+          if (me.team != null && e.winner === me.team) this.add('sndRounds');
+          break;
+        }
         case 'streak': if (e.id === id) this.add('streaksCalled'); break;
       }
     }

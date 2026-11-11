@@ -210,7 +210,7 @@ function gatedKits(loadout) {
 }
 
 function careerStats() {
-  const c = { level: data.peakLevel, prestige: data.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0 };
+  const c = { level: data.peakLevel, prestige: data.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {} };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
 }
