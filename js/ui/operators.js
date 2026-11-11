@@ -117,6 +117,15 @@ export const OPERATORS = [
     bio: 'Keeps the last light on the line. Fifth prestige, and he has never once let it go out.',
     unlock: { prestige: 5 }, kit: { core: 'heavy', back: 'lantern', extra: null, gear: 'tower', hair: null, face: 'plain' },
     look: { w: 1.14, h: 1.07, l: 1.12, sh: 1.04, hip: 1, head: 1.02, skin: 0x6a4632, hair: 0x0e0c0a, sleeve: 0x3a3a40, trouser: 0x2a2a30 } },
+  // Extraction exclusives (js/shared/extraction.js): only banking contracts opens them.
+  { id: 'courier', name: 'Courier', role: 'Runs the case, shades on, never looks back', voice: F,
+    bio: 'Has carried every kind of package across the frontier and opened none of them. The pay is in the not asking.',
+    unlock: { life: 'ex:intel', goal: 4, label: 'Bank 4 Secure Intel contracts in Extraction' }, kit: { core: 'light', back: 'satchels', extra: 'bandolier', gear: 'backcap', hair: 'pony', face: 'shades' },
+    look: { w: 0.9, h: 0.98, l: 0.86, sh: 0.9, hip: 1.02, head: 0.96, skin: 0xb07850, hair: 0x2a1a10, sleeve: 0x3a3430, trouser: 0x2c2826 } },
+  { id: 'nightjar', name: 'Nightjar', role: 'Contract hunter in four-eyed night gear', voice: M,
+    bio: 'Takes the jobs at the far end of the board, after dark, and comes back with all of them. The radio only ever says "done".',
+    unlock: { life: 'ex:contracts', goal: 20, label: 'Bank 20 contracts in Extraction' }, kit: { core: 'plate', back: 'radio', extra: 'scrim', gear: 'nvg', hair: null, face: 'balaclava' },
+    look: { w: 1.02, h: 1.02, l: 1, sh: 1.02, hip: 1, head: 1, skin: 0x8a5a3c, hair: 0x0e0c0a, sleeve: 0x1e2428, trouser: 0x181c20 } },
 ];
 
 export const OPERATOR_IDS = OPERATORS.map(o => o.id);
@@ -257,6 +266,8 @@ const SKIN_ROWS = {
   mako: [['Reef', 'teal', { stat: 'long', goal: 40 }], ['Kelp', 'moss'], ['Riptide', 'navy'], ['Bioluminescent', 'aurora'], ['Abyss', 'wraith']],
   seraph: [['Choir', 'ivory', { prestige: 4 }], ['Steel Feather', 'urban'], ['Fallen', 'crimson'], ['Dawn', 'sky'], ['Radiant', 'royal']],
   warden: [['Keeper', 'slate', { prestige: 6 }], ['Lamplighter', 'olive'], ['Watchfire', 'ember'], ['Last Light', 'night'], ['Eternal Flame', 'gold']],
+  courier: [['Dead Drop', 'desert', { life: 'ex:out', goal: 10, label: 'Extract 10 times' }], ['Night Run', 'night'], ['Contraband', 'rust'], ['Black Bag', 'violet'], ['Gilded Case', 'gold']],
+  nightjar: [['Moonless', 'moon', { life: 'ex:hvt', goal: 10, label: 'Bank 10 Eliminate HVT contracts' }], ['Thicket', 'moss'], ['Ashfall', 'ash'], ['Low Burn', 'ember'], ['Prism Eye', 'prism']],
 };
 
 const ROW_TIERS = ['field', 2, 3, 4, 5];

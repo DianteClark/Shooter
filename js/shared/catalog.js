@@ -30,6 +30,10 @@ export const STREAKS = {
   dome:      { id: 'dome',      name: 'Aegis Dome',   cost: 2600, air: false, limit: 1, role: 'support', desc: 'A 6 m bubble for 20 s: enemy grenades and streak blasts cannot reach your team inside', counter: 'Walk in and fight; shoot the emitter; Shock, Blackout, EMP' },
   bombrun:   { id: 'bombrun',   name: 'Carpet Line',  cost: 3000, air: true,  limit: 1, role: 'offense', desc: 'Drag the aim stick to draw a line, let go: bombs walk along it', counter: 'Get off the red line; buildings, Flak, Aegis Dome' },
   rover:     { id: 'rover',     name: 'Rover',        cost: 3400, air: false, limit: 1, role: 'offense', desc: 'Armed ground robot that drives at enemies your team can see for 25 s', counter: 'Shoot it, explosives, Shock; Hijacker takes it' },
+  // Extraction exclusives (js/shared/extraction.js): unlocked only by banking contracts. `base` is the streak whose
+  // machinery they run on (js/sim/sim.js _callStreak), with their own numbers.
+  blackbird: { id: 'blackbird', name: 'Blackbird',    cost: 3400, air: true,  limit: 1, role: 'intel',   base: 'overwatch', desc: 'Stealth advanced UAV for 45 s: reveals Ghost too, Jammers cannot blank it', counter: 'EMP' },
+  vulture:   { id: 'vulture',   name: 'Vulture',      cost: 3300, air: true,  limit: 1, role: 'offense', base: 'chopper', desc: 'Armoured attack chopper that hunts for 38 s and shrugs off light fire', counter: 'Launchers; buildings; EMP' },
 };
 export const STREAK_IDS = Object.keys(STREAKS);
 
@@ -99,6 +103,8 @@ export const PERKS = {
   deadsilence: { id: 'deadsilence', tier: 2, name: 'Dead Silence', desc: 'Your footsteps make no sound' },
   tracker:     { id: 'tracker',     tier: 2, name: 'Tracker',      desc: 'Enemies you hit stay on your team\'s minimap for 4 s' },
   engineer:    { id: 'engineer',    tier: 2, name: 'Engineer',     desc: 'Your sentries, aircraft and Trophy last longer; Blackout cannot jam you' },
+  // Extraction exclusive (js/shared/extraction.js). Appended: the wire packs a perk as its index within its tier.
+  hardtarget:  { id: 'hardtarget',  tier: 0, name: 'Hard Target',  desc: 'Take 15% less gunfire while sprinting or sliding' },
 };
 export const PERK_IDS = Object.keys(PERKS);
 export const HARDLINE_MULT = 0.85;
@@ -123,6 +129,7 @@ export const PRO = {
   deadsilence: { name: 'Keen Ears',       desc: 'Sprinting enemies within 14 m ping your minimap', where: 'hud' },
   tracker:     { name: 'Footprints',      desc: 'See enemy footprints from the last 4 s wherever you have sight', where: 'hud' },
   engineer:    { name: 'Hijacker',        desc: 'See enemy equipment through walls; stand at an enemy Sentry for 1.5 s to take it', where: 'sim' },
+  hardtarget:  { name: 'Evasive',         desc: 'The cut also holds for 1 s after you stop sprinting or sliding', where: 'sim' },
 };
 
 // Calling card ids are data in js/shared/progression.js (CARDS); a loadout only carries the id, checked there.

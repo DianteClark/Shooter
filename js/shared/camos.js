@@ -5,7 +5,8 @@
 // tier:    0 default, 1 standard, 2 rare, 3 mastery, 4 prestige.
 // tint:    optional; mastery and prestige camos recolor tracers and muzzle flash so they read in play.
 //
-// How a camo is earned, per weapon (see js/shared/progression.js):
+// How a camo is earned, per weapon (see js/shared/progression.js), or for every gun at once:
+//   exfil: 'camo:<id>'     an Extraction exclusive (js/shared/extraction.js EX_UNLOCKS): contracts banked on extraction.
 //   chal: {track, goal}    a challenge: `goal` of track kills|head|long|slide|clean.
 //   mastery: true          every challenge on the weapon complete, plus masteryKills if set.
 //   prestige: n            weapon prestige n on that weapon.
@@ -31,6 +32,9 @@ export const CAMOS = [
   { id: 'wire',    name: 'Live Wire',   pattern: 'livewire', colors: [0x12141c, 0x35c8ff, 0xf2fbff],           scale: 5.0, animated: true, tier: 4, tint: 0x5ad2ff, prestige: 1 },
   { id: 'aurora',  name: 'Polar Night', pattern: 'aurora',   colors: [0x060a1c, 0x1fff9a, 0xc23dff, 0xf4fbff], scale: 4.0, animated: true, tier: 4, tint: 0x4dffb0, prestige: 2 },
   { id: 'horizon', name: 'Event Horizon', pattern: 'singularity', colors: [0x05030a, 0xff7a1a, 0xfff0c2, 0x4d2bff], scale: 7.0, animated: true, tier: 4, tint: 0xffa040, prestige: 3 },
+  // Extraction exclusives (js/shared/extraction.js): every gun at once, opened by contracts banked on extraction.
+  { id: 'blackbox', name: 'Black Box',   pattern: 'hex',      colors: [0x15171b, 0x25282e, 0xff6a1a, 0x0a0b0d], scale: 8.0,                 tier: 2, exfil: 'camo:blackbox' },
+  { id: 'flare',   name: 'Exfil Flare', pattern: 'livewire', colors: [0x1a0c0a, 0xff3a1a, 0xffd27a],           scale: 5.0, animated: true, tier: 2, tint: 0xff5a2a, exfil: 'camo:flare' },
 ];
 
 const BY_ID = new Map(CAMOS.map(c => [c.id, c]));

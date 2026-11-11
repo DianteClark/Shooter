@@ -43,11 +43,11 @@ test('every tactical, lethal, streak and operator has a track of 3 to 5 tiers wi
   }
 });
 
-test('operators wave: 27 operators, the first nine in their old order, women and men, every unlock kind', () => {
+test('operators wave: 27 operators (29 with the two Extraction exclusives), the first nine in their old order, women and men, every unlock kind', () => {
   const { OPERATOR_IDS, operatorUnlock, botOrder, botOperator, skinsFor, SKIN_TIERS, getSkin } = OPS;
   assert.deepEqual(OPERATOR_IDS.slice(0, 9), ['trooper', 'wisp', 'anvil', 'relay', 'yarddog', 'ronin', 'ghoul', 'ram', 'monarch'], 'ids are appended, never reordered');
-  assert.equal(OPERATORS.length, 27);
-  assert.equal(new Set(OPERATOR_IDS).size, 27);
+  assert.equal(OPERATORS.length, 29);
+  assert.equal(new Set(OPERATOR_IDS).size, 29);
   const women = OPERATORS.filter(o => o.voice === 'f').length;
   assert.ok(women >= 8 && women <= 10, `${women} women`);
   for (const op of OPERATORS) {
@@ -71,10 +71,10 @@ test('operators wave: 27 operators, the first nine in their old order, women and
   assert.ok(operatorUnlock(get('morse'), { ...career, level: 16 }).unlocked);
   // Bots: every operator once before any repeat, women and men alternating, the same order on every client.
   const o = botOrder(1234);
-  assert.equal(new Set(o).size, 27);
+  assert.equal(new Set(o).size, 29);
   assert.deepEqual(botOrder(1234), o);
   for (let i = 0; i < 6; i++) assert.notEqual(get(o[2 * i]).voice === 'f', get(o[2 * i + 1]).voice === 'f', 'alternates');
-  assert.equal(botOperator(1234, 27), o[0]);
+  assert.equal(botOperator(1234, 29), o[0]);
   assert.notDeepEqual(botOrder(99), o);
 });
 

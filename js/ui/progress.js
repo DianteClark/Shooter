@@ -191,7 +191,7 @@ const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 
 // The Golden Gun is gold, always: no camo, tracer or kill effect but its own.
 const plainOnly = w => w === GOLDEN_ID;
-const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none' : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w)));
+const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none' : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w), data.life));
 const hasCosmetic = (w, item) => (plainOnly(w) ? !item.prestige : readWeapon(w).prestige >= item.prestige);
 // V11: an unlock above 30 is a mastery ladder tier (attachments.js LADDER_BASE), met by the gun's ladT.
 const hasAttachment = (w, id) => {
@@ -431,6 +431,7 @@ export const Progress = {
   // Lifetime totals of every match's challenge counts (kills, plants, won:dom, played:ctf, ...) plus map:<id> (played
   // there) and mapwon:<id>, for the map, mode and career cards.
   lifetime() { return { ...data.life }; },
+  extractions() { return data.extractions ?? 0; },
   skins(op) {
     const got = masteryRewards(data);
     return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));
@@ -653,7 +654,7 @@ export const Progress = {
   /* ---------- Match results (js/game/awards.js) ---------- */
   // `pro` is ProTracker.gains(): {perk: {stat: n}}. Pro perks and calling cards earned here come back in `unlocks`
   // ({kind:'pro', id:perk, name, desc} and {kind:'card', id, name, req}), Pro first: they are the bigger moment.
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won }) {
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, extracted = false }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel;
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
@@ -665,6 +666,7 @@ export const Progress = {
     // Mastery first, so the ladder only counts for guns that were already level 30 when the match began.
     const tiers = applyMasteryGains(data, mastery ?? {});
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
+    if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
     gainXp(xp);
     for (const [w, gained] of Object.entries(weapons)) {

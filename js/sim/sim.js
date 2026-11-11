@@ -42,6 +42,8 @@ const CHAIN_WINDOW = 3.5;        // Seconds between kills for double/triple/fury
 const LONGSHOT = 26;
 
 const UAV_TIME = 20, JAM_TIME = 15, OVERWATCH_TIME = 30, EMP_JAM_TIME = 8;
+const BLACKBIRD_TIME = 45, VULTURE_LIFE = 38 / 24;    // Extraction exclusives (js/shared/catalog.js).
+const HARD_TARGET = 0.85, HARD_TARGET_PRO = 1;         // Hard Target: gunfire taken while sprinting or sliding; Evasive: seconds after.
 const AIR_TEAM_MAX = 3, AIR_TOTAL_MAX = 5;   // Airspace: at most this many air streaks up per team, and on the map in total.
 const SUPPLY_RADIUS = 14, SUPPLY_MAGS = 3;
 const MORTAR_SHELLS = 5, MORTAR_GAP = 0.7, MORTAR_FLIGHT = 1.4, MORTAR_RADIUS = 4.2, MORTAR_DAMAGE = 125, MORTAR_SCATTER = 1.7;
@@ -1430,6 +1432,11 @@ export class Sim {
     // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
     // damage dealt: in hit events, assists and the firing range readout.
     if (target.windT > this.time && hasPro(target.ps, 'adrenaline')) dmg *= WIND_TAKEN;     // Second Wind.
+    // Hard Target: gunfire hurts less on the move (Evasive keeps it for a moment after).
+    if (!streak && !equip && target.ps.perks.includes('hardtarget')) {
+      if (target.ps.sprinting || target.ps.sliding) target.evadeT = this.time + HARD_TARGET_PRO;
+      if (target.ps.sprinting || target.ps.sliding || (hasPro(target.ps, 'hardtarget') && (target.evadeT ?? 0) > this.time)) dmg *= HARD_TARGET;
+    }
     if (target.armor > 0) dmg = this._soak(target, dmg, weapon, streak, equip);         // Juggernaut.
     if (target.plates > 0) dmg = V9.soakPlates(this, target, dmg, weapon, streak, equip);   // Plate Drop.
     dmg = Math.min(dmg, Math.max(0, target.hp));
@@ -1754,6 +1761,18 @@ export class Sim {
       case 'missile': this._launchMissile(p); break;
       case 'swarm': this._launchSwarm(p); break;
       case 'juggernaut': this._suitUp(p); break;
+      // Extraction exclusives: an Overwatch for longer, a tougher Attack Chopper that stays longer.
+      case 'blackbird':
+        this.overwatch[p.team] = BLACKBIRD_TIME;
+        this.uav[p.team] = Math.max(this.uav[p.team], BLACKBIRD_TIME);
+        this._emit({ t: 'streak', id, kind, team: p.team });
+        break;
+      case 'vulture': {
+        this._launchChopper(p);
+        const g = this.gunships[this.gunships.length - 1];
+        if (g?.kind === 'chopper' && g.owner === p) { g.life *= VULTURE_LIFE; g.variant = 'vulture'; g.hp = g.maxHp = V9.AIR_HP.chopper * 1.5; }
+        break;
+      }
       default: V9.launch(this, p, kind, spot); break;
     }
   }
@@ -1793,7 +1812,7 @@ export class Sim {
     switch (kind) {
       case 'uav': return this.uav[team] > 0 ? 1 : 0;
       case 'jammer': return (this.ffa ? this.jamBy[team] > 0 : this.jam[1 - team] > 0) ? 1 : 0;
-      case 'overwatch': return this.overwatch[team] > 0 ? 1 : 0;
+      case 'overwatch': case 'blackbird': return this.overwatch[team] > 0 ? 1 : 0;
       case 'mortar': return this.mortars.reduce((n, m) => n + (m.team === team ? 1 : 0), 0);
       case 'strike': return this.strikes.some(s => s.kind === 'strike' && s.team === team) ? 1 : 0;
       case 'turret': return this.turrets.reduce((n, t) => n + (t.team === team ? 1 : 0), 0);
@@ -1801,6 +1820,7 @@ export class Sim {
       case 'chopper':
       case 'missile':
       case 'swarm': return this.gunships.reduce((n, g) => n + (g.team === team && g.kind === kind && g.lead !== false ? 1 : 0), 0);
+      case 'vulture': return this.gunships.reduce((n, g) => n + (g.team === team && g.variant === 'vulture' ? 1 : 0), 0);
       default: return 0;
     }
   }

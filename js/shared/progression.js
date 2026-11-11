@@ -207,7 +207,8 @@ export function isMastered(w) {
 }
 
 // The rule for one camo on one weapon, ignoring grandfathered ownership.
-export function camoGateOpen(camo, w) {
+export function camoGateOpen(camo, w, life = null) {
+  if (camo.exfil) { const u = EX_UNLOCKS.find(x => x.id === camo.exfil); return !!u && (life?.[u.key] ?? 0) >= u.goal; }
   if (camo.prestige) return (w.prestige ?? 0) >= camo.prestige;
   // Mastery camos sit at the end of the weapon ladder (v4); ones earned before it existed are in `owned`.
   if (camo.mastery) return isMastered(w) && ladderDone(w) && (w.kills ?? 0) >= (camo.masteryKills ?? 0);
@@ -216,6 +217,7 @@ export function camoGateOpen(camo, w) {
 }
 
 export function camoRequirement(camo) {
+  if (camo.exfil) return EX_UNLOCKS.find(u => u.id === camo.exfil)?.label ?? 'Extraction exclusive';
   if (camo.prestige) return `Weapon Prestige ${camo.prestige} on this weapon`;
   if (camo.mastery) return camo.masteryKills ? `Mastery and ${camo.masteryKills} kills` : 'Every challenge and the mastery ladder on this weapon';
   if (camo.chal) return `${camo.chal.goal} ${TRACK_LABEL[camo.chal.track]}`;
@@ -288,6 +290,7 @@ export const PRO_CHALLENGES = {
   deadsilence: [{ stat: 'flankKills', goal: 7, label: 'Get 7 kills from the side or behind' }, { stat: 'closeKills', goal: 15, label: 'Get 15 kills within 8 m' }],
   tracker:     [{ stat: 'hits', goal: 160, label: 'Land 160 hits' }, { stat: 'assists', goal: 18, label: 'Get 18 assists' }],
   engineer:    [{ stat: 'deploys', goal: 8, label: 'Make 8 Trophy saves or Sentry and aircraft calls' }, { stat: 'kills', goal: 50, label: 'Get 50 kills' }],
+  hardtarget:  [{ stat: 'sprintM', goal: 2500, label: 'Sprint 2,500 m' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
 };
 export const PRO_STATS = [...new Set(Object.values(PRO_CHALLENGES).flatMap(list => list.map(c => c.stat)))];
 
@@ -523,7 +526,9 @@ const MASTERY_OPERATORS = [['trooper', 'Trooper'], ['wisp', 'Wisp'], ['anvil', '
   // Operators wave (roadmap 11), in js/ui/operators.js order.
   ['sparrow', 'Sparrow'], ['coyote', 'Coyote'], ['vesper', 'Vesper'], ['wren', 'Wren'], ['ox', 'Ox'], ['morse', 'Morse'],
   ['cipher', 'Cipher'], ['harrow', 'Harrow'], ['sable', 'Sable'], ['marshal', 'Marshal'], ['flint', 'Flint'], ['nyx', 'Nyx'],
-  ['halcyon', 'Halcyon'], ['tinker', 'Tinker'], ['rook', 'Rook'], ['mako', 'Mako'], ['seraph', 'Seraph'], ['warden', 'Warden']];
+  ['halcyon', 'Halcyon'], ['tinker', 'Tinker'], ['rook', 'Rook'], ['mako', 'Mako'], ['seraph', 'Seraph'], ['warden', 'Warden'],
+  // Extraction exclusives.
+  ['courier', 'Courier'], ['nightjar', 'Nightjar']];
 const OPERATOR_SIGNATURE = {
   trooper: T('multi', 15, 'Get 15 multi-kills'),
   wisp: T('slideKills', 20, 'Get 20 kills while sliding'),
@@ -552,6 +557,8 @@ const OPERATOR_SIGNATURE = {
   mako: T('head', 40, 'Get 40 headshots'),
   seraph: T('multi', 15, 'Get 15 multi-kills'),
   warden: T('streak5', 10, 'Reach a 5-kill streak 10 times'),
+  courier: T('assists', 40, 'Get 40 assists'),
+  nightjar: T('long', 25, 'Get 25 longshots'),
 };
 const operatorTiers = (id, name) => [
   T('secs', 900, `Play 15 minutes as ${name}`), T('kills', 50, `Get 50 kills as ${name}`),
@@ -729,6 +736,7 @@ export function itemOpen(save, kind, id) {
 // Before v4: everything a level had opened stays open, and mastery camos earned under the old rule stay earned.
 function grandfather(s) {
   for (const key of Object.keys(UNLOCK_CHALLENGES)) {
+    if (UNLOCK_CHALLENGES[key].extraction) continue;       // Extraction exclusives were never open by level.
     const [kind, id] = key.split(':');
     if (itemUnlockLevel(kind, id) <= s.peakLevel && !s.granted.includes(key)) s.granted.push(key);
   }
@@ -986,7 +994,7 @@ const PRO_ART = {
   bandolier: ['belts', '#2b2216', '#6b5434', '#f0d39a'], hardline: ['chevrons', '#2a1838', '#6a3a8e', '#e2b8ff'],
   ghost: ['fog', '#151a22', '#3d4a5c', '#d6e2f0'], coldblood: ['frost', '#0f2233', '#2a6e99', '#bfefff'],
   deadsilence: ['waves', '#16161e', '#3a3a50', '#c6c6e6'], tracker: ['prints', '#24200f', '#5e5426', '#f5e7a0'],
-  engineer: ['circuit', '#12261c', '#2b6b4a', '#9dffc8'],
+  engineer: ['circuit', '#12261c', '#2b6b4a', '#9dffc8'], hardtarget: ['chevrons', '#2a1408', '#7a3a14', '#ffb070'],
 };
 // Default art for the mastery cards by kind: the item's own icon on a pattern in that kind's colours.
 const MASTERY_CARD_ART = {

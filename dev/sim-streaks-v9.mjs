@@ -80,7 +80,8 @@ const enemyOf = (sim, p) => sim.players.find(q => q.team !== p.team && !q.dummy)
 
 test('eight new streaks appended after V8, with role, counter and a wire id that fits five bits', () => {
   assert.deepEqual(STREAK_IDS.slice(0, 13), ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut']);
-  assert.deepEqual(STREAK_IDS.slice(13), NEW);
+  assert.deepEqual(STREAK_IDS.slice(13, 13 + NEW.length), NEW);
+  assert.deepEqual(STREAK_IDS.slice(13 + NEW.length), ['blackbird', 'vulture']);      // Extraction exclusives, appended.
   assert.ok(STREAK_IDS.length <= 32);
   for (const id of STREAK_IDS) {
     const s = STREAKS[id];

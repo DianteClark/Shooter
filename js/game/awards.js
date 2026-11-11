@@ -15,6 +15,8 @@ import { landingOf, maxThrowRange } from '../sim/equipment.js';
 import { MAPS } from '../shared/map.js';
 import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa, BR } from '../shared/modes.js';
+import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
+import { objOf } from '../sim/rules.js';
 
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const GUN_SECONDS = 3;           // Held at least this long counts as a gun used, for the history.
@@ -134,6 +136,7 @@ export class MatchAwards {
   // Placing in a free-for-all, 1 = first; null in team modes. Ranked as the sim and the results screen rank it: each
   // player is a side of one, so by that side's score (kills, or rungs in Gun Game), then fewer deaths, then kills.
   #placing(view, me) {
+    if (objOf(view)?.ex) return null;        // Extraction squads are not placed: they get out or they do not.
     const ffa = isFfa(this.mode) || (me?.team ?? 0) >= FFA_TEAM;
     if (!ffa || !me) return null;
     if (Number.isFinite(me.place)) return me.place;
@@ -201,12 +204,27 @@ export class MatchAwards {
       const minutes = Math.floor((st[4] ?? 0) / 600);
       if (minutes > 0) lines.push([`Survived ${minutes} min`, minutes * BR.xp.minute]);
     }
-    if (won) lines.push(['Win', MATCH_XP.win]);
+    // Extraction: contracts pay only if the squad got out (anyone in it); the whole pot is banked for everyone in it.
+    const exObj = objOf(view)?.ex ? objOf(view) : null;
+    let ex = null;
+    if (exObj && me) {
+      const squad = exObj.squads?.find(s => s.team === me.team) ?? null;
+      const lo = this.loadout ?? Progress.loadout();
+      const pay = extractionPay(squad, { primary: lo?.primary ?? null, operator: lo?.operator ?? 'trooper' });
+      lines.push(...pay.lines);
+      if (pay.weaponXp && lo?.primary) this.#bucket(lo.primary).xp += pay.weaponXp;
+      try { if (pay.opSecs) this.mastery.add(this.mastery.op ?? lo?.operator ?? 'trooper', 'secs', pay.opSecs); } catch (err) { console.error('extraction mastery', err); }
+      const before = EX_UNLOCKS.map(u => exUnlockStatus(u, Progress.lifetime()));
+      ex = { extracted: pay.extracted, banked: pay.banked, lost: pay.lost, life: pay.life, before, lives: squad?.lives ?? 0, me: !!me.out };
+    }
+    const exWon = ex ? ex.extracted : null;
+    if (exWon !== null) { /* The Extracted line is the win. */ }
+    else if (won) lines.push(['Win', MATCH_XP.win]);
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
     // Challenges settle first so the XP they pay is part of this match's total. A failure here costs only them.
     let challenges = [], tallied = null;
     try {
-      tallied = this.tally.finish({ won, place });
+      tallied = this.tally.finish({ won: exWon ?? won, place });
       const settled = Challenges.apply(tallied);
       challenges = settled.moved;
       for (const period of ['daily', 'weekly']) {
@@ -217,15 +235,23 @@ export class MatchAwards {
     // Mastery tiers this match finishes pay their XP here too; the save itself changes in applyMatch.
     let mastery = {};
     try {
-      mastery = this.mastery.finish({ won });
+      mastery = this.mastery.finish({ won: exWon ?? won });
       const tierXp = Progress.masteryXp(mastery);
       if (tierXp > 0) lines.push(['Mastery tiers', tierXp]);
     } catch (err) { console.error('mastery', err); mastery = {}; }
     const total = lines.reduce((sum, l) => sum + l[1], 0);
 
     // Lifetime totals take the same counts the challenges do, plus where it was played and whether it was won.
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life: tallied ?? this.tally.counts(), mapId: this.mapId, won });
-    const outcome = won ? 'win' : drawn ? 'draw' : 'loss';
+    const life = { ...(tallied ?? this.tally.counts()) };
+    if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, extracted: !!ex?.extracted });
+    if (ex) {
+      // Exclusive unlock progress this match, and anything it opened.
+      const after = Progress.lifetime();
+      ex.unlocks = EX_UNLOCKS.map((u, i) => ({ ...exUnlockStatus(u, after), before: ex.before[i].value }));
+      for (const u of ex.unlocks) if (u.done && !ex.before.find(b => b.id === u.id)?.done && !applied.unlocks.some(x => `${x.kind}:${x.id}` === u.id)) applied.unlocks.push({ kind: u.kind, id: u.item, name: u.name, req: u.label });
+    }
+    const outcome = exWon !== null ? (exWon ? 'win' : 'loss') : won ? 'win' : drawn ? 'draw' : 'loss';
     let history = null;
     try { history = MatchHistory.add(this.#historyEntry(view, me, outcome, place, total, applied.level, challenges)); } catch (err) { console.error('match history', err); }
     this.result = {
@@ -239,6 +265,7 @@ export class MatchAwards {
       place,
       history,
       medals: { ...this.medals },
+      ex,
       stats: {
         kills: this.kills, headshots: this.headshots, longshots: this.longshots, slideKills: this.slideKills,
         equipmentKills: this.equipKills, streakKills: this.streakKills, assists: this.assists,

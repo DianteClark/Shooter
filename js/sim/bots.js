@@ -1274,7 +1274,7 @@ export class BotBrain {
     const busy = visible || this.hasKnown;
     switch (kind) {
       case 'uav':
-      case 'overwatch': return !visible;
+      case 'overwatch': case 'blackbird': return !visible;
       case 'jammer': return this._enemyRadar() || busy;
       case 'turret': return busy || this.mode === 'hold';
       case 'mortar':
