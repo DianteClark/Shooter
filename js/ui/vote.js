@@ -196,7 +196,7 @@ export function soloMarkup({ mapId, mode }) {
           <div class="solo-modes">${[...MODE_IDS, RANDOM].map(id => {
             const m = MODES[id] ?? RANDOM_MODE;
             return `<button class="solo-mode${MODES[id]?.large ? ' large' : ''}" data-act="soloMode" data-id="${id}">
-              ${modeIcon(id)}<b>${esc(m.name)}</b>
+              ${modeIcon(id)}<b>${esc(m.name).replace('Headquarters', 'Head&shy;quarters')}</b>
             </button>`;
           }).join('')}</div>
           <span class="solo-more" aria-hidden="true">${ico('next')}</span>

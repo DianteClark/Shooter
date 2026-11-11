@@ -149,7 +149,7 @@ export function botMatchSheet(menu, pick, { onChange } = {}) {
         + stepper('time', MODES[mode].rounds ? 'Round time' : 'Time limit', mmss(r.timeLimit), r.timeLimit === MODES[mode].timeLimit ? 'Default' : `Default ${mmss(MODES[mode].timeLimit)}`, { canDown: ti > 0, canUp: ti < ts.length - 1 });
     }
     menu.overlay(`
-      <div class="sheet bm-sheet" role="dialog" aria-label="Bot match settings">
+      <div class="sheet bm-sheet scroll-y" role="dialog" aria-label="Bot match settings">
         <div class="bm-head">
           <span class="bm-title"><b>Bot match</b><small>${mode ? esc(MODES[mode].name) : 'Any mode'}</small></span>
           <button class="btn is-primary bm-done" data-act="bmDone" data-sound="confirm">${ico('check')}<b>Done</b></button>

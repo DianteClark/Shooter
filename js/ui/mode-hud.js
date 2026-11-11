@@ -37,7 +37,7 @@ const CSS = `
 .mh-lives { display: flex; gap: 3px; margin-left: 2px; }
 .mh-lives i { width: 8px; height: 12px; background: rgba(231,234,228,.18); clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%); }
 .mh-lives i.on { background: var(--mh-accent, var(--c-sodium)); }
-.mh-wait { position: absolute; left: 50%; top: calc(var(--st) + 82px); transform: translateX(-50%); padding: 7px 16px 8px; text-align: center;
+.mh-wait { flex: none; max-width: 330px; padding: 7px 16px 8px; text-align: center;
   background: rgba(16,20,26,.88); box-shadow: var(--hud-edge), inset 0 2px 0 var(--c-sodium); clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); z-index: 2; }
 .mh-wait b { display: block; font: 400 18px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium); }
 .mh-wait small { display: block; margin-top: 4px; font: 11px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); }
@@ -48,11 +48,15 @@ const CSS = `
 .mh-tag.mine { color: var(--c-blue-hi, #6cc4ff); }
 .mh-tag.enemy { color: #ff7a6a; }
 .mh-tag.carry span { color: var(--c-sodium); }
-.mh-mods { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 6px); display: flex; gap: 3px; }
+.mh-mods { position: absolute; left: calc(50% + 184px); top: calc(var(--st) + 10px); display: flex; gap: 3px; }
 .mh-mods i { font: 400 10px/1 var(--f-stencil); font-style: normal; letter-spacing: var(--tr-stencil); padding: 3px 5px; color: var(--c-night); background: var(--c-sodium);
   clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
 .hud.hc-on .minimap { display: none !important; }
-.hud.mh-on .ctf-status { display: none !important; }
+.hud.mh-on .ctf-status, .hud.mh-on .obj-strip { display: none !important; }
+/* Held off the field: the wait plate takes the Respawn row, and the respawn clock (which is not running) goes. */
+.hud.mh-held .death-next, .hud.mh-held .death-go, .hud.mh-held .death-timer { display: none !important; }
+/* A mode that deals everyone's kit has no loadout to pick for the next life. */
+.hud.mh-dealt .death-next { display: none !important; }
 `;
 
 export class ModeHud {
@@ -77,6 +81,8 @@ export class ModeHud {
     this.sSub = this.status.querySelector('small');
     this.sExtra = this.status.querySelector('.mh-extra');
     this.wait = el.querySelector('.mh-wait');
+    // The wait plate lives in the death screen's action row, where Respawn would be.
+    hud.el.querySelector('.death-act')?.prepend(this.wait);
     this.mods = el.querySelector('.mh-mods');
     this.tags = [...el.querySelectorAll('.mh-tag')].map(root => ({ root, span: root.querySelector('span'), html: '', x: NaN, y: NaN, cls: '' }));
     this.cache = {};
@@ -91,6 +97,8 @@ export class ModeHud {
     this.wait.hidden = true;
     for (const t of this.tags) t.root.hidden = true;
     this.hud.el.classList.toggle('mh-on', this.on);
+    this.hud.el.classList.toggle('mh-dealt', this.rules === 'oic' || this.rules === 'inf');
+    this.hud.el.classList.remove('mh-held');
     this.hud.el.classList.toggle('hc-on', mods.includes('hardcore'));
     // The match's modifiers, as small plates in the top corner, for the whole match.
     this.mods.hidden = !mods.length;
@@ -117,6 +125,7 @@ export class ModeHud {
     if (this.cache.wait === key) return;
     this.cache.wait = key;
     this.wait.hidden = !text;
+    this.hud.el.classList.toggle('mh-held', !!text);
     if (text) { this.wait.querySelector('b').textContent = text; this.wait.querySelector('small').textContent = sub; }
   }
 
@@ -127,6 +136,9 @@ export class ModeHud {
     if (!o || intro) { this.#paint('', {}); this.#waitFor(''); this.#hideTags(); return; }
     const fn = this[`_${this.rules}`];
     fn?.call(this, view, me, o);
+    // Dead, the death screen and the wait plate do the talking.
+    const hide = !me.alive && view.phase === 'live';
+    if (this.cache.hid !== hide) { this.cache.hid = hide; this.status.style.visibility = hide ? 'hidden' : ''; }
   }
 
   // ---- Per mode ----
@@ -331,8 +343,10 @@ export class ModeHud {
     }
   }
 
-  // The name of a mode with its modifiers, for the board and the intro.
-  title() { return MODES[this.modeId]?.name ?? ''; }
+  // What the scorebar says under the clock, where "to <limit>" does not fit the mode. Null keeps the default.
+  goal(limit) {
+    return { inf: 'survive', oic: 'last alive', ctl: `${limit} rounds`, ko: `${limit} vips` }[this.rules] ?? null;
+  }
 }
 
 // The scoreboard and results column of each rule set here: its header and each player's number. Null for the others.

@@ -89,6 +89,16 @@ export const MODS_CSS = `
 .mod-row.on .mod-sw::after { transform: translateX(16px); background: var(--c-sodium); }
 .mod-row:disabled { opacity: .45; }
 .mods-sheet .mods-rows { max-height: min(62vh, 300px); overflow-y: auto; }
+/* In the bot match sheet: two columns, and the sheet scrolls when a short phone cannot hold it all. */
+#ui .bm-sheet { max-height: calc(100dvh - 12px); }
+#ui .bm-sheet .mods-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: none; }
+#ui .bm-sheet .mod-row { min-height: 40px; padding: 4px 8px; grid-template-columns: 22px 1fr 34px; gap: 7px; }
+#ui .bm-sheet .mod-row b { font-size: var(--fs-body); }
+#ui .bm-sheet .mod-row small { font-size: var(--fs-micro); }
+#ui .bm-sheet .mod-row .mod-sw { width: 32px; height: 18px; }
+#ui .bm-sheet .mod-row.on .mod-sw::after { transform: translateX(12px); }
+#ui .bm-sheet .mod-row .mod-sw::after { width: 12px; height: 12px; }
+#ui .bm-sheet > * { flex: none; }
 .chip.mods-chip.on { box-shadow: var(--bevel), inset 0 -2px 0 var(--c-sodium); }
 .chip.mods-chip.on b { color: var(--c-sodium); }
 .bm-mods-h { margin: 8px 0 4px; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }

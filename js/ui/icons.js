@@ -457,6 +457,13 @@ const ALIAS = {
   tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',
+  // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).
+  'medal:hq_capture': 'medal:capture', hq_capture: 'medal:capture', 'medal:hq_destroy': 'medal:carrier_kill', hq_destroy: 'medal:carrier_kill',
+  'medal:vip_kill': 'ui:crown', vip_kill: 'ui:crown', 'medal:bodyguard': 'medal:defend', bodyguard: 'medal:defend',
+  'medal:infect': 'mode:inf', infect: 'mode:inf', 'medal:first_infected': 'mode:inf', first_infected: 'mode:inf',
+  'medal:last_stand': 'medal:clutch', last_stand: 'medal:clutch', 'medal:survivor': 'medal:defend', survivor: 'medal:defend',
+  'medal:oic_last': 'medal:clutch', oic_last: 'medal:clutch', 'medal:ctl_capture': 'medal:capture', ctl_capture: 'medal:capture',
+  'medal:ctl_hold': 'medal:defend', ctl_hold: 'medal:defend', 'medal:grind_bank': 'mode:grind', grind_bank: 'mode:grind',
   // Menu vocabulary (js/ui/yard.js names).
   bots: 'ui:bot', rejoin: 'ui:refresh', load: 'ui:download', export: 'ui:share', equip: 'ui:check', team: 'ui:party',
   swapteam: 'swap', wait: 'ui:clock', warn: 'ui:warning', sound: 'ui:volume', settings: 'ui:settings',

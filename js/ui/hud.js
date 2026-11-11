@@ -110,6 +110,12 @@ const MEDALS = {
   flag_take: ['Flag Taken', `+${CTF.score.take}`, 2], flag_capture: ['Flag Captured', `+${CTF.score.capture}`, 3],
   flag_return: ['Flag Returned', `+${CTF.score.ret}`, 1], carrier_kill: ['Carrier Killed', `+${CTF.score.carrierKill}`, 2],
   flag_defend: ['Flag Defense', `+${CTF.score.defend}`, 1],
+  // Modes overhaul (docs/MODES.md).
+  hq_capture: ['HQ Captured', `+${SCORE.capture}`, 2], hq_destroy: ['HQ Destroyed', '+150', 3],
+  vip_kill: ['VIP Killed', '+300', 3], bodyguard: ['Bodyguard', 'Saved your VIP', 1],
+  infect: ['Infection', '+100', 1], first_infected: ['Patient Zero', 'Spread it', 2], last_stand: ['Last Stand', 'Outlasted them all', 3],
+  survivor: ['Survivor', 'Made it to the end', 2], oic_last: ['Last One Standing', 'One round to spare', 3],
+  ctl_capture: ['Zone Taken', `+${SCORE.capture}`, 2], ctl_hold: ['Held the Line', '+150', 2], grind_bank: ['Tags Banked', 'Points on the board', 2],
 };
 
 // Search and Destroy wording. Why a round ended, from the winner's side and the loser's.
@@ -456,7 +462,7 @@ export class HUD {
     this.#seedFallback();
     this.#drawMapBase();
     this.#buildObjectiveHud();
-    this.sbGoal.textContent = this.gun ? `${scoreLimit} guns` : `to ${scoreLimit}`;
+    this.sbGoal.textContent = this.gun ? `${scoreLimit} guns` : this.modeHud.goal(scoreLimit) ?? `to ${scoreLimit}`;
     this.el.classList.toggle('snd-on', this.snd);
     this.el.classList.toggle('ctf-on', this.ctf);
     for (const pips of this.sndEl.pips) pips.innerHTML = this.snd || this.ctf ? '<i></i>'.repeat(scoreLimit) : '';
