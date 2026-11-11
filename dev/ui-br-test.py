@@ -185,7 +185,7 @@ async def lobby_shots(browser, vw, vh, failures, errors):
     await pg.locator('[data-act="host"]').first.click()
     await pg.wait_for_function(f'{G}.code')
     await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: 'frontier' }}")
-    await pg.locator('[data-act="botSkill"]').first.click()
+    await pg.locator('[data-act="moveTeam"]').first.click()      # Any lobby repaint picks up the BR room.
     await pg.wait_for_timeout(500)
     if await pg.locator('.br-size').count() == 0: failures.append(f'lobby {vw}: no squad size option after a BR match')
     await pg.locator('.br-size [data-n="2"]').click()
