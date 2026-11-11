@@ -363,6 +363,7 @@ export class GameRenderer {
           break;
         }
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
+        case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'explosion': {
           // A launcher's blast waits for its rocket to get there.
           if (!vfx.rocketInbound(ev.x, ev.z, ev.radius || 4)) this._boom(ev.x, ev.z, ev.radius || 4);

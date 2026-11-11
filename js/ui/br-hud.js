@@ -14,7 +14,7 @@
 import { BR, MODES } from '../shared/modes.js';
 import { MAX_HP, TEAMS, WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { BR_KIND, itemName } from '../sim/br.js';
+import { BR_KIND, itemName, AMMO_TYPES } from '../sim/br.js';
 import { spectate } from '../sim/snd.js';
 import { esc } from './widgets.js';
 import { icon } from './icons.js';
@@ -22,6 +22,7 @@ import { icon } from './icons.js';
 const ORD = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const MAP_PX = 640;          // Backing pixels of the big map.
+const MINI_SPAN = 120;       // Metres across the zoomed battle royale minimap.
 
 const CSS = `
 .br-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
@@ -105,6 +106,41 @@ const CSS = `
 .br-map-close { height: 36px; border: 0; padding: 0 14px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
 .hud.br-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
 .hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
+/* Hands: both guns and fists as three slots over the ammo readout, and the ammo pouch (rounds for guns not in hand). */
+.br-hands { position: absolute; left: 0; bottom: calc(100% + 4px); display: flex; gap: 3px; align-items: flex-end; pointer-events: auto; }
+.br-slot { position: relative; width: 50px; height: 30px; border: 0; padding: 2px 3px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  color: var(--c-chalk); background: linear-gradient(180deg, rgba(42,51,61,.9), rgba(16,20,26,.85)); box-shadow: var(--hud-edge), inset 0 2px 0 var(--rar, rgba(231,234,228,.25));
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px); }
+.br-slot small { font: 9px/1 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.br-slot.on { background: linear-gradient(180deg, rgba(74,62,30,.95), rgba(32,28,16,.9)); box-shadow: var(--hud-edge), inset 0 2px 0 var(--rar, var(--c-sodium)), inset 0 -2px 0 var(--c-sodium); }
+.br-slot.on small { color: var(--c-chalk); }
+.br-slot.empty { opacity: .45; }
+.br-slot:active { filter: brightness(1.4); }
+.br-slot.fist { width: 38px; }
+.br-pouch { display: flex; flex-direction: column; gap: 1px; margin-left: 3px; font: 9px/1.05 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); text-shadow: var(--text-lift); white-space: nowrap; }
+.br-pouch b { color: var(--c-chalk); font-weight: 400; }
+.br-hands-col { display: flex; flex-direction: column; gap: 2px; }
+.br-pouch { flex-direction: row; gap: 7px; margin-left: 1px; }
+/* Reviving a teammate: your own bar, under the circle chips (clear of the Take button). */
+.br-reviving { position: absolute; left: 50%; top: calc(var(--st) + 80px); transform: translateX(-50%); width: 190px; padding: 6px 10px 7px; text-align: center;
+  background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+.br-reviving b { display: block; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #7be08a; }
+.br-reviving i { display: block; height: 5px; margin-top: 5px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
+.br-reviving i i { position: absolute; inset: 0; margin: 0; height: auto; background: #59d36b; transform-origin: left; transform: scaleX(0); }
+/* The big callout as the final circles start. */
+.br-callout { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); text-align: center; pointer-events: none; animation: br-call 3.4s ease-out forwards; }
+.br-callout b { display: block; font: 400 38px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium); text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 18px rgba(255,190,60,.35); }
+.br-callout small { display: block; margin-top: 4px; font: 13px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-shadow: var(--text-lift); }
+@keyframes br-call { 0% { opacity: 0; transform: translateX(-50%) scale(1.3); } 10% { opacity: 1; transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+/* The downed panel sits below your character, not on it. */
+.br-down { top: auto; bottom: calc(var(--sb) + 66px); }
+/* Narrow screens (under 667 px): the squad panel moves to the top right so it never touches the Alive chip. */
+@media (max-width: 666px) {
+  .br-squad { left: auto; right: calc(var(--sr) + 54px); width: 76px; }
+  .hud.lefty .br-squad { right: auto; left: calc(var(--sl) + 54px); }
+  .br-chip { min-width: 48px; padding: 0 7px; }
+  .br-circle { min-width: 96px; }
+}
 `;
 
 export class BrHud {
@@ -138,6 +174,7 @@ export class BrHud {
       <div class="br-hint" hidden></div>
       <div class="br-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div>
         <button class="br-btn br-self" data-tap="1" hidden>${icon('ui:refresh', { size: 16 })}<span>Self-revive</span></button></div>
+      <div class="br-reviving" hidden><b>Reviving</b><i><i></i></i></div>
       <div class="br-out" hidden><b>Eliminated</b><div class="place"></div><small></small><button data-tap="1" class="br-spec-next" hidden>Next teammate</button></div>
       <div class="br-map" hidden data-tap="1">
         <div class="br-map-frame"><canvas width="${MAP_PX}" height="${MAP_PX}"></canvas></div>
@@ -149,6 +186,13 @@ export class BrHud {
         </div>
       </div>`;
     hud.el.appendChild(el);
+    // The hand slots sit on the ammo readout, so they move with it (left-handed layouts too).
+    this.handsEl = document.createElement('div');
+    this.handsEl.className = 'br-hands';
+    this.handsEl.hidden = true;
+    this.handsEl.innerHTML = `<div class="br-hands-col"><div class="br-pouch"></div><div style="display:flex;gap:3px">${[0, 1, 2].map(k => `<button class="br-slot${k === 2 ? ' fist' : ''}" data-tap="1" data-k="${k}"><span class="gi"></span><small></small></button>`).join('')}</div></div>`;
+    hud.el.querySelector('.arms')?.appendChild(this.handsEl);
+    for (const b of this.handsEl.querySelectorAll('.br-slot')) b.addEventListener('click', e => { e.stopPropagation(); this.cmd?.('slot', { k: Number(b.dataset.k) }); });
     const $ = s => el.querySelector(s);
     this.$ = $;
     this.aliveEl = $('.br-alive b'); this.squadsEl = $('.br-squads b');
@@ -173,6 +217,15 @@ export class BrHud {
     act($('.br-map-close'), () => this.toggleMap(false));
     act($('.br-spec-next'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1); });
     this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl) this.toggleMap(false); });
+    // A tap on the map marks a spot for the squad (a landing zone before the drop).
+    this.mapCanvas.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!this.map) return;
+      const r = this.mapCanvas.getBoundingClientRect(), W = Math.max(this.map.width, this.map.height);
+      this.cmd?.('ping', { x: (e.clientX - r.left) / r.width * W, z: (e.clientY - r.top) / r.height * W });
+    });
+    this.revEl = $('.br-reviving');
+    this.pings = [];
     this.takeId = null;
     this.mapOpen = false;
     this.c = {};
@@ -190,11 +243,13 @@ export class BrHud {
   prepare(on, { map, roster, localId, mode }) {
     this.on = on;
     this.el.hidden = !on;
+    this.handsEl.hidden = true;
     this.hud.el.classList.toggle('br-on', on);
     this.hud.el.classList.remove('br-down-on');
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId; this.mode = mode;
     this.c = {};
+    this.pings = []; this.leader = null; this.leaderAt = -99; this.calledFinal = false;
     this.mapManual = false;
     this.base = null;
     this.toggleMap(true, true);
@@ -250,8 +305,8 @@ export class BrHud {
       c.mapTitle = title;
       this.$('.br-map-title').textContent = title;
       this.$('.br-map-note').textContent = aboard || view.phase === 'warmup'
-        ? 'The transport flies the dotted line. Jump when it is near where you want to land, then steer the glide with the left stick. Gold names hold the best loot.'
-        : 'White: the circle now. Dashed: where it closes to next. Tap outside the map to close.';
+        ? 'The transport flies the dotted line. Jump when it is near where you want to land, then steer the glide with the left stick. Gold names hold the best loot. Tap the map to mark a landing spot for your squad.'
+        : 'White: the circle now. Dashed: where it closes to next. Tap the map to mark a spot; tap outside it to close.';
     }
     const hint = air === 2 ? `<b>Gliding</b>Steer with the left stick` : aboard && view.phase === 'warmup' ? '<b>Boarding</b>The transport sets off in a moment' : '';
     if (c.hint !== hint) { c.hint = hint; this.hintEl.innerHTML = hint; this.hintEl.hidden = !hint || this.mapOpen; }
@@ -287,11 +342,43 @@ export class BrHud {
       }
     }
 
+    this.#hands(view, me, inv, air);
     // A ground gun in reach while both hands hold guns: tap to swap the one in hand for it.
     this.#take(view, me, air);
     this.#squad(view, me);
+    this.#reviving(view, me);
+    this.#leader(view, me);
     this.#downed(view, me, inv);
     this.#out(view, me);
+  }
+
+  // Three slots: each hand's gun (rarity on top, rounds in it / spare) and fists. The one in use is lit.
+  #hands(view, me, inv, air) {
+    const ps = view.brPs, st = view.brStash;
+    const show = !!ps && me.alive && !me.downed && !air;
+    if (this.c.handsOn !== show) { this.c.handsOn = show; this.handsEl.hidden = !show; }
+    if (!show) return;
+    const gun = s => (st?.slot === s ? { def: st.def, ammo: st.ammo, res: st.res } : ps.defs[s]?.id !== 'knife' ? { def: ps.defs[s], ammo: ps.ammo[s], res: ps.reserve[s] } : null);
+    const g0 = gun(0), g1 = gun(1);
+    const fists = ps.weapon === 'knife';
+    const pouch = inv?.pouch ?? null;
+    const key = `${g0?.def.id}|${g0?.def.rarity}|${g0?.ammo}|${g0?.res}|${g1?.def.id}|${g1?.def.rarity}|${g1?.ammo}|${g1?.res}|${ps.slot}|${fists}|${pouch}`;
+    if (this.c.hands === key) return;
+    this.c.hands = key;
+    const btns = this.handsEl.querySelectorAll('.br-slot');
+    [g0, g1].forEach((g, s) => {
+      const b = btns[s];
+      b.classList.toggle('on', !fists && ps.slot === s && !!g);
+      b.classList.toggle('empty', !g);
+      b.style.setProperty('--rar', g ? BR.rarityCss[g.def.rarity ?? 0] : 'rgba(231,234,228,.18)');
+      b.querySelector('.gi').innerHTML = g ? icon(g.def.id, { size: 14 }) : '';
+      b.querySelector('small').textContent = !g ? 'Empty' : g.res > 900 || g.def.unlimitedReserve ? `${g.ammo}` : `${g.ammo}/${g.res}`;
+    });
+    btns[2].classList.toggle('on', fists);
+    if (!btns[2].dataset.done) { btns[2].dataset.done = '1'; btns[2].querySelector('.gi').innerHTML = icon('knife', { size: 14 }); btns[2].querySelector('small').textContent = 'Fists'; }
+    const P = ['Light', 'Rifle', 'Shell', 'Heavy', 'Rocket'];
+    this.handsEl.querySelector('.br-pouch').innerHTML = pouch ? pouch.map((n, t) => (n > 0 ? `<span>${P[t]} <b>${n}</b></span>` : '')).join('') : '';
+    void AMMO_TYPES;
   }
 
   #plates(me) {
@@ -348,6 +435,41 @@ export class BrHud {
       return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${esc(p.name)}</b><em>${note}</em>
         <span class="bars">${plates}<i style="flex:2.2;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
     }).join('');
+  }
+
+  // Your own revive bar while you pick a teammate up (the downed one has theirs in the down panel).
+  #reviving(view, me) {
+    let pat = null;
+    if (me.alive && !me.downed && !me.air) {
+      let bd = 2.6;
+      for (const p of view.players) {
+        if (p.team !== me.team || p.id === me.id || !p.alive || !p.downed || !(p.reviveK > 0.01)) continue;
+        const d = Math.hypot(p.x - me.x, p.z - me.z);
+        if (d < bd) { bd = d; pat = p; }
+      }
+    }
+    const key = pat ? pat.id : '';
+    if (this.c.rev !== key) {
+      this.c.rev = key;
+      this.revEl.hidden = !pat;
+      if (pat) this.revEl.querySelector('b').textContent = `Reviving ${pat.name}`;
+    }
+    if (pat) this.revEl.querySelector('i i').style.transform = `scaleX(${Math.min(1, pat.reviveK).toFixed(3)})`;
+  }
+
+  // The kill leader: named when it changes, and (if not on your squad) shown on the maps where they were, every 30 s.
+  #leader(view, me) {
+    let best = null;
+    for (const p of view.players) if (p.alive && (p.kills ?? 0) >= 3 && (!best || p.kills > best.kills)) best = p;
+    const id = best?.id ?? null;
+    if (id !== this.c.leaderId) {
+      if (id && view.phase === 'live') this.hud.notify(id === me.id ? `You are the kill leader (${best.kills})` : `${best.name} is the kill leader (${best.kills})`);
+      this.c.leaderId = id;
+      this.leaderAt = -99;
+    }
+    const now = performance.now() / 1000;
+    if (best && best.team !== me.team && now - this.leaderAt > 30) { this.leaderAt = now; this.leader = { x: best.x, z: best.z, name: best.name, kills: best.kills, t: now }; }
+    if (!best || best.team === me.team) this.leader = null;
   }
 
   #downed(view, me, inv) {
@@ -418,7 +540,24 @@ export class BrHud {
       case 'brpick':
         if (e.id === me) this.hud.notify(`+ ${({ plate: 'Armor plate', med: 'Medkit', kit: 'Self-revive kit', lethal: 'Lethal', tactical: 'Tactical', ammo: 'Ammo' })[e.kind] ?? e.kind}`);
         break;
+      case 'brping': {
+        if (view.players.find(p => p.id === e.id)?.team !== myTeam) break;
+        this.pings = this.pings.filter(g => g.id !== e.id);
+        this.pings.push({ id: e.id, x: e.x, z: e.z, t: performance.now() / 1000, mine: e.id === me });
+        if (e.id !== me) this.hud.notify(`${view.players.find(p => p.id === e.id)?.name ?? 'A squadmate'} marked a spot`);
+        break;
+      }
       case 'brphase':
+        if (e.state === 'wait' && e.phase >= BR.phases.length - 3 && !this.calledFinal) {
+          this.calledFinal = true;
+          const n = view.br?.squadsLeft ?? 0, solo = BR_SOLO(this.mode);
+          const el = document.createElement('div');
+          el.className = 'br-callout';
+          el.innerHTML = `<b>Final circles</b><small>${n} ${solo ? (n === 1 ? 'player' : 'players') : n === 1 ? 'squad' : 'squads'} left. Hold inside the ring.</small>`;
+          this.el.appendChild(el);
+          setTimeout(() => el.remove(), 3500);
+          break;
+        }
         if (e.state === 'shrink') this.hud.notify('The circle is closing');
         else if (e.state === 'wait') this.hud.notify('Next circle marked on the map');
         else if (e.state === 'final') this.hud.notify('Final circle');
@@ -436,9 +575,17 @@ export class BrHud {
     // Outside the circle, darkened.
     g.fillStyle = 'rgba(120,20,40,.35)';
     g.beginPath();
-    g.rect(0, 0, g.canvas.width, g.canvas.height);
+    g.rect(-4000, -4000, 8000 + this.map.width * sx, 8000 + this.map.height * sz);    // The minimap may be translated (zoomed).
     g.arc(br.circle.x * sx, br.circle.z * sz, Math.max(0, br.circle.r * sx), 0, Math.PI * 2, true);
     g.fill('evenodd');
+    // Outside the next circle: a dashed line in toward it.
+    const dn = Math.hypot(me.x - br.next.x, me.z - br.next.z);
+    if (me.alive && !me.air && br.state !== 'final' && dn > br.next.r && br.plane.f >= 1) {
+      const k = (dn - br.next.r) / dn;
+      g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 1.5; g.setLineDash([4, 4]);
+      g.beginPath(); g.moveTo(me.x * sx, me.z * sz); g.lineTo((me.x + (br.next.x - me.x) * k) * sx, (me.z + (br.next.z - me.z) * k) * sz); g.stroke(); g.setLineDash([]);
+    }
+    this.#marks(g, sx, sz, 1);
     g.strokeStyle = '#fff'; g.lineWidth = 2;
     g.beginPath(); g.arc(br.circle.x * sx, br.circle.z * sz, Math.max(0, br.circle.r * sx), 0, Math.PI * 2); g.stroke();
     if (br.state !== 'final') {
@@ -458,6 +605,45 @@ export class BrHud {
       g.beginPath(); g.arc(p.x * sx, p.z * sz, 5 + Math.sin(performance.now() / 150) * 2, 0, Math.PI * 2); g.stroke();
     }
     g.restore();
+  }
+
+  // Squad pings and the kill leader's last reveal, on either map (k scales the marks).
+  #marks(g, sx, sz, k) {
+    const now = performance.now() / 1000;
+    this.pings = this.pings.filter(p => now - p.t < 40);
+    for (const p of this.pings) {
+      const x = p.x * sx, y = p.z * sz, a = Math.max(0.35, 1 - (now - p.t) / 40);
+      g.globalAlpha = a;
+      g.fillStyle = p.mine ? '#ffffff' : '#ffc24a'; g.strokeStyle = '#0a0d11'; g.lineWidth = 1.5 * k;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x - 5 * k, y - 11 * k); g.arc(x, y - 11 * k, 5 * k, Math.PI, 0); g.closePath(); g.fill(); g.stroke();
+      g.globalAlpha = 1;
+    }
+    const L = this.leader;
+    if (L && now - L.t < 30) {
+      const x = L.x * sx, y = L.z * sz, r = (7 + Math.sin(now * 5) * 1.5) * k;
+      g.strokeStyle = '#ffb21a'; g.lineWidth = 2 * k;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#ffb21a';
+      g.beginPath(); g.moveTo(x - 4 * k, y - 1 * k); g.lineTo(x - 4 * k, y - 6 * k); g.lineTo(x - 2 * k, y - 3 * k); g.lineTo(x, y - 7 * k); g.lineTo(x + 2 * k, y - 3 * k); g.lineTo(x + 4 * k, y - 6 * k); g.lineTo(x + 4 * k, y - 1 * k); g.closePath(); g.fill();
+    }
+  }
+
+  // The zoomed minimap: a window of MINI_SPAN metres on the player (or the teammate watched), kept on the map.
+  miniWindow(view, me, W, H) {
+    if (!this.map || !view.br) return null;
+    const eyeId = !me.alive ? spectate.target(view, me.id) : null;
+    const eye = (eyeId && view.players.find(p => p.id === eyeId)) || me;
+    const span = me.air === 1 || view.phase === 'warmup' ? Math.max(this.map.width, this.map.height) : MINI_SPAN;
+    const k = W / span, spanZ = H / k;
+    const ox = Math.max(0, Math.min(this.map.width - span, eye.x - span / 2)), oz = Math.max(0, Math.min(this.map.height - spanZ, eye.z - spanZ / 2));
+    return { k, ox, oz, span, spanZ, W, H };
+  }
+
+  drawMiniBase(g, z) {
+    const base = this.#mapBase(), s = this.baseS;
+    g.fillStyle = '#1d242c'; g.fillRect(0, 0, z.W, z.H);
+    g.drawImage(base, z.ox * s, z.oz * s, z.span * s, z.spanZ * s, 0, 0, z.W, z.H);
+    g.fillStyle = 'rgba(10,13,17,.25)'; g.fillRect(0, 0, z.W, z.H);
   }
 
   #mapBase() {
@@ -512,6 +698,7 @@ export class BrHud {
       g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = '#ffbe50';
       g.beginPath(); g.moveTo(14, 0); g.lineTo(-8, -11); g.lineTo(-4, 0); g.lineTo(-8, 11); g.closePath(); g.fill(); g.restore();
     }
+    this.#marks(g, s, s, 1.8);
     // Squad and you.
     for (const p of view.players) {
       if (p.team !== me.team || !p.alive || p.air === 1) continue;

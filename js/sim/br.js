@@ -26,7 +26,7 @@
 // Events: {t:'brjump', id, x, z}, {t:'brland', id}, {t:'brgive', id, slot, w, r, kit, ammo, res}, {t:'bramm', id, slot,
 // n}, {t:'brinv', id, guns}, {t:'brpick', id, kind}, {t:'brchest', x, z}, {t:'down', by, target, weapon, x, z},
 // {t:'revive', id, by}, {t:'bruse', id, kind, done?}, {t:'brplate', id, broke?}, {t:'brsquad', team, place},
-// {t:'brphase', phase, state}.
+// {t:'brphase', phase, state}, {t:'brping', id, team, x, z}.
 
 import { BR, MODES } from '../shared/modes.js';
 import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../shared/constants.js';
@@ -45,6 +45,10 @@ export const AMMO_TYPES = ['light', 'rifle', 'shell', 'heavy', 'rocket'];
 export const AMMO_NAMES = { light: 'Light ammo', rifle: 'Rifle ammo', shell: 'Shells', heavy: 'Heavy ammo', rocket: 'Rockets' };
 const AMMO_OF = { SMG: 'light', Pistol: 'light', Assault: 'rifle', LMG: 'rifle', Shotgun: 'shell', Marksman: 'heavy', Sniper: 'heavy', Launcher: 'rocket' };
 const AMMO_PACK = { light: 40, rifle: 45, shell: 12, heavy: 14, rocket: 2 };
+// The ammo pouch: rounds for guns you are not holding are kept, up to these, and top up a gun of that type when you take
+// one (docs/BR.md "Inventory").
+export const POUCH_CAP = { light: 120, rifle: 135, shell: 36, heavy: 42, rocket: 4 };
+const POUCH_CAPS = AMMO_TYPES.map(t => POUCH_CAP[t]);
 export const ammoOf = id => AMMO_OF[WEAPON_CATEGORY[id]] ?? null;
 const TACTICAL_IDS = Object.keys(TACTICALS), LETHAL_IDS = Object.keys(LETHALS);
 const EQUIP_CAP = 3;
@@ -71,8 +75,19 @@ const CONV_CHANCE = [0, 0, 0, 0, 0.2];
 const CHANGE_REPEAT = 1.2;       // Seconds a loot change keeps riding along in snapshots.
 const CELL = 8;                  // Loot grid cell, metres.
 const PLAN_EVERY = 15;           // Ticks between squad plans (0.5 s).
+const BACKUP_EVERY = 90;         // Ticks between host-migration backups to each human guest (3 s).
 const NOISE_KEEP = 7;            // Seconds a gunfight stays interesting to bots that heard it.
 const THIRD_PARTY = 75;          // Metres a geared bot squad will go to join a fight it hears.
+// Pacing (docs/BR.md "Pacing"): the share of squads that pick a contested drop on purpose, by squad size; how far apart
+// the rest land (metres, a Gaussian falloff); the chance a heard fight is joined, by circle phase (times the squad's
+// aggro); and how long a squad keeps to its first place before it moves on.
+const HOT_DROP = [0, 0.06, 0.08, 0.1, 0.1];
+const DROP_GAP = 70;
+const JOIN_FIGHT = [0, 0.15, 0.3, 0.25, 0.2, 0.15, 0.15];   // Late on, squads mostly hold and let fights come.
+const LOOT_DWELL = 50;
+const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
+const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
+const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
 
 function mulberry32(a) {
   return function () {
@@ -338,6 +353,7 @@ export class BrRules {
       p.br = {
         armor: 0, plates: 0, meds: 0, kits: 0, guns: [null, null], useK: null, useT: 0, useDur: 0,
         reviveT: 0, downedBy: null, downWeapon: null, out: false, place: 0, dmg: 0, revives: 0, knocks: 0,
+        pouch: [0, 0, 0, 0, 0], stash: null,      // Ammo kept by type; the gun put away while fists are out {slot, ammo, res}.
         glideT: 0, deathT: 0, jumpAt: 0.5, dropX: p0.x, dropZ: p0.z, follow: null, landed: false,
       };
       this._startKit(p);
@@ -365,11 +381,24 @@ export class BrRules {
   _camo(p, id) { return p.isBot ? 'none' : (p.loadout?.camos?.[id] ?? 'none'); }
 
   _invGuns(p) {
-    const ps = p.ps;
     return [0, 1].map(s => {
       const g = p.br.guns[s];
-      return g ? [WEAPON_IDS.indexOf(g.id), g.r, packKit(g.kit), ps.ammo[s], ps.reserve[s]] : null;
+      return g ? [WEAPON_IDS.indexOf(g.id), g.r, packKit(g.kit), this._ammoIn(p, s), this._resIn(p, s)] : null;
     });
+  }
+
+  // A hand's gun is held unless it is put away for fists (stash). Its rounds live in the stash meanwhile.
+  _held(p, s) { return !!p.br.guns[s] && p.br.stash?.slot !== s; }
+  _ammoIn(p, s) { return p.br.stash?.slot === s ? p.br.stash.ammo : p.ps.ammo[s]; }
+  _resIn(p, s) { return p.br.stash?.slot === s ? p.br.stash.res : p.ps.reserve[s]; }
+
+  // Rounds into the pouch for their type, up to its cap. Returns what did not fit.
+  _toPouch(p, type, n) {
+    const t = AMMO_TYPES.indexOf(type);
+    if (t < 0 || n <= 0) return n;
+    const k = Math.max(0, Math.min(n, POUCH_CAPS[t] - p.br.pouch[t]));
+    p.br.pouch[t] += k;
+    return n - k;
   }
 
   // ---- Commands from a phone ----
@@ -393,8 +422,46 @@ export class BrRules {
       case 'med': return this._startUse(p, 'med');
       case 'self': return this._startUse(p, 'self');
       case 'cancel': p.br.useK = null; return true;
+      case 'fists': return this._fists(p, msg);
+      case 'ping': {
+        // A landing spot (or any spot) for the squad, at most every 1.5 s.
+        const x = +msg.x, z = +msg.z;
+        if (!Number.isFinite(x) || !Number.isFinite(z) || sim.time - (p.br.pingT ?? -9) < 1.5) return false;
+        p.br.pingT = sim.time;
+        sim._emit({ t: 'brping', id: p.id, team: p.team, x: Math.round(Math.max(0, Math.min(sim.map.width, x)) * 10) / 10, z: Math.round(Math.max(0, Math.min(sim.map.height, z)) * 10) / 10 });
+        return true;
+      }
     }
     return false;
+  }
+
+  // Fists as the third slot: the gun in a hand is put away (its rounds kept) and fists come out; again, and it is back.
+  // The phone does it at once and tells the host, with the rounds it put away.
+  _fists(p, msg) {
+    const b = p.br, ps = p.ps;
+    if (p.brAir || p.downed) return false;
+    if (msg.on) {
+      const slot = msg.slot === 1 ? 1 : 0, g = b.guns[slot];
+      if (!g || b.stash) return false;
+      const def = brDef(g.id, g.kit, g.r);
+      b.stash = { slot, ammo: Math.max(0, Math.min(def.magazine, msg.ammo | 0)), res: Math.max(0, Math.min(brAmmoCap(def), msg.res | 0)) };
+      brArm(ps, slot, KNIFE);
+      ps.slot = slot; ps.weapon = KNIFE;
+    } else {
+      const st = b.stash;
+      if (!st) return false;
+      b.stash = null;
+      const g = b.guns[st.slot];
+      if (!g) return true;
+      brArm(ps, st.slot, g.id, g.kit, g.r, st.ammo, st.res);
+      ps.slot = st.slot; ps.weapon = g.id;
+      // The pouch tops the gun back up.
+      const t = AMMO_TYPES.indexOf(ammoOf(g.id)), def = ps.defs[st.slot];
+      const n = t >= 0 && !def.unlimitedReserve ? Math.min(b.pouch[t], brAmmoCap(def) - ps.reserve[st.slot]) : 0;
+      if (n > 0) { b.pouch[t] -= n; ps.reserve[st.slot] += n; if (!p.isBot) this.sim._emit({ t: 'bramm', id: p.id, slot: st.slot, n }); }
+    }
+    this.sim._metaUntil = this.sim.tick + 2;
+    return true;
   }
 
   _startUse(p, kind) {
@@ -596,6 +663,7 @@ export class BrRules {
     const sim = this.sim;
     if (!p.alive) return;
     p.downed = false;
+    if (cause === 'zone') this.zoneDeaths = (this.zoneDeaths ?? 0) + 1;    // Counted for the pacing test (dev/sim-br.mjs).
     if (killer && killer !== p && killer.alive !== undefined) {
       sim._kill(p, killer, weapon ?? killer.ps.weapon, Math.hypot(killer.ps.x - p.ps.x, killer.ps.z - p.ps.z), null, false, null);
     } else sim._selfKill(p, cause);
@@ -655,7 +723,7 @@ export class BrRules {
     p.ackX = ps.x; p.ackZ = ps.z; p.ackT = 1.5;
     if (p.alive) {
       sim._emit({ t: 'spawn', id: p.id, x: Math.round(ps.x * 100) / 100, z: Math.round(ps.z * 100) / 100, aim: Math.round(ps.aim * 100) / 100 });
-      sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p), air: p.brAir, glideT: p.br.glideT });
+      sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p), air: p.brAir, glideT: p.br.glideT, fists: p.br.stash ? p.br.stash.slot : -1 });
     }
   }
 
@@ -739,10 +807,11 @@ export class BrRules {
         const type = AMMO_TYPES[it.v];
         let left = it.n;
         for (const s of [ps.slot, 1 - ps.slot]) {
-          if (!left || !b.guns[s] || ammoOf(b.guns[s].id) !== type) continue;
+          if (!left || !this._held(p, s) || ammoOf(b.guns[s].id) !== type) continue;
           const got = brAmmo(ps, s, left);
           if (got > 0) { left -= got; if (!p.isBot) sim._emit({ t: 'bramm', id: p.id, slot: s, n: got }); }
         }
+        left = this._toPouch(p, type, left);       // The rest is kept for a gun of that type.
         if (left === it.n) return;
         if (left > 0) { it.n = left; this._removeItem(it); this._addItem({ ...it, kit: NO_ATTACHMENTS }); return; }
         took = true; break;
@@ -793,13 +862,21 @@ export class BrRules {
     if (slot !== 0 && slot !== 1) slot = !b.guns[0] ? 0 : !b.guns[1] ? 1 : ps.slot;
     const old = b.guns[slot];
     const id = WEAPON_IDS[it.v];
+    const oldAmmo = this._ammoIn(p, slot), oldRes = this._resIn(p, slot);
+    if (b.stash?.slot === slot) b.stash = null;
     this._removeItem(it);
     if (old) {
-      this._addItem({ kind: K.gun, v: WEAPON_IDS.indexOf(old.id), r: old.r, n: 1, kit: old.kit, ammo: ps.ammo[slot], res: ps.reserve[slot],
+      // The old gun goes down with its magazine; its spare rounds go in the pouch, as far as they fit.
+      const keep = brDef(old.id).unlimitedReserve ? oldRes : this._toPouch(p, ammoOf(old.id), oldRes);
+      this._addItem({ kind: K.gun, v: WEAPON_IDS.indexOf(old.id), r: old.r, n: 1, kit: old.kit, ammo: oldAmmo, res: keep,
         x: it.x, z: it.z });
     }
     const def = brDef(id, it.kit, it.r);
-    const ammo = it.ammo ?? def.magazine, res = it.res ?? def.magazine * (1 + (it.r >> 1));
+    const ammo = it.ammo ?? def.magazine;
+    let res = it.res ?? def.magazine * (1 + (it.r >> 1));
+    // Topped up from the pouch.
+    const pt = AMMO_TYPES.indexOf(ammoOf(id));
+    if (pt >= 0 && !def.unlimitedReserve) { const n = Math.max(0, Math.min(b.pouch[pt], brAmmoCap(def) - res)); b.pouch[pt] -= n; res += n; }
     b.guns[slot] = { id, r: it.r, kit: it.kit };
     brArm(ps, slot, id, it.kit, it.r, ammo, res);
     p.kits[slot] = it.kit;
@@ -841,11 +918,14 @@ export class BrRules {
     for (let s = 0; s < 2; s++) {
       const g = b.guns[s];
       if (!g) continue;
-      drops.push({ kind: K.gun, v: WEAPON_IDS.indexOf(g.id), r: g.r, n: 1, kit: g.kit, ammo: ps.ammo[s], res: 0 });
-      const type = ammoOf(g.id);
-      if (type && ps.reserve[s] > 0) drops.push({ kind: K.ammo, v: AMMO_TYPES.indexOf(type), r: 0, n: Math.min(ps.reserve[s], AMMO_PACK[type] * 3) });
+      drops.push({ kind: K.gun, v: WEAPON_IDS.indexOf(g.id), r: g.r, n: 1, kit: g.kit, ammo: this._ammoIn(p, s), res: 0 });
+      const type = ammoOf(g.id), res = this._resIn(p, s);
+      if (type && res > 0 && !brDef(g.id).unlimitedReserve) b.pouch[AMMO_TYPES.indexOf(type)] += res;
       b.guns[s] = null;
     }
+    b.stash = null;
+    b.pouch.forEach((n, t) => { if (n > 0) drops.push({ kind: K.ammo, v: t, r: 0, n: Math.min(n, AMMO_PACK[AMMO_TYPES[t]] * 3) }); });
+    b.pouch = [0, 0, 0, 0, 0];
     if (b.plates) drops.push({ kind: K.plate, v: 0, r: 0, n: b.plates });
     if (b.meds) drops.push({ kind: K.med, v: 0, r: 0, n: 1 });
     if (b.kits) drops.push({ kind: K.kit, v: 0, r: 4, n: 1 });
@@ -916,7 +996,7 @@ export class BrRules {
   // Bots in a human's squad follow that human out of the transport and down.
   _planDrops(squads) {
     const sim = this.sim, rng = sim.rng, pois = this.def.pois ?? [], plane = this.plane;
-    const taken = new Map();
+    const picks = [];
     const dx = (plane.tx - plane.fx) / plane.len, dz = (plane.tz - plane.fz) / plane.len;
     for (const [team, members] of squads) {
       const human = members.find(p => !p.isBot);
@@ -929,28 +1009,53 @@ export class BrRules {
         }
         continue;
       }
+      // Most squads land away from everyone else (real players spread out along the line); now and then a squad goes
+      // for a contested tier 1 place on purpose. Duos and solos also land between the places, at any loot spot.
+      const hot = rng() < HOT_DROP[Math.min(4, this.squad)];
       let best = null, bestW = -1;
-      for (const poi of pois) {
-        const t = ((poi.x - plane.fx) * dx + (poi.z - plane.fz) * dz);
-        const off = Math.abs((poi.x - plane.fx) * dz - (poi.z - plane.fz) * dx);
-        const n = taken.get(poi.id) ?? 0;
-        const w = (poi.tier === 1 ? 3 : poi.tier === 2 ? 2 : 1.2) * Math.pow(0.3, n) * Math.exp(-off / 140) * (0.4 + rng()) * (t > 20 && t < plane.len - 20 ? 1 : 0.2);
-        if (w > bestW) { bestW = w; best = poi; }
+      for (const c of this._dropCands(rng)) {
+        const t = ((c.x - plane.fx) * dx + (c.z - plane.fz) * dz);
+        const off = Math.abs((c.x - plane.fx) * dz - (c.z - plane.fz) * dx);
+        let near = 0;
+        for (const q of picks) { const d = Math.hypot(q.x - c.x, q.z - c.z); near = Math.max(near, Math.exp(-(d * d) / (DROP_GAP * DROP_GAP))); }
+        // A hot drop joins one other squad at a tier 1 place, never a third.
+        const crowd = picks.filter(q => Math.hypot(q.x - c.x, q.z - c.z) < 30).length;
+        const spread = hot && crowd < 2 ? (c.tier === 1 ? 1 + near : 0.1) : (1 - 0.97 * near) * (crowd ? 0.05 : 1);
+        const w = (c.tier === 1 ? 3 : c.tier === 2 ? 2 : 1.2) * spread * Math.exp(-off / 140) * (0.4 + rng()) * (t > 20 && t < plane.len - 20 ? 1 : 0.2);
+        if (w > bestW) { bestW = w; best = c; }
       }
       if (!best) best = { x: sim.map.width / 2, z: sim.map.height / 2, r: 30, id: 'mid' };
-      taken.set(best.id, (taken.get(best.id) ?? 0) + 1);
+      picks.push(best);
       const along = ((best.x - plane.fx) * dx + (best.z - plane.fz) * dz) / plane.len;
-      const off = Math.abs((best.x - plane.fx) * dz - (best.z - plane.fz) * dx);
       // Out when the transport passes closest to the place; the glide covers what it can of the rest.
       const jump = Math.max(0.05, Math.min(BR.forceJump - 0.02, along - 0.01));
-      void off;
       for (const p of members) {
         p.br.jumpAt = jump + (rng() - 0.5) * 0.02;
         const a = rng() * Math.PI * 2, r = (best.r ?? 20) * 0.6 * Math.sqrt(rng());
         p.br.dropX = best.x + Math.cos(a) * r; p.br.dropZ = best.z + Math.sin(a) * r;
       }
-      this.plans.set(team, { poi: best, kind: 'loot', since: sim.time });
+      // A squad's habits for the match: how long it loots before it moves for the circle (late rotators sometimes get
+      // caught), and how keen it is to join fights it hears.
+      this.plans.set(team, { poi: best.poi ?? best, kind: 'loot', since: sim.time, late: rng(), aggro: 0.5 + rng() * 0.8 });
     }
+  }
+
+  // Where squads may land: the named places, and for duos and solos also loot spots between them (each tied to its
+  // nearest place for the loot run that follows).
+  _dropCands(rng) {
+    const pois = this.def.pois ?? [];
+    const out = pois.map(poi => ({ x: poi.x, z: poi.z, r: poi.r, tier: poi.tier, id: poi.id, poi }));
+    if (this.squad <= 2) {
+      const loot = this.def.loot ?? [];
+      for (let i = 0; i < 40 && loot.length; i++) {
+        const s = loot[Math.floor(rng() * loot.length)];
+        let poi = null, bd = Infinity;
+        for (const q of pois) { const d = Math.hypot(q.x - s.x, q.z - s.z); if (d < bd) { bd = d; poi = q; } }
+        if (!poi) continue;
+        out.push({ x: s.x, z: s.z, r: 8, tier: Math.min(3, s.tier + 1), id: `spot${i}`, poi: { id: `spot:${poi.id}:${i}`, x: s.x, z: s.z, r: 16, tier: s.tier } });
+      }
+    }
+    return out;
   }
 
   _geared(p) {
@@ -973,21 +1078,29 @@ export class BrRules {
     const toNext = Math.hypot(ax - n.x, az - n.z) - n.r * 0.7;
     const walk = Math.max(0, toNext) / 5 + 10;
     const outsideNow = Math.hypot(ax - c.x, az - c.z) > c.r - 6;
-    const closing = this.state === 'shrink' || this.timer < walk * 1.2 + 8;
+    // Late rotators (plan.late near 1) leave it until the shrink is under way; the rest move with time to spare.
+    const late = plan.late ?? 0.5;
+    // The first circle hurts so little that nobody leaves good loot for it before it moves.
+    // While it shrinks, a squad moves once the edge comes near (they stagger as it sweeps across the map).
+    const closing = this.phase === 0 ? Math.hypot(ax - c.x, az - c.z) > c.r - 25 : (this.state === 'shrink' && (late < 0.75 || toNext > n.r * 0.4)) || this.timer < walk * (1.3 - late) + 8 * (1 - late);
     const geared = bots.every(p => this._geared(p));
     let kind = 'loot';
-    if (outsideNow || (closing && toNext > 0)) kind = 'rotate';
+    // A greedy squad (late, from phase 1) shrugs the circle off until it starts to hurt; sometimes it leaves it too late.
+    const shrugs = late > 0.6 && this.phase >= 1 && this.state !== 'final' && bots.every(q => q.hp > GREEDY_HP);
+    if ((outsideNow && !shrugs) || (closing && toNext > 0 && !shrugs)) kind = 'rotate';
     else if (geared || this.phase >= 2) kind = 'hold';
-    // A fight nearby, inside where we need to be: sometimes worth taking a piece of. Each burst of gunfire is weighed once.
+    // A fight nearby, inside where we need to be: sometimes worth taking a piece of. Each burst of gunfire is weighed
+    // once. Nobody goes looking for trouble while the first circle waits; later, keener and further.
     let fight = plan.fight && sim.time - plan.fight.t < NOISE_KEEP ? plan.fight : null;
-    if (!fight && kind !== 'rotate' && geared && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
-      const reach = this.phase >= 2 ? THIRD_PARTY * 0.75 : THIRD_PARTY * 0.5;
+    const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1);
+    if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= 3) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
+      const reach = THIRD_PARTY * Math.min(0.7, 0.4 + this.phase * 0.1);
       for (let i = this.noise.length - 1; i >= 0; i--) {
         const s = this.noise[i];
         if (s.team === team || s.weighed?.has(team)) continue;
         (s.weighed || (s.weighed = new Set())).add(team);
         const d = Math.hypot(s.x - ax, s.z - az);
-        if (d > 18 && d < reach && Math.hypot(s.x - n.x, s.z - n.z) < n.r + 10 && sim.rng() < 0.45) { fight = s; break; }
+        if (d > 18 && d < reach && Math.hypot(s.x - n.x, s.z - n.z) < n.r + 10 && sim.rng() < join) { fight = s; break; }
       }
     }
     plan.fight = fight;
@@ -997,22 +1110,28 @@ export class BrRules {
     // Where the squad goes, once per plan change or when the circle moves on.
     if (kind === 'rotate' && (!plan.spot || plan.circle !== this.phase)) {
       const a = Math.atan2(az - n.z, ax - n.x) + (sim.rng() - 0.5) * 0.8;
-      plan.spot = this._walkable(n.x + Math.cos(a) * n.r * 0.5, n.z + Math.sin(a) * n.r * 0.5);
+      // In at the near edge, not the middle: squads coming from all sides do not all meet in the centre.
+      plan.spot = this._walkable(n.x + Math.cos(a) * n.r * 0.7, n.z + Math.sin(a) * n.r * 0.7);
       plan.circle = this.phase;
-    } else if (kind === 'hold' && (!plan.spot || plan.circle !== this.phase || sim.time - plan.since > 35)) {
-      plan.spot = this._holdSpot(n, ax, az);
+    } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && Math.hypot(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
+      // A squad holds where it is while that stays inside the next circle: it does not wander between holds.
+      plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62);
       plan.circle = this.phase; plan.since = sim.time;
     } else if (kind === 'fight') {
       const d = Math.hypot(fight.x - ax, fight.z - az);
       plan.spot = this._walkable(fight.x + (ax - fight.x) / d * 16, fight.z + (az - fight.z) / d * 16);
     }
 
+    let sqx = 0, sqz = 0;
+    for (const q of bots) { sqx += q.ps.x / bots.length; sqz += q.ps.z / bots.length; }
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
+      bot.sightK = 1;
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
         if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
-        else if (b.meds > 0 && p.hp < 60) this._startUse(p, 'med');
+        // (A greedy squad sitting in the circle's damage does not think to heal until it heads in.)
+        else if (b.meds > 0 && p.hp < 60 && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)) this._startUse(p, 'med');
       }
       // A teammate down nearby comes first, unless there is a fight in view.
       const mate = downed.length && !bot.targetVisible ? downed.reduce((m, q) => {
@@ -1035,13 +1154,20 @@ export class BrRules {
         continue;
       }
       if (kind === 'loot' || (kind === 'hold' && !this._geared(p))) {
+        // The squad loots together: round the middle of the place and the squad (so a teammate is near enough to pick
+        // you up), or round its hold once the circle has a say.
         const poi = plan.poi;
-        const t = this._lootTarget(p, kind === 'loot' ? 40 : 22, poi && kind === 'loot' ? poi.x : p.ps.x, poi && kind === 'loot' ? poi.z : p.ps.z);
-        if (t) { bot.setObjective(t); continue; }
-        // Nothing left here: the squad moves to the nearest place it has not been, inside the next circle.
-        if (kind === 'loot' && sim.time - plan.since > 6) {
+        let lx = sqx, lz = sqz, lr = 18;
+        if (kind === 'loot' && poi) { lx = (poi.x + sqx) / 2; lz = (poi.z + sqz) / 2; lr = Math.max(16, Math.min(28, poi.r + 6)); }
+        else if (plan.spot) { lx = plan.spot.x; lz = plan.spot.z; }
+        const t = this._lootTarget(p, lr, lx, lz);
+        if (t) { bot.setObjective(t); bot.sightK = LOOT_SIGHT[Math.min(this.phase, 2)]; continue; }
+        // Nothing left here: the squad moves to the nearest quiet place it has not been, inside the next circle; while
+        // the first circle waits it stays put a while first (a squad with a gun each settles in instead).
+        const dwell = this.phase === 0 && this.state === 'wait' ? LOOT_DWELL : 6;
+        if (kind === 'loot' && sim.time - plan.since > dwell && !(this.phase === 0 && this.state === 'wait' && bots.filter(q => this._heldScore(q, 0) >= 2.2 || this._heldScore(q, 1) >= 2.2).length * 2 >= bots.length)) {
           (plan.visited || (plan.visited = new Set())).add(plan.poi?.id);
-          plan.poi = this._nextPoi(team, ax, az, n, plan.visited);
+          plan.poi = this._nextPoi(team, ax, az, n, plan.visited, this.phase === 0 ? 90 : Infinity);
           plan.since = sim.time;
         }
       }
@@ -1064,21 +1190,27 @@ export class BrRules {
   }
 
   // A good place to sit out the wait inside the next circle: late in the match a roofless room or a hold with cover.
-  _holdSpot(n, ax, az) {
-    const sim = this.sim, rooms = sim.map.rooms ?? [];
+  // ringK: where in the next circle (a share of its radius) the squad likes to sit; edge players sit just outside it and
+  // run in as it shrinks, which sometimes goes wrong.
+  _holdSpot(n, ax, az, ringK = 0.62) {
+    const sim = this.sim, rooms = sim.map.rooms ?? [], c = this.circle;
+    const early = this.phase === 0 && this.state === 'wait';     // The first circle is far off: settle in where you are.
     let best = null, bestS = -Infinity;
     for (const r of rooms) {
       const x = r.x + r.w / 2, z = r.z + r.d / 2;
       const dc = Math.hypot(x - n.x, z - n.z);
-      if (dc > n.r * 0.85) continue;
-      const s = -Math.hypot(x - ax, z - az) * 0.05 - dc * 0.02 + sim.rng() * 2 + (this.phase >= 3 ? 2 : 0);
+      if ((dc > n.r * Math.max(0.85, ringK + 0.1) || Math.hypot(x - c.x, z - c.z) > c.r * 0.9) && !early) continue;
+      // Late on, a ring inside the edge on our side rather than the middle, where every squad would meet.
+      const ring = this.phase >= 1 ? Math.abs(dc / Math.max(1, n.r) - ringK) * 8 : 0;
+      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring + sim.rng() * 2;
       if (s > bestS) { bestS = s; best = { x, z }; }
     }
     if (!best) {
-      const ix = sim.nav.holdIndex, k = ix.near(n.x, n.z, Math.max(10, n.r * 0.8));
+      const ix = sim.nav.holdIndex, k = ix.near(n.x, n.z, Math.max(10, n.r * Math.max(0.8, ringK + 0.12)));
       for (let q = 0; q < k; q++) {
         const h = sim.nav.holds[ix.out[q]];
-        const s = -Math.hypot(h.x - ax, h.z - az) * 0.04 + sim.rng() * 2;
+        const ring = this.phase >= 1 ? Math.abs(Math.hypot(h.x - n.x, h.z - n.z) / Math.max(1, n.r) - ringK) * 8 : 0;
+        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring + sim.rng() * 2;
         if (s > bestS) { bestS = s; best = { x: h.x, z: h.z }; }
       }
     }
@@ -1086,13 +1218,16 @@ export class BrRules {
   }
 
   // The next place to loot: near, inside the next circle, not been there, and nobody else heading for it.
-  _nextPoi(team, x, z, n, visited) {
+  _nextPoi(team, x, z, n, visited, maxD = Infinity) {
     let best = null, bestS = -Infinity;
     for (const poi of this.def.pois ?? []) {
-      if (Math.hypot(poi.x - n.x, poi.z - n.z) > n.r + 20 || visited?.has(poi.id)) continue;
+      const d = Math.hypot(poi.x - x, poi.z - z);
+      if (Math.hypot(poi.x - n.x, poi.z - n.z) > n.r + 20 || visited?.has(poi.id) || d > maxD) continue;
       let others = 0;
       for (const [t, pl] of this.plans) if (t !== team && pl.poi === poi) others++;
-      const s = -Math.hypot(poi.x - x, poi.z - z) + (poi.tier === 1 ? 25 : 0) - others * 80 + this.sim.rng() * 30;
+      // Somebody is there already (any enemy within the place): a looting squad goes elsewhere.
+      for (const q of this.sim.players) if (q.alive && q.team !== team && !q.brAir && Math.hypot(q.ps.x - poi.x, q.ps.z - poi.z) < poi.r + 20) { others++; break; }
+      const s = -d + (poi.tier === 1 ? 25 : 0) - others * 80 + this.sim.rng() * 30;
       if (s > bestS) { bestS = s; best = poi; }
     }
     return best;
@@ -1160,7 +1295,8 @@ export class BrRules {
   _inv(p) {
     const b = p?.br;
     if (!b) return 0;
-    return [b.plates, b.meds, b.kits, USE_KINDS.indexOf(b.useK), Math.ceil(b.useT * 10), Math.ceil(b.useDur * 10), b.guns[0]?.r ?? -1, b.guns[1]?.r ?? -1];
+    return [b.plates, b.meds, b.kits, USE_KINDS.indexOf(b.useK), Math.ceil(b.useT * 10), Math.ceil(b.useDur * 10), b.guns[0]?.r ?? -1, b.guns[1]?.r ?? -1,
+      b.pouch, b.stash ? b.stash.slot : -1];
   }
 
   _stats() {
@@ -1186,7 +1322,113 @@ export class BrRules {
     if (guest) this.sentTo.set(guest.id, this.seq);
     out.push(ch ? ch.flat() : 0);
     out.push(sim.tick % 90 === 0 || sim.phase === 'ended' ? this._stats() : 0);   // For the results screen: rarely.
+    // Host migration: now and then each human guest gets what only the host knows (everyone's inventory, the circle's
+    // own clock, bot drop plans), so whichever phone takes over can carry the match on (restore).
+    // Half the players at a time, so no one snapshot carries the whole pack list.
+    const bt = sim.tick + guest?.index * 7;
+    if (guest && !guest.isBot && bt % (BACKUP_EVERY / 2) === 0 && sim.tick % 90 > 4) out.push(this.backup((bt / (BACKUP_EVERY / 2)) & 1));
     return out;
+  }
+
+  // ---- Host migration ----
+
+  // What a new host needs and the snapshots do not carry: per player [plates, meds, kits, gun0, gun1, ammo0, res0,
+  // ammo1, res1, downedBy index, use kind, use time, glide time, jumpAt, dropX, dropZ, follow index, revive count, dmg,
+  // knocks, deathT] with a gun as [weapon index, rarity, packed kit] or 0; then the rules' own clock and the circle's
+  // shrink start.
+  backup(half = -1) {
+    const sim = this.sim, idx = id => (id ? sim.byId.get(id)?.index ?? -1 : -1), n = sim.players.length;
+    const per = sim.players.map((p, i) => {
+      const b = p.br, ps = p.ps;
+      if (!b || !p.alive || (half === 0 && i >= n / 2) || (half === 1 && i < n / 2)) return 0;
+      const air = p.brAir !== 0;      // Drop plans only matter until the landing; damage, revives and knocks ride the stats.
+      const g = s => (b.guns[s] ? [WEAPON_IDS.indexOf(b.guns[s].id), b.guns[s].r, packKit(b.guns[s].kit)] : 0);
+      void ps;
+      return [b.plates, b.meds, b.kits, g(0), g(1), this._ammoIn(p, 0), this._resIn(p, 0), this._ammoIn(p, 1), this._resIn(p, 1), idx(b.downedBy), USE_KINDS.indexOf(b.useK),
+        Math.round(b.useT * 10), air ? Math.round(b.glideT * 10) : 0, air ? Math.round(b.jumpAt * 1000) : 0, air ? Math.round(b.dropX) : 0, air ? Math.round(b.dropZ) : 0, air ? idx(b.follow) : -1,
+        0, 0, 0, 0, b.pouch.some(Boolean) ? b.pouch : 0, b.stash ? b.stash.slot : -1];
+    });
+    return [Math.round(this.t * 10), r1(this.from.x), r1(this.from.z), r1(this.from.r), this.dropsPlanned ? 1 : 0, per];
+  }
+
+  // The new host (once a guest) rebuilds the rules from its old mirror (`old`, the guest copy with its loot table and
+  // the latest backup) and the newest snapshot view. Called by Sim.fromSnapshot after the players are restored.
+  restore(view, old) {
+    const sim = this.sim, bk = old?.saved ?? null;
+    this.authority = true;
+    if (old) {
+      Object.assign(this.plane, old.plane);
+      this.circle = { ...old.circle }; this.next = { ...old.next };
+      this.phase = old.phase; this.state = old.state; this.timer = old.timer;
+      // The loot table as this phone last mirrored it: same ids, so other phones' mirrors stay in step.
+      this.items = old.items; this.grid = old.grid;
+      this.log = []; this.seq = 0; this.sentTo = new Map();
+    }
+    this.nextChosen = true;
+    this.t = bk ? bk[0] / 10 : Math.max(0, view.t - (sim.phase === 'live' ? 0 : BR.warmup));
+    this.from = bk ? { x: bk[1] / 10, z: bk[2] / 10, r: bk[3] / 10 } : { ...this.circle };
+    if (this.state === 'shrink' && !bk) {
+      // Where this shrink began, from how far along it is.
+      const ph = BR.phases[this.phase], k = Math.max(0, Math.min(0.99, 1 - this.timer / ph.shrink));
+      this.from = { x: (this.circle.x - this.next.x * k) / (1 - k), z: (this.circle.z - this.next.z * k) / (1 - k), r: (this.circle.r - this.next.r * k) / (1 - k) };
+    }
+    this.dropsPlanned = bk ? !!bk[4] : this.plane.f > 0;
+    if (sim.phase === 'warmup') sim.phaseT = Math.max(0.5, BR.warmup - view.t);
+    const stats = view.br?.stats ?? old?.stats ?? null;
+    const byIndex = i => (i >= 0 ? sim.players[i]?.id ?? null : null);
+    this.squadsOut = new Map();
+    sim.players.forEach((p, i) => {
+      const v = view.players[i], b = p.br, ps = p.ps;
+      if (!b || !v) return;
+      p.alive = !!v.alive;                     // A held (away) human's character stays on the field in battle royale.
+      b.armor = v.brArmor ?? 0;
+      p.brAir = v.air ?? 0;
+      b.out = !!v.out; b.place = v.place ?? 0;
+      if (b.out) this.squadsOut.set(p.team, b.place);
+      p.downed = !!v.downed && p.alive;
+      b.reviveT = p.downed ? (v.reviveK ?? 0) * BR.reviveTime : 0;
+      if (p.downed) { p.hp = Math.max(1, v.hp ?? BR.downHp); ps.sprinting = false; }
+      b.landed = p.brAir === 0;
+      const st = stats?.[i];
+      if (st) { b.dmg = st[0]; b.revives = st[1]; b.knocks = st[2]; }
+      const e = p.alive ? bk?.[5]?.[i] : null;
+      if (!p.alive) { b.guns = [null, null]; b.plates = 0; b.meds = 0; b.kits = 0; b.pouch = [0, 0, 0, 0, 0]; b.stash = null; }
+      if (e) {
+        [b.plates, b.meds, b.kits] = e;
+        const weapon = ps.weapon;
+        for (const s of [0, 1]) {
+          const g = e[3 + s];
+          const id = g ? WEAPON_IDS[g[0]] : null;
+          if (id && WEAPONS[id]) {
+            const kit = unpackKit(id, g[2]);
+            b.guns[s] = { id, r: g[1], kit };
+            brArm(ps, s, id, kit, g[1], e[5 + s * 2], e[6 + s * 2]);
+            p.kits[s] = kit;
+          } else { b.guns[s] = null; brArm(ps, s, KNIFE); }
+        }
+        // Back in the hand the snapshot showed.
+        ps.slot = weapon === ps.secondary && weapon !== ps.primary ? 1 : 0;
+        ps.weapon = ps.slot ? ps.secondary : ps.primary;
+        ps.swapT = 0; ps.cooldown = 0;
+        p.primary = ps.primary;
+        b.downedBy = byIndex(e[9]); b.useK = USE_KINDS[e[10]] ?? null; b.useT = e[11] / 10;
+        b.useDur = b.useK === 'plate' ? BR.plateTime : b.useK === 'med' ? BR.medTime : b.useK === 'self' ? BR.selfRevive : 0;
+        if (p.brAir) { b.glideT = e[12] / 10; b.jumpAt = e[13] / 1000; b.dropX = e[14]; b.dropZ = e[15]; b.follow = byIndex(e[16]); }
+        b.pouch = Array.isArray(e[21]) ? e[21].slice(0, 5) : [0, 0, 0, 0, 0];
+        b.stash = null;
+        const fs = e[22] ?? -1;
+        if ((fs === 0 || fs === 1) && b.guns[fs]) {
+          b.stash = { slot: fs, ammo: ps.ammo[fs], res: ps.reserve[fs] };
+          brArm(ps, fs, KNIFE);
+          if (weapon === KNIFE || ps.slot === fs) { ps.slot = fs; ps.weapon = KNIFE; }
+        }
+      }
+      if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * 3; b.offZ = Math.sin(a) * 3; }
+    });
+    // This phone's own pack is fresher in its own inventory block.
+    const me = sim.byId.get(view.localId), inv = view.br?.inv;
+    if (me?.br && inv) { me.br.plates = inv.plates; me.br.meds = inv.meds; me.br.kits = inv.kits; }
+    this._fillView();
   }
 
   encode() { return this.encodeFor(null); }
@@ -1196,7 +1438,12 @@ export class BrRules {
   decode(a, view) {
     const players = view.players;
     if (!a) { this._fillView(); view.br = this.view; return; }
-    const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats] = a;
+    const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats, backup] = a;
+    if (backup) {                              // Kept for a host migration (restore); halves merge into one.
+      const old = this.saved?.[5];
+      if (old) backup[5] = backup[5].map((e, i) => e || old[i] || 0);
+      this.saved = backup;
+    }
     this.plane.f = f / 1000;
     this.plane.fx = fx; this.plane.fz = fz; this.plane.tx = tx; this.plane.tz = tz;
     this.plane.len = Math.hypot(tx - fx, tz - fz) || 1;
@@ -1213,7 +1460,7 @@ export class BrRules {
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
     V.circle = this.circle; V.next = this.next; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.squadsLeft = squads; V.alive = alive; V.items = this.items; V.stats = this.stats; V.t = this.t;
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]] } : null;
+    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1 } : null;
     V.squad = this.squad;
     view.br = V;
   }
@@ -1235,7 +1482,7 @@ export class BrRules {
     V.stats = sim.tick % 30 === 0 || sim.phase === 'ended' || !V.stats ? this._stats() : V.stats;
     const me = sim.byId.get(view.localId);
     const inv = me && this._inv(me);
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]] } : null;
+    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1 } : null;
     view.br = V;
   }
 

@@ -13,6 +13,7 @@ import { Progress } from './progress.js';
 import { LoadoutsScreen } from './loadout.js';
 import { OperatorsScreen } from './operatorscreen.js';
 import { voteMarkup, paintVote, soloMarkup, paintSolo } from './vote.js';
+import { squadMarkup, paintVoteSquad } from './br-squad.js';
 import { botMatchSummary } from './botsettings.js';
 import { mpMarkup, paintMp, searchMarkup, customHead, trainingMarkup, paintTraining, customLine } from './playscreens.js';
 import { followMapArt } from './mapthumb.js';
@@ -312,7 +313,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], custom = null } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -356,7 +357,7 @@ export class Menu {
           <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         </div>
         ${isHost ? inviteControls({ listed }) : listed ? `<span class="inv-listed static">${ico('ui:signal')}<b>Public</b></span>` : ''}
-        <p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>
+        ${br ? squadMarkup(brSquad, isHost) : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>`}
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
       </header>
       <div class="yard-lines">
@@ -386,6 +387,7 @@ export class Menu {
       followMapArt(this.el);
     }
     paintVote(this.el, state);
+    paintVoteSquad(this.el, state);
     this.show();
   }
 

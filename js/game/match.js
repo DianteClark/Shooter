@@ -55,6 +55,8 @@ export class Match {
     this.glideT = 0;
     this.planeF = 0;
     this.brWeapon = null;
+    this.brStash = null;           // Fists out: the gun put away {slot, def, ammo, res} (brSlot).
+    this.brSwapWant = false;
     this.resolvedInput = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
 
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
@@ -143,7 +145,7 @@ export class Match {
       if (e.t === 'shot' && e.by === this.localId) continue;
       if (e.t === 'overheat' && e.id === this.localId) continue;
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
-      if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
+      if (e.t === 'kill' && e.target === this.localId) { this.localAlive = false; this.brStash = null; }
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
       // Modes overhaul: a side change (Infected) keeps this device's codec right before the spawn that follows it, and
       // a One in the Chamber kill hands the bullet back to the phone that owns the gun.
@@ -166,11 +168,15 @@ export class Match {
     switch (e.t) {
       case 'brgive': {
         const id = WEAPON_IDS[e.w];
+        if (this.brStash?.slot === e.slot) this.brStash = null;     // A new gun into the hand that had fists out.
         brArm(ps, e.slot, id, unpackKit(id, e.kit), e.r, e.ammo, e.res);
         this.brWeapon = null;
         break;
       }
-      case 'bramm': brAmmo(ps, e.slot, e.n); break;
+      case 'bramm':
+        if (this.brStash?.slot === e.slot) { const d = this.brStash.def; this.brStash.res = Math.min(this.brStash.res + e.n, d.unlimitedReserve ? 999 : 9999); }
+        else brAmmo(ps, e.slot, e.n);
+        break;
       case 'brinv':
         e.guns.forEach((g, s) => {
           const id = g ? WEAPON_IDS[g[0]] : 'knife';
@@ -178,6 +184,13 @@ export class Match {
         });
         ps.slot = ps.primary === 'knife' && ps.secondary !== 'knife' ? 1 : 0;
         ps.weapon = ps.slot ? ps.secondary : ps.primary;
+        this.brStash = null;
+        if ((e.fists === 0 || e.fists === 1) && e.guns[e.fists]) {      // Fists were out in that hand.
+          const s = e.fists;
+          this.brStash = { slot: s, def: ps.defs[s], ammo: ps.ammo[s], res: ps.reserve[s] };
+          brArm(ps, s, 'knife');
+          ps.slot = s; ps.weapon = 'knife';
+        }
         ps.perks = []; ps.pro = [];
         if (e.air !== undefined) { this.brAir = e.air; this.glideT = e.glideT ?? 0; }
         this.brWeapon = null;
@@ -188,9 +201,35 @@ export class Match {
     }
   }
 
+  // Battle royale slots from the HUD: 0 and 1 the hands' guns, 2 fists. Fists put the gun in hand away (its rounds
+  // kept in brStash) and the host is told; the gun's own slot, or fists again, brings it back.
+  brSlot(k) {
+    if (!this.br || this.brAir || !this.localAlive) return;
+    const ps = this.ps, st = this.brStash;
+    if (k === 2) {
+      if (st) return this.brSlot(st.slot);
+      if (ps.weapon === 'knife') return;
+      const slot = ps.slot;
+      this.brStash = { slot, def: ps.defs[slot], ammo: ps.ammo[slot], res: ps.reserve[slot] };
+      brArm(ps, slot, 'knife');
+      ps.slot = slot; ps.weapon = 'knife';
+      this.#command({ cmd: 'br', act: 'fists', on: 1, slot, ammo: this.brStash.ammo, res: this.brStash.res });
+      return;
+    }
+    if (st && st.slot === k) {
+      brArm(ps, k, st.def.id, st.def.kit ?? undefined, st.def.rarity ?? 0, st.ammo, st.res);
+      ps.slot = k; ps.weapon = st.def.id;
+      this.brStash = null;
+      this.#command({ cmd: 'br', act: 'fists', on: 0 });
+      return;
+    }
+    if (ps.slot !== k) this.brSwapWant = true;      // The ordinary swap, on the next step.
+  }
+
   // Battle royale commands from the HUD: jump, take (a ground gun), plate, med, self (revive kit), cancel.
   brCommand(act, extra = {}) {
     if (!this.br) return;
+    if (act === 'slot') { this.brSlot(extra.k | 0); return; }
     if (act === 'jump') {
       if (this.brAir !== 1 || this.interp.newest?.phase !== 'live') return;
       this.brAir = 2; this.glideT = BR.glide;     // The glide starts here and now; the host follows the command.
@@ -299,6 +338,7 @@ export class Match {
     if (this.br) {
       if (this.#brAirStep(r, view, dt)) { this.#sendState(dt); return; }
       const me = view.players.find(p => p.id === this.localId);
+      if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
       if (me?.downed) downedInput(r);
     }
     this.audio.trigger = r.fire;                          // The dry-fire click needs to know the trigger is held.
@@ -363,6 +403,7 @@ export class Match {
     if (!view) return;
     this.sim = Sim.fromSnapshot(view, this.roster, {
       map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds, mods: this.mods ?? [],
+      br: this.sim.br ?? null,      // The guest's battle royale mirror: loot table and the host's last backup.
     });
     this.isHost = true;
     this.hostId = this.localId;
@@ -497,6 +538,7 @@ export class Match {
       this.killcam.render(view, events, dt);
       if (this.renderer.ambient?.strikeNow) this.audio.lightning();
       this.hud.onEvents(events);
+      if (this.br) { view.brPs = this.ps; view.brStash = this.brStash; }     // The BR hand slots on the HUD.
       this.hud.update(view, dt);
       this.audio.onEvents(events, view);
       this.audio.update(view, dt);
