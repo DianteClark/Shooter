@@ -1,4 +1,4 @@
-// Mode modifiers in the menus (docs/MODES.md): the toggles in the Play vs bots settings sheet and the friend lobby's
+// Mode modifiers in the menus (docs/MODES.md): the toggles in the Custom match settings sheet and the friend lobby's
 // sheet, the chip that shows what is on, and the featured playlist's button. The rules are in js/shared/playlist.js.
 //
 //   soloMods() / setSoloMods(list)            this device's picks for bot matches, saved

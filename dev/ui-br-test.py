@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Battle royale end to end in a real browser (docs/BR.md): python3 dev/ui-br-test.py [port] [outdir]
 
-Serves the repo, picks Battle Royale on the BR map from the Play vs bots picker, rides the transport, jumps from the drop
+Serves the repo, picks Battle Royale on the BR map from the Custom match picker, rides the transport, jumps from the drop
 map, glides, lands, picks loot up by walking over it, swaps a ground gun with the Take button, plates up, fights the
 nearest enemy (the aim and trigger are driven through Controls.read), goes down and waits for a squadmate's revive, then
 ends the match (every other squad is finished off on the host) and checks the BR results screen. Screenshots at
@@ -46,7 +46,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
     await pg.reload()
     await pg.wait_for_timeout(1200)
-    await pg.locator('[data-act="solo"]').first.click()
+    await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_timeout(700)
     await pg.locator('[data-act="soloMap"][data-id="frontier"]').first.click()
     await pg.wait_for_timeout(300)
