@@ -49,8 +49,8 @@ level, prestige, days }` as of `date` (a Date or ms):
   0.55..2.1, team win rate 0.40..0.62, BR win 1..14%, top five 12..52%, XP a match 1,700..3,600) times a weekly form
   (0.8..1.2). The current week counts its days so far. Integers, floored.
 - `level` / `prestige` come from `xp` through the player curve (`levelFromXp`); this is the badge matchmaking shows.
-- `extractions` stays 0 until `EXTRACTION_LAUNCH` (null) is set to the day extraction mode ships; set it once, never
-  move it (that would rewrite every career). Then extraction matches come out of the team share.
+- `extractions` stays 0 until `EXTRACTION_LAUNCH` (2026-11-11, the day extraction mode shipped); never move it (that
+  would rewrite every career). From then extraction matches come out of the team share.
 - Cost: about 25 ms for the whole pool two years on (one loop step per week). Cache per day if a board needs it often.
 - Never change `POOL_SEED`, `POOL_EPOCH`, the tag order or `rates()` once boards are live: every bot's history would
   change under the players' eyes. New profiles go on the end of `TAGS`.

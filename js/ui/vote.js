@@ -86,7 +86,7 @@ export function voteMarkup(state) {
       <span class="vc-art" data-map="${esc(map.id)}" style="background-image:url(${mapImage(map)})"></span>
       <span class="vc-shade"></span>
       <span class="vc-top">${o.again ? '<b class="vc-again t-tag">Rematch</b>' : ''}<span class="vc-votes"></span></span>
-      ${mode.large || isLarge(o.mapId) ? `<b class="vc-gw t-tag">${ico('party')}${mode.br ? 'Battle royale' : 'Ground War'}</b>` : ''}
+      ${mode.large || isLarge(o.mapId) ? `<b class="vc-gw t-tag">${ico('party')}${mode.br ? 'Battle royale' : mode.ex ? 'Extraction' : 'Ground War'}</b>` : ''}
       <b class="vc-map">${esc(map.name)}</b>
       <span class="vc-mode">${modeIcon(o.mode)}<span class="vc-mode-name">${esc(mode.name)}</span></span>
       <small class="vc-desc">${esc(mode.desc)}</small>

@@ -151,6 +151,10 @@ async def run(browser, vw, vh, failures, errors):
     await shot('11-lifted')
     await pg.wait_for_selector('.menu[data-screen="results"] .rs', timeout=90000)
     await pg.wait_for_timeout(2500)
+    # The screen slides in; let the entrance finish (software rendering is slow) before judging the layout.
+    for _ in range(10):
+        if not await pg.evaluate(f"{OVERFLOW}(['.rs-top'])"): break
+        await pg.wait_for_timeout(700)
     await shot('12-results')
     word = await ev("document.querySelector('.rs-word h2')?.textContent")
     if word != 'Extracted': failures.append(f'{tag}: results say {word!r}')

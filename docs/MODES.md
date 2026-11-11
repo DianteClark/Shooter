@@ -49,8 +49,8 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
 
 ## Play flow (ROADMAP item 14)
 - **Multiplayer** (title hero; `js/ui/matchmaking.js` data, `js/ui/playscreens.js` screens, flow in `main.js`
-  `findMatch` / `startMpVote` / `launchMp`): tabs Standard, Ground War, Battle Royale (Quads, Duos, Solos) and a
-  disabled Extraction. A pick is one playlist (Quick Play, Objective, Party modes, today's Featured with its modifiers)
+  `findMatch` / `startMpVote` / `launchMp`): tabs Standard, Ground War, Battle Royale (Quads, Duos, Solos) and
+  Extraction (Quads, Duos; docs/EXTRACT.md). A pick is one playlist (Quick Play, Objective, Party modes, today's Featured with its modifiers)
   or one or more ticked modes. Find match: a short search, then the pre-match lobby on the vote screen with 2-3 maps of
   the tab's size tier (`mpVoteOptions`; one card on Battle Royale, which has one giant map) while the other seats'
   ballots come in, then the match. No map or difficulty pickers. **Quick play** on the title is Standard Quick Play;

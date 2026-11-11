@@ -63,7 +63,7 @@ on every push, keep 2% of weekly usage for bugs.
     from cover, pre-aim lanes; weak bots tunnel and overpeek; SMGs fight to 72% of their range.
 16. Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
     saved "as of" that match; boards for level, kills, K/D, wins, BR wins/top 5, extractions, mastery, weekly.
-17. Extraction mode (our own name, not "DMZ"): 4 squads of 4 (or duos) on Frontier, empty slots filled with bot squads;
+17. DONE (exfil, docs/EXTRACT.md). Extraction mode (our own name, not "DMZ"): 4 squads of 4 (or duos) on Frontier, empty slots filled with bot squads;
     AI patrols harder toward the centre; contracts (intel, HVT, cache, hack, escort); own loadouts; only ammo loot; no
     streaks; respawn timer but a shared squad life pool, then spectate; must exfil to bank rewards (one squadmate out is
     enough); rewards are mastery progress plus exclusive streaks, weapons, perks and operators.

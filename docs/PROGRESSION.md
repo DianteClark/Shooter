@@ -89,3 +89,14 @@ rounds won) is a new ChallengeTally stat. Each has a mastery track (`MASTERY_OPE
 career rule and four mastery skins. Bots: `botOperator(seed, i)`, every operator once per match before repeats,
 alternating women and men. Test: `node dev/ui-mastery-test.mjs` (roster, unlocks, bot order, round tally, and an SY4
 code made before the wave).
+
+## Extraction (docs/EXTRACT.md)
+- `save.extractions`: lifetime count of matches whose squad got out (appended field, default 0; `Progress.extractions()`).
+  Leaderboards read it.
+- Contracts banked on extraction add lifetime tallies `ex:intel`, `ex:hvt`, `ex:cache`, `ex:hack`, `ex:escort`,
+  `ex:contracts`, `ex:out`, `ex:big` (an extraction with 4+), which gate the exclusives in `js/shared/extraction.js`
+  (`EX_UNLOCKS`): Courier and Nightjar (operators), Hard Target (perk), Blackbird and Vulture (streaks), Black Box and
+  Exfil Flare (camos for every gun). Streak and perk gates are `UNLOCK_CHALLENGES` with `extraction: true` and are never
+  grandfathered by the v4 migration.
+- Contract pay: XP lines, weapon XP to the primary, operator mastery `secs`; extracting counts as a win for the operator
+  track and the challenges.
