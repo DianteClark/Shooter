@@ -31,11 +31,11 @@ const DEG = Math.PI / 180;
 // does what good players do. Probabilities unless named otherwise:
 //   trade       moves up when a teammate dies within tradeReach metres (knowing roughly where the shots came from)
 //   preaim      while walking, looks down the lane ahead of it instead of at its feet (_laneLook)
-//   footsteps   share of `hearing` at which a sprinting enemy is heard (walking: STEP_WALK of that), through walls too
+//   footsteps   share of `hearing` at which a sprinting enemy is heard (walking: STEP_WALK of that), through walls too;
+//               a bot on the move stops and holds the angle toward it for a moment
 //   tunnel      in a fight, misses a second enemy it would otherwise have noticed
 //   spreadOut   does not become the third bot hunting the same noise: takes another angle on it
 //   topOff      lets the sights down between fights so a part-empty magazine refills (player.js TOPOFF_*)
-//   retreatSmart  only breaks off a fight to heal when it is losing it
 //   overpeek    walks out of a held angle at what it sees, into the open
 //   peekCover   fights a mid-range duel from beside cover, stepping back behind it to reload and heal (mode 'peek')
 //   routeSense  how much a close gun (and, a quarter as much, anyone flanking) routes round long sight lines (nav.js
@@ -48,7 +48,7 @@ export const SKILLS = {
     arcTries: 0, sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
     objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false, dodge: 0.3,
-    routeSense: 0, trade: 0.15, tradeReach: 16, preaim: 0.08, footsteps: 0.3, tunnel: 0.55, spreadOut: 0, topOff: 0, retreatSmart: 0, overpeek: 0.45, peekCover: 0,
+    routeSense: 0, trade: 0.15, tradeReach: 16, preaim: 0.08, footsteps: 0.3, tunnel: 0.55, spreadOut: 0, topOff: 0, overpeek: 0.45, peekCover: 0,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
@@ -57,7 +57,7 @@ export const SKILLS = {
     arcTries: 0, sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
     objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false, dodge: 0.6,
-    routeSense: 0.35, trade: 0.4, tradeReach: 21, preaim: 0.4, footsteps: 0.5, tunnel: 0.3, spreadOut: 0.4, topOff: 0.4, retreatSmart: 0.5, overpeek: 0.2, peekCover: 0.3,
+    routeSense: 0.35, trade: 0.4, tradeReach: 21, preaim: 0.4, footsteps: 0.5, tunnel: 0.3, spreadOut: 0.4, topOff: 0.4, overpeek: 0.2, peekCover: 0.3,
   },
   veteran: {
     thinkHz: 9, reaction: [0.26, 0.42], aimError: 0.09, aimFloor: 0.036, settle: 0.6, turnRate: 13, lag: 0.14,
@@ -66,7 +66,7 @@ export const SKILLS = {
     arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
     objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true, dodge: 0.85,
-    routeSense: 0.75, trade: 0.65, tradeReach: 26, preaim: 0.75, footsteps: 0.7, tunnel: 0.12, spreadOut: 0.75, topOff: 0.85, retreatSmart: 0.85, overpeek: 0.07, peekCover: 0.6,
+    routeSense: 0.75, trade: 0.65, tradeReach: 26, preaim: 0.75, footsteps: 0.7, tunnel: 0.12, spreadOut: 0.75, topOff: 0.85, overpeek: 0.07, peekCover: 0.6,
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
@@ -75,7 +75,7 @@ export const SKILLS = {
     arcTries: 4, sprint: 1, callouts: true, calloutDelay: 1, calloutErr: 3.2, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
     objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true, dodge: 0.95,
-    routeSense: 1, trade: 0.85, tradeReach: 30, preaim: 0.92, footsteps: 0.85, tunnel: 0.04, spreadOut: 0.95, topOff: 1, retreatSmart: 1, overpeek: 0.02, peekCover: 0.8,
+    routeSense: 1, trade: 0.85, tradeReach: 30, preaim: 0.92, footsteps: 0.85, tunnel: 0.04, spreadOut: 0.95, topOff: 1, overpeek: 0.02, peekCover: 0.8,
   },
 };
 
@@ -88,17 +88,19 @@ const SKILL_CACHE = new Map();
 const CAPPED = new Set(['objPlay', 'objPush', 'sprint', 'notice', 'adsUse', 'strafe', 'nade', 'smoke', 'flash', 'dodge']);
 export function skillAt(rating, style = null) {
   const r = Math.max(0, Math.min(1, Number(rating) || 0));
-  const key = `${Math.round(r * 200)}|${style ?? ''}`;
+  const step = Math.round(r * 300);          // Thirds land exactly on a tier.
+  const key = `${step}|${style ?? ''}`;
   let S = SKILL_CACHE.get(key);
   if (S) return S;
-  const x = Math.round(r * 200) / 200 * 3, i = Math.min(2, Math.floor(x)), f = x - i;
+  const x = step / 100, i = Math.min(2, Math.floor(x)), f = x - i;
   const a = SKILLS[TIERS[i]], b = SKILLS[TIERS[i + 1]], near = f < 0.5 ? a : b;
   S = {};
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
-    const va = a[k] ?? b[k], vb = b[k] ?? a[k];
-    if (typeof va === 'number' && typeof vb === 'number') S[k] = va + (vb - va) * f;
+    const va = k in a ? a[k] : b[k], vb = k in b ? b[k] : a[k];
+    if (f === 0 || f === 1) S[k] = f ? vb : va;
+    else if (typeof va === 'number' && typeof vb === 'number') S[k] = va + (vb - va) * f;
     else if (Array.isArray(va)) S[k] = va.map((v, n) => v + (vb[n] - v) * f);
-    else S[k] = near[k] ?? va;
+    else S[k] = k in near ? near[k] : va;
   }
   const lean = style && STYLES[style]?.lean;
   if (lean) {
@@ -197,6 +199,7 @@ const QUIET_ENEMY = 75, QUIET_HUMAN = 100, QUIET_SLOWDOWN = 3;
 const TRADE_ERR = 2.5, TRADE_ERR_PER_M = 0.2;   // How well a teammate's death says where the shooter is.
 const TRADE_SHORT = 3;          // A trade walks up to this far short of where the teammate fell.
 const STEP_WALK = 0.55;         // Walking footsteps carry this fraction of the distance sprinting ones do.
+const STEP_HOLD = [1.2, 2.6];   // Seconds a bot that hears someone coming holds the angle they will come round.
 const CROWD = 7, CROWD_MAX = 2; // Metres around a contact, and how many teammates already hunting it make it crowded.
 const SIDE_STEP = 8;            // How far to one side a crowded hunt swings out.
 const PEEK_COVER = 6, PEEK_STEP = 2.4, PEEK_MIN = 9, PEEK_MAX = 40, PEEK_JIGGLE = 1.2, PEEK_TIME = 14, PEEK_REST = 4;
@@ -1015,6 +1018,14 @@ export class BotBrain {
     const err = (HEAR_ERR_BASE + bestD * HEAR_ERR_PER_M) * S.hearErr * (walled ? HEAR_ERR_WALLED : 1);
     this._rough(q.x, q.z, err, POS);
     this._note(POS.x, POS.z, false, err);
+    // Someone is coming: stop and hold the angle they will come round, rather than run at the noise.
+    if ((this.mode === 'none' || this.mode === 'advance' || this.mode === 'flank') && !this.objective) {
+      this.mode = 'hold'; this.arrived = false;
+      this.holdSpot = null;
+      this.holdAim = Math.atan2(POS.z - ps.z, POS.x - ps.x);
+      this.holdT = between(sim.rng, STEP_HOLD[0], STEP_HOLD[1]);
+      this._goTo(ps.x, ps.z);
+    }
     return true;
   }
 
@@ -1142,8 +1153,7 @@ export class BotBrain {
       this.modeT -= this.interval;
       const healed = p.hp >= 82 && ps.reloadT <= 0;
       if (this.modeT <= 0 || healed || (this.arrived && visible && this.targetDist < 7)) this._setMode('none');
-    } else if (S.retreatHp > 0 && p.hp < S.retreatHp && (visible || this.hasKnown) && p.hp < this.lastRetreatHp && !this.objective?.commit
-      && !(visible && this._winning() && sim.rng() < S.retreatSmart)) {
+    } else if (S.retreatHp > 0 && p.hp < S.retreatHp && (visible || this.hasKnown) && p.hp < this.lastRetreatHp && !this.objective?.commit) {
       this._takeCover();
     } else if (visible && this.targetDist > 8 && (ammo === 0 || ps.reloadT > 0) && sim.rng() < S.coverReload && !this.objective?.commit) {
       this._takeCover();
@@ -1624,13 +1634,6 @@ export class BotBrain {
       this.turretTarget = null;
       this._coverFrom(nearest.x, nearest.z);
     }
-  }
-
-  // Is the fight in view going this bot's way? The other side is no healthier, and the gun is loaded and up.
-  _winning() {
-    const { p, ps } = this, q = this.target;
-    if (!q || !q.alive) return false;
-    return q.hp <= p.hp + 10 && ps.reloadT <= 0 && ps.ammo[ps.slot] > weaponDef(ps).magazine * 0.25;
   }
 
   // Cover near enough to fight from: a spot out of the threat's sight, and beside it a spot that sees it. Mode 'peek'
