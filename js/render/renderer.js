@@ -551,7 +551,8 @@ export class GameRenderer {
       tx = local.x + this.lookX;
       tz = local.z + this.lookZ;
       // Flying your own Cruise Missile: the camera rides with it so a long flight never leaves the screen.
-      const missile = view?.gunships?.find(g => g.kind === 'missile' && g.owner === view.localId);
+      const missile = view?.gunships?.find(g => g.kind === 'missile' && g.owner === view.localId)
+        ?? view?.drones?.find(g => (g.kind === 'recon' || g.kind === 'reticle') && g.owner === view.localId);   // V9 piloted streaks.
       const mc = this.missileCam ?? 0;
       this.missileCam = mc + ((missile ? 1 : 0) - mc) * Math.min(1, dt * 5);
       if (missile) { this.missileX = missile.x; this.missileZ = missile.z; }

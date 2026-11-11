@@ -16,7 +16,7 @@ on every push, keep 2% of weekly usage for bugs.
    which the bot-only rig did not show. Rerun the rig with streaks, equipment, Mixed skill and the human-like thumb.
 7. IN PROGRESS: battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
    the regions, loot rarities, closing circle, revives, bots that loot, rotate and fight like players.
-8. Scorestreaks overhaul.
+8. DONE (1111-4). Scorestreaks overhaul.
 9. Game modes overhaul (new modes built on the new maps).
 10. Attachments wave: signature attachments per gun, conversion kits, unlocked through each gun's mastery.
 11. Operators overhaul: many more unlockable operators including female operators; mastery for them.

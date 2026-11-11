@@ -346,7 +346,7 @@ test('Ripple: one pull is three rockets and three blasts, none of which kills al
   assert.ok(WEAPONS.salvo.explosive.damage < 100 && WEAPONS.salvo.explosive.damage * 2 >= 100);
 });
 
-test('Gaff and Maul: reach three metres and no further, lunge on the swing, two swings and one', () => {
+test('Gaff and Maul: reach three metres and no further, the Gaff lunges and the Maul swings in place, two swings and one', () => {
   for (const [id, swings] of [['knife', 2], ['maul', 1]]) {
     const w = WEAPONS[id];
     assert.equal(shotsToKill(w, 1.5), swings);
@@ -355,10 +355,13 @@ test('Gaff and Maul: reach three metres and no further, lunge on the swing, two 
     const x0 = ps.x;
     const shots = run(ps, DT * 2, { fire: true });
     assert.equal(shots.length, 1);
-    assert.ok(Math.hypot(ps.vx, ps.vz) > MOVE.run * 1.5, `${id} lunges: ${Math.hypot(ps.vx, ps.vz).toFixed(1)} m/s`);
+    if (w.lunge) {
+      assert.ok(Math.hypot(ps.vx, ps.vz) > MOVE.run * 1.5, `${id} lunges: ${Math.hypot(ps.vx, ps.vz).toFixed(1)} m/s`);
+    }
     run(ps, 0.5);
     const moved = ps.x - x0;
-    assert.ok(moved > 0.6 && moved < 3.2, `${id} carried ${moved.toFixed(2)} m`);
+    if (w.lunge) assert.ok(moved > 0.6 && moved < 3.2, `${id} carried ${moved.toFixed(2)} m`);
+    else assert.ok(Math.abs(moved) < 0.3, `${id} swings in place: ${moved.toFixed(2)} m`);   // The Maul is an overhead swing, not a charge.
     assert.ok(Math.hypot(ps.vx, ps.vz) < 0.2, 'and stops');
     assert.equal(availableFor(id).length, 0, `${id} takes no attachments`);
     assert.equal(normalizeKit(id, { grip: 'wrap', mag: 'extmag' }), normalizeKit(id, null));

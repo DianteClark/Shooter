@@ -65,9 +65,14 @@ const STREAK_VERB = {
   uav: 'online', jammer: 'jamming radar', resupply: 'dropped', turret: 'deployed', mortar: 'firing',
   strike: 'inbound', overwatch: 'online', chopper: 'overhead', emp: 'detonated', gunship: 'overhead',
   missile: 'launched', swarm: 'launched', juggernaut: 'suited up',
+  sweep: 'pinging', recon: 'launched', airdrop: 'inbound', plates: 'dropped', hound: 'deployed', dome: 'raised', bombrun: 'inbound', rover: 'deployed',
 };
 // Enemy streaks the local player should react to right now.
-const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP!', missile: 'Cruise missile inbound', swarm: 'Drone swarm: break line of sight', juggernaut: 'Enemy Juggernaut: use explosives' };          // Seconds of hits averaged into the live damage readout.
+const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP: streaks offline', missile: 'Cruise missile inbound', swarm: 'Drone swarm: break line of sight', juggernaut: 'Enemy Juggernaut: use explosives',
+  sweep: 'Sonar sweep: you may be on their map', recon: 'Enemy recon drone: shoot it down', hound: 'Enemy Wingman drone', dome: 'Aegis Dome: fight inside it',
+  bombrun: 'Carpet Line: get off the red line', rover: 'Enemy Rover: shoot it' };
+// V9: what a piloted streak tells its own pilot, and how a shoot-down reads.
+const PILOT_HINT = { missile: 'Steer it with the aim stick', recon: 'Hold the aim stick to fly it', bombrun: 'Drag the aim stick, let go to drop' };          // Seconds of hits averaged into the live damage readout.
 const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.
 // Pro senses drawn by the HUD (js/shared/catalog.js PRO): footprints, the Fastball blast ring, enemy equipment.
 const PRINT_HZ = 12;             // Footprint line-of-sight checks per second; drawing still follows the camera every frame.
@@ -97,6 +102,7 @@ const MEDALS = {
   fury: ['Fury Kill', '4 or more', 3], revenge: ['Revenge', 'Settled the score', 1], longshot: ['Longshot', 'From across the yard', 1],
   streak3: ['Three Streak', 'On a run', 2], streak5: ['Five Streak', 'Unstoppable', 3], streak10: ['Ten Streak', 'Unbroken', 3],
   golden: ['Golden Kill', 'One round, one kill', 3],
+  shootdown: ['Shot Down', 'Enemy streak destroyed', 2], destroyed: ['Destroyed', 'Enemy machine wrecked', 1],
   plant: ['Bomb Planted', 'Now hold it', 2], defuse: ['Bomb Defused', 'Saved the site', 3], clutch: ['Clutch', 'Won it alone', 3],
   flag_take: ['Flag Taken', `+${CTF.score.take}`, 2], flag_capture: ['Flag Captured', `+${CTF.score.capture}`, 3],
   flag_return: ['Flag Returned', `+${CTF.score.ret}`, 1], carrier_kill: ['Carrier Killed', `+${CTF.score.carrierKill}`, 2],
@@ -1878,10 +1884,11 @@ export class HUD {
       c.vign = veil;
       this.vignette.style.opacity = veil;
     }
-    const armor = me.alive ? Math.max(0, Math.ceil(me.armor ?? 0)) : 0;
+    // Juggernaut armour and Plate Drop plates share the band; plates alone fill it against their own 100.
+    const armor = me.alive ? Math.max(0, Math.ceil((me.armor ?? 0) + (me.plates ?? 0))) : 0;
     if (armor !== c.armor) {
       c.armor = armor;
-      this.armorFill.style.transform = `scaleX(${Math.min(1, armor / STREAKS.juggernaut.armor)})`;
+      this.armorFill.style.transform = `scaleX(${Math.min(1, armor / ((me.armor ?? 0) > 0 ? STREAKS.juggernaut.armor : STREAKS.plates.armor))})`;
       this.armorNum.hidden = armor <= 0;
       this.armorNum.textContent = `+${armor}`;
     }
@@ -2192,7 +2199,8 @@ export class HUD {
         case 'incoming': this.#onIncoming(e); break;
         case 'emp': this.#onEmp(e); break;
         case 'pulse': this.#onPulse(e); break;
-        case 'zap': if (e.by === this.view?.localId) this.notify('Trophy stopped a grenade'); break;
+        case 'zap': if (e.by === this.view?.localId) this.notify(e.kind === 'dome' ? 'Aegis Dome stopped a throw' : 'Trophy stopped a grenade'); break;
+        case 'streak_aim': case 'air_down': case 'crate_open': case 'crate': case 'plates': case 'plates_break': this.#onV9(e); break;
         case 'decoy': if (e.by === this.view?.localId) this.notify('Decoy firing'); else this.#fakePing(e); break;
         case 'stuck': if (e.id === this.view?.localId) this.#banner(e.kind === 'tagger' ? 'Tagged' : 'Stuck!', e.kind === 'tagger' ? 'The enemy can see you for 8 s' : 'Get it away from your team', 1100, 'enemy'); break;
         case 'jammed': if (e.id === this.view?.localId) this.notify('Blackout: equipment and radar down'); break;
@@ -2387,7 +2395,39 @@ export class HUD {
     this.notify(`${friendly ? '' : 'Enemy '}${name} ${verb}`);
     // The ones that change what this player can see or do get a callout as well as a feed line.
     if (!friendly && STREAK_WARN[e.kind]) this.#callout(STREAK_WARN[e.kind]);
-    else if (p.id === me.id) this.#callout(`${name} ${verb}`);
+    else if (p.id === me.id) this.#callout(PILOT_HINT[e.kind] && e.kind !== 'bombrun' ? `${name}: ${PILOT_HINT[e.kind]}` : `${name} ${verb}`);
+  }
+
+  // V9 scorestreak events: drawing a Carpet Line, shoot-downs, Airdrops and plates.
+  #onV9(e) {
+    const view = this.view, me = view && this.#findLocal(view);
+    if (!me) return;
+    const nameOf = id => view.players.find(q => q.id === id)?.name ?? '';
+    const streak = k => STREAKS[k]?.name ?? (k === 'reticle' ? 'Carpet Line' : k);
+    switch (e.t) {
+      case 'streak_aim': if (e.id === me.id) this.#callout(PILOT_HINT[e.kind] ?? 'Aim it'); break;
+      case 'air_down': {
+        if (e.kind === 'reticle') break;
+        const ours = e.team === me.team;
+        if (e.emp) { if (ours && e.owner === me.id) this.notify(`Your ${streak(e.kind)} was knocked out by an EMP`); break; }
+        if (e.by === me.id) this.notify(`You shot down an enemy ${streak(e.kind)}`);
+        else if (ours) { this.notify(`${nameOf(e.by) || 'The enemy'} shot down your team's ${streak(e.kind)}`); if (e.owner === me.id) this.#callout(`${streak(e.kind)} shot down`); }
+        else this.notify(`${nameOf(e.by)} shot down an enemy ${streak(e.kind)}`);
+        break;
+      }
+      case 'crate':
+        if (e.team === me.team) this.notify('Airdrop landed: stand on it to open');
+        break;
+      case 'crate_open': {
+        const who = e.id === me.id ? 'You' : nameOf(e.id);
+        if (e.stolen && e.team !== me.team && e.owner === me.id) this.#callout(`${who} stole your Airdrop`);
+        else if (e.id === me.id) this.#callout(`Airdrop: ${streak(e.kind)}${e.stolen ? ' (stolen)' : ''}`);
+        else this.notify(`${who} ${e.stolen ? 'stole an Airdrop' : 'opened an Airdrop'}: ${streak(e.kind)}`);
+        break;
+      }
+      case 'plates': if (e.id === me.id && e.by !== me.id) this.notify(`${nameOf(e.by)} gave you armour plates`); break;
+      case 'plates_break': if (e.id === me.id) this.#callout('Plates broken'); break;
+    }
   }
 
   // The tile already says why; this makes the refusal felt at the moment of the tap.
@@ -2411,7 +2451,7 @@ export class HUD {
   #onEmp(e) {
     const me = this.view && this.#findLocal(this.view);
     if (!me || e.team !== me.team) return;
-    this.#banner('EMP', 'Your air, sentries and radar are down', 2000, 'enemy');
+    this.#banner('EMP', 'Air, machines and radar down. Streaks offline 12 s', 2000, 'enemy');
   }
 
   #onPulse(e) {
@@ -2976,6 +3016,38 @@ export class HUD {
         g.lineTo(x - px * 11 - ca * 3, y - py * 11 - sa * 3);
         g.closePath();
         g.fill();
+        g.stroke();
+      }
+    }
+    // V9: Rovers (a sentry square that moves), Domes (their bubble), Airdrop crates, and the small drones.
+    if (view.deploys) {
+      for (const t of view.deploys) {
+        const x = t.x * sx, y = t.z * sz;
+        g.fillStyle = TEAMS[t.team].css;
+        g.strokeStyle = t.team === myTeam ? '#fff' : '#171c22';
+        g.lineWidth = 2;
+        if (t.kind === 'dome') {
+          g.globalAlpha = 0.28;
+          g.beginPath(); g.arc(x, y, 6 * sx, 0, Math.PI * 2); g.fill();
+          g.globalAlpha = 1;
+          g.beginPath(); g.arc(x, y, 6 * sx, 0, Math.PI * 2); g.stroke();
+        } else if (t.kind === 'crate') {
+          g.fillRect(x - 4, y - 4, 8, 8); g.strokeRect(x - 4, y - 4, 8, 8);
+        } else {
+          g.beginPath(); g.arc(x, y, 5.5, 0, Math.PI * 2); g.fill(); g.stroke();
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(t.aim) * 10, y + Math.sin(t.aim) * 10); g.stroke();
+        }
+      }
+    }
+    if (view.drones) {
+      for (const d of view.drones) {
+        if (d.kind === 'reticle' && d.team !== myTeam) continue;
+        const x = d.x * sx, y = d.z * sz;
+        g.strokeStyle = d.kind === 'reticle' ? '#ff4a3a' : '#fff';
+        g.fillStyle = TEAMS[d.team].css;
+        g.lineWidth = 1.5;
+        g.beginPath(); g.arc(x, y, d.kind === 'reticle' ? 5 : 4, 0, Math.PI * 2);
+        if (d.kind !== 'reticle') g.fill();
         g.stroke();
       }
     }

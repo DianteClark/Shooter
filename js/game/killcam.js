@@ -144,6 +144,7 @@ export class Killcam {
     f.n = n;
     // These arrays belong to one decoded snapshot and are never mutated afterwards, so a reference is a snapshot.
     f.projectiles = view.projectiles; f.smokes = view.smokes; f.turrets = view.turrets; f.gunships = view.gunships;
+    f.deploys = view.deploys; f.drones = view.drones;     // V9 scorestreaks.
     f.tags = view.tags; f.points = view.points; f.mode = view.mode; f.uav = view.uav;
   }
 
@@ -307,6 +308,7 @@ export class Killcam {
     const src = k < 0.5 ? a : b;
     out.t = src.t; out.projectiles = src.projectiles; out.smokes = src.smokes; out.turrets = src.turrets;
     out.gunships = src.gunships; out.tags = src.tags; out.points = src.points; out.mode = src.mode;
+    out.deploys = src.deploys; out.drones = src.drones;
     if (src.uav) out.uav = src.uav;
   }
 
