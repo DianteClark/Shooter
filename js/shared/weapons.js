@@ -177,8 +177,8 @@ export const WEAPONS = {
   // One shell only at arm's length, two anywhere inside a room, nothing much past a doorway. Drum fed: one long reload.
   autoshot: {
     id: 'autoshot', name: 'Squall', role: 'Doorway', auto: true,
-    damage: 17, rpm: 320, magazine: 14, reserve: 56, reload: 2.6, range: 13,
-    falloff: { start: 5, end: 11, min: 0.3 },
+    damage: 17, rpm: 320, magazine: 14, reserve: 56, reload: 2.4, range: 13,
+    falloff: { start: 5.5, end: 11, min: 0.3 },
     adsSpread: 0.055, hipSpread: 0.075, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
     pattern: { amp: 0.02, freq: 1.1, ramp: 3 }, turnCap: 6.5,
     adsTime: 0.2, sprintToFire: 0.11, swapTime: 0.46, moveMult: 1.02, adsMoveMult: 0.78,
@@ -256,7 +256,7 @@ export const WEAPONS = {
   // longest magazine change outside the belt guns. Four to the body, a step behind the rifles.
   lightlmg: {
     id: 'lightlmg', name: 'Gantry', role: 'Box-fed', auto: true,
-    damage: 30, rpm: 600, magazine: 45, reserve: 180, reload: 3.6, range: 48,
+    damage: 30, rpm: 580, magazine: 45, reserve: 180, reload: 3.6, range: 48,
     falloff: { start: 20, end: 34, min: 0.73 }, penetrate: 0.7,
     adsSpread: 0.009, hipSpread: 0.085, bloomPerShot: 0.05, bloomRecover: 2, bloomScale: 1.5,
     pattern: { amp: 0.011, freq: 0.5, ramp: 5 }, turnCap: 6,
@@ -368,7 +368,7 @@ export const WEAPONS = {
   // Slow, heavy, two to the body close in. Every shot lands with weight and costs a beat.
   revolver: {
     id: 'revolver', name: 'Verdict', role: 'Hand cannon', auto: false,
-    damage: 62, rpm: 125, magazine: 6, reserve: 48, reload: 2.4, range: 34,
+    damage: 62, rpm: 140, magazine: 6, reserve: 48, reload: 2.1, range: 34,
     falloff: { start: 12, end: 22, min: 0.55 },
     adsSpread: 0.006, hipSpread: 0.042, bloomPerShot: 0.7, bloomRecover: 2.2, bloomScale: 1,
     adsTime: 0.14, sprintToFire: 0.1, swapTime: 0.2, moveMult: 1.06, adsMoveMult: 0.8,
