@@ -3,7 +3,8 @@
 //
 // A modifier changes one thing about any mode it is played with:
 //   hardcore   everyone has a third of the health (damage x HARDCORE_DAMAGE) and the HUD drops its minimap
-//   snipers    sniper rifles only: a primary that is not one becomes the Longbow (the sidearm stays)
+//   snipers    sniper rifles only: a primary that is not one becomes one of them, picked by the gun it replaces, so a
+//              room gets a spread of rifles (the sidearm stays)
 //   melee      blades only: the Gaff and the Maul, Hatchets to throw, no scorestreaks
 //   nostreaks  no scorestreaks
 // Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected) ignore snipers and melee; battle
@@ -23,7 +24,8 @@ export const HARDCORE_DAMAGE = 3;
 const EXCLUSIVE = [['snipers', 'melee']];
 // Rule sets that deal every gun themselves.
 const DEALT = new Set(['gun', 'oic', 'inf']);
-const SNIPER = 'sniper', BLADE = 'knife', SLEDGE = 'maul';
+const SNIPERS = Object.keys(WEAPONS).filter(id => WEAPONS[id].category === 'Sniper');
+const BLADE = 'knife', SLEDGE = 'maul';
 
 // The modifiers that apply to a mode, in MOD_IDS order, from any list (unknown ids, repeats and clashes dropped).
 export function cleanMods(list, modeId = null) {
@@ -44,7 +46,11 @@ export function cleanMods(list, modeId = null) {
 export function dealLoadout(l, mods) {
   if (!mods?.length || !l) return l;
   const out = { ...l };
-  if (mods.includes('snipers') && WEAPONS[out.primary]?.category !== 'Sniper') out.primary = SNIPER;
+  if (mods.includes('snipers') && WEAPONS[out.primary]?.category !== 'Sniper') {
+    let h = 0;
+    for (const c of String(out.primary)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    out.primary = SNIPERS[h % SNIPERS.length];
+  }
   if (mods.includes('melee')) {
     out.primary = BLADE; out.secondary = SLEDGE; out.lethal = 'hatchet';
     out.streaks = [];

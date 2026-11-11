@@ -1,5 +1,5 @@
 // Headquarters, the host side (mode 'hq', and 'gwhq' on the Ground War maps). One HQ at a time, on the map's hardpoint
-// zones (map.points.hard) in a seeded order. A neutral HQ is captured by standing in it alone (HQ.capture seconds for
+// zones (map.points.hard, or its Domination flags where it has none) in a seeded order. A neutral HQ is captured by standing in it alone (HQ.capture seconds for
 // one player, faster with company, nothing while both sides stand in it). The team that holds it scores a point a
 // second, but cannot respawn while it stands: its dead wait. The other team destroys it by standing in it uncontested
 // for HQ.destroy seconds; a held HQ that nobody destroys relocates after HQ.life seconds. Either way the next HQ goes
@@ -19,7 +19,9 @@ export class HqRules {
     this.sim = sim;
     this.look = 'hard';
     this.allIn = true;
-    this.zones = makeZones(sim.map.points?.hard);
+    // The hardpoint zones; a map without them (the Ground War maps) uses its Domination flags as HQ sites.
+    const pts = sim.map.points ?? {};
+    this.zones = makeZones((pts.hard?.length ?? 0) >= 2 ? pts.hard : pts.dom);
     this.order = seededOrder(this.zones.length, seed, 0x4e51);
     this.idx = 0;
     this.phase = 'gap';

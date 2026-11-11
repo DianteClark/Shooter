@@ -2686,7 +2686,7 @@ export class Sim {
     return [
       Math.round(this.time * 100), PHASES.indexOf(this.phase), Math.round(this.timeLeft * 10),
       side(this.scores), 0, this.winner === null ? -1 : this.winner,
-      radar, 0, 0, 0, 0, 0, 0, 0, 0, jams,
+      radar, 0, 0, 0, 0, 0, 0, 0, this._encodeObjective(), jams,     // A free-for-all mode's own block (One in the Chamber).
     ];
   }
 
