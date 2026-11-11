@@ -21,4 +21,5 @@ on every push, keep 2% of weekly usage for bugs.
 8. DONE (1111-4). Scorestreaks overhaul.
 9. Game modes overhaul (new modes built on the new maps).
 10. Attachments wave: signature attachments per gun, conversion kits, unlocked through each gun's mastery.
-11. Operators overhaul: many more unlockable operators including female operators; mastery for them.
+11. DONE (ops). Operators overhaul: 27 operators (18 new, nine of them women) from a parametric parts kit, builds in the
+    shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.

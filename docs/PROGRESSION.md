@@ -20,7 +20,9 @@ To restyle one, change its `art` in `MASTERY_CARD_ART` (progression.js, tell me)
   `mastery-ghoul` `mastery-ram` `mastery-monarch`
 
 ### Operator skins: `skin:<operator>-<tier>`
-Two per operator, granted at operator mastery tier 3 and tier 5 (the tier-5 one is the mastery look). These are the
+Four per operator since the operators wave: granted at operator mastery tiers 2 (Veteran), 3 (Elite), 4 (Specialist)
+and 5 (Mastery, the tier-5 look). Rewards are read from the tiers reached, so a save already past tier 2 or 4 has the
+new skins at once. The list below is the original pair; every operator in js/ui/operators.js has `-2` .. `-5`. These are the
 ids in `SKINS` (js/ui/operators.js), which keeps which skin is worn in its own store; Progress only grants them.
 
 `skin:trooper-3` `skin:trooper-5` `skin:wisp-3` `skin:wisp-5` `skin:anvil-3` `skin:anvil-5` `skin:relay-3`
@@ -77,3 +79,13 @@ an unlock. Save codes are `SY4.`; `SY2.` and `SY3.` codes still import through t
 
 Tests: `node dev/ui-mastery-test.mjs` (counting, applying, unlock gates, v1/v3 migration, SY3 and SY4 codes, Progress
 over a stored v3 save, and one bot match through the tracker; `quick` skips the match).
+
+## Operators wave (roadmap 11)
+27 operators (the first nine unchanged and in their old order, then 18 new: nine women, nine men). Data in
+`js/ui/operators.js` (bio, voice 'f'/'m', unlock, build, colours, `kit`); the new ones are assembled by
+`js/render/operator-kit.js` (see its header). Unlocks: start, level, prestige, or a challenge read from the lifetime
+tally (`unlock: {life: 'cat:SMG'|'plants'|'captures'|'sndRounds'|..., goal, label}`); `sndRounds` (Search and Destroy
+rounds won) is a new ChallengeTally stat. Each has a mastery track (`MASTERY_OPERATORS`, appended), a field skin by
+career rule and four mastery skins. Bots: `botOperator(seed, i)`, every operator once per match before repeats,
+alternating women and men. Test: `node dev/ui-mastery-test.mjs` (roster, unlocks, bot order, round tally, and an SY4
+code made before the wave).
