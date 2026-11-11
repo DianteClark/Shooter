@@ -12,6 +12,8 @@ const LIFE = {
   frost:    { flock: 6, ground: 6, col: [0.07, 0.07, 0.09], size: 0.44, flockY: 9.5, vents: 3 },
   topside:  { flock: 11, ground: 9, col: [0.42, 0.44, 0.5], size: 0.4, flockY: 7, vents: 0 },
   sunken:   { flock: 8, ground: 0, col: [0.9, 0.93, 0.88], size: 0.66, flockY: 10, vents: 0 },
+  jungle:   { flock: 10, ground: 0, col: [0.12, 0.1, 0.08], size: 0.5, flockY: 11, vents: 0 },
+  arctic:   { flock: 5, ground: 4, col: [0.06, 0.06, 0.08], size: 0.44, flockY: 9.5, vents: 3 },
 };
 const NONE = { flock: 0, ground: 0, col: [0, 0, 0], size: 0.5, flockY: 8, vents: 0 };
 

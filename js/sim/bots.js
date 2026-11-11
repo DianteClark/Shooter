@@ -1453,7 +1453,9 @@ export class BotBrain {
     // Recruits walk straight through a turret's field of fire; everyone else takes the long way round.
     this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS, this.S.turret ? this.p.team : -1);
     this.pathI = 0;
-    if (this.pathLen === 0) this.arrived = true;
+    // A fresh path means somewhere to go. The solve can lag _goTo by a tick or two (path budget), and the old path's
+    // end reached in between must not leave the bot standing on 'arrived' with a whole new route ahead of it.
+    this.arrived = this.pathLen === 0;
   }
 
   // ---- Driving, every tick ----

@@ -65,7 +65,7 @@ function build() {
   // Capture the Flag (see flagBases). In front of the long wagon wall that screens the spawns, between the near wagon rows.
   points.ctf = flagBases(W, H, { x: 12, z: 23 });
 
-  return { id: 'frost', name: 'Frostline', theme: 'frost', width: W, height: H, walls, spawns, lanes, nav, points };
+  return { id: 'frost', name: 'Frostline', theme: 'arctic', size: 'medium', region: 'arctic', width: W, height: H, walls, spawns, lanes, nav, points };
 }
 
 export default build();
