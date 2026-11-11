@@ -13,6 +13,7 @@
 // Each gun's numbers in a scope are one flat array, laid out by FIELDS.
 
 import { MAPS } from '../shared/map.js';
+import { MODES } from '../shared/modes.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { BUILD } from '../build.js';
@@ -147,7 +148,8 @@ export class MatchTelemetry {
     if (this.result !== undefined || !view) return;
     if (view.mode === 'range') return;
     this.mapId = view.mapId ?? this.mapId;
-    this.mode = view.mode ?? this.mode;
+    // The rule set, as before the modes overhaul: view.mode is what a new mode's zones look like (HQ draws as 'hard').
+    this.mode = MODES[view.modeId]?.rules ?? view.mode ?? this.mode;
     if (this.players.size === 0) for (const v of view.players) this.#player(v);
     this.#heldTime(view);
     for (let i = 0; i < events.length; i++) {

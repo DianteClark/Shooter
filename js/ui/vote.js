@@ -9,6 +9,8 @@ import { esc } from './widgets.js';
 import { mapImage, followMapArt } from './mapthumb.js';
 import { ico, header } from './yard.js';
 import { sweep, flash, enter } from './motion.js';
+import { cleanMods, playlistName } from '../shared/playlist.js';
+import { soloMods, featuredButton } from './modifiers.js';
 
 export const RANDOM = 'random';
 const RANDOM_MODE = { short: '?', name: 'Random', desc: 'Any mode the map can host.' };
@@ -172,7 +174,7 @@ export function soloMarkup({ mapId, mode }) {
   const sections = SIZE_IDS.map(t => ({ t, ids: MAP_IDS.filter(id => tierOf(id) === t) })).filter(s => s.ids.length);
   if (BR_PICK.length) sections.push({ t: 'br', ids: BR_PICK });     // Battle royale: 32 players, squads, the circle.
   const out = `
-    ${header({ back: 'soloBack', title: 'Play vs bots', extra: `<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
+    ${header({ back: 'soloBack', title: 'Play vs bots', extra: `${featuredButton('btn solo-feat')}<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
     <div class="solo">
       <div class="solo-maps">
         <button class="solo-map random" data-act="soloMap" data-id="${RANDOM}" data-in="up">
@@ -194,7 +196,7 @@ export function soloMarkup({ mapId, mode }) {
           <div class="solo-modes">${[...MODE_IDS, RANDOM].map(id => {
             const m = MODES[id] ?? RANDOM_MODE;
             return `<button class="solo-mode${MODES[id]?.large ? ' large' : ''}" data-act="soloMode" data-id="${id}">
-              ${modeIcon(id)}<b>${esc(m.name)}</b>
+              ${modeIcon(id)}<b>${esc(m.name).replace('Headquarters', 'Head&shy;quarters')}</b>
             </button>`;
           }).join('')}</div>
           <span class="solo-more" aria-hidden="true">${ico('next')}</span>
@@ -207,7 +209,8 @@ export function soloMarkup({ mapId, mode }) {
 
 // What Start will launch, in words: "Domination on Dust", "Any mode on Harbor".
 function pickLine(mapId, mode) {
-  const m = mode === RANDOM ? 'Any mode' : MODES[mode]?.name ?? '';
+  const mods = soloMods();
+  const m = mode === RANDOM ? (mods.length ? `${playlistName('', mods).trim()}, any mode` : 'Any mode') : MODES[mode] ? playlistName(mode, cleanMods(mods, mode)) : '';
   return `${m} on ${mapId === RANDOM ? 'any map' : MAPS[mapId]?.name ?? ''}`;
 }
 

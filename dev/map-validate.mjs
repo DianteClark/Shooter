@@ -21,6 +21,8 @@
 // Exits non-zero if any map fails a hard check (fields, nav, gaps, fair, bots); sight lines are reported, not failed.
 import { MAPS, MAP_IDS, BR_MAP_IDS, sizeOf, REGIONS } from '../js/shared/map.js';
 import { MODES, mapModes, modeFitsMap, playersFor, isFfa, teamSizeFor } from '../js/shared/modes.js';
+import { CTL } from '../js/sim/ctl.js';
+import { GRIND } from '../js/sim/grind.js';
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { NavGrid } from '../js/sim/nav.js';
 import { raycastMap } from '../js/shared/geometry.js';
@@ -143,6 +145,43 @@ function objectives(map) {
   const p = map.points ?? {}, list = [];
   for (const k of ['dom', 'hard', 'snd', 'ctf']) for (const o of p[k] ?? []) list.push({ kind: k, ...o });
   return list;
+}
+
+// The modes overhaul's own points (docs/MODES.md), as each mode's rules module will place them, for every mode the map
+// hosts: Headquarters sites (hardpoint zones, or Domination flags), Control's two zones (the bomb sites, widened to
+// CTL.radius; both on the defenders' east half), Grind's two banks (the outer Domination flags, one on each half). Each
+// must be reachable and open enough to stand a few players in (see the thresholds below).
+function checkModePoints(map, nav, reach, out) {
+  const hosts = mapModes(map).filter(m => modeFitsMap(map, m));
+  const p = map.points ?? {};
+  const zones = [];
+  if (hosts.some(m => MODES[m].rules === 'hq')) for (const z of (p.hard?.length >= 2 ? p.hard : p.dom ?? [])) zones.push({ mode: 'hq', ...z, r: z.r ?? 4 });
+  if (hosts.some(m => MODES[m].rules === 'ctl')) {
+    for (const z of p.snd ?? []) zones.push({ mode: 'ctl', ...z, r: Math.max(z.r ?? 3, CTL.radius) });
+    if ((p.snd ?? []).some(z => z.x < map.width / 2)) out.fail.push('ctl: a zone sits on the attackers\' (west) half');
+  }
+  if (hosts.some(m => MODES[m].rules === 'grind')) {
+    const d = p.dom ?? [], banks = d.length >= 2 ? [d[0], d[d.length - 1]] : [];
+    for (const z of banks) zones.push({ mode: 'grind', ...z, r: Math.max(z.r ?? 4, GRIND.radius) });
+    if (banks.length === 2 && (banks[0].x < map.width / 2) === (banks[1].x < map.width / 2)) out.warn.push('grind: both banks on one half');
+  }
+  let n = 0;
+  for (const z of zones) {
+    if (!reachableNear(nav, reach, z.x, z.z, Math.max(1, z.r * 0.8))) { out.fail.push(`${z.mode} ${z.id} (${z.x}, ${z.z}) unreachable`); continue; }
+    let cells = 0, open = 0;
+    for (let x = z.x - z.r; x <= z.x + z.r; x += 0.5) for (let y = z.z - z.r; y <= z.z + z.r; y += 0.5) {
+      if (Math.hypot(x - z.x, y - z.z) > z.r) continue;
+      cells++;
+      if (nav.isWalkable(x, y) && reach[cellOf(nav, x, y)]) open++;
+    }
+    // Hardpoint zones round a building are fine for standing in its doorways: under 35% open is worth a look, under 15%
+    // nobody can stand there.
+    const pct = Math.round(100 * open / cells);
+    if (pct < 15) out.fail.push(`${z.mode} ${z.id}: only ${pct}% of the zone is open ground`);
+    else if (pct < 35) out.warn.push(`${z.mode} ${z.id}: ${pct}% of the zone is open ground`);
+    n++;
+  }
+  if (zones.length) out.info.push(`mode points ${n}/${zones.length} ok (${[...new Set(zones.map(z => z.mode))].join(' ')})`);
 }
 
 function checkNav(map, nav, reach, out) {
@@ -302,13 +341,14 @@ function botMatch(map, mode, out) {
   const hist = new Map();
   let tick = 0;
   // Flag runs are rarer than fights: Capture the Flag gets twice as long to show one.
-  const seconds = MODES[mode].rules === 'ctf' ? SECONDS * 2 : SECONDS;
+  // Flag runs, Control rounds and the first infections are slower to show than a fight.
+  const seconds = ['ctf', 'ctl', 'inf'].includes(MODES[mode].rules) ? SECONDS * 2 : SECONDS;
   const end = Math.round((3.2 + seconds) * SIM_HZ);
   const t0 = performance.now();
   for (; tick < end && sim.phase !== 'ended'; tick++) {
     sim.step(STEP);
     for (const e of sim.drainEvents()) {
-      const k = e.t === 'snd' || e.t === 'ctf' ? `${e.t}:${e.kind}` : e.t;
+      const k = e.kind && ['snd', 'ctf', 'hq', 'ko', 'inf', 'oic', 'ctl', 'grind'].includes(e.t) ? `${e.t}:${e.kind}` : e.t;
       ev[k] = (ev[k] ?? 0) + 1;
     }
     // Once a second: a bot that has been pushing its stick for 4 s and gone less than 0.6 m is stuck on something.
@@ -329,7 +369,10 @@ function botMatch(map, mode, out) {
   }
   const ms = (performance.now() - t0) / tick;
   const kills = ev.kill ?? 0;
-  const obj = { dom: ev.capture ?? 0, hard: sim.scores[0] + sim.scores[1], kc: ev.tag ?? 0, snd: (ev['snd:plant'] ?? 0) + (ev['snd:defuse'] ?? 0) + (ev['snd:round'] ?? 0), ctf: (ev['ctf:take'] ?? 0) + (ev['ctf:capture'] ?? 0) + (ev['ctf:return'] ?? 0) };
+  const obj = { dom: ev.capture ?? 0, hard: sim.scores[0] + sim.scores[1], kc: ev.tag ?? 0, snd: (ev['snd:plant'] ?? 0) + (ev['snd:defuse'] ?? 0) + (ev['snd:round'] ?? 0), ctf: (ev['ctf:take'] ?? 0) + (ev['ctf:capture'] ?? 0) + (ev['ctf:return'] ?? 0),
+    // The modes overhaul.
+    hq: (ev['hq:capture'] ?? 0) + (ev['hq:destroy'] ?? 0), ko: ev['ko:kill'] ?? 0, inf: ev['inf:infected'] ?? 0, oic: ev['oic:out'] ?? 0,
+    ctl: (ev['ctl:capture'] ?? 0) + (ev['ctl:end'] ?? 0), grind: (ev['grind:pick'] ?? 0) + (ev['grind:bank'] ?? 0) };
   const rules = MODES[mode].rules;
   const objective = obj[rules];
   const stuckSpots = [...stuck.entries()].sort((a, b) => b[1] - a[1]);
@@ -338,7 +381,7 @@ function botMatch(map, mode, out) {
   out.info.push(`bots ${line}`);
   if (kills === 0) out.fail.push(`${mode}: no kills in ${seconds} s`);
   // Bots take flags and plant bombs rarely enough that a quiet minute is not a map fault on its own: reported only.
-  if (objective === 0) (rules === 'snd' || rules === 'ctf' ? out.warn : out.fail).push(`${mode}: no objective activity in ${seconds} s`);
+  if (objective === 0) (rules === 'snd' || rules === 'ctf' || rules === 'ctl' || rules === 'oic' || rules === 'ko' || rules === 'inf' ? out.warn : out.fail).push(`${mode}: no objective activity in ${seconds} s`);
   // Stuck-seconds per bot per minute: a little is a bot waiting at a corner; a lot is a trap.
   const perBot = stuckTotal / sim.players.length / (seconds / 60);
   if (perBot > 4) out.fail.push(`${mode}: bots stuck ${perBot.toFixed(1)} s per bot per minute`);
@@ -425,6 +468,7 @@ for (const id of todo) {
   const nav = new NavGrid(map);
   const reach = flood(nav, map.spawns[0][0]);
   checkNav(map, nav, reach, out);
+  checkModePoints(map, nav, reach, out);
   checkGaps(map, out);
   if (isGiant(map)) checkGiant(map, nav, reach, out);
   else checkFair(map, nav, out);

@@ -12,6 +12,8 @@ import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
 import { playerBanner, proProgressHtml, unlockStamp } from './cards.js';
 import { challengeStamp, challengeStrip } from './challenges.js';
+import { modeColumn } from './mode-hud.js';
+import { playlistName } from '../shared/playlist.js';
 import { masteryStamp, masteryStrip } from './mastery.js';
 
 const FILL_MS = 520;
@@ -126,10 +128,13 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   // The mode's own number takes the headshot column where the mode has one.
   const rules = modeRules(data.modeId ?? data.mode);      // Ground War modes keep the columns of their rule set.
   // Search and Destroy: plants and defuses, as "plants/defuses". Capture the Flag: "captures/returns/carrier kills".
-  const modeHead = rules === 'kc' ? 'Conf' : rules === 'dom' || rules === 'hard' ? 'Cap' : rules === 'snd' ? 'P/D' : rules === 'ctf' ? 'C/R/K' : 'HS';
-  const modeStat = p => (rules === 'kc' ? p.confirms ?? 0 : rules === 'dom' || rules === 'hard' ? p.captures ?? 0
+  let modeHead = rules === 'kc' ? 'Conf' : rules === 'dom' || rules === 'hard' ? 'Cap' : rules === 'snd' ? 'P/D' : rules === 'ctf' ? 'C/R/K' : 'HS';
+  let modeStat = p => (rules === 'kc' ? p.confirms ?? 0 : rules === 'dom' || rules === 'hard' ? p.captures ?? 0
     : rules === 'snd' ? `${p.plants ?? 0}/${p.defuses ?? 0}`
     : rules === 'ctf' ? `${p.captures ?? 0}/${p.returns ?? 0}/${p.carrierKills ?? 0}` : p.head ?? 0);
+  // The modes overhaul's rule sets bring their own column (js/ui/mode-hud.js).
+  const ownCol = modeColumn(rules);
+  if (ownCol) { modeHead = ownCol.head; modeStat = ownCol.stat; }
   let [word, line] = OUTCOME[outcome] ?? OUTCOME.draw;
   const winTeam = outcome === 'win' ? myTeam : outcome === 'loss' ? 1 - myTeam : null;
   let tone = TEAMS[winTeam]?.css ?? 'var(--c-sodium)';      // A free-for-all sets its own below.
@@ -224,9 +229,9 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     }
     return `<div class="rb theirs" style="--team:${TEAMS[myTeam]?.css}">
       <div class="rb-head"><b class="rb-team">Standings</b><b class="rb-pts"></b>
-        <span>K</span><span>D</span><span>A</span><span>${gun ? 'Gun' : 'HS'}</span><span class="wide">${gun ? 'Score' : 'Kills'}</span></div>
+        <span>K</span><span>D</span><span>A</span><span>${gun ? 'Gun' : ownCol ? ownCol.head : 'HS'}</span><span class="wide">${gun ? 'Score' : 'Kills'}</span></div>
       ${rows.map(([p, n], i) => `<div class="rb-row${p.id === data.localId ? ' me' : ''}${p.id === mvp?.id ? ' mvp' : ''}" style="--i:${i}">
-        <span class="rb-name"><u style="text-decoration:none;min-width:2.3ch;color:var(--c-haze)">${ORDINAL(n)}</u><i style="flex:none;width:7px;height:7px;background:${TEAMS[p.team]?.css}"></i>${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${gun ? Math.min(GUN_LADDER.length, scoreOf(p) + 1) : p.head ?? 0}</span><span class="wide">${gun ? matchScore(p) : scoreOf(p)}</span>
+        <span class="rb-name"><u style="text-decoration:none;min-width:2.3ch;color:var(--c-haze)">${ORDINAL(n)}</u><i style="flex:none;width:7px;height:7px;background:${TEAMS[p.team]?.css}"></i>${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${gun ? Math.min(GUN_LADDER.length, scoreOf(p) + 1) : ownCol ? ownCol.stat(p) : p.head ?? 0}</span><span class="wide">${gun ? matchScore(p) : scoreOf(p)}</span>
       </div>`).join('')}
       ${rest ? `<div class="rb-row" style="--i:${rows.length}"><span class="rb-name"><b>+${rest} more</b></span></div>` : ''}
     </div>`;
@@ -271,7 +276,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         <span class="rs-mvp-tag">${art('ui:star', 12)}MVP</span>
         ${playerBanner(mvp.id, mvp.name, { size: 168, sub: `${mvp.kills} ${mvp.kills === 1 ? 'kill' : 'kills'}, ${matchScore(mvp)} pts` })}
       </div>` : '';
-  const modeName = MODES[data.modeId ?? data.mode]?.name ?? '';
+  const modeName = playlistName(data.modeId ?? data.mode, data.mods ?? []) || (MODES[data.modeId ?? data.mode]?.name ?? '');
   // Search and Destroy: one chip per round in the order played, in the colour of the side that took it, marked with
   // how (wipe, detonation, defuse, time). data.snd is the match's final S&D state when the match passes it on.
   const ROUND_ICON = { elim: 'ui:skull', bomb: 'bomb', defuse: 'medal:defuse', time: 'ui:clock' };

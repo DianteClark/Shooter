@@ -19,8 +19,28 @@ on every push, keep 2% of weekly usage for bugs.
 7. DONE (1111-8): battle royale (docs/BR.md): 32 players (up to 8 humans, the rest bots), squads of 4 (plus duos/solos), giant map stitched from
    the regions, loot rarities, closing circle, revives, bots that loot, rotate and fight like players.
 8. DONE (1111-4). Scorestreaks overhaul.
-9. Game modes overhaul (new modes built on the new maps).
+9. DONE (modes). Game modes overhaul (docs/MODES.md): Headquarters, Kill Order, Infected, One in the Chamber, Control,
+   Grind, Ground War HQ and Kill Order; modifiers (Hardcore, Snipers Only, Melee Only, No Streaks); a daily featured playlist.
 10. DONE (atts). Attachments wave: 66 signature attachments, 12 conversion kits, unlocked through weapon levels and the
     mastery ladder; best-build balance rig (dev/best-builds.mjs). docs/WEAPONS-OVERHAUL.md "Attachments wave".
 11. DONE (ops). Operators overhaul: 27 operators (18 new, nine of them women) from a parametric parts kit, builds in the
     shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.
+
+## Owner's next wave (2026-11-11 morning)
+12. Quick fixes: calling card progress bars; results screen challenges scroll; duplicate names across guns, perks,
+    equipment, streaks and operators (e.g. Bulwark gun and Bulwark tactical); operators screen text.
+13. Gunsmith overhaul: weapon classes as big tiles in a horizontal scroller on top, that class's guns as big cards in a
+    vertical scroller below; attachments list with smooth native scrolling; nothing cramped or overflowing.
+14. Multiplayer restructure: "Play vs bots" becomes Multiplayer with tabs Standard / Ground War / Battle Royale (later the
+    extraction mode); you pick a mode or mix and get a match; map is random or a vote of 2-3. Custom has two tabs:
+    Match (map, mode, bots, difficulty, modifiers; friends can join) and Training (the range, or any map with N bots,
+    infinite ammo, no death, bot behaviour options, damage readout; never counts toward progress).
+15. Bot overhaul: a pool of 150+ named bot players with persistent profiles (level, loadout habits, play style), most with
+    a hidden skill range and a random per-match form, some locked at a tier; smarter decisions at every tier; the
+    difficulty selector only in Custom.
+16. Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
+    saved "as of" that match; boards for level, kills, K/D, wins, BR wins/top 5, extractions, mastery, weekly.
+17. Extraction mode (our own name, not "DMZ"): 4 squads of 4 (or duos) on Frontier, empty slots filled with bot squads;
+    AI patrols harder toward the centre; contracts (intel, HVT, cache, hack, escort); own loadouts; only ammo loot; no
+    streaks; respawn timer but a shared squad life pool, then spectate; must exfil to bank rewards (one squadmate out is
+    enough); rewards are mastery progress plus exclusive streaks, weapons, perks and operators.

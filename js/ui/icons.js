@@ -378,6 +378,18 @@ const SQUARE = {
   'mode:br': { f: [P(3, 12, 8, 5.5, 16, 3.5, 24, 5.5, 29, 12, 24, 10.5, 16, 10, 8, 10.5), bar(5.5, 12, 14, 21, 1.6), bar(26.5, 12, 18, 21, 1.6), R(13.5, 20, 5, 7.5, 1)], a: [O(16, 18.5, 2.6), R(5, 28.5, 22, 2, 1)] },
   // Capture the Flag: two stands facing each other across the yard, the near flag lit.
   'mode:ctf': { f: [R(4, 3, 3, 25), R(25, 3, 3, 25), R(1.5, 27, 29, 3, 1)], b: [P(25, 11, 14, 15.5, 25, 20)], a: [P(7, 4, 18, 8.5, 7, 13)] },
+  // Modes overhaul. Headquarters: a field post with its mast, the beacon on top lit.
+  'mode:hq': { f: [R(7, 14, 18, 15, 1), bar(16, 14, 16, 6, 2.2)], h: [R(13.5, 21, 5, 8)], a: [O(16, 5, 3.2)] },
+  // Kill Order: a crown with its jewel lit: the VIP.
+  'mode:ko': { f: [P(3, 25, 3, 9, 10, 16, 16, 5, 22, 16, 29, 9, 29, 25)], h: [O(16, 19, 3.6)], a: [O(16, 19, 2.2), R(3, 26.5, 26, 3, 1)] },
+  // Infected: three spreading cells round a lit core.
+  'mode:inf': { f: [O(16, 9, 6.2), O(8.5, 22, 6.2), O(23.5, 22, 6.2)], h: [O(16, 9, 2.8), O(8.5, 22, 2.8), O(23.5, 22, 2.8)], a: [O(16, 17.5, 2.6)] },
+  // One in the Chamber: a single round standing up, its case lit.
+  'mode:oic': { f: [P(11.5, 18, 11.5, 11, 16, 2.5, 20.5, 11, 20.5, 18)], a: [R(11.5, 19.5, 9, 10, 1)] },
+  // Control: two zones, and the line between attack and defence.
+  'mode:ctl': { f: [O(8.5, 16, 6.5), O(23.5, 16, 6.5)], h: [O(8.5, 16, 3.4), O(23.5, 16, 3.4)], a: [R(14.8, 2, 2.4, 28)] },
+  // Grind: tags in hand, carried to the bank.
+  'mode:grind': { f: [R(2, 4, 12, 8, 2), R(4.5, 9, 12, 8, 2), R(16, 18, 14, 12, 1)], h: [O(13, 13, 1.5), R(19, 21, 8, 2)], a: [P(16, 7, 22, 7, 22, 3.5, 29, 10, 22, 16.5, 22, 13, 16, 13)] },
   // Gun Game: a ladder, its top rung lit.
   'mode:gun': { f: [R(5, 2, 3.4, 28, 1), R(23.6, 2, 3.4, 28, 1), R(8.4, 12, 15.2, 2.8), R(8.4, 18.5, 15.2, 2.8), R(8.4, 25, 15.2, 2.8)], a: [R(8.4, 5, 15.2, 3.4)] },
 
@@ -442,9 +454,16 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', brduo: 'mode:br', brsolo: 'mode:br',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',
+  // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).
+  'medal:hq_capture': 'medal:capture', hq_capture: 'medal:capture', 'medal:hq_destroy': 'medal:carrier_kill', hq_destroy: 'medal:carrier_kill',
+  'medal:vip_kill': 'ui:crown', vip_kill: 'ui:crown', 'medal:bodyguard': 'medal:defend', bodyguard: 'medal:defend',
+  'medal:infect': 'mode:inf', infect: 'mode:inf', 'medal:first_infected': 'mode:inf', first_infected: 'mode:inf',
+  'medal:last_stand': 'medal:clutch', last_stand: 'medal:clutch', 'medal:survivor': 'medal:defend', survivor: 'medal:defend',
+  'medal:oic_last': 'medal:clutch', oic_last: 'medal:clutch', 'medal:ctl_capture': 'medal:capture', ctl_capture: 'medal:capture',
+  'medal:ctl_hold': 'medal:defend', ctl_hold: 'medal:defend', 'medal:grind_bank': 'mode:grind', grind_bank: 'mode:grind',
   // Menu vocabulary (js/ui/yard.js names).
   bots: 'ui:bot', rejoin: 'ui:refresh', load: 'ui:download', export: 'ui:share', equip: 'ui:check', team: 'ui:party',
   swapteam: 'swap', wait: 'ui:clock', warn: 'ui:warning', sound: 'ui:volume', settings: 'ui:settings',

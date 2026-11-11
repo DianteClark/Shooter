@@ -62,7 +62,7 @@ export class Match {
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
     this.sim = new Sim({
       roster: this.roster, map: this.map, seed: this.seed,
-      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode,
+      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode, mods: this.mods ?? [],
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
     this.telemetry = new MatchTelemetry({ localId: this.localId });
@@ -142,6 +142,10 @@ export class Match {
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) { this.localAlive = false; this.brStash = null; }
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
+      // Modes overhaul: a side change (Infected) keeps this device's codec right before the spawn that follows it, and
+      // a One in the Chamber kill hands the bullet back to the phone that owns the gun.
+      if (e.t === 'team') { const p = this.sim.byId.get(e.id); if (p) p.team = e.team; }
+      if (e.t === 'ammo' && e.id === this.localId) this.ps.ammo[e.slot ?? 0] = Math.min(e.max ?? 99, this.ps.ammo[e.slot ?? 0] + e.add);
       if (e.t === 'dazed' && e.id === this.localId) applyDaze(this.ps, e.amount, e.dur);   // Stun, Gas, Shock slow you.
       if (e.t === 'rejoin' && e.oldId !== e.id) this.#rebind(e);   // A newcomer took an open slot.
       if (this.br && e.id === this.localId) this.#brEvent(e);
@@ -229,7 +233,9 @@ export class Match {
   }
 
   #spawnLocal(x, z, aim) {
-    respawnPlayer(this.ps, x, z, aim, this.nextLoadout || undefined);
+    // A mode or modifier that deals loadouts (Infected, One in the Chamber, Snipers Only...) deals this one too.
+    const dealt = this.sim.dealFor(this.localId, this.nextLoadout || this.me.loadout);
+    respawnPlayer(this.ps, x, z, aim, dealt === this.me.loadout && !this.nextLoadout ? undefined : dealt);
     this.spawned = true;
     this.localAlive = true;
     this.lastSpawnAt = this.now();
@@ -391,7 +397,7 @@ export class Match {
     const net = this.net, view = this.interp.newest;
     if (!view) return;
     this.sim = Sim.fromSnapshot(view, this.roster, {
-      map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds,
+      map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds, mods: this.mods ?? [],
       br: this.sim.br ?? null,      // The guest's battle royale mirror: loot table and the host's last backup.
     });
     this.isHost = true;
@@ -494,8 +500,9 @@ export class Match {
     let awards = {};
     try { awards = this.awards.finish(view) ?? {}; } catch (err) { console.error('match awards', err); }
     this.onEnd({
-      scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode,
-      myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
+      scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode, mods: this.mods ?? [],
+      // The side at the end: Infected moves players between sides during the match.
+      myTeam: view.players.find(p => p.id === this.localId)?.team ?? this.me.team, players: view.players.map(p => ({ ...p })),
       snd: view.snd ?? view.points?.snd ?? null,
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       ...awards,

@@ -231,10 +231,11 @@ export function planObjectives(sim) {
       if (!p.bot || p.team !== team || !p.alive) continue;
       // Some bots this life just want a fight; they stay on the lane logic. A round of Search and Destroy needs everyone.
       // A flag carrier always plays the flag, whatever this life's roll said.
-      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd || sim.ctf?.isCarrier(p)) crew.push(p.bot);
+      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd || sim.rules?.allIn || sim.ctf?.isCarrier(p)) crew.push(p.bot);
       else p.bot.setObjective(null);
     }
     if (!crew.length) continue;
+    if (sim.rules) { sim.rules.plan?.(team, crew); continue; }     // The modes overhaul's rule sets plan their own.
     if (sim.snd) { planSnd(sim, team, crew); continue; }
     if (sim.ctf) { planCtf(sim, team, crew); continue; }
     if (sim.mode === 'kc') planTags(sim, team, crew);

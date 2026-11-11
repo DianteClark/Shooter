@@ -723,7 +723,7 @@ fillGaps(FOLEY, deriveFoley, 'foley');
 
 // Medals: note lists as [semitones above A4, start time]. Bigger achievements climb higher and last longer.
 // Rarer outranks commoner when medals collide.
-const MEDAL_RANK = { golden: 13, flag_capture: 12.5, streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, carrier_kill: 7.5, flag_take: 7.2, revenge: 7, longshot: 6, streak3: 5, flag_return: 4.5, double: 4, capture: 3, defend: 2, flag_defend: 2, confirm: 1, deny: 0 };
+const MEDAL_RANK = { last_stand: 12.6, oic_last: 12.6, vip_kill: 12.4, hq_destroy: 9.5, golden: 13, flag_capture: 12.5, streak10: 12, fury: 11, streak5: 10, first_blood: 9, triple: 8, carrier_kill: 7.5, flag_take: 7.2, revenge: 7, longshot: 6, streak3: 5, flag_return: 4.5, double: 4, capture: 3, defend: 2, flag_defend: 2, confirm: 1, deny: 0 };
 
 const MEDALS = {
   first_blood: { notes: [[0, 0], [7, 0.09], [12, 0.18]], dur: 0.5, gain: 0.7 },
@@ -750,6 +750,19 @@ const MEDALS = {
   flag_return: { notes: [[7, 0], [2, 0.09], [7, 0.18]], dur: 0.45, gain: 0.62, shape: 0.8 },
   carrier_kill: { notes: [[-2, 0], [5, 0.07], [10, 0.14]], dur: 0.48, gain: 0.7, shape: 1.3 },
   flag_defend: { notes: [[7, 0], [4, 0.09], [7, 0.18]], dur: 0.42, gain: 0.6, shape: 0.8 },
+  // Modes overhaul (docs/MODES.md).
+  hq_capture: { notes: [[0, 0], [7, 0.1], [12, 0.2]], dur: 0.55, gain: 0.7, shape: 1 },
+  hq_destroy: { notes: [[12, 0], [7, 0.08], [0, 0.16], [-5, 0.26]], dur: 0.7, gain: 0.75, shape: 1.4 },
+  vip_kill: { notes: [[0, 0], [4, 0.08], [7, 0.16], [12, 0.26]], dur: 0.8, gain: 0.78, shape: 0.5 },
+  bodyguard: { notes: [[7, 0], [4, 0.09], [7, 0.18]], dur: 0.42, gain: 0.6, shape: 0.8 },
+  infect: { notes: [[-3, 0], [-8, 0.08]], dur: 0.4, gain: 0.6, shape: 1.6 },
+  first_infected: { notes: [[-12, 0], [-9, 0.12], [-13, 0.24]], dur: 0.7, gain: 0.7, shape: 1.8 },
+  last_stand: { notes: [[0, 0], [7, 0.09], [12, 0.18], [19, 0.3]], dur: 0.85, gain: 0.78, shape: 0.4 },
+  survivor: { notes: [[0, 0], [4, 0.08], [7, 0.16]], dur: 0.5, gain: 0.7 },
+  oic_last: { notes: [[0, 0], [7, 0.09], [12, 0.18], [19, 0.3]], dur: 0.85, gain: 0.78, shape: 0.4 },
+  ctl_capture: { notes: [[0, 0], [7, 0.1], [12, 0.2]], dur: 0.55, gain: 0.7, shape: 1 },
+  ctl_hold: { notes: [[7, 0], [12, 0.08], [16, 0.16]], dur: 0.55, gain: 0.7, shape: 0.6 },
+  grind_bank: { notes: [[9, 0], [16, 0.07], [21, 0.14]], dur: 0.4, gain: 0.62 },
 };
 
 function renderMedal(spec, sr) {
