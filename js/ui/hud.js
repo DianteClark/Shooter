@@ -5,7 +5,8 @@ import { WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from '../shared/catalog.js';
-import { GUN_LADDER, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
+import { GUN_LADDER, isBr, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
+import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { Progress, matchScore } from './progress.js';
 import { badgeMark, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
@@ -368,9 +369,16 @@ export class HUD {
     addEventListener('resize', () => this.remeasure());
     this.#seedFallback();
     this.#build();
+    this.brHud = new BrHud(this);
     this.#drawMapBase();
     this.reset();
   }
+
+  // Battle royale buttons (jump, take, plate, med, self-revive) reach the match through this.
+  onBrCommand(cb) { this.brHud.onCommand(cb); }
+
+  // A row in the kill feed, for the modes' own layers (js/ui/br-hud.js).
+  pushFeed(html, mine = false, side = '') { this.#pushFeed(html, mine, side); }
 
   // Rotation, toolbars, or a new match: layout-derived numbers are refreshed here and only ever read per frame.
   remeasure() {
@@ -432,6 +440,7 @@ export class HUD {
     this.gun = this.mode === 'gun';
     this.snd = this.mode === 'snd';           // Search and Destroy: rounds, the bomb, spectating instead of respawns.
     this.ctf = this.mode === 'ctf';           // Capture the Flag: both flags' status, markers and the carrier's strip.
+    this.br = isBr(mode);                     // Battle royale: its own layer replaces the scorebar and death screen.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
@@ -454,7 +463,14 @@ export class HUD {
     this.el.classList.toggle('range-on', mode === 'range');
     this.#hideIntro();
     this.remeasured = false;
-    this.pendingIntro = intro && mode !== 'range' ? { mapId, mode, roster, localId } : null;
+    // Battle royale opens on its drop map instead of the team card.
+    this.pendingIntro = intro && mode !== 'range' && !this.br ? { mapId, mode, roster, localId } : null;
+    this.brHud.prepare(this.br, { map: this.map, roster, localId, mode });
+    if (this.br) {
+      const mine = TEAMS[roster.find(r => r.id === localId)?.team ?? 2]?.css ?? '#38b6ff';
+      this.el.style.setProperty('--my-team', mine);
+      this.el.style.setProperty('--enemy-team', TEAMS[1].css);
+    }
   }
 
   // Gun Game: no scorestreaks and nothing to swap to, so their buttons go; the death screen has no loadouts to offer.
@@ -1050,7 +1066,7 @@ export class HUD {
   #paintBoard(view) {
     const me = this.#findLocal(view);
     if (!me) return;
-    if (this.ffa) { this.#paintFfaBoard(view, me); return; }
+    if (this.ffa || this.br) { this.#paintFfaBoard(view, me); return; }
     [me.team, 1 - me.team].forEach((team, s) => {
       const side = this.boardSides[s];
       side.team.textContent = `${TEAMS[team].name}  ${view.scores[team]}`;
@@ -1230,7 +1246,7 @@ export class HUD {
       }
       const place = ORDINAL(ranked.indexOf(me) + 1);
       if (place !== c.place) { c.place = place; this.sbMine.name.textContent = place; }
-    } else if (c.teamFlip !== myTeam) {
+    } else if (!this.br && c.teamFlip !== myTeam) {
       c.teamFlip = myTeam;
       this.#paintTeams(myTeam);
     }
@@ -1292,6 +1308,7 @@ export class HUD {
     this.controls?.notePlayerAim(me.aim);
     this.#updateTiles(me, c);
     if (this.snd) this.#updateSnd(view, me, c, snd);
+    else if (this.br) this.brHud.update(view, me, dt);
     else this.#updateDeath(me, c, view);
     if (this.ctf) this.#updateCtf(view, me, c);
     this.#decayEffects(dt);
@@ -2181,6 +2198,7 @@ export class HUD {
   onEvents(events) {
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
+      if (this.br) this.brHud.onEvent(e, this.view);
       switch (e.t) {
         case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
         case 'hit': this.#onHit(e); break;
@@ -2263,7 +2281,7 @@ export class HUD {
         this.hitEl.classList.toggle('head', head);
       }
       // Armour soaked it, or cover took some of it off first: the marker says so (see HIT_CSS).
-      const armor = !!e.armor, weak = !armor && this.clockT - this.coverShotT < COVER_HIT_WINDOW;
+      const armor = !!e.armor || !!e.plate, weak = !armor && this.clockT - this.coverShotT < COVER_HIT_WINDOW;
       if (this.hitArmor !== armor) { this.hitArmor = armor; this.hitEl.classList.toggle('armor', armor); }
       if (this.hitWeak !== weak) { this.hitWeak = weak; this.hitEl.classList.toggle('weak', weak); }
       // A heavy round lands a bigger marker than a light one: 0.85x for a graze up to 1.25x for a sniper hit.
@@ -2533,6 +2551,11 @@ export class HUD {
     this.endShown = true;
     this.endAt = performance.now();
     this.deathEl.classList.remove('show', 'picking');
+    if (this.br) {
+      this.brHud.endBanner(this.endEl, winner, myTeam, view);
+      this.endEl.classList.add('show');
+      return;
+    }
     if (this.ffa && view) {
       // Placement, not sides: first is a win, the podium is a good day, the rest is a loss.
       const ranked = ffaRank(view), at = ranked.findIndex(p => p.team === myTeam) + 1;
@@ -2636,7 +2659,7 @@ export class HUD {
     // A flag carrier shows on the enemy minimap wherever they are (the price of carrying it).
     const ctf = this.ctf ? ctfOf(view) : null;
     // Out for the round, you see what the teammate you watch sees.
-    const eyeId = this.snd && !me.alive ? spectate.target(view, me.id) : null;
+    const eyeId = (this.snd || this.br) && !me.alive ? spectate.target(view, me.id) : null;
     const eye = eyeId ? view.players.find(p => p.id === eyeId) ?? me : me;
 
     for (const p of view.players) {
@@ -2688,6 +2711,7 @@ export class HUD {
 
     this.#drawDeployables(view, myTeam, sx, sz, g);
     this.#drawProMini(view, me, sx, sz, g, clock);
+    if (this.br) this.brHud.drawMini(g, view, me, sx, sz);
 
     this.#drawSelf(g, me, sx, sz);
   }

@@ -2,6 +2,7 @@
 // GameRenderer.update is the only per-frame entry point; it allocates nothing once running.
 import * as THREE from 'three';
 import { TEAMS } from '../shared/constants.js';
+import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
 import { Weather } from './weather.js';
@@ -361,6 +362,7 @@ export class GameRenderer {
           }
           break;
         }
+        case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'explosion': {
           // A launcher's blast waits for its rocket to get there.
           if (!vfx.rocketInbound(ev.x, ev.z, ev.radius || 4)) this._boom(ev.x, ev.z, ev.radius || 4);
@@ -695,6 +697,7 @@ export class GameRenderer {
     this.vfx.step(fxDt);
     this.combat.smokeAlpha = cine ? 0.16 : 1;
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
+    if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z);
     this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill && !cine) this._drawLaser(local);
     this.ambient.update(fxDt, this.camTarget.x, this.camTarget.z);
@@ -790,6 +793,7 @@ export class GameRenderer {
     const g = this.governor;
     if (g && g.clock > 45 && !g.thermal) saveAutoStep(QUALITY_STEPS[this.stepI].id);
     this.chars.dispose();
+    this.brFx?.dispose();
     this.vfx.dispose();
     this.combat.dispose();
     this.props.dispose();

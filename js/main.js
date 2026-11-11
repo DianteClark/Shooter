@@ -5,7 +5,8 @@ import { AudioEngine } from './audio/audio.js';
 import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
-import { MODES, firstModeFor, isFfa, playersFor } from './shared/modes.js';
+import { MODES, firstModeFor, isBr, isFfa, playersFor } from './shared/modes.js';
+const BR_HUMANS = 8;           // Battle royale: up to eight people in a room, bots fill the rest of the 32 (docs/BR.md).
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE } from './shared/constants.js';
 import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
@@ -493,6 +494,7 @@ const ffaRoom = () => isFfa(roomMode());
 
 // Humans the room can seat: both teams in full, or a free-for-all's whole field on its map.
 function roomCap() {
+  if (isBr(roomMode())) return BR_HUMANS;
   if (!ffaRoom()) return TEAM_SIZE * 2;
   const mapId = app.matchInfo?.mapId ?? app.lastPlayed?.mapId;
   return playersFor(roomMode(), MAPS[mapId] ?? null);
@@ -1130,6 +1132,7 @@ function beginMatch({ roster, seed, mapId, mode, scoreLimit, timeLimit, hostId, 
   app.match.telemetry.mapId = mapId;
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
   hud.onRespawn(msg => app.match?.requestRespawn(msg));
+  hud.onBrCommand((act, extra) => app.match?.brCommand(act, extra));
   // A respawn before the player opens the picker should still use the equipped weapon (training keeps its own kit).
   app.match.setNextLoadout(tutorial ? roster.find(r => r.id === id).loadout : Progress.loadout());
   if (tutorial) {

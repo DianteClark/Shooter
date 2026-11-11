@@ -1001,11 +1001,12 @@ export class Characters {
       const friendly = p.team === localTeam;
       r.heat = p.heat ?? 0;
       r.overheated = !!p.overheated;
-      const seen = p.alive && !r.down && (friendly || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
+      // Battle royale: nobody aboard the transport is drawn (js/sim/br.js).
+      const seen = p.alive && !r.down && p.air !== 1 && (friendly || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
       r.seen = seen;
       r.reveal += (seen ? 1 : -1) * dt / (seen ? 0.09 : 0.18);
       r.reveal = Math.min(1, Math.max(0, r.reveal));
-      if (!p.alive || r.down) r.reveal = 0;
+      if (!p.alive || r.down || p.air === 1) r.reveal = 0;
       r.visible = r.reveal > 0.005;
 
       const ads = p.adsT || 0;

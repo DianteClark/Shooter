@@ -219,7 +219,7 @@ export class BrRules {
     this.plans = new Map();          // Bot squad plans by team.
     this.claims = new Map();         // Item id -> {bot, until}.
     this.stats = null;               // Guest: the latest stats block.
-    this.view = { plane: null, circle: null, next: null, phase: 0, state: 'wait', timer: 0, squadsLeft: 0, alive: 0, inv: null, items: this.items, stats: null, pois: def.pois };
+    this.view = { plane: null, circle: null, next: null, phase: 0, state: 'wait', timer: 0, squadsLeft: 0, alive: 0, inv: null, items: this.items, stats: null, pois: def.pois, rules: this };
     sim.phaseT = BR.warmup;
   }
 
