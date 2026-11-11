@@ -63,20 +63,25 @@ async def main():
                 await pg.wait_for_timeout(wait)
 
             screen = lambda: pg.evaluate("window.__game.menu.el.dataset.screen")
+            # Every screen the menu shows, in order: a short moment (the search) is caught however slow the machine.
+            await pg.evaluate("window.__screens = []; new MutationObserver(() => window.__screens.push(window.__game.menu.el.dataset.screen)).observe(window.__game.menu.el, { attributes: true, attributeFilter: ['data-screen'] })")
+            seen = lambda name: pg.evaluate(f"window.__screens.splice(0).includes('{name}')")
 
             async def leave():
                 await pg.evaluate("window.__game.hud.leaveCb()")
                 await pg.wait_for_timeout(500)
 
             print('Title')
+            if SHOTS: await shots(pg, 'title')
             acts = await pg.evaluate("[...document.querySelectorAll('.menu [data-act]')].map(b => b.dataset.act)")
             check('title offers Multiplayer, Custom, Quick play, Host, Join', all(a in acts for a in ('multiplayer', 'custom', 'quickPlay', 'host', 'join')), acts)
             check('no Play vs bots or Firing range on the title', 'solo' not in acts and 'range' not in acts)
 
             async def find_and_vote(expect_tier, expect_modes, cards=(2, 3)):
+                await pg.evaluate("window.__screens.length = 0")
                 await tap('[data-act="mpFind"]', 150)
-                check('  search moment shown', await screen() == 'mpsearch')
-                await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'vote'", timeout=8000)
+                await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'vote'", timeout=15000)
+                check('  search moment shown', await seen('mpsearch'))
                 opts = await pg.evaluate("""(async () => { const { MAPS } = await import('./js/shared/map.js'); const { tierOf } = await import('./js/ui/vote.js');
                   return window.__game.app.vote.options.map(o => ({ mapId: o.mapId, mode: o.mode, tier: MAPS[o.mapId].size === 'giant' ? 'giant' : tierOf(o.mapId) })); })()""")
                 n_cards = await pg.evaluate("document.querySelectorAll('.vote-card').length")
@@ -141,7 +146,7 @@ async def main():
             await tap('[data-act="mpPlaylist"][data-id="featured"]')
             f = await pg.evaluate("import('./js/shared/playlist.js').then(m => m.featured())")
             await tap('[data-act="mpFind"]', 150)
-            await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'vote'", timeout=8000)
+            await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'vote'", timeout=15000)
             if SHOTS: await shots(pg, 'vote')
             await pg.wait_for_function('window.__game.app.inMatch', timeout=20000)
             info = await pg.evaluate(INFO)
@@ -149,8 +154,10 @@ async def main():
             await leave()
 
             print('Quick play from the title')
+            await pg.evaluate("window.__screens.length = 0")
             await tap('[data-act="quickPlay"]', 150)
-            check('quick play goes through the search', await screen() == 'mpsearch')
+            await pg.wait_for_function('window.__game.app.inMatch', timeout=20000)
+            check('quick play goes through the search and the vote', await pg.evaluate("window.__screens.includes('mpsearch') && window.__screens.includes('vote')"))
             await pg.wait_for_function('window.__game.app.inMatch', timeout=20000)
             info = await pg.evaluate(INFO)
             check('quick play: a Standard quick play mode', info['mode'] in ('tdm', 'dom', 'kc', 'hard', 'hq', 'ffa'), info)
@@ -178,12 +185,23 @@ async def main():
             await tap('[data-act="customHost"]', 900)
             lob = await pg.evaluate("({ screen: window.__game.menu.el.dataset.screen, custom: window.__game.app.lobby.custom, chip: document.querySelector('.cu-chip')?.textContent.trim() })")
             check('host room: lobby carries the custom settings', lob['screen'] == 'lobby' and lob['custom'] and lob['custom']['mapId'] == 'harbor' and lob['custom']['mode'] == 'kc', lob)
+            if SHOTS: await shots(pg, 'lobby-custom')
             check('lobby shows them', 'Kill Confirmed on Harbor' in (lob['chip'] or ''), lob['chip'])
             await tap('[data-act="lobbyCustom"]', 500)
             await tap('[data-act="customVote"]', 500)
             lob = await pg.evaluate("({ screen: window.__game.menu.el.dataset.screen, custom: window.__game.app.lobby.custom })")
             check('host switches the room back to the map vote', lob['screen'] == 'lobby' and lob['custom'] is None, lob)
-            await tap('[data-act="leaveLobby"]', 600)
+            await tap('[data-act="lobbyCustom"]', 500)
+            await tap('[data-act="soloMap"][data-id="pier"]')
+            await tap('[data-act="soloMode"][data-id="tdm"]')
+            await tap('[data-act="soloStart"]', 500)
+            lob = await pg.evaluate("({ screen: window.__game.menu.el.dataset.screen, custom: window.__game.app.lobby.custom })")
+            check('host sets custom settings from the lobby', lob['screen'] == 'lobby' and (lob['custom'] or {}).get('mapId') == 'pier', lob)
+            await tap('[data-act="start"]', 300)
+            await pg.wait_for_function('window.__game.app.inMatch', timeout=20000)
+            info = await pg.evaluate(INFO)
+            check('custom room starts on its map and mode, no vote, its difficulty', info['mapId'] == 'pier' and info['mode'] == 'tdm' and info['skills'] == [lob['custom']['skill']], info)
+            await leave()
 
             print('Training: the range')
             await tap('[data-act="custom"]', 500)
