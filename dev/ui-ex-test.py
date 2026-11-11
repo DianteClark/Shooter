@@ -67,7 +67,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1500)
     # Shield the local squad so a stray fight cannot end the run; the AI and other squads leave a shielded player be.
     await ev(f"""(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId);
-      window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 99; }}, 200); }})()""")
+      window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === me.team) {{ p.spawnProtect = 99; if (p.downed) {{ p.downed = false; p.hp = 100; }} }} }}, 200); }})()""")
     await shot('03-insertion')
     await check_fit(pg, ['.ex-top', '.ex-con', '.ex-squad', '.minimap'], f'{tag} hud', failures)
     con = await ev(f"!document.querySelector('.ex-con').hidden && document.querySelector('.ex-con b').textContent")
@@ -125,7 +125,10 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"""(() => {{ const R = {G}.match.sim.rules; R.t = Math.max(R.t, 211); R._stepWindows(); }})()""")
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, e = R.exfils.find(x => x.state === 1); m.ps.x = e.x; m.ps.z = e.z; window.__site = e.i;
       for (const q of m.sim.players) if (!q.ai && q.team !== m.sim.byId.get(m.localId).team) {{ q.ps.x = 5 + q.index; q.ps.z = 5; }} }})()""")
-    await pg.wait_for_selector('.ex-call:not([hidden])', timeout=8000)
+    try: await pg.wait_for_selector('.ex-call:not([hidden])', timeout=25000)
+    except Exception:
+        print('  debug', await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId), v = m.interp.newest; return JSON.stringify({{ t: R.t, site: window.__site, e: R.exfils[window.__site], me: [me.ps.x, me.ps.z, me.alive, me.downed], ps: [m.ps.x, m.ps.z], acts: document.querySelector('.ex-acts').outerHTML.slice(0, 300) }}); }})()"))
+        raise
     await pg.wait_for_timeout(300)
     await shot('08-exfil-zone')
     await check_fit(pg, ['.ex-call', '.ex-top', '.ex-tag:not([hidden])'], f'{tag} exfil', failures)

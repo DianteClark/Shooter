@@ -829,7 +829,7 @@ export class ExtractRules {
   _blast(c) {
     const sim = this.sim;
     for (const q of sim.players) {
-      if (!q.alive || q.ex?.out) continue;
+      if (!q.alive || q.ex?.out || q.spawnProtect > 0) continue;
       const d = Math.hypot(q.ps.x - c.x, q.ps.z - c.z);
       if (d < 5) { q.hp -= (5 - d) * 22; if (q.hp <= 0) { if (q.ex && this.tryDown(q, null, 'charge')) continue; sim._selfKill(q, 'charge'); } }
     }

@@ -80,7 +80,7 @@ export class ExFx {
     // Landing zones: a wide ring and a soft disc, a flare column on open ones.
     this.zones = inst(new THREE.RingGeometry(0.93, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), RING_MAX);
     this.discs = inst(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12, depthWrite: false }), RING_MAX);
-    this.flares = inst(new THREE.CylinderGeometry(0.5, 1.4, 14, 10, 1, true).translate(0, 7, 0),
+    this.flares = inst(new THREE.CylinderGeometry(0.3, 0.9, 14, 10, 1, true).translate(0, 7, 0),
       new THREE.MeshBasicMaterial({ map: flareTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), RING_MAX, 5);
     // Objective beams: the local squad's target, and its drop point.
     this.beams = inst(new THREE.CylinderGeometry(0.18, 0.45, 18, 8, 1, true).translate(0, 9, 0),
@@ -198,7 +198,7 @@ export class ExFx {
     }
     this.zones.count = this.discs.count = this.flares.count = zn;
     for (const m of [this.zones, this.discs, this.flares]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
-    this.flareMat.opacity = 0.75 + 0.25 * Math.sin(t * 9);
+    this.flareMat.opacity = 0.4 + 0.15 * Math.sin(t * 9);
 
     // ---- Contract things ----
     const live = new Set();

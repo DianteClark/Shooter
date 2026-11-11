@@ -326,7 +326,7 @@ export class ExHud {
     switch (k.type) {
       case 'intel': step = k.carrier >= 0 ? (view.players[k.carrier]?.id === me.id ? `Carry the case to the drop <em>${d} m</em>` : `${esc(view.players[k.carrier]?.name ?? 'A teammate')} has the case: cover them`) : k.state === 2 ? `The case is down: pick it up <em>${d} m</em>` : `Find the intel case <em>${d} m</em>`; prog = k.carrier >= 0 ? 0.5 : 0; break;
       case 'hvt': step = `Kill the commander and his guards <em>${d} m</em>`; break;
-      case 'cache': warn = k.state === 1 && k.def > 0; step = k.state === 1 ? (warn ? 'They are pulling the charge!' : 'Charge set: defend it') : prog > 0 ? 'Planting the charge...' : `Reach the cache and stand still to plant <em>${d} m</em>`; break;
+      case 'cache': warn = k.state === 1 && k.def > 0; step = k.state === 1 ? (warn ? 'They are pulling the charge!' : 'Charge set: get clear and defend it') : prog > 0 ? 'Planting the charge...' : `Reach the cache and stand still to plant <em>${d} m</em>`; break;
       case 'hack': warn = !!k.contested; step = warn ? 'Contested: clear the area' : prog > 0 ? `Hacking: stay within ${EX.hackR} m` : `Hold the terminal area <em>${d} m</em>`; break;
       case 'escort': warn = !k.moving && prog > 0; step = k.moving ? 'Moving: stay beside it' : `Walk with the mule to its point <em>${d} m</em>`; break;
     }
@@ -418,7 +418,7 @@ export class ExHud {
     let sx, sy;
     if (w > 0.01) { sx = ((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * W; sy = (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * H; }
     else { sx = W / 2 + (x - eye.x) * 100; sy = H / 2 + (z - eye.z) * 100; }
-    const mx = 70, top = 96, bottom = H - 60;
+    const mx = 70, top = 96, bottom = H - 122;      // Clear of the minimap and chips above, the sticks and buttons below.
     const off = sx < mx || sx > W - mx || sy < top || sy > bottom;
     if (off && !pin) { t.root.hidden = true; return k + 1; }
     if (off) {
