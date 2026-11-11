@@ -475,10 +475,15 @@ function toGeometry(acc) {
   return g;
 }
 
-// `legacy` is TORSOS or HEADS, `slots` the kit's slots for that mesh, `base` 0 for the torso and 4 for the head.
-function variantGeometry(legacy, slots, base) {
+// Two banks per body part, so a soldier's vertex shader only walks its own bank: the hand-made operators (`legacy` is
+// TORSOS or HEADS) and the kit (`slots` are its slots for that mesh). `base` is 0 for the torso and 4 for the head.
+function legacyGeometry(legacy, base) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
   LEGACY.forEach((id, i) => { const b = new MeshBuilder(); (legacy[id] ?? legacy.trooper)(b); pushBuilt(acc, b, base, i); });
+  return toGeometry(acc);
+}
+function kitGeometry(slots, base) {
+  const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
   if (base === 4) { const b = new MeshBuilder(); headBase(b); pushBuilt(acc, b, base, KIT_HEAD); }
   slots.forEach(([name, table], k) => PICKS[name].forEach((part, i) => {
     const b = new MeshBuilder();
@@ -488,7 +493,8 @@ function variantGeometry(legacy, slots, base) {
   return toGeometry(acc);
 }
 
-const torsoGeometry = () => variantGeometry(TORSOS, TORSO_SLOTS, 0);
+const torsoGeometry = () => legacyGeometry(TORSOS, 0);
+const torsoKitGeometry = () => kitGeometry(TORSO_SLOTS, 0);
 // The trooper's issue kit alone, without any gear-slot pieces: the distance LOD (every instance costs one variant's
 // triangles, recolour and accents still apply) and the x-ray silhouette.
 function liteGeometry(table, base) {
@@ -513,7 +519,8 @@ function liteGeometry(table, base) {
   g.setAttribute('aVar', new THREE.Float32BufferAttribute(vars, 1));
   return g;
 }
-const headGeometry = () => variantGeometry(HEADS, HEAD_SLOTS, 4);
+const headGeometry = () => legacyGeometry(HEADS, 4);
+const headKitGeometry = () => kitGeometry(HEAD_SLOTS, 4);
 
 // Limbs are the same mesh for everyone; part 2 takes the instance's tint and thickness comes from the rig.
 function limbAttrs(g) {
@@ -731,6 +738,10 @@ export class Characters {
     const cap = MAX_PLAYERS + MAX_CORPSES;
     this.torso = add(torsoGeometry(), cap);
     this.head = add(headGeometry(), cap);
+    // The kit bank (operators built from parts). Only drawn when someone on screen wears a kit operator.
+    this.torsoKit = add(torsoKitGeometry(), MAX_PLAYERS);
+    this.headKit = add(headKitGeometry(), MAX_PLAYERS);
+    this.isKit = OPERATORS.map(o => !!o.kit);
     this.upper = add(upperLimbGeometry(), cap * 4);      // Upper arms and thighs.
     this.arm = add(armGeometry(), cap * 2);
     this.leg = add(legGeometry(), cap * 2);
@@ -762,6 +773,8 @@ export class Characters {
     };
     this.xrayTorso = xrayOf(this.torso, TORSOS, 0);
     this.xrayHead = xrayOf(this.head, HEADS, 4);
+    this.xrayTorsoKit = xrayOf(this.torsoKit, TORSOS, 0);
+    this.xrayHeadKit = xrayOf(this.headKit, HEADS, 4);
     this.torsoLite = add(liteGeometry(TORSOS, 0), cap);
     this.headLite = add(liteGeometry(HEADS, 4), cap);
     this.xrayTorsoLite = xrayOf(this.torsoLite, TORSOS, 0);
@@ -809,7 +822,7 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.ring, this.blob, this.torsoLite, this.headLite];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
@@ -966,7 +979,7 @@ export class Characters {
     const { localId, localTeam, uav, revealAll } = opts;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
-    let nT = 0, nTL = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
+    let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
     const fullReach = this._fullReach(view, localId);
     let nRing = 0;
     for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
@@ -1164,9 +1177,10 @@ export class Characters {
 
       const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz;
       r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > (r.lite ? LOD_BACK * LOD_BACK : LOD_FAR * LOD_FAR));
-      const tMesh = r.lite ? this.torsoLite : torso, hMesh = r.lite ? this.headLite : head;
+      const kit = !r.lite && this.isKit[r.op];
+      const tMesh = r.lite ? this.torsoLite : kit ? this.torsoKit : torso, hMesh = r.lite ? this.headLite : kit ? this.headKit : head;
       // The distance meshes show their one variant whoever wears them; the operator still sets the build and colours.
-      const ti = r.lite ? nTL++ : nT, op = r.op;
+      const ti = r.lite ? nTL++ : kit ? nK++ : nT, op = r.op;
       _s.set(look.w, look.h, look.w);
       _m.copy(_body).scale(_s);
       _m.toArray(tMesh.instanceMatrix.array, ti * 16);
@@ -1181,7 +1195,7 @@ export class Characters {
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.HEAD * 16);
       this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
-      if (!r.lite) nT++;
+      if (!r.lite && !kit) nT++;
 
       // Gun.
       const gunMesh = this._gunMesh(proto);
@@ -1355,6 +1369,8 @@ export class Characters {
 
     // No silhouettes through walls in a replay: the camera there is low, and they read as ghosts.
     this.xrayTorso.count = revealAll ? 0 : nT; this.xrayHead.count = revealAll ? 0 : nT;
+    this.xrayTorsoKit.count = revealAll ? 0 : nK; this.xrayHeadKit.count = revealAll ? 0 : nK;
+    this.torsoKit.count = nK; this.headKit.count = nK;
     this.xrayTorsoLite.count = revealAll ? 0 : nTL; this.xrayHeadLite.count = revealAll ? 0 : nTL;
     this.ring.count = nRing; this.blob.count = nRing;
     this.counts.nT = nT; this.counts.nTL = nTL; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
@@ -1385,6 +1401,7 @@ export class Characters {
       m.dispose();
     }
     this.xrayTorso.geometry.dispose(); this.xrayHead.geometry.dispose();
+    this.xrayTorsoKit.geometry.dispose(); this.xrayHeadKit.geometry.dispose();
     this.xrayTorsoLite.geometry.dispose(); this.xrayHeadLite.geometry.dispose();
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();

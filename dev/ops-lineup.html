@@ -75,7 +75,7 @@ if (!q.get('nolabels')) {
 }
 const g = chars.torso.geometry.attributes.position.count, h = chars.head.geometry.attributes.position.count;
 const bySlot = m => { const o = {}; for (const v of m.geometry.attributes.aVar.array) { const k = Math.floor((v % 256) / 32); o[k] = (o[k] ?? 0) + 1; } return o; };
-window.stats = { torsoVerts: g, headVerts: h, torsoBySlot: bySlot(chars.torso), headBySlot: bySlot(chars.head), liteT: chars.torsoLite.geometry.attributes.position.count, liteH: chars.headLite.geometry.attributes.position.count };
+window.stats = { torsoVerts: g, headVerts: h, torsoBySlot: bySlot(chars.torso), headBySlot: bySlot(chars.head), kitBySlot: [bySlot(chars.torsoKit), bySlot(chars.headKit)], liteT: chars.torsoLite.geometry.attributes.position.count, liteH: chars.headLite.geometry.attributes.position.count };
 window.ready = true;
 </script>
 </body>
