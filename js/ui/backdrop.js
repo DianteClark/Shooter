@@ -9,7 +9,7 @@ import { GameRenderer } from '../render/renderer.js';
 import { castRay } from '../render/fog.js';
 import { setThemeLighting } from '../render/art.js';
 import { MAPS, MAP_IDS } from '../shared/map.js';
-import { OPERATOR_IDS } from './operators.js';
+import { OPERATOR_IDS, botOrder } from './operators.js';
 import { currentSkin } from './cards.js';
 
 const ROTATION_KEY = 'switchyard-backdrop';
@@ -189,11 +189,12 @@ export class MenuBackdrop {
 
   #roster() {
     const op = this.loadout?.operator ?? OPERATOR_IDS[0];
-    const seed = (this.mapId?.length ?? 0) + 3;
+    // Two squadmates from the bots' wardrobe (a woman and a man, never the hero's operator), dressed as bots dress.
+    const mates = botOrder((this.mapId?.length ?? 0) + 3).filter(id => id !== op);
     return [
       { id: 'bd-hero', operator: op, skin: this.loadout?.skin ?? currentSkin(op) },
-      { id: 'bd-mate0', operator: OPERATOR_IDS[seed % OPERATOR_IDS.length] },
-      { id: 'bd-mate1', operator: OPERATOR_IDS[(seed + 4) % OPERATOR_IDS.length] },
+      { id: 'bd-mate0', operator: mates[0], isBot: true },
+      { id: 'bd-mate1', operator: mates[1], isBot: true },
     ];
   }
 

@@ -1,6 +1,7 @@
-// The Operators screen: a turntable on the left with the operator's skins down its right edge, the roster on the right.
-// Tapping a card or a skin previews it; a locked one still previews, since seeing the prize is the point, and the detail
-// line says what earns it. Equip puts the operator on this loadout and the previewed skin on that operator.
+// The Operators screen: a turntable on the left with the operator's skins down its right edge; on the right the
+// operator's file (bio, how they are earned, skins owned) over the roster, a scrolling list with All / Owned / Locked
+// tabs. Tapping a card or a skin previews it; a locked one still previews, since seeing the prize is the point, and the
+// detail line says what earns it. Equip puts the operator on this loadout and the previewed skin on that operator.
 import { DEFAULT_OPERATOR, getSkin, SKIN_TIERS } from './operators.js';
 import { Progress } from './progress.js';
 import { currentSkin, skinStatus, equipSkin } from './cards.js';
@@ -10,6 +11,14 @@ import { ico, header } from './yard.js';
 import { flash, pop } from './motion.js';
 
 const GLOW_CLASS = ['', 'lit', 'pulse', 'prism'];
+// Brings a card into the list's view without moving the page.
+function scrollToCard(card) {
+  const list = card?.parentElement;
+  if (!list) return;
+  const top = card.offsetTop - list.offsetTop, bottom = top + card.offsetHeight;
+  if (top < list.scrollTop) list.scrollTop = top - 4;
+  else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 4;
+}
 
 export class OperatorsScreen {
   constructor(menu, { loadoutIndex = Progress.activeLoadout, onBack, onChange }) {
@@ -19,7 +28,9 @@ export class OperatorsScreen {
     this.onBack = onBack;
     this.preview = this.equipped;
     this.skin = currentSkin(this.preview);
+    this.filter = 'all';
     menu.on({
+      opFilter: ({ id }) => this.setFilter(id),
       opBack: () => onBack(),
       opPick: ({ id }) => this.tap(id),
       opSkin: ({ id }) => this.tapSkin(id),
@@ -53,6 +64,14 @@ export class OperatorsScreen {
     this.skin = id;
     this.paint();
     this.mount();
+  }
+
+  setFilter(id) {
+    if (!['all', 'owned', 'locked'].includes(id) || id === this.filter) return;
+    this.filter = id;
+    const grid = this.menu.el.querySelector('.op-grid');
+    grid.scrollTop = 0;
+    this.paint();
   }
 
   equip() {
@@ -96,7 +115,12 @@ export class OperatorsScreen {
           <div class="op-skins"></div>
           <div class="op-detail"></div>
         </div>
-        <div class="op-grid">
+        <div class="op-side">
+          <div class="op-file" data-in="up"><p class="op-bio"></p><div class="op-tags"></div></div>
+          <div class="op-tabs" role="tablist">
+            ${[['all', 'All'], ['owned', 'Owned'], ['locked', 'Locked']].map(([id, label]) => `<button class="op-tab" data-act="opFilter" data-id="${id}" data-sound="tab"><b>${label}</b><small></small></button>`).join('')}
+          </div>
+        <div class="op-grid scroll-y">
           ${Progress.operators().map(({ op, unlocked }) => `
             <button class="op-card${unlocked ? '' : ' locked'}" data-act="opPick" data-id="${op.id}" style="--op:${hex(op.look.sleeve)};--op2:${hex(op.look.trouser)}" data-in="up">
               <span class="op-stripe" aria-hidden="true"></span>
@@ -106,10 +130,12 @@ export class OperatorsScreen {
               <i class="op-mini"><i></i></i>
             </button>`).join('')}
         </div>
+        </div>
       </div>`;
     this.renderSkins();
     this.mount();
     this.paint();
+    scrollToCard(m.el.querySelector(`.op-card[data-id="${this.preview}"]`));
   }
 
   // One swatch per skin: gear, sleeve and trouser colours on the diagonal, the accent along the foot.
@@ -150,8 +176,22 @@ export class OperatorsScreen {
       if (on && !b.classList.contains('on')) pop(b);
       b.classList.toggle('on', on);
     }
+    // The file: the bio, how this operator is earned, and how many of the skins are owned.
+    el.querySelector('.op-bio').textContent = op.bio ?? op.role;
+    const owned = skins.filter(k => k.unlocked).length;
+    const how = !op.unlock ? 'Starter' : op.unlock.prestige ? `Prestige ${op.unlock.prestige}` : op.unlock.level ? `Level ${op.unlock.level}` : 'Challenge';
+    el.querySelector('.op-tags').innerHTML = `<span class="op-tag${entry.unlocked ? ' ok' : ''}">${ico(entry.unlocked ? 'check' : 'lock')}${entry.unlocked ? 'Owned' : esc(how)}</span>`
+      + `<span class="op-tag">${ico('operator')}${owned} / ${skins.length} skins</span>`;
+    const counts = { all: roster.length, owned: roster.filter(o => o.unlocked).length };
+    counts.locked = counts.all - counts.owned;
+    for (const t of el.querySelectorAll('.op-tab')) {
+      t.classList.toggle('on', t.dataset.id === this.filter);
+      t.setAttribute('aria-selected', t.dataset.id === this.filter);
+      t.querySelector('small').textContent = counts[t.dataset.id];
+    }
     for (const card of el.querySelectorAll('.op-card')) {
       const id = card.dataset.id, e = roster.find(o => o.op.id === id);
+      card.classList.toggle('hide', this.filter === 'owned' ? !e.unlocked : this.filter === 'locked' ? e.unlocked : false);
       card.classList.toggle('on', id === this.preview);
       card.classList.toggle('equipped', id === equippedId);
       const skin = id === equippedId ? getSkin(currentSkin(id)) : null;

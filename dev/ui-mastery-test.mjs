@@ -38,9 +38,51 @@ test('every tactical, lethal, streak and operator has a track of 3 to 5 tiers wi
   const { SKINS } = OPS;
   for (const op of OPERATORS) {
     const ids = getTrack(op.id).tiers.flatMap(c => c.rewards).filter(r => r.kind === 'skin').map(r => r.id);
-    assert.deepEqual(ids, [`skin:${op.id}-3`, `skin:${op.id}-5`]);
+    assert.deepEqual(ids, [2, 3, 4, 5].map(t => `skin:${op.id}-${t}`));
     for (const id of ids) assert.ok(SKINS.some(k => k.id === id), `${id} exists in the operator roster`);
   }
+});
+
+test('operators wave: 27 operators, the first nine in their old order, women and men, every unlock kind', () => {
+  const { OPERATOR_IDS, operatorUnlock, botOrder, botOperator, skinsFor, SKIN_TIERS, getSkin } = OPS;
+  assert.deepEqual(OPERATOR_IDS.slice(0, 9), ['trooper', 'wisp', 'anvil', 'relay', 'yarddog', 'ronin', 'ghoul', 'ram', 'monarch'], 'ids are appended, never reordered');
+  assert.equal(OPERATORS.length, 27);
+  assert.equal(new Set(OPERATOR_IDS).size, 27);
+  const women = OPERATORS.filter(o => o.voice === 'f').length;
+  assert.ok(women >= 8 && women <= 10, `${women} women`);
+  for (const op of OPERATORS) {
+    assert.ok(op.name && op.role && op.bio, op.id);
+    assert.equal(skinsFor(op.id).length, 6, `${op.id}: issue, field and four mastery skins`);
+    for (const k of skinsFor(op.id)) assert.ok(SKIN_TIERS[k.tier] && (k.gear === null || Number.isFinite(k.gear)), k.id);
+    if (op.kit) for (const slot of ['core', 'face']) assert.ok(op.kit[slot], `${op.id} ${slot}`);
+  }
+  // The old skins keep their ids and names.
+  assert.equal(getSkin('skin:trooper-5').name, 'Sovereign');
+  assert.equal(getSkin('skin:ghoul-field').glow, 1);
+  const career = { level: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: {} };
+  const get = id => OPERATORS.find(o => o.id === id);
+  assert.ok(operatorUnlock(get('sparrow'), career).unlocked, 'a woman is in the starting roster');
+  assert.equal(operatorUnlock(get('nyx'), career).unlocked, false);
+  assert.deepEqual(operatorUnlock(get('nyx'), { ...career, life: { 'cat:SMG': 20 } }).value, 20);
+  assert.ok(operatorUnlock(get('nyx'), { ...career, life: { 'cat:SMG': 50 } }).unlocked);
+  assert.ok(operatorUnlock(get('flint'), { ...career, life: { plants: 5 } }).unlocked);
+  assert.ok(operatorUnlock(get('halcyon'), { ...career, life: { sndRounds: 10 } }).unlocked);
+  assert.ok(operatorUnlock(get('seraph'), { ...career, prestige: 3 }).unlocked);
+  assert.ok(operatorUnlock(get('morse'), { ...career, level: 16 }).unlocked);
+  // Bots: every operator once before any repeat, women and men alternating, the same order on every client.
+  const o = botOrder(1234);
+  assert.equal(new Set(o).size, 27);
+  assert.deepEqual(botOrder(1234), o);
+  for (let i = 0; i < 6; i++) assert.notEqual(get(o[2 * i]).voice === 'f', get(o[2 * i + 1]).voice === 'f', 'alternates');
+  assert.equal(botOperator(1234, 27), o[0]);
+  assert.notDeepEqual(botOrder(99), o);
+});
+
+test('the lifetime tally counts Search and Destroy rounds won', () => {
+  const t = new P.ChallengeTally(ME);
+  const v = view(1, {}, { mode: 'snd' });
+  t.onEvents([{ t: 'snd', kind: 'end', round: 1, winner: 0 }, { t: 'snd', kind: 'end', round: 2, winner: 1 }, { t: 'snd', kind: 'end', round: 3, winner: 0 }], v);
+  assert.equal(t.counts().sndRounds, 2);
 });
 
 /* ---------- Counting ---------- */
@@ -242,6 +284,32 @@ test('Progress: migrated save keeps gated gear in its loadout and stores v4', ()
   assert.equal(Progress.loadout().lethal, 'cluster');
   assert.ok(Progress.loadout().streaks.includes('gunship'));
 });
+// Made by the build before the operators wave (1111-6): level 30, prestige 1, Ram and Monarch on two loadouts, Trooper
+// mastered, Anvil at tier 3, three skins worn, 60 lifetime SMG kills.
+const PRE_OPS_CODE = 'SY4.WzQsIk9sZE9wcyIsMCwwLDEsMzAsMCxbXSxbWyJBc3NhdWx0IiwiYXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSwicmFtIl0sWyJSdXNoIiwic21nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sIm1vbmFyY2giXSxbIkJyZWFjaCIsInNob3RndW4iLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIlN1cHByZXNzIiwibG1nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sbnVsbF0sWyJPdmVyd2F0Y2giLCJzbmlwZXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXV0sW10sW10sInlhcmQiLFtbInRyb29wZXIiLDUsWzAsNDAwLDEwMDAsMjAsMTJdXSxbImFudmlsIiwzLFswLDYwLDkwMCw0MSwzXV1dLFtdLFtbImFudmlsIiwic2tpbjphbnZpbC0zIl0sWyJ0cm9vcGVyIiwic2tpbjp0cm9vcGVyLTUiXSxbIndpc3AiLCJza2luOndpc3AtZmllbGQiXV0sbnVsbCxbWyJraWxscyIsNTAwXSxbImNhdDpTTUciLDYwXSxbInBsYW50cyIsMl1dXQ.9fu58v';
+test('operators wave: a save code from before it loads with its operators, skins and mastery, and earns the new skins', () => {
+  const r = decodeSave(PRE_OPS_CODE);
+  assert.ok(r.ok, r.error);
+  const s = r.save;
+  assert.deepEqual(s.loadouts.slice(0, 3).map(l => l.operator), ['ram', 'monarch', null]);
+  assert.deepEqual(s.skins, { anvil: 'skin:anvil-3', trooper: 'skin:trooper-5', wisp: 'skin:wisp-field' });
+  assert.equal(s.mastery.anvil.t, 3);
+  assert.equal(s.mastery.trooper.t, 5);
+  const got = masteryRewards(s);
+  for (const id of ['skin:trooper-2', 'skin:trooper-3', 'skin:trooper-4', 'skin:trooper-5', 'skin:anvil-2', 'skin:anvil-3']) assert.ok(got.has(id), id);
+  assert.equal(got.has('skin:anvil-4'), false);
+  // Its lifetime tally already opens Nyx (50 SMG kills); its prestige opens Monarch and every level unlock.
+  const { operatorUnlock } = OPS;
+  const career = { level: s.peakLevel, prestige: s.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: s.life };
+  const get = id => OPERATORS.find(o => o.id === id);
+  assert.ok(operatorUnlock(get('nyx'), career).unlocked);
+  assert.ok(operatorUnlock(get('monarch'), career).unlocked);
+  assert.ok(operatorUnlock(get('marshal'), career).unlocked, 'a prestiged save counts as level 50');
+  assert.equal(operatorUnlock(get('halcyon'), career).unlocked, false);
+  // And it goes back out as a code that reads the same.
+  assert.deepEqual(decodeSave(encodeSave(s)).save.skins, s.skins);
+});
+
 test('Progress: applyMatch moves tracks, stamps tier-ups first, pays mastery XP, grants the card and skin', () => {
   const gains = { tracks: { anvil: { secs: 900, kills: 50, hurtKills: 40 } }, weapons: {} };
   assert.equal(Progress.masteryXp(gains), 1000);
@@ -253,7 +321,7 @@ test('Progress: applyMatch moves tracks, stamps tier-ups first, pays mastery XP,
   assert.ok(Progress.hasReward('skin:anvil-3'));
   assert.equal(Progress.hasReward('skin:anvil-5'), false);
   assert.equal(Progress.mastery('anvil').tier, 3);
-  assert.deepEqual(Progress.skins('anvil').map(k => k.unlocked), [true, false]);
+  assert.deepEqual(Progress.skins('anvil').map(k => k.unlocked), [true, true, false, false], 'veteran and elite earned, specialist and mastery not');
   assert.deepEqual(Progress.badges().map(b => b.id), ['badge:anvil-1']);
   assert.ok(Progress.setOperatorSkin('anvil', 'skin:anvil-3'));
   assert.equal(Progress.setOperatorSkin('anvil', 'skin:anvil-5'), false, 'not earned yet');
