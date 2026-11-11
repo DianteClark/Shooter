@@ -33,7 +33,9 @@ GL = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--
 
 # Menu scenes of the gallery, and the saves each is checked with.
 SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-modes', 'mp-groundwar', 'mp-br', 'mp-search', 'vote-mp', 'lobby-host', 'lobby-full', 'vote', 'keypad-name', 'not-found', 'loadouts', 'operators', 'profile',
-          'save-code', 'options', 'help', 'stats', 'challenges', 'history', 'boards', 'boards-friends', 'boards-around', 'boards-kd', 'cards', 'emblems', 'results-draw', 'results-gw']
+          'save-code', 'options', 'help', 'stats', 'challenges', 'history', 'boards', 'boards-friends', 'boards-around', 'boards-kd', 'cards', 'emblems', 'results-draw', 'results-gw',
+          # Seasons and ranked (docs/SEASONS.md): on a day in Season 1 (dev/ui-gallery.html sets the date).
+          'title-season', 'season-track', 'season-weekly', 'season-ranked', 'season-pre', 'mp-ranked', 'boards-season', 'boards-ranked', 'results-season']
 # A spread of guns: long names, no attachments, signature parts and kits, melee, launchers, the akimbo pair.
 GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper', 'golden', 'akimbo', 'knife', 'beltlmg']
 

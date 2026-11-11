@@ -133,6 +133,7 @@ export const EXTRA_CARD_IDS = EXTRA.map(c => c.id);
 // granted through the save's season block (Progress.hasReward). `season` lets the picker hide other seasons' locked ones.
 const tierOf = (def, id) => trackRewards(def).find(r => r.own === `card:${id}`)?.tier ?? 0;
 registerCards(SEASON_DEFS.flatMap(def => [
-  ...seasonCards(def).map(c => ({ ...card(c.id, c.name, 'Season', `Season ${def.n} reward track, tier ${tierOf(def, c.id)}`, () => extras().granted(`card:${c.id}`), c.art), season: def.id })),
-  ...rankedCards(def).map(c => ({ ...card(c.id, c.name, 'Ranked', `Reach ${c.name.slice(def.name.length + 1)} in Season ${def.n} Ranked`, () => extras().granted(`card:${c.id}`), c.art), season: def.id })),
+  // `c.rewards` is Progress's card career's set of every granted reward (mastery and seasons).
+  ...seasonCards(def).map(c => ({ id: c.id, name: c.name, group: 'Season', req: `Season ${def.n} reward track, tier ${tierOf(def, c.id)}`, need: k => !!k?.rewards?.has(`card:${c.id}`), art: c.art, season: def.id })),
+  ...rankedCards(def).map(c => ({ id: c.id, name: c.name, group: 'Ranked', req: `Reach ${c.name.slice(def.name.length + 1)} in Season ${def.n} Ranked`, need: k => !!k?.rewards?.has(`card:${c.id}`), art: c.art, season: def.id })),
 ]));
