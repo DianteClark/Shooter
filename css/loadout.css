@@ -279,3 +279,9 @@
 .pk-card .ld-tx b .role-chip.role-support { color: #5fe08f; }
 #ui .pk-card .ld-tx small.ctr, .pk-card .ld-tx small.ctr { max-height: 12.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-sodium, #f2a63b); opacity: .8; font-size: 9.5px; }
 
+/* Perk, equipment and streak sheets scroll, so the cards can be roomy: four to a column at once, and a card grows to fit
+   its text (name, job chip, two or three lines) instead of letting it spill past the edge. */
+.pk-list { grid-auto-rows: minmax(calc((100% - 9px) / 4), auto); }
+.pk-card { padding: 6px 9px; align-items: center; }
+.pk-card .ld-tx { min-width: 0; }
+.pk-card .ld-tx small, #ui .pk-card .ld-tx small { max-height: none; overflow: visible; font-size: 11px; line-height: 1.2; }
