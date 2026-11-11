@@ -331,7 +331,7 @@ export function formRating(profile, seed) {
 // The rating an average human plays at against this pool's bots, so that a typical player's K/D is about 1 (calibrated
 // with dev/balance-sim.mjs --realistic and the human-like thumb). humanRating moves a player away from it with their
 // record.
-export const HUMAN_BASE = 0.42;
+export const HUMAN_BASE = 0.27;
 // info: { level, prestige, kd (recent K/D, or null), matches (how many that K/D is over) }
 export function humanRating({ level = 1, prestige = 0, kd = null, matches = 0 } = {}) {
   let r = HUMAN_BASE + Math.min(0.08, (prestige * MAX_LEVEL + level) / 5000);

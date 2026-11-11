@@ -58,6 +58,9 @@ on every push, keep 2% of weekly usage for bugs.
 15. Bot overhaul: a pool of 150+ named bot players with persistent profiles (level, loadout habits, play style), most with
     a hidden skill range and a random per-match form, some locked at a tier; smarter decisions at every tier; the
     difficulty selector only in Custom.
+    DONE (bots): docs/BOTS.md. 200 seeded profiles (js/shared/botpool.js), a fifth locked; matchmaking by rating and
+    level into `buildRoster(..., { pool })`; `careerAt(profile, date)` for item 16; bots trade, hear footsteps, peek
+    from cover, pre-aim lanes; weak bots tunnel and overpeek; SMGs fight to 72% of their range.
 16. Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
     saved "as of" that match; boards for level, kills, K/D, wins, BR wins/top 5, extractions, mastery, weekly.
 17. Extraction mode (our own name, not "DMZ"): 4 squads of 4 (or duos) on Frontier, empty slots filled with bot squads;
