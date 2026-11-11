@@ -716,6 +716,8 @@ export class BrRules {
       case K.gun: {
         const id = WEAPON_IDS[it.v];
         const empty = b.guns[0] ? (b.guns[1] ? -1 : 1) : 0;
+        // A bot leaves guns lying at a human squadmate's feet alone: that is their pick to make.
+        if (p.bot && this._humanMateNear(p, it.x, it.z, 4)) return;
         if (empty >= 0) { this._takeGun(p, it, empty); return; }
         if (p.bot && this._gunScore(id, it.r) > Math.min(this._heldScore(p, 0), this._heldScore(p, 1)) + 0.6 && !this._dupCat(p, id)) {
           this._takeGun(p, it, this._heldScore(p, 0) < this._heldScore(p, 1) ? 0 : 1);
@@ -760,6 +762,11 @@ export class BrRules {
       this._removeItem(it);
       if (!p.isBot) sim._emit({ t: 'brpick', id: p.id, kind: BR_KINDS[it.kind] });
     }
+  }
+
+  _humanMateNear(p, x, z, r) {
+    for (const q of this.sim.players) if (q !== p && !q.isBot && q.team === p.team && q.alive && Math.hypot(q.ps.x - x, q.ps.z - z) < r) return true;
+    return false;
   }
 
   _gunScore(id, r) { return (CAT_SCORE[WEAPON_CATEGORY[id]] ?? 0) + r * 0.45; }

@@ -271,6 +271,7 @@ export class BrHud {
         this.plateBtn.classList.toggle('off', !inv.plates);
         this.medBtn.classList.toggle('off', !inv.meds);
         this.kitBtn.hidden = !inv.kits || BR_SOLO(this.mode);
+        this.kitBtn.classList.toggle('off', !me.downed);     // Shown so you know you carry one; it works while down.
         this.$('.br-inv').hidden = !me.alive || air !== 0;
         this.selfBtn.hidden = !inv.kits;
       }
