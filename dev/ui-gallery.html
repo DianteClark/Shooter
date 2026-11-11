@@ -32,7 +32,7 @@
   try { Object.defineProperty(window, 'localStorage', { value: store, configurable: true }); } catch { /* falls back to the real one */ }
   // Seasons (docs/SEASONS.md): &date=YYYY-MM-DD runs the frame on that local date; season scenes default to a day in
   // Season 1 (week 3, the Cold Snap event on).
-  const day = q.get('date') ?? (/^(season|boards-season|boards-ranked|results-season|mp-ranked|title-season)/.test(q.get('frame') ?? '') ? '2026-12-02' : null);
+  const day = q.get('date') ?? (/^(season-(track|weekly|ranked)|boards-season|boards-ranked|results-season|mp-ranked|title-season)/.test(q.get('frame') ?? '') ? '2026-12-02' : null);
   if (day) {
     const Real = Date, offset = new Real(`${day}T12:00:00`).getTime() - Real.now();
     class FakeDate extends Real {

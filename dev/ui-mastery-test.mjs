@@ -52,7 +52,7 @@ test('operators wave: 27 operators, the first nine in their old order, women and
   assert.ok(women >= 8 && women <= 10, `${women} women`);
   for (const op of OPERATORS) {
     assert.ok(op.name && op.role && op.bio, op.id);
-    assert.equal(skinsFor(op.id).length, 6, `${op.id}: issue, field and four mastery skins`);
+    assert.equal(skinsFor(op.id).filter(k => !k.season).length, 6, `${op.id}: issue, field and four mastery skins`);
     for (const k of skinsFor(op.id)) assert.ok(SKIN_TIERS[k.tier] && (k.gear === null || Number.isFinite(k.gear)), k.id);
     if (op.kit) for (const slot of ['core', 'face']) assert.ok(op.kit[slot], `${op.id} ${slot}`);
   }

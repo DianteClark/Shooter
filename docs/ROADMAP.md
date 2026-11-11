@@ -86,9 +86,11 @@ on every push, keep 2% of weekly usage for bugs.
     stacked, some average, members queue together and share a team; regular duos; loners. Clan tags on leaderboards.
 20. Bug sweep (every mode and screen at both sizes, saves, friend lobbies) and a phone performance pass (with the
     owner's Performance overlay screenshots).
-21. Ranked: placements, divisions, seasonal resets, matched against the bot pool and friends.
+21. DONE (seasons). Ranked: placements, divisions, seasonal resets, matched against the bot pool and friends. docs/SEASONS.md.
 22. Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
     mode/event, ranked reset, seasonal boards. Ship two seasons ahead per update, content date-locked; if updates stop,
     "Season Replay" rotates past seasons. Season 1 with the framework.
+    DONE (seasons): docs/SEASONS.md. Season 1 Cold Iron (2026-11-16), Season 2 Signal Fire (2026-12-28), then Season
+    Replay; free 100-tier track, weekly sets, an event playlist each, ranked reset, Season boards view and Ranked category.
 23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
 24. Music: synthesised menu and match music.
