@@ -64,10 +64,10 @@ const CSS = `
 .ex-con small { font: 9px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-con p { grid-column: 1 / 3; margin: 3px 0 0; font: 11px/1.25 var(--f-plate); letter-spacing: .02em; color: var(--c-chalk); }
 .ex-con p em { font-style: normal; color: var(--c-sodium); }
-.ex-con .bar { grid-column: 1 / 3; height: 4px; margin-top: 3px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
-.ex-con .bar i { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--k, 0)); }
+.ex-con .ex-bar { grid-column: 1 / 3; height: 4px; margin-top: 3px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
+.ex-con .ex-bar div { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--k, 0)); }
 .ex-con.warn { box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-red); }
-.ex-con.warn .bar i { background: var(--c-red); }
+.ex-con.warn .ex-bar div { background: var(--c-red); }
 .hud.lefty .ex-con { right: auto; left: calc(var(--sl) + 8px); top: calc(var(--st) + 92px); }
 .ex-acts { position: absolute; left: 50%; bottom: calc(var(--sb) + 66px); transform: translateX(-50%); display: flex; gap: 8px; }
 .ex-act { height: 48px; min-width: 128px; padding: 0 16px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -166,7 +166,7 @@ export class ExHud {
         <div class="ex-chip ex-exfil"><b>3:30</b><small>Exfil opens</small></div>
       </div>
       <div class="ex-squad"></div>
-      <div class="ex-con" hidden><span class="ci"></span><b></b><small></small><p></p><span class="bar"><i></i></span></div>
+      <div class="ex-con" hidden><span class="ci"></span><b></b><small></small><p></p><div class="ex-bar"><div></div></div></div>
       <div class="ex-acts">
         <button class="ex-act ex-call" data-tap="1" hidden>CALL EXFIL<small>Helicopter in ${EX.inbound} s</small></button>
         <button class="ex-act alt ex-phone" data-tap="1" hidden>CONTRACTS<small>Pick a new one</small></button>
@@ -335,7 +335,7 @@ export class ExHud {
       this.conEl.classList.toggle('warn', warn);
     }
     const pk = Math.round(prog * 100) / 100;
-    if (this.c.conK !== pk) { this.c.conK = pk; this.conEl.querySelector('.bar i').style.setProperty('--k', pk.toFixed(2)); }
+    if (this.c.conK !== pk) { this.c.conK = pk; this.conEl.querySelector('.ex-bar div').style.setProperty('--k', pk.toFixed(2)); }
   }
 
   // Where the squad's contract wants you now.

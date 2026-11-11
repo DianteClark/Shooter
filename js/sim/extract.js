@@ -1393,6 +1393,11 @@ export class ExtractRules {
 
   decode(a, out) {
     const sim = this.sim;
+    // The host decodes its own snapshots for its view (js/game/match.js): it reads its live state, never the wire's.
+    if (this.authority) {
+      for (let i = 0; i < out.players.length && i < sim.players.length; i++) this.playerView(sim.players[i], out.players[i]);
+      return this.view();
+    }
     if (a) {
       const [t, players, sites, cons, slow, backup, loot] = a;
       this.t = t / 10;

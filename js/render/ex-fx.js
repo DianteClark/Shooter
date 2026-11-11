@@ -45,8 +45,12 @@ function helicopter() {
   box(0.5, 0.08, 13, 0, 0, 0, dark, rotor);
   g.add(rotor);
   g.userData.rotor = rotor;
+  noFog(g);
   return g;
 }
+
+// The scene's distance haze would wash these out at gameplay zoom; they read as markers, so they skip it.
+function noFog(root) { root.traverse(o => { if (o.material) o.material.fog = false; }); return root; }
 
 function crate(w, h, d, color, band = 0x1c2228) {
   const g = new THREE.Group();
@@ -94,6 +98,7 @@ export class ExFx {
     // Contract things, keyed by contract id.
     this.things = new Map();
     this.leaving = new Map();      // Site -> seconds since the helicopter lifted off.
+    noFog(this.group);
   }
 
   // Events that start an animation of their own.
@@ -137,6 +142,7 @@ export class ExFx {
       head.position.set(0.5, 1, 0); g.add(head);
       const cargo = crate(0.7, 0.4, 0.7, 0x55603e); cargo.position.set(-0.25, 0.88, 0); g.add(cargo);
     }
+    noFog(g);
     this.group.add(g);
     t = { g, type: c.type, x: c.x, z: c.z, yaw: 0 };
     this.things.set(c.id, t);
@@ -169,17 +175,19 @@ export class ExFx {
       // The helicopter: in from the far side of the map over `inbound` s, down on the zone, then up and away.
       const a = Math.atan2(e.z - this.map.height / 2, e.x - this.map.width / 2);
       const fx = e.x + Math.cos(a) * 110, fz = e.z + Math.sin(a) * 110;
-      let x = e.x, z = e.z, y = 0.3, yaw = a + Math.PI, show = true;
+      // It sets down at the outer edge of the zone, so the squad boarding it stays in sight.
+      const lx = e.x + Math.cos(a) * e.r * 0.55, lz = e.z + Math.sin(a) * e.r * 0.55;
+      let x = lx, z = lz, y = 0.3, yaw = a + Math.PI, show = true;
       if (e.state === 2) {
         const k = Math.max(0, Math.min(1, 1 - e.timer / (e.final ? Math.max(1, EX.final.land - EX.final.open) : EX.inbound)));
         if (k < 0.02 && e.final) show = false;
         const s = 1 - (1 - k) * (1 - k);
-        x = fx + (e.x - fx) * s; z = fz + (e.z - fz) * s; y = 18 - 15 * s;
+        x = fx + (lx - fx) * s; z = fz + (lz - fz) * s; y = 18 - 15 * s;
       } else if (e.state === 3) {
         y = 0.3 + Math.sin(t * 2) * 0.05;
       } else if (leave !== undefined && leave < 8) {
         const k = leave / 8;
-        x = e.x + Math.cos(a) * 120 * k * k; z = e.z + Math.sin(a) * 120 * k * k; y = 0.3 + 20 * k; yaw = a;
+        x = lx + Math.cos(a) * 120 * k * k; z = lz + Math.sin(a) * 120 * k * k; y = 0.3 + 20 * k; yaw = a;
       } else show = false;
       h.visible = show;
       if (show) {
@@ -261,6 +269,8 @@ export class ExFx {
       this.downs.setMatrixAt(rn++, M4);
     }
     this.downs.count = rn; this.downs.instanceMatrix.needsUpdate = true;
+    // The renderer's scene does not update world matrices by itself (renderer.js): the moving pieces need it here.
+    this.group.updateMatrixWorld(true);
   }
 
   dispose() {

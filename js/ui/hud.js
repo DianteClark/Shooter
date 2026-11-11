@@ -1275,7 +1275,7 @@ export class HUD {
       }
       const place = ORDINAL(ranked.indexOf(me) + 1);
       if (place !== c.place) { c.place = place; this.sbMine.name.textContent = place; }
-    } else if (!this.br && c.teamFlip !== myTeam) {
+    } else if (!this.br && !this.ex && c.teamFlip !== myTeam) {
       c.teamFlip = myTeam;
       this.#paintTeams(myTeam);
     }
@@ -1821,7 +1821,7 @@ export class HUD {
       this.prints.update(view, me, view.t);
       this.printClock += dt;
       if (this.printClock >= 1 / PRINT_HZ) { this.printClock = 0; this.printList = this.prints.visible(this.map, me, view.t, view.smokes).slice(); }
-      const enemy = this.ffa ? FFA_FOE : TEAMS[1 - me.team].css;
+      const enemy = this.ffa || this.ex ? FFA_FOE : TEAMS[1 - me.team].css;
       for (const f of this.printList) {
         const a = project(f.x, 0.03, f.z);
         if (!a) continue;
