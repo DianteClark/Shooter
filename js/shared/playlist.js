@@ -11,6 +11,7 @@
 // royale takes none.
 import { WEAPONS } from './weapons.js';
 import { MODES } from './modes.js';
+import { isAvailable } from './attachments.js';
 
 export const MODS = {
   hardcore:  { id: 'hardcore',  name: 'Hardcore',     short: 'HC',   desc: 'A third of the health. No minimap.' },
@@ -56,7 +57,21 @@ export function dealLoadout(l, mods) {
     out.streaks = [];
   }
   if (mods.includes('nostreaks')) out.streaks = [];
-  if (out.primary !== l.primary) out.camo = l.camos?.[out.primary] ?? 'none';
+  if (out.primary !== l.primary) {
+    out.camo = l.camos?.[out.primary] ?? 'none';
+    out.attachments = dealtKits(l.attachments, out.primary);
+  }
+  return out;
+}
+
+// The attachments a dealt gun keeps: the player's own kit for it (fitted in the Gunsmith, so already unlocked), through
+// the attachment API's isAvailable; the flat older form, which belonged to the replaced gun, is dropped.
+function dealtKits(a, gun) {
+  const out = {};
+  if (!a || typeof a !== 'object') return out;
+  for (const k in a) if (a[k] && typeof a[k] === 'object') out[k] = a[k];
+  const own = out[gun];
+  if (own) out[gun] = Object.fromEntries(Object.entries(own).filter(([, id]) => typeof id === 'string' && isAvailable(gun, id)));
   return out;
 }
 
