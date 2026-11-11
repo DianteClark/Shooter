@@ -17,6 +17,8 @@ export const GUN_LADDER = [
 GUN_LADDER.splice(6, 0, ...V10_LADDER);   // V10 guns join mid-ladder, ahead of the specialists and sidearms.
 // Everyone carries the same kit on a rung: the rung's gun and nothing to swap to, a Hatchet (a hit with it, or any
 // thrown kill, also knocks the victim back a rung) and a Stim. No scorestreaks.
+// The map tiers the new 6v6 modes play on: everything short of Ground War.
+const STANDARD_SIZES = ['small', 'medium', 'large'];
 const GUN_KIT = { secondary: 'pistol', attachments: {}, perks: ['marathon', 'fasthands', 'deadsilence'], tactical: 'stim', lethal: 'hatchet' };
 
 export const MODES = {
@@ -30,6 +32,17 @@ export const MODES = {
   snd:   { id: 'snd',   rules: 'snd',  teamSize: 6,  rounds: true, name: 'Search and Destroy', short: 'S&D', scoreLimit: 4, timeLimit: 120, desc: 'One life a round. Plant the bomb or stop it. First to 4 rounds.' },
   ctf:   { id: 'ctf',   rules: 'ctf',  teamSize: 6,  name: 'Capture the Flag', short: 'CTF', scoreLimit: 3, timeLimit: 600, desc: 'Take their flag home to yours. Yours has to be home to score. First to 3.' },
   gun:   { id: 'gun',   rules: 'gun',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 12, everyMap: true, name: 'Gun Game', short: 'GUN', scoreLimit: GUN_LADDER.length, timeLimit: 600, desc: `A new gun every kill, ${GUN_LADDER.length} to the Verdict. A Hatchet knocks you back one.` },
+  // Modes overhaul (docs/MODES.md). Each runs its own rules module (js/sim/<rules>.js, registered in js/sim/rules.js).
+  // `sizes` lists the map tiers a mode is offered on; `needs` the map points it plays on (checked by modeFitsMap and
+  // dev/map-validate.mjs); `look` the rule set the renderer and HUD draw its zones as.
+  hq:    { id: 'hq',    rules: 'hq',   teamSize: 6,  sizes: STANDARD_SIZES, needs: { hard: 2 }, look: 'hard', name: 'Headquarters', short: 'HQ', scoreLimit: 200, timeLimit: 600, desc: 'Take the HQ and hold it. While it stands, its team cannot respawn.' },
+  ko:    { id: 'ko',    rules: 'ko',   teamSize: 6,  sizes: STANDARD_SIZES, name: 'Kill Order', short: 'KO', scoreLimit: 10, timeLimit: 600, desc: 'Each team has a marked VIP. Only killing theirs scores. Guard yours.' },
+  inf:   { id: 'inf',   rules: 'inf',  teamSize: 6,  sizes: STANDARD_SIZES, name: 'Infected', short: 'INF', scoreLimit: 12, timeLimit: 300, desc: 'Killed by the infected, you join them. Survive the clock to win.' },
+  oic:   { id: 'oic',   rules: 'oic',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 10, sizes: STANDARD_SIZES, name: 'One in the Chamber', short: 'OIC', scoreLimit: 20, timeLimit: 420, desc: 'One bullet, one-shot kills, three lives. A kill gives the bullet back.' },
+  ctl:   { id: 'ctl',   rules: 'ctl',  teamSize: 6,  sizes: STANDARD_SIZES, needs: { snd: 2 }, look: 'dom', rounds: true, name: 'Control', short: 'CTL', scoreLimit: 3, timeLimit: 150, desc: 'Attack two zones or defend them, sides swap each round. Each team has limited lives.' },
+  grind: { id: 'grind', rules: 'grind', teamSize: 6, sizes: STANDARD_SIZES, needs: { dom: 2 }, look: 'dom', name: 'Grind', short: 'GRD', scoreLimit: 50, timeLimit: 600, desc: 'Grab tags from kills and carry them to a bank. Die and you drop them all.' },
+  gwhq:  { id: 'gwhq',  rules: 'hq',   teamSize: 16, large: true, everyHuge: true, needs: { hard: 2 }, look: 'hard', name: 'Ground War HQ', short: 'GW HQ', scoreLimit: 300, timeLimit: 900, desc: '16 v 16. Take the HQ and hold it. While it stands, its team cannot respawn.' },
+  gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 15, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 
@@ -80,7 +93,7 @@ export function playersFor(id, map = null) {
 // every map hosts.
 export function mapModes(map) {
   const own = map?.modes ?? MODE_IDS.filter(id => !MODES[id].large);
-  const extra = MODE_IDS.filter(id => MODES[id].everyMap && !own.includes(id));
+  const extra = MODE_IDS.filter(id => (MODES[id].everyMap || (MODES[id].everyHuge && tierOf(map) === 'huge')) && !own.includes(id));
   return extra.length ? [...own, ...extra] : own;
 }
 
@@ -88,12 +101,19 @@ export function mapModes(map) {
 export function modeFitsMap(map, mode) {
   if (!map || !MODES[mode] || !mapModes(map).includes(mode)) return false;
   const rules = MODES[mode].rules;
+  const def = MODES[mode];
+  if (def.sizes && !def.sizes.includes(tierOf(map))) return false;
+  if (def.needs) return Object.entries(def.needs).every(([kind, n]) => (map.points?.[kind]?.length ?? 0) >= n);
   if (rules === 'dom') return !!map.points?.dom?.length;
   if (rules === 'hard') return !!map.points?.hard?.length;
   if (rules === 'snd') return map.points?.snd?.length === 2;
   if (rules === 'ctf') return map.points?.ctf?.length === 2;
   return true;
 }
+
+// A map's size tier, as js/shared/map.js sizeOf reads it (that module imports this one, so it is repeated here): a
+// Ground War map is huge, a map without a tier medium.
+const tierOf = map => (map?.large ? 'huge' : ['small', 'medium', 'large', 'huge', 'giant'].includes(map?.size) ? map.size : 'medium');
 
 // The first mode a map hosts, for falling back when a pick does not fit.
 export const firstModeFor = map => mapModes(map).find(id => modeFitsMap(map, id)) ?? 'tdm';

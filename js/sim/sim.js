@@ -18,6 +18,8 @@ import { addScore, createStreakState, setStreakKinds, spendStreak } from './stre
 import * as V9 from './streaks-v9.js';   // Scorestreaks overhaul (2026-11): new streaks, shoot-downs, EMP rework.
 import { decodeSnd, restoreSnd, SndRules } from './snd.js';
 import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
+import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module per mode (js/sim/rules.js).
+import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -275,16 +277,19 @@ function buildFfaRoster(humans, { botSkill, mapId, mode, seed, players }) {
 
 export class Sim {
   // scoreLimit and timeLimit default to the mode's own, from shared/modes.js.
-  constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm' }) {
+  constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm', mods = [] }) {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
     this.rng = mulberry32(seed >>> 0);
     const def = mode === 'range' ? RANGE_MODE : (MODES[mode] || MODES.tdm);
     // `mode` is the rule set everything keys on ('dom' for Ground War Domination too); modeId is the mode as picked.
     this.mode = def.rules ?? def.id;
     this.modeId = def.id;
+    // Modifiers (js/shared/playlist.js): the ones this mode can take, in a fixed order.
+    this.mods = cleanMods(mods, def.id);
+    this.hardcore = this.mods.includes('hardcore');
     this.ffa = !!def.ffa;
     this.ladder = this.mode === 'gun';      // Gun Game: scores are rungs climbed, and the rung is the loadout.
-    this.objective = OBJECTIVE_RULES.has(this.mode);
+    this.objective = OBJECTIVE_RULES.has(this.mode) || !!MODE_RULES[this.mode];
     if (this.mode === 'range') roster = [...roster, ...rangeDummies(this.map)];
     // Each free-for-all player is a side of one. buildRoster already deals these; a roster from elsewhere gets them here.
     if (this.ffa) roster = roster.slice(0, FFA_MAX).map((r, i) => (r.team === FFA_TEAM + i ? r : { ...r, team: FFA_TEAM + i }));
@@ -342,6 +347,7 @@ export class Sim {
     this.players = roster.map((r, index) => {
       let loadout = this._cleanLoadout({ ...r.loadout, primary: r.loadout?.primary || r.primary, camo: r.loadout?.camo || r.camo });
       if (this.ladder) loadout = gunLoadout(0, loadout);
+      loadout = this._deal(r.team, loadout);
       return {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
@@ -395,6 +401,9 @@ export class Sim {
     this.snd = this.mode === 'snd' ? new SndRules(this) : null;
     // Capture the Flag keeps its two flags to itself (js/sim/ctf.js); the view shows them as view.ctf, not as points.
     this.ctf = this.mode === 'ctf' ? new CtfRules(this) : null;
+    // The modes overhaul's rule sets: each its own module, hooked in through `this.rules` (see js/sim/rules.js).
+    const Rules = MODE_RULES[this.mode];
+    this.rules = Rules ? new Rules(this, seed) : null;
     this.hardIdx = 0;
     this.hardT = HARD_ROTATE;
     this.tickT = this.mode === 'hard' ? HARD_TICK : DOM_TICK;
@@ -418,6 +427,21 @@ export class Sim {
     return l;
   }
 
+  // A loadout as this match deals it to a side: the mode's own kit (One in the Chamber, Infected), then the modifiers.
+  _deal(team, l) {
+    if (this.rules?.kit) l = this.rules.kit(team, l);
+    return dealLoadout(l, this.mods);
+  }
+
+  // The same for a phone's own player, which owns its gun and so deals its own loadout at each spawn (js/game/match.js).
+  // On a guest this sim is the snapshot codec, and the side is the one the newest snapshot gave.
+  dealFor(id, base) {
+    const p = this.byId.get(id);
+    if (!p || !base || this.ladder) return base;
+    if (!this.rules?.kit && !this.mods.length) return base;
+    return this._deal(p.team, normalizeLoadout(base));
+  }
+
   drainEvents() {
     const out = this.events;
     this.events = [];
@@ -429,6 +453,7 @@ export class Sim {
   _spawnAll() {
     if (this.ffa) { this._ffaSpawnAll(); return; }
     if (this.snd) { this.snd.startRound(); return; }
+    if (this.rules?.spawnAll?.()) return;
     const used = new Set();
     for (const p of this.players) {
       if (p.dummy) { this._placeAt(p, p.home, p.home.aim); continue; }
@@ -463,6 +488,7 @@ export class Sim {
     // Ignore a human's stale in-flight states until their phone has processed this spawn.
     if (!p.isBot) { p.ackX = s.x; p.ackZ = s.z; p.ackT = 1.5; }
     if (p.bot) p.bot.reset();
+    this.rules?.onSpawn?.(p);
     this._emit({ t: 'spawn', id: p.id, x: s.x, z: s.z, aim: round2(aim) });
   }
 
@@ -572,6 +598,7 @@ export class Sim {
   // the live hardpoint, so nobody spawns straight into a capture.
   _spawnFlow(p, s) {
     if (this.ctf) return this.ctf.spawnFlow(p, s);
+    if (this.rules?.spawnFlow) return this.rules.spawnFlow(p, s);
     if (this.mode === 'dom') {
       let score = 0;
       for (let i = 0; i < this.zones.length; i++) {
@@ -616,11 +643,11 @@ export class Sim {
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
       if (this.phaseT <= 0) this._setPhase('live');
-    } else if (this.phase === 'live' && !this.range && !this.snd) {
+    } else if (this.phase === 'live' && !this.range && !this.snd && !this.rules?.ownClock) {
       this.timeLeft -= STEP;
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
-        this._end(this.ffa ? this._ffaLeader(true) : this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1));
+        this._end(this.rules?.timeUp ? this.rules.timeUp() : this.ffa ? this._ffaLeader(true) : this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1));
       }
     }
 
@@ -673,6 +700,7 @@ export class Sim {
     if (p.ackT > 0) p.ackT -= STEP;
     if (!p.alive) {
       if (this.snd) return;          // One life a round: the next round brings everyone back.
+      if (this.rules?.holdDead?.(p)) return;     // Out of lives, or a Headquarters standing for their team.
       p.respawnT -= STEP;
       p.deadT += STEP;
       if (p.respawnT <= 0 && this._readyToRespawn(p)) this._respawn(p);
@@ -733,12 +761,14 @@ export class Sim {
     this.phase = phase;
     this._emit({ t: 'phase', phase });
     if (phase === 'live' && this.snd) this.snd.onLive();
+    if (phase === 'live') this.rules?.onLive?.();
     if (phase === 'live' && this.mode === 'hard' && this.points.length) this._emit({ t: 'hard_move', id: this.points[0].id });
   }
 
   // ---- Objectives ----
 
   _stepObjectives() {
+    if (this.rules) { this.rules.step(STEP); return; }     // Each ends the match itself.
     if (this.snd) { this.snd.step(STEP); return; }
     if (this.ctf) { this.ctf.step(STEP); return; }      // Captures end the match themselves.
     if (this.mode === 'kc') this._stepTags();
@@ -1001,7 +1031,7 @@ export class Sim {
   setLoadout(id, loadout) {
     const p = this.byId.get(id);
     if (!p || !loadout || typeof loadout !== 'object' || this.ladder) return false;     // Gun Game deals the loadouts.
-    p.pendingLoadout = this._cleanLoadout(loadout, p.loadout);
+    p.pendingLoadout = this._deal(p.team, this._cleanLoadout(loadout, p.loadout));
     this.snd?.onLoadout(p);
     return true;
   }
@@ -1212,6 +1242,8 @@ export class Sim {
   _damage(target, attacker, dmg, weapon, dist, streak = null, head = false, equip = null) {
     if (!target || !target.alive || target.spawnProtect > 0 || target.team === attacker.team) return;
     if (this.snd && !this.snd.combat) return;       // Between rounds nothing hurts.
+    if (this.rules?.damage) { dmg = this.rules.damage(target, attacker, dmg, weapon, streak, equip); if (!(dmg > 0)) return; }
+    if (this.hardcore) dmg *= HARDCORE_DAMAGE;         // Hardcore: everyone on a third of the health.
     // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
     // damage dealt: in hit events, assists and the firing range readout.
     if (target.windT > this.time && hasPro(target.ps, 'adrenaline')) dmg *= WIND_TAKEN;     // Second Wind.
@@ -1315,6 +1347,7 @@ export class Sim {
 
     this.snd?.onKill(target);
     this.ctf?.onKill(target, killer);
+    if (this.rules) { this.rules.onKill?.(target, killer, { weapon, streak, equip, head }); return; }
     if (!this.snd && !this.ctf && this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
   }
 
@@ -1330,6 +1363,7 @@ export class Sim {
     this._emit({ t: 'kill', by: target.id, target: target.id, weapon: target.ps.weapon, camo: target.camo, x, z, assist: null, dist: 0, equip, vw: target.ps.weapon });
     this.snd?.onKill(target);
     this.ctf?.onKill(target, null);
+    this.rules?.onKill?.(target, null, {});
   }
 
   _medal(p, medal) { this._emit({ t: 'medal', id: p.id, medal }); }
@@ -2183,6 +2217,7 @@ export class Sim {
       // Not a death: no kill, no score. The modes only need to let go of a flag or the bomb, and notice the side's count.
       this.snd?.onKill(p);
       this.ctf?.onKill(p, null);
+      this.rules?.onKill?.(p, null, { away: true });
     }
     this._emit({ t: 'away', id: p.id });
   }
@@ -2273,7 +2308,7 @@ export class Sim {
     if (fresh) this._freshStats(p);
     this._metaUntil = this.tick + 2;
     this._emit({ t: 'rejoin', oldId, id: p.id, name: p.name, fresh: !!fresh, info: info ?? undefined });
-    if (!this.snd && this.phase !== 'ended') this._respawn(p);
+    if (!this.snd && this.phase !== 'ended' && !this.rules?.holdDead?.(p)) this._respawn(p);
     const ps = p.ps;
     return { index: p.index, id: p.id, oldId, x: ps.x, z: ps.z, aim: ps.aim, alive: p.alive, hp: Math.max(0, Math.ceil(p.hp)) };
   }
@@ -2308,7 +2343,7 @@ export class Sim {
   static fromSnapshot(view, roster, opts = {}) {
     const seed = opts.seed ?? 1;
     const sim = new Sim({
-      roster, map: opts.map ?? view.mapId, seed, mode: view.modeId ?? view.mode,
+      roster, map: opts.map ?? view.mapId, seed, mode: view.modeId ?? view.mode, mods: opts.mods ?? view.mods,
       scoreLimit: opts.scoreLimit ?? view.scoreLimit, timeLimit: opts.timeLimit,
     });
     sim.rng = mulberry32((seed ^ Math.round(view.t * 1000)) >>> 0);
@@ -2386,6 +2421,7 @@ export class Sim {
   }
 
   _restoreMode(view) {
+    if (this.rules) { this.rules.restore(view); return; }
     if (this.ctf) { restoreCtf(this.ctf, view); return; }
     if (this.snd) {
       restoreSnd(this.snd, view);
@@ -2481,8 +2517,11 @@ export class Sim {
     const points = this.points.map(z => this._pointView(z, z.owner, z.cap, z.contested));
     if (snd) points.snd = snd;
     if (ctf) points.ctf = ctf;
+    // A rules module's state rides the point list too (see objOf in js/sim/rules.js), so interpolated views keep it.
+    const obj = this.rules ? this.rules.view() : null;
+    if (obj) points.obj = obj;
     const view = {
-      t: this.time, phase: this.phase, snd, ctf, timeLeft: this.timeLeft, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
+      t: this.time, phase: this.phase, snd, ctf, obj, mods: this.mods, timeLeft: this.timeLeft, mode: this.rules?.look ?? this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
       tags: this.tags.map(t => ({ id: t.id, x: t.x, z: t.z, team: t.team, life: t.life })),
       points,
@@ -2621,6 +2660,7 @@ export class Sim {
   }
 
   _encodeObjective() {
+    if (this.rules) return this.rules.encode();
     if (this.snd) return this.snd.encode();
     if (this.ctf) return this.ctf.encode();
     if (this.mode === 'kc') {
@@ -2633,6 +2673,7 @@ export class Sim {
 
   _decodeObjective(a, out) {
     out.tags = []; out.points = []; out.hardT = 0;
+    if (this.rules) { out.obj = out.points.obj = this.rules.decode(a || null, out); return; }
     if (this.mode === 'snd') {
       // The sites never change; the round state rides on the list as well as on the view (see sndOf in snd.js).
       out.points = this.zones.map(z => this._pointView(z, -1, 0, false));
@@ -2767,7 +2808,7 @@ export class Sim {
         weapon: WEAPON_IDS[weapon], camo: this.players[by].camo, x: x / 10, z: z / 10 };
     }
     const view = {
-      t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit,
+      t: d[0] / 100, phase: PHASES[d[1]], timeLeft: d[2] / 10, mode: this.rules?.look ?? this.mode, modeId: this.modeId, scoreLimit: this.scoreLimit, mods: this.mods,
       scores: null, winner: d[5] === -1 ? null : d[5], ffa: this.ffa,
       uav: null, players, localId, lastKill,
       mapId: this.map.id, theme: this.map.theme, range: this.range ? this.range.view() : null,
