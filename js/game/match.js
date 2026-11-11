@@ -469,7 +469,7 @@ export class Match {
       p.reloadT = ps.reloadT; p.reloadDur = ps.reloadDur;
       p.adsT = ps.adsT; p.sprinting = ps.sprinting; p.sliding = ps.sliding; p.bloom = ps.bloom;
       p.heat = ps.heat; p.overheated = ps.overheated; p.firingT = ps.firingT;
-      if (this.br) p.air = this.brAir;
+      if (this.br) { p.air = this.brAir; p.glideT = this.brAir === 2 ? this.glideT : undefined; }
     }
     return p;
   }
