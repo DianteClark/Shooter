@@ -170,7 +170,7 @@ const LIST = [
   sig('s_sabot', 'slug', 'mag', 'Sabot Slugs', 27,
     'Railspike at its best: through cover and down a lane.',
     'Keeps more damage through cover and reaches further. Fewer shells, slower reload.',
-    { penetrate: 1.15, range: 1.15, magazine: 0.67, reload: 1.1 }, { look: { mag: 'speedmag' } }),
+    { penetrate: 1.15, range: 1.15, magazine: 0.84, reload: 1.1 }, { look: { mag: 'speedmag' } }),
   conv('k_bucktube', 'slug', 'mag', 'Buckshot Tube', 24,
     'A fast-pumping buckshot gun built on the Railspike.',
     'Fires seven pellets: kills up close in one shell, far less reach, cover stops it.',
@@ -192,7 +192,7 @@ const LIST = [
   sig('s_needlechoke', 'flechette', 'barrel', 'Needle Choke', 26,
     'Flechettes keep their bite much further down the sights.',
     'Damage fades far less and reaches further, tighter aimed. Wide from the hip, slower to aim.',
-    { falloffMin: 1.4, range: 1.2, adsSpread: 0.8, hipSpread: 1.25, adsTime: 1.08 }, { look: { barrel: 'choke' } }),
+    { falloffMin: 1.3, range: 1.15, adsSpread: 0.8, hipSpread: 1.25, adsTime: 1.08 }, { look: { barrel: 'choke' } }),
   sig('s_barbed', 'flechette', 'mag', 'Barbed Darts', M1,
     'Heavier darts: fewer needed to finish the job.',
     'More damage per dart. Fewer shells, slower to load.',
@@ -301,7 +301,7 @@ const LIST = [
   sig('s_hollowpoint', 'hushdmr', 'mag', 'Hollow Points', 19,
     'Hits harder in the open; cover now stops it.',
     'More damage per round. Cover stops every round, fewer rounds.',
-    { damage: 1.12, magazine: 0.8 }, { set: { penetrate: undefined }, notes: [{ text: 'Cover stops every round', better: false }], look: { mag: 'speedmag' } }),
+    { damage: 1.15, magazine: 0.9 }, { set: { penetrate: undefined }, notes: [{ text: 'Cover stops every round', better: false }], look: { mag: 'speedmag' } }),
 
   // ---------------- Sniper ----------------
   sig('s_heavybolt', 'sniper', 'grip', 'Heavy Bolt', 16,

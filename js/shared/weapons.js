@@ -153,8 +153,9 @@ export const WEAPONS = {
   // rate of fire (every miss costs a beat), a muzzle that climbs and feet a little slower than the other SMGs.
   heavysmg: {
     id: 'heavysmg', name: 'Ballast', role: 'Bruiser', auto: true,
+    // V11 attachments wave: full damage to 10 m (was 9); stock and best build both ran 0.83-0.84 in mirrored play.
     damage: 36, rpm: 590, magazine: 26, reserve: 144, reload: 2.1, range: 30,
-    falloff: { start: 9, end: 18, min: 0.64 }, penetrate: 0.55,
+    falloff: { start: 10, end: 18, min: 0.64 }, penetrate: 0.55,
     adsSpread: 0.016, hipSpread: 0.044, bloomPerShot: 0.09, bloomRecover: 2.8, bloomScale: 1.4,
     pattern: { amp: 0.012, freq: 0.8, ramp: 2, drift: 0.003 },
     adsTime: 0.17, sprintToFire: 0.13, swapTime: 0.32, moveMult: 1.02, adsMoveMult: 0.7,
@@ -258,7 +259,8 @@ export const WEAPONS = {
   // longest magazine change outside the belt guns. Four to the body, a step behind the rifles.
   lightlmg: {
     id: 'lightlmg', name: 'Gantry', role: 'Box-fed', auto: true,
-    damage: 30, rpm: 580, magazine: 45, reserve: 180, reload: 3.6, range: 48,
+    // V11 attachments wave: 565 rpm (was 580); its best build (reflex, vertical grip) ran 1.25 in mirrored play.
+    damage: 30, rpm: 565, magazine: 45, reserve: 180, reload: 3.6, range: 48,
     falloff: { start: 20, end: 34, min: 0.73 }, penetrate: 0.7,
     adsSpread: 0.009, hipSpread: 0.085, bloomPerShot: 0.05, bloomRecover: 2, bloomScale: 1.5,
     pattern: { amp: 0.011, freq: 0.5, ramp: 5 }, turnCap: 6,

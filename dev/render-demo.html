@@ -91,12 +91,17 @@ function makePlayers() {
 function lineup(players, me) {
   me.x = 36; me.z = 31; me.aim = 0;
   const camos = ['none', 'stalker', 'gold', 'rust', 'molten', 'prism', 'cobalt', 'toxin', 'crimson', 'glacier', 'comb', 'ash'];
-  const weapons = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
+  // V11: &guns=dmr,shotgun,...&kits=grip:k_runaway;barrel:k_slugbarrel;... puts those guns, with those parts fitted,
+  // in the lineup (kits listed per gun, ';' between guns, ',' between parts), for judging attachment models in a match.
+  const guns = params.get('guns')?.split(',');
+  const kits = (params.get('kits') ?? '').split(';').map(k => Object.fromEntries(k.split(',').filter(Boolean).map(x => x.split(':'))));
+  const weapons = guns ?? ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'pistol'];
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
     p.lineX = i < 6 ? 28 + i * 3.2 : 30.5 + (i - 6) * 2.2;
     p.lineZ = i < 6 ? 22 : 30;
-    p.weapon = weapons[i % 6];
+    p.weapon = weapons[i % weapons.length];
+    if (guns) p.attachments = kits[i % weapons.length] ?? {};
     p.camo = camos[i];
     // Second row demonstrates the animation states at inspection zoom.
     if (i === 0) { p.lineX = 36; p.lineZ = 33; }
