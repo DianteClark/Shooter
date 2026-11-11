@@ -7,12 +7,14 @@
 //             small map, `players` on a medium one, `largePlayers` on a large or Ground War map. `everyMap` modes are offered on every map, Ground War ones included.
 //   rounds    Search and Destroy: scoreLimit is rounds to win, timeLimit the length of one round (see SND below).
 import { normalizeLoadout } from './catalog.js';
+import { V10_LADDER } from './weapons-v10.js';
 
 // Gun Game: one rung per kill, about one gun per category on the way, sidearms last. The final kill has to be made with
 // the Verdict. Order runs from forgiving to demanding, so the climb gets harder as you near the top.
 export const GUN_LADDER = [
   'smg', 'ar', 'autoshot', 'saw', 'burst', 'pdw', 'battle', 'coach', 'semisnipe', 'thumper', 'deuce', 'revolver',
 ];
+GUN_LADDER.splice(6, 0, ...V10_LADDER);   // V10 guns join mid-ladder, ahead of the specialists and sidearms.
 // Everyone carries the same kit on a rung: the rung's gun and nothing to swap to, a Hatchet (a hit with it, or any
 // thrown kill, also knocks the victim back a rung) and a Stim. No scorestreaks.
 const GUN_KIT = { secondary: 'pistol', attachments: {}, perks: ['marathon', 'fasthands', 'deadsilence'], tactical: 'stim', lethal: 'hatchet' };

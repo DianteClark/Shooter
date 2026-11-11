@@ -1892,7 +1892,9 @@ export class HUD {
     }
     if (me.ammo !== c.ammo) {
       c.ammo = me.ammo;
-      this.ammoEl.textContent = me.ammo;
+      const blade = !!WEAPONS[me.weapon]?.melee;   // V10: a blade has no rounds to count.
+      this.ammoEl.textContent = blade ? '\u221e' : me.ammo;
+      this.reserveEl.style.display = blade ? 'none' : '';
       this.magFill.style.transform = `scaleX(${Math.min(1, me.ammo / (c.magazine || 1))})`;
     }
     if (me.reserve !== c.reserve) {
@@ -1914,7 +1916,7 @@ export class HUD {
     }
     // There is no reload button, so the ammo readout itself says what is happening.
     const empty = me.ammo <= 0 && me.reserve <= 0;
-    const low = !reloading && me.ammo <= Math.ceil((c.magazine ?? 30) * LOW_AMMO);
+    const low = !reloading && !WEAPONS[me.weapon]?.melee && me.ammo <= Math.ceil((c.magazine ?? 30) * LOW_AMMO);   // A blade is never low.
     const tag = empty ? 'empty' : reloading ? 'reloading' : low ? 'low' : '';
     if (tag !== c.tag) {
       c.tag = tag;
@@ -1929,7 +1931,7 @@ export class HUD {
   }
 
   #updateHeat(me, c) {
-    const heatGun = !!WEAPONS[me.weapon]?.heat;
+    const heatGun = !!(WEAPONS[me.weapon]?.heat || WEAPONS[me.weapon]?.charge);   // A charge gun shows its charge on the same bar.
     if (heatGun !== c.heatOn) {
       c.heatOn = heatGun;
       this.heatEl.hidden = !heatGun;

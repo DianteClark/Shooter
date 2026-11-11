@@ -6,6 +6,7 @@ import { MAX_HP, PRIMARY_IDS, WEAPON_IDS, WEAPON_CATEGORY, FFA_TEAM, GOLDEN_ID }
 import { MODES, modeRules } from './modes.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
+import { V10_UNLOCKS } from './weapons-v10.js';
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
 // progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
@@ -122,6 +123,7 @@ export const UNLOCK_SCHEDULE = [
   { level: 10, kind: 'weapon',   id: 'heavysmg' },
   { level: 16, kind: 'weapon',   id: 'lightlmg' },
   { level: 18, kind: 'weapon',   id: 'crossbow' },
+  ...V10_UNLOCKS,   // V10 guns, levels 3 to 40 (js/shared/weapons-v10.js).
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 const V1_GRANT_LEVEL = 15;

@@ -17,6 +17,7 @@ import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
 import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
 import { TUNING } from '../shared/tuning.js';
+import { fillV10 } from '../shared/weapons-v10.js';
 import { spectate } from '../sim/snd.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
@@ -47,6 +48,7 @@ const GUN_FX_FALLBACK = {
   scatter:    { tail: 3.2, linger: 0.05, speed: 170, flash: [2.0, 0.75, 1.8],  shell: null, extra: 'blast' },
 };
 for (const id in GUN_FX_FALLBACK) if (!GUN_FX[id]) GUN_FX[id] = GUN_FX_FALLBACK[id];
+fillV10(GUN_FX, 'fx');   // V10 guns borrow a tracer and flash until vfx.js gives them their own.
 
 // Kills from these hold the hit-stop a beat longer.
 const BIG_KILL = new Set(['Sniper', 'Marksman', 'Launcher']);

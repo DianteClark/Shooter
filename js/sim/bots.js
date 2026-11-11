@@ -13,6 +13,7 @@ import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange } from './equipment.js';
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
+import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
 import { isAvailable } from '../shared/attachments.js';
 import { SND } from '../shared/modes.js';
 
@@ -144,6 +145,7 @@ const BOT_KITS = {
 
 // Sidearms bots carry, dealt in turn: each one equally often, so per-gun stats compare like with like.
 const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper', 'scatter'];
+BOT_SECONDARIES.push(...V10_BOT_SECONDARIES);
 export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
 // A gun without its own kits borrows its category's base gun's, minus what it cannot take.
 const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol' };

@@ -1,6 +1,8 @@
 // Dismantled soldiers. On death every body part leaves its last drawn pose as a free rigid body, tumbling
 // with a shove from the killing shot, then dither-fades. No blood: the break glows in the victim's team colour.
 // The parts draw through Characters' instanced meshes, so a dozen bodies add instances but no draw calls.
+import { fillV10 } from '../shared/weapons-v10.js';
+
 export const MAX_CORPSES = 12;
 
 export const PART = {
@@ -26,6 +28,7 @@ const FORCE = {
   carbine: [6, 3.2, 2.4], heavysmg: [6.5, 3.2, 2.5], slug: [11, 4.5, 2.6], lightlmg: [7, 3, 2.4], crossbow: [8, 2.5, 1.8], scatter: [9, 4.5, 3.2],
 };
 const FORCE_DEFAULT = FORCE.ar;
+fillV10(FORCE, 'force');
 
 const rand = (a, b) => a + Math.random() * (b - a);
 

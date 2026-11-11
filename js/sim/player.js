@@ -344,6 +344,7 @@ export function currentSpread(ps, w = weaponDef(ps)) {
   const speed = Math.hypot(ps.vx, ps.vz);
   s *= 1 + 0.55 * (1 - ads) * Math.min(1, speed / MOVE.run);
   if (ps.sliding && !w.slideFire) s *= 1.7;
+  if (w.settle) s *= w.settle.from + (1 - w.settle.from) * Math.min(1, ps.shotIndex / w.settle.shots);   // V10: tightens as it fires.
   return s * TUNING.spread;
 }
 
@@ -363,6 +364,19 @@ function burstRecovery(w) {
 }
 
 function isLocked(ps, w) { return w.heat !== undefined && ps.overheated; }
+
+// V10 charge guns (weapons-v10.js `charge`): true while the round is still being held back. The trigger has to stay
+// down for charge.time with the gun otherwise ready; the charge bleeds off at the same pace when it is not. The bar
+// the HUD draws for heat shows it, which is why a charge gun cannot also be a heat gun.
+function chargeHolds(ps, w, trigger, dt) {
+  if (!w.charge) return false;
+  const ready = trigger && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0 && ps.cooldown <= 0 && ps.ammo[ps.slot] > 0;
+  ps.chargeT = ready ? (ps.chargeT || 0) + dt : Math.max(0, (ps.chargeT || 0) - dt);
+  const full = ps.chargeT >= w.charge.time;
+  if (full) ps.chargeT = 0;
+  if (ps.slot === 0) ps.heat = ps.chargeT / w.charge.time;
+  return !full;
+}
 
 // Runs whichever gun is in hand, so a locked LMG keeps cooling behind the pistol.
 function stepHeat(ps, dt) {
@@ -416,7 +430,8 @@ function fireOne(ps, w, rng) {
   // Lets the owner's own traceShot match the host, which works the range out from the loadout itself.
   if (w.range !== WEAPONS[ps.weapon].range) shot.range = w.range;
   if (w.penetrate !== WEAPONS[ps.weapon].penetrate) shot.penetrate = w.penetrate;
-  ps.ammo[ps.slot]--;
+  if (w.melee) { if (w.lunge) { ps.vx = Math.cos(ps.aim) * w.lunge; ps.vz = Math.sin(ps.aim) * w.lunge; } }   // V10: a swing spends nothing and carries you forward.
+  else ps.ammo[ps.slot]--;
   ps.shotIndex++;
   ps.sinceShot = 0;
   // A suppressed shot leaves any reveal from an earlier unsuppressed shot to run out on its own.
@@ -577,7 +592,8 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   // down; sprinting abandons it.
   if (ps.sprinting) ps.burstLeft = 0;
   let shots = NO_SHOTS;
-  if ((trigger || ps.burstLeft > 0) && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
+  const charging = chargeHolds(ps, w, trigger, dt);
+  if ((trigger || ps.burstLeft > 0) && !charging && ps.reloadT <= 0 && ps.swapT <= 0 && ps.sprintRecoverT <= 0) {
     for (let guard = 0; guard < 4 && ps.cooldown <= 0 && ps.ammo[ps.slot] > 0 && !isLocked(ps, w); guard++) {
       let interval;
       if (w.burst) {
