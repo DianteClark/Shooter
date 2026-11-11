@@ -136,8 +136,8 @@ const POS_FIELDS = [0, 1, 2, 5, 6];      // A far player's keyframe (code 2): po
 const INTEREST_FAR = 60;
 const INTEREST_EVERY = 3;
 const EVENT_FAR = 150;
-const BOT_NAMES = ['Rook', 'Mako', 'Vesper', 'Dagger', 'Quill', 'Sable', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Ghoul', 'Brine', 'Cinder', 'Wick', 'Hex',
-  'Flint', 'Moth', 'Raze', 'Talon', 'Grit', 'Lark', 'Husk', 'Vane', 'Cobb', 'Wren', 'Briar', 'Slate', 'Knell', 'Jinx', 'Sorrel', 'Thane'];   // 32: a full Ground War match never repeats one.
+const BOT_NAMES = ['Ridge', 'Talon', 'Gully', 'Dagger', 'Quill', 'Kestle', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Rivet', 'Brine', 'Cinder', 'Wick', 'Hex',
+  'Sorrel', 'Moth', 'Raze', 'Cobalt', 'Grit', 'Lark', 'Husk', 'Vane', 'Cobb', 'Basalt', 'Briar', 'Slate', 'Knell', 'Jinx', 'Thatch', 'Thane'];   // 32: a full Ground War match never repeats one.
 // Every primary exactly once. A match fields twelve consecutive entries (team 1 starts six in) from an offset picked
 // by seed, or by map and mode, so over a session every gun is carried by bots equally often: the per-gun stats
 // (js/game/telemetry.js) compare guns by kills per carrier-minute, and a gun listed twice would just look strong.
