@@ -106,11 +106,11 @@ A fast flick therefore hipfires before ADS ramps up. No ADS button: thumbs are b
   from the guest by the other side. `decodeSnapshot` reads code 2. The host's match loop sends per guest when
   `sim.interest` is on: `net.sendSnapshot(d, target)`, `net.sendEvents(e, target)` and `net.guests` (linked guests).
 - `js/render/world.js` packs the world mesh (position Float32, `aCol` normalised Uint16 x4 over COL_RANGE, `aNP`
-  normalised Int8 x4: normal and wet amount): 24 bytes a vertex instead of 40. Maps over 5,000 m^2 (large, huge,
-  bigger) cut every static layer (world, decals, signs, glow) into 32 m tiles; `world.chunks` lists them and
+  normalised Int8 x4: normal and wet amount): 24 bytes a vertex instead of 40. Maps over 8,000 m^2 (huge, and bigger)
+  cut every static layer (world, decals, signs, glow) into 32 m tiles; `world.chunks` lists them and
   `world.setView(camera, x, z, cut)` (called by the renderer each frame) hides tiles whose box is outside the frustum
   or further than `cut` from the camera target (quality step `cut`: 60 m on Low and Potato, none above; replays get
-  none). Small and medium maps keep one mesh per layer. `world.decals` is a Group.
+  none). Small, medium and large maps keep one mesh per layer. `world.decals` is a Group.
 
 `js/audio/audio.js`: `class AudioEngine { unlock(); onEvents(events,view); setMicActive(bool); update(view,dt); hit markers, medals etc. }`. Synthesized via Web Audio (layered transient + body + tail per gun, no files). Mix must survive iOS mic-on volume drop (compressor; louder when mic active). Distance attenuation from `view.localId`.
 

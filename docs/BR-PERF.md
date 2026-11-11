@@ -121,3 +121,89 @@ in 32 draw calls on screen against Harvest's 71k in 25.
 
 No engine code was changed for this experiment: the prototype grid and chunker live in `dev/br-perf.mjs` and
 `dev/br-render.html` only.
+
+## After: the engine performance pass (2026-11-11, branch perf)
+
+Changes 1 to 5 above are in. Everything below was measured on the same 2-vCPU sandbox (busy, so CPU times wander);
+`dev/perf-sim.mjs`, `dev/perf-render.mjs` and `dev/perf-geometry.mjs` reproduce it, and run against an older checkout
+(`--root=` / `--ref=`) for the before side. "Before" for the giant map and the renderer is the parent commit (338a22c);
+for the existing maps' sim it is also the dev tip the branch merged (same game code, without this pass).
+
+**Nothing about play changed on today's maps.** The wall grid returns bit-identical answers to the old loops (276,000
+rays, 92,000 sight lines, 276,000 collisions over all 21 maps and the giant map, plus walls added and removed
+mid-match as Bulwarks do; every map's NavGrid has the same blocked cells, cover points and holds). Fingerprints of
+every player's position, aim and hp on every tick and of every event match the old code over 60 s matches on
+Harvest, Downtown and Expedition, and `dev/map-validate.mjs` (148 bot matches on 20 maps) prints the same kills,
+objective events, scores and stuck counts. The changes that do alter bots (two-level paths, the think budget) and the
+per-guest snapshots switch on only past 40,000 cells / m^2, which no map in the rotation comes near.
+
+### Host sim (32 bots, 16 v 16 Ground War TDM, 60 s live, CPU ms per tick)
+| map | walls | start (nav + bots) | mean | p99 | worst | before: start / mean / p99 / worst |
+|---|---|---|---|---|---|---|
+| Harvest | 179 | 62 ms | 0.73 | 6.9 | 21 | 389 ms / 2.43 / 10.6 / 36 |
+| Downtown | 137 | 37 ms | 0.51 | 5.3 | 23 | 361 ms / 1.73 / 8.6 / 16 |
+| Expedition | 156 | 52 ms | 0.37 | 3.3 | 19 | 476 ms / 1.75 / 7.7 / 17 |
+| giant, density 1, spread | 1,396 | 245 ms | 0.32 | 4.8 | 28 | 36 s / 7.50 / 16.0 / 42 |
+| giant, density 2 | 2,248 | 300 ms | 0.25 | 3.1 | 13 | 54 s / 11.46 / 19.8 / 31 |
+| giant, density 1, dense | 1,396 | 165 ms | 0.25 | 2.4 | 14 | 36 s / 7.28 / 13.1 / 33 |
+
+- Mean tick 3 to 5x cheaper on today's maps, 23 to 46x on the giant map, which now costs less than Harvest did. The
+  budget gate in change 6 (under 3 ms mean at 3,300 walls, no tick over 33 ms) holds for density 2.
+- p99 and worst are CPU time of the whole process, so they include garbage collection and the JIT's compiler
+  threads (the first live seconds); the worst ticks left are mostly those, not game work. The old wall-clock p95/worst
+  in the table above also counted the neighbours' load.
+- Nav build: Harvest 1.2 s to 0.1 s, Downtown 0.7 s to 0.04 s, giant 44 to 55 s to 0.2 to 0.3 s (per-wall blocked
+  cells and tactical points, grid-backed hold rating). Big-map paths: about 1 ms each after warm-up, worst under 3 ms.
+- `dev/map-validate.mjs` mean bot-match tick over all 148 matches: 0.49 to 0.34 ms.
+
+### Renderer (852 x 393, headless Chromium, SwiftShader; calls and triangles exact, frame ms median of 30)
+| map | q | calls | triangles drawn | world geometry | frame ms | before: calls / triangles / geometry / frame |
+|---|---|---|---|---|---|---|
+| Firing range | low | 21 | 26.6k | 1.2 MB | 89 | 21 / 26.6k / 2.0 MB / 103 |
+| Firing range | high | 27 | 29.2k | 1.2 MB | 176 | 27 / 29.2k / 2.0 MB / 180 |
+| Railyard | low | 25 | 47.9k | 2.2 MB | 149 | 25 / 47.9k / 3.7 MB / 150 |
+| Railyard | high | 31 | 51.4k | 2.2 MB | 279 | 31 / 51.4k / 3.7 MB / 280 |
+| Pier | low | 28 | 42.6k | 1.8 MB | 138 | 28 / 42.6k / 3.0 MB / 142 |
+| Pier | high | 34 | 46.2k | 1.8 MB | 262 | 34 / 46.2k / 3.0 MB / 266 |
+| Foundry | low | 22 | 48.1k | 2.6 MB | same draw | 22 / 48.1k / 4.3 MB / 112 |
+| Foundry | high | 28 | 52.0k | 2.6 MB | same draw | 28 / 52.0k / 4.3 MB / 243 |
+| Harvest | low | 32 | 39.0k | 3.9 MB | 107 | 23 / 68.1k / 6.5 MB / 223 |
+| Harvest | high | 37 | 44.1k | 3.9 MB | 236 | 28 / 73.1k / 6.5 MB / 244 |
+| Downtown | low | 36 | 31.7k | 4.1 MB | 119 | 26 / 67.4k / 6.4 MB / 132 |
+| Downtown | high | 42 | 36.1k | 4.1 MB | 233 | 32 / 71.9k / 6.4 MB / 239 |
+| Expedition | low | 29 | 26.6k | 3.9 MB | 111 | 23 / 67.1k / 6.4 MB / 116 |
+| Expedition | high | 35 | 30.4k | 3.9 MB | 233 | 30 / 70.9k / 6.4 MB / 232 |
+| giant, density 1 | low | 25 | 29.0k | 39.4 MB | 124 | 20 / 589.5k / 65.1 MB / 340 |
+| giant, density 1 | high | 32 | 31.8k | 39.4 MB | 429 | 26 / 592.4k / 65.1 MB / 470 |
+
+- The world mesh is packed (position Float32, colour normalised Uint16, normal and wet amount normalised Int8):
+  24 bytes a vertex instead of 40, so 37 to 40% less vertex memory on every map, no visible difference.
+- Huge maps and anything bigger are cut into 32 m tiles per layer (world, shadow decals, signs, glow), culled by their
+  bounding boxes against the frustum (three's bounding spheres were far too loose for flat tiles: 80 calls on the giant
+  map in the study, 25 to 32 now) and, on Low and Potato, by a 60 m distance cut. Triangles drawn fall by half on the
+  Ground War maps for 6 to 10 more calls, and by 95% on the giant map. Small, medium and large maps stay one mesh per
+  layer: chunking Foundry measured 22 to 36 calls for 26% fewer triangles and no faster frame, Railyard 25 to 34 calls
+  for 20% fewer, so those keep exactly their old draw.
+- Instanced props are at most 40 per map, so per-tile culling would buy nothing; lamps are baked into the vertex
+  colours and their glow is a tiled layer, so lights go with their tiles. The fog mask, minimap and spawn pads were
+  checked in screenshots of real matches on Harvest, Downtown and Foundry (all 21 maps load with no console errors).
+- Still to do for the battle royale: the giant map's mesh is still built whole (39 MB at density 1, more at the
+  realistic 3,300 walls) and takes 1 to 2 s; building tiles lazily as the camera approaches, as change 3 suggested,
+  is the next step and fits the tile code as it is.
+
+### Snapshots (per guest, with interest management forced on; 7 of the 32 count as guests)
+| map | broadcast snapshot | per-guest snapshot | a guest's downlink (snapshots + events) |
+|---|---|---|---|
+| giant, spread | 1,469 B | 786 B | 22.5 to 12.4 KB/s |
+| giant, density 2 | 1,528 B | 877 B | 23.5 to 13.9 KB/s |
+| giant, dense | 1,658 B | 1,123 B | 25.6 to 17.7 KB/s |
+| Harvest (left off in play) | 1,893 B | 1,792 B | 30.7 to 29.2 KB/s |
+| Downtown (left off in play) | 1,837 B | 1,689 B | 29.3 to 27.1 KB/s |
+
+- On maps over 40,000 m^2 the host sends each guest its own snapshot: anyone more than 60 m away from the guest
+  (unless firing, marked, or an enemy under the guest's UAV) gets a position-only record every third snapshot (5 Hz)
+  and nothing in between; slow blocks still go out as before. Shots fired more than 150 m away by the other side are
+  not sent to that guest. Decoded on a guest's own Sim, players within 40 m match the host to the wire's rounding
+  (0.014 m) and far ones lag by at most about 3 m. Host upload for 7 guests on the giant map: about 160 to 90 KB/s.
+- Today's maps leave it off: it saves only 5 to 8% there (a guest sees most of a Ground War map), and the broadcast
+  snapshot is one encode for everyone.

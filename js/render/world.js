@@ -15,10 +15,11 @@ import * as industrial from './themes/industrial.js';
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
 // Static geometry is cut into CHUNK x CHUNK metre tiles (by triangle centre) so the camera only draws the tiles in
-// view, on maps of more than CHUNK_ABOVE square metres (large and huge maps, and anything bigger). Small and medium
-// maps stay one mesh per layer: the camera sees most of them, so tiles would add draw calls and save few triangles.
+// view, on maps of more than CHUNK_ABOVE square metres (the huge Ground War maps, and anything bigger). Small, medium
+// and large maps stay one mesh per layer: the camera sees much of them, so tiles would add more draw calls than the
+// triangles they save are worth (measured: Foundry went from 22 to 36 calls for 26% fewer triangles, and no faster).
 const CHUNK = 32;
-const CHUNK_ABOVE = 5000;
+const CHUNK_ABOVE = 8000;
 const VIEW_M = new THREE.Matrix4(), VIEW_F = new THREE.Frustum();
 const WATER_Y = -0.62;       // Basin surface, below the quay.
 
