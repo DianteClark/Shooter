@@ -32,8 +32,6 @@ for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m =
 // Giant battle royale maps (docs/BR.md) are never in a 6v6 or Ground War rotation, the solo picker's size sections or
 // the menu backdrop: the battle royale mode lists them itself (BR_MAP_IDS).
 export const MAP_IDS = Object.keys(MAPS).filter(id => !MAPS[id].hidden && MAPS[id].size !== 'giant');
-// Battle royale maps host every squad size (js/shared/modes.js br, brduo, brsolo).
-for (const id in MAPS) if (MAPS[id].modes?.includes('br')) for (const m of ['brduo', 'brsolo']) if (!MAPS[id].modes.includes(m)) MAPS[id].modes.push(m);
 export const BR_MAP_IDS = Object.keys(MAPS).filter(id => MAPS[id].size === 'giant');
 export const DEFAULT_MAP = 'railyard';
 

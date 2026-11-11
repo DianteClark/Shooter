@@ -65,7 +65,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=15000)
     await pg.wait_for_timeout(600)
     # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
-    await ev(f"{G}.match.sim.byId.get({G}.match.localId).spawnProtect = 999")
+    await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 999; }})()")
     # Loot: walk (teleport) over the nearest few items, then stand by a ground gun.
     took = await ev(f"""(async () => {{
       const m = {G}.match, rules = m.sim.br, out = [];
@@ -80,6 +80,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       for (let s = 0; s < 2; s++) if (!me.br.guns[s]) sim.br._takeGun(me, sim.br._addItem({{ kind: 0, v: 0, r: 1, n: 1, x: m.ps.x, z: m.ps.z }}), s);
       me.br.plates = Math.max(me.br.plates, 3);
+      for (const it of sim.br.near(m.ps.x, m.ps.z, 4)) if (it.kind === 0) sim.br._removeItem(it);
       sim.br._addItem({{ kind: 0, v: 2, r: 4, n: 1, x: m.ps.x + 0.3, z: m.ps.z }});
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - m.ps.x, p.ps.z - m.ps.z) < 70) {{ p.ps.x = 3; p.ps.z = 3; }} }})()""")
     await pg.wait_for_timeout(700)
@@ -104,7 +105,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1800)
     await shot('08-fight')
     await ev('window.__fight = false')
-    await ev(f"{G}.match.sim.byId.get({G}.match.localId).spawnProtect = 0")
+    await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 0; }})()")
     # Down, then a squadmate's revive (the squad bots come for you).
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 70) {{ p.ps.x = 3; p.ps.z = 3; }}

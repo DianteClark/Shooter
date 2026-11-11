@@ -128,7 +128,8 @@ export function playersFor(id, map = null) {
 // every map hosts.
 export function mapModes(map) {
   const own = map?.modes ?? MODE_IDS.filter(id => !MODES[id].large);
-  const extra = MODE_IDS.filter(id => MODES[id].everyMap && !own.includes(id));
+  // A battle royale map lists 'br'; it hosts every squad size.
+  const extra = MODE_IDS.filter(id => ((MODES[id].everyMap && map?.size !== 'giant') || (MODES[id].br && own.includes('br'))) && !own.includes(id));
   return extra.length ? [...own, ...extra] : own;
 }
 

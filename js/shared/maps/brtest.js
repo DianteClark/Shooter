@@ -1,7 +1,7 @@
 // Battle royale TEST map (dev stand-in, docs/BR.md): a procedural 400 x 400 m farmland grid that meets the map contract
 // (br.pois, br.loot, br.chests, br.drop, br.circleBias) so the mode can be built and tested before the real giant map
 // lands. Built from a fixed seed, so every phone builds the same world. Swap: register the real map with
-// `modes: ['br', 'brduo', 'brsolo']` and drop this one from js/shared/map.js (see docs/BR.md, "Swapping the map").
+// `modes: ['br']` (every squad size follows, see mapModes in js/shared/modes.js); this one stays as the small test map.
 //
 // Layout: 9 x 9 blocks of 32 m between 8 m lanes. POI blocks are hamlets of roofless plank and stone shells (most loot
 // is indoors, which is where fights happen); the rest are fields, paddocks, orchards, hay yards and ponds.
@@ -189,7 +189,7 @@ function build() {
   return {
     id: 'brtest', name: 'Proving Grounds', theme: 'harvest', size: 'huge', hidden: true, region: 'mixed', width: SIZE, height: SIZE,
     walls, spawns, lanes, nav, rooms, points: { dom: [], hard: [] },
-    modes: ['br', 'brduo', 'brsolo'], large: true, devMap: true,
+    modes: ['br'], large: true, devMap: true,
     br: { pois, loot, chests, drop: null, circleBias },
   };
 }
