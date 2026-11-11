@@ -34,7 +34,7 @@ function build() {
     [21, 4, 2.5, 3.2, 2.7, 'container'],
 
     // Apron cover around the causeway mouths.
-    [14, 22.6, 2, 2, 1.1, 'crate'],
+    [16.6, 22.6, 2, 2, 1.1, 'crate'],
     [21.5, 22.5, 2.5, 3, 2.7, 'container'],
     [7.5, 19.5, 1.2, 9, 2.4, 'wall'],
   ]);
@@ -55,7 +55,7 @@ function build() {
   points.snd = bombSites({ x: 64.5, z: 6 }, { x: 63, z: 41.5 });
 
   // Capture the Flag (see flagBases). On the strip between the warehouses, in front of the quay wall that screens the spawns: the basins either side leave the middle strip or the long way round the quays.
-  points.ctf = flagBases(W, H, { x: 11, z: 24 });
+  points.ctf = flagBases(W, H, { x: 14, z: 24 });   // 52 m apart: at 58 m bots took the flag but rarely got it home.
 
   return { id: 'harbor', name: 'Harbor', theme: 'harbor', size: 'medium', region: 'coast', width: W, height: H, walls, spawns, lanes, nav, points, decor };
 }
