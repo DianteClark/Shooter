@@ -42,13 +42,13 @@ export const MODES = {
   // `sizes` lists the map tiers a mode is offered on; `needs` the map points it plays on (checked by modeFitsMap and
   // dev/map-validate.mjs); `look` the rule set the renderer and HUD draw its zones as.
   hq:    { id: 'hq',    rules: 'hq',   teamSize: 6,  sizes: STANDARD_SIZES, needs: { hard: 2 }, look: 'hard', name: 'Headquarters', short: 'HQ', scoreLimit: 200, timeLimit: 600, desc: 'Take the HQ and hold it. While it stands, its team cannot respawn.' },
-  ko:    { id: 'ko',    rules: 'ko',   teamSize: 6,  sizes: STANDARD_SIZES, name: 'Kill Order', short: 'KO', scoreLimit: 10, timeLimit: 600, desc: 'Each team has a marked VIP. Only killing theirs scores. Guard yours.' },
-  inf:   { id: 'inf',   rules: 'inf',  teamSize: 6,  sizes: STANDARD_SIZES, name: 'Infected', short: 'INF', scoreLimit: 12, timeLimit: 300, desc: 'Killed by the infected, you join them. Survive the clock to win.' },
-  oic:   { id: 'oic',   rules: 'oic',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 10, sizes: STANDARD_SIZES, name: 'One in the Chamber', short: 'OIC', scoreLimit: 20, timeLimit: 420, desc: 'One bullet, one-shot kills, three lives. A kill gives the bullet back.' },
+  ko:    { id: 'ko',    rules: 'ko',   teamSize: 6,  sizes: STANDARD_SIZES, name: 'Kill Order', short: 'KO', scoreLimit: 20, timeLimit: 600, desc: 'Each team has a marked VIP. Only killing theirs scores. Guard yours.' },
+  inf:   { id: 'inf',   rules: 'inf',  teamSize: 6,  sizes: STANDARD_SIZES, name: 'Infected', short: 'INF', scoreLimit: 12, timeLimit: 240, desc: 'Killed by the infected, you join them. Survive the clock to win.' },
+  oic:   { id: 'oic',   rules: 'oic',  teamSize: 1, ffa: true, smallPlayers: 5, players: 6, largePlayers: 8, sizes: STANDARD_SIZES, name: 'One in the Chamber', short: 'OIC', scoreLimit: 20, timeLimit: 300, desc: 'One bullet, one-shot kills, three lives. A kill gives the bullet back.' },
   ctl:   { id: 'ctl',   rules: 'ctl',  teamSize: 6,  sizes: STANDARD_SIZES, needs: { snd: 2 }, look: 'dom', rounds: true, name: 'Control', short: 'CTL', scoreLimit: 3, timeLimit: 150, desc: 'Attack two zones or defend them, sides swap each round. Each team has limited lives.' },
   grind: { id: 'grind', rules: 'grind', teamSize: 6, sizes: STANDARD_SIZES, needs: { dom: 2 }, look: 'dom', name: 'Grind', short: 'GRD', scoreLimit: 50, timeLimit: 600, desc: 'Grab tags from kills and carry them to a bank. Die and you drop them all.' },
   gwhq:  { id: 'gwhq',  rules: 'hq',   teamSize: 16, large: true, everyHuge: true, needs: { hard: 2 }, look: 'hard', name: 'Ground War HQ', short: 'GW HQ', scoreLimit: 300, timeLimit: 900, desc: '16 v 16. Take the HQ and hold it. While it stands, its team cannot respawn.' },
-  gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 15, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
+  gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 20, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 

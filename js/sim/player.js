@@ -142,6 +142,8 @@ function applyLoadout(ps, l) {
   if (LETHALS[l.lethal]) ps.lethal = l.lethal;
   if (l.attachments && typeof l.attachments === 'object') ps.attachments = l.attachments;
   if (l.ladder) ps.ladder = true;
+  // One in the Chamber: the primary holds this many rounds and no reserve (null: the gun's own magazine).
+  if (l.primary) ps.rounds = Number.isInteger(l.rounds) ? l.rounds : null;
   refreshDefs(ps);
 }
 
@@ -199,6 +201,7 @@ function fillAmmo(ps) {
   const a = weaponDef(ps, ps.primary), b = weaponDef(ps, ps.secondary);
   ps.ammo[0] = a.magazine; ps.ammo[1] = b.magazine;
   ps.reserve[0] = reserveFor(a); ps.reserve[1] = reserveFor(b);
+  if (ps.rounds != null) { ps.ammo[0] = ps.rounds; ps.reserve[0] = 0; }
 }
 
 // Places a player at a spawn point, full ammo and equipment, every timer cleared.

@@ -140,6 +140,10 @@ export class Match {
       if (e.t === 'spawn' && e.id === this.localId) this.#spawnLocal(e.x, e.z, e.aim);
       if (e.t === 'kill' && e.target === this.localId) this.localAlive = false;
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
+      // Modes overhaul: a side change (Infected) keeps this device's codec right before the spawn that follows it, and
+      // a One in the Chamber kill hands the bullet back to the phone that owns the gun.
+      if (e.t === 'team') { const p = this.sim.byId.get(e.id); if (p) p.team = e.team; }
+      if (e.t === 'ammo' && e.id === this.localId) this.ps.ammo[e.slot ?? 0] = Math.min(e.max ?? 99, this.ps.ammo[e.slot ?? 0] + e.add);
       if (e.t === 'dazed' && e.id === this.localId) applyDaze(this.ps, e.amount, e.dur);   // Stun, Gas, Shock slow you.
       if (e.t === 'rejoin' && e.oldId !== e.id) this.#rebind(e);   // A newcomer took an open slot.
       if (this.br && e.id === this.localId) this.#brEvent(e);
@@ -190,7 +194,9 @@ export class Match {
   }
 
   #spawnLocal(x, z, aim) {
-    respawnPlayer(this.ps, x, z, aim, this.nextLoadout || undefined);
+    // A mode or modifier that deals loadouts (Infected, One in the Chamber, Snipers Only...) deals this one too.
+    const dealt = this.sim.dealFor(this.localId, this.nextLoadout || this.me.loadout);
+    respawnPlayer(this.ps, x, z, aim, dealt === this.me.loadout && !this.nextLoadout ? undefined : dealt);
     this.spawned = true;
     this.localAlive = true;
     this.lastSpawnAt = this.now();
