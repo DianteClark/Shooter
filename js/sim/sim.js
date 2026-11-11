@@ -21,6 +21,7 @@ import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
 import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module per mode (js/sim/rules.js).
 import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
+import { HUMAN_BASE, pickPoolBots, TIER_RATING } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -211,7 +212,14 @@ function gunOffset(mapId, mode, seed) {
 // Fills both teams up to teamSize with named bots of varied loadouts. Each team's bots take consecutive primaries and
 // one of each sidearm in turn, so a full team of six carries every secondary once. teamSize defaults to the mode's own
 // (16 for Ground War, see shared/modes.js), or TEAM_SIZE when no mode is given.
-export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId = null, mode = null, seed = null } = {}) {
+//
+// `pool` (the bot player pool, js/shared/botpool.js): bots are drawn from the named players by matchmaking instead of
+// dealt: { target, level, spread, recent, date } go to pickPoolBots (target defaults to HUMAN_BASE). Each bot then
+// plays at its own per-match rating (skill = the nearest tier; `rating` and `style` ride the roster entry for
+// js/sim/bots.js) unless botSkill names a tier, which then holds every bot at that tier (Custom's difficulty).
+// Names, levels (`badge`), operators, skins, cards, emblems, camos and loadouts come from the profiles.
+export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId = null, mode = null, seed = null, pool = null } = {}) {
+  if (pool) return buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool: pool === true ? {} : pool });
   if (MODES[mode]?.rules === 'br') return buildBrRoster(humans, { botSkill, mode });
   if (MODES[mode]?.ffa) return buildFfaRoster(humans, { botSkill, mapId, mode, seed, players: teamSize });
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
@@ -290,6 +298,77 @@ function botLoadout(primary, side, skill, i, deal = 0) {
     loadout.card = `pro-${loadout.perks[skill === 'elite' ? 2 : i % 3]}`;
   }
   return loadout;
+}
+
+// ---- The bot player pool ----
+
+// A pool bot's roster entry: its profile's identity and habits, this match's rating, a loadout from what it likes.
+function poolBotEntry(n, team, pick, botSkill, seed) {
+  const prof = pick.profile;
+  const forced = botSkill && botSkill !== 'mixed' && TIER_RATING[botSkill] !== undefined;
+  const rating = forced ? TIER_RATING[botSkill] : pick.rating;
+  const skill = forced ? botSkill : pick.tier;
+  // Gear follows the player's usual level, not tonight's form: a strong player who is off still carries a full kit.
+  const usual = forced ? botSkill : prof.skill.locked ?? (prof.skill.mu < 0.17 ? 'recruit' : prof.skill.mu < 0.5 ? 'regular' : prof.skill.mu < 0.83 ? 'veteran' : 'elite');
+  // The favourite most matches, the others now and then.
+  const r = mulberry32((seed ?? 0) ^ (prof.index * 0x9e3779b1))();
+  const primary = prof.guns[r < 0.6 ? 0 : r < 0.85 ? 1 : 2] ?? prof.guns[0];
+  const loadout = normalizeLoadout({
+    primary, secondary: SECONDARY_IDS.includes(prof.secondary) ? prof.secondary : 'pistol', camo: prof.camo,
+    attachments: { [primary]: botAttachments(primary, usual, prof.kit[primary] ?? 0) },
+    tactical: prof.tactical, lethal: prof.lethal, perks: prof.perks.slice(), streaks: prof.streaks.slice(),
+  });
+  if (PRO_SKILLS.has(usual) || pick.badge.prestige > 0) loadout.pro = loadout.perks.slice();
+  loadout.card = prof.card;
+  Object.assign(loadout, { operator: prof.operator, skin: prof.skin, emblem: prof.emblem });
+  return {
+    id: `bot${n}`, name: prof.name, team, isBot: true, skill, rating, style: prof.style, pool: prof.id,
+    primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...pick.badge }, operator: prof.operator, skin: prof.skin,
+  };
+}
+
+function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }) {
+  const m = MODES[mode];
+  const draw = count => pickPoolBots({ count, seed: seed ?? 0, target: pool.target ?? HUMAN_BASE, level: pool.level ?? null,
+    spread: pool.spread, recent: pool.recent ?? null, date: pool.date ?? Date.now(), remember: pool.remember ?? true, locked: pool.locked ?? null });
+  const humanEntry = h => {
+    const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
+    return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
+  };
+  // Battle royale and free-for-all keep their own seating; only who sits in the bot seats changes.
+  if (m?.rules === 'br' || m?.ffa) {
+    const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
+    const seats = base.filter(r => r.isBot);
+    const picks = draw(seats.length);
+    return base.map(r => {
+      const k = seats.indexOf(r);
+      if (!r.isBot || !picks[k]) return r;      // A filtered draw (tests) can run short: the seat keeps a dealt bot.
+      const e = poolBotEntry(Number(r.id.slice(3)), r.team, picks[k], botSkill, seed);
+      if (m.rules === 'gun') { const g = gunLoadout(0, e.loadout); Object.assign(e, { loadout: { ...g, skin: e.skin, emblem: e.loadout.emblem }, primary: g.primary, camo: g.camo }); }
+      if (m.rules === 'br') Object.assign(e, { primary: r.primary, loadout: { ...r.loadout, operator: e.operator, skin: e.skin, emblem: e.loadout.emblem, card: e.loadout.card } });
+      return e;
+    });
+  }
+  teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
+  const roster = humans.map(humanEntry);
+  const open = [0, 1].map(t => Math.max(0, teamSize - roster.filter(r => r.team === t).length));
+  const picks = draw(open[0] + open[1]);
+  // Even teams, as matchmaking would make them: strongest first, each to the side with the lower total so far, with the
+  // humans counted at the target rating.
+  const strength = [0, 1].map(t => roster.filter(r => r.team === t).length * (pool.target ?? HUMAN_BASE));
+  const order = picks.slice().sort((a, b) => b.rating - a.rating);
+  const sides = [[], []];
+  for (const p of order) {
+    const t = open[0] - sides[0].length <= 0 ? 1 : open[1] - sides[1].length <= 0 ? 0 : strength[0] <= strength[1] ? 0 : 1;
+    sides[t].push(p); strength[t] += p.rating;
+  }
+  // Back in draw order within a side, so seat order does not read strongest-first.
+  let n = 0;
+  for (let t = 0; t < 2; t++) {
+    sides[t].sort((a, b) => picks.indexOf(a) - picks.indexOf(b));
+    for (const p of sides[t]) roster.push(poolBotEntry(n++, t, p, botSkill, seed));
+  }
+  return roster;
 }
 
 // Free-for-all: every player is a side of one, team FFA_TEAM + roster index (see TEAMS in constants.js), and bots fill
@@ -402,6 +481,7 @@ export class Sim {
       loadout = this._deal(r.team, loadout);
       return {
         id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
+        rating: typeof r.rating === 'number' ? r.rating : null, style: r.style ?? null,     // Pool bots (js/shared/botpool.js).
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
         // Held slot: the human dropped. Off the field, stats kept; `open` once nobody came back in HOLD_OPEN_SECONDS.
         away: false, awayT: 0, open: false,
@@ -1394,6 +1474,13 @@ export class Sim {
     if (head) kill.head = true;
     kill.vw = target.ps.weapon;     // What the victim was holding: per-gun deaths in the stats.
     this._emit(kill);
+    // Teammates near a gunfight death know about it (the shots, the feed, the body): the ones who trade move up.
+    if (!streak && !equip) {
+      for (let i = 0; i < this.players.length; i++) {
+        const q = this.players[i];
+        if (q.bot && q.alive && q !== target && q.team === target.team) q.bot.onTeammateDown(target, killer);
+      }
+    }
     this.lastKill = { by: killer.id, target: target.id, weapon, camo: killer.camo, x: kill.x, z: kill.z };
     // Where the fighting just was, for free-for-all bots looking for some (BotBrain._roam).
     const hot = this.hot ??= { x: 0, z: 0, t: 0 };

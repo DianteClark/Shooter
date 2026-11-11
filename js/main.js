@@ -13,7 +13,8 @@ import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
-import { Progress, matchScore } from './ui/progress.js';
+import { Progress, matchScore, MatchHistory } from './ui/progress.js';
+import { humanRating } from './shared/botpool.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
 import { brMode, cleanSquad as cleanBrSquad } from './ui/br-squad.js';
 import { cleanOperator, botOperator } from './ui/operators.js';
@@ -689,17 +690,38 @@ function cleanBadge(b) {
   return { prestige: n(b?.prestige, MAX_PRESTIGE, 0), level: n(b?.level, MAX_LEVEL, 1) };
 }
 
+// Matchmaking for the bot player pool (js/shared/botpool.js): where the humans in this match sit, so the bots drawn
+// are players of about their level and skill. This phone's player is rated from their recent results; anyone else
+// from the level on their badge.
+function poolFor(humans) {
+  const me = app.net?.localId ?? 'local';
+  const recent = MatchHistory.list().slice(0, 10);
+  const ratings = humans.map(h => {
+    const b = cleanBadge(h.badge);
+    if (h.id !== me && h.id !== 'local') return humanRating(b);
+    const k = recent.reduce((a, e) => a + (e.kills || 0), 0), d = recent.reduce((a, e) => a + (e.deaths || 0), 0);
+    return humanRating({ ...b, kd: recent.length ? k / Math.max(1, d) : null, matches: recent.length });
+  });
+  const n = Math.max(1, humans.length), mean = f => humans.reduce((a, h) => a + f(cleanBadge(h.badge)), 0) / n;
+  return {
+    target: ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : undefined,
+    level: { prestige: Math.round(mean(b => b.prestige)), level: Math.round(mean(b => b.level)) },
+  };
+}
+
 // Bots have no save to read, so their rank follows their skill; a little variety by seat keeps tables believable.
+// Pool bots (js/shared/botpool.js) bring their own level, operator, skin and emblem from their profile.
 const BOT_LEVEL = { recruit: 4, regular: 14, veteran: 27, elite: 42 };
 function withBadges(roster, humans, seed = 0) {
   return roster.map((r, i) => {
     const human = humans.find(h => h.id === r.id);
-    // Bots take the whole roster in a seeded order that alternates women and men, so a squad is mixed and differs
-    // between matches (js/ui/operators.js botOrder).
-    const operator = human ? cleanOperator(human.loadout?.operator) : botOperator(seed, i);
+    // Dealt bots take the whole roster in a seeded order that alternates women and men, so a squad is mixed and
+    // differs between matches (js/ui/operators.js botOrder).
+    const operator = human ? cleanOperator(human.loadout?.operator) : r.operator ? cleanOperator(r.operator) : botOperator(seed, i);
     const badge = r.badge ?? (human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 });
     // The sim's loadout cleaning drops cosmetics it does not use; carry the player's skin and emblem across it.
-    const looks = human ? { skin: human.loadout?.skin ?? null, emblem: human.loadout?.emblem ?? null } : {};
+    const looks = human ? { skin: human.loadout?.skin ?? null, emblem: human.loadout?.emblem ?? null }
+      : r.pool ? { skin: r.skin ?? r.loadout?.skin ?? null, emblem: r.loadout?.emblem ?? null } : {};
     return { ...r, badge, operator, loadout: { ...r.loadout, operator, ...looks } };
   });
 }
@@ -1042,7 +1064,7 @@ function launchMp(mapId, mode, mods = []) {
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
   // ?bots= is a test hook; players always get the seam's default.
-  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL });
+  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool: poolFor(humans) });
   beginMatch({
     roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: cleanMods(mods, mode), ...limitsFor(mode),
     hostId: id, isHost: true, localId: id,
@@ -1178,7 +1200,8 @@ function launchSolo(pickMap, pickMode, mods = soloMods()) {
   const set = BotMatch.resolve(mode, MAPS[mapId]);
   const botSkill = params.get('bots') || set.skill;
   // Teams: `bots` on the enemy side, and your side fills around you to the same size. Free-for-all counts seats.
-  const roster = buildRoster(humans, { botSkill, mode, mapId, seed, teamSize: isFfa(mode) ? set.players : set.bots });
+  // Bots come from the player pool; a difficulty other than Mixed holds every one of them at that tier.
+  const roster = buildRoster(humans, { botSkill, mode, mapId, seed, teamSize: isFfa(mode) ? set.players : set.bots, pool: poolFor(humans) });
   beginMatch({
     roster: withBadges(roster, humans, seed),
     seed, mapId, mode, mods: cleanMods(mods, mode),
@@ -1319,8 +1342,8 @@ function launchHostMatch(mapId, mode, custom = null) {
   if (custom?.scoreLimit && !LIMIT_OVERRIDE) limits.scoreLimit = custom.scoreLimit;
   if (custom?.timeLimit && !TIME_OVERRIDE) limits.timeLimit = custom.timeLimit;
   const roster = custom
-    ? buildRoster(clean, { botSkill: custom.botSkill, mode, mapId, seed, teamSize: custom.teamSize ?? null })
-    : pickBotsForMatch({ humans: clean, mode, mapId, seed });
+    ? buildRoster(clean, { botSkill: custom.botSkill, mode, mapId, seed, teamSize: custom.teamSize ?? null, pool: poolFor(clean) })
+    : pickBotsForMatch({ humans: clean, mode, mapId, seed, pool: poolFor(clean) });
   const payload = {
     t: 'start', seed, mapId, mode, mods: cleanMods(app.lobby.mods, mode), ...limits,
     roster: withBadges(roster, clean, seed),

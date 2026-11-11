@@ -100,10 +100,12 @@ export function lobbySize(tab, modes) {
   return modes.some(m => !MODES[m]?.ffa) ? 12 : 8;
 }
 
-// THE bot seam (docs/ROADMAP.md item 15, the bot overhaul): who fills a Multiplayer match's seats around `humans`.
-// Today: the mode's own seat count, at the default mixed difficulty. The overhaul replaces the body with named bot
-// players from the persistent pool; every Multiplayer match (and the friend lobby's map vote) goes through here.
+// THE bot seam (docs/ROADMAP.md item 15): who fills a Multiplayer match's seats around `humans`.
+// The mode's own seat count, filled from the bot player pool (js/shared/botpool.js, docs/BOTS.md) by matchmaking:
+// `pool` is where the humans sit ({ target, level }, main.js poolFor; true for an average player). Mixed (MP_BOT_SKILL)
+// lets every bot play at its own per-match form; a tier (the ?bots= test hook) holds them all there. Every Multiplayer
+// match and friend-lobby map-vote match goes through here.
 export const MP_BOT_SKILL = 'mixed';
-export function pickBotsForMatch({ humans, mode, mapId, seed, botSkill = MP_BOT_SKILL }) {
-  return buildRoster(humans, { botSkill, mode, mapId, seed });
+export function pickBotsForMatch({ humans, mode, mapId, seed, botSkill = MP_BOT_SKILL, pool = true }) {
+  return buildRoster(humans, { botSkill, mode, mapId, seed, pool });
 }

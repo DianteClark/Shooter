@@ -17,6 +17,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
 import { isAvailable, availableFor } from '../shared/attachments.js';
 import { SND } from '../shared/modes.js';
+import { STYLES, TIERS } from '../shared/botpool.js';
 
 const DEG = Math.PI / 180;
 
@@ -25,6 +26,18 @@ const DEG = Math.PI / 180;
 // about 85% of same-gun duels against a Recruit, 60% against a Regular and a third against a Veteran. Recruit and
 // Regular are left as they were; Veteran reacts and settles a touch slower than before (it was 0.24-0.38 s, floor
 // 0.03), because the default Mixed lobby is two Veterans and an Elite in every six and that is where a phone loses.
+// Bot overhaul (ROADMAP item 15): decision quality and awareness, not just aim. A weak bot plays badly the way a weak
+// player does (stares at the one enemy it is fighting, walks out of a good angle, fights on in the open), a strong one
+// does what good players do. Probabilities unless named otherwise:
+//   trade       moves up when a teammate dies within tradeReach metres (knowing roughly where the shots came from)
+//   preaim      while walking, looks down the lane ahead of it instead of at its feet (_laneLook)
+//   footsteps   share of `hearing` at which a sprinting enemy is heard (walking: STEP_WALK of that), through walls too;
+//               a bot on the move stops and holds the angle toward it for a moment
+//   tunnel      in a fight, misses a second enemy it would otherwise have noticed
+//   spreadOut   does not become the third bot hunting the same noise: takes another angle on it
+//   topOff      lets the sights down between fights so a part-empty magazine refills (player.js TOPOFF_*)
+//   overpeek    walks out of a held angle at what it sees, into the open
+//   peekCover   fights a mid-range duel from beside cover, stepping back behind it to reload and heal (mode 'peek')
 export const SKILLS = {
   recruit: {
     thinkHz: 5, reaction: [0.55, 0.95], aimError: 0.2, aimFloor: 0.085, settle: 1.15, turnRate: 5.5, lag: 0.26,
@@ -33,6 +46,7 @@ export const SKILLS = {
     arcTries: 0, sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
     objPlay: 0.6, objDefend: 0, objSplit: 1, tagSight: 12, objPush: 0, objRotate: false, dodge: 0.3,
+    trade: 0.15, tradeReach: 16, preaim: 0.08, footsteps: 0.3, tunnel: 0.55, spreadOut: 0, topOff: 0, overpeek: 0.45, peekCover: 0,
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
@@ -41,6 +55,7 @@ export const SKILLS = {
     arcTries: 0, sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
     objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false, dodge: 0.6,
+    trade: 0.4, tradeReach: 21, preaim: 0.4, footsteps: 0.5, tunnel: 0.3, spreadOut: 0.4, topOff: 0.4, overpeek: 0.2, peekCover: 0.3,
   },
   veteran: {
     thinkHz: 9, reaction: [0.26, 0.42], aimError: 0.09, aimFloor: 0.036, settle: 0.6, turnRate: 13, lag: 0.14,
@@ -49,6 +64,7 @@ export const SKILLS = {
     arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
     objPlay: 0.95, objDefend: 0.3, objSplit: 7, tagSight: 32, objPush: 0.55, objRotate: true, dodge: 0.85,
+    trade: 0.65, tradeReach: 26, preaim: 0.75, footsteps: 0.7, tunnel: 0.12, spreadOut: 0.75, topOff: 0.85, overpeek: 0.07, peekCover: 0.6,
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
@@ -57,12 +73,53 @@ export const SKILLS = {
     arcTries: 4, sprint: 1, callouts: true, calloutDelay: 1, calloutErr: 3.2, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
     objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true, dodge: 0.95,
+    trade: 0.85, tradeReach: 30, preaim: 0.92, footsteps: 0.85, tunnel: 0.04, spreadOut: 0.95, topOff: 1, overpeek: 0.02, peekCover: 0.8,
   },
 };
 
+// Pool bots (js/shared/botpool.js) play at a rating, 0..1, rather than a tier: the tiers above sit at 0, 1/3, 2/3 and
+// 1, and skillAt reads between the two either side of the rating. Numbers and ranges blend; switches (callouts,
+// pistolSwap, objRotate, turret) take the nearer tier's. `lean` is the player's play style (STYLES[style].lean):
+// multipliers on how it chooses to play (flank, holdProb, objPlay, objPush, objDefend, sprint, slide, holdTime), never
+// on how well it aims or how fast it reacts.
+const SKILL_CACHE = new Map();
+const CAPPED = new Set(['objPlay', 'objPush', 'sprint', 'notice', 'adsUse', 'strafe', 'nade', 'smoke', 'flash', 'dodge']);
+export function skillAt(rating, style = null) {
+  const r = Math.max(0, Math.min(1, Number(rating) || 0));
+  const step = Math.round(r * 300);          // Thirds land exactly on a tier.
+  const key = `${step}|${style ?? ''}`;
+  let S = SKILL_CACHE.get(key);
+  if (S) return S;
+  const x = step / 100, i = Math.min(2, Math.floor(x)), f = x - i;
+  const a = SKILLS[TIERS[i]], b = SKILLS[TIERS[i + 1]], near = f < 0.5 ? a : b;
+  S = {};
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const va = k in a ? a[k] : b[k], vb = k in b ? b[k] : a[k];
+    if (f === 0 || f === 1) S[k] = f ? vb : va;
+    else if (typeof va === 'number' && typeof vb === 'number') S[k] = va + (vb - va) * f;
+    else if (Array.isArray(va)) S[k] = va.map((v, n) => v + (vb[n] - v) * f);
+    else S[k] = k in near ? near[k] : va;
+  }
+  const lean = style && STYLES[style]?.lean;
+  if (lean) {
+    for (const k in lean) {
+      if (k === 'holdTime') S.holdTime = S.holdTime.map(v => v * lean.holdTime);
+      else if (typeof S[k] === 'number') S[k] = CAPPED.has(k) ? Math.min(1, S[k] * lean[k]) : S[k] * lean[k];
+    }
+  }
+  S.rating = r;
+  SKILL_CACHE.set(key, S);
+  return S;
+}
+// The skill table a player's brain runs: a pool bot's rating and style, else its tier.
+export function skillOf(player) {
+  return typeof player.rating === 'number' ? skillAt(player.rating, player.style) : SKILLS[player.skill] || SKILLS.regular;
+}
+
 // Preferred fighting distance per weapon, and how the weapon shifts the bot's playstyle, live in each gun's
 // `botUse` (weapons.js): {pref, hold, flank, advance, rush?, scoped?, fireMax?, adsMin?}.
-// `rush`: beyond this range the gun is not worth firing, so sprint the gap instead of plinking.
+// `rush`: beyond this range the gun is not worth firing, so sprint the gap instead of plinking (for a gun with no
+// fireMax, at least RUSH_REACH of its range: see styleOf).
 // V10, engagement distance by gun. Every bot fights at the distance its gun wants (pref), and what it does about
 // being at the wrong one depends on the gun:
 //   close guns (`rush` set: shotguns, SMGs, the pocket guns) do not cross open ground at someone who is looking at
@@ -78,8 +135,17 @@ const DEFAULT_STYLE = { pref: 15, hold: 1, flank: 1, advance: 3 };
 // V11: with `ps`, the gun as fitted: a conversion kit can change how a bot should fight with it (a slug barrel on a pump).
 function styleOf(id, ps) {
   const d = ps ? weaponDef(ps, id) : WEAPONS[id];
-  return STYLE[id] || (d && d.botUse) || DEFAULT_STYLE;
+  const b = STYLE[id] || (d && d.botUse) || DEFAULT_STYLE;
+  if (!b.rush || b.fireMax || !d) return b;
+  let r = REACH.get(b);
+  if (!r) REACH.set(b, r = { ...b, rush: Math.max(b.rush, d.range * RUSH_REACH) });
+  return r;
 }
+// Bot overhaul: a close gun that still hits at range (an SMG: no fireMax) fights out to RUSH_REACH of its range instead
+// of sprinting mute at whoever is shooting it. Measured on small maps (bot lobbies from the pool): SMG K/D 0.81 to 0.96,
+// LMG 1.20 to 1.17; the first shot of a fight decides most of them, and an SMG that would not fire past 15 m never had it.
+const RUSH_REACH = 0.72;
+const REACH = new WeakMap();
 const ADS_RANGE = 12;           // botUse.adsMin applies past this distance, or always on a gun with an adsGate.
 const PRECISE_BODY = 0.5;       // botUse.precise: metres either side of the target's centre the sights must be inside...
 const PRECISE_SLOP = 0.25;      // ...plus this fraction of the tier's usual trigger tolerance (worse bots still jerk it).
@@ -128,6 +194,15 @@ const CORNER_SIGHT = 15;        // A corner worth holding with a close gun sees 
 const EXPOSE_RAYS = 12, EXPOSE_MAX = 30;
 // Thinking budget on big maps (NavGrid.big): a bot with nothing near it thinks QUIET_SLOWDOWN times less often.
 const QUIET_ENEMY = 75, QUIET_HUMAN = 100, QUIET_SLOWDOWN = 3;
+const TRADE_ERR = 2.5, TRADE_ERR_PER_M = 0.2;   // How well a teammate's death says where the shooter is.
+const TRADE_SHORT = 3;          // A trade walks up to this far short of where the teammate fell.
+const STEP_WALK = 0.55;         // Walking footsteps carry this fraction of the distance sprinting ones do.
+const STEP_HOLD = [1.2, 2.6];   // Seconds a bot that hears someone coming holds the angle they will come round.
+const CROWD = 7, CROWD_MAX = 2; // Metres around a contact, and how many teammates already hunting it make it crowded.
+const SIDE_STEP = 8;            // How far to one side a crowded hunt swings out.
+const PEEK_COVER = 6, PEEK_STEP = 2.4, PEEK_MIN = 9, PEEK_MAX = 40, PEEK_JIGGLE = 1.2, PEEK_TIME = 14, PEEK_REST = 4;
+const LOOK_REACH = 9;           // Holds within this distance lend their sight line to a bot pre-aiming on the move...
+const LOOK_AGAIN = 4;           // ...looked up again once it has walked this far (metres, along the axes).
 
 // How open a spot is: the mean clear sight line from it, metres, capped at EXPOSE_MAX. A yard reads high, a doorway low.
 function exposureAt(map, x, z) {
@@ -680,7 +755,7 @@ export class BotBrain {
     this.sim = sim;
     this.p = player;
     this.ps = player.ps;
-    this.S = SKILLS[player.skill] || SKILLS.regular;
+    this.S = skillOf(player);
     this.input = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
     this.interval = 1 / this.S.thinkHz;
     this.thinkT = this.interval * (staggerIndex % 11) / 11;
@@ -725,6 +800,8 @@ export class BotBrain {
     this.canHit = true;
     this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
     this.lifeT = this.sim.time;                   // When this life began: plans made once a life key on it.
+    this.peekCover = null; this.peekSpot = null; this.peekIn = false; this.peekRoll = false; this.peekRestT = 0;
+    this.overpeek = false; this.lookAng = null; this.lookX = 0; this.lookZ = 0; this.topOffNow = false; this.preaimOn = false;
     this._assignLane();
   }
 
@@ -816,6 +893,28 @@ export class BotBrain {
     this._note(ps.x + Math.cos(bearing) * guess, ps.z + Math.sin(bearing) * guess, false, 1 + d * 0.22);
   }
 
+  // A teammate went down in a gunfight. Close enough to have heard it, a bot that trades moves up: knowing about where
+  // the shots came from (as a teammate's last callout would say), it walks up toward where they fell and looks there.
+  // A bot holding a point or an angle stays on it and turns to face it.
+  onTeammateDown(victim, killer) {
+    const { S, sim, ps } = this;
+    if (this.targetVisible || this.objective?.commit || this.mode === 'cover' || this.flashT > 0) return;
+    const vx = victim.ps.x, vz = victim.ps.z, d = Math.hypot(vx - ps.x, vz - ps.z);
+    if (d > S.tradeReach || sim.rng() >= S.trade) return;
+    const q = killer.ps, err = TRADE_ERR + Math.hypot(q.x - vx, q.z - vz) * TRADE_ERR_PER_M;
+    this._rough(q.x, q.z, err, POS);
+    this._note(POS.x, POS.z, false, err);
+    this.thinkT = Math.min(this.thinkT, 0.1);
+    if ((this.mode === 'objective' || this.mode === 'hold' || this.mode === 'peek') && this.arrived) return;
+    this._setMode('hunt');
+    this.modeT = 5;
+    if (d > TRADE_SHORT + 1) {
+      const k = (d - TRADE_SHORT) / d;
+      const at = walkable(sim, ps.x + (vx - ps.x) * k, ps.z + (vz - ps.z) * k);
+      this._goTo(at.x, at.z);
+    } else this._goTo(ps.x, ps.z);
+  }
+
   // Forgets on schedule, and lets a stale noise drift back toward the last place it actually saw someone.
   // The estimate never moves toward where an enemy is now.
   _ageKnowledge() {
@@ -870,6 +969,8 @@ export class BotBrain {
       // Walls first, then the dice: nothing about a hidden enemy, not even whether a roll was made, reaches this bot.
       if (!hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes)) continue;
       if (!tracking && !noisy && sim.rng() > S.notice) continue;      // Looking the right way is not the same as noticing.
+      // Tunnel vision: busy with one enemy, a weaker player does not take in the next.
+      if (!tracking && !noisy && this.targetVisible && sameTarget?.alive && q !== sameTarget && sim.rng() < S.tunnel) continue;
       // A downed enemy is finished off, but only once nobody standing is a threat.
       const score = d - (tracking ? 4 : 0) + q.hp * 0.03 + (q.downed ? 14 : 0);
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
@@ -887,12 +988,46 @@ export class BotBrain {
     }
 
     // Shared info: never targets, only somewhere to look or go.
-    if (!best) {
+    if (!best && !this._hearSteps()) {
       if (sim.radarUp(p.team)) this._uavPing();
       else if (!this._markPing() && S.callouts) this._hearCallouts();
     }
     this._ageKnowledge();
     if (this.target && !this.targetVisible && sim.time - this.sawT > Math.max(S.memory, S.suppress)) this.target = null;
+  }
+
+  // Footsteps: an enemy on the move nearby is heard, through walls at a shorter range, as a direction and a rough
+  // distance like a gunshot. Dead Silence is silent. True when it heard someone.
+  _hearSteps() {
+    const { sim, p, ps, S } = this;
+    if (!(S.footsteps > 0) || sim.time - this.heardT < HEAR_GAP) return false;
+    const reach = S.hearing * S.footsteps;
+    let best = null, bestD = Infinity;
+    for (let i = 0; i < sim.players.length; i++) {
+      const q = sim.players[i];
+      if (q.team === p.team || !q.alive || q.brAir || q.downed) continue;
+      const qs = q.ps;
+      if (Math.hypot(qs.vx, qs.vz) < AUDIBLE_SPEED || qs.perks.includes('deadsilence')) continue;
+      const d = Math.hypot(qs.x - ps.x, qs.z - ps.z), r = reach * (qs.sprinting ? 1 : STEP_WALK);
+      if (d < r && d < bestD) { bestD = d; best = q; }
+    }
+    if (!best) return false;
+    const q = best.ps, r = reach * (q.sprinting ? 1 : STEP_WALK);
+    const walled = !hasLineOfSight(sim.map, ps.x, ps.z, q.x, q.z);
+    if (walled && bestD > r * HEAR_OCCLUDED) return false;
+    this.heardT = sim.time;
+    const err = (HEAR_ERR_BASE + bestD * HEAR_ERR_PER_M) * S.hearErr * (walled ? HEAR_ERR_WALLED : 1);
+    this._rough(q.x, q.z, err, POS);
+    this._note(POS.x, POS.z, false, err);
+    // Someone is coming: stop and hold the angle they will come round, rather than run at the noise.
+    if ((this.mode === 'none' || this.mode === 'advance' || this.mode === 'flank') && !this.objective) {
+      this.mode = 'hold'; this.arrived = false;
+      this.holdSpot = null;
+      this.holdAim = Math.atan2(POS.z - ps.z, POS.x - ps.x);
+      this.holdT = between(sim.rng, STEP_HOLD[0], STEP_HOLD[1]);
+      this._goTo(ps.x, ps.z);
+    }
+    return true;
   }
 
   // The team's UAV. Sweeps once a second, so it shows where someone was a moment ago rather than where they are now.
@@ -962,6 +1097,8 @@ export class BotBrain {
     this.anchorT = 0.35;
     this.useAds = (sim.rng() < S.adsUse && d > 6) || !!styleOf(ps.weapon, ps).scoped;
     this.objPushRoll = sim.rng() < S.objPush;
+    this.overpeek = sim.rng() < S.overpeek;
+    this.peekRoll = sim.rng() < S.peekCover;
     this.slidIn = false;
     this.strafeT = 0;
     this.burstLeft = 0; this.burstPause = 0;
@@ -974,6 +1111,12 @@ export class BotBrain {
   think() {
     const { sim, p, ps, S } = this;
     this._perceive();
+    // Pre-aim only matters on the move with nothing to look at; the lane is looked up again after a few metres.
+    if (!this.preaimOn || this.targetVisible || this.hasKnown || !this.moving) this.lookAng = null;
+    else if (this.lookAng === null || Math.abs(ps.x - this.lookX) + Math.abs(ps.z - this.lookZ) > LOOK_AGAIN) {
+      this.lookAng = this._laneLook(); this.lookX = ps.x; this.lookZ = ps.z;
+    }
+    this.topOffNow = sim.rng() < S.topOff;
 
     // Separation so teammates don't walk in single file or stack in a doorway.
     let sx = 0, sz = 0;
@@ -1022,6 +1165,15 @@ export class BotBrain {
     }
     this.lastRetreatHp = p.hp;
 
+    // Fighting from beside cover: set up once a fight at the right distance starts, then step in and out (see _peek).
+    const bu0 = styleOf(ps.weapon, ps);
+    if (visible && this.peekRoll && !bu0.rush && this.targetDist > PEEK_MIN && this.targetDist < PEEK_MAX
+      && (this.mode === 'none' || this.mode === 'advance' || this.mode === 'hunt' || this.mode === 'flank' || (this.mode === 'objective' && !this.objective?.commit && !this.arrived && this.objective?.role !== 'collect'))) {
+      this.peekRoll = false;
+      this._setupPeek(this.target.ps.x, this.target.ps.z);
+    }
+    if (this.mode === 'peek') this._peek(visible);
+
     // A close gun has no business crossing the open at someone who is looking at it: work in through cover, and
     // failing that get behind something and let them come.
     const bu = styleOf(ps.weapon, ps);
@@ -1063,10 +1215,12 @@ export class BotBrain {
     const worthChasing = this.hasKnown && !o?.commit && (o
       ? !this.knownSoft && this.knownErr < 6 && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
       : !this.knownSoft || knownD < 14);
-    if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt' && this.mode !== 'close') {
+    if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt' && this.mode !== 'close' && this.mode !== 'peek') {
       this._setMode('hunt');
       this.modeT = o ? 3 : 6;
-      this._goTo(this.knownX, this.knownZ);
+      // Two teammates already on it: a good player takes it from another side rather than queue up behind them.
+      if (!o && this._crowded(this.knownX, this.knownZ) && sim.rng() < S.spreadOut) this._sideStep(this.knownX, this.knownZ);
+      else this._goTo(this.knownX, this.knownZ);
     }
     if (this.mode === 'hunt') {
       this.modeT -= this.interval;
@@ -1487,15 +1641,104 @@ export class BotBrain {
     }
   }
 
+  // Cover near enough to fight from: a spot out of the threat's sight, and beside it a spot that sees it. Mode 'peek'
+  // walks to the second and fights from there; _peek steps back to the first to reload or heal.
+  _setupPeek(tx, tz) {
+    const { sim, ps } = this;
+    const c = sim.nav.findCover(ps.x, ps.z, tx, tz, sim.rng, PEEK_COVER);
+    if (!c) return false;
+    let spot = null, best = Infinity;
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * TAU, x = c.x + Math.cos(a) * PEEK_STEP, z = c.z + Math.sin(a) * PEEK_STEP;
+      if (!sim.nav.isWalkable(x, z) || !sim.nav.segmentClear(c.x, c.z, x, z)) continue;
+      if (!hasLineOfSight(sim.map, x, z, tx, tz)) continue;
+      const score = Math.hypot(x - ps.x, z - ps.z) + Math.hypot(x - tx, z - tz) * 0.15;
+      if (score < best) { best = score; spot = { x, z }; }
+    }
+    if (!spot) return false;
+    this.mode = 'peek'; this.arrived = false;
+    this.peekCover = c; this.peekSpot = spot; this.peekIn = false; this.peekRestT = 0;
+    this.modeT = PEEK_TIME;
+    this.holdAim = Math.atan2(tz - spot.z, tx - spot.x);
+    this._goTo(spot.x, spot.z);
+    return true;
+  }
+
+  // Out at the spot: fight. Low on rounds or health: back behind the cover until reloaded and patched up (or it has
+  // waited long enough), then out again. Ends when the time is up or there is nobody left to fight.
+  _peek(visible) {
+    const { p, ps } = this;
+    this.modeT -= this.interval;
+    const mag = weaponDef(ps).magazine;
+    if (!this.peekIn) {
+      if (this.arrived && (p.hp < 60 || ps.reloadT > 0 || ps.ammo[ps.slot] <= mag * 0.25)) {
+        this.peekIn = true; this.peekRestT = 0;
+        this._goTo(this.peekCover.x, this.peekCover.z);
+      }
+    } else if (this.arrived) {
+      this.peekRestT += this.interval;
+      if ((ps.reloadT <= 0 && ps.ammo[ps.slot] >= mag * 0.7 && p.hp >= 75) || this.peekRestT > PEEK_REST) {
+        this.peekIn = false;
+        this._goTo(this.peekSpot.x, this.peekSpot.z);
+      }
+    }
+    if (this.modeT <= 0 || (this.target && !this.target.alive && !visible) || (!visible && !this.hasKnown && !this.peekIn)) this._setMode('none');
+  }
+
+  // Two or more teammates already hunting around (x, z).
+  _crowded(x, z) {
+    const { sim, p } = this;
+    let n = 0;
+    for (let i = 0; i < sim.players.length; i++) {
+      const q = sim.players[i];
+      if (q === p || q.team !== p.team || !q.alive || !q.bot || q.bot.mode !== 'hunt') continue;
+      if (Math.hypot(q.bot.goalX - x, q.bot.goalZ - z) < CROWD && ++n >= CROWD_MAX) return true;
+    }
+    return false;
+  }
+
+  // Comes at (x, z) from one side: a point SIDE_STEP metres across the line from here, whichever side is open.
+  _sideStep(x, z) {
+    const { sim, ps } = this;
+    const dx = x - ps.x, dz = z - ps.z, d = Math.max(0.5, Math.hypot(dx, dz));
+    const side = sim.rng() < 0.5 ? 1 : -1;
+    for (const k of [side, -side]) {
+      const ax = x - dz / d * SIDE_STEP * k - dx / d * 2, az = z + dx / d * SIDE_STEP * k - dz / d * 2;
+      if (sim.nav.isWalkable(ax, az)) { this._goTo(ax, az); return; }
+    }
+    this._goTo(x, z);
+  }
+
+  // Where a player who knows the map looks while walking: down the longest sight line toward the enemy from a hold
+  // point near here (the lanes people come down), else toward the enemy's side along its lane; in a free-for-all,
+  // toward the last fight if it was recent and near. Null: nothing better than where it is walking.
+  _laneLook() {
+    const { sim, ps } = this;
+    if (sim.ffa) {
+      const hot = sim.hot;
+      return hot && sim.time - hot.t < 10 && Math.hypot(hot.x - ps.x, hot.z - ps.z) < 40 ? Math.atan2(hot.z - ps.z, hot.x - ps.x) : null;
+    }
+    const side = this.side, ix = sim.nav.holdIndex, n = ix.near(ps.x, ps.z, LOOK_REACH);
+    let best = null, bestS = 12;
+    for (let q = 0; q < n; q++) {
+      const h = sim.nav.holds[ix.out[q]];
+      if (h.sight[side] > bestS && Math.hypot(h.x - ps.x, h.z - ps.z) < LOOK_REACH) { bestS = h.sight[side]; best = h; }
+    }
+    if (best) return best.aim[side];
+    const lane = sim.map.lanes?.[this.laneIdx];
+    if (!lane) return null;
+    return Math.atan2(lane.z - ps.z, (side === 0 ? sim.map.width : 0) - ps.x);
+  }
+
   _takeCover() {
     const tx = this.target && this.targetVisible ? this.target.ps.x : this.knownX;
     const tz = this.target && this.targetVisible ? this.target.ps.z : this.knownZ;
     if (this._coverFrom(tx, tz)) this._maybeSmoke(tx, tz);
   }
 
-  _coverFrom(tx, tz) {
+  _coverFrom(tx, tz, reach = 14) {
     const { sim, ps } = this;
-    const c = sim.nav.findCover(ps.x, ps.z, tx, tz, sim.rng);
+    const c = sim.nav.findCover(ps.x, ps.z, tx, tz, sim.rng, reach);
     if (!c) return false;
     this.mode = 'cover';
     this.modeT = between(sim.rng, 4, 7);
@@ -1759,6 +2002,7 @@ export class BotBrain {
 
   _goTo(x, z) {
     this.goalX = x; this.goalZ = z;
+    this.preaimOn = this.sim.rng() < this.S.preaim;     // Decided per walk, so the eyes do not flick every think.
     this.arrived = false;
     this.pathDirty = true;
   }
@@ -1812,10 +2056,13 @@ export class BotBrain {
     const ux = (q.ps.x - ps.x) / d, uz = (q.ps.z - ps.z) / d;
     const o = this.objective;
     const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend' || o.role === 'plant' || o.role === 'defuse');
-    const atHold = ((this.mode === 'hold' || this.mode === 'close') && this.arrived) || holdingPoint;
+    const peeking = this.mode === 'peek' && this.arrived;
+    const atHold = ((this.mode === 'hold' || this.mode === 'close') && this.arrived) || holdingPoint || peeking;
     let fwd = 0;
     // A wall of crates between us that this gun cannot punch through: get an angle by closing in.
     if (!this.canHit && !holdingPoint) fwd = 1;
+    // Overpeeking: a weaker player walks out of the angle it was holding, toward what it saw.
+    else if (atHold && this.overpeek && !holdingPoint) fwd = 1;
     else if (!atHold) {
       // A close gun wants to be at its distance, not near it; a long gun gives ground to anyone inside its own.
       if (d > style.pref + (style.rush ? 1 : 4)) fwd = 1;
@@ -1840,6 +2087,11 @@ export class BotBrain {
     if (holdingPoint && Math.hypot(ps.x + mx * 1.3 - o.x, ps.z + mz * 1.3 - o.z) > o.r * 0.9) {
       this.strafeDir = -this.strafeDir;
       mx = 0; mz = 0;
+    }
+    // Peeking: a short jiggle either side of the spot beside cover, never a walk into the open.
+    if (peeking && !this.overpeek && Math.hypot(ps.x + mx * 0.6 - this.peekSpot.x, ps.z + mz * 0.6 - this.peekSpot.z) > PEEK_JIGGLE) {
+      this.strafeDir = -this.strafeDir;
+      mx = (this.peekSpot.x - ps.x) * 0.8; mz = (this.peekSpot.z - ps.z) * 0.8;
     }
     I.mx = mx; I.mz = mz;
   }
@@ -1934,7 +2186,7 @@ export class BotBrain {
       if (!rushing) this._trigger(q, d, trueAng, dt, q.ps.x, q.ps.z);
       // A committed objective (a flag run, a flag grab) never stops to trade shots: it fights on the move.
       const pushing = this.mode === 'objective' && !this.arrived && (d > style.pref || this.objPushRoll || !!this.objective?.commit);
-      if ((this.mode === 'cover' || this.mode === 'hold' || this.mode === 'close' || pushing) && !this.arrived) this._followPath(false);
+      if ((this.mode === 'cover' || this.mode === 'hold' || this.mode === 'close' || this.mode === 'peek' || pushing) && !this.arrived) this._followPath(false);
       else this._combatMove(q, d, dt);
       if (rushing) {
         I.sprint = S.sprint >= 1 || this.sprintRoll;
@@ -1961,7 +2213,7 @@ export class BotBrain {
         this.peek += dt * 1.8;
         desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x) + (Math.sin(this.peek) * 0.65 + this.knownBias) * spread;
         if ((this.mode === 'hold' || this.mode === 'close') && this.arrived) I.aiming = true;
-      } else if ((this.mode === 'hold' || this.mode === 'close') && this.arrived) {
+      } else if ((this.mode === 'hold' || this.mode === 'close' || (this.mode === 'peek' && !this.peekIn)) && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.holdAim + Math.sin(this.peek) * 0.28;
         I.aiming = !!styleOf(ps.weapon, ps).scoped || S.adsUse > 0.8;
@@ -1971,7 +2223,15 @@ export class BotBrain {
         I.aiming = !!styleOf(ps.weapon, ps).scoped || S.adsUse > 0.8;
       } else if (this.moving) {
         desired = Math.atan2(I.mz, I.mx);
+        // Pre-aiming: eyes down the lane it is walking toward rather than at its feet, sweeping a little.
+        if (this.lookAng !== null && Math.abs(angleDiff(this.lookAng, desired)) < 2) {
+          this.peek += dt * 1.1;
+          desired = this.lookAng + Math.sin(this.peek) * 0.3;
+        }
       }
+      // Between fights a good player lets the sights down long enough for a part-empty magazine to top off.
+      if (this.topOffNow && !this.suppressing && ps.reloadT <= 0 && ps.ammo[ps.slot] < weaponDef(ps).magazine * 0.7
+        && !(this.hasKnown && !this.knownSoft && sim.time - this.knownT < 1.5)) I.aiming = false;
     }
 
     // Soft separation, only while walking the map.
