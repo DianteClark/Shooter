@@ -51,7 +51,7 @@ async def main():
             ctx = await browser.new_context(viewport={'width': 844, 'height': 390}, has_touch=True, is_mobile=True)
             pg = await ctx.new_page()
             pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and INJECTED not in m.text else None)
-            pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
+            pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e} {getattr(e, "stack", "")[:600]}'))
             await pg.goto(f'http://localhost:{PORT}/?debug=1&bots=elite&limit=1&time=20')
             await pg.wait_for_timeout(900)
             await pg.evaluate("window.__game.Progress.name='Tester'")
@@ -114,7 +114,7 @@ async def main():
             await pg.locator('[data-act="soloMap"][data-id="harvest"]').first.tap()
             await pg.wait_for_timeout(300)
             gw_modes = await pg.evaluate("[...document.querySelectorAll('.solo-mode')].filter(b => !b.hidden).map(b => b.dataset.id)")
-            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
+            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'gwhq', 'gwko', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
             print(f'  {"harvest offers no 6v6 team modes":<44} {"ok" if ok else "FAIL"} {gw_modes}')
             if not ok: failures.append(f'harvest modes {gw_modes}')
             st5 = await play('5 harvest ground war', tap('[data-act="soloStart"]'))
