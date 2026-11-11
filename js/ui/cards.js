@@ -109,7 +109,8 @@ function botEmblem(id) {
   h >>>= 0;
   return h % 2 ? EMBLEMS[(h >>> 3) % EMBLEMS.length].id : null;
 }
-const emblemOfEntry = r => (r?.isBot ? botEmblem(r.id) : cleanEmblem(r?.loadout?.emblem ?? r?.emblem));
+// Pool bots (js/shared/botpool.js) wear their profile's emblem, or none.
+const emblemOfEntry = r => (r?.isBot && !r.pool ? botEmblem(r.id) : cleanEmblem(r?.loadout?.emblem ?? r?.emblem));
 
 // Called by the HUD as each match is prepared; results read the same map after the match.
 export function setRosterIdentity(list = []) {

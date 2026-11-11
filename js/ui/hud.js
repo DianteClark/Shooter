@@ -548,7 +548,7 @@ export class HUD {
   // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
   #showIntro(mapId, mode, roster, localId) {
     const map = MAPS[mapId] ?? this.map;
-    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${esc(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot ? '<small>Bot</small>' : ''}</div>`;
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${esc(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
     const team = (t, side) => {
       const list = roster.filter(p => p.team === t);
       return `<div class="in-team ${side}" style="--team:${TEAMS[t].css}"><h3><i></i>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;

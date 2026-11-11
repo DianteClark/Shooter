@@ -17,6 +17,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
 import { isAvailable, availableFor } from '../shared/attachments.js';
 import { SND } from '../shared/modes.js';
+import { STYLES, TIERS } from '../shared/botpool.js';
 
 const DEG = Math.PI / 180;
 
@@ -59,6 +60,43 @@ export const SKILLS = {
     objPlay: 1, objDefend: 0.4, objSplit: 10, tagSight: 46, objPush: 0.75, objRotate: true, dodge: 0.95,
   },
 };
+
+// Pool bots (js/shared/botpool.js) play at a rating, 0..1, rather than a tier: the tiers above sit at 0, 1/3, 2/3 and
+// 1, and skillAt reads between the two either side of the rating. Numbers and ranges blend; switches (callouts,
+// pistolSwap, objRotate, turret) take the nearer tier's. `lean` is the player's play style (STYLES[style].lean):
+// multipliers on how it chooses to play (flank, holdProb, objPlay, objPush, objDefend, sprint, slide, holdTime), never
+// on how well it aims or how fast it reacts.
+const SKILL_CACHE = new Map();
+const CAPPED = new Set(['objPlay', 'objPush', 'sprint', 'notice', 'adsUse', 'strafe', 'nade', 'smoke', 'flash', 'dodge']);
+export function skillAt(rating, style = null) {
+  const r = Math.max(0, Math.min(1, Number(rating) || 0));
+  const key = `${Math.round(r * 200)}|${style ?? ''}`;
+  let S = SKILL_CACHE.get(key);
+  if (S) return S;
+  const x = Math.round(r * 200) / 200 * 3, i = Math.min(2, Math.floor(x)), f = x - i;
+  const a = SKILLS[TIERS[i]], b = SKILLS[TIERS[i + 1]], near = f < 0.5 ? a : b;
+  S = {};
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const va = a[k] ?? b[k], vb = b[k] ?? a[k];
+    if (typeof va === 'number' && typeof vb === 'number') S[k] = va + (vb - va) * f;
+    else if (Array.isArray(va)) S[k] = va.map((v, n) => v + (vb[n] - v) * f);
+    else S[k] = near[k] ?? va;
+  }
+  const lean = style && STYLES[style]?.lean;
+  if (lean) {
+    for (const k in lean) {
+      if (k === 'holdTime') S.holdTime = S.holdTime.map(v => v * lean.holdTime);
+      else if (typeof S[k] === 'number') S[k] = CAPPED.has(k) ? Math.min(1, S[k] * lean[k]) : S[k] * lean[k];
+    }
+  }
+  S.rating = r;
+  SKILL_CACHE.set(key, S);
+  return S;
+}
+// The skill table a player's brain runs: a pool bot's rating and style, else its tier.
+export function skillOf(player) {
+  return typeof player.rating === 'number' ? skillAt(player.rating, player.style) : SKILLS[player.skill] || SKILLS.regular;
+}
 
 // Preferred fighting distance per weapon, and how the weapon shifts the bot's playstyle, live in each gun's
 // `botUse` (weapons.js): {pref, hold, flank, advance, rush?, scoped?, fireMax?, adsMin?}.
@@ -678,7 +716,7 @@ export class BotBrain {
     this.sim = sim;
     this.p = player;
     this.ps = player.ps;
-    this.S = SKILLS[player.skill] || SKILLS.regular;
+    this.S = skillOf(player);
     this.input = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
     this.interval = 1 / this.S.thinkHz;
     this.thinkT = this.interval * (staggerIndex % 11) / 11;

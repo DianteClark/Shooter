@@ -6,6 +6,8 @@
 //   node dev/balance-sim.mjs --sidearms              the sidearms, carried as the main gun, against each other
 //   node dev/balance-sim.mjs --human                 the scripted human-like thumb (js/sim/humanlike.js) against bots
 //   node dev/balance-sim.mjs --realistic             lobbies like the owner's: see REALISTIC below
+//   (realistic) --mixed: the old dealt Mixed roster instead of the bot pool; --target=0.42: the pool's matchmaking
+//   target (default HUMAN_BASE, an average player); --locked=elite|veteran|regular|recruit: only bots locked at that tier
 //   options: --rounds=3 --seconds=120 --seed=1 --maps=pier+turnstile,railyard+dust,foundry+canyon --modes=tdm,dom --skill=mixed|regular|...
 //            --trials=3 (duels per pairing, distance and scenario) --no-matches --no-duels --kits (bot attachments)
 //            --streaks --equipment (both off by default: this measures guns) --json=out.json --compare=before.json
@@ -14,7 +16,8 @@
 //            sides of the mirror, instead of none or --kits)
 //
 // REALISTIC (--realistic, Pass 2): what a real lobby is, as opposed to a gun lab. Rosters come from the game's own
-// buildRoster (js/sim/sim.js) with Mixed skill, so bots draw their primaries, kits, perks, equipment and streaks the way
+// buildRoster (js/sim/sim.js), from the bot player pool by matchmaking (js/shared/botpool.js; --mixed: the old dealt
+// Mixed roster), so bots draw their primaries, kits, perks, equipment and streaks the way
 // they do in a match (twelve consecutive guns from a seeded offset, not mirrored); scorestreaks and equipment are on;
 // the mode's own score limit applies; maps and modes are drawn the way Quick Play draws them (js/ui/vote.js
 // resolvePick: map by size-tier weight, then any mode it hosts; Gun Game is left out because it hands out its own
@@ -46,6 +49,7 @@ import { botAttachments } from '../js/sim/bots.js';
 import { MatchTelemetry, FIELDS, DIST_LABELS, gunRows } from '../js/game/telemetry.js';
 import { wall, perimeter, edgeSpawns, navGrid } from '../js/shared/maps/build.js';
 import { THUMB, makeHumanLike } from '../js/sim/humanlike.js';
+import { HUMAN_BASE, POOL_EPOCH } from '../js/shared/botpool.js';
 
 const args = process.argv.slice(2);
 const has = k => args.includes(`--${k}`);
@@ -366,7 +370,7 @@ function runRealistic() {
   const how = {};
   const t0 = performance.now();
   let n = 0;
-  const lobbies = [];
+  const lobbies = [], lobbyKd = [];
   for (let r = 0; r < ROUNDS; r++) {
     if (QUICK) {
       // The same draw for every thumb gun in a round, so guns are compared on the same lobbies.
@@ -377,7 +381,8 @@ function runRealistic() {
   for (const g of thumbGuns) for (const { r, mapId, mode } of lobbies) {
     const seed = hash('real', SEED, r, g, mapId, mode);
     const human = { id: 'me', name: 'thumb', team: 0, loadout: { primary: g, secondary: 'pistol' } };
-    const roster = buildRoster([human], { botSkill: 'mixed', mapId, mode, seed });
+    const roster = has('mixed') ? buildRoster([human], { botSkill: 'mixed', mapId, mode, seed })
+      : buildRoster([human], { botSkill: 'mixed', mapId, mode, seed, pool: { target: Number(opt('target', HUMAN_BASE)), locked: opt('locked', null), date: POOL_EPOCH + 10 * 86400000 } });
     // The thumb rides a BotBrain for everything but its right thumb, so the sim has to make it one.
     const me = roster.find(e => e.id === 'me');
     me.isBot = true; me.skill = 'regular';
@@ -404,6 +409,8 @@ function runRealistic() {
     const rec = tel.finish(lightView(sim, 'me'));
     n++;
     if (!rec) continue;
+    const meP = sim.byId.get('me');
+    lobbyKd.push({ k: meP.kills, d: meP.deaths, mode, mapId, lobby: roster.filter(e => e.isBot).reduce((a, e) => a + (e.rating ?? 0), 0) / Math.max(1, roster.length - 1) });
     // Bots only: everyone minus the thumb.
     const mine = rec.g.m;
     const others = {};
@@ -412,7 +419,7 @@ function runRealistic() {
     foldRows(thumbRows, { [g]: mine[g] || [] });
     foldRows((perThumbGun[g] ||= {}), others);
   }
-  return { bots, thumbRows, perThumbGun, thumbGuns, how, n, ms: performance.now() - t0 };
+  return { bots, thumbRows, perThumbGun, thumbGuns, how, n, lobbyKd, ms: performance.now() - t0 };
 }
 
 function reportRealistic(res) {
@@ -443,6 +450,13 @@ function reportRealistic(res) {
     hk += r.kills; hd += r.deaths;
   }
   console.log(`thumb all guns: K/D ${(hk / Math.max(1, hd)).toFixed(2)}`);
+  // Match to match: the thumb's K/D in each lobby (kills / max(1, deaths)), as a player would see it on the results.
+  const per = res.lobbyKd.map(l => l.k / Math.max(1, l.d)).sort((a, b) => a - b);
+  const q = f => per[Math.min(per.length - 1, Math.floor(f * per.length))];
+  const mean = per.reduce((a, b) => a + b, 0) / Math.max(1, per.length);
+  const sd = Math.sqrt(per.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, per.length));
+  console.log(`thumb per-lobby K/D (${per.length}): mean ${mean.toFixed(2)} sd ${sd.toFixed(2)}  p10 ${q(0.1)?.toFixed(2)} p25 ${q(0.25)?.toFixed(2)} median ${q(0.5)?.toFixed(2)} p75 ${q(0.75)?.toFixed(2)} p90 ${q(0.9)?.toFixed(2)}; under 0.5: ${pct(per.filter(v => v < 0.5).length / Math.max(1, per.length))}%, over 2: ${pct(per.filter(v => v > 2).length / Math.max(1, per.length))}%`);
+  json.lobbies = res.lobbyKd;
   return json;
 }
 

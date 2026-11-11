@@ -18,7 +18,7 @@
 //   classes, guns             favourite weapon classes (two) and guns (three, favourite first); kit[gun] = which of
 //                             the bot kits (js/sim/bots.js botAttachments `i`) they run on it
 //   secondary, perks, tactical, lethal, streaks
-//   operator, skin, card, emblem   looks; skin is a skin id (js/ui/operators.js), emblem may be null
+//   operator, skin, card, emblem, camo   looks; skin is a skin id (js/ui/operators.js), emblem may be null
 //   skill: { locked: null | tier, mu, form }   mu: their usual rating; form: sigma of the per-match roll
 //   activity                  average matches a day; brShare the share of them that are battle royale
 //   joined                    days after POOL_EPOCH the player started (negative: before it); base, the career then
@@ -148,6 +148,7 @@ for (const id of PRIMARY_IDS) {
 }
 const CARD_IDS = new Set(CARDS.map(c => c.id));
 const SKIN_STEPS = ['base', 'field', 2, 3, 4, 5];
+const CAMO_STEPS = [['ash', 'stalker', 'rust', 'comb', 'bare'], ['cobalt', 'crimson', 'glacier', 'toxin', 'iron'], ['gold', 'molten', 'carbon', 'wire']];
 
 // Locked profiles: about one in five. Most of them sit at the ends (the player you always dread, the one you always
 // farm), a few in the middle.
@@ -204,11 +205,15 @@ function buildProfile(index) {
   const skin = `skin:${op}-${SKIN_STEPS[step]}`;
   const card = pickCard(rng, base, perks, locked, mu);
   const emblem = rng() < 0.7 ? EMBLEMS[Math.floor(rng() * EMBLEMS.length)].id : null;
+  // Camo on the favourite gun: plenty run none; the rest wear what their time in the game has earned.
+  const cr = rng() + seniority * 0.5;
+  const camo = cr < 0.55 ? 'none' : cr < 1.05 ? CAMO_STEPS[0][Math.floor(rng() * CAMO_STEPS[0].length)]
+    : cr < 1.3 ? CAMO_STEPS[1][Math.floor(rng() * CAMO_STEPS[1].length)] : CAMO_STEPS[2][Math.floor(rng() * CAMO_STEPS[2].length)];
 
   return Object.freeze({
     id, index, name: TAGS[index], style, classes: Object.freeze(classes), guns: Object.freeze(guns), kit: Object.freeze(kit), secondary,
     perks: Object.freeze(perks), tactical, lethal, streaks: Object.freeze(streaks),
-    operator: op, skin, card, emblem,
+    operator: op, skin, card, emblem, camo,
     skill: Object.freeze({ locked, mu: Math.round(mu * 1000) / 1000, form: Math.round(form * 1000) / 1000 }),
     activity, brShare, joined, base: Object.freeze(base),
   });
@@ -348,14 +353,15 @@ const RECENT_KEEP = 2;
 // {level, prestige}; spread: how far from the target a draw may wander (sigma, on the 0..1 scale); exclude: profile
 // ids already seated; recent: the previous lobbies' ids (defaults to this phone's memory). Returns
 // [{ profile, rating, tier, badge: {level, prestige} }] in draw order. Deterministic for a seed and inputs.
-export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = null, spread = 0.17, exclude = [], recent = null, date = Date.now(), remember = true } = {}) {
+// locked: only profiles locked at that tier (tests and the balance rig).
+export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = null, spread = 0.17, exclude = [], recent = null, date = Date.now(), remember = true, locked = null } = {}) {
   const rng = mulberry32(hash32('lobby', seed));
   const lastIds = new Set((recent ?? RECENT).flat());
   const taken = new Set(exclude);
   const want = level ? rank(level.prestige ?? 0, level.level ?? 1) : null;
   const cand = [];
   for (const p of BOT_POOL) {
-    if (taken.has(p.id)) continue;
+    if (taken.has(p.id) || (locked && p.skill.locked !== locked)) continue;
     // Skill: a bell around the target (locked players by their tier, others by their usual level, mu).
     const dr = p.skill.mu - target;
     let w = Math.exp(-dr * dr / (2 * spread * spread)) + 0.02;
