@@ -15,6 +15,12 @@ const BIG_CELLS = 40000;
 const SECTOR_SHIFT = 4, SECTOR = 1 << SECTOR_SHIFT;
 const MAX_EXPAND = 4000;    // Cells one big-map search may expand before it settles for the closest it reached (see partial).
 const PULL_REACH = 40;      // Cells ahead a big-map path corner looks when pulling the string.
+// Openness (bot overhaul): how far you can see from a spot (the mean of its three longest sight lines), sampled every OPEN_STEP metres, so a bot that does not want
+// to be seen crossing a long sight line (a close gun; a player who knows the map) can route around them. A cell costs
+// up to OPEN_COST metres extra in proportion to `shy` and to how far past OPEN_FROM metres it sees.
+const OPEN_STEP = 2, OPEN_RAYS = 8, OPEN_MAX = 30, OPEN_FROM = 14, OPEN_SPAN = 14, OPEN_COST = 2;
+const OPEN_MASK = 20;       // Metres of sight past which string-pulling may not shortcut across a shy path.
+const OPEN_CACHE = new WeakMap();   // Per walls array: maps are static, and every Sim on one map shares the sampling.
 
 export class NavGrid {
   constructor(map) {
@@ -149,6 +155,37 @@ export class NavGrid {
     }
   }
 
+  // Lazily sampled openness (see OPEN_STEP), one byte per OPEN_STEP square: metres of mean sight line, capped. Not on
+  // big maps (they route over sectors, and the first sample would cost a hitch).
+  get openness() {
+    if (this._open !== undefined) return this._open;
+    if (this.big) return (this._open = null);
+    let o = OPEN_CACHE.get(this.map.walls);
+    if (!o) {
+      const ow = Math.ceil(this.w / OPEN_STEP), oh = Math.ceil(this.h / OPEN_STEP);
+      o = { w: ow, cost: new Uint8Array(ow * oh), mask: new Uint8Array(this.w * this.h) };
+      for (let j = 0; j < oh; j++) for (let i = 0; i < ow; i++) {
+        const x = (i + 0.5) * OPEN_STEP, z = (j + 0.5) * OPEN_STEP;
+        if (!this.isWalkable(x, z)) continue;
+        // The longest few sight lines, not the mean: a lane is narrow but sees far along itself, which is the point.
+        let a1 = 0, a2 = 0, a3 = 0;
+        for (let r = 0; r < OPEN_RAYS; r++) {
+          const a = (r / OPEN_RAYS) * Math.PI * 2;
+          const hit = raycastMap(this.map, x, z, Math.cos(a), Math.sin(a), OPEN_MAX, 'blocksVision');
+          const t = hit ? hit.t : OPEN_MAX;
+          if (t > a1) { a3 = a2; a2 = a1; a1 = t; } else if (t > a2) { a3 = a2; a2 = t; } else if (t > a3) a3 = t;
+        }
+        o.cost[j * ow + i] = Math.round((a1 + a2 + a3) / 3);
+      }
+      for (let k = 0; k < this.w * this.h; k++) {
+        const i = k % this.w, j = (k - i) / this.w;
+        o.mask[k] = o.cost[Math.floor(j / OPEN_STEP) * ow + Math.floor(i / OPEN_STEP)] > OPEN_MASK ? 1 : 0;
+      }
+      OPEN_CACHE.set(this.map.walls, o);
+    }
+    return (this._open = o);
+  }
+
   // A big map searches in two levels and lets far-off bots think less often (bots.js).
   get big() { return this.regionOf !== null; }
 
@@ -205,12 +242,15 @@ export class NavGrid {
   // On a big map (see SECTOR) the search first finds a route over the sector graph and then only opens cells of the
   // sectors along that route (and their neighbours), with a cap on cells expanded; a goal nobody can reach costs a
   // coarse search, not a sweep of the whole map. Small maps search exactly as they always have.
-  findPath(ax, az, bx, bz, out, maxPoints, team = -1) {
+  // With `shy` (0..1), long sight lines cost extra (see openness) and the string is not pulled across them.
+  findPath(ax, az, bx, bz, out, maxPoints, team = -1, shy = 0) {
     const w = this.w, h = this.h;
     const startCell = this.nearestFree(ax, az);
     let goalCell = this.nearestFree(bx, bz);
     const { g, parent, stamp, closed, blocked } = this;
     const danger = team >= 0 ? this.danger[team > 1 ? 0 : team] : null;
+    const open = shy > 0 ? this.openness : null, ow = open ? open.w : 0, oc = open ? open.cost : null;
+    const openK = shy * OPEN_COST / OPEN_SPAN;
     const id = ++this.search;
     this.partial = false;
     let corridor = null, cap = Infinity;
@@ -248,7 +288,11 @@ export class NavGrid {
           if (corridor && corridor[(j >> SECTOR_SHIFT) * this.sw + (i >> SECTOR_SHIFT)] !== id) continue;
           // No cutting corners past a blocked cell.
           if (di !== 0 && dj !== 0 && (blocked[cj * w + i] || blocked[j * w + ci])) continue;
-          const cost = base + (di !== 0 && dj !== 0 ? SQRT2 : 1) + (danger && danger[k] ? DANGER_COST : 0);
+          let cost = base + (di !== 0 && dj !== 0 ? SQRT2 : 1) + (danger && danger[k] ? DANGER_COST : 0);
+          if (oc) {
+            const e = oc[(j >> 1) * ow + (i >> 1)] - OPEN_FROM;
+            if (e > 0) cost += openK * Math.min(OPEN_SPAN, e);
+          }
           if (stamp[k] === id && g[k] <= cost) continue;
           stamp[k] = id; g[k] = cost; parent[k] = cur;
           this._push(k, cost + this._h(k));
@@ -278,7 +322,9 @@ export class NavGrid {
         const k = raw[j], cx = k % w + 0.5, cz = (k - k % w) / w + 0.5;
         // Once already inside covered ground the only goal is out, so shortcuts are fine again.
         const avoid = danger && !danger[this.idx(anchorX, anchorZ)] ? danger : null;
-        if (this.segmentClear(anchorX, anchorZ, cx, cz, avoid)) lastGood = j;
+        // A shy path keeps to its edges: no shortcut across open ground it went round (unless it is already out there).
+        const shun = open && !open.mask[this.idx(anchorX, anchorZ)] ? open.mask : null;
+        if (this.segmentClear(anchorX, anchorZ, cx, cz, avoid) && (!shun || this.segmentClear(anchorX, anchorZ, cx, cz, shun))) lastGood = j;
         else if (j < lastGood - 3) break;
       }
       const k = raw[lastGood];

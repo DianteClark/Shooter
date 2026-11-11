@@ -45,8 +45,11 @@ export class HumanLikeBrain extends BotBrain {
     super(sim, player, staggerIndex);
     this.H = thumb;
     const base = SKILLS[thumb.base || 'regular'];
+    // The bot overhaul's decision traits (bots.js SKILLS: trading, peeking from cover, footsteps...) stay off: the thumb
+    // is the yardstick bots are measured against, so its own walking-around brain is the one it was calibrated with.
     this.S = { ...base, reaction: thumb.reaction, fov: Math.PI * 2, sight: thumb.sight, notice: 1, adsUse: thumb.settle,
-      strafe: thumb.strafe, turnRate: 40, pistolSwap: true };
+      strafe: thumb.strafe, turnRate: 40, pistolSwap: true,
+      trade: 0, preaim: 0, footsteps: 0, tunnel: 0, spreadOut: 0, topOff: 0, retreatSmart: 0, overpeek: 0, peekCover: 0 };
     this.human = true;
     this.view = [];            // {id, team, alive, x, z} per player: what applyAimAssist reads from a GameView.
     this.stick = player.ps.aim;

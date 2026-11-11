@@ -1446,6 +1446,13 @@ export class Sim {
     if (head) kill.head = true;
     kill.vw = target.ps.weapon;     // What the victim was holding: per-gun deaths in the stats.
     this._emit(kill);
+    // Teammates near a gunfight death know about it (the shots, the feed, the body): the ones who trade move up.
+    if (!streak && !equip) {
+      for (let i = 0; i < this.players.length; i++) {
+        const q = this.players[i];
+        if (q.bot && q.alive && q !== target && q.team === target.team) q.bot.onTeammateDown(target, killer);
+      }
+    }
     this.lastKill = { by: killer.id, target: target.id, weapon, camo: killer.camo, x: kill.x, z: kill.z };
     // Where the fighting just was, for free-for-all bots looking for some (BotBrain._roam).
     const hot = this.hot ??= { x: 0, z: 0, t: 0 };
