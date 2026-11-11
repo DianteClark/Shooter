@@ -673,6 +673,8 @@ function planHardpoint(sim, team, crew) {
 function gaussian(rng) { return (rng() + rng() + rng() + rng() - 2) / 0.577; }
 function between(rng, a, b) { return a + (b - a) * rng(); }
 
+const STRAFE_LEG = 1.3;          // Training's strafing bots turn round this often (seconds).
+
 export class BotBrain {
   constructor(sim, player, staggerIndex) {
     this.sim = sim;
@@ -2030,6 +2032,28 @@ export class BotBrain {
     return true;
   }
 
+  // Training's bot behaviours (TRAIN_BEHAVIOURS in js/sim/sim.js): the brain still sees, aims and shoots; only the feet
+  // change. Standing never moves; strafing steps across the player's line, turning every STRAFE_LEG seconds; rushing
+  // runs at the player, by path while out of sight and straight in once it sees them.
+  _drill(kind, dt) {
+    const { sim, ps, input: I } = this;
+    I.slide = false; this.wantSlide = false;
+    if (kind === 'standing') { I.mx = 0; I.mz = 0; I.sprint = false; return; }
+    const h = sim.players.find(q => !q.isBot && !q.dummy && q.alive);
+    if (!h) { I.mx = 0; I.mz = 0; I.sprint = false; return; }
+    const dx = h.ps.x - ps.x, dz = h.ps.z - ps.z, d = Math.hypot(dx, dz) || 1;
+    if (kind === 'strafing') {
+      this.strafeT = (this.strafeT ?? 0) + dt;
+      if (this.strafeT > STRAFE_LEG) { this.strafeT = 0; this.strafeDir = -(this.strafeDir || 1); }
+      const side = this.strafeDir || 1;
+      I.mx = -dz / d * side; I.mz = dx / d * side; I.sprint = false;
+      return;
+    }
+    if (this.targetVisible && this.target === h) { I.mx = dx / d; I.mz = dz / d; I.sprint = d > 9; return; }
+    if (Math.hypot(this.goalX - h.ps.x, this.goalZ - h.ps.z) > 5) this._goTo(h.ps.x, h.ps.z);
+    I.sprint = true;
+  }
+
   update(dt) {
     const { sim, ps, input: I } = this;
     this.sprintRoll = true;
@@ -2044,6 +2068,8 @@ export class BotBrain {
     this.sprintRoll = this.sprintLucky !== false;
     if (this.pathDirty) this._solvePath();
     this.drive(dt);
+    const drill = sim.training?.behaviour;
+    if (drill && drill !== 'normal') this._drill(drill, dt);
     // A bot that wants ADS eases its move stick into the ADS stance (see adsRoomFor) instead of strafing at full stick
     // from the hip. The stick is put back afterwards so the scaling can never compound across ticks.
     const mx = I.mx, mz = I.mz, len = Math.hypot(mx, mz);

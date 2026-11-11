@@ -10,7 +10,7 @@ import { mapImage, followMapArt } from './mapthumb.js';
 import { ico, header } from './yard.js';
 import { sweep, flash, enter } from './motion.js';
 import { cleanMods, playlistName } from '../shared/playlist.js';
-import { soloMods, featuredButton } from './modifiers.js';
+import { soloMods } from './modifiers.js';
 
 export const RANDOM = 'random';
 const RANDOM_MODE = { short: '?', name: 'Random', desc: 'Any mode the map can host.' };
@@ -25,7 +25,7 @@ function mixArt() {
 
 // Battle royale maps (giant, kept out of MAP_IDS): the real ones, and the dev test map only with ?brtest.
 const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('brtest');
-const BR_PICK = [...BR_MAP_IDS.filter(id => !MAPS[id].devMap), ...(DEBUG ? Object.keys(MAPS).filter(id => MAPS[id].devMap && MAPS[id].br) : [])];
+export const BR_PICK = [...BR_MAP_IDS.filter(id => !MAPS[id].devMap), ...(DEBUG ? Object.keys(MAPS).filter(id => MAPS[id].devMap && MAPS[id].br) : [])];
 const PICK_IDS = [...MAP_IDS, ...BR_PICK];
 
 // Every playable map and mode pair.
@@ -93,7 +93,8 @@ export function voteMarkup(state) {
     </button>`;
   }).join('');
   return `
-    ${header({ back: 'voteLeave', label: 'Leave', title: 'Vote for the next match', extra: `
+    ${header({ back: 'voteLeave', label: 'Leave', title: voteTitle(state), extra: `${state.lobby ? `
+      <div class="vote-lobby">${ico('party')}<span><b>${esc(state.lobby.name)}</b><small>Lobby ${state.lobby.size}/${state.lobby.size}</small></span></div>` : ''}
       <div class="vote-clock">
         ${ico('timer')}
         <span class="vote-num"></span>
@@ -103,14 +104,18 @@ export function voteMarkup(state) {
     <p class="vote-foot" data-in="fade"></p>`;
 }
 
+// Multiplayer's pre-match lobby (state.lobby) votes on 2-3 maps; with one map there is nothing to vote on.
+const voteTitle = state => (state.lobby ? (state.options.length > 1 ? 'Vote for the map' : 'Match starting') : 'Vote for the next match');
+
 export function paintVote(root, state) {
   root.querySelector('.vote-num').textContent = state.winner === null ? Math.max(0, state.left) : '';
   root.querySelector('.vote-bar i').style.transform = `scaleX(${state.winner === null ? Math.max(0, state.left / state.seconds) : 0})`;
   const title = root.querySelector('.bar-title');
   const foot = root.querySelector('.vote-foot');
   if (state.winner === null) {
-    title.textContent = 'Vote for the next match';
-    foot.textContent = state.mine === null ? 'Tap a card. You can change your mind until the timer runs out.' : 'Vote cast. Tap another card to change it.';
+    title.textContent = voteTitle(state);
+    foot.textContent = state.lobby && state.options.length < 2 ? 'Deploying when the timer runs out.'
+      : state.mine === null ? 'Tap a card. You can change your mind until the timer runs out.' : 'Vote cast. Tap another card to change it.';
   } else {
     const o = state.options[state.winner];
     const r = isRandom(o) ? state.resolved : o;
@@ -144,7 +149,8 @@ export function paintVote(root, state) {
     card.classList.toggle('lost', state.winner !== null && state.winner !== i);
     card.disabled = state.winner !== null;
     const votes = card.querySelector('.vc-votes');
-    const html = Array.from({ length: state.total }, (_, k) => `<i class="${k < n ? 'on' : ''}"></i>`).join('') + `<b>${n}</b>`;
+    // A big lobby shows only the count: 32 ballot pips would not fit on a card.
+    const html = (state.total <= 12 ? Array.from({ length: state.total }, (_, k) => `<i class="${k < n ? 'on' : ''}"></i>`).join('') : '') + `<b>${n}</b>`;
     if (votes.dataset.n !== String(n)) {
       if (votes.dataset.n !== undefined && n > Number(votes.dataset.n)) enter(votes, 'stamp', { duration: 260 });
       votes.dataset.n = n;
@@ -158,10 +164,10 @@ export function paintVote(root, state) {
 // Maps sit in one labelled section per size tier (Small, Medium, Large, then Huge for 16 v 16, so nobody starts a
 // Ground War by accident), in a column that scrolls once there are more than fit; Random stands beside it, always in view.
 const isLarge = id => !!MAPS[id]?.large || sizeOf(MAPS[id]) === 'huge' || (MAPS[id]?.modes ?? []).some(m => MODES[m]?.large);
-const tierOf = id => (isLarge(id) ? 'huge' : sizeOf(MAPS[id]));
-const mapCard = id => {
+export const tierOf = id => (isLarge(id) ? 'huge' : sizeOf(MAPS[id]));
+export const mapCard = (id, act = 'soloMap') => {
   const m = MAPS[id], region = regionName(m);
-  return `<button class="solo-map" data-act="soloMap" data-id="${id}" data-in="up">
+  return `<button class="solo-map" data-act="${act}" data-id="${id}" data-in="up">
           <span class="vc-art" data-map="${esc(m.id)}" style="background-image:url(${mapImage(m)})"></span>
           <span class="vc-shade"></span>
           ${region ? `<span class="sm-region t-tag" data-region="${esc(m.region)}">${esc(region)}</span>` : ''}
@@ -170,11 +176,12 @@ const mapCard = id => {
         </button>`;
 };
 
-export function soloMarkup({ mapId, mode }) {
+// `head` replaces the header (Custom puts its tabs there).
+export function soloMarkup({ mapId, mode }, { head = null } = {}) {
   const sections = SIZE_IDS.map(t => ({ t, ids: MAP_IDS.filter(id => tierOf(id) === t) })).filter(s => s.ids.length);
   if (BR_PICK.length) sections.push({ t: 'br', ids: BR_PICK });     // Battle royale: 32 players, squads, the circle.
   const out = `
-    ${header({ back: 'soloBack', title: 'Play vs bots', extra: `${featuredButton('btn solo-feat')}<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
+    ${head ?? header({ back: 'soloBack', title: 'Custom match' })}
     <div class="solo">
       <div class="solo-maps">
         <button class="solo-map random" data-act="soloMap" data-id="${RANDOM}" data-in="up">
@@ -187,7 +194,7 @@ export function soloMarkup({ mapId, mode }) {
         <div class="solo-scroll scroll-y">${sections.map(({ t, ids }) => `
           <section class="solo-sec tier-${t}">
             <h3 class="solo-h">${ico(t === 'huge' || t === 'br' ? 'party' : 'map')}<b>${t === 'br' ? 'Battle royale' : SIZES[t].label}</b><small>${t === 'br' ? '32 players, squads' : t === 'huge' ? '16 v 16' : SIZES[t].note}</small><i>${ids.length}</i></h3>
-            <div class="solo-grid">${ids.map(mapCard).join('')}</div>
+            <div class="solo-grid">${ids.map(id => mapCard(id)).join('')}</div>
           </section>`).join('')}
         </div>
       </div>

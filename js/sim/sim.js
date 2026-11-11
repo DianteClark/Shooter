@@ -295,9 +295,19 @@ function buildFfaRoster(humans, { botSkill, mapId, mode, seed, players }) {
   return roster;
 }
 
+// Training switches (Custom > Training). Bot behaviours: normal plays as usual, standing never moves, strafing steps side to
+// side across the player's line, rushing runs straight at the player (js/sim/bots.js applies them).
+export const TRAIN_BEHAVIOURS = ['normal', 'standing', 'strafing', 'rushing'];
+function cleanTraining(t) {
+  if (!t || typeof t !== 'object') return null;
+  return { ammo: !!t.ammo, noDeath: !!t.noDeath, behaviour: TRAIN_BEHAVIOURS.includes(t.behaviour) ? t.behaviour : 'normal' };
+}
+
 export class Sim {
   // scoreLimit and timeLimit default to the mode's own, from shared/modes.js.
-  constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm', mods = [] }) {
+  // `training` (Custom > Training, solo only): { ammo, noDeath, behaviour } practice switches on an ordinary map. It turns
+  // on the range's readout for every bot, and the trainSwap command; see TRAINING below.
+  constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm', mods = [], training = null }) {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
     this.rng = mulberry32(seed >>> 0);
     const def = mode === 'range' ? RANGE_MODE : (MODES[mode] || MODES.tdm);
@@ -324,7 +334,8 @@ export class Sim {
     this.time = 0;
     this.tick = 0;
     this.accum = 0;
-    this.phase = this.mode === 'range' ? 'live' : 'warmup';     // The range opens the moment you walk in.
+    this.training = cleanTraining(training);
+    this.phase = this.mode === 'range' || this.training ? 'live' : 'warmup';     // The range opens the moment you walk in.
     this.phaseT = WARMUP;
     this.timeLeft = this.timeLimit;
     this.scores = new Array(T).fill(0);
@@ -396,7 +407,7 @@ export class Sim {
     for (const p of this.players) if (p.isBot) this._noGoldForBots(p);
     this.calledAt = Array.from({ length: T }, () => new Float32Array(n).fill(-99));
     this.spawnUsedAt = new Map();
-    this.range = this.mode === 'range' ? new RangeDirector(this) : null;
+    this.range = this.mode === 'range' || this.training ? new RangeDirector(this) : null;
     this._emit({ t: 'phase', phase: this.phase });
     this._spawnAll();
   }
@@ -1054,6 +1065,14 @@ export class Sim {
     this._diffFx(p);
   }
 
+  // Training and the range: the loadout just sent (setLoadout) goes on at once, where the player stands.
+  _trainSwap(id) {
+    const p = this.byId.get(id);
+    if (!p || p.isBot || !p.alive || (!this.training && this.mode !== 'range')) return false;
+    this._placeAt(p, { x: p.ps.x, z: p.ps.z }, p.ps.aim);
+    return true;
+  }
+
   // Takes effect at the next spawn. Score and held streaks carry over; see setStreakKinds.
   setLoadout(id, loadout) {
     const p = this.byId.get(id);
@@ -1075,6 +1094,7 @@ export class Sim {
     if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
     if (msg.cmd === 'br') return !!this.br && this.br.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
+    if (msg.cmd === 'trainSwap') return this._trainSwap(id);
     return false;
   }
 
@@ -1298,6 +1318,13 @@ export class Sim {
       target.dmgT[attacker.index] = this.time;
     }
     let killed = target.hp <= 0, down = false;
+    // Training's No death: the blow lands, then the player stands straight back up where they were.
+    if (killed && this.training?.noDeath && !target.isBot && !target.dummy) {
+      this._emit({ t: 'hit', by: attacker.id, target: target.id, dmg: Math.round(dmg), x: round2(target.ps.x), z: round2(target.ps.z), killed: false, saved: true });
+      target.deaths++;
+      this._placeAt(target, { x: target.ps.x, z: target.ps.z }, target.ps.aim);
+      return;
+    }
     // Battle royale squads: lethal damage downs you while a teammate is still up.
     if (killed && this.br && this.br.tryDown(target, attacker, weapon)) { killed = false; down = true; }
     const hit = { t: 'hit', by: attacker.id, target: target.id, dmg: Math.round(dmg),

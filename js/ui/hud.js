@@ -15,6 +15,7 @@ import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
 import { icon, resolveIcon } from './icons.js';
+import { ArmorySheet } from './trainarmory.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
 import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
 import { effectRadius } from '../sim/equipment.js';
@@ -442,7 +443,8 @@ export class HUD {
   }
 
   // Call before each match.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [] } = {}) {
+  // `training` (Custom > Training): the firing range's readout and armory on an ordinary map.
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [], training = null } = {}) {
     this.map = MAPS[mapId] ?? this.map;
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
@@ -474,8 +476,10 @@ export class HUD {
     this.#oneGunControls(this.gun);
     this.#sndControls(this.snd || this.br);   // Battle royale has no scorestreaks either.
     this.reset();
-    this.#range.prepare(mode === 'range');
-    this.el.classList.toggle('range-on', mode === 'range');
+    const practice = mode === 'range' || !!training;
+    this.#range.prepare(practice, { training: !!training });
+    this.el.classList.toggle('range-on', practice);
+    this.el.classList.toggle('training-on', !!training);
     this.#hideIntro();
     this.remeasured = false;
     // Battle royale opens on its drop map instead of the team card.
@@ -543,6 +547,8 @@ export class HUD {
 
   // onSetLoadout's sibling for the firing range's Reset.
   onRangeReset(cb) { this.#range.onReset = cb; }
+  // Training and the range: a gun picked in the armory, as a whole loadout (js/ui/trainarmory.js).
+  onArmory(cb) { this.#range.onArmory = cb; }
 
   // Team roster and map name over the warmup; decorative, so it never takes a touch. The countdown under the map card
   // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
@@ -834,6 +840,7 @@ export class HUD {
           <small class="rp-model"></small>
         </div>
         <button class="rp-reset" data-tap="1">Reset</button>
+        <button class="rp-armory" data-tap="1">Armory</button>
       </div>
       <button class="range-leave" data-tap="1" hidden>Leave range</button>
       <div class="intro"></div>
@@ -3107,14 +3114,19 @@ class RangeReadout {
     this.leave = root.querySelector('.range-leave');
     this.nodes = Object.fromEntries(['dps', 'peak', 'ttk', 'best', 'acc', 'last', 'model'].map(k => [k, root.querySelector(`.rp-${k}`)]));
     root.querySelector('.rp-reset').addEventListener('click', () => this.onReset?.());
+    this.armory = new ArmorySheet(root, loadout => this.onArmory?.(loadout));
+    root.querySelector('.rp-armory').addEventListener('click', () => (this.armory.isOpen ? this.armory.close() : this.armory.open(Progress.loadout())));
     this.clock = 0;
     this.active = false;
   }
 
-  prepare(active) {
+  prepare(active, { training = false } = {}) {
     this.active = active;
     this.panel.hidden = !active;
     this.leave.hidden = !active;
+    this.armory.close();
+    this.panel.querySelector('.rp-head').textContent = training ? 'Training' : 'Firing Range';
+    this.leave.textContent = training ? 'Leave training' : 'Leave range';
     this.clock = Infinity;           // First frame paints at once.
   }
 

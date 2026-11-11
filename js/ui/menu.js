@@ -14,6 +14,7 @@ import { LoadoutsScreen } from './loadout.js';
 import { OperatorsScreen } from './operatorscreen.js';
 import { voteMarkup, paintVote, soloMarkup, paintSolo } from './vote.js';
 import { botMatchSummary } from './botsettings.js';
+import { mpMarkup, paintMp, searchMarkup, customHead, trainingMarkup, paintTraining, customLine } from './playscreens.js';
 import { followMapArt } from './mapthumb.js';
 import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
@@ -44,7 +45,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { title: 0, keypad: 1, solo: 1, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -177,14 +178,14 @@ export class Menu {
         </div>
         <nav class="ttl-nav">
           ${rejoin ? `<button class="tl-rejoin" data-act="rejoin" data-in="rail">${ico('rejoin')}<span><b>Rejoin ${esc(rejoin.code)}</b><small>Your last match may still be running</small></span></button>` : ''}
-          <button class="tl-hero is-primary" data-sound="confirm" data-act="solo" data-in="rail">
-            <span class="tl-hero-ico">${ico('bots')}</span>
-            <span class="tl-hero-tx"><b>Play vs bots</b><small>Choose a map and a mode</small></span>
+          <button class="tl-hero is-primary" data-sound="confirm" data-act="multiplayer" data-in="rail">
+            <span class="tl-hero-ico">${ico('party')}</span>
+            <span class="tl-hero-tx"><b>Multiplayer</b><small>Pick a playlist, join a match</small></span>
             ${ico('play', 'tl-go')}
           </button>
           <div class="tl-grid${PUBLIC_LOBBIES ? ' has-browse' : ''}">
+            <button class="tl-btn" data-act="custom" data-in="rail">${ico('options')}<b>Custom</b></button>
             <button class="tl-btn" data-act="quickPlay" data-in="rail">${ico('quick')}<b>Quick play</b></button>
-            <button class="tl-btn" data-act="range" data-in="rail">${ico('range')}<b>Firing range</b></button>
             <button class="tl-btn${PUBLIC_LOBBIES ? ' tl-third' : ''}" data-act="host" data-in="rail">${ico('host')}<b>Host</b></button>
             <button class="tl-btn${PUBLIC_LOBBIES ? ' tl-third' : ''}" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
             ${PUBLIC_LOBBIES ? `<button class="tl-btn tl-third tl-browse" data-act="browse" data-in="rail">${ico('ui:signal')}<b>Browse</b></button>` : ''}
@@ -311,7 +312,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [] } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], custom = null } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -363,14 +364,9 @@ export class Menu {
         ${train(1)}
       </div>
       <footer class="lobby-foot" data-in="up">
-        <div class="skills${isHost ? '' : ' fixed'}">
-          <span>${ico('bots')}Bots</span>
-          ${isHost
-            ? SKILLS.map(([id, label]) => `<button class="seg${botSkill === id ? ' on' : ''}" data-act="botSkill" data-skill="${id}">${label}</button>`).join('')
-            : `<b class="seg on">${esc(skillName)}</b>`}
-        </div>
+        <button class="chip cu-chip${custom ? ' on' : ''}" ${isHost ? 'data-act="lobbyCustom"' : 'disabled'}>${ico(custom ? 'options' : 'map')}<span><small>${custom ? 'Custom match' : isHost ? 'Map vote. Tap for custom' : 'Map vote'}</small><b>${esc(custom ? customLine(custom) : 'Bots: Mixed')}</b></span></button>
         <button class="chip" data-act="loadout">${ico('loadout')}<b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
-        ${modsChip(mods, { fixed: !isHost })}
+        ${custom ? '' : modsChip(mods, { fixed: !isHost })}
         <button class="chip" data-act="gunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
         <button class="chip" data-act="operators">${ico('operator')}<b>Operators</b></button>
         ${start}
@@ -410,6 +406,61 @@ export class Menu {
     this.#paintBotMatch(state);
     paintSolo(this.el, state);
     followMapArt(this.el);
+    this.show();
+  }
+
+  // Multiplayer (js/ui/playscreens.js): built when the screen or tab changes, then only the marks are painted.
+  multiplayer(state) {
+    if (!(this.el.dataset.screen === 'multiplayer' && this.el.classList.contains('on') && this.el.querySelector(`.mp[data-tab="${state.tab}"]`))) {
+      this.#stopPreview();
+      this.#endReel();
+      const fresh = this.el.dataset.screen !== 'multiplayer';
+      this.el.dataset.screen = 'multiplayer';
+      this.el.innerHTML = mpMarkup(state);
+      if (!fresh) this.stagger(this.el.querySelector('.mp'));
+    }
+    paintMp(this.el, state);
+    this.show();
+  }
+
+  // The matchmaking moment between Find match and the pre-match vote. found(n) counts players in.
+  matchSearch(state) {
+    this.#stopPreview();
+    this.el.dataset.screen = 'mpsearch';
+    this.el.innerHTML = searchMarkup(state);
+    this.show();
+    const n = this.el.querySelector('.mp-found');
+    return { found: k => { if (n?.isConnected) n.textContent = String(k); } };
+  }
+
+  // Custom: Match is the full picker (solo above) under the Custom tabs; Training its own panel. lobby: editing a
+  // friend lobby's custom settings (Start becomes Use in lobby, and Training is not offered).
+  custom(state) {
+    const { tab, pick, training, lobby = false } = state;
+    if (tab === 'match') {
+      const built = this.el.dataset.screen === 'custom' && this.el.classList.contains('on') && this.el.querySelector('.solo');
+      if (!built) {
+        this.#stopPreview();
+        this.#endReel();
+        this.el.dataset.screen = 'custom';
+        this.el.innerHTML = soloMarkup(pick, { head: customHead('match', { lobby }) });
+        this.el.querySelector('.solo-modes')?.classList.add('scroll-x');
+        this.el.querySelector('.solo-start')?.insertAdjacentHTML('beforebegin', `<button class="btn solo-bots" data-act="soloBots" aria-label="Bot match settings">${ico('bot')}<span><b></b><small></small></span></button>`);
+        if (lobby) this.el.querySelector('.solo-start b').textContent = 'Use';
+        followMapArt(this.el);
+      }
+      this.#paintBotMatch(pick);
+      paintSolo(this.el, pick);
+    } else {
+      if (!(this.el.dataset.screen === 'custom' && this.el.classList.contains('on') && this.el.querySelector('.trn'))) {
+        this.#stopPreview();
+        this.#endReel();
+        this.el.dataset.screen = 'custom';
+        this.el.innerHTML = trainingMarkup(training);
+        followMapArt(this.el);
+      }
+      paintTraining(this.el, training);
+    }
     this.show();
   }
 
