@@ -71,6 +71,7 @@ const CONV_CHANCE = [0, 0, 0, 0, 0.2];
 const CHANGE_REPEAT = 1.2;       // Seconds a loot change keeps riding along in snapshots.
 const CELL = 8;                  // Loot grid cell, metres.
 const PLAN_EVERY = 15;           // Ticks between squad plans (0.5 s).
+const BACKUP_EVERY = 90;         // Ticks between host-migration backups to each human guest (3 s).
 const NOISE_KEEP = 7;            // Seconds a gunfight stays interesting to bots that heard it.
 const THIRD_PARTY = 75;          // Metres a geared bot squad will go to join a fight it hears.
 // Pacing (docs/BR.md "Pacing"): the share of squads that pick a contested drop on purpose, by squad size; how far apart
@@ -1252,7 +1253,101 @@ export class BrRules {
     if (guest) this.sentTo.set(guest.id, this.seq);
     out.push(ch ? ch.flat() : 0);
     out.push(sim.tick % 90 === 0 || sim.phase === 'ended' ? this._stats() : 0);   // For the results screen: rarely.
+    // Host migration: now and then each human guest gets what only the host knows (everyone's inventory, the circle's
+    // own clock, bot drop plans), so whichever phone takes over can carry the match on (restore).
+    if (guest && !guest.isBot && (sim.tick + guest.index * 7) % BACKUP_EVERY === 0) out.push(this.backup());
     return out;
+  }
+
+  // ---- Host migration ----
+
+  // What a new host needs and the snapshots do not carry: per player [plates, meds, kits, gun0, gun1, ammo0, res0,
+  // ammo1, res1, downedBy index, use kind, use time, glide time, jumpAt, dropX, dropZ, follow index, revive count, dmg,
+  // knocks, deathT] with a gun as [weapon index, rarity, packed kit] or 0; then the rules' own clock and the circle's
+  // shrink start.
+  backup() {
+    const sim = this.sim, idx = id => (id ? sim.byId.get(id)?.index ?? -1 : -1);
+    const per = sim.players.map(p => {
+      const b = p.br, ps = p.ps;
+      if (!b) return 0;
+      const g = s => (b.guns[s] ? [WEAPON_IDS.indexOf(b.guns[s].id), b.guns[s].r, packKit(b.guns[s].kit)] : 0);
+      return [b.plates, b.meds, b.kits, g(0), g(1), ps.ammo[0], ps.reserve[0], ps.ammo[1], ps.reserve[1], idx(b.downedBy), USE_KINDS.indexOf(b.useK),
+        Math.round(b.useT * 10), Math.round(b.glideT * 10), Math.round(b.jumpAt * 1000), Math.round(b.dropX), Math.round(b.dropZ), idx(b.follow),
+        b.revives, Math.round(b.dmg), b.knocks, Math.round(b.deathT * 10)];
+    });
+    return [Math.round(this.t * 10), r1(this.from.x), r1(this.from.z), r1(this.from.r), this.dropsPlanned ? 1 : 0, per];
+  }
+
+  // The new host (once a guest) rebuilds the rules from its old mirror (`old`, the guest copy with its loot table and
+  // the latest backup) and the newest snapshot view. Called by Sim.fromSnapshot after the players are restored.
+  restore(view, old) {
+    const sim = this.sim, bk = old?.saved ?? null;
+    this.authority = true;
+    if (old) {
+      Object.assign(this.plane, old.plane);
+      this.circle = { ...old.circle }; this.next = { ...old.next };
+      this.phase = old.phase; this.state = old.state; this.timer = old.timer;
+      // The loot table as this phone last mirrored it: same ids, so other phones' mirrors stay in step.
+      this.items = old.items; this.grid = old.grid;
+      this.log = []; this.seq = 0; this.sentTo = new Map();
+    }
+    this.nextChosen = true;
+    this.t = bk ? bk[0] / 10 : Math.max(0, view.t - (sim.phase === 'live' ? 0 : BR.warmup));
+    this.from = bk ? { x: bk[1] / 10, z: bk[2] / 10, r: bk[3] / 10 } : { ...this.circle };
+    if (this.state === 'shrink' && !bk) {
+      // Where this shrink began, from how far along it is.
+      const ph = BR.phases[this.phase], k = Math.max(0, Math.min(0.99, 1 - this.timer / ph.shrink));
+      this.from = { x: (this.circle.x - this.next.x * k) / (1 - k), z: (this.circle.z - this.next.z * k) / (1 - k), r: (this.circle.r - this.next.r * k) / (1 - k) };
+    }
+    this.dropsPlanned = bk ? !!bk[4] : this.plane.f > 0;
+    if (sim.phase === 'warmup') sim.phaseT = Math.max(0.5, BR.warmup - view.t);
+    const stats = view.br?.stats ?? old?.stats ?? null;
+    const byIndex = i => (i >= 0 ? sim.players[i]?.id ?? null : null);
+    this.squadsOut = new Map();
+    sim.players.forEach((p, i) => {
+      const v = view.players[i], b = p.br, ps = p.ps;
+      if (!b || !v) return;
+      p.alive = !!v.alive;                     // A held (away) human's character stays on the field in battle royale.
+      b.armor = v.brArmor ?? 0;
+      p.brAir = v.air ?? 0;
+      b.out = !!v.out; b.place = v.place ?? 0;
+      if (b.out) this.squadsOut.set(p.team, b.place);
+      p.downed = !!v.downed && p.alive;
+      b.reviveT = p.downed ? (v.reviveK ?? 0) * BR.reviveTime : 0;
+      if (p.downed) { p.hp = Math.max(1, v.hp ?? BR.downHp); ps.sprinting = false; }
+      b.landed = p.brAir === 0;
+      const st = stats?.[i];
+      if (st) { b.dmg = st[0]; b.revives = st[1]; b.knocks = st[2]; }
+      const e = bk?.[5]?.[i];
+      if (e) {
+        [b.plates, b.meds, b.kits] = e;
+        const weapon = ps.weapon;
+        for (const s of [0, 1]) {
+          const g = e[3 + s];
+          const id = g ? WEAPON_IDS[g[0]] : null;
+          if (id && WEAPONS[id]) {
+            const kit = unpackKit(id, g[2]);
+            b.guns[s] = { id, r: g[1], kit };
+            brArm(ps, s, id, kit, g[1], e[5 + s * 2], e[6 + s * 2]);
+            p.kits[s] = kit;
+          } else { b.guns[s] = null; brArm(ps, s, KNIFE); }
+        }
+        // Back in the hand the snapshot showed.
+        ps.slot = weapon === ps.secondary && weapon !== ps.primary ? 1 : 0;
+        ps.weapon = ps.slot ? ps.secondary : ps.primary;
+        ps.swapT = 0; ps.cooldown = 0;
+        p.primary = ps.primary;
+        b.downedBy = byIndex(e[9]); b.useK = USE_KINDS[e[10]] ?? null; b.useT = e[11] / 10;
+        b.useDur = b.useK === 'plate' ? BR.plateTime : b.useK === 'med' ? BR.medTime : b.useK === 'self' ? BR.selfRevive : 0;
+        b.glideT = e[12] / 10; b.jumpAt = e[13] / 1000; b.dropX = e[14]; b.dropZ = e[15]; b.follow = byIndex(e[16]);
+        b.revives = e[17]; b.dmg = e[18]; b.knocks = e[19]; b.deathT = e[20] / 10;
+      }
+      if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * 3; b.offZ = Math.sin(a) * 3; }
+    });
+    // This phone's own pack is fresher in its own inventory block.
+    const me = sim.byId.get(view.localId), inv = view.br?.inv;
+    if (me?.br && inv) { me.br.plates = inv.plates; me.br.meds = inv.meds; me.br.kits = inv.kits; }
+    this._fillView();
   }
 
   encode() { return this.encodeFor(null); }
@@ -1262,7 +1357,8 @@ export class BrRules {
   decode(a, view) {
     const players = view.players;
     if (!a) { this._fillView(); view.br = this.view; return; }
-    const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats] = a;
+    const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats, backup] = a;
+    if (backup) this.saved = backup;           // Kept for a host migration (restore).
     this.plane.f = f / 1000;
     this.plane.fx = fx; this.plane.fz = fz; this.plane.tx = tx; this.plane.tz = tz;
     this.plane.len = Math.hypot(tx - fx, tz - fz) || 1;

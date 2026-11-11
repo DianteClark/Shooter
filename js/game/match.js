@@ -352,6 +352,7 @@ export class Match {
     if (!view) return;
     this.sim = Sim.fromSnapshot(view, this.roster, {
       map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds,
+      br: this.sim.br ?? null,      // The guest's battle royale mirror: loot table and the host's last backup.
     });
     this.isHost = true;
     this.hostId = this.localId;

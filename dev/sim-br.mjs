@@ -11,6 +11,7 @@ import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 const STEP = 1 / SIM_HZ;
 const args = process.argv.slice(2);
 const QUICK = args.includes('--quick');
+const PACING = args.find(a => a.startsWith('--pacing'));
 const MAP = MAPS[(args.find(a => a.startsWith('--map=')) ?? '--map=frontier').slice(6)];   // --map=brtest: the small stand-in.
 let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed++; console.log(`  FAIL ${msg}`); } else console.log(`  ok   ${msg}`); };
@@ -154,7 +155,6 @@ function units() {
   check(view.players.find(p => p.id === 'h1').out, 'guest sees the squad out');
 }
 
-const PACING = args.find(a => a.startsWith('--pacing'));
 if (PACING) {
   // node dev/sim-br.mjs --pacing=N: N seeds per mode, pacing numbers only.
   const n = +(PACING.split('=')[1] ?? 4);
@@ -187,7 +187,58 @@ function squadUnits() {
   check(teamsOf(r, ['h0', 'h1']).size === 1 && teamsOf(r, ['h2', 'h3', 'h4']).size === 1, 'quads: a pair and a trio each stay whole');
 }
 
+// ---- Host migration: a guest's mirror plus the host's backups carry the match on ----
+function migration(mode, seed, atS) {
+  console.log(`host migration (${mode}, at ${atS} s)`);
+  const humans = [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }, { id: 'h3', name: 'Other', team: 1 }];
+  const host = makeSim(mode, seed, humans), guest = makeSim(mode, seed, humans), g2 = makeSim(mode, seed, humans);
+  let view = null;
+  while (host.time < atS && host.phase !== 'ended') {
+    host.step(STEP);
+    host.drainEvents();
+    view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+    if (host.tick % 2 === 0) g2.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h3'))), 'h3');
+  }
+  const roster = buildRoster(humans, { botSkill: 'mixed', mode, mapId: MAP.id, seed });
+  const sim = Sim.fromSnapshot(view, roster, { map: MAP, seed, gone: ['h1'], br: guest.br });
+  const a = host.br, b = sim.br;
+  check(sim.br.authority && b.phase === a.phase && b.state === a.state && Math.abs(b.timer - a.timer) < 0.3, `circle phase ${b.phase} ${b.state}, timer ${b.timer.toFixed(1)}/${a.timer.toFixed(1)}`);
+  check(Math.hypot(b.circle.x - a.circle.x, b.circle.z - a.circle.z) < 0.5 && Math.abs(b.circle.r - a.circle.r) < 0.5 && Math.hypot(b.next.x - a.next.x, b.next.z - a.next.z) < 0.2 && Math.abs(b.next.r - a.next.r) < 0.2, 'circle centre, radius and next circle');
+  check(Math.abs(b.from.r - a.from.r) < 0.5 && Math.abs(b.t - a.t) < 3.5, `shrink start and the rules' clock (${b.t.toFixed(1)}/${a.t.toFixed(1)})`);
+  const same = a.items.length === b.items.length && a.items.every((it, i) => (it === null) === (b.items[i] == null) && (!it || (it.kind === b.items[i].kind && it.v === b.items[i].v)));
+  check(same, `loot on the ground and opened chests (${b.items.filter(Boolean).length} items, ${a.items.filter(x => x === null).length} taken)`);
+  let inv = 0, guns = 0, state = 0, n = 0;
+  for (let i = 0; i < host.players.length; i++) {
+    const p = host.players[i], q = sim.players[i];
+    if (!p.br) continue;
+    n++;
+    if (p.br.plates === q.br.plates && p.br.meds === q.br.meds && p.br.kits === q.br.kits) inv++;
+    if ([0, 1].every(s => (p.br.guns[s]?.id ?? null) === (q.br.guns[s]?.id ?? null) && (p.br.guns[s]?.r ?? -1) === (q.br.guns[s]?.r ?? -1) && (!p.alive || p.ps.defs[s] === q.ps.defs[s]))) guns++;
+    if (Math.abs(p.br.armor - q.br.armor) <= 1 && !!p.downed === !!q.downed && p.brAir === q.brAir && p.br.out === q.br.out && p.alive === q.alive && p.team === q.team) state++;
+  }
+  // Packs ride the 3 s backup, so a pickup in the last moments before the drop can be missing.
+  check(inv >= n - 3, `every player's plates, medkits and kits (${inv}/${n})`);
+  check(guns >= n - 3, `every player's guns with rarity and kit (${guns}/${n})`);
+  check(state === n, `armor, downs, air and squad state (${state}/${n})`);
+  check([...a.squadsOut.keys()].every(t => b.squadsOut.has(t)), `squads out (${b.squadsOut.size})`);
+  const host1 = sim.byId.get('h1');
+  check(host1.away && (host1.alive === host.byId.get('h1').alive), 'the old host is held, never bot-driven');
+  // The new host plays it out, and the other guest (h3), now decoding from it, stays in step.
+  let ok = true, ticks = 0;
+  try {
+    while (sim.phase !== 'ended' && ticks < SIM_HZ * 60 * 14) {
+      sim.step(STEP); sim.drainEvents(); ticks++;
+      if (ticks % 2 === 0) g2.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h3'))), 'h3');
+    }
+    g2.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h3'))), 'h3');      // The last moment's drops.
+  } catch (e) { ok = false; console.log(e); }
+  check(ok && sim.phase === 'ended', `the new host finishes the match (${(sim.time / 60).toFixed(1)} min)`);
+  const gi = g2.br.items.filter(Boolean).length, hi = sim.br.items.filter(Boolean).length;
+  check(gi === hi, `a guest's loot mirror follows the new host (${gi}/${hi})`);
+}
+
 squadUnits();
+if (!PACING) { migration('br', 21, 150); migration('br', 22, 330); }
 units();
 const modes = QUICK ? ['br'] : ['br', 'brduo', 'brsolo'];
 const results = [];

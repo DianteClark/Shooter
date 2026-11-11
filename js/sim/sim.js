@@ -2399,6 +2399,7 @@ export class Sim {
     sim.firstBlood = view.players.some(p => p.kills > 0);
     for (let i = 0; i < view.players.length && i < sim.players.length; i++) sim._restorePlayer(sim.players[i], view.players[i]);
     sim._restoreMode(view);
+    sim.br?.restore(view, opts.br ?? null);       // Battle royale: circle, loot mirror, packs (js/sim/br.js).
     sim._restoreStreaks(view);
     // Gun Game: everyone back on the rung their score says, with the ammo the snapshot had.
     if (sim.ladder) {
