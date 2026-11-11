@@ -205,15 +205,15 @@ const PAL = {
 const SKIN_ROWS = {
   trooper: [
     ['Urban Grey', [0x8a9098, 0x6c7178, 0x4a4e55, 0x9fe8ff, 0], { stat: 'kills', goal: 200 }], ['Woodland', 'woodland'],
-    ['Night Recon', [0x26332a, 0x2a3a2e, 0x1e2a22, 0x5dff7a, 1]], ['Blue Line', 'navy'], ['Sovereign', [0xc9a240, 0x4a3c20, 0x2e2616, 0xffe08a, 2]],
+    ['Night Recon', [0x26332a, 0x2a3a2e, 0x1e2a22, 0x5dff7a, 1]], ['Blue Line', 'navy'], ['Imperial', [0xc9a240, 0x4a3c20, 0x2e2616, 0xffe08a, 2]],
   ],
   wisp: [
     ['Drifter', [0xb59a6a, 0xa48a5e, 0x7d6a4a, 0xffd08a, 0], { stat: 'long', goal: 50 }], ['Fern', 'moss'],
     ['Veil', [0x4c5a32, 0x56643a, 0x3e4a2a, 0xc8ff6a, 1]], ['Will-o', 'teal'], ['Prism Wisp', [0x2a2440, 0x3a2f5a, 0x221c36, 0x18e8ff, 3]],
   ],
   anvil: [
-    ['Foundry', [0x8a4420, 0x5a2f1a, 0x3a2418, 0xffb14a, 0], { stat: 'kills', goal: 600 }], ['Gunmetal', 'urban'],
-    ['Bulwark', [0x3a4a66, 0x34405a, 0x252c3c, 0xff4a2a, 1]], ['Slag', 'ember'], ['Molten', [0x2a1410, 0x3a1a12, 0x22100c, 0xff5a10, 2]],
+    ['Forgehand', [0x8a4420, 0x5a2f1a, 0x3a2418, 0xffb14a, 0], { stat: 'kills', goal: 600 }], ['Gunmetal', 'urban'],
+    ['Bastion', [0x3a4a66, 0x34405a, 0x252c3c, 0xff4a2a, 1]], ['Slag', 'ember'], ['Molten', [0x2a1410, 0x3a1a12, 0x22100c, 0xff5a10, 2]],
   ],
   relay: [
     ['Arctic Signal', [0xd8dee2, 0xc4ccd2, 0x8f9aa2, 0x4dc8ff, 0], { level: 20 }], ['Field Telephone', 'desert'],
@@ -240,28 +240,28 @@ const SKIN_ROWS = {
     ['Usurper', [0x1c1420, 0x2a1e30, 0x161018, 0xb04aff, 1]], ['Regent', 'crimson'], ['Sovereign Prism', [0x2a2236, 0x3a2e4c, 0x221a2c, 0xffd659, 3]],
   ],
   sparrow: [['Field Hospital', 'ivory', { stat: 'kills', goal: 150 }], ['Hedgerow', 'woodland'], ['Night Ward', 'night'], ['Lifeline', 'teal'], ['Golden Hour', 'gold']],
-  coyote: [['Salt Flat', 'ash', { stat: 'long', goal: 40 }], ['Dune', 'desert'], ['Mirage', 'ember'], ['Dust Devil', 'rust'], ['Sun Dog', 'molten']],
+  coyote: [['Salt Flat', 'ash', { stat: 'long', goal: 40 }], ['Dune', 'desert'], ['Mirage', 'ember'], ['Sirocco', 'rust'], ['Sun Dog', 'molten']],
   vesper: [['Hide', 'moss', { stat: 'long', goal: 80 }], ['Frost Hide', 'arctic'], ['Dusk', 'violet'], ['Evening Star', 'navy'], ['Northern Lights', 'aurora']],
   wren: [['Grey Wing', 'urban', { stat: 'kills', goal: 300 }], ['High Desert', 'desert'], ['Night Flight', 'night'], ['Clear Sky', 'sky'], ['Prism Rotor', 'prism']],
-  ox: [['Yard Brown', 'rust', { stat: 'kills', goal: 500 }], ['Drab', 'olive'], ['Furnace', 'ember'], ['Iron', 'slate'], ['Golden Yoke', 'gold']],
+  ox: [['Yard Brown', 'rust', { stat: 'kills', goal: 500 }], ['Drab', 'olive'], ['Smelter', 'ember'], ['Iron', 'slate'], ['Golden Yoke', 'gold']],
   morse: [['Dispatch', 'navy', { level: 24 }], ['Field Post', 'olive'], ['Dot Dash', 'violet'], ['Frequency', 'teal'], ['Carrier Gold', 'royal']],
   cipher: [['White Noise', 'ash', { stat: 'kills', goal: 300 }], ['Grid', 'urban'], ['Encrypted', 'toxic'], ['Black Box', 'night'], ['Prism Key', 'prism']],
   harrow: [['Snowline', 'arctic', { stat: 'kills', goal: 400 }], ['Scree', 'urban'], ['Pine', 'woodland'], ['Avalanche', 'sky'], ['Moonlit Peak', 'moon']],
-  sable: [['Sandstorm', 'desert', { stat: 'slide', goal: 60 }], ['Oasis', 'teal'], ['Red Rock', 'rust'], ['Night Caravan', 'violet'], ['Sunfire', 'molten']],
-  marshal: [['Dress Whites', 'ivory', { prestige: 1 }], ['Field Grey', 'urban'], ['Staff', 'crimson'], ['Old Guard', 'navy'], ['Field Marshal', 'royal']],
-  flint: [['Quarry', 'ash', { stat: 'kills', goal: 300 }], ['Hazard', 'slate'], ['Fuse', 'ember'], ['Blast Door', 'olive'], ['Shaped Charge', 'molten']],
+  sable: [['Sandstorm', 'desert', { stat: 'slide', goal: 60 }], ['Lagoon', 'teal'], ['Red Rock', 'rust'], ['Night Caravan', 'violet'], ['Sunfire', 'molten']],
+  marshal: [['Dress Whites', 'ivory', { prestige: 1 }], ['Field Grey', 'urban'], ['Staff', 'crimson'], ['Grey Guard', 'navy'], ['Field Marshal', 'royal']],
+  flint: [['Quarry', 'ash', { stat: 'kills', goal: 300 }], ['Hi-Vis', 'slate'], ['Fuse', 'ember'], ['Blast Door', 'olive'], ['Detonator', 'molten']],
   nyx: [['Shadow', 'night', { stat: 'clean', goal: 100 }], ['City Night', 'navy'], ['Nightshade', 'violet'], ['Witching Hour', 'crimson'], ['Eclipse', 'wraith']],
-  halcyon: [['Whiteout', 'arctic', { stat: 'kills', goal: 300 }], ['Tundra', 'urban'], ['Polar Night', 'night'], ['Glacier', 'sky'], ['Aurora', 'aurora']],
+  halcyon: [['Snowblind', 'arctic', { stat: 'kills', goal: 300 }], ['Tundra', 'urban'], ['Long Night', 'night'], ['Icefall', 'sky'], ['Aurora', 'aurora']],
   tinker: [['Grease', 'slate', { stat: 'clean', goal: 120 }], ['Workshop', 'olive'], ['Arc Weld', 'teal'], ['Boiler', 'rust'], ['Brass Works', 'gold']],
   rook: [['Concrete', 'urban', { stat: 'slide', goal: 80 }], ['Brick', 'rust'], ['Riot', 'navy'], ['Firebreak', 'crimson'], ['Checkmate', 'moon']],
-  mako: [['Reef', 'teal', { stat: 'long', goal: 40 }], ['Kelp', 'moss'], ['Deep Water', 'navy'], ['Bioluminescent', 'aurora'], ['Abyss', 'wraith']],
+  mako: [['Reef', 'teal', { stat: 'long', goal: 40 }], ['Kelp', 'moss'], ['Riptide', 'navy'], ['Bioluminescent', 'aurora'], ['Abyss', 'wraith']],
   seraph: [['Choir', 'ivory', { prestige: 4 }], ['Steel Feather', 'urban'], ['Fallen', 'crimson'], ['Dawn', 'sky'], ['Radiant', 'royal']],
   warden: [['Keeper', 'slate', { prestige: 6 }], ['Lamplighter', 'olive'], ['Watchfire', 'ember'], ['Last Light', 'night'], ['Eternal Flame', 'gold']],
 };
 
 const ROW_TIERS = ['field', 2, 3, 4, 5];
 export const SKINS = OPERATORS.flatMap(op => [
-  { id: `skin:${op.id}-base`, operator: op.id, tier: 'base', name: 'Standard issue', slot: 0, glow: 0,
+  { id: `skin:${op.id}-base`, operator: op.id, tier: 'base', name: `${op.name} issue`, slot: 0, glow: 0,
     gear: null, sleeve: op.look.sleeve, trouser: op.look.trouser, accent: null, unlock: null },
   ...SKIN_ROWS[op.id].map(([name, pal, rule], i) => {
     const [gear, sleeve, trouser, accent, glow] = typeof pal === 'string' ? PAL[pal] : pal, tier = ROW_TIERS[i];

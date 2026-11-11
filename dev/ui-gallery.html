@@ -115,6 +115,11 @@ const SCENES = {
   }),
   'loadouts': menuScene('Loadouts', ({ menu }) => menu.loadouts({ onBack: noop, onChange: noop, onGunsmith: noop, onOperators: noop, onRename: noop }), { gl: true }),
   'gunsmith': menuScene('Gunsmith', ({ menu }) => menu.gunsmith({ loadoutIndex: 0, weapon: 'ar', onBack: noop, onChange: noop }), { gl: true }),
+  // V12: the pick view (classes across the top, guns below); &cat=Sniper opens on a class.
+  'gunsmith-pick': menuScene('Gunsmith: classes and guns', ({ menu }) => {
+    menu.gunsmith({ loadoutIndex: 0, onBack: noop, onChange: noop });
+    if (q.get('cat')) menu.screen.selectCategory(q.get('cat'));
+  }, { gl: true }),
   // V11: &gun=dmr&slot=grip&try=k_runaway&fit=barrel:s_pinbarrel,mag:extmag opens a gun with parts fitted and one being tried.
   'gunsmith-try': menuScene('Gunsmith: trying an attachment', async ({ menu }) => {
     const gun = q.get('gun') ?? 'dmr';
@@ -131,6 +136,21 @@ const SCENES = {
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop }); }),
+  'challenges': menuScene('Challenges', ({ menu }) => menu.challenges({ onBack: noop })),
+  'history': menuScene('Match history', ({ menu }) => menu.history({ onBack: noop, onStats: noop })),
+  // Some kills on a few guns, so locked cards show their progress bars part-way.
+  'cards': menuScene('Calling cards picker', async ({ menu }) => {
+    const { cardsSheet } = await import('./js/ui/cards.js');
+    const { Progress } = await import('./js/ui/progress.js');
+    Progress.applyMatch({ xp: 40000, weapons: { ar: { xp: 9000, kills: 64, head: 21, long: 9 }, smg: { xp: 6000, kills: 41, head: 8 }, sniper: { xp: 4000, kills: 17, head: 12, long: 15 } } });
+    menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop });
+    cardsSheet(menu, {});
+  }),
+  'emblems': menuScene('Emblems picker', async ({ menu }) => {
+    const { cardsSheet } = await import('./js/ui/cards.js');
+    menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop });
+    cardsSheet(menu, { tab: 'emblems' });
+  }),
   'results-win': menuScene('Results: win', ({ menu, results }) => menu.results(results('win'), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
   'results-loss': menuScene('Results: loss', ({ menu, results }) => menu.results(results('loss'), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
   'results-draw': menuScene('Results: draw, long names', ({ menu, results }) => menu.results(results('draw', true), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
@@ -215,6 +235,7 @@ async function menuFrame(scene, ui) {
   if (!scene.gl) document.getElementById('game').remove();
   const { Menu } = await import('./js/ui/menu.js');
   const menu = new Menu(ui);
+  window.__menu = menu;   // Tests drive the screen through it (dev/ui-overflow-test.py).
   menu.show?.();
   const cache = {};
   for (const o of ['win', 'loss', 'draw']) if (scene.label.toLowerCase().includes(o)) cache[o] = await fakeResults(o, scene.label.includes('long'), scene.label.includes('Ground War'));
@@ -253,10 +274,14 @@ async function fakeResults(outcome, long, groundWar = false) {
         { id: 'c1', label: 'Get 200 kills', icon: 'ui:skull', before: 16, value: 40, goal: 200, fresh: false, xp: 2000, period: 'weekly' },
         { id: 'c2', label: 'Get 90 kills with SMGs', icon: 'smg', before: 23, value: 30, goal: 90, fresh: false, xp: 1500, period: 'weekly' },
         { id: 'c3', label: 'Get 50 headshot kills in one long week of play', icon: 'headshot', before: 11, value: 24, goal: 50, fresh: true, xp: 1200, period: 'daily' },
+        { id: 'c4', label: 'Win 3 Domination matches', icon: 'mode:dom', before: 1, value: 2, goal: 3, fresh: false, xp: 900, period: 'daily' },
+        { id: 'c5', label: 'Get 25 kills with LMGs', icon: 'lmg', before: 4, value: 25, goal: 25, fresh: true, xp: 1000, period: 'daily' },
+        { id: 'c6', label: 'Call in 10 scorestreaks', icon: 'uav', before: 2, value: 5, goal: 10, fresh: false, xp: 1500, period: 'weekly' },
       ],
       proProgress: [
         { perk: 'marathon', name: 'Adrenaline', done: false, steps: [{ before: 3, value: 7, goal: 10 }, { before: 0, value: 4, goal: 6 }] },
         { perk: 'scavenger', name: 'Scavenger', done: true, steps: [{ before: 9, value: 10, goal: 10 }, { before: 5, value: 6, goal: 6 }] },
+        { perk: 'ghost', name: 'Ghost', done: false, steps: [{ before: 1, value: 3, goal: 20 }, { before: 0, value: 2, goal: 15 }] },
       ],
     } : {}),
   };

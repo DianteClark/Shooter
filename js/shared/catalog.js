@@ -56,7 +56,7 @@ export const TACTICALS = {
   // Gear wave (2026-11). Appended: old ids keep their wire numbers.
   snapshot: { id: 'snapshot', name: 'Snapshot', count: 1, job: 'Instant recon', counter: 'Cold Blooded halves it, Blank Slate ignores it', desc: 'Pops on landing: shows every enemy within 12 m through walls for 3 s' },
   blackout: { id: 'blackout', name: 'Blackout', count: 1, job: 'Shut down kit', counter: 'Engineer is immune; stay out of the 7 m', desc: 'EMP burst: enemies in it lose equipment and minimap for 6 s, devices die' },
-  bulwark:  { id: 'bulwark',  name: 'Bulwark',  count: 1, job: 'Instant cover', counter: 'Explosives wreck it; two magazines break it; flank', desc: 'Waist-high shield where it lands. Shoot over it. Lasts 25 s' },
+  bulwark:  { id: 'bulwark',  name: 'Rampart',  count: 1, job: 'Instant cover', counter: 'Explosives wreck it; two magazines break it; flank', desc: 'Waist-high shield where it lands. Shoot over it. Lasts 25 s' },
   tagger:   { id: 'tagger',   name: 'Tagger',   count: 1, job: 'Track one target', counter: 'Blank Slate ignores it, Cold Blooded halves it', desc: 'Dart that sticks to an enemy and shows them to your team for 8 s' },
   medpack:  { id: 'medpack',  name: 'Medpack',  count: 1, job: 'Heal the squad', counter: 'Shoot it, Shock or Blackout', desc: 'Heals you and teammates within 3.5 m for 15 s' },
 };

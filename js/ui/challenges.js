@@ -100,9 +100,9 @@ export function challengesScreen(menu, { onBack }) {
 
 // ---- Results --------------------------------------------------------------------------------------------------------
 // What moved this match, under the tables: up to three rows with the bar from before to after.
-export function challengeStrip(list = []) {
+export function challengeStrip(list = [], max = 3) {
   if (!list?.length) return '';
-  const rows = [...list].sort((a, b) => Number(b.fresh) - Number(a.fresh)).slice(0, 3);
+  const rows = [...list].sort((a, b) => Number(b.fresh) - Number(a.fresh)).slice(0, max);
   return `<div class="rs-ch"><small class="rs-ch-h">${ico('ui:flag')}Challenges</small>${rows.map(c => `
     <div class="rs-ch-row${c.fresh ? ' done' : ''}">${mark(c.icon, 15)}<b>${esc(c.label)}</b>
       <i class="rs-ch-bar" style="--a:${(c.before / c.goal).toFixed(3)};--f:${(c.value / c.goal).toFixed(3)}"></i>

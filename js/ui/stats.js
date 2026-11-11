@@ -64,7 +64,7 @@ export function statsScreen(menu, { onBack }) {
           `<button class="seg${state.scope === s ? ' on' : ''}" data-act="stScope" data-s="${s}">${ico(SCOPE_ICON[s])}${l}</button>`).join('')}</div>
         <small class="st-count">${ico('timer')}${agg.matches} match${agg.matches === 1 ? '' : 'es'}</small>
       </header>
-      <div class="st-cats"${first ? ' data-in="fade"' : ''}>${['All', ...CATEGORIES, GEAR_TAB].map(c =>
+      <div class="st-cats scroll-x"${first ? ' data-in="fade"' : ''}>${['All', ...CATEGORIES, GEAR_TAB].map(c =>
         `<button class="seg${state.cat === c ? ' on' : ''}" data-act="stCat" data-c="${c}">${c === 'All' ? '' : c === GEAR_TAB ? ico('frag') : ico(`cat:${c}`)}<b>${c}</b></button>`).join('')}</div>
       <div class="st-table"${first ? ' data-in="up"' : ''}>
         <div class="st-row st-head">

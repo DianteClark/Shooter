@@ -1,7 +1,11 @@
-// The gunsmith: one bench with the live gun and its stat bars, and a panel of tabs on the thumb side.
+// The gunsmith, in two views (V12, the owner's design):
+//   pick   weapon classes as big tiles in a horizontal scroller across the top, that class's guns as big cards in a
+//          vertical scroller below (picture, name, level, mastery progress). Both scroll natively (.scroll-x/.scroll-y).
+//   bench  the picked gun: live preview, stat bars and facts on one side, a panel of tabs on the thumb side
+//          (attachments by slot, camo, effects, mastery, prestige).
 // Trying something never commits it. The preview and the bars follow the try; a second tap (or the button) fits it.
-// The same goes for guns: browsing the rail only changes the bench, and Equip is the one thing that changes the loadout.
-// Only the changed parts of the DOM are patched, so the canvas and its WebGL context stay put.
+// The same goes for guns: opening one only changes the bench, and Equip is the one thing that changes the loadout.
+// On the bench only the changed parts of the DOM are patched, so the canvas and its WebGL context stay put.
 import { WEAPONS } from '../shared/weapons.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { getCamo, TRACERS, KILL_EFFECTS } from '../shared/camos.js';
@@ -51,6 +55,25 @@ function rangeStripHtml(r) {
     + seg(0, r.fullF, hi) + seg(r.fullF, r.fadeF, `linear-gradient(90deg,${hi},${lo})`) + seg(r.fadeF, r.maxF, lo)
     + `<i style="position:absolute;top:0;bottom:0;left:${pct(r.maxF)};width:2px;margin-left:-1px;background:#fff"></i>` + ticks + `</div>`;
 }
+// Class tiles say what the class is, in full.
+const CLASS_NAME = { Assault: 'Assault Rifles', SMG: 'SMGs', Shotgun: 'Shotguns', LMG: 'LMGs', Marksman: 'Marksman Rifles', Sniper: 'Sniper Rifles', Pistol: 'Pistols', Launcher: 'Launchers', Melee: 'Melee' };
+// A gun's road to mastery: its camo challenges plus the ladder past level 30, as steps done of all.
+function masteryOf(id) {
+  const chal = Progress.challenges(id), lad = Progress.weaponLadder(id);
+  const done = chal.filter(c => c.done).length + lad.tier, of = chal.length + lad.count;
+  return { done, of, f: of ? done / of : 0 };
+}
+// Brings a child of a native scroller into view without scrolling anything else (scrollIntoView can move the page).
+function keepInView(sc, el, axis = 'y') {
+  if (!sc || !el) return;
+  const x = axis === 'x', pos = x ? el.offsetLeft : el.offsetTop, size = x ? el.offsetWidth : el.offsetHeight;
+  const view = x ? sc.clientWidth : sc.clientHeight, at = x ? sc.scrollLeft : sc.scrollTop, pad = 8;
+  let to = at;
+  if (pos - pad < at) to = pos - pad;
+  // Sideways the strip snaps to tile starts, so a tile off the right edge is brought to the left edge instead.
+  else if (pos + size + pad > at + view) to = x ? pos - 4 : pos + size + pad - view;
+  if (to !== at) { if (x) sc.scrollLeft = Math.max(0, to); else sc.scrollTop = Math.max(0, to); }
+}
 const TABS = [['attach', 'Attach', 'optic'], ['camo', 'Camo', 'camo'], ['fx', 'Effects', 'new'], ['mastery', 'Mastery', 'star'], ['prestige', 'Prestige', 'prestige']];
 const REWARD_ICON = { xp: 'star', badge: 'star', card: 'flag', camos: 'camo' };
 
@@ -68,6 +91,8 @@ export class Gunsmith {
     this.tryAtt = null;      // Attachment id or STOCK.
     this.tryCamo = null;
     this.tryFx = null;       // { kind:'tracer'|'killFx', id }
+    // Opened on a gun (the loadout's Gunsmith button) it starts on that gun's bench; from the title, on the guns.
+    this.view = weapon ? 'bench' : 'pick';
     this.bindActions();
     this.renderShell();
   }
@@ -79,6 +104,7 @@ export class Gunsmith {
   bindActions() {
     this.menu.on({
       gsBack: () => this.onBack(),
+      gsPick: () => this.showPick(),
       gsWeapon: ({ id }) => this.selectWeapon(id),
       gsCat: ({ cat }) => this.selectCategory(cat),
       gsEquip: () => this.equip(),
@@ -95,24 +121,32 @@ export class Gunsmith {
   selectCategory(cat) {
     if (cat === this.cat) return;
     this.cat = cat;
-    this.renderRail();
-    this.paintRail();
+    for (const b of this.classTiles ?? []) b.classList.toggle('on', b.dataset.cat === cat);
+    const tile = this.classTiles?.find(b => b.dataset.cat === cat);
+    if (tile) keepInView(this.classesEl, tile, 'x');
+    this.renderGuns();
+    if (this.gunsEl) this.gunsEl.scrollTop = 0;
   }
 
-  // Looking only: what is equipped is untouched until equip().
+  // Opens a gun's bench. Looking only: what is equipped is untouched until equip().
   selectWeapon(id) {
-    if (id === this.weapon) return;
     if (!Progress.isItemUnlocked('weapon', id)) {
       this.menu.toast(`${WEAPONS[id]?.name ?? id}: ${levelRequirement(Progress.itemUnlockLevel('weapon', id))}`);
       return;
     }
-    this.weapon = id;
-    this.tryAtt = this.tryCamo = this.tryFx = null;
-    if (!this.available(this.slot).length) this.slot = SLOTS.find(s => this.available(s).length) ?? 'optic';
-    this.paintRail();
-    this.renderStats();
-    this.renderPanel();
-    this.update();
+    if (id !== this.weapon) {
+      this.weapon = id;
+      this.tryAtt = this.tryCamo = this.tryFx = null;
+      if (!this.available(this.slot).length) this.slot = SLOTS.find(s => this.available(s).length) ?? 'optic';
+    }
+    this.view = 'bench';
+    this.renderView();
+  }
+
+  showPick() {
+    this.view = 'pick';
+    this.cat = categoryOf(this.weapon);
+    this.renderView();
   }
 
   equip() {
@@ -120,7 +154,6 @@ export class Gunsmith {
     if (!Progress.isItemUnlocked('weapon', id) || this.isEquipped) return;
     Progress.updateLoadout(this.index, { [slotOf(id)]: id });
     this.onChange?.();
-    this.paintRail();
     this.paintEquip();
     this.menu.toast(`${this.name} equipped`);
   }
@@ -248,35 +281,96 @@ export class Gunsmith {
         this.menu.previewMount(this.benchEl, this.weapon, Progress.camo(this.weapon), this.kit);
         this.renderPanel();
         this.update();
-        this.paintRail();
       },
     });
   }
 
   // ---- Markup ----
   renderShell() {
-    const m = this.menu;
-    m.el.dataset.screen = 'gunsmith';
-    m.el.innerHTML = `
-      <header class="bar">
-        ${backButton('gsBack', 'Done')}
+    this.menu.el.dataset.screen = 'gunsmith';
+    this.renderView();
+    this.menu.show();
+  }
+
+  renderView() {
+    if (this.view === 'pick') this.renderPick();
+    else this.renderBench();
+  }
+
+  header(back) {
+    return `<header class="bar">
+        ${back}
         <h2 class="bar-title">Gunsmith</h2>
-        <span class="hdr-tag gs-lo">${ico('loadout')}${esc(this.loadout.name)}</span>
-        <div class="gs-lvl">
-          <b class="gs-lvn"></b>
-          <i class="xp"><i class="gs-xp"></i></i>
-          <small class="gs-xpn"></small>
-        </div>
-      </header>
-      <div class="gs enter">
-        <div class="gs-weapons">
-          <nav class="gs-cats">${CATEGORIES.map(c => `<button class="gs-cat" data-act="gsCat" data-cat="${c}">${ico(`cat:${c}`)}<b>${c}</b></button>`).join('')}</nav>
-          <div class="gs-list"></div>
-        </div>
+        <span class="hdr-tag gs-lo">${ico('loadout')}<b class="t-clip">${esc(this.loadout.name)}</b></span>
+        ${this.view === 'bench' ? '<button class="btn is-primary gs-done" data-act="gsBack" data-sound="confirm">' + ico('check') + '<b>Done</b></button>' : ''}
+      </header>`;
+  }
+
+  // ---- Pick: classes across the top, that class's guns below ----
+  renderPick() {
+    const m = this.menu, lo = this.loadout;
+    const held = new Set([lo.primary, lo.secondary]);
+    m.el.innerHTML = `
+      ${this.header(backButton('gsBack', 'Done'))}
+      <div class="gs-pick">
+        <nav class="gs-classes scroll-x" aria-label="Weapon classes">${CATEGORIES.map(c => {
+          const guns = gunsIn(c), open = guns.filter(id => Progress.isItemUnlocked('weapon', id)).length;
+          return `<button class="gs-class${c === this.cat ? ' on' : ''}" data-act="gsCat" data-cat="${c}" data-sound="tab">
+            <span class="gs-cico">${ico(`cat:${c}`)}</span>
+            <span class="gs-ctx"><b>${esc(CLASS_NAME[c] ?? c)}</b><small>${open === guns.length ? `${guns.length} ${guns.length === 1 ? 'gun' : 'guns'}` : `${open} of ${guns.length} open`}</small></span>
+            ${guns.some(id => held.has(id)) ? '<i class="gs-held" title="In this loadout"></i>' : ''}
+          </button>`;
+        }).join('')}</nav>
+        <div class="gs-guns scroll-y"></div>
+        <div class="gs-gl" aria-hidden="true"></div>
+      </div>`;
+    const $ = sel => m.el.querySelector(sel);
+    this.classesEl = $('.gs-classes');
+    this.classTiles = [...m.el.querySelectorAll('.gs-class')];
+    this.gunsEl = $('.gs-guns');
+    // Gun pictures borrow the preview's GL context, which needs its canvas on the page: a hidden 2 px mount.
+    m.previewMount($('.gs-gl'), this.weapon, Progress.camo(this.weapon), this.kit);
+    this.renderGuns();
+    const tile = this.classTiles.find(b => b.dataset.cat === this.cat);
+    if (tile) keepInView(this.classesEl, tile, 'x');
+    stagger(m.el.querySelectorAll('.gs-class'), 'right', { step: 25, max: 9 });
+  }
+
+  renderGuns() {
+    const lo = this.loadout;
+    const list = gunsIn(this.cat);
+    this.gunsEl.innerHTML = list.map(id => {
+      const open = Progress.isItemUnlocked('weapon', id);
+      const slot = id === lo.primary ? 'Primary' : id === lo.secondary ? 'Secondary' : '';
+      const ms = masteryOf(id);
+      return `<button class="gs-gun${open ? '' : ' locked'}${id === this.weapon ? ' on' : ''}${slot ? ' equipped' : ''}" data-act="gsWeapon" data-id="${esc(id)}" ${open ? '' : 'data-sound="deny"'}>
+        <span class="gs-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas>${slot ? `<em class="gs-eq">${slot}</em>` : ''}${open ? '' : `<em class="gs-lk">${ico('lock')}</em>`}</span>
+        <span class="gs-gn"><b>${esc(WEAPONS[id].name)}</b><span class="gs-glv">${open ? weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id)) : `Level ${Progress.itemUnlockLevel('weapon', id)}`}</span></span>
+        <span class="gs-gm"><small>${open ? 'Mastery' : esc(WEAPONS[id].role ?? '')}</small><i class="m-bar"><i style="transform:scaleX(${open ? ms.f.toFixed(3) : 0})"></i></i><small class="gs-gmn">${open ? (ms.f >= 1 ? 'Mastered' : `${ms.done}/${ms.of}`) : 'Locked'}</small></span>
+      </button>`;
+    }).join('');
+    this.menu.paintGuns(this.gunsEl, this.resolveThumb);
+    stagger(this.gunsEl.querySelectorAll('.gs-gun'), 'up', { step: 30, max: 8 });
+  }
+
+  resolveThumb = id => ({ camo: Progress.camo(id), kit: Progress.kitFor(this.index, id) });
+
+  // ---- Bench ----
+  renderBench() {
+    const m = this.menu;
+    this.classTiles = null;
+    this.gunsEl = this.classesEl = null;
+    m.el.innerHTML = `
+      ${this.header(backButton('gsPick', 'Guns'))}
+      <div class="gs">
         <div class="gs-bench">
           <div class="gs-view">
-            <div class="gs-title"><b></b><small></small></div>
-            <button class="btn gs-equip" data-act="gsEquip" data-sound="confirm">${ico('equip')}<b></b></button>
+            <div class="gs-vhead">
+              <div class="gs-title"><b></b><small></small>
+                <span class="gs-lvl"><b class="gs-lvn"></b><i class="xp"><i class="gs-xp"></i></i><small class="gs-xpn"></small></span>
+              </div>
+              <button class="btn gs-equip" data-act="gsEquip" data-sound="confirm">${ico('equip')}<b></b></button>
+            </div>
           </div>
           <div class="gs-stats"></div>
           <div class="gs-facts"></div>
@@ -290,60 +384,25 @@ export class Gunsmith {
       </div>`;
     const $ = sel => m.el.querySelector(sel);
     this.benchEl = $('.gs-view');
-    this.titleName = $('.gs-title b');
-    this.titleCamo = $('.gs-title small');
+    this.titleName = $('.gs-title > b');
+    this.titleCamo = $('.gs-title > small');
     this.statsEl = $('.gs-stats');
     this.bodyEl = $('.gs-body');
     this.footEl = $('.gs-foot');
     this.lvnEl = $('.gs-lvn');
     this.xpEl = $('.gs-xp');
     this.xpnEl = $('.gs-xpn');
-    this.listEl = $('.gs-list');
-    this.catBtns = [...m.el.querySelectorAll('.gs-cat')];
     this.equipBtn = $('.gs-equip');
     this.factsEl = $('.gs-facts');
     this.rangeEl = $('.gs-range');
+    this.factsHtml = this.rangeHtml = this.infoHtml = null;
     this.tabs = [...m.el.querySelectorAll('.gs-tab')];
     m.previewMount(this.benchEl, this.weapon, Progress.camo(this.weapon), this.kit);
-    this.renderRail();
-    this.paintRail();
     this.paintTabs();
     this.renderStats();
     this.renderPanel();
     this.update();
-    m.show();
-    stagger(m.el.querySelectorAll('.gs-weapons, .gs-bench, .gs-panel'), 'up', { delay: 60, step: 50 });
-  }
-
-  // The guns of one category, each with its picture.
-  renderRail() {
-    const list = gunsIn(this.cat);
-    this.listEl.style.setProperty('--rows', Math.max(3, list.length));
-    this.listEl.innerHTML = list.map(id => {
-      const open = Progress.isItemUnlocked('weapon', id);
-      return `<button class="gs-w${open ? '' : ' locked'}" data-act="gsWeapon" data-id="${esc(id)}">
-        <span class="gs-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas></span>
-        <span class="gs-wt"><b>${esc(WEAPONS[id].name)}</b><small></small></span>
-        ${open ? '' : `<em class="lock">${ico('lock')}</em>`}
-      </button>`;
-    }).join('');
-    this.rail = [...this.listEl.querySelectorAll('.gs-w')];
-    this.menu.paintGuns(this.listEl, this.resolveThumb);
-    for (const b of this.catBtns) b.classList.toggle('on', b.dataset.cat === this.cat);
-  }
-
-  resolveThumb = id => ({ camo: Progress.camo(id), kit: Progress.kitFor(this.index, id) });
-
-  paintRail() {
-    const primary = this.loadout.primary, secondary = this.loadout.secondary;
-    for (const btn of this.rail) {
-      const id = btn.dataset.id, open = Progress.isItemUnlocked('weapon', id);
-      btn.classList.toggle('on', id === this.weapon);
-      btn.classList.toggle('equipped', id === primary || id === secondary);
-      btn.querySelector('small').innerHTML = open
-        ? weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id))
-        : `Level ${Progress.itemUnlockLevel('weapon', id)}`;
-    }
+    stagger(m.el.querySelectorAll('.gs-bench, .gs-panel'), 'up', { delay: 40, step: 50 });
   }
 
   // The bench's one link to the loadout.
@@ -352,7 +411,8 @@ export class Gunsmith {
     b.disabled = on;
     b.classList.toggle('is-go', on);
     b.classList.toggle('is-primary', !on);
-    const text = on ? `${SLOT_NAME[slotOf(this.weapon)]}: equipped` : `Equip ${SLOT_NAME[slotOf(this.weapon)]}`;
+    const text = on ? 'Equipped' : `Equip ${SLOT_NAME[slotOf(this.weapon)]}`;
+    b.title = `${SLOT_NAME[slotOf(this.weapon)]} in ${this.loadout.name}`;
     if (b.querySelector('b').textContent !== text) b.querySelector('b').textContent = text;
   }
 
@@ -405,6 +465,9 @@ export class Gunsmith {
   }
 
   renderPanel() {
+    // Every tab but Attach scrolls as a whole; Attach scrolls its parts list alone, under fixed slots.
+    this.bodyEl.classList.toggle('scroll-y', this.tab !== 'attach');
+    this.bodyEl.scrollTop = 0;
     if (this.tab === 'attach') this.renderAttach();
     else if (this.tab === 'camo') this.renderCamos();
     else if (this.tab === 'fx') this.renderFx();
@@ -413,27 +476,32 @@ export class Gunsmith {
     this.paintPanelState();
   }
 
+  // Slots down the left, that slot's parts in a native scroller beside them, and what the part under the thumb moves.
   renderAttach() {
     const kit = this.kit;
     this.shownOpt = null;
     this.bodyEl.innerHTML = `
-      <div class="att-slots">
-        ${SLOTS.map(s => {
-          const opts = this.available(s);
-          const fitted = kit[s] ? ATTACHMENTS[kit[s]].name : opts.length ? 'Stock' : 'None';
-          return `<button class="att-slot${s === this.slot ? ' on' : ''}${kit[s] ? ' fitted' : ''}" data-act="gsSlot" data-slot="${s}" data-sound="tab" ${opts.length ? '' : 'disabled'}>${ico(s)}<span><small>${SLOT_LABEL[s]}</small><b>${esc(fitted)}</b></span></button>`;
-        }).join('')}
-      </div>
-      <div class="att-opts">
-        <button class="att-opt" data-act="gsAtt" data-id="${STOCK}"><b>Stock</b><em class="tag"></em></button>
-        ${this.available(this.slot).map(a => `
-          <button class="att-opt${a.unlocked ? '' : ' locked'}${a.kind ? ` is-${a.kind}` : ''}" data-act="gsAtt" data-id="${a.id}">
-            <b>${esc(a.name)}</b>${kindChip(a)}
-            <em class="tag">${a.unlocked ? '' : `${ico('lock')}${unlockLabel(a.unlockLevel)}`}</em>
-          </button>`).join('')}
+      <div class="att-wrap">
+        <div class="att-slots">
+          ${SLOTS.map(s => {
+            const opts = this.available(s);
+            const fitted = kit[s] ? ATTACHMENTS[kit[s]].name : opts.length ? 'Stock' : 'None';
+            return `<button class="att-slot${s === this.slot ? ' on' : ''}${kit[s] ? ' fitted' : ''}" data-act="gsSlot" data-slot="${s}" data-sound="tab" ${opts.length ? '' : 'disabled'}>${ico(s)}<span><small>${SLOT_LABEL[s]}</small><b>${esc(fitted)}</b></span></button>`;
+          }).join('')}
+        </div>
+        <div class="att-opts scroll-y">
+          <button class="att-opt" data-act="gsAtt" data-id="${STOCK}"><b>Stock</b><span class="att-sub"><em class="tag"></em></span></button>
+          ${this.available(this.slot).map(a => `
+            <button class="att-opt${a.unlocked ? '' : ' locked'}${a.kind ? ` is-${a.kind}` : ''}" data-act="gsAtt" data-id="${a.id}">
+              <b>${esc(a.name)}</b>
+              <span class="att-sub">${kindChip(a)}<em class="tag">${a.unlocked ? '' : `${ico('lock')}${unlockLabel(a.unlockLevel)}`}</em></span>
+            </button>`).join('')}
+        </div>
       </div>
       <div class="att-info"></div>`;
     this.infoEl = this.bodyEl.querySelector('.att-info');
+    this.infoHtml = null;     // A fresh box: paintInfo must fill (or hide) it whatever the last one held.
+    this.optsEl = this.bodyEl.querySelector('.att-opts');
   }
 
   // V11: what the part under the thumb (tried, else fitted) is for, and every number it moves on this gun.
@@ -552,7 +620,7 @@ export class Gunsmith {
       }
       // Keep the part under the thumb (tried, else fitted) in view in a list that scrolls.
       const cur = body.querySelector('.att-opt.trying') ?? body.querySelector('.att-opt.fitted');
-      if (cur && cur.dataset.id !== this.shownOpt) { this.shownOpt = cur.dataset.id; cur.scrollIntoView({ block: 'nearest' }); }
+      if (cur && cur.dataset.id !== this.shownOpt) { this.shownOpt = cur.dataset.id; keepInView(this.optsEl, cur); }
       for (const b of body.querySelectorAll('.att-slot')) {
         const s = b.dataset.slot;
         b.classList.toggle('on', s === this.slot);

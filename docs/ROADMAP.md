@@ -27,10 +27,30 @@ on every push, keep 2% of weekly usage for bugs.
     shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.
 
 ## Owner's next wave (2026-11-11 morning)
-12. Quick fixes: calling card progress bars; results screen challenges scroll; duplicate names across guns, perks,
+12. DONE (fixes). Quick fixes: calling card progress bars; results screen challenges scroll; duplicate names across guns, perks,
     equipment, streaks and operators (e.g. Bulwark gun and Bulwark tactical); operators screen text.
-13. Gunsmith overhaul: weapon classes as big tiles in a horizontal scroller on top, that class's guns as big cards in a
+    Name audit (fixes): every display name across guns, attachments, perks, equipment, streaks, operators and their
+    skins, maps, modes, medals, calling cards, emblems, camos, tracers and kill effects; ids unchanged. Renamed:
+    tactical Bulwark -> Rampart (the LMG keeps Bulwark; its mastery card is now "Rampart Master"); Anvil skin Bulwark ->
+    Bastion; Flint skin Shaped Charge -> Detonator (the attachment keeps it); Halcyon skins Glacier -> Icefall, Polar
+    Night -> Long Night, Whiteout -> Snowblind (camos and the Frostline card keep theirs); Trooper skin Sovereign ->
+    Imperial; Anvil field skin Foundry -> Forgehand; Flint skin Hazard -> Hi-Vis (Ram keeps Hazard); Ox skin Furnace
+    -> Smelter (Ram keeps Furnace); Coyote skin Dust Devil -> Sirocco; Sable skin Oasis -> Lagoon; Mako skin Deep Water
+    -> Riptide; Marshal skin Old Guard -> Grey Guard (the emblem keeps it); every operator's base skin "Standard issue"
+    -> "<Operator> issue"; card Wingman (500 assists) -> Right Hand (the streak keeps Wingman); card Night Market ->
+    Neon Lights (the map keeps it); cards Sovereign, Molten Core, Prism -> Gold Standard, Meltdown, Kaleidoscope (the
+    camos keep theirs); prestige title Engineer -> Engine Driver (the perk keeps Engineer); kill effect Standard -> No
+    Effect (the tracer keeps Standard); medals Kill Confirmed -> Tag Confirmed (the mode keeps it), Last One Standing ->
+    Last Gun Standing (the S&D card keeps it); emblems Whiteout -> Frostbite, Prism -> Refraction, Live Wire -> Spark
+    Gap. The Harrier (id `scout`) clashes with nothing (the streak is Recon Drone). Left on purpose: each prestige
+    rank's calling card is named after its rank, and signature attachments carry their gun's name (Kiln Baffles).
+13. DONE (fixes). Gunsmith overhaul: weapon classes as big tiles in a horizontal scroller on top, that class's guns as big cards in a
     vertical scroller below; attachments list with smooth native scrolling; nothing cramped or overflowing.
+    Built as two views in js/ui/gunsmith.js: pick (class tiles in a snapping .scroll-x strip, gun cards with picture,
+    level and mastery steps in a .scroll-y grid) and bench (preview, bars, facts; tabs with the slots in a column beside
+    a native .scroll-y parts list, 44 px rows, Signature/Kit chips and the delta strip kept). Opened from a loadout's
+    Gunsmith button it starts on that gun's bench ("Guns" goes back to the pick view, "Done" leaves). Guarded by
+    dev/ui-overflow-test.py (every menu and the gunsmith at 667x375 and 852x393, plus touch drags on its scrollers).
 14. Multiplayer restructure: "Play vs bots" becomes Multiplayer with tabs Standard / Ground War / Battle Royale (later the
     extraction mode); you pick a mode or mix and get a match; map is random or a vote of 2-3. Custom has two tabs:
     Match (map, mode, bots, difficulty, modifiers; friends can join) and Training (the range, or any map with N bots,
