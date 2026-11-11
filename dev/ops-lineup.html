@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Operator lineup</title>
+<style>html, body { margin: 0; background: #1b1d22; } canvas { display: block; }
+#lab { position: fixed; inset: 0; pointer-events: none; font: 600 11px system-ui; color: #eee; text-shadow: 0 1px 2px #000; }
+#lab span { position: absolute; transform: translate(-50%, 0); white-space: nowrap; }</style>
+</head>
+<body>
+<canvas id="c"></canvas><div id="lab"></div>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js" } }</script>
+<script type="module">
+// Every operator side by side, for reviewing silhouettes, builds, skins and gun holds (dev only).
+//   ?view=game    the match camera's tilt and lens, at match scale (what a phone shows)
+//   ?view=close   the same tilt, close up        ?view=front   eye level, from the front
+//   &skin=base|field|2|3|4|5   the skin tier everyone wears      &team=0|1     &weapon=ar      &ops=a,b,c (a subset)
+//   &w=852&h=393  canvas size    &aim=0.8  facing (radians; 1.57 faces the camera)   &move=1  walk in place
+import * as THREE from 'three';
+import { Characters } from '../js/render/characters.js';
+import { OPERATORS } from '../js/ui/operators.js';
+
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 852), H = +(q.get('h') || 393), view = q.get('view') || 'close';
+const canvas = document.getElementById('c');
+const webgl = new THREE.WebGLRenderer({ canvas, antialias: true });
+webgl.setPixelRatio(2);
+webgl.setSize(W, H);
+webgl.setClearColor(0x3a3d38);
+const scene = new THREE.Scene();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: 0x4a4d46 }));
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+const time = { value: 0 };
+const chars = new Characters(scene, { walls: [] }, time);
+const ids = q.get('ops') ? q.get('ops').split(',') : OPERATORS.map(o => o.id);
+const per = +(q.get('per') || 0) || (view === 'game' ? 9 : Math.ceil(ids.length / (view === 'front' ? 2 : 3)));
+const gap = view === 'game' ? 2.0 : 2.3;
+const players = ids.map((id, i) => {
+  const col = i % per, row = Math.floor(i / per);
+  return { id, team: +(q.get('team') || 0) ^ (q.get('mixteams') ? i & 1 : 0), x: (col - (per - 1) / 2) * gap, z: row * gap * (view === 'front' ? 1.6 : 1.25),
+    aim: +(q.get('aim') ?? 0.8), vx: 0, vz: 0, hp: 100, alive: true, weapon: q.get('weapon') || 'ar', camo: 'none',
+    adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0 };
+});
+const tier = q.get('skin') || 'base';
+chars.setRoster(players.map(p => ({ id: p.id, operator: p.id, skin: `skin:${p.id}-${tier}` })));
+const rows = Math.ceil(ids.length / per);
+const cam = new THREE.PerspectiveCamera(view === 'front' ? 30 : 26, W / H, 0.5, 200);
+const cz = (rows - 1) * gap * (view === 'front' ? 0.8 : 0.62);
+if (view === 'front') { cam.position.set(0, 1.6, cz + 15); cam.lookAt(0, 1.0, cz); }
+else {
+  const TILT = THREE.MathUtils.degToRad(55);
+  // The match frames 30 m across the screen at its target; close-up frames the lineup.
+  const dist = view === 'game' ? 30 / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H)) : (per * gap + 1) / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H));
+  cam.position.set(0, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
+  cam.lookAt(0, 0, cz);
+}
+const v = { t: 0, players, smokes: null };
+const move = +(q.get('move') || 0);
+for (let i = 0; i < 90; i++) {
+  time.value += 1 / 60; v.t = time.value;
+  if (move) for (const p of players) { p.vx = Math.cos(p.aim) * 4; p.vz = Math.sin(p.aim) * 4; }
+  chars.update(v, 1 / 60, { localId: 'none', localTeam: 0, uav: false, revealAll: true });
+}
+webgl.render(scene, cam);
+if (!q.get('nolabels')) {
+  const lab = document.getElementById('lab');
+  for (const p of players) {
+    const s = new THREE.Vector3(p.x, view === 'front' ? 0 : -0.2, p.z + (view === 'front' ? 0 : 0.75)).project(cam);
+    const el = document.createElement('span');
+    el.textContent = p.id;
+    el.style.left = `${(s.x * 0.5 + 0.5) * W}px`; el.style.top = `${(-s.y * 0.5 + 0.5) * H}px`;
+    lab.appendChild(el);
+  }
+}
+const g = chars.torso.geometry.attributes.position.count, h = chars.head.geometry.attributes.position.count;
+const bySlot = m => { const o = {}; for (const v of m.geometry.attributes.aVar.array) { const k = Math.floor((v % 256) / 32); o[k] = (o[k] ?? 0) + 1; } return o; };
+window.stats = { torsoVerts: g, headVerts: h, torsoBySlot: bySlot(chars.torso), headBySlot: bySlot(chars.head), kitBySlot: [bySlot(chars.torsoKit), bySlot(chars.headKit)], liteT: chars.torsoLite.geometry.attributes.position.count, liteH: chars.headLite.geometry.attributes.position.count };
+window.ready = true;
+</script>
+</body>
+</html>

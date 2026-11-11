@@ -14,7 +14,7 @@ import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore } from './ui/progress.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
-import { OPERATOR_IDS, cleanOperator } from './ui/operators.js';
+import { cleanOperator, botOperator } from './ui/operators.js';
 import { Net, joinDiagnosis } from './net/net.js';
 import { LocalNet } from './net/local.js';
 import { Voice } from './net/voice.js';
@@ -628,8 +628,9 @@ const BOT_LEVEL = { recruit: 4, regular: 14, veteran: 27, elite: 42 };
 function withBadges(roster, humans, seed = 0) {
   return roster.map((r, i) => {
     const human = humans.find(h => h.id === r.id);
-    // Bots walk through the operator list from a seed-chosen start, so a squad is mixed and differs between matches.
-    const operator = human ? cleanOperator(human.loadout?.operator) : OPERATOR_IDS[(i + seed) % OPERATOR_IDS.length];
+    // Bots take the whole roster in a seeded order that alternates women and men, so a squad is mixed and differs
+    // between matches (js/ui/operators.js botOrder).
+    const operator = human ? cleanOperator(human.loadout?.operator) : botOperator(seed, i);
     const badge = r.badge ?? (human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 });
     // The sim's loadout cleaning drops cosmetics it does not use; carry the player's skin and emblem across it.
     const looks = human ? { skin: human.loadout?.skin ?? null, emblem: human.loadout?.emblem ?? null } : {};

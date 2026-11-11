@@ -163,8 +163,8 @@ export class Corpses {
         switch (p) {
           // Bodies in pieces draw from the single-variant meshes: nobody reads an operator off a flying torso, and a
           // Ground War brawl can leave a dozen of them about.
-          case PART.TORSO: mesh = chars.torsoLite; slot = n.nTL; break;
-          case PART.HEAD: mesh = chars.headLite; slot = n.nTL; break;
+          case PART.TORSO: mesh = chars.torsoLite; slot = n.nTL; op2 = this.op[c]; break;
+          case PART.HEAD: mesh = chars.headLite; slot = n.nTL; op2 = this.op[c]; break;
           case PART.UPPER_R: case PART.UPPER_L: mesh = upper; slot = n.nU++; tint = this.armRGB[c]; break;
           case PART.THIGH_L: case PART.THIGH_R: mesh = upper; slot = n.nU++; tint = this.legRGB[c]; break;
           case PART.FORE_R: case PART.FORE_L: mesh = arm; slot = n.nA++; tint = this.armRGB[c]; break;

@@ -22,4 +22,5 @@ on every push, keep 2% of weekly usage for bugs.
 9. Game modes overhaul (new modes built on the new maps).
 10. DONE (atts). Attachments wave: 66 signature attachments, 12 conversion kits, unlocked through weapon levels and the
     mastery ladder; best-build balance rig (dev/best-builds.mjs). docs/WEAPONS-OVERHAUL.md "Attachments wave".
-11. Operators overhaul: many more unlockable operators including female operators; mastery for them.
+11. DONE (ops). Operators overhaul: 27 operators (18 new, nine of them women) from a parametric parts kit, builds in the
+    shader, four mastery skins each, challenge unlocks, a scrolling operator screen, bots in a mixed seeded order.
