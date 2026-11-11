@@ -6,7 +6,8 @@
 //   snipers    sniper rifles only: a primary that is not one becomes the Longbow (the sidearm stays)
 //   melee      blades only: the Gaff and the Maul, Hatchets to throw, no scorestreaks
 //   nostreaks  no scorestreaks
-// Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected) ignore snipers and melee.
+// Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected) ignore snipers and melee; battle
+// royale takes none.
 import { WEAPONS } from './weapons.js';
 import { MODES } from './modes.js';
 
@@ -33,6 +34,7 @@ export function cleanMods(list, modeId = null) {
     if (hit.length > 1) keep = keep.filter(id => !pair.includes(id) || id === hit[hit.length - 1]);
   }
   const rules = MODES[modeId]?.rules ?? modeId;
+  if (rules === 'br' || rules === 'range') return [];        // Battle royale and the range take no modifiers.
   if (DEALT.has(rules)) keep = keep.filter(id => id !== 'snipers' && id !== 'melee');
   if (rules === 'snd') keep = keep.filter(id => id !== 'nostreaks');      // S&D has none to begin with.
   return MOD_IDS.filter(id => keep.includes(id));

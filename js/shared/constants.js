@@ -29,6 +29,9 @@ export const TEAMS = [
 ];
 export const FFA_TEAM = 2;                         // First free-for-all colour slot in TEAMS.
 export const FFA_MAX = TEAMS.length - FFA_TEAM;    // Players a free-for-all can colour apart: 12.
+// Battle royale squads are sides too (team FFA_TEAM + squad, up to 32 of them in solos): past the twelve colours above,
+// the palette repeats. Appended after FFA_MAX is fixed, so the free-for-all cap does not move.
+for (let i = TEAMS.length; i < FFA_TEAM + 32; i++) TEAMS.push({ ...TEAMS[FFA_TEAM + (i - FFA_TEAM) % FFA_MAX], id: i });
 
 // Display order everywhere (loadout, gunsmith): grouped by category. Ids are stable, the wire sends list indices.
 export const CATEGORIES = ['Assault', 'SMG', 'Shotgun', 'LMG', 'Marksman', 'Sniper', 'Pistol', 'Launcher', 'Melee'];

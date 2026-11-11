@@ -75,6 +75,7 @@ export class Interpolator {
     out.range = b.range;
     out.snd = b.snd;
     out.ctf = b.ctf;
+    out.br = b.br;            // Battle royale: circle, transport, loot and own inventory (js/sim/br.js).
     // Radar state per viewer (sim.js _applyIntel): a Jammer, a Blackout on the local player, an enemy Overwatch.
     out.jammed = b.jammed; out.overwatched = b.overwatched;
 

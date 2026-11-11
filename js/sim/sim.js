@@ -20,6 +20,7 @@ import { decodeSnd, restoreSnd, SndRules } from './snd.js';
 import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
 import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module per mode (js/sim/rules.js).
 import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
+import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -101,7 +102,7 @@ const HARD_ROTATE = 40, HARD_TICK = 1;
 const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
 const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
 const PLAN_EVERY = 15;           // Ticks between bot objective plans.
-const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd', 'ctf']);
+const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd', 'ctf', 'br']);
 
 // Free-for-all spawning: anywhere open on the map, as far from everyone as it can get.
 const FFA_GRID = 5;              // Metres between candidate spawn points sampled over open ground.
@@ -211,6 +212,7 @@ function gunOffset(mapId, mode, seed) {
 // one of each sidearm in turn, so a full team of six carries every secondary once. teamSize defaults to the mode's own
 // (16 for Ground War, see shared/modes.js), or TEAM_SIZE when no mode is given.
 export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId = null, mode = null, seed = null } = {}) {
+  if (MODES[mode]?.rules === 'br') return buildBrRoster(humans, { botSkill, mode });
   if (MODES[mode]?.ffa) return buildFfaRoster(humans, { botSkill, mapId, mode, seed, players: teamSize });
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(h => {
@@ -234,6 +236,24 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId
         primary: loadout.primary, camo: loadout.camo, loadout,
       });
     }
+  }
+  return roster;
+}
+
+// Battle royale: squads of the mode's size, team FFA_TEAM + squad index. Humans fill squads first, in lobby team order,
+// so friends share a squad wherever they fit; bots fill every seat left to the mode's player count (32). Loadouts only
+// matter for cosmetics: the rules hand out what everyone carries (js/sim/br.js).
+function buildBrRoster(humans, { botSkill, mode }) {
+  const m = MODES[mode], squad = m.squad, total = m.players;
+  const order = humans.slice(0, total).map((h, i) => ({ h, i })).sort((a, b) => (a.h.team ?? 0) - (b.h.team ?? 0) || a.i - b.i);
+  const roster = order.map(({ h }, i) => {
+    const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
+    return { id: h.id, name: h.name, team: FFA_TEAM + Math.floor(i / squad), isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
+  });
+  for (let n = 0; roster.length < total; n++) {
+    const skill = botSkill === 'mixed' ? MIXED_SKILLS[n % MIXED_SKILLS.length] : botSkill;
+    const loadout = normalizeLoadout({ primary: 'ar', secondary: 'pistol', camo: 'none' });
+    roster.push({ id: `bot${n}`, name: BOT_NAMES[n % BOT_NAMES.length], team: FFA_TEAM + Math.floor(roster.length / squad), isBot: true, skill, primary: 'ar', camo: 'none', loadout });
   }
   return roster;
 }
@@ -287,12 +307,14 @@ export class Sim {
     // Modifiers (js/shared/playlist.js): the ones this mode can take, in a fixed order.
     this.mods = cleanMods(mods, def.id);
     this.hardcore = this.mods.includes('hardcore');
-    this.ffa = !!def.ffa;
+    const brRules = def.rules === 'br';
+    // Battle royale sides are squads (team FFA_TEAM + squad), so it keeps per-side state the free-for-all way.
+    this.ffa = !!def.ffa || brRules;
     this.ladder = this.mode === 'gun';      // Gun Game: scores are rungs climbed, and the rung is the loadout.
     this.objective = OBJECTIVE_RULES.has(this.mode) || !!MODE_RULES[this.mode];
     if (this.mode === 'range') roster = [...roster, ...rangeDummies(this.map)];
     // Each free-for-all player is a side of one. buildRoster already deals these; a roster from elsewhere gets them here.
-    if (this.ffa) roster = roster.slice(0, FFA_MAX).map((r, i) => (r.team === FFA_TEAM + i ? r : { ...r, team: FFA_TEAM + i }));
+    if (this.ffa && !brRules) roster = roster.slice(0, FFA_MAX).map((r, i) => (r.team === FFA_TEAM + i ? r : { ...r, team: FFA_TEAM + i }));
     // Everything kept per team (scores, radar, jamming, sight lists) is sized for every side there is.
     const T = this.teamCount = this.ffa ? FFA_TEAM + roster.length : 2;
     this.scoreLimit = scoreLimit ?? def.scoreLimit;
@@ -404,6 +426,7 @@ export class Sim {
     // The modes overhaul's rule sets: each its own module, hooked in through `this.rules` (see js/sim/rules.js).
     const Rules = MODE_RULES[this.mode];
     this.rules = Rules ? new Rules(this, seed) : null;
+    this.br = this.mode === 'br' ? new BrRules(this, seed) : null;
     this.hardIdx = 0;
     this.hardT = HARD_ROTATE;
     this.tickT = this.mode === 'hard' ? HARD_TICK : DOM_TICK;
@@ -423,7 +446,8 @@ export class Sim {
     if (!WEAPONS[l.primary]) l.primary = fallback ? fallback.primary : 'ar';
     if (!SECONDARY_IDS.includes(l.secondary)) l.secondary = fallback ? fallback.secondary : 'pistol';
     // Search and Destroy has no scorestreaks: one life a round leaves no room to earn them fairly.
-    if (this.mode === 'snd') l.streaks = [];
+    if (this.mode === 'snd' || this.mode === 'br') l.streaks = [];
+    if (this.mode === 'br') l.perks = [];      // Battle royale: nothing from your own loadout fights, only its looks.
     return l;
   }
 
@@ -451,6 +475,7 @@ export class Sim {
   // ---- Spawning ----
 
   _spawnAll() {
+    if (this.br) { this.br.spawnAll(); return; }
     if (this.ffa) { this._ffaSpawnAll(); return; }
     if (this.snd) { this.snd.startRound(); return; }
     if (this.rules?.spawnAll?.()) return;
@@ -643,7 +668,7 @@ export class Sim {
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
       if (this.phaseT <= 0) this._setPhase('live');
-    } else if (this.phase === 'live' && !this.range && !this.snd && !this.rules?.ownClock) {
+    } else if (this.phase === 'live' && !this.range && !this.snd && !this.br && !this.rules?.ownClock) {
       this.timeLeft -= STEP;
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
@@ -668,13 +693,14 @@ export class Sim {
       else if (this.objective) this._stepObjectives();
       const players = this.players;
       for (let i = 0; i < players.length; i++) this._stepTimers(players[i]);
-      if (!this.range && this.objective && this.tick % PLAN_EVERY === 0) planObjectives(this);
+      if (!this.range && this.objective && !this.br && this.tick % PLAN_EVERY === 0) planObjectives(this);
       this._expireCallouts();
       // Alternate who acts first: a bot's shot lands immediately, so a fixed order hands one team every tied duel.
       const flip = this.tick & 1, last = players.length - 1;
       for (let i = 0; i <= last; i++) {
         const p = players[flip ? last - i : i];
         if (!p.bot || !p.alive) continue;
+        if (this.br && this.br.driveBot(p, STEP)) { this._diffFx(p); continue; }   // Aboard, gliding or down.
         const shots = p.bot.update(STEP);
         for (let s = 0; s < shots.length; s++) this.applyShot(p.id, shots[s], 0);
         this._diffFx(p);
@@ -691,7 +717,7 @@ export class Sim {
   _stepTimers(p) {
     if (p.away) {
       p.awayT += STEP;
-      if (!p.open && p.awayT >= HOLD_OPEN_SECONDS) {
+      if (!p.open && !this.br && p.awayT >= HOLD_OPEN_SECONDS) {     // Battle royale never seats a newcomer.
         p.open = true;
         this._emit({ t: 'slotOpen', id: p.id });
       }
@@ -699,7 +725,7 @@ export class Sim {
     }
     if (p.ackT > 0) p.ackT -= STEP;
     if (!p.alive) {
-      if (this.snd) return;          // One life a round: the next round brings everyone back.
+      if (this.snd || this.br) return;   // One life a round (S&D), or one life (battle royale).
       if (this.rules?.holdDead?.(p)) return;     // Out of lives, or a Headquarters standing for their team.
       p.respawnT -= STEP;
       p.deadT += STEP;
@@ -710,7 +736,7 @@ export class Sim {
     if (p.markT > 0) p.markT -= STEP;
     if (p.jamT > 0) p.jamT -= STEP;        // Blackout.
     if (p.regenT > 0) p.regenT -= STEP;
-    else if (p.hp < MAX_HP) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
+    else if (p.hp < MAX_HP && !p.downed) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
     if (hasPro(p.ps, 'bandolier')) this._restock(p);
   }
 
@@ -768,6 +794,7 @@ export class Sim {
   // ---- Objectives ----
 
   _stepObjectives() {
+    if (this.br) { this.br.step(STEP); return; }       // The last squad standing ends it (js/sim/br.js).
     if (this.rules) { this.rules.step(STEP); return; }     // Each ends the match itself.
     if (this.snd) { this.snd.step(STEP); return; }
     if (this.ctf) { this.ctf.step(STEP); return; }      // Captures end the match themselves.
@@ -1046,6 +1073,7 @@ export class Sim {
     if (msg.cmd === 'throw') return this._throw(id, msg);
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
     if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
+    if (msg.cmd === 'br') return !!this.br && this.br.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     return false;
   }
@@ -1056,6 +1084,7 @@ export class Sim {
     if (!p || !p.alive || this.phase !== 'live' || !Number.isFinite(aim)) return false;
     if (slot !== 'tactical' && slot !== 'lethal') return false;
     if (p.jamT > 0) return false;                 // Blackout: no equipment until it wears off.
+    if (this.br && (p.downed || p.brAir)) return false;
     // Satchel: with one armed on the map, the Lethal tap is the detonator, not another throw.
     if (slot === 'lethal' && p.ps.lethal === 'charge' && this.eq.detonate(id) > 0) { p.spawnProtect = 0; return true; }
     const ps = p.ps, heal = slot === 'tactical' && ps.tactical === 'stim';
@@ -1099,6 +1128,7 @@ export class Sim {
   applyShot(id, shot, ageSeconds = 0) {
     const shooter = this.byId.get(id);
     if (!shooter || !shooter.alive || this.phase === 'ended') return;
+    if (this.br && (shooter.downed || shooter.brAir)) return;     // Down or in the air: no shooting.
     // Every gun stat below comes from the shooter's loadout as the host knows it, never from the shot itself.
     const w = weaponDef(shooter.ps, shot.weapon);
     if (!w) return;
@@ -1109,7 +1139,7 @@ export class Sim {
     for (let i = 0; i < this.players.length; i++) {
       const p = this.players[i];
       const e = scratch[i] || (scratch[i] = { id: null, team: 0, alive: false, x: 0, z: 0, sliding: false });
-      e.id = p.id; e.team = p.team; e.alive = p.alive;
+      e.id = p.id; e.team = p.team; e.alive = p.alive && !p.brAir;
       if (age > 0) this.posAt(p, age, e);
       else { e.x = p.ps.x; e.z = p.ps.z; e.sliding = p.ps.sliding; }
     }
@@ -1127,6 +1157,7 @@ export class Sim {
     if (w.suppressed) fired.sup = 1;
     this._emit(fired);
     this._alertBots(shooter, !!w.suppressed);
+    this.br?.onShot(shooter);
     if (this.range) this.range.onShot(shooter, shot, rays);
 
     if (this.phase !== 'live') return;
@@ -1244,6 +1275,10 @@ export class Sim {
     if (this.snd && !this.snd.combat) return;       // Between rounds nothing hurts.
     if (this.rules?.damage) { dmg = this.rules.damage(target, attacker, dmg, weapon, streak, equip); if (!(dmg > 0)) return; }
     if (this.hardcore) dmg *= HARDCORE_DAMAGE;         // Hardcore: everyone on a third of the health.
+    if (this.br) {
+      if (target.brAir) return;                        // Nothing reaches someone in the air.
+      dmg = this.br.absorb(target, dmg);               // Armor plates first.
+    }
     // A lethal headshot carries a multiplier worth several hundred points. Only what the target had left counts as
     // damage dealt: in hit events, assists and the firing range readout.
     if (target.windT > this.time && hasPro(target.ps, 'adrenaline')) dmg *= WIND_TAKEN;     // Second Wind.
@@ -1252,6 +1287,7 @@ export class Sim {
     dmg = Math.min(dmg, Math.max(0, target.hp));
     if (this.range) this.range.onDamage(target, attacker, dmg, dist, head, !!(streak || equip));
     target.hp -= dmg;
+    this.br?.onDamage(attacker, dmg);
     // Shock Absorber (Flak Pro): blasts do not reset the regen delay.
     const blast = (equip && EQUIPMENT[equip]?.blast) || BLAST_STREAKS.has(streak) || (!streak && !equip && WEAPONS[weapon]?.explosive);
     if (!(blast && hasPro(target.ps, 'flak'))) target.regenT = target.ps.perks.includes('quickmend') ? MEND_DELAY : REGEN_DELAY;
@@ -1261,9 +1297,13 @@ export class Sim {
       target.dmgBy[attacker.index] += dmg;
       target.dmgT[attacker.index] = this.time;
     }
-    const killed = target.hp <= 0;
+    let killed = target.hp <= 0, down = false;
+    // Battle royale squads: lethal damage downs you while a teammate is still up.
+    if (killed && this.br && this.br.tryDown(target, attacker, weapon)) { killed = false; down = true; }
     const hit = { t: 'hit', by: attacker.id, target: target.id, dmg: Math.round(dmg),
       x: round2(target.ps.x), z: round2(target.ps.z), killed };
+    if (down) hit.down = true;
+    if (this._plated) { hit.plate = this._plated; this._plated = 0; }   // 1 hit plates, 2 broke the last of them.
     if (head) hit.head = true;
     if (this._soaked) { hit.armor = true; this._soaked = false; }     // Some or all of it went into Juggernaut armour.
     // Gunfire carries its gun and range, for the per-gun stats (js/game/telemetry.js). Streaks and thrown kit do not.
@@ -1347,8 +1387,9 @@ export class Sim {
 
     this.snd?.onKill(target);
     this.ctf?.onKill(target, killer);
+    this.br?.onDeath(target);
     if (this.rules) { this.rules.onKill?.(target, killer, { weapon, streak, equip, head }); return; }
-    if (!this.snd && !this.ctf && this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
+    if (!this.snd && !this.ctf && !this.br && this.scores[killer.team] >= this.scoreLimit) this._end(killer.team);
   }
 
   // A death with nobody to credit: a Search and Destroy attacker caught in their own bomb. Counts as a death only.
@@ -1364,6 +1405,7 @@ export class Sim {
     this.snd?.onKill(target);
     this.ctf?.onKill(target, null);
     this.rules?.onKill?.(target, null, {});
+    this.br?.onDeath(target);
   }
 
   _medal(p, medal) { this._emit({ t: 'medal', id: p.id, medal }); }
@@ -2201,6 +2243,14 @@ export class Sim {
   humanLeft(id) {
     const p = this.byId.get(id);
     if (!p || p.isBot || p.dummy || p.away) return;
+    if (this.br) {
+      // Battle royale: the character stays where it is (standing, or down) and nobody drives it; the human can come back.
+      p.away = true; p.awayT = 0; p.open = false; p.ackT = 0;
+      p.ps.sprinting = false; p.ps.sliding = false; p.ps.vx = 0; p.ps.vz = 0; p.ps.firingT = 0;
+      this.br.onAway(p);
+      this._emit({ t: 'away', id: p.id });
+      return;
+    }
     const wasAlive = p.alive;
     p.away = true;
     p.awayT = 0;
@@ -2249,7 +2299,7 @@ export class Sim {
   // A newcomer takes an open slot: same seat (team, free-for-all colour), fresh stats under their own id and name.
   // The side with fewer players on the field gets them first. Returns what humanRejoin returns, or null when none is open.
   claimOpenSlot(id, name, loadout = null, info = null) {
-    if (this.byId.has(id)) return null;
+    if (this.byId.has(id) || this.br) return null;      // Nobody joins a battle royale after the jump.
     const onField = t => this.players.reduce((n, q) => n + (q.team === t && !q.away && !q.dummy ? 1 : 0), 0);
     let best = null;
     for (const p of this.players) if (p.away && p.open && (!best || onField(p.team) < onField(best.team))) best = p;
@@ -2308,7 +2358,8 @@ export class Sim {
     if (fresh) this._freshStats(p);
     this._metaUntil = this.tick + 2;
     this._emit({ t: 'rejoin', oldId, id: p.id, name: p.name, fresh: !!fresh, info: info ?? undefined });
-    if (!this.snd && this.phase !== 'ended' && !this.rules?.holdDead?.(p)) this._respawn(p);
+    if (this.br) this.br.onRejoin(p);
+    else if (!this.snd && this.phase !== 'ended' && !this.rules?.holdDead?.(p)) this._respawn(p);
     const ps = p.ps;
     return { index: p.index, id: p.id, oldId, x: ps.x, z: ps.z, aim: ps.aim, alive: p.alive, hp: Math.max(0, Math.ceil(p.hp)) };
   }
@@ -2475,7 +2526,7 @@ export class Sim {
 
   _playerView(p) {
     const ps = p.ps, st = p.score;
-    return {
+    const v = {
       id: p.id, name: p.name, team: p.team, isBot: p.isBot, skill: p.skill, dummy: p.dummy,
       x: ps.x, z: ps.z, aim: ps.aim, vx: ps.vx, vz: ps.vz,
       hp: Math.max(0, Math.ceil(p.hp)), alive: p.alive, respawnT: Math.max(0, p.respawnT), armor: Math.ceil(p.armor),
@@ -2494,6 +2545,8 @@ export class Sim {
       captures: p.captures ?? 0, returns: p.returns ?? 0, carrierKills: p.carrierKills ?? 0,
       away: p.away, open: p.open, awayT: p.awayT,
     };
+    this.rules?.playerView?.(p, v);
+    return v;
   }
 
   // Phantom (Ghost Pro): gunfire never shows on the enemy minimap. Marks from Tracker and the rest still do.
@@ -2536,6 +2589,7 @@ export class Sim {
       jam: this.jam.slice(), overwatchT: this.overwatch.slice(),
     };
     V9.viewLists(this, view);
+    this.br?.hostView(view);
     return this._applyIntel(view);
   }
 
@@ -2660,6 +2714,7 @@ export class Sim {
   }
 
   _encodeObjective() {
+    if (this.br) return this.br.encode();
     if (this.rules) return this.rules.encode();
     if (this.snd) return this.snd.encode();
     if (this.ctf) return this.ctf.encode();
@@ -2673,6 +2728,11 @@ export class Sim {
 
   _decodeObjective(a, out) {
     out.tags = []; out.points = []; out.hardT = 0;
+    if (this.br) {
+      // The host reads its own rules; a guest mirrors them from the block (js/sim/br.js).
+      if (this.br.authority) this.br.hostView(out); else this.br.decode(a || null, out);
+      return;
+    }
     if (this.rules) { out.obj = out.points.obj = this.rules.decode(a || null, out); return; }
     if (this.mode === 'snd') {
       // The sites never change; the round state rides on the list as well as on the view (see sndOf in snd.js).
@@ -2886,6 +2946,7 @@ export class Sim {
     if (!this.interest || !g) return this._lastBroadcast;
     const full = this._snapFull, codes = this._snapCodes, n = this.players.length;
     const out = full.slice(0, SNAP_HEAD);
+    if (this.br) out[14] = this.br.encodeFor(g);      // Own inventory and the loot changes this guest has not had.
     const gx = g.ps.x, gz = g.ps.z, uav = this.uav[g.team] > 0, phase = this.tick >> 1;
     for (let i = 0; i < n; i++) {
       const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;

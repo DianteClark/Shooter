@@ -71,3 +71,48 @@ canyon rims have two passes each; roads join every place to two or more neighbou
 - Testing: `?debug=1&map=frontier&mode=tdm` plays it under a team mode (dev path in main.js); `node dev/map-validate.mjs
   frontier` checks the contract, reachability, sealed rooms, door widths and a 32-bot free roam;
   `node dev/br-render.mjs` measures load and frames.
+
+## The mode (`br`, `brduo`, `brsolo`; js/sim/br.js)
+Rules module `BrRules`, owned by the Sim when the rule set is `br` (hooks: the `this.br` checks in sim.js). Squads are
+sides: team `FFA_TEAM + squad`; humans fill squads first in lobby order (friends together), bots fill to 32. Numbers live
+in `BR` (js/shared/modes.js).
+- Start: everyone aboard the transport for `BR.warmup` (7 s, drop map up), then it flies a random line through the middle
+  third at 30 m/s. Jump (button on the drop map and the HUD), 6.5 s steerable glide at 14 m/s, landing pushed clear of
+  walls. Anyone aboard at 94% of the line is thrown out. Bot squads pick places along the line by tier (hot drops: a
+  place already picked weighs 0.3x per squad); bots in a human's squad jump with their human and glide to them.
+- Loot: the seed builds the table on every phone (`br.loot` spots: a floor roll of gun 34%, ammo 26, plate 16, medkit 8,
+  lethal 7, tactical 6, self-revive kit 3; guns come with ammo 60% of the time; `br.chests` are closed caches that open
+  when someone stands at one and spill two guns at chest rarity, plates and a kit or lethal). Rarity by tier
+  (common to legendary; chests 0/18/38/30/14%) gives 0-4 attachments and 4% better handling per step (aim, reload, swap,
+  sprint-to-fire, hip spread; damage and fire rate untouched). Ammo types: light (SMG, pistol), rifle (AR, LMG), shells,
+  heavy (marksman, sniper), rockets. Walking over loot takes ammo for a held gun, plates (carry 5), medkits (3), one kit,
+  equipment of the kind held (cap 3); a gun fills an empty hand by itself and is tapped to swap otherwise (the old gun
+  drops). Two hands; an empty hand is fists (the Gaff). Everyone starts with fists and a common pistol.
+- Armor: 3 plates of 50; one tap plates you up, 1.1 s a plate, cancelled by firing or a hit. Plates take gunfire and
+  blasts first; the circle ignores them. Medkit 2.6 s to full health.
+- Circle: 7 phases (wait/shrink seconds, radius as a share of the map, damage per second): 70/50 0.38 1, 50/40 0.27 2,
+  40/35 0.18 4, 35/30 0.11 7, 30/25 0.06 10, 25/20 0.03 15, 20/25 0 25. The first wait starts when the transport has
+  crossed. Each next centre lies inside the current circle, weighted by `br.circleBias`. A full match is 6-9 minutes.
+- Downs (squads only): lethal damage downs you while a teammate is up: crawl at 0.32 speed, no gun, bleed out in 30 s,
+  finished by more damage. A teammate standing within 1.9 m (not firing, not running) revives in 4 s to 35 health; a
+  self-revive kit takes 5 s. A squad is out once nobody in it is up (anyone still down dies then); placement is squads
+  left + 1. In solos lethal damage kills.
+- Bots (`BrRules.plan`, 2 Hz per squad, through `BotBrain.setObjective`): loot their place (claims stop squadmates
+  chasing one item), move on to the nearest unvisited place inside the next circle, rotate when the walk in would not
+  beat the circle, hold a room or a hold point inside the next circle once geared (late phases prefer rooms), third-party
+  fights they hear within 37-56 m once geared (each burst weighed once, 45%), revive downed teammates when nothing is in
+  view, plate and heal between fights, finish downed enemies (downed targets rank behind active ones). Aboard, gliding and
+  downed bots are driven by the rules (`driveBot`).
+- Wire: the objective slot of the snapshot carries the BR block (`encodeFor(guest)`): circle, transport, per-player
+  armor/down/air/revive/place, the guest's own inventory, the loot changes it has not had (re-sent for 1.2 s; all of
+  them to a rejoining phone), and per-player stats every 3 s and at the end. Guns and ammo for a human go to their phone
+  as `brgive`/`bramm`/`brinv` events (the phone owns its gun state). A dropped human's character stays standing (or
+  down), never bot-driven, and rejoins into it; nobody joins after the start.
+- Map contract use: `br.pois` (drop map names, bot drops), `br.loot`, `br.chests`, `br.circleBias`, `br.drop` (null:
+  random line), `rooms` (late holds), `assets/maps/<id>-overview.jpg` (drop and full map). Any map with `modes`
+  including `br` gets `brduo` and `brsolo` too (js/shared/map.js). `brtest` (js/shared/maps/brtest.js, hidden) is the
+  small stand-in used by `node dev/sim-br.mjs --map=brtest` and `?brtest` in the picker.
+- Tests: `node dev/sim-br.mjs` (units, then quads, duos and solos on Frontier: one winner inside 12 minutes, loot, plates,
+  downs, revives, wipes, tick budget, snapshot bytes), `python3 dev/ui-br-test.py [port]` (picker to results in a
+  browser, screenshots), `python3 dev/ui-br-net-test.py [port]` (two tabs over ?net=local: one squad, guns to the guest,
+  loot mirror, drop and rejoin).

@@ -14,6 +14,10 @@ import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
+import { BR, isBr } from '../shared/modes.js';
+import { WEAPON_IDS } from '../shared/constants.js';
+import { unpackKit } from '../shared/attachments.js';
+import { brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
 
 // Smallest signed rotation from b to a.
 function angleDiffSigned(a, b) {
@@ -44,6 +48,13 @@ export class Match {
     this.ended = false;            // Set once results have been handed to onEnd.
     this.rng = Math.random;
     this.frameEvents = [];
+    // Battle royale (js/sim/br.js): this phone flies its own player aboard and in the glide, applies the guns and ammo the
+    // host hands it, and crawls when down. brAir: 1 aboard, 2 gliding, 0 on the ground.
+    this.br = isBr(this.mode);
+    this.brAir = this.br ? 1 : 0;
+    this.glideT = 0;
+    this.planeF = 0;
+    this.brWeapon = null;
     this.resolvedInput = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
 
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
@@ -131,12 +142,51 @@ export class Match {
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
       if (e.t === 'dazed' && e.id === this.localId) applyDaze(this.ps, e.amount, e.dur);   // Stun, Gas, Shock slow you.
       if (e.t === 'rejoin' && e.oldId !== e.id) this.#rebind(e);   // A newcomer took an open slot.
+      if (this.br && e.id === this.localId) this.#brEvent(e);
       if (e.t === 'arm' && e.id === this.localId) {   // Gun Game promotion or setback, in that gun's own camo.
         armPlayer(this.ps, e.weapon);
         this.ps.camo = this.me.loadout?.camos?.[e.weapon] ?? 'none';
       }
       this.frameEvents.push(e);
     }
+  }
+
+  // What the host hands this phone's own player in a battle royale.
+  #brEvent(e) {
+    const ps = this.ps;
+    switch (e.t) {
+      case 'brgive': {
+        const id = WEAPON_IDS[e.w];
+        brArm(ps, e.slot, id, unpackKit(id, e.kit), e.r, e.ammo, e.res);
+        this.brWeapon = null;
+        break;
+      }
+      case 'bramm': brAmmo(ps, e.slot, e.n); break;
+      case 'brinv':
+        e.guns.forEach((g, s) => {
+          const id = g ? WEAPON_IDS[g[0]] : 'knife';
+          brArm(ps, s, id, g ? unpackKit(id, g[2]) : undefined, g ? g[1] : 0, g ? g[3] : undefined, g ? g[4] : undefined);
+        });
+        ps.slot = ps.primary === 'knife' && ps.secondary !== 'knife' ? 1 : 0;
+        ps.weapon = ps.slot ? ps.secondary : ps.primary;
+        ps.perks = []; ps.pro = [];
+        if (e.air !== undefined) { this.brAir = e.air; this.glideT = e.glideT ?? 0; }
+        this.brWeapon = null;
+        break;
+      case 'brjump': if (this.brAir === 1) { this.brAir = 2; this.glideT = BR.glide; } break;
+      case 'brland': if (this.brAir) { this.brAir = 0; land(ps, this.map); } break;
+      default: break;
+    }
+  }
+
+  // Battle royale commands from the HUD: jump, take (a ground gun), plate, med, self (revive kit), cancel.
+  brCommand(act, extra = {}) {
+    if (!this.br) return;
+    if (act === 'jump') {
+      if (this.brAir !== 1 || this.interp.newest?.phase !== 'live') return;
+      this.brAir = 2; this.glideT = BR.glide;     // The glide starts here and now; the host follows the command.
+    }
+    this.#command({ cmd: 'br', act, ...extra });
   }
 
   #spawnLocal(x, z, aim) {
@@ -210,8 +260,36 @@ export class Match {
     return r;
   }
 
+  // Aboard or gliding: no gun, no walking, the transport or the stick moves you. True when that is all this frame does.
+  #brAirStep(r, view, dt) {
+    const ps = this.ps;
+    if (this.brAir === 1) {
+      const pl = view.br?.plane;
+      if (!pl) return true;
+      // The transport's own clock, nudged toward the host's, so the camera rides it smoothly between snapshots.
+      if (view.phase === 'live') this.planeF += dt * BR.planeSpeed / pl.len;
+      if (Math.abs(this.planeF - pl.f) > 0.015 || view.phase !== 'live') this.planeF = pl.f;
+      ps.x = pl.fx + (pl.tx - pl.fx) * this.planeF; ps.z = pl.fz + (pl.tz - pl.fz) * this.planeF;
+      ps.vx = 0; ps.vz = 0;
+      ps.aim = Math.atan2(pl.tz - pl.fz, pl.tx - pl.fx);
+      return true;
+    }
+    if (this.brAir === 2) {
+      glideStep(ps, r.mx, r.mz, dt, this.map);
+      this.glideT -= dt;
+      if (this.glideT <= 0) { this.brAir = 0; land(ps, this.map); }
+      return true;
+    }
+    return false;
+  }
+
   #stepLocal(input, view, dt) {
     const r = this.#resolveInput(input, view);
+    if (this.br) {
+      if (this.#brAirStep(r, view, dt)) { this.#sendState(dt); return; }
+      const me = view.players.find(p => p.id === this.localId);
+      if (me?.downed) downedInput(r);
+    }
     this.audio.trigger = r.fire;                          // The dry-fire click needs to know the trigger is held.
     this.ps.noSlide = ctfCarrying(view, this.localId);   // A flag carrier cannot slide.
     const shots = stepPlayer(this.ps, r, dt, this.map, this.rng);
@@ -232,12 +310,20 @@ export class Match {
     if (r.streak >= 0) this.#command({ cmd: 'streak', slot: r.streak });
     if (r.tactical) this.#throw('tactical', r);
     if (r.lethal) this.#throw('lethal', r);
-    if (!this.isHost) {
-      this.sendAccum += dt;
-      if (this.sendAccum >= 1 / STATE_SEND_HZ) {
-        this.sendAccum = 0;
-        this.net.sendState(encodeHumanState(this.ps));
-      }
+    // Battle royale camos go with the gun in hand: each gun wears your camo for it, if you have one.
+    if (this.br && this.ps.weapon !== this.brWeapon) {
+      this.brWeapon = this.ps.weapon;
+      this.ps.camo = this.me.loadout?.camos?.[this.ps.weapon] ?? 'none';
+    }
+    this.#sendState(dt);
+  }
+
+  #sendState(dt) {
+    if (this.isHost) return;
+    this.sendAccum += dt;
+    if (this.sendAccum >= 1 / STATE_SEND_HZ) {
+      this.sendAccum = 0;
+      this.net.sendState(encodeHumanState(this.ps));
     }
   }
 
@@ -331,6 +417,7 @@ export class Match {
       p.reloadT = ps.reloadT; p.reloadDur = ps.reloadDur;
       p.adsT = ps.adsT; p.sprinting = ps.sprinting; p.sliding = ps.sliding; p.bloom = ps.bloom;
       p.heat = ps.heat; p.overheated = ps.overheated; p.firingT = ps.firingT;
+      if (this.br) p.air = this.brAir;
     }
     return p;
   }
@@ -369,6 +456,7 @@ export class Match {
       scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode,
       myTeam: this.me.team, players: view.players.map(p => ({ ...p })),
       snd: view.snd ?? view.points?.snd ?? null,
+      br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       ...awards,
     });
   }

@@ -218,10 +218,11 @@ export function planObjectives(sim) {
       if (!p.bot || p.team !== team || !p.alive) continue;
       // Some bots this life just want a fight; they stay on the lane logic. A round of Search and Destroy needs everyone.
       // A flag carrier always plays the flag, whatever this life's roll said.
-      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd || sim.ctf?.isCarrier(p)) crew.push(p.bot);
+      if (p.bot.objRoll < p.bot.S.objPlay || sim.snd || sim.rules?.allIn || sim.ctf?.isCarrier(p)) crew.push(p.bot);
       else p.bot.setObjective(null);
     }
     if (!crew.length) continue;
+    if (sim.rules) { sim.rules.plan?.(team, crew); continue; }     // The modes overhaul's rule sets plan their own.
     if (sim.snd) { planSnd(sim, team, crew); continue; }
     if (sim.ctf) { planCtf(sim, team, crew); continue; }
     if (sim.mode === 'kc') planTags(sim, team, crew);
@@ -839,7 +840,8 @@ export class BotBrain {
     const sightRange = S.sight + (styleOf(ps.weapon).sight || 0);
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
-      if (q.team === p.team || !q.alive || q.spawnProtect > 0) continue;
+      // Battle royale: nobody in the air is a target (js/sim/br.js).
+      if (q.team === p.team || !q.alive || q.spawnProtect > 0 || q.brAir) continue;
       const dx = q.ps.x - ps.x, dz = q.ps.z - ps.z;
       const d = Math.hypot(dx, dz);
       if (d > sightRange) continue;
@@ -852,7 +854,8 @@ export class BotBrain {
       // Walls first, then the dice: nothing about a hidden enemy, not even whether a roll was made, reaches this bot.
       if (!hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes)) continue;
       if (!tracking && !noisy && sim.rng() > S.notice) continue;      // Looking the right way is not the same as noticing.
-      const score = d - (tracking ? 4 : 0) + q.hp * 0.03;
+      // A downed enemy is finished off, but only once nobody standing is a threat.
+      const score = d - (tracking ? 4 : 0) + q.hp * 0.03 + (q.downed ? 14 : 0);
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
       if (S.callouts && !sim.ffa && sim.time - sim.calledAt[p.team][q.index] > CALLOUT_GAP) this._callOut(q);
     }
