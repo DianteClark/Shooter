@@ -28,6 +28,11 @@ import { PERKS, TACTICALS, LETHALS, STREAKS } from './catalog.js';
 import { CARDS, PLAYER_CURVE, MAX_LEVEL, MAX_PRESTIGE } from './progression.js';
 import { OPERATORS } from '../ui/operators.js';
 import { EMBLEMS } from '../ui/emblems.js';
+import { EX_UNLOCKS } from './extraction.js';
+// Extraction's exclusive items never reach the pool: bots cannot have earned them, and adding them must not reshuffle
+// the profiles the boards already show.
+const EXCLUSIVE = new Set(EX_UNLOCKS.map(u => u.item));
+const POOL_OPERATORS = OPERATORS.filter(o => !EXCLUSIVE.has(o.id));
 
 export const POOL_SEED = 0x5717c4a2;
 // Day zero of careers. Fixed: changing it would change every bot's career at every date.
@@ -257,7 +262,7 @@ function buildProfile(index) {
 
   // Looks: better-established players wear more of what they have earned.
   const seniority = clamp01(base.xp / (PLAYER_CURVE.cap * 5));
-  const op = OPERATORS[Math.floor(rng() * OPERATORS.length)].id;
+  const op = POOL_OPERATORS[Math.floor(rng() * POOL_OPERATORS.length)].id;
   const step = Math.min(5, Math.floor(rng() * 3 + seniority * 4 + (locked === 'elite' ? 1 : 0)));
   const skin = `skin:${op}-${SKIN_STEPS[step]}`;
   const card = pickCard(rng, base, perks, locked, mu);
@@ -287,7 +292,7 @@ function pickCard(rng, base, perks, locked, mu) {
     return career[Math.floor(rng() * career.length)];
   }
   if (r < 0.88 && (mu > 0.55 || locked === 'elite')) {
-    const gold = CARDS.filter(c => c.group === 'Mastery');
+    const gold = CARDS.filter(c => c.group === 'Mastery' && !EXCLUSIVE.has(c.id.replace(/^mastery-/, '')));
     return gold[Math.floor(rng() * gold.length)].id;
   }
   return 'yard';

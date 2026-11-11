@@ -50,7 +50,8 @@ ok(BOT_POOL.length >= 250 && BOT_POOL.length <= 320, 'pool size', BOT_POOL.lengt
 // The first 200 (before the clans) and their careers, as they were: leaderboards already show them.
 const first = BOT_POOL.slice(0, 200), at200 = new Date(POOL_EPOCH + 200 * DAY);
 const firstHash = createHash('sha256').update(JSON.stringify(first) + JSON.stringify(first.map(p => careerAt(p, at200)))).digest('hex').slice(0, 16);
-ok(firstHash === 'd74e12f356dded4d', 'the first 200 profiles and their careers are unchanged', firstHash);
+// 31a0665d: EXTRACTION_LAUNCH set (2026-11-11), so careers from that day carry extractions (d74e12f3 before it).
+ok(firstHash === '31a0665dbfcc76eb', 'the first 200 profiles and their careers are unchanged', firstHash);
 ok(new Set(BOT_POOL.map(p => p.id)).size === BOT_POOL.length, 'ids unique');
 const norm = s => s.toLowerCase().replace(/[^a-z]/g, '');
 const names = BOT_POOL.map(p => p.name);
