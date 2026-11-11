@@ -358,6 +358,12 @@ blade pairs and Barbed Darts (the Thistle draws no magazine) do not.
 nibble empty or past an older build's list (so an older build sees stock) and puts its whole index in the high part, 7
 bits a slot (an exact integer below 2^44 in the JSON snapshot).
 
+**Battle royale loot** (js/sim/br.js `_rollGun`): class parts by rarity as before (botAttachments with `own: false`);
+an epic gun carries one of its signature attachments 35% of the time, a legendary one 50%, and only a legendary can roll
+its conversion kit (20% when the gun has one). dev/sim-attachments.mjs checks the rates and that every rolled part is
+legal and survives the BR wire. dev/sim-br.mjs now checks revives over all squad matches together: bots carrying
+signatures change the deal, and seed 11 alone gave 0 revives (dev itself gives 1-9 over seeds 11-14).
+
 **Gunsmith.** The option list scrolls (30 px rows) and keeps the tried or fitted part in view; signatures and kits
 carry a Signature/Kit chip; locks read "Level 12" or "Mastery I" and the foot names the requirement; the foot shows
 what the part is for; a strip lists every number it moves on this gun (green up, red down, mode changes as notes),
@@ -374,7 +380,11 @@ plays mirrored matches with every gun carrying its best build; `node dev/kd-comb
 cannot see stealth, cover or a lane, so a few duel-best builds play worse than stock in matches (Squall's first search
 picked Runner's Choke; an 8-trial rerun did not); those are trade-offs that matches punish, not over-strong builds.
 
-Results, mirrored, 4 seeds x 2 rounds, best builds on every primary (stock in brackets, same seeds): RESULTS_LINE
+Results, mirrored, 4 seeds x 2 rounds, best builds on every primary (stock in brackets, same seeds): all 34 primaries 0.82-1.22 (stock 0.79-1.24, five outside 0.85-1.20). Just outside, inside
+the +-0.06 a gun's 1,400 kills and deaths carry: Bulwark 1.22 (1.17 the run before; canted dot and Hush Can), Murmur
+0.84 (stock 0.79) and Ballast 0.82 (stock 0.83, both weak without attachments). Biggest lifts from a best build:
+Thistle 0.86 -> 1.11 (Needle Choke, Barbed Darts), Lancet 0.96 -> 1.12, Flywheel 0.92 -> 1.02, Prospector 0.97 -> 1.05;
+biggest drops (duel-best, match-worse): Shunter 1.10 -> 0.98, Doublet 0.97 -> 0.85, Lodestone 1.12 -> 1.00.
 
 Changes made from those runs: Gantry 565 rpm (was 580; best build 1.25), Ballast full damage to 10 m (was 9; stock and
 best build 0.83-0.84), Needle Choke falloff x1.3 (was 1.4), Capacitor Bank charge x0.72 (was 0.65) and slower to aim
