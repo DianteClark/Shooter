@@ -33,7 +33,11 @@ import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, ROMAN } from './widgets.js';
 import { vetOf, vetTag } from './cards.js';
 import { play, enter, sweep, shake, reducedMotion, DUR } from './motion.js';
-import { featuredButton, modsChip } from './modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
+import { featuredButton, modsChip } from './modifiers.js';
+import { featured, MODS } from '../shared/playlist.js';
+import { MODES as ALL_MODES } from '../shared/modes.js';
+// The featured pairing in a few words for the Multiplayer button: modifiers plus the mode's short name.
+const shortFeatured = () => { const f = featured(); const m = ALL_MODES[f.mode]; return [...f.mods.map(id => MODS[id]?.name ?? id), (f.mods.length ? m?.short : m?.name) ?? f.name].join(' '); };     // Modes overhaul: modifiers and the featured playlist.
 
 export { esc };
 
@@ -181,7 +185,7 @@ export class Menu {
           ${rejoin ? `<button class="tl-rejoin" data-act="rejoin" data-in="rail">${ico('rejoin')}<span><b>Rejoin ${esc(rejoin.code)}</b><small>Your last match may still be running</small></span></button>` : ''}
           <button class="tl-hero is-primary" data-sound="confirm" data-act="multiplayer" data-in="rail">
             <span class="tl-hero-ico">${ico('party')}</span>
-            <span class="tl-hero-tx"><b>Multiplayer</b><small>Pick a playlist, join a match</small></span>
+            <span class="tl-hero-tx"><b>Multiplayer</b><small class="tl-feat-line">${ico('star')}Today: ${esc(shortFeatured())}</small></span>
             ${ico('play', 'tl-go')}
           </button>
           <div class="tl-grid${PUBLIC_LOBBIES ? ' has-browse' : ''}">
@@ -191,7 +195,6 @@ export class Menu {
             <button class="tl-btn${PUBLIC_LOBBIES ? ' tl-third' : ''}" data-act="join" data-in="rail">${ico('join')}<b>Join</b></button>
             ${PUBLIC_LOBBIES ? `<button class="tl-btn tl-third tl-browse" data-act="browse" data-in="rail">${ico('ui:signal')}<b>Browse</b></button>` : ''}
           </div>
-          ${featuredButton()}
           <button class="tl-btn tl-loadout" data-act="loadout" data-in="rail">${ico('loadout')}<span><b>Loadouts</b><small>${esc(lo?.name ?? '')}${gun ? `: ${esc(gun)}` : ''}</small></span></button>
         </nav>
       </section>
@@ -204,7 +207,7 @@ export class Menu {
         </span>
       </button>
       ${titleChallenges()}
-      <nav class="ttl-sec">
+      <nav class="ttl-sec" aria-label="More">
         ${[['gunsmith', 'gunsmith', 'Gunsmith'], ['operators', 'operator', 'Operators'], ['history', 'ui:clock', 'History'], ['boards', 'ui:crown', 'Boards'], ['options', 'options', 'Options'], ['help', 'help', 'How to play'], ['saveCode', 'save', 'Save code']]
           .map(([act, icon, label]) => `<button class="chip" data-act="${act}" data-in="up">${ico(icon)}<b>${label}</b></button>`).join('')}
       </nav>`;

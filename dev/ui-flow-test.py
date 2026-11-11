@@ -90,7 +90,8 @@ async def main():
                       and all(o['tier'] in expect_tier and o['mode'] in expect_modes for o in opts), opts)
                 await tap('.vote-card[data-i="0"]', 100)
                 mine = await pg.evaluate("window.__game.app.vote?.mine")
-                check('  ballot cast', mine == 0, mine)
+                # A one-card vote (Battle Royale has one giant map) can resolve before the tap lands.
+                check('  ballot cast', mine == 0 or len(opts) == 1, mine)
                 await pg.wait_for_function('window.__game.app.inMatch', timeout=20000)
                 await pg.wait_for_timeout(600)
                 info = await pg.evaluate(INFO)
@@ -294,7 +295,8 @@ async def main():
             kills = await pg.evaluate("""(() => { const sim = window.__game.app.match.sim, me = sim.byId.get('local');
               for (let i = 0; i < 3; i++) { const bot = sim.players.find(p => p.isBot && p.alive); if (!bot) break; bot.spawnProtect = 0; sim._damage(bot, me, 500, me.ps.weapon, 8, null, true); }
               sim._end(0); return me.kills; })()""")
-            await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'results' || !window.__game.app.inMatch", timeout=20000)
+            # The final-kill replay plays first: about 12 s, longer on a loaded machine.
+            await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'results' || !window.__game.app.inMatch", timeout=60000)
             await pg.wait_for_timeout(5500)
             check('training session ended with kills', kills >= 1, kills)
             after = await pg.evaluate(PROGRESS)
