@@ -51,11 +51,11 @@ on every push, keep 2% of weekly usage for bugs.
     a native .scroll-y parts list, 44 px rows, Signature/Kit chips and the delta strip kept). Opened from a loadout's
     Gunsmith button it starts on that gun's bench ("Guns" goes back to the pick view, "Done" leaves). Guarded by
     dev/ui-overflow-test.py (every menu and the gunsmith at 667x375 and 852x393, plus touch drags on its scrollers).
-14. Multiplayer restructure: "Play vs bots" becomes Multiplayer with tabs Standard / Ground War / Battle Royale (later the
+14. DONE (1111-12). Multiplayer restructure: "Play vs bots" becomes Multiplayer with tabs Standard / Ground War / Battle Royale (later the
     extraction mode); you pick a mode or mix and get a match; map is random or a vote of 2-3. Custom has two tabs:
     Match (map, mode, bots, difficulty, modifiers; friends can join) and Training (the range, or any map with N bots,
     infinite ammo, no death, bot behaviour options, damage readout; never counts toward progress).
-15. Bot overhaul: a pool of 150+ named bot players with persistent profiles (level, loadout habits, play style), most with
+15. DONE (1111-12). Bot overhaul: a pool of 150+ named bot players with persistent profiles (level, loadout habits, play style), most with
     a hidden skill range and a random per-match form, some locked at a tier; smarter decisions at every tier; the
     difficulty selector only in Custom.
     DONE (bots): docs/BOTS.md. 200 seeded profiles (js/shared/botpool.js), a fifth locked; matchmaking by rating and
