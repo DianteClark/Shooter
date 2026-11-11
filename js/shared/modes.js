@@ -48,7 +48,7 @@ export const MODES = {
   ctl:   { id: 'ctl',   rules: 'ctl',  teamSize: 6,  sizes: STANDARD_SIZES, needs: { snd: 2 }, look: 'dom', rounds: true, name: 'Control', short: 'CTL', scoreLimit: 3, timeLimit: 150, desc: 'Attack two zones or defend them, sides swap each round. Each team has limited lives.' },
   grind: { id: 'grind', rules: 'grind', teamSize: 6, sizes: STANDARD_SIZES, needs: { dom: 2 }, look: 'dom', name: 'Grind', short: 'GRD', scoreLimit: 40, timeLimit: 600, desc: 'Grab tags from kills and carry them to a bank. Die and you drop them all.' },
   gwhq:  { id: 'gwhq',  rules: 'hq',   teamSize: 16, large: true, everyHuge: true, needs: [{ hard: 2 }, { dom: 3 }], look: 'hard', name: 'Ground War HQ', short: 'GW HQ', scoreLimit: 300, timeLimit: 900, desc: '16 v 16. Take the HQ and hold it. While it stands, its team cannot respawn.' },
-  gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 20, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
+  gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 12, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 
