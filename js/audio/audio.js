@@ -27,6 +27,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { MAPS } from '../shared/map.js';
 import { raycastMap } from '../shared/geometry.js';
 import { fillGaps, classOf, weightOf, idHash, impactBus } from '../render/feel.js';
+import { EquipmentSfx } from './equipment-sfx.js';   // Gear wave equipment sounds (2026-11).
 
 const MAX_VOICES = 26;
 // Priority. A new voice can only replace something strictly lower, so the top of this list always plays.
@@ -2028,6 +2029,7 @@ export class AudioEngine {
     if (!this._running()) return;
     this._trackLocal(view);
     this.lastView = view;
+    (this.gearSfx ??= new EquipmentSfx(this)).onEvents(events, view);
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
@@ -2106,6 +2108,7 @@ export class AudioEngine {
           if (e.id === me) this._play(this.sfx.flashRing, { bus: this.ui, priority: PR.boom, cls: 'loud', gain: 0.3 + 0.6 * e.amount });
           break;
         case 'heal': {
+          if (e.kind) break;              // Medpack ticks: equipment-sfx.js has its own, quieter sound.
           const p = this._posOf(view, e.id);
           if (e.id === me) this._play(this.sfx.stim, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.8 });
           else if (p) this._world(this.sfx.stim, p.x, p.z, 12, { gain: 0.5, priority: PR.gun });

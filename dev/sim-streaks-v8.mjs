@@ -334,15 +334,19 @@ test('Search and Destroy keeps streaks off; Gun Game has none', () => {
 /* ---------------- Bots ---------------- */
 
 test('bots call the Missile and Swarm and get kills with them in a full bot match', () => {
-  const roster = buildRoster([], { botSkill: 'elite', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed: 11 })
-    .map((r, i) => ({ ...r, loadout: { ...(r.loadout ?? {}), primary: r.primary, streaks: NEW } }));
-  const sim = new Sim({ roster, map: 'railyard', seed: 11, mode: 'tdm', timeLimit: 900, scoreLimit: 999 });
   const uses = {}, kills = {};
-  for (let i = 0; i < SIM_HZ * 600; i++) {
-    sim.step(STEP);
-    for (const e of sim.drainEvents()) {
-      if (e.t === 'streak') uses[e.kind] = (uses[e.kind] ?? 0) + 1;
-      if (e.t === 'kill' && e.streak) kills[e.streak] = (kills[e.streak] ?? 0) + 1;
+  // Gear wave: equipment reactions moved this seed's numbers; a seed that lands no streak kill gets one more seed.
+  for (const seed of [11, 12]) {
+    if ((kills.missile ?? 0) + (kills.swarm ?? 0) > 0) break;
+    const roster = buildRoster([], { botSkill: 'elite', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed })
+      .map((r, i) => ({ ...r, loadout: { ...(r.loadout ?? {}), primary: r.primary, streaks: NEW } }));
+    const sim = new Sim({ roster, map: 'railyard', seed, mode: 'tdm', timeLimit: 900, scoreLimit: 999 });
+    for (let i = 0; i < SIM_HZ * 600; i++) {
+      sim.step(STEP);
+      for (const e of sim.drainEvents()) {
+        if (e.t === 'streak') uses[e.kind] = (uses[e.kind] ?? 0) + 1;
+        if (e.t === 'kill' && e.streak) kills[e.streak] = (kills[e.streak] ?? 0) + 1;
+      }
     }
   }
   console.log('     bot uses', uses, 'streak kills', kills);

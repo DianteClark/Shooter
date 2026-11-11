@@ -15,6 +15,7 @@ import { uploadUsed } from './dynbuf.js';
 import { SND, CTF } from '../shared/modes.js';
 import { sndOf } from '../sim/snd.js';
 import { ctfOf } from '../sim/ctf.js';
+import { EquipmentFX } from './equipment-fx.js';   // Gear wave equipment (2026-11): models, beams, burns, rings.
 
 const MAX_NADES = 18;
 const MAX_FIRES = 6;
@@ -638,6 +639,7 @@ export class CombatFX {
       fragmentShader: `varying vec3 vC; void main(){ gl_FragColor = vec4(vC, 1.0); }`,
     });
     this.nades = this.#modelMesh(nadeModels(), MAX_NADES, 3);
+    this.gear = new EquipmentFX(this, { ModelSet, NADE_RGB, BLAST_R });
     this.vehicles = this.#modelMesh(vehicleModels(), MAX_VEHICLES, 2);
 
     // Aircraft shadows reuse the vehicle geometry's vertices with their own instance list.
@@ -871,6 +873,7 @@ export class CombatFX {
     this.lastCtf = view.mode === 'ctf' ? ctfOf(view) : null;
     this.#updatePoints(view, dt);
     this.#updateNades(view, dt, localX, localZ, localTeam, hasLocal);
+    this.gear.update(view, dt, localX, localZ, localTeam, hasLocal);
     this.#updateFires(view, dt, localX, localZ, hasLocal);
     this.#updateSmoke(view, dt);
     this.#updateVehicles(view, dt, localX, localZ, localTeam, uav, hasLocal);
@@ -883,6 +886,7 @@ export class CombatFX {
   // Events for everything the systems added. Drawn only where the local player could see them, except warnings.
   onEvents(events, localId, localTeam) {
     if (!events) return;
+    this.gear.onEvents(events, localId, localTeam);
     const vfx = this.vfx;
     for (let i = 0; i < events.length; i++) {
       const ev = events[i];
@@ -1151,6 +1155,7 @@ export class CombatFX {
     for (let i = 0; i < this.mortars.length; i++) this.mortars[i].t = -1;
     for (let i = 0; i < this.marked.length; i++) this.marked[i].id = null;
     this.staticBurst = 0; this.staticAmt = 0;
+    this.gear.reset();
   }
 
   // The throw-aim preview from view.throwPreview: { points:[{x,y,z}], bounces:[{x,z}], landing:{x,z,kind} }.
@@ -2022,6 +2027,7 @@ export class CombatFX {
     const meshes = [this.nades, this.vehicles, this.shadow, this.fireMesh, this.smokeMesh, this.tagMesh, this.flagStand, this.flagCloth, this.zones, this.zoneWalls];
     // Each InstancedMesh holds its own instance-matrix buffer; dispose() is what releases it.
     for (const m of meshes) { this.scene.remove(m); m.geometry.dispose(); m.dispose(); }
+    this.gear.dispose();
     this.scene.remove(this.staticMesh);
     this.staticMesh.geometry.dispose();
     for (const m of [this.solidMat, this.modelMat, this.shadowMat, this.fireMat, this.staticMat, this.smokeMat, this.flagMat, this.zoneMat, this.wallMat]) m.dispose();
