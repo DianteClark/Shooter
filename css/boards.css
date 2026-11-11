@@ -1,0 +1,70 @@
+/* Leaderboards (js/ui/boards.js): views in the bar, categories in a sideways strip, the ranked list beside the picked
+   player's card. Fits 667x375 and up; the list and the strip scroll natively. */
+#ui .menu[data-screen="boards"] { gap: var(--sp-2); }
+#ui .bd-bar { gap: var(--sp-3); margin-bottom: 0; }
+#ui .bd-views { margin-left: auto; display: flex; gap: 2px; }
+#ui .bd-views .seg { display: flex; align-items: center; gap: 5px; height: 32px; white-space: nowrap; }
+#ui .bd-views .seg .ico { height: 14px; }
+#ui .bd-views .seg b { font-weight: 400; }
+#ui .bd-cats { flex: none; display: flex; gap: 2px; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+#ui .bd-cats::-webkit-scrollbar { display: none; }
+#ui .bd-cats .seg { flex: 1 0 auto; min-width: max-content; height: 30px; padding: 0 9px; display: flex; align-items: center; justify-content: center; gap: 5px; clip-path: none; white-space: nowrap; }
+#ui .bd-cats .seg .ico { height: 14px; flex: none; }
+#ui .bd-cats .seg b { font-weight: 400; }
+
+.bd-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--sp-3); }
+.bd-list { min-height: 0; display: flex; flex-direction: column; background: rgba(16,20,26,.55); box-shadow: var(--edge); }
+.bd-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+#ui .bd-row {
+  position: relative; width: 100%; display: grid; grid-template-columns: 40px 20px 44px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2);
+  min-height: 34px; padding: 0 var(--sp-3) 0 0; text-align: left; color: var(--c-chalk); background: none; border-bottom: 1px solid var(--c-line);
+}
+#ui .bd-body .bd-row:nth-child(2n) { background: rgba(231,234,228,.025); }
+#ui .bd-row.open { background: var(--c-steel-hi); box-shadow: inset 0 0 0 1px var(--c-line-hi); }
+#ui .bd-body .bd-row.me { background: linear-gradient(90deg, rgba(242,166,59,.30), rgba(242,166,59,.10)); box-shadow: inset 3px 0 0 var(--c-sodium); }
+#ui .bd-body .bd-row.me.open { box-shadow: inset 3px 0 0 var(--c-sodium), inset 0 0 0 1px var(--c-sodium); }
+#ui .bd-head { flex: none; min-height: 26px; grid-template-columns: 40px minmax(0, 1fr) auto; background: var(--face-steel); box-shadow: var(--bevel); border: 0;
+  font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
+.bd-rank { text-align: right; font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-haze); }
+.bd-head .bd-rank { font: inherit; }
+.bd-row.me .bd-rank { color: var(--c-sodium); }
+.bd-em { display: grid; place-items: center; line-height: 0; }
+.bd-bdg { display: flex; align-items: center; gap: 3px; line-height: 0; }
+.bd-bdg u { text-decoration: none; font: 400 var(--fs-caption)/1 var(--f-plate); color: var(--c-haze); }
+.bd-name { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.bd-name b { min-width: 0; font: 400 var(--fs-lead)/1.1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bd-name small { flex: none; padding: 2px 5px; font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-sodium-ink); background: var(--c-sodium); }
+.bd-pal { flex: none; display: grid; place-items: center; width: 18px; height: 18px; color: var(--c-blue); background: rgba(80,150,255,.14); box-shadow: inset 0 0 0 1px rgba(80,150,255,.45); }
+#ui .bd-pal .ico { height: 12px; }
+.bd-val { text-align: right; font: 400 var(--fs-lead)/1 var(--f-plate); letter-spacing: .04em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--c-chalk); }
+.bd-head .bd-val, .bd-head .bd-who { font: inherit; color: var(--c-haze); }
+.bd-row.me .bd-val { color: var(--c-sodium); }
+.bd-note { display: flex; align-items: center; gap: 6px; margin: 0; padding: var(--sp-3); font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }
+.bd-pin { flex: none; padding: 6px var(--sp-3); color: var(--c-chalk); background: rgba(242,166,59,.12); border-bottom: 1px solid var(--c-line); }
+#ui .bd-note .ico { height: 14px; flex: none; color: var(--c-sodium); }
+.bd-foot { flex: none; padding: 5px var(--sp-3); font: 400 var(--fs-micro)/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-top: 1px solid var(--c-line); }
+
+.bd-detail { min-height: 0; display: flex; }
+.bdd { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-2); background: var(--face-steel); box-shadow: var(--bevel), var(--edge); overflow: hidden;
+  --cut: var(--cut-lg); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.bdd-card { flex: none; display: flex; justify-content: center; }
+.bdd-who { flex: none; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-width: 0; }
+.bdd-rank { display: flex; align-items: baseline; gap: 5px; }
+.bdd-rank small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+.bdd-rank b { font: 400 var(--fs-heading)/1 var(--f-stencil); color: var(--c-sodium); }
+.bdd-op { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--c-chalk); }
+#ui .bdd-op .ico { height: 14px; flex: none; color: var(--c-sodium); }
+.bdd-op b { font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; }
+.bdd-op small { min-width: 0; font: 400 var(--fs-caption)/1 var(--f-body); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bdd-stats { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--c-line); }
+.bdd-stat { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px 2px; background: var(--c-steel); }
+.bdd-stat b { font: 400 var(--fs-body)/1 var(--f-stencil); color: var(--c-chalk); white-space: nowrap; }
+.bdd-stat small { font: 400 8px/1 var(--f-plate); letter-spacing: .06em; color: var(--c-haze); text-transform: uppercase; white-space: nowrap; }
+.bdd-stat.on b { color: var(--c-sodium); }
+
+/* The smallest phones: a narrower card panel. */
+@media (max-width: 700px) {
+  .bd-split { grid-template-columns: minmax(0, 1fr) 224px; gap: var(--sp-2); }
+  #ui .bd-views .seg { padding: 0 8px; }
+}

@@ -79,6 +79,7 @@ const entryOf = (id, kind, card, extra = {}) => ({ id, kind, ...card, ...extra }
 
 // A friend's or my weekly numbers count only in the week they were for.
 const weekly = (e, key) => (e.wk?.key === key ? e.wk : { key, k: 0, w: 0 });
+export const weekOf = (e, now = Date.now()) => weekly(e, periodKey('weekly', new Date(now)));
 
 // Mastery for a bot: no tracks to read, so a steady share of their matches, set by their id and usual skill; never
 // falls (matches never do) and never passes what there is to finish.
@@ -92,9 +93,10 @@ let poolCache = { key: null, list: null };
 export function poolEntries(now = Date.now()) {
   const d = new Date(now), key = `${dayKey(d)}|${periodKey('weekly', d)}`;
   if (poolCache.key === key) return poolCache.list;
-  const wkKey = periodKey('weekly', d), from = weekStart(d).getTime();
-  // Careers move by whole days, so the board reads the start of today: every phone on this date gets the same rows.
-  const today = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  // Careers move by whole days. The board reads the local calendar date as that day in UTC, so every phone on the same
+  // date gets the same rows, wherever it is; the week from this Monday's date the same way.
+  const utc = x => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
+  const wkKey = periodKey('weekly', d), from = utc(weekStart(d)), today = utc(d);
   const list = BOT_POOL.map(p => {
     const c = careerAt(p, today), was = careerAt(p, from);
     return entryOf(p.id, 'pool', {
@@ -113,7 +115,7 @@ export function poolEntries(now = Date.now()) {
 const kdOf = e => (e.d ? e.kdk / e.d : e.kdk);
 const fmtInt = v => Math.round(v).toLocaleString('en-US');
 export const CATEGORIES = [
-  { id: 'level', label: 'Level', icon: 'rank', value: e => e.prestige * MAX_LEVEL + e.level, tie: e => e.xp, fmt: (v, e) => `${e.prestige ? `P${e.prestige} ` : ''}${e.level}` },
+  { id: 'level', label: 'Level', icon: 'rank', value: e => e.prestige * MAX_LEVEL + e.level, tie: e => e.xp, fmt: (v, e) => `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}` },
   { id: 'kills', label: 'Kills', icon: 'skull', value: e => e.k, fmt: fmtInt },
   { id: 'kd', label: 'K/D', icon: 'aim', value: kdOf, eligible: e => e.kdm >= KD_MIN_MATCHES, tie: e => e.kdm, fmt: v => v.toFixed(2),
     rule: `At least ${KD_MIN_MATCHES} matches` },

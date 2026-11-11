@@ -150,6 +150,11 @@ const SCENES = {
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop }); }),
+  // Leaderboards: a played-in save, three friends (one with a long tag, one from last week) and the pool.
+  'boards': menuScene('Boards: everyone', ({ menu }) => boardsScene(menu, 'everyone', 'level')),
+  'boards-friends': menuScene('Boards: friends', ({ menu }) => boardsScene(menu, 'friends', 'kills')),
+  'boards-around': menuScene('Boards: around me', ({ menu }) => boardsScene(menu, 'around', 'wkills')),
+  'boards-kd': menuScene('Boards: K/D, too few matches', ({ menu }) => boardsScene(menu, 'everyone', 'kd')),
   'challenges': menuScene('Challenges', ({ menu }) => menu.challenges({ onBack: noop })),
   'history': menuScene('Match history', ({ menu }) => menu.history({ onBack: noop, onStats: noop })),
   // Some kills on a few guns, so locked cards show their progress bars part-way.
@@ -243,6 +248,19 @@ async function runFrame(id) {
   // Let entrances settle before anyone screenshots. Timed sequences (the results reel) ask for longer; &wait= overrides.
   await new Promise(r => setTimeout(r, Number(q.get('wait') ?? scene?.settle ?? 900)));
   window.__ready = true;
+}
+
+async function boardsScene(menu, view, cat) {
+  const { Progress, Friends } = await import('./js/ui/progress.js');
+  const { boardsScreen } = await import('./js/ui/boards.js');
+  for (let i = 0; i < (cat === 'kd' ? 4 : 30); i++) Progress.applyMatch({ xp: 3000, weapons: {}, won: i % 3 === 0, career: { kills: 14 + (i % 7), deaths: 11 + (i % 5), br: i % 6 === 5, place: 4 } });
+  const card = (name, k, extra = {}) => ({ v: 1, name, level: 37, prestige: 2, xp: 2e6, m: 300, k, w: 140, brm: 40, brw: 4, br5: 15, ex: 0, kdm: 120, kdk: 2400, d: 2100, mst: 12, wk: { key: '', k: 0, w: 0 }, op: 'anvil', skin: null, card: 'kills-1000', emblem: null, ...extra });
+  const day = 864e5, now = Date.now();
+  Friends.clear();
+  Friends.see('Pfriend01', card('Nightjar', 5200, { level: 50, prestige: 10 }), now - 2 * day);
+  Friends.see('Pfriend02', card('WWWWWWWWWWWW', 900, { level: 12, prestige: 0, op: 'wisp' }), now - 9 * day);
+  Friends.see('Pfriend03', card('Ox', 3100), now);
+  boardsScreen(menu, { onBack: () => {}, myId: 'Pme', view, cat });
 }
 
 async function menuFrame(scene, ui) {
