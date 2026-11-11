@@ -810,7 +810,8 @@ let friendsCache = null;
 const friendList = () => (friendsCache ??= cleanFriends(parse(read(FRIENDS_KEY))));
 
 export const Friends = {
-  list() { return friendList().slice(); },
+  // selfId: never list this phone's own player (two test tabs share one storage).
+  list(selfId = null) { return friendList().filter(f => f.id !== selfId); },
   // A card from a lobby partner; returns true if it was stored.
   see(id, card, now = Date.now(), selfId = null) {
     const next = seeFriend(friendList(), id, card, now, selfId);

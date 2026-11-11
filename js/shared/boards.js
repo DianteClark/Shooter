@@ -69,7 +69,7 @@ export function cleanFriends(raw) {
 export function seeFriend(list, id, raw, now = Date.now(), selfId = null) {
   const card = cleanCard(raw);
   if (!card || typeof id !== 'string' || !PID.test(id) || id === selfId) return null;
-  const next = [{ id, at: now, card }, ...list.filter(f => f.id !== id)];
+  const next = [{ id, at: now, card }, ...list.filter(f => f.id !== id && f.id !== selfId)];
   next.sort((a, b) => b.at - a.at);
   return next.slice(0, FRIENDS_MAX);
 }

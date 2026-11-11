@@ -59,7 +59,7 @@ export function boardsScreen(menu, { onBack, myId = 'me', now = () => Date.now()
   menu.el.dataset.screen = 'boards';
 
   const paint = (first = false) => {
-    const friends = Friends.list();
+    const friends = Friends.list(myId);
     const b = state.board = buildBoard({ me: Progress.careerCard(), myId, friends, cat: state.cat, view: state.view, now: now() });
     const cat = b.cat;
     if (state.open === null || !b.rows[state.open]) state.open = b.me >= 0 ? b.me : b.rows.length ? 0 : null;
