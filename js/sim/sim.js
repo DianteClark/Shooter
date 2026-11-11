@@ -5,7 +5,7 @@ import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS,
 import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle, wallsInBox, wallScratch } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
-import { GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
+import { EX, EX_AI_TEAM, GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_PRIMARIES } from '../shared/weapons-v10.js';
@@ -138,6 +138,8 @@ const FAR_SEND = 40;             // Metres from every human past which a quiet p
 const INTEREST_AREA = 40000;
 const POS_FIELDS = [0, 1, 2, 5, 6];      // A far player's keyframe (code 2): position, aim, hp, flags.
 const INTEREST_FAR = 60;
+const INTEREST_FAR_AI = 40;      // Extraction's AI patrols: past this a keyframe every third snapshot,
+const AI_NEAR = 14;              // and past this a keyframe every snapshot instead of the full record.
 const INTEREST_EVERY = 3;
 const EVENT_FAR = 150;
 const BOT_NAMES = ['Ridge', 'Talon', 'Gully', 'Dagger', 'Quill', 'Kestle', 'Ember', 'Tarn', 'Pike', 'Onyx', 'Fable', 'Rivet', 'Brine', 'Cinder', 'Wick', 'Hex',
@@ -221,6 +223,7 @@ function gunOffset(mapId, mode, seed) {
 export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId = null, mode = null, seed = null, pool = null } = {}) {
   if (pool) return buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool: pool === true ? {} : pool });
   if (MODES[mode]?.rules === 'br') return buildBrRoster(humans, { botSkill, mode });
+  if (MODES[mode]?.rules === 'ex') return buildExRoster(humans, { botSkill, mode });
   if (MODES[mode]?.ffa) return buildFfaRoster(humans, { botSkill, mapId, mode, seed, players: teamSize });
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(h => {
@@ -285,6 +288,25 @@ function buildBrRoster(humans, { botSkill, mode }) {
   return roster;
 }
 
+// Extraction (js/sim/extract.js): the battle royale seating for the 16 squad seats (4 x 4 or 8 x 2), friends together,
+// bots in every empty seat with their own loadouts, then the AI patrol seats (EX.aiSlots) on side EX_AI_TEAM. The rules
+// dress and place the patrols themselves.
+function buildExRoster(humans, { botSkill, mode }) {
+  const base = buildBrRoster(humans, { botSkill, mode });
+  let k = 0;
+  const roster = base.map(r => {
+    if (!r.isBot) return r;
+    const skill = r.skill, loadout = botLoadout(BOT_PRIMARIES[(k * 5 + 3) % BOT_PRIMARIES.length], k + 2, skill, k, 7);
+    k++;
+    return { ...r, primary: loadout.primary, camo: loadout.camo, loadout };
+  });
+  for (let i = 0; i < EX.aiSlots; i++) {
+    const loadout = normalizeLoadout({ primary: 'ar', secondary: 'pistol', camo: 'none', operator: 'ghoul' });
+    roster.push({ id: `ai${i}`, name: 'Patrol', team: EX_AI_TEAM, isBot: true, ai: true, skill: 'regular', primary: 'ar', camo: 'none', loadout });
+  }
+  return roster;
+}
+
 // One bot loadout, dealt the same way for teams and free-for-all. `i` staggers equipment, perks and streaks.
 function botLoadout(primary, side, skill, i, deal = 0) {
   const loadout = normalizeLoadout({
@@ -336,9 +358,10 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
   };
   // Battle royale and free-for-all keep their own seating; only who sits in the bot seats changes.
-  if (m?.rules === 'br' || m?.ffa) {
-    const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
-    const seats = base.filter(r => r.isBot);
+  if (m?.rules === 'br' || m?.rules === 'ex' || m?.ffa) {
+    const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : m.rules === 'ex' ? buildExRoster(humans, { botSkill: 'regular', mode })
+      : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
+    const seats = base.filter(r => r.isBot && !r.ai);      // Extraction's AI patrol seats are not players.
     const picks = draw(seats.length);
     return base.map(r => {
       const k = seats.indexOf(r);
@@ -415,8 +438,9 @@ export class Sim {
     // Modifiers (js/shared/playlist.js): the ones this mode can take, in a fixed order.
     this.mods = cleanMods(mods, def.id);
     this.hardcore = this.mods.includes('hardcore');
-    const brRules = def.rules === 'br';
-    // Battle royale sides are squads (team FFA_TEAM + squad), so it keeps per-side state the free-for-all way.
+    const brRules = def.rules === 'br' || def.rules === 'ex';
+    // Battle royale and extraction sides are squads (team FFA_TEAM + squad), so they keep per-side state the
+    // free-for-all way (extraction's AI patrols are one more side, EX_AI_TEAM).
     this.ffa = !!def.ffa || brRules;
     this.ladder = this.mode === 'gun';      // Gun Game: scores are rungs climbed, and the rung is the loadout.
     this.objective = OBJECTIVE_RULES.has(this.mode) || !!MODE_RULES[this.mode];
@@ -480,7 +504,7 @@ export class Sim {
       if (this.ladder) loadout = gunLoadout(0, loadout);
       loadout = this._deal(r.team, loadout);
       return {
-        id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null,
+        id: r.id, name: r.name, team: r.team, isBot: !!r.isBot, skill: r.skill ?? null, ai: !!r.ai,
         rating: typeof r.rating === 'number' ? r.rating : null, style: r.style ?? null,     // Pool bots (js/shared/botpool.js).
         dummy: !!r.dummy, home: r.home ?? null, humanId: null,
         // Held slot: the human dropped. Off the field, stats kept; `open` once nobody came back in HOLD_OPEN_SECONDS.
@@ -556,7 +580,7 @@ export class Sim {
     if (!WEAPONS[l.primary]) l.primary = fallback ? fallback.primary : 'ar';
     if (!SECONDARY_IDS.includes(l.secondary)) l.secondary = fallback ? fallback.secondary : 'pistol';
     // Search and Destroy has no scorestreaks: one life a round leaves no room to earn them fairly.
-    if (this.mode === 'snd' || this.mode === 'br') l.streaks = [];
+    if (this.mode === 'snd' || this.mode === 'br' || this.mode === 'ex') l.streaks = [];     // Extraction: none either.
     if (this.mode === 'br') l.perks = [];      // Battle royale: nothing from your own loadout fights, only its looks.
     return l;
   }
@@ -586,6 +610,7 @@ export class Sim {
 
   _spawnAll() {
     if (this.br) { this.br.spawnAll(); return; }
+    if (this.rules?.ownSpawns && this.rules.spawnAll()) return;     // Extraction: insertion points and AI posts.
     if (this.ffa) { this._ffaSpawnAll(); return; }
     if (this.snd) { this.snd.startRound(); return; }
     if (this.rules?.spawnAll?.()) return;
@@ -704,6 +729,7 @@ export class Sim {
   // Own side preferred; any point an enemy can see, or that was just used, is heavily penalised.
   _respawn(p) {
     if (p.dummy) { this._placeAt(p, p.home, p.home.aim); return; }
+    if (this.rules?.respawn?.(p)) return;          // Extraction places its own (near the squad, from the lives pool).
     if (this.ffa) { this._ffaRespawn(p); return; }
     let best = null, bestScore = -Infinity;
     const enemyTeam = 1 - p.team;
@@ -811,6 +837,7 @@ export class Sim {
         const p = players[flip ? last - i : i];
         if (!p.bot || !p.alive) continue;
         if (this.br && this.br.driveBot(p, STEP)) { this._diffFx(p); continue; }   // Aboard, gliding or down.
+        if (this.rules?.driveBot && this.rules.driveBot(p, STEP)) { this._diffFx(p); continue; }   // Extraction: down, or a patrol asleep.
         const shots = p.bot.update(STEP);
         for (let s = 0; s < shots.length; s++) this.applyShot(p.id, shots[s], 0);
         this._diffFx(p);
@@ -827,7 +854,7 @@ export class Sim {
   _stepTimers(p) {
     if (p.away) {
       p.awayT += STEP;
-      if (!p.open && !this.br && p.awayT >= HOLD_OPEN_SECONDS) {     // Battle royale never seats a newcomer.
+      if (!p.open && !this.br && !this.rules?.closed && p.awayT >= HOLD_OPEN_SECONDS) {     // Battle royale and extraction never seat a newcomer.
         p.open = true;
         this._emit({ t: 'slotOpen', id: p.id });
       }
@@ -1192,6 +1219,7 @@ export class Sim {
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
     if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
     if (msg.cmd === 'br') return !!this.br && this.br.command(this.byId.get(id), msg);
+    if (msg.cmd === 'ex') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     if (msg.cmd === 'trainSwap') return this._trainSwap(id);
     return false;
@@ -1203,7 +1231,7 @@ export class Sim {
     if (!p || !p.alive || this.phase !== 'live' || !Number.isFinite(aim)) return false;
     if (slot !== 'tactical' && slot !== 'lethal') return false;
     if (p.jamT > 0) return false;                 // Blackout: no equipment until it wears off.
-    if (this.br && (p.downed || p.brAir)) return false;
+    if (p.downed || p.brAir) return false;          // Down (battle royale, extraction) or in the air.
     // Satchel: with one armed on the map, the Lethal tap is the detonator, not another throw.
     if (slot === 'lethal' && p.ps.lethal === 'charge' && this.eq.detonate(id) > 0) { p.spawnProtect = 0; return true; }
     const ps = p.ps, heal = slot === 'tactical' && ps.tactical === 'stim';
@@ -1247,7 +1275,7 @@ export class Sim {
   applyShot(id, shot, ageSeconds = 0) {
     const shooter = this.byId.get(id);
     if (!shooter || !shooter.alive || this.phase === 'ended') return;
-    if (this.br && (shooter.downed || shooter.brAir)) return;     // Down or in the air: no shooting.
+    if (shooter.downed || shooter.brAir) return;     // Down or in the air: no shooting.
     // Every gun stat below comes from the shooter's loadout as the host knows it, never from the shot itself.
     const w = weaponDef(shooter.ps, shot.weapon);
     if (!w) return;
@@ -1277,6 +1305,7 @@ export class Sim {
     this._emit(fired);
     this._alertBots(shooter, !!w.suppressed);
     this.br?.onShot(shooter);
+    this.rules?.onShot?.(shooter);
     if (this.range) this.range.onShot(shooter, shot, rays);
 
     if (this.phase !== 'live') return;
@@ -1426,6 +1455,7 @@ export class Sim {
     }
     // Battle royale squads: lethal damage downs you while a teammate is still up.
     if (killed && this.br && this.br.tryDown(target, attacker, weapon)) { killed = false; down = true; }
+    else if (killed && this.rules?.tryDown && this.rules.tryDown(target, attacker, weapon)) { killed = false; down = true; }   // Extraction squads too.
     const hit = { t: 'hit', by: attacker.id, target: target.id, dmg: Math.round(dmg),
       x: round2(target.ps.x), z: round2(target.ps.z), killed };
     if (down) hit.down = true;
@@ -2432,7 +2462,7 @@ export class Sim {
   // A newcomer takes an open slot: same seat (team, free-for-all colour), fresh stats under their own id and name.
   // The side with fewer players on the field gets them first. Returns what humanRejoin returns, or null when none is open.
   claimOpenSlot(id, name, loadout = null, info = null) {
-    if (this.byId.has(id) || this.br) return null;      // Nobody joins a battle royale after the jump.
+    if (this.byId.has(id) || this.br || this.rules?.closed) return null;      // Nobody joins a battle royale after the jump, or an extraction.
     const onField = t => this.players.reduce((n, q) => n + (q.team === t && !q.away && !q.dummy ? 1 : 0), 0);
     let best = null;
     for (const p of this.players) if (p.away && p.open && (!best || onField(p.team) < onField(best.team))) best = p;
@@ -2775,7 +2805,7 @@ export class Sim {
     }
     // Keyed to the tick, not to encode calls: the host encodes twice on some ticks, and the extra
     // local one must not swallow what guests need to receive.
-    if (this.tick <= this._metaUntil || this.tick % 15 === 0) out[9] = this._encodeMeta();
+    if (this.tick <= this._metaUntil || this.tick % (this.rules?.metaEvery ?? 15) === 0) out[9] = this._encodeMeta();
     this._encodeEntities(out);
     for (let i = 0; i < this.players.length; i++) {
       const p = this.players[i], ps = p.ps, st = p.score;
@@ -2819,7 +2849,7 @@ export class Sim {
     const jams = this.jam.some(v => v > 0) || this.overwatch.some(v => v > 0) || locked ? [...side(this.jam), ...side(this.overwatch)].map(ds).concat(this._lockDs()) : 0;
     return [
       Math.round(this.time * 100), PHASES.indexOf(this.phase), Math.round(this.timeLeft * 10),
-      side(this.scores), 0, this.winner === null ? -1 : this.winner,
+      this.scores.some(Boolean) ? side(this.scores) : 0, 0, this.winner === null ? -1 : this.winner,     // All zero (battle royale, extraction): 0.
       radar, 0, 0, 0, 0, 0, 0, 0, this._encodeObjective(), jams,     // A free-for-all mode's own block (One in the Chamber).
     ];
   }
@@ -2840,7 +2870,7 @@ export class Sim {
       if (list) for (let i = 0; i < n; i++) out[FFA_TEAM + i] = (list[at + i] ?? 0) / k;
       return out;
     };
-    view.scores = side(d[3]);
+    view.scores = side(d[3] || null);
     view.uav = side(d[6] || null, 10);
     view.jam = side(d[15] || null, 10);
     view.overwatchT = side(d[15] || null, 10, n);
@@ -3085,7 +3115,13 @@ export class Sim {
     for (let i = 0; i < n; i++) {
       const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;
       let code = codes[i];
-      if (code === 1 && p !== g && !(uav && p.team !== g.team) && !(full[o + 22] > 0)
+      if (p.ai && code && code !== 2) {
+        // Extraction's AI patrols: the full record only up close; keyframes (position, aim, hp, flags) every snapshot in
+        // mid range and every third one far off. Their guns and ammo matter to nobody's screen.
+        const dx = Math.abs(p.ps.x - gx), dz = Math.abs(p.ps.z - gz);
+        if (dx > INTEREST_FAR_AI || dz > INTEREST_FAR_AI) code = (phase + i) % INTEREST_EVERY ? 0 : 2;
+        else if (dx > AI_NEAR || dz > AI_NEAR) code = (phase + i) & 1 ? 0 : 2;
+      } else if (code === 1 && p !== g && !(uav && p.team !== g.team) && !(full[o + 22] > 0)
         && (Math.abs(p.ps.x - gx) > INTEREST_FAR || Math.abs(p.ps.z - gz) > INTEREST_FAR)) code = (phase + i) % INTEREST_EVERY ? 0 : 2;
       out.push(code);
       if (code === 2) for (let k = 0; k < POS_FIELDS.length; k++) out.push(full[o + POS_FIELDS[k]]);

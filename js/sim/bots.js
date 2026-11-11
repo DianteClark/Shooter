@@ -801,6 +801,7 @@ export class BotBrain {
     this.objRoll = this.sim.rng();                // Decided once a life, so a bot does not change its mind every plan.
     this.lifeT = this.sim.time;                   // When this life began: plans made once a life key on it.
     this.peekCover = null; this.peekSpot = null; this.peekIn = false; this.peekRoll = false; this.peekRestT = 0;
+    this.calm = false;
     this.overpeek = false; this.lookAng = null; this.lookX = 0; this.lookZ = 0; this.topOffNow = false; this.preaimOn = false;
     this._assignLane();
   }
@@ -2335,6 +2336,8 @@ export class BotBrain {
     // from the hip. The stick is put back afterwards so the scaling can never compound across ticks.
     const mx = I.mx, mz = I.mz, len = Math.hypot(mx, mz);
     if (I.aiming && !I.sprint && len > ADS_STICK_FULL) { I.mx = mx * ADS_STICK_FULL / len; I.mz = mz * ADS_STICK_FULL / len; }
+    // Extraction's AI patrols walk their rounds (js/sim/extract.js sets `calm`) until something happens.
+    if (this.calm && !this.targetVisible && !this.hasKnown) { I.sprint = false; I.mx *= 0.48; I.mz *= 0.48; }
     const shots = stepPlayer(ps, I, dt, sim.map, sim.rng);
     I.mx = mx; I.mz = mz;
     I.swap = false; I.slide = false;

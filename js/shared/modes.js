@@ -48,6 +48,10 @@ export const MODES = {
   ctl:   { id: 'ctl',   rules: 'ctl',  teamSize: 6,  sizes: STANDARD_SIZES, needs: { snd: 2 }, look: 'dom', rounds: true, name: 'Control', short: 'CTL', scoreLimit: 3, timeLimit: 150, desc: 'Attack two zones or defend them, sides swap each round. Each team has limited lives.' },
   grind: { id: 'grind', rules: 'grind', teamSize: 6, sizes: STANDARD_SIZES, needs: { dom: 2 }, look: 'dom', name: 'Grind', short: 'GRD', scoreLimit: 40, timeLimit: 600, desc: 'Grab tags from kills and carry them to a bank. Die and you drop them all.' },
   gwhq:  { id: 'gwhq',  rules: 'hq',   teamSize: 16, large: true, everyHuge: true, needs: [{ hard: 2 }, { dom: 3 }], look: 'hard', name: 'Ground War HQ', short: 'GW HQ', scoreLimit: 300, timeLimit: 900, desc: '16 v 16. Take the HQ and hold it. While it stands, its team cannot respawn.' },
+  // Extraction (docs/EXTRACT.md): squads on the giant map against AI patrols and each other; contracts fill a pending
+  // pot that only an extraction banks. `ex` marks the family for menus and the HUD; `squad` is players per squad.
+  exq:   { id: 'exq',   rules: 'ex', teamSize: 4, squad: 4, ex: true, large: true, players: 16, name: 'Extraction', short: 'EXF', scoreLimit: 1, timeLimit: 900, desc: 'Four squads of four. Take contracts, fight the patrols, and get out on the helicopter to keep what you earned.' },
+  exd:   { id: 'exd',   rules: 'ex', teamSize: 2, squad: 2, ex: true, large: true, players: 16, name: 'Extraction Duos', short: 'EXF 2', scoreLimit: 1, timeLimit: 900, desc: 'Eight pairs. Take contracts, fight the patrols, and get out on the helicopter to keep what you earned.' },
   gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 12, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
 };
 export const MODE_IDS = Object.keys(MODES);
@@ -118,6 +122,36 @@ export const BR = {
   rarityCss: ['#c9cbc4', '#59d36b', '#3fa0ff', '#b05cff', '#ffb21a'],
   rarityHex: [0xc9cbc4, 0x59d36b, 0x3fa0ff, 0xb05cff, 0xffb21a],
 };
+// Extraction numbers, shared by the sim (js/sim/extract.js), bots, HUD, results and awards. Seconds and metres.
+export const EX = {
+  warmup: 8,             // Squads stand at their insertion points before the match goes live.
+  length: 900,           // Match clock: 15 minutes, then whoever is still out there gets nothing from contracts.
+  lives: { 4: 10, 2: 5 }, // The squad's shared pool of respawns, by squad size.
+  respawn: 12,           // Respawn timer while the pool lasts.
+  bleed: 30,             // Downs and revives as in battle royale (BR.reviveTime, reviveReach, reviveHp, crawl).
+  // Exfil: windows open set sites at set times; a squad member in an open zone calls the helicopter, which flies in for
+  // `inbound` s and waits up to `wait` s. A squad that holds the zone alone (no other squad and no AI inside, nobody
+  // of it down) for `hold` s is lifted out. The final exfil opens late, lands at `final.land` and stays to the end,
+  // lifting one squad after another.
+  windows: [{ open: 210, close: 420, n: 2 }, { open: 450, close: 660, n: 2 }],
+  final: { open: 720, land: 780 },
+  inbound: 25, wait: 50, hold: 10, cooldown: 30, zoneR: 9,
+  // Contracts: rewards by site tier (1 best). XP, weapon XP for the gun in hand when it was paid, and operator mastery
+  // seconds. All of it goes into the squad's pending pot; an extraction banks the pot for the whole squad.
+  reward: { xp: [0, 1500, 1050, 700], weaponXp: [0, 900, 650, 450], opSecs: [0, 240, 180, 120] },
+  extractXp: 1000,       // Banked on top of the pot by an extraction (even with no contracts done).
+  stayXp: 300,           // Participation for a squad that never got out.
+  intelReach: 1.6, plantTime: 3, fuse: 30, defuseTime: 5, cacheReach: 1.8, hackTime: 55, hackR: 6,
+  escortSpeed: 1.4, escortNear: 8, escortBlock: 11, phoneReach: 3,
+  ammoReach: 1.5, boxMags: 2, dropMags: 1, boxBack: 60, dropLife: 45,
+  aiSlots: 48,           // AI patrol seats in the roster; groups take them as players come near and give them back.
+  wake: 80, sleep: 110,  // A patrol group appears when a player is this near its place, and goes when none is near.
+};
+// The AI faction's side: FFA_TEAM (2) + 8, past the most squads a match has (eight duos).
+export const EX_AI_TEAM = 10;
+export const CONTRACT_TYPES = ['intel', 'hvt', 'cache', 'hack', 'escort'];
+export const CONTRACT_NAMES = { intel: 'Secure Intel', hvt: 'Eliminate HVT', cache: 'Destroy Cache', hack: 'Hack Terminal', escort: 'Escort Asset' };
+export const isEx = id => MODES[id]?.rules === 'ex';
 export const isBr = id => MODES[id]?.rules === 'br' || id === 'br';
 export const squadSizeFor = id => MODES[id]?.squad ?? 4;
 
@@ -130,7 +164,7 @@ export const isFfa = id => !!(MODES[id]?.ffa || id === 'ffa' || id === 'gun');
 // Everyone in a full match: both teams, or a free-for-all's field, which is bigger on a Ground War map.
 export function playersFor(id, map = null) {
   const m = MODES[id] ?? MODES.tdm;
-  if (m.br) return m.players;
+  if (m.br || m.ex) return m.players;
   if (!m.ffa) return m.teamSize * 2;
   // A map without a size tier counts as medium (see SIZES in js/shared/map.js).
   const size = map?.large ? 'huge' : map?.size;
@@ -142,7 +176,7 @@ export function playersFor(id, map = null) {
 export function mapModes(map) {
   const own = map?.modes ?? MODE_IDS.filter(id => !MODES[id].large);
   // A battle royale map lists 'br'; it hosts every squad size. Huge maps host the `everyHuge` Ground War modes.
-  const extra = MODE_IDS.filter(id => ((MODES[id].everyMap && map?.size !== 'giant') || (MODES[id].everyHuge && tierOf(map) === 'huge' && !own.includes('br')) || (MODES[id].br && own.includes('br'))) && !own.includes(id));
+  const extra = MODE_IDS.filter(id => ((MODES[id].everyMap && map?.size !== 'giant') || (MODES[id].everyHuge && tierOf(map) === 'huge' && !own.includes('br')) || ((MODES[id].br || MODES[id].ex) && own.includes('br'))) && !own.includes(id));
   return extra.length ? [...own, ...extra] : own;
 }
 
@@ -158,6 +192,7 @@ export function modeFitsMap(map, mode) {
   if (rules === 'snd') return map.points?.snd?.length === 2;
   if (rules === 'ctf') return map.points?.ctf?.length === 2;
   if (rules === 'br') return !!map.br?.loot?.length;
+  if (rules === 'ex') return (map.br?.pois?.length ?? 0) >= 8;
   return true;
 }
 

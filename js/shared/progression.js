@@ -7,6 +7,7 @@ import { MODES, modeRules } from './modes.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 import { V10_UNLOCKS } from './weapons-v10.js';
+import { EX_UNLOCKS } from './extraction.js';
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
 // progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
@@ -707,6 +708,8 @@ export const UNLOCK_CHALLENGES = {
   'streak:juggernaut': { label: 'Call in 8 scorestreaks', goal: 8, value: s => total(s, 'streak', 'uses') },
   'streak:dome':     { label: 'Call in 12 scorestreaks', goal: 12, value: s => total(s, 'streak', 'uses') },
   'streak:rover':    { label: 'Get 25 scorestreak kills', goal: 25, value: s => total(s, 'streak', 'kills') },
+  // Extraction exclusives (js/shared/extraction.js): contracts banked by getting out, counted in the lifetime tallies.
+  ...Object.fromEntries(EX_UNLOCKS.filter(u => u.kind === 'streak' || u.kind === 'perk').map(u => [u.id, { label: u.label, goal: u.goal, value: s => s.life?.[u.key] ?? 0, extraction: true }])),
 };
 
 // {label, goal, value, done} for an item's challenge in a save, or null when it has none.
@@ -1147,6 +1150,8 @@ export function blankSave() {
     // they are read (js/ui/progress.js); `life` is the lifetime sum of every match's ChallengeTally counts plus
     // map:<id> and mapwon:<id>, for the map, mode and career cards.
     skins: {}, emblem: null, life: {},
+    // Lifetime extractions (Extraction mode): every match this player's squad got out of. Leaderboards read it.
+    extractions: 0,
   };
 }
 
@@ -1197,6 +1202,7 @@ export function sanitizeSave(raw) {
   s.skins = cleanSkins(raw.skins);
   s.emblem = typeof raw.emblem === 'string' && SHORT_ID.test(raw.emblem) ? raw.emblem : null;
   s.life = cleanLife(raw.life);
+  s.extractions = count(raw.extractions);
   return s;
 }
 

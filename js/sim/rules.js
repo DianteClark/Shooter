@@ -24,8 +24,9 @@ import { InfRules } from './inf.js';
 import { OicRules } from './oic.js';
 import { CtlRules } from './ctl.js';
 import { GrindRules } from './grind.js';
+import { ExtractRules } from './extract.js';     // Extraction (docs/EXTRACT.md).
 
-export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules };
+export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules };
 
 // The mode state on any view: the sim's and decoded views carry it as `view.obj`; an interpolated view (js/game/interp.js
 // copies a fixed list of fields) still has it on the point list it does copy.
