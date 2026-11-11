@@ -26,7 +26,7 @@ async def boot(pg, query, opts=''):
     if opts: await pg.evaluate(opts)
     await pg.goto(f'http://localhost:{PORT}/?debug=1&{query}')
     await pg.wait_for_timeout(1200)
-    await pg.click('[data-act="solo"]')
+    await pg.click('[data-act="custom"]')
     for _ in range(80):
         if await pg.evaluate("!!window.__game.app.match?.sim"): break
         await pg.wait_for_timeout(100)

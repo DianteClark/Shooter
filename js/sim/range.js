@@ -1,4 +1,5 @@
-// Firing range: mode rules, target dummies and the DPS/TTK numbers the HUD shows. Solo only, host side.
+// Firing range: mode rules, target dummies and the DPS/TTK numbers the HUD shows. Solo only, host side. In training
+// (sim.training) every bot is a target too, so the same readout works on any map.
 // Dummies are ordinary players on team 1 so hits, kills, hitmarkers and the renderer need no special case;
 // they carry `dummy: true` on the view, have no brain and stand back up a second after dying.
 import { MAX_HP, SIM_HZ } from '../shared/constants.js';
@@ -24,6 +25,7 @@ export function rangeDummies(map) {
 export class RangeDirector {
   constructor(sim) {
     this.sim = sim;
+    this.isTarget = sim.training ? p => p.dummy || p.isBot : p => p.dummy;
     this.resetStats();
   }
 
@@ -70,7 +72,7 @@ export class RangeDirector {
   }
 
   onShot(shooter, shot, rays) {
-    if (shooter.dummy) return;
+    if (this.isTarget(shooter)) return;
     this.shots++;
     this.lastWeapon = shot.weapon;
     for (let i = 0; i < rays.length; i++) {
@@ -83,7 +85,7 @@ export class RangeDirector {
   // Called before the damage lands, with the dummy's health still intact. `dmg` is already capped at the health the
   // dummy had left (Sim._damage), so a lethal headshot reads as the kill it is, not as a x9 multiplier on paper.
   onDamage(target, attacker, dmg, dist, head, indirect) {
-    if (!target.dummy || attacker.dummy) return;
+    if (!this.isTarget(target) || this.isTarget(attacker)) return;
     if (!this.hitAt.has(target) || target.hp >= MAX_HP - 1e-6) this.hitAt.set(target, this.sim.time);
     if (indirect) return;              // Grenades and streaks hurt the dummy, but say nothing about the gun.
     this.samples.push({ t: this.sim.time, dmg });
@@ -96,8 +98,8 @@ export class RangeDirector {
   }
 
   onKill(target) {
-    if (!target.dummy) return;
-    target.respawnT = DUMMY_RESPAWN;
+    if (!this.isTarget(target)) return;
+    if (target.dummy) target.respawnT = DUMMY_RESPAWN;
     this.kills++;
     const from = this.hitAt.get(target);
     this.hitAt.delete(target);
@@ -109,7 +111,7 @@ export class RangeDirector {
   // Everything the HUD needs, updated live. TTK is first hit to death; `model` is what the gun can do on paper
   // at the last hit's distance (full damage to the body, every round landing), so a readout can compare the two.
   view() {
-    const human = this.sim.players.find(p => !p.dummy);
+    const human = this.sim.players.find(p => !p.dummy && !p.isBot);
     let model = null;
     if (human) {
       const w = weaponDef(human.ps), dist = this.lastDist || 10;

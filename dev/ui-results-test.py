@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Regression test: every solo match ends on its results screen, and Rematch after a Random pick rolls again.
+"""Regression test: every solo match ends on its results screen; Next match after Quick play searches the same playlist.
 
 Run from anywhere: python3 dev/ui-results-test.py [port]. It serves the repo itself and plays short matches
 (?limit=1&time=20) back to back in one page, the way a player does:
-  1. Quick play (Random map and mode) -> results
-  2. Rematch -> must be the map and mode match 1 rolled, not a new roll -> results
-  3. Menu -> Play vs bots -> Random map -> Start -> results
+  1. Quick play (Multiplayer, Standard quick play: search, pre-match vote, match) -> results
+  2. Next match -> searches Quick play again (the pick is kept) -> results
+  3. Menu -> Custom -> Random map -> Start -> results
   4. Rematch, with the end banner and the final-kill turntable made to throw -> results must still come up
-  5. Menu -> Play vs bots -> Harvest (Ground War) -> Start -> results, 16 a side
+  5. Menu -> Custom -> Harvest (Ground War) -> Start -> results, 16 a side
 After each: the results screen is on and its tables are in, the match is gone, and no Killcam Skip button is left
 behind. Also checks that Random only ever rolls pairs a map hosts, and that the vote's Rematch card is the last match.
 """
@@ -52,7 +52,7 @@ async def main():
             pg = await ctx.new_page()
             pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and INJECTED not in m.text else None)
             pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e} {getattr(e, "stack", "")[:600]}'))
-            await pg.goto(f'http://localhost:{PORT}/?debug=1&bots=elite&limit=1&time=20')
+            await pg.goto(f'http://localhost:{PORT}/?debug=1&bots=elite&limit=1&time=20&vote=3&search=600')
             await pg.wait_for_timeout(900)
             await pg.evaluate("window.__game.Progress.name='Tester'")
             # The first-run training offer would cover the title; it is shown once, so a reload clears it.
@@ -66,7 +66,7 @@ async def main():
 
             async def play(name, start, expect=None, inject=False):
                 await start()
-                await pg.wait_for_function('window.__game.app.inMatch', timeout=20000)
+                await pg.wait_for_function('window.__game.app.inMatch', timeout=40000)
                 info = await pg.evaluate('({ mapId: window.__game.app.matchInfo.mapId, mode: window.__game.app.matchInfo.mode, n: window.__game.app.matchInfo.roster.length })')
                 if inject:
                     await pg.evaluate(f"""(() => {{ const g = window.__game;
@@ -87,7 +87,7 @@ async def main():
             async def via_picker(map_id):
                 await pg.locator('[data-act="resMenu"]').first.tap()
                 await pg.wait_for_timeout(700)
-                await pg.locator('[data-act="solo"]').first.tap()
+                await pg.locator('[data-act="custom"]').first.tap()
                 await pg.wait_for_timeout(700)
                 await pg.locator(f'[data-act="soloMap"][data-id="{map_id}"]').first.tap()
                 await pg.wait_for_timeout(300)
@@ -97,11 +97,12 @@ async def main():
 
             print('Consecutive solo matches')
             st1 = await play('1 quick play (random)', tap('[data-act="quickPlay"]'))
-            st2 = await play('2 rematch after random rolls again', tap('[data-act="resRematch"]'))
+            label = await pg.evaluate("document.querySelector('[data-act=\"resRematch\"]')?.textContent.trim()")
+            st2 = await play('2 next match searches quick play again', tap('[data-act="resRematch"]'))
             pick = await pg.evaluate('window.__game.app.lastPick')
-            ok = pick and pick['mapId'] == 'random' and pick['mode'] == 'random'
-            print(f'  {"rematch kept the Random pick":<44} {"ok" if ok else "FAIL"} {pick}')
-            if not ok: failures.append(f'rematch lost the random pick: {pick}')
+            ok = pick and pick.get('mp', {}).get('tab') == 'standard' and pick['mp']['sel']['playlist'] == 'qp' and label == 'Next match'
+            print(f'  {"next match kept the quick play pick":<44} {"ok" if ok else "FAIL"} {pick} {label}')
+            if not ok: failures.append(f'next match lost the quick play pick: {pick} {label}')
             shown = []
             async def start3():
                 shown.extend(await via_picker('random'))
@@ -109,7 +110,7 @@ async def main():
             await play('4 rematch, end banner + preview throw', tap('[data-act="resRematch"]'), inject=True)
             await pg.evaluate("location.reload()")       # Undo the injected faults.
             await pg.wait_for_timeout(1200)
-            await pg.locator('[data-act="solo"]').first.tap()   # Title -> picker, then back out through results flow below.
+            await pg.locator('[data-act="custom"]').first.tap()   # Title -> Custom match, then back out through results flow below.
             await pg.wait_for_timeout(700)
             await pg.locator('[data-act="soloMap"][data-id="harvest"]').first.tap()
             await pg.wait_for_timeout(300)

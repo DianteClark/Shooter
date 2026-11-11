@@ -46,3 +46,23 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
   from three to five and the field down to 5/6/8 to stretch it.
 - Control on small maps is mostly decided on lives; attackers get 7 lives a player, defenders 5.
 - Infected: the infected throw Shivs, not Hatchets (one-hit throws ended matches in 90 s).
+
+## Play flow (ROADMAP item 14)
+- **Multiplayer** (title hero; `js/ui/matchmaking.js` data, `js/ui/playscreens.js` screens, flow in `main.js`
+  `findMatch` / `startMpVote` / `launchMp`): tabs Standard, Ground War, Battle Royale (Quads, Duos, Solos) and a
+  disabled Extraction. A pick is one playlist (Quick Play, Objective, Party modes, today's Featured with its modifiers)
+  or one or more ticked modes. Find match: a short search, then the pre-match lobby on the vote screen with 2-3 maps of
+  the tab's size tier (`mpVoteOptions`; one card on Battle Royale, which has one giant map) while the other seats'
+  ballots come in, then the match. No map or difficulty pickers. **Quick play** on the title is Standard Quick Play;
+  results' main button is Next match (the same pick again).
+- **Bot seam**: `pickBotsForMatch({humans, mode, mapId, seed})` in `js/ui/matchmaking.js` fills every Multiplayer match
+  and every friend lobby map-vote match (default mixed difficulty). The bot overhaul replaces its body.
+- **Custom**: Match is the old solo picker (map by size, mode, modifiers, bots per side, difficulty, limits); Host room
+  opens the friend lobby with those settings (`app.lobby.custom`, sent to guests, shown on the lobby chip). In any
+  friend lobby the host can swap the map vote for custom settings and back. Training: the firing range, or any map with
+  1-12 enemy bots (difficulty), switches for infinite ammo and no death (the sim stands you back up in place), bot
+  behaviour (normal, standing, strafing, rushing: `BotBrain._drill`), the range readout on every bot, and the Armory
+  (`js/ui/trainarmory.js`; the sim's `trainSwap` puts an owned gun on at once). The Sim takes `training`.
+- **Training never counts**: `Match.isPractice()` (range, training, tutorial) sets `practice` on MatchAwards and
+  MatchTelemetry, the only writers of XP, levels, weapon XP, mastery, challenges, history, career stats and gun stats.
+  `dev/ui-flow-test.py` checks the stored save, challenges, history and gun stats are unchanged after a session.

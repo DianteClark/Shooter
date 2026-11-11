@@ -34,7 +34,7 @@ export class Match {
     Object.assign(this, config);   // canvas, mapId, seed, limits, roster, ids, net, controls, hud, renderer, audio, onEnd
     this.map = MAPS[this.mapId];
     this.me = this.roster.find(r => r.id === this.localId);
-    this.ps = createPlayerState({ id: this.localId, primary: this.me.primary, camo: this.me.camo, loadout: this.me.loadout, instantReload: this.mode === 'range' });
+    this.ps = createPlayerState({ id: this.localId, primary: this.me.primary, camo: this.me.camo, loadout: this.me.loadout, instantReload: this.mode === 'range' || !!this.training?.ammo });
     this.nextLoadout = null;
     this.running = false;
     this.spawned = false;
@@ -62,12 +62,15 @@ export class Match {
     // Guests build a Sim too, purely as the snapshot codec; only the host ever steps it.
     this.sim = new Sim({
       roster: this.roster, map: this.map, seed: this.seed,
-      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode, mods: this.mods ?? [],
+      scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode, mods: this.mods ?? [], training: this.training ?? null,
     });
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
     this.telemetry = new MatchTelemetry({ localId: this.localId });
     this.killcam = new Killcam({ renderer: this.renderer, localId: this.localId });
     this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });
+    // Practice pays and records nothing: the firing range and Custom > Training (`training`) never count toward XP,
+    // mastery, challenges, history, gun stats or telemetry. Both trackers check `practice` before writing anything.
+    if (this.isPractice()) { this.awards.practice = true; this.telemetry.practice = true; }
     this.interp = new Interpolator(this.isHost ? STEP * 1.5 : INTERP_DELAY);
     this.frame = this.frame.bind(this);
     this.#wireNet();
@@ -95,6 +98,8 @@ export class Match {
   requestRespawn(msg = {}) {
     this.#command({ ...msg, cmd: 'respawn' });
   }
+
+  isPractice() { return this.mode === 'range' || !!this.training || !!this.practice; }
 
   // Cuts the end-of-match hold short so results show at once.
   endNow() {

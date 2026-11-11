@@ -39,8 +39,11 @@ import { challengeUnlock } from './ui/challenges.js';
 import { ico } from './ui/yard.js';
 import { BotMatch, botMatchSheet } from './ui/botsettings.js';
 import { modsSheet, soloMods } from './ui/modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
-import { cleanMods, featured } from './shared/playlist.js';
+import { cleanMods } from './shared/playlist.js';
 import { QuickChat } from './ui/quickchat.js';
+// Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
+import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
+import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Updater, BUILD } from './ui/updater.js';
 
@@ -63,6 +66,8 @@ const selfId = () => playerId(NetImpl === LocalNet ? sessionStorage : localStora
 const LIMIT_OVERRIDE = Number(params.get('limit')) || 0;
 const TIME_OVERRIDE = Number(params.get('time')) || 0;
 const VOTE_SECONDS = Number(params.get('vote')) || 10;
+const MP_VOTE_SECONDS = Number(params.get('vote')) || 8;     // Multiplayer's pre-match vote.
+const SEARCH_MS = Number(params.get('search')) || 1800;     // Multiplayer's matchmaking moment.
 
 const limitsFor = mode => {
   const m = mode === 'range' ? RANGE_MODE : MODES[mode];
@@ -126,7 +131,13 @@ const app = {
   // room's next vote offers it as a Rematch card unless the winning card was Random.
   lastPlayed: null,
   // The pick as chosen, before rolling. A Random half stays Random on Rematch, so each rematch rolls again.
+  // Multiplayer: { mp: {tab, sel} }, so the next match searches the same playlist; Training: { training: true }.
   lastPick: null,
+  mp: { tab: 'standard', sels: {} },   // Multiplayer: the open tab and each tab's pick ({playlist, modes}).
+  mpSearch: null,                      // The matchmaking moment's timers.
+  customTab: 'match',                  // Custom: 'match' or 'training'.
+  customFrom: null,                    // 'lobby' while a host edits the friend lobby's custom settings.
+  training: loadTraining(),            // Custom > Training's settings (js/ui/playscreens.js).
 };
 const RESULTS_FALLBACK_MS = 2500;  // Results come up by this long after a match ends even if the end banner failed.
 
@@ -203,6 +214,8 @@ function goTitle(message) {
   app.lobby = { humans: [], botSkill: 'mixed' };
   app.lastPlayed = null;
   app.lastPick = null;
+  app.customFrom = null;
+  stopSearch();
   hud.setVisible(false);
   menu.overlay('');
   showTitle();
@@ -253,9 +266,35 @@ menu.on({
   history: () => openHistory(),
   rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
   range: () => { needName(startRange); },
+  multiplayer: () => { needName(openMultiplayer); },
+  custom: () => { startSolo(); },
   solo: () => { startSolo(); },
   quickPlay: () => { needName(quickPlay); },
   featured: () => { needName(playFeatured); },
+  // Multiplayer (js/ui/playscreens.js): a playlist, or one or more ticked modes, then Find match.
+  mpBack: () => showTitle(),
+  mpTab: ({ tab }) => { if (MP_TAB_IDS.includes(tab)) { app.mp.tab = tab; renderMp(); } },
+  mpPlaylist: ({ id }) => { const sel = mpSel(); sel.playlist = id; sel.modes = []; renderMp(); },
+  mpMode: ({ id }) => {
+    const sel = mpSel();
+    if (sel.playlist) { sel.playlist = null; sel.modes = []; }
+    sel.modes = sel.modes.includes(id) ? sel.modes.filter(m => m !== id) : [...sel.modes, id];
+    renderMp();
+  },
+  mpFind: () => findMatch(app.mp.tab, mpSel()),
+  mpCancel: () => { stopSearch(); renderMp(); },
+  // Custom: Match (the picker) and Training.
+  customTab: ({ tab }) => { if (tab === 'match' || tab === 'training') { app.customTab = tab; renderCustom(); } },
+  customBack: () => leaveCustom(),
+  customHost: () => { needName(() => startHosting({ custom: currentCustom() })); },
+  customVote: () => setLobbyCustom(null),
+  lobbyCustom: () => editLobbyCustom(),
+  trMap: ({ id }) => { if (id === 'range' || MAPS[id]) setTraining({ map: id }); },
+  trStep: ({ dir }) => setTraining({ bots: Math.max(1, Math.min(TRAIN_MAX_BOTS, app.training.bots + Number(dir))) }),
+  trSkill: ({ id }) => setTraining({ skill: id }),
+  trDrill: ({ id }) => setTraining({ behaviour: id }),
+  trToggle: ({ key }) => { if (key === 'ammo' || key === 'noDeath') setTraining({ [key]: !app.training[key] }); },
+  trStart: () => { needName(startTraining); },
   lobbyMods: () => {
     if (!app.isHost) return;
     modsSheet(menu, { mods: app.lobby.mods ?? [], onChange: list => { app.lobby.mods = list; broadcastLobby(); renderLobby(); } });
@@ -271,11 +310,11 @@ menu.on({
   toggleReady: () => toggleReady(),
   start: () => startVote(),
   voteCast: ({ i }) => castVote(Number(i)),
-  voteLeave: () => goTitle(),
-  soloBack: () => showTitle(),
+  voteLeave: () => { if (app.vote?.solo) { stopVote(); renderMp(); } else goTitle(); },
+  soloBack: () => leaveCustom(),
   soloMap: ({ id }) => pickSoloMap(id),
   soloMode: ({ id }) => pickSoloMode(id),
-  soloStart: () => launchSolo(app.soloPick.mapId, app.soloPick.mode),
+  soloStart: () => (app.customFrom === 'lobby' ? setLobbyCustom(currentCustom()) : launchSolo(app.soloPick.mapId, app.soloPick.mode)),
   soloBots: () => botMatchSheet(menu, app.soloPick, { onChange: renderSoloPick }),
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
   brSquad: ({ n }) => setBrSquad(n),
@@ -396,6 +435,7 @@ function localHuman() {
 
 function renderLobby() {
   if (!app.net) return;
+  if (app.isHost && app.customFrom === 'lobby') return;     // The host is in the custom picker; Back repaints.
   menu.lobby({
     code: app.code, humans: app.lobby.humans, botSkill: app.lobby.botSkill, isHost: app.isHost,
     localId: app.net.localId, hostId: app.net.hostId,
@@ -404,6 +444,7 @@ function renderLobby() {
     ffa: ffaRoom(),
     public: app.public,
     mods: app.lobby.mods ?? [],
+    custom: app.lobby.custom ?? null,
     br: isBr(roomMode()), brSquad: app.lobby.brSquad ?? 4,
   });
 }
@@ -418,7 +459,7 @@ function setBrSquad(n) {
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], custom: app.lobby.custom ?? null, brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD });
 }
 
 // --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
@@ -526,7 +567,8 @@ function teamOpen(team, except = null) {
   return app.lobby.humans.filter(h => h.team === team && h.id !== except).length < TEAM_SIZE;
 }
 
-function startHosting() {
+// `custom`: Custom > Host room hosts with the picker's settings (see currentCustom); otherwise the room plays the map vote.
+function startHosting({ custom = null } = {}) {
   wakeLock.set(true);           // A host reading out the code should not watch the phone dim.
   const code = NetImpl.makeCode();
   const net = NetImpl.host(code, myName());
@@ -535,9 +577,11 @@ function startHosting() {
   app.isHost = true;
   app.lobby = {
     humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...seatData() }],
-    botSkill: 'mixed',
-    mods: [],
+    botSkill: custom?.skill ?? MP_BOT_SKILL,
+    mods: custom?.mods ?? [],
+    custom,
   };
+  app.customFrom = null;
   wireSharedNet(net);
   wireHostNet(net);
   renderLobby();
@@ -756,6 +800,7 @@ function guestLobbyMessage(msg) {
       app.lobby.humans = msg.humans;
       app.lobby.botSkill = msg.botSkill;
       app.lobby.mods = cleanMods(msg.mods);
+      app.lobby.custom = msg.custom && typeof msg.custom === 'object' ? msg.custom : null;
       app.lobby.brSquad = cleanBrSquad(msg.brSquad);
       app.countdown = msg.countdown ?? null;
       app.public = !!msg.public;
@@ -865,12 +910,164 @@ function updateVoiceTeam() {
   app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id && (ffa || h.team === me.team)).map(h => h.id));
 }
 
-// --- Solo: a direct pick of map and mode ---
+// --- Custom: Match is a direct pick of map, mode, bots and limits; Training the range or a map with practice bots ---
+// The ?map=&mode= test hook still launches a custom match straight from the Custom button.
 function startSolo() {
   needName(() => {
     resetToSolo();
     if (params.has('map') || params.has('mode')) launchSolo(params.get('map') || DEFAULT_MAP, params.get('mode') || 'tdm');
-    else renderSoloPick();
+    else renderCustom();
+  });
+}
+
+function renderCustom() {
+  if (app.customTab === 'training' && app.customFrom !== 'lobby') menu.custom({ tab: 'training', training: app.training });
+  else renderSoloPick();
+}
+
+function leaveCustom() {
+  if (app.customFrom === 'lobby') { app.customFrom = null; renderLobby(); return; }
+  showTitle();
+}
+
+// What the picker would launch, as a friend lobby carries it: the pick (halves may be Random), modifiers, difficulty,
+// and the bot match settings for a picked mode (a Random mode plays with the rolled mode's defaults).
+function currentCustom() {
+  const { mapId, mode } = app.soloPick;
+  const set = MODES[mode] ? BotMatch.resolve(mode, MAPS[mapId] ?? null) : null;
+  return {
+    mapId, mode, mods: cleanMods(soloMods(), MODES[mode] ? mode : null), skill: BotMatch.skill,
+    bots: set?.bots ?? null, players: set?.players ?? null, scoreLimit: set?.scoreLimit ?? null, timeLimit: set?.timeLimit ?? null,
+  };
+}
+
+// --- Friend lobby: the host may swap the map vote for custom settings, which every guest sees on the lobby ---
+function editLobbyCustom() {
+  if (!app.isHost || !app.net) return;
+  const c = app.lobby.custom;
+  if (c) app.soloPick = { mapId: c.mapId, mode: c.mode };
+  app.customFrom = 'lobby';
+  renderSoloPick();
+}
+
+function setLobbyCustom(custom) {
+  app.customFrom = null;
+  if (!app.isHost || !app.net) return renderLobby();
+  app.lobby.custom = custom;
+  app.lobby.botSkill = custom?.skill ?? MP_BOT_SKILL;
+  app.lobby.mods = custom ? custom.mods : [];
+  broadcastLobby();
+  renderLobby();
+}
+
+// A custom room's Start: its pick (a Random half rolled here), difficulty, bots per side and limits.
+function launchCustomRoom() {
+  const c = app.lobby.custom;
+  const { mapId, mode } = resolvePick({ mapId: c.mapId, mode: c.mode });
+  app.lastPick = { mapId: c.mapId, mode: c.mode, custom: true };
+  const set = c.mode === mode && c.bots !== null ? c : null;
+  launchHostMatch(mapId, mode, {
+    botSkill: c.skill, teamSize: set ? (isFfa(mode) ? set.players : set.bots) : null,
+    scoreLimit: set?.scoreLimit ?? null, timeLimit: set?.timeLimit ?? null,
+  });
+}
+
+// --- Training: the firing range, or any map with N bots and practice switches. Pays and records nothing. ---
+function setTraining(part) {
+  app.training = { ...app.training, ...part };
+  saveTraining(app.training);
+  renderCustom();
+}
+
+function startTraining() {
+  const t = app.training;
+  resetToSolo();
+  if (t.map === 'range' || !MAPS[t.map]) return launchRange();
+  const id = 'local', seed = randomSeed();
+  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  // Every bot on the other side: buildRoster fills both sides to `bots`, and training keeps the enemy half.
+  const roster = buildRoster(humans, { botSkill: t.skill, mode: 'tdm', mapId: t.map, seed, teamSize: t.bots }).filter(r => !r.isBot || r.team === 1);
+  app.lastPick = { training: true };
+  beginMatch({
+    roster: withBadges(roster, humans, seed), seed, mapId: t.map, mode: 'tdm', scoreLimit: 9999, timeLimit: 5999,
+    hostId: id, isHost: true, localId: id, intro: false,
+    training: { ammo: t.ammo, noDeath: t.noDeath, behaviour: t.behaviour },
+  });
+}
+
+// --- Multiplayer: pick a playlist or modes, a short search, a pre-match vote of 2-3 maps, then the match ---
+function openMultiplayer() {
+  resetToSolo();
+  app.customFrom = null;
+  renderMp();
+}
+
+function mpSel(tab = app.mp.tab) {
+  return (app.mp.sels[tab] ??= defaultSelection(tab));
+}
+
+function renderMp() {
+  menu.multiplayer({ tab: app.mp.tab, sel: mpSel() });
+}
+
+function stopSearch() {
+  clearTimeout(app.mpSearch?.timer);
+  clearInterval(app.mpSearch?.tick);
+  app.mpSearch = null;
+}
+
+function findMatch(tab, sel) {
+  const r = resolveSelection(tab, sel);
+  if (!r.modes.length) return;
+  resetToSolo();
+  app.mp.tab = tab;
+  app.mp.sels[tab] = { playlist: sel.playlist ?? null, modes: [...(sel.modes ?? [])] };
+  app.lastPick = { mp: { tab, sel: app.mp.sels[tab] } };
+  const size = lobbySize(tab, r.modes);
+  const ui = menu.matchSearch({ name: r.name, tab, size });
+  const t0 = performance.now();
+  app.mpSearch = {
+    tick: setInterval(() => ui.found(Math.min(size, 1 + Math.floor((performance.now() - t0) / SEARCH_MS * size))), 90),
+    timer: setTimeout(() => { stopSearch(); startMpVote(tab, r, size); }, SEARCH_MS),
+  };
+}
+
+// The pre-match lobby: the same vote screen a friend room uses, with the other players' ballots coming in as it runs.
+function startMpVote(tab, r, size) {
+  const options = mpVoteOptions(tab, r.modes);
+  if (!options.length) { renderMp(); menu.toast('No map hosts that pick', 'warn'); return; }
+  app.vote = {
+    solo: true, key: `mp:${Date.now()}`, options, votes: new Map(), left: MP_VOTE_SECONDS, seconds: MP_VOTE_SECONDS,
+    winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name,
+    timer: setInterval(mpVoteTick, 1000),
+  };
+  renderVote();
+}
+
+function mpVoteTick() {
+  const vote = app.vote;
+  if (!vote?.solo) return;
+  vote.left--;
+  const others = vote.total - 1, cast = vote.votes.size - (vote.mine !== null ? 1 : 0);
+  const want = Math.round(others * Math.min(1, (vote.seconds - vote.left) / Math.max(1, vote.seconds - 2)));
+  for (let k = cast; k < want; k++) vote.votes.set(`p${k}`, Math.floor(Math.random() * vote.options.length));
+  if (vote.left > 0) { renderVote(); return; }
+  clearInterval(vote.timer);
+  vote.winner = tallyWinner(voteCounts(vote));
+  vote.resolved = { mapId: vote.options[vote.winner].mapId, mode: vote.options[vote.winner].mode };
+  vote.reveal = setTimeout(() => launchMp(vote.resolved.mapId, vote.resolved.mode, vote.mods), VOTE_REVEAL_MS);
+  renderVote();
+}
+
+function launchMp(mapId, mode, mods = []) {
+  stopVote();
+  const id = 'local', seed = randomSeed();
+  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  // ?bots= is a test hook; players always get the seam's default.
+  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool: poolFor(humans) });
+  beginMatch({
+    roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: cleanMods(mods, mode), ...limitsFor(mode),
+    hostId: id, isHost: true, localId: id,
   });
 }
 
@@ -880,6 +1077,7 @@ function resetToSolo() {
   stopVote();
   app.isHost = true;
   app.lobby = { humans: [], botSkill: app.lobby.botSkill || 'mixed', mods: [] };
+  stopSearch();
 }
 
 function startRange() {
@@ -925,11 +1123,11 @@ function finishTutorial(completed) {
         <p>Bots come in four skills. Daily challenges on the title pay extra XP for every match you play.</p>
         <div class="sheet-row">
           <button class="btn" data-act="tutMenu">${ico('ui:home')}<b>Menu</b></button>
-          <button class="btn is-primary" data-sound="confirm" data-act="tutPlay">${ico('bots')}<b>Play vs bots</b></button>
+          <button class="btn is-primary" data-sound="confirm" data-act="tutPlay">${ico('party')}<b>Multiplayer</b></button>
         </div>
       </div>
     </div>`);
-  menu.on({ tutMenu: () => menu.overlay(''), tutPlay: () => { menu.overlay(''); startSolo(); } });
+  menu.on({ tutMenu: () => menu.overlay(''), tutPlay: () => { menu.overlay(''); needName(openMultiplayer); } });
 }
 
 // First run only, and never for anyone who has already played: a returning player is never held up by it.
@@ -941,7 +1139,7 @@ function maybeOfferTutorial() {
 }
 
 function renderSoloPick() {
-  menu.solo(app.soloPick);
+  menu.custom({ tab: 'match', pick: app.soloPick, lobby: app.customFrom === 'lobby' });
 }
 
 function pickSoloMap(mapId) {
@@ -960,6 +1158,8 @@ function pickSoloMode(mode) {
 // Rematch in solo: the same map and mode again at once; a half that was picked as Random rolls again.
 function rematchSolo() {
   if (app.lastMode === 'range') return startRange();
+  if (app.lastPick?.training) return needName(startTraining);
+  if (app.lastPick?.mp) return needName(() => findMatch(app.lastPick.mp.tab, app.lastPick.mp.sel));
   const pick = app.lastPick, last = app.lastPlayed;
   if (!pick && !last) return startSolo();
   // A Random half rolls fresh; a chosen half is replayed as chosen.
@@ -971,17 +1171,14 @@ function rematchSolo() {
   });
 }
 
-// Today's featured playlist (js/shared/playlist.js): its mode and modifiers on a random map that hosts it.
+// Today's featured playlist (js/shared/playlist.js), from the title: Multiplayer's featured playlist, matchmade.
 function playFeatured() {
-  const f = featured();
-  resetToSolo();
-  launchSolo(RANDOM, f.mode, f.mods);
+  findMatch('standard', { playlist: 'featured', modes: [] });
 }
 
-// Quick play: one tap from the title or the picker, a random map and a random mode it can host.
+// Quick play: one tap from the title into Multiplayer, Standard, Quick Play.
 function quickPlay() {
-  resetToSolo();
-  launchSolo(RANDOM, RANDOM);
+  findMatch('standard', { playlist: 'qp', modes: [] });
 }
 
 // The room's last winning card was Random: its next vote offers no fixed Rematch card, only fresh options and Random.
@@ -1024,6 +1221,7 @@ function stopVote() {
 function startVote() {
   if (!app.net || !app.isHost || app.vote) return;
   stopRematch();
+  if (app.lobby.custom) return launchCustomRoom();
   app.vote = {
     key: `${app.code}:${Date.now()}`, options: voteOptions(Math.random, isRandomPick(app.lastPick) ? null : app.lastPlayed), votes: new Map(), left: VOTE_SECONDS,
     seconds: VOTE_SECONDS, winner: null, resolved: null, mine: null,
@@ -1058,6 +1256,7 @@ function voteTick() {
 // One count per option, from the ballots still seated in the room.
 function voteCounts(vote) {
   const counts = vote.options.map(() => 0);
+  if (vote.solo) { for (const i of vote.votes.values()) counts[i]++; return counts; }
   for (const [id, i] of vote.votes) if (app.lobby.humans.some(h => h.id === id)) counts[i]++;
   return counts;
 }
@@ -1072,7 +1271,8 @@ function castVote(i) {
   const vote = app.vote;
   if (!vote || vote.winner !== null || !vote.options[i]) return;
   vote.mine = i;
-  if (app.isHost) {
+  if (vote.solo) vote.votes.set('local', i);
+  else if (app.isHost) {
     vote.votes.set(app.net.localId, i);
     broadcastVote();
   } else {
@@ -1086,8 +1286,10 @@ function renderVote() {
   if (!vote) return;
   menu.vote({
     key: vote.key, options: vote.options, left: vote.left, seconds: vote.seconds, winner: vote.winner, resolved: vote.resolved ?? null, mine: vote.mine,
-    counts: app.isHost ? voteCounts(vote) : vote.counts, total: app.isHost ? app.lobby.humans.length : vote.total,
-    brSquad: app.isHost ? app.lobby.brSquad ?? 4 : vote.brSquad ?? 4, isHost: app.isHost,
+    counts: app.isHost ? voteCounts(vote) : vote.counts, total: vote.solo ? vote.total : app.isHost ? app.lobby.humans.length : vote.total,
+    lobby: vote.solo ? { name: vote.name, size: vote.total } : null,
+    // Multiplayer's own vote: the squad size is the playlist's (Quads, Duos, Solos), shown and fixed.
+    brSquad: vote.solo ? MODES[vote.options[0]?.mode]?.squad ?? 4 : app.isHost ? app.lobby.brSquad ?? 4 : vote.brSquad ?? 4, isHost: app.isHost && !vote.solo,
   });
 }
 
@@ -1128,16 +1330,23 @@ function voteBehindResults() {
   }, Math.max(0, RESULTS_MIN_MS - (performance.now() - app.resultsAt)));
 }
 
-function launchHostMatch(mapId, mode) {
+// `custom` (a custom room): { botSkill, teamSize, scoreLimit, timeLimit } instead of the map vote's defaults.
+function launchHostMatch(mapId, mode, custom = null) {
   const net = app.net;
   if (!net) return;
   stopVote();
-  const { humans, botSkill } = app.lobby;
+  const { humans } = app.lobby;
   const clean = humans.map(({ id, name, team, primary, camo, loadout, badge }) => ({ id, name, team, primary, camo, loadout, badge }));
   const seed = randomSeed();
+  const limits = limitsFor(mode);
+  if (custom?.scoreLimit && !LIMIT_OVERRIDE) limits.scoreLimit = custom.scoreLimit;
+  if (custom?.timeLimit && !TIME_OVERRIDE) limits.timeLimit = custom.timeLimit;
+  const roster = custom
+    ? buildRoster(clean, { botSkill: custom.botSkill, mode, mapId, seed, teamSize: custom.teamSize ?? null, pool: poolFor(clean) })
+    : pickBotsForMatch({ humans: clean, mode, mapId, seed, pool: poolFor(clean) });
   const payload = {
-    t: 'start', seed, mapId, mode, mods: cleanMods(app.lobby.mods, mode), ...limitsFor(mode),
-    roster: withBadges(buildRoster(clean, { botSkill, mode, mapId, seed, pool: poolFor(clean) }), clean, seed),
+    t: 'start', seed, mapId, mode, mods: cleanMods(app.lobby.mods, mode), ...limits,
+    roster: withBadges(roster, clean, seed),
   };
   net.sendLobby(payload);
   beginMatch({ ...payload, hostId: net.localId, isHost: true });
@@ -1147,7 +1356,7 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false }) {
+function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
@@ -1156,7 +1365,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.lastPlayed = mode === 'range' ? null : { mapId, mode };
-  app.matchInfo = { roster, seed, mapId, mode, mods, scoreLimit, timeLimit };
+  app.matchInfo = { roster, seed, mapId, mode, mods, scoreLimit, timeLimit, training };
   if (net) rememberRoom(app.code);
   stopVote();
   net?.resetGameHandlers();
@@ -1164,13 +1373,13 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   backdrop.stop();
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro, training });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
   updateVoiceTeam();
   // Callouts need someone to hear them: friends, or bots on your side. Not in training or on the range.
-  quickChat.start({ net, roster, localId: id, mapId, mode, ffa: isFfa(mode), enabled: !tutorial && mode !== 'range' });
+  quickChat.start({ net, roster, localId: id, mapId, mode, ffa: isFfa(mode), enabled: !tutorial && !training && mode !== 'range' });
   if (!Progress.flag('aimHint') && !tutorial) {
     controls.showAimHint(true);
     Progress.setFlag('aimHint');
@@ -1183,7 +1392,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.setCamera(renderer.camera);
   app.match = new Match({
     canvas, mapId, mode, mods, seed, scoreLimit, timeLimit, roster, localId: id, hostId, isHost,
-    net, controls, hud, renderer, audio, rejoin,
+    net, controls, hud, renderer, audio, rejoin, training,
     onEnd: results => onMatchEnd(results),
   });
   // The interpolated view does not carry the map id; history and gun stats need it.
@@ -1256,9 +1465,11 @@ function pickMvp(players) {
 
 // The player chose to walk away from a running match from the scoreboard.
 function leaveMatch() {
+  const practice = !!app.matchInfo?.training || app.lastMode === 'range';
   endLocalMatch();
   forgetRoom();
   goTitle();
+  if (practice) { app.customTab = 'training'; renderCustom(); }     // Training and the range go back to Training.
 }
 
 function showResults(results) {
@@ -1297,7 +1508,7 @@ function showResults(results) {
       challenges: results.challenges ?? [],
       proProgress: results.proProgress ?? [],
       finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
-      rematchLabel: 'Rematch',
+      rematchLabel: app.lastPick?.mp && !app.net ? 'Next match' : 'Rematch',
       snd: results.snd,
       br: results.br,
       mastery: results.mastery,
@@ -1368,6 +1579,13 @@ hud.onLeaveMatch(leaveMatch);
 // The interpolated view does not carry the range tracker, so the readout takes it from the newest snapshot.
 hud.rangeSource = () => app.match?.interp.newest?.range ?? null;
 hud.onRangeReset(() => app.match?.sim.applyCommand(app.match.localId, { cmd: 'rangeReset' }));
+// Training and the range: a gun from the armory goes on at once (the sim respawns the player where they stand).
+hud.onArmory?.(loadout => {
+  const m = app.match;
+  if (!m?.isPractice()) return;
+  m.setNextLoadout(loadout);
+  m.sim.applyCommand(m.localId, { cmd: 'trainSwap' });
+});
 // A touch that lands with the audio engine asleep must wake it even when the action would start sound itself.
 Options.subscribe(applyOptions);
 showTitle({ arrive: true });

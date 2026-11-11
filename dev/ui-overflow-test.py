@@ -32,7 +32,7 @@ SIZE_ID = {(667, 375): 'se', (812, 375): 'mini', (844, 390): 'p13', (852, 393): 
 GL = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 
 # Menu scenes of the gallery, and the saves each is checked with.
-SCENES = ['title', 'solo', 'lobby-host', 'lobby-full', 'vote', 'keypad-name', 'not-found', 'loadouts', 'operators', 'profile',
+SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-modes', 'mp-groundwar', 'mp-br', 'mp-search', 'vote-mp', 'lobby-host', 'lobby-full', 'vote', 'keypad-name', 'not-found', 'loadouts', 'operators', 'profile',
           'save-code', 'options', 'help', 'stats', 'challenges', 'history', 'cards', 'emblems', 'results-draw', 'results-gw']
 # A spread of guns: long names, no attachments, signature parts and kits, melee, launchers, the akimbo pair.
 GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper', 'golden', 'akimbo', 'knife', 'beltlmg']

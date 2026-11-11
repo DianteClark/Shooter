@@ -82,7 +82,7 @@ async def main():
                 await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
                 await pg.reload()
                 await pg.wait_for_timeout(1200)
-                await pg.locator('[data-act="solo"]').first.click()
+                await pg.locator('[data-act="custom"]').first.click()
                 await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
                 await pg.evaluate(SETUP + f"('{q}')")
                 await pg.wait_for_function('window.__game.app.match.audio.ready === true', timeout=180000)

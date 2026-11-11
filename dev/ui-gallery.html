@@ -105,7 +105,21 @@ const SCENES = {
   'keypad-code': menuScene('Keypad: room code', ({ menu }) => menu.keypad({ title: 'Join a room', value: 'K7', max: 4, kind: 'code', hint: 'Ask the host for the four letters', onDone: noop, onCancel: noop, doneLabel: 'Join' })),
   'searching': menuScene('Searching', ({ menu }) => menu.searching('K7QX', noop)),
   'not-found': menuScene('Room not found', ({ menu }) => menu.notFound('K7QX', { retry: noop, back: noop })),
-  'solo': menuScene('Solo: map and mode', ({ menu }) => menu.solo({ mapId: 'railyard', mode: 'tdm' })),
+  'custom': menuScene('Custom: match', ({ menu }) => menu.custom({ tab: 'match', pick: { mapId: 'railyard', mode: 'tdm' } })),
+  'custom-lobby': menuScene('Custom: a friend lobby\'s settings', ({ menu }) => menu.custom({ tab: 'match', pick: { mapId: 'dust', mode: 'hq' }, lobby: true })),
+  'training': menuScene('Custom: training', async ({ menu }) => {
+    const { loadTraining } = await import('./js/ui/playscreens.js');
+    menu.custom({ tab: 'training', training: { ...loadTraining(), map: 'dust' } });
+  }),
+  'multiplayer': menuScene('Multiplayer: Standard', ({ menu }) => menu.multiplayer({ tab: 'standard', sel: { playlist: 'qp', modes: [] } })),
+  'mp-modes': menuScene('Multiplayer: ticked modes', ({ menu }) => menu.multiplayer({ tab: 'standard', sel: { playlist: null, modes: ['hq', 'snd', 'oic'] } })),
+  'mp-groundwar': menuScene('Multiplayer: Ground War', ({ menu }) => menu.multiplayer({ tab: 'groundwar', sel: { playlist: 'gwqp', modes: [] } })),
+  'mp-br': menuScene('Multiplayer: Battle Royale', ({ menu }) => menu.multiplayer({ tab: 'br', sel: { playlist: 'quads', modes: [] } })),
+  'mp-search': menuScene('Multiplayer: finding a match', ({ menu }) => menu.matchSearch({ name: 'Quick Play: Standard', tab: 'standard', size: 12 }).found(7)),
+  'vote-mp': menuScene('Multiplayer: pre-match vote', async ({ menu }) => {
+    const { mpVoteOptions } = await import('./js/ui/matchmaking.js');
+    menu.vote({ key: 2, options: mpVoteOptions('standard', ['tdm', 'dom', 'hq'], () => 0.37), left: 6, seconds: 8, winner: null, resolved: null, mine: 0, counts: [5, 4, 2], total: 12, lobby: { name: 'Quick Play: Standard', size: 12 } });
+  }),
   'lobby-host': menuScene('Lobby: host', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(4), botSkill: 'regular', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),
   'lobby-guest': menuScene('Lobby: guest, countdown', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(3, { host: 'h1' }), botSkill: 'veteran', isHost: false, localId: 'me', hostId: 'h1', countdown: 4, rematchWait: false })),
   'lobby-full': menuScene('Lobby: 12, long names', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }), botSkill: 'elite', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),

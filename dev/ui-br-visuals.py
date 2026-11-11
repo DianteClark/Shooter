@@ -29,7 +29,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
     await pg.reload()
     await pg.wait_for_timeout(1200)
-    await pg.locator('[data-act="solo"]').first.click()
+    await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_timeout(700)
     await pg.locator('[data-act="soloMap"][data-id="brtest"]').first.click()
     await pg.wait_for_timeout(300)

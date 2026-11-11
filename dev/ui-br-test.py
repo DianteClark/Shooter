@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Battle royale end to end in a real browser (docs/BR.md): python3 dev/ui-br-test.py [port] [outdir]
 
-Serves the repo, picks Battle Royale on the BR map from the Play vs bots picker, rides the transport, jumps from the drop
+Serves the repo, picks Battle Royale on the BR map from the Custom match picker, rides the transport, jumps from the drop
 map, glides, lands, picks loot up by walking over it, swaps a ground gun with the Take button, plates up, fights the
 nearest enemy (the aim and trigger are driven through Controls.read), goes down and waits for a squadmate's revive, then
 ends the match (every other squad is finished off on the host) and checks the BR results screen. Screenshots at
@@ -46,7 +46,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
     await pg.reload()
     await pg.wait_for_timeout(1200)
-    await pg.locator('[data-act="solo"]').first.click()
+    await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_timeout(700)
     await pg.locator('[data-act="soloMap"][data-id="frontier"]').first.click()
     await pg.wait_for_timeout(300)
@@ -185,7 +185,7 @@ async def lobby_shots(browser, vw, vh, failures, errors):
     await pg.locator('[data-act="host"]').first.click()
     await pg.wait_for_function(f'{G}.code')
     await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: 'frontier' }}")
-    await pg.locator('[data-act="botSkill"]').first.click()
+    await pg.locator('[data-act="moveTeam"]').first.click()      # Any lobby repaint picks up the BR room.
     await pg.wait_for_timeout(500)
     if await pg.locator('.br-size').count() == 0: failures.append(f'lobby {vw}: no squad size option after a BR match')
     await pg.locator('.br-size [data-n="2"]').click()

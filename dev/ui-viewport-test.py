@@ -101,7 +101,7 @@ async def main():
                 await pg.reload()
                 await pg.wait_for_timeout(1200)
                 title = await pg.evaluate("Math.round(document.querySelector('.menu.on').getBoundingClientRect().bottom)")
-                await pg.locator('[data-act="solo"]').first.click()
+                await pg.locator('[data-act="custom"]').first.click()
                 await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=40000)
                 await pg.wait_for_timeout(1200)
                 s = await pg.evaluate(LIVE)
