@@ -73,8 +73,13 @@ plays exactly as before. New traits, all scaled by rating (recruit .. elite):
 - Close guns that still hit at range (SMGs) fight out to 72% of their range instead of sprinting mute at a shooter
   (their `rush` was 13..15 m): on small maps the first shot decides most fights, and the SMG never had it.
 
-Measured (details in the bots branch report): human-like thumb K/D in realistic lobbies, locked elite and locked weak
-lobbies, small-map class K/D, and host tick cost.
+Measured (dev/balance-sim.mjs --realistic, seed 1, the human-like thumb):
+- Before, dealt Mixed bots, 216 lobbies: thumb K/D 0.70. Same dealt Mixed roster with the new brains: 0.65 (144).
+- Pool at HUMAN_BASE 0.27, 216 lobbies: thumb K/D 0.92; per lobby median 1.06, p10 0.40, p90 1.87 (12% of lobbies
+  under 0.5, 8% over 2). `--locked=elite`: 0.17. `--locked=recruit`: 2.41.
+- Small maps, pool lobbies: SMG K/D 0.81 to 0.93-0.96, LMG 1.20-1.33 to 1.16-1.17.
+- Host tick (dev/perf-sim.mjs, 32 bots, interleaved runs): Downtown 0.56-0.64 ms against 0.58-0.62 before; the full
+  dev/map-validate.mjs: same stuck total (231 against 240) and tick within noise.
 
 Tried and dropped: breaking off a fight only when losing it (bot-vs-bot K/D worse), a shorter dash to cover under fire
 (worse), routing close guns round long sight lines (no measurable gain, +30% path cost).
