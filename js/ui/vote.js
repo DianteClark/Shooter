@@ -3,7 +3,7 @@
 //
 // Random: either half of a pick (or both) may be RANDOM. Whoever is hosting turns it into a real map and mode with
 // resolvePick before the match starts, and only that resolved pair is ever sent, so every phone plays the same map.
-import { MAPS, MAP_IDS, DEFAULT_MAP, SIZES, SIZE_IDS, sizeOf, regionName } from '../shared/map.js';
+import { MAPS, MAP_IDS, BR_MAP_IDS, DEFAULT_MAP, SIZES, SIZE_IDS, sizeOf, regionName } from '../shared/map.js';
 import { MODES, MODE_IDS, modeFitsMap, firstModeFor } from '../shared/modes.js';
 import { esc } from './widgets.js';
 import { mapImage, followMapArt } from './mapthumb.js';
@@ -21,10 +21,15 @@ function mixArt() {
   return `<span class="vc-mix" aria-hidden="true">${tiles}</span><i class="vc-q" aria-hidden="true">${ico('random')}</i>`;
 }
 
+// Battle royale maps (giant, kept out of MAP_IDS): the real ones, and the dev test map only with ?brtest.
+const DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).has('brtest');
+const BR_PICK = [...BR_MAP_IDS.filter(id => !MAPS[id].devMap), ...(DEBUG ? Object.keys(MAPS).filter(id => MAPS[id].devMap && MAPS[id].br) : [])];
+const PICK_IDS = [...MAP_IDS, ...BR_PICK];
+
 // Every playable map and mode pair.
 function allPairs() {
   const pairs = [];
-  for (const mapId of MAP_IDS) for (const mode of MODE_IDS) if (modeFits(MAPS[mapId], mode)) pairs.push({ mapId, mode });
+  for (const mapId of PICK_IDS) for (const mode of MODE_IDS) if (modeFits(MAPS[mapId], mode)) pairs.push({ mapId, mode });
   return pairs;
 }
 
@@ -79,7 +84,7 @@ export function voteMarkup(state) {
       <span class="vc-art" data-map="${esc(map.id)}" style="background-image:url(${mapImage(map)})"></span>
       <span class="vc-shade"></span>
       <span class="vc-top">${o.again ? '<b class="vc-again t-tag">Rematch</b>' : ''}<span class="vc-votes"></span></span>
-      ${mode.large || isLarge(o.mapId) ? `<b class="vc-gw t-tag">${ico('party')}Ground War</b>` : ''}
+      ${mode.large || isLarge(o.mapId) ? `<b class="vc-gw t-tag">${ico('party')}${mode.br ? 'Battle royale' : 'Ground War'}</b>` : ''}
       <b class="vc-map">${esc(map.name)}</b>
       <span class="vc-mode">${modeIcon(o.mode)}<span class="vc-mode-name">${esc(mode.name)}</span></span>
       <small class="vc-desc">${esc(mode.desc)}</small>
@@ -165,6 +170,7 @@ const mapCard = id => {
 
 export function soloMarkup({ mapId, mode }) {
   const sections = SIZE_IDS.map(t => ({ t, ids: MAP_IDS.filter(id => tierOf(id) === t) })).filter(s => s.ids.length);
+  if (BR_PICK.length) sections.push({ t: 'br', ids: BR_PICK });     // Battle royale: 32 players, squads, the circle.
   const out = `
     ${header({ back: 'soloBack', title: 'Play vs bots', extra: `<button class="btn solo-quick" data-act="quickPlay">${ico('quick')}<b>Quick play</b></button>` })}
     <div class="solo">
@@ -178,7 +184,7 @@ export function soloMarkup({ mapId, mode }) {
         </button>
         <div class="solo-scroll scroll-y">${sections.map(({ t, ids }) => `
           <section class="solo-sec tier-${t}">
-            <h3 class="solo-h">${ico(t === 'huge' ? 'party' : 'map')}<b>${SIZES[t].label}</b><small>${t === 'huge' ? '16 v 16' : SIZES[t].note}</small><i>${ids.length}</i></h3>
+            <h3 class="solo-h">${ico(t === 'huge' || t === 'br' ? 'party' : 'map')}<b>${t === 'br' ? 'Battle royale' : SIZES[t].label}</b><small>${t === 'br' ? '32 players, squads' : t === 'huge' ? '16 v 16' : SIZES[t].note}</small><i>${ids.length}</i></h3>
             <div class="solo-grid">${ids.map(mapCard).join('')}</div>
           </section>`).join('')}
         </div>
@@ -285,6 +291,9 @@ export function voteOptions(random = Math.random, again = null) {
   pick(p => !usedTiers.has(tier(p)));
   pick(p => !usedModes.has(p.mode));
   pick(() => true);
+  // A friend lobby always has a battle royale card: it is the mode a full room comes for.
+  const brCard = BR_PICK.find(id => !MAPS[id].devMap);
+  if (brCard && !out.some(o => MODES[o.mode]?.br) && out.length >= 3) out[2] = { mapId: brCard, mode: 'br' };
   out.push({ mapId: RANDOM, mode: RANDOM });
   return out;
 }

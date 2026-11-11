@@ -374,6 +374,8 @@ const SQUARE = {
   })(),
   // Search and Destroy: the bomb, under the diamond that marks a site.
   'mode:snd': { f: [R(3.5, 15, 25, 14, 2)], h: [R(7, 18.5, 11, 6, 1)], a: [O(23, 22, 2.5), P(16, 1.5, 22, 7.5, 16, 13.5, 10, 7.5)] },
+  // Battle royale: a canopy and its rider dropping into the closing circle.
+  'mode:br': { f: [P(3, 12, 8, 5.5, 16, 3.5, 24, 5.5, 29, 12, 24, 10.5, 16, 10, 8, 10.5), bar(5.5, 12, 14, 21, 1.6), bar(26.5, 12, 18, 21, 1.6), R(13.5, 20, 5, 7.5, 1)], a: [O(16, 18.5, 2.6), R(5, 28.5, 22, 2, 1)] },
   // Capture the Flag: two stands facing each other across the yard, the near flag lit.
   'mode:ctf': { f: [R(4, 3, 3, 25), R(25, 3, 3, 25), R(1.5, 27, 29, 3, 1)], b: [P(25, 11, 14, 15.5, 25, 20)], a: [P(7, 4, 18, 8.5, 7, 13)] },
   // Gun Game: a ladder, its top rung lit.
@@ -440,7 +442,7 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', brduo: 'mode:br', brsolo: 'mode:br',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Menu vocabulary (js/ui/yard.js names).

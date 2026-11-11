@@ -14,7 +14,7 @@ import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally, MasteryT
 import { landingOf, maxThrowRange } from '../sim/equipment.js';
 import { MAPS } from '../shared/map.js';
 import { FFA_TEAM } from '../shared/constants.js';
-import { isFfa } from '../shared/modes.js';
+import { isFfa, BR } from '../shared/modes.js';
 
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const GUN_SECONDS = 3;           // Held at least this long counts as a gun used, for the history.
@@ -189,6 +189,17 @@ export class MatchAwards {
     if (this.headshots) lines.push([`Headshots x${this.headshots}`, this.headshots * MATCH_XP.headshot]);
     if (this.assists) lines.push([`Assists x${this.assists}`, this.assists * MATCH_XP.assist]);
     if (this.medalCount) lines.push([`Medals x${this.medalCount}`, this.medalCount * MATCH_XP.medal]);
+    // Battle royale: placement, revives and time alive (js/sim/br.js keeps the numbers; BR.xp prices them).
+    if (view?.br && me) {
+      const at = view.players.indexOf(me), st = view.br.stats?.[at] ?? [0, 0, 0, 0, 0];
+      const squads = new Set(view.players.map(p => p.team)).size;
+      const placed = won ? 1 : place || squads;
+      const placeXp = Math.round(BR.xp.place * (squads - placed) / Math.max(1, squads - 1));
+      if (placeXp > 0) lines.push([`Placed ${placed} of ${squads}`, placeXp]);
+      if (st[1] > 0) lines.push([`Revives x${st[1]}`, st[1] * BR.xp.revive]);
+      const minutes = Math.floor((st[4] ?? 0) / 600);
+      if (minutes > 0) lines.push([`Survived ${minutes} min`, minutes * BR.xp.minute]);
+    }
     if (won) lines.push(['Win', MATCH_XP.win]);
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
     // Challenges settle first so the XP they pay is part of this match's total. A failure here costs only them.

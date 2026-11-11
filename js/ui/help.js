@@ -87,6 +87,7 @@ const PANELS = {
       ${card('mode:ffa', 'Free-for-All', 'Everyone for themselves. Most kills wins.')}
       ${card('mode:gun', 'Gun Game', 'Every kill moves you to the next gun. A kill with the last one wins. A thrown kill knocks the victim back a gun.')}
       ${card('mode:gwtdm', 'Ground War', '16 v 16 on the large map, as Team Deathmatch or five-flag Domination.')}
+      ${card('mode:br', 'Battle Royale', '32 players in squads of four (or duos, or solos); friends share a squad and bots fill the rest. Ride the transport and tap <b>Jump</b> over where you want to land, then steer the glide. You start with fists and a pistol: walk over loot to take ammo, armor plates, medkits and equipment, and tap to swap for a better gun (rarer colours handle better and carry more attachments). Tap <b>Plate</b> to fill your three armor slots. Stay inside the circle: it shrinks in seven phases and hurts more each time. Downed in a squad? Crawl to a teammate; standing next to you brings you back. Last squad standing wins.', true)}
       ${card('ui:aim', 'Firing Range', 'Your loadout, dummies at marked distances, instant reloads and a live damage readout. Open it from the main menu.', true)}
     </div>`,
   tips: () => `

@@ -153,6 +153,49 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     mineCss = TEAMS[myTeam]?.css; themCss = rival ? TEAMS[rival.team]?.css : 'var(--c-haze)';
   }
 
+  // Battle royale (js/sim/br.js): placement among the squads, your squad's own numbers, and how the squads finished.
+  // data.br.stats is per roster index: [damage, revives, downs dealt, placement, seconds alive x10].
+  const br = rules === 'br';
+  const brStat = p => data.br?.stats?.[roster.indexOf(p)] ?? [0, 0, 0, p.place ?? 0, 0];
+  const solo = MODES[data.modeId ?? data.mode]?.squad === 1;
+  const squadTeams = br ? [...new Set(roster.map(p => p.team))] : [];
+  const myPlace = br ? (outcome === 'win' ? 1 : roster.find(p => p.id === data.localId)?.place || squadTeams.length) : 0;
+  if (br) {
+    word = outcome === 'win' ? 'Victory' : `${ORDINAL(myPlace)} place`;
+    line = outcome === 'win' ? (solo ? 'Last one standing' : 'Last squad standing') : `out of ${squadTeams.length} ${solo ? 'players' : 'squads'}`;
+    tone = myPlace === 1 ? 'var(--c-gold)' : myPlace <= 3 ? 'var(--c-sodium)' : 'var(--c-haze)';
+    mineNum = myPlace; themNum = squadTeams.length; mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
+  }
+  const mmss = ds => { const s = Math.round(ds / 10); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const brSquad = () => {
+    const mates = roster.filter(p => p.team === myTeam);
+    return `<div class="rb ours${outcome === 'win' ? ' won' : ''}" style="--team:${TEAMS[myTeam]?.css}">
+      <div class="rb-head"><b class="rb-team">${solo ? 'You' : 'Your squad'}</b><b class="rb-pts">${ORDINAL(myPlace)}</b>
+        <span>K</span><span title="Downs">Dn</span><span title="Revives">Rv</span><span title="Damage">Dmg</span><span class="wide">Alive</span></div>
+      ${mates.map((p, i) => { const st = brStat(p); return `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${i}">
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${esc(p.name)}</b></span><span>${p.kills}</span><span>${st[2]}</span><span>${st[1]}</span><span>${st[0]}</span><span class="wide">${mmss(st[4])}</span>
+      </div>`; }).join('')}
+    </div>`;
+  };
+  const brSquads = () => {
+    const rows = squadTeams.map(t => {
+      const ms = roster.filter(p => p.team === t);
+      const place = ms.reduce((m, p) => Math.max(m, p.place || 0), 0) || (t === (outcome === 'win' ? myTeam : null) ? 1 : squadTeams.length);
+      return { t, ms, place, kills: ms.reduce((n, p) => n + p.kills, 0) };
+    }).sort((a, b) => a.place - b.place);
+    let shownRows = rows.slice(0, BOARD_ROWS - 1);
+    const mine = rows.find(r => r.t === myTeam);
+    if (mine && !shownRows.includes(mine)) shownRows = [...rows.slice(0, BOARD_ROWS - 2), mine];
+    return `<div class="rb theirs" style="--team:var(--c-gold)">
+      <div class="rb-head"><b class="rb-team">${solo ? 'Standings' : 'Squads'}</b><b class="rb-pts"></b>
+        <span></span><span></span><span></span><span>K</span><span class="wide">Place</span></div>
+      ${shownRows.map((r, i) => `<div class="rb-row${r.t === myTeam ? ' me' : ''}" style="--i:${i}">
+        <span class="rb-name" style="grid-column:span 4"><i style="flex:none;width:7px;height:7px;background:${TEAMS[r.t]?.css}"></i><b>${esc(r.ms.map(p => p.name).join(', '))}</b></span><span>${r.kills}</span><span class="wide">${ORDINAL(r.place)}</span>
+      </div>`).join('')}
+      ${rows.length > shownRows.length ? `<div class="rb-row" style="--i:${shownRows.length}"><span class="rb-name"><b>+${rows.length - shownRows.length} more</b></span></div>` : ''}
+    </div>`;
+  };
+
   // A podium for the top three, in their own colours, the winner raised in the middle.
   const podium = () => {
     const step = [ranked[1], ranked[0], ranked[2]];
@@ -257,7 +300,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
-      <div class="rb-pair">${ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
+      <div class="rb-pair">${br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>

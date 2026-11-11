@@ -29,6 +29,12 @@ export const MODES = {
   ffa:   { id: 'ffa',   rules: 'ffa',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 12, everyMap: true, name: 'Free-for-All', short: 'FFA', scoreLimit: 30, timeLimit: 600, desc: 'Every player for themselves. Most kills takes it.' },
   snd:   { id: 'snd',   rules: 'snd',  teamSize: 6,  rounds: true, name: 'Search and Destroy', short: 'S&D', scoreLimit: 4, timeLimit: 120, desc: 'One life a round. Plant the bomb or stop it. First to 4 rounds.' },
   ctf:   { id: 'ctf',   rules: 'ctf',  teamSize: 6,  name: 'Capture the Flag', short: 'CTF', scoreLimit: 3, timeLimit: 600, desc: 'Take their flag home to yours. Yours has to be home to score. First to 3.' },
+  // Battle royale (docs/BR.md): 32 players on a giant map, the room fills with bots, last squad standing. One rule set,
+  // three squad sizes. `squad` is players per squad; `br` marks the family for menus and the HUD. No score or clock
+  // limit: the circle ends it (BR.phases below), and timeLimit is only a safety net.
+  br:     { id: 'br',     rules: 'br', teamSize: 4, squad: 4, br: true, large: true, players: 32, name: 'Battle Royale', short: 'BR', scoreLimit: 1, timeLimit: 1500, desc: 'Squads of four. Drop in, loot, outlast the circle. Last squad standing.' },
+  brduo:  { id: 'brduo',  rules: 'br', teamSize: 2, squad: 2, br: true, large: true, players: 32, name: 'BR Duos', short: 'BR 2', scoreLimit: 1, timeLimit: 1500, desc: 'Battle royale in pairs. Drop, loot, outlast the circle.' },
+  brsolo: { id: 'brsolo', rules: 'br', teamSize: 1, squad: 1, br: true, large: true, players: 32, name: 'BR Solos', short: 'BR 1', scoreLimit: 1, timeLimit: 1500, desc: 'Battle royale alone: no downs, no revives. Last one standing.' },
   gun:   { id: 'gun',   rules: 'gun',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 12, everyMap: true, name: 'Gun Game', short: 'GUN', scoreLimit: GUN_LADDER.length, timeLimit: 600, desc: `A new gun every kill, ${GUN_LADDER.length} to the Verdict. A Hatchet knocks you back one.` },
 };
 export const MODE_IDS = Object.keys(MODES);
@@ -61,6 +67,47 @@ export const CTF_STATES = ['home', 'carried', 'dropped'];
 // Why a round ended, in the order the snapshot carries them.
 export const SND_REASONS = ['elim', 'bomb', 'defuse', 'time'];
 
+// Battle royale numbers, shared by the sim (js/sim/br.js), the HUD and the bots. Times in seconds, distances in metres.
+export const BR = {
+  warmup: 7,             // On the transport before it moves: the drop map is up.
+  planeSpeed: 30,        // Transport speed along the flight line.
+  planeOver: 30,         // The flight line starts and ends this far outside the map.
+  glide: 6.5,            // Seconds from the jump to the ground. Steerable at glideSpeed.
+  glideSpeed: 14,
+  forceJump: 0.94,       // Everyone still aboard is thrown out at this share of the line.
+  // The circle: phase i waits `wait`, then shrinks over `shrink` to radius `r` (a share of the map's width). Damage per
+  // second outside it is `dps` while phase i is the one shrinking or held. Plates do not stop it.
+  phases: [
+    { wait: 70, shrink: 50, r: 0.38, dps: 1 },
+    { wait: 50, shrink: 40, r: 0.27, dps: 2 },
+    { wait: 40, shrink: 35, r: 0.18, dps: 4 },
+    { wait: 35, shrink: 30, r: 0.11, dps: 7 },
+    { wait: 30, shrink: 25, r: 0.06, dps: 10 },
+    { wait: 25, shrink: 20, r: 0.03, dps: 15 },
+    { wait: 20, shrink: 25, r: 0, dps: 25 },
+  ],
+  downHp: 100,           // A downed player's bleed bar; lethal damage while downed finishes them.
+  bleed: 30,             // Seconds to bleed out untouched.
+  crawl: 0.32,           // Stick scale while downed.
+  reviveTime: 4,         // Seconds a teammate stands next to a downed player to bring them up.
+  reviveReach: 1.9,
+  reviveHp: 35,
+  selfRevive: 5,         // Seconds a self-revive kit takes.
+  plateHp: 50, plateSlots: 3, plateTime: 1.1, plateCarry: 5,
+  medTime: 2.6, medCarry: 3, kitCarry: 1,
+  pickup: 1.5,           // Auto pickup reach.
+  take: 2.4,             // A ground gun this close can be tapped to swap.
+  chestReach: 1.7,
+  // Match XP on top of the usual lines: placement (scaled from last to first), each revive, each minute alive.
+  xp: { place: 1000, revive: 150, minute: 40 },
+  rarity: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
+  rarityName: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'],
+  rarityCss: ['#c9cbc4', '#59d36b', '#3fa0ff', '#b05cff', '#ffb21a'],
+  rarityHex: [0xc9cbc4, 0x59d36b, 0x3fa0ff, 0xb05cff, 0xffb21a],
+};
+export const isBr = id => MODES[id]?.rules === 'br' || id === 'br';
+export const squadSizeFor = id => MODES[id]?.squad ?? 4;
+
 // The rule set behind a mode id; unknown ids (and 'range') pass through.
 export const modeRules = id => MODES[id]?.rules ?? id;
 // Players per team for a mode, for buildRoster and lobby caps. A free-for-all is a side of one.
@@ -70,6 +117,7 @@ export const isFfa = id => !!(MODES[id]?.ffa || id === 'ffa' || id === 'gun');
 // Everyone in a full match: both teams, or a free-for-all's field, which is bigger on a Ground War map.
 export function playersFor(id, map = null) {
   const m = MODES[id] ?? MODES.tdm;
+  if (m.br) return m.players;
   if (!m.ffa) return m.teamSize * 2;
   // A map without a size tier counts as medium (see SIZES in js/shared/map.js).
   const size = map?.large ? 'huge' : map?.size;
@@ -80,7 +128,8 @@ export function playersFor(id, map = null) {
 // every map hosts.
 export function mapModes(map) {
   const own = map?.modes ?? MODE_IDS.filter(id => !MODES[id].large);
-  const extra = MODE_IDS.filter(id => MODES[id].everyMap && !own.includes(id));
+  // A battle royale map lists 'br'; it hosts every squad size.
+  const extra = MODE_IDS.filter(id => ((MODES[id].everyMap && map?.size !== 'giant') || (MODES[id].br && own.includes('br'))) && !own.includes(id));
   return extra.length ? [...own, ...extra] : own;
 }
 
@@ -92,6 +141,7 @@ export function modeFitsMap(map, mode) {
   if (rules === 'hard') return !!map.points?.hard?.length;
   if (rules === 'snd') return map.points?.snd?.length === 2;
   if (rules === 'ctf') return map.points?.ctf?.length === 2;
+  if (rules === 'br') return !!map.br?.loot?.length;
   return true;
 }
 

@@ -28,7 +28,8 @@ import { MAPS } from '../shared/map.js';
 import { raycastMap } from '../shared/geometry.js';
 import { fillGaps, classOf, weightOf, idHash, impactBus } from '../render/feel.js';
 import { EquipmentSfx } from './equipment-sfx.js';   // Gear wave equipment sounds (2026-11).
-import { StreaksSfx } from './streaks-sfx.js';       // Scorestreaks overhaul sounds (2026-11).
+import { StreaksSfx } from './streaks-sfx.js';
+import { BrSfx } from './br-sfx.js';               // Battle royale sounds (docs/BR.md).       // Scorestreaks overhaul sounds (2026-11).
 
 const MAX_VOICES = 26;
 // Priority. A new voice can only replace something strictly lower, so the top of this list always plays.
@@ -2032,6 +2033,7 @@ export class AudioEngine {
     this.lastView = view;
     (this.gearSfx ??= new EquipmentSfx(this)).onEvents(events, view);
     (this.streakSfx ??= new StreaksSfx(this)).onEvents(events, view);
+    if (view?.br) (this.brSfx ??= new BrSfx(this)).onEvents(events, view);
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
