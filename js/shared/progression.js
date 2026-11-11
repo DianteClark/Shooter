@@ -1126,6 +1126,74 @@ export function addLife(save, counts = {}) {
   }
 }
 
+/* ---------- Career totals, for the leaderboards (ROADMAP item 16, js/shared/boards.js) ---------- */
+// Appended to save v4 with defaults (no version bump): `career` holds the lifetime totals the boards rank and the
+// current week's. m matches, k kills, w wins, brm/brw/br5 battle royale matches, wins and top fives, ex extractions
+// (extraction mode banks one per match a squadmate got out; see recordCareer). K/D counts only matches tracked here:
+// kdm matches, kdk kills, d deaths, so a save from before tracking (its kills known, its deaths not) never shows a
+// made-up K/D. w is team-mode wins (like the pool's careerAt); wk: { key (periodKey weekly: Monday, local time), m,
+// k, w (every win, battle royale too) }.
+const CAREER_KEYS = ['m', 'k', 'w', 'brm', 'brw', 'br5', 'ex', 'kdm', 'kdk', 'd'];
+export function blankCareer() {
+  return { m: 0, k: 0, w: 0, brm: 0, brw: 0, br5: 0, ex: 0, kdm: 0, kdk: 0, d: 0, wk: { key: '', m: 0, k: 0, w: 0 } };
+}
+
+// A save from before career tracking: what its lifetime tally already knows (matches, kills, wins, battle royale
+// matches and wins; a BR win is a top five too). Deaths were never kept, so K/D starts with the next match.
+function careerFromLife(life = {}) {
+  const c = blankCareer();
+  c.m = count(life.played); c.k = count(life.kills);
+  c.brm = count(life['played:br']); c.brw = Math.min(c.brm, count(life['won:br'])); c.br5 = c.brw;
+  c.w = Math.max(0, count(life.wins) - c.brw);     // Wins counts team matches; battle royale wins have their own.
+  return c;
+}
+
+export function cleanCareer(raw, life) {
+  if (!isObj(raw)) return careerFromLife(life);
+  const c = blankCareer();
+  for (const k of CAREER_KEYS) c[k] = count(raw[k]);
+  c.brw = Math.min(c.brw, c.brm); c.br5 = Math.min(Math.max(c.br5, c.brw), c.brm);
+  c.kdm = Math.min(c.kdm, c.m); c.kdk = Math.min(c.kdk, c.k);
+  if (isObj(raw.wk) && typeof raw.wk.key === 'string' && /^W\d{4}-\d{2}-\d{2}$/.test(raw.wk.key)) {
+    c.wk = { key: raw.wk.key, m: count(raw.wk.m), k: count(raw.wk.k), w: count(raw.wk.w) };
+  }
+  return c;
+}
+
+// This week's window, rolled over to `now`'s week first (a new Monday starts it at zero).
+export function careerWeek(career, now = new Date()) {
+  const key = periodKey('weekly', now);
+  if (career.wk?.key !== key) career.wk = { key, m: 0, k: 0, w: 0 };
+  return career.wk;
+}
+
+// One finished match into the career. m: { kills, deaths, won, br (a battle royale), place (BR squad placing, 1 =
+// won), extracted (extraction mode: true when this player's squad banked; the extraction engineer passes it) }.
+export function recordCareer(save, m = {}, now = new Date()) {
+  const c = save.career ??= blankCareer();
+  const kills = count(m.kills), deaths = count(m.deaths), won = !!m.won;
+  c.m++; c.k += kills; c.kdm++; c.kdk += kills; c.d += deaths;
+  if (m.br) {
+    c.brm++;
+    if (won || m.place === 1) c.brw++;
+    if (won || (Number.isFinite(m.place) && m.place <= 5)) c.br5++;
+  } else if (won) c.w++;
+  if (m.extracted) c.ex += m.extracted === true ? 1 : count(m.extracted);
+  const wk = careerWeek(c, now);
+  wk.m++; wk.k += kills; if (won) wk.w++;
+  for (const k of CAREER_KEYS) c[k] = Math.min(COUNT_MAX, c[k]);
+  return c;
+}
+
+// Mastery finished: every tier of a mastery track (tactical, lethal, streak, operator), and each gun's ladder.
+export const MASTERY_TOTAL = () => MASTERY_TRACKS.length + WEAPON_IDS.length;
+export function masteryCompleted(save) {
+  let n = 0;
+  for (const t of MASTERY_TRACKS) if ((save.mastery?.[t.id]?.t ?? 0) >= t.tiers.length) n++;
+  for (const w of Object.values(save.weapons ?? {})) if (ladderDone(w)) n++;
+  return n;
+}
+
 // Fresh loadout slots only ever start on guns available from level 1.
 const BASE_PRIMARIES = ['ar', 'smg', 'shotgun', 'lmg', 'sniper'];
 
@@ -1158,7 +1226,8 @@ export function blankSave() {
     // they are read (js/ui/progress.js); `life` is the lifetime sum of every match's ChallengeTally counts plus
     // map:<id> and mapwon:<id>, for the map, mode and career cards.
     skins: {}, emblem: null, life: {},
-    // Lifetime extractions (Extraction mode): every match this player's squad got out of. Leaderboards read it.
+    career: blankCareer(),
+    // Lifetime extractions (Extraction mode): every match this player's squad got out of (career.ex counts the same).
     extractions: 0,
   };
 }
@@ -1210,6 +1279,7 @@ export function sanitizeSave(raw) {
   s.skins = cleanSkins(raw.skins);
   s.emblem = typeof raw.emblem === 'string' && SHORT_ID.test(raw.emblem) ? raw.emblem : null;
   s.life = cleanLife(raw.life);
+  s.career = cleanCareer(raw.career, s.life);
   s.extractions = count(raw.extractions);
   return s;
 }
@@ -1294,6 +1364,9 @@ function pack(s) {
     // v4 tail: mastery counters by track (stats in the track's order), grandfathered unlocks, skins, emblem, lifetime.
     MASTERY_TRACKS.filter(t => s.mastery?.[t.id]).map(t => [t.id, s.mastery[t.id].t, t.stats.map(k => s.mastery[t.id].s[k] ?? 0)]),
     s.granted ?? [], Object.entries(s.skins ?? {}), s.emblem ?? null, Object.entries(s.life ?? {}),
+    // Appended (boards): the career totals, keyed. Left off while they say no more than the lifetime tally does (a
+    // code without them seeds them from it), so a code from before them re-exports to the very same code.
+    ...(s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? [s.career] : []),
   ];
 }
 
@@ -1329,6 +1402,7 @@ function unpack(a) {
     life: Array.isArray(a[16]) ? Object.fromEntries(a[16].filter(e => Array.isArray(e) && typeof e[0] === 'string' && !UNSAFE_KEYS.has(e[0]))) : {},
     loadouts: loadouts.map(l => (Array.isArray(l) ? { name: l[0], primary: l[1], secondary: l[2], attachments: l[3], perks: l[4], tactical: l[5], lethal: l[6], streaks: l[7], operator: l[8] } : null)),
     pro, proDone: a[10], card: a[11],
+    ...(a[17] && typeof a[17] === 'object' && !Array.isArray(a[17]) ? { career: a[17] } : {}),
   };
 }
 

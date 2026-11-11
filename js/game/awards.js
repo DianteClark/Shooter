@@ -243,9 +243,13 @@ export class MatchAwards {
     const total = lines.reduce((sum, l) => sum + l[1], 0);
 
     // Lifetime totals take the same counts the challenges do, plus where it was played and whether it was won.
+    // Career totals for the leaderboards: kills and deaths as the scoreboard has them, a battle royale's placing, and
+    // whether this player's squad got out of an extraction.
+    const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
+    const career = { kills: me?.kills ?? this.kills, deaths: me?.deaths ?? 0, br: !!view?.br, place: brPlace, extracted: !!ex?.extracted };
     const life = { ...(tallied ?? this.tally.counts()) };
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, extracted: !!ex?.extracted });
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted });
     if (ex) {
       // Exclusive unlock progress this match, and anything it opened.
       const after = Progress.lifetime();

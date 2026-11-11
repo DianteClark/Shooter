@@ -13,7 +13,9 @@ import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
-import { Progress, matchScore, MatchHistory } from './ui/progress.js';
+import { Progress, matchScore, MatchHistory, Friends } from './ui/progress.js';
+import { cleanCard } from './shared/boards.js';
+import { boardsScreen } from './ui/boards.js';
 import { humanRating } from './shared/botpool.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
 import { brMode, cleanSquad as cleanBrSquad } from './ui/br-squad.js';
@@ -252,7 +254,34 @@ function teardownNet() {
   app.voice = null;
   const net = app.net;
   app.net = null;
+  app.careers = null;
   net?.leave();
+}
+
+// --- Career cards for the leaderboards (js/shared/boards.js) ---
+// Every phone in a lobby sends its career summary (Progress.careerCard: totals, name, level, operator, card, emblem;
+// nothing else from the save) when it joins and after each match. Guests send theirs to the host, which keeps one per
+// player and relays them all; each phone stores the others' as friends (Friends.see), dated now.
+function shareCareer() {
+  if (!app.net) return;
+  let card;
+  try { card = Progress.careerCard(); } catch (err) { console.error('career card', err); return; }
+  if (app.isHost) {
+    (app.careers ??= new Map()).set(app.net.localId, card);
+    broadcastCareers();
+  } else app.net.sendLobby({ t: 'career', c: card });
+}
+
+function broadcastCareers() {
+  if (!app.isHost || !app.net || !app.careers?.size) return;
+  app.net.sendLobby({ t: 'careers', list: [...app.careers].map(([id, c]) => ({ id, c })) });
+}
+
+function storeCareer(id, raw) {
+  const card = cleanCard(raw);
+  if (!card || !app.net || id === app.net.localId) return null;
+  Friends.see(id, card, Date.now(), app.net.localId);
+  return card;
 }
 
 // --- Title actions ---
@@ -261,6 +290,7 @@ menu.on({
   saveCode: () => openSave(),
   options: () => openOptions(),
   stats: () => openStats(),
+  boards: () => openBoards(),
   help: () => openHelp(),
   challenges: () => menu.challenges({ onBack: afterEditing }),
   history: () => openHistory(),
@@ -409,7 +439,11 @@ function editSquad() {
 }
 
 function openStats(back = afterEditing) {
-  statsScreen(menu, { onBack: back });
+  statsScreen(menu, { onBack: back, onBoards: () => openBoards(() => openStats(back)) });
+}
+
+function openBoards(back = afterEditing) {
+  boardsScreen(menu, { onBack: back, myId: app.net?.localId ?? selfId() });
 }
 
 function openHistory() {
@@ -667,6 +701,14 @@ function hostLobbyMessage(msg, from) {
       }
       return;
     }
+    case 'career': {
+      const card = guest ? storeCareer(from, msg.c) : null;
+      if (!card) return;
+      (app.careers ??= new Map()).set(from, card);
+      if (!app.careers.has(app.net.localId)) try { app.careers.set(app.net.localId, Progress.careerCard()); } catch (err) { console.error('career card', err); }
+      broadcastCareers();
+      return;
+    }
     case 'ready': if (guest) guest.ready = !!msg.ready; break;
     case 'loadout': if (guest) Object.assign(guest, seatFrom(msg)); break;
     case 'team': {
@@ -777,6 +819,7 @@ function startJoining(code) {
   wireSharedNet(net);
   net.onConnected(() => {
     net.sendLobby({ t: 'join', name: myName(), build: BUILD, ...seatData() });
+    shareCareer();
   });
   net.onJoinFailed(() => {
     teardownNet();
@@ -810,6 +853,9 @@ function guestLobbyMessage(msg) {
       break;
     case 'vote':
       showGuestVote(msg);
+      break;
+    case 'careers':
+      for (const r of Array.isArray(msg.list) ? msg.list.slice(0, 16) : []) if (typeof r?.id === 'string') storeCareer(r.id, r.c);
       break;
     case 'start':
       // A guest that never left this match hears its own rejoin announcement after a brief drop.
@@ -1522,6 +1568,7 @@ function showResults(results) {
     menu.show();
   }
   app.resultsAt = performance.now();
+  shareCareer();
   voteBehindResults();
 }
 

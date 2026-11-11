@@ -36,7 +36,7 @@ const GEAR_COLUMNS = [
 const num = (v, d) => v === null || v === undefined ? '-' : v.toFixed(d);
 const pct = v => v === null || v === undefined ? '-' : `${Math.round(v * 100)}%`;
 
-export function statsScreen(menu, { onBack }) {
+export function statsScreen(menu, { onBack, onBoards }) {
   const state = { scope: 'a', cat: 'All', sort: 'kills', open: null, code: null };
   menu.el.dataset.screen = 'stats';
 
@@ -93,6 +93,7 @@ export function statsScreen(menu, { onBack }) {
           <button class="btn is-primary" data-sound="confirm" data-act="stCopy">${ico('copy')}<b>Copy</b></button>
           <button class="btn" data-act="stHide">${ico('close')}<b>Close</b></button>`
         : `<p>Kills and K/D count gunfire only. TTK runs from the first hit to the kill. Pick is the share of players who used the gun. K/min is per minute held.</p>
+          ${onBoards ? `<button class="btn st-boards" data-act="stBoards">${ico('ui:crown')}<b>Boards</b></button>` : ''}
           <button class="btn${state.confirm ? ' is-danger' : ''}" data-act="stClear"${empty ? ' disabled' : ''}>${ico('trash')}<b>${state.confirm ? 'Tap again to clear' : 'Clear'}</b></button>
           <button class="btn is-primary" data-sound="confirm" data-act="stExport"${empty ? ' disabled' : ''}>${ico('export')}<b>Export code</b></button>`}
       </footer>`;
@@ -103,6 +104,7 @@ export function statsScreen(menu, { onBack }) {
 
   menu.on({
     stBack: () => onBack(),
+    stBoards: () => onBoards?.(),
     stScope: ({ s }) => { state.scope = s; state.open = null; state.scroll = 0; paint(); },
     stCat: ({ c }) => { state.cat = c; state.open = null; state.scroll = 0; paint(); },
     stSort: ({ k }) => { state.sort = k; state.scroll = 0; paint(); },

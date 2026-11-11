@@ -61,9 +61,34 @@ on every push, keep 2% of weekly usage for bugs.
     DONE (bots): docs/BOTS.md. 200 seeded profiles (js/shared/botpool.js), a fifth locked; matchmaking by rating and
     level into `buildRoster(..., { pool })`; `careerAt(profile, date)` for item 16; bots trade, hear footsteps, peek
     from cover, pre-aim lanes; weak bots tunnel and overpeek; SMGs fight to 72% of their range.
-16. Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
+16. DONE (1111-13). Leaderboards: bots' careers grow deterministically by date; friends' career summaries are swapped in shared lobbies and
     saved "as of" that match; boards for level, kills, K/D, wins, BR wins/top 5, extractions, mastery, weekly.
+    DONE (boards). Save v4 gains `career` (appended, defaults; old saves and SY4 codes seed it from the lifetime tally,
+    and a code with nothing new re-exports unchanged): matches, kills, team wins, BR matches/wins/top 5, extractions
+    (`recordCareer` takes `extracted` from the extraction mode), K/D over tracked matches only, and a weekly window
+    (Monday, local). Lobby message `career` (guest to host) / `careers` (host relays all): Progress.careerCard() only,
+    ~230 bytes; friends kept in `switchyard.friends`, newest 100, "as of" the last shared lobby or match. Boards screen
+    (js/ui/boards.js; title and Gun stats): 10 categories (K/D needs 25 matches), Everyone / Friends / Around me; pool
+    rows from careerAt on the local date read as UTC (identical on every phone that date), clan tag slot via clanOf,
+    `poolWindow(from, to)` for seasonal boards. No per-match bump for bots you met: it would differ between phones.
+    Tests: dev/sim-boards.mjs, dev/ui-boards-net-test.py, overflow scenes boards*.
 17. DONE (exfil, docs/EXTRACT.md). Extraction mode (our own name, not "DMZ"): 4 squads of 4 (or duos) on Frontier, empty slots filled with bot squads;
     AI patrols harder toward the centre; contracts (intel, HVT, cache, hack, escort); own loadouts; only ammo loot; no
     streaks; respawn timer but a shared squad life pool, then spectate; must exfil to bank rewards (one squadmate out is
     enough); rewards are mastery progress plus exclusive streaks, weapons, perks and operators.
+
+## Owner's wave (2026-11-11 afternoon), approved "full force"
+18. Owner fixes: Infected Ground War (two starting infected); gunsmith gun cards' level/XP bar at the bottom of the card,
+    clear of the picture; BR: parachute folds on landing, visible glide descent and a landing animation instead of
+    spawning on the ground; BR pickup prompt bottom-centre (not over the aim stick), naming the slot it replaces, and
+    auto-swap to melee when out of ammo; wiped BR players choose Spectate or Leave.
+19. Clans: grow the bot pool to about 300 (append, never reorder); 20-25 fake clans of 3-8 with shared tags, some
+    stacked, some average, members queue together and share a team; regular duos; loners. Clan tags on leaderboards.
+20. Bug sweep (every mode and screen at both sizes, saves, friend lobbies) and a phone performance pass (with the
+    owner's Performance overlay screenshots).
+21. Ranked: placements, divisions, seasonal resets, matched against the bot pool and friends.
+22. Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
+    mode/event, ranked reset, seasonal boards. Ship two seasons ahead per update, content date-locked; if updates stop,
+    "Season Replay" rotates past seasons. Season 1 with the framework.
+23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
+24. Music: synthesised menu and match music.

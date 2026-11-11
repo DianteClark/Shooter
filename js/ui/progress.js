@@ -43,6 +43,7 @@
  *            emblem() -> earned emblem id|null  setEmblem(id|null) -> bool   loadout() carries `skin` and `emblem`.
  *            Stored in the save (and its codes); js/ui/operators.js's own store is kept as a mirror.
  * Lifetime   lifetime() -> {stat: n} every match's ChallengeTally counts plus map:<id>, mapwon:<id>
+ * Boards     careerCard() -> this player's leaderboard summary (js/shared/boards.js); Friends (below) keeps friends'.
  * Match      applyMatch(summary)  used by js/game/awards.js only. Summary may carry `mastery` (MasteryTracker.gains()).
  * Removed    recordKill(w) stays as a no-op returning []. MatchAwards counts kills now; hud.js should drop the call.
  *
@@ -73,8 +74,10 @@ import {
   cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX, goldenStatus, GOLDEN_REQUIREMENT,
   MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
+  recordCareer, careerWeek, masteryCompleted, blankCareer,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
+import { cleanFriends, seeFriend } from '../shared/boards.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 
 export { levelOf };
@@ -654,7 +657,9 @@ export const Progress = {
   /* ---------- Match results (js/game/awards.js) ---------- */
   // `pro` is ProTracker.gains(): {perk: {stat: n}}. Pro perks and calling cards earned here come back in `unlocks`
   // ({kind:'pro', id:perk, name, desc} and {kind:'card', id, name, req}), Pro first: they are the bigger moment.
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, extracted = false }) {
+  // `career` ({ kills, deaths, won, br, place, extracted }, see recordCareer) feeds the leaderboard totals; `extracted`
+  // (extraction mode) also counts the save's lifetime `extractions`.
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel;
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
@@ -668,6 +673,7 @@ export const Progress = {
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
+    if (career) recordCareer(data, { won, ...career });
     gainXp(xp);
     for (const [w, gained] of Object.entries(weapons)) {
       const entry = writeWeapon(w);
@@ -730,6 +736,19 @@ export const Progress = {
 
   // Kills are counted once by MatchAwards at match end now.
   recordKill() { return []; },
+
+  // The leaderboard summary of this player (js/shared/boards.js cleanCard reads the same shape): what a friend's
+  // phone is sent, and this player's own row. Totals only; nothing else from the save.
+  careerCard(now = new Date()) {
+    const c = data.career ?? blankCareer(), wk = careerWeek(c, now);
+    const lo = this.loadout();
+    return {
+      v: 1, name: this.name || 'Rookie', level: levelOf(data.xp), prestige: data.prestige, xp: data.totalXp,
+      m: c.m, k: c.k, w: c.w, brm: c.brm, brw: c.brw, br5: c.br5, ex: c.ex, kdm: c.kdm, kdk: c.kdk, d: c.d,
+      mst: masteryCompleted(data), wk: { key: wk.key, k: wk.k, w: wk.w },
+      op: lo.operator ?? null, skin: lo.skin ?? null, card: equippedCard(), emblem: currentEmblemId(),
+    };
+  },
 };
 
 /* ---------- Daily and weekly challenges ---------- */
@@ -784,4 +803,25 @@ export const MatchHistory = {
     return e;
   },
   clear() { historyCache = { v: HISTORY_VERSION, list: [] }; try { localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ } },
+};
+
+/* ---------- Friends' career cards (js/shared/boards.js) ---------- */
+// Kept apart from the save: a friend's card belongs to this phone, not to the player's save code. Written only when a
+// lobby partner's card arrives (js/main.js), so a card stays "as of" the last time you played together.
+const FRIENDS_KEY = 'switchyard.friends';
+let friendsCache = null;
+const friendList = () => (friendsCache ??= cleanFriends(parse(read(FRIENDS_KEY))));
+
+export const Friends = {
+  // selfId: never list this phone's own player (two test tabs share one storage).
+  list(selfId = null) { return friendList().filter(f => f.id !== selfId); },
+  // A card from a lobby partner; returns true if it was stored.
+  see(id, card, now = Date.now(), selfId = null) {
+    const next = seeFriend(friendList(), id, card, now, selfId);
+    if (!next) return false;
+    friendsCache = next;
+    write(FRIENDS_KEY, JSON.stringify({ v: 1, list: next }));
+    return true;
+  },
+  clear() { friendsCache = []; try { localStorage.removeItem(FRIENDS_KEY); } catch { /* ignore */ } },
 };
