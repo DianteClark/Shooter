@@ -100,8 +100,11 @@ timers, per-player downs); `restore` rebuilds from the guest's mirror plus that 
   `ownSpawns`, `metaEvery`, AI interest); `js/sim/bots.js` `calm`; `buildExRoster` (squads like battle royale, AI seats
   last, the first four named Commander).
 - `js/shared/extraction.js` (exclusives and pay), `js/shared/modes.js` (`EX`, `exq`, `exd`, `EX_AI_TEAM`).
-- UI: `js/ui/ex-hud.js` (chips, squad, contract card, Call exfil and the phone sheet, screen markers, downed and held
-  panels, zoomed minimap and full map), `js/render/ex-fx.js` (landing zones, helicopters, contract things, phones, ammo,
+- UI: `js/ui/ex-hud.js`, its own module and elements so the HUD redesign can move them (chips, squad, contract card,
+  Call exfil and the phone sheet placed like the battle royale's take prompt, screen markers, downed panel, the battle
+  royale's out panel markup with Spectate / Next player / Next squad / Leave through `spectate.any` and main.js
+  `leaveBrEarly` (Match.leaveNow, `early` into the results), zoomed minimap and full map; `hud.music?.cue('exfil')` when
+  your squad calls the helicopter, a no-op until the music engine lands), `js/render/ex-fx.js` (landing zones, helicopters, contract things, phones, ammo,
   downed rings), results (`js/ui/results.js`), Multiplayer tab (`js/ui/matchmaking.js`), Help.
 - Tests: `node dev/sim-extract.mjs [--quick]`; `python3 dev/ui-ex-test.py [port]` (Multiplayer to results, screenshots
   in /tmp/exfil); `python3 dev/ui-ex-net-test.py [port]` (two humans in one squad over ?net=local).

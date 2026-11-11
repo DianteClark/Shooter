@@ -14,7 +14,7 @@ import { EX, EX_AI_TEAM, CONTRACT_NAMES, BR, MODES } from '../shared/modes.js';
 import { MAX_HP, TEAMS } from '../shared/constants.js';
 import { objOf } from '../sim/rules.js';
 import { spectate } from '../sim/snd.js';
-import { esc } from './widgets.js';
+import { esc, nameHtml } from './widgets.js';
 import { icon } from './icons.js';
 
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -104,16 +104,7 @@ const CSS = `
 .ex-rev b { display: block; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #7be08a; }
 .ex-rev i { display: block; height: 5px; margin-top: 5px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .ex-rev i i { position: absolute; inset: 0; margin: 0; height: auto; background: #59d36b; transform-origin: left; transform: scaleX(0); }
-.ex-held { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); text-align: center; min-width: 260px; max-width: 340px; padding: 12px 18px;
-  background: linear-gradient(180deg, rgba(42,51,61,.92), rgba(16,20,26,.9)); box-shadow: var(--hud-edge); clip-path: polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px); }
-.ex-held b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
-.ex-held.won b { color: #8ff09c; }
-.ex-held .what { font: 400 18px/1.1 var(--f-stencil); color: var(--c-sodium); margin-top: 4px; }
-.ex-held small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-top: 6px; }
-.ex-held .acts { display: flex; gap: 8px; justify-content: center; }
-.ex-held .ex-leave { color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
-.ex-held button { margin-top: 10px; height: 36px; padding: 0 14px; border: 0; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-chalk);
-  clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+.ex-held.won b, .ex-held.won .place { color: #8ff09c; }
 .ex-lives-note { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
   color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.78)); white-space: nowrap; }
 .hud.ex-offers-on .ex-acts { visibility: hidden; }
@@ -182,7 +173,8 @@ export class ExHud {
       ${'<div class="ex-tag" hidden><span></span></div>'.repeat(TAGS)}
       <div class="ex-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div></div>
       <div class="ex-rev" hidden><b>Reviving</b><i><i></i></i></div>
-      <div class="ex-held" hidden><b></b><div class="what"></div><small></small><div class="acts"><button data-tap="1" class="ex-spec-next" hidden>Next teammate</button><button data-tap="1" class="ex-leave">Leave</button></div></div>
+      <div class="br-out ex-held" hidden><div class="txt"><b></b><div class="place"></div><small></small></div>
+        <div class="acts"><button data-tap="1" class="br-spec go ex-spec">Spectate</button><button data-tap="1" class="br-spec-next quiet ex-spec-next" hidden>Next player</button><button data-tap="1" class="br-spec-squad quiet ex-spec-squad" hidden>Next squad</button><button data-tap="1" class="br-leave ex-leave">Leave</button></div></div>
       <div class="ex-offers" hidden data-tap="1"><h3>Contract phone<small>Take one: it replaces the contract your squad has now</small></h3><div class="ex-offer-row"></div><button class="close" data-tap="1">Close</button></div>
       <div class="ex-map" hidden data-tap="1">
         <div class="ex-map-frame"><canvas width="${MAP_PX}" height="${MAP_PX}"></canvas></div>
@@ -217,7 +209,11 @@ export class ExHud {
     });
     act($('.ex-map-close'), () => this.toggleMap(false));
     this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl) this.toggleMap(false); });
-    act($('.ex-spec-next'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1); });
+    // The battle royale's out panel (js/ui/br-hud.js #out), driven the same way: Spectate opens anyone still playing
+    // once your squad has nobody left to watch, Next player / Next squad step through them.
+    act($('.ex-spec'), () => { spectate.any = true; this.c.held = null; });
+    act($('.ex-spec-next'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1); this.c.held = null; });
+    act($('.ex-spec-squad'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1, true); this.c.held = null; });
     // Out for good: results now for this phone (main.js leaveBrEarly, the battle royale's own Leave), the match goes on.
     act($('.ex-leave'), () => this.hud.brLeaveCb?.());
     this.c = {};
@@ -312,7 +308,7 @@ export class ExHud {
     this.squadEl.innerHTML = mates.map(p => {
       const state = p.out ? 'lifted' : !p.alive ? 'out' : p.downed ? 'down' : '';
       const note = p.out ? 'Out' : !p.alive ? 'Dead' : p.downed ? 'Down' : p.away ? 'Away' : '';
-      return `<div class="ex-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${esc(p.name)}</b><em>${note}</em>
+      return `<div class="ex-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
         <i style="--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></div>`;
     }).join('');
   }
@@ -353,7 +349,22 @@ export class ExHud {
     return { x: k.x, z: k.z };
   }
 
+  // Call exfil and Contracts sit where the battle royale's take prompt does (js/ui/br-hud.js #placeTake): bottom-centre in
+  // the gap between the vitals and the aim stick's ring, never on a stick or a button. Measured once per screen size.
+  #placeActs() {
+    const key = `${innerWidth}x${innerHeight}`;
+    if (this.actsAt === key) return;
+    this.actsAt = key;
+    const ring = document.querySelector('.controls .stick-aim .ring-fire')?.getBoundingClientRect();
+    const vit = this.hud.el.querySelector('.vitals')?.getBoundingClientRect();
+    const lo = (vit?.width ? vit.right : innerWidth * 0.3) + 6, hi = (ring?.width ? ring.left : innerWidth * 0.62) - 6;
+    const st = this.$('.ex-acts').style;
+    st.left = `${Math.round((lo + hi) / 2)}px`;
+    st.maxWidth = `${Math.max(140, Math.round(hi - lo))}px`;
+  }
+
   #actions(view, me, ex, squad) {
+    this.#placeActs();
     const up = me.alive && !me.downed && view.phase === 'live';
     const zone = up ? (ex.exfils ?? []).find(e => e.state === 1 && Math.hypot(me.x - e.x, me.z - e.z) <= e.r) : null;
     if (this.c.call !== !!zone) { this.c.call = !!zone; this.callBtn.hidden = !zone; }
@@ -473,16 +484,18 @@ export class ExHud {
     if (pat) this.revEl.querySelector('i i').style.transform = `scaleX(${Math.min(1, pat.reviveK).toFixed(3)})`;
   }
 
-  // Off the field for good: out of lives, or lifted out. The death screen goes and this says what is left to happen.
+  // Off the field for good: out of lives, or lifted out. The death screen goes and the battle royale's out panel says what
+  // is left to happen: watch your squad (it can still bank the pot for you), anyone once nobody of yours is left, or leave
+  // for your results now (main.js leaveBrEarly: Match.leaveNow, headless for a host with others still playing).
   #held(view, me, squad) {
     const live = view.phase === 'live';
     const lifted = !!me.out;
     const held = live && !me.alive && (lifted || (squad?.lives ?? 0) <= 0);
-    const watch = held ? spectate.target(view, me.id) : null;
-    const key = held ? `${lifted}|${watch}|${squad?.extracted ?? 0}|${squad?.banked?.length ?? 0}` : '';
-    // Dead with lives left: the death screen, and a line on the pool.
     const note = live && !me.alive && !held ? `Squad lives left: ${squad?.lives ?? 0}. Respawn near a squadmate.` : '';
     if (this.c.note !== note) { this.c.note = note; this.noteEl.hidden = !note; this.noteEl.textContent = note; }
+    const watch = held ? spectate.target(view, me.id) : null;
+    const mates = held ? view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length : 0;
+    const key = held ? `${lifted}|${watch}|${mates}|${spectate.any}|${squad?.extracted ?? 0}|${squad?.banked?.length ?? 0}` : '';
     if (this.c.held === key) return;
     this.c.held = key;
     this.heldEl.hidden = !held;
@@ -490,13 +503,20 @@ export class ExHud {
     if (held) this.hud.controls?.setDown(true);
     if (!held) return;
     const w = watch && view.players.find(p => p.id === watch);
-    const banked = squad?.banked ?? [];
-    this.heldEl.classList.toggle('won', lifted || !!squad?.extracted);
-    this.heldEl.querySelector('b').textContent = lifted ? 'Extracted' : squad?.extracted ? 'Squad got out' : 'Out of lives';
-    this.heldEl.querySelector('.what').textContent = lifted || squad?.extracted ? `${banked.length} contract${banked.length === 1 ? '' : 's'} banked` : `${squad?.pot?.length ?? 0} contracts pending`;
-    this.heldEl.querySelector('small').textContent = w ? `Watching ${w.name}.${!squad?.extracted ? ' If anyone in your squad gets out, the pot is banked for you too: stay to keep that chance.' : ' Leave whenever you like: it is banked.'}` : 'Leave for your results, or watch until the match ends.';
-    const mates = view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length;
-    this.heldEl.querySelector('.ex-spec-next').hidden = mates < 2;
+    const others = !mates && !!w, choosing = !mates && !spectate.any;
+    const banked = squad?.banked ?? [], out = lifted || !!squad?.extracted;
+    const $ = q => this.heldEl.querySelector(q);
+    this.heldEl.classList.toggle('watching', !!w);
+    this.heldEl.classList.toggle('won', out);
+    $('b').innerHTML = others ? `Watching ${nameHtml(w.name)}` : lifted ? 'Extracted' : out ? 'Squad got out' : 'Out of lives';
+    $('.place').textContent = out ? `${banked.length} banked` : `${squad?.pot?.length ?? 0} pending`;
+    $('small').textContent = mates ? (out ? `Watching ${w?.name ?? 'your squad'}. Leave whenever you like: it is banked.` : `Watching ${w?.name ?? 'your squad'}. If anyone of your squad gets out, the pot is banked for you too.`)
+      : others ? `${out ? `${banked.length} banked` : 'Nothing banked'}  /  ${view.players.filter(p => p.team === w.team && p.alive).length} of theirs up`
+      : choosing ? 'Watch the rest, or see your results now.' : 'Nobody left to watch.';
+    $('.ex-spec').hidden = !choosing;
+    $('.ex-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
+    $('.ex-spec-next').textContent = mates ? 'Next teammate' : 'Next player';
+    $('.ex-spec-squad').hidden = !others;
   }
 
   // ---- Events: feed lines and callouts ----
@@ -504,7 +524,7 @@ export class ExHud {
     if (!this.on || !view) return;
     const me = view.players.find(p => p.id === view.localId);
     if (!me) return;
-    const name = id => { const p = view.players.find(q => q.id === id); return p ? `<em style="color:${p.team === EX_AI_TEAM ? AI_CSS : TEAMS[p.team]?.css ?? '#fff'}">${esc(p.name)}</em>` : '?'; };
+    const name = id => { const p = view.players.find(q => q.id === id); return p ? `<em style="color:${p.team === EX_AI_TEAM ? AI_CSS : TEAMS[p.team]?.css ?? '#fff'}">${nameHtml(p.name)}</em>` : '?'; };
     const mine = t => t === me.team;
     switch (e.t) {
       case 'down':
@@ -530,7 +550,10 @@ export class ExHud {
         this.#callout(e.final ? 'Final exfil' : 'Exfil open', e.final ? 'One last helicopter. It lands soon and stays to the end.' : `${e.sites.length} landing zones open. Stand in one and call it.`);
         break;
       case 'excall':
-        if (mine(e.team)) this.#callout('Exfil called', `The helicopter lands in ${EX.inbound} s. Hold the zone.`);
+        if (mine(e.team)) {
+          this.#callout('Exfil called', `The helicopter lands in ${EX.inbound} s. Hold the zone.`);
+          this.hud.music?.cue?.('exfil');      // The music engine's exfil moment (a no-op until it is wired).
+        }
         else if (Math.hypot(e.x - me.x, e.z - me.z) < 160) this.hud.notify('Another squad called an exfil nearby');
         break;
       case 'exland':
