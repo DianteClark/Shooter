@@ -5,10 +5,21 @@
 //   node dev/balance-sim.mjs --gun=pdw,battle        named guns only
 //   node dev/balance-sim.mjs --sidearms              the sidearms, carried as the main gun, against each other
 //   node dev/balance-sim.mjs --human                 the scripted human-like thumb (js/sim/humanlike.js) against bots
+//   node dev/balance-sim.mjs --realistic             lobbies like the owner's: see REALISTIC below
 //   options: --rounds=3 --seconds=120 --seed=1 --maps=pier+turnstile,railyard+dust,foundry+canyon --modes=tdm,dom --skill=mixed|regular|...
 //            --trials=3 (duels per pairing, distance and scenario) --no-matches --no-duels --kits (bot attachments)
 //            --streaks --equipment (both off by default: this measures guns) --json=out.json --compare=before.json
 //            --assist=0.8 (human: Options aim-assist slider) --thumb=key:value,... (override THUMB fields)
+//
+// REALISTIC (--realistic, Pass 2): what a real lobby is, as opposed to a gun lab. Rosters come from the game's own
+// buildRoster (js/sim/sim.js) with Mixed skill, so bots draw their primaries, kits, perks, equipment and streaks the way
+// they do in a match (twelve consecutive guns from a seeded offset, not mirrored); scorestreaks and equipment are on;
+// the mode's own score limit applies; maps and modes are drawn the way Quick Play draws them (js/ui/vote.js
+// resolvePick: map by size-tier weight, then any mode it hosts; Gun Game is left out because it hands out its own
+// guns); and one human-like thumb (js/sim/humanlike.js) carries the gun under test (--gun / --class pick the thumb's
+// guns; default: two of every class). --maps / --modes given explicitly replace the draw. Reported: every primary's
+// K/D across all bots in those lobbies, and the thumb's K/D with each gun it carried. --seconds (default 300) caps a
+// match; --rounds lobbies per thumb gun (default 3).
 //
 // MATCHES are mirrored: both teams field the same six guns in the same slots at the same skill, so a gun's kills and
 // deaths are earned against an identical field. A round deals every gun into a set of six once and plays each set on
@@ -23,8 +34,9 @@
 // gun in the run's list), so 50% is par at that distance.
 
 import { writeFileSync, readFileSync } from 'node:fs';
-import { MAPS, sizeOf } from '../js/shared/map.js';
-import { Sim } from '../js/sim/sim.js';
+import { MAPS, MAP_IDS, SIZES, sizeOf } from '../js/shared/map.js';
+import { MODES, MODE_IDS, modeFitsMap } from '../js/shared/modes.js';
+import { Sim, buildRoster } from '../js/sim/sim.js';
 import { SIM_HZ, PRIMARY_IDS, SECONDARY_IDS, GOLDEN_ID, CATEGORIES } from '../js/shared/constants.js';
 import { WEAPONS } from '../js/shared/weapons.js';
 import { normalizeLoadout } from '../js/shared/catalog.js';
@@ -38,12 +50,14 @@ const has = k => args.includes(`--${k}`);
 const opt = (k, d) => { const a = args.find(x => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const SEED = Number(opt('seed', 1));
 const ROUNDS = Number(opt('rounds', 3));
-const SECONDS = Number(opt('seconds', 120));
+const REALISTIC = has('realistic');
+const SECONDS = Number(opt('seconds', REALISTIC ? 300 : 120));
+const QUICK = REALISTIC && !opt('maps', null) && !opt('modes', null);
 const TRIALS = Number(opt('trials', 3));
 // A + B alternates by round, so a default run covers two maps of each size for the price of one.
 const MAP_LIST = opt('maps', 'pier+turnstile,railyard+dust,foundry+canyon').split(',').map(m => m.split('+'));
 const mapsFor = round => MAP_LIST.map(alts => alts[round % alts.length]);
-const MODE_LIST = opt('modes', 'tdm,dom').split(',');
+const MODE_LIST = opt('modes', REALISTIC ? 'tdm,dom,kc' : 'tdm,dom').split(',');
 const SKILL = opt('skill', 'regular');
 const MIXED = ['regular', 'veteran', 'regular', 'recruit', 'regular', 'elite'];
 const STEP = 1 / SIM_HZ;
@@ -102,8 +116,8 @@ function loadoutFor(gun, skill, i) {
 function quiet(sim) {
   for (const p of sim.players) {
     if (!p.bot) continue;
-    if (!has('streaks')) p.bot._thinkStreaks = () => {};
-    if (!has('equipment')) p.bot._thinkEquipment = () => {};
+    if (!has('streaks') && !REALISTIC) p.bot._thinkStreaks = () => {};
+    if (!has('equipment') && !REALISTIC) p.bot._thinkEquipment = () => {};
   }
 }
 
@@ -319,6 +333,116 @@ function runHuman() {
   return out;
 }
 
+// ---- Realistic lobbies -----------------------------------------------------------------------------------------
+
+// Two of every class that has primaries: what the thumb carries when no --gun/--class is given.
+function defaultThumbGuns() {
+  const out = [];
+  for (const c of CATEGORIES) out.push(...POOL.filter(id => WEAPONS[id].category === c).slice(0, 2));
+  return out;
+}
+
+// js/ui/vote.js resolvePick(RANDOM, RANDOM), without the UI module: a map by size-tier weight, then a mode it hosts.
+const QUICK_MODES = MODE_IDS.filter(m => MODES[m].rules !== 'gun');
+function quickPick(rng) {
+  const maps = MAP_IDS.filter(id => QUICK_MODES.some(m => modeFitsMap(MAPS[id], m)));
+  const per = {};
+  for (const id of maps) per[sizeOf(MAPS[id])] = (per[sizeOf(MAPS[id])] ?? 0) + 1;
+  const w = maps.map(id => SIZES[sizeOf(MAPS[id])].weight / per[sizeOf(MAPS[id])]);
+  let x = rng() * w.reduce((a, b) => a + b, 0), mapId = maps[maps.length - 1];
+  for (let i = 0; i < maps.length; i++) if ((x -= w[i]) < 0) { mapId = maps[i]; break; }
+  const modes = QUICK_MODES.filter(m => modeFitsMap(MAPS[mapId], m));
+  return { mapId, mode: modes[Math.floor(rng() * modes.length)] };
+}
+
+function runRealistic() {
+  const thumb = thumbFromArgs();
+  const thumbGuns = FOCUS || defaultThumbGuns();
+  const bots = {}, thumbRows = {}, perThumbGun = {};
+  // How bots holding each gun die, from the kill events: by a streak or thrown kit, or by gunfire inside 10 m.
+  const how = {};
+  const t0 = performance.now();
+  let n = 0;
+  const lobbies = [];
+  for (let r = 0; r < ROUNDS; r++) {
+    if (QUICK) {
+      // The same draw for every thumb gun in a round, so guns are compared on the same lobbies.
+      const rng = mulberry32(hash('quick', SEED, r));
+      for (let k = 0; k < 6; k++) lobbies.push({ r, ...quickPick(rng) });
+    } else for (const mapId of mapsFor(r)) for (const mode of MODE_LIST) lobbies.push({ r, mapId, mode });
+  }
+  for (const g of thumbGuns) for (const { r, mapId, mode } of lobbies) {
+    const seed = hash('real', SEED, r, g, mapId, mode);
+    const human = { id: 'me', name: 'thumb', team: 0, loadout: { primary: g, secondary: 'pistol' } };
+    const roster = buildRoster([human], { botSkill: 'mixed', mapId, mode, seed });
+    // The thumb rides a BotBrain for everything but its right thumb, so the sim has to make it one.
+    const me = roster.find(e => e.id === 'me');
+    me.isBot = true; me.skill = 'regular';
+    // The mode's own limits; the loop below stops at SECONDS (an S&D round timer is the mode's business).
+    const sim = new Sim({ roster, map: MAPS[mapId], seed, mode });
+    sim.step(STEP);
+    makeHumanLike(sim, 'me', thumb);
+    quiet(sim);
+    const tel = new MatchTelemetry({ localId: 'me' });
+    tel.mapId = mapId;
+    const end = Math.round((3.2 + SECONDS) * SIM_HZ) + 5;
+    for (let tick = 0; tick < end && sim.phase !== 'ended'; tick++) {
+      sim.step(STEP);
+      const ev = sim.drainEvents();
+      if (ev.length || tick % 3 === 0) tel.onEvents(ev, lightView(sim, 'me'));
+      for (const e of ev) {
+        if (e.t !== 'kill' || e.target === 'me' || !e.vw || e.by === e.target) continue;
+        const h = how[e.vw] ||= { n: 0, kit: 0, close: 0 };
+        h.n++;
+        if (e.streak || e.equip) h.kit++;
+        else if (e.dist < 10) h.close++;
+      }
+    }
+    const rec = tel.finish(lightView(sim, 'me'));
+    n++;
+    if (!rec) continue;
+    // Bots only: everyone minus the thumb.
+    const mine = rec.g.m;
+    const others = {};
+    for (const gun in rec.g.a) others[gun] = rec.g.a[gun].map((v, i) => v - (mine[gun]?.[i] || 0));
+    foldRows(bots, others);
+    foldRows(thumbRows, { [g]: mine[g] || [] });
+    foldRows((perThumbGun[g] ||= {}), others);
+  }
+  return { bots, thumbRows, perThumbGun, thumbGuns, how, n, ms: performance.now() - t0 };
+}
+
+function reportRealistic(res) {
+  const ids = sortGuns(POOL);
+  const rowsOf = rows => Object.fromEntries(gunRows({ g: { x: rows }, pm: { x: 1 } }, 'x', ids).map(r => [r.id, r]));
+  const bots = rowsOf(res.bots);
+  console.log(`\nREALISTIC  ${res.n} lobbies of up to ${SECONDS} s (${QUICK ? 'Quick Play draw' : `${MAP_LIST.map(m => m.join('+')).join(', ')} x ${MODE_LIST.join(', ')}`}), Mixed bots, streaks + equipment, one thumb, seed ${SEED}, ${(res.ms / 1000).toFixed(0)} s`);
+  console.log(`${pad('class', 9)}${pad('gun', 11)}${pad('name', 12)} bot K/D  kills deaths  k/min  ads% cone% onAcc   hs%  died to: kit% <10m%`);
+  const json = { seed: SEED, realistic: true, guns: {}, thumb: {} };
+  for (const id of ids) {
+    const r = bots[id];
+    if (!r.kills && !r.deaths) continue;
+    console.log(`${pad(WEAPONS[id].category, 9)}${pad(id, 11)}${pad(WEAPONS[id].name, 12)}${num(r.kd, 2, 8)} ${String(r.kills).padStart(6)} ${String(r.deaths).padStart(6)} ${num(r.kpm)} ${pct(r.adsShare)} ${pct(r.coneShare)} ${num(r.coneAcc)} ${pct(r.head)}          ${pct(res.how[id] ? res.how[id].kit / res.how[id].n : null)} ${pct(res.how[id] ? res.how[id].close / res.how[id].n : null)}`);
+    json.guns[id] = { kd: r.kd, kills: r.kills, deaths: r.deaths, how: res.how[id] };
+  }
+  const prim = ids.filter(id => bots[id].deaths >= 20 && PRIMARY_IDS.includes(id));
+  const out = prim.filter(id => bots[id].kd < 0.8 || bots[id].kd > 1.25);
+  console.log(`bot K/D range ${Math.min(...prim.map(id => bots[id].kd)).toFixed(2)} to ${Math.max(...prim.map(id => bots[id].kd)).toFixed(2)}; primaries outside 0.80-1.25: ${out.length ? out.map(id => `${WEAPONS[id].name} ${bots[id].kd.toFixed(2)}`).join(', ') : 'none'}`);
+  const thumb = rowsOf(res.thumbRows);
+  console.log(`\nTHUMB in those lobbies (bots' all-gun K/D in the same lobbies for reference)`);
+  console.log(`${pad('class', 9)}${pad('gun', 11)}${pad('name', 12)}   K/D  kills deaths  k/min   acc  ads% cone% onAcc   hs%  lobby`);
+  let hk = 0, hd = 0;
+  for (const id of sortGuns(res.thumbGuns)) {
+    const r = thumb[id];
+    const lob = Object.values(res.perThumbGun[id] || {}).reduce((a, row) => [a[0] + row[F.kills], a[1] + row[F.deaths]], [0, 0]);
+    console.log(`${pad(WEAPONS[id].category, 9)}${pad(id, 11)}${pad(WEAPONS[id].name, 12)}${num(r.kd)} ${String(r.kills).padStart(6)} ${String(r.deaths).padStart(6)} ${num(r.kpm)} ${num(r.acc)} ${pct(r.adsShare)} ${pct(r.coneShare)} ${num(r.coneAcc)} ${pct(r.head)} ${num(lob[0] / Math.max(1, lob[1]))}`);
+    json.thumb[id] = { kd: r.kd, kills: r.kills, deaths: r.deaths, adsShare: r.adsShare, coneAcc: r.coneAcc };
+    hk += r.kills; hd += r.deaths;
+  }
+  console.log(`thumb all guns: K/D ${(hk / Math.max(1, hd)).toFixed(2)}`);
+  return json;
+}
+
 // ---- Report -----------------------------------------------------------------------------------------------------
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -401,7 +525,10 @@ function reportHuman(h) {
 let before = null;
 if (opt('compare', null)) { try { before = JSON.parse(readFileSync(opt('compare'), 'utf8')); } catch { console.error('cannot read --compare file'); } }
 
-if (has('human')) {
+if (REALISTIC) {
+  const json = reportRealistic(runRealistic());
+  if (opt('json', null)) writeFileSync(opt('json'), JSON.stringify(json, null, 1));
+} else if (has('human')) {
   reportHuman(runHuman());
 } else {
   const matches = has('no-matches') ? null : runMatches();

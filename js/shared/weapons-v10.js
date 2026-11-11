@@ -44,7 +44,7 @@ export const V10_WEAPONS = {
   // strings stay laser straight; hold it down and it locks up in the open.
   heatar: {
     id: 'heatar', name: 'Kiln', role: 'Heat rifle', auto: true,
-    damage: 27, rpm: 620, magazine: 75, reserve: 150, reload: 3.4, range: 46,
+    damage: 27, rpm: 605, magazine: 75, reserve: 150, reload: 3.4, range: 46,
     falloff: { start: 18, end: 32, min: 0.68 }, penetrate: 0.7,
     adsSpread: 0.0075, hipSpread: 0.06, bloomPerShot: 0, bloomRecover: 2, bloomScale: 1.6,
     heat: { rounds: 17, coolDelay: 0.3, coolTime: 1.5, lockout: 1.8, loosenFrom: 0.6 },
@@ -72,8 +72,8 @@ export const V10_WEAPONS = {
   // changing drums with. Heavy for its class and loose from the hip.
   drumsmg: {
     id: 'drumsmg', name: 'Hopper', role: 'High capacity', auto: true,
-    damage: 23, rpm: 880, magazine: 64, reserve: 192, reload: 2.8, range: 27,
-    falloff: { start: 10, end: 18, min: 0.5 },
+    damage: 24, rpm: 920, magazine: 64, reserve: 192, reload: 2.8, range: 27,
+    falloff: { start: 11, end: 18, min: 0.55 },
     adsSpread: 0.02, hipSpread: 0.036, bloomPerShot: 0.035, bloomRecover: 2.8, bloomScale: 1.4,
     pattern: { amp: 0.013, freq: 1.2, ramp: 6 },
     adsTime: 0.15, sprintToFire: 0.11, swapTime: 0.34, moveMult: 1.03, adsMoveMult: 0.72,
@@ -87,9 +87,9 @@ export const V10_WEAPONS = {
   magshot: {
     id: 'magshot', name: 'Trammel', role: 'Mag-fed', auto: false,
     damage: 20, rpm: 230, magazine: 8, reserve: 42, reload: 1.7, range: 14,
-    falloff: { start: 6, end: 11, min: 0.3 },
+    falloff: { start: 7.5, end: 11, min: 0.3 },
     adsSpread: 0.045, hipSpread: 0.078, bloomPerShot: 0.14, bloomRecover: 1.8, bloomScale: 0.45, turnCap: 8,
-    adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.4, moveMult: 1.03, adsMoveMult: 0.7,
+    adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.4, moveMult: 1.08, adsMoveMult: 0.7,
     pellets: 8, kickCam: 0.9, tracerWidth: 0.5, longshot: 9,
     botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 11, precise: true },
   },
@@ -99,9 +99,9 @@ export const V10_WEAPONS = {
   flechette: {
     id: 'flechette', name: 'Thistle', role: 'Flechette', auto: false,
     damage: 19, rpm: 140, magazine: 5, reserve: 40, reload: 0.5, range: 30,
-    falloff: { start: 12, end: 24, min: 0.6 }, penetrate: 0.6,
+    falloff: { start: 13, end: 24, min: 0.6 }, penetrate: 0.6,
     adsSpread: 0.013, hipSpread: 0.045, bloomPerShot: 0.3, bloomRecover: 2, bloomScale: 0.6, turnCap: 9,
-    adsTime: 0.21, sprintToFire: 0.16, swapTime: 0.42, moveMult: 1.0, adsMoveMult: 0.66,
+    adsTime: 0.21, sprintToFire: 0.16, swapTime: 0.42, moveMult: 1.03, adsMoveMult: 0.66,
     pellets: 5, shellReload: true, kickCam: 0.95, tracerWidth: 0.45, longshot: 17,
     botUse: { pref: 11, hold: 0.8, flank: 1.2, advance: 3, rush: 20, scoped: true, fireMax: 24, precise: true },
   },
@@ -126,9 +126,9 @@ export const V10_WEAPONS = {
   // over at once. Miss the first pair and the gap before the next is the longest of the semi rifles.
   twinshot: {
     id: 'twinshot', name: 'Tandem', role: 'Paired shots', auto: true,
-    damage: 42, rpm: 270, burst: { count: 2, gap: 0.085 }, magazine: 16, reserve: 96, reload: 2.4, range: 54,
-    falloff: { start: 22, end: 38, min: 0.7 }, penetrate: 0.75,
-    adsSpread: 0.0035, hipSpread: 0.08, bloomPerShot: 0.22, bloomRecover: 2.4, bloomScale: 1.3,
+    damage: 42, rpm: 290, burst: { count: 2, gap: 0.085 }, magazine: 16, reserve: 96, reload: 2.4, range: 54,
+    falloff: { start: 25, end: 38, min: 0.75 }, penetrate: 0.75,
+    adsSpread: 0.0035, hipSpread: 0.08, bloomPerShot: 0.18, bloomRecover: 2.4, bloomScale: 1.3,
     pattern: { amp: 0.009, freq: 1.2, ramp: 1 }, turnCap: 9,
     adsTime: 0.25, sprintToFire: 0.24, swapTime: 0.4, moveMult: 0.96, adsMoveMult: 0.52,
     pellets: 1, kickCam: 0.75, tracerWidth: 1.2, longshot: 28,
@@ -139,8 +139,8 @@ export const V10_WEAPONS = {
   // where they came from. Handles like a carbine and fades like one.
   hushdmr: {
     id: 'hushdmr', name: 'Nightjar', role: 'Quiet rifle', auto: false, suppressed: true,
-    damage: 50, rpm: 230, magazine: 10, reserve: 70, reload: 2.2, range: 44,
-    falloff: { start: 14, end: 28, min: 0.68 }, penetrate: 0.6,
+    damage: 52, rpm: 255, magazine: 10, reserve: 70, reload: 2.2, range: 44,
+    falloff: { start: 14, end: 28, min: 0.72 }, penetrate: 0.6,
     adsSpread: 0.0035, hipSpread: 0.07, bloomPerShot: 0.4, bloomRecover: 2.4, bloomScale: 1.2, turnCap: 11,
     adsTime: 0.21, sprintToFire: 0.19, swapTime: 0.36, moveMult: 1.0, adsMoveMult: 0.6,
     pellets: 1, kickCam: 0.55, tracerWidth: 0.85, longshot: 24,
@@ -152,11 +152,11 @@ export const V10_WEAPONS = {
   // is there before a bolt gun has finished cycling, at any range it reaches.
   scout: {
     id: 'scout', name: 'Harrier', role: 'Straight-pull', auto: false,
-    damage: 92, rpm: 120, magazine: 7, reserve: 42, reload: 2.6, range: 68,
+    damage: 92, rpm: 130, magazine: 7, reserve: 42, reload: 2.6, range: 68,
     falloff: { start: 36, end: 52, min: 0.72 }, penetrate: 0.8,
     adsSpread: 0.002, hipSpread: 0.15, bloomPerShot: 0.4, bloomRecover: 1.8, bloomScale: 1,
     adsGate: 0.55, turnCap: 6.5,
-    adsTime: 0.23, sprintToFire: 0.28, swapTime: 0.46, moveMult: 0.97, adsMoveMult: 0.55,
+    adsTime: 0.21, sprintToFire: 0.28, swapTime: 0.46, moveMult: 0.97, adsMoveMult: 0.55,
     pellets: 1, kickCam: 0.9, tracerWidth: 1.4, longshot: 30,
     botUse: { pref: 24, hold: 1.7, flank: 0.6, advance: 2, scoped: true, adsMin: 0.85, precise: true, sight: 4 },
   },
@@ -166,11 +166,11 @@ export const V10_WEAPONS = {
   // if you let go.
   rail: {
     id: 'rail', name: 'Lodestone', role: 'Charge shot', auto: false,
-    damage: 150, rpm: 70, charge: { time: 0.35 }, magazine: 4, reserve: 20, reload: 3.4, range: 82,
+    damage: 150, rpm: 70, charge: { time: 0.3 }, magazine: 4, reserve: 20, reload: 2.8, range: 82,
     falloff: { start: 55, end: 75, min: 0.8 }, penetrate: 0.95,
     adsSpread: 0.0012, hipSpread: 0.18, bloomPerShot: 0.7, bloomRecover: 1, bloomScale: 1,
     adsGate: 0.42, turnCap: 3.8,
-    adsTime: 0.36, sprintToFire: 0.42, swapTime: 0.66, moveMult: 0.88, adsMoveMult: 0.36,
+    adsTime: 0.32, sprintToFire: 0.42, swapTime: 0.66, moveMult: 0.88, adsMoveMult: 0.36,
     pellets: 1, kickCam: 1.5, tracerWidth: 1.8, longshot: 36,
     botUse: { pref: 30, hold: 2.3, flank: 0.3, advance: 2, scoped: true, adsMin: 0.85, precise: true, sight: 6 },
   },

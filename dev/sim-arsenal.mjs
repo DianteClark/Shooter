@@ -225,7 +225,7 @@ test('Murmur, Nightjar, Gaff, Maul: suppressed by nature, and cannot take a Hush
 
 test('Hopper: 64 rounds without a reload, far more than any other SMG', () => {
   const ps = shooter('drumsmg');
-  const n = run(ps, 63 * 60 / 880, { fire: true }).length;
+  const n = run(ps, 63 * 60 / WEAPONS.drumsmg.rpm, { fire: true }).length;
   assert.ok(n >= 63 && n <= 64, `${n} rounds in one string`);
   assert.ok(ps.ammo[0] <= 1 && ps.reloadT === 0, 'still on the first drum');
   for (const id of ['smg', 'pdw', 'tacsmg', 'heavysmg', 'hushsmg']) assert.ok(WEAPONS[id].magazine * 1.75 <= 64);   // Skitter went to 36 in the V10 balance pass.
@@ -275,7 +275,7 @@ test('Tandem: two rounds per pull, a hair apart, committed once started', () => 
   const t = run(ps, 1.0, { fire: true }).map(s => s.t);
   assert.ok(t.length >= 4 && t.length % 2 === 0);
   for (let i = 0; i + 1 < t.length; i += 2) assert.ok(Math.abs(t[i + 1] - t[i] - 0.085) < 0.02, 'pair gap');
-  assert.ok(Math.abs(t[2] - t[0] - 2 * 60 / 270) < 0.03, 'pairs at 135 a minute');
+  assert.ok(Math.abs(t[2] - t[0] - 2 * 60 / WEAPONS.twinshot.rpm) < 0.03, 'pairs at half the rpm');
   const tap = shooter('twinshot');
   const one = [...run(tap, DT, { fire: true }), ...run(tap, 0.4)];
   assert.equal(one.length, 2, 'a tap still sends the pair');

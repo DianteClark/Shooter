@@ -28,10 +28,13 @@ export const THUMB = {
   fireCone: 0.5,          // The thumb is past the ring once it is pointing this close to the target.
   overhold: 1.0,          // Seconds the trigger stays down after the target is gone.
   prefire: 1.5,           // Seconds it sprays toward a fresh contact it cannot see (a noise, a callout, a corner).
-  settle: 0.25,           // Share of fights fought with the move stick eased into ADS.
+  settle: 0.25,           // Share of fights fought with the move stick eased into ADS...
+  settleLong: 0.8,        // ...and with a gun that wants the sights (botUse.scoped). Pass 2: the owner's Foreman was 83% aimed.
   strafe: 0.9,            // Share of the time it is strafing in a fight.
-  sight: 20,              // Metres: what fits on the screen around the player.
+  sight: 20,              // Metres: what fits on the screen around the player...
+  adsLook: 7.5,           // ...plus the camera's lead toward the aim at full ADS (js/render/renderer.js ADS_LOOK).
   assist: 1,              // The Options aim-assist slider (controls.aimAssist), 0..1.
+  tapAll: 0,              // 1: every semi-automatic is tapped with the sights on the body (a careful player), not held.
 };
 
 const POS = { x: 0, z: 0 };
@@ -53,11 +56,13 @@ export class HumanLikeBrain extends BotBrain {
   _acquire(q, d) {
     super._acquire(q, d);
     const rng = this.sim.rng;
-    this.useAds = rng() < this.H.settle || !!weaponDef(this.ps).adsGate;
+    const w = weaponDef(this.ps);
+    this.useAds = rng() < (w.botUse?.scoped ? this.H.settleLong ?? this.H.settle : this.H.settle) || !!w.adsGate;
     this.flickErr = gaussian(rng) * this.H.flick;
   }
 
   drive(dt) {
+    this.S.sight = this.H.sight + (this.H.adsLook || 0) * this.ps.adsT;
     super.drive(dt);
     const { sim, ps, input: I, H } = this;
     const rng = sim.rng;
@@ -82,7 +87,7 @@ export class HumanLikeBrain extends BotBrain {
       const off = Math.abs(angleDiff(this.stick, want));
       if (this.reactLeft <= 0 && d <= w.range * 1.1) {
         // A gun that kills in a round or two is tapped when the sights cross the body; everything else is held.
-        const tap = !w.auto && (w.damage * (w.pellets || 1) >= 50 || w.adsGate);
+        const tap = !w.auto && (w.damage * (w.pellets || 1) >= 50 || w.adsGate || H.tapAll);
         fire = tap ? Math.abs(angleDiff(ps.aim, want)) < Math.atan2(0.55, d) + 0.02 && (!w.adsGate || ps.adsT >= 0.85)
           : off < H.fireCone;
       }
