@@ -115,8 +115,8 @@ export class BrFx {
     this.chutes = inst(canopyGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: THREE.DoubleSide }), CHUTE_MAX);
     // Revive progress over the downed player and whoever is picking them up: a dark bar and its fill.
     const bar = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    this.barBg = inst(bar, new THREE.MeshBasicMaterial({ color: 0x10141a, transparent: true, opacity: 0.75, depthWrite: false, depthTest: false }), BAR_MAX);
-    this.barFill = inst(bar.clone(), new THREE.MeshBasicMaterial({ color: 0x59d36b, depthWrite: false, depthTest: false }), BAR_MAX);
+    this.barBg = inst(bar, new THREE.MeshBasicMaterial({ color: 0x0a0d11, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, toneMapped: false }), BAR_MAX);
+    this.barFill = inst(bar.clone(), new THREE.MeshBasicMaterial({ color: 0x7dff8f, depthWrite: false, depthTest: false, toneMapped: false, fog: false }), BAR_MAX);
     this.barBg.renderOrder = 8; this.barFill.renderOrder = 9;
     // Landing pings: a teammate's chosen spot, a beam and a ring for a few seconds (js/ui/br-hud.js sends them).
     this.pingRings = inst(new THREE.RingGeometry(1.1, 1.5, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), PING_MAX);
@@ -228,9 +228,9 @@ export class BrFx {
       }
       for (const at of helper ? [d, helper] : [d]) {
         const k = Math.max(0.02, Math.min(1, d.reviveK));
-        V.set(at.x, 2.4, at.z - 1.05); Q.identity(); S.set(1.5, 1, 0.2);
+        V.set(at.x, 2.6, at.z - 0.75); Q.identity(); S.set(1.9, 1, 0.32);
         this.barBg.setMatrixAt(nBar, M4.compose(V, Q, S));
-        V.set(at.x - 0.72 + 0.72 * k, 2.42, at.z - 1.05); S.set(1.44 * k, 1, 0.13);
+        V.set(at.x - 0.88 + 0.88 * k, 2.62, at.z - 0.75); S.set(1.76 * k, 1, 0.2);
         this.barFill.setMatrixAt(nBar++, M4.compose(V, Q, S));
       }
     }

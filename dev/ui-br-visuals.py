@@ -41,11 +41,15 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"(() => {{ const b = {G}.match.hud.brHud; b.c.mapDismissed = true; b.toggleMap(false); }})()")
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       for (const q of sim.players) if (q.team === me.team && q !== me && q.brAir === 1) {{ sim.br._jump(q); q.br.glideT = 30; }} }})()""")
-    await pg.wait_for_timeout(1500)
-    await shot('30-canopies')
-    await crop('30-canopies')
     await ev(f"{G}.match.brCommand('jump')")
     await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=20000)
+    # A squadmate still under its canopy, gliding in next to us.
+    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
+      const q = sim.players.find(p => p.team === me.team && p !== me && p.alive); q.brAir = 2; q.br.glideT = 4; q.br.follow = null;
+      q.ps.x = m.ps.x - 6; q.ps.z = m.ps.z - 2; q.br.dropX = m.ps.x + 6; q.br.dropZ = m.ps.z - 2; }})()""")
+    await pg.wait_for_timeout(700)
+    await shot('30-canopies')
+    await crop('30-canopies')
     await pg.wait_for_timeout(500)
     # Stage: everyone else far off and shielded, the squad around the local player in the open.
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), nav = sim.nav;
@@ -57,10 +61,11 @@ async def run(browser, vw, vh, failures, errors):
       }}
       window.__mate = sim.players.find(p => p.team === me.team && p !== me && p.alive).id; }})()""")
     await pg.wait_for_timeout(900)
-    # The squadmate goes down five metres off and crawls; the rest of the squad is sent away so only we can revive.
+    # The rest of the squad is out, so the squadmate who goes down right next to us and we pick them up.
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), q = sim.byId.get(window.__mate), foe = sim.players.find(p => p.team !== me.team);
-      q.ps.x = m.ps.x + 5; q.ps.z = m.ps.z; q.spawnProtect = 0; q.br.armor = 0; sim._damage(q, foe, 999, 'ar', 10);
-      for (const p of sim.players) if (p.team === me.team && p !== me && p !== q) {{ p.ps.x = m.ps.x - 40; p.ps.z = m.ps.z; p.bot?.setObjective({{ key: 'away', role: 'hold', x: m.ps.x - 40, z: m.ps.z, r: 2 }}); }} }})()""")
+      q.ps.x = m.ps.x + 1.6; q.ps.z = m.ps.z + 0.4;
+      for (const p of sim.players) if (p.team === me.team && p !== me && p !== q) {{ p.spawnProtect = 0; p.br.armor = 0; sim._damage(p, foe, 999, 'ar', 10); sim._damage(p, foe, 999, 'ar', 10); }}
+      q.spawnProtect = 0; q.br.armor = 0; sim._damage(q, foe, 999, 'ar', 10); }})()""")
     await pg.wait_for_timeout(1300)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === window.__mate).downed")
     if not downed: failures.append(f'{vw}: the squadmate did not go down')
@@ -69,9 +74,9 @@ async def run(browser, vw, vh, failures, errors):
     # Stand next to them: the revive runs, bars over both, our kneel.
     try:
         await pg.wait_for_function(f"({G}.match.interp.newest.players.find(p => p.id === window.__mate).reviveK ?? 0) > 0.45", timeout=15000)
+        if await pg.locator('.br-reviving').is_hidden(): failures.append(f'{vw}: no reviving bar on the HUD')
         await shot('32-revive')
         await crop('32-revive')
-        if await pg.locator('.br-reviving').is_hidden(): failures.append(f'{vw}: no reviving bar on the HUD')
     except Exception:
         failures.append(f'{vw}: the revive never started')
     await pg.locator('.minimap').screenshot(path=f'{OUT}/33-minimap-{vw}x{vh}.png')

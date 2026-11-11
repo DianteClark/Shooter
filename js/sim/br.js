@@ -1324,7 +1324,9 @@ export class BrRules {
     out.push(sim.tick % 90 === 0 || sim.phase === 'ended' ? this._stats() : 0);   // For the results screen: rarely.
     // Host migration: now and then each human guest gets what only the host knows (everyone's inventory, the circle's
     // own clock, bot drop plans), so whichever phone takes over can carry the match on (restore).
-    if (guest && !guest.isBot && (sim.tick + guest.index * 7) % BACKUP_EVERY === 0) out.push(this.backup());
+    // Half the players at a time, so no one snapshot carries the whole pack list.
+    const bt = sim.tick + guest?.index * 7;
+    if (guest && !guest.isBot && bt % (BACKUP_EVERY / 2) === 0 && sim.tick % 90 > 4) out.push(this.backup((bt / (BACKUP_EVERY / 2)) & 1));
     return out;
   }
 
@@ -1334,16 +1336,17 @@ export class BrRules {
   // ammo1, res1, downedBy index, use kind, use time, glide time, jumpAt, dropX, dropZ, follow index, revive count, dmg,
   // knocks, deathT] with a gun as [weapon index, rarity, packed kit] or 0; then the rules' own clock and the circle's
   // shrink start.
-  backup() {
-    const sim = this.sim, idx = id => (id ? sim.byId.get(id)?.index ?? -1 : -1);
-    const per = sim.players.map(p => {
+  backup(half = -1) {
+    const sim = this.sim, idx = id => (id ? sim.byId.get(id)?.index ?? -1 : -1), n = sim.players.length;
+    const per = sim.players.map((p, i) => {
       const b = p.br, ps = p.ps;
-      if (!b) return 0;
+      if (!b || !p.alive || (half === 0 && i >= n / 2) || (half === 1 && i < n / 2)) return 0;
+      const air = p.brAir !== 0;      // Drop plans only matter until the landing; damage, revives and knocks ride the stats.
       const g = s => (b.guns[s] ? [WEAPON_IDS.indexOf(b.guns[s].id), b.guns[s].r, packKit(b.guns[s].kit)] : 0);
       void ps;
       return [b.plates, b.meds, b.kits, g(0), g(1), this._ammoIn(p, 0), this._resIn(p, 0), this._ammoIn(p, 1), this._resIn(p, 1), idx(b.downedBy), USE_KINDS.indexOf(b.useK),
-        Math.round(b.useT * 10), Math.round(b.glideT * 10), Math.round(b.jumpAt * 1000), Math.round(b.dropX), Math.round(b.dropZ), idx(b.follow),
-        b.revives, Math.round(b.dmg), b.knocks, Math.round(b.deathT * 10), b.pouch, b.stash ? b.stash.slot : -1];
+        Math.round(b.useT * 10), air ? Math.round(b.glideT * 10) : 0, air ? Math.round(b.jumpAt * 1000) : 0, air ? Math.round(b.dropX) : 0, air ? Math.round(b.dropZ) : 0, air ? idx(b.follow) : -1,
+        0, 0, 0, 0, b.pouch.some(Boolean) ? b.pouch : 0, b.stash ? b.stash.slot : -1];
     });
     return [Math.round(this.t * 10), r1(this.from.x), r1(this.from.z), r1(this.from.r), this.dropsPlanned ? 1 : 0, per];
   }
@@ -1388,7 +1391,8 @@ export class BrRules {
       b.landed = p.brAir === 0;
       const st = stats?.[i];
       if (st) { b.dmg = st[0]; b.revives = st[1]; b.knocks = st[2]; }
-      const e = bk?.[5]?.[i];
+      const e = p.alive ? bk?.[5]?.[i] : null;
+      if (!p.alive) { b.guns = [null, null]; b.plates = 0; b.meds = 0; b.kits = 0; b.pouch = [0, 0, 0, 0, 0]; b.stash = null; }
       if (e) {
         [b.plates, b.meds, b.kits] = e;
         const weapon = ps.weapon;
@@ -1409,9 +1413,8 @@ export class BrRules {
         p.primary = ps.primary;
         b.downedBy = byIndex(e[9]); b.useK = USE_KINDS[e[10]] ?? null; b.useT = e[11] / 10;
         b.useDur = b.useK === 'plate' ? BR.plateTime : b.useK === 'med' ? BR.medTime : b.useK === 'self' ? BR.selfRevive : 0;
-        b.glideT = e[12] / 10; b.jumpAt = e[13] / 1000; b.dropX = e[14]; b.dropZ = e[15]; b.follow = byIndex(e[16]);
-        b.revives = e[17]; b.dmg = e[18]; b.knocks = e[19]; b.deathT = e[20] / 10;
-        if (Array.isArray(e[21])) b.pouch = e[21].slice(0, 5);
+        if (p.brAir) { b.glideT = e[12] / 10; b.jumpAt = e[13] / 1000; b.dropX = e[14]; b.dropZ = e[15]; b.follow = byIndex(e[16]); }
+        b.pouch = Array.isArray(e[21]) ? e[21].slice(0, 5) : [0, 0, 0, 0, 0];
         b.stash = null;
         const fs = e[22] ?? -1;
         if ((fs === 0 || fs === 1) && b.guns[fs]) {
@@ -1436,7 +1439,11 @@ export class BrRules {
     const players = view.players;
     if (!a) { this._fillView(); view.br = this.view; return; }
     const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats, backup] = a;
-    if (backup) this.saved = backup;           // Kept for a host migration (restore).
+    if (backup) {                              // Kept for a host migration (restore); halves merge into one.
+      const old = this.saved?.[5];
+      if (old) backup[5] = backup[5].map((e, i) => e || old[i] || 0);
+      this.saved = backup;
+    }
     this.plane.f = f / 1000;
     this.plane.fx = fx; this.plane.fz = fz; this.plane.tx = tx; this.plane.tz = tz;
     this.plane.len = Math.hypot(tx - fx, tz - fz) || 1;
