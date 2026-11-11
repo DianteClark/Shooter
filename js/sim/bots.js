@@ -200,8 +200,9 @@ const BOT_KIT_SLOTS = { recruit: 1, regular: 2, veteran: 3, elite: 4 };
 // other life of the deal (i), veterans always, elites every signature; a veteran or elite on one deal in three runs
 // the gun's conversion kit instead (its `set.botUse` changes how the bot fights with it). The class kit fills the
 // slots that are left, up to the tier's count, so a tier never carries more parts than before.
-export function botAttachments(weaponId, skill, i) {
-  const own = availableFor(weaponId).filter(a => a.kind);
+// opts.own false: class parts only, no signatures or kits (battle royale floor loot rolls those itself, by rarity).
+export function botAttachments(weaponId, skill, i, { own: withOwn = true } = {}) {
+  const own = withOwn ? availableFor(weaponId).filter(a => a.kind) : [];
   const sigs = own.filter(a => a.kind === 'sig'), conv = own.find(a => a.kind === 'kit');
   const kits = BOT_KITS[weaponId] || BOT_KITS[KIT_FALLBACK[WEAPONS[weaponId]?.category]];
   if (skill === 'recruit' && i % 2 === 1) return {};

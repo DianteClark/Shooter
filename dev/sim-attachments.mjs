@@ -269,4 +269,27 @@ test('bots fit only parts their gun takes, more of the gun\'s own as skill rises
   assert.ok(KITS.every(k => [0, 1, 2].some(i => botAttachments(k.weapons[0], 'elite', i)[k.slot] === k.id)), 'elites run every kit');
 });
 
+// Battle royale floor loot (js/sim/br.js): class parts by rarity; a signature only on epic and legendary guns, a kit
+// only on legendary; every part one the gun takes; the kit survives the BR wire.
+const { BrRules } = await import('../js/sim/br.js');
+test('battle royale loot: signatures on epic and legendary guns, kits only on legendary, all legal', () => {
+  let a = 7;
+  const rng = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+  const sig = [0, 0, 0, 0, 0], kit = [0, 0, 0, 0, 0], n = [0, 0, 0, 0, 0];
+  for (let i = 0; i < 6000; i++) {
+    const g = BrRules.prototype._rollGun.call({}, rng, i % 2 ? 'chest' : 1);
+    const id = WEAPON_IDS[g.v];
+    n[g.r]++;
+    for (const slot in g.kit) {
+      const att = ATTACHMENTS[g.kit[slot]];
+      assert.ok(isAvailable(id, att.id) && att.slot === slot, `${id} ${att.id}`);
+      if (att.kind === 'sig') sig[g.r]++;
+      if (att.kind === 'kit') kit[g.r]++;
+    }
+    assert.deepEqual(unpackKit(id, packKit(g.kit)), g.kit);
+  }
+  assert.ok(sig[0] + sig[1] + sig[2] === 0 && sig[3] > n[3] * 0.2 && sig[4] > n[4] * 0.3, `signatures by rarity ${sig} of ${n}`);
+  assert.ok(kit[0] + kit[1] + kit[2] + kit[3] === 0 && kit[4] > 0, `kits by rarity ${kit}`);
+});
+
 console.log(`\n${passed} checks passed`);
