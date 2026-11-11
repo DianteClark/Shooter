@@ -2,7 +2,7 @@
 // the rank badge, and the results strip and stamps. Data from Progress.season() / Progress.ranked(); the rules are in
 // js/shared/seasons.js and js/shared/ranked.js.
 //
-//   titleSeason()                       the panel under the title's challenges (opens the Season screen)
+//   seasonChip() / profileRank()        the title's Season chip (days left, a dot when tiers wait) and the card's rank
 //   seasonScreen(menu, { onBack, onPlayRanked, tab })   tabs: track | weekly | ranked
 //   rankBadge(code, size) / rankChip(code)             the division mark (code from ranked.js codeOf; -1 unranked)
 //   seasonStrip(track, ranked)          rows for the results' progress card;  seasonStamp(u) reel cards
@@ -73,24 +73,21 @@ function rewardName(r) {
   return r.id;
 }
 
-/* ---------- Title panel ---------- */
-export function titleSeason() {
+/* ---------- Title: the season chip (the free slot of the title's button grid) and the rank on the profile card ---------- */
+export function seasonChip() {
   let s;
   try { s = Progress.season(); } catch (err) { console.error('season', err); return ''; }
-  const { info, ranked } = s;
-  const def = info.def ?? info.next;
-  const theme = def?.theme ?? ['#151a20', '#2f3944', '#e7eae4', '#f2a63b'];
-  const frac = info.def ? (s.maxed ? 1 : s.into / s.span) : 0;
-  const rk = ranked.placed ? `${rankBadge(ranked.code, 18)}<b>${esc(ranked.division.name)}</b>` : `${rankBadge(-1, 18)}<b>${ranked.pm ? `Placement ${ranked.pm}/${PLACEMENTS}` : 'Unranked'}</b>`;
-  return `<button class="tsn" data-act="season" data-in="right" style="--sa:${theme[3]};--sg:${theme[1]}" aria-label="Season">
-    <span class="tsn-head"><b>${esc(info.def ? info.short : `Season ${def.n}`)}</b><em>${esc(info.def ? info.name : def.name)}</em><small>${ico('timer')}${info.def ? daysText(info.daysLeft) : `Starts in ${info.daysLeft} day${info.daysLeft === 1 ? '' : 's'}`}</small></span>
-    <span class="tsn-row">
-      <span class="tsn-tier">${info.def ? `Tier <u>${s.tier}</u>` : 'Preseason'}</span>
-      <i class="tsn-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
-      ${s.claimable ? `<em class="tsn-claim">${s.claimable} to claim</em>` : ''}
-      <span class="tsn-rank">${rk}</span>
-    </span>
-  </button>`;
+  const { info } = s, def = info.def ?? info.next;
+  const left = info.def ? (info.daysLeft <= 1 ? 'Last day' : `${info.daysLeft}d left`) : `In ${info.daysLeft}d`;
+  return `<button class="chip tsn-chip${s.claimable ? ' has-claim' : ''}" data-act="season" data-in="up" style="--sa:${def.theme[3]}" aria-label="Season, ${esc(left)}">
+    ${icon('ui:star', { size: 15 })}<b>${esc(info.def ? (info.replay ? 'Replay' : `Season ${def.n}`) : `Season ${def.n}`)}</b><small>${esc(left)}</small>${s.claimable ? '<i class="tsn-dot"></i>' : ''}</button>`;
+}
+// The rank on the title's profile card: the division badge once placed (nothing while unranked).
+export function profileRank() {
+  try {
+    const rk = Progress.ranked();
+    return rk.placed ? `<i class="pc-rk" title="${esc(rk.division.name)}">${rankBadge(rk.code, 20)}</i>` : '';
+  } catch { return ''; }
 }
 
 /* ---------- The Season screen ---------- */

@@ -8,28 +8,6 @@
 #ui .rk-chip b { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; }
 #ui .car-id .rk-badge { margin-right: 2px; }
 
-/* ---- Title: the season panel, under the day's challenges ---- */
-#ui .tsn {
-  position: absolute; top: calc(var(--st) + 194px); right: calc(max(var(--sr), 12px) + 8px); width: 272px;
-  display: flex; flex-direction: column; gap: 5px; padding: 6px var(--sp-3) 6px var(--sp-4); text-align: left; color: var(--c-chalk);
-  background: linear-gradient(172deg, color-mix(in srgb, var(--sg) 55%, rgba(29,35,43,.92)), rgba(29,35,43,.92)); box-shadow: var(--bevel), var(--edge), inset 3px 0 0 var(--sa);
-  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
-  overflow: hidden;
-}
-.tsn-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.tsn-head b { flex: none; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--sa); text-transform: uppercase; }
-.tsn-head em { min-width: 0; font: 400 13px/1 var(--f-stencil); font-style: normal; letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tsn-head small { margin-left: auto; flex: none; display: flex; align-items: center; gap: 3px; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); white-space: nowrap; }
-#ui .tsn-head small .ico { height: 11px; color: var(--sa); }
-.tsn-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.tsn-tier { flex: none; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
-.tsn-tier u { text-decoration: none; font: 400 14px/1 var(--f-stencil); color: var(--c-chalk); }
-.tsn-bar { flex: 1; min-width: 30px; position: relative; height: 4px; background: rgba(231,234,228,.14); overflow: hidden; }
-.tsn-bar > i { position: absolute; inset: 0; background: var(--sa); transform-origin: left; }
-.tsn-claim { flex: none; padding: 2px 4px 1px; font: 400 9px/1 var(--f-plate); font-style: normal; letter-spacing: .04em; text-transform: uppercase; color: var(--c-night, #10141a); background: var(--sa); white-space: nowrap; }
-.tsn-rank { flex: none; display: flex; align-items: center; gap: 4px; max-width: 108px; min-width: 0; }
-.tsn-rank b { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
 /* ---- The Season screen ---- */
 #ui .menu[data-screen="season"] { gap: var(--sp-2); }
 #ui .sz-bar-h { gap: var(--sp-3); margin-bottom: 0; }
@@ -177,3 +155,10 @@
 #ui .bdd-rk { flex: none; display: flex; align-items: center; gap: 4px; min-width: 0; }
 #ui .bdd-rk b { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .03em; white-space: nowrap; }
 #ui .bdd-rk small { font: 400 var(--fs-micro)/1 var(--f-plate); color: var(--c-haze); white-space: nowrap; }
+
+/* ---- Title: the season chip in the button grid, the rank on the profile card ---- */
+#ui .tsn-chip { position: relative; box-shadow: var(--bevel), inset 0 -2px 0 var(--sa); }
+#ui .tsn-chip svg { color: var(--sa); }
+#ui .tsn-chip small { font: 400 8.5px/1 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); white-space: nowrap; }
+#ui .tsn-dot { position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--sa); box-shadow: 0 0 6px var(--sa); }
+#ui .pc-rk { flex: none; display: inline-flex; line-height: 0; margin-left: auto; }
