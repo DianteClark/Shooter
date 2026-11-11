@@ -849,7 +849,8 @@ export class BotBrain {
     let best = null, bestScore = Infinity, bestD = 0;
     const sameTarget = this.target;
     // Engagements stay on-screen distances; a scoped rifle reaches further by what its botUse.sight says.
-    const sightRange = S.sight + (styleOf(ps.weapon, ps).sight || 0);
+    // Battle royale: a bot with its head down in the loot sees less of what is around it (sightK, set by js/sim/br.js).
+    const sightRange = (S.sight + (styleOf(ps.weapon, ps).sight || 0)) * (this.sightK ?? 1);
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       // Battle royale: nobody in the air is a target (js/sim/br.js).

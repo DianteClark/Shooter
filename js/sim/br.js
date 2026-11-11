@@ -73,6 +73,14 @@ const CELL = 8;                  // Loot grid cell, metres.
 const PLAN_EVERY = 15;           // Ticks between squad plans (0.5 s).
 const NOISE_KEEP = 7;            // Seconds a gunfight stays interesting to bots that heard it.
 const THIRD_PARTY = 75;          // Metres a geared bot squad will go to join a fight it hears.
+// Pacing (docs/BR.md "Pacing"): the share of squads that pick a contested drop on purpose, by squad size; how far apart
+// the rest land (metres, a Gaussian falloff); the chance a heard fight is joined, by circle phase (times the squad's
+// aggro); and how long a squad keeps to its first place before it moves on.
+const HOT_DROP = [0, 0.06, 0.08, 0.1, 0.1];
+const DROP_GAP = 70;
+const JOIN_FIGHT = [0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.7];
+const LOOT_DWELL = 50;
+const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
 
 function mulberry32(a) {
   return function () {
@@ -596,6 +604,7 @@ export class BrRules {
     const sim = this.sim;
     if (!p.alive) return;
     p.downed = false;
+    if (cause === 'zone') this.zoneDeaths = (this.zoneDeaths ?? 0) + 1;    // Counted for the pacing test (dev/sim-br.mjs).
     if (killer && killer !== p && killer.alive !== undefined) {
       sim._kill(p, killer, weapon ?? killer.ps.weapon, Math.hypot(killer.ps.x - p.ps.x, killer.ps.z - p.ps.z), null, false, null);
     } else sim._selfKill(p, cause);
@@ -916,7 +925,7 @@ export class BrRules {
   // Bots in a human's squad follow that human out of the transport and down.
   _planDrops(squads) {
     const sim = this.sim, rng = sim.rng, pois = this.def.pois ?? [], plane = this.plane;
-    const taken = new Map();
+    const picks = [];
     const dx = (plane.tx - plane.fx) / plane.len, dz = (plane.tz - plane.fz) / plane.len;
     for (const [team, members] of squads) {
       const human = members.find(p => !p.isBot);
@@ -929,28 +938,53 @@ export class BrRules {
         }
         continue;
       }
+      // Most squads land away from everyone else (real players spread out along the line); now and then a squad goes
+      // for a contested tier 1 place on purpose. Duos and solos also land between the places, at any loot spot.
+      const hot = rng() < HOT_DROP[Math.min(4, this.squad)];
       let best = null, bestW = -1;
-      for (const poi of pois) {
-        const t = ((poi.x - plane.fx) * dx + (poi.z - plane.fz) * dz);
-        const off = Math.abs((poi.x - plane.fx) * dz - (poi.z - plane.fz) * dx);
-        const n = taken.get(poi.id) ?? 0;
-        const w = (poi.tier === 1 ? 3 : poi.tier === 2 ? 2 : 1.2) * Math.pow(0.3, n) * Math.exp(-off / 140) * (0.4 + rng()) * (t > 20 && t < plane.len - 20 ? 1 : 0.2);
-        if (w > bestW) { bestW = w; best = poi; }
+      for (const c of this._dropCands(rng)) {
+        const t = ((c.x - plane.fx) * dx + (c.z - plane.fz) * dz);
+        const off = Math.abs((c.x - plane.fx) * dz - (c.z - plane.fz) * dx);
+        let near = 0;
+        for (const q of picks) { const d = Math.hypot(q.x - c.x, q.z - c.z); near = Math.max(near, Math.exp(-(d * d) / (DROP_GAP * DROP_GAP))); }
+        // A hot drop joins one other squad at a tier 1 place, never a third.
+        const crowd = picks.filter(q => Math.hypot(q.x - c.x, q.z - c.z) < 30).length;
+        const spread = hot && crowd < 2 ? (c.tier === 1 ? 1 + near : 0.1) : (1 - 0.97 * near) * (crowd ? 0.05 : 1);
+        const w = (c.tier === 1 ? 3 : c.tier === 2 ? 2 : 1.2) * spread * Math.exp(-off / 140) * (0.4 + rng()) * (t > 20 && t < plane.len - 20 ? 1 : 0.2);
+        if (w > bestW) { bestW = w; best = c; }
       }
       if (!best) best = { x: sim.map.width / 2, z: sim.map.height / 2, r: 30, id: 'mid' };
-      taken.set(best.id, (taken.get(best.id) ?? 0) + 1);
+      picks.push(best);
       const along = ((best.x - plane.fx) * dx + (best.z - plane.fz) * dz) / plane.len;
-      const off = Math.abs((best.x - plane.fx) * dz - (best.z - plane.fz) * dx);
       // Out when the transport passes closest to the place; the glide covers what it can of the rest.
       const jump = Math.max(0.05, Math.min(BR.forceJump - 0.02, along - 0.01));
-      void off;
       for (const p of members) {
         p.br.jumpAt = jump + (rng() - 0.5) * 0.02;
         const a = rng() * Math.PI * 2, r = (best.r ?? 20) * 0.6 * Math.sqrt(rng());
         p.br.dropX = best.x + Math.cos(a) * r; p.br.dropZ = best.z + Math.sin(a) * r;
       }
-      this.plans.set(team, { poi: best, kind: 'loot', since: sim.time });
+      // A squad's habits for the match: how long it loots before it moves for the circle (late rotators sometimes get
+      // caught), and how keen it is to join fights it hears.
+      this.plans.set(team, { poi: best.poi ?? best, kind: 'loot', since: sim.time, late: rng(), aggro: 0.5 + rng() * 0.8 });
     }
+  }
+
+  // Where squads may land: the named places, and for duos and solos also loot spots between them (each tied to its
+  // nearest place for the loot run that follows).
+  _dropCands(rng) {
+    const pois = this.def.pois ?? [];
+    const out = pois.map(poi => ({ x: poi.x, z: poi.z, r: poi.r, tier: poi.tier, id: poi.id, poi }));
+    if (this.squad <= 2) {
+      const loot = this.def.loot ?? [];
+      for (let i = 0; i < 40 && loot.length; i++) {
+        const s = loot[Math.floor(rng() * loot.length)];
+        let poi = null, bd = Infinity;
+        for (const q of pois) { const d = Math.hypot(q.x - s.x, q.z - s.z); if (d < bd) { bd = d; poi = q; } }
+        if (!poi) continue;
+        out.push({ x: s.x, z: s.z, r: 8, tier: Math.min(3, s.tier + 1), id: `spot${i}`, poi: { id: `spot:${poi.id}:${i}`, x: s.x, z: s.z, r: 16, tier: s.tier } });
+      }
+    }
+    return out;
   }
 
   _geared(p) {
@@ -973,21 +1007,26 @@ export class BrRules {
     const toNext = Math.hypot(ax - n.x, az - n.z) - n.r * 0.7;
     const walk = Math.max(0, toNext) / 5 + 10;
     const outsideNow = Math.hypot(ax - c.x, az - c.z) > c.r - 6;
-    const closing = this.state === 'shrink' || this.timer < walk * 1.2 + 8;
+    // Late rotators (plan.late near 1) leave it until the shrink is under way; the rest move with time to spare.
+    const late = plan.late ?? 0.5;
+    // The first circle hurts so little that nobody leaves good loot for it before it moves.
+    const closing = this.phase === 0 && this.state === 'wait' ? false : (this.state === 'shrink' && (late < 0.75 || toNext > n.r * 0.4)) || this.timer < walk * (1.3 - late) + 8 * (1 - late);
     const geared = bots.every(p => this._geared(p));
     let kind = 'loot';
     if (outsideNow || (closing && toNext > 0)) kind = 'rotate';
     else if (geared || this.phase >= 2) kind = 'hold';
-    // A fight nearby, inside where we need to be: sometimes worth taking a piece of. Each burst of gunfire is weighed once.
+    // A fight nearby, inside where we need to be: sometimes worth taking a piece of. Each burst of gunfire is weighed
+    // once. Nobody goes looking for trouble while the first circle waits; later, keener and further.
     let fight = plan.fight && sim.time - plan.fight.t < NOISE_KEEP ? plan.fight : null;
-    if (!fight && kind !== 'rotate' && geared && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
-      const reach = this.phase >= 2 ? THIRD_PARTY * 0.75 : THIRD_PARTY * 0.5;
+    const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1);
+    if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= 3) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
+      const reach = THIRD_PARTY * Math.min(1, 0.4 + this.phase * 0.15);
       for (let i = this.noise.length - 1; i >= 0; i--) {
         const s = this.noise[i];
         if (s.team === team || s.weighed?.has(team)) continue;
         (s.weighed || (s.weighed = new Set())).add(team);
         const d = Math.hypot(s.x - ax, s.z - az);
-        if (d > 18 && d < reach && Math.hypot(s.x - n.x, s.z - n.z) < n.r + 10 && sim.rng() < 0.45) { fight = s; break; }
+        if (d > 18 && d < reach && Math.hypot(s.x - n.x, s.z - n.z) < n.r + 10 && sim.rng() < join) { fight = s; break; }
       }
     }
     plan.fight = fight;
@@ -997,9 +1036,11 @@ export class BrRules {
     // Where the squad goes, once per plan change or when the circle moves on.
     if (kind === 'rotate' && (!plan.spot || plan.circle !== this.phase)) {
       const a = Math.atan2(az - n.z, ax - n.x) + (sim.rng() - 0.5) * 0.8;
-      plan.spot = this._walkable(n.x + Math.cos(a) * n.r * 0.5, n.z + Math.sin(a) * n.r * 0.5);
+      // In at the near edge, not the middle: squads coming from all sides do not all meet in the centre.
+      plan.spot = this._walkable(n.x + Math.cos(a) * n.r * 0.7, n.z + Math.sin(a) * n.r * 0.7);
       plan.circle = this.phase;
-    } else if (kind === 'hold' && (!plan.spot || plan.circle !== this.phase || sim.time - plan.since > 35)) {
+    } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && Math.hypot(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
+      // A squad holds where it is while that stays inside the next circle: it does not wander between holds.
       plan.spot = this._holdSpot(n, ax, az);
       plan.circle = this.phase; plan.since = sim.time;
     } else if (kind === 'fight') {
@@ -1009,6 +1050,7 @@ export class BrRules {
 
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
+      bot.sightK = 1;
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
         if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
@@ -1036,12 +1078,14 @@ export class BrRules {
       }
       if (kind === 'loot' || (kind === 'hold' && !this._geared(p))) {
         const poi = plan.poi;
-        const t = this._lootTarget(p, kind === 'loot' ? 40 : 22, poi && kind === 'loot' ? poi.x : p.ps.x, poi && kind === 'loot' ? poi.z : p.ps.z);
-        if (t) { bot.setObjective(t); continue; }
-        // Nothing left here: the squad moves to the nearest place it has not been, inside the next circle.
-        if (kind === 'loot' && sim.time - plan.since > 6) {
+        const t = this._lootTarget(p, kind === 'loot' ? Math.max(16, Math.min(40, (poi?.r ?? 30) + 6)) : 22, poi && kind === 'loot' ? poi.x : p.ps.x, poi && kind === 'loot' ? poi.z : p.ps.z);
+        if (t) { bot.setObjective(t); bot.sightK = LOOT_SIGHT[Math.min(this.phase, 2)]; continue; }
+        // Nothing left here: the squad moves to the nearest quiet place it has not been, inside the next circle; while
+        // the first circle waits it stays put a while first (a squad with a gun each settles in instead).
+        const dwell = this.phase === 0 && this.state === 'wait' ? LOOT_DWELL : 6;
+        if (kind === 'loot' && sim.time - plan.since > dwell && !(this.phase === 0 && this.state === 'wait' && bots.filter(q => this._heldScore(q, 0) >= 2.2 || this._heldScore(q, 1) >= 2.2).length * 2 >= bots.length)) {
           (plan.visited || (plan.visited = new Set())).add(plan.poi?.id);
-          plan.poi = this._nextPoi(team, ax, az, n, plan.visited);
+          plan.poi = this._nextPoi(team, ax, az, n, plan.visited, this.phase === 0 ? 120 : Infinity);
           plan.since = sim.time;
         }
       }
@@ -1071,14 +1115,14 @@ export class BrRules {
       const x = r.x + r.w / 2, z = r.z + r.d / 2;
       const dc = Math.hypot(x - n.x, z - n.z);
       if (dc > n.r * 0.85) continue;
-      const s = -Math.hypot(x - ax, z - az) * 0.05 - dc * 0.02 + sim.rng() * 2 + (this.phase >= 3 ? 2 : 0);
+      const s = -Math.hypot(x - ax, z - az) * 0.12 - dc * 0.02 + sim.rng() * 2;
       if (s > bestS) { bestS = s; best = { x, z }; }
     }
     if (!best) {
       const ix = sim.nav.holdIndex, k = ix.near(n.x, n.z, Math.max(10, n.r * 0.8));
       for (let q = 0; q < k; q++) {
         const h = sim.nav.holds[ix.out[q]];
-        const s = -Math.hypot(h.x - ax, h.z - az) * 0.04 + sim.rng() * 2;
+        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 + sim.rng() * 2;
         if (s > bestS) { bestS = s; best = { x: h.x, z: h.z }; }
       }
     }
@@ -1086,13 +1130,16 @@ export class BrRules {
   }
 
   // The next place to loot: near, inside the next circle, not been there, and nobody else heading for it.
-  _nextPoi(team, x, z, n, visited) {
+  _nextPoi(team, x, z, n, visited, maxD = Infinity) {
     let best = null, bestS = -Infinity;
     for (const poi of this.def.pois ?? []) {
-      if (Math.hypot(poi.x - n.x, poi.z - n.z) > n.r + 20 || visited?.has(poi.id)) continue;
+      const d = Math.hypot(poi.x - x, poi.z - z);
+      if (Math.hypot(poi.x - n.x, poi.z - n.z) > n.r + 20 || visited?.has(poi.id) || d > maxD) continue;
       let others = 0;
       for (const [t, pl] of this.plans) if (t !== team && pl.poi === poi) others++;
-      const s = -Math.hypot(poi.x - x, poi.z - z) + (poi.tier === 1 ? 25 : 0) - others * 80 + this.sim.rng() * 30;
+      // Somebody is there already (any enemy within the place): a looting squad goes elsewhere.
+      for (const q of this.sim.players) if (q.alive && q.team !== team && !q.brAir && Math.hypot(q.ps.x - poi.x, q.ps.z - poi.z) < poi.r + 20) { others++; break; }
+      const s = -d + (poi.tier === 1 ? 25 : 0) - others * 80 + this.sim.rng() * 30;
       if (s > bestS) { bestS = s; best = poi; }
     }
     return best;
