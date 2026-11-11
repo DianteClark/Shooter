@@ -219,7 +219,7 @@ export const V10_WEAPONS = {
   // A boat hook cut down to a hand's length. Two quick swings kill, each one carries you a step forward, it makes no
   // sound and nothing in the game runs faster. Everything past three metres outranges it.
   knife: {
-    id: 'knife', name: 'Gaff', role: 'Blade', auto: false, suppressed: true, melee: true, lunge: 13,
+    id: 'knife', name: 'Gaff', role: 'Blade', auto: false, suppressed: true, melee: true, swing: 'slash', lunge: 13,
     damage: 60, rpm: 190, magazine: 1, reserve: 999, reload: 0.5, range: 2.7,
     falloff: { start: 99, end: 100, min: 1 },
     adsSpread: 0.02, hipSpread: 0.02, bloomPerShot: 0, bloomRecover: 3, bloomScale: 1,
@@ -231,7 +231,7 @@ export const V10_WEAPONS = {
   // A spike maul off the track gang. One swing kills and throws you further than the Gaff's, then leaves you
   // recovering for a full second if it missed.
   maul: {
-    id: 'maul', name: 'Maul', role: 'Sledge', auto: false, suppressed: true, melee: true, lunge: 17,
+    id: 'maul', name: 'Maul', role: 'Sledge', auto: false, suppressed: true, melee: true, lunge: 0, swing: 'overhead',
     damage: 140, rpm: 55, magazine: 1, reserve: 999, reload: 0.5, range: 3,
     falloff: { start: 99, end: 100, min: 1 },
     adsSpread: 0.03, hipSpread: 0.03, bloomPerShot: 0, bloomRecover: 3, bloomScale: 1, turnCap: 10,
