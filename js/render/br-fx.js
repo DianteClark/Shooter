@@ -132,7 +132,7 @@ export class BrFx {
   // A squadmate's landing ping: shown for a while where it was put.
   ping(x, z, color = 0xffc24a) { this.pingList.push({ x, z, t: 0, color }); if (this.pingList.length > PING_MAX) this.pingList.shift(); }
 
-  update(view, dt, camX, camZ) {
+  update(view, dt, camX, camZ, chars = null) {
     const br = view.br;
     if (!br) return;
     this.clock += dt;
@@ -146,7 +146,7 @@ export class BrFx {
     // Transport.
     this.plane.visible = br.plane.f < 1;
     if (this.plane.visible) {
-      this.plane.position.set(br.plane.x, 14, br.plane.z);
+      this.plane.position.set(br.plane.x, 14, br.plane.z);      // GLIDE_ALT (characters.js): the glide starts here.
       this.plane.rotation.set(0, -Math.atan2(br.plane.tz - br.plane.fz, br.plane.tx - br.plane.fx), Math.sin(t * 0.7) * 0.03);
     }
     // Loot near the camera.
@@ -201,9 +201,12 @@ export class BrFx {
     for (const p of view.players) {
       if (!p.alive) continue;
       if (Math.abs(p.x - camX) > 50 || Math.abs(p.z - camZ) > 40) continue;
-      if (p.air === 2 && nP < CHUTE_MAX) {
-        // The wing faces the way the glide goes and swings a little under it.
-        V.set(p.x, 0.4, p.z); Q.setFromAxisAngle(UP, -p.aim); S.set(1, 1, 1);
+      // The canopy rides over the glider's harness (js/render/characters.js glideRig: height and fold) and folds away in
+      // a moment once they touch down. Without rigs (tests), over anyone the view says is gliding.
+      const rig = chars?.rigs.get(p.id), open = rig ? rig.chute : p.air === 2 ? 1 : 0;
+      if (open > 0 && nP < CHUTE_MAX) {
+        // The wing faces the way the glide goes and swings a little under it; folding, it narrows and drops onto them.
+        V.set(p.x, (rig ? rig.alt : 0) + 0.4 + 0.9 * (1 - open), p.z); Q.setFromAxisAngle(UP, -p.aim); S.set(0.6 + 0.4 * open, open, open * open);
         Q.multiply(_qs.setFromAxisAngle(_ax, Math.sin(t * 1.7 + p.x) * 0.08));
         this.chutes.setMatrixAt(nP, M4.compose(V, Q, S));
         this.chutes.setColorAt(nP++, C.setHex(TEAMS[p.team]?.color ?? 0xffffff));

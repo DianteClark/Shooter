@@ -345,8 +345,8 @@ export class Gunsmith {
       const ms = masteryOf(id);
       return `<button class="gs-gun${open ? '' : ' locked'}${id === this.weapon ? ' on' : ''}${slot ? ' equipped' : ''}" data-act="gsWeapon" data-id="${esc(id)}" ${open ? '' : 'data-sound="deny"'}>
         <span class="gs-pic"><canvas class="gun-pic" data-gun="${esc(id)}"></canvas>${slot ? `<em class="gs-eq">${slot}</em>` : ''}${open ? '' : `<em class="gs-lk">${ico('lock')}</em>`}</span>
-        <span class="gs-gn"><b>${esc(WEAPONS[id].name)}</b><span class="gs-glv">${open ? weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id)) : `Level ${Progress.itemUnlockLevel('weapon', id)}`}</span></span>
-        <span class="gs-gm"><small>${open ? 'Mastery' : esc(WEAPONS[id].role ?? '')}</small><i class="m-bar"><i style="transform:scaleX(${open ? ms.f.toFixed(3) : 0})"></i></i><small class="gs-gmn">${open ? (ms.f >= 1 ? 'Mastered' : `${ms.done}/${ms.of}`) : 'Locked'}</small></span>
+        <span class="gs-gn"><b>${esc(WEAPONS[id].name)}</b></span>
+        <span class="gs-gm"><span class="gs-glv">${open ? weaponLevelHtml(Progress.weaponLevel(id), Progress.weaponPrestige(id)) : `Level ${Progress.itemUnlockLevel('weapon', id)}`}</span><small>${open ? 'Mastery' : 'Locked'}</small><i class="m-bar"><i style="transform:scaleX(${open ? ms.f.toFixed(3) : 0})"></i></i><small class="gs-gmn">${open ? (ms.f >= 1 ? 'Done' : `${ms.done}/${ms.of}`) : ''}</small></span>
       </button>`;
     }).join('');
     this.menu.paintGuns(this.gunsEl, this.resolveThumb);

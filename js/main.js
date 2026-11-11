@@ -207,6 +207,7 @@ function seatData() {
 }
 
 function goTitle(message) {
+  if (app.match?.headless) endLocalMatch();      // A host who left a battle royale early: the room's match goes with them.
   wakeLock.set(false);
   teardownNet();
   stopRematch();
@@ -1483,6 +1484,7 @@ function endLocalMatch() {
 
 function onMatchEnd(results) {
   const match = app.match;
+  if (results.early) { showResults(results); return; }     // Left a battle royale early: no end banner, straight to results.
   // Training ran out of clock before it was done: it ends as a skip, with no results screen.
   if (app.tutorial) { finishTutorial(false); return; }
   // A guest can be pulled into the vote during this hold, and the old results must not land on top of it.
@@ -1509,6 +1511,17 @@ function pickMvp(players) {
   return mvp;
 }
 
+// Battle royale, out of the match: Leave shows this phone's results now (js/ui/br-hud.js). Nobody else's match ends: a
+// guest's phone just stops following it; a host with other people in the room keeps simulating it, drawing nothing,
+// behind the results screen until it ends for them (Match.leaveNow headless), then lets it go.
+function leaveBrEarly() {
+  const m = app.match;
+  if (!m || !app.inMatch || m.ended) return;
+  const others = !!app.net && app.isHost && (app.lobby.humans?.length ?? 0) > 1;
+  if (others) m.onLateEnd = () => { if (app.match === m) endLocalMatch(); };
+  m.leaveNow({ headless: others });
+}
+
 // The player chose to walk away from a running match from the scoreboard.
 function leaveMatch() {
   const practice = !!app.matchInfo?.training || app.lastMode === 'range';
@@ -1522,13 +1535,14 @@ function showResults(results) {
   try {
     for (const p of results.players) Object.assign(p, hud.objectiveStats(p.id));
   } catch (err) { console.error('objective stats', err); }
-  endLocalMatch();
+  if (app.match?.headless) { hud.setVisible(false); controls.setEnabled(false); }    // Still running for the room.
+  else endLocalMatch();
   if (!app.net) wakeLock.set(false);
   forgetRoom();
   app.rematchWait = false;
 
   const won = results.winner === results.myTeam;
-  const drawn = results.winner === null || results.winner === undefined;
+  const drawn = !results.early && (results.winner === null || results.winner === undefined);    // Left early: a loss.
   const lastKill = results.lastKill;
   const killer = lastKill && results.players.find(p => p.id === lastKill.by);
   const victim = lastKill && results.players.find(p => p.id === lastKill.target);
@@ -1557,6 +1571,7 @@ function showResults(results) {
       rematchLabel: app.lastPick?.mp && !app.net ? 'Next match' : 'Rematch',
       snd: results.snd,
       br: results.br,
+      early: !!results.early,
       mastery: results.mastery,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
     }, { rematch: () => afterResults(), menu: () => goTitle() });
@@ -1571,6 +1586,7 @@ function showResults(results) {
 }
 
 function afterResults() {
+  if (app.match?.headless) { menu.toast('Your room is still playing. The next match comes when theirs ends.'); return; }
   if (!app.net) return rematchSolo();
   if (app.vote && !app.isHost) return renderVote();   // The host has already opened the next vote.
   const me = localHuman();
@@ -1623,6 +1639,7 @@ installTaps();
 // One sound per tap, chosen by tap.js from the element (data-sound, back-ish actions, disabled controls).
 setTapSound(kind => audio.uiSound?.(kind));
 hud.onLeaveMatch(leaveMatch);
+hud.onBrLeave(leaveBrEarly);
 // The interpolated view does not carry the range tracker, so the readout takes it from the newest snapshot.
 hud.rangeSource = () => app.match?.interp.newest?.range ?? null;
 hud.onRangeReset(() => app.match?.sim.applyCommand(app.match.localId, { cmd: 'rangeReset' }));

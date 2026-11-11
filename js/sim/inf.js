@@ -10,6 +10,7 @@
 //
 // Events: {t:'inf', kind:'first'|'infected'|'last', id, by?}. Medals: infect, first_infected, last_stand, survivor.
 import { addScore } from './streaks.js';
+import { MODES } from '../shared/modes.js';
 import { alive, chaseObjective, decodeStats, encodeStats, restoreStats, zoneObjective, makeZones } from './mode-kit.js';
 
 export const INF = { perFirst: 12, alpha: 0.5, respawn: 2.5, tick: 10, tickScore: 25, infectScore: 100, surviveScore: 500, regroup: 35 };
@@ -19,11 +20,13 @@ const KIT = { primary: 'knife', secondary: 'knife', lethal: 'shiv', tactical: 's
 export class InfRules {
   constructor(sim, seed) {
     this.sim = sim;
+    // A mode's own numbers on top of INF (Ground War Infected: `firsts` infected at the start, see MODES.gwinf.inf).
+    this.k = { ...INF, ...(MODES[sim.modeId]?.inf ?? {}) };
     this.allIn = true;
     this.started = false;
     this.first = null;
     this.last = null;
-    this.tickT = INF.tick;
+    this.tickT = this.k.tick;
     this.camp = 0; this.campT = 0;         // Survivor bots' hold: an index into the map's hardpoint zones.
     this.spots = makeZones(sim.map.points?.hard?.length ? sim.map.points.hard : sim.map.points?.dom);
   }
@@ -39,8 +42,8 @@ export class InfRules {
     const sim = this.sim, pool = sim.players.filter(p => !p.dummy && !p.away);
     this.started = true;
     for (const p of pool) if (p.team !== 0) this._setTeam(p, 0);
-    // One infected for every INF.perFirst players; at least one.
-    const n = Math.max(1, Math.min(pool.length - 1, Math.round(pool.length / INF.perFirst)));
+    // One infected for every this.k.perFirst players; at least one.
+    const n = Math.max(1, Math.min(pool.length - 1, this.k.firsts ?? Math.round(pool.length / this.k.perFirst)));
     for (let k = 0; k < n; k++) {
       const left = pool.filter(p => p.team === 0);
       const first = left[Math.floor(sim.rng() * left.length)];
@@ -87,28 +90,38 @@ export class InfRules {
     }
     this.tickT -= dt;
     if (this.tickT <= 0) {
-      this.tickT += INF.tick;
-      for (const p of sim.players) if (p.team === 0 && p.alive) addScore(p.score, INF.tickScore);
+      this.tickT += this.k.tick;
+      for (const p of sim.players) if (p.team === 0 && p.alive) addScore(p.score, this.k.tickScore);
     }
     const left = this._count();
     if (left === 0 && sim.phase === 'live') { sim.lastKill ??= null; sim._end(1); }
   }
 
-  // While the infection is down to one player, that one (the alpha) takes INF.alpha of the damage: a lone blade against
+  // Ground War Infected: the infected come back at a spawn about `spawnNear` metres from the nearest survivor, not across
+  // a huge map from them (the sim's own score already favours distance: this caps it).
+  spawnFlow(p, s) {
+    const near = this.k.spawnNear;
+    if (!near || p.team !== 1 || !this.started) return 0;
+    let d = Infinity;
+    for (const q of this.sim.players) if (q.team === 0 && q.alive) d = Math.min(d, Math.hypot(q.ps.x - s.x, q.ps.z - s.z));
+    return d === Infinity ? 0 : -2 * Math.max(0, Math.min(d, 200) - near);
+  }
+
+  // While the infection is down to its first players (one, or the mode's `firsts` or `alphaUntil`), they (the alphas) takes this.k.alpha of the damage: a lone blade against
   // eleven guns would rarely get going.
   damage(target, attacker, dmg) {
-    return target.team === 1 && this.started && this.sim.scores[1] <= 1 ? dmg * INF.alpha : dmg;
+    return target.team === 1 && this.started && this.sim.scores[1] <= (this.k.alphaUntil ?? this.k.firsts ?? 1) ? dmg * this.k.alpha : dmg;
   }
 
   onKill(target, killer, info) {
     const sim = this.sim;
-    if (target.team === 1) { target.respawnT = Math.min(target.respawnT, INF.respawn); return; }
+    if (target.team === 1) { target.respawnT = Math.min(target.respawnT, this.k.respawn); return; }
     if (info.away || !this.started) { this._count(); return; }
     // A survivor down: infected, by whoever did it (a fall or their own grenade still counts).
     const by = killer && killer.team === 1 ? killer : null;
-    if (by) { by.infections = (by.infections ?? 0) + 1; addScore(by.score, INF.infectScore); sim._medal(by, 'infect'); }
+    if (by) { by.infections = (by.infections ?? 0) + 1; addScore(by.score, this.k.infectScore); sim._medal(by, 'infect'); }
     this._infect(target, by ?? target);
-    target.respawnT = INF.respawn + 1;
+    target.respawnT = this.k.respawn + 1;
     const left = this._count();
     if (left === 1 && !this.last) {
       this.last = sim.players.find(p => p.team === 0 && !p.away && !p.dummy) ?? null;
@@ -124,7 +137,7 @@ export class InfRules {
     for (const p of sim.players) {
       if (p.team !== 0 || p.away || p.dummy) continue;
       p.survived = 1;
-      addScore(p.score, INF.surviveScore);
+      addScore(p.score, this.k.surviveScore);
       sim._medal(p, p === this.last ? 'last_stand' : 'survivor');
     }
     return 0;
@@ -144,19 +157,32 @@ export class InfRules {
       return;
     }
     if (!this.spots.length) { for (const b of crew) b.setObjective(null); return; }
-    if (sim.time - this.campT > INF.regroup) {
-      // The hold nearest the survivors' middle that is not the one they just left.
-      let x = 0, z = 0, n = 0;
-      for (const p of sim.players) if (p.team === 0 && p.alive) { x += p.ps.x; z += p.ps.z; n++; }
-      if (n) {
-        let best = this.camp, bd = Infinity;
-        this.spots.forEach((s, i) => { const d = Math.hypot(s.x - x / n, s.z - z / n) + (i === this.camp && this.campT > 0 ? 30 : 0); if (d < bd) { bd = d; best = i; } });
-        this.camp = best;
+    // `holds` groups (Ground War: thirty survivors stacked on one spot would never fall), split by player index.
+    const g = Math.max(1, Math.min(this.k.holds ?? 1, this.spots.length));
+    if (sim.time - this.campT > this.k.regroup) {
+      // Each group: the hold nearest its middle that is not the one it just left nor another group's.
+      const camps = this.camps ?? [this.camp], taken = new Set();
+      for (let k = 0; k < g; k++) {
+        let x = 0, z = 0, n = 0;
+        for (const p of sim.players) if (p.team === 0 && p.alive && (g === 1 || p.index % g === k)) { x += p.ps.x; z += p.ps.z; n++; }
+        let best = camps[k] ?? this.camp;
+        if (n) {
+          let bd = Infinity;
+          this.spots.forEach((s, i) => {
+            if (taken.has(i)) return;
+            const d = Math.hypot(s.x - x / n, s.z - z / n) + (i === camps[k] && this.campT > 0 ? 30 : 0);
+            if (d < bd) { bd = d; best = i; }
+          });
+        }
+        taken.add(best); camps[k] = best;
       }
+      this.camps = camps; this.camp = camps[0];
       this.campT = sim.time;
     }
-    const spot = this.spots[this.camp];
-    for (const b of crew) b.setObjective(zoneObjective(spot, 'defend', 'camp'));
+    for (const b of crew) {
+      const k = g === 1 ? 0 : b.p.index % g, spot = this.spots[this.camps?.[k] ?? this.camp];
+      b.setObjective(zoneObjective(spot, 'defend', `camp${k}`));
+    }
   }
 
   // ---- View and wire ----

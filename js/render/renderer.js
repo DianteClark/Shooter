@@ -7,7 +7,7 @@ import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
 import { Weather } from './weather.js';
 import { FogMask, castRay } from './fog.js';
-import { Characters } from './characters.js';
+import { Characters, GLIDE_ALT } from './characters.js';
 import { VFX, GUN_FX } from './vfx.js';
 import { CombatFX, GUNSHIP_Y, CHOPPER_Y } from './combat.js';
 import { Surfaces } from './surfaces.js';
@@ -585,10 +585,15 @@ export class GameRenderer {
 
     const easeGoal = local ? (local.sprinting ? 0.035 : 0) - (local.adsT || 0) * 0.025 : 0;
     this.camEase += (easeGoal - this.camEase) * Math.min(1, dt * 5);
-    const dist = this.distance * TUNING.camZoom * (1 - this.zoomPunch + this.camEase);
+    // Battle royale: the camera rides a glider down (aboard, it waits up at the jump height), so the ground comes up to meet
+    // you; it is level with the ground again the moment you land.
+    const lr = local && view?.br ? this.chars.rigs.get(local.id) : null;
+    const altGoal = !lr || !local.alive ? 0 : local.air === 1 ? GLIDE_ALT : lr.alt;
+    const alt = altGoal;
+    const dist = this.distance * TUNING.camZoom * (1 - this.zoomPunch + this.camEase) * (1 + alt * 0.012);
     const cx = tx + sx + this.kickX, cz = tz + sz + this.kickZ;
-    cam.position.set(cx, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
-    cam.lookAt(cx, 0, cz);
+    cam.position.set(cx, alt + dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
+    cam.lookAt(cx, alt, cz);
     if (this.roll) cam.rotateZ(this.roll);
     cam.updateMatrixWorld();
   }
@@ -698,7 +703,7 @@ export class GameRenderer {
     this.vfx.step(fxDt);
     this.combat.smokeAlpha = cine ? 0.16 : 1;
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
-    if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z);
+    if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, this.chars);
     this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill && !cine) this._drawLaser(local);
     this.ambient.update(fxDt, this.camTarget.x, this.camTarget.z);

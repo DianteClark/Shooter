@@ -21,7 +21,7 @@ import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
 import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module per mode (js/sim/rules.js).
 import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
-import { HUMAN_BASE, pickPoolBots, TIER_RATING } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
+import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -322,15 +322,65 @@ function poolBotEntry(n, team, pick, botSkill, seed) {
   loadout.card = prof.card;
   Object.assign(loadout, { operator: prof.operator, skin: prof.skin, emblem: prof.emblem });
   return {
-    id: `bot${n}`, name: prof.name, team, isBot: true, skill, rating, style: prof.style, pool: prof.id,
+    id: `bot${n}`, name: displayName(prof), team, isBot: true, skill, rating, style: prof.style, pool: prof.id,
     primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...pick.badge }, operator: prof.operator, skin: prof.skin,
   };
+}
+
+// The largest group of friends (a clan's members, a duo) that queues into one match together, by mode: a battle royale
+// squad; four on a 6v6 side, six in Ground War; three into one free-for-all (rivals there, but in the same lobby).
+function partyCap(m, teamSize) {
+  if (m?.rules === 'br') return Math.max(2, m.squad);
+  if (m?.ffa) return 3;
+  return (teamSize ?? m?.teamSize ?? TEAM_SIZE) >= 16 ? 6 : 4;
+}
+
+// Seats each party of pool picks on one side: parties (largest first, then the strongest) to the side with the lower
+// rating total that has room for all of them, singles after; a party only splits when no side has room for it.
+function seatParties(picks, open, strength) {
+  const groups = new Map();
+  for (const p of picks) { const k = p.party ?? `s${picks.indexOf(p)}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+  const total = g => g.reduce((a, p) => a + p.rating, 0);
+  const order = [...groups.values()].sort((a, b) => b.length - a.length || total(b) - total(a));
+  const sides = [[], []];
+  for (const g of order) {
+    const room = t => open[t] - sides[t].length;
+    let t = room(0) >= g.length && room(1) >= g.length ? (strength[0] <= strength[1] ? 0 : 1) : room(0) >= g.length ? 0 : room(1) >= g.length ? 1 : -1;
+    // A clanmate past the party cap queued alone: away from their clan's party when there is room.
+    const apart = g.length === 1 ? g[0].apart : null;
+    if (apart !== null && apart !== undefined) { const with_ = sides.findIndex(sd => sd.some(p => p.party === apart)); if (with_ >= 0 && room(1 - with_) > 0) t = 1 - with_; }
+    for (const p of g) {
+      const s = t >= 0 && room(t) > 0 ? t : room(0) >= room(1) ? 0 : 1;
+      sides[s].push(p); strength[s] += p.rating;
+    }
+  }
+  return sides;
+}
+
+// Battle royale: a party fills one squad (an empty one first), singles take the seats left, in squad order.
+function seatBrParties(seats, picks) {
+  const free = new Map();
+  seats.forEach((r, i) => { if (!free.has(r.team)) free.set(r.team, []); free.get(r.team).push(i); });
+  const out = new Array(seats.length).fill(null);
+  const groups = new Map();
+  for (const p of picks) if (p.party !== null && p.party !== undefined) { if (!groups.has(p.party)) groups.set(p.party, []); groups.get(p.party).push(p); }
+  const placed = new Set();
+  for (const g of [...groups.values()].sort((a, b) => b.length - a.length)) {
+    let best = null;
+    for (const [team, list] of free) if (list.length >= g.length && (!best || list.length > free.get(best).length)) best = team;
+    if (best === null) continue;
+    for (const p of g) { out[free.get(best).shift()] = p; placed.add(p); }
+  }
+  const rest = picks.filter(p => !placed.has(p));
+  for (let i = 0; i < out.length && rest.length; i++) if (!out[i]) out[i] = rest.shift();
+  return out;
 }
 
 function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }) {
   const m = MODES[mode];
   const draw = count => pickPoolBots({ count, seed: seed ?? 0, target: pool.target ?? HUMAN_BASE, level: pool.level ?? null,
-    spread: pool.spread, recent: pool.recent ?? null, date: pool.date ?? Date.now(), remember: pool.remember ?? true, locked: pool.locked ?? null });
+    spread: pool.spread, recent: pool.recent ?? null, date: pool.date ?? Date.now(), remember: pool.remember ?? true, locked: pool.locked ?? null,
+    party: pool.party ?? partyCap(m, teamSize) });
   const humanEntry = h => {
     const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
@@ -339,7 +389,8 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
   if (m?.rules === 'br' || m?.ffa) {
     const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
     const seats = base.filter(r => r.isBot);
-    const picks = draw(seats.length);
+    const drawn = draw(seats.length);
+    const picks = m.rules === 'br' && m.squad > 1 ? seatBrParties(seats, drawn) : drawn;
     return base.map(r => {
       const k = seats.indexOf(r);
       if (!r.isBot || !picks[k]) return r;      // A filtered draw (tests) can run short: the seat keeps a dealt bot.
@@ -356,12 +407,7 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
   // Even teams, as matchmaking would make them: strongest first, each to the side with the lower total so far, with the
   // humans counted at the target rating.
   const strength = [0, 1].map(t => roster.filter(r => r.team === t).length * (pool.target ?? HUMAN_BASE));
-  const order = picks.slice().sort((a, b) => b.rating - a.rating);
-  const sides = [[], []];
-  for (const p of order) {
-    const t = open[0] - sides[0].length <= 0 ? 1 : open[1] - sides[1].length <= 0 ? 0 : strength[0] <= strength[1] ? 0 : 1;
-    sides[t].push(p); strength[t] += p.rating;
-  }
+  const sides = seatParties(picks, open, strength);
   // Back in draw order within a side, so seat order does not read strongest-first.
   let n = 0;
   for (let t = 0; t < 2; t++) {

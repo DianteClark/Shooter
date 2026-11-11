@@ -13,6 +13,7 @@ go with any mode, and a featured playlist that changes every day. None of them i
 | grind | Grind | Grab tags from kills and carry them to a bank. Die and you drop them all. | S M L | outer Domination flags as banks |
 | gwhq | Ground War HQ | 16 v 16 Headquarters. | huge | Domination flags |
 | gwko | Ground War Kill Order | 16 v 16 Kill Order. | huge | none |
+| gwinf | Ground War Infected | 32 players, two start infected. | huge | (hardpoint or Domination points as survivor holds) |
 
 `MODES` (js/shared/modes.js) declares `sizes` and `needs` (point sets, any one of a list); `modeFitsMap` checks both,
 and `everyHuge` puts a Ground War mode on every huge map. `look` is the rule set the renderer and HUD draw the mode's
@@ -45,6 +46,11 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
 - One in the Chamber with bots is quick (about a minute on a small map): bots land the one round often. Lives went
   from three to five and the field down to 5/6/8 to stretch it.
 - Control on small maps is mostly decided on lives; attackers get 7 lives a player, defenders 5.
+- Ground War Infected (`MODES.gwinf.inf` overrides `INF`): two first infected; the alphas take half damage while the
+  infected are two or fewer; infected respawn at a spawn about 120 m or less from the nearest survivor (`spawnNear`,
+  without it they spawned across the map and were shot on the way back); survivor bots split into two holds (`holds`;
+  thirty stacked on one spot never fell on Expedition); five-minute clock. Measured (bots, 3 huge maps x 5 seeds):
+  survivors 6, infected 9 (before the spawn cap: survivors won every Expedition match 27-5 and lost every other).
 - Infected: the infected throw Shivs, not Hatchets (one-hit throws ended matches in 90 s).
 
 ## Play flow (ROADMAP item 14)

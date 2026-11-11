@@ -115,7 +115,7 @@ async def main():
             await pg.locator('[data-act="soloMap"][data-id="harvest"]').first.tap()
             await pg.wait_for_timeout(300)
             gw_modes = await pg.evaluate("[...document.querySelectorAll('.solo-mode')].filter(b => !b.hidden).map(b => b.dataset.id)")
-            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'gwhq', 'gwko', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
+            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
             print(f'  {"harvest offers no 6v6 team modes":<44} {"ok" if ok else "FAIL"} {gw_modes}')
             if not ok: failures.append(f'harvest modes {gw_modes}')
             st5 = await play('5 harvest ground war', tap('[data-act="soloStart"]'))

@@ -16,7 +16,7 @@ import { MAX_HP, TEAMS, WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { BR_KIND, itemName, AMMO_TYPES } from '../sim/br.js';
 import { spectate } from '../sim/snd.js';
-import { esc } from './widgets.js';
+import { esc, nameHtml } from './widgets.js';
 import { icon } from './icons.js';
 
 const ORD = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
@@ -65,11 +65,14 @@ const CSS = `
 .br-hint { position: absolute; left: 50%; bottom: calc(var(--sb) + 76px); transform: translateX(-50%); padding: 6px 12px; font: 13px/1.2 var(--f-plate);
   letter-spacing: var(--tr-plate); color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.75)); white-space: nowrap; text-align: center; }
 .br-hint b { font: 400 16px/1 var(--f-stencil); color: var(--c-sodium); display: block; margin-bottom: 3px; }
-.br-take { position: absolute; left: 50%; bottom: calc(var(--sb) + 104px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px;
+.br-take { position: absolute; left: 34%; width: 26%; bottom: calc(var(--sb) + 64px); display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 10px 0 10px; text-align: left;
   border: 0; color: #fff; background: linear-gradient(180deg, rgba(42,51,61,.95), rgba(16,20,26,.92)); box-shadow: var(--hud-edge), inset 3px 0 0 var(--rar);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); white-space: nowrap; }
-.br-take b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
-.br-take small { font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.br-take > span:last-child { min-width: 0; overflow: hidden; }
+.br-take .ti { flex: none; line-height: 0; }
+.br-take b, .br-take small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.br-take b { font: 400 16px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
+.br-take small { margin-bottom: 3px; font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-transform: uppercase; }
 .br-squad { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 84px; }
 .br-mate { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 1px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team); }
 .br-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -94,8 +97,21 @@ const CSS = `
 .br-out b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .br-out .place { font: 400 44px/1 var(--f-stencil); color: var(--c-sodium); }
 .br-out small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-top: 6px; }
-.br-out button { margin-top: 10px; height: 36px; padding: 0 14px; border: 0; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-chalk);
-  clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+.br-out button { height: 40px; min-width: 112px; padding: 0 14px; border: 0; font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-chalk);
+  clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); pointer-events: auto; }
+.br-out .acts { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+.br-out button.go { background: var(--c-sodium); }
+.br-out button.quiet { color: var(--c-chalk); background: rgba(231,234,228,.14); box-shadow: inset 0 0 0 1px rgba(231,234,228,.3); }
+/* Watching: the plate shrinks to a strip at the bottom, clear of the middle of the screen. */
+.br-out.watching { top: auto; bottom: calc(var(--sb) + 10px); min-width: 0; max-width: calc(100vw - 24px); padding: 8px 14px 8px 14px; display: flex; align-items: center; gap: 12px; text-align: left; }
+.br-out.watching b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-out.watching .place { display: none; }
+.br-out.watching small { margin-top: 3px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-out.watching .txt { min-width: 0; }
+/* The death replay's Skip sits bottom right: the strip moves up out of its way until the replay is over. */
+.killcam-on .br-out.watching { bottom: calc(var(--sb) + 62px); }
+.br-out.watching .acts { margin-top: 0; gap: 6px; flex: none; }
+.br-out.watching button { min-width: 0; height: 38px; font-size: 14px; padding: 0 12px; }
 .br-map { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; background: rgba(10,13,17,.62); pointer-events: auto; }
 .br-map-frame { position: relative; height: min(calc(100vh - 24px), 92vw); aspect-ratio: 1; box-shadow: 0 0 0 1px rgba(231,234,228,.3), 0 0 0 4px rgba(16,20,26,.7); }
 .br-map canvas { width: 100%; height: 100%; display: block; }
@@ -169,13 +185,14 @@ export class BrHud {
         <button class="br-btn br-med" data-tap="1" data-act="med">${icon('ui:plus', { size: 16 })}<span class="n">0</span><small>Medkit</small><i class="br-fill"></i></button>
         <button class="br-btn br-kit" data-tap="1" data-act="self" hidden>${icon('ui:refresh', { size: 16 })}<span class="n">0</span><small>Revive</small></button>
       </div>
-      <button class="br-take" data-tap="1" hidden><span class="ti"></span><span><b></b><br><small></small></span></button>
+      <button class="br-take" data-tap="1" hidden><span class="ti"></span><span><small></small><b></b></span></button>
       <button class="br-jump br-jump-main" data-tap="1" hidden>JUMP<small>Leave the transport</small></button>
       <div class="br-hint" hidden></div>
       <div class="br-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div>
         <button class="br-btn br-self" data-tap="1" hidden>${icon('ui:refresh', { size: 16 })}<span>Self-revive</span></button></div>
       <div class="br-reviving" hidden><b>Reviving</b><i><i></i></i></div>
-      <div class="br-out" hidden><b>Eliminated</b><div class="place"></div><small></small><button data-tap="1" class="br-spec-next" hidden>Next teammate</button></div>
+      <div class="br-out" hidden><div class="txt"><b>Eliminated</b><div class="place"></div><small></small></div>
+        <div class="acts"><button data-tap="1" class="br-spec go">Spectate</button><button data-tap="1" class="br-spec-next quiet" hidden>Next player</button><button data-tap="1" class="br-spec-squad quiet" hidden>Next squad</button><button data-tap="1" class="br-leave">Leave</button></div></div>
       <div class="br-map" hidden data-tap="1">
         <div class="br-map-frame"><canvas width="${MAP_PX}" height="${MAP_PX}"></canvas></div>
         <div class="br-map-side">
@@ -213,9 +230,12 @@ export class BrHud {
     act(this.selfBtn, () => this.cmd?.('self'));
     act(this.jumpBtn, () => this.#jump());
     act(this.jumpMap, () => this.#jump());
-    act(this.takeBtn, () => { if (this.takeId !== null) this.cmd?.('take', { item: this.takeId }); });
+    act(this.takeBtn, () => { if (this.takeId !== null) this.cmd?.('take', this.takeSlot >= 0 ? { item: this.takeId, slot: this.takeSlot } : { item: this.takeId }); });
     act($('.br-map-close'), () => this.toggleMap(false));
-    act($('.br-spec-next'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1); });
+    act($('.br-spec-next'), () => { if (this.view) { spectate.cycle(this.view, this.view.localId, 1); this.c.out = null; } });
+    act($('.br-spec-squad'), () => { if (this.view) { spectate.cycle(this.view, this.view.localId, 1, true); this.c.out = null; } });
+    act($('.br-spec'), () => { spectate.any = true; this.c.out = null; });
+    act($('.br-leave'), () => this.hud.brLeaveCb?.());
     this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl) this.toggleMap(false); });
     // A tap on the map marks a spot for the squad (a landing zone before the drop).
     this.mapCanvas.addEventListener('click', e => {
@@ -412,15 +432,38 @@ export class BrHud {
     const inv = view.br.inv;
     const handsFull = !!inv && inv.rarity[0] >= 0 && inv.rarity[1] >= 0;
     const id = best ? best.id : null;
-    if (id === this.takeId && handsFull === this.takeFull) return;
-    this.takeId = id; this.takeFull = handsFull;
+    // With both hands full the swap replaces the gun in the hand you hold (fists out: the hand they are out in).
+    const slot = handsFull ? view.brPs?.slot ?? 0 : -1;
+    if (id === this.takeId && handsFull === this.takeFull && slot === this.takeSlot) return;
+    this.takeId = id; this.takeFull = handsFull; this.takeSlot = slot;
     this.takeBtn.hidden = id === null;
     if (id === null) return;
+    this.#placeTake();
     const gun = WEAPON_IDS[best.v], r = best.r;
     this.takeBtn.style.setProperty('--rar', BR.rarityCss[r]);
-    this.takeBtn.querySelector('.ti').innerHTML = icon(gun, { size: 18 });
-    this.takeBtn.querySelector('b').textContent = `${handsFull ? 'Swap for' : 'Pick up'} ${WEAPONS[gun]?.name ?? 'gun'}`;
-    this.takeBtn.querySelector('small').textContent = handsFull ? `${BR.rarityName[r]}  /  drops the gun in your hand` : `${BR.rarityName[r]}  /  into your empty hand`;
+    this.takeBtn.querySelector('.ti').innerHTML = icon(gun, { size: 15 });
+    // Two short lines that fit the narrowest phone: what the tap does to which hand, then the gun in its rarity colour.
+    this.takeBtn.querySelector('small').textContent = handsFull ? `Swap ${slot ? 'secondary' : 'primary'} for` : `Pick up as ${inv?.rarity[0] < 0 ? 'primary' : 'secondary'}`;
+    this.takeBtn.querySelector('b').textContent = WEAPONS[gun]?.name ?? 'Gun';
+    this.takeBtn.title = `${BR.rarityName[r]} ${WEAPONS[gun]?.name ?? 'gun'}`;
+  }
+
+  // The take prompt sits bottom-centre in the gap between the vitals and the aim stick's ring (where the ring rests),
+  // just over the plate and medkit buttons, never on a stick or a button. Measured once per screen size.
+  #placeTake() {
+    const key = `${innerWidth}x${innerHeight}`;
+    if (this.takeAt === key) return;
+    this.takeAt = key;
+    const ring = document.querySelector('.controls .stick-aim .ring-fire')?.getBoundingClientRect();
+    const vit = this.hud.el.querySelector('.vitals')?.getBoundingClientRect();
+    const inv = this.el.querySelector('.br-inv')?.getBoundingClientRect();
+    const hands = this.handsEl?.getBoundingClientRect();
+    const lo = (vit?.width ? vit.right : innerWidth * 0.3) + 6;
+    const hi = Math.min(ring?.width ? ring.left : innerWidth * 0.62, hands?.width ? hands.left : Infinity) - 6;
+    const st = this.takeBtn.style;
+    st.left = `${Math.round(lo)}px`;
+    st.width = `${Math.max(120, Math.round(hi - lo))}px`;
+    st.bottom = `${Math.round(innerHeight - (inv?.height ? inv.top : innerHeight - 60) + 6)}px`;
   }
 
   #squad(view, me) {
@@ -432,7 +475,7 @@ export class BrHud {
       const state = !p.alive ? 'out' : p.downed ? 'down' : '';
       const note = !p.alive ? 'Out' : p.downed ? 'Down' : p.away ? 'Away' : p.air ? 'Air' : '';
       const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2)}"></i>`).join('');
-      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${esc(p.name)}</b><em>${note}</em>
+      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
         <span class="bars">${plates}<i style="flex:2.2;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
     }).join('');
   }
@@ -491,29 +534,42 @@ export class BrHud {
     if (c.self !== self) { c.self = self; this.selfBtn.hidden = !self; }
   }
 
+  // Out of the match: watching a teammate who is still in (Next player, Leave), or, the squad out, a clear choice of
+  // Spectate (anyone left, player by player or squad by squad) or Leave (results now; main.js keeps the match running for
+  // everyone else). Bots never hold it up: Leave is there from the moment you are out.
   #out(view, me) {
     const out = !me.alive && view.phase === 'live';
     const c = this.c;
     const watch = out ? spectate.target(view, me.id) : null;
-    const key = out ? `${watch}|${me.place}` : '';
+    const mates = out ? view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length : 0;
+    const key = out ? `${watch}|${me.place}|${mates}|${spectate.any}|${view.br.squadsLeft}` : '';
     if (c.out === key) return;
     c.out = key;
     this.outEl.hidden = !out;
     this.hud.controls?.setDown(out);
     if (!out) return;
     const w = watch && view.players.find(p => p.id === watch);
-    this.outEl.querySelector('b').textContent = w ? 'Eliminated' : 'Squad out';
-    this.outEl.querySelector('.place').textContent = me.place ? `${ORD(me.place)} place` : '';
-    this.outEl.querySelector('small').textContent = w ? `Spectating ${w.name}. Your squad can still win.` : 'Results come up when the match ends. You can leave from the scoreboard.';
-    const left = view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length;
-    this.outEl.querySelector('.br-spec-next').hidden = left < 2;
+    const others = !mates && !!w;            // Watching another squad.
+    const choosing = !mates && !spectate.any;
+    this.outEl.classList.toggle('watching', !!w);
+    const $ = s => this.outEl.querySelector(s);
+    $('b').innerHTML = mates ? 'Eliminated' : others ? `Watching ${nameHtml(w.name)}` : 'Squad out';
+    $('.place').textContent = me.place ? `${ORD(me.place)} place` : '';
+    const sq = others ? view.players.filter(p => p.team === w.team && p.alive).length : 0;
+    $('small').textContent = mates ? (w ? `Spectating ${w.name}. Your squad can still win.` : 'Your squad can still win.')
+      : others ? `${me.place ? `You: ${ORD(me.place)}  /  ` : ''}${view.br.squadsLeft ?? '?'} ${view.br.squad > 1 ? 'squads' : 'players'} left${view.br.squad > 1 ? `  /  ${sq} of theirs up` : ''}`
+      : choosing ? 'Watch the rest, or see your results now.' : 'Nobody left to watch.';
+    $('.br-spec').hidden = !choosing;
+    $('.br-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
+    $('.br-spec-next').textContent = mates ? 'Next teammate' : 'Next player';
+    $('.br-spec-squad').hidden = !others || view.br.squad < 2;
   }
 
   // Feed rows and callouts for the battle royale's own events.
   onEvent(e, view) {
     if (!this.on || !view) return;
     const me = view.localId;
-    const name = id => { const p = view.players.find(q => q.id === id); return p ? `<em style="color:${TEAMS[p.team]?.css ?? '#fff'}">${esc(p.name)}</em>` : '?'; };
+    const name = id => { const p = view.players.find(q => q.id === id); return p ? `<em style="color:${TEAMS[p.team]?.css ?? '#fff'}">${nameHtml(p.name)}</em>` : '?'; };
     const myTeam = view.players.find(p => p.id === me)?.team;
     switch (e.t) {
       case 'down': {

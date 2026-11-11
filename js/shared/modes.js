@@ -49,6 +49,8 @@ export const MODES = {
   grind: { id: 'grind', rules: 'grind', teamSize: 6, sizes: STANDARD_SIZES, needs: { dom: 2 }, look: 'dom', name: 'Grind', short: 'GRD', scoreLimit: 40, timeLimit: 600, desc: 'Grab tags from kills and carry them to a bank. Die and you drop them all.' },
   gwhq:  { id: 'gwhq',  rules: 'hq',   teamSize: 16, large: true, everyHuge: true, needs: [{ hard: 2 }, { dom: 3 }], look: 'hard', name: 'Ground War HQ', short: 'GW HQ', scoreLimit: 300, timeLimit: 900, desc: '16 v 16. Take the HQ and hold it. While it stands, its team cannot respawn.' },
   gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 12, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
+  // Infected on a huge map: 32 players, two start infected (`inf` overrides INF in js/sim/inf.js; tuned in dev/sim-modes-v10.mjs).
+  gwinf: { id: 'gwinf', rules: 'inf',  teamSize: 16, large: true, everyHuge: true, inf: { firsts: 2, holds: 2, spawnNear: 120, respawn: 5 }, name: 'Ground War Infected', short: 'GW INF', scoreLimit: 32, timeLimit: 300, desc: '32 players, two start infected. Killed by them, you join them. Survive the clock.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 
