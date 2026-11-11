@@ -118,6 +118,26 @@ function units() {
     check(s.contract && s.contract.id !== c.id, `${type}: the next contract is revealed`);
   }
 
+  // Ammo for the primary: a box (then it is gone for a while), and a drop off the dead.
+  {
+    const { sim } = makeSim('exq', 15);
+    live(sim);
+    freeze(sim);
+    const R = sim.rules, me = sim.players.find(p => p.team === FFA_TEAM), foe = sim.players.find(p => p.team === FFA_TEAM + 1);
+    const box = R.boxes[0];
+    me.ps.reserve[0] = 0; me.ps.reserve[1] = 0;
+    place(me, box.x, box.z);
+    run(sim, 0.5);
+    check(me.ps.reserve[0] > 0 && me.ps.reserve[1] === 0 && R.boxDown.has(box.i), `an ammo box refills the primary only (${me.ps.reserve[0]} rounds) and goes down`);
+    place(foe, 40, 40); foe.spawnProtect = 0;
+    sim._kill(foe, me, me.ps.weapon, 10, null, false, null);
+    const d = R.drops[R.drops.length - 1];
+    me.ps.reserve[0] = 0;
+    place(me, d.x, d.z);
+    run(sim, 0.5);
+    check(me.ps.reserve[0] > 0 && !R.drops.includes(d), 'the dead drop ammo for the primary');
+  }
+
   // Taking a contract at a phone.
   {
     const { sim } = makeSim('exq', 12);
@@ -204,6 +224,19 @@ function units() {
     check(clean.extractions === 7 && blankSave().extractions === 0, 'the save keeps a lifetime extractions count');
   }
 
+  // Held slots: a human who drops is off the field, keeps the slot (no newcomer takes it), and comes back free.
+  {
+    const { sim } = makeSim('exq', 22, [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }]);
+    live(sim);
+    freeze(sim);
+    const g = sim.byId.get('h2'), s = squadOf(sim, g.team), lives = s.lives;
+    sim.humanLeft('h2');
+    run(sim, 70);
+    check(g.away && !g.alive && !g.open && sim.claimOpenSlot('h9', 'Newcomer') === null, 'a dropped human is held: off the field, no newcomer seated');
+    const r = sim.humanRejoin('h2');
+    check(r && g.alive && !g.away && s.lives === lives, `the human comes back into the match without spending a life (${s.lives}/${lives})`);
+  }
+
   // Host migration: a guest's mirror and backup carry the contracts, the exfil and the AI on.
   {
     const { sim, roster } = makeSim('exq', 21, [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }]);
@@ -267,7 +300,7 @@ function runMatch(mode, seed) {
   const r = { mode, seed, t: R.t, ended: sim.phase === 'ended', mean, p99: times[Math.floor(times.length * 0.99)], snapMean: bytes.reduce((a, b) => a + b, 0) / bytes.length, snapMax: bytes[bytes.length - 1],
     extracted: squads.filter(s => s.extracted).length, banked: squads.reduce((n, s) => n + s.banked.length, 0), types, ev };
   console.log(`  ${mode} seed ${seed}: ${r.t.toFixed(0)} s, ${r.extracted}/${squads.length} squads out, ${r.banked} contracts banked, ${ev.done} done (${[...types].join(' ')}), ${ev.exfil} lifts, ${ev.excall} calls, `
-    + `kills ${ev.kill} (AI ${ev.aiKills}, squad v squad ${ev.pvp}), downs ${ev.down}, revives ${ev.revive}, waves ${ev.exwave}, contested ticks ${ev.contested}, ammo ${ev.exammo}; `
+    + `kills ${ev.kill} (AI ${ev.aiKills}, squad v squad ${ev.pvp}), downs ${ev.down}, revives ${ev.revive}, waves ${ev.exwave}, contested ticks ${ev.contested}; `
     + `tick ${mean.toFixed(2)} ms mean, p99 ${r.p99.toFixed(1)}; snapshot per guest ${r.snapMean.toFixed(0)} B mean, ${r.snapMax} max`);
   return r;
 }

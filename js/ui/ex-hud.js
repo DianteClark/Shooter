@@ -114,6 +114,7 @@ const CSS = `
   clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 .ex-lives-note { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
   color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.78)); white-space: nowrap; }
+.hud.ex-offers-on .ex-acts { visibility: hidden; }
 .ex-offers { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(10,13,17,.66); pointer-events: auto; }
 .ex-offers h3 { margin: 0; font: 400 24px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .ex-offers h3 small { display: block; margin-top: 4px; font: 11px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
@@ -140,9 +141,12 @@ const CSS = `
 .ex-callout small { display: block; margin-top: 4px; font: 13px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-shadow: var(--text-lift); }
 @keyframes ex-call { 0% { opacity: 0; transform: translateX(-50%) scale(1.3); } 10% { opacity: 1; transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (max-width: 700px) {
-  .ex-chip { min-width: 44px; padding: 0 6px; }
-  .ex-chip b { font-size: 17px; }
-  .ex-exfil { min-width: 84px; }
+  .ex-top { gap: 3px; transform: translateX(calc(-50% + 14px)); }
+  .ex-chip { min-width: 40px; padding: 0 5px; }
+  .ex-chip b { font-size: 16px; }
+  .ex-chip small { font-size: 8px; }
+  .ex-exfil { min-width: 80px; }
+  .ex-squad { width: 74px; }
   .ex-con { width: 160px; }
   .ex-offer { width: 150px; }
 }
@@ -245,6 +249,7 @@ export class ExHud {
   #openOffers(open) {
     this.offersOpen = open;
     this.offersEl.hidden = !open;
+    this.hud.el.classList.toggle('ex-offers-on', open);
     this.c.offers = null;
   }
 
@@ -287,7 +292,7 @@ export class ExHud {
     const sites = ex.exfils ?? [];
     const landed = sites.filter(e => e.state === 3), inbound = sites.filter(e => e.state === 2), open = sites.filter(e => e.state === 1);
     const near = list => list.reduce((b, e) => (!b || Math.hypot(e.x - me.x, e.z - me.z) < Math.hypot(b.x - me.x, b.z - me.z) ? e : b), null);
-    if (landed.length) { const e = near(landed); return { key: `l${e.i}${Math.ceil(e.timer)}`, big: e.final ? clock(e.timer) : `${Math.ceil(e.timer)}s`, small: e.final ? 'Final exfil down' : 'Helicopter down', cls: 'go' }; }
+    if (landed.length) { const e = near(landed); return { key: `l${e.i}${Math.ceil(e.timer)}`, big: clock(e.timer), small: e.final ? 'Final exfil down' : 'Helicopter down', cls: 'go' }; }
     if (inbound.length) { const e = near(inbound); return { key: `i${e.i}${Math.ceil(e.timer)}`, big: clock(e.timer), small: e.final ? 'Final exfil lands' : 'Helicopter inbound', cls: 'warn' }; }
     if (open.length) { const e = near(open); return { key: `o${open.length}${Math.ceil(e.timer)}`, big: clock(e.timer), small: `${open.length} exfil${open.length > 1 ? 's' : ''} open`, cls: 'go' }; }
     const next = [...EX.windows.map(w => w.open), EX.final.open].find(o => o > t);
@@ -392,7 +397,7 @@ export class ExHud {
     for (const e of ex.exfils ?? []) {
       if (e.state < 1 || e.state > 3 || n >= TAGS) continue;
       const d = Math.round(Math.hypot(e.x - eye.x, e.z - eye.z));
-      if (e.state === 1 && d > 220) continue;
+      if ((e.state === 1 && d > 220) || d < e.r) continue;      // Standing in it, the ring says enough.
       n = this.#tag(n, e.x, e.z, e.state === 3 ? 'go' : e.state === 2 ? '' : 'open', `${icon('mode:ex', { size: 13 })}${e.final ? 'Final exfil' : 'Exfil'} <small>${d} m</small>`, eye);
     }
     // The nearest phone, when close enough to matter.
