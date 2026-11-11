@@ -15,7 +15,7 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else '/tmp/br-mode'
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows']   # Both tabs keep running.
 G = 'window.__game.app'
-URL = f'http://localhost:{PORT}/?debug=1&net=local&vote=8&brtest'
+URL = f'http://localhost:{PORT}/?debug=1&net=local&vote=15&brtest'
 
 
 async def main():

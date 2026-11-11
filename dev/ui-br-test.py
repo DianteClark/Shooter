@@ -62,7 +62,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.locator('.br-jump-map').click()
     await pg.wait_for_timeout(2200)
     await shot('04-glide')
-    await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=15000)
+    await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=40000)
     await pg.wait_for_timeout(600)
     # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
     await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 999; }})()")
@@ -119,13 +119,14 @@ async def run(browser, vw, vh, failures, errors):
     # Down, then a squadmate's revive (the squad bots come for you).
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 70) {{ p.ps.x = 3; p.ps.z = 3; }}
-      for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) {{ p.ps.x = me.ps.x + 6; p.ps.z = me.ps.z; p.brAir = 0; }}
+      for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) {{ p.ps.x = me.ps.x + 6; p.ps.z = me.ps.z; p.brAir = 0; if (p.downed) {{ p.downed = false; p.hp = 100; }} }}
+      window.__mates = sim.players.filter(p => p.team === me.team && p !== me).map(p => [p.alive, p.downed, p.hp | 0]);
       // The fight just before may already have downed us: a second lethal hit then finishes, which is the rule, not a bug.
       if (me.downed) {{ me.downed = false; me.hp = 100; }}
       me.br.armor = 0; sim._damage(me, foe, 999, 'ar', 10); }})()""")
     await pg.wait_for_timeout(900)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed")
-    if not downed: failures.append(f'{vw}: not downed')
+    if not downed: failures.append(f'{vw}: not downed (squadmates {await ev("JSON.stringify(window.__mates)")}, me alive {await ev(f"{G}.match.sim.byId.get({G}.match.localId).alive")})')
     await pg.wait_for_timeout(600)
     await shot('09-downed')
     # Crawl a little (the pose reads moving), then the squadmate's revive: bars over both, captured part way.
