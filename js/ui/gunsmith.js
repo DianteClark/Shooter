@@ -366,11 +366,10 @@ export class Gunsmith {
         <div class="gs-bench">
           <div class="gs-view">
             <div class="gs-vhead">
-              <div class="gs-title"><b></b><small></small>
-                <span class="gs-lvl"><b class="gs-lvn"></b><i class="xp"><i class="gs-xp"></i></i><small class="gs-xpn"></small></span>
-              </div>
+              <div class="gs-title"><b></b><small></small></div>
               <button class="btn gs-equip" data-act="gsEquip" data-sound="confirm">${ico('equip')}<b></b></button>
             </div>
+            <span class="gs-lvl"><b class="gs-lvn"></b><i class="xp"><i class="gs-xp"></i></i><small class="gs-xpn"></small></span>
           </div>
           <div class="gs-stats"></div>
           <div class="gs-facts"></div>

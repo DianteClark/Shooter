@@ -78,11 +78,11 @@ on every push, keep 2% of weekly usage for bugs.
     enough); rewards are mastery progress plus exclusive streaks, weapons, perks and operators.
 
 ## Owner's wave (2026-11-11 afternoon), approved "full force"
-18. Owner fixes: Infected Ground War (two starting infected); gunsmith gun cards' level/XP bar at the bottom of the card,
+18. DONE (1111-15). Owner fixes: Infected Ground War (two starting infected); gunsmith gun cards' level/XP bar at the bottom of the card,
     clear of the picture; BR: parachute folds on landing, visible glide descent and a landing animation instead of
     spawning on the ground; BR pickup prompt bottom-centre (not over the aim stick), naming the slot it replaces, and
     auto-swap to melee when out of ammo; wiped BR players choose Spectate or Leave.
-19. Clans: grow the bot pool to about 300 (append, never reorder); 20-25 fake clans of 3-8 with shared tags, some
+19. DONE (1111-15). Clans: grow the bot pool to about 300 (append, never reorder); 20-25 fake clans of 3-8 with shared tags, some
     stacked, some average, members queue together and share a team; regular duos; loners. Clan tags on leaderboards.
 20. Bug sweep (every mode and screen at both sizes, saves, friend lobbies) and a phone performance pass (with the
     owner's Performance overlay screenshots).
