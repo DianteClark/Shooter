@@ -20,6 +20,10 @@ import { SND } from '../shared/modes.js';
 const DEG = Math.PI / 180;
 
 // aimError: sigma in radians at first sight. aimFloor: sigma once settled (never zero: no aimbots).
+// V10 fairness pass (dev/balance-sim.mjs --human, js/sim/humanlike.js): a thumb on the aim stick, with aim assist, wins
+// about 85% of same-gun duels against a Recruit, 60% against a Regular and a third against a Veteran. Recruit and
+// Regular are left as they were; Veteran reacts and settles a touch slower than before (it was 0.24-0.38 s, floor
+// 0.03), because the default Mixed lobby is two Veterans and an Elite in every six and that is where a phone loses.
 export const SKILLS = {
   recruit: {
     thinkHz: 5, reaction: [0.55, 0.95], aimError: 0.2, aimFloor: 0.085, settle: 1.15, turnRate: 5.5, lag: 0.26,
@@ -38,7 +42,7 @@ export const SKILLS = {
     objPlay: 0.82, objDefend: 0.2, objSplit: 4, tagSight: 22, objPush: 0.3, objRotate: false,
   },
   veteran: {
-    thinkHz: 9, reaction: [0.24, 0.38], aimError: 0.085, aimFloor: 0.03, settle: 0.55, turnRate: 13, lag: 0.13,
+    thinkHz: 9, reaction: [0.26, 0.42], aimError: 0.09, aimFloor: 0.036, settle: 0.6, turnRate: 13, lag: 0.14,
     fov: 160 * DEG, sight: 26, hearing: 13, hearErr: 1, notice: 0.92, memory: 3, close: 5,
     retreatHp: 42, strafe: 0.85, adsUse: 0.9, flank: 0.28, holdProb: 0.45, holdTime: [2, 5], slide: 0.3,
     arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
@@ -58,6 +62,15 @@ export const SKILLS = {
 // Preferred fighting distance per weapon, and how the weapon shifts the bot's playstyle, live in each gun's
 // `botUse` (weapons.js): {pref, hold, flank, advance, rush?, scoped?, fireMax?, adsMin?}.
 // `rush`: beyond this range the gun is not worth firing, so sprint the gap instead of plinking.
+// V10, engagement distance by gun. Every bot fights at the distance its gun wants (pref), and what it does about
+// being at the wrong one depends on the gun:
+//   close guns (`rush` set: shotguns, SMGs, the pocket guns) do not cross open ground at someone who is looking at
+//     them. Out of reach of a facing enemy they bound to cover that is nearer the target and out of its sight
+//     (_closeIn), wait at the corner for it to come, and only charge the last few metres or a turned back. With no
+//     cover to use they fall back to an ambush; an SMG that is being shot with nowhere to go shoots back (`plink`).
+//     Between fights they keep to ground with short sight lines (_laneGoal, _goCorner) instead of holding a lane.
+//   long guns (pref 18 and up) back away from anyone inside their distance, hold the long-sight spots (`hold`), push
+//     fewer stages (`advance`), and see further down a scope (`sight`, metres added to the tier's sight range).
 // STYLE holds overrides only, for a gun whose bot behaviour should differ from its data; empty today.
 const STYLE = {};
 const DEFAULT_STYLE = { pref: 15, hold: 1, flank: 1, advance: 3 };
@@ -95,6 +108,22 @@ const DENY_REACH = 13;          // Metres a bot will go out of its way to deny i
 const OBJ_CHASE = 9;            // How far a bot on an objective will leave it to run down a firm contact.
 const HARD_LEAD = 8;            // Seconds before a rotation that bots who think ahead start for the next zone.
 const OVERWATCH_MAX = 15;       // Furthest a supporting bot will stand from the edge of the zone it covers.
+const CLOSE_REACH = 15;         // Metres a close gun will run to the next piece of cover on its way in.
+const CLOSE_GAIN = 1.5;         // ...which has to be at least this much nearer the target than where it stands.
+const CLOSE_DASH = 2;           // Metres past `rush` that are simply charged, whoever is looking.
+const CORNER_SIGHT = 15;        // A corner worth holding with a close gun sees no further than this on average.
+const EXPOSE_RAYS = 12, EXPOSE_MAX = 30;
+
+// How open a spot is: the mean clear sight line from it, metres, capped at EXPOSE_MAX. A yard reads high, a doorway low.
+function exposureAt(map, x, z) {
+  let sum = 0;
+  for (let i = 0; i < EXPOSE_RAYS; i++) {
+    const a = (i / EXPOSE_RAYS) * TAU;
+    const hit = raycastMap(map, x, z, Math.cos(a), Math.sin(a), EXPOSE_MAX, 'blocksVision');
+    sum += hit ? hit.t : EXPOSE_MAX;
+  }
+  return sum / EXPOSE_RAYS;
+}
 
 // Full kits per gun; a bot runs one of them, cut down for its tier. Slots listed in the order they are fitted,
 // so a low tier keeps what matters most on that gun. Suppressors are listed third: veterans and elites only.
@@ -663,6 +692,7 @@ export class BotBrain {
     this.sawT = -99; this.sawX = 0; this.sawZ = 0; this.suppressing = false;
     this.turretTarget = null;
     this.style = styleOf(ps.primary);
+    this.plink = false; this.closeN = 0;
     this.peek = 0;
     this.objective = null; this.objKey = null; this.objAim = 0; this.objPushRoll = false;
     this.canHit = true;
@@ -794,8 +824,8 @@ export class BotBrain {
     }
     let best = null, bestScore = Infinity, bestD = 0;
     const sameTarget = this.target;
-    // Engagements stay on-screen distances; only a scoped rifle reaches further.
-    const sightRange = styleOf(ps.weapon).pref >= 28 ? S.sight + 10 : S.sight;
+    // Engagements stay on-screen distances; a scoped rifle reaches further by what its botUse.sight says.
+    const sightRange = S.sight + (styleOf(ps.weapon).sight || 0);
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       if (q.team === p.team || !q.alive || q.spawnProtect > 0) continue;
@@ -959,12 +989,30 @@ export class BotBrain {
     }
     this.lastRetreatHp = p.hp;
 
-    // A shotgun has no business in the open at range: get behind something and let them come.
-    if (visible && WEAPONS[ps.weapon].category === 'Shotgun' && this.targetDist > 10.5 && this.mode !== 'hold' && this.mode !== 'cover' && this.mode !== 'objective') {
+    // A close gun has no business crossing the open at someone who is looking at it: work in through cover, and
+    // failing that get behind something and let them come.
+    const bu = styleOf(ps.weapon);
+    this.plink = false;
+    if (visible && bu.rush && this.targetDist > bu.rush + CLOSE_DASH && this.mode !== 'hold' && this.mode !== 'cover' && this.mode !== 'close'
+      && !(this.mode === 'objective' && (this.arrived || this.objective?.commit))) {
       // Unless they are looking the other way, in which case this is exactly the moment to close.
       const t = this.target.ps;
       const facingUs = Math.abs(angleDiff(t.aim, Math.atan2(ps.z - t.z, ps.x - t.x))) < 0.9;
-      if (facingUs || this.targetDist > 18) this._ambush();
+      if (facingUs || this.targetDist > bu.rush * 2.2) {
+        // Nowhere to go: a gun that still reaches fights from where it stands rather than run mute into the fire.
+        if (!this._closeIn(t.x, t.z) && !this._ambush()) this.plink = !bu.fireMax || this.targetDist <= bu.fireMax;
+      }
+    }
+    if (this.mode === 'close') {
+      if (visible && this.targetDist <= bu.rush) this._setMode('none');          // Close enough: fight.
+      else if (this.arrived) {
+        // At the corner. Give them a moment to walk into it, then take the next bound toward where they were.
+        this.holdT -= this.interval;
+        if (this.holdT <= 0) {
+          const far = this.hasKnown && Math.hypot(this.knownX - ps.x, this.knownZ - ps.z) > bu.rush;
+          if (!(far && this.closeN < 3 && this._closeIn(this.knownX, this.knownZ))) this._setMode('none');
+        }
+      }
     }
 
     // Pistol when the primary runs dry mid-fight; back to the main gun when it is over.
@@ -982,7 +1030,7 @@ export class BotBrain {
     const worthChasing = this.hasKnown && !o?.commit && (o
       ? !this.knownSoft && this.knownErr < 6 && knownD < OBJ_CHASE && !(this.mode === 'objective' && this.arrived)
       : !this.knownSoft || knownD < 14);
-    if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt') {
+    if (worthChasing && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'hunt' && this.mode !== 'close') {
       this._setMode('hunt');
       this.modeT = o ? 3 : 6;
       this._goTo(this.knownX, this.knownZ);
@@ -1274,12 +1322,38 @@ export class BotBrain {
     const { sim, ps, S } = this;
     const t = this.target.ps;
     const c = sim.nav.findCover(ps.x, ps.z, t.x, t.z, sim.rng);
-    if (!c) return;
+    if (!c) return false;
     this.mode = 'hold';
     this.holdSpot = c;
     this.holdAim = Math.atan2(t.z - c.z, t.x - c.x);
-    this.holdT = between(sim.rng, S.holdTime[0], S.holdTime[1]);
+    this.holdT = between(sim.rng, S.holdTime[0], S.holdTime[1]) * 1.4;
     this._goTo(c.x, c.z);
+    return true;
+  }
+
+  // One bound of a covered approach: the nearest cover that is out of the threat's sight and nearer to it than here.
+  // False when there is none, or the bot has bounded enough for one contact.
+  _closeIn(tx, tz) {
+    const { sim, ps } = this;
+    const here = Math.hypot(tx - ps.x, tz - ps.z);
+    let best = null, bestScore = Infinity;
+    for (const c of sim.nav.cover) {
+      const d = Math.hypot(c.x - ps.x, c.z - ps.z);
+      if (d > CLOSE_REACH || d < 1.5) continue;
+      const left = Math.hypot(tx - c.x, tz - c.z);
+      if (left > here - CLOSE_GAIN || left < 2) continue;
+      if (hasLineOfSight(sim.map, c.x, c.z, tx, tz)) continue;
+      const score = d + left * 0.7 + sim.rng() * 2;
+      if (score < bestScore) { bestScore = score; best = c; }
+    }
+    if (!best) return false;
+    this.closeN = this.mode === 'close' ? this.closeN + 1 : 0;
+    this.mode = 'close';
+    this.holdSpot = best;
+    this.holdAim = Math.atan2(tz - best.z, tx - best.x);
+    this.holdT = between(sim.rng, 0.7, 1.6);
+    this._goTo(best.x, best.z);
+    return true;
   }
 
   _assignLane() {
@@ -1302,10 +1376,20 @@ export class BotBrain {
     const { sim, p } = this;
     const W = sim.map.width;
     const f = STAGES[Math.min(stage, STAGES.length - 1)];
-    return {
-      x: (this.side === 0 ? f : 1 - f) * W + (sim.rng() - 0.5) * 2,
-      z: sim.map.lanes[this.laneIdx].z + (sim.rng() - 0.5) * 7,
-    };
+    const x = (this.side === 0 ? f : 1 - f) * W, z = sim.map.lanes[this.laneIdx].z;
+    // A close gun does not walk the middle of the lane: of a handful of spots around the stage it takes the least
+    // open one, so its route runs along the lane's edges and through whatever stands in it.
+    if (this.style.rush) {
+      let best = null, bestE = Infinity;
+      for (let i = 0; i < 6; i++) {
+        const cx = x + (sim.rng() - 0.5) * 8, cz = z + (sim.rng() - 0.5) * 16;
+        if (!sim.nav.isWalkable(cx, cz)) continue;
+        const e = exposureAt(sim.map, cx, cz) + sim.rng() * 2;
+        if (e < bestE) { bestE = e; best = { x: cx, z: cz }; }
+      }
+      if (best) return best;
+    }
+    return { x: x + (sim.rng() - 0.5) * 2, z: z + (sim.rng() - 0.5) * 7 };
   }
 
   _onObjective() {
@@ -1407,9 +1491,39 @@ export class BotBrain {
     return !sim.ffa ? this.side : h.sight[0] >= h.sight[1] ? 0 : 1;
   }
 
+  // A close gun's hold: a corner with short sight lines near its lane, watching the way the enemy comes. Anyone who
+  // rounds it is already inside the gun's distance.
+  _goCorner() {
+    const { sim, ps, S } = this;
+    const laneZ = sim.map.lanes[this.laneIdx].z, W = sim.map.width;
+    let best = null, bestScore = Infinity;
+    for (const c of sim.nav.cover) {
+      const d = Math.hypot(c.x - ps.x, c.z - ps.z);
+      if (d > 12 || d < 2) continue;
+      if (!sim.ffa && Math.abs(c.z - laneZ) > 11) continue;
+      const depth = sim.ffa ? 0 : (this.side === 0 ? c.x : W - c.x) / W;
+      if (depth > 0.72 || this._teammateNear(c.x, c.z, 3)) continue;
+      const e = exposureAt(sim.map, c.x, c.z);
+      if (e > CORNER_SIGHT) continue;
+      // Forward of here rather than back toward the spawn: a corner nobody walks past is no ambush.
+      const ahead = sim.ffa ? 0 : (this.side === 0 ? c.x - ps.x : ps.x - c.x);
+      const score = d * 0.4 + e * 0.5 - Math.min(6, ahead) * 0.5 + sim.rng() * 5;
+      if (score < bestScore) { bestScore = score; best = c; }
+    }
+    if (!best) return false;
+    this.mode = 'hold';
+    this.holdSpot = best;
+    const enemyX = sim.ffa ? W / 2 : this.side === 0 ? best.x + 9 : best.x - 9;
+    this.holdAim = Math.atan2(laneZ - best.z, enemyX - best.x);
+    this.holdT = between(sim.rng, S.holdTime[0], S.holdTime[1]) * 1.5;
+    this._goTo(best.x, best.z);
+    return true;
+  }
+
   // Goes to a nearby spot with a good sightline and watches down it for a few seconds.
   _goHold() {
     const { sim, p, ps, S } = this;
+    if (this.style.rush && this.style.corner !== false) return this._goCorner();
     let best = null, bestScore = Infinity;
     const laneZ = sim.map.lanes[this.laneIdx].z;
     for (const h of sim.nav.holds) {
@@ -1491,12 +1605,13 @@ export class BotBrain {
     const ux = (q.ps.x - ps.x) / d, uz = (q.ps.z - ps.z) / d;
     const o = this.objective;
     const holdingPoint = this.mode === 'objective' && this.arrived && o && (o.role === 'attack' || o.role === 'defend' || o.role === 'plant' || o.role === 'defuse');
-    const atHold = (this.mode === 'hold' && this.arrived) || holdingPoint;
+    const atHold = ((this.mode === 'hold' || this.mode === 'close') && this.arrived) || holdingPoint;
     let fwd = 0;
     // A wall of crates between us that this gun cannot punch through: get an angle by closing in.
     if (!this.canHit && !holdingPoint) fwd = 1;
     else if (!atHold) {
-      if (d > style.pref + 4) fwd = 1;
+      // A close gun wants to be at its distance, not near it; a long gun gives ground to anyone inside its own.
+      if (d > style.pref + (style.rush ? 1 : 4)) fwd = 1;
       else if (d < style.pref - 3 && style.pref >= 12) fwd = -0.85;
     }
 
@@ -1606,11 +1721,13 @@ export class BotBrain {
       // A flag runner with distance in hand does not stop to shoot back: it sprints for home, only turning to fight
       // someone close enough to catch it.
       const running = this.mode === 'objective' && !this.arrived && this.objective?.role === 'run' && d > CTF_RUN_FIGHT;
-      const rushing = running || (style.rush && d > style.rush && this.mode !== 'cover' && this.mode !== 'hold');
+      // Bounding to cover (mode 'close') is a run too: the gun stays down until the bot is where it is going.
+      const bounding = this.mode === 'close' && !this.arrived && d > style.rush;
+      const rushing = running || bounding || (style.rush && d > style.rush && !this.plink && this.mode !== 'cover' && this.mode !== 'hold' && this.mode !== 'close');
       if (!rushing) this._trigger(q, d, trueAng, dt, q.ps.x, q.ps.z);
       // A committed objective (a flag run, a flag grab) never stops to trade shots: it fights on the move.
       const pushing = this.mode === 'objective' && !this.arrived && (d > style.pref || this.objPushRoll || !!this.objective?.commit);
-      if ((this.mode === 'cover' || this.mode === 'hold' || pushing) && !this.arrived) this._followPath(false);
+      if ((this.mode === 'cover' || this.mode === 'hold' || this.mode === 'close' || pushing) && !this.arrived) this._followPath(false);
       else this._combatMove(q, d, dt);
       if (rushing) {
         I.sprint = S.sprint >= 1 || this.sprintRoll;
@@ -1636,8 +1753,8 @@ export class BotBrain {
         const spread = Math.min(0.9, Math.atan2(Math.max(0.5, this._knownBlur), dist));
         this.peek += dt * 1.8;
         desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x) + (Math.sin(this.peek) * 0.65 + this.knownBias) * spread;
-        if (this.mode === 'hold' && this.arrived) I.aiming = true;
-      } else if (this.mode === 'hold' && this.arrived) {
+        if ((this.mode === 'hold' || this.mode === 'close') && this.arrived) I.aiming = true;
+      } else if ((this.mode === 'hold' || this.mode === 'close') && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.holdAim + Math.sin(this.peek) * 0.28;
         I.aiming = !!styleOf(ps.weapon).scoped || S.adsUse > 0.8;

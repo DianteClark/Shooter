@@ -94,8 +94,11 @@ export const MARATHON_PRO_RELOAD = 1.35;   // Run and Load: reload clock speed w
 // Assist range, reach (scales ASSIST_CONE and ASSIST_EDGE), slowdown (scales the friction) and strength (scales
 // ASSIST_MAX_OFFSET) are tunables; these are their values at 1x.
 const ASSIST_CONE = 8 * Math.PI / 180;
-const ASSIST_EDGE = 1.25;       // Friction fades out between the body's edge and this multiple of it.
-const ASSIST_MAX_OFFSET = 6 * Math.PI / 180;
+const ASSIST_EDGE = 1.5;        // Assist fades out between the body's edge and this multiple of it (V10: was 1.25).
+const ASSIST_MAX_OFFSET = 7 * Math.PI / 180;      // V10: was 6 degrees.
+const ASSIST_FRICTION = 0.38;   // Share of the stick's rotation cancelled over a target from the hip (V10: was 0.32); +0.3 in ADS.
+const ASSIST_TRACK = 0.45;      // Share of the target's drift across the view that is followed from the hip; +0.15 in ADS.
+const ASSIST_TRACK_RATE = 2.5;  // rad/s: drift faster than this is not followed past the cap.
 
 const TAU = Math.PI * 2;
 
@@ -182,7 +185,7 @@ export function createPlayerState({ id, primary = 'ar', camo = 'none', loadout, 
     holsterT: 0, holsterSlot: 0, holsterDur: 0,   // Fast Hands Pro: a reload finishing on the holstered gun.
     heatIdle: 9, calmT: 0,
     slideDirX: 0, slideDirZ: 0, slideSpeed: 0,
-    aaOffset: 0, aaRaw: null,
+    aaOffset: 0, aaRaw: null, aaId: null, aaBearing: 0,
     daze: 0, dazeT: 0,                              // Stun, Gas and Shock: see applyDaze.
   };
   if (loadout) applyLoadout(ps, loadout);
@@ -215,7 +218,7 @@ export function respawnPlayer(ps, x, z, aim, loadout) {
   ps.cooldown = 0; ps.bloom = 0; ps.shotIndex = 0;
   ps.swapT = 0; ps.sinceShot = 9; ps.burstLeft = 0;
   ps.holsterT = 0; ps.holsterDur = 0;
-  ps.aaOffset = 0; ps.aaRaw = null;
+  ps.aaOffset = 0; ps.aaRaw = null; ps.aaId = null;
   ps.daze = 0; ps.dazeT = 0;
   return ps;
 }
@@ -802,16 +805,21 @@ export function traceShot(shot, map, players, selfId, def) {
   return rays;
 }
 
-// Stick aim -> assisted aim. Friction only: while the aim is over a visible enemy's body, part of the
-// stick's rotation is cancelled so it is easier to stay on target. Nothing ever moves the aim on its
-// own, so landing on the head stays the player's skill. All state is the offset on ps, so taking the
-// thumb off the stick or losing the target releases it.
+// Stick aim -> assisted aim. Two things, both only while the aim is over (or just beside) a visible enemy's body:
+//   friction   part of the stick's own rotation is cancelled, so a thumb's wander stays on the target;
+//   tracking   part of the target's sideways drift across the view (its strafe, and the player's own) is followed, so
+//              a strafing target does not slide out from under a thumb that is holding still. V10: a thumb is a
+//              position, not a rate, and cannot lead a strafe the way a bot's turn does.
+// Neither ever turns the aim toward a target: tracking follows a fraction of the bearing's change, never the gap to
+// the centre, so landing on the body and finding the head stay the player's skill, and a target that outruns the
+// offset cap simply walks out of it. All state is on ps, so taking the thumb off the stick or losing the target
+// releases it. Bots never come through here.
 export function applyAimAssist(aim, ps, players, map, dt) {
-  if (typeof aim !== 'number') { ps.aaRaw = null; return aim; }
+  if (typeof aim !== 'number') { ps.aaRaw = null; ps.aaId = null; return aim; }
   const reach = TUNING.assistReach, range = TUNING.assistRange;
   const cone = ASSIST_CONE * reach, zone = Math.max(1.05, ASSIST_EDGE * reach);
   const maxOffset = ASSIST_MAX_OFFSET * TUNING.assist;
-  let bestAbs = cone, bestEdge = 0, found = false;
+  let bestAbs = cone, bestEdge = 0, found = null, bestBearing = 0;
   const selfTeam = selfTeamOf(ps, players);
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
@@ -820,22 +828,32 @@ export function applyAimAssist(aim, ps, players, map, dt) {
     const dx = p.x - ps.x, dz = p.z - ps.z;
     const dSq = dx * dx + dz * dz;
     if (dSq > range * range || dSq < 0.04) continue;
-    const abs = Math.abs(angleDiff(Math.atan2(dz, dx), aim + ps.aaOffset));
+    const bearing = Math.atan2(dz, dx);
+    const abs = Math.abs(angleDiff(bearing, aim + ps.aaOffset));
     const edge = Math.min(cone, Math.asin(Math.min(1, HIT_RADIUS / Math.sqrt(dSq))));
     if (abs >= bestAbs || abs >= edge * zone) continue;
     if (!hasLineOfSight(map, ps.x, ps.z, p.x, p.z)) continue;
-    bestAbs = abs; bestEdge = edge; found = true;
+    bestAbs = abs; bestEdge = edge; found = p; bestBearing = bearing;
   }
   const rawDelta = ps.aaRaw === null ? 0 : angleDiff(aim, ps.aaRaw);
   ps.aaRaw = aim;
   if (found) {
     const fade = bestAbs <= bestEdge ? 1 : 1 - (bestAbs - bestEdge) / (bestEdge * (zone - 1));
     // Capped below 1: a full cancel would glue the aim to the target and the stick could not pull it off.
-    const friction = Math.min(0.9, (0.32 + 0.3 * ps.adsT) * TUNING.assistSlow);
+    const friction = Math.min(0.9, (ASSIST_FRICTION + 0.3 * ps.adsT) * TUNING.assistSlow);
     ps.aaOffset -= rawDelta * friction * fade;
+    // Tracking: only for the target the aim was already on last frame, and never more than a brisk strafe's worth
+    // in one frame (a respawn or a snapshot jump is not a strafe).
+    if (ps.aaId === found.id) {
+      const drift = angleDiff(bestBearing, ps.aaBearing);
+      const lim = ASSIST_TRACK_RATE * dt;
+      ps.aaOffset += Math.max(-lim, Math.min(lim, drift)) * Math.min(0.9, (ASSIST_TRACK + 0.15 * ps.adsT) * TUNING.assistSlow) * fade;
+    }
+    ps.aaId = found.id; ps.aaBearing = bestBearing;
     ps.aaOffset = Math.max(-maxOffset, Math.min(maxOffset, ps.aaOffset));
   } else {
     // Release quickly so aim never feels sticky once nothing is there.
+    ps.aaId = null;
     ps.aaOffset *= Math.max(0, 1 - 9 * dt);
     if (Math.abs(ps.aaOffset) < 1e-4) ps.aaOffset = 0;
   }

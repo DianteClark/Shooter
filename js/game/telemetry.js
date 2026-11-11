@@ -12,6 +12,10 @@
 // Three scopes per gun: a = everyone in the match, h = human players only, m = the local player only.
 // Each gun's numbers in a scope are one flat array, laid out by FIELDS.
 
+import { MAPS } from '../shared/map.js';
+import { hasLineOfSight } from '../shared/geometry.js';
+import { WEAPONS } from '../shared/weapons.js';
+
 export const STATS_VERSION = 1;
 const STORE_KEY = 'switchyard.gunstats';
 const MAX_MATCHES = 40;          // Newest matches kept one by one; older ones are folded into one archive record.
@@ -38,10 +42,31 @@ export const FIELDS = [
   'heldS',      // seconds alive with it in hand while the match was live
   ...DIST_LABELS.map((_, i) => 'dmg' + i),
   ...DIST_LABELS.map((_, i) => 'hit' + i),
+  // V10, appended: rows saved or exported before these existed are shorter and read as zeros here (fold and
+  // decodeStatsCode both stop at the row's own length), so the store version and old codes stay valid. A gun whose
+  // adsShots + hipShots is 0 simply has no split recorded; gunRows reports null for it rather than a made-up share.
+  'adsShots',   // shots fired fully aimed in
+  'hipShots',   // shots fired from the hip or part-way in
+  'adsHits',    // hits from shots of each kind
+  'hipHits',
+  'coneShots',  // shots fired while an enemy was in front of the muzzle: in range, in sight, within CONE of the aim
 ];
 const F = Object.fromEntries(FIELDS.map((k, i) => [k, i]));
 const NF = FIELDS.length;
 export const SCOPES = ['a', 'h', 'm'];
+
+// "In the cone": an enemy the shooter could see, inside the gun's range, whose body is within this of the shot's aim.
+// Wide enough to take in a near miss on a strafing target, narrow enough that firing down an empty lane is not in it.
+// shots - coneShots is spraying (nobody there); coneShots - hits is missing.
+export const CONE = 10 * Math.PI / 180;
+const CONE_BODY = 0.55;          // Metres: the body's half-width added to the cone, so a point-blank target counts.
+const ADS_FULL = 0.85;           // Same threshold as js/sim/player.js.
+
+function angleOff(a, b) {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
+  return Math.abs(d);
+}
 
 function bucketOf(dist) {
   for (let i = 0; i < DIST_EDGES.length; i++) if (dist < DIST_EDGES[i]) return i;
@@ -58,6 +83,7 @@ export class MatchTelemetry {
     this.scopes = { a: {}, h: {}, m: {} };    // scope -> gunId -> row
     this.players = new Map();                  // id -> { bot, held: {gunId: seconds} }
     this.fights = new Map();                   // targetId -> { last, first: Map(attackerId -> time) }
+    this.lastAds = new Map();                  // shooterId -> whether their latest shot was aimed in
     this.clock = 0;                            // Seconds of match time seen, from view.t.
     this.lastT = null;
     this.live = 0;                             // Seconds of live phase.
@@ -117,7 +143,7 @@ export class MatchTelemetry {
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       switch (e.t) {
-        case 'shot': this.#add(e.by, e.weapon, F.shots, 1); break;
+        case 'shot': this.#onShot(e, view); break;
         case 'hit': this.#onHit(e); break;
         case 'kill': this.#onKill(e, view); break;
         case 'spawn': this.fights.delete(e.id); break;
@@ -125,10 +151,41 @@ export class MatchTelemetry {
     }
   }
 
+  // A shot: counted, split by stance, and checked for anyone in front of it. The event may carry `ads` (0/1); when it
+  // does not, the shooter's adsT in the view decides. A bolt gun knocks its own scope back as it fires (boltKick), so
+  // for those the bar is the kick, not full ADS.
+  #onShot(e, view) {
+    const gun = e.weapon, by = e.by;
+    this.#add(by, gun, F.shots, 1);
+    const players = view.players;
+    let me = null;
+    for (let i = 0; i < players.length; i++) if (players[i].id === by) { me = players[i]; break; }
+    if (!me) return;
+    const w = WEAPONS[gun];
+    const need = Math.min(ADS_FULL, w?.boltKick ?? 1) - 0.03;
+    const ads = e.ads !== undefined ? !!e.ads : (me.adsT || 0) >= need;
+    this.lastAds.set(by, ads);
+    this.#add(by, gun, ads ? F.adsShots : F.hipShots, 1);
+    if (typeof e.aim !== 'number') return;
+    const ox = e.ox ?? me.x, oz = e.oz ?? me.z, range = w ? w.range : 60;
+    const map = MAPS[this.mapId] || null;
+    for (let i = 0; i < players.length; i++) {
+      const q = players[i];
+      if (q.id === by || !q.alive || q.team === me.team) continue;
+      const dx = q.x - ox, dz = q.z - oz, d = Math.hypot(dx, dz);
+      if (d > range || d < 1e-3) continue;
+      if (angleOff(Math.atan2(dz, dx), e.aim) > CONE + Math.atan2(CONE_BODY, d)) continue;
+      if (map && !hasLineOfSight(map, ox, oz, q.x, q.z)) continue;
+      this.#add(by, gun, F.coneShots, 1);
+      return;
+    }
+  }
+
   #onHit(e) {
     if (!e.w) return;                 // A streak or thrown kit: not gunplay.
     const by = e.by, gun = e.w, dmg = e.dmg || 0;
     this.#add(by, gun, F.hits, 1);
+    if (this.lastAds.has(by)) this.#add(by, gun, this.lastAds.get(by) ? F.adsHits : F.hipHits, 1);
     this.#add(by, gun, F.dmg, dmg);
     if (e.head) this.#add(by, gun, F.headHits, 1);
     if (typeof e.dist === 'number') {
@@ -285,8 +342,25 @@ export function gunRows(agg, scope, ids) {
       pick: pm ? r[F.picks] / pm : null,
       kpm: r[F.heldS] >= 30 ? kills / (r[F.heldS] / 60) : null,
       dmgPerHit: DIST_LABELS.map((_, i) => r[F.hit0 + i] ? r[F.dmg0 + i] / r[F.hit0 + i] : null),
+      // V10 split; null for rows recorded before it (see FIELDS). split = shots that have a stance recorded.
+      ...stanceOf(r),
     };
   });
+}
+
+// Hip/ADS and on-target numbers of one row. adsShare: share of shots aimed in. adsAcc / hipAcc: hit rate of each.
+// coneShare: share of shots with an enemy in front of the muzzle (the rest is spraying). coneAcc: hits per such shot,
+// the accuracy that says how well the player aims rather than how long they hold the trigger.
+function stanceOf(r) {
+  const ads = r[F.adsShots] || 0, hip = r[F.hipShots] || 0, split = ads + hip, cone = r[F.coneShots] || 0;
+  if (!split) return { adsShare: null, adsAcc: null, hipAcc: null, coneShare: null, coneAcc: null };
+  return {
+    adsShare: ads / split,
+    adsAcc: ads ? Math.min(1, (r[F.adsHits] || 0) / ads) : null,
+    hipAcc: hip ? Math.min(1, (r[F.hipHits] || 0) / hip) : null,
+    coneShare: cone / split,
+    coneAcc: cone ? Math.min(1, ((r[F.adsHits] || 0) + (r[F.hipHits] || 0)) / cone) : null,
+  };
 }
 
 // ---- Export code ----

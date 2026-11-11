@@ -17,13 +17,14 @@ const stat = (name, body) => `<div class="help-stat"><dt>${esc(name)}</dt><dd>${
 const PANELS = {
   weapons: () => `
     <dl class="help-stats scroll-y">
-      ${stat('Damage', 'Damage of one shot at close range. Shotguns show all pellets together. Everyone has 100 health, which comes back on its own a few seconds after you stop taking hits.')}
+      ${stat('Damage', 'Damage of one shot at close range. Shotguns show all pellets together: inside the first range number a pump or double-barrel kills in one shell if most of the fan lands, so put the middle of it on the body. Everyone has 100 health, which comes back on its own a few seconds after you stop taking hits.')}
       ${stat('Headshots', 'The head is a small zone at the centre of a player. <b>Aimed in</b>, a headshot kills in one hit with any gun. <b>From the hip</b> it does 1.6&times; damage instead. Marksman rifles and snipers kill with a headshot either way. Explosives have no headshots.')}
       ${stat('Fire rate', 'Shots per minute (RPM). Every gun fires while you hold the trigger, semi-autos and snipers included, at their own pace.')}
       ${stat('Range', 'Shown as three numbers: full damage out to the first, fading to its lowest by the second, and nothing at all past the third. Bullets simply stop at the last one, so shots beyond it miss.')}
       ${stat('Pierce', 'How much damage a round keeps after passing through <b>waist-high cover</b> such as crates and barriers. 70% means a 30 damage shot still does 21. It goes through at most two pieces. Most SMGs, pistols and shotguns have no pierce, nor do crossbow bolts: crates stop them. The Ballast SMG and the Railspike slug gun are the exceptions. Buildings, containers and walls stop every gun. Your own cover never counts: you can always fire over a crate you are crouched behind.')}
       ${stat('Aimed fire', 'Spread while aimed in. Lower is tighter. You aim in by holding the right stick with the move stick below about 70%; at a full push you hip-fire instead.')}
-      ${stat('Hip fire', 'Spread when firing without aiming, including at a full sprint push. Each shot adds bloom, which settles back when you stop.')}
+      ${stat('Hip fire', 'Spread when firing without aiming, including at a full sprint push. Moving widens it by up to half, and each shot adds bloom, which settles back when you stop. The Skitter, Rasp, Shunter, Prospector, Squall, Flicker and Gnat shoot straight out of a slide; every other gun sprays wider in one.')}
+      ${stat('Aim assist', 'While your aim is on or just beside an enemy you can see, within 30 m, part of your thumb\'s wobble is cancelled and your aim follows part of the target\'s sideways movement, a little more when aimed in. It never turns onto a target for you and lets go when you pull away. Strength is in Options.')}
       ${stat('Recoil', 'How far the gun pulls and sways while you hold the trigger. Grips and compensators tame it.')}
       ${stat('Aim speed', 'Time to get fully aimed in. Until then the gun fires as hip fire, and a headshot is not yet a one-hit kill.')}
       ${stat('Handling', 'Sprint-to-fire delay and swap time together: how quickly you can shoot after sprinting or switching guns. A slide pays off most of the sprint delay.')}
