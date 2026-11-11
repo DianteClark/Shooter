@@ -47,6 +47,7 @@ setCareerExtras(() => {
   return {
     ...c, level: Progress.prestige > 0 ? 50 : Progress.level, prestige: Progress.prestige, pro: Progress.proPerks(),
     cats, masteredIn, masteredSet, mastered: masteredSet.size, catSize: CAT_SIZE, camoOn,
+    chal: w => { const l = Progress.challenges(w); return [l.filter(c => c.done).length, l.length]; },
     life: Progress.lifetime?.() ?? {}, granted: id => !!Progress.hasReward?.(id),
   };
 });
@@ -561,13 +562,28 @@ export function cardHtml(id, { size = 'm', title, sub, locked = false, equipped 
   const name = title ?? card.name;
   const line2 = sub ?? card.group;
   const anim = art.anim && !locked ? ` a-${art.anim}` : '';
-  return `<span class="ccard${art.gold ? ' gold' : ''}${anim}${locked ? ' locked' : ''}${equipped ? ' equipped' : ''}${cls ? ' ' + cls : ''}" style="--cw:${w}px" data-card="${esc(card.id)}">
+  // A long name steps the title down a size rather than lose its end.
+  const long = name.length > 18 ? ' long' : name.length > 14 ? ' longish' : '';
+  return `<span class="ccard${long}${art.gold ? ' gold' : ''}${anim}${locked ? ' locked' : ''}${equipped ? ' equipped' : ''}${cls ? ' ' + cls : ''}" style="--cw:${w}px" data-card="${esc(card.id)}">
     ${groundSvg(card)}${anim ? '<i class="cc-fx" aria-hidden="true"></i>' : ''}
     <span class="cc-em">${emblem(card, Math.round(w * 0.2))}</span>
     <span class="cc-tx"><b>${esc(name)}</b>${line2 ? `<small>${esc(line2)}</small>` : ''}</span>
     ${locked ? `<span class="cc-lock">${icon('ui:lock', { size: Math.max(12, Math.round(w * 0.06)) })}</span>` : ''}
     ${equipped ? `<span class="cc-on">${icon('ui:check', { size: Math.max(10, Math.round(w * 0.05)), accent: 'currentColor' })}</span>` : ''}
   </span>`;
+}
+
+// The bar under a card still being earned, like every other progress bar in the game: sodium fill and value/goal.
+const fmtN = v => v.toLocaleString('en-US');
+export function cardProgressHtml({ value, goal }) {
+  const f = Math.max(0, Math.min(1, value / goal));
+  return `<span class="cc-prog"><i class="cc-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i><small>${fmtN(value)}/${fmtN(goal)}</small></span>`;
+}
+
+// Locked cards nearest to done, for the results screen: [{card, progress}], the closest first.
+export function cardsInReach(max = 3) {
+  return Progress.cards().filter(x => x.progress && x.progress.value > 0)
+    .sort((a, b) => b.progress.value / b.progress.goal - a.progress.value / a.progress.goal).slice(0, max);
 }
 
 /* ---------- Picker ---------- */
@@ -595,7 +611,7 @@ export function cardsSheet(menu, { onClose, onChange, tab = 'cards' } = {}) {
         }).join('')}</nav>
         <div class="cs-grid scroll-y">${shown.map(x => `
           <button class="cs-cell${x.unlocked ? '' : ' locked'}${x.equipped ? ' on' : ''}" data-act="csPick" data-id="${x.card.id}" ${x.unlocked ? '' : 'data-sound="deny"'}>
-            ${cardHtml(x.card.id, { size: 228, locked: !x.unlocked, equipped: x.equipped, sub: x.card.req })}
+            ${cardHtml(x.card.id, { size: 228, locked: !x.unlocked, equipped: x.equipped, sub: x.card.req })}${x.progress ? cardProgressHtml(x.progress) : ''}
           </button>`).join('')}</div>`;
   };
   const renderEmblems = () => {

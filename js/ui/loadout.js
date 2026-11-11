@@ -133,7 +133,7 @@ export class LoadoutsScreen {
       <header class="bar ld-bar">
         ${backButton('loBack', 'Done')}
         <h2 class="bar-title">Loadouts</h2>
-        <nav class="ld-tabs">${all.slice(0, LOADOUT_COUNT).map((x, i) => `
+        <nav class="ld-tabs scroll-x">${all.slice(0, LOADOUT_COUNT).map((x, i) => `
           <button class="ld-tab${i === this.selected ? ' on' : ''}${i === active ? ' active' : ''}" data-act="loPick" data-i="${i}">
             <i class="lamp"></i><b>${esc(x.name)}</b><small>${esc(gunName(x.primary))}</small>
           </button>`).join('')}</nav>
@@ -161,7 +161,7 @@ export class LoadoutsScreen {
               <span class="ld-side-pic"><canvas class="gun-pic" data-gun="${esc(l.secondary)}"></canvas></span>
               <span class="ld-tx"><small>Secondary / ${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelHtml(l.secondary)}</small></span>
             </button>
-            <button class="ld-act" data-act="loGunsmith">${ico('gunsmith')}<b>Gunsmith</b><small>Camo, parts, prestige</small></button>
+            <button class="ld-act" data-act="loGunsmith">${ico('gunsmith')}<b>Gunsmith</b><small>Parts and camos</small></button>
             <button class="ld-act" data-act="loRename">${ico('edit')}<b>Rename</b><small>${esc(l.name)}</small></button>
           </div>
         </section>

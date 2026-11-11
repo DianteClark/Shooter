@@ -86,9 +86,9 @@ const gradeOf = st => {
 };
 
 /* ---------- Results ---------- */
-export function masteryStrip(list = []) {
+export function masteryStrip(list = [], max = 3) {
   if (!list?.length) return '';
-  const rows = [...list].sort((a, b) => b.up - a.up || b.value / b.goal - a.value / a.goal).slice(0, 3);
+  const rows = [...list].sort((a, b) => b.up - a.up || b.value / b.goal - a.value / a.goal).slice(0, max);
   return `<div class="rs-ch rs-mastery"><small class="rs-ch-h">${ico('star')}Mastery</small>${rows.map(m => `
     <div class="rs-ch-row${m.up ? ' done' : ''}">${art(m.icon, 15)}<b>${esc(m.name)} ${m.up ? `<em>Tier ${ROMAN[m.tier]}</em>` : ''}</b>
       <i class="rs-ch-bar" style="--a:${(m.before / m.goal).toFixed(3)};--f:${(m.value / m.goal).toFixed(3)}"></i>

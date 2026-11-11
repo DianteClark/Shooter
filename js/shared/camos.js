@@ -52,7 +52,7 @@ export const TRACERS = [
 ];
 
 export const KILL_EFFECTS = [
-  { id: 'none',      name: 'Standard',        prestige: 0 },
+  { id: 'none',      name: 'No Effect',       prestige: 0 },
   { id: 'embers',    name: 'Ember Shower',    prestige: 1 },
   { id: 'shockring', name: 'Shock Ring',      prestige: 1 },
   { id: 'shatter',   name: 'Crystal Shatter', prestige: 2 },

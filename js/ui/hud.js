@@ -99,7 +99,7 @@ const TIPS = [
 
 // [title, line under it, tier]. Tier sets the plate: 1 steel, 2 sodium, 3 sodium with hazard stripes.
 const MEDALS = {
-  confirm: ['Kill Confirmed', `+${SCORE.confirm}`, 1], deny: ['Tag Denied', `+${SCORE.deny}`, 1],
+  confirm: ['Tag Confirmed', `+${SCORE.confirm}`, 1], deny: ['Tag Denied', `+${SCORE.deny}`, 1],
   capture: ['Captured', `+${SCORE.capture}`, 1], defend: ['Defended', `+${SCORE.defend}`, 1],
   headshot: ['Headshot', `+${SCORE.headshot}`, 1],
   first_blood: ['First Blood', 'Round opener', 2], double: ['Double Kill', '2 in quick order', 2], triple: ['Triple Kill', '3 in quick order', 2],
@@ -115,7 +115,7 @@ const MEDALS = {
   hq_capture: ['HQ Captured', `+${SCORE.capture}`, 2], hq_destroy: ['HQ Destroyed', '+150', 3],
   vip_kill: ['VIP Killed', '+300', 3], bodyguard: ['Bodyguard', 'Saved your VIP', 1],
   infect: ['Infection', '+100', 1], first_infected: ['Patient Zero', 'Spread it', 2], last_stand: ['Last Stand', 'Outlasted them all', 3],
-  survivor: ['Survivor', 'Made it to the end', 2], oic_last: ['Last One Standing', 'One round to spare', 3],
+  survivor: ['Survivor', 'Made it to the end', 2], oic_last: ['Last Gun Standing', 'One round to spare', 3],
   ctl_capture: ['Zone Taken', `+${SCORE.capture}`, 2], ctl_hold: ['Held the Line', '+150', 2], grind_bank: ['Tags Banked', 'Points on the board', 2],
 };
 

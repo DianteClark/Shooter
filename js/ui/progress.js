@@ -25,7 +25,7 @@
  * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'}
  * Pro        proStatus(perk) -> {perk,name,desc,steps:[{stat,label,goal,value,done}],done}  isPro(perk)  proPerks() -> [ids]
  *            Challenge rules and the Pro list live in js/shared/progression.js (PRO_CHALLENGES) and catalog.js (PRO).
- * Cards      cards() -> [{card,unlocked,equipped}]  card (get) -> equipped id  setCard(id) -> bool
+ * Cards      cards() -> [{card,unlocked,equipped,progress:{value,goal}|null}]  card (get) -> equipped id  setCard(id) -> bool
  *            isVeteran()  identity() -> {pro:[ids], card, veteran}. loadout() carries `pro` and `card` to the roster.
  * Golden     goldenStatus() -> {earned, steps:[{id,label,value,goal,done}], requirement}  goldenEarned()
  *            goldenPending() -> true once, until markGoldenCelebrated(), when it has been earned and not yet shown
@@ -267,7 +267,9 @@ function cardCareer() {
   const c = careerStats();
   const camos = new Set();
   for (const camo of MASTERY_CAMOS) if (WEAPON_IDS.some(w => hasCamo(w, camo))) camos.add(camo.id);
-  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos, rewards: masteryRewards(data) };
+  const trackTiers = {};
+  for (const [id, e] of Object.entries(data.mastery ?? {})) trackTiers[id] = e?.t ?? 0;
+  return { ...c, peakLevel: data.peakLevel, pro: data.proDone, proCounts: data.pro, trackTiers, mastered: WEAPON_IDS.filter(w => isMastered(readWeapon(w))).length, camos, rewards: masteryRewards(data) };
 }
 
 // The career the operator skins and emblems are judged on (js/ui/operators.js skinUnlock, js/ui/emblems.js).
@@ -291,6 +293,15 @@ function currentEmblemId() {
 
 // Gated items that are open now, as 'kind:id', to find the ones a match opened.
 const openGated = () => new Set(Object.keys(UNLOCK_CHALLENGES).filter(k => isOpen(...k.split(':'))));
+
+// How far a locked card is: {value, goal}, or null for a card with nothing to count.
+function cardProgress(card, career) {
+  if (!card.prog) return null;
+  try {
+    const [value, goal] = card.prog(career);
+    return Number.isFinite(value) && goal > 0 ? { value: Math.max(0, Math.min(goal, Math.floor(value))), goal } : null;
+  } catch { return null; }
+}
 
 function equippedCard() {
   return cardsEarned(cardCareer()).includes(data.card) ? data.card : 'yard';
@@ -609,8 +620,11 @@ export const Progress = {
 
   /* ---------- Calling cards and Veteran ---------- */
   cards() {
-    const earned = new Set(cardsEarned(cardCareer())), on = equippedCard();
-    return CARDS.map(card => ({ card, unlocked: earned.has(card.id), equipped: card.id === on }));
+    const career = cardCareer(), earned = new Set(cardsEarned(career)), on = equippedCard();
+    return CARDS.map(card => {
+      const unlocked = earned.has(card.id);
+      return { card, unlocked, equipped: card.id === on, progress: unlocked ? null : cardProgress(card, career) };
+    });
   },
   get card() { return equippedCard(); },
   setCard(id) {

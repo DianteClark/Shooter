@@ -61,12 +61,12 @@ const ROWS = [
   ['rails', 'Main Line', 'oct', '#7a6a50', ['#c8ccd2', '#8a6a40'], 'rails', { starter: true }],
   ['gear', 'Cog', 'oct', '#9aa4ad', ['#c8ccd2', '#ff9f1c'], 'gear', { level: 10 }],
   ['spike', 'Rail Spike', 'cut', '#8a6a40', ['#d0d4d8', '#ffb02a'], 'spike', { level: 25 }],
-  ['bolt', 'Live Wire', 'diamond', '#ffd659', ['#ffd659', '#fff4bf'], 'bolt', { stat: 'kills', goal: 500, label: 'gun kills' }],
+  ['bolt', 'Spark Gap', 'diamond', '#ffd659', ['#ffd659', '#fff4bf'], 'bolt', { stat: 'kills', goal: 500, label: 'gun kills' }],
   ['fang', 'Fang', 'shield', '#ff4d3d', ['#f2ead8', '#ff4d3d'], 'fang', { stat: 'head', goal: 100, label: 'headshots' }],
   ['scope', 'Crosshair', 'oct', '#ff3a3a', ['#e6ecf2', '#ff3a3a'], 'scope', { stat: 'long', goal: 50, label: 'longshots' }],
   ['wave', 'Undertow', 'hex', '#2ae0b0', ['#7cf8e0', '#2ae0b0'], 'wave', { stat: 'slide', goal: 50, label: 'slide kills' }],
   ['anchor', 'Anchor', 'shield', '#ffb03a', ['#bfe2f2', '#ffb03a'], 'anchor', { life: 'mapwon:harbor', goal: 5, label: 'wins on Harbor' }],
-  ['flake', 'Whiteout', 'hex', '#7cd8ff', ['#eaf6ff', '#7cd8ff'], 'flake', { life: 'mapwon:frost', goal: 5, label: 'wins on Frostline' }],
+  ['flake', 'Frostbite', 'hex', '#7cd8ff', ['#eaf6ff', '#7cd8ff'], 'flake', { life: 'mapwon:frost', goal: 5, label: 'wins on Frostline' }],
   ['sun', 'High Noon', 'oct', '#ff8a2a', ['#ffb02a', '#fff0c0'], 'sun', { life: 'mapwon:dust', goal: 5, label: 'wins on Dust' }],
   ['bomb', 'Charge', 'cut', '#ff3a10', ['#2a2e36', '#ffb02a'], 'bomb', { life: 'plants', goal: 10, label: 'bomb plants' }],
   ['pennant', 'Pennant', 'shield', '#38b6ff', ['#38b6ff', '#e6ecf2'], 'pennant', { life: 'flagCaps', goal: 5, label: 'flag captures' }],
@@ -75,7 +75,7 @@ const ROWS = [
   ['crown', 'Crown', 'shield', '#ffd659', ['#ffd659', '#b27616'], 'crown', { prestige: 3 }],
   ['wing', 'Wing', 'diamond', '#d8d4ff', ['#d8d4ff', '#9a8cff'], 'wing', { prestige: 6 }],
   ['gem', 'Armorer Gem', 'oct', '#ff2bd6', ['#ff2bd6', '#ffd2f4'], 'gem', { mastered: 3 }],
-  ['prism', 'Prism', 'hex', '#18e8ff', ['#e8f8ff', '#18e8ff'], 'prism', { camo: 'prism', goal: 1, label: 'weapon in Prism' }],
+  ['prism', 'Refraction', 'hex', '#18e8ff', ['#e8f8ff', '#18e8ff'], 'prism', { camo: 'prism', goal: 1, label: 'weapon in Prism' }],
   ['oldguard', 'Old Guard', 'shield', '#e5a536', ['#ffe39a', '#e5a536'], 'oldguard', { prestige: 10 }],
 ];
 
