@@ -371,16 +371,18 @@ const BY_ID = new Map(BOT_POOL.map(p => [p.id, p]));
 export const profileById = id => BY_ID.get(id) ?? null;
 
 // The clan a profile (or profile id) belongs to, { tag, name, skill, members: [ids] }, or null for a loner.
-export function clanOf(profile) {
+export function clanInfo(profile) {
   const p = typeof profile === 'string' ? BY_ID.get(profile) : profile;
   return p ? CLAN_BY_INDEX.get(p.index) ?? null : null;
 }
+// Its clan tag ('VXN'), or null: what leaderboards show before the name (js/shared/boards.js).
+export const clanOf = profile => clanInfo(profile)?.tag ?? null;
 // A regular duo's other half (profile id), or null.
 export const duoOf = profile => DUO_BY_ID.get(typeof profile === 'string' ? profile : profile?.id) ?? null;
 // How a profile shows in lobbies, scoreboards, the killfeed and results: "[VXN] Name", or just the name.
 export function displayName(profile) {
-  const c = clanOf(profile);
-  return c ? `[${c.tag}] ${profile.name}` : profile.name;
+  const tag = clanOf(profile);
+  return tag ? `[${tag}] ${profile.name}` : profile.name;
 }
 // Who a profile queues with: its clanmates or its duo partner (ids, itself left out), or null.
 function partyOf(p) {

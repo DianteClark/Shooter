@@ -230,7 +230,7 @@ ok(prest.filter(v => v === 0).length > 10 && prest.filter(v => v === MAX_PRESTIG
 
 // ---- Clans ----
 console.log('clans');
-const { CLANS, DUOS, clanOf, duoOf, displayName, profileById } = Pool;
+const { CLANS, DUOS, clanOf, clanInfo, duoOf, displayName, profileById } = Pool;
 ok(CLANS.length >= 20 && CLANS.length <= 25, '20-25 clans', CLANS.length);
 ok(CLANS.every(c => c.members.length >= 3 && c.members.length <= 8), 'each of 3-8 players');
 ok(CLANS.every(c => /^[A-Z]{2,4}$/.test(c.tag)) && new Set(CLANS.map(c => c.tag)).size === CLANS.length, 'tags: 2-4 capitals, unique');
@@ -240,7 +240,8 @@ ok(new Set(grouped).size === grouped.length && grouped.every(id => profileById(i
 ok(DUOS.length >= 8 && DUOS.every(d => duoOf(d[0]) === d[1] && duoOf(d[1]) === d[0] && !clanOf(d[0])), 'regular duos', DUOS.length);
 const loners = BOT_POOL.filter(p => !clanOf(p) && !duoOf(p));
 ok(loners.length > BOT_POOL.length * 0.4, 'plenty of loners', loners.length);
-ok(CLANS.every(c => c.members.every(id => clanOf(id) === c && clanOf(profileById(id)) === c)), 'clanOf by profile or id');
+ok(CLANS.every(c => c.members.every(id => clanInfo(id) === c && clanOf(profileById(id)) === c.tag && clanOf(id) === c.tag)), 'clanOf (the tag) and clanInfo (the clan), by profile or id');
+ok(clanOf(loners[0]) === null && clanInfo(loners[0]) === null, '...null for a loner');
 ok(displayName(profileById(CLANS[0].members[0])) === `[${CLANS[0].tag}] ${profileById(CLANS[0].members[0]).name}` && displayName(loners[0]) === loners[0].name, 'display name: "[TAG] Name"');
 const muOf = kind => mean(CLANS.filter(c => c.skill === kind).flatMap(c => c.members.map(id => profileById(id).skill.mu)));
 ok(CLANS.filter(c => c.skill === 'stacked').length >= 3 && CLANS.filter(c => c.skill === 'weak').length >= 1, 'a few stacked clans, one or two weak');
@@ -252,10 +253,10 @@ const sideRates = (mode, mapId, n, cap) => {
   for (let k = 0; k < n; k++) {
     const r = buildRoster([human], { mode, mapId, seed: 7000 + k, pool: { ...pool, date } });
     for (const e of r) {
-      const c = e.pool && clanOf(e.pool);
+      const c = e.pool && clanInfo(e.pool);
       if (!c) continue;
       seen.add(c.tag); clanBots++;
-      const mates = r.filter(q => q !== e && q.pool && clanOf(q.pool) === c);
+      const mates = r.filter(q => q !== e && q.pool && clanInfo(q.pool) === c);
       if (mates.length) withMate++;
       for (const q of mates) { pairs++; if (q.team === e.team) sameSide++; }
       if (mates.filter(q => q.team === e.team).length + 1 > cap) over++;

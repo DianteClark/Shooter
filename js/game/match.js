@@ -553,6 +553,7 @@ export class Match {
 
     if (this.isHost) this.#stepHost(dt);
     if (this.headless) {          // Left early as the host (leaveNow): keep the match going for the others, draw nothing.
+      this.frameEvents.length = 0;
       if (this.sim?.phase === 'ended' && !this.lateEnded) { this.lateEnded = true; this.onLateEnd?.(); }
       return;
     }

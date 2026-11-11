@@ -104,10 +104,12 @@ const CSS = `
 .br-out button.quiet { color: var(--c-chalk); background: rgba(231,234,228,.14); box-shadow: inset 0 0 0 1px rgba(231,234,228,.3); }
 /* Watching: the plate shrinks to a strip at the bottom, clear of the middle of the screen. */
 .br-out.watching { top: auto; bottom: calc(var(--sb) + 10px); min-width: 0; max-width: calc(100vw - 24px); padding: 8px 14px 8px 14px; display: flex; align-items: center; gap: 12px; text-align: left; }
-.br-out.watching b { font-size: 18px; }
+.br-out.watching b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .br-out.watching .place { display: none; }
 .br-out.watching small { margin-top: 3px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .br-out.watching .txt { min-width: 0; }
+/* The death replay's Skip sits bottom right: the strip moves up out of its way until the replay is over. */
+.killcam-on .br-out.watching { bottom: calc(var(--sb) + 62px); }
 .br-out.watching .acts { margin-top: 0; gap: 6px; flex: none; }
 .br-out.watching button { min-width: 0; height: 38px; font-size: 14px; padding: 0 12px; }
 .br-map { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; background: rgba(10,13,17,.62); pointer-events: auto; }
@@ -455,8 +457,9 @@ export class BrHud {
     const ring = document.querySelector('.controls .stick-aim .ring-fire')?.getBoundingClientRect();
     const vit = this.hud.el.querySelector('.vitals')?.getBoundingClientRect();
     const inv = this.el.querySelector('.br-inv')?.getBoundingClientRect();
+    const hands = this.handsEl?.getBoundingClientRect();
     const lo = (vit?.width ? vit.right : innerWidth * 0.3) + 6;
-    const hi = (ring?.width ? ring.left : innerWidth * 0.62) - 6;
+    const hi = Math.min(ring?.width ? ring.left : innerWidth * 0.62, hands?.width ? hands.left : Infinity) - 6;
     const st = this.takeBtn.style;
     st.left = `${Math.round(lo)}px`;
     st.width = `${Math.max(120, Math.round(hi - lo))}px`;
@@ -550,12 +553,12 @@ export class BrHud {
     const choosing = !mates && !spectate.any;
     this.outEl.classList.toggle('watching', !!w);
     const $ = s => this.outEl.querySelector(s);
-    $('b').textContent = mates ? 'Eliminated' : others ? `Watching ${w.name}` : 'Squad out';
+    $('b').innerHTML = mates ? 'Eliminated' : others ? `Watching ${nameHtml(w.name)}` : 'Squad out';
     $('.place').textContent = me.place ? `${ORD(me.place)} place` : '';
     const sq = others ? view.players.filter(p => p.team === w.team && p.alive).length : 0;
     $('small').textContent = mates ? (w ? `Spectating ${w.name}. Your squad can still win.` : 'Your squad can still win.')
-      : others ? `${me.place ? `You placed ${ORD(me.place)}  /  ` : ''}${view.br.squadsLeft ?? '?'} squads left${view.br.squad > 1 ? `  /  ${sq} of theirs up` : ''}`
-      : choosing ? 'Watch the rest of the match, or see your results now.' : 'Nobody left to watch.';
+      : others ? `${me.place ? `You: ${ORD(me.place)}  /  ` : ''}${view.br.squadsLeft ?? '?'} ${view.br.squad > 1 ? 'squads' : 'players'} left${view.br.squad > 1 ? `  /  ${sq} of theirs up` : ''}`
+      : choosing ? 'Watch the rest, or see your results now.' : 'Nobody left to watch.';
     $('.br-spec').hidden = !choosing;
     $('.br-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
     $('.br-spec-next').textContent = mates ? 'Next teammate' : 'Next player';

@@ -28,8 +28,9 @@ profiles, drawn into each match by matchmaking, each playing at a per-match form
   (no well-known organisation's acronym, nothing offensive). `skill`: four 'stacked' clans (VXN, ZPHR, KJX, QZR: their
   own recruits play like elites, a third locked elite; older members picked from the pool's strong players), two 'weak'
   (RKTY, ZZZ), the rest 'average'. 12 regular duos (`DUOS`, no tag). 164 loners.
-- `clanOf(profile | id)` (the clan or null), `duoOf(profile | id)` (the partner's id or null), `displayName(profile)`
-  ("[VXN] Name"; the roster name of a pool bot). For leaderboards: show `clanOf(p)?.tag` before `p.name`.
+- `clanOf(profile | id)` (the tag, 'VXN', or null: what js/shared/boards.js reads), `clanInfo(profile | id)` (the clan
+  or null), `duoOf(profile | id)` (the partner's id or null), `displayName(profile)` ("[VXN] Name"; the roster name of a
+  pool bot).
 - Queueing together: `pickPoolBots({ party })` (default 1: nobody brings friends). A drawn clan member brings 1..cap-1
   clanmates along 72% of the time, a duo its partner 85%; one party per clan a lobby, later clanmates join it until the
   cap, past it they queued alone and are seated against it (`apart`). Entries carry `party` (a number, or null).
