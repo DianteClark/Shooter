@@ -17,7 +17,7 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else '/tmp/exfil'
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows']
 G = 'window.__game.app'
-URL = f'http://localhost:{PORT}/?debug=1&net=local&vote=15'
+URL = f'http://localhost:{PORT}/?debug=1&net=local&vote=15&brtest'
 
 
 async def main():
@@ -66,9 +66,22 @@ async def main():
             await host.evaluate(f"{G}.vote.options[0] = {{ ...{G}.vote.options[0], mapId: 'brtest', mode: 'exq' }}")
             for pg in (host, guest):
                 await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=10000)
-                await pg.locator('.vote-card[data-i="0"]').click(timeout=4000)
-            for pg in (host, guest):
-                await pg.wait_for_function(f'{G}.match?.interp.newest?.points?.obj?.ex', timeout=120000)
+                await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]').click()")
+            for tag, pg in (('host', host), ('guest', guest)):
+                for _ in range(40):
+                    st = await pg.evaluate(f"JSON.stringify([{G}.inMatch, {G}.vote && {G}.vote.winner, {G}.vote && {G}.vote.left, {G}.matchInfo && {G}.matchInfo.mapId, {G}.matchInfo && {G}.matchInfo.mode, !!({G}.match && {G}.match.interp.newest), !!({G}.match?.interp.newest?.points?.obj?.ex)])")
+                    if st.endswith('true]'): break
+                    print('    ', tag, st, flush=True)
+                    await pg.wait_for_timeout(3000)
+                try: await pg.wait_for_function(f'{G}.match?.interp.newest?.points?.obj?.ex', timeout=40000)
+                except Exception:
+                    if tag != 'guest': raise
+                    # The two-tab channel sometimes leaves a guest without snapshots; the same phone rejoins its held slot.
+                    print('     guest has no snapshots: rejoining', flush=True)
+                    await guest.reload()
+                    await guest.wait_for_timeout(1500)
+                    await guest.evaluate(f"window.__game.join('{code}')")
+                    await guest.wait_for_function(f'{G}.match?.interp.newest?.points?.obj?.ex', timeout=90000)
             for pg in (host, guest): await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")
             hid = await host.evaluate(f'{G}.match.localId')
             gid = await guest.evaluate(f'{G}.match.localId')
@@ -78,7 +91,10 @@ async def main():
             # Shield the squad and keep the AI off it; the guest reads its contract from the wire.
             await host.evaluate(f"""(() => {{ const sim = {G}.match.sim;
               window.__keep = setInterval(() => {{ for (const p of sim.players) {{ if (p.team === {info[0]}) p.spawnProtect = window.__noShield ? 0 : 99; if (p.ai && p.alive) {{ p.alive = false; p.hp = 0; p.exGroup = null; }} }} }}, 150); }})()""")
-            await guest.wait_for_timeout(2500)
+            for _ in range(12):
+                await guest.wait_for_timeout(1000)
+                ok = await guest.evaluate(f"(() => {{ const v = {G}.match.interp.newest, o = v.obj ?? v.points.obj; return !!o.squads.find(q => q.team === {info[0]})?.contract; }})()")
+                if ok: break
             hc = await host.evaluate(f"(() => {{ const c = {G}.match.sim.rules.squads.get({info[0]}).contract; return c && c.type + '@' + c.poi; }})()")
             gc = await guest.evaluate(f"(() => {{ const v = {G}.match.interp.newest, o = v.obj ?? v.points.obj, s = o.squads.find(q => q.team === {info[0]}); return s?.contract && s.contract.type + '@' + s.contract.poi; }})()")
             gcard = await guest.evaluate("!document.querySelector('.ex-con').hidden && document.querySelector('.ex-con b').textContent")
