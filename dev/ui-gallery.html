@@ -133,6 +133,8 @@ const SCENES = {
   }),
   'lobby-host': menuScene('Lobby: host', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(4), botSkill: 'regular', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),
   'lobby-guest': menuScene('Lobby: guest, countdown', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(3, { host: 'h1' }), botSkill: 'veteran', isHost: false, localId: 'me', hostId: 'h1', countdown: 4, rematchWait: false })),
+  'lobby-ranked': menuScene('Lobby: full room, ranked on', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }).map((h, i) => ({ ...h, badge: { ...h.badge, rk: i % 4 ? i + 2 : -1 } })), botSkill: 'mixed', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false, rankedOn: true, rankedFull: true })),
+  'lobby-unranked': menuScene('Lobby: full room, ranked off', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12), botSkill: 'mixed', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false, rankedOn: false, rankedFull: true })),
   'lobby-full': menuScene('Lobby: 12, long names', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }), botSkill: 'elite', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),
   'vote': menuScene('Map vote', async ({ menu }) => {
     const { voteOptions } = await import('./js/ui/vote.js');

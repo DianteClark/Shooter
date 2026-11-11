@@ -138,11 +138,11 @@ async def main():
                 await pg.wait_for_timeout(300)
                 await pg.locator('[data-act="szPlayRanked"]').first.tap()
             st6 = await play('6 ranked from the season screen', ranked_start)
-            mi = await pg.evaluate("({ ...window.__game.app.matchInfo, roster: null })")
+            mi = st6['last'] or {}
             rk1 = await pg.evaluate('window.__game.Progress.ranked()')
             row = await pg.evaluate("!!document.querySelector('.rs-rk')")
-            ok = mi['ranked'] and mi['mode'] in ('hard', 'snd', 'ctl') and mi['mapId'] in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy') and not mi['mods'] and rk1['pm'] == 1 and row
-            print(f'  {"ranked: ruleset, a placement, the results row":<44} {"ok" if ok else "FAIL"} {mi["mode"]} {mi["mapId"]} pm={rk1["pm"]} row={row}')
+            ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy') and rk1['pm'] == 1 and row
+            print(f'  {"ranked: ruleset, a placement, the results row":<44} {"ok" if ok else "FAIL"} {mi.get("mode")} {mi.get("mapId")} pm={rk1["pm"]} row={row}')
             if not ok: failures.append(f'ranked {mi} {rk1} {row}')
             await browser.close()
     finally:

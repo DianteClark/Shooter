@@ -271,7 +271,7 @@ export function seasonStrip(track, ranked) {
     const d = after && after.next !== null ? (after.sr - after.floor) / (after.next - after.floor) : after ? 1 : ranked.placement / ranked.placements;
     const b = ranked.before && after ? Math.max(0, Math.min(1, (ranked.before.sr - after.floor) / ((after.next ?? after.floor + 1) - after.floor))) : 0;
     rows.push(`<div class="rs-ch-row rs-rk${ranked.promoted || ranked.placedNow ? ' done' : ''}">${rankBadge(code, 15)}<b>${esc(label)}</b>
-      <i class="rs-ch-bar" style="--a:${Math.min(b, d).toFixed(3)};--f:${Math.max(0, Math.min(1, d)).toFixed(3)}"></i><small class="${ranked.delta > 0 ? 'up' : ranked.delta < 0 ? 'down' : ''}">${ranked.before ? `${ranked.delta > 0 ? '+' : ''}${ranked.delta}` : ranked.placedNow ? 'Placed' : '...'}</small></div>`);
+      <i class="rs-ch-bar" style="--a:${Math.min(b, d).toFixed(3)};--f:${Math.max(0, Math.min(1, d)).toFixed(3)}"></i><small class="${ranked.delta > 0 ? 'up' : ranked.delta < 0 ? 'down' : ''}">${ranked.before ? `${ranked.delta > 0 ? '+' : ''}${ranked.delta}` : ranked.placedNow ? 'Placed' : 'Placing'}</small></div>`);
   }
   return `<div class="rs-ch rs-sn"><small class="rs-ch-h">${ico('ui:star', '', 10)}${esc(info.def ? info.short : 'Preseason')}${ranked ? ' · Ranked' : ''}</small>${rows.join('')}</div>`;
 }

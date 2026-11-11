@@ -106,7 +106,8 @@ async def main():
             check('Multiplayer screen', await screen() == 'multiplayer')
             if SHOTS: await shots(pg, 'multiplayer-standard')
             pls = await pg.evaluate("[...document.querySelectorAll('.mp-pl')].map(b => b.dataset.id)")
-            check('Standard playlists: quick play, objective, party, featured', pls == ['qp', 'obj', 'party', 'featured'], pls)
+            # Seasons: Ranked first, then the season's event while it runs (docs/SEASONS.md).
+            check('Standard playlists: ranked, (event), quick play, objective, party, featured', [p for p in pls if p != 'event'] == ['ranked', 'qp', 'obj', 'party', 'featured'], pls)
             n_modes = await pg.evaluate("document.querySelectorAll('.mp-mode').length")
             check('Standard lists the 14 single modes', n_modes == 14, n_modes)
             pickers = await pg.evaluate("document.querySelectorAll('.menu .solo-map, .menu [data-act=\"soloBots\"], .menu .bm-seg').length")
