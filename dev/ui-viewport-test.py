@@ -51,6 +51,9 @@ FIT = """(() => {
   for (const s of sel) for (const el of menu.querySelectorAll(s)) {
     const r = el.getBoundingClientRect();
     if (!r.width) continue;
+    // Inside a card that scrolls (the progress card, the XP lines): reachable by scrolling, so not cut.
+    const scroller = el.closest('.scroll-y');
+    if (scroller && scroller !== el && scroller.scrollHeight > scroller.clientHeight + 1) continue;
     if (r.bottom > limit) bad.push(`${s} ends ${Math.round(r.bottom - limit)}px below the screen`);
     const box = el.parentElement?.closest('.rs-card, .res-choice, .rs-ch, .rs-pro, .xp-lines, .wp-list');
     if (!box) continue;
@@ -62,7 +65,7 @@ FIT = """(() => {
   if (btns.length !== 2 || btns.some(b => b.height < 44 * k - 1)) bad.push('Rematch and Menu not both full size');
   // Dead plate: the empty height under the last thing in each card, as a share of the card.
   let dead = 0;
-  for (const card of menu.querySelectorAll('.rs-card:not(.finalcard)')) {
+  for (const card of menu.querySelectorAll('.rs-card:not(.finalcard):not(.scroll-y)')) {
     const c = card.getBoundingClientRect();
     let last = c.top;
     for (const el of card.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (r.height && r.bottom <= c.bottom + 1) last = Math.max(last, r.bottom); }
