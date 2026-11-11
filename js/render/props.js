@@ -21,6 +21,9 @@ const SETS = {
   frost: [CRATE, BARREL, CONE, CRATE],
   topside: [CONE, CONE, BARREL, CRATE, SIGN],
   sunken: [JAR, JAR, CRATE, JAR, BARREL],
+  metro: [SIGN, CONE, BARREL, CRATE, SIGN],
+  subway: [SIGN, CONE, CRATE],
+  desert: [JAR, JAR, BARREL, CRATE, SIGN],
   range: [CRATE, BARREL, CONE],
 };
 const COVER_KINDS = new Set(['container', 'crate', 'barrier', 'wall', 'building', 'shop', 'stall', 'adobe', 'rock', 'sandbag', 'tent', 'hull']);

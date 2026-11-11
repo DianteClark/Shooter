@@ -491,6 +491,11 @@ const THEME_AUDIO = {
   // Sun-baked rock and adobe: dry, one clean echo off the far wall.
   dust:     { ir: { len: 0.55, damp: 0.14, gain: 0.22 }, slaps: [[0.2, 0.8], [0.34, 0.3]], f0: 1800, f1: 500, metal: 0, wash: 0.02 },
 };
+// Region themes reuse the closest room: city streets ring like the market, the station like a tiled hall, the desert
+// like Dust.
+THEME_AUDIO.metro = THEME_AUDIO.neon;
+THEME_AUDIO.desert = THEME_AUDIO.dust;
+THEME_AUDIO.subway = { ir: { len: 1.1, damp: 0.45, gain: 0.36 }, slaps: [[0.04, 1], [0.09, 0.7], [0.16, 0.45]], f0: 2800, f1: 700, metal: 900, wash: 0.08 };
 const SIZE_TUNE = [{ dur: 0.14, f: 1.2, gain: 0.8 }, { dur: 0.2, f: 1, gain: 1 }, { dur: 0.3, f: 0.78, gain: 1.15 }];
 
 function renderReflection(theme, size, sr, seed) {
@@ -1702,7 +1707,7 @@ export class AudioEngine {
     const r = e.rays[0];
     if (r.hit !== 'wall') return;
     this.impactAt = now;
-    const buf = this.theme === 'railyard' ? this.sfx.impactMetal : this.theme === 'dust' ? this.sfx.impactDirt : this.sfx.impactConcrete;
+    const buf = this.theme === 'railyard' ? this.sfx.impactMetal : this.theme === 'dust' || this.theme === 'desert' ? this.sfx.impactDirt : this.sfx.impactConcrete;
     this._world(buf, r.x, r.z, IMPACT_RANGE, { gain: 0.34, priority: PR.tail, cls: 'impact', rate: 0.9 + Math.random() * 0.2 });
   }
 
@@ -2081,8 +2086,8 @@ export class AudioEngine {
     this._stopLoops();
     // Which sky each map has. Matching what art.js draws: rain over the night maps, wind over the desert.
     if (!this.ready) return;
-    if (known === 'dust') this._ensureLoop('windSrc', this.loops.wind, 1);
-    if (known === 'neon' || known === 'harbor') this._ensureLoop('rainSrc', this.loops.rain, 1);
+    if (known === 'dust' || known === 'desert') this._ensureLoop('windSrc', this.loops.wind, 1);
+    if (known === 'neon' || known === 'harbor' || known === 'metro') this._ensureLoop('rainSrc', this.loops.rain, 1);
     if (known === 'harbor') this._ensureLoop('windSrc', this.loops.wind, 0.55);
   }
 
@@ -2095,7 +2100,7 @@ export class AudioEngine {
     const now = this.ctx.currentTime;
     if (now >= this.nextAmbRefresh) {
       this.nextAmbRefresh = now + 0.25;
-      const base = this.theme === 'harbor' || this.theme === 'neon' ? 0.1 : this.theme === 'dust' ? 0.12 : 0;
+      const base = this.theme === 'harbor' || this.theme === 'neon' || this.theme === 'metro' ? 0.1 : this.theme === 'dust' || this.theme === 'desert' ? 0.12 : 0;
       // A firefight pushes the weather right down; this is the music-free part of the ducking.
       this._holdGain(this.amb.gain, base * (this.micActive ? 0.45 : 1) * (1 - 0.75 * this.fight));
     }

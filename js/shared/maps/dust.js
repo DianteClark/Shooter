@@ -1,4 +1,4 @@
-// Desert outpost. Rock shelves funnel the flanks into arroyos around a walled courtyard: longer
+// Desert, medium. Outpost. Rock shelves funnel the flanks into arroyos around a walled courtyard: longer
 // fights across open sand, with the courtyard as the fortified close-range middle.
 import { bombSites, flagBases, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
@@ -58,7 +58,7 @@ function build() {
   // Capture the Flag (see flagBases). In the gap between the two rock shelves, in front of the spawns: the arroyos either side are the flanks.
   points.ctf = flagBases(W, H, { x: 14.5, z: 26.5 });
 
-  return { id: 'dust', name: 'Dust', theme: 'dust', width: W, height: H, walls, spawns, lanes, nav, points };
+  return { id: 'dust', name: 'Dust', theme: 'desert', size: 'medium', region: 'desert', width: W, height: H, walls, spawns, lanes, nav, points };
 }
 
 export default build();

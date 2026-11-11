@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { MeshBuilder } from './meshbuild.js';
 import { hexRGB, lightAt, getTheme } from './art.js';
+import * as metroTheme from './themes/metro.js';
+import * as desertTheme from './themes/desert.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const WATER_Y = -0.62;       // Basin surface, below the quay.
@@ -270,16 +272,16 @@ function makeBake(theme, lamps) {
   };
 }
 
-function box3(b, x, y, z, w, h, d, ch = 0) { b.box(x + w / 2, y + h / 2, z + d / 2, w, h, d, ch); }
+export function box3(b, x, y, z, w, h, d, ch = 0) { b.box(x + w / 2, y + h / 2, z + d / 2, w, h, d, ch); }
 
-function emissive(b, fn) {
+export function emissive(b, fn) {
   const saved = b.bake;
   b.bake = null;
   fn();
   b.bake = saved;
 }
 
-const scale = (c, k) => c.map(v => v * k);
+export const scale = (c, k) => c.map(v => v * k);
 
 // ---- Ground -----------------------------------------------------------------------------------------
 
@@ -299,7 +301,7 @@ function ground(ctx) {
     for (const v of [w.x, w.x + w.w]) { const k = Math.round((v + pad) / cell); xs[k] = v; fixedX.add(k); }
     for (const v of [w.z, w.z + w.d]) { const k = Math.round((v + pad) / cell); zs[k] = v; fixedZ.add(k); }
   }
-  const amp = theme.id === 'dust' ? 0.28 : theme.id === 'frost' ? 0.2 : theme.void ? 0.03 : 0.12;
+  const amp = theme.groundAmp ?? (theme.id === 'dust' ? 0.28 : theme.id === 'frost' ? 0.2 : theme.void ? 0.03 : 0.12);
   const pts = [];
   for (let j = 0; j <= nz; j++) {
     const row = [];
@@ -417,6 +419,7 @@ function groundShader(ctx) {
     };
   }
   if (theme.id === 'harvest') return harvestGround(ctx);
+  if (THEME_STAGES[theme.id]?.ground) return THEME_STAGES[theme.id].ground(ctx);
   // dust: warm sand with ripples, darker packed tracks down the lanes.
   return p => {
     const [x, , z] = p;
@@ -844,7 +847,7 @@ function neonLights(ctx) {
   }
 }
 
-function shop(ctx, w) {
+export function shop(ctx, w) {
   const { b, sb, glow, rnd } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
   const style = ctx.shopStyle.get(w);
@@ -933,10 +936,10 @@ function shop(ctx, w) {
   }
 }
 
-function fract(v) { return v - Math.floor(v); }
+export function fract(v) { return v - Math.floor(v); }
 
 // Low market stall: counter of goods under a striped canvas awning on poles.
-function stall(ctx, w) {
+export function stall(ctx, w) {
   const { b, sb, glow, rnd, theme } = ctx;
   const { x, z, w: sw, d: sd, h } = w;
   const long = sw >= sd;
@@ -976,7 +979,7 @@ function stall(ctx, w) {
 }
 
 // Spawn screens: dark concrete hoarding with a neon line so they read at a glance.
-function neonWall(ctx, w) {
+export function neonWall(ctx, w) {
   const { b, sb } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
   b.setColor(scale(INK.concrete, 0.55));
@@ -989,7 +992,7 @@ function neonWall(ctx, w) {
 }
 
 // Perimeter: tenement walls with sparse lit windows.
-function tenement(ctx, w) {
+export function tenement(ctx, w) {
   const { b, rnd } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
   b.setColor(scale(INK.wall, 0.42));
@@ -1065,7 +1068,7 @@ function neonDecor(ctx) {
 // ---- Dust ----------------------------------------------------------------------------------------------
 
 // Faceted rock mass inside its footprint: jittered stacked rings tapering upward, with strata colours.
-function rockMass(ctx, x, z, w, d, h, opts = {}) {
+export function rockMass(ctx, x, z, w, d, h, opts = {}) {
   const { b, rnd } = ctx;
   const segs = Math.max(6, Math.min(12, Math.round((w + d) / 2.5)));
   const ring = (y, inset, jit) => {
@@ -1096,12 +1099,12 @@ function rockMass(ctx, x, z, w, d, h, opts = {}) {
   for (let j = 1; j < segs - 1; j++) b.tri([prev[0][0], capY + 0.01, prev[0][2]], [prev[j][0], capY + 0.01, prev[j][2]], [prev[j + 1][0], capY + 0.01, prev[j + 1][2]], [prev[0][0], capY - 2, prev[0][2]]);
 }
 
-function rockWall(ctx, w) { rockMass(ctx, w.x, w.z, w.w, w.d, w.h, { levels: w.w > 6 || w.d > 6 ? 4 : 3 }); }
+export function rockWall(ctx, w) { rockMass(ctx, w.x, w.z, w.w, w.d, w.h, { levels: w.w > 6 || w.d > 6 ? 4 : 3 }); }
 
-function boulder(ctx, w) { rockMass(ctx, w.x, w.z, w.w, w.d, w.h, { levels: 2, colour: INK.rockL }); }
+export function boulder(ctx, w) { rockMass(ctx, w.x, w.z, w.w, w.d, w.h, { levels: 2, colour: INK.rockL }); }
 
 // Mud-brick courtyard wall: crenellated top, plaster patches flaking to brick on the sunny face.
-function adobe(ctx, w) {
+export function adobe(ctx, w) {
   const { b, rnd } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
   const long = bw >= bd;
@@ -1128,7 +1131,7 @@ function adobe(ctx, w) {
   if (long) for (let i = 0.6; i < bw; i += 1.4) box3(b, x + i, h - 0.5, z + bd, 0.14, 0.14, 0.3);
 }
 
-function adobeScreen(ctx, w) {
+export function adobeScreen(ctx, w) {
   const { b } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
   b.setColor(INK.adobeD);
@@ -1138,7 +1141,7 @@ function adobeScreen(ctx, w) {
 }
 
 // Canvas tent: ridge pole and sloped canvas over a solid core, guy ropes staked inside the footprint.
-function tent(ctx, w) {
+export function tent(ctx, w) {
   const { b, rnd } = ctx;
   const { x, z, w: tw, d: td, h } = w;
   const eastWest = tw >= td;
@@ -1184,7 +1187,7 @@ function tent(ctx, w) {
 }
 
 // Stacked sandbags: staggered rows of bevelled pouches.
-function sandbags(ctx, w) {
+export function sandbags(ctx, w) {
   const { b, rnd } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
   const long = bw >= bd;
@@ -1203,7 +1206,7 @@ function sandbags(ctx, w) {
   }
 }
 
-function ridge(ctx, w) {
+export function ridge(ctx, w) {
   // Perimeter becomes a broken rock ridge so the arena looks like a canyon, not a pen.
   const { rnd } = ctx;
   const { x, z, w: bw, d: bd, h } = w;
@@ -1239,7 +1242,7 @@ function dustDecor(ctx) {
 // A ring of additive gradient quads around the map, close enough to stay inside the camera's far plane, so a
 // high camera sees a horizon instead of the clear colour. `sky` is {low, mid, high, warm, warmDir:[x,z]}: the
 // horizon band is tinted toward `warm` on the side the light comes from. Costs no draw call (glow batch).
-function skyRing(ctx, sky) {
+export function skyRing(ctx, sky) {
   const { glow, W, H } = ctx;
   const cx = W / 2, cz = H / 2, R = Math.max(W, H) * 0.5 + 34, N = 28;
   const y0 = sky.y0 ?? -30, y1 = sky.y1 ?? 10, y2 = sky.y2 ?? 60;
@@ -2804,7 +2807,7 @@ function harvestDecor(ctx) {
 
 // ---- Railyard ------------------------------------------------------------------------------------------
 
-function building(b, w, rnd, lamps) {
+export function building(b, w, rnd, lamps) {
   const { x, z, w: bw, d: bd, h, landmark } = w;
   const wallC = landmark ? INK.concrete : (rnd() < 0.5 ? INK.wall : INK.wallB);
   b.setColor(wallC);
@@ -2875,7 +2878,7 @@ function building(b, w, rnd, lamps) {
   }
 }
 
-function container(b, w, rnd) {
+export function container(b, w, rnd) {
   const { x, z, w: cw, d: cd, h } = w;
   const base = hexRGB(CONTAINER_COLORS[Math.floor(rnd() * CONTAINER_COLORS.length)]);
   const long = cw >= cd;
@@ -2909,7 +2912,7 @@ function container(b, w, rnd) {
   else box3(b, x + cw + 0.02, h * 0.45, z + cd * 0.3, 0.04, h * 0.32, cd * 0.28);
 }
 
-function crate(b, w, rnd) {
+export function crate(b, w, rnd) {
   const { x, z, w: cw, d: cd, h } = w;
   const c = rnd() < 0.5 ? INK.crate : INK.crate.map(v => v * 0.9);
   b.setColor(c);
@@ -2931,7 +2934,7 @@ function crate(b, w, rnd) {
 }
 
 // Jersey barrier: faceted concrete, hazard stripes on top so it reads as low cover from above.
-function barrier(b, w) {
+export function barrier(b, w) {
   const { x, z, w: bw, d: bd, h } = w;
   const long = bw >= bd;
   const L = long ? bw : bd, T = long ? bd : bw;
@@ -2962,7 +2965,7 @@ function barrier(b, w) {
   }
 }
 
-function concreteWall(b, w) {
+export function concreteWall(b, w) {
   const { x, z, w: bw, d: bd, h } = w;
   b.setColor(INK.concrete.map(c => c * 0.9));
   box3(b, x, 0, z, bw, h, bd);
@@ -3120,6 +3123,7 @@ const DRESS = {
   topside: { ...RAILYARD_DRESS, crane: steelColumn, building: topsideCore, wall: topsideWall, container: materialStack, crate: brickPallet, barrier: topsideBarrier, water: lightWell, border: topsideEdge },
   sunken: { ...RAILYARD_DRESS, rock: sunkenRock, boulder: fallenStone, building: shrine, water: sunkenBank, wall: sunkenWall, border: jungleEdge },
   harvest: { ...RAILYARD_DRESS, wall: harvestWall, barrier: harvestBarrier, crate: roundBale, container: harvestContainer, building: harvestBuilding, water: pondBank, border: hedgeBorder },
+  metro: metroTheme.dress, subway: metroTheme.dress, desert: desertTheme.dress,
 };
 
 const THEME_STAGES = {
@@ -3138,6 +3142,7 @@ const THEME_STAGES = {
   topside: { lights: topsideLights, paint: topsidePaint, decor: topsideDecor },
   sunken: { lights: sunkenLights, paint: sunkenPaint, decor: sunkenDecor },
   harvest: { lights: () => {}, paint: harvestPaint, decor: harvestDecor },
+  metro: metroTheme.stage, subway: metroTheme.stage, desert: desertTheme.stage,
 };
 
 // Sun shadows and contact darkening: per-vertex strength a, drawn with multiply blending.
@@ -3278,6 +3283,7 @@ const THUMB_STYLE = {
   topside: { ground: '#8a847e', solid: '#4c4a52', low: '#a8865a', water: '#1a1418', edge: '#241a22' },
   sunken: { ground: '#4f5c3e', solid: '#8a8a72', low: '#6c6c58', water: '#18342c', edge: '#121a14' },
   harvest: { ground: '#9a8a58', solid: '#6e4a3c', low: '#c0a462', water: '#2c4a44', edge: '#2a2418' },
+  metro: metroTheme.thumb, subway: metroTheme.thumbSubway, desert: desertTheme.thumb,
 };
 
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is
