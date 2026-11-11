@@ -223,22 +223,22 @@ test('Murmur, Nightjar, Gaff, Maul: suppressed by nature, and cannot take a Hush
   assert.ok(isAvailable('drumsmg', 'suppressor'));
 });
 
-test('Hopper: 64 rounds without a reload, twice any other SMG', () => {
+test('Hopper: 64 rounds without a reload, far more than any other SMG', () => {
   const ps = shooter('drumsmg');
   const n = run(ps, 63 * 60 / 880, { fire: true }).length;
   assert.ok(n >= 63 && n <= 64, `${n} rounds in one string`);
   assert.ok(ps.ammo[0] <= 1 && ps.reloadT === 0, 'still on the first drum');
-  for (const id of ['smg', 'pdw', 'tacsmg', 'heavysmg', 'hushsmg']) assert.ok(WEAPONS[id].magazine * 2 <= 64);
+  for (const id of ['smg', 'pdw', 'tacsmg', 'heavysmg', 'hushsmg']) assert.ok(WEAPONS[id].magazine * 1.75 <= 64);   // Skitter went to 36 in the V10 balance pass.
   assert.ok(!isAvailable('drumsmg', 'drummag') && isAvailable('drumsmg', 'extmag'));
 });
 
 test('Trammel: a fan of eight from a box magazine, one magazine change instead of shell by shell', () => {
   const ps = shooter('magshot');
-  const shots = run(ps, 6 * 60 / 230 + 0.2, { fire: true });
-  assert.equal(shots.length, 6);
+  const shots = run(ps, WEAPONS.magshot.magazine * 60 / WEAPONS.magshot.rpm + 0.2, { fire: true });
+  assert.equal(shots.length, WEAPONS.magshot.magazine);
   assert.ok(shots.every(s => s.angles.length === 8));
   run(ps, 0.1);
-  assert.ok(Math.abs(ps.reloadDur - 2.0) < 0.05 && !WEAPONS.magshot.shellReload);
+  assert.ok(Math.abs(ps.reloadDur - WEAPONS.magshot.reload) < 0.05 && !WEAPONS.magshot.shellReload);
   run(ps, 1.0);
   assert.equal(ps.ammo[0], 0, 'nothing chambered part way');
   assert.equal(shotsToKill(WEAPONS.magshot, 3), 1);
@@ -259,7 +259,7 @@ test('Stanchion: the cone starts 4.5 times wide and settles to the tightest auto
   const ps = aimedIn(shooter('beltlmg'), 'beltlmg');
   const w = weaponDef(ps);
   const cold = currentSpread(ps, w);
-  run(ps, 16 * 60 / 680 + 0.05, AIM_FIRE);
+  run(ps, 16 * 60 / WEAPONS.beltlmg.rpm + 0.05, AIM_FIRE);
   const hot = currentSpread(ps, w);
   assert.ok(Math.abs(cold / hot - 4.5) < 0.05, `cold ${cold.toFixed(4)} hot ${hot.toFixed(4)}`);
   const autos = WEAPON_IDS.filter(id => WEAPONS[id].auto && !WEAPONS[id].burst && id !== 'beltlmg');
@@ -291,24 +291,25 @@ test('Harrier: stays on the scope between shots where a bolt gun is thrown off i
   assert.ok(60 / WEAPONS.scout.rpm < 60 / WEAPONS.semisnipe.rpm);
 });
 
-test('Lodestone: nothing leaves until the trigger has been held 0.6 s, then it goes by itself; letting go bleeds the charge', () => {
+test('Lodestone: nothing leaves until the trigger has been held for its charge time, then it goes by itself; letting go bleeds the charge', () => {
+  const CT = WEAPONS.rail.charge.time;
   const ps = aimedIn(shooter('rail'), 'rail');
-  assert.equal(run(ps, 0.5, AIM_FIRE).length, 0, 'no shot at 0.5 s');
-  assert.ok(ps.heat > 0.7 && ps.heat < 0.95, 'the bar shows the charge');
+  assert.equal(run(ps, CT - 0.1, AIM_FIRE).length, 0, 'no shot before the charge is full');
+  assert.ok(ps.heat > 0.5 && ps.heat < 0.95, 'the bar shows the charge');
   const shots = run(ps, 0.2, AIM_FIRE);
-  assert.equal(shots.length, 1, 'the round leaves on its own at 0.6 s');
+  assert.equal(shots.length, 1, 'the round leaves on its own once charged');
   assert.equal(ps.ammo[0], 3);
   assert.ok(ps.heat < 0.05, 'bar empties with the shot');
   // Tapping never fires it.
   const tap = aimedIn(shooter('rail'), 'rail');
   let n = 0;
-  for (let i = 0; i < 12; i++) { n += run(tap, 0.25, AIM_FIRE).length; n += run(tap, 0.3, AIM).length; }
-  assert.equal(n, 0, 'twelve quarter-second pulls, no shot');
+  for (let i = 0; i < 12; i++) { n += run(tap, CT - 0.12, AIM_FIRE).length; n += run(tap, 0.3, AIM).length; }
+  assert.equal(n, 0, 'twelve short pulls, no shot');
   // Held down it cycles at charge + cooldown.
   const hold = aimedIn(shooter('rail'), 'rail');
   const t = run(hold, 3.2, AIM_FIRE).map(s => s.t);
-  assert.equal(t.length, 2);
-  assert.ok(Math.abs(t[1] - t[0] - (0.6 + 60 / 70)) < 0.08, `cycle ${(t[1] - t[0]).toFixed(2)} s`);
+  assert.ok(t.length >= 2);
+  assert.ok(Math.abs(t[1] - t[0] - (CT + 60 / WEAPONS.rail.rpm)) < 0.08, `cycle ${(t[1] - t[0]).toFixed(2)} s`);
   assert.equal(shotsToKill(WEAPONS.rail, 70), 1);
   assert.ok(!WEAPONS.rail.heat && PRIMARY_IDS.includes('rail'), 'a charge gun is a primary with no heat bar of its own');
 });

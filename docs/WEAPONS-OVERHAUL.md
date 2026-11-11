@@ -236,3 +236,10 @@ saw         Drover                      1  1.00  0.10  1.00  0.07    -     2    
 scatter     Bramble                     0  0.00  0.04    -    -  0.00     8      -   28    -    -    -    -
 sniper      Lancet                      0  0.00  0.00    -    -  0.00     6      -    -    -    -    -    -
 ```
+
+## After merging the 16 new guns (lead, 4 seeds x 2 rounds x 6 maps x TDM and Domination)
+All 39 primaries sit between 0.81 and 1.15 K/D. Just under the band: Hopper 0.81, Ballast 0.81, Lodestone 0.82,
+Trammel 0.84, Murmur 0.84. Known gap: on the small maps (Pier, Turnstile) SMGs run 0.64-0.70 and LMGs 1.2-1.45, the
+reverse of what the size should favour: bots hold the long lanes there. Look at bot play on small maps, not gun stats.
+Tuned from their first numbers: Trammel, Thistle, Murmur, Hopper, Harrier, Lodestone up; Kiln, Stanchion, Bulwark,
+Tallyman, Monolith down a touch; Ballast and Thresher up a touch.

@@ -44,9 +44,9 @@ export const V10_WEAPONS = {
   // strings stay laser straight; hold it down and it locks up in the open.
   heatar: {
     id: 'heatar', name: 'Kiln', role: 'Heat rifle', auto: true,
-    damage: 27, rpm: 640, magazine: 75, reserve: 150, reload: 3.4, range: 46,
+    damage: 27, rpm: 620, magazine: 75, reserve: 150, reload: 3.4, range: 46,
     falloff: { start: 18, end: 32, min: 0.68 }, penetrate: 0.7,
-    adsSpread: 0.006, hipSpread: 0.06, bloomPerShot: 0, bloomRecover: 2, bloomScale: 1.6,
+    adsSpread: 0.0075, hipSpread: 0.06, bloomPerShot: 0, bloomRecover: 2, bloomScale: 1.6,
     heat: { rounds: 17, coolDelay: 0.3, coolTime: 1.5, lockout: 1.8, loosenFrom: 0.6 },
     pattern: { amp: 0.01, freq: 0.6, ramp: 5 }, turnCap: 12,
     adsTime: 0.23, sprintToFire: 0.2, swapTime: 0.4, moveMult: 0.97, adsMoveMult: 0.52,
@@ -59,11 +59,11 @@ export const V10_WEAPONS = {
   // It pays in reach instead, the shortest of the SMGs.
   hushsmg: {
     id: 'hushsmg', name: 'Murmur', role: 'Ghost', auto: true, suppressed: true,
-    damage: 22, rpm: 860, magazine: 30, reserve: 180, reload: 1.8, range: 24,
-    falloff: { start: 7, end: 14, min: 0.5 },
-    adsSpread: 0.016, hipSpread: 0.038, bloomPerShot: 0.05, bloomRecover: 3.2, bloomScale: 1.3,
+    damage: 24, rpm: 900, magazine: 30, reserve: 180, reload: 1.8, range: 24,
+    falloff: { start: 9, end: 16, min: 0.5 },
+    adsSpread: 0.016, hipSpread: 0.032, bloomPerShot: 0.05, bloomRecover: 3.2, bloomScale: 1.3,
     pattern: { amp: 0.008, freq: 1.1, ramp: 3 },
-    adsTime: 0.14, sprintToFire: 0.1, swapTime: 0.27, moveMult: 1.06, adsMoveMult: 0.8,
+    adsTime: 0.14, sprintToFire: 0.08, swapTime: 0.27, moveMult: 1.06, adsMoveMult: 0.8,
     pellets: 1, slideFire: true, kickCam: 0.26, tracerWidth: 0.6, longshot: 14,
     botUse: { pref: 7, hold: 0.5, flank: 1.5, advance: 3, rush: 14 },
   },
@@ -72,11 +72,11 @@ export const V10_WEAPONS = {
   // changing drums with. Heavy for its class and loose from the hip.
   drumsmg: {
     id: 'drumsmg', name: 'Hopper', role: 'High capacity', auto: true,
-    damage: 20, rpm: 880, magazine: 64, reserve: 192, reload: 3.1, range: 27,
-    falloff: { start: 8, end: 16, min: 0.5 },
-    adsSpread: 0.02, hipSpread: 0.046, bloomPerShot: 0.035, bloomRecover: 2.8, bloomScale: 1.4,
+    damage: 23, rpm: 880, magazine: 64, reserve: 192, reload: 2.8, range: 27,
+    falloff: { start: 10, end: 18, min: 0.5 },
+    adsSpread: 0.02, hipSpread: 0.036, bloomPerShot: 0.035, bloomRecover: 2.8, bloomScale: 1.4,
     pattern: { amp: 0.013, freq: 1.2, ramp: 6 },
-    adsTime: 0.17, sprintToFire: 0.13, swapTime: 0.34, moveMult: 1.0, adsMoveMult: 0.72,
+    adsTime: 0.15, sprintToFire: 0.11, swapTime: 0.34, moveMult: 1.03, adsMoveMult: 0.72,
     pellets: 1, kickCam: 0.34, tracerWidth: 0.75, longshot: 15,
     botUse: { pref: 7, hold: 0.7, flank: 1.2, advance: 3, rush: 15 },
   },
@@ -86,24 +86,24 @@ export const V10_WEAPONS = {
   // shells. Lighter pattern than the Thresher, so it wants two at anything past arm's length.
   magshot: {
     id: 'magshot', name: 'Trammel', role: 'Mag-fed', auto: false,
-    damage: 15, rpm: 230, magazine: 6, reserve: 42, reload: 2.0, range: 14,
-    falloff: { start: 4.5, end: 9, min: 0.3 },
+    damage: 20, rpm: 230, magazine: 8, reserve: 42, reload: 1.7, range: 14,
+    falloff: { start: 6, end: 11, min: 0.3 },
     adsSpread: 0.045, hipSpread: 0.078, bloomPerShot: 0.14, bloomRecover: 1.8, bloomScale: 0.45, turnCap: 8,
     adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.4, moveMult: 1.03, adsMoveMult: 0.7,
     pellets: 8, kickCam: 0.9, tracerWidth: 0.5, longshot: 9,
-    botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 11 },
+    botUse: { pref: 4, hold: 0.5, flank: 1.5, advance: 3, rush: 9, fireMax: 11, precise: true },
   },
 
   // Five steel darts in a fan a third the width of buckshot. No one-shot anywhere, but two aimed shells kill out to
   // twenty metres, where every other shotgun is spent, and the darts go through a crate.
   flechette: {
     id: 'flechette', name: 'Thistle', role: 'Flechette', auto: false,
-    damage: 17, rpm: 105, magazine: 5, reserve: 40, reload: 0.5, range: 30,
+    damage: 19, rpm: 140, magazine: 5, reserve: 40, reload: 0.5, range: 30,
     falloff: { start: 12, end: 24, min: 0.6 }, penetrate: 0.6,
     adsSpread: 0.013, hipSpread: 0.045, bloomPerShot: 0.3, bloomRecover: 2, bloomScale: 0.6, turnCap: 9,
     adsTime: 0.21, sprintToFire: 0.16, swapTime: 0.42, moveMult: 1.0, adsMoveMult: 0.66,
     pellets: 5, shellReload: true, kickCam: 0.95, tracerWidth: 0.45, longshot: 17,
-    botUse: { pref: 11, hold: 0.8, flank: 1.2, advance: 3, rush: 20, scoped: true, fireMax: 24 },
+    botUse: { pref: 11, hold: 0.8, flank: 1.2, advance: 3, rush: 20, scoped: true, fireMax: 24, precise: true },
   },
 
   // ---------------- LMG ----------------
@@ -111,7 +111,7 @@ export const V10_WEAPONS = {
   // the fifteenth it is the tightest automatic in the game. No heat bar. Let go and it has to settle again.
   beltlmg: {
     id: 'beltlmg', name: 'Stanchion', role: 'Settles in', auto: true,
-    damage: 29, rpm: 680, magazine: 90, reserve: 180, reload: 4.3, range: 52,
+    damage: 29, rpm: 650, magazine: 90, reserve: 180, reload: 4.3, range: 52,
     falloff: { start: 22, end: 38, min: 0.72 }, penetrate: 0.75,
     adsSpread: 0.005, hipSpread: 0.08, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.5,
     settle: { shots: 15, from: 4.5 },
@@ -152,13 +152,13 @@ export const V10_WEAPONS = {
   // is there before a bolt gun has finished cycling, at any range it reaches.
   scout: {
     id: 'scout', name: 'Harrier', role: 'Straight-pull', auto: false,
-    damage: 86, rpm: 120, magazine: 7, reserve: 42, reload: 2.6, range: 68,
+    damage: 92, rpm: 120, magazine: 7, reserve: 42, reload: 2.6, range: 68,
     falloff: { start: 36, end: 52, min: 0.72 }, penetrate: 0.8,
     adsSpread: 0.002, hipSpread: 0.15, bloomPerShot: 0.4, bloomRecover: 1.8, bloomScale: 1,
     adsGate: 0.55, turnCap: 6.5,
-    adsTime: 0.27, sprintToFire: 0.28, swapTime: 0.46, moveMult: 0.97, adsMoveMult: 0.55,
+    adsTime: 0.23, sprintToFire: 0.28, swapTime: 0.46, moveMult: 0.97, adsMoveMult: 0.55,
     pellets: 1, kickCam: 0.9, tracerWidth: 1.4, longshot: 30,
-    botUse: { pref: 24, hold: 1.7, flank: 0.6, advance: 2, scoped: true, adsMin: 0.85, precise: true },
+    botUse: { pref: 24, hold: 1.7, flank: 0.6, advance: 2, scoped: true, adsMin: 0.85, precise: true, sight: 4 },
   },
 
   // A coil rifle. Hold the trigger for six tenths of a second and the slug leaves on its own, through cover almost
@@ -166,13 +166,13 @@ export const V10_WEAPONS = {
   // if you let go.
   rail: {
     id: 'rail', name: 'Lodestone', role: 'Charge shot', auto: false,
-    damage: 150, rpm: 70, charge: { time: 0.6 }, magazine: 4, reserve: 20, reload: 3.4, range: 82,
+    damage: 150, rpm: 70, charge: { time: 0.35 }, magazine: 4, reserve: 20, reload: 3.4, range: 82,
     falloff: { start: 55, end: 75, min: 0.8 }, penetrate: 0.95,
     adsSpread: 0.0012, hipSpread: 0.18, bloomPerShot: 0.7, bloomRecover: 1, bloomScale: 1,
     adsGate: 0.42, turnCap: 3.8,
-    adsTime: 0.42, sprintToFire: 0.42, swapTime: 0.66, moveMult: 0.88, adsMoveMult: 0.36,
+    adsTime: 0.36, sprintToFire: 0.42, swapTime: 0.66, moveMult: 0.88, adsMoveMult: 0.36,
     pellets: 1, kickCam: 1.5, tracerWidth: 1.8, longshot: 36,
-    botUse: { pref: 30, hold: 2.3, flank: 0.3, advance: 2, scoped: true },
+    botUse: { pref: 30, hold: 2.3, flank: 0.3, advance: 2, scoped: true, adsMin: 0.85, precise: true, sight: 6 },
   },
 
   // ---------------- Pistol ----------------

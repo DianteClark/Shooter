@@ -152,7 +152,7 @@ export const WEAPONS = {
   // rate of fire (every miss costs a beat), a muzzle that climbs and feet a little slower than the other SMGs.
   heavysmg: {
     id: 'heavysmg', name: 'Ballast', role: 'Bruiser', auto: true,
-    damage: 36, rpm: 560, magazine: 26, reserve: 144, reload: 2.1, range: 30,
+    damage: 36, rpm: 590, magazine: 26, reserve: 144, reload: 2.1, range: 30,
     falloff: { start: 9, end: 18, min: 0.64 }, penetrate: 0.55,
     adsSpread: 0.016, hipSpread: 0.044, bloomPerShot: 0.09, bloomRecover: 2.8, bloomScale: 1.4,
     pattern: { amp: 0.012, freq: 0.8, ramp: 2, drift: 0.003 },
@@ -167,7 +167,7 @@ export const WEAPONS = {
   shotgun: {
     id: 'shotgun', name: 'Thresher', role: 'Breach', auto: false,
     damage: 22, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 16,
-    falloff: { start: 7, end: 13, min: 0.3 },
+    falloff: { start: 7.5, end: 13.5, min: 0.3 },
     adsSpread: 0.036, hipSpread: 0.06, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
     adsTime: 0.17, sprintToFire: 0.1, swapTime: 0.42, moveMult: 1.04, adsMoveMult: 0.68,
     pellets: 8, shellReload: true, kickCam: 1, tracerWidth: 0.55, longshot: 10,
@@ -215,13 +215,13 @@ export const WEAPONS = {
   // Slow to get going, then a wall of fire until the barrel gives out. Swings like a gate: guard an angle.
   lmg: {
     id: 'lmg', name: 'Bulwark', role: 'Suppress', auto: true,
-    damage: 29, rpm: 660, magazine: 100, reserve: 200, reload: 4.5, range: 52,
+    damage: 29, rpm: 640, magazine: 100, reserve: 200, reload: 4.5, range: 52,
     falloff: { start: 18, end: 38, min: 0.72 }, penetrate: 0.75,
     adsSpread: 0.014, hipSpread: 0.095, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.7,
     spinup: { shots: 9, from: 0.68 },
     heat: { rounds: 30, coolDelay: 0.4, coolTime: 2.5, lockout: 2.5, loosenFrom: 0.75 }, turnCap: 2.4,
     pattern: { amp: 0.014, freq: 0.34, ramp: 8 },
-    adsTime: 0.36, sprintToFire: 0.34, swapTime: 0.62, moveMult: 0.84, adsMoveMult: 0.42,
+    adsTime: 0.4, sprintToFire: 0.34, swapTime: 0.62, moveMult: 0.82, adsMoveMult: 0.42,
     pellets: 1, kickCam: 0.72, tracerWidth: 1.25, longshot: 28,
     botUse: { pref: 20, hold: 1.6, flank: 0.5, advance: 2, scoped: true },
   },
@@ -270,7 +270,7 @@ export const WEAPONS = {
   // Two to the body through mid range, and it flinches the scope a little each time, so measured beats frantic.
   dmr: {
     id: 'dmr', name: 'Tallyman', role: 'Marksman', auto: false,
-    damage: 52, rpm: 200, magazine: 12, reserve: 72, reload: 2.5, range: 58,
+    damage: 52, rpm: 185, magazine: 12, reserve: 72, reload: 2.5, range: 58,
     falloff: { start: 26, end: 42, min: 0.68 }, penetrate: 0.8,
     adsSpread: 0.0025, hipSpread: 0.09, bloomPerShot: 0.6, bloomRecover: 2.1, bloomScale: 1.2,
     boltKick: 0.78, turnCap: 8,
@@ -337,7 +337,7 @@ export const WEAPONS = {
     falloff: { start: 60, end: 80, min: 0.8 }, penetrate: 0.95,
     adsSpread: 0.0012, hipSpread: 0.24, bloomPerShot: 0.8, bloomRecover: 0.8, bloomScale: 1,
     adsGate: 0.4, boltKick: 0.3, turnCap: 3.1,
-    adsTime: 0.52, sprintToFire: 0.55, swapTime: 0.8, moveMult: 0.82, adsMoveMult: 0.34,
+    adsTime: 0.56, sprintToFire: 0.55, swapTime: 0.8, moveMult: 0.82, adsMoveMult: 0.34,
     pellets: 1, kickCam: 1.7, tracerWidth: 2, longshot: 38,
     botUse: { pref: 32, hold: 2.5, flank: 0.2, advance: 2, scoped: true, adsMin: 0.85, precise: true, sight: 7 },
   },
