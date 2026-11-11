@@ -1,5 +1,5 @@
-// Flooded jungle ruin on a grey, steaming morning. A moat rings the walled temple island in the middle and you
-// cross it on four broken causeways, so the map plays as king of the hill: the island courtyard holds the
+// Coast. A flooded sea temple on a tidal shore, a grey, steaming morning. A moat of tidewater rings the walled temple
+// island in the middle and you cross it on four broken causeways, so the map plays as king of the hill: the island courtyard holds the
 // centre, the causeways are the chokepoints, and the banks are thick with fig trunks and fallen masonry.
 import { bombSites, flagBases, wall, rotated, perimeter, edgeSpawns, navGrid, symmetricPoints } from './build.js';
 
@@ -17,10 +17,10 @@ function build() {
     [33, 13, 1, 1, 2.8, 'rock', { ruin: 'statue' }],
 
     // The island's broken curtain wall, gapped where the causeways land.
-    [26.5, 15.5, 4.5, 1.2, 3.2, 'rock', { ruin: true }],
-    [26.5, 16.7, 1.2, 3.3, 3.2, 'rock', { ruin: true }],
-    [26.5, 26.5, 1.2, 4.8, 3.2, 'rock', { ruin: true }],
-    [38, 15.5, 7.5, 1.2, 3.2, 'rock', { ruin: true }],
+    [26, 15, 5, 1.2, 3.2, 'rock', { ruin: true }],
+    [26, 16.2, 1.2, 3.8, 3.2, 'rock', { ruin: true }],
+    [26, 26.5, 1.2, 5.3, 3.2, 'rock', { ruin: true }],
+    [38, 15, 8, 1.2, 3.2, 'rock', { ruin: true }],
     // Inside the courtyard: a colonnade stump and fallen blocks.
     [30.4, 26.6, 1.2, 1.2, 3.4, 'rock', { ruin: 'pillar' }],
     // Baffles just inside the gates, so no line runs from one causeway through the courtyard to the next.
@@ -35,7 +35,7 @@ function build() {
     [12.5, 2.5, 2.4, 2.4, 4, 'rock', { tree: true }],
     [20.6, 17.6, 2.4, 2.4, 4, 'rock', { tree: true }],
     [11, 28, 2.4, 2.4, 4, 'rock', { tree: true }],
-    [19.5, 12.5, 2.6, 2.6, 4, 'rock', { tree: true }],
+    [20.4, 12.5, 2.6, 2.6, 4, 'rock', { tree: true }],
     [21, 39, 2.6, 2.6, 4, 'rock', { tree: true }],
     [34, 9.6, 2.4, 2.4, 4, 'rock', { tree: true }],
     [45, 2.2, 2.6, 2.6, 4, 'rock', { tree: true }],
@@ -69,7 +69,7 @@ function build() {
   // Capture the Flag (see flagBases). On the open bank in front of the spawns, a causeway run from the temple.
   points.ctf = flagBases(W, H, { x: 12, z: 25.5 });
 
-  return { id: 'sunken', name: 'Sunken', theme: 'sunken', width: W, height: H, walls, spawns, lanes, nav, points };
+  return { id: 'sunken', name: 'Sunken', theme: 'sunken', size: 'medium', region: 'coast', width: W, height: H, walls, spawns, lanes, nav, points };
 }
 
 export default build();

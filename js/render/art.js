@@ -166,7 +166,8 @@ THEMES.topside = {
   ] },
 };
 
-// Flooded jungle ruin on a grey, steaming morning: soft high light, drizzle on the moat, mist in the trees.
+// Flooded sea temple on a tidal shore (region: coast), a grey, steaming morning: soft high light, drizzle on the moat,
+// palms along the beach to the south and the old forest only behind the pyramid. The moat is sea-green tidewater.
 THEMES.sunken = {
   id: 'sunken',
   light: { dir: norm([-0.3, 0.86, 0.42]), sun: [0.54, 0.57, 0.46], sky: [0.36, 0.42, 0.39], amb: [0.26, 0.29, 0.27] },
@@ -175,9 +176,9 @@ THEMES.sunken = {
   shadow: { col: [0.34, 0.44, 0.38], strength: 0.56, len: 0.6 },
   lamp: [0.34, 0.22, 0.08],
   wet: 0.45, sheen: norm([0.1, 0.9, -0.42]), sheenCol: [0.42, 0.52, 0.46],
-  water: { deep: [0.04, 0.10, 0.08], shallow: [0.11, 0.21, 0.15], glint: [0.5, 0.64, 0.54] },
+  water: { deep: [0.03, 0.11, 0.11], shallow: [0.09, 0.24, 0.22], glint: [0.56, 0.74, 0.7] },
   ink: ink({
-    ground: 0x5a5c44, asphalt: 0x6e6d62, dirt: 0x4f4536, gravel: 0x67665a,
+    ground: 0x6e6a50, sand: 0x8c8466, asphalt: 0x6e6d62, dirt: 0x4f4536, gravel: 0x67665a,
     roof: 0x55604a, wall: 0x7a7a66, wallB: 0x6a705c, trim: 0x383a30,
     concrete: 0x878774, crate: 0x7a6044, crateD: 0x4a3a28,
     rail: 0x6a6a60, tie: 0x3a3228, hazardY: 0x9a8a40, hazardK: 0x262a22,

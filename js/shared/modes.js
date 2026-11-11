@@ -3,8 +3,8 @@
 //             rules on a bigger field, so everything keyed to a rule set (HUD flags, bot plans, scoring) works unchanged.
 //   teamSize  players per team in a full match; bots fill up to it.
 //   large     needs a Ground War map: small maps never offer it.
-//   ffa       every player for themselves (see TEAMS in constants.js): `players` in a full match on an ordinary map,
-//             `largePlayers` on a Ground War map. `everyMap` modes are offered on every map, Ground War ones included.
+//   ffa       every player for themselves (see TEAMS in constants.js). Seats follow the map's size tier: `smallPlayers` on a
+//             small map, `players` on a medium one, `largePlayers` on a large or Ground War map. `everyMap` modes are offered on every map, Ground War ones included.
 //   rounds    Search and Destroy: scoreLimit is rounds to win, timeLimit the length of one round (see SND below).
 import { normalizeLoadout } from './catalog.js';
 
@@ -24,10 +24,10 @@ export const MODES = {
   hard:  { id: 'hard',  rules: 'hard', teamSize: 6,  name: 'Hardpoint',       short: 'HP',  scoreLimit: 150, timeLimit: 600, desc: 'One zone at a time. Hold it to score; it moves.' },
   gwtdm: { id: 'gwtdm', rules: 'tdm',  teamSize: 16, large: true, name: 'Ground War TDM', short: 'GW TDM', scoreLimit: 250, timeLimit: 900, desc: '16 v 16 on a big map. First team to the kill limit.' },
   gwdom: { id: 'gwdom', rules: 'dom',  teamSize: 16, large: true, name: 'Ground War Domination', short: 'GW DOM', scoreLimit: 400, timeLimit: 900, desc: '16 v 16, five flags. More flags, faster points.' },
-  ffa:   { id: 'ffa',   rules: 'ffa',  teamSize: 1, ffa: true, players: 8, largePlayers: 12, everyMap: true, name: 'Free-for-All', short: 'FFA', scoreLimit: 30, timeLimit: 600, desc: 'Every player for themselves. Most kills takes it.' },
+  ffa:   { id: 'ffa',   rules: 'ffa',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 12, everyMap: true, name: 'Free-for-All', short: 'FFA', scoreLimit: 30, timeLimit: 600, desc: 'Every player for themselves. Most kills takes it.' },
   snd:   { id: 'snd',   rules: 'snd',  teamSize: 6,  rounds: true, name: 'Search and Destroy', short: 'S&D', scoreLimit: 4, timeLimit: 120, desc: 'One life a round. Plant the bomb or stop it. First to 4 rounds.' },
   ctf:   { id: 'ctf',   rules: 'ctf',  teamSize: 6,  name: 'Capture the Flag', short: 'CTF', scoreLimit: 3, timeLimit: 600, desc: 'Take their flag home to yours. Yours has to be home to score. First to 3.' },
-  gun:   { id: 'gun',   rules: 'gun',  teamSize: 1, ffa: true, players: 8, largePlayers: 12, everyMap: true, name: 'Gun Game', short: 'GUN', scoreLimit: GUN_LADDER.length, timeLimit: 600, desc: `A new gun every kill, ${GUN_LADDER.length} to the Verdict. A Hatchet knocks you back one.` },
+  gun:   { id: 'gun',   rules: 'gun',  teamSize: 1, ffa: true, smallPlayers: 6, players: 8, largePlayers: 12, everyMap: true, name: 'Gun Game', short: 'GUN', scoreLimit: GUN_LADDER.length, timeLimit: 600, desc: `A new gun every kill, ${GUN_LADDER.length} to the Verdict. A Hatchet knocks you back one.` },
 };
 export const MODE_IDS = Object.keys(MODES);
 
@@ -68,7 +68,10 @@ export const isFfa = id => !!(MODES[id]?.ffa || id === 'ffa' || id === 'gun');
 // Everyone in a full match: both teams, or a free-for-all's field, which is bigger on a Ground War map.
 export function playersFor(id, map = null) {
   const m = MODES[id] ?? MODES.tdm;
-  return m.ffa ? (map?.large ? m.largePlayers : m.players) : m.teamSize * 2;
+  if (!m.ffa) return m.teamSize * 2;
+  // A map without a size tier counts as medium (see SIZES in js/shared/map.js).
+  const size = map?.large ? 'huge' : map?.size;
+  return size === 'small' ? m.smallPlayers : size === 'large' || size === 'huge' ? m.largePlayers : m.players;
 }
 
 // Modes a map can host: its own `modes` list (see js/shared/map.js, which fills it in for every map), plus the modes

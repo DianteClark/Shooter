@@ -55,7 +55,7 @@ function build() {
   // Capture the Flag (see flagBases). At the head of the middle lane, between the two sheds and in front of the spawn screens: every run home crosses the signal box.
   points.ctf = flagBases(W, H, { x: 15, z: 24 });
 
-  return { id: 'railyard', name: 'Railyard', theme: 'railyard', width: W, height: H, walls, spawns, lanes, nav, points };
+  return { id: 'railyard', name: 'Railyard', theme: 'railyard', size: 'medium', region: 'industrial', width: W, height: H, walls, spawns, lanes, nav, points };
 }
 
 export default build();

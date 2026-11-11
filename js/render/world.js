@@ -9,6 +9,8 @@ import * as metroTheme from './themes/metro.js';
 import * as desertTheme from './themes/desert.js';
 import jungle from './themes/jungle.js';
 import arctic from './themes/arctic.js';
+import * as coast from './themes/coast.js';
+import * as industrial from './themes/industrial.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const WATER_Y = -0.62;       // Basin surface, below the quay.
@@ -341,7 +343,8 @@ function groundShader(ctx) {
   const inMap = (x, z) => x > 0 && x < W && z > 0 && z < H;
   const laneDist = z => { let d = 99; for (const l of map.lanes) d = Math.min(d, Math.abs(z - l.z)); return d; };
   ctx.groundWet = 0;
-  if (THEME_STAGES[theme.id].ground) return THEME_STAGES[theme.id].ground(ctx);   // Theme modules shade their own.
+  const own = THEME_STAGES[theme.id]?.ground;      // A theme module's own ground (js/render/themes/).
+  if (own) return own(ctx);
   if (theme.id === 'railyard') {
     return p => {
       const [x, , z] = p;
@@ -818,6 +821,7 @@ function harborDecor(ctx) {
   box3(b, -28, -0.4, -28, W + 56, 0.05, 28 - 3);
   b.setColor(scale(INK.concrete, 0.3));
   box3(b, -10, -0.2, -13, W + 20, 0.9, 3);
+  coast.lighthouse(ctx, W + 12, -11.5, 12);
   // Warehouse sheds, kept low on the south side so they never hide the fight.
   b.setColor(scale(INK.wall, 0.5));
   for (let z = -3; z < H + 6; z += 7) { box3(b, -9, 0, z, 6, 3.4, 5); box3(b, W + 3, 0, H - z - 5, 6, 3.4, 5); }
@@ -2131,31 +2135,21 @@ function ruinPillar(ctx, w) {
 }
 
 // Strangler fig: buttress roots and a fat trunk inside the footprint, a modest canopy on top.
+// A stand of palms on a mound of coral stone: the coast's tree, as solid as the block it stands for.
 function figTree(ctx, w) {
   const { b, rnd } = ctx;
   const { x, z, w: tw, d: td, h } = w;
   const cx = x + tw / 2, cz = z + td / 2, r = Math.min(tw, td) / 2;
-  b.setColor(INK.bark);
-  for (let k = 0; k < 5; k++) {
-    const a = k * 1.2566 + rnd() * 0.4;
-    const ex = cx + Math.cos(a) * r * 0.92, ez = cz + Math.sin(a) * r * 0.92;
-    b.loft([
-      [[cx - 0.12, 0, cz - 0.12], [ex, 0, ez], [cx + 0.12, 0, cz + 0.12]],
-      [[cx - 0.1, h * 0.45, cz - 0.1], [cx + Math.cos(a) * 0.3, h * 0.45, cz + Math.sin(a) * 0.3], [cx + 0.1, h * 0.45, cz + 0.1]],
-    ]);
+  b.setColor(INK.rockL);
+  b.prismY(0, h * 0.28, cx, cz, r, r * 0.8, 7, rnd());
+  b.setColor(scale(INK.sand ?? INK.rockL, 0.95));
+  b.prismY(h * 0.28, h * 0.36, cx, cz, r * 0.8, r * 0.5, 7, rnd());
+  b.setColor(scale(INK.bark, 1.1));
+  b.prismY(h * 0.36, h, cx, cz, r * 0.42, r * 0.3, 7, rnd());      // The solid heart the trunks grow from.
+  for (let k = 0; k < 2; k++) {
+    const a = k * 3.1 + rnd() * 0.5, o = r * 0.3;
+    coast.palm(ctx, cx + Math.cos(a) * o, cz + Math.sin(a) * o, h + 0.4 + k * 0.8, 0.08 + rnd() * 0.08, 1.15);
   }
-  b.setColor(scale(INK.bark, 1.12));
-  b.prismY(0, h, cx, cz, r * 0.55, r * 0.38, 7, rnd());
-  b.setColor(INK.vine);
-  b.prismY(0.4, h * 0.9, cx + r * 0.3, cz + r * 0.3, 0.07, 0.05, 4);
-  // Canopy: two stacked faceted clumps, kept close over the trunk so it never hides a player for long.
-  const cr = r * 1.4;
-  b.setColor(INK.leafD);
-  b.prismY(h - 0.5, h + 0.25, cx, cz, cr * 0.6, cr, 7, rnd());
-  b.setColor(INK.leaf);
-  b.prismY(h + 0.25, h + 0.85, cx, cz, cr, cr * 0.45, 7, rnd());
-  b.setColor(scale(INK.leaf, 1.2));
-  b.prismY(h + 0.85, h + 1.05, cx, cz, cr * 0.45, cr * 0.1, 7, rnd());
 }
 
 function sunkenRock(ctx, w) {
@@ -2270,11 +2264,14 @@ function sunkenDecor(ctx) {
     const side = i % 4, t = rnd();
     let x, z;
     if (side === 0) { x = -26 + t * (W + 52); z = -6 - rnd() * 18; if (x > px - 2 && x < px + 24 && z < -10) continue; }
-    else if (side === 1) { x = -26 + t * (W + 52); z = H + 5 + rnd() * 16; }
+    else if (side === 1) { x = -26 + t * (W + 52); z = H + 4 + rnd() * 3; if (rnd() < 0.5) continue; }
     else if (side === 2) { x = -5 - rnd() * 18; z = -8 + t * (H + 16); }
     else { x = W + 5 + rnd() * 18; z = -8 + t * (H + 16); }
-    jungleTree(b, x, z, 4 + rnd() * 5, 2.2 + rnd() * 2, rnd);
+    // The coast: palms along the beach and the shore, the old forest only behind the temple.
+    if (side === 0 && rnd() < 0.5) jungleTree(b, x, z, 4 + rnd() * 5, 2.2 + rnd() * 2, rnd);
+    else coast.palm(ctx, x, z, 4.5 + rnd() * 3, 0.15 + rnd() * 0.3);
   }
+  coast.sea(ctx, 'south', { from: 7, beach: 4, y: WATER_Y });
   skyRing(ctx, { low: [0.1, 0.14, 0.12], mid: [0.2, 0.26, 0.23], warm: [0.3, 0.34, 0.28], high: [0.07, 0.1, 0.1], warmDir: [-0.3, -1], y0: -4, y1: 10, y2: 50 });
   // Mist pools in the low ground beside the moat, as soft additive glow.
   for (const w of ctx.map.walls) if (w.kind === 'water') glow.halo(w.x + w.w / 2, w.z + w.d / 2, Math.max(w.w, w.d) * 0.55, [0.035, 0.05, 0.045], WATER_Y + 0.05, 12);
@@ -3129,6 +3126,8 @@ const DRESS = {
   metro: metroTheme.dress, subway: metroTheme.dress, desert: desertTheme.dress,
   jungle: jungle.dress(RAILYARD_DRESS),
   arctic: arctic.dress({ ...RAILYARD_DRESS, container: wagon, building: frostBuilding, wall: frostWall, crate: frostCrate, barrier: frostBarrier, sandbag: snowbank, border: frostBorder }),
+  pier: { ...RAILYARD_DRESS, ...coast.pier.dress },
+  foundry: { ...RAILYARD_DRESS, ...industrial.foundry.dress },
 };
 
 const THEME_STAGES = {
@@ -3138,19 +3137,24 @@ const THEME_STAGES = {
       for (const w of c.map.walls) if (w.landmark) c.lamps.push({ x: w.x + w.w / 2, z: w.z + w.d / 2, r: 9 });
     },
     paint: (c) => groundPaint(c.b, c.map, c.rnd, c.W, c.H),
-    decor: (c) => backdrop(c.b, c.W, c.H, c.rnd),
+    decor: (c) => { backdrop(c.b, c.W, c.H, c.rnd); industrial.skyline(c, { dist: 34, count: 8, tint: 1.2 }); },
   },
   harbor: { lights: harborLights, paint: harborPaint, decor: harborDecor },
   neon: { lights: neonLights, paint: neonPaint, decor: neonDecor },
   dust: { lights: () => {}, paint: dustPaint, decor: dustDecor },
   frost: { lights: frostLights, paint: frostPaint, decor: frostDecor },
-  topside: { lights: topsideLights, paint: topsidePaint, decor: topsideDecor },
+  topside: { lights: topsideLights, paint: topsidePaint, decor: (c) => { topsideDecor(c); industrial.skyline(c, { y: STREET_Y, dist: 44, count: 9, tint: 1.3 }); } },
   sunken: { lights: sunkenLights, paint: sunkenPaint, decor: sunkenDecor },
   harvest: { lights: () => {}, paint: harvestPaint, decor: harvestDecor },
   metro: metroTheme.stage, subway: metroTheme.stage, desert: desertTheme.stage,
   jungle: jungle.stage,
   arctic: arctic.stage({ lights: frostLights, paint: frostPaint, decor: frostDecor }),
+  pier: coast.pier.stage,
+  foundry: industrial.foundry.stage,
 };
+
+// What theme modules (js/render/themes/) may draw with, handed over on ctx.kit: they cannot import world.js back.
+const KIT = { box3, emissive, scale, skyRing, building, container, crate, barrier, concreteWall, border, hexRGB, WATER_Y };
 
 // Sun shadows and contact darkening: per-vertex strength a, drawn with multiply blending.
 function buildDecals(map, theme) {
@@ -3211,7 +3215,7 @@ export function buildWorld(map, teams, fogUniforms) {
   const glow = new GlowList();
   const timeU = { value: 0 };
   const flashU = { value: 0 };
-  const ctx = { b, sb, glow, map, theme, W, H, lamps, timeU, flashU, rnd: mulberry(7321), noise: makeNoise(991), groundWet: 0, tracks: frostTracks(map) };
+  const ctx = { b, sb, glow, map, theme, W, H, lamps, timeU, flashU, rnd: mulberry(7321), noise: makeNoise(991), groundWet: 0, tracks: frostTracks(map), kit: KIT };
 
   // Lights come first: the ground and walls bake them in as they are generated.
   const stages = THEME_STAGES[theme.id];
@@ -3293,6 +3297,8 @@ const THUMB_STYLE = {
   metro: metroTheme.thumb, subway: metroTheme.thumbSubway, desert: desertTheme.thumb,
   jungle: jungle.thumb,
   arctic: arctic.thumb,
+  pier: coast.pier.thumb,
+  foundry: industrial.foundry.thumb,
 };
 
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is

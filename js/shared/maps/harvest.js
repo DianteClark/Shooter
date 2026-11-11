@@ -49,8 +49,8 @@ function build() {
     // ---- Middle lane (z 29..43): the home farmyard (flag A) and the field to the grain yard.
     silo(14.5, 29.6), silo(14.5, 39),
     tractor(20.5, 30.4), dyke(27.6, 33, 0.7, 3), stack(29, 39.2), bale(21.6, 40.6),
-    [35.5, 30.5, 6.5, 4.5, 0, 'water', { pond: true }],
-    stack(42.6, 33.2), house(39.5, 37.6, 3.2, 2.8, 3.2),       // Hay and the pump house beside the pond.
+    [35.5, 30.8, 6.5, 4.5, 0, 'water', { pond: true }],
+    stack(43, 33.2), house(39.5, 37.6, 3.2, 2.8, 3.2),       // Hay and the pump house beside the pond.
     dyke(46.6, 33.5, 0.7, 5), hedge(46.5, 40, 6.5, 1.2),
     stack(51, 36.4, 2.2, 2.2), bale(53.5, 33.4),
 
@@ -99,7 +99,7 @@ function build() {
   }
 
   return {
-    id: 'harvest', name: 'Harvest', theme: 'harvest', width: W, height: H, walls, spawns, lanes, nav, points, rooms,
+    id: 'harvest', name: 'Harvest', theme: 'harvest', size: 'huge', region: 'farmland', width: W, height: H, walls, spawns, lanes, nav, points, rooms,
     modes: ['gwtdm', 'gwdom'], large: true,
   };
 }

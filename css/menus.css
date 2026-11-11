@@ -589,20 +589,35 @@
 #ui .solo-quick { margin-left: auto; min-height: 38px; height: 38px; font-size: var(--fs-body); }
 #ui .solo-quick .ico { color: var(--c-sodium); }
 /* Two labelled sections side by side: the standard 6v6 maps (and Random), then the large Ground War maps. */
-#ui .solo-maps { flex: 1; min-height: 0; display: flex; gap: var(--sp-3); }
-#ui .solo-sec { flex: var(--cols, 4) 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
-#ui .solo-sec.large { flex: 1.25 1 0; }
+/* Maps: Random stands on the left, always in view; the size tiers scroll beside it, one labelled section each. Cards
+   keep a fixed height so twenty maps read as rows to scroll, not a grid squeezed to slivers. */
+#ui .solo-maps { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(96px, .2fr) minmax(0, 1fr); gap: var(--sp-3); }
+#ui .solo-maps > .solo-map.random { height: 100%; }
+#ui .solo-map .sm-sub { font: 400 var(--fs-micro)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-top: 3px; }
+#ui .solo-scroll { min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding-right: 2px;
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 14px), transparent); }
+#ui .solo-sec { flex: none; display: flex; flex-direction: column; gap: 5px; }
+#ui .solo-sec:last-child { padding-bottom: 12px; }
 #ui .solo-h { flex: none; display: flex; align-items: center; gap: 6px; height: 16px; margin: 0; padding-bottom: 3px; box-shadow: inset 0 -1px 0 var(--c-line-hi); white-space: nowrap; overflow: hidden; }
 #ui .solo-h .ico { height: 13px; color: var(--c-sodium); }
 #ui .solo-h b { font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 #ui .solo-h small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
-#ui .solo-sec.large .solo-h { box-shadow: inset 0 -2px 0 var(--c-sodium); }
-#ui .solo-sec.large .solo-h b { color: var(--c-sodium); }
-#ui .solo-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: var(--sp-2); }
+#ui .solo-h i { margin-left: auto; font: 400 var(--fs-micro)/1 var(--f-plate); font-style: normal; color: var(--c-rail); }
+#ui .solo-sec.tier-huge .solo-h { box-shadow: inset 0 -2px 0 var(--c-sodium); }
+#ui .solo-sec.tier-huge .solo-h b { color: var(--c-sodium); }
+#ui .solo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-auto-rows: clamp(70px, 21vh, 92px); gap: var(--sp-2); }
+#ui .sm-region { position: absolute !important; left: var(--cut, 10px); top: 0; padding: 3px 7px 2px 6px; background: rgba(16,20,26,.8); color: var(--c-chalk); box-shadow: inset 2px 0 0 var(--region, var(--c-rail)); }
+#ui .sm-region[data-region="coast"] { --region: #6fb3c8; }
+#ui .sm-region[data-region="industrial"] { --region: #c98a4a; }
+#ui .sm-region[data-region="metro"] { --region: #b07ad8; }
+#ui .sm-region[data-region="desert"] { --region: #d8b46a; }
+#ui .sm-region[data-region="jungle"] { --region: #6fae5a; }
+#ui .sm-region[data-region="arctic"] { --region: #cfe2f2; }
+#ui .sm-region[data-region="farmland"] { --region: #c8b05a; }
 /* Long names ("Night Market") take a second line on narrow phones rather than an ellipsis. */
 #ui .solo-grid .sm-name { align-items: flex-end; }
 #ui .solo-grid .sm-name .ico { flex: none; margin-bottom: 2px; }
-#ui .solo-grid .sm-name b { font-size: clamp(16px, 2.5vw, 22px); line-height: .98; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+#ui .solo-grid .sm-name b { font-size: clamp(15px, 2.3vw, 20px); line-height: .98; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 #ui .solo-map { padding: var(--sp-2) var(--sp-3) var(--sp-2); }
 #ui .solo-map:not(.on) .vc-art { filter: saturate(.75) brightness(.8); }
 #ui .solo-map.on .vc-art { transform: scale(1.06); }

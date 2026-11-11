@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BR render cost</title>
+<style>html, body { margin: 0; background: #000; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js", "trystero": "../vendor/trystero.min.js" } }</script>
+<script type="module">
+// Battle royale feasibility (docs/BR-PERF.md), dev only. Renders the giant test map (dev/br-map.mjs) with the real
+// GameRenderer on a pinned quality step and reports draw calls, triangles and frame time.
+//   ?density=1        wall density of the test map
+//   &q=low            quality step (quality.js)
+//   &cull=none        the world as built today: one merged mesh, never culled
+//   &cull=chunk       the merged mesh split into 32 m chunks with bounding spheres: three.js frustum-culls them
+//   &cull=distance    chunks, and any chunk farther than 60 m from the camera target hidden too
+//   ?harvest=1        Harvest instead, for the baseline
+// window.measure(frames) returns { ms, cpuMs, calls, triangles, worldTris, ... }.
+import * as THREE from 'three';
+import { GameRenderer } from '../js/render/renderer.js';
+import { brMap } from './br-map.mjs';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 852), H = +(params.get('h') || 393);
+const cull = params.get('cull') || 'none';
+const canvas = document.getElementById('game');
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+// ?harvest=1 measures Harvest instead, the Ground War baseline the brief holds large maps to.
+const map = params.has('harvest') ? (await import('../js/shared/map.js')).MAPS.harvest : brMap({ density: +(params.get('density') || 1) });
+
+const t0 = performance.now();
+const r = new GameRenderer(canvas, map, { dynamicRes: false });
+r.setQuality(params.get('q') || 'low');
+r.resize();
+const buildMs = performance.now() - t0;
+const worldTris = r.world.tris;
+
+// Splits a non-indexed mesh's triangles into square chunks by centroid. Each chunk keeps the material and gets a
+// bounding sphere, so three.js frustum-culls it.
+function chunked(mesh, size) {
+  const g = mesh.geometry, pos = g.getAttribute('position'), names = Object.keys(g.attributes);
+  const buckets = new Map();
+  for (let t = 0; t < pos.count / 3; t++) {
+    const cx = (pos.getX(t * 3) + pos.getX(t * 3 + 1) + pos.getX(t * 3 + 2)) / 3;
+    const cz = (pos.getZ(t * 3) + pos.getZ(t * 3 + 1) + pos.getZ(t * 3 + 2)) / 3;
+    const key = `${Math.floor(cx / size)},${Math.floor(cz / size)}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(t);
+  }
+  const out = [];
+  for (const [key, tris] of buckets) {
+    const ng = new THREE.BufferGeometry();
+    for (const n of names) {
+      const a = g.getAttribute(n), k = a.itemSize, src = a.array, dst = new Float32Array(tris.length * 3 * k);
+      tris.forEach((t, i) => dst.set(src.subarray(t * 3 * k, t * 3 * k + 3 * k), i * 3 * k));
+      ng.setAttribute(n, new THREE.BufferAttribute(dst, k));
+    }
+    ng.computeBoundingSphere();
+    const m = new THREE.Mesh(ng, mesh.material);
+    m.renderOrder = mesh.renderOrder;
+    m.frustumCulled = true;
+    const [i, j] = key.split(',').map(Number);
+    m.userData.cx = (i + 0.5) * size; m.userData.cz = (j + 0.5) * size;
+    out.push(m);
+  }
+  return out;
+}
+
+let chunks = [];
+if (cull !== 'none') {
+  const group = r.world.group;
+  for (const mesh of [group.children[0], r.world.decals]) {
+    const parts = chunked(mesh, 32);
+    group.remove(mesh);
+    for (const p of parts) { p.matrixAutoUpdate = false; p.updateMatrix(); p.updateMatrixWorld(true); group.add(p); }
+    chunks.push(...parts);
+  }
+}
+
+// 32 players at the map's spawn points; the local player in the middle of the city.
+const spawns = map.spawns.flat();
+const players = spawns.map((s, i) => ({
+  id: 'p' + i, name: 'P' + i, team: i % 2, isBot: true, skill: 'regular', x: s.x, z: s.z, aim: s.aim, vx: 0, vz: 0, hp: 100,
+  alive: true, respawnT: 0, weapon: 'ar', camo: 'none', ammo: 30, reserve: 90, reloadT: 0, reloadDur: 2, adsT: 0,
+  sprinting: false, sliding: false, spawnProtect: false, kills: 0, deaths: 0, streak: 0, streakReady: null, bloom: 0,
+  score: 0, capped: false, slots: [], heat: 0, overheated: false, head: 0, assists: 0, firingT: 0, tacticalLeft: 1,
+  lethalLeft: 1, tactical: 'smoke', lethal: 'frag',
+}));
+const view = {
+  t: 0, phase: 'live', timeLeft: 300, scores: [0, 0], winner: null, uav: [0, 0], players, localId: 'p0', lastKill: null,
+  projectiles: [], smokes: [], turrets: [], gunships: [], mode: 'tdm', tags: [], points: [], jam: [0, 0], overwatchT: [0, 0],
+};
+r.setLocal('p0');
+const gl = r.webgl.getContext();
+const PIXEL = new Uint8Array(4);
+
+function frame() {
+  view.t += 1 / 60;
+  // The local player walks a slow circle through the middle, so the camera and fog keep moving.
+  const me = players[0];
+  me.x = map.width / 2 + Math.cos(view.t * 0.3) * 40; me.z = map.height / 2 + Math.sin(view.t * 0.3) * 40;
+  if (cull === 'distance') {
+    const cx = r.camTarget?.x ?? me.x, cz = r.camTarget?.z ?? me.z;
+    for (const c of chunks) c.visible = Math.hypot(c.userData.cx - cx, c.userData.cz - cz) < 60;
+  }
+  const a = performance.now();
+  r.update(view, [], 1 / 60);
+  const cpu = performance.now() - a;
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, PIXEL);     // Waits for the frame: finish() alone may not.
+  return [cpu, performance.now() - a];
+}
+
+window.measure = (n = 120) => {
+  for (let i = 0; i < 30; i++) frame();
+  let cpu = 0, all = 0, calls = 0, tris = 0;
+  for (let i = 0; i < n; i++) {
+    const [c, t] = frame();
+    cpu += c; all += t;
+    const st = r.getStats();
+    calls += st.calls; tris += st.triangles;
+  }
+  const geoBytes = r.world.group.children.reduce((s, m) => s + Object.values(m.geometry?.attributes ?? {}).reduce((q, a) => q + a.array.byteLength, 0), 0);
+  return { cull, walls: map.walls.length, buildMs, worldTris, chunks: chunks.length, ms: all / n, cpuMs: cpu / n,
+    calls: calls / n, triangles: tris / n, geoMB: geoBytes / 1048576, dpr: r.getStats().dpr };
+};
+window.ready = true;
+</script>
+</body>
+</html>

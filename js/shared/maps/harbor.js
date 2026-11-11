@@ -18,7 +18,7 @@ function build() {
     [11, 29, 9, 9, 3.6, 'building'],
 
     // Causeway: staggered boxes so nobody owns the whole 80 metres.
-    [25, 20.6, 3.5, 2.5, 2.7, 'container'],
+    [25, 21.2, 3.5, 2.5, 2.7, 'container'],
     [31, 23, 2.2, 2.4, 2.9, 'container'],
     [35.5, 21.5, 3, 0.8, 0.9, 'barrier'],
     [36, 25.8, 1.8, 2.2, 2.7, 'container'],
@@ -27,7 +27,7 @@ function build() {
     [25, 2, 6, 2.5, 2.7, 'container'],
     [40, 6.5, 6, 2.5, 2.7, 'container'],
     [49, 1, 2.5, 5.7, 2.7, 'container'],
-    [34, 0.6, 1.4, 1.4, 2.4, 'crane'],
+    [34, 1, 1.4, 1.4, 2.4, 'crane'],
     [34, 6.4, 1.4, 1.4, 2.4, 'crane'],
     [56, 5, 1.6, 1.6, 1.1, 'crate'],
     [60, 2.2, 3, 2.5, 2.7, 'container'],
@@ -49,7 +49,7 @@ function build() {
     [{ x: 45, z: 3.5, r: 4 }, { x: 29, z: 24.5, r: 3.6 }]);
 
   // Render-only dressing: gantry cranes straddle the quay on their crane-kind legs.
-  const decor = [{ type: 'gantry', x: 34.7, z0: 1.3, z1: 7.1, boomZ: 15 }, { type: 'gantry', x: 45.3, z0: 46.7, z1: 40.9, boomZ: 37 }];
+  const decor = [{ type: 'gantry', x: 34.7, z0: 1.7, z1: 7.1, boomZ: 15 }, { type: 'gantry', x: 45.3, z0: 46.3, z1: 40.9, boomZ: 37 }];
 
   // Search and Destroy (see bombSites). One on each quay, beyond the crane legs and the box line: the basins keep them apart, so a rotation goes back around the warehouses.
   points.snd = bombSites({ x: 64.5, z: 6 }, { x: 63, z: 41.5 });
@@ -57,7 +57,7 @@ function build() {
   // Capture the Flag (see flagBases). On the strip between the warehouses, in front of the quay wall that screens the spawns: the basins either side leave the middle strip or the long way round the quays.
   points.ctf = flagBases(W, H, { x: 11, z: 24 });
 
-  return { id: 'harbor', name: 'Harbor', theme: 'harbor', width: W, height: H, walls, spawns, lanes, nav, points, decor };
+  return { id: 'harbor', name: 'Harbor', theme: 'harbor', size: 'medium', region: 'coast', width: W, height: H, walls, spawns, lanes, nav, points, decor };
 }
 
 export default build();
