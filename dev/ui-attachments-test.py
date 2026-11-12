@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""V11 attachments wave: the gunsmith with signature attachments and conversion kits, at 667x375 and 852x393.
+"""V11 attachments wave and wave 2: the gunsmith with signature attachments, conversion kits and the wave 2 general
+parts (js/shared/attachments-w2.js), at 667x375 and 852x393.
 
   python3 dev/ui-attachments-test.py [port] [outdir]
 
@@ -28,6 +29,15 @@ CASES = [
     ('ar', 'grip', 'k_triburst', 'optic:reflex,mag:s_matchmag'),
     ('maul', 'barrel', 's_ironhead', ''),
     ('rampar', 'grip', 's_heavywheel', ''),     # Mastery I: locked on a veteran save.
+    # Wave 2: general parts, several fitted at once so the bench shows them together.
+    ('sniper', 'optic', 'irons', 'barrel:muzzlebrake,grip:thumbrest'),
+    ('pistol', 'grip', 'beavertail', 'optic:laserbox,mag:subsonic,barrel:flashhider'),
+    ('launcher', 'barrel', 'guiderail', 'optic:rangefinder,mag:lightrocket,grip:thumbrest'),
+    ('shotgun', 'mag', 'magnum', 'barrel:ventrib,grip:rubber,optic:irons'),
+    ('lightlmg', 'optic', 'prism', 'barrel:flashhider'),
+    ('akimbo', 'grip', 'rubber', 'mag:tapedmag'),
+    ('thumper', 'barrel', 'venturi', 'mag:lightrocket,optic:laserbox'),
+    ('dmr', 'grip', 'vertical', 'optic:prism,barrel:flashhider'),   # The longest grip list there is (nine parts).
 ]
 
 CHECK = """() => {
@@ -97,10 +107,14 @@ async def main():
                         fails.append(f'{tag}: the delta list is cut off: {res["deltas"]}')
                     if not res['why']:
                         fails.append(f'{tag}: no "what it is for" line')
-                    if not any(t in ('Signature', 'Kit') for t in res['tags']):
+                    if tried[:2] in ('s_', 'k_') and not any(t in ('Signature', 'Kit') for t in res['tags']):
                         fails.append(f'{tag}: no Signature/Kit tag in the list')
                     if any(h < 26 for h in res['optHeights']):
                         fails.append(f'{tag}: options squashed {res["optHeights"]}')
+                    if len(set(res['optHeights'])) > 1:
+                        fails.append(f'{tag}: options of uneven height {res["optHeights"]}')
+                    if len(res['optHeights']) >= 8 and not res['optsScroll']:
+                        fails.append(f'{tag}: a long list ({len(res["optHeights"])}) does not scroll')
                     if tried == 's_heavywheel' and not any('Mastery' in t for t in res['lockText']):
                         fails.append(f'{tag}: ladder lock not shown: {res["lockText"]}')
                     print(f'{tag}: deltas {len(res["deltas"])}, tags {res["tags"]}, scroll {res["optsScroll"]}, foot "{res["foot"]}"')

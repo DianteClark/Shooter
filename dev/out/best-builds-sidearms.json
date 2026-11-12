@@ -1,89 +1,96 @@
 {
  "pistol": {
   "kit": {
-   "optic": "pointdot",
-   "grip": "s_snapholster"
+   "optic": "pointdot"
   },
-  "score": 0.6866666666666666,
-  "stock": 0.64,
-  "evals": 31
+  "score": 0.72,
+  "stock": 0.62,
+  "evals": 47
  },
  "revolver": {
   "kit": {
-   "optic": "pointdot",
-   "barrel": "longbarrel"
+   "optic": "reflex"
   },
-  "score": 0.44,
-  "stock": 0.41333333333333333,
-  "evals": 33
+  "score": 0.48,
+  "stock": 0.44,
+  "evals": 49
  },
  "machpistol": {
   "kit": {
-   "optic": "reflex"
+   "mag": "extmag",
+   "grip": "wrap"
   },
-  "score": 0.58,
-  "stock": 0.5,
-  "evals": 31
+  "score": 0.66,
+  "stock": 0.55,
+  "evals": 47
  },
  "deuce": {
   "kit": {
-   "barrel": "s_longslide",
-   "mag": "lightmag"
+   "optic": "pointdot",
+   "barrel": "suppressor",
+   "mag": "tapedmag",
+   "grip": "thumbrest"
   },
-  "score": 0.64,
-  "stock": 0.54,
-  "evals": 33
+  "score": 0.62,
+  "stock": 0.51,
+  "evals": 49
  },
  "launcher": {
   "kit": {
    "optic": "holo",
+   "barrel": "longtube",
    "mag": "s_twintube",
-   "grip": "wrap"
+   "grip": "rubber"
   },
-  "score": 0.4722222222222222,
-  "stock": 0.3111111111111111,
-  "evals": 19
+  "score": 0.475,
+  "stock": 0.3,
+  "evals": 35
  },
  "thumper": {
-  "kit": {},
-  "score": 0.30833333333333335,
-  "stock": 0.30833333333333335,
-  "evals": 10
+  "kit": {
+   "optic": "holo",
+   "mag": "s_pumpdrum",
+   "grip": "wrap"
+  },
+  "score": 0.4375,
+  "stock": 0.23333333333333334,
+  "evals": 35
  },
  "scatter": {
   "kit": {
-   "optic": "reflex",
-   "barrel": "compensator",
-   "grip": "knurl"
+   "optic": "ghostring",
+   "barrel": "longbarrel",
+   "grip": "rubber"
   },
-  "score": 0.4533333333333333,
-  "stock": 0.4066666666666667,
-  "evals": 31
+  "score": 0.51,
+  "stock": 0.34,
+  "evals": 43
  },
  "akimbo": {
   "kit": {
-   "barrel": "longbarrel"
+   "barrel": "compensator",
+   "grip": "beavertail"
   },
-  "score": 0.6233333333333333,
-  "stock": 0.5333333333333333,
-  "evals": 23
+  "score": 0.63,
+  "stock": 0.53,
+  "evals": 35
  },
  "nailer": {
   "kit": {
-   "optic": "reflex",
-   "mag": "speedmag"
+   "optic": "holo"
   },
-  "score": 0.5388888888888889,
-  "stock": 0.5222222222222223,
-  "evals": 29
+  "score": 0.55,
+  "stock": 0.49166666666666664,
+  "evals": 39
  },
  "salvo": {
   "kit": {
-   "optic": "holo",
-   "grip": "angled"
+   "optic": "laserbox",
+   "barrel": "venturi",
+   "mag": "warhead"
   },
-  "score": 0.45,
-  "stock": 0.36666666666666664,
-  "evals": 19
+  "score": 0.3416666666666667,
+  "stock": 0.23333333333333334,
+  "evals": 35
  }
 }
