@@ -109,10 +109,16 @@ function redeploys() {
   check(s2.br.squadsOut.has(team), 'the rest dead: the squad is out');
   stepFor(s2, RB.redeploy[0] + 2);
   check(sq.every(p => !p.alive), 'and nobody in it comes back');
-  // Downed while a squadmate is on the way back in: a down, not a death.
-  const s3 = makeSim('rb', 14);
-  live(s3); stepFor(s3, 25);
-  const t3 = s3.players[0].team, q3 = s3.players.filter(p => p.team === t3);
+  // Downed while a squadmate is on the way back in: a down, not a death. The first seed from 14 with no enemy within
+  // 40 m of the one who goes down, so a passing fight cannot finish them (bots' kits shift who is where).
+  let s3, t3, q3;
+  for (let seed = 14; seed < 30; seed++) {
+    s3 = makeSim('rb', seed);
+    live(s3); stepFor(s3, 25);
+    t3 = s3.players[0].team; q3 = s3.players.filter(p => p.team === t3);
+    const v = q3[3];
+    if (!s3.players.some(p => p.team !== t3 && p.alive && Math.hypot(p.ps.x - v.ps.x, p.ps.z - v.ps.z) < 40)) break;
+  }
   for (const p of q3) p.brAir = 0;
   for (const p of q3.slice(0, 3)) s3.br._die(p, null, null, 'test');
   check(q3.slice(0, 3).every(p => p.br.redeployT > 0), 'three dead, all waiting (the fourth is up)');
