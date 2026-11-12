@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-11', title: 'Every phone, and an install guide',
+    items: [
+      'Android phones are welcome: Chrome and Samsung Internet now fit the game to the screen, go full screen with a tap and hold it sideways.',
+      'On Android the back gesture goes back one screen instead of closing the game. On the title screen, back twice to close.',
+      'Install the game as an app on Android, with its own icon. Chrome and Samsung Internet offer an Install button.',
+      'Graphics quality now starts at a better level for your phone, older iPhones and Android phones included, and steps down sooner if the frame rate drops.',
+      'New option on Android: Vibrate on hits (off unless you turn it on).',
+      'How to play > Install shows how to add Switchyard to your Home Screen on iPhone or Android, step by step for your browser.',
+      'It also explains where your progress lives: only on this phone, nothing sent to a server. Keep your Save code as a backup to move to another phone or recover after clearing website data.',
+    ],
+  },
+  {
     build: '1111-23', date: '2026-11-11', title: 'A cleaner match HUD',
     items: [
       'The weapon and ammo panel now sits up by the top corner, clear of the aim stick, on every iPhone size.',
