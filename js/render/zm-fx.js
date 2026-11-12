@@ -9,11 +9,14 @@
 //              walls; rolling, the lid opens and guns cycle up out of it (slowing as it settles), the gun on offer floats
 //              and turns, the lid shuts once it is taken; moving, it lifts away up the beam and drops in at its new spot
 //   drops      power-ups spinning on the ground (instanced)
+//   economy    the upgrade bench, the supply terminal, the armour bench, traps, the exfil pad, the quest and the
+//              terminal's gear: js/render/zm-econ-fx.js (about sixteen more)
 // About eleven draw calls whatever the round, a few hundred triangles each (docs/BR-PERF.md: no per-zombie cost).
 import * as THREE from 'three';
 import { getGun } from './guns.js';
 import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS } from '../shared/zombies.js';
 import { ZmPowerFx } from './zm-power.js';     // A layout with a power switch (Ashgrove Halt): the switch, dark machines.
+import { ZmEconFx } from './zm-econ-fx.js';     // ROADMAP item 36: bench, terminal, armour, traps, exfil, quest, gear.
 
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), E = new THREE.Euler(), C = new THREE.Color();
 const DROP_MAX = 8;
@@ -179,6 +182,7 @@ export class ZmFx {
     this.group.add(this.drops);
     this.t = 0;
     this.power = L.power ? new ZmPowerFx(this.group, L, this) : null;
+    this.econ = new ZmEconFx(this.group, L);
   }
 
   update(view, dt) {
@@ -186,6 +190,7 @@ export class ZmFx {
     if (!obj?.zm) return;
     this.t += dt;
     this.power?.update(obj, dt);
+    this.econ.update(obj, dt);
     const L = this.L;
     // Gates.
     L.doors.forEach((d, i) => {
@@ -272,6 +277,8 @@ export class ZmFx {
   }
 
   dispose() {
+    this.econ.dispose();
+    this.group.remove(this.econ.root);
     this.scene.remove(this.group);
     this.group.traverse(o => { if (o.isMesh && o !== this.offer) { if (o !== this.wallXray) o.geometry?.dispose(); o.material?.dispose(); } });
   }

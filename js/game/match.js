@@ -15,7 +15,8 @@ import { Killcam } from './killcam.js';
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
 import { BR, isBr, isEx, isZm } from '../shared/modes.js';
-import { zmEvent } from '../sim/zm-phone.js';     // Graveyard Shift: guns, ammo and perks the host hands this phone.
+import { zmEvent } from '../sim/zm-phone.js';
+import { zmTierCamo } from '../shared/zombies.js';     // Graveyard Shift: guns, ammo and perks the host hands this phone.
 import { exAmmo } from '../sim/extract.js';
 import { objOf } from '../sim/rules.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -602,10 +603,12 @@ export class Match {
     if (!p) return null;
     // Each gun wears its own camo: the loadout's camo belongs to the primary only, so a swap to the sidearm (or any
     // other gun) must not carry it over. The host learns the change from the state this client sends.
-    if (ps.weapon !== this.camoWeapon) {
-      this.camoWeapon = ps.weapon;
+    // Graveyard Shift: a gun upgraded at the bench wears its tier's look instead (js/shared/zombies.js zmTierCamo).
+    const zt = this.zm ? ps.defs[ps.slot]?.zt ?? 0 : 0, camoKey = zt ? `${ps.weapon}:${zt}` : ps.weapon;
+    if (camoKey !== this.camoWeapon) {
+      this.camoWeapon = camoKey;
       const lo = this.me.loadout;
-      ps.camo = lo?.camos?.[ps.weapon] ?? (ps.weapon === (lo?.primary ?? this.me.primary) ? (lo?.camo ?? this.me.camo ?? 'none') : 'none');
+      ps.camo = (zt && zmTierCamo(ps.weapon, zt)) || (lo?.camos?.[ps.weapon] ?? (ps.weapon === (lo?.primary ?? this.me.primary) ? (lo?.camo ?? this.me.camo ?? 'none') : 'none'));
     }
     if (this.localAlive) {
       p.x = ps.x; p.z = ps.z; p.aim = ps.aim; p.vx = ps.vx; p.vz = ps.vz;

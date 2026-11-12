@@ -2,11 +2,14 @@
 // can move it: the round plate (round, zombies left, Double Pay, the boss's health), the crew list (points, perks,
 // downs), the use button bottom-centre clear of both sticks (open a gate, buy a gun or its ammo, the mystery crate,
 // a perk machine), the downed and reviving bars, the "back next round" panel, points pops and round banners.
+// The economy (ROADMAP item 36): the use button's prompts for the bench, the terminal, the armour bench, traps, the exfil
+// pad, the relics and the altar; the plate bar over health; tier pips on the weapon panel; the supply terminal's sheet
+// (five items, controller-navigable: js/ui/gamepad.js MATCH_PANELS); the exfil clock and the relic count on the plate.
 // js/ui/hud.js makes one, forwards prepare/update/onEvent/endBanner, and asks quietKill() before a kill-feed row.
 import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, zmUsable } from '../shared/zombies.js';
+import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
 
 const CSS = `
 .zm-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
@@ -67,6 +70,35 @@ const CSS = `
 .zm-pop.spend { color: #ff8a7c; }
 @keyframes zmPop { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-22px); } }
 .zm-ui [hidden] { display: none !important; }
+.zm-exfil { box-shadow: var(--hud-edge), inset 0 -3px 0 #59d36b; } .zm-exfil b { color: #8ff09c; }
+.zm-relic { box-shadow: var(--hud-edge), inset 0 -2px 0 #b070ff; } .zm-relic b { color: #d8b8ff; }
+/* Plates: three segments over the health bar (as battle royale's). */
+.zm-plates { display: flex; gap: 3px; height: 5px; margin-bottom: 2px; }
+.zm-plates[hidden] { display: none !important; }
+.zm-plates i { flex: 1; position: relative; background: rgba(16,20,26,.85); box-shadow: inset 0 0 0 1px rgba(231,234,228,.16); transform: skewX(-24deg); overflow: hidden; }
+.zm-plates i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #d7e6a8, #8aa04a); transform-origin: left center; transform: scaleX(var(--k, 0)); }
+/* Upgrade bench tiers on the weapon panel: three pips, lit to the gun's tier (tier 3 in its round's colour). */
+.zm-tier { display: inline-flex; gap: 2px; margin-left: 5px; vertical-align: middle; }
+.zm-tier[hidden] { display: none !important; }
+.zm-tier i { width: 6px; height: 6px; transform: rotate(45deg); background: rgba(231,234,228,.18); }
+.zm-tier i.on { background: var(--k, #b070ff); box-shadow: 0 0 5px var(--k, #b070ff); }
+/* The supply terminal's sheet. */
+.zm-shop { position: absolute; inset: 0; z-index: var(--z-overlay); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(10,13,17,.66); pointer-events: auto; }
+.zm-shop[hidden] { display: none !important; }
+.zm-shop h3 { margin: 0; font: 400 24px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-align: center; }
+.zm-shop h3 small { display: block; margin-top: 4px; font: 11px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.zm-shop-row { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - var(--sl) - var(--sr) - 20px); }
+.zm-item { width: 118px; min-height: 112px; padding: 9px; border: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; color: var(--c-chalk);
+  background: linear-gradient(180deg, rgba(42,51,61,.96), rgba(16,20,26,.94)); box-shadow: var(--hud-edge), inset 0 3px 0 #4dffa0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px); }
+.zm-item b { font: 400 16px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.zm-item small { font: 10px/1.25 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); }
+.zm-item em { font: 400 14px/1 var(--f-stencil); font-style: normal; color: var(--c-sodium); margin-top: auto; }
+.zm-item.off { opacity: .45; }
+.zm-item.off em { color: var(--c-haze); }
+.zm-item:active { filter: brightness(1.3); }
+.zm-shop .close { height: 36px; border: 0; padding: 0 18px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
+@media (max-height: 400px) { .zm-item { width: 112px; min-height: 96px; padding: 7px; } .zm-item b { font-size: 14px; } .zm-shop { gap: 7px; } .zm-shop h3 { font-size: 20px; } }
 `;
 
 const fmt = n => Math.round(n).toLocaleString('en-US');
@@ -89,13 +121,16 @@ export class ZmHud {
         <div class="zm-chip zm-left"><b>0</b><small>Undead left</small></div>
         <div class="zm-chip zm-pts"><b>500</b><small>Points</small></div>
         <div class="zm-chip zm-dbl" hidden><b>30</b><small>Double Pay</small></div>
+        <div class="zm-chip zm-exfil" hidden><b>60</b><small>Hold the pad</small></div>
+        <div class="zm-chip zm-relic" hidden><b>0/3</b><small>Relics</small></div>
       </div>
       <div class="zm-boss" hidden><b>Yardmaster</b><i><i></i></i></div>
       <div class="zm-crew"></div>
       <button class="zm-use" data-tap="1" hidden><span class="t">BUY</span><small></small></button>
       <div class="zm-down" hidden><b>Down</b><small>Hold on: a teammate can get you up</small><i class="bl"><i></i></i><i class="rv"><i></i></i></div>
       <div class="zm-rev" hidden><b>Reviving</b><i><i></i></i></div>
-      <div class="zm-held" hidden><b>Bled out</b><small>Back with the pistol next round</small></div>`;
+      <div class="zm-held" hidden><b>Bled out</b><small>Back with the pistol next round</small></div>
+      <div class="zm-shop" hidden data-tap="1"><h3>Supply terminal<small>Paid from your points. One of each a round.</small></h3><div class="zm-shop-row"></div><button class="close" data-tap="1">Close</button></div>`;
     hud.el.appendChild(el);
     const $ = s => el.querySelector(s);
     this.roundEl = $('.zm-round'); this.roundB = $('.zm-round b');
@@ -107,11 +142,30 @@ export class ZmHud {
     this.downEl = $('.zm-down'); this.bleedBar = $('.zm-down .bl i'); this.revBar = $('.zm-down .rv i');
     this.revEl = $('.zm-rev'); this.revMine = $('.zm-rev i i');
     this.heldEl = $('.zm-held');
+    this.exfilEl = $('.zm-exfil'); this.exfilB = $('.zm-exfil b'); this.exfilS = $('.zm-exfil small');
+    this.relicEl = $('.zm-relic'); this.relicB = $('.zm-relic b');
+    this.shopEl = $('.zm-shop'); this.shopRow = $('.zm-shop-row');
+    this.shopRow.innerHTML = ZE.supplyOrder.map(k => `<button class="zm-item" data-tap="1" data-item="${k}"><b>${ZE.supply[k].name}</b><small>${ZE.supply[k].desc}</small><em></em></button>`).join('');
+    this.shopRow.addEventListener('click', e => {
+      const b = e.target.closest('.zm-item');
+      if (!b) return;
+      e.stopPropagation();
+      if (b.classList.contains('off')) return;
+      this.cmd?.('use', { item: b.dataset.item });
+      this.#shop(false);
+    });
+    $('.zm-shop .close').addEventListener('click', e => { e.stopPropagation(); this.#shop(false); });
+    this.shopEl.addEventListener('click', e => { if (e.target === this.shopEl) this.#shop(false); });
+    this.hands = null;         // () => the local player's hands (ps): the gun tiers on its defs (main.js sets it).
     // The round plate and the boss bar go in the objective strip, which the HUD's layout pass keeps clear of the rest.
     this.topEl = hud.strip.mount($('.zm-top'), { order: 0 });
     hud.strip.mount(this.bossEl, { row: 1 });
     this.topEl.hidden = true;
-    this.useEl.addEventListener('click', e => { e.stopPropagation(); if (this.use?.ok) this.cmd?.('use'); });
+    this.useEl.addEventListener('click', e => {
+      e.stopPropagation();
+      if (this.use?.kind === 'terminal') { this.#shop(true); return; }     // The terminal opens its sheet.
+      if (this.use?.ok) this.cmd?.('use');
+    });
     this.c = {};
   }
 
@@ -127,6 +181,14 @@ export class ZmHud {
     this.map = map; this.roster = roster; this.localId = localId;
     this.c = {}; this.use = null; this.lastPts = null;
     this.crewEl.innerHTML = '';
+    this.bought = {}; this.hinted = false;
+    this.#shop(false);
+  }
+
+  #shop(on) {
+    this.shopOpen = !!on;
+    this.shopEl.hidden = !on;
+    if (on) this.c.shop = null;
   }
 
   update(view, me, dt) {
@@ -149,6 +211,9 @@ export class ZmHud {
     if (c.dbl !== dbl) { c.dbl = dbl; this.dblEl.hidden = !dbl; this.dblB.textContent = dbl; }
     this.bossEl.hidden = !z.boss;
     if (z.boss) this.bossBar.style.setProperty('--k', Math.max(0, z.boss.hp).toFixed(3));
+    const bossName = z.boss?.warden ? ZM_KIND_NAMES.warden : ZM_KIND_NAMES.boss;
+    if (c.bossName !== bossName) { c.bossName = bossName; this.bossEl.querySelector('b').textContent = bossName; }
+    this.#econ(z, me);
     this.#crew(view, me);
     // Downed, reviving, out until the next round.
     const down = !!me.downed && me.alive;
@@ -170,20 +235,120 @@ export class ZmHud {
     // The use button: whatever is in reach.
     const idx = view.players.indexOf(me);
     const guns = this.guns?.() ?? [me.weapon];
-    const u = me.alive && !me.downed ? zmUsable(z.layout, me.x, me.z, { open: z.open, box: { spot: z.box?.spot ?? -1, state: z.box?.state ?? 0, gun: z.box?.gun, owner: z.box?.owner ?? -1 }, pts, perks: me.zperks ?? [], guns, me: idx, power: z.power ?? 1 }) : null;
+    const ps = this.hands?.(), held = ps?.weapon ?? me.weapon, tier = ps?.defs?.[ps.slot]?.zt ?? 0;
+    const u = me.alive && !me.downed ? zmUsable(z.layout, me.x, me.z, { open: z.open, box: { spot: z.box?.spot ?? -1, state: z.box?.state ?? 0, gun: z.box?.gun, owner: z.box?.owner ?? -1 }, pts, perks: me.zperks ?? [], guns, me: idx, power: z.power ?? 1,
+      limit: me.zlimit ?? ZM.perkLimit, held, tier, bench: z.bench, traps: z.traps?.map(t => t.state), plates: me.zplates ?? 0, exfil: z.exfil?.state ?? 0, round: z.round, quest: z.quest }) : null;
     this.use = u;
-    const key = u ? `${u.kind}:${u.i}:${u.ok}:${u.gun ?? ''}:${u.off ? 1 : 0}` : '';
+    if (this.shopOpen && u?.kind !== 'terminal') this.#shop(false);     // Walked away from the terminal.
+    const key = u ? `${u.kind}:${u.i}:${u.ok}:${u.gun ?? ''}:${u.off ? 1 : 0}:${u.why ?? ''}:${u.cost}:${u.tier ?? ''}` : '';
     if (c.use !== key) {
       c.use = key;
       this.useEl.hidden = !u;
       if (u) {
-        const gun = u.gun ? WEAPONS[u.gun]?.name ?? u.gun : '';
-        const title = u.kind === 'door' ? 'OPEN GATE' : u.kind === 'wall' ? `BUY ${gun}` : u.kind === 'ammo' ? `AMMO ${gun}` : u.kind === 'box' ? 'MYSTERY CRATE' : u.kind === 'take' ? `TAKE ${gun}` : u.label.toUpperCase();
-        const sub = u.off ? `${fmt(u.cost)} · No power: find the switch` : u.kind === 'power' ? 'Free: lights the perk machines' : u.kind === 'take' ? 'Free: it is yours' : u.kind === 'perk' ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : u.ok ? fmt(u.cost) : `${fmt(u.cost)} · need ${fmt(u.cost - pts)} more`;
+        const [title, sub] = this.#prompt(u, pts);
         this.useT.textContent = title;
         this.useS.textContent = sub;
         this.useEl.classList.toggle('poor', !u.ok);
       }
+    }
+    if (this.shopOpen) this.#shopItems(z, pts);
+  }
+
+  // The use button's two lines for what is in reach.
+  #prompt(u, pts) {
+    const gun = u.gun ? WEAPONS[u.gun]?.name ?? u.gun : '';
+    const price = u.ok || u.off ? fmt(u.cost) : `${fmt(u.cost)} · need ${fmt(u.cost - pts)} more`;
+    const why = (lead = '') => (u.why ? `${lead ? `${lead} · ` : ''}${u.why}` : lead);
+    switch (u.kind) {
+      case 'door': return ['OPEN GATE', price];
+      case 'wall': return [`BUY ${gun}`, price];
+      case 'ammo': return [`AMMO ${gun}`, price];
+      case 'box': return ['MYSTERY CRATE', price];
+      case 'take': return [`TAKE ${gun}`, 'Free: it is yours'];
+      case 'power': return [u.label.toUpperCase(), 'Free: lights the perk machines'];
+      case 'perk': return [u.label.toUpperCase(), u.why ? why(fmt(u.cost)) : u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : price];
+      case 'slot': return ['PERK SLOT', u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · Hold up to ${ZM.perkMax} perks` : price];
+      case 'terminal': return ['SUPPLY TERMINAL', 'Sentries, strikes, drones, lures, vests'];
+      case 'armour': return ['ARMOUR PLATE', u.off ? why() : u.ok ? `${fmt(u.cost)} · up to ${ZE.plate.max} plates` : price];
+      case 'bench': {
+        if (u.off) return [u.gun ? `UPGRADE ${gun}` : 'UPGRADE BENCH', why()];
+        const fx = u.tier >= 3 ? ` · ${ZM_FX[zmFxOf(u.gun)].name}` : '';
+        return [`UPGRADE ${gun}`, u.ok ? `${fmt(u.cost)} · tier ${u.tier}${fx}` : price];
+      }
+      case 'benchwait': return [`UPGRADING ${gun}`, 'Back in a moment'];
+      case 'benchtake': return [`TAKE ${gun}`, `Tier ${u.tier}: it is yours`];
+      case 'trap': return [u.label.toUpperCase(), u.off ? why() : u.ok ? `${fmt(u.cost)} · armed for ${ZE.trap.on} s` : price];
+      case 'exfil': return ['CALL EXFIL', u.off ? why(fmt(u.cost)) : u.ok ? `${fmt(u.cost)} · hold the pad ${ZE.exfil.hold} s` : price];
+      case 'relic': return ['PICK IT UP', 'An old lantern, still warm'];
+      case 'altar': return [u.off ? 'THE ALTAR' : 'SET THE RELICS', u.off ? why() : 'Something will answer'];
+      default: return [u.label.toUpperCase(), price];
+    }
+  }
+
+  // The terminal's sheet: each item's price this round, greyed when bought already or too dear.
+  #shopItems(z, pts) {
+    const key = `${z.round}:${pts}:${JSON.stringify(this.bought)}`;
+    if (this.c.shop === key) return;
+    this.c.shop = key;
+    for (const b of this.shopRow.children) {
+      const k = b.dataset.item, cost = supplyCost(k, z.round), had = this.bought[k] === z.round;
+      b.querySelector('em').textContent = had ? 'Bought this round' : fmt(cost);
+      b.classList.toggle('off', had || cost > pts);
+    }
+  }
+
+  // The plate bar, the weapon panel's tier pips, the exfil clock and the relic count.
+  #econ(z, me) {
+    const c = this.c;
+    if (!this.platesEl) {
+      const vit = this.hud.el.querySelector('.vitals');
+      this.platesEl = document.createElement('div');
+      this.platesEl.className = 'zm-plates';
+      this.platesEl.innerHTML = '<i></i><i></i><i></i>';
+      (vit?.querySelector('.hp-bars') ?? vit)?.prepend(this.platesEl);
+      const sub = this.hud.el.querySelector('.arms-sub');
+      this.tierEl = document.createElement('span');
+      this.tierEl.className = 'zm-tier';
+      this.tierEl.innerHTML = '<i></i><i></i><i></i>';
+      sub?.querySelector('.arms-name')?.after(this.tierEl);
+    }
+    const plates = me.alive ? me.zplates ?? 0 : 0;
+    if (c.plates !== plates) {
+      c.plates = plates;
+      this.platesEl.hidden = !(plates > 0);
+      [...this.platesEl.children].forEach((n, i) => n.style.setProperty('--k', Math.max(0, Math.min(1, (plates - i * ZE.plate.hp) / ZE.plate.hp)).toFixed(2)));
+    }
+    const ps = this.hands?.(), tier = ps?.defs?.[ps.slot]?.zt ?? 0, gun = ps?.weapon ?? me.weapon;
+    const tk = `${tier}:${gun}`;
+    if (c.tier !== tk) {
+      c.tier = tk;
+      this.tierEl.hidden = !tier;
+      const col = tier >= 3 ? ZM_FX[zmFxOf(gun)].css : tier === 2 ? '#ffd659' : '#8fe08a';
+      [...this.tierEl.children].forEach((n, i) => { n.classList.toggle('on', i < tier); n.style.setProperty('--k', col); });
+      this.tierEl.title = tier ? `Tier ${tier}${tier >= 3 ? `: ${ZM_FX[zmFxOf(gun)].name}` : ''}` : '';
+    }
+    const X = z.exfil;
+    const ex = X?.state === 1 ? String(Math.max(0, Math.ceil(X.timer))) : '';
+    if (c.exfil !== ex) {
+      c.exfil = ex;
+      this.exfilEl.hidden = !ex;
+      this.exfilB.textContent = ex;
+      if (ex && z.layout?.exfil) {
+        const d = Math.hypot(me.x - z.layout.exfil.x, me.z - z.layout.exfil.z);
+        this.exfilS.textContent = d < z.layout.exfil.r + 0.8 ? 'On the pad' : 'Get to the pad';
+      }
+    }
+    if (ex && z.layout?.exfil) {
+      const on = Math.hypot(me.x - z.layout.exfil.x, me.z - z.layout.exfil.z) < z.layout.exfil.r + 0.8;
+      if (c.onPad !== on) { c.onPad = on; this.exfilS.textContent = on ? 'On the pad' : 'Get to the pad'; }
+    }
+    const q = z.quest, n = q && !q.state ? (z.layout?.relics ?? []).filter(r => q.got & (1 << r.i)).length : 0;
+    const rel = n ? `${n}/${z.layout.relics.length}` : '';
+    if (c.relic !== rel) { c.relic = rel; this.relicEl.hidden = !rel; this.relicB.textContent = rel; }
+    // A hint at the quest: from round 3, once, while nobody has found a relic.
+    if (!this.hinted && z.round >= 3 && z.state === 'round' && q && !q.got && z.layout?.relics?.length) {
+      this.hinted = true;
+      this.hud.notify('Something glows in the dead ends: old lanterns, still warm');
     }
   }
 
@@ -211,7 +376,7 @@ export class ZmHud {
   quietKill(e, view) {
     const t = view?.players?.find(p => p.id === e.target);
     if (!t?.ai) return false;
-    return t.zk !== 4;
+    return t.zk < 4;           // The Yardmaster's (4) and the Gravewarden's (5) deaths make the feed.
   }
 
   onEvent(e, view) {
@@ -235,13 +400,50 @@ export class ZmHud {
         break;
       case 'zperk': if (e.id === me?.id && e.perk) this.hud.notify(`${ZM_PERKS[e.perk]?.name}: ${ZM_PERKS[e.perk]?.desc}`); break;
       case 'down': if (e.target !== me?.id && view?.players?.find(p => p.id === e.target)?.team === me?.team) this.hud.notify(`${name(e.target)} is down: revive them`); break;
-      case 'revive': if (e.id === me?.id) this.hud.notify(`${name(e.by)} got you up`); break;
+      case 'revive': if (e.id === me?.id && e.by !== me?.id) this.hud.notify(`${name(e.by)} got you up`); break;
+      case 'zbreath': if (e.id === me?.id) this.hud.notify('Last Breath: getting yourself up'); break;
+      case 'zbench':
+        if (e.state === 1 && e.by === me?.id) this.hud.notify(`The ${WEAPONS[e.gun]?.name ?? e.gun} is on the bench: tier ${e.tier}`);
+        if (e.state === 2 && e.by === me?.id) this.hud.notify(`Your ${WEAPONS[e.gun]?.name ?? e.gun} is ready at the bench`);
+        if (e.state === 0 && e.by === me?.id && e.tier >= 3) this.hud.banner(ZM_FX[zmFxOf(e.gun)].name, `${WEAPONS[e.gun]?.name ?? e.gun}: ${ZM_FX[zmFxOf(e.gun)].desc.toLowerCase()}`, 1600);
+        break;
+      case 'zsupply':
+        if (e.by === me?.id) this.bought[e.item] = objOf(view)?.round ?? 0;
+        this.hud.notify(`${e.by === me?.id ? 'You' : name(e.by)} called ${ZE.supply[e.item]?.name ?? e.item}`);
+        break;
+      case 'ztrap': {
+        const t = objOf(view)?.layout?.traps?.[e.i];
+        if (e.state === 1 && t) this.hud.notify(`${e.by === me?.id ? 'You' : name(e.by)} armed the ${ZM_TRAP_NAMES[t.kind]}`);
+        break;
+      }
+      case 'zexfil':
+        if (e.state === 1) this.hud.banner('Exfil called', `Hold the pad for ${ZE.exfil.hold} s: everything is coming`, 2000, 'enemy');
+        else if (e.fail) this.hud.banner('Nobody on the pad', 'The exfil left without you', 1800);
+        break;
+      case 'zescape': this.hud.banner(e.ids?.includes(me?.id) ? 'Escaped' : 'They got out', `Round ${e.round}`, 2400); break;
+      case 'zrelic': {
+        const z = objOf(view);
+        const altar = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
+        this.hud.notify(e.n >= e.of ? `Relic ${e.n} of ${e.of}: set them on the altar${altar ? ` in the ${altar}` : ''}` : `${e.by === me?.id ? 'You' : name(e.by)} found a relic: ${e.n} of ${e.of}`);
+        break;
+      }
+      case 'zwarden':
+        if (e.state === 1) this.hud.banner('The relics are set', `The ${ZM_KIND_NAMES.warden} wakes`, 2000, 'enemy');
+        else if (e.state === 2) this.hud.banner(`The ${ZM_KIND_NAMES.warden} falls`, `+${fmt(ZE.quest.pts)} each, and a calling card`, 2400);
+        break;
       default:
     }
   }
 
   endBanner(endEl, winner, myTeam, view) {
     const z = objOf(view);
+    if (z?.escaped?.length) {
+      const me = view?.players?.find(p => p.id === view.localId);
+      endEl.dataset.result = z.escaped.includes(me?.id) ? 'win' : 'loss';
+      endEl.querySelector('b').textContent = z.escaped.includes(me?.id) ? 'Escaped' : 'Left behind';
+      endEl.querySelector('small').textContent = `Out on round ${z.round}`;
+      return;
+    }
     endEl.dataset.result = 'loss';
     endEl.querySelector('b').textContent = 'Overrun';
     endEl.querySelector('small').textContent = `You survived ${Math.max(0, (z?.round ?? 1) - 1)} round${(z?.round ?? 1) - 1 === 1 ? '' : 's'}`;
