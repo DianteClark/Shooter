@@ -205,8 +205,8 @@ const LIST = [
     { spinupFrom: 1.3, heatRounds: 0.85 }, { look: { grip: 'vertical' } }),
   conv('k_assaultbox', 'lmg', 'mag', 'Assault Box', 22,
     'A Bulwark you can walk with: no wind-up, half the belt.',
-    'No wind-up, lighter and quicker to aim and swing. Half the rounds, overheats much sooner, fires a little slower, wider from the hip.',
-    { magazine: 0.5, heatRounds: 0.65, moveMult: 1.05, adsTime: 0.95, turnCap: 1.1, hipSpread: 1.1, rpm: 0.95 },
+    'No wind-up, lighter and quicker to aim and swing. Half the rounds, overheats much sooner, fires slower, wider from the hip.',
+    { magazine: 0.5, heatRounds: 0.65, moveMult: 1.05, adsTime: 0.95, turnCap: 1.1, hipSpread: 1.1, rpm: 0.9 },
     { set: { spinup: undefined }, notes: ['No wind-up'], look: { mag: 'speedmag' } }),
 
   sig('s_droversling', 'saw', 'grip', 'Drover Sling', 14,

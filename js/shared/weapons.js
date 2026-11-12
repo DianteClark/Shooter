@@ -337,7 +337,7 @@ export const WEAPONS = {
   // four rounds, and you carry it like a railway sleeper.
   antimat: {
     id: 'antimat', name: 'Monolith', role: 'Siege', auto: false,
-    damage: 175, rpm: 30, magazine: 4, reserve: 20, reload: 4.2, range: 88,
+    damage: 175, rpm: 28, magazine: 4, reserve: 20, reload: 4.2, range: 88,
     falloff: { start: 60, end: 80, min: 0.8 }, penetrate: 0.95,
     adsSpread: 0.0012, hipSpread: 0.24, bloomPerShot: 0.8, bloomRecover: 0.8, bloomScale: 1,
     adsGate: 0.4, boltKick: 0.3, turnCap: 3.1,
