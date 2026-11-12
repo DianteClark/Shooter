@@ -162,12 +162,16 @@ export class HqRules {
     return encodeStats(out, this.sim.players, STATS);
   }
 
-  decode(a, out) {
+  // `host`: the sim decoding is the one that steps (the host's own view). Its state is the truth, so the block's
+  // rounded clock and progress stay out of it (taking them back stalled the gap's 5 s at 5.0 and the next HQ never opened).
+  decode(a, out, host = false) {
     decodeStats(a, 6, out.players, STATS);
     if (!a) return null;
-    this.idx = a[0]; this.phase = PHASES[a[1]] ?? 'capture';
-    unpackZone(this.zone, a[2]);
-    this.progress = a[3] / 100; this.by = a[4] - 1; this.t = a[5] / 10;
+    if (!host) {
+      this.idx = a[0]; this.phase = PHASES[a[1]] ?? 'capture';
+      unpackZone(this.zone, a[2]);
+      this.progress = a[3] / 100; this.by = a[4] - 1; this.t = a[5] / 10;
+    }
     if (this.phase !== 'gap') out.points.push(this.sim._pointView(this.zone, this.zone.owner, this.zone.cap, this.zone.contested));
     return this.view();
   }

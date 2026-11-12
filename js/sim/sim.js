@@ -861,6 +861,9 @@ export class Sim {
   // Accumulates dt into fixed SIM_HZ ticks. Passing exactly 1/SIM_HZ runs exactly one tick.
   step(dt) {
     if (!this.nav) this._initBots();
+    // Only a sim that steps is the match's truth. The host decodes its own snapshot every tick for its view
+    // (Match.#pushHostView), and a rule set must then not take the snapshot's rounded numbers back into its state.
+    this.authority = true;
     this.accum += dt;
     let steps = 0;
     while (this.accum >= STEP - 1e-9) {
@@ -3013,7 +3016,7 @@ export class Sim {
       if (this.br.authority) this.br.hostView(out); else this.br.decode(a || null, out);
       return;
     }
-    if (this.rules) { out.obj = out.points.obj = this.rules.decode(a || null, out); return; }
+    if (this.rules) { out.obj = out.points.obj = this.rules.decode(a || null, out, !!this.authority); return; }
     if (this.mode === 'snd') {
       // The sites never change; the round state rides on the list as well as on the view (see sndOf in snd.js).
       out.points = this.zones.map(z => this._pointView(z, -1, 0, false));
