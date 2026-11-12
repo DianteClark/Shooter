@@ -89,6 +89,9 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
   button shows the machine greyed, "No power: find the switch") until someone throws the power switch: free, but it
   stands in an area behind gates. Once on it stays on (`zlights` event, a banner, the wire's `power` flag; a host
   migration keeps it). Maps without a switch are always on.
+  The switch's state reads at a glance: a red lamp and the lever up while off, green and thrown down once on; the use
+  prompt answers within reach of the spot or the panel face from every side (tested walking in from 24 directions) and,
+  once on, still shows, greyed, as "Power is on"; everyone gets the banner "<name> turned on the power" (bots too).
 - **Perk machines** (six, one or two per band): Ironhide (2500, half damage from the undead), Quickdraw (3000, Fast
   Hands reloads and swaps), Mercy Run (1500, revive in 2 s), Hammerfall (2000, +50% damage), Fleetfoot (2000,
   Marathon's faster sprint and slide recharge), Last Breath (3500, see "Economy"). A player holds four at most
@@ -234,6 +237,45 @@ the owner's next run.
 under the 10,000 run cap; challenges and mastery come on top as in any mode. Weapon XP 16,545 before, about **5,500**
 after (10% share; a single gun stops at 5,000 a run, level 15 of 30 from nothing).
 
+## Special zombies and special rounds (build NEXT, owner notes)
+Four kinds join the horde from round 8 (`ZM_SPECIAL` in js/shared/zombies.js, behaviour in js/sim/zm-kinds.js), each
+answered differently:
+- **Spitter** (from round 9; hp 0.8x, slow): keeps 6-12 m off with a clear line, winds up 0.7 s (arms up: the swing
+  flag), lobs an acid glob aimed a little ahead of a moving target. The glob flies 0.55 s + 0.055 s a metre on a drawn
+  arc with its landing ring pulsing on the ground the whole way, so a sidestep clears it. Landing: 24 to anyone within
+  1 m and a 1.6 m puddle that burns 16/s for 3 s (both scaled with the round like a claw). Cooldown 3.2-4.6 s.
+- **Bloater** (from round 11; hp 2.4x, very slow): in reach it swells (its windup) and bursts instead of clawing;
+  killed, it bursts where it falls. Burst (`ZM_BLAST`): 85 at the centre to 22 at 4.2 m to the crew (walls shelter,
+  Ironhide halves), and 1.6x a round's health to the horde inside it when a player killed it (credited to them, so
+  popping one in a crowd pays). Kill it at range.
+- **Crawler** (from round 8; hp 0.55x, quick: 0.92 of a run): on all fours, small and dark; shots trace it with the
+  sliding radius (0.4 m against 0.55 m), so it is easy to lose among bigger zombies and to miss.
+- **Shieldbearer** (from round 13; hp 1.5x): bullets and blades from within 66 degrees of its facing hit its shield
+  (1.4x its health) instead; explosives, traps, the terminal's gear and a Bloater's burst go round it. Broken (a clang,
+  then a shatter), the front is open. Flank it.
+- The mix: each special has a share from its first round (3-4%), growing about 1% a round to 7-14%, and a cap alive at
+  once (2 to 5, +1 every five rounds). The specials take their share out of the shamblers and runners; brutes and the
+  bosses are as before.
+- **Special rounds** (`specialRound(r, seed)`): every 5-7 rounds from round 6 or 7, never on a boss round (it moves to
+  the next), in turn: **Sprint** (every zombie a runner, +0.06 pace), **Fog** (the phones darken past about 9 m round
+  the player; crew bots' sight is cut to match), **Bloater swarm** (70% of the count, 60% of them Bloaters). A banner
+  ("Round 12: Fog round") and a horn announce it. Deterministic from the match seed: every phone and a migrated host
+  agree.
+- Bots: a Bloater still far off is shot first (and backed away from inside 6.5 m), Spitters and Crawlers early, a
+  Shieldbearer facing them goes to the back of the queue and is walked round (one way, kept up) rather than shot into;
+  they step off puddles and out from under a glob's landing ring.
+- Looks (js/render/zm-looks.js, parts already in the kit: no new geometry): Spitter tall and thin, hooded, acid-green
+  tanks glowing; Bloater short and enormous, violet, amber glowing pouches; Crawler small and dark on all fours (the
+  downed crawl); Shieldbearer broad, helmeted, an iron shield (js/render/zm-kinds-fx.js, instanced). Globs, landing
+  rings, puddles and burst splashes are instanced too: five draw calls, nothing drawn when empty; the fog is one quad on
+  a fog round only.
+- Sounds (js/audio/zm-sfx.js, synthesised): a wet hawk and a splash where the glob lands, gurgling Spitters, bubbling
+  Bloaters and a wet burst under the bang, a Crawler's dry skitter, a shield's clang and shatter, the special round's
+  horn.
+- Wire: the packed zombie's kind is 4 bits now (kind 9 is a Shieldbearer with its shield broken); the round's special
+  is one more number on the block. Globs and bursts are events (`zspit` with its flight time, `zblast`, `zshield`): no
+  per-tick state.
+
 ## Wire
 The horde never goes out as player records. The rules block (`encode`) carries round, state, timer, undead left, the
 open-gate mask, the crate, Double Pay, a short crew array `[points, perk bits | downed | revive progress, kills,
@@ -280,7 +322,12 @@ economy adds about eighteen fixed ones (gear is instanced).
   reserved spots, power gating perks, the bot power run, boss arena spawns, the power on the wire and through a migration), rounds and escalation, a bot crew
   playing rounds and buying, economy (hits, kills, Double Pay, gates, wall-buys and ammo, the crate roll / offer / take /
   move), perks, revive and bleed-out, game over, power-ups, wire round-trip and migration, the save record through an
-  export code, determinism, round-20 and round-30 performance with the economy busy. The `econ` section (item 36):
+  export code, determinism, round-20 and round-30 performance with the economy busy. The `specials` section: the mix by
+  round, the special-round schedule over seeds, a Spitter's distance and glob (lands on a standing target, a sidestep
+  dodges it, the puddle burns then dries), a Bloater's burst (killed at range, reaching you), a Crawler's small target
+  (a shot 0.42 m off centre misses it and hits a shambler), the Shieldbearer's shield (front, frag, behind, broken, on
+  the wire), the bots' target order and puddle dodge, each special round in play and every special in a round-16 mix.
+  The Ashgrove part also walks at the power switch from every side and checks "Power is on" and a bot's `zlights`. The `econ` section (item 36):
   loadout streaks off (no slots, none called in a bot match); the bench (prices, the gun out of the hands, the bench
   busy, the wait, take, magazines, damage per tier, left too long, tier 3's arcs, burning and slow, tiers kept through a
   swap and lost with the gun); the terminal (every item at its price, prices climb, once a round, sentry and drone fire,
@@ -295,7 +342,10 @@ economy adds about eighteen fixed ones (gear is instanced).
   (clear of the sticks), then Overrun results with the Rounds survived XP line and the saved record. The economy part
   (`ZM_ONLY=econ`, Ashgrove at both sizes): a gun upgraded at the bench (out of the hands, back at tier 1 with one pip and
   the tier's camo), tier 3's look, the terminal's sheet and a sentry bought from it (firing), each trap armed, two plates
-  (the bar), the exfil called at round 15 (its clock), a relic, the altar and the Gravewarden's bar.
+  (the bar), the exfil called at round 15 (its clock), a relic, the altar and the Gravewarden's bar. The specials part
+  (`ZM_ONLY=specials`, Foundry): one of each special in front of the player (kinds and the shield in the view), a glob
+  with its landing ring, the puddle, a Bloater's burst, a fog round's banner and darkness. The Ashgrove part checks the
+  "turned on the power" banner, POWER IS ON at the switch and the green lamp.
 - `python3 dev/ui-gamepad-test.py`: the terminal's sheet from a controller (Interact opens it, the d-pad walks it, A buys,
   B closes). `python3 dev/ui-hud-layout-test.py --only zm`: the plates, tier pips, exfil clock, relic count and an
   upgrade prompt clear of each other and the sticks at every size.

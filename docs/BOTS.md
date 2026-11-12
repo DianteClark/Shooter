@@ -96,6 +96,22 @@ plays exactly as before. New traits, all scaled by rating (recruit .. elite):
 - Close guns that still hit at range (SMGs) fight out to 72% of their range instead of sprinting mute at a shooter
   (their `rush` was 13..15 m): on small maps the first shot decides most fights, and the SMG never had it.
 
+Sight like a screen (build NEXT, owner notes): a bot sees no further than a person on a phone could. Unaimed that is
+`HUMAN_VIEW` (20 m, what fits round the player on screen; the human-like thumb's own number); toward where it aims,
+`ADS_LOOK` (7.5 m, the camera's lead at full ADS, js/render/renderer.js camLook) more, scaled by its sights (`ps.adsT`:
+the same aiming state a human has, so the pose and laser show it, the gun's ADS time paces it and it walks at the aimed
+pace) and by how square the target is to the aim. The tier's own `sight` (18..28 m, plus a scope's) still caps it, and
+battle royale's `sightK` scales it. To engage past 20 m a bot must aim in: a visible target past 18.5 m keeps its sights
+up, and a contact (heard, called out, remembered) further than 18 m off brings them up toward it (not for a close gun
+closing the gap). Sights raised to look, not to answer a fight, wait on `aimIn` first (recruit 0.6 s, regular 0.4,
+veteran 0.25, elite 0.12), then the gun's ADS time. The human-like thumb (js/sim/humanlike.js) keeps its own model.
+Measured: mirrored matches (dev/balance-sim.mjs --no-duels --rounds=1, seed 1) K/D spread across guns 0.269 before,
+0.255 after (range 0.61-1.60 to 0.68-1.61), kills 3046 to 2953; dev/sim-br.mjs pacing (12 matches) 11.9 min mean, 36% of
+deaths in the first 3 min, all checks pass; dev/sim-extract.mjs all ok; dev/sim-arsenal.mjs 55/55.
+
+Graveyard Shift's specials (js/sim/zm-kinds.js, asked through `sim.rules.kinds`): Bloaters far off first (backed away
+from inside 6.5 m), Spitters and Crawlers early, a Shieldbearer facing the bot last and walked round; off acid puddles.
+
 Measured (dev/balance-sim.mjs --realistic, seed 1, the human-like thumb):
 - Before, dealt Mixed bots, 216 lobbies: thumb K/D 0.70. Same dealt Mixed roster with the new brains: 0.65 (144).
 - Pool at HUMAN_BASE 0.27, 216 lobbies: thumb K/D 0.92; per lobby median 1.06, p10 0.40, p90 1.87 (12% of lobbies
