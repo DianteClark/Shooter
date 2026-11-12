@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: '1111-20', date: '2026-11-11', title: 'A cleaner match HUD',
+    build: '1111-21', date: '2026-11-11', title: 'A cleaner match HUD',
     items: [
       'The weapon and ammo panel now sits up by the top corner, clear of the aim stick, on every iPhone size.',
       'Battle royale and extraction: each teammate is one tidy row with their name, a health bar and a thin plates bar. Downed shows red with a down mark, out is greyed. Longer names fit.',

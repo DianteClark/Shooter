@@ -81,6 +81,10 @@ CHECK = r"""
   add('battle royale kit', q('.br-inv'));
   for (const s of ['.br-squad', '.ex-squad']) if (anyShown(q(s))) add('squad panel', q(s));
   add('modifiers', q('.mh-mods'));
+  // Graveyard Shift's own layer (js/ui/zm-hud.js): the crew list, the use button and its bars (the round plate and
+  // the boss bar are strip rows).
+  if (anyShown(q('.zm-crew'))) add('zombies crew', q('.zm-crew'));
+  for (const s of ['.zm-use', '.zm-down', '.zm-rev', '.zm-held']) add(s.slice(1), q(s));
   add('leave range', q('.range-leave'));
   for (const s of ['.br-take', '.snd-carry', '.ctf-carry', '.snd-spec', '.br-jump-main', '.br-hint', '.br-down', '.ex-down', '.br-out']) add(s.slice(1), q(s));
   if (anyShown(q('.ex-acts'))) add('ex-acts', q('.ex-acts'));

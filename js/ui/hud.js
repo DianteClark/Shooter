@@ -448,7 +448,7 @@ export class HUD {
     this.markObstacles = [];
     const add = r => { if (r.width > 0) this.markObstacles.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom }); };
     for (const r of Object.values(this.controls?.rects ?? {})) this.markObstacles.push(r);
-    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.feed', '.br-squad', '.ex-squad', '.os-row[data-row="0"]', '.os-row[data-row="1"]']) add(this.el.querySelector(sel).getBoundingClientRect());
+    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.feed', '.br-squad', '.ex-squad', '.zm-crew', '.os-row[data-row="0"]', '.os-row[data-row="1"]']) add(this.el.querySelector(sel).getBoundingClientRect());
     // The Pro layer is drawn at CSS pixels: a few thin shapes do not need the phone's full pixel ratio.
     this.proCanvas.width = Math.max(1, Math.round(this.viewW));
     this.proCanvas.height = Math.max(1, Math.round(this.viewH));
@@ -560,8 +560,16 @@ export class HUD {
     // Kill feed: under the minimap (square and zoomed in battle royale and extraction), as many rows as fit above the
     // move stick, two or three.
     const mm = box(this.el.querySelector('.minimap'));
-    const feedTop = mm && mm.height ? mm.bottom + 8 : safe.t + 50;
     const fx0 = lefty ? W - safe.r - 8 - 210 * k : safe.l + 8, fx1 = fx0 + 210 * k;
+    // The squad panels beside the minimap fill in after the layout: take them at their full size (three teammates in
+    // battle royale and extraction, a crew of four in Graveyard Shift). The feed also clears them.
+    const squads = [];
+    for (const [sel, rows, rowH] of [['.br-squad', 3, 31], ['.ex-squad', 3, 31], ['.zm-crew', 4, 26]]) {
+      const r = box(this.el.querySelector(sel));
+      if (r && r.width) squads.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + rows * rowH * k });
+    }
+    let feedTop = mm && mm.height ? mm.bottom + 8 : safe.t + 50;
+    for (const r of squads) if (r.right > fx0 && r.left < fx1) feedTop = Math.max(feedTop, r.bottom + 6);
     let feedFloor = H;
     for (const c of circles) if (c.x + c.r > fx0 && c.x - c.r < fx1) feedFloor = Math.min(feedFloor, c.y - c.r);
     for (const r of buttons) if (r.x1 > fx0 && r.x0 < fx1) feedFloor = Math.min(feedFloor, r.y0);
@@ -580,10 +588,7 @@ export class HUD {
     // The squad panels and the feed fill in after the layout: take their full size now.
     const feed = this.feedEl.getBoundingClientRect();
     obstacles.push({ left: feed.left, right: feed.left + this.feedEl.offsetWidth * k, top: feed.top, bottom: feed.top + this.feedRows * FEED_ROW_H * k });
-    for (const sel of ['.br-squad', '.ex-squad']) {
-      const r = box(this.el.querySelector(sel));
-      if (r && r.width) obstacles.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + 3 * 31 * k });
-    }
+    obstacles.push(...squads);
     let y = base;
     const tops = [];
     this.strip.rows.forEach((row, n) => {

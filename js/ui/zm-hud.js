@@ -12,8 +12,10 @@ const CSS = `
 .zm-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
 .zm-ui [data-tap] { pointer-events: auto; }
 .hud.zm-on .scorebar, .hud.zm-on .obj-strip, .hud.zm-on .gun-rung, .hud.zm-on .streaks, .hud.zm-on .death { display: none !important; }
-.hud.zm-on .feed { top: calc(var(--st) + 120px); }
-.zm-top { position: absolute; left: 50%; top: calc(var(--st) + 6px); transform: translateX(-50%); display: flex; gap: 4px; align-items: stretch; }
+/* The round plate and the boss bar ride the objective strip (rows 0 and 1, js/ui/hud.js layout()); the feed goes under
+   the crew list by the same pass. */
+.zm-top { display: flex; gap: 4px; align-items: stretch; }
+.zm-top[hidden], .zm-top [hidden], .zm-boss[hidden] { display: none !important; }
 .zm-chip { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 50px; height: 40px; padding: 0 9px;
   background: linear-gradient(180deg, rgba(42,51,61,.94), rgba(16,20,26,.9)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
@@ -25,26 +27,29 @@ const CSS = `
 .zm-dbl { box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium); }
 .zm-dbl b { color: var(--c-sodium); }
 .zm-pts b { color: var(--c-sodium); }
-.zm-boss { position: absolute; left: 50%; top: calc(var(--st) + 52px); transform: translateX(-50%); width: 220px; padding: 3px 8px 5px; text-align: center;
+.zm-boss { width: 220px; box-sizing: border-box; padding: 3px 8px 5px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
 .zm-boss b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ffb21a; }
 .zm-boss i { display: block; height: 5px; margin-top: 4px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .zm-boss i i { position: absolute; inset: 0; margin: 0; height: auto; background: #ff7a1a; transform-origin: left; transform: scaleX(var(--k, 1)); }
-.zm-crew { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 98px; }
-.hud.lefty .zm-crew { left: auto; right: calc(var(--sr) + 134px); }
-.zm-mate { display: grid; grid-template-columns: 1fr auto; gap: 2px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team, #38b6ff); }
+.zm-crew { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 2px; width: 112px;
+  transform: scale(var(--hud-k, 1)); transform-origin: left top; }
+.hud.lefty .zm-crew { left: auto; right: calc(var(--sr) + 134px); transform-origin: right top; }
+/* One fixed-height row per player (four at most): name and points, the perks under them. */
+.zm-mate { box-sizing: border-box; height: 24px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 11px 6px; gap: 2px 4px; padding: 2px 5px 3px 7px; overflow: hidden; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team, #38b6ff); }
 .zm-mate.me { background: rgba(60,48,16,.72); box-shadow: inset 2px 0 0 var(--c-sodium); }
-.zm-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.zm-mate em { font: 400 13px/1 var(--f-stencil); font-style: normal; letter-spacing: var(--tr-stencil); color: var(--c-sodium); font-variant-numeric: tabular-nums; }
-.zm-mate span { grid-column: 1 / 3; display: flex; gap: 2px; min-height: 6px; }
+.zm-mate b { min-width: 0; font: 11px/11px var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.zm-mate em { font: 400 13px/11px var(--f-stencil); font-style: normal; letter-spacing: var(--tr-stencil); color: var(--c-sodium); font-variant-numeric: tabular-nums; }
+.zm-mate span { grid-column: 1 / 3; display: flex; gap: 2px; height: 6px; }
 .zm-mate span i { width: 10px; height: 6px; background: var(--k); box-shadow: 0 0 4px var(--k); }
 .zm-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
 .zm-mate.dead { opacity: .45; }
-.zm-use { position: absolute; left: 50%; bottom: calc(var(--sb) + 62px); transform: translateX(-50%); height: 50px; min-width: 150px; max-width: 46vw; padding: 0 16px; border: 0;
+.zm-use { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, calc(var(--sb) + 62px)); transform: translateX(-50%); height: 50px; min-width: 150px; max-width: 46vw; padding: 0 16px; border: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   font: 400 19px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-sodium); white-space: nowrap;
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); box-shadow: 0 0 0 2px #fff inset; }
 .zm-use small { font: 10px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.hud .zm-use { max-width: min(46vw, var(--lane-w, 46vw)); }
 .zm-use.poor { color: var(--c-chalk); background: linear-gradient(180deg, rgba(60,60,60,.92), rgba(28,28,28,.9)); box-shadow: 0 0 0 2px rgba(255,255,255,.25) inset; }
 .zm-use:active { filter: brightness(1.3); }
 .zm-down, .zm-held, .zm-rev { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 230px; padding: 8px 12px 10px; text-align: center;
@@ -102,6 +107,10 @@ export class ZmHud {
     this.downEl = $('.zm-down'); this.bleedBar = $('.zm-down .bl i'); this.revBar = $('.zm-down .rv i');
     this.revEl = $('.zm-rev'); this.revMine = $('.zm-rev i i');
     this.heldEl = $('.zm-held');
+    // The round plate and the boss bar go in the objective strip, which the HUD's layout pass keeps clear of the rest.
+    this.topEl = hud.strip.mount($('.zm-top'), { order: 0 });
+    hud.strip.mount(this.bossEl, { row: 1 });
+    this.topEl.hidden = true;
     this.useEl.addEventListener('click', e => { e.stopPropagation(); if (this.use?.ok) this.cmd?.('use'); });
     this.c = {};
   }
@@ -111,6 +120,8 @@ export class ZmHud {
   prepare(on, { map, roster, localId }) {
     this.on = on;
     this.el.hidden = !on;
+    this.topEl.hidden = !on;
+    if (!on) this.bossEl.hidden = true;
     this.hud.el.classList.toggle('zm-on', on);
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId;
