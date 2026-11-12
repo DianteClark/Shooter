@@ -11,7 +11,7 @@ import { ZM_SQUAD } from './shared/zombies.js';     // Graveyard Shift seats fou
 const BR_HUMANS = 8;           // Battle royale: up to eight people in a room, bots fill the rest of the 32 (docs/BR.md).
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE } from './shared/constants.js';
-import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
+import { MAX_LEVEL, MAX_PRESTIGE, MASTER_MAX } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
@@ -777,7 +777,10 @@ function seatFrom(msg) {
 
 function cleanBadge(b) {
   const n = (v, max, min) => Math.min(max, Math.max(min, Math.floor(Number(v)) || min));
-  return { prestige: n(b?.prestige, MAX_PRESTIGE, 0), level: n(b?.level, MAX_LEVEL, 1), rk: cleanCode(b?.rk) };
+  const prestige = n(b?.prestige, MAX_PRESTIGE, 0), level = n(b?.level, MAX_LEVEL, 1);
+  // Master Prestige (docs/PRESTIGE.md): only at Prestige X level 50; older builds send none.
+  const master = prestige >= MAX_PRESTIGE && level >= MAX_LEVEL ? n(b?.master, MASTER_MAX, 0) : 0;
+  return { prestige, level, master, rk: cleanCode(b?.rk) };
 }
 
 // Matchmaking for the bot player pool (js/shared/botpool.js): where the humans in this match sit, so the bots drawn

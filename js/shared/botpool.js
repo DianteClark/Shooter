@@ -25,7 +25,7 @@
 import { WEAPONS } from './weapons.js';
 import { PRIMARY_IDS } from './constants.js';
 import { PERKS, TACTICALS, LETHALS, STREAKS } from './catalog.js';
-import { CARDS, PLAYER_CURVE, MAX_LEVEL, MAX_PRESTIGE } from './progression.js';
+import { CARDS, PLAYER_CURVE, MAX_LEVEL, MAX_PRESTIGE, masterOf } from './progression.js';
 import { OPERATORS } from '../ui/operators.js';
 import { EMBLEMS } from '../ui/emblems.js';
 import { EX_UNLOCKS } from './extraction.js';
@@ -329,17 +329,18 @@ function accrue(R, matches, brShare, k) {
   };
 }
 
-// XP to prestige and level: each prestige is one climb of the player curve to MAX_LEVEL.
+// XP to prestige and level: each prestige is one climb of the player curve to MAX_LEVEL. Past Prestige X level 50 the
+// Master level counts on from the same XP, by the players' own rule (js/shared/progression.js masterOf).
 export function levelFromXp(xp) {
   const per = PLAYER_CURVE.cap;
   const prestige = Math.min(MAX_PRESTIGE, Math.floor(xp / per));
   const level = prestige >= MAX_PRESTIGE ? Math.min(MAX_LEVEL, PLAYER_CURVE.levelOf(xp - MAX_PRESTIGE * per)) : PLAYER_CURVE.levelOf(xp - prestige * per);
-  return { prestige, level };
+  return { prestige, level, master: masterOf(prestige, level, xp) };
 }
 
 const WEEK = 7;
 // careerAt(profile, date): a bot's career totals as of `date` (a Date or ms), for leaderboards (ROADMAP item 16).
-//   { matches, kills, deaths, kd, wins, brMatches, brWins, brTop5, extractions, xp, level, prestige, days }
+//   { matches, kills, deaths, kd, wins, brMatches, brWins, brTop5, extractions, xp, level, prestige, master, days }
 // Deterministic: the same profile and date give the same numbers on every phone, and every total is non-decreasing in
 // the date (dev/sim-botpool.mjs checks it). Growth: each week since POOL_EPOCH (or since the player joined, if later)
 // they play activity x 7 x a weekly factor (0..2, from a hash of id and week: some weeks off, some binges) matches, at
@@ -438,7 +439,7 @@ const RECENT_KEEP = 2;
 // Draws `count` distinct bots for a match. target: the humans' mean rating (humanRating); level: their mean rank as
 // {level, prestige}; spread: how far from the target a draw may wander (sigma, on the 0..1 scale); exclude: profile
 // ids already seated; recent: the previous lobbies' ids (defaults to this phone's memory). Returns
-// [{ profile, rating, tier, badge: {level, prestige}, party }] in draw order. Deterministic for a seed and inputs.
+// [{ profile, rating, tier, badge: {level, prestige, master}, party }] in draw order. Deterministic for a seed and inputs.
 // locked: only profiles locked at that tier (tests and the balance rig). party: the largest group that queues together
 // in this mode (1: nobody brings friends); a drawn clan member or duo often pulls clanmates in with them, and every
 // player of one group carries the same `party` number (null alone), so buildRoster can seat them together.
@@ -469,7 +470,7 @@ export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = nul
   const take = (p, group, apart = null) => {
     const rating = formRating(p, seed);
     const c = careerAt(p, date);
-    out.push({ profile: p, rating, tier: tierOf(rating), badge: { prestige: c.prestige, level: c.level }, party: group, apart });
+    out.push({ profile: p, rating, tier: tierOf(rating), badge: { prestige: c.prestige, level: c.level, master: c.master }, party: group, apart });
   };
   const pickFrom = list => {
     let total = 0;

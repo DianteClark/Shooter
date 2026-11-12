@@ -1,5 +1,5 @@
 // Small markup helpers shared by every screen outside a match, and by the HUD's badges.
-import { badgeSvg } from '../shared/progression.js';
+import { badgeSvg, masterTier } from '../shared/progression.js';
 import { icon, hasIcon, resolveIcon } from './icons.js';
 import { rollNumber } from './motion.js';
 import { ATTACHMENTS } from '../shared/attachments.js';
@@ -18,18 +18,25 @@ export const SLOT_LABEL = { optic: 'Optic', barrel: 'Barrel', mag: 'Magazine', g
 export const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 
 const icons = new Map();
-// Badge emblems repeat constantly in feeds and tables, so each rank/size string is built once.
-export function badgeMark(prestige = 0, size = 18) {
-  const key = prestige * 1000 + size;
+// Badge emblems repeat constantly in feeds and tables, so each rank/size string is built once. `master` > 0 draws that
+// Master level's tier icon instead of the prestige badge (docs/PRESTIGE.md).
+export function badgeMark(prestige = 0, size = 18, master = 0) {
+  const tier = master > 0 ? masterTier(master) : -1;
+  const key = `${tier >= 0 ? `m${tier}` : prestige}:${size}`;
   let svg = icons.get(key);
-  if (!svg) icons.set(key, svg = badgeSvg(prestige, size));
+  if (!svg) icons.set(key, svg = badgeSvg(prestige, size, master));
   return svg;
 }
+// A badge object ({prestige, level, master}) as its mark, and as the level it prints: the Master level once there is one.
+export const badgeMarkOf = (badge, size = 18) => badgeMark(badge?.prestige ?? 0, size, badge?.master ?? 0);
+export const badgeLevel = badge => (badge?.master > 0 ? badge.master : badge?.level ?? 1);
+// A key that changes whenever the mark would (scoreboards repaint a row's badge only when it does).
+export const badgeKey = badge => (!badge ? -1 : badge.master > 0 ? 100 + masterTier(badge.master) : badge.prestige ?? 0);
 
 // Badge plus level: what lobby and scoreboards print next to a name. Null badge renders nothing.
 export function badgeTag(badge, size = 18) {
   if (!badge) return '';
-  return `<span class="bdg">${badgeMark(badge.prestige ?? 0, size)}<b>${badge.level ?? 1}</b></span>`;
+  return `<span class="bdg${badge.master > 0 ? ' mstr' : ''}">${badgeMarkOf(badge, size)}<b>${badgeLevel(badge)}</b></span>`;
 }
 
 // A weapon's level and its weapon-prestige rank, as one unbreakable unit: "Lv 30" then a gold rank plate "III", with a

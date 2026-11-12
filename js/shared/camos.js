@@ -10,6 +10,7 @@
 //   chal: {track, goal}    a challenge: `goal` of track kills|head|long|slide|clean.
 //   mastery: true          every challenge on the weapon complete, plus masteryKills if set.
 //   prestige: n            weapon prestige n on that weapon.
+//   pp: n / mlv: n         player prestige n / Master level n (docs/PRESTIGE.md): every gun at once.
 //   season: 'S1'           a season's reward track (js/shared/season-items.js); appended below, owned through the save's
 //                          season block (js/ui/progress.js), hidden before that season starts.
 // unlockKills is the v1 kill threshold and is read only by the save migration, so saves keep what they earned.
@@ -42,6 +43,24 @@ export const CAMOS = [
 ];
 // Seasons (docs/SEASONS.md): every season's camos go on the end, in season order, so indices only ever grow.
 for (const def of SEASON_DEFS) CAMOS.push(...seasonCamos(def));
+// Player prestige (docs/PRESTIGE.md): one camo per prestige rank, `pp: n`, and two on the Master levels, `mlv: n`. Every
+// gun at once, from the rank on. Coloured after each rank's badge (js/shared/progression.js BADGES). Peers send camo ids,
+// not indices (js/render/camo-shader.js camoIndex looks them up here), so a later season's rows may land before these.
+export const RANK_CAMOS = [
+  { id: 'pp-brake',   name: 'Brake Dust',     pattern: 'splinter',    colors: [0x8d6a3f, 0x333a44, 0xe0a23a, 0x1c2026], scale: 3.2,                 tier: 4, pp: 1 },
+  { id: 'pp-coupler', name: 'Coupling Brass', pattern: 'hex',         colors: [0xb08a50, 0x2f3842, 0xf3dfa4, 0x141a20], scale: 8.0,                 tier: 4, pp: 2 },
+  { id: 'pp-aspect',  name: 'Three Aspect',   pattern: 'digital',     colors: [0x16222b, 0x1a7f7a, 0x3dffa0, 0xff4d3d], scale: 9.0,                 tier: 4, pp: 3 },
+  { id: 'pp-points',  name: 'Crossover',      pattern: 'carbon',      colors: [0x1b324a, 0x0c1626, 0xffb347],           scale: 11.0,                tier: 4, pp: 4 },
+  { id: 'pp-dispatch', name: 'Night Dispatch', pattern: 'aurora',     colors: [0x27173d, 0xd39bff, 0xffe08a, 0xf0d6ff], scale: 4.0, animated: true, tier: 4, tint: 0xd39bff, pp: 5 },
+  { id: 'pp-silver',  name: 'Silver Service', pattern: 'gold',        colors: [0xc7ccd6, 0x2a3a55, 0xe8fbff],           scale: 7.0, animated: true, tier: 4, tint: 0x7ee0ff, pp: 6 },
+  { id: 'pp-firebox', name: 'Firebox',        pattern: 'molten',      colors: [0x2a120c, 0xc4562e, 0xffd98a],           scale: 3.0, animated: true, tier: 4, tint: 0xff8a3d, pp: 7 },
+  { id: 'pp-laurel',  name: 'Laurel Line',    pattern: 'livewire',    colors: [0x0e2a1e, 0x6fd08a, 0xffe59a],           scale: 5.0, animated: true, tier: 4, tint: 0x6fd08a, pp: 8 },
+  { id: 'pp-sunset',  name: 'Sunset Limited', pattern: 'prism',       colors: [0xff8c3d, 0xb0248c, 0xffd27a],           scale: 6.0, animated: true, tier: 4, tint: 0xff7ad1, pp: 9 },
+  { id: 'pp-crown',   name: 'Crown Jewels',   pattern: 'singularity', colors: [0x170838, 0xffcf40, 0xfff4bf, 0x7a4dff], scale: 7.0, animated: true, tier: 4, tint: 0xffcf40, pp: 10 },
+  { id: 'ml-platinum', name: 'Master Line',   pattern: 'gold',        colors: [0xe6ecf2, 0x6a7480, 0xffffff],           scale: 7.0, animated: true, tier: 4, tint: 0xf2f6ff, mlv: 100 },
+  { id: 'ml-lamps',   name: 'Thousand Lamps', pattern: 'aurora',      colors: [0x05030a, 0xffd659, 0xff4d7a, 0xffffff], scale: 4.0, animated: true, tier: 4, tint: 0xffd659, mlv: 750 },
+];
+CAMOS.push(...RANK_CAMOS);
 
 const BY_ID = new Map(CAMOS.map(c => [c.id, c]));
 

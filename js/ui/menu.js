@@ -31,7 +31,7 @@ import { fingerDown } from './tap.js';
 import { scrolling } from './scroll.js';
 import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
-import { esc, badgeMark, ROMAN } from './widgets.js';
+import { esc, badgeMark, badgeMarkOf, badgeLevel, ROMAN } from './widgets.js';
 import { vetOf, vetTag } from './cards.js';
 import { play, enter, sweep, shake, reducedMotion, DUR } from './motion.js';
 import { featuredButton, modsChip } from './modifiers.js';
@@ -63,7 +63,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { controller: 2, a11y: 2, season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { prestige: 2, controller: 2, a11y: 2, season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -184,7 +184,9 @@ export class Menu {
     const name = Progress.name || 'Rookie';
     const lo = Progress.loadouts()[Progress.activeLoadout];
     const gun = WEAPONS[lo?.primary]?.name ?? '';
-    const frac = lp.maxed ? 1 : lp.into / lp.span;
+    // Master Prestige (docs/PRESTIGE.md): the card follows the Master level and its own bar.
+    const mp = lp.master > 0 ? lp.mp : null, bar = mp ?? lp;
+    const frac = bar.maxed ? 1 : bar.into / bar.span;
     this.el.dataset.screen = 'title';
     this.el.innerHTML = `
       ${yardBackdrop()}
@@ -212,10 +214,10 @@ export class Menu {
         </nav>
       </section>
       <button class="pcard${can ? ' ready' : ''}" data-act="profile" data-in="right">
-        <span class="pc-badge">${badgeMark(lp.prestige, 46)}</span>
+        <span class="pc-badge">${badgeMark(lp.prestige, 46, lp.master)}</span>
         <span class="pc-body">
-          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}${profileRank()}</span>
-          <span class="pc-lv"><b>Level <u class="pc-lvn">${lp.level}</u></b><small>${can ? 'Prestige ready' : lp.maxed ? 'Max level' : `${Math.round(lp.into).toLocaleString('en-US')} / ${lp.span.toLocaleString('en-US')} XP`}</small></span>
+          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${mp ? '<em class="pc-pr">M</em>' : lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}${profileRank()}</span>
+          <span class="pc-lv"><b>${mp ? 'Master' : 'Level'} <u class="pc-lvn">${mp ? lp.master : lp.level}</u></b><small>${can ? 'Prestige ready' : bar.maxed ? 'Max level' : `${Math.round(bar.into).toLocaleString('en-US')} / ${bar.span.toLocaleString('en-US')} XP`}</small></span>
           <i class="xp"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
         </span>
       </button>
@@ -347,8 +349,8 @@ export class Menu {
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           // voice: party voice runs in this room (js/ui/voice-ui.js paints the talking dot and the mute button).
           const car = `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
-            <span class="car-id">${voice ? `<i class="vc-dot">${ico('ui:mic', '', 13)}</i>` : ''}${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${esc(h.name)}</b></span>
-            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge?.level, emblem: h.loadout?.emblem })}<small>${self ? 'You' : status}</small></span>
+            <span class="car-id">${voice ? `<i class="vc-dot">${ico('ui:mic', '', 13)}</i>` : ''}${h.badge ? badgeMarkOf(h.badge, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${esc(h.name)}</b></span>
+            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge ? badgeLevel(h.badge) : null, emblem: h.loadout?.emblem })}<small>${self ? 'You' : status}</small></span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
           cells += voice
