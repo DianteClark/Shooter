@@ -433,8 +433,9 @@ export class BrHud {
     this.c.aboardKey = key;
     const el = this.$('.br-aboard');
     el.hidden = !flying;
-    const small = aboard ? `Leave the transport  /  ${n} aboard` : 'Leave the transport';
-    this.jumpBtn.querySelector('small').textContent = small; this.jumpMap.querySelector('small').textContent = small;
+    // The HUD's button stays as narrow as before (it sits between the sticks); the drop map's has room for both.
+    this.jumpBtn.querySelector('small').textContent = aboard ? `${n} still aboard` : 'Leave the transport';
+    this.jumpMap.querySelector('small').textContent = aboard ? `Leave the transport  /  ${n} aboard` : 'Leave the transport';
     if (!flying) return;
     const squad = (br.squad ?? 4) > 1 && mates.length > 1;
     el.innerHTML = `<div class="n"><b>${n}</b>${n === 1 ? 'player' : 'players'} still aboard</div>${squad ? mates.map(p => {
