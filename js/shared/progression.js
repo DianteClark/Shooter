@@ -208,9 +208,12 @@ export function isMastered(w) {
   return challengesFor(w).every(c => c.done);
 }
 
-// The rule for one camo on one weapon, ignoring grandfathered ownership.
-export function camoGateOpen(camo, w, life = null) {
-  if (camo.season) return false;        // A season's camo is owned through the save's season block (js/ui/progress.js).
+// The rule for one camo on one weapon, ignoring grandfathered ownership. `rank` is the player's {prestige, master}, for
+// the player-prestige and Master camos (every gun at once; docs/PRESTIGE.md).
+export function camoGateOpen(camo, w, life = null, rank = null) {
+  if (camo.season) return false;
+  if (camo.pp) return (rank?.prestige ?? 0) >= camo.pp;
+  if (camo.mlv) return (rank?.master ?? 0) >= camo.mlv;        // A season's camo is owned through the save's season block (js/ui/progress.js).
   if (camo.exfil) { const u = EX_UNLOCKS.find(x => x.id === camo.exfil); return !!u && (life?.[u.key] ?? 0) >= u.goal; }
   if (camo.prestige) return (w.prestige ?? 0) >= camo.prestige;
   // Mastery camos sit at the end of the weapon ladder (v4); ones earned before it existed are in `owned`.
@@ -222,6 +225,8 @@ export function camoGateOpen(camo, w, life = null) {
 export function camoRequirement(camo) {
   if (camo.exfil) return EX_UNLOCKS.find(u => u.id === camo.exfil)?.label ?? 'Extraction exclusive';
   if (camo.season) return `Season ${defById(camo.season)?.n ?? ''} reward track`;
+  if (camo.pp) return `Reach Prestige ${camo.pp}`;
+  if (camo.mlv) return `Reach Master level ${camo.mlv}`;
   if (camo.prestige) return `Weapon Prestige ${camo.prestige} on this weapon`;
   if (camo.mastery) return camo.masteryKills ? `Mastery and ${camo.masteryKills} kills` : 'Every challenge and the mastery ladder on this weapon';
   if (camo.chal) return `${camo.chal.goal} ${TRACK_LABEL[camo.chal.track]}`;
@@ -264,6 +269,93 @@ const PRESTIGE_NAMES = ['Yard Hand', 'Brakeman', 'Coupler', 'Signalman', 'Switch
 
 export const prestigeName = rank => PRESTIGE_NAMES[Math.min(MAX_PRESTIGE, Math.max(0, Math.floor(Number(rank)) || 0))];
 
+/* ---------- Master Prestige (ROADMAP item 39, docs/PRESTIGE.md) ---------- */
+// Past Prestige X the level keeps counting: Master level 1 is Prestige X at level 50, then one Master level every
+// MASTER_LEVEL_XP to MASTER_MAX. It is read from total XP alone (every XP ever earned past eleven full climbs of the player
+// curve), so nothing new is stored: a save from before it converts on load with no loss, and a bot's Master level comes
+// from its career XP by the very same rule (js/shared/botpool.js levelFromXp). An icon tier every MASTER_TIER_STEP levels.
+export const MASTER_MAX = 1000;
+export const MASTER_LEVEL_XP = 2500;
+export const MASTER_TIER_STEP = 100;
+export const MASTER_START_XP = (MAX_PRESTIGE + 1) * PLAYER_CURVE.cap;
+export const MASTER_TIERS = Math.floor(MASTER_MAX / MASTER_TIER_STEP) + 1;      // 0 (1-99) .. 10 (1000)
+const MASTER_TIER_NAMES = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Sapphire', 'Ruby', 'Amethyst', 'Obsidian', 'Eternal'];
+// The Master curve has the player curve's shape ({floor, levelOf, progress, cap}) over the XP past MASTER_START_XP.
+export const MASTER_CURVE = {
+  base: MASTER_LEVEL_XP, step: 0, max: MASTER_MAX, cap: (MASTER_MAX - 1) * MASTER_LEVEL_XP,
+  floor: n => (Math.max(1, n) - 1) * MASTER_LEVEL_XP,
+  levelOf: xp => Math.min(MASTER_MAX, 1 + Math.floor(Math.max(0, Number(xp) || 0) / MASTER_LEVEL_XP)),
+  progress(xp) {
+    const level = this.levelOf(xp);
+    if (level >= MASTER_MAX) return { level, into: 1, span: 1, maxed: true };
+    return { level, into: Math.max(0, xp) - this.floor(level), span: MASTER_LEVEL_XP, maxed: false };
+  },
+};
+// Master level for a rank and total XP: 0 below Prestige X level 50, else at least 1.
+export function masterOf(prestige, level, totalXp) {
+  if ((prestige ?? 0) < MAX_PRESTIGE || (level ?? 1) < MAX_LEVEL) return 0;
+  return MASTER_CURVE.levelOf((totalXp ?? 0) - MASTER_START_XP);
+}
+// {level, into, span, maxed} on the Master curve, or null when not a Master.
+export function masterProgress(prestige, level, totalXp) {
+  if (!masterOf(prestige, level, totalXp)) return null;
+  return MASTER_CURVE.progress(Math.max(0, (totalXp ?? 0) - MASTER_START_XP));
+}
+export const masterTier = m => (m > 0 ? Math.min(MASTER_TIERS - 1, Math.floor(m / MASTER_TIER_STEP)) : -1);
+export const masterTierName = tier => MASTER_TIER_NAMES[Math.max(0, Math.min(MASTER_TIERS - 1, tier))];
+// The Master level a tier starts at: 1, 100, 200, ... 1000.
+export const masterTierStart = tier => Math.max(1, tier * MASTER_TIER_STEP);
+export const rankName = (prestige, master = 0) => (master > 0 ? `${masterTierName(masterTier(master))} Master` : prestigeName(prestige));
+// One number that orders every player: prestige, then level, then Master level (boards, matchmaking display).
+export const rankValue = ({ prestige = 0, level = 1, master = 0 } = {}) => prestige * MAX_LEVEL + level + (master ?? 0);
+// What a badge prints for the level: the Master level once there is one.
+export const rankLevel = b => (b?.master > 0 ? b.master : b?.level ?? 1);
+
+// Master milestones. Icon tiers are their own rewards (one every MASTER_TIER_STEP); these are the rest. Cards are in CARDS
+// (group Prestige), camos in js/shared/camos.js RANK_CAMOS (mlv), the emblem in js/ui/emblems.js (rule {master}).
+export const MASTER_REWARDS = [
+  { level: 1, kind: 'card', id: 'mp-1', name: 'Past the Last Stop' },
+  { level: 100, kind: 'camo', id: 'ml-platinum', name: 'Master Line' },
+  { level: 250, kind: 'emblem', id: 'mastermark', name: 'Master Mark' },
+  { level: 500, kind: 'card', id: 'mp-500', name: 'Half the Thousand' },
+  { level: 750, kind: 'camo', id: 'ml-lamps', name: 'Thousand Lamps' },
+  { level: 1000, kind: 'card', id: 'mp-1000', name: 'The Whole Line' },
+];
+// What reaching prestige rank n (1..MAX_PRESTIGE) awards: its badge, its camo (every gun) and its calling card.
+export function prestigeRankRewards(n) {
+  const camo = CAMOS.find(c => c.pp === n);
+  return [
+    { kind: 'rank', id: `badge:${n}`, prestige: n, name: prestigeName(n) },
+    ...(camo ? [{ kind: 'camo', id: camo.id, name: camo.name, colors: camo.colors, every: true }] : []),
+    { kind: 'card', id: `prestige-${n}`, name: prestigeName(n) },
+  ];
+}
+// What reaching Master level m awards: a new icon tier at 1, 100, 200 ... and the milestone rewards.
+export function masterRewardsAt(m) {
+  const out = [];
+  const tier = masterTier(m);
+  if (m > 0 && masterTierStart(tier) === m) out.push({ kind: 'rank', id: `master:${tier}`, master: m, name: rankName(MAX_PRESTIGE, m) });
+  for (const r of MASTER_REWARDS) {
+    if (r.level !== m) continue;
+    const camo = r.kind === 'camo' ? CAMOS.find(c => c.id === r.id) : null;
+    out.push({ ...r, ...(camo ? { colors: camo.colors, every: true } : {}) });
+  }
+  return out;
+}
+// Every Master reward met going from Master level a to b (a < m <= b), in order.
+export function masterRewardsBetween(a, b) {
+  const out = [];
+  const levels = new Set([...MASTER_REWARDS.map(r => r.level), ...Array.from({ length: MASTER_TIERS }, (_, t) => masterTierStart(t))]);
+  for (const m of [...levels].sort((x, y) => x - y)) if (m > a && m <= b) out.push(...masterRewardsAt(m));
+  return out;
+}
+// The next Master reward after level m: { level, rewards } or null at the top.
+export function nextMasterReward(m) {
+  const levels = [...new Set([...MASTER_REWARDS.map(r => r.level), ...Array.from({ length: MASTER_TIERS }, (_, t) => masterTierStart(t))])].sort((x, y) => x - y);
+  const level = levels.find(l => l > m);
+  return level ? { level, rewards: masterRewardsAt(level) } : null;
+}
+
 // Card colours per prestige rank, after each rank's badge: ground, mid, light, accent.
 const PRESTIGE_ART = [
   ['#2a2016', '#6b5030', '#f3dfa4', '#e0a23a'], ['#1e2830', '#4d5a64', '#f3dfa4', '#e8c26a'],
@@ -271,6 +363,14 @@ const PRESTIGE_ART = [
   ['#1e1030', '#7a2d8c', '#f0d6ff', '#ffe08a'], ['#141e34', '#2a3a55', '#e8fbff', '#d4a040'],
   ['#2a120c', '#c4562e', '#ffd98a', '#ffb37a'], ['#0e2a1e', '#2a8562', '#ffe59a', '#ff5a7a'],
   ['#28102c', '#8c2f6e', '#ffd27a', '#7ae8ff'], ['#170838', '#7a4dff', '#fff4bf', '#ffcf40'],
+];
+
+// Master card colours per icon tier, after MASTER_PALETTE.
+const MASTER_ART = [
+  ['#16181c', '#4a5058', '#e6ecf2', '#9aa4ad'], ['#22140a', '#7a4a22', '#ffd2a0', '#d08a4a'], ['#181c22', '#5a6470', '#f2f6ff', '#c8d0da'],
+  ['#2a1e04', '#9c7414', '#fff4bf', '#ffd659'], ['#141a22', '#5a7088', '#f4fbff', '#bfe6ff'], ['#06221a', '#1a7a5a', '#c8ffe8', '#3dffa0'],
+  ['#0a1430', '#2a4ea8', '#d8e6ff', '#5aa0ff'], ['#2a060e', '#a3182e', '#ffd0d8', '#ff4d6a'], ['#1c0a2a', '#6a2a9e', '#f0d6ff', '#c27aff'],
+  ['#08080c', '#26262e', '#d8d8e8', '#7a4dff'], ['#170838', '#7a4dff', '#fff4bf', '#ffcf40'],
 ];
 
 /* ---------- Pro perks (V7) ---------- */
@@ -1015,7 +1115,11 @@ export const CARDS = [
     { p: PRO_ART[perk][0], c: [PRO_ART[perk][1], PRO_ART[perk][2], PRO_ART[perk][3], '#ffd659'], e: perk, gold: true },
     c => { const st = proStatus(perk, c.proCounts ?? {}, c.pro).steps; return [st.filter(x => x.done).length, st.length]; })),
   ...Array.from({ length: MAX_PRESTIGE }, (_, i) => i + 1).map(n => card(`prestige-${n}`, prestigeName(n), 'Prestige', `Prestige ${n}`, c => c.prestige >= n,
-    { p: n >= 8 ? 'rays' : n >= 5 ? 'chevrons' : 'rails', c: PRESTIGE_ART[n - 1], e: `badge:${n}` }, c => [c.prestige ?? 0, n])),
+    { p: n >= 8 ? 'rays' : n >= 5 ? 'chevrons' : 'rails', c: PRESTIGE_ART[n - 1], e: `badge:${n}`, ...(n >= 6 ? { anim: n >= 10 ? 'prism' : 'gold' } : {}) }, c => [c.prestige ?? 0, n])),
+  // Master Prestige (docs/PRESTIGE.md): MASTER_REWARDS' cards, emblem `master:<tier>`.
+  ...MASTER_REWARDS.filter(r => r.kind === 'card').map(r => card(r.id, r.name, 'Prestige', `Master level ${r.level}`, c => (c.master ?? 0) >= r.level,
+    { p: r.level >= 1000 ? 'rays' : r.level >= 500 ? 'chevrons' : 'rails', c: MASTER_ART[masterTier(r.level)], e: `master:${masterTier(r.level)}`, gold: true, anim: r.level >= 1000 ? 'prism' : 'gold' },
+    c => [Math.min(c.master ?? 0, r.level), r.level])),
   card('camo-gold', 'Gold Standard', 'Mastery', 'Sovereign camo on any weapon', c => c.camos.has('gold'), { p: 'rays', c: ['#3a2a08', '#b27616', '#fff4bf', '#ffd659'], e: 'camo:gold', gold: true }),
   card('mastery-5', 'Armorer', 'Mastery', 'Master 5 weapons', c => c.mastered >= 5, { p: 'plates', c: ['#2a2410', '#7a6420', '#ffe9a0', '#ffd659'], e: 'ui:gunsmith', gold: true }, c => [c.mastered, 5]),
   card('camo-molten', 'Meltdown', 'Mastery', 'Molten Core camo on any weapon', c => c.camos.has('molten'), { p: 'pulse', c: ['#1a0d0a', '#a3270a', '#ffd23f', '#ff4a0a'], e: 'camo:molten', gold: true }),
@@ -1616,12 +1720,50 @@ const BADGES = [
     + crown(14, 24, '#ffe07a', '#ff4d7a') + dots(44, 8, 1.8, '#ffffff', UP + Math.PI / 8) + chevron(76, 22, 6, 4, '#ffe07a') + chevron(83, 18, 5, 3, '#fff4bf'),
 ];
 
-// SVG markup for a prestige rank 0..10 (0 is the pre-prestige plate). Pure strings, safe to inline anywhere.
-export function badgeSvg(prestige = 0, size = 48) {
-  const rank = Math.min(MAX_PRESTIGE, Math.max(0, count(prestige)));
+// Master Prestige icons, one per tier (every MASTER_TIER_STEP levels): a faceted diamond carrying an "M" of two rails,
+// in the tier's metal, that gathers the prestige badges' trimmings as it climbs (rays, wings, laurels, gear, crown), and
+// one pip on the rim per tier passed. [rim, face light, face dark, glyph, accent].
+const MASTER_PALETTE = [
+  ['#6a7480', '#3d444e', '#2a3038', '#c8ccd2', '#9aa4ad'], ['#a8683a', '#4a3020', '#33200f', '#ffd2a0', '#d08a4a'],
+  ['#c8d0da', '#3a4450', '#262e38', '#f2f6ff', '#9fb4c8'], ['#ffd659', '#5a4210', '#3a2a08', '#fff4bf', '#ffb020'],
+  ['#e6f2ff', '#2e4256', '#1c2a3a', '#ffffff', '#9fdcff'], ['#3dffa0', '#124a36', '#0a3024', '#d8ffee', '#1fc87a'],
+  ['#5aa0ff', '#1a2e66', '#101c44', '#e0ecff', '#7ae8ff'], ['#ff4d6a', '#5a0e1c', '#3a0812', '#ffe0e6', '#ffb020'],
+  ['#c27aff', '#3a1660', '#260c42', '#f6e8ff', '#ff7ad1'], ['#7a4dff', '#121218', '#08080c', '#e8e0ff', '#ff4d7a'],
+  ['#ffcf40', '#26105c', '#170838', '#fff4bf', '#7af0ff'],
+];
+function masterBadge(tier) {
+  const [rim, light, dark, glyph, accent] = MASTER_PALETTE[tier];
+  const t = tier;
+  let s = '';
+  if (t >= 1) s += rays(30, 46 + Math.min(4, t * 0.5), 12 + t * 2, 0.07, accent);
+  if (t >= 4) s += rays(26, 40, 12 + t * 2, 0.05, glyph, UP + Math.PI / (12 + t * 2));
+  if (t >= 3) s += wing(-1, 5 + Math.min(3, t - 3), rim, glyph) + wing(1, 5 + Math.min(3, t - 3), rim, glyph);
+  if (t >= 6) s += laurel(-1, 8 + t, accent, rim) + laurel(1, 8 + t, accent, rim);
+  if (t >= 8) s += gear(33, 16, 5, rim);
+  const out = ngon(36, 4), inn = ngon(29, 4);
+  s += poly(out, rim) + facets(inn, light, dark);
+  // The M: two uprights joined by a vee, cut like rail sections.
+  s += poly([[33, 66], [33, 34], [40, 34], [50, 48], [60, 34], [67, 34], [67, 66], [61, 66], [61, 46], [50, 61], [39, 46], [39, 66]], glyph);
+  s += poly([[33, 66], [39, 66], [39, 63], [33, 63]], accent) + poly([[61, 66], [67, 66], [67, 63], [61, 63]], accent);
+  if (t >= 1) s += dots(32.5, t * 2, 1.7, accent, UP + Math.PI / 4);
+  if (t >= 9) s += crown(9, 22, glyph, accent);
+  if (t >= 10) s += gem(6, '#ffffff', accent, '#ffffff', 79);
+  return s;
+}
+
+// SVG markup for a prestige rank 0..10 (0 is the pre-prestige plate), or a Master level's tier icon when `master` > 0.
+// Pure strings, safe to inline anywhere.
+export function badgeSvg(prestige = 0, size = 48, master = 0) {
   const px = Math.max(8, count(size, 512));
+  if (master > 0) {
+    const tier = masterTier(count(master, MASTER_MAX));
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${px}" height="${px}" role="img" aria-label="${rankName(MAX_PRESTIGE, master)}">${masterBadge(tier)}</svg>`;
+  }
+  const rank = Math.min(MAX_PRESTIGE, Math.max(0, count(prestige)));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${px}" height="${px}" role="img" aria-label="${prestigeName(rank)}">${BADGES[rank]()}</svg>`;
 }
+// A Master tier's icon by tier (0..MASTER_TIERS-1), for ladders that list tiers rather than levels.
+export const masterTierSvg = (tier, size = 48) => badgeSvg(MAX_PRESTIGE, size, masterTierStart(tier));
 
 /* ---------- Daily and weekly challenges (V7 round 2) ---------- */
 // Three daily and three weekly XP goals, drawn from one pool with a seed made of the local date, so a set stays the same

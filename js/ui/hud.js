@@ -14,7 +14,7 @@ import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCES
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
-import { badgeMark, nameHtml, weaponLevelHtml } from './widgets.js';
+import { badgeMarkOf, badgeLevel, badgeKey, nameHtml, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
@@ -810,7 +810,7 @@ export class HUD {
   // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
   #showIntro(mapId, mode, roster, localId) {
     const map = MAPS[mapId] ?? this.map;
-    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${nameHtml(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMarkOf(p.badge, 15)}</i><u>${badgeLevel(p.badge)}</u>` : ''}<b>${nameHtml(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
     const team = (t, side) => {
       const list = roster.filter(p => p.team === t);
       return `<div class="in-team ${side}" style="--team:${TEAMS[t].css}"><h3><i></i>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
@@ -1374,12 +1374,12 @@ export class HUD {
         if (slot.nameKey !== p.name) { slot.nameKey = p.name; slot.name.innerHTML = nameHtml(p.name); }
         slot.name.style.color = '';
         const badge = this.badges.get(p.id);
-        const rank = badge?.prestige ?? -1;
+        const rank = badgeKey(badge);
         if (rank !== slot.rank) {
           slot.rank = rank;
-          slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : '';
+          slot.bdg.innerHTML = badge ? badgeMarkOf(badge, 15) : '';
         }
-        slot.lv.textContent = badge?.level ?? '';
+        slot.lv.textContent = badge ? badgeLevel(badge) : '';
         this.#paintAway(slot, p);
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
@@ -1408,9 +1408,9 @@ export class HUD {
         if (slot.nameKey !== nk) { slot.nameKey = nk; slot.name.innerHTML = `${at + 1}. ${nameHtml(p.name)}`; }
         slot.name.style.color = TEAMS[p.team]?.css ?? '';
         const badge = this.badges.get(p.id);
-        const rank = badge?.prestige ?? -1;
-        if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : ''; }
-        slot.lv.textContent = badge?.level ?? '';
+        const rank = badgeKey(badge);
+        if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMarkOf(badge, 15) : ''; }
+        slot.lv.textContent = badge ? badgeLevel(badge) : '';
         this.#paintAway(slot, p);
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
@@ -2482,7 +2482,7 @@ export class HUD {
     const who = k?.name ? identityOf(k.id) : null;
     this.deathBy.innerHTML = k?.name
       ? `${cardHtml(who?.card ?? 'yard', { size: 236, title: k.name, sub: '' })}
-         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 16)}</i><u>Lv ${k.badge.level ?? ''}</u>` : ''}${vetTag(!!who?.vet, { emblem: who?.emblem })}</span>`
+         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMarkOf(k.badge, 16)}</i><u>${k.badge.master > 0 ? 'Master' : 'Lv'} ${badgeLevel(k.badge)}</u>` : ''}${vetTag(!!who?.vet, { emblem: who?.emblem })}</span>`
       : '<em>Eliminated</em>';
     this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : k.fin ? 'Finished by' : 'Killed by') : 'Down';
     this.dcIcon.innerHTML = k ? glyph(k.icon, 20) : '';
@@ -2730,7 +2730,7 @@ export class HUD {
 
   #feedBadge(id) {
     const badge = this.badges.get(id);
-    return badge ? `<i class="f-bdg">${badgeMark(badge.prestige ?? 0, 13)}</i>` : '';
+    return badge ? `<i class="f-bdg">${badgeMarkOf(badge, 13)}</i>` : '';
   }
 
   #onStreak(e) {

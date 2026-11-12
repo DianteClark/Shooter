@@ -15,7 +15,7 @@
 //   careerNow(), cardUnlocked(id), skinStatus(op) -> [{skin, unlocked, requirement, value, goal, equipped}],
 //   currentSkin(op), equipSkin(op, id), emblems() -> [{emblem, unlocked, requirement, equipped}], currentEmblem(),
 //   setEmblem(id).
-import { CARDS, CARD_GROUPS, getCard, isVeteran, badgeSvg } from '../shared/progression.js';
+import { CARDS, CARD_GROUPS, getCard, isVeteran, badgeSvg, masterTierSvg } from '../shared/progression.js';
 import { WEAPON_IDS, WEAPON_CATEGORY, GOLDEN_ID } from '../shared/constants.js';
 import { getCamo } from '../shared/camos.js';
 import { TACTICALS, LETHALS, STREAKS } from '../shared/catalog.js';
@@ -46,7 +46,7 @@ setCareerExtras(() => {
     for (const k in camoOn) if (Progress.isUnlocked(w, k)) camoOn[k]++;
   }
   return {
-    ...c, level: Progress.prestige > 0 ? 50 : Progress.level, prestige: Progress.prestige, pro: Progress.proPerks(),
+    ...c, level: Progress.prestige > 0 ? 50 : Progress.level, prestige: Progress.prestige, master: Progress.master, pro: Progress.proPerks(),
     cats, masteredIn, masteredSet, mastered: masteredSet.size, catSize: CAT_SIZE, camoOn,
     chal: w => { const l = Progress.challenges(w); return [l.filter(c => c.done).length, l.length]; },
     life: Progress.lifetime?.() ?? {}, granted: id => !!Progress.hasReward?.(id),
@@ -556,6 +556,7 @@ function groundSvg(card) {
 function emblem(card, px) {
   const art = artOf(card), e = art.e, [, , light, accent] = art.c;
   if (e.startsWith('badge:')) return badgeSvg(Number(e.slice(6)), px);
+  if (e.startsWith('master:')) return masterTierSvg(Number(e.slice(7)), px);
   if (e.startsWith('camo:')) return `<i class="cc-swatch" style="background:${swatchCss(getCamo(e.slice(5)))}"></i>`;
   return icon(e, { size: Math.round(px * 0.78), color: light, accent });
 }

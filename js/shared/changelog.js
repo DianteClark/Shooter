@@ -17,6 +17,16 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1111-28', date: '2026-11-12', title: 'Prestige and Master Prestige',
+    items: [
+      'Every prestige rank now brings its own camo for every gun, alongside its icon and calling card. Ranks you already hold have theirs waiting.',
+      'Entering prestige plays a new reveal: your new icon, its camo and calling card, and what the next rank brings.',
+      'New Prestige view: tap the rank ladder in your service record to see every rank and its rewards, and what comes next.',
+      'Master Prestige: past Prestige X at level 50 your level keeps counting, up to Master 1,000, with a new icon every 100 levels and cards, camos and an emblem along the way. Prestige X players start at the Master level their XP has already earned.',
+      'Master levels show wherever a level does: your player card, lobbies, scoreboards, the kill feed, results and the boards. The busiest bot players are Masters too.',
+    ],
+  },
+  {
     build: '1111-27', date: '2026-11-12', title: 'Accessibility',
     items: [
       'New in Options: Accessibility. Colour modes for red-weak, green-weak and blue-weak eyes, and a high contrast mode. They change team colours everywhere: players, rings, the minimap, the kill feed, objectives, squads and loot.',

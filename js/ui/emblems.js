@@ -51,6 +51,7 @@ const GLYPHS = {
   gem: (a, b) => poly([[10, 9], [22, 9], [27, 14], [16, 27], [5, 14]], a) + poly([[10, 9], [16, 14], [22, 9]], b) + poly([[5, 14], [27, 14], [16, 27]], '#000', ' opacity=".18"'),
   prism: (a, b) => poly([[16, 5], [27, 25], [5, 25]], a) + poly([[16, 11], [22, 22], [10, 22]], '#151a20') + poly([[22, 17], [30, 13], [30, 15]], '#ff2bd6') + poly([[22, 18], [30, 17], [30, 19]], '#ffd659') + poly([[22, 19], [30, 21], [30, 23]], '#18e8ff') + rect(3, 16, 10, 1.4, b),
   oldguard: (a, b) => poly([[16, 5], [26, 10], [26, 18], [16, 27], [6, 18], [6, 10]], a) + poly([[9, 13], [16, 9], [23, 13], [23, 16], [16, 12], [9, 16]], '#151a20') + poly([[9, 19], [16, 15], [23, 19], [23, 22], [16, 18], [9, 22]], b),
+  master: (a, b) => poly([[8, 25], [8, 8], [12, 8], [16, 15], [20, 8], [24, 8], [24, 25], [20.5, 25], [20.5, 15], [16, 22], [11.5, 15], [11.5, 25]], a) + rect(7, 26, 18, 2, b) + poly(ngon(1.8, 4, 0, 16, 5), b),
   rails: (a, b) => rect(9, 4, 2.4, 24, a) + rect(20.6, 4, 2.4, 24, a) + [8, 14, 20, 26].map(y => rect(6, y - 1, 20, 2, b)).join(''),
 };
 
@@ -88,7 +89,10 @@ export const EMBLEM_IDS = EMBLEMS.map(e => e.id);
 const seasonRow = (season, track) => ([id, name, plateKind, rim, colours, glyph]) => ({ id, name, plate: plateKind, rim, colours, glyph,
   season, rule: { grant: true, label: track ? `${season} reward track` : `${season} ranked reward` } });
 export const SEASON_EMBLEMS = SEASON_DEFS.flatMap(d => [...seasonEmblems(d).map(seasonRow(d.id, true)), ...rankedEmblems(d).map(seasonRow(d.id, false))]);
-export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS];
+// Master Prestige (docs/PRESTIGE.md): kept out of EMBLEMS for the same reason as the season ones.
+export const RANK_EMBLEMS = [['mastermark', 'Master Mark', 'diamond', '#e6ecf2', ['#ffffff', '#ffd659'], 'master', { master: 250 }]]
+  .map(([id, name, plateKind, rim, colours, glyph, rule]) => ({ id, name, plate: plateKind, rim, colours, glyph, rule }));
+export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS, ...RANK_EMBLEMS];
 const BY_ID = new Map(ALL_EMBLEMS.map(e => [e.id, e]));
 export const getEmblem = id => BY_ID.get(id) ?? null;
 export const cleanEmblem = id => (BY_ID.has(id) ? id : null);
@@ -101,6 +105,7 @@ export function emblemUnlocked(e, c) {
   if (r.grant) return { unlocked: false, requirement: r.label };
   if (r.level) return { unlocked: c.level >= r.level, requirement: `Reach level ${r.level}` };
   if (r.prestige) return { unlocked: c.prestige >= r.prestige, requirement: `Reach prestige ${r.prestige}` };
+  if (r.master) return { unlocked: (c.master ?? 0) >= r.master, requirement: `Reach Master level ${r.master}` };
   if (r.pro) return { unlocked: (c.pro?.length ?? 0) >= r.pro, requirement: `Earn ${r.pro} Pro perks` };
   if (r.mastered) return { unlocked: (c.mastered ?? 0) >= r.mastered, requirement: `Master ${r.mastered} weapons` };
   if (r.camo) return { unlocked: (c.camoOn?.[r.camo] ?? 0) >= r.goal, requirement: `${r.goal} ${r.label}` };

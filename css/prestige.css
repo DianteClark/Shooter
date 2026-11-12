@@ -1,0 +1,85 @@
+/* Prestige (ROADMAP item 39, docs/PRESTIGE.md): the Prestige view, the way into it from the service record's rank
+   ladder, and the prestige reveal's reward tiles. js/ui/prestige.js draws all of it. */
+
+/* ---- Service record: the rank ladder is the way in ---------------------------------------------------------------- */
+#ui .pf-ladder-open { display: flex; flex-direction: column; gap: var(--sp-2); width: 100%; padding: 0; text-align: left; background: none; }
+#ui .pf-ladder-open h4 small { margin-left: 0; }
+#ui .pf-ladder-go { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; font: 400 var(--fs-caption)/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-sodium); }
+#ui .pf-ladder-go .ico { height: 14px; }
+
+/* ---- The view ----------------------------------------------------------------------------------------------------- */
+#ui .pr { flex: 1; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr); gap: var(--sp-4); }
+#ui .pr-now {
+  position: relative; overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  background: radial-gradient(90% 60% at 100% 0%, rgba(242,166,59,.18), transparent 70%), linear-gradient(172deg, rgba(58,69,82,.92), rgba(29,35,43,.92));
+  box-shadow: var(--bevel), var(--edge), inset 3px 0 0 var(--c-sodium);
+  --cut: var(--cut-lg); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+#ui .pr-head { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+#ui .pr-big { flex: none; line-height: 0; filter: drop-shadow(0 4px 10px rgba(0,0,0,.55)); }
+#ui .pr-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ui .pr-id > small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-gold); }
+#ui .pr-id > b { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .pr-lv { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: var(--sp-2); row-gap: 3px; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); white-space: nowrap; }
+#ui .pr-lv u { text-decoration: none; color: var(--c-sodium); }
+#ui .pr-lv small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); }
+#ui .pr-now .xp { height: 5px; }
+#ui .pr-next { display: flex; flex-direction: column; gap: var(--sp-2); min-height: 0; }
+#ui .pr-next h4, #ui .pr-list h4 { display: flex; align-items: center; gap: var(--sp-2); font: 400 var(--fs-lead)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
+#ui .pr-next h4 .ico, #ui .pr-list h4 .ico { height: 17px; color: var(--c-sodium); }
+#ui .pr-next h4 small, #ui .pr-list h4 small { margin-left: auto; min-width: 0; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .pr-next p { font: 400 var(--fs-caption)/1.25 var(--f-body); color: var(--c-haze); }
+#ui .pr-tiles { display: flex; flex-direction: column; gap: 3px; }
+#ui .pr-now > .btn { margin-top: auto; }
+
+/* A reward tile: picture, kind, name. */
+#ui .pr-tile { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: 4px 8px; background: rgba(29,35,43,.66); box-shadow: var(--edge); }
+#ui .pr-tile > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ui .pr-tile small { font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+#ui .pr-tile b { font: 400 var(--fs-body)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .pr-mk { flex: none; display: grid; place-items: center; line-height: 0; }
+#ui .pr-sw { width: var(--s); height: var(--s); box-shadow: 0 0 0 2px var(--c-chalk), 0 2px 6px rgba(0,0,0,.4); transform: rotate(45deg) scale(.72); }
+#ui .pr-cd .ccard { pointer-events: none; }
+
+/* The ranks and Master milestones. */
+#ui .pr-list { min-height: 0; display: flex; flex-direction: column; gap: 3px; padding-bottom: var(--sp-4); }
+#ui .pr-list h4 { margin: var(--sp-2) 0 2px; }
+#ui .pr-list h4:first-child { margin-top: 0; }
+#ui .pr-row { flex: none; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: 4px 8px; background: rgba(29,35,43,.66); box-shadow: var(--edge); }
+#ui .pr-row.here { background: var(--face-steel-hi); box-shadow: var(--bevel-hi), inset 3px 0 0 var(--c-sodium); }
+#ui .pr-row:not(.earned) .pr-bdg svg, #ui .pr-row:not(.earned) .pr-cm .pr-mk { opacity: .35; filter: saturate(.2); }
+#ui .pr-bdg { flex: none; width: 40px; display: grid; place-items: center; line-height: 0; }
+#ui .pr-nm { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ui .pr-nm b { font: 400 var(--fs-body)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .pr-nm small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .pr-cm { flex: 0 1 112px; min-width: 0; display: flex; align-items: center; gap: 6px; }
+#ui .pr-cm small { min-width: 0; font: 400 var(--fs-micro)/1.1 var(--f-plate); letter-spacing: .03em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .pr-cdw { flex: none; line-height: 0; }
+#ui .pr-cm.pr-rw { flex: none; width: 116px; justify-content: center; }
+#ui .pr-row:not(.earned) .pr-rw .pr-mk { opacity: .35; filter: saturate(.2); }
+#ui .pr-st { flex: none; width: 18px; line-height: 0; color: var(--c-plate); }
+#ui .pr-st .ico { height: 16px; }
+#ui .pr-st.on { color: var(--c-go, #4bd18a); }
+#ui .pr-note { font: 400 var(--fs-caption)/1.25 var(--f-body); color: var(--c-haze); }
+#ui .pr-tiers { flex: none; display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 3px; }
+#ui .pr-tier { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 3px; background: rgba(29,35,43,.66); box-shadow: var(--edge); line-height: 0; min-width: 0; }
+#ui .pr-tier small { font: 400 9px/1 var(--f-plate); color: var(--c-haze); }
+#ui .pr-tier.locked svg { opacity: .3; filter: saturate(.2); }
+#ui .pr-tier.on { background: var(--face-steel-hi); box-shadow: var(--bevel-hi), inset 0 -3px 0 var(--c-sodium); }
+#ui .pr-tier.on small { color: var(--c-sodium); }
+@media (max-width: 700px) {
+  #ui .pr { grid-template-columns: 236px minmax(0, 1fr); gap: var(--sp-3); }
+  #ui .pr-cm small { display: none; }
+  #ui .pr-cm { flex: none; }
+  #ui .pr-big svg { width: 64px; height: 64px; }
+  #ui .pr-id > b { font-size: var(--fs-lead); }
+}
+
+/* ---- The reveal: the new rank's camo and card under the stamped badge ------------------------------------------- */
+#ui .pr-rewards { position: absolute; z-index: 1; left: 0; right: 0; bottom: 34px; display: flex; justify-content: center; align-items: stretch; gap: var(--sp-2); padding: 0 var(--sp-4); }
+#ui .pr-rewards .pr-card > span { gap: 4px; }
+#ui .pr-rewards .pr-tile { padding: 6px 12px; background: var(--face-steel); box-shadow: var(--bevel), var(--edge); animation: rise .32s calc(.42s + var(--i) * .12s) var(--ease-out) both; }
+#ui .pr-rewards .pr-tile small { font-size: 9px; }
+#ui .pr-rewards .pr-tile b { font-size: var(--fs-lead); }
+#ui .pr-cer-next { font: 400 var(--fs-caption)/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-gold); }
+@media (prefers-reduced-motion: reduce) { #ui .pr-rewards .pr-tile { animation: none; } }

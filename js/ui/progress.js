@@ -1,8 +1,9 @@
 /* Progress API (Wave 2). `w` is a weapon id, `i` a loadout index 0..4, `slot` optic|barrel|mag|grip.
  * setCamo/setTracer/setKillFx/setAttachment return false and change nothing when the item is locked.
  * Identity   name (get/set)  primary (get/set: active loadout's gun)  flag(n)  setFlag(n)
- * Player     xp  level  prestige  totalXp  levelProgress() -> {level,into,span,maxed,prestige}
- *            canPrestige()  doPrestige() -> {ok,prestige,badge}   badge() -> {prestige,level} (for roster)
+ * Player     xp  level  prestige  master  totalXp  levelProgress() -> {level,into,span,maxed,prestige,master,mp}
+ *            canPrestige()  doPrestige() -> {ok,prestige,badge,rewards}   badge() -> {prestige,level,master} (for roster)
+ *            prestigeTrack() -> {prestige, master, ranks, masterRewards, next}   (docs/PRESTIGE.md)
  *            addXp(n) -> {before,after,xp}   (MatchAwards owns match XP; do not also add it in main.js)
  * Badges     import { badgeSvg, prestigeName, MAX_PRESTIGE } from '../shared/progression.js'
  *            badgeSvg(prestige, size=48) -> SVG markup string, safe to inline repeatedly (no ids/defs).
@@ -79,6 +80,7 @@ import {
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
   recordCareer, careerWeek, masteryCompleted, blankCareer,
   recordZmBest,
+  masterOf, masterProgress, prestigeRankRewards, masterRewardsBetween, nextMasterReward, MASTER_REWARDS,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { cleanFriends, seeFriend } from '../shared/boards.js';
@@ -203,7 +205,10 @@ const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 const plainOnly = w => w === GOLDEN_ID;
 const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none'
   : camo.season ? seasonOwned(data.season).has(`camo:${camo.id}`)
-  : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w), data.life));
+  : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w), data.life, rankNow()));
+// The player's rank for the rank camos: prestige and Master level (docs/PRESTIGE.md).
+const masterNow = () => masterOf(data.prestige, levelOf(data.xp), data.totalXp);
+const rankNow = () => ({ prestige: data.prestige, master: masterNow() });
 // Every reward id granted: mastery tracks plus the season tracks and ranked (js/shared/seasons.js).
 function allRewards() {
   const set = new Set(masteryRewards(data));
@@ -242,7 +247,7 @@ function gatedKits(loadout) {
 }
 
 function careerStats() {
-  const c = { level: data.peakLevel, prestige: data.prestige, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id) };
+  const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id) };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
 }
@@ -378,9 +383,12 @@ export const Progress = {
   get totalXp() { return data.totalXp; },
   get level() { return levelOf(data.xp); },
   get prestige() { return data.prestige; },
+  // Master Prestige (docs/PRESTIGE.md): 0 until Prestige X level 50, then 1..MASTER_MAX, read from total XP.
+  get master() { return masterNow(); },
 
+  // master: the Master level (0 if none); mp: {level, into, span, maxed} on the Master curve, or null.
   levelProgress() {
-    return { ...PLAYER_CURVE.progress(data.xp), prestige: data.prestige };
+    return { ...PLAYER_CURVE.progress(data.xp), prestige: data.prestige, master: masterNow(), mp: masterProgress(data.prestige, levelOf(data.xp), data.totalXp) };
   },
 
   addXp(amount) {
@@ -395,17 +403,30 @@ export const Progress = {
   },
 
   // Resets the level only. Unlocks read peakLevel, which never falls.
+  // rewards: what the new rank brings (its badge, camo for every gun and calling card: prestigeRankRewards).
   doPrestige() {
-    if (!this.canPrestige()) return { ok: false, prestige: data.prestige, badge: badgeSvg(data.prestige) };
+    if (!this.canPrestige()) return { ok: false, prestige: data.prestige, badge: badgeSvg(data.prestige), rewards: [] };
     const had = goldenEarned();
     data.prestige++;
     data.xp = 0;
     save();
-    return { ok: true, prestige: data.prestige, badge: badgeSvg(data.prestige), golden: !had && goldenEarned() };
+    return { ok: true, prestige: data.prestige, badge: badgeSvg(data.prestige), golden: !had && goldenEarned(), rewards: prestigeRankRewards(data.prestige) };
   },
 
+  // {prestige, level, master}: what lobbies, scoreboards and the feed print (master 0 below Master Prestige).
   badge() {
-    return { prestige: data.prestige, level: levelOf(data.xp) };
+    return { prestige: data.prestige, level: levelOf(data.xp), master: masterNow() };
+  },
+
+  // The Prestige view (js/ui/prestige.js): every rank's rewards with earned flags, the Master milestones, what is next.
+  prestigeTrack() {
+    const p = data.prestige, m = masterNow();
+    const ranks = Array.from({ length: MAX_PRESTIGE }, (_, i) => ({ rank: i + 1, earned: p >= i + 1, rewards: prestigeRankRewards(i + 1) }));
+    const master = MASTER_REWARDS.map(r => ({ ...r, earned: m >= r.level }));
+    const next = p < MAX_PRESTIGE ? { kind: 'prestige', rank: p + 1, rewards: prestigeRankRewards(p + 1) }
+      : m === 0 ? { kind: 'master', level: 1, rewards: masterRewardsBetween(0, 1) }
+      : (() => { const n = nextMasterReward(m); return n ? { kind: 'master', level: n.level, rewards: n.rewards } : null; })();
+    return { prestige: p, master: m, ranks, masterRewards: master, next };
   },
 
   /* ---------- Unlocks ---------- */
@@ -727,7 +748,7 @@ export const Progress = {
   // `career` ({ kills, deaths, won, br, place, extracted }, see recordCareer) feeds the leaderboard totals; `extracted`
   // (extraction mode) also counts the save's lifetime `extractions`.
   applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false }) {
-    const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel;
+    const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel, masterBefore = masterNow();
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
     const cardsBefore = new Set(cardsEarned(cardCareer()));
@@ -769,6 +790,13 @@ export const Progress = {
       unlocks.push({ kind, id, name: ITEM_TABLES[kind]?.[id]?.name ?? id, req: UNLOCK_CHALLENGES[k].label });
     }
     unlocks.unshift(...proUnlocks, ...tiers.ups, ...cardUnlocks);
+    // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
+    // cards are already in cardUnlocks, so they are not stamped twice).
+    const masterAfter = masterNow();
+    if (masterAfter > masterBefore) {
+      unlocks.unshift(...masterRewardsBetween(masterBefore, masterAfter).filter(r => r.kind !== 'card')
+        .map(r => ({ ...r, req: `Master level ${r.level ?? r.master}` })));
+    }
     // The biggest moment there is goes first of all.
     if (!goldenBefore && goldenEarned()) unlocks.unshift(GOLDEN_UNLOCK());
     // Steps moved this match, for the results screen: [{perk, name, steps:[{label,goal,before,value,done}]}].
@@ -785,6 +813,7 @@ export const Progress = {
         if (!unlockMet(a.unlock, before) && unlockMet(a.unlock, entry)) unlocks.push({ kind: 'attachment', id: a.id, name: a.name, slot: a.slot, weapon: w, weaponName: name });
       }
       for (const c of CAMOS) {
+        if (c.pp || c.mlv) continue;        // Rank camos open on every gun at once: one stamp below, not one per gun.
         if (!before.camos.has(c.id) && hasCamo(w, c)) unlocks.push({ kind: 'camo', id: c.id, name: c.name, colors: c.colors, weapon: w, weaponName: name });
       }
       weaponChanges.push({
@@ -793,7 +822,7 @@ export const Progress = {
       });
     }
     return {
-      level: { before: beforeLevel, after: levelOf(data.xp), ...this.levelProgress(), canPrestige: this.canPrestige() },
+      level: { before: beforeLevel, after: levelOf(data.xp), ...this.levelProgress(), masterBefore, canPrestige: this.canPrestige() },
       weapons: weaponChanges,
       unlocks,
       proProgress,

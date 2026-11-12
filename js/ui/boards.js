@@ -3,7 +3,7 @@
 // Views: Everyone, Friends (you and them), Around me (your rank and its neighbours). The list on the left scrolls
 // natively and opens on your row; the panel on the right shows whichever row was tapped (yours to begin with).
 // Mount like the stats screen: boardsScreen(menu, { onBack, myId }).
-import { CATEGORIES, VIEWS, AROUND, buildBoard, getCategory, weekOf, categoriesFor, SEASON_KD_MIN } from '../shared/boards.js';
+import { CATEGORIES, VIEWS, AROUND, buildBoard, getCategory, weekOf, categoriesFor, SEASON_KD_MIN, masterOfEntry } from '../shared/boards.js';
 import { seasonAt } from '../shared/seasons.js';
 import { division } from '../shared/ranked.js';
 import { rankBadge } from './season.js';
@@ -30,7 +30,7 @@ function row(r, i, open) {
   return `<button class="bd-row${kind}${open ? ' open' : ''}" data-act="bdRow" data-i="${i}">
     <span class="bd-rank t-num">${r.rank}</span>
     <span class="bd-em">${emblemHtml(e.emblem, { size: 18 }) || ''}</span>
-    <span class="bd-bdg">${badgeMark(e.prestige, 16)}<u>${e.level}</u></span>
+    <span class="bd-bdg">${badgeMark(e.prestige, 16, masterOfEntry(e))}<u>${masterOfEntry(e) || e.level}</u></span>
     <span class="bd-name">${e.clan ? `<em class="bd-clan">[${esc(e.clan)}]</em>` : ''}<b>${esc(e.name)}</b>${e.kind === 'friend' ? `<i class="bd-pal" title="Friend">${ico('ui:user', '', 12)}</i>` : ''}${e.kind === 'me' ? '<small>You</small>' : ''}${(e.sn?.sr ?? -1) >= 0 ? `<i class="bd-rk">${rankBadge(division(e.sn.sr).code, 14)}</i>` : ''}</span>
     <span class="bd-val t-num">${esc(r.text)}</span>
   </button>`;
@@ -43,7 +43,7 @@ function detail(r, cat, now) {
   const kd = e.d ? (e.kdk / e.d).toFixed(2) : e.kdm ? e.kdk.toFixed(2) : '-';
   const stat = (label, value, on) => `<span class="bdd-stat${on ? ' on' : ''}"><b class="t-num">${value}</b><small>${label}</small></span>`;
   const sr = e.sn?.sr ?? -1, rank = sr >= 0 ? `${division(sr).name}` : 'Unranked';
-  const sub = e.kind === 'friend' ? `Friend · as of ${dateText(e.asOf)}` : e.kind === 'me' ? 'You' : `${e.prestige ? `Prestige ${e.prestige} · ` : ''}Level ${e.level}`;
+  const sub = e.kind === 'friend' ? `Friend · as of ${dateText(e.asOf)}` : e.kind === 'me' ? 'You' : masterOfEntry(e) ? `Master level ${masterOfEntry(e)}` : `${e.prestige ? `Prestige ${e.prestige} · ` : ''}Level ${e.level}`;
   return `<div class="bdd">
     <div class="bdd-card">${cardHtml(e.card, { size: 196, title: e.clan ? `[${e.clan}] ${e.name}` : e.name, sub })}</div>
     <div class="bdd-who">
@@ -52,7 +52,7 @@ function detail(r, cat, now) {
       <span class="bdd-rk">${rankBadge(sr >= 0 ? division(sr).code : -1, 22)}<b>${esc(rank)}</b>${sr >= 0 ? `<small>${n(sr)} SR</small>` : ''}</span>
     </div>
     <div class="bdd-stats">
-      ${stat('Level', `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}`, cat.id === 'level')}${stat('XP', n(e.xp))}${stat('Matches', n(e.m))}${stat('Kills', n(e.k), cat.id === 'kills')}${stat('K/D', kd, cat.id === 'kd')}
+      ${stat('Level', masterOfEntry(e) ? `Master ${masterOfEntry(e)}` : `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}`, cat.id === 'level')}${stat('XP', n(e.xp))}${stat('Matches', n(e.m))}${stat('Kills', n(e.k), cat.id === 'kills')}${stat('K/D', kd, cat.id === 'kd')}
       ${stat('Wins', n(e.w + (e.brw ?? 0)), cat.id === 'wins')}${stat('BR played', n(e.brm))}${stat('BR wins', n(e.brw), cat.id === 'brwins')}${stat('BR top 5', n(e.br5), cat.id === 'brtop5')}
       ${e.seasonView ? `${stat('Season tier', n(e.sn?.t ?? 0), cat.id === 'tier')}${stat('Ranked', sr >= 0 ? n(sr) : '-', cat.id === 'ranked')}${stat('BR top 5', n(e.br5))}${stat('Matches', n(e.m))}`
         : `${stat('Extract', n(e.ex), cat.id === 'extract')}${stat('Mastery', n(e.mst), cat.id === 'mastery')}${stat('Week kills', n(wk.k), cat.id === 'wkills')}${stat('Week wins', n(wk.w), cat.id === 'wwins')}`}

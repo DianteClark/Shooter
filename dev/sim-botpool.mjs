@@ -24,7 +24,7 @@ import { ATTACHMENTS } from '../js/shared/attachments.js';
 import { V11_ATTACHMENTS } from '../js/shared/attachments-v11.js';
 import { PRIMARY_IDS, SECONDARY_IDS, GOLDEN_ID } from '../js/shared/constants.js';
 import { PERKS, PRO, TACTICALS, LETHALS, STREAKS } from '../js/shared/catalog.js';
-import { CARDS, prestigeName, MAX_LEVEL, MAX_PRESTIGE } from '../js/shared/progression.js';
+import { CARDS, prestigeName, MAX_LEVEL, MAX_PRESTIGE, PLAYER_CURVE, MASTER_START_XP, MASTER_LEVEL_XP, MASTER_MAX, masterOf, rankValue } from '../js/shared/progression.js';
 import { CAMOS, TRACERS, KILL_EFFECTS } from '../js/shared/camos.js';
 import { MAPS } from '../js/shared/map.js';
 import { MODES } from '../js/shared/modes.js';
@@ -49,7 +49,8 @@ ok(!/Math\.random/.test(src), 'no Math.random in the pool');
 ok(BOT_POOL.length >= 250 && BOT_POOL.length <= 320, 'pool size', BOT_POOL.length);
 // The first 200 (before the clans) and their careers, as they were: leaderboards already show them.
 const first = BOT_POOL.slice(0, 200), at200 = new Date(POOL_EPOCH + 200 * DAY);
-const firstHash = createHash('sha256').update(JSON.stringify(first) + JSON.stringify(first.map(p => careerAt(p, at200)))).digest('hex').slice(0, 16);
+// `master` (docs/PRESTIGE.md) is read from xp by levelFromXp, so it is left out: the careers themselves must not move.
+const firstHash = createHash('sha256').update(JSON.stringify(first) + JSON.stringify(first.map(p => { const { master, ...c } = careerAt(p, at200); return c; }))).digest('hex').slice(0, 16);
 // 31a0665d: EXTRACTION_LAUNCH set (2026-11-11), so careers from that day carry extractions (d74e12f3 before it).
 ok(firstHash === '31a0665dbfcc76eb', 'the first 200 profiles and their careers are unchanged', firstHash);
 ok(new Set(BOT_POOL.map(p => p.id)).size === BOT_POOL.length, 'ids unique');
@@ -208,6 +209,7 @@ for (const p of BOT_POOL) {
     const c = careerAt(p, POOL_EPOCH + d * DAY + 3600e3);
     for (const k of KEYS) if (c[k] < last[k]) { mono = false; where = `${p.name} ${k} day ${d}`; }
     if (c.prestige * MAX_LEVEL + c.level < last.prestige * MAX_LEVEL + last.level) { mono = false; where = `${p.name} level day ${d}`; }
+    if (rankValue(c) < rankValue(last) || c.master < last.master) { mono = false; where = `${p.name} master day ${d}`; }
     last = c;
   }
 }
@@ -229,6 +231,36 @@ ok(ms < 60, 'the whole pool two years on is cheap', `${ms.toFixed(1)} ms`);
 const nowC = BOT_POOL.map(p => careerAt(p, POOL_EPOCH + 10 * DAY));
 const prest = nowC.map(c => c.prestige);
 ok(prest.filter(v => v === 0).length > 10 && prest.filter(v => v === MAX_PRESTIGE).length < BOT_POOL.length * 0.4, 'levels spread at launch', `${prest.filter(v => v === 0).length} unprestiged, ${prest.filter(v => v === MAX_PRESTIGE).length} at the top`);
+
+// ---- Master Prestige (docs/PRESTIGE.md) ----
+console.log('master');
+{
+  const { levelFromXp } = Pool;
+  // The rule before Master levels, verbatim: prestige and level must not move for any XP.
+  const old = xp => { const per = PLAYER_CURVE.cap, prestige = Math.min(MAX_PRESTIGE, Math.floor(xp / per));
+    return { prestige, level: prestige >= MAX_PRESTIGE ? Math.min(MAX_LEVEL, PLAYER_CURVE.levelOf(xp - MAX_PRESTIGE * per)) : PLAYER_CURVE.levelOf(xp - prestige * per) }; };
+  let same = true, up = true, prev = 0;
+  for (let xp = 0; xp < MASTER_START_XP + (MASTER_MAX + 5) * MASTER_LEVEL_XP; xp += 1777) {
+    const r = levelFromXp(xp), o = old(xp);
+    if (r.prestige !== o.prestige || r.level !== o.level) same = false;
+    if (r.master < prev) up = false;
+    prev = r.master;
+  }
+  ok(same, 'levelFromXp: prestige and level exactly as before, for every XP');
+  ok(up, 'and the Master level never falls as XP grows');
+  ok(levelFromXp(MASTER_START_XP - 1).master === 0 && levelFromXp(MASTER_START_XP).master === 1 && levelFromXp(MASTER_START_XP + MASTER_LEVEL_XP).master === 2
+    && levelFromXp(1e12).master === MASTER_MAX, 'Master 1 at Prestige X level 50, one a step, capped', MASTER_START_XP);
+  ok(BOT_POOL.every(p => { const c = careerAt(p, POOL_EPOCH + 300 * DAY); return c.master === masterOf(c.prestige, c.level, c.xp); }), 'a bot\'s Master level follows the players\' rule (masterOf)');
+  // Same numbers per date: careers are a function of the date (and a fresh process agrees).
+  const date = Date.UTC(2026, 10, 12), here2 = fileURLToPath(new URL('../js/shared/botpool.js', import.meta.url));
+  const mine = JSON.stringify(BOT_POOL.map(p => careerAt(p, date).master));
+  const theirs = execFileSync(process.execPath, ['--input-type=module', '-e', `import('${here2}').then(m => process.stdout.write(JSON.stringify(m.BOT_POOL.map(p => m.careerAt(p, ${date}).master))))`], { encoding: 'utf8', maxBuffer: 1 << 24 });
+  ok(mine === theirs, 'Master levels are the same per date in a fresh process');
+  const ms2 = JSON.parse(mine), masters = ms2.filter(Boolean);
+  ok(masters.length > 10 && masters.length < BOT_POOL.length * 0.5 && Math.max(...masters) > 200, 'the pool\'s top grinders have Master levels', `${masters.length} Masters, top ${Math.max(...masters)}`);
+  const picked = Pool.pickPoolBots({ count: 30, seed: 9, target: 0.9, level: { prestige: 10, level: 50 }, date, remember: false });
+  ok(picked.every(b => b.badge.master === careerAt(b.profile, date).master) && picked.some(b => b.badge.master > 0), 'bots carry their Master level on their badge');
+}
 
 // ---- Clans ----
 console.log('clans');
