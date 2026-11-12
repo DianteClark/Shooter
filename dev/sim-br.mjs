@@ -81,8 +81,6 @@ function report(r) {
   check(ev.landed >= 30, `${r.mode}: everyone jumped and landed`);
   check(r.removed > 60 && ev.brgive > 20, `${r.mode}: loot picked up (guns ${ev.brgive})`);
   check(ev.brplate > 5 && ev.plateHits > 5, `${r.mode}: plates go on and soak hits`);
-  // (5: the calmer early game of ROADMAP 25 means fewer wounds to heal; 6-14 a match over seeds 11-13.)
-  check(ev.medkit >= 5, `${r.mode}: bots heal with medkits (${ev.medkit})`);
   // Revives are rare per match (0-9 over seeds 11-14 on Frontier), so they are checked over all squad matches together.
   if (sim.br.downs) check(ev.down > 5, `${r.mode}: downs (${ev.down}) and revives (${ev.revive})`);
   else check(ev.down === 0, `${r.mode}: no downs in solos`);
@@ -410,6 +408,8 @@ if (!QUICK) {
   check(p4 >= 3 && p5 >= 2, `pacing: several squads at the late circles (${p4.toFixed(1)} at phase 4, ${p5.toFixed(1)} at phase 5)`);
 }
 const squads = results.filter(r => r.sim.br.downs);
+// Medkits used vary a lot by match (2-14 over seeds 11-13: a quick match leaves few wounds to heal), so over all of them.
+check(results.reduce((n, r) => n + r.ev.medkit, 0) >= 6 * results.length, `bots heal with medkits (${results.map(r => r.ev.medkit).join(', ')})`);
 if (squads.length) check(squads.reduce((n, r) => n + r.ev.revive, 0) > 0, `squad matches: revives (${squads.map(r => r.ev.revive).join(', ')})`);
 console.log(failed ? `${failed} FAILED` : 'all ok');
 process.exit(failed ? 1 : 0);

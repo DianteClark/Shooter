@@ -211,4 +211,6 @@ in `BR` (js/shared/modes.js).
 
   Bot-only matches end at 11-12.5 min, when the sixth and seventh circles leave no room. Matches with humans, who
   rarely play to the end, run longer. The full `node dev/sim-br.mjs` checks a 10.5-15 min mean, at most 45% early
-  deaths, and 3 or more squads at phase 4 and 2 or more at phase 5, over 12 matches (now 12.0 min, 35%, 6.3 and 3.8).
+  deaths, and 3 or more squads at phase 4 and 2 or more at phase 5, over 12 matches (now 11.3 min, 35%, 6.1 and 3.0).
+  After the dev merge (signature attachments) quads measured 12.2 min, 46% early, and 5.6/4.8/3.8/2.1 squads; duos
+  12.1 min, 28%, 10.7/6.8/3.8/2.2; solos 12.3 min, 38%, 12.3/6.8/3.5/2.8.
