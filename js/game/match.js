@@ -14,7 +14,8 @@ import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
-import { BR, isBr, isEx } from '../shared/modes.js';
+import { BR, isBr, isEx, isZm } from '../shared/modes.js';
+import { zmEvent } from '../sim/zm-phone.js';     // Graveyard Shift: guns, ammo and perks the host hands this phone.
 import { exAmmo } from '../sim/extract.js';
 import { objOf } from '../sim/rules.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -56,6 +57,7 @@ export class Match {
     this.brAir = this.br ? 1 : 0;
     // Extraction (js/sim/extract.js): this phone crawls when down and takes the primary ammo the host hands it.
     this.ex = isEx(this.mode);
+    this.zm = isZm(this.mode);     // Graveyard Shift (js/sim/zombies.js): crawls when down, takes the guns the host hands it.
     this.glideT = 0;
     this.planeF = 0;
     this.brWeapon = null;
@@ -181,6 +183,7 @@ export class Match {
       if (e.t === 'kill' && e.target === this.localId) { this.localAlive = false; this.brStash = null; }
       if (e.t === 'scavenge' && e.id === this.localId) scavengeRefill(this.ps);
       if (e.t === 'exammo' && e.id === this.localId) exAmmo(this.ps, e.mags);
+      if (this.zm && e.id === this.localId) zmEvent(this.ps, e);
       // Modes overhaul: a side change (Infected) keeps this device's codec right before the spawn that follows it, and
       // a One in the Chamber kill hands the bullet back to the phone that owns the gun.
       if (e.t === 'team') { const p = this.sim.byId.get(e.id); if (p) p.team = e.team; }
@@ -258,6 +261,12 @@ export class Match {
       return;
     }
     if (ps.slot !== k) this.brSwapWant = true;      // The ordinary swap, on the next step.
+  }
+
+  // Graveyard Shift: the use tap (a gate, a wall-buy, the crate, a perk machine: whatever is in reach).
+  zmCommand(act, extra = {}) {
+    if (!this.zm) return;
+    this.#command({ cmd: 'zm', act, ...extra });
   }
 
   // Extraction commands from the HUD: call (the helicopter, standing in an open zone), take (a contract at a phone).
@@ -392,7 +401,7 @@ export class Match {
       if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
       if (me?.downed) downedInput(r);
       else this.#brDry(view, dt);
-    } else if (this.ex) {
+    } else if (this.ex || this.zm) {
       const me = view.players.find(p => p.id === this.localId);
       if (me?.downed) downedInput(r);
     }
@@ -567,6 +576,7 @@ export class Match {
       snd: view.snd ?? view.points?.snd ?? null,
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
+      zmView: objOf(view)?.zm ? { round: objOf(view).round, best: objOf(view).best, crew: objOf(view).crew } : null,
       early: !!this.early,
       ...awards,
     });

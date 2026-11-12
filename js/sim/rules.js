@@ -18,6 +18,8 @@
 //   playerView(p, v)        per-player mode stats onto a player view
 //   view()                  the mode's state for the view: view.obj, and view.points.obj (see objOf)
 //   encode() / decode(a, out) / restore(view)   snapshot block, the guest's reading of it, host migration
+//   seatCode(p, code)       the per-guest record code for an AI seat (0: none; Graveyard Shift sends its horde itself)
+//   medal(p, medal)         false keeps a medal from being awarded
 import { HqRules } from './hq.js';
 import { KoRules } from './ko.js';
 import { InfRules } from './inf.js';
@@ -25,8 +27,9 @@ import { OicRules } from './oic.js';
 import { CtlRules } from './ctl.js';
 import { GrindRules } from './grind.js';
 import { ExtractRules } from './extract.js';     // Extraction (docs/EXTRACT.md).
+import { ZmRules } from './zombies.js';         // Graveyard Shift (docs/ZOMBIES.md).
 
-export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules };
+export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules, zm: ZmRules };
 
 // The mode state on any view: the sim's and decoded views carry it as `view.obj`; an interpolated view (js/game/interp.js
 // copies a fixed list of fields) still has it on the point list it does copy.

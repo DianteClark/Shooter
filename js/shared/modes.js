@@ -54,6 +54,9 @@ export const MODES = {
   exd:   { id: 'exd',   rules: 'ex', teamSize: 2, squad: 2, ex: true, large: true, players: 16, name: 'Extraction Duos', short: 'EXF 2', scoreLimit: 1, timeLimit: 900, desc: 'Eight pairs. Take contracts, fight the patrols, and get out on the helicopter to keep what you earned.' },
   gwko:  { id: 'gwko',  rules: 'ko',   teamSize: 16, large: true, everyHuge: true, name: 'Ground War Kill Order', short: 'GW KO', scoreLimit: 12, timeLimit: 900, desc: '16 v 16. Each team has a marked VIP. Only killing theirs scores.' },
   // Infected on a huge map: 32 players, two start infected (`inf` overrides INF in js/sim/inf.js; tuned in dev/sim-modes-v10.mjs).
+  // Graveyard Shift (docs/ZOMBIES.md): co-op wave survival for up to four (bots fill the seats) against a horde on its
+  // own side. Played only on the maps js/shared/zombies.js lays out (`maps`); `zm` marks the family for menus and the HUD.
+  zm:    { id: 'zm',    rules: 'zm',  teamSize: 4, zm: true, maps: ['neon', 'ruins', 'foundry'], name: 'Graveyard Shift', short: 'GRAVE', scoreLimit: 999, timeLimit: 7200, desc: 'Up to four hold off the undead, round after round. Buy guns off the walls, open the gates, drink the perks. How long can you last?' },
   gwinf: { id: 'gwinf', rules: 'inf',  teamSize: 16, large: true, everyHuge: true, inf: { firsts: 2, holds: 2, spawnNear: 120, respawn: 5 }, name: 'Ground War Infected', short: 'GW INF', scoreLimit: 32, timeLimit: 300, desc: '32 players, two start infected. Killed by them, you join them. Survive the clock.' },
 };
 export const MODE_IDS = Object.keys(MODES);
@@ -156,6 +159,7 @@ export const EX_AI_TEAM = 10;
 export const CONTRACT_TYPES = ['intel', 'hvt', 'cache', 'hack', 'escort'];
 export const CONTRACT_NAMES = { intel: 'Secure Intel', hvt: 'Eliminate HVT', cache: 'Destroy Cache', hack: 'Hack Terminal', escort: 'Escort Asset' };
 export const isEx = id => MODES[id]?.rules === 'ex';
+export const isZm = id => MODES[id]?.rules === 'zm';
 export const isBr = id => MODES[id]?.rules === 'br' || id === 'br';
 export const squadSizeFor = id => MODES[id]?.squad ?? 4;
 
@@ -169,6 +173,7 @@ export const isFfa = id => !!(MODES[id]?.ffa || id === 'ffa' || id === 'gun');
 export function playersFor(id, map = null) {
   const m = MODES[id] ?? MODES.tdm;
   if (m.br || m.ex) return m.players;
+  if (m.zm) return m.teamSize;            // Graveyard Shift: the players' side only (the horde is not players).
   if (!m.ffa) return m.teamSize * 2;
   // A map without a size tier counts as medium (see SIZES in js/shared/map.js).
   const size = map?.large ? 'huge' : map?.size;
@@ -180,7 +185,7 @@ export function playersFor(id, map = null) {
 export function mapModes(map) {
   const own = map?.modes ?? MODE_IDS.filter(id => !MODES[id].large);
   // A battle royale map lists 'br'; it hosts every squad size. Huge maps host the `everyHuge` Ground War modes.
-  const extra = MODE_IDS.filter(id => ((MODES[id].everyMap && map?.size !== 'giant') || (MODES[id].everyHuge && tierOf(map) === 'huge' && !own.includes('br')) || ((MODES[id].br || MODES[id].ex) && own.includes('br'))) && !own.includes(id));
+  const extra = MODE_IDS.filter(id => (MODES[id].maps?.includes(map?.id) || (MODES[id].everyMap && map?.size !== 'giant') || (MODES[id].everyHuge && tierOf(map) === 'huge' && !own.includes('br')) || ((MODES[id].br || MODES[id].ex) && own.includes('br'))) && !own.includes(id));
   return extra.length ? [...own, ...extra] : own;
 }
 
@@ -197,6 +202,7 @@ export function modeFitsMap(map, mode) {
   if (rules === 'ctf') return map.points?.ctf?.length === 2;
   if (rules === 'br') return !!map.br?.loot?.length;
   if (rules === 'ex') return (map.br?.pois?.length ?? 0) >= 8;
+  if (rules === 'zm') return !!def.maps?.includes(map.id);
   return true;
 }
 

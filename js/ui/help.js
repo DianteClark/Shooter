@@ -7,8 +7,9 @@ import { ATTACHMENTS } from '../shared/attachments.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
+import { changelogHtml } from './whatsnew.js';
 
-const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info']];
+const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info'], ['updates', 'Updates', 'star']];
 
 // One piece of equipment: its job, what it does, and what beats it (catalog.js job / desc / counter).
 const gear = kind => t => `<div class="help-stat"><dt>${esc(t.name)} <small>${kind}: ${esc(t.job ?? '')}</small></dt><dd>${esc(t.desc)}. <b>Counter:</b> ${esc(t.counter ?? '')}.</dd></div>`;
@@ -20,6 +21,7 @@ const card = (icon, title, body, wide = false) => `<div class="help-card${wide ?
 const stat = (name, body) => `<div class="help-stat"><dt>${esc(name)}</dt><dd>${body}</dd></div>`;
 
 const PANELS = {
+  updates: () => `<div class="cl-list">${changelogHtml()}</div>`,
   weapons: () => `
     <dl class="help-stats scroll-y">
       ${stat('Damage', 'Damage of one shot at close range. Shotguns show all pellets together: inside the first range number a pump or double-barrel kills in one shell if most of the fan lands, so put the middle of it on the body. Everyone has 100 health, which comes back on its own a few seconds after you stop taking hits.')}

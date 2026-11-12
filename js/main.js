@@ -6,7 +6,8 @@ import { music } from './audio/music.js';
 import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
-import { MODES, firstModeFor, isBr, isEx, isFfa, playersFor } from './shared/modes.js';
+import { MODES, firstModeFor, isBr, isEx, isFfa, isZm, playersFor } from './shared/modes.js';
+import { ZM_SQUAD } from './shared/zombies.js';     // Graveyard Shift seats four (docs/ZOMBIES.md).
 const BR_HUMANS = 8;           // Battle royale: up to eight people in a room, bots fill the rest of the 32 (docs/BR.md).
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE } from './shared/constants.js';
@@ -52,6 +53,7 @@ import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySiz
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Updater, BUILD } from './ui/updater.js';
+import { maybeShowWhatsNew } from './ui/whatsnew.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -610,6 +612,7 @@ const ffaRoom = () => isFfa(roomMode());
 // Humans the room can seat: both teams in full, or a free-for-all's whole field on its map.
 function roomCap() {
   if (isBr(roomMode()) || isEx(roomMode())) return BR_HUMANS;     // Extraction: eight people at most, in squads.
+  if (isZm(roomMode()) || isZm(app.lobby?.custom?.mode)) return ZM_SQUAD;     // Graveyard Shift: four players, all on one side.
   if (!ffaRoom()) return TEAM_SIZE * 2;
   const mapId = app.matchInfo?.mapId ?? app.lastPlayed?.mapId;
   return playersFor(roomMode(), MAPS[mapId] ?? null);
@@ -973,7 +976,7 @@ function updateVoiceTeam() {
   const me = localHuman();
   if (!app.voice || !me) return;
   // A free-for-all has no squad: voice goes to every human in the room.
-  const ffa = ffaRoom();
+  const ffa = ffaRoom() || isZm(roomMode());     // Graveyard Shift: every human is on the one side.
   app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id && (ffa || h.team === me.team)).map(h => h.id));
 }
 
@@ -1020,6 +1023,7 @@ function editLobbyCustom() {
 function setLobbyCustom(custom) {
   app.customFrom = null;
   if (!app.isHost || !app.net) return renderLobby();
+  if (isZm(custom?.mode) && app.lobby.humans.length > ZM_SQUAD) { menu.toast(`Graveyard Shift seats ${ZM_SQUAD} players`, 'warn'); return renderLobby(); }
   app.lobby.custom = custom;
   app.lobby.botSkill = custom?.skill ?? MP_BOT_SKILL;
   app.lobby.mods = custom ? custom.mods : withHardcore([], Options.get('hardcore'));
@@ -1086,6 +1090,14 @@ function stopSearch() {
 function findMatch(tab, sel) {
   const r = resolveSelection(tab, sel, { hardcore: !!Options.get('hardcore') });
   if (!r.modes.length) return;
+  // Graveyard Shift with friends: a friend room set to the mode on any of its maps (friends take the bots' seats).
+  if (r.friends) {
+    resetToSolo();
+    app.mp.tab = tab;
+    app.mp.sels[tab] = { playlist: sel.playlist ?? null, modes: [] };
+    needName(() => startHosting({ custom: { mapId: RANDOM, mode: r.modes[0], mods: [], skill: MP_BOT_SKILL, bots: null, players: null, scoreLimit: null, timeLimit: null } }));
+    return;
+  }
   resetToSolo();
   app.mp.tab = tab;
   app.mp.sels[tab] = { playlist: sel.playlist ?? null, modes: [...(sel.modes ?? [])] };
@@ -1500,6 +1512,8 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.onRespawn(msg => app.match?.requestRespawn(msg));
   hud.onBrCommand((act, extra) => app.match?.brCommand(act, extra));
   hud.onExCommand((act, extra) => app.match?.exCommand(act, extra));
+  hud.onZmCommand((act, extra) => app.match?.zmCommand(act, extra));
+  hud.zmHud.guns = () => (app.match ? [app.match.ps.primary, app.match.ps.secondary] : []);
   // A respawn before the player opens the picker should still use the equipped weapon (training keeps its own kit).
   app.match.setNextLoadout(tutorial ? roster.find(r => r.id === id).loadout : Progress.loadout());
   if (tutorial) {
@@ -1626,6 +1640,7 @@ function showResults(results) {
       snd: results.snd,
       br: results.br,
       ex: results.ex ?? null, exView: results.exView ?? null,
+      zm: results.zm ?? null, zmView: results.zmView ?? null,
       early: !!results.early,
       mastery: results.mastery,
       season: results.season ?? null,
@@ -1715,6 +1730,6 @@ showTitle({ arrive: true });
 const offeredTutorial = !invite && maybeOfferTutorial();
 if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
-else if (!offeredTutorial) maybeInstallPrompt();
+else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 
 

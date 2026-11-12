@@ -22,6 +22,7 @@ import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module
 import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
 import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
+import { clearZmWalls, ZM, ZM_SQUAD, ZM_TEAM } from '../shared/zombies.js';   // Graveyard Shift (docs/ZOMBIES.md).
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -226,6 +227,7 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId
   if (pool) return buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool: pool === true ? {} : pool });
   if (MODES[mode]?.rules === 'br') return buildBrRoster(humans, { botSkill, mode });
   if (MODES[mode]?.rules === 'ex') return buildExRoster(humans, { botSkill, mode });
+  if (MODES[mode]?.rules === 'zm') return buildZmRoster(humans, { botSkill, mode });
   if (MODES[mode]?.ffa) return buildFfaRoster(humans, { botSkill, mapId, mode, seed, players: teamSize });
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(h => {
@@ -312,6 +314,23 @@ function buildExRoster(humans, { botSkill, mode }) {
 }
 
 // One bot loadout, dealt the same way for teams and free-for-all. `i` staggers equipment, perks and streaks.
+// Graveyard Shift (docs/ZOMBIES.md): every human on team 0 (four at most), bot teammates in the empty seats, then the
+// horde's seats on team ZM_TEAM. The rules hand out what everyone carries (js/sim/zombies.js kit).
+function buildZmRoster(humans, { botSkill, mode }) {
+  const roster = [];
+  humans.slice(0, ZM_SQUAD).forEach(h => roster.push({ ...h, team: 0, isBot: false }));
+  const skill = botSkill === 'mixed' ? 'veteran' : botSkill;
+  for (let k = roster.length; k < ZM_SQUAD; k++) {
+    const name = BOT_NAMES[(k * 7 + 3) % BOT_NAMES.length];
+    roster.push({ id: `bot${k}`, name, team: 0, isBot: true, skill, primary: 'pistol', camo: 'none', loadout: { ...botLoadout('ar', 0, skill, k), primary: 'pistol' } });
+  }
+  for (let k = 0; k < ZM.seats; k++) {
+    roster.push({ id: `zm-${k}`, name: 'Undead', team: ZM_TEAM, isBot: true, ai: true, skill: 'recruit', primary: 'knife', camo: 'none',
+      loadout: { primary: 'knife', secondary: 'knife', camo: 'none', perks: [], streaks: [], operator: 'trooper' } });
+  }
+  return roster;
+}
+
 function botLoadout(primary, side, skill, i, deal = 0) {
   const loadout = normalizeLoadout({
     primary, secondary: botSecondary(side), camo: 'none', attachments: { [primary]: botAttachments(primary, skill, i) },
@@ -412,8 +431,9 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
   };
   // Battle royale and free-for-all keep their own seating; only who sits in the bot seats changes.
-  if (m?.rules === 'br' || m?.rules === 'ex' || m?.ffa) {
+  if (m?.rules === 'br' || m?.rules === 'ex' || m?.rules === 'zm' || m?.ffa) {
     const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : m.rules === 'ex' ? buildExRoster(humans, { botSkill: 'regular', mode })
+      : m.rules === 'zm' ? buildZmRoster(humans, { botSkill: 'regular', mode })
       : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
     const seats = base.filter(r => r.isBot && !r.ai);      // Extraction's AI patrol seats are not players.
     const drawn = draw(seats.length);
@@ -480,6 +500,7 @@ export class Sim {
   // on the range's readout for every bot, and the trainSwap command; see TRAINING below.
   constructor({ roster, map, seed = 1, scoreLimit, timeLimit, mode = 'tdm', mods = [], training = null }) {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
+    clearZmWalls(this.map);      // Graveyard Shift's fences and gates, if an earlier match left them on this shared map.
     this.rng = mulberry32(seed >>> 0);
     const def = mode === 'range' ? RANGE_MODE : (MODES[mode] || MODES.tdm);
     // `mode` is the rule set everything keys on ('dom' for Ground War Domination too); modeId is the mode as picked.
@@ -923,8 +944,9 @@ export class Sim {
     if (p.markT > 0) p.markT -= STEP;
     if (p.jamT > 0) p.jamT -= STEP;        // Blackout.
     if (p.regenT > 0) p.regenT -= STEP;
-    // Battle royale heals with medkits only (docs/BR.md); extraction and every other mode regenerate.
-    else if (p.hp < MAX_HP && !p.downed && !this.br) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
+    // Battle royale heals with medkits only (docs/BR.md); extraction and every other mode regenerate (unless the player
+    // is marked noRegen).
+    else if (p.hp < MAX_HP && !p.downed && !p.noRegen && !this.br) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
     if (hasPro(p.ps, 'bandolier')) this._restock(p);
   }
 
@@ -1270,7 +1292,7 @@ export class Sim {
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
     if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
     if (msg.cmd === 'br') return !!this.br && this.br.command(this.byId.get(id), msg);
-    if (msg.cmd === 'ex') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
+    if (msg.cmd === 'ex' || msg.cmd === 'zm') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     if (msg.cmd === 'trainSwap') return this._trainSwap(id);
     return false;
@@ -1627,7 +1649,7 @@ export class Sim {
     this.br?.onDeath(target);
   }
 
-  _medal(p, medal) { this._emit({ t: 'medal', id: p.id, medal }); }
+  _medal(p, medal) { if (this.rules?.medal && !this.rules.medal(p, medal)) return; this._emit({ t: 'medal', id: p.id, medal }); }
 
   // Pack Rat (Scavenger Pro): one lethal back, or a tactical if lethals are full. False when both are full.
   _packRat(ps) {
@@ -3185,7 +3207,8 @@ export class Sim {
     for (let i = 0; i < n; i++) {
       const p = this.players[i], o = SNAP_HEAD + i * PLAYER_STRIDE;
       let code = codes[i];
-      if (p.ai && code && code !== 2) {
+      if (p.ai && this.rules?.seatCode) code = this.rules.seatCode(p, code);     // Graveyard Shift: the horde rides its own block.
+      else if (p.ai && code && code !== 2) {
         // Extraction's AI patrols: the full record only up close; keyframes (position, aim, hp, flags) every snapshot in
         // mid range and every third one far off. Their guns and ammo matter to nobody's screen.
         const dx = Math.abs(p.ps.x - gx), dz = Math.abs(p.ps.z - gz);

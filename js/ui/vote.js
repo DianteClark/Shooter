@@ -41,7 +41,8 @@ function allPairs() {
 // maps weigh nothing, so they only come up when the mode asked for is a Ground War mode that nothing else hosts. Then a
 // mode that map can host. A fixed half is kept as it is.
 export function resolvePick({ mapId, mode }, random = Math.random) {
-  const fits = allPairs().filter(p => (mapId === RANDOM || p.mapId === mapId) && (mode === RANDOM || p.mode === mode));
+  // A Random mode never rolls Graveyard Shift (co-op, four seats): it is only ever picked by name.
+  const fits = allPairs().filter(p => (mapId === RANDOM || p.mapId === mapId) && (mode === RANDOM ? !MODES[p.mode]?.zm : p.mode === mode));
   if (!fits.length) {
     const map = MAPS[mapId] ? mapId : DEFAULT_MAP;
     return { mapId: map, mode: firstModeFor(MAPS[map]) };
@@ -277,7 +278,7 @@ const VOTE_WEIGHT = t => (t === 'huge' ? 0.06 : SIZES[t].weight);
 // first card, marked as the rematch, so a room can play the same yard again; the other two are fresh. Huge maps come
 // in only through the Ground War modes they host, as before.
 export function voteOptions(random = Math.random, again = null) {
-  const pairs = allPairs().filter(p => !again || p.mapId !== again.mapId || p.mode !== again.mode);
+  const pairs = allPairs().filter(p => !MODES[p.mode]?.zm && (!again || p.mapId !== again.mapId || p.mode !== again.mode));
   for (let i = pairs.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [pairs[i], pairs[j]] = [pairs[j], pairs[i]];

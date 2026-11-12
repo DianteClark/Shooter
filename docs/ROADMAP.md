@@ -102,8 +102,8 @@ on every push, keep 2% of weekly usage for bugs.
     (no regen; extraction keeps regen); calmer early bots (loot and rotate first) and somewhat shorter rings so matches
     reach the late circles; one Hardcore switch on the playlist screen applying hardcore rules to every mode; Control
     spectates the remaining players once your side is out of lives.
-26. Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
-    a boss every 10 rounds, on existing maps.
+26. DONE (zombies). Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
+    a boss every 10 rounds, on existing maps. Graveyard Shift on Night Market, Ruins and Foundry; docs/ZOMBIES.md.
 27. Resurgence BR: small map, fast circle, redeploy while any squadmate lives.
 28. Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
 29. Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
@@ -111,3 +111,9 @@ on every push, keep 2% of weekly usage for bugs.
 31. Gunfight 2v2: short rounds, the same random loadout for everyone, small maps.
 32. Finishing moves and an emote wheel.
 33. Daily challenges feeding season XP (alongside the weekly sets).
+34. Every phone: Android (Chrome/Samsung Internet) and all iPhone sizes and ages, with quality tiers picked per device,
+    touch and safe areas checked on both; an install guide in the game (Add to Home Screen on iOS Safari, Install app
+    on Android Chrome) with a plain explanation of where progress lives (on the phone, in the browser's storage for
+    this site; the save code is the backup; nothing is sent to a server; clearing site data or deleting the app
+    without a code loses it).
+35. Signature attachments read as clear upgrades: DONE (1111-18), strengths x1.5, costs halved.

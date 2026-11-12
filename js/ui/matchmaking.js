@@ -23,6 +23,7 @@ export const MP_TABS = [
   { id: 'groundwar', name: 'Ground War', note: '16 v 16', icon: 'party' },
   { id: 'br', name: 'Battle Royale', note: '32 players', icon: 'mode:br' },
   { id: 'extraction', name: 'Extraction', note: '16 players', icon: 'mode:ex' },
+  { id: 'zombies', name: 'Zombies', note: 'Co-op, 1-4', icon: 'mode:zm' },
 ];
 export const MP_TAB_IDS = MP_TABS.filter(t => !t.soon).map(t => t.id);
 
@@ -49,6 +50,11 @@ const PLAYLISTS = {
   extraction: [
     { id: 'exquads', name: 'Quads', icon: 'mode:ex', modes: ['exq'], sub: '4 squads of four, AI patrols' },
     { id: 'exduos', name: 'Duos', icon: 'mode:ex', modes: ['exd'], sub: '8 pairs, AI patrols' },
+  ],
+  // Graveyard Shift (docs/ZOMBIES.md): solo with three bot teammates, or a friend room (friends take the bots' seats).
+  zombies: [
+    { id: 'zmsolo', name: 'Solo with bots', icon: 'mode:zm', modes: ['zm'], sub: 'You and three bot teammates' },
+    { id: 'zmfriends', name: 'With friends', icon: 'host', modes: ['zm'], sub: 'Host a room: up to four, bots fill the rest', friends: true },
   ],
 };
 
@@ -82,7 +88,7 @@ export const HARDCORE_TABS = ['standard', 'groundwar'];
 export function resolveSelection(tab, sel, { hardcore = false } = {}) {
   const p = sel?.playlist && playlistsFor(tab).find(x => x.id === sel.playlist);
   let r;
-  if (p) r = { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked };
+  if (p) r = { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked, friends: !!p.friends };
   else {
     const modes = modesFor(tab).filter(id => sel?.modes?.includes(id));
     if (!modes.length) return { modes: [], mods: [], name: '' };
@@ -103,6 +109,7 @@ function tabMaps(tab, ranked = false) {
   if (ranked) return MAP_IDS.filter(id => tierOf(id) === RANKED_RULES.size && !MAPS[id].devMap && open(id));
   if (tab === 'groundwar') return MAP_IDS.filter(id => tierOf(id) === 'huge' && open(id));
   if (tab === 'br' || tab === 'extraction') return BR_PICK.filter(id => !MAPS[id].devMap && open(id));
+  if (tab === 'zombies') return (MODES.zm.maps ?? []).filter(id => MAPS[id] && open(id));
   return MAP_IDS.filter(id => tierOf(id) !== 'huge' && open(id));
 }
 const tabWeight = tab => (tab === 'standard' ? t => SIZES[t]?.weight ?? 0 : () => 1);
@@ -129,6 +136,7 @@ export function mpVoteOptions(tab, modes, random = Math.random, { ranked = false
 export function lobbySize(tab, modes) {
   if (tab === 'br' || tab === 'extraction') return MODES[modes[0]]?.players ?? 32;
   if (tab === 'groundwar') return 32;
+  if (tab === 'zombies') return MODES.zm.teamSize;
   return modes.some(m => !MODES[m]?.ffa) ? 12 : 8;
 }
 
