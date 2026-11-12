@@ -29,3 +29,12 @@ Keep the established identity and push it to premium: a freight yard at dusk. St
 **Sound** (`js/audio/audio.js`). `audio.uiSound(kind)` with kind `tap back confirm deny tab tick unlock levelUp rankUp`, or the shorthands `uiClick/uiTap/uiBack/uiConfirm/uiDeny/uiTab/uiTick(t 0..1)/uiUnlock/uiLevelUp/uiRankUp`; `setUiVolume(0..1.5)`. Own bus below the gameplay mix, own 3-voice cap, rate-limited; safe before unlock. Wire every tap once in `main.js`: `setTapSound(kind => audio.uiSound(kind))` from `js/ui/tap.js`. Per element: `data-sound="back|confirm|deny|tab|tick|none"`; default is `back` for data-act/data-tap containing back/close/cancel/leave, `deny` for disabled controls, else `tap`. Outcomes (unlock, level up) are played by the screen, timed to its animation.
 
 **Gallery**: `dev/ui-gallery.html` (see the page header for query options).
+
+## In-match HUD layout (`css/hud.css`, `js/ui/hud.js` `layout()`)
+The thumbs own both lower corners and the button cluster; every mode places its panels in four groups around them:
+- **Top**: the score bar and the objective strip (`hud.strip.mount(node, { row, order })`, rows 0-2: state, detail such as extraction's contract or the boss bar, live progress). Modes mount into the strip instead of placing their own plates.
+- **Side**: minimap, the squad or crew list beside it (fixed-height rows: name, health bar, thin plates bar; down is red with a down mark, out is greyed), and the kill feed under both (two or three rows, as many as fit above the move stick). On the aim side, the corner chips and the weapon panel under them, never over the aim stick.
+- **Dock**: health beside the streak tiles (or the battle royale's plate and medkit) on the bottom edge between the sticks.
+- **Lane**: one prompt at a time over the dock (take a gun, exfil, the bomb, a flag, Graveyard Shift's use button).
+
+Out and spectating, the weapon panel and health hide and the out plate takes the strip's second row. The FPS overlay is one line in the move stick's bottom corner. Feed rows size to content: names ellipsize first, the words after them stay. The pass runs on a new match, rotation, HUD size and hand changes, never per frame. `dev/ui-hud-layout-test.py` checks every mode at five iPhone sizes, both hands and three HUD sizes for stick, button and panel overlap.
