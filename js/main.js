@@ -2,6 +2,7 @@
 import { Match } from './game/match.js';
 import { GameRenderer } from './render/renderer.js';
 import { AudioEngine } from './audio/audio.js';
+import { music } from './audio/music.js';
 import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
@@ -97,6 +98,7 @@ const backdrop = new MenuBackdrop(canvas);
 const STILL_SCREENS = new Set(['loadouts', 'gunsmith', 'operators', 'results']);
 menu.onScreen = screen => {
   uiRoot.dataset.menu = screen;
+  music.screen(screen, app.inMatch);
   if (app.inMatch) return;
   if (screen === 'results') return;            // The match renderer has only just let go; the next screen builds it.
   if (STILL_SCREENS.has(screen)) backdrop.still();
@@ -1549,6 +1551,7 @@ function showResults(results) {
   const killer = lastKill && results.players.find(p => p.id === lastKill.by);
   const victim = lastKill && results.players.find(p => p.id === lastKill.target);
   const counting = app.countdown !== null && !!app.net && !app.isHost;
+  music.results(drawn ? 'draw' : won ? 'win' : 'loss');
   try {
     menu.results({
       outcome: drawn ? 'draw' : won ? 'win' : 'loss',
@@ -1612,6 +1615,7 @@ function applyOptions(v, changed) {
   controls.aimAssist = v.aimAssist;
   if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
+  if (!changed || changed === 'matchMusic') music.setMatchMusic(v.matchMusic);
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
   backdrop.quality = v.quality;

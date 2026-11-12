@@ -29,6 +29,7 @@ import { raycastMap } from '../shared/geometry.js';
 import { fillGaps, classOf, weightOf, idHash, impactBus } from '../render/feel.js';
 import { EquipmentSfx } from './equipment-sfx.js';   // Gear wave equipment sounds (2026-11).
 import { StreaksSfx } from './streaks-sfx.js';
+import { music } from './music.js';                 // Synthesised music (roadmap 24).
 import { BrSfx } from './br-sfx.js';               // Battle royale sounds (docs/BR.md).       // Scorestreaks overhaul sounds (2026-11).
 
 const MAX_VOICES = 26;
@@ -1482,6 +1483,7 @@ export class AudioEngine {
     // Music sits with the feedback: it is not world sound and must not be ducked by a firefight.
     this.music = ctx.createGain(); this.music.gain.value = 0.7;
     this.music.connect(this.master);
+    music.attach(this);               // Menu and match music (js/audio/music.js) feed this bus.
     // Weather goes through the compressor, so a firefight naturally pushes it down.
     this.amb = ctx.createGain(); this.amb.gain.value = 0;
     this.amb.connect(this.comp);
@@ -1614,6 +1616,7 @@ export class AudioEngine {
   // (a slider passes its value so the ticks climb). Safe to call before audio is unlocked: it does nothing.
   uiSound(kind = 'tap', { pitch = 1, gain = 1 } = {}) {
     if (kind === 'click') kind = 'tap';   // The menu's name for an ordinary tap.
+    music.uiSting(kind);                   // levelUp, rankUp, unlock, prestige: a musical sting alongside.
     const ctx = this.ctx, buf = this.uiBufs?.[kind];
     if (!ctx || !buf || ctx.state !== 'running') return;
     const now = ctx.currentTime;
@@ -1662,6 +1665,7 @@ export class AudioEngine {
     // Mic mode: the master boost is meant for gunfire and callouts, so music and weather give some of it back.
     this.music.gain.setTargetAtTime((this.micActive ? 0.34 : 0.7) * (this.musicVolume ?? 1), now, 0.08);
     this.thunderBus.gain.setTargetAtTime(this.micActive ? 0.25 : 0.55, now, 0.08);
+    music.voice(this.micActive);
   }
 
   setVolume(v) {
@@ -2330,7 +2334,7 @@ export class AudioEngine {
         this.tensionGain = g;
       }
     }
-    if (this.tensionGain) this._holdGain(this.tensionGain.gain, closing ? (this.micActive ? 0.1 : 0.2) * (1 - 0.5 * this.fight) : 0);
+    if (this.tensionGain) this._holdGain(this.tensionGain.gain, closing && !music.ownsTension ? (this.micActive ? 0.1 : 0.2) * (1 - 0.5 * this.fight) : 0);
   }
 
   _stopTension() {
@@ -2543,6 +2547,7 @@ export class AudioEngine {
     this._updateTension(view);
     this._updateSnd(view, dt);
     this._updateWeather(view, dt);
+    music.frame(view);
   }
 
   _step(p) {
@@ -2571,6 +2576,7 @@ export class AudioEngine {
       this._stopLoops();
       if (this.farSrc) { try { this.farSrc.stop(); } catch { /* already stopped */ } }
     }
+    music.detach();
     if (this.ctx && !this.offline) this.ctx.close().catch(() => {});
     this.ctx = null;
     this.ready = false;

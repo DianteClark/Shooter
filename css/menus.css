@@ -872,6 +872,10 @@
 #ui .opt-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 #ui .opt-name b { font: 400 var(--fs-lead)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); }
 #ui .opt-name small { font: 400 var(--fs-caption)/1.2 var(--f-body); color: var(--c-haze); white-space: normal; }
+/* Music: the "in matches" switch rides on the slider's name line (js/audio/music.js). */
+#ui .opt-name-mm { flex-direction: row; align-items: center; justify-content: space-between; }
+#ui .opt-matchmusic { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); }
+#ui .opt-matchmusic small { color: var(--c-haze); font: inherit; }
 #ui .opt-stepper { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px 46px; align-items: center; gap: var(--sp-2); }
 #ui .opt-step {
   width: 38px; height: 36px; display: grid; place-items: center; color: var(--c-chalk); background: var(--face-steel); box-shadow: var(--bevel), var(--edge);

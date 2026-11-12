@@ -91,4 +91,5 @@ on every push, keep 2% of weekly usage for bugs.
     mode/event, ranked reset, seasonal boards. Ship two seasons ahead per update, content date-locked; if updates stop,
     "Season Replay" rotates past seasons. Season 1 with the framework.
 23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
-24. Music: synthesised menu and match music.
+24. DONE (1111). Music: synthesised menu and match music. js/audio/music-synth.js (instruments, arrangements, offline render),
+    js/audio/music.js (director: scenes, layers, stings; music.cue(...)). Options: Music slider, "In matches" switch.

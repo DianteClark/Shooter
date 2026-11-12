@@ -9,6 +9,7 @@ import { esc, badgeMark, ROMAN, levelRequirement } from './widgets.js';
 import { ico, header } from './yard.js';
 import { rollNumber } from './motion.js';
 import { masteryScreen, masteryTotals } from './mastery.js';
+import { playUi } from '../audio/audio.js';
 
 const KIND_LABEL = { camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator', pro: 'Pro perk', card: 'Calling card' };
 export const kindLabel = kind => KIND_LABEL[kind] ?? kind;
@@ -35,6 +36,7 @@ export function confirmPrestige(menu, { title, loses, keeps, confirmLabel, onYes
 
 // One full-screen moment: rays turning behind the emblem, stamped in. Tap anywhere dismisses.
 function ceremony(menu, { emblem, kicker, title, sub, rewards = [], onMount, onDone }) {
+  playUi('prestige');
   menu.overlay(`
     <div class="cer" data-act="cerDone">
       <div class="cer-rays"></div>

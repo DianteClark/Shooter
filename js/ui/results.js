@@ -15,6 +15,7 @@ import { challengeStamp, challengeStrip } from './challenges.js';
 import { modeColumn } from './mode-hud.js';
 import { playlistName } from '../shared/playlist.js';
 import { masteryStamp, masteryStrip } from './mastery.js';
+import { playUi } from '../audio/audio.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
@@ -451,6 +452,7 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, them
   if (reel.dead) return;
   if (lp.after > lp.before) {
     q('.xp-card').classList.add('levelled');
+    playUi('levelUp');
     await reel.stamp(`
       <div class="rx-card rx-level">
         <div class="rx-emblem">${badgeMark(lp.prestige ?? 0, 92)}</div>
@@ -473,6 +475,7 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, them
 
   // Unlocks, one card each, then done.
   for (const u of unlocks) {
+    playUi('unlock');
     await reel.stamp(unlockCard(u), UNLOCK_MS);
     if (reel.dead) return;
   }
