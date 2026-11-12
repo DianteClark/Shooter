@@ -157,9 +157,10 @@ export class ZmFx {
     this.lid = lb.mesh();
     this.lid.position.set(0, 0.8, -0.42);
     this.crate.add(this.lid);
-    this.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 14, 10, 1, true),
+    // The beam rises out of the crate (narrow at its mouth, so the crate itself is not washed out under it).
+    this.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.32, 13, 10, 1, true),
       new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-    this.beam.position.y = 7;
+    this.beam.position.y = 0.95 + 6.5;
     this.crateRoot.add(this.beam);
     // Its outline through walls, like the wall-buys.
     this.crateXray = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.84, 0.86).translate(0, 0.42, 0), xrayMaterial(CRATE_GLOW, 0.5));
