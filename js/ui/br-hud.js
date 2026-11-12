@@ -132,7 +132,7 @@ const CSS = `
 .br-slot.on small { color: var(--c-chalk); }
 .br-slot.empty { opacity: .45; }
 .br-slot:active { filter: brightness(1.4); }
-.br-slot.fist { width: 36px; }
+.br-slot.fist { width: 44px; }
 .br-pouch { display: flex; flex-direction: column; gap: 1px; margin-left: 3px; font: 9px/1.05 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); text-shadow: var(--text-lift); white-space: nowrap; }
 .br-pouch b { color: var(--c-chalk); font-weight: 400; }
 .br-hands-col { display: flex; flex-direction: column; justify-content: space-between; gap: 3px; }
@@ -205,7 +205,9 @@ export class BrHud {
     this.handsEl = document.createElement('div');
     this.handsEl.className = 'br-hands';
     this.handsEl.hidden = true;
-    this.handsEl.innerHTML = `<div class="br-hands-col"><div class="br-pouch"></div><div style="display:flex;gap:3px">${[0, 1, 2].map(k => `<button class="br-slot${k === 2 ? ' fist' : ''}" data-tap="1" data-k="${k}"><span class="gi"></span><small></small></button>`).join('')}</div></div>`;
+    // No gun slots (owner notes: the swap button does that): fists, which come out by themselves once both guns are dry,
+    // and the pouch. A tap on Fists puts them up or brings the gun back.
+    this.handsEl.innerHTML = `<div class="br-hands-col"><div class="br-pouch"></div><div style="display:flex;gap:3px"><button class="br-slot fist" data-tap="1" data-k="2"><span class="gi">${icon('ui:glove', { size: 15 })}</span><small>Fists</small></button></div></div>`;
     hud.el.querySelector('.arms')?.appendChild(this.handsEl);
     for (const b of this.handsEl.querySelectorAll('.br-slot')) b.addEventListener('click', e => { e.stopPropagation(); this.cmd?.('slot', { k: Number(b.dataset.k) }); });
     const $ = s => el.querySelector(s);
@@ -383,30 +385,18 @@ export class BrHud {
     this.#out(view, me);
   }
 
-  // Three slots: each hand's gun (rarity on top, rounds in it / spare) and fists. The one in use is lit.
+  // Fists (lit while they are out) and the pouch: rounds for guns not in hand.
   #hands(view, me, inv, air) {
-    const ps = view.brPs, st = view.brStash;
+    const ps = view.brPs;
     const show = !!ps && me.alive && !me.downed && !air;
     if (this.c.handsOn !== show) { this.c.handsOn = show; this.handsEl.hidden = !show; this.hud.layout(); }
     if (!show) return;
-    const gun = s => (st?.slot === s ? { def: st.def, ammo: st.ammo, res: st.res } : ps.defs[s]?.id !== 'knife' ? { def: ps.defs[s], ammo: ps.ammo[s], res: ps.reserve[s] } : null);
-    const g0 = gun(0), g1 = gun(1);
     const fists = ps.weapon === 'knife';
     const pouch = inv?.pouch ?? null;
-    const key = `${g0?.def.id}|${g0?.def.rarity}|${g0?.ammo}|${g0?.res}|${g1?.def.id}|${g1?.def.rarity}|${g1?.ammo}|${g1?.res}|${ps.slot}|${fists}|${pouch}`;
+    const key = `${fists}|${pouch}`;
     if (this.c.hands === key) return;
     this.c.hands = key;
-    const btns = this.handsEl.querySelectorAll('.br-slot');
-    [g0, g1].forEach((g, s) => {
-      const b = btns[s];
-      b.classList.toggle('on', !fists && ps.slot === s && !!g);
-      b.classList.toggle('empty', !g);
-      b.style.setProperty('--rar', g ? BR.rarityCss[g.def.rarity ?? 0] : 'rgba(231,234,228,.18)');
-      b.querySelector('.gi').innerHTML = g ? icon(g.def.id, { size: 14 }) : '';
-      b.querySelector('small').textContent = !g ? 'Empty' : g.res > 900 || g.def.unlimitedReserve ? `${g.ammo}` : `${g.ammo}/${g.res}`;
-    });
-    btns[2].classList.toggle('on', fists);
-    if (!btns[2].dataset.done) { btns[2].dataset.done = '1'; btns[2].querySelector('.gi').innerHTML = icon('knife', { size: 14 }); btns[2].querySelector('small').textContent = 'Fists'; }
+    this.handsEl.querySelector('.br-slot').classList.toggle('on', fists);
     const P = ['Light', 'Rifle', 'Shell', 'Heavy', 'Rocket'];
     this.handsEl.querySelector('.br-pouch').innerHTML = pouch ? pouch.map((n, t) => (n > 0 ? `<span>${P[t]} <b>${n}</b></span>` : '')).join('') : '';
     void AMMO_TYPES;

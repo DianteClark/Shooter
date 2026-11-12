@@ -35,7 +35,7 @@ import { LETHALS, TACTICALS } from '../shared/catalog.js';
 import { applyAttachments, availableFor, kitKey, NO_ATTACHMENTS, packKit, unpackKit, normalizeKit } from '../shared/attachments.js';
 import { resolveCircle } from '../shared/geometry.js';
 import { botAttachments } from './bots.js';
-import { stepPlayer } from './player.js';
+import { setSlot, stepPlayer } from './player.js';
 
 const r1 = v => Math.round(v * 10);
 const KNIFE = 'knife';
@@ -179,6 +179,32 @@ export function brAmmo(ps, slot, n) {
   const got = Math.max(0, Math.min(n, brAmmoCap(def) - ps.reserve[slot]));
   ps.reserve[slot] += got;
   return got;
+}
+
+// Fists by themselves (owner notes): with both guns out of rounds the fists come out; once rounds turn up for a gun
+// you carry (you walk over ammo for it), that gun comes back. A gun's rounds are its magazine and reserve, and for the gun
+// put away for fists also the pouch's rounds of its type, which top it up as it comes back. `ps` the hands, `stash` the
+// gun put away ({slot, def, ammo, res}) or null, `pouch` rounds by type, `auto` whether the fists are out because
+// everything ran dry (fists a player chose stay out). Returns HANDS.keep, HANDS.fists (put them up), HANDS.dry (fists out
+// with nothing to come back to: the caller marks them as automatic) or the slot (0, 1) of the gun to bring back.
+export const HANDS = { keep: -1, fists: 2, dry: 3 };
+export function brUsable(def, ammo, res, pouch = null) {
+  if (!def || def.id === KNIFE || def.melee) return false;
+  if (ammo > 0 || res > 0 || def.unlimitedReserve) return true;
+  const t = AMMO_TYPES.indexOf(ammoOf(def.id));
+  return t >= 0 && (pouch?.[t] ?? 0) > 0;
+}
+export function brHandWant(ps, stash, pouch, auto) {
+  if (ps.weapon !== KNIFE) {
+    const s = ps.slot, o = 1 - s;
+    // A gun in hand runs on what it holds (the usual fall-through swaps to a loaded other gun).
+    if (brUsable(ps.defs[s], ps.ammo[s], ps.reserve[s]) || brUsable(ps.defs[o], ps.ammo[o], ps.reserve[o])) return HANDS.keep;
+    return stash ? HANDS.keep : HANDS.fists;
+  }
+  const o = stash ? 1 - stash.slot : 1 - ps.slot;
+  const back = stash && brUsable(stash.def, stash.ammo, stash.res, pouch) ? stash.slot : brUsable(ps.defs[o], ps.ammo[o], ps.reserve[o]) ? o : -1;
+  if (back < 0) return HANDS.dry;
+  return auto ? back : HANDS.keep;
 }
 
 // ---- The transport and the glide, the same on the host (bots, and the plane for everyone) and a phone (its own) ----
@@ -564,6 +590,27 @@ export class BrRules {
     return true;
   }
 
+  // A bot's hands follow the same rule as a phone's (brHandWant): fists once both guns are dry, a gun back once it has rounds.
+  _botHands(p) {
+    const b = p.br, ps = p.ps;
+    if (b.useK || ps.reloadT > 0 || ps.swapT > 0) return;
+    if (ps.weapon !== KNIFE) b.autoFists = false;
+    const g = b.stash ? b.guns[b.stash.slot] : null;
+    const st = g ? { slot: b.stash.slot, def: brDef(g.id, g.kit, g.r), ammo: b.stash.ammo, res: b.stash.res } : null;
+    const want = brHandWant(ps, st, b.pouch, !!b.autoFists);
+    if (want === HANDS.fists) { this._fists(p, { on: 1, slot: ps.slot, ammo: ps.ammo[ps.slot], res: ps.reserve[ps.slot] }); b.autoFists = true; }
+    else if (want === HANDS.dry) b.autoFists = true;
+    else if (want >= 0) this._handBack(p, want);
+  }
+
+  // The gun in `slot` back in hand: the one put away comes out of the stash (topped up from the pouch), the other by a swap.
+  _handBack(p, slot) {
+    const b = p.br, ps = p.ps;
+    if (b.stash) this._fists(p, { on: 0 });
+    if (ps.slot !== slot && b.guns[slot]) setSlot(ps, slot);
+    b.autoFists = false;
+  }
+
   _startUse(p, kind) {
     const b = p.br;
     if (p.brAir || b.useK === kind) return false;
@@ -629,6 +676,7 @@ export class BrRules {
       if (p.downed) { this._stepDowned(p, dt); continue; }
       if (b.useK) this._stepUse(p, dt);
       if ((sim.tick + p.index) % 3 === 0) this._pickups(p);
+      if (p.bot && (sim.tick + p.index) % 10 === 0) this._botHands(p);
     }
     if (sim.tick % PLAN_EVERY === 0) this.plan();
     while (this.noise.length && sim.time - this.noise[0].t > NOISE_KEEP) this.noise.shift();

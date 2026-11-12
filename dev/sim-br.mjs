@@ -5,7 +5,7 @@ import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
 import { SIM_HZ, MAX_HP, WEAPON_IDS, WEAPON_CATEGORY } from '../js/shared/constants.js';
-import { BR_KIND, flightLine } from '../js/sim/br.js';
+import { BR_KIND, flightLine, brHandWant, brDef, brArm, HANDS } from '../js/sim/br.js';
 import { stepPlayer } from '../js/sim/player.js';
 import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
@@ -375,9 +375,54 @@ function followUnits() {
   check(moveSame / n < 0.2 && aimSame / n < 0.12, `squadmates do not walk or aim with the human (${(moveSame / n * 100).toFixed(0)}%, ${(aimSame / n * 100).toFixed(0)}%)`);
 }
 
+// ---- Hands (owner notes): both guns dry -> fists by themselves; ammo for a gun you carry -> that gun back ----
+function handsUnits() {
+  console.log('hands: automatic fists');
+  const ps = { slot: 0, weapon: 'knife', primary: 'knife', secondary: 'knife', defs: [null, null], ammo: [0, 0], reserve: [0, 0], cooldown: 0 };
+  const smg = WEAPON_IDS.find(id => WEAPON_CATEGORY[id] === 'SMG'), ar = WEAPON_IDS.find(id => WEAPON_CATEGORY[id] === 'Assault');
+  brArm(ps, 0, smg, undefined, 0, 0, 0); brArm(ps, 1, ar, undefined, 0, 0, 0); ps.slot = 0; ps.weapon = smg;
+  const pouch = [0, 0, 0, 0, 0];
+  check(brHandWant(ps, null, pouch, false) === HANDS.fists, 'both guns dry: fists come out');
+  ps.reserve[1] = 30;
+  check(brHandWant(ps, null, pouch, false) === HANDS.keep, 'one gun dry, the other loaded: no fists (the swap falls through)');
+  ps.reserve[1] = 0;
+  // Fists out by themselves: the held gun is in the stash.
+  const st = { slot: 0, def: ps.defs[0], ammo: 0, res: 0 };
+  brArm(ps, 0, 'knife'); ps.slot = 0; ps.weapon = 'knife';
+  check(brHandWant(ps, st, pouch, true) === HANDS.dry, 'fists out with nothing loaded: they stay out');
+  pouch[0] = 40;            // Light rounds picked up: they go in the pouch for the gun put away.
+  check(brHandWant(ps, st, pouch, true) === 0, 'rounds for the gun put away: it comes back');
+  check(brHandWant(ps, st, pouch, false) === HANDS.keep, 'fists the player chose stay out');
+  pouch[0] = 0; ps.reserve[1] = 45;     // Rounds for the gun in the other hand (bramm to its reserve).
+  check(brHandWant(ps, st, pouch, true) === 1, 'rounds for the other gun: that one comes up');
+  // Start kit: fists in one hand, a loaded pistol in the other. Nothing happens by itself.
+  const k0 = { slot: 0, weapon: 'knife', primary: 'knife', secondary: 'pistol', defs: [brDef('knife'), brDef('pistol')], ammo: [1, 12], reserve: [999, 24] };
+  check(brHandWant(k0, null, pouch, false) === HANDS.keep, 'the start kit keeps fists out');
+
+  // A bot runs the same rule on the host.
+  const sim = makeSim('br', 4);
+  while (sim.phase !== 'live') sim.step(STEP);
+  const bot = sim.players.find(p => p.isBot);
+  for (const p of sim.players) { p.brAir = 0; p.spawnProtect = 1e9; }
+  const k = sim.nav.nearestFree(200, 200); bot.ps.x = k % sim.nav.w + 0.5; bot.ps.z = Math.floor(k / sim.nav.w) + 0.5;
+  for (const p of sim.players) if (p !== bot) { p.ps.x = 5; p.ps.z = 5; }
+  const b = bot.br;
+  b.guns = [{ id: smg, r: 0, kit: {} }, { id: ar, r: 0, kit: {} }];
+  brArm(bot.ps, 0, smg, {}, 0, 0, 0); brArm(bot.ps, 1, ar, {}, 0, 0, 0); bot.ps.slot = 0; bot.ps.weapon = smg; bot.ps.swapT = 0; bot.ps.cooldown = 0;
+  b.pouch = [0, 0, 0, 0, 0];
+  for (const it of sim.br.near(bot.ps.x, bot.ps.z, 6)) sim.br._removeItem(it);
+  for (let i = 0; i < 20; i++) { bot.ps.reloadT = 0; sim.step(STEP); }
+  check(bot.ps.weapon === 'knife' && b.stash && b.autoFists, `a bot with both guns dry puts its fists up (${bot.ps.weapon})`);
+  sim.br._addItem({ kind: BR_KIND.ammo, v: 0, r: 0, n: 40, x: bot.ps.x, z: bot.ps.z });       // Light rounds for the SMG.
+  for (let i = 0; i < 24; i++) sim.step(STEP);
+  check(bot.ps.weapon === smg && !b.stash && bot.ps.reserve[0] + bot.ps.ammo[0] > 0, `walking over its ammo brings the SMG back (${bot.ps.weapon}, ${bot.ps.ammo[0]}/${bot.ps.reserve[0]})`);
+}
+
 if (args.includes('--follow')) { followUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
+if (args.includes('--hands')) { handsUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
 squadUnits();
+handsUnits();
 healUnits();
 flightUnits();
 followUnits();

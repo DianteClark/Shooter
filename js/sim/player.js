@@ -266,7 +266,7 @@ export function armSecondary(ps, weapon) {
   return ps;
 }
 
-function setSlot(ps, slot) {
+export function setSlot(ps, slot) {
   // Sleight (Fast Hands Pro): a magazine reload in progress carries on in the holster instead of being lost, and
   // swapping back picks it up where it is. Shell-fed guns load by hand, so theirs still stops.
   const carry = ps.reloadT > 0 && !weaponDef(ps).shellReload && hasPro(ps, 'fasthands');
