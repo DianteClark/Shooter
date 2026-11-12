@@ -13,6 +13,7 @@ const LIFE = {
   topside:  { flock: 11, ground: 9, col: [0.42, 0.44, 0.5], size: 0.4, flockY: 7, vents: 0 },
   pier:     { flock: 14, ground: 8, col: [0.86, 0.88, 0.9], size: 0.5, flockY: 9, vents: 0 },
   foundry:  { flock: 5, ground: 4, col: [0.08, 0.08, 0.1], size: 0.42, flockY: 10, vents: 7 },
+  ashgrove: { flock: 7, ground: 6, col: [0.05, 0.05, 0.06], size: 0.46, flockY: 9, vents: 0 },      // Crows over the churchyard.
   sunken:   { flock: 8, ground: 0, col: [0.9, 0.93, 0.88], size: 0.66, flockY: 10, vents: 0 },
   metro:    { flock: 0, ground: 4, col: [0.12, 0.12, 0.15], size: 0.4, flockY: 8, vents: 6 },
   subway:   { flock: 0, ground: 0, col: [0, 0, 0], size: 0.4, flockY: 8, vents: 3 },

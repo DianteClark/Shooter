@@ -594,6 +594,7 @@ THEME_AUDIO.foundry = { ir: { len: 1.4, damp: 0.4, gain: 0.4 }, slaps: [[0.05, 1
 // Open fields: almost nothing comes back, and what does is late.
 THEME_AUDIO.harvest = { ir: { len: 0.6, damp: 0.16, gain: 0.16 }, slaps: [[0.27, 0.55], [0.46, 0.22]], f0: 1500, f1: 400, metal: 0, wash: 0.03 };
 THEME_AUDIO.frost = THEME_AUDIO.arctic;
+THEME_AUDIO.ashgrove = THEME_AUDIO.harvest;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;
 THEME_AUDIO.sunken = THEME_AUDIO.harbor;
 THEME_AUDIO.topside = THEME_AUDIO.railyard;

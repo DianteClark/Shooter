@@ -408,6 +408,8 @@ const SQUARE = {
   'map:harvest': { f: [P(3, 28, 3, 15, 10.5, 8, 18, 15, 18, 28), R(20.5, 9, 4.5, 19, [2.2, 2.2, 0, 0]), R(26, 13, 4, 15, [2, 2, 0, 0])], h: [R(8, 19, 5, 9)], a: [R(1.5, 28, 29, 2)] },
   'map:pier': { f: [P(2.5, 16, 10, 8.5, 17.5, 16), R(4, 15.5, 12, 8.5), R(1, 24, 30, 2.6), R(5, 26, 2.2, 5), R(14.5, 26, 2.2, 5), R(24, 26, 2.2, 5), R(23.6, 9, 3, 15)], h: [R(8, 18.5, 4, 5.5)], a: [O(25.1, 7, 3.2)] },
   'map:foundry': { f: [P(1, 29.5, 1, 17, 7.5, 12, 7.5, 17, 14, 12, 14, 17, 20.5, 12, 20.5, 29.5), R(23, 3, 6, 26.5)], h: [R(4, 21, 4, 4), R(11.5, 21, 4, 4)], a: [R(22.5, 7, 7, 2.6), O(26, 1.6, 1.6)] },
+  // Ashgrove Halt: the chapel and its tower, a lit window, the lamp by the gate.
+  'map:ashgrove': { f: [P(2, 29.5, 2, 17, 10, 10.5, 18, 17, 18, 29.5), R(19.5, 9, 6.5, 20.5), P(19, 9, 22.75, 2, 26.5, 9), R(28, 17, 1.6, 12.5)], h: [R(8, 22, 4, 7.5, [2, 2, 0, 0])], a: [R(9.2, 15, 1.8, 3.4, [0.9, 0.9, 0, 0]), O(28.8, 15.5, 1.8)] },
   'map:topside': { f: [P(2, 29.5, 2, 16, 8, 16, 8, 10, 15, 10, 15, 19, 20, 19, 20, 6.5, 26.5, 6.5, 26.5, 29.5, 30, 29.5, 30, 29.5), R(22.5, 1.5, 1.6, 5)], h: [R(10, 13, 3, 3), R(21.8, 10, 3, 3), R(21.8, 16, 3, 3), R(4, 20, 2.5, 3)], a: [O(23.3, 2, 1.6)] },
 
   // ---- Search and Destroy ----
@@ -473,7 +475,7 @@ const ALIAS = {
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
   tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
-  railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
+  railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry', ashgrove: 'map:ashgrove',
   'map:range': 'ui:aim', range: 'ui:aim',
   // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).
   'medal:hq_capture': 'medal:capture', hq_capture: 'medal:capture', 'medal:hq_destroy': 'medal:carrier_kill', hq_destroy: 'medal:carrier_kill',

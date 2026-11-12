@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { getGun } from './guns.js';
 import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS } from '../shared/zombies.js';
+import { ZmPowerFx } from './zm-power.js';     // A layout with a power switch (Ashgrove Halt): the switch, dark machines.
 
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), E = new THREE.Euler(), C = new THREE.Color();
 const DROP_MAX = 8;
@@ -141,12 +142,14 @@ export class ZmFx {
     this.drops.frustumCulled = false;
     this.group.add(this.drops);
     this.t = 0;
+    this.power = L.power ? new ZmPowerFx(this.group, L, this) : null;
   }
 
   update(view, dt) {
     const obj = view.obj ?? view.points?.obj;
     if (!obj?.zm) return;
     this.t += dt;
+    this.power?.update(obj, dt);
     const L = this.L;
     // Gates.
     L.doors.forEach((d, i) => {
