@@ -668,7 +668,10 @@ export class Sim {
   // A loadout as this match deals it to a side: the mode's own kit (One in the Chamber, Infected), then the modifiers.
   _deal(team, l) {
     if (this.rules?.kit) l = this.rules.kit(team, l);
-    return dealLoadout(l, this.mods);
+    const out = dealLoadout(l, this.mods);
+    // Graveyard Shift: the class streaks stay home (the supply terminal sells the mode's own, js/sim/zm-econ.js).
+    if (this.rules?.noStreaks) out.streaks = [];
+    return out;
   }
 
   // The same for a phone's own player, which owns its gun and so deals its own loadout at each spawn (js/game/match.js).
@@ -1803,7 +1806,7 @@ export class Sim {
   // Refusing keeps the streak; a human hears why through a streak_denied event, a bot would only be spamming it.
   useStreak(id, slot) {
     const p = this.byId.get(id);
-    if (!p || this.phase !== 'live' || !p.alive || this.snd) return null;
+    if (!p || this.phase !== 'live' || !p.alive || this.snd || this.rules?.noStreaks) return null;
     const slots = p.score.slots;
     if (slot === undefined) {
       for (let i = slots.length - 1; i >= 0 && slot === undefined; i--) if (slots[i].held) slot = i;

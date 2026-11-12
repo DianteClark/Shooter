@@ -78,7 +78,10 @@ section('layout');
 for (const id of ZM_MAP_IDS) {
   const map = MAPS[id], L = zmLayout(map);
   ok(L.doors.length === (L.graph ? map.zm.gates.length : L.def.cuts.length), `${id}: one gate per ${L.graph ? 'declared gate' : 'cut'} (${L.doors.length})`);
-  ok(L.machines.length === 4 && new Set(L.machines.map(m => m.perk)).size === 4, `${id}: four perk machines`);
+  ok(L.machines.length === 6 && new Set(L.machines.map(m => m.perk)).size === 6, `${id}: six perk machines`);
+  ok(L.bench && L.terminal && L.armour && L.exfil && L.altar, `${id}: bench, terminal, armour bench, exfil pad and altar placed`);
+  ok(L.traps.length >= 2 && L.traps.length <= 3 && L.relics.length === 3 && new Set(L.relics.map(r => r.band)).size === 3, `${id}: 2-3 traps (${L.traps.length}), three relics in three areas`);
+  ok(L.bands[L.terminal.band].depth === 0, `${id}: the terminal is in the start area`);
   ok(L.wallBuys.filter(w => w.band === L.start).length >= 2, `${id}: two wall-buys in the start band`);
   ok(L.boxSpots.length >= 2, `${id}: crate spots ${L.boxSpots.length}`);
   ok(L.starts.length === 4, `${id}: four starts`);
@@ -97,7 +100,8 @@ for (const id of ZM_MAP_IDS) {
     const got = b.cells.filter(k => open[k]).length;
     ok(got >= b.cells.length * 0.97, `${id}: band ${b.i} reachable with the gates open (${got}/${b.cells.length})`);
   }
-  const spots = [...L.wallBuys, ...L.machines, ...L.boxSpots, ...(L.power ? [L.power] : [])];
+  const spots = [...L.wallBuys, ...L.machines, ...L.boxSpots, ...(L.power ? [L.power] : []), L.bench, L.terminal, L.armour, L.altar, L.exfil, ...L.relics, ...L.traps,
+    ...L.traps.map(t => ({ x: t.sx, z: t.sz, band: t.band }))];
   // On reachable floor: the spot's own cell, or (a spot drawn close against its wall) one within a metre of it.
   const onFloor = p => { for (let dz = -1; dz <= 1; dz += 0.5) for (let dx = -1; dx <= 1; dx += 0.5) if (open[nav.idx(p.x + dx, p.z + dz)] && !nav.blocked[nav.idx(p.x + dx, p.z + dz)]) return true; return false; };
   ok(spots.every(onFloor), `${id}: every wall-buy, machine and crate spot on reachable floor`);
@@ -385,10 +389,13 @@ section('ashgrove');
   ok(L.boss && L.boss.band === area('field') && L.boss.spots.length >= 3 && L.boss.spots.every(p => L.band[L.cellAt(p.x, p.z)] === L.boss.band), 'boss spots in the Burial Field');
   ok(L.bands[area('field')].cells.length >= 400, `the boss arena is roomy (${L.bands[area('field')].cells.length} m2)`);
   ok(L.boxSpots.length >= 3 && L.boxSpots.length <= 4 && new Set(L.boxSpots.map(b => b.band)).size === L.boxSpots.length, 'three or four crate spots, in different areas');
-  ok(L.machines.length === 4 && L.wallBuys.length >= 8 && L.bands.every(b => L.risers[b.i].length >= 4), 'machines, wall-buys and spawn windows everywhere');
+  ok(L.machines.length === 6 && L.wallBuys.length >= 8 && L.bands.every(b => L.risers[b.i].length >= 4), 'machines, wall-buys and spawn windows everywhere');
   const R0 = L.reserved;
   ok(R0.bench && R0.terminal && R0.armour && R0.exfil && R0.traps?.length >= 2 && R0.traps.length <= 3, 'economy spots reserved (bench, terminal, armour, 2-3 traps, exfil)');
   ok([R0.bench, R0.terminal, R0.armour, R0.exfil, ...R0.traps].every(p => p.band >= 0 && p.note), 'every reserved spot in an area, with a note');
+  ok(Math.hypot(L.bench.x - R0.bench.x, L.bench.z - R0.bench.z) < 0.01 && Math.hypot(L.terminal.x - R0.terminal.x, L.terminal.z - R0.terminal.z) < 0.01
+    && Math.hypot(L.armour.x - R0.armour.x, L.armour.z - R0.armour.z) < 0.01 && L.exfil.x === R0.exfil.x && L.traps.length === R0.traps.length, 'the economy stands on the reserved spots');
+  ok(L.altar.band === area('field') && L.relics.map(r => L.bands[r.band].id).sort().join() === 'church,goods,lane', 'the altar in the Burial Field, a relic in each dead end');
   // Dead ends: the lamp room, the crypt and the coal stage each have one way in (a flood from inside with that one
   // doorway blocked never gets out).
   placeZmWalls(map, (1 << L.doors.length) - 1);

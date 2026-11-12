@@ -16,17 +16,19 @@
 // its own gun), {t:'zammo', id, slot?} (a refill; slot omitted: both), {t:'zperk', id, perk, lost?}, {t:'zbox', state,
 // spot, gun?, by?}, {t:'zdrop', kind, x, z}, {t:'zpower', kind, by}, {t:'zbuy', id, kind, cost}, {t:'zswing', id},
 // {t:'down', ...} and {t:'revive', id, by} as in battle royale, {t:'zover', round}, {t:'zlights', by} (the power is on,
-// on a map with a switch: layout.power).
+// on a map with a switch: layout.power). The economy's own (bench, terminal, traps, exfil, quest): js/sim/zm-econ.js.
 import { MAX_HP, WEAPON_IDS } from '../shared/constants.js';
 import { normalizeLoadout } from '../shared/catalog.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import {
-  ZM, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
+  ZM, ZE, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
   roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
+import { ZmEcon } from './zm-econ.js';     // ROADMAP item 36: the upgrade bench, the terminal, plates, traps, exfil, quest.
+import { zmTierDef } from './zm-phone.js';
 
 const PLAN_EVERY = 15;
 const FIELD_EVERY = 12;           // Ticks between flow field rebuilds per target.
@@ -67,6 +69,7 @@ export class ZmRules {
     this.ownSpawns = true;
     this.ownClock = true;
     this.allIn = true;
+    this.noStreaks = true;      // Loadout scorestreaks neither charge nor fire here (Sim._deal, Sim.useStreak).
     this.rng = mulberry32((seed ^ 0x2b0d1e) >>> 0);
     this.L = zmLayout(sim.map);
     placeZmWalls(sim.map, 0);
@@ -83,6 +86,13 @@ export class ZmRules {
     this.bossSeat = -1;
     this._zs = [];            // Guest: decoded zombies.
     this._prev = new Map();   // Guest: last positions per seat, for velocities.
+    this.econ = new ZmEcon(this);
+  }
+
+  // A crew member's mode state: points, perks (and the cap on them), the economy's plates and gun tiers.
+  static crewState() {
+    return { pts: ZM.startPts, perks: [], kills: 0, downs: 0, revives: 0, reviveT: 0, downedBy: null, spent: 0, bought: 0, head: 0,
+      earned: 0, limit: ZM.perkLimit, plates: 0, tiers: {}, supply: {}, breathAt: 0, selfT: 0, spentBy: {} };
   }
 
   // ---- Seats ----
@@ -105,7 +115,7 @@ export class ZmRules {
     sim.interest = true;                  // Per-guest snapshots: zombies ride the objective block, not player records.
     const starts = this.L.starts;
     this.crew.forEach((p, k) => {
-      p.zm = { pts: ZM.startPts, perks: [], kills: 0, downs: 0, revives: 0, reviveT: 0, downedBy: null, spent: 0, bought: 0, head: 0 };
+      p.zm = ZmRules.crewState();
       p.downed = false;
       const s = starts[k % starts.length] ?? { x: sim.map.width / 2, z: sim.map.height / 2 };
       sim._placeAt(p, s, 0);
@@ -123,7 +133,7 @@ export class ZmRules {
   onSpawn(p) {
     p.downed = false;
     if (this.isZ(p)) { p.spawnProtect = 0; p.noRegen = true; p.ps.tacticalLeft = 0; p.ps.lethalLeft = 0; return; }
-    if (p.zm) { p.zm.reviveT = 0; p.zm.downedBy = null; p.zm.perks = []; }
+    if (p.zm) { p.zm.reviveT = 0; p.zm.downedBy = null; p.zm.perks = []; p.zm.tiers = {}; p.zm.selfT = 0; }
     if (p.bot) p.bot.kite = 4.5;
   }
 
@@ -135,7 +145,8 @@ export class ZmRules {
     if (sim.phase !== 'live') return;
     if (this.state === 3) return;
     if (this.doubleT > 0) this.doubleT = Math.max(0, this.doubleT - dt);
-    if (this.state === 0 || this.state === 2) {
+    if (this.econ.exfilOn) sim.timeLeft = Math.max(0, this.econ.exfil.timer);     // The exfil's wave holds the round.
+    else if (this.state === 0 || this.state === 2) {
       this.timer -= dt;
       sim.timeLeft = Math.max(0, this.timer);
       if (this.timer <= 0) this._startRound(this.round + 1);
@@ -144,6 +155,8 @@ export class ZmRules {
       this._stepSpawns(dt);
       if (this.killed >= this.count) this._endRound();
     }
+    this.econ.step(dt);
+    if (this.state === 3) return;
     for (const p of this.crew) {
       if (!p.alive || p.away) continue;
       if (p.downed) this._stepDowned(p, dt);
@@ -186,7 +199,7 @@ export class ZmRules {
     const sim = this.sim;
     if (this.state === 3 || sim.phase !== 'live') return;
     const humans = this.crew.filter(p => !p.isBot);
-    const up = this.crew.some(p => p.alive && !p.downed && !p.away);
+    const up = this.crew.some(p => p.alive && (!p.downed || p.zm?.selfT > 0) && !p.away);     // Last Breath: getting up.
     // Humans all gone (dropped) with a human match: over too.
     const left = humans.length > 0 && humans.every(p => p.away);
     if (up && !left) return;
@@ -238,9 +251,9 @@ export class ZmRules {
 
   _raise(p, kind, spot) {
     const sim = this.sim, K = ZM.kinds[ZM_KINDS[kind]];
-    p.zk = kind;
+    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0;
     sim._placeAt(p, spot, Math.atan2(sim.map.height / 2 - spot.z, sim.map.width / 2 - spot.x));
-    p.hp = p.zMax = Math.round(this.hp * K.hp * (kind === 3 ? 1 + 0.1 * this.crew.length : 1));
+    p.hp = p.zMax = Math.round(this.hp * K.hp * (kind >= 3 ? 1 + 0.1 * this.crew.length : 1));
     p.zSwing = 0; p.zCool = 0.4 + this.rng() * 0.4; p.zT = null; p.zStuck = 0; p.zLastX = spot.x; p.zLastZ = spot.z; p.zStuckT = 0;
     p.zPace = Math.min(1, K.speed + (kind === 0 ? paceBonus(this.round) : 0)) * (0.92 + this.rng() * 0.16);
     p.ps.tacticalLeft = 0; p.ps.lethalLeft = 0;
@@ -374,6 +387,13 @@ export class ZmRules {
       const d = f ? f.dist[cell] : BIG;
       if (d < td) { td = d; tgt = q; field = f; }
     }
+    // A lure (the supply terminal's) pulls whatever is within its reach by path, ahead of the crew.
+    if (this.econ.gear.length) {
+      for (const g of this.econ.lures) {
+        const f = this._field(g), d = f ? f.dist[cell] : BIG;
+        if (d < ZE.supply.lure.pull && d - 15 < td) { td = d - 15; tgt = g; field = f; }
+      }
+    }
     if (!tgt) {
       // Somewhere unreachable (or nobody up): stand, and after a while sink back for a fresh riser.
       p.zStuckT += dt;
@@ -431,7 +451,7 @@ export class ZmRules {
     }
     mx += sx * 1.4; mz += sz * 1.4;
     const ml = Math.hypot(mx, mz);
-    const pace = p.zSwing > 0 ? 0.15 : p.zPace;
+    const pace = p.zSwing > 0 ? 0.15 : p.zPace * (p.zSlowT > sim.time ? 0.45 : 1);     // Rime rounds slow.
     if (ml > 1e-4) { I.mx = mx / ml * pace; I.mz = mz / ml * pace; }
     I.aim = d < 3 ? Math.atan2(dz, dx) : ml > 1e-4 ? Math.atan2(mz, mx) : ps.aim;
     // Turn at a zombie's pace, not a soldier's.
@@ -461,21 +481,27 @@ export class ZmRules {
   // A zombie leaves quietly (stuck, or nowhere to go) and its place in the round's count rises again later.
   _sink(p) {
     p.alive = false; p.hp = 0; p.zFree = this.sim.time + 1;
+    if (p.zExtra) { this.econ.onSink(p); p.zExtra = false; return; }     // Off the round's count: nothing to give back.
     if (this.bossSeat === p.index) { this.bossDue = true; this.bossSeat = -1; }
     this.spawned = Math.max(this.killed, this.spawned - 1);
   }
 
   // ---- Damage and deaths ----
 
-  damage(target, attacker, dmg) {
+  // `streak`: the economy's own sources ('ztrap', 'zsentry', 'zdrone', 'zstrike', 'zlure', 'zfx' for a tier-3 round's
+  // effect) pay no hit points and take no perk or tier on top: their damage is already what it should be.
+  damage(target, attacker, dmg, weapon, streak) {
     if (this.isZ(target)) {
       if (!attacker?.zm) return dmg;
+      if (streak && streak[0] === 'z') return dmg;
       if (attacker.zm.perks.includes('hammer')) dmg *= 1.5;
+      dmg = this.econ.gunHit(target, attacker, dmg, weapon);
       this._pay(attacker, ZM.pts.hit);
       return dmg;
     }
     if (target.downed) return 0;
     if (this.isZ(attacker) && target.zm?.perks.includes('iron')) dmg *= 0.5;
+    if (this.isZ(attacker) && target.zm) dmg = this.econ.soak(target, dmg);     // Armour plates.
     return dmg;
   }
 
@@ -483,13 +509,16 @@ export class ZmRules {
 
   tryDown(p, attacker, weapon) {
     if (this.isZ(p) || p.downed || !p.zm) return false;
-    if (!this.crew.some(q => q !== p && q.alive && !q.downed && !q.away)) return false;
+    // Last Breath, charged: down, and up again by yourself in a moment, perks kept (even with nobody else up).
+    const breath = p.zm.perks.includes('breath') && (p.zm.breathAt ?? 0) <= this.round;
+    if (!breath && !this.crew.some(q => q !== p && q.alive && !q.downed && !q.away)) return false;
     p.downed = true;
     p.hp = 100;
     p.zm.reviveT = 0; p.zm.downs++;
     p.zm.downedBy = attacker && attacker !== p ? attacker.id : null;
     p.ps.sprinting = false; p.ps.sliding = false;
-    this._losePerks(p);
+    if (breath) { p.zm.selfT = 3; p.zm.breathAt = this.round + 3; this.sim._emit({ t: 'zbreath', id: p.id }); }
+    else this._losePerks(p);
     this.sim._emit({ t: 'down', by: attacker?.id ?? p.id, target: p.id, weapon, x: Math.round(p.ps.x * 100) / 100, z: Math.round(p.ps.z * 100) / 100 });
     return true;
   }
@@ -497,12 +526,17 @@ export class ZmRules {
   _losePerks(p) {
     if (!p.zm.perks.length) return;
     p.zm.perks = [];
-    p.ps.perks = p.ps.perks.filter(k => k !== 'fasthands');
+    p.ps.perks = p.ps.perks.filter(k => k !== 'fasthands' && k !== 'marathon');
     if (!p.isBot) this.sim._emit({ t: 'zperk', id: p.id, lost: 1 });
   }
 
   _stepDowned(p, dt) {
     const sim = this.sim, b = p.zm;
+    if (b.selfT > 0) {
+      b.selfT -= dt;
+      if (b.selfT <= 0) { p.downed = false; p.hp = ZM.reviveHp; p.regenT = 2; b.reviveT = 0; b.downedBy = null; sim._emit({ t: 'revive', id: p.id, by: p.id }); }
+      return;
+    }
     p.hp -= 100 / ZM.bleed * dt;
     if (p.hp <= 0) { p.downed = false; sim._selfKill(p, 'bleed'); return; }
     let helper = null;
@@ -531,15 +565,18 @@ export class ZmRules {
     if (this.isZ(target)) {
       target.zFree = sim.time + 0.6;
       if (info.away) { this._sink(target); return; }
-      this.killed++;
+      if (!target.zExtra) this.killed++;
       const boss = target.zk === 3;
       if (boss) this.bossSeat = -1;
+      this.econ.onKill(target, killer);
       if (killer?.zm) {
         killer.zm.kills++;
         if (info.head) killer.zm.head++;
         const melee = !info.equip && !info.streak && WEAPONS[info.weapon]?.melee;
-        this._pay(killer, boss ? ZM.pts.boss : melee ? ZM.pts.melee : info.head ? ZM.pts.head : ZM.pts.kill);
+        const econ = this.econ.killPay(info);
+        this._pay(killer, econ ?? (boss ? ZM.pts.boss : melee ? ZM.pts.melee : info.head ? ZM.pts.head : ZM.pts.kill));
       }
+      target.zExtra = false;
       if (boss) this._dropAt(target.ps.x, target.ps.z, 'ammo');
       else if (this.dropsThisRound < ZM.drop.perRound && this.rng() < ZM.drop.chance) this._dropAt(target.ps.x, target.ps.z);
       return;
@@ -553,7 +590,8 @@ export class ZmRules {
 
   _pay(p, n, double = true) {
     if (!p?.zm) return;
-    p.zm.pts += n * (double && this.doubleT > 0 ? 2 : 1);
+    const v = n * (double && this.doubleT > 0 ? 2 : 1);
+    p.zm.pts += v; p.zm.earned += v;
   }
 
   // ---- Power-ups ----
@@ -610,17 +648,20 @@ export class ZmRules {
   // The phone's 'use' tap: whatever zmUsable says is in reach, if the points are there.
   command(p, msg) {
     if (!p || !p.zm || msg?.act !== 'use' || !p.alive || p.downed || this.state === 3) return false;
-    return this._use(p, this._usableFor(p));
+    return this._use(p, this._usableFor(p), msg);
   }
 
   _usableFor(p) {
     return zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p));
   }
   _stateFor(p) {
-    return { open: this.open, box: { spot: this.box.spot, state: this.box.state, gun: this.box.gun, owner: this.box.owner }, pts: p.zm.pts, perks: p.zm.perks, guns: [p.ps.primary, p.ps.secondary], me: p.index, power: this.power };
+    const E = this.econ;
+    return { open: this.open, box: { spot: this.box.spot, state: this.box.state, gun: this.box.gun, owner: this.box.owner }, pts: p.zm.pts, perks: p.zm.perks, guns: [p.ps.primary, p.ps.secondary], me: p.index, power: this.power,
+      limit: p.zm.limit, held: p.ps.weapon, tier: p.zm.tiers[p.ps.weapon] ?? 0, bench: E.bench, traps: E.traps.map(t => t.state), plates: p.zm.plates,
+      exfil: E.exfil.state, round: this.round, quest: E.quest };
   }
 
-  _use(p, u) {
+  _use(p, u, msg = null) {
     if (!u || !u.ok) return false;
     const sim = this.sim, L = this.L;
     switch (u.kind) {
@@ -659,15 +700,24 @@ export class ZmRules {
         break;
       }
       case 'perk': {
+        if (p.zm.perks.length >= p.zm.limit) return false;
         p.zm.perks.push(u.perk);
         if (u.perk === 'quick' && !p.ps.perks.includes('fasthands')) p.ps.perks = [...p.ps.perks, 'fasthands'];
+        if (u.perk === 'stride' && !p.ps.perks.includes('marathon')) p.ps.perks = [...p.ps.perks, 'marathon'];
         if (!p.isBot) sim._emit({ t: 'zperk', id: p.id, perk: u.perk });
         break;
       }
-      default: return false;
+      default: {
+        // The economy's (js/sim/zm-econ.js): it says what it costs, or refuses.
+        const cost = this.econ.use(p, u, msg);
+        if (cost === null || cost > p.zm.pts) return false;
+        u.cost = cost;
+      }
     }
     p.zm.pts -= u.cost; p.zm.spent += u.cost; p.zm.bought++;
-    sim._emit({ t: 'zbuy', id: p.id, kind: u.kind, cost: u.cost, gun: u.gun ?? null, perk: u.perk ?? null });
+    const cat = u.kind === 'ammo' || u.kind === 'wall' || u.kind === 'box' ? 'guns' : u.kind === 'perk' || u.kind === 'slot' ? 'perks' : u.kind === 'door' ? 'gates' : u.kind;
+    if (u.cost) p.zm.spentBy[cat] = (p.zm.spentBy[cat] ?? 0) + u.cost;
+    sim._emit({ t: 'zbuy', id: p.id, kind: u.kind, cost: u.cost, gun: u.gun ?? null, perk: u.perk ?? null, ...(u.item ? { item: u.item } : {}) });
     return true;
   }
 
@@ -713,6 +763,8 @@ export class ZmRules {
     if (!WEAPONS[gun]) return;
     let slot = ps.secondary === NO_GUN ? 1 : ps.primary === NO_GUN ? 0 : ps.slot;
     if (ps.primary === gun) slot = 0; else if (ps.secondary === gun) slot = 1;
+    const old = slot === 0 ? ps.primary : ps.secondary;
+    if (p.zm && old !== gun) delete p.zm.tiers[old];        // A gun given up loses its bench tier.
     brArm(ps, slot, gun);
     ps.slot = slot; ps.weapon = gun;
     if (WEAPONS[gun].unlimitedReserve) ps.reserve[slot] = 999; else ps.reserve[slot] = WEAPONS[gun].reserve ?? WEAPONS[gun].magazine * 3;
@@ -743,6 +795,21 @@ export class ZmRules {
         bot.setObjective({ key: `zrev${down.index}`, role: 'collect', x: down.ps.x, z: down.ps.z, r: 0.8 });
         return;
       }
+      // The exfil is on: everyone to the pad.
+      const X = this.econ.exfil, pad = this.L.exfil;
+      if (X.state === 1 && pad) {
+        const a = (k + 1) * 1.7, x = pad.x + Math.cos(a) * pad.r * 0.5, z = pad.z + Math.sin(a) * pad.r * 0.5;
+        const at = this._walk(x, z);
+        bot.setObjective({ key: 'zexfil', role: 'defend', x: at.x, z: at.z, r: pad.r * 0.6 });
+        return;
+      }
+      // Its gun on the upgrade bench: wait by it, take it.
+      const bn = this.econ.bench, bb = this.L.bench;
+      if (bn.state && bn.owner === p.index && bb) {
+        if (bn.state === 2 && Math.hypot(bb.x - p.ps.x, bb.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); return; }
+        bot.setObjective({ key: 'zbench', role: 'collect', x: bb.x, z: bb.z, r: 0.8 });
+        return;
+      }
       // Its roll at the crate: wait for it, take it.
       const bx = this.box;
       if ((bx.state === 1 || bx.state === 2) && bx.owner === p.index && !bx.moving) {
@@ -762,7 +829,13 @@ export class ZmRules {
       const want = this._botWant(p, humans);
       if (want) {
         const d = Math.hypot(want.x - p.ps.x, want.z - p.ps.z);
-        if (d < ZM.useReach * 0.8) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); return; }
+        if (d < ZM.useReach * 0.8) {
+          // The bench upgrades the gun in hand: a bot takes the one it came for out first.
+          if (want.kind === 'bench' && want.gun && p.ps.weapon !== want.gun) { const sl = p.ps.primary === want.gun ? 0 : 1; p.ps.slot = sl; p.ps.weapon = want.gun; }
+          this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p)), want);
+          bot.setObjective(null);
+          return;
+        }
         bot.setObjective({ key: `zbuy${want.kind}${want.i}`, role: 'collect', x: want.x, z: want.z, r: 0.8 });
         return;
       }
@@ -799,8 +872,14 @@ export class ZmRules {
       } else if (!hasGun && z.pts >= w.cost) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 40 + w.cost / 100 - d);
       else if (hasGun && z.pts >= w.cost + 400 && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 35 + (w.cost - held) / 50 - d);
     }
+    const full = z.perks.length >= z.limit;
     for (const m of L.machines) {
       if (!bandOpen(L, this.open, m.band) || z.perks.includes(m.perk) || !this.power) continue;
+      // At the cap: a perk slot when there is plenty over (the next machine visit buys the perk itself).
+      if (full) {
+        if (z.limit < ZM.perkMax && z.pts >= ZM.slotCost + 2500 && dist(m.x, m.z) < 45) consider({ kind: 'slot', i: m.i, x: m.x, z: m.z }, 20 - dist(m.x, m.z));
+        continue;
+      }
       const cost = ZM_PERKS[m.perk].cost, d = dist(m.x, m.z);
       if (z.pts >= cost + (hasGun ? 300 : 1200) && d < 45) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 30 - d + (m.perk === 'iron' ? 10 : 0));
     }
@@ -810,6 +889,7 @@ export class ZmRules {
       const d = dist(bs.x, bs.z);
       if (d < 40) consider({ kind: 'box', i: bs.i, x: bs.x, z: bs.z }, 15 - d);
     }
+    this.econ.botWants(p, consider);
     if (!humans || z.pts > 4000) {
       for (const d of L.doors) {
         if (this.open & (1 << d.i) || z.pts < d.cost + (humans ? 2000 : 600)) continue;
@@ -876,6 +956,9 @@ export class ZmRules {
     v.reviveK = p.downed ? p.zm.reviveT / ZM.reviveTime : 0;
     v.zpts = p.zm.pts;
     v.zperks = p.zm.perks;
+    v.zplates = p.zm.plates;
+    v.zlimit = p.zm.limit;
+    v.zbreath = p.zm.perks.includes('breath') ? ((p.zm.breathAt ?? 0) <= this.round ? 1 : 0) : -1;
   }
 
   view() {
@@ -885,9 +968,14 @@ export class ZmRules {
     V.box = { spot: b.spot, state: b.state, gun: b.gun >= 0 ? BOX_GUNS[b.gun] : null, owner: b.owner, timer: b.timer };
     V.drops = this.drops;
     V.layout = this.L;
-    V.crew = this.crew.map(p => ({ index: p.index, id: p.id, pts: p.zm?.pts ?? 0, perks: p.zm?.perks ?? [], kills: p.zm?.kills ?? 0, downs: p.zm?.downs ?? 0, revives: p.zm?.revives ?? 0, head: p.zm?.head ?? 0 }));
+    V.crew = this.crew.map(p => ({ index: p.index, id: p.id, pts: p.zm?.pts ?? 0, perks: p.zm?.perks ?? [], kills: p.zm?.kills ?? 0, downs: p.zm?.downs ?? 0, revives: p.zm?.revives ?? 0, head: p.zm?.head ?? 0,
+      plates: p.zm?.plates ?? 0, limit: p.zm?.limit ?? ZM.perkLimit, earned: p.zm?.earned ?? 0, spent: p.zm?.spent ?? 0 }));
     const boss = this.bossSeat >= 0 ? this.sim.players[this.bossSeat] : null;
-    V.boss = boss?.alive && boss.zk === 3 ? { hp: boss.hp / Math.max(1, boss.zMax) } : null;
+    const ward = this.econ.wardenSeat >= 0 ? this.sim.players[this.econ.wardenSeat] : null;
+    V.boss = ward?.alive && ward.zk === 4 ? { hp: ward.hp / Math.max(1, ward.zMax), warden: true } : boss?.alive && boss.zk === 3 ? { hp: boss.hp / Math.max(1, boss.zMax) } : null;
+    // A guest has the bars from the block (its own seats carry no health).
+    if (!this.authority) V.boss = this._wardHp >= 0 ? { hp: this._wardHp / 100, warden: true } : this._bossHp >= 0 ? { hp: this._bossHp / 100 } : null;
+    Object.assign(V, this.econ.view());
     return V;
   }
 
@@ -900,9 +988,13 @@ export class ZmRules {
       if (!z) return [0, 0];
       let bits = 0;
       ZM_PERK_IDS.forEach((k, i) => { if (z.perks.includes(k)) bits |= 1 << i; });
-      if (p.downed) bits |= 16;
-      bits |= Math.min(15, Math.round((p.downed ? z.reviveT / ZM.reviveTime : 0) * 15)) << 5;
-      return [z.pts, bits, z.kills, z.revives];
+      if (p.downed) bits |= 64;
+      bits |= Math.min(15, Math.round((p.downed ? z.reviveT / ZM.reviveTime : 0) * 15)) << 7;
+      if (z.limit > ZM.perkLimit) bits |= 1 << 11;
+      // Gun tiers (the guns in hand only: a host migration keeps them), as [weapon index, tier] pairs.
+      const tiers = [];
+      for (const g of [p.ps.primary, p.ps.secondary]) if (z.tiers[g]) tiers.push(WEAPON_IDS.indexOf(g), z.tiers[g]);
+      return [z.pts, bits, z.kills, z.revives, Math.round(z.plates), z.breathAt ?? 0, tiers, z.earned ?? 0, z.spent ?? 0];
     });
     const zs = [];
     for (const p of this.horde) if (p.alive) zs.push(packZombie(p.index - this.horde[0].index, p.ps.x, p.ps.z, p.ps.aim, p.zk, p.zSwing > 0));
@@ -910,7 +1002,8 @@ export class ZmRules {
     return [this.round, this.state, Math.round(this.timer * 10), Math.max(0, this.count - this.killed), this.open,
       [b.spot, b.state, b.gun, b.owner, Math.round(b.timer * 10)], Math.round(this.doubleT * 10), crew, zs,
       this.drops.flatMap(d => [d.id, ZM_POWERUPS.indexOf(d.kind), r1(d.x), r1(d.z)]),
-      boss?.alive && boss.zk === 3 ? Math.round(boss.hp / Math.max(1, boss.zMax) * 100) : -1, this.count, this.best, this.power];
+      boss?.alive && boss.zk === 3 ? Math.round(boss.hp / Math.max(1, boss.zMax) * 100) : -1, this.count, this.best, this.power, this.econ.encode(),
+      (() => { const w = this.econ.wardenSeat >= 0 ? sim.players[this.econ.wardenSeat] : null; return w?.alive && w.zk === 4 ? Math.round(w.hp / Math.max(1, w.zMax) * 100) : -1; })()];
   }
 
   // Zombie seats never go out as player records to a guest: the block above carries them.
@@ -927,8 +1020,10 @@ export class ZmRules {
       return this.view();
     }
     if (a) {
-      const [round, state, timer, left, open, box, dbl, crew, zs, drops, boss, count, best, power] = a;
+      const [round, state, timer, left, open, box, dbl, crew, zs, drops, boss, count, best, power, econ, ward] = a;
       this.power = power ?? 1;
+      this.econ.decode(econ);
+      this._wardHp = ward ?? -1;
       this.round = round; this.state = state; this.timer = timer / 10; this.count = count ?? 0; this.killed = Math.max(0, this.count - left);
       this.best = best ?? 0;
       if (open !== this.open) { this.open = open; syncZmDoors(sim.map, open); }
@@ -947,10 +1042,16 @@ export class ZmRules {
     crewList.forEach((p, k) => {
       const c = this._crewWire?.[k], v = out.players[p.index];
       if (!c || !v) return;
-      p.zm ??= { pts: 0, perks: [], kills: 0, revives: 0, downs: 0, reviveT: 0 };
+      p.zm ??= ZmRules.crewState();
       p.zm.pts = c[0]; p.zm.perks = ZM_PERK_IDS.filter((_, i) => c[1] & (1 << i)); p.zm.kills = c[2] ?? 0; p.zm.revives = c[3] ?? 0;
-      v.zpts = c[0]; v.zperks = p.zm.perks;
-      v.downed = !!(c[1] & 16); v.reviveK = ((c[1] >> 5) & 15) / 15;
+      p.zm.plates = c[4] ?? 0; p.zm.breathAt = c[5] ?? 0; p.zm.limit = c[1] & (1 << 11) ? ZM.perkMax : ZM.perkLimit;
+      p.zm.earned = c[7] ?? 0; p.zm.spent = c[8] ?? 0;
+      p.zm.tiers = {};
+      const T = c[6] ?? [];
+      for (let i = 0; i + 1 < T.length; i += 2) if (WEAPON_IDS[T[i]]) p.zm.tiers[WEAPON_IDS[T[i]]] = T[i + 1];
+      v.zpts = c[0]; v.zperks = p.zm.perks; v.zplates = p.zm.plates; v.zlimit = p.zm.limit;
+      v.zbreath = p.zm.perks.includes('breath') ? (p.zm.breathAt <= this.round ? 1 : 0) : -1;
+      v.downed = !!(c[1] & 64); v.reviveK = ((c[1] >> 7) & 15) / 15;
       v.ai = false;
     });
     // The horde: every seat dead unless the block has it.
@@ -985,6 +1086,8 @@ export class ZmRules {
       this.drops = old.drops.map(d => ({ ...d, t: sim.time }));
       this.doubleT = old.doubleT;
       this.power = old.power ?? 1;
+      this.econ.restore(old.econ);
+      this._bossHp = old._bossHp; this._wardHp = old._wardHp;
     }
     syncZmDoors(sim.map, this.open);
     this.hp = roundHp(Math.max(1, this.round));
@@ -997,15 +1100,18 @@ export class ZmRules {
         if (p.alive) {
           live++;
           const K = ZM.kinds[ZM_KINDS[p.zk]];
-          p.hp = p.zMax = Math.round(this.hp * K.hp);
+          p.hp = p.zMax = Math.round(this.hp * K.hp * (p.zk >= 3 ? 1 + 0.1 * this.crew.length : 1));
           p.zSwing = 0; p.zCool = 0.5; p.zStuck = 0; p.zStuckT = 0; p.zLastX = p.ps.x; p.zLastZ = p.ps.z;
           p.zPace = Math.min(1, K.speed + (p.zk === 0 ? paceBonus(this.round) : 0));
-          if (p.zk === 3) this.bossSeat = p.index;
+          p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0;
+          // The bosses keep what the bar showed.
+          if (p.zk === 3) { this.bossSeat = p.index; if (this._bossHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._bossHp / 100)); }
+          if (p.zk === 4) { this.econ.wardenSeat = p.index; p.zExtra = true; live--; if (this._wardHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._wardHp / 100)); }
         }
         return;
       }
-      p.zm ??= { pts: 0, perks: [], kills: 0, downs: 0, revives: 0, reviveT: 0, downedBy: null, spent: 0, bought: 0, head: 0 };
-      Object.assign(p.zm, { spent: p.zm.spent ?? 0, bought: p.zm.bought ?? 0, head: p.zm.head ?? 0, downedBy: null });
+      p.zm ??= ZmRules.crewState();
+      Object.assign(p.zm, { ...ZmRules.crewState(), ...p.zm, downedBy: null });
       p.downed = !!v?.downed && p.alive;
       p.zm.reviveT = p.downed ? (v.reviveK ?? 0) * ZM.reviveTime : 0;
       if (p.downed) p.hp = Math.max(1, v.hp ?? 50);
