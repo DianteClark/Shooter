@@ -106,6 +106,8 @@ export function optionsScreen(menu, opts) {
         <p class="opt-note">${ico('info')}Settings stay on this phone and are not part of your save code.</p>
       </section>
     </div>`;
+  // Each column scrolls natively when it is taller than the screen, so no row is ever squeezed onto the next.
+  for (const col of menu.el.querySelectorAll('.opt-col')) col.classList.add('scroll-y');
   const q = sel => menu.el.querySelector(sel);
   const paint = () => {
     const v = Options.values;

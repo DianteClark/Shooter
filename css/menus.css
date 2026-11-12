@@ -953,6 +953,17 @@
 #ui .opt-toggle.on .opt-knob { transform: translateX(41px); background: linear-gradient(172deg, #79e3aa, var(--c-go)); }
 #ui .opt-note { margin-top: auto; display: flex; gap: var(--sp-2); align-items: flex-start; font: 400 var(--fs-caption)/1.25 var(--f-body); color: var(--c-haze); }
 #ui .opt-note .ico { height: 15px; color: var(--c-rail); margin-top: 1px; }
+/* Options columns (Controls the tallest: the Controller button on its heading, two sliders, three switches): every row
+   keeps its height and the column scrolls instead of laying rows over each other; short phones get tighter spacing. */
+#ui .opt-col.scroll-y { overflow-x: hidden; overflow-y: auto; }
+#ui .opt-col > * { flex-shrink: 0; }
+#ui .opt-col h4 { min-height: 26px; }
+#ui .opt-row[data-key] { gap: 6px; }
+@media (max-height: 400px) {
+  #ui .opt-col { gap: 10px; padding-top: var(--sp-2); }
+  #ui .opt-step { height: 32px; }
+  #ui .opt-segs .seg { height: 30px; }
+}
 
 /* ---- How to play --------------------------------------------------------------------------------------------- */
 #ui .help-tabs { display: flex; gap: 2px; margin-left: auto; }
