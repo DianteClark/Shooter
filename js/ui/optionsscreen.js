@@ -70,11 +70,7 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
       <section class="opt-col" data-in="up">
         <h4>${ico('sound')}Audio</h4>
         ${stepper('sound')}
-        ${stepper('music')}
-        <div class="opt-row">
-          <div class="opt-name"><b>Music in matches</b><small>Off: menus, match stings and the battle royale flight only</small></div>
-          ${toggle('optMatchMusic', 'opt-matchmusic')}
-        </div>
+        ${stepper('music').replace('<div class="opt-name"><b>Music</b>', `<div class="opt-name opt-name-mm"><b>Music</b><button class="seg opt-matchmusic" data-act="optMatchMusic" aria-label="Music in matches"><small>In matches</small><b></b></button>`)}
         ${VOICE_LEVELS_WORK ? stepper('voice') : `
         <div class="opt-row">
           <div class="opt-name"><b>Team voice</b><small>Plays your squad's voice on this phone</small></div>
