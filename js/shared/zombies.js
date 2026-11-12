@@ -34,13 +34,18 @@ export const ZM = {
     shambler: { hp: 1, dmg: 40, speed: 0.36, reach: 1.25, windup: 0.45, cool: 1.1 },
     runner: { hp: 0.85, dmg: 36, speed: 0.84, reach: 1.25, windup: 0.4, cool: 1 },
     brute: { hp: 4, dmg: 70, speed: 0.5, reach: 1.5, windup: 0.6, cool: 1.4 },
-    boss: { hp: 22, dmg: 90, speed: 0.62, reach: 1.9, windup: 0.7, cool: 1.5 },
+    boss: { hp: 30, dmg: 90, speed: 0.62, reach: 1.9, windup: 0.7, cool: 1.5 },          // hp 22 on 1111-32.
     // The Gravewarden: only the altar's quest raises it (ZE.quest), never a round.
-    warden: { hp: 40, dmg: 110, speed: 0.66, reach: 2.1, windup: 0.75, cool: 1.35 },
+    warden: { hp: 55, dmg: 110, speed: 0.66, reach: 2.1, windup: 0.75, cool: 1.35 },       // hp 40 on 1111-32.
   },
   roundMax: 220,                       // Zombies in one round, at most.
-  xp: { kill: 12, head: 4, round: 120, boss: 400, escape: 2000, escapeRound: 100, warden: 3000 },     // Account XP in place of the usual kill lines (awards.js).
-  weaponXp: 0.3,                       // Share of the usual weapon XP a zombie kill pays.
+  // Account XP in place of the usual kill lines (awards.js, zmXp). Owner notes (1111-32): an escape on round 18 paid
+  // +28k with challenges, ten long multiplayer matches' worth; now about 8k, a cap of 10k on the run's own lines.
+  // Before: kill 12, head 4, round 120, boss 400, escape 2000 + 100 a round, warden 3000, no cap.
+  xp: { kill: 8, killSoft: 150, killPast: 2, head: 2, round: 80, boss: 300, escape: 1000, escapeRound: 50, warden: 1500, cap: 10000 },
+  // Share of the usual weapon XP a zombie kill pays (0.3 before: a gun maxed in one run), and at most this much weapon
+  // XP for one gun in one run (the weapon curve tops out at 12,122).
+  weaponXp: 0.1, weaponXpCap: 5000,
   perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };
 export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden'];
@@ -103,7 +108,7 @@ export const ZE = {
   supplyScale: 0.05,
   gearMax: 8,                       // Sentries, drones, lures and strikes in play at once (the crew's).
   trap: { cost: 1000, on: 30, cool: 45, playerDps: 14, pay: 10, dps: 1.4, boss: 0.012, r: 1.7 },
-  exfil: { from: 15, cost: 12000, hold: 60, r: 3.2, gap: 0.42 },
+  exfil: { from: 15, cost: 15000, hold: 75, r: 3.2, gap: 0.32 },     // 1111-32: 12000, 60 s, 0.42 s; the wave's brutes at the round's full share.
   quest: { pts: 3000 },
 };
 export const ZM_TRAP_KINDS = ['shock', 'vent', 'blade'];
@@ -123,26 +128,75 @@ export const zmTierCamo = (gun, tier) => (tier >= 3 ? ZM_FX[zmFxOf(gun)].camo : 
 export const zmUpgradable = gun => !!gun && gun !== NO_GUN && WEAPON_CATEGORY[gun] !== 'Melee' && !!WEAPON_CATEGORY[gun];
 export const supplyCost = (item, round) => Math.round(ZE.supply[item].cost * (1 + ZE.supplyScale * Math.max(0, (round | 0) - 1)) / 50) * 50;
 
+// The account XP lines of a run (js/game/awards.js shows them; dev/sim-zm-runs.mjs totals them): one source for both.
+// `played` is MATCH_XP.played, passed in so this module keeps off progression.js.
+export function zmXp({ kills = 0, head = 0, survived = 0, escaped = 0, warden = false, played = 200 }) {
+  const X = ZM.xp, lines = [['Match played', played]];
+  // Diminishing: the first killSoft undead pay `kill` each, the rest `killPast`.
+  const killLine = kills ? [`Undead put down x${kills}`, Math.min(kills, X.killSoft) * X.kill + Math.max(0, kills - X.killSoft) * X.killPast] : null;
+  if (killLine) lines.push(killLine);
+  if (head) lines.push([`Headshots x${head}`, head * X.head]);
+  if (survived) lines.push([`Rounds survived x${survived}`, survived * X.round]);
+  const bosses = Math.floor(survived / 10);
+  if (bosses) lines.push([`Bosses put down x${bosses}`, bosses * X.boss]);
+  if (escaped) lines.push([`Escaped on round ${escaped}`, X.escape + X.escapeRound * escaped]);
+  if (warden) lines.push(['Gravewarden put down', X.warden]);
+  // The run's cap comes off the undead line, which says so.
+  const over = lines.reduce((a, l) => a + l[1], 0) - X.cap;
+  if (over > 0 && killLine) { killLine[1] = Math.max(0, killLine[1] - over); killLine[0] += ' (run cap)'; }
+  return { lines, total: lines.reduce((a, l) => a + l[1], 0) };
+}
+
 // ---- Rounds ----
 
-// Zombies in round r (1-based). Four seats always (bots fill), so no player scaling.
-export function roundCount(r) {
+// Difficulty (docs/ZOMBIES.md "Difficulty"). Rounds 1-10 are as they were; after round 10 (owner notes, 1111-32: a solo
+// run with bots escaped round 18 untouched) health climbs faster, claws hit harder, runners close on a jogging player,
+// brutes come thicker, and the horde spawns quicker. A crew always has four seats, but people are better than the bots
+// that fill for them, so each person past the first adds count and health.
+export const ZM_LATE = {
+  from: 10,               // The round the late tuning starts after.
+  hpGrowth: 1.085,        // A shambler's health per round past round 9 (was 1.06).
+  dmgPerRound: 0.025,     // Claw damage +2.5% a round past round 10...
+  dmgMax: 1.5,            // ...to at most 1.5x.
+  runnerPerRound: 0.01,   // A runner's pace +0.01 of a run a round past round 12...
+  runnerMax: 0.1,         // ...to at most +0.1 (0.94 of a run: a jog no longer outruns them; a sprint still does).
+  spawnGapMin: 0.3,       // Seconds between spawns, at the quickest (was 0.45).
+  perHuman: { count: 0.2, hp: 0.1 },     // Per person in the crew past the first.
+};
+const humansPast = humans => Math.max(0, Math.min(ZM_SQUAD, humans | 0) - 1);
+
+// Zombies in round r (1-based), for `humans` people in the crew (bots fill the other seats).
+export function roundCount(r, humans = 1) {
   const base = r <= 5 ? [6, 9, 12, 16, 20][r - 1] : Math.round(0.15 * r * r + 2.3 * r + 8);
-  return Math.min(ZM.roundMax, isBossRound(r) ? Math.round(base * 0.6) : base);
+  const n = Math.round((isBossRound(r) ? base * 0.6 : base) * (1 + ZM_LATE.perHuman.count * humansPast(humans)));
+  return Math.min(ZM.roundMax, n);
 }
-// A shambler's health in round r: linear to round 9, then 6% more a round.
+// A shambler's health in round r: linear to round 9, then ZM_LATE.hpGrowth a round.
 export function roundHp(r) {
-  return Math.round(r <= 9 ? 120 + 70 * (r - 1) : 680 * Math.pow(1.06, r - 9));
+  return Math.round(r <= 9 ? 120 + 70 * (r - 1) : 680 * Math.pow(ZM_LATE.hpGrowth, r - 9));
 }
+// A zombie's full health: the round's, by kind; the bosses also by crew seats, everything by people past the first.
+export function zmMaxHp(kind, hp, crew, humans = 1) {
+  const K = ZM.kinds[ZM_KINDS[kind]];
+  return Math.round(hp * K.hp * (kind >= 3 ? 1 + 0.1 * crew : 1) * (1 + ZM_LATE.perHuman.hp * humansPast(humans)));
+}
+// A claw's damage in round r.
+export const clawDmg = (kind, r) => ZM.kinds[ZM_KINDS[kind]].dmg * Math.min(ZM_LATE.dmgMax, 1 + ZM_LATE.dmgPerRound * Math.max(0, r - ZM_LATE.from));
+// A zombie's pace (share of a run) in round r: shamblers quicken early (paceBonus), runners late.
+export const zmPace = (kind, r) => Math.min(1, ZM.kinds[ZM_KINDS[kind]].speed
+  + (kind === 0 ? paceBonus(r) : kind === 1 ? Math.min(ZM_LATE.runnerMax, ZM_LATE.runnerPerRound * Math.max(0, r - 12)) : 0));
+// Brutes up at once: three, one more every five rounds past round 10, at most six.
+export const bruteCap = r => Math.min(6, 3 + Math.floor(Math.max(0, r - ZM_LATE.from) / 5));
 export const isBossRound = r => r > 0 && r % 10 === 0;
 // The mix: runners from round 3 (most of the horde by round 12), brutes from round 5, never more than a few at once.
+// Past round 10 brutes keep climbing (to a fifth of the horde by round 22) and runners to 80% by round 15.
 export function roundMix(r) {
-  const runner = Math.max(0, Math.min(0.75, (r - 2) * 0.08));
-  const brute = r < 5 ? 0 : Math.min(0.12, 0.03 + (r - 5) * 0.01);
+  const runner = Math.max(0, Math.min(r <= 12 ? 0.75 : Math.min(0.8, 0.75 + (r - 12) * 0.017), (r - 2) * 0.08));
+  const brute = r < 5 ? 0 : r <= 10 ? Math.min(0.12, 0.03 + (r - 5) * 0.01) : Math.min(0.2, 0.08 + (r - 10) * 0.01);
   return { runner, brute };
 }
 // Seconds between spawns, and a shambler's pace bonus as rounds go on.
-export const spawnGap = r => Math.max(0.45, 2.1 - 0.11 * r);
+export const spawnGap = r => Math.max(r <= ZM_LATE.from ? 0.45 : ZM_LATE.spawnGapMin, 2.1 - 0.11 * r);
 export const paceBonus = r => Math.min(0.12, r * 0.01);
 
 // ---- Map layouts ----

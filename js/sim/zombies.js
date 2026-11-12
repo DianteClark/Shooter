@@ -23,7 +23,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import {
   ZM, ZE, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
-  roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
+  roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmMaxHp, clawDmg, zmPace, bruteCap, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
@@ -99,6 +99,8 @@ export class ZmRules {
 
   isZ(p) { return p.ai && p.team === ZM_TEAM; }
   get crew() { return this._crew ??= this.sim.players.filter(p => p.team !== ZM_TEAM); }
+  // People in the crew (bots fill the rest): the horde's count and health scale with them past the first.
+  get humans() { return Math.max(1, this.crew.filter(p => !p.isBot).length); }
   get horde() { return this._horde ??= this.sim.players.filter(p => this.isZ(p)); }
 
   // What a side carries: players the pistol and the blade, a frag and a stim, nothing of their class; zombies claws.
@@ -172,7 +174,7 @@ export class ZmRules {
     const sim = this.sim;
     this.round = r;
     this.state = 1;
-    this.count = roundCount(r);
+    this.count = roundCount(r, this.humans);
     this.spawned = 0; this.killed = 0;
     this.spawnT = 1.2;
     this.dropsThisRound = 0;
@@ -243,7 +245,7 @@ export class ZmRules {
     else {
       const mix = roundMix(this.round), u = this.rng();
       const brutes = this.horde.filter(q => q.alive && q.zk === 2).length;
-      kind = u < mix.brute && brutes < 3 ? 2 : u < mix.brute + mix.runner ? 1 : 0;
+      kind = u < mix.brute && brutes < bruteCap(this.round) ? 2 : u < mix.brute + mix.runner ? 1 : 0;
     }
     this._raise(seat, kind, spot);
     this.spawned++;
@@ -253,9 +255,9 @@ export class ZmRules {
     const sim = this.sim, K = ZM.kinds[ZM_KINDS[kind]];
     p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0;
     sim._placeAt(p, spot, Math.atan2(sim.map.height / 2 - spot.z, sim.map.width / 2 - spot.x));
-    p.hp = p.zMax = Math.round(this.hp * K.hp * (kind >= 3 ? 1 + 0.1 * this.crew.length : 1));
+    p.hp = p.zMax = zmMaxHp(kind, this.hp, this.crew.length, this.humans);
     p.zSwing = 0; p.zCool = 0.4 + this.rng() * 0.4; p.zT = null; p.zStuck = 0; p.zLastX = spot.x; p.zLastZ = spot.z; p.zStuckT = 0;
-    p.zPace = Math.min(1, K.speed + (kind === 0 ? paceBonus(this.round) : 0)) * (0.92 + this.rng() * 0.16);
+    p.zPace = zmPace(kind, this.round) * (0.92 + this.rng() * 0.16);
     p.ps.tacticalLeft = 0; p.ps.lethalLeft = 0;
     if (kind === 3) this.bossSeat = p.index;
   }
@@ -410,7 +412,7 @@ export class ZmRules {
       if (p.zSwing <= 0) {
         p.zCool = K.cool;
         const hit = this._clawTarget(p, K.reach + 0.45);
-        if (hit) sim._damage(hit, p, K.dmg, NO_GUN, Math.hypot(hit.ps.x - ps.x, hit.ps.z - ps.z));
+        if (hit) sim._damage(hit, p, clawDmg(p.zk, this.round), NO_GUN, Math.hypot(hit.ps.x - ps.x, hit.ps.z - ps.z));
       }
     } else if (p.zCool <= 0 && this._clawTarget(p, K.reach)) {
       p.zSwing = K.windup;
@@ -1080,7 +1082,7 @@ export class ZmRules {
     const sim = this.sim, obj = view.obj ?? view.points?.obj, old = obj?.rules ?? null;
     this.authority = true;
     if (old && old !== this) {
-      this.round = old.round; this.state = old.state; this.timer = old.timer; this.count = old.count || roundCount(Math.max(1, old.round));
+      this.round = old.round; this.state = old.state; this.timer = old.timer; this.count = old.count || roundCount(Math.max(1, old.round), this.humans);
       this.killed = old.killed; this.open = old.open; this.best = old.best;
       Object.assign(this.box, old.box, { moveAt: this._moveAt(), uses: 0 });
       this.drops = old.drops.map(d => ({ ...d, t: sim.time }));
@@ -1100,9 +1102,9 @@ export class ZmRules {
         if (p.alive) {
           live++;
           const K = ZM.kinds[ZM_KINDS[p.zk]];
-          p.hp = p.zMax = Math.round(this.hp * K.hp * (p.zk >= 3 ? 1 + 0.1 * this.crew.length : 1));
+          p.hp = p.zMax = zmMaxHp(p.zk, this.hp, this.crew.length, this.humans);
           p.zSwing = 0; p.zCool = 0.5; p.zStuck = 0; p.zStuckT = 0; p.zLastX = p.ps.x; p.zLastZ = p.ps.z;
-          p.zPace = Math.min(1, K.speed + (p.zk === 0 ? paceBonus(this.round) : 0));
+          p.zPace = zmPace(p.zk, this.round);
           p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0;
           // The bosses keep what the bar showed.
           if (p.zk === 3) { this.bossSeat = p.index; if (this._bossHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._bossHp / 100)); }

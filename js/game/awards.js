@@ -20,7 +20,7 @@ import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
-import { ZM } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
+import { ZM, zmXp } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
 import { getCamo } from '../shared/camos.js';
 import { performance } from '../shared/ranked.js';
 
@@ -242,17 +242,10 @@ export class MatchAwards {
       const escaped = !!zmObj.escaped?.includes(me.id), warden = zmObj.quest?.state === 2;
       const survived = Math.max(0, (zmObj.round ?? 1) - (escaped ? 0 : 1));
       lines.length = 0;
-      lines.push(['Match played', MATCH_XP.played]);
-      if (this.kills) lines.push([`Undead put down x${this.kills}`, this.kills * ZM.xp.kill]);
-      if (this.headshots) lines.push([`Headshots x${this.headshots}`, this.headshots * ZM.xp.head]);
-      if (survived) lines.push([`Rounds survived x${survived}`, survived * ZM.xp.round]);
-      const bosses = Math.floor(survived / 10);
-      if (bosses) lines.push([`Bosses put down x${bosses}`, bosses * ZM.xp.boss]);
-      if (escaped) lines.push([`Escaped on round ${zmObj.round}`, ZM.xp.escape + ZM.xp.escapeRound * (zmObj.round ?? 0)]);
-      if (warden) lines.push(['Gravewarden put down', ZM.xp.warden]);
+      lines.push(...zmXp({ kills: this.kills, head: this.headshots, survived, escaped: escaped ? zmObj.round ?? 0 : 0, warden, played: MATCH_XP.played }).lines);
       let feat = null;
       if (escaped || warden) { try { feat = Progress.recordZmFeat?.(this.mapId, { escaped: escaped ? zmObj.round : 0, boss: warden }) ?? null; } catch (err) { console.error('zm feat', err); } }
-      for (const b of Object.values(this.weapons)) b.xp = Math.round(b.xp * ZM.weaponXp);
+      for (const b of Object.values(this.weapons)) b.xp = Math.min(ZM.weaponXpCap, Math.round(b.xp * ZM.weaponXp));
       let rec = { best: survived, before: 0, fresh: false };
       try { rec = Progress.recordZm?.(this.mapId, survived) ?? rec; } catch (err) { console.error('zm record', err); }
       zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',

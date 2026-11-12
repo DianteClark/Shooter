@@ -59,10 +59,15 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
 - **Start**: 6 s warmup. Everyone (humans and bots) spawns together on open ground in the start band with the pistol,
   the blade, a frag and a stim; class loadouts, attachments, perks and streaks stay home (the loadout's scorestreaks
   neither charge nor fire: `ZmRules.noStreaks`, `Sim._deal`, `Sim.useStreak`). 500 points each.
-- **Rounds**: count `roundCount(r)` (6, 9, 12, 16, 20, then 0.15r^2 + 2.3r + 8, at most 220; boss rounds 60%); shambler
-  health `roundHp(r)` (120 + 70 a round to round 9, then +6% a round); runners from round 3 (75% of the horde at most),
-  brutes from round 5 (up to 12%, never more than three alive); every 10th round starts with the boss (the Yardmaster,
-  22x health, +10% per player). Spawns come every `spawnGap(r)` (2.1 s falling to 0.45 s). 10 s between rounds.
+- **Rounds**: count `roundCount(r, humans)` (6, 9, 12, 16, 20, then 0.15r^2 + 2.3r + 8, at most 220; boss rounds 60%;
+  +20% per person in the crew past the first); shambler health `roundHp(r)` (120 + 70 a round to round 9, then +8.5% a
+  round); runners from round 3 (75% of the horde by round 12, 80% by 15), brutes from round 5 (12% by round 10, then
+  climbing to 20% by round 22; three alive at once, one more every five rounds past 10, at most six); every 10th round
+  starts with the boss (the Yardmaster, 30x health, +10% per crew seat). Every zombie +10% health per person past the
+  first (`zmMaxHp`). Spawns come every `spawnGap(r)` (2.1 s falling to 0.45 s, 0.3 s past round 10). Past round 10 claws
+  hit 2.5% harder a round (at most 1.5x, `clawDmg`) and past round 12 runners gain 0.01 of a run's pace a round (at most
+  +0.1: 0.94 of a run, `zmPace`). 10 s between rounds. The numbers are `ZM_LATE` in js/shared/zombies.js; see
+  "Difficulty and pay" below.
 - **The cap**: at most `ZM.seats` = 24 zombies alive. The rest of the round's count waits for a seat.
 - **Horde AI**: a Dijkstra flow field per player who is up over the nav grid (rebuilt when they change cell, at most every
   12 ticks, staggered by seat); each zombie walks downhill on the field of the nearest player by path, straight in
@@ -110,8 +115,8 @@ The owner reached round 12 with lots of points and all four perks and nothing to
 | **Supply terminal** | the start area (Ashgrove: the Halt's yard wall) | a sheet of five, one of each per player a round, prices up 5% a round past round 1: **Sentry Gun** (1500: 40 s at your feet, 15 m, 12% of a round's health a shot), **Air Strike** (2500: the thickest crowd within 25 m, five 4 m shells, 300% each; bosses 6%), **Hunter Drone** (2000: 45 s at your shoulder, flies to what it hunts, 14% a shot), **Lure** (1000: the undead within 30 m by path go for it for 12 s, then it blows for 200% in 5 m), **Armour Vest** (1250: every plate at once). At most eight pieces of gear in play. Trap, sentry, drone, strike and lure kills pay half a kill (30) and no hit points |
 | **Armour bench** | one gate out (Ashgrove: the signal box) | a plate for 500, three at most (50 each); plates take claws before health (after Ironhide), the bar of three over health |
 | **Traps** | 2-3 per map at gates (Ashgrove: the three reserved chokepoints) | **Live Rail** (electric floor), **Firedamp Vents** (fire), **Threshers** (spinning blades): 1000 at the switch beside it, 30 s running, 45 s cooling. The undead in it take 140% of a round's health a second (bosses 1.2%); kills pay 10. A player in it takes 14 a second |
-| **Exfil** | a far area (Ashgrove: the Burial Field's north-east corner) | from round 15, 12000 to call at the pad: a final wave (a zombie every ~0.4 s, off the round's count) for 60 s, then whoever is up on the pad gets out: the match is won, "Escaped on round N", 2000 + 100 a round XP and the map's escape record. Nobody on the pad: the exfil leaves, the match goes on |
-| **The quest** | three relics (Ashgrove: the lamp room, the crypt, the coal stage) and the altar (the obelisk's south face) | pick up the relics (shared by the crew), set them on the altar: the **Gravewarden** rises (40x a round's health, +10% per player, calls up two runners every 10 s, off the round's count). Putting it down pays 3000 each, 3000 XP and the **Lantern Out** calling card |
+| **Exfil** | a far area (Ashgrove: the Burial Field's north-east corner) | from round 15, 15000 to call at the pad: a final wave (a zombie every ~0.3 s, off the round's count, brutes at the round's share) for 75 s, then whoever is up on the pad gets out: the match is won, "Escaped on round N", 1000 + 50 a round XP and the map's escape record. Nobody on the pad: the exfil leaves, the match goes on |
+| **The quest** | three relics (Ashgrove: the lamp room, the crypt, the coal stage) and the altar (the obelisk's south face) | pick up the relics (shared by the crew), set them on the altar: the **Gravewarden** rises (55x a round's health, +10% per player, calls up two runners every 10 s, off the round's count). Putting it down pays 3000 each, 1500 XP and the **Lantern Out** calling card |
 | **Last Breath** | a perk machine | go down and get yourself up 3 s later with every perk kept, even with nobody else up; then spent for three rounds |
 
 **Placement.** Ashgrove uses its reserved spots (`map.zm.reserved`) and its own `quest` block. The banded maps place the
@@ -182,6 +187,53 @@ tier 3 by round 20, with the perk slot (8000) and two more perks (5500) beside t
 at the suggested 5000 / 15000 / 30000, the terminal's cheapest items (lure, sentry) at about a round's income at round
 10, plates at a tenth of it.
 
+## Difficulty and pay (the tuning after 1111-32, owner notes)
+The owner's first Ashgrove run on 1111-32: solo with three bots, escaped on round 18 with **no downs**, 692 kills, the
+Gravewarden down, "could've easily kept going". It paid **+28,432 account XP** (a normal match pays 2,000 to 4,000) and
+**+16,545 weapon XP** (a gun from nothing to level 30 in one run). Target: a good player's solo run with bots ends
+somewhere between rounds 12 and 25; a long run pays 2 to 3 long multiplayer matches; no gun maxes in a run.
+
+**What changed** (rounds 1 to 10 are exactly as they were, so new and bot-only crews meet the same opening): shambler
+health +8.5% a round past round 9 (was 6%), claws +2.5% a round past 10 (to 1.5x), runners quicker past 12 (to 0.94 of
+a run: a jog no longer outruns them), runners 80% and brutes up to 20% of the late horde with up to six brutes up at
+once, spawns down to 0.3 s apart (was 0.45), the Yardmaster 30x health (was 22x), the Gravewarden 55x (was 40x), the
+exfil 15000 for a 75 s wave of a zombie every 0.3 s with brutes in it (was 12000, 60 s, 0.42 s, half the brutes); per
+person past the first, +20% count and +10% health. Pay: see Progression.
+
+**Measured** (`node dev/sim-zm-runs.mjs`, Ashgrove). Held crew (`--held`: claws counted, no health taken, tier-2 guns
+from round 10), seed 7:
+
+| round | hp before / after | live mean before / after | peak | claw damage per player per minute, before / after |
+|---|---|---|---|---|
+| 8 | 610 / 610 | 4.6 / 4.6 | 8 / 8 | 70 / 70 |
+| 10 | 721 / 738 | 4.1 / 4.3 | 9 / 10 | 149 / 267 |
+| 12 | 810 / 869 | 6 / 6.4 | 10 / 11 | 97 / 132 |
+| 14 | 910 / 1022 | 8 / 9 | 14 / 15 | 541 / 598 |
+| 15 | 965 / 1109 | 13.3 / 13 | 22 / 22 | 1434 / 1321 |
+| 16 | 1022 / 1204 | 12.9 / 15.5 | 20 / 24 | 856 / 1884 |
+| 17 | 1084 / 1306 | 11.8 / 17.1 | 20 / 24 | 1053 / 2329 |
+| 18 | 1149 / 1417 | 10.9 / 17.6 | 17 / 24 | 1307 / 2614 |
+| 20 | 1291 / 1668 | 9.2 / 11.8 | 20 / 24 | 620 / 1856 |
+| 21 | 1368 / 1810 | 10.4 / 19.2 | 22 / 24 | 812 / 3392 |
+| 22 | 1450 / 1964 | 12.5 / 18.3 | 24 / 24 | 1095 / 3643 |
+| 24 | 1630 / 2312 | 8.5 / 14 | 16 / 24 | 199 / 2111 |
+| 25 | 1727 / 2508 | 17.6 / 15.8 | 24 / 24 | 1563 / 2778 |
+| 26 | 1831 / 2722 | 17.2 / 19.7 | 24 / 24 | 2072 / 3811 |
+
+The late horde is about twice as thick and hits about twice as hard from round 15: the pressure the 1111-32 build
+reached on rounds 25-26 (1,563 to 2,072 a minute) now comes on rounds 15-16, and round 18's is double what the owner
+met. Where a person ends cannot be measured headless: the human-like stand-in (js/sim/humanlike.js, a thumb's aim on a
+bot's legs) does not kite, and its crews fall to the round-10 boss on both builds (six runs each: rounds 7 9 9 10 10
+11 before, 7 9 9 10 10 10 after; the opening is unchanged). Calibrating a "person" proxy by letting fewer claws land
+failed the same way (the run ends when the bots are down and the stand-in is cornered). Reading the pressure table
+against the owner's run puts the same player's end around rounds 16 to 20, inside the target; worth checking against
+the owner's next run.
+
+**Pay** for the owner's run (692 kills, ~300 headshots, escaped 18, Gravewarden): the mode's own lines 19,064 before,
+**8,224** after (200 played, 2,284 undead, 600 headshots, 1,440 rounds, 300 boss, 1,900 escape, 1,500 Gravewarden),
+under the 10,000 run cap; challenges and mastery come on top as in any mode. Weapon XP 16,545 before, about **5,500**
+after (10% share; a single gun stops at 5,000 a run, level 15 of 30 from nothing).
+
 ## Wire
 The horde never goes out as player records. The rules block (`encode`) carries round, state, timer, undead left, the
 open-gate mask, the crate, Double Pay, a short crew array `[points, perk bits | downed | revive progress, kills,
@@ -197,13 +249,15 @@ the health their bars showed), the bench, traps, gear, the exfil, the quest and 
 cap.
 
 ## Progression
-- XP: match played, 12 per kill, 4 per headshot, 120 per round survived, 400 per boss round passed; guns earn 30% of the
-  usual weapon XP. Kills stay off the K/D boards.
+- XP (`zmXp`, shown by js/game/awards.js): match played, 8 per kill for the first 150 and 2 each after, 2 per
+  headshot, 80 per round survived, 300 per boss round passed, an escape 1000 + 50 a round, the Gravewarden 1500; the
+  run's own lines stop at 10,000 (the cap comes off the undead line, marked "run cap"). Guns earn 10% of the usual
+  weapon XP, at most 5000 per gun per run (the curve tops out at 12,122). Kills stay off the K/D boards.
 - Save: `save.zmBest` = `{mapId: rounds}` (best rounds survived), only ever goes up; SY4 export code entry [19],
   appended after career [17] and season [18] (written only when there is a record). `recordZmBest`, `cleanZmBest`.
 - Feats (item 36): `save.zmFeats` = `{mapId: [best round escaped on, Gravewarden down 0|1]}`, only ever goes up; SY4
   entry [21], appended after the finisher picks [20] (written only when there is one). `recordZmFeat`, `cleanZmFeats`.
-  An escape pays 2000 + 100 a round ("Escaped on round N"), the Gravewarden 3000; the **Lantern Out** calling card
+  An escape pays 1000 + 50 a round ("Escaped on round N"), the Gravewarden 1500; the **Lantern Out** calling card
   (Career) follows the flag on any map. The results screen says Escaped and lists the best escape.
 
 ## Performance (dev/sim-zombies.mjs, 24 live, every gate open, every trap running, two sentries, two drones, tier-3 guns)

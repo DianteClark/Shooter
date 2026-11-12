@@ -414,7 +414,7 @@ export class ZmEcon {
       const spot = R._riser();
       if (spot) {
         const mix = roundMix(R.round), u = R.rng();
-        this._extra(u < mix.brute * 0.5 ? 2 : u < 0.85 ? 1 : 0, spot);
+        this._extra(u < mix.brute ? 2 : u < 0.85 ? 1 : 0, spot);     // Brutes at the round's full share (half on 1111-32).
       }
     }
     if (X.timer > 0) return;
