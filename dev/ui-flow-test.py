@@ -135,7 +135,7 @@ async def main():
             pls = await pg.evaluate("[...document.querySelectorAll('.mp-pl')].map(b => b.dataset.id)")
             check('Battle Royale: Quads, Duos, Solos', pls == ['quads', 'duos', 'solos'], pls)
             soon = await pg.evaluate("document.querySelector('[data-act=\"mpTab\"][data-tab=\"extraction\"]')?.disabled")
-            check('Extraction tab shown, disabled', soon is True, soon)
+            check('Extraction tab shown and open', soon is False, soon)
             await tap('[data-act="mpPlaylist"][data-id="duos"]')
             if SHOTS: await shots(pg, 'multiplayer-br')
             opts, info = await find_and_vote({'giant'}, {'brduo'}, cards=(1, 3))

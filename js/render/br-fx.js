@@ -262,6 +262,8 @@ export class BrFx {
     this.chutes.instanceMatrix.needsUpdate = true;
     if (this.chutes.instanceColor) this.chutes.instanceColor.needsUpdate = true;
     this.rings.instanceMatrix.needsUpdate = true;
+    // The renderer's scene does not update world matrices by itself (renderer.js): the plane, wall and rings move here.
+    this.group.updateMatrixWorld(true);
   }
 
   dispose() {
