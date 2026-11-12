@@ -8,10 +8,11 @@
 //   take      "Take <gun>" when a ground gun is in reach and both hands are full (an empty hand fills itself)
 //   squad     each squadmate's plates and health, down and out marks
 //   down      the downed overlay: bleed bar, revive progress, the self-revive button
-//   out       eliminated: placement, and who you are watching
+//   out       eliminated: placement, and who you are watching (Rebound: the redeploy countdown)
+//   rebound   Rebound's note under the top chips: redeploys on until circle N, then off
 //   map       the drop map before and during the flight (places, flight line, transport) and the full map on a tap of
 //             the minimap: circle, next circle, squad.
-import { BR, MODES } from '../shared/modes.js';
+import { BR, MODES, RB, brPhases, isRebound } from '../shared/modes.js';
 import { MAX_HP, TEAMS, WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { BR_KIND, itemName, AMMO_TYPES } from '../sim/br.js';
@@ -95,6 +96,12 @@ const CSS = `
 .br-out { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; min-width: 260px; padding: 12px 18px;
   background: linear-gradient(180deg, rgba(42,51,61,.92), rgba(16,20,26,.9)); box-shadow: var(--hud-edge); clip-path: polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px); }
 .br-out b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
+.br-rd { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); padding: 3px 10px; white-space: nowrap;
+  font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); background: rgba(16,20,26,.7); box-shadow: inset 0 -2px 0 #59d36b; }
+.br-rd.off { color: var(--c-haze); box-shadow: inset 0 -2px 0 rgba(231,234,228,.3); }
+.br-rd[hidden], .br-out .rd[hidden] { display: none; }
+.br-out .rd { margin: 8px auto 0; width: 200px; height: 6px; background: rgba(231,234,228,.15); position: relative; }
+.br-out .rd i { position: absolute; inset: 0; background: #59d36b; transform-origin: left; transform: scaleX(var(--k, 0)); }
 .br-out .place { font: 400 44px/1 var(--f-stencil); color: var(--c-sodium); }
 .br-out small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); margin-top: 6px; }
 .br-out button { height: 40px; min-width: 112px; padding: 0 14px; border: 0; font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-chalk);
@@ -178,6 +185,7 @@ export class BrHud {
         <div class="br-chip br-squads"><b>8</b><small>Squads</small></div>
       </div>
       <div class="br-outside" hidden>Outside the circle</div>
+      <div class="br-rd" hidden></div>
       <div class="br-squad"></div>
       <div class="br-inv">
         <button class="br-btn br-plate" data-tap="1" data-act="plate">${icon('plates', { size: 18 })}<span class="n">0</span><small>Plate</small><i class="br-fill"></i></button>
@@ -190,7 +198,7 @@ export class BrHud {
       <div class="br-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div>
         <button class="br-btn br-self" data-tap="1" hidden>${icon('ui:refresh', { size: 16 })}<span>Self-revive</span></button></div>
       <div class="br-reviving" hidden><b>Reviving</b><i><i></i></i></div>
-      <div class="br-out" hidden><div class="txt"><b>Eliminated</b><div class="place"></div><small></small></div>
+      <div class="br-out" hidden><div class="txt"><b>Eliminated</b><div class="place"></div><small></small><div class="rd" hidden><i></i></div></div>
         <div class="acts"><button data-tap="1" class="br-spec go">Spectate</button><button data-tap="1" class="br-spec-next quiet" hidden>Next player</button><button data-tap="1" class="br-spec-squad quiet" hidden>Next squad</button><button data-tap="1" class="br-leave">Leave</button></div></div>
       <div class="br-map" hidden data-tap="1">
         <div class="br-map-frame"><canvas width="${MAP_PX}" height="${MAP_PX}"></canvas></div>
@@ -220,6 +228,7 @@ export class BrHud {
     this.hintEl = $('.br-hint');
     this.downEl = $('.br-down'); this.selfBtn = $('.br-self');
     this.outEl = $('.br-out');
+    this.rdEl = $('.br-rd');
     this.mapEl = $('.br-map'); this.mapCanvas = $('.br-map canvas'); this.mapG = this.mapCanvas.getContext('2d');
     const act = (node, fn) => node.addEventListener('click', e => { e.stopPropagation(); fn(); });
     act(this.plateBtn, () => this.cmd?.('plate'));
@@ -272,7 +281,10 @@ export class BrHud {
     this.dropLock = false;
     this.base = null;
     this.toggleMap(true, true);
-    this.pips.innerHTML = '<i></i>'.repeat(BR.phases.length);
+    this.phaseN = brPhases(mode).length;
+    this.rebound = isRebound(mode);
+    this.pips.innerHTML = '<i></i>'.repeat(this.phaseN);
+    this.rdEl.hidden = true;
     const mm = this.hud.el.querySelector('.minimap');
     if (!this.mmWired) {
       this.mmWired = true;
@@ -307,6 +319,7 @@ export class BrHud {
     if (c.pip !== pip) { c.pip = pip; [...this.pips.children].forEach((n, i) => n.classList.toggle('on', i < pip)); }
     const outside = me.alive && !air && Math.hypot(me.x - br.circle.x, me.z - br.circle.z) > br.circle.r;
     if (c.outside !== outside) { c.outside = outside; this.outsideEl.hidden = !outside; }
+    this.#reboundNote(view, br);
 
     // Map: up by itself during boarding and the flight, until you jump (there is no close button).
     const wantAuto = (view.phase === 'warmup' || air === 1) && me.alive;
@@ -468,12 +481,12 @@ export class BrHud {
 
   #squad(view, me) {
     const mates = view.players.filter(p => p.team === me.team && p.id !== me.id);
-    const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}`).join(';');
+    const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}|${p.redeploy}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
     this.squadEl.innerHTML = mates.map(p => {
       const state = !p.alive ? 'out' : p.downed ? 'down' : '';
-      const note = !p.alive ? 'Out' : p.downed ? 'Down' : p.away ? 'Away' : p.air ? 'Air' : '';
+      const note = !p.alive ? (p.redeploy ? 'Redeploy' : 'Out') : p.downed ? 'Down' : p.away ? 'Away' : p.air ? 'Air' : '';
       const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2)}"></i>`).join('');
       return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
         <span class="bars">${plates}<i style="flex:2.2;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
@@ -542,7 +555,8 @@ export class BrHud {
     const c = this.c;
     const watch = out ? spectate.target(view, me.id) : null;
     const mates = out ? view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length : 0;
-    const key = out ? `${watch}|${me.place}|${mates}|${spectate.any}|${view.br.squadsLeft}` : '';
+    const rd = out ? view.br.inv?.redeploy ?? 0 : 0;      // Rebound: seconds until you parachute back in.
+    const key = out ? `${watch}|${me.place}|${mates}|${spectate.any}|${view.br.squadsLeft}|${Math.ceil(rd)}` : '';
     if (c.out === key) return;
     c.out = key;
     this.outEl.hidden = !out;
@@ -563,6 +577,27 @@ export class BrHud {
     $('.br-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
     $('.br-spec-next').textContent = mates ? 'Next teammate' : 'Next player';
     $('.br-spec-squad').hidden = !others || view.br.squad < 2;
+    const rdBar = $('.rd');
+    rdBar.hidden = !(rd > 0);
+    if (rd > 0) {
+      const full = RB.redeploy[Math.min(view.br.phase, RB.redeploy.length - 1)];
+      $('b').innerHTML = `Redeploying in ${Math.ceil(rd)}`;
+      $('small').textContent = w ? `Watching ${w.name}. You parachute in next to your squad.` : 'You parachute in next to your squad.';
+      rdBar.style.setProperty('--k', Math.max(0, Math.min(1, 1 - rd / full)).toFixed(2));
+      $('.br-spec').hidden = true; $('.br-leave').hidden = false;
+    }
+  }
+
+  // Rebound: under the top chips, whether a death still means a redeploy and until which circle.
+  #reboundNote(view, br) {
+    const on = this.rebound && view.phase !== 'ended';
+    const live = on && br.phase < RB.redeployEnd && br.state !== 'final';
+    const text = !on ? '' : live ? `Redeploys on: they end at circle ${RB.redeployEnd + 1}` : 'Redeploys over: no coming back';
+    if (this.c.rd === text) return;
+    this.c.rd = text;
+    this.rdEl.hidden = !text;
+    this.rdEl.textContent = text;
+    this.rdEl.classList.toggle('off', on && !live);
   }
 
   // Feed rows and callouts for the battle royale's own events.
@@ -604,7 +639,7 @@ export class BrHud {
         break;
       }
       case 'brphase':
-        if (e.state === 'wait' && e.phase >= BR.phases.length - 3 && !this.calledFinal) {
+        if (e.state === 'wait' && e.phase >= (this.phaseN ?? BR.phases.length) - 3 && !this.calledFinal) {
           this.calledFinal = true;
           const n = view.br?.squadsLeft ?? 0, solo = BR_SOLO(this.mode);
           const el = document.createElement('div');
@@ -619,6 +654,13 @@ export class BrHud {
         else if (e.state === 'final') this.hud.notify('Final circle');
         break;
       case 'brjump': if (e.id === me) { this.c.mapDismissed = true; this.toggleMap(false); } break;
+      case 'brwait':
+        if (e.id === me) this.hud.notify(`Redeploy in ${Math.ceil(e.secs)} s while your squad holds on`);
+        break;
+      case 'brredeploy':
+        if (e.id === me) this.hud.notify('Redeployed: steer the glide to your squad');
+        else if (view.players.find(p => p.id === e.id)?.team === myTeam) this.hud.notify(`${view.players.find(p => p.id === e.id)?.name ?? 'A squadmate'} is back in`);
+        break;
       default: break;
     }
   }

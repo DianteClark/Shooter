@@ -2,7 +2,7 @@
 // options of the pre-match vote, and who fills the seats. Pure data and functions; js/ui/playscreens.js draws them and
 // js/main.js runs the search, the vote and the match.
 //
-//   MP_TABS                          Standard, Ground War, Battle Royale, Extraction (Quads and Duos on Frontier)
+//   MP_TABS                          Standard (with Showdown 2v2), Ground War, Battle Royale (with Rebound), Extraction
 //   playlistsFor(tab)                [{id, name, sub, modes, mods, featured?, icon}] the tab's playlists
 //   modesFor(tab)                    the single modes a player can tick on that tab (none on Battle Royale)
 //   resolveSelection(tab, sel, o)    {modes, mods, name} for a pick: one playlist, or one or more ticked modes; with
@@ -21,13 +21,13 @@ import { modeFits, weightedMap, tierOf, BR_PICK } from './vote.js';
 export const MP_TABS = [
   { id: 'standard', name: 'Standard', note: '6 v 6', icon: 'mode:tdm' },
   { id: 'groundwar', name: 'Ground War', note: '16 v 16', icon: 'party' },
-  { id: 'br', name: 'Battle Royale', note: '32 players', icon: 'mode:br' },
+  { id: 'br', name: 'Battle Royale', note: '20-32 players', icon: 'mode:br' },
   { id: 'extraction', name: 'Extraction', note: '16 players', icon: 'mode:ex' },
   { id: 'zombies', name: 'Zombies', note: 'Co-op, 1-4', icon: 'mode:zm' },
 ];
 export const MP_TAB_IDS = MP_TABS.filter(t => !t.soon).map(t => t.id);
 
-const STANDARD_MODES = ['tdm', 'dom', 'kc', 'hard', 'hq', 'snd', 'ctf', 'ffa', 'ko', 'ctl', 'grind', 'gun', 'inf', 'oic'];
+const STANDARD_MODES = ['tdm', 'dom', 'kc', 'hard', 'hq', 'snd', 'ctf', 'ffa', 'ko', 'ctl', 'grind', 'gun', 'inf', 'oic', 'gf'];
 const GROUND_WAR_MODES = ['gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf'];
 const short = ids => ids.map(id => MODES[id].short).join(', ');
 
@@ -36,6 +36,8 @@ const PLAYLISTS = {
     { id: 'qp', name: 'Quick Play: Standard', icon: 'quick', modes: ['tdm', 'dom', 'kc', 'hard', 'hq', 'ffa'] },
     { id: 'obj', name: 'Objective', icon: 'mode:dom', modes: ['dom', 'hard', 'hq', 'snd', 'ctf', 'ctl', 'grind'] },
     { id: 'party', name: 'Party modes', icon: 'party', modes: ['gun', 'inf', 'oic', 'ko'] },
+    // Showdown (ROADMAP 31): 2 v 2 rounds on the small maps, a friend as your partner or a bot.
+    { id: 'showdown', name: 'Showdown 2v2', icon: 'mode:gf', modes: ['gf'], sub: '2 v 2 rounds, same kit for all, first to 6' },
   ],
   groundwar: [
     { id: 'gwqp', name: 'Quick Play: Ground War', icon: 'quick', modes: GROUND_WAR_MODES },
@@ -45,6 +47,9 @@ const PLAYLISTS = {
     { id: 'quads', name: 'Quads', icon: 'mode:br', modes: ['br'], sub: '8 squads of four' },
     { id: 'duos', name: 'Duos', icon: 'mode:br', modes: ['brduo'], sub: '16 pairs' },
     { id: 'solos', name: 'Solos', icon: 'mode:br', modes: ['brsolo'], sub: '32 alone' },
+    // Rebound (ROADMAP 27): a small part of the map, a fast circle, redeploys while a squadmate lives.
+    { id: 'rbquads', name: 'Rebound Quads', icon: 'mode:rb', modes: ['rb'], sub: '6 squads of four, redeploys' },
+    { id: 'rbduos', name: 'Rebound Duos', icon: 'mode:rb', modes: ['rbduo'], sub: '10 pairs, redeploys' },
   ],
   // Extraction (docs/EXTRACT.md): squads only, never solos.
   extraction: [
@@ -137,6 +142,7 @@ export function lobbySize(tab, modes) {
   if (tab === 'br' || tab === 'extraction') return MODES[modes[0]]?.players ?? 32;
   if (tab === 'groundwar') return 32;
   if (tab === 'zombies') return MODES.zm.teamSize;
+  if (modes.length && modes.every(m => MODES[m]?.teamSize === 2 && !MODES[m]?.ffa)) return 4;     // Showdown.
   return modes.some(m => !MODES[m]?.ffa) ? 12 : 8;
 }
 

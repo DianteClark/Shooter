@@ -1,5 +1,5 @@
-// The modes overhaul's HUD layer (docs/MODES.md): Headquarters, Kill Order, Infected, One in the Chamber, Control and
-// Grind. The ordinary HUD owns one and calls it from a few hooks (prepare, update, onEvent, drawMini, meter, stat), the
+// The modes overhaul's HUD layer (docs/MODES.md): Headquarters, Kill Order, Infected, One in the Chamber, Control,
+// Grind and Showdown. The ordinary HUD owns one and calls it from a few hooks (prepare, update, onEvent, drawMini, meter, stat), the
 // way it calls the battle royale layer. Zones (the HQ, Control's two, Grind's banks) are drawn by the ordinary objective
 // chips, markers and renderer through the mode's `look`; this adds what those cannot say:
 //
@@ -15,7 +15,7 @@ import { spectate } from '../sim/snd.js';
 import { icon } from './icons.js';
 import { esc } from './widgets.js';
 
-const RULES = new Set(['hq', 'ko', 'inf', 'oic', 'ctl', 'grind']);
+const RULES = new Set(['hq', 'ko', 'inf', 'oic', 'ctl', 'grind', 'gf']);
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const MARK_Y = 2.6;          // Metres above the ground a head tag floats.
 
@@ -49,6 +49,9 @@ const CSS = `
 .mh-tag.mine { color: var(--c-blue-hi, #6cc4ff); }
 .mh-tag.enemy { color: #ff7a6a; }
 .mh-tag.carry span { color: var(--c-sodium); }
+/* Showdown: each enemy's health over their head. */
+.mh-tag .mh-hp { width: 36px; height: 4px; background: rgba(0,0,0,.55); box-shadow: 0 0 0 1px rgba(0,0,0,.6); position: relative; }
+.mh-tag .mh-hp i { position: absolute; inset: 0; background: #ff7a6a; transform-origin: left; transform: scaleX(var(--k, 1)); }
 .mh-mods { position: absolute; left: calc(50% + 184px); top: calc(var(--st) + 10px); display: flex; gap: 3px; }
 .mh-mods i { font: 400 10px/1 var(--f-stencil); font-style: normal; letter-spacing: var(--tr-stencil); padding: 3px 5px; color: var(--c-night); background: var(--c-sodium);
   clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
@@ -108,7 +111,7 @@ export class ModeHud {
     this.wait.hidden = true;
     for (const t of this.tags) t.root.hidden = true;
     this.hud.el.classList.toggle('mh-on', this.on);
-    this.hud.el.classList.toggle('mh-dealt', this.rules === 'oic' || this.rules === 'inf');
+    this.hud.el.classList.toggle('mh-dealt', this.rules === 'oic' || this.rules === 'inf' || this.rules === 'gf');
     this.hud.el.classList.remove('mh-held', 'mh-watch');
     this.watching = false;
     this.hud.el.classList.toggle('hc-on', mods.includes('hardcore'));
@@ -228,6 +231,34 @@ export class ModeHud {
     this.#hideTags();
   }
 
+  // Showdown: the round and its clock state, the kit number, overtime; every enemy's health over their head.
+  _gf(view, me, o) {
+    const mine = view.scores?.[me.team] ?? 0, theirs = view.scores?.[1 - me.team] ?? 0;
+    const up = t => view.players.filter(p => p.team === t && p.alive && !p.away).length;
+    const word = o.state === 'freeze' ? `Round ${o.round}` : o.state === 'post' ? `Round ${o.round} over` : o.overtime ? 'Overtime: take the flag' : `${up(me.team)} v ${up(1 - me.team)}`;
+    const sub = o.state === 'freeze' ? ((o.round - 1) % 2 === 0 ? 'New kit for everyone' : 'Same kit as last round') : o.overtime ? 'Stand on it alone, or have more health at the end' : 'One life. No health regen';
+    this.#paint(`${o.state}${o.round}${o.overtime}${mine}${theirs}${word}`, {
+      ico: o.overtime ? 'ui:flag' : 'mode:gf', word, sub, side: o.overtime ? 'alert' : '',
+      extra: `<span class="mh-num">${mine}-${theirs}</span>`,
+    });
+    const out = !me.alive && o.state === 'live';
+    const watch = out ? spectate.target(view, me.id) : null;
+    const w = watch && view.players.find(p => p.id === watch);
+    this.view = view;
+    this.watching = !!w;
+    this.hud.el.classList.toggle('mh-watch', !!w);
+    this.#waitFor(!out ? '' : w ? `Watching ${w.name}` : 'Out this round', w ? `${w.team === me.team ? 'Your partner' : 'Enemy'} · back next round · tap to switch` : 'Back next round.');
+    let k = 0;
+    if (view.phase === 'live' || o.state === 'live') {
+      for (const p of view.players) {
+        if (p.team === me.team || !p.alive || p.away || k >= this.tags.length) continue;
+        const hp = Math.max(0, Math.min(1, (p.hp ?? 100) / 100));
+        this.#tag(k++, p.x, p.z, 'enemy', `<em class="mh-hp" style="--k:${hp.toFixed(2)}"><i></i></em>`);
+      }
+    }
+    this.#hideTags(k);
+  }
+
   _grind(view, me, o) {
     const n = me.carry ?? 0;
     this.#paint(`g${n}`, n
@@ -302,6 +333,12 @@ export class ModeHud {
         else if (e.kind === 'overtime') hud.banner('Overtime', att ? 'Stay on the zone' : 'Get them off the zone', 1300, 'alert');
         break;
       }
+      case 'gf':
+        if (e.kind === 'round') hud.banner(`Round ${e.round}`, (e.round - 1) % 2 === 0 ? 'A new kit for everyone' : 'Same kit, sides swapped next round', 1600);
+        else if (e.kind === 'overtime') hud.banner('Overtime', 'Take the flag in the middle', 1400, 'alert');
+        else if (e.kind === 'end') hud.banner(e.winner < 0 ? 'Round Drawn' : ours(e.winner) ? 'Round Won' : 'Round Lost',
+          { elim: 'Wiped out', flag: 'The flag was taken', health: 'More health at the end', draw: 'Nobody scores' }[e.reason] ?? '', 1800, e.winner < 0 ? '' : ours(e.winner) ? 'mine' : 'enemy');
+        break;
       case 'grind':
         if (e.kind === 'bank' && e.id === me.id) hud.banner(`Banked ${e.n}`, `+${e.n} for your team`, 1100, 'mine');
         else if (e.kind === 'bank') hud.pushFeed(`<span class="f-note">${name(e.id)} banked ${e.n}</span>`, false, view.players.find(p => p.id === e.id)?.team === me.team ? 'mine' : 'enemy');
@@ -319,6 +356,11 @@ export class ModeHud {
       if (pt.contested) return ['HQ Contested', o.progress || 1, 'contest'];
       if (o.phase === 'capture') return ['Capturing HQ', o.by === me.team ? o.progress : 0, 'mine'];
       return o.owner === me.team ? ['Holding HQ', 1, 'mine'] : ['Destroying HQ', o.progress, 'mine'];
+    }
+    if (this.rules === 'gf') {
+      if (pt.contested) return ['Flag Contested', Math.abs(pt.capture) || 1, 'contest'];
+      const ours = (pt.capture > 0 ? 1 : 0) === me.team;
+      return [ours || !pt.capture ? 'Taking the flag' : 'Losing the flag', Math.abs(pt.capture), ours || !pt.capture ? 'mine' : 'enemy'];
     }
     if (this.rules === 'ctl') {
       const att = o.attackers === me.team, done = pt.owner === o.attackers;
@@ -365,7 +407,7 @@ export class ModeHud {
 
   // What the scorebar says under the clock, where "to <limit>" does not fit the mode. Null keeps the default.
   goal(limit) {
-    return { inf: 'survive', oic: 'last alive', ctl: `${limit} rounds`, ko: `${limit} vips` }[this.rules] ?? null;
+    return { inf: 'survive', oic: 'last alive', ctl: `${limit} rounds`, ko: `${limit} vips`, gf: `${limit} rounds` }[this.rules] ?? null;
   }
 }
 
@@ -377,5 +419,6 @@ const COLUMNS = {
   oic: { head: 'Lives', title: 'Lives left', stat: p => p.oicLives ?? 0 },
   ctl: { head: 'Cap', title: 'Zones taken', stat: p => p.ctlCaps ?? 0 },
   grind: { head: 'Bank', title: 'Tags banked', stat: p => p.banked ?? 0 },
+  gf: { head: 'Rds', title: 'Rounds won', stat: p => p.gfWins ?? 0 },
 };
 export const modeColumn = rules => COLUMNS[rules] ?? null;

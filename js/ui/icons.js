@@ -390,6 +390,10 @@ const SQUARE = {
   'mode:ctl': { f: [O(8.5, 16, 6.5), O(23.5, 16, 6.5)], h: [O(8.5, 16, 3.4), O(23.5, 16, 3.4)], a: [R(14.8, 2, 2.4, 28)] },
   // Grind: tags in hand, carried to the bank.
   'mode:grind': { f: [R(2, 4, 12, 8, 2), R(4.5, 9, 12, 8, 2), R(16, 18, 14, 12, 1)], h: [O(13, 13, 1.5), R(19, 21, 8, 2)], a: [P(16, 7, 22, 7, 22, 3.5, 29, 10, 22, 16.5, 22, 13, 16, 13)] },
+  // Rebound: the canopy and rider, with two arrows curling back up: you come back in.
+  'mode:rb': { f: [P(3, 12, 8, 5.5, 16, 3.5, 24, 5.5, 29, 12, 24, 10.5, 16, 10, 8, 10.5), bar(5.5, 12, 14, 21, 1.6), bar(26.5, 12, 18, 21, 1.6), R(13.5, 20, 5, 7.5, 1)], a: [P(2, 26, 6, 21, 10, 26), P(22, 26, 26, 21, 30, 26), R(4.8, 26, 2.4, 4), R(24.8, 26, 2.4, 4)] },
+  // Showdown: two and two either side of the overtime flag, the flag lit.
+  'mode:gf': { f: [O(5.5, 9, 3.2), O(5.5, 22, 3.2), O(26.5, 9, 3.2), O(26.5, 22, 3.2)], h: [R(14.8, 5, 2.4, 23)], a: [P(17.2, 5, 25, 8.5, 17.2, 12), R(10, 27.5, 12, 2.5, 1)] },
   // Gun Game: a ladder, its top rung lit.
   'mode:gun': { f: [R(5, 2, 3.4, 28, 1), R(23.6, 2, 3.4, 28, 1), R(8.4, 12, 15.2, 2.8), R(8.4, 18.5, 15.2, 2.8), R(8.4, 25, 15.2, 2.8)], a: [R(8.4, 5, 15.2, 3.4)] },
 
@@ -467,7 +471,7 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',

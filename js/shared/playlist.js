@@ -7,7 +7,7 @@
 //              room gets a spread of rifles (the sidearm stays)
 //   melee      blades only: the Gaff and the Maul, Hatchets to throw, no scorestreaks
 //   nostreaks  no scorestreaks
-// Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected) ignore snipers and melee; battle
+// Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected, Showdown) ignore snipers and melee; battle
 // royale takes none.
 import { WEAPONS } from './weapons.js';
 import { MODES } from './modes.js';
@@ -105,6 +105,7 @@ export const FEATURED = [
   { mode: 'ko', mods: [] },
   { mode: 'gun', mods: [] },
   { mode: 'ctl', mods: [] },
+  { mode: 'gf', mods: [] },
 ];
 const EPOCH = Date.UTC(2026, 0, 1);
 
