@@ -821,7 +821,11 @@ export class BotBrain {
       if (this.mode === 'objective') this._setMode('none');
       return;
     }
-    if (this.objective && this.objKey === o.key) return;
+    if (this.objective && this.objKey === o.key) {
+      // The same objective with a new watch direction (a squadmate's sector, a survivor's side of the hold): turn to it.
+      if (o.aim != null) { this.objective.aim = o.aim; if (this.mode === 'objective' && this.objective.role !== 'collect') this.objAim = o.aim; }
+      return;
+    }
     this.objective = o; this.objKey = o.key;
     if (this.mode !== 'cover') this._setMode('none');
   }
@@ -969,7 +973,9 @@ export class BotBrain {
       if (!tracking && !noisy && !inCone) continue;
       // Walls first, then the dice: nothing about a hidden enemy, not even whether a roll was made, reaches this bot.
       if (!hasLineOfSight(sim.map, ps.x, ps.z, q.ps.x, q.ps.z, sim.smokes)) continue;
-      if (!tracking && !noisy && sim.rng() > S.notice) continue;      // Looking the right way is not the same as noticing.
+      // (Battle royale scales the chance by circle phase, `noticeK` from js/sim/br.js: early on squads keep their heads
+      // down in the loot and take the fights that find them.)
+      if (!tracking && !noisy && sim.rng() > S.notice * (this.noticeK ?? 1)) continue;      // Looking the right way is not the same as noticing.
       // Tunnel vision: busy with one enemy, a weaker player does not take in the next.
       if (!tracking && !noisy && this.targetVisible && sameTarget?.alive && q !== sameTarget && sim.rng() < S.tunnel) continue;
       // A downed enemy is finished off, but only once nobody standing is a threat.
@@ -1856,7 +1862,7 @@ export class BotBrain {
     }
     // Look toward the enemy's half and sweep from there: holding a flag is mostly watching for who comes next.
     const enemyX = this.side === 0 ? sim.map.width : 0;
-    this.objAim = Math.atan2(sim.map.height / 2 - z, enemyX - x);
+    this.objAim = o.aim ?? Math.atan2(sim.map.height / 2 - z, enemyX - x);
     this._goTo(x, z);
   }
 

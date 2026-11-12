@@ -122,7 +122,7 @@ await test('gwinf: two infected at the start of a 32-player match; they respawn 
   assert.equal(sim.scores[1], 2);
   assert.equal(sim.scores[0], 30);
   run(sim, 50);
-  assert.equal(new Set(sim.rules.camps).size, 2, 'two survivor holds');
+  assert.ok(new Set(sim.rules.groups.map(g => g.spot)).size >= 2, 'survivors over two or more holds');
 });
 
 await test('ko: only the enemy VIP scores, and a new VIP is named at once', () => {
@@ -209,6 +209,37 @@ await test('ctl: out of lives and dead, you spectate the living (teammates first
   const w = spectate.target(view, 'h1');
   if (sim.rules.state === 'live') assert.ok(w && view.players.find(p => p.id === w).team !== me.team, 'side wiped: an enemy is watched');
   spectate.reset();
+});
+
+// ROADMAP 25: survivor bots used to stack one camp (oasis, canyon, railyard and dust, two seeds each: 1.19 clusters on
+// average, the biggest with 97% of the survivors); now groups hold their own spots, move on and fall back (2.4 clusters,
+// the biggest 63%). Over 32 matches survivors win 7 (the one camp: 11), rounds last 161 s on average (178).
+await test('inf: survivors spread over several spots in small groups, not one camp', () => {
+  const clusters = pts => {
+    const seen = pts.map(() => false), sizes = [];
+    for (let i = 0; i < pts.length; i++) { if (seen[i]) continue; let k = 0; const st = [i]; seen[i] = true;
+      while (st.length) { const a = st.pop(); k++; for (let j = 0; j < pts.length; j++) if (!seen[j] && Math.hypot(pts[a].x - pts[j].x, pts[a].z - pts[j].z) < 12) { seen[j] = true; st.push(j); } }
+      sizes.push(k); }
+    return sizes;
+  };
+  let C = 0, S = 0, N = 0, moved = 0;
+  for (const map of ['oasis', 'railyard']) {
+    const { sim } = makeSim('inf', map, { seed: 3 });
+    const spotOf = new Map();
+    run(sim, 150, s => {
+      if (s.phase === 'live' && s.tick % (SIM_HZ * 2) === 0) {
+        const pts = s.players.filter(p => p.team === 0 && p.alive).map(p => p.ps);
+        if (pts.length >= 3) { const c = clusters(pts); C += c.length; S += Math.max(...c) / pts.length; N++; }
+        for (const g of s.rules.groups ?? []) { const k = g.ids[0]; if (spotOf.has(k) && spotOf.get(k) !== g.spot) moved++; spotOf.set(k, g.spot); }
+      }
+      return false;
+    });
+  }
+  console.log(`     ${(C / N).toFixed(2)} clusters, the biggest ${(S / N * 100).toFixed(0)}%, ${moved} moves`);
+  assert.ok(N > 10, `samples ${N}`);
+  assert.ok(C / N >= 2, `survivors in ${(C / N).toFixed(2)} clusters on average`);
+  assert.ok(S / N <= 0.75, `the biggest cluster holds ${(S / N * 100).toFixed(0)}% of the survivors`);
+  assert.ok(moved >= 2, `groups reposition (${moved} moves)`);
 });
 
 await test('grind: tags go in the pocket, bank in the zone, drop on death', () => {
