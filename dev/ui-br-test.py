@@ -64,9 +64,9 @@ async def run(browser, vw, vh, failures, errors):
     if await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: the drop map closed before the jump')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
     await shot('03-flight')
-    # The transport (owner notes): how many are still aboard, and the squad's state, on the drop map's side.
+    # The transport (owner notes): how many are still aboard (the panel may trail the newest view by a frame or two), and the squad's state, on the drop map's side.
     aboard = await ev(f"[document.querySelector('.br-aboard')?.hidden, document.querySelector('.br-aboard .n b')?.textContent, {G}.match.interp.newest.players.filter(p => p.alive && p.air === 1).length, document.querySelectorAll('.br-aboard .m').length]")
-    if aboard[0] or not aboard[1] or abs(int(aboard[1]) - aboard[2]) > 5 or aboard[3] < 2:     # The panel trails the newest view by a frame or two. failures.append(f'{vw}: the aboard count is not shown right ({aboard})')
+    if aboard[0] or not aboard[1] or abs(int(aboard[1]) - aboard[2]) > 5 or aboard[3] < 2: failures.append(f'{vw}: the aboard count is not shown right ({aboard})')
     await pg.locator('.br-jump-map').click()
     # An app switch mid-glide (ROADMAP 25): frames stop, the page hides and comes back. The match carries on from where it
     # was (no catch-up burst), and every squadmate lands and goes its own way.
