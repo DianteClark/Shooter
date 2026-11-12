@@ -222,7 +222,7 @@ export class ZmHud {
       case 'zround': {
         this.hud.banner(`Round ${e.round}`, e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', 1800, 'enemy');
         const z = objOf(view);
-        if (e.round === 1 && z?.layout?.power && !z.power) this.hud.notify(`The power is out: throw the switch in the ${z.layout.bands[z.layout.power.band]?.name ?? 'yard'} to wake the perk machines`);
+        if (e.round === 1 && z?.layout?.power && !z.power) this.hud.notify(`Power out: the switch is in the ${z.layout.bands[z.layout.power.band]?.name ?? 'yard'}`);
         break;
       }
       case 'zbreak': this.hud.banner(`Round ${e.round} survived`, `Next round in ${ZM.between} s`, 1600); break;

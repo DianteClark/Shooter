@@ -185,7 +185,10 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     if await ev(f'{G}.match.sim.rules.power') != 0: failures.append(f'{tag}: the power is not off at the start')
     # The machine in the Halt: dark, and it sells nothing.
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId); me.zm.pts = 20000;
-      const mc = R.L.machines.find(x => x.band === R.L.start); window.__perk = mc.perk; window.__mc = mc; m.ps.x = mc.x; m.ps.z = mc.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+      const mc = R.L.machines.find(x => x.band === R.L.start); window.__perk = mc.perk; window.__mc = mc; m.ps.x = mc.x - 2.5; m.ps.z = mc.z + 3; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    await pg.wait_for_timeout(1500)
+    await shot('02a-machine-dark-view')
+    await ev(f"(() => {{ const m = {G}.match; m.ps.x = window.__mc.x; m.ps.z = window.__mc.z; }})()")
     await pg.wait_for_selector('.zm-use:not([hidden])', timeout=10000)
     await pg.wait_for_timeout(400)
     await shot('02-perk-dark')
@@ -198,7 +201,10 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     # Open the Halt -> Lane -> Pump Yard gates on the host, walk to the switch, throw it with the use button.
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, L = R.L, id = n => L.bands.findIndex(b => b.id === n);
       for (const d of L.doors) if ((d.a === id('halt') && d.b === id('lane')) || (d.a === id('lane') && d.b === id('pump'))) R._use(m.sim.byId.get(m.localId), {{ kind: 'door', i: d.i, cost: 0, ok: true }});
-      m.ps.x = L.power.x; m.ps.z = L.power.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+      m.ps.x = L.power.x - 3; m.ps.z = L.power.z + 2.5; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    await pg.wait_for_timeout(1800)
+    await shot('03a-switch-view')
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x; m.ps.z = L.power.z; }})()")
     try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'TURN ON THE POWER'", timeout=10000)
     except Exception: failures.append(f'{tag}: no TURN ON THE POWER prompt at the switch: ' + str(await ev("document.querySelector('.zm-use')?.textContent")))
     await pg.wait_for_timeout(1500)
@@ -212,6 +218,9 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     if await ev(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.pts") != pts: failures.append(f'{tag}: the switch cost points')
     await pg.wait_for_timeout(1200)
     await shot('04-power-on')
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x - 3; m.ps.z = L.power.z + 2.5; }})()")
+    await pg.wait_for_timeout(1200)
+    await shot('04a-switch-on-view')
     # Back to the machine: now it sells.
     await ev(f"(() => {{ const m = {G}.match; m.ps.x = window.__mc.x; m.ps.z = window.__mc.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
     await pg.wait_for_selector('.zm-use:not([hidden]):not(.poor)', timeout=10000)

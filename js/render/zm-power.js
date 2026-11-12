@@ -24,9 +24,9 @@ export class ZmPowerFx {
     this.lever.position.set(0.2, 1.3, -0.1);
     this.root.add(this.lever);
     // The beacon over it while the power is off: an additive column of light.
-    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 5, 8, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x9fe8c0, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-    this.beacon.position.set(0.8, 2.6, 0);
+    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.9, 7, 10, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xa8ffcc, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    this.beacon.position.set(0.9, 3.5, 0);
     this.root.add(this.beacon);
     this.on = null; this.t = 0; this.throwT = 1;
   }
@@ -45,7 +45,7 @@ export class ZmPowerFx {
     }
     if (this.throwT < 1) this.throwT = Math.min(1, this.throwT + dt * 3);
     this.lever.rotation.z = on ? -2.4 * (1 - (1 - this.throwT) ** 2) : 0;
-    if (!on) this.beacon.material.opacity = 0.12 + 0.1 * Math.abs(Math.sin(this.t * 1.8));
+    if (!on) this.beacon.material.opacity = 0.22 + 0.18 * Math.abs(Math.sin(this.t * 1.8));
   }
 }
 
