@@ -375,6 +375,29 @@ function followUnits() {
   check(moveSame / n < 0.2 && aimSame / n < 0.12, `squadmates do not walk or aim with the human (${(moveSame / n * 100).toFixed(0)}%, ${(aimSame / n * 100).toFixed(0)}%)`);
 }
 
+// ---- The transport (owner notes): how many are still aboard, the same on a guest as on the host ----
+function planeUnits(mode = 'br') {
+  console.log(`transport: players aboard (${mode})`);
+  const humans = [{ id: 'h1', name: 'Me', team: 0 }, { id: 'h2', name: 'Pal', team: 0 }];
+  const sim = makeSim(mode, 6, humans), guest = makeSim(mode, 6, humans);
+  const aboard = v => v.players.filter(p => p.alive && p.air === 1).length;
+  let view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2');
+  check(aboard(view) === sim.players.length, `everyone aboard at the start (${aboard(view)})`);
+  let seen = new Set([aboard(view)]), ok = true, mid = null;
+  while (sim.br.plane.f < 1 && sim.time < 120) {
+    sim.step(STEP); sim.drainEvents();
+    if (sim.tick % 3) continue;
+    view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2');
+    const host = sim.players.filter(p => p.alive && p.brAir === 1).length;
+    if (aboard(view) !== host) ok = false;
+    seen.add(host);
+    if (mid === null && host < sim.players.length && host > 0) mid = { host, squad: view.players.filter(p => p.team === view.players.find(q => q.id === 'h2').team).map(p => p.air) };
+  }
+  check(ok, 'a guest counts the same players aboard as the host, all the way across');
+  check(seen.size > 5 && Math.min(...seen) === 0, `the count falls as people jump (${[...seen].sort((a, b) => b - a).slice(0, 6).join(', ')}..., 0 at the end)`);
+  check(mid && mid.squad.every(a => a >= 0 && a <= 2), `each squadmate's state rides along (${mid?.squad.join('/')})`);
+}
+
 // ---- Hands (owner notes): both guns dry -> fists by themselves; ammo for a gun you carry -> that gun back ----
 function handsUnits() {
   console.log('hands: automatic fists');
@@ -419,9 +442,12 @@ function handsUnits() {
 }
 
 if (args.includes('--follow')) { followUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
+if (args.includes('--plane')) { planeUnits('br'); planeUnits('rb'); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes('--hands')) { handsUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
 squadUnits();
+planeUnits('br');
+planeUnits('rb');
 handsUnits();
 healUnits();
 flightUnits();

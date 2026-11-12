@@ -137,6 +137,17 @@ const CSS = `
 .br-pouch b { color: var(--c-chalk); font-weight: 400; }
 .br-hands-col { display: flex; flex-direction: column; justify-content: space-between; gap: 3px; }
 .br-pouch { flex-direction: row; gap: 6px; margin-left: 1px; min-height: 9px; }
+/* The drop map's side: how many are still aboard the transport, and where each squadmate is. */
+.br-aboard { display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; background: rgba(16,20,26,.78); box-shadow: var(--hud-edge); }
+.br-aboard .n { display: flex; align-items: baseline; gap: 6px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.br-aboard .n b { font: 400 26px/1 var(--f-stencil); color: var(--c-sodium); font-variant-numeric: tabular-nums; }
+.br-aboard .m { display: flex; justify-content: space-between; gap: 10px; font: 12px/1.25 var(--f-plate); color: var(--c-chalk); }
+.br-aboard .m b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+.br-aboard .m span { color: var(--c-haze); white-space: nowrap; }
+.br-aboard .m span.air { color: #ffbe50; }
+.br-aboard .m span.gl { color: #8fd0ff; }
+.br-aboard .m span.dn { color: #7be08a; }
+.br-aboard .m span.out { color: #ff8a7c; }
 /* Reviving a teammate: your own bar, in the objective strip's progress row. */
 .br-reviving { width: 190px; padding: 6px 10px 7px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
@@ -197,6 +208,7 @@ export class BrHud {
         <div class="br-map-side">
           <h3 class="br-map-title">Drop map</h3>
           <p class="br-map-note"></p>
+          <div class="br-aboard" hidden></div>
           <button class="br-jump br-jump-map" data-tap="1" hidden>JUMP<small>Leave the transport</small></button>
         </div>
       </div>`;
@@ -340,6 +352,7 @@ export class BrHud {
         ? 'The transport flies the dotted line. Jump when it is near where you want to land, then steer the glide with the left stick. Gold names hold the best loot. Tap the map to mark a landing spot for your squad.'
         : 'White: the circle now. Dashed: where it closes to next. Tap the map to mark a spot; tap outside it to close.';
     }
+    this.#aboard(view, me, aboard);
     const hint = air === 2 ? `<b>Gliding</b>Steer with the left stick` : aboard && view.phase === 'warmup' ? '<b>Boarding</b>The transport sets off in a moment' : '';
     if (c.hint !== hint) { c.hint = hint; this.hintEl.innerHTML = hint; this.hintEl.hidden = !hint || this.mapOpen; }
     if (c.hintMap !== this.mapOpen) { c.hintMap = this.mapOpen; this.hintEl.hidden = !c.hint || this.mapOpen; }
@@ -383,6 +396,31 @@ export class BrHud {
     this.#leader(view, me);
     this.#downed(view, me, inv);
     this.#out(view, me);
+  }
+
+  // The transport (owner notes): how many are still aboard, and each squadmate's state, on the drop map's side and the
+  // Jump button. Everyone's `air` rides the battle royale block (1 aboard, 2 gliding), so guests see the same count.
+  #aboard(view, me, aboard) {
+    const br = view.br;
+    const flying = br.plane.f < 1 && view.phase !== 'ended';
+    let n = 0;
+    for (const p of view.players) if (p.alive && p.air === 1) n++;
+    this.aboardN = flying ? n : 0;
+    const mates = view.players.filter(p => p.team === me.team);
+    const word = p => (!p.alive ? ['Out', 'out'] : p.air === 1 ? ['Aboard', 'air'] : p.air === 2 ? ['Gliding', 'gl'] : ['Landed', 'dn']);
+    const key = flying ? `${n}|${mates.map(p => `${p.id}${word(p)[1]}`).join(',')}|${aboard}` : '';
+    if (this.c.aboardKey === key) return;
+    this.c.aboardKey = key;
+    const el = this.$('.br-aboard');
+    el.hidden = !flying;
+    const small = aboard ? `Leave the transport  /  ${n} aboard` : 'Leave the transport';
+    this.jumpBtn.querySelector('small').textContent = small; this.jumpMap.querySelector('small').textContent = small;
+    if (!flying) return;
+    const squad = (br.squad ?? 4) > 1 && mates.length > 1;
+    el.innerHTML = `<div class="n"><b>${n}</b>${n === 1 ? 'player' : 'players'} still aboard</div>${squad ? mates.map(p => {
+      const [w, cls] = word(p);
+      return `<div class="m"><b>${p.id === me.id ? 'You' : nameHtml(p.name)}</b><span class="${cls}">${w}</span></div>`;
+    }).join('') : ''}`;
   }
 
   // Fists (lit while they are out) and the pouch: rounds for guns not in hand.
@@ -765,7 +803,22 @@ export class BrHud {
       g.beginPath(); g.moveTo(br.plane.fx * s, br.plane.fz * s); g.lineTo(br.plane.tx * s, br.plane.tz * s); g.stroke(); g.setLineDash([]);
       const a = Math.atan2(br.plane.tz - br.plane.fz, br.plane.tx - br.plane.fx), x = br.plane.x * s, y = br.plane.z * s;
       g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = '#ffbe50';
-      g.beginPath(); g.moveTo(14, 0); g.lineTo(-8, -11); g.lineTo(-4, 0); g.lineTo(-8, 11); g.closePath(); g.fill(); g.restore();
+      g.beginPath(); g.moveTo(14, 0); g.lineTo(-8, -11); g.lineTo(-4, 0); g.lineTo(-8, 11); g.closePath(); g.fill();
+      // Your squad still aboard: a dot each along the fuselage, in the squad's colour (you in white).
+      const riders = view.players.filter(p => p.team === me.team && p.alive && p.air === 1);
+      riders.forEach((p, i) => {
+        g.fillStyle = p.id === me.id ? '#ffffff' : TEAMS[p.team]?.css ?? '#fff';
+        g.strokeStyle = '#0a0d11'; g.lineWidth = 1.5;
+        g.beginPath(); g.arc(6 - i * 5, 0, 2.6, 0, Math.PI * 2); g.fill(); g.stroke();
+      });
+      g.restore();
+      if (this.aboardN) {
+        const label = `${this.aboardN} aboard`;
+        g.font = '15px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        const ly = y + (y > MAP_PX - 40 ? -24 : 24), lx = Math.max(40, Math.min(MAP_PX - 40, x));
+        g.lineWidth = 4; g.strokeStyle = 'rgba(10,13,17,.9)'; g.strokeText(label, lx, ly);
+        g.fillStyle = '#ffbe50'; g.fillText(label, lx, ly);
+      }
     }
     this.#marks(g, s, s, 1.8);
     // Squad and you.

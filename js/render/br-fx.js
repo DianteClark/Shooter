@@ -11,6 +11,15 @@ import { BR } from '../shared/modes.js';
 import { TEAMS } from '../shared/constants.js';
 import { BR_KIND } from '../sim/br.js';
 
+const RIDER_MAX = 34;
+// Two box geometries as one (non-indexed), for the riders on the transport.
+function mergeBoxes(a, b) {
+  const g = new THREE.BufferGeometry(), A = a.toNonIndexed(), B = b.toNonIndexed();
+  const pos = new Float32Array(A.attributes.position.count * 3 + B.attributes.position.count * 3);
+  pos.set(A.attributes.position.array, 0); pos.set(B.attributes.position.array, A.attributes.position.array.length);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  return g;
+}
 const GLOW_MAX = 200, LOOT_MAX = 180, CHEST_MAX = 24, BEAM_MAX = 60, CHUTE_MAX = 32, RING_MAX = 16, BAR_MAX = 16, PING_MAX = 8;
 const NEAR = 38;              // Metres around the camera target that loot is drawn.
 const KIND_TINT = { [BR_KIND.ammo]: 0x9aa58a, [BR_KIND.plate]: 0x3fa0ff, [BR_KIND.med]: 0xf2f0e6, [BR_KIND.kit]: 0xffb21a, [BR_KIND.lethal]: 0xff6a3a, [BR_KIND.tactical]: 0x8cf0d0 };
@@ -92,6 +101,14 @@ export class BrFx {
     box(1.6, 0.3, 5.5, -5, 0.8, 0, hull);     // Tailplane.
     box(1.6, 2.4, 0.3, -5, 1.8, 0, hull);     // Fin.
     for (const z of [-4.2, 4.2]) box(1.8, 1, 1, 1.6, 0.1, z, dark);   // Engines.
+    // Who is still aboard (owner notes): small seated figures in rows on the fuselage, your squad up front in its colour
+    // (you in white), everyone else grey. One instanced mesh in the plane's own frame.
+    const rider = new THREE.BoxGeometry(0.42, 0.5, 0.4).translate(0, 0.25, 0);
+    const head = new THREE.BoxGeometry(0.3, 0.28, 0.3).translate(0, 0.66, 0);
+    this.riders = new THREE.InstancedMesh(mergeBoxes(rider, head), new THREE.MeshBasicMaterial({ color: 0xffffff }), RIDER_MAX);
+    this.riders.count = 0; this.riders.frustumCulled = false;
+    this.riders.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(RIDER_MAX * 3).fill(1), 3);
+    plane.add(this.riders);
     plane.visible = false;
     this.plane = plane;
     this.group.add(plane);
@@ -127,6 +144,26 @@ export class BrFx {
     this.pops = [];
   }
 
+  // Seats on the roof: two rows from the nose back, squad first.
+  #riders(view) {
+    const me = view.players.find(p => p.id === view.localId), team = me?.team;
+    const list = view.players.filter(p => p.alive && p.air === 1);
+    list.sort((a, b) => (b.team === team) - (a.team === team));
+    const R = this.riders;
+    let n = 0;
+    for (const p of list) {
+      if (n >= RIDER_MAX) break;
+      const row = n % 2, col = Math.floor(n / 2);
+      V.set(4.2 - col * 0.62, 1.1, row ? 0.55 : -0.55); Q.identity(); S.set(1, 1, 1);
+      R.setMatrixAt(n, M4.compose(V, Q, S));
+      R.setColorAt(n, C.setHex(p.id === view.localId ? 0xffffff : p.team === team ? (TEAMS[p.team]?.color ?? 0x6fd0ff) : 0x5b626b));
+      n++;
+    }
+    R.count = n;
+    R.instanceMatrix.needsUpdate = true;
+    R.instanceColor.needsUpdate = true;
+  }
+
   onChest(x, z) { this.pops.push({ x, z, t: 0 }); }
 
   // A squadmate's landing ping: shown for a while where it was put.
@@ -148,6 +185,7 @@ export class BrFx {
     if (this.plane.visible) {
       this.plane.position.set(br.plane.x, 14, br.plane.z);      // GLIDE_ALT (characters.js): the glide starts here.
       this.plane.rotation.set(0, -Math.atan2(br.plane.tz - br.plane.fz, br.plane.tx - br.plane.fx), Math.sin(t * 0.7) * 0.03);
+      this.#riders(view);
     }
     // Loot near the camera.
     const rules = br.rules;
