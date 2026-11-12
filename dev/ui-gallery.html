@@ -165,6 +165,8 @@ const SCENES = {
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
   // Options > Controller (js/ui/controllerscreen.js), opened from the Options screen's Set up button.
   'controller': menuScene('Options: controller', ({ menu }) => { menu.options({ onBack: noop, onPreviewSound: noop }); menu.el.querySelector('[data-act="optPad"]').click(); }),
+  // Options > Accessibility (js/ui/a11yscreen.js), opened from the Graphics heading's Accessibility button.
+  'a11y': menuScene('Options: accessibility', ({ menu }) => { menu.options({ onBack: noop, onPreviewSound: noop }); menu.el.querySelector('[data-act="optA11y"]').click(); }),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'help-install': menuScene('Help: Install', ({ menu }) => menu.help({ onBack: noop, tab: 'install' })),
   'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop }); }),

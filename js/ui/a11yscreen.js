@@ -23,7 +23,7 @@ export function a11yScreen(menu, { onBack }) {
   menu.el.innerHTML = `
     ${header({ back: 'a11yBack', label: 'Done', title: 'Accessibility' })}
     <div class="a11y-cols">
-      <section class="opt-col" data-in="up">
+      <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('ui:eye')}Seeing</h4>
         <div class="opt-row a11y-stack">
           <div class="opt-name"><b>Colour mode</b><small class="a11y-cb-note"></small></div>
@@ -39,7 +39,7 @@ export function a11yScreen(menu, { onBack }) {
           <button class="opt-toggle a11y-calm" data-act="a11yCalm"><i class="opt-knob"></i><b></b></button>
         </div>
       </section>
-      <section class="opt-col" data-in="up">
+      <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('ui:volume')}Hearing and touch</h4>
         <div class="opt-row a11y-stack">
           <div class="opt-name"><b>Sound cues</b><small>Grenades near you as a marker that points at them. Steps: enemy footsteps you would hear, as an arc on their side</small></div>

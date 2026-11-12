@@ -1311,5 +1311,5 @@ html[data-calm] .vignette.critical .vg-pulse, html[data-calm] .mm-tag, html[data
 html[data-calm] .daze-veil, html[data-calm] .snd-mark .sm-plate, html[data-calm] .lb-away { animation: none !important; }
 
 /* Text size (menus only; the HUD has HUD size). Grows the type tokens every menu reads. */
-html[data-text="large"] .menu, html[data-text="large"] .overlay { --fs-micro: 11px; --fs-caption: 12px; --fs-body: 14px; --fs-lead: 16px; --fs-title: 19px; }
-html[data-text="larger"] .menu, html[data-text="larger"] .overlay { --fs-micro: 12px; --fs-caption: 13px; --fs-body: 15.5px; --fs-lead: 17px; --fs-title: 20px; }
+html[data-text="large"] .menu, html[data-text="large"] .overlay { --fs-micro: 10.5px; --fs-caption: 12px; --fs-body: 14px; --fs-lead: 16px; --fs-title: 18.5px; }
+html[data-text="larger"] .menu, html[data-text="larger"] .overlay { --fs-micro: 11px; --fs-caption: 13px; --fs-body: 15px; --fs-lead: 17px; --fs-title: 19px; }

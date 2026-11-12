@@ -48,7 +48,7 @@ export function optionsScreen(menu, opts) {
   menu.el.innerHTML = `
     ${header({ back: 'optBack', label: 'Done', title: 'Options' })}
     <div class="opt-cols">
-      <section class="opt-col" data-in="up">
+      <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('graphics')}Graphics<button class="seg opt-pad opt-a11y" data-act="optA11y" aria-label="Accessibility settings">${ico('ui:eye')}<b>Accessibility</b></button></h4>
         <div class="opt-row opt-quality">
           <div class="opt-name"><b>Quality</b><small>${esc(autoNote())}. Lower steps save battery and heat.</small></div>
@@ -67,7 +67,7 @@ export function optionsScreen(menu, opts) {
           ${toggle('optFullscreen', 'opt-fullscreen')}
         </div>` : ''}
       </section>
-      <section class="opt-col" data-in="up">
+      <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('controls')}Controls<button class="seg opt-pad" data-act="optPad" aria-label="Controller settings">${ico('ui:controls')}<b>Controller</b></button></h4>
         ${stepper('sensitivity')}
         ${stepper('aimAssist')}
@@ -88,7 +88,7 @@ export function optionsScreen(menu, opts) {
           ${toggle('optHaptics', 'opt-haptics')}
         </div>` : ''}
       </section>
-      <section class="opt-col" data-in="up">
+      <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('sound')}Audio${voiceModeChip}</h4>
         ${stepper('sound')}
         ${stepper('music').replace('<div class="opt-name"><b>Music</b>', `<div class="opt-name opt-name-mm"><b>Music</b><button class="seg opt-matchmusic" data-act="optMatchMusic" aria-label="Music in matches"><small>In matches</small><b></b></button>`)}

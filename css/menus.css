@@ -891,9 +891,12 @@
 #ui .opt-pad { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; flex: none; margin: -3px 0 -3px auto; font: 400 var(--fs-caption)/1 var(--f-stencil); letter-spacing: var(--tr-plate); }
 #ui .opt-pad .ico { height: 14px; color: var(--c-chalk); }
 #ui .opt-pad b { font: inherit; }
+/* A column taller than the screen (a phone with the vibration row, a larger menu text size) scrolls instead of
+   squeezing its rows onto each other. */
+#ui .opt-col.scroll-y { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+#ui .opt-col.scroll-y > * { flex-shrink: 0; }
 /* Options > Accessibility (js/ui/a11yscreen.js). */
 #ui .a11y-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
-#ui .a11y-cols .opt-col { overflow-y: auto; }
 #ui .a11y-stack { flex-direction: column; align-items: stretch; }
 #ui .a11y-stack .opt-segs { display: flex; flex-wrap: wrap; gap: 3px; }
 #ui .a11y-stack .opt-segs .seg { flex: 1 0 auto; height: 30px; padding: 0 8px; white-space: nowrap; }
