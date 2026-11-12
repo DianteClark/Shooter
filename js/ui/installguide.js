@@ -8,9 +8,9 @@ import { platformKey, installed, canPromptInstall, promptInstall, onInstallChang
 // The guide's own platform picker: the detected one is chosen first, the others stay a tap away (a friend's phone).
 const PLATS = [
   ['ios-safari', 'iPhone Safari'],
-  ['ios-other', 'iPhone, other apps'],
+  ['ios-other', 'iPhone, other'],
   ['android-chrome', 'Android Chrome'],
-  ['android-samsung', 'Samsung Internet'],
+  ['android-samsung', 'Samsung'],
 ];
 
 const detected = () => {

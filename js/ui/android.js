@@ -17,7 +17,7 @@ import { Options } from './options.js';
 const BACKISH = '.back, .pk-close, .close, [data-sound="back"], [data-act$="Back"], [data-act$="back"], [data-act$="Close"], [data-act$="close"], [data-act*="Cancel"], [data-act*="Skip"], [data-act*="Dismiss"], [data-act*="dismiss"]';
 const shown = el => !!el && el.isConnected && el.getClientRects().length > 0 && !el.closest('[hidden]') && !el.disabled;
 
-export const fullscreenSupported = () => ANDROID && !!document.fullscreenEnabled && !!document.documentElement.requestFullscreen;
+export const fullscreenSupported = () => ANDROID && !installed() && !!document.fullscreenEnabled && !!document.documentElement.requestFullscreen;
 export const inFullscreen = () => !!document.fullscreenElement;
 
 // Inside a tap: full screen, then landscape. Errors are expected (no gesture, a browser that refuses) and ignored.
