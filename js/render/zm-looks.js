@@ -1,6 +1,6 @@
 // Graveyard Shift's undead (docs/ZOMBIES.md), in the operators' own parts kit (js/render/operator-kit.js): the same
 // low-poly soldier, greyed and torn. They exist only in the renderer: js/render/characters.js appends them to its
-// operator table after the roster (at ZM_OP_BASE, the last four of its MAX_OPERATORS uniform slots), so menus,
+// operator table after the roster's MAX_OPERATORS slots (four more uniform slots), so menus,
 // progression and the bot pool never see them. A seat's look comes from the view each frame (`zk`: 1 shambler,
 // 2 runner, 3 brute, 4 boss), because one roster seat raises many zombies of different kinds.
 export const ZM_OPERATORS = [

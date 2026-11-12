@@ -73,15 +73,17 @@ const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke:
 // Skins ride on the same instances: aOp.y is the gear slot plus 4 x the glow mode, aSkin the gear recolour (rgb,
 // strength) and, on torsos and heads, aTint the accent colour (zero keeps the baked one). The tag is described at tag().
 export const MAX_OPERATORS = 32;
-// Graveyard Shift: the undead take the last four operator slots (renderer only; see zm-looks.js). ALL_OPS is the table
-// the shader uniforms and per-operator numbers are built from.
-const ZM_OP_BASE = MAX_OPERATORS - ZM_OPERATORS.length;
-if (OPERATORS.length > ZM_OP_BASE) console.warn('characters: operators overlap the undead slots');
-const ALL_OPS = Array.from({ length: MAX_OPERATORS }, (_, i) => (i < ZM_OP_BASE ? OPERATORS[i] ?? null : ZM_OPERATORS[i - ZM_OP_BASE])).map(o => o ?? OPERATORS[0]);
+// Graveyard Shift: the undead take four slots after the roster's MAX_OPERATORS (renderer only; see zm-looks.js), so the
+// uniform tables hold OP_SLOTS. ALL_OPS is the table the shader uniforms and per-operator numbers are built from.
+const ZM_OP_BASE = MAX_OPERATORS;
+const ZM_TINT = [0.42, 0.6, 0.28];
+const OP_SLOTS = MAX_OPERATORS + ZM_OPERATORS.length;
+if (OPERATORS.length > MAX_OPERATORS) console.warn('characters: more operators than MAX_OPERATORS');
+const ALL_OPS = Array.from({ length: OP_SLOTS }, (_, i) => (i < ZM_OP_BASE ? OPERATORS[i] ?? null : ZM_OPERATORS[i - ZM_OP_BASE])).map(o => o ?? OPERATORS[0]);
 const CHAR_VERT = /* glsl */`
 uniform float uTime;
-uniform vec4 uSel[${MAX_OPERATORS * 2}];
-uniform vec4 uLook[${MAX_OPERATORS * 2}];
+uniform vec4 uSel[${OP_SLOTS * 2}];
+uniform vec4 uLook[${OP_SLOTS * 2}];
 attribute vec3 aCol;
 attribute float aPart;
 attribute float aVar;
@@ -761,7 +763,7 @@ export class Characters {
     this.skinById = new Map();
 
     const uSel = [], uLook = [];
-    for (let i = 0; i < MAX_OPERATORS; i++) {
+    for (let i = 0; i < OP_SLOTS; i++) {
       const op = ALL_OPS[i], [t, h] = opPicks(op), L = op.look;
       uSel.push(new THREE.Vector4(...t), new THREE.Vector4(...h));
       uLook.push(new THREE.Vector4(...hexRGB(L.skin ?? 0x7a5c43), L.sh ?? 1), new THREE.Vector4(...hexRGB(L.hair ?? 0x1e1612), L.hip ?? 1));
@@ -1242,7 +1244,7 @@ export class Characters {
 
       if (!r.visible) continue;
 
-      const team = this.teamRGB[p.team] || this.teamRGB[0];
+      const team = zk ? ZM_TINT : this.teamRGB[p.team] || this.teamRGB[0];     // The undead wear a sickly green, not a side's colour.
       let fade = r.reveal;
       // Spawn protection: a quick shimmer rather than a flat fade.
       if (p.spawnProtect) fade *= 0.55 + 0.45 * Math.abs(Math.sin(view.t * 16));

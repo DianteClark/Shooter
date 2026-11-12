@@ -322,7 +322,7 @@ function buildZmRoster(humans, { botSkill, mode }) {
   const skill = botSkill === 'mixed' ? 'veteran' : botSkill;
   for (let k = roster.length; k < ZM_SQUAD; k++) {
     const name = BOT_NAMES[(k * 7 + 3) % BOT_NAMES.length];
-    roster.push({ id: `bot-zm${k}`, name, team: 0, isBot: true, skill, primary: 'pistol', camo: 'none', loadout: { ...botLoadout('ar', 0, skill, k), primary: 'pistol' } });
+    roster.push({ id: `bot${k}`, name, team: 0, isBot: true, skill, primary: 'pistol', camo: 'none', loadout: { ...botLoadout('ar', 0, skill, k), primary: 'pistol' } });
   }
   for (let k = 0; k < ZM.seats; k++) {
     roster.push({ id: `zm-${k}`, name: 'Undead', team: ZM_TEAM, isBot: true, ai: true, skill: 'recruit', primary: 'knife', camo: 'none',
@@ -431,8 +431,9 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
   };
   // Battle royale and free-for-all keep their own seating; only who sits in the bot seats changes.
-  if (m?.rules === 'br' || m?.rules === 'ex' || m?.ffa) {
+  if (m?.rules === 'br' || m?.rules === 'ex' || m?.rules === 'zm' || m?.ffa) {
     const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : m.rules === 'ex' ? buildExRoster(humans, { botSkill: 'regular', mode })
+      : m.rules === 'zm' ? buildZmRoster(humans, { botSkill: 'regular', mode })
       : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
     const seats = base.filter(r => r.isBot && !r.ai);      // Extraction's AI patrol seats are not players.
     const drawn = draw(seats.length);

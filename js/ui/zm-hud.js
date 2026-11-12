@@ -127,7 +127,7 @@ export class ZmHud {
     const round = String(Math.max(1, z.round || 1));
     if (c.round !== round) { c.round = round; this.roundB.textContent = round; }
     this.roundEl.classList.toggle('boss', boss);
-    const left = z.state === 'round' ? fmt(z.left) : z.state === 'break' || z.state === 'pre' ? `${Math.ceil(z.timer)}s` : '0';
+    const left = z.state === 'round' ? fmt(z.left) : z.state === 'break' || z.state === 'pre' ? String(Math.max(0, Math.ceil(z.timer))) : '0';
     if (c.left !== left) { c.left = left; this.leftB.textContent = left; this.leftB.nextElementSibling.textContent = z.state === 'round' ? 'Undead left' : 'Next round'; }
     const pts = me.zpts ?? 0;
     if (c.pts !== pts) {

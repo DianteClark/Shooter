@@ -31,10 +31,10 @@ export const ZM = {
   drop: { chance: 0.03, perRound: 4, life: 25, reach: 1.6, double: 30 },
   // Zombies by kind: health and damage multipliers, stick speed (of a run), melee reach and windup.
   kinds: {
-    shambler: { hp: 1, dmg: 45, speed: 0.36, reach: 1.25, windup: 0.45, cool: 1.1 },
-    runner: { hp: 0.85, dmg: 40, speed: 0.84, reach: 1.25, windup: 0.4, cool: 1 },
-    brute: { hp: 4, dmg: 75, speed: 0.5, reach: 1.5, windup: 0.6, cool: 1.4 },
-    boss: { hp: 22, dmg: 95, speed: 0.62, reach: 1.9, windup: 0.7, cool: 1.5 },
+    shambler: { hp: 1, dmg: 40, speed: 0.36, reach: 1.25, windup: 0.45, cool: 1.1 },
+    runner: { hp: 0.85, dmg: 36, speed: 0.84, reach: 1.25, windup: 0.4, cool: 1 },
+    brute: { hp: 4, dmg: 70, speed: 0.5, reach: 1.5, windup: 0.6, cool: 1.4 },
+    boss: { hp: 22, dmg: 90, speed: 0.62, reach: 1.9, windup: 0.7, cool: 1.5 },
   },
   roundMax: 220,                       // Zombies in one round, at most.
   xp: { kill: 12, head: 4, round: 120, boss: 400 },     // Account XP in place of the usual kill lines (awards.js).
@@ -289,11 +289,18 @@ export function zmLayout(map) {
     return i % 3 === 1 && j % 3 === 1;
   }).map(k => ({ x: k % W + 0.5, z: Math.floor(k / W) + 0.5 })).filter(p => !nearDoor(p.x, p.z, 3)));
 
-  // Player starts: open cells nearest the start band's middle.
+  // Player starts: open ground (every cell within 3 m clear: out in the yard, not in a room) nearest the start band's
+  // middle; any floor if the band has no such ground.
   const sb = bands[def.start];
-  const starts = sb.cells.map(k => ({ x: k % W + 0.5, z: Math.floor(k / W) + 0.5 }))
-    .sort((a, b) => Math.hypot(a.x - sb.cx, a.z - sb.cz) - Math.hypot(b.x - sb.cx, b.z - sb.cz))
-    .filter((p, k, list) => list.slice(0, k).every(q => Math.hypot(q.x - p.x, q.z - p.z) > 1.8)).slice(0, ZM_SQUAD);
+  const roomy = k => { const i = k % W, j = Math.floor(k / W); for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) if (!main[(j + dj) * W + i + di]) return false; return true; };
+  const ground = sb.cells.filter(roomy);
+  const pts = (ground.length >= 8 ? ground : sb.cells).map(k => ({ x: k % W + 0.5, z: Math.floor(k / W) + 0.5 }));
+  const s0 = pts.reduce((b, p) => (Math.hypot(p.x - sb.cx, p.z - sb.cz) < Math.hypot(b.x - sb.cx, b.z - sb.cz) ? p : b), pts[0]);
+  // The crew starts together: the three others nearest the first, a couple of metres apart.
+  const starts = [];
+  for (const p of pts.sort((a, b) => Math.hypot(a.x - s0.x, a.z - s0.z) - Math.hypot(b.x - s0.x, b.z - s0.z))) {
+    if (starts.length < ZM_SQUAD && starts.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 1.8)) starts.push(p);
+  }
 
   const L = { mapId: map.id, def, start: def.start, bands, fences, doors, wallBuys, boxSpots, machines, risers, starts, W, H, main, band, cellAt };
   Object.defineProperty(map, '_zmLayout', { value: L, configurable: true, writable: true, enumerable: false });

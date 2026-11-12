@@ -97,8 +97,8 @@ export class ZmFx {
       const proto = getGun(wb.gun);
       if (proto?.geometry) {
         Q.setFromEuler(E.set(0, -side, 0));
-        M4.compose(V.set(fx + nx * 0.03 - Math.cos(side) * 0.15, 1.4, fz + nz * 0.03 - Math.sin(side) * 0.15), Q, S.set(1.05, 1.05, 1.05));
-        w.geom(proto.geometry, M4, 0xf2e6b8);
+        M4.compose(V.set(fx + nx * 0.03 - Math.cos(side) * 0.1, 1.4, fz + nz * 0.03 - Math.sin(side) * 0.1), Q, S.set(0.78, 0.78, 0.78));
+        w.geom(proto.geometry, M4, 0xd8cc9c);
       }
     }
     this.walls = w.mesh();

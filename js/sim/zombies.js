@@ -346,8 +346,10 @@ export class ZmRules {
     const I = this._zIn ??= { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
     I.mx = 0; I.mz = 0; I.aim = ps.aim; I.sprint = false;
     if (this.state === 3) { stepPlayer(ps, I, dt, sim.map, sim.rng); return; }
-    // Target: the nearest player who is up, by path.
-    const cell = nav.idx(ps.x, ps.z);
+    // Target: the nearest player who is up, by path. A zombie shouldering a wall stands in a cell the grid calls blocked:
+    // it reads the field from the nearest free one.
+    let cell = nav.idx(ps.x, ps.z);
+    if (nav.blocked[cell]) cell = nav.nearestFree(ps.x, ps.z);
     let tgt = null, td = BIG, field = null;
     for (const q of this._targets()) {
       const f = this._field(q);
@@ -378,7 +380,7 @@ export class ZmRules {
     }
     // Moving: straight in when close and in sight, else downhill on the field a few cells ahead.
     let mx = 0, mz = 0;
-    if (d < 7 && hasLineOfSight(sim.map, ps.x, ps.z, tgt.ps.x, tgt.ps.z)) { mx = dx / Math.max(d, 0.01); mz = dz / Math.max(d, 0.01); }
+    if (d < 7 && (d < 1.2 || nav.segmentClear(ps.x, ps.z, tgt.ps.x, tgt.ps.z))) { mx = dx / Math.max(d, 0.01); mz = dz / Math.max(d, 0.01); }
     else if (field) {
       const W = nav.w, bl = nav.blocked, dist = field.dist;
       let c = cell;
@@ -489,7 +491,7 @@ export class ZmRules {
     for (const q of this.crew) {
       if (q === p || !q.alive || q.downed || q.away) continue;
       if (Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) > ZM.reviveReach) continue;
-      if (q.ps.firingT > 1.2 || Math.hypot(q.ps.vx, q.ps.vz) > 2.6) continue;
+      if (Math.hypot(q.ps.vx, q.ps.vz) > 2.6) continue;     // Standing by is enough: shooting over them still counts.
       helper = q; break;
     }
     if (helper) {
@@ -713,8 +715,16 @@ export class ZmRules {
       bot.kite = 4.5;
       // A downed mate within reach of the path.
       const down = this.crew.filter(q => q.alive && q.downed).sort((a, b) => Math.hypot(a.ps.x - p.ps.x, a.ps.z - p.ps.z) - Math.hypot(b.ps.x - p.ps.x, b.ps.z - p.ps.z))[0];
-      if (down && Math.hypot(down.ps.x - p.ps.x, down.ps.z - p.ps.z) < 45) {
+      if (down && Math.hypot(down.ps.x - p.ps.x, down.ps.z - p.ps.z) < 45 && !this._near(p, 2.2)) {
         bot.setObjective({ key: `zrev${down.index}`, role: 'collect', x: down.ps.x, z: down.ps.z, r: 0.8 });
+        return;
+      }
+      // Its roll at the crate: wait for it, take it.
+      const bx = this.box;
+      if ((bx.state === 1 || bx.state === 2) && bx.owner === p.index && !bx.moving) {
+        const bs = this.L.boxSpots[bx.spot];
+        if (bx.state === 2 && Math.hypot(bs.x - p.ps.x, bs.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); return; }
+        bot.setObjective({ key: `zbox${bx.spot}`, role: 'collect', x: bs.x, z: bs.z, r: 0.8 });
         return;
       }
       // Something to buy near.
@@ -744,6 +754,9 @@ export class ZmRules {
     const consider = (item, score) => { if (score > bestS) { bestS = score; best = item; } };
     const dist = (x, zz) => Math.hypot(x - ps.x, zz - ps.z);
     const hasGun = ps.primary !== START_GUN || (ps.secondary !== NO_GUN && ps.secondary !== START_GUN);
+    // What the gun in the hands is worth, by its wall price (a crate gun counts as a good one).
+    const worth = g => (g === START_GUN || g === NO_GUN ? 0 : L.wallBuys.find(w => w.gun === g)?.cost ?? 1600);
+    const held = Math.max(worth(ps.primary), worth(ps.secondary));
     for (const w of L.wallBuys) {
       if (!bandOpen(L, this.open, w.band)) continue;
       const own = ps.primary === w.gun || ps.secondary === w.gun;
@@ -753,12 +766,18 @@ export class ZmRules {
         const slot = ps.primary === w.gun ? 0 : 1;
         if (ps.reserve[slot] < (WEAPONS[w.gun].magazine ?? 30) && z.pts >= w.ammo + 200) consider({ kind: 'ammo', i: w.i, x: w.x, z: w.z }, 50 - d);
       } else if (!hasGun && z.pts >= w.cost) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 40 + w.cost / 100 - d);
-      else if (hasGun && z.pts >= w.cost + 1500 && w.cost > 1300 && !own) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 10 - d);
+      else if (hasGun && z.pts >= w.cost + 400 && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 35 + (w.cost - held) / 50 - d);
     }
     for (const m of L.machines) {
       if (!bandOpen(L, this.open, m.band) || z.perks.includes(m.perk)) continue;
       const cost = ZM_PERKS[m.perk].cost, d = dist(m.x, m.z);
       if (z.pts >= cost + (hasGun ? 300 : 1200) && d < 45) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 30 - d + (m.perk === 'iron' ? 10 : 0));
+    }
+    // The crate now and then, once the basics are bought.
+    const bs = this.box.state === 0 && this.box.spot >= 0 ? L.boxSpots[this.box.spot] : null;
+    if (bs && bandOpen(L, this.open, bs.band) && hasGun && z.perks.length >= 2 && z.pts >= ZM.box.cost + 1500 && held < 1700) {
+      const d = dist(bs.x, bs.z);
+      if (d < 40) consider({ kind: 'box', i: bs.i, x: bs.x, z: bs.z }, 15 - d);
     }
     if (!humans || z.pts > 4000) {
       for (const d of L.doors) {
