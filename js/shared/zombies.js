@@ -100,6 +100,9 @@ export const ZM_MAPS = {
   neon: { cuts: [21.5, 42.0], doors: [22, 22], start: 1 },
   ruins: { cuts: [14.5, 37.5], doors: [17, 17], start: 1 },
   foundry: { cuts: [16.5, 38.5, 64.5, 86.5], doors: [31, 31, 31, 31], start: 2 },
+  // A purpose-built map (ROADMAP item 38): its layout is declared on the map itself (`map.zm`, the graph form: areas
+  // joined by gates in a loop; see graphLayout). `power`: the perk machines are dark until someone throws the switch.
+  ashgrove: { graph: true, power: true },
 };
 export const ZM_MAP_IDS = Object.keys(ZM_MAPS);
 
@@ -145,6 +148,7 @@ export function zmLayout(map) {
   const def = map && ZM_MAPS[map.id];
   if (!def) return null;
   if (map._zmLayout) return map._zmLayout;
+  if (def.graph) return graphLayout(map, def);
   const walls = baseWalls(map);
   const rng = mulberry32(hashStr(`zm:${map.id}`));
   const fences = [], doors = [];
@@ -307,6 +311,116 @@ export function zmLayout(map) {
   return L;
 }
 
+// ---- The graph form: a layout declared on the map (`map.zm`), for maps built for the mode ----
+//
+// Areas (each found by flooding out from its `seed` with every gate shut) joined by gates in any shape: a loop, side
+// rooms, dead ends. Everything placed is named by the map: wall-buys, crate spots, machines, the power switch, the
+// boss arena's spots, spawn windows (risers), starts and the spots kept for the economy (`reserved`, not used by the
+// rules yet). Returns the same shape as the banded form, plus `graph`, `power`, `boss`, `reserved` and per door its
+// two areas (`a`, `b`) and a stand point on each side (`stand[area]`).
+const SIDE = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
+function graphLayout(map, def) {
+  const Z = map.zm;
+  const walls = baseWalls(map);
+  const W = Math.ceil(map.width / CELL), H = Math.ceil(map.height / CELL);
+  const areaIdx = id => Z.areas.findIndex(a => a.id === id);
+  const doors = Z.gates.map((g, i) => ({ i, x: g.x, z: g.z, w: g.w, d: g.d, cx: g.x + g.w / 2, cz: g.z + g.d / 2, a: areaIdx(g.a), b: areaIdx(g.b), cost: g.cost }));
+  const all = [...walls, ...doors];
+  const free = new Uint8Array(W * H);
+  for (let j = 0; j < H; j++) {
+    for (let i = 0; i < W; i++) {
+      const x = i + 0.5, z = j + 0.5;
+      if (x < 1.2 || z < 1.2 || x > map.width - 1.2 || z > map.height - 1.2) continue;
+      if (!hits(all, x - CLEAR, z - CLEAR, x + CLEAR, z + CLEAR)) free[j * W + i] = 1;
+    }
+  }
+  const cellAt = (x, z) => Math.floor(z) * W + Math.floor(x);
+  const band = new Int8Array(W * H).fill(-1), main = new Uint8Array(W * H);
+  const bands = Z.areas.map((a, i) => {
+    const s0 = cellAt(a.seed.x, a.seed.z), cells = [];
+    if (free[s0] && band[s0] < 0) {
+      const stack = [s0];
+      band[s0] = i;
+      while (stack.length) {
+        const c = stack.pop(), ci = c % W, cj = (c - ci) / W;
+        cells.push(c);
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = ci + di, nj = cj + dj;
+          if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue;
+          const n = nj * W + ni;
+          if (!free[n] || band[n] >= 0) continue;
+          band[n] = i; stack.push(n);
+        }
+      }
+    }
+    for (const k of cells) main[k] = 1;
+    let sx = 0, sz = 0;
+    for (const k of cells) { sx += k % W + 0.5; sz += Math.floor(k / W) + 0.5; }
+    return { i, id: a.id, name: a.name, x0: 0, x1: map.width, depth: 0, cells, cx: cells.length ? sx / cells.length : a.seed.x, cz: cells.length ? sz / cells.length : a.seed.z };
+  });
+  const start = areaIdx(Z.start);
+  // Depth: gates from the start area.
+  const depth = bands.map(() => Infinity);
+  depth[start] = 0;
+  for (let q = [start]; q.length;) {
+    const nq = [];
+    for (const b of q) for (const d of doors) {
+      const o = d.a === b ? d.b : d.b === b ? d.a : -1;
+      if (o >= 0 && depth[o] === Infinity) { depth[o] = depth[b] + 1; nq.push(o); }
+    }
+    q = nq;
+  }
+  bands.forEach((b, i) => { b.depth = depth[i]; });
+  // The area at a floor spot: its own cell, else the nearest cell of any area within 2 m.
+  const bandAt = (x, z) => {
+    const k = cellAt(x, z);
+    if (band[k] >= 0) return band[k];
+    let best = -1, bd = 4;
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+      const n = k + dj * W + di;
+      if (n >= 0 && n < W * H && band[n] >= 0 && di * di + dj * dj < bd) { bd = di * di + dj * dj; best = band[n]; }
+    }
+    return best;
+  };
+  for (const d of doors) {
+    const across = d.w < d.d;                // A door in a north-south wall is crossed east-west.
+    const sides = across ? [{ x: d.x - 1.2, z: d.cz }, { x: d.x + d.w + 1.2, z: d.cz }] : [{ x: d.cx, z: d.z - 1.2 }, { x: d.cx, z: d.z + d.d + 1.2 }];
+    d.stand = {};
+    for (const s of sides) { const b = bandAt(s.x, s.z); if (b >= 0) d.stand[b] = s; }
+    const near = depth[d.a] <= depth[d.b] ? d.a : d.b;
+    d.from = near; d.opens = near === d.a ? d.b : d.a;
+  }
+  // A spot against a wall: the wall point a mark is drawn on (wx, wz) and the way the face looks (face).
+  const tall = map.walls.filter(w => w.blocksMove && w.kind !== 'border' && !w.zm);
+  const onWall = s => {
+    const [dx, dz] = SIDE[s.wall] ?? [0, 0];
+    let wx = s.x, wz = s.z;
+    for (let t = 0; t < 2; t += 0.02) {
+      const px = s.x + dx * t, pz = s.z + dz * t;
+      if (hits(tall, px - 0.01, pz - 0.01, px + 0.01, pz + 0.01)) break;
+      wx = px; wz = pz;
+    }
+    return { x: s.x, z: s.z, wx, wz, face: Math.atan2(-dz, -dx), band: bandAt(s.x, s.z) };
+  };
+  const wallBuys = Z.wallBuys.map((s, i) => ({ i, gun: s.gun, cost: s.cost, ammo: ammoCost(s.cost), ...onWall(s) }));
+  const boxSpots = Z.boxes.map((s, i) => ({ i, ...onWall(s) }));
+  const machines = Z.machines.map((s, i) => ({ i, perk: s.perk, ...onWall(s) }));
+  const risers = bands.map(() => []);
+  for (const r of Z.risers) { const b = bandAt(r.x, r.z); if (b >= 0) risers[b].push({ x: r.x, z: r.z }); }
+  const power = def.power && Z.power ? { ...onWall(Z.power) } : null;
+  const boss = Z.boss ? { band: areaIdx(Z.boss.area), spots: Z.boss.spots.map(p => ({ x: p.x, z: p.z })) } : null;
+  const reserved = {};
+  for (const [k, v] of Object.entries(Z.reserved ?? {})) {
+    reserved[k] = Array.isArray(v) ? v.map(p => ({ ...p, band: bandAt(p.x, p.z) })) : { ...(v.wall ? onWall(v) : { x: v.x, z: v.z }), ...v, band: bandAt(v.x, v.z) };
+  }
+  const L = {
+    mapId: map.id, def, graph: true, start, bands, fences: [], doors, wallBuys, boxSpots, machines, risers, starts: Z.starts.map(p => ({ x: p.x, z: p.z })),
+    power, boss, reserved, W, H, main, band, cellAt,
+  };
+  Object.defineProperty(map, '_zmLayout', { value: L, configurable: true, writable: true, enumerable: false });
+  return L;
+}
+
 // ---- The mode's walls on the shared map object ----
 
 // Puts the layout's fences and closed doors into map.walls (as tail walls, see geometry.js wallGrid), replacing any
@@ -372,8 +486,9 @@ export function reblockNav(nav, map, r) {
 
 // ---- What a player can use where they stand (the HUD's prompt and the host's check are the same function) ----
 
-// state: { open (door bits), box: {spot, state, gun, owner}, pts, perks: [ids], guns: [primary, secondary] }.
-// Returns { kind: 'door'|'wall'|'ammo'|'box'|'take'|'perk', i, cost, label, ok } for the nearest usable thing, or null.
+// state: { open (door bits), box: {spot, state, gun, owner}, pts, perks: [ids], guns: [primary, secondary], power }.
+// Returns { kind: 'door'|'wall'|'ammo'|'box'|'take'|'perk'|'power', i, cost, label, ok, off? } for the nearest usable
+// thing, or null. `off`: a perk machine on a map whose power is still off (shown, never ok).
 export function zmUsable(L, x, z, st) {
   if (!L) return null;
   let best = null, bestD = ZM.useReach;
@@ -381,7 +496,7 @@ export function zmUsable(L, x, z, st) {
   for (const d of L.doors) {
     if (st.open & (1 << d.i)) continue;
     // A door is used from either side, along its length.
-    const dz = Math.max(d.z, Math.min(z, d.z + d.d)), dist = near(d.cx, dz);
+    const dz = Math.max(d.z, Math.min(z, d.z + d.d)), dist = L.graph ? near(Math.max(d.x, Math.min(x, d.x + d.w)), dz) : near(d.cx, dz);
     if (dist >= 0) { bestD = dist; best = { kind: 'door', i: d.i, cost: d.cost, label: 'Open the gate' }; }
   }
   for (const w of L.wallBuys) {
@@ -400,20 +515,53 @@ export function zmUsable(L, x, z, st) {
       else if (box.state === 2 && box.owner === st.me) { bestD = dist; best = { kind: 'take', i: box.spot, cost: 0, gun: box.gun, label: 'Take' }; }
     }
   }
+  // A map with a power switch (`power: true`): the machines are dark until it is thrown, and the switch is free.
+  const dark = !!L.power && !st.power;
   for (const m of L.machines) {
     if (!bandOpen(L, st.open, m.band) || st.perks?.includes(m.perk)) continue;
     const dist = near(m.x, m.z);
     if (dist < 0) continue;
     bestD = dist;
-    best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name };
+    best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: dark || undefined };
   }
-  if (best) best.ok = best.cost <= (st.pts ?? 0);
+  if (dark && bandOpen(L, st.open, L.power.band)) {
+    const dist = near(L.power.x, L.power.z);
+    if (dist >= 0) { bestD = dist; best = { kind: 'power', i: 0, cost: 0, label: 'Turn on the power' }; }
+  }
+  if (best) best.ok = !best.off && best.cost <= (st.pts ?? 0);
   return best;
+}
+
+// Where a player stands to open door d from an area that is open now (null when neither side is).
+export function zmDoorStand(L, open, d) {
+  if (!L.graph) return bandOpen(L, open, d.from) ? { x: d.cx + (d.from < d.opens ? -1.2 : 1.2), z: d.cz } : null;
+  for (const b of [d.from, d.opens]) if (d.stand[b] && bandOpen(L, open, b)) return d.stand[b];
+  return null;
+}
+
+// The graph form: which areas the open gates join to the start (cached per mask).
+function graphReach(L, open) {
+  const cache = L._reach ??= new Map();
+  let r = cache.get(open);
+  if (r) return r;
+  r = new Uint8Array(L.bands.length);
+  r[L.start] = 1;
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const d of L.doors) {
+      if (!(open & (1 << d.i)) || r[d.a] === r[d.b]) continue;
+      r[d.a] = r[d.b] = 1; grew = true;
+    }
+  }
+  if (cache.size > 256) cache.clear();
+  cache.set(open, r);
+  return r;
 }
 
 // Whether band b is reachable with these doors open: walk out from the start band through open doors.
 export function bandOpen(L, open, b) {
   if (b === L.start) return true;
+  if (L.graph) return b >= 0 && !!graphReach(L, open)[b];
   const step = b > L.start ? 1 : -1;
   for (let k = L.start; k !== b; k += step) {
     const cut = step > 0 ? k : k - 1;

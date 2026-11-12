@@ -21,11 +21,12 @@ import canopy from './maps/canopy.js';
 import riverbend from './maps/riverbend.js';
 import expedition from './maps/expedition.js';
 import icebreaker from './maps/icebreaker.js';
+import ashgrove from './maps/ashgrove.js';   // Graveyard Shift only (hidden, no modes of its own).
 import frontier from './maps/br-frontier.js';
 import brtest from './maps/brtest.js';     // Battle royale test map: small, fast to build, used by dev/sim-br.mjs.
 import { MODE_IDS, MODES } from './modes.js';
 
-export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, icebreaker, range, frontier, brtest };
+export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, icebreaker, ashgrove, range, frontier, brtest };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // What the vote and match setup offer. The firing range is reached from its own menu entry only.
