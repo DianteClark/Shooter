@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Graveyard Shift: Ashgrove Halt',
+    build: '1111-30', date: '2026-11-12', title: 'Graveyard Shift: Ashgrove Halt',
     items: [
       'A new map built for Graveyard Shift: Ashgrove Halt, a country rail halt and its churchyard on a foggy night. Start on the platform and open your way round the goods yard, the churchyard, the burial field and the level crossing.',
       'The power is out at Ashgrove: the perk machines stay dark until someone reaches the pump house in the middle of the map and throws the switch. It costs nothing, but you have to get there.',
