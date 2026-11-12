@@ -11,7 +11,7 @@ import { ZM_SQUAD } from './shared/zombies.js';     // Graveyard Shift seats fou
 const BR_HUMANS = 8;           // Battle royale: up to eight people in a room, bots fill the rest of the 32 (docs/BR.md).
 import { normalizeLoadout } from './shared/catalog.js';
 import { TEAM_SIZE } from './shared/constants.js';
-import { MAX_LEVEL, MAX_PRESTIGE } from './shared/progression.js';
+import { MAX_LEVEL, MAX_PRESTIGE, MASTER_MAX } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
@@ -32,6 +32,10 @@ import { takeInvite, wireInvite, joinFromInvite, inviteJoinFailed, inviteSettled
 import { installTaps, setTapSound } from './ui/tap.js';
 import { installScrolling, scrollerOf, canScroll } from './ui/scroll.js';
 import { Options } from './ui/options.js';
+import { applyPalette } from './shared/palette.js';     // Colour modes (docs/ACCESSIBILITY.md).
+import { setCalm } from './render/feel.js';
+import { setReducedMotion } from './ui/motion.js';
+import { scaleOf } from './ui/layout.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
 import { installed as runningInstalled, platformKey, requestPersist, browserName } from './ui/platform.js';     // Phones (docs/DEVICES.md).
@@ -773,7 +777,10 @@ function seatFrom(msg) {
 
 function cleanBadge(b) {
   const n = (v, max, min) => Math.min(max, Math.max(min, Math.floor(Number(v)) || min));
-  return { prestige: n(b?.prestige, MAX_PRESTIGE, 0), level: n(b?.level, MAX_LEVEL, 1), rk: cleanCode(b?.rk) };
+  const prestige = n(b?.prestige, MAX_PRESTIGE, 0), level = n(b?.level, MAX_LEVEL, 1);
+  // Master Prestige (docs/PRESTIGE.md): only at Prestige X level 50; older builds send none.
+  const master = prestige >= MAX_PRESTIGE && level >= MAX_LEVEL ? n(b?.master, MASTER_MAX, 0) : 0;
+  return { prestige, level, master, rk: cleanCode(b?.rk) };
 }
 
 // Matchmaking for the bot player pool (js/shared/botpool.js): where the humans in this match sit, so the bots drawn
@@ -1710,6 +1717,19 @@ function applyOptions(v, changed) {
   controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
   hud.setLefty(v.lefty);
   if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
+  // Accessibility (docs/ACCESSIBILITY.md).
+  if (!changed || changed === 'colorMode') applyPalette(v.colorMode);
+  if (!changed || changed === 'calm') {
+    setCalm(v.calm);
+    setReducedMotion(v.calm ? true : null);
+    document.documentElement.toggleAttribute('data-calm', v.calm);
+  }
+  if (!changed || changed === 'textSize') document.documentElement.dataset.text = v.textSize;
+  if (!changed || changed === 'cues') hud.setCues(v.cues);
+  if (!changed || changed === 'layout' || changed === 'lefty' || changed === 'sensitivity') {
+    controls.applyLayout(v.layout);
+    hud.setChipScale(scaleOf(v.layout, 'chips'));
+  }
   controls.aimAssist = v.aimAssist;
   if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);

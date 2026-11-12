@@ -12,7 +12,7 @@
 // Bots you played against do not get a bump from that match: it would live only on the phones that were there, so
 // two friends' boards would disagree about the same bot. Their careers stay a function of the date alone.
 import * as Pool from './botpool.js';
-import { CARD_IDS, MAX_LEVEL, MAX_PRESTIGE, MASTERY_TOTAL, weekStart, periodKey, dayKey } from './progression.js';
+import { CARD_IDS, MAX_LEVEL, MAX_PRESTIGE, MASTERY_TOTAL, weekStart, periodKey, dayKey, masterOf, rankValue } from './progression.js';
 import { OPERATOR_IDS, getSkin } from '../ui/operators.js';
 import { cleanEmblem } from '../ui/emblems.js';
 // Seasons and ranked (docs/SEASONS.md): the Season view ranks the season's window, the Ranked category everyone's SR.
@@ -152,15 +152,18 @@ export function poolEntries(now = Date.now()) {
 }
 
 /* ---------- Categories ---------- */
+// An entry's Master level: from its rank and total XP, the same rule for me, friends (any build) and the pool.
+export const masterOfEntry = e => masterOf(e.prestige, e.level, e.xp);
 const kdOf = e => (e.d ? e.kdk / e.d : e.kdk);
 const fmtInt = v => Math.round(v).toLocaleString('en-US');
 const fmtXp = v => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${Math.round(v / 1e3)}k`);
 // A count short enough for a small box: 99,999 in full, then 153k, 2.09M, 12.4M (the screens' stat cells and rows).
 export const compactNum = v => (v < 1e5 ? fmtInt(v) : v < 1e6 ? `${Math.round(v / 1e3)}k` : `${(v / 1e6).toFixed(v < 1e7 ? 2 : 1)}M`);
 export const CATEGORIES = [
-  // Prestige and level, then total XP: maxed players are told apart by what they have earned, and the row shows it.
-  { id: 'level', label: 'Level', icon: 'rank', value: e => e.prestige * MAX_LEVEL + e.level, tie: e => e.xp,
-    fmt: (v, e) => `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}${e.prestige >= MAX_PRESTIGE && e.level >= MAX_LEVEL && e.xp ? ` · ${fmtXp(e.xp)} XP` : ''}` },
+  // Prestige and level, then the Master level past Prestige X (read from total XP: masterOf, docs/PRESTIGE.md), then
+  // total XP: players on one level are told apart by what they have earned. A Master row shows its total XP too.
+  { id: 'level', label: 'Level', icon: 'rank', value: e => rankValue({ prestige: e.prestige, level: e.level, master: masterOfEntry(e) }), tie: e => e.xp,
+    fmt: (v, e) => { const m = masterOfEntry(e); return m ? `Master ${m}${e.xp ? ` · ${fmtXp(e.xp)} XP` : ''}` : `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}`; } },
   { id: 'kills', label: 'Kills', icon: 'skull', value: e => e.k, fmt: fmtInt },
   { id: 'kd', label: 'K/D', icon: 'aim', value: kdOf, eligible: e => e.kdm >= KD_MIN_MATCHES, tie: e => e.kdm, fmt: v => v.toFixed(2),
     rule: `At least ${KD_MIN_MATCHES} matches` },

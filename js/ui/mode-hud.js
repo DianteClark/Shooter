@@ -34,7 +34,7 @@ const CSS = `
 .mh-status .mh-bar { width: 64px; height: 4px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .mh-status .mh-bar i { position: absolute; inset: 0; background: var(--mh-accent, var(--c-sodium)); transform-origin: left; transform: scaleX(var(--k, 0)); }
 .mh-status[data-side="mine"] { --mh-accent: var(--c-blue-hi, #6cc4ff); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-blue, #38b6ff); }
-.mh-status[data-side="enemy"] { --mh-accent: #ff8a7c; box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-red, #ff4d3d); }
+.mh-status[data-side="enemy"] { --mh-accent: var(--c-red-hi, #ff8a7c); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-red, #ff4d3d); }
 .mh-status[data-side="alert"] { --mh-accent: var(--c-sodium); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium); }
 .mh-lives { display: flex; gap: 3px; margin-left: 2px; }
 .mh-lives i { width: 8px; height: 12px; background: rgba(231,234,228,.18); clip-path: polygon(50% 0, 100% 30%, 100% 100%, 0 100%, 0 30%); }

@@ -16,6 +16,28 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1111-28', date: '2026-11-12', title: 'Prestige and Master Prestige',
+    items: [
+      'Every prestige rank now brings its own camo for every gun, alongside its icon and calling card. Ranks you already hold have theirs waiting.',
+      'Entering prestige plays a new reveal: your new icon, its camo and calling card, and what the next rank brings.',
+      'New Prestige view: tap the rank ladder in your service record to see every rank and its rewards, and what comes next.',
+      'Master Prestige: past Prestige X at level 50 your level keeps counting, up to Master 1,000, with a new icon every 100 levels and cards, camos and an emblem along the way. Prestige X players start at the Master level their XP has already earned.',
+      'Master levels show wherever a level does: your player card, lobbies, scoreboards, the kill feed, results and the boards. The busiest bot players are Masters too.',
+    ],
+  },
+  {
+    build: '1111-27', date: '2026-11-12', title: 'Accessibility',
+    items: [
+      'New in Options: Accessibility. Colour modes for red-weak, green-weak and blue-weak eyes, and a high contrast mode. They change team colours everywhere: players, rings, the minimap, the kill feed, objectives, squads and loot.',
+      'In a colour mode enemies also differ in shape: their rings are dashed and their kill feed rows are striped. Battle royale guns show their rarity as pips.',
+      'Touch layout: drag the sticks, buttons and streak tiles where your thumbs want them and make them bigger or smaller. It is mirrored when you play left-handed, and nothing can end up under another control or the HUD.',
+      'Reduce shake and flashes: less camera shake, dimmer explosions, a dark flashbang instead of a white one, and no blinking warnings.',
+      'Sound cues: a marker points at grenades landing near you. You can also turn on footsteps, shown as an arc on the side they come from.',
+      'A larger text size for menus.',
+      'The emote row on the title screen no longer covers the Join and Browse buttons on smaller phones.',
+    ],
+  },
+  {
     build: '1111-26', date: '2026-11-12', title: 'Sixteen new attachments',
     items: [
       'Sixteen new attachments, so every gun has more to choose from in each slot. Snipers, pistols, shotguns and launchers gain the most.',

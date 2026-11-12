@@ -161,10 +161,19 @@ const SCENES = {
   }, { gl: true }),
   'operators': menuScene('Operators', ({ menu }) => menu.operators({ loadoutIndex: 0, onBack: noop, onChange: noop }), { gl: true }),
   'profile': menuScene('Profile', ({ menu }) => menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop })),
+  // Prestige (docs/PRESTIGE.md): the view from the service record's rank ladder, the reveal, and a Master save.
+  'prestige': menuScene('Prestige view', ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfPrestigeView"]').click(); }),
+  'prestige-master': menuScene('Prestige view, Master 137', ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfPrestigeView"]').click(); }, { seed: 'master' }),
+  'prestige-reveal': menuScene('Prestige reveal', async ({ menu }) => { const { prestigeReveal } = await import('./js/ui/prestige.js'); menu.title({}); prestigeReveal(menu, { prestige: 4 }); }),
+  'title-master': menuScene('Title, Master 137', ({ menu }) => menu.title({}), { seed: 'master' }),
+  'profile-master': menuScene('Profile, Master 137', ({ menu }) => menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }), { seed: 'master' }),
+  'results-master': menuScene('Results: win, Master levels', ({ menu, results }) => menu.results(results('win'), { rematch: noop, menu: noop }), { gl: true, settle: 4500, seed: 'master' }),
   'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
   // Options > Controller (js/ui/controllerscreen.js), opened from the Options screen's Set up button.
   'controller': menuScene('Options: controller', ({ menu }) => { menu.options({ onBack: noop, onPreviewSound: noop }); menu.el.querySelector('[data-act="optPad"]').click(); }),
+  // Options > Accessibility (js/ui/a11yscreen.js), opened from the Graphics heading's Accessibility button.
+  'a11y': menuScene('Options: accessibility', ({ menu }) => { menu.options({ onBack: noop, onPreviewSound: noop }); menu.el.querySelector('[data-act="optA11y"]').click(); }),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'help-install': menuScene('Help: Install', ({ menu }) => menu.help({ onBack: noop, tab: 'install' })),
   'help-updates': menuScene('Help: Updates (the changelog, scrolls)', ({ menu }) => menu.help({ onBack: noop, tab: 'updates' })),
@@ -268,6 +277,7 @@ async function runFrame(id) {
       const max = w => Progress.applyMatch({ xp: 0, weapons: { [w]: { xp: 1e7, kills: 0 } } });
       for (const w of WEAPON_IDS) { for (let i = 0; i < 3; i++) { max(w); Progress.prestigeWeapon(w); } max(w); }
     }
+    if (scene?.seed === 'master') await seedMaster();
     if (scene.kind === 'menu') await menuFrame(scene, ui);
     else if (scene.kind === 'hud') await hudFrame(scene, ui);
     else await scene.fn(ui);
@@ -278,6 +288,14 @@ async function runFrame(id) {
   // Let entrances settle before anyone screenshots. Timed sequences (the results reel) ask for longer; &wait= overrides.
   await new Promise(r => setTimeout(r, Number(q.get('wait') ?? scene?.settle ?? 900)));
   window.__ready = true;
+}
+
+// Prestige X and on to Master level 137 (docs/PRESTIGE.md): ten climbs and prestiges, then XP past the eleventh.
+async function seedMaster() {
+  const { Progress } = await import('./js/ui/progress.js');
+  const { PLAYER_CURVE, MASTER_LEVEL_XP } = await import('./js/shared/progression.js');
+  while (Progress.prestige < 10) { Progress.addXp(PLAYER_CURVE.cap); Progress.doPrestige(); }
+  Progress.addXp(PLAYER_CURVE.cap + 136 * MASTER_LEVEL_XP + 1200);
 }
 
 // A season played in: 16 matches (12 of them ranked: placed, then a few more), some tiers claimed, some waiting.

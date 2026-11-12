@@ -9,14 +9,17 @@ import { GUN_LADDER, isBr, isEx, isFfa, MODES, modeRules, SND, CTF } from '../sh
 import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
 import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/FINISHERS.md).
-import { ZmHud } from './zm-hud.js';            // Graveyard Shift layer (docs/ZOMBIES.md).
+import { ZmHud } from './zm-hud.js';
+import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
-import { badgeMark, nameHtml, weaponLevelHtml } from './widgets.js';
+import { badgeMarkOf, badgeLevel, badgeKey, nameHtml, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
+import { reducedMotion } from './motion.js';
+import { isPlaced, scaleOf } from './layout.js';
 import { icon, resolveIcon } from './icons.js';
 import { ArmorySheet } from './trainarmory.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
@@ -333,7 +336,8 @@ const HIT_CSS = `
 .hit.armor:not(.kill) .hit-armor { display: block; }
 .hit.weak:not(.kill):not(.head) .hit-x path { stroke: #b9c0c8; stroke-width: 2.2; stroke-dasharray: 5 3; }
 `;
-const REDUCED_MOTION = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+// The system setting or Options > Reduce shake and flashes (js/ui/motion.js setReducedMotion).
+const REDUCED_MOTION = { get matches() { return reducedMotion(); } };
 const COVER_HIT_WINDOW = 0.3;    // Seconds after one of your rounds passed through cover that a hit counts as reduced.
 const RESPAWN_FLASH = [{ opacity: 0.75 }, { opacity: 0 }];
 const STREAK_HIT = [
@@ -424,6 +428,7 @@ export class HUD {
     this.zmHud = new ZmHud(this);
     this.modeHud = new ModeHud(this);
     this.finHud = new FinHud(this);
+    this.cues = new CuesHud(this);
     this.#drawMapBase();
     this.reset();
   }
@@ -459,6 +464,9 @@ export class HUD {
     this.proDrawn = true;
   }
 
+  // Options > Accessibility > Sound cues: 'off', 'nades' or 'all' (js/ui/cues-hud.js).
+  setCues(level) { this.cues.setLevel(level); }
+
   // Options: HUD size (Small, Normal, Large) scales the panels; the layout pass keeps them clear of the thumbs.
   setHudSize(size) {
     this.hudK = HUD_SCALE[size] ?? 1;
@@ -478,6 +486,9 @@ export class HUD {
     if (!W || !H) return;
     const k = this.hudK ?? 1, lefty = this.el.classList.contains('lefty');
     const st = this.root.style, px = v => `${Math.round(v)}px`;
+    // Streak tiles the player placed (Options > Touch layout) leave the dock and count as a button; size them first.
+    const placedTiles = isPlaced(ctl.layout, 'streaks');
+    if (placedTiles) st.setProperty('--tile-k', this.tileK());
     const { zones, rects } = ctl.geometry();
     if (!zones) return;
     const ins = safeInsets(), safe = { t: ins.top, r: ins.right, b: ins.bottom, l: ins.left };
@@ -516,7 +527,12 @@ export class HUD {
     // Dock: health beside the streak tiles (or the battle royale's plate and medkit buttons), along the bottom edge
     // between the sticks. The tiles go on the aim thumb's side, as the buttons do.
     const vit = this.vitals, tiles = ctl.el.querySelector('.streaks'), inv = this.el.querySelector('.br-inv');
-    const right = this.br ? inv : tiles?.style.display !== 'none' && [...ctl.tiles].some(t => t.node.style.display !== 'none') ? tiles : null;
+    const tilesShown = tiles?.style.display !== 'none' && [...ctl.tiles].some(t => t.node.style.display !== 'none');
+    const right = this.br ? inv : tilesShown && !placedTiles ? tiles : null;
+    if (!this.br && tilesShown && placedTiles) {
+      const r = ctl.el.querySelector('.stk-row').getBoundingClientRect();
+      if (r.width) buttons.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom });
+    }
     // The first sizing that fits a free stretch: as chosen, then the tiles at their touch size, then health smaller.
     const tryK = [[k, this.tileK()], [k, 1], [Math.min(k, 1), 1], [HUD_SCALE.small, 1]];
     let fit = null;
@@ -532,7 +548,7 @@ export class HUD {
     }
     const { vk, tk, vw, rw, y0, total, span } = fit;
     st.setProperty('--vit-k', vk);
-    st.setProperty('--tile-k', tk);
+    st.setProperty('--tile-k', placedTiles ? this.tileK() : tk);
     const cx = Math.max(span[0] + total / 2, Math.min(span[1] - total / 2, W / 2));
     const left = cx - total / 2;
     const vitX = right && !lefty ? left : right ? left + rw + DOCK_GAP * 2 : left;
@@ -632,7 +648,14 @@ export class HUD {
   }
 
   // Streak tiles grow with Large but never shrink below their touch size.
-  tileK() { return Math.max(1, this.hudK ?? 1); }
+  // A custom tile size (Options > Touch layout) multiplies on top, never below 1.
+  tileK() { return Math.max(1, this.hudK ?? 1) * scaleOf(this.controls?.layout, 'streaks'); }
+
+  // Options > Touch layout: the corner chips' size (mic, quick chat, emote). The wheels they open sit under them.
+  setChipScale(k) {
+    this.root.style.setProperty('--chips-k', k);
+    this.layout();
+  }
 
   #markBlocked(x, y) {
     for (const r of this.markObstacles) {
@@ -787,7 +810,7 @@ export class HUD {
   // is driven from update() so it stays true to the sim's warmup whatever speed this phone runs at.
   #showIntro(mapId, mode, roster, localId) {
     const map = MAPS[mapId] ?? this.map;
-    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMark(p.badge.prestige ?? 0, 15)}</i><u>${p.badge.level ?? ''}</u>` : ''}<b>${nameHtml(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
+    const row = (p, i) => `<div class="in-row${p.id === localId ? ' me' : ''}" style="--i:${i}">${p.badge ? `<i class="f-bdg">${badgeMarkOf(p.badge, 15)}</i><u>${badgeLevel(p.badge)}</u>` : ''}<b>${nameHtml(p.name)}</b>${vetTag(vetOf(p), { short: true })}${p.isBot && !p.pool ? '<small>Bot</small>' : ''}</div>`;
     const team = (t, side) => {
       const list = roster.filter(p => p.team === t);
       return `<div class="in-team ${side}" style="--team:${TEAMS[t].css}"><h3><i></i>${esc(TEAMS[t].name)}</h3>${list.map(row).join('')}</div>`;
@@ -1351,12 +1374,12 @@ export class HUD {
         if (slot.nameKey !== p.name) { slot.nameKey = p.name; slot.name.innerHTML = nameHtml(p.name); }
         slot.name.style.color = '';
         const badge = this.badges.get(p.id);
-        const rank = badge?.prestige ?? -1;
+        const rank = badgeKey(badge);
         if (rank !== slot.rank) {
           slot.rank = rank;
-          slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : '';
+          slot.bdg.innerHTML = badge ? badgeMarkOf(badge, 15) : '';
         }
-        slot.lv.textContent = badge?.level ?? '';
+        slot.lv.textContent = badge ? badgeLevel(badge) : '';
         this.#paintAway(slot, p);
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
@@ -1385,9 +1408,9 @@ export class HUD {
         if (slot.nameKey !== nk) { slot.nameKey = nk; slot.name.innerHTML = `${at + 1}. ${nameHtml(p.name)}`; }
         slot.name.style.color = TEAMS[p.team]?.css ?? '';
         const badge = this.badges.get(p.id);
-        const rank = badge?.prestige ?? -1;
-        if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMark(rank, 15) : ''; }
-        slot.lv.textContent = badge?.level ?? '';
+        const rank = badgeKey(badge);
+        if (rank !== slot.rank) { slot.rank = rank; slot.bdg.innerHTML = badge ? badgeMarkOf(badge, 15) : ''; }
+        slot.lv.textContent = badge ? badgeLevel(badge) : '';
         this.#paintAway(slot, p);
         cells[1].textContent = p.kills;
         cells[2].textContent = p.deaths;
@@ -1592,6 +1615,7 @@ export class HUD {
     if (this.ctf) this.#updateCtf(view, me, c);
     this.modeHud.update(view, me);
     this.finHud.update(view, me);
+    this.cues.update(view, me);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -2456,7 +2480,7 @@ export class HUD {
     const who = k?.name ? identityOf(k.id) : null;
     this.deathBy.innerHTML = k?.name
       ? `${cardHtml(who?.card ?? 'yard', { size: 236, title: k.name, sub: '' })}
-         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 16)}</i><u>Lv ${k.badge.level ?? ''}</u>` : ''}${vetTag(!!who?.vet, { emblem: who?.emblem })}</span>`
+         <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMarkOf(k.badge, 16)}</i><u>${k.badge.master > 0 ? 'Master' : 'Lv'} ${badgeLevel(k.badge)}</u>` : ''}${vetTag(!!who?.vet, { emblem: who?.emblem })}</span>`
       : '<em>Eliminated</em>';
     this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : k.fin ? 'Finished by' : 'Killed by') : 'Down';
     this.dcIcon.innerHTML = k ? glyph(k.icon, 20) : '';
@@ -2514,7 +2538,7 @@ export class HUD {
             this.killer = null;
             this.deathPainted = false;
             this.#syncThrowReach();
-            this.respawnEl.animate(RESPAWN_FLASH, { duration: 420, easing: 'ease-out' });
+            if (!REDUCED_MOTION.matches) this.respawnEl.animate(RESPAWN_FLASH, { duration: 420, easing: 'ease-out' });
           }
           break;
         case 'streak': this.#onStreak(e); break;
@@ -2704,7 +2728,7 @@ export class HUD {
 
   #feedBadge(id) {
     const badge = this.badges.get(id);
-    return badge ? `<i class="f-bdg">${badgeMark(badge.prestige ?? 0, 13)}</i>` : '';
+    return badge ? `<i class="f-bdg">${badgeMarkOf(badge, 13)}</i>` : '';
   }
 
   #onStreak(e) {

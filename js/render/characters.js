@@ -6,6 +6,7 @@ import { MeshBuilder } from './meshbuild.js';
 import { getGun } from './guns.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex, camoTint } from './camo-shader.js';
 import { GLSL_LIGHT, GLSL_DITHER, hexRGB } from './art.js';
+import { TEAM_RGB, colorMode } from '../shared/palette.js';
 import { WEAPON_IDS, TEAMS } from '../shared/constants.js';
 import { fillV10 } from '../shared/weapons-v10.js';
 import { BR } from '../shared/modes.js';
@@ -746,7 +747,7 @@ export class Characters {
     this.time = time;
     this.rigs = new Map();
     this.visionWalls = map.walls.filter(w => w.blocksVision);
-    this.teamRGB = TEAMS.map(t => hexRGB(t.color));
+    this.teamRGB = TEAM_RGB;     // Shared with the colour modes (js/shared/palette.js).
     // Per-operator numbers the frame loop reads, so it never touches colour conversion or string lookups.
     // armZ / hipZ: where the arms and legs join a body of this build; head: the head's scale.
     this.looks = ALL_OPS.map(o => ({
@@ -842,15 +843,22 @@ export class Characters {
     const ringMat = new THREE.ShaderMaterial({
       vertexShader: `
         attribute vec3 aTeam; attribute vec2 aFx; attribute float aRim;
-        varying vec3 vC; varying float vA;
+        varying vec3 vC; varying float vA; varying vec3 vP;
         void main(){
           float fade = aFx.x;
           vec3 c = aTeam;
           float a = aRim > 0.5 ? 0.95 : 0.18;
-          vC = (c + aFx.y * 0.35) * a * fade; vA = a * fade;
+          vC = (c + max(aFx.y, 0.0) * 0.35) * a * fade; vA = a * fade;
+          vP = vec3(position.x, position.z, aRim > 0.5 && aFx.y < -0.5 ? 1.0 : 0.0);
           gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position,1.0);
         }`,
-      fragmentShader: `varying vec3 vC; varying float vA; void main(){ gl_FragColor = vec4(vC, vA); }`,
+      // Colour modes (js/shared/palette.js): an enemy's rim is broken into six dashes, so sides differ in shape too.
+      fragmentShader: `uniform float uShapes; varying vec3 vC; varying float vA; varying vec3 vP;
+        void main(){
+          if (uShapes > 0.5 && vP.z > 0.5 && fract(atan(vP.y, vP.x) * 0.9549297) < 0.38) discard;
+          gl_FragColor = vec4(vC, vA);
+        }`,
+      uniforms: { uShapes: { value: colorMode() === 'off' ? 0 : 1 } },
       depthTest: false, depthWrite: false,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     });
@@ -1079,6 +1087,7 @@ export class Characters {
 
   update(view, dt, opts) {
     const { localId, localTeam, uav, revealAll } = opts;
+    this.ringMat.uniforms.uShapes.value = colorMode() === 'off' ? 0 : 1;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
     let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
@@ -1525,7 +1534,8 @@ export class Characters {
       _s.set(ringScale, 1, ringScale);
       _m.compose(_p, _q, _s);
       _m.toArray(this.ring.instanceMatrix.array, nRing * 16);
-      this.ring.geometry.attributes.aFx.setXY(nRing, r.reveal, local ? 1 : 0);
+      // y: 1 the local player (brighter), -1 an enemy (dashed rim in a colour mode), 0 a teammate.
+      this.ring.geometry.attributes.aFx.setXY(nRing, r.reveal, local ? 1 : p.team === localTeam ? 0 : -1);
       this.ring.geometry.attributes.aTeam.setXYZ(nRing, team[0], team[1], team[2]);
       const shade = 0.9 / (1 + r.alt * 0.06);       // The shadow shrinks the higher a glider is.
       _s.set(shade, 1, shade);

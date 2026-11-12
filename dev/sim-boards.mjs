@@ -129,7 +129,7 @@ console.log('ranking');
   const ar = B.buildBoard({ me: meCard, friends: pals, cat: 'kills', view: 'around' });
   ok(ar.rows.length <= 2 * B.AROUND + 1 && ar.rows[ar.me].e.kind === 'me' && ar.rows[ar.me].rank === all.rows[all.me].rank, 'Around me: your rank with its neighbours', `${ar.rows.length} rows, rank ${ar.rows[ar.me].rank}`);
   const lvl = B.buildBoard({ me: { ...meCard, level: 50, prestige: 10, xp: 9e9 }, cat: 'level' });
-  ok(lvl.rows[0].e.kind === 'me' && lvl.rows[0].text.startsWith('P10 · 50'), 'level ranks prestige first', lvl.rows[0].text);
+  ok(lvl.rows[0].e.kind === 'me' && lvl.rows[0].text.startsWith('Master 1000'), 'level ranks prestige, then Master level, first', lvl.rows[0].text);
   const wk = B.buildBoard({ me: meCard, friends: [{ id: 'Pold', at: 1, card: B.cleanCard({ v: 1, name: 'Old', wk: { key: 'W2020-01-06', k: 9999, w: 99 } }) }], cat: 'wkills', view: 'friends' });
   ok(wk.rows.find(r => r.e.id === 'Pold').value === 0, "a friend's card from an earlier week counts zero on the weekly boards");
   const pool = B.poolEntries(Date.now());
@@ -141,6 +141,30 @@ console.log('ranking');
   ok(pool.every(p => p.clan === null || /^[A-Z0-9]{2,4}$/.test(p.clan)), 'clan tags only from clanOf, when the pool has it');
   const wkStart = P.weekStart(new Date()), win = B.poolWindow(wkStart, Date.now());
   ok(win.length === BOT_POOL.length && win.every((w, i) => w.k === pool[i].wk.k), 'poolWindow (the hook for seasonal boards) gives the weekly numbers for this week');
+}
+
+// ---- Master Prestige on the Level board (docs/PRESTIGE.md) ----
+console.log('master');
+{
+  const S = P.MASTER_START_XP, X = P.MASTER_LEVEL_XP;
+  const card = (name, prestige, level, xp) => ({ v: 1, name, prestige, level, xp });
+  const pals = [
+    { id: 'Pm1', at: 1, card: B.cleanCard(card('Grinder', 10, 50, S + 300 * X + 5)) },       // Master 301
+    { id: 'Pm2', at: 1, card: B.cleanCard(card('Edge', 10, 50, S)) },                       // Master 1
+    { id: 'Pm3', at: 1, card: B.cleanCard(card('Almost', 10, 49, S + 900 * X)) },           // Not a Master yet, however much XP
+    { id: 'Pm4', at: 1, card: B.cleanCard(card('Nine', 9, 50, 9e6)) },
+    { id: 'Pm5', at: 1, card: B.cleanCard(card('Tied', 10, 50, S + 300 * X + 900)) },       // Master 301 too, more XP
+  ];
+  const lv = B.buildBoard({ me: card('Me', 10, 50, S + 40 * X), friends: pals, cat: 'level', view: 'friends' });
+  ok(lv.rows.map(r => r.e.name).join(',') === 'Tied,Grinder,Me,Edge,Almost,Nine', 'Level board: Master level first, then XP within it; prestige and level below', lv.rows.map(r => `${r.e.name} ${r.text}`).join(' | '));
+  ok(lv.rows[0].rank === 1 && lv.rows[1].rank === 1 && lv.rows[0].text.startsWith('Master 301') && lv.rows[2].text.startsWith('Master 41'), 'one Master level shares a rank; rows read "Master N"');
+  ok(lv.rows.find(r => r.e.name === 'Almost').text === 'P10 · 49' && lv.rows.find(r => r.e.name === 'Nine').text === 'P9 · 50', 'below Master the row reads prestige and level as before');
+  // A card from a build before Master levels has no such field: its Master level is read from its XP all the same.
+  ok(B.masterOfEntry(pals[0].card) === 301 && B.masterOfEntry(pals[2].card) === 0 && B.masterOfEntry({ prestige: 10, level: 50, xp: 0 }) === 1, 'Master level comes from rank and total XP (older cards too)');
+  const all = B.buildBoard({ me: card('Me', 10, 50, S + 40 * X), cat: 'level' });
+  ok(all.rows.every((r, i) => !i || r.value <= all.rows[i - 1].value), 'whole Level board sorted highest first');
+  const bots = all.rows.filter(r => r.e.kind === 'pool' && B.masterOfEntry(r.e) > 0);
+  ok(bots.length > 10 && bots.every(r => r.text.startsWith(`Master ${B.masterOfEntry(r.e)}`)), 'pool Masters rank and read as Masters', `${bots.length} on the board, top ${bots[0]?.text}`);
 }
 
 // ---- Pool: identical for two phones on the same date ----
@@ -155,7 +179,10 @@ console.log('pool');
   let prev = null, fine = true;
   for (let d = 0; d < 60; d++) {
     const rows = B.poolEntries(Date.UTC(2026, 10, 1) + d * DAY + 12 * 3600e3);
-    if (prev) for (let i = 0; i < rows.length; i++) for (const k of ['m', 'k', 'd', 'w', 'brm', 'brw', 'br5', 'xp', 'mst']) if (rows[i][k] < prev[i][k]) fine = false;
+    if (prev) for (let i = 0; i < rows.length; i++) {
+      for (const k of ['m', 'k', 'd', 'w', 'brm', 'brw', 'br5', 'xp', 'mst']) if (rows[i][k] < prev[i][k]) fine = false;
+      if (B.getCategory('level').value(rows[i]) < B.getCategory('level').value(prev[i])) fine = false;     // Level, Master included.
+    }
     prev = rows;
   }
   ok(fine, 'pool totals never fall from one day to the next (60 days)');

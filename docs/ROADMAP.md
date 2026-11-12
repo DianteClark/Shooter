@@ -92,7 +92,11 @@ on every push, keep 2% of weekly usage for bugs.
     "Season Replay" rotates past seasons. Season 1 with the framework.
     DONE (seasons): docs/SEASONS.md. Season 1 Cold Iron (2026-11-16), Season 2 Signal Fire (2026-12-28), then Season
     Replay; free 100-tier track, weekly sets, an event playlist each, ranked reset, Season boards view and Ranked category.
-23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
+23. DONE (a11y). Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
+    docs/ACCESSIBILITY.md. Options > Accessibility: colour modes (Protanopia, Deuteranopia, Tritanopia, High contrast)
+    from one palette (js/shared/palette.js) with shape cues; touch layout editor (move and resize sticks, buttons,
+    streak tiles; chip size), mirrored for the left hand; menu text size; reduce shake and flashes; grenade and
+    footstep cues. Title emote row fits 640-956 px.
 24. DONE (1111). Music: synthesised menu and match music. js/audio/music-synth.js (instruments, arrangements, offline render),
     js/audio/music.js (director: scenes, layers, stings; music.cue(...)). Options: Music slider, "In matches" switch.
 
@@ -128,3 +132,15 @@ on every push, keep 2% of weekly usage for bugs.
     without a code loses it). Device tiers by GPU/memory/screen with per-tier DPR caps, Android full screen, back
     gesture, vibration option, install worker and manifest, How to play > Install; docs/DEVICES.md.
 35. Signature attachments read as clear upgrades: DONE (1111-18), strengths x1.5, costs halved.
+
+## Owner's wave (2026-11-12 morning), approved; target ~90% of the week
+36. Graveyard Shift economy: upgrade bench (3 tiers per gun), supply terminal replacing loadout streaks (zombie-tuned
+    streaks bought with points, bots buy too), traps at chokepoints, armour plates and two extra perk machines with a
+    paid perk-limit raise, a late exfil (~round 15) and a hidden boss step.
+37. Bug sweep (every mode and screen) and balance run: mirrored bot matches with the wave 2 attachments; the owner's
+    100-match stats when they arrive.
+38. A purpose-built Graveyard Shift map: power switch, story layout, boss arena.
+39. DONE (NEXT). Prestige rework: per-prestige icon, camo and calling card; Master Prestige levels past P10 (to 1,000,
+    read from total XP, icon tiers every 100, cards, camos and an emblem on the way); Prestige view and reveal. docs/PRESTIGE.md.
+Ideas held for later (owner to decide after 36-39): tournaments vs bot clans, weekly events, custom lobby extras and a
+party playlist, new operators and skins, replays, match history detail.

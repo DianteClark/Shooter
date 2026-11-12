@@ -3,7 +3,8 @@ import { icon } from './icons.js';
 import { AimFilter, wrapAngle } from './aimfilter.js';
 import { TUNING, onTune } from '../shared/tuning.js';
 import { mountTuner } from './tuner.js';
-import { viewport } from './viewport.js';
+import { viewport, safeInsets } from './viewport.js';
+import { placeControls, scaleOf } from './layout.js';
 
 // Twin-stick touch input. Touch handlers only store numbers; read() turns them into the Input object and
 // repaints with transforms, once per frame, so a burst of touchmoves costs nothing extra.
@@ -109,6 +110,8 @@ export class Controls {
     this.knobLimit = this.fireRing + KNOB_OVER;
     this.leftRadius = TUNING.leftSize;
     this.lefty = false;
+    this.layout = {};              // Options.layout: the touch layout editor's places and sizes (js/ui/layout.js).
+    this.placement = null;         // placeControls' last result: boxes and conflicts, for the tests.
     this.buttonTouch = new Map();  // touch id -> button or tile name
     // iOS's touch stream is not always whole (see #adopt). These two let a finger it lost track of be picked up again.
     this.lost = new Map();         // touch id -> { side, ox, oz }: a stick let go of without that finger's touchend
@@ -243,7 +246,7 @@ export class Controls {
   // Stick geometry from the tuning registry and the sensitivity option. The ring is redrawn at its true pixel size
   // (no CSS scale, so the stroke stays crisp), the move rim resized, and the knobs repainted against the new limits.
   #applyTuning() {
-    const ring = TUNING.fireRing / this.sensitivity;
+    const ring = TUNING.fireRing / this.sensitivity * scaleOf(this.layout, 'aim');
     this.fireRing = ring;
     this.fireRelease = ring * FIRE_RELEASE_FRAC;
     this.knobLimit = ring + KNOB_OVER;
@@ -258,7 +261,7 @@ export class Controls {
     const a = (ring + 4).toFixed(1), b = (ring + 15).toFixed(1);
     svg.querySelector('.ring-ticks').setAttribute('d', `M0 -${a}V-${b}M0 ${a}V${b}M-${a} 0H-${b}M${a} 0H${b}`);
 
-    const lr = this.leftRadius = TUNING.leftSize;
+    const lr = this.leftRadius = TUNING.leftSize * scaleOf(this.layout, 'move');
     const rim = this.moveRim.style;
     rim.left = rim.top = `${-lr}px`;
     rim.width = rim.height = `${lr * 2}px`;
@@ -273,6 +276,13 @@ export class Controls {
     this.paintDirty = true;
     if (this.enabled) this.#measure();
     this.#paint();
+  }
+
+  // Options > Accessibility > Touch layout: where each control sits and how big it is. Sticks grow their ring with
+  // their size (the move stick's travel to full speed, the aim ring's travel to fire), buttons and tiles only their face.
+  applyLayout(layout) {
+    this.layout = layout && typeof layout === 'object' ? layout : {};
+    this.#applyTuning();
   }
 
   setThrowReach(strongArm) {
@@ -292,6 +302,13 @@ export class Controls {
   // Layout is only ever measured here, never during play.
   #measure() {
     this.width = viewport().w || window.innerWidth;
+    // Custom places first (or the CSS defaults back), so the rects below are where the controls really are.
+    const ins = safeInsets();
+    this.placement = placeControls(this.el, this.layout, {
+      W: this.width, H: viewport().h || window.innerHeight, lefty: this.lefty,
+      safe: { t: ins.top, r: ins.right, b: ins.bottom, l: ins.left },
+      radius: { move: this.leftRadius + MOVE_ZONE_PAD, aim: this.fireRing + 15 },
+    });
     const box = (node, slop) => {
       const r = node.getBoundingClientRect();
       return { x0: r.left - slop, y0: r.top - slop, x1: r.right + slop, y1: r.bottom + slop };

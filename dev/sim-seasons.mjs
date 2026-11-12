@@ -278,7 +278,8 @@ console.log('names');
   ok(!clash.length, 'no season name clashes with the rest of the game', clash.join(', '));
   const dup = fresh.filter((n, i) => fresh.indexOf(n) !== i && !I.SEASON_DEFS.some(d => d.name === n));
   ok(!dup.length, 'and none repeats', dup.join(', '));
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 && getEmblem('s1-emb-01'), 'season emblems stay out of the pool\'s list');
+  // + 1: the Master Prestige emblem (docs/PRESTIGE.md), kept out of the pool's list the same way.
+  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 + 1 && getEmblem('s1-emb-01'), 'season emblems stay out of the pool\'s list');
   const sk = SKINS.find(s => s.id === 'skin:anvil-s1');
   ok(sk && skinUnlock(sk, { granted: () => false }).requirement === 'Season 1 reward track', 'season skins name their track');
 }
