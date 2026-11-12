@@ -1471,7 +1471,7 @@ export class Characters {
         const stance = (side < 0 ? 0.16 : -0.14) * standK;
         let footX = p.x + rightX * side * (wide + 0.05 * standK) + aimX * stance + r.moveX * off;
         let footZ = p.z + rightZ * side * (wide + 0.05 * standK) + aimZ * stance + r.moveZ * off;
-        let footY = 0.13 + lift + (r.alt > 0 ? r.alt - 0.06 + Math.sin(clock * 2.4 + side) * 0.05 : 0);
+        let footY = 0.13 + lift + (r.alt > 0 ? r.alt - 0.06 + Math.sin(clock * 2.4 + side) * 0.05 : 0) + Math.max(0, -A.drop) * 0.9;     // Lifted off the ground in a finisher: the feet go too.
         let poleX = r.moveX * 0.8 + aimX * 0.4 + rightX * side * 0.3, poleY = 0.15, poleZ = r.moveZ * 0.8 + aimZ * 0.4 + rightZ * side * 0.3;
         if (slide > 0.01) {
           // Lead leg kicks straight out, trail leg folds under the body with its knee to the side.

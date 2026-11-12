@@ -163,10 +163,10 @@ export function finPose(k, role, u, downed, o) {
 
 // Emotes: `t` seconds in, `dur` long. Weighted in and out so they start and stop cleanly.
 const EMOTE = {
-  wave(t, o) { const s = Math.sin(t * 11); o.lw = 1; o.lx = 0.25; o.ly = 1.78; o.lz = -0.42 + s * 0.16; o.twist = -0.15; o.head = -0.1; },
-  salute(t, o) { o.lw = 1; o.lx = 0.32; o.ly = 1.62; o.lz = -0.02; o.lean = -0.08; o.head = -0.12; },
-  point(t, o) { o.lw = 1; o.lx = 1.0; o.ly = 1.4; o.lz = -0.3; o.twist = -0.35; o.lean = 0.06; },
-  thumbs(t, o) { o.lw = 1; o.lx = 0.62; o.ly = 1.22 + Math.abs(Math.sin(t * 5)) * 0.05; o.lz = -0.12; o.head = 0.08; },
+  wave(t, o) { const s = Math.sin(t * 11); o.lw = 1; o.lx = 0.2; o.ly = 2.08; o.lz = -0.5 + s * 0.2; o.twist = -0.15; o.head = -0.1; },
+  salute(t, o) { o.lw = 1; o.lx = 0.34; o.ly = 1.74; o.lz = -0.1; o.lean = -0.08; o.head = -0.12; },
+  point(t, o) { o.lw = 1; o.lx = 1.15; o.ly = 1.5; o.lz = -0.35; o.twist = -0.35; o.lean = 0.06; },
+  thumbs(t, o) { o.lw = 1; o.lx = 0.7; o.ly = 1.4 + Math.abs(Math.sin(t * 5)) * 0.06; o.lz = -0.2; o.head = 0.08; },
   laugh(t, o) { const b = Math.sin(t * 15); o.lean = -0.22 + b * 0.07; o.drop = Math.abs(b) * 0.03; o.lw = 1; o.lx = 0.3; o.ly = 0.98; o.lz = -0.05; o.head = -0.35 + b * 0.1; },
   shuffle(t, o) {
     const s = Math.sin(t * 4.2), b = Math.abs(Math.sin(t * 8.4));
@@ -182,6 +182,7 @@ export function emotePose(id, t, dur, o) {
   const f = EMOTE[id];
   if (!f) return o;
   f(t, o, dur);
+  o.gpitch -= 0.7; o.gy -= 0.15;      // The gun hangs muzzle down while the free hand talks.
   const w = Math.max(0, Math.min(1, t / 0.18, (dur - t) / 0.22));
   for (const k in o) if (!TARGETS.has(k)) o[k] *= w;
   return o;

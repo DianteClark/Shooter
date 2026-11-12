@@ -356,6 +356,16 @@ menu.on({
   gunsmith: () => openGunsmith(),
   loadout: () => openLoadout(),
   operators: () => openOperators(),
+  // The title's emote row: the operator in the yard plays it (docs/FINISHERS.md).
+  titleEmote: () => { const row = menu.el.querySelector('.ttl-emotes'); if (row) row.hidden = !row.hidden; },
+  titleEmotePlay: ({ i }) => {
+    const e = Progress.emotes()[Number(i)];
+    if (!e) return;
+    if (!e.unlocked) { menu.toast(`${e.name}: ${e.requirement}`, 'warn'); return; }
+    const row = menu.el.querySelector('.ttl-emotes');
+    if (row) row.hidden = true;
+    if (!backdrop.emote(Number(i))) menu.toast(e.name);
+  },
   leaveLobby: () => goTitle(),
   toggleReady: () => toggleReady(),
   start: () => startVote(),

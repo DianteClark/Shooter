@@ -116,6 +116,15 @@ export class MenuBackdrop {
     this.renderer?.chars.setRoster(this.#roster());
   }
 
+  // An emote on the operator in the yard (docs/FINISHERS.md, index into EMOTES). False while the yard is not up.
+  emote(e) {
+    if (!this.renderer || this.state !== 'live') return false;
+    this.events.push({ t: 'emote', id: 'bd-hero', e });
+    this.touched = performance.now();
+    this.#run();
+    return true;
+  }
+
   // Shows the yard moving. Builds it first if needed, a beat after the call so the screen that asked paints first.
   live() {
     this.state = 'live';
@@ -242,6 +251,7 @@ export class MenuBackdrop {
     this.view.t = this.clock;
     this.#place(dt);
     this.renderer.update(this.view, this.events, dt);
+    this.events.length = 0;
     if (this.canvas.style.opacity === '0') this.#fadeIn();
   };
 

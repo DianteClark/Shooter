@@ -39,6 +39,17 @@ import { MODES as ALL_MODES } from '../shared/modes.js';
 // The featured pairing in a few words for the Multiplayer button: modifiers plus the mode's short name.
 const shortFeatured = () => { const f = featured(); const m = ALL_MODES[f.mode]; return [...f.mods.map(id => MODS[id]?.name ?? id), (f.mods.length ? m?.short : m?.name) ?? f.name].join(' '); };     // Modes overhaul: modifiers and the featured playlist.
 import { seasonChip, profileRank, seasonScreen, rankBadge } from './season.js';      // Seasons and ranked (docs/SEASONS.md).
+import { icon } from './icons.js';
+
+// The title's emote button (docs/FINISHERS.md): the operator in the yard behind the menu plays the one tapped. The
+// row of emotes opens above the button; locked ones are dimmed and say what earns them (main.js titleEmotePlay).
+function titleEmotes() {
+  const list = Progress.emotes();
+  return `<div class="ttl-emote-box">
+    <div class="ttl-emotes" hidden>${list.map((e, i) => `<button class="ttl-em${e.unlocked ? '' : ' locked'}" data-act="titleEmotePlay" data-i="${i}" data-sound="none">${icon(e.unlocked ? e.icon : 'ui:lock', { size: 14 })}<b>${esc(e.name)}</b></button>`).join('')}</div>
+    <button class="ttl-emote" data-act="titleEmote" data-sound="tab" aria-label="Emotes">${icon('ui:user', { size: 17 })}<b>Emote</b></button>
+  </div>`;
+}
 
 export { esc };
 
@@ -208,6 +219,7 @@ export class Menu {
         </span>
       </button>
       ${titleChallenges()}
+      ${titleEmotes()}
       <nav class="ttl-sec" aria-label="More">
         ${[['gunsmith', 'gunsmith', 'Gunsmith'], ['operators', 'operator', 'Operators'], ['history', 'ui:clock', 'History'], ['boards', 'ui:crown', 'Boards'], ['options', 'options', 'Options'], ['help', 'help', 'How to play'], ['saveCode', 'save', 'Save code']]
           .map(([act, icon, label]) => `<button class="chip" data-act="${act}" data-in="up">${ico(icon)}<b>${label}</b></button>`).join('')}
