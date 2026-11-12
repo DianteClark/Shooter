@@ -60,7 +60,7 @@ function detail(r, cat, now) {
       <span class="bdd-rk">${rankBadge(sr >= 0 ? division(sr).code : -1, 22)}<b>${esc(rank)}</b>${sr >= 0 ? `<small>${n(sr)} SR</small>` : ''}</span>
     </div>
     <div class="bdd-stats">
-      ${stat('Level', masterOfEntry(e) ? `Master ${masterOfEntry(e)}` : `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}`, cat.id === 'level')}${stat('XP', cn(e.xp))}${stat('Matches', cn(e.m))}${stat('Kills', cn(e.k), cat.id === 'kills')}${stat('K/D', kd, cat.id === 'kd')}
+      ${masterOfEntry(e) ? stat('Master lvl', cn(masterOfEntry(e)), cat.id === 'level') : stat('Level', `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}`, cat.id === 'level')}${stat('XP', cn(e.xp))}${stat('Matches', cn(e.m))}${stat('Kills', cn(e.k), cat.id === 'kills')}${stat('K/D', kd, cat.id === 'kd')}
       ${stat('Wins', cn(e.w + (e.brw ?? 0)), cat.id === 'wins')}${stat('BR played', cn(e.brm))}${stat('BR wins', cn(e.brw), cat.id === 'brwins')}${stat('BR top 5', cn(e.br5), cat.id === 'brtop5')}
       ${e.seasonView ? `${stat('Season tier', cn(e.sn?.t ?? 0), cat.id === 'tier')}${stat('Ranked', sr >= 0 ? cn(sr) : '-', cat.id === 'ranked')}${stat('BR top 5', cn(e.br5))}${stat('Matches', cn(e.m))}`
         : `${stat('Extract', cn(e.ex), cat.id === 'extract')}${stat('Mastery', cn(e.mst), cat.id === 'mastery')}${stat('Week kills', cn(wk.k), cat.id === 'wkills')}${stat('Week wins', cn(wk.w), cat.id === 'wwins')}`}
