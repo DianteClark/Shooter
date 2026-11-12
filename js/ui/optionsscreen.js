@@ -6,6 +6,7 @@ import { pop } from './motion.js';
 import { VOICE_LEVELS_WORK } from '../net/voice.js';
 import { deviceProfile, savedAutoStep, QUALITY_STEPS } from '../render/quality.js';
 import { controllerScreen } from './controllerscreen.js';
+import { a11yScreen } from './a11yscreen.js';
 import { hapticsSupported } from './haptics.js';
 import { fullscreenSupported, enterFullscreen } from './android.js';
 
@@ -48,7 +49,7 @@ export function optionsScreen(menu, opts) {
     ${header({ back: 'optBack', label: 'Done', title: 'Options' })}
     <div class="opt-cols">
       <section class="opt-col" data-in="up">
-        <h4>${ico('graphics')}Graphics</h4>
+        <h4>${ico('graphics')}Graphics<button class="seg opt-pad opt-a11y" data-act="optA11y" aria-label="Accessibility settings">${ico('ui:eye')}<b>Accessibility</b></button></h4>
         <div class="opt-row opt-quality">
           <div class="opt-name"><b>Quality</b><small>${esc(autoNote())}. Lower steps save battery and heat.</small></div>
           <div class="opt-segs">${QUALITY_LEVELS.map(([id, label]) => `<button class="seg" data-act="optQuality" data-id="${id}">${label}</button>`).join('')}</div>
@@ -172,6 +173,7 @@ export function optionsScreen(menu, opts) {
     optSquadClear: () => { Options.set('squad', ''); paint(); },
     optVoiceMode: () => { Options.set('voiceMode', Options.get('voiceMode') === 'ptt' ? 'open' : 'ptt'); paint(); },
     optPad: () => controllerScreen(menu, { onBack: () => optionsScreen(menu, opts) }),
+    optA11y: () => a11yScreen(menu, { onBack: () => optionsScreen(menu, opts) }),
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));

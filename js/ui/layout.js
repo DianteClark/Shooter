@@ -27,7 +27,7 @@ const BY_ID = Object.fromEntries(LAYOUT_ITEMS.map(i => [i.id, i]));
 // rows sit under the minimap, than on the aim side, where the weapon panel shrinks to fit over the buttons.
 export const TOP_BAND = { move: 0.42, aim: 0.34 };
 const EDGE = 4;                  // Pixels kept from the safe area's edge.
-const GAP = 4;                   // Pixels kept between two controls.
+const GAP = 8;                   // Pixels kept between two controls' faces (their touch slop may meet, never the faces).
 const STICK_HIT = 0.55;          // Of a stick's radius: the part another control may not cover (the ring's rim may).
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
