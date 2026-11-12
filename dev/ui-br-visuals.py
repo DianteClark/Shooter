@@ -79,10 +79,11 @@ async def run(browser, vw, vh, failures, errors):
     # Stand next to them: the revive runs, bars over both, our kneel.
     try:
         await pg.wait_for_function(f"({G}.match.interp.newest.players.find(p => p.id === window.__mate).reviveK ?? 0) > 0.45", timeout=120000, polling=400)
-        if await pg.locator('.br-reviving').is_hidden(): failures.append(f'{vw}: no reviving bar on the HUD')
+        if await pg.locator('.br-reviving:not(.br-recalling)').is_hidden(): failures.append(f'{vw}: no reviving bar on the HUD')
         await shot('32-revive')
         await crop('32-revive')
-    except Exception:
+    except Exception as err:
+        print('  revive wait:', str(err)[:300], flush=True)
         st = await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), q = sim.byId.get(window.__mate);
           return JSON.stringify({{ d: Math.hypot(me.ps.x - q.ps.x, me.ps.z - q.ps.z).toFixed(2), down: q.downed, alive: q.alive, rev: q.br.reviveT, fire: me.ps.firingT, v: Math.hypot(me.ps.vx, me.ps.vz), t: sim.time, k: m.interp.newest.players.find(p => p.id === q.id).reviveK }}); }})()""")
         failures.append(f'{vw}: the revive never started ({st})')
