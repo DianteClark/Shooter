@@ -32,13 +32,13 @@ export class ZmKindsFx {
     // The shield: a riveted iron door, held upright a little off the chest.
     const sg = new THREE.BoxGeometry(0.1, 1.15, 0.9);
     sg.translate(0.52, 0.85, 0);
-    this.shieldMesh = inst(sg, new THREE.MeshBasicMaterial({ color: 0x70757c }), 8);
+    this.shieldMesh = inst(sg, new THREE.MeshBasicMaterial({ color: 0x9a9fa6 }), 8);
     // Fog: a quad over the view, see-through near the player and dark past ZM_FOG.
     this.fog = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
       transparent: true, depthTest: false, depthWrite: false,
       uniforms: { uR: { value: ZM_FOG }, uK: { value: 0 } },
       vertexShader: 'varying vec2 vP; void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform float uR; uniform float uK; varying vec2 vP; void main() { float d = length(vP) * 120.0; float a = smoothstep(uR - 2.0, uR + 4.0, d) * 0.88 * uK; gl_FragColor = vec4(0.07, 0.09, 0.08, a); }',
+      fragmentShader: 'uniform float uR; uniform float uK; varying vec2 vP; void main() { float d = length(vP) * 120.0; float a = smoothstep(uR - 4.0, uR + 1.5, d) * 0.9 * uK; gl_FragColor = vec4(0.07, 0.09, 0.08, a); }',
     }));
     this.fog.rotation.x = -Math.PI / 2;
     this.fog.position.y = 2.7;
