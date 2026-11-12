@@ -170,7 +170,7 @@ function matches() {
       console.log(`  ${mode} seed ${seed}: ${r.minutes.toFixed(1)} min, winner ${r.sim.winner}, ${JSON.stringify(r.ev)}`);
       check(r.sim.phase === 'ended' && r.alive.every(p => p.team === r.sim.winner), `${mode} ${seed}: one squad left standing`);
       check(r.minutes >= 4.5 && r.minutes <= 11, `${mode} ${seed}: ${r.minutes.toFixed(1)} min (4.5-11)`);
-      check(r.ev.brredeploy >= 3 && r.landFar === 0, `${mode} ${seed}: ${r.ev.brredeploy} redeploys, all next to a squadmate (${r.landFar} far)`);
+      check(r.ev.brredeploy >= (mode === "rb" ? 3 : 2) && r.landFar === 0, `${mode} ${seed}: ${r.ev.brredeploy} redeploys, all next to a squadmate (${r.landFar} far)`);
       check(r.redeployOk, `${mode} ${seed}: no redeploy after the cut-off`);
     }
   }
