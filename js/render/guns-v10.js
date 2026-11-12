@@ -83,6 +83,7 @@ export const V10_MAG_LOOK = {
 // ---- Guns ----
 export function v10Factories(h) {
   const { kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, longGunGrips } = h;
+  const { fitShellCuff, fitGuideRail, fitVenturi } = h;   // Wave 2 (guns-w2.js).
   const under = id => id === 'angled' || id === 'vertical' || id === 'handstop';
 
   // A plain fixed stock: wedge from the receiver back to a padded butt at (bx, by).
@@ -245,6 +246,7 @@ export function v10Factories(h) {
       mx = end + 0.24;
     }
     k.accent(); for (let i = 0; i < 5; i++) b.box(-0.1 + i * 0.09, 0.12, 0.125, 0.04, 0.14, 0.035);   // Dart saddle.
+    fitShellCuff(k, a.mag, -0.62, -0.02, -0.105);                                             // Wave 2 shells.
     k.body().extrude([[-0.28, 0.14], [-0.28, 0], [-0.52, -0.1], [-0.92, -0.18], [-0.92, 0.08], [-0.52, 0.16]], -0.08, 0.08);
     k.grip().box(-0.95, -0.05, 0, 0.06, 0.28, 0.18, 0.02);
     if (a.optic) fitOptic(k, a.optic, 0.04, 0.22, 0.9);
@@ -392,6 +394,7 @@ export function v10Factories(h) {
     }
     k.accent(); for (let x = 0.66; x < end - 0.1; x += 0.24) b.box(x, 0.12, 0, 0.08, 0.14, 0.14);   // Coils.
     k.dark().box(end, 0.12, 0, 0.06, 0.2, 0.3, 0.02);                                          // Muzzle yoke.
+    const brake = a.barrel === 'muzzlebrake' ? fitBarrel(k, 'muzzlebrake', end + 0.03, 0.12, 0, 0.1) : null;
     stock(k, -0.36, -0.04, 0.22, -1.04, 0.04, 0.11);
     if (a.optic) fitOptic(k, a.optic, 0.02, 0.38);
     else {
@@ -403,7 +406,7 @@ export function v10Factories(h) {
     k[m.part]().box(0.22, -0.04 - 0.12 * f, 0, 0.3, 0.24 * f, 0.2, 0.03);                      // Battery.
     k.accent().box(0.22, -0.05 - 0.24 * f, 0, 0.2, 0.03, 0.12);
     const fore = longGunGrips(k, a, -0.06, 0.34, 0.14, 0.86, 0.04, -1.07, 0.04);
-    return { geometry: b.build(), muzzle: [end + 0.04, 0.12, 0], fore, eject: [0.1, 0.3, 0.17], length: end + 1.15 };
+    return { geometry: b.build(), muzzle: [brake ?? end + 0.04, 0.12, 0], fore, eject: [0.1, 0.3, 0.17], length: (brake ?? end + 0.04) + 1.11 };
   }
 
   // Magpies: two compact pistols, one in each hand, a forearm's width apart. The off-hand one is held higher and
@@ -425,7 +428,8 @@ export function v10Factories(h) {
       k.grip().extrude([[x - 0.14, oy + 0.04], [x + 0.06, oy + 0.04], [x, oy - drop], [x - 0.2, oy - drop]], z - 0.07, z + 0.07);
       k[m.part]().box(x - 0.1, oy - drop - 0.02, z, 0.24, 0.04, 0.16);
       if (m.tab) k.accent().box(x - 0.1, oy - drop - 0.05, z, 0.14, 0.03, 0.1);
-      if (isWrap(a.grip)) for (const g of [0.35, 0.7]) k.accent().box(x - 0.07 - 0.02 * g, oy - drop * g, z, 0.2, 0.03, 0.16);
+      if (a.grip === 'wrap' || a.grip === 'knurl') for (const g of [0.35, 0.7]) k.accent().box(x - 0.07 - 0.02 * g, oy - drop * g, z, 0.2, 0.03, 0.16);
+      else if (isWrap(a.grip)) fitWrap(k, x - 0.05, drop, 0.14, a.grip, z, oy);                // Wave 2 grips.
     }
     return { geometry: b.build(), muzzle: [mx === null ? 0.66 : mx, 0.18, 0.24], fore: [-0.2, 0.1, -0.24], eject: [0.1, 0.28, 0.24], length: 1 };
   }
@@ -456,14 +460,17 @@ export function v10Factories(h) {
   function salvo(a) {
     const k = kit(), b = k.b;
     const ext = a.barrel === 'longtube' ? 0.34 : 0, end = 0.94 + ext;
-    const big = a.mag === 'warhead' ? 1.2 : a.mag === 'shaped' ? 0.8 : 1;
+    const light = a.mag === 'lightrocket', big = a.mag === 'warhead' ? 1.2 : a.mag === 'shaped' ? 0.8 : light ? 0.75 : 1;
     const tubes = [[0.08, -0.15], [0.08, 0.15], [0.32, 0]];
     for (const [y, z] of tubes) {
       k.body().prismX(-0.5, end, y, z, 0.13, 0.13, 8, OCT);
       k.dark().prismX(end, end + 0.05, y, z, 0.145, 0.145, 8, OCT);
       k.accent().prismX(end + 0.05, end + 0.05 + 0.1 * big, y, z, 0.1 * big, 0.03, 8, OCT);    // Warhead tip.
-      k.dark().prismX(-0.56, -0.5, y, z, 0.15, 0.13, 8, OCT);                                  // Exhaust bell.
+      if (a.barrel === 'venturi') fitVenturi(k, -0.5, y, z, 0.13, -1, 0.2, 1.45);
+      else k.dark().prismX(-0.56, -0.5, y, z, 0.15, 0.13, 8, OCT);                             // Exhaust bell.
+      if (light) k.accent().prismX(end - 0.14, end - 0.1, y, z, 0.14, 0.14, 8, OCT);           // Light rockets: a bright band.
     }
+    if (a.barrel === 'guiderail') fitGuideRail(k, -0.3, end, 0.32, 0.13);
     k.metal().box(0.2, 0.16, 0, 0.1, 0.34, 0.5, 0.02);                                         // Bands holding the tubes.
     k.metal().box(-0.3, 0.16, 0, 0.1, 0.34, 0.5, 0.02);
     if (a.mag === 'satchel') k.body2().box(-0.05, 0.16, -0.36, 0.34, 0.24, 0.14, 0.03);

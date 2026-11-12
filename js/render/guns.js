@@ -6,6 +6,7 @@ import { MeshBuilder } from './meshbuild.js';
 import { PART } from './camo-shader.js';
 import { kitKey, normalizeKit, NO_ATTACHMENTS, ATTACHMENTS, SLOTS } from '../shared/attachments.js';
 import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
+import { fitOpticW2, fitBarrelW2, fitWrapW2, W2_WRAPS, W2_MAG_LOOK, fitVentRib, fitShellCuff, fitGuideRail, fitVenturi } from './guns-w2.js';
 
 const C = {
   body:  0x424852,
@@ -39,6 +40,7 @@ function pistolGrip(k, x = -0.02, drop = 0.34, w = 0.13) {
 // Bracket and sight on the rail. x,y = rail centre and rail top. s scales it for small guns.
 function fitOptic(k, id, x, y, s = 1) {
   if (fitOpticV10(k, id, x, y, s)) return;   // V10 optics (guns-v10.js).
+  if (fitOpticW2(k, id, x, y, s)) return;    // Wave 2 optics (guns-w2.js).
   if (id === 'reflex') {
     // An open square: the frame is what reads at phone size.
     k.dark().box(x, y + 0.035 * s, 0, 0.3 * s, 0.07 * s, 0.19 * s);
@@ -146,7 +148,8 @@ function fitBarrel(k, id, x, y, z, r, len = 0.5) {
     k.dark().box(x + 0.13, y, z, 0.045, r * 2.25, r * 3.05);
     return x + 0.21;
   }
-  return fitBarrelV10(k, id, x, y, z, r, len);   // V10 barrels (guns-v10.js), or null: the gun's own muzzle stays.
+  // V10 and wave 2 barrels (guns-v10.js, guns-w2.js), or null: the gun's own muzzle stays.
+  return fitBarrelV10(k, id, x, y, z, r, len) ?? fitBarrelW2(k, id, x, y, z, r, len);
 }
 
 // Stubby angled grip, plain vertical post, or a wide swing brace sticking out to the side.
@@ -164,14 +167,15 @@ function fitForegrip(k, id, x, y) {
 }
 
 // Grip tape bands around the rear grip; the knurled frame is three dark rings instead.
-function fitWrap(k, x, drop, w, id = 'wrap') {
+function fitWrap(k, x, drop, w, id = 'wrap', z = 0, oy = 0) {
+  if (fitWrapW2(k, x, drop, w, id, z, oy)) return;   // Wave 2 grips (guns-w2.js).
   if (id === 'knurl') {
     for (const f of [0.25, 0.5, 0.75]) k.dark().box(x - 0.015 * f, -drop * f, 0, 0.18, 0.03, w + 0.03);
     return;
   }
   for (const f of [0.3, 0.62]) k.accent().box(x - 0.015 * f, -drop * f, 0, 0.19, 0.035, w + 0.03);
 }
-const isWrap = id => id === 'wrap' || id === 'knurl';
+const isWrap = id => id === 'wrap' || id === 'knurl' || W2_WRAPS.has(id);
 
 // Stock attachments, from the butt (x) forward. Skeleton: an open frame of rods. Recoil stock: a fat padded block.
 function fitStock(k, id, x, y) {
@@ -201,7 +205,7 @@ const MAG_LOOK = {
   drummag:  { len: 0.45, part: 'dark', drum: true },
   apmag:    { len: 1, part: 'metal', tab: true },
 };
-Object.assign(MAG_LOOK, V10_MAG_LOOK);
+Object.assign(MAG_LOOK, V10_MAG_LOOK, W2_MAG_LOOK);
 const MAG_BASE = { len: 1, part: 'dark' };
 const magLook = id => MAG_LOOK[id] || MAG_BASE;
 
@@ -235,7 +239,7 @@ function ar(a) {
   k.metal().box(-0.16, 0.21, -0.17, 0.18, 0.06, 0.07);                                      // Charging handle, sticks out left.
   if (m.drum) fitDrum(k, 0.18, -0.2);
   pistolGrip(k, -0.03, 0.34);
-  if (a.grip === 'wrap') fitWrap(k, -0.03, 0.34, 0.13);
+  if (isWrap(a.grip)) fitWrap(k, -0.03, 0.34, 0.13, a.grip);
   else fitForegrip(k, a.grip, 0.74, 0.0);
   fitStock(k, a.grip, -0.98, 0.02);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.74, -0.14, 0] : [0.74, 0.02, 0];
@@ -297,6 +301,8 @@ function shotgun(a) {
     // Tubes neck down, so the muzzle end looks pinched.
     for (const z of [-0.12, 0.12]) k.dark().prismX(end, end + 0.16, 0.13, z, 0.1, 0.06, 8, Math.PI / 8);
     mx = end + 0.17;
+  } else if (a.barrel === 'ventrib') {
+    mx = fitVentRib(k, end, 0.13, [-0.12, 0.12], 0.11, 0.26);
   } else {
     k.dark().box(end + 0.04, 0.13, 0, 0.12, 0.26, 0.54, 0.03);              // Heavy muzzle collar.
     mx = end + 0.1;
@@ -315,11 +321,11 @@ function shotgun(a) {
     k.accent(); for (let i = 0; i < 3; i++) b.prismZ(0.3, 0.34, 0.04 + i * 0.1, 0.02, 0.04, 0.04, 6);
   } else if (a.mag === 'lightmag') {
     k.body2().box(-0.5, 0.17, 0, 0.3, 0.06, 0.34);                           // Skeleton cheek rest.
-  }
+  } else fitShellCuff(k, a.mag, -0.62, 0.0, -0.165);                          // Wave 2 shells, on the stock's left.
   if (a.optic) fitOptic(k, a.optic, 0.14, 0.26);
   else k.accent().box(0.14, 0.26, 0, 0.12, 0.04, 0.1);
   pistolGrip(k, -0.03, 0.32);
-  if (a.grip === 'wrap') fitWrap(k, -0.03, 0.32, 0.13);
+  if (isWrap(a.grip)) fitWrap(k, -0.03, 0.32, 0.13, a.grip);
   else fitForegrip(k, a.grip, 0.72, -0.11);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.72, -0.25, 0] : [0.72, -0.05, 0];
   return { geometry: b.build(), muzzle: [mx, 0.13, 0], fore, eject: [0.12, 0.26, 0.17], length: mx + 0.99 };
@@ -357,7 +363,7 @@ function lmg(a) {
   k.metal(); b.box(1.18, -0.07, -0.08, 0.05, 0.26, 0.04); b.box(1.18, -0.07, 0.08, 0.05, 0.26, 0.04);   // Bipod.
   b.box(1.18, -0.21, 0, 0.09, 0.03, 0.26);
   pistolGrip(k, -0.05, 0.34, 0.15);
-  if (a.grip === 'wrap') fitWrap(k, -0.05, 0.34, 0.15);
+  if (isWrap(a.grip)) fitWrap(k, -0.05, 0.34, 0.15, a.grip);
   else fitForegrip(k, a.grip, 0.82, -0.0);
   fitStock(k, a.grip, -1.02, 0.03);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.82, -0.14, 0] : [0.82, -0.01, 0];
@@ -405,7 +411,7 @@ function sniper(a) {
   k[m.part]().extrude([[0.08, 0.02], [0.3, 0.02], [0.3, -0.3 * f], [0.14, -0.3 * f]], -0.06, 0.06);
   if (m.tab) k.accent().box(0.22, -0.3 * f, 0, 0.18, 0.05, 0.1);
   pistolGrip(k, -0.02, 0.3, 0.11);
-  if (a.grip === 'wrap') fitWrap(k, -0.02, 0.3, 0.11);
+  if (isWrap(a.grip)) fitWrap(k, -0.02, 0.3, 0.11, a.grip);
   else fitForegrip(k, a.grip, 0.8, 0.06);
   fitStock(k, a.grip, -1.04, 0.02);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.8, -0.1, 0] : [0.8, 0.03, 0];
@@ -465,7 +471,7 @@ function burst(a) {
   if (m.tab) k.accent().box(0.14 + 0.05 * f, -0.46 * f, 0, 0.18, 0.05, 0.13);
   if (m.drum) fitDrum(k, 0.2, -0.18);
   pistolGrip(k, -0.03, 0.34);
-  if (a.grip === 'wrap') fitWrap(k, -0.03, 0.34, 0.13);
+  if (isWrap(a.grip)) fitWrap(k, -0.03, 0.34, 0.13, a.grip);
   else fitForegrip(k, a.grip, 0.84, -0.02);
   fitStock(k, a.grip, -0.76, 0.05);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.84, -0.16, 0] : [0.84, 0, 0];
@@ -524,6 +530,8 @@ function autoshot(a) {
     k.metal().prismX(end + 0.02, end + 0.34, 0.15, 0, 0.1, 0.1, 8, Math.PI / 8);
     k.accent().prismX(end + 0.24, end + 0.28, 0.15, 0, 0.11, 0.11, 8, Math.PI / 8);
     mx = end + 0.35;
+  } else if (a.barrel === 'ventrib') {
+    mx = fitVentRib(k, end + 0.06, 0.15, [0], 0.12, 0.29);
   } else {
     k.dark().prismX(end + 0.02, end + 0.17, 0.15, 0, 0.1, 0.19, 8, Math.PI / 8);   // Flared mouth.
     mx = end + 0.18;
@@ -539,7 +547,7 @@ function autoshot(a) {
   if (a.optic) fitOptic(k, a.optic, 0.14, 0.29);
   else k.accent().box(0.14, 0.3, 0, 0.14, 0.04, 0.08);
   pistolGrip(k, -0.14, 0.32);
-  if (a.grip === 'wrap') fitWrap(k, -0.14, 0.32, 0.13);
+  if (isWrap(a.grip)) fitWrap(k, -0.14, 0.32, 0.13, a.grip);
   else fitForegrip(k, a.grip, 0.72, 0.0);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.72, -0.14, 0] : [0.72, 0, 0];
   return { geometry: b.build(), muzzle: [mx, 0.15, 0], fore, eject: [0.1, 0.3, 0.2], length: mx + 0.8 };
@@ -576,7 +584,7 @@ function dmr(a) {
   if (m.tab) k.accent().box(0.28, -0.26 * f, 0, 0.18, 0.05, 0.1);
   k.metal().box(0.0, 0.2, 0.13, 0.12, 0.05, 0.08);
   pistolGrip(k, -0.04, 0.32, 0.12);
-  if (a.grip === 'wrap') fitWrap(k, -0.04, 0.32, 0.12);
+  if (isWrap(a.grip)) fitWrap(k, -0.04, 0.32, 0.12, a.grip);
   else fitForegrip(k, a.grip, 0.96, 0.02);
   fitStock(k, a.grip, -1.06, 0.0);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.96, -0.12, 0] : [0.96, 0.02, 0];
@@ -622,13 +630,19 @@ function launcher(a) {
     k.accent().prismX(0.88, 0.94, 0.17, 0, tubeR + 0.02, tubeR + 0.02, 8, Math.PI / 8);
   }
   k.accent(); for (const x of [-0.5, 0.72]) b.prismX(x, x + 0.07, 0.17, 0, tubeR + 0.012, tubeR + 0.012, 8, Math.PI / 8);
-  k.dark().prismX(-0.96, -0.7, 0.17, 0, 0.29, tubeR, 8, Math.PI / 8);       // Flared exhaust.
-  k.metal().prismX(-0.99, -0.96, 0.17, 0, 0.27, 0.29, 8, Math.PI / 8);
+  if (a.barrel === 'venturi') fitVenturi(k, -0.7, 0.17, 0, tubeR, -1, 0.42, 2);   // A long wide nozzle replaces the exhaust.
+  else {
+    k.dark().prismX(-0.96, -0.7, 0.17, 0, 0.29, tubeR, 8, Math.PI / 8);     // Flared exhaust.
+    k.metal().prismX(-0.99, -0.96, 0.17, 0, 0.27, 0.29, 8, Math.PI / 8);
+  }
+  if (a.barrel === 'guiderail') fitGuideRail(k, -0.42, 0.86 + ext, 0.17, tubeR);
   // Warhead: the only thing in the game this shape. The wide warhead is obviously wider.
-  // The shaped charge is a slim spike instead of a bulb.
-  const hr = blast ? 0.34 : shaped ? 0.18 : 0.27, wx = 0.9 + ext, tip = shaped ? 0.4 : 0.24;
+  // The shaped charge is a slim spike instead of a bulb; light rockets are a slim finned bulb.
+  const light = a.mag === 'lightrocket';
+  const hr = blast ? 0.34 : shaped ? 0.18 : light ? 0.21 : 0.27, wx = 0.9 + ext, tip = shaped ? 0.4 : light ? 0.3 : 0.24;
   k.metal().prismX(wx, wx + 0.1, 0.17, 0, tubeR, tubeR, 8, Math.PI / 8);
   k.dark().prismX(wx + 0.1, wx + 0.36, 0.17, 0, hr, hr, 8, Math.PI / 8);
+  if (light) { k.metal(); for (const [dy, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) b.box(wx + 0.16, 0.17 + dy * hr, dz * hr, 0.1, dy ? 0.08 : 0.02, dz ? 0.08 : 0.02); }
   k.accent().prismX(wx + 0.36, wx + 0.36 + tip, 0.17, 0, hr, 0.05, 8, Math.PI / 8);
   k.metal().prismX(wx + 0.36 + tip, wx + 0.42 + tip, 0.17, 0, 0.05, 0.03, 8, Math.PI / 8);
   if (a.optic) fitOptic(k, a.optic, 0.1, 0.36, 0.9);
@@ -638,7 +652,7 @@ function launcher(a) {
   }
   k.dark().box(-0.1, -0.02, 0, 0.36, 0.08, 0.16);
   pistolGrip(k, -0.1, 0.36, 0.14);
-  if (a.grip === 'wrap') fitWrap(k, -0.1, 0.36, 0.14);
+  if (isWrap(a.grip)) fitWrap(k, -0.1, 0.36, 0.14, a.grip);
   else if (a.grip === 'angled') fitForegrip(k, a.grip, 0.46, -0.02);
   else k.grip().box(0.46, -0.16, 0, 0.12, 0.3, 0.11, 0.03);
   const fore = a.grip === 'angled' ? [0.46, -0.16, 0] : [0.46, -0.18, 0];
@@ -726,6 +740,9 @@ function coach(a) {
     for (const y of [0.06, 0.22]) k.metal().prismX(end, end + 0.28, y, 0, 0.07, 0.07, 8, Math.PI / 8);
     k.accent().box(end + 0.2, 0.14, 0, 0.04, 0.36, 0.18);
     mx = end + 0.29;
+  } else if (a.barrel === 'ventrib') {
+    k.metal().prismX(end - 0.01, end + 0.22, 0.06, 0, 0.078, 0.078, 8, Math.PI / 8);
+    mx = fitVentRib(k, end, 0.22, [0], 0.085, 0.3);
   } else {
     k.dark().box(end + 0.02, 0.14, 0, 0.06, 0.38, 0.22);
     mx = end + 0.05;
@@ -737,10 +754,11 @@ function coach(a) {
   k.grip().box(-1.08, -0.08, 0, 0.07, 0.36, 0.24, 0.02);
   if (a.mag === 'speedmag') { k.dark().box(-0.6, 0.0, 0.13, 0.3, 0.14, 0.05); k.accent(); for (let i = 0; i < 3; i++) b.prismX(-0.72 + i * 0.1, -0.66 + i * 0.1, 0.0, 0.16, 0.035, 0.035, 6); }
   else if (a.mag === 'lightmag') k.body2().box(-0.62, 0.15, 0, 0.28, 0.05, 0.24);
+  else fitShellCuff(k, a.mag, -0.66, -0.02, -0.135);
   if (a.optic) fitOptic(k, a.optic, 0.4, 0.3, 0.85);
   else k.accent().box(end - 0.05, 0.32, 0, 0.05, 0.04, 0.04);                                 // Bead sight.
   pistolGrip(k, -0.06, 0.3, 0.12);
-  if (a.grip === 'wrap') fitWrap(k, -0.06, 0.3, 0.12);
+  if (isWrap(a.grip)) fitWrap(k, -0.06, 0.3, 0.12, a.grip);
   else fitForegrip(k, a.grip, 0.52, -0.08);
   const fore = a.grip === 'angled' || a.grip === 'vertical' ? [0.52, -0.22, 0] : [0.52, -0.05, 0];
   return { geometry: b.build(), muzzle: [mx, 0.14, 0], fore, eject: [-0.1, 0.3, 0], length: mx + 1.08 };
@@ -986,15 +1004,19 @@ function deuce(a) {
 function thumper(a) {
   const k = kit(), b = k.b;
   const blast = a.mag === 'warhead', shaped = a.mag === 'shaped';
-  const cr = blast ? 0.3 : 0.26;
+  const light = a.mag === 'lightrocket', cr = blast ? 0.3 : light ? 0.23 : 0.26;
   k.body().prismX(-0.1, 0.36, 0.12, 0, cr, cr, 8, Math.PI / 8);                                 // Cylinder.
+  if (light) k.accent().prismX(0.1, 0.15, 0.12, 0, cr + 0.012, cr + 0.012, 8, Math.PI / 8);     // Light rockets: a bright band.
   k.dark(); for (let i = 0; i < 6; i++) { const t = i / 6 * Math.PI * 2; b.prismX(0.355, 0.37, 0.12 + Math.sin(t) * cr * 0.6, Math.cos(t) * cr * 0.6, 0.06, 0.06, 6); }
   k.accent().prismX(-0.12, -0.1, 0.12, 0, 0.1, 0.1, 8, Math.PI / 8);
   const ext = a.barrel === 'longtube' ? 0.36 : 0;
   const end = 0.86 + ext;
   k.body2().prismX(0.36, end, 0.14, 0, 0.13, 0.13, 8, Math.PI / 8);                              // Fat barrel.
   if (ext) k.accent().prismX(0.84, 0.9, 0.14, 0, 0.145, 0.145, 8, Math.PI / 8);
-  k.dark().prismX(end, end + 0.08, 0.14, 0, shaped ? 0.1 : 0.16, shaped ? 0.1 : 0.16, 8, Math.PI / 8);
+  if (a.barrel === 'venturi') fitVenturi(k, end, 0.14, 0, 0.13, 1, 0.18, 1.7);
+  else k.dark().prismX(end, end + 0.08, 0.14, 0, shaped ? 0.1 : 0.16, shaped ? 0.1 : 0.16, 8, Math.PI / 8);
+  if (a.barrel === 'guiderail') fitGuideRail(k, 0.4, end, 0.14, 0.13);
+  const mEnd = end + (a.barrel === 'venturi' ? 0.18 : 0.08);
   k.metal().box(0.45, 0.31, 0, 0.42, 0.05, 0.1);                                                // Top strap.
   // Skeleton folding stock.
   k.metal().box(-0.48, 0.18, 0, 0.6, 0.04, 0.05);
@@ -1003,11 +1025,11 @@ function thumper(a) {
   if (a.optic) fitOptic(k, a.optic, 0.5, 0.34, 0.85);
   else { k.dark().box(0.66, 0.4, 0, 0.12, 0.14, 0.04); k.accent().box(0.66, 0.46, 0, 0.13, 0.03, 0.06); }   // Leaf sight.
   pistolGrip(k, -0.18, 0.34, 0.14);
-  if (a.grip === 'wrap') fitWrap(k, -0.18, 0.34, 0.14);
+  if (isWrap(a.grip)) fitWrap(k, -0.18, 0.34, 0.14, a.grip);
   else if (a.grip === 'angled') fitForegrip(k, a.grip, 0.62, 0.02);
   else k.grip().box(0.62, -0.12, 0, 0.11, 0.26, 0.11, 0.03);
   const fore = a.grip === 'angled' ? [0.62, -0.12, 0] : [0.62, -0.14, 0];
-  return { geometry: b.build(), muzzle: [end + 0.08, 0.14, 0], fore, eject: [0.1, 0.12, 0.25], length: end + 0.9 };
+  return { geometry: b.build(), muzzle: [mEnd, 0.14, 0], fore, eject: [0.1, 0.12, 0.25], length: end + 0.9 + (mEnd - end - 0.08) };
 }
 
 // ---- V8 guns ----
@@ -1094,6 +1116,8 @@ function slug(a) {
   } else if (a.barrel === 'choke') {
     k.dark().prismX(end, end + 0.16, 0.2, 0, 0.1, 0.06, 8, Math.PI / 8);
     mx = end + 0.17;
+  } else if (a.barrel === 'ventrib') {
+    mx = fitVentRib(k, end, 0.2, [0], 0.09, 0.31);
   } else {
     k.accent().prismX(end - 0.06, end, 0.2, 0, 0.1, 0.1, 8, Math.PI / 8);                       // Bright crown band.
     mx = end + 0.01;
@@ -1103,6 +1127,7 @@ function slug(a) {
   k.dark().box(0.12, 0.12, -0.17, 0.08 * n + 0.06, 0.16, 0.04, 0.01);
   k.accent(); for (let i = 0; i < n; i++) b.prismY(0.06, 0.2, 0.12 - (n - 1) * 0.04 + i * 0.08, -0.2, 0.033, 0.033, 6);
   if (a.mag === 'lightmag') k.body2().box(-0.5, 0.2, 0, 0.3, 0.06, 0.3);
+  else fitShellCuff(k, a.mag, -0.56, 0.05, 0.145);
   k.body().extrude([[-0.24, 0.26], [-0.24, 0.0], [-0.52, -0.14], [-1.0, -0.18], [-1.0, 0.14], [-0.52, 0.24]], -0.12, 0.12);
   k.grip().box(-1.03, -0.02, 0, 0.07, 0.34, 0.26, 0.02);
   if (a.optic) fitOptic(k, a.optic, 0.1, 0.32);
@@ -1253,7 +1278,8 @@ const FACTORIES = {
 };
 
 // The V10 arsenal's models live in guns-v10.js and are built from the same shared parts.
-Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, longGunGrips }));
+Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, longGunGrips,
+  fitShellCuff, fitGuideRail, fitVenturi }));
 
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.
 const cache = new Map();
