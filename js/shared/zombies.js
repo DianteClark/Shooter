@@ -723,9 +723,16 @@ export function zmUsable(L, x, z, st) {
     else if (full) best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: true, why: `Perk limit: ${limit}` };
     else best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: dark || undefined };
   }
-  if (dark && bandOpen(L, st.open, L.power.band)) {
-    const dist = near(L.power.x, L.power.z);
-    if (dist >= 0) { bestD = dist; best = { kind: 'power', i: 0, cost: 0, label: 'Turn on the power' }; }
+  // The switch answers from its spot or from the panel face itself (a player pressed against the wall beside it), and
+  // once thrown it still answers, as "Power is on" (shown, never usable), so nobody wonders whether a mate got there.
+  if (L.power && bandOpen(L, st.open, L.power.band)) {
+    const a = near(L.power.x, L.power.z), b = near(L.power.wx, L.power.wz);
+    const dist = a < 0 ? b : b < 0 ? a : Math.min(a, b);
+    if (dist >= 0) {
+      bestD = dist;
+      best = dark ? { kind: 'power', i: 0, cost: 0, label: 'Turn on the power' }
+        : { kind: 'power', i: 0, cost: 0, label: 'Power is on', off: true, why: 'The perk machines are live' };
+    }
   }
   // The economy (ROADMAP item 36).
   const at = (p, make) => {

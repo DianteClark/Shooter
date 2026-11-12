@@ -255,6 +255,13 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     try: await pg.wait_for_function(f"{G}.match.sim.rules.power === 1", timeout=6000)
     except Exception: failures.append(f'{tag}: the switch did not turn the power on')
     if await ev(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.pts") != pts: failures.append(f'{tag}: the switch cost points')
+    # Everyone is told who did it, and the switch now says so instead of going quiet.
+    try: await pg.wait_for_function("[...document.querySelectorAll('.banner, .hud-banner, [class*=banner]')].some(b => /turned on the power/i.test(b.textContent))", timeout=3000)
+    except Exception: failures.append(f'{tag}: no "<name> turned on the power" banner')
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'POWER IS ON' && document.querySelector('.zm-use').classList.contains('poor')", timeout=4000)
+    except Exception: failures.append(f'{tag}: the switch does not say POWER IS ON once thrown: ' + str(await ev("document.querySelector('.zm-use')?.textContent")))
+    lamp = await ev(f"(() => {{ const p = {G}.renderer?.zmFx?.power ?? {G}.match?.renderer?.zmFx?.power; return p ? [p.lamp.material.color.getHex(), p.lever.rotation.z] : null; }})()")
+    if lamp is not None and (lamp[0] != 0x4fe36a): failures.append(f'{tag}: the switch lamp is not green once on ({lamp})')
     await pg.wait_for_timeout(1200)
     await shot('04-power-on')
     await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x - 3; m.ps.z = L.power.z + 2.5; }})()")

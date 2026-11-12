@@ -452,10 +452,42 @@ section('ashgrove');
   syncZmDoors(sim.map, R.open);
   const us = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
   ok(us?.kind === 'power' && us.ok && us.cost === 0, `the switch is offered (${us?.kind})`);
+  // Every approach: a player walking at the switch from any side (real movement against the walls) gets the prompt
+  // before stopping, and from the panel face too.
+  {
+    const { stepPlayer } = await import('../js/sim/player.js');
+    const IDLE = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false };
+    let tried = 0, got = 0; const miss = [];
+    for (let a = 0; a < 24; a++) {
+      const ang = a / 24 * Math.PI * 2, sx = L.power.wx + Math.cos(ang) * 5, sz = L.power.wz + Math.sin(ang) * 5;
+      if (!sim.nav.isWalkable(sx, sz)) continue;
+      tried++;
+      const ps = { ...me.ps, x: sx, z: sz, vx: 0, vz: 0 };
+      let seen = false;
+      for (let i = 0; i < 4 * SIM_HZ && !seen; i++) {
+        const dx = L.power.wx - ps.x, dz = L.power.wz - ps.z, l = Math.hypot(dx, dz) || 1;
+        stepPlayer(ps, { ...IDLE, mx: dx / l, mz: dz / l, aim: Math.atan2(dz, dx) }, DT, sim.map, sim.rng);
+        seen = zmUsable(L, ps.x, ps.z, R._stateFor(me))?.kind === 'power';
+      }
+      if (seen) got++; else miss.push(`${(ang * 180 / Math.PI).toFixed(0)}deg`);
+    }
+    ok(tried >= 6 && got === tried, `the switch prompt shows from every walkable approach (${got}/${tried}${miss.length ? ', missed ' + miss.join(' ') : ''})`);
+    ok(zmUsable(L, L.power.wx, L.power.wz, R._stateFor(me))?.kind === 'power', 'and right against the panel');
+  }
   sim.drainEvents();
   ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && R.power === 1 && me.zm.pts === 9000, 'throwing the switch is free');
   ok(sim.drainEvents().some(e => e.t === 'zlights' && e.by === me.id), 'zlights event');
-  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.kind !== 'power', 'the switch is not offered again');
+  const again = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(again?.kind === 'power' && again.off && !again.ok && again.label === 'Power is on', `once on, the switch says "Power is on" (${again?.label})`);
+  ok(!sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && sim.drainEvents().every(e => e.t !== 'zlights'), 'and cannot be thrown again');
+  // A bot that throws it tells the whole crew too (the banner names it).
+  {
+    const s2 = makeSim('ashgrove', 62); toLive(s2);
+    const R2 = s2.rules, bot = R2.crew.find(p => p.isBot);
+    s2.drainEvents();
+    R2._use(bot, { kind: 'power', i: 0, cost: 0, ok: true });
+    ok(bot && s2.drainEvents().some(e => e.t === 'zlights' && e.by === bot.id), 'a bot throwing the switch emits zlights with its id');
+  }
   me.ps.x = mercy.x; me.ps.z = mercy.z;
   ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && me.zm.perks.includes('mercy') && me.zm.pts === 9000 - ZM_PERKS.mercy.cost, 'with the power on the machine sells');
   // Other maps: no switch, machines always on.
