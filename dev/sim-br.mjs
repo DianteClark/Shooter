@@ -28,7 +28,7 @@ function runMatch(mode, seed) {
   sim.step(STEP);
   const startMs = performance.now() - t0;
   const times = [];
-  const ev = { kill: 0, down: 0, revive: 0, brgive: 0, brchest: 0, brplate: 0, brsquad: 0, pick: 0, plateHits: 0, zoneDeaths: 0, landed: 0 };
+  const ev = { kill: 0, down: 0, revive: 0, brgive: 0, brchest: 0, brplate: 0, brsquad: 0, pick: 0, plateHits: 0, zoneDeaths: 0, landed: 0, medkit: 0 };
   const snapBytes = [];
   const guests = sim.players.slice(0, 7);
   const killT = [];                             // Live seconds of each death (kills, circle, bleed-outs).
@@ -56,6 +56,7 @@ function runMatch(mode, seed) {
       if (e.t === 'kill' && e.equip === 'zone') ev.zoneDeaths++;
       if (e.t === 'kill') killT.push(sim.time - (liveT0 ?? 0));
       if (e.t === 'brland') ev.landed++;
+      if (e.t === 'heal' && e.kind === 'medkit') ev.medkit++;
     }
   }
   times.sort((a, b) => a - b);
@@ -80,6 +81,7 @@ function report(r) {
   check(ev.landed >= 30, `${r.mode}: everyone jumped and landed`);
   check(r.removed > 60 && ev.brgive > 20, `${r.mode}: loot picked up (guns ${ev.brgive})`);
   check(ev.brplate > 5 && ev.plateHits > 5, `${r.mode}: plates go on and soak hits`);
+  check(ev.medkit >= 8, `${r.mode}: bots heal with medkits (${ev.medkit})`);
   // Revives are rare per match (0-9 over seeds 11-14 on Frontier), so they are checked over all squad matches together.
   if (sim.br.downs) check(ev.down > 5, `${r.mode}: downs (${ev.down}) and revives (${ev.revive})`);
   else check(ev.down === 0, `${r.mode}: no downs in solos`);
@@ -148,6 +150,17 @@ function units() {
   pal.ps.x = me.ps.x + 1; pal.ps.z = me.ps.z;
   for (let i = 0; i < SIM_HZ * (BR.reviveTime + 0.5); i++) { pal.ps.x = me.ps.x + 1; pal.ps.z = me.ps.z; pal.ps.vx = 0; pal.ps.vz = 0; sim.step(STEP); }
   check(!me.downed && me.alive && me.hp > 0, 'a teammate standing close revives');
+  // No regen in BR: health stays where the revive left it; a medkit brings it back (ROADMAP 25).
+  const hpUp = me.hp;
+  me.spawnProtect = pal.spawnProtect = 999;
+  for (const q of sim.players) if (q.team !== me.team && Math.hypot(q.ps.x - me.ps.x, q.ps.z - me.ps.z) < 120) { q.ps.x = 5; q.ps.z = 5; }
+  for (let i = 0; i < SIM_HZ * 12; i++) { pal.ps.x = me.ps.x + 1; pal.ps.z = me.ps.z; sim.step(STEP); }
+  check(me.hp === hpUp, `no health regen in BR (${hpUp} -> ${me.hp} after 12 s)`);
+  me.br.meds = 1;
+  check(sim.applyCommand('h1', { cmd: 'br', act: 'med' }), 'medkit accepted while hurt');
+  for (let i = 0; i < SIM_HZ * (BR.medTime + 0.3); i++) sim.step(STEP);
+  check(me.hp === MAX_HP && me.br.meds === 0, `a medkit heals to full (${me.hp})`);
+  me.spawnProtect = pal.spawnProtect = 0;
   // Circle damages outside.
   const W = sim.map.width;
   sim.br.circle = { x: W / 2, z: W / 2, r: 10 };
@@ -255,6 +268,21 @@ function migration(mode, seed, atS) {
   check(gi === hi, `a guest's loot mirror follows the new host (${gi}/${hi})`);
 }
 
+// ---- Healing (ROADMAP 25): extraction keeps regen; BR has medkits often enough and bots use them ----
+function healUnits() {
+  console.log('healing');
+  const roster = buildRoster([{ id: 'h1', name: 'Me', team: 0 }], { botSkill: 'mixed', mode: 'exq', mapId: MAP.id, seed: 4 });
+  const ex = new Sim({ roster, map: MAP, seed: 4, mode: 'exq' });
+  while (ex.phase !== 'live') ex.step(STEP);
+  const p = ex.byId.get('h1');
+  p.hp = 40; p.regenT = 0;
+  for (let i = 0; i < SIM_HZ * 6; i++) ex.step(STEP);
+  check(p.hp > 40, `extraction still regenerates (${p.hp | 0})`);
+  const sim = makeSim('br', 9), items = sim.br.items.filter(Boolean);
+  const meds = items.filter(it => it.kind === BR_KIND.med).length;
+  check(meds >= 55, `medkits on the floor: ${meds} for 32 players`);
+}
+
 // ---- Flight lines (ROADMAP 25): middle, thirds and edges, always over enough land, deterministic from the seed ----
 function flightUnits() {
   console.log('flight lines');
@@ -348,6 +376,7 @@ function followUnits() {
 if (args.includes('--follow')) { followUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
 squadUnits();
+healUnits();
 flightUnits();
 followUnits();
 if (!PACING) { migration('br', 21, 150); migration('br', 22, 330); }

@@ -63,7 +63,8 @@ const CAT_SCORE = { Assault: 3.2, SMG: 3, LMG: 2.7, Marksman: 2.6, Shotgun: 2.4,
 // Rarity rolls by where the loot lies: [common .. legendary] weights for tier 1, 2, 3, and a chest.
 const RARITY_ROLL = { 1: [20, 30, 28, 15, 7], 2: [35, 32, 20, 10, 3], 3: [52, 30, 13, 4, 1], chest: [0, 18, 38, 30, 14] };
 // Floor item kinds by share.
-const FLOOR_ROLL = [['gun', 34], ['ammo', 26], ['plate', 16], ['med', 8], ['lethal', 7], ['tactical', 6], ['kit', 3]];
+// Medkits are the only way back to full health (no regen in BR), so they turn up half again as often as before.
+const FLOOR_ROLL = [['gun', 34], ['ammo', 24], ['plate', 16], ['med', 12], ['lethal', 6], ['tactical', 5], ['kit', 3]];
 // Rarity handling: each step up shaves this share off aim time, reload, swap, sprint-to-fire and hip spread.
 const RARITY_HANDLING = 0.04;
 const KIT_SKILL = [null, 'regular', 'regular', 'veteran', 'elite'];
@@ -88,6 +89,7 @@ const LOOT_DWELL = 50;
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
 const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
+const HEAL_BELOW = [0, 62, 78, 88];     // A bot uses a medkit below this health, by medkits carried (0-3).
 // Bots in a human's squad (ROADMAP 25: they used to copy the human's every move). In the glide each heads for its own
 // slot FOLLOW_GLIDE m off the human and only moves the slot once the human's has drifted SLOT_SLACK m from it; on the
 // ground they loot within LEAD_LOOT m of the human, regroup past LEAD_LEASH m, and between times hold a spot round the
@@ -938,7 +940,8 @@ export class BrRules {
     const sim = this.sim, rng = sim.rng;
     this._removeItem(it);
     sim._emit({ t: 'brchest', x: Math.round(it.x * 10) / 10, z: Math.round(it.z * 10) / 10 });
-    const kinds = ['gun', rng() < 0.5 ? 'gun' : 'plate', 'plate', rng() < 0.4 ? 'kit' : rng() < 0.5 ? 'lethal' : 'med'];
+    const r4 = rng();
+    const kinds = ['gun', rng() < 0.5 ? 'gun' : 'plate', 'plate', r4 < 0.3 ? 'kit' : r4 < 0.75 ? 'med' : 'lethal'];
     kinds.forEach((kind, i) => {
       const a = i / kinds.length * Math.PI * 2 + rng() * 0.6;
       const roll = kind === 'gun' ? this._rollGun(rng, 'chest') : this._rollItem(rng, 1, kind);
@@ -1180,9 +1183,14 @@ export class BrRules {
       bot.sightK = 1;
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
-        if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
+        // No regen in BR: a medkit is the only heal. Badly hurt, it comes before plates; otherwise plates first, then a
+        // medkit once enough health is missing to be worth one (sooner with spares in the pack).
         // (A greedy squad sitting in the circle's damage does not think to heal until it heads in.)
-        else if (b.meds > 0 && p.hp < 60 && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)) this._startUse(p, 'med');
+        const heal = b.meds > 0 && p.hp < MAX_HP && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)
+          && p.hp < HEAL_BELOW[Math.min(b.meds, HEAL_BELOW.length - 1)];
+        if (heal && p.hp < 45) this._startUse(p, 'med');
+        else if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
+        else if (heal) this._startUse(p, 'med');
       }
       // A teammate down nearby comes first, unless there is a fight in view.
       const mate = downed.length && !bot.targetVisible ? downed.reduce((m, q) => {
@@ -1299,12 +1307,12 @@ export class BrRules {
       const claim = this.claims.get(it.id);
       if (claim && claim.bot !== p.id && claim.until > sim.time) continue;
       if (!this._wants(p, it)) continue;
-      const d = Math.hypot(it.x - p.ps.x, it.z - p.ps.z) - (it.kind === K.chest ? 12 : it.kind === K.gun ? 4 : 0);
+      // Hurt with no medkit: one is worth a detour (health does not come back by itself in BR).
+      const d = Math.hypot(it.x - p.ps.x, it.z - p.ps.z) - (it.kind === K.chest ? 12 : it.kind === K.gun ? 4 : it.kind === K.med && !b.meds && p.hp < 75 ? 10 : 0);
       if (d < bestD) { bestD = d; best = it; }
     }
     if (!best) return null;
     this.claims.set(best.id, { bot: p.id, until: sim.time + 8 });
-    void b;
     return { key: `loot:${best.id}`, role: 'collect', x: best.x, z: best.z, r: 1 };
   }
 
