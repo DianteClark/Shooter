@@ -4,10 +4,10 @@
 import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { GUN_LADDER, isFfa, MODES, modeRules, EX, CONTRACT_NAMES } from '../shared/modes.js';
-import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL } from '../shared/progression.js';
+import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL, MASTER_CURVE } from '../shared/progression.js';
 import { matchScore, Progress } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, nameHtml, SLOT_LABEL, ROMAN } from './widgets.js';
-import { kindLabel } from './prestige.js';
+import { kindLabel, rankStamp, masterStampHtml } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion } from './motion.js';
 import { playerBanner, proProgressHtml, unlockStamp, cardHtml, cardProgressHtml, cardsInReach } from './cards.js';
@@ -96,7 +96,7 @@ class Reel {
       await this.fill(bar, frac, 1);
       level++;
       frac = 0;
-      label.textContent = `Lv ${level}`;
+      label.textContent = `${to.prefix ?? 'Lv'} ${level}`;
       label.animate([{ transform: 'scale(1.5)', color: '#fff' }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.3,1.55,.45,1)' });
       onLevel?.(level);
       await this.sleep(70);
@@ -337,8 +337,12 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   };
 
   const lp = level ?? { before: 1, after: 1, level: 1, into: 0, span: 1, maxed: false, prestige: 0 };
-  const startLevel = lp.before ?? lp.level;
-  const xpFrom = beforeState(PLAYER_CURVE, totalPlayerXp(lp), xp?.total ?? 0, startLevel);
+  // Master Prestige (docs/PRESTIGE.md): a Master before the match fills the Master bar ("M 137") instead of the level's.
+  const master = lp.master > 0 && lp.masterBefore > 0 && lp.mp ? { ...lp.mp, before: lp.masterBefore } : null;
+  const startLevel = master ? master.before : lp.before ?? lp.level;
+  const xpFrom = master ? beforeState(MASTER_CURVE, MASTER_CURVE.floor(master.level) + (master.maxed ? 0 : master.into), xp?.total ?? 0, startLevel)
+    : beforeState(PLAYER_CURVE, totalPlayerXp(lp), xp?.total ?? 0, startLevel);
+  const barNow = master ?? lp;
   const weaponRow = (w, i) => `
       <div class="wp" style="--i:${i}">
         <span class="wp-icon">${art(w.weapon, 14)}</span>
@@ -392,10 +396,10 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
           <div class="fk-cap">${fk ? `<small>Final kill</small><b>${esc(fk.byName)}</b><span>on ${esc(fk.targetName)}</span><em>${art(fk.weapon, 10)}${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}</em>` : '<small>Final kill</small><span>The match ended without one</span>'}</div>
         </div>
         <div class="rs-card xp-card">
-          <div class="xp-head"><b class="xp-sum">+<u class="xp-total">0</u><small>XP</small></b><span class="xp-lv">${badgeMark(lp.prestige ?? 0, 22)}<b class="xp-lvn">Lv ${startLevel}</b></span></div>
+          <div class="xp-head"><b class="xp-sum">+<u class="xp-total">0</u><small>XP</small></b><span class="xp-lv">${badgeMark(lp.prestige ?? 0, 22, lp.masterBefore ?? 0)}<b class="xp-lvn">${master ? 'M' : 'Lv'} ${startLevel}</b></span></div>
           <div class="xp-lines scroll-y">${(xp?.lines ?? []).map(([label, amount], i) => `<div class="xp-row" style="--i:${i}"><span>${esc(label)}</span><b>+${amount}</b></div>`).join('') || '<small class="empty">No XP this time</small>'}</div>
           <i class="rs-bar big"><i class="rs-fill xp-player" style="transform:scaleX(0)"></i></i>
-          <small class="xp-next">${lp.maxed ? 'Maximum level' : `${Math.round(lp.into)} / ${lp.span} to Lv ${lp.level + 1}`}</small>
+          <small class="xp-next">${barNow.maxed ? 'Maximum level' : `${Math.round(barNow.into)} / ${barNow.span} to ${master ? 'Master' : 'Lv'} ${barNow.level + 1}`}</small>
           ${lp.canPrestige ? '<small class="res-prestige">Prestige available</small>' : ''}
         </div>
         <div class="rs-card wp-card">
@@ -433,7 +437,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     resSkip: () => { menu.overlay(''); reel.tapThrough(); },
     resHero: () => reel.wake?.(),
   });
-  runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, themNum, xp }).catch(err => {
+  runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineNum, themNum, xp }).catch(err => {
     // A reel that fails partway still leaves the whole screen readable.
     console.error('results reel', err);
     menu.el.querySelector('.rs-hero')?.remove();
@@ -450,7 +454,7 @@ function weaponFrom(w) {
   return beforeState(WEAPON_CURVE, total, w.xpGained, w.levelBefore);
 }
 
-async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, themNum, xp }) {
+async function runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineNum, themNum, xp }) {
   const q = sel => menu.el.querySelector(sel);
   const root = q('.rs');
 
@@ -478,10 +482,24 @@ async function runReel(menu, reel, { lp, xpFrom, weapons, unlocks, mineNum, them
   const bar = q('.xp-player'), label = q('.xp-lvn');
   if (!bar || !label) return;       // The screen was replaced while the reel played.
   bar.style.transform = `scaleX(${xpFrom.frac.toFixed(3)})`;
-  const to = { level: lp.level, frac: lp.maxed ? 1 : lp.into / lp.span };
+  const to = master ? { level: master.level, frac: master.maxed ? 1 : master.into / master.span, prefix: 'M' }
+    : { level: lp.level, frac: lp.maxed ? 1 : lp.into / lp.span };
   await reel.climb(bar, label, xpFrom, to);
   if (reel.dead) return;
-  if (lp.after > lp.before) {
+  if (master && master.level > master.before) {
+    // A Master level (or several): its own stamp, with the tier's icon.
+    q('.xp-card').classList.add('levelled');
+    playUi('levelUp');
+    await reel.stamp(masterStampHtml(lp.master, lp.masterBefore));
+    if (reel.dead) return;
+  } else if (!master && lp.master > 0) {
+    // This match reached Prestige X level 50: Master Prestige begins, with its reveal.
+    q('.xp-card').classList.add('levelled');
+    playUi('prestige');
+    label.textContent = `M ${lp.master}`;
+    await reel.stamp(masterStampHtml(lp.master, 0), STAMP_MS + 600);
+    if (reel.dead) return;
+  } else if (lp.after > lp.before) {
     q('.xp-card').classList.add('levelled');
     playUi('levelUp');
     await reel.stamp(`
@@ -526,7 +544,7 @@ function cardsStrip(list) {
 
 function unlockCard(u) {
   // Pro perks and calling cards have their own ceremony (js/ui/cards.js), mastery tiers theirs (js/ui/mastery.js).
-  const special = unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u) ?? seasonStamp(u);
+  const special = rankStamp(u) ?? unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u) ?? seasonStamp(u);
   if (special) return special;
   let mark;
   if (u.kind === 'camo') {
