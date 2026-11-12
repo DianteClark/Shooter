@@ -137,6 +137,12 @@ const CSS = `
 .br-pouch b { color: var(--c-chalk); font-weight: 400; }
 .br-hands-col { display: flex; flex-direction: column; justify-content: space-between; gap: 3px; }
 .br-pouch { flex-direction: row; gap: 6px; margin-left: 1px; min-height: 9px; }
+/* Recall Beacons: the take lane's button, the carried-tag note (amber) and the recall bar. */
+.br-recall { --rar: #7dff8f; }
+.br-recall b { color: #7dff8f; }
+.br-tagnote { box-shadow: inset 0 -2px 0 #ffbe50; }
+.br-recalling b { color: #ffd36b; }
+.br-recalling i i { background: #ffbe50; }
 /* The drop map's side: how many are still aboard the transport, and where each squadmate is. */
 .br-aboard { display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; background: rgba(16,20,26,.78); box-shadow: var(--hud-edge); }
 .br-aboard .n { display: flex; align-items: baseline; gap: 6px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
@@ -189,6 +195,7 @@ export class BrHud {
       </div>
       <div class="br-outside" hidden>Outside the circle</div>
       <div class="br-rd" hidden></div>
+      <div class="br-rd br-tagnote" hidden></div>
       <div class="br-squad"></div>
       <div class="br-inv">
         <button class="br-btn br-plate" data-tap="1" data-act="plate">${icon('plates', { size: 18 })}<span class="n">0</span><small>Plate</small><i class="br-fill"></i></button>
@@ -196,11 +203,13 @@ export class BrHud {
         <button class="br-btn br-kit" data-tap="1" data-act="self" style="visibility:hidden">${icon('ui:refresh', { size: 16 })}<span class="n">0</span><small>Revive</small></button>
       </div>
       <button class="br-take" data-tap="1" hidden><span class="ti"></span><span><small></small><b></b></span></button>
+      <button class="br-take br-recall" data-tap="1" hidden><span class="ti">${icon('ui:beacon', { size: 18 })}</span><span><small>Recall at the beacon</small><b></b></span></button>
       <button class="br-jump br-jump-main" data-tap="1" hidden>JUMP<small>Leave the transport</small></button>
       <div class="br-hint" hidden></div>
       <div class="br-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div>
         <button class="br-btn br-self" data-tap="1" hidden>${icon('ui:refresh', { size: 16 })}<span>Self-revive</span></button></div>
       <div class="br-reviving" hidden><b>Reviving</b><i><i></i></i></div>
+      <div class="br-reviving br-recalling" hidden><b>Recalling</b><i><i></i></i></div>
       <div class="br-out" hidden><div class="txt"><b>Eliminated</b><div class="place"></div><small></small><div class="rd" hidden><i></i></div></div>
         <div class="acts"><button data-tap="1" class="br-spec go">Spectate</button><button data-tap="1" class="br-spec-next quiet" hidden>Next player</button><button data-tap="1" class="br-spec-squad quiet" hidden>Next squad</button><button data-tap="1" class="br-leave">Leave</button></div></div>
       <div class="br-map" hidden data-tap="1">
@@ -229,7 +238,8 @@ export class BrHud {
     this.outsideEl = $('.br-outside');
     this.squadEl = $('.br-squad');
     this.plateBtn = $('.br-plate'); this.medBtn = $('.br-med'); this.kitBtn = $('.br-kit');
-    this.takeBtn = $('.br-take');
+    this.takeBtn = $('.br-take:not(.br-recall)');
+    this.recallBtn = $('.br-recall'); this.tagEl = $('.br-tagnote'); this.recEl = $('.br-recalling');
     this.jumpBtn = $('.br-jump-main'); this.jumpMap = $('.br-jump-map');
     this.hintEl = $('.br-hint');
     this.downEl = $('.br-down'); this.selfBtn = $('.br-self');
@@ -243,6 +253,7 @@ export class BrHud {
     act(this.selfBtn, () => this.cmd?.('self'));
     act(this.jumpBtn, () => this.#jump());
     act(this.jumpMap, () => this.#jump());
+    act(this.recallBtn, () => { if (this.recallInv?.recall) this.cmd?.('cancel'); else if (this.recallB !== null) this.cmd?.('recall', { b: this.recallB }); });
     act(this.takeBtn, () => { if (this.takeId !== null) this.cmd?.('take', this.takeSlot >= 0 ? { item: this.takeId, slot: this.takeSlot } : { item: this.takeId }); });
     act($('.br-spec-next'), () => { if (this.view) { spectate.cycle(this.view, this.view.localId, 1); this.c.out = null; } });
     act($('.br-spec-squad'), () => { if (this.view) { spectate.cycle(this.view, this.view.localId, 1, true); this.c.out = null; } });
@@ -261,7 +272,9 @@ export class BrHud {
     // The circle chips are the objective strip's state row, your revive bar its progress row (js/ui/hud.js ObjStrip).
     hud.strip.mount($('.br-top'), { order: 0 });
     this.squadEl.appendChild($('.br-rd'));     // Rebound's redeploy note: the last row of the squad column.
+    this.squadEl.appendChild(this.tagEl);
     hud.strip.mount(this.revEl, { row: 2 });
+    hud.strip.mount(this.recEl, { row: 2 });
     this.pings = [];
     this.takeId = null;
     this.mapOpen = false;
@@ -391,6 +404,7 @@ export class BrHud {
     this.#hands(view, me, inv, air);
     // A ground gun in reach while both hands hold guns: tap to swap the one in hand for it.
     this.#take(view, me, air);
+    this.#recall(view, me, air);
     this.#squad(view, me);
     this.#reviving(view, me);
     this.#leader(view, me);
@@ -488,7 +502,7 @@ export class BrHud {
 
   #squad(view, me) {
     const mates = view.players.filter(p => p.team === me.team && p.id !== me.id);
-    const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}|${p.redeploy}`).join(';');
+    const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}|${p.redeploy}|${p.recallable}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
     // Name, health and (a thin second bar) plates; downed is a red bar and a down mark, out a greyed row. No status
@@ -496,10 +510,51 @@ export class BrHud {
     this.squadEl.innerHTML = mates.map(p => {
       const state = !p.alive ? 'out' : p.downed ? 'down' : '';
       const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${p.alive ? Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2) : 0}"></i>`).join('');
-      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : !p.alive && p.redeploy ? icon('ui:refresh', { size: 10, accent: 'currentColor' }) : ''}</em>
+      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : !p.alive && p.redeploy ? icon('ui:refresh', { size: 10, accent: 'currentColor' }) : !p.alive && p.recallable ? icon('ui:beacon', { size: 10, accent: 'currentColor' }) : ''}</em>
         <span class="mbars"><i style="flex:1;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span><span class="mbars pl">${plates}</span></div>`;
     }).join('');
     this.squadEl.appendChild(this.rdEl);
+    this.squadEl.appendChild(this.tagEl);
+  }
+
+  // Recall Beacons: the button at a beacon while you carry a squadmate's tag (it takes the take prompt's place), your
+  // recall bar, and the note at the foot of the squad column (whose tag you carry, or that a squadmate can come back).
+  #recall(view, me, air) {
+    const br = view.br, inv = br.inv, c = this.c;
+    this.recallInv = inv;
+    const up = me.alive && !me.downed && !air;
+    const tags = up ? inv?.tags ?? [] : [];
+    const rec = up ? inv?.recall : null;
+    let bc = null;
+    if (br.recallOn && tags.length && !rec) {
+      let bd = BR.recall.reach;
+      for (const b of br.beacons ?? []) { if (b.used || b.user) continue; const d = Math.hypot(b.x - me.x, b.z - me.z); if (d <= bd) { bd = d; bc = b; } }
+    }
+    const nameOf = id => view.players.find(p => p.id === id)?.name ?? 'Squadmate';
+    const show = !!bc || !!rec;
+    this.recallB = bc ? bc.id : null;
+    const bkey = show ? `${rec ? `r${rec.who}` : `b${bc.id}`}|${tags.join(',')}` : '';
+    if (c.recallBtn !== bkey) {
+      c.recallBtn = bkey;
+      this.recallBtn.hidden = !show;
+      if (!show) this.takeId = -2;          // The take prompt re-reads what is in reach.
+      if (show) {
+        this.recallBtn.querySelector('small').textContent = rec ? 'Hold still. Tap to stop' : 'Recall at the beacon';
+        this.recallBtn.querySelector('b').textContent = nameOf(rec ? rec.who : tags[0]);
+      }
+    }
+    if (show) this.takeBtn.hidden = true;
+    const rkey = rec ? rec.who : '';
+    if (c.recalling !== rkey) {
+      c.recalling = rkey;
+      this.recEl.hidden = !rec;
+      if (rec) this.recEl.querySelector('b').textContent = `Recalling ${nameOf(rec.who)}`;
+    }
+    if (rec) this.recEl.querySelector('i i').style.transform = `scaleX(${Math.min(1, rec.k).toFixed(3)})`;
+    // The note: the tag you carry, or a squadmate whose tag is lying where they fell.
+    const lying = br.recallOn && me.alive ? view.players.find(p => p.team === me.team && p.id !== me.id && !p.alive && p.recallable) : null;
+    const text = !br.recallOn || !me.alive ? '' : tags.length ? `${nameOf(tags[0])}'s tag: take it to a Recall Beacon` : lying ? `${lying.name}: pick up their tag where they fell` : '';
+    if (c.tagNote !== text) { c.tagNote = text; this.tagEl.hidden = !text; this.tagEl.textContent = text; }
   }
 
   // Your own revive bar while you pick a teammate up (the downed one has theirs in the down panel).
@@ -565,7 +620,8 @@ export class BrHud {
     const watch = out ? spectate.target(view, me.id) : null;
     const mates = out ? view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length : 0;
     const rd = out ? view.br.inv?.redeploy ?? 0 : 0;      // Rebound: seconds until you parachute back in.
-    const key = out ? `${watch}|${me.place}|${mates}|${spectate.any}|${view.br.squadsLeft}|${Math.ceil(rd)}` : '';
+    const recall = out && mates > 0 && !!me.recallable;    // Recall Beacons: your squad can still bring you back.
+    const key = out ? `${watch}|${me.place}|${mates}|${spectate.any}|${view.br.squadsLeft}|${Math.ceil(rd)}|${recall}` : '';
     if (c.out === key) return;
     c.out = key;
     this.outEl.hidden = !out;
@@ -582,6 +638,7 @@ export class BrHud {
     $('small').textContent = mates ? (w ? `Spectating ${w.name}. Your squad can still win.` : 'Your squad can still win.')
       : others ? `${me.place ? `You: ${ORD(me.place)}  /  ` : ''}${view.br.squadsLeft ?? '?'} ${view.br.squad > 1 ? 'squads' : 'players'} left${view.br.squad > 1 ? `  /  ${sq} of theirs up` : ''}`
       : choosing ? 'Watch the rest, or see your results now.' : 'Nobody left to watch.';
+    if (recall) $('small').textContent = `${w ? `Spectating ${w.name}. ` : ''}Your squad can recall you: your tag to a Recall Beacon.`;
     $('.br-spec').hidden = !choosing;
     $('.br-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
     $('.br-spec-next').textContent = mates ? 'Next teammate' : 'Next player';
@@ -663,6 +720,29 @@ export class BrHud {
         else if (e.state === 'final') this.hud.notify('Final circle');
         break;
       case 'brjump': if (e.id === me) { this.c.mapDismissed = true; this.toggleMap(false); } break;
+      case 'brtag': {
+        const who = view.players.find(p => p.id === e.who)?.name ?? 'A squadmate';
+        if (e.id === me) this.hud.notify(e.auto ? `${who}'s tag came to you: take it to a Recall Beacon` : `${who}'s tag: take it to a Recall Beacon`);
+        else if (e.who === me) this.hud.notify(`${view.players.find(p => p.id === e.id)?.name ?? 'A squadmate'} has your tag`);
+        break;
+      }
+      case 'brrecall': {
+        const by = view.players.find(p => p.id === e.id), who = view.players.find(p => p.id === e.who);
+        const bc = view.br?.beacons?.[e.b];
+        if (e.kind === 'start') {
+          this.recallPulse = { b: e.b, t: performance.now() / 1000 };
+          if (by?.team === myTeam && e.id !== me) this.hud.notify(`${by.name} is recalling ${e.who === me ? 'you' : who?.name ?? 'a squadmate'}`);
+          else if (by?.team !== myTeam) this.hud.notify(`A Recall Beacon is active${bc?.name ? ` at ${bc.name}` : ''}`);
+        } else if (e.kind === 'done') {
+          if (e.who === me) this.hud.notify('Recalled: steer the glide to the beacon');
+          else if (who?.team === myTeam) this.hud.notify(`${who.name} is back in`);
+          else this.hud.pushFeed(`${name(e.who)}<span class="f-note" style="color:#7be08a">recalled</span>`, false, 'foe');
+        } else if (e.kind === 'stop' && e.id === me && e.why !== 'cancel' && e.why !== 'gone') this.hud.notify(e.why === 'left' ? 'Recall stopped: stay at the beacon' : 'Recall stopped');
+        break;
+      }
+      case 'brbeacons':
+        if (view.players.find(p => p.id === me)?.alive || !e.on) this.hud.notify(e.on ? 'Recall Beacons online' : 'Recall Beacons offline');
+        break;
       case 'brwait':
         if (e.id === me) this.hud.notify(`Redeploy in ${Math.ceil(e.secs)} s while your squad holds on`);
         break;
@@ -693,6 +773,7 @@ export class BrHud {
       g.beginPath(); g.moveTo(me.x * sx, me.z * sz); g.lineTo((me.x + (br.next.x - me.x) * k) * sx, (me.z + (br.next.z - me.z) * k) * sz); g.stroke(); g.setLineDash([]);
     }
     this.#marks(g, sx, sz, 1);
+    this.#beacons(g, view, me, sx, sz, 1);
     g.strokeStyle = '#fff'; g.lineWidth = 2;
     g.beginPath(); g.arc(br.circle.x * sx, br.circle.z * sz, Math.max(0, br.circle.r * sx), 0, Math.PI * 2); g.stroke();
     if (br.state !== 'final') {
@@ -712,6 +793,36 @@ export class BrHud {
       g.beginPath(); g.arc(p.x * sx, p.z * sz, 5 + Math.sin(performance.now() / 150) * 2, 0, Math.PI * 2); g.stroke();
     }
     g.restore();
+  }
+
+  // Recall Beacons on either map: shown while a squadmate can be recalled or you carry a tag (ready green, spent grey),
+  // and to everyone while one is in use (pulsing amber). Your squad's tags on the ground as small white tags.
+  #beacons(g, view, me, sx, sz, k) {
+    const br = view.br;
+    if (!br.recallOn || !br.beacons?.length) return;
+    const need = (br.inv?.tags?.length ?? 0) > 0 || view.players.some(p => p.team === me.team && !p.alive && p.recallable);
+    const now = performance.now() / 1000;
+    for (const b of br.beacons) {
+      const busy = !!b.user;
+      if (!need && !busy) continue;
+      const x = b.x * sx, y = b.z * sz, r = 5 * k;
+      if (busy) {
+        g.strokeStyle = '#ffbe50'; g.lineWidth = 2 * k;
+        g.beginPath(); g.arc(x, y, r * (1.6 + 0.5 * Math.sin(now * 6)), 0, Math.PI * 2); g.stroke();
+      }
+      g.fillStyle = b.used ? '#6b7178' : busy ? '#ffbe50' : '#59d36b';
+      g.strokeStyle = '#0a0d11'; g.lineWidth = 1.5 * k;
+      g.beginPath(); g.moveTo(x, y - r * 1.3); g.lineTo(x + r, y); g.lineTo(x, y + r * 1.3); g.lineTo(x - r, y); g.closePath(); g.fill(); g.stroke();
+      if (!b.used) { g.fillStyle = '#0a0d11'; g.fillRect(x - 0.8 * k, y - r * 0.7, 1.6 * k, r * 1.1); }
+    }
+    if (!need) return;
+    for (const it of br.items) {
+      if (!it || it.kind !== BR_KIND.tag || view.players[it.v]?.team !== me.team) continue;
+      const x = it.x * sx, y = it.z * sz;
+      g.fillStyle = '#ffffff'; g.strokeStyle = '#0a0d11'; g.lineWidth = 1.2 * k;
+      g.beginPath(); g.rect(x - 3 * k, y - 4 * k, 6 * k, 8 * k); g.fill(); g.stroke();
+      g.fillStyle = '#0a0d11'; g.beginPath(); g.arc(x, y - 2.2 * k, 0.9 * k, 0, Math.PI * 2); g.fill();
+    }
   }
 
   // Squad pings and the kill leader's last reveal, on either map (k scales the marks).
@@ -821,6 +932,7 @@ export class BrHud {
       }
     }
     this.#marks(g, s, s, 1.8);
+    this.#beacons(g, view, me, s, s, 1.8);
     // Squad and you.
     for (const p of view.players) {
       if (p.team !== me.team || !p.alive || p.air === 1) continue;

@@ -7,6 +7,8 @@
 //   plate       a zip and a hard clack per plate; the last plate breaking a crunch
 //   down        a falling two-tone alarm for your squad, a thump for the enemy you downed
 //   revive      a rising three-note chime
+//   recall      a Recall Beacon in use: a rising two-tone siren repeated from the beacon, heard far (it gives the user away);
+//               a tag picked up a short chirp; a recall done a bright rising sweep
 //   circle      a warning sweep when it starts to close; a low hum while you are outside it
 const PR = { boom: 4, ui: 3, world: 2, gun: 1 };
 
@@ -53,6 +55,9 @@ const RECIPES = {
   knock: [0.4, (d, sr, r) => { click(d, sr, r, 0, 1); tone(d, sr, { dur: 0.35, gain: 1, f0: 220, f1: 110, decay: 5 }); }, 0.6],
   revive: [0.8, (d, sr) => { [523, 659, 784].forEach((f, i) => tone(d, sr, { at: i * 0.12, dur: 0.45, gain: 0.8, f0: f, decay: 3.5, attack: 0.01 })); }, 0.55],
   closing: [1.4, (d, sr) => { tone(d, sr, { dur: 1.4, gain: 1, f0: 300, f1: 900, decay: 1.2, attack: 0.08, square: 0.2 }); tone(d, sr, { dur: 1.4, gain: 0.5, f0: 600, f1: 1800, decay: 1.4, attack: 0.08 }); }, 0.5],
+  siren: [0.9, (d, sr) => { tone(d, sr, { dur: 0.42, gain: 1, f0: 620, f1: 980, decay: 0.6, attack: 0.02, square: 0.5 }); tone(d, sr, { at: 0.45, dur: 0.42, gain: 1, f0: 980, f1: 620, decay: 0.6, attack: 0.02, square: 0.5 }); }, 0.6],
+  tag: [0.3, (d, sr, r) => { click(d, sr, r, 0, 0.6); tone(d, sr, { dur: 0.12, gain: 0.8, f0: 1760, decay: 5, attack: 0.002 }); tone(d, sr, { at: 0.09, dur: 0.18, gain: 0.8, f0: 2350, decay: 5, attack: 0.002 }); }, 0.55],
+  recalled: [1.2, (d, sr, r) => { tone(d, sr, { dur: 1.1, gain: 0.8, f0: 300, f1: 1400, decay: 1.6, attack: 0.04 }); noise(d, sr, r, { dur: 1.1, gain: 0.4, f0: 900, f1: 5000, decay: 2.5 }); [784, 1047].forEach((f, i) => tone(d, sr, { at: 0.5 + i * 0.14, dur: 0.5, gain: 0.6, f0: f, decay: 3, attack: 0.01 })); }, 0.6],
   hum: [0.8, (d, sr, r) => { tone(d, sr, { dur: 0.8, gain: 0.9, f0: 58, decay: 0.3, attack: 0.1, square: 0.5 }); noise(d, sr, r, { dur: 0.8, gain: 0.4, f0: 1800, decay: 0.5 }); }, 0.45],
 };
 
@@ -99,11 +104,19 @@ export class BrSfx {
         }
         case 'revive': { const p = view?.players?.find(q => q.id === e.id); if (p && p.team === team) this.#ui('revive', e.id === me ? 0.8 : 0.5); break; }
         case 'brphase': if (e.state === 'shrink') this.#ui('closing', 0.6); break;
+        case 'brtag': if (e.id === me) this.#ui('tag', 0.7); break;
+        case 'brrecall':
+          if (e.kind === 'start') { const bc = view?.br?.beacons?.[e.b]; this.recall = bc ? { x: bc.x, z: bc.z, b: e.b } : null; this.sirenAt = -9; }
+          else if (this.recall?.b === e.b) this.recall = null;
+          if (e.kind === 'done') this.#world('recalled', e.x, e.z, 90, 1, PR.ui);
+          break;
         default: break;
       }
     }
-    // Loops: the transport while aboard, the circle's hum while outside it.
+    // Loops: the transport while aboard, the circle's hum while outside it, a beacon's siren while one is held.
     const now = this.e.ctx?.currentTime ?? 0, br = view?.br;
+    if (this.recall && br && br.beacons?.[this.recall.b] && !br.beacons[this.recall.b].user && now - (this.sirenAt ?? -9) > 1.5) this.recall = null;
+    if (this.recall && now - (this.sirenAt ?? -9) > 0.95) { this.sirenAt = now; this.#world('siren', this.recall.x, this.recall.z, 110, 0.9, PR.ui); }
     if (!br || !mine?.alive) return;
     if (mine.air === 1 && now - this.droneAt > 1.1) { this.droneAt = now; this.#ui('drone', 0.35); }
     const out = !mine.air && Math.hypot(mine.x - br.circle.x, mine.z - br.circle.z) > br.circle.r;
