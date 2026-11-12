@@ -212,8 +212,8 @@ async def run(browser, mp, mode, failures, errors):
             # Out of it and watching a teammate: the out plate on the bottom edge, no weapon panel.
             await pg.set_viewport_size({'width': 852, 'height': 393})
             await pg.evaluate(f"""(() => {{ const m = {G}.app.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
-              me.spawnProtect = 0; for (let i = 0; i < 3 && me.alive; i++) sim._damage(me, foe, 900, 'ar', 8);
-              if (sim.ex) {{ const sq = sim.ex.squads?.[me.team]; if (sq) sq.lives = 0; }} }})()""")
+              const R = sim.rules; if (R?.squadOf) {{ const sq = R.squadOf(me); if (sq) sq.lives = 0; R._dirty?.(); }}
+              me.spawnProtect = 0; for (let i = 0; i < 3 && me.alive; i++) sim._damage(me, foe, 900, 'ar', 8); }})()""")
             await pg.wait_for_timeout(3500)
             await pg.evaluate("document.querySelector('.killcam-skip')?.click()")
             await pg.wait_for_timeout(1500)
