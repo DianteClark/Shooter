@@ -88,6 +88,16 @@ const LOOT_DWELL = 50;
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
 const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
+// Bots in a human's squad (ROADMAP 25: they used to copy the human's every move). In the glide each heads for its own
+// slot FOLLOW_GLIDE m off the human and only moves the slot once the human's has drifted SLOT_SLACK m from it; on the
+// ground they loot within LEAD_LOOT m of the human, regroup past LEAD_LEASH m, and between times hold a spot round the
+// human (re-picked once the human has moved WITH_REPICK m) watching their own sector, not the human's aim.
+const FOLLOW_GLIDE = 7;
+const SLOT_SLACK = 8;
+const LEAD_LOOT = 22;
+const LEAD_LEASH = 34;
+const WITH_REPICK = 12;
+export const FOLLOW_TUNING = { FOLLOW_GLIDE, SLOT_SLACK, LEAD_LOOT, LEAD_LEASH, WITH_REPICK };
 
 function mulberry32(a) {
   return function () {
@@ -529,7 +539,15 @@ export class BrRules {
       const b = p.br;
       if (p.brAir === 1) {
         // A bot in a human's squad goes out a moment after its human does.
-        if (b.follow && b.jumpAt > 1) { const lead = sim.byId.get(b.follow); if (!lead || lead.brAir !== 1 || !lead.alive) b.jumpAt = plane.f + 0.005 + sim.rng() * 0.02; }
+        if (b.follow && b.jumpAt > 1) {
+          const lead = sim.byId.get(b.follow);
+          if (!lead || lead.brAir !== 1 || !lead.alive) {
+            b.jumpAt = plane.f + 0.005 + sim.rng() * 0.02;
+            // Its own landing slot, near the human (never the transport's start point the record was made with).
+            const at = lead && lead.alive ? lead.ps : pos;
+            b.dropX = at.x + b.offX; b.dropZ = at.z + b.offZ;
+          }
+        }
         p.ps.x = pos.x; p.ps.z = pos.z; p.ps.vx = vx; p.ps.vz = vz;
         if (plane.f >= BR.forceJump || (p.isBot && plane.f >= b.jumpAt && this._inMap(pos))) this._jump(p);
         continue;
@@ -977,11 +995,15 @@ export class BrRules {
     if (!b) return false;
     if (p.brAir === 1) return true;
     if (p.brAir === 2) {
-      let tx = b.dropX, tz = b.dropZ;
       const lead = b.follow && this.sim.byId.get(b.follow);
-      if (lead && lead.alive && lead.brAir === 2) { tx = lead.ps.x + b.offX; tz = lead.ps.z + b.offZ; }
-      const dx = tx - p.ps.x, dz = tz - p.ps.z, d = Math.hypot(dx, dz);
-      glideStep(p.ps, d > 1 ? dx / d : 0, d > 1 ? dz / d : 0, dt, this.sim.map);
+      // Following a human: the slot moves only once the human's own slot has drifted well away from it, so their
+      // steering is followed in broad strokes, never copied stroke for stroke.
+      if (lead && lead.alive && lead.brAir === 2 && !lead.away) {
+        const sx = lead.ps.x + b.offX, sz = lead.ps.z + b.offZ;
+        if (Math.hypot(sx - b.dropX, sz - b.dropZ) > SLOT_SLACK) { b.dropX = sx; b.dropZ = sz; }
+      }
+      const dx = b.dropX - p.ps.x, dz = b.dropZ - p.ps.z, d = Math.hypot(dx, dz);
+      glideStep(p.ps, d > 1.5 ? dx / d : 0, d > 1.5 ? dz / d : 0, dt, this.sim.map);
       return true;
     }
     if (p.downed) {
@@ -1033,8 +1055,8 @@ export class BrRules {
         let k = 0;
         for (const p of members) {
           if (!p.isBot) continue;
-          const a = (k++ / 3) * Math.PI * 2;
-          p.br.follow = human.id; p.br.offX = Math.cos(a) * 3; p.br.offZ = Math.sin(a) * 3; p.br.jumpAt = 2;   // Jumps with the human.
+          const a = (k++ / 3) * Math.PI * 2 + rng() * 0.6, r = FOLLOW_GLIDE * (0.85 + rng() * 0.3);
+          p.br.follow = human.id; p.br.offX = Math.cos(a) * r; p.br.offZ = Math.sin(a) * r; p.br.jumpAt = 2;   // Jumps with the human.
         }
         continue;
       }
@@ -1172,14 +1194,20 @@ export class BrRules {
         bot.setObjective({ key: `rev:${mate.q.id}:${Math.round(mate.q.ps.x)}:${Math.round(mate.q.ps.z)}`, role: 'collect', x: mate.q.ps.x, z: mate.q.ps.z, r: 1, commit: true });
         continue;
       }
-      // A human leads: stay with them, looting what is close.
+      // A human leads: stay in reach of them, looting what is around, as a squadmate would (not a shadow: no copying
+      // their moves or their aim).
       if (lead && kind !== 'rotate') {
-        const near = this._lootTarget(p, 14, lead.ps.x, lead.ps.z);
+        const dl = Math.hypot(lead.ps.x - p.ps.x, lead.ps.z - p.ps.z);
+        const near = dl < LEAD_LEASH ? this._lootTarget(p, LEAD_LOOT, lead.ps.x, lead.ps.z) : null;
         if (near) { bot.setObjective(near); continue; }
-        const a = (i / bots.length) * Math.PI * 2;
-        const at = this._walkable(lead.ps.x + Math.cos(a) * 4, lead.ps.z + Math.sin(a) * 4);
-        const far = Math.hypot(at.x - p.ps.x, at.z - p.ps.z) > 8;
-        bot.setObjective({ key: far ? `with:${Math.round(at.x / 6)}:${Math.round(at.z / 6)}` : bot.objKey ?? 'with', role: 'hold', x: at.x, z: at.z, r: 3, aim: lead.ps.aim });
+        // A spot round the human, kept until the human has moved on; the bot watches its own side of the squad.
+        if (!b.with || Math.hypot(lead.ps.x - b.with.lx, lead.ps.z - b.with.lz) > WITH_REPICK) {
+          const a = (i / bots.length) * Math.PI * 2 + (sim.rng() - 0.5) * 0.9, r = 5 + sim.rng() * 4;
+          const at = this._walkable(lead.ps.x + Math.cos(a) * r, lead.ps.z + Math.sin(a) * r);
+          b.with = { x: at.x, z: at.z, lx: lead.ps.x, lz: lead.ps.z, aim: a, n: (b.with?.n ?? 0) + 1 };
+        }
+        const w = b.with;
+        bot.setObjective({ key: `with:${w.n}`, role: 'hold', x: w.x, z: w.z, r: 3, aim: w.aim });
         continue;
       }
       if (kind === 'loot' || (kind === 'hold' && !this._geared(p))) {
@@ -1452,7 +1480,7 @@ export class BrRules {
           if (weapon === KNIFE || ps.slot === fs) { ps.slot = fs; ps.weapon = KNIFE; }
         }
       }
-      if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * 3; b.offZ = Math.sin(a) * 3; }
+      if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * FOLLOW_GLIDE; b.offZ = Math.sin(a) * FOLLOW_GLIDE; }
     });
     // This phone's own pack is fresher in its own inventory block.
     const me = sim.byId.get(view.localId), inv = view.br?.inv;

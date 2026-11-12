@@ -6,6 +6,7 @@ import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
 import { SIM_HZ, MAX_HP, WEAPON_IDS, WEAPON_CATEGORY } from '../js/shared/constants.js';
 import { BR_KIND, flightLine } from '../js/sim/br.js';
+import { stepPlayer } from '../js/sim/player.js';
 import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
 const STEP = 1 / SIM_HZ;
@@ -294,9 +295,61 @@ function flightUnits() {
   check(spots.size >= 5, `edge line: bot squads spread over ${spots.size} places`);
 }
 
+// ---- Bot squadmates follow a human as squadmates, never as copies (ROADMAP 25: after an app switch the owner found his
+// three bots copying his every move). The human jumps, the phone goes quiet for 1.5 s (an app switch: the host keeps
+// stepping on a frozen state), then steers a zigzag down and walks a square on the ground. Bots must land near the
+// human (not at the transport's start point), and neither glide in lockstep nor move and aim with the human after. ----
+function followUnits() {
+  console.log('squadmates of a human');
+  const I = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
+  let lock = 0, lockN = 0, moveSame = 0, aimSame = 0, n = 0, landFar = 0, stuck = 0;
+  for (const seed of [5, 6, 7, 8]) {
+    const sim = makeSim('br', seed, [{ id: 'h1', name: 'Me', team: 0 }]);
+    const me = sim.byId.get('h1'), mates = sim.players.filter(p => p.team === me.team && p !== me);
+    for (const p of sim.players) if (p.team !== me.team) p.spawnProtect = 1e9;
+    while (sim.phase !== 'live' || sim.br.plane.f < 0.35) { sim.step(STEP); sim.drainEvents(); }
+    sim.applyCommand('h1', { cmd: 'br', act: 'jump' });
+    const jumpT = sim.time;
+    for (let t = 0; t < SIM_HZ * 50; t++) {
+      const s = sim.time - jumpT;
+      const before = mates.map(p => [p.ps.x, p.ps.z]), hx = me.ps.x, hz = me.ps.z;
+      if (me.brAir === 2 && s > 1.5) {              // Back from the switch: a zigzag glide (what the phone sends).
+        const a = Math.floor(s * 2) % 2 ? 0.6 : -0.6;
+        me.ps.x += Math.cos(a) * BR.glideSpeed * STEP; me.ps.z += Math.sin(a) * BR.glideSpeed * STEP;
+      } else if (me.brAir === 0) {
+        const a = [0, 1.57, 3.14, 4.71][Math.floor(s / 3) % 4];
+        I.mx = Math.cos(a); I.mz = Math.sin(a); I.aim = a + 0.7;
+        stepPlayer(me.ps, I, STEP, sim.map, Math.random);
+      }
+      sim.step(STEP); sim.drainEvents();
+      const mvx = me.ps.x - hx, mvz = me.ps.z - hz, mv = Math.hypot(mvx, mvz);
+      for (const [i, p] of mates.entries()) {
+        if (!p.alive) continue;
+        const vx = p.ps.x - before[i][0], vz = p.ps.z - before[i][1], v = Math.hypot(vx, vz);
+        if (p.brAir === 2 && me.brAir === 2 && mv > 0.01) { lockN++; if (Math.hypot(vx - mvx, vz - mvz) < mv * 0.15) lock++; }
+        if (p.brAir === 0 && me.brAir === 0 && s > BR.glide + 3 && t % 3 === 0) {
+          n++;
+          if (v > 0.05 && (vx * I.mx + vz * I.mz) / v > 0.9) moveSame++;
+          if (Math.abs(Math.atan2(Math.sin(p.ps.aim - me.ps.aim), Math.cos(p.ps.aim - me.ps.aim))) < 0.25) aimSame++;
+        }
+      }
+      if (s > BR.glide + 2 && s < BR.glide + 2 + STEP * 1.5) {
+        for (const p of mates) { if (p.brAir) stuck++; else if (Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) > 30) landFar++; }
+      }
+    }
+  }
+  console.log(`  glide lockstep ${(lock / Math.max(1, lockN) * 100).toFixed(0)}%, ground: moving with the human ${(moveSame / n * 100).toFixed(0)}%, aim copied ${(aimSame / n * 100).toFixed(0)}%`);
+  check(stuck === 0, `every squadmate has landed shortly after the human (${stuck} still in the air)`);
+  check(landFar === 0, `squadmates land near the human (${landFar} landed over 30 m away)`);
+  check(lock / Math.max(1, lockN) < 0.3, `squadmates do not glide in lockstep with the human (${(lock / Math.max(1, lockN) * 100).toFixed(0)}% of glide ticks)`);
+  check(moveSame / n < 0.2 && aimSame / n < 0.12, `squadmates do not walk or aim with the human (${(moveSame / n * 100).toFixed(0)}%, ${(aimSame / n * 100).toFixed(0)}%)`);
+}
+
+if (args.includes('--follow')) { followUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
 squadUnits();
 flightUnits();
+followUnits();
 if (!PACING) { migration('br', 21, 150); migration('br', 22, 330); }
 units();
 const modes = QUICK ? ['br'] : ['br', 'brduo', 'brsolo'];

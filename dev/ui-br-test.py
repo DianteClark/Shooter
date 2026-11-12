@@ -65,10 +65,23 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
     await shot('03-flight')
     await pg.locator('.br-jump-map').click()
+    # An app switch mid-glide (ROADMAP 25): frames stop, the page hides and comes back. The match carries on from where it
+    # was (no catch-up burst), and every squadmate lands and goes its own way.
+    await ev("""(() => { window.__raf = window.requestAnimationFrame; window.__q = []; window.requestAnimationFrame = f => { window.__q.push(f); return 0; };
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); })()""")
+    t_hidden = await ev(f'{G}.match.sim.time')
+    await pg.wait_for_timeout(3000)
+    await ev("""(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange'));
+      window.requestAnimationFrame = window.__raf; for (const f of window.__q) window.__raf(f); })()""")
+    if await ev(f'{G}.match.sim.time') - t_hidden > 0.5: failures.append(f'{vw}: the match ran on while the page was hidden')
     await pg.wait_for_timeout(2200)
     await shot('04-glide')
     await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=40000)
     await pg.wait_for_timeout(600)
+    try:
+        await pg.wait_for_function(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); return m.sim.players.every(p => p.team !== me.team || !p.brAir); }})()", timeout=8000)
+    except Exception:
+        failures.append(f'{vw}: squadmates still in the air after the app switch')
     # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
     await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 999; }})()")
     # Loot: walk (teleport) over the nearest few items, then stand by a ground gun.
