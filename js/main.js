@@ -32,6 +32,10 @@ import { takeInvite, wireInvite, joinFromInvite, inviteJoinFailed, inviteSettled
 import { installTaps, setTapSound } from './ui/tap.js';
 import { installScrolling, scrollerOf, canScroll } from './ui/scroll.js';
 import { Options } from './ui/options.js';
+import { applyPalette } from './shared/palette.js';     // Colour modes (docs/ACCESSIBILITY.md).
+import { setCalm } from './render/feel.js';
+import { setReducedMotion } from './ui/motion.js';
+import { scaleOf } from './ui/layout.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
 import { installed as runningInstalled, platformKey, requestPersist, browserName } from './ui/platform.js';     // Phones (docs/DEVICES.md).
@@ -1710,6 +1714,19 @@ function applyOptions(v, changed) {
   controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
   hud.setLefty(v.lefty);
   if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
+  // Accessibility (docs/ACCESSIBILITY.md).
+  if (!changed || changed === 'colorMode') applyPalette(v.colorMode);
+  if (!changed || changed === 'calm') {
+    setCalm(v.calm);
+    setReducedMotion(v.calm ? true : null);
+    document.documentElement.toggleAttribute('data-calm', v.calm);
+  }
+  if (!changed || changed === 'textSize') document.documentElement.dataset.text = v.textSize;
+  if (!changed || changed === 'cues') hud.setCues(v.cues);
+  if (!changed || changed === 'layout' || changed === 'lefty' || changed === 'sensitivity') {
+    controls.applyLayout(v.layout);
+    hud.setChipScale(scaleOf(v.layout, 'chips'));
+  }
   controls.aimAssist = v.aimAssist;
   if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);

@@ -25,7 +25,7 @@ body.pad-on .fin-btn::after { content: var(--pad-melee, "RS"); position: absolut
   background: rgba(16,20,26,.92); color: #fff; font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 1.5px rgba(255,255,255,.6); }
 .em-btn.on { background: var(--face-sodium); }
 .em-btn.on .gl { color: var(--c-sodium-ink); }
-.em-wheel { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 46px); z-index: var(--z-hud-alert);
+.em-wheel { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 10px + 36px * var(--chips-k, 1)); z-index: var(--z-hud-alert);
   display: grid; grid-template-columns: repeat(4, 86px); grid-auto-rows: 34px; gap: 3px; padding: 3px; pointer-events: auto;
   background: var(--hud-glass); box-shadow: var(--hud-edge), inset 0 2px 0 var(--c-sodium);
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
