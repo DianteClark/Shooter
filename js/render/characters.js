@@ -18,6 +18,8 @@ import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
 import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
+import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
+import { EMOTES, getFinisher } from '../shared/finishers.js';
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -724,8 +726,16 @@ class Rig {
     this.crawl = 0;           // Battle royale: 0..1 into the downed crawl.
     this.kneel = 0;           // 0..1 down on one knee, reviving someone at (kneelX, kneelZ).
     this.kneelX = 0; this.kneelZ = 0;
+    // Finishers (view fin {k, role, other, t, dur}): the move, our role in it, the clock (smoothed between snapshots),
+    // whether the target was already down, and a 0..1 weight easing it in and out. Emotes: the id and its clock.
+    this.finK = null; this.finRole = null; this.finOther = null; this.finT = 0; this.finDur = 1; this.finDown = false; this.finW = 0;
+    this.emote = null; this.emoteT = 0; this.emoteDur = 1;
+    this.fp = blankPose();
   }
 }
+
+const NO_POSE = blankPose();
+const POSE_FIXED = new Set(['lx', 'ly', 'lz', 'rx', 'ry', 'rz', 'lieUp']);     // Targets and flags: never eased.
 
 const smooth01 = t => t * t * (3 - 2 * t);
 
@@ -948,6 +958,7 @@ export class Characters {
     if (!r) return;
     r.kick = Math.min(1.3, r.kick + 0.55 + strength * 0.5);
     r.sv[ROCK] += 1.5 + strength * 3.2;
+    r.emote = null;
     const def = weapon ? WEAPONS[weapon] : null;
     if (def && def.melee) {
       // Melee swings instead of kicking: a timed arc the gun pose follows (see SWINGS), alternating sides for a blade.
@@ -974,6 +985,12 @@ export class Characters {
   }
 
   onSwap(id) { const r = this.rigs.get(id); if (r) r.swap = 1; }
+  // An emote event (index into EMOTES). Moving, firing or a finisher ends it early (see update).
+  onEmote(id, e) {
+    const r = this.rigs.get(id), def = EMOTES[e];
+    if (!r || !def || r.finK) return;
+    r.emote = def.id; r.emoteT = 0; r.emoteDur = def.dur;
+  }
   onThrow(id, kind) { const r = this.rigs.get(id); if (r) { r.throwT = 1; r.throwKind = kind || 'frag'; } }
 
   // Replaces a rig with flying parts. Returns false when the rig has not been drawn recently (never seen).
@@ -1022,6 +1039,44 @@ export class Characters {
   }
 
   // Rebuilds all instance buffers from the view. Writes every rig's muzzle position, used by VFX.
+  // The finisher or emote pose layer for one rig this frame (a shared zero pose when there is neither). A finisher
+  // follows the view's clock, smoothed between snapshots; its blows jolt the target. An emote runs on its own clock and
+  // stops when its player moves, fires, goes down or is caught in a finisher.
+  _layer(r, p, dt, speed) {
+    const f = p.alive ? p.fin : null;
+    if (f) {
+      if (r.finK !== f.k || r.finRole !== f.role || r.finOther !== f.other) {
+        r.finK = f.k; r.finRole = f.role; r.finOther = f.other; r.finT = f.t; r.finDur = f.dur || 1.5; r.finDown = !!p.downed;
+      } else {
+        const before = r.finT / r.finDur;
+        r.finT += dt;
+        r.finT += (f.t - r.finT) * damp(5, dt);       // The view's clock steps with each snapshot; ours glides after it.
+        if (Math.abs(r.finT - f.t) > 0.3) r.finT = f.t;
+        if (r.finRole === 'v') {
+          const now = r.finT / r.finDur;
+          for (const h of getFinisher(r.finK).hits ?? []) if (before < h && now >= h) { r.sv[FLINCH_F] += 6; r.flash = Math.max(r.flash, 0.6); }
+        }
+      }
+      r.emote = null;
+      r.finW = Math.min(1, r.finW + dt * 14);
+    } else if (r.finW > 0) {
+      r.finW = Math.max(0, r.finW - dt * 5);
+      if (!p.alive) r.finW = 0;
+      if (r.finW === 0) r.finK = null;
+    }
+    if (r.finK && r.finW > 0) {
+      finPose(r.finK, r.finRole, Math.min(1, r.finT / r.finDur), r.finDown, r.fp);
+      if (r.finW < 1) for (const k in r.fp) if (!POSE_FIXED.has(k)) r.fp[k] *= r.finW;
+      return r.fp;
+    }
+    if (r.emote) {
+      r.emoteT += dt;
+      if (r.emoteT >= r.emoteDur || speed > 0.8 || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
+      return emotePose(r.emote, r.emoteT, r.emoteDur, r.fp);
+    }
+    return NO_POSE;
+  }
+
   update(view, dt, opts) {
     const { localId, localTeam, uav, revealAll } = opts;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
@@ -1105,7 +1160,10 @@ export class Characters {
       const patient = revivers.get(p.id);
       if (patient) { r.kneelX = patient.x; r.kneelZ = patient.z; }
       r.kneel += ((patient ? 1 : 0) - r.kneel) * damp(10, dt);
-      const crawl = r.crawl, kneel = r.kneel;
+      const A = this._layer(r, p, dt, speed);     // A finisher or an emote over everything else (finisher-anim.js).
+      const crawl = Math.max(r.crawl, A.lie), kneel = Math.min(1, r.kneel + A.kneel);
+      // Facing of the body (a finisher may turn it), and which way lying legs trail: behind, or ahead when on the back.
+      const faceA = p.aim - A.twist, legDir = A.lie > r.crawl && A.lieUp ? -1 : 1;
 
       // Gait: phase is distance-locked, so a planted foot stays planted instead of skating.
       const prevPhase = r.phase;
@@ -1148,17 +1206,19 @@ export class Characters {
       const stand = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02 - kneel * 0.36;
       // Touch-down: the body drops into the legs and comes back up (the feet stay planted, so the knees take it).
       const dip = r.landT > 0 ? Math.sin(Math.PI * Math.min(1, (1 - r.landT) * 1.6)) * 0.42 * Math.min(1, r.landT * 3) : 0;
-      const y = stand + (0.3 + Math.sin(r.phase * 2) * 0.02 - stand) * crawl + r.alt - dip;
+      const y = stand - A.drop + (0.3 + Math.sin(r.phase * 2) * 0.02 - stand + A.drop) * crawl + r.alt - dip;
       const rightX = -aimZ, rightZ = aimX;
       const sway = sinPhase * 0.035 * runK;
-      const bodyX = p.x + rightX * sway, bodyZ = p.z + rightZ * sway;
+      const bodyX = p.x + rightX * (sway + A.side) + aimX * A.push, bodyZ = p.z + rightZ * (sway + A.side) + aimZ * A.push;
 
       // A turning torso trails the aim while the gun stays on it: that gap is what reads as mass.
       const throwActive = r.throwT > 0 ? Math.sin((1 - r.throwT) * Math.PI) : 0;
       const lag = clamp(r.aimVel * 0.03, -0.32, 0.32) * (1 - ads * 0.7);
-      const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32;
-      const pitch = (zk ? -0.32 - runK * 0.12 : 0) + dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - crawl * 1.38 - kneel * 0.32;
-      const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK;
+      const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32 + A.twist;
+      // Lying from a finisher: face down like the crawl, or on the back (lieUp).
+      const lieDown = Math.max(r.crawl, A.lie * (1 - A.lieUp)), lieUp = A.lie * A.lieUp;
+      const pitch = (zk ? -0.32 - runK * 0.12 : 0) + dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - lieDown * 1.38 + lieUp * 1.38 - kneel * 0.32 - A.lean * (1 - A.lie);
+      const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK + A.roll;
       _e.set(roll, -(p.aim - lag - twist), pitch);
       _q.setFromEuler(_e);
       _s.set(1, 1, 1);
@@ -1175,7 +1235,8 @@ export class Characters {
       let gunZ = 0.18 - ads * 0.1 + hold[2] * carry - sprint * 0.04 + sinPhase * 0.05 * sprint - lag * 0.06;
       let gunRoll = -swap * 0.6 + sinPhase * 0.09 * sprint + (r.kickRoll || 0);
       let gunYaw = sprint * 1.0 + swapBack * 0.35 - lag + lag * 0.15 - twist * 0.85;
-      let gunPitch = r.kick * 0.2 * rec.climb - swap * 0.9 + rock * 0.08;
+      let gunPitch = r.kick * 0.2 * rec.climb - swap * 0.9 + rock * 0.08 + A.gpitch;
+      gunX += A.gx; gunY += A.gy; gunZ += A.gz; gunRoll += A.groll; gunYaw += A.gyaw;
       if (r.swingT !== undefined && r.swingT < 1) {
         // u 0..1 through the swing: a wind-up, a fast strike through the target, a slow recovery.
         const u = r.swingT, side = r.swingSide || 1;
@@ -1228,7 +1289,7 @@ export class Characters {
 
       _gunE.set(gunRoll, gunYaw, gunPitch);
       _qGun.setFromEuler(_gunE);
-      const gs = GUN_SCALE * (GUN_SCALES[p.weapon] || 1) * (1 - crawl * 0.999);   // No gun in hand while down.
+      const gs = GUN_SCALE * (GUN_SCALES[p.weapon] || 1) * (1 - Math.max(crawl, A.hide) * 0.999);   // No gun in hand while down (or put away for a finisher).
       _s.set(gs, gs, gs);
       _p.set(gunX, gunY, gunZ);
       _gun.compose(_p, _qGun, _s).premultiply(_body);
@@ -1264,7 +1325,7 @@ export class Characters {
 
       _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(look.head, look.head, look.head);
-      _e.set(-roll * 0.5 + r.sx[FLINCH_S] * 0.6, lag * 0.85 + twist * 0.5, r.kick * 0.08 + slide * -0.3 - pitch * 0.4 + r.sx[FLINCH_F] * 0.8);
+      _e.set(-roll * 0.5 + r.sx[FLINCH_S] * 0.6, lag * 0.85 + (twist - A.twist) * 0.5, r.kick * 0.08 + slide * -0.3 - pitch * 0.4 + r.sx[FLINCH_F] * 0.8 - A.head);
       _q.setFromEuler(_e);
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
@@ -1358,10 +1419,17 @@ export class Characters {
           _v.set(p.x + aimX * reach + rightX * side * 0.3, 0.08, p.z + aimZ * reach + rightZ * side * 0.3);
           _b.lerp(_v, crawl);
         }
-        if (kneel > 0.01 && side < 0) {
+        if (r.kneel > 0.01 && side < 0) {
           // The free hand on the teammate being picked up.
           _v.set(r.kneelX, 0.32, r.kneelZ);
-          _b.lerp(_v, kneel * 0.85);
+          _b.lerp(_v, r.kneel * 0.85);
+        }
+        // A finisher's grab or an emote's gesture: the hand to a target in the body's own frame, from the ground up.
+        const hw = side < 0 ? A.lw : A.rw;
+        if (hw > 0.01) {
+          const fx = Math.cos(faceA), fz = Math.sin(faceA), hx3 = side < 0 ? A.lx : A.rx, hy3 = side < 0 ? A.ly : A.ry, hz3 = side < 0 ? A.lz : A.rz;
+          _v.set(p.x + fx * hx3 - fz * hz3, hy3 * look.h, p.z + fz * hx3 + fx * hz3);
+          _b.lerp(_v, hw);
         }
         // Elbows hang out and down; the pole leans back so the hands read as gripping forward.
         solveJoint(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 0.4 * look.l, 0.44 * look.l,
@@ -1403,7 +1471,7 @@ export class Characters {
         const stance = (side < 0 ? 0.16 : -0.14) * standK;
         let footX = p.x + rightX * side * (wide + 0.05 * standK) + aimX * stance + r.moveX * off;
         let footZ = p.z + rightZ * side * (wide + 0.05 * standK) + aimZ * stance + r.moveZ * off;
-        let footY = 0.13 + lift + (r.alt > 0 ? r.alt - 0.06 + Math.sin(clock * 2.4 + side) * 0.05 : 0);
+        let footY = 0.13 + lift + (r.alt > 0 ? r.alt - 0.06 + Math.sin(clock * 2.4 + side) * 0.05 : 0) + Math.max(0, -A.drop) * 0.9;     // Lifted off the ground in a finisher: the feet go too.
         let poleX = r.moveX * 0.8 + aimX * 0.4 + rightX * side * 0.3, poleY = 0.15, poleZ = r.moveZ * 0.8 + aimZ * 0.4 + rightZ * side * 0.3;
         if (slide > 0.01) {
           // Lead leg kicks straight out, trail leg folds under the body with its knee to the side.
@@ -1417,8 +1485,9 @@ export class Characters {
         if (crawl > 0.01) {
           // Legs trail out behind, pushing off in turn.
           const push = Math.sin(r.phase + (side > 0 ? Math.PI : 0)) * 0.16;
-          footX += (hipX - aimX * (0.95 + push) + rightX * side * 0.08 - footX) * crawl;
-          footZ += (hipZ - aimZ * (0.95 + push) + rightZ * side * 0.08 - footZ) * crawl;
+          const lx2 = Math.cos(faceA) * legDir, lz2 = Math.sin(faceA) * legDir;
+          footX += (hipX - lx2 * (0.95 + push) + rightX * side * 0.08 - footX) * crawl;
+          footZ += (hipZ - lz2 * (0.95 + push) + rightZ * side * 0.08 - footZ) * crawl;
           footY += (0.1 - footY) * crawl;
           poleX *= 1 - crawl; poleZ *= 1 - crawl; poleY += (-0.8 - poleY) * crawl;     // Knees toward the ground.
         }

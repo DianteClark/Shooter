@@ -804,6 +804,7 @@ export class BrRules {
     const sim = this.sim, b = p.br;
     p.hp -= BR.downHp / BR.bleed * dt;
     if (p.hp <= 0) { this._die(p, this._downer(p), b.downWeapon, 'bleed'); return; }
+    if (p.fin) return;             // Being finished (js/sim/finishers.js): no revive, no self-revive, mid-move.
     if (b.useK === 'self') {
       b.useT -= dt;
       if (b.useT <= 0) { b.kits--; b.useK = null; this._revive(p, p); }

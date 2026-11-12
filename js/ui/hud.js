@@ -8,6 +8,7 @@ import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from
 import { GUN_LADDER, isBr, isEx, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
 import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
+import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/FINISHERS.md).
 import { ZmHud } from './zm-hud.js';            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
@@ -422,6 +423,7 @@ export class HUD {
     this.exHud = new ExHud(this);
     this.zmHud = new ZmHud(this);
     this.modeHud = new ModeHud(this);
+    this.finHud = new FinHud(this);
     this.#drawMapBase();
     this.reset();
   }
@@ -432,6 +434,8 @@ export class HUD {
   onExCommand(cb) { this.exHud.onCommand(cb); }
   // Graveyard Shift's use button (a gate, a wall-buy, the crate, a perk machine).
   onZmCommand(cb) { this.zmHud.onCommand(cb); }
+  // The Finish button and the emote wheel ('finish', or 'emote' with its index).
+  onFinCommand(cb) { this.finHud.onCommand(cb); }
 
   // A mode banner, for the modes' own layers (js/ui/mode-hud.js).
   banner(title, sub, duration, side) { this.#banner(title, sub, duration, side); }
@@ -1587,6 +1591,7 @@ export class HUD {
     }
     if (this.ctf) this.#updateCtf(view, me, c);
     this.modeHud.update(view, me);
+    this.finHud.update(view, me);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -2453,7 +2458,7 @@ export class HUD {
       ? `${cardHtml(who?.card ?? 'yard', { size: 236, title: k.name, sub: '' })}
          <span class="dc-vet">${k.badge ? `<i class="f-bdg">${badgeMark(k.badge.prestige ?? 0, 16)}</i><u>Lv ${k.badge.level ?? ''}</u>` : ''}${vetTag(!!who?.vet, { emblem: who?.emblem })}</span>`
       : '<em>Eliminated</em>';
-    this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : 'Killed by') : 'Down';
+    this.deathEl.querySelector('.dc-kick').textContent = k?.name ? (k.self ? 'Your own blast' : k.fin ? 'Finished by' : 'Killed by') : 'Down';
     this.dcIcon.innerHTML = k ? glyph(k.icon, 20) : '';
     this.dcName.textContent = k?.weapon ?? '';
     const tags = [];
@@ -2498,6 +2503,7 @@ export class HUD {
       if (this.ex) this.exHud.onEvent(e, this.view);
       if (this.zm) this.zmHud.onEvent(e, this.view);
       this.modeHud.onEvent(e, this.view);
+      this.finHud.onEvent(e, this.view);
       switch (e.t) {
         case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
         case 'hit': this.#onHit(e); break;
@@ -2681,16 +2687,16 @@ export class HUD {
     const gold = causeId === GOLDEN_ID && !e.equip && !e.streak;
     const goldStyle = gold ? ` style="color:${GOLD_CSS};filter:drop-shadow(0 0 4px rgba(255,207,64,.75))"` : '';
     const cause = art ? `<span class="f-w${gold ? ' f-gold' : ''}"${goldStyle} title="${esc(killCause(e))}">${art}</span>` : `<span class="f-w f-text">${esc(killCause(e))}</span>`;
-    const head = e.head ? `<span class="f-hs">${glyph('medal:headshot', 14)}</span>` : '';
+    const head = (e.head ? `<span class="f-hs">${glyph('medal:headshot', 14)}</span>` : '') + (e.fin ? '<span class="f-fin">FINISHED</span>' : '');
     const side = byP?.team === view.players.find(p => p.id === view.localId)?.team ? 'ally' : 'foe';
     this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${nameHtml(byName)}</em>${cause}${head}${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${nameHtml(tgtName)}</em>`, mine, side);
-    if (e.by === view.localId && e.target !== view.localId) this.#scorePop(SCORE.kill + (e.head ? SCORE.headshot : 0), e.head ? 'Headshot' : 'Kill');
+    if (e.by === view.localId && e.target !== view.localId) this.#scorePop(SCORE.kill + (e.head ? SCORE.headshot : 0), e.fin ? 'Finisher' : e.head ? 'Headshot' : 'Kill');
     else if (e.assist === view.localId) this.#scorePop(SCORE.assist, 'Assist');
 
     if (e.target === view.localId) {
       this.killer = {
         id: e.by, name: byName, color: byCss, weapon: killCause(e), icon: e.equip ?? (typeof e.streak === 'string' ? e.streak : e.weapon),
-        head: !!e.head, dist: e.streak || e.equip ? 0 : e.dist, badge: this.badges.get(e.by) ?? null, self: e.by === e.target,
+        head: !!e.head, dist: e.streak || e.equip || e.fin ? 0 : e.dist, badge: this.badges.get(e.by) ?? null, self: e.by === e.target, fin: !!e.fin,
       };
       this.deathPainted = false;
     }

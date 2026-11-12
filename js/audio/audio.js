@@ -30,6 +30,9 @@ import { fillGaps, classOf, weightOf, idHash, impactBus } from '../render/feel.j
 import { EquipmentSfx } from './equipment-sfx.js';   // Gear wave equipment sounds (2026-11).
 import { StreaksSfx } from './streaks-sfx.js';
 import { music } from './music.js';                 // Synthesised music (roadmap 24).
+import { FinSfx } from './fin-sfx.js';
+import { ZmSfx } from './zm-sfx.js';
+import { objOf } from '../sim/rules.js';
 import { BrSfx } from './br-sfx.js';               // Battle royale sounds (docs/BR.md).       // Scorestreaks overhaul sounds (2026-11).
 
 const MAX_VOICES = 26;
@@ -2051,6 +2054,8 @@ export class AudioEngine {
     (this.gearSfx ??= new EquipmentSfx(this)).onEvents(events, view);
     (this.streakSfx ??= new StreaksSfx(this)).onEvents(events, view);
     if (view?.br) (this.brSfx ??= new BrSfx(this)).onEvents(events, view);
+    (this.finSfx ??= new FinSfx(this)).onEvents(events, view);       // Finishers and emotes (docs/FINISHERS.md).
+    if (objOf(view)?.zm) (this.zmSfx ??= new ZmSfx(this)).onEvents(events, view);     // Graveyard Shift (docs/ZOMBIES.md).
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];

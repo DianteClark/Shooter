@@ -22,6 +22,8 @@ import { WEAPON_IDS } from '../shared/constants.js';
 import { unpackKit } from '../shared/attachments.js';
 import { AMMO_TYPES, ammoOf, brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
 import { hapticEvents } from '../ui/haptics.js';
+import { finishable, FIN } from '../shared/finishers.js';       // Finishing moves (docs/FINISHERS.md).
+import { hasLineOfSight } from '../shared/geometry.js';
 
 // Smallest signed rotation from b to a.
 function angleDiffSigned(a, b) {
@@ -265,6 +267,41 @@ export class Match {
     if (ps.slot !== k) this.brSwapWant = true;      // The ordinary swap, on the next step.
   }
 
+  // Finishing move (docs/FINISHERS.md): the HUD's Finish button, a controller's Melee, or a blade swung at someone who
+  // qualifies. The host decides; this phone only names the target it sees. False when nobody is in reach.
+  finish() {
+    const id = this.finTarget;
+    if (!id || !this.localAlive) return false;
+    const now = this.now();
+    if (now - (this.finAskAt ?? -9) < 0.5) return true;     // One request in flight at a time.
+    this.finAskAt = now;
+    this.#command({ cmd: 'finish', target: id });
+    return true;
+  }
+
+  // An emote from the wheel (index into EMOTES): an event to everyone, drawn on this player's character.
+  emote(e) {
+    if (!this.localAlive || this.interp.newest?.phase === 'ended') return false;
+    this.#command({ cmd: 'emote', e });
+    return true;
+  }
+
+  // Who this phone could finish right now, from what it sees: the nearest enemy in reach who is down or has their back
+  // turned, in sight. The HUD shows the Finish button while there is one (view.finTarget).
+  #findFinTarget(view, me) {
+    this.finTarget = null;
+    if (!me || !this.localAlive || me.downed || me.fin || this.brAir || view.phase !== 'live' || this.zm) return;
+    const ps = this.ps, A = this.finA || (this.finA = {});
+    A.x = ps.x; A.z = ps.z; A.aim = ps.aim; A.team = me.team;
+    let best = null, bd = Infinity;
+    for (const p of view.players) {
+      if (p.id === this.localId || !finishable(A, p)) continue;
+      const d = Math.hypot(p.x - ps.x, p.z - ps.z);
+      if (d < bd && hasLineOfSight(this.map, ps.x, ps.z, p.x, p.z)) { bd = d; best = p; }
+    }
+    this.finTarget = best ? best.id : null;
+  }
+
   // Graveyard Shift: the use tap (a gate, a wall-buy, the crate, a perk machine: whatever is in reach).
   zmCommand(act, extra = {}) {
     if (!this.zm) return;
@@ -402,6 +439,21 @@ export class Match {
   }
 
   #stepLocal(input, view, dt) {
+    // In a finisher (either side of it): no input at all, and this player stands where the host pinned it.
+    const fresh = this.interp.newest?.players.find(p => p.id === this.localId);
+    if (fresh?.fin) {
+      const ps = this.ps;
+      ps.x = fresh.x; ps.z = fresh.z; ps.aim = fresh.aim; ps.vx = 0; ps.vz = 0;
+      ps.sprinting = false; ps.sliding = false;
+      this.lastAim = ps.aim;
+      this.finTarget = null;
+      this.audio.trigger = false;
+      this.#sendState(dt);
+      return;
+    }
+    this.#findFinTarget(view, fresh);
+    // A controller's Melee, or a blade swung, at someone who qualifies: the finisher instead of the swing.
+    if (this.finTarget && (input.melee || (input.fire && weaponDef(this.ps)?.melee)) && this.finish()) { input.melee = false; input.fire = false; }
     const r = this.#resolveInput(input, view);
     if (this.br) {
       if (this.#brAirStep(r, view, dt)) { this.#sendState(dt); return; }
@@ -613,6 +665,7 @@ export class Match {
     if (this.localAlive && view.phase !== 'ended') this.#stepLocal(input, view, dt);
     this.#overlayLocal(view);
     this.#updateThrowPreview(view, input);
+    view.finTarget = this.localAlive && view.phase !== 'ended' ? this.finTarget : null;
 
     const events = this.frameEvents;
     try {

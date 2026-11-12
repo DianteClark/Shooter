@@ -33,6 +33,7 @@ export const PAD_ACTIONS = [
   { id: 'streak3', name: 'Streak 3', def: -1 },
   { id: 'ping', name: 'Ping', def: STD.UP },
   { id: 'chat', name: 'Quick chat', def: STD.DOWN },
+  { id: 'emote', name: 'Emote wheel', def: -1 },
   { id: 'talk', name: 'Push to talk', def: STD.RIGHT },
   { id: 'board', name: 'Scoreboard (hold)', def: STD.SELECT },
   { id: 'pause', name: 'Pause', def: STD.START },
@@ -89,7 +90,7 @@ const AXIS_NAV = 0.55;
 const TRIGGER_ON = 0.35;
 
 // Shown over in-match play: the first visible one takes the focus ring instead of the sticks.
-const MATCH_PANELS = ['.qc-wheel', '.br-map', '.ex-map', '.ex-offers', '.armory', '.br-out', '.hud .death.show.picking .picker', '.hud .death.show'];
+const MATCH_PANELS = ['.qc-wheel', '.em-wheel', '.br-map', '.ex-map', '.ex-offers', '.armory', '.br-out', '.hud .death.show.picking .picker', '.hud .death.show'];
 // The in-match buttons Interact presses, first visible wins: leave the transport, take loot, buy, call exfil, revive.
 const INTERACT = ['.br-jump-main', '.br-take', '.zm-use', '.ex-call', '.ex-phone', '.br-self', '.hud .death.show .death-go'];
 const BACKISH = '.back, .pk-close, .close, .br-map-close, .ex-map-close, .arm-close, [data-sound="back"], [data-act$="Back"], [data-act$="back"], [data-act$="Close"], [data-act$="close"], [data-act*="Cancel"]';
@@ -291,6 +292,7 @@ export class GamepadInput {
     }
     if (pr('ping')) this.quickChat?.ctx && this.quickChat.send(0);
     if (pr('chat') && this.quickChat?.btn && !this.quickChat.btn.hidden) this.quickChat.btn.click();
+    if (pr('emote') && this.hud?.finHud && !this.hud.finHud.chip.hidden) this.hud.finHud.chip.click();     // docs/FINISHERS.md
     if (pr('pause') && this.hud) {
       if (!this.hud.boardOpen) this.hud.toggleBoard();
       this.paused = true;
@@ -519,6 +521,7 @@ export class GamepadInput {
       return;
     }
     if (inMatch && scope.classList.contains('qc-wheel')) { this.quickChat?.btn?.click(); return; }
+    if (inMatch && scope.classList.contains('em-wheel')) { this.hud?.finHud?.chip.click(); return; }
     const el = [...scope.querySelectorAll(BACKISH)].find(usable);
     if (el) activate(el);
   }
@@ -547,12 +550,13 @@ export class GamepadInput {
   // Two CSS variables carry the prompts: the Interact button's name on loot, buy and exfil buttons, and the Streak
   // button's name under lit streak tiles. Rewritten only when the family or a binding changes.
   #glyphs(force = false) {
-    const key = `${Pad.family}|${bindingOf('interact')}|${bindingOf('streak')}`;
+    const key = `${Pad.family}|${bindingOf('interact')}|${bindingOf('streak')}|${bindingOf('melee')}`;
     if (!force && key === this.glyphKey) return;
     this.glyphKey = key;
     const s = document.body.style;
     s.setProperty('--pad-interact', JSON.stringify(buttonName(bindingOf('interact')) || ''));
     s.setProperty('--pad-streak', JSON.stringify(buttonName(bindingOf('streak')) || ''));
+    s.setProperty('--pad-melee', JSON.stringify(buttonName(bindingOf('melee')) || ''));     // The Finish button's prompt.
   }
 
   // The remap screen: the next button pressed goes to cb (null cancels).

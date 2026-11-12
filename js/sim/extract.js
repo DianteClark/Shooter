@@ -355,6 +355,7 @@ export class ExtractRules {
     const sim = this.sim, b = p.ex;
     p.hp -= BR.downHp / EX.bleed * dt;
     if (p.hp <= 0) { this._die(p, b.downedBy ? sim.byId.get(b.downedBy) : null, b.downWeapon); return; }
+    if (p.fin) return;             // Being finished (js/sim/finishers.js): nobody can pick you up mid-move.
     let helper = null;
     for (const q of sim.players) {
       if (q === p || q.team !== p.team || q.ai || !this._up(q)) continue;

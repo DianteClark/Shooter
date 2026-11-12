@@ -114,7 +114,10 @@ on every push, keep 2% of weekly usage for bugs.
 30. Attachments wave 2: more attachments per gun, visible on the model.
 31. DONE (modes2). Gunfight 2v2: short rounds, the same random loadout for everyone, small maps. Showdown on Pier, Turnstile,
     Oasis and Ruins: first to 6, 40 s rounds then an overtime flag, enemy health over their heads; docs/MODES.md "Showdown".
-32. Finishing moves and an emote wheel.
+32. DONE (finishers). Finishing moves and an emote wheel: six finishers (melee a downed enemy or one with their back
+    turned; both locked, the attacker can be shot to cancel), picked per operator, unlocked by level, operator mastery
+    and the season track; eight emotes on a wheel beside quick chat (and on the title's yard operator); bots use both;
+    Graveyard Shift sounds. docs/FINISHERS.md.
 33. Daily challenges feeding season XP (alongside the weekly sets).
 34. DONE (NEXT). Every phone: Android (Chrome/Samsung Internet) and all iPhone sizes and ages, with quality tiers picked per device,
     touch and safe areas checked on both; an install guide in the game (Add to Home Screen on iOS Safari, Install app

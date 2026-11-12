@@ -9,6 +9,7 @@
 // Thinking (perception, decisions) runs at 5-12 Hz, staggered across bots. Driving the stick, aim and
 // trigger runs every tick, which is what keeps them looking fluid.
 
+import { stalkInput } from './finishers.js';
 import { streakMoment, thinkAir, thinkStrikes } from './bot-streaks.js';
 import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam } from './equipment.js';
@@ -2346,6 +2347,7 @@ export class BotBrain {
     if (I.aiming && !I.sprint && len > ADS_STICK_FULL) { I.mx = mx * ADS_STICK_FULL / len; I.mz = mz * ADS_STICK_FULL / len; }
     // Extraction's AI patrols walk their rounds (js/sim/extract.js sets `calm`) until something happens.
     if (this.calm && !this.targetVisible && !this.hasKnown) { I.sprint = false; I.mx *= 0.48; I.mz *= 0.48; }
+    if (this.p.finStalk) stalkInput(sim, this.p, I);     // Creeping up for a finisher (js/sim/finishers.js).
     const shots = stepPlayer(ps, I, dt, sim.map, sim.rng);
     I.mx = mx; I.mz = mz;
     I.swap = false; I.slide = false;

@@ -727,6 +727,15 @@
 #ui .op-tags { display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow: hidden; }
 #ui .op-tag { flex: none; display: flex; align-items: center; gap: 4px; padding: 3px 6px 2px; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); background: rgba(231,234,228,.06); white-space: nowrap; }
 #ui .op-tag .ico { height: 11px; color: var(--c-sodium); }
+/* The operator's finishing move (docs/FINISHERS.md): one chip per finisher, the equipped one lit, locked ones dimmed. */
+#ui .op-fin { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#ui .op-fin > small { flex: none; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+#ui .op-fins { display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+#ui .op-fins::-webkit-scrollbar { display: none; }
+#ui .op-finchip { flex: none; display: flex; align-items: center; gap: 3px; height: 24px; padding: 0 7px; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); background: rgba(231,234,228,.08); white-space: nowrap; }
+#ui .op-finchip.on { color: var(--c-sodium-ink); background: var(--c-sodium); }
+#ui .op-finchip.locked { opacity: .5; }
+#ui .op-finchip .ico { height: 10px; }
 #ui .op-tag.ok { color: var(--c-go); }
 #ui .op-tag.ok .ico { color: var(--c-go); }
 #ui .op-tag.is-goal { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--c-sodium); }
@@ -1109,6 +1118,17 @@
 
 /* Title clean-up (owner, 2026-11-11): the featured playlist rides in the Multiplayer button's subtitle, and the secondary
    buttons sit in a compact grid in the right column under the challenges, never across the left column. */
+/* The title's emote button and its row (docs/FINISHERS.md): bottom middle, left of the secondary chips. */
+#ui .ttl-emote-box { position: absolute; right: calc(max(var(--sr), 12px) + 292px); bottom: calc(max(var(--sb), 8px) + 10px); display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+#ui .ttl-emote { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 52px; height: 44px; color: var(--c-chalk); background: rgba(16,20,26,.62); box-shadow: var(--edge); --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+#ui .ttl-emote b { font: 400 9.5px/1 var(--f-plate); letter-spacing: .04em; }
+#ui .ttl-emote svg { color: var(--c-sodium); }
+#ui .ttl-emotes { display: grid; grid-template-columns: repeat(4, 76px); gap: 3px; padding: 3px; background: rgba(16,20,26,.8); box-shadow: var(--edge), inset 0 2px 0 var(--c-sodium); }
+#ui .ttl-emotes[hidden] { display: none; }
+#ui .ttl-em { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 5px; color: var(--c-chalk); background: rgba(47,57,68,.9); text-align: left; }
+#ui .ttl-em b { font: 400 9.5px/1.05 var(--f-plate); letter-spacing: .03em; overflow: hidden; }
+#ui .ttl-em svg { flex: none; color: var(--c-sodium); }
+#ui .ttl-em.locked { opacity: .45; }
 #ui .ttl-sec { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; width: 272px; }
 #ui .ttl-sec .chip { min-width: 0; height: 44px; padding: 3px 2px; flex-direction: column; justify-content: center; gap: 2px; }
 #ui .ttl-sec .chip b { font-size: 9.5px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }

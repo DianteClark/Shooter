@@ -359,6 +359,16 @@ menu.on({
   gunsmith: () => openGunsmith(),
   loadout: () => openLoadout(),
   operators: () => openOperators(),
+  // The title's emote row: the operator in the yard plays it (docs/FINISHERS.md).
+  titleEmote: () => { const row = menu.el.querySelector('.ttl-emotes'); if (row) row.hidden = !row.hidden; },
+  titleEmotePlay: ({ i }) => {
+    const e = Progress.emotes()[Number(i)];
+    if (!e) return;
+    if (!e.unlocked) { menu.toast(`${e.name}: ${e.requirement}`, 'warn'); return; }
+    const row = menu.el.querySelector('.ttl-emotes');
+    if (row) row.hidden = true;
+    if (!backdrop.emote(Number(i))) menu.toast(e.name);
+  },
   leaveLobby: () => goTitle(),
   toggleReady: () => toggleReady(),
   start: () => startVote(),
@@ -796,7 +806,7 @@ function withBadges(roster, humans, seed = 0) {
     const operator = human ? cleanOperator(human.loadout?.operator) : r.operator ? cleanOperator(r.operator) : botOperator(seed, i);
     const badge = r.badge ?? (human ? cleanBadge(human.badge) : { prestige: 0, level: (BOT_LEVEL[r.skill] ?? 12) + (i * 3) % 7 });
     // The sim's loadout cleaning drops cosmetics it does not use; carry the player's skin and emblem across it.
-    const looks = human ? { skin: human.loadout?.skin ?? null, emblem: human.loadout?.emblem ?? null }
+    const looks = human ? { skin: human.loadout?.skin ?? null, emblem: human.loadout?.emblem ?? null, finisher: human.loadout?.finisher ?? null }
       : r.pool ? { skin: r.skin ?? r.loadout?.skin ?? null, emblem: r.loadout?.emblem ?? null } : {};
     return { ...r, badge, operator, loadout: { ...r.loadout, operator, ...looks } };
   });
@@ -1504,6 +1514,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   updateVoiceTeam();
   // Callouts need someone to hear them: friends, or bots on your side. Not in training or on the range.
   quickChat.start({ net, roster, localId: id, mapId, mode, ffa: isFfa(mode), enabled: !tutorial && !training && mode !== 'range' });
+  hud.finHud.prepare({ enabled: !tutorial, emotes: Progress.emotesOpen(), localId: id });     // Emote wheel, Finish button.
   if (!Progress.flag('aimHint') && !tutorial) {
     controls.showAimHint(true);
     Progress.setFlag('aimHint');
@@ -1530,6 +1541,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.onBrCommand((act, extra) => app.match?.brCommand(act, extra));
   hud.onExCommand((act, extra) => app.match?.exCommand(act, extra));
   hud.onZmCommand((act, extra) => app.match?.zmCommand(act, extra));
+  hud.onFinCommand((act, e) => (act === 'finish' ? app.match?.finish() : app.match?.emote(e)));
   hud.zmHud.guns = () => (app.match ? [app.match.ps.primary, app.match.ps.secondary] : []);
   // A respawn before the player opens the picker should still use the equipped weapon (training keeps its own kit).
   app.match.setNextLoadout(tutorial ? roster.find(r => r.id === id).loadout : Progress.loadout());
@@ -1561,6 +1573,7 @@ function endLocalMatch() {
   app.renderer?.dispose();
   app.renderer = null;
   quickChat.stop();
+  hud.finHud.stop();
   hud.setVisible(false);
   controls.setEnabled(false);
   updateVoiceTeam();               // Back to party voice with the whole lobby.
