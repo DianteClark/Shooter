@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Prestige and Master Prestige',
+    build: '1111-28', date: '2026-11-12', title: 'Prestige and Master Prestige',
     items: [
       'Every prestige rank now brings its own camo for every gun, alongside its icon and calling card. Ranks you already hold have theirs waiting.',
       'Entering prestige plays a new reveal: your new icon, its camo and calling card, and what the next rank brings.',
