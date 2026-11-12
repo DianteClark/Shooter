@@ -25,35 +25,84 @@ function rankedSub(p) {
   } catch (err) { console.error('ranked', err); return `<span class="mp-pl-tx"><b>${esc(p.name)}</b><small>${esc(p.sub)}</small></span>`; }
 }
 
-const tabsNav = (act, tabs, on) => `<nav class="mp-tabs">${tabs.map(t => `<button class="seg${t.id === on ? ' on' : ''}${t.soon ? ' soon' : ''}" data-act="${act}" data-tab="${t.id}" data-sound="tab"${t.soon ? ' disabled aria-disabled="true"' : ''}>${ico(t.icon)}<span><b>${esc(t.name)}</b><small>${esc(t.note)}</small></span></button>`).join('')}</nav>`;
+const tabsNav = (act, tabs, on) => `<nav class="mp-tabs scroll-x">${tabs.map(t => `<button class="seg${t.id === on ? ' on' : ''}${t.soon ? ' soon' : ''}" data-act="${act}" data-tab="${t.id}" data-sound="tab"${t.soon ? ' disabled aria-disabled="true"' : ''}>${ico(t.icon)}<span><b>${esc(t.name)}</b><small>${esc(t.note)}</small></span></button>`).join('')}</nav>`;
 
 /* ---------- Multiplayer ---------- */
+// One scroller under the tabs, a fixed foot (what fills the seats, the Hardcore switch, Find match). Standard opens on
+// its Spotlight (Ranked, the season's event, today's featured playlist), then the playlists, then the single modes to
+// tick. The big-card tabs (Battle Royale, Extraction, Zombies) fit on one screen: their cards in one row, under group
+// heads (Battle Royale and Rebound), so a card's title is the playlist's own short name (Quads, Duos) under its family.
+const BIG = ['br', 'extraction', 'zombies'];
+const TAB_NOTE = {
+  standard: 'Bots fill the seats nobody takes. The lobby votes on the map; friends join through a room code.',
+  groundwar: '16 a side on the huge maps. Bots fill the seats nobody takes; the lobby votes on the map.',
+  br: '32 players a drop. Friends share a squad; bots fill the seats nobody takes.',
+  extraction: '16 players on Frontier with your own loadout. Bots fill the squads; AI patrols hold the map.',
+  zombies: 'Graveyard Shift: hold off the undead round after round. Start with a pistol; your class stays home.',
+};
+
+// The tab's playlists in groups: [{ name, note, items }].
+function mpGroups(tab, lists) {
+  if (tab === 'standard') {
+    const spot = lists.filter(p => p.ranked || p.event || p.featured);
+    return [{ id: 'spot', name: 'Spotlight', note: 'Ranked and today\'s featured playlist', items: spot },
+      { id: 'pl', name: 'Playlists', note: '6 v 6 and 2 v 2', items: lists.filter(p => !spot.includes(p)) }];
+  }
+  if (tab === 'br') {
+    const rb = lists.filter(p => MODES[p.modes[0]]?.rebound);
+    return [{ id: 'br', name: 'Battle Royale', note: 'One life, last squad up', items: lists.filter(p => !rb.includes(p)) },
+      { id: 'rb', name: 'Rebound', note: 'Fast, redeploys', items: rb }];
+  }
+  return [{ id: 'pl', name: 'Playlists', note: '', items: lists }];
+}
+
+const EYEBROW = p => (p.ranked ? 'Ranked' : p.event ? 'Limited event' : p.featured ? 'Featured today' : '');
+
+function plCard(p, group, big) {
+  // Under a family's head the card drops the family from its title: "Rebound Quads" reads "Quads" under Rebound.
+  const title = group && p.name.startsWith(group.name + ' ') ? p.name.slice(group.name.length + 1) : p.name;
+  const brow = EYEBROW(p);
+  const desc = big ? MODES[p.modes[0]]?.desc : '';
+  return `
+          <button class="mp-pl${p.featured ? ' feat' : ''}${p.ranked ? ' rk' : ''}${p.event ? ' ev' : ''}${big ? ' big' : ''}" data-act="mpPlaylist" data-id="${p.id}" data-in="up" aria-label="${esc(p.name)}">
+            ${brow ? `<span class="mp-brow">${esc(brow)}</span>` : ''}
+            ${p.ranked ? rankedSub(p) : `<span class="mp-pl-ico">${ico(p.icon)}</span>
+            <span class="mp-pl-tx"><b>${esc(title)}</b><small>${esc(p.sub)}</small>${desc ? `<em>${esc(desc)}</em>` : ''}</span>`}
+            <i class="mp-tick">${ico('check')}</i>
+          </button>`;
+}
+
+const sectionHead = (icon, name, note) => `<h3 class="mp-h">${ico(icon)}<b>${esc(name)}</b>${note ? `<small>${esc(note)}</small>` : ''}</h3>`;
+
 // state: { tab, sel: {playlist, modes} }
 export function mpMarkup({ tab }) {
-  const lists = playlistsFor(tab), modes = modesFor(tab), br = tab === 'br' || tab === 'extraction' || tab === 'zombies';
-  return `
-    ${header({ back: 'mpBack', title: 'Multiplayer', cls: 'mp-bar', extra: tabsNav('mpTab', MP_TABS, tab) })}
-    <div class="mp${br ? ' mp-br' : ''}" data-tab="${tab}">
-      <section class="mp-lists">
-        <h3 class="mp-h">${ico('menu')}<b>Playlists</b></h3>
-        <div class="mp-pls">${lists.map(p => `
-          <button class="mp-pl${p.featured ? ' feat' : ''}${p.ranked ? ' rk' : ''}${p.event ? ' ev' : ''}" data-act="mpPlaylist" data-id="${p.id}" data-in="up">
-            ${p.ranked ? rankedSub(p) : `<span class="mp-pl-ico">${ico(p.icon)}</span>
-            <span class="mp-pl-tx"><b>${esc(p.name)}</b><small>${esc(p.sub)}</small>${br ? `<em>${esc(MODES[p.modes[0]].desc)}</em>` : ''}</span>`}
-            <i class="mp-tick">${ico('check')}</i>
-          </button>`).join('')}
-        </div>
-      </section>
-      ${modes.length ? `<section class="mp-modes-col">
-        <h3 class="mp-h">${ico('mode:dom')}<b>Modes</b><small>Tick one or more</small></h3>
+  const lists = playlistsFor(tab), modes = modesFor(tab), big = BIG.includes(tab);
+  const groups = mpGroups(tab, lists).filter(g => g.items.length);
+  const body = big
+    // One row of cards, each group's head spanning its own cards.
+    ? `<div class="mp-grid big" style="--n:${lists.length}">
+        ${groups.map(g => `<div class="mp-gh" style="grid-column:span ${g.items.length}">${sectionHead(g.items[0].icon, g.name, g.note)}</div>`).join('')}
+        ${groups.map(g => g.items.map(p => plCard(p, groups.length > 1 ? g : null, true)).join('')).join('')}
+      </div>`
+    : groups.map(g => `
+      <section class="mp-sec mp-sec-${g.id}">
+        ${sectionHead(g.id === 'spot' ? 'star' : 'menu', g.name, g.note)}
+        <div class="mp-grid${g.id === 'spot' ? ' spot' : ''}">${g.items.map(p => plCard(p, null, false)).join('')}</div>
+      </section>`).join('') + (modes.length ? `
+      <section class="mp-sec mp-sec-modes">
+        ${sectionHead('mode:dom', 'Modes', 'Tick one or more')}
         <div class="mp-modes">${modes.map(id => `
           <button class="mp-mode" data-act="mpMode" data-id="${id}" data-in="up">${ico(id)}<b>${esc(MODES[id].name.replace('Ground War ', 'GW ')).replace('Headquarters', 'Head&shy;quarters')}</b><i class="mp-tick">${ico('check')}</i></button>`).join('')}
         </div>
-      </section>` : ''}
+      </section>` : '');
+  return `
+    ${header({ back: 'mpBack', title: 'Multiplayer', cls: 'mp-bar', extra: tabsNav('mpTab', MP_TABS, tab) })}
+    <div class="mp${big ? ' mp-big' : ''}" data-tab="${tab}">
+      <div class="mp-body${big ? '' : ' scroll-y'}">${body}</div>
       <footer class="mp-foot" data-in="up">
-        <p class="mp-note">${ico('bots')}<span>${tab === 'zombies' ? 'Graveyard Shift: hold off the undead round after round on Night Market, Ruins or Foundry. Start with a pistol; your class stays home.' : tab === 'extraction' ? '16 players on Frontier with your own loadout. Bots fill the squads; AI patrols hold the map.' : br ? '32 players a drop. Bots fill the seats nobody takes.' : 'Bots fill the seats nobody takes. The lobby votes on the map.'}</span></p>
+        <p class="mp-note">${ico(tab === 'zombies' ? 'mode:zm' : 'bots')}<span>${esc(TAB_NOTE[tab] ?? TAB_NOTE.standard)}</span></p>
         <button class="mod-row mp-hc" data-act="mpHardcore" data-sound="tab" aria-pressed="false"${HARDCORE_TABS.includes(tab) ? '' : ' disabled'}>
-          <span class="mod-ico">${ico('ui:skull')}</span><span class="mod-txt"><b>Hardcore</b><small>${HARDCORE_TABS.includes(tab) ? 'Every mode: a third of the health, no minimap' : 'Not in this playlist'}</small></span><i class="mod-sw" aria-hidden="true"></i></button>
+          <span class="mod-ico">${ico('ui:skull')}</span><span class="mod-txt"><b>Hardcore</b><small>${HARDCORE_TABS.includes(tab) ? 'A third of the health, no minimap' : 'Not in this playlist'}</small></span><i class="mod-sw" aria-hidden="true"></i></button>
         <button class="btn is-primary mp-find" data-act="mpFind" data-sound="confirm">${ico('play')}<span><b>Find match</b><small class="mp-pick"></small></span></button>
       </footer>
     </div>`;

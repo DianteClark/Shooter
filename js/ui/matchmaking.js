@@ -76,7 +76,7 @@ export function playlistsFor(tab, date = new Date()) {
       list.splice(1, 0, { id: 'event', name: ev.name, icon: 'ui:timer', modes: [ev.mode], mods, sub: `${playlistName(ev.mode, mods)} · ${ev.daysLeft} day${ev.daysLeft === 1 ? '' : 's'} left`, event: true });
     }
     const f = featured(date);
-    list.push({ id: 'featured', name: f.name, icon: 'star', modes: [f.mode], mods: f.mods, sub: 'Featured today', featured: true });
+    list.push({ id: 'featured', name: f.name, icon: 'star', modes: [f.mode], mods: f.mods, sub: 'A new one every day', featured: true });
   }
   return list;
 }
