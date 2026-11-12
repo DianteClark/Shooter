@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Finishing moves and emotes',
+    items: [
+      'Finishing moves: get close to a downed enemy, or to one with their back to you, and tap Finish (or press Melee on a controller, or swing a blade). You both play out the move, then they are out.',
+      'You are both open while it plays: if anyone shoots you mid-move, it stops and your target gets away.',
+      'Six finishers to earn through levels, operator mastery and the season track. Pick one for each operator in the Operators screen.',
+      'Emotes: a new button beside quick chat opens a wheel of eight, from Wave and Salute to the Yard Shuffle. Moving or firing stops one. Try them on the title screen too.',
+      'Kills from a finisher show as FINISHED in the feed and the killcam. Bots use finishers and emotes now and then.',
+      'Graveyard Shift now has its own sounds: the undead groan and claw, the mystery crate plays its tune, and perk machines, wall-buys, gates and every round start and end have a sound of their own.',
+    ],
+  },
+  {
     build: '1111-24', date: '2026-11-11', title: 'Rebound and Showdown',
     items: [
       'New on the Battle Royale tab: Rebound. A fast battle royale on one part of Frontier, in squads of four or pairs, with a quicker circle and matches of about eight to ten minutes.',
