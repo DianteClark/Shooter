@@ -205,8 +205,8 @@ const LIST = [
     { spinupFrom: 1.3, heatRounds: 0.85 }, { look: { grip: 'vertical' } }),
   conv('k_assaultbox', 'lmg', 'mag', 'Assault Box', 22,
     'A Bulwark you can walk with: no wind-up, half the belt.',
-    'No wind-up, lighter and quicker to aim and swing. Half the rounds, overheats much sooner, wider from the hip.',
-    { magazine: 0.5, heatRounds: 0.65, moveMult: 1.05, adsTime: 0.95, turnCap: 1.1, hipSpread: 1.1 },
+    'No wind-up, lighter and quicker to aim and swing. Half the rounds, overheats much sooner, fires a little slower, wider from the hip.',
+    { magazine: 0.5, heatRounds: 0.65, moveMult: 1.05, adsTime: 0.95, turnCap: 1.1, hipSpread: 1.1, rpm: 0.95 },
     { set: { spinup: undefined }, notes: ['No wind-up'], look: { mag: 'speedmag' } }),
 
   sig('s_droversling', 'saw', 'grip', 'Drover Sling', 14,
@@ -446,6 +446,7 @@ export const SIG_TRIM = {
   s_prespun: { gain: 1 },        // Bulwark: starting fire rate +30% (boosted +45%) took it to 1.36 mirrored.
   s_overdrive: { core: 1 },      // Millrace: fire rate +10% (boosted +12.5%) with Light Barrels: 1.30.
   s_looplever: { core: 1 },      // Prospector: fire rate +20% (boosted +25%): the biggest duel gain of any signature.
+  s_capacitor: { gain: 1 },      // Lodestone: charge time -28% (boosted -42%): its best build ran 1.24, with both signatures 1.30.
   s_hotchamber: { core: 0.8 },   // Kestrel: fire rate +25% (boosted +31%) on the top stock sniper: 1.26-1.32; now +20%.
 };
 function boostSignature(a) {

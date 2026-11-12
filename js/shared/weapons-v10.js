@@ -59,7 +59,7 @@ export const V10_WEAPONS = {
   // It pays in reach instead, the shortest of the SMGs.
   hushsmg: {
     id: 'hushsmg', name: 'Murmur', role: 'Ghost', auto: true, suppressed: true,
-    damage: 24, rpm: 930, magazine: 30, reserve: 180, reload: 1.8, range: 24,
+    damage: 24, rpm: 960, magazine: 30, reserve: 180, reload: 1.8, range: 24,
     falloff: { start: 10, end: 17, min: 0.55 },
     adsSpread: 0.016, hipSpread: 0.032, bloomPerShot: 0.05, bloomRecover: 3.2, bloomScale: 1.3,
     pattern: { amp: 0.008, freq: 1.1, ramp: 3 },
