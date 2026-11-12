@@ -511,6 +511,354 @@ section('ashgrove');
   }
 }
 
+// ---- The economy (ROADMAP item 36): streaks off, the bench, the terminal, plates, traps, perks, exfil, the quest ----
+section('econ');
+{
+  const { ZE, ZM_PERKS, supplyCost, zmTierCamo, syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const { zmTierDef } = await import('../js/sim/zm-phone.js');
+  const { WEAPONS } = await import('../js/shared/weapons.js');
+  // Loadout streaks: neither charged nor called, by humans or bots.
+  {
+    const sim = makeSim('ruins', 31, [{ id: 'me', name: 'Me', team: 0, loadout: { primary: 'ar', streaks: ['uav', 'turret', 'gunship'] } }]);
+    const R = sim.rules;
+    ok(R.crew.every(p => p.score.slots.length === 0 && p.loadout.streaks.length === 0), 'no loadout streak slots in the mode');
+    let called = 0;
+    run(sim, QUICK ? 90 : 160, e => { if (e.t === 'streak') called++; });
+    ok(called === 0 && sim.useStreak('me') === null, `no streaks called (${called})`);
+  }
+  const openAll = (sim, R) => { for (const d of R.L.doors) R.open |= 1 << d.i; syncZmDoors(sim.map, R.open); for (const d of R.L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear(); };
+  const sim = makeSim('neon', 37, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, L = R.L, E = R.econ, me = R.crew.find(p => !p.isBot);
+  for (const p of R.crew) if (p.bot) p.bot.update = () => [];
+  R.plan = () => {}; R._crewPlan = null;
+  openAll(sim, R);
+  R._startRound(6); R.spawnT = 999;
+  me.spawnProtect = 0;
+  const use = (extra = {}) => sim.applyCommand(me.id, { cmd: 'zm', act: 'use', ...extra });
+  const at = p => { me.ps.x = p.x; me.ps.z = p.z; };
+  const usable = () => zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  // ---- The upgrade bench ----
+  R._give(me, 'ar');
+  me.zm.pts = 100000;
+  at(L.bench);
+  let u = usable();
+  ok(u?.kind === 'bench' && u.gun === 'ar' && u.tier === 1 && u.cost === ZE.bench.cost[0], `the bench offers tier 1 for ${ZE.bench.cost[0]} (${u?.kind})`);
+  sim.drainEvents();
+  ok(use() && E.bench.state === 1 && me.zm.pts === 100000 - ZE.bench.cost[0], 'tier 1 paid, the gun goes in');
+  const evs = sim.drainEvents();
+  ok(me.ps.weapon === 'knife' && evs.some(e => e.t === 'zarm' && e.id === me.id) && evs.some(e => e.t === 'zbench' && e.state === 1), 'out of the hands meanwhile (zarm, zbench)');
+  const mate = R.crew.find(p => p.isBot);
+  ok(zmUsable(L, L.bench.x, L.bench.z, R._stateFor(mate))?.off && !R._use(mate, zmUsable(L, L.bench.x, L.bench.z, R._stateFor(mate))), 'nobody else can use the bench meanwhile');
+  ok(usable()?.kind === 'benchwait' && !use(), 'its owner waits');
+  run(sim, ZE.bench.time + 0.2);
+  ok(E.bench.state === 2 && usable()?.kind === 'benchtake', 'ready: take it');
+  sim.drainEvents();
+  ok(use() && E.bench.state === 0 && me.ps.weapon === 'ar' && me.zm.tiers.ar === 1, 'back in hand at tier 1');
+  const arm = sim.drainEvents().find(e => e.t === 'zarm');
+  const slot = me.ps.primary === 'ar' ? 0 : 1;
+  ok(arm?.tier === 1 && me.ps.defs[slot].magazine === zmTierDef('ar', 1).magazine && zmTierDef('ar', 1).magazine > WEAPONS.ar.magazine, `bigger magazine (${WEAPONS.ar.magazine} -> ${me.ps.defs[slot].magazine}), the phone told`);
+  // Damage at tier 1.
+  const z = R.horde[0];
+  R._raise(z, 0, { x: me.ps.x + 2, z: me.ps.z });
+  let hp = z.hp;
+  sim._damage(z, me, 10, 'ar', 2);
+  ok(Math.abs(hp - z.hp - 10 * ZE.tiers[1].dmg) < 0.01, `tier 1 hits ${ZE.tiers[1].dmg}x`);
+  // Tiers 2 and 3 (left on the bench past its hold: it comes back by itself).
+  z.alive = false;
+  const pb = me.zm.pts;
+  ok(use() && E.bench.tier === 2 && me.zm.pts === pb - ZE.bench.cost[1], 'tier 2 costs more');
+  run(sim, ZE.bench.time + ZE.bench.hold + 0.3);
+  ok(E.bench.state === 0 && me.zm.tiers.ar === 2 && me.ps.weapon === 'ar', 'left on the bench, it comes back by itself');
+  ok(use(), 'tier 3');
+  run(sim, ZE.bench.time + 0.2); use();
+  ok(me.zm.tiers.ar === 3 && usable()?.off && usable()?.why === 'Fully upgraded', 'tier 3 is the top');
+  ok(zmTierCamo('ar', 3) === 'wire' && zmTierCamo('smg', 3) === 'molten' && zmTierCamo('shotgun', 3) === 'horizon' && zmTierCamo('dmr', 3) === 'pp-silver', 'tier 3 looks by class');
+  // Arc rounds: a hit jumps to two more nearby.
+  const zs = [R.horde[1], R.horde[2], R.horde[3]];
+  zs.forEach((q, k) => R._raise(q, 0, { x: me.ps.x + 3, z: me.ps.z + k - 1 }));
+  sim._fxT?.clear?.(); E._fxT.clear();
+  const before = zs.map(q => q.hp);
+  sim.drainEvents();
+  sim._damage(zs[1], me, 10, 'ar', 3);
+  const arcs = sim.drainEvents().filter(e => e.t === 'zfx' && e.k === 'arc').length;
+  ok(arcs === 2 && zs[0].hp < before[0] && zs[2].hp < before[2], `arc rounds jump to two more (${arcs})`);
+  // The tier stays with the gun through a swap, and goes when the gun is given up.
+  const arSlot = () => (me.ps.primary === 'ar' ? 0 : 1);
+  me.ps.slot = 1 - arSlot(); me.ps.weapon = me.ps.slot ? me.ps.secondary : me.ps.primary;
+  R._give(me, 'shotgun');
+  ok(me.zm.tiers.ar === 3 && (me.ps.primary === 'ar' || me.ps.secondary === 'ar') && me.ps.weapon === 'shotgun', 'a new gun in the other hand: the tier stays with the first');
+  me.ps.slot = arSlot(); me.ps.weapon = 'ar';
+  const zt = R.horde[4];
+  R._raise(zt, 0, { x: me.ps.x - 3, z: me.ps.z });
+  hp = zt.hp;
+  sim._damage(zt, me, 10, 'ar', 3);
+  ok(me.zm.tiers.ar === 3 && Math.abs(hp - zt.hp - 10 * ZE.tiers[3].dmg) < 0.01, 'swapped back to, it hits at tier 3');
+  zt.alive = false;
+  R._give(me, 'lmg');
+  ok(!me.zm.tiers.ar && me.ps.weapon === 'lmg', 'given up for another gun: the tier goes with it');
+  // Rime rounds slow; Ember rounds burn; Burst rounds burst.
+  me.zm.tiers.lmg = 0;
+  for (const [gun, k] of [['dmr', 'frost'], ['smg', 'burn']]) {
+    R._give(me, gun); me.zm.tiers[gun] = 3;
+    const q = R.horde[5 + (gun === 'smg')];
+    R._raise(q, 0, { x: me.ps.x + 4, z: me.ps.z + 2 });
+    sim.drainEvents();
+    sim._damage(q, me, 5, gun, 4);
+    ok(sim.drainEvents().some(e => e.t === 'zfx' && e.k === k) && (k === 'frost' ? q.zSlowT > sim.time : q.zBurnT > sim.time), `${gun}: ${k}`);
+    if (k === 'burn') { const h = q.hp; run(sim, 1); ok(q.hp < h, 'burning hurts over time'); }
+  }
+  // ---- The supply terminal ----
+  at(L.terminal);
+  ok(usable()?.kind === 'terminal' && usable().ok, 'the terminal is in reach');
+  ok(supplyCost('sentry', 1) === ZE.supply.sentry.cost && supplyCost('sentry', 20) > supplyCost('sentry', 10), 'supply prices climb with the rounds');
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.hp = 0; }
+  const items = {};
+  for (const item of ['sentry', 'drone', 'lure', 'strike', 'vest']) {
+    const p0 = me.zm.pts;
+    me.zm.plates = 0;
+    items[item] = use({ item }) && me.zm.pts === p0 - supplyCost(item, R.round);
+  }
+  ok(Object.values(items).every(Boolean), `every item sold at its price (${JSON.stringify(items)})`);
+  ok(E.gear.map(g => g.kind).sort().join() === 'drone,lure,sentry,strike' && me.zm.plates === ZE.plate.hp * ZE.plate.max, 'sentry, drone, lure and strike in play; the vest fills the plates');
+  ok(!use({ item: 'sentry' }), 'one of each a round');
+  // Zombies in front of the sentry and the strike's mark: they take fire.
+  const sentry = E.gear.find(g => g.kind === 'sentry');
+  const tz = R.horde.slice(0, 3);
+  tz.forEach((q, k) => R._raise(q, 0, { x: sentry.x + 5 + k * 0.5, z: sentry.z }));
+  const hp0 = tz.map(q => q.hp);
+  let shots = 0, booms = 0;
+  run(sim, 3, e => { if (e.t === 'turret_shot') shots++; if (e.t === 'explosion') booms++; });
+  ok(shots > 3 && tz.some((q, k) => !q.alive || q.hp < hp0[k]), `the sentry and drone fire (${shots} shots)`);
+  ok(booms >= ZE.supply.strike.shells - 1, `the strike's shells land (${booms})`);
+  // The lure pulls a zombie away from the crew.
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.hp = 0; }
+  const lure = E.gear.find(g => g.kind === 'lure');
+  if (lure) {
+    lure.life = 10;
+    const q = R.horde[8];
+    const spot = { x: (lure.x + me.ps.x) / 2 + 6, z: lure.z };
+    R._raise(q, 0, sim.nav.isWalkable(spot.x, spot.z) ? spot : { x: lure.x + 3, z: lure.z });
+    const d0 = Math.hypot(q.ps.x - lure.x, q.ps.z - lure.z);
+    run(sim, 3);
+    ok(Math.hypot(q.ps.x - lure.x, q.ps.z - lure.z) < d0 || !q.alive, 'a zombie goes for the lure');
+  } else ok(false, 'the lure is in play');
+  // ---- Plates ----
+  E.gear.length = 0;
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.hp = 0; }
+  me.zm.plates = 0;
+  at(L.armour);
+  const p1 = me.zm.pts;
+  ok(usable()?.kind === 'armour' && use() && me.zm.plates === ZE.plate.hp && me.zm.pts === p1 - ZE.plate.cost, 'a plate for 500');
+  use(); use();
+  ok(me.zm.plates === ZE.plate.hp * 3 && usable()?.off && !use(), 'three at most');
+  const claw = R.horde[0];
+  R._raise(claw, 0, { x: me.ps.x + 1, z: me.ps.z });
+  me.hp = 100;
+  sim._damage(me, claw, 40, 'knife', 1);
+  ok(me.hp === 100 && me.zm.plates === ZE.plate.hp * 3 - 40, 'plates take a claw first');
+  me.zm.plates = 10;
+  sim.drainEvents();
+  sim._damage(me, claw, 40, 'knife', 1);
+  ok(Math.abs(me.hp - 70) < 0.01 && me.zm.plates === 0 && sim.drainEvents().some(e => e.t === 'plates_break'), 'the last plate breaks, the rest goes through');
+  claw.alive = false;
+  // ---- Traps ----
+  const T = L.traps[0];
+  me.ps.x = T.sx; me.ps.z = T.sz;
+  me.hp = 100;
+  u = usable();
+  ok(u?.kind === 'trap' && u.cost === ZE.trap.cost, `a trap's switch (${u?.kind})`);
+  const p2 = me.zm.pts;
+  ok(use() && E.traps[0].state === 1 && me.zm.pts === p2 - ZE.trap.cost, 'armed for 1000');
+  ok(usable()?.off && !use(), 'not again while it runs');
+  const victim = R.horde[0];
+  R._raise(victim, 1, { x: T.x, z: T.z });
+  victim.zPace = 0;
+  const p3 = me.zm.pts, k0 = R.killed;
+  run(sim, 2.5);
+  ok(!victim.alive && R.killed === k0 + 1 && me.zm.pts === p3 + ZE.trap.pay, `the trap kills, and pays ${ZE.trap.pay} (got ${me.zm.pts - p3})`);
+  me.ps.x = T.x; me.ps.z = T.z; me.hp = 100; me.zm.plates = 0;
+  run(sim, 1);
+  ok(me.hp < 100 && me.hp > 70 && !me.downed, `a player in it is hurt lightly (${me.hp.toFixed(0)})`);
+  me.ps.x = T.sx; me.ps.z = T.sz;
+  run(sim, ZE.trap.on);
+  ok(E.traps[0].state === 2, 'then it cools down');
+  run(sim, ZE.trap.cool + 0.5);
+  ok(E.traps[0].state === 0 && usable()?.ok, 'and can be armed again');
+  // ---- Perks: the two new machines, the cap, the slot ----
+  me.zm.perks = []; me.zm.limit = ZM.perkLimit;
+  for (const perk of ['iron', 'quick', 'mercy', 'hammer']) { at(L.machines.find(m => m.perk === perk)); use(); }
+  ok(me.zm.perks.length === 4, 'four perks');
+  at(L.machines.find(m => m.perk === 'stride'));
+  u = usable();
+  ok(u?.kind === 'slot' && u.cost === ZM.slotCost, `at the cap a machine sells a perk slot (${u?.kind})`);
+  const p4 = me.zm.pts;
+  ok(use() && me.zm.limit === ZM.perkMax && me.zm.pts === p4 - ZM.slotCost, 'the slot raises the cap to six');
+  ok(use() && me.zm.perks.includes('stride') && me.ps.perks.includes('marathon'), 'Fleetfoot: Marathon\'s sprint');
+  at(L.machines.find(m => m.perk === 'breath'));
+  ok(use() && me.zm.perks.length === 6, 'six perks');
+  // Last Breath: down, up by yourself, perks kept; spent for three rounds.
+  for (const q of R.crew) if (q !== me) { q.alive = false; }
+  const cl = R.horde[1];
+  R._raise(cl, 0, { x: me.ps.x + 1, z: me.ps.z });
+  me.hp = 10; me.zm.plates = 0;
+  sim._damage(me, cl, 500, 'knife', 1);
+  cl.alive = false;
+  ok(me.downed && me.zm.perks.length === 6 && sim.phase !== 'ended', 'Last Breath: down alone, perks kept, not over');
+  run(sim, 3.3);
+  ok(!me.downed && me.alive && me.zm.breathAt === R.round + 3, 'up by yourself; spent for three rounds');
+  for (const q of R.crew) if (q !== me) { sim._placeAt(q, me.ps, 0); q.spawnProtect = 1e9; }
+  R._raise(cl, 0, { x: me.ps.x + 1, z: me.ps.z });
+  sim._damage(me, cl, 500, 'knife', 1);
+  ok(me.downed && me.zm.perks.length === 0, 'spent: an ordinary down loses the perks');
+  cl.alive = false;
+  me.downed = false; me.hp = 100;
+  clearZmWalls(sim.map);
+}
+{
+  // ---- Exfil ----
+  const { ZE, syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  for (const stay of [true, false]) {
+    const sim = makeSim('ashgrove', 41, [{ id: 'me', name: 'Me', team: 0 }]);
+    toLive(sim);
+    const R = sim.rules, L = R.L, E = R.econ, me = R.crew.find(p => !p.isBot);
+    for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+    R.plan = () => {}; R._crewPlan = null;
+    for (const d of L.doors) R.open |= 1 << d.i;
+    syncZmDoors(sim.map, R.open); for (const d of L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+    R._startRound(14); R.spawnT = 999;
+    me.zm.pts = 50000;
+    me.ps.x = L.exfil.x; me.ps.z = L.exfil.z;
+    let u = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+    ok(u?.kind === 'exfil' && u.off && !sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }), 'no exfil before round 15');
+    R._startRound(15); R.spawnT = 999;
+    let ev = [];
+    ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && E.exfil.state === 1 && me.zm.pts === 50000 - ZE.exfil.cost, 'round 15: the exfil is called for its price');
+    if (!stay) { me.ps.x = L.starts[0].x; me.ps.z = L.starts[0].z; }
+    const k0 = R.killed;
+    let extras = 0;
+    run(sim, ZE.exfil.hold * 0.5, e => { ev.push(e); });
+    extras = R.horde.filter(p => p.alive && p.zExtra).length;
+    ok(extras > 3 && R.killed === k0, `a final wave comes (${extras} up, off the round's count)`);
+    if (!stay) {
+      // Nobody needs to beat the wave: the crew stays where it is.
+      for (const z of R.horde) if (z.alive) sim._selfKill(z, 'test');
+    }
+    run(sim, ZE.exfil.hold * 0.5 + 1, e => { ev.push(e); });
+    if (stay) {
+      const esc = ev.find(e => e.t === 'zescape');
+      ok(esc && esc.ids.includes(me.id) && sim.phase === 'ended' && sim.winner === 0, 'on the pad at the end: escaped, the match won');
+      ok(R.view().escaped?.includes(me.id) && R.best === 15, 'the view says who got out');
+      const map2 = { ...MAPS.ashgrove, walls: MAPS.ashgrove.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+      const guest = new Sim({ roster: sim.players.map(p => ({ id: p.id, name: p.name, team: p.team, isBot: p.isBot, ai: p.ai, loadout: p.loadout })), map: map2, seed: 41, mode: 'zm' });
+      const view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor(me.id))), me.id);
+      ok((view.obj ?? view.points.obj).escaped?.includes(me.id), 'a guest sees who got out');
+      clearZmWalls(map2);
+    } else {
+      ok(ev.some(e => e.t === 'zexfil' && e.fail) && E.exfil.state === 0 && sim.phase !== 'ended', 'nobody on the pad: the exfil fails, the match goes on');
+    }
+    clearZmWalls(sim.map);
+  }
+}
+{
+  // ---- The quest: three relics, the altar, the Gravewarden ----
+  const { ZE, ZM_KINDS, syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const sim = makeSim('ashgrove', 43, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, L = R.L, E = R.econ, me = R.crew.find(p => !p.isBot);
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  R._startRound(12); R.spawnT = 999;
+  const use = () => sim.applyCommand(me.id, { cmd: 'zm', act: 'use' });
+  me.ps.x = L.altar.x; me.ps.z = L.altar.z;
+  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.kind === 'altar' && !use(), 'the altar waits for its relics');
+  const got = [];
+  for (const r of L.relics) { me.ps.x = r.x; me.ps.z = r.z; sim.drainEvents(); ok(use(), `relic ${r.i} picked up`); got.push(sim.drainEvents().find(e => e.t === 'zrelic')?.n); }
+  ok(got.join() === '1,2,3' && E.quest.got === 7, `relics counted (${got})`);
+  me.ps.x = L.altar.x; me.ps.z = L.altar.z;
+  ok(use() && E.quest.state === 1, 'set on the altar');
+  run(sim, 1.5);
+  const w = sim.players[E.wardenSeat];
+  ok(w?.alive && w.zk === 4 && w.zMax >= R.hp * ZM.kinds.warden.hp, `the Gravewarden rises (${w?.zMax} hp)`);
+  ok(R.view().boss?.warden, 'its bar shows');
+  const k0 = R.killed, pts = R.crew.map(p => p.zm.pts);
+  let down = null;
+  sim._damage(w, me, w.hp + 10, 'ar', 5);
+  run(sim, 0.1, e => { if (e.t === 'zwarden' && e.state === 2) down = e; });
+  ok(!w.alive && E.quest.state === 2 && down, 'put down: the quest is done');
+  ok(R.killed === k0 && R.crew.every((p, k) => p.zm.pts >= pts[k] + ZE.quest.pts), 'it pays everyone and is off the round count');
+  clearZmWalls(sim.map);
+}
+{
+  // ---- Bots spend in the economy ----
+  const sim = makeSim('neon', 47);
+  toLive(sim);
+  const R = sim.rules;
+  const { syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  for (const d of R.L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of R.L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  for (const p of R.crew) { p.spawnProtect = 1e9; p.zm.pts = 40000; p.zm.perks = ['iron', 'quick', 'mercy', 'hammer']; R._give(p, 'ar'); }
+  R._startRound(9);
+  const kinds = new Set(), items = new Set();
+  run(sim, QUICK ? 100 : 160, e => { if (e.t === 'zbuy') { kinds.add(e.kind); if (e.item) items.add(e.item); } if (e.t === 'zround' && e.round > 9) for (const p of R.crew) p.zm.pts = Math.max(p.zm.pts, 30000); });
+  ok(kinds.has('bench') && kinds.has('armour') && kinds.has('terminal'), `bots upgrade guns, buy plates and use the terminal (${[...kinds]}; items ${[...items]})`);
+  ok(R.crew.some(p => Object.values(p.zm.tiers).some(t => t > 0)), 'a bot holds an upgraded gun');
+  ok(R.crew.some(p => p.zm.limit > ZM.perkLimit), 'a rich bot buys a perk slot');
+  clearZmWalls(sim.map);
+}
+{
+  // ---- Wire and migration: the economy's state reaches a guest and survives a new host ----
+  const humans = [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }];
+  const roster = buildRoster(humans, { mode: 'zm', mapId: 'ruins', seed: 13 });
+  const host = new Sim({ roster, map: 'ruins', seed: 13, mode: 'zm' });
+  host.step(DT); toLive(host);
+  const R = host.rules, E = R.econ, h2 = R.crew.find(p => p.id === 'h2');
+  R._startRound(11);
+  R._give(h2, 'smg'); h2.zm.tiers.smg = 2; h2.zm.plates = 75; h2.zm.limit = ZM.perkMax; h2.zm.perks = ['iron', 'breath'];
+  E.traps[0].state = 1; E.traps[0].timer = 12;
+  E.bench = Object.assign(E.bench, { state: 1, owner: R.crew[0].index, gun: 'ar', tier: 2, timer: 3, slot: 0 });
+  E._supply(h2, 'sentry'); E._supply(h2, 'lure');
+  E.quest.got = 5;
+  const map2 = { ...MAPS.ruins, walls: MAPS.ruins.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+  const guest = new Sim({ roster, map: map2, seed: 13, mode: 'zm' });
+  const snap = host.encodeSnapshotFor('h2');
+  const view = guest.decodeSnapshot(JSON.parse(JSON.stringify(snap)), 'h2');
+  const obj = view.obj ?? view.points.obj, G = guest.rules, g2 = G.crew.find(p => p.id === 'h2');
+  ok(obj.bench.state === 1 && obj.bench.gun === 'ar' && obj.bench.tier === 2, 'guest sees the bench at work');
+  ok(obj.traps[0].state === 1 && Math.abs(obj.traps[0].timer - 12) < 0.2 && obj.gear.length === 2 && obj.quest.got === 5, 'guest sees traps, gear and the quest');
+  const v2 = view.players.find(p => p.id === 'h2');
+  ok(v2.zplates === 75 && v2.zlimit === ZM.perkMax && g2.zm.tiers.smg === 2 && v2.zperks.includes('breath'), 'guest sees plates, the perk cap, gun tiers and the new perks');
+  ok(JSON.stringify(snap).length < 2600, `snapshot with the economy ${JSON.stringify(snap).length} B`);
+  if (guest._restoreMode) {
+    guest.players.forEach((p, i) => { const v = view.players[i]; p.alive = v.alive; p.ps.x = v.x; p.ps.z = v.z; });
+    guest._restoreMode(view);
+    ok(G.econ.bench.state === 1 && G.econ.traps[0].state === 1 && G.econ.gear.length === 2 && G.econ.quest.got === 5, 'a migration keeps the bench, traps, gear and quest');
+    ok(g2.zm.tiers.smg === 2 && g2.zm.plates === 75 && g2.zm.limit === ZM.perkMax, 'and every player\'s tiers, plates and perk cap');
+    // The new host runs it on: the bench finishes, the trap times out.
+    guest.step(DT);
+    for (let i = 0; i < 20 * 60 && G.econ.traps[0].state === 1; i++) { guest.step(DT); guest.drainEvents(); }
+    ok(G.econ.traps[0].state === 2 && G.econ.bench.state !== 1, 'the new host carries on with them');
+  }
+  clearZmWalls(map2); clearZmWalls(host.map);
+}
+{
+  // The save: an escape's round and the Gravewarden per map, through an export code; the calling card.
+  const { recordZmFeat, CARDS, cardsEarned } = await import('../js/shared/progression.js');
+  const s = blankSave();
+  ok(recordZmFeat(s, 'ashgrove', { escaped: 16 }).freshEscape && s.zmFeats.ashgrove[0] === 16, 'an escape recorded');
+  ok(!recordZmFeat(s, 'ashgrove', { escaped: 15 }).freshEscape && s.zmFeats.ashgrove[0] === 16, 'a lower escape keeps the best');
+  const fb = recordZmFeat(s, 'neon', { boss: true });
+  ok(fb.freshBoss && s.zmFeats.neon[1] === 1 && !recordZmFeat(s, 'neon', { boss: true }).freshBoss, 'the Gravewarden flag, once');
+  const back = decodeSave(encodeSave(s));
+  ok(back.ok && back.save.zmFeats.ashgrove[0] === 16 && back.save.zmFeats.neon[1] === 1, 'feats survive an export code');
+  ok(JSON.stringify(sanitizeSave({ zmFeats: { neon: [-1, 'x'], ruins: [2000, 0], __proto__: [1, 1] } }).zmFeats) === '{"neon":[0,1],"ruins":[999,0]}', 'feats sanitised');
+  const card = CARDS.find(c => c.id === 'zm-warden');
+  ok(card && card.need({ zmFeats: s.zmFeats }) && !card.need({ zmFeats: { neon: [12, 0] } }), 'the Gravewarden card follows the flag');
+  void cardsEarned;
+}
+
 // ---- Determinism ----
 section('determinism');
 {

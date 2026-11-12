@@ -39,7 +39,7 @@ export const ZM = {
     warden: { hp: 40, dmg: 110, speed: 0.66, reach: 2.1, windup: 0.75, cool: 1.35 },
   },
   roundMax: 220,                       // Zombies in one round, at most.
-  xp: { kill: 12, head: 4, round: 120, boss: 400 },     // Account XP in place of the usual kill lines (awards.js).
+  xp: { kill: 12, head: 4, round: 120, boss: 400, escape: 2000, escapeRound: 100, warden: 3000 },     // Account XP in place of the usual kill lines (awards.js).
   weaponXp: 0.3,                       // Share of the usual weapon XP a zombie kill pays.
   perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };

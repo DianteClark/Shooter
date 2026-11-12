@@ -1132,6 +1132,8 @@ export const CARDS = [
   card('clean-250', 'Bare Hands', 'Career', '250 equipment-free kills', c => c.clean >= 250, { p: 'plates', c: ['#1e2328', '#4a545e', '#e6ecf2', '#9aa4ad'], e: 'ui:aim' }, c => [c.clean, 250]),
   card('level-30', 'Thirty Up', 'Career', 'Reach level 30', c => c.peakLevel >= 30, { p: 'hazard', c: ['#24180a', '#5c3c14', '#ffd9a0', '#ff9f1c'], e: 'ui:rank' }, c => [c.peakLevel, 30]),
   card('pro-5', 'Pro Shop', 'Career', 'Earn 5 Pro perks', c => c.pro.length >= 5, { p: 'circuit', c: ['#221a08', '#6a5214', '#fff0b8', '#ffd659'], e: 'ui:star', gold: true }, c => [c.pro.length, 5]),
+  // Graveyard Shift's hidden quest (ROADMAP item 36): the Gravewarden put down, on any map.
+  card('zm-warden', 'Lantern Out', 'Career', 'Put down the Gravewarden in Graveyard Shift', c => zmWardenDown(c.zmFeats), { p: 'rays', c: ['#120e1c', '#3a2a5a', '#d8c8ff', '#b070ff'], e: 'ui:skull', gold: true }),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),
@@ -1345,6 +1347,9 @@ export function blankSave() {
     zmBest: {},
     // Finishing moves (docs/FINISHERS.md): the one each operator plays, {operator: finisher id}; unset is the default.
     finishers: {},
+    // Graveyard Shift feats (ROADMAP item 36): per map id [best round escaped on (0 none), Gravewarden put down (0/1)].
+    // Appended; only ever goes up.
+    zmFeats: {},
   };
 }
 
@@ -1359,6 +1364,31 @@ export function cleanZmBest(raw) {
   }
   return out;
 }
+// The Graveyard Shift feats block: {mapId: [escaped round 0..999, boss 0|1]}.
+export function cleanZmFeats(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const k of Object.keys(raw)) {
+    if (UNSAFE_KEYS.has(k) || !idText(k) || Object.keys(out).length >= 64) continue;
+    const v = Array.isArray(raw[k]) ? raw[k] : [];
+    const esc = count(v[0], 999), boss = v[1] ? 1 : 0;
+    if (esc || boss) out[k] = [esc, boss];
+  }
+  return out;
+}
+// Records an escape (the round it was on) and/or the Gravewarden put down on a map: { escaped, boss, freshEscape,
+// freshBoss } (fresh: a new best escape round, a first boss on the map). Mutates the save.
+export function recordZmFeat(save, mapId, { escaped = 0, boss = false } = {}) {
+  const feats = save.zmFeats ??= {};
+  const was = Array.isArray(feats[mapId]) ? feats[mapId] : [0, 0];
+  const esc = count(escaped, 999), b = boss ? 1 : 0;
+  const now = [Math.max(count(was[0], 999), esc), was[1] || b ? 1 : 0];
+  if (idText(mapId) && (now[0] || now[1])) feats[mapId] = now;
+  return { escaped: now[0], boss: !!now[1], freshEscape: esc > count(was[0], 999), freshBoss: !!b && !was[1] };
+}
+// Whether the Gravewarden has gone down on any map (its calling card).
+export const zmWardenDown = feats => isObj(feats) && Object.values(feats).some(v => Array.isArray(v) && v[1]);
+
 // The finisher picks block: known operators to known finisher ids (whether each is still unlocked is read at use).
 export function cleanFinisherPicks(raw) {
   const out = {};
@@ -1426,6 +1456,7 @@ export function sanitizeSave(raw) {
   s.season = cleanSeasonState(raw.season);
   s.zmBest = cleanZmBest(raw.zmBest);
   s.finishers = cleanFinisherPicks(raw.finishers);
+  s.zmFeats = cleanZmFeats(raw.zmFeats);
   return s;
 }
 
@@ -1521,9 +1552,11 @@ function packTail(s) {
   const career = s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? s.career : null;
   const season = s.season && !seasonStateEmpty(s.season) ? s.season : null;
   // [19] Graveyard Shift records (appended): only when there is one, after whatever [17] and [18] say (null for nothing).
-  // [20] finisher picks per operator (docs/FINISHERS.md), the same way. Trailing nothings are left off.
+  // [20] finisher picks per operator (docs/FINISHERS.md), the same way. [21] Graveyard Shift feats (escapes, the
+  // Gravewarden), the same way. Trailing nothings are left off.
   const tail = [career, season, s.zmBest && Object.keys(s.zmBest).length ? s.zmBest : null,
-    s.finishers && Object.keys(s.finishers).length ? s.finishers : null];
+    s.finishers && Object.keys(s.finishers).length ? s.finishers : null,
+    s.zmFeats && Object.keys(s.zmFeats).length ? s.zmFeats : null];
   while (tail.length && tail[tail.length - 1] === null) tail.pop();
   return tail;
 }
@@ -1564,6 +1597,7 @@ function unpack(a) {
     ...(a[18] && typeof a[18] === 'object' && !Array.isArray(a[18]) ? { season: a[18] } : {}),
     ...(a[19] && typeof a[19] === 'object' && !Array.isArray(a[19]) ? { zmBest: a[19] } : {}),
     ...(a[20] && typeof a[20] === 'object' && !Array.isArray(a[20]) ? { finishers: a[20] } : {}),
+    ...(a[21] && typeof a[21] === 'object' && !Array.isArray(a[21]) ? { zmFeats: a[21] } : {}),
   };
 }
 
