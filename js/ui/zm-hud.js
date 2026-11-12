@@ -9,7 +9,7 @@
 import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
+import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
 
 const CSS = `
 .zm-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
@@ -376,7 +376,7 @@ export class ZmHud {
   quietKill(e, view) {
     const t = view?.players?.find(p => p.id === e.target);
     if (!t?.ai) return false;
-    return t.zk < 4;           // The Yardmaster's (4) and the Gravewarden's (5) deaths make the feed.
+    return t.zk !== 4 && t.zk !== 5;     // The Yardmaster's (4) and the Gravewarden's (5) deaths make the feed.
   }
 
   onEvent(e, view) {
@@ -385,7 +385,8 @@ export class ZmHud {
     const name = id => view?.players?.find(p => p.id === id)?.name ?? '';
     switch (e.t) {
       case 'zround': {
-        this.hud.banner(`Round ${e.round}`, e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', 1800, 'enemy');
+        const sp = ZM_ROUND_NAMES[e.special];     // A special round: its own banner (js/sim/zm-kinds.js).
+        this.hud.banner(sp ? `Round ${e.round}: ${sp[0]}` : `Round ${e.round}`, sp ? sp[1] : e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', sp ? 2600 : 1800, 'enemy');
         const z = objOf(view);
         if (e.round === 1 && z?.layout?.power && !z.power) this.hud.notify(`Power out: the switch is in the ${z.layout.bands[z.layout.power.band]?.name ?? 'yard'}`);
         break;

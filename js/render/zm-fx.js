@@ -11,12 +11,15 @@
 //   drops      power-ups spinning on the ground (instanced)
 //   economy    the upgrade bench, the supply terminal, the armour bench, traps, the exfil pad, the quest and the
 //              terminal's gear: js/render/zm-econ-fx.js (about sixteen more)
+//   specials   acid globs, landing marks and puddles, Shieldbearers' shields, bursts, the fog round: zm-kinds-fx.js
+//              (five more, instanced; the fog only on a fog round)
 // About eleven draw calls whatever the round, a few hundred triangles each (docs/BR-PERF.md: no per-zombie cost).
 import * as THREE from 'three';
 import { getGun } from './guns.js';
 import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS } from '../shared/zombies.js';
 import { ZmPowerFx } from './zm-power.js';     // A layout with a power switch (Ashgrove Halt): the switch, dark machines.
 import { ZmEconFx } from './zm-econ-fx.js';     // ROADMAP item 36: bench, terminal, armour, traps, exfil, quest, gear.
+import { ZmKindsFx } from './zm-kinds-fx.js';   // Specials: acid globs and puddles, shields, bursts, the fog round.
 
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), E = new THREE.Euler(), C = new THREE.Color();
 const DROP_MAX = 8;
@@ -183,7 +186,10 @@ export class ZmFx {
     this.t = 0;
     this.power = L.power ? new ZmPowerFx(this.group, L, this) : null;
     this.econ = new ZmEconFx(this.group, L);
+    this.kinds = new ZmKindsFx(this.group);
   }
+
+  onEvent(ev) { this.kinds.onEvent(ev); }
 
   update(view, dt) {
     const obj = view.obj ?? view.points?.obj;
@@ -191,6 +197,7 @@ export class ZmFx {
     this.t += dt;
     this.power?.update(obj, dt);
     this.econ.update(obj, dt);
+    this.kinds.update(view, obj, dt);
     const L = this.L;
     // Gates.
     L.doors.forEach((d, i) => {

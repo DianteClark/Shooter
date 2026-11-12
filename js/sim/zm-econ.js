@@ -18,7 +18,7 @@
 import { WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { ZM, ZE, ZM_KINDS, ZM_TRAP_KINDS, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, supplyCost, roundMix } from '../shared/zombies.js';
+import { ZM, ZE, ZM_KINDS, ZM_TRAP_KINDS, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, supplyCost, roundMix, isBossKind } from '../shared/zombies.js';
 import { brArm } from './br.js';
 import { zmTierDef } from './zm-phone.js';
 
@@ -355,7 +355,7 @@ export class ZmEcon {
 
   // Damage worth `k` of a round's health (a boss or the Gravewarden takes `boss` of its own).
   _share(q, k, boss) {
-    return q.zk >= 3 ? Math.max(1, (q.zMax ?? 1) * boss) : Math.max(1, this.R.hp * k);
+    return isBossKind(q.zk) ? Math.max(1, (q.zMax ?? 1) * boss) : Math.max(1, this.R.hp * k);
   }
 
   _blast(owner, x, z, r, k, boss, streak, weapon) {
@@ -392,7 +392,7 @@ export class ZmEcon {
       const T = this.L.traps[i], by = sim.players[t.by] ?? R.crew[0];
       for (const q of R.horde) {
         if (!q.alive || Math.hypot(q.ps.x - T.x, q.ps.z - T.z) > T.r) continue;
-        const dmg = q.zk >= 3 ? (q.zMax ?? 1) * ZE.trap.boss * step : R.hp * ZE.trap.dps * step;
+        const dmg = isBossKind(q.zk) ? (q.zMax ?? 1) * ZE.trap.boss * step : R.hp * ZE.trap.dps * step;
         sim._damage(q, by, dmg, 'knife', 0, 'ztrap');
       }
       const claw = R.horde[0];
@@ -465,7 +465,7 @@ export class ZmEcon {
     q.respawnT = 1;
     // A seat for it: a free one, else an ordinary zombie sinks (its place in the round comes back later).
     if (!R.horde.some(p => !p.alive && (p.zFree ?? 0) <= sim.time)) {
-      const s = R.horde.find(p => p.alive && p.zk < 3);
+      const s = R.horde.find(p => p.alive && !isBossKind(p.zk));
       if (s) { R._sink(s); s.zFree = sim.time; }
     }
     const spot = R._bossSpot() ?? this._nearAltar() ?? R._riser();

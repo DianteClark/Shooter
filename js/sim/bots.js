@@ -1012,7 +1012,8 @@ export class BotBrain {
       // Tunnel vision: busy with one enemy, a weaker player does not take in the next.
       if (!tracking && !noisy && this.targetVisible && sameTarget?.alive && q !== sameTarget && sim.rng() < S.tunnel) continue;
       // A downed enemy is finished off, but only once nobody standing is a threat.
-      const score = d - (tracking ? 4 : 0) + q.hp * 0.03 + (q.downed ? 14 : 0);
+      // Graveyard Shift: Bloaters popped while still far, shields facing us left for later (js/sim/zm-kinds.js).
+      const score = d - (tracking ? 4 : 0) + q.hp * 0.03 + (q.downed ? 14 : 0) + (this.kite && q.zk != null ? sim.rules?.kinds?.score(q, ps, d) ?? 0 : 0);
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
       if (S.callouts && !sim.ffa && sim.time - sim.calledAt[p.team][q.index] > CALLOUT_GAP) this._callOut(q);
     }
@@ -2103,8 +2104,9 @@ export class BotBrain {
     if (!this.canHit && !holdingPoint) fwd = 1;
     // Overpeeking: a weaker player walks out of the angle it was holding, toward what it saw.
     else if (atHold && this.overpeek && !holdingPoint) fwd = 1;
-    // Graveyard Shift (js/sim/zombies.js sets `kite`): against a melee horde, backpedal from anyone inside it.
-    else if (this.kite && d < this.kite) fwd = -1;
+    // Graveyard Shift (js/sim/zombies.js sets `kite`): against a melee horde, backpedal from anyone inside it, and
+    // further from a Bloater (its burst reaches ZM_BLAST.r).
+    else if (this.kite && d < (q.zk === 6 ? 6.5 : this.kite)) fwd = -1;
     else if (!atHold) {
       // A close gun wants to be at its distance, not near it; a long gun gives ground to anyone inside its own.
       if (d > style.pref + (style.rush ? 1 : 4)) fwd = 1;
@@ -2117,6 +2119,8 @@ export class BotBrain {
       this.strafeDir = sim.rng() < S.strafe ? (sim.rng() < 0.5 ? -1 : 1) : 0;
     }
 
+    // A Shieldbearer's shield facing this bot: walk round it, one way, and keep going until the flank is open.
+    if (this.kite && sim.rules?.kinds?.facing(q, ps)) { this.strafeDir = this.flankDir ||= (p => (p.index & 1 ? 1 : -1))(this.p); if (fwd > 0) fwd = 0.3; }
     let mx = ux * fwd - uz * this.strafeDir, mz = uz * fwd + ux * this.strafeDir;
     const len = Math.hypot(mx, mz);
     if (len > 1) { mx /= len; mz /= len; }
@@ -2291,6 +2295,12 @@ export class BotBrain {
       I.mx += this.sepX * 0.5; I.mz += this.sepZ * 0.5;
       const len = Math.hypot(I.mx, I.mz);
       if (len > 1) { I.mx /= len; I.mz /= len; }
+    }
+
+    // Graveyard Shift: off the acid (a Spitter's puddle, or where its glob is about to land).
+    if (this.kite) {
+      const off = sim.rules?.kinds?.dodge(ps);
+      if (off) { I.mx = off.x; I.mz = off.z; I.sprint = false; }
     }
 
     if (this.escapeT > 0) {
