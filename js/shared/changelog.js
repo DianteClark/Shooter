@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Bug sweep',
+    items: [
+      'Graveyard Shift is harder after round 10: tougher, faster and harder-hitting undead, more runners and brutes, quicker spawns, tougher bosses, and a longer, rougher exfil. Rounds 1 to 10 are unchanged. Each extra player in the crew adds more undead with more health.',
+      'Graveyard Shift pays less XP for a long run (about three long multiplayer matches at most), and guns level more slowly there: no more maxing a gun in one run.',
+      'Graveyard Shift results show the round you reached ("Round 18"), the record panel no longer spills out of its box, and an escape no longer ends on a final kill replay.',
+      'Graveyard Shift: if the host leaves, everyone keeps their points, perks, armour plates and upgraded guns.',
+      'Playing with a controller, the Buy, Take and Jump buttons stay where they belong instead of jumping to the top of the screen.',
+      'Headquarters: the HQ marker no longer sits on top of the "Defend your HQ" plate.',
+      'Showdown: no stray marker in the top-left corner, and no empty scorestreak tiles. One in the Chamber and the infected lose the empty tiles too.',
+    ],
+  },
+  {
     build: '1111-33', date: '2026-11-12', title: 'Weapon balance after the new attachments',
     items: [
       'Toned down: Kestrel (slower, one-shot range 18 m, a touch slower to aim), Bulwark, Millrace, Gantry, Tallyman, Kiln and Monolith (all fire a little slower).',
