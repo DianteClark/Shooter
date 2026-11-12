@@ -140,19 +140,19 @@ export const BR = {
 // Rebound numbers (modes with `rebound`; js/sim/br.js). Everything else is BR's.
 //   area      the playable part of the BR map: a circle of this radius (metres), placed by the seed where the named
 //             places are thickest (reboundArea in js/sim/br.js). It is the first circle; the transport crosses it.
-//   phases    as BR.phases, but `k` is the circle's radius as a share of the area's. About 7.5 minutes of circle.
+//   phases    as BR.phases, but `k` is the circle's radius as a share of the area's. About 9 minutes of circle.
 //   redeploy  seconds dead before you parachute back in near a squadmate, by circle phase (longer later on).
 //   redeployEnd  no redeploy for a death from this phase on (circle redeployEnd + 1, counted from 1, on screen).
 //   kit       what a redeploy brings: a gun of this rarity at most, a sidearm, and this much armor.
 export const RB = {
   area: 150,
   phases: [
-    { wait: 65, shrink: 40, k: 0.68, dps: 3 },
-    { wait: 55, shrink: 35, k: 0.46, dps: 5 },
-    { wait: 50, shrink: 30, k: 0.31, dps: 8 },
-    { wait: 45, shrink: 30, k: 0.19, dps: 12 },
-    { wait: 40, shrink: 25, k: 0.1, dps: 16 },
-    { wait: 30, shrink: 35, k: 0, dps: 22 },
+    { wait: 75, shrink: 45, k: 0.68, dps: 3 },
+    { wait: 65, shrink: 40, k: 0.46, dps: 5 },
+    { wait: 60, shrink: 35, k: 0.31, dps: 8 },
+    { wait: 55, shrink: 30, k: 0.19, dps: 12 },
+    { wait: 50, shrink: 25, k: 0.1, dps: 16 },
+    { wait: 35, shrink: 35, k: 0, dps: 22 },
   ],
   redeploy: [12, 15, 20, 25],
   redeployEnd: 4,

@@ -9,7 +9,7 @@
 // Round flow as in Control: 'freeze' (sim phase 'warmup', everyone held at their end), 'live', 'post'. The pairs swap
 // ends with each new kit. Events: {t:'gf', kind:'round'|'go'|'overtime'|'end', ...}. A phone applies the 'round' event
 // (match.js calls rules.event) before the spawns that follow it, so it deals the new kit.
-import { MAX_HP, PRIMARY_IDS, SECONDARY_IDS, WEAPON_CATEGORY, GOLDEN_ID } from '../shared/constants.js';
+import { PRIMARY_IDS, SECONDARY_IDS, WEAPON_CATEGORY, GOLDEN_ID } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { botAttachments } from './bots.js';
 import { alive, chaseObjective, decodeStats, encodeStats, restoreStats, walkable, zoneObjective } from './mode-kit.js';
@@ -227,7 +227,7 @@ export class GfRules {
     if (!foes.length) return;
     const elapsed = sim.timeLimit - sim.timeLeft;
     crew.forEach((b, i) => {
-      const p = b.player ?? sim.players.find(q => q.bot === b);
+      const p = b.p;
       if (!p) return;
       // The opening: walk up toward the middle, partners a few metres apart.
       if (elapsed < 6 + (this.round % 3)) {
@@ -300,4 +300,3 @@ export class GfRules {
   }
 }
 
-export { MAX_HP };

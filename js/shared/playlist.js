@@ -24,7 +24,7 @@ export const HARDCORE_DAMAGE = 3;
 // Modifiers that cannot be played together: the later one in a list wins.
 const EXCLUSIVE = [['snipers', 'melee']];
 // Rule sets that deal every gun themselves.
-const DEALT = new Set(['gun', 'oic', 'inf']);
+const DEALT = new Set(['gun', 'oic', 'inf', 'gf']);
 const SNIPERS = Object.keys(WEAPONS).filter(id => WEAPONS[id].category === 'Sniper');
 const BLADE = 'knife', SLEDGE = 'maul';
 

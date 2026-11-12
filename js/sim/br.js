@@ -92,6 +92,7 @@ const RB_DWELL = 60;
 const RB_JOIN = 0.6;
 const RB_ALERT = -1;
 const RB_CALM_SIGHT = 0.6;     // Sight and notice kept by a calm Rebound squad (someone waiting to land, or the last two).
+const RB_CALM_SQUADS = 3;
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
 const HOLD_GAP = 40;            // Metres a squad's hold keeps from another squad's.
@@ -1280,8 +1281,8 @@ export class BrRules {
     let fight = plan.fight && sim.time - plan.fight.t < NOISE_KEEP ? plan.fight : null;
     // Rebound: keener from the start, but a squad with someone waiting to redeploy keeps out of trouble until they land.
     const waiting = this.rb && sim.players.some(q => q.team === team && !q.alive && q.br?.redeployT > 0);
-    // The last two squads of a Rebound sit tight and let the circle bring them together.
-    const calm = this.rb && (waiting || (this.state !== 'final' && this._squadsIn().size <= 2));
+    // The last few squads of a Rebound sit tight and let the circle bring them together.
+    const calm = this.rb && (waiting || (this.state !== 'final' && this._squadsIn().size <= RB_CALM_SQUADS));
     const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1) * (this.rb ? (calm ? 0 : RB_JOIN) : 1);
     if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= (this.rb ? 1 : 3)) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
       const reach = THIRD_PARTY * Math.min(0.7, 0.4 + this.phase * 0.1);

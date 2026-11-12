@@ -187,6 +187,7 @@ export class Match {
       // Modes overhaul: a side change (Infected) keeps this device's codec right before the spawn that follows it, and
       // a One in the Chamber kill hands the bullet back to the phone that owns the gun.
       if (e.t === 'team') { const p = this.sim.byId.get(e.id); if (p) p.team = e.team; }
+      if (e.t === 'gf') this.sim.rules?.event?.(e);     // Showdown: the round's kit, before its spawns.
       if (e.t === 'ammo' && e.id === this.localId) this.ps.ammo[e.slot ?? 0] = Math.min(e.max ?? 99, this.ps.ammo[e.slot ?? 0] + e.add);
       if (e.t === 'dazed' && e.id === this.localId) applyDaze(this.ps, e.amount, e.dur);   // Stun, Gas, Shock slow you.
       if (e.t === 'rejoin' && e.oldId !== e.id) this.#rebind(e);   // A newcomer took an open slot.
