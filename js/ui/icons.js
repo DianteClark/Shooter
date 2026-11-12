@@ -444,6 +444,8 @@ const SQUARE = {
 
   // ---- Extraction (docs/EXTRACT.md): the mode, its contracts, and the items only it pays for. ----
   'mode:ex': { f: [P(6, 9, 20, 9, 26, 12, 26, 16, 22, 18, 9, 18, 6, 15), R(2, 4, 28, 2.4, 1), R(14.8, 6, 2.4, 3), R(9, 20, 3, 4), R(19, 20, 3, 4), R(6, 23.5, 20, 2.4, 1)], h: [P(19, 11, 23.5, 12.5, 23.5, 14.5, 19, 14.5)], a: [P(13, 27, 19, 27, 16, 31)] },
+  // Graveyard Shift (docs/ZOMBIES.md): a headstone, and a hand coming up out of the ground beside it.
+  'mode:zm': { f: [R(7, 5, 16, 21, [8, 8, 1, 1]), R(2, 26, 28, 3, 1)], h: [R(13.8, 9, 2.4, 11), R(10, 12, 10, 2.4)], a: [P(25, 26, 25, 19, 26.3, 15, 27.3, 18.5, 28.3, 14.5, 29.3, 18.5, 30, 19.5, 30, 26)] },
   'ex:intel': { f: [R(3, 10, 26, 17, 2), P(11, 10, 11, 6, 13, 4, 19, 4, 21, 6, 21, 10, 18.5, 10, 18.5, 6.8, 13.5, 6.8, 13.5, 10)], h: [R(3, 16, 26, 1.8)], a: [R(14, 14, 4, 5, 1)] },
   'ex:hvt': { f: [O(16, 16, 12.5)], h: [O(16, 16, 9.5)], b: [O(16, 16, 9.5)], s: [P(16, 1, 16, 9), P(16, 23, 16, 31), P(1, 16, 9, 16), P(23, 16, 31, 16)], a: [O(16, 16, 3.4)], sw: 3 },
   'ex:cache': { f: [R(3, 11, 26, 17, 1.5)], h: [R(6, 14, 20, 1.8), R(6, 22, 20, 1.8)], a: [R(12.5, 4, 7, 9, 1), R(15, 1, 2, 3)] },
@@ -465,7 +467,7 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry',
   'map:range': 'ui:aim', range: 'ui:aim',
