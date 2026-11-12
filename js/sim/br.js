@@ -191,7 +191,7 @@ export function brAmmo(ps, slot, n) {
 export const HANDS = { keep: -1, fists: 2, dry: 3 };
 export function brUsable(def, ammo, res, pouch = null) {
   if (!def || def.id === KNIFE || def.melee) return false;
-  if (ammo > 0 || res > 0 || def.unlimitedReserve) return true;
+  if (ammo > 0 || res > 0) return true;        // (An unlimited reserve shows as 999; rounds are what the fall-through swaps on.)
   const t = AMMO_TYPES.indexOf(ammoOf(def.id));
   return t >= 0 && (pouch?.[t] ?? 0) > 0;
 }
