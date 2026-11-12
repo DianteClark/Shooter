@@ -28,7 +28,7 @@
 // {t:'revive', id, by}, {t:'bruse', id, kind, done?}, {t:'brplate', id, broke?}, {t:'brsquad', team, place},
 // {t:'brphase', phase, state}, {t:'brping', id, team, x, z}.
 
-import { BR, MODES } from '../shared/modes.js';
+import { BR, MODES, RB } from '../shared/modes.js';
 import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { LETHALS, TACTICALS } from '../shared/catalog.js';
@@ -86,6 +86,11 @@ const HOT_DROP = [0, 0.02, 0.03, 0.04, 0.04];
 const DROP_GAP = 120;
 const JOIN_FIGHT = [0, 0.03, 0.08, 0.1, 0.08, 0.06, 0.06];   // Calm early (loot and rotate first); late on, squads mostly hold.
 const LOOT_DWELL = 50;
+// Rebound bots (docs/BR.md "Rebound"): squads land closer together, settle in sooner and fight more.
+const RB_DROP_GAP = 80;
+const RB_DWELL = 40;
+const RB_JOIN = 1;
+const RB_ALERT = -1;
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
 const HOLD_GAP = 40;            // Metres a squad's hold keeps from another squad's.
@@ -230,6 +235,28 @@ export function flightLine(W, H, a, u, lane, pois = []) {
   return { from: { x: cx - ca * half, z: cz - sa * half }, to: { x: cx + ca * half, z: cz + sa * half }, off: off / W };
 }
 
+// Rebound's playable area for a seed: a circle of RB.area metres on the map, centred where the named places are
+// thickest (tier 1 counts 3, tier 2 counts 2, tier 3 counts 1, a place counted while its middle is 12 m or more inside).
+// The seed picks among the four best centres on a 20 m grid that keeps the whole circle on the map. Pure: every phone
+// gets the same area from the match seed.
+export function reboundArea(map, seed) {
+  const R = Math.min(RB.area, Math.min(map.width, map.height) / 2 - 4), pois = map.br?.pois ?? [];
+  const cands = [];
+  for (let x = R; x <= map.width - R + 0.1; x += 20) {
+    for (let z = R; z <= map.height - R + 0.1; z += 20) {
+      let s = 0;
+      for (const q of pois) if (Math.hypot(q.x - x, q.z - z) < R - 12) s += q.tier === 1 ? 3 : q.tier === 2 ? 2 : 1;
+      cands.push({ x, z, s });
+    }
+  }
+  cands.sort((a, b) => b.s - a.s || a.x - b.x || a.z - b.z);
+  // The four best, kept 60 m apart so the pick is a real choice of region.
+  const top = [];
+  for (const c of cands) { if (top.every(t => Math.hypot(t.x - c.x, t.z - c.z) >= 60)) top.push(c); if (top.length === 4) break; }
+  const pick = top[Math.floor(mulberry32((seed ^ 0x5eb0d) >>> 0)() * top.length)] ?? { x: map.width / 2, z: map.height / 2 };
+  return { x: pick.x, z: pick.z, r: R };
+}
+
 // A downed player's stick: a crawl, no trigger, no sprint, no slide, no equipment.
 export function downedInput(input) {
   input.mx *= BR.crawl; input.mz *= BR.crawl;
@@ -247,13 +274,24 @@ export class BrRules {
     this.def = def;
     this.squad = MODES[sim.modeId]?.squad ?? 4;
     this.downs = this.squad > 1;
+    // Rebound (docs/BR.md "Rebound"): a part of the map, its own circles, and redeploys while a squadmate is up.
+    this.rb = MODES[sim.modeId]?.rebound ? RB : null;
+    this.area = this.rb ? reboundArea(map, seed) : null;
+    this.phases = this.rb ? RB.phases : BR.phases;
+    this.phR = this.phases.map(ph => (this.rb ? ph.k * this.area.r : ph.r * map.width));     // Each phase's radius, metres.
     this.authority = false;          // Set on the first host step; a guest's copy only mirrors.
     const rng = mulberry32((seed ^ 0x6b7a11) >>> 0);
     this.lootRng = rng;
     // Flight line: the map's own, or a random heading through the middle, a third or near an edge (flightLine).
     const W = map.width, H = map.height;
     let from, to;
-    if (def.drop) { from = def.drop.from; to = def.drop.to; }
+    if (this.area) {
+      // Rebound: a line across the area, never far off its middle (two draws from the loot rng, as below).
+      const a = rng() * Math.PI * 2, u = rng(), A = this.area, half = A.r + BR.planeOver;
+      const off = (u - 0.5) * 0.5 * A.r, ca = Math.cos(a), sa = Math.sin(a);
+      const cx = A.x - sa * off, cz = A.z + ca * off;
+      from = { x: cx - ca * half, z: cz - sa * half }; to = { x: cx + ca * half, z: cz + sa * half };
+    } else if (def.drop) { from = def.drop.from; to = def.drop.to; }
     else {
       // Two draws from the loot rng as before (the loot table is unchanged); the lane comes from its own rng.
       const a = rng() * Math.PI * 2, u = rng();
@@ -263,12 +301,12 @@ export class BrRules {
     this.t = 0;                      // Seconds since the transport set off.
     // Circle: starts around the whole map, shrinks phase by phase toward centres chosen as it goes (host).
     const R0 = Math.hypot(W, H) / 2 + 6;
-    this.circle = { x: W / 2, z: H / 2, r: R0 };
+    this.circle = this.area ? { ...this.area } : { x: W / 2, z: H / 2, r: R0 };
     this.from = { ...this.circle };
-    this.next = { x: W / 2, z: H / 2, r: BR.phases[0].r * W };
+    this.next = { x: this.circle.x, z: this.circle.z, r: this.phR[0] };
     this.phase = 0;
     this.state = 'wait';             // 'wait' | 'shrink' | 'final'
-    this.timer = BR.phases[0].wait;
+    this.timer = this.phases[0].wait;
     this.nextChosen = false;
     // Loot.
     this.items = [];                 // By id; removed ones are null.
@@ -295,6 +333,7 @@ export class BrRules {
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
     V.circle = { ...this.circle }; V.next = { ...this.next }; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.items = this.items; V.t = this.t; V.squad = this.squad;
+    V.area = this.area; V.rebound = this.rb; V.phases = this.phases.length;
   }
 
   // ---- Loot table ----
@@ -407,7 +446,7 @@ export class BrRules {
   }
 
   // Fists in one hand, a common sidearm with two magazines in the other.
-  _startKit(p) {
+  _startKit(p, redeploy = false) {
     const ps = p.ps;
     ps.tacticalLeft = 0; ps.lethalLeft = 0;
     ps.perks = []; ps.pro = [];
@@ -418,9 +457,22 @@ export class BrRules {
     ps.slot = 0; ps.weapon = KNIFE;
     p.primary = KNIFE;
     p.kits[0] = NO_ATTACHMENTS; p.kits[1] = NO_ATTACHMENTS;
-    p.camo = this._camo(p, KNIFE);
+    if (redeploy) {
+      // Rebound: a redeploy brings a common or uncommon long gun (no launchers or sniper rifles) with two spare magazines.
+      let g;
+      for (let i = 0; i < 8; i++) {
+        g = this._rollGun(this.sim.rng, 3);
+        const cat = WEAPON_CATEGORY[WEAPON_IDS[g.v]];
+        if (cat !== 'Launcher' && cat !== 'Sniper' && cat !== 'Pistol') break;
+      }
+      const id = WEAPON_IDS[g.v], r = Math.min(g.r, this.rb.kitRarity), kit = r ? g.kit : NO_ATTACHMENTS, def = brDef(id, kit, r);
+      p.br.guns[0] = { id, r, kit };
+      brArm(ps, 0, id, kit, r, def.magazine, def.magazine * 2);
+      ps.slot = 0; ps.weapon = id; p.primary = id; p.kits[0] = kit;
+    }
+    p.camo = this._camo(p, ps.weapon);
     ps.camo = p.camo;
-    if (!p.isBot) this.sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p) });
+    if (!p.isBot) this.sim._emit({ t: 'brinv', id: p.id, guns: this._invGuns(p), ...(redeploy ? { air: 2, glideT: BR.glide } : {}) });
   }
 
   // A floor gun wears the player's own camo for that gun if they have one, else none.
@@ -542,7 +594,8 @@ export class BrRules {
     this._stepCircle(dt);
     const outside = this._dps();
     for (const p of sim.players) {
-      if (!p.alive || !p.br) continue;
+      if (!p.br) continue;
+      if (!p.alive) { if (p.br.redeployT > 0) this._stepRedeploy(p, dt); continue; }
       const b = p.br;
       if (p.brAir === 1) {
         // A bot in a human's squad goes out a moment after its human does.
@@ -581,7 +634,61 @@ export class BrRules {
     if (this.log.length > 4000) this.log.splice(0, this.log.length - 4000);
   }
 
-  _inMap(pos) { return pos.x > 8 && pos.z > 8 && pos.x < this.sim.map.width - 8 && pos.z < this.sim.map.height - 8; }
+  _inMap(pos) {
+    if (this.area && Math.hypot(pos.x - this.area.x, pos.z - this.area.z) > this.area.r - 6) return false;
+    return pos.x > 8 && pos.z > 8 && pos.x < this.sim.map.width - 8 && pos.z < this.sim.map.height - 8;
+  }
+
+  // ---- Rebound: redeploys ----
+
+  // Whether a death now earns a redeploy: Rebound, a squadmate still up, and the circle not yet past the cut-off.
+  _canRedeploy(p) {
+    return !!this.rb && this.phase < this.rb.redeployEnd && this.state !== 'final' && !this.squadsOut.has(p.team) && this._aliveInSquad(p);
+  }
+
+  _stepRedeploy(p, dt) {
+    const b = p.br;
+    if (this.squadsOut.has(p.team) || this.sim.phase !== 'live') { b.redeployT = 0; return; }
+    if (p.away) return;                       // A held slot waits for its phone; it goes in once it is back.
+    b.redeployT = Math.max(0, b.redeployT - dt);
+    if (b.redeployT <= 0) this._redeploy(p);
+  }
+
+  // Back in: on the parachute over a squadmate who is up (the one with the fewest enemies near), with a common gun, a
+  // sidearm and a plate's armor. Everything else the player carried dropped where they died.
+  _redeploy(p) {
+    const sim = this.sim, rng = sim.rng;
+    let mate = null, best = Infinity;
+    for (const q of sim.players) {
+      if (q === p || q.team !== p.team || !q.alive) continue;
+      let foes = 0;
+      for (const e of sim.players) if (e.alive && e.team !== q.team && Math.hypot(e.ps.x - q.ps.x, e.ps.z - q.ps.z) < 35) foes++;
+      const s = foes * 10 + (q.brAir ? 5 : 0) + (q.downed ? 3 : 0) + rng();      // A downed mate will do: land and pick them up.
+      if (s < best) { best = s; mate = q; }
+    }
+    if (!mate) { p.br.redeployT = 0; return; }
+    // Land a few metres off the mate, pulled inside the circle; set off 40 m back along a random line.
+    const c = this.circle, a = rng() * Math.PI * 2, r = 5 + rng() * 6;
+    let lx = mate.ps.x + Math.cos(a) * r, lz = mate.ps.z + Math.sin(a) * r;
+    const dc = Math.hypot(lx - c.x, lz - c.z);
+    if (dc > c.r * 0.9 && dc > 1) { const k = (c.r * 0.9) / dc; lx = c.x + (lx - c.x) * k; lz = c.z + (lz - c.z) * k; }
+    const land = this._walkable(lx, lz);
+    const W = sim.map.width, H = sim.map.height, b0 = rng() * Math.PI * 2;
+    const sx = Math.max(4, Math.min(W - 4, land.x + Math.cos(b0) * 40)), sz = Math.max(4, Math.min(H - 4, land.z + Math.sin(b0) * 40));
+    const keep = p.br;
+    sim._placeAt(p, { x: sx, z: sz }, Math.atan2(land.z - sz, land.x - sx));
+    p.spawnProtect = 0;
+    p.downed = false;
+    p.brAir = 2;
+    p.br = {
+      armor: this.rb.kitArmor, plates: 0, meds: 0, kits: 0, guns: [null, null], useK: null, useT: 0, useDur: 0,
+      reviveT: 0, downedBy: null, downWeapon: null, out: false, place: 0, dmg: keep.dmg, revives: keep.revives, knocks: keep.knocks,
+      pouch: [0, 0, 0, 0, 0], stash: null, glideT: BR.glide, deathT: keep.deathT, jumpAt: 0, dropX: land.x, dropZ: land.z,
+      follow: null, landed: false, redeployT: 0, redeploys: (keep.redeploys ?? 0) + 1,
+    };
+    this._startKit(p, true);
+    sim._emit({ t: 'brredeploy', id: p.id, by: mate.id, x: Math.round(land.x), z: Math.round(land.z) });
+  }
 
   _land(p) {
     const sim = this.sim, ps = p.ps;
@@ -606,7 +713,7 @@ export class BrRules {
     if (!this.nextChosen) this._chooseNext();
     if (this.plane.f < 1) return;          // The first wait starts once the transport has crossed.
     this.timer -= dt;
-    const ph = BR.phases[this.phase];
+    const ph = this.phases[this.phase];
     if (this.state === 'shrink') {
       const k = Math.max(0, Math.min(1, 1 - this.timer / ph.shrink));
       this.circle.x = this.from.x + (this.next.x - this.from.x) * k;
@@ -621,8 +728,8 @@ export class BrRules {
     } else {
       this.circle = { ...this.next };
       this.phase++;
-      if (this.phase >= BR.phases.length) { this.state = 'final'; this.phase = BR.phases.length - 1; this.timer = 0; }
-      else { this.state = 'wait'; this.timer = BR.phases[this.phase].wait; this.nextChosen = false; this._chooseNext(); }
+      if (this.phase >= this.phases.length) { this.state = 'final'; this.phase = this.phases.length - 1; this.timer = 0; }
+      else { this.state = 'wait'; this.timer = this.phases[this.phase].wait; this.nextChosen = false; this._chooseNext(); }
     }
     this.sim._emit({ t: 'brphase', phase: this.phase, state: this.state });
     void W;
@@ -631,7 +738,7 @@ export class BrRules {
   // The next circle sits wholly inside this one, drawn toward the map's weighted places and kept on walkable ground.
   _chooseNext() {
     const sim = this.sim, W = sim.map.width, H = sim.map.height, rng = sim.rng;
-    const r = BR.phases[this.phase].r * W;
+    const r = this.phR[this.phase];
     const cur = this.circle;
     const room = Math.max(0, Math.min(cur.r, Math.hypot(W, H) / 2) - r);
     let best = null, bestScore = -Infinity;
@@ -652,9 +759,20 @@ export class BrRules {
     this.nextChosen = true;
   }
 
-  _dps() { return BR.phases[Math.min(this.phase, BR.phases.length - 1)].dps * (this.state === 'final' ? 1.4 : 1); }
+  _dps() { return this.phases[Math.min(this.phase, this.phases.length - 1)].dps * (this.state === 'final' ? 1.4 : 1); }
 
   // ---- Downs, revives, deaths ----
+
+  // Rebound: a squadmate on the field (up or down), or one waiting to redeploy.
+  _aliveInSquad(p) {
+    for (const q of this.sim.players) if (q !== p && q.team === p.team && q.alive) return true;
+    return false;
+  }
+  _waitingInSquad(p) {
+    if (!this.rb) return false;
+    for (const q of this.sim.players) if (q !== p && q.team === p.team && !q.alive && q.br?.redeployT > 0) return true;
+    return false;
+  }
 
   _upInSquad(p, except = null) {
     for (const q of this.sim.players) if (q !== p && q !== except && q.team === p.team && q.alive && !q.downed) return true;
@@ -665,7 +783,8 @@ export class BrRules {
 
   // Called by the sim when damage would kill. True when the player goes down instead.
   tryDown(p, attacker, weapon) {
-    if (!this.downs || p.downed || !this._upInSquad(p)) return false;
+    // Rebound: a squadmate on the way back in can still pick you up.
+    if (!this.downs || p.downed || !(this._upInSquad(p) || this._waitingInSquad(p))) return false;
     const sim = this.sim;
     p.downed = true;
     p.hp = BR.downHp;
@@ -732,7 +851,12 @@ export class BrRules {
     p.br.deathT = this.t;
     p.ps.firingT = 0;
     this._dropAll(p);
-    if (!this._upInSquad(p)) {
+    if (this._canRedeploy(p)) {
+      p.br.redeployT = this.rb.redeploy[Math.min(this.phase, this.rb.redeploy.length - 1)];
+      sim._emit({ t: 'brwait', id: p.id, secs: p.br.redeployT });
+    } else p.br.redeployT = 0;
+    // Out once nobody is up (Rebound: and nobody on the way back in to pick them up, or nobody left on the field at all).
+    if ((!this._upInSquad(p) && !this._waitingInSquad(p)) || (this.rb && !this._aliveInSquad(p))) {
       // Everyone still down in the squad goes with it.
       for (const q of sim.players) {
         if (q !== p && q.team === p.team && q.alive && q.downed) this._die(q, this._downer(q), q.br.downWeapon, 'bleed');
@@ -1056,6 +1180,7 @@ export class BrRules {
   _planDrops(squads) {
     const sim = this.sim, rng = sim.rng, pois = this.def.pois ?? [], plane = this.plane;
     const picks = [];
+    const gap = this.rb ? RB_DROP_GAP : DROP_GAP;
     const dx = (plane.tx - plane.fx) / plane.len, dz = (plane.tz - plane.fz) / plane.len;
     for (const [team, members] of squads) {
       const human = members.find(p => !p.isBot);
@@ -1076,14 +1201,14 @@ export class BrRules {
         const t = ((c.x - plane.fx) * dx + (c.z - plane.fz) * dz);
         const off = Math.abs((c.x - plane.fx) * dz - (c.z - plane.fz) * dx);
         let near = 0;
-        for (const q of picks) { const d = Math.hypot(q.x - c.x, q.z - c.z); near = Math.max(near, Math.exp(-(d * d) / (DROP_GAP * DROP_GAP))); }
+        for (const q of picks) { const d = Math.hypot(q.x - c.x, q.z - c.z); near = Math.max(near, Math.exp(-(d * d) / (gap * gap))); }
         // A hot drop joins one other squad at a tier 1 place, never a third.
         const crowd = picks.filter(q => Math.hypot(q.x - c.x, q.z - c.z) < 30).length;
         const spread = hot && crowd < 2 ? (c.tier === 1 ? 1 + near : 0.1) : (1 - 0.97 * near) * (crowd ? 0.05 : 1);
         const w = (c.tier === 1 ? 3 : c.tier === 2 ? 2 : 1.2) * spread * Math.exp(-off / 140) * (0.4 + rng()) * (t > 20 && t < plane.len - 20 ? 1 : 0.2);
         if (w > bestW) { bestW = w; best = c; }
       }
-      if (!best) best = { x: sim.map.width / 2, z: sim.map.height / 2, r: 30, id: 'mid' };
+      if (!best) best = { x: this.area?.x ?? sim.map.width / 2, z: this.area?.z ?? sim.map.height / 2, r: 30, id: 'mid' };
       picks.push(best);
       const along = ((best.x - plane.fx) * dx + (best.z - plane.fz) * dz) / plane.len;
       // Out when the transport passes closest to the place; the glide covers what it can of the rest.
@@ -1102,10 +1227,11 @@ export class BrRules {
   // Where squads may land: the named places, and for duos and solos also loot spots between them (each tied to its
   // nearest place for the loot run that follows).
   _dropCands(rng) {
-    const pois = this.def.pois ?? [];
+    const A = this.area, inArea = q => !A || Math.hypot(q.x - A.x, q.z - A.z) < A.r - 8;     // Rebound: its area only.
+    const pois = (this.def.pois ?? []).filter(inArea);
     const out = pois.map(poi => ({ x: poi.x, z: poi.z, r: poi.r, tier: poi.tier, id: poi.id, poi }));
-    if (this.squad <= 2) {
-      const loot = this.def.loot ?? [];
+    if (this.squad <= 2 || (A && out.length < 8)) {
+      const loot = (this.def.loot ?? []).filter(inArea);
       for (let i = 0; i < 40 && loot.length; i++) {
         const s = loot[Math.floor(rng() * loot.length)];
         let poi = null, bd = Infinity;
@@ -1151,8 +1277,10 @@ export class BrRules {
     // A fight nearby, inside where we need to be: sometimes worth taking a piece of. Each burst of gunfire is weighed
     // once. Nobody goes looking for trouble while the first circle waits; later, keener and further.
     let fight = plan.fight && sim.time - plan.fight.t < NOISE_KEEP ? plan.fight : null;
-    const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1);
-    if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= 3) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
+    // Rebound: keener from the start, but a squad with someone waiting to redeploy keeps out of trouble until they land.
+    const waiting = this.rb && sim.players.some(q => q.team === team && !q.alive && q.br?.redeployT > 0);
+    const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1) * (this.rb ? (waiting ? 0 : RB_JOIN) : 1);
+    if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= (this.rb ? 1 : 3)) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
       const reach = THIRD_PARTY * Math.min(0.7, 0.4 + this.phase * 0.1);
       for (let i = this.noise.length - 1; i >= 0; i--) {
         const s = this.noise[i];
@@ -1185,8 +1313,9 @@ export class BrRules {
     for (const q of bots) { sqx += q.ps.x / bots.length; sqz += q.ps.z / bots.length; }
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
-      bot.sightK = PHASE_SIGHT[Math.min(this.phase, PHASE_SIGHT.length - 1)];
-      bot.noticeK = PHASE_NOTICE[Math.min(this.phase, PHASE_NOTICE.length - 1)];
+      const ph = this.rb ? Math.max(0, this.phase + RB_ALERT) : this.phase;     // Rebound bots are as alert as a later BR circle.
+      bot.sightK = PHASE_SIGHT[Math.min(ph, PHASE_SIGHT.length - 1)];
+      bot.noticeK = PHASE_NOTICE[Math.min(ph, PHASE_NOTICE.length - 1)];
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
         // No regen in BR: a medkit is the only heal. Badly hurt, it comes before plates; otherwise plates first, then a
@@ -1235,7 +1364,7 @@ export class BrRules {
         if (t) { bot.setObjective(t); bot.sightK = Math.min(bot.sightK, LOOT_SIGHT[Math.min(this.phase, 2)]); continue; }
         // Nothing left here: the squad moves to the nearest quiet place it has not been, inside the next circle; while
         // the first circle waits it stays put a while first (a squad with a gun each settles in instead).
-        const dwell = this.phase === 0 && this.state === 'wait' ? LOOT_DWELL : 6;
+        const dwell = this.phase === 0 && this.state === 'wait' ? (this.rb ? RB_DWELL : LOOT_DWELL) : 6;
         if (kind === 'loot' && sim.time - plan.since > dwell && !(this.phase === 0 && this.state === 'wait' && bots.filter(q => this._heldScore(q, 0) >= 2.2 || this._heldScore(q, 1) >= 2.2).length * 2 >= bots.length)) {
           (plan.visited || (plan.visited = new Set())).add(plan.poi?.id);
           plan.poi = this._nextPoi(team, ax, az, n, plan.visited, this.phase === 0 ? 90 : Infinity);
@@ -1355,7 +1484,8 @@ export class BrRules {
     const b = p.br;
     if (!b) return 0;
     const rev = p.downed ? Math.min(15, Math.round((b.useK === 'self' ? 1 - b.useT / BR.selfRevive : b.reviveT / BR.reviveTime) * 15)) : 0;
-    return Math.min(255, Math.ceil(b.armor)) | (p.downed ? 256 : 0) | ((p.brAir & 3) << 9) | (rev << 11) | (b.out ? 32768 : 0) | ((b.place & 63) << 16);
+    return Math.min(255, Math.ceil(b.armor)) | (p.downed ? 256 : 0) | ((p.brAir & 3) << 9) | (rev << 11) | (b.out ? 32768 : 0) | ((b.place & 63) << 16)
+      | (!p.alive && b.redeployT > 0 ? 1 << 22 : 0);      // Rebound: dead, waiting to redeploy.
   }
 
   _head() {
@@ -1371,7 +1501,7 @@ export class BrRules {
     const b = p?.br;
     if (!b) return 0;
     return [b.plates, b.meds, b.kits, USE_KINDS.indexOf(b.useK), Math.ceil(b.useT * 10), Math.ceil(b.useDur * 10), b.guns[0]?.r ?? -1, b.guns[1]?.r ?? -1,
-      b.pouch, b.stash ? b.stash.slot : -1];
+      b.pouch, b.stash ? b.stash.slot : -1, !p.alive && b.redeployT > 0 ? Math.ceil(b.redeployT * 10) : 0];
   }
 
   _stats() {
@@ -1444,7 +1574,7 @@ export class BrRules {
     this.from = bk ? { x: bk[1] / 10, z: bk[2] / 10, r: bk[3] / 10 } : { ...this.circle };
     if (this.state === 'shrink' && !bk) {
       // Where this shrink began, from how far along it is.
-      const ph = BR.phases[this.phase], k = Math.max(0, Math.min(0.99, 1 - this.timer / ph.shrink));
+      const ph = this.phases[this.phase], k = Math.max(0, Math.min(0.99, 1 - this.timer / ph.shrink));
       this.from = { x: (this.circle.x - this.next.x * k) / (1 - k), z: (this.circle.z - this.next.z * k) / (1 - k), r: (this.circle.r - this.next.r * k) / (1 - k) };
     }
     this.dropsPlanned = bk ? !!bk[4] : this.plane.f > 0;
@@ -1460,6 +1590,7 @@ export class BrRules {
       p.brAir = v.air ?? 0;
       b.out = !!v.out; b.place = v.place ?? 0;
       if (b.out) this.squadsOut.set(p.team, b.place);
+      b.redeployT = this.rb && !p.alive && v.redeploy ? 10 : 0;      // Rebound: a wait cut short by the handover.
       p.downed = !!v.downed && p.alive;
       b.reviveT = p.downed ? (v.reviveK ?? 0) * BR.reviveTime : 0;
       if (p.downed) { p.hp = Math.max(1, v.hp ?? BR.downHp); ps.sprinting = false; }
@@ -1530,13 +1661,14 @@ export class BrRules {
     for (let i = 0; i < players.length; i++) {
       const v = per?.[i] ?? 0, q = players[i];
       q.brArmor = v & 255; q.downed = !!(v & 256); q.air = (v >> 9) & 3; q.reviveK = ((v >> 11) & 15) / 15; q.out = !!(v & 32768); q.place = (v >> 16) & 63;
+      q.redeploy = !!(v & (1 << 22));
     }
     const V = this.view;
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
     V.circle = this.circle; V.next = this.next; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.squadsLeft = squads; V.alive = alive; V.items = this.items; V.stats = this.stats; V.t = this.t;
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1 } : null;
-    V.squad = this.squad;
+    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1, redeploy: (inv[10] ?? 0) / 10 } : null;
+    V.squad = this.squad; V.area = this.area; V.rebound = this.rb; V.phases = this.phases.length;
     view.br = V;
   }
 
@@ -1548,16 +1680,17 @@ export class BrRules {
       q.brArmor = b ? Math.ceil(b.armor) : 0; q.downed = !!p.downed; q.air = p.brAir | 0;
       q.reviveK = p.downed && b ? (b.useK === 'self' ? 1 - b.useT / BR.selfRevive : b.reviveT / BR.reviveTime) : 0;
       q.out = !!b?.out; q.place = b?.place ?? 0;
+      q.redeploy = !p.alive && b?.redeployT > 0;
     }
     const V = this.view;
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
     V.circle = { ...this.circle }; V.next = { ...this.next }; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.squadsLeft = this._squadsIn().size; V.alive = sim.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0);
-    V.items = this.items; V.t = this.t; V.squad = this.squad;
+    V.items = this.items; V.t = this.t; V.squad = this.squad; V.area = this.area; V.rebound = this.rb; V.phases = this.phases.length;
     V.stats = sim.tick % 30 === 0 || sim.phase === 'ended' || !V.stats ? this._stats() : V.stats;
     const me = sim.byId.get(view.localId);
     const inv = me && this._inv(me);
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1 } : null;
+    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1, redeploy: (inv[10] ?? 0) / 10 } : null;
     view.br = V;
   }
 

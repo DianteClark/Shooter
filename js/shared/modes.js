@@ -58,6 +58,14 @@ export const MODES = {
   // own side. Played only on the maps js/shared/zombies.js lays out (`maps`); `zm` marks the family for menus and the HUD.
   zm:    { id: 'zm',    rules: 'zm',  teamSize: 4, zm: true, maps: ['neon', 'ruins', 'foundry'], name: 'Graveyard Shift', short: 'GRAVE', scoreLimit: 999, timeLimit: 7200, desc: 'Up to four hold off the undead, round after round. Buy guns off the walls, open the gates, drink the perks. How long can you last?' },
   gwinf: { id: 'gwinf', rules: 'inf',  teamSize: 16, large: true, everyHuge: true, inf: { firsts: 2, holds: 2, spawnNear: 120, respawn: 5 }, name: 'Ground War Infected', short: 'GW INF', scoreLimit: 32, timeLimit: 300, desc: '32 players, two start infected. Killed by them, you join them. Survive the clock.' },
+  // Rebound (ROADMAP 27, docs/BR.md "Rebound"): a small, fast battle royale on one part of a BR map, with redeploys.
+  // The same rule set as battle royale (`rules: 'br'`, so every BR system, HUD and menu applies); `rebound` switches
+  // on the variant's numbers (RB below).
+  rb:    { id: 'rb',    rules: 'br', teamSize: 4, squad: 4, br: true, large: true, rebound: true, players: 24, name: 'Rebound', short: 'RBD', scoreLimit: 1, timeLimit: 1000, desc: 'Fast battle royale on a small part of the map, squads of four. Die while a squadmate lives and you parachute back in.' },
+  rbduo: { id: 'rbduo', rules: 'br', teamSize: 2, squad: 2, br: true, large: true, rebound: true, players: 20, name: 'Rebound Duos', short: 'RBD 2', scoreLimit: 1, timeLimit: 1000, desc: 'Fast battle royale in pairs. Die while your partner lives and you parachute back in.' },
+  // Showdown (ROADMAP 31, docs/MODES.md "Showdown"): 2 v 2 rounds on the small maps, everyone on the same dealt kit
+  // (js/sim/gf.js). scoreLimit is rounds to win, timeLimit one round's clock before the overtime flag.
+  gf:    { id: 'gf',    rules: 'gf',  teamSize: 2, sizes: ['small'], rounds: true, look: 'hard', name: 'Showdown', short: '2v2', scoreLimit: 6, timeLimit: 40, desc: '2 v 2 rounds on a small map, one life each. Everyone gets the same random kit, new every two rounds. First to 6.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 
@@ -129,6 +137,31 @@ export const BR = {
   rarityCss: ['#c9cbc4', '#59d36b', '#3fa0ff', '#b05cff', '#ffb21a'],
   rarityHex: [0xc9cbc4, 0x59d36b, 0x3fa0ff, 0xb05cff, 0xffb21a],
 };
+// Rebound numbers (modes with `rebound`; js/sim/br.js). Everything else is BR's.
+//   area      the playable part of the BR map: a circle of this radius (metres), placed by the seed where the named
+//             places are thickest (reboundArea in js/sim/br.js). It is the first circle; the transport crosses it.
+//   phases    as BR.phases, but `k` is the circle's radius as a share of the area's. About 7.5 minutes of circle.
+//   redeploy  seconds dead before you parachute back in near a squadmate, by circle phase (longer later on).
+//   redeployEnd  no redeploy for a death from this phase on (circle redeployEnd + 1, counted from 1, on screen).
+//   kit       what a redeploy brings: a gun of this rarity at most, a sidearm, and this much armor.
+export const RB = {
+  area: 120,
+  phases: [
+    { wait: 55, shrink: 35, k: 0.68, dps: 3 },
+    { wait: 50, shrink: 35, k: 0.46, dps: 5 },
+    { wait: 45, shrink: 30, k: 0.31, dps: 8 },
+    { wait: 40, shrink: 30, k: 0.19, dps: 12 },
+    { wait: 40, shrink: 25, k: 0.1, dps: 16 },
+    { wait: 30, shrink: 35, k: 0, dps: 22 },
+  ],
+  redeploy: [12, 15, 20, 25],
+  redeployEnd: 4,
+  kitRarity: 1, kitArmor: 50,
+};
+export const isRebound = id => !!MODES[id]?.rebound;
+// The circle phases a battle royale mode plays (Rebound's own, or BR's).
+export const brPhases = id => (isRebound(id) ? RB.phases : BR.phases);
+
 // Extraction numbers, shared by the sim (js/sim/extract.js), bots, HUD, results and awards. Seconds and metres.
 export const EX = {
   warmup: 8,             // Squads stand at their insertion points before the match goes live.
