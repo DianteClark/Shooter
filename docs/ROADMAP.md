@@ -111,7 +111,9 @@ on every push, keep 2% of weekly usage for bugs.
     lobby cars and the scoreboard rows; talking marks from RTP audio levels; docs/CONTROLLER.md (Voice).
 29. DONE (voice). Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
     js/ui/gamepad.js, Options > Controller (remap, deadzone, aim sensitivity, invert Y); docs/CONTROLLER.md.
-30. Attachments wave 2: more attachments per gun, visible on the model.
+30. DONE (atts2). Attachments wave 2: more attachments per gun, visible on the model. Sixteen general parts
+    (js/shared/attachments-w2.js), each drawn on every gun that takes it (js/render/guns-w2.js); every gun 5-9
+    options per slot (launchers 3-5); docs/WEAPONS-OVERHAUL.md "Attachments wave 2".
 31. DONE (modes2). Gunfight 2v2: short rounds, the same random loadout for everyone, small maps. Showdown on Pier, Turnstile,
     Oasis and Ruins: first to 6, 40 s rounds then an overtime flag, enemy health over their heads; docs/MODES.md "Showdown".
 32. Finishing moves and an emote wheel.

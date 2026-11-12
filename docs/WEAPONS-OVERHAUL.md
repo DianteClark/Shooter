@@ -474,3 +474,92 @@ the band stock (Breaker 1.44, Bombard 1.43) and stay there.
 | Melee | Gaff | Lunge Strap | Sig | grip | lunge +30% | fire rate -15% | Level 15 |
 | Melee | Maul | Iron Head | Sig | barrel | damage +15%, range +15% | fire rate -18%, move speed -4% | Level 5 |
 | Melee | Maul | Ash Haft | Sig | grip | fire rate +30%, move speed +3% | damage -22%, range -12% | Level 15 |
+
+## Attachments wave 2 (ROADMAP item 30)
+
+Goal: more choice per gun, every part visible on the model. Data in js/shared/attachments-w2.js, appended to
+ATTACHMENTS after the V11 table (attachments.js), so every older id keeps its index in packKit's slot lists: 16 new
+general parts (4 optics, 5 barrels, 4 mags, 3 grips; 137 attachments in all), and the Taped Mags opened to SMGs and
+pistols (`W2_EXTEND`). Slot sizes are now optic 17, barrel 40, mag 40, grip 40.
+
+**Choice per gun.** Every gun now has 5 to 9 options in each slot it uses (signatures and kits included), launchers 3
+to 5; the exceptions are shells, nails and a nose (Bramble mags 3, Tacker mags and barrels 4). The thin slots grew
+most: sniper optics 3 -> 5, pistol grips 2 -> 5, pistol mags 3 -> 5, shotgun optics 4 -> 6, launcher barrels 1 -> 3 and
+grips 2 -> 4. 194 gun-slot pairs gained a choice. Classes that already had 7+ (assault, marksman) gained one at most.
+
+**Rules.** Same as the older general parts: multipliers on MOD_INFO keys only, never an identity key (damage, rpm,
+wind-up... stay signature/kit-only), and every part gives something and costs something on every gun that takes it
+(dev/sim-attachments.mjs checks every pair from the effective def). Each has `name`, `for` and `desc` for the Gunsmith.
+
+**New slots: not added.** The wire would allow a fifth slot (packKit's high part could take another 7 bits and stay
+below 2^51, and an older build would simply ignore it), but every gun model, the Gunsmith's four slot buttons, bot kits,
+BR loot and the loadout card all assume four slots, and the four are far from full (the slot lists can hold 127 each).
+More parts per slot gave the same choice for a fraction of the risk.
+
+**Wire and saves.** Nothing older moved: old kit ints and SY4 codes decode unchanged (the V11 test ints 30673 and 4376
+still hold). The two new optics past index 13 land in the low nibble (indices 14 and 15) where a V11 build finds no
+part and shows stock; every other new part rides the 7-bit high part, as V11 parts do. Save codes store kits by id.
+
+**Unlocks.** Spread over levels 4 to 28 (14 distinct levels), chosen where each class had gaps (sniper 10, 13, 17, 22,
+26; pistol 6, 10, 13, 17, 21, 23, 28; launcher 4, 14, 16, 17, 21, 27, 28). The rule "one part per level" became "at
+most two parts on one level of a gun, never two for one slot, never two wave 2 parts"; the results screen already
+lists several unlocks. No gun now goes more than four levels without a new part (launchers five).
+
+**Models** (js/render/guns-w2.js). Every new part draws its own piece, not a borrowed `look`: Flip Irons (notched rear
+leaf and winged front post), Prism 2x (wedge body, round eyepiece), Rangefinder (short tube with a ranging box on top),
+Tac Laser (a cylinder slung low off the right side), Birdcage Hider (four bars in an X closed by a ring), Tank Brake
+(three wide baffle plates), Vent Rib (tube extensions under a rib on posts with a bead), Venturi Nozzle (a long flared
+bell: the Breaker's exhaust, the Bombard's muzzle, the Ripple's three bells), Guide Rail (a rail on brackets along the
+tube's right side), Light Rockets (a slim finned warhead, or a bright band), Magnum Shells and Flite Wads (a shell
+cuff on the stock for the guns that keep shells there, a fatter or shorter magazine for the rest), Subsonic Rounds (a
+dark polymer mag with a bright base tab), Rubber Sleeve (a fat sleeve with finger ridges), Thumb Rest (a bright-edged
+shelf off the grip's right side), Beavertail (a metal tail over the hand). Parts that hang off one side sit on the
+right (+z), which is the side the Gunsmith bench shows. The shared fitters (fitOptic, fitBarrel, fitWrap, MAG_LOOK)
+call into guns-w2.js, so most guns needed no change; the shotguns, launchers, Lodestone and Magpies build those slots
+their own way and call its helpers. dev/sim-attachments.mjs checks all 197 gun-part pairs: drawn, different from stock
+and from every other part in that slot on that gun, no more than 0.5 m past the gun (worst 0.27 m), hand points finite.
+Every older gun-part model is byte-identical to before (checked against the pre-wave-2 tree).
+
+**Balance.** General parts never touch damage or rate of fire, so kill breakpoints move only through range. Range only
+grows where the gun's best older part in that slot already reaches as far: Magnum Shells +5% (the shotguns' best
+reach with Rifled Bore goes x1.25 -> x1.31), Rangefinder +6% (launchers x1.30 -> x1.38). dev/sim-attachments.mjs checks
+every gun: the furthest distance of each shots-to-kill breakpoint with its longest-reaching legal build moves under
+6%, and the best aimed and hip spread a build can reach tightens by under 20% (launchers are the edge, x0.74 -> x0.59
+of stock aimed spread, so the Thumb Rest is weaker on a tube). Best builds (`node dev/best-builds.mjs`, 2 trials, 2
+passes; dev/out/best-builds*.json updated): wave 2 parts appear where they fit the gun's job (Prism 2x on 4 of 22
+guns that take it, Tac Laser on the Doublet, Trammel and Ripple, Flite Wads on the Thresher, Flip Irons on the Squall,
+Thumb Rest on the Lancet and Deuce, Rubber Sleeve on three sidearms and the Murmur, Beavertail on the Magpies), and no
+part is in every best build (most picked: Canted Dot 6 of 23, then Long Barrel, Bull Barrel, Prism 2x and Steady Glass
+at 4).
+
+**Bots and loot.** botAttachments: new class kits that use every wave 2 part (ar, smg, lmg get two each; shotgun,
+sniper, burst, pdw, autoshot, dmr one; pistols two), and launchers get class kits of their own for the first time
+(Venturi + Light Rockets, Rangefinder + Guide Rail + Thumb Rest, Tac Laser + Venturi). Kit lists are 3 or 5 long so
+battle royale floor loot (deals 0, 2 and 4) reaches every kit; dev/sim-attachments.mjs checks that every wave 2 part
+rolls on the floor in 20,000 rolls and every rolled part is legal and survives the BR wire.
+
+**Gunsmith.** No layout change was needed: the option list already scrolls with 30 px rows and keeps the tried part in
+view. dev/ui-attachments-test.py adds eight wave 2 views (Lancet irons with a tank brake, Flicker with laser,
+birdcage and beavertail, Breaker with rangefinder, guide rail and light rockets, Thresher with magnum shells and a
+vent rib, Gantry prism, Magpies rubber sleeves, Bombard venturi, and the Tallyman's nine-part grip list) and checks the
+rows are even and long lists scroll.
+
+| Part | Slot | Takes it | Gives | Costs | Level |
+|---|---|---|---|---|---|
+| Flip Irons | optic | Shotgun, LMG, Sniper, Launcher, Pistol (Flicker, Verdict, Gnat, Deuce, Bramble, Tacker) | time to aim -16%, sprint to fire -8%, swap time -6% | aimed spread +28%, range -6% | 17 |
+| Prism 2x | optic | Assault, LMG, Marksman, Sniper | aimed spread -14%, settle speed +12% | time to aim +10%, hip spread +8% | 22 |
+| Rangefinder | optic | Launcher | range +6%, aimed spread -8% | time to aim +12%, swap time +8% | 14 |
+| Tac Laser | optic | SMG, Shotgun, Launcher, Pistol (Flicker, Verdict, Gnat, Deuce, Bramble, Tacker) | hip spread -14%, sprint to fire -10% | aimed spread +14%, time to aim +6% | 21 |
+| Birdcage Hider | barrel | Assault, SMG (Skitter, Rasp, Stitch, Ballast, Hopper), Marksman (Tallyman, Foreman, Prospector, Tandem), Sniper (Lancet, Monolith, Kestrel, Harrier), Pistol (Flicker, Verdict, Gnat, Deuce, Bramble, Magpies), LMG (Gantry, Stanchion) | sprint to fire -10%, settle speed +12% | range -6%, swap time +6% | 10 |
+| Tank Brake | barrel | Sniper, LMG (Gantry, Stanchion) | settle speed +20%, recoil sway -12% | hip spread +12%, sprint to fire +8% | 26 |
+| Vent Rib | barrel | Shotgun | settle speed +20%, sprint to fire -12% | range -6%, swap time +6% | 14 |
+| Venturi Nozzle | barrel | Launcher | sprint to fire -14%, swap time -10% | range -10%, aimed spread +12% | 4 |
+| Guide Rail | barrel | Launcher | aimed spread -14%, hip spread -6% | time to aim +10%, move speed -3% | 27 |
+| Subsonic Rounds | mag | SMG, Pistol (Flicker, Verdict, Gnat, Deuce, Magpies) | recoil sway -15%, bloom per shot -15% | range -12%, hip spread +5% | 23 |
+| Magnum Shells | mag | Shotgun | range +5% | magazine -15%, reload +12%, sprint to fire +6% | 25 |
+| Flite Wads | mag | Shotgun | hip spread -8%, aimed spread -5% | reload +10%, swap time +8% | 7 |
+| Light Rockets | mag | Launcher | swap time -15%, move speed +3% | blast radius -12%, reload +6% | 16 |
+| Rubber Sleeve | grip | SMG, Shotgun, Pistol, Launcher | recoil sway -15%, bloom per shot -12% | swap time +10%, sprint to fire +6% | 28 |
+| Thumb Rest | grip | Sniper, Pistol, Launcher | aimed spread -10%, settle speed +8% | time to aim +6%, swap time +8% | 13 |
+| Beavertail | grip | Pistol | hip spread -8%, move speed +2% | aimed spread +10%, swap time +6% | 6 |
+| Taped Mags (opened) | mag | now also SMG (not the Hopper) and Pistol (not the Bramble or Tacker) | reload -20% | time to aim +8%, swap time +10%, hip spread +10% | 12 |
