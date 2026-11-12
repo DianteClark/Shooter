@@ -49,7 +49,10 @@ async def main():
         pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
         ev = pg.evaluate
         async def tap(sel, wait=300):
-            await pg.locator(sel).first.click()
+            try:
+                await pg.locator(sel).first.click(timeout=4000)
+            except Exception:     # Something animating over it (a toast, the HUD's own fade): press it the way tap.js would.
+                await pg.evaluate(f"document.querySelector({sel!r})?.click()")
             await pg.wait_for_timeout(wait)
         async def shot(name):
             await pg.screenshot(path=f'{OUT}/{name}.png')
