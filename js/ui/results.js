@@ -196,7 +196,8 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       : `Survived ${survived} round${survived === 1 ? '' : 's'}${z.fresh ? ': a new record on this map' : z.best ? ` · best ${z.best}` : ''}`;
     if (z.warden) line += ' · the Gravewarden is down';
     tone = z.fresh || z.escaped ? 'var(--c-gold)' : 'var(--c-haze)';
-    mineNum = survived; themNum = Math.max(survived, z.best ?? 0); mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
+    // One number, not a pair: the round the crew reached (or got out on), read "Round 18", never "18 - 18".
+    mineNum = z.escaped || data.zmView?.round || survived; themNum = null; mineCss = tone; themCss = 'var(--c-haze)';
   }
   const zmCrew = () => {
     const crew = data.zmView?.crew ?? [];
@@ -212,8 +213,9 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const zmRecord = () => {
     const z = data.zm ?? {}, map = z.mapName ?? '';
     const rows = [['Round reached', data.zmView?.round ?? 0], ['Rounds survived', z.survived ?? 0], [`Best on ${esc(map) || 'this map'}`, z.best ?? 0], ['Undead put down', z.kills ?? 0]];
-    if (z.escaped || z.bestEscape) rows.push(['Best escape', z.bestEscape ? `Round ${z.bestEscape}` : '-']);
-    if (z.warden) rows.push(['Gravewarden', z.freshBoss ? 'Down: card earned' : 'Down']);
+    // Values stay short: the column is a number's width at 667 px (owner notes: "Round 18" and "Down: card earned" spilled).
+    if (z.escaped || z.bestEscape) rows.push(['Best escape', z.bestEscape ? `R${z.bestEscape}` : '-']);
+    if (z.warden) rows.push([z.freshBoss ? 'Gravewarden (card earned)' : 'Gravewarden', 'Down']);
     return `<div class="rb theirs" style="--team:#b8241c">
       <div class="rb-head"><b class="rb-team">Graveyard Shift</b><b class="rb-pts">${z.fresh ? 'Record' : ''}</b><span></span><span></span><span></span><span></span><span class="wide"></span></div>
       ${rows.map(([k, v], i) => `<div class="rb-row" style="--i:${i}"><span class="rb-name" style="grid-column:span 5"><b>${k}</b></span><span class="wide" style="color:${i === 2 && z.fresh ? 'var(--c-gold)' : 'var(--c-chalk)'}">${v}</span></div>`).join('')}
@@ -389,7 +391,8 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     <div class="rs" data-outcome="${outcome}" style="--tone:${tone}">
       <div class="rs-top">
         <div class="rs-word"><h2>${esc(word)}</h2><small>${esc(modeName)}${roundStrip}</small></div>
-        <span class="rs-score"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>
+        ${zmr ? `<span class="rs-score rs-round"><small>Round</small><u class="rs-mine" style="color:${mineCss}">0</u></span>`
+          : `<span class="rs-score"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>`}
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
@@ -397,7 +400,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>
-          <div class="fk-cap">${fk ? `<small>Final kill</small><b>${esc(fk.byName)}</b><span>on ${esc(fk.targetName)}</span><em>${art(fk.weapon, 10)}${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}</em>` : '<small>Final kill</small><span>The match ended without one</span>'}</div>
+          <div class="fk-cap">${fk ? `<small>Final kill</small><b>${esc(fk.byName)}</b><span>on ${esc(fk.targetName)}</span><em>${art(fk.weapon, 10)}${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}</em>` : zmr && data.zm?.escaped ? `<small>Escaped</small><span>Out on the exfil on round ${data.zm.escaped}</span>` : '<small>Final kill</small><span>The match ended without one</span>'}</div>
         </div>
         <div class="rs-card xp-card">
           <div class="xp-head"><b class="xp-sum">+<u class="xp-total">0</u><small>XP</small></b><span class="xp-lv">${badgeMark(lp.prestige ?? 0, 22, lp.masterBefore ?? 0)}<b class="xp-lvn">${master ? 'M' : 'Lv'} ${startLevel}</b></span></div>
@@ -421,7 +424,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rs-hero" data-act="resHero">
         <i class="rs-hero-band"></i>
         <h1>${esc(word)}</h1>
-        <p class="rs-hero-score"><u style="color:${mineCss}">${mineNum}</u><i></i><u style="color:${themCss}">${themNum}</u></p>
+        <p class="rs-hero-score">${zmr ? `<small>Round</small><u style="color:${mineCss}">${mineNum}</u>` : `<u style="color:${mineCss}">${mineNum}</u><i></i><u style="color:${themCss}">${themNum}</u>`}</p>
         <small>${esc(line)}</small>
       </div>
     </div>`;
@@ -477,7 +480,7 @@ async function runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineN
   if (reel.dead) return;
   root.classList.add('in');
   rollNumber(q('.rs-mine'), mineNum, { from: 0, duration: 600 });
-  rollNumber(q('.rs-them'), themNum, { from: 0, duration: 600 });
+  if (themNum !== null) rollNumber(q('.rs-them'), themNum, { from: 0, duration: 600 });
   rollNumber(q('.xp-total'), xp?.total ?? 0, { from: 0, duration: 900, delay: 300 });
   await reel.sleep(520);
   if (reel.dead) return;

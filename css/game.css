@@ -1123,6 +1123,7 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 #ui .rs-score { display: flex; align-items: center; gap: 10px; font: 400 32px/1 var(--f-stencil); font-variant-numeric: tabular-nums; }
 #ui .rs-score u { text-decoration: none; min-width: 1.2ch; }
 #ui .rs-score i { width: 12px; height: 3px; background: var(--c-haze); }
+#ui .rs-score small, #ui .rs-hero-score small { font: 400 .45em/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-haze); text-transform: uppercase; }   /* Graveyard Shift: "Round 18". */
 #ui .rs-mvp {
   margin-left: auto; display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 10px; row-gap: 2px; padding: 4px 14px 4px 12px;
   background: var(--face-steel-hi); box-shadow: var(--bevel-hi), inset 3px 0 0 var(--team);

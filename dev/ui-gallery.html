@@ -214,6 +214,13 @@ const SCENES = {
   'results-draw': menuScene('Results: draw, long names', ({ menu, results }) => menu.results(results('draw', true), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
   // The tallest results screen: Ground War (16 a side), five XP lines, three weapons, challenges and Pro challenges.
   'results-gw': menuScene('Results: Ground War loss, challenges, Pro', ({ menu, results }) => menu.results(results('loss', false, true), { rematch: noop, menu: noop }), { gl: true, settle: 4500 }),
+  // Graveyard Shift (owner notes): an escape on round 18 with the Gravewarden down and its card fresh, the longest record panel.
+  'results-zm': menuScene('Results: Graveyard Shift escape (win)', ({ menu, results }) => {
+    const r = results('win'), crew = r.roster.slice(0, 4).map(p => ({ ...p, team: 0 }));
+    menu.results({ ...r, mode: 'zm', modeId: 'zm', roster: crew, players: crew, scores: [18, 18], finalKill: null,
+      zm: { survived: 18, round: 18, best: 18, before: 11, fresh: true, kills: 692, mapName: 'Ashgrove Halt', escaped: 18, warden: true, bestEscape: 18, freshEscape: true, freshBoss: true },
+      zmView: { round: 18, best: 18, crew: crew.map((p, i) => ({ id: p.id, kills: 692 - i * 150, head: 120 - i * 20, downs: i, revives: 3 - i, pts: 184320 - i * 40000 })) } }, { rematch: noop, menu: noop });
+  }, { gl: true, settle: 4500 }),
   'install': menuScene('Install prompt', ({ menu }) => { menu.title({}); menu.installPrompt(noop); }),
 
   'hud-live': hudScene('Live, TDM', () => {}),

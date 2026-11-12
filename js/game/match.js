@@ -636,7 +636,9 @@ export class Match {
     if (this.endTimer < 0) {
       this.controls.setEnabled(false);
       let hold = 0;
-      try { hold = (view.lastKill && this.killcam.playFinal(view.lastKill)) || 0; } catch (err) { console.error('final kill replay', err); }
+      // Graveyard Shift's escape ends on its own ESCAPED banner: no final kill replay of the last zombie shot.
+      const escaped = !!objOf(view)?.zm && !!objOf(view)?.escaped?.length;
+      try { hold = (!escaped && view.lastKill && this.killcam.playFinal(view.lastKill)) || 0; } catch (err) { console.error('final kill replay', err); }
       this.endTimer = hold || END_HOLD;
     }
     this.endTimer -= this.dt;

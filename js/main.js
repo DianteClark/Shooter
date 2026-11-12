@@ -1674,7 +1674,7 @@ function showResults(results) {
       unlocks: [...seasonUnlocks(results.season, results.ranked), ...(results.challenges ?? []).filter(c => c.fresh).map(challengeUnlock), ...(results.unlocks ?? [])],
       challenges: results.challenges ?? [],
       proProgress: results.proProgress ?? [],
-      finalKill: lastKill ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
+      finalKill: lastKill && !results.zm?.escaped ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
       rematchLabel: app.lastPick?.mp && !app.net ? 'Next match' : 'Rematch',
       snd: results.snd,
       br: results.br,
