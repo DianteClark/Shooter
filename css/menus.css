@@ -1096,3 +1096,7 @@
 #ui .ttl-sec .chip .ico, #ui .ttl-sec .chip svg { height: 15px; }
 .tl-feat-line { display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .tl-feat-line .ico, #ui .tl-feat-line svg { height: 12px; flex: none; }
+/* Bench: the weapon level and XP sit along the bottom of the preview, clear of the gun (owner, 2026-11-11). */
+#ui .gs-view > .gs-lvl { position: absolute; z-index: 2; left: 8px; right: 8px; bottom: 6px; margin: 0; padding: 4px 8px; pointer-events: none;
+  background: linear-gradient(90deg, rgba(18,22,28,.82), rgba(18,22,28,.55) 70%, transparent); }
+#ui .gs-view > .gs-lvl .xp { flex: 1; max-width: 160px; }
