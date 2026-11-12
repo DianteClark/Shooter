@@ -492,6 +492,8 @@ export class BrHud {
     if (id === null) return;
     const gun = WEAPON_IDS[best.v], r = best.r;
     this.takeBtn.style.setProperty('--rar', BR.rarityCss[r]);
+    this.takeBtn.dataset.r = r;
+    this.takeBtn.dataset.pips = '◆'.repeat(r + 1);    // Colour modes show the tier as pips too (css/game.css).
     this.takeBtn.querySelector('.ti').innerHTML = icon(gun, { size: 15 });
     // Two short lines that fit the narrowest phone: what the tap does to which hand, then the gun in its rarity colour.
     this.takeBtn.querySelector('small').textContent = handsFull ? `Swap ${slot ? 'secondary' : 'primary'} for` : `Pick up as ${inv?.rarity[0] < 0 ? 'primary' : 'secondary'}`;

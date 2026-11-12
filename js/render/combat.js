@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { MeshBuilder } from './meshbuild.js';
 import { castRay } from './fog.js';
 import { GLSL_LIGHT, hexRGB } from './art.js';
+import { TEAM_RGB } from '../shared/palette.js';
 import { prewarm } from './vfx.js';
 import { TEAMS } from '../shared/constants.js';
 import { smokeBlocks } from '../shared/geometry.js';
@@ -624,7 +625,7 @@ export class CombatFX {
     this.time = time;
     this.map = map;
     this.visionWalls = map.walls.filter(w => w.blocksVision);
-    this.teamRGB = TEAMS.map(t => hexRGB(t.color));
+    this.teamRGB = TEAM_RGB;     // Shared with the colour modes (js/shared/palette.js).
     this.trailClock = 0;
     this.smokeAlpha = 1;             // A replay camera sits low and close, where a cloud would block the whole shot.
     this.teamOf = new Map();         // Player id -> team, refreshed from the view each frame.

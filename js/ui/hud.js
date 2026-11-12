@@ -9,7 +9,8 @@ import { GUN_LADDER, isBr, isEx, isFfa, MODES, modeRules, SND, CTF } from '../sh
 import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
 import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/FINISHERS.md).
-import { ZmHud } from './zm-hud.js';            // Graveyard Shift layer (docs/ZOMBIES.md).
+import { ZmHud } from './zm-hud.js';
+import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
@@ -17,6 +18,8 @@ import { badgeMark, nameHtml, weaponLevelHtml } from './widgets.js';
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
+import { reducedMotion } from './motion.js';
+import { isPlaced, scaleOf } from './layout.js';
 import { icon, resolveIcon } from './icons.js';
 import { ArmorySheet } from './trainarmory.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
@@ -333,7 +336,8 @@ const HIT_CSS = `
 .hit.armor:not(.kill) .hit-armor { display: block; }
 .hit.weak:not(.kill):not(.head) .hit-x path { stroke: #b9c0c8; stroke-width: 2.2; stroke-dasharray: 5 3; }
 `;
-const REDUCED_MOTION = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+// The system setting or Options > Reduce shake and flashes (js/ui/motion.js setReducedMotion).
+const REDUCED_MOTION = { get matches() { return reducedMotion(); } };
 const COVER_HIT_WINDOW = 0.3;    // Seconds after one of your rounds passed through cover that a hit counts as reduced.
 const RESPAWN_FLASH = [{ opacity: 0.75 }, { opacity: 0 }];
 const STREAK_HIT = [
@@ -424,6 +428,7 @@ export class HUD {
     this.zmHud = new ZmHud(this);
     this.modeHud = new ModeHud(this);
     this.finHud = new FinHud(this);
+    this.cues = new CuesHud(this);
     this.#drawMapBase();
     this.reset();
   }
@@ -459,6 +464,9 @@ export class HUD {
     this.proDrawn = true;
   }
 
+  // Options > Accessibility > Sound cues: 'off', 'nades' or 'all' (js/ui/cues-hud.js).
+  setCues(level) { this.cues.setLevel(level); }
+
   // Options: HUD size (Small, Normal, Large) scales the panels; the layout pass keeps them clear of the thumbs.
   setHudSize(size) {
     this.hudK = HUD_SCALE[size] ?? 1;
@@ -478,6 +486,9 @@ export class HUD {
     if (!W || !H) return;
     const k = this.hudK ?? 1, lefty = this.el.classList.contains('lefty');
     const st = this.root.style, px = v => `${Math.round(v)}px`;
+    // Streak tiles the player placed (Options > Touch layout) leave the dock and count as a button; size them first.
+    const placedTiles = isPlaced(ctl.layout, 'streaks');
+    if (placedTiles) st.setProperty('--tile-k', this.tileK());
     const { zones, rects } = ctl.geometry();
     if (!zones) return;
     const ins = safeInsets(), safe = { t: ins.top, r: ins.right, b: ins.bottom, l: ins.left };
@@ -516,7 +527,12 @@ export class HUD {
     // Dock: health beside the streak tiles (or the battle royale's plate and medkit buttons), along the bottom edge
     // between the sticks. The tiles go on the aim thumb's side, as the buttons do.
     const vit = this.vitals, tiles = ctl.el.querySelector('.streaks'), inv = this.el.querySelector('.br-inv');
-    const right = this.br ? inv : tiles?.style.display !== 'none' && [...ctl.tiles].some(t => t.node.style.display !== 'none') ? tiles : null;
+    const tilesShown = tiles?.style.display !== 'none' && [...ctl.tiles].some(t => t.node.style.display !== 'none');
+    const right = this.br ? inv : tilesShown && !placedTiles ? tiles : null;
+    if (!this.br && tilesShown && placedTiles) {
+      const r = ctl.el.querySelector('.stk-row').getBoundingClientRect();
+      if (r.width) buttons.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom });
+    }
     // The first sizing that fits a free stretch: as chosen, then the tiles at their touch size, then health smaller.
     const tryK = [[k, this.tileK()], [k, 1], [Math.min(k, 1), 1], [HUD_SCALE.small, 1]];
     let fit = null;
@@ -532,7 +548,7 @@ export class HUD {
     }
     const { vk, tk, vw, rw, y0, total, span } = fit;
     st.setProperty('--vit-k', vk);
-    st.setProperty('--tile-k', tk);
+    st.setProperty('--tile-k', placedTiles ? this.tileK() : tk);
     const cx = Math.max(span[0] + total / 2, Math.min(span[1] - total / 2, W / 2));
     const left = cx - total / 2;
     const vitX = right && !lefty ? left : right ? left + rw + DOCK_GAP * 2 : left;
@@ -632,7 +648,14 @@ export class HUD {
   }
 
   // Streak tiles grow with Large but never shrink below their touch size.
-  tileK() { return Math.max(1, this.hudK ?? 1); }
+  // A custom tile size (Options > Touch layout) multiplies on top, never below 1.
+  tileK() { return Math.max(1, this.hudK ?? 1) * scaleOf(this.controls?.layout, 'streaks'); }
+
+  // Options > Touch layout: the corner chips' size (mic, quick chat, emote). The wheels they open sit under them.
+  setChipScale(k) {
+    this.root.style.setProperty('--chips-k', k);
+    this.layout();
+  }
 
   #markBlocked(x, y) {
     for (const r of this.markObstacles) {
@@ -1592,6 +1615,7 @@ export class HUD {
     if (this.ctf) this.#updateCtf(view, me, c);
     this.modeHud.update(view, me);
     this.finHud.update(view, me);
+    this.cues.update(view, me);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -2516,7 +2540,7 @@ export class HUD {
             this.killer = null;
             this.deathPainted = false;
             this.#syncThrowReach();
-            this.respawnEl.animate(RESPAWN_FLASH, { duration: 420, easing: 'ease-out' });
+            if (!REDUCED_MOTION.matches) this.respawnEl.animate(RESPAWN_FLASH, { duration: 420, easing: 'ease-out' });
           }
           break;
         case 'streak': this.#onStreak(e); break;

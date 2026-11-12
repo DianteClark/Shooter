@@ -200,11 +200,16 @@ export const impactBus = {
 
 // Reduced motion: the camera kick, hit punch and screen shake a gun adds are scaled by this (1 or a small number).
 // The player's own Camera kick / Screen shake sliders (tuning.js) still multiply on top.
-let motionScale = 1;
+// Options > Accessibility > Reduce shake and flashes (setCalm) forces the reduced numbers whatever the system says, and
+// also dims explosion light pops (feelFlash, js/render/vfx.js applyPops).
+let motionScale = 1, osReduced = false, calm = false;
+const setScale = () => { motionScale = osReduced || calm ? 0.25 : 1; };
 if (typeof matchMedia === 'function') {
   const mq = matchMedia('(prefers-reduced-motion: reduce)');
-  const set = () => { motionScale = mq.matches ? 0.25 : 1; };
+  const set = () => { osReduced = mq.matches; setScale(); };
   set();
   if (mq.addEventListener) mq.addEventListener('change', set);
 }
 export const feelMotion = () => motionScale;
+export const feelFlash = () => (calm ? 0.35 : 1);
+export const setCalm = on => { calm = !!on; setScale(); };

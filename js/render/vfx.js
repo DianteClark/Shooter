@@ -6,7 +6,7 @@ import { MeshBuilder } from './meshbuild.js';
 import { MAX_POPS } from './world.js';
 import { getTracer, getKillEffect } from '../shared/camos.js';
 import { uploadUsed } from './dynbuf.js';
-import { completeFx, impactBus } from './feel.js';
+import { completeFx, impactBus, feelFlash } from './feel.js';
 
 const TRACERS = 180;
 const PARTS = 1100;
@@ -1403,10 +1403,10 @@ export class VFX {
   }
 
   applyPops(material) {
-    const posU = material.uniforms.uPopPos.value, colU = material.uniforms.uPopCol.value;
+    const posU = material.uniforms.uPopPos.value, colU = material.uniforms.uPopCol.value, dim = feelFlash();
     for (let i = 0; i < MAX_POPS; i++) {
       const p = this.pops[i];
-      const k = p.t > 0 ? p.t / p.life : 0;
+      const k = p.t > 0 ? p.t / p.life * dim : 0;
       posU[i].set(p.x, p.y, p.z, p.r);
       colU[i].set(p.c[0] * k, p.c[1] * k, p.c[2] * k);
     }

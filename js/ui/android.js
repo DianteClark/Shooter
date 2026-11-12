@@ -22,6 +22,8 @@ export const inFullscreen = () => !!document.fullscreenElement;
 
 // Inside a tap: full screen, then landscape. Errors are expected (no gesture, a browser that refuses) and ignored.
 export async function enterFullscreen() {
+  // Automated browsers (the dev tests) stay windowed: a full-screen switch mid-click stalls their clicks.
+  if (navigator.webdriver) return;
   if (!fullscreenSupported() || inFullscreen() || installed() && matchMedia('(display-mode: fullscreen)').matches) return;
   try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch { return; }
   try { await screen.orientation?.lock?.('landscape'); } catch { /* not allowed here: the rotate hint still shows */ }

@@ -1,4 +1,8 @@
 // Player settings, stored on this device apart from the progression save so a save code never overrides them.
+import { COLOR_MODES } from '../shared/palette.js';
+import { sanitizeLayout } from './layout.js';
+
+const COLOR_MODE_IDS = COLOR_MODES.map(([id]) => id);
 const KEY = 'switchyard-options';
 
 // Ids match QUALITY_STEPS in js/render/quality.js. 'high' and 'low' keep their meaning from older saves.
@@ -6,6 +10,10 @@ export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'H
 
 // The in-match HUD's panels (js/ui/hud.js setHudSize): the streak tiles never go below their touch size.
 export const HUD_SIZES = [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']];
+
+// Accessibility (js/ui/a11yscreen.js, docs/ACCESSIBILITY.md). Colour modes are js/shared/palette.js COLOR_MODES.
+export const TEXT_SIZES = [['normal', 'Normal'], ['large', 'Large'], ['larger', 'Larger']];
+export const CUE_LEVELS = [['off', 'Off'], ['nades', 'Grenades'], ['all', 'Grenades and steps']];
 
 export const OPTION_DEFAULTS = Object.freeze({
   quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, hudSize: 'normal', voice: 1, sound: 1, music: 1, matchMusic: false, fps: false, touchDebug: false, autoRespawn: false,
@@ -17,6 +25,8 @@ export const OPTION_DEFAULTS = Object.freeze({
   // Phones (docs/DEVICES.md): vibration on hits where the browser has it, and full screen in an Android browser tab.
   haptics: false, fullscreen: true,
   padDead: 0.15, padSens: 1, padInvertY: false, padMap: {},
+  // Accessibility. layout: the touch layout editor's custom places and sizes (js/ui/layout.js), {} for the default.
+  colorMode: 'off', textSize: 'normal', calm: false, cues: 'nades', layout: {},
 });
 
 // Slider-style settings: unit is the on-screen step, and what the bar and label report.
@@ -45,6 +55,10 @@ function load() {
       for (const [k, v] of Object.entries(out.padMap)) if (Number.isInteger(v) && v >= -1 && v < 20) map[k] = v;
     }
     out.padMap = map;
+    if (!COLOR_MODE_IDS.includes(out.colorMode)) out.colorMode = 'off';
+    if (!TEXT_SIZES.some(([id]) => id === out.textSize)) out.textSize = 'normal';
+    if (!CUE_LEVELS.some(([id]) => id === out.cues)) out.cues = 'nades';
+    out.layout = sanitizeLayout(out.layout);
     out.squad = out.squad.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
     for (const [key, s] of Object.entries(STEPPED)) out[key] = clamp(out[key], s.min, s.max);
     return out;

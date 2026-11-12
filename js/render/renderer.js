@@ -2,6 +2,7 @@
 // GameRenderer.update is the only per-frame entry point; it allocates nothing once running.
 import * as THREE from 'three';
 import { TEAMS } from '../shared/constants.js';
+import { TEAM_RGB } from '../shared/palette.js';   // [r, g, b] per side, rewritten in place by the colour modes.
 import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
 import { ExFx } from './ex-fx.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
 import { ZmFx } from './zm-fx.js';     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
@@ -96,7 +97,6 @@ void main() {
 }`;
 
 // Frequently needed colours as arrays, kept stable so the event path allocates nothing.
-const TEAM_RGB = TEAMS.map(t => hexRGB(t.color));
 const TINTS = new Map();
 function tracerColor(camoId, team) {
   let t = TINTS.get(camoId);
@@ -532,7 +532,7 @@ export class GameRenderer {
     const cam = this.camera;
     const t = this.time.value;
     this.trauma = Math.max(0, this.trauma - dt * 2.4);
-    const shake = this.trauma * this.trauma;
+    const shake = this.trauma * this.trauma * feelMotion();   // Reduce shake (Options) or the system setting: a quarter.
 
     // Replays hand the camera to the killcam's description of the shot.
     if (this.cine) {
