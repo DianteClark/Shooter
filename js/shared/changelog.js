@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Graveyard Shift: Ashgrove Halt',
+    items: [
+      'A new map built for Graveyard Shift: Ashgrove Halt, a country rail halt and its churchyard on a foggy night. Start on the platform and open your way round the goods yard, the churchyard, the burial field and the level crossing.',
+      'The power is out at Ashgrove: the perk machines stay dark until someone reaches the pump house in the middle of the map and throws the switch. It costs nothing, but you have to get there.',
+      'On boss rounds the Yardmaster rises in the burial field, open ground round the old memorial with room to run.',
+      'Three dead ends hide the mystery crate: the lamp room, the crypt and the coal stage.',
+      'Playing solo with bots, a bot teammate will go and turn the power on after round 2 if you have not.',
+    ],
+  },
+  {
     build: '1111-28', date: '2026-11-12', title: 'Prestige and Master Prestige',
     items: [
       'Every prestige rank now brings its own camo for every gun, alongside its icon and calling card. Ranks you already hold have theirs waiting.',
