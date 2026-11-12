@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Graveyard Shift: somewhere to spend your points',
+    build: '1111-32', date: '2026-11-12', title: 'Graveyard Shift: somewhere to spend your points',
     items: [
       'Upgrade bench: bring the gun in your hands to the bench and it comes back stronger, with a bigger magazine and more ammo. Three tiers (5,000, 15,000 and 30,000 points); the third adds special rounds that set the undead burning, arc between them, burst on impact or slow them down, depending on the gun. Upgraded guns glow and fire coloured tracers, and keep their tier when you swap.',
       'Supply terminal: buy a Sentry Gun, an Air Strike on the thickest crowd near you, a Hunter Drone, a Lure that draws the undead in and then blows, or an Armour Vest. One of each per round; prices rise as the rounds go on. Your class scorestreaks no longer work in Graveyard Shift, for you or the bots.',
