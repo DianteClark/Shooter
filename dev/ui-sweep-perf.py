@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Perf overlay numbers in real matches (ROADMAP item 37): python3 dev/ui-sweep-perf.py [port] [outdir] [--root=DIR] [cases]
+"""Perf overlay numbers in real matches (ROADMAP item 37): python3 dev/ui-sweep-perf.py [port] [outdir] [--root=DIR] [--q=low|high] [cases]
 
 At 932x430 in headless Chromium (SwiftShader, so frame and script ms only compare runs on this machine; draw calls and
 triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground),
@@ -18,10 +18,11 @@ for a in sys.argv[1:]:
 PORT = int(argv[0]) if argv and argv[0].isdigit() else 8395
 OUT = argv[1] if len(argv) > 1 else '/tmp/sweep-perf'
 ONLY = argv[2:]
+Q = next((a[4:] for a in sys.argv[1:] if a.startswith('--q=')), 'low')
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
 G = 'window.__game.app'
-CASES = [('br', 'frontier', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('tdm', 'railyard', 'tdm')]
+CASES = [('br', 'frontier', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm')]
 
 ZM20 = f"""(async () => {{
   const m = {G}.match, sim = m.sim, R = sim.rules;
@@ -57,13 +58,14 @@ async def run(browser, name, mapId, mode, rows):
     await pg.wait_for_timeout(1000)
     await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_function(f'{G}.inMatch && {G}.match?.interp?.newest?.phase === "live"', timeout=90000)
+    await ev(f"{G}.renderer?.setQuality?.('{Q}')")     # Pinned, as docs/BR-PERF.md measures (SwiftShader would drop auto to Potato).
     extra = ''
     if name == 'br':
         await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=60000)
         await pg.locator('.br-jump-map').first.click()
         await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=60000)
         await pg.wait_for_timeout(2000)
-    if name == 'zm20':
+    if name.startswith('zm20'):
         extra = f'horde {await ev(ZM20)}'
     await pg.wait_for_timeout(3000)
     calls, tris, script, frame, lines = [], [], [], [], None
