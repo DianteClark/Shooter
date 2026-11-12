@@ -24,12 +24,14 @@
 // I-V (LADDER_BASE + tier) rather than a weapon level.
 //
 // weapons: allow-list of weapon ids (absent = every gun). perWeapon: mods replaced per weapon, merged over mods.
-// unlock: the weapon level (1 to 30) that unlocks it. Level ties only happen between attachments that can never
-// be on the same gun. Tracks by weapon come from trackFor(); the unlock order is ATTACHMENT_LIST.
+// unlock: the weapon level (1 to 30) that unlocks it. A gun opens at most two parts on one level (wave 2 shares levels
+// with older parts), never two for the same slot. Tracks by weapon come from trackFor(); the unlock order is
+// ATTACHMENT_LIST.
 
 import { GOLDEN_ID, WEAPON_IDS, idsIn } from './constants.js';
 import { V10_DENY } from './weapons-v10.js';
 import { V11_ATTACHMENTS } from './attachments-v11.js';
+import { W2_ATTACHMENTS, W2_EXTEND } from './attachments-w2.js';
 
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 
@@ -358,6 +360,10 @@ for (const id in PURPOSE) ATTACHMENTS[id].for = PURPOSE[id];
 
 // V11: signature attachments and conversion kits, appended after every older id (packKit's slot lists depend on it).
 Object.assign(ATTACHMENTS, V11_ATTACHMENTS);
+// Wave 2 (attachments-w2.js): sixteen more general attachments, after V11 for the same reason, and a few older parts
+// opened to more classes.
+Object.assign(ATTACHMENTS, W2_ATTACHMENTS);
+for (const [id, more] of W2_EXTEND) ATTACHMENTS[id].weapons = [...new Set([...ATTACHMENTS[id].weapons, ...more])];
 
 // V10 guns: exclusions a category allow-list cannot express (weapons-v10.js V10_DENY), taken out of every list above.
 // Signature attachments and kits name their one gun themselves, so the blanket exclusions (blades) skip them.
