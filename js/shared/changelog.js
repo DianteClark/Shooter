@@ -4,6 +4,19 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Recall Beacons, boxing gloves and a better crate',
+    items: [
+      'Battle royale: Recall Beacons. When a squadmate is eliminated their tag drops where they fell. Pick it up, hold it at a Recall Beacon for a few seconds and they parachute back in beside it with a basic kit. Each beacon works once, everyone nearby can hear and see one in use, and they go offline from the fifth circle.',
+      'Beacons show on the map and minimap while you have a squadmate to bring back. In Rebound they switch on once redeploys are over.',
+      'The drop map shows how many players are still aboard the transport and whether each squadmate is aboard, gliding or landed. You can also see them sitting on the transport.',
+      'Battle royale fists are now boxing gloves, with a proper punch and a boing when it lands. They hit as hard as before.',
+      'No more gun slots on the battle royale HUD: Swap changes guns. When both guns run dry your fists come out by themselves, and walking over ammo for one of your guns brings it back.',
+      'Graveyard Shift: wall guns glow, and you can see them and the mystery crate through walls. The crate is a proper crate now: the lid opens, guns spin up out of it, your pick floats until you take it, and it flies off to its next spot.',
+      'Headquarters: fixed the next HQ sometimes never appearing after one was destroyed or moved.',
+      'Control: fixed a single attacker being unable to take a zone.',
+    ],
+  },
+  {
     build: '1111-27', date: '2026-11-12', title: 'Accessibility',
     items: [
       'New in Options: Accessibility. Colour modes for red-weak, green-weak and blue-weak eyes, and a high contrast mode. They change team colours everywhere: players, rings, the minimap, the kill feed, objectives, squads and loot.',
