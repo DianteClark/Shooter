@@ -101,6 +101,7 @@ from consecutive snapshots. Round 20 with 24 alive: about 0.7 KB mean per guest 
 | neon | 0.40 ms | 4.5 ms | 13.5 ms | 719 / 1356 B |
 | ruins | 0.27 ms | 2.9 ms | 4.9 ms | 713 / 1382 B |
 | foundry | 0.24 ms | 2.3 ms | 5.0 ms | 721 / 1349 B |
+| ashgrove | 0.17 ms | 2.0 ms | 3.6 ms | 721 / 1333 B |
 
 Inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms). The renderer adds no per-zombie draw calls.
 
