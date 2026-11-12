@@ -11,6 +11,7 @@
 @import url("boards.css");
 @import url("seasons.css");
 @import url("voice.css");
+@import url("install.css");
 
 /* Dusk yard: steel that has gone blue-mauve in the last light, with sodium lamps for anything that wants attention.
    Team colours come from js/shared/constants.js and are the only fully saturated colours on screen. */

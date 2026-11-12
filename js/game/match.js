@@ -21,6 +21,7 @@ import { objOf } from '../sim/rules.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { unpackKit } from '../shared/attachments.js';
 import { AMMO_TYPES, ammoOf, brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
+import { hapticEvents } from '../ui/haptics.js';
 
 // Smallest signed rotation from b to a.
 function angleDiffSigned(a, b) {
@@ -623,6 +624,7 @@ export class Match {
       this.audio.update(view, dt);
       this.awards.onEvents(events, view);
       this.telemetry.onEvents(events, view);
+      hapticEvents(events, this.localId);      // Vibrate on hits, when the option is on (docs/DEVICES.md).
     } finally {
       events.length = 0;
       // A frame that throws while drawing the end (the final replay, a HUD readout) must still let the match end.

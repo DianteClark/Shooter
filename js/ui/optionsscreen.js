@@ -6,6 +6,8 @@ import { pop } from './motion.js';
 import { VOICE_LEVELS_WORK } from '../net/voice.js';
 import { deviceProfile, savedAutoStep, QUALITY_STEPS } from '../render/quality.js';
 import { controllerScreen } from './controllerscreen.js';
+import { hapticsSupported } from './haptics.js';
+import { fullscreenSupported, enterFullscreen } from './android.js';
 
 const stepLabel = id => QUALITY_STEPS.find(s => s.id === id)?.label ?? id;
 
@@ -59,6 +61,10 @@ export function optionsScreen(menu, opts) {
           <div class="opt-name"><b>Touch debug</b><small>Shows every finger and the last touch events. Screenshot it when a control misbehaves</small></div>
           ${toggle('optTouchDebug', 'opt-touchdebug')}
         </div>
+        ${fullscreenSupported() ? `<div class="opt-row">
+          <div class="opt-name"><b>Full screen</b><small>Hides the browser and system bars in a browser tab</small></div>
+          ${toggle('optFullscreen', 'opt-fullscreen')}
+        </div>` : ''}
       </section>
       <section class="opt-col" data-in="up">
         <h4>${ico('controls')}Controls<button class="seg opt-pad" data-act="optPad" aria-label="Controller settings">${ico('ui:controls')}<b>Controller</b></button></h4>
@@ -72,6 +78,10 @@ export function optionsScreen(menu, opts) {
           <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
           ${toggle('optAutoRespawn', 'opt-autorespawn')}
         </div>
+        ${hapticsSupported() ? `<div class="opt-row">
+          <div class="opt-name"><b>Vibrate on hits</b><small>A buzz when you are hit or land a hit</small></div>
+          ${toggle('optHaptics', 'opt-haptics')}
+        </div>` : ''}
       </section>
       <section class="opt-col" data-in="up">
         <h4>${ico('sound')}Audio${voiceModeChip}</h4>
@@ -105,6 +115,12 @@ export function optionsScreen(menu, opts) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
+    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen']]) {
+      const t = q(cls);
+      if (!t) continue;
+      t.classList.toggle('on', v[key] === true);
+      t.querySelector('b').textContent = v[key] === true ? 'On' : 'Off';
+    }
     const mm = q('.opt-matchmusic');
     mm.classList.toggle('on', v.matchMusic === true);
     mm.querySelector('b').textContent = v.matchMusic === true ? 'On' : 'Off';
@@ -137,6 +153,13 @@ export function optionsScreen(menu, opts) {
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
     optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },
+    optHaptics: () => { Options.set('haptics', !Options.get('haptics')); if (Options.get('haptics')) try { navigator.vibrate?.(20); } catch { /* blocked */ } paint(); },
+    optFullscreen: () => {
+      Options.set('fullscreen', !Options.get('fullscreen'));
+      if (Options.get('fullscreen')) enterFullscreen();
+      else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      paint();
+    },
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optSquad: () => onSquad?.(),

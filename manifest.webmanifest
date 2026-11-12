@@ -1,16 +1,24 @@
 {
   "name": "Switchyard",
   "short_name": "Switchyard",
-  "description": "6v6 team deathmatch in a freight yard at dusk.",
+  "description": "6v6 top-down shooter in a freight yard at dusk. Play with friends, phone to phone.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
   "background_color": "#1d232b",
   "theme_color": "#1d232b",
+  "categories": ["games"],
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
   "icons": [
     { "src": "assets/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
