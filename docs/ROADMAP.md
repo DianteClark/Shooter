@@ -105,8 +105,11 @@ on every push, keep 2% of weekly usage for bugs.
 26. DONE (zombies). Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
     a boss every 10 rounds, on existing maps. Graveyard Shift on Night Market, Ruins and Foundry; docs/ZOMBIES.md.
 27. Resurgence BR: small map, fast circle, redeploy while any squadmate lives.
-28. Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
-29. Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
+28. DONE (voice). Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
+    Options Mic chip (Open / Hold to talk); party voice in the friend lobby (mic in the lobby header); mute plates on the
+    lobby cars and the scoreboard rows; talking marks from RTP audio levels; docs/CONTROLLER.md (Voice).
+29. DONE (voice). Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
+    js/ui/gamepad.js, Options > Controller (remap, deadzone, aim sensitivity, invert Y); docs/CONTROLLER.md.
 30. Attachments wave 2: more attachments per gun, visible on the model.
 31. Gunfight 2v2: short rounds, the same random loadout for everyone, small maps.
 32. Finishing moves and an emote wheel.

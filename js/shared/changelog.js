@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-11', title: 'Controllers and voice chat',
+    items: [
+      'Play with a controller: PlayStation, Xbox and iPhone (MFi) controllers work on iPhone and Android. Left stick moves, right stick aims, triggers aim and fire, and every action has a button, including reload and melee.',
+      'Menus work with a controller too: the d-pad moves, A or Cross picks, B or Circle goes back, the shoulder buttons switch tabs.',
+      'The on-screen sticks hide while you use a controller and come back as soon as you touch the screen.',
+      'Options > Controller: change any button, set the stick deadzone and aim sensitivity, or invert the right stick.',
+      'Voice chat: choose open mic or hold to talk in Options. Talk with friends in the lobby before the match, not only in it.',
+      'Mute any one player from the lobby or the scoreboard, and see who is talking by the mic beside their name.',
+    ],
+  },
+  {
     build: '1111-20', date: '2026-11-11', title: 'Zombies: Graveyard Shift',
     items: [
       'New co-op mode: Graveyard Shift. Hold off the undead round after round on Night Market, Ruins or Foundry. Find it under Multiplayer > Zombies.',
