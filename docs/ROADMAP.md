@@ -87,7 +87,7 @@ on every push, keep 2% of weekly usage for bugs.
 20. Bug sweep (every mode and screen at both sizes, saves, friend lobbies) and a phone performance pass (with the
     owner's Performance overlay screenshots).
 21. DONE (seasons). Ranked: placements, divisions, seasonal resets, matched against the bot pool and friends. docs/SEASONS.md.
-22. Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
+22. DONE (1111-17). Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
     mode/event, ranked reset, seasonal boards. Ship two seasons ahead per update, content date-locked; if updates stop,
     "Season Replay" rotates past seasons. Season 1 with the framework.
     DONE (seasons): docs/SEASONS.md. Season 1 Cold Iron (2026-11-16), Season 2 Signal Fire (2026-12-28), then Season
