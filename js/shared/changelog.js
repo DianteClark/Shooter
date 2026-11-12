@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Bug sweep',
+    build: '1111-34', date: '2026-11-12', title: 'Bug sweep',
     items: [
       'Graveyard Shift is harder after round 10: tougher, faster and harder-hitting undead, more runners and brutes, quicker spawns, tougher bosses, and a longer, rougher exfil. Rounds 1 to 10 are unchanged. Each extra player in the crew adds more undead with more health.',
       'Graveyard Shift pays less XP for a long run (about three long multiplayer matches at most), and guns level more slowly there: no more maxing a gun in one run.',
