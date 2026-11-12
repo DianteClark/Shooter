@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-11', title: 'Rebound and Showdown',
+    build: '1111-24', date: '2026-11-11', title: 'Rebound and Showdown',
     items: [
       'New on the Battle Royale tab: Rebound. A fast battle royale on one part of Frontier, in squads of four or pairs, with a quicker circle and matches of about eight to ten minutes.',
       'In Rebound, die while a squadmate is still in and you parachute back in next to them after a short countdown, with a gun, a sidearm and some armor. A note under your squad says at which circle redeploys end.',
