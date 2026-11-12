@@ -42,6 +42,7 @@ MATCHES = [
     ('topside', 'ctl'), ('topside', 'grind'),
     ('harvest', 'gwtdm'), ('harvest', 'gwdom'), ('harvest', 'gwhq'), ('harvest', 'gwko'), ('harvest', 'gwinf'),
     ('frontier', 'br'), ('frontier', 'brduo'), ('frontier', 'brsolo'), ('frontier', 'exq'), ('frontier', 'exd'),
+    ('neon', 'zm'),
     ('', 'training'), ('', 'range'), ('', 'tutorial'),
 ]
 ONLY = opt('--only', '')
