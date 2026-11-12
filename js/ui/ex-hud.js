@@ -316,7 +316,7 @@ export class ExHud {
   // The squad's contract: the next step in words, its progress, how far.
   #contract(view, me, squad) {
     const k = squad?.contract;
-    const show = !!k && view.phase !== 'ended' && !squad?.done;
+    const show = !!k && view.phase !== 'ended' && !squad?.done && !me.out;      // Lifted out: nothing left to do.
     if (this.c.conShow !== show) { this.c.conShow = show; this.conEl.hidden = !show; }
     if (!show) return;
     const poi = objOf(view).pois?.[k.poi];
@@ -404,7 +404,7 @@ export class ExHud {
     const eye = me.alive ? me : view.players.find(p => p.id === spectate.target(view, me.id)) ?? me;
     let n = 0;
     const k = squad?.contract;
-    if (k && !squad.done && view.phase === 'live') {
+    if (k && !squad.done && !me.out && view.phase === 'live') {
       const g = this.#goal(k, eye);
       const mine = k.type === 'intel' && k.carrier >= 0 && view.players[k.carrier]?.id === me.id;
       if (!(k.type === 'intel' && k.carrier >= 0 && !mine)) n = this.#tag(n, g.x, g.z, k.contested || (k.type === 'cache' && k.def > 0) ? 'warn' : '', `${icon(`ex:${k.type}`, { size: 13 })}${mine ? 'Drop' : CONTRACT_NAMES[k.type].split(' ').pop()} <small>${Math.round(Math.hypot(g.x - eye.x, g.z - eye.z))} m</small>`, eye);
@@ -433,7 +433,7 @@ export class ExHud {
     let sx, sy;
     if (w > 0.01) { sx = ((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * W; sy = (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * H; }
     else { sx = W / 2 + (x - eye.x) * 100; sy = H / 2 + (z - eye.z) * 100; }
-    const mx = 70, top = 96, bottom = H - 122;      // Clear of the minimap and chips above, the sticks and buttons below.
+    const mx = 70, top = 112, bottom = H - 122;      // Clear of the minimap and chips above, the sticks and buttons below.
     const off = sx < mx || sx > W - mx || sy < top || sy > bottom;
     if (off && !pin) { t.root.hidden = true; return k + 1; }
     if (off) {
