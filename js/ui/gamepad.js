@@ -46,7 +46,9 @@ const NAMES = {
 };
 const DPAD_ARROWS = { 12: '▲', 13: '▼', 14: '◀', 15: '▶' };
 
+// Chrome names a DualShock 4 just "Wireless Controller", so Xbox is ruled out first.
 export function padFamily(id = '') {
+  if (/xbox|045e/i.test(id)) return 'xbox';
   return /054c|playstation|dualsense|dualshock|wireless controller/i.test(id) ? 'ps' : 'xbox';
 }
 
@@ -139,6 +141,7 @@ export class GamepadInput {
     this.paused = false;           // Pause opened the scoreboard as a menu
     this.peek = false;             // Scoreboard held open by its button
     this.talking = false;
+    this.playing = false;          // This frame's poll gave the match the pad (no panel open over it)
     this.focusEl = null;
     this.focusKey = '';
     this.scopeEl = null;
@@ -254,7 +257,8 @@ export class GamepadInput {
     this.#voiceButton();
     const live = this.inMatch?.() && this.controls?.enabled;
     const panel = live ? this.#matchPanel() : null;
-    if (live && !panel) {
+    this.playing = !!(live && !panel);
+    if (this.playing) {
       this.#ring(null);
       this.#play(dt);
     } else {
@@ -355,6 +359,16 @@ export class GamepadInput {
   // Called from Controls.read() once a frame while a match takes input: the pad's Input over the thumbs'.
   merge(inp) {
     if (!this.active || !this.supported) return;
+    if (!this.playing) {
+      // A panel is open over the match (pause, quick chat, the death screen): the sticks walk its focus ring instead.
+      inp.mx = inp.mz = 0;
+      inp.aim = null;
+      inp.aiming = inp.fire = inp.sprint = inp.melee = inp.reload = false;
+      inp.slide = inp.swap = inp.tactical = inp.lethal = false;
+      inp.streak = -1;
+      inp.throwAim = inp.throwDist = null;
+      return;
+    }
     const dead = Options.get('padDead');
     let mx = this.axes[0], mz = this.axes[1];
     const len = Math.hypot(mx, mz);
