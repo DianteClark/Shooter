@@ -51,7 +51,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { controller: 2, season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -318,7 +318,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false, voice = false } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -332,11 +332,15 @@ export class Menu {
           const self = h.id === localId;
           const can = !ffa && (isHost || self);
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
-          cells += `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
-            <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${esc(h.name)}</b></span>
+          // voice: party voice runs in this room (js/ui/voice-ui.js paints the talking dot and the mute button).
+          const car = `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
+            <span class="car-id">${voice ? `<i class="vc-dot">${ico('ui:mic', '', 13)}</i>` : ''}${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${esc(h.name)}</b></span>
             <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge?.level, emblem: h.loadout?.emblem })}<small>${self ? 'You' : status}</small></span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
+          cells += voice
+            ? `<div class="car-cell" data-voice="${esc(h.id)}">${car}${self ? '' : `<button class="car-mute" data-act="voiceMute" data-id="${esc(h.id)}" data-voice-mute="${esc(h.id)}" data-sound="tab" hidden aria-label="Mute">${ico('ui:volume', '', 14)}</button>`}</div>`
+            : car;
         } else {
           cells += `<div class="car bot">${ico('bots')}<small>Bot<br><em>${esc(skillName)}</em></small></div>`;
         }
@@ -361,6 +365,7 @@ export class Menu {
           <span>Room code</span>
           <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         </div>
+        ${voice ? `<button class="chip lb-mic" data-act="lobbyMic" data-state="off" aria-label="Party voice">${ico('ui:mic')}<b>Mic</b></button>` : ''}
         ${isHost ? inviteControls({ listed }) : listed ? `<span class="inv-listed static">${ico('ui:signal')}<b>Public</b></span>` : ''}
         ${br ? squadMarkup(brSquad, isHost) : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>`}
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}

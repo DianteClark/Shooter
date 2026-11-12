@@ -5,6 +5,7 @@ import { ico, header } from './yard.js';
 import { pop } from './motion.js';
 import { VOICE_LEVELS_WORK } from '../net/voice.js';
 import { deviceProfile, savedAutoStep, QUALITY_STEPS } from '../render/quality.js';
+import { controllerScreen } from './controllerscreen.js';
 
 const stepLabel = id => QUALITY_STEPS.find(s => s.id === id)?.label ?? id;
 
@@ -34,7 +35,11 @@ const stepper = key => {
 
 const toggle = (act, cls = '') => `<button class="opt-toggle${cls ? ' ' + cls : ''}" data-act="${act}"><i class="opt-knob"></i><b></b></button>`;
 
-export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
+// The voice row's Mic chip: open mic or push to talk (js/net/voice.js).
+const voiceModeChip = `<button class="seg opt-voicemode" data-act="optVoiceMode" aria-label="Microphone mode"><small>Mic</small><b></b></button>`;
+
+export function optionsScreen(menu, opts) {
+  const { onBack, onPreviewSound, onSquad } = opts;
   menu.el.dataset.screen = 'options';
   menu.el.innerHTML = `
     ${header({ back: 'optBack', label: 'Done', title: 'Options' })}
@@ -66,14 +71,19 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
           <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
           ${toggle('optAutoRespawn', 'opt-autorespawn')}
         </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>Controller</b><small>Buttons, stick deadzone, aim sensitivity</small></div>
+          <button class="seg opt-pad" data-act="optPad">${ico('ui:controls')}<b>Set up</b></button>
+        </div>
       </section>
       <section class="opt-col" data-in="up">
         <h4>${ico('sound')}Audio</h4>
         ${stepper('sound')}
         ${stepper('music').replace('<div class="opt-name"><b>Music</b>', `<div class="opt-name opt-name-mm"><b>Music</b><button class="seg opt-matchmusic" data-act="optMatchMusic" aria-label="Music in matches"><small>In matches</small><b></b></button>`)}
-        ${VOICE_LEVELS_WORK ? stepper('voice') : `
+        ${VOICE_LEVELS_WORK ? stepper('voice').replace('<div class="opt-name"><b>Team voice</b>', `<div class="opt-name opt-name-mm"><b>Team voice</b>${voiceModeChip}`) : `
         <div class="opt-row">
           <div class="opt-name"><b>Team voice</b><small>Plays your squad's voice on this phone</small></div>
+          ${voiceModeChip}
           ${toggle('optVoice', 'opt-voice')}
         </div>`}
         <div class="opt-row opt-squad">
@@ -102,6 +112,9 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
     const mm = q('.opt-matchmusic');
     mm.classList.toggle('on', v.matchMusic === true);
     mm.querySelector('b').textContent = v.matchMusic === true ? 'On' : 'Off';
+    const vm = q('.opt-voicemode');
+    vm.classList.toggle('on', v.voiceMode === 'ptt');
+    vm.querySelector('b').textContent = v.voiceMode === 'ptt' ? 'Hold to talk' : 'Open';
     const tag = q('.opt-squad-tag');
     tag.classList.toggle('on', !!v.squad);
     tag.querySelector('b').textContent = v.squad || 'None';
@@ -132,6 +145,8 @@ export function optionsScreen(menu, { onBack, onPreviewSound, onSquad }) {
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optSquad: () => onSquad?.(),
     optSquadClear: () => { Options.set('squad', ''); paint(); },
+    optVoiceMode: () => { Options.set('voiceMode', Options.get('voiceMode') === 'ptt' ? 'open' : 'ptt'); paint(); },
+    optPad: () => controllerScreen(menu, { onBack: () => optionsScreen(menu, opts) }),
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));

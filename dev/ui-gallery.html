@@ -136,6 +136,8 @@ const SCENES = {
   'lobby-ranked': menuScene('Lobby: full room, ranked on', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }).map((h, i) => ({ ...h, badge: { ...h.badge, rk: i % 4 ? i + 2 : -1 } })), botSkill: 'mixed', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false, rankedOn: true, rankedFull: true })),
   'lobby-unranked': menuScene('Lobby: full room, ranked off', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12), botSkill: 'mixed', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false, rankedOn: false, rankedFull: true })),
   'lobby-full': menuScene('Lobby: 12, long names', ({ menu }) => menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }), botSkill: 'elite', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false })),
+  // Party voice in the lobby (roadmap item 28): the mic in the header, a mute plate on every other player's car.
+  'lobby-voice': menuScene('Lobby: party voice, 12', ({ menu }) => { menu.lobby({ code: 'K7QX', humans: fakeHumans(12, { long: true }), botSkill: 'elite', isHost: true, localId: 'me', hostId: 'me', countdown: null, rematchWait: false, voice: true }); for (const b of menu.el.querySelectorAll('.car-mute')) b.hidden = false; menu.el.querySelector('.car-cell')?.classList.add('talking'); }),
   'vote': menuScene('Map vote', async ({ menu }) => {
     const { voteOptions } = await import('./js/ui/vote.js');
     menu.vote({ key: 1, options: voteOptions(() => 0.37), left: 11, seconds: 15, winner: null, resolved: null, mine: 1, counts: [1, 2, 0], total: 4 });
@@ -161,6 +163,8 @@ const SCENES = {
   'profile': menuScene('Profile', ({ menu }) => menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop })),
   'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),
+  // Options > Controller (js/ui/controllerscreen.js), opened from the Options screen's Set up button.
+  'controller': menuScene('Options: controller', ({ menu }) => { menu.options({ onBack: noop, onPreviewSound: noop }); menu.el.querySelector('[data-act="optPad"]').click(); }),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop }); }),
   // Leaderboards: a played-in save, three friends (one with a long tag, one from last week) and the pool.

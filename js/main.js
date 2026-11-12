@@ -48,6 +48,8 @@ import { cleanMods } from './shared/playlist.js';
 import { seasonUnlocks } from './ui/season.js';
 import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
 import { QuickChat } from './ui/quickchat.js';
+import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
+import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
 // Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
 import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
@@ -97,6 +99,8 @@ wireInvite(menu, () => app.code);
 const audio = new AudioEngine();
 const quickChat = new QuickChat(hud, { audio });
 const backdrop = new MenuBackdrop(canvas);
+// Created at the end of this file's setup, once app exists; see wireExtras.
+let gamepad = null, voiceUi = null;
 
 // Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
 // keep it moving. Nothing of the backdrop exists while a match owns the canvas.
@@ -359,6 +363,8 @@ menu.on({
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
   brSquad: ({ n }) => setBrSquad(n),
   moveTeam: ({ id }) => moveTeam(id),
+  lobbyMic: () => app.voice?.toggleMic(),
+  voiceMute: ({ id }) => voiceUi?.toggleMute(id),
 });
 
 function needName(next) {
@@ -485,7 +491,9 @@ function localHuman() {
 function renderLobby() {
   if (!app.net) return;
   if (app.isHost && app.customFrom === 'lobby') return;     // The host is in the custom picker; Back repaints.
+  updateVoiceTeam();
   menu.lobby({
+    voice: !!app.voice && app.voice.state !== 'unavailable',
     code: app.code, humans: app.lobby.humans, botSkill: app.lobby.botSkill, isHost: app.isHost,
     localId: app.net.localId, hostId: app.net.hostId,
     countdown: app.isHost ? (app.rematch?.left ?? null) : app.countdown,
@@ -964,11 +972,14 @@ function wireSharedNet(net) {
   hud.onMic(() => app.voice?.toggleMic());
   hud.onSpeaker(() => { if (app.voice) app.voice.setMuted(!app.voice.muted); });
   app.voice?.setVolume(Options.get('voice'));
+  app.voice?.setMode(Options.get('voiceMode'));
 }
 
 function updateVoiceTeam() {
   const me = localHuman();
   if (!app.voice || !me) return;
+  // Before and between matches the friend lobby is one party: everyone hears everyone.
+  if (!app.inMatch) { app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id).map(h => h.id)); return; }
   // A free-for-all has no squad: voice goes to every human in the room.
   const ffa = ffaRoom() || isZm(roomMode());     // Graveyard Shift: every human is on the one side.
   app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id && (ffa || h.team === me.team)).map(h => h.id));
@@ -1540,6 +1551,7 @@ function endLocalMatch() {
   quickChat.stop();
   hud.setVisible(false);
   controls.setEnabled(false);
+  updateVoiceTeam();               // Back to party voice with the whole lobby.
 }
 
 function onMatchEnd(results) {
@@ -1677,6 +1689,7 @@ function applyOptions(v, changed) {
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
   if (!changed || changed === 'matchMusic') music.setMatchMusic(v.matchMusic);
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
+  if (!changed || changed === 'voiceMode') app.voice?.setMode(v.voiceMode);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
   backdrop.quality = v.quality;
   if (!changed || changed === 'fps') perf.setVisible(v.fps || FPS_PARAM);
@@ -1692,6 +1705,15 @@ function maybeInstallPrompt() {
   Progress.setFlag('installPrompt');
   menu.installPrompt(() => {});
 }
+
+// Controllers and the voice overlay need app, the HUD, the menu and quick chat.
+gamepad = new GamepadInput({
+  controls, hud, menu, quickChat,
+  voice: () => app.voice,
+  inMatch: () => !!app.inMatch && !!app.match,
+  toast: text => (app.inMatch ? hud.notify(text) : menu.toast(text)),
+});
+voiceUi = new VoiceUI({ hud, voice: () => app.voice, nameOf: id => app.lobby.humans.find(h => h.id === id)?.name ?? app.matchInfo?.roster?.find(r => r.id === id)?.name ?? '' });
 
 // Times every frame's script work for the Auto quality governor and the performance overlay.
 installFrameClock();
@@ -1722,7 +1744,7 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
+if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial, gamepad, voiceUi, Options };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 

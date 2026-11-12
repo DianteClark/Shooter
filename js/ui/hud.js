@@ -1115,6 +1115,7 @@ export class HUD {
         row.hidden = !p;
         if (!p) return;
         row.classList.toggle('me', p.id === me.id);
+        if (row.dataset.voice !== p.id) row.dataset.voice = p.id;    // js/ui/voice-ui.js: talking mark and mute
         if (slot.nameKey !== p.name) { slot.nameKey = p.name; slot.name.innerHTML = nameHtml(p.name); }
         slot.name.style.color = '';
         const badge = this.badges.get(p.id);
@@ -1147,6 +1148,7 @@ export class HUD {
         row.hidden = !p;
         if (!p) return;
         row.classList.toggle('me', p.id === me.id);
+        if (row.dataset.voice !== p.id) row.dataset.voice = p.id;    // js/ui/voice-ui.js: talking mark and mute
         const nk = `${at + 1}|${p.name}`;
         if (slot.nameKey !== nk) { slot.nameKey = nk; slot.name.innerHTML = `${at + 1}. ${nameHtml(p.name)}`; }
         slot.name.style.color = TEAMS[p.team]?.css ?? '';

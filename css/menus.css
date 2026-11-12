@@ -876,6 +876,24 @@
 #ui .opt-name-mm { flex-direction: row; align-items: center; justify-content: space-between; }
 #ui .opt-matchmusic { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); }
 #ui .opt-matchmusic small { color: var(--c-haze); font: inherit; }
+/* Team voice: open mic or push to talk, on the voice row's name line like Music's switch (js/net/voice.js). */
+#ui .opt-voicemode { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); flex: none; }
+#ui .opt-voicemode small { color: var(--c-haze); font: inherit; }
+#ui .opt-pad { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 34px; flex: none; }
+#ui .opt-pad .ico { height: 16px; }
+/* Options > Controller (js/ui/controllerscreen.js). */
+#ui .pad-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr); gap: var(--sp-3); }
+#ui .pad-status { margin: 0; font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }
+#ui .pad-reset { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 32px; margin-top: auto; }
+#ui .pad-reset .ico { height: 15px; }
+#ui .pad-map h4 small { margin-left: auto; font: 400 var(--fs-caption)/1 var(--f-body); letter-spacing: 0; color: var(--c-haze); }
+#ui .pad-binds { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 30px; gap: 3px var(--sp-2); align-content: start; overflow-y: auto; }
+#ui .pad-bind { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 4px 0 10px; height: 30px; min-width: 0; background: rgba(231,234,228,.05); box-shadow: inset 0 0 0 1px var(--c-line); text-align: left; }
+#ui .pad-bind span { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .03em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#ui .pad-key { flex: none; min-width: 34px; padding: 4px 7px; text-align: center; background: var(--c-night); color: var(--c-sodium); font: 700 11px/1 system-ui, sans-serif; border-radius: 3px; }
+#ui .pad-bind.unbound .pad-key { color: var(--c-plate); }
+#ui .pad-bind.listen { box-shadow: inset 0 0 0 1.5px var(--c-sodium); background: rgba(242,166,59,.14); }
+#ui .pad-bind.listen .pad-key { color: var(--c-night); background: var(--c-sodium); }
 #ui .opt-stepper { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px 46px; align-items: center; gap: var(--sp-2); }
 #ui .opt-step {
   width: 38px; height: 36px; display: grid; place-items: center; color: var(--c-chalk); background: var(--face-steel); box-shadow: var(--bevel), var(--edge);

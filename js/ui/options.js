@@ -7,6 +7,10 @@ export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'H
 export const OPTION_DEFAULTS = Object.freeze({
   quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1, matchMusic: false, fps: false, touchDebug: false, autoRespawn: false,
   squad: '',     // Squad tag for public rooms (js/net/lobbies.js): letters and digits, up to 10; '' for none.
+  voiceMode: 'open',   // 'open': the mic sends while it is on. 'ptt': push to talk, only while the mic (or Talk) is held.
+  // Controller (js/ui/gamepad.js, docs/CONTROLLER.md). padMap holds only the actions moved off their default button:
+  // action id -> standard-mapping button index, or -1 for unbound.
+  padDead: 0.15, padSens: 1, padInvertY: false, padMap: {},
 });
 
 // Slider-style settings: unit is the on-screen step, and what the bar and label report.
@@ -16,6 +20,8 @@ export const STEPPED = {
   sound: { label: 'Sound effects', min: 0, max: 1, step: 0.1, text: v => Math.round(v * 100) + '%' },
   music: { label: 'Music', min: 0, max: 1, step: 0.1, text: v => Math.round(v * 100) + '%' },
   voice: { label: 'Team voice', min: 0, max: 1, step: 0.1, text: v => Math.round(v * 100) + '%' },
+  padDead: { label: 'Stick deadzone', min: 0.05, max: 0.35, step: 0.05, text: v => Math.round(v * 100) + '%', hint: 'Stick travel ignored around centre' },
+  padSens: { label: 'Aim sensitivity', min: 0.5, max: 2, step: 0.1, text: v => v.toFixed(1) + 'x', hint: 'How fast the aim follows the right stick' },
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -26,6 +32,12 @@ function load() {
     const out = { ...OPTION_DEFAULTS };
     for (const key of Object.keys(OPTION_DEFAULTS)) if (typeof raw[key] === typeof OPTION_DEFAULTS[key]) out[key] = raw[key];
     if (!QUALITY_LEVELS.some(([id]) => id === out.quality)) out.quality = 'auto';
+    if (out.voiceMode !== 'open' && out.voiceMode !== 'ptt') out.voiceMode = 'open';
+    const map = {};
+    if (out.padMap && typeof out.padMap === 'object' && !Array.isArray(out.padMap)) {
+      for (const [k, v] of Object.entries(out.padMap)) if (Number.isInteger(v) && v >= -1 && v < 20) map[k] = v;
+    }
+    out.padMap = map;
     out.squad = out.squad.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
     for (const [key, s] of Object.entries(STEPPED)) out[key] = clamp(out[key], s.min, s.max);
     return out;
