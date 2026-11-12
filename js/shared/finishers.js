@@ -6,16 +6,17 @@
 // hit first. Ids are in saves and on the wire (by index): append only, never reorder.
 // EMOTES: short cosmetic animations on the quick wheel (js/ui/finisher-hud.js), synced as an event. Append only too.
 //
+// hits: the moments (0..1 through it) a blow lands, for the sound and the target's jolt.
 // unlock: {} default | { level } peak player level | { opTier } any operator's mastery tier | { season } a season
 // track tier reached (any season, kept once claimed).
 
 export const FINISHERS = [
-  { id: 'lights', name: 'Lights Out', dur: 1.3, unlock: {}, desc: 'A stock to the back of the head, then a second for good measure.' },
-  { id: 'switchback', name: 'Switchback', dur: 1.5, unlock: { level: 8 }, desc: 'Spin them round by the collar and drive a knee home.' },
-  { id: 'coupling', name: 'Hard Coupling', dur: 1.6, unlock: { level: 22 }, desc: 'Hook the arm, hip throw, a heel on the way down.' },
-  { id: 'railspike', name: 'Railspike', dur: 1.5, unlock: { opTier: 3 }, desc: 'Both hands up, one hammer blow straight down.' },
-  { id: 'lastcall', name: 'Last Call', dur: 1.2, unlock: { season: 30 }, desc: 'Quiet and quick: a hand over the mouth and a sharp twist.' },
-  { id: 'derail', name: 'Derail', dur: 1.8, unlock: { opTier: 5 }, desc: 'Lift them clean off their feet and slam them into the ballast.' },
+  { id: 'lights', name: 'Lights Out', dur: 1.3, hits: [0.36, 0.64], unlock: {}, desc: 'A stock to the back of the head, then a second for good measure.' },
+  { id: 'switchback', name: 'Switchback', dur: 1.5, hits: [0.6], unlock: { level: 8 }, desc: 'Spin them round by the collar and drive a knee home.' },
+  { id: 'coupling', name: 'Hard Coupling', dur: 1.6, hits: [0.55, 0.78], unlock: { level: 22 }, desc: 'Hook the arm, hip throw, a heel on the way down.' },
+  { id: 'railspike', name: 'Railspike', dur: 1.5, hits: [0.56], unlock: { opTier: 3 }, desc: 'Both hands up, one hammer blow straight down.' },
+  { id: 'lastcall', name: 'Last Call', dur: 1.2, hits: [0.55], unlock: { season: 30 }, desc: 'Quiet and quick: a hand over the mouth and a sharp twist.' },
+  { id: 'derail', name: 'Derail', dur: 1.8, hits: [0.62], unlock: { opTier: 5 }, desc: 'Lift them clean off their feet and slam them into the ballast.' },
 ];
 export const FINISHER_IDS = FINISHERS.map(f => f.id);
 export const DEFAULT_FINISHER = 'lights';

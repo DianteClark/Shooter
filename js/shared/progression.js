@@ -1,5 +1,6 @@
 // The rules of progression as pure functions and data: no DOM, no storage, runs in node.
 // js/ui/progress.js holds the one save and applies these rules to it.
+import { FINISHER_IDS } from './finishers.js';
 import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
 import { PERKS, PERK_IDS, PRO, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
 import { MAX_HP, PRIMARY_IDS, WEAPON_IDS, WEAPON_CATEGORY, FFA_TEAM, GOLDEN_ID } from './constants.js';
@@ -1238,6 +1239,8 @@ export function blankSave() {
     season: blankSeasonState(),
     // Graveyard Shift (docs/ZOMBIES.md): the most rounds survived, per map id. Appended; only ever goes up.
     zmBest: {},
+    // Finishing moves (docs/FINISHERS.md): the one each operator plays, {operator: finisher id}; unset is the default.
+    finishers: {},
   };
 }
 
@@ -1250,6 +1253,13 @@ export function cleanZmBest(raw) {
     const n = count(raw[k], 999);
     if (n > 0) out[k] = n;
   }
+  return out;
+}
+// The finisher picks block: known operators to known finisher ids (whether each is still unlocked is read at use).
+export function cleanFinisherPicks(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const op of Object.keys(raw)) if (OPERATOR_IDS_HERE.has(op) && FINISHER_IDS.includes(raw[op])) out[op] = raw[op];
   return out;
 }
 // Records a run on a map: { best, before, fresh } (fresh when it beat the record). Mutates the save.
@@ -1311,6 +1321,7 @@ export function sanitizeSave(raw) {
   s.extractions = count(raw.extractions);
   s.season = cleanSeasonState(raw.season);
   s.zmBest = cleanZmBest(raw.zmBest);
+  s.finishers = cleanFinisherPicks(raw.finishers);
   return s;
 }
 
@@ -1406,9 +1417,11 @@ function packTail(s) {
   const career = s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? s.career : null;
   const season = s.season && !seasonStateEmpty(s.season) ? s.season : null;
   // [19] Graveyard Shift records (appended): only when there is one, after whatever [17] and [18] say (null for nothing).
-  if (s.zmBest && Object.keys(s.zmBest).length) return [career, season, s.zmBest];
-  if (season) return [career, season];
-  return career ? [career] : [];
+  // [20] finisher picks per operator (docs/FINISHERS.md), the same way. Trailing nothings are left off.
+  const tail = [career, season, s.zmBest && Object.keys(s.zmBest).length ? s.zmBest : null,
+    s.finishers && Object.keys(s.finishers).length ? s.finishers : null];
+  while (tail.length && tail[tail.length - 1] === null) tail.pop();
+  return tail;
 }
 
 function unpack(a) {
@@ -1446,6 +1459,7 @@ function unpack(a) {
     ...(a[17] && typeof a[17] === 'object' && !Array.isArray(a[17]) ? { career: a[17] } : {}),
     ...(a[18] && typeof a[18] === 'object' && !Array.isArray(a[18]) ? { season: a[18] } : {}),
     ...(a[19] && typeof a[19] === 'object' && !Array.isArray(a[19]) ? { zmBest: a[19] } : {}),
+    ...(a[20] && typeof a[20] === 'object' && !Array.isArray(a[20]) ? { finishers: a[20] } : {}),
   };
 }
 

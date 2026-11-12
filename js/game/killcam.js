@@ -19,14 +19,15 @@ const FINAL_PRE = 1.7, FINAL_POST = 1.0;
 
 // Only the things the renderer reacts to; everything else stays out of the buffer.
 const KEEP = new Set(['gear', 'fried', 'shot', 'hit', 'kill', 'explosion', 'bang', 'swap', 'slide', 'throw', 'heal', 'overheat',
-  'turret', 'turret_down', 'turret_shot', 'gunship_shot']);
+  'turret', 'turret_down', 'turret_shot', 'gunship_shot', 'emote']);
 
 const smooth = t => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 
 function blankPlayer() {
   return { id: null, name: '', team: 0, x: 0, z: 0, aim: 0, vx: 0, vz: 0, hp: 0, alive: false, weapon: 'ar', camo: 'none',
-    attachments: undefined, adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, overheated: false, ghost: false, respawnT: 0 };
+    attachments: undefined, adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, overheated: false, ghost: false, respawnT: 0,
+    fin: null, downed: false };
 }
 
 function copyPlayer(to, from) {
@@ -35,6 +36,7 @@ function copyPlayer(to, from) {
   to.attachments = from.attachments; to.adsT = from.adsT || 0; to.reloadT = from.reloadT || 0; to.reloadDur = from.reloadDur || 0;
   to.sprinting = !!from.sprinting; to.sliding = !!from.sliding; to.spawnProtect = !!from.spawnProtect; to.heat = from.heat || 0;
   to.overheated = !!from.overheated; to.ghost = !!from.ghost; to.respawnT = from.respawnT || 0;
+  to.fin = from.fin ?? null; to.downed = !!from.downed;     // A finisher replays as one (docs/FINISHERS.md).
 }
 
 export class Killcam {
@@ -292,6 +294,7 @@ export class Killcam {
       const B = b.players[i] && b.players[i].id === A.id ? b.players[i] : A;
       copyPlayer(to, k < 0.5 ? A : B);
       if (held) { to.vx = 0; to.vz = 0; }
+      if (A.fin && B.fin && A.fin.k === B.fin.k && A.fin.role === B.fin.role) to.fin = { ...A.fin, t: A.fin.t + (B.fin.t - A.fin.t) * k };
       if (A.alive === B.alive) {
         const dx = B.x - A.x, dz = B.z - A.z;
         if (dx * dx + dz * dz < 36) {
@@ -451,8 +454,8 @@ export class Killcam {
     if (!this.ui) return;
     const killer = this.#findName(ev.by);
     this.ui.el.dataset.kind = kind;
-    this.ui.title.textContent = kind === 'final' ? 'Final Kill' : 'Killcam';
-    this.ui.who.textContent = kind === 'final' ? killer : killer ? `${killer} got you` : '';
+    this.ui.title.textContent = kind === 'final' ? (ev.fin ? 'Final Kill: Finished' : 'Final Kill') : ev.fin ? 'Finished' : 'Killcam';
+    this.ui.who.textContent = kind === 'final' ? killer : killer ? (ev.fin ? `${killer} finished you` : `${killer} got you`) : '';
     this.ui.el.classList.add('on');
     document.body.classList.add('killcam-on');
     this.ui.skip.classList.add('on');

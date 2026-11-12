@@ -727,6 +727,15 @@
 #ui .op-tags { display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow: hidden; }
 #ui .op-tag { flex: none; display: flex; align-items: center; gap: 4px; padding: 3px 6px 2px; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); background: rgba(231,234,228,.06); white-space: nowrap; }
 #ui .op-tag .ico { height: 11px; color: var(--c-sodium); }
+/* The operator's finishing move (docs/FINISHERS.md): one chip per finisher, the equipped one lit, locked ones dimmed. */
+#ui .op-fin { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#ui .op-fin > small { flex: none; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+#ui .op-fins { display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+#ui .op-fins::-webkit-scrollbar { display: none; }
+#ui .op-finchip { flex: none; display: flex; align-items: center; gap: 3px; height: 24px; padding: 0 7px; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); background: rgba(231,234,228,.08); white-space: nowrap; }
+#ui .op-finchip.on { color: var(--c-sodium-ink); background: var(--c-sodium); }
+#ui .op-finchip.locked { opacity: .5; }
+#ui .op-finchip .ico { height: 10px; }
 #ui .op-tag.ok { color: var(--c-go); }
 #ui .op-tag.ok .ico { color: var(--c-go); }
 #ui .op-tag.is-goal { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--c-sodium); }

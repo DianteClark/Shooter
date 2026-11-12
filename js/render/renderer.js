@@ -387,6 +387,7 @@ export class GameRenderer {
           break;
         }
         case 'swap': chars.onSwap(ev.id); break;
+        case 'emote': chars.onEmote(ev.id, ev.e); break;     // docs/FINISHERS.md
         case 'throw': chars.onThrow(ev.id, ev.kind); break;
         case 'bang': {
           if (ev.kind === 'flash') vfx.flashBurst(ev.x, ev.z, ev.r || 7);

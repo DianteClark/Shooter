@@ -39,6 +39,9 @@
  *            skins(op) -> [{id:'skin:<op>-3'|'skin:<op>-5',tier,name,unlocked,requirement}] (the operator
  *            store in js/ui/operators.js keeps which skin is worn; hasReward is its `granted`)
  *            masteryXp(gains) -> XP the tiers those gains finish would pay (dry run)   lastMastery() -> last match's moved rows
+ * Finishers  finishers(op?) -> [{...finisher, unlocked, requirement, equipped}]  finisherFor(op) -> id (the pick if still
+ *            unlocked, else the default)  setFinisher(op, id) -> bool  emotes() -> [{...emote, unlocked, requirement}]
+ *            emotesOpen() -> [ids]. loadout() carries `finisher` (the loadout's operator's).
  * Looks      operatorSkin(op) -> skin id|null  setOperatorSkin(op, id|null) -> bool (any earned skin of that operator)
  *            emblem() -> earned emblem id|null  setEmblem(id|null) -> bool   loadout() carries `skin` and `emblem`.
  *            Stored in the save (and its codes); js/ui/operators.js's own store is kept as a mirror.
@@ -82,6 +85,7 @@ import { cleanFriends, seeFriend } from '../shared/boards.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP } from '../shared/seasons.js';
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
+import { FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
 
 export { levelOf };
 
@@ -254,6 +258,18 @@ function gateGun(id, list, fallback) {
   return gunOpen(fallback) ? fallback : list.find(gunOpen) ?? fallback;
 }
 
+// What the finisher and emote unlocks are judged on: peak level, the best operator mastery tier, the best season tier.
+function finisherCtx() {
+  let opTier = 0, season = 0;
+  for (const t of MASTERY_TRACKS) if (t.kind === 'operator') opTier = Math.max(opTier, data.mastery?.[t.id]?.t ?? 0);
+  for (const v of Object.values(data.season?.cl ?? {})) season = Math.max(season, v | 0);
+  return { level: data.peakLevel ?? 1, opTier, season };
+}
+function finisherFor(op) {
+  const id = data.finishers?.[op], f = FINISHERS.find(x => x.id === id);
+  return f && unlockOk(f.unlock, finisherCtx()) ? f.id : DEFAULT_FINISHER;
+}
+
 // Every weapon's own camo, tracer and kill effect, for modes that change your gun mid-match (Gun Game).
 function weaponCosmetics() {
   const camos = {}, tracers = {}, killFxs = {};
@@ -281,6 +297,7 @@ function matchLoadout(saved, wanted = saved.primary) {
     ...weaponCosmetics(),
     operator: operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR,
     skin: equippedSkin(operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR),
+    finisher: finisherFor(operatorOpen(saved.operator) ? saved.operator : DEFAULT_OPERATOR),
     emblem: currentEmblemId(),
     pro: data.proDone.slice(),
     card: equippedCard(),
@@ -445,6 +462,25 @@ export const Progress = {
     save();
     return true;
   },
+  /* ---------- Finishers and emotes (docs/FINISHERS.md) ---------- */
+  finishers(op = null) {
+    const ctx = finisherCtx(), on = op ? finisherFor(op) : null;
+    return FINISHERS.map(f => ({ ...f, unlocked: unlockOk(f.unlock, ctx), requirement: unlockText(f.unlock), equipped: f.id === on }));
+  },
+  finisherFor(op) { return finisherFor(op); },
+  setFinisher(op, id) {
+    const f = FINISHERS.find(x => x.id === id);
+    if (!OPERATOR_IDS.includes(op) || !f || !unlockOk(f.unlock, finisherCtx())) return false;
+    data.finishers ??= {};
+    if (id === DEFAULT_FINISHER) delete data.finishers[op]; else data.finishers[op] = id;
+    save();
+    return true;
+  },
+  emotes() {
+    const ctx = finisherCtx();
+    return EMOTES.map(e => ({ ...e, unlocked: unlockOk(e.unlock, ctx), requirement: unlockText(e.unlock) }));
+  },
+  emotesOpen() { const ctx = finisherCtx(); return EMOTES.filter(e => unlockOk(e.unlock, ctx)).map(e => e.id); },
   emblem() { return currentEmblemId(); },
   setEmblem(id) {
     const e = id === null ? null : getEmblem(id);

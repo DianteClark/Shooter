@@ -35,6 +35,7 @@ export class OperatorsScreen {
       opPick: ({ id }) => this.tap(id),
       opSkin: ({ id }) => this.tapSkin(id),
       opEquip: () => this.equip(),
+      opFin: ({ id }) => this.pickFinisher(id),
     });
     this.render();
     menu.show();
@@ -96,6 +97,22 @@ export class OperatorsScreen {
     this.paint();
   }
 
+  // The finishing move this operator plays (docs/FINISHERS.md): set at once for an earned one; a locked one says why.
+  pickFinisher(id) {
+    const f = Progress.finishers(this.preview).find(x => x.id === id);
+    if (!f) return;
+    const chip = this.menu.el.querySelector(`.op-finchip[data-id="${id}"]`);
+    if (!f.unlocked) { this.menu.deny(chip, `${f.name}: ${f.requirement}`); return; }
+    if (f.equipped) { this.menu.toast(`${f.name}: ${f.desc}`); return; }
+    if (Progress.setFinisher(this.preview, id)) {
+      this.onChange?.();
+      const op = Progress.operators().find(o => o.op.id === this.preview)?.op;
+      this.menu.toast(`${op?.name ?? 'Operator'}: ${f.name} equipped. ${f.desc}`);
+      if (chip) pop(chip);
+    }
+    this.paint();
+  }
+
   // The turntable takes a skin id in place of the operator id (OperatorPreview.show resolves it).
   mount() {
     const l = this.loadout;
@@ -116,7 +133,8 @@ export class OperatorsScreen {
           <div class="op-detail"></div>
         </div>
         <div class="op-side">
-          <div class="op-file" data-in="up"><p class="op-bio"></p><div class="op-tags"></div></div>
+          <div class="op-file" data-in="up"><p class="op-bio"></p><div class="op-tags"></div>
+            <div class="op-fin"><small>Finisher</small><div class="op-fins"></div></div></div>
           <div class="op-tabs" role="tablist">
             ${[['all', 'All'], ['owned', 'Owned'], ['locked', 'Locked']].map(([id, label]) => `<button class="op-tab" data-act="opFilter" data-id="${id}" data-sound="tab"><b>${label}</b><small></small></button>`).join('')}
           </div>
@@ -182,6 +200,7 @@ export class OperatorsScreen {
     const how = !op.unlock ? 'Starter' : op.unlock.prestige ? `Prestige ${op.unlock.prestige}` : op.unlock.level ? `Level ${op.unlock.level}` : 'Challenge';
     el.querySelector('.op-tags').innerHTML = `<span class="op-tag${entry.unlocked ? ' ok' : ''}">${ico(entry.unlocked ? 'check' : 'lock')}${entry.unlocked ? 'Owned' : esc(how)}</span>`
       + `<span class="op-tag">${ico('operator')}${owned} / ${skins.length} skins</span>`;
+    el.querySelector('.op-fins').innerHTML = Progress.finishers(op.id).map(f => `<button class="op-finchip${f.equipped ? ' on' : ''}${f.unlocked ? '' : ' locked'}" data-act="opFin" data-id="${f.id}" data-sound="tab">${f.unlocked ? '' : ico('lock')}${esc(f.name)}</button>`).join('');
     const counts = { all: roster.length, owned: roster.filter(o => o.unlocked).length };
     counts.locked = counts.all - counts.owned;
     for (const t of el.querySelectorAll('.op-tab')) {
