@@ -7,7 +7,8 @@ import { objOf } from '../js/sim/rules.js';
 import { MODES, MODE_IDS, mapModes, modeFitsMap } from '../js/shared/modes.js';
 import { MAPS, MAP_IDS } from '../js/shared/map.js';
 import { WEAPONS } from '../js/shared/weapons.js';
-import { cleanMods, dealLoadout, featured, FEATURED, MODS } from '../js/shared/playlist.js';
+import { cleanMods, dealLoadout, featured, FEATURED, MODS, withHardcore, hardcoreFits } from '../js/shared/playlist.js';
+import { spectate } from '../js/sim/snd.js';
 import { SIM_HZ } from '../js/shared/constants.js';
 
 const STEP = 1 / SIM_HZ;
@@ -121,7 +122,7 @@ await test('gwinf: two infected at the start of a 32-player match; they respawn 
   assert.equal(sim.scores[1], 2);
   assert.equal(sim.scores[0], 30);
   run(sim, 50);
-  assert.equal(new Set(sim.rules.camps).size, 2, 'two survivor holds');
+  assert.ok(new Set(sim.rules.groups.map(g => g.spot)).size >= 2, 'survivors over two or more holds');
 });
 
 await test('ko: only the enemy VIP scores, and a new VIP is named at once', () => {
@@ -182,6 +183,63 @@ await test('ctl: lives run down, out of lives stays down, sides swap each round'
   run(sim, 12);
   assert.equal(r.attackers, 1 - A);
   assert.ok(p.alive);
+});
+
+await test('ctl: out of lives and dead, you spectate the living (teammates first, a tap cycles, then anyone)', () => {
+  const { sim } = makeSim('ctl', 'railyard', { humans: [{ id: 'h1', name: 'Me', team: 0 }] });
+  run(sim, 7);
+  const r = sim.rules, me = sim.byId.get('h1'), foe = sim.players.find(q => q.team !== me.team);
+  spectate.reset();
+  me.spawnProtect = 0; sim._damage(me, foe, 999, 'ar', 5);
+  let view = sim.getView('h1');
+  assert.equal(spectate.target(view, 'h1'), null, 'lives left: no spectating, the respawn comes');
+  r.lives[me.team] = 0;
+  run(sim, 1);
+  view = sim.getView('h1');
+  const mates = view.players.filter(p => p.team === me.team && p.alive && p.id !== 'h1').map(p => p.id);
+  assert.ok(mates.length >= 2, 'teammates still up');
+  const first = spectate.target(view, 'h1');
+  assert.ok(mates.includes(first), 'watching a teammate first');
+  const next = spectate.cycle(view, 'h1', 1);
+  assert.ok(mates.includes(next) && next !== first, 'a tap moves to the next teammate');
+  // The whole side down: anyone still up (the other side) is watched.
+  for (const p of sim.players) if (p.team === me.team && p.alive) { p.spawnProtect = 0; sim._damage(p, foe, 999, 'ar', 5); }
+  r.lives[1 - me.team] = 99;
+  view = sim.getView('h1');
+  const w = spectate.target(view, 'h1');
+  if (sim.rules.state === 'live') assert.ok(w && view.players.find(p => p.id === w).team !== me.team, 'side wiped: an enemy is watched');
+  spectate.reset();
+});
+
+// ROADMAP 25: survivor bots used to stack one camp (oasis, canyon, railyard and dust, two seeds each: 1.19 clusters on
+// average, the biggest with 97% of the survivors); now groups hold their own spots, move on and fall back (2.4 clusters,
+// the biggest 63%). Over 32 matches survivors win 7 (the one camp: 11), rounds last 161 s on average (178).
+await test('inf: survivors spread over several spots in small groups, not one camp', () => {
+  const clusters = pts => {
+    const seen = pts.map(() => false), sizes = [];
+    for (let i = 0; i < pts.length; i++) { if (seen[i]) continue; let k = 0; const st = [i]; seen[i] = true;
+      while (st.length) { const a = st.pop(); k++; for (let j = 0; j < pts.length; j++) if (!seen[j] && Math.hypot(pts[a].x - pts[j].x, pts[a].z - pts[j].z) < 12) { seen[j] = true; st.push(j); } }
+      sizes.push(k); }
+    return sizes;
+  };
+  let C = 0, S = 0, N = 0, moved = 0;
+  for (const map of ['oasis', 'railyard']) {
+    const { sim } = makeSim('inf', map, { seed: 3 });
+    const spotOf = new Map();
+    run(sim, 150, s => {
+      if (s.phase === 'live' && s.tick % (SIM_HZ * 2) === 0) {
+        const pts = s.players.filter(p => p.team === 0 && p.alive).map(p => p.ps);
+        if (pts.length >= 3) { const c = clusters(pts); C += c.length; S += Math.max(...c) / pts.length; N++; }
+        for (const g of s.rules.groups ?? []) { const k = g.ids[0]; if (spotOf.has(k) && spotOf.get(k) !== g.spot) moved++; spotOf.set(k, g.spot); }
+      }
+      return false;
+    });
+  }
+  console.log(`     ${(C / N).toFixed(2)} clusters, the biggest ${(S / N * 100).toFixed(0)}%, ${moved} moves`);
+  assert.ok(N > 10, `samples ${N}`);
+  assert.ok(C / N >= 2, `survivors in ${(C / N).toFixed(2)} clusters on average`);
+  assert.ok(S / N <= 0.75, `the biggest cluster holds ${(S / N * 100).toFixed(0)}% of the survivors`);
+  assert.ok(moved >= 2, `groups reposition (${moved} moves)`);
 });
 
 await test('grind: tags go in the pocket, bank in the zone, drop on death', () => {
@@ -291,6 +349,15 @@ await test('held slots: a human who drops in Infected and Kill Order neither bre
 });
 
 /* ---------------- Featured playlist ---------------- */
+
+await test('the Hardcore switch: every mode it fits, never BR or extraction; no featured Hardcore pairing (picks: dev/ui-flow-test.py)', () => {
+  assert.ok(hardcoreFits('tdm') && hardcoreFits('ctl') && hardcoreFits('gwinf') && hardcoreFits('oic'));
+  assert.ok(!hardcoreFits('br') && !hardcoreFits('brduo') && !hardcoreFits('exq') && !hardcoreFits('range'));
+  assert.deepEqual(withHardcore(['nostreaks'], true, 'kc'), ['hardcore', 'nostreaks']);
+  assert.deepEqual(withHardcore([], true, 'br'), []);
+  assert.deepEqual(withHardcore(['snipers'], false, 'tdm'), ['snipers']);
+  assert.ok(FEATURED.every(f => !f.mods.includes('hardcore')));
+});
 
 await test('featured: the same pick all day, a different one tomorrow, every entry playable', () => {
   const a = featured(new Date(2026, 10, 11, 1)), b = featured(new Date(2026, 10, 11, 23)), c = featured(new Date(2026, 10, 12, 9));

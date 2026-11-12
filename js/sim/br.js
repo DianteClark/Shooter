@@ -63,7 +63,8 @@ const CAT_SCORE = { Assault: 3.2, SMG: 3, LMG: 2.7, Marksman: 2.6, Shotgun: 2.4,
 // Rarity rolls by where the loot lies: [common .. legendary] weights for tier 1, 2, 3, and a chest.
 const RARITY_ROLL = { 1: [20, 30, 28, 15, 7], 2: [35, 32, 20, 10, 3], 3: [52, 30, 13, 4, 1], chest: [0, 18, 38, 30, 14] };
 // Floor item kinds by share.
-const FLOOR_ROLL = [['gun', 34], ['ammo', 26], ['plate', 16], ['med', 8], ['lethal', 7], ['tactical', 6], ['kit', 3]];
+// Medkits are the only way back to full health (no regen in BR), so they turn up half again as often as before.
+const FLOOR_ROLL = [['gun', 34], ['ammo', 24], ['plate', 16], ['med', 12], ['lethal', 6], ['tactical', 5], ['kit', 3]];
 // Rarity handling: each step up shaves this share off aim time, reload, swap, sprint-to-fire and hip spread.
 const RARITY_HANDLING = 0.04;
 const KIT_SKILL = [null, 'regular', 'regular', 'veteran', 'elite'];
@@ -81,13 +82,29 @@ const THIRD_PARTY = 75;          // Metres a geared bot squad will go to join a 
 // Pacing (docs/BR.md "Pacing"): the share of squads that pick a contested drop on purpose, by squad size; how far apart
 // the rest land (metres, a Gaussian falloff); the chance a heard fight is joined, by circle phase (times the squad's
 // aggro); and how long a squad keeps to its first place before it moves on.
-const HOT_DROP = [0, 0.06, 0.08, 0.1, 0.1];
-const DROP_GAP = 70;
-const JOIN_FIGHT = [0, 0.15, 0.3, 0.25, 0.2, 0.15, 0.15];   // Late on, squads mostly hold and let fights come.
+const HOT_DROP = [0, 0.02, 0.03, 0.04, 0.04];
+const DROP_GAP = 120;
+const JOIN_FIGHT = [0, 0.03, 0.08, 0.1, 0.08, 0.06, 0.06];   // Calm early (loot and rotate first); late on, squads mostly hold.
 const LOOT_DWELL = 50;
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
-const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
+const HOLD_GAP = 40;            // Metres a squad's hold keeps from another squad's.
+const LOOT_SIGHT = [0.45, 0.6, 0.8];   // Sight range kept by a bot busy looting, by circle phase.
+// Calm early (ROADMAP 25): how far any bot picks fights from, by circle phase (a share of its usual sight). Early on
+// squads loot and rotate and take the fights that come close; the reach comes back as the circles tighten.
+const PHASE_SIGHT = [0.4, 0.55, 0.75, 0.85, 0.9, 1];
+const PHASE_NOTICE = [0.2, 0.4, 0.6, 0.75, 0.85, 1];   // And how readily it notices someone not shooting (BotBrain.noticeK).
+const HEAL_BELOW = [0, 62, 78, 88];     // A bot uses a medkit below this health, by medkits carried (0-3).
+// Bots in a human's squad (ROADMAP 25: they used to copy the human's every move). In the glide each heads for its own
+// slot FOLLOW_GLIDE m off the human and only moves the slot once the human's has drifted SLOT_SLACK m from it; on the
+// ground they loot within LEAD_LOOT m of the human, regroup past LEAD_LEASH m, and between times hold a spot round the
+// human (re-picked once the human has moved WITH_REPICK m) watching their own sector, not the human's aim.
+const FOLLOW_GLIDE = 7;
+const SLOT_SLACK = 8;
+const LEAD_LOOT = 22;
+const LEAD_LEASH = 34;
+const WITH_REPICK = 12;
+export const FOLLOW_TUNING = { FOLLOW_GLIDE, SLOT_SLACK, LEAD_LOOT, LEAD_LEASH, WITH_REPICK };
 
 function mulberry32(a) {
   return function () {
@@ -182,6 +199,37 @@ export function land(ps, map) {
   for (let i = 0; i < 6; i++) resolveCircle(map, ps, 0.45);
 }
 
+// The transport's line for heading `a` (radians), with `u` and `lane` uniform draws in [0, 1): 40% of lines cross the
+// middle (within 8% of the map's width of the centre), 35% a third (13-20%), 25% near an edge (24-32%), on either side.
+// A line that would leave too little land under it (a chord under 70% of the width, or fewer than 40% of the named
+// places within GLIDE_REACH of it, at least 4) is pulled in toward the centre until it does not.
+const LANE_BANDS = [[0.4, 0, 0.08], [0.35, 0.13, 0.2], [0.25, 0.24, 0.32]];
+const GLIDE_REACH = 110;
+export function flightLine(W, H, a, u, lane, pois = []) {
+  let band = LANE_BANDS[LANE_BANDS.length - 1], acc = 0;
+  for (const b of LANE_BANDS) { acc += b[0]; if (lane < acc) { band = b; break; } }
+  const side = u < 0.5 ? -1 : 1, v = (u < 0.5 ? u : u - 0.5) * 2;
+  let off = side * (band[1] + (band[2] - band[1]) * v) * W;
+  const ca = Math.cos(a), sa = Math.sin(a), half = Math.hypot(W, H) / 2 + BR.planeOver;
+  const need = Math.min(pois.length, Math.max(4, Math.ceil(pois.length * 0.4)));
+  for (let i = 0; i < 12; i++) {
+    const cx = W / 2 - sa * off, cz = H / 2 + ca * off;
+    // Land under the line: the chord of the map rectangle (slab clip), and the places within glide reach.
+    let t0 = -half, t1 = half;
+    for (const [p, d, lo, hi] of [[cx, ca, 0, W], [cz, sa, 0, H]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) t1 = t0 - 1; continue; }
+      const ta = (lo - p) / d, tb = (hi - p) / d;
+      t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+    }
+    let near = 0;
+    for (const q of pois) if (Math.abs((q.x - cx) * sa - (q.z - cz) * ca) < GLIDE_REACH) near++;
+    if ((t1 - t0 >= 0.7 * Math.min(W, H) && near >= need) || Math.abs(off) < 1) break;
+    off *= 0.8;
+  }
+  const cx = W / 2 - sa * off, cz = H / 2 + ca * off;
+  return { from: { x: cx - ca * half, z: cz - sa * half }, to: { x: cx + ca * half, z: cz + sa * half }, off: off / W };
+}
+
 // A downed player's stick: a crawl, no trigger, no sprint, no slide, no equipment.
 export function downedInput(input) {
   input.mx *= BR.crawl; input.mz *= BR.crawl;
@@ -202,16 +250,14 @@ export class BrRules {
     this.authority = false;          // Set on the first host step; a guest's copy only mirrors.
     const rng = mulberry32((seed ^ 0x6b7a11) >>> 0);
     this.lootRng = rng;
-    // Flight line: the map's own, or across the middle third at a random heading.
+    // Flight line: the map's own, or a random heading through the middle, a third or near an edge (flightLine).
     const W = map.width, H = map.height;
     let from, to;
     if (def.drop) { from = def.drop.from; to = def.drop.to; }
     else {
-      const a = rng() * Math.PI * 2, off = (rng() - 0.5) * 0.3 * W;
-      const cx = W / 2 - Math.sin(a) * off, cz = H / 2 + Math.cos(a) * off;
-      const half = Math.hypot(W, H) / 2 + BR.planeOver;
-      from = { x: cx - Math.cos(a) * half, z: cz - Math.sin(a) * half };
-      to = { x: cx + Math.cos(a) * half, z: cz + Math.sin(a) * half };
+      // Two draws from the loot rng as before (the loot table is unchanged); the lane comes from its own rng.
+      const a = rng() * Math.PI * 2, u = rng();
+      ({ from, to } = flightLine(W, H, a, u, mulberry32((seed ^ 0x2f1a5c) >>> 0)(), def.pois ?? []));
     }
     this.plane = { fx: from.x, fz: from.z, tx: to.x, tz: to.z, len: Math.hypot(to.x - from.x, to.z - from.z), f: 0 };
     this.t = 0;                      // Seconds since the transport set off.
@@ -500,7 +546,15 @@ export class BrRules {
       const b = p.br;
       if (p.brAir === 1) {
         // A bot in a human's squad goes out a moment after its human does.
-        if (b.follow && b.jumpAt > 1) { const lead = sim.byId.get(b.follow); if (!lead || lead.brAir !== 1 || !lead.alive) b.jumpAt = plane.f + 0.005 + sim.rng() * 0.02; }
+        if (b.follow && b.jumpAt > 1) {
+          const lead = sim.byId.get(b.follow);
+          if (!lead || lead.brAir !== 1 || !lead.alive) {
+            b.jumpAt = plane.f + 0.005 + sim.rng() * 0.02;
+            // Its own landing slot, near the human (never the transport's start point the record was made with).
+            const at = lead && lead.alive ? lead.ps : pos;
+            b.dropX = at.x + b.offX; b.dropZ = at.z + b.offZ;
+          }
+        }
         p.ps.x = pos.x; p.ps.z = pos.z; p.ps.vx = vx; p.ps.vz = vz;
         if (plane.f >= BR.forceJump || (p.isBot && plane.f >= b.jumpAt && this._inMap(pos))) this._jump(p);
         continue;
@@ -891,7 +945,8 @@ export class BrRules {
     const sim = this.sim, rng = sim.rng;
     this._removeItem(it);
     sim._emit({ t: 'brchest', x: Math.round(it.x * 10) / 10, z: Math.round(it.z * 10) / 10 });
-    const kinds = ['gun', rng() < 0.5 ? 'gun' : 'plate', 'plate', rng() < 0.4 ? 'kit' : rng() < 0.5 ? 'lethal' : 'med'];
+    const r4 = rng();
+    const kinds = ['gun', rng() < 0.5 ? 'gun' : 'plate', 'plate', r4 < 0.3 ? 'kit' : r4 < 0.75 ? 'med' : 'lethal'];
     kinds.forEach((kind, i) => {
       const a = i / kinds.length * Math.PI * 2 + rng() * 0.6;
       const roll = kind === 'gun' ? this._rollGun(rng, 'chest') : this._rollItem(rng, 1, kind);
@@ -948,11 +1003,15 @@ export class BrRules {
     if (!b) return false;
     if (p.brAir === 1) return true;
     if (p.brAir === 2) {
-      let tx = b.dropX, tz = b.dropZ;
       const lead = b.follow && this.sim.byId.get(b.follow);
-      if (lead && lead.alive && lead.brAir === 2) { tx = lead.ps.x + b.offX; tz = lead.ps.z + b.offZ; }
-      const dx = tx - p.ps.x, dz = tz - p.ps.z, d = Math.hypot(dx, dz);
-      glideStep(p.ps, d > 1 ? dx / d : 0, d > 1 ? dz / d : 0, dt, this.sim.map);
+      // Following a human: the slot moves only once the human's own slot has drifted well away from it, so their
+      // steering is followed in broad strokes, never copied stroke for stroke.
+      if (lead && lead.alive && lead.brAir === 2 && !lead.away) {
+        const sx = lead.ps.x + b.offX, sz = lead.ps.z + b.offZ;
+        if (Math.hypot(sx - b.dropX, sz - b.dropZ) > SLOT_SLACK) { b.dropX = sx; b.dropZ = sz; }
+      }
+      const dx = b.dropX - p.ps.x, dz = b.dropZ - p.ps.z, d = Math.hypot(dx, dz);
+      glideStep(p.ps, d > 1.5 ? dx / d : 0, d > 1.5 ? dz / d : 0, dt, this.sim.map);
       return true;
     }
     if (p.downed) {
@@ -1004,8 +1063,8 @@ export class BrRules {
         let k = 0;
         for (const p of members) {
           if (!p.isBot) continue;
-          const a = (k++ / 3) * Math.PI * 2;
-          p.br.follow = human.id; p.br.offX = Math.cos(a) * 3; p.br.offZ = Math.sin(a) * 3; p.br.jumpAt = 2;   // Jumps with the human.
+          const a = (k++ / 3) * Math.PI * 2 + rng() * 0.6, r = FOLLOW_GLIDE * (0.85 + rng() * 0.3);
+          p.br.follow = human.id; p.br.offX = Math.cos(a) * r; p.br.offZ = Math.sin(a) * r; p.br.jumpAt = 2;   // Jumps with the human.
         }
         continue;
       }
@@ -1115,7 +1174,7 @@ export class BrRules {
       plan.circle = this.phase;
     } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && Math.hypot(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
       // A squad holds where it is while that stays inside the next circle: it does not wander between holds.
-      plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62);
+      plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62, team);
       plan.circle = this.phase; plan.since = sim.time;
     } else if (kind === 'fight') {
       const d = Math.hypot(fight.x - ax, fight.z - az);
@@ -1126,12 +1185,18 @@ export class BrRules {
     for (const q of bots) { sqx += q.ps.x / bots.length; sqz += q.ps.z / bots.length; }
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
-      bot.sightK = 1;
+      bot.sightK = PHASE_SIGHT[Math.min(this.phase, PHASE_SIGHT.length - 1)];
+      bot.noticeK = PHASE_NOTICE[Math.min(this.phase, PHASE_NOTICE.length - 1)];
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
-        if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
+        // No regen in BR: a medkit is the only heal. Badly hurt, it comes before plates; otherwise plates first, then a
+        // medkit once enough health is missing to be worth one (sooner with spares in the pack).
         // (A greedy squad sitting in the circle's damage does not think to heal until it heads in.)
-        else if (b.meds > 0 && p.hp < 60 && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)) this._startUse(p, 'med');
+        const heal = b.meds > 0 && p.hp < MAX_HP && !(shrugs && kind !== 'rotate' && Math.hypot(p.ps.x - c.x, p.ps.z - c.z) > c.r)
+          && p.hp < HEAL_BELOW[Math.min(b.meds, HEAL_BELOW.length - 1)];
+        if (heal && p.hp < 45) this._startUse(p, 'med');
+        else if (b.plates > 0 && b.armor <= (BR.plateSlots - 1) * BR.plateHp) this._startUse(p, 'plate');
+        else if (heal) this._startUse(p, 'med');
       }
       // A teammate down nearby comes first, unless there is a fight in view.
       const mate = downed.length && !bot.targetVisible ? downed.reduce((m, q) => {
@@ -1143,14 +1208,20 @@ export class BrRules {
         bot.setObjective({ key: `rev:${mate.q.id}:${Math.round(mate.q.ps.x)}:${Math.round(mate.q.ps.z)}`, role: 'collect', x: mate.q.ps.x, z: mate.q.ps.z, r: 1, commit: true });
         continue;
       }
-      // A human leads: stay with them, looting what is close.
+      // A human leads: stay in reach of them, looting what is around, as a squadmate would (not a shadow: no copying
+      // their moves or their aim).
       if (lead && kind !== 'rotate') {
-        const near = this._lootTarget(p, 14, lead.ps.x, lead.ps.z);
+        const dl = Math.hypot(lead.ps.x - p.ps.x, lead.ps.z - p.ps.z);
+        const near = dl < LEAD_LEASH ? this._lootTarget(p, LEAD_LOOT, lead.ps.x, lead.ps.z) : null;
         if (near) { bot.setObjective(near); continue; }
-        const a = (i / bots.length) * Math.PI * 2;
-        const at = this._walkable(lead.ps.x + Math.cos(a) * 4, lead.ps.z + Math.sin(a) * 4);
-        const far = Math.hypot(at.x - p.ps.x, at.z - p.ps.z) > 8;
-        bot.setObjective({ key: far ? `with:${Math.round(at.x / 6)}:${Math.round(at.z / 6)}` : bot.objKey ?? 'with', role: 'hold', x: at.x, z: at.z, r: 3, aim: lead.ps.aim });
+        // A spot round the human, kept until the human has moved on; the bot watches its own side of the squad.
+        if (!b.with || Math.hypot(lead.ps.x - b.with.lx, lead.ps.z - b.with.lz) > WITH_REPICK) {
+          const a = (i / bots.length) * Math.PI * 2 + (sim.rng() - 0.5) * 0.9, r = 5 + sim.rng() * 4;
+          const at = this._walkable(lead.ps.x + Math.cos(a) * r, lead.ps.z + Math.sin(a) * r);
+          b.with = { x: at.x, z: at.z, lx: lead.ps.x, lz: lead.ps.z, aim: a, n: (b.with?.n ?? 0) + 1 };
+        }
+        const w = b.with;
+        bot.setObjective({ key: `with:${w.n}`, role: 'hold', x: w.x, z: w.z, r: 3, aim: w.aim });
         continue;
       }
       if (kind === 'loot' || (kind === 'hold' && !this._geared(p))) {
@@ -1161,7 +1232,7 @@ export class BrRules {
         if (kind === 'loot' && poi) { lx = (poi.x + sqx) / 2; lz = (poi.z + sqz) / 2; lr = Math.max(16, Math.min(28, poi.r + 6)); }
         else if (plan.spot) { lx = plan.spot.x; lz = plan.spot.z; }
         const t = this._lootTarget(p, lr, lx, lz);
-        if (t) { bot.setObjective(t); bot.sightK = LOOT_SIGHT[Math.min(this.phase, 2)]; continue; }
+        if (t) { bot.setObjective(t); bot.sightK = Math.min(bot.sightK, LOOT_SIGHT[Math.min(this.phase, 2)]); continue; }
         // Nothing left here: the squad moves to the nearest quiet place it has not been, inside the next circle; while
         // the first circle waits it stays put a while first (a squad with a gun each settles in instead).
         const dwell = this.phase === 0 && this.state === 'wait' ? LOOT_DWELL : 6;
@@ -1192,8 +1263,12 @@ export class BrRules {
   // A good place to sit out the wait inside the next circle: late in the match a roofless room or a hold with cover.
   // ringK: where in the next circle (a share of its radius) the squad likes to sit; edge players sit just outside it and
   // run in as it shrinks, which sometimes goes wrong.
-  _holdSpot(n, ax, az, ringK = 0.62) {
+  _holdSpot(n, ax, az, ringK = 0.62, team = null) {
     const sim = this.sim, rooms = sim.map.rooms ?? [], c = this.circle;
+    // Not on top of another squad's hold: squads spread round the circle instead of meeting at the same few rooms.
+    const others = [];
+    for (const [t, pl] of this.plans) if (t !== team && pl.kind === 'hold' && pl.spot) others.push(pl.spot);
+    const crowd = (x, z) => { let k = 0; for (const o of others) { const d = Math.hypot(o.x - x, o.z - z); if (d < HOLD_GAP) k += (HOLD_GAP - d) * 0.25; } return k; };
     const early = this.phase === 0 && this.state === 'wait';     // The first circle is far off: settle in where you are.
     let best = null, bestS = -Infinity;
     for (const r of rooms) {
@@ -1202,7 +1277,7 @@ export class BrRules {
       if ((dc > n.r * Math.max(0.85, ringK + 0.1) || Math.hypot(x - c.x, z - c.z) > c.r * 0.9) && !early) continue;
       // Late on, a ring inside the edge on our side rather than the middle, where every squad would meet.
       const ring = this.phase >= 1 ? Math.abs(dc / Math.max(1, n.r) - ringK) * 8 : 0;
-      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring + sim.rng() * 2;
+      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring - crowd(x, z) + sim.rng() * 2;
       if (s > bestS) { bestS = s; best = { x, z }; }
     }
     if (!best) {
@@ -1210,7 +1285,7 @@ export class BrRules {
       for (let q = 0; q < k; q++) {
         const h = sim.nav.holds[ix.out[q]];
         const ring = this.phase >= 1 ? Math.abs(Math.hypot(h.x - n.x, h.z - n.z) / Math.max(1, n.r) - ringK) * 8 : 0;
-        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring + sim.rng() * 2;
+        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring - crowd(h.x, h.z) + sim.rng() * 2;
         if (s > bestS) { bestS = s; best = { x: h.x, z: h.z }; }
       }
     }
@@ -1242,12 +1317,12 @@ export class BrRules {
       const claim = this.claims.get(it.id);
       if (claim && claim.bot !== p.id && claim.until > sim.time) continue;
       if (!this._wants(p, it)) continue;
-      const d = Math.hypot(it.x - p.ps.x, it.z - p.ps.z) - (it.kind === K.chest ? 12 : it.kind === K.gun ? 4 : 0);
+      // Hurt with no medkit: one is worth a detour (health does not come back by itself in BR).
+      const d = Math.hypot(it.x - p.ps.x, it.z - p.ps.z) - (it.kind === K.chest ? 12 : it.kind === K.gun ? 4 : it.kind === K.med && !b.meds && p.hp < 75 ? 10 : 0);
       if (d < bestD) { bestD = d; best = it; }
     }
     if (!best) return null;
     this.claims.set(best.id, { bot: p.id, until: sim.time + 8 });
-    void b;
     return { key: `loot:${best.id}`, role: 'collect', x: best.x, z: best.z, r: 1 };
   }
 
@@ -1423,7 +1498,7 @@ export class BrRules {
           if (weapon === KNIFE || ps.slot === fs) { ps.slot = fs; ps.weapon = KNIFE; }
         }
       }
-      if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * 3; b.offZ = Math.sin(a) * 3; }
+      if (b.follow) { const k = sim.players.filter(q => q.br?.follow === b.follow).indexOf(p); const a = (k / 3) * Math.PI * 2; b.offX = Math.cos(a) * FOLLOW_GLIDE; b.offZ = Math.sin(a) * FOLLOW_GLIDE; }
     });
     // This phone's own pack is fresher in its own inventory block.
     const me = sim.byId.get(view.localId), inv = view.br?.inv;

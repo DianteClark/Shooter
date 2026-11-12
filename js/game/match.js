@@ -82,7 +82,20 @@ export class Match {
     this.#wireNet();
   }
 
+  // Back from an app switch: the frame clock and the host's catch-up start again from now (no burst of stale steps), and
+  // nothing the thumbs held when the page went away carries on (Controls lets go of the sticks as it hides).
+  #onVisibility = () => {
+    if (typeof document === 'undefined') return;
+    if (document.hidden) { this.hiddenAt = performance.now(); return; }
+    this.lastTime = performance.now();
+    this.accum = 0;
+    this.sendAccum = 1;            // A guest tells the host where it is on the first frame back.
+    const r = this.resolvedInput;
+    r.mx = 0; r.mz = 0; r.fire = false; r.sprint = false; r.slide = false; r.swap = false; r.tactical = false; r.lethal = false; r.streak = -1;
+  };
+
   start() {
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.#onVisibility);
     this.renderer.setLocal(this.localId);
     this.renderer.vfx.setLoadouts(this.roster);
     this.controls.setEnabled(true);
@@ -95,6 +108,7 @@ export class Match {
   }
 
   stop() {
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.#onVisibility);
     this.running = false;
     this.controls.setEnabled(false);
     this.killcam.dispose();

@@ -97,7 +97,7 @@ on every push, keep 2% of weekly usage for bugs.
     js/audio/music.js (director: scenes, layers, stings; music.cue(...)). Options: Music slider, "In matches" switch.
 
 ## Owner's wave (2026-11-11 evening), approved "do em all with confidence" (target: 80% of the week, keep 20% for fixes)
-25. BR and modes sweep (owner's notes): drop the "Close map" button on the BR drop screen; flight lines vary (edges as
+25. DONE (1111-21). BR and modes sweep (owner's notes): drop the "Close map" button on the BR drop screen; flight lines vary (edges as
     well as the middle); bot squadmates must not copy the player's input after an app switch; BR heals with medkits only
     (no regen; extraction keeps regen); calmer early bots (loot and rotate first) and somewhat shorter rings so matches
     reach the late circles; one Hardcore switch on the playlist screen applying hardcore rules to every mode; Control

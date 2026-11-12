@@ -944,7 +944,9 @@ export class Sim {
     if (p.markT > 0) p.markT -= STEP;
     if (p.jamT > 0) p.jamT -= STEP;        // Blackout.
     if (p.regenT > 0) p.regenT -= STEP;
-    else if (p.hp < MAX_HP && !p.downed && !p.noRegen) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
+    // Battle royale heals with medkits only (docs/BR.md); extraction and every other mode regenerate (unless the player
+    // is marked noRegen).
+    else if (p.hp < MAX_HP && !p.downed && !p.noRegen && !this.br) p.hp = Math.min(MAX_HP, p.hp + (p.ps.perks.includes('quickmend') || this._nearMedic(p) ? MEND_RATE : REGEN_RATE) * STEP);
     if (hasPro(p.ps, 'bandolier')) this._restock(p);
   }
 

@@ -5,12 +5,14 @@
 //   MP_TABS                          Standard, Ground War, Battle Royale, Extraction (Quads and Duos on Frontier)
 //   playlistsFor(tab)                [{id, name, sub, modes, mods, featured?, icon}] the tab's playlists
 //   modesFor(tab)                    the single modes a player can tick on that tab (none on Battle Royale)
-//   resolveSelection(tab, sel)       {modes, mods, name} for a pick: one playlist, or one or more ticked modes
+//   resolveSelection(tab, sel, o)    {modes, mods, name} for a pick: one playlist, or one or more ticked modes; with
+//                                    o.hardcore (the Hardcore switch, Options 'hardcore') Hardcore goes on where it fits
+//   HARDCORE_TABS                    the tabs the switch applies to (not Battle Royale or Extraction)
 //   mpVoteOptions(tab, modes, rng)   2-3 {mapId, mode} on different maps of the tab's size tier (fewer only if the tier has fewer)
 //   pickBotsForMatch({...})          THE seam for the bot overhaul: the roster of a Multiplayer match
 import { MAPS, MAP_IDS, SIZES } from '../shared/map.js';
 import { MODES } from '../shared/modes.js';
-import { featured, cleanMods, playlistName } from '../shared/playlist.js';
+import { featured, cleanMods, playlistName, withHardcore, hardcoreFits } from '../shared/playlist.js';
 import { eventAt, dateLocked } from '../shared/seasons.js';
 import { RANKED_RULES } from '../shared/ranked.js';
 import { buildRoster } from '../sim/sim.js';
@@ -79,13 +81,25 @@ export const modesFor = tab => (tab === 'standard' ? STANDARD_MODES : tab === 'g
 // A fresh pick for a tab: its first playlist.
 export const defaultSelection = tab => ({ playlist: PLAYLISTS[tab]?.[0]?.id ?? null, modes: [] });
 
-// What a pick plays: a playlist's modes and modifiers, or the ticked modes (in the tab's order) with none.
-export function resolveSelection(tab, sel) {
+export const HARDCORE_TABS = ['standard', 'groundwar'];
+
+// What a pick plays: a playlist's modes and modifiers, or the ticked modes (in the tab's order) with none. The Hardcore
+// switch adds Hardcore to the pick (per mode at launch, cleanMods) on the tabs it applies to, never to Ranked.
+export function resolveSelection(tab, sel, { hardcore = false } = {}) {
   const p = sel?.playlist && playlistsFor(tab).find(x => x.id === sel.playlist);
-  if (p) return { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked, friends: !!p.friends };
-  const modes = modesFor(tab).filter(id => sel?.modes?.includes(id));
-  if (!modes.length) return { modes: [], mods: [], name: '' };
-  return { modes, mods: [], name: modes.length === 1 ? MODES[modes[0]].name : `${modes.length} modes: ${short(modes)}` };
+  let r;
+  if (p) r = { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked, friends: !!p.friends };
+  else {
+    const modes = modesFor(tab).filter(id => sel?.modes?.includes(id));
+    if (!modes.length) return { modes: [], mods: [], name: '' };
+    r = { modes, mods: [], name: modes.length === 1 ? MODES[modes[0]].name : `${modes.length} modes: ${short(modes)}` };
+  }
+  if (hardcore && HARDCORE_TABS.includes(tab) && !r.ranked && r.modes.some(hardcoreFits) && !r.mods.includes('hardcore')) {
+    r.mods = withHardcore(r.mods, true);
+    r.name = `Hardcore ${r.name}`;
+  }
+  r.hardcore = r.mods.includes('hardcore');
+  return r;
 }
 
 // The maps a tab plays on: Standard everything short of Ground War (weighted by size tier), Ground War the huge maps,
