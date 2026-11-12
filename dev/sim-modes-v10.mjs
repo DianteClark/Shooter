@@ -7,7 +7,8 @@ import { objOf } from '../js/sim/rules.js';
 import { MODES, MODE_IDS, mapModes, modeFitsMap } from '../js/shared/modes.js';
 import { MAPS, MAP_IDS } from '../js/shared/map.js';
 import { WEAPONS } from '../js/shared/weapons.js';
-import { cleanMods, dealLoadout, featured, FEATURED, MODS } from '../js/shared/playlist.js';
+import { cleanMods, dealLoadout, featured, FEATURED, MODS, withHardcore, hardcoreFits } from '../js/shared/playlist.js';
+import { spectate } from '../js/sim/snd.js';
 import { SIM_HZ } from '../js/shared/constants.js';
 
 const STEP = 1 / SIM_HZ;
@@ -184,6 +185,32 @@ await test('ctl: lives run down, out of lives stays down, sides swap each round'
   assert.ok(p.alive);
 });
 
+await test('ctl: out of lives and dead, you spectate the living (teammates first, a tap cycles, then anyone)', () => {
+  const { sim } = makeSim('ctl', 'railyard', { humans: [{ id: 'h1', name: 'Me', team: 0 }] });
+  run(sim, 7);
+  const r = sim.rules, me = sim.byId.get('h1'), foe = sim.players.find(q => q.team !== me.team);
+  spectate.reset();
+  me.spawnProtect = 0; sim._damage(me, foe, 999, 'ar', 5);
+  let view = sim.getView('h1');
+  assert.equal(spectate.target(view, 'h1'), null, 'lives left: no spectating, the respawn comes');
+  r.lives[me.team] = 0;
+  run(sim, 1);
+  view = sim.getView('h1');
+  const mates = view.players.filter(p => p.team === me.team && p.alive && p.id !== 'h1').map(p => p.id);
+  assert.ok(mates.length >= 2, 'teammates still up');
+  const first = spectate.target(view, 'h1');
+  assert.ok(mates.includes(first), 'watching a teammate first');
+  const next = spectate.cycle(view, 'h1', 1);
+  assert.ok(mates.includes(next) && next !== first, 'a tap moves to the next teammate');
+  // The whole side down: anyone still up (the other side) is watched.
+  for (const p of sim.players) if (p.team === me.team && p.alive) { p.spawnProtect = 0; sim._damage(p, foe, 999, 'ar', 5); }
+  r.lives[1 - me.team] = 99;
+  view = sim.getView('h1');
+  const w = spectate.target(view, 'h1');
+  if (sim.rules.state === 'live') assert.ok(w && view.players.find(p => p.id === w).team !== me.team, 'side wiped: an enemy is watched');
+  spectate.reset();
+});
+
 await test('grind: tags go in the pocket, bank in the zone, drop on death', () => {
   const { sim } = makeSim('grind', 'railyard');
   run(sim, 4);
@@ -291,6 +318,15 @@ await test('held slots: a human who drops in Infected and Kill Order neither bre
 });
 
 /* ---------------- Featured playlist ---------------- */
+
+await test('the Hardcore switch: every mode it fits, never BR or extraction; no featured Hardcore pairing (picks: dev/ui-flow-test.py)', () => {
+  assert.ok(hardcoreFits('tdm') && hardcoreFits('ctl') && hardcoreFits('gwinf') && hardcoreFits('oic'));
+  assert.ok(!hardcoreFits('br') && !hardcoreFits('brduo') && !hardcoreFits('exq') && !hardcoreFits('range'));
+  assert.deepEqual(withHardcore(['nostreaks'], true, 'kc'), ['hardcore', 'nostreaks']);
+  assert.deepEqual(withHardcore([], true, 'br'), []);
+  assert.deepEqual(withHardcore(['snipers'], false, 'tdm'), ['snipers']);
+  assert.ok(FEATURED.every(f => !f.mods.includes('hardcore')));
+});
 
 await test('featured: the same pick all day, a different one tomorrow, every entry playable', () => {
   const a = featured(new Date(2026, 10, 11, 1)), b = featured(new Date(2026, 10, 11, 23)), c = featured(new Date(2026, 10, 12, 9));
