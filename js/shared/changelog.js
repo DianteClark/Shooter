@@ -4,6 +4,13 @@
 
 export const CHANGELOG = [
   {
+    build: '1111-19b', date: '2026-11-11', title: 'Leaderboards make sense',
+    items: [
+      'Wins boards count every win, battle royale included, and a player\'s card shows the same total.',
+      'Maxed-out players on the Level board show their total XP, which is what orders them; player cards show XP too.',
+    ],
+  },
+  {
     build: '1111-19', date: '2026-11-11', title: 'What\'s new',
     items: [
       'After an update, the title screen shows what changed. The full history is in How to play > Updates.',
