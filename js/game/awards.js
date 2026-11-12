@@ -7,6 +7,9 @@
 // result carries `challenges` (what moved, see applyChallengeTally). The match also goes into the history (`history`).
 // Mastery (MasteryTracker): every tactical, lethal, streak and operator track and each gun's ladder past level 30. Tiers
 // finished pay XP as a line of the match, come back first in `unlocks` (kind 'mastery'), and `mastery` lists what moved.
+// Seasons (docs/SEASONS.md): the match's XP and challenge counts move the season track and its weekly sets, and a
+// ranked match (`ranked = { lobby, rating }`, set by main.js for the Ranked playlist only) moves the rating; the result
+// carries `season` (the track's move) and `ranked` (the rating's). Training and Custom never set `ranked`.
 // `practice = true` (the tutorial) makes finish() record and pay nothing. observe(fn) hands fn(events, view) every
 // frame's events after the awards have seen them, for the tutorial's prompts.
 import { Progress, Challenges, MatchHistory, matchScore } from '../ui/progress.js';
@@ -18,6 +21,7 @@ import { isFfa, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
 import { getCamo } from '../shared/camos.js';
+import { performance } from '../shared/ranked.js';
 
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const GUN_SECONDS = 3;           // Held at least this long counts as a gun used, for the history.
@@ -51,6 +55,7 @@ export class MatchAwards {
     this.mapId = null;
     this.mode = null;
     this.practice = false;
+    this.ranked = null;
     this.observers = [];
     this.result = null;
   }
@@ -146,6 +151,14 @@ export class MatchAwards {
     let place = 1;
     for (const p of view.players ?? []) if (p.id !== me.id && !p.dummy && ahead(p) > 0) place++;
     return place;
+  }
+
+  // How the player did for ranked (js/shared/ranked.js performance): their place in their team's table by score.
+  #performance(view, me) {
+    if (!me) return 0;
+    const mates = (view?.players ?? []).filter(p => !p.dummy && p.team === me.team);
+    const sorted = mates.slice().sort((a, b) => matchScore(b) - matchScore(a) || (a.deaths ?? 0) - (b.deaths ?? 0));
+    return performance({ rank: sorted.indexOf(me) + 1, of: sorted.length, kills: me.kills ?? 0, deaths: me.deaths ?? 0 });
   }
 
   // The history entry for this match (see cleanHistoryEntry in js/shared/progression.js).
@@ -257,6 +270,14 @@ export class MatchAwards {
       for (const u of ex.unlocks) if (u.done && !ex.before.find(b => b.id === u.id)?.done && !applied.unlocks.some(x => `${x.kind}:${x.id}` === u.id)) applied.unlocks.push({ kind: u.kind, id: u.item, name: u.name, req: u.label, ...(u.kind === 'camo' ? { colors: getCamo(u.item).colors, weaponName: 'every gun' } : {}) });
     }
     const outcome = exWon !== null ? (exWon ? 'win' : 'loss') : won ? 'win' : drawn ? 'draw' : 'loss';
+    // The season track, weekly season sets and (ranked only) the rating. A failure here costs only them.
+    let season = null;
+    try {
+      season = Progress.applySeasonMatch({
+        xp: total, counts: tallied ?? this.tally.counts(), career: { ...career, won: exWon ?? won },
+        ranked: this.ranked ? { outcome, perf: this.#performance(view, me), lobby: this.ranked.lobby ?? null, rating: this.ranked.rating ?? null } : null,
+      });
+    } catch (err) { console.error('season', err); }
     let history = null;
     try { history = MatchHistory.add(this.#historyEntry(view, me, outcome, place, total, applied.level, challenges)); } catch (err) { console.error('match history', err); }
     this.result = {
@@ -269,6 +290,8 @@ export class MatchAwards {
       challenges,
       place,
       history,
+      season: season?.track ?? null,
+      ranked: season?.ranked ?? null,
       medals: { ...this.medals },
       ex,
       stats: {

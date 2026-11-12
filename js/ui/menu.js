@@ -38,6 +38,7 @@ import { featured, MODS } from '../shared/playlist.js';
 import { MODES as ALL_MODES } from '../shared/modes.js';
 // The featured pairing in a few words for the Multiplayer button: modifiers plus the mode's short name.
 const shortFeatured = () => { const f = featured(); const m = ALL_MODES[f.mode]; return [...f.mods.map(id => MODS[id]?.name ?? id), (f.mods.length ? m?.short : m?.name) ?? f.name].join(' '); };     // Modes overhaul: modifiers and the featured playlist.
+import { seasonChip, profileRank, seasonScreen, rankBadge } from './season.js';      // Seasons and ranked (docs/SEASONS.md).
 
 export { esc };
 
@@ -50,7 +51,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -201,7 +202,7 @@ export class Menu {
       <button class="pcard${can ? ' ready' : ''}" data-act="profile" data-in="right">
         <span class="pc-badge">${badgeMark(lp.prestige, 46)}</span>
         <span class="pc-body">
-          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}</span>
+          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}${profileRank()}</span>
           <span class="pc-lv"><b>Level <u class="pc-lvn">${lp.level}</u></b><small>${can ? 'Prestige ready' : lp.maxed ? 'Max level' : `${Math.round(lp.into).toLocaleString('en-US')} / ${lp.span.toLocaleString('en-US')} XP`}</small></span>
           <i class="xp"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
         </span>
@@ -210,6 +211,7 @@ export class Menu {
       <nav class="ttl-sec" aria-label="More">
         ${[['gunsmith', 'gunsmith', 'Gunsmith'], ['operators', 'operator', 'Operators'], ['history', 'ui:clock', 'History'], ['boards', 'ui:crown', 'Boards'], ['options', 'options', 'Options'], ['help', 'help', 'How to play'], ['saveCode', 'save', 'Save code']]
           .map(([act, icon, label]) => `<button class="chip" data-act="${act}" data-in="up">${ico(icon)}<b>${label}</b></button>`).join('')}
+        ${seasonChip()}
       </nav>`;
     this.show();
     const hero = this.el.querySelector('.tl-hero'), mark = this.el.querySelector('.wordmark');
@@ -316,7 +318,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -331,7 +333,7 @@ export class Menu {
           const can = !ffa && (isHost || self);
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           cells += `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
-            <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}<b>${esc(h.name)}</b></span>
+            <span class="car-id">${h.badge ? badgeMark(h.badge.prestige ?? 0, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${esc(h.name)}</b></span>
             <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge?.level, emblem: h.loadout?.emblem })}<small>${self ? 'You' : status}</small></span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
@@ -370,7 +372,8 @@ export class Menu {
       <footer class="lobby-foot" data-in="up">
         <button class="chip cu-chip${custom ? ' on' : ''}" ${isHost ? 'data-act="lobbyCustom"' : 'disabled'}>${ico(custom ? 'options' : 'map')}<span><small>${custom ? 'Custom match' : isHost ? 'Map vote. Tap for custom' : 'Map vote'}</small><b>${esc(custom ? customLine(custom) : 'Bots: Mixed')}</b></span></button>
         <button class="chip" data-act="loadout">${ico('loadout')}<b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
-        ${custom ? '' : modsChip(mods, { fixed: !isHost })}
+        ${custom ? '' : rankedOn && rankedFull ? '' : modsChip(mods, { fixed: !isHost })}
+        ${!custom && !br && rankedFull ? `<button class="chip rk-room${rankedOn ? ' on' : ''}" ${isHost ? 'data-act="lobbyRanked"' : 'disabled'}>${ico('ui:rank')}<span><small>${rankedOn ? 'Ranked room' : 'Full room'}</small><b>${rankedOn ? 'Ranked: on' : isHost ? 'Make ranked' : 'Unranked'}</b></span></button>` : ''}
         <button class="chip" data-act="gunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
         <button class="chip" data-act="operators">${ico('operator')}<b>Operators</b></button>
         ${start}
@@ -512,6 +515,11 @@ export class Menu {
   help(opts) {
     this.#stopPreview();
     helpScreen(this, opts);
+  }
+
+  season(opts) {
+    this.#stopPreview();
+    seasonScreen(this, opts);
   }
 
   challenges(opts) {

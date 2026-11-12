@@ -25,7 +25,8 @@ import { Progress } from './progress.js';
 import { stagger, pop } from './motion.js';
 import { setCareerExtras, careerExtras } from './cardbook.js';
 import { getSkin, skinsFor, skinUnlock, baseSkin, isGrantSkin, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice, OPERATORS } from './operators.js';
-import { EMBLEMS, getEmblem, cleanEmblem, emblemUnlocked, emblemHtml } from './emblems.js';
+import { seasonAt } from '../shared/seasons.js';
+import { EMBLEMS, ALL_EMBLEMS, getEmblem, cleanEmblem, emblemUnlocked, emblemHtml } from './emblems.js';
 
 export { getCard, getSkin, skinsFor, getEmblem };
 
@@ -81,7 +82,10 @@ export function equipSkin(op, id) {
 /* ---------- Emblems ---------- */
 export function emblems() {
   const c = careerNow(), on = currentEmblem();
-  return EMBLEMS.map(emblem => ({ emblem, ...emblemUnlocked(emblem, c), equipped: emblem.id === on }));
+  // Season emblems show once earned, or while their season is the one running (its track and ranked crests to aim for).
+  const live = seasonAt().def?.id;
+  return ALL_EMBLEMS.map(emblem => ({ emblem, ...emblemUnlocked(emblem, c), equipped: emblem.id === on }))
+    .filter(e => !e.emblem.season || e.unlocked || e.emblem.season === live);
 }
 export function currentEmblem() {
   const e = getEmblem(equippedEmblem());

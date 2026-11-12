@@ -10,7 +10,9 @@
 //   pickBotsForMatch({...})          THE seam for the bot overhaul: the roster of a Multiplayer match
 import { MAPS, MAP_IDS, SIZES } from '../shared/map.js';
 import { MODES } from '../shared/modes.js';
-import { featured } from '../shared/playlist.js';
+import { featured, cleanMods, playlistName } from '../shared/playlist.js';
+import { eventAt, dateLocked } from '../shared/seasons.js';
+import { RANKED_RULES } from '../shared/ranked.js';
 import { buildRoster } from '../sim/sim.js';
 import { modeFits, weightedMap, tierOf, BR_PICK } from './vote.js';
 
@@ -48,10 +50,18 @@ const PLAYLISTS = {
   ],
 };
 
-// The tab's playlists, today's featured one last on Standard (every featured pairing is a 6v6 mode).
+// The tab's playlists, today's featured one last on Standard (every featured pairing is a 6v6 mode). Standard also
+// has Ranked first (seasons, docs/SEASONS.md: a fixed ruleset, medium maps, no modifiers) and, while the season's
+// limited-time event runs, its playlist after Ranked.
 export function playlistsFor(tab, date = new Date()) {
   const list = (PLAYLISTS[tab] ?? []).map(p => ({ ...p, mods: [], sub: p.sub ?? short(p.modes) }));
   if (tab === 'standard') {
+    list.unshift({ id: 'ranked', name: 'Ranked', icon: 'ui:rank', modes: RANKED_RULES.modes.slice(), mods: [], sub: `${short(RANKED_RULES.modes)} · medium maps`, ranked: true });
+    const ev = eventAt(date);
+    if (ev && MODES[ev.mode]) {
+      const mods = cleanMods(ev.mods, ev.mode);
+      list.splice(1, 0, { id: 'event', name: ev.name, icon: 'ui:timer', modes: [ev.mode], mods, sub: `${playlistName(ev.mode, mods)} · ${ev.daysLeft} day${ev.daysLeft === 1 ? '' : 's'} left`, event: true });
+    }
     const f = featured(date);
     list.push({ id: 'featured', name: f.name, icon: 'star', modes: [f.mode], mods: f.mods, sub: 'Featured today', featured: true });
   }
@@ -66,7 +76,7 @@ export const defaultSelection = tab => ({ playlist: PLAYLISTS[tab]?.[0]?.id ?? n
 // What a pick plays: a playlist's modes and modifiers, or the ticked modes (in the tab's order) with none.
 export function resolveSelection(tab, sel) {
   const p = sel?.playlist && playlistsFor(tab).find(x => x.id === sel.playlist);
-  if (p) return { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name };
+  if (p) return { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked };
   const modes = modesFor(tab).filter(id => sel?.modes?.includes(id));
   if (!modes.length) return { modes: [], mods: [], name: '' };
   return { modes, mods: [], name: modes.length === 1 ? MODES[modes[0]].name : `${modes.length} modes: ${short(modes)}` };
@@ -74,17 +84,19 @@ export function resolveSelection(tab, sel) {
 
 // The maps a tab plays on: Standard everything short of Ground War (weighted by size tier), Ground War the huge maps,
 // Battle Royale the giant ones.
-function tabMaps(tab) {
-  if (tab === 'groundwar') return MAP_IDS.filter(id => tierOf(id) === 'huge');
-  if (tab === 'br' || tab === 'extraction') return BR_PICK.filter(id => !MAPS[id].devMap);
-  return MAP_IDS.filter(id => tierOf(id) !== 'huge');
+function tabMaps(tab, ranked = false) {
+  const open = id => !dateLocked('map', id);         // A season's date-locked map waits for its season.
+  if (ranked) return MAP_IDS.filter(id => tierOf(id) === RANKED_RULES.size && !MAPS[id].devMap && open(id));
+  if (tab === 'groundwar') return MAP_IDS.filter(id => tierOf(id) === 'huge' && open(id));
+  if (tab === 'br' || tab === 'extraction') return BR_PICK.filter(id => !MAPS[id].devMap && open(id));
+  return MAP_IDS.filter(id => tierOf(id) !== 'huge' && open(id));
 }
 const tabWeight = tab => (tab === 'standard' ? t => SIZES[t]?.weight ?? 0 : () => 1);
 
 // The pre-match vote: up to three different maps of the tab's tier that host at least one of `modes`, each with one of
 // those modes (spread across the modes before repeating one). A tier with fewer maps gives fewer cards.
-export function mpVoteOptions(tab, modes, random = Math.random) {
-  const open = tabMaps(tab).filter(id => modes.some(m => modeFits(MAPS[id], m)));
+export function mpVoteOptions(tab, modes, random = Math.random, { ranked = false } = {}) {
+  const open = tabMaps(tab, ranked).filter(id => modes.some(m => modeFits(MAPS[id], m)));
   const out = [], used = new Set();
   while (out.length < 3 && open.length) {
     const mapId = weightedMap(open, random, tabWeight(tab));

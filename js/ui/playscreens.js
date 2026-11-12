@@ -13,6 +13,17 @@ import { ico, header } from './yard.js';
 import { mapCard, tierOf } from './vote.js';
 import { MP_TABS, playlistsFor, modesFor, resolveSelection } from './matchmaking.js';
 import { SKILLS } from './botsettings.js';
+import { Progress } from './progress.js';
+import { rankBadge } from './season.js';      // Seasons: the Ranked playlist wears the player's rank.
+
+// The Ranked playlist's line: the player's division and SR, or how far through placements they are.
+function rankedSub(p) {
+  try {
+    const rk = Progress.ranked();
+    return `<span class="mp-pl-rk">${rankBadge(rk.code, 26)}</span>`
+      + `<span class="mp-pl-tx"><b>${esc(p.name)}</b><small>${esc(rk.placed ? `${rk.division.name} · ${rk.sr.toLocaleString('en-US')} SR` : `Placements ${rk.pm}/${rk.placements}`)}<u class="mp-pl-sub2"> · ${esc(p.modes.map(m => MODES[m]?.short ?? m).join(', '))}</u></small></span>`;
+  } catch (err) { console.error('ranked', err); return `<span class="mp-pl-tx"><b>${esc(p.name)}</b><small>${esc(p.sub)}</small></span>`; }
+}
 
 const tabsNav = (act, tabs, on) => `<nav class="mp-tabs">${tabs.map(t => `<button class="seg${t.id === on ? ' on' : ''}${t.soon ? ' soon' : ''}" data-act="${act}" data-tab="${t.id}" data-sound="tab"${t.soon ? ' disabled aria-disabled="true"' : ''}>${ico(t.icon)}<span><b>${esc(t.name)}</b><small>${esc(t.note)}</small></span></button>`).join('')}</nav>`;
 
@@ -26,9 +37,9 @@ export function mpMarkup({ tab }) {
       <section class="mp-lists">
         <h3 class="mp-h">${ico('menu')}<b>Playlists</b></h3>
         <div class="mp-pls">${lists.map(p => `
-          <button class="mp-pl${p.featured ? ' feat' : ''}" data-act="mpPlaylist" data-id="${p.id}" data-in="up">
-            <span class="mp-pl-ico">${ico(p.icon)}</span>
-            <span class="mp-pl-tx"><b>${esc(p.name)}</b><small>${esc(p.sub)}</small>${br ? `<em>${esc(MODES[p.modes[0]].desc)}</em>` : ''}</span>
+          <button class="mp-pl${p.featured ? ' feat' : ''}${p.ranked ? ' rk' : ''}${p.event ? ' ev' : ''}" data-act="mpPlaylist" data-id="${p.id}" data-in="up">
+            ${p.ranked ? rankedSub(p) : `<span class="mp-pl-ico">${ico(p.icon)}</span>
+            <span class="mp-pl-tx"><b>${esc(p.name)}</b><small>${esc(p.sub)}</small>${br ? `<em>${esc(MODES[p.modes[0]].desc)}</em>` : ''}</span>`}
             <i class="mp-tick">${ico('check')}</i>
           </button>`).join('')}
         </div>

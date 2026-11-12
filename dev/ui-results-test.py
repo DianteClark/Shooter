@@ -123,6 +123,27 @@ async def main():
             n = await pg.evaluate("window.__game.app.badges?.size ?? 0")
             print(f'  {"ground war roster 32":<44} {"ok" if n == 32 else "FAIL"} {n}')
             if n != 32: failures.append(f'ground war roster {n}')
+            # Seasons: Custom (just played) moved no rating; the title's Season chip -> Ranked -> Play Ranked plays one
+            # of the ranked modes on a medium map, no modifiers, and the results carry the ranked row.
+            rk0 = await pg.evaluate('window.__game.Progress.ranked()')
+            ok = rk0['pm'] == 0 and rk0['w'] + rk0['l'] + rk0['d'] == 0
+            print(f'  {"custom matches never count for ranked":<44} {"ok" if ok else "FAIL"} {rk0["pm"]}')
+            if not ok: failures.append(f'custom moved ranked {rk0}')
+            await pg.locator('[data-act="resMenu"]').first.tap()
+            await pg.wait_for_timeout(700)
+            async def ranked_start():
+                await pg.locator('[data-act="season"]').first.tap()
+                await pg.wait_for_timeout(500)
+                await pg.locator('[data-act="szTab"][data-tab="ranked"]').first.tap()
+                await pg.wait_for_timeout(300)
+                await pg.locator('[data-act="szPlayRanked"]').first.tap()
+            st6 = await play('6 ranked from the season screen', ranked_start)
+            mi = st6['last'] or {}
+            rk1 = await pg.evaluate('window.__game.Progress.ranked()')
+            row = await pg.evaluate("!!document.querySelector('.rs-rk')")
+            ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy') and rk1['pm'] == 1 and row
+            print(f'  {"ranked: ruleset, a placement, the results row":<44} {"ok" if ok else "FAIL"} {mi.get("mode")} {mi.get("mapId")} pm={rk1["pm"]} row={row}')
+            if not ok: failures.append(f'ranked {mi} {rk1} {row}')
             await browser.close()
     finally:
         srv.terminate()

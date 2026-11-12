@@ -76,7 +76,7 @@ console.log('career');
   const me = Progress.careerCard();
   ok(me.m === 2 && me.k === 12 && me.d === 10 && me.w === 1 && me.brm === 1 && me.br5 === 1 && me.wk.k === 12, 'Progress.applyMatch feeds careerCard', JSON.stringify(me));
   const keys = Object.keys(me).sort().join(',');
-  ok(keys === 'br5,brm,brw,card,d,emblem,ex,k,kdk,kdm,level,m,mst,name,op,prestige,skin,v,w,wk,xp', 'the card holds totals and looks only', keys);
+  ok(keys === 'br5,brm,brw,card,d,emblem,ex,k,kdk,kdm,level,m,mst,name,op,prestige,skin,sn,v,w,wk,xp', 'the card holds totals and looks only', keys);
   ok(JSON.stringify(me).length < 400, 'the card is compact', `${JSON.stringify(me).length} bytes`);
   ok(B.cleanCard(me) !== null, 'my own card passes cleanCard');
 }

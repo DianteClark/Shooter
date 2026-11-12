@@ -8,6 +8,7 @@ import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 import { V10_UNLOCKS } from './weapons-v10.js';
 import { EX_UNLOCKS } from './extraction.js';
+import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById } from './seasons.js';
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
 // progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
@@ -208,6 +209,7 @@ export function isMastered(w) {
 
 // The rule for one camo on one weapon, ignoring grandfathered ownership.
 export function camoGateOpen(camo, w, life = null) {
+  if (camo.season) return false;        // A season's camo is owned through the save's season block (js/ui/progress.js).
   if (camo.exfil) { const u = EX_UNLOCKS.find(x => x.id === camo.exfil); return !!u && (life?.[u.key] ?? 0) >= u.goal; }
   if (camo.prestige) return (w.prestige ?? 0) >= camo.prestige;
   // Mastery camos sit at the end of the weapon ladder (v4); ones earned before it existed are in `owned`.
@@ -218,6 +220,7 @@ export function camoGateOpen(camo, w, life = null) {
 
 export function camoRequirement(camo) {
   if (camo.exfil) return EX_UNLOCKS.find(u => u.id === camo.exfil)?.label ?? 'Extraction exclusive';
+  if (camo.season) return `Season ${defById(camo.season)?.n ?? ''} reward track`;
   if (camo.prestige) return `Weapon Prestige ${camo.prestige} on this weapon`;
   if (camo.mastery) return camo.masteryKills ? `Mastery and ${camo.masteryKills} kills` : 'Every challenge and the mastery ladder on this weapon';
   if (camo.chal) return `${camo.chal.goal} ${TRACK_LABEL[camo.chal.track]}`;
@@ -729,6 +732,8 @@ export function unlockChallenge(save, kind, id) {
 }
 
 export function itemOpen(save, kind, id) {
+  // A season's reward track can open a locked weapon early (docs/SEASONS.md): the level and challenge still work too.
+  if (save.season && seasonOwned(save.season).has(`${kind}:${id}`)) return true;
   if (itemUnlockLevel(kind, id) > (save.peakLevel ?? 1)) return false;
   return unlockChallenge(save, kind, id)?.done ?? true;
 }
@@ -1229,6 +1234,8 @@ export function blankSave() {
     career: blankCareer(),
     // Lifetime extractions (Extraction mode): every match this player's squad got out of (career.ex counts the same).
     extractions: 0,
+    // Seasons and ranked (js/shared/seasons.js): the track, weekly sets, claimed rewards and the ranked block.
+    season: blankSeasonState(),
   };
 }
 
@@ -1281,6 +1288,7 @@ export function sanitizeSave(raw) {
   s.life = cleanLife(raw.life);
   s.career = cleanCareer(raw.career, s.life);
   s.extractions = count(raw.extractions);
+  s.season = cleanSeasonState(raw.season);
   return s;
 }
 
@@ -1366,8 +1374,17 @@ function pack(s) {
     s.granted ?? [], Object.entries(s.skins ?? {}), s.emblem ?? null, Object.entries(s.life ?? {}),
     // Appended (boards): the career totals, keyed. Left off while they say no more than the lifetime tally does (a
     // code without them seeds them from it), so a code from before them re-exports to the very same code.
-    ...(s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? [s.career] : []),
+    ...packTail(s),
   ];
+}
+
+// The appended tail: [17] career (boards), [18] season block (seasons). Each is left off while it says nothing new, so a
+// code from before them re-exports to the very same code; a season block with no career before it puts null there.
+function packTail(s) {
+  const career = s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? s.career : null;
+  const season = s.season && !seasonStateEmpty(s.season) ? s.season : null;
+  if (season) return [career, season];
+  return career ? [career] : [];
 }
 
 function unpack(a) {
@@ -1403,6 +1420,7 @@ function unpack(a) {
     loadouts: loadouts.map(l => (Array.isArray(l) ? { name: l[0], primary: l[1], secondary: l[2], attachments: l[3], perks: l[4], tactical: l[5], lethal: l[6], streaks: l[7], operator: l[8] } : null)),
     pro, proDone: a[10], card: a[11],
     ...(a[17] && typeof a[17] === 'object' && !Array.isArray(a[17]) ? { career: a[17] } : {}),
+    ...(a[18] && typeof a[18] === 'object' && !Array.isArray(a[18]) ? { season: a[18] } : {}),
   };
 }
 
