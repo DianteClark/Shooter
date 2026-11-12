@@ -447,7 +447,9 @@ export const SIG_TRIM = {
   s_overdrive: { core: 1 },      // Millrace: fire rate +10% (boosted +12.5%) with Light Barrels: 1.30.
   s_looplever: { core: 1 },      // Prospector: fire rate +20% (boosted +25%): the biggest duel gain of any signature.
   s_capacitor: { gain: 1 },      // Lodestone: charge time -28% (boosted -42%): its best build ran 1.24, with both signatures 1.30.
-  s_hotchamber: { core: 0.8 },   // Kestrel: fire rate +25% (boosted +31%) on the top stock sniper: 1.26-1.32; now +20%.
+  s_hotchamber: { core: 0.6 },   // Kestrel: fire rate +25% (boosted +31%) on the top stock sniper: 1.26-1.32; now +15%.
+  s_bedded: { gain: 1 },         // Stanchion: with Long Belt it ran 1.28 (stock 1.10): both back to base strength.
+  s_longbelt: { gain: 1 },
 };
 function boostSignature(a) {
   if (a.kind !== 'sig') return a;

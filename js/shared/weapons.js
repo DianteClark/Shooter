@@ -116,7 +116,7 @@ export const WEAPONS = {
   smg: {
     id: 'smg', name: 'Skitter', role: 'Rush', auto: true,
     damage: 23, rpm: 980, magazine: 36, reserve: 192, reload: 1.75, range: 30,
-    falloff: { start: 12, end: 20, min: 0.6 },
+    falloff: { start: 13, end: 20, min: 0.6 },
     adsSpread: 0.018, hipSpread: 0.032, bloomPerShot: 0.05, bloomRecover: 3.2, bloomScale: 1.3,
     pattern: { amp: 0.009, freq: 1.3, ramp: 3 },
     adsTime: 0.13, sprintToFire: 0.07, swapTime: 0.26, moveMult: 1.09, adsMoveMult: 0.8,
@@ -217,7 +217,7 @@ export const WEAPONS = {
   // Slow to get going, then a wall of fire until the barrel gives out. Swings like a gate: guard an angle.
   lmg: {
     id: 'lmg', name: 'Bulwark', role: 'Suppress', auto: true,
-    damage: 29, rpm: 610, magazine: 100, reserve: 200, reload: 4.5, range: 52,
+    damage: 29, rpm: 595, magazine: 100, reserve: 200, reload: 4.5, range: 52,
     falloff: { start: 18, end: 38, min: 0.72 }, penetrate: 0.75,
     adsSpread: 0.014, hipSpread: 0.095, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.7,
     spinup: { shots: 9, from: 0.68 },
@@ -244,7 +244,7 @@ export const WEAPONS = {
   // Rotary. A second to wind up, then the highest rate in the game and a turning circle like a freight car.
   rotary: {
     id: 'rotary', name: 'Millrace', role: 'Area denial', auto: true,
-    damage: 20, rpm: 1130, magazine: 150, reserve: 300, reload: 5, range: 38,
+    damage: 20, rpm: 1100, magazine: 150, reserve: 300, reload: 5, range: 38,
     falloff: { start: 14, end: 26, min: 0.55 }, penetrate: 0.6,
     adsSpread: 0.03, hipSpread: 0.11, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.3,
     spinup: { shots: 12, from: 0.55 },
@@ -260,8 +260,8 @@ export const WEAPONS = {
   lightlmg: {
     id: 'lightlmg', name: 'Gantry', role: 'Box-fed', auto: true,
     // V11 attachments wave: 565 rpm (was 580); its best build (reflex, vertical grip) ran 1.25 in mirrored play.
-    // Balance pass 3: 545 rpm (stock 1.18-1.19 mirrored).
-    damage: 30, rpm: 545, magazine: 45, reserve: 180, reload: 3.6, range: 48,
+    // Balance pass 3: 535 rpm (stock 1.17-1.19 mirrored).
+    damage: 30, rpm: 535, magazine: 45, reserve: 180, reload: 3.6, range: 48,
     falloff: { start: 20, end: 34, min: 0.73 }, penetrate: 0.7,
     adsSpread: 0.009, hipSpread: 0.085, bloomPerShot: 0.05, bloomRecover: 2, bloomScale: 1.5,
     pattern: { amp: 0.011, freq: 0.5, ramp: 5 }, turnCap: 6,

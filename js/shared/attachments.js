@@ -71,7 +71,7 @@ export const ATTACHMENTS = {
     id: 'snapsight', slot: 'optic', name: 'Snap Sight', unlock: 5,
     desc: 'Scope up much faster. One-shot range drops a lot and aimed fire is looser.',
     weapons: idsIn('Sniper'),
-    mods: { adsTime: 0.78, sprintToFire: 0.9, range: 0.55, adsSpread: 3 },
+    mods: { adsTime: 0.82, sprintToFire: 0.9, range: 0.55, adsSpread: 3 },
   },
   canted: {
     id: 'canted', slot: 'optic', name: 'Canted Dot', unlock: 10,
