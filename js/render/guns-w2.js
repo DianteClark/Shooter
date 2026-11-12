@@ -44,9 +44,10 @@ export function fitOpticW2(k, id, x, y, s = 1) {
     return true;
   }
   if (id === 'laserbox') {
-    // A laser module slung off the LEFT side on a short arm (the Canted Dot hangs right): a long cylinder with a lens.
-    const z = -0.24 * s;
-    k.dark().box(x, y + 0.035 * s, -0.08 * s, 0.14 * s, 0.07 * s, 0.22 * s);
+    // A laser module slung low off the right side on a short arm (the Canted Dot sits higher, on a longer arm): a long
+    // cylinder with a bright lens, the one optic that reaches forward of the rail.
+    const z = 0.24 * s;
+    k.dark().box(x, y + 0.035 * s, 0.08 * s, 0.14 * s, 0.07 * s, 0.22 * s);
     k.dark().prismX(x - 0.16 * s, x + 0.2 * s, y + 0.07 * s, z, 0.065 * s, 0.065 * s, 8, OCT);
     k.accent().prismX(x + 0.2 * s, x + 0.215 * s, y + 0.07 * s, z, 0.05 * s, 0.05 * s, 8, OCT);
     k.metal().box(x - 0.06 * s, y + 0.14 * s, z, 0.09 * s, 0.04 * s, 0.07 * s);
@@ -101,9 +102,9 @@ export function fitWrapW2(k, x, drop, w, id, z = 0, oy = 0) {
     return true;
   }
   if (id === 'thumbrest') {
-    // A shelf for the thumb sticking out of the grip's left side, edged bright: it shows from above.
-    k.grip().box(x, oy - drop * 0.18, z - w / 2 - 0.06, 0.24, 0.05, 0.13, 0.02);
-    k.accent().box(x, oy - drop * 0.18 + 0.03, z - w / 2 - 0.115, 0.2, 0.015, 0.02);
+    // A shelf sticking out of the grip's right side, edged bright: it shows from above and on the bench.
+    k.grip().box(x, oy - drop * 0.18, z + w / 2 + 0.06, 0.24, 0.05, 0.13, 0.02);
+    k.accent().box(x, oy - drop * 0.18 + 0.03, z + w / 2 + 0.115, 0.2, 0.015, 0.02);
     return true;
   }
   if (id === 'beavertail') {
@@ -139,12 +140,12 @@ export function fitShellCuff(k, id, x, y, z) {
   return false;
 }
 
-// ---- Launchers. Guide Rail: a sighting rail along the tube's left side on two brackets. ----
+// ---- Launchers. Guide Rail: a sighting rail along the tube's right side on two brackets. ----
 export function fitGuideRail(k, x0, x1, y, r) {
-  const z = -(r + 0.05);
-  k.metal().box((x0 + x1) / 2, y, z, x1 - x0, 0.05, 0.05);
-  k.dark().box(x0 + 0.1, y, z + 0.03, 0.06, 0.07, 0.07);
-  k.dark().box(x1 - 0.1, y, z + 0.03, 0.06, 0.07, 0.07);
+  const z = r + 0.05;
+  k.metal().box((x0 + x1) / 2, y, z, x1 - x0, 0.075, 0.06, 0.01);
+  k.dark().box(x0 + 0.1, y, z - 0.03, 0.06, 0.07, 0.07);
+  k.dark().box(x1 - 0.1, y, z - 0.03, 0.06, 0.07, 0.07);
   k.accent().box(x1 - 0.02, y + 0.05, z, 0.03, 0.06, 0.03);
 }
 // Venturi Nozzle: a flared bell `len` long at a tube's end (x, facing dir +1 forward or -1 back), radius r widening by `flare`.

@@ -321,7 +321,7 @@ function shotgun(a) {
     k.accent(); for (let i = 0; i < 3; i++) b.prismZ(0.3, 0.34, 0.04 + i * 0.1, 0.02, 0.04, 0.04, 6);
   } else if (a.mag === 'lightmag') {
     k.body2().box(-0.5, 0.17, 0, 0.3, 0.06, 0.34);                           // Skeleton cheek rest.
-  } else fitShellCuff(k, a.mag, -0.62, 0.0, -0.165);                          // Wave 2 shells, on the stock's left.
+  } else fitShellCuff(k, a.mag, -0.62, -0.08, 0.165);                         // Wave 2 shells, on the stock under the rack.
   if (a.optic) fitOptic(k, a.optic, 0.14, 0.26);
   else k.accent().box(0.14, 0.26, 0, 0.12, 0.04, 0.1);
   pistolGrip(k, -0.03, 0.32);
@@ -754,7 +754,7 @@ function coach(a) {
   k.grip().box(-1.08, -0.08, 0, 0.07, 0.36, 0.24, 0.02);
   if (a.mag === 'speedmag') { k.dark().box(-0.6, 0.0, 0.13, 0.3, 0.14, 0.05); k.accent(); for (let i = 0; i < 3; i++) b.prismX(-0.72 + i * 0.1, -0.66 + i * 0.1, 0.0, 0.16, 0.035, 0.035, 6); }
   else if (a.mag === 'lightmag') k.body2().box(-0.62, 0.15, 0, 0.28, 0.05, 0.24);
-  else fitShellCuff(k, a.mag, -0.66, -0.02, -0.135);
+  else fitShellCuff(k, a.mag, -0.66, -0.02, 0.135);
   if (a.optic) fitOptic(k, a.optic, 0.4, 0.3, 0.85);
   else k.accent().box(end - 0.05, 0.32, 0, 0.05, 0.04, 0.04);                                 // Bead sight.
   pistolGrip(k, -0.06, 0.3, 0.12);

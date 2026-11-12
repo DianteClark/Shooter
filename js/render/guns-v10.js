@@ -246,7 +246,7 @@ export function v10Factories(h) {
       mx = end + 0.24;
     }
     k.accent(); for (let i = 0; i < 5; i++) b.box(-0.1 + i * 0.09, 0.12, 0.125, 0.04, 0.14, 0.035);   // Dart saddle.
-    fitShellCuff(k, a.mag, -0.62, -0.02, -0.105);                                             // Wave 2 shells.
+    fitShellCuff(k, a.mag, -0.62, -0.02, 0.105);                                             // Wave 2 shells.
     k.body().extrude([[-0.28, 0.14], [-0.28, 0], [-0.52, -0.1], [-0.92, -0.18], [-0.92, 0.08], [-0.52, 0.16]], -0.08, 0.08);
     k.grip().box(-0.95, -0.05, 0, 0.06, 0.28, 0.18, 0.02);
     if (a.optic) fitOptic(k, a.optic, 0.04, 0.22, 0.9);
