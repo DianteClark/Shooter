@@ -35,6 +35,7 @@ const MM_SCALE = 2;              // Backing-store pixels per CSS pixel; fixed so
 const MM_WIDTH = 118;            // CSS pixels; the height follows the map's aspect.
 const FEED_ROWS = 3;              // Short and quick: the feed never reaches down to the move stick.
 const FEED_LIFE = 4;
+const FEED_ROW_H = 22;            // A feed row and its gap.
 const HUD_SCALE = { small: 0.88, normal: 1, large: 1.14 };   // Options: HUD size.
 const DOCK_BOTTOM = 6;           // Health and the tiles sit this far off the bottom edge.
 const DOCK_GAP = 4;
@@ -538,7 +539,7 @@ export class HUD {
     // Weapon panel: under the corner chips, on the aim thumb's side, above the button cluster. It keeps its size
     // unless the buttons under it would be covered (a short screen at Large).
     const corner = box(this.el.querySelector('.corner'));
-    const top = Math.max(corner && corner.height ? corner.bottom : 0, safe.t + 40) + 6;
+    const top = Math.max(corner && corner.height ? corner.bottom : 0, safe.t + 44 * k) + 6;
     const arms = this.arms, aw = arms.offsetWidth * k, ah = arms.offsetHeight;
     const ax0 = lefty ? safe.l + ARMS_EDGE : W - safe.r - ARMS_EDGE - aw, ax1 = ax0 + aw;
     let floor = H;
@@ -548,6 +549,18 @@ export class HUD {
     st.setProperty('--arms-y', px(top));
     st.setProperty('--arms-k', armsK.toFixed(3));
 
+    // Kill feed: under the minimap (square and zoomed in battle royale and extraction), as many rows as fit above the
+    // move stick, two or three.
+    const mm = box(this.el.querySelector('.minimap'));
+    const feedTop = mm && mm.height ? mm.bottom + 8 : safe.t + 50;
+    const fx0 = lefty ? W - safe.r - 8 - 210 * k : safe.l + 8, fx1 = fx0 + 210 * k;
+    let feedFloor = H;
+    for (const c of circles) if (c.x + c.r > fx0 && c.x - c.r < fx1) feedFloor = Math.min(feedFloor, c.y - c.r);
+    for (const r of buttons) if (r.x1 > fx0 && r.x0 < fx1) feedFloor = Math.min(feedFloor, r.y0);
+    this.feedRows = Math.max(2, Math.min(FEED_ROWS, Math.floor((feedFloor - DOCK_GAP - feedTop) / (FEED_ROW_H * k))));
+    st.setProperty('--feed-y', px(feedTop));
+    while (this.feed.length > this.feedRows) this.feed.pop().row.remove();
+
     // Objective strip rows: centred under the score bar where there is one (else in the free stretch of the top edge),
     // clear of the minimap, the squad panel, the feed, the corner and the weapon panel.
     const bar = box(this.el.querySelector('.scorebar'));
@@ -556,7 +569,7 @@ export class HUD {
       .map(sel => box(this.el.querySelector(sel))).filter(r => r && r.width > 0);
     // The squad panels and the feed fill in after the layout: take their full size now.
     const feed = this.feedEl.getBoundingClientRect();
-    obstacles.push({ left: feed.left, right: feed.left + this.feedEl.offsetWidth * k, top: feed.top, bottom: feed.top + FEED_ROWS * 22 * k });
+    obstacles.push({ left: feed.left, right: feed.left + this.feedEl.offsetWidth * k, top: feed.top, bottom: feed.top + this.feedRows * FEED_ROW_H * k });
     for (const sel of ['.br-squad', '.ex-squad']) {
       const r = box(this.el.querySelector(sel));
       if (r && r.width) obstacles.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + 3 * 26 * k });
@@ -568,7 +581,7 @@ export class HUD {
       const h = Math.max(row.offsetHeight, STRIP_ROW_H[n]) * k;
       let lo = safe.l + 6, hi = W - safe.r - 6;
       for (const r of obstacles) {
-        if (r.bottom <= y || r.top >= y + h) continue;
+        if (r.bottom <= y + 2 || r.top >= y + h - 2) continue;
         if ((r.left + r.right) / 2 < W / 2) lo = Math.max(lo, r.right + DOCK_GAP * 2);
         else hi = Math.min(hi, r.left - DOCK_GAP * 2);
       }
@@ -2750,7 +2763,7 @@ export class HUD {
     row.animate([{ transform: 'translateX(-18px)', opacity: 0, filter: 'brightness(2)' }, { transform: 'none', opacity: 1, filter: 'brightness(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.9,.3,1)' });
     this.feedEl.prepend(row);
     this.feed.unshift({ row, life: FEED_LIFE });
-    while (this.feed.length > FEED_ROWS) this.feed.pop().row.remove();
+    while (this.feed.length > (this.feedRows ?? FEED_ROWS)) this.feed.pop().row.remove();
   }
 
   // A few seconds on the host's notice line, then the feed keeps a record of it.

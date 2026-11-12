@@ -206,9 +206,6 @@ export class BrHud {
         </div>
       </div>`;
     hud.el.appendChild(el);
-    // The circle chips are the objective strip's state row, your revive bar its progress row (js/ui/hud.js ObjStrip).
-    hud.strip.mount(el.querySelector('.br-top'), { order: 0 });
-    hud.strip.mount(el.querySelector('.br-reviving'), { row: 2 });
     // The hand slots are part of the weapon panel, beside the ammo readout (left-handed layouts too).
     this.handsEl = document.createElement('div');
     this.handsEl.className = 'br-hands';
@@ -251,6 +248,9 @@ export class BrHud {
       this.cmd?.('ping', { x: (e.clientX - r.left) / r.width * W, z: (e.clientY - r.top) / r.height * W });
     });
     this.revEl = $('.br-reviving');
+    // The circle chips are the objective strip's state row, your revive bar its progress row (js/ui/hud.js ObjStrip).
+    hud.strip.mount($('.br-top'), { order: 0 });
+    hud.strip.mount(this.revEl, { row: 2 });
     this.pings = [];
     this.takeId = null;
     this.mapOpen = false;

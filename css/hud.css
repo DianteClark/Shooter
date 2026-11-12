@@ -30,3 +30,7 @@
 
 /* The death screen and its loadout picker start under the strip's state row. */
 .hud .death-col, .hud .picker { top: var(--death-y, calc(var(--st) + 50px)); }
+
+/* Training: Skip sits with the corner chips (mirrored for the left hand); the feed is noise while learning. */
+#ui.hud-lefty .tut-skip { right: auto; left: calc(max(var(--sl), 10px) + 6px); }
+#ui.tut-on .hud .feed { display: none; }

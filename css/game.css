@@ -436,7 +436,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 
 /* Kill feed: one row per kill, killer, weapon silhouette, victim. The local player's rows are lit. */
 /* Three rows under the minimap, gone in four seconds: never down to the move stick, never over the objective strip. */
-.feed { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 92px); width: 210px; display: flex; flex-direction: column; gap: 2px; transform: scale(var(--hud-k, 1)); transform-origin: left top; }
+.feed { position: absolute; left: calc(var(--sl) + 8px); top: var(--feed-y, calc(var(--st) + 92px)); width: 210px; display: flex; flex-direction: column; gap: 2px; transform: scale(var(--hud-k, 1)); transform-origin: left top; }
 .f-row {
   align-self: flex-start; display: flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px 0 7px; max-width: 100%;
   font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .04em; white-space: nowrap;
@@ -1000,7 +1000,7 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 .range-leave { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 94px); padding: 0 14px; }
 .hud.range-on .scorebar, .hud.range-on .minimap { display: none; }
 .hud.range-on .range-leave { top: calc(var(--st) + 8px); }
-.hud.range-on .feed { left: calc(var(--sl) + 8px); top: calc(var(--st) + 50px); }
+.hud.lefty .range-leave { left: auto; right: calc(var(--sr) + 8px); }
 
 /* The killcam banner (js/game/killcam.js) takes the row under the score bar. */
 .killcam-on .obj-strip, .killcam-on .obj-meter, .killcam-on .obj-banner, .killcam-on .spectate { visibility: hidden; }
