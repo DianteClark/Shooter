@@ -1,222 +1,230 @@
 {
  "ar": {
   "kit": {
+   "optic": "reticle",
+   "barrel": "stub",
    "mag": "s_matchmag"
   },
-  "score": 0.6166666666666667,
-  "stock": 0.6055555555555555,
+  "score": 0.6,
+  "stock": 0.4722222222222222,
   "evals": 63
  },
  "burst": {
   "kit": {
-   "barrel": "stub"
+   "optic": "holo",
+   "barrel": "suppressor",
+   "mag": "speedmag",
+   "grip": "k_openbolt"
   },
-  "score": 0.565,
-  "stock": 0.495,
+  "score": 0.595,
+  "stock": 0.525,
   "evals": 61
  },
  "heavyar": {
   "kit": {
-   "optic": "ghostring"
+   "optic": "holo",
+   "barrel": "heavybarrel",
+   "mag": "s_mule",
+   "grip": "handstop"
   },
-  "score": 0.585,
-  "stock": 0.55,
+  "score": 0.57,
+  "stock": 0.48,
   "evals": 59
  },
  "smg": {
   "kit": {
-   "optic": "canted",
-   "barrel": "stub",
-   "mag": "lightmag",
-   "grip": "vertical"
+   "barrel": "breacher",
+   "mag": "speedmag"
   },
-  "score": 0.5944444444444444,
-  "stock": 0.4777777777777778,
+  "score": 0.6277777777777778,
+  "stock": 0.6055555555555555,
   "evals": 57
  },
  "pdw": {
   "kit": {
-   "optic": "pointdot",
-   "barrel": "longbarrel"
+   "optic": "holo",
+   "barrel": "longbarrel",
+   "mag": "lightmag",
+   "grip": "skelstock"
   },
-  "score": 0.6444444444444445,
-  "stock": 0.5583333333333333,
+  "score": 0.6416666666666667,
+  "stock": 0.5444444444444444,
   "evals": 57
  },
  "tacsmg": {
   "kit": {
-   "optic": "ghostring",
-   "barrel": "compensator",
-   "mag": "tapedmag"
+   "optic": "s_needlesight",
+   "barrel": "s_suture",
+   "grip": "wrap"
   },
-  "score": 0.63,
-  "stock": 0.565,
+  "score": 0.675,
+  "stock": 0.595,
   "evals": 57
  },
  "shotgun": {
   "kit": {
-   "optic": "pointdot",
-   "barrel": "rifled",
-   "mag": "flitewad",
-   "grip": "angled"
+   "optic": "irons",
+   "barrel": "choke",
+   "mag": "magnum"
   },
-  "score": 0.5555555555555556,
-  "stock": 0.48333333333333334,
+  "score": 0.5611111111111111,
+  "stock": 0.4666666666666667,
   "evals": 53
  },
  "autoshot": {
   "kit": {
    "optic": "irons",
    "barrel": "rifled",
-   "mag": "satchel"
+   "mag": "magnum",
+   "grip": "handstop"
   },
-  "score": 0.4666666666666667,
-  "stock": 0.39444444444444443,
+  "score": 0.5166666666666667,
+  "stock": 0.38333333333333336,
   "evals": 53
  },
  "coach": {
   "kit": {
-   "optic": "laserbox",
-   "barrel": "rifled",
+   "optic": "reflex",
    "mag": "lightmag",
-   "grip": "handstop"
+   "grip": "vertical"
   },
-  "score": 0.605,
-  "stock": 0.525,
+  "score": 0.61,
+  "stock": 0.555,
   "evals": 51
  },
  "lmg": {
   "kit": {
-   "mag": "k_assaultbox",
-   "grip": "vertical"
+   "barrel": "compensator",
+   "grip": "s_prespun"
   },
   "score": 0.5333333333333333,
-  "stock": 0.48333333333333334,
+  "stock": 0.4666666666666667,
   "evals": 57
  },
  "saw": {
   "kit": {
-   "optic": "canted",
-   "barrel": "heavybarrel",
+   "optic": "longeye",
+   "barrel": "heatsink",
    "mag": "apmag"
   },
   "score": 0.545,
-  "stock": 0.5,
+  "stock": 0.455,
   "evals": 57
  },
  "rotary": {
   "kit": {
-   "optic": "prism"
+   "optic": "canted",
+   "grip": "brace"
   },
-  "score": 0.53,
-  "stock": 0.47,
+  "score": 0.525,
+  "stock": 0.42,
   "evals": 57
  },
  "dmr": {
   "kit": {
-   "optic": "s_cheekpiece"
+   "optic": "holo",
+   "barrel": "heavybarrel",
+   "mag": "tapedmag"
   },
-  "score": 0.5722222222222222,
-  "stock": 0.49166666666666664,
+  "score": 0.5138888888888888,
+  "stock": 0.4722222222222222,
   "evals": 61
  },
  "battle": {
   "kit": {
-   "optic": "reflex",
-   "grip": "wrap"
+   "optic": "canted",
+   "mag": "apmag"
   },
-  "score": 0.4722222222222222,
-  "stock": 0.40555555555555556,
+  "score": 0.5,
+  "stock": 0.44166666666666665,
   "evals": 61
  },
  "lever": {
   "kit": {
-   "optic": "steady",
-   "grip": "s_looplever"
+   "optic": "reticle",
+   "mag": "speedmag"
   },
-  "score": 0.57,
-  "stock": 0.475,
+  "score": 0.53,
+  "stock": 0.47,
   "evals": 61
  },
  "sniper": {
   "kit": {
    "optic": "snapsight",
-   "mag": "speedmag",
-   "grip": "thumbrest"
+   "barrel": "heavybarrel",
+   "mag": "speedmag"
   },
-  "score": 0.6555555555555556,
-  "stock": 0.525,
+  "score": 0.6,
+  "stock": 0.5555555555555556,
   "evals": 49
  },
  "antimat": {
   "kit": {
-   "optic": "snapsight",
-   "mag": "extmag"
+   "optic": "hunter"
   },
-  "score": 0.665,
-  "stock": 0.5725,
+  "score": 0.595,
+  "stock": 0.5875,
   "evals": 49
  },
  "semisnipe": {
   "kit": {
-   "optic": "steady",
-   "barrel": "heavybarrel"
+   "barrel": "heavybarrel",
+   "grip": "thumbrest"
   },
-  "score": 0.615,
-  "stock": 0.565,
+  "score": 0.61,
+  "stock": 0.52,
   "evals": 49
  },
  "carbine": {
-  "kit": {
-   "optic": "reflex",
-   "mag": "speedmag"
-  },
-  "score": 0.6222222222222222,
-  "stock": 0.5833333333333334,
-  "evals": 61
+  "kit": {},
+  "score": 0.5888888888888889,
+  "stock": 0.5888888888888889,
+  "evals": 31
  },
  "heavysmg": {
   "kit": {
-   "optic": "canted"
+   "optic": "ghostring",
+   "barrel": "suppressor"
   },
-  "score": 0.595,
-  "stock": 0.575,
+  "score": 0.575,
+  "stock": 0.55,
   "evals": 55
  },
  "slug": {
-  "kit": {},
-  "score": 0.615,
-  "stock": 0.615,
-  "evals": 27
+  "kit": {
+   "optic": "reflex",
+   "mag": "s_sabot",
+   "grip": "angled"
+  },
+  "score": 0.55,
+  "stock": 0.53,
+  "evals": 53
  },
  "lightlmg": {
   "kit": {
-   "optic": "steady",
-   "barrel": "suppressor"
+   "optic": "steady"
   },
-  "score": 0.51,
-  "stock": 0.455,
+  "score": 0.505,
+  "stock": 0.4625,
   "evals": 55
  },
  "crossbow": {
   "kit": {
    "optic": "canted",
-   "barrel": "longbarrel",
-   "grip": "s_recurve"
+   "mag": "s_broadhead",
+   "grip": "wrap"
   },
-  "score": 0.5875,
-  "stock": 0.48,
+  "score": 0.57,
+  "stock": 0.525,
   "evals": 55
  },
  "rampar": {
   "kit": {
-   "optic": "prism",
-   "barrel": "heavybarrel",
-   "mag": "speedmag",
-   "grip": "s_lightwheel"
+   "optic": "reticle",
+   "barrel": "heavybarrel"
   },
-  "score": 0.65,
-  "stock": 0.525,
+  "score": 0.575,
+  "stock": 0.51,
   "evals": 61
  },
  "heatar": {
@@ -224,93 +232,93 @@
    "optic": "longeye",
    "barrel": "suppressor"
   },
-  "score": 0.545,
-  "stock": 0.455,
+  "score": 0.565,
+  "stock": 0.435,
   "evals": 61
  },
  "hushsmg": {
   "kit": {
-   "optic": "ghostring",
-   "barrel": "longbarrel",
-   "mag": "extmag",
-   "grip": "rubber"
+   "optic": "reflex"
   },
-  "score": 0.605,
-  "stock": 0.525,
+  "score": 0.6,
+  "stock": 0.53,
   "evals": 53
  },
  "drumsmg": {
-  "kit": {},
-  "score": 0.605,
-  "stock": 0.605,
-  "evals": 26
+  "kit": {
+   "optic": "ghostring",
+   "mag": "lightmag",
+   "grip": "skelstock"
+  },
+  "score": 0.635,
+  "stock": 0.545,
+  "evals": 51
  },
  "magshot": {
   "kit": {
-   "optic": "laserbox",
-   "mag": "extmag",
+   "optic": "reflex",
+   "barrel": "rifled",
+   "mag": "lightmag",
    "grip": "vertical"
   },
-  "score": 0.48,
-  "stock": 0.445,
+  "score": 0.525,
+  "stock": 0.475,
   "evals": 51
  },
  "flechette": {
   "kit": {
-   "optic": "holo",
-   "barrel": "s_needlechoke",
-   "mag": "s_barbed",
-   "grip": "angled"
+   "optic": "irons",
+   "barrel": "breacher",
+   "mag": "s_barbed"
   },
-  "score": 0.59,
-  "stock": 0.4475,
+  "score": 0.6,
+  "stock": 0.435,
   "evals": 53
  },
  "beltlmg": {
   "kit": {
-   "optic": "canted",
-   "barrel": "suppressor",
-   "mag": "satchel"
+   "optic": "longeye",
+   "grip": "brace"
   },
-  "score": 0.5275,
-  "stock": 0.44,
+  "score": 0.52,
+  "stock": 0.465,
   "evals": 57
  },
  "twinshot": {
   "kit": {
-   "optic": "steady"
+   "optic": "longeye",
+   "barrel": "stub"
   },
-  "score": 0.4675,
-  "stock": 0.42,
+  "score": 0.4725,
+  "stock": 0.395,
   "evals": 59
  },
  "hushdmr": {
   "kit": {
-   "optic": "canted",
-   "barrel": "longbarrel",
    "mag": "s_hollowpoint"
   },
-  "score": 0.575,
-  "stock": 0.52,
+  "score": 0.62,
+  "stock": 0.58,
   "evals": 55
  },
  "scout": {
   "kit": {
-   "optic": "prism"
+   "optic": "snapsight",
+   "barrel": "floated",
+   "grip": "angled"
   },
-  "score": 0.515,
-  "stock": 0.4875,
+  "score": 0.5175,
+  "stock": 0.41,
   "evals": 49
  },
  "rail": {
   "kit": {
-   "optic": "prism",
-   "barrel": "heavybarrel",
+   "optic": "snapsight",
    "mag": "s_capacitor",
-   "grip": "angled"
+   "grip": "thumbrest"
   },
-  "score": 0.6375,
-  "stock": 0.585,
+  "score": 0.6225,
+  "stock": 0.5625,
   "evals": 45
  }
 }

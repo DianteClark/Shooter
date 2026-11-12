@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: '1111-33', date: '2026-11-12', title: 'Weapon balance after the new attachments',
+    items: [
+      'Toned down: Kestrel (slower, one-shot range 18 m, a touch slower to aim), Bulwark, Millrace, Gantry, Tallyman, Kiln and Monolith (all fire a little slower).',
+      'Toned up: Foreman (faster, steadier), Murmur (faster, keeps its damage a little further), Thistle and Railspike (faster), Trammel and Skitter (full damage a metre further).',
+      'Snap Sight: scopes in a little slower.',
+      'Assault Box (Bulwark): no wind-up as before, but it fires slower, overheats sooner and is less of a speed boost.',
+      'Signatures that made their gun too strong are trimmed (still upgrades over stock): Pre-Spun Motor, Overdrive Motor, Loop Lever, Hot Chamber, Capacitor Bank, Long Belt, Bedded Receiver and Mule Rounds.',
+      'Signatures that held their gun back cost less: Muffled Bolt and Ram Rounds no longer slow the fire rate, Featherweight Frame no longer cuts range, Buck and Ball is no wider from the hip, and Hopper Gyro, Box Twelve and Recurve Limbs no longer slow you down.',
+    ],
+  },
+  {
     build: '1111-32', date: '2026-11-12', title: 'Graveyard Shift: somewhere to spend your points',
     items: [
       'Upgrade bench: bring the gun in your hands to the bench and it comes back stronger, with a bigger magazine and more ammo. Three tiers (5,000, 15,000 and 30,000 points); the third adds special rounds that set the undead burning, arc between them, burst on impact or slow them down, depending on the gun. Upgraded guns glow and fire coloured tracers, and keep their tier when you swap.',

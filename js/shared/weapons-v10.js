@@ -44,7 +44,7 @@ export const V10_WEAPONS = {
   // strings stay laser straight; hold it down and it locks up in the open.
   heatar: {
     id: 'heatar', name: 'Kiln', role: 'Heat rifle', auto: true,
-    damage: 27, rpm: 605, magazine: 75, reserve: 150, reload: 3.4, range: 46,
+    damage: 27, rpm: 590, magazine: 75, reserve: 150, reload: 3.4, range: 46,
     falloff: { start: 18, end: 32, min: 0.68 }, penetrate: 0.7,
     adsSpread: 0.0075, hipSpread: 0.06, bloomPerShot: 0, bloomRecover: 2, bloomScale: 1.6,
     heat: { rounds: 17, coolDelay: 0.3, coolTime: 1.5, lockout: 1.8, loosenFrom: 0.6 },
@@ -59,8 +59,8 @@ export const V10_WEAPONS = {
   // It pays in reach instead, the shortest of the SMGs.
   hushsmg: {
     id: 'hushsmg', name: 'Murmur', role: 'Ghost', auto: true, suppressed: true,
-    damage: 24, rpm: 900, magazine: 30, reserve: 180, reload: 1.8, range: 24,
-    falloff: { start: 9, end: 16, min: 0.5 },
+    damage: 24, rpm: 960, magazine: 30, reserve: 180, reload: 1.8, range: 24,
+    falloff: { start: 10, end: 17, min: 0.55 },
     adsSpread: 0.016, hipSpread: 0.032, bloomPerShot: 0.05, bloomRecover: 3.2, bloomScale: 1.3,
     pattern: { amp: 0.008, freq: 1.1, ramp: 3 },
     adsTime: 0.14, sprintToFire: 0.08, swapTime: 0.27, moveMult: 1.06, adsMoveMult: 0.8,
@@ -87,7 +87,7 @@ export const V10_WEAPONS = {
   magshot: {
     id: 'magshot', name: 'Trammel', role: 'Mag-fed', auto: false,
     damage: 20, rpm: 230, magazine: 8, reserve: 42, reload: 1.7, range: 14,
-    falloff: { start: 7.5, end: 11, min: 0.3 },
+    falloff: { start: 8, end: 11.5, min: 0.3 },
     adsSpread: 0.045, hipSpread: 0.078, bloomPerShot: 0.14, bloomRecover: 1.8, bloomScale: 0.45, turnCap: 8,
     adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.4, moveMult: 1.08, adsMoveMult: 0.7,
     pellets: 8, kickCam: 0.9, tracerWidth: 0.5, longshot: 9,
@@ -98,7 +98,7 @@ export const V10_WEAPONS = {
   // twenty metres, where every other shotgun is spent, and the darts go through a crate.
   flechette: {
     id: 'flechette', name: 'Thistle', role: 'Flechette', auto: false,
-    damage: 19, rpm: 140, magazine: 5, reserve: 40, reload: 0.5, range: 30,
+    damage: 19, rpm: 160, magazine: 5, reserve: 40, reload: 0.5, range: 30,
     falloff: { start: 13, end: 24, min: 0.6 }, penetrate: 0.6,
     adsSpread: 0.013, hipSpread: 0.045, bloomPerShot: 0.3, bloomRecover: 2, bloomScale: 0.6, turnCap: 9,
     adsTime: 0.21, sprintToFire: 0.16, swapTime: 0.42, moveMult: 1.03, adsMoveMult: 0.66,

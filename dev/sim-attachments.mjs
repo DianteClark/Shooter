@@ -138,8 +138,9 @@ test('kits change behaviour as described when fired', () => {
   let r = fire('dmr', { grip: 'k_runaway' }, 1);
   assert.ok(r.shots.length >= 6, `${r.shots.length} rounds a second`);
   assert.ok(r.ps.adsT > 0.9, 'stays aimed while firing');
-  const plain = fire('dmr', {}, 1);
-  assert.ok(plain.shots.length <= 4 && plain.ps.adsT < 0.95, 'the stock Tallyman is semi and kicks the scope');
+  // Read just after its third round (at 178 rpm a whole second ends with the scope already back up).
+  const plain = fire('dmr', {}, 2 * 60 / WEAPONS.dmr.rpm + 0.02);
+  assert.ok(plain.shots.length <= 4 && plain.ps.adsT < 0.95, `the stock Tallyman is semi and kicks the scope ${plain.shots.length} ${plain.ps.adsT}`);
   // Slug Barrel / Buckshot Tube / Scatter Loads: one ray against seven and six.
   assert.ok(fire('shotgun', { barrel: 'k_slugbarrel' }, 0.3).shots.every(s => s.angles.length === 1));
   assert.ok(fire('slug', { mag: 'k_bucktube' }, 0.3).shots.every(s => s.angles.length === 7));

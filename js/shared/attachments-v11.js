@@ -84,8 +84,8 @@ const LIST = [
   // ---------------- SMG ----------------
   sig('s_featherframe', 'smg', 'grip', 'Featherweight Frame', 16,
     'Leans into the Skitter\'s feet: the fastest thing on the map.',
-    'Faster on foot and out of a sprint. Shorter range, more recoil sway.',
-    { moveMult: 1.03, sprintToFire: 0.85, range: 0.85, patternAmp: 1.2 }, { look: { grip: 'skelstock' } }),
+    'Faster on foot and out of a sprint. More recoil sway.',
+    { moveMult: 1.03, sprintToFire: 0.85, patternAmp: 1.2 }, { look: { grip: 'skelstock' } }),
   conv('k_hivedrum', 'smg', 'mag', 'Hive Drum', 26,
     'A Skitter that clears a whole room on one load.',
     'Twice the rounds and a slower, steadier rate. A long reload, heavier, slower to aim.',
@@ -112,13 +112,13 @@ const LIST = [
 
   sig('s_ramrounds', 'heavysmg', 'mag', 'Ram Rounds', 25,
     'The bruiser that shoots through the crate you hide behind.',
-    'Keeps more damage through cover. Slower fire, fewer rounds.',
-    { penetrate: 1.35, rpm: 0.92, magazine: 0.85 }, { look: { mag: 'apmag' } }),
+    'Keeps more damage through cover. Fewer rounds.',
+    { penetrate: 1.35, magazine: 0.85 }, { look: { mag: 'apmag' } }),
 
   sig('s_muffledbolt', 'hushsmg', 'grip', 'Muffled Bolt', 16,
     'For the ghost who is always moving.',
-    'Fires sooner out of a sprint, moves faster aimed. Shorter range, slower fire.',
-    { sprintToFire: 0.85, adsMoveMult: 1.1, range: 0.9, rpm: 0.94 }, { look: { grip: 'wrap' } }),
+    'Fires sooner out of a sprint, moves faster aimed. Slower to swap.',
+    { sprintToFire: 0.85, adsMoveMult: 1.1, swapTime: 1.1 }, { look: { grip: 'wrap' } }),
   conv('k_openmuzzle', 'hushsmg', 'barrel', 'Open Muzzle', 26,
     'Trades the Murmur\'s silence for real reach.',
     'No longer suppressed: shows on the minimap and is loud. Reaches much further and fades less.',
@@ -127,8 +127,8 @@ const LIST = [
 
   sig('s_gyro', 'drumsmg', 'grip', 'Hopper Gyro', 25,
     'Keeps a 64-round pan on target to the last round.',
-    'Much less bloom and sway. Heavier on foot, slower out of a sprint.',
-    { bloomPerShot: 0.7, patternAmp: 0.8, moveMult: 0.96, sprintToFire: 1.15 }, { look: { grip: 'vertical' } }),
+    'Much less bloom and sway. Slower out of a sprint.',
+    { bloomPerShot: 0.7, patternAmp: 0.8, sprintToFire: 1.15 }, { look: { grip: 'vertical' } }),
 
   // ---------------- Shotgun ----------------
   sig('s_breachpump', 'shotgun', 'grip', 'Breach Pump', 27,
@@ -163,8 +163,8 @@ const LIST = [
     { rpm: 1.6, hipSpread: 1.15, adsSpread: 1.1, reload: 1.15 }, { look: { grip: 'wrap' } }),
   sig('s_buckball', 'coach', 'mag', 'Buck and Ball', M1,
     'Fewer, heavier pellets for the ambush that starts a little further out.',
-    'Six heavy pellets that carry further and fly tighter aimed. Less forgiving from the hip.',
-    { range: 1.25, adsSpread: 0.85, hipSpread: 1.1 },
+    'Six heavy pellets that carry further and fly tighter aimed. A little less damage in all.',
+    { range: 1.25, adsSpread: 0.85 },
     { set: { pellets: 6, damage: 30 }, notes: ['Six heavy pellets'], look: { mag: 'speedmag' } }),
 
   sig('s_sabot', 'slug', 'mag', 'Sabot Slugs', 27,
@@ -186,8 +186,8 @@ const LIST = [
 
   sig('s_boxtwelve', 'magshot', 'mag', 'Box Twelve', 26,
     'Twelve shells in a box: the shotgun that never pauses.',
-    'Half again as many shells. Slower reload, heavier, slower to aim.',
-    { magazine: 1.5, reload: 1.25, moveMult: 0.96, adsTime: 1.06 }, { look: { mag: 'extmag' } }),
+    'Half again as many shells. Slower reload, slower to aim.',
+    { magazine: 1.5, reload: 1.25, adsTime: 1.06 }, { look: { mag: 'extmag' } }),
 
   sig('s_needlechoke', 'flechette', 'barrel', 'Needle Choke', 26,
     'Flechettes keep their bite much further down the sights.',
@@ -205,8 +205,8 @@ const LIST = [
     { spinupFrom: 1.3, heatRounds: 0.85 }, { look: { grip: 'vertical' } }),
   conv('k_assaultbox', 'lmg', 'mag', 'Assault Box', 22,
     'A Bulwark you can walk with: no wind-up, half the belt.',
-    'No wind-up, much lighter and quicker to aim and swing. Half the rounds, overheats sooner, wider from the hip.',
-    { magazine: 0.5, heatRounds: 0.75, moveMult: 1.08, adsTime: 0.85, turnCap: 1.3, hipSpread: 1.1 },
+    'No wind-up, lighter and quicker to aim and swing. Half the rounds, overheats much sooner, fires slower, wider from the hip.',
+    { magazine: 0.5, heatRounds: 0.65, moveMult: 1.05, adsTime: 0.95, turnCap: 1.1, hipSpread: 1.1, rpm: 0.9 },
     { set: { spinup: undefined }, notes: ['No wind-up'], look: { mag: 'speedmag' } }),
 
   sig('s_droversling', 'saw', 'grip', 'Drover Sling', 14,
@@ -290,8 +290,8 @@ const LIST = [
     { damage: 1.1, adsGate: 1.25, range: 0.8, reload: 1.2 }, { look: { mag: 'speedmag' } }),
   sig('s_recurve', 'crossbow', 'grip', 'Recurve Limbs', M1,
     'The silent hunter reaching across a lane.',
-    'Kills from further away. Slower to aim, heavier on foot.',
-    { range: 1.25, adsTime: 1.1, moveMult: 0.97 }, { look: { grip: 'vertical' } }),
+    'Kills from further away. Slower to aim.',
+    { range: 1.25, adsTime: 1.1 }, { look: { grip: 'vertical' } }),
 
   sig('s_lockstep', 'twinshot', 'grip', 'Lockstep Sear', 19,
     'Both rounds of the pair land before the target moves.',
@@ -438,14 +438,28 @@ const BETTER = { adsSpread: -1, hipSpread: -1, bloomPerShot: -1, patternAmp: -1,
   blastRadius: 1, bloomRecover: 1, reserve: 1, damage: 1, rpm: 1, settleShots: -1, settleFrom: -1, spinupShots: -1,
   spinupFrom: 1, chargeTime: -1, burstGap: -1, boltKick: 1, adsGate: 1, lunge: 1, falloffMin: 1, heatLockout: -1 };
 export const SIG_GAIN = 1.5, SIG_GAIN_CORE = 1.25, SIG_COST = 0.5;
+// Balance pass 3 (docs/WEAPONS-OVERHAUL.md): the few signatures that made their gun the best in mirrored play keep
+// the boost on their costs (halved) but not on the strength that did it. `gain` replaces SIG_GAIN, `core` SIG_GAIN_CORE
+// for that one signature; 1 means the strength is its base value, still a clear upgrade over its pre-boost self
+// (its costs stay halved), below 1 a little less than base.
+export const SIG_TRIM = {
+  s_prespun: { gain: 0.6 },      // Bulwark: starting fire rate +30% (boosted +45%) took it to 1.36 mirrored, still 1.31-1.33 at +30%; now +18%.
+  s_mule: { core: 0.75 },        // Drayman: damage +8% (boosted +10%) stretched its three-shot reach: 1.23-1.29; now +6%.
+  s_overdrive: { core: 1 },      // Millrace: fire rate +10% (boosted +12.5%) with Light Barrels: 1.30.
+  s_looplever: { core: 1 },      // Prospector: fire rate +20% (boosted +25%): the biggest duel gain of any signature.
+  s_capacitor: { gain: 1 },      // Lodestone: charge time -28% (boosted -42%): its best build ran 1.24, with both signatures 1.30.
+  s_hotchamber: { core: 0.6 },   // Kestrel: fire rate +25% (boosted +31%) on the top stock sniper: 1.26-1.32; now +15%.
+  s_bedded: { gain: 1 },         // Stanchion: with Long Belt it ran 1.28 (stock 1.10): both back to base strength.
+  s_longbelt: { gain: 1 },
+};
 function boostSignature(a) {
   if (a.kind !== 'sig') return a;
-  const mods = {};
+  const mods = {}, trim = SIG_TRIM[a.id] ?? {};
   for (const [k, v] of Object.entries(a.mods)) {
     const dir = BETTER[k];
     if (typeof v !== 'number' || !dir) { mods[k] = v; continue; }
     const helps = (v - 1) * dir > 0;
-    const scale = helps ? (k === 'damage' || k === 'rpm' ? SIG_GAIN_CORE : SIG_GAIN) : SIG_COST;
+    const scale = helps ? (k === 'damage' || k === 'rpm' ? trim.core ?? SIG_GAIN_CORE : trim.gain ?? SIG_GAIN) : SIG_COST;
     mods[k] = +Math.max(0.2, 1 + (v - 1) * scale).toFixed(3);
   }
   return { ...a, mods, base: a.mods };

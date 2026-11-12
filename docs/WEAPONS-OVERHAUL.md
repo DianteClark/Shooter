@@ -563,3 +563,149 @@ rows are even and long lists scroll.
 | Thumb Rest | grip | Sniper, Pistol, Launcher | aimed spread -10%, settle speed +8% | time to aim +6%, swap time +8% | 13 |
 | Beavertail | grip | Pistol | hip spread -8%, move speed +2% | aimed spread +10%, swap time +6% | 6 |
 | Taped Mags (opened) | mag | now also SMG (not the Hopper) and Pistol (not the Bramble or Tacker) | reload -20% | time to aim +8%, swap time +10%, hip spread +10% | 12 |
+
+## Balance pass 3 (ROADMAP item 37, balance half)
+
+After attachments wave 2 and the signature boost (attachments-v11.js `boostSignature`: strengths x1.5, damage and fire
+rate x1.25, costs halved). Target: every primary roughly 0.85-1.15 K/D in mirrored bot play, stock and with best
+builds, each gun keeping its range; no part in more than ~40% of best builds; signatures still clear upgrades.
+
+### How to re-run (when the owner's 100-match stats arrive, or after any data change)
+```
+node dev/best-builds.mjs                      # re-search every gun's best build (about 3 min) -> dev/out/best-builds.json
+node dev/sig-builds.mjs                       # best build + the gun's own signatures -> dev/out/sig-builds.json
+node dev/sig-builds.mjs --only                # stock + signatures only -> dev/out/sig-only.json
+SEEDS="1 2 3 4 5 6 7 8 9 10 11 12" sh dev/balance-pass.sh stock best sig    # about 25 min on 2 cores
+OUT=dev/out/pass-before sh dev/balance-pass.sh      # keep a "before" set in another folder
+node dev/kd-combine.mjs dev/out/pass/best-*.json --band=0.85,1.15 --vs=$(ls dev/out/pass/stock-*.json | paste -sd, -)
+node dev/ttk-table.mjs [--builds=dev/out/sig-only.json --vs]   # ideal body-shot time to kill at 5/10/20/35/55 m
+node dev/ttk-table.mjs --picks=dev/out/best-builds.json         # how often each part is in a best build
+node dev/best-builds.mjs --sigs --trials=12   # each signature alone v stock, duel win % (is it an upgrade?)
+node dev/balance-sim.mjs --no-matches         # duels: class range bands
+```
+balance-pass.sh runs mirrored 6 v 6 matches (Regular bots, Pier/Turnstile, Railyard/Dust, Foundry/Canyon x TDM and
+Domination, 120 s) for each seed in parallel and sums them; outputs (git-ignored) go to dev/out/pass/. Noise: a gun's
+K/D over 12 seeds x 2 rounds (about 2,000 kills and deaths) carries about +-0.05; one seed carries +-0.15, so do not
+tune from fewer than six seeds. Kill events of the owner's stats (js/game/telemetry.js) decode to the same rows, so
+the real numbers can be laid next to these tables gun by gun.
+
+### What it found (before: 6 seeds; after: 12 seeds)
+- Stock 0.82-1.30. Too high: Kestrel 1.30 (Pass 2 buffs), Bulwark and Kiln 1.22, Tallyman, Millrace 1.20, Gantry
+  1.19. Low: Murmur 0.82, Thistle 0.84, Foreman and Squall 0.85.
+- Best builds 0.79-1.27: Lancet 1.27 and Monolith 1.22 (both on Snap Sight), Bulwark 1.26 (Assault Box kit),
+  Prospector 1.17 (Loop Lever).
+- Signatures (each gun's best build with all its own signatures, what an Elite carries) 0.74-1.32: Kestrel 1.32 (Hot
+  Chamber), Millrace 1.30 (Overdrive Motor), Bulwark 1.27/1.36 alone (Pre-Spun Motor); later runs showed Stanchion
+  1.28 (Long Belt + Bedded Receiver), Lodestone 1.30 (Capacitor Bank) and Drayman 1.29 (Mule Rounds). At the bottom,
+  signatures that cost the gun its job: Muffled Bolt (Murmur 0.74, slower fire and shorter reach on a 24 m SMG),
+  Featherweight Frame (Skitter 0.77), Buck and Ball (Doublet 0.79), Box Twelve, Hopper Gyro, Ram Rounds.
+- Pick rates: no general part above 18% of the 34 best builds (Canted Dot 6) before, 15% after (Bull Barrel 5). The
+  only part above 40% of the guns that can take it is Snap Sight, 3 of 5 snipers (9% of all builds): it is the
+  sniper quickscope optic, and its time to aim came down twice (below). Signatures are in 10 of 34 best builds.
+
+### What changed
+Guns (js/shared/weapons.js, weapons-v10.js):
+- Kestrel 62 rpm (was 68), one-shot range 18 m (was 20), aims in 0.21 s (was 0.19): the Pass 2 values it ran 1.24 on.
+  Note: in realistic lobbies it was the weakest sniper (0.64); recheck against the owner's numbers.
+- Bulwark 595 rpm (was 640). Millrace 1,100 rpm (was 1,200). Gantry 535 rpm (was 565). Tallyman 178 rpm (was 185).
+  Kiln 590 rpm (was 605). Monolith 28 rpm (was 30).
+- Foreman 335 rpm (was 305), bloom per shot 0.19 (was 0.21): still three to the body and capped on heads.
+- Murmur 960 rpm (was 900), full damage to 10 m (was 9) and 55% at range (was 50%). Thistle 160 rpm (was 140).
+  Railspike 230 rpm (was 220). Trammel full damage to 8 m (was 7.5). Skitter full damage to 13 m (was 12).
+Parts (attachments.js, attachments-v11.js):
+- Snap Sight time to aim x0.82 (was x0.72).
+- Assault Box (Bulwark kit): +5% feet (was +8%), -5% time to aim (was -15%), +10% swing (was +30%), overheats after
+  65% of the rounds (was 75%), and fires 10% slower (new cost).
+- Signature trims, per signature (`SIG_TRIM` in attachments-v11.js; the global boost is unchanged and their costs stay
+  halved): Pre-Spun Motor starting fire rate +18% (boosted was +45%), Overdrive Motor fire rate +10% (+12.5%), Loop
+  Lever +20% (+25%), Hot Chamber +15% (+31%), Capacitor Bank charge -28% (-42%), Long Belt +45% rounds (+68%),
+  Bedded Receiver back to its base settle, Mule Rounds damage +6% (+10%).
+- Signature costs eased where the signature played worse than stock: Muffled Bolt (no fire-rate cost; shorter reach
+  replaced by a slower swap), Ram Rounds (no fire-rate cost), Featherweight Frame (no range cost), Buck and Ball (no
+  hip-spread cost), Hopper Gyro, Box Twelve and Recurve Limbs (no move-speed cost). Each still has a cost.
+- dev/sim-attachments.mjs read the stock Tallyman's scope kick at the end of a full second; at 178 rpm the scope is
+  back up by then, so it reads it just after the third round.
+
+### Results: mirrored K/D
+Before: the code at the start of the pass, 6 seeds x 2 rounds, with the best builds searched before it. After: 12
+seeds x 2 rounds, best builds re-searched after the trims (dev/out/best-builds.json). "Signatures" is the best build
+with every signature of the gun fitted (dev/sig-builds.mjs).
+
+| Class | Gun | Stock before | Stock after | Best build before | Best build after | Signatures before | Signatures after |
+|---|---|---|---|---|---|---|---|
+| Assault | Halyard | 1.15 | 1.12 | 1.10 | 1.03 | 1.02 | 0.99 |
+| Assault | Cadence | 1.15 | 1.08 | 1.10 | 1.09 | 1.06 | 1.12 |
+| Assault | Drayman | 1.07 | 1.13 | 1.04 | 1.17 | 1.10 | 1.13 |
+| SMG | Skitter | 0.90 | 0.93 | 0.86 | 0.87 | 0.77 | 0.85 |
+| SMG | Rasp | 0.88 | 0.95 | 0.93 | 0.99 | 0.95 | 1.02 |
+| SMG | Stitch | 0.90 | 0.96 | 0.91 | 0.94 | 0.95 | 0.94 |
+| Shotgun | Thresher | 0.91 | 0.92 | 0.91 | 0.91 | 0.90 | 0.91 |
+| Shotgun | Squall | 0.85 | 0.86 | 0.93 | 0.87 | 0.89 | 0.91 |
+| Shotgun | Doublet | 0.90 | 0.93 | 0.91 | 0.90 | 0.79 | 0.85 |
+| LMG | Bulwark | 1.22 | 1.10 | 1.26 | 1.18 | 1.27 | 1.20 |
+| LMG | Drover | 1.12 | 1.11 | 1.07 | 1.14 | 1.05 | 1.04 |
+| LMG | Millrace | 1.20 | 1.18 | 1.06 | 1.16 | 1.30 | 1.23 |
+| Marksman | Tallyman | 1.20 | 1.09 | 1.08 | 1.09 | 1.14 | 1.10 |
+| Marksman | Foreman | 0.85 | 0.93 | 0.84 | 0.99 | 0.91 | 1.06 |
+| Marksman | Prospector | 1.02 | 0.99 | 1.17 | 0.99 | 1.10 | 1.08 |
+| Sniper | Lancet | 1.05 | 1.10 | 1.27 | 1.10 | 1.15 | 1.08 |
+| Sniper | Monolith | 1.08 | 1.19 | 1.22 | 1.01 | 1.16 | 0.95 |
+| Sniper | Kestrel | 1.30 | 1.08 | 1.13 | 1.16 | 1.32 | 1.21 |
+| Assault | Shunter | 1.08 | 1.07 | 1.01 | 1.01 | 1.00 | 1.02 |
+| SMG | Ballast | 0.92 | 0.99 | 0.89 | 0.87 | 0.93 | 0.87 |
+| Shotgun | Railspike | 0.87 | 0.89 | 0.84 | 0.95 | 0.91 | 0.89 |
+| LMG | Gantry | 1.19 | 1.13 | 1.12 | 1.12 | 1.18 | 1.12 |
+| Marksman | Bodkin | 0.89 | 0.86 | 0.91 | 0.89 | 0.90 | 0.87 |
+| Assault | Flywheel | 0.95 | 0.96 | 1.14 | 0.95 | 0.97 | 1.12 |
+| Assault | Kiln | 1.22 | 1.10 | 1.01 | 1.02 | 1.04 | 1.05 |
+| SMG | Murmur | 0.82 | 0.87 | 0.79 | 0.85 | 0.74 | 0.80 |
+| SMG | Hopper | 0.94 | 0.90 | 0.87 | 0.86 | 0.86 | 0.86 |
+| Shotgun | Trammel | 0.89 | 0.90 | 0.87 | 0.91 | 0.83 | 0.86 |
+| Shotgun | Thistle | 0.84 | 0.87 | 1.10 | 1.03 | 1.13 | 1.10 |
+| LMG | Stanchion | 1.13 | 1.13 | 1.05 | 1.04 | 1.13 | 1.09 |
+| Marksman | Tandem | 1.01 | 1.05 | 1.02 | 1.04 | 1.06 | 1.02 |
+| Marksman | Nightjar | 1.00 | 1.05 | 1.11 | 1.09 | 1.06 | 1.04 |
+| Sniper | Harrier | 1.07 | 1.09 | 1.08 | 1.19 | 1.07 | 1.18 |
+| Sniper | Lodestone | 1.10 | 1.07 | 1.11 | 1.18 | 1.16 | 1.04 |
+
+Range: stock 0.82-1.30 -> 0.86-1.19; best builds 0.79-1.27 -> 0.85-1.19; signatures 0.74-1.32 -> 0.80-1.23. Nothing
+stock or best-build is outside 0.85-1.20; between 1.15 and 1.20 sit Monolith 1.19 and Millrace 1.18 stock and
+Harrier 1.19, Bulwark, Lodestone 1.18, Drayman 1.17, Kestrel, Millrace 1.16 with best builds, all within the run's
++-0.05. Monolith, Millrace and Gantry are 1.35-1.76 on the two small maps and 0.75-1.05 on medium ones: the known
+small-map residue (bots hold long lanes on small maps), not gun stats; trimming Millrace by 100 rpm did not move it.
+Murmur is the weakest gun in all three (0.87 / 0.85 / 0.80) after two buffs. With signatures, Millrace 1.23 and
+Kestrel 1.21 are just over and Murmur 0.80 under: the next candidates if the owner's stats agree.
+
+Signatures as upgrades (each alone on stock, duel win % against the stock field, 12 trials): the trimmed ones still
+gain: Pre-Spun Motor +6.0, Overdrive Motor +5.9, Loop Lever +7.0, Hot Chamber +5.0, Capacitor Bank +4.9 points. About
+20 signatures read at or under stock in duels, nearly all the capacity, reload, move and swap ones (Squall Drum,
+Stripper Clips, Box Twelve, Long Belt) whose gain a single duel cannot use.
+
+Ideal body-shot time to kill, stock, shots/seconds at 5, 10, 20, 35 m (dev/ttk-table.mjs), changed guns only:
+```
+            before                            after
+Bulwark     4/0.39 4/0.39 4/0.39 5/0.51       4/0.42 4/0.42 4/0.42 5/0.55
+Millrace    5/0.33 5/0.33 7/0.47 10/0.66      5/0.36 5/0.36 7/0.51 10/0.72
+Gantry      4/0.32 4/0.32 4/0.32 5/0.42       4/0.34 4/0.34 4/0.34 5/0.45
+Tallyman    2/0.32 2/0.32 2/0.32 3/0.65       2/0.34 2/0.34 2/0.34 3/0.67
+Kiln        4/0.30 4/0.30 4/0.30 6/0.50       4/0.31 4/0.31 4/0.31 6/0.51
+Foreman     3/0.39 3/0.39 3/0.39 4/0.59       3/0.36 3/0.36 3/0.36 4/0.54
+Kestrel     1      1      1      2/0.88       1      1      2/0.97 2/0.97
+Murmur      5/0.27 5/0.27 9/0.53 -            5/0.25 5/0.25 8/0.44 -
+Thistle     2/0.43 2/0.43 2/0.43 -            2/0.38 2/0.38 2/0.38 -
+Railspike   2/0.27 2/0.27 3/0.55 -            2/0.26 2/0.26 3/0.52 -
+```
+With signatures the biggest moves are trimmed back: Bulwark with Pre-Spun 4/0.28 -> 4/0.34 at 5-20 m, Kestrel with
+Hot Chamber two shots 0.67 -> 0.84 s, Lodestone with Capacitor Bank one shot after 0.23 -> 0.28 s.
+
+Range bands (duels, mean aware win %, 50 is par; `node dev/balance-sim.mjs --no-matches`):
+```
+            before: 4m 10m 20m 35m 55m     after: 4m 10m 20m 35m 55m
+Assault             47  51  54  50  51            47  48  55  51  53
+SMG                 64  57  56  53  52            65  59  56  50  50
+Shotgun             67  62  39  33  36            68  64  40  36  40
+LMG                 41  46  54  48  49            38  44  53  48  48
+Marksman            43  44  45  51  50            43  45  48  51  49
+Sniper              34  37  54  68  64            34  38  49  66  62
+```
+Each class still owns its distance: shotguns 4 m, SMGs 10 m, ARs 20 m, snipers 35 m and beyond.
