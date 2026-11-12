@@ -155,6 +155,8 @@ export function poolEntries(now = Date.now()) {
 const kdOf = e => (e.d ? e.kdk / e.d : e.kdk);
 const fmtInt = v => Math.round(v).toLocaleString('en-US');
 const fmtXp = v => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${Math.round(v / 1e3)}k`);
+// A count short enough for a small box: 99,999 in full, then 153k, 2.09M, 12.4M (the screens' stat cells and rows).
+export const compactNum = v => (v < 1e5 ? fmtInt(v) : v < 1e6 ? `${Math.round(v / 1e3)}k` : `${(v / 1e6).toFixed(v < 1e7 ? 2 : 1)}M`);
 export const CATEGORIES = [
   // Prestige and level, then total XP: maxed players are told apart by what they have earned, and the row shows it.
   { id: 'level', label: 'Level', icon: 'rank', value: e => e.prestige * MAX_LEVEL + e.level, tie: e => e.xp,
