@@ -57,6 +57,11 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=30000)
     await pg.wait_for_timeout(2500)
     await shot('02-dropmap')
+    # The drop map has no Close button and stays up until you jump: a tap on the backdrop or the minimap leaves it up.
+    if await pg.locator('.br-map-close').count(): failures.append(f'{vw}: the drop map still has a Close map button')
+    await ev("(() => { const m = document.querySelector('.br-map'); m.dispatchEvent(new MouseEvent('click', { bubbles: true })); document.querySelector('.minimap').click(); })()")
+    await pg.wait_for_timeout(300)
+    if await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: the drop map closed before the jump')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
     await shot('03-flight')
     await pg.locator('.br-jump-map').click()
@@ -153,7 +158,10 @@ async def run(browser, vw, vh, failures, errors):
     pings = await ev(f"{G}.match.hud.brHud.pings.length")
     if pings < 1: failures.append(f'{vw}: a tap on the map put no ping')
     await shot('11-fullmap')
-    await pg.locator('.br-map-close').click()
+    # After the drop a tap outside the map closes it.
+    await ev("document.querySelector('.br-map').dispatchEvent(new MouseEvent('click', { bubbles: true }))")
+    await pg.wait_for_timeout(300)
+    if not await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: a tap outside the full map did not close it')
     # The end: every other squad finished off on the host.
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       for (let k = 0; k < 3; k++) for (const p of sim.players) if (p.team !== me.team && p.alive) {{ p.brAir = 0; sim._damage(p, me, 999, me.ps.weapon, 10); }} }})()""")
