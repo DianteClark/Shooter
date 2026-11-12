@@ -532,10 +532,6 @@ export class HUD {
     st.setProperty('--vit-x', px(vitX));
     st.setProperty('--rp-x', px(rpX));
     st.setProperty('--dock-top', px(y0));
-    // Out and watching, the out plate takes the dock's place: its own free stretch, as it is taller.
-    const oy1 = H - safe.b - DOCK_BOTTOM, out = pick(free(oy1 - OUT_H * k, oy1), 300);
-    st.setProperty('--dock-x', px((out[0] + out[1]) / 2));
-    st.setProperty('--dock-w', px(out[1] - out[0]));
 
     // Prompt lane: just over the dock, between the sticks (take a gun, call exfil, the bomb, a flag, reviving).
     const ly1 = y0 - DOCK_GAP * 2, ly0 = ly1 - LANE_H * k;
@@ -573,14 +569,16 @@ export class HUD {
     // clear of the minimap, the squad panel, the feed, the corner and the weapon panel.
     const bar = box(this.el.querySelector('.scorebar'));
     const base = bar && bar.height ? bar.bottom + 4 : safe.t + 6;
-    const obstacles = ['.minimap', '.corner', '.arms', '.br-squad', '.ex-squad', '.range-leave', '.mh-mods']
+    const armsBox = box(this.arms);
+    const obstacles = ['.minimap', '.corner', '.range-leave', '.mh-mods']
       .map(sel => box(this.el.querySelector(sel))).filter(r => r && r.width > 0);
+    if (armsBox?.width) obstacles.push(armsBox);
     // The squad panels and the feed fill in after the layout: take their full size now.
     const feed = this.feedEl.getBoundingClientRect();
     obstacles.push({ left: feed.left, right: feed.left + this.feedEl.offsetWidth * k, top: feed.top, bottom: feed.top + this.feedRows * FEED_ROW_H * k });
     for (const sel of ['.br-squad', '.ex-squad']) {
       const r = box(this.el.querySelector(sel));
-      if (r && r.width) obstacles.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + 3 * 26 * k });
+      if (r && r.width) obstacles.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + 3 * 31 * k });
     }
     let y = base;
     const tops = [];
@@ -601,6 +599,20 @@ export class HUD {
       st.setProperty(`--os-w${n}`, px(Math.max(80, max) / k));
       y += h + 4;
     });
+    // Out and watching (battle royale, extraction): the out plate goes under the strip's state row, in the widest free
+    // stretch there (the weapon panel is hidden while you are out), clear of both sticks.
+    {
+      const oy = tops[1], oh = OUT_H * k;
+      let lo = safe.l + 6, hi = W - safe.r - 6;
+      for (const r of obstacles) {
+        if (r === armsBox || r.bottom <= oy + 2 || r.top >= oy + oh - 2) continue;
+        if ((r.left + r.right) / 2 < W / 2) lo = Math.max(lo, r.right + DOCK_GAP * 2);
+        else hi = Math.min(hi, r.left - DOCK_GAP * 2);
+      }
+      st.setProperty('--out-x', px((lo + hi) / 2));
+      st.setProperty('--out-y', px(oy));
+      st.setProperty('--out-w', px(hi - lo));
+    }
     // The death screen's column starts under the strip's state row (and extraction's contract), which stay readable.
     st.setProperty('--death-y', px(this.ex ? tops[2] : tops[1]));
     ctl.remeasure();

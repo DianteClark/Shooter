@@ -43,7 +43,7 @@
 }
 .hud.lefty .br-squad, .hud.lefty .ex-squad { left: auto; right: calc(var(--sr) + 134px); transform-origin: right top; }
 .hud .br-mate, .hud .ex-mate {
-  position: relative; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-auto-rows: auto;
+  position: relative; width: 100%; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-auto-rows: auto;
   align-items: center; gap: 2px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team);
 }
 .hud .br-mate b, .hud .ex-mate b { min-width: 0; height: 13px; font: 11px/13px var(--f-plate); letter-spacing: .02em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -57,12 +57,13 @@
 .hud .br-mate.out, .hud .ex-mate.out { opacity: .4; filter: grayscale(1); }
 .hud .ex-mate.lifted { box-shadow: inset 2px 0 0 #59d36b; }
 
-/* Out of the match and watching (battle royale, extraction): the out plate takes the dock's place on the bottom edge,
-   between the sticks (the weapon panel and health are hidden while you are down). */
-.hud .br-out.watching { left: var(--dock-x, 50%); bottom: calc(var(--sb) + 6px); max-width: var(--dock-w, calc(100vw - 24px)); }
-.killcam-on .hud .br-out.watching { bottom: calc(var(--sb) + 62px); }
+/* Out of the match and watching (battle royale, extraction): the out plate sits under the strip's state row, in the
+   free stretch the layout pass found (the weapon panel and health are hidden while you are out), away from the sticks. */
+.hud .br-out.watching { left: var(--out-x, 50%); top: var(--out-y, calc(var(--st) + 52px)); bottom: auto; max-width: var(--out-w, calc(100vw - 24px)); }
+.hud .br-out.watching small { max-width: none; }
+.killcam-on .hud .br-out.watching { top: calc(var(--out-y, calc(var(--st) + 52px)) + 44px); bottom: auto; }
 
 /* The performance overlay in a match: one line in the bottom corner under the move stick, clear of every panel. */
-body:has(.hud.on) .perf { top: auto; right: auto; left: calc(env(safe-area-inset-left, 0px) + 6px); bottom: calc(env(safe-area-inset-bottom, 0px) + 3px); width: 150px; height: 16px; padding: 2px 4px 2px 7px; }
+body:has(.hud.on) .perf { top: auto; right: auto; left: calc(env(safe-area-inset-left, 0px) + 6px); bottom: calc(env(safe-area-inset-bottom, 0px) + 3px); width: 172px; height: 16px; padding: 2px 4px 2px 7px; }
 body:has(.hud.on.lefty) .perf { left: auto; right: calc(env(safe-area-inset-right, 0px) + 6px); }
 body:has(.hud.on) .perf div:not(:first-child) { display: none; }
