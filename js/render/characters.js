@@ -17,6 +17,7 @@ import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.j
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
 import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
+import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -72,6 +73,11 @@ const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke:
 // Skins ride on the same instances: aOp.y is the gear slot plus 4 x the glow mode, aSkin the gear recolour (rgb,
 // strength) and, on torsos and heads, aTint the accent colour (zero keeps the baked one). The tag is described at tag().
 export const MAX_OPERATORS = 32;
+// Graveyard Shift: the undead take the last four operator slots (renderer only; see zm-looks.js). ALL_OPS is the table
+// the shader uniforms and per-operator numbers are built from.
+const ZM_OP_BASE = MAX_OPERATORS - ZM_OPERATORS.length;
+if (OPERATORS.length > ZM_OP_BASE) console.warn('characters: operators overlap the undead slots');
+const ALL_OPS = Array.from({ length: MAX_OPERATORS }, (_, i) => (i < ZM_OP_BASE ? OPERATORS[i] ?? null : ZM_OPERATORS[i - ZM_OP_BASE])).map(o => o ?? OPERATORS[0]);
 const CHAR_VERT = /* glsl */`
 uniform float uTime;
 uniform vec4 uSel[${MAX_OPERATORS * 2}];
@@ -440,7 +446,7 @@ export const PICKS = (() => {
   const out = {};
   for (const [name] of [...TORSO_SLOTS, ...HEAD_SLOTS]) {
     const used = [];
-    for (const op of OPERATORS) if (op.kit?.[name] && !used.includes(op.kit[name])) used.push(op.kit[name]);
+    for (const op of [...OPERATORS, ...ZM_OPERATORS]) if (op.kit?.[name] && !used.includes(op.kit[name])) used.push(op.kit[name]);
     if (used.length > NONE) throw new Error(`operator kit: too many ${name} parts`);
     out[name] = used;
   }
@@ -731,7 +737,7 @@ export class Characters {
     this.teamRGB = TEAMS.map(t => hexRGB(t.color));
     // Per-operator numbers the frame loop reads, so it never touches colour conversion or string lookups.
     // armZ / hipZ: where the arms and legs join a body of this build; head: the head's scale.
-    this.looks = OPERATORS.map(o => ({
+    this.looks = ALL_OPS.map(o => ({
       ...o.look, sleeveRGB: hexRGB(o.look.sleeve), trouserRGB: hexRGB(o.look.trouser),
       armZ: 0.31 * o.look.w * (o.look.sh ?? 1), hipZ: 0.17 * o.look.w * (o.look.hip ?? 1), head: o.look.head ?? 1,
     }));
@@ -744,13 +750,19 @@ export class Characters {
       look.lite = { ...look, pack: 4 * k.glow };
       return look;
     });
-    this.baseSkin = OPERATORS.map(o => getSkin(`skin:${o.id}-base`).index);
+    this.baseSkin = ALL_OPS.map(o => getSkin(`skin:${o.id}-base`)?.index ?? 0);
+    // The undead's clothes, as skin looks (see ZM_SKIN_LOOKS).
+    this.zmSkins = ZM_SKIN_LOOKS.map(k => {
+      const look = { gear: [0, 0, 0, 0], acc: k.accent != null ? hexRGB(k.accent) : [0, 0, 0], pack: 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser) };
+      look.lite = look;
+      return look;
+    });
     this.opById = new Map();
     this.skinById = new Map();
 
     const uSel = [], uLook = [];
     for (let i = 0; i < MAX_OPERATORS; i++) {
-      const op = OPERATORS[i] ?? OPERATORS[0], [t, h] = opPicks(op), L = op.look;
+      const op = ALL_OPS[i], [t, h] = opPicks(op), L = op.look;
       uSel.push(new THREE.Vector4(...t), new THREE.Vector4(...h));
       uLook.push(new THREE.Vector4(...hexRGB(L.skin ?? 0x7a5c43), L.sh ?? 1), new THREE.Vector4(...hexRGB(L.hair ?? 0x1e1612), L.hip ?? 1));
     }
@@ -774,7 +786,7 @@ export class Characters {
     // The kit bank (operators built from parts). Only drawn when someone on screen wears a kit operator.
     this.torsoKit = add(torsoKitGeometry(), MAX_PLAYERS);
     this.headKit = add(headKitGeometry(), MAX_PLAYERS);
-    this.isKit = OPERATORS.map(o => !!o.kit);
+    this.isKit = ALL_OPS.map(o => !!o.kit);
     this.upper = add(upperLimbGeometry(), cap * 4);      // Upper arms and thighs.
     this.arm = add(armGeometry(), cap * 2);
     this.leg = add(legGeometry(), cap * 2);
@@ -1040,9 +1052,10 @@ export class Characters {
       const p = view.players[pi];
       const r = this.rig(p.id);
       r.team = p.team;
-      r.op = this.opById.get(p.id) ?? 0;
+      const zk = p.zk | 0;       // Graveyard Shift: 1..4 an undead kind on this seat (no gun, arms out, hunched).
+      r.op = zk ? ZM_OP_BASE + zk - 1 : this.opById.get(p.id) ?? 0;
       const look = this.looks[r.op];
-      const sk = this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
+      const sk = zk ? this.zmSkins[zk - 1] : this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
       if (view.br) glideRig(r, p, dt, vfx, this.focusX, this.focusZ); else r.alt = r.chute = r.landT = 0;
       if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.75); }
@@ -1142,7 +1155,7 @@ export class Characters {
       const throwActive = r.throwT > 0 ? Math.sin((1 - r.throwT) * Math.PI) : 0;
       const lag = clamp(r.aimVel * 0.03, -0.32, 0.32) * (1 - ads * 0.7);
       const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32;
-      const pitch = dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - crawl * 1.38 - kneel * 0.32;
+      const pitch = (zk ? -0.32 - runK * 0.12 : 0) + dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - crawl * 1.38 - kneel * 0.32;
       const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK;
       _e.set(roll, -(p.aim - lag - twist), pitch);
       _q.setFromEuler(_e);
@@ -1257,9 +1270,9 @@ export class Characters {
       this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
       if (!r.lite && !kit) nT++;
 
-      // Gun.
+      // Gun (the undead carry none).
       const gunMesh = this._gunMesh(proto);
-      const gi = gunMesh.count++;
+      const gi = zk ? MAX_PLAYERS + MAX_CORPSES - 1 : gunMesh.count++;
       _gun.toArray(gunMesh.instanceMatrix.array, gi * 16);
       _gun.toArray(r.pose, P.GUN * 16);
       const ga = gunMesh.geometry.attributes;
@@ -1272,7 +1285,7 @@ export class Characters {
       ga.aFx.setXY(gi, fade, flash);
       // Barrel glow: the gun's own heat stat, or what sustained fire alone has put into the barrel.
       ga.aHeat.setX(gi, vfx ? Math.max(r.heat, vfx.barrelGlow(r)) : r.heat);
-      r.gunMesh = gunMesh; r.camoI = camoI; r.accent[0] = ar; r.accent[1] = ag; r.accent[2] = ab;
+      r.gunMesh = zk ? null : gunMesh; r.camoI = camoI; r.accent[0] = ar; r.accent[1] = ag; r.accent[2] = ab;
       r.armRGB = sk.sleeveRGB; r.legRGB = sk.trouserRGB;
       r.posed = clock;
 
@@ -1295,7 +1308,12 @@ export class Characters {
       const fwd = _body.elements;       // Column 0 is the body's forward axis, column 2 its right.
       for (let side = -1; side <= 1; side += 2) {
         _a.set(0.02, shoulderY, side * look.armZ).applyMatrix4(_body);
-        if (side > 0) {
+        if (zk) {
+          // Arms out in front, swaying; a claw lifts both and drives them down through the target.
+          const u = r.swingT !== undefined && r.swingT < 1 ? r.swingT : 1, lift = u < 1 ? Math.sin(Math.PI * Math.min(1, u * 1.4)) : 0;
+          const sway = Math.sin(clock * 3.1 + r.seed + side) * 0.06;
+          _b.set(0.62 * look.l + lift * 0.12, shoulderY - 0.04 + lift * 0.42 - (u > 0.7 && u < 1 ? (u - 0.7) * 1.2 : 0) + sway, side * 0.2 * look.w).applyMatrix4(_body);
+        } else if (side > 0) {
           _b.set(0, 0, 0).applyMatrix4(_gun);
         } else {
           _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);

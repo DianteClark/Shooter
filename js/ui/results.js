@@ -186,6 +186,35 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     tone = out ? 'var(--c-gold)' : 'var(--c-haze)';
     mineNum = banked.length; themNum = banked.length + lost.length; mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
   }
+  // Graveyard Shift (js/sim/zombies.js): how many rounds the crew lasted, the map's record, and the crew's own numbers.
+  // data.zm is this phone's record line (js/game/awards.js); data.zmView the match's final round and crew.
+  const zmr = rules === 'zm';
+  if (zmr) {
+    const z = data.zm ?? {}, survived = z.survived ?? Math.max(0, (data.zmView?.round ?? 1) - 1);
+    word = 'Overrun';
+    line = `Survived ${survived} round${survived === 1 ? '' : 's'}${z.fresh ? ': a new record on this map' : z.best ? ` · best ${z.best}` : ''}`;
+    tone = z.fresh ? 'var(--c-gold)' : 'var(--c-haze)';
+    mineNum = survived; themNum = Math.max(survived, z.best ?? 0); mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
+  }
+  const zmCrew = () => {
+    const crew = data.zmView?.crew ?? [];
+    const mates = roster.filter(p => p.team === myTeam && !p.ai);
+    return `<div class="rb ours" style="--team:${TEAMS[myTeam]?.css}">
+      <div class="rb-head"><b class="rb-team">Your crew</b><b class="rb-pts"></b>
+        <span>K</span><span title="Headshots">HS</span><span title="Downs">Dn</span><span title="Revives">Rv</span><span class="wide">Points</span></div>
+      ${mates.map((p, i) => { const c = crew.find(x => x.id === p.id) ?? {}; return `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${i}">
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${nameHtml(p.name)}</b></span><span>${c.kills ?? p.kills}</span><span>${c.head ?? 0}</span><span>${c.downs ?? 0}</span><span>${c.revives ?? 0}</span><span class="wide">${(c.pts ?? 0).toLocaleString('en-US')}</span>
+      </div>`; }).join('')}
+    </div>`;
+  };
+  const zmRecord = () => {
+    const z = data.zm ?? {}, map = z.mapName ?? '';
+    const rows = [['Round reached', data.zmView?.round ?? 0], ['Rounds survived', z.survived ?? 0], [`Best on ${esc(map) || 'this map'}`, z.best ?? 0], ['Undead put down', z.kills ?? 0]];
+    return `<div class="rb theirs" style="--team:#b8241c">
+      <div class="rb-head"><b class="rb-team">Graveyard Shift</b><b class="rb-pts">${z.fresh ? 'Record' : ''}</b><span></span><span></span><span></span><span></span><span class="wide"></span></div>
+      ${rows.map(([k, v], i) => `<div class="rb-row" style="--i:${i}"><span class="rb-name" style="grid-column:span 5"><b>${k}</b></span><span class="wide" style="color:${i === 2 && z.fresh ? 'var(--c-gold)' : 'var(--c-chalk)'}">${v}</span></div>`).join('')}
+    </div>`;
+  };
   const exStat = p => data.exView?.stats?.[roster.indexOf(p)] ?? [0, 0];
   const exSquad = () => {
     const mates = roster.filter(p => p.team === myTeam && !p.ai);
@@ -356,7 +385,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
-      <div class="rb-pair">${exr ? exSquad() + exRewards() : br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
+      <div class="rb-pair">${zmr ? zmCrew() + zmRecord() : exr ? exSquad() + exRewards() : br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>

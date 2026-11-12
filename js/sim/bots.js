@@ -2064,6 +2064,8 @@ export class BotBrain {
     if (!this.canHit && !holdingPoint) fwd = 1;
     // Overpeeking: a weaker player walks out of the angle it was holding, toward what it saw.
     else if (atHold && this.overpeek && !holdingPoint) fwd = 1;
+    // Graveyard Shift (js/sim/zombies.js sets `kite`): against a melee horde, backpedal from anyone inside it.
+    else if (this.kite && d < this.kite) fwd = -1;
     else if (!atHold) {
       // A close gun wants to be at its distance, not near it; a long gun gives ground to anyone inside its own.
       if (d > style.pref + (style.rush ? 1 : 4)) fwd = 1;

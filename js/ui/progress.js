@@ -75,6 +75,7 @@ import {
   MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
   recordCareer, careerWeek, masteryCompleted, blankCareer,
+  recordZmBest,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { cleanFriends, seeFriend } from '../shared/boards.js';
@@ -457,6 +458,13 @@ export const Progress = {
   // there) and mapwon:<id>, for the map, mode and career cards.
   lifetime() { return { ...data.life }; },
   extractions() { return data.extractions ?? 0; },
+  // Graveyard Shift (docs/ZOMBIES.md): the most rounds survived on a map, and recording a run ({ best, before, fresh }).
+  zmBest(mapId) { return data.zmBest?.[mapId] ?? 0; },
+  recordZm(mapId, rounds) {
+    const r = recordZmBest(data, mapId, rounds);
+    if (r.fresh) save();
+    return r;
+  },
   skins(op) {
     const got = masteryRewards(data);
     return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));
