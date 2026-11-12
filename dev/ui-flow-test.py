@@ -107,8 +107,12 @@ async def main():
             check('Multiplayer screen', await screen() == 'multiplayer')
             if SHOTS: await shots(pg, 'multiplayer-standard')
             pls = await pg.evaluate("[...document.querySelectorAll('.mp-pl')].map(b => b.dataset.id)")
-            # Seasons: Ranked first, then the season's event while it runs (docs/SEASONS.md).
-            check('Standard playlists: ranked, (event), quick play, objective, party, showdown, featured', [p for p in pls if p != 'event'] == ['ranked', 'qp', 'obj', 'party', 'showdown', 'featured'], pls)
+            # The Spotlight first (Ranked, the season's event while it runs, today's featured; docs/SEASONS.md), then the rest.
+            check('Standard playlists: spotlight (ranked, (event), featured), quick play, objective, party, showdown', [p for p in pls if p != 'event'] == ['ranked', 'featured', 'qp', 'obj', 'party', 'showdown'], pls)
+            spot = await pg.evaluate("[...document.querySelectorAll('.mp-sec-spot .mp-pl')].map(b => b.dataset.id)")
+            check('  ranked and featured in the Spotlight', 'ranked' in spot and 'featured' in spot, spot)
+            sc = await pg.evaluate("(() => { const b = document.querySelector('.mp-body'); return !!b && b.classList.contains('scroll-y') && document.querySelectorAll('.mp .scroll-y').length === 1; })()")
+            check('  one scroller under the tabs', sc, sc)
             n_modes = await pg.evaluate("document.querySelectorAll('.mp-mode').length")
             check('Standard lists the 15 single modes', n_modes == 15, n_modes)
             pickers = await pg.evaluate("document.querySelectorAll('.menu .solo-map, .menu [data-act=\"soloBots\"], .menu .bm-seg').length")

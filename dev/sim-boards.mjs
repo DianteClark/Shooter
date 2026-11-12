@@ -157,7 +157,7 @@ console.log('master');
   ];
   const lv = B.buildBoard({ me: card('Me', 10, 50, S + 40 * X), friends: pals, cat: 'level', view: 'friends' });
   ok(lv.rows.map(r => r.e.name).join(',') === 'Tied,Grinder,Me,Edge,Almost,Nine', 'Level board: Master level first, then XP within it; prestige and level below', lv.rows.map(r => `${r.e.name} ${r.text}`).join(' | '));
-  ok(lv.rows[0].rank === 1 && lv.rows[1].rank === 1 && lv.rows[0].text.startsWith('Master 301') && lv.rows[2].text.startsWith('Master 41'), 'one Master level shares a rank; rows read "Master N"');
+  ok(lv.rows[0].rank === 1 && lv.rows[1].rank === 2 && lv.rows[0].text.startsWith('Master 301') && lv.rows[2].text.startsWith('Master 41'), 'one Master level is ranked by XP within it; rows read "Master N"');
   ok(lv.rows.find(r => r.e.name === 'Almost').text === 'P10 · 49' && lv.rows.find(r => r.e.name === 'Nine').text === 'P9 · 50', 'below Master the row reads prestige and level as before');
   // A card from a build before Master levels has no such field: its Master level is read from its XP all the same.
   ok(B.masterOfEntry(pals[0].card) === 301 && B.masterOfEntry(pals[2].card) === 0 && B.masterOfEntry({ prestige: 10, level: 50, xp: 0 }) === 1, 'Master level comes from rank and total XP (older cards too)');

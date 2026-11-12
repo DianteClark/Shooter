@@ -157,6 +157,8 @@ export const masterOfEntry = e => masterOf(e.prestige, e.level, e.xp);
 const kdOf = e => (e.d ? e.kdk / e.d : e.kdk);
 const fmtInt = v => Math.round(v).toLocaleString('en-US');
 const fmtXp = v => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${Math.round(v / 1e3)}k`);
+// A count short enough for a small box: 99,999 in full, then 153k, 2.09M, 12.4M (the screens' stat cells and rows).
+export const compactNum = v => (v < 1e5 ? fmtInt(v) : v < 1e6 ? `${Math.round(v / 1e3)}k` : `${(v / 1e6).toFixed(v < 1e7 ? 2 : 1)}M`);
 export const CATEGORIES = [
   // Prestige and level, then the Master level past Prestige X (read from total XP: masterOf, docs/PRESTIGE.md), then
   // total XP: players on one level are told apart by what they have earned. A Master row shows its total XP too.
@@ -193,7 +195,7 @@ function seasonal(e, key) {
   return { ...e, m: sn.m, k: sn.k, w: sn.w, brw: sn.brw, br5: sn.br5, kdm: sn.m, kdk: sn.k, d: sn.d, sn, seasonView: true };
 }
 
-// Ranks entries on a category: highest first; ties share a rank (1, 2, 2, 4), ordered by the category's tie-break and
+// Ranks entries on a category: highest first, then by the category's tie-break (total XP on Level); only a full tie shares a rank (1, 2, 2, 4), and
 // then the name and id so every phone lists them alike. Entries the category does not admit (K/D under the minimum)
 // come back in `unranked`.
 export function rankEntries(entries, catId, now = Date.now()) {
@@ -206,7 +208,7 @@ export function rankEntries(entries, catId, now = Date.now()) {
   }
   rows.sort((a, b) => b.value - a.value || b.tie - a.tie || (a.e.name < b.e.name ? -1 : a.e.name > b.e.name ? 1 : 0) || (a.e.id < b.e.id ? -1 : 1));
   let rank = 0;
-  rows.forEach((r, i) => { r.rank = i && r.value === rows[i - 1].value ? rank : (rank = i + 1); });
+  rows.forEach((r, i) => { r.rank = i && r.value === rows[i - 1].value && r.tie === rows[i - 1].tie ? rank : (rank = i + 1); });
   return { rows, unranked };
 }
 

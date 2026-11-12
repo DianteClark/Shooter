@@ -38,6 +38,10 @@
 .bd-pal { flex: none; display: grid; place-items: center; width: 18px; height: 18px; color: var(--c-blue); background: rgba(80,150,255,.14); box-shadow: inset 0 0 0 1px rgba(80,150,255,.45); }
 #ui .bd-pal .ico { height: 12px; }
 .bd-val { text-align: right; font: 400 var(--fs-lead)/1 var(--f-plate); letter-spacing: .04em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--c-chalk); }
+.bd-val.two { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.bd-val.two b { font: inherit; font-weight: 400; }
+.bd-val.two small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+.bd-row.me .bd-val.two small { color: var(--c-sodium); opacity: .8; }
 .bd-head .bd-val, .bd-head .bd-who { font: inherit; color: var(--c-haze); }
 .bd-row.me .bd-val { color: var(--c-sodium); }
 .bd-note { display: flex; align-items: center; gap: 6px; margin: 0; padding: var(--sp-3); font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }
@@ -60,7 +64,8 @@
 .bdd-op small { min-width: 0; font: 400 var(--fs-caption)/1 var(--f-body); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bdd-stats { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--c-line); }
 .bdd-stat { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px 2px; background: var(--c-steel); }
-.bdd-stat b { font: 400 var(--fs-body)/1 var(--f-stencil); color: var(--c-chalk); white-space: nowrap; }
+.bdd-stat b { max-width: 100%; font: 400 var(--fs-body)/1 var(--f-stencil); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bdd-stat.long b { font-size: 11px; letter-spacing: 0; }
 .bdd-stat small { font: 400 8px/1 var(--f-plate); letter-spacing: .06em; color: var(--c-haze); text-transform: uppercase; white-space: nowrap; }
 .bdd-stat.on b { color: var(--c-sodium); }
 

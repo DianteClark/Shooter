@@ -128,15 +128,7 @@
 .sz-div small { font: 400 9px/1 var(--f-plate); color: var(--c-haze); white-space: nowrap; }
 .sz-div-rw { display: flex; align-items: center; gap: 4px; line-height: 0; }
 
-/* ---- Multiplayer: the Ranked and event playlists ---- */
-#ui .mp-pl.rk { grid-template-columns: 30px minmax(0, 1fr) 18px; box-shadow: var(--bevel), inset 3px 0 0 var(--c-gold, var(--c-sodium)); }
-#ui .mp-pl.rk.on { box-shadow: var(--bevel), inset 0 0 0 2px var(--c-sodium); }
-#ui .mp-pl-rk { display: grid; place-items: center; line-height: 0; }
-#ui .mp-pl.rk .mp-pl-tx small { color: var(--c-chalk); }
-#ui .mp-pl.rk .mp-pl-tx .mp-pl-sub2 { text-decoration: none; color: var(--c-haze); }
-#ui .mp-pl.ev { box-shadow: var(--bevel), inset 3px 0 0 #7cd8ff; }
-#ui .mp-pl.ev.on { box-shadow: var(--bevel), inset 0 0 0 2px var(--c-sodium); }
-#ui .mp-pl.ev .mp-pl-ico .ico { color: #7cd8ff; }
+/* ---- Multiplayer: the Ranked and event playlists: css/mp.css (the Spotlight). ---- */
 
 /* ---- Results: the season rows ---- */
 #ui .rs-sn .rs-ch-h { color: var(--c-sodium); }

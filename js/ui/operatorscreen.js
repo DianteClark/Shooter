@@ -134,7 +134,7 @@ export class OperatorsScreen {
         </div>
         <div class="op-side">
           <div class="op-file" data-in="up"><p class="op-bio"></p><div class="op-tags"></div>
-            <div class="op-fin"><small>Finisher</small><div class="op-fins"></div></div></div>
+            <div class="op-fin"><small>Finisher</small><div class="op-fins scroll-x"></div></div></div>
           <div class="op-tabs" role="tablist">
             ${[['all', 'All'], ['owned', 'Owned'], ['locked', 'Locked']].map(([id, label]) => `<button class="op-tab" data-act="opFilter" data-id="${id}" data-sound="tab"><b>${label}</b><small></small></button>`).join('')}
           </div>
