@@ -87,10 +87,11 @@ const DROP_GAP = 120;
 const JOIN_FIGHT = [0, 0.03, 0.08, 0.1, 0.08, 0.06, 0.06];   // Calm early (loot and rotate first); late on, squads mostly hold.
 const LOOT_DWELL = 50;
 // Rebound bots (docs/BR.md "Rebound"): squads land closer together, settle in sooner and fight more.
-const RB_DROP_GAP = 80;
-const RB_DWELL = 40;
-const RB_JOIN = 1;
+const RB_DROP_GAP = 110;
+const RB_DWELL = 60;
+const RB_JOIN = 0.6;
 const RB_ALERT = -1;
+const RB_CALM_SIGHT = 0.6;     // Sight and notice kept by a calm Rebound squad (someone waiting to land, or the last two).
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
 const HOLD_GAP = 40;            // Metres a squad's hold keeps from another squad's.
@@ -1279,7 +1280,9 @@ export class BrRules {
     let fight = plan.fight && sim.time - plan.fight.t < NOISE_KEEP ? plan.fight : null;
     // Rebound: keener from the start, but a squad with someone waiting to redeploy keeps out of trouble until they land.
     const waiting = this.rb && sim.players.some(q => q.team === team && !q.alive && q.br?.redeployT > 0);
-    const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1) * (this.rb ? (waiting ? 0 : RB_JOIN) : 1);
+    // The last two squads of a Rebound sit tight and let the circle bring them together.
+    const calm = this.rb && (waiting || (this.state !== 'final' && this._squadsIn().size <= 2));
+    const join = (JOIN_FIGHT[Math.min(this.phase + (this.state === 'wait' ? 0 : 1), JOIN_FIGHT.length - 1)] ?? 0.5) * (plan.aggro ?? 1) * (this.rb ? (calm ? 0 : RB_JOIN) : 1);
     if (!fight && join > 0 && kind !== 'rotate' && (geared || this.phase >= (this.rb ? 1 : 3)) && bots.length >= Math.min(2, members.length) && bots.every(p => p.hp > 60)) {
       const reach = THIRD_PARTY * Math.min(0.7, 0.4 + this.phase * 0.1);
       for (let i = this.noise.length - 1; i >= 0; i--) {
@@ -1316,6 +1319,7 @@ export class BrRules {
       const ph = this.rb ? Math.max(0, this.phase + RB_ALERT) : this.phase;     // Rebound bots are as alert as a later BR circle.
       bot.sightK = PHASE_SIGHT[Math.min(ph, PHASE_SIGHT.length - 1)];
       bot.noticeK = PHASE_NOTICE[Math.min(ph, PHASE_NOTICE.length - 1)];
+      if (calm) { bot.sightK *= RB_CALM_SIGHT; bot.noticeK *= RB_CALM_SIGHT; }
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
         // No regen in BR: a medkit is the only heal. Badly hurt, it comes before plates; otherwise plates first, then a

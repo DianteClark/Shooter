@@ -145,12 +145,12 @@ export const BR = {
 //   redeployEnd  no redeploy for a death from this phase on (circle redeployEnd + 1, counted from 1, on screen).
 //   kit       what a redeploy brings: a gun of this rarity at most, a sidearm, and this much armor.
 export const RB = {
-  area: 120,
+  area: 150,
   phases: [
-    { wait: 55, shrink: 35, k: 0.68, dps: 3 },
-    { wait: 50, shrink: 35, k: 0.46, dps: 5 },
-    { wait: 45, shrink: 30, k: 0.31, dps: 8 },
-    { wait: 40, shrink: 30, k: 0.19, dps: 12 },
+    { wait: 65, shrink: 40, k: 0.68, dps: 3 },
+    { wait: 55, shrink: 35, k: 0.46, dps: 5 },
+    { wait: 50, shrink: 30, k: 0.31, dps: 8 },
+    { wait: 45, shrink: 30, k: 0.19, dps: 12 },
     { wait: 40, shrink: 25, k: 0.1, dps: 16 },
     { wait: 30, shrink: 35, k: 0, dps: 22 },
   ],
