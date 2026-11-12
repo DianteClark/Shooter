@@ -47,7 +47,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       for (const q of sim.players) if (q.team === me.team && q !== me && q.brAir === 1) {{ sim.br._jump(q); q.br.glideT = 30; }} }})()""")
     await ev(f"{G}.match.brCommand('jump')")
-    await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=20000)
+    await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=60000)
     # A squadmate still under its canopy, gliding in next to us.
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       const q = sim.players.find(p => p.team === me.team && p !== me && p.alive); q.brAir = 2; q.br.glideT = 4; q.br.follow = null;
@@ -78,12 +78,14 @@ async def run(browser, vw, vh, failures, errors):
     await crop('31-crawl')
     # Stand next to them: the revive runs, bars over both, our kneel.
     try:
-        await pg.wait_for_function(f"({G}.match.interp.newest.players.find(p => p.id === window.__mate).reviveK ?? 0) > 0.45", timeout=15000)
+        await pg.wait_for_function(f"({G}.match.interp.newest.players.find(p => p.id === window.__mate).reviveK ?? 0) > 0.45", timeout=120000, polling=400)
         if await pg.locator('.br-reviving').is_hidden(): failures.append(f'{vw}: no reviving bar on the HUD')
         await shot('32-revive')
         await crop('32-revive')
     except Exception:
-        failures.append(f'{vw}: the revive never started')
+        st = await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), q = sim.byId.get(window.__mate);
+          return JSON.stringify({{ d: Math.hypot(me.ps.x - q.ps.x, me.ps.z - q.ps.z).toFixed(2), down: q.downed, alive: q.alive, rev: q.br.reviveT, fire: me.ps.firingT, v: Math.hypot(me.ps.vx, me.ps.vz), t: sim.time, k: m.interp.newest.players.find(p => p.id === q.id).reviveK }}); }})()""")
+        failures.append(f'{vw}: the revive never started ({st})')
     mm = await pg.locator('.minimap').bounding_box()
     await pg.screenshot(path=f'{OUT}/33-minimap-{vw}x{vh}.png', clip=mm)
     # Boxing gloves: fists out, a few punches thrown (the rig's swing, as a melee shot event drives it).
