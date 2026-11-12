@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'A cleaner Multiplayer screen and menu fixes',
+    items: [
+      'The Multiplayer screen is redone: clear tabs across the top, one smooth scrolling list, Ranked and today\'s featured playlist together in a Spotlight at the top, and the Hardcore switch and Find match in a tidy bar at the bottom.',
+      'Battle Royale lists its playlists side by side under Battle Royale and Rebound, so every name fits.',
+      'Help > Updates and every long Help page scroll smoothly again.',
+      'Leaderboards: big numbers fit. XP over a million reads 2.1M, and a maxed player\'s row shows their level over their XP.',
+      'Gunsmith camos sit in an even grid with space between them, each with its name underneath.',
+      'Options: rows no longer run into each other on smaller phones; a column scrolls when it is full.',
+      'Rebound: the map vote names the right playlist, and the redeploy messages fit on screen.',
+    ],
+  },
+  {
     build: '1111-26', date: '2026-11-12', title: 'Sixteen new attachments',
     items: [
       'Sixteen new attachments, so every gun has more to choose from in each slot. Snipers, pistols, shotguns and launchers gain the most.',
