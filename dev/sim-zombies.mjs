@@ -12,7 +12,15 @@
 //   wire         the packed zombie round-trips; a guest's decoded view has the horde, the gates and the points; a host
 //                migration keeps round, gates and points; the save keeps a per-map record through an export code
 //   determinism  two sims with one seed agree tick for tick
-//   perf         a round-20 horde (24 live, brutes and runners) on each map: host tick cost and per-guest snapshot size
+//   perf         a round-20 and a round-30 horde (24 live, brutes and runners) on each map with every trap running,
+//                sentries, drones and tier-3 guns: host tick cost and per-guest snapshot size
+//   econ         (ROADMAP item 36) loadout streaks off; the upgrade bench (tiers, the wait, the bench busy, magazines,
+//                damage, tier-3 effects, tiers kept through a swap and lost with the gun); the supply terminal (every
+//                item, prices, once a round, sentry and drone fire, the strike's shells, the lure's pull); plates;
+//                traps (arm, kill, reduced pay, players hurt lightly, cooldown); the perk cap and slot, Fleetfoot, Last
+//                Breath; exfil (not before 15, the final wave, escape and failure, guests see it); the quest (relics,
+//                altar, the Gravewarden, pay); bots spending in the economy; the wire and a host migration; the save's
+//                feats and the calling card
 //   ashgrove     the purpose-built map (graph layout): areas, the gate loop, dead ends, reserved economy spots; the power
 //                switch gates the perk machines (dark until thrown, free, synced to guests and kept by a migration); a
 //                bot throws it solo after round 2 and not with two humans; the boss rises in the Burial Field when it is
@@ -872,9 +880,9 @@ section('determinism');
   }
 }
 
-// ---- Performance: a round-20 horde ----
+// ---- Performance: a round-20 and a round-30 horde, with the economy busy (every trap armed, sentries, drones) ----
 section('perf');
-for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) {
+for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) for (const round of [20, 30]) {
   const sim = makeSim(id, 99);
   toLive(sim);
   const R = sim.rules;
@@ -884,12 +892,16 @@ for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) {
   for (const d of R.L.doors) reblockNav(sim.nav, sim.map, d);
   R.fields.clear();
   for (const p of R.crew) p.spawnProtect = 1e9;     // The crew stands its ground the whole time.
-  R._startRound(20);
+  R._startRound(round);
   R.spawnT = 0;
-  // Fill every seat from the risers (runners, brutes and shamblers as round 20 deals them).
+  // Fill every seat from the risers (runners, brutes and shamblers as the round deals them).
   for (let k = 0; k < 200 && R.horde.some(p => !p.alive); k++) { R.spawnT = 0; R._stepSpawns(DT); }
   const live = R.horde.filter(p => p.alive).length;
-  ok(live === ZM.seats, `${id}: ${live} live`);
+  ok(live === ZM.seats, `${id} r${round}: ${live} live`);
+  // The economy at its busiest: traps running, a sentry and a drone each for two of the crew, tier-3 guns all round.
+  R.econ.traps.forEach(t => { t.state = 1; t.timer = 999; });
+  R.crew.slice(0, 2).forEach(p => { R.econ._supply(p, 'sentry'); R.econ._supply(p, 'drone'); });
+  for (const p of R.crew) { R._give(p, 'ar'); p.zm.tiers.ar = 3; }
   const times = [];
   let bytes = 0, n = 0, maxB = 0;
   const secs = QUICK ? 6 : 12;
@@ -904,10 +916,10 @@ for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) {
   }
   times.sort((x, y) => x - y);
   const mean = times.reduce((s, v) => s + v, 0) / times.length, p99 = times[Math.floor(times.length * 0.99)], worst = times[times.length - 1];
-  console.log(`  ${id}: ${live} live, host tick ${mean.toFixed(2)} ms mean, p99 ${p99.toFixed(2)} ms, max ${worst.toFixed(2)} ms; snapshot ${Math.round(bytes / n)} B mean, ${maxB} B max`);
-  ok(worst < 33, `${id}: no tick over 33 ms (docs/BR-PERF.md budget gate) (${worst.toFixed(2)})`);
-  ok(mean < 4, `${id}: host tick under 4 ms mean (${mean.toFixed(2)})`);
-  ok(bytes / n < 1800, `${id}: per-guest snapshot under 1.8 KB mean`);
+  console.log(`  ${id} r${round}: ${live} live, host tick ${mean.toFixed(2)} ms mean, p99 ${p99.toFixed(2)} ms, max ${worst.toFixed(2)} ms; snapshot ${Math.round(bytes / n)} B mean, ${maxB} B max`);
+  ok(worst < 33, `${id} r${round}: no tick over 33 ms (docs/BR-PERF.md budget gate) (${worst.toFixed(2)})`);
+  ok(mean < 4, `${id} r${round}: host tick under 4 ms mean (${mean.toFixed(2)})`);
+  ok(bytes / n < 1900, `${id} r${round}: per-guest snapshot under 1.9 KB mean`);
   clearZmWalls(sim.map);
 }
 

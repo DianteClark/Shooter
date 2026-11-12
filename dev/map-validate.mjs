@@ -16,7 +16,8 @@
 //   zm         (a map built for Graveyard Shift, `zmOnly`, docs/ZOMBIES.md) hosts zm and nothing else, stays hidden; its
 //              layout: gates shut seal the start area, each gate opens exactly the area behind it, every area reachable
 //              with them open, every wall-buy, crate spot, machine, the power switch, the boss arena's spots, spawn
-//              windows, starts and the economy's reserved spots on reachable floor in the right area; no fairness
+//              windows, starts, the economy's reserved spots and its pieces (bench, terminal, armour bench, trap switches,
+//              exfil pad, altar, relics) on reachable floor in the right area; no fairness
 //              check; instead of 6v6 matches a bot crew plays Graveyard Shift (rounds that move on, kills, gates opened,
 //              the power thrown, nobody stuck)
 //   giant      (size 'giant', battle royale maps, docs/BR.md) the br contract (places, loot, caches, circle bias),
@@ -479,6 +480,9 @@ function checkZm(map, out) {
       ...(L.power ? [['power switch', L.power]] : []), ...(L.boss?.spots ?? []).map((p, i) => ['boss spot ' + i, { ...p, band: L.boss.band }]),
       ...L.starts.map((p, i) => ['start ' + i, { ...p, band: L.start }]), ...L.risers.flatMap((list, b) => list.map((p, i) => [`riser ${L.bands[b].id} ${i}`, { ...p, band: b }])),
       ...Object.entries(L.reserved ?? {}).flatMap(([k, v]) => (Array.isArray(v) ? v.map((p, i) => [`reserved ${k} ${i}`, p]) : [[`reserved ${k}`, v]])),
+      // The economy (ROADMAP item 36): its stations, trap switches, the exfil pad, the altar and the relics.
+      ...['bench', 'terminal', 'armour', 'altar', 'exfil'].filter(k => L[k]).map(k => [k, L[k]]),
+      ...(L.traps ?? []).map((t, i) => [`trap ${i} switch`, { x: t.sx, z: t.sz, band: t.band }]), ...(L.relics ?? []).map((r, i) => [`relic ${i}`, r]),
     ];
     let bad = 0;
     for (const [name, p] of spots) {
