@@ -24,6 +24,7 @@ import { saveScreen } from './savecode.js';
 import { inviteControls } from './invite.js';
 import { optionsScreen } from './optionsscreen.js';
 import { helpScreen } from './help.js';
+import { installSheet } from './installguide.js';
 import { challengesScreen, titleChallenges } from './challenges.js';
 import { historyScreen } from './history.js';
 import { fingerDown } from './tap.js';
@@ -579,18 +580,7 @@ export class Menu {
 
   // Shown once to Safari players who have not added the game to their Home Screen.
   installPrompt(onDismiss) {
-    this.overlay(`
-      <div class="sheet install">
-        <div class="sheet-head">${ico('phone')}<h2>Add to Home Screen</h2></div>
-        <p>Switchyard runs full screen from your Home Screen, with no browser bars in the way of your thumbs.</p>
-        <ol class="steps">
-          <li><span class="step-n">1</span>${ico('share')}<span>Tap <b>Share</b> in Safari</span></li>
-          <li><span class="step-n">2</span>${ico('plus')}<span>Choose <b>Add to Home Screen</b></span></li>
-          <li><span class="step-n">3</span>${ico('play')}<span>Open Switchyard from its new icon</span></li>
-        </ol>
-        <div class="sheet-row"><button class="btn is-primary" data-sound="confirm" data-act="dismissInstall">${ico('check')}<b>Got it</b></button></div>
-      </div>`);
-    this.on({ dismissInstall: () => { this.overlay(''); onDismiss(); } });
+    installSheet(this, { onDone: onDismiss });       // The install guide (js/ui/installguide.js) for this phone's browser.
   }
 
   // Puts the shared preview canvas inside `mount`, created the first time it is needed, and starts it turning.

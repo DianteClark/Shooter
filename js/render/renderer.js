@@ -275,14 +275,17 @@ export class GameRenderer {
     this.frameStats.profile = this.profile;
     if (q === 'auto' && this.dynamicRes) {
       const saved = savedAutoStep();
-      const start = Math.max(AUTO_CEILING, stepIndex(saved || this.profile.step));
+      const ceiling = this.profile.ceiling ?? AUTO_CEILING;
+      const start = Math.max(ceiling, stepIndex(saved || this.profile.step));
       this.qualityMode = 'auto';
       this.resScale = 1;
-      this.governor = new Governor(this, start);
+      this.stepI = -1;             // Re-applied below, so the tier's pixel-ratio cap takes effect on this step too.
+      this.governor = new Governor(this, start, ceiling);
     } else {
       this.qualityMode = pinned >= 0 ? q : 'high';
       this.governor = null;
       this.resScale = 1;
+      this.stepI = -1;
       this._applyStep(pinned >= 0 ? pinned : stepIndex('high'));
       this._applyRes();
     }
@@ -305,7 +308,9 @@ export class GameRenderer {
     if (i === this.stepI) return;
     this.stepI = i;
     const q = QUALITY_STEPS[i];
-    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q.dpr);
+    // Auto also keeps under the device tier's cap (quality.js deviceProfile); a step the player picked is honoured as is.
+    const cap = this.qualityMode === 'auto' ? (this.profile?.dprCap ?? Infinity) : Infinity;
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, q.dpr, cap);
     this._applyRes();
     this.fog.setDensity(q.fogTexels);
     this.fog.setPasses(q.fogPasses);

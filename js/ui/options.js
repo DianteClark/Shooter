@@ -14,6 +14,8 @@ export const OPTION_DEFAULTS = Object.freeze({
   voiceMode: 'open',   // 'open': the mic sends while it is on. 'ptt': push to talk, only while the mic (or Talk) is held.
   // Controller (js/ui/gamepad.js, docs/CONTROLLER.md). padMap holds only the actions moved off their default button:
   // action id -> standard-mapping button index, or -1 for unbound.
+  // Phones (docs/DEVICES.md): vibration on hits where the browser has it, and full screen in an Android browser tab.
+  haptics: false, fullscreen: true,
   padDead: 0.15, padSens: 1, padInvertY: false, padMap: {},
 });
 

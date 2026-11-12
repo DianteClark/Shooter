@@ -30,6 +30,10 @@ const POLL_MS = 1000;
 const SLACK = 2;                   // Pixels of disagreement that are only rounding.
 
 const root = document.documentElement;
+// Android reports its viewport honestly, and its screen size includes the status and navigation bars, while 100lvh in
+// a tab is the height with the address bar scrolled away (it never is here). The iOS corrections below would make the
+// app taller than what is really on screen there, so Android takes the visible size as it is.
+const ANDROID = /Android/i.test(navigator.userAgent);
 let current = { w: 0, h: 0, k: 1, cover: 0, source: '' };
 let last = null;                   // Every candidate from the latest measure, for the touch debug overlay.
 const listeners = new Set();
@@ -84,7 +88,7 @@ function candidates() {
 
   const visW = Math.max(iw, vw, cw), visH = Math.max(ih, vh, ch);
   let w = visW, h = visH, source = 'inner';
-  if (forced !== 'inner') {
+  if (forced !== 'inner' && !ANDROID) {
     if (app && sw && sh) {
       // No browser chrome: the screen is the app. Only ever grow, and only by an amount a phone could have lost.
       if (sh > h && sh - h < sh * 0.3) { h = sh; source = 'screen'; }

@@ -118,9 +118,10 @@ on every push, keep 2% of weekly usage for bugs.
     Oasis and Ruins: first to 6, 40 s rounds then an overtime flag, enemy health over their heads; docs/MODES.md "Showdown".
 32. Finishing moves and an emote wheel.
 33. Daily challenges feeding season XP (alongside the weekly sets).
-34. Every phone: Android (Chrome/Samsung Internet) and all iPhone sizes and ages, with quality tiers picked per device,
+34. DONE (NEXT). Every phone: Android (Chrome/Samsung Internet) and all iPhone sizes and ages, with quality tiers picked per device,
     touch and safe areas checked on both; an install guide in the game (Add to Home Screen on iOS Safari, Install app
     on Android Chrome) with a plain explanation of where progress lives (on the phone, in the browser's storage for
     this site; the save code is the backup; nothing is sent to a server; clearing site data or deleting the app
-    without a code loses it).
+    without a code loses it). Device tiers by GPU/memory/screen with per-tier DPR caps, Android full screen, back
+    gesture, vibration option, install worker and manifest, How to play > Install; docs/DEVICES.md.
 35. Signature attachments read as clear upgrades: DONE (1111-18), strengths x1.5, costs halved.

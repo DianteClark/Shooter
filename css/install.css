@@ -1,0 +1,25 @@
+/* ---- Install guide (js/ui/installguide.js): the Install tab of How to play, and the once-only sheet ---------- */
+#ui .ig { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--sp-2); height: 100%; min-height: 0; }
+#ui .ig > section {
+  display: flex; flex-direction: column; gap: var(--sp-2); min-height: 0; padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  background: linear-gradient(172deg, rgba(53,64,76,.7), rgba(29,35,43,.7)); box-shadow: var(--edge);
+}
+#ui .ig h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font: 400 var(--fs-title)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
+#ui .ig h4 .ico { height: 24px; color: var(--c-sodium); flex: none; }
+#ui .ig-plats { display: flex; flex-wrap: wrap; gap: 2px; }
+#ui .ig-plats .seg { min-height: 34px; padding: 0 10px; }
+#ui .ig-plats .seg b { font-weight: 400; white-space: nowrap; }
+#ui .ig-steps { margin: 0; }
+#ui .ig-steps li, #ui .ig-sheet .steps li { font: 400 var(--fs-caption)/1.3 var(--f-body); }
+#ui .ig-row { display: flex; justify-content: flex-start; }
+#ui .ig-here, #ui .ig-status, #ui .ig-note { display: flex; gap: var(--sp-2); align-items: flex-start; font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }
+#ui .ig-here .ico, #ui .ig-status .ico, #ui .ig-note .ico { height: 15px; flex: none; margin-top: 1px; color: var(--c-rail); }
+#ui .ig-here.ok, #ui .ig-status.ok { color: #bfe9cf; }
+#ui .ig-here.ok .ico, #ui .ig-status.ok .ico { color: var(--c-go); }
+#ui .ig-facts { list-style: none; display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; }
+#ui .ig-facts li { display: flex; gap: var(--sp-2); align-items: flex-start; font: 400 var(--fs-caption)/1.32 var(--f-body); color: #d0d6db; }
+#ui .ig-facts li .ico { height: 18px; flex: none; margin-top: 1px; color: var(--c-sodium); }
+#ui .ig-facts b, #ui .ig-note b, #ui .ig-steps b { color: var(--c-chalk); font-weight: 600; }
+#ui .ig-sheet { width: min(600px, 100%); gap: var(--sp-2); }
+#ui .ig-sheet p:not(.ig-note) { font-size: var(--fs-body); }
+#ui .ig-sheet .steps li { padding: var(--sp-2) var(--sp-3); }
