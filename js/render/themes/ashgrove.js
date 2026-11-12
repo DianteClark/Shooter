@@ -436,7 +436,7 @@ function ashTree(ctx, w) {
     for (let i = 0; i < 4; i++) {
       const a = i * 1.7 + rnd(), r = 1.3 + rnd() * 0.8, y = 2 + i * 0.4;
       b.loft([
-        [[cx - 0.08, y, cz - 0.08], [cx + 0.08, y, cz - 0.08], [cx + 0.08, y, cz + 0.08], [cx - 0.08, y, cz + 0.08]],
+        [[cx - 0.08, y, cz - 0.06], [cx + 0.08, y, cz - 0.06], [cx, y, cz + 0.09]],
         [[cx + Math.cos(a) * r - 0.03, y + 1.2, cz + Math.sin(a) * r], [cx + Math.cos(a) * r + 0.03, y + 1.2, cz + Math.sin(a) * r], [cx + Math.cos(a) * r, y + 1.2, cz + Math.sin(a) * r + 0.04]],
       ]);
     }

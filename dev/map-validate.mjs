@@ -13,6 +13,12 @@
 //              objective's counterpart (the same point for a shared one): within 10%
 //   sight      the longest clear sight line from walkable ground, and the share of long ones, against the tier
 //   bots       a bot-only match per mode the map hosts: kills, objective events, bots stuck pushing into a wall
+//   zm         (a map built for Graveyard Shift, `zmOnly`, docs/ZOMBIES.md) hosts zm and nothing else, stays hidden; its
+//              layout: gates shut seal the start area, each gate opens exactly the area behind it, every area reachable
+//              with them open, every wall-buy, crate spot, machine, the power switch, the boss arena's spots, spawn
+//              windows, starts and the economy's reserved spots on reachable floor in the right area; no fairness
+//              check; instead of 6v6 matches a bot crew plays Graveyard Shift (rounds that move on, kills, gates opened,
+//              the power thrown, nobody stuck)
 //   giant      (size 'giant', battle royale maps, docs/BR.md) the br contract (places, loot, caches, circle bias),
 //              every place, loot spot and cache reachable, no sealed rooms (every room floor reachable), door gaps at
 //              least 2 m; no fairness check (nobody spawns in teams); sight sampled coarser; instead of the mode's own
@@ -27,6 +33,7 @@ import { Sim, buildRoster } from '../js/sim/sim.js';
 import { NavGrid } from '../js/sim/nav.js';
 import { raycastMap } from '../js/shared/geometry.js';
 import { PLAYER_RADIUS, SIM_HZ } from '../js/shared/constants.js';
+import { zmLayout, placeZmWalls, clearZmWalls, bandOpen } from '../js/shared/zombies.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const a = args.find(x => x.startsWith(`--${k}=`)); return a ? a.split('=')[1] : d; };
@@ -34,7 +41,8 @@ const QUICK = args.includes('--quick'), ASCII = args.includes('--ascii'), ARGS_A
 const SECONDS = Number(opt('seconds', 60));
 const ONLY_MODES = opt('modes', null)?.split(',');
 const ids = args.filter(a => !a.startsWith('--'));
-const todo = ids.length ? ids : [...MAP_IDS, ...BR_MAP_IDS];
+const ZM_ONLY = Object.keys(MAPS).filter(id => MAPS[id].zmOnly);
+const todo = ids.length ? ids : [...MAP_IDS, ...BR_MAP_IDS, ...ZM_ONLY];
 
 const GAP = 2 * PLAYER_RADIUS + 0.1;           // Narrower than this and a player cannot get through (or only by luck).
 const TOUCH = 0.05;                            // Closer than this counts as touching: no gap at all.
@@ -56,6 +64,13 @@ function checkFields(map, size, out) {
     (map.size ? out.fail : out.warn).push(`footprint ${map.width} x ${map.height} outside ${size} (${w0}-${w1} x ${h0}-${h1})`);
   }
   const hosts = mapModes(map).filter(m => modeFitsMap(map, m));
+  if (map.zmOnly) {
+    if (hosts.join() !== 'zm') out.fail.push(`a Graveyard Shift map hosts ${hosts.join(' ') || 'nothing'} (wants zm alone)`);
+    if (!map.hidden || MAP_IDS.includes(map.id)) out.fail.push('a Graveyard Shift map must stay out of the playlists (hidden)');
+    if (!zmLayout(map)) out.fail.push('no zombies layout');
+    out.info.push(`${size} ${map.region ?? '-'} ${map.width}x${map.height}, ${map.walls.length} walls, modes ${hosts.join(' ')} (Graveyard Shift only)`);
+    return;
+  }
   const need = size === 'huge' ? ['gwtdm', 'gwdom'] : STANDARD;
   const missing = need.filter(m => !hosts.includes(m));
   if (missing.length) out.fail.push(`does not host ${missing.join(', ')}`);
@@ -423,6 +438,102 @@ function freeRoam(map, out) {
   if (mean > 4) out.fail.push(`free roam: host tick ${mean.toFixed(2)} ms mean (budget 4)`);
 }
 
+// ---- Graveyard Shift maps ---------------------------------------------------------------------------------------
+
+// The layout on the nav grid: with every gate shut the crew is sealed in the start area; each gate, opened alone from
+// an area that is open, lets the crew into exactly the area behind it; with every gate open the whole layout is one.
+function checkZm(map, out) {
+  const L = zmLayout(map);
+  if (!L) return;
+  const areaOf = reach => L.bands.map(b => b.cells.filter(k => reach[k]).length / Math.max(1, b.cells.length));
+  const at = (open) => { placeZmWalls(map, open); const nav = new NavGrid(map); return { nav, reach: flood(nav, L.starts[0]) }; };
+  try {
+    const shut = at(0), got = areaOf(shut.reach);
+    L.bands.forEach((b, i) => {
+      if (!b.cells.length) out.fail.push(`zm area ${b.id}: no floor (seed in a wall?)`);
+      if (i === L.start ? got[i] < 0.97 : got[i] > 0) out.fail.push(`zm gates shut: area ${b.id} ${(got[i] * 100).toFixed(0)}% reachable`);
+    });
+    // Every gate from the side that is open with it shut: open the gates on a path to it first (a breadth-first order).
+    let open = 0;
+    const order = [];
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const d of L.doors) if (!(open & (1 << d.i)) && (bandOpen(L, open, d.a ?? d.from) || bandOpen(L, open, d.b ?? d.opens))) { order.push(d); open |= 1 << d.i; grew = true; }
+    }
+    if (order.length !== L.doors.length) out.fail.push(`zm: ${L.doors.length - order.length} gates can never be reached`);
+    open = 0;
+    for (const d of order) {
+      const before = new Set(L.bands.filter(b => bandOpen(L, open, b.i)).map(b => b.i));
+      open |= 1 << d.i;
+      const g = areaOf(at(open).reach);
+      L.bands.forEach((b, i) => {
+        const want = bandOpen(L, open, i);
+        if (want && g[i] < 0.97) out.fail.push(`zm gate ${d.i} open: area ${b.id} only ${(g[i] * 100).toFixed(0)}% reachable`);
+        if (!want && g[i] > 0) out.fail.push(`zm gate ${d.i} open: area ${b.id} leaks in (${(g[i] * 100).toFixed(0)}%)`);
+      });
+      void before;
+    }
+    const all = at((1 << L.doors.length) - 1);
+    const spots = [
+      ...L.wallBuys.map(p => ['wall-buy ' + p.gun, p]), ...L.boxSpots.map((p, i) => ['crate spot ' + i, p]), ...L.machines.map(p => ['machine ' + p.perk, p]),
+      ...(L.power ? [['power switch', L.power]] : []), ...(L.boss?.spots ?? []).map((p, i) => ['boss spot ' + i, { ...p, band: L.boss.band }]),
+      ...L.starts.map((p, i) => ['start ' + i, { ...p, band: L.start }]), ...L.risers.flatMap((list, b) => list.map((p, i) => [`riser ${L.bands[b].id} ${i}`, { ...p, band: b }])),
+      ...Object.entries(L.reserved ?? {}).flatMap(([k, v]) => (Array.isArray(v) ? v.map((p, i) => [`reserved ${k} ${i}`, p]) : [[`reserved ${k}`, v]])),
+    ];
+    let bad = 0;
+    for (const [name, p] of spots) {
+      if (!reachableNear(all.nav, all.reach, p.x, p.z, 0.9)) { out.fail.push(`zm ${name} (${p.x}, ${p.z}) not on reachable floor`); bad++; continue; }
+      if (p.band === undefined || p.band < 0) { out.fail.push(`zm ${name} (${p.x}, ${p.z}) in no area`); bad++; }
+    }
+    const strict = [...L.risers.flat(), ...L.starts, ...(L.boss?.spots ?? [])].filter(p => !all.nav.isWalkable(p.x, p.z));
+    if (strict.length) out.fail.push(`zm: ${strict.length} risers/starts/boss spots on blocked cells: ${strict.slice(0, 4).map(p => `(${p.x}, ${p.z})`).join(' ')}`);
+    const per = L.bands.map(b => `${b.id} ${b.cells.length}m2/${L.risers[b.i].length}r`).join(', ');
+    out.info.push(`zm layout: ${L.bands.length} areas (${per}), ${L.doors.length} gates, ${L.wallBuys.length} wall-buys, ${L.boxSpots.length} crate spots, ${L.machines.length} machines${L.power ? ', power switch' : ''}${L.boss ? ', boss arena' : ''}; ${spots.length - bad}/${spots.length} spots ok`);
+  } finally { clearZmWalls(map); }
+}
+
+// A bot crew (no humans) plays Graveyard Shift: the rounds move on, the crew kills, opens gates, throws the power (on a
+// map with a switch) and nobody on the crew stands pushing into a wall.
+function zmMatch(map, out) {
+  const seconds = SECONDS * 5, seed = 1234;
+  const roster = buildRoster([], { mode: 'zm', mapId: map.id, seed });
+  const sim = new Sim({ roster, map, seed, mode: 'zm' });
+  const STEP = 1 / SIM_HZ, hist = new Map(), stuck = new Map();
+  const ev = {};
+  let cpu = 0, live = 0, worst = 0;
+  const end = Math.round(seconds * SIM_HZ);
+  for (let tick = 0; tick < end && sim.phase !== 'ended'; tick++) {
+    const c = process.cpuUsage();
+    sim.step(STEP);
+    const cu = process.cpuUsage(c), ms = (cu.user + cu.system) / 1000;
+    if (sim.phase === 'live' && tick > 1) { cpu += ms; live++; worst = Math.max(worst, ms); }
+    for (const e of sim.drainEvents()) ev[e.t] = (ev[e.t] ?? 0) + 1;
+    if (tick % SIM_HZ === 0 && sim.phase === 'live') {
+      for (const p of sim.rules.crew) {
+        if (!p.bot) continue;
+        const h = hist.get(p.id) ?? [];
+        h.push({ x: p.ps.x, z: p.ps.z, push: Math.hypot(p.bot.input.mx, p.bot.input.mz), alive: p.alive && !p.downed });
+        if (h.length > 5) h.shift();
+        hist.set(p.id, h);
+        if (h.length === 5 && h.every(s => s.alive && s.push > 0.5) && Math.hypot(h[4].x - h[0].x, h[4].z - h[0].z) < 0.6) {
+          const key = `${Math.round(p.ps.x)},${Math.round(p.ps.z)}`;
+          stuck.set(key, (stuck.get(key) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  clearZmWalls(map);
+  const R = sim.rules, kills = R.crew.reduce((n, p) => n + p.zm.kills, 0);
+  const spots = [...stuck.entries()].sort((a, b) => b[1] - a[1]), total = spots.reduce((a, [, n]) => a + n, 0);
+  out.info.push(`bots zm ${Math.round(sim.time)}s: round ${R.round}, kills ${kills}, gates ${ev.zdoor ?? 0}, power ${R.power ? 'on' : 'off'}, buys ${ev.zbuy ?? 0}, downs ${ev.down ?? 0}, stuck ${total}${spots.length ? ` at ${spots.slice(0, 4).map(([k, n]) => `(${k})x${n}`).join(' ')}` : ''}, tick ${(cpu / live).toFixed(2)} ms mean, ${worst.toFixed(1)} worst`);
+  if (R.round < 4) out.fail.push(`zm: the crew only reached round ${R.round} in ${seconds} s`);
+  if (kills < 20) out.fail.push(`zm: ${kills} kills`);
+  if (!(ev.zdoor > 0)) out.fail.push('zm: no gate opened');
+  if (R.L.power && !R.power && R.round >= 6) out.fail.push('zm: nobody threw the power by round 6');
+  if (total / 4 / (seconds / 60) > 4) out.fail.push(`zm: crew bots stuck ${(total / 4 / (seconds / 60)).toFixed(1)} s per bot per minute`);
+  if (cpu / live > 4) out.fail.push(`zm: host tick ${(cpu / live).toFixed(2)} ms mean (budget 4)`);
+}
+
 // ---- Output ------------------------------------------------------------------------------------------------------
 
 function print(out) {
@@ -471,10 +582,12 @@ for (const id of todo) {
   checkModePoints(map, nav, reach, out);
   checkGaps(map, out);
   if (isGiant(map)) checkGiant(map, nav, reach, out);
+  else if (map.zmOnly) checkZm(map, out);
   else checkFair(map, nav, out);
   checkSight(map, nav, reach, size, out, isGiant(map) ? 6 : 2);
   if (ASCII) console.log(ascii(map, nav, reach));
   if (!QUICK && isGiant(map)) freeRoam(map, out);
+  else if (!QUICK && map.zmOnly) zmMatch(map, out);
   else if (!QUICK) for (const mode of mapModes(map)) {
     if (!modeFitsMap(map, mode) || (ONLY_MODES && !ONLY_MODES.includes(mode))) continue;
     botMatch(map, mode, out);
