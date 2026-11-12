@@ -485,7 +485,7 @@ pistols (`W2_EXTEND`). Slot sizes are now optic 17, barrel 40, mag 40, grip 40.
 **Choice per gun.** Every gun now has 5 to 9 options in each slot it uses (signatures and kits included), launchers 3
 to 5; the exceptions are shells, nails and a nose (Bramble mags 3, Tacker mags and barrels 4). The thin slots grew
 most: sniper optics 3 -> 5, pistol grips 2 -> 5, pistol mags 3 -> 5, shotgun optics 4 -> 6, launcher barrels 1 -> 3 and
-grips 2 -> 4. 194 gun-slot pairs gained a choice. Classes that already had 7+ (assault, marksman) gained one at most.
+grips 2 -> 4. 127 gun slots gained at least one choice. Classes that already had 7+ (assault, marksman) gained one at most.
 
 **Rules.** Same as the older general parts: multipliers on MOD_INFO keys only, never an identity key (damage, rpm,
 wind-up... stay signature/kit-only), and every part gives something and costs something on every gun that takes it
@@ -528,7 +528,7 @@ every gun: the furthest distance of each shots-to-kill breakpoint with its longe
 of stock aimed spread, so the Thumb Rest is weaker on a tube). Best builds (`node dev/best-builds.mjs`, 2 trials, 2
 passes; dev/out/best-builds*.json updated): wave 2 parts appear where they fit the gun's job (Prism 2x on 4 of 22
 guns that take it, Tac Laser on the Doublet, Trammel and Ripple, Flite Wads on the Thresher, Flip Irons on the Squall,
-Thumb Rest on the Lancet and Deuce, Rubber Sleeve on three sidearms and the Murmur, Beavertail on the Magpies), and no
+Thumb Rest on the Lancet and Deuce, Rubber Sleeve on the Breaker, the Bramble and the Murmur, Beavertail on the Magpies), and no
 part is in every best build (most picked: Canted Dot 6 of 23, then Long Barrel, Bull Barrel, Prism 2x and Steady Glass
 at 4).
 

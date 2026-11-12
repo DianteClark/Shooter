@@ -343,7 +343,7 @@ test('wave 2: every gun has about five to seven choices in each slot it uses', (
     assert.ok(all.length >= min && all.length <= 10, `${w} ${slot}: ${all.length} choices`);
     if (all.length > old.length) grew++;
   }
-  assert.ok(grew >= 80, `${grew} gun slots gained a choice`);
+  assert.ok(grew >= 120, `${grew} gun slots gained a choice`);
   // The slots that were thinnest are the ones that grew.
   for (const [w, slot] of [['sniper', 'optic'], ['pistol', 'grip'], ['pistol', 'mag'], ['launcher', 'barrel'], ['shotgun', 'optic'], ['coach', 'mag']]) {
     assert.ok(availableFor(w, slot).length >= availableFor(w, slot).filter(a => before(w, a)).length + 2, `${w} ${slot} grew by two`);
