@@ -23,6 +23,8 @@ import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
 import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 import { clearZmWalls, ZM, ZM_SQUAD, ZM_TEAM } from '../shared/zombies.js';   // Graveyard Shift (docs/ZOMBIES.md).
+import * as Fin from './finishers.js';     // Finishing moves and emotes (docs/FINISHERS.md).
+import { cleanFinisher, FINISHER_IDS } from '../shared/finishers.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -502,6 +504,10 @@ export class Sim {
     this.map = typeof map === 'string' ? MAPS[map] : (map || MAPS[DEFAULT_MAP]);
     clearZmWalls(this.map);      // Graveyard Shift's fences and gates, if an earlier match left them on this shared map.
     this.rng = mulberry32(seed >>> 0);
+    // Finishers (js/sim/finishers.js) draw from their own stream, so matches without one replay exactly as before.
+    this.finRng = mulberry32((seed ^ 0x6a09e667) >>> 0);
+    this.fins = [];
+    this._finKill = null;
     const def = mode === 'range' ? RANGE_MODE : (MODES[mode] || MODES.tdm);
     // `mode` is the rule set everything keys on ('dom' for Ground War Domination too); modeId is the mode as picked.
     this.mode = def.rules ?? def.id;
@@ -595,6 +601,9 @@ export class Sim {
         prevReload: false, prevWeapon: loadout.primary, prevSliding: false, prevOverheated: false,
         ackX: 0, ackZ: 0, ackT: 0,
         bot: null,
+        // The finisher this player plays (the operator's pick; bots by seat), and the one running on them, if any.
+        finisher: r.isBot ? (r.loadout?.finisher ? cleanFinisher(r.loadout.finisher) : FINISHER_IDS[(index * 7 + (seed >>> 0)) % FINISHER_IDS.length]) : cleanFinisher(r.loadout?.finisher ?? r.finisher),
+        fin: null, finCool: 0, emoteAt: -99,
       };
     });
     this.byId = new Map(this.players.map(p => [p.id, p]));
@@ -902,17 +911,19 @@ export class Sim {
       for (let i = 0; i < players.length; i++) this._stepTimers(players[i]);
       if (!this.range && this.objective && !this.br && this.tick % PLAN_EVERY === 0) planObjectives(this);
       this._expireCallouts();
+      if (this.fins.length) Fin.stepFins(this);     // Both players in a finisher stay pinned; nobody in one acts.
       // Alternate who acts first: a bot's shot lands immediately, so a fixed order hands one team every tied duel.
       const flip = this.tick & 1, last = players.length - 1;
       for (let i = 0; i <= last; i++) {
         const p = players[flip ? last - i : i];
-        if (!p.bot || !p.alive) continue;
+        if (!p.bot || !p.alive || p.fin) continue;
         if (this.br && this.br.driveBot(p, STEP)) { this._diffFx(p); continue; }   // Aboard, gliding or down.
         if (this.rules?.driveBot && this.rules.driveBot(p, STEP)) { this._diffFx(p); continue; }   // Extraction: down, or a patrol asleep.
         const shots = p.bot.update(STEP);
         for (let s = 0; s < shots.length; s++) this.applyShot(p.id, shots[s], 0);
         this._diffFx(p);
       }
+      Fin.botFinishers(this);
     }
 
     const h = this.tick % HISTORY;
@@ -1261,6 +1272,7 @@ export class Sim {
     // Gun Game: the host hands out the gun. A phone a moment behind a promotion must not hand the old one back.
     if (this.ladder) { ps.primary = p.loadout.primary; ps.slot = 0; ps.weapon = ps.primary; p.primary = ps.primary; }
     if (d.camo && d.camo !== p.camo) { p.camo = d.camo; ps.camo = d.camo; this._metaUntil = this.tick + 2; }
+    if (p.fin) Fin.pin(p.fin);       // In a finisher: the phone's own idea of where it is waits until it ends.
     this._diffFx(p);
   }
 
@@ -1295,6 +1307,9 @@ export class Sim {
     if (msg.cmd === 'ex' || msg.cmd === 'zm') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     if (msg.cmd === 'trainSwap') return this._trainSwap(id);
+    // Finishers and emotes (js/sim/finishers.js): the phone names the target it saw; the host checks it with some slack.
+    if (msg.cmd === 'finish') return Fin.startFinisher(this, this.byId.get(id), typeof msg.target === 'string' ? msg.target : null, Fin.FIN_SLACK);
+    if (msg.cmd === 'emote') return Fin.emote(this, this.byId.get(id), msg.e | 0);
     return false;
   }
 
@@ -1304,7 +1319,7 @@ export class Sim {
     if (!p || !p.alive || this.phase !== 'live' || !Number.isFinite(aim)) return false;
     if (slot !== 'tactical' && slot !== 'lethal') return false;
     if (p.jamT > 0) return false;                 // Blackout: no equipment until it wears off.
-    if (p.downed || p.brAir) return false;          // Down (battle royale, extraction) or in the air.
+    if (p.downed || p.brAir || p.fin) return false;          // Down (battle royale, extraction), in the air or in a finisher.
     // Satchel: with one armed on the map, the Lethal tap is the detonator, not another throw.
     if (slot === 'lethal' && p.ps.lethal === 'charge' && this.eq.detonate(id) > 0) { p.spawnProtect = 0; return true; }
     const ps = p.ps, heal = slot === 'tactical' && ps.tactical === 'stim';
@@ -1348,7 +1363,7 @@ export class Sim {
   applyShot(id, shot, ageSeconds = 0) {
     const shooter = this.byId.get(id);
     if (!shooter || !shooter.alive || this.phase === 'ended') return;
-    if (shooter.downed || shooter.brAir) return;     // Down or in the air: no shooting.
+    if (shooter.downed || shooter.brAir || shooter.fin) return;     // Down, in the air or in a finisher: no shooting.
     // Every gun stat below comes from the shooter's loadout as the host knows it, never from the shot itself.
     const w = weaponDef(shooter.ps, shot.weapon);
     if (!w) return;
@@ -1513,6 +1528,8 @@ export class Sim {
     dmg = Math.min(dmg, Math.max(0, target.hp));
     if (this.range) this.range.onDamage(target, attacker, dmg, dist, head, !!(streak || equip));
     target.hp -= dmg;
+    // A finisher's attacker who takes a hit lets go: the target is free (and still down, if they were).
+    if (target.fin && target.fin.a === target && dmg > 0) Fin.cancelFin(this, target.fin, 'hit');
     this.br?.onDamage(attacker, dmg);
     // Shock Absorber (Flak Pro): blasts do not reset the regen delay.
     const blast = (equip && EQUIPMENT[equip]?.blast) || BLAST_STREAKS.has(streak) || (!streak && !equip && WEAPONS[weapon]?.explosive);
@@ -1551,6 +1568,7 @@ export class Sim {
   }
 
   _kill(target, killer, weapon, dist, streak, head, equip) {
+    if (target.fin) Fin.cancelFin(this, target.fin, 'broken');
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME;
     target.deadT = 0; target.wantRespawn = false;
     if (this.range) this.range.onKill(target);
@@ -1580,6 +1598,7 @@ export class Sim {
     if (streak) kill.streak = streak;
     if (equip) kill.equip = equip;
     if (head) kill.head = true;
+    if (this._finKill) kill.fin = this._finKill;      // A finishing move: the feed and the killcam say so.
     kill.vw = target.ps.weapon;     // What the victim was holding: per-gun deaths in the stats.
     this._emit(kill);
     // Teammates near a gunfight death know about it (the shots, the feed, the body): the ones who trade move up.
@@ -1636,6 +1655,7 @@ export class Sim {
   // A death with nobody to credit: a Search and Destroy attacker caught in their own bomb. Counts as a death only.
   _selfKill(target, equip) {
     if (!target.alive) return;
+    if (target.fin) Fin.cancelFin(this, target.fin, 'broken');
     target.hp = 0; target.alive = false; target.respawnT = RESPAWN_TIME; target.deadT = 0; target.wantRespawn = false;
     target.deaths++; target.streak = 0; target.chain = 0; target.spawnProtect = 0; target.markT = 0;
     target.armor = 0; target.plates = 0;
@@ -2799,6 +2819,7 @@ export class Sim {
       plants: p.plants ?? 0, defuses: p.defuses ?? 0,
       captures: p.captures ?? 0, returns: p.returns ?? 0, carrierKills: p.carrierKills ?? 0,
       away: p.away, open: p.open, awayT: p.awayT,
+      fin: p.fin ? { k: FINISHER_IDS[p.fin.k], role: p.fin.a === p ? 'a' : 'v', other: (p.fin.a === p ? p.fin.v : p.fin.a).id, t: p.fin.t, dur: p.fin.dur } : null,
     };
     this.rules?.playerView?.(p, v);
     return v;
@@ -2922,7 +2943,11 @@ export class Sim {
         Math.round(ps.heat * 20), Math.round(Math.max(this._firingReveal(ps), p.markT) * 10), p.head,
       );
     }
-    return (this._lastBroadcast = this._packPlayers(out));
+    const packed = this._packPlayers(out);
+    // Finishers running (js/sim/finishers.js) ride after the player records: who, on whom, which, how far in.
+    this._finBlock = Fin.encodeFins(this);
+    if (this._finBlock) packed.push(this._finBlock);
+    return (this._lastBroadcast = packed);
   }
 
   // V9: the EMP streak lock, ds per side, on the end of the jam block (the jam block goes out when any is running).
@@ -3116,6 +3141,7 @@ export class Sim {
         attachments: this._decodedKit(r, WEAPON_IDS[d[o + 8]]),
       };
     }
+    Fin.decodeFins(d.finBlock, this, players);
     let lastKill = null;
     if (d[8]) {
       const [by, target, weapon, x, z] = d[8];
@@ -3220,6 +3246,7 @@ export class Sim {
       if (code === 2) for (let k = 0; k < POS_FIELDS.length; k++) out.push(full[o + POS_FIELDS[k]]);
       else if (code) for (let k = 0; k < PLAYER_STRIDE; k++) if (code === 3 || !IS_SLOW[k]) out.push(full[o + k]);
     }
+    if (this._finBlock) out.push(this._finBlock);
     return out;
   }
 
@@ -3259,6 +3286,7 @@ export class Sim {
       }
       for (let k = 0; k < PLAYER_STRIDE; k++) full.push(known[i] ? c[k] : (k === 6 ? 0 : c[k]));
     }
+    full.finBlock = o < d.length ? d[o] : 0;      // The finishers block, when any are running (encodeSnapshot).
     return full;
   }
 }
