@@ -43,11 +43,13 @@ import { challengeUnlock } from './ui/challenges.js';
 import { ico } from './ui/yard.js';
 import { BotMatch, botMatchSheet } from './ui/botsettings.js';
 import { modsSheet, soloMods } from './ui/modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
-import { cleanMods } from './shared/playlist.js';
+import { cleanMods, withHardcore } from './shared/playlist.js';
 // Seasons and ranked (docs/SEASONS.md).
 import { seasonUnlocks } from './ui/season.js';
 import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
 import { QuickChat } from './ui/quickchat.js';
+import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
+import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
 // Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
 import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
@@ -97,6 +99,8 @@ wireInvite(menu, () => app.code);
 const audio = new AudioEngine();
 const quickChat = new QuickChat(hud, { audio });
 const backdrop = new MenuBackdrop(canvas);
+// Created at the end of this file's setup, once app exists; see wireExtras.
+let gamepad = null, voiceUi = null;
 
 // Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
 // keep it moving. Nothing of the backdrop exists while a match owns the canvas.
@@ -322,6 +326,8 @@ menu.on({
     renderMp();
   },
   mpFind: () => findMatch(app.mp.tab, mpSel()),
+  // The Hardcore switch: saved on this device, on top of every pick it fits (and a room this phone hosts).
+  mpHardcore: () => { Options.set('hardcore', !Options.get('hardcore')); renderMp(); },
   mpCancel: () => { stopSearch(); renderMp(); },
   // Custom: Match (the picker) and Training.
   customTab: ({ tab }) => { if (tab === 'match' || tab === 'training') { app.customTab = tab; renderCustom(); } },
@@ -337,7 +343,11 @@ menu.on({
   trStart: () => { needName(startTraining); },
   lobbyMods: () => {
     if (!app.isHost) return;
-    modsSheet(menu, { mods: app.lobby.mods ?? [], onChange: list => { app.lobby.mods = list; broadcastLobby(); renderLobby(); } });
+    modsSheet(menu, { mods: app.lobby.mods ?? [], onChange: list => {
+      // Hardcore in a room is the same switch as on the Multiplayer screen: flipping it here flips that too.
+      if (list.includes('hardcore') !== (app.lobby.mods ?? []).includes('hardcore')) Options.set('hardcore', list.includes('hardcore'));
+      app.lobby.mods = list; broadcastLobby(); renderLobby();
+    } });
   },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
@@ -359,6 +369,8 @@ menu.on({
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
   brSquad: ({ n }) => setBrSquad(n),
   moveTeam: ({ id }) => moveTeam(id),
+  lobbyMic: () => app.voice?.toggleMic(),
+  voiceMute: ({ id }) => voiceUi?.toggleMute(id),
 });
 
 function needName(next) {
@@ -485,7 +497,9 @@ function localHuman() {
 function renderLobby() {
   if (!app.net) return;
   if (app.isHost && app.customFrom === 'lobby') return;     // The host is in the custom picker; Back repaints.
+  updateVoiceTeam();
   menu.lobby({
+    voice: !!app.voice && app.voice.state !== 'unavailable',
     code: app.code, humans: app.lobby.humans, botSkill: app.lobby.botSkill, isHost: app.isHost,
     localId: app.net.localId, hostId: app.net.hostId,
     countdown: app.isHost ? (app.rematch?.left ?? null) : app.countdown,
@@ -629,7 +643,7 @@ function startHosting({ custom = null } = {}) {
   app.lobby = {
     humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...seatData() }],
     botSkill: custom?.skill ?? MP_BOT_SKILL,
-    mods: custom?.mods ?? [],
+    mods: custom?.mods ?? withHardcore([], Options.get('hardcore')),     // A map-vote room starts with the Hardcore switch.
     custom,
   };
   app.customFrom = null;
@@ -964,11 +978,14 @@ function wireSharedNet(net) {
   hud.onMic(() => app.voice?.toggleMic());
   hud.onSpeaker(() => { if (app.voice) app.voice.setMuted(!app.voice.muted); });
   app.voice?.setVolume(Options.get('voice'));
+  app.voice?.setMode(Options.get('voiceMode'));
 }
 
 function updateVoiceTeam() {
   const me = localHuman();
   if (!app.voice || !me) return;
+  // Before and between matches the friend lobby is one party: everyone hears everyone.
+  if (!app.inMatch) { app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id).map(h => h.id)); return; }
   // A free-for-all has no squad: voice goes to every human in the room.
   const ffa = ffaRoom() || isZm(roomMode());     // Graveyard Shift: every human is on the one side.
   app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id && (ffa || h.team === me.team)).map(h => h.id));
@@ -1020,7 +1037,7 @@ function setLobbyCustom(custom) {
   if (isZm(custom?.mode) && app.lobby.humans.length > ZM_SQUAD) { menu.toast(`Graveyard Shift seats ${ZM_SQUAD} players`, 'warn'); return renderLobby(); }
   app.lobby.custom = custom;
   app.lobby.botSkill = custom?.skill ?? MP_BOT_SKILL;
-  app.lobby.mods = custom ? custom.mods : [];
+  app.lobby.mods = custom ? custom.mods : withHardcore([], Options.get('hardcore'));
   broadcastLobby();
   renderLobby();
 }
@@ -1072,7 +1089,7 @@ function mpSel(tab = app.mp.tab) {
 }
 
 function renderMp() {
-  menu.multiplayer({ tab: app.mp.tab, sel: mpSel() });
+  menu.multiplayer({ tab: app.mp.tab, sel: mpSel(), hardcore: !!Options.get('hardcore') });
 }
 
 function stopSearch() {
@@ -1082,7 +1099,7 @@ function stopSearch() {
 }
 
 function findMatch(tab, sel) {
-  const r = resolveSelection(tab, sel);
+  const r = resolveSelection(tab, sel, { hardcore: !!Options.get('hardcore') });
   if (!r.modes.length) return;
   // Graveyard Shift with friends: a friend room set to the mode on any of its maps (friends take the bots' seats).
   if (r.friends) {
@@ -1477,7 +1494,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro, training });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
-  hud.setMic(net?.room ? (app.voice?.state ?? 'off') : 'hidden', app.voice?.muted);
+  hud.setMic(net?.room ? (app.voice?.shownState ?? 'off') : 'hidden', app.voice?.muted);
   updateVoiceTeam();
   // Callouts need someone to hear them: friends, or bots on your side. Not in training or on the range.
   quickChat.start({ net, roster, localId: id, mapId, mode, ffa: isFfa(mode), enabled: !tutorial && !training && mode !== 'range' });
@@ -1540,6 +1557,7 @@ function endLocalMatch() {
   quickChat.stop();
   hud.setVisible(false);
   controls.setEnabled(false);
+  updateVoiceTeam();               // Back to party voice with the whole lobby.
 }
 
 function onMatchEnd(results) {
@@ -1678,6 +1696,7 @@ function applyOptions(v, changed) {
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
   if (!changed || changed === 'matchMusic') music.setMatchMusic(v.matchMusic);
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
+  if (!changed || changed === 'voiceMode') app.voice?.setMode(v.voiceMode);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
   backdrop.quality = v.quality;
   if (!changed || changed === 'fps') { perf.setVisible(v.fps || FPS_PARAM); hud.layout(); }
@@ -1693,6 +1712,15 @@ function maybeInstallPrompt() {
   Progress.setFlag('installPrompt');
   menu.installPrompt(() => {});
 }
+
+// Controllers and the voice overlay need app, the HUD, the menu and quick chat.
+gamepad = new GamepadInput({
+  controls, hud, menu, quickChat,
+  voice: () => app.voice,
+  inMatch: () => !!app.inMatch && !!app.match,
+  toast: text => (app.inMatch ? hud.notify(text) : menu.toast(text)),
+});
+voiceUi = new VoiceUI({ hud, voice: () => app.voice, nameOf: id => app.lobby.humans.find(h => h.id === id)?.name ?? app.matchInfo?.roster?.find(r => r.id === id)?.name ?? '' });
 
 // Times every frame's script work for the Auto quality governor and the performance overlay.
 installFrameClock();
@@ -1723,7 +1751,7 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange) };
+if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 

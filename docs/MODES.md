@@ -29,8 +29,8 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
   loadout's `rounds` (player.js) and an `{t:'ammo'}` refund event (match.js).
 - Bots: each module's `plan(team, crew)`, called from `planObjectives` (bots.js). HQ: everyone on the HQ, holders guard
   it with long guns outside, thinkers rotate to the next site. Kill Order: the VIP stays with the pack, two guard it,
-  the rest hunt the enemy VIP. Infected: survivors stack a hold and move every 35 s; infected chase the nearest
-  survivor. One in the Chamber: free-for-all fighting; out of rounds, the blade. Control: attackers stack the zone
+  the rest hunt the enemy VIP. Infected: survivors hold several spots in small groups (see "Infected bots"); the
+  infected spread over the survivors and come in from the side. One in the Chamber: free-for-all fighting; out of rounds, the blade. Control: attackers stack the zone
   they have most on (a third split to the other); defenders weight the threatened zone. Grind: pick up near tags, bank
   at 3 or when a bank is near, one guard on the home bank.
 - Modifiers and the featured playlist: `js/shared/playlist.js` (`cleanMods`, `dealLoadout`, `featured`). The Sim takes
@@ -52,6 +52,25 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
   thirty stacked on one spot never fell on Expedition); five-minute clock. Measured (bots, 3 huge maps x 5 seeds):
   survivors 6, infected 9 (before the spawn cap: survivors won every Expedition match 27-5 and lost every other).
 - Infected: the infected throw Shivs, not Hatchets (one-hit throws ended matches in 90 s).
+- Infected bots (ROADMAP 25; js/sim/inf.js `plan`). Survivor bots used to stack one hardpoint and wait. Now they form
+  groups of 4, 4, 1 and 3 in the order they join (Ground War keeps its `holds` big groups). Each group holds its own
+  haven: one of the mode's zones or a hold point (up to 24 spots, 9 m or more apart), 16 m or more from the other
+  groups' spots and within 22 m of one of them, so neighbours can cover each other. Members commit to the spot and each
+  watches its own side of it, turned toward the nearest infected (`aim` on a bot objective, bots.js). A group moves on
+  after 60-100 s, or 8 s after it loses someone, but only with no infected within 22 m. With more infected than members
+  within 12 m of the spot it falls back on a neighbouring group's spot. The loner roams every 12-20 s while 7 or more
+  survivors are left. Groups close ranks as survivors fall: one group per four. The infected pick prey with a cost for
+  each other infected already on it, and from 18 m out they swing in from alternate sides.
+  Measured over oasis, canyon, railyard and dust, 8 seeds each (32 matches):
+
+  | | Survivor clusters (12 m) | Biggest cluster | Survivors win | Mean round |
+  |---|---|---|---|---|
+  | Before (one camp) | 1.19 | 97% | 11/32 | 178 s |
+  | Small groups, no commit or close ranks | 3.8 | 44% | 0/32* | ~105 s |
+  | Shipped | 2.40 | 63% | 7/32 | 161 s |
+
+  *First cut, 8 matches. Small groups spread thin lost one by one. Committing to the spot, moving only when it is
+  quiet, falling back on friends and closing ranks brought the rounds back near the old length.
 
 ## Play flow (ROADMAP item 14)
 - **Multiplayer** (title hero; `js/ui/matchmaking.js` data, `js/ui/playscreens.js` screens, flow in `main.js`

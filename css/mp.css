@@ -64,6 +64,14 @@
 #ui .mp-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--sp-3); height: 58px; }
 #ui .mp-note { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; margin: 0 auto 0 0; font: 400 var(--fs-caption)/1.25 var(--f-body); color: var(--c-haze); }
 #ui .mp-note .ico { height: 18px; color: var(--c-sodium); }
+#ui .mp-hc { flex: none; width: 210px; height: 100%; min-height: 0; grid-template-columns: 22px minmax(0, 1fr) 34px; gap: 6px; padding: 4px 8px; }
+#ui .mp-hc b { font-size: var(--fs-body); }
+#ui .mp-hc small { font-size: 10px; line-height: 1.15; }
+#ui .mp-hc .mod-sw { width: 32px; height: 18px; }
+#ui .mp-hc .mod-sw::after { width: 12px; height: 12px; }
+#ui .mp-hc.on .mod-sw::after { transform: translateX(12px); }
+#ui .mp-hc:disabled { opacity: .4; }
+@media (max-width: 720px) { #ui .mp-hc { width: 150px; } #ui .mp-hc small { display: none; } }
 #ui .mp-find { height: 100%; width: 240px; gap: var(--sp-3); justify-content: flex-start; padding: 0 var(--sp-4); text-align: left; }
 #ui .mp-find span { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 #ui .mp-find b { font-size: 22px; }

@@ -11,6 +11,7 @@ import { MODES, modeRules } from '../shared/modes.js';
 import { MODS } from '../shared/playlist.js';
 import { TEAMS } from '../shared/constants.js';
 import { objOf } from '../sim/rules.js';
+import { spectate } from '../sim/snd.js';
 import { icon } from './icons.js';
 import { esc } from './widgets.js';
 
@@ -56,6 +57,10 @@ const CSS = `
 .hud.mh-on .ctf-status, .hud.mh-on .obj-strip { display: none !important; }
 /* Held off the field: the wait plate takes the Respawn row, and the respawn clock (which is not running) goes. */
 .hud.mh-held .death-next, .hud.mh-held .death-go, .hud.mh-held .death-timer { display: none !important; }
+/* Control, out of lives: the death screen steps aside for the player being watched; the wait plate cycles who. */
+.hud.mh-watch .death { background: none; }
+.hud.mh-watch .death-top { display: none !important; }
+.hud.mh-watch .mh-wait { pointer-events: auto; cursor: pointer; }
 /* A mode that deals everyone's kit has no loadout to pick for the next life. */
 .hud.mh-dealt .death-next { display: none !important; }
 `;
@@ -85,6 +90,12 @@ export class ModeHud {
     this.wait = el.querySelector('.mh-wait');
     // The wait plate lives in the death screen's action row, where Respawn would be.
     hud.el.querySelector('.death-act')?.prepend(this.wait);
+    this.wait.addEventListener('click', e => {
+      if (!this.watching || !this.view) return;
+      e.stopPropagation();
+      spectate.cycle(this.view, this.view.localId, 1);
+      this.cache.wait = null;
+    });
     this.mods = el.querySelector('.mh-mods');
     this.tags = [...el.querySelectorAll('.mh-tag')].map(root => ({ root, span: root.querySelector('span'), html: '', x: NaN, y: NaN, cls: '' }));
     this.cache = {};
@@ -101,7 +112,8 @@ export class ModeHud {
     this.hud.el.classList.toggle('mh-on', this.on);
     this.dealt = this.rules === 'oic' || this.rules === 'inf';     // Everyone's kit is dealt: no loadout, no second gun.
     this.hud.el.classList.toggle('mh-dealt', this.dealt);
-    this.hud.el.classList.remove('mh-held');
+    this.hud.el.classList.remove('mh-held', 'mh-watch');
+    this.watching = false;
     this.hud.el.classList.toggle('hc-on', mods.includes('hardcore'));
     // The match's modifiers, as small plates in the top corner, for the whole match.
     this.mods.hidden = !mods.length;
@@ -136,7 +148,7 @@ export class ModeHud {
     if (!this.on) return;
     const o = objOf(view);
     const intro = this.hud.introOn || view.phase === 'ended';
-    if (!o || intro) { this.#paint('', {}); this.#waitFor(''); this.#hideTags(); return; }
+    if (!o || intro) { this.#paint('', {}); this.#waitFor(''); this.#hideTags(); this.hud.el.classList.remove('mh-watch'); this.watching = false; return; }
     const fn = this[`_${this.rules}`];
     fn?.call(this, view, me, o);
     // Dead, the death screen and the wait plate do the talking.
@@ -207,7 +219,15 @@ export class ModeHud {
       ico: att ? 'ui:flag' : 'ui:lock', word, sub: `Lives ${mine} / theirs ${theirs}`, side: o.overtime ? 'alert' : att ? 'enemy' : 'mine',
       extra: `<span class="mh-num">${mine}</span>`,
     });
-    this.#waitFor(!me.alive && o.state === 'live' && mine <= 0 ? 'No lives left' : '', 'Your team is out of respawns this round.');
+    // Out of lives: watch whoever is still up (spectate.ctlOut), teammates first; a tap on the plate switches.
+    const out = !me.alive && o.state === 'live' && mine <= 0;
+    const watch = out ? spectate.target(view, me.id) : null;
+    const w = watch && view.players.find(p => p.id === watch);
+    this.view = view;
+    this.watching = !!w;
+    this.hud.el.classList.toggle('mh-watch', !!w);
+    this.#waitFor(!out ? '' : w ? `Watching ${w.name}` : 'No lives left',
+      w ? `${w.team === me.team ? 'Teammate' : 'Enemy'} · out of respawns this round · tap to switch` : 'Your team is out of respawns this round.');
     this.#hideTags();
   }
 

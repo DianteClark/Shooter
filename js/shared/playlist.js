@@ -38,6 +38,7 @@ export function cleanMods(list, modeId = null) {
   }
   const rules = MODES[modeId]?.rules ?? modeId;
   if (rules === 'br' || rules === 'ex' || rules === 'range') return [];        // Battle royale, extraction and the range take no modifiers.
+  if (MODES[modeId]?.noMods) return [];                                     // A mode can opt out (co-op modes).
   if (DEALT.has(rules)) keep = keep.filter(id => id !== 'snipers' && id !== 'melee');
   if (rules === 'snd') keep = keep.filter(id => id !== 'nostreaks');      // S&D has none to begin with.
   return MOD_IDS.filter(id => keep.includes(id));
@@ -81,22 +82,28 @@ export function playlistName(modeId, mods = []) {
   return mods.length ? `${mods.map(id => MODS[id].name).join(' ')} ${m}` : m;
 }
 
+// ---- The Hardcore switch (ROADMAP 25): one setting on the Multiplayer screen puts Hardcore on every mode it fits ----
+// (never battle royale, extraction, the range or a mode with `noMods`; never Ranked). The list a mode plays with it on:
+export const hardcoreFits = modeId => cleanMods(['hardcore'], modeId).length > 0;
+export const withHardcore = (mods = [], on = false, modeId = null) => cleanMods(on ? [...mods, 'hardcore'] : mods, modeId);
+
 // ---- Featured playlist: one mode and modifier pairing a day, the same on every phone, no server ----
+// Hardcore is not one of the pairings any more: it is a switch of its own (withHardcore) that goes on top of any of them.
 // Cycles through FEATURED by the local calendar day. Days count from 2026-01-01 so the order starts at the top.
 export const FEATURED = [
-  { mode: 'hq', mods: ['hardcore'] },
+  { mode: 'hq', mods: ['nostreaks'] },
   { mode: 'inf', mods: [] },
   { mode: 'ko', mods: ['snipers'] },
   { mode: 'oic', mods: [] },
   { mode: 'ctl', mods: ['nostreaks'] },
   { mode: 'grind', mods: [] },
   { mode: 'tdm', mods: ['melee'] },
-  { mode: 'dom', mods: ['hardcore'] },
+  { mode: 'dom', mods: ['snipers'] },
   { mode: 'ffa', mods: ['snipers'] },
   { mode: 'hq', mods: [] },
-  { mode: 'kc', mods: ['hardcore', 'nostreaks'] },
+  { mode: 'kc', mods: ['nostreaks'] },
   { mode: 'ko', mods: [] },
-  { mode: 'inf', mods: ['hardcore'] },
+  { mode: 'gun', mods: [] },
   { mode: 'ctl', mods: [] },
 ];
 const EPOCH = Date.UTC(2026, 0, 1);

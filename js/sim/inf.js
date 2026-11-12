@@ -15,6 +15,16 @@ import { alive, chaseObjective, decodeStats, encodeStats, restoreStats, zoneObje
 
 export const INF = { perFirst: 12, alpha: 0.5, respawn: 2.5, tick: 10, tickScore: 25, infectScore: 100, surviveScore: 500, regroup: 35 };
 const STATS = ['infections', 'survived'];
+const TAU = Math.PI * 2;
+// Survivor bots (ROADMAP 25; numbers from a 32-match sweep, docs/MODES.md "Infected bots"):
+const GROUP_SIZES = [4, 4, 1, 3];         // Groups in the order they form; a 1 roams on its own.
+const HAVEN_MAX = 24, HAVEN_GAP = 9;      // Spots survivors hold: the mode's zones plus hold points at least 9 m apart.
+const PRESSED_R = 12;                     // More infected than the group this close to its spot: overrun, fall back.
+const QUIET_R = 22;                       // A group moves on (its time up) only with no infected this close.
+const LOST_HOLD = 8;                      // Lost someone: move on this many seconds later (once it is quiet).
+const CLOSE_RANKS = 4, ROAM_MIN = 7;      // One group per 4 survivors as they thin out; a loner roams while 7 are left.
+const CROWD_R = 16, SUPPORT_R = 22;       // A new spot keeps 16 m from other groups' and within 22 m of one of them.
+const FLANK_FROM = 18, FLANK_OFF = 9;     // Infected further than this from their prey come in from the side.
 const KIT = { primary: 'knife', secondary: 'knife', lethal: 'shiv', tactical: 'smoke', attachments: {}, perks: ['marathon', 'fasthands', 'deadsilence'], pro: [], streaks: [] };
 
 export class InfRules {
@@ -27,7 +37,7 @@ export class InfRules {
     this.first = null;
     this.last = null;
     this.tickT = this.k.tick;
-    this.camp = 0; this.campT = 0;         // Survivor bots' hold: an index into the map's hardpoint zones.
+    this.groups = null; this.havenList = null;   // Survivor bots' groups and the spots they hold (plan).
     this.spots = makeZones(sim.map.points?.hard?.length ? sim.map.points.hard : sim.map.points?.dom);
   }
 
@@ -143,45 +153,137 @@ export class InfRules {
     return 0;
   }
 
-  // ---- Bots: survivors pick a hold and stack it, moving on every so often; the infected run down the nearest. ----
+  // ---- Bots (ROADMAP 25: survivors used to stack one camp and wait) ----
+  // Survivors split into small groups (fours and threes, and a loner who roams), each holding its own spot: the mode's
+  // zones and the map's hold points, spread out (havens), near enough another group's to trade fire across. Members
+  // commit to the spot and each watches its own side of it. A group moves on when its time there is up and no infected
+  // is close, falls back on a neighbouring group when overrun, and groups close ranks as the survivors thin out (spread
+  // too thin, small groups fell one by one: a 32-match sweep had survivors win 2 in 32 against 11 for the old one camp).
+  // The infected spread over the prey and the ones further out come in from the side.
+  _havens() {
+    if (this.havenList) return this.havenList;
+    const sim = this.sim, out = this.spots.map(z => ({ x: z.x, z: z.z, r: Math.max(3, z.r * 0.6) }));
+    const holds = sim.nav?.holds ?? [];
+    // Farthest-point picks from the hold points, at least HAVEN_GAP apart, up to HAVEN_MAX in all.
+    const far = h => out.reduce((m, o) => Math.min(m, Math.hypot(o.x - h.x, o.z - h.z)), Infinity);
+    while (out.length < HAVEN_MAX && holds.length) {
+      let best = null, bd = HAVEN_GAP;
+      for (const h of holds) { const d = far(h); if (d > bd) { bd = d; best = h; } }
+      if (!best) break;
+      out.push({ x: best.x, z: best.z, r: 3 });
+    }
+    return (this.havenList = out);
+  }
+
+  // fallback: overrun, the group falls back on a neighbouring group's spot (strength in numbers) rather than off on its own.
+  _pickHaven(g, groups, infected, x, z, fallback = false) {
+    const sim = this.sim, hv = this._havens();
+    let best = g.spot, bs = -Infinity;
+    hv.forEach((h, i) => {
+      if (i === g.spot) return;
+      let threat = 0, crowd = 0, friend = Infinity;
+      for (const q of infected) { const d = Math.hypot(q.ps.x - h.x, q.ps.z - h.z); if (d < 30) threat += 30 - d; }
+      for (const o of groups) if (o !== g && o.spot >= 0) {
+        const d = Math.hypot(hv[o.spot].x - h.x, hv[o.spot].z - h.z);
+        friend = Math.min(friend, d);
+        if (d < CROWD_R) crowd += CROWD_R - d;
+      }
+      // Near enough a neighbouring group to help each other, not on top of it (falling back, on top of it is fine).
+      const support = friend < Infinity ? -Math.max(0, friend - SUPPORT_R) * (fallback ? 0.5 : 1) : 0;
+      const s = -Math.hypot(h.x - x, h.z - z) * (fallback ? 0.6 : 0.35) - threat * 1.5 - (fallback ? 0 : crowd * 2) + support + sim.rng() * 10;
+      if (s > bs) { bs = s; best = i; }
+    });
+    g.spot = best; g.since = sim.time; g.hold = g.roam ? 12 + sim.rng() * 8 : 60 + sim.rng() * 40;
+  }
+
   plan(team, crew) {
     const sim = this.sim;
     if (!this.started) return;
     if (team === 1) {
       const prey = sim.players.filter(p => p.team === 0 && p.alive);
+      const on = new Map();
       for (const b of crew) {
-        let best = null, bd = Infinity;
-        for (const q of prey) { const d = Math.hypot(q.ps.x - b.ps.x, q.ps.z - b.ps.z); if (d < bd) { bd = d; best = q; } }
-        b.setObjective(best ? chaseObjective(sim, `prey${best.index}`, best.ps.x, best.ps.z, 'attack', true) : null);
+        let best = null, bs = Infinity;
+        for (const q of prey) {
+          const d = Math.hypot(q.ps.x - b.ps.x, q.ps.z - b.ps.z);
+          const s = d + (on.get(q) ?? 0) * 12;          // Spread over the prey: a target three are already on costs more.
+          if (s < bs) { bs = s; best = q; }
+        }
+        if (!best) { b.setObjective(null); continue; }
+        on.set(best, (on.get(best) ?? 0) + 1);
+        const d = Math.hypot(best.ps.x - b.ps.x, best.ps.z - b.ps.z);
+        let tx = best.ps.x, tz = best.ps.z;
+        // Flank: from further out, half the pack swings in from one side and the other half from the other.
+        if (d > FLANK_FROM) {
+          const a = Math.atan2(best.ps.z - b.ps.z, best.ps.x - b.ps.x) + (b.p.index % 2 ? 1 : -1) * Math.PI / 2;
+          const k = Math.min(FLANK_OFF, (d - FLANK_FROM) * 0.5);
+          tx += Math.cos(a) * k; tz += Math.sin(a) * k;
+        }
+        b.setObjective(chaseObjective(sim, `prey${best.index}`, tx, tz, 'attack', true));
       }
       return;
     }
-    if (!this.spots.length) { for (const b of crew) b.setObjective(null); return; }
-    // `holds` groups (Ground War: thirty survivors stacked on one spot would never fall), split by player index.
-    const g = Math.max(1, Math.min(this.k.holds ?? 1, this.spots.length));
-    if (sim.time - this.campT > this.k.regroup) {
-      // Each group: the hold nearest its middle that is not the one it just left nor another group's.
-      const camps = this.camps ?? [this.camp], taken = new Set();
-      for (let k = 0; k < g; k++) {
-        let x = 0, z = 0, n = 0;
-        for (const p of sim.players) if (p.team === 0 && p.alive && (g === 1 || p.index % g === k)) { x += p.ps.x; z += p.ps.z; n++; }
-        let best = camps[k] ?? this.camp;
-        if (n) {
-          let bd = Infinity;
-          this.spots.forEach((s, i) => {
-            if (taken.has(i)) return;
-            const d = Math.hypot(s.x - x / n, s.z - z / n) + (i === camps[k] && this.campT > 0 ? 30 : 0);
-            if (d < bd) { bd = d; best = i; }
-          });
-        }
-        taken.add(best); camps[k] = best;
-      }
-      this.camps = camps; this.camp = camps[0];
-      this.campT = sim.time;
+    const hv = this._havens();
+    if (!hv.length) { for (const b of crew) b.setObjective(null); return; }
+    // Ground War Infected keeps its `holds` big groups (thirty survivors in twos would never hold anything there).
+    const size = this.k.holds ? Math.max(2, Math.ceil(crew.length / this.k.holds)) : null;
+    const surv = sim.players.filter(p => p.team === 0 && p.alive).sort((a, b) => a.index - b.index);
+    const infected = sim.players.filter(p => p.team === 1 && p.alive);
+    const groups = this.groups ?? (this.groups = []);
+    // Membership: kept from plan to plan; a survivor without a group joins the smallest one under its size, or starts one.
+    const byId = new Map();
+    for (const g of groups) { const n0 = g.ids.length; g.ids = g.ids.filter(id => surv.some(p => p.id === id)); g.lost = n0 - g.ids.length; for (const id of g.ids) byId.set(id, g); }
+    for (let i = groups.length - 1; i >= 0; i--) if (!groups[i].ids.length) groups.splice(i, 1);
+    for (const p of surv) {
+      if (byId.has(p.id)) continue;
+      const cap = size ?? GROUP_SIZES[groups.length % GROUP_SIZES.length];
+      let g = groups.find(o => o.ids.length < o.cap);
+      if (!g) { g = { ids: [], cap, spot: -1, since: 0, hold: 0, roam: cap === 1, lost: 0 }; groups.push(g); }
+      g.ids.push(p.id); byId.set(p.id, g);
     }
+    // Thinned out, groups close ranks: one group per CLOSE_RANKS survivors, the smallest folding into its nearest
+    // neighbour (a loner keeps roaming while ROAM_MIN are left). Three on their own hold die one by one; together they last.
+    const roams = g => g.roam && surv.length >= ROAM_MIN;
+    while (groups.filter(g => !roams(g)).length > Math.max(1, Math.ceil(surv.length / CLOSE_RANKS))) {
+      const pool = groups.filter(g => !roams(g)).sort((a, b) => a.ids.length - b.ids.length);
+      const g = pool[0], at = g.spot >= 0 ? hv[g.spot] : null;
+      let o = null, od = Infinity;
+      for (const q of pool) if (q !== g) { const d = at && q.spot >= 0 ? Math.hypot(hv[q.spot].x - at.x, hv[q.spot].z - at.z) : 0; if (d < od) { od = d; o = q; } }
+      o.ids.push(...g.ids); o.cap = Math.max(o.cap, o.ids.length); o.roam = false;
+      for (const id of g.ids) byId.set(id, o);
+      groups.splice(groups.indexOf(g), 1);
+    }
+    for (const g of groups) {
+      const ms = surv.filter(p => g.ids.includes(p.id));
+      let x = 0, z = 0;
+      for (const p of ms) { x += p.ps.x / ms.length; z += p.ps.z / ms.length; }
+      const h = g.spot >= 0 ? hv[g.spot] : null;
+      // Overrun (more infected on the spot than the group can hold): fall back on friends at once. Otherwise a group
+      // moves on once its time there is up, sooner when it has just lost someone, and only while no infected is close
+      // (running across open ground with the pack on you is how a group dies).
+      let near = 0, close = 0;
+      for (const q of infected) {
+        if (h && Math.hypot(q.ps.x - h.x, q.ps.z - h.z) < PRESSED_R) near++;
+        if (Math.hypot(q.ps.x - x, q.ps.z - z) < QUIET_R) close++;
+      }
+      if (g.lost > 0) g.hold = Math.min(g.hold, sim.time - g.since + LOST_HOLD);
+      if (!h) this._pickHaven(g, groups, infected, x, z);
+      else if (near > ms.length) this._pickHaven(g, groups, infected, x, z, true);
+      else if (sim.time - g.since > g.hold && (!close || g.roam)) this._pickHaven(g, groups, infected, x, z);
+      g.lost = 0;
+    }
+    // Each member watches its own side of the hold, the group turned toward the nearest infected (a camp of eleven
+    // covers every way in by numbers; three have to share it out).
     for (const b of crew) {
-      const k = g === 1 ? 0 : b.p.index % g, spot = this.spots[this.camps?.[k] ?? this.camp];
-      b.setObjective(zoneObjective(spot, 'defend', `camp${k}`));
+      const g = byId.get(b.p.id);
+      if (!g || g.spot < 0) { b.setObjective(null); continue; }
+      const h = hv[g.spot];
+      let near = null, nd = Infinity;
+      for (const q of infected) { const d = Math.hypot(q.ps.x - h.x, q.ps.z - h.z); if (d < nd) { nd = d; near = q; } }
+      const n = g.ids.length, k = g.ids.indexOf(b.p.id);
+      const base = near ? Math.atan2(near.ps.z - h.z, near.ps.x - h.x) : (g.spot * 2.4);
+      const aim = n > 1 ? base + (k - (n - 1) / 2) * (TAU / n) : base;
+      b.setObjective({ key: `haven${g.spot}`, x: h.x, z: h.z, r: h.r, role: 'defend', aim, commit: true });
     }
   }
 

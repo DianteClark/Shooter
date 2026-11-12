@@ -77,7 +77,7 @@ function inList(list, id) {
 }
 
 function freshInput() {
-  return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1, throwAim: null, throwDist: null };
+  return { mx: 0, mz: 0, aim: null, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1, throwAim: null, throwDist: null, reload: false, melee: false };
 }
 
 export class Controls {
@@ -116,6 +116,7 @@ export class Controls {
                                    // finger beside a held stick) takes that stick when it frees up; a 'button' one never does.
     this.watched = new WeakSet();  // Touch targets with listeners of their own; see #watch.
     this.debug = null;             // (text) => void while the touch debug overlay is on (js/ui/touchdebug.js).
+    this.pad = null;               // js/ui/gamepad.js: merges a controller into read()'s Input.
     this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
     this.equip = { tactical: { kind: '', left: NaN }, lethal: { kind: '', left: NaN } };
     this.scoreCache = { score: NaN, capped: null };
@@ -916,6 +917,7 @@ export class Controls {
       inp.streak = -1;
       inp.throwAim = null;
       inp.throwDist = null;
+      inp.reload = inp.melee = false;
       return inp;
     }
 
@@ -992,6 +994,9 @@ export class Controls {
 
     if (this.throw) this.paintDirty = true;   // The rig keeps animating the hold timer.
     if (this.paintDirty) this.#paint();
+    inp.reload = inp.melee = false;
+    // A game controller (js/ui/gamepad.js) writes into the same Input, on top of whatever the thumbs are doing.
+    this.pad?.merge(inp);
     return inp;
   }
 

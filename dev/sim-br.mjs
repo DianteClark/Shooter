@@ -5,7 +5,8 @@ import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
 import { SIM_HZ, MAX_HP, WEAPON_IDS, WEAPON_CATEGORY } from '../js/shared/constants.js';
-import { BR_KIND } from '../js/sim/br.js';
+import { BR_KIND, flightLine } from '../js/sim/br.js';
+import { stepPlayer } from '../js/sim/player.js';
 import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
 const STEP = 1 / SIM_HZ;
@@ -27,14 +28,14 @@ function runMatch(mode, seed) {
   sim.step(STEP);
   const startMs = performance.now() - t0;
   const times = [];
-  const ev = { kill: 0, down: 0, revive: 0, brgive: 0, brchest: 0, brplate: 0, brsquad: 0, pick: 0, plateHits: 0, zoneDeaths: 0, landed: 0 };
+  const ev = { kill: 0, down: 0, revive: 0, brgive: 0, brchest: 0, brplate: 0, brsquad: 0, pick: 0, plateHits: 0, zoneDeaths: 0, landed: 0, medkit: 0 };
   const snapBytes = [];
   const guests = sim.players.slice(0, 7);
   const killT = [];                             // Live seconds of each death (kills, circle, bleed-outs).
   let liveT0 = null, finalSquads = null, finalPhase = 4;
   const phaseSquads = [];                       // Squads in as each circle phase begins.       // Pretend seven of them are guests, for the per-guest snapshot size.
   let tick = 0;
-  const maxTicks = SIM_HZ * 60 * 14;
+  const maxTicks = SIM_HZ * 60 * 18;
   while (sim.phase !== 'ended' && tick < maxTicks) {
     const c = process.cpuUsage();
     sim.step(STEP);
@@ -55,6 +56,7 @@ function runMatch(mode, seed) {
       if (e.t === 'kill' && e.equip === 'zone') ev.zoneDeaths++;
       if (e.t === 'kill') killT.push(sim.time - (liveT0 ?? 0));
       if (e.t === 'brland') ev.landed++;
+      if (e.t === 'heal' && e.kind === 'medkit') ev.medkit++;
     }
   }
   times.sort((a, b) => a - b);
@@ -147,6 +149,17 @@ function units() {
   pal.ps.x = me.ps.x + 1; pal.ps.z = me.ps.z;
   for (let i = 0; i < SIM_HZ * (BR.reviveTime + 0.5); i++) { pal.ps.x = me.ps.x + 1; pal.ps.z = me.ps.z; pal.ps.vx = 0; pal.ps.vz = 0; sim.step(STEP); }
   check(!me.downed && me.alive && me.hp > 0, 'a teammate standing close revives');
+  // No regen in BR: health stays where the revive left it; a medkit brings it back (ROADMAP 25).
+  const hpUp = me.hp;
+  me.spawnProtect = pal.spawnProtect = 999;
+  for (const q of sim.players) if (q.team !== me.team && Math.hypot(q.ps.x - me.ps.x, q.ps.z - me.ps.z) < 120) { q.ps.x = 5; q.ps.z = 5; }
+  for (let i = 0; i < SIM_HZ * 12; i++) { pal.ps.x = me.ps.x + 1; pal.ps.z = me.ps.z; sim.step(STEP); }
+  check(me.hp === hpUp, `no health regen in BR (${hpUp} -> ${me.hp} after 12 s)`);
+  me.br.meds = 1;
+  check(sim.applyCommand('h1', { cmd: 'br', act: 'med' }), 'medkit accepted while hurt');
+  for (let i = 0; i < SIM_HZ * (BR.medTime + 0.3); i++) sim.step(STEP);
+  check(me.hp === MAX_HP && me.br.meds === 0, `a medkit heals to full (${me.hp})`);
+  me.spawnProtect = pal.spawnProtect = 0;
   // Circle damages outside.
   const W = sim.map.width;
   sim.br.circle = { x: W / 2, z: W / 2, r: 10 };
@@ -175,10 +188,13 @@ function units() {
 if (PACING) {
   // node dev/sim-br.mjs --pacing=N: N seeds per mode, pacing numbers only.
   const n = +(PACING.split('=')[1] ?? 4);
-  for (const mode of ['br', 'brduo', 'brsolo']) {
+  const only = args.find(a => a.startsWith('--modes='))?.slice(8).split(',');
+  for (const mode of only ?? ['br', 'brduo', 'brsolo']) {
     const rs = [];
     for (let i = 0; i < n; i++) rs.push(runMatch(mode, 101 + i * 7));
     const avg = f => rs.reduce((a, r) => a + f(r), 0) / rs.length;
+    const at = k => avg(r => r.phaseSquads[k - 1] ?? 0).toFixed(1);
+    console.log(`${mode} summary: ${avg(r => r.minutes).toFixed(1)} min mean (${Math.min(...rs.map(r => r.minutes)).toFixed(1)}-${Math.max(...rs.map(r => r.minutes)).toFixed(1)}), ${(avg(r => r.early) * 100).toFixed(0)}% of deaths in the first 3 min, squads in at phase 3/4/5/6 starts ${at(3)}/${at(4)}/${at(5)}/${at(6)}`);
     console.log(`${mode}: minutes ${rs.map(r => r.minutes.toFixed(1)).join(' ')} | early ${rs.map(r => (r.early * 100).toFixed(0)).join(' ')}% | circle deaths ${rs.map(r => r.sim.br.zoneDeaths ?? 0).join(' ')} | squads by phase ${rs.map(r => r.phaseSquads.join('/')).join(' ')} | tick ${avg(r => r.mean).toFixed(2)} ms | snap ${avg(r => r.snapMean).toFixed(0)} B`);
   }
   process.exit(0);
@@ -254,7 +270,117 @@ function migration(mode, seed, atS) {
   check(gi === hi, `a guest's loot mirror follows the new host (${gi}/${hi})`);
 }
 
+// ---- Healing (ROADMAP 25): extraction keeps regen; BR has medkits often enough and bots use them ----
+function healUnits() {
+  console.log('healing');
+  const roster = buildRoster([{ id: 'h1', name: 'Me', team: 0 }], { botSkill: 'mixed', mode: 'exq', mapId: MAP.id, seed: 4 });
+  const ex = new Sim({ roster, map: MAP, seed: 4, mode: 'exq' });
+  while (ex.phase !== 'live') ex.step(STEP);
+  const p = ex.byId.get('h1');
+  p.hp = 40; p.regenT = 0;
+  for (let i = 0; i < SIM_HZ * 6; i++) ex.step(STEP);
+  check(p.hp > 40, `extraction still regenerates (${p.hp | 0})`);
+  const sim = makeSim('br', 9), items = sim.br.items.filter(Boolean);
+  const meds = items.filter(it => it.kind === BR_KIND.med).length;
+  check(meds >= 55, `medkits on the floor: ${meds} for 32 players`);
+}
+
+// ---- Flight lines (ROADMAP 25): middle, thirds and edges, always over enough land, deterministic from the seed ----
+function flightUnits() {
+  console.log('flight lines');
+  const W = MAP.width, H = MAP.height, pois = MAP.br?.pois ?? [];
+  const bands = [0, 0, 0];
+  let landOk = 0, n = 0, same = 0, edgeSeed = null;
+  for (let seed = 1; seed <= 60; seed++) {
+    const a = makeSim('br', seed), b = makeSim('br', seed), p = a.br.plane;
+    if (['fx', 'fz', 'tx', 'tz'].every(k => p[k] === b.br.plane[k])) same++;
+    const dx = (p.tx - p.fx) / p.len, dz = (p.tz - p.fz) / p.len;
+    const off = Math.abs((W / 2 - p.fx) * dz - (H / 2 - p.fz) * dx) / W;
+    bands[off < 0.1 ? 0 : off < 0.22 ? 1 : 2]++;
+    if (off > 0.24 && edgeSeed === null) edgeSeed = seed;
+    // Land under it: places within glide reach of the line, and the stretch of it over the map.
+    const near = pois.filter(q => Math.abs((q.x - p.fx) * dz - (q.z - p.fz) * dx) < 110).length;
+    let inside = 0;
+    for (let f = 0; f <= 1; f += 0.01) { const x = p.fx + (p.tx - p.fx) * f, z = p.fz + (p.tz - p.fz) * f; if (x >= 0 && x <= W && z >= 0 && z <= H) inside += p.len * 0.01; }
+    if (near >= Math.min(pois.length, Math.max(4, Math.ceil(pois.length * 0.4))) && inside >= 0.68 * W) landOk++;
+    n++;
+  }
+  console.log(`  lines by lane over ${n} seeds: middle ${bands[0]}, thirds ${bands[1]}, edges ${bands[2]}`);
+  check(same === n, 'the same seed flies the same line');
+  check(bands[0] >= n * 0.2 && bands[1] >= n * 0.15 && bands[2] >= n * 0.12, 'lines cross the middle, the thirds and near the edges');
+  check(landOk === n, `every line crosses enough land and places (${landOk}/${n})`);
+  // A line squeezed toward the corner of a map with its places in the middle is pulled in over them.
+  const mid = [0, 1, 2, 3, 4, 5].map(i => ({ x: 180 + i * 8, z: 200 }));
+  const fl = flightLine(400, 400, Math.PI / 4, 0.99, 0.99, mid);
+  check(Math.abs(fl.off) * 400 < 110, `an edge line is pulled in over the places (${fl.off.toFixed(2)} of the width)`);
+  // An edge line: bot squads still land spread over the places along it, and the guest sees the same line.
+  const sim = makeSim('br', edgeSeed), guest = makeSim('br', edgeSeed);
+  while (sim.time < 70 && sim.players.some(p => p.brAir)) { sim.step(STEP); sim.drainEvents(); }
+  const view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor(sim.players[0].id))), sim.players[0].id);
+  check(Math.abs(view.br.plane.fx - sim.br.plane.fx) < 1 && Math.abs(view.br.plane.tz - sim.br.plane.tz) < 1, 'a guest decodes the same line');
+  const landed = sim.players.filter(p => p.alive && !p.brAir);
+  const spots = new Set([...sim.br.plans.values()].map(pl => pl.poi?.id));
+  const onMap = landed.every(p => p.ps.x > 0 && p.ps.x < W && p.ps.z > 0 && p.ps.z < H);
+  check(landed.length >= 30 && onMap, `edge line (seed ${edgeSeed}): everyone lands on the map (${landed.length})`);
+  check(spots.size >= 5, `edge line: bot squads spread over ${spots.size} places`);
+}
+
+// ---- Bot squadmates follow a human as squadmates, never as copies (ROADMAP 25: after an app switch the owner found his
+// three bots copying his every move). The human jumps, the phone goes quiet for 1.5 s (an app switch: the host keeps
+// stepping on a frozen state), then steers a zigzag down and walks a square on the ground. Bots must land near the
+// human (not at the transport's start point), and neither glide in lockstep nor move and aim with the human after. ----
+function followUnits() {
+  console.log('squadmates of a human');
+  const I = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
+  let lock = 0, lockN = 0, moveSame = 0, aimSame = 0, n = 0, landFar = 0, stuck = 0;
+  for (const seed of [5, 6, 7, 8]) {
+    const sim = makeSim('br', seed, [{ id: 'h1', name: 'Me', team: 0 }]);
+    const me = sim.byId.get('h1'), mates = sim.players.filter(p => p.team === me.team && p !== me);
+    for (const p of sim.players) if (p.team !== me.team) p.spawnProtect = 1e9;
+    while (sim.phase !== 'live' || sim.br.plane.f < 0.35) { sim.step(STEP); sim.drainEvents(); }
+    sim.applyCommand('h1', { cmd: 'br', act: 'jump' });
+    const jumpT = sim.time;
+    for (let t = 0; t < SIM_HZ * 50; t++) {
+      const s = sim.time - jumpT;
+      const before = mates.map(p => [p.ps.x, p.ps.z]), hx = me.ps.x, hz = me.ps.z;
+      if (me.brAir === 2 && s > 1.5) {              // Back from the switch: a zigzag glide (what the phone sends).
+        const a = Math.floor(s * 2) % 2 ? 0.6 : -0.6;
+        me.ps.x += Math.cos(a) * BR.glideSpeed * STEP; me.ps.z += Math.sin(a) * BR.glideSpeed * STEP;
+      } else if (me.brAir === 0) {
+        const a = [0, 1.57, 3.14, 4.71][Math.floor(s / 3) % 4];
+        I.mx = Math.cos(a); I.mz = Math.sin(a); I.aim = a + 0.7;
+        stepPlayer(me.ps, I, STEP, sim.map, Math.random);
+      }
+      sim.step(STEP); sim.drainEvents();
+      const mvx = me.ps.x - hx, mvz = me.ps.z - hz, mv = Math.hypot(mvx, mvz);
+      for (const [i, p] of mates.entries()) {
+        if (!p.alive) continue;
+        const vx = p.ps.x - before[i][0], vz = p.ps.z - before[i][1], v = Math.hypot(vx, vz);
+        if (p.brAir === 2 && me.brAir === 2 && mv > 0.01) { lockN++; if (Math.hypot(vx - mvx, vz - mvz) < mv * 0.15) lock++; }
+        if (p.brAir === 0 && me.brAir === 0 && s > BR.glide + 3 && t % 3 === 0) {
+          n++;
+          if (v > 0.05 && (vx * I.mx + vz * I.mz) / v > 0.9) moveSame++;
+          if (Math.abs(Math.atan2(Math.sin(p.ps.aim - me.ps.aim), Math.cos(p.ps.aim - me.ps.aim))) < 0.25) aimSame++;
+        }
+      }
+      if (s > BR.glide + 2 && s < BR.glide + 2 + STEP * 1.5) {
+        for (const p of mates) { if (p.brAir) stuck++; else if (Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) > 30) landFar++; }
+      }
+    }
+  }
+  console.log(`  glide lockstep ${(lock / Math.max(1, lockN) * 100).toFixed(0)}%, ground: moving with the human ${(moveSame / n * 100).toFixed(0)}%, aim copied ${(aimSame / n * 100).toFixed(0)}%`);
+  check(stuck === 0, `every squadmate has landed shortly after the human (${stuck} still in the air)`);
+  check(landFar === 0, `squadmates land near the human (${landFar} landed over 30 m away)`);
+  check(lock / Math.max(1, lockN) < 0.3, `squadmates do not glide in lockstep with the human (${(lock / Math.max(1, lockN) * 100).toFixed(0)}% of glide ticks)`);
+  check(moveSame / n < 0.2 && aimSame / n < 0.12, `squadmates do not walk or aim with the human (${(moveSame / n * 100).toFixed(0)}%, ${(aimSame / n * 100).toFixed(0)}%)`);
+}
+
+if (args.includes('--follow')) { followUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
+if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
 squadUnits();
+healUnits();
+flightUnits();
+followUnits();
 if (!PACING) { migration('br', 21, 150); migration('br', 22, 330); }
 units();
 const modes = QUICK ? ['br'] : ['br', 'brduo', 'brsolo'];
@@ -264,24 +390,26 @@ for (const [i, mode] of modes.entries()) {
   report(r);
   results.push(r);
 }
-// Pacing (docs/BR.md "Pacing"), over these matches and three more seeds per mode: matches run 9-14 minutes, kills are
-// spread out (no more than ~45% in the first three minutes), the circle kills someone now and then, and two to four
-// squads (up to 5.5 on this 12-match mean) are still in when the final circles start (the circle at 18% of the map,
-// phase 3). Bot overhaul (docs/BOTS.md): bots that hold the angle on footsteps and fight from beside cover kill a
-// little less mid-game; the mean moved from 4.3 to 4.5-5.4 across runs with any one new trait off, so the bound did.
+// Pacing (docs/BR.md "Pacing" and "Owner sweep"), over these matches and three more seeds per mode: matches run 10.5-15
+// minutes, kills are spread out (no more than ~45% in the first three minutes), the circle kills someone now and then,
+// and several squads are still in when the fifth circle (phase 4, 13% of the map) starts. ROADMAP 25: the owner's
+// matches were over by the second circle; before the calmer early bots and the new circles, 10.5 min on average and 1.9
+// squads at phase 4 in quads (none at phase 5), after 11.9 and 5.0 (3.8 at phase 5).
 if (!QUICK) {
   const all = [...results];
   for (const mode of modes) for (let i = 0; i < 3; i++) all.push(runMatch(mode, 101 + i * 7));
   const mean = f => all.reduce((a, r) => a + f(r), 0) / all.length;
   const mins = mean(r => r.minutes), early = mean(r => r.early), circle = all.reduce((a, r) => a + (r.sim.br.zoneDeaths ?? 0), 0);
-  const fin = mean(r => r.phaseSquads[2] ?? 1);
-  console.log(`pacing over ${all.length} matches: ${mins.toFixed(1)} min mean (${Math.min(...all.map(r => r.minutes)).toFixed(1)}-${Math.max(...all.map(r => r.minutes)).toFixed(1)}), ${(early * 100).toFixed(0)}% of deaths in the first 3 min, ${circle} circle deaths, ${fin.toFixed(1)} squads at the final circles`);
-  check(mins >= 9 && mins <= 14, `pacing: matches average 9-14 sim minutes (${mins.toFixed(1)})`);
+  const p4 = mean(r => r.phaseSquads[3] ?? 1), p5 = mean(r => r.phaseSquads[4] ?? 0);
+  console.log(`pacing over ${all.length} matches: ${mins.toFixed(1)} min mean (${Math.min(...all.map(r => r.minutes)).toFixed(1)}-${Math.max(...all.map(r => r.minutes)).toFixed(1)}), ${(early * 100).toFixed(0)}% of deaths in the first 3 min, ${circle} circle deaths, ${p4.toFixed(1)} squads at phase 4, ${p5.toFixed(1)} at phase 5`);
+  check(mins >= 10.5 && mins <= 15, `pacing: matches average 10.5-15 sim minutes (${mins.toFixed(1)})`);
   check(early <= 0.45, `pacing: at most 45% of deaths in the first three minutes (${(early * 100).toFixed(0)}%)`);
   check(circle >= 1, `pacing: some circle deaths (${circle})`);
-  check(fin >= 2 && fin <= 5.5, `pacing: 2-5 squads contest the final circles (${fin.toFixed(1)})`);
+  check(p4 >= 3 && p5 >= 2, `pacing: several squads at the late circles (${p4.toFixed(1)} at phase 4, ${p5.toFixed(1)} at phase 5)`);
 }
 const squads = results.filter(r => r.sim.br.downs);
+// Medkits used vary a lot by match (2-14 over seeds 11-13: a quick match leaves few wounds to heal), so over all of them.
+check(results.reduce((n, r) => n + r.ev.medkit, 0) >= 6 * results.length, `bots heal with medkits (${results.map(r => r.ev.medkit).join(', ')})`);
 if (squads.length) check(squads.reduce((n, r) => n + r.ev.revive, 0) > 0, `squad matches: revives (${squads.map(r => r.ev.revive).join(', ')})`);
 console.log(failed ? `${failed} FAILED` : 'all ok');
 process.exit(failed ? 1 : 0);

@@ -2,7 +2,7 @@
 // matchmaking moment, and Custom (Match: the full picker from js/ui/vote.js; Training: the range or a map with bots and
 // practice switches). Markup and in-place paints only; js/main.js owns the state and the actions.
 //
-// Multiplayer actions: mpTab, mpPlaylist, mpMode, mpFind, mpBack.
+// Multiplayer actions: mpTab, mpPlaylist, mpMode, mpHardcore (the Hardcore switch in the footer), mpFind, mpBack.
 // Custom actions: customTab, customHost, customVote (lobby: back to the map vote), plus the picker's own soloMap/soloMode/
 // soloStart/soloBots and Training's trMap, trStep, trSkill, trDrill, trToggle, trStart.
 import { MAPS, MAP_IDS, SIZES, SIZE_IDS } from '../shared/map.js';
@@ -11,7 +11,7 @@ import { MODS } from '../shared/playlist.js';
 import { esc } from './widgets.js';
 import { ico, header } from './yard.js';
 import { mapCard, tierOf } from './vote.js';
-import { MP_TABS, playlistsFor, modesFor, resolveSelection } from './matchmaking.js';
+import { MP_TABS, playlistsFor, modesFor, resolveSelection, HARDCORE_TABS } from './matchmaking.js';
 import { SKILLS } from './botsettings.js';
 import { Progress } from './progress.js';
 import { rankBadge } from './season.js';      // Seasons: the Ranked playlist wears the player's rank.
@@ -52,13 +52,17 @@ export function mpMarkup({ tab }) {
       </section>` : ''}
       <footer class="mp-foot" data-in="up">
         <p class="mp-note">${ico('bots')}<span>${tab === 'zombies' ? 'Graveyard Shift: hold off the undead round after round on Night Market, Ruins or Foundry. Start with a pistol; your class stays home.' : tab === 'extraction' ? '16 players on Frontier with your own loadout. Bots fill the squads; AI patrols hold the map.' : br ? '32 players a drop. Bots fill the seats nobody takes.' : 'Bots fill the seats nobody takes. The lobby votes on the map.'}</span></p>
+        <button class="mod-row mp-hc" data-act="mpHardcore" data-sound="tab" aria-pressed="false"${HARDCORE_TABS.includes(tab) ? '' : ' disabled'}>
+          <span class="mod-ico">${ico('ui:skull')}</span><span class="mod-txt"><b>Hardcore</b><small>${HARDCORE_TABS.includes(tab) ? 'Every mode: a third of the health, no minimap' : 'Not in this playlist'}</small></span><i class="mod-sw" aria-hidden="true"></i></button>
         <button class="btn is-primary mp-find" data-act="mpFind" data-sound="confirm">${ico('play')}<span><b>Find match</b><small class="mp-pick"></small></span></button>
       </footer>
     </div>`;
 }
 
-export function paintMp(root, { tab, sel }) {
-  const r = resolveSelection(tab, sel);
+export function paintMp(root, { tab, sel, hardcore = false }) {
+  const r = resolveSelection(tab, sel, { hardcore });
+  const hc = root.querySelector('.mp-hc');
+  if (hc) { const on = hardcore && HARDCORE_TABS.includes(tab); hc.classList.toggle('on', on); hc.setAttribute('aria-pressed', String(on)); }
   for (const b of root.querySelectorAll('.mp-pl')) b.classList.toggle('on', b.dataset.id === sel.playlist);
   for (const b of root.querySelectorAll('.mp-mode')) b.classList.toggle('on', !sel.playlist && sel.modes.includes(b.dataset.id));
   const find = root.querySelector('.mp-find');

@@ -406,17 +406,26 @@ export function sndOf(view) {
 export const spectate = {
   pick: null,          // The teammate chosen by tapping, or null for the first one alive.
   any: false,          // Battle royale or extraction, squad out and Spectate chosen: anyone still alive can be watched (squad by squad).
+  // Control (js/sim/ctl.js): dead with your side's respawns spent this round, you watch whoever is still up, your own
+  // side first (a tap on the wait plate cycles, js/ui/mode-hud.js), then anyone once your side is all down.
+  ctlOut(view, me) {
+    const o = view?.obj?.kind === 'ctl' ? view.obj : view?.points?.obj?.kind === 'ctl' ? view.points.obj : null;
+    return !!o && o.state === 'live' && !!me && !me.alive && (o.lives?.[me.team] ?? 1) <= 0;
+  },
   // The id to watch, or null when there is nothing to spectate (alive, between rounds' freeze, not S&D, team wiped).
   target(view, localId) {
     const snd = sndOf(view);
     // Extraction: only with the squad's lives spent, or once lifted out (js/sim/extract.js).
     const ex = view?.obj?.ex ? view.obj : view?.points?.obj?.ex ? view.points.obj : null;
     // Search and Destroy between rounds, or a battle royale squad member who is out (js/sim/br.js).
-    if ((!snd && !view?.br && !ex) || snd?.state === 'freeze' || view.phase === 'ended') return null;
+    const ctlView = view?.obj?.kind === 'ctl' || view?.points?.obj?.kind === 'ctl';
+    if ((!snd && !view?.br && !ex && !ctlView) || snd?.state === 'freeze' || view.phase === 'ended') return null;
     const players = view.players;
     let me = null;
     for (let i = 0; i < players.length; i++) if (players[i].id === localId) { me = players[i]; break; }
     if (!me || me.alive) return null;
+    const ctl = ctlView && this.ctlOut(view, me);
+    if (ctlView && !ctl) return null;
     if (ex && !me.out && (ex.squads?.find(s => s.team === me.team)?.lives ?? 0) > 0) return null;
     let first = null;
     for (let i = 0; i < players.length; i++) {
@@ -425,7 +434,7 @@ export const spectate = {
       if (p.id === this.pick) return p.id;
       first ??= p.id;
     }
-    if (first === null && this.any && (view.br || ex)) {
+    if (first === null && ((this.any && (view.br || ex)) || ctl)) {
       for (let i = 0; i < players.length; i++) {
         const p = players[i];
         if (!p.alive || p.id === localId || p.air === 1 || p.ai) continue;     // Extraction: squads, not the AI patrols.
@@ -442,7 +451,7 @@ export const spectate = {
     const me = view.players.find(p => p.id === localId);
     let list = view.players.filter(p => me && p.team === me.team && p.alive && p.id !== localId);
     const ex = view?.obj?.ex || view?.points?.obj?.ex;
-    if (!list.length && this.any && (view.br || ex)) list = view.players.filter(p => p.alive && p.id !== localId && p.air !== 1 && !p.ai).sort((a, b) => a.team - b.team);
+    if (!list.length && ((this.any && (view.br || ex)) || this.ctlOut(view, me))) list = view.players.filter(p => p.alive && p.id !== localId && p.air !== 1 && !p.ai).sort((a, b) => a.team - b.team);
     if (!list.length) return null;
     const i = Math.max(0, list.findIndex(p => p.id === now));
     let j = (i + step + list.length) % list.length;

@@ -112,7 +112,6 @@ const CSS = `
 .br-map-side h3 { margin: 0; font: 400 24px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .br-map-side p { margin: 0; font: 12px/1.35 var(--f-body); color: var(--c-haze); }
 .br-map-side .br-jump { position: static; transform: none; }
-.br-map-close { height: 36px; border: 0; padding: 0 14px; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); background: rgba(42,51,61,.95); box-shadow: var(--hud-edge); }
 .hud.br-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
 .hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
 /* Hands: both guns and fists as three slots over the ammo readout, and the ammo pouch (rounds for guns not in hand). */
@@ -191,7 +190,6 @@ export class BrHud {
           <h3 class="br-map-title">Drop map</h3>
           <p class="br-map-note"></p>
           <button class="br-jump br-jump-map" data-tap="1" hidden>JUMP<small>Leave the transport</small></button>
-          <button class="br-map-close" data-tap="1">Close map</button>
         </div>
       </div>`;
     hud.el.appendChild(el);
@@ -223,12 +221,12 @@ export class BrHud {
     act(this.jumpBtn, () => this.#jump());
     act(this.jumpMap, () => this.#jump());
     act(this.takeBtn, () => { if (this.takeId !== null) this.cmd?.('take', this.takeSlot >= 0 ? { item: this.takeId, slot: this.takeSlot } : { item: this.takeId }); });
-    act($('.br-map-close'), () => this.toggleMap(false));
     act($('.br-spec-next'), () => { if (this.view) { spectate.cycle(this.view, this.view.localId, 1); this.c.out = null; } });
     act($('.br-spec-squad'), () => { if (this.view) { spectate.cycle(this.view, this.view.localId, 1, true); this.c.out = null; } });
     act($('.br-spec'), () => { spectate.any = true; this.c.out = null; });
     act($('.br-leave'), () => this.hud.brLeaveCb?.());
-    this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl) this.toggleMap(false); });
+    // Aboard (and while boarding) the drop map stays up until you jump; afterwards a tap outside it closes it.
+    this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl && !this.dropLock) this.toggleMap(false); });
     // A tap on the map marks a spot for the squad (a landing zone before the drop).
     this.mapCanvas.addEventListener('click', e => {
       e.stopPropagation();
@@ -266,6 +264,7 @@ export class BrHud {
     this.c = {};
     this.pings = []; this.leader = null; this.leaderAt = -99; this.calledFinal = false;
     this.mapManual = false;
+    this.dropLock = false;
     this.base = null;
     this.toggleMap(true, true);
     this.pips.innerHTML = '<i></i>'.repeat(BR.phases.length);
@@ -273,7 +272,7 @@ export class BrHud {
     if (!this.mmWired) {
       this.mmWired = true;
       mm.setAttribute('data-tap', '1');
-      mm.addEventListener('click', () => { if (this.on) this.toggleMap(!this.mapOpen); });
+      mm.addEventListener('click', () => { if (this.on && !this.dropLock) this.toggleMap(!this.mapOpen); });
     }
   }
 
@@ -305,8 +304,9 @@ export class BrHud {
     const outside = me.alive && !air && Math.hypot(me.x - br.circle.x, me.z - br.circle.z) > br.circle.r;
     if (c.outside !== outside) { c.outside = outside; this.outsideEl.hidden = true; this.circleEl.classList.toggle('outside', outside); c.circleS = null; }
 
-    // Map: up by itself during boarding and the flight, until you jump or close it.
+    // Map: up by itself during boarding and the flight, until you jump (there is no close button).
     const wantAuto = (view.phase === 'warmup' || air === 1) && me.alive;
+    this.dropLock = wantAuto && !c.mapDismissed;
     if (wantAuto && !this.mapOpen && !c.mapDismissed) this.toggleMap(true, true);
     if (!wantAuto && this.mapAuto) this.toggleMap(false);
     if (this.mapOpen) this.#drawBigMap(view, me);

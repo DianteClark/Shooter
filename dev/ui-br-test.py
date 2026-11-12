@@ -57,13 +57,31 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_function(f'{G}.match?.interp.newest?.br', timeout=30000)
     await pg.wait_for_timeout(2500)
     await shot('02-dropmap')
+    # The drop map has no Close button and stays up until you jump: a tap on the backdrop or the minimap leaves it up.
+    if await pg.locator('.br-map-close').count(): failures.append(f'{vw}: the drop map still has a Close map button')
+    await ev("(() => { const m = document.querySelector('.br-map'); m.dispatchEvent(new MouseEvent('click', { bubbles: true })); document.querySelector('.minimap').click(); })()")
+    await pg.wait_for_timeout(300)
+    if await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: the drop map closed before the jump')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
     await shot('03-flight')
     await pg.locator('.br-jump-map').click()
+    # An app switch mid-glide (ROADMAP 25): frames stop, the page hides and comes back. The match carries on from where it
+    # was (no catch-up burst), and every squadmate lands and goes its own way.
+    await ev("""(() => { window.__raf = window.requestAnimationFrame; window.__q = []; window.requestAnimationFrame = f => { window.__q.push(f); return 0; };
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); })()""")
+    t_hidden = await ev(f'{G}.match.sim.time')
+    await pg.wait_for_timeout(3000)
+    await ev("""(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange'));
+      window.requestAnimationFrame = window.__raf; for (const f of window.__q) window.__raf(f); })()""")
+    if await ev(f'{G}.match.sim.time') - t_hidden > 0.5: failures.append(f'{vw}: the match ran on while the page was hidden')
     await pg.wait_for_timeout(2200)
     await shot('04-glide')
     await pg.wait_for_function(f'{G}.match.brAir === 0', timeout=40000)
     await pg.wait_for_timeout(600)
+    try:
+        await pg.wait_for_function(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); return m.sim.players.every(p => p.team !== me.team || !p.brAir); }})()", timeout=8000)
+    except Exception:
+        failures.append(f'{vw}: squadmates still in the air after the app switch')
     # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
     await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 999; }})()")
     # Loot: walk (teleport) over the nearest few items, then stand by a ground gun.
@@ -153,7 +171,10 @@ async def run(browser, vw, vh, failures, errors):
     pings = await ev(f"{G}.match.hud.brHud.pings.length")
     if pings < 1: failures.append(f'{vw}: a tap on the map put no ping')
     await shot('11-fullmap')
-    await pg.locator('.br-map-close').click()
+    # After the drop a tap outside the map closes it.
+    await ev("document.querySelector('.br-map').dispatchEvent(new MouseEvent('click', { bubbles: true }))")
+    await pg.wait_for_timeout(300)
+    if not await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: a tap outside the full map did not close it')
     # The end: every other squad finished off on the host.
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       for (let k = 0; k < 3; k++) for (const p of sim.players) if (p.team !== me.team && p.alive) {{ p.brAir = 0; sim._damage(p, me, 999, me.ps.weapon, 10); }} }})()""")

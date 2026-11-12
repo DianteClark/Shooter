@@ -112,7 +112,7 @@ in `BR` (js/shared/modes.js).
   random line), `rooms` (late holds), `assets/maps/<id>-overview.jpg` (drop and full map). Any map with `modes`
   including `br` gets `brduo` and `brsolo` too (js/shared/map.js). `brtest` (js/shared/maps/brtest.js, hidden) is the
   small stand-in used by `node dev/sim-br.mjs --map=brtest` and `?brtest` in the picker.
-- Tests: `node dev/sim-br.mjs` (units, then quads, duos and solos on Frontier: one winner inside 12 minutes, loot, plates,
+- Tests: `node dev/sim-br.mjs` (units, then quads, duos and solos on Frontier: one winner inside 14.5 minutes, loot, plates,
   downs, revives, wipes, tick budget, snapshot bytes), `python3 dev/ui-br-test.py [port]` (picker to results in a
   browser, screenshots), `python3 dev/ui-br-net-test.py [port]` (two tabs over ?net=local: one squad, guns to the guest,
   loot mirror, drop and rejoin).
@@ -164,3 +164,53 @@ in `BR` (js/shared/modes.js).
   (`Match.leaveNow`) goes to results at once (no banner, `results.early`: a loss, your place, squads still in listed as
   "In"); a guest's phone just stops following; a host with other people in the room keeps simulating the match, drawing
   nothing (`headless`), until it ends for them (Rematch waits for it; going to the title ends it, as leaving a room does).
+
+## Owner sweep (ROADMAP item 25)
+- Drop screen: no Close map button. The drop map stays up until you jump (js/ui/br-hud.js; dev/ui-br-test.py checks
+  that the button is gone).
+- Flight lines (`flightLine` in js/sim/br.js): 40% of lines cross the middle, 35% a third and 25% run near an edge, on
+  either side. A line with too little land under it is pulled in toward the centre until it has enough. Enough means a
+  chord of at least 70% of the map, and at least 40% of the named places (4 or more) within glide reach. The line comes
+  from the seed, and guests decode it from the snapshot as before. `node dev/sim-br.mjs --flight`: 60 seeds, 22 middle,
+  17 thirds, 21 edges, every line over enough land.
+- Bot squadmates of a human (the owner jumped, switched apps, came back, and his three bots moved as he did). Cause:
+  in the glide a following bot steered for the human's position plus a 3 m offset every tick. On the ground it held
+  4 m off the human with the human's `aim`, so the squad copied every stroke of the stick. After an app switch this was
+  plain to see: the host stepped a frozen human and then a burst of catch-up. Now each bot glides to its own slot
+  about 7 m off the human and moves it only once the human's slot has drifted 8 m away. On the ground it loots within
+  22 m of the human and regroups past 34 m. Between times it holds its own spot round the human, re-picked once the
+  human has moved 12 m, and watches its own sector (`aim` on bot objectives now works, js/sim/bots.js). Its landing slot is
+  set from the human when it jumps, never from the transport's start point. `Match` (js/game/match.js) also resets its
+  frame clock and catch-up on `visibilitychange` and lets go of the held input, so coming back is not a burst of
+  stale steps. `node dev/sim-br.mjs --follow` checks four seeds with a 1.5 s freeze after the jump: bots glide in step
+  with the human on 2% of ticks, walk with them on 14% of ticks and copy their aim on 4%.
+- Healing: medkits only in BR (no regen; extraction keeps it). Medkits are half again as common, and bots heal by need
+  and detour for a medkit when hurt.
+- Pacing (the owner's match was over by the second circle). Changes:
+  - Calmer early bots. By circle phase, any bot picks fights from 40/55/75/85/90/100% of its sight (`PHASE_SIGHT`) and
+    notices someone not shooting at 20/40/60/75/85/100% of its usual rate (`PHASE_NOTICE`, `BotBrain.noticeK`).
+  - A looting bot sees 45/60/80% (`LOOT_SIGHT`).
+  - Heard fights are joined less (`JOIN_FIGHT` 0.03-0.1).
+  - Fewer hot drops (`HOT_DROP` 2-4%) and wider drop spacing (`DROP_GAP` 120 m).
+  - Squads' holds keep 40 m apart (`HOLD_GAP`).
+  - Circles (js/shared/modes.js `BR.phases`): the first two come sooner (waits 90 and 75 s, were 130 and 110). The
+    later ones are a little wider (26/19/13/8% of the map, were 18/11/6/3%) and held a little longer, so several squads
+    fit in them. 795 s of circle (was 825).
+
+  Measured with `node dev/sim-br.mjs --pacing=8 --modes=br` and `--pacing=6 --modes=brduo,brsolo`, seeds 101 + 7k,
+  Frontier. Phase 4 is the fifth circle.
+
+  | | Mean length | Deaths in first 3 min | Squads at phase 3/4/5/6 starts |
+  |---|---|---|---|
+  | Quads, before | 10.5 min (9.3-11.1) | 52% | 3.6 / 1.9 / 0.0 / 0.0 |
+  | Quads, after | 11.9 min (10.7-12.4) | 41% | 6.0 / 5.0 / 3.8 / 1.6 |
+  | Duos, before | 10.8 min | 27% | 6.2 / 1.5 / 0.7 / 0.0 |
+  | Duos, after | 12.3 min | 30% | 10.8 / 6.7 / 3.8 / 2.2 |
+  | Solos, before | 11.2 min | 22% | 6.2 / 4.0 / 0.3 / 0.0 |
+  | Solos, after | 11.8 min | 40% | 14.2 / 8.5 / 4.7 / 1.8 |
+
+  Bot-only matches end at 11-12.5 min, when the sixth and seventh circles leave no room. Matches with humans, who
+  rarely play to the end, run longer. The full `node dev/sim-br.mjs` checks a 10.5-15 min mean, at most 45% early
+  deaths, and 3 or more squads at phase 4 and 2 or more at phase 5, over 12 matches (now 11.3 min, 35%, 6.1 and 3.0).
+  After the dev merge (signature attachments) quads measured 12.2 min, 46% early, and 5.6/4.8/3.8/2.1 squads; duos
+  12.1 min, 28%, 10.7/6.8/3.8/2.2; solos 12.3 min, 38%, 12.3/6.8/3.5/2.8.

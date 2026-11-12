@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: '1111-21', date: '2026-11-11', title: 'A cleaner match HUD',
+    build: '1111-23', date: '2026-11-11', title: 'A cleaner match HUD',
     items: [
       'The weapon and ammo panel now sits up by the top corner, clear of the aim stick, on every iPhone size.',
       'Battle royale and extraction: each teammate is one tidy row with their name, a health bar and a thin plates bar. Downed shows red with a down mark, out is greyed. Longer names fit.',
@@ -12,6 +12,30 @@ export const CHANGELOG = [
       'The FPS readout is now one small line in the bottom corner, so it no longer covers the contract tracker or anything else.',
       'Kill feed rows always stay inside their box: long names are shortened, and the words (like "was infected") stay readable.',
       'New HUD size option (Small, Normal, Large) in Options.',
+    ],
+  },
+  {
+    build: '1111-22', date: '2026-11-11', title: 'Controllers and voice chat',
+    items: [
+      'Play with a controller: PlayStation, Xbox and iPhone (MFi) controllers work on iPhone and Android. Left stick moves, right stick aims, triggers aim and fire, and every action has a button, including reload and melee.',
+      'Menus work with a controller too: the d-pad moves, A or Cross picks, B or Circle goes back, the shoulder buttons switch tabs.',
+      'The on-screen sticks hide while you use a controller and come back as soon as you touch the screen.',
+      'Options > Controller: change any button, set the stick deadzone and aim sensitivity, or invert the right stick.',
+      'Voice chat: choose open mic or hold to talk in Options. Talk with friends in the lobby before the match, not only in it.',
+      'Mute any one player from the lobby or the scoreboard, and see who is talking by the mic beside their name.',
+    ],
+  },
+  {
+    build: '1111-21', date: '2026-11-11', title: 'Battle royale and modes sweep',
+    items: [
+      'Battle royale: the drop map stays up until you jump. The Close map button is gone.',
+      'The transport flies a different line each match: through the middle, across a third or near an edge, always over plenty of land.',
+      'Bot squadmates no longer copy your moves after you switch apps and come back. They glide to their own spot, loot near you and watch their own side.',
+      'Battle royale health only comes back with medkits. Medkits are more common, and bots heal when they need to.',
+      'Calmer battle royale openings: bots loot and move before they pick fights, and get bolder as the circle closes. The first circles come in sooner and the late ones leave more room, so more squads reach the endgame.',
+      'One Hardcore switch at the bottom of the Multiplayer screen turns on Hardcore for every mode it fits, in matches and in rooms you host.',
+      'Control: once your side is out of lives, you watch the players still in.',
+      'Infected: survivor bots hold several spots in small groups and move when the infected close in. The infected spread out and come at them from the sides.',
     ],
   },
   {
