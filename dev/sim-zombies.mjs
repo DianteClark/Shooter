@@ -13,8 +13,12 @@
 //                migration keeps round, gates and points; the save keeps a per-map record through an export code
 //   determinism  two sims with one seed agree tick for tick
 //   perf         a round-20 horde (24 live, brutes and runners) on each map: host tick cost and per-guest snapshot size
+//   ashgrove     the purpose-built map (graph layout): areas, the gate loop, dead ends, reserved economy spots; the power
+//                switch gates the perk machines (dark until thrown, free, synced to guests and kept by a migration); a
+//                bot throws it solo after round 2 and not with two humans; the boss rises in the Burial Field when it is
+//                open (an ordinary riser when not); determinism
 import { Sim, buildRoster } from '../js/sim/sim.js';
-import { MAPS } from '../js/shared/map.js';
+import { MAPS, MAP_IDS } from '../js/shared/map.js';
 import { NavGrid } from '../js/sim/nav.js';
 import { MODES, modeFitsMap, mapModes } from '../js/shared/modes.js';
 import { ZM, ZM_MAP_IDS, ZM_TEAM, roundCount, roundHp, roundMix, isBossRound, zmLayout, placeZmWalls, clearZmWalls, bandOpen, zmUsable } from '../js/shared/zombies.js';
@@ -73,7 +77,7 @@ ok(JSON.stringify(ZM_MAP_IDS.slice().sort()) === JSON.stringify(MODES.zm.maps.sl
 section('layout');
 for (const id of ZM_MAP_IDS) {
   const map = MAPS[id], L = zmLayout(map);
-  ok(L.doors.length === L.def.cuts.length, `${id}: one gate per cut (${L.doors.length})`);
+  ok(L.doors.length === (L.graph ? map.zm.gates.length : L.def.cuts.length), `${id}: one gate per ${L.graph ? 'declared gate' : 'cut'} (${L.doors.length})`);
   ok(L.machines.length === 4 && new Set(L.machines.map(m => m.perk)).size === 4, `${id}: four perk machines`);
   ok(L.wallBuys.filter(w => w.band === L.start).length >= 2, `${id}: two wall-buys in the start band`);
   ok(L.boxSpots.length >= 2, `${id}: crate spots ${L.boxSpots.length}`);
@@ -93,8 +97,11 @@ for (const id of ZM_MAP_IDS) {
     const got = b.cells.filter(k => open[k]).length;
     ok(got >= b.cells.length * 0.97, `${id}: band ${b.i} reachable with the gates open (${got}/${b.cells.length})`);
   }
-  const spots = [...L.wallBuys, ...L.machines, ...L.boxSpots];
-  ok(spots.every(p => open[nav.idx(p.x, p.z)]), `${id}: every wall-buy, machine and crate spot on reachable floor`);
+  const spots = [...L.wallBuys, ...L.machines, ...L.boxSpots, ...(L.power ? [L.power] : [])];
+  // On reachable floor: the spot's own cell, or (a spot drawn close against its wall) one within a metre of it.
+  const onFloor = p => { for (let dz = -1; dz <= 1; dz += 0.5) for (let dx = -1; dx <= 1; dx += 0.5) if (open[nav.idx(p.x + dx, p.z + dz)] && !nav.blocked[nav.idx(p.x + dx, p.z + dz)]) return true; return false; };
+  ok(spots.every(onFloor), `${id}: every wall-buy, machine and crate spot on reachable floor`);
+  ok(spots.every(p => p.band >= 0 && p.band < L.bands.length), `${id}: every placement in an area`);
   ok(L.wallBuys.every(w => Math.hypot(w.wx - w.x, w.wz - w.z) < 1.3), `${id}: wall-buys against a wall`);
   clearZmWalls(map);
   ok(!map.walls.some(w => w.zm), `${id}: clearZmWalls leaves the map clean`);
@@ -361,20 +368,158 @@ section('wire');
   ok(JSON.stringify(sanitizeSave({ zmBest: { neon: -3, __proto__: 5, ruins: 1e9 } }).zmBest) === '{"ruins":999}', 'records sanitised');
 }
 
+// ---- Ashgrove Halt: the purpose-built map ----
+section('ashgrove');
+{
+  const map = MAPS.ashgrove, L = zmLayout(map);
+  const { zmDoorStand, syncZmDoors, reblockNav, ZM_PERKS } = await import('../js/shared/zombies.js');
+  const area = id => L.bands.findIndex(b => b.id === id);
+  ok(map.zmOnly && map.hidden && !MAP_IDS.includes('ashgrove') && mapModes(map).join() === 'zm', 'Graveyard Shift only: hidden, hosts zm alone');
+  ok(L.graph && L.bands.length === 6 && L.bands.every(b => b.cells.length > 150), `six areas, all with floor (${L.bands.map(b => b.cells.length)})`);
+  ok(L.bands[L.start].id === 'halt' && L.doors.length === 7, 'starts in the Halt, seven gates');
+  // The loop: Halt, Goods Yard, Churchyard, Burial Field, Crossing Lane, back to the Halt; the Pump Yard off two sides.
+  const joins = (x, y) => L.doors.some(d => (d.a === area(x) && d.b === area(y)) || (d.a === area(y) && d.b === area(x)));
+  ok(['halt', 'goods', 'church', 'field', 'lane', 'halt'].every((x, i, a) => i === 0 || joins(a[i - 1], x)), 'the gates make a loop');
+  ok(joins('church', 'pump') && joins('lane', 'pump'), 'the Pump Yard opens from the Churchyard and the Lane');
+  ok(L.power && L.power.band === area('pump'), 'the power switch is in the Pump Yard');
+  ok(L.boss && L.boss.band === area('field') && L.boss.spots.length >= 3 && L.boss.spots.every(p => L.band[L.cellAt(p.x, p.z)] === L.boss.band), 'boss spots in the Burial Field');
+  ok(L.bands[area('field')].cells.length >= 400, `the boss arena is roomy (${L.bands[area('field')].cells.length} m2)`);
+  ok(L.boxSpots.length >= 3 && L.boxSpots.length <= 4 && new Set(L.boxSpots.map(b => b.band)).size === L.boxSpots.length, 'three or four crate spots, in different areas');
+  ok(L.machines.length === 4 && L.wallBuys.length >= 8 && L.bands.every(b => L.risers[b.i].length >= 4), 'machines, wall-buys and spawn windows everywhere');
+  const R0 = L.reserved;
+  ok(R0.bench && R0.terminal && R0.armour && R0.exfil && R0.traps?.length >= 2 && R0.traps.length <= 3, 'economy spots reserved (bench, terminal, armour, 2-3 traps, exfil)');
+  ok([R0.bench, R0.terminal, R0.armour, R0.exfil, ...R0.traps].every(p => p.band >= 0 && p.note), 'every reserved spot in an area, with a note');
+  // Dead ends: the lamp room, the crypt and the coal stage each have one way in (a flood from inside with that one
+  // doorway blocked never gets out).
+  placeZmWalls(map, (1 << L.doors.length) - 1);
+  const nav = new NavGrid(map);
+  for (const [name, inside, door] of [['lamp room', [4, 4], [4.5, 9]], ['crypt', [28, 4], [28.5, 9]], ['coal stage', [73, 42], [72, 37.5]]]) {
+    const saved = nav.blocked.slice();
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -1; dz <= 1; dz++) nav.blocked[nav.idx(door[0] + dx, door[1] + dz)] = 1;
+    const seen = reach(nav, inside[0], inside[1]);
+    let n = 0; for (let k = 0; k < seen.length; k++) n += seen[k];
+    ok(n > 10 && n < 100, `${name}: a dead end (${n} cells behind its one doorway)`);
+    nav.blocked.set(saved);
+  }
+  clearZmWalls(map);
+  // Gate stands on both sides.
+  ok(L.doors.every(d => Object.keys(d.stand).length === 2), 'every gate has a stand point on each side');
+  ok(zmDoorStand(L, 0, L.doors[0]) && !zmDoorStand(L, 0, L.doors[2]), 'zmDoorStand: only from an open side');
+
+  // Power: perks dark until the switch is thrown; the switch costs nothing; guests see it; a migration keeps it.
+  const sim = makeSim('ashgrove', 61);
+  toLive(sim);
+  const R = sim.rules, me = R.crew[0];
+  for (const p of R.crew) if (p.bot) p.bot.update = () => [];
+  R.plan = () => {}; R._crewPlan = null;
+  ok(R.power === 0 && sim.rules.view().power === 0, 'the power starts off');
+  const mercy = L.machines.find(m => m.perk === 'mercy');
+  me.ps.x = mercy.x; me.ps.z = mercy.z; me.zm.pts = 9000;
+  const u0 = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(u0?.kind === 'perk' && u0.off && !u0.ok, 'a machine shows dark with the power off');
+  ok(!sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && me.zm.perks.length === 0 && me.zm.pts === 9000, 'a dark machine sells nothing');
+  me.ps.x = L.power.x; me.ps.z = L.power.z;
+  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me)) === null || zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.kind !== 'power', 'the switch is out of reach while the Pump Yard is shut');
+  for (const d of L.doors) if (d.a === area('lane') && d.b === area('pump') || d.a === area('halt') && d.b === area('lane')) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open);
+  const us = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(us?.kind === 'power' && us.ok && us.cost === 0, `the switch is offered (${us?.kind})`);
+  sim.drainEvents();
+  ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && R.power === 1 && me.zm.pts === 9000, 'throwing the switch is free');
+  ok(sim.drainEvents().some(e => e.t === 'zlights' && e.by === me.id), 'zlights event');
+  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.kind !== 'power', 'the switch is not offered again');
+  me.ps.x = mercy.x; me.ps.z = mercy.z;
+  ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && me.zm.perks.includes('mercy') && me.zm.pts === 9000 - ZM_PERKS.mercy.cost, 'with the power on the machine sells');
+  // Other maps: no switch, machines always on.
+  const n = makeSim('neon', 3);
+  ok(!n.rules.L.power && n.rules.power === 1, 'maps without a switch: power always on');
+  // Wire and migration.
+  const humans = [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }];
+  const roster = buildRoster(humans, { mode: 'zm', mapId: 'ashgrove', seed: 5 });
+  const host = new Sim({ roster, map: 'ashgrove', seed: 5, mode: 'zm' });
+  host.step(DT); toLive(host);
+  const map2 = { ...MAPS.ashgrove, walls: MAPS.ashgrove.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+  const guest = new Sim({ roster, map: map2, seed: 5, mode: 'zm' });
+  let view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  ok((view.obj ?? view.points.obj).power === 0, 'guest sees the power off');
+  host.rules.power = 1;
+  host.step(DT); host.drainEvents();
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  ok((view.obj ?? view.points.obj).power === 1 && guest.rules.power === 1, 'guest sees it on');
+  if (guest._restoreMode) {
+    guest.players.forEach((p, i) => { const v = view.players[i]; p.alive = v.alive; p.ps.x = v.x; p.ps.z = v.z; });
+    guest._restoreMode(view);
+    ok(guest.rules.power === 1, 'a migration keeps the power on');
+  }
+  clearZmWalls(MAPS.ashgrove);
+}
+{
+  // A bot throws the power: solo with bots, from round 3, the Pump Yard open (or the gates on the way paid for).
+  const sim = makeSim('ashgrove', 71, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, me = R.crew.find(p => !p.bot);
+  me.spawnProtect = 1e9;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.zm) p.zm.pts = 6000; }
+  R._startRound(3);
+  R.spawnT = 999;
+  let by = null;
+  run(sim, 90, e => { if (e.t === 'zlights') by = e.by; });
+  const flipper = R.crew.find(p => p.id === by);
+  ok(R.power === 1 && flipper?.bot, `a bot teammate throws the power after round 2 (${by})`);
+  // Not with two humans, and not before round 3.
+  const s2 = makeSim('ashgrove', 72, [{ id: 'a', name: 'A', team: 0 }, { id: 'b', name: 'B', team: 0 }]);
+  toLive(s2);
+  for (const p of s2.rules.crew) { p.spawnProtect = 1e9; if (p.zm) p.zm.pts = 6000; }
+  s2.rules._startRound(3); s2.rules.spawnT = 999;
+  run(s2, 60);
+  ok(s2.rules.power === 0, 'with two humans the bots leave the switch to them');
+  const s3 = makeSim('ashgrove', 73, [{ id: 'a', name: 'A', team: 0 }]);
+  toLive(s3);
+  for (const p of s3.rules.crew) { p.spawnProtect = 1e9; if (p.zm) p.zm.pts = 6000; }
+  s3.rules._startRound(2); s3.rules.spawnT = 999;
+  run(s3, 40);
+  ok(s3.rules.power === 0, 'not in rounds 1 and 2');
+  for (const s of [sim, s2, s3]) clearZmWalls(s.map);
+}
+{
+  // Boss rounds: the boss rises in the Burial Field when it is open, at an ordinary riser when it is not.
+  const { syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  for (const fieldOpen of [true, false]) {
+    const sim = makeSim('ashgrove', 81);
+    toLive(sim);
+    const R = sim.rules, L = R.L;
+    for (const p of R.crew) if (p.bot) p.bot.update = () => [];
+    R.plan = () => {}; R._crewPlan = null;
+    const field = L.bands.findIndex(b => b.id === 'field');
+    for (const d of L.doors) if (fieldOpen || (d.a !== field && d.b !== field)) R.open |= 1 << d.i;
+    syncZmDoors(sim.map, R.open);
+    for (const d of L.doors) reblockNav(sim.nav, sim.map, d);
+    R.fields.clear();
+    R._startRound(10);
+    for (let k = 0; k < 20 && R.bossSeat < 0; k++) { R.spawnT = 0; R._stepSpawns(DT); }
+    const boss = sim.players[R.bossSeat];
+    const inField = boss && L.band[L.cellAt(boss.ps.x, boss.ps.z)] === field;
+    ok(boss?.alive && boss.zk === 3 && inField === fieldOpen, `boss round, field ${fieldOpen ? 'open: rises in the Burial Field' : 'shut: rises elsewhere'} (${boss?.ps.x.toFixed(1)}, ${boss?.ps.z.toFixed(1)})`);
+    clearZmWalls(sim.map);
+  }
+}
+
 // ---- Determinism ----
 section('determinism');
 {
   const sig = sim => JSON.stringify([sim.tick, sim.rules.round, sim.rules.killed, sim.rules.crew.map(p => [p.zm.pts, Math.round(p.ps.x * 100), Math.round(p.ps.z * 100)]),
     sim.rules.horde.map(p => (p.alive ? [Math.round(p.ps.x * 100), Math.round(p.ps.z * 100), Math.round(p.hp)] : 0))]);
-  const a = makeSim('foundry', 77), b = makeSim('foundry', 77);
-  let same = true;
-  for (let t = 0; t < (QUICK ? 40 : 80) && same; t++) { run(a, 1); run(b, 1); same = sig(a) === sig(b); }
-  ok(same, 'same seed, same match');
+  for (const id of ['foundry', 'ashgrove']) {
+    const a = makeSim(id, 77), b = makeSim(id, 77);
+    let same = true;
+    for (let t = 0; t < (QUICK ? 40 : 80) && same; t++) { run(a, 1); run(b, 1); same = sig(a) === sig(b); }
+    ok(same, `${id}: same seed, same match`);
+  }
 }
 
 // ---- Performance: a round-20 horde ----
 section('perf');
-for (const id of QUICK ? ['neon'] : ZM_MAP_IDS) {
+for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) {
   const sim = makeSim(id, 99);
   toLive(sim);
   const R = sim.rules;
