@@ -5,7 +5,7 @@ import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { BR } from '../js/shared/modes.js';
 import { SIM_HZ, MAX_HP, WEAPON_IDS, WEAPON_CATEGORY } from '../js/shared/constants.js';
-import { BR_KIND } from '../js/sim/br.js';
+import { BR_KIND, flightLine } from '../js/sim/br.js';
 import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
 const STEP = 1 / SIM_HZ;
@@ -254,7 +254,49 @@ function migration(mode, seed, atS) {
   check(gi === hi, `a guest's loot mirror follows the new host (${gi}/${hi})`);
 }
 
+// ---- Flight lines (ROADMAP 25): middle, thirds and edges, always over enough land, deterministic from the seed ----
+function flightUnits() {
+  console.log('flight lines');
+  const W = MAP.width, H = MAP.height, pois = MAP.br?.pois ?? [];
+  const bands = [0, 0, 0];
+  let landOk = 0, n = 0, same = 0, edgeSeed = null;
+  for (let seed = 1; seed <= 60; seed++) {
+    const a = makeSim('br', seed), b = makeSim('br', seed), p = a.br.plane;
+    if (['fx', 'fz', 'tx', 'tz'].every(k => p[k] === b.br.plane[k])) same++;
+    const dx = (p.tx - p.fx) / p.len, dz = (p.tz - p.fz) / p.len;
+    const off = Math.abs((W / 2 - p.fx) * dz - (H / 2 - p.fz) * dx) / W;
+    bands[off < 0.1 ? 0 : off < 0.22 ? 1 : 2]++;
+    if (off > 0.24 && edgeSeed === null) edgeSeed = seed;
+    // Land under it: places within glide reach of the line, and the stretch of it over the map.
+    const near = pois.filter(q => Math.abs((q.x - p.fx) * dz - (q.z - p.fz) * dx) < 110).length;
+    let inside = 0;
+    for (let f = 0; f <= 1; f += 0.01) { const x = p.fx + (p.tx - p.fx) * f, z = p.fz + (p.tz - p.fz) * f; if (x >= 0 && x <= W && z >= 0 && z <= H) inside += p.len * 0.01; }
+    if (near >= Math.min(pois.length, Math.max(4, Math.ceil(pois.length * 0.4))) && inside >= 0.68 * W) landOk++;
+    n++;
+  }
+  console.log(`  lines by lane over ${n} seeds: middle ${bands[0]}, thirds ${bands[1]}, edges ${bands[2]}`);
+  check(same === n, 'the same seed flies the same line');
+  check(bands[0] >= n * 0.2 && bands[1] >= n * 0.15 && bands[2] >= n * 0.12, 'lines cross the middle, the thirds and near the edges');
+  check(landOk === n, `every line crosses enough land and places (${landOk}/${n})`);
+  // A line squeezed toward the corner of a map with its places in the middle is pulled in over them.
+  const mid = [0, 1, 2, 3, 4, 5].map(i => ({ x: 180 + i * 8, z: 200 }));
+  const fl = flightLine(400, 400, Math.PI / 4, 0.99, 0.99, mid);
+  check(Math.abs(fl.off) * 400 < 110, `an edge line is pulled in over the places (${fl.off.toFixed(2)} of the width)`);
+  // An edge line: bot squads still land spread over the places along it, and the guest sees the same line.
+  const sim = makeSim('br', edgeSeed), guest = makeSim('br', edgeSeed);
+  while (sim.time < 70 && sim.players.some(p => p.brAir)) { sim.step(STEP); sim.drainEvents(); }
+  const view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor(sim.players[0].id))), sim.players[0].id);
+  check(Math.abs(view.br.plane.fx - sim.br.plane.fx) < 1 && Math.abs(view.br.plane.tz - sim.br.plane.tz) < 1, 'a guest decodes the same line');
+  const landed = sim.players.filter(p => p.alive && !p.brAir);
+  const spots = new Set([...sim.br.plans.values()].map(pl => pl.poi?.id));
+  const onMap = landed.every(p => p.ps.x > 0 && p.ps.x < W && p.ps.z > 0 && p.ps.z < H);
+  check(landed.length >= 30 && onMap, `edge line (seed ${edgeSeed}): everyone lands on the map (${landed.length})`);
+  check(spots.size >= 5, `edge line: bot squads spread over ${spots.size} places`);
+}
+
+if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
 squadUnits();
+flightUnits();
 if (!PACING) { migration('br', 21, 150); migration('br', 22, 330); }
 units();
 const modes = QUICK ? ['br'] : ['br', 'brduo', 'brsolo'];

@@ -182,6 +182,37 @@ export function land(ps, map) {
   for (let i = 0; i < 6; i++) resolveCircle(map, ps, 0.45);
 }
 
+// The transport's line for heading `a` (radians), with `u` and `lane` uniform draws in [0, 1): 40% of lines cross the
+// middle (within 8% of the map's width of the centre), 35% a third (13-20%), 25% near an edge (24-32%), on either side.
+// A line that would leave too little land under it (a chord under 70% of the width, or fewer than 40% of the named
+// places within GLIDE_REACH of it, at least 4) is pulled in toward the centre until it does not.
+const LANE_BANDS = [[0.4, 0, 0.08], [0.35, 0.13, 0.2], [0.25, 0.24, 0.32]];
+const GLIDE_REACH = 110;
+export function flightLine(W, H, a, u, lane, pois = []) {
+  let band = LANE_BANDS[LANE_BANDS.length - 1], acc = 0;
+  for (const b of LANE_BANDS) { acc += b[0]; if (lane < acc) { band = b; break; } }
+  const side = u < 0.5 ? -1 : 1, v = (u < 0.5 ? u : u - 0.5) * 2;
+  let off = side * (band[1] + (band[2] - band[1]) * v) * W;
+  const ca = Math.cos(a), sa = Math.sin(a), half = Math.hypot(W, H) / 2 + BR.planeOver;
+  const need = Math.min(pois.length, Math.max(4, Math.ceil(pois.length * 0.4)));
+  for (let i = 0; i < 12; i++) {
+    const cx = W / 2 - sa * off, cz = H / 2 + ca * off;
+    // Land under the line: the chord of the map rectangle (slab clip), and the places within glide reach.
+    let t0 = -half, t1 = half;
+    for (const [p, d, lo, hi] of [[cx, ca, 0, W], [cz, sa, 0, H]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) t1 = t0 - 1; continue; }
+      const ta = (lo - p) / d, tb = (hi - p) / d;
+      t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+    }
+    let near = 0;
+    for (const q of pois) if (Math.abs((q.x - cx) * sa - (q.z - cz) * ca) < GLIDE_REACH) near++;
+    if ((t1 - t0 >= 0.7 * Math.min(W, H) && near >= need) || Math.abs(off) < 1) break;
+    off *= 0.8;
+  }
+  const cx = W / 2 - sa * off, cz = H / 2 + ca * off;
+  return { from: { x: cx - ca * half, z: cz - sa * half }, to: { x: cx + ca * half, z: cz + sa * half }, off: off / W };
+}
+
 // A downed player's stick: a crawl, no trigger, no sprint, no slide, no equipment.
 export function downedInput(input) {
   input.mx *= BR.crawl; input.mz *= BR.crawl;
@@ -202,16 +233,14 @@ export class BrRules {
     this.authority = false;          // Set on the first host step; a guest's copy only mirrors.
     const rng = mulberry32((seed ^ 0x6b7a11) >>> 0);
     this.lootRng = rng;
-    // Flight line: the map's own, or across the middle third at a random heading.
+    // Flight line: the map's own, or a random heading through the middle, a third or near an edge (flightLine).
     const W = map.width, H = map.height;
     let from, to;
     if (def.drop) { from = def.drop.from; to = def.drop.to; }
     else {
-      const a = rng() * Math.PI * 2, off = (rng() - 0.5) * 0.3 * W;
-      const cx = W / 2 - Math.sin(a) * off, cz = H / 2 + Math.cos(a) * off;
-      const half = Math.hypot(W, H) / 2 + BR.planeOver;
-      from = { x: cx - Math.cos(a) * half, z: cz - Math.sin(a) * half };
-      to = { x: cx + Math.cos(a) * half, z: cz + Math.sin(a) * half };
+      // Two draws from the loot rng as before (the loot table is unchanged); the lane comes from its own rng.
+      const a = rng() * Math.PI * 2, u = rng();
+      ({ from, to } = flightLine(W, H, a, u, mulberry32((seed ^ 0x2f1a5c) >>> 0)(), def.pois ?? []));
     }
     this.plane = { fx: from.x, fz: from.z, tx: to.x, tz: to.z, len: Math.hypot(to.x - from.x, to.z - from.z), f: 0 };
     this.t = 0;                      // Seconds since the transport set off.
