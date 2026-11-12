@@ -9,7 +9,7 @@
 //   squad     each squadmate's plates and health, down and out marks
 //   down      the downed overlay: bleed bar, revive progress, the self-revive button
 //   out       eliminated: placement, and who you are watching (Rebound: the redeploy countdown)
-//   rebound   Rebound's note under the top chips: redeploys on until circle N, then off
+//   rebound   Rebound's note at the foot of the squad column: redeploys on until circle N, then over
 //   map       the drop map before and during the flight (places, flight line, transport) and the full map on a tap of
 //             the minimap: circle, next circle, squad.
 import { BR, MODES, RB, brPhases, isRebound } from '../shared/modes.js';
@@ -569,7 +569,7 @@ export class BrHud {
     }
   }
 
-  // Rebound: under the top chips, whether a death still means a redeploy and until which circle.
+  // Rebound: at the foot of the squad column, whether a death still means a redeploy and until which circle.
   #reboundNote(view, br) {
     const on = this.rebound && view.phase !== 'ended';
     const live = on && br.phase < RB.redeployEnd && br.state !== 'final';

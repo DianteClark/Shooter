@@ -241,7 +241,7 @@ results and XP are battle royale's own; the numbers that differ are `RB` in js/s
   Redeploy); the guest's own inventory block carries its countdown (`view.br.inv.redeploy`, seconds); `view.br.area`,
   `view.br.rebound`, `view.br.phases`. Events `{t:'brwait', id, secs}` and `{t:'brredeploy', id, by, x, z}`. Host
   migration restarts a cut-short wait at 10 s.
-- HUD (js/ui/br-hud.js): a note under the circle chips, "Redeploys on: they end at circle 5", then "Redeploys over";
+- HUD (js/ui/br-hud.js): a note as the last row of the squad column, "Redeploys on until circle 5", then "Redeploys over";
   the out panel says "Redeploying in N" with a bar while you watch a squadmate; notices when you or a squadmate are back.
 - Bots: squads land closer together (`RB_DROP_GAP` 110 m), settle in for 60 s, join heard fights at 0.6x BR's rate but
   from the second circle; a squad with someone waiting to land, and the last three squads, go calm (no third-partying,
