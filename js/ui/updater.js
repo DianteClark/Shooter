@@ -49,12 +49,13 @@ export class Updater {
     const show = !!this.latest && this.canShow();
     if (show && !this.btn) this.btn = this.#build();
     if (this.btn) this.btn.hidden = !show;
-    // Under the title's tagline, where the screen is empty at every phone size.
-    const sub = show && document.querySelector('.wm-sub');
-    if (sub) {
-      const r = sub.getBoundingClientRect();
-      this.btn.style.left = `${Math.round(r.left)}px`;
-      this.btn.style.top = `${Math.round(r.bottom + 8)}px`;
+    // Centred just above the Multiplayer button, where every phone size has room.
+    const hero = show && document.querySelector('.tl-hero');
+    if (hero) {
+      const r = hero.getBoundingClientRect(), h = this.btn.offsetHeight || 32;
+      this.btn.style.left = `${Math.round(r.left + r.width / 2)}px`;
+      this.btn.style.top = `${Math.round(r.top - h - 8)}px`;
+      this.btn.style.transform = 'translateX(-50%)';
     }
   }
 

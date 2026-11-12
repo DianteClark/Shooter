@@ -429,4 +429,26 @@ const LIST = [
     { rpm: 1.3, moveMult: 1.03, damage: 0.78, range: 0.88 }),
 ];
 
-export const V11_ATTACHMENTS = Object.fromEntries(LIST.map(a => [a.id, a]));
+// Signatures are a reward (weapon level 7, 25 or the mastery ladder), so each must feel clearly better than the stock
+// part it replaces, not a sideways trade (owner, 1111: the Flywheel's signature read worse than its base part). Every
+// signature's strengths are pushed further and its costs halved; the identity (what it leans into) stays the same.
+// Damage and fire rate grow less, so kill breakpoints move only where a signature already aims to move them.
+const BETTER = { adsSpread: -1, hipSpread: -1, bloomPerShot: -1, patternAmp: -1, adsTime: -1, sprintToFire: -1, swapTime: -1,
+  reload: -1, heatCool: -1, magazine: 1, range: 1, moveMult: 1, adsMoveMult: 1, turnCap: 1, heatRounds: 1, penetrate: 1,
+  blastRadius: 1, bloomRecover: 1, reserve: 1, damage: 1, rpm: 1, settleShots: -1, settleFrom: -1, spinupShots: -1,
+  spinupFrom: 1, chargeTime: -1, burstGap: -1, boltKick: 1, adsGate: 1, lunge: 1, falloffMin: 1, heatLockout: -1 };
+export const SIG_GAIN = 1.5, SIG_GAIN_CORE = 1.25, SIG_COST = 0.5;
+function boostSignature(a) {
+  if (a.kind !== 'sig') return a;
+  const mods = {};
+  for (const [k, v] of Object.entries(a.mods)) {
+    const dir = BETTER[k];
+    if (typeof v !== 'number' || !dir) { mods[k] = v; continue; }
+    const helps = (v - 1) * dir > 0;
+    const scale = helps ? (k === 'damage' || k === 'rpm' ? SIG_GAIN_CORE : SIG_GAIN) : SIG_COST;
+    mods[k] = +Math.max(0.2, 1 + (v - 1) * scale).toFixed(3);
+  }
+  return { ...a, mods, base: a.mods };
+}
+
+export const V11_ATTACHMENTS = Object.fromEntries(LIST.map(boostSignature).map(a => [a.id, a]));

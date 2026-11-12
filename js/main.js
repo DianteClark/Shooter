@@ -53,6 +53,7 @@ import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySiz
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Updater, BUILD } from './ui/updater.js';
+import { maybeShowWhatsNew } from './ui/whatsnew.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -1723,6 +1724,6 @@ showTitle({ arrive: true });
 const offeredTutorial = !invite && maybeOfferTutorial();
 if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
-else if (!offeredTutorial) maybeInstallPrompt();
+else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 
 
