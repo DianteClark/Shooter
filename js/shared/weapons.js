@@ -217,7 +217,7 @@ export const WEAPONS = {
   // Slow to get going, then a wall of fire until the barrel gives out. Swings like a gate: guard an angle.
   lmg: {
     id: 'lmg', name: 'Bulwark', role: 'Suppress', auto: true,
-    damage: 29, rpm: 625, magazine: 100, reserve: 200, reload: 4.5, range: 52,
+    damage: 29, rpm: 610, magazine: 100, reserve: 200, reload: 4.5, range: 52,
     falloff: { start: 18, end: 38, min: 0.72 }, penetrate: 0.75,
     adsSpread: 0.014, hipSpread: 0.095, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.7,
     spinup: { shots: 9, from: 0.68 },
@@ -288,7 +288,7 @@ export const WEAPONS = {
     id: 'battle', name: 'Foreman', role: 'Pressure', auto: false,
     damage: 39, rpm: 315, magazine: 20, reserve: 100, reload: 2.1, range: 52,
     falloff: { start: 22, end: 36, min: 0.7 }, penetrate: 0.75,
-    adsSpread: 0.004, hipSpread: 0.085, bloomPerShot: 0.21, bloomRecover: 2.6, bloomScale: 1.3,
+    adsSpread: 0.004, hipSpread: 0.085, bloomPerShot: 0.19, bloomRecover: 2.6, bloomScale: 1.3,
     pattern: { amp: 0.006, freq: 0.8, ramp: 2, drift: 0.0012 }, turnCap: 10, headMax: 2.4,
     adsTime: 0.24, sprintToFire: 0.22, swapTime: 0.38, moveMult: 0.97, adsMoveMult: 0.55,
     pellets: 1, kickCam: 0.7, tracerWidth: 1.2, longshot: 27,
@@ -350,7 +350,7 @@ export const WEAPONS = {
   semisnipe: {
     id: 'semisnipe', name: 'Kestrel', role: 'Quickscope', auto: false,
     damage: 104, rpm: 64, magazine: 6, reserve: 36, reload: 2.5, range: 58,
-    falloff: { start: 20, end: 28, min: 0.6 }, penetrate: 0.8,
+    falloff: { start: 18, end: 28, min: 0.6 }, penetrate: 0.8,
     adsSpread: 0.002, hipSpread: 0.14, bloomPerShot: 0.55, bloomRecover: 1.5, bloomScale: 1,
     adsGate: 0.6, boltKick: 0.3, turnCap: 7,
     adsTime: 0.19, sprintToFire: 0.26, swapTime: 0.44, moveMult: 0.98, adsMoveMult: 0.6,

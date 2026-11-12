@@ -127,8 +127,8 @@ const LIST = [
 
   sig('s_gyro', 'drumsmg', 'grip', 'Hopper Gyro', 25,
     'Keeps a 64-round pan on target to the last round.',
-    'Much less bloom and sway. Heavier on foot, slower out of a sprint.',
-    { bloomPerShot: 0.7, patternAmp: 0.8, moveMult: 0.96, sprintToFire: 1.15 }, { look: { grip: 'vertical' } }),
+    'Much less bloom and sway. Slower out of a sprint.',
+    { bloomPerShot: 0.7, patternAmp: 0.8, sprintToFire: 1.15 }, { look: { grip: 'vertical' } }),
 
   // ---------------- Shotgun ----------------
   sig('s_breachpump', 'shotgun', 'grip', 'Breach Pump', 27,
@@ -163,8 +163,8 @@ const LIST = [
     { rpm: 1.6, hipSpread: 1.15, adsSpread: 1.1, reload: 1.15 }, { look: { grip: 'wrap' } }),
   sig('s_buckball', 'coach', 'mag', 'Buck and Ball', M1,
     'Fewer, heavier pellets for the ambush that starts a little further out.',
-    'Six heavy pellets that carry further and fly tighter aimed. Less forgiving from the hip.',
-    { range: 1.25, adsSpread: 0.85, hipSpread: 1.1 },
+    'Six heavy pellets that carry further and fly tighter aimed. A little less damage in all.',
+    { range: 1.25, adsSpread: 0.85 },
     { set: { pellets: 6, damage: 30 }, notes: ['Six heavy pellets'], look: { mag: 'speedmag' } }),
 
   sig('s_sabot', 'slug', 'mag', 'Sabot Slugs', 27,
@@ -186,8 +186,8 @@ const LIST = [
 
   sig('s_boxtwelve', 'magshot', 'mag', 'Box Twelve', 26,
     'Twelve shells in a box: the shotgun that never pauses.',
-    'Half again as many shells. Slower reload, heavier, slower to aim.',
-    { magazine: 1.5, reload: 1.25, moveMult: 0.96, adsTime: 1.06 }, { look: { mag: 'extmag' } }),
+    'Half again as many shells. Slower reload, slower to aim.',
+    { magazine: 1.5, reload: 1.25, adsTime: 1.06 }, { look: { mag: 'extmag' } }),
 
   sig('s_needlechoke', 'flechette', 'barrel', 'Needle Choke', 26,
     'Flechettes keep their bite much further down the sights.',
@@ -206,7 +206,7 @@ const LIST = [
   conv('k_assaultbox', 'lmg', 'mag', 'Assault Box', 22,
     'A Bulwark you can walk with: no wind-up, half the belt.',
     'No wind-up, much lighter and quicker to aim and swing. Half the rounds, overheats sooner, wider from the hip.',
-    { magazine: 0.5, heatRounds: 0.75, moveMult: 1.08, adsTime: 0.85, turnCap: 1.3, hipSpread: 1.1 },
+    { magazine: 0.5, heatRounds: 0.75, moveMult: 1.05, adsTime: 0.85, turnCap: 1.2, hipSpread: 1.1 },
     { set: { spinup: undefined }, notes: ['No wind-up'], look: { mag: 'speedmag' } }),
 
   sig('s_droversling', 'saw', 'grip', 'Drover Sling', 14,
@@ -290,8 +290,8 @@ const LIST = [
     { damage: 1.1, adsGate: 1.25, range: 0.8, reload: 1.2 }, { look: { mag: 'speedmag' } }),
   sig('s_recurve', 'crossbow', 'grip', 'Recurve Limbs', M1,
     'The silent hunter reaching across a lane.',
-    'Kills from further away. Slower to aim, heavier on foot.',
-    { range: 1.25, adsTime: 1.1, moveMult: 0.97 }, { look: { grip: 'vertical' } }),
+    'Kills from further away. Slower to aim.',
+    { range: 1.25, adsTime: 1.1 }, { look: { grip: 'vertical' } }),
 
   sig('s_lockstep', 'twinshot', 'grip', 'Lockstep Sear', 19,
     'Both rounds of the pair land before the target moves.',
@@ -445,6 +445,7 @@ export const SIG_TRIM = {
   s_prespun: { gain: 1 },        // Bulwark: starting fire rate +30% (boosted +45%) took it to 1.36 mirrored.
   s_overdrive: { core: 1 },      // Millrace: fire rate +10% (boosted +12.5%) with Light Barrels: 1.30.
   s_looplever: { core: 1 },      // Prospector: fire rate +20% (boosted +25%): the biggest duel gain of any signature.
+  s_hotchamber: { core: 1 },     // Kestrel: fire rate +25% (boosted +31%) on the top stock sniper: 1.26-1.32.
 };
 function boostSignature(a) {
   if (a.kind !== 'sig') return a;
