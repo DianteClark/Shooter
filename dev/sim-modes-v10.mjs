@@ -329,7 +329,7 @@ for (const mode in WIRE) {
     if (mode !== 'inf') assert.deepEqual(nv.scores.slice(0, 2), gv.scores.slice(0, 2));
     if (mode === 'grind') assert.equal(next.tags.length, gv.tags.length);
     void g;
-    const evs = run(next, 200);
+    const evs = run(next, mode === 'oic' ? 500 : 200);   // OIC needs someone out of lives, which can take longer.
     assert.ok(count(evs, 'kill') > 0, 'play goes on');
     assert.ok(evs.some(OBJECTIVE[MODES[mode].rules]) || next.phase === 'ended', 'and so does the objective');
   });
