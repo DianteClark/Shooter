@@ -1100,3 +1100,22 @@
 #ui .gs-view > .gs-lvl { position: absolute; z-index: 2; left: 8px; right: 8px; bottom: 6px; margin: 0; padding: 4px 8px; pointer-events: none;
   background: linear-gradient(90deg, rgba(18,22,28,.82), rgba(18,22,28,.55) 70%, transparent); }
 #ui .gs-view > .gs-lvl .xp { flex: 1; max-width: 160px; }
+
+/* Changelog: Help > Updates and the What's new sheet (js/ui/whatsnew.js). */
+#ui .cl-list { display: flex; flex-direction: column; gap: var(--sp-3); grid-column: 1 / -1; }
+#ui .cl-entry { background: rgba(255,255,255,.04); border-radius: 10px; padding: 10px 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+#ui .cl-entry h4 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px; font: var(--fs-body)/1.2 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; }
+#ui .cl-entry h4 small { opacity: .55; font: 11px/1 ui-monospace, Menlo, monospace; letter-spacing: 0; text-transform: none; }
+#ui .cl-entry ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+#ui .cl-entry ul { list-style: disc; text-align: left; }
+#ui .cl-entry li { text-transform: none; letter-spacing: 0; font-family: var(--f-body); text-align: left; font-size: var(--fs-small, 13px); line-height: 1.35; opacity: .9; }
+#ui .whats-new { width: min(620px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; gap: 10px; }
+#ui .whats-new .wn-body { overflow-y: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+#ui .whats-new .sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#ui .whats-new .wn-note { opacity: .65; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+#ui .cl-entry li { display: list-item; list-style: disc outside; }
+#ui .cl-entry h4 { text-align: left; flex-wrap: wrap; justify-content: flex-start; }
+#ui .help-tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+#ui .help-tabs::-webkit-scrollbar { display: none; }
+#ui .help-tabs .seg { flex: none; }
+@media (max-width: 760px) { #ui[data-menu="help"] .help-tabs .seg b { display: none; } #ui[data-menu="help"] .help-tabs .seg.on b { display: inline; } }

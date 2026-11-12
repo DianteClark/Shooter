@@ -154,12 +154,16 @@ export function poolEntries(now = Date.now()) {
 /* ---------- Categories ---------- */
 const kdOf = e => (e.d ? e.kdk / e.d : e.kdk);
 const fmtInt = v => Math.round(v).toLocaleString('en-US');
+const fmtXp = v => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${Math.round(v / 1e3)}k`);
 export const CATEGORIES = [
-  { id: 'level', label: 'Level', icon: 'rank', value: e => e.prestige * MAX_LEVEL + e.level, tie: e => e.xp, fmt: (v, e) => `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}` },
+  // Prestige and level, then total XP: maxed players are told apart by what they have earned, and the row shows it.
+  { id: 'level', label: 'Level', icon: 'rank', value: e => e.prestige * MAX_LEVEL + e.level, tie: e => e.xp,
+    fmt: (v, e) => `${e.prestige ? `P${e.prestige} · ` : ''}${e.level}${e.prestige >= MAX_PRESTIGE && e.level >= MAX_LEVEL && e.xp ? ` · ${fmtXp(e.xp)} XP` : ''}` },
   { id: 'kills', label: 'Kills', icon: 'skull', value: e => e.k, fmt: fmtInt },
   { id: 'kd', label: 'K/D', icon: 'aim', value: kdOf, eligible: e => e.kdm >= KD_MIN_MATCHES, tie: e => e.kdm, fmt: v => v.toFixed(2),
     rule: `At least ${KD_MIN_MATCHES} matches` },
-  { id: 'wins', label: 'Wins', icon: 'cup', value: e => e.w, fmt: fmtInt },
+  // Every win: team modes and battle royale, so a player who mostly plays battle royale is not ranked under one with fewer.
+  { id: 'wins', label: 'Wins', icon: 'cup', value: e => e.w + (e.brw ?? 0), fmt: fmtInt },
   { id: 'brwins', label: 'BR wins', icon: 'crown', value: e => e.brw, fmt: fmtInt },
   { id: 'brtop5', label: 'BR top 5', icon: 'star', value: e => e.br5, fmt: fmtInt },
   { id: 'extract', label: 'Extractions', icon: 'exit', value: e => e.ex, fmt: fmtInt },

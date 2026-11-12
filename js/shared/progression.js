@@ -1236,7 +1236,28 @@ export function blankSave() {
     extractions: 0,
     // Seasons and ranked (js/shared/seasons.js): the track, weekly sets, claimed rewards and the ranked block.
     season: blankSeasonState(),
+    // Graveyard Shift (docs/ZOMBIES.md): the most rounds survived, per map id. Appended; only ever goes up.
+    zmBest: {},
   };
+}
+
+// The Graveyard Shift record block: {mapId: rounds}, map ids as short ids, rounds 0..999.
+export function cleanZmBest(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const k of Object.keys(raw)) {
+    if (UNSAFE_KEYS.has(k) || !idText(k) || Object.keys(out).length >= 64) continue;
+    const n = count(raw[k], 999);
+    if (n > 0) out[k] = n;
+  }
+  return out;
+}
+// Records a run on a map: { best, before, fresh } (fresh when it beat the record). Mutates the save.
+export function recordZmBest(save, mapId, rounds) {
+  const best = save.zmBest ??= {};
+  const before = count(best[mapId], 999), n = count(rounds, 999);
+  if (idText(mapId) && n > before) best[mapId] = n;
+  return { best: Math.max(before, n), before, fresh: n > before && n > 0 };
 }
 
 // Pro counters: {perk: {stat: n}} for known perks and the stats their challenges use; finished perks as a list.
@@ -1289,6 +1310,7 @@ export function sanitizeSave(raw) {
   s.career = cleanCareer(raw.career, s.life);
   s.extractions = count(raw.extractions);
   s.season = cleanSeasonState(raw.season);
+  s.zmBest = cleanZmBest(raw.zmBest);
   return s;
 }
 
@@ -1383,6 +1405,8 @@ function pack(s) {
 function packTail(s) {
   const career = s.career && JSON.stringify(cleanCareer(s.career)) !== JSON.stringify(careerFromLife(s.life ?? {})) ? s.career : null;
   const season = s.season && !seasonStateEmpty(s.season) ? s.season : null;
+  // [19] Graveyard Shift records (appended): only when there is one, after whatever [17] and [18] say (null for nothing).
+  if (s.zmBest && Object.keys(s.zmBest).length) return [career, season, s.zmBest];
   if (season) return [career, season];
   return career ? [career] : [];
 }
@@ -1421,6 +1445,7 @@ function unpack(a) {
     pro, proDone: a[10], card: a[11],
     ...(a[17] && typeof a[17] === 'object' && !Array.isArray(a[17]) ? { career: a[17] } : {}),
     ...(a[18] && typeof a[18] === 'object' && !Array.isArray(a[18]) ? { season: a[18] } : {}),
+    ...(a[19] && typeof a[19] === 'object' && !Array.isArray(a[19]) ? { zmBest: a[19] } : {}),
   };
 }
 

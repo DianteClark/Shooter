@@ -159,7 +159,7 @@ test('signature mechanics move the gun they are made for', () => {
   const light = gaps(fire('rampar', { grip: 's_lightwheel' }, 0.6).shots), stock = gaps(fire('rampar', {}, 0.6).shots);
   assert.ok(light[0] < stock[0], `light flywheel ${light[0]} v ${stock[0]}`);
   // Long Belt: a longer belt. Bedded Receiver: settles in fewer rounds from a tighter start.
-  assert.equal(shooter('beltlmg', { mag: 's_longbelt' }).ammo[0], Math.round(90 * 1.45));
+  assert.equal(shooter('beltlmg', { mag: 's_longbelt' }).ammo[0], Math.round(90 * ATTACHMENTS.s_longbelt.mods.magazine));
   const bed = weaponDef(shooter('beltlmg', { grip: 's_bedded' }));
   assert.ok(bed.settle.shots < 15 && bed.settle.from < 4.5);
   // Capacitor Bank charges faster; Lockstep Sear packs the pair.

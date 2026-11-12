@@ -8,6 +8,7 @@ import { STREAKS, STREAK_DENY_TEXT, LETHALS, SCORE, PRO, normalizeLoadout } from
 import { GUN_LADDER, isBr, isEx, isFfa, MODES, modeRules, SND, CTF } from '../shared/modes.js';
 import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
+import { ZmHud } from './zm-hud.js';            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
@@ -419,6 +420,7 @@ export class HUD {
     this.#build();
     this.brHud = new BrHud(this);
     this.exHud = new ExHud(this);
+    this.zmHud = new ZmHud(this);
     this.modeHud = new ModeHud(this);
     this.#drawMapBase();
     this.reset();
@@ -428,6 +430,8 @@ export class HUD {
   onBrCommand(cb) { this.brHud.onCommand(cb); }
   // Extraction buttons (call exfil, take a contract at a phone).
   onExCommand(cb) { this.exHud.onCommand(cb); }
+  // Graveyard Shift's use button (a gate, a wall-buy, the crate, a perk machine).
+  onZmCommand(cb) { this.zmHud.onCommand(cb); }
 
   // A mode banner, for the modes' own layers (js/ui/mode-hud.js).
   banner(title, sub, duration, side) { this.#banner(title, sub, duration, side); }
@@ -677,6 +681,7 @@ export class HUD {
     this.ctf = this.mode === 'ctf';           // Capture the Flag: both flags' status, markers and the carrier's strip.
     this.br = isBr(mode);                     // Battle royale: its own layer replaces the scorebar and death screen.
     this.ex = isEx(mode);                     // Extraction: its own layer replaces the scorebar; respawns go on until the lives do.
+    this.zm = MODES[mode]?.rules === 'zm';    // Graveyard Shift: its own layer replaces the scorebar and death screen.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
@@ -693,7 +698,7 @@ export class HUD {
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
-    this.#sndControls(this.snd || this.br || this.ex);   // Battle royale and extraction have no scorestreaks either.
+    this.#sndControls(this.snd || this.br || this.ex || this.zm);   // Battle royale and extraction have no scorestreaks either.
     this.reset();
     const practice = mode === 'range' || !!training;
     this.#range.prepare(practice, { training: !!training });
@@ -702,9 +707,10 @@ export class HUD {
     this.#hideIntro();
     this.remeasured = false;
     // Battle royale opens on its drop map instead of the team card.
-    this.pendingIntro = intro && mode !== 'range' && !this.br && !this.ex ? { mapId, mode, roster, localId } : null;
+    this.pendingIntro = intro && mode !== 'range' && !this.br && !this.ex && !this.zm ? { mapId, mode, roster, localId } : null;
     this.brHud.prepare(this.br, { map: this.map, roster, localId, mode });
     this.exHud.prepare(this.ex, { map: this.map, roster, localId, mode });
+    this.zmHud.prepare(this.zm, { map: this.map, roster, localId, mode });
     if (this.br || this.ex) {
       const mine = TEAMS[roster.find(r => r.id === localId)?.team ?? 2]?.css ?? '#38b6ff';
       this.el.style.setProperty('--my-team', mine);
@@ -1569,6 +1575,7 @@ export class HUD {
     else if (this.br) this.brHud.update(view, me, dt);
     else {
       if (this.ex) this.exHud.update(view, me, dt);
+      if (this.zm) this.zmHud.update(view, me, dt);
       this.#updateDeath(me, c, view);
     }
     if (this.ctf) this.#updateCtf(view, me, c);
@@ -2482,6 +2489,7 @@ export class HUD {
       const e = events[i];
       if (this.br) this.brHud.onEvent(e, this.view);
       if (this.ex) this.exHud.onEvent(e, this.view);
+      if (this.zm) this.zmHud.onEvent(e, this.view);
       this.modeHud.onEvent(e, this.view);
       switch (e.t) {
         case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
@@ -2653,6 +2661,7 @@ export class HUD {
   #onKill(e) {
     const view = this.view;
     if (!view) return;
+    if (this.zm && this.zmHud.quietKill(e, view)) return;     // Graveyard Shift: the horde's deaths stay off the feed.
     const byP = view.players.find(p => p.id === e.by);
     const tgtP = view.players.find(p => p.id === e.target);
     const byName = byP?.name ?? '?';
@@ -2842,6 +2851,11 @@ export class HUD {
     }
     if (this.ex) {
       this.exHud.endBanner(this.endEl, winner, myTeam, view);
+      this.endEl.classList.add('show');
+      return;
+    }
+    if (this.zm) {
+      this.zmHud.endBanner(this.endEl, winner, myTeam, view);
       this.endEl.classList.add('show');
       return;
     }

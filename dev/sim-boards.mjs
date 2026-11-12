@@ -129,7 +129,7 @@ console.log('ranking');
   const ar = B.buildBoard({ me: meCard, friends: pals, cat: 'kills', view: 'around' });
   ok(ar.rows.length <= 2 * B.AROUND + 1 && ar.rows[ar.me].e.kind === 'me' && ar.rows[ar.me].rank === all.rows[all.me].rank, 'Around me: your rank with its neighbours', `${ar.rows.length} rows, rank ${ar.rows[ar.me].rank}`);
   const lvl = B.buildBoard({ me: { ...meCard, level: 50, prestige: 10, xp: 9e9 }, cat: 'level' });
-  ok(lvl.rows[0].e.kind === 'me' && lvl.rows[0].text === 'P10 · 50', 'level ranks prestige first', lvl.rows[0].text);
+  ok(lvl.rows[0].e.kind === 'me' && lvl.rows[0].text.startsWith('P10 · 50'), 'level ranks prestige first', lvl.rows[0].text);
   const wk = B.buildBoard({ me: meCard, friends: [{ id: 'Pold', at: 1, card: B.cleanCard({ v: 1, name: 'Old', wk: { key: 'W2020-01-06', k: 9999, w: 99 } }) }], cat: 'wkills', view: 'friends' });
   ok(wk.rows.find(r => r.e.id === 'Pold').value === 0, "a friend's card from an earlier week counts zero on the weekly boards");
   const pool = B.poolEntries(Date.now());

@@ -20,6 +20,7 @@ import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
+import { ZM } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
 import { getCamo } from '../shared/camos.js';
 import { performance } from '../shared/ranked.js';
 
@@ -231,6 +232,25 @@ export class MatchAwards {
       const before = EX_UNLOCKS.map(u => exUnlockStatus(u, Progress.lifetime()));
       ex = { extracted: pay.extracted, banked: pay.banked, lost: pay.lost, life: pay.life, before, lives: squad?.lives ?? 0, me: !!me.out };
     }
+    // Graveyard Shift: the horde is not soldiers. Kills, headshots and medals pay the mode's own (smaller) lines, rounds
+    // survived pay, the guns earn a share of the usual weapon XP, and the map's best round goes into the save.
+    const zmObj = objOf(view)?.zm ? objOf(view) : null;
+    let zm = null;
+    if (zmObj && me) {
+      const mine = zmObj.crew?.find(c => c.id === me.id) ?? {};
+      const survived = Math.max(0, (zmObj.round ?? 1) - 1);
+      lines.length = 0;
+      lines.push(['Match played', MATCH_XP.played]);
+      if (this.kills) lines.push([`Undead put down x${this.kills}`, this.kills * ZM.xp.kill]);
+      if (this.headshots) lines.push([`Headshots x${this.headshots}`, this.headshots * ZM.xp.head]);
+      if (survived) lines.push([`Rounds survived x${survived}`, survived * ZM.xp.round]);
+      const bosses = Math.floor(survived / 10);
+      if (bosses) lines.push([`Bosses put down x${bosses}`, bosses * ZM.xp.boss]);
+      for (const b of Object.values(this.weapons)) b.xp = Math.round(b.xp * ZM.weaponXp);
+      let rec = { best: survived, before: 0, fresh: false };
+      try { rec = Progress.recordZm?.(this.mapId, survived) ?? rec; } catch (err) { console.error('zm record', err); }
+      zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '' };
+    }
     const exWon = ex ? ex.extracted : null;
     if (exWon !== null) { /* The Extracted line is the win. */ }
     else if (won) lines.push(['Win', MATCH_XP.win]);
@@ -259,7 +279,7 @@ export class MatchAwards {
     // Career totals for the leaderboards: kills and deaths as the scoreboard has them, a battle royale's placing, and
     // whether this player's squad got out of an extraction.
     const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
-    const career = { kills: me?.kills ?? this.kills, deaths: me?.deaths ?? 0, br: !!view?.br, place: brPlace, extracted: !!ex?.extracted };
+    const career = { kills: zm ? 0 : me?.kills ?? this.kills, deaths: zm ? 0 : me?.deaths ?? 0, br: !!view?.br, place: brPlace, extracted: !!ex?.extracted };     // The horde stays off the K/D boards.
     const life = { ...(tallied ?? this.tally.counts()) };
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
     const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted });
@@ -294,6 +314,7 @@ export class MatchAwards {
       ranked: season?.ranked ?? null,
       medals: { ...this.medals },
       ex,
+      zm,
       stats: {
         kills: this.kills, headshots: this.headshots, longshots: this.longshots, slideKills: this.slideKills,
         equipmentKills: this.equipKills, streakKills: this.streakKills, assists: this.assists,

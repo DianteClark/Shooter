@@ -87,7 +87,7 @@ on every push, keep 2% of weekly usage for bugs.
 20. Bug sweep (every mode and screen at both sizes, saves, friend lobbies) and a phone performance pass (with the
     owner's Performance overlay screenshots).
 21. DONE (seasons). Ranked: placements, divisions, seasonal resets, matched against the bot pool and friends. docs/SEASONS.md.
-22. Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
+22. DONE (1111-17). Seasons: date-driven, no server. Each ~6 weeks: free 100-tier reward track, weekly challenge sets, a featured
     mode/event, ranked reset, seasonal boards. Ship two seasons ahead per update, content date-locked; if updates stop,
     "Season Replay" rotates past seasons. Season 1 with the framework.
     DONE (seasons): docs/SEASONS.md. Season 1 Cold Iron (2026-11-16), Season 2 Signal Fire (2026-12-28), then Season
@@ -95,3 +95,25 @@ on every push, keep 2% of weekly usage for bugs.
 23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
 24. DONE (1111). Music: synthesised menu and match music. js/audio/music-synth.js (instruments, arrangements, offline render),
     js/audio/music.js (director: scenes, layers, stings; music.cue(...)). Options: Music slider, "In matches" switch.
+
+## Owner's wave (2026-11-11 evening), approved "do em all with confidence" (target: 80% of the week, keep 20% for fixes)
+25. BR and modes sweep (owner's notes): drop the "Close map" button on the BR drop screen; flight lines vary (edges as
+    well as the middle); bot squadmates must not copy the player's input after an app switch; BR heals with medkits only
+    (no regen; extraction keeps regen); calmer early bots (loot and rotate first) and somewhat shorter rings so matches
+    reach the late circles; one Hardcore switch on the playlist screen applying hardcore rules to every mode; Control
+    spectates the remaining players once your side is out of lives.
+26. DONE (zombies). Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
+    a boss every 10 rounds, on existing maps. Graveyard Shift on Night Market, Ruins and Foundry; docs/ZOMBIES.md.
+27. Resurgence BR: small map, fast circle, redeploy while any squadmate lives.
+28. Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
+29. Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
+30. Attachments wave 2: more attachments per gun, visible on the model.
+31. Gunfight 2v2: short rounds, the same random loadout for everyone, small maps.
+32. Finishing moves and an emote wheel.
+33. Daily challenges feeding season XP (alongside the weekly sets).
+34. Every phone: Android (Chrome/Samsung Internet) and all iPhone sizes and ages, with quality tiers picked per device,
+    touch and safe areas checked on both; an install guide in the game (Add to Home Screen on iOS Safari, Install app
+    on Android Chrome) with a plain explanation of where progress lives (on the phone, in the browser's storage for
+    this site; the save code is the backup; nothing is sent to a server; clearing site data or deleting the app
+    without a code loses it).
+35. Signature attachments read as clear upgrades: DONE (1111-18), strengths x1.5, costs halved.
