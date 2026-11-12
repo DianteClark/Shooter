@@ -10,7 +10,8 @@ const SIZE_MODE = { 4: 'br', 2: 'brduo', 1: 'brsolo' };
 
 export const cleanSquad = n => (SIZE_MODE[n] ? Number(n) : 4);
 // The mode a battle royale pick plays at this squad size; any other mode passes through.
-export const brMode = (mode, size) => (MODES[mode]?.br ? SIZE_MODE[cleanSquad(size)] : mode);
+// Rebound stays Rebound: quads at four, pairs otherwise (it has no solos; a redeploy needs a squadmate).
+export const brMode = (mode, size) => (!MODES[mode]?.br ? mode : MODES[mode].rebound ? (cleanSquad(size) === 4 ? 'rb' : 'rbduo') : SIZE_MODE[cleanSquad(size)]);
 
 // The segmented control. The host taps it (data-act="brSquad"); a guest sees the choice, fixed.
 export function squadMarkup(size, isHost) {
