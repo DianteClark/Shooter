@@ -4,6 +4,19 @@
 
 export const CHANGELOG = [
   {
+    build: '1111-21', date: '2026-11-11', title: 'Battle royale and modes sweep',
+    items: [
+      'Battle royale: the drop map stays up until you jump. The Close map button is gone.',
+      'The transport flies a different line each match: through the middle, across a third or near an edge, always over plenty of land.',
+      'Bot squadmates no longer copy your moves after you switch apps and come back. They glide to their own spot, loot near you and watch their own side.',
+      'Battle royale health only comes back with medkits. Medkits are more common, and bots heal when they need to.',
+      'Calmer battle royale openings: bots loot and move before they pick fights, and get bolder as the circle closes. The first circles come in sooner and the late ones leave more room, so more squads reach the endgame.',
+      'One Hardcore switch at the bottom of the Multiplayer screen turns on Hardcore for every mode it fits, in matches and in rooms you host.',
+      'Control: once your side is out of lives, you watch the players still in.',
+      'Infected: survivor bots hold several spots in small groups and move when the infected close in. The infected spread out and come at them from the sides.',
+    ],
+  },
+  {
     build: '1111-20', date: '2026-11-11', title: 'Zombies: Graveyard Shift',
     items: [
       'New co-op mode: Graveyard Shift. Hold off the undead round after round on Night Market, Ruins or Foundry. Find it under Multiplayer > Zombies.',
