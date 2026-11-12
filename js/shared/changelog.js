@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Weapon balance after the new attachments',
+    build: '1111-33', date: '2026-11-12', title: 'Weapon balance after the new attachments',
     items: [
       'Toned down: Kestrel (slower, one-shot range 18 m, a touch slower to aim), Bulwark, Millrace, Gantry, Tallyman, Kiln and Monolith (all fire a little slower).',
       'Toned up: Foreman (faster, steadier), Murmur (faster, keeps its damage a little further), Thistle and Railspike (faster), Trammel and Skitter (full damage a metre further).',
