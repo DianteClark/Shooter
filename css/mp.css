@@ -4,7 +4,8 @@
 /* ---- Tabs in the header ---- */
 #ui .menu .mp-bar { gap: var(--sp-3); }
 #ui .menu .mp-bar .bar-title { font-size: var(--fs-heading); flex: none; }
-#ui .mp-tabs { display: flex; gap: 2px; min-width: 0; }
+#ui .mp-tabs { display: flex; gap: 2px; min-width: 0; margin-left: auto; }
+#ui .mp-tabs .seg { flex: none; }
 #ui .menu .mp-tabs .seg { height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 10px; min-width: 0; text-align: left; }
 #ui .mp-tabs .seg .ico { height: 17px; color: var(--c-sodium); }
 #ui .mp-tabs .seg.on .ico { color: var(--c-sodium-ink); }
@@ -16,67 +17,114 @@
 #ui .mp-tabs .seg.soon .ico { color: var(--c-rail); }
 #ui .cu-side { margin-left: auto; min-height: 40px !important; height: 40px; padding: 0 var(--sp-3) !important; font-size: var(--fs-body) !important; }
 #ui .cu-side .ico { color: var(--c-sodium); }
+/* The tabs' player counts go first when the bar is tight: every tab stays in view up to the widest iPhones. */
+@media (max-width: 1000px) { #ui .mp-bar .mp-tabs .seg small { display: none; } #ui .menu .mp-bar .mp-tabs .seg { height: 36px; padding: 0 9px; gap: 5px; } }
 @media (max-width: 720px) {
   #ui .mp-tabs .seg small { display: none; }
   #ui .menu .mp-tabs .seg { padding: 0 7px; gap: 4px; }
   #ui .menu .mp-bar .bar-title { font-size: var(--fs-title); }
 }
 
-/* ---- Multiplayer ---- */
-#ui .mp { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(190px, .9fr) minmax(0, 1.5fr); grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2) var(--sp-3); }
-#ui .mp.mp-br { grid-template-columns: 1fr; }
-#ui .mp-lists, #ui .mp-modes-col { min-height: 0; display: flex; flex-direction: column; gap: 5px; }
-#ui .mp-h { flex: none; display: flex; align-items: center; gap: 6px; height: 16px; margin: 0; padding-bottom: 3px; box-shadow: inset 0 -1px 0 var(--c-line-hi); white-space: nowrap; overflow: hidden; }
-#ui .mp-h .ico { height: 13px; color: var(--c-sodium); }
-#ui .mp-h b { font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--trn-stencil); color: var(--c-chalk); }
-#ui .mp-h small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--trn-plate); color: var(--c-haze); }
-#ui .mp-pls { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+/* ---- Multiplayer ----
+   One scroller (.mp-body, native momentum) under the tabs and a fixed foot. Sections: a stencil head with a hazard tick
+   and a plate note, then an even grid of cards. Standard: Spotlight (Ranked, event, featured: a hazard band and an
+   eyebrow), Playlists, Modes. The big-card tabs (Battle Royale, Extraction, Zombies): one row of tall cards under group
+   heads, sized to fit the screen without scrolling. */
+#ui .mp { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+#ui .mp-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-4); padding: 2px 2px var(--sp-3); margin: -2px -2px 0; }
+#ui .mp-body.scroll-y { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 12px), transparent); }
+#ui .mp-body.scroll-y > * { flex-shrink: 0; }
+#ui .mp-sec { display: flex; flex-direction: column; gap: var(--sp-2); }
+#ui .mp-h { flex: none; display: flex; align-items: center; gap: 7px; min-width: 0; height: 18px; margin: 0; padding-bottom: 4px; box-shadow: inset 0 -1px 0 var(--c-line-hi); white-space: nowrap; overflow: hidden; }
+#ui .mp-h::before { content: ''; flex: none; width: 14px; height: 6px; background: var(--tex-hazard); background-size: 17px 17px; }
+#ui .mp-h .ico { flex: none; height: 13px; color: var(--c-sodium); }
+#ui .mp-h b { flex: none; font: 400 var(--fs-body)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-transform: uppercase; }
+#ui .mp-h small { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
+
+#ui .mp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--sp-2); }
+#ui .mp-grid.spot { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 #ui .mp-pl, #ui .mp-mode {
-  position: relative; display: grid; align-items: center; text-align: left; color: var(--c-chalk); min-width: 0;
+  position: relative; display: grid; align-items: center; min-width: 0; text-align: left; color: var(--c-chalk);
   background: linear-gradient(172deg, rgba(53,64,76,.94), rgba(33,40,49,.94)); box-shadow: var(--bevel), var(--edge);
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast);
 }
-#ui .mp-pl { flex: 1 1 0; min-height: 40px; max-height: 62px; grid-template-columns: 30px minmax(0, 1fr) 18px; gap: var(--sp-2); padding: 4px var(--sp-2) 4px var(--sp-3); }
-#ui .mp-pl-ico { display: grid; place-items: center; }
+#ui .mp-pl { min-height: 56px; grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: auto; gap: var(--sp-3); padding: 8px 30px 8px var(--sp-3); }
+#ui .mp-pl-ico, #ui .mp-pl-rk { display: grid; place-items: center; line-height: 0; }
 #ui .mp-pl-ico .ico { height: 22px; color: var(--c-sodium); }
-#ui .mp-pl-tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-#ui .mp-pl-tx b { font: 400 var(--fs-lead)/1 var(--f-stencil); letter-spacing: var(--trn-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#ui .mp-pl-tx small { font: 400 var(--fs-micro)/1.15 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#ui .mp-pl.feat { box-shadow: var(--bevel), inset 3px 0 0 var(--c-gold, var(--c-sodium)); }
-#ui .mp-pl.feat small { color: var(--c-sodium); text-transform: uppercase; }
-#ui .mp-tick { display: grid; place-items: center; width: 18px; height: 18px; font-style: normal; background: rgba(16,20,26,.5); box-shadow: inset 0 0 0 1.5px var(--c-line-hi); }
+#ui .mp-pl-tx { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#ui .mp-pl-tx b { font: 400 var(--fs-lead)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#ui .mp-pl-tx small { font: 400 var(--fs-micro)/1.2 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#ui .mp-pl-tx small u { text-decoration: none; }
+#ui .mp-tick { position: absolute; right: 8px; top: 8px; display: grid; place-items: center; width: 18px; height: 18px; font-style: normal; background: rgba(16,20,26,.5); box-shadow: inset 0 0 0 1.5px var(--c-line-hi); }
 #ui .mp-tick .ico { height: 12px; opacity: 0; color: var(--c-sodium-ink); stroke-width: 3; }
-#ui .mp-pl.on, #ui .mp-mode.on { box-shadow: var(--bevel), inset 0 0 0 2px var(--c-sodium); }
+#ui .mp-pl.on, #ui .mp-mode.on { box-shadow: var(--bevel), inset 0 0 0 2px var(--c-sodium); background: linear-gradient(172deg, rgba(74,62,44,.96), rgba(40,36,32,.96)); }
 #ui .mp-pl.on .mp-tick, #ui .mp-mode.on .mp-tick { background: var(--c-sodium); box-shadow: none; }
 #ui .mp-pl.on .mp-tick .ico, #ui .mp-mode.on .mp-tick .ico { opacity: 1; }
-#ui .mp-modes { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); grid-auto-rows: minmax(34px, 52px); gap: 5px; overflow-y: auto; align-content: start; }
+
+/* Spotlight: a hazard band on top and an eyebrow over the title (Ranked wears the player's rank badge). */
+#ui .mp-pl.rk, #ui .mp-pl.ev, #ui .mp-pl.feat { min-height: 64px; padding-top: 16px; grid-template-columns: 28px minmax(0, 1fr); }
+#ui .mp-pl.rk::before, #ui .mp-pl.ev::before, #ui .mp-pl.feat::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--tex-hazard); opacity: .9; }
+#ui .mp-pl.rk::before { background: repeating-linear-gradient(-45deg, var(--c-gold) 0 6px, var(--c-night) 6px 12px); }
+#ui .mp-pl.ev::before { background: repeating-linear-gradient(-45deg, #7cd8ff 0 6px, var(--c-night) 6px 12px); }
+#ui .mp-brow { position: absolute; left: var(--sp-3); top: 7px; font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-sodium); }
+#ui .mp-pl.rk .mp-brow { color: var(--c-gold); }
+#ui .mp-pl.ev .mp-brow, #ui .mp-pl.ev .mp-pl-ico .ico { color: #7cd8ff; }
+#ui .mp-pl.feat .mp-pl-ico .ico { color: var(--c-gold); }
+#ui .mp-pl.rk, #ui .mp-pl.ev, #ui .mp-pl.feat { box-shadow: var(--bevel), var(--edge); }
+#ui .mp-pl.rk.on, #ui .mp-pl.ev.on, #ui .mp-pl.feat.on { box-shadow: var(--bevel), inset 0 0 0 2px var(--c-sodium); }
+#ui .mp-pl.rk .mp-brow, #ui .mp-pl.ev .mp-brow, #ui .mp-pl.feat .mp-brow { top: 9px; }
+#ui .mp-pl.rk .mp-pl-tx, #ui .mp-pl.ev .mp-pl-tx, #ui .mp-pl.feat .mp-pl-tx { padding-top: 6px; }
+
+/* Modes: small even plates to tick. */
+#ui .mp-modes { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); grid-auto-rows: 44px; gap: var(--sp-1); }
 #ui .mp-mode { grid-template-columns: 18px minmax(0, 1fr) 16px; gap: 6px; padding: 3px 6px 3px 8px; }
 #ui .mp-mode .ico { height: 16px; color: var(--c-sodium); }
-#ui .mp-mode b { font: 400 11.5px/1.02 var(--f-stencil); letter-spacing: .02em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-#ui .mp-mode .mp-tick { width: 16px; height: 16px; }
-#ui .mp-br .mp-pls { flex-direction: row; gap: var(--sp-2); }
-#ui .mp-br .mp-pl { flex: 1 1 0; max-height: none; grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; justify-items: start; padding: var(--sp-3); }
-#ui .mp-br .mp-pl-ico .ico { height: 44px; }
-#ui .mp-br .mp-pl-tx b { font-size: var(--fs-heading); }
-#ui .mp-br .mp-tick { position: absolute; right: 10px; top: 10px; }
-#ui .mp-pl-tx em { font: 400 var(--fs-caption)/1.25 var(--f-body); font-style: normal; color: var(--c-chalk); opacity: .8; margin-top: 4px; white-space: normal; }
-#ui .mp-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--sp-3); height: 58px; }
-#ui .mp-note { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; margin: 0 auto 0 0; font: 400 var(--fs-caption)/1.25 var(--f-body); color: var(--c-haze); }
-#ui .mp-note .ico { height: 18px; color: var(--c-sodium); }
-#ui .mp-hc { flex: none; width: 210px; height: 100%; min-height: 0; grid-template-columns: 22px minmax(0, 1fr) 34px; gap: 6px; padding: 4px 8px; }
+#ui .mp-mode b { font: 400 11.5px/1.05 var(--f-stencil); letter-spacing: .02em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+#ui .mp-mode .mp-tick { position: static; width: 16px; height: 16px; }
+
+/* The big-card tabs: one row, the group heads on top of their own cards. */
+#ui .mp-grid.big { flex: 1; min-height: 0; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); gap: var(--sp-2); }
+#ui .mp-gh { min-width: 0; }
+#ui .mp-pl.big { min-height: 0; height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-items: start; gap: var(--sp-2); padding: var(--sp-4) var(--sp-3) var(--sp-3); overflow: hidden; }
+#ui .mp-pl.big .mp-pl-ico { justify-content: start; }
+#ui .mp-pl.big .mp-pl-ico .ico { height: 40px; }
+#ui .mp-pl.big .mp-pl-tx { align-self: stretch; min-height: 0; overflow: hidden; }
+#ui .mp-pl.big .mp-pl-tx b { font-size: var(--fs-heading); line-height: 1; }
+#ui .mp-pl.big .mp-pl-tx small { font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--tr-plate); }
+#ui .mp-pl-tx em { font: 400 var(--fs-caption)/1.3 var(--f-body); font-style: normal; color: var(--c-chalk); opacity: .82; margin-top: 2px; min-height: 0; overflow: hidden; }
+#ui .mp-pl.big .mp-tick { right: 10px; top: 10px; }
+#ui .mp[data-tab="br"] .mp-pl.big .mp-pl-tx b { font-size: 21px; }
+@media (max-width: 720px) {
+  #ui .mp[data-tab="br"] .mp-pl.big .mp-pl-tx b { font-size: var(--fs-title); }
+  #ui .mp-pl.big .mp-pl-ico .ico { height: 32px; }
+  #ui .mp-pl.big { padding: var(--sp-3) var(--sp-2) var(--sp-2) var(--sp-3); }
+}
+@media (max-height: 380px) { #ui .mp-pl-tx em { font-size: 10.5px; line-height: 1.25; } }
+
+/* The foot: what fills the seats, the Hardcore switch, Find match. */
+#ui .mp-foot { flex: none; display: flex; align-items: stretch; gap: var(--sp-3); height: 54px; padding-top: var(--sp-2); box-shadow: inset 0 1px 0 var(--c-line); }
+#ui .mp-note { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); margin: 0; font: 400 var(--fs-caption)/1.25 var(--f-body); color: var(--c-haze); }
+#ui .mp-note span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+#ui .mp-note .ico { flex: none; height: 18px; color: var(--c-sodium); }
+#ui .mp-hc { flex: none; width: 200px; height: 100%; min-height: 0; grid-template-columns: 22px minmax(0, 1fr) 34px; gap: 6px; padding: 4px 8px; }
 #ui .mp-hc b { font-size: var(--fs-body); }
 #ui .mp-hc small { font-size: 10px; line-height: 1.15; }
 #ui .mp-hc .mod-sw { width: 32px; height: 18px; }
 #ui .mp-hc .mod-sw::after { width: 12px; height: 12px; }
 #ui .mp-hc.on .mod-sw::after { transform: translateX(12px); }
 #ui .mp-hc:disabled { opacity: .4; }
-@media (max-width: 720px) { #ui .mp-hc { width: 150px; } #ui .mp-hc small { display: none; } }
-#ui .mp-find { height: 100%; width: 240px; gap: var(--sp-3); justify-content: flex-start; padding: 0 var(--sp-4); text-align: left; }
+#ui .mp-find { flex: none; height: 100%; width: 230px; gap: var(--sp-3); justify-content: flex-start; padding: 0 var(--sp-4); text-align: left; }
 #ui .mp-find span { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 #ui .mp-find b { font-size: 22px; }
 #ui .mp-find small { font: 400 var(--fs-caption)/1.1 var(--f-body); color: rgba(42,26,6,.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .mp-find:disabled { filter: saturate(.3) brightness(.7); }
+@media (max-width: 720px) {
+  #ui .mp-hc { width: 150px; } #ui .mp-hc small { display: none; }
+  #ui .mp-find { width: 196px; } #ui .mp-find b { font-size: 19px; }
+  #ui .mp-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  #ui .mp-modes { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+}
 
 /* ---- Matchmaking moment ---- */
 #ui .mp-search h2 { font-size: var(--fs-heading); }

@@ -14,6 +14,19 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1111-29', date: '2026-11-12', title: 'A cleaner Multiplayer screen and menu fixes',
+    items: [
+      'Leaderboards: players on the same level are ranked by their total XP instead of sharing a rank.',
+      'The Multiplayer screen is redone: clear tabs across the top, one smooth scrolling list, Ranked and today\'s featured playlist together in a Spotlight at the top, and the Hardcore switch and Find match in a tidy bar at the bottom.',
+      'Battle Royale lists its playlists side by side under Battle Royale and Rebound, so every name fits.',
+      'Help > Updates and every long Help page scroll smoothly again.',
+      'Leaderboards: big numbers fit. XP over a million reads 2.1M, and a maxed player\'s row shows their level over their XP.',
+      'Gunsmith camos sit in an even grid with space between them, each with its name underneath.',
+      'Options: rows no longer run into each other on smaller phones; a column scrolls when it is full.',
+      'Rebound: the map vote names the right playlist, and the redeploy messages fit on screen.',
+    ],
+  },
+  {
     build: '1111-28', date: '2026-11-12', title: 'Prestige and Master Prestige',
     items: [
       'Every prestige rank now brings its own camo for every gun, alongside its icon and calling card. Ranks you already hold have theirs waiting.',

@@ -1,4 +1,4 @@
-// How to play, as four tabs so nothing scrolls at 390 px tall. The Training button replays the guided match
+// How to play, in tabs; a long tab scrolls in the body (one native scroller, touch momentum). The Training button replays the guided match
 // (js/game/tutorial.js) whenever the player wants it. Everything here restates rules that live in the sim;
 // the streak section is the one players ask about most.
 import { STREAKS, STREAK_ROLE_NAME, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
@@ -24,7 +24,7 @@ const stat = (name, body) => `<div class="help-stat"><dt>${esc(name)}</dt><dd>${
 const PANELS = {
   updates: () => `<div class="cl-list">${changelogHtml()}</div>`,
   weapons: () => `
-    <dl class="help-stats scroll-y">
+    <dl class="help-stats">
       ${stat('Damage', 'Damage of one shot at close range. Shotguns show all pellets together: inside the first range number a pump or double-barrel kills in one shell if most of the fan lands, so put the middle of it on the body. Everyone has 100 health, which comes back on its own a few seconds after you stop taking hits.')}
       ${stat('Headshots', 'The head is a small zone at the centre of a player. <b>Aimed in</b>, a headshot kills in one hit with any gun. <b>From the hip</b> it does 1.6&times; damage instead. Marksman rifles and snipers kill with a headshot either way. Explosives have no headshots.')}
       ${stat('Fire rate', 'Shots per minute (RPM). Every gun fires while you hold the trigger, semi-autos and snipers included, at their own pace.')}
@@ -50,7 +50,7 @@ const PANELS = {
       ${stat('Conversion kits', `One slot that changes how a gun plays, at a real price. Marked <b>Kit</b> in the Gunsmith. ${Object.values(ATTACHMENTS).filter(a => a.kind === 'kit').map(a => `<b>${esc(a.name)}</b> (${esc(WEAPONS[a.weapons[0]].name)}): ${esc(a.for)}`).join(' ')}`)}
     </dl>`,
   gear: () => `
-    <dl class="help-stats scroll-y">
+    <dl class="help-stats">
       ${stat('How it works', 'One tactical and one lethal. Tap to throw where you aim, or hold and drag from the button to place it. Counts refill when you respawn. Devices left on the ground (mines, Claymores, Tripwires, Satchels, Sensors, Trophies, Medpacks, Decoys) can be <b>shot</b>; a Rampart takes a couple of magazines, or two grenades. Shock and Blackout fry them, a Trophy shoots down grenades.')}
       ${stat('Satchel', 'Throw it, then tap Lethal again: the button turns red and reads Detonate. It stays armed until it goes off, is shot, or a minute passes.')}
       ${Object.values(TACTICALS).map(gear('Tactical')).join('')}
@@ -65,7 +65,7 @@ const PANELS = {
       ${card('frag', 'Tactical and lethal', 'Tap to throw where you are aiming. Hold and drag from the button to set direction and distance: an arc shows where it lands. Drag back onto the button to cancel.', true)}
     </div>`,
   streaks: () => `
-    <div class="help-streaks scroll-y">
+    <div class="help-streaks">
       <div class="help-counters">${Object.values(STREAKS).sort((a, b) => a.cost - b.cost).map(s => `<span class="help-ctr role-${s.role}">${ico(s.id)}<b>${esc(s.name)}<em>${s.cost}</em></b><i>${esc(STREAK_ROLE_NAME[s.role] ?? '')}</i><small>${esc(s.counter ?? '')}</small></span>`).join('')}</div>
       <ol class="help-rules">
         <li>Kills score 100, headshots +25, assists 50. <b>Your score carries through death</b>, and streaks you already hold stay. Costs are high, so streaks still take real play.</li>
@@ -80,7 +80,7 @@ const PANELS = {
 
     </div>`,
   modes: () => `
-    <div class="help-grid scroll-y">
+    <div class="help-grid">
       ${card('mode:tdm', 'Team Deathmatch', 'First team to the kill limit wins.')}
       ${card('mode:kc', 'Kill Confirmed', 'Collect enemy tags to score. Grab your own team\'s to deny.')}
       ${card('mode:dom', 'Domination', 'Hold the three flags. More flags, faster points.')}
@@ -106,7 +106,7 @@ const PANELS = {
       ${card('ui:aim', 'Training', 'Custom, then <b>Training</b>: the firing range (dummies at marked distances), or any map with up to 12 bots. Switches for infinite ammo and no death; bots can stand, strafe, rush or play normally. A live damage and time-to-kill readout, and the <b>Armory</b> button swaps in any gun you own at once. Training never counts toward XP, mastery, challenges or stats.', true)}
     </div>`,
   tips: () => `
-    <div class="help-grid scroll-y">
+    <div class="help-grid">
       ${card('ui:eye-off', 'Stay off the radar', 'Firing marks you on the enemy minimap for a moment. A suppressor hides it.')}
       ${card('cat:LMG', 'Beat the big guns', 'LMGs turn slowly while firing and overheat. Flank them.')}
       ${card('flash', 'Equipment', `${Object.keys(TACTICALS).length} tacticals and ${Object.keys(LETHALS).length} lethals, each with a job and a counter: see the Gear tab. Counts refill when you respawn.`)}
@@ -125,7 +125,7 @@ export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }
   menu.el.dataset.screen = 'help';
   const training = onTutorial ? `<button class="btn is-primary help-tut" data-sound="confirm" data-act="helpTutorial">${ico('play')}<b>Training</b></button>` : '';
   menu.el.innerHTML = `
-    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
+    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs scroll-x">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
     <div class="help-body"></div>`;
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];
@@ -134,8 +134,15 @@ export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }
       if (!installed) { installed = installActions(install, () => { if (tab === 'install' && body.isConnected) body.innerHTML = installPanel(install); }); menu.on(installed.actions); }
       body.innerHTML = installPanel(install);
     } else body.innerHTML = PANELS[tab]();
+    // One scroller for every long tab: the body itself (native, momentum on iOS), back at the top on each tab. Install
+    // keeps its own two columns, the steps scrolling inside.
+    body.classList.toggle('scroll-y', tab !== 'install');
+    body.scrollTop = 0;
     stagger(body.querySelectorAll('.help-card, .help-chip, .help-rules li'), 'up', { step: 25, max: 12 });
     for (const t of tabs) t.classList.toggle('on', t.dataset.tab === tab);
+    // A narrow phone scrolls the tab strip sideways: keep the open tab in view.
+    const strip = tabs[0]?.parentElement, on = tabs.find(t => t.dataset.tab === tab);
+    if (strip && on && (on.offsetLeft + on.offsetWidth > strip.scrollLeft + strip.clientWidth || on.offsetLeft < strip.scrollLeft)) strip.scrollLeft = on.offsetLeft + on.offsetWidth - strip.clientWidth + 4;
   };
   menu.on({
     helpBack: () => { installed?.dispose(); onBack(); },

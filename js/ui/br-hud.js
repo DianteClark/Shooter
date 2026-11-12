@@ -565,7 +565,7 @@ export class BrHud {
     if (rd > 0) {
       const full = RB.redeploy[Math.min(view.br.phase, RB.redeploy.length - 1)];
       $('b').innerHTML = `Redeploying in ${Math.ceil(rd)}`;
-      $('small').textContent = w ? `Watching ${w.name}. You parachute in next to your squad.` : 'You parachute in next to your squad.';
+      $('small').textContent = w ? `Watching ${w.name}` : 'Back in beside your squad';     // Short: the plate is one line on a phone.
       rdBar.style.setProperty('--k', Math.max(0, Math.min(1, 1 - rd / full)).toFixed(2));
       $('.br-spec').hidden = true; $('.br-leave').hidden = false;
     }
@@ -638,10 +638,10 @@ export class BrHud {
         break;
       case 'brjump': if (e.id === me) { this.c.mapDismissed = true; this.toggleMap(false); } break;
       case 'brwait':
-        if (e.id === me) this.hud.notify(`Redeploy in ${Math.ceil(e.secs)} s while your squad holds on`);
+        if (e.id === me) this.hud.notify(`Redeploy in ${Math.ceil(e.secs)} s`);
         break;
       case 'brredeploy':
-        if (e.id === me) this.hud.notify('Redeployed: steer the glide to your squad');
+        if (e.id === me) this.hud.notify('Redeployed: glide to your squad');
         else if (view.players.find(p => p.id === e.id)?.team === myTeam) this.hud.notify(`${view.players.find(p => p.id === e.id)?.name ?? 'A squadmate'} is back in`);
         break;
       default: break;

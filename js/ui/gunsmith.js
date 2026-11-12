@@ -524,14 +524,19 @@ export class Gunsmith {
       const frac = c && !unlocked ? Math.min(1, c.value / c.goal) : 0;
       const tag = camo.prestige ? `<span class="p-tag">${ROMAN[camo.prestige]}</span>` : '';
       const count = c && !unlocked ? `<small class="ct">${c.value}/${c.goal}</small>` : '';
+      // A face (the swatch, its lock, prestige tag and progress) over the camo's name, in a grid with real gaps.
       return `<button class="tile${unlocked ? '' : ' locked'}" data-act="gsCamo" data-id="${camo.id}" aria-label="${esc(camo.name)}">
-        <span class="tile-swatch" style="background:${swatchCss(camo)}"></span>
-        ${tag}
-        ${unlocked ? '' : `<span class="tile-lk">${ico('lock')}</span>`}
-        ${count}
-        ${c && !unlocked ? `<i class="tile-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>` : ''}
+        <span class="tile-face">
+          <span class="tile-swatch" style="background:${swatchCss(camo)}"></span>
+          ${tag}
+          ${unlocked ? '' : `<span class="tile-lk">${ico('lock')}</span>`}
+          ${count}
+          ${c && !unlocked ? `<i class="tile-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>` : ''}
+        </span>
+        <b class="tile-name">${esc(camo.name)}</b>
       </button>`;
     }).join('')}</div>
+    <h4 class="chal-h">Camo challenges</h4>
     <div class="chal-strip">${this.challengeTracks(chal)}</div>`;
   }
 
@@ -546,7 +551,7 @@ export class Gunsmith {
       return `<div class="chal">
         <span>${esc(list[0].label.replace('Equipment-free kills', 'Clean'))}</span>
         <i class="xp"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
-        <small>${next ? `${next.value}/${next.goal}` : 'Done'}<em>${done}/${list.length}</em></small>
+        <small><b>${next ? `${next.value}/${next.goal}` : 'Done'}</b><em>${done}/${list.length} camos</em></small>
       </div>`;
     }).join('');
   }
