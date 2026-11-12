@@ -457,7 +457,8 @@ export class HUD {
     this.markObstacles = [];
     const add = r => { if (r.width > 0) this.markObstacles.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom }); };
     for (const r of Object.values(this.controls?.rects ?? {})) this.markObstacles.push(r);
-    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.feed', '.br-squad', '.ex-squad', '.zm-crew', '.os-row[data-row="0"]', '.os-row[data-row="1"]']) add(this.el.querySelector(sel).getBoundingClientRect());
+    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.feed', '.br-squad', '.ex-squad', '.zm-crew']) add(this.el.querySelector(sel).getBoundingClientRect());
+    this.#measureStripRows();
     // The Pro layer is drawn at CSS pixels: a few thin shapes do not need the phone's full pixel ratio.
     this.proCanvas.width = Math.max(1, Math.round(this.viewW));
     this.proCanvas.height = Math.max(1, Math.round(this.viewH));
@@ -661,7 +662,20 @@ export class HUD {
     for (const r of this.markObstacles) {
       if (x + MARK_CLEAR > r.x0 && x - MARK_CLEAR < r.x1 && y + MARK_CLEAR > r.y0 && y - MARK_CLEAR < r.y1) return true;
     }
+    for (const r of this.stripRects) {
+      if (r && x + MARK_CLEAR > r.x0 && x - MARK_CLEAR < r.x1 && y + MARK_CLEAR > r.y0 && y - MARK_CLEAR < r.y1) return true;
+    }
     return false;
+  }
+
+  // The objective strip's state and detail rows, as markers must keep off them. Their plates come and go during a
+  // match (Headquarters' "Defend your HQ" arrives with the first HQ), so the rects follow the rows' size through a
+  // ResizeObserver rather than the one measure at the start, which would see them empty.
+  #measureStripRows() {
+    this.stripRects = [0, 1].map(n => {
+      const r = this.strip.rows[n].getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? { x0: r.left, y0: r.top, x1: r.right, y1: r.bottom } : null;
+    });
   }
 
   // Controls owns the buttons and streak tiles so there is a single touch surface; the HUD feeds them.
@@ -1172,6 +1186,12 @@ export class HUD {
     const $ = sel => el.querySelector(sel);
     // Every mode's state in one place: the objective strip under the score bar (see ObjStrip and layout()).
     this.strip = new ObjStrip(el, $('.scorebar'));
+    this.stripRects = [null, null];
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => this.#measureStripRows());
+      ro.observe(this.strip.rows[0]);
+      ro.observe(this.strip.rows[1]);
+    }
     this.strip.mount($('.obj-strip'), { order: 1 });
     this.strip.mount($('.snd-alive'), { order: 1 });
     this.strip.mount($('.ctf-status'), { order: 1 });
@@ -2329,6 +2349,18 @@ export class HUD {
       controls.setScore(score, capped);
     }
     const slots = me.slots ?? this.fallbackSlots;
+    // A kit dealt with no scorestreaks (Showdown, One in the Chamber, the infected side): the tiles and the score
+    // counter go, as in the modes that never have them, and come back with a kit that has some.
+    const none = Array.isArray(me.slots) && me.slots.length === 0;
+    if (none !== c.noSlots) {
+      const first = c.noSlots === undefined;
+      c.noSlots = none;
+      if (!(this.gun || this.snd || this.br || this.ex || this.zm) && !(first && !none)) {
+        for (const t of controls.tiles ?? []) if (t?.node) t.node.style.display = none ? 'none' : '';
+        if (controls.scoreBox) controls.scoreBox.style.display = none ? 'none' : '';
+        this.layout();
+      }
+    }
     for (let i = 0; i < 3; i++) {
       const slot = slots[i];
       if (controls.setTile(i, slot, score)) this.#streakReady(slot.kind);
@@ -3233,7 +3265,7 @@ export class HUD {
       this.objMarks.appendChild(mark);
       this.objNodes.push({
         chip: this.#pointNode(chip),
-        mark: { ...this.#pointNode(mark), arrow: mark.querySelector('.o-arrow'), x: NaN, y: NaN, a: NaN, off: null, shown: null },
+        mark: { ...this.#pointNode(mark), arrow: mark.querySelector('.o-arrow'), x: NaN, y: NaN, a: NaN, off: null, shown: null, gone: null },
       });
     }
   }
@@ -3244,8 +3276,8 @@ export class HUD {
 
   #updateObjectives(view, me, c) {
     const points = view.points;
+    if (this.objNodes.length) this.#updateMarks(view, me, points ?? []);
     if (this.objNodes.length && points) {
-      this.#updateMarks(view, me, points);
       const n = Math.min(points.length, this.objNodes.length);
       for (let i = 0; i < n; i++) this.#paintPoint(this.objNodes[i].chip, points[i], i, me.team);
     }
@@ -3276,6 +3308,12 @@ export class HUD {
     const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements;
     const y = MARK_Y[this.mode] ?? 3;
     const n = Math.min(points.length, this.objNodes.length);
+    // A marker with no point behind it this frame (Showdown's overtime flag before and after overtime) stays out of
+    // sight instead of sitting at the screen's corner or where its point last was.
+    for (let i = 0; i < this.objNodes.length; i++) {
+      const m = this.objNodes[i].mark, gone = i >= n;
+      if (gone !== m.gone) { m.gone = gone; m.root.style.visibility = gone ? 'hidden' : ''; }
+    }
     for (let i = 0; i < n; i++) {
       const pt = points[i], m = this.objNodes[i].mark;
       this.#paintPoint(m, pt, i, me.team);
