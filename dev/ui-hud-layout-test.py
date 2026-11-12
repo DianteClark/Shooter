@@ -17,7 +17,8 @@ Panels: the score bar, every objective strip row, the minimap, the kill feed (fi
 chips, the weapon panel, health, the streak tiles, the battle royale's kit and squad panels, extraction's squad panel,
 the modifiers, the range's Leave, prompts in the lane, the tutorial's card and Skip, and on the death screen its card,
 Next life, Respawn and the wait plate. Then it dies once per size (killcam, then the death screen) and checks again.
-Battle royale is checked on the ground, with both hands full and a ground gun in reach (the Take prompt).
+Battle royale is checked on the ground, with both hands full and a ground gun in reach (the Take prompt). Graveyard
+Shift with the economy showing: plates, tier pips, the exfil clock, the relic count and an upgrade prompt.
 Screenshots at 667x375, 852x393 and 932x430, plus left-handed and Large samples, go to DIR (default /tmp/hud).
 Fails (exit 1) on any finding or console error. Ports 8401-8409 are the HUD's; the default is 8405.
 """
@@ -172,6 +173,13 @@ async def start(pg, mp, mode):
           if (mates[0]) {{ mates[0].spawnProtect = 0; sim._damage(mates[0], foe, 900, 'ar', 8); sim._damage(mates[0], foe, 900, 'ar', 8); }}
           if (mates[1]) {{ mates[1].spawnProtect = 0; sim._damage(mates[1], foe, 900, 'ar', 8); }} }})()""")
     await pg.evaluate(SAFE)
+    if mode == 'zm':
+        # The economy's HUD (ROADMAP item 36): plates on the health bar, tier pips on the weapon panel, the exfil clock
+        # and the relic count on the round plate, an upgrade prompt (the longest) in the lane.
+        await pg.evaluate(f"""(() => {{ const m = {G}.app.match, sim = m.sim, R = sim.rules, me = sim.byId.get(m.localId);
+          me.zm.plates = 150; me.zm.pts = 99999; R._give(me, 'heavyar'); R.econ._arm(me, me.ps.slot, 'heavyar', 2); me.zm.tiers.heavyar = 2;
+          R.round = 15; R.econ.exfil.state = 1; R.econ.exfil.timer = 999; R.econ.quest.got = 3;
+          for (const d of R.L.doors) R.open |= 1 << d.i; m.ps.x = R.L.bench.x; m.ps.z = R.L.bench.z; }})()""")
     await pg.wait_for_timeout(2500)
 
 
