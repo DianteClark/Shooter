@@ -1,13 +1,14 @@
 # Graveyard Shift (ROADMAP item 26)
 
 Our own co-op wave survival: up to four players (friends from the lobby, bot teammates in every empty seat) hold off a
-horde round after round on Night Market (`neon`), Ruins (`ruins`) and Foundry (`foundry`). Everyone starts with a
+horde round after round on Night Market (`neon`), Ruins (`ruins`), Foundry (`foundry`) and Ashgrove Halt (`ashgrove`, built
+for the mode: see "Ashgrove Halt" below). Everyone starts with a
 pistol and the blade; points from hits and kills buy guns off the walls, the mystery crate, gates into the rest of the
 map and four perk machines. The match ends when nobody is left up. All names are our own.
 
 | id | name | players | maps |
 |---|---|---|---|
-| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry |
+| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove |
 
 Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, formulas and layouts in
 `js/shared/zombies.js` (`ZM`), mode entry `MODES.zm` (`js/shared/modes.js`, `maps` lists where it plays).
@@ -15,7 +16,8 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
 ## Files
 - `js/shared/zombies.js`: numbers (`ZM`), kinds, perks, power-ups, wall guns, crate guns, round formulas, and each map's
   layout (`zmLayout`): fences, gates, bands, wall-buys, crate spots, perk machines, risers and starts, built from the
-  map's walls alone so every phone gets the same one. `placeZmWalls / syncZmDoors / clearZmWalls / reblockNav` put the
+  map's walls alone so every phone gets the same one (the banded form), or declared on the map itself (`map.zm`, the
+  graph form, Ashgrove Halt). `placeZmWalls / syncZmDoors / clearZmWalls / reblockNav` put the
   fences and closed gates on the map as walls and keep the nav grid in step; `zmUsable` says what a player standing at
   a spot can use (shared by the host's command check, the HUD's button and the bots).
 - `js/sim/zombies.js`: the host rules (`ZmRules`): rounds, spawning, horde driving, damage, downs and revives, buying,
@@ -25,6 +27,8 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
   keeps the horde seats; per-guest records skip the horde (`rules.seatCode`).
 - `js/render/zm-fx.js`: fences, gates (an opened one drops away), wall-buy chalk outlines, perk machines, the crate and
   its beam and floating gun, power-ups. About eight draw calls whatever the round.
+- `js/render/zm-power.js`: a layout with a power switch: the breaker panel and its lever, a beacon over it while the
+  power is off, and the perk machines dark (dimmed, crowns out) until it is on. Four small draw calls.
 - `js/render/zm-looks.js` + `js/render/characters.js`: the undead (shambler, runner, brute, boss) in the operators'
   parts kit, greyed and torn, as four extra operator uniform slots after `MAX_OPERATORS`. They ride the same instanced
   character meshes as soldiers (no extra draw calls); a horde seat's look comes from the view (`zk`).
@@ -60,6 +64,10 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
 - **Mystery crate**: 950 points, rolls 3 s, offers one gun from `BOX_GUNS` (specialists and heavy hitters, never one you
   hold) to whoever paid for 9 s. After 4-8 rolls a roll comes up empty: the money back, and the crate moves to another
   spot after 6 s.
+- **Power** (a layout with `power: true`, Ashgrove Halt only): the perk machines stand dark and sell nothing (the use
+  button shows the machine greyed, "No power: find the switch") until someone throws the power switch: free, but it
+  stands in an area behind gates. Once on it stays on (`zlights` event, a banner, the wire's `power` flag; a host
+  migration keeps it). Maps without a switch are always on.
 - **Perk machines** (four, one or two per band): Ironhide (2500, half damage from the undead), Quickdraw (3000, Fast
   Hands reloads and swaps), Mercy Run (1500, revive in 2 s), Hammerfall (2000, +50% damage). Going down loses them all.
 - **Downs**: lethal damage downs you while anyone else is up (battle royale's crawl, 30 s bleed). A teammate standing by
@@ -69,7 +77,8 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
   Crate. Full Crate (everyone's guns full), Double Pay (30 s), Clean Sweep (every zombie but the boss, +400 each).
 - **Bot teammates**: revive first; then take their own crate roll; then shop (a wall gun better than what they hold,
   perks with a cushion, ammo when low, the crate once they have two perks and a middling gun, gates only with no humans
-  or when rich); otherwise a loose ring round the lead human. They backpedal from anything inside 4.5 m (`bot.kite`),
+  or when rich); otherwise a loose ring round the lead human. On a map with a power switch, solo (at most one human)
+  from round 3, the first bot up goes and throws it if nobody has, buying the gates on the way to it when it can. They backpedal from anything inside 4.5 m (`bot.kite`),
   and never walk off to shop in the middle of a fight.
 
 ## Wire
@@ -96,7 +105,8 @@ from consecutive snapshots. Round 20 with 24 alive: about 0.7 KB mean per guest 
 Inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms). The renderer adds no per-zombie draw calls.
 
 ## Tests
-- `node dev/sim-zombies.mjs [--quick]`: layout (sealed bands, reachability, placements), rounds and escalation, a bot crew
+- `node dev/sim-zombies.mjs [--quick]`: layout (sealed bands, reachability, placements), Ashgrove (the loop, dead ends,
+  reserved spots, power gating perks, the bot power run, boss arena spawns, the power on the wire and through a migration), rounds and escalation, a bot crew
   playing rounds and buying, economy (hits, kills, Double Pay, gates, wall-buys and ammo, the crate roll / offer / take /
   move), perks, revive and bleed-out, game over, power-ups, wire round-trip and migration, the save record through an
   export code, determinism, round-20 performance.
@@ -104,6 +114,65 @@ Inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms). The rendere
   Find match, round 1 with zombies in view, the round survived, a wall-buy, a perk and a gate through the use button
   (clear of the sticks), then Overrun results with the Rounds survived XP line and the saved record.
 
+## Ashgrove Halt (ROADMAP item 38)
+A country rail halt and its churchyard on the edge of the farm valley, at night, in the fog: `js/shared/maps/ashgrove.js`
+(medium, 76 x 48, region farmland), theme `js/render/themes/ashgrove.js`. Our own place and names. Built for Graveyard
+Shift and nothing else: `hidden: true`, `modes: []`, `zmOnly: true` (so `mapModes` gives it zm alone, no Free-for-All or
+Gun Game, and it never shows in a 6v6 vote, the solo picker or the menu backdrop); `MODES.zm.maps` lists it.
+
+The story, as the crew walks it (x east, z south):
+
+| area | id | where | what is there |
+|---|---|---|---|
+| The Halt (start) | `halt` | south-west | the platform, the waiting room; SMG and shotgun on the walls, Mercy Run |
+| Goods Yard | `goods` | west | the goods shed, a parked van, the lamp room (a dead end, crate spot); AR, DMR, Quickdraw |
+| Churchyard | `church` | north | the chapel, headstones, the crypt (a dead end, crate spot); PDW, heavy SMG, Hammerfall |
+| Pump Yard (power) | `pump` | centre | the pump house with the power switch, the water tower; heavy AR. Ringed by a low railing you see and shoot over from the Churchyard and the Lane |
+| Burial Field (boss arena) | `field` | east | open ground round the obelisk, chest tombs; LMG, saw, a crate spot |
+| Crossing Lane | `lane` | south | the level crossing, the signal box, the coal stage behind a wall (a dead end, crate spot); carbine, Ironhide |
+
+Gates (price): Halt-Goods 750, Halt-Lane 750, Goods-Church 1000, Lane-Pump 1250, Church-Pump 1250, Church-Field 1500,
+Lane-Field 1500. They make one loop (Halt, Goods Yard, Churchyard, Burial Field, Crossing Lane, back to the Halt) with the
+Pump Yard reached from either side; every gate is a chokepoint. An area is open when the open gates join it to the Halt
+(`bandOpen` walks the gate graph), so the loop can be opened either way round.
+
+**The graph form** (`ZM_MAPS[id] = { graph: true, power: true }`, `map.zm`; `graphLayout` in js/shared/zombies.js): areas
+are found by flooding from each area's `seed` with every gate shut; gates are the rects that fill the openings in the
+map's walls (no fences), each with its two areas (`a`, `b`), price and a stand point on each side (`stand[area]`,
+`zmDoorStand(L, open, d)` for the side that is open). Wall-buys, crate spots (the first two are where the crate can
+start), machines and the switch name a floor spot and the side its wall is on (`wall`: n, s, e, w); the wall point and
+facing come from the map's walls. Spawn windows (`risers`) and the crew's `starts` are listed per area. The banded form
+(neon, ruins, foundry) is unchanged.
+
+**Power**: `power: true` on the layout puts the switch on the pump house's west wall (`L.power`). **Boss arena**:
+`L.boss = { band, spots }`: on a boss round (10, 20, ...) the Yardmaster rises in the Burial Field, at the listed spot
+furthest from the crew, when the field is open; otherwise at an ordinary riser (it never rises behind a shut gate). The
+field is the biggest area (about 480 m2 of floor) with the obelisk to kite round.
+
+**Kept for the economy** (`map.zm.reserved`, copied to `L.reserved` with each spot's area; nothing reads them yet):
+
+| key | where | for |
+|---|---|---|
+| `bench` | Pump Yard, the pump house's north face | the upgrade bench |
+| `terminal` | the Halt, on the yard wall | the supply terminal |
+| `armour` | Crossing Lane, the signal box's south face | the armour bench |
+| `traps` (3) | the Goods Yard gate into the Churchyard; the lane squeezed between the signal box and the railing; the Burial Field gate onto the lane | traps at chokepoints (`r` metres round x, z) |
+| `exfil` | the Burial Field's far (north-east) corner, r 3 | the exfil pad |
+
+Each has a `note`; spots against a wall carry `wall` (and `wx`, `wz`, `face` like a wall-buy).
+
+**Art and budget**: night, cold moonlight from the north-west, ground mist (big faint motes), 22 oil lamp posts and the
+lit chapel, waiting room and signal box windows, a ring of dark conifers beyond the hedges. The world is about 26k
+triangles in 3 draw calls (Ruins 23k, Pier 26k, Night Market 29k, Foundry 39k), 27 lamp pools baked in; zm-fx adds its
+usual handful and the power switch four. No team spawn pads (a zombies map has no team ends).
+
+**Tests**: `node dev/map-validate.mjs ashgrove` (fields, nav, gaps; the zm layout: shut gates seal the Halt, each gate
+opens exactly the area behind it, every placement, riser, start, boss spot and reserved spot on reachable floor in an
+area; a 300 s bot crew match); the `ashgrove` section of dev/sim-zombies.mjs; the Ashgrove part of
+dev/ui-zombies-test.py (932x430: power out, a dark machine refuses, gates to the Pump Yard, the switch through the use
+button, the perk bought).
+
 ## Open
-- No dedicated sounds yet for claws, the crate or the machines (hits and kills use the usual ones).
-- Only the three maps listed; a new map needs a `ZM_MAPS` entry (cuts, door z, start band) and a pass of the layout test.
+- Ashgrove's reserved spots wait for the economy (item 36).
+- A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove)
+  and a pass of the layout tests.

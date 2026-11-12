@@ -139,7 +139,10 @@ on every push, keep 2% of weekly usage for bugs.
     paid perk-limit raise, a late exfil (~round 15) and a hidden boss step.
 37. Bug sweep (every mode and screen) and balance run: mirrored bot matches with the wave 2 attachments; the owner's
     100-match stats when they arrive.
-38. A purpose-built Graveyard Shift map: power switch, story layout, boss arena.
+38. DONE (NEXT). A purpose-built Graveyard Shift map: Ashgrove Halt (a rail halt and churchyard at night, Graveyard
+    Shift only): six areas behind seven gates in a loop with dead ends, a power switch in the central Pump Yard that wakes
+    the perk machines (`power: true` per layout), the Burial Field as the boss arena, and spots reserved for the economy
+    (item 36). docs/ZOMBIES.md "Ashgrove Halt".
 39. DONE (NEXT). Prestige rework: per-prestige icon, camo and calling card; Master Prestige levels past P10 (to 1,000,
     read from total XP, icon tiers every 100, cards, camos and an emblem on the way); Prestige view and reveal. docs/PRESTIGE.md.
 Ideas held for later (owner to decide after 36-39): tournaments vs bot clans, weekly events, custom lobby extras and a
