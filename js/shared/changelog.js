@@ -4,8 +4,9 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'A cleaner Multiplayer screen and menu fixes',
+    build: '1111-29', date: '2026-11-12', title: 'A cleaner Multiplayer screen and menu fixes',
     items: [
+      'Leaderboards: players on the same level are ranked by their total XP instead of sharing a rank.',
       'The Multiplayer screen is redone: clear tabs across the top, one smooth scrolling list, Ranked and today\'s featured playlist together in a Spotlight at the top, and the Hardcore switch and Find match in a tidy bar at the bottom.',
       'Battle Royale lists its playlists side by side under Battle Royale and Rebound, so every name fits.',
       'Help > Updates and every long Help page scroll smoothly again.',

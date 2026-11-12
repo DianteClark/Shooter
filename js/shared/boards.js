@@ -195,7 +195,7 @@ function seasonal(e, key) {
   return { ...e, m: sn.m, k: sn.k, w: sn.w, brw: sn.brw, br5: sn.br5, kdm: sn.m, kdk: sn.k, d: sn.d, sn, seasonView: true };
 }
 
-// Ranks entries on a category: highest first; ties share a rank (1, 2, 2, 4), ordered by the category's tie-break and
+// Ranks entries on a category: highest first, then by the category's tie-break (total XP on Level); only a full tie shares a rank (1, 2, 2, 4), and
 // then the name and id so every phone lists them alike. Entries the category does not admit (K/D under the minimum)
 // come back in `unranked`.
 export function rankEntries(entries, catId, now = Date.now()) {
@@ -208,7 +208,7 @@ export function rankEntries(entries, catId, now = Date.now()) {
   }
   rows.sort((a, b) => b.value - a.value || b.tie - a.tie || (a.e.name < b.e.name ? -1 : a.e.name > b.e.name ? 1 : 0) || (a.e.id < b.e.id ? -1 : 1));
   let rank = 0;
-  rows.forEach((r, i) => { r.rank = i && r.value === rows[i - 1].value ? rank : (rank = i + 1); });
+  rows.forEach((r, i) => { r.rank = i && r.value === rows[i - 1].value && r.tie === rows[i - 1].tie ? rank : (rank = i + 1); });
   return { rows, unranked };
 }
 
