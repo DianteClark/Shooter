@@ -117,8 +117,8 @@ const LIST = [
 
   sig('s_muffledbolt', 'hushsmg', 'grip', 'Muffled Bolt', 16,
     'For the ghost who is always moving.',
-    'Fires sooner out of a sprint, moves faster aimed. Shorter range, slower fire.',
-    { sprintToFire: 0.85, adsMoveMult: 1.1, range: 0.9, rpm: 0.94 }, { look: { grip: 'wrap' } }),
+    'Fires sooner out of a sprint, moves faster aimed. Shorter range.',
+    { sprintToFire: 0.85, adsMoveMult: 1.1, range: 0.9 }, { look: { grip: 'wrap' } }),
   conv('k_openmuzzle', 'hushsmg', 'barrel', 'Open Muzzle', 26,
     'Trades the Murmur\'s silence for real reach.',
     'No longer suppressed: shows on the minimap and is loud. Reaches much further and fades less.',
@@ -438,14 +438,22 @@ const BETTER = { adsSpread: -1, hipSpread: -1, bloomPerShot: -1, patternAmp: -1,
   blastRadius: 1, bloomRecover: 1, reserve: 1, damage: 1, rpm: 1, settleShots: -1, settleFrom: -1, spinupShots: -1,
   spinupFrom: 1, chargeTime: -1, burstGap: -1, boltKick: 1, adsGate: 1, lunge: 1, falloffMin: 1, heatLockout: -1 };
 export const SIG_GAIN = 1.5, SIG_GAIN_CORE = 1.25, SIG_COST = 0.5;
+// Balance pass 3 (docs/WEAPONS-OVERHAUL.md): the few signatures that made their gun the best in mirrored play keep
+// the boost on their costs (halved) but not on the strength that did it. `gain` replaces SIG_GAIN, `core` SIG_GAIN_CORE
+// for that one signature; 1 means the strength is its base value, still a clear upgrade over its pre-boost self.
+export const SIG_TRIM = {
+  s_prespun: { gain: 1 },        // Bulwark: starting fire rate +30% (boosted +45%) took it to 1.36 mirrored.
+  s_overdrive: { core: 1 },      // Millrace: fire rate +10% (boosted +12.5%) with Light Barrels: 1.30.
+  s_looplever: { core: 1 },      // Prospector: fire rate +20% (boosted +25%): the biggest duel gain of any signature.
+};
 function boostSignature(a) {
   if (a.kind !== 'sig') return a;
-  const mods = {};
+  const mods = {}, trim = SIG_TRIM[a.id] ?? {};
   for (const [k, v] of Object.entries(a.mods)) {
     const dir = BETTER[k];
     if (typeof v !== 'number' || !dir) { mods[k] = v; continue; }
     const helps = (v - 1) * dir > 0;
-    const scale = helps ? (k === 'damage' || k === 'rpm' ? SIG_GAIN_CORE : SIG_GAIN) : SIG_COST;
+    const scale = helps ? (k === 'damage' || k === 'rpm' ? trim.core ?? SIG_GAIN_CORE : trim.gain ?? SIG_GAIN) : SIG_COST;
     mods[k] = +Math.max(0.2, 1 + (v - 1) * scale).toFixed(3);
   }
   return { ...a, mods, base: a.mods };

@@ -7,6 +7,8 @@
 //   node dev/best-builds.mjs --class=Sniper        one class
 //   options: --trials=2 (aware duels per opponent and distance; flank duels are one each way) --passes=2 --seed=1
 //            --out=dev/out/best-builds.json --sidearms (search the sidearms instead of the primaries)
+//   node dev/best-builds.mjs --sigs [--trials=4]   no search: each signature alone on stock against the same field,
+//            printed as the gun's win rate stock -> with it (is every signature an upgrade over the stock part?)
 //
 // Score of a kit: mean win rate (a draw counts half) over FIELD x {4,10,20,35,55 m} x {aware, flank, flanked}, Regular
 // bots both sides. The same seed is used for every candidate of a gun, so candidates face the same dice where their
@@ -138,6 +140,18 @@ function search(gun) {
   return { kit: { ...normalizeKit(gun, kit) }, score: best, stock, evals };
 }
 
+if (has('sigs')) {
+  let worse = 0;
+  for (const gun of list) {
+    const sigs = availableFor(gun).filter(a => a.kind === 'sig');
+    if (!sigs.length) continue;
+    const stock = score(gun, {});
+    const cells = sigs.map(a => { const s = score(gun, { [a.slot]: a.id }); if (s < stock) worse++; return `${a.name} ${(s * 100).toFixed(1)}% (${s >= stock ? '+' : ''}${((s - stock) * 100).toFixed(1)})`; });
+    console.log(`${gun.padEnd(11)}${WEAPONS[gun].name.padEnd(12)} stock ${(stock * 100).toFixed(1)}%  ${cells.join('  ')}`);
+  }
+  console.log(`signatures under stock: ${worse}`);
+  process.exit(0);
+}
 if (!existsSync('dev/out')) mkdirSync('dev/out', { recursive: true });
 const out = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : {};
 const t0 = performance.now();

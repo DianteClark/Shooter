@@ -1,0 +1,38 @@
+
+MATCHES  72 mirrored matches of 120 s (pier+turnstile, railyard+dust, foundry+canyon x tdm, dom), skill regular, seed 6, 155 s
+class    gun        name           K/D  small   med  large  k/min   ttk   acc  ads% cone% onAcc  kills   damage share by range 0-5 5-10 10-20 20-30 30-45 45+
+Assault  ar         Halyard       1.06   1.12   0.92   1.13   3.93   0.66   0.40    37    94   0.42    164      6   15   67   10    1    0
+Assault  burst      Cadence       0.96   1.26   0.93   0.71   3.89   0.68   0.35    30    89   0.40    160      9   22   57   10    1    0
+Assault  heavyar    Drayman       0.98   1.22   0.67   1.07   3.19   0.58   0.36    30    92   0.39    135      7   16   65   12    1    0
+Assault  carbine    Shunter       0.91   0.82   1.04   0.89   3.92   0.68   0.40    37    93   0.43    160     15   28   52    4    1    0
+Assault  rampar     Flywheel      0.86   0.89   0.80   0.90   3.82   0.57   0.40    31    94   0.43    233     12   19   62    7    0    0
+Assault  heatar     Kiln          1.21   1.44   1.00   1.17   4.33   0.66   0.35    40    84   0.42    181      7   13   68   12    0    0
+SMG      smg        Skitter       0.65   0.45   0.79   0.79   3.70   0.41   0.43    27    91   0.47    144     21   40   37    2    0    0
+SMG      pdw        Rasp          0.81   0.71   0.82   0.95   4.63   0.39   0.37    37    92   0.40    180     23   35   41    2    0    0
+SMG      tacsmg     Stitch        1.03   0.90   1.14   1.12   5.34   0.33   0.42    67    90   0.46    211     18   29   51    2    0    0
+SMG      heavysmg   Ballast       0.86   0.70   0.90   1.06   4.44   0.42   0.41    41    92   0.45    176     13   30   54    3    0    0
+SMG      hushsmg    Murmur        0.95   0.77   1.16   1.02   4.80   0.37   0.45    34    91   0.50    191     21   39   39    1    0    0
+SMG      drumsmg    Hopper        0.79   0.66   1.00   0.75   3.98   0.52   0.45    36    91   0.49    158     17   37   45    2    0    0
+Shotgun  shotgun    Thresher      0.87   0.74   1.11   0.78   4.61   0.07   0.86    18    42   1.00    272     46   46    8    0    0    0
+Shotgun  autoshot   Squall        1.01   0.76   1.35   0.98   4.43   0.18   0.88    26    50   1.00    180     49   47    3    0    0    0
+Shotgun  coach      Doublet       0.83   0.83   0.97   0.66   4.03   0.07   0.95     8    43   1.00    161     48   48    5    0    0    0
+Shotgun  slug       Railspike     0.78   0.80   0.76   0.76   4.01   0.48   0.55    37    81   0.68    159     15   30   52    3    0    0
+Shotgun  magshot    Trammel       0.99   0.85   1.28   0.87   4.61   0.05   0.91    20    41   1.00    186     52   47    1    0    0    0
+Shotgun  flechette  Thistle       1.13   1.03   1.35   1.00   5.70   0.50   0.88    45    70   1.00    226     14   23   61    2    0    0
+LMG      lmg        Bulwark       1.24   1.46   1.00   1.26   4.04   0.47   0.32    54    82   0.39    171      5   19   61   14    0    0
+LMG      saw        Drover        0.96   1.05   1.12   0.70   3.97   0.74   0.38    56    88   0.43    163      7   14   70    8    1    0
+LMG      rotary     Millrace      1.41   1.44   1.12   1.73   4.47   0.63   0.31    51    77   0.40    190      6   20   67    7    1    0
+LMG      lightlmg   Gantry        1.22   1.74   0.94   1.02   4.16   0.73   0.39    51    94   0.42    175      7   16   68    9    0    0
+LMG      beltlmg    Stanchion     1.11   1.29   1.04   0.95   3.69   0.76   0.34    51    95   0.35    156      5   18   64   13    0    0
+Marksman dmr        Tallyman      1.31   1.70   1.04   1.26   3.67   0.33   0.57    86    82   0.70    158      8   14   50   28    0    0
+Marksman battle     Foreman       0.90   1.08   0.90   0.70   3.08   0.79   0.37    53    92   0.40    194      6   21   61   11    0    0
+Marksman lever      Prospector    1.08   1.16   0.88   1.27   4.12   0.43   0.49    36    85   0.57    171      7   19   60   14    0    0
+Marksman crossbow   Bodkin        1.01   0.95   1.10   0.98   3.83   0.00   0.64   100    57   1.00    159     14   29   55    2    0    0
+Marksman twinshot   Tandem        1.06   1.27   0.84   1.06   3.48   0.46   0.38    62    87   0.44    147     11   21   51   16    2    0
+Marksman hushdmr    Nightjar      1.09   1.20   0.88   1.24   3.90   0.29   0.57    63    81   0.71    163     11   22   57   11    0    0
+Sniper   sniper     Lancet        1.23   1.19   1.05   1.53   3.09   0.00   0.54   100    70   0.77    202      5   17   41   35    2    0
+Sniper   antimat    Monolith      1.18   1.33   1.06   1.15   2.49   0.00   0.53   100    69   0.76    110      4   11   41   41    3    0
+Sniper   semisnipe  Kestrel       1.32   1.19   1.29   1.57   4.62   0.10   0.57   100    74   0.76    194      9   14   52   24    0    0
+Sniper   scout      Harrier       1.05   1.23   0.93   0.98   3.27   0.35   0.53   100    84   0.63    139      9   15   38   37    1    0
+Sniper   rail       Lodestone     1.22   1.55   0.85   1.34   2.83   0.00   0.59   100    70   0.84    124      3    9   44   44    0    0
+K/D range 0.65 to 1.41; outside 0.85-1.20: Kiln 1.21, Skitter 0.65, Rasp 0.81, Hopper 0.79, Doublet 0.83, Railspike 0.78, Bulwark 1.24, Millrace 1.41, Gantry 1.22, Tallyman 1.31, Lancet 1.23, Kestrel 1.32, Lodestone 1.22

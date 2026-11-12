@@ -1,0 +1,355 @@
+{
+ "ar": {
+  "kit": {
+   "barrel": "s_trueline",
+   "mag": "s_matchmag"
+  },
+  "sigs": [
+   "s_trueline",
+   "s_matchmag"
+  ]
+ },
+ "burst": {
+  "kit": {
+   "barrel": "stub",
+   "grip": "s_metronome"
+  },
+  "sigs": [
+   "s_metronome"
+  ]
+ },
+ "heavyar": {
+  "kit": {
+   "optic": "ghostring",
+   "mag": "s_mule"
+  },
+  "sigs": [
+   "s_mule"
+  ]
+ },
+ "smg": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "stub",
+   "mag": "lightmag",
+   "grip": "s_featherframe"
+  },
+  "sigs": [
+   "s_featherframe"
+  ]
+ },
+ "pdw": {
+  "kit": {
+   "optic": "pointdot",
+   "barrel": "s_burr",
+   "mag": "s_rattle"
+  },
+  "sigs": [
+   "s_burr",
+   "s_rattle"
+  ]
+ },
+ "tacsmg": {
+  "kit": {
+   "optic": "s_needlesight",
+   "barrel": "s_suture",
+   "mag": "tapedmag"
+  },
+  "sigs": [
+   "s_needlesight",
+   "s_suture"
+  ]
+ },
+ "shotgun": {
+  "kit": {
+   "optic": "pointdot",
+   "barrel": "rifled",
+   "mag": "flitewad",
+   "grip": "s_breachpump"
+  },
+  "sigs": [
+   "s_breachpump"
+  ]
+ },
+ "autoshot": {
+  "kit": {
+   "optic": "irons",
+   "barrel": "s_runnerchoke",
+   "mag": "s_squalldrum"
+  },
+  "sigs": [
+   "s_runnerchoke",
+   "s_squalldrum"
+  ]
+ },
+ "coach": {
+  "kit": {
+   "optic": "laserbox",
+   "barrel": "rifled",
+   "mag": "s_buckball",
+   "grip": "s_twintriggers"
+  },
+  "sigs": [
+   "s_twintriggers",
+   "s_buckball"
+  ]
+ },
+ "lmg": {
+  "kit": {
+   "mag": "k_assaultbox",
+   "grip": "s_prespun"
+  },
+  "sigs": [
+   "s_prespun"
+  ]
+ },
+ "saw": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "s_quickbarrel",
+   "mag": "apmag",
+   "grip": "s_droversling"
+  },
+  "sigs": [
+   "s_droversling",
+   "s_quickbarrel"
+  ]
+ },
+ "rotary": {
+  "kit": {
+   "optic": "prism",
+   "barrel": "s_lightbarrels",
+   "mag": "s_overdrive"
+  },
+  "sigs": [
+   "s_lightbarrels",
+   "s_overdrive"
+  ]
+ },
+ "dmr": {
+  "kit": {
+   "optic": "s_cheekpiece"
+  },
+  "sigs": [
+   "s_cheekpiece"
+  ]
+ },
+ "battle": {
+  "kit": {
+   "optic": "reflex",
+   "barrel": "s_pinbarrel",
+   "grip": "s_hairtrigger"
+  },
+  "sigs": [
+   "s_hairtrigger",
+   "s_pinbarrel"
+  ]
+ },
+ "lever": {
+  "kit": {
+   "optic": "steady",
+   "grip": "s_looplever"
+  },
+  "sigs": [
+   "s_looplever"
+  ]
+ },
+ "sniper": {
+  "kit": {
+   "optic": "snapsight",
+   "mag": "speedmag",
+   "grip": "s_heavybolt"
+  },
+  "sigs": [
+   "s_heavybolt"
+  ]
+ },
+ "antimat": {
+  "kit": {
+   "optic": "snapsight",
+   "barrel": "s_monobrake",
+   "mag": "s_siege"
+  },
+  "sigs": [
+   "s_siege",
+   "s_monobrake"
+  ]
+ },
+ "semisnipe": {
+  "kit": {
+   "optic": "s_kestreleye",
+   "barrel": "heavybarrel",
+   "grip": "s_hotchamber"
+  },
+  "sigs": [
+   "s_hotchamber",
+   "s_kestreleye"
+  ]
+ },
+ "carbine": {
+  "kit": {
+   "optic": "reflex",
+   "mag": "speedmag",
+   "grip": "s_dashsling"
+  },
+  "sigs": [
+   "s_dashsling"
+  ]
+ },
+ "heavysmg": {
+  "kit": {
+   "optic": "canted",
+   "mag": "s_ramrounds"
+  },
+  "sigs": [
+   "s_ramrounds"
+  ]
+ },
+ "slug": {
+  "kit": {
+   "mag": "s_sabot"
+  },
+  "sigs": [
+   "s_sabot"
+  ]
+ },
+ "lightlmg": {
+  "kit": {
+   "optic": "steady",
+   "barrel": "suppressor",
+   "mag": "s_box75"
+  },
+  "sigs": [
+   "s_box75"
+  ]
+ },
+ "crossbow": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "longbarrel",
+   "mag": "s_broadhead",
+   "grip": "s_recurve"
+  },
+  "sigs": [
+   "s_broadhead",
+   "s_recurve"
+  ]
+ },
+ "rampar": {
+  "kit": {
+   "optic": "prism",
+   "barrel": "heavybarrel",
+   "mag": "speedmag",
+   "grip": "s_lightwheel"
+  },
+  "sigs": [
+   "s_lightwheel"
+  ]
+ },
+ "heatar": {
+  "kit": {
+   "optic": "longeye",
+   "barrel": "s_baffles",
+   "mag": "s_firebrick"
+  },
+  "sigs": [
+   "s_baffles",
+   "s_firebrick"
+  ]
+ },
+ "hushsmg": {
+  "kit": {
+   "optic": "ghostring",
+   "barrel": "longbarrel",
+   "mag": "extmag",
+   "grip": "s_muffledbolt"
+  },
+  "sigs": [
+   "s_muffledbolt"
+  ]
+ },
+ "drumsmg": {
+  "kit": {
+   "grip": "s_gyro"
+  },
+  "sigs": [
+   "s_gyro"
+  ]
+ },
+ "magshot": {
+  "kit": {
+   "optic": "laserbox",
+   "mag": "s_boxtwelve",
+   "grip": "vertical"
+  },
+  "sigs": [
+   "s_boxtwelve"
+  ]
+ },
+ "flechette": {
+  "kit": {
+   "optic": "holo",
+   "barrel": "s_needlechoke",
+   "mag": "s_barbed",
+   "grip": "angled"
+  },
+  "sigs": [
+   "s_needlechoke",
+   "s_barbed"
+  ]
+ },
+ "beltlmg": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "suppressor",
+   "mag": "s_longbelt",
+   "grip": "s_bedded"
+  },
+  "sigs": [
+   "s_longbelt",
+   "s_bedded"
+  ]
+ },
+ "twinshot": {
+  "kit": {
+   "optic": "steady",
+   "grip": "s_lockstep"
+  },
+  "sigs": [
+   "s_lockstep"
+  ]
+ },
+ "hushdmr": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "longbarrel",
+   "mag": "s_hollowpoint"
+  },
+  "sigs": [
+   "s_hollowpoint"
+  ]
+ },
+ "scout": {
+  "kit": {
+   "optic": "prism",
+   "mag": "s_stripper",
+   "grip": "s_wingbolt"
+  },
+  "sigs": [
+   "s_stripper",
+   "s_wingbolt"
+  ]
+ },
+ "rail": {
+  "kit": {
+   "optic": "prism",
+   "barrel": "s_overcharge",
+   "mag": "s_capacitor",
+   "grip": "angled"
+  },
+  "sigs": [
+   "s_capacitor",
+   "s_overcharge"
+  ]
+ }
+}
