@@ -444,7 +444,7 @@ export class HUD {
     this.markObstacles = [];
     const add = r => { if (r.width > 0) this.markObstacles.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom }); };
     for (const r of Object.values(this.controls?.rects ?? {})) this.markObstacles.push(r);
-    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.os-row[data-row="0"]']) add(this.el.querySelector(sel).getBoundingClientRect());
+    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.feed', '.br-squad', '.ex-squad', '.os-row[data-row="0"]', '.os-row[data-row="1"]']) add(this.el.querySelector(sel).getBoundingClientRect());
     // The Pro layer is drawn at CSS pixels: a few thin shapes do not need the phone's full pixel ratio.
     this.proCanvas.width = Math.max(1, Math.round(this.viewW));
     this.proCanvas.height = Math.max(1, Math.round(this.viewH));
@@ -543,7 +543,7 @@ export class HUD {
     // Weapon panel: under the corner chips, on the aim thumb's side, above the button cluster. It keeps its size
     // unless the buttons under it would be covered (a short screen at Large).
     const corner = box(this.el.querySelector('.corner'));
-    const top = Math.max(corner && corner.height ? corner.bottom : 0, safe.t + 44 * k) + 6;
+    const top = Math.max(corner && corner.height ? corner.bottom : 0, safe.t + 44 * Math.max(1, k)) + 6;
     const arms = this.arms, aw = arms.offsetWidth * k, ah = arms.offsetHeight;
     const ax0 = lefty ? safe.l + ARMS_EDGE : W - safe.r - ARMS_EDGE - aw, ax1 = ax0 + aw;
     let floor = H;

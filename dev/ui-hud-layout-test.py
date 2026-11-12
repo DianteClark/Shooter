@@ -18,7 +18,7 @@ chips, the weapon panel, health, the streak tiles, the battle royale's kit and s
 the modifiers, the range's Leave, prompts in the lane, the tutorial's card and Skip, and on the death screen its card,
 Next life, Respawn and the wait plate. Then it dies once per size (killcam, then the death screen) and checks again.
 Battle royale is checked on the ground, with both hands full and a ground gun in reach (the Take prompt).
-Screenshots at 667x375 and 852x393, plus left-handed and Large samples, go to DIR (default /tmp/hud).
+Screenshots at 667x375, 852x393 and 932x430, plus left-handed and Large samples, go to DIR (default /tmp/hud).
 Fails (exit 1) on any finding or console error. Ports 8401-8409 are the HUD's; the default is 8405.
 """
 import asyncio, subprocess, sys, os, json
@@ -46,7 +46,7 @@ MATCHES = [
 ]
 ONLY = opt('--only', '')
 if ONLY: MATCHES = [m for m in MATCHES if m[1] in ONLY.split(',')]
-SHOT_SIZES = {(667, 375), (852, 393)}
+SHOT_SIZES = {(667, 375), (852, 393), (932, 430)}
 
 CHECK = r"""
 (phase) => {
@@ -109,6 +109,13 @@ CHECK = r"""
   for (let i = 0; i < panels.length; i++) for (let j = i + 1; j < panels.length; j++) {
     if (inter(panels[i].r, panels[j].r, 1)) out.push(`overlap: ${panels[i].name} [${round(panels[i].r)}] and ${panels[j].name} [${round(panels[j].r)}]`);
   }
+  // Kill feed rows: nothing may run out of its row (once a fresh row's slide-in is over).
+  for (const row of qa('.feed .f-row')) row.getAnimations().forEach(a => a.finish());
+  for (const row of qa('.feed .f-row')) {
+    const rr = row.getBoundingClientRect(), fr = q('.feed').getBoundingClientRect();
+    if (rr.right > fr.right + 1 || rr.left < fr.left - 1) out.push(`cut: feed row wider than the feed (${Math.round(rr.width)})`);
+    for (const c of row.querySelectorAll('*')) { const r = c.getBoundingClientRect(); if (r.width && (r.right > rr.right + 1 || r.left < rr.left - 1)) { out.push(`cut: feed row text runs out of its row (${c.className || c.tagName})`); break; } }
+  }
   if (live) ctl.tiles.forEach((t, i) => {
     const r = ctl.rects[`tile${i}`];
     if (shown(t.node) && r && (r.x1 - r.x0 < 44 || r.y1 - r.y0 < 44)) out.push(`target: streak tile ${i} is ${Math.round(r.x1 - r.x0)}x${Math.round(r.y1 - r.y0)}`);
@@ -119,7 +126,13 @@ CHECK = r"""
 
 # A full kill feed: three rows of long names, as a busy 16v16 match leaves it.
 FILL_FEED = f"""(() => {{ const h = {G}.hud;
-  for (let i = 0; i < 3; i++) h.pushFeed('<em>LongestNameHere{{i}}</em><span class="f-w">FOREMAN</span><em>AnotherLongName</em>'.replace('{{i}}', i), i === 0, i ? 'foe' : 'ally'); }})()"""
+  // Every kind of row with the longest names (the feed keeps the newest three): a kill, a note on its own, an
+  // infection, a VIP kill.
+  h.pushFeed('<em>LongestNameHere0</em><span class="f-w">FOREMAN</span><em>AnotherLongName</em>', false, 'foe');
+  h.pushFeed('<span class="f-note">[CLAN] ExtremelyLongPlayerName took over as host of this very match</span>');
+  h.pushFeed('<span class="f-ico"><svg width="13" height="13"></svg></span><em>ExtremelyLongPlayerName</em><span class="f-note">was infected</span>', false, 'foe');
+  h.pushFeed('<span class="f-ico"><svg width="13" height="13"></svg></span><em>ExtremelyLongPlayerName</em><span class="f-note">killed VIP</span><em>AnotherVeryLongName</em>', true, 'ally');
+  }})()"""
 SAFE = f"""(() => {{ const m = {G}.app.match, me = m?.sim?.byId.get(m.localId); if (me) me.spawnProtect = 9999; }})()"""
 
 
@@ -139,6 +152,8 @@ async def start(pg, mp, mode):
         await pg.wait_for_timeout(1500)
         await pg.locator('.br-jump-map').click(timeout=30000)
         await pg.wait_for_function(f'{G}.app.match.brAir === 0', timeout=90000)
+        # The squad lands too (a teammate in the air takes no damage, so the squad panel's states would not show).
+        await pg.wait_for_function(f'(() => {{ const m = {G}.app.match, sim = m.sim, me = sim.byId.get(m.localId); return sim.players.every(p => p.team !== me.team || !p.brAir); }})()', timeout=90000)
         # Both hands full and a rare gun at your feet: the hand slots and the Take prompt.
         await pg.evaluate(f"""(() => {{ const m = {G}.app.match, sim = m.sim, me = sim.byId.get(m.localId);
           for (let s = 0; s < 2; s++) if (!me.br.guns[s]) sim.br._takeGun(me, sim.br._addItem({{ kind: 0, v: 0, r: 1, n: 1, x: m.ps.x, z: m.ps.z }}), s);
@@ -229,11 +244,11 @@ async def main():
                 n = len(failures)
                 await run(browser, mp, mode, failures, errors)
                 print(f'{mode}: {"ok" if len(failures) == n else f"{len(failures) - n} findings"}', flush=True)
+                for f in failures[n:]: print('  ', f, flush=True)
             await browser.close()
     finally:
         srv.terminate()
     errors = [e for e in errors if 'GL Driver' not in e]
-    for f in failures: print('  ', f)
     print('console errors:', errors[:8] or 'none')
     if failures or errors:
         print(f'FAILED: {len(failures)} findings')

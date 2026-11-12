@@ -67,3 +67,15 @@
 body:has(.hud.on) .perf { top: auto; right: auto; left: calc(env(safe-area-inset-left, 0px) + 6px); bottom: calc(env(safe-area-inset-bottom, 0px) + 3px); width: 172px; height: 16px; padding: 2px 4px 2px 7px; }
 body:has(.hud.on.lefty) .perf { left: auto; right: calc(env(safe-area-inset-right, 0px) + 6px); }
 body:has(.hud.on) .perf div:not(:first-child) { display: none; }
+
+/* Kill feed rows size to their content up to the feed's width; any text part (names, notes such as an infection or a
+   VIP kill, quick chat) ellipsizes instead of running out of the row. */
+.hud .f-row { overflow: hidden; }
+.hud .f-row > * { flex: none; }
+/* Names give way first (each down to a few letters), then the words: "was infected" outlasts a long name. */
+.hud .f-row > em { flex: 0 1000 auto; min-width: 3.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud .f-row > .f-note, .hud .f-row > .f-text, .hud .f-row > .qc-say, .hud .f-row > span:not(.f-w):not(.f-hs):not(.f-bdg):not(.f-ico) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud .f-ico { display: grid; place-items: center; line-height: 0; color: var(--c-sodium); --icon-accent: currentColor; }
+
+/* Eliminated, before you pick Spectate or Leave: the out plate is the moment, the feed steps back. */
+.hud:has(.br-out:not([hidden]):not(.watching)) .feed { visibility: hidden; }
