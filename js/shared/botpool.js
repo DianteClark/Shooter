@@ -68,7 +68,7 @@ StrafeKing PeekQueen CrouchSpam AimDuke lowping_lou HighPing Rubberband Desync T
 Hitreg OneClip ReloadRita SoloQueue DuoQueue Lobbyist AfkAndy brb_snack GG_Gus Osprey Heron Plover Shrike Magpie Jackdaw Vole
 Marten Otter Pika Dingo Caracal Ocelot Adder Krait Sleet Gale Monsoon Flux Grommet Sprocket Piston Camshaft Gasket Bushing
 Lugnut Ratchet Hacksaw Spirit_Lvl Sawhorse Toolbox Overalls NightBus LastTrain RedEye_Flt SignalLost Neon_Nora Asphalt
-Underpass Overgrowth Slipstream Backdraft Kickback Rebound Tumbleweed Halfmoon Sundown Daybreak Lowtide Sandbar Shoal Jetsam
+Underpass Overgrowth Slipstream Backdraft Kickback Bounceback Tumbleweed Halfmoon Sundown Daybreak Lowtide Sandbar Shoal Jetsam
 Flotsam Barnacle Pike_Line Minnow Axolotl Pangolin Wombat Quokka Tapir Yak_Attack Bison Moose_Juice Whippet`.split(/\s+/);
 
 // ---- Clans and regular duos (ROADMAP item 19) ----
