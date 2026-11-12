@@ -125,7 +125,7 @@ export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }
   menu.el.dataset.screen = 'help';
   const training = onTutorial ? `<button class="btn is-primary help-tut" data-sound="confirm" data-act="helpTutorial">${ico('play')}<b>Training</b></button>` : '';
   menu.el.innerHTML = `
-    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
+    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs scroll-x">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
     <div class="help-body"></div>`;
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];
@@ -140,6 +140,9 @@ export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }
     body.scrollTop = 0;
     stagger(body.querySelectorAll('.help-card, .help-chip, .help-rules li'), 'up', { step: 25, max: 12 });
     for (const t of tabs) t.classList.toggle('on', t.dataset.tab === tab);
+    // A narrow phone scrolls the tab strip sideways: keep the open tab in view.
+    const strip = tabs[0]?.parentElement, on = tabs.find(t => t.dataset.tab === tab);
+    if (strip && on && (on.offsetLeft + on.offsetWidth > strip.scrollLeft + strip.clientWidth || on.offsetLeft < strip.scrollLeft)) strip.scrollLeft = on.offsetLeft + on.offsetWidth - strip.clientWidth + 4;
   };
   menu.on({
     helpBack: () => { installed?.dispose(); onBack(); },
