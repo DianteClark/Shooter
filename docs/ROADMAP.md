@@ -102,8 +102,8 @@ on every push, keep 2% of weekly usage for bugs.
     (no regen; extraction keeps regen); calmer early bots (loot and rotate first) and somewhat shorter rings so matches
     reach the late circles; one Hardcore switch on the playlist screen applying hardcore rules to every mode; Control
     spectates the remaining players once your side is out of lives.
-26. Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
-    a boss every 10 rounds, on existing maps.
+26. DONE (zombies). Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
+    a boss every 10 rounds, on existing maps. Graveyard Shift on Night Market, Ruins and Foundry; docs/ZOMBIES.md.
 27. Resurgence BR: small map, fast circle, redeploy while any squadmate lives.
 28. Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
 29. Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.

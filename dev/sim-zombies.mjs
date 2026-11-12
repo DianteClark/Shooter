@@ -403,8 +403,9 @@ for (const id of QUICK ? ['neon'] : ZM_MAP_IDS) {
     if (i % 2 === 0) { const b = JSON.stringify(sim.encodeSnapshotFor(R.crew[1].id)).length; bytes += b; maxB = Math.max(maxB, b); n++; }
   }
   times.sort((x, y) => x - y);
-  const mean = times.reduce((s, v) => s + v, 0) / times.length, p99 = times[Math.floor(times.length * 0.99)];
-  console.log(`  ${id}: ${live} live, host tick ${mean.toFixed(2)} ms mean, p99 ${p99.toFixed(2)} ms; snapshot ${Math.round(bytes / n)} B mean, ${maxB} B max`);
+  const mean = times.reduce((s, v) => s + v, 0) / times.length, p99 = times[Math.floor(times.length * 0.99)], worst = times[times.length - 1];
+  console.log(`  ${id}: ${live} live, host tick ${mean.toFixed(2)} ms mean, p99 ${p99.toFixed(2)} ms, max ${worst.toFixed(2)} ms; snapshot ${Math.round(bytes / n)} B mean, ${maxB} B max`);
+  ok(worst < 33, `${id}: no tick over 33 ms (docs/BR-PERF.md budget gate) (${worst.toFixed(2)})`);
   ok(mean < 4, `${id}: host tick under 4 ms mean (${mean.toFixed(2)})`);
   ok(bytes / n < 1800, `${id}: per-guest snapshot under 1.8 KB mean`);
   clearZmWalls(sim.map);

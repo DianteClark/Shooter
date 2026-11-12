@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: '1111-22', date: '2026-11-11', title: 'Zombies: Graveyard Shift',
+    items: [
+      'New co-op mode: Graveyard Shift. Hold off the undead round after round on Night Market, Ruins or Foundry. Find it under Multiplayer > Zombies.',
+      'Play solo with three bot teammates, or host a room for up to four friends (bots fill the empty seats).',
+      'Start with a pistol. Earn points for hits and kills, then buy guns and ammo off the walls, try the mystery crate, open gates to new areas and drink four perks: Ironhide, Quickdraw, Mercy Run and Hammerfall.',
+      'Shamblers, runners, brutes and a boss every tenth round. Watch for power-ups: Full Crate, Double Pay and Clean Sweep.',
+      'Go down and a teammate can revive you. When nobody is left standing, it is over. Your best round on each map is saved.',
+    ],
+  },
+  {
     build: '1111-19', date: '2026-11-11', title: 'What\'s new',
     items: [
       'After an update, the title screen shows what changed. The full history is in How to play > Updates.',

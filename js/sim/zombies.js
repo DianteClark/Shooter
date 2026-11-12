@@ -280,8 +280,10 @@ export class ZmRules {
     const cell = nav.idx(q.ps.x, q.ps.z);
     if (f && (sim.tick - f.at < FIELD_EVERY || f.cell === cell) && sim.tick - f.at < FIELD_EVERY * 4) return f;
     const n = nav.w * nav.h;
+    // A new field's age is offset by the player's seat, so the crew's four rebuilds fall on different ticks.
+    const fresh = !f;
     if (!f) { f = { dist: new Float32Array(n), at: 0, cell: -1 }; this.fields.set(q.index, f); }
-    f.at = sim.tick; f.cell = cell;
+    f.at = sim.tick - (fresh ? (q.index % 4) * 3 : 0); f.cell = cell;
     const dist = f.dist; dist.fill(BIG);
     const heap = this._heap ??= new Int32Array(n * 8), key = this._key ??= new Float32Array(n * 8);
     let hn = 0;
