@@ -109,7 +109,7 @@ body.pad-on .controls .stick, body.pad-on .controls .tbtn, body.pad-on .controls
 body.pad-on .pad-focus { outline: 3px solid var(--c-sodium, #ffc23d) !important; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(255,194,61,.25), 0 0 18px rgba(255,194,61,.45) !important; position: relative; z-index: 3; }
 body:not(.pad-on) .pad-glyph { display: none !important; }
 .pad-glyph { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: rgba(16,20,26,.88); color: #fff; font: 700 11px/1 system-ui, sans-serif; box-shadow: 0 0 0 1.5px rgba(255,255,255,.55); pointer-events: none; white-space: nowrap; }
-body.pad-on .br-take, body.pad-on .zm-use, body.pad-on .ex-call, body.pad-on .br-jump-main, body.pad-on .death-go, body.pad-on .br-self { position: relative; }
+body.pad-on .ex-call, body.pad-on .death-go, body.pad-on .br-self { position: relative; }   /* The glyph's anchor. The take, use and jump prompts are already placed absolutely in the prompt lane: making them relative drops them out of it. */
 body.pad-on .br-take::after, body.pad-on .zm-use::after, body.pad-on .ex-call::after, body.pad-on .br-jump-main::after, body.pad-on .death-go::after, body.pad-on .br-self::after {
   content: var(--pad-interact, "A"); position: absolute; right: -6px; top: -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: rgba(16,20,26,.92); color: #fff;
   font: 700 11px/18px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 1.5px rgba(255,255,255,.6); pointer-events: none; }
