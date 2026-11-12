@@ -5,7 +5,7 @@ import { MAPS } from '../shared/map.js';
 import { SIM_HZ, SNAPSHOT_EVERY, STATE_SEND_HZ, INTERP_DELAY } from '../shared/constants.js';
 import {
   createPlayerState, respawnPlayer, stepPlayer, traceShot, applyAimAssist,
-  encodeHumanState, decodeHumanState, armPlayer, applyDaze,
+  encodeHumanState, decodeHumanState, armPlayer, applyDaze, weaponDef,
 } from '../sim/player.js';
 import { Sim, scavengeRefill } from '../sim/sim.js';
 import { previewThrow, maxThrowRange } from '../sim/equipment.js';
@@ -348,6 +348,12 @@ export class Match {
     } else this.pilotHeld = false;
     this.lastAim = aim;
     r.aim = aim;
+    // A controller's Melee (js/ui/gamepad.js): swings a blade in hand, or brings out the one in the other slot.
+    if (input.melee) {
+      const ps = this.ps;
+      if (weaponDef(ps)?.melee) r.fire = true;
+      else if (weaponDef(ps, ps.slot === 0 ? ps.secondary : ps.primary)?.melee && ps.swapT <= 0) r.swap = true;
+    }
     // Everyone holds position through the warmup countdown, as bots do; aiming stays live.
     if (view.phase === 'warmup') {
       r.mx = 0; r.mz = 0; r.fire = false; r.sprint = false; r.slide = false;
@@ -385,7 +391,7 @@ export class Match {
       if (this.#brAirStep(r, view, dt)) { this.#sendState(dt); return; }
       const me = view.players.find(p => p.id === this.localId);
       if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
-      if (me?.downed) downedInput(r);
+      if (me?.downed) { downedInput(r); r.reload = false; }
       else this.#brDry(view, dt);
     } else if (this.ex || this.zm) {
       const me = view.players.find(p => p.id === this.localId);

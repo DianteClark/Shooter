@@ -626,8 +626,11 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   if (!trigger && ps.sinceShot > SHOT_INDEX_RESET) ps.shotIndex = 0;
   if (ps.sinceShot > BLOOM_RECOVER_DELAY && ps.bloom > 0) ps.bloom = Math.max(0, ps.bloom - w.bloomRecover * dt);
 
+  // A controller's Reload button (js/ui/gamepad.js): a manual reload of a part-empty magazine, whenever one could start.
+  if (input.reload && !trigger && ps.swapT <= 0 && ps.reloadT <= 0 && !w.melee) startReload(ps, w);
+
   // Auto-reload on empty; if the gun is completely dry, fall through to the other one.
-  // There is no reload button, so a part-empty magazine also tops itself off in a quiet moment.
+  // Touch has no reload button, so a part-empty magazine also tops itself off in a quiet moment.
   if (ps.ammo[ps.slot] <= 0 && ps.reloadT <= 0 && ps.cooldown <= 0) {
     if (ps.reserve[ps.slot] > 0 || w.unlimitedReserve) startReload(ps, w);
     else if (ps.ammo[1 - ps.slot] > 0 || ps.reserve[1 - ps.slot] > 0) setSlot(ps, 1 - ps.slot);
