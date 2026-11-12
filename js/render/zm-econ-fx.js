@@ -14,7 +14,9 @@
 //              lighting as they are found
 //   gear       sentries (turning to their aim), hunter drones (hovering, bobbing), lures (a pulsing red post) and the
 //              air strike's mark on the ground: instanced, one draw call each
-// About sixteen draw calls whatever the round.
+//   x-ray      the stations' outlines, their lamps and the trap rings through walls and roofs (the camera looks north:
+//              a piece on a north face hides behind its building otherwise)
+// About eighteen draw calls whatever the round.
 import * as THREE from 'three';
 import { getGun } from './guns.js';
 import { ZE, ZM_FX, zmFxOf } from '../shared/zombies.js';
@@ -70,7 +72,7 @@ export class ZmEconFx {
     this.L = L;
     this.root = new THREE.Group();
     group.add(this.root);
-    const st = new Kit(), glow = new Kit();
+    const st = new Kit(), glow = new Kit(), ghost = new Kit();     // ghost: the stations' outlines for the x-ray pass.
     // The upgrade bench.
     const B = L.bench;
     if (B) {
@@ -81,15 +83,18 @@ export class ZmEconFx {
       glow.at(B.wx, B.wz, B.face);
       glow.box(0.12, 1.25, 0, 0.04, 0.12, 1.5, 0xff7a1a, 0, false);
       for (let k = 0; k < 3; k++) glow.box(0.12, 1.85, -0.5 + k * 0.5, 0.05, 0.16, 0.16, 0xb070ff, 0, false);
+      ghost.at(B.wx, B.wz, B.face).box(0.48, 0.5, 0, 0.9, 1.0, 2.1, 0xff9a3a, 0, false).box(0.08, 1.55, 0, 0.1, 1.3, 2.1, 0xb070ff, 0, false);
     }
     // The supply terminal.
     const T = L.terminal;
     if (T) {
       st.at(T.wx, T.wz, T.face);
-      st.box(0.34, 0.9, 0, 0.6, 1.8, 0.9, 0x2b3a33).box(0.66, 1.35, 0, 0.06, 0.62, 0.8, 0x101814).box(0.62, 0.75, 0, 0.12, 0.08, 0.7, 0x6d7a72);
-      st.box(0.2, 2.15, 0.32, 0.05, 0.7, 0.05, 0x9aa4a0);
+      st.box(0.4, 1.0, 0, 0.72, 2.0, 1.1, 0x2b3a33).box(0.78, 1.45, 0, 0.06, 0.7, 0.96, 0x101814).box(0.8, 0.8, 0, 0.16, 0.1, 0.86, 0x6d7a72);
+      st.box(0.2, 2.4, 0.4, 0.06, 0.9, 0.06, 0x9aa4a0);
       glow.at(T.wx, T.wz, T.face);
-      glow.box(0.7, 1.35, 0, 0.02, 0.5, 0.68, 0x4dffa0, 0, false).box(0.2, 2.52, 0.32, 0.1, 0.1, 0.1, 0x4dffa0, 0, false).box(0.7, 1.82, 0, 0.02, 0.08, 0.7, 0x2fd07a, 0, false);
+      glow.box(0.82, 1.45, 0, 0.02, 0.58, 0.84, 0x4dffa0, 0, false).box(0.2, 2.9, 0.4, 0.16, 0.16, 0.16, 0x4dffa0, 0, false).box(0.82, 1.95, 0, 0.02, 0.1, 0.9, 0x2fd07a, 0, false)
+        .box(0.4, 2.04, 0, 0.6, 0.06, 1.0, 0x2fd07a, 0, false);
+      ghost.at(T.wx, T.wz, T.face).box(0.4, 1.0, 0, 0.72, 2.0, 1.1, 0x4dffa0, 0, false);
     }
     // The armour bench: a rack of plates.
     const A = L.armour;
@@ -99,6 +104,7 @@ export class ZmEconFx {
       for (let k = 0; k < 3; k++) st.box(0.6, 1.1, -0.45 + k * 0.45, 0.07, 0.62, 0.38, 0x6b7a4a).box(0.64, 1.1, -0.45 + k * 0.45, 0.02, 0.2, 0.2, 0x8c9a62);
       glow.at(A.wx, A.wz, A.face);
       glow.box(0.57, 1.96, 0, 0.03, 0.06, 1.5, 0x9fd8ff, 0, false);
+      ghost.at(A.wx, A.wz, A.face).box(0.3, 0.95, 0, 0.5, 1.9, 1.5, 0x9fd8ff, 0, false);
     }
     // The altar: a plinth with three sockets (lit by the quest, below).
     const Al = L.altar;
@@ -106,6 +112,14 @@ export class ZmEconFx {
       st.at(Al.wx, Al.wz, Al.face);
       st.box(0.6, 0.42, 0, 1.0, 0.84, 1.5, 0x5d5a55).box(0.6, 0.88, 0, 1.12, 0.09, 1.64, 0x726e68).box(0.14, 1.3, 0, 0.18, 0.9, 0.5, 0x4a4743);
     }
+    // Trap areas: a ring on the floor (dim hazard yellow idle, red armed, amber cooling), seen through walls too.
+    const ringGeo = new THREE.RingGeometry(0.93, 1, 40).rotateX(-Math.PI / 2);
+    this.trapRings = new THREE.InstancedMesh(ringGeo, additive({ color: 0xffffff, opacity: 0.8, side: THREE.DoubleSide }), Math.max(1, L.traps.length));
+    this.trapRingsX = new THREE.InstancedMesh(ringGeo, xrayMaterial(0xffffff, 0.55), Math.max(1, L.traps.length));
+    L.traps.forEach((t, i) => { M4.compose(V.set(t.x, 0.11, t.z), Q.identity(), S.set(t.r, 1, t.r)); for (const m of [this.trapRings, this.trapRingsX]) { m.setMatrixAt(i, M4); m.setColorAt(i, C.setHex(0x806020)); } });
+    this.trapRings.count = this.trapRingsX.count = L.traps.length;
+    this.trapRingsX.renderOrder = 3;
+    this.root.add(this.trapRings, this.trapRingsX);
     // The exfil pad: a ring of lamps and the pad's painted edge.
     const X = L.exfil;
     if (X) {
@@ -133,7 +147,11 @@ export class ZmEconFx {
     this.glow.renderOrder = 2;
     this.xray = new THREE.Mesh(this.glow.geometry, xrayMaterial(0xffffff, 0.45));
     this.xray.renderOrder = 3;
-    this.root.add(this.stations, this.glow, this.xray);
+    // The stations' outlines through walls and roofs (the camera looks north: a bench on a north face hides behind its
+    // building otherwise), and their lamps.
+    this.ghost = new THREE.Mesh(ghost.geometry(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.4, depthWrite: false, depthFunc: THREE.GreaterDepth, blending: THREE.AdditiveBlending, fog: false }));
+    this.ghost.renderOrder = 3;
+    this.root.add(this.stations, this.glow, this.xray, this.ghost);
     // Trap switch lamps: one instanced mesh.
     this.lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), new THREE.MeshBasicMaterial({ color: 0xffffff }), Math.max(1, lampPos.length));
     lampPos.forEach(([x, y, z], i) => { M4.makeTranslation(x, y, z); this.lamps.setMatrixAt(i, M4); this.lamps.setColorAt(i, C.setHex(0x59d36b)); });
@@ -209,12 +227,15 @@ export class ZmEconFx {
       const on = s.state === 1;
       fx.m.visible = on;
       this.lamps.setColorAt(i, C.setHex(s.state === 1 ? 0xff3a2a : s.state === 2 ? 0xffb21a : 0x59d36b));
+      const rc = s.state === 1 ? C.setHex(0xff3a2a).multiplyScalar(0.7 + 0.3 * Math.sin(t * 8)) : C.setHex(s.state === 2 ? 0x805010 : 0x806020);
+      this.trapRings.setColorAt(i, rc); this.trapRingsX.setColorAt(i, rc);
       if (!on) return;
       if (fx.kind === 'shock') { fx.m.material.opacity = 0.35 + 0.6 * Math.abs(Math.sin(t * 37 + i)) * (Math.sin(t * 13) > -0.3 ? 1 : 0.2); fx.m.rotation.y = Math.floor(t * 12) * 1.7; }
       else if (fx.kind === 'vent') { fx.m.scale.set(1, 0.75 + 0.35 * Math.abs(Math.sin(t * 9 + i)), 1); fx.m.material.opacity = 0.55 + 0.3 * Math.abs(Math.sin(t * 15)); }
       else fx.m.rotation.y = t * 14;
     });
-    if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
+    for (const m of [this.lamps, this.trapRings, this.trapRingsX]) if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    this.ghost.material.opacity = 0.3 + 0.1 * Math.sin(t * 2.4);
     // Exfil: hidden before its round, dim once it can be called, bright and counting down when called.
     if (this.beacon) {
       const X = obj.exfil ?? { state: 0 }, can = (obj.round ?? 0) >= ZE.exfil.from;
@@ -252,16 +273,18 @@ export class ZmEconFx {
       const proto = key ? getGun(b.gun) : null;
       if (proto?.geometry) {
         const camo = b.tier >= 3 ? ZM_FX[zmFxOf(b.gun)].camo : b.tier === 2 ? 'gold' : 'pp-laurel';
-        this.benchGun = new THREE.Mesh(proto.geometry, new THREE.MeshBasicMaterial({ color: getCamo(camo).tint ?? 0xffd77a }));
+        // Drawn over everything (a bench can stand behind its building from this camera): the gun at work reads anyway.
+        this.benchGun = new THREE.Mesh(proto.geometry, new THREE.MeshBasicMaterial({ color: getCamo(camo).tint ?? 0xffd77a, depthTest: false, transparent: true, opacity: 0.95 }));
+        this.benchGun.renderOrder = 6;
         this.benchGun.scale.setScalar(1.3);
         this.root.add(this.benchGun);
       }
     }
     if (this.benchGun && B) {
       const ready = b.state === 2;
-      this.benchGun.position.set(B.wx + Math.cos(B.face) * 0.5, 1.45 + Math.sin(t * (ready ? 2 : 9)) * 0.06, B.wz + Math.sin(B.face) * 0.5);
+      this.benchGun.position.set(B.wx + Math.cos(B.face) * 0.5, 1.6 + Math.sin(t * (ready ? 2 : 9)) * 0.06, B.wz + Math.sin(B.face) * 0.5);
       this.benchGun.rotation.y = t * (ready ? 1.1 : 7);
-      this.benchGun.material.color.offsetHSL(0, 0, 0);
+      this.benchGun.material.opacity = ready ? 0.95 : 0.55 + 0.4 * Math.abs(Math.sin(t * 11));
     }
     // Gear.
     const counts = { sentry: 0, drone: 0, lure: 0, strike: 0 };
@@ -278,7 +301,8 @@ export class ZmEconFx {
   }
 
   dispose() {
-    this.root.traverse(o => { if (o.isMesh && o !== this.xray && o !== this.benchGun) { o.geometry?.dispose(); o.material?.dispose(); } });
+    this.root.traverse(o => { if (o.isMesh && o !== this.xray && o !== this.benchGun && o !== this.trapRingsX) { o.geometry?.dispose(); o.material?.dispose(); } });
+    this.trapRingsX.material.dispose();
     this.benchGun?.material.dispose();
   }
 }

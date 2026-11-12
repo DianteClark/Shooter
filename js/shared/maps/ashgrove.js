@@ -160,9 +160,9 @@ function build() {
       exfil: { x: 72, z: 4, r: 3, note: 'exfil pad: the Burial Field, far corner' },
     },
     // The hidden quest (ROADMAP item 36): a relic in each of the three dead ends, set on the altar at the obelisk's
-    // foot, raises the Gravewarden in the Burial Field.
+    // foot (its south face, toward the camera), raises the Gravewarden in the Burial Field.
     quest: {
-      altar: { x: 66.2, z: 14.2, wall: 's' },
+      altar: { x: 66.2, z: 18.2, wall: 'n' },
       relics: [{ x: 2.2, z: 5.5 }, { x: 26.2, z: 2.2 }, { x: 73.6, z: 42.2 }],
     },
   };

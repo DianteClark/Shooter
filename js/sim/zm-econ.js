@@ -512,7 +512,7 @@ export class ZmEcon {
       for (const gun of [ps.primary, ps.secondary]) {
         if (!zmUpgradable(gun) || gun === START_GUN) continue;
         const t = z.tiers[gun] ?? 0;
-        if (t >= 3 || z.pts < ZE.bench.cost[t] + (t ? 3000 : 1500)) continue;
+        if (t >= 3 || z.pts < ZE.bench.cost[t] + (t ? 1000 : 1500)) continue;
         const d = dist(L.bench.x, L.bench.z);
         if (d < 60) consider({ kind: 'bench', i: 0, x: L.bench.x, z: L.bench.z, gun }, 32 + t * 4 - d * 0.4);
         break;

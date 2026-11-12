@@ -1133,7 +1133,7 @@ export class Characters {
       const p = view.players[pi];
       const r = this.rig(p.id);
       r.team = p.team;
-      const zk = p.zk | 0;       // Graveyard Shift: 1..4 an undead kind on this seat (no gun, arms out, hunched).
+      const zk = p.zk | 0;       // Graveyard Shift: 1..5 an undead kind on this seat (no gun, arms out, hunched).
       r.op = zk ? ZM_OP_BASE + zk - 1 : this.opById.get(p.id) ?? 0;
       const look = this.looks[r.op];
       const sk = zk ? this.zmSkins[zk - 1] : this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
