@@ -87,7 +87,7 @@ export const V10_WEAPONS = {
   magshot: {
     id: 'magshot', name: 'Trammel', role: 'Mag-fed', auto: false,
     damage: 20, rpm: 230, magazine: 8, reserve: 42, reload: 1.7, range: 14,
-    falloff: { start: 7.5, end: 11, min: 0.3 },
+    falloff: { start: 8, end: 11.5, min: 0.3 },
     adsSpread: 0.045, hipSpread: 0.078, bloomPerShot: 0.14, bloomRecover: 1.8, bloomScale: 0.45, turnCap: 8,
     adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.4, moveMult: 1.08, adsMoveMult: 0.7,
     pellets: 8, kickCam: 0.9, tracerWidth: 0.5, longshot: 9,
