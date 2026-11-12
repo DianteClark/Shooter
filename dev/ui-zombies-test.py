@@ -6,8 +6,11 @@ match on one of the mode's maps, plays round 1 (the horde is put down on the hos
 take minutes, after the first zombies have risen and walked), checks the round counter moves on, then walks (teleports)
 the local player to a wall-buy and taps the use button with the points for it, checks the phone's own gun changed,
 buys a perk and opens a gate the same way, and finally lets the crew fall and checks the Overrun results screen.
-Screenshots at 852x393 and 667x375 go to outdir (default /tmp/zombies). Fails on any console error, and on HUD panels
-that spill off the screen.
+Then Ashgrove Halt at 932x430 (the debug hook ?map=ashgrove&mode=zm and the Custom button): the round starts with the
+power out, a perk machine shows dark and will not sell, the gates to the Pump Yard open, the switch is thrown through
+the use button (free), and the same machine sells its perk.
+Screenshots at 852x393, 667x375 and 932x430 go to outdir (default /tmp/zombies). Fails on any console error, and on HUD
+panels that spill off the screen. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove runs only the second.
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -72,7 +75,7 @@ async def run(browser, vw, vh, failures, errors):
     mode = await ev(f'{G}.match.mode')
     if mode != 'zm': failures.append(f'{tag}: match mode {mode}')
     mapId = await ev(f'{G}.match.mapId')
-    if mapId not in ('neon', 'ruins', 'foundry'): failures.append(f'{tag}: zombies on {mapId}')
+    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove'): failures.append(f'{tag}: zombies on {mapId}')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=30000)
     # Nobody on the crew dies by accident while the test drives (spawn protection holds the claws off).
     await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200); }})()""")
@@ -154,6 +157,75 @@ async def run(browser, vw, vh, failures, errors):
     await ctx.close()
 
 
+async def run_ashgrove(browser, vw, vh, failures, errors):
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'ash {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'ash {vw}: PAGEERR {e} {getattr(e, "stack", "")}'))
+    tag = f'ashgrove {vw}x{vh}'
+    async def shot(name):
+        print(f'  {tag} {name}', flush=True)
+        await pg.screenshot(path=f'{OUT}/ash-{name}-{vw}x{vh}.png')
+    ev = lambda js: pg.evaluate(js)
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=ashgrove&mode=zm')
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    mapId, mode = await ev(f'[{G}.match.mapId, {G}.match.mode]')
+    if (mapId, mode) != ('ashgrove', 'zm'): failures.append(f'{tag}: match on {mapId} / {mode}')
+    await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
+      for (const p of sim.rules.crew) if (p.bot) {{ p.bot.update = () => []; }} sim.rules.plan = () => {{}}; sim.rules._crewPlan = null; }})()""")
+    await pg.wait_for_function(f"{G}.match.sim.rules.round === 1 && {G}.match.sim.rules.horde.some(p => p.alive)", timeout=60000)
+    await pg.wait_for_timeout(2500)
+    await shot('01-round1')
+    await check_fit(pg, ['.zm-top', '.zm-crew', '.minimap'], f'{tag} hud', failures)
+    if await ev(f'{G}.match.sim.rules.power') != 0: failures.append(f'{tag}: the power is not off at the start')
+    # The machine in the Halt: dark, and it sells nothing.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId); me.zm.pts = 20000;
+      const mc = R.L.machines.find(x => x.band === R.L.start); window.__perk = mc.perk; window.__mc = mc; m.ps.x = mc.x; m.ps.z = mc.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    await pg.wait_for_selector('.zm-use:not([hidden])', timeout=10000)
+    await pg.wait_for_timeout(400)
+    await shot('02-perk-dark')
+    sub = await ev("document.querySelector('.zm-use')?.textContent")
+    poor = await ev("document.querySelector('.zm-use').classList.contains('poor')")
+    if 'power' not in (sub or '').lower() or not poor: failures.append(f'{tag}: a dark machine prompt says {sub!r} (greyed {poor})')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_timeout(800)
+    if await ev(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.perks.length"): failures.append(f'{tag}: a dark machine sold a perk')
+    # Open the Halt -> Lane -> Pump Yard gates on the host, walk to the switch, throw it with the use button.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, L = R.L, id = n => L.bands.findIndex(b => b.id === n);
+      for (const d of L.doors) if ((d.a === id('halt') && d.b === id('lane')) || (d.a === id('lane') && d.b === id('pump'))) R._use(m.sim.byId.get(m.localId), {{ kind: 'door', i: d.i, cost: 0, ok: true }});
+      m.ps.x = L.power.x; m.ps.z = L.power.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'TURN ON THE POWER'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no TURN ON THE POWER prompt at the switch: ' + str(await ev("document.querySelector('.zm-use')?.textContent")))
+    await pg.wait_for_timeout(1500)
+    await shot('03-switch')
+    where = await ev(CLEAR_OF_STICKS)
+    if where: failures.append(f'{tag}: use button not clear of the sticks: {where}')
+    pts = await ev(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.pts")
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.power === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the switch did not turn the power on')
+    if await ev(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.pts") != pts: failures.append(f'{tag}: the switch cost points')
+    await pg.wait_for_timeout(1200)
+    await shot('04-power-on')
+    # Back to the machine: now it sells.
+    await ev(f"(() => {{ const m = {G}.match; m.ps.x = window.__mc.x; m.ps.z = window.__mc.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    await pg.wait_for_selector('.zm-use:not([hidden]):not(.poor)', timeout=10000)
+    await pg.wait_for_timeout(300)
+    await shot('05-perk-live')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.perks.includes(window.__perk)", timeout=6000)
+    except Exception: failures.append(f'{tag}: the perk machine did not sell once the power was on')
+    await pg.wait_for_timeout(500)
+    await shot('06-perked')
+    await ev('clearInterval(window.__shield)')
+    await ctx.close()
+
+
 async def main():
     os.makedirs(OUT, exist_ok=True)
     server = subprocess.Popen([sys.executable, '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -164,9 +236,12 @@ async def main():
             browser = await p.chromium.launch(args=ARGS)
             sizes = [(852, 393), (667, 375)]
             if os.environ.get('ZM_SIZE'): sizes = [tuple(int(v) for v in os.environ['ZM_SIZE'].split('x'))]
-            for vw, vh in sizes:
-                try: await run(browser, vw, vh, failures, errors)
-                except Exception as e: failures.append(f'{vw}x{vh}: {type(e).__name__}: {e}')
+            if os.environ.get('ZM_ONLY') != 'ashgrove':
+                for vw, vh in sizes:
+                    try: await run(browser, vw, vh, failures, errors)
+                    except Exception as e: failures.append(f'{vw}x{vh}: {type(e).__name__}: {e}')
+            try: await run_ashgrove(browser, 932, 430, failures, errors)
+            except Exception as e: failures.append(f'ashgrove: {type(e).__name__}: {e}')
             await browser.close()
     finally:
         server.terminate()

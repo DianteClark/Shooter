@@ -3236,7 +3236,7 @@ export function buildWorld(map, teams, fogUniforms) {
   stages.lights(ctx);
   ground(ctx);
   stages.paint(ctx);
-  spawnPads(b, map, teams, W);
+  if (!map.zmOnly) spawnPads(b, map, teams, W);      // A Graveyard Shift map has no team ends.
   for (const w of map.walls) {
     const draw = dress[w.kind];
     if (draw) draw(ctx, w);
