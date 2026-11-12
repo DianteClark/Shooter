@@ -121,6 +121,7 @@ async def run(browser, vw, vh, failures, errors):
     # A perk machine and a gate.
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; const mc = R.L.machines.find(x => x.band === R.L.start) ?? R.L.machines[0];
       if (R.L.machines[0] && mc.band !== R.L.start) for (const d of R.L.doors) R.open |= 1 << d.i;
+      R.power = 1;     // A map with a power switch (Ashgrove): the second part throws it through the button.
       window.__perk = mc.perk; m.ps.x = mc.x; m.ps.z = mc.z; }})()""")
     await pg.wait_for_selector('.zm-use:not([hidden]):not(.poor)', timeout=10000)
     await pg.wait_for_timeout(300)
@@ -131,7 +132,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(400)
     await shot('08-perked')
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; R.open = 0; const d = R.L.doors[0];
-      m.ps.x = d.cx + (d.from < d.opens ? -1.2 : 1.2); m.ps.z = d.cz; }})()""")
+      const s = d.stand?.[d.from] ?? {{ x: d.cx + (d.from < d.opens ? -1.2 : 1.2), z: d.cz }}; m.ps.x = s.x; m.ps.z = s.z; }})()""")
     await pg.wait_for_function(f"document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'OPEN GATE'", timeout=10000)
     await shot('09-gate')
     await pg.locator('.zm-use').first.click()
@@ -167,7 +168,7 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
         print(f'  {tag} {name}', flush=True)
         await pg.screenshot(path=f'{OUT}/ash-{name}-{vw}x{vh}.png')
     ev = lambda js: pg.evaluate(js)
-    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=ashgrove&mode=zm')
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=ashgrove&mode=zm', timeout=120000)
     await pg.wait_for_timeout(900)
     await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
     await pg.reload()

@@ -162,7 +162,7 @@ function build() {
   return {
     id: 'ashgrove', name: 'Ashgrove Halt', theme: 'ashgrove', size: 'medium', region: 'farmland',
     hidden: true, modes: [], zmOnly: true,
-    width: W, height: H, walls, spawns, lanes, nav, points: {},
+    width: W, height: H, walls, spawns, lanes, nav, points: { dom: [], hard: [] },     // No flags: zombies only.
     decor: [{ type: 'rails', z: [45.6] }, { type: 'tank', x: 48, z: 21, w: 3.5, d: 4, y: 7 }],
     zm,
   };
