@@ -29,6 +29,13 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
   its beam and floating gun, power-ups. About eight draw calls whatever the round.
 - `js/render/zm-power.js`: a layout with a power switch: the breaker panel and its lever, a beacon over it while the
   power is off, and the perk machines dark (dimmed, crowns out) until it is on. Four small draw calls.
+
+- `js/render/zm-fx.js`: fences, gates (an opened one drops away), wall-buys (a chalk frame and the gun in gold with a
+  pulsing glow, and an x-ray copy drawn only where walls or roofs hide it, so a buy reads through walls), perk machines,
+  the crate (a plank crate with iron corners and a lid hinged at the back, its outline through walls too: rolling, the
+  lid opens and guns cycle up out of it, slowing as it settles; the offer floats and turns; the lid shuts once it is
+  taken; a move lifts it up the beam and drops it in at its new spot), power-ups. About eleven draw calls whatever the
+  round; the x-ray passes are one merged mesh for every wall-buy and one box for the crate.
 - `js/render/zm-looks.js` + `js/render/characters.js`: the undead (shambler, runner, brute, boss) in the operators'
   parts kit, greyed and torn, as four extra operator uniform slots after `MAX_OPERATORS`. They ride the same instanced
   character meshes as soldiers (no extra draw calls); a horde seat's look comes from the view (`zk`).
@@ -172,6 +179,12 @@ opens exactly the area behind it, every placement, riser, start, boss spot and r
 area; a 300 s bot crew match); the `ashgrove` section of dev/sim-zombies.mjs; the Ashgrove part of
 dev/ui-zombies-test.py (932x430: power out, a dark machine refuses, gates to the Pump Yard, the switch through the use
 button, the perk bought).
+
+## Scorestreaks (as of build NEXT, unchanged pending the owner)
+Loadout streaks do trigger here: the kit (`ZmRules.kit`) deals no streaks, but the streak slots come from the roster's
+loadout, and kills still feed streak score (`Sim._kill`). Bots call them (one test run on Ruins, eight rounds: six UAVs,
+five turrets, three gunships). The touch HUD hides the streak tiles in this mode, so a human on touch cannot call one; a
+controller's Streak button could.
 
 ## Open
 - Ashgrove's reserved spots wait for the economy (item 36).

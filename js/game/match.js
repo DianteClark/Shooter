@@ -20,7 +20,7 @@ import { exAmmo } from '../sim/extract.js';
 import { objOf } from '../sim/rules.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { unpackKit } from '../shared/attachments.js';
-import { AMMO_TYPES, ammoOf, brAmmo, brArm, downedInput, glideStep, land } from '../sim/br.js';
+import { brAmmo, brArm, brHandWant, downedInput, glideStep, HANDS, land } from '../sim/br.js';
 import { hapticEvents } from '../ui/haptics.js';
 import { finishable, FIN } from '../shared/finishers.js';       // Finishing moves (docs/FINISHERS.md).
 import { hasLineOfSight } from '../shared/geometry.js';
@@ -314,21 +314,35 @@ export class Match {
     this.#command({ cmd: 'ex', act, ...extra });
   }
 
-  // Battle royale: the gun in hand has nothing left anywhere (magazine, reserve, and the pouch's rounds of its type): a
-  // moment after the last shot, out come the fists, as if their slot were tapped (the gun is kept, and comes back topped up
-  // from the pouch when its slot is tapped once rounds are found).
+  // Battle royale hands (brHandWant, js/sim/br.js): both guns out of rounds, and a moment after the last shot out come
+  // the fists, as if their slot were tapped (the gun is kept). Walk over ammo for a gun you carry and it comes back by
+  // itself (from the pouch for the one put away). Fists you chose stay out until you choose otherwise.
   #brDry(view, dt) {
-    const ps = this.ps, def = ps.defs?.[ps.slot];
-    const t = def && ps.weapon !== 'knife' && !def.unlimitedReserve ? AMMO_TYPES.indexOf(ammoOf(def.id)) : -1;
-    const dry = t >= 0 && ps.ammo[ps.slot] <= 0 && ps.reserve[ps.slot] <= 0 && !(view.br?.inv?.pouch?.[t] > 0);
-    this.brDryT = dry ? (this.brDryT ?? 0) + dt : 0;
-    if (this.brDryT > 0.35) { this.brDryT = 0; this.brSlot(2); }
+    const ps = this.ps;
+    if (ps.weapon !== 'knife') this.brAuto = false;
+    if (this.brHold > 0) { this.brHold -= dt; return; }       // Just brought a gun back: its rounds are on the way.
+    const want = brHandWant(ps, this.brStash, view.br?.inv?.pouch, !!this.brAuto);
+    if (want === HANDS.dry) { this.brAuto = true; this.brDryT = 0; return; }
+    this.brDryT = want === HANDS.keep ? 0 : (this.brDryT ?? 0) + dt;
+    if (this.brDryT < (want === HANDS.fists ? 0.35 : 0.12)) return;
+    this.brDryT = 0;
+    if (want === HANDS.fists) { this.brSlot(2); this.brAuto = true; }
+    else this.#brBack(want);
+  }
+
+  // A gun back in hand (`k`): the one put away for fists comes out of its stash, the other by the usual swap.
+  #brBack(k) {
+    const st = this.brStash;
+    if (st) this.brSlot(st.slot);
+    if (this.ps.slot !== k && this.ps.defs[k]?.id !== 'knife') this.brSwapWant = true;
+    this.brAuto = false;
+    this.brHold = 1;
   }
 
   // Battle royale commands from the HUD: jump, take (a ground gun), plate, med, self (revive kit), cancel.
   brCommand(act, extra = {}) {
     if (!this.br) return;
-    if (act === 'slot') { this.brSlot(extra.k | 0); return; }
+    if (act === 'slot') { this.brAuto = false; this.brSlot(extra.k | 0); return; }
     if (act === 'jump') {
       if (this.brAir !== 1 || this.interp.newest?.phase !== 'live') return;
       this.brAir = 2; this.glideT = BR.glide;     // The glide starts here and now; the host follows the command.
@@ -458,6 +472,13 @@ export class Match {
     if (this.br) {
       if (this.#brAirStep(r, view, dt)) { this.#sendState(dt); return; }
       const me = view.players.find(p => p.id === this.localId);
+      // No hand slots on the battle royale HUD: the swap button, with fists out, brings a gun back (a loaded one first).
+      if (r.swap && this.brStash) {
+        r.swap = false;
+        const k = brHandWant(this.ps, this.brStash, view.br?.inv?.pouch, true);
+        this.brAuto = false;
+        if (k === 0 || k === 1) this.#brBack(k); else this.brSlot(this.brStash.slot);
+      }
       if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
       if (me?.downed) { downedInput(r); r.reload = false; }
       else this.#brDry(view, dt);

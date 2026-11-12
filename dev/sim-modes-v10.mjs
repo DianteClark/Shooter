@@ -115,6 +115,86 @@ await test('hq: the side holding the HQ cannot respawn; destroying it brings the
   assert.ok(p.alive || sim.phase === 'ended', 'back once it is gone');
 });
 
+// Like Match.#stepHost: the host decodes its own snapshot every tick for its view. The rule set must not take the
+// block's rounded numbers back (the HQ gap clock sat at 5.0 and the next HQ never opened; Control's capture stalled).
+function runAsHost(sim, seconds, onEvent = () => {}) {
+  const me = sim.players[0].id;
+  for (let i = Math.round(seconds * SIM_HZ); i > 0 && sim.phase !== 'ended'; i--) {
+    sim.step(STEP);
+    sim.decodeSnapshot(sim.encodeSnapshot(), me);
+    for (const e of sim.drainEvents()) onEvent(e, sim);
+  }
+}
+// Every closed HQ is followed by the next going live after HQ.gap seconds (or the match ends).
+function hqWatch() {
+  const w = { closes: 0, opens: 0, worst: 0, at: null };
+  w.on = (e, sim) => {
+    if (e.t !== 'hq') return;
+    if (e.kind === 'destroy' || e.kind === 'expire') { w.closes++; w.at = sim.time; }
+    if (e.kind === 'live') { w.opens++; if (w.at != null) w.worst = Math.max(w.worst, sim.time - w.at); w.at = null; }
+  };
+  w.check = (sim, label) => {
+    assert.ok(w.closes >= 1, `${label}: an HQ closed`);
+    assert.ok(w.worst <= 5.2, `${label}: next HQ within the gap (${w.worst.toFixed(2)} s)`);
+    if (w.at != null && sim.phase !== 'ended') assert.ok(sim.time - w.at <= 5.2, `${label}: stuck in the gap for ${(sim.time - w.at).toFixed(1)} s`);
+  };
+  return w;
+}
+
+await test('hq: the next HQ opens after each one ends, with the host decoding its own view (maps x seeds)', () => {
+  const maps = QUICK ? ['railyard', 'pier'] : ['railyard', 'pier', 'foundry', 'dust', 'canyon'];
+  for (const map of maps) for (const seed of QUICK ? [3] : [3, 17]) {
+    const { sim } = makeSim('hq', map, { seed });
+    const w = hqWatch();
+    runAsHost(sim, 240, w.on);
+    w.check(sim, `${map} seed ${seed}`);
+    assert.ok(w.opens >= 2, `${map} seed ${seed}: a second HQ`);
+  }
+  const { sim } = makeSim('gwhq', 'harvest', { seed: 5 });
+  const w = hqWatch();
+  runAsHost(sim, 260, w.on);
+  w.check(sim, 'gwhq harvest');
+});
+
+await test('hq: a host migration in the gap and while held still opens the next HQ', () => {
+  for (const when of ['gap', 'held']) {
+    const humans = [{ id: 'h1', name: 'Host', team: 0, primary: 'ar' }, { id: 'h2', name: 'Guest', team: 1, primary: 'smg' }];
+    const { roster, sim } = makeSim('hq', 'railyard', { humans, seed: 21 });
+    const guest = new Sim({ roster, map: 'railyard', seed: 21, mode: 'hq' });
+    let gv = null;
+    runAsHost(sim, 400, () => {});
+    // Play on (as host) until the phase we want, taking the guest's view as we go.
+    for (let i = 0; i < 400 * SIM_HZ && sim.phase !== 'ended'; i++) {
+      sim.step(STEP); sim.drainEvents();
+      gv = guest.decodeSnapshot(sim.encodeSnapshot(), 'h2');
+      if (sim.rules.phase === when && (when !== 'gap' || sim.rules.t < 3)) break;
+    }
+    if (sim.phase === 'ended') continue;
+    assert.equal(objOf(gv).phase, when);
+    const next = Sim.fromSnapshot(gv, roster, { map: 'railyard', seed: 21, gone: ['h1'] });
+    assert.equal(next.rules.phase, when);
+    if (when === 'held') next.rules._destroy(1 - next.rules.zone.owner);
+    const w = hqWatch();
+    if (when === 'held') w.closes = 1, w.at = next.time;
+    runAsHost(next, 30, w.on);
+    assert.ok(w.opens >= 1, `${when}: the next HQ opened after the migration`);
+    w.check(next, `migration in ${when}`);
+  }
+});
+
+await test('ctl: one attacker alone takes a zone with the host decoding its own view', () => {
+  const { sim } = makeSim('ctl', 'pier', { seed: 4 });
+  runAsHost(sim, 12);
+  const R = sim.rules, A = R.attackers, z = R.zones[0];
+  const p = sim.players.find(q => q.team === A && q.alive);
+  for (const q of sim.players) if (q !== p) { q.alive = false; q.respawnT = 999; }
+  for (let i = 0; i < 12 * SIM_HZ && Math.abs(z.cap) < 1 && z.owner !== A; i++) {
+    p.ps.x = z.x; p.ps.z = z.z;
+    sim.step(STEP); sim.decodeSnapshot(sim.encodeSnapshot(), p.id); sim.drainEvents();
+  }
+  assert.ok(z.owner === A || Math.abs(z.cap) > 0.9, `capture progressed (${z.cap})`);
+});
+
 await test('gwinf: two infected at the start of a 32-player match; they respawn near the survivors, who split over holds', () => {
   const { sim } = makeSim('gwinf', 'harvest');
   run(sim, 6);

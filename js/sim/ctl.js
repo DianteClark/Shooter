@@ -219,8 +219,14 @@ export class CtlRules {
     return encodeStats(out, this.sim.players, STATS);
   }
 
-  decode(a, out) {
+  // `host`: the stepping sim's own view; its zones and clock are the truth (a capture's 1/270 a tick rounded away).
+  decode(a, out, host = false) {
     const sim = this.sim;
+    if (host) {
+      decodeStats(a, a ? 8 + this.zones.length + 1 + a[8 + this.zones.length] : 0, out.players, STATS);
+      for (const z of this.zones) out.points.push(sim._pointView(z, z.owner, z.cap, z.contested));
+      return this.view();
+    }
     if (!a) { decodeStats(null, 0, out.players, STATS); out.points.push(...this.zones.map(z => sim._pointView(z, z.owner, z.cap, z.contested))); return this.view(); }
     this.state = STATES[a[0]] ?? 'live'; this.round = a[1]; this.attackers = a[2]; this.lives = [a[3], a[4]]; this.livesMax = a[5];
     const clock = a[6] / 10; this.overtime = !!a[7];

@@ -35,11 +35,12 @@ import { LETHALS, TACTICALS } from '../shared/catalog.js';
 import { applyAttachments, availableFor, kitKey, NO_ATTACHMENTS, packKit, unpackKit, normalizeKit } from '../shared/attachments.js';
 import { resolveCircle } from '../shared/geometry.js';
 import { botAttachments } from './bots.js';
-import { stepPlayer } from './player.js';
+import { setSlot, stepPlayer } from './player.js';
 
 const r1 = v => Math.round(v * 10);
 const KNIFE = 'knife';
-export const BR_KINDS = ['gun', 'ammo', 'plate', 'med', 'kit', 'lethal', 'tactical', 'chest'];
+// 'tag' (last, so older kinds keep their numbers): a dead player's recall tag, `v` their player index (Recall Beacons).
+export const BR_KINDS = ['gun', 'ammo', 'plate', 'med', 'kit', 'lethal', 'tactical', 'chest', 'tag'];
 const K = Object.fromEntries(BR_KINDS.map((k, i) => [k, i]));
 export const AMMO_TYPES = ['light', 'rifle', 'shell', 'heavy', 'rocket'];
 export const AMMO_NAMES = { light: 'Light ammo', rifle: 'Rifle ammo', shell: 'Shells', heavy: 'Heavy ammo', rocket: 'Rockets' };
@@ -181,6 +182,32 @@ export function brAmmo(ps, slot, n) {
   return got;
 }
 
+// Fists by themselves (owner notes): with both guns out of rounds the fists come out; once rounds turn up for a gun
+// you carry (you walk over ammo for it), that gun comes back. A gun's rounds are its magazine and reserve, and for the gun
+// put away for fists also the pouch's rounds of its type, which top it up as it comes back. `ps` the hands, `stash` the
+// gun put away ({slot, def, ammo, res}) or null, `pouch` rounds by type, `auto` whether the fists are out because
+// everything ran dry (fists a player chose stay out). Returns HANDS.keep, HANDS.fists (put them up), HANDS.dry (fists out
+// with nothing to come back to: the caller marks them as automatic) or the slot (0, 1) of the gun to bring back.
+export const HANDS = { keep: -1, fists: 2, dry: 3 };
+export function brUsable(def, ammo, res, pouch = null) {
+  if (!def || def.id === KNIFE || def.melee) return false;
+  if (ammo > 0 || res > 0) return true;        // (An unlimited reserve shows as 999; rounds are what the fall-through swaps on.)
+  const t = AMMO_TYPES.indexOf(ammoOf(def.id));
+  return t >= 0 && (pouch?.[t] ?? 0) > 0;
+}
+export function brHandWant(ps, stash, pouch, auto) {
+  if (ps.weapon !== KNIFE) {
+    const s = ps.slot, o = 1 - s;
+    // A gun in hand runs on what it holds (the usual fall-through swaps to a loaded other gun).
+    if (brUsable(ps.defs[s], ps.ammo[s], ps.reserve[s]) || brUsable(ps.defs[o], ps.ammo[o], ps.reserve[o])) return HANDS.keep;
+    return stash ? HANDS.keep : HANDS.fists;
+  }
+  const o = stash ? 1 - stash.slot : 1 - ps.slot;
+  const back = stash && brUsable(stash.def, stash.ammo, stash.res, pouch) ? stash.slot : brUsable(ps.defs[o], ps.ammo[o], ps.reserve[o]) ? o : -1;
+  if (back < 0) return HANDS.dry;
+  return auto ? back : HANDS.keep;
+}
+
 // ---- The transport and the glide, the same on the host (bots, and the plane for everyone) and a phone (its own) ----
 
 export function planeAt(plane, f, out = { x: 0, z: 0 }) {
@@ -259,6 +286,35 @@ export function reboundArea(map, seed) {
   return { x: pick.x, z: pick.z, r: R };
 }
 
+// Recall Beacons for a map (and Rebound's area): `count` named places, `gap` metres or more apart, spread by farthest
+// point from the one nearest the middle; tier 2 and 3 places first (tier 1 only to make up the number). Each stands on the
+// place's nearest outdoor loot spot (open, walkable ground). Pure: every phone gets the same beacons from the map and area.
+export function recallBeacons(map, area = null) {
+  const cfg = area ? RB.recall : BR.recall, pois = map.br?.pois ?? [], loot = map.br?.loot ?? [];
+  const inArea = q => !area || Math.hypot(q.x - area.x, q.z - area.z) < area.r - 14;
+  let cands = pois.filter(q => inArea(q) && q.tier >= 2);
+  if (cands.length < cfg.count) cands = pois.filter(inArea);
+  cands = cands.slice().sort((a, b) => (a.id < b.id ? -1 : 1));
+  if (!cands.length) return [];
+  const cx = area?.x ?? map.width / 2, cz = area?.z ?? map.height / 2;
+  const picked = [cands.reduce((m, q) => (Math.hypot(q.x - cx, q.z - cz) < Math.hypot(m.x - cx, m.z - cz) ? q : m))];
+  while (picked.length < cfg.count) {
+    let best = null, bestD = cfg.gap;
+    for (const q of cands) {
+      if (picked.includes(q)) continue;
+      const d = Math.min(...picked.map(o => Math.hypot(o.x - q.x, o.z - q.z)));
+      if (d >= bestD) { bestD = d; best = q; }
+    }
+    if (!best) break;
+    picked.push(best);
+  }
+  return picked.map((q, i) => {
+    let at = null, bd = (q.r ?? 20) + 12;
+    for (const l of loot) { if (l.indoor) continue; const d = Math.hypot(l.x - q.x, l.z - q.z); if (d < bd) { bd = d; at = l; } }
+    return { id: i, x: at ? at.x : q.x, z: at ? at.z : q.z, poi: q.id, name: q.name };
+  });
+}
+
 // A downed player's stick: a crawl, no trigger, no sprint, no slide, no equipment.
 export function downedInput(input) {
   input.mx *= BR.crawl; input.mz *= BR.crawl;
@@ -323,6 +379,9 @@ export class BrRules {
     this.noise = [];                 // Recent gunfire: {x, z, t, team}.
     this.plans = new Map();          // Bot squad plans by team.
     this.claims = new Map();         // Item id -> {bot, until}.
+    // Recall Beacons: one use each; `user` the id of whoever is holding it, `k` 0..1 their progress (a guest's mirror).
+    this.beacons = recallBeacons(map, this.area).map(b => ({ ...b, used: false, user: null, k: 0 }));
+    this.recallOn = false;           // Whether the beacons are online now (host; guests read it from the block).
     this.stats = null;               // Guest: the latest stats block.
     this.view = { plane: null, circle: null, next: null, phase: 0, state: 'wait', timer: 0, squadsLeft: 0, alive: 0, inv: null, items: this.items, stats: null, pois: def.pois, rules: this };
     sim.phaseT = BR.warmup;
@@ -336,6 +395,7 @@ export class BrRules {
     V.circle = { ...this.circle }; V.next = { ...this.next }; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.items = this.items; V.t = this.t; V.squad = this.squad;
     V.area = this.area; V.rebound = this.rb; V.phases = this.phases.length;
+    V.beacons = this.beacons; V.recallOn = this.recallOn;
   }
 
   // ---- Loot table ----
@@ -442,6 +502,7 @@ export class BrRules {
         reviveT: 0, downedBy: null, downWeapon: null, out: false, place: 0, dmg: 0, revives: 0, knocks: 0,
         pouch: [0, 0, 0, 0, 0], stash: null,      // Ammo kept by type; the gun put away while fists are out {slot, ammo, res}.
         glideT: 0, deathT: 0, jumpAt: 0.5, dropX: p0.x, dropZ: p0.z, follow: null, landed: false,
+        tags: [], recall: null, recalls: 0,       // Recall Beacons: squadmates' tags carried, the use in progress.
       };
       this._startKit(p);
     }
@@ -467,7 +528,7 @@ export class BrRules {
         const cat = WEAPON_CATEGORY[WEAPON_IDS[g.v]];
         if (cat !== 'Launcher' && cat !== 'Sniper' && cat !== 'Pistol') break;
       }
-      const id = WEAPON_IDS[g.v], r = Math.min(g.r, this.rb.kitRarity), kit = r ? g.kit : NO_ATTACHMENTS, def = brDef(id, kit, r);
+      const id = WEAPON_IDS[g.v], r = Math.min(g.r, this.rb?.kitRarity ?? 0), kit = r ? g.kit : NO_ATTACHMENTS, def = brDef(id, kit, r);
       p.br.guns[0] = { id, r, kit };
       brArm(ps, 0, id, kit, r, def.magazine, def.magazine * 2);
       ps.slot = 0; ps.weapon = id; p.primary = id; p.kits[0] = kit;
@@ -521,7 +582,8 @@ export class BrRules {
       case 'plate': return this._startUse(p, 'plate');
       case 'med': return this._startUse(p, 'med');
       case 'self': return this._startUse(p, 'self');
-      case 'cancel': p.br.useK = null; return true;
+      case 'cancel': p.br.useK = null; if (p.br.recall) this._recallStop(p, 'cancel'); return true;
+      case 'recall': return this._recallStart(p, msg.b);
       case 'fists': return this._fists(p, msg);
       case 'ping': {
         // A landing spot (or any spot) for the squad, at most every 1.5 s.
@@ -564,6 +626,27 @@ export class BrRules {
     return true;
   }
 
+  // A bot's hands follow the same rule as a phone's (brHandWant): fists once both guns are dry, a gun back once it has rounds.
+  _botHands(p) {
+    const b = p.br, ps = p.ps;
+    if (b.useK || ps.reloadT > 0 || ps.swapT > 0) return;
+    if (ps.weapon !== KNIFE) b.autoFists = false;
+    const g = b.stash ? b.guns[b.stash.slot] : null;
+    const st = g ? { slot: b.stash.slot, def: brDef(g.id, g.kit, g.r), ammo: b.stash.ammo, res: b.stash.res } : null;
+    const want = brHandWant(ps, st, b.pouch, !!b.autoFists);
+    if (want === HANDS.fists) { this._fists(p, { on: 1, slot: ps.slot, ammo: ps.ammo[ps.slot], res: ps.reserve[ps.slot] }); b.autoFists = true; }
+    else if (want === HANDS.dry) b.autoFists = true;
+    else if (want >= 0) this._handBack(p, want);
+  }
+
+  // The gun in `slot` back in hand: the one put away comes out of the stash (topped up from the pouch), the other by a swap.
+  _handBack(p, slot) {
+    const b = p.br, ps = p.ps;
+    if (b.stash) this._fists(p, { on: 0 });
+    if (ps.slot !== slot && b.guns[slot]) setSlot(ps, slot);
+    b.autoFists = false;
+  }
+
   _startUse(p, kind) {
     const b = p.br;
     if (p.brAir || b.useK === kind) return false;
@@ -594,6 +677,7 @@ export class BrRules {
     const pos = planeAt(plane, plane.f, this._pp || (this._pp = { x: 0, z: 0 }));
     const vx = (plane.tx - plane.fx) / plane.len * BR.planeSpeed, vz = (plane.tz - plane.fz) / plane.len * BR.planeSpeed;
     this._stepCircle(dt);
+    this._stepRecallOn();
     const outside = this._dps();
     for (const p of sim.players) {
       if (!p.br) continue;
@@ -628,9 +712,12 @@ export class BrRules {
       }
       if (p.downed) { this._stepDowned(p, dt); continue; }
       if (b.useK) this._stepUse(p, dt);
+      if (b.recall) this._stepRecall(p, dt);
       if ((sim.tick + p.index) % 3 === 0) this._pickups(p);
+      if (p.bot && (sim.tick + p.index) % 10 === 0) this._botHands(p);
     }
     if (sim.tick % PLAN_EVERY === 0) this.plan();
+    if (sim.tick % 30 === 7 && this.recallOn) this._sweepTags();
     while (this.noise.length && sim.time - this.noise[0].t > NOISE_KEEP) this.noise.shift();
     // Changes older than the repeat window that every guest has had can go.
     if (this.log.length > 4000) this.log.splice(0, this.log.length - 4000);
@@ -677,19 +764,156 @@ export class BrRules {
     const land = this._walkable(lx, lz);
     const W = sim.map.width, H = sim.map.height, b0 = rng() * Math.PI * 2;
     const sx = Math.max(4, Math.min(W - 4, land.x + Math.cos(b0) * 40)), sz = Math.max(4, Math.min(H - 4, land.z + Math.sin(b0) * 40));
-    const keep = p.br;
+    this._dropIn(p, land, sx, sz);
+    sim._emit({ t: 'brredeploy', id: p.id, by: mate.id, x: Math.round(land.x), z: Math.round(land.z) });
+  }
+
+  // Back on the field (a Rebound redeploy or a Recall Beacon): on the parachute from (sx, sz) down to `land`, with the
+  // basic kit (a common long gun, the pistol, a plate's armor). What the player carried before stayed where they fell.
+  _dropIn(p, land, sx, sz, recall = false) {
+    const sim = this.sim, keep = p.br;
     sim._placeAt(p, { x: sx, z: sz }, Math.atan2(land.z - sz, land.x - sx));
     p.spawnProtect = 0;
     p.downed = false;
     p.brAir = 2;
     p.br = {
-      armor: this.rb.kitArmor, plates: 0, meds: 0, kits: 0, guns: [null, null], useK: null, useT: 0, useDur: 0,
+      armor: this.rb?.kitArmor ?? RB.kitArmor, plates: 0, meds: 0, kits: 0, guns: [null, null], useK: null, useT: 0, useDur: 0,
       reviveT: 0, downedBy: null, downWeapon: null, out: false, place: 0, dmg: keep.dmg, revives: keep.revives, knocks: keep.knocks,
       pouch: [0, 0, 0, 0, 0], stash: null, glideT: BR.glide, deathT: keep.deathT, jumpAt: 0, dropX: land.x, dropZ: land.z,
-      follow: null, landed: false, redeployT: 0, redeploys: (keep.redeploys ?? 0) + 1,
+      follow: null, landed: false, redeployT: 0, redeploys: (keep.redeploys ?? 0) + (recall ? 0 : 1),
+      tags: [], recall: null, recalls: keep.recalls ?? 0, recalled: (keep.recalled ?? 0) + (recall ? 1 : 0),
     };
     this._startKit(p, true);
-    sim._emit({ t: 'brredeploy', id: p.id, by: mate.id, x: Math.round(land.x), z: Math.round(land.z) });
+  }
+
+  // ---- Recall Beacons (docs/BR.md "Recall Beacons") ----
+
+  // Online through BR's early circles (offline from circle BR.recall.off + 1); in Rebound only once redeploys are over,
+  // until the last circle. Going offline takes every tag off the map.
+  _recallLive() {
+    if (!this.beacons.length || this.state === 'final') return false;
+    return this.rb ? this.phase >= this.rb.recall.from && this.phase < this.rb.recall.off : this.phase < BR.recall.off;
+  }
+
+  _stepRecallOn() {
+    const on = this._recallLive();
+    if (on === this.recallOn) return;
+    this.recallOn = on;
+    if (!on) {
+      for (const p of this.sim.players) { if (p.br?.recall) this._recallStop(p, 'offline'); if (p.br) p.br.tags = []; }
+      for (const it of this.items) if (it && it.kind === K.tag) this._removeItem(it);
+    }
+    this.sim._emit({ t: 'brbeacons', on });
+  }
+
+  // Whose tags a squad could still bring back: dead (not waiting on a redeploy), squad still in, phone not away.
+  _recallable(q) { return !!q?.br && !q.alive && !(q.br.redeployT > 0) && !this.squadsOut.has(q.team) && !q.away; }
+
+  // The tag a carrier would use first: the first squadmate still waiting.
+  _tagFor(p) {
+    for (const i of p.br.tags) if (this._recallable(this.sim.players[i])) return i;
+    return -1;
+  }
+
+  // The nearest beacon in reach that can take a recall now.
+  _beaconAt(x, z, reach = BR.recall.reach) {
+    let best = null, bd = reach;
+    for (const b of this.beacons) {
+      if (b.used || b.user) continue;
+      const d = Math.hypot(b.x - x, b.z - z);
+      if (d <= bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+
+  _recallStart(p, bi) {
+    const b = p.br;
+    if (!this.recallOn || p.brAir || p.downed || b.recall || b.useK) return false;
+    const who = this._tagFor(p);
+    if (who < 0) return false;
+    const bc = Number.isInteger(bi) && this.beacons[bi] && !this.beacons[bi].used && !this.beacons[bi].user
+      && Math.hypot(this.beacons[bi].x - p.ps.x, this.beacons[bi].z - p.ps.z) <= BR.recall.reach + 0.6 ? this.beacons[bi] : this._beaconAt(p.ps.x, p.ps.z);
+    if (!bc) return false;
+    bc.user = p.id; bc.k = 0;
+    b.recall = { b: bc.id, t: 0, who };
+    this.sim._emit({ t: 'brrecall', kind: 'start', id: p.id, who: this.sim.players[who].id, b: bc.id, x: bc.x, z: bc.z });
+    return true;
+  }
+
+  // Holding it: in reach of the beacon, not shooting, not hit, not down (those stop it; see absorb, onShot, tryDown).
+  _stepRecall(p, dt) {
+    const r = p.br.recall, bc = this.beacons[r.b], q = this.sim.players[r.who];
+    if (!bc || Math.hypot(bc.x - p.ps.x, bc.z - p.ps.z) > BR.recall.reach + 0.6) { this._recallStop(p, 'left'); return; }
+    if (!this._recallable(q)) { this._recallStop(p, 'gone'); return; }
+    r.t += dt;
+    bc.k = Math.min(1, r.t / BR.recall.time);
+    if (r.t >= BR.recall.time) this._recallDone(p);
+  }
+
+  _recallStop(p, why) {
+    const r = p.br.recall;
+    if (!r) return;
+    const bc = this.beacons[r.b];
+    if (bc && bc.user === p.id) { bc.user = null; bc.k = 0; }
+    p.br.recall = null;
+    this.sim._emit({ t: 'brrecall', kind: 'stop', id: p.id, b: r.b, why });
+  }
+
+  // Done: the beacon is spent, the tag is used, and the teammate parachutes in a few metres off it.
+  _recallDone(p) {
+    const sim = this.sim, r = p.br.recall, bc = this.beacons[r.b], q = sim.players[r.who];
+    p.br.recall = null;
+    bc.used = true; bc.user = null; bc.k = 1;
+    p.br.tags = p.br.tags.filter(i => i !== r.who);
+    p.br.recalls = (p.br.recalls ?? 0) + 1;
+    const rng = sim.rng, a = rng() * Math.PI * 2, d = 3 + rng() * 3;
+    const land = this._walkable(bc.x + Math.cos(a) * d, bc.z + Math.sin(a) * d);
+    const W = sim.map.width, H = sim.map.height, b0 = rng() * Math.PI * 2;
+    const sx = Math.max(4, Math.min(W - 4, land.x + Math.cos(b0) * 40)), sz = Math.max(4, Math.min(H - 4, land.z + Math.sin(b0) * 40));
+    this._dropIn(q, land, sx, sz, true);
+    sim._emit({ t: 'brrecall', kind: 'done', id: p.id, who: q.id, b: bc.id, x: Math.round(land.x), z: Math.round(land.z) });
+  }
+
+  // A tag left outside the circle (the circle killed them, or closed over the spot) goes to the nearest squadmate up,
+  // so a death out in the storm does not cost the squad its recall.
+  _sweepTags() {
+    const c = this.circle, sim = this.sim;
+    for (const it of this.items) {
+      if (!it || it.kind !== K.tag) continue;
+      const q = sim.players[it.v];
+      if (!this._recallable(q)) { this._removeItem(it); continue; }
+      if (Math.hypot(it.x - c.x, it.z - c.z) <= c.r) continue;
+      let best = null, bd = Infinity;
+      for (const m of sim.players) {
+        if (m.team !== q.team || !m.alive || m.downed || m.brAir || !m.br) continue;
+        const d = Math.hypot(m.ps.x - it.x, m.ps.z - it.z);
+        if (d < bd) { bd = d; best = m; }
+      }
+      if (!best) continue;
+      this._removeItem(it);
+      best.br.tags.push(it.v);
+      sim._emit({ t: 'brtag', id: best.id, who: q.id, auto: true });
+    }
+  }
+
+  // A death: their own tag goes down where they fell for the squad, and so do any tags they carried.
+  _dropTags(p) {
+    const b = p.br, list = b.tags ?? [];
+    b.tags = [];
+    if (b.recall) this._recallStop(p, 'dead');
+    if (!this.recallOn || this.squadsOut.has(p.team)) return;
+    const own = this._recallable(p) ? [p.index] : [];
+    [...own, ...list.filter(i => this._recallable(this.sim.players[i]))].forEach((i, k) => {
+      const a = k * 2.1, at = this._spot(p.ps.x + Math.cos(a) * 0.5 * k, p.ps.z + Math.sin(a) * 0.5 * k);
+      this._addItem({ kind: K.tag, v: i, r: 0, n: 1, x: at.x, z: at.z });
+    });
+  }
+
+  // Who has someone's tag: 'ground' (an item), the carrier's player, or null.
+  _tagState(i) {
+    for (const q of this.sim.players) if (q.br?.tags?.includes(i)) return q;
+    for (const it of this.items) if (it && it.kind === K.tag && it.v === i) return 'ground';
+    return null;
   }
 
   _land(p) {
@@ -792,6 +1016,7 @@ export class BrRules {
     p.hp = BR.downHp;
     p.br.reviveT = 0;
     p.br.useK = null;
+    if (p.br.recall) this._recallStop(p, 'down');
     p.br.downedBy = attacker && attacker !== p ? attacker.id : null;
     p.br.downWeapon = weapon;
     p.ps.sprinting = false; p.ps.sliding = false;
@@ -866,6 +1091,7 @@ export class BrRules {
       }
       this._squadOut(p.team);
     }
+    this._dropTags(p);
   }
 
   _squadsIn() {
@@ -883,6 +1109,7 @@ export class BrRules {
     const place = left.size + 1;
     this.squadsOut.set(team, place);
     this.lastOut = team;
+    for (const it of this.items) if (it && it.kind === K.tag && sim.players[it.v]?.team === team) this._removeItem(it);
     for (const q of sim.players) if (q.team === team && q.br) { q.br.out = true; q.br.place = place; }
     sim._emit({ t: 'brsquad', team, place });
     if (left.size <= 1 && sim.phase === 'live') {
@@ -913,6 +1140,7 @@ export class BrRules {
   // Plates take gunfire and blasts before health. Returns what is left for health; flags the hit for the HUD.
   absorb(target, dmg) {
     const b = target.br;
+    if (b?.recall && dmg > 0) this._recallStop(target, 'hit');      // Getting shot stops a recall.
     if (!b || target.downed || b.armor <= 0) return dmg;
     const took = Math.min(b.armor, dmg);
     b.armor -= took;
@@ -924,6 +1152,7 @@ export class BrRules {
   onShot(p) {
     const b = p.br;
     if (b && b.useK && b.useK !== 'self') b.useK = null;
+    if (b?.recall) this._recallStop(p, 'shot');
     const last = this.noise[this.noise.length - 1];
     if (!last || last.team !== p.team || this.sim.time - last.t > 0.5 || Math.hypot(last.x - p.ps.x, last.z - p.ps.z) > 20) {
       this.noise.push({ x: p.ps.x, z: p.ps.z, t: this.sim.time, team: p.team });
@@ -1006,6 +1235,15 @@ export class BrRules {
         took = true; break;
       }
       case K.med: if (b.meds >= BR.medCarry) return; b.meds++; took = true; break;
+      case K.tag: {
+        // A squadmate's tag: walked over, it goes in your pocket for a Recall Beacon. Enemies leave it be.
+        const q = sim.players[it.v];
+        if (!q || q.team !== p.team || !this._recallable(q)) return;
+        this._removeItem(it);
+        b.tags.push(it.v);
+        sim._emit({ t: 'brtag', id: p.id, who: q.id });
+        return;
+      }
       case K.kit: if (b.kits >= BR.kitCarry || !this.downs) return; b.kits++; took = true; break;
       case K.lethal: case K.tactical: {
         const lethal = it.kind === K.lethal, ids = lethal ? LETHAL_IDS : TACTICAL_IDS, kind = ids[it.v];
@@ -1316,6 +1554,7 @@ export class BrRules {
 
     let sqx = 0, sqz = 0;
     for (const q of bots) { sqx += q.ps.x / bots.length; sqz += q.ps.z / bots.length; }
+    const tags = this.recallOn ? this._squadTags(team) : null;
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
       const ph = this.rb ? Math.max(0, this.phase + RB_ALERT) : this.phase;     // Rebound bots are as alert as a later BR circle.
@@ -1343,6 +1582,9 @@ export class BrRules {
         bot.setObjective({ key: `rev:${mate.q.id}:${Math.round(mate.q.ps.x)}:${Math.round(mate.q.ps.z)}`, role: 'collect', x: mate.q.ps.x, z: mate.q.ps.z, r: 1, commit: true });
         continue;
       }
+      // Recall Beacons: fetch a fallen squadmate's tag, carry it to a beacon inside the circle, hold it there.
+      const rc = tags && this._botRecall(p, lead, tags, outsideNow);
+      if (rc) { bot.setObjective(rc); continue; }
       // A human leads: stay in reach of them, looting what is around, as a squadmate would (not a shadow: no copying
       // their moves or their aim).
       if (lead && kind !== 'rotate') {
@@ -1384,6 +1626,44 @@ export class BrRules {
       bot.setObjective({ key: `${kind}:${this.phase}:${Math.round(at.x)}:${Math.round(at.z)}`, role: kind === 'rotate' ? 'collect' : 'hold', x: at.x, z: at.z, r: kind === 'hold' ? 3 : 2,
         aim, commit: kind === 'rotate' && outsideNow });
     }
+  }
+
+  // This squad's tags on the ground.
+  _squadTags(team) {
+    const out = [];
+    for (const it of this.items) if (it && it.kind === K.tag && this.sim.players[it.v]?.team === team && this._recallable(this.sim.players[it.v])) out.push(it);
+    return out;
+  }
+
+  // A bot's part in a recall, or null: holding a beacon, carrying a tag to one, or going for a tag on the ground. A bot
+  // with a human squadmate stays near them (short trips only). Not while it is outside the circle.
+  _botRecall(p, lead, tags, outsideNow) {
+    const b = p.br, bot = p.bot, sim = this.sim, c = this.circle;
+    if (b.recall) { const bc = this.beacons[b.recall.b]; return { key: `recall:${bc.id}`, role: 'hold', x: bc.x, z: bc.z, r: 0.6, commit: true }; }
+    if (outsideNow || p.hp < 35) return null;
+    const ox = lead ? lead.ps.x : p.ps.x, oz = lead ? lead.ps.z : p.ps.z;
+    if (this._tagFor(p) >= 0) {
+      let best = null, bd = lead ? 45 : 170;
+      for (const bc of this.beacons) {
+        if (bc.used || bc.user || Math.hypot(bc.x - c.x, bc.z - c.z) > c.r - 4) continue;
+        const d = Math.hypot(bc.x - ox, bc.z - oz);
+        if (d < bd) { bd = d; best = bc; }
+      }
+      if (!best) return null;
+      if (Math.hypot(best.x - p.ps.x, best.z - p.ps.z) <= BR.recall.reach - 0.4 && !bot.targetVisible && !b.useK) this._recallStart(p, best.id);
+      return { key: `beacon:${best.id}`, role: 'collect', x: best.x, z: best.z, r: 0.5, commit: true };
+    }
+    let best = null, bd = lead ? 30 : 160;
+    for (const it of tags) {
+      const claim = this.claims.get(it.id);
+      if (claim && claim.bot !== p.id && claim.until > sim.time) continue;
+      if (Math.hypot(it.x - c.x, it.z - c.z) > c.r) continue;
+      const d = Math.hypot(it.x - ox, it.z - oz);
+      if (d < bd) { bd = d; best = it; }
+    }
+    if (!best) return null;
+    this.claims.set(best.id, { bot: p.id, until: sim.time + 6 });
+    return { key: `tag:${best.id}`, role: 'collect', x: best.x, z: best.z, r: 0.4, commit: true };
   }
 
   _reviverFor(q) { const id = q.br.reviverBot; const r = id && this.sim.byId.get(id); return r && r.alive && !r.downed ? r : null; }
@@ -1465,6 +1745,7 @@ export class BrRules {
     const b = p.br, ps = p.ps;
     switch (it.kind) {
       case K.chest: return true;
+      case K.tag: return this.sim.players[it.v]?.team === p.team && this._recallable(this.sim.players[it.v]);
       case K.gun: {
         const id = WEAPON_IDS[it.v];
         if (!b.guns[0] || !b.guns[1]) return true;
@@ -1485,13 +1766,28 @@ export class BrRules {
 
   // ---- View and wire ----
 
-  // Packed per player: armor 8 bits | downed | air 2 bits | revive progress 4 bits | out | place 6 bits.
+  // Recall tags this tick: players whose tag is out there (on the ground or carried), and who carries one.
+  _tagsNow() {
+    const T = this._tags || (this._tags = { tick: -1, out: new Set(), carriers: new Set() });
+    if (T.tick === this.sim.tick) return T;
+    T.tick = this.sim.tick; T.out.clear(); T.carriers.clear();
+    if (this.recallOn) {
+      for (const q of this.sim.players) if (q.br?.tags?.length) { T.carriers.add(q.index); for (const i of q.br.tags) T.out.add(i); }
+      for (const it of this.items) if (it && it.kind === K.tag) T.out.add(it.v);
+    }
+    return T;
+  }
+
+  // Packed per player: armor 8 bits | downed | air 2 bits | revive progress 4 bits | out | place 6 bits | waiting to
+  // redeploy (bit 22) | can be recalled: dead, tag out there (23) | carries a tag (24).
   _packPlayer(p) {
     const b = p.br;
     if (!b) return 0;
+    const T = this._tagsNow();
     const rev = p.downed ? Math.min(15, Math.round((b.useK === 'self' ? 1 - b.useT / BR.selfRevive : b.reviveT / BR.reviveTime) * 15)) : 0;
     return Math.min(255, Math.ceil(b.armor)) | (p.downed ? 256 : 0) | ((p.brAir & 3) << 9) | (rev << 11) | (b.out ? 32768 : 0) | ((b.place & 63) << 16)
-      | (!p.alive && b.redeployT > 0 ? 1 << 22 : 0);      // Rebound: dead, waiting to redeploy.
+      | (!p.alive && b.redeployT > 0 ? 1 << 22 : 0)      // Rebound: dead, waiting to redeploy.
+      | (T.out.has(p.index) && this._recallable(p) ? 1 << 23 : 0) | (T.carriers.has(p.index) ? 1 << 24 : 0);
   }
 
   _head() {
@@ -1507,7 +1803,23 @@ export class BrRules {
     const b = p?.br;
     if (!b) return 0;
     return [b.plates, b.meds, b.kits, USE_KINDS.indexOf(b.useK), Math.ceil(b.useT * 10), Math.ceil(b.useDur * 10), b.guns[0]?.r ?? -1, b.guns[1]?.r ?? -1,
-      b.pouch, b.stash ? b.stash.slot : -1, !p.alive && b.redeployT > 0 ? Math.ceil(b.redeployT * 10) : 0];
+      b.pouch, b.stash ? b.stash.slot : -1, !p.alive && b.redeployT > 0 ? Math.ceil(b.redeployT * 10) : 0,
+      b.tags?.length ? b.tags.slice() : 0, b.recall ? [b.recall.who, b.recall.b, Math.round(Math.min(1, b.recall.t / BR.recall.time) * 100)] : 0];
+  }
+
+  // Recall Beacons on the wire: [online, then per beacon 0 ready | 1 used | 2 + progress % while someone holds it].
+  _beaconBlock() {
+    if (!this.beacons.length) return 0;
+    return [this.recallOn ? 1 : 0, ...this.beacons.map(b => (b.used ? 1 : b.user ? 2 + Math.round(b.k * 100) : 0))];
+  }
+  _readBeacons(a) {
+    if (!a) return;
+    this.recallOn = !!a[0];
+    this.beacons.forEach((b, i) => { const v = a[i + 1] ?? 0; b.used = v === 1; b.user = v >= 2 ? '?' : null; b.k = v >= 2 ? (v - 2) / 100 : v === 1 ? 1 : 0; });
+  }
+  _invView(inv) {
+    return inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1, redeploy: (inv[10] ?? 0) / 10,
+      tags: Array.isArray(inv[11]) ? inv[11].map(i => this.sim.players[i]?.id).filter(Boolean) : [], recall: Array.isArray(inv[12]) ? { who: this.sim.players[inv[12][0]]?.id ?? null, b: inv[12][1], k: inv[12][2] / 100 } : null } : null;
   }
 
   _stats() {
@@ -1533,6 +1845,7 @@ export class BrRules {
     if (guest) this.sentTo.set(guest.id, this.seq);
     out.push(ch ? ch.flat() : 0);
     out.push(sim.tick % 90 === 0 || sim.phase === 'ended' ? this._stats() : 0);   // For the results screen: rarely.
+    out.push(this._beaconBlock());
     // Host migration: now and then each human guest gets what only the host knows (everyone's inventory, the circle's
     // own clock, bot drop plans), so whichever phone takes over can carry the match on (restore).
     // Half the players at a time, so no one snapshot carries the whole pack list.
@@ -1557,7 +1870,7 @@ export class BrRules {
       void ps;
       return [b.plates, b.meds, b.kits, g(0), g(1), this._ammoIn(p, 0), this._resIn(p, 0), this._ammoIn(p, 1), this._resIn(p, 1), idx(b.downedBy), USE_KINDS.indexOf(b.useK),
         Math.round(b.useT * 10), air ? Math.round(b.glideT * 10) : 0, air ? Math.round(b.jumpAt * 1000) : 0, air ? Math.round(b.dropX) : 0, air ? Math.round(b.dropZ) : 0, air ? idx(b.follow) : -1,
-        0, 0, 0, 0, b.pouch.some(Boolean) ? b.pouch : 0, b.stash ? b.stash.slot : -1];
+        0, 0, 0, 0, b.pouch.some(Boolean) ? b.pouch : 0, b.stash ? b.stash.slot : -1, b.tags?.length ? b.tags.slice() : 0];
     });
     return [Math.round(this.t * 10), r1(this.from.x), r1(this.from.z), r1(this.from.r), this.dropsPlanned ? 1 : 0, per];
   }
@@ -1575,6 +1888,9 @@ export class BrRules {
       this.items = old.items; this.grid = old.grid;
       this.log = []; this.seq = 0; this.sentTo = new Map();
     }
+    // Recall Beacons: the mirror's used flags; a recall in progress at the handover starts again.
+    if (old?.beacons) old.beacons.forEach((ob, i) => { const b = this.beacons[i]; if (b) { b.used = !!ob.used; b.user = null; b.k = b.used ? 1 : 0; } });
+    this.recallOn = old ? !!old.recallOn : this._recallLive();
     this.nextChosen = true;
     this.t = bk ? bk[0] / 10 : Math.max(0, view.t - (sim.phase === 'live' ? 0 : BR.warmup));
     this.from = bk ? { x: bk[1] / 10, z: bk[2] / 10, r: bk[3] / 10 } : { ...this.circle };
@@ -1604,7 +1920,8 @@ export class BrRules {
       const st = stats?.[i];
       if (st) { b.dmg = st[0]; b.revives = st[1]; b.knocks = st[2]; }
       const e = p.alive ? bk?.[5]?.[i] : null;
-      if (!p.alive) { b.guns = [null, null]; b.plates = 0; b.meds = 0; b.kits = 0; b.pouch = [0, 0, 0, 0, 0]; b.stash = null; }
+      b.recall = null; b.tags ??= [];
+      if (!p.alive) { b.guns = [null, null]; b.plates = 0; b.meds = 0; b.kits = 0; b.pouch = [0, 0, 0, 0, 0]; b.stash = null; b.tags = []; }
       if (e) {
         [b.plates, b.meds, b.kits] = e;
         const weapon = ps.weapon;
@@ -1627,6 +1944,7 @@ export class BrRules {
         b.useDur = b.useK === 'plate' ? BR.plateTime : b.useK === 'med' ? BR.medTime : b.useK === 'self' ? BR.selfRevive : 0;
         if (p.brAir) { b.glideT = e[12] / 10; b.jumpAt = e[13] / 1000; b.dropX = e[14]; b.dropZ = e[15]; b.follow = byIndex(e[16]); }
         b.pouch = Array.isArray(e[21]) ? e[21].slice(0, 5) : [0, 0, 0, 0, 0];
+        b.tags = Array.isArray(e[23]) ? e[23].slice() : [];
         b.stash = null;
         const fs = e[22] ?? -1;
         if ((fs === 0 || fs === 1) && b.guns[fs]) {
@@ -1650,7 +1968,8 @@ export class BrRules {
   decode(a, view) {
     const players = view.players;
     if (!a) { this._fillView(); view.br = this.view; return; }
-    const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats, backup] = a;
+    const [f, cx, cz, cr, nx, nz, nr, phase, state, timer, squads, alive, fx, fz, tx, tz, per, inv, ch, stats, beacons, backup] = a;
+    this._readBeacons(beacons);
     if (backup) {                              // Kept for a host migration (restore); halves merge into one.
       const old = this.saved?.[5];
       if (old) backup[5] = backup[5].map((e, i) => e || old[i] || 0);
@@ -1668,12 +1987,14 @@ export class BrRules {
       const v = per?.[i] ?? 0, q = players[i];
       q.brArmor = v & 255; q.downed = !!(v & 256); q.air = (v >> 9) & 3; q.reviveK = ((v >> 11) & 15) / 15; q.out = !!(v & 32768); q.place = (v >> 16) & 63;
       q.redeploy = !!(v & (1 << 22));
+      q.recallable = !!(v & (1 << 23)); q.tagged = !!(v & (1 << 24));
     }
     const V = this.view;
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
     V.circle = this.circle; V.next = this.next; V.phase = this.phase; V.state = this.state; V.timer = this.timer;
     V.squadsLeft = squads; V.alive = alive; V.items = this.items; V.stats = this.stats; V.t = this.t;
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1, redeploy: (inv[10] ?? 0) / 10 } : null;
+    V.inv = this._invView(inv);
+    V.beacons = this.beacons; V.recallOn = this.recallOn;
     V.squad = this.squad; V.area = this.area; V.rebound = this.rb; V.phases = this.phases.length;
     view.br = V;
   }
@@ -1687,6 +2008,8 @@ export class BrRules {
       q.reviveK = p.downed && b ? (b.useK === 'self' ? 1 - b.useT / BR.selfRevive : b.reviveT / BR.reviveTime) : 0;
       q.out = !!b?.out; q.place = b?.place ?? 0;
       q.redeploy = !p.alive && b?.redeployT > 0;
+      const T = this._tagsNow();
+      q.recallable = !!b && T.out.has(p.index) && this._recallable(p); q.tagged = T.carriers.has(p.index);
     }
     const V = this.view;
     V.plane = { ...this.plane, ...planeAt(this.plane, this.plane.f) };
@@ -1696,7 +2019,8 @@ export class BrRules {
     V.stats = sim.tick % 30 === 0 || sim.phase === 'ended' || !V.stats ? this._stats() : V.stats;
     const me = sim.byId.get(view.localId);
     const inv = me && this._inv(me);
-    V.inv = inv ? { plates: inv[0], meds: inv[1], kits: inv[2], use: USE_KINDS[inv[3]] ?? null, useT: inv[4] / 10, useDur: inv[5] / 10, rarity: [inv[6], inv[7]], pouch: inv[8] ?? null, fists: inv[9] ?? -1, redeploy: (inv[10] ?? 0) / 10 } : null;
+    V.inv = this._invView(inv);
+    V.beacons = this.beacons; V.recallOn = this.recallOn;
     view.br = V;
   }
 
@@ -1731,6 +2055,7 @@ export function itemName(it) {
     case 'lethal': return LETHALS[LETHAL_IDS[it.v]]?.name ?? 'Lethal';
     case 'tactical': return TACTICALS[TACTICAL_IDS[it.v]]?.name ?? 'Tactical';
     case 'chest': return 'Supply cache';
+    case 'tag': return 'Recall tag';
   }
   return '';
 }

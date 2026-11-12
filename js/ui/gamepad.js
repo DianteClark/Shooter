@@ -92,7 +92,7 @@ const TRIGGER_ON = 0.35;
 // Shown over in-match play: the first visible one takes the focus ring instead of the sticks.
 const MATCH_PANELS = ['.qc-wheel', '.em-wheel', '.br-map', '.ex-map', '.ex-offers', '.armory', '.br-out', '.hud .death.show.picking .picker', '.hud .death.show'];
 // The in-match buttons Interact presses, first visible wins: leave the transport, take loot, buy, call exfil, revive.
-const INTERACT = ['.br-jump-main', '.br-take', '.zm-use', '.ex-call', '.ex-phone', '.br-self', '.hud .death.show .death-go'];
+const INTERACT = ['.br-jump-main', '.br-take', '.br-recall', '.zm-use', '.ex-call', '.ex-phone', '.br-self', '.hud .death.show .death-go'];
 const BACKISH = '.back, .pk-close, .close, .br-map-close, .ex-map-close, .arm-close, [data-sound="back"], [data-act$="Back"], [data-act$="back"], [data-act$="Close"], [data-act$="close"], [data-act*="Cancel"]';
 
 const shown = el => !!el && el.isConnected && el.getClientRects().length > 0 && !el.closest('[hidden]') && getComputedStyle(el).visibility !== 'hidden';

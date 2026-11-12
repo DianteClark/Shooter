@@ -130,6 +130,10 @@ export const BR = {
   pickup: 1.5,           // Auto pickup reach.
   take: 2.4,             // A ground gun this close can be tapped to swap.
   chestReach: 1.7,
+  // Recall Beacons (docs/BR.md "Recall Beacons"): `count` beacons at named places, `gap` metres or more apart. A dead
+  // squadmate's tag (picked up where they fell) is taken to one and held there for `time` s within `reach` m; the
+  // teammate parachutes in beside it with a basic kit. One use a beacon; all of them go offline from circle `off` + 1.
+  recall: { count: 6, gap: 90, time: 6, reach: 2.6, tagReach: 1.5, off: 4 },
   // Match XP on top of the usual lines: placement (scaled from last to first), each revive, each minute alive.
   xp: { place: 1000, revive: 150, minute: 40 },
   rarity: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
@@ -156,6 +160,8 @@ export const RB = {
   ],
   redeploy: [12, 15, 20, 25],
   redeployEnd: 4,
+  // Recall Beacons in Rebound: only once redeploys are over (circle redeployEnd + 1), and offline for the last circle.
+  recall: { count: 3, gap: 60, from: 4, off: 5 },
   kitRarity: 1, kitArmor: 50,
 };
 export const isRebound = id => !!MODES[id]?.rebound;
