@@ -41,6 +41,7 @@ const DOCK_BOTTOM = 6;           // Health and the tiles sit this far off the bo
 const DOCK_GAP = 4;
 const LANE_H = 46;               // The prompt lane over the dock.
 const LANE_MAX = 300;
+const OUT_H = 46;                // The battle royale's out plate while watching.
 const ARMS_EDGE = 8;             // The weapon panel's inset from the side.
 const STRIP_ROW_H = [36, 30, 24];   // Least height kept for each objective strip row (content comes and goes).
 const HIT_LIFE = 0.22;
@@ -475,6 +476,9 @@ export class HUD {
     const box = el => (el && el.getClientRects().length ? el.getBoundingClientRect() : null);
     const buttons = ['slide', 'swap', 'tactical', 'lethal'].filter(b => ctl.buttons[b].style.display !== 'none').map(b => rects[b]).filter(r => r && r.x1 > r.x0);
     const circles = [zones.move, zones.aim];
+    // The performance overlay's one line in the bottom corner (css/hud.css) is kept clear like a button.
+    const perf = box(document.querySelector('.perf:not([hidden])'));
+    if (perf && perf.width) buttons.push({ x0: perf.left, y0: perf.top, x1: perf.right, y1: perf.bottom });
 
     // Free stretches of a horizontal band [y0, y1] once the stick circles and the buttons are taken out.
     const free = (y0, y1, lo = safe.l + 6, hi = W - safe.r - 6) => {
@@ -528,6 +532,10 @@ export class HUD {
     st.setProperty('--vit-x', px(vitX));
     st.setProperty('--rp-x', px(rpX));
     st.setProperty('--dock-top', px(y0));
+    // Out and watching, the out plate takes the dock's place: its own free stretch, as it is taller.
+    const oy1 = H - safe.b - DOCK_BOTTOM, out = pick(free(oy1 - OUT_H * k, oy1), 300);
+    st.setProperty('--dock-x', px((out[0] + out[1]) / 2));
+    st.setProperty('--dock-w', px(out[1] - out[0]));
 
     // Prompt lane: just over the dock, between the sticks (take a gun, call exfil, the bomb, a flag, reviving).
     const ly1 = y0 - DOCK_GAP * 2, ly0 = ly1 - LANE_H * k;

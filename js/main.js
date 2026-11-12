@@ -1665,7 +1665,7 @@ function applyOptions(v, changed) {
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
   backdrop.quality = v.quality;
-  if (!changed || changed === 'fps') perf.setVisible(v.fps || FPS_PARAM);
+  if (!changed || changed === 'fps') { perf.setVisible(v.fps || FPS_PARAM); hud.layout(); }
   if (!changed || changed === 'touchDebug') touchDebug.setEnabled(v.touchDebug || TOUCHDEBUG_PARAM);
 }
 

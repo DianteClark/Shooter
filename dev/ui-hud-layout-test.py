@@ -84,6 +84,7 @@ CHECK = r"""
   for (const s of ['.br-take', '.snd-carry', '.ctf-carry', '.snd-spec', '.br-jump-main', '.br-hint', '.br-down', '.ex-down', '.br-out']) add(s.slice(1), q(s));
   if (anyShown(q('.ex-acts'))) add('ex-acts', q('.ex-acts'));
   add('tutorial card', document.querySelector('.tut-card'));
+  add('perf overlay', document.querySelector('.perf'));
   add('tutorial skip', document.querySelector('.tut-skip'));
   if (phase === 'dead') for (const s of ['.death-card', '.death-next', '.death-timer', '.mh-wait']) add(s.slice(1), q(s));
   const chat = q('.qc-btn');
@@ -126,7 +127,7 @@ async def start(pg, mp, mode):
     url = f'http://localhost:{PORT}/?debug=1&bots=recruit' + (f'&map={mp}&mode={mode}' if mp else '')
     await pg.goto(url)
     await pg.wait_for_timeout(700)
-    await pg.evaluate(f"{G}.Progress.name='Tester'; {G}.Progress.setFlag('tutorialOffered'); {G}.Options.set('lefty', false); {G}.Options.set('hudSize', 'normal')")
+    await pg.evaluate(f"{G}.Progress.name='Tester'; {G}.Progress.setFlag('tutorialOffered'); {G}.Options.set('lefty', false); {G}.Options.set('hudSize', 'normal'); {G}.Options.set('fps', true)")
     await pg.reload()
     await pg.wait_for_timeout(1000)
     if mode == 'tutorial': await pg.evaluate(f'{G}.tutorial()')
@@ -144,6 +145,12 @@ async def start(pg, mp, mode):
           me.br.plates = 3;
           for (const it of sim.br.near(m.ps.x, m.ps.z, 4)) if (it.kind === 0) sim.br._removeItem(it);
           sim.br._addItem({{ kind: 0, v: 2, r: 4, n: 1, x: m.ps.x + 0.3, z: m.ps.z }}); }})()""")
+    if mode.startswith('br') or mode.startswith('ex'):
+        # A squad in every state: one teammate out, one down (the squad panel's tags).
+        await pg.evaluate(f"""(() => {{ const m = {G}.app.match, sim = m.sim, me = sim.byId.get(m.localId);
+          const mates = sim.players.filter(p => p.team === me.team && p.id !== me.id), foe = sim.players.find(p => p.team !== me.team);
+          if (mates[0]) {{ mates[0].spawnProtect = 0; sim._damage(mates[0], foe, 900, 'ar', 8); sim._damage(mates[0], foe, 900, 'ar', 8); }}
+          if (mates[1]) {{ mates[1].spawnProtect = 0; sim._damage(mates[1], foe, 900, 'ar', 8); }} }})()""")
     await pg.evaluate(SAFE)
     await pg.wait_for_timeout(2500)
 
@@ -153,7 +160,7 @@ async def sweep(pg, mode, phase, failures, shots):
         await pg.set_viewport_size({'width': w, 'height': h})
         await pg.wait_for_timeout(350)
         combos = [(False, 'normal')] if QUICK else [(l, s) for l in (False, True) for s in ('small', 'normal', 'large')]
-        if phase == 'dead': combos = [(False, 'normal'), (True, 'normal')]
+        if phase in ('dead', 'out'): combos = [(False, 'normal'), (True, 'normal')]
         for lefty, size in combos:
             await pg.evaluate(f"{G}.Options.set('lefty', {'true' if lefty else 'false'}); {G}.Options.set('hudSize', '{size}')")
             if phase == 'live': await pg.evaluate(FILL_FEED)
@@ -186,13 +193,23 @@ async def run(browser, mp, mode, failures, errors):
     try:
         await start(pg, mp, mode)
         await sweep(pg, mode, 'live', failures, True)
+        if mode in ('br', 'exq'):
+            # Out of it and watching a teammate: the out plate on the bottom edge, no weapon panel.
+            await pg.set_viewport_size({'width': 852, 'height': 393})
+            await pg.evaluate(f"""(() => {{ const m = {G}.app.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
+              me.spawnProtect = 0; for (let i = 0; i < 3 && me.alive; i++) sim._damage(me, foe, 900, 'ar', 8);
+              if (sim.ex) {{ const sq = sim.ex.squads?.[me.team]; if (sq) sq.lives = 0; }} }})()""")
+            await pg.wait_for_timeout(3500)
+            await pg.evaluate("document.querySelector('.killcam-skip')?.click()")
+            await pg.wait_for_timeout(1500)
+            await sweep(pg, mode, 'out', failures, True)
         if mode not in ('training', 'range', 'tutorial') and not mode.startswith('br') and not mode.startswith('ex'):
             await pg.set_viewport_size({'width': 852, 'height': 393})
             if await die(pg, mode):
                 await pg.wait_for_timeout(700)
-                if await pg.locator('.killcam-skip').count():
+                if await pg.locator('.killcam-skip.on').count():
                     await pg.screenshot(path=f'{SHOTS}/{mode}-killcam-852x393.png')
-                    await pg.locator('.killcam-skip').first.click()
+                    await pg.evaluate("document.querySelector('.killcam-skip')?.click()")
                 await pg.wait_for_timeout(900)
                 await sweep(pg, mode, 'dead', failures, True)
     except Exception as e:

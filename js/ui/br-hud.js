@@ -76,16 +76,6 @@ const CSS = `
 .br-take b, .br-take small { display: block; overflow: hidden; text-overflow: ellipsis; }
 .br-take b { font: 400 16px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
 .br-take small { margin-bottom: 3px; font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-transform: uppercase; }
-.br-squad { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 84px; }
-.br-mate { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 1px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team); }
-.br-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.br-mate em { font: 9px/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-haze); }
-.br-mate .bars { grid-column: 1 / 3; display: flex; gap: 2px; height: 4px; }
-.br-mate .bars i { position: relative; background: rgba(231,234,228,.12); overflow: hidden; }
-.br-mate .bars i::after { content: ''; position: absolute; inset: 0; background: var(--bar); transform-origin: left; transform: scaleX(var(--k, 0)); }
-.br-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
-.br-mate.down em { color: #ff9a8c; }
-.br-mate.out { opacity: .4; }
 .br-down { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); width: 250px; text-align: center; }
 .br-down b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff6b5c; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
 .br-down small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); margin: 5px 0 8px; text-shadow: var(--text-lift); }
@@ -156,7 +146,6 @@ const CSS = `
 .br-down { top: auto; left: var(--lane-x, 50%); bottom: var(--lane-b, 66px); }
 /* Narrow screens: slimmer chips, so the strip fits between the squad panel and the corner. */
 @media (max-width: 700px) {
-  .br-squad { width: 76px; }
   .br-chip { min-width: 46px; padding: 0 6px; }
   .br-circle { min-width: 92px; }
 }
@@ -460,12 +449,13 @@ export class BrHud {
     const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
+    // Name, health and (a thin second bar) plates; downed is a red bar and a down mark, out a greyed row. No status
+    // words: they crowded the names.
     this.squadEl.innerHTML = mates.map(p => {
       const state = !p.alive ? 'out' : p.downed ? 'down' : '';
-      const note = !p.alive ? 'Out' : p.downed ? 'Down' : p.away ? 'Away' : p.air ? 'Air' : '';
-      const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2)}"></i>`).join('');
-      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
-        <span class="bars">${plates}<i style="flex:2.2;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
+      const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${p.alive ? Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2) : 0}"></i>`).join('');
+      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : ''}</em>
+        <span class="mbars"><i style="flex:1;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span><span class="mbars pl">${plates}</span></div>`;
     }).join('');
   }
 

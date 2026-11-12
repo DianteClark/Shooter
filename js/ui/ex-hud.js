@@ -44,17 +44,6 @@ const CSS = `
 .ex-chip.warn b { color: var(--c-sodium); }
 .ex-exfil { min-width: 96px; }
 .ex-pot b { color: var(--c-sodium); }
-.ex-squad { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 84px; }
-.ex-mate { display: grid; grid-template-columns: 1fr auto; gap: 1px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team); }
-.ex-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ex-mate em { font: 9px/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-haze); }
-.ex-mate i { grid-column: 1 / 3; height: 4px; background: rgba(231,234,228,.12); position: relative; overflow: hidden; }
-.ex-mate i::after { content: ''; position: absolute; inset: 0; background: var(--bar, var(--c-chalk)); transform-origin: left; transform: scaleX(var(--k, 0)); }
-.ex-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
-.ex-mate.down em { color: #ff9a8c; }
-.ex-mate.out { opacity: .4; }
-.ex-mate.lifted { box-shadow: inset 2px 0 0 #59d36b; }
-.ex-mate.lifted em { color: #8ff09c; }
 .hud.lefty .ex-squad { left: auto; right: calc(var(--sr) + 134px); }
 /* The contract: the objective strip's detail row (js/ui/hud.js ObjStrip), one compact plate. */
 .ex-con { width: min(300px, var(--os-w1, 300px)); padding: 4px 9px 5px 7px; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 1px 6px; text-align: left;
@@ -140,7 +129,6 @@ const CSS = `
   .ex-chip b { font-size: 16px; }
   .ex-chip small { font-size: 8px; }
   .ex-exfil { min-width: 80px; }
-  .ex-squad { width: 74px; }
   .ex-offer { width: 150px; }
 }
 `;
@@ -310,11 +298,12 @@ export class ExHud {
     const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
+    // The battle royale's compact rows: name and health; downed a red bar and a down mark, dead a greyed row, lifted
+    // out a green edge.
     this.squadEl.innerHTML = mates.map(p => {
       const state = p.out ? 'lifted' : !p.alive ? 'out' : p.downed ? 'down' : '';
-      const note = p.out ? 'Out' : !p.alive ? 'Dead' : p.downed ? 'Down' : p.away ? 'Away' : '';
-      return `<div class="ex-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
-        <i style="--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></div>`;
+      return `<div class="ex-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : ''}</em>
+        <span class="mbars"><i style="flex:1;--bar:${p.downed ? 'var(--c-red)' : p.out ? '#59d36b' : 'var(--c-chalk)'};--k:${p.alive || p.out ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
     }).join('');
   }
 
