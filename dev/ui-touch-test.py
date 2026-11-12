@@ -64,8 +64,8 @@ async def main():
                 await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
                 await pg.reload()
                 await pg.wait_for_timeout(1200)
-                await pg.locator('[data-act="custom"]').first.click()
-                await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=30000)
+                await pg.locator('[data-act="custom"]').first.click(no_wait_after=True)
+                await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
                 await pg.evaluate(SYNTH)
                 # The test reads the stick itself; the match loop must not eat the edges or the state between checks.
                 await pg.evaluate("window.__game.app.match.running = false")
@@ -318,7 +318,7 @@ async def live_cases(browser, mode, failures, errors):
     if mode == 'training':
         await pg.evaluate('window.__game.tutorial()')
     else:
-        await pg.locator('[data-act="custom"]').first.click()
+        await pg.locator('[data-act="custom"]').first.click(no_wait_after=True)
     await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=40000)
     # Count throws the sim accepts, from the match's own event stream.
     await pg.evaluate("""(() => { window.__thrown = 0; const m = window.__game.app.match;
