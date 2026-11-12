@@ -1157,4 +1157,9 @@
 #ui .help-tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 #ui .help-tabs::-webkit-scrollbar { display: none; }
 #ui .help-tabs .seg { flex: none; }
+/* One scroller: the help body (js/ui/help.js) scrolls every long tab natively with momentum; the panels inside take
+   their own height, and the last card clears the home indicator. */
+#ui .help-body.scroll-y { padding-bottom: max(var(--sb, 0px), 10px); -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 12px), transparent); }
+#ui .help-body.scroll-y > .help-grid, #ui .help-body.scroll-y > .help-stats, #ui .help-body.scroll-y > .help-streaks { height: auto; grid-auto-rows: max-content; }
+#ui .help-body.scroll-y > .help-streaks { display: block; }
 @media (max-width: 760px) { #ui[data-menu="help"] .help-tabs .seg b { display: none; } #ui[data-menu="help"] .help-tabs .seg.on b { display: inline; } }

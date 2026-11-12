@@ -33,7 +33,7 @@ GL = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--
 
 # Menu scenes of the gallery, and the saves each is checked with.
 SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-modes', 'mp-groundwar', 'mp-br', 'mp-search', 'vote-mp', 'lobby-host', 'lobby-full', 'vote', 'keypad-name', 'not-found', 'loadouts', 'operators', 'profile',
-          'save-code', 'options', 'controller', 'lobby-voice', 'help', 'help-install', 'install', 'stats', 'challenges', 'history', 'boards', 'boards-friends', 'boards-around', 'boards-kd', 'cards', 'emblems', 'results-draw', 'results-gw',
+          'save-code', 'options', 'controller', 'lobby-voice', 'help', 'help-install', 'help-updates', 'help-modes', 'install', 'stats', 'challenges', 'history', 'boards', 'boards-friends', 'boards-around', 'boards-kd', 'cards', 'emblems', 'results-draw', 'results-gw',
           # Seasons and ranked (docs/SEASONS.md): on a day in Season 1 (dev/ui-gallery.html sets the date).
           'title-season', 'season-track', 'season-weekly', 'season-ranked', 'season-pre', 'mp-ranked', 'boards-season', 'boards-ranked', 'results-season', 'lobby-ranked', 'lobby-unranked']
 # A spread of guns: long names, no attachments, signature parts and kits, melee, launchers, the akimbo pair.
@@ -174,6 +174,25 @@ async def scroll_checks(pg, ctx, vw, vh, fails):
     await cdp.detach()
 
 
+async def touch_scroll(pg, ctx, where, fails):
+    """A real thumb drag on the screen's one scroller moves it (native scrolling, momentum on iOS), and taps nothing."""
+    sel = '.help-body.scroll-y' if 'help' in where else '.mp-body'
+    box = await pg.evaluate("(sel => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, room: e.scrollHeight - e.clientHeight, top: e.scrollTop }; })", sel)
+    if box is None:
+        fails.append(f'{where}: no scroller {sel}')
+        return
+    if box['room'] < 20:
+        return                                      # Everything fits: nothing to scroll.
+    cdp = await ctx.new_cdp_session(pg)
+    await drag(cdp, box['x'], box['y'] + 40, 0, -100)
+    await pg.wait_for_timeout(700)
+    top = await pg.evaluate("(sel => document.querySelector(sel).scrollTop)", sel)
+    if top <= box['top'] + 20:
+        fails.append(f'{where}: {sel} did not follow the thumb (scrollTop {box["top"]} -> {top})')
+    await pg.evaluate("(sel => { document.querySelector(sel).scrollTop = 0; })", sel)
+    await cdp.detach()
+
+
 async def main():
     srv = subprocess.Popen(['python3', '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(0.8)
@@ -220,7 +239,9 @@ async def main():
                             if scene == 'results-gw':       # Every challenge row, scrolled into view.
                                 await pg.evaluate("document.querySelector('.prog-card') && (document.querySelector('.prog-card').scrollTop = 1e4)")
                                 await check(f'{scene} scrolled ({save})')
-                            if scene == 'help':
+                            if scene in ('help-updates', 'help-modes', 'multiplayer', 'mp-br'):
+                                await touch_scroll(pg, ctx, f'{vw}x{vh} {scene} ({save})', fails)
+                            if scene.startswith('help'):
                                 await pg.evaluate("document.querySelectorAll('.scroll-y').forEach(e => e.scrollTop = 1e4)")
                                 await check(f'{scene} scrolled ({save})')
 
