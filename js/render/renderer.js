@@ -3,9 +3,9 @@
 import * as THREE from 'three';
 import { TEAMS } from '../shared/constants.js';
 import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
-import { ExFx } from './ex-fx.js';
+import { ExFx } from './ex-fx.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
 import { ZmFx } from './zm-fx.js';     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
-import { clearZmWalls } from '../shared/zombies.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
+import { clearZmWalls } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
 import { Weather } from './weather.js';

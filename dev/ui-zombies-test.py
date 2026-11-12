@@ -85,8 +85,9 @@ async def run(browser, vw, vh, failures, errors):
     await check_fit(pg, ['.zm-top', '.zm-crew', '.minimap'], f'{tag} hud', failures)
     rnd = await ev("document.querySelector('.zm-round b').textContent")
     if rnd.strip() != '1': failures.append(f'{tag}: round plate says {rnd!r}')
-    seen = await ev(f"{G}.match.interp.newest.players.filter(p => p.zk > 0 && p.alive).length")
-    if not seen: failures.append(f'{tag}: no zombies in the view')
+    # The bots thin them out fast: any moment with one up in the view will do.
+    try: await pg.wait_for_function(f"{G}.match.interp.newest.players.some(p => p.zk > 0 && p.alive)", timeout=30000, polling=50)
+    except Exception: failures.append(f'{tag}: no zombies in the view')
     # The rest of round 1, put down on the host (their kills pay whoever is closest).
     await ev(f"""(() => {{ const sim = {G}.match.sim, R = sim.rules, me = sim.byId.get({G}.match.localId);
       window.__cull = setInterval(() => {{ for (const z of R.horde) if (z.alive) sim._damage(z, me, 99999, 'pistol', 5); }}, 300); }})()""")
