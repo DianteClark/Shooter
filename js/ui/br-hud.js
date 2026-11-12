@@ -51,7 +51,7 @@ const CSS = `
 .br-plates i { flex: 1; position: relative; background: rgba(16,20,26,.85); box-shadow: inset 0 0 0 1px rgba(231,234,228,.16); transform: skewX(-24deg); overflow: hidden; }
 .br-plates i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #9fd1ff, #3fa0ff); transform-origin: left center; transform: scaleX(var(--k, 0)); }
 /* Plate, medkit and self-revive take the streak tiles' place in the dock beside health (js/ui/hud.js layout). */
-.br-inv { position: absolute; left: var(--rp-x, 50%); bottom: calc(var(--sb) + 6px); transform: scale(var(--hud-k, 1)); transform-origin: left bottom; display: flex; gap: 4px; align-items: flex-end; pointer-events: none; }
+.br-inv { position: absolute; left: var(--rp-x, 50%); bottom: calc(var(--sb) + 6px); transform: scale(var(--vit-k, var(--hud-k, 1))); transform-origin: left bottom; display: flex; gap: 4px; align-items: flex-end; pointer-events: none; }
 .br-btn { position: relative; width: 46px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; padding: 0;
   color: var(--c-chalk); background: linear-gradient(180deg, rgba(42,51,61,.92), rgba(16,20,26,.88)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); font: 400 15px/1 var(--f-stencil); }

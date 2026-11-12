@@ -583,7 +583,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .status { position: absolute; inset: 0; pointer-events: none; }
 .vitals {
   position: absolute; left: var(--vit-x, 40%); bottom: calc(var(--sb) + 6px); width: 150px; display: flex; align-items: flex-end; gap: 6px; padding: 3px 8px 4px 7px;
-  transform: scale(var(--hud-k, 1)); transform-origin: left bottom;
+  transform: scale(var(--vit-k, var(--hud-k, 1))); transform-origin: left bottom;
   background: var(--hud-glass-lo); box-shadow: var(--hud-edge);
   --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
@@ -805,12 +805,14 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 
 /* Clear of the kill feed: only phones too narrow to centre the column beside it shift it over (either side, for lefties). */
 @media (max-width: 760px) {
-  .hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 208px); }
-  .hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 208px); }
+  .hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 226px); }
+  .hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 226px); }
 }
 /* The respawn ring hangs to the right of the killer card, so the card itself sits on the column's centre line. */
 .death-top { position: relative; }
 body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; margin-left: 10px; }
+/* Left-handed: the ring hangs on the other side, away from the feed. */
+body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin: 0 10px 0 0; }
 .killcam-on .hud:has(.feed > *) .death-col { left: calc(max(var(--sl), 12px) + 8px); right: calc(max(var(--sr), 12px) + 8px); }
 
 /* Small phones: the card drops the calling card's extra height so the column stays in the top half. */

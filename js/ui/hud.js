@@ -157,7 +157,6 @@ const SND_CSS = `
 .sa-mid b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .sa-mid small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
 .sa-mid small[data-role="defend"] { color: var(--c-blue, #38b6ff); }
-.hud.snd-on .death-col, .hud.snd-on .picker { top: calc(var(--st) + 72px); }
 .death.snd-life-buy, .death.snd-life-spec { background: none; pointer-events: none; }
 .death.snd-life-buy .death-top, .death.snd-life-spec .death-top, .death.snd-life-buy .death-go, .death.snd-life-spec .death-go { display: none !important; }
 /* During a death replay the Next round line drops below the killcam banner and the alive strip. */
@@ -454,7 +453,6 @@ export class HUD {
   setHudSize(size) {
     this.hudK = HUD_SCALE[size] ?? 1;
     this.root.style.setProperty('--hud-k', this.hudK);
-    this.root.style.setProperty('--tile-k', this.tileK());
     this.layout();
   }
 
@@ -506,14 +504,24 @@ export class HUD {
     // between the sticks. The tiles go on the aim thumb's side, as the buttons do.
     const vit = this.vitals, tiles = ctl.el.querySelector('.streaks'), inv = this.el.querySelector('.br-inv');
     const right = this.br ? inv : tiles?.style.display !== 'none' && [...ctl.tiles].some(t => t.node.style.display !== 'none') ? tiles : null;
-    const vw = vit.offsetWidth * k, vh = vit.offsetHeight * k;
-    const rw = right ? right.offsetWidth * (right === tiles ? this.tileK() : k) : 0;
-    const rh = right ? right.offsetHeight * (right === tiles ? this.tileK() : k) : 0;
-    const dockH = Math.max(vh, rh), y1 = H - safe.b - DOCK_BOTTOM, y0 = y1 - dockH;
-    const total = vw + (right ? DOCK_GAP * 2 + rw : 0);
-    const span = pick(free(y0, y1), total);
+    // The first sizing that fits a free stretch: as chosen, then the tiles at their touch size, then health smaller.
+    const tryK = [[k, this.tileK()], [k, 1], [Math.min(k, 1), 1], [HUD_SCALE.small, 1]];
+    let fit = null;
+    for (const [vk, tk] of tryK) {
+      const rk = right === tiles ? tk : vk;
+      const vw = vit.offsetWidth * vk, rw = right ? right.offsetWidth * rk : 0;
+      const dockH = Math.max(vit.offsetHeight * vk, right ? right.offsetHeight * rk : 0);
+      const y1 = H - safe.b - DOCK_BOTTOM, y0 = y1 - dockH;
+      const total = vw + (right ? DOCK_GAP * 2 + rw : 0);
+      const span = pick(free(y0, y1), total);
+      fit = { vk, tk, vw, rw, y0, total, span };
+      if (span[1] - span[0] >= total) break;
+    }
+    const { vk, tk, vw, rw, y0, total, span } = fit;
+    st.setProperty('--vit-k', vk);
+    st.setProperty('--tile-k', tk);
     const cx = Math.max(span[0] + total / 2, Math.min(span[1] - total / 2, W / 2));
-    let left = cx - total / 2;
+    const left = cx - total / 2;
     const vitX = right && !lefty ? left : right ? left + rw + DOCK_GAP * 2 : left;
     const rpX = right && !lefty ? left + vw + DOCK_GAP * 2 : left;
     st.setProperty('--vit-x', px(vitX));
@@ -554,7 +562,9 @@ export class HUD {
       if (r && r.width) obstacles.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + 3 * 26 * k });
     }
     let y = base;
+    const tops = [];
     this.strip.rows.forEach((row, n) => {
+      tops.push(y);
       const h = Math.max(row.offsetHeight, STRIP_ROW_H[n]) * k;
       let lo = safe.l + 6, hi = W - safe.r - 6;
       for (const r of obstacles) {
@@ -570,6 +580,8 @@ export class HUD {
       st.setProperty(`--os-w${n}`, px(Math.max(80, max) / k));
       y += h + 4;
     });
+    // The death screen's column starts under the strip's state row (and extraction's contract), which stay readable.
+    st.setProperty('--death-y', px(this.ex ? tops[2] : tops[1]));
     ctl.remeasure();
   }
 
@@ -674,8 +686,6 @@ export class HUD {
     if (c?.buttons?.swap) c.buttons.swap.style.display = on ? 'none' : '';
     if (c?.scoreBox) c.scoreBox.style.display = on ? 'none' : '';
     this.el.querySelector('.death-next').style.display = on ? 'none' : '';
-    // The ladder strip sits where the Respawn row would; the row (and the killer card under it) steps below it.
-    this.el.querySelector('.death-act').style.marginTop = on ? '58px' : '';
   }
 
   // Search and Destroy has no scorestreaks, so their tiles and the score counter go; everything else stays.

@@ -27,3 +27,6 @@
 
 /* The killcam banner and the training card follow the strip's first row: clear of the minimap and the weapon panel. */
 #ui .tut-card { left: var(--os-x0, 50%); top: var(--os-y0, calc(var(--st) + 50px)); width: min(320px, var(--os-w0, 320px)); margin-left: calc(min(320px, var(--os-w0, 320px)) / -2); }
+
+/* The death screen and its loadout picker start under the strip's state row. */
+.hud .death-col, .hud .picker { top: var(--death-y, calc(var(--st) + 50px)); }
