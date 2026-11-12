@@ -71,6 +71,8 @@ function tracerWidthOf(id) {
 
 const TILT = THREE.MathUtils.degToRad(55);
 const VFOV = 26;
+const PLAY_CLEAR = 22;          // Metres: taller than anything built on a map, for the play camera's near plane.
+const CINE_NEAR = 0.8;        // Replays and the menu backdrop: the lens never comes closer than this to anything.
 const VIEW_WIDTH = 30;        // Metres of ground across the screen at the camera target.
 const ADS_LOOK = 7.5;         // Metres of lookahead toward aim at full ADS.
 const MAX_DPR = 2;            // Gun previews in the menus.
@@ -158,7 +160,7 @@ export class GameRenderer {
 
     this.scene = new THREE.Scene();
     this.scene.matrixWorldAutoUpdate = false;
-    this.camera = new THREE.PerspectiveCamera(VFOV, 2, 3, 140);
+    this.camera = new THREE.PerspectiveCamera(VFOV, 2, 3, 120);
     this.camera.matrixAutoUpdate = true;
 
     const world = buildWorld(map, TEAMS, this.fog.uniforms);
@@ -545,7 +547,7 @@ export class GameRenderer {
     // Replays hand the camera to the killcam's description of the shot.
     if (this.cine) {
       const c = this.cine;
-      if (cam.fov !== c.fov || cam.near !== 0.5) { cam.fov = c.fov; cam.near = 0.5; cam.far = 170; cam.updateProjectionMatrix(); }
+      if (cam.fov !== c.fov || cam.near !== CINE_NEAR) { cam.fov = c.fov; cam.near = CINE_NEAR; cam.far = 170; cam.updateProjectionMatrix(); }
       const sx = wobble(t, 1.3) * shake * 0.4, sy = wobble(t, 2.9) * shake * 0.3, sz = wobble(t, 4.1) * shake * 0.4;
       cam.position.set(c.px + sx, c.py + sy, c.pz + sz);
       cam.lookAt(c.tx, c.ty, c.tz);
@@ -553,7 +555,6 @@ export class GameRenderer {
       cam.updateMatrixWorld();
       return;
     }
-    if (cam.fov !== VFOV || cam.near !== 3) { cam.fov = VFOV; cam.near = 3; cam.far = 140; cam.updateProjectionMatrix(); }
 
     let tx = this.camTarget.x, tz = this.camTarget.z;
     if (this.finalKill) {
@@ -613,6 +614,13 @@ export class GameRenderer {
     const dist = this.distance * TUNING.camZoom * (1 - this.zoomPunch + this.camEase) * (1 + alt * 0.012);
     const cx = tx + sx + this.kickX, cz = tz + sz + this.kickZ;
     cam.position.set(cx, alt + dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
+    // Depth range fitted to the shot, for depth precision: the near plane sits as far out as it can without cutting the
+    // tallest landmark (a ~20 m chimney) when the camera passes over it, so it moves out with the glider in battle
+    // royale; the far plane just past the ground at the top edge of the screen.
+    const camY = cam.position.y;
+    const near = Math.min(12, Math.max(3, Math.round((camY - PLAY_CLEAR) * 0.8)));
+    const far = Math.min(240, Math.max(90, Math.ceil((camY * 1.8 + 40) / 10) * 10));
+    if (cam.fov !== VFOV || cam.near !== near || cam.far !== far) { cam.fov = VFOV; cam.near = near; cam.far = far; cam.updateProjectionMatrix(); }
     cam.lookAt(cx, alt, cz);
     if (this.roll) cam.rotateZ(this.roll);
     cam.updateMatrixWorld();

@@ -3,7 +3,7 @@
 // realtime lights), plus one multiply-blended decal mesh for shadows, one additive mesh for glow and
 // wet-ground light streaks, a flickering sign mesh, and a water mesh where the map has basins.
 import * as THREE from 'three';
-import { MeshBuilder } from './meshbuild.js';
+import { MeshBuilder, settleCoplanar } from './meshbuild.js';
 import { hexRGB, lightAt, getTheme } from './art.js';
 import * as metroTheme from './themes/metro.js';
 import * as desertTheme from './themes/desert.js';
@@ -3265,6 +3265,7 @@ export function buildWorld(map, teams, fogUniforms) {
     }
     return parts.length;
   };
+  settleCoplanar([b, sb]);       // Trims, caps and panels laid flat on bigger faces: lift them so they never flicker.
   addLayer(packWorld(b), material, 0);
 
   const decalMat = new THREE.ShaderMaterial({

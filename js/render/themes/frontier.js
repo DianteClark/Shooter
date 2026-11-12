@@ -13,7 +13,7 @@
 // its footprint or right outside a door, so you always see who is in the room with you.
 import * as THREE from 'three';
 import { THEMES, hexRGB } from '../art.js';
-import { MeshBuilder } from '../meshbuild.js';
+import { MeshBuilder, settleCoplanar } from '../meshbuild.js';
 import { mass, waterBanks, box3, emissive, scale, mix } from './kit.js';
 import { lighthouse } from './coast.js';
 import { regionField, segDist, mulberry as mul2 } from '../../shared/maps/br-kit.js';
@@ -417,6 +417,8 @@ export function buildGiantWorld(map, fogUniforms, X) {
       roof(rb, r, ctx);
       for (let v = before / 3; v < rb.pos.length / 3; v++) rect.push(r.x, r.z, r.x + r.w, r.z + r.d);
     }
+
+    settleCoplanar([b, rb, sb]);       // Trims and caps flat on roofs and walls: lift them so they never flicker.
 
     // Meshes.
     const add = (geo, mat, order, parent = group) => {

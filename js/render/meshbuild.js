@@ -161,3 +161,138 @@ export class MeshBuilder {
     return g;
   }
 }
+
+// Z-fighting guard for the merged world. Builders lay trims, caps, parapet tops, panels and paint flat on top of bigger
+// faces at exactly the same height or plane, and two coplanar faces of different colours flicker against each other as
+// the camera pans (worst on roof edges). This finds every triangle that overlaps a coplanar, same-facing triangle of
+// another colour that lies under it (bigger, or the same size and emitted earlier) and lifts it off along its normal,
+// LIFT metres per face under it (an odd step, so a lift rarely lands on a face a round centimetre up), which is far below a pixel at play distance and far above the depth buffer's step.
+// One pass over all the builders given, so a roof in one mesh and a wall cap in another are kept apart too.
+const LIFT = 0.007;
+const PLANE_EPS = 0.004;
+export function settleCoplanar(builders) {
+  if (globalThis.__noSettle) return 0;          // dev/zfight-check.py: before/after comparisons.
+  // A lifted face can land on one that sat a centimetre up, so settle again until nothing moves.
+  let moved = 0, hot = null;
+  for (let pass = 0; pass < 4; pass++) {
+    hot = settleOnce(builders, hot);
+    if (!hot) break;
+    moved += hot.count;
+  }
+  return moved;
+}
+
+// One pass. hot (from the pass before) limits it to the planes a lifted face moved onto; returns the faces it lifted.
+function settleOnce(builders, hot) {
+  const list = builders.filter(b => b && b.pos.length);
+  let n = 0;
+  for (const b of list) n += b.pos.length / 9;
+  if (n < 2) return null;
+  const owner = new Int32Array(n), local = new Int32Array(n);
+  const nx = new Float32Array(n), ny = new Float32Array(n), nz = new Float32Array(n), dd = new Float64Array(n), area = new Float32Array(n);
+  const buckets = new Map();
+  let t = 0;
+  list.forEach((b, bi) => {
+    const P = b.pos;
+    for (let i = 0; i < P.length; i += 9, t++) {
+      owner[t] = bi; local[t] = i;
+      const ux = P[i + 3] - P[i], uy = P[i + 4] - P[i + 1], uz = P[i + 5] - P[i + 2];
+      const vx = P[i + 6] - P[i], vy = P[i + 7] - P[i + 1], vz = P[i + 8] - P[i + 2];
+      let x = uy * vz - uz * vy, y = uz * vx - ux * vz, z = ux * vy - uy * vx;
+      const l = Math.hypot(x, y, z);
+      area[t] = l / 2;
+      if (l < 1e-9 || y / l < -0.3) { area[t] = 0; continue; }      // Undersides never show to the top-down camera.
+      x /= l; y /= l; z /= l;
+      nx[t] = x; ny[t] = y; nz[t] = z;
+      dd[t] = x * P[i] + y * P[i + 1] + z * P[i + 2];
+      // Numeric key: the coarse normal, then the plane offset (any map fits in +-4 km).
+      const k = (((Math.round(x * 10) + 10) * 21 + Math.round(y * 10) + 10) * 21 + Math.round(z * 10) + 10) * 2e6 + Math.round(dd[t] / PLANE_EPS) + 1e6;
+      let a = buckets.get(k);
+      if (!a) buckets.set(k, a = []);
+      a.push(t);
+    }
+  });
+  const lift = new Uint8Array(n), pairs = [];
+  const pts = new Float64Array(6), qts = new Float64Array(6);
+  const flat = (ti, out) => {
+    const P = list[owner[ti]].pos, i = local[ti];
+    const ax = Math.abs(nx[ti]), ay = Math.abs(ny[ti]), az = Math.abs(nz[ti]);
+    const u = ay >= ax && ay >= az ? 0 : ax >= az ? 1 : 0, v = ay >= ax && ay >= az ? 2 : ax >= az ? 2 : 1;
+    for (let j = 0; j < 3; j++) { out[j * 2] = P[i + j * 3 + u]; out[j * 2 + 1] = P[i + j * 3 + v]; }
+  };
+  // 2-D separating axes; touching along an edge (or overlapping by under 2 mm) is not an overlap.
+  const overlaps = (A, B) => {
+    for (let s = 0; s < 2; s++) {
+      const T = s ? B : A;
+      for (let e = 0; e < 3; e++) {
+        const px = T[e * 2], py = T[e * 2 + 1], qx = T[((e + 1) % 3) * 2], qy = T[((e + 1) % 3) * 2 + 1];
+        let ax = py - qy, ay = qx - px;
+        const L = Math.hypot(ax, ay);
+        if (L < 1e-9) continue;
+        ax /= L; ay /= L;
+        let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+        for (let j = 0; j < 3; j++) {
+          const da = A[j * 2] * ax + A[j * 2 + 1] * ay, db = B[j * 2] * ax + B[j * 2 + 1] * ay;
+          if (da < a0) a0 = da; if (da > a1) a1 = da; if (db < b0) b0 = db; if (db > b1) b1 = db;
+        }
+        if (a1 <= b0 + 0.002 || b1 <= a0 + 0.002) return false;
+      }
+    }
+    return true;
+  };
+  const colDiff = (a, b) => {
+    const A = list[owner[a]].col, B = list[owner[b]].col, i = local[a], j = local[b];
+    return Math.abs(A[i] - B[j]) + Math.abs(A[i + 1] - B[j + 1]) + Math.abs(A[i + 2] - B[j + 2]);
+  };
+  const box = new Float64Array(4);
+  const bounds = (T) => {
+    box[0] = Math.min(T[0], T[2], T[4]); box[1] = Math.max(T[0], T[2], T[4]);
+    box[2] = Math.min(T[1], T[3], T[5]); box[3] = Math.max(T[1], T[3], T[5]);
+  };
+  for (const [k, own] of buckets) {
+    const next = buckets.get(k + 1);
+    if (own.length + (next ? next.length : 0) < 2) continue;
+    if (hot && !own.some(t => hot.has(t)) && !(next && next.some(t => hot.has(t)))) continue;
+    const all = next ? own.concat(next) : own;
+    // Sweep along the first flat axis: only triangles whose spans meet are compared.
+    const lo = new Float64Array(all.length), hi = new Float64Array(all.length), lo2 = new Float64Array(all.length), hi2 = new Float64Array(all.length);
+    for (let i = 0; i < all.length; i++) { flat(all[i], pts); bounds(pts); lo[i] = box[0]; hi[i] = box[1]; lo2[i] = box[2]; hi2[i] = box[3]; }
+    const order = Array.from(all, (_, i) => i).sort((a, b) => lo[a] - lo[b]);
+    for (let oi = 0; oi < order.length; oi++) {
+      const i = order[oi];
+      for (let oj = oi + 1; oj < order.length; oj++) {
+        const j = order[oj];
+        if (lo[j] >= hi[i] - 0.002) break;
+        if (lo2[j] >= hi2[i] - 0.002 || lo2[i] >= hi2[j] - 0.002) continue;
+        const a = all[i], b = all[j];
+        if (i >= own.length && j >= own.length) continue;      // Both from the next bucket: that bucket's own pass.
+        if (Math.abs(dd[a] - dd[b]) > PLANE_EPS) continue;
+        if (nx[a] * nx[b] + ny[a] * ny[b] + nz[a] * nz[b] < 0.999) continue;
+        if (colDiff(a, b) < 0.02) continue;
+        flat(a, pts); flat(b, qts);
+        if (!overlaps(pts, qts)) continue;
+        // The smaller face is the detail laid on the bigger one; between equals, the later one.
+        const top = area[a] < area[b] * 0.98 ? a : area[b] < area[a] * 0.98 ? b : Math.max(a, b);
+        pairs.push(top, top === a ? b : a);
+      }
+    }
+  }
+  // Layers: each face sits one step above everything it lies on (a cap on a trim on a wall lifts twice).
+  for (let pass = 0, changed = true; changed && pass < 8; pass++) {
+    changed = false;
+    for (let p = 0; p < pairs.length; p += 2) {
+      const want = Math.min(8, lift[pairs[p + 1]] + 1);
+      if (lift[pairs[p]] < want) { lift[pairs[p]] = want; changed = true; }
+    }
+  }
+  const moved = new Set();
+  for (let ti = 0; ti < n; ti++) {
+    if (!lift[ti]) continue;
+    moved.add(ti);
+    const P = list[owner[ti]].pos, i = local[ti], s = lift[ti] * LIFT;
+    for (let j = 0; j < 9; j += 3) { P[i + j] += nx[ti] * s; P[i + j + 1] += ny[ti] * s; P[i + j + 2] += nz[ti] * s; }
+  }
+  if (!moved.size) return null;
+  moved.count = moved.size;
+  return moved;
+}
