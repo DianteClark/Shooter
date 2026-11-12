@@ -32,6 +32,49 @@ const SAVE_DAYS = 14;
 //  - the iOS version in the user agent is a floor on the chip: iOS 16 and later need an A11, 17 and later an A12.
 //    Safari has frozen that version at times, but a frozen version is still a valid floor.
 // So the guess is: screen family, refined by OS floor; chip name when present. Auto corrects it within seconds.
+//
+// Android (Chrome, Samsung Internet) is the other way round: the GPU renderer string is real ("Adreno (TM) 740",
+// "Mali-G78 MP20", "Samsung Xclipse 940", often wrapped in "ANGLE (...)"), and deviceMemory (rounded, capped at 8)
+// and hardwareConcurrency are real too. So there the GPU family decides, memory and cores pull a guess down, and a
+// phone whose GPU is not recognised is placed by memory and cores alone. See docs/DEVICES.md for the table.
+//
+// Each tier also caps the drawing buffer's pixel ratio while Auto runs (dprCap): budget Android phones ship 2.6-3.5x
+// screens with GPUs that cannot fill them, and a capped ratio is the cheapest saving there is. The cap is on top of the
+// step's own ceiling, so a High phone (no cap) is exactly as before. ceiling: the highest step Auto may climb to, one
+// above the guess at most, so a phone guessed Low is not walked up to High and back down every match.
+const TIER_DPR_CAP = { ultra: Infinity, high: Infinity, medium: 2, low: 1.6, potato: 1.3 };
+const GPU_KEY = 'switchyard-gpu';
+
+// A GPU renderer string to a starting step, or '' when the family is not known.
+export function gpuTier(gpu) {
+  if (!gpu) return '';
+  if (/SwiftShader|llvmpipe|Software|softpipe/i.test(gpu)) return 'potato';
+  const apple = gpu.match(/Apple A(\d+)/);
+  if (apple) { const a = Number(apple[1]); return a <= 9 ? 'potato' : a <= 11 ? 'low' : a <= 13 ? 'medium' : 'high'; }
+  const adreno = gpu.match(/Adreno[^0-9]*(\d{3})/i);
+  if (adreno) {
+    const n = Number(adreno[1]);
+    if (n >= 700) return n >= 710 && n < 730 ? 'medium' : 'high';    // 710/720 sit in budget 7-series chips.
+    if (n >= 650) return 'high';         // 650/660: Snapdragon 865/888.
+    if (n >= 618) return 'medium';       // 618..644: Snapdragon 730..855 and the 7-series.
+    if (n >= 600) return 'low';          // 610/612/613: entry-level 4- and 6-series.
+    if (n >= 530) return 'low';          // 530/540: Snapdragon 820/835.
+    return 'potato';
+  }
+  if (/Xclipse|Immortalis/i.test(gpu)) return 'high';
+  const mali = gpu.match(/Mali-G(\d+)/i);
+  if (mali) {
+    const n = Number(mali[1]);
+    if (n >= 100) { const series = Math.floor(n / 100); return series >= 7 ? 'high' : series === 6 ? 'medium' : series === 5 ? 'low' : 'potato'; }   // G710, G615, G57x, G310.
+    return n >= 76 ? 'high' : n >= 68 ? 'medium' : n >= 51 ? 'low' : 'potato';   // G76-G78, G68-G72, G51-G57, G31.
+  }
+  if (/Mali-T|Mali-4|PowerVR|GE8\d{3}|Vivante|VideoCore/i.test(gpu)) return /BXM|BXE|IMG/i.test(gpu) ? 'low' : 'potato';
+  if (/Maleoon|Tegra/i.test(gpu)) return 'medium';
+  return '';
+}
+
+const lower = (a, b) => (stepIndex(a) >= stepIndex(b) ? a : b);
+
 export function deviceProfile(gl) {
   const dpr = window.devicePixelRatio || 1;
   const sw = window.screen?.width || 0, sh = window.screen?.height || 0;
@@ -40,6 +83,7 @@ export function deviceProfile(gl) {
   const memory = navigator.deviceMemory || 0;
   const ua = navigator.userAgent || '';
   const iPhone = /iPhone|iPod/.test(ua);
+  const android = /Android/i.test(ua);
   const osMatch = ua.match(/OS (\d+)_\d+/);
   const ios = iPhone && osMatch ? Number(osMatch[1]) : 0;
   let gpu = '';
@@ -47,14 +91,19 @@ export function deviceProfile(gl) {
     const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
     gpu = (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || (gl && gl.getParameter(gl.RENDERER)) || '';
   } catch { gpu = ''; }
+  // The Options screen asks without a context: it gets the string the last match read, so its note matches.
+  try {
+    if (gpu) localStorage.setItem(GPU_KEY, gpu);
+    else gpu = localStorage.getItem(GPU_KEY) || '';
+  } catch { /* private mode */ }
 
   let step = 'high', why = '';
   const chip = gpu.match(/Apple A(\d+)/);
-  if (/SwiftShader|llvmpipe|Software/i.test(gpu)) { step = 'potato'; why = 'software renderer'; }
+  const fromGpu = gpuTier(gpu);
+  if (fromGpu === 'potato' && /SwiftShader|llvmpipe|Software|softpipe/i.test(gpu)) { step = 'potato'; why = 'software renderer'; }
   else if (chip) {
-    const a = Number(chip[1]);
-    step = a <= 9 ? 'potato' : a <= 11 ? 'low' : a <= 13 ? 'medium' : 'high';
-    why = `A${a} GPU`;
+    step = fromGpu;
+    why = `A${chip[1]} GPU`;
   } else if (iPhone) {
     why = `${short}x${long} @${dpr}x, iOS ${ios || '?'}`;
     if (long <= 568) step = 'potato';                                   // SE (1st gen), 5s: A9 and older.
@@ -62,11 +111,22 @@ export function deviceProfile(gl) {
     else if (long <= 812) step = ios >= 17 ? 'medium' : 'low';         // X / XS / 11 Pro, 12 and 13 mini.
     else if (long <= 896) step = 'medium';                              // XR, 11, XS Max, 11 Pro Max: A12/A13.
     else step = 'high';                                                 // 12 and later.
+  } else if (android) {
+    const name = (gpu.match(/(Adreno[^,)]*\d{3}|Mali-[GT]\d+|Immortalis-G\d+|Xclipse \d+|PowerVR[^,)]*|Maleoon \d+)/i)?.[1] || '').replace(/\s*\(TM\)\s*/i, ' ').trim();
+    // Not recognised: memory and cores alone. deviceMemory is 0.25..8 in Chrome; Samsung Internet reports it too.
+    const byHardware = memory && memory <= 2 ? 'potato' : (memory && memory <= 3) || (cores && cores <= 4) ? 'low' : memory && memory <= 4 ? 'medium' : 'high';
+    step = fromGpu || byHardware;
+    // A strong GPU paired with little memory still thrashes: the lower of the two wins.
+    if (fromGpu && memory && memory <= 4) step = lower(step, memory <= 2 ? 'low' : 'medium');
+    why = `${name || 'GPU ?'}, ${memory ? memory + ' GB' : '? GB'}, ${cores || '?'} cores, ${short}x${long} @${+dpr.toFixed(2)}x`;
   } else {
     why = 'not an iPhone';
-    if (memory && memory <= 2) step = 'low';
+    if (fromGpu && fromGpu !== 'high') step = fromGpu;
+    if (memory && memory <= 2) step = lower(step, 'low');
   }
-  return { step, why, gpu: gpu || 'unknown', dpr, screen: `${short}x${long}`, cores, memory, ios };
+  const dprCap = TIER_DPR_CAP[step] ?? Infinity;
+  const ceiling = Math.max(AUTO_CEILING, stepIndex(step) - 1);
+  return { step, why, gpu: gpu || 'unknown', dpr, dprCap, ceiling, screen: `${short}x${long}`, cores, memory, ios, android };
 }
 
 // The step Auto settled on last match, if recent: a phone that needed Low last time starts there.
@@ -124,6 +184,11 @@ const PERIOD = 20;           // Seconds per thermal period.
 const THERMAL_RATIO = 1.35;  // Script time this far above the cool reference, sustained, means the chip is throttled.
 const THERMAL_PERIODS = 4;   // ... for this many periods in a row (80 s).
 const THERMAL_HOLD = 180;    // Seconds without a step-up after throttling is seen.
+// Sustained low frame rate: frames this far over the target (about 37 fps against 60) for this many windows in a row
+// step down at once, without first walking the resolution to its floor. A phone that far off will not be saved by 10%
+// fewer pixels, and two seconds of 30 fps is what a player notices.
+const VERY_SLOW = 1.6;
+const VERY_SLOW_WINDOWS = 4;
 
 // Decides resolution scale and step from frame intervals and script time. host: { setStep(i), setResScale(s),
 // resScale, step }. Nothing here allocates per frame.
@@ -137,6 +202,7 @@ export class Governor {
     // Window accumulators.
     this.wT = 0; this.wN = 0; this.wSum = 0; this.wWork = 0; this.wMiss = 0; this.wCapped = 0;
     this.slowStreak = 0;
+    this.verySlow = 0;         // Windows in a row far below the target rate (see VERY_SLOW).
     this.goodStreak = 0;
     this.raiseWait = 3;        // Good windows before a resolution raise; doubles when a raise does not hold.
     this.raisedAt = -999;
@@ -218,6 +284,12 @@ export class Governor {
 
     if (slow) {
       this.goodStreak = 0;
+      this.verySlow = avg > this.target * VERY_SLOW ? this.verySlow + 1 : 0;
+      if (this.verySlow >= VERY_SLOW_WINDOWS && host.step < QUALITY_STEPS.length - 1 && this.clock - this.lastStepAt > 2.5) {
+        this.verySlow = 0;
+        this._setStep(host.step + 1, 'low frame rate');
+        return;
+      }
       // Script busy for most of a late frame: fewer pixels will not help, so go straight to the step's other savings.
       const cpuBound = work > avg * 0.75;
       if (host.resScale > RES_FLOOR + 1e-3 && !cpuBound) {
@@ -230,6 +302,7 @@ export class Governor {
       return;
     }
     this.slowStreak = 0;
+    this.verySlow = 0;
     if (!good) { this.goodStreak = 0; return; }
     this.goodStreak++;
     if (host.resScale < 1) {
@@ -256,7 +329,7 @@ export class Governor {
     // Keep the picture continuous: the new ceiling picks up at about the resolution the old one had reached.
     host.setResScale(Math.max(RES_FLOOR, Math.min(1, effective / host.maxDpr)));
     this.lastStepAt = this.clock;
-    this.slowStreak = 0; this.goodStreak = 0; this.hotPeriods = 0;
+    this.slowStreak = 0; this.goodStreak = 0; this.hotPeriods = 0; this.verySlow = 0;
     this.reason = reason;
     this._resetPeriod();
   }
