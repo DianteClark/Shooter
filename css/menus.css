@@ -877,10 +877,11 @@
 #ui .opt-matchmusic { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); }
 #ui .opt-matchmusic small { color: var(--c-haze); font: inherit; }
 /* Team voice: open mic or push to talk, on the voice row's name line like Music's switch (js/net/voice.js). */
-#ui .opt-voicemode { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); flex: none; }
+#ui .opt-voicemode { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); flex: none; margin: -3px 0 -3px auto; letter-spacing: var(--tr-plate); }
 #ui .opt-voicemode small { color: var(--c-haze); font: inherit; }
-#ui .opt-pad { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 34px; flex: none; }
-#ui .opt-pad .ico { height: 16px; }
+#ui .opt-pad { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; flex: none; margin: -3px 0 -3px auto; font: 400 var(--fs-caption)/1 var(--f-stencil); letter-spacing: var(--tr-plate); }
+#ui .opt-pad .ico { height: 14px; color: var(--c-chalk); }
+#ui .opt-pad b { font: inherit; }
 /* Options > Controller (js/ui/controllerscreen.js). */
 #ui .pad-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr); gap: var(--sp-3); }
 #ui .pad-status { margin: 0; font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }

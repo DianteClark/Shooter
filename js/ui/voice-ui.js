@@ -5,39 +5,12 @@
 //   [data-voice-mute="<player id>"]  a mute button: .on while muted, hidden unless that player's voice reaches this phone
 //   .lb-mic, .hud .chip-btn.mic      mic buttons: data-state follows the voice state; in push to talk a hold sends
 // The scoreboard's rows get their mute buttons and talking dots here (inside .lb-name), so hud.js only tags each row.
-// In a match a short list of who is talking sits under the HUD's corner chips.
+// In a match a short list of who is talking sits under the HUD's corner chips. Styles: css/voice.css.
 import { icon } from './icons.js';
 import { esc } from './widgets.js';
 
 const PAINT_MS = 150;
 
-const CSS = `
-.vc-dot { display: none; width: 12px; height: 12px; flex: none; color: var(--c-go, #4bd18a); line-height: 0; }
-.vc-dot svg { width: 12px; height: 12px; }
-.talking .vc-dot { display: inline-block; animation: vc-pulse .5s ease-in-out infinite alternate; }
-@keyframes vc-pulse { from { opacity: .55; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .talking .vc-dot { animation: none; } }
-.lb-mute { flex: none; width: 20px; height: 18px; margin-left: auto; padding: 0; display: grid; place-items: center; background: rgba(231,234,228,.08); color: var(--c-haze, #9aa6b2); border: 0; border-radius: 3px; pointer-events: auto; line-height: 0; }
-.lb-mute svg { width: 12px; height: 12px; }
-.lb-mute.on { background: rgba(255,77,61,.25); color: #ff8a7d; }
-.vc-talkers { position: absolute; right: calc(var(--sr, 0px) + 8px); top: calc(var(--st, 0px) + 46px); display: flex; flex-direction: column; align-items: flex-end; gap: 3px; pointer-events: none; z-index: 2; }
-.hud.lefty .vc-talkers { right: auto; left: calc(var(--sl, 0px) + 8px); align-items: flex-start; }
-.vc-talkers span { display: flex; align-items: center; gap: 4px; padding: 2px 7px 2px 5px; background: rgba(16,20,26,.72); color: #e7eae4; font: 400 11px/1.2 var(--f-plate, system-ui); letter-spacing: .04em; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vc-talkers span .vc-dot { display: inline-block; }
-#ui .car-cell { position: relative; display: flex; flex-direction: column; min-width: 0; }
-#ui .car-cell > .car { flex: 1; }
-#ui .car-cell .vc-dot { width: 13px; height: 13px; }
-#ui .car-mute { position: absolute; right: 3px; bottom: 3px; width: 26px; height: 22px; padding: 0; display: grid; place-items: center; background: rgba(16,20,26,.55); color: var(--c-haze); border: 0; line-height: 0; z-index: 1; }
-#ui .car-mute .ico, #ui .car-mute svg { width: 14px; height: 14px; }
-#ui .car-mute.on { background: rgba(255,77,61,.3); color: #ff8a7d; }
-#ui .lb-mic { flex: none; height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
-#ui .lb-mic .ico { height: 18px; }
-#ui .lb-mic b { font: 400 var(--fs-caption, 12px)/1 var(--f-plate); letter-spacing: var(--tr-plate); white-space: nowrap; }
-#ui .lb-mic[data-state="on"] { background: var(--c-go); color: var(--c-night); }
-#ui .lb-mic[data-state="requesting"] { color: var(--c-sodium); }
-#ui .lb-mic[data-state="denied"] b { color: var(--c-red, #ff4d3d); }
-.chip-btn.mic[data-state="ptt"] .gl { color: var(--c-sodium, #ffc23d); }
-`;
 
 const MIC_TEXT = { off: 'Mic off', on: 'Talking', requesting: 'Mic...', denied: 'Mic blocked', ptt: 'Hold to talk' };
 const MIC_TEXT_OPEN_ON = 'Mic on';
@@ -50,10 +23,6 @@ export class VoiceUI {
     this.nameOf = nameOf;
     this.holding = false;
     this.talkKey = '';
-    const style = document.createElement('style');
-    style.textContent = CSS;
-    document.head.appendChild(style);
-
     this.talkers = document.createElement('div');
     this.talkers.className = 'vc-talkers';
     hud?.el?.appendChild(this.talkers);
