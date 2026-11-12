@@ -95,3 +95,19 @@ on every push, keep 2% of weekly usage for bugs.
 23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
 24. DONE (1111). Music: synthesised menu and match music. js/audio/music-synth.js (instruments, arrangements, offline render),
     js/audio/music.js (director: scenes, layers, stings; music.cue(...)). Options: Music slider, "In matches" switch.
+
+## Owner's wave (2026-11-11 evening), approved "do em all with confidence" (target: 80% of the week, keep 20% for fixes)
+25. BR and modes sweep (owner's notes): drop the "Close map" button on the BR drop screen; flight lines vary (edges as
+    well as the middle); bot squadmates must not copy the player's input after an app switch; BR heals with medkits only
+    (no regen; extraction keeps regen); calmer early bots (loot and rotate first) and somewhat shorter rings so matches
+    reach the late circles; one Hardcore switch on the playlist screen applying hardcore rules to every mode; Control
+    spectates the remaining players once your side is out of lives.
+26. Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
+    a boss every 10 rounds, on existing maps.
+27. Resurgence BR: small map, fast circle, redeploy while any squadmate lives.
+28. Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
+29. Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
+30. Attachments wave 2: more attachments per gun, visible on the model.
+31. Gunfight 2v2: short rounds, the same random loadout for everyone, small maps.
+32. Finishing moves and an emote wheel.
+33. Daily challenges feeding season XP (alongside the weekly sets).
