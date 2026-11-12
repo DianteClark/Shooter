@@ -156,10 +156,15 @@ async def showdown(browser, vw, vh, failures, errors):
       for (const p of sim.players) p.spawnProtect = 0;
       const foe = sim.players.find(p => p.team !== me.team);
       sim._damage(me, foe, 999, foe.ps.weapon, 10); }})()""")
-    await pg.wait_for_timeout(700)
+    # (A killcam may play first; skip it.)
+    await pg.wait_for_timeout(900)
+    kc = pg.locator('[data-act="kcSkip"]:not([hidden]), .killcam-skip:not([hidden])')
+    if await kc.count():
+        try: await kc.first.click(timeout=2000)
+        except Exception: pass
+    try: await pg.wait_for_function("!!document.querySelector('.mh-wait:not([hidden]) b')?.textContent", timeout=12000)
+    except Exception: failures.append(f'{tag}: no wait plate on the death screen')
     await shot('04-dead')
-    wait = await ev("document.querySelector('.mh-wait:not([hidden]) b')?.textContent")
-    if not wait: failures.append(f'{tag}: no wait plate on the death screen')
     await ev(f"""(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId), foe = sim.players.find(p => p.team !== me.team);
       for (const p of sim.players) if (p.team === me.team && p.alive) sim._damage(p, foe, 999, foe.ps.weapon, 10); }})()""")
     try: await pg.wait_for_function(f'({G}.match.sim.rules.round >= 2)', timeout=20000)

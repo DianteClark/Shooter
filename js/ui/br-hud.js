@@ -89,7 +89,7 @@ const CSS = `
 .br-out { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; min-width: 260px; padding: 12px 18px;
   background: linear-gradient(180deg, rgba(42,51,61,.92), rgba(16,20,26,.9)); box-shadow: var(--hud-edge); clip-path: polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px); }
 .br-out b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
-.br-rd { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); padding: 3px 10px; white-space: nowrap;
+.br-rd { padding: 2px 5px 3px; white-space: normal; line-height: 1.25 !important;
   font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); background: rgba(16,20,26,.7); box-shadow: inset 0 -2px 0 #59d36b; }
 .br-rd.off { color: var(--c-haze); box-shadow: inset 0 -2px 0 rgba(231,234,228,.3); }
 .br-rd[hidden], .br-out .rd[hidden] { display: none; }
@@ -246,6 +246,7 @@ export class BrHud {
     this.revEl = $('.br-reviving');
     // The circle chips are the objective strip's state row, your revive bar its progress row (js/ui/hud.js ObjStrip).
     hud.strip.mount($('.br-top'), { order: 0 });
+    this.squadEl.appendChild($('.br-rd'));     // Rebound's redeploy note: the last row of the squad column.
     hud.strip.mount(this.revEl, { row: 2 });
     this.pings = [];
     this.takeId = null;
@@ -470,6 +471,7 @@ export class BrHud {
       return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : !p.alive && p.redeploy ? icon('ui:refresh', { size: 10, accent: 'currentColor' }) : ''}</em>
         <span class="mbars"><i style="flex:1;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span><span class="mbars pl">${plates}</span></div>`;
     }).join('');
+    this.squadEl.appendChild(this.rdEl);
   }
 
   // Your own revive bar while you pick a teammate up (the downed one has theirs in the down panel).
@@ -571,7 +573,7 @@ export class BrHud {
   #reboundNote(view, br) {
     const on = this.rebound && view.phase !== 'ended';
     const live = on && br.phase < RB.redeployEnd && br.state !== 'final';
-    const text = !on ? '' : live ? `Redeploys on: they end at circle ${RB.redeployEnd + 1}` : 'Redeploys over: no coming back';
+    const text = !on ? '' : live ? `Redeploys on until circle ${RB.redeployEnd + 1}` : 'Redeploys over';
     if (this.c.rd === text) return;
     this.c.rd = text;
     this.rdEl.hidden = !text;
