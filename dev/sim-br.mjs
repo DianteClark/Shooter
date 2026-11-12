@@ -35,7 +35,7 @@ function runMatch(mode, seed) {
   let liveT0 = null, finalSquads = null, finalPhase = 4;
   const phaseSquads = [];                       // Squads in as each circle phase begins.       // Pretend seven of them are guests, for the per-guest snapshot size.
   let tick = 0;
-  const maxTicks = SIM_HZ * 60 * 14;
+  const maxTicks = SIM_HZ * 60 * 18;
   while (sim.phase !== 'ended' && tick < maxTicks) {
     const c = process.cpuUsage();
     sim.step(STEP);
@@ -81,7 +81,8 @@ function report(r) {
   check(ev.landed >= 30, `${r.mode}: everyone jumped and landed`);
   check(r.removed > 60 && ev.brgive > 20, `${r.mode}: loot picked up (guns ${ev.brgive})`);
   check(ev.brplate > 5 && ev.plateHits > 5, `${r.mode}: plates go on and soak hits`);
-  check(ev.medkit >= 8, `${r.mode}: bots heal with medkits (${ev.medkit})`);
+  // (5: the calmer early game of ROADMAP 25 means fewer wounds to heal; 6-14 a match over seeds 11-13.)
+  check(ev.medkit >= 5, `${r.mode}: bots heal with medkits (${ev.medkit})`);
   // Revives are rare per match (0-9 over seeds 11-14 on Frontier), so they are checked over all squad matches together.
   if (sim.br.downs) check(ev.down > 5, `${r.mode}: downs (${ev.down}) and revives (${ev.revive})`);
   else check(ev.down === 0, `${r.mode}: no downs in solos`);
@@ -189,10 +190,13 @@ function units() {
 if (PACING) {
   // node dev/sim-br.mjs --pacing=N: N seeds per mode, pacing numbers only.
   const n = +(PACING.split('=')[1] ?? 4);
-  for (const mode of ['br', 'brduo', 'brsolo']) {
+  const only = args.find(a => a.startsWith('--modes='))?.slice(8).split(',');
+  for (const mode of only ?? ['br', 'brduo', 'brsolo']) {
     const rs = [];
     for (let i = 0; i < n; i++) rs.push(runMatch(mode, 101 + i * 7));
     const avg = f => rs.reduce((a, r) => a + f(r), 0) / rs.length;
+    const at = k => avg(r => r.phaseSquads[k - 1] ?? 0).toFixed(1);
+    console.log(`${mode} summary: ${avg(r => r.minutes).toFixed(1)} min mean (${Math.min(...rs.map(r => r.minutes)).toFixed(1)}-${Math.max(...rs.map(r => r.minutes)).toFixed(1)}), ${(avg(r => r.early) * 100).toFixed(0)}% of deaths in the first 3 min, squads in at phase 3/4/5/6 starts ${at(3)}/${at(4)}/${at(5)}/${at(6)}`);
     console.log(`${mode}: minutes ${rs.map(r => r.minutes.toFixed(1)).join(' ')} | early ${rs.map(r => (r.early * 100).toFixed(0)).join(' ')}% | circle deaths ${rs.map(r => r.sim.br.zoneDeaths ?? 0).join(' ')} | squads by phase ${rs.map(r => r.phaseSquads.join('/')).join(' ')} | tick ${avg(r => r.mean).toFixed(2)} ms | snap ${avg(r => r.snapMean).toFixed(0)} B`);
   }
   process.exit(0);
@@ -388,22 +392,22 @@ for (const [i, mode] of modes.entries()) {
   report(r);
   results.push(r);
 }
-// Pacing (docs/BR.md "Pacing"), over these matches and three more seeds per mode: matches run 9-14 minutes, kills are
-// spread out (no more than ~45% in the first three minutes), the circle kills someone now and then, and two to four
-// squads (up to 5.5 on this 12-match mean) are still in when the final circles start (the circle at 18% of the map,
-// phase 3). Bot overhaul (docs/BOTS.md): bots that hold the angle on footsteps and fight from beside cover kill a
-// little less mid-game; the mean moved from 4.3 to 4.5-5.4 across runs with any one new trait off, so the bound did.
+// Pacing (docs/BR.md "Pacing" and "Owner sweep"), over these matches and three more seeds per mode: matches run 10.5-15
+// minutes, kills are spread out (no more than ~45% in the first three minutes), the circle kills someone now and then,
+// and several squads are still in when the fifth circle (phase 4, 13% of the map) starts. ROADMAP 25: the owner's
+// matches were over by the second circle; before the calmer early bots and the new circles, 10.5 min on average and 1.9
+// squads at phase 4 in quads (none at phase 5), after 11.9 and 5.0 (3.8 at phase 5).
 if (!QUICK) {
   const all = [...results];
   for (const mode of modes) for (let i = 0; i < 3; i++) all.push(runMatch(mode, 101 + i * 7));
   const mean = f => all.reduce((a, r) => a + f(r), 0) / all.length;
   const mins = mean(r => r.minutes), early = mean(r => r.early), circle = all.reduce((a, r) => a + (r.sim.br.zoneDeaths ?? 0), 0);
-  const fin = mean(r => r.phaseSquads[2] ?? 1);
-  console.log(`pacing over ${all.length} matches: ${mins.toFixed(1)} min mean (${Math.min(...all.map(r => r.minutes)).toFixed(1)}-${Math.max(...all.map(r => r.minutes)).toFixed(1)}), ${(early * 100).toFixed(0)}% of deaths in the first 3 min, ${circle} circle deaths, ${fin.toFixed(1)} squads at the final circles`);
-  check(mins >= 9 && mins <= 14, `pacing: matches average 9-14 sim minutes (${mins.toFixed(1)})`);
+  const p4 = mean(r => r.phaseSquads[3] ?? 1), p5 = mean(r => r.phaseSquads[4] ?? 0);
+  console.log(`pacing over ${all.length} matches: ${mins.toFixed(1)} min mean (${Math.min(...all.map(r => r.minutes)).toFixed(1)}-${Math.max(...all.map(r => r.minutes)).toFixed(1)}), ${(early * 100).toFixed(0)}% of deaths in the first 3 min, ${circle} circle deaths, ${p4.toFixed(1)} squads at phase 4, ${p5.toFixed(1)} at phase 5`);
+  check(mins >= 10.5 && mins <= 15, `pacing: matches average 10.5-15 sim minutes (${mins.toFixed(1)})`);
   check(early <= 0.45, `pacing: at most 45% of deaths in the first three minutes (${(early * 100).toFixed(0)}%)`);
   check(circle >= 1, `pacing: some circle deaths (${circle})`);
-  check(fin >= 2 && fin <= 5.5, `pacing: 2-5 squads contest the final circles (${fin.toFixed(1)})`);
+  check(p4 >= 3 && p5 >= 2, `pacing: several squads at the late circles (${p4.toFixed(1)} at phase 4, ${p5.toFixed(1)} at phase 5)`);
 }
 const squads = results.filter(r => r.sim.br.downs);
 if (squads.length) check(squads.reduce((n, r) => n + r.ev.revive, 0) > 0, `squad matches: revives (${squads.map(r => r.ev.revive).join(', ')})`);

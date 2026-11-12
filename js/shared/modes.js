@@ -97,13 +97,15 @@ export const BR = {
   // The circle: phase i waits `wait`, then shrinks over `shrink` to radius `r` (a share of the map's width). Damage per
   // second outside it is `dps` while phase i is the one shrinking or held. Plates do not stop it.
   phases: [
-    { wait: 130, shrink: 60, r: 0.4, dps: 1 },
-    { wait: 110, shrink: 65, r: 0.28, dps: 4 },
-    { wait: 90, shrink: 55, r: 0.18, dps: 8 },
-    { wait: 60, shrink: 45, r: 0.11, dps: 12 },
-    { wait: 45, shrink: 35, r: 0.06, dps: 16 },
-    { wait: 35, shrink: 30, r: 0.03, dps: 20 },
-    { wait: 25, shrink: 40, r: 0, dps: 25 },
+    // ROADMAP 25 (docs/BR.md "Pacing"): the first circles come in sooner (waits were 130 and 110 s) and the later ones
+    // are a little wider and held a little longer, so the late game has room for several squads. 795 s (before: 825).
+    { wait: 90, shrink: 50, r: 0.42, dps: 1 },
+    { wait: 75, shrink: 50, r: 0.33, dps: 4 },
+    { wait: 70, shrink: 45, r: 0.26, dps: 8 },
+    { wait: 75, shrink: 40, r: 0.19, dps: 12 },
+    { wait: 75, shrink: 35, r: 0.13, dps: 16 },
+    { wait: 65, shrink: 35, r: 0.08, dps: 20 },
+    { wait: 45, shrink: 45, r: 0, dps: 25 },
   ],
   downHp: 100,           // A downed player's bleed bar; lethal damage while downed finishes them.
   bleed: 30,             // Seconds to bleed out untouched.

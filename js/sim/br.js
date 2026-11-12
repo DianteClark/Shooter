@@ -82,13 +82,18 @@ const THIRD_PARTY = 75;          // Metres a geared bot squad will go to join a 
 // Pacing (docs/BR.md "Pacing"): the share of squads that pick a contested drop on purpose, by squad size; how far apart
 // the rest land (metres, a Gaussian falloff); the chance a heard fight is joined, by circle phase (times the squad's
 // aggro); and how long a squad keeps to its first place before it moves on.
-const HOT_DROP = [0, 0.06, 0.08, 0.1, 0.1];
-const DROP_GAP = 70;
-const JOIN_FIGHT = [0, 0.15, 0.3, 0.25, 0.2, 0.15, 0.15];   // Late on, squads mostly hold and let fights come.
+const HOT_DROP = [0, 0.02, 0.03, 0.04, 0.04];
+const DROP_GAP = 120;
+const JOIN_FIGHT = [0, 0.03, 0.08, 0.1, 0.08, 0.06, 0.06];   // Calm early (loot and rotate first); late on, squads mostly hold.
 const LOOT_DWELL = 50;
 const GREEDY_HP = 28;              // A greedy squad heads in once someone is below this.
 const EDGE_RING = 1.08;            // Edge players hold this far out (a share of the next circle's radius).
-const LOOT_SIGHT = [0.55, 0.7, 0.85];   // Sight range kept by a bot busy looting, by circle phase.
+const HOLD_GAP = 40;            // Metres a squad's hold keeps from another squad's.
+const LOOT_SIGHT = [0.45, 0.6, 0.8];   // Sight range kept by a bot busy looting, by circle phase.
+// Calm early (ROADMAP 25): how far any bot picks fights from, by circle phase (a share of its usual sight). Early on
+// squads loot and rotate and take the fights that come close; the reach comes back as the circles tighten.
+const PHASE_SIGHT = [0.4, 0.55, 0.75, 0.85, 0.9, 1];
+const PHASE_NOTICE = [0.2, 0.4, 0.6, 0.75, 0.85, 1];   // And how readily it notices someone not shooting (BotBrain.noticeK).
 const HEAL_BELOW = [0, 62, 78, 88];     // A bot uses a medkit below this health, by medkits carried (0-3).
 // Bots in a human's squad (ROADMAP 25: they used to copy the human's every move). In the glide each heads for its own
 // slot FOLLOW_GLIDE m off the human and only moves the slot once the human's has drifted SLOT_SLACK m from it; on the
@@ -1169,7 +1174,7 @@ export class BrRules {
       plan.circle = this.phase;
     } else if (kind === 'hold' && (!plan.spot || (plan.circle !== this.phase && Math.hypot(plan.spot.x - n.x, plan.spot.z - n.z) > n.r * 0.8))) {
       // A squad holds where it is while that stays inside the next circle: it does not wander between holds.
-      plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62);
+      plan.spot = this._holdSpot(n, ax, az, (plan.late ?? 0) > 0.65 ? EDGE_RING : 0.62, team);
       plan.circle = this.phase; plan.since = sim.time;
     } else if (kind === 'fight') {
       const d = Math.hypot(fight.x - ax, fight.z - az);
@@ -1180,7 +1185,8 @@ export class BrRules {
     for (const q of bots) { sqx += q.ps.x / bots.length; sqz += q.ps.z / bots.length; }
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i], bot = p.bot, b = p.br;
-      bot.sightK = 1;
+      bot.sightK = PHASE_SIGHT[Math.min(this.phase, PHASE_SIGHT.length - 1)];
+      bot.noticeK = PHASE_NOTICE[Math.min(this.phase, PHASE_NOTICE.length - 1)];
       // Look after yourself between fights: plates first, then a medkit.
       if (!bot.targetVisible && !b.useK) {
         // No regen in BR: a medkit is the only heal. Badly hurt, it comes before plates; otherwise plates first, then a
@@ -1226,7 +1232,7 @@ export class BrRules {
         if (kind === 'loot' && poi) { lx = (poi.x + sqx) / 2; lz = (poi.z + sqz) / 2; lr = Math.max(16, Math.min(28, poi.r + 6)); }
         else if (plan.spot) { lx = plan.spot.x; lz = plan.spot.z; }
         const t = this._lootTarget(p, lr, lx, lz);
-        if (t) { bot.setObjective(t); bot.sightK = LOOT_SIGHT[Math.min(this.phase, 2)]; continue; }
+        if (t) { bot.setObjective(t); bot.sightK = Math.min(bot.sightK, LOOT_SIGHT[Math.min(this.phase, 2)]); continue; }
         // Nothing left here: the squad moves to the nearest quiet place it has not been, inside the next circle; while
         // the first circle waits it stays put a while first (a squad with a gun each settles in instead).
         const dwell = this.phase === 0 && this.state === 'wait' ? LOOT_DWELL : 6;
@@ -1257,8 +1263,12 @@ export class BrRules {
   // A good place to sit out the wait inside the next circle: late in the match a roofless room or a hold with cover.
   // ringK: where in the next circle (a share of its radius) the squad likes to sit; edge players sit just outside it and
   // run in as it shrinks, which sometimes goes wrong.
-  _holdSpot(n, ax, az, ringK = 0.62) {
+  _holdSpot(n, ax, az, ringK = 0.62, team = null) {
     const sim = this.sim, rooms = sim.map.rooms ?? [], c = this.circle;
+    // Not on top of another squad's hold: squads spread round the circle instead of meeting at the same few rooms.
+    const others = [];
+    for (const [t, pl] of this.plans) if (t !== team && pl.kind === 'hold' && pl.spot) others.push(pl.spot);
+    const crowd = (x, z) => { let k = 0; for (const o of others) { const d = Math.hypot(o.x - x, o.z - z); if (d < HOLD_GAP) k += (HOLD_GAP - d) * 0.25; } return k; };
     const early = this.phase === 0 && this.state === 'wait';     // The first circle is far off: settle in where you are.
     let best = null, bestS = -Infinity;
     for (const r of rooms) {
@@ -1267,7 +1277,7 @@ export class BrRules {
       if ((dc > n.r * Math.max(0.85, ringK + 0.1) || Math.hypot(x - c.x, z - c.z) > c.r * 0.9) && !early) continue;
       // Late on, a ring inside the edge on our side rather than the middle, where every squad would meet.
       const ring = this.phase >= 1 ? Math.abs(dc / Math.max(1, n.r) - ringK) * 8 : 0;
-      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring + sim.rng() * 2;
+      const s = -Math.hypot(x - ax, z - az) * 0.12 - ring - crowd(x, z) + sim.rng() * 2;
       if (s > bestS) { bestS = s; best = { x, z }; }
     }
     if (!best) {
@@ -1275,7 +1285,7 @@ export class BrRules {
       for (let q = 0; q < k; q++) {
         const h = sim.nav.holds[ix.out[q]];
         const ring = this.phase >= 1 ? Math.abs(Math.hypot(h.x - n.x, h.z - n.z) / Math.max(1, n.r) - ringK) * 8 : 0;
-        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring + sim.rng() * 2;
+        const s = -Math.hypot(h.x - ax, h.z - az) * 0.12 - ring - crowd(h.x, h.z) + sim.rng() * 2;
         if (s > bestS) { bestS = s; best = { x: h.x, z: h.z }; }
       }
     }
