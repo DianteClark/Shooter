@@ -23,8 +23,12 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
 - `js/sim/zm-phone.js`: the phone that owns a human's gun applies the host's `zarm`, `zammo` and `zperk` events.
 - `js/sim/sim.js`: `buildZmRoster` (four player seats, then `ZM.seats` horde seats on team `ZM_TEAM`), the pool roster
   keeps the horde seats; per-guest records skip the horde (`rules.seatCode`).
-- `js/render/zm-fx.js`: fences, gates (an opened one drops away), wall-buy chalk outlines, perk machines, the crate and
-  its beam and floating gun, power-ups. About eight draw calls whatever the round.
+- `js/render/zm-fx.js`: fences, gates (an opened one drops away), wall-buys (a chalk frame and the gun in gold with a
+  pulsing glow, and an x-ray copy drawn only where walls or roofs hide it, so a buy reads through walls), perk machines,
+  the crate (a plank crate with iron corners and a lid hinged at the back, its outline through walls too: rolling, the
+  lid opens and guns cycle up out of it, slowing as it settles; the offer floats and turns; the lid shuts once it is
+  taken; a move lifts it up the beam and drops it in at its new spot), power-ups. About eleven draw calls whatever the
+  round; the x-ray passes are one merged mesh for every wall-buy and one box for the crate.
 - `js/render/zm-looks.js` + `js/render/characters.js`: the undead (shambler, runner, brute, boss) in the operators'
   parts kit, greyed and torn, as four extra operator uniform slots after `MAX_OPERATORS`. They ride the same instanced
   character meshes as soldiers (no extra draw calls); a horde seat's look comes from the view (`zk`).
@@ -103,6 +107,12 @@ Inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms). The rendere
 - `python3 dev/ui-zombies-test.py <port>`: in Chromium at 852x393 and 667x375: Multiplayer > Zombies > Solo with bots >
   Find match, round 1 with zombies in view, the round survived, a wall-buy, a perk and a gate through the use button
   (clear of the sticks), then Overrun results with the Rounds survived XP line and the saved record.
+
+## Scorestreaks (as of build NEXT, unchanged pending the owner)
+Loadout streaks do trigger here: the kit (`ZmRules.kit`) deals no streaks, but the streak slots come from the roster's
+loadout, and kills still feed streak score (`Sim._kill`). Bots call them (one test run on Ruins, eight rounds: six UAVs,
+five turrets, three gunships). The touch HUD hides the streak tiles in this mode, so a human on touch cannot call one; a
+controller's Streak button could.
 
 ## Open
 - No dedicated sounds yet for claws, the crate or the machines (hits and kills use the usual ones).

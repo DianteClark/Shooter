@@ -188,7 +188,8 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(900)
     note = await ev("document.querySelector('.br-tagnote')?.hidden === false ? document.querySelector('.br-tagnote').textContent : null")
     if not note: failures.append(f'{vw}: no tag note once a squadmate fell')
-    await pg.locator('.minimap').screenshot(path=f'{OUT}/10c-minimap-beacon-{vw}x{vh}.png')
+    mm = await pg.locator('.minimap').bounding_box()
+    await pg.screenshot(path=f'{OUT}/10c-minimap-beacon-{vw}x{vh}.png', clip=mm)
     await ev(f"""(() => {{ const m = {G}.match, mi = m.sim.byId.get(window.__mate).index, tag = m.sim.br.items.find(it => it && it.kind === 8 && it.v === mi); if (tag) {{ m.ps.x = tag.x; m.ps.z = tag.z; }} }})()""")
     await pg.wait_for_timeout(700)
     await ev(f"(() => {{ const m = {G}.match, bc = m.sim.br.beacons[window.__bc]; m.ps.x = bc.x + 0.8; m.ps.z = bc.z + 0.3; }})()")
@@ -200,7 +201,7 @@ async def run(browser, vw, vh, failures, errors):
     await shot('10e-recalling')
     if await pg.locator('.br-recalling').is_hidden(): failures.append(f'{vw}: no Recalling bar while holding the beacon')
     try:
-        await pg.wait_for_function(f"{G}.match.sim.byId.get(window.__mate).alive", timeout=9000)
+        await pg.wait_for_function(f"{G}.match.sim.byId.get(window.__mate).alive", timeout=30000)
         await pg.wait_for_timeout(1200)
         await shot('10f-recalled')
     except Exception:

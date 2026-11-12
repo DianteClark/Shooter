@@ -255,3 +255,57 @@ results and XP are battle royale's own; the numbers that differ are `RB` in js/s
   the guest's view, no redeploy after the cut-off, a wiped squad stays out, a redeployer reviving the downed last one,
   determinism, 4 quads and 3 duos matches with length and redeploy checks); `python3 dev/ui-modes2-test.py [port]`
   (the playlist, the drop, the note, a redeploy countdown and glide, results).
+
+## Owner notes (Recall Beacons, the transport, fists)
+- The transport: the drop map's side says how many players are still aboard and where each squadmate is (Aboard,
+  Gliding, Landed, Out); the Jump button and the map's transport label carry the count, and your squad's riders sit on
+  the map's transport icon. In the world the transport carries seated figures on its roof, your squad up front in its
+  colour (you in white), everyone else grey (js/render/br-fx.js `#riders`). Everyone's `air` already rides the block, so
+  a guest counts the same as the host. Same in Rebound.
+- Hands: no gun slots on the battle royale HUD any more (the Swap button swaps guns). A Fists toggle and the pouch stay
+  beside the ammo readout. `brHandWant` (js/sim/br.js) is the one rule, used by the phone (`Match.#brDry`) and bots
+  (`BrRules._botHands`): both guns out of rounds, the fists come out by themselves; walk over ammo for a gun you carry
+  and that gun comes back (the one put away comes back topped up from the pouch). Fists you chose yourself stay out.
+  The Swap button with fists out brings a gun back. The readout says Fists with a glove icon.
+- Fists are boxing gloves: the blade's slot keeps its id (`knife`, the Gaff's damage and reach), but in battle royale the
+  renderer draws no blade, puts low-poly red gloves on both hands (js/render/characters.js `gloveGeometry`), holds a
+  guard and throws alternating straight punches; a glove landing plays a boing (js/audio/audio.js `boing`).
+
+## Recall Beacons
+Our own respawn beacons (numbers in `BR.recall` and `RB.recall`, js/shared/modes.js; code in the "Recall Beacons" part of
+js/sim/br.js).
+- Placement: `recallBeacons(map, area)`: `BR.recall.count` (6) named places, 90 m or more apart, spread by farthest
+  point from the place nearest the middle, tier 2 and 3 places first; each on its place's nearest outdoor loot spot. On
+  Frontier: Radio Hill, Lighthouse Point, Airfield, Canyon Dam, Frozen Ship, Freight Yard. Rebound: three inside its area
+  (60 m apart). Pure, so every phone has the same beacons.
+- Tags: a player who dies for good (not waiting on a Rebound redeploy) while the squad is still in drops a recall tag
+  (loot kind `tag`, `v` their player index) where they fell, with any tags they carried. A squadmate walks over it to
+  take it (enemies cannot). A tag left outside the circle goes to the nearest squadmate up (`_sweepTags`), so a death
+  in the storm does not cost the recall. A squad out loses its tags.
+- Use: carrying a tag, stand within `reach` (2.6 m) of a ready beacon and tap Recall (the take prompt's lane). Hold it
+  for `time` (6 s): firing, a hit, going down or walking off stops it. Everyone hears it (a siren from the beacon, a
+  notice naming the place) and sees it (a tall amber beam). Done: the beacon is spent (one use each), and the squadmate
+  parachutes in from 40 m out to a spot beside it with the redeploy kit (a common long gun, the pistol, 50 armor;
+  `_dropIn`, shared with Rebound's redeploy).
+- When: battle royale, from the start until circle 5 (`BR.recall.off` 4, the phase index); going offline takes every
+  tag off the map. Rebound has its own redeploys, so its beacons come online only once redeploys end (circle 5) and go
+  offline for the last circle (`RB.recall`).
+- Bots (`_botRecall`): fetch a squad tag inside the circle (one bot per tag, within 160 m; 30 m of a human squadmate),
+  carry it to the nearest ready beacon inside the circle (170 m; 45 m of the human), and hold it when nothing is in
+  view. Over three bot quads matches on Frontier: 65 tags taken, 15 squadmates recalled (of 18 beacons).
+- HUD (js/ui/br-hud.js): the Recall button (green, the squadmate's name; tap again to stop), a Recalling bar in the
+  objective strip, a note at the foot of the squad column (whose tag you carry, or that a fallen squadmate's tag is
+  waiting), a beacon mark on a fallen squadmate's row, beacons on the minimap and map while a squadmate can be recalled
+  or you carry a tag (green ready, grey spent) and to everyone while one is held (pulsing amber), your squad's tags as
+  white tags. The out panel says your squad can recall you.
+- World (js/render/br-fx.js): a mast per beacon with a lamp (green ready, grey spent, dull red offline), a ring on the
+  ground while ready, a beam and a filling ring while held; tags as turning plates in their squad's colour with a beam.
+- Wire: per player bit 23 (can be recalled: dead, tag out there) and 24 (carries a tag); a beacons block after the stats
+  (`[online, 0 ready | 1 used | 2 + progress %]`); the guest's own carried tags and recall progress in its inventory
+  block; carried tags in the host-migration backup (index 23). Events `{t:'brtag', id, who, auto?}`,
+  `{t:'brrecall', kind: 'start'|'stop'|'done', id, who, b, x, z, why?}`, `{t:'brbeacons', on}`.
+- Tests: `node dev/sim-br.mjs --recall [--quick]` (placement, Rebound areas, tag drop and pickup, the guest's view,
+  start, stop by a shot and by walking off, progress on the wire, the drop-in and kit, one use, a carrier's death,
+  enemies, offline from circle 5, Rebound's window, and bots over three matches); `--plane` (aboard counts, BR and
+  Rebound); `--hands` (automatic fists both ways, bots). `python3 dev/ui-br-test.py [port]` covers the aboard panel,
+  no gun slots, automatic fists and back, and a recall from tag to drop-in.
