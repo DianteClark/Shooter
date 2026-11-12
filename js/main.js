@@ -34,6 +34,9 @@ import { installScrolling, scrollerOf, canScroll } from './ui/scroll.js';
 import { Options } from './ui/options.js';
 import { installViewport, onViewport } from './ui/viewport.js';
 import { wakeLock } from './ui/wakelock.js';
+import { installed as runningInstalled, platformKey, requestPersist, browserName } from './ui/platform.js';     // Phones (docs/DEVICES.md).
+import { installAndroid } from './ui/android.js';
+import { installSheet } from './ui/installguide.js';
 import { PerfOverlay } from './ui/perf.js';
 import { TouchDebug } from './ui/touchdebug.js';
 import { statsScreen } from './ui/stats.js';
@@ -477,9 +480,9 @@ function openHistory() {
   menu.history({ onBack: afterEditing, onStats: () => openStats(openHistory) });
 }
 
-function openHelp() {
+function openHelp(tab) {
   // Training is solo; from a lobby it would walk out of the room, so it is only offered from the title.
-  menu.help({ onBack: afterEditing, onTutorial: app.net ? null : () => startTutorial() });
+  menu.help({ onBack: afterEditing, onTutorial: app.net ? null : () => startTutorial(), tab });
 }
 
 function openSave(back = afterEditing) {
@@ -1480,6 +1483,9 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   app.inMatch = true;
   wakeLock.set(true);
   updater.paint();
+  // Ask the browser to keep this site's storage (the save) from the first match on. Firefox would ask the player with a
+  // dialog, so there it waits for the install guide. Answered once per session.
+  if (browserName() !== 'firefox') requestPersist();
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.lastPlayed = mode === 'range' ? null : { mapId, mode };
@@ -1704,13 +1710,13 @@ function applyOptions(v, changed) {
 }
 
 // --- Startup ---
+// Offered once to a phone player in a browser tab (any iPhone browser, Android Chrome, Samsung Internet and others):
+// how to add the game for this browser, and where progress lives. The guide stays in How to play, Install tab.
 function maybeInstallPrompt() {
-  const ua = navigator.userAgent;
-  const iOSSafari = /iP(hone|od|ad)/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS/.test(ua);
-  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
-  if (!iOSSafari || standalone || Progress.flag('installPrompt')) return;
+  if (runningInstalled()) { requestPersist(); return; }
+  if (platformKey() === 'desktop' || Progress.flag('installPrompt')) return;
   Progress.setFlag('installPrompt');
-  menu.installPrompt(() => {});
+  installSheet(menu, { onMore: () => openHelp('install') });
 }
 
 // Controllers and the voice overlay need app, the HUD, the menu and quick chat.
@@ -1730,6 +1736,13 @@ const TOUCHDEBUG_PARAM = params.get('touchdebug') === '1';
 const touchDebug = new TouchDebug(controls);
 followViewport();
 blockIosGestures();
+// Android: full screen and landscape lock in a tab, the back gesture walks the menus, the install worker.
+installAndroid({
+  menu,
+  inMatch: () => !!app.inMatch,
+  onMatchBack: () => hud.notify?.('Use the menu to leave the match'),
+  onTitleBack: () => menu.toast('Back again to close Switchyard'),
+});
 installScrolling();
 installTaps();
 // One sound per tap, chosen by tap.js from the element (data-sound, back-ish actions, disabled controls).

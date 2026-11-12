@@ -8,8 +8,9 @@ import { WEAPONS } from '../shared/weapons.js';
 import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
 import { changelogHtml } from './whatsnew.js';
+import { installPanel, installActions } from './installguide.js';
 
-const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info'], ['updates', 'Updates', 'star']];
+const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info'], ['install', 'Install', 'phone'], ['updates', 'Updates', 'star']];
 
 // One piece of equipment: its job, what it does, and what beats it (catalog.js job / desc / counter).
 const gear = kind => t => `<div class="help-stat"><dt>${esc(t.name)} <small>${kind}: ${esc(t.job ?? '')}</small></dt><dd>${esc(t.desc)}. <b>Counter:</b> ${esc(t.counter ?? '')}.</dd></div>`;
@@ -116,8 +117,11 @@ const PANELS = {
     </div>`,
 };
 
-export function helpScreen(menu, { onBack, onTutorial }) {
-  let tab = 'controls';
+// tab: the tab to open on ('install' from the install sheet's More).
+export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }) {
+  let tab = TABS.some(([id]) => id === first) ? first : 'controls';
+  const install = {};             // The Install tab's own state (platform picked, storage answer).
+  let installed = null;
   menu.el.dataset.screen = 'help';
   const training = onTutorial ? `<button class="btn is-primary help-tut" data-sound="confirm" data-act="helpTutorial">${ico('play')}<b>Training</b></button>` : '';
   menu.el.innerHTML = `
@@ -126,12 +130,15 @@ export function helpScreen(menu, { onBack, onTutorial }) {
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];
   const paint = () => {
-    body.innerHTML = PANELS[tab]();
+    if (tab === 'install') {
+      if (!installed) { installed = installActions(install, () => { if (tab === 'install' && body.isConnected) body.innerHTML = installPanel(install); }); menu.on(installed.actions); }
+      body.innerHTML = installPanel(install);
+    } else body.innerHTML = PANELS[tab]();
     stagger(body.querySelectorAll('.help-card, .help-chip, .help-rules li'), 'up', { step: 25, max: 12 });
     for (const t of tabs) t.classList.toggle('on', t.dataset.tab === tab);
   };
   menu.on({
-    helpBack: () => onBack(),
+    helpBack: () => { installed?.dispose(); onBack(); },
     helpTutorial: () => onTutorial?.(),
     helpTab: ({ tab: next }) => { tab = next; paint(); },
   });

@@ -41,9 +41,11 @@ def ring_polygon(cx, cy, r0, r1, sides, a0, a1):
 
 
 def main():
-    im = Image.new('RGB', (S, S), STEEL)
-    d = ImageDraw.Draw(im)
-    facet_background(d)
+    bg = Image.new('RGB', (S, S), STEEL)
+    facet_background(ImageDraw.Draw(bg))
+    # The mark is drawn on its own layer, so the maskable icons can shrink it into Android's safe circle.
+    fg = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(fg)
 
     cx, cy = S * .5, S * .5
     R0, R1 = S * .33, S * .405
@@ -74,8 +76,19 @@ def main():
 
     assets = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets')
     os.makedirs(assets, exist_ok=True)
-    for size in (180, 512):
+    im = bg.copy()
+    im.paste(fg, (0, 0), fg)
+    for size in (180, 192, 512):
         im.resize((size, size), Image.LANCZOS).save(os.path.join(assets, f'icon-{size}.png'), optimize=True)
+    # Maskable (Android adaptive icons): the launcher may crop to a circle of 80% of the width, so the mark is scaled
+    # to fit inside it (the ring reaches 0.455 of the width from the centre; 0.78 of that is 0.355) over the full bleed.
+    k = 0.78
+    small = fg.resize((int(S * k), int(S * k)), Image.LANCZOS)
+    mk = bg.copy()
+    off = (S - small.width) // 2
+    mk.paste(small, (off, off), small)
+    for size in (192, 512):
+        mk.resize((size, size), Image.LANCZOS).save(os.path.join(assets, f'icon-maskable-{size}.png'), optimize=True)
 
 
 main()

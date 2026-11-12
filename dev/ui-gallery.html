@@ -166,6 +166,7 @@ const SCENES = {
   // Options > Controller (js/ui/controllerscreen.js), opened from the Options screen's Set up button.
   'controller': menuScene('Options: controller', ({ menu }) => { menu.options({ onBack: noop, onPreviewSound: noop }); menu.el.querySelector('[data-act="optPad"]').click(); }),
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
+  'help-install': menuScene('Help: Install', ({ menu }) => menu.help({ onBack: noop, tab: 'install' })),
   'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop }); }),
   // Leaderboards: a played-in save, three friends (one with a long tag, one from last week) and the pool.
   // Seasons and ranked: a played-in season (tiers claimed and some to claim, placed in ranked), on a day in Season 1.
