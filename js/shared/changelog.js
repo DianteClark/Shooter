@@ -4,6 +4,19 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Graveyard Shift: somewhere to spend your points',
+    items: [
+      'Upgrade bench: bring the gun in your hands to the bench and it comes back stronger, with a bigger magazine and more ammo. Three tiers (5,000, 15,000 and 30,000 points); the third adds special rounds that set the undead burning, arc between them, burst on impact or slow them down, depending on the gun. Upgraded guns glow and fire coloured tracers, and keep their tier when you swap.',
+      'Supply terminal: buy a Sentry Gun, an Air Strike on the thickest crowd near you, a Hunter Drone, a Lure that draws the undead in and then blows, or an Armour Vest. One of each per round; prices rise as the rounds go on. Your class scorestreaks no longer work in Graveyard Shift, for you or the bots.',
+      'Traps at chokepoints: the Live Rail, the Firedamp Vents and the Threshers. Pay to switch one on for 30 seconds. They shred the undead (for fewer points than a gun kill) and sting anyone standing in them.',
+      'Armour plates: up to three, bought at the armour bench, shown over your health bar. They take the undead\'s hits first.',
+      'Two new perk machines: Fleetfoot (faster sprint and slides) and Last Breath (go down and get yourself back up, once every three rounds). You can hold four perks; a perk slot at any machine raises that to six.',
+      'From round 15 you can call the exfil at the exfil pad. Hold out on the pad for 60 seconds against everything that comes, and get out for big XP and an "Escaped on round" record for the map.',
+      'Something is hidden on every map. Find three old lanterns and set them on the altar to wake the Gravewarden. Put it down for a lot of XP, points for the whole crew and a new calling card, Lantern Out.',
+      'Bot teammates use all of it too: they upgrade their guns, buy plates and supplies, and switch traps on when the undead pile in.',
+    ],
+  },
+  {
     build: '1111-31', date: '2026-11-12', title: 'Recall Beacons, boxing gloves and a better crate',
     items: [
       'Battle royale: Recall Beacons. When a squadmate is eliminated their tag drops where they fell. Pick it up, hold it at a Recall Beacon for a few seconds and they parachute back in beside it with a basic kit. Each beacon works once, everyone nearby can hear and see one in use, and they go offline from the fifth circle.',

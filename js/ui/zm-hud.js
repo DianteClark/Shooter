@@ -355,12 +355,12 @@ export class ZmHud {
   #crew(view, me) {
     const z = objOf(view);
     const crew = view.players.filter(p => p.team === me.team && !p.ai);
-    const key = crew.map(p => `${p.id}:${p.zpts}:${(p.zperks ?? []).join('')}:${p.downed ? 1 : 0}:${p.alive ? 1 : 0}`).join('|');
+    const key = crew.map(p => `${p.id}:${p.zpts}:${(p.zperks ?? []).join('')}:${p.downed ? 1 : 0}:${p.alive ? 1 : 0}:${p.zbreath ?? -1}`).join('|');
     if (this.c.crew === key) return;
     this.c.crew = key;
     this.crewEl.innerHTML = crew.map(p => `<div class="zm-mate${p.id === me.id ? ' me' : ''}${p.alive && p.downed ? ' down' : ''}${!p.alive ? ' dead' : ''}">
       <b>${escape(p.name)}</b><em>${fmt(p.zpts ?? 0)}</em>
-      <span>${(p.zperks ?? []).map(k => `<i style="--k:${ZM_PERKS[k]?.css ?? '#fff'}" title="${escape(ZM_PERKS[k]?.name ?? k)}"></i>`).join('')}</span></div>`).join('');
+      <span>${(p.zperks ?? []).map(k => `<i style="--k:${ZM_PERKS[k]?.css ?? '#fff'}${k === 'breath' && p.zbreath === 0 ? ';opacity:.3' : ''}" title="${escape(ZM_PERKS[k]?.name ?? k)}"></i>`).join('')}</span></div>`).join('');
     void z;
   }
 
