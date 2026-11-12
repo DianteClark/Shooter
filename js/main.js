@@ -1550,6 +1550,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.onZmCommand((act, extra) => app.match?.zmCommand(act, extra));
   hud.onFinCommand((act, e) => (act === 'finish' ? app.match?.finish() : app.match?.emote(e)));
   hud.zmHud.guns = () => (app.match ? [app.match.ps.primary, app.match.ps.secondary] : []);
+  hud.zmHud.hands = () => app.match?.ps ?? null;
   // A respawn before the player opens the picker should still use the equipped weapon (training keeps its own kit).
   app.match.setNextLoadout(tutorial ? roster.find(r => r.id === id).loadout : Progress.loadout());
   if (tutorial) {

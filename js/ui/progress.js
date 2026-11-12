@@ -79,7 +79,7 @@ import {
   MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
   recordCareer, careerWeek, masteryCompleted, blankCareer,
-  recordZmBest,
+  recordZmBest, recordZmFeat,
   masterOf, masterProgress, prestigeRankRewards, masterRewardsBetween, nextMasterReward, MASTER_REWARDS,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
@@ -247,7 +247,8 @@ function gatedKits(loadout) {
 }
 
 function careerStats() {
-  const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id) };
+  const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id),
+    zmFeats: data.zmFeats ?? {} };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
 }
@@ -522,6 +523,13 @@ export const Progress = {
     if (r.fresh) save();
     return r;
   },
+  // Graveyard Shift feats (ROADMAP item 36): an escape's round and the Gravewarden, per map.
+  recordZmFeat(mapId, feat) {
+    const r = recordZmFeat(data, mapId, feat);
+    if (r.freshEscape || r.freshBoss) save();
+    return r;
+  },
+  zmFeats(mapId) { const f = data.zmFeats?.[mapId] ?? [0, 0]; return { escaped: f[0] ?? 0, boss: !!f[1] }; },
   skins(op) {
     const got = masteryRewards(data);
     return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));

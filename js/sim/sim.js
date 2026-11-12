@@ -668,7 +668,10 @@ export class Sim {
   // A loadout as this match deals it to a side: the mode's own kit (One in the Chamber, Infected), then the modifiers.
   _deal(team, l) {
     if (this.rules?.kit) l = this.rules.kit(team, l);
-    return dealLoadout(l, this.mods);
+    const out = dealLoadout(l, this.mods);
+    // Graveyard Shift: the class streaks stay home (the supply terminal sells the mode's own, js/sim/zm-econ.js).
+    if (this.rules?.noStreaks) out.streaks = [];
+    return out;
   }
 
   // The same for a phone's own player, which owns its gun and so deals its own loadout at each spawn (js/game/match.js).
@@ -861,6 +864,9 @@ export class Sim {
   // Accumulates dt into fixed SIM_HZ ticks. Passing exactly 1/SIM_HZ runs exactly one tick.
   step(dt) {
     if (!this.nav) this._initBots();
+    // Only a sim that steps is the match's truth. The host decodes its own snapshot every tick for its view
+    // (Match.#pushHostView), and a rule set must then not take the snapshot's rounded numbers back into its state.
+    this.authority = true;
     this.accum += dt;
     let steps = 0;
     while (this.accum >= STEP - 1e-9) {
@@ -1800,7 +1806,7 @@ export class Sim {
   // Refusing keeps the streak; a human hears why through a streak_denied event, a bot would only be spamming it.
   useStreak(id, slot) {
     const p = this.byId.get(id);
-    if (!p || this.phase !== 'live' || !p.alive || this.snd) return null;
+    if (!p || this.phase !== 'live' || !p.alive || this.snd || this.rules?.noStreaks) return null;
     const slots = p.score.slots;
     if (slot === undefined) {
       for (let i = slots.length - 1; i >= 0 && slot === undefined; i--) if (slots[i].held) slot = i;
@@ -3013,7 +3019,7 @@ export class Sim {
       if (this.br.authority) this.br.hostView(out); else this.br.decode(a || null, out);
       return;
     }
-    if (this.rules) { out.obj = out.points.obj = this.rules.decode(a || null, out); return; }
+    if (this.rules) { out.obj = out.points.obj = this.rules.decode(a || null, out, !!this.authority); return; }
     if (this.mode === 'snd') {
       // The sites never change; the round state rides on the list as well as on the view (see sndOf in snd.js).
       out.points = this.zones.map(z => this._pointView(z, -1, 0, false));

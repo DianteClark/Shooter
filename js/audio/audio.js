@@ -1086,6 +1086,18 @@ function renderSfx(sr) {
       addNoise(d, sr, r, { dur: 0.06, gain: 0.7, f0: 2400, f1: 600, decay: 7 });
       addClick(d, sr, r, { dur: 0.004, gain: 0.6, hp: 1800 });
     }, 0.8),
+    // Battle royale fists are boxing gloves: a padded thump and a cartoon spring, the pitch wobbling down.
+    boing: mk(0.42, (d, r) => {
+      addTone(d, sr, { dur: 0.08, gain: 0.9, f0: 140, f1: 60, decay: 7, shape: 1.2 });
+      addNoise(d, sr, r, { dur: 0.04, gain: 0.35, f0: 1200, f1: 400, decay: 8 });
+      let ph = 0;
+      for (let i = Math.floor(0.012 * sr); i < d.length; i++) {
+        const t = i / sr - 0.012;
+        const f = 170 + 230 * Math.exp(-t * 7) * (1 + 0.32 * Math.sin(t * Math.PI * 2 * 15));
+        ph += Math.PI * 2 * f / sr;
+        d[i] += Math.sin(ph) * Math.exp(-t * 6.5) * Math.min(1, t * 400) * 0.75;
+      }
+    }, 0.8),
     impactMetal: mk(0.24, (d, r) => {
       addClick(d, sr, r, { dur: 0.004, gain: 1, hp: 4000 });
       addMetal(d, sr, { at: 0.002, dur: 0.2, gain: 0.8, f: 2300, decay: 7 });
@@ -2041,7 +2053,12 @@ export class AudioEngine {
 
   // A blade or a club connecting. Heard by everyone near it, louder for the two people involved.
   _meleeHit(e) {
-    const b = this.sfx.meleeHit;
+    const b = this.lastView?.br && e.w === 'knife' && this.sfx.boing ? this.sfx.boing : this.sfx.meleeHit;     // BR fists: gloves.
+    if (b === this.sfx.boing) {
+      if (e.by === this.localId || e.target === this.localId) this._play(b, { bus: this.ui, priority: PR.hit, cls: 'foley', gain: 0.9, rate: 0.95 + Math.random() * 0.1 });
+      else this._world(b, e.x, e.z, FOLEY_RANGE, { gain: 0.7, priority: PR.gun, cls: 'foley', rate: 0.95 + Math.random() * 0.1 });
+      return;
+    }
     if (!b) return;
     const rate = 1.35 / Math.max(0.75, Math.sqrt(weightOf(e.w) / 0.3));
     if (e.by === this.localId || e.target === this.localId) this._play(b, { bus: this.ui, priority: PR.hit, cls: 'foley', gain: 0.9, rate });

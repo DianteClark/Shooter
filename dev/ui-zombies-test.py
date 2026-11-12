@@ -10,7 +10,11 @@ Then Ashgrove Halt at 932x430 (the debug hook ?map=ashgrove&mode=zm and the Cust
 power out, a perk machine shows dark and will not sell, the gates to the Pump Yard open, the switch is thrown through
 the use button (free), and the same machine sells its perk.
 Screenshots at 852x393, 667x375 and 932x430 go to outdir (default /tmp/zombies). Fails on any console error, and on HUD
-panels that spill off the screen. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove runs only the second.
+panels that spill off the screen. Then the economy (ROADMAP item 36) on Ashgrove at 852x393 and 667x375: a gun upgraded
+at the bench through the use button (the gun goes in, comes out at tier 1 with its pips and look), the supply terminal's
+sheet and a sentry bought from it, a trap armed at its switch, plates at the armour bench, the exfil called at round 15,
+the relics set on the altar and the Gravewarden's bar. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove or
+ZM_ONLY=econ runs only that part.
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -118,6 +122,40 @@ async def run(browser, vw, vh, failures, errors):
     except Exception: failures.append(f'{tag}: buying at the wall did not arm the gun')
     await pg.wait_for_timeout(500)
     await shot('06-bought')
+    # The mystery crate (owner notes): looks like a crate, the lid opens, guns cycle up, the pick floats, the lid shuts,
+    # and a move lifts it away and drops it in elsewhere. Crops of the middle of the screen go to outdir.
+    crop = lambda name: pg.screenshot(path=f'{OUT}/{name}-crop-{vw}x{vh}.png', clip={'x': vw * 0.28, 'y': vh * 0.12, 'width': vw * 0.44, 'height': vh * 0.66})
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; R.open = (1 << 8) - 1; R.box.state = 0; R.box.uses = 0; R.box.moveAt = 99;
+      const bs = R.L.boxSpots[R.box.spot]; m.ps.x = bs.x; m.ps.z = bs.z; }})()""")
+    await pg.wait_for_function(f"document.querySelector('.zm-use:not([hidden]) .t')?.textContent?.toUpperCase().includes('CRATE')", timeout=10000)
+    await pg.wait_for_timeout(500)
+    await crop('05b-crate')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_timeout(1300)
+    await crop('05c-crate-rolling')
+    lid = await ev(f"{G}.renderer?.zmFx?.lid?.rotation.x ?? window.__game.app.match?.renderer?.zmFx?.lid?.rotation.x ?? null")
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.box.state === 2", timeout=8000)
+    except Exception: failures.append(f'{tag}: the crate never offered a gun')
+    await pg.wait_for_timeout(700)
+    await crop('05d-crate-offer')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_timeout(900)
+    await crop('05e-crate-taken')
+    await ev(f"(() => {{ const R = {G}.match.sim.rules; R.box.state = 3; R.box.timer = 2.5; R.box.gun = -1; }})()")
+    await pg.wait_for_timeout(600)
+    await crop('05f-crate-leaving')
+    await pg.wait_for_function(f"{G}.match.sim.rules.box.state === 0", timeout=8000)
+    await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules, bs = R.L.boxSpots[R.box.spot]; m.ps.x = bs.x; m.ps.z = bs.z; }})()")
+    await pg.wait_for_timeout(250)
+    await crop('05g-crate-arrived')
+    print(f'  {tag} crate lid at roll {lid}', flush=True)
+    # A wall-buy behind a wall: its glow shows through (stand on the far side of the wall it hangs on).
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, w = R.L.wallBuys[0];
+      m.ps.x = w.wx - Math.cos(w.face) * 3.5; m.ps.z = w.wz - Math.sin(w.face) * 3.5;
+      const k = m.sim.nav.nearestFree(m.ps.x, m.ps.z); m.ps.x = k % m.sim.nav.w + 0.5; m.ps.z = Math.floor(k / m.sim.nav.w) + 0.5; }})()""")
+    await pg.wait_for_timeout(600)
+    await shot('05h-wallbuy-glow')
+    await crop('05h-wallbuy-glow')
     # A perk machine and a gate.
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; const mc = R.L.machines.find(x => x.band === R.L.start) ?? R.L.machines[0];
       if (R.L.machines[0] && mc.band !== R.L.start) for (const d of R.L.doors) R.open |= 1 << d.i;
@@ -236,6 +274,165 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     await ctx.close()
 
 
+async def run_econ(browser, vw, vh, failures, errors):
+    """The economy (ROADMAP item 36) on Ashgrove Halt: upgrade a gun at the bench, buy from the supply terminal's sheet,
+    arm a trap, buy a plate, the exfil called and the quest's altar; screenshots and crops of each piece."""
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'econ {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'econ {vw}: PAGEERR {e} {getattr(e, "stack", "")}'))
+    tag = f'econ {vw}x{vh}'
+    async def shot(name):
+        print(f'  {tag} {name}', flush=True)
+        await pg.screenshot(path=f'{OUT}/econ-{name}-{vw}x{vh}.png')
+    crop = lambda name: pg.screenshot(path=f'{OUT}/econ-{name}-crop-{vw}x{vh}.png', clip={'x': vw * 0.25, 'y': vh * 0.08, 'width': vw * 0.5, 'height': vh * 0.72})
+    ev = lambda js: pg.evaluate(js)
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=ashgrove&mode=zm', timeout=120000)
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    # Shielded, the bots stand still, every gate open and the power on; the horde held back.
+    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, R = sim.rules; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
+      for (const p of R.crew) if (p.bot) {{ p.bot.update = () => []; }} R.plan = () => {{}}; R._crewPlan = null;
+      const me = sim.byId.get(m.localId); for (const d of R.L.doors) if (!(R.open & (1 << d.i))) R._use(me, {{ kind: 'door', i: d.i, cost: 0, ok: true }});
+      R.power = 1; me.zm.pts = 200000; }})()""")
+    await pg.wait_for_function(f"{G}.match.sim.rules.round === 1", timeout=60000)
+    await ev(f"(() => {{ const R = {G}.match.sim.rules; R.spawnT = 1e9; for (const z of R.horde) if (z.alive) {{ z.alive = false; z.hp = 0; }} }})()")
+    goto = lambda what: ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L, p = {what}; m.ps.x = p.x; m.ps.z = p.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    prompt = lambda: ev("document.querySelector('.zm-use:not([hidden]) .t')?.textContent ?? ''")
+    # ---- The upgrade bench: a wall gun first, then tier 1 through the use button. ----
+    await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules; R._give(m.sim.byId.get(m.localId), 'ar'); }})()")
+    await pg.wait_for_function(f"{G}.match.ps.weapon === 'ar'", timeout=6000)
+    await goto('L.bench')
+    try: await pg.wait_for_function("(document.querySelector('.zm-use:not([hidden]) .t')?.textContent ?? '').startsWith('UPGRADE')", timeout=8000)
+    except Exception: failures.append(f'{tag}: no UPGRADE prompt at the bench: {await prompt()!r}')
+    await pg.wait_for_timeout(500)
+    await shot('01-bench')
+    await crop('01-bench')
+    where = await ev(CLEAR_OF_STICKS)
+    if where: failures.append(f'{tag}: use button not clear of the sticks: {where}')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.bench.state === 1 && {G}.match.ps.weapon === 'knife'", timeout=6000)
+    except Exception: failures.append(f'{tag}: the bench did not take the gun')
+    await pg.wait_for_timeout(1200)
+    await crop('02-bench-working')
+    await pg.wait_for_function(f"{G}.match.sim.rules.econ.bench.state === 2", timeout=10000)
+    await pg.wait_for_function("(document.querySelector('.zm-use:not([hidden]) .t')?.textContent ?? '').startsWith('TAKE')", timeout=6000)
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.ps.weapon === 'ar' && {G}.match.ps.defs[{G}.match.ps.slot].zt === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the upgraded gun did not come back at tier 1')
+    await pg.wait_for_timeout(600)
+    pips = await ev("document.querySelectorAll('.zm-tier:not([hidden]) i.on').length")
+    if pips != 1: failures.append(f'{tag}: weapon panel shows {pips} tier pips, not 1')
+    camo = await ev(f"{G}.match.ps.camo")
+    if camo != 'pp-laurel': failures.append(f'{tag}: a tier 1 gun wears {camo!r}')
+    # Tier 3 straight off on the host, for the look (and its arc rounds' tracers).
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId); R.econ._handBack?.call; me.zm.tiers.ar = 2;
+      R.econ.use(me, {{ kind: 'bench' }}); R.econ.bench.timer = 0.05; }})()""")
+    await pg.wait_for_function(f"{G}.match.sim.rules.econ.bench.state === 2", timeout=6000)
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_function(f"{G}.match.ps.defs[{G}.match.ps.slot].zt === 3", timeout=6000)
+    await pg.wait_for_timeout(800)
+    await shot('03-tier3')
+    await crop('03-tier3')
+    pips = await ev("document.querySelectorAll('.zm-tier:not([hidden]) i.on').length")
+    if pips != 3: failures.append(f'{tag}: weapon panel shows {pips} tier pips at tier 3')
+    await check_fit(pg, ['.arms', '.vitals', '.zm-use'], f'{tag} tier', failures)
+    # ---- The supply terminal: its sheet, a sentry. ----
+    await goto('L.terminal')
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'SUPPLY TERMINAL'", timeout=8000)
+    except Exception: failures.append(f'{tag}: no SUPPLY TERMINAL prompt: {await prompt()!r}')
+    await pg.wait_for_timeout(400)
+    await crop('04-terminal')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_selector('.zm-shop:not([hidden]) .zm-item', timeout=5000)
+    await pg.wait_for_timeout(300)
+    await shot('05-terminal-sheet')
+    await check_fit(pg, ['.zm-shop-row', '.zm-shop h3', '.zm-shop .close'], f'{tag} sheet', failures)
+    n = await ev("document.querySelectorAll('.zm-shop .zm-item').length")
+    if n < 4 or n > 5: failures.append(f'{tag}: the terminal offers {n} items')
+    await pg.locator('.zm-item[data-item="sentry"]').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.gear.some(g => g.kind === 'sentry')", timeout=6000)
+    except Exception: failures.append(f'{tag}: buying a sentry from the sheet did nothing')
+    if not await ev("document.querySelector('.zm-shop').hidden"): failures.append(f'{tag}: the sheet stayed open after a buy')
+    # Zombies in front of it: it fires.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, g = R.econ.gear.find(x => x.kind === 'sentry');
+      for (let k = 0; k < 3; k++) {{ const z = R.horde[k]; R._raise(z, 0, {{ x: g.x + 3 + k * 0.6, z: g.z + 1.5 }}); z.zPace = 0; }} m.ps.x -= 1.5; }})()""")
+    await pg.wait_for_timeout(700)
+    await shot('06-sentry')
+    await crop('06-sentry')
+    await ev(f"(() => {{ const R = {G}.match.sim.rules; for (const z of R.horde) if (z.alive) {{ z.alive = false; z.hp = 0; }} }})()")
+    # ---- A trap: arm it at its switch, see it run. ----
+    await goto('({ x: L.traps[1].sx, z: L.traps[1].sz })')
+    try: await pg.wait_for_function("(document.querySelector('.zm-use:not([hidden]) .t')?.textContent ?? '') === 'FIREDAMP VENTS'", timeout=8000)
+    except Exception: failures.append(f'{tag}: no trap prompt at its switch: {await prompt()!r}')
+    await crop('07-trap-idle')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.traps[1].state === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the trap did not arm')
+    await ev(f"""(() => {{ const R = {G}.match.sim.rules, T = R.L.traps[1]; const z = R.horde[4]; R._raise(z, 1, {{ x: T.x, z: T.z }}); z.zPace = 0; }})()""")
+    await pg.wait_for_timeout(500)
+    await shot('08-trap-armed')
+    await crop('08-trap-armed')
+    for i in (0, 2):
+        await ev(f"(() => {{ const E = {G}.match.sim.rules.econ; E.traps[{i}].state = 1; E.traps[{i}].timer = 30; }})()")
+    await goto('({ x: L.traps[0].x + 2, z: L.traps[0].z + 3 })')
+    await pg.wait_for_timeout(700)
+    await crop('08b-trap-shock')
+    await goto('({ x: L.traps[2].x - 2, z: L.traps[2].z - 3 })')
+    await pg.wait_for_timeout(700)
+    await crop('08c-trap-blades')
+    # ---- Plates at the armour bench. ----
+    await goto('L.armour')
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'ARMOUR PLATE'", timeout=8000)
+    except Exception: failures.append(f'{tag}: no ARMOUR PLATE prompt: {await prompt()!r}')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.plates === 50", timeout=6000)
+    except Exception: failures.append(f'{tag}: the armour bench sold no plate')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_timeout(700)
+    shown = await ev("[...document.querySelectorAll('.zm-plates:not([hidden]) i')].map(n => n.style.getPropertyValue('--k')).join()")
+    if shown != '1.00,1.00,0.00': failures.append(f'{tag}: plate bar reads {shown!r} after two plates')
+    await shot('09-plates')
+    await crop('09-armour')
+    await check_fit(pg, ['.vitals', '.zm-use'], f'{tag} plates', failures)
+    # ---- The exfil, called (round 15), and the altar with every relic found. ----
+    await ev(f"(() => {{ const R = {G}.match.sim.rules; R.round = 15; }})()")
+    await goto('L.exfil')
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'CALL EXFIL'", timeout=8000)
+    except Exception: failures.append(f'{tag}: no CALL EXFIL prompt: {await prompt()!r}')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.exfil.state === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the exfil was not called')
+    await pg.wait_for_timeout(1500)
+    await shot('10-exfil')
+    await crop('10-exfil')
+    await check_fit(pg, ['.zm-top'], f'{tag} exfil', failures)
+    if await ev("document.querySelector('.zm-exfil').hidden"): failures.append(f'{tag}: no exfil clock on the plate')
+    await ev(f"(() => {{ const R = {G}.match.sim.rules; R.econ.exfil.state = 0; for (const z of R.horde) if (z.alive) {{ z.alive = false; z.hp = 0; }} R.econ.quest.got = 3; }})()")
+    await goto('L.relics[2]')
+    await pg.wait_for_timeout(600)
+    await crop('11-relic')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.got === 7", timeout=6000)
+    await goto('L.altar')
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'SET THE RELICS'", timeout=8000)
+    except Exception: failures.append(f'{tag}: no SET THE RELICS prompt: {await prompt()!r}')
+    await crop('12-altar')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.wardenSeat >= 0", timeout=8000)
+    except Exception: failures.append(f'{tag}: the Gravewarden did not rise')
+    await pg.wait_for_timeout(1500)
+    await shot('13-warden')
+    bossName = await ev("document.querySelector('.zm-boss:not([hidden]) b')?.textContent")
+    if bossName != 'Gravewarden': failures.append(f'{tag}: boss bar says {bossName!r}')
+    await ev('clearInterval(window.__shield)')
+    await ctx.close()
+
+
 async def main():
     os.makedirs(OUT, exist_ok=True)
     server = subprocess.Popen([sys.executable, '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -246,12 +443,16 @@ async def main():
             browser = await p.chromium.launch(args=ARGS)
             sizes = [(852, 393), (667, 375)]
             if os.environ.get('ZM_SIZE'): sizes = [tuple(int(v) for v in os.environ['ZM_SIZE'].split('x'))]
-            if os.environ.get('ZM_ONLY') != 'ashgrove':
+            if os.environ.get('ZM_ONLY') in (None, ''):
                 for vw, vh in sizes:
                     try: await run(browser, vw, vh, failures, errors)
                     except Exception as e: failures.append(f'{vw}x{vh}: {type(e).__name__}: {e}')
-            try: await run_ashgrove(browser, 932, 430, failures, errors)
-            except Exception as e: failures.append(f'ashgrove: {type(e).__name__}: {e}')
+            if os.environ.get('ZM_ONLY') in (None, '', 'ashgrove'):
+                try: await run_ashgrove(browser, 932, 430, failures, errors)
+                except Exception as e: failures.append(f'ashgrove: {type(e).__name__}: {e}')
+            for vw, vh in [(852, 393), (667, 375)] if os.environ.get('ZM_ONLY') in (None, '', 'econ') else []:
+                try: await run_econ(browser, vw, vh, failures, errors)
+                except Exception as e: failures.append(f'econ {vw}x{vh}: {type(e).__name__}: {e}')
             await browser.close()
     finally:
         server.terminate()

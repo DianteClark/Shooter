@@ -5,12 +5,23 @@
 //   loot        small crates near the camera, coloured by rarity, bobbing; rare and better get a light beam; chests
 //   gliders     a canopy over everyone in the glide
 //   downed      a pulsing red ring under downed players
+//   beacons     Recall Beacons: a mast with a lamp (green ready, grey spent, dull red offline); in use a tall amber beam
+//               anyone can see and a ring filling with the recall; recall tags on the ground in their squad's colour
 // Everything is instanced or a single mesh, so this adds a handful of draw calls whatever is on the map.
 import * as THREE from 'three';
 import { BR } from '../shared/modes.js';
 import { TEAMS } from '../shared/constants.js';
 import { BR_KIND } from '../sim/br.js';
 
+const RIDER_MAX = 34;
+// Two box geometries as one (non-indexed), for the riders on the transport.
+function mergeBoxes(a, b) {
+  const g = new THREE.BufferGeometry(), A = a.toNonIndexed(), B = b.toNonIndexed();
+  const pos = new Float32Array(A.attributes.position.count * 3 + B.attributes.position.count * 3);
+  pos.set(A.attributes.position.array, 0); pos.set(B.attributes.position.array, A.attributes.position.array.length);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  return g;
+}
 const GLOW_MAX = 200, LOOT_MAX = 180, CHEST_MAX = 24, BEAM_MAX = 60, CHUTE_MAX = 32, RING_MAX = 16, BAR_MAX = 16, PING_MAX = 8;
 const NEAR = 38;              // Metres around the camera target that loot is drawn.
 const KIND_TINT = { [BR_KIND.ammo]: 0x9aa58a, [BR_KIND.plate]: 0x3fa0ff, [BR_KIND.med]: 0xf2f0e6, [BR_KIND.kit]: 0xffb21a, [BR_KIND.lethal]: 0xff6a3a, [BR_KIND.tactical]: 0x8cf0d0 };
@@ -92,6 +103,14 @@ export class BrFx {
     box(1.6, 0.3, 5.5, -5, 0.8, 0, hull);     // Tailplane.
     box(1.6, 2.4, 0.3, -5, 1.8, 0, hull);     // Fin.
     for (const z of [-4.2, 4.2]) box(1.8, 1, 1, 1.6, 0.1, z, dark);   // Engines.
+    // Who is still aboard (owner notes): small seated figures in rows on the fuselage, your squad up front in its colour
+    // (you in white), everyone else grey. One instanced mesh in the plane's own frame.
+    const rider = new THREE.BoxGeometry(0.42, 0.5, 0.4).translate(0, 0.25, 0);
+    const head = new THREE.BoxGeometry(0.3, 0.28, 0.3).translate(0, 0.66, 0);
+    this.riders = new THREE.InstancedMesh(mergeBoxes(rider, head), new THREE.MeshBasicMaterial({ color: 0xffffff }), RIDER_MAX);
+    this.riders.count = 0; this.riders.frustumCulled = false;
+    this.riders.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(RIDER_MAX * 3).fill(1), 3);
+    plane.add(this.riders);
     plane.visible = false;
     this.plane = plane;
     this.group.add(plane);
@@ -113,6 +132,7 @@ export class BrFx {
     this.beams = inst(new THREE.CylinderGeometry(0.09, 0.2, 4, 6, 1, true).translate(0, 2, 0),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }), BEAM_MAX);
     this.chutes = inst(canopyGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: THREE.DoubleSide }), CHUTE_MAX);
+    this.beaconList = null;          // Built on the first view that has them (#buildBeacons).
     // Revive progress over the downed player and whoever is picking them up: a dark bar and its fill.
     const bar = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     this.barBg = inst(bar, new THREE.MeshBasicMaterial({ color: 0x0a0d11, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, toneMapped: false }), BAR_MAX);
@@ -125,6 +145,76 @@ export class BrFx {
     this.near = [];
     // A chest's lid flies when it opens: a short pop drawn as a beam burst.
     this.pops = [];
+  }
+
+  // Seats on the roof: two rows from the nose back, squad first.
+  #riders(view) {
+    const me = view.players.find(p => p.id === view.localId), team = me?.team;
+    const list = view.players.filter(p => p.alive && p.air === 1);
+    list.sort((a, b) => (b.team === team) - (a.team === team));
+    const R = this.riders;
+    let n = 0;
+    for (const p of list) {
+      if (n >= RIDER_MAX) break;
+      const row = n % 2, col = Math.floor(n / 2);
+      V.set(4.2 - col * 0.62, 1.1, row ? 0.55 : -0.55); Q.identity(); S.set(1, 1, 1);
+      R.setMatrixAt(n, M4.compose(V, Q, S));
+      R.setColorAt(n, C.setHex(p.id === view.localId ? 0xffffff : p.team === team ? (TEAMS[p.team]?.color ?? 0x6fd0ff) : 0x5b626b));
+      n++;
+    }
+    R.count = n;
+    R.instanceMatrix.needsUpdate = true;
+    R.instanceColor.needsUpdate = true;
+  }
+
+  // One mast per beacon: base, pole and head in one shared mesh; its own lamp, ring and beam (only the lamp is always on).
+  #buildBeacons(list) {
+    const mast = new THREE.BufferGeometry(), parts = [
+      new THREE.BoxGeometry(1.5, 0.3, 1.5).translate(0, 0.15, 0), new THREE.BoxGeometry(0.24, 2.7, 0.24).translate(0, 1.6, 0),
+      new THREE.BoxGeometry(0.7, 0.45, 0.7).translate(0, 3.05, 0), new THREE.BoxGeometry(0.16, 1.1, 0.16).translate(0.45, 0.85, 0.45).rotateY(0.2),
+    ].map(g => g.toNonIndexed());
+    const n = parts.reduce((a, g) => a + g.attributes.position.array.length, 0), pos = new Float32Array(n);
+    let o = 0;
+    for (const g of parts) { pos.set(g.attributes.position.array, o); o += g.attributes.position.array.length; }
+    mast.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    mast.computeVertexNormals();
+    const mastMat = new THREE.MeshBasicMaterial({ color: 0x4a525b });
+    const lampG = new THREE.BoxGeometry(0.46, 0.34, 0.46).translate(0, 3.45, 0);
+    const ringG = new THREE.RingGeometry(0.86, 1, 32).rotateX(-Math.PI / 2);
+    const beamG = new THREE.CylinderGeometry(0.45, 1.1, 34, 10, 1, true).translate(0, 17, 0);
+    this.beaconList = list.map(b => {
+      const g = new THREE.Group();
+      g.position.set(b.x, 0, b.z);
+      g.add(new THREE.Mesh(mast, mastMat));
+      const lamp = new THREE.Mesh(lampG, new THREE.MeshBasicMaterial({ color: 0x59d36b }));
+      const ring = new THREE.Mesh(ringG, new THREE.MeshBasicMaterial({ color: 0x59d36b, transparent: true, opacity: 0.7, depthWrite: false }));
+      ring.position.y = 0.07; ring.scale.setScalar(BR.recall.reach);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffbe50, transparent: true, opacity: 0.35, depthWrite: false }));
+      fill.position.y = 0.06;
+      const beam = new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ color: 0xffbe50, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      beam.renderOrder = 5; beam.frustumCulled = false;
+      g.add(lamp, ring, fill, beam);
+      this.group.add(g);
+      return { g, lamp, ring, fill, beam };
+    });
+  }
+
+  #beacons(br, t) {
+    if (!br.beacons?.length) return;
+    if (!this.beaconList) this.#buildBeacons(br.beacons);
+    br.beacons.forEach((b, i) => {
+      const m = this.beaconList[i];
+      if (!m) return;
+      const busy = !!b.user && br.recallOn, ready = br.recallOn && !b.used && !busy;
+      m.lamp.material.color.setHex(!br.recallOn ? 0x5a2a26 : b.used ? 0x30343a : busy ? (Math.sin(t * 14) > 0 ? 0xffe08a : 0xff9a2a) : 0x59d36b);
+      if (ready) m.lamp.material.color.multiplyScalar(0.75 + 0.25 * Math.sin(t * 3 + i));
+      m.ring.visible = ready || busy;
+      m.ring.material.color.setHex(busy ? 0xffbe50 : 0x59d36b);
+      m.fill.visible = busy;
+      if (busy) m.fill.scale.setScalar(Math.max(0.05, b.k) * BR.recall.reach);
+      m.beam.visible = busy;
+      if (busy) { m.beam.material.opacity = 0.32 + 0.18 * Math.sin(t * 8); m.beam.rotation.y = t * 1.5; }
+    });
   }
 
   onChest(x, z) { this.pops.push({ x, z, t: 0 }); }
@@ -148,7 +238,9 @@ export class BrFx {
     if (this.plane.visible) {
       this.plane.position.set(br.plane.x, 14, br.plane.z);      // GLIDE_ALT (characters.js): the glide starts here.
       this.plane.rotation.set(0, -Math.atan2(br.plane.tz - br.plane.fz, br.plane.tx - br.plane.fx), Math.sin(t * 0.7) * 0.03);
+      this.#riders(view);
     }
+    this.#beacons(br, t);
     // Loot near the camera.
     const rules = br.rules;
     let nL = 0, nC = 0, nB = 0, nG = 0;
@@ -163,6 +255,16 @@ export class BrFx {
           continue;
         }
         if (nL >= LOOT_MAX) continue;
+        if (it.kind === BR_KIND.tag) {
+          // A recall tag: a flat plate standing up and turning, in its squad's colour, with a beam so the squad finds it.
+          const hex = TEAMS[view.players[it.v]?.team]?.color ?? 0xffffff;
+          V.set(it.x, 0.45 + Math.sin(t * 2.4 + it.id) * 0.08, it.z); Q.setFromAxisAngle(UP, t * 1.6 + it.id); S.set(0.12, 1.5, 0.75);
+          this.loot.setMatrixAt(nL, M4.compose(V, Q, S));
+          this.loot.setColorAt(nL++, C.setHex(0xe8ecef));
+          if (nG < GLOW_MAX) { V.set(it.x, 0.04, it.z); S.set(1.2, 1, 1.2); this.glows.setMatrixAt(nG, M4.compose(V, Q.identity(), S)); this.glows.setColorAt(nG++, C.setHex(hex)); }
+          if (nB < BEAM_MAX) { V.set(it.x, 0, it.z); S.set(0.8, 1.2, 0.8); this.beams.setMatrixAt(nB, M4.compose(V, Q.identity(), S)); this.beams.setColorAt(nB++, C.setHex(hex)); }
+          continue;
+        }
         const bob = 0.22 + Math.sin(t * 2.4 + it.id * 1.3) * 0.06;
         V.set(it.x, bob, it.z); Q.setFromAxisAngle(UP, t * 0.8 + it.id); S.set(it.kind === BR_KIND.gun ? 1.6 : 1, 1, it.kind === BR_KIND.gun ? 0.7 : 1);
         this.loot.setMatrixAt(nL, M4.compose(V, Q, S));

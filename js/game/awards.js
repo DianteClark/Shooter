@@ -238,7 +238,9 @@ export class MatchAwards {
     let zm = null;
     if (zmObj && me) {
       const mine = zmObj.crew?.find(c => c.id === me.id) ?? {};
-      const survived = Math.max(0, (zmObj.round ?? 1) - 1);
+      // An escape (the exfil, ROADMAP item 36) counts the round it got out on as survived.
+      const escaped = !!zmObj.escaped?.includes(me.id), warden = zmObj.quest?.state === 2;
+      const survived = Math.max(0, (zmObj.round ?? 1) - (escaped ? 0 : 1));
       lines.length = 0;
       lines.push(['Match played', MATCH_XP.played]);
       if (this.kills) lines.push([`Undead put down x${this.kills}`, this.kills * ZM.xp.kill]);
@@ -246,10 +248,15 @@ export class MatchAwards {
       if (survived) lines.push([`Rounds survived x${survived}`, survived * ZM.xp.round]);
       const bosses = Math.floor(survived / 10);
       if (bosses) lines.push([`Bosses put down x${bosses}`, bosses * ZM.xp.boss]);
+      if (escaped) lines.push([`Escaped on round ${zmObj.round}`, ZM.xp.escape + ZM.xp.escapeRound * (zmObj.round ?? 0)]);
+      if (warden) lines.push(['Gravewarden put down', ZM.xp.warden]);
+      let feat = null;
+      if (escaped || warden) { try { feat = Progress.recordZmFeat?.(this.mapId, { escaped: escaped ? zmObj.round : 0, boss: warden }) ?? null; } catch (err) { console.error('zm feat', err); } }
       for (const b of Object.values(this.weapons)) b.xp = Math.round(b.xp * ZM.weaponXp);
       let rec = { best: survived, before: 0, fresh: false };
       try { rec = Progress.recordZm?.(this.mapId, survived) ?? rec; } catch (err) { console.error('zm record', err); }
-      zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '' };
+      zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',
+        escaped: escaped ? zmObj.round : 0, warden, bestEscape: feat?.escaped ?? 0, freshEscape: !!feat?.freshEscape, freshBoss: !!feat?.freshBoss };
     }
     const exWon = ex ? ex.extracted : null;
     if (exWon !== null) { /* The Extracted line is the win. */ }

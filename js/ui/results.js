@@ -191,9 +191,11 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const zmr = rules === 'zm';
   if (zmr) {
     const z = data.zm ?? {}, survived = z.survived ?? Math.max(0, (data.zmView?.round ?? 1) - 1);
-    word = 'Overrun';
-    line = `Survived ${survived} round${survived === 1 ? '' : 's'}${z.fresh ? ': a new record on this map' : z.best ? ` · best ${z.best}` : ''}`;
-    tone = z.fresh ? 'var(--c-gold)' : 'var(--c-haze)';
+    word = z.escaped ? 'Escaped' : 'Overrun';
+    line = z.escaped ? `Escaped on round ${z.escaped}${z.freshEscape ? ': a new record on this map' : ''}`
+      : `Survived ${survived} round${survived === 1 ? '' : 's'}${z.fresh ? ': a new record on this map' : z.best ? ` · best ${z.best}` : ''}`;
+    if (z.warden) line += ' · the Gravewarden is down';
+    tone = z.fresh || z.escaped ? 'var(--c-gold)' : 'var(--c-haze)';
     mineNum = survived; themNum = Math.max(survived, z.best ?? 0); mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
   }
   const zmCrew = () => {
@@ -210,6 +212,8 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const zmRecord = () => {
     const z = data.zm ?? {}, map = z.mapName ?? '';
     const rows = [['Round reached', data.zmView?.round ?? 0], ['Rounds survived', z.survived ?? 0], [`Best on ${esc(map) || 'this map'}`, z.best ?? 0], ['Undead put down', z.kills ?? 0]];
+    if (z.escaped || z.bestEscape) rows.push(['Best escape', z.bestEscape ? `Round ${z.bestEscape}` : '-']);
+    if (z.warden) rows.push(['Gravewarden', z.freshBoss ? 'Down: card earned' : 'Down']);
     return `<div class="rb theirs" style="--team:#b8241c">
       <div class="rb-head"><b class="rb-team">Graveyard Shift</b><b class="rb-pts">${z.fresh ? 'Record' : ''}</b><span></span><span></span><span></span><span></span><span class="wide"></span></div>
       ${rows.map(([k, v], i) => `<div class="rb-row" style="--i:${i}"><span class="rb-name" style="grid-column:span 5"><b>${k}</b></span><span class="wide" style="color:${i === 2 && z.fresh ? 'var(--c-gold)' : 'var(--c-chalk)'}">${v}</span></div>`).join('')}

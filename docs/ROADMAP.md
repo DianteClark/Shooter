@@ -134,9 +134,13 @@ on every push, keep 2% of weekly usage for bugs.
 35. Signature attachments read as clear upgrades: DONE (1111-18), strengths x1.5, costs halved.
 
 ## Owner's wave (2026-11-12 morning), approved; target ~90% of the week
-36. Graveyard Shift economy: upgrade bench (3 tiers per gun), supply terminal replacing loadout streaks (zombie-tuned
+36. DONE (NEXT). Graveyard Shift economy: upgrade bench (3 tiers per gun), supply terminal replacing loadout streaks (zombie-tuned
     streaks bought with points, bots buy too), traps at chokepoints, armour plates and two extra perk machines with a
-    paid perk-limit raise, a late exfil (~round 15) and a hidden boss step.
+    paid perk-limit raise, a late exfil (~round 15) and a hidden boss step. Upgrade bench (5000/15000/30000, tier 3 Ember,
+    Arc, Burst or Rime rounds by class), supply terminal (Sentry Gun, Air Strike, Hunter Drone, Lure, Armour Vest;
+    class streaks off), three traps (Live Rail, Firedamp Vents, Threshers), armour plates, Fleetfoot and Last Breath, a
+    perk slot (4 to 6), the exfil from round 15 and the relics / altar / Gravewarden quest with its calling card, on all
+    four maps; docs/ZOMBIES.md "Economy".
 37. Bug sweep (every mode and screen) and balance run: mirrored bot matches with the wave 2 attachments; the owner's
     100-match stats when they arrive.
 38. DONE (NEXT). A purpose-built Graveyard Shift map: Ashgrove Halt (a rail halt and churchyard at night, Graveyard

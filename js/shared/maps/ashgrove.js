@@ -128,6 +128,8 @@ function build() {
       { x: 11.3, z: 6, wall: 'e', perk: 'quick' },       // Goods Yard: the shed's west end.
       { x: 55.3, z: 3, wall: 'e', perk: 'hammer' },      // Churchyard: the east wall.
       { x: 51.7, z: 40, wall: 'w', perk: 'iron' },       // Crossing Lane: the signal box.
+      { x: 6.5, z: 18.3, wall: 'n', perk: 'stride' },    // Goods Yard: the van's tailgate side (ROADMAP item 36).
+      { x: 41, z: 9.7, wall: 'n', perk: 'breath' },      // Churchyard: the chapel's porch.
     ],
     // The power switch on the pump house's west wall: free, but someone has to get there.
     power: { x: 36.2, z: 26, wall: 'e' },
@@ -144,7 +146,7 @@ function build() {
     ],
     // The crew starts together on the platform.
     starts: [{ x: 8.5, z: 40 }, { x: 11, z: 40 }, { x: 8.5, z: 42.5 }, { x: 11, z: 42.5 }],
-    // Kept for the zombies economy (not used yet): the next builder places these pieces here. Each is open floor in
+    // The zombies economy's pieces (ROADMAP item 36: js/shared/zombies.js graphLayout reads them). Each is open floor in
     // its area; `wall` says which side a bench stands against; traps cover a chokepoint (`r` metres round x, z).
     reserved: {
       bench: { x: 40.5, z: 22.2, wall: 's', note: 'upgrade bench: the pump house, north face' },
@@ -156,6 +158,12 @@ function build() {
         { x: 66, z: 37, r: 2, note: 'the Burial Field gate onto the lane' },
       ],
       exfil: { x: 72, z: 4, r: 3, note: 'exfil pad: the Burial Field, far corner' },
+    },
+    // The hidden quest (ROADMAP item 36): a relic in each of the three dead ends, set on the altar at the obelisk's
+    // foot (its south face, toward the camera), raises the Gravewarden in the Burial Field.
+    quest: {
+      altar: { x: 66.2, z: 18.2, wall: 'n' },
+      relics: [{ x: 2.2, z: 5.5 }, { x: 26.2, z: 2.2 }, { x: 73.6, z: 42.2 }],
     },
   };
 

@@ -42,6 +42,15 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
 - Tests: `node dev/sim-modes-v10.mjs [quick]`; `node dev/map-validate.mjs` checks each new mode's points per map and runs
   a bot match per hosted mode.
 
+## Fix: the next HQ never opened (owner report)
+The host decodes its own snapshot every tick for its view (`Match.#pushHostView`). `HqRules.decode` wrote the block's
+rounded numbers back into the live rules: the gap's clock is sent as `ceil(t * 10)`, so 5 s minus one tick came back as
+5.0 and the gap never ended. Headless tests never decoded on the host, so they missed it. Control had the same fault
+with zone capture (one attacker adds 1/270 a tick, rounded away to nothing). Now `Sim.step` marks the stepping sim as the
+authority and `decode(a, out, host)` leaves a host's own state alone (hq.js, ctl.js; the other modules only copy exact
+values). `dev/sim-modes-v10.mjs` runs HQ as a host does (step, encode, decode) over five maps and two seeds and Ground
+War HQ, through host migrations in the gap and while held, and Control's lone capture.
+
 ## Tuning notes (bot-only matches)
 - One in the Chamber with bots is quick (about a minute on a small map): bots land the one round often. Lives went
   from three to five and the field down to 5/6/8 to stretch it.

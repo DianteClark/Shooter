@@ -567,6 +567,18 @@ function bootGeometry() {
   return limbAttrs(b.build());
 }
 
+// A boxing glove (battle royale fists, owner notes): origin at the wrist, the fist along +X. Red leather, a white cuff
+// and a stitched thumb; 13 boxes, so a squad of them costs nothing.
+function gloveGeometry() {
+  const b = new MeshBuilder();
+  b.setPart(0).setColor(0xc8261c).box(0.1, 0, 0, 0.17, 0.15, 0.15, 0.045);          // The fist.
+  b.setColor(0xa81d15).box(0.07, -0.01, 0.075, 0.1, 0.07, 0.05, 0.02);               // Thumb along the side.
+  b.setColor(0xe0261a).box(0.15, 0.035, 0, 0.08, 0.06, 0.13, 0.025);                 // Knuckle pad.
+  b.setColor(0xf2efe6).prismX(-0.035, 0.03, 0, 0, 0.068, 0.074, 6);                  // Cuff.
+  b.setColor(0x2a2a2e).prismX(-0.012, 0.004, 0, 0, 0.076, 0.076, 6);                 // Lace band.
+  return limbAttrs(b.build());
+}
+
 // Unit box in the instance's tint, scaled to whatever the off hand is holding: magazine, drum, shell, rocket, grenade.
 function heldBoxGeometry() {
   const b = new MeshBuilder();
@@ -614,6 +626,7 @@ function blobGeometry() {
 const _m = new THREE.Matrix4(), _body = new THREE.Matrix4(), _gun = new THREE.Matrix4();
 const _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _p = new THREE.Vector3();
+const _X = new THREE.Vector3(1, 0, 0);
 const _e = new THREE.Euler(0, 0, 0, 'YZX');
 const _gunE = new THREE.Euler(0, 0, 0, 'YZX');
 const _qGun = new THREE.Quaternion();
@@ -805,6 +818,7 @@ export class Characters {
     this.leg = add(legGeometry(), cap * 2);
     this.boot = add(bootGeometry(), cap * 2);
     this.held = add(heldBoxGeometry(), MAX_PLAYERS);
+    this.glove = add(gloveGeometry(), MAX_PLAYERS * 2);
 
     // X-ray pass, drawn after the world and before characters, so only pixels hidden by walls survive.
     const xrayMat = new THREE.ShaderMaterial({
@@ -887,7 +901,7 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
@@ -1090,7 +1104,8 @@ export class Characters {
     this.ringMat.uniforms.uShapes.value = colorMode() === 'off' ? 0 : 1;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
-    let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0;
+    let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
+    const glove = this.glove;
     const fullReach = this._fullReach(view, localId);
     let nRing = 0;
     for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
@@ -1118,7 +1133,7 @@ export class Characters {
       const p = view.players[pi];
       const r = this.rig(p.id);
       r.team = p.team;
-      const zk = p.zk | 0;       // Graveyard Shift: 1..4 an undead kind on this seat (no gun, arms out, hunched).
+      const zk = p.zk | 0;       // Graveyard Shift: 1..5 an undead kind on this seat (no gun, arms out, hunched).
       r.op = zk ? ZM_OP_BASE + zk - 1 : this.opById.get(p.id) ?? 0;
       const look = this.looks[r.op];
       const sk = zk ? this.zmSkins[zk - 1] : this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
@@ -1235,6 +1250,8 @@ export class Characters {
       _body.compose(_p, _q, _s);
 
       // Gun pose in upper-body space: hip, ADS and sprint carry, then reload, swap and recoil layered on top.
+      // Battle royale fists are boxing gloves on both hands: no blade in hand, a guard and alternating punches.
+      const fists = !!view.br && !zk && p.weapon === 'knife';
       const hold = HOLD[p.weapon] || HOLD_NONE;
       const carry = 1 - sprint * 0.5;
       const swap = r.swap, swapBack = Math.sin(swap * Math.PI);
@@ -1298,7 +1315,7 @@ export class Characters {
 
       _gunE.set(gunRoll, gunYaw, gunPitch);
       _qGun.setFromEuler(_gunE);
-      const gs = GUN_SCALE * (GUN_SCALES[p.weapon] || 1) * (1 - Math.max(crawl, A.hide) * 0.999);   // No gun in hand while down (or put away for a finisher).
+      const gs = fists ? 1e-4 : GUN_SCALE * (GUN_SCALES[p.weapon] || 1) * (1 - Math.max(crawl, A.hide) * 0.999);   // No gun in hand while down (or put away for a finisher).
       _s.set(gs, gs, gs);
       _p.set(gunX, gunY, gunZ);
       _gun.compose(_p, _qGun, _s).premultiply(_body);
@@ -1385,6 +1402,15 @@ export class Characters {
           const u = r.swingT !== undefined && r.swingT < 1 ? r.swingT : 1, lift = u < 1 ? Math.sin(Math.PI * Math.min(1, u * 1.4)) : 0;
           const sway = Math.sin(clock * 3.1 + r.seed + side) * 0.06;
           _b.set(0.62 * look.l + lift * 0.12, shoulderY - 0.04 + lift * 0.42 - (u > 0.7 && u < 1 ? (u - 0.7) * 1.2 : 0) + sway, side * 0.2 * look.w).applyMatrix4(_body);
+        } else if (fists) {
+          // Guard up by the chin, bobbing with the stride; a punch drives one glove straight out and back (swingSide
+          // alternates hands), the other tucks in.
+          const u = r.swingT !== undefined && r.swingT < 1 ? r.swingT : 1;
+          const ext = u >= 1 ? 0 : u < 0.28 ? smooth01(u / 0.28) : 1 - smooth01((u - 0.28) / 0.72);
+          const mine = (r.swingSide || 1) === side ? ext : -ext * 0.25;
+          const bobG = Math.sin(r.phase + (side > 0 ? 0 : Math.PI)) * 0.035 * runK + Math.sin(clock * 3.3 + r.seed + side) * 0.012;
+          _b.set(0.36 + mine * 0.42 - sprint * 0.06, shoulderY - 0.02 + bobG + Math.max(0, mine) * 0.05 - sprint * 0.1,
+            side * (0.21 - Math.max(0, mine) * 0.16)).applyMatrix4(_body);
         } else if (side > 0) {
           _b.set(0, 0, 0).applyMatrix4(_gun);
         } else {
@@ -1453,6 +1479,16 @@ export class Characters {
         _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
         this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB);
         nA++;
+        if (fists && nG < MAX_PLAYERS * 2) {
+          // The glove on the hand, along the forearm (elbow to hand).
+          _v.set(_b.x - _joint[0], _b.y - _joint[1], _b.z - _joint[2]).normalize();
+          _q.setFromUnitVectors(_X, _v);
+          _s.set(1.45, 1.45, 1.45);       // Boxing gloves are big: they have to read from the top-down camera.
+          _m.compose(_b, _q, _s);
+          _m.toArray(glove.instanceMatrix.array, nG * 16);
+          this._writeFx(glove, nG, fade, flash, team, 0, null);
+          nG++;
+        }
       }
 
       // Legs follow travel direction, independent of aim, through a stance and a swing phase.
@@ -1558,6 +1594,7 @@ export class Characters {
     this.torsoLite.count = this.counts.nTL; this.headLite.count = this.counts.nTL;
     upper.count = this.counts.nU; arm.count = this.counts.nA; leg.count = this.counts.nL; boot.count = this.counts.nB;
     held.count = nH;
+    glove.count = nG;
     // Only the instances drawn this frame are sent; the x-ray meshes share torso and head buffers.
     for (let i = 0; i < this.bodyMeshes.length; i++) {
       const m = this.bodyMeshes[i], n = m.count;

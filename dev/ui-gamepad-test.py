@@ -9,6 +9,8 @@ Run from anywhere: python3 dev/ui-gamepad-test.py [port]. It serves the repo its
               magazine; Start opens the pause board with the ring on it, B closes it; Select peeks the board while held;
               d-pad up pings; d-pad down opens quick chat, the ring picks a callout, A sends it
   Touch       a touch on the glass leaves controller mode and the sticks come back; disconnect toast in the match feed
+  Zombies     Graveyard Shift's supply terminal: Interact opens its sheet with the ring on an item, the d-pad walks to the
+              Lure, A buys it (the sheet closes), B closes the sheet
 """
 import asyncio, subprocess, sys, time, os, math
 from playwright.async_api import async_playwright
@@ -210,6 +212,32 @@ async def main():
             await pg.wait_for_timeout(300)
             feed = await pg.evaluate("document.querySelector('.hud .feed')?.textContent ?? ''")
             check('disconnect toast in the match feed', 'disconnected' in feed, feed[-80:])
+
+            print('Graveyard Shift terminal')
+            # The supply terminal's sheet (ROADMAP item 36) from a controller: Interact at the terminal opens it with the
+            # ring on an item, the d-pad walks the items, A buys, B closes it.
+            await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local&map=ashgrove&mode=zm')
+            await pg.wait_for_timeout(1300)
+            await pg.locator('[data-act="custom"]').first.click()
+            await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
+            await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, R = sim.rules; setInterval(() => { for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }, 200);
+              for (const p of R.crew) if (p.bot) p.bot.update = () => []; R.plan = () => {}; R._crewPlan = null;
+              sim.byId.get(m.localId).zm.pts = 50000; m.ps.x = R.L.terminal.x; m.ps.z = R.L.terminal.z; m.ps.vx = 0; m.ps.vz = 0; })()""")
+            await pg.evaluate('window.__connect(true)')
+            await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'SUPPLY TERMINAL'", timeout=20000)
+            await press(UP, 70, 200)
+            await press(A, 80, 500)
+            opened = await pg.evaluate("!document.querySelector('.zm-shop').hidden")
+            ring = await pg.evaluate("document.querySelector('.pad-focus')?.className ?? ''")
+            check('Interact at the terminal opens its sheet, the ring on an item', opened and ('zm-item' in ring or 'close' in ring), ring)
+            ok = await walk_to('.zm-item[data-item="lure"]')
+            check('d-pad walks the ring to the Lure', ok, await pg.evaluate("document.querySelector('.pad-focus')?.dataset.item ?? ''"))
+            await press(A, 80, 600)
+            bought = await pg.evaluate("window.__game.app.match.sim.rules.econ.gear.some(g => g.kind === 'lure')")
+            check('A buys it and the sheet closes', bought and await pg.evaluate("document.querySelector('.zm-shop').hidden"), bought)
+            await press(A, 80, 500)
+            await press(B, 80, 400)
+            check('B closes the sheet', await pg.evaluate("document.querySelector('.zm-shop').hidden"))
             await browser.close()
     finally:
         srv.kill()
