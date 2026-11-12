@@ -38,3 +38,5 @@ The thumbs own both lower corners and the button cluster; every mode places its 
 - **Lane**: one prompt at a time over the dock (take a gun, exfil, the bomb, a flag, Graveyard Shift's use button).
 
 Out and spectating, the weapon panel and health hide and the out plate takes the strip's second row. The FPS overlay is one line in the move stick's bottom corner. Feed rows size to content: names ellipsize first, the words after them stay. The pass runs on a new match, rotation, HUD size and hand changes, never per frame. `dev/ui-hud-layout-test.py` checks every mode at five iPhone sizes, both hands and three HUD sizes for stick, button and panel overlap.
+
+A custom touch layout (Options > Accessibility, docs/ACCESSIBILITY.md) is placed by `js/ui/layout.js placeControls` before the pass measures the controls, so the pass works from wherever the player put them; placed streak tiles leave the dock and count as a button. The editor keeps controls out of the top band the HUD's top and side groups use.

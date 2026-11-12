@@ -92,7 +92,11 @@ on every push, keep 2% of weekly usage for bugs.
     "Season Replay" rotates past seasons. Season 1 with the framework.
     DONE (seasons): docs/SEASONS.md. Season 1 Cold Iron (2026-11-16), Season 2 Signal Fire (2026-12-28), then Season
     Replay; free 100-tier track, weekly sets, an event playlist each, ranked reset, Season boards view and Ranked category.
-23. Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
+23. DONE (a11y). Accessibility: colorblind modes, adjustable control layout and sizes, left-handed check.
+    docs/ACCESSIBILITY.md. Options > Accessibility: colour modes (Protanopia, Deuteranopia, Tritanopia, High contrast)
+    from one palette (js/shared/palette.js) with shape cues; touch layout editor (move and resize sticks, buttons,
+    streak tiles; chip size), mirrored for the left hand; menu text size; reduce shake and flashes; grenade and
+    footstep cues. Title emote row fits 640-956 px.
 24. DONE (1111). Music: synthesised menu and match music. js/audio/music-synth.js (instruments, arrangements, offline render),
     js/audio/music.js (director: scenes, layers, stings; music.cue(...)). Options: Music slider, "In matches" switch.
 

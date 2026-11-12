@@ -316,6 +316,7 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
    as the row's first plate. js/ui/hud.js layout sets --rp-x from the measured sticks and buttons. Visual 40 x 38; the
    touch rect adds TILE_SLOP (js/ui/controls.js), so every tile takes a 46 x 44 tap. Large grows them (--tile-k). */
 .streaks { position: absolute; left: var(--rp-x, 50%); bottom: calc(var(--sb) + 6px); transform: scale(var(--tile-k, 1)); transform-origin: left bottom; }
+.streaks.placed { transform-origin: center; }   /* Placed by the touch layout (js/ui/layout.js): left/top is its centre. */
 .stk-row { display: flex; gap: 4px; align-items: stretch; }
 .st-score {
   flex: none; width: 38px; height: 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -512,10 +513,12 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .heal-veil { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(75,209,138,.55)); }
 .flashbang { position: absolute; inset: 0; opacity: 0; background: #fffdf2; will-change: opacity; z-index: var(--z-overlay); }
 .dmg { position: absolute; left: 50%; top: 50%; width: 270px; height: 270px; opacity: 0; will-change: transform, opacity; overflow: visible; z-index: var(--z-hud-alert); }
-.dmg-arc { fill: rgba(255,60,44,.78); stroke: rgba(255,200,190,.85); stroke-width: 1.2; }
+.dmg-arc { fill: color-mix(in srgb, var(--c-red) 78%, transparent); stroke: rgba(255,230,220,.85); stroke-width: 1.2; }
 .dmg-tip { fill: #fff; }
 
-.corner { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 7px); display: flex; align-items: center; gap: 6px; pointer-events: auto; }
+.corner { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 7px); display: flex; align-items: center; gap: 6px; pointer-events: auto;
+  scale: var(--chips-k, 1); transform-origin: right top; }   /* --chips-k: Options > Touch layout. */
+.hud.lefty .corner { transform-origin: left top; }
 .net-chip {
   display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate);
   background: var(--hud-glass); box-shadow: var(--hud-edge);
@@ -549,7 +552,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .qc-btn.pressed { filter: brightness(.8); }
 .qc-btn.qc-loose { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 7px); pointer-events: auto; }
 .qc-wheel {
-  position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 46px); z-index: var(--z-hud-alert);
+  position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 10px + 36px * var(--chips-k, 1)); z-index: var(--z-hud-alert);
   display: grid; grid-template-columns: repeat(var(--cols, 5), 82px); grid-auto-rows: 34px; gap: 3px; padding: 3px;
   background: var(--hud-glass); box-shadow: var(--hud-edge), inset 0 2px 0 var(--c-sodium); pointer-events: auto;
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
@@ -599,8 +602,8 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .hp-armor { position: absolute; left: 0; right: 0; top: 0; height: 40%; background: var(--c-sodium); transform-origin: left center; transform: scaleX(0); }
 .hp-tags { position: absolute; left: 0; bottom: calc(100% + 3px); display: flex; align-items: flex-end; gap: 5px; }
 .hp-armor-num { font: 400 var(--fs-title)/1 var(--f-stencil); color: var(--c-sodium); text-shadow: var(--text-lift); }
-.vitals.hurt .hp-fill { background: linear-gradient(180deg, #ff8173, var(--c-red)); }
-.vitals.hurt .hp-num { color: #ff7a6c; }
+.vitals.hurt .hp-fill { background: linear-gradient(180deg, var(--c-red-hi, #ff8173), var(--c-red)); }
+.vitals.hurt .hp-num { color: var(--c-red-hi, #ff7a6c); }
 .vitals.hurt .hp-track { box-shadow: inset 0 0 0 1px rgba(255,77,61,.6), 0 0 8px var(--c-red-glow); }
 .protect { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-night); background: var(--c-go); padding: 2px 5px; white-space: nowrap; }
 
@@ -1286,3 +1289,27 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 @media (prefers-reduced-motion: reduce) {
   #ui .rs.in > *, #ui .rs.in .rb-row, #ui .rs.in .xp-row, #ui .rs.in > .rs-cards > *, #ui .rx-rays, #ui .rx-emblem, #ui .rx-text, #ui .rx-mark, #ui .rx-swatch, #ui .rx-unlock h2 { animation: none !important; }
 }
+
+/* =====================================================================================================================
+   ACCESSIBILITY (docs/ACCESSIBILITY.md). Colour modes swap the tokens on the root (js/shared/palette.js); these rules
+   add what colour alone cannot carry, and the calm and text size settings.
+   ===================================================================================================================== */
+/* Colour modes: the kill feed's enemy rows get a hatched edge, so ally and enemy differ in shape as well as colour. */
+html[data-cb] .f-row.foe:not(.mine) { box-shadow: inset 3px 0 0 transparent; background-image: repeating-linear-gradient(180deg, var(--enemy-team) 0 3px, transparent 3px 5px); background-size: 3px 100%; background-repeat: no-repeat; background-color: var(--hud-glass-lo); }
+/* High contrast: solid HUD plates, heavier hit marks and damage arcs, the low health bar outlined. */
+html[data-cb="contrast"] .hud, html[data-cb="contrast"] .controls { --hud-glass: rgba(10,12,16,.94); --hud-glass-lo: rgba(10,12,16,.88); --hud-edge: inset 0 0 0 1.5px rgba(255,255,255,.55); }
+html[data-cb="contrast"] .hit-x path { stroke-width: 5; }
+html[data-cb="contrast"] .dmg-arc { stroke: #fff; stroke-width: 3; }
+html[data-cb="contrast"] .tbtn { box-shadow: inset 0 0 0 2.5px rgba(255,255,255,.85), 0 2px 6px rgba(0,0,0,.4); }
+/* Battle royale rarity: pips for the tier (1 common .. 5 legendary) on the Take prompt, in every colour mode. */
+html[data-cb] .br-take[data-r]::after { content: attr(data-pips); position: absolute; right: 6px; top: 2px; font: 8px/1 var(--f-plate); letter-spacing: 1px; color: var(--rar, #fff); text-shadow: var(--text-lift); }
+
+/* Reduce shake and flashes: the flashbang blinds with a dark veil instead of a white flash (it still hides the game),
+   and the blinking warnings hold still. Camera shake and explosion light are scaled down in js/render/feel.js. */
+html[data-calm] .flashbang { background: #2b3038; }
+html[data-calm] .vignette.critical .vg-pulse, html[data-calm] .mm-tag, html[data-calm] .kc-rec, html[data-calm] .tbtn-swap.urgent,
+html[data-calm] .daze-veil, html[data-calm] .snd-mark .sm-plate, html[data-calm] .lb-away { animation: none !important; }
+
+/* Text size (menus only; the HUD has HUD size). Grows the type tokens every menu reads. */
+html[data-text="large"] .menu, html[data-text="large"] .overlay { --fs-micro: 10.5px; --fs-caption: 12px; --fs-body: 14px; --fs-lead: 16px; --fs-title: 18.5px; }
+html[data-text="larger"] .menu, html[data-text="larger"] .overlay { --fs-micro: 11px; --fs-caption: 13px; --fs-body: 15px; --fs-lead: 17px; --fs-title: 19px; }
