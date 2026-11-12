@@ -867,8 +867,8 @@
 #ui .opt-col h4 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 #ui .opt-col h4 .ico { height: 20px; color: var(--c-sodium); }
 #ui .opt-row { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); min-height: 0; }
-#ui .opt-row[data-key], #ui .opt-quality { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
-#ui .opt-quality .opt-name, #ui .opt-quality .opt-segs { flex: none; }
+#ui .opt-row[data-key], #ui .opt-quality, #ui .opt-hudsize { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+#ui .opt-quality .opt-name, #ui .opt-quality .opt-segs, #ui .opt-hudsize .opt-name, #ui .opt-hudsize .opt-segs { flex: none; }
 #ui .opt-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 #ui .opt-name b { font: 400 var(--fs-lead)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); }
 #ui .opt-name small { font: 400 var(--fs-caption)/1.2 var(--f-body); color: var(--c-haze); white-space: normal; }

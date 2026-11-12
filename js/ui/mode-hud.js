@@ -20,7 +20,7 @@ const MARK_Y = 2.6;          // Metres above the ground a head tag floats.
 
 const CSS = `
 .mh-ui { position: absolute; inset: 0; pointer-events: none; }
-.mh-status { position: absolute; left: 50%; top: calc(var(--st) + 43px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+.mh-status { display: flex; align-items: center; gap: 8px;
   min-height: 30px; padding: 3px 12px 3px 8px; background: var(--hud-glass, rgba(16,20,26,.78)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); white-space: nowrap; }
 .mh-status[hidden], .mh-wait[hidden], .mh-tag[hidden], .mh-mods[hidden] { display: none; }
@@ -75,7 +75,8 @@ export class ModeHud {
       <div class="mh-mods" hidden></div>
       ${'<div class="mh-tag" hidden><span></span></div>'.repeat(3)}`;
     hud.el.appendChild(el);
-    this.status = el.querySelector('.mh-status');
+    // The status plate renders into the HUD's objective strip (js/ui/hud.js ObjStrip), beside the zone chips.
+    this.status = hud.strip.mount(el.querySelector('.mh-status'), { order: 2 });
     this.sIco = this.status.querySelector('.mh-ico');
     this.sWord = this.status.querySelector('b');
     this.sSub = this.status.querySelector('small');
@@ -97,7 +98,8 @@ export class ModeHud {
     this.wait.hidden = true;
     for (const t of this.tags) t.root.hidden = true;
     this.hud.el.classList.toggle('mh-on', this.on);
-    this.hud.el.classList.toggle('mh-dealt', this.rules === 'oic' || this.rules === 'inf');
+    this.dealt = this.rules === 'oic' || this.rules === 'inf';     // Everyone's kit is dealt: no loadout, no second gun.
+    this.hud.el.classList.toggle('mh-dealt', this.dealt);
     this.hud.el.classList.remove('mh-held');
     this.hud.el.classList.toggle('hc-on', mods.includes('hardcore'));
     // The match's modifiers, as small plates in the top corner, for the whole match.

@@ -45,6 +45,9 @@ const THROW_BASE_M = 13;
 const THROW_STRONG_M = 19;
 const THROW_HELD_M = 9;         // Range when the button is held but never dragged.
 
+const MOVE_ZONE_PAD = 6;        // The move rim's edge and shadow, past its radius.
+const AIM_ZONE_PAD = 18;        // The aim ring's ticks reach 15 px past the ring.
+
 const BUTTONS = ['slide', 'swap', 'tactical', 'lethal'];
 const TILE_COUNT = 3;
 const TILE_IDS = Array.from({ length: TILE_COUNT }, (_, i) => `tile${i}`);
@@ -177,8 +180,8 @@ export class Controls {
         ${b in EMPTY_ICON ? '<b class="tbtn-count">0</b>' : ''}
       </button>`).join('')}
       <div class="streaks">
-        <div class="st-score"><span>Score</span><b>0</b></div>
         <div class="stk-row">
+        <div class="st-score"><span>Score</span><b>0</b></div>
         ${TILE_IDS.map((t, i) => `
           <button class="st-tile" data-btn="${t}" data-slot="${i}" aria-label="Streak ${i + 1}">
             <i class="st-fill"></i>
@@ -298,7 +301,25 @@ export class Controls {
     const r = this.el.querySelector('.rest-r').getBoundingClientRect();
     this.restLeft = { x: l.left, y: l.top };
     this.restRight = { x: r.left, y: r.top };
+    this.#measureZones();
     this.paintDirty = true;
+  }
+
+  // Where each stick rests, as a circle the HUD keeps clear of: the move rim, and the aim ring with its ticks. The
+  // sizes follow the tuning (leftSize, fireRing) and the sensitivity option. Measured with the rects, never per frame.
+  #measureZones() {
+    const l = this.restLeft, r = this.restRight;
+    if (!l || !r) return;
+    this.zones = {
+      move: { x: l.x, y: l.y, r: this.leftRadius + MOVE_ZONE_PAD },
+      aim: { x: r.x, y: r.y, r: this.fireRing + AIM_ZONE_PAD },
+    };
+  }
+
+  // Stick zones and touch rects for a layout pass (js/ui/hud.js layout): measured now, whether or not a match is on.
+  geometry() {
+    this.#measure();
+    return { zones: this.zones, rects: this.rects };
   }
 
   setEnabled(on) {

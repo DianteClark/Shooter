@@ -1657,6 +1657,7 @@ function afterResults() {
 function applyOptions(v, changed) {
   controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
   hud.setLefty(v.lefty);
+  if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
   controls.aimAssist = v.aimAssist;
   if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
@@ -1707,7 +1708,7 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial };
+if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange) };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial) maybeInstallPrompt();
 

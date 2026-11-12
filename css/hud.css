@@ -1,0 +1,29 @@
+/* In-match HUD layout (js/ui/hud.js layout(), docs/UI.md). The thumbs own both lower corners and the button cluster, so
+   the HUD is four groups placed around them, the same in every mode:
+     top       score bar, and the objective strip under it (or along the top edge where a mode has none)
+     side      minimap and a three-row feed on the move thumb's side; corner chips and the weapon panel on the aim side
+     dock      health (and plates) beside the streak tiles, or the battle royale's plate and medkit, on the bottom edge
+     lane      one prompt at a time over the dock: take a gun, call exfil, the bomb, a flag, the aim hint
+   The layout pass measures the sticks (they move with tuning and sensitivity) and the buttons, and writes custom
+   properties on the shared root: --vit-x, --rp-x (dock), --lane-x/-w/-b, --arms-y/-k, --os-x/y/w0..2 (strip rows),
+   --hud-k (Options: HUD size) and --tile-k. Nothing here is measured per frame. */
+
+/* The objective strip: three rows, each centred on its own --os-x and narrowed to --os-w by the layout pass. A mode
+   mounts its element into a row (ObjStrip.mount); whatever the element's own placement was, in the strip it flows. */
+.ostrip { position: absolute; inset: 0; pointer-events: none; }
+.os-row {
+  position: absolute; left: var(--os-x0, 50%); top: var(--os-y0, calc(var(--st) + 50px)); max-width: var(--os-w0, 360px);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transform: translateX(-50%) scale(var(--hud-k, 1)); transform-origin: center top;
+}
+.os-row[data-row="1"] { left: var(--os-x1, 50%); top: var(--os-y1, calc(var(--st) + 90px)); max-width: var(--os-w1, 360px); }
+.os-row[data-row="2"] { left: var(--os-x2, 50%); top: var(--os-y2, calc(var(--st) + 124px)); max-width: var(--os-w2, 360px); }
+.os-row:empty { display: none; }
+.hud .os-row > .os-item { position: relative; left: auto; right: auto; top: auto; bottom: auto; margin: 0; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* The live scoreboard and a death replay's banner take the space under the score bar. */
+.hud:has(.board:not([hidden])) .ostrip, .killcam-on .ostrip { visibility: hidden; }
+/* Dead: the death screen's card sits where the strip's lower rows are. */
+.hud:has(.death.show) .os-row[data-row="1"], .hud:has(.death.show) .os-row[data-row="2"] { visibility: hidden; }
+
+/* The killcam banner and the training card follow the strip's first row: clear of the minimap and the weapon panel. */
+#ui .tut-card { left: var(--os-x0, 50%); top: var(--os-y0, calc(var(--st) + 50px)); width: min(320px, var(--os-w0, 320px)); margin-left: calc(min(320px, var(--os-w0, 320px)) / -2); }
