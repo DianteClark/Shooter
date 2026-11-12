@@ -30,9 +30,9 @@ const CSS = `
 .br-ui .br-map { z-index: var(--z-overlay); }
 .br-ui [data-tap] { pointer-events: auto; }
 .hud.br-on .scorebar, .hud.br-on .obj-strip, .hud.br-on .gun-rung { display: none !important; }
-.hud.br-on .feed { top: calc(var(--st) + 134px); }
 .hud.br-on .death { display: none !important; }
-.br-top { position: absolute; left: 50%; top: calc(var(--st) + 6px); transform: translateX(-50%); display: flex; align-items: stretch; gap: 4px; }
+.br-top { display: flex; align-items: stretch; gap: 4px; }
+.hud:not(.br-on) .br-top, .hud:not(.br-on) .br-reviving { display: none !important; }
 .br-chip { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 54px; height: 40px; padding: 0 9px;
   background: linear-gradient(180deg, rgba(42,51,61,.94), rgba(16,20,26,.9)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
@@ -41,17 +41,19 @@ const CSS = `
 .br-circle { min-width: 104px; box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium); }
 .br-circle.closing { box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-red); }
 .br-circle.closing b { color: #ff8a7c; }
+/* Outside the circle: the circle chip itself turns red and says so (it blinks), instead of a second plate. */
+.br-circle.outside { background: linear-gradient(180deg, rgba(165,42,31,.95), rgba(90,18,12,.92)); box-shadow: var(--hud-edge), inset 0 -2px 0 #fff; animation: br-blink .7s steps(2, jump-none) infinite; }
+.br-circle.outside b, .br-circle.outside small { color: #fff; }
 .br-pips { display: flex; gap: 2px; margin-top: 3px; }
 .br-pips i { width: 9px; height: 3px; background: rgba(231,234,228,.2); }
 .br-pips i.on { background: var(--c-sodium); }
-.br-outside { position: absolute; left: 50%; top: calc(var(--st) + 52px); transform: translateX(-50%); padding: 4px 10px; font: 400 13px/1 var(--f-stencil);
-  letter-spacing: var(--tr-stencil); color: #fff; background: rgba(165,42,31,.9); clip-path: polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%); animation: br-blink .7s steps(2, jump-none) infinite; }
 @keyframes br-blink { to { opacity: .55; } }
-.br-plates { display: flex; gap: 3px; height: 6px; margin-top: 1px; }
+.br-plates { display: flex; gap: 3px; height: 5px; margin-bottom: 2px; }
 .br-plates i { flex: 1; position: relative; background: rgba(16,20,26,.85); box-shadow: inset 0 0 0 1px rgba(231,234,228,.16); transform: skewX(-24deg); overflow: hidden; }
 .br-plates i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #9fd1ff, #3fa0ff); transform-origin: left center; transform: scaleX(var(--k, 0)); }
-.br-inv { position: absolute; left: 50%; bottom: calc(var(--sb) + 8px); transform: translateX(-50%); display: flex; gap: 6px; align-items: flex-end; }
-.br-btn { position: relative; width: 50px; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; padding: 0;
+/* Plate, medkit and self-revive take the streak tiles' place in the dock beside health (js/ui/hud.js layout). */
+.br-inv { position: absolute; left: var(--rp-x, 50%); bottom: calc(var(--sb) + 6px); transform: scale(var(--vit-k, var(--hud-k, 1))); transform-origin: left bottom; display: flex; gap: 4px; align-items: flex-end; pointer-events: none; }
+.br-btn { position: relative; width: 46px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; padding: 0;
   color: var(--c-chalk); background: linear-gradient(180deg, rgba(42,51,61,.92), rgba(16,20,26,.88)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); font: 400 15px/1 var(--f-stencil); }
 .br-btn small { font: 8px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
@@ -59,14 +61,15 @@ const CSS = `
 .br-btn.busy { box-shadow: var(--hud-edge), inset 0 -3px 0 var(--c-sodium); }
 .br-btn .br-fill { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--c-sodium); transform-origin: left; transform: scaleX(0); }
 .br-btn:active { filter: brightness(1.4); }
-.br-jump { position: absolute; left: 50%; bottom: calc(var(--sb) + 70px); transform: translateX(-50%); min-width: 150px; height: 58px; padding: 0 22px; border: 0;
+.br-jump { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 70px); transform: translateX(-50%); min-width: 150px; height: 58px; padding: 0 22px; border: 0;
   font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-sodium);
   clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px); box-shadow: 0 0 0 2px #fff inset; }
 .br-jump small { display: block; font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); margin-top: 3px; }
-.br-hint { position: absolute; left: 50%; bottom: calc(var(--sb) + 76px); transform: translateX(-50%); padding: 6px 12px; font: 13px/1.2 var(--f-plate);
+.br-hint { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 76px); transform: translateX(-50%); padding: 6px 12px; font: 13px/1.2 var(--f-plate);
   letter-spacing: var(--tr-plate); color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.75)); white-space: nowrap; text-align: center; }
 .br-hint b { font: 400 16px/1 var(--f-stencil); color: var(--c-sodium); display: block; margin-bottom: 3px; }
-.br-take { position: absolute; left: 34%; width: 26%; bottom: calc(var(--sb) + 64px); display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 10px 0 10px; text-align: left;
+/* The take prompt rides the prompt lane over the dock, between the sticks (js/ui/hud.js layout). */
+.br-take { position: absolute; left: var(--lane-x, 50%); width: min(var(--lane-w, 220px), 240px); bottom: var(--lane-b, 64px); transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 10px 0 10px; text-align: left;
   border: 0; color: #fff; background: linear-gradient(180deg, rgba(42,51,61,.95), rgba(16,20,26,.92)); box-shadow: var(--hud-edge), inset 3px 0 0 var(--rar);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); white-space: nowrap; }
 .br-take > span:last-child { min-width: 0; overflow: hidden; }
@@ -74,16 +77,6 @@ const CSS = `
 .br-take b, .br-take small { display: block; overflow: hidden; text-overflow: ellipsis; }
 .br-take b { font: 400 16px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
 .br-take small { margin-bottom: 3px; font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-transform: uppercase; }
-.br-squad { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 84px; }
-.br-mate { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 1px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team); }
-.br-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.br-mate em { font: 9px/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-haze); }
-.br-mate .bars { grid-column: 1 / 3; display: flex; gap: 2px; height: 4px; }
-.br-mate .bars i { position: relative; background: rgba(231,234,228,.12); overflow: hidden; }
-.br-mate .bars i::after { content: ''; position: absolute; inset: 0; background: var(--bar); transform-origin: left; transform: scaleX(var(--k, 0)); }
-.br-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
-.br-mate.down em { color: #ff9a8c; }
-.br-mate.out { opacity: .4; }
 .br-down { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); width: 250px; text-align: center; }
 .br-down b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff6b5c; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
 .br-down small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); margin: 5px 0 8px; text-shadow: var(--text-lift); }
@@ -129,8 +122,9 @@ const CSS = `
 .hud.br-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
 .hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
 /* Hands: both guns and fists as three slots over the ammo readout, and the ammo pouch (rounds for guns not in hand). */
-.br-hands { position: absolute; left: 0; bottom: calc(100% + 4px); display: flex; gap: 3px; align-items: flex-end; pointer-events: auto; }
-.br-slot { position: relative; width: 50px; height: 30px; border: 0; padding: 2px 3px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+.br-hands { display: flex; gap: 3px; align-items: stretch; pointer-events: auto; padding: 4px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: var(--hud-edge);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
+.br-slot { position: relative; width: 46px; height: 36px; border: 0; padding: 2px 3px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   color: var(--c-chalk); background: linear-gradient(180deg, rgba(42,51,61,.9), rgba(16,20,26,.85)); box-shadow: var(--hud-edge), inset 0 2px 0 var(--rar, rgba(231,234,228,.25));
   clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px); }
 .br-slot small { font: 9px/1 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -138,13 +132,13 @@ const CSS = `
 .br-slot.on small { color: var(--c-chalk); }
 .br-slot.empty { opacity: .45; }
 .br-slot:active { filter: brightness(1.4); }
-.br-slot.fist { width: 38px; }
+.br-slot.fist { width: 36px; }
 .br-pouch { display: flex; flex-direction: column; gap: 1px; margin-left: 3px; font: 9px/1.05 var(--f-plate); letter-spacing: .02em; color: var(--c-haze); text-shadow: var(--text-lift); white-space: nowrap; }
 .br-pouch b { color: var(--c-chalk); font-weight: 400; }
-.br-hands-col { display: flex; flex-direction: column; gap: 2px; }
-.br-pouch { flex-direction: row; gap: 7px; margin-left: 1px; }
-/* Reviving a teammate: your own bar, under the circle chips (clear of the Take button). */
-.br-reviving { position: absolute; left: 50%; top: calc(var(--st) + 80px); transform: translateX(-50%); width: 190px; padding: 6px 10px 7px; text-align: center;
+.br-hands-col { display: flex; flex-direction: column; justify-content: space-between; gap: 3px; }
+.br-pouch { flex-direction: row; gap: 6px; margin-left: 1px; min-height: 9px; }
+/* Reviving a teammate: your own bar, in the objective strip's progress row. */
+.br-reviving { width: 190px; padding: 6px 10px 7px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 .br-reviving b { display: block; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #7be08a; }
 .br-reviving i { display: block; height: 5px; margin-top: 5px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
@@ -155,13 +149,11 @@ const CSS = `
 .br-callout small { display: block; margin-top: 4px; font: 13px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-shadow: var(--text-lift); }
 @keyframes br-call { 0% { opacity: 0; transform: translateX(-50%) scale(1.3); } 10% { opacity: 1; transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 /* The downed panel sits below your character, not on it. */
-.br-down { top: auto; bottom: calc(var(--sb) + 66px); }
-/* Narrow screens (under 667 px): the squad panel moves to the top right so it never touches the Alive chip. */
-@media (max-width: 666px) {
-  .br-squad { left: auto; right: calc(var(--sr) + 54px); width: 76px; }
-  .hud.lefty .br-squad { right: auto; left: calc(var(--sl) + 54px); }
-  .br-chip { min-width: 48px; padding: 0 7px; }
-  .br-circle { min-width: 96px; }
+.br-down { top: auto; left: var(--lane-x, 50%); bottom: var(--lane-b, 66px); }
+/* Narrow screens: slimmer chips, so the strip fits between the squad panel and the corner. */
+@media (max-width: 700px) {
+  .br-chip { min-width: 46px; padding: 0 6px; }
+  .br-circle { min-width: 92px; }
 }
 `;
 
@@ -190,7 +182,7 @@ export class BrHud {
       <div class="br-inv">
         <button class="br-btn br-plate" data-tap="1" data-act="plate">${icon('plates', { size: 18 })}<span class="n">0</span><small>Plate</small><i class="br-fill"></i></button>
         <button class="br-btn br-med" data-tap="1" data-act="med">${icon('ui:plus', { size: 16 })}<span class="n">0</span><small>Medkit</small><i class="br-fill"></i></button>
-        <button class="br-btn br-kit" data-tap="1" data-act="self" hidden>${icon('ui:refresh', { size: 16 })}<span class="n">0</span><small>Revive</small></button>
+        <button class="br-btn br-kit" data-tap="1" data-act="self" style="visibility:hidden">${icon('ui:refresh', { size: 16 })}<span class="n">0</span><small>Revive</small></button>
       </div>
       <button class="br-take" data-tap="1" hidden><span class="ti"></span><span><small></small><b></b></span></button>
       <button class="br-jump br-jump-main" data-tap="1" hidden>JUMP<small>Leave the transport</small></button>
@@ -209,7 +201,7 @@ export class BrHud {
         </div>
       </div>`;
     hud.el.appendChild(el);
-    // The hand slots sit on the ammo readout, so they move with it (left-handed layouts too).
+    // The hand slots are part of the weapon panel, beside the ammo readout (left-handed layouts too).
     this.handsEl = document.createElement('div');
     this.handsEl.className = 'br-hands';
     this.handsEl.hidden = true;
@@ -252,6 +244,9 @@ export class BrHud {
       this.cmd?.('ping', { x: (e.clientX - r.left) / r.width * W, z: (e.clientY - r.top) / r.height * W });
     });
     this.revEl = $('.br-reviving');
+    // The circle chips are the objective strip's state row, your revive bar its progress row (js/ui/hud.js ObjStrip).
+    hud.strip.mount($('.br-top'), { order: 0 });
+    hud.strip.mount(this.revEl, { row: 2 });
     this.pings = [];
     this.takeId = null;
     this.mapOpen = false;
@@ -314,11 +309,12 @@ export class BrHud {
       : br.state === 'final' ? 'Final circle' : br.state === 'shrink' ? 'Closing' : 'Circle closes in';
     const shown = view.phase === 'warmup' ? clock(view.timeLeft ?? 0) : br.state === 'final' ? '--' : clock(br.timer);
     if (c.circleT !== shown) { c.circleT = shown; this.circleT.textContent = shown; }
-    if (c.circleS !== phaseLabel) { c.circleS = phaseLabel; this.circleS.textContent = phaseLabel; this.circleEl.classList.toggle('closing', br.state !== 'wait'); }
+    const label = c.outside ? 'Outside the circle' : phaseLabel;
+    if (c.circleS !== label) { c.circleS = label; this.circleS.textContent = label; this.circleEl.classList.toggle('closing', br.state !== 'wait'); }
     const pip = br.phase + (br.state === 'final' ? 1 : 0);
     if (c.pip !== pip) { c.pip = pip; [...this.pips.children].forEach((n, i) => n.classList.toggle('on', i < pip)); }
     const outside = me.alive && !air && Math.hypot(me.x - br.circle.x, me.z - br.circle.z) > br.circle.r;
-    if (c.outside !== outside) { c.outside = outside; this.outsideEl.hidden = !outside; }
+    if (c.outside !== outside) { c.outside = outside; this.outsideEl.hidden = true; this.circleEl.classList.toggle('outside', outside); c.circleS = null; }
     this.#reboundNote(view, br);
 
     // Map: up by itself during boarding and the flight, until you jump (there is no close button).
@@ -358,9 +354,10 @@ export class BrHud {
         this.kitBtn.querySelector('.n').textContent = inv.kits;
         this.plateBtn.classList.toggle('off', !inv.plates);
         this.medBtn.classList.toggle('off', !inv.meds);
-        this.kitBtn.hidden = !inv.kits || BR_SOLO(this.mode);
+        // Hidden by visibility, so the dock keeps its measured width (js/ui/hud.js layout).
+        this.kitBtn.style.visibility = !inv.kits || BR_SOLO(this.mode) ? 'hidden' : '';
         this.kitBtn.classList.toggle('off', !me.downed);     // Shown so you know you carry one; it works while down.
-        this.$('.br-inv').hidden = !me.alive || air !== 0;
+        this.$('.br-inv').style.visibility = !me.alive || air !== 0 ? 'hidden' : '';
         this.selfBtn.hidden = !inv.kits;
       }
       const using = inv.use;
@@ -389,7 +386,7 @@ export class BrHud {
   #hands(view, me, inv, air) {
     const ps = view.brPs, st = view.brStash;
     const show = !!ps && me.alive && !me.downed && !air;
-    if (this.c.handsOn !== show) { this.c.handsOn = show; this.handsEl.hidden = !show; }
+    if (this.c.handsOn !== show) { this.c.handsOn = show; this.handsEl.hidden = !show; this.hud.layout(); }
     if (!show) return;
     const gun = s => (st?.slot === s ? { def: st.def, ammo: st.ammo, res: st.res } : ps.defs[s]?.id !== 'knife' ? { def: ps.defs[s], ammo: ps.ammo[s], res: ps.reserve[s] } : null);
     const g0 = gun(0), g1 = gun(1);
@@ -420,7 +417,7 @@ export class BrHud {
       this.platesEl = document.createElement('div');
       this.platesEl.className = 'br-plates';
       this.platesEl.innerHTML = '<i></i><i></i><i></i>';
-      vit?.appendChild(this.platesEl);
+      (vit?.querySelector('.hp-bars') ?? vit)?.prepend(this.platesEl);
     }
     this.platesEl.hidden = !this.on;
     const a = me.alive ? me.brArmor ?? 0 : 0;
@@ -451,7 +448,6 @@ export class BrHud {
     this.takeId = id; this.takeFull = handsFull; this.takeSlot = slot;
     this.takeBtn.hidden = id === null;
     if (id === null) return;
-    this.#placeTake();
     const gun = WEAPON_IDS[best.v], r = best.r;
     this.takeBtn.style.setProperty('--rar', BR.rarityCss[r]);
     this.takeBtn.querySelector('.ti').innerHTML = icon(gun, { size: 15 });
@@ -461,35 +457,18 @@ export class BrHud {
     this.takeBtn.title = `${BR.rarityName[r]} ${WEAPONS[gun]?.name ?? 'gun'}`;
   }
 
-  // The take prompt sits bottom-centre in the gap between the vitals and the aim stick's ring (where the ring rests),
-  // just over the plate and medkit buttons, never on a stick or a button. Measured once per screen size.
-  #placeTake() {
-    const key = `${innerWidth}x${innerHeight}`;
-    if (this.takeAt === key) return;
-    this.takeAt = key;
-    const ring = document.querySelector('.controls .stick-aim .ring-fire')?.getBoundingClientRect();
-    const vit = this.hud.el.querySelector('.vitals')?.getBoundingClientRect();
-    const inv = this.el.querySelector('.br-inv')?.getBoundingClientRect();
-    const hands = this.handsEl?.getBoundingClientRect();
-    const lo = (vit?.width ? vit.right : innerWidth * 0.3) + 6;
-    const hi = Math.min(ring?.width ? ring.left : innerWidth * 0.62, hands?.width ? hands.left : Infinity) - 6;
-    const st = this.takeBtn.style;
-    st.left = `${Math.round(lo)}px`;
-    st.width = `${Math.max(120, Math.round(hi - lo))}px`;
-    st.bottom = `${Math.round(innerHeight - (inv?.height ? inv.top : innerHeight - 60) + 6)}px`;
-  }
-
   #squad(view, me) {
     const mates = view.players.filter(p => p.team === me.team && p.id !== me.id);
     const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${Math.ceil((p.brArmor ?? 0) / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}|${p.air}|${p.redeploy}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
+    // Name, health and (a thin second bar) plates; downed is a red bar and a down mark, out a greyed row. No status
+    // words: they crowded the names.
     this.squadEl.innerHTML = mates.map(p => {
       const state = !p.alive ? 'out' : p.downed ? 'down' : '';
-      const note = !p.alive ? (p.redeploy ? 'Redeploy' : 'Out') : p.downed ? 'Down' : p.away ? 'Away' : p.air ? 'Air' : '';
-      const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2)}"></i>`).join('');
-      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
-        <span class="bars">${plates}<i style="flex:2.2;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
+      const plates = [0, 1, 2].map(i => `<i style="flex:1;--bar:#3fa0ff;--k:${p.alive ? Math.max(0, Math.min(1, ((p.brArmor ?? 0) - i * BR.plateHp) / BR.plateHp)).toFixed(2) : 0}"></i>`).join('');
+      return `<div class="br-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : !p.alive && p.redeploy ? icon('ui:refresh', { size: 10, accent: 'currentColor' }) : ''}</em>
+        <span class="mbars"><i style="flex:1;--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span><span class="mbars pl">${plates}</span></div>`;
     }).join('');
   }
 

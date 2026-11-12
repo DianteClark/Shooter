@@ -1,0 +1,81 @@
+/* In-match HUD layout (js/ui/hud.js layout(), docs/UI.md). The thumbs own both lower corners and the button cluster, so
+   the HUD is four groups placed around them, the same in every mode:
+     top       score bar, and the objective strip under it (or along the top edge where a mode has none)
+     side      minimap and a three-row feed on the move thumb's side; corner chips and the weapon panel on the aim side
+     dock      health (and plates) beside the streak tiles, or the battle royale's plate and medkit, on the bottom edge
+     lane      one prompt at a time over the dock: take a gun, call exfil, the bomb, a flag, the aim hint
+   The layout pass measures the sticks (they move with tuning and sensitivity) and the buttons, and writes custom
+   properties on the shared root: --vit-x, --rp-x (dock), --lane-x/-w/-b, --arms-y/-k, --os-x/y/w0..2 (strip rows),
+   --hud-k (Options: HUD size) and --tile-k. Nothing here is measured per frame. */
+
+/* The objective strip: three rows, each centred on its own --os-x and narrowed to --os-w by the layout pass. A mode
+   mounts its element into a row (ObjStrip.mount); whatever the element's own placement was, in the strip it flows. */
+.ostrip { position: absolute; inset: 0; pointer-events: none; }
+.os-row {
+  position: absolute; left: var(--os-x0, 50%); top: var(--os-y0, calc(var(--st) + 50px)); max-width: var(--os-w0, 360px);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transform: translateX(-50%) scale(var(--hud-k, 1)); transform-origin: center top;
+}
+.os-row[data-row="1"] { left: var(--os-x1, 50%); top: var(--os-y1, calc(var(--st) + 90px)); max-width: var(--os-w1, 360px); }
+.os-row[data-row="2"] { left: var(--os-x2, 50%); top: var(--os-y2, calc(var(--st) + 124px)); max-width: var(--os-w2, 360px); }
+.os-row:empty { display: none; }
+.hud .os-row > .os-item { position: relative; left: auto; right: auto; top: auto; bottom: auto; margin: 0; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* The live scoreboard and a death replay's banner take the space under the score bar. */
+.hud:has(.board:not([hidden])) .ostrip, .killcam-on .ostrip { visibility: hidden; }
+/* Dead: the death screen's card sits where the strip's lower rows are. */
+.hud:has(.death.show) .os-row[data-row="1"], .hud:has(.death.show) .os-row[data-row="2"] { visibility: hidden; }
+
+/* The killcam banner and the training card follow the strip's first row: clear of the minimap and the weapon panel. */
+#ui .tut-card { left: var(--os-x0, 50%); top: var(--os-y0, calc(var(--st) + 50px)); width: min(320px, var(--os-w0, 320px)); margin-left: calc(min(320px, var(--os-w0, 320px)) / -2); }
+
+/* The death screen and its loadout picker start under the strip's state row. */
+.hud .death-col, .hud .picker { top: var(--death-y, calc(var(--st) + 50px)); }
+
+/* Training: Skip sits with the corner chips (mirrored for the left hand); the feed is noise while learning. */
+#ui.hud-lefty .tut-skip { right: auto; left: calc(max(var(--sl), 10px) + 6px); }
+#ui.tut-on .hud .feed { display: none; }
+
+/* Squad panels (battle royale and extraction): beside the minimap on its side, one fixed-height row per teammate, the
+   name with room for ten characters before the ellipsis, the state as a compact tag, plates and health under it. */
+.hud .br-squad, .hud .ex-squad {
+  position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); width: 112px; display: flex; flex-direction: column; gap: 3px;
+  transform: scale(var(--hud-k, 1)); transform-origin: left top;
+}
+.hud.lefty .br-squad, .hud.lefty .ex-squad { left: auto; right: calc(var(--sr) + 134px); transform-origin: right top; }
+.hud .br-mate, .hud .ex-mate {
+  position: relative; width: 100%; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-auto-rows: auto;
+  align-items: center; gap: 2px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team);
+}
+.hud .br-mate b, .hud .ex-mate b { min-width: 0; height: 13px; font: 11px/13px var(--f-plate); letter-spacing: .02em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hud .br-mate em, .hud .ex-mate em { display: grid; place-items: center; width: 12px; height: 12px; font-style: normal; color: #fff; background: var(--c-red); line-height: 0; }
+.hud .br-mate em:empty, .hud .ex-mate em:empty { display: none; }
+.hud .mbars { grid-column: 1 / 3; display: flex; gap: 2px; height: 4px; }
+.hud .mbars.pl { height: 2px; }
+.hud .mbars i { position: relative; display: block; height: 100%; background: rgba(231,234,228,.12); overflow: hidden; }
+.hud .mbars i::after { content: ''; position: absolute; inset: 0; background: var(--bar, var(--c-chalk)); transform-origin: left; transform: scaleX(var(--k, 0)); }
+.hud .br-mate.down, .hud .ex-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
+.hud .br-mate.out, .hud .ex-mate.out { opacity: .4; filter: grayscale(1); }
+.hud .ex-mate.lifted { box-shadow: inset 2px 0 0 #59d36b; }
+
+/* Out of the match and watching (battle royale, extraction): the out plate sits under the strip's state row, in the
+   free stretch the layout pass found (the weapon panel and health are hidden while you are out), away from the sticks. */
+.hud .br-out.watching { left: var(--out-x, 50%); top: var(--out-y, calc(var(--st) + 52px)); bottom: auto; max-width: var(--out-w, calc(100vw - 24px)); }
+.hud .br-out.watching small { max-width: none; }
+.killcam-on .hud .br-out.watching { top: calc(var(--out-y, calc(var(--st) + 52px)) + 44px); bottom: auto; }
+
+/* The performance overlay in a match: one line in the bottom corner under the move stick, clear of every panel. */
+body:has(.hud.on) .perf { top: auto; right: auto; left: calc(env(safe-area-inset-left, 0px) + 6px); bottom: calc(env(safe-area-inset-bottom, 0px) + 3px); width: 172px; height: 16px; padding: 2px 4px 2px 7px; }
+body:has(.hud.on.lefty) .perf { left: auto; right: calc(env(safe-area-inset-right, 0px) + 6px); }
+body:has(.hud.on) .perf div:not(:first-child) { display: none; }
+
+/* Kill feed rows size to their content up to the feed's width; any text part (names, notes such as an infection or a
+   VIP kill, quick chat) ellipsizes instead of running out of the row. */
+.hud .f-row { overflow: hidden; }
+.hud .f-row > * { flex: none; }
+/* Names give way first (each down to a few letters), then the words: "was infected" outlasts a long name. */
+.hud .f-row > em { flex: 0 1000 auto; min-width: 3.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud .f-row > .f-note, .hud .f-row > .f-text, .hud .f-row > .qc-say, .hud .f-row > span:not(.f-w):not(.f-hs):not(.f-bdg):not(.f-ico) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud .f-ico { display: grid; place-items: center; line-height: 0; color: var(--c-sodium); --icon-accent: currentColor; }
+
+/* Eliminated, before you pick Spectate or Leave: the out plate is the moment, the feed steps back. */
+.hud:has(.br-out:not([hidden]):not(.watching)) .feed { visibility: hidden; }

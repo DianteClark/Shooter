@@ -1690,6 +1690,7 @@ function afterResults() {
 function applyOptions(v, changed) {
   controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
   hud.setLefty(v.lefty);
+  if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
   controls.aimAssist = v.aimAssist;
   if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
@@ -1698,7 +1699,7 @@ function applyOptions(v, changed) {
   if (!changed || changed === 'voiceMode') app.voice?.setMode(v.voiceMode);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);
   backdrop.quality = v.quality;
-  if (!changed || changed === 'fps') perf.setVisible(v.fps || FPS_PARAM);
+  if (!changed || changed === 'fps') { perf.setVisible(v.fps || FPS_PARAM); hud.layout(); }
   if (!changed || changed === 'touchDebug') touchDebug.setEnabled(v.touchDebug || TOUCHDEBUG_PARAM);
 }
 
@@ -1750,7 +1751,7 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, backdrop, quickChat, join: startJoining, tutorial: startTutorial, gamepad, voiceUi, Options };
+if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 

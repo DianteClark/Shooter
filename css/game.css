@@ -8,6 +8,7 @@
 @import url("journey.css");
 @import url("browse.css");
 @import url("mp.css");
+@import url("hud.css");
 @import url("boards.css");
 @import url("seasons.css");
 @import url("voice.css");
@@ -272,7 +273,7 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 .stick-aim.hot .ring-ticks { stroke: var(--c-red); }
 .stick-aim.hot .aim-knob { background: radial-gradient(circle at 38% 32%, #ffd2cc 0, #ff7b6d 40%, var(--c-red) 100%); box-shadow: 0 0 0 2px rgba(16,20,26,.55), var(--glow-red); }
 .aim-hint {
-  position: absolute; right: calc(var(--sr) + 92px); bottom: calc(var(--sb) + 256px); max-width: 240px; padding: 6px 10px;
+  position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 120px); transform: translateX(-50%); width: max-content; max-width: min(240px, var(--lane-w, 240px)); padding: 6px 10px;
   font: var(--fs-body)/var(--lh-snug) var(--f-body); text-align: right; color: var(--c-chalk);
   background: var(--hud-glass); box-shadow: var(--hud-edge), inset -3px 0 0 var(--c-sodium);
 }
@@ -310,41 +311,43 @@ button { transition: transform .12s ease-out, filter .12s ease-out; }
 @keyframes btn-urge { to { transform: scale(1.08); } }
 .down-state .streaks, .down-state .tbtn { visibility: hidden; }
 
-/* Streak tiles: three signal plates between the thumbs. Sodium rises toward each tile's cost. */
-.streaks { position: absolute; left: 50%; bottom: calc(var(--sb) + 6px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+/* Streak tiles: one row of signal plates in the dock beside health, on the aim thumb's side, with the score folded in
+   as the row's first plate. js/ui/hud.js layout sets --rp-x from the measured sticks and buttons. Visual 40 x 38; the
+   touch rect adds TILE_SLOP (js/ui/controls.js), so every tile takes a 46 x 44 tap. Large grows them (--tile-k). */
+.streaks { position: absolute; left: var(--rp-x, 50%); bottom: calc(var(--sb) + 6px); transform: scale(var(--tile-k, 1)); transform-origin: left bottom; }
+.stk-row { display: flex; gap: 4px; align-items: stretch; }
 .st-score {
-  display: flex; align-items: baseline; gap: 6px; padding: 2px 9px 2px 8px;
-  font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze);
-  background: var(--hud-glass); box-shadow: var(--hud-edge);
-  --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  flex: none; width: 38px; height: 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font: 8px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase;
+  background: var(--hud-glass-lo); box-shadow: var(--hud-edge), inset 0 -2px 0 rgba(242,166,59,.55);
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
-.st-score b { font: 400 16px/1 var(--f-stencil); color: var(--c-chalk); min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; }
+.st-score b { font: 400 15px/1 var(--f-stencil); color: var(--c-chalk); font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .st-score.capped b { color: var(--c-sodium); }
-.stk-row { display: flex; gap: 6px; }
 .st-tile {
-  position: relative; width: 64px; height: 54px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  position: relative; width: 40px; height: 38px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   background: var(--hud-glass); box-shadow: var(--hud-edge); color: var(--c-chalk); pointer-events: none;
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   transition: transform var(--dur-fast) var(--ease-out);
 }
-.st-tile svg { position: relative; width: 24px; height: 24px; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+.st-tile svg { position: relative; width: 20px; height: 20px; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
 .st-icon { position: relative; line-height: 0; }
 .st-fill {
   position: absolute; inset: 0; transform-origin: center bottom; transform: scaleY(0); will-change: transform;
   background: linear-gradient(0deg, rgba(242,166,59,.62), rgba(242,166,59,.28) 92%, var(--c-sodium-hi) 92%, var(--c-sodium-hi));
 }
-.st-cost { position: relative; font: 400 12px/1 var(--f-stencil); color: var(--c-chalk); letter-spacing: var(--tr-stencil); text-shadow: var(--text-lift); }
+.st-cost { position: relative; font: 400 10px/1 var(--f-stencil); color: var(--c-chalk); letter-spacing: 0; text-shadow: var(--text-lift); }
 .st-lock { position: absolute; inset: 0; display: none; place-items: center; }
+.st-why { position: absolute; left: 1px; right: 1px; bottom: 2px; font: 7px/1 var(--f-plate); text-align: center; white-space: nowrap; overflow: hidden; }
 .st-tile.down { transform: scale(.9); transition-duration: var(--dur-instant); }
 .st-tile.held { background: var(--face-sodium); color: var(--c-sodium-ink); box-shadow: var(--bevel-sodium); }
-.st-tile.held::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--tex-hazard); opacity: .85; }
+.st-tile.held::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--tex-hazard); opacity: .85; }
 .st-tile.held .st-fill { display: none; }
 .st-tile.held .st-cost { color: var(--c-sodium-ink); text-shadow: none; }
 .st-tile.held svg { color: var(--c-sodium-ink); --icon-accent: #fff6df; filter: none; }
 .st-tile.blocked { background: rgba(16,20,26,.5); color: var(--c-rail); box-shadow: inset 0 0 0 1px rgba(76,90,103,.7); }
 .st-tile.blocked .st-fill, .st-tile.blocked .st-icon, .st-tile.blocked .st-cost { visibility: hidden; }
 .st-tile.blocked .st-lock { display: grid; }
-.st-why { position: absolute; left: 0; right: 0; bottom: 3px; font: 9px/1 var(--f-plate); letter-spacing: .02em; color: var(--c-sodium-ink); text-align: center; }
 .st-tile.denied { background: rgba(242,166,59,.4); color: var(--c-chalk); box-shadow: inset 0 0 0 1.5px var(--c-sodium); }
 .st-tile.denied::after { display: none; }
 .st-tile.denied svg { color: var(--c-chalk); opacity: .75; }
@@ -433,7 +436,8 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 @keyframes mm-tag { to { opacity: .6; } }
 
 /* Kill feed: one row per kill, killer, weapon silhouette, victim. The local player's rows are lit. */
-.feed { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 94px); width: 260px; display: flex; flex-direction: column; gap: 2px; }
+/* Three rows under the minimap, gone in four seconds: never down to the move stick, never over the objective strip. */
+.feed { position: absolute; left: calc(var(--sl) + 8px); top: var(--feed-y, calc(var(--st) + 92px)); width: 210px; display: flex; flex-direction: column; gap: 2px; transform: scale(var(--hud-k, 1)); transform-origin: left top; }
 .f-row {
   align-self: flex-start; display: flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px 0 7px; max-width: 100%;
   font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: .04em; white-space: nowrap;
@@ -444,7 +448,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .f-row.foe { --strip: var(--enemy-team); }
 .f-row.mine { background: linear-gradient(90deg, rgba(42,51,61,.95), rgba(16,20,26,.82)); box-shadow: inset 3px 0 0 var(--c-sodium), inset 0 0 0 1px rgba(242,166,59,.35); }
 .f-row.out { opacity: 0; }
-.f-row em { font-style: normal; min-width: 0; max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+.f-row em { font-style: normal; min-width: 0; max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
 .f-w { display: flex; align-items: center; color: var(--c-chalk); padding: 0 2px; }
 .f-w .f-gun { --icon-accent: currentColor; }
 .f-text { font: var(--fs-micro)/1 var(--f-plate); color: var(--c-haze); }
@@ -455,7 +459,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .feed .f-row:has(.f-note) { --strip: var(--c-sodium); }
 
 /* Medals: stamped plates under the score bar, heavier the rarer. */
-.medals { position: absolute; left: 50%; top: calc(var(--st) + 60px); transform: translateX(-50%); width: 360px; height: 96px; display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: var(--z-hud-alert); }
+.medals { position: absolute; left: 50%; top: var(--os-y1, calc(var(--st) + 60px)); transform: translateX(-50%); width: 360px; height: 96px; display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: var(--z-hud-alert); }
 .medal {
   position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 8px; padding: 5px 16px 5px 8px;
   background: var(--face-steel); color: var(--c-chalk); box-shadow: var(--bevel-hi), var(--edge-hi);
@@ -575,60 +579,82 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 @keyframes qc-ping { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.4); opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .qc-ping { animation: none; } }
 
-/* Status flanks the streak tiles: health on the left thumb's side, the weapon on the right. */
-.status { position: absolute; left: 50%; bottom: calc(var(--sb) + 6px); width: 0; height: 0; }
+/* Health: a thin bar in the dock along the bottom edge, between the sticks (js/ui/hud.js layout sets --vit-x). Battle
+   royale and extraction plates ride the same bar (.br-plates over it). Status tags (spawn shield, armour) sit above. */
+.status { position: absolute; inset: 0; pointer-events: none; }
 .vitals {
-  position: absolute; right: 110px; bottom: 0; width: 120px; padding: 4px 8px 6px 14px; display: flex; flex-direction: column; gap: 3px;
-  background: linear-gradient(270deg, rgba(16,20,26,.8), rgba(16,20,26,.55) 70%, rgba(16,20,26,0));
+  position: absolute; left: var(--vit-x, 40%); bottom: calc(var(--sb) + 6px); width: 150px; display: flex; align-items: flex-end; gap: 6px; padding: 3px 8px 4px 7px;
+  transform: scale(var(--vit-k, var(--hud-k, 1))); transform-origin: left bottom;
+  background: var(--hud-glass-lo); box-shadow: var(--hud-edge);
+  --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
-.hp-line { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
-.hp-num { font: 400 28px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: var(--text-lift); font-variant-numeric: tabular-nums; }
-.hp-num::after { content: 'HP'; margin-left: 3px; font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
-.hp-track { position: relative; display: block; height: 9px; background: rgba(16,20,26,.85); transform: skewX(-24deg); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(231,234,228,.16); }
+.hp-num { flex: none; min-width: 2.1ch; font: 400 18px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: var(--text-lift); font-variant-numeric: tabular-nums; text-align: right; }
+.hp-bars { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 2px; }
+.hp-track { position: relative; display: block; height: 7px; background: rgba(16,20,26,.85); transform: skewX(-24deg); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(231,234,228,.16); }
 .hp-fill, .hp-loss { position: absolute; inset: 0; transform-origin: left center; will-change: transform; }
 .hp-fill { background: linear-gradient(180deg, #fff, var(--c-chalk) 55%, #c2c8c6); }
 .hp-loss { background: #ffd9d2; opacity: .85; }
 .hp-ticks { position: absolute; inset: 0; background: linear-gradient(90deg, transparent calc(100% - 2px), rgba(16,20,26,.85) 0) 0 0 / 25% 100%; }
+.hp-armor { position: absolute; left: 0; right: 0; top: 0; height: 40%; background: var(--c-sodium); transform-origin: left center; transform: scaleX(0); }
+.hp-tags { position: absolute; left: 0; bottom: calc(100% + 3px); display: flex; align-items: flex-end; gap: 5px; }
+.hp-armor-num { font: 400 var(--fs-title)/1 var(--f-stencil); color: var(--c-sodium); text-shadow: var(--text-lift); }
 .vitals.hurt .hp-fill { background: linear-gradient(180deg, #ff8173, var(--c-red)); }
 .vitals.hurt .hp-num { color: #ff7a6c; }
 .vitals.hurt .hp-track { box-shadow: inset 0 0 0 1px rgba(255,77,61,.6), 0 0 8px var(--c-red-glow); }
-.protect { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-night); background: var(--c-go); padding: 2px 5px; align-self: center; }
+.protect { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-night); background: var(--c-go); padding: 2px 5px; white-space: nowrap; }
 
+/* Weapon panel: a slim plate under the corner chips, on the aim thumb's side, above the button cluster
+   (js/ui/hud.js layout sets --arms-y and --arms-k). Ammo, the gun in hand, the gun Swap brings out, the magazine.
+   The battle royale's hand slots and ammo pouch join it as a second block (.br-hands). */
 .arms {
-  position: absolute; left: 110px; bottom: 0; width: 132px; padding: 4px 14px 6px 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  background: linear-gradient(90deg, rgba(16,20,26,.8), rgba(16,20,26,.55) 70%, rgba(16,20,26,0));
+  position: absolute; right: calc(var(--sr) + 8px); top: var(--arms-y, calc(var(--st) + 48px)); display: flex; flex-direction: row-reverse; align-items: stretch; gap: 4px;
+  transform: scale(var(--arms-k, 1)); transform-origin: right top;
 }
-.arms-top { display: flex; align-items: center; gap: 6px; height: 16px; max-width: 100%; }
-.arms-icon { flex: none; color: var(--c-chalk); filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+.arms-main {
+  position: relative; width: 150px; padding: 4px 9px 6px 10px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--hud-glass); box-shadow: var(--hud-edge), inset 0 -2px 0 rgba(231,234,228,.12);
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.arms-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 26px; }
+.arms-icon { flex: none; color: var(--c-chalk); filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); line-height: 0; }
 .arms-icon .gl { --icon-accent: var(--c-sodium); }
 .arms-icon:empty { display: none; }
-.arms-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-shadow: var(--text-lift); }
+.arms-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; height: 11px; }
+.arms-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-shadow: var(--text-lift); }
+.arms-alt { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 3px; font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; }
+.arms-alt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.arms-alt .ico, .arms-alt svg { flex: none; opacity: .8; }
 .arms-count { display: flex; align-items: baseline; gap: 4px; }
-.arms-count .ammo { font: 400 34px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: var(--text-lift); font-variant-numeric: tabular-nums; }
-.arms-count .reserve { font: 400 15px/1 var(--f-stencil); color: var(--c-haze); text-shadow: var(--text-lift); }
+.arms-count .ammo { font: 400 26px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); text-shadow: var(--text-lift); font-variant-numeric: tabular-nums; }
+.arms-count .reserve { font: 400 13px/1 var(--f-stencil); color: var(--c-haze); text-shadow: var(--text-lift); }
 .arms-count .reserve::before { content: '/'; margin-right: 2px; opacity: .6; }
-.mag { position: relative; display: block; width: 100%; height: 4px; background: rgba(231,234,228,.14); overflow: hidden; }
+.mag { position: relative; display: block; width: 100%; height: 3px; margin-top: 2px; background: rgba(231,234,228,.14); overflow: hidden; }
 .mag-fill { position: absolute; inset: 0; background: var(--c-chalk); transform-origin: left center; will-change: transform; }
 .mag::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent calc(100% - 1px), rgba(16,20,26,.95) 0) 0 0 / calc(100% / var(--mag, 1)) 100%; }
 .arms[data-tag="low"] .ammo, .arms[data-tag="low"] .arms-name { color: var(--c-sodium); }
 .arms[data-tag="low"] .mag-fill { background: var(--c-sodium); }
 .arms[data-tag="low"] .arms-name { animation: pulse-text .6s steps(2, jump-none) infinite alternate; }
+.arms[data-tag="low"] .arms-main { box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium); }
 .arms[data-tag="empty"] .ammo, .arms[data-tag="empty"] .arms-name { color: var(--c-red); }
-.arms[data-tag="reloading"] .arms-name { color: var(--c-chalk); }
+.arms[data-tag="empty"] .arms-main { box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-red); }
+.arms[data-tag="empty"] .arms-alt { color: var(--c-sodium); }
+.arms[data-tag="reloading"] .arms-name { color: var(--c-sodium-hi); }
 .arms[data-tag="reloading"] .mag { opacity: 0; }
 @keyframes pulse-text { to { opacity: .45; } }
-.reload-track { position: absolute; left: 8px; right: 14px; bottom: 6px; height: 4px; background: rgba(231,234,228,.18); opacity: 0; }
+.reload-track { position: absolute; left: 10px; right: 9px; bottom: 6px; height: 3px; background: rgba(231,234,228,.18); opacity: 0; }
 .reload-track.on { opacity: 1; }
 .reload-fill { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left center; transform: scaleX(0); box-shadow: 0 0 6px var(--c-sodium-glow); }
-.heat { position: absolute; left: 8px; right: 14px; top: -8px; height: 6px; background: rgba(16,20,26,.85); transform: skewX(-24deg); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(231,234,228,.18); }
+.heat { position: absolute; left: 10px; right: 9px; top: 2px; height: 4px; background: rgba(16,20,26,.85); transform: skewX(-24deg); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(231,234,228,.18); }
 .heat-fill { position: absolute; inset: 0; background: linear-gradient(90deg, #ff8a1c, #ffc23a 70%, #fff3cf); transform-origin: left center; transform: scaleX(0); will-change: transform; }
 .arms[data-heat="warm"] .heat { animation: heat-warn .22s steps(2, jump-none) infinite alternate; }
 .arms[data-heat="over"] .heat-fill { background: var(--tex-hazard-red); }
 .arms[data-heat="over"] .ammo { color: var(--c-red); }
 @keyframes heat-warn { from { opacity: 1; } to { opacity: .55; } }
+/* Out of play (dead, spectating, eliminated): the death screen or the out panel does the talking. */
+.hud.me-down .arms, .hud.me-down .vitals { visibility: hidden; }
 
 .over-banner {
-  position: absolute; left: 50%; bottom: calc(var(--sb) + 112px); transform: translateX(-50%); display: none; flex-direction: column; align-items: center;
+  position: absolute; left: var(--lane-x, 50%); bottom: calc(var(--lane-b, 60px) + 56px); transform: translateX(-50%); display: none; flex-direction: column; align-items: center;
   padding: 7px 22px 6px; background: var(--face-red); color: #fff4ef; box-shadow: var(--bevel-sodium); z-index: var(--z-hud-alert);
   --cut: var(--cut-md); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
@@ -780,12 +806,14 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 
 /* Clear of the kill feed: only phones too narrow to centre the column beside it shift it over (either side, for lefties). */
 @media (max-width: 760px) {
-  .hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 208px); }
-  .hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 208px); }
+  .hud:not(.lefty):has(.feed > *) .death-col { left: calc(var(--sl) + 226px); }
+  .hud.lefty:has(.feed > *) .death-col { right: calc(var(--sr) + 226px); }
 }
 /* The respawn ring hangs to the right of the killer card, so the card itself sits on the column's centre line. */
 .death-top { position: relative; }
 body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; margin-left: 10px; }
+/* Left-handed: the ring hangs on the other side, away from the feed. */
+body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin: 0 10px 0 0; }
 .killcam-on .hud:has(.feed > *) .death-col { left: calc(max(var(--sl), 12px) + 8px); right: calc(max(var(--sr), 12px) + 8px); }
 
 /* Small phones: the card drops the calling card's extra height so the column stays in the top half. */
@@ -813,10 +841,13 @@ body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; mar
 .controls.lefty .tbtn-swap { right: auto; left: calc(var(--sl) + 14px); }
 .controls.lefty .tbtn-tactical { right: auto; left: calc(var(--sl) + 86px); }
 .controls.lefty .tbtn-lethal { right: auto; left: calc(var(--sl) + 14px); }
-.controls.lefty .aim-hint { right: auto; left: calc(var(--sl) + 92px); text-align: left; box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-sodium); }
-.hud.lefty .minimap { left: auto; right: calc(var(--sr) + 8px); top: calc(var(--st) + 44px); }
-.hud.lefty .feed { left: auto; right: calc(var(--sr) + 8px); align-items: flex-end; top: calc(var(--st) + 134px); }
-.hud.lefty .corner { right: auto; left: calc(var(--sl) + 8px); }
+.controls.lefty .aim-hint { text-align: left; box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-sodium); }
+/* Every panel mirrors with the sticks: minimap and feed to the right, the corner chips and the weapon panel to the left.
+   The dock, the prompt lane and the objective strip are placed by measurement (js/ui/hud.js layout), so they follow. */
+.hud.lefty .minimap { left: auto; right: calc(var(--sr) + 8px); }
+.hud.lefty .feed { left: auto; right: calc(var(--sr) + 8px); align-items: flex-end; transform-origin: right top; }
+.hud.lefty .corner { right: auto; left: calc(var(--sl) + 8px); flex-direction: row-reverse; }
+.hud.lefty .arms { right: auto; left: calc(var(--sl) + 8px); flex-direction: row; transform-origin: left top; }
 
 /* --- Match intro: map card, mode, both rosters and a 3-2-1 over the warmup --- */
 .intro {
@@ -891,8 +922,8 @@ body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; mar
 .respawn-flash { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(circle at 50% 56%, rgba(255,247,226,.55), rgba(75,209,138,.1) 60%, transparent); }
 
 /* --- Mode objectives --- */
-.hud[data-mode="dom"] .medals, .hud[data-mode="hard"] .medals, .hud[data-mode="kc"] .medals { top: calc(var(--st) + 112px); }
-.obj-strip { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+
+.obj-strip { display: flex; align-items: center; gap: 10px; }
 .obj-chips { display: flex; gap: 6px; }
 .o-chip { position: relative; width: 34px; height: 34px; display: grid; place-items: center; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
 .o-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -927,7 +958,7 @@ body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; mar
 .o-mark.off b { font-size: 15px; }
 .hud[data-mode="hard"] .o-mark b::before { content: 'H'; font: 400 18px/1 var(--f-stencil); }
 .obj-meter {
-  position: absolute; left: 50%; top: calc(var(--st) + 90px); transform: translateX(-50%); width: 220px; height: 22px; display: grid; place-items: center; overflow: hidden;
+  width: 220px; height: 22px; display: grid; place-items: center; overflow: hidden;
   background: var(--hud-glass); box-shadow: var(--hud-edge);
   --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
@@ -949,7 +980,7 @@ body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; mar
 
 /* --- Firing range readout: a strip along the top, since thumbs own both lower corners. --- */
 .range-panel {
-  position: absolute; left: 50%; top: calc(var(--st) + 6px); transform: translateX(-50%); padding: 4px 6px 4px 10px; display: flex; align-items: center; gap: 10px;
+  padding: 4px 6px 4px 10px; display: flex; align-items: center; gap: 10px;
   background: linear-gradient(180deg, rgba(42,51,61,.94), rgba(16,20,26,.88)); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium); pointer-events: auto; white-space: nowrap;
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
@@ -970,7 +1001,7 @@ body:not(.killcam-on) .death-timer { position: absolute; left: 100%; top: 0; mar
 .range-leave { position: absolute; left: calc(var(--sl) + 8px); top: calc(var(--st) + 94px); padding: 0 14px; }
 .hud.range-on .scorebar, .hud.range-on .minimap { display: none; }
 .hud.range-on .range-leave { top: calc(var(--st) + 8px); }
-.hud.range-on .feed { left: calc(var(--sl) + 8px); top: calc(var(--st) + 50px); }
+.hud.lefty .range-leave { left: auto; right: calc(var(--sr) + 8px); }
 
 /* The killcam banner (js/game/killcam.js) takes the row under the score bar. */
 .killcam-on .obj-strip, .killcam-on .obj-meter, .killcam-on .obj-banner, .killcam-on .spectate { visibility: hidden; }
