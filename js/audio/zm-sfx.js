@@ -122,7 +122,7 @@ export class ZmSfx {
         case 'zdoor': { const p = this.#pos(view, e.by); if (p) this.#world('gate', p.x, p.z, 40, { gain: 1 }); break; }
         case 'zbuy': {
           const p = this.#pos(view, e.id);
-          if (!p || e.kind === 'door' || e.kind === 'box' || e.kind === 'perk') break;     // Those have their own.
+          if (!p || e.kind === 'door' || e.kind === 'box' || e.kind === 'perk' || e.kind === 'power') break;     // Those have their own.
           if (e.id === me) this.#ui(e.kind === 'ammo' ? 'ammo' : 'buy', 0.8); else this.#world(e.kind === 'ammo' ? 'ammo' : 'buy', p.x, p.z, 20, { gain: 0.6 });
           break;
         }
@@ -137,6 +137,7 @@ export class ZmSfx {
           break;
         }
         case 'zpower': this.#ui('power', 0.8); break;
+        case 'zlights': { const p = this.#pos(view, e.by); if (p) this.#world('gate', p.x, p.z, 80, { gain: 1 }); this.#ui('roundEnd', 0.8); break; }     // The power is on.
         case 'zdrop': this.#world('drop', e.x, e.z, 35, { gain: 0.8 }); break;
         case 'down': { const t = view?.players?.find(q => q.id === e.target), m = view?.players?.find(q => q.id === me); if (t && m && t.team === m.team && !t.zk) this.#ui('down', e.target === me ? 0.9 : 0.6); break; }
         default: break;

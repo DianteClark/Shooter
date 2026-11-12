@@ -15,14 +15,15 @@
 // Events: {t:'zround', round, boss}, {t:'zbreak', round}, {t:'zdoor', i, by}, {t:'zarm', id, slot, w} (the phone arms
 // its own gun), {t:'zammo', id, slot?} (a refill; slot omitted: both), {t:'zperk', id, perk, lost?}, {t:'zbox', state,
 // spot, gun?, by?}, {t:'zdrop', kind, x, z}, {t:'zpower', kind, by}, {t:'zbuy', id, kind, cost}, {t:'zswing', id},
-// {t:'down', ...} and {t:'revive', id, by} as in battle royale, {t:'zover', round}.
+// {t:'down', ...} and {t:'revive', id, by} as in battle royale, {t:'zover', round}, {t:'zlights', by} (the power is on,
+// on a map with a switch: layout.power).
 import { MAX_HP, WEAPON_IDS } from '../shared/constants.js';
 import { normalizeLoadout } from '../shared/catalog.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import {
   ZM, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
-  roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen,
+  roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
@@ -74,6 +75,7 @@ export class ZmRules {
     this.round = 0; this.state = 0; this.timer = ZM.warmup;
     this.count = 0; this.spawned = 0; this.killed = 0; this.spawnT = 0;
     this.open = 0;
+    this.power = this.L.power ? 0 : 1;   // A map with a switch starts dark (the machines do not sell until it is on).
     this.box = { spot: 0, state: 0, gun: -1, owner: -1, timer: 0, uses: 0, moveAt: 6 };
     this.drops = []; this.dropId = 0; this.dropsThisRound = 0; this.doubleT = 0;
     this.fields = new Map();
@@ -220,11 +222,11 @@ export class ZmRules {
     this.spawnT = spawnGap(this.round) * (0.7 + 0.6 * this.rng());
     const seat = this.horde.find(p => !p.alive && (p.zFree ?? 0) <= sim.time);
     if (!seat) return;
-    const spot = this._riser();
+    let spot = this._riser();
     if (!spot) return;
     // The boss comes with the first of a boss round; otherwise roll the mix.
     let kind = 0;
-    if (this.bossDue) { kind = 3; this.bossDue = false; }
+    if (this.bossDue) { kind = 3; this.bossDue = false; spot = this._bossSpot() ?? spot; }
     else {
       const mix = roundMix(this.round), u = this.rng();
       const brutes = this.horde.filter(q => q.alive && q.zk === 2).length;
@@ -264,6 +266,20 @@ export class ZmRules {
       if (d >= BIG) { if (!fields.length) d = 30; else continue; }
       const sc = d < 12 ? d - 30 : d > 42 ? 42 - d * 0.5 : 20 + this.rng() * 10;
       if (sc > bestS) { bestS = sc; best = s; }
+    }
+    return best;
+  }
+
+  // The boss arena (layout.boss): the boss rises there when the arena is open, at the spot furthest from the crew.
+  _bossSpot() {
+    const B = this.L.boss;
+    if (!B || !bandOpen(this.L, this.open, B.band) || !B.spots.length) return null;
+    const crew = this._targets();
+    let best = null, bd = -1;
+    for (const s of B.spots) {
+      const d = crew.reduce((m, q) => Math.min(m, Math.hypot(q.ps.x - s.x, q.ps.z - s.z)), Infinity);
+      const sc = (d === Infinity ? 0 : Math.min(d, 30)) + this.rng();
+      if (sc > bd) { bd = sc; best = s; }
     }
     return best;
   }
@@ -601,7 +617,7 @@ export class ZmRules {
     return zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p));
   }
   _stateFor(p) {
-    return { open: this.open, box: { spot: this.box.spot, state: this.box.state, gun: this.box.gun, owner: this.box.owner }, pts: p.zm.pts, perks: p.zm.perks, guns: [p.ps.primary, p.ps.secondary], me: p.index };
+    return { open: this.open, box: { spot: this.box.spot, state: this.box.state, gun: this.box.gun, owner: this.box.owner }, pts: p.zm.pts, perks: p.zm.perks, guns: [p.ps.primary, p.ps.secondary], me: p.index, power: this.power };
   }
 
   _use(p, u) {
@@ -634,6 +650,12 @@ export class ZmRules {
         this._give(p, BOX_GUNS[b.gun]);
         b.state = 0; b.gun = -1; b.owner = -1;
         sim._emit({ t: 'zbox', state: 0, spot: b.spot });
+        break;
+      }
+      case 'power': {
+        if (this.power) return false;
+        this.power = 1;
+        sim._emit({ t: 'zlights', by: p.id });
         break;
       }
       case 'perk': {
@@ -729,6 +751,13 @@ export class ZmRules {
         bot.setObjective({ key: `zbox${bx.spot}`, role: 'collect', x: bs.x, z: bs.z, r: 0.8 });
         return;
       }
+      // The power, on a map with a switch: solo with bots, one bot goes and throws it after round 2 if nobody has.
+      const run = this._powerRun(p, crew);
+      if (run) {
+        if (Math.hypot(run.x - p.ps.x, run.z - p.ps.z) < ZM.useReach * 0.8) { this._use(p, run.use); bot.setObjective(null); return; }
+        bot.setObjective({ key: `zpow${run.use.kind}${run.use.i}`, role: 'collect', x: run.x, z: run.z, r: 0.8 });
+        return;
+      }
       // Something to buy near.
       const want = this._botWant(p, humans);
       if (want) {
@@ -771,7 +800,7 @@ export class ZmRules {
       else if (hasGun && z.pts >= w.cost + 400 && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 35 + (w.cost - held) / 50 - d);
     }
     for (const m of L.machines) {
-      if (!bandOpen(L, this.open, m.band) || z.perks.includes(m.perk)) continue;
+      if (!bandOpen(L, this.open, m.band) || z.perks.includes(m.perk) || !this.power) continue;
       const cost = ZM_PERKS[m.perk].cost, d = dist(m.x, m.z);
       if (z.pts >= cost + (hasGun ? 300 : 1200) && d < 45) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 30 - d + (m.perk === 'iron' ? 10 : 0));
     }
@@ -784,10 +813,43 @@ export class ZmRules {
     if (!humans || z.pts > 4000) {
       for (const d of L.doors) {
         if (this.open & (1 << d.i) || z.pts < d.cost + (humans ? 2000 : 600)) continue;
-        if (!bandOpen(L, this.open, d.from)) continue;
+        const at = zmDoorStand(L, this.open, d);
+        if (!at) continue;
         const dd = dist(d.cx, d.cz);
-        if (dd < 50) consider({ kind: 'door', i: d.i, x: d.cx + (d.from < d.opens ? -1 : 1), z: d.cz }, 5 - dd);
+        if (dd < 50) consider({ kind: 'door', i: d.i, x: at.x, z: at.z }, 5 - dd);
       }
+    }
+    return best;
+  }
+
+  // The bot that goes for the power switch (layout.power, still off, round 3 on, at most one human in the crew): the
+  // first bot up in the crew. Its next step: the switch when the Pump Yard is open, else the gate one step nearer to it
+  // that it can pay for. Null when there is nothing for it to do (it plays as usual).
+  _powerRun(p, crew) {
+    const L = this.L;
+    if (!L.power || this.power || this.round < 3 || this.state === 3) return null;
+    if (this.crew.filter(q => !q.isBot && !q.away).length > 1) return null;
+    if (crew.find(b => b.p.alive && !b.p.downed && b.p.zm)?.p !== p) return null;
+    if (this.state === 1 && this._near(p, 5)) return null;
+    if (bandOpen(L, this.open, L.power.band)) return { x: L.power.x, z: L.power.z, use: { kind: 'power', i: 0, cost: 0, ok: true } };
+    // Gates from the power area outward: how many each area is from it.
+    if (!this._pDist) {
+      const dist = L.bands.map(() => Infinity);
+      dist[L.power.band] = 0;
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const d of L.doors) for (const [u, v] of [[d.a ?? d.from, d.b ?? d.opens], [d.b ?? d.opens, d.a ?? d.from]]) if (dist[u] + 1 < dist[v]) { dist[v] = dist[u] + 1; grew = true; }
+      }
+      this._pDist = dist;
+    }
+    let best = null, bd = Infinity;
+    for (const d of L.doors) {
+      if (this.open & (1 << d.i) || p.zm.pts < d.cost) continue;
+      const at = zmDoorStand(L, this.open, d);
+      if (!at) continue;
+      const far = bandOpen(L, this.open, d.a ?? d.from) ? (d.b ?? d.opens) : (d.a ?? d.from);
+      const sc = this._pDist[far] * 100 + Math.hypot(at.x - p.ps.x, at.z - p.ps.z);
+      if (sc < bd) { bd = sc; best = { x: at.x, z: at.z, use: { kind: 'door', i: d.i, cost: d.cost, ok: true } }; }
     }
     return best;
   }
@@ -819,7 +881,7 @@ export class ZmRules {
   view() {
     const V = this.V, b = this.box;
     V.round = this.round; V.state = STATES[this.state]; V.timer = this.timer; V.left = Math.max(0, this.count - this.killed);
-    V.count = this.count; V.open = this.open; V.doubleT = this.doubleT; V.best = this.best;
+    V.count = this.count; V.open = this.open; V.doubleT = this.doubleT; V.best = this.best; V.power = this.power;
     V.box = { spot: b.spot, state: b.state, gun: b.gun >= 0 ? BOX_GUNS[b.gun] : null, owner: b.owner, timer: b.timer };
     V.drops = this.drops;
     V.layout = this.L;
@@ -830,7 +892,7 @@ export class ZmRules {
   }
 
   // [round, state, timer ds, left, open, box [spot, state, gun, owner, timer ds], double ds, crew [pts, perk bits |
-  // down | revive], zombies (packed), drops [id, kind, x, z]..., boss hp %, count, best].
+  // down | revive], zombies (packed), drops [id, kind, x, z]..., boss hp %, count, best, power].
   encode() {
     const sim = this.sim, b = this.box;
     const crew = this.crew.map(p => {
@@ -848,7 +910,7 @@ export class ZmRules {
     return [this.round, this.state, Math.round(this.timer * 10), Math.max(0, this.count - this.killed), this.open,
       [b.spot, b.state, b.gun, b.owner, Math.round(b.timer * 10)], Math.round(this.doubleT * 10), crew, zs,
       this.drops.flatMap(d => [d.id, ZM_POWERUPS.indexOf(d.kind), r1(d.x), r1(d.z)]),
-      boss?.alive && boss.zk === 3 ? Math.round(boss.hp / Math.max(1, boss.zMax) * 100) : -1, this.count, this.best];
+      boss?.alive && boss.zk === 3 ? Math.round(boss.hp / Math.max(1, boss.zMax) * 100) : -1, this.count, this.best, this.power];
   }
 
   // Zombie seats never go out as player records to a guest: the block above carries them.
@@ -865,7 +927,8 @@ export class ZmRules {
       return this.view();
     }
     if (a) {
-      const [round, state, timer, left, open, box, dbl, crew, zs, drops, boss, count, best] = a;
+      const [round, state, timer, left, open, box, dbl, crew, zs, drops, boss, count, best, power] = a;
+      this.power = power ?? 1;
       this.round = round; this.state = state; this.timer = timer / 10; this.count = count ?? 0; this.killed = Math.max(0, this.count - left);
       this.best = best ?? 0;
       if (open !== this.open) { this.open = open; syncZmDoors(sim.map, open); }
@@ -921,6 +984,7 @@ export class ZmRules {
       Object.assign(this.box, old.box, { moveAt: this._moveAt(), uses: 0 });
       this.drops = old.drops.map(d => ({ ...d, t: sim.time }));
       this.doubleT = old.doubleT;
+      this.power = old.power ?? 1;
     }
     syncZmDoors(sim.map, this.open);
     this.hp = roundHp(Math.max(1, this.round));

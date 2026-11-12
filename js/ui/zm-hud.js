@@ -170,16 +170,16 @@ export class ZmHud {
     // The use button: whatever is in reach.
     const idx = view.players.indexOf(me);
     const guns = this.guns?.() ?? [me.weapon];
-    const u = me.alive && !me.downed ? zmUsable(z.layout, me.x, me.z, { open: z.open, box: { spot: z.box?.spot ?? -1, state: z.box?.state ?? 0, gun: z.box?.gun, owner: z.box?.owner ?? -1 }, pts, perks: me.zperks ?? [], guns, me: idx }) : null;
+    const u = me.alive && !me.downed ? zmUsable(z.layout, me.x, me.z, { open: z.open, box: { spot: z.box?.spot ?? -1, state: z.box?.state ?? 0, gun: z.box?.gun, owner: z.box?.owner ?? -1 }, pts, perks: me.zperks ?? [], guns, me: idx, power: z.power ?? 1 }) : null;
     this.use = u;
-    const key = u ? `${u.kind}:${u.i}:${u.ok}:${u.gun ?? ''}` : '';
+    const key = u ? `${u.kind}:${u.i}:${u.ok}:${u.gun ?? ''}:${u.off ? 1 : 0}` : '';
     if (c.use !== key) {
       c.use = key;
       this.useEl.hidden = !u;
       if (u) {
         const gun = u.gun ? WEAPONS[u.gun]?.name ?? u.gun : '';
         const title = u.kind === 'door' ? 'OPEN GATE' : u.kind === 'wall' ? `BUY ${gun}` : u.kind === 'ammo' ? `AMMO ${gun}` : u.kind === 'box' ? 'MYSTERY CRATE' : u.kind === 'take' ? `TAKE ${gun}` : u.label.toUpperCase();
-        const sub = u.kind === 'take' ? 'Free: it is yours' : u.kind === 'perk' ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : u.ok ? fmt(u.cost) : `${fmt(u.cost)} · need ${fmt(u.cost - pts)} more`;
+        const sub = u.off ? `${fmt(u.cost)} · No power: find the switch` : u.kind === 'power' ? 'Free: lights the perk machines' : u.kind === 'take' ? 'Free: it is yours' : u.kind === 'perk' ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : u.ok ? fmt(u.cost) : `${fmt(u.cost)} · need ${fmt(u.cost - pts)} more`;
         this.useT.textContent = title;
         this.useS.textContent = sub;
         this.useEl.classList.toggle('poor', !u.ok);
@@ -219,10 +219,16 @@ export class ZmHud {
     const me = view?.players?.find(p => p.id === view.localId);
     const name = id => view?.players?.find(p => p.id === id)?.name ?? '';
     switch (e.t) {
-      case 'zround': this.hud.banner(`Round ${e.round}`, e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', 1800, 'enemy'); break;
+      case 'zround': {
+        this.hud.banner(`Round ${e.round}`, e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', 1800, 'enemy');
+        const z = objOf(view);
+        if (e.round === 1 && z?.layout?.power && !z.power) this.hud.notify(`The power is out: throw the switch in the ${z.layout.bands[z.layout.power.band]?.name ?? 'yard'} to wake the perk machines`);
+        break;
+      }
       case 'zbreak': this.hud.banner(`Round ${e.round} survived`, `Next round in ${ZM.between} s`, 1600); break;
       case 'zpower': this.hud.banner(ZM_POWERUP_NAMES[e.kind] ?? 'Power-up', e.kind === 'ammo' ? 'Every gun topped up' : e.kind === 'double' ? `Double points for ${ZM.drop.double} s` : 'The horde drops where it stands', 1500); break;
       case 'zdoor': this.hud.notify(`${name(e.by)} opened a gate`); break;
+      case 'zlights': this.hud.banner('The power is on', `${name(e.by)} threw the switch: the perk machines are live`, 1800); break;
       case 'zbox':
         if (e.state === 2 && e.by === me?.id) this.hud.notify(`The crate offers a ${WEAPONS[e.gun]?.name ?? e.gun}: take it`);
         if (e.state === 3) this.hud.notify('The crate is moving on');
