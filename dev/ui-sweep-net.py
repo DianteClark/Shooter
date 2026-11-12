@@ -48,7 +48,17 @@ async def run_case(browser, name, mapId, mode, fails):
         await pg.wait_for_timeout(1000)
         return pg
     host = await page('host', 'Hosty')
-    await host.locator('[data-act="host"]').first.click()
+    if mode == 'zm':
+        # Graveyard Shift with friends: Multiplayer > Zombies > With friends hosts a custom room set to the mode.
+        await host.locator('[data-act="multiplayer"]').first.click()
+        await host.wait_for_timeout(500)
+        await host.locator('[data-act="mpTab"][data-tab="zombies"]').first.click()
+        await host.wait_for_timeout(300)
+        await host.locator('[data-act="mpPlaylist"][data-id="zmfriends"]').first.click()
+        await host.wait_for_timeout(300)
+        await host.locator('[data-act="mpFind"]').first.click()
+    else:
+        await host.locator('[data-act="host"]').first.click()
     await host.wait_for_function(f'{G}.code', timeout=30000)
     code = await host.evaluate(f'{G}.code')
     guest = await page('guest', 'Guesty')
@@ -68,12 +78,14 @@ async def run_case(browser, name, mapId, mode, fails):
         await guest.locator('[data-act="toggleReady"]').first.click()
         await host.wait_for_function(f'{G}.lobby.humans.every(h => h.ready || h.host)', timeout=20000)
         await host.wait_for_timeout(300)
+        if mode == 'zm': await host.evaluate(f"{G}.lobby.custom.mapId = '{mapId}'")
         await host.locator('[data-act="start"]').first.click()
-        await host.wait_for_function(f'{G}.vote?.options', timeout=20000)
-        await host.evaluate(f"(() => {{ const o = {G}.vote.options; o[0] = {{ ...o[0], mapId: '{mapId}', mode: '{mode}' }}; }})()")
-        for pg in pages:
-            try: await pg.locator('.vote-card[data-i="0"]').click(timeout=4000)
-            except Exception: pass
+        if mode != 'zm':
+            await host.wait_for_function(f'{G}.vote?.options', timeout=20000)
+            await host.evaluate(f"(() => {{ const o = {G}.vote.options; o[0] = {{ ...o[0], mapId: '{mapId}', mode: '{mode}' }}; }})()")
+            for pg in pages:
+                try: await pg.locator('.vote-card[data-i="0"]').click(timeout=4000)
+                except Exception: pass
         await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=60000)
         await guest.wait_for_function(f'{G}.inMatch && !!{G}.match?.interp?.newest', timeout=60000)
         got = await host.evaluate(f"[{G}.match.mapId, {G}.match.mode]")

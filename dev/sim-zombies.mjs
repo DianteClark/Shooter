@@ -365,6 +365,19 @@ section('wire');
     ok(G.round === 3 && G.open === R.open && G.crew[1].zm.pts === 1234, 'migration keeps round, gates and points');
     ok(G.horde.filter(p => p.alive).every(p => p.hp > 0 && p.noRegen), 'migration: live zombies have health and no regen');
   }
+  // As the game migrates (js/game/match.js promoteToHost): a new Sim from the guest's newest view, whose players start
+  // blank. Points, perks, plates and tiers must come over from the mirror (they reset to 500 and nothing before).
+  {
+    R.crew[1].zm.perks = ['iron']; R.crew[1].zm.plates = 100; R.crew[1].zm.tiers = { pistol: 2 };
+    host.step(DT);     // The crew block is encoded once a tick.
+    const g2map = { ...MAPS.ruins, walls: MAPS.ruins.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+    const g2 = new Sim({ roster, map: g2map, seed: 9, mode: 'zm' });
+    const v2 = g2.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+    const n2 = Sim.fromSnapshot(v2, roster, { map: { ...MAPS.ruins, walls: MAPS.ruins.walls.filter(w => !w.zm).map(w => ({ ...w })) }, seed: 9 });
+    const c = n2.rules.crew.find(p => p.id === 'h2').zm;
+    ok(c.pts === 1234 && c.perks.includes('iron') && c.plates === 100 && c.tiers.pistol === 2, `a migration onto a new Sim keeps points, perks, plates and tiers (${c.pts}, ${c.perks}, ${c.plates}, ${JSON.stringify(c.tiers)})`);
+    clearZmWalls(n2.map);
+  }
 }
 {
   const s = blankSave();

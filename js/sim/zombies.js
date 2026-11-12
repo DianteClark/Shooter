@@ -1112,6 +1112,10 @@ export class ZmRules {
         }
         return;
       }
+      // A real migration builds a new Sim (js/game/match.js promoteToHost): its players start with a blank crew state,
+      // so points, perks, plates and tiers come from the guest's mirror (the old rules), by player id.
+      const prev = old && old !== this ? old.crew?.find(q => q.id === p.id)?.zm : null;
+      if (prev) p.zm = { ...prev, perks: [...(prev.perks ?? [])], tiers: { ...(prev.tiers ?? {}) }, spentBy: { ...(prev.spentBy ?? {}) } };
       p.zm ??= ZmRules.crewState();
       Object.assign(p.zm, { ...ZmRules.crewState(), ...p.zm, downedBy: null });
       p.downed = !!v?.downed && p.alive;
