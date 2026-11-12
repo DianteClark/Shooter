@@ -7,7 +7,7 @@
 // across every open run it crosses except one, which takes a door; buying the door opens the next band. Players start
 // in band `start`. Everything placed (wall-buys, crate spots, machines, risers) sits on open floor reachable inside its
 // band, found from the map's walls on a 1 m grid, so the layout is the same on the host and every guest.
-import { PLAYER_RADIUS } from './constants.js';
+import { PLAYER_RADIUS, WEAPON_CATEGORY } from './constants.js';
 import { wallsInBox } from './geometry.js';
 
 export const ZM_TEAM = 1;              // The horde's side; players (humans and bot teammates) are team 0.
@@ -35,13 +35,16 @@ export const ZM = {
     runner: { hp: 0.85, dmg: 36, speed: 0.84, reach: 1.25, windup: 0.4, cool: 1 },
     brute: { hp: 4, dmg: 70, speed: 0.5, reach: 1.5, windup: 0.6, cool: 1.4 },
     boss: { hp: 22, dmg: 90, speed: 0.62, reach: 1.9, windup: 0.7, cool: 1.5 },
+    // The Gravewarden: only the altar's quest raises it (ZE.quest), never a round.
+    warden: { hp: 40, dmg: 110, speed: 0.66, reach: 2.1, windup: 0.75, cool: 1.35 },
   },
   roundMax: 220,                       // Zombies in one round, at most.
   xp: { kill: 12, head: 4, round: 120, boss: 400 },     // Account XP in place of the usual kill lines (awards.js).
   weaponXp: 0.3,                       // Share of the usual weapon XP a zombie kill pays.
+  perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };
-export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss'];
-export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster' };
+export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden'];
+export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster', warden: 'Gravewarden' };
 
 // Perk machines, our own: what each does is applied by the host (js/sim/zombies.js), Quickdraw also on the phone.
 export const ZM_PERKS = {
@@ -49,8 +52,11 @@ export const ZM_PERKS = {
   quick: { id: 'quick', name: 'Quickdraw', cost: 3000, color: 0x3fb2ff, css: '#3fb2ff', desc: 'Faster reloads and swaps' },
   mercy: { id: 'mercy', name: 'Mercy Run', cost: 1500, color: 0x4fd36a, css: '#4fd36a', desc: 'Revive teammates twice as fast' },
   hammer: { id: 'hammer', name: 'Hammerfall', cost: 2000, color: 0xf2b630, css: '#f2b630', desc: 'Every round hits 50% harder' },
+  // ROADMAP item 36: two more machines, and a cap on how many a player holds (ZM.perkLimit, raised by a perk slot).
+  stride: { id: 'stride', name: 'Fleetfoot', cost: 2000, color: 0x2fe0c8, css: '#2fe0c8', desc: 'Faster sprint, quicker slides' },
+  breath: { id: 'breath', name: 'Last Breath', cost: 3500, color: 0xb070ff, css: '#b070ff', desc: 'Go down and get yourself up: once every 3 rounds' },
 };
-export const ZM_PERK_IDS = ['iron', 'quick', 'mercy', 'hammer'];
+export const ZM_PERK_IDS = ['iron', 'quick', 'mercy', 'hammer', 'stride', 'breath'];
 export const ZM_POWERUPS = ['ammo', 'double', 'nuke'];
 export const ZM_POWERUP_NAMES = { ammo: 'Full Crate', double: 'Double Pay', nuke: 'Clean Sweep' };
 
@@ -69,6 +75,53 @@ export const BOX_GUNS = ['rotary', 'beltlmg', 'drumsmg', 'heavysmg', 'lightlmg',
   'scatter', 'deuce', 'maul', 'heavyar', 'lmg', 'autoshot'];
 export const START_GUN = 'pistol';
 export const NO_GUN = 'knife';
+
+// ---- The economy (ROADMAP item 36, docs/ZOMBIES.md "Economy"): somewhere for points to go after the perks ----
+//   bench     the upgrade bench: the gun in your hands through three tiers (damage, magazine, reserve; tier 3 adds a
+//             round effect by the gun's class). The gun goes in for `time` s; nobody else can use the bench meanwhile.
+//   supply    the supply terminal: zombie-tuned streaks for points (the loadout's own streaks are off in this mode)
+//   plate     the armour bench: plates (a bar of three) soak claws before health
+//   trap      pay to arm for `on` s, then `cool` s of cooldown; kills pay `pay` instead of a kill's points; players in
+//             it take `playerDps`
+//   exfil     from round `from`: call it at the pad, hold out `hold` s at the pad, and whoever is on it gets out
+//   quest     three relics hidden across the map, set on the altar: the Gravewarden rises (ZM.kinds.warden)
+export const ZE = {
+  bench: { cost: [5000, 15000, 30000], time: 4, hold: 30 },
+  // Per tier: damage, magazine and reserve multipliers (tier 0 is the gun as bought).
+  tiers: [{ dmg: 1, mag: 1, res: 1 }, { dmg: 1.8, mag: 1.35, res: 1.7 }, { dmg: 3, mag: 1.7, res: 2.3 }, { dmg: 4.4, mag: 1.7, res: 2.6 }],
+  plate: { hp: 50, max: 3, cost: 500 },
+  // Supply terminal items: base price (rising `scale` a round past round 1, rounded to 50), and one of each per player
+  // per round. Damage is in round-health shares (roundHp), so a sentry stays useful at round 30.
+  supply: {
+    sentry: { name: 'Sentry Gun', cost: 1500, desc: 'A turret at your feet: 40 s of fire on the undead', life: 40, range: 15, gap: 0.16, hit: 0.12 },
+    strike: { name: 'Air Strike', cost: 2500, desc: 'Marks the thickest crowd near you: five shells, 4 m each', delay: 1.6, shells: 5, every: 0.45, r: 4, hit: 3, boss: 0.06 },
+    drone: { name: 'Hunter Drone', cost: 2000, desc: 'Flies with you and hunts the undead for 45 s', life: 45, range: 18, gap: 0.22, hit: 0.14 },
+    lure: { name: 'Lure', cost: 1000, desc: 'A noisy decoy: the undead go for it for 12 s, then it blows', life: 12, pull: 30, r: 5, hit: 2 },
+    vest: { name: 'Armour Vest', cost: 1250, desc: 'Every plate at once, wherever you are' },
+  },
+  supplyOrder: ['sentry', 'strike', 'drone', 'lure', 'vest'],
+  supplyScale: 0.05,
+  gearMax: 8,                       // Sentries, drones, lures and strikes in play at once (the crew's).
+  trap: { cost: 1000, on: 30, cool: 45, playerDps: 14, pay: 10, dps: 1.4, boss: 0.012, r: 1.7 },
+  exfil: { from: 15, cost: 12000, hold: 60, r: 3.2, gap: 0.42 },
+  quest: { pts: 3000 },
+};
+export const ZM_TRAP_KINDS = ['shock', 'vent', 'blade'];
+export const ZM_TRAP_NAMES = { shock: 'Live Rail', vent: 'Firedamp Vents', blade: 'Threshers' };
+// Round effects at tier 3, by the gun's class; each has its look (an existing camo: the gun's glow and its tracers).
+export const ZM_FX = {
+  fire: { name: 'Ember Rounds', desc: 'Sets the undead burning', camo: 'molten', css: '#ff6a1a' },
+  shock: { name: 'Arc Rounds', desc: 'Jumps to two more nearby', camo: 'wire', css: '#5ad2ff' },
+  blast: { name: 'Burst Rounds', desc: 'Every hit bursts', camo: 'horizon', css: '#ffa040' },
+  frost: { name: 'Rime Rounds', desc: 'Slows what it hits', camo: 'pp-silver', css: '#7ee0ff' },
+};
+const FX_BY_CATEGORY = { SMG: 'fire', Pistol: 'fire', Assault: 'shock', LMG: 'shock', Shotgun: 'blast', Launcher: 'blast', Marksman: 'frost', Sniper: 'frost' };
+export const zmFxOf = gun => FX_BY_CATEGORY[WEAPON_CATEGORY[gun]] ?? 'shock';
+export const ZM_TIER_CAMO = [null, 'pp-laurel', 'gold'];
+// The camo a gun wears at a tier (null: its own).
+export const zmTierCamo = (gun, tier) => (tier >= 3 ? ZM_FX[zmFxOf(gun)].camo : ZM_TIER_CAMO[tier] ?? null);
+export const zmUpgradable = gun => !!gun && gun !== NO_GUN && WEAPON_CATEGORY[gun] !== 'Melee' && !!WEAPON_CATEGORY[gun];
+export const supplyCost = (item, round) => Math.round(ZE.supply[item].cost * (1 + ZE.supplyScale * Math.max(0, (round | 0) - 1)) / 50) * 50;
 
 // ---- Rounds ----
 
@@ -306,9 +359,86 @@ export function zmLayout(map) {
     if (starts.length < ZM_SQUAD && starts.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 1.8)) starts.push(p);
   }
 
-  const L = { mapId: map.id, def, start: def.start, bands, fences, doors, wallBuys, boxSpots, machines, risers, starts, W, H, main, band, cellAt };
+  // ---- The economy's pieces (ROADMAP item 36). Placed after everything above, so the older placements stay put. ----
+  // The two newer perk machines in the nearest bands past the start; the terminal in the start band, the armour bench
+  // one gate out, the upgrade bench at the deepest band; a trap just through each of the first three gates (a gate is a
+  // chokepoint); the exfil pad on open ground in a far band and the altar against a wall in another; the three relics
+  // tucked away (the floor cell furthest from its band's middle) in three different bands.
+  const out = byDepth.filter(b => b.i !== def.start), last = byDepth[byDepth.length - 1];
+  ['stride', 'breath'].forEach((perk, k) => {
+    const b = out[k % Math.max(1, out.length)] ?? sb;
+    const m = pickSpread(wallSpots(b), 1, taken, b.cx, b.cz, 5)[0] ?? pickSpread(wallSpots(b), 1, taken, b.cx, b.cz, 3)[0];
+    if (m) { const mc = { i: machines.length, band: b.i, perk, ...m }; machines.push(mc); taken.push(mc); }
+  });
+  const station = (b, gap = 5) => {
+    const s = pickSpread(wallSpots(b), 1, taken, b.cx, b.cz, gap)[0] ?? pickSpread(wallSpots(b), 1, taken, b.cx, b.cz, 3)[0];
+    if (!s) return null;
+    const st = { i: 0, band: b.i, ...s };
+    taken.push(st);
+    return st;
+  };
+  const terminal = station(sb), armour = station(out[0] ?? sb), bench = station(last);
+  const traps = [];
+  for (const d of [...doors].sort((a, b) => a.i - b.i).slice(0, 3)) {
+    const dir = d.opens > d.cut ? 1 : -1;
+    for (const off of [2.8, 2.2, 3.4, 4]) {
+      const x = d.cx + dir * off, z = d.cz, k = cellAt(x, z);
+      if (!main[k] || band[k] !== d.opens) continue;
+      traps.push({ i: traps.length, band: d.opens, x, z, r: ZE.trap.r });
+      break;
+    }
+  }
+  const roomy2 = k => { const i = k % W, j = Math.floor(k / W); for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (!main[(j + dj) * W + i + di]) return false; return true; };
+  const xb = byDepth.length >= 3 ? byDepth[byDepth.length - 2] : last;
+  let exfil = null, ebest = -Infinity;
+  for (const k of xb.cells) {
+    if (!roomy2(k)) continue;
+    const x = k % W + 0.5, z = Math.floor(k / W) + 0.5;
+    const sc = Math.min(...doors.map(d => Math.hypot(d.cx - x, d.cz - z)), 18) - Math.hypot(x - xb.cx, z - xb.cz) * 0.25
+      - (taken.some(t => Math.hypot(t.x - x, t.z - z) < 4) ? 50 : 0);
+    if (sc > ebest) { ebest = sc; exfil = { x, z, r: ZE.exfil.r, band: xb.i }; }
+  }
+  const altar = station(xb === last && out.length > 1 ? out[out.length - 2] : xb, 4);
+  const relics = [];
+  for (const b of [...out.slice().reverse(), sb]) {
+    if (relics.length >= 3) break;
+    let best = null, bd = -Infinity;
+    for (const k of b.cells) {
+      const x = k % W + 0.5, z = Math.floor(k / W) + 0.5;
+      if (nearDoor(x, z, 4) || [...taken, ...relics].some(t => Math.hypot(t.x - x, t.z - z) < 5)) continue;
+      if (exfil && Math.hypot(exfil.x - x, exfil.z - z) < 6) continue;
+      const sc = Math.hypot(x - b.cx, z - b.cz);
+      if (sc > bd) { bd = sc; best = { i: relics.length, band: b.i, x, z }; }
+    }
+    if (best) relics.push(best);
+  }
+
+  const L = { mapId: map.id, def, start: def.start, bands, fences, doors, wallBuys, boxSpots, machines, risers, starts, W, H, main, band, cellAt,
+    bench, terminal, armour, traps, exfil, altar, relics };
+  finishEcon(L);
   Object.defineProperty(map, '_zmLayout', { value: L, configurable: true, writable: true, enumerable: false });
   return L;
+}
+
+// Trap kinds by index and each trap's switch: open floor just outside the trap (its own area first), where a player
+// stands to pay for it without standing in it.
+function finishEcon(L) {
+  for (const t of L.traps) {
+    t.kind = ZM_TRAP_KINDS[t.i % ZM_TRAP_KINDS.length];
+    let at = null;
+    for (const pass of [0, 1]) {
+      for (const rr of [t.r + 1.1, t.r + 1.6, t.r + 2.2]) {
+        for (let k = 0; k < 16 && !at; k++) {
+          const a = (k / 16) * Math.PI * 2, x = t.x + Math.cos(a) * rr, z = t.z + Math.sin(a) * rr, c = L.cellAt(x, z);
+          if (x < 0 || z < 0 || !L.main[c] || (pass === 0 && L.band[c] !== t.band)) continue;
+          at = { x, z };
+        }
+        if (at) break;
+      }
+      if (at) break;
+    }
+    t.sx = at?.x ?? t.x; t.sz = at?.z ?? t.z + t.r + 1;
+  }
 }
 
 // ---- The graph form: a layout declared on the map (`map.zm`), for maps built for the mode ----
@@ -413,10 +543,18 @@ function graphLayout(map, def) {
   for (const [k, v] of Object.entries(Z.reserved ?? {})) {
     reserved[k] = Array.isArray(v) ? v.map(p => ({ ...p, band: bandAt(p.x, p.z) })) : { ...(v.wall ? onWall(v) : { x: v.x, z: v.z }), ...v, band: bandAt(v.x, v.z) };
   }
+  // The economy's pieces on the spots the map kept for them, the quest's altar and relics on its own (`quest`).
+  const st = s => (s ? { i: 0, ...onWall(s) } : null);
+  const Q = Z.quest ?? {};
   const L = {
     mapId: map.id, def, graph: true, start, bands, fences: [], doors, wallBuys, boxSpots, machines, risers, starts: Z.starts.map(p => ({ x: p.x, z: p.z })),
     power, boss, reserved, W, H, main, band, cellAt,
+    bench: st(Z.reserved?.bench), terminal: st(Z.reserved?.terminal), armour: st(Z.reserved?.armour),
+    traps: (Z.reserved?.traps ?? []).map((t, i) => ({ i, x: t.x, z: t.z, r: t.r ?? ZE.trap.r, band: bandAt(t.x, t.z) })),
+    exfil: Z.reserved?.exfil ? { x: Z.reserved.exfil.x, z: Z.reserved.exfil.z, r: Z.reserved.exfil.r ?? ZE.exfil.r, band: bandAt(Z.reserved.exfil.x, Z.reserved.exfil.z) } : null,
+    altar: st(Q.altar), relics: (Q.relics ?? []).map((r, i) => ({ i, x: r.x, z: r.z, band: bandAt(r.x, r.z) })),
   };
+  finishEcon(L);
   Object.defineProperty(map, '_zmLayout', { value: L, configurable: true, writable: true, enumerable: false });
   return L;
 }
@@ -486,9 +624,12 @@ export function reblockNav(nav, map, r) {
 
 // ---- What a player can use where they stand (the HUD's prompt and the host's check are the same function) ----
 
-// state: { open (door bits), box: {spot, state, gun, owner}, pts, perks: [ids], guns: [primary, secondary], power }.
-// Returns { kind: 'door'|'wall'|'ammo'|'box'|'take'|'perk'|'power', i, cost, label, ok, off? } for the nearest usable
-// thing, or null. `off`: a perk machine on a map whose power is still off (shown, never ok).
+// state: { open (door bits), box: {spot, state, gun, owner}, pts, perks: [ids], guns: [primary, secondary], power, me,
+// and for the economy: limit (perk limit), held (gun in hand), tier (its tier), bench {state, owner, gun, tier}, traps
+// [state per trap: 0 idle, 1 running, 2 cooling], plates (hp), exfil (0 idle), round, quest {got bits, state} }.
+// Returns { kind, i, cost, label, ok, off?, why? } for the nearest usable thing, or null. Kinds: door, wall, ammo, box,
+// take, perk, slot, power, terminal, armour, bench, benchwait, benchtake, trap, exfil, relic, altar. `off`: shown, never
+// ok (a dark machine, a busy bench, a running trap...); `why` says why.
 export function zmUsable(L, x, z, st) {
   if (!L) return null;
   let best = null, bestD = ZM.useReach;
@@ -522,11 +663,58 @@ export function zmUsable(L, x, z, st) {
     const dist = near(m.x, m.z);
     if (dist < 0) continue;
     bestD = dist;
-    best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: dark || undefined };
+    // At the perk limit a machine sells a perk slot instead (once), then nothing more.
+    const limit = st.limit ?? ZM.perkLimit, full = (st.perks?.length ?? 0) >= limit;
+    if (full && limit < ZM.perkMax) best = { kind: 'slot', i: m.i, cost: ZM.slotCost, perk: m.perk, label: 'Perk slot', off: dark || undefined };
+    else if (full) best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: true, why: `Perk limit: ${limit}` };
+    else best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: dark || undefined };
   }
   if (dark && bandOpen(L, st.open, L.power.band)) {
     const dist = near(L.power.x, L.power.z);
     if (dist >= 0) { bestD = dist; best = { kind: 'power', i: 0, cost: 0, label: 'Turn on the power' }; }
+  }
+  // The economy (ROADMAP item 36).
+  const at = (p, make) => {
+    if (!p || !bandOpen(L, st.open, p.band)) return;
+    const dist = near(p.x, p.z);
+    if (dist < 0) return;
+    const u = make();
+    if (u) { bestD = dist; best = u; }
+  };
+  at(L.terminal, () => ({ kind: 'terminal', i: 0, cost: 0, label: 'Supply terminal' }));
+  at(L.armour, () => {
+    const full = (st.plates ?? 0) >= ZE.plate.hp * ZE.plate.max - 0.5;
+    return { kind: 'armour', i: 0, cost: ZE.plate.cost, label: 'Armour plate', off: full || undefined, why: full ? 'Plates full' : undefined };
+  });
+  at(L.bench, () => {
+    const b = st.bench ?? { state: 0, owner: -1 };
+    if (b.state && b.owner === st.me) return b.state === 2 ? { kind: 'benchtake', i: 0, cost: 0, gun: b.gun, tier: b.tier, label: 'Take' }
+      : { kind: 'benchwait', i: 0, cost: 0, gun: b.gun, tier: b.tier, label: 'Upgrading', off: true, why: 'Working on it' };
+    if (b.state) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'In use' };
+    const g = st.held, t = st.tier ?? 0;
+    if (!zmUpgradable(g)) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'Hold a gun to upgrade it' };
+    if (t >= 3) return { kind: 'bench', i: 0, cost: 0, gun: g, tier: 3, label: 'Upgrade bench', off: true, why: 'Fully upgraded' };
+    return { kind: 'bench', i: 0, gun: g, tier: t + 1, cost: ZE.bench.cost[t], label: 'Upgrade' };
+  });
+  for (const t of L.traps ?? []) {
+    at({ x: t.sx, z: t.sz, band: L.band[L.cellAt(t.sx, t.sz)] >= 0 ? L.band[L.cellAt(t.sx, t.sz)] : t.band }, () => {
+      const s = st.traps?.[t.i] ?? 0;
+      return { kind: 'trap', i: t.i, cost: ZE.trap.cost, label: ZM_TRAP_NAMES[t.kind], trap: t.kind, off: s ? true : undefined, why: s === 1 ? 'Running' : s === 2 ? 'Cooling down' : undefined };
+    });
+  }
+  if (L.exfil && bandOpen(L, st.open, L.exfil.band) && !st.exfil) {
+    const dist = Math.max(0, Math.hypot(L.exfil.x - x, L.exfil.z - z) - L.exfil.r + 0.6);
+    if (dist < bestD) {
+      bestD = dist;
+      const early = (st.round ?? 0) < ZE.exfil.from;
+      best = { kind: 'exfil', i: 0, cost: ZE.exfil.cost, label: 'Call the exfil', off: early || undefined, why: early ? `From round ${ZE.exfil.from}` : undefined };
+    }
+  }
+  const q = st.quest ?? { got: 0, state: 0 };
+  if (!q.state) {
+    for (const r of L.relics ?? []) if (!(q.got & (1 << r.i))) at(r, () => ({ kind: 'relic', i: r.i, cost: 0, label: 'Pick it up' }));
+    const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
+    at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Set the relics' : 'The altar', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 3} relics found` }));
   }
   if (best) best.ok = !best.off && best.cost <= (st.pts ?? 0);
   return best;
