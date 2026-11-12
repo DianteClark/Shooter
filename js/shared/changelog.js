@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-11', title: 'Rebound and Showdown',
+    items: [
+      'New on the Battle Royale tab: Rebound. A fast battle royale on one part of Frontier, in squads of four or pairs, with a quicker circle and matches of about eight to ten minutes.',
+      'In Rebound, die while a squadmate is still in and you parachute back in next to them after a short countdown, with a gun, a sidearm and some armor. A note under the circle clock says at which circle redeploys end.',
+      'New on the Standard tab: Showdown 2v2. Short rounds on the small maps, one life each, first to 6 rounds. Play it with a friend or with a bot partner.',
+      'In Showdown everyone gets the same random kit, a new one every two rounds. Enemy health shows over their heads, and if the clock runs out a flag rises in the middle: stand on it to win the round.',
+      'Showdown joins the featured playlist rotation and the daily challenges. Both modes are explained in How to play > Modes.',
+    ],
+  },
+  {
     build: '1111-23', date: '2026-11-11', title: 'A cleaner match HUD',
     items: [
       'The weapon and ammo panel now sits up by the top corner, clear of the aim stick, on every iPhone size.',
