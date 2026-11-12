@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Accessibility',
+    build: '1111-27', date: '2026-11-12', title: 'Accessibility',
     items: [
       'New in Options: Accessibility. Colour modes for red-weak, green-weak and blue-weak eyes, and a high contrast mode. They change team colours everywhere: players, rings, the minimap, the kill feed, objectives, squads and loot.',
       'In a colour mode enemies also differ in shape: their rings are dashed and their kill feed rows are striped. Battle royale guns show their rarity as pips.',
