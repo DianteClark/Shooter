@@ -214,3 +214,44 @@ in `BR` (js/shared/modes.js).
   deaths, and 3 or more squads at phase 4 and 2 or more at phase 5, over 12 matches (now 11.3 min, 35%, 6.1 and 3.0).
   After the dev merge (signature attachments) quads measured 12.2 min, 46% early, and 5.6/4.8/3.8/2.1 squads; duos
   12.1 min, 28%, 10.7/6.8/3.8/2.2; solos 12.3 min, 38%, 12.3/6.8/3.5/2.8.
+
+## Rebound (ROADMAP item 27)
+The roadmap's "Resurgence": a small, fast battle royale with redeploys. Modes `rb` (Quads, 24 players, 6 squads) and
+`rbduo` (Duos, 20 players, 10 pairs), on the Battle Royale tab of Multiplayer. Both are the `br` rule set with
+`rebound: true` (js/shared/modes.js), so loot, plates, medkits, downs, revives, the transport and glide, spectating,
+results and XP are battle royale's own; the numbers that differ are `RB` in js/shared/modes.js, and the code is the
+`this.rb` branches of js/sim/br.js.
+- Area: `reboundArea(map, seed)` (js/sim/br.js) puts a circle of `RB.area` (150 m) on the map where the named places are
+  thickest (the seed picks among the four best centres, 60 m or more apart; 4 regions of Frontier over 40 seeds). It is
+  the first circle (44% of Frontier). The transport flies a line across it, never far off its middle; bots only drop on
+  places and loot spots inside it (`_dropCands`) and only jump over it.
+- Circle: `RB.phases`, six phases whose radius `k` is a share of the area's: 75/45 0.68 3, 65/40 0.46 5, 60/35 0.31 8,
+  55/30 0.19 12, 50/25 0.10 16, 35/35 0 22 (wait/shrink s, radius, damage per second). 9.2 minutes of circle. The HUD's
+  pips and "Final circles" callout follow the mode's phase count (`brPhases`).
+- Redeploy: a death while a squadmate is on the field (up or downed) earns one (`_canRedeploy`): after
+  `RB.redeploy[phase]` seconds (12, 15, 20, 25) you parachute in (`_redeploy`) a few metres from the squadmate with the
+  fewest enemies near (a downed one will do: land and pick them up), starting 40 m out on a full glide, with a common or
+  uncommon long gun and two spare magazines, the pistol and 50 armor (`_startKit(p, true)`; a human's phone gets it as a
+  `brinv` with `air: 2`). Damage, revives and knocks carry over. No redeploy for a death from circle 5 on
+  (`RB.redeployEnd` 4, the phase index). A squad is out once nobody in it is up and nobody is waiting to redeploy, or
+  nobody in it is left on the field; anyone waiting then stays out. A squadmate on the way back in also lets the last one
+  up be downed instead of killed (`tryDown`), so a redeploy can turn into a revive. A held (dropped) human waits until
+  the phone is back.
+- Wire: per player bit 22 of the BR pack marks "waiting to redeploy" (`view.players[i].redeploy`, the squad panel says
+  Redeploy); the guest's own inventory block carries its countdown (`view.br.inv.redeploy`, seconds); `view.br.area`,
+  `view.br.rebound`, `view.br.phases`. Events `{t:'brwait', id, secs}` and `{t:'brredeploy', id, by, x, z}`. Host
+  migration restarts a cut-short wait at 10 s.
+- HUD (js/ui/br-hud.js): a note under the circle chips, "Redeploys on: they end at circle 5", then "Redeploys over";
+  the out panel says "Redeploying in N" with a bar while you watch a squadmate; notices when you or a squadmate are back.
+- Bots: squads land closer together (`RB_DROP_GAP` 110 m), settle in for 60 s, join heard fights at 0.6x BR's rate but
+  from the second circle; a squad with someone waiting to land, and the last three squads, go calm (no third-partying,
+  sight and notice x0.6) so redeployers can rejoin and the circle brings the end. Redeployed bots glide to their slot by
+  the squadmate, then play the squad's plan (loot near it while under-geared, revive).
+- Tuning (bots only, `node dev/sim-resurgence.mjs`): first cut (120 m area, 7.5 min of circle, BR's bots) ended in 3-6
+  minutes with squads wiped in one fight before a redeploy could land. The calm rules, a 150 m area and a 9.2 minute
+  circle give quads 7.4-8.4 min and duos 7.4-8.4 min, mean 7.9 (seeds 5-10), 30-40 redeploys a quads match. As with
+  BR, matches with people in them run longer than bot-only ones.
+- Tests: `node dev/sim-resurgence.mjs [--quick]` (area, circle, flight line, landing inside, redeploy rules and kit,
+  the guest's view, no redeploy after the cut-off, a wiped squad stays out, a redeployer reviving the downed last one,
+  determinism, 4 quads and 3 duos matches with length and redeploy checks); `python3 dev/ui-modes2-test.py [port]`
+  (the playlist, the drop, the note, a redeploy countdown and glide, results).

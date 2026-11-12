@@ -74,7 +74,7 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
 
 ## Play flow (ROADMAP item 14)
 - **Multiplayer** (title hero; `js/ui/matchmaking.js` data, `js/ui/playscreens.js` screens, flow in `main.js`
-  `findMatch` / `startMpVote` / `launchMp`): tabs Standard, Ground War, Battle Royale (Quads, Duos, Solos) and
+  `findMatch` / `startMpVote` / `launchMp`): tabs Standard (with Showdown 2v2), Ground War, Battle Royale (Quads, Duos, Solos, Rebound Quads and Duos) and
   Extraction (Quads, Duos; docs/EXTRACT.md). A pick is one playlist (Quick Play, Objective, Party modes, today's Featured with its modifiers)
   or one or more ticked modes. Find match: a short search, then the pre-match lobby on the vote screen with 2-3 maps of
   the tab's size tier (`mpVoteOptions`; one card on Battle Royale, which has one giant map) while the other seats'
@@ -91,3 +91,34 @@ zones as (HQ as a hardpoint, Control and Grind as Domination flags).
 - **Training never counts**: `Match.isPractice()` (range, training, tutorial) sets `practice` on MatchAwards and
   MatchTelemetry, the only writers of XP, levels, weapon XP, mastery, challenges, history, career stats and gun stats.
   `dev/ui-flow-test.py` checks the stored save, challenges, history and gun stats are unchanged after a session.
+
+## Showdown (ROADMAP item 31)
+The roadmap's "Gunfight": 2 v 2 rounds. Mode `gf` (js/shared/modes.js; rules js/sim/gf.js, registered in js/sim/rules.js),
+`sizes: ['small']`, so it plays on Pier, Turnstile, Oasis and Ruins. On the Standard tab as its own playlist (Showdown
+2v2) and a tickable mode; in the featured rotation; its rule set brings a "Play 2 Showdown matches" daily challenge.
+Solo is you and a bot against two bots; two friends in a room play the bots. Lobby size 4.
+- Rounds as in Control: freeze (`GF.freeze` 5 s, sim phase warmup), live, post (4 s). One life a round (`holdDead`), no
+  health regeneration (`noRegen` on spawn), no scorestreaks. Wipe the other pair to win the round. After the 40 s round
+  clock (the mode's `timeLimit`) the overtime flag rises (`GF.ot` 15 s): a side alone on it for `GF.capture` 3 s takes the
+  round (a second player on it is half again as fast; the other side alone on it first wears the progress down);
+  both on it holds it. At the end of overtime the side with more health left wins; level is a drawn round, no point.
+  First to 6 (`scoreLimit`); after `GF.maxRounds` 15 the leader takes it.
+- The flag (`flagSpot(map)`): the middle of the line between the two ends' spawns, moved to the nearest spot with room
+  round it. Pure geometry, so every phone puts it in the same place; drawn as a hardpoint (`look: 'hard'`) while it is
+  up (sim.points holds it only in overtime).
+- Kits: `kitFor(seed, k)` deals kit k (a primary from the six primary classes, weighted toward rifles and SMGs, two or
+  three attachments, a pistol, a lethal and a tactical, the same three perks) from the match seed; it changes every
+  `GF.kitEvery` 2 rounds, and the pairs swap ends with it. The host re-deals everyone's loadout at the round start; a
+  phone deals its own through `Sim.dealFor`, its codec's rules taking the `{t:'gf', kind:'round'}` event before the
+  spawns that follow it (match.js calls `rules.event`). Players' cosmetics for the dealt gun stay theirs. Snipers Only and
+  Melee Only do not apply (playlist.js `DEALT`); Hardcore does.
+- Bots (`plan`): the pair walks up toward the middle a few metres apart for the first 6-8 s, then hunts the nearest
+  living enemy, the second of the pair swinging 7 m wide of the line; in overtime both go to the flag.
+- HUD (js/ui/mode-hud.js `_gf`): the plate says "Round N" in the freeze (and whether the kit is new), "2 v 1" while live,
+  "Overtime: take the flag", with the rounds score; every enemy's health as a bar over their head; on the death screen
+  the watch plate (tap to switch); banners for the round, overtime and its end; scoreboard column Rds (rounds won).
+- Tests: `node dev/sim-gunfight.mjs [--quick]` (maps, kits the same for everyone and changing every two rounds, a phone
+  dealing the host's kit, the flag on walkable ground, overtime by the flag, by health and drawn, both on the flag,
+  rosters solo and with a friend, determinism, bot matches on every small map: rounds of 7-12 s of play, 2.3-3.9 minute
+  matches). `python3 dev/ui-modes2-test.py [port]` (playlist, the match on a small map, the plate, one kit, enemy health
+  tags, the watch plate, round 2, results).

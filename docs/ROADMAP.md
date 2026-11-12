@@ -104,14 +104,16 @@ on every push, keep 2% of weekly usage for bugs.
     spectates the remaining players once your side is out of lives.
 26. DONE (zombies). Zombies: co-op wave survival for up to 4 (friends or bots), points, wall-buys, mystery box, doors, perk machines,
     a boss every 10 rounds, on existing maps. Graveyard Shift on Night Market, Ruins and Foundry; docs/ZOMBIES.md.
-27. Resurgence BR: small map, fast circle, redeploy while any squadmate lives.
+27. DONE (modes2). Resurgence BR: small map, fast circle, redeploy while any squadmate lives. Rebound (Quads 24, Duos 20) on a
+    seeded 150 m part of Frontier, a 9-minute circle, redeploys until circle 5; docs/BR.md "Rebound".
 28. DONE (voice). Voice chat with friends: peer to peer audio over the existing connection, push-to-talk or open mic, per-player mute.
     Options Mic chip (Open / Hold to talk); party voice in the friend lobby (mic in the lobby header); mute plates on the
     lobby cars and the scoreboard rows; talking marks from RTP audio levels; docs/CONTROLLER.md (Voice).
 29. DONE (voice). Controller support: the Gamepad API (PlayStation, Xbox, MFi), remappable, menus navigable.
     js/ui/gamepad.js, Options > Controller (remap, deadzone, aim sensitivity, invert Y); docs/CONTROLLER.md.
 30. Attachments wave 2: more attachments per gun, visible on the model.
-31. Gunfight 2v2: short rounds, the same random loadout for everyone, small maps.
+31. DONE (modes2). Gunfight 2v2: short rounds, the same random loadout for everyone, small maps. Showdown on Pier, Turnstile,
+    Oasis and Ruins: first to 6, 40 s rounds then an overtime flag, enemy health over their heads; docs/MODES.md "Showdown".
 32. Finishing moves and an emote wheel.
 33. Daily challenges feeding season XP (alongside the weekly sets).
 34. Every phone: Android (Chrome/Samsung Internet) and all iPhone sizes and ages, with quality tiers picked per device,
