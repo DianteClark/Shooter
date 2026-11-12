@@ -854,6 +854,30 @@
 #ui .tile-lk .ico { height: 14px; }
 #ui .tile.on { outline: 0; box-shadow: inset 0 0 0 2px var(--c-go); }
 #ui .tile.trying { outline: 0; box-shadow: inset 0 0 0 2px var(--c-sodium); transform: scale(.94); }
+/* Camos (Gunsmith > Camo): a grid of even swatches with real gaps, each face over its name; the body scrolls, and the
+   challenge tracks follow the grid as plates of their own. */
+#ui .camos { flex: none; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px 6px; }
+#ui .camos .tile { aspect-ratio: auto; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow: visible; background: none; box-shadow: none; clip-path: none; text-align: left; }
+#ui .camos .tile-face { position: relative; display: block; aspect-ratio: 1; overflow: hidden; background: var(--c-steel); box-shadow: var(--edge);
+  --cut: var(--cut-xs); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+#ui .camos .tile.on, #ui .camos .tile.trying { box-shadow: none; transform: none; }
+#ui .camos .tile.on::after { display: none; }
+#ui .camos .tile.on .tile-face { box-shadow: inset 0 0 0 2px var(--c-go); }
+#ui .camos .tile.on .tile-face::after { content: ''; position: absolute; left: 4px; top: 4px; width: 7px; height: 7px; background: var(--c-go); }
+#ui .camos .tile.trying .tile-face { box-shadow: inset 0 0 0 2px var(--c-sodium); transform: scale(.94); }
+#ui .camos .tile.on .tile-name { color: var(--c-go); }
+#ui .camos .tile-name { display: block; min-width: 0; font: 400 9px/1.1 var(--f-plate); letter-spacing: .04em; text-transform: uppercase; color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .camos .tile:not(.locked) .tile-name { color: var(--c-chalk); }
+#ui .camos .tile-lk { background: rgba(29,35,43,.5); }
+#ui .camos .ct { bottom: 7px; font-size: 9.5px; }
+#ui .camos .p-tag { right: 3px; top: 3px; }
+#ui .chal-h { flex: none; margin: var(--sp-2) 0 0; }
+#ui .chal-strip { margin-top: 0; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+#ui .chal { gap: 4px; padding: 6px 8px; background: rgba(29,35,43,.66); box-shadow: var(--edge); }
+#ui .chal span { font: 400 9.5px/1 var(--f-plate); letter-spacing: .06em; text-transform: uppercase; color: var(--c-chalk); overflow: hidden; text-overflow: ellipsis; }
+#ui .chal small { gap: 6px; font: 400 9.5px/1 var(--f-plate); }
+#ui .chal small b { font-weight: 400; color: var(--c-chalk); }
+#ui .chal small em { white-space: nowrap; }
 #ui .p-tag { font: 400 11px/1 var(--f-stencil); background: var(--c-gold); color: var(--c-night); }
 #ui .fx { background: var(--face-steel); box-shadow: var(--edge); }
 #ui .fx b { font: 400 10px/1.05 var(--f-stencil); }
