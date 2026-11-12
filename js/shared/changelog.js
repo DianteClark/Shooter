@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Sixteen new attachments',
+    items: [
+      'Sixteen new attachments, so every gun has more to choose from in each slot. Snipers, pistols, shotguns and launchers gain the most.',
+      'New optics: Flip Irons, Prism 2x, Tac Laser and, for launchers, a Rangefinder. New barrels: Birdcage Hider, Tank Brake, Vent Rib, and a Venturi Nozzle and Guide Rail for launchers.',
+      'New magazines: Subsonic Rounds for SMGs and pistols, Magnum Shells and Flite Wads for shotguns, Light Rockets for launchers. Taped Mags now fit SMGs and pistols too.',
+      'New grips: Rubber Sleeve, Thumb Rest and Beavertail.',
+      'Every new part shows on the gun, in the Gunsmith and in the match. Each one gives something and costs something: the Gunsmith lists exactly what it changes.',
+      'They unlock as your guns level up, spread from level 4 to 28. Bots use them too, and they turn up on guns in battle royale.',
+    ],
+  },
+  {
     build: '1111-25', date: '2026-11-12', title: 'Every phone, and an install guide',
     items: [
       'Android phones are welcome: Chrome and Samsung Internet now fit the game to the screen, go full screen with a tap and hold it sideways.',
