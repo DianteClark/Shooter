@@ -42,7 +42,7 @@ import { challengeUnlock } from './ui/challenges.js';
 import { ico } from './ui/yard.js';
 import { BotMatch, botMatchSheet } from './ui/botsettings.js';
 import { modsSheet, soloMods } from './ui/modifiers.js';     // Modes overhaul: modifiers and the featured playlist.
-import { cleanMods } from './shared/playlist.js';
+import { cleanMods, withHardcore } from './shared/playlist.js';
 // Seasons and ranked (docs/SEASONS.md).
 import { seasonUnlocks } from './ui/season.js';
 import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
@@ -320,6 +320,8 @@ menu.on({
     renderMp();
   },
   mpFind: () => findMatch(app.mp.tab, mpSel()),
+  // The Hardcore switch: saved on this device, on top of every pick it fits (and a room this phone hosts).
+  mpHardcore: () => { Options.set('hardcore', !Options.get('hardcore')); renderMp(); },
   mpCancel: () => { stopSearch(); renderMp(); },
   // Custom: Match (the picker) and Training.
   customTab: ({ tab }) => { if (tab === 'match' || tab === 'training') { app.customTab = tab; renderCustom(); } },
@@ -335,7 +337,11 @@ menu.on({
   trStart: () => { needName(startTraining); },
   lobbyMods: () => {
     if (!app.isHost) return;
-    modsSheet(menu, { mods: app.lobby.mods ?? [], onChange: list => { app.lobby.mods = list; broadcastLobby(); renderLobby(); } });
+    modsSheet(menu, { mods: app.lobby.mods ?? [], onChange: list => {
+      // Hardcore in a room is the same switch as on the Multiplayer screen: flipping it here flips that too.
+      if (list.includes('hardcore') !== (app.lobby.mods ?? []).includes('hardcore')) Options.set('hardcore', list.includes('hardcore'));
+      app.lobby.mods = list; broadcastLobby(); renderLobby();
+    } });
   },
   host: () => { needName(startHosting); },
   join: () => { needName(askCode); },
@@ -626,7 +632,7 @@ function startHosting({ custom = null } = {}) {
   app.lobby = {
     humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...seatData() }],
     botSkill: custom?.skill ?? MP_BOT_SKILL,
-    mods: custom?.mods ?? [],
+    mods: custom?.mods ?? withHardcore([], Options.get('hardcore')),     // A map-vote room starts with the Hardcore switch.
     custom,
   };
   app.customFrom = null;
@@ -1016,7 +1022,7 @@ function setLobbyCustom(custom) {
   if (!app.isHost || !app.net) return renderLobby();
   app.lobby.custom = custom;
   app.lobby.botSkill = custom?.skill ?? MP_BOT_SKILL;
-  app.lobby.mods = custom ? custom.mods : [];
+  app.lobby.mods = custom ? custom.mods : withHardcore([], Options.get('hardcore'));
   broadcastLobby();
   renderLobby();
 }
@@ -1068,7 +1074,7 @@ function mpSel(tab = app.mp.tab) {
 }
 
 function renderMp() {
-  menu.multiplayer({ tab: app.mp.tab, sel: mpSel() });
+  menu.multiplayer({ tab: app.mp.tab, sel: mpSel(), hardcore: !!Options.get('hardcore') });
 }
 
 function stopSearch() {
@@ -1078,7 +1084,7 @@ function stopSearch() {
 }
 
 function findMatch(tab, sel) {
-  const r = resolveSelection(tab, sel);
+  const r = resolveSelection(tab, sel, { hardcore: !!Options.get('hardcore') });
   if (!r.modes.length) return;
   resetToSolo();
   app.mp.tab = tab;

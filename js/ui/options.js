@@ -7,6 +7,7 @@ export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'H
 export const OPTION_DEFAULTS = Object.freeze({
   quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1, matchMusic: false, fps: false, touchDebug: false, autoRespawn: false,
   squad: '',     // Squad tag for public rooms (js/net/lobbies.js): letters and digits, up to 10; '' for none.
+  hardcore: false,   // The Hardcore switch on the Multiplayer screen (and what a hosted friend room starts with).
 });
 
 // Slider-style settings: unit is the on-screen step, and what the bar and label report.
