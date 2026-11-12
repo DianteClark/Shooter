@@ -154,6 +154,13 @@ const CSS = `
 .br-aboard .m span.gl { color: #8fd0ff; }
 .br-aboard .m span.dn { color: #7be08a; }
 .br-aboard .m span.out { color: #ff8a7c; }
+@media (max-height: 380px) {
+  .br-map-side { gap: 6px; }
+  .br-map-side p { font-size: 11px; line-height: 1.25; }
+  .br-aboard { padding: 5px 8px; gap: 2px; }
+  .br-aboard .n b { font-size: 21px; }
+  .br-aboard .m { font-size: 11px; line-height: 1.15; }
+}
 /* Reviving a teammate: your own bar, in the objective strip's progress row. */
 .br-reviving { width: 190px; padding: 6px 10px 7px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }

@@ -126,13 +126,15 @@ async def run(browser, vw, vh, failures, errors):
     await ev(f"""(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId);
       for (const s of [0, 1]) {{ m.ps.ammo[s] = 0; m.ps.reserve[s] = 0; me.ps.ammo[s] = 0; me.ps.reserve[s] = 0; }} me.br.pouch = [0, 0, 0, 0, 0];
       for (const it of m.sim.br.near(m.ps.x, m.ps.z, 4)) if (it.kind === 1) m.sim.br._removeItem(it); }})()""")
-    await pg.wait_for_timeout(1200)
+    try: await pg.wait_for_function(f"{G}.match.ps.weapon === 'knife' && {G}.match.brStash", timeout=15000)
+    except Exception: pass
     auto = await ev(f"[{G}.match.ps.weapon, {G}.match.brStash?.slot ?? -1, {G}.match.brAuto]")
     await shot('06c-autofists')
     if auto[0] != 'knife' or auto[1] < 0 or not auto[2]: failures.append(f'{vw}: both guns dry did not bring the fists out ({auto})')
     await ev(f"""(() => {{ const m = {G}.match, br = m.sim.br;
       for (let v = 0; v < 5; v++) br._addItem({{ kind: 1, v, r: 0, n: 40, x: m.ps.x + 0.2, z: m.ps.z }}); }})()""")
-    await pg.wait_for_timeout(1500)
+    try: await pg.wait_for_function(f"{G}.match.ps.weapon !== 'knife' && !{G}.match.brStash", timeout=15000)
+    except Exception: pass
     again = await ev(f"[{G}.match.ps.weapon, {G}.match.brStash, {G}.match.ps.reserve[{G}.match.ps.slot]]")
     if again[0] == 'knife' or again[1] is not None: failures.append(f'{vw}: ammo for the gun did not bring it back ({again})')
     await pg.locator('.br-plate').click()
