@@ -647,7 +647,7 @@ export class BrHud {
     $('small').textContent = mates ? (w ? `Spectating ${w.name}. Your squad can still win.` : 'Your squad can still win.')
       : others ? `${me.place ? `You: ${ORD(me.place)}  /  ` : ''}${view.br.squadsLeft ?? '?'} ${view.br.squad > 1 ? 'squads' : 'players'} left${view.br.squad > 1 ? `  /  ${sq} of theirs up` : ''}`
       : choosing ? 'Watch the rest, or see your results now.' : 'Nobody left to watch.';
-    if (recall) $('small').textContent = `${w ? `Spectating ${w.name}. ` : ''}Your squad can recall you: your tag to a Recall Beacon.`;
+    if (recall) $('small').textContent = `${w ? `Spectating ${w.name}. ` : ''}Squad can recall you at a beacon`;
     $('.br-spec').hidden = !choosing;
     $('.br-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
     $('.br-spec-next').textContent = mates ? 'Next teammate' : 'Next player';
