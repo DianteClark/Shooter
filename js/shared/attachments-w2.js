@@ -67,7 +67,7 @@ const LIST = [
     LAUNCHERS,
     'Putting the round exactly where you aim.',
     'Much tighter aimed and hip fire. Slower to aim, heavier on foot.',
-    { adsSpread: 0.85, hipSpread: 0.94, adsTime: 1.1, moveMult: 0.97 }),
+    { adsSpread: 0.86, hipSpread: 0.94, adsTime: 1.1, moveMult: 0.97 }),
 
   // ---- Mag ----
   part('subsonic', 'mag', 'Subsonic Rounds', 23,

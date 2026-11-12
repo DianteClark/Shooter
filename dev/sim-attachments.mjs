@@ -1,4 +1,5 @@
-// Node tests for the V11 attachments wave (js/shared/attachments-v11.js): signature attachments and conversion kits.
+// Node tests for the V11 attachments wave (js/shared/attachments-v11.js): signature attachments and conversion kits,
+// and for attachments wave 2 (js/shared/attachments-w2.js, the section at the end).
 // Every attachment applies to every gun that takes it and gives something and costs something; its model fits the
 // gun (drawn, not floating off it); kits do what their description says when the gun is fired; wire packing keeps the
 // old ints; save codes round-trip and an old code with attachments still loads; unlocks spread over levels and the
@@ -12,6 +13,7 @@ import { WEAPON_IDS, SECONDARY_IDS, GOLDEN_ID } from '../js/shared/constants.js'
 import { ATTACHMENTS, MOD_INFO, IDENTITY_MODS, SLOTS, LADDER_BASE, availableFor, isAvailable, normalizeKit, packKit, unpackKit,
   trackFor, applyAttachments, attachmentDeltas, unlockMet, unlockLabel } from '../js/shared/attachments.js';
 import { V11_ATTACHMENTS } from '../js/shared/attachments-v11.js';
+import { W2_ATTACHMENTS, W2_EXTEND } from '../js/shared/attachments-w2.js';
 import { blankSave, encodeSave, decodeSave, cleanLoadout, WEAPON_LADDER } from '../js/shared/progression.js';
 import { botAttachments } from '../js/sim/bots.js';
 import { MAPS } from '../js/shared/map.js';
@@ -66,7 +68,9 @@ test('60-80 signature attachments and 8-12 kits, one gun each, appended after ev
   assert.ok(KITS.length >= 8 && KITS.length <= 12, `${KITS.length} kits`);
   const ids = Object.keys(ATTACHMENTS);
   const first = ids.indexOf(NEW[0].id);
-  assert.deepEqual(ids.slice(first), NEW.map(a => a.id), 'V11 ids are the tail of the table, in order');
+  // Wave 2's general parts (attachments-w2.js) come after V11, so V11 is one block in its own order.
+  assert.deepEqual(ids.slice(first, first + NEW.length), NEW.map(a => a.id), 'V11 ids follow the older table, in order');
+  assert.ok(ids.slice(first + NEW.length).every(id => W2_ATTACHMENTS[id]), 'only wave 2 comes after V11');
   assert.ok(ids.slice(0, first).every(id => !ATTACHMENTS[id].kind));
   for (const a of NEW) {
     assert.ok(a.name && a.desc && a.for && SLOTS.includes(a.slot), a.id);
@@ -210,7 +214,7 @@ test('wire: old kit ints unchanged, every new kit survives, an older build sees 
     // What a pre-V11 build decodes: only the low 16 bits, 4 a slot. A V11 part reads as stock, never as another part.
     for (let i = 0; i < SLOTS.length; i++) {
       if (!kit[SLOTS[i]]) continue;
-      const oldLen = Object.values(ATTACHMENTS).filter(a => a.slot === SLOTS[i] && !a.kind).length, nib = (n % 65536 >>> (i * 4)) & 15;
+      const oldLen = Object.values(ATTACHMENTS).filter(a => a.slot === SLOTS[i] && !a.kind && !W2_ATTACHMENTS[a.id]).length, nib = (n % 65536 >>> (i * 4)) & 15;
       assert.ok(nib === 0 || nib > oldLen, `${w} ${SLOTS[i]}: an older build would read nibble ${nib} as an older part`);
     }
   }
@@ -238,14 +242,20 @@ test('SY4 codes: an old code with attachments loads; a save with signatures and 
   assert.equal(encodeSave(back.save), encodeSave(s), 'and re-exports to the same code');
 });
 
-test('unlocks: levels and mastery tiers, never two on one level of a gun, something new every few levels', () => {
+test('unlocks: levels and mastery tiers, at most two on one level of a gun, something new every few levels', () => {
   for (const a of NEW) assert.ok(a.unlock >= 2 && a.unlock <= LADDER_BASE + WEAPON_LADDER.length, `${a.id} unlock ${a.unlock}`);
   assert.ok(NEW.some(a => a.unlock > LADDER_BASE), 'some open on the mastery ladder');
   assert.equal(unlockLabel(31), 'Mastery I'); assert.equal(unlockLabel(12), 'Level 12');
   assert.ok(unlockMet(31, { peak: 30, ladT: 1 }) && !unlockMet(31, { peak: 30, ladT: 0 }) && unlockMet(12, { peak: 12 }));
   for (const w of WEAPON_IDS.filter(id => id !== GOLDEN_ID)) {
     const lv = trackFor(w).map(t => t.level);
-    assert.equal(new Set(lv).size, lv.length, `${w}: one part per level`);
+    const at = {};
+    for (const t of trackFor(w)) (at[t.level] ??= []).push(t.attachment);
+    // Wave 2 shares levels with older parts: at most two a level, never two for one slot, never two wave 2 parts.
+    for (const l in at) {
+      assert.ok(at[l].length <= 2 && new Set(at[l].map(a => a.slot)).size === at[l].length, `${w}: level ${l} opens ${at[l].map(a => a.id)}`);
+      assert.ok(at[l].filter(a => W2_ATTACHMENTS[a.id]).length <= 1, `${w}: two wave 2 parts on level ${l}`);
+    }
     if (WEAPONS[w].melee) continue;
     const levels = [1, ...lv.filter(l => l <= LADDER_BASE), LADDER_BASE];
     const gap = Math.max(...levels.slice(1).map((l, i) => l - levels[i]));
@@ -290,6 +300,167 @@ test('battle royale loot: signatures on epic and legendary guns, kits only on le
   }
   assert.ok(sig[0] + sig[1] + sig[2] === 0 && sig[3] > n[3] * 0.2 && sig[4] > n[4] * 0.3, `signatures by rarity ${sig} of ${n}`);
   assert.ok(kit[0] + kit[1] + kit[2] + kit[3] === 0 && kit[4] > 0, `kits by rarity ${kit}`);
+});
+
+/* ---------------- Attachments wave 2 (js/shared/attachments-w2.js) ---------------- */
+
+const W2 = Object.values(W2_ATTACHMENTS);
+const W2_IDS = new Set(W2.map(a => a.id));
+// What a gun could fit before wave 2: no wave 2 part, and the parts wave 2 opened to more classes only where they were.
+const OPENED = new Map(W2_EXTEND.map(([id, more]) => [id, new Set(more)]));
+const before = (w, a) => !W2_IDS.has(a.id) && !OPENED.get(a.id)?.has(w);
+const GUNS = WEAPON_IDS.filter(id => id !== GOLDEN_ID && !WEAPONS[id].melee);
+// Each W2 part on each gun that takes it, plus the classes an older part was opened to.
+const W2_PAIRS = [...W2.flatMap(a => GUNS.filter(w => isAvailable(w, a.id)).map(w => [a, w])),
+  ...W2_EXTEND.flatMap(([id, more]) => more.filter(w => isAvailable(w, id)).map(w => [ATTACHMENTS[id], w]))];
+
+test('wave 2: sixteen general parts, appended after V11, plain trade-offs on MOD_INFO keys', () => {
+  assert.equal(W2.length, 16);
+  const ids = Object.keys(ATTACHMENTS);
+  assert.deepEqual(ids.slice(-W2.length), W2.map(a => a.id), 'wave 2 is the tail of the table');
+  for (const a of W2) {
+    assert.ok(a.name && a.desc && a.for && SLOTS.includes(a.slot) && !a.kind && !a.set && !a.look, a.id);
+    assert.ok(Number.isInteger(a.unlock) && a.unlock >= 2 && a.unlock <= 30, `${a.id} unlock ${a.unlock}`);
+    for (const m of [a.mods, ...Object.values(a.perWeapon ?? {})]) for (const k of Object.keys(m)) {
+      assert.ok(MOD_INFO[k] && !IDENTITY_MODS.has(k), `${a.id}.${k}`);
+    }
+    assert.ok(!a.weapons.includes(GOLDEN_ID) || !isAvailable(GOLDEN_ID, a.id));
+    assert.ok(GUNS.filter(w => isAvailable(w, a.id)).length >= 2, `${a.id} fits more than one gun`);
+    assert.ok(!GUNS.some(w => WEAPONS[w].melee && isAvailable(w, a.id)), `${a.id} stays off blades`);
+  }
+  // The names read differently from every older part.
+  const names = Object.values(ATTACHMENTS).map(a => a.name);
+  assert.equal(new Set(names).size, names.length, 'every part has its own name');
+});
+
+test('wave 2: every gun has about five to seven choices in each slot it uses', () => {
+  const FEW = { scatter: { mag: 3 }, nailer: { mag: 4, barrel: 4 } };   // Shells, a nail strip and a nose: little to change.
+  let grew = 0;
+  for (const w of GUNS) for (const slot of SLOTS) {
+    const all = availableFor(w, slot), old = all.filter(a => before(w, a));
+    if (!all.length) continue;
+    const min = FEW[w]?.[slot] ?? (WEAPONS[w].category === 'Launcher' ? 3 : 5);   // Launchers take fewer parts in all.
+    assert.ok(all.length >= min && all.length <= 10, `${w} ${slot}: ${all.length} choices`);
+    if (all.length > old.length) grew++;
+  }
+  assert.ok(grew >= 80, `${grew} gun slots gained a choice`);
+  // The slots that were thinnest are the ones that grew.
+  for (const [w, slot] of [['sniper', 'optic'], ['pistol', 'grip'], ['pistol', 'mag'], ['launcher', 'barrel'], ['shotgun', 'optic'], ['coach', 'mag']]) {
+    assert.ok(availableFor(w, slot).length >= availableFor(w, slot).filter(a => before(w, a)).length + 2, `${w} ${slot} grew by two`);
+  }
+});
+
+test('wave 2: no part moves a gun\'s kill ranges or spread far past its best older build', () => {
+  // The best a gun can do with general parts, one per slot, before and after wave 2.
+  const best = (w, read, dir, allow) => {
+    let p = 1;
+    for (const slot of SLOTS) {
+      let m = 1;
+      for (const a of availableFor(w, slot)) {
+        if (a.kind || !allow(w, a)) continue;
+        const v = read(applyAttachments(WEAPONS[w], { [slot]: a.id })) / read(WEAPONS[w]);
+        if ((v - m) * dir > 0) m = v;
+      }
+      p *= m;
+    }
+    return p;
+  };
+  const any = () => true;
+  for (const w of GUNS) {
+    const reachOld = best(w, d => d.falloff.start, 1, before), reachNew = best(w, d => d.falloff.start, 1, any);
+    assert.ok(reachNew <= reachOld * 1.06 + 1e-9, `${w}: full-damage reach x${reachOld.toFixed(3)} -> x${reachNew.toFixed(3)}`);
+    // Every shots-to-kill breakpoint, aimed and to the body, holds within 6% of its old furthest distance.
+    const kitOf = allow => Object.fromEntries(SLOTS.map(slot => {
+      const opts = availableFor(w, slot).filter(a => !a.kind && allow(w, a));
+      opts.sort((x, y) => applyAttachments(WEAPONS[w], { [slot]: y.id }).falloff.end - applyAttachments(WEAPONS[w], { [slot]: x.id }).falloff.end);
+      return [slot, opts[0]?.id];
+    }).filter(e => e[1]));
+    const defOld = applyAttachments(WEAPONS[w], kitOf(before)), defNew = applyAttachments(WEAPONS[w], kitOf(any));
+    const reach = (def, n) => { let r = 0; for (let d = 0.5; d <= def.range; d += 0.25) if (shotsToKill(def, d) <= n) r = d; return r; };
+    for (let n = shotsToKill(WEAPONS[w], 1); n <= Math.min(12, shotsToKill(WEAPONS[w], 1) + 4); n++) {
+      const o = reach(defOld, n), nw = reach(defNew, n);
+      assert.ok(nw <= o * 1.06 + 0.5, `${w}: ${n} to kill reaches ${o} m before, ${nw} m now`);
+    }
+    for (const key of ['adsSpread', 'hipSpread']) {
+      const o = best(w, d => d[key], -1, before), nw = best(w, d => d[key], -1, any);
+      assert.ok(nw >= o * 0.8 - 1e-9, `${w}: best ${key} x${o.toFixed(3)} -> x${nw.toFixed(3)}`);
+    }
+  }
+});
+
+test('wave 2: every new part survives the wire and save codes; older builds read it as stock', () => {
+  for (const [a, w] of W2_PAIRS) {
+    const kit = { [a.slot]: a.id }, n = packKit(kit);
+    assert.ok(Number.isSafeInteger(n));
+    assert.deepEqual(unpackKit(w, n), normalizeKit(w, kit), `${a.id} on ${w}`);
+    // An older build (V11: its slot list stops before wave 2) finds no part at that index.
+    const i = SLOTS.indexOf(a.slot), v11Len = Object.values(ATTACHMENTS).filter(x => x.slot === a.slot && !W2_IDS.has(x.id)).length;
+    const nib = (n % 65536 >>> (i * 4)) & 15, ext = Math.floor(n / 65536 / 2 ** (i * 7)) % 128;
+    if (W2_IDS.has(a.id)) assert.ok((ext || nib) > v11Len, `${a.id}: index ${ext || nib} is past an older build's ${v11Len}`);
+  }
+  // A full wave 2 kit next to a signature, and an old kit int, unchanged.
+  const mix = { optic: 'irons', barrel: 'muzzlebrake', mag: 's_stripper', grip: 'thumbrest' };
+  assert.deepEqual(unpackKit('scout', packKit(mix)), normalizeKit('scout', mix));
+  assert.equal(packKit({ optic: 'reflex', barrel: 'shroud', mag: 'apmag', grip: 'heavystock' }), 30673);
+  const s = blankSave();
+  s.loadouts[0] = cleanLoadout({ ...s.loadouts[0], primary: 'shotgun', secondary: 'launcher',
+    attachments: { shotgun: { optic: 'laserbox', barrel: 'ventrib', mag: 'magnum', grip: 'rubber' }, launcher: { optic: 'rangefinder', barrel: 'guiderail', mag: 'lightrocket', grip: 'thumbrest' }, pistol: { grip: 'beavertail', mag: 'tapedmag' } } }, 0);
+  const back = decodeSave(encodeSave(s));
+  assert.ok(back.ok, back.error);
+  assert.deepEqual(back.save.loadouts[0].attachments.shotgun, { optic: 'laserbox', barrel: 'ventrib', mag: 'magnum', grip: 'rubber' });
+  assert.deepEqual(back.save.loadouts[0].attachments.launcher, { optic: 'rangefinder', barrel: 'guiderail', mag: 'lightrocket', grip: 'thumbrest' });
+  assert.deepEqual(back.save.loadouts[0].attachments.pistol, { grip: 'beavertail', mag: 'tapedmag' });
+  assert.equal(encodeSave(back.save), encodeSave(s));
+  assert.ok(decodeSave(OLD_CODE).ok, 'the old code still loads');
+});
+
+test('wave 2: every new part has its own model piece on every gun that takes it, inside the gun\'s reach', () => {
+  const geo = g => Object.keys(g.geometry.attributes).sort().map(n => `${n}:${g.geometry.attributes[n].array.join(',')}`).join('|');
+  let n = 0;
+  for (const [a, w] of W2_PAIRS) {
+    const base = getGun(w), g = getGun(w, { [a.slot]: a.id });
+    assert.equal(modelKit({ [a.slot]: a.id })[a.slot], a.id, `${a.id} draws itself, not a borrowed look`);
+    const bb = base.geometry.boundingBox, gb = g.geometry.boundingBox;
+    const grow = Math.max(bb.min.x - gb.min.x, gb.max.x - bb.max.x, bb.min.y - gb.min.y, gb.max.y - bb.max.y, bb.min.z - gb.min.z, gb.max.z - bb.max.z);
+    assert.ok(grow < 0.5, `${a.id} on ${w} sticks ${grow.toFixed(2)} m past the gun`);
+    assert.ok(g.muzzle.every(Number.isFinite) && g.fore.every(Number.isFinite) && g.length > 0.5, `${a.id} on ${w} hand points`);
+    const mine = geo(g);
+    assert.notEqual(mine, geo(base), `${a.id} on ${w} changes the model`);
+    for (const o of availableFor(w, a.slot)) if (o.id !== a.id && !o.kind) assert.notEqual(geo(getGun(w, { [a.slot]: o.id })), mine, `${a.id} on ${w} looks like ${o.id}`);
+    n++;
+  }
+  assert.ok(n >= 190, `${n} gun-part models`);
+});
+
+test('wave 2: unlocks spread over the levels; no gun goes more than four levels without a new part', () => {
+  const levels = new Set(W2.map(a => a.unlock));
+  assert.ok(levels.size >= 14, `${levels.size} distinct levels`);
+  assert.ok(W2.some(a => a.unlock <= 7) && W2.some(a => a.unlock >= 25), 'early and late parts');
+  for (const w of GUNS) {
+    const lv = trackFor(w).map(t => t.level).filter(l => l <= LADDER_BASE);
+    const gaps = [1, ...lv, LADDER_BASE].slice(1).map((l, i, arr) => l - ([1, ...lv][i]));
+    assert.ok(Math.max(...gaps) <= (WEAPONS[w].category === 'Launcher' ? 5 : 4), `${w}: ${Math.max(...gaps)} levels without anything new (${lv})`);
+  }
+});
+
+test('wave 2: bots and battle royale floor loot use every new part, only where it fits', () => {
+  const seen = new Set();
+  for (const w of WEAPON_IDS) for (const skill of ['regular', 'veteran', 'elite']) for (let i = 0; i < 15; i++) {
+    const kit = botAttachments(w, skill, i);
+    for (const slot in kit) { assert.ok(isAvailable(w, kit[slot])); if (W2_IDS.has(kit[slot]) || kit[slot] === 'tapedmag') seen.add(kit[slot]); }
+  }
+  for (const a of W2) assert.ok(seen.has(a.id), `no bot fits ${a.id}`);
+  let r = 11;
+  const rng = () => { r = (r * 16807) % 2147483647; return r / 2147483647; };
+  const loot = new Set();
+  for (let i = 0; i < 20000; i++) {
+    const g = BrRules.prototype._rollGun.call({}, rng, i % 2 ? 'chest' : 2);
+    const id = WEAPON_IDS[g.v];
+    for (const slot in g.kit) { assert.ok(isAvailable(id, g.kit[slot])); loot.add(g.kit[slot]); }
+    assert.deepEqual(unpackKit(id, packKit(g.kit)), g.kit);
+  }
+  const missing = W2.filter(a => !loot.has(a.id)).map(a => a.id);
+  assert.equal(missing.length, 0, `never on the floor: ${missing}`);
 });
 
 console.log(`\n${passed} checks passed`);

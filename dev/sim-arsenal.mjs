@@ -372,7 +372,7 @@ test('Gaff and Maul: reach three metres and no further, the Gaff lunges and the 
 
 /* ---------------- Attachments ---------------- */
 
-test('eight new attachments: appended, real trade-offs, fit old and new guns, no level ties on any gun', () => {
+test('eight new attachments: appended, real trade-offs, fit old and new guns, at most two parts a level', () => {
   // Slot lists only grow at the end, so the kit ints older builds send still mean the same kit.
   assert.equal(packKit({ optic: 'reflex', barrel: 'shroud', mag: 'apmag', grip: 'heavystock' }), 30673);
   assert.equal(packKit({ optic: 'reticle', barrel: 'suppressor', mag: 'extmag', grip: 'angled' }), 4376);
@@ -390,9 +390,11 @@ test('eight new attachments: appended, real trade-offs, fit old and new guns, no
     assert.deepEqual(unpackKit(w, packKit({ [a.slot]: id })), normalizeKit(w, { [a.slot]: id }), `${id} survives the wire`);
     assert.ok(compareStats(w, {}, { [a.slot]: id }).some(r => r.changed), `${id} moves a stat bar on the ${w}`);
   }
+  // Wave 2 (attachments-w2.js) shares levels with older parts: at most two on one level of a gun, never one slot twice.
   for (const w of WEAPON_IDS) {
-    const lv = trackFor(w).map(t => t.level);
-    assert.equal(new Set(lv).size, lv.length, `${w}: one attachment per weapon level`);
+    const at = {};
+    for (const t of trackFor(w)) (at[t.level] ??= []).push(t.attachment.slot);
+    for (const l in at) assert.ok(at[l].length <= 2 && new Set(at[l]).size === at[l].length, `${w}: level ${l} opens ${at[l]}`);
   }
   assert.equal(applyAttachments(WEAPONS.ar, { mag: 'satchel' }).reserve, 225);
   assert.equal(applyAttachments(WEAPONS.launcher, { mag: 'satchel' }).reserve, 5);

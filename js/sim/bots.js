@@ -222,52 +222,73 @@ const BOT_KITS = {
     { barrel: 'compensator', optic: 'reflex', grip: 'vertical', mag: 'extmag' },
     { optic: 'longeye', barrel: 'longbarrel', mag: 'speedmag', grip: 'vertical' },
     { optic: 'holo', grip: 'angled', barrel: 'suppressor', mag: 'lightmag' },
+    { optic: 'prism', barrel: 'flashhider', grip: 'angled', mag: 'tapedmag' },
+    { barrel: 'flashhider', optic: 'holo', grip: 'skelstock', mag: 'lightmag' },
   ],
   smg: [
     { optic: 'holo', grip: 'angled', mag: 'extmag', barrel: 'longbarrel' },
     { barrel: 'compensator', optic: 'reflex', mag: 'speedmag', grip: 'wrap' },
     { grip: 'angled', optic: 'holo', barrel: 'suppressor', mag: 'lightmag' },
+    { optic: 'laserbox', grip: 'rubber', mag: 'subsonic', barrel: 'flashhider' },
+    { barrel: 'flashhider', optic: 'reflex', mag: 'tapedmag', grip: 'angled' },
   ],
   shotgun: [
     { barrel: 'choke', optic: 'holo', mag: 'extmag', grip: 'angled' },
     { barrel: 'sawnoff', grip: 'wrap', mag: 'speedmag', optic: 'reflex' },
+    { barrel: 'ventrib', optic: 'laserbox', mag: 'flitewad', grip: 'rubber' },
   ],
   lmg: [
     { barrel: 'heatsink', optic: 'reflex', grip: 'brace', mag: 'speedmag' },
     { optic: 'longeye', barrel: 'compensator', grip: 'vertical', mag: 'extmag' },
     { barrel: 'longbarrel', optic: 'holo', grip: 'brace', mag: 'lightmag' },
+    { optic: 'prism', barrel: 'muzzlebrake', grip: 'vertical', mag: 'extmag' },
+    { optic: 'irons', barrel: 'flashhider', grip: 'angled', mag: 'tapedmag' },
   ],
   sniper: [
     { optic: 'snapsight', grip: 'angled', mag: 'speedmag', barrel: 'fluted' },
     { grip: 'wrap', mag: 'extmag', barrel: 'suppressor' },
+    { optic: 'prism', barrel: 'muzzlebrake', grip: 'thumbrest', mag: 'extmag' },
   ],
   pistol: [
     { mag: 'extmag', barrel: 'compensator', optic: 'reflex', grip: 'wrap' },
+    { optic: 'laserbox', grip: 'beavertail', mag: 'subsonic', barrel: 'flashhider' },
+    { mag: 'tapedmag', optic: 'irons', grip: 'thumbrest', barrel: 'compensator' },
   ],
   burst: [
     { barrel: 'compensator', optic: 'reflex', grip: 'vertical', mag: 'speedmag' },
     { optic: 'longeye', barrel: 'longbarrel', mag: 'extmag', grip: 'angled' },
+    { optic: 'prism', barrel: 'flashhider', grip: 'vertical', mag: 'tapedmag' },
   ],
   pdw: [
     { grip: 'vertical', barrel: 'compensator', mag: 'extmag', optic: 'holo' },
     { barrel: 'suppressor', grip: 'wrap', mag: 'lightmag', optic: 'reflex' },
+    { optic: 'laserbox', grip: 'rubber', mag: 'subsonic', barrel: 'compensator' },
   ],
   autoshot: [
     { barrel: 'choke', mag: 'extmag', optic: 'holo', grip: 'angled' },
     { grip: 'wrap', barrel: 'sawnoff', mag: 'speedmag', optic: 'reflex' },
+    { barrel: 'ventrib', mag: 'magnum', optic: 'irons', grip: 'rubber' },
   ],
   dmr: [
     { optic: 'reflex', grip: 'vertical', mag: 'extmag', barrel: 'longbarrel' },
     { optic: 'longeye', barrel: 'suppressor', mag: 'speedmag', grip: 'brace' },
+    { optic: 'prism', barrel: 'flashhider', mag: 'tapedmag', grip: 'vertical' },
+  ],
+  // Wave 2: launchers get class kits (until now they fought stock).
+  launcher: [
+    { barrel: 'venturi', mag: 'lightrocket', grip: 'rubber', optic: 'irons' },
+    { optic: 'rangefinder', grip: 'thumbrest', barrel: 'guiderail', mag: 'shaped' },
+    { optic: 'laserbox', barrel: 'venturi', grip: 'angled', mag: 'warhead' },
   ],
 };
+// Kit lists are 3 or 5 long: battle royale loot deals 0, 2 or 4 (br.js _rollGun), and that reaches every kit.
 
 // Sidearms bots carry, dealt in turn: each one equally often, so per-gun stats compare like with like.
 const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper', 'scatter'];
 BOT_SECONDARIES.push(...V10_BOT_SECONDARIES);
 export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
 // A gun without its own kits borrows its category's base gun's, minus what it cannot take.
-const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol' };
+const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher' };
 const BOT_KIT_SLOTS = { recruit: 1, regular: 2, veteran: 3, elite: 4 };
 
 // The kit a bot of this tier carries on this gun: recruits only sometimes have one attachment, elites a full kit.
