@@ -115,6 +115,40 @@ async def run(browser, vw, vh, failures, errors):
     except Exception: failures.append(f'{tag}: buying at the wall did not arm the gun')
     await pg.wait_for_timeout(500)
     await shot('06-bought')
+    # The mystery crate (owner notes): looks like a crate, the lid opens, guns cycle up, the pick floats, the lid shuts,
+    # and a move lifts it away and drops it in elsewhere. Crops of the middle of the screen go to outdir.
+    crop = lambda name: pg.screenshot(path=f'{OUT}/{name}-crop-{vw}x{vh}.png', clip={'x': vw * 0.28, 'y': vh * 0.12, 'width': vw * 0.44, 'height': vh * 0.66})
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; R.open = (1 << 8) - 1; R.box.state = 0; R.box.uses = 0; R.box.moveAt = 99;
+      const bs = R.L.boxSpots[R.box.spot]; m.ps.x = bs.x; m.ps.z = bs.z; }})()""")
+    await pg.wait_for_function(f"document.querySelector('.zm-use:not([hidden]) .t')?.textContent?.toUpperCase().includes('CRATE')", timeout=10000)
+    await pg.wait_for_timeout(500)
+    await crop('05b-crate')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_timeout(1300)
+    await crop('05c-crate-rolling')
+    lid = await ev(f"{G}.renderer?.zmFx?.lid?.rotation.x ?? window.__game.app.match?.renderer?.zmFx?.lid?.rotation.x ?? null")
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.box.state === 2", timeout=8000)
+    except Exception: failures.append(f'{tag}: the crate never offered a gun')
+    await pg.wait_for_timeout(700)
+    await crop('05d-crate-offer')
+    await pg.locator('.zm-use').first.click()
+    await pg.wait_for_timeout(900)
+    await crop('05e-crate-taken')
+    await ev(f"(() => {{ const R = {G}.match.sim.rules; R.box.state = 3; R.box.timer = 2.5; R.box.gun = -1; }})()")
+    await pg.wait_for_timeout(600)
+    await crop('05f-crate-leaving')
+    await pg.wait_for_function(f"{G}.match.sim.rules.box.state === 0", timeout=8000)
+    await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules, bs = R.L.boxSpots[R.box.spot]; m.ps.x = bs.x; m.ps.z = bs.z; }})()")
+    await pg.wait_for_timeout(250)
+    await crop('05g-crate-arrived')
+    print(f'  {tag} crate lid at roll {lid}', flush=True)
+    # A wall-buy behind a wall: its glow shows through (stand on the far side of the wall it hangs on).
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, w = R.L.wallBuys[0];
+      m.ps.x = w.wx - Math.cos(w.face) * 3.5; m.ps.z = w.wz - Math.sin(w.face) * 3.5;
+      const k = m.sim.nav.nearestFree(m.ps.x, m.ps.z); m.ps.x = k % m.sim.nav.w + 0.5; m.ps.z = Math.floor(k / m.sim.nav.w) + 0.5; }})()""")
+    await pg.wait_for_timeout(600)
+    await shot('05h-wallbuy-glow')
+    await crop('05h-wallbuy-glow')
     # A perk machine and a gate.
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; const mc = R.L.machines.find(x => x.band === R.L.start) ?? R.L.machines[0];
       if (R.L.machines[0] && mc.band !== R.L.start) for (const d of R.L.doors) R.open |= 1 << d.i;

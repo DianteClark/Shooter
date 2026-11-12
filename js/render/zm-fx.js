@@ -2,11 +2,14 @@
 // makes one of these the first time a view carries the zombies block and calls update() once a frame.
 //   fences     the board-and-post fences on every cut line (one merged mesh, built once)
 //   gates      a boarded gate per door with its price lamp; an opened gate drops away
-//   wall-buys  a chalk frame and the gun's silhouette on the wall (one merged mesh)
+//   wall-buys  a chalk frame and the gun in gold on the wall, a soft glow round it, and the same silhouette seen through
+//              walls and roofs (an x-ray pass: drawn only where something stands in front of it), so a buy is easy to find
 //   machines   the four perk machines, each in its colour with a lit crown (one merged mesh, crowns pulse)
-//   crate      the mystery crate at its spot, a light beam over it, the gun it offers floating above while it rolls
+//   crate      the mystery crate: a plank crate with iron corners and a hinged lid, a light beam, its outline through
+//              walls; rolling, the lid opens and guns cycle up out of it (slowing as it settles), the gun on offer floats
+//              and turns, the lid shuts once it is taken; moving, it lifts away up the beam and drops in at its new spot
 //   drops      power-ups spinning on the ground (instanced)
-// About eight draw calls whatever the round, a few hundred triangles each.
+// About eleven draw calls whatever the round, a few hundred triangles each (docs/BR-PERF.md: no per-zombie cost).
 import * as THREE from 'three';
 import { getGun } from './guns.js';
 import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS } from '../shared/zombies.js';
@@ -14,6 +17,10 @@ import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS } from '../shared/zombies.js';
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), E = new THREE.Euler(), C = new THREE.Color();
 const DROP_MAX = 8;
 const DROP_RGB = { ammo: 0x59d36b, double: 0xffc24a, nuke: 0xff5a3a };
+const WALL_GUN = 0xffd77a, WALL_GLOW = 0xffa83a, CRATE_GLOW = 0x7fd0ff;
+// Drawn only where something nearer hides it: walls, roofs, a crowd. Additive, so it reads as light coming through.
+const xrayMaterial = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, depthFunc: THREE.GreaterDepth,
+  blending: THREE.AdditiveBlending, fog: false });
 
 // A growing list of coloured boxes merged into one geometry: positions and vertex colours, shaded by face so the boxes
 // read without lights.
@@ -86,8 +93,8 @@ export class ZmFx {
       this.group.add(m);
       return { m, open: false, t: 0 };
     });
-    // Wall-buys: a chalk frame on the wall face and the gun's outline in it.
-    const w = new Boxes();
+    // Wall-buys: a chalk frame on the wall face and the gun in it, in gold; a glow and an x-ray copy of the gun.
+    const w = new Boxes(), glow = new Boxes();
     for (const wb of L.wallBuys) {
       const yaw = wb.face, nx = Math.cos(yaw), nz = Math.sin(yaw);
       const fx = wb.wx + nx * 0.04, fz = wb.wz + nz * 0.04, side = yaw + Math.PI / 2;
@@ -98,11 +105,19 @@ export class ZmFx {
       if (proto?.geometry) {
         Q.setFromEuler(E.set(0, -side, 0));
         M4.compose(V.set(fx + nx * 0.03 - Math.cos(side) * 0.1, 1.4, fz + nz * 0.03 - Math.sin(side) * 0.1), Q, S.set(0.78, 0.78, 0.78));
-        w.geom(proto.geometry, M4, 0xd8cc9c);
+        w.geom(proto.geometry, M4, WALL_GUN);
+        // The glow: the same gun a little bigger and a hair off the wall.
+        M4.compose(V.set(fx + nx * 0.06 - Math.cos(side) * 0.1, 1.4, fz + nz * 0.06 - Math.sin(side) * 0.1), Q, S.set(0.98, 1.25, 1.25));
+        glow.geom(proto.geometry, M4, 0xffffff);
       }
     }
     this.walls = w.mesh();
     this.group.add(this.walls);
+    this.wallGlow = glow.mesh({ color: WALL_GLOW, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.wallGlow.renderOrder = 2;
+    this.wallXray = new THREE.Mesh(this.wallGlow.geometry, xrayMaterial(WALL_GLOW, 0.55));
+    this.wallXray.renderOrder = 3;
+    this.group.add(this.wallGlow, this.wallXray);
     // Perk machines: a cabinet, a darker door, a lit crown.
     const mb = new Boxes(), crowns = new Boxes();
     for (const mc of L.machines) {
@@ -118,22 +133,42 @@ export class ZmFx {
     this.machines = mb.mesh();
     this.crowns = crowns.mesh({ transparent: true, opacity: 0.9 });
     this.group.add(this.machines, this.crowns);
-    // The crate: a long chest with iron bands, and a beam of light over it.
-    const cb = new Boxes();
-    cb.box(0, 0.45, 0, 1.6, 0.9, 0.8, 0x5a3b22);
-    for (const x of [-0.6, 0, 0.6]) cb.box(x, 0.46, 0, 0.1, 0.94, 0.84, 0x2a2a2a);
-    cb.box(0, 0.93, 0, 1.64, 0.06, 0.84, 0xc9a24a);
+    // The crate: planks on a dark frame, iron corners and bands, a gold mark front and back, and a lid hinged at the
+    // back (local -z, against the wall; +z faces the room). Origin at the floor, in the middle.
+    const IRON = 0x3a3d42, cb = new Boxes();
+    cb.box(0, 0.4, 0, 1.44, 0.76, 0.78, 0x4a2f1a);
+    [0x8a5a32, 0x7a4e2b, 0x8f6036].forEach((rgb, k) => {
+      const y = 0.15 + k * 0.25;
+      cb.box(0, y, 0.4, 1.4, 0.21, 0.04, rgb); cb.box(0, y, -0.4, 1.4, 0.21, 0.04, rgb);
+      cb.box(0.73, y, 0, 0.04, 0.21, 0.74, rgb); cb.box(-0.73, y, 0, 0.04, 0.21, 0.74, rgb);
+    });
+    for (const x of [-0.72, 0.72]) for (const z of [-0.4, 0.4]) cb.box(x, 0.4, z, 0.1, 0.82, 0.1, IRON);
+    cb.box(0, 0.04, 0, 1.5, 0.08, 0.84, IRON);
+    cb.box(0, 0.78, 0, 1.5, 0.05, 0.84, IRON);
+    for (const z of [0.43, -0.43]) cb.box(0, 0.42, z, 0.3, 0.3, 0.03, 0xffd36a);
     this.crate = cb.mesh();
-    this.lid = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.12, 0.82), new THREE.MeshBasicMaterial({ color: 0x6a4a2c }));
-    this.lid.geometry.translate(0, 0.06, -0.41);
+    this.crateRoot = new THREE.Group();
+    this.crateRoot.add(this.crate);
+    const lb = new Boxes();
+    lb.box(0, 0.06, 0.42, 1.5, 0.12, 0.84, 0x7a4e2b);
+    for (const z of [0.15, 0.42, 0.69]) lb.box(0, 0.125, z, 1.42, 0.012, 0.2, 0x93643a);
+    lb.box(0, 0.07, 0.02, 1.54, 0.15, 0.05, IRON); lb.box(0, 0.07, 0.82, 1.54, 0.15, 0.05, IRON);
+    lb.box(0, 0.16, 0.84, 0.28, 0.08, 0.06, 0xc9a24a);
+    this.lid = lb.mesh();
+    this.lid.position.set(0, 0.8, -0.42);
     this.crate.add(this.lid);
-    this.lid.position.set(0, 0.92, 0.41);
     this.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 14, 10, 1, true),
       new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
     this.beam.position.y = 7;
-    this.crate.add(this.beam);
-    this.group.add(this.crate);
+    this.crateRoot.add(this.beam);
+    // Its outline through walls, like the wall-buys.
+    this.crateXray = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.84, 0.86).translate(0, 0.42, 0), xrayMaterial(CRATE_GLOW, 0.5));
+    this.crateXray.renderOrder = 3;
+    this.crate.add(this.crateXray);
+    this.group.add(this.crateRoot);
     this.offer = null; this.offerGun = null;
+    this.crateAnim = null;          // {kind: 'leave' | 'arrive', t}
+    this.crateWas = null;           // The state and spot last frame.
     // Power-ups.
     this.drops = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.42, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), DROP_MAX);
     this.drops.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -163,32 +198,54 @@ export class ZmFx {
     // Crowns pulse.
     this.crowns.material.opacity = 0.65 + 0.3 * Math.abs(Math.sin(this.t * 2.2));
     // The crate.
+    this.wallGlow.material.opacity = 0.3 + 0.14 * Math.sin(this.t * 2.6);
+    this.wallXray.material.opacity = 0.42 + 0.12 * Math.sin(this.t * 2.6);
     const b = obj.box, spot = b && b.spot >= 0 ? L.boxSpots[b.spot] : null;
-    this.crate.visible = !!spot && b.state !== 3;
-    if (spot) {
+    const was = this.crateWas;
+    if (b && was) {
+      if (b.state === 3 && was.state !== 3) this.crateAnim = { kind: 'leave', t: 0 };
+      else if (b.state !== 3 && (was.state === 3 || was.spot !== b.spot)) this.crateAnim = { kind: 'arrive', t: 0 };
+    }
+    this.crateWas = b ? { state: b.state, spot: b.spot } : null;
+    const A = this.crateAnim;
+    if (A) { A.t += dt; if (A.t > (A.kind === 'leave' ? 1.4 : 0.8)) this.crateAnim = null; }
+    // Hidden while away, once it has lifted off.
+    this.crateRoot.visible = !!spot && (b.state !== 3 || A?.kind === 'leave');
+    if (spot && this.crateRoot.visible) {
       const yaw = spot.face;
-      this.crate.position.set(spot.wx + Math.cos(yaw) * 0.55, 0, spot.wz + Math.sin(yaw) * 0.55);
-      this.crate.rotation.y = -yaw + Math.PI / 2;
-      const opening = b.state === 1 || b.state === 2;
-      this.lid.rotation.x += ((opening ? -1.9 : 0) - this.lid.rotation.x) * Math.min(1, dt * 8);
-      this.beam.material.opacity = b.state === 0 ? 0.16 + 0.05 * Math.sin(this.t * 3) : 0.3;
-      // The gun over the open crate: cycling while it rolls, the offer once it lands.
+      this.crateRoot.position.set(spot.wx + Math.cos(yaw) * 0.55, 0, spot.wz + Math.sin(yaw) * 0.55);
+      this.crateRoot.rotation.y = -yaw + Math.PI / 2;
+      // Moving: up the beam, turning, and gone; arriving: down from above with a bounce.
+      let lift = 0, spin = 0, k = 1;
+      if (A?.kind === 'leave') { const u = Math.min(1, A.t / 1.4); lift = u * u * 7; spin = u * u * 9; k = 1 - Math.max(0, u - 0.7) / 0.3 * 0.9; }
+      else if (A?.kind === 'arrive') { const u = Math.min(1, A.t / 0.8); lift = u < 0.7 ? (1 - u / 0.7) ** 2 * 6 : Math.sin((u - 0.7) / 0.3 * Math.PI) * 0.25; spin = (1 - u) * 3; }
+      this.crate.position.y = lift;
+      this.crate.rotation.y = spin;
+      this.crate.scale.setScalar(k);
+      const opening = (b.state === 1 || b.state === 2) && !A;
+      this.lid.rotation.x += ((opening ? -1.95 : 0) - this.lid.rotation.x) * Math.min(1, dt * (opening ? 7 : 5));
+      this.beam.material.opacity = A ? 0.45 : b.state === 0 ? 0.16 + 0.05 * Math.sin(this.t * 3) : 0.3;
+      // The gun over the open crate: cycling while it rolls (slowing as it settles), the offer once it lands.
       let gun = null;
-      if (b.state === 1) gun = BOX_GUNS[Math.floor(this.t * 9) % BOX_GUNS.length];
-      else if (b.state === 2) gun = b.gun;
+      if (b.state === 1) {
+        const left = Math.max(0, b.timer ?? 0), roll = ZM.box.roll;
+        this.cycle = (this.cycle ?? 0) + dt * (2.5 + 11 * Math.min(1, left / roll));
+        gun = BOX_GUNS[Math.floor(this.cycle) % BOX_GUNS.length];
+      } else if (b.state === 2) gun = b.gun;
       if (gun !== this.offerGun) {
         if (this.offer) { this.crate.remove(this.offer); this.offer = null; }
         this.offerGun = gun;
         const proto = gun ? getGun(gun) : null;
         if (proto?.geometry) {
           this.offer = new THREE.Mesh(proto.geometry, new THREE.MeshBasicMaterial({ color: b.state === 2 ? 0xfff0b0 : 0x9fd8ff }));
+          this.offer.scale.setScalar(1.25);
           this.crate.add(this.offer);
         }
       }
       if (this.offer) {
-        const rise = b.state === 1 ? 0.9 + Math.min(1, (3 - (b.timer ?? 0)) / 3) * 0.6 : 1.5;
-        this.offer.position.set(0, rise + Math.sin(this.t * 2) * 0.05, 0);
-        this.offer.rotation.y = b.state === 2 ? this.t * 0.8 : 0;
+        const rise = b.state === 1 ? 0.95 + Math.min(1, (ZM.box.roll - (b.timer ?? 0)) / ZM.box.roll) * 0.65 : 1.65;
+        this.offer.position.set(0, rise + Math.sin(this.t * (b.state === 2 ? 2.2 : 6)) * 0.07, 0);
+        this.offer.rotation.y = b.state === 2 ? this.t * 1.1 : Math.sin(this.t * 5) * 0.25;
       }
     }
     // Power-ups.
@@ -209,7 +266,7 @@ export class ZmFx {
 
   dispose() {
     this.scene.remove(this.group);
-    this.group.traverse(o => { if (o.isMesh && o !== this.offer) { o.geometry?.dispose(); o.material?.dispose(); } });
+    this.group.traverse(o => { if (o.isMesh && o !== this.offer) { if (o !== this.wallXray) o.geometry?.dispose(); o.material?.dispose(); } });
   }
 }
 

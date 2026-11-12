@@ -2201,10 +2201,12 @@ export class HUD {
     if (me.weapon !== c.weapon || me.attachments !== c.kit) {
       c.weapon = me.weapon;
       c.kit = me.attachments;
-      this.armsName.textContent = weaponName(me.weapon);
+      // Battle royale fists are the blade's slot, but boxing gloves (owner notes): named and drawn as such.
+      const fists = this.br && me.weapon === 'knife';
+      this.armsName.textContent = fists ? 'Fists' : weaponName(me.weapon);
       c.magazine = effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
       c.tag = null;                // The status line may need to return to the weapon's name.
-      this.armsIcon.innerHTML = glyph(me.weapon, 15);
+      this.armsIcon.innerHTML = fists ? icon('ui:glove', { size: 17 }) : glyph(me.weapon, 15);
       this.#otherGun(me.weapon, c);
       // Rounds as notches when they can be counted at a glance; a belt-fed gun gets a plain gauge.
       this.arms.style.setProperty('--mag', c.magazine <= 40 ? c.magazine : 1);
@@ -2243,7 +2245,7 @@ export class HUD {
     if (tag !== c.tag) {
       c.tag = tag;
       this.arms.dataset.tag = tag;
-      this.armsName.textContent = empty ? 'Out of ammo' : reloading ? 'Reloading' : low ? 'Low ammo' : weaponName(me.weapon);
+      this.armsName.textContent = empty ? 'Out of ammo' : reloading ? 'Reloading' : low ? 'Low ammo' : this.br && me.weapon === 'knife' ? 'Fists' : weaponName(me.weapon);
     }
     if (empty !== c.swapHint) {
       c.swapHint = empty;

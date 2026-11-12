@@ -1400,8 +1400,8 @@ export class Characters {
           const ext = u >= 1 ? 0 : u < 0.28 ? smooth01(u / 0.28) : 1 - smooth01((u - 0.28) / 0.72);
           const mine = (r.swingSide || 1) === side ? ext : -ext * 0.25;
           const bobG = Math.sin(r.phase + (side > 0 ? 0 : Math.PI)) * 0.035 * runK + Math.sin(clock * 3.3 + r.seed + side) * 0.012;
-          _b.set(0.3 + mine * 0.44 - sprint * 0.06, shoulderY - 0.03 + bobG + Math.max(0, mine) * 0.05 - sprint * 0.1,
-            side * (0.13 - Math.max(0, mine) * 0.1)).applyMatrix4(_body);
+          _b.set(0.36 + mine * 0.42 - sprint * 0.06, shoulderY - 0.02 + bobG + Math.max(0, mine) * 0.05 - sprint * 0.1,
+            side * (0.21 - Math.max(0, mine) * 0.16)).applyMatrix4(_body);
         } else if (side > 0) {
           _b.set(0, 0, 0).applyMatrix4(_gun);
         } else {
@@ -1474,7 +1474,7 @@ export class Characters {
           // The glove on the hand, along the forearm (elbow to hand).
           _v.set(_b.x - _joint[0], _b.y - _joint[1], _b.z - _joint[2]).normalize();
           _q.setFromUnitVectors(_X, _v);
-          _s.set(1, 1, 1);
+          _s.set(1.45, 1.45, 1.45);       // Boxing gloves are big: they have to read from the top-down camera.
           _m.compose(_b, _q, _s);
           _m.toArray(glove.instanceMatrix.array, nG * 16);
           this._writeFx(glove, nG, fade, flash, team, 0, null);

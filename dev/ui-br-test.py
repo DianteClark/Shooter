@@ -64,6 +64,9 @@ async def run(browser, vw, vh, failures, errors):
     if await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: the drop map closed before the jump')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
     await shot('03-flight')
+    # The transport (owner notes): how many are still aboard, and the squad's state, on the drop map's side.
+    aboard = await ev(f"[document.querySelector('.br-aboard')?.hidden, document.querySelector('.br-aboard .n b')?.textContent, {G}.match.interp.newest.players.filter(p => p.alive && p.air === 1).length, document.querySelectorAll('.br-aboard .m').length]")
+    if aboard[0] or not aboard[1] or abs(int(aboard[1]) - aboard[2]) > 2 or aboard[3] < 2: failures.append(f'{vw}: the aboard count is not shown right ({aboard})')
     await pg.locator('.br-jump-map').click()
     # An app switch mid-glide (ROADMAP 25): frames stop, the page hides and comes back. The match carries on from where it
     # was (no catch-up burst), and every squadmate lands and goes its own way.
@@ -108,16 +111,30 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(500)
     rar = await ev(f"{G}.match.sim.byId.get({G}.match.localId).br.guns.some(g => g && g.r === 4)")
     if not rar: failures.append(f'{vw}: Take did not swap in the legendary gun')
-    # Fists: the third slot puts the gun away, and its own slot brings it back.
+    # No gun slots on the BR HUD (owner notes: the swap button does that); Fists puts the gun away, and brings it back.
+    if await pg.locator('.br-slot[data-k="0"]').count(): failures.append(f'{vw}: the BR HUD still shows gun slots')
     await pg.locator('.br-slot[data-k="2"]').click()
     await pg.wait_for_timeout(400)
     fist = await ev(f"[{G}.match.ps.weapon, {G}.match.sim.byId.get({G}.match.localId).br.stash?.slot ?? -1]")
     await shot('06b-fists')
     if fist[0] != 'knife' or fist[1] < 0: failures.append(f'{vw}: fists slot did not put the gun away ({fist})')
-    await pg.locator(f'.br-slot[data-k="{fist[1]}"]').click()
+    await pg.locator('.br-slot[data-k="2"]').click()
     await pg.wait_for_timeout(400)
     back = await ev(f"[{G}.match.ps.weapon, {G}.match.sim.byId.get({G}.match.localId).br.stash]")
     if back[0] == 'knife' or back[1] is not None: failures.append(f'{vw}: the gun did not come back from fists ({back})')
+    # Both guns dry: fists by themselves; ammo for one under your feet: that gun comes back by itself.
+    await ev(f"""(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId);
+      for (const s of [0, 1]) {{ m.ps.ammo[s] = 0; m.ps.reserve[s] = 0; me.ps.ammo[s] = 0; me.ps.reserve[s] = 0; }} me.br.pouch = [0, 0, 0, 0, 0];
+      for (const it of m.sim.br.near(m.ps.x, m.ps.z, 4)) if (it.kind === 1) m.sim.br._removeItem(it); }})()""")
+    await pg.wait_for_timeout(1200)
+    auto = await ev(f"[{G}.match.ps.weapon, {G}.match.brStash?.slot ?? -1, {G}.match.brAuto]")
+    await shot('06c-autofists')
+    if auto[0] != 'knife' or auto[1] < 0 or not auto[2]: failures.append(f'{vw}: both guns dry did not bring the fists out ({auto})')
+    await ev(f"""(() => {{ const m = {G}.match, br = m.sim.br;
+      for (let v = 0; v < 5; v++) br._addItem({{ kind: 1, v, r: 0, n: 40, x: m.ps.x + 0.2, z: m.ps.z }}); }})()""")
+    await pg.wait_for_timeout(1500)
+    again = await ev(f"[{G}.match.ps.weapon, {G}.match.brStash, {G}.match.ps.reserve[{G}.match.ps.slot]]")
+    if again[0] == 'knife' or again[1] is not None: failures.append(f'{vw}: ammo for the gun did not bring it back ({again})')
     await pg.locator('.br-plate').click()
     await pg.wait_for_timeout(1500)
     await shot('07-plating')
@@ -161,6 +178,33 @@ async def run(browser, vw, vh, failures, errors):
         await shot('10-revived')
     except Exception:
         failures.append(f'{vw}: no squadmate revived the human')
+    # Recall Beacons: a squadmate falls, their tag is picked up, held at a beacon, and they parachute back in.
+    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
+      const mate = sim.players.find(p => p.team === me.team && p !== me && p.alive); window.__mate = mate.id;
+      const bc = sim.br.beacons[0]; window.__bc = bc.id;
+      for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - bc.x, p.ps.z - bc.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }}
+      m.ps.x = bc.x + 4; m.ps.z = bc.z + 1; mate.ps.x = bc.x + 9; mate.ps.z = bc.z + 1; mate.spawnProtect = 0; mate.br.armor = 0;
+      sim._damage(mate, foe, 999, 'ar', 10); sim._damage(mate, foe, 999, 'ar', 10); }})()""")
+    await pg.wait_for_timeout(900)
+    note = await ev("document.querySelector('.br-tagnote')?.hidden === false ? document.querySelector('.br-tagnote').textContent : null")
+    if not note: failures.append(f'{vw}: no tag note once a squadmate fell')
+    await pg.locator('.minimap').screenshot(path=f'{OUT}/10c-minimap-beacon-{vw}x{vh}.png')
+    await ev(f"""(() => {{ const m = {G}.match, mi = m.sim.byId.get(window.__mate).index, tag = m.sim.br.items.find(it => it && it.kind === 8 && it.v === mi); if (tag) {{ m.ps.x = tag.x; m.ps.z = tag.z; }} }})()""")
+    await pg.wait_for_timeout(700)
+    await ev(f"(() => {{ const m = {G}.match, bc = m.sim.br.beacons[window.__bc]; m.ps.x = bc.x + 0.8; m.ps.z = bc.z + 0.3; }})()")
+    await pg.wait_for_timeout(700)
+    if await pg.locator('.br-recall').is_hidden(): failures.append(f'{vw}: no Recall button at the beacon with a tag')
+    await shot('10d-recall-ready')
+    await pg.locator('.br-recall').click()
+    await pg.wait_for_timeout(2800)
+    await shot('10e-recalling')
+    if await pg.locator('.br-recalling').is_hidden(): failures.append(f'{vw}: no Recalling bar while holding the beacon')
+    try:
+        await pg.wait_for_function(f"{G}.match.sim.byId.get(window.__mate).alive", timeout=9000)
+        await pg.wait_for_timeout(1200)
+        await shot('10f-recalled')
+    except Exception:
+        failures.append(f'{vw}: the squadmate was not recalled')
     # The zoomed minimap, then the full map from it, and a landing ping put on it.
     await pg.locator('.minimap').screenshot(path=f'{OUT}/10b-minimap-{vw}x{vh}.png')
     await ev("document.querySelector('.minimap').click()")

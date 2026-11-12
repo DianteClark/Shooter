@@ -69,14 +69,14 @@ const CSS = `
   letter-spacing: var(--tr-plate); color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.75)); white-space: nowrap; text-align: center; }
 .br-hint b { font: 400 16px/1 var(--f-stencil); color: var(--c-sodium); display: block; margin-bottom: 3px; }
 /* The take prompt rides the prompt lane over the dock, between the sticks (js/ui/hud.js layout). */
-.br-take { position: absolute; left: var(--lane-x, 50%); width: min(var(--lane-w, 220px), 240px); bottom: var(--lane-b, 64px); transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 10px 0 10px; text-align: left;
+.br-take, .br-recall { position: absolute; left: var(--lane-x, 50%); width: min(var(--lane-w, 220px), 240px); bottom: var(--lane-b, 64px); transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 10px 0 10px; text-align: left;
   border: 0; color: #fff; background: linear-gradient(180deg, rgba(42,51,61,.95), rgba(16,20,26,.92)); box-shadow: var(--hud-edge), inset 3px 0 0 var(--rar);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); white-space: nowrap; }
-.br-take > span:last-child { min-width: 0; overflow: hidden; }
-.br-take .ti { flex: none; line-height: 0; }
-.br-take b, .br-take small { display: block; overflow: hidden; text-overflow: ellipsis; }
-.br-take b { font: 400 16px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
-.br-take small { margin-bottom: 3px; font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-transform: uppercase; }
+.br-take > span:last-child, .br-recall > span:last-child { min-width: 0; overflow: hidden; }
+.br-take .ti, .br-recall .ti { flex: none; line-height: 0; }
+.br-take b, .br-take small, .br-recall b, .br-recall small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.br-take b, .br-recall b { font: 400 16px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--rar); }
+.br-take small, .br-recall small { margin-bottom: 3px; font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-transform: uppercase; }
 .br-down { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); width: 250px; text-align: center; }
 .br-down b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff6b5c; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
 .br-down small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); margin: 5px 0 8px; text-shadow: var(--text-lift); }
@@ -203,7 +203,7 @@ export class BrHud {
         <button class="br-btn br-kit" data-tap="1" data-act="self" style="visibility:hidden">${icon('ui:refresh', { size: 16 })}<span class="n">0</span><small>Revive</small></button>
       </div>
       <button class="br-take" data-tap="1" hidden><span class="ti"></span><span><small></small><b></b></span></button>
-      <button class="br-take br-recall" data-tap="1" hidden><span class="ti">${icon('ui:beacon', { size: 18 })}</span><span><small>Recall at the beacon</small><b></b></span></button>
+      <button class="br-recall" data-tap="1" hidden><span class="ti">${icon('ui:beacon', { size: 18 })}</span><span><small>Recall at the beacon</small><b></b></span></button>
       <button class="br-jump br-jump-main" data-tap="1" hidden>JUMP<small>Leave the transport</small></button>
       <div class="br-hint" hidden></div>
       <div class="br-down" hidden><b>Down</b><small></small><div class="bleed"><i></i></div><div class="rev"><i></i></div>
@@ -238,7 +238,7 @@ export class BrHud {
     this.outsideEl = $('.br-outside');
     this.squadEl = $('.br-squad');
     this.plateBtn = $('.br-plate'); this.medBtn = $('.br-med'); this.kitBtn = $('.br-kit');
-    this.takeBtn = $('.br-take:not(.br-recall)');
+    this.takeBtn = $('.br-take');
     this.recallBtn = $('.br-recall'); this.tagEl = $('.br-tagnote'); this.recEl = $('.br-recalling');
     this.jumpBtn = $('.br-jump-main'); this.jumpMap = $('.br-jump-map');
     this.hintEl = $('.br-hint');
@@ -419,7 +419,6 @@ export class BrHud {
     const flying = br.plane.f < 1 && view.phase !== 'ended';
     let n = 0;
     for (const p of view.players) if (p.alive && p.air === 1) n++;
-    this.aboardN = flying ? n : 0;
     const mates = view.players.filter(p => p.team === me.team);
     const word = p => (!p.alive ? ['Out', 'out'] : p.air === 1 ? ['Aboard', 'air'] : p.air === 2 ? ['Gliding', 'gl'] : ['Landed', 'dn']);
     const key = flying ? `${n}|${mates.map(p => `${p.id}${word(p)[1]}`).join(',')}|${aboard}` : '';
@@ -923,8 +922,10 @@ export class BrHud {
         g.beginPath(); g.arc(6 - i * 5, 0, 2.6, 0, Math.PI * 2); g.fill(); g.stroke();
       });
       g.restore();
-      if (this.aboardN) {
-        const label = `${this.aboardN} aboard`;
+      let aboardN = 0;
+      for (const p of view.players) if (p.alive && p.air === 1) aboardN++;
+      if (aboardN) {
+        const label = `${aboardN} aboard`;
         g.font = '15px Oswald, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
         const ly = y + (y > MAP_PX - 40 ? -24 : 24), lx = Math.max(40, Math.min(MAP_PX - 40, x));
         g.lineWidth = 4; g.strokeStyle = 'rgba(10,13,17,.9)'; g.strokeText(label, lx, ly);
