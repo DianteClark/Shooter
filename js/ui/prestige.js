@@ -297,9 +297,12 @@ export function prestigeScreen(menu, { onBack, onChange } = {}) {
       const at = masterTierStart(i), got = m >= at;
       return `<span class="pr-tier${got ? '' : ' locked'}${m > 0 && masterTier(m) === i ? ' on' : ''}" title="${esc(masterTierName(i))} Master">${masterTierSvg(i, 28)}<small>${at}</small></span>`;
     }).join('');
+    // A milestone: the Master icon of its level, its name, and the reward itself (card, camo swatch or emblem).
     const masterRow = r => `<div class="pr-row pr-mrow${r.earned ? ' earned' : ''}">
-        <i class="pr-bdg">${rewardMark(r, r.kind === 'card' ? 24 : 34)}</i>
+        <i class="pr-bdg">${badgeMark(MAX_PRESTIGE, 36, r.level)}</i>
         <span class="pr-nm"><b>${esc(r.name)}</b><small>${esc(kindLabel(r.kind))} · Master ${r.level}</small></span>
+        ${r.kind === 'card' ? `<span class="pr-cdw">${cardHtml(r.id, { size: 116, sub: '', locked: !r.earned })}</span>`
+          : `<span class="pr-cm pr-rw">${rewardMark(r, 26)}</span>`}
         ${status(r.earned)}
       </div>`;
     menu.el.innerHTML = `

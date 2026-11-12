@@ -55,6 +55,8 @@
 #ui .pr-cm { flex: 0 1 112px; min-width: 0; display: flex; align-items: center; gap: 6px; }
 #ui .pr-cm small { min-width: 0; font: 400 var(--fs-micro)/1.1 var(--f-plate); letter-spacing: .03em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .pr-cdw { flex: none; line-height: 0; }
+#ui .pr-cm.pr-rw { flex: none; width: 116px; justify-content: center; }
+#ui .pr-row:not(.earned) .pr-rw .pr-mk { opacity: .35; filter: saturate(.2); }
 #ui .pr-st { flex: none; width: 18px; line-height: 0; color: var(--c-plate); }
 #ui .pr-st .ico { height: 16px; }
 #ui .pr-st.on { color: var(--c-go, #4bd18a); }

@@ -790,6 +790,13 @@ export const Progress = {
       unlocks.push({ kind, id, name: ITEM_TABLES[kind]?.[id]?.name ?? id, req: UNLOCK_CHALLENGES[k].label });
     }
     unlocks.unshift(...proUnlocks, ...tiers.ups, ...cardUnlocks);
+    // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
+    // cards are already in cardUnlocks, so they are not stamped twice).
+    const masterAfter = masterNow();
+    if (masterAfter > masterBefore) {
+      unlocks.unshift(...masterRewardsBetween(masterBefore, masterAfter).filter(r => r.kind !== 'card')
+        .map(r => ({ ...r, req: `Master level ${r.level ?? r.master}` })));
+    }
     // The biggest moment there is goes first of all.
     if (!goldenBefore && goldenEarned()) unlocks.unshift(GOLDEN_UNLOCK());
     // Steps moved this match, for the results screen: [{perk, name, steps:[{label,goal,before,value,done}]}].
@@ -813,14 +820,6 @@ export const Progress = {
         weapon: w, name, xpGained: Math.max(0, Math.round(weapons[w].xp)), kills: weapons[w].kills ?? 0,
         levelBefore: before.level, levelAfter: WEAPON_CURVE.levelOf(entry.xp), ...this.weaponProgress(w),
       });
-    }
-    // Master Prestige: the icon tiers and milestones this match passed, first among the unlocks (cards among them are
-    // already in cardUnlocks, so they are not stamped twice).
-    const masterAfter = masterNow();
-    if (masterAfter > masterBefore) {
-      const ups = masterRewardsBetween(masterBefore, masterAfter).filter(r => r.kind !== 'card')
-        .map(r => ({ ...r, req: `Master level ${r.level ?? r.master}` }));
-      unlocks.unshift(...ups);
     }
     return {
       level: { before: beforeLevel, after: levelOf(data.xp), ...this.levelProgress(), masterBefore, canPrestige: this.canPrestige() },

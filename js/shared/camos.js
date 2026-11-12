@@ -53,7 +53,7 @@ export const RANK_CAMOS = [
   { id: 'pp-points',  name: 'Crossover',      pattern: 'carbon',      colors: [0x1b324a, 0x0c1626, 0xffb347],           scale: 11.0,                tier: 4, pp: 4 },
   { id: 'pp-dispatch', name: 'Night Dispatch', pattern: 'aurora',     colors: [0x27173d, 0xd39bff, 0xffe08a, 0xf0d6ff], scale: 4.0, animated: true, tier: 4, tint: 0xd39bff, pp: 5 },
   { id: 'pp-silver',  name: 'Silver Service', pattern: 'gold',        colors: [0xc7ccd6, 0x2a3a55, 0xe8fbff],           scale: 7.0, animated: true, tier: 4, tint: 0x7ee0ff, pp: 6 },
-  { id: 'pp-firebox', name: 'Firebox',        pattern: 'molten',      colors: [0x2a120c, 0xc4562e, 0xffd98a],           scale: 3.0, animated: true, tier: 4, tint: 0xff8a3d, pp: 7 },
+  { id: 'pp-firebox', name: 'Footplate',      pattern: 'molten',      colors: [0x2a120c, 0xc4562e, 0xffd98a],           scale: 3.0, animated: true, tier: 4, tint: 0xff8a3d, pp: 7 },
   { id: 'pp-laurel',  name: 'Laurel Line',    pattern: 'livewire',    colors: [0x0e2a1e, 0x6fd08a, 0xffe59a],           scale: 5.0, animated: true, tier: 4, tint: 0x6fd08a, pp: 8 },
   { id: 'pp-sunset',  name: 'Sunset Limited', pattern: 'prism',       colors: [0xff8c3d, 0xb0248c, 0xffd27a],           scale: 6.0, animated: true, tier: 4, tint: 0xff7ad1, pp: 9 },
   { id: 'pp-crown',   name: 'Crown Jewels',   pattern: 'singularity', colors: [0x170838, 0xffcf40, 0xfff4bf, 0x7a4dff], scale: 7.0, animated: true, tier: 4, tint: 0xffcf40, pp: 10 },

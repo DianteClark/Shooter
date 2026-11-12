@@ -332,6 +332,119 @@ test('Progress: applyMatch moves tracks, stamps tier-ups first, pays mastery XP,
   assert.equal(JSON.parse(store.get('switchyard.custom.v1')).skins.anvil, 'skin:anvil-3', 'the operators store mirrors the save');
 });
 
+/* ---------- Prestige rework and Master Prestige (ROADMAP item 39, docs/PRESTIGE.md) ---------- */
+{
+  const { MAX_PRESTIGE, MAX_LEVEL, PLAYER_CURVE, MASTER_START_XP, MASTER_LEVEL_XP, MASTER_MAX, MASTER_TIERS, MASTER_REWARDS,
+    prestigeRankRewards, masterOf, masterRewardsBetween, badgeSvg, masterTierSvg, levelOf } = P;
+  const { ALL_EMBLEMS, EMBLEMS, emblemUnlocked } = await import('../js/ui/emblems.js');
+  const { masterOfEntry } = await import('../js/shared/boards.js');
+  const X = MASTER_LEVEL_XP, CAP = PLAYER_CURVE.cap;
+
+  test('prestige: every rank 1-10 has its own icon, its own camo (every gun) and its own calling card', () => {
+    const camos = new Set(), icons = new Set([badgeSvg(0)]);
+    for (let n = 1; n <= MAX_PRESTIGE; n++) {
+      const r = prestigeRankRewards(n);
+      assert.deepEqual(r.map(x => x.kind), ['rank', 'camo', 'card'], `P${n}`);
+      const camo = CAMOS.find(c => c.id === r[1].id);
+      assert.ok(camo && camo.pp === n && camo.tier === 4, `P${n} camo`);
+      camos.add(camo.id);
+      assert.ok(CARDS.some(c => c.id === r[2].id && c.group === 'Prestige'), `P${n} card`);
+      icons.add(badgeSvg(n));
+    }
+    assert.equal(camos.size, MAX_PRESTIGE);
+    assert.equal(icons.size, MAX_PRESTIGE + 1);
+    assert.ok(camoGateOpen(CAMOS.find(c => c.pp === 3), blankSave().weapons.ar ?? {}, null, { prestige: 3, master: 0 }));
+    assert.equal(camoGateOpen(CAMOS.find(c => c.pp === 4), {}, null, { prestige: 3, master: 0 }), false);
+    assert.equal(camoGateOpen(CAMOS.find(c => c.pp === 1), {}, null, null), false, 'no rank given: closed');
+  });
+
+  test('Master: levels from total XP past eleven climbs, steady per level, capped; icon tiers every 100 and the milestones exist', () => {
+    assert.equal(MASTER_START_XP, (MAX_PRESTIGE + 1) * CAP);
+    assert.equal(masterOf(10, 49, 1e12), 0, 'not before level 50 at Prestige X');
+    assert.equal(masterOf(9, 50, 1e12), 0);
+    assert.equal(masterOf(10, 50, 0), 1, 'Prestige X level 50 is Master 1 whatever the total says');
+    assert.equal(masterOf(10, 50, MASTER_START_XP + 99 * X - 1), 99);
+    assert.equal(masterOf(10, 50, MASTER_START_XP + 99 * X), 100);
+    assert.equal(masterOf(10, 50, 1e9), MASTER_MAX);
+    const tiers = new Set(Array.from({ length: MASTER_TIERS }, (_, t) => masterTierSvg(t)));
+    assert.equal(tiers.size, MASTER_TIERS, 'each tier its own icon');
+    assert.equal(badgeSvg(10, 48, 150), masterTierSvg(1), 'Master 150 wears the 100 tier');
+    for (const r of MASTER_REWARDS) {
+      if (r.kind === 'card') assert.ok(CARDS.find(c => c.id === r.id)?.need({ master: r.level }) && !CARDS.find(c => c.id === r.id).need({ master: r.level - 1 }), r.id);
+      if (r.kind === 'camo') assert.equal(CAMOS.find(c => c.id === r.id)?.mlv, r.level, r.id);
+      if (r.kind === 'emblem') {
+        const e = ALL_EMBLEMS.find(x => x.id === r.id);
+        assert.ok(e && emblemUnlocked(e, { master: r.level }).unlocked && !emblemUnlocked(e, { master: r.level - 1 }).unlocked, r.id);
+        assert.ok(!EMBLEMS.includes(e), 'kept out of the pool\'s emblem list');
+      }
+    }
+    const all = masterRewardsBetween(0, MASTER_MAX);
+    assert.equal(all.filter(r => r.kind === 'rank').length, MASTER_TIERS);
+    assert.equal(all.length, MASTER_TIERS + MASTER_REWARDS.length);
+    assert.deepEqual(masterRewardsBetween(99, 100).map(r => r.id), ['master:1', 'ml-platinum']);
+  });
+
+  // A Prestige X player from before Master levels: level 50, and a total that runs 123 levels' worth past the eleventh climb.
+  const oldP10 = () => {
+    const s = blankSave();
+    Object.assign(s, { name: 'Sovereign', prestige: 10, xp: CAP, totalXp: MASTER_START_XP + 123 * X + 7, peakLevel: MAX_LEVEL });
+    return s;
+  };
+  test('old saves: a Prestige X save converts to its Master level from total XP with no loss, and codes round-trip', () => {
+    const s = migrateSave(JSON.parse(JSON.stringify(oldP10())));
+    assert.equal(s.prestige, 10);
+    assert.equal(levelOf(s.xp), MAX_LEVEL);
+    assert.equal(s.totalXp, MASTER_START_XP + 123 * X + 7, 'every XP kept');
+    assert.equal(masterOf(s.prestige, levelOf(s.xp), s.totalXp), 124);
+    const code = encodeSave(s);
+    const back = decodeSave(code);
+    assert.ok(back.ok, back.error);
+    assert.equal(masterOf(back.save.prestige, levelOf(back.save.xp), back.save.totalXp), 124);
+    assert.equal(encodeSave(back.save), code, 'append-only: the code re-exports byte for byte (nothing new stored)');
+    // A code written by the build before the rework reads the same.
+    assert.ok(code.startsWith('SY4.'));
+  });
+
+  test('Progress: prestige reveal rewards, the rank camo on every gun, then Master levels with their icons and milestones', () => {
+    // Prestige IX at level 50: one prestige to go.
+    const s = oldP10();
+    Object.assign(s, { prestige: 9, totalXp: 10 * CAP });
+    assert.ok(Progress.importCode(encodeSave(s)).ok);
+    assert.ok(Progress.canPrestige());
+    assert.equal(Progress.master, 0);
+    assert.equal(Progress.isUnlocked('ar', 'pp-crown'), false);
+    const r = Progress.doPrestige();
+    assert.ok(r.ok);
+    assert.deepEqual(r.rewards.map(x => x.id), ['badge:10', 'pp-crown', 'prestige-10']);
+    assert.ok(['ar', 'sniper', 'pistol'].every(w => Progress.isUnlocked(w, 'pp-crown') && Progress.isUnlocked(w, 'pp-brake')), 'rank camos on every gun');
+    assert.equal(Progress.canPrestige(), false, 'no prestige past X');
+    assert.equal(Progress.prestigeTrack().next.kind, 'master');
+    // Climb to level 50 at Prestige X: Master 1, its icon and its card.
+    const up = Progress.applyMatch({ xp: CAP, weapons: { ar: { xp: 100, kills: 1 } }, pro: {} });
+    assert.equal(up.level.master, 1);
+    assert.equal(up.level.masterBefore, 0);
+    assert.equal(Progress.badge().master, 1);
+    assert.equal(up.unlocks[0].id, 'master:0');
+    assert.ok(up.unlocks.some(u => u.kind === 'card' && u.id === 'mp-1'));
+    // On past Master 100: the Bronze icon and the Master Line camo, stamped once (not once per gun used).
+    const m = Progress.applyMatch({ xp: 100 * X, weapons: { ar: { xp: 100, kills: 1 }, smg: { xp: 100, kills: 1 } }, pro: {} });
+    assert.equal(m.level.master, 101);
+    assert.equal(m.level.mp.level, 101);
+    assert.equal(m.unlocks.filter(u => u.id === 'ml-platinum').length, 1);
+    assert.ok(m.unlocks.some(u => u.id === 'master:1'));
+    assert.ok(Progress.isUnlocked('lmg', 'ml-platinum'));
+    assert.equal(Progress.isUnlocked('lmg', 'ml-lamps'), false);
+    assert.equal(Progress.prestigeTrack().next.level, 200);
+    // Everywhere a level shows reads the same Master level: badge, and the boards' card.
+    assert.equal(masterOfEntry(Progress.careerCard()), Progress.master);
+    assert.equal(Progress.levelProgress().master, 101);
+    // The save keeps no new field, and a code of it re-imports to the same Master level.
+    const code = Progress.exportCode();
+    assert.ok(Progress.importCode(code).ok);
+    assert.equal(Progress.master, 101);
+  });
+}
+
 /* ---------- One bot match through the tracker ---------- */
 if (!process.argv.includes('quick')) {
   const { Sim, buildRoster } = await import('../js/sim/sim.js');
