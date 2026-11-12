@@ -262,6 +262,9 @@ export class ZmFx {
     this.drops.count = n;
     this.drops.instanceMatrix.needsUpdate = true;
     if (this.drops.instanceColor) this.drops.instanceColor.needsUpdate = true;
+    // The renderer's scene does not update world matrices by itself (renderer.js): without this the crate stayed where
+    // it was first built (the map's corner) and an opened gate never moved.
+    this.group.updateMatrixWorld(true);
   }
 
   dispose() {
