@@ -1,6 +1,7 @@
 {
  "ar": {
   "kit": {
+   "optic": "reticle",
    "barrel": "s_trueline",
    "mag": "s_matchmag"
   },
@@ -11,7 +12,9 @@
  },
  "burst": {
   "kit": {
-   "barrel": "stub",
+   "optic": "holo",
+   "barrel": "suppressor",
+   "mag": "speedmag",
    "grip": "s_metronome"
   },
   "sigs": [
@@ -20,8 +23,10 @@
  },
  "heavyar": {
   "kit": {
-   "optic": "ghostring",
-   "mag": "s_mule"
+   "optic": "holo",
+   "barrel": "heavybarrel",
+   "mag": "s_mule",
+   "grip": "handstop"
   },
   "sigs": [
    "s_mule"
@@ -29,9 +34,8 @@
  },
  "smg": {
   "kit": {
-   "optic": "canted",
-   "barrel": "stub",
-   "mag": "lightmag",
+   "barrel": "breacher",
+   "mag": "speedmag",
    "grip": "s_featherframe"
   },
   "sigs": [
@@ -40,9 +44,10 @@
  },
  "pdw": {
   "kit": {
-   "optic": "pointdot",
+   "optic": "holo",
    "barrel": "s_burr",
-   "mag": "s_rattle"
+   "mag": "s_rattle",
+   "grip": "skelstock"
   },
   "sigs": [
    "s_burr",
@@ -53,7 +58,7 @@
   "kit": {
    "optic": "s_needlesight",
    "barrel": "s_suture",
-   "mag": "tapedmag"
+   "grip": "wrap"
   },
   "sigs": [
    "s_needlesight",
@@ -62,9 +67,9 @@
  },
  "shotgun": {
   "kit": {
-   "optic": "pointdot",
-   "barrel": "rifled",
-   "mag": "flitewad",
+   "optic": "irons",
+   "barrel": "choke",
+   "mag": "magnum",
    "grip": "s_breachpump"
   },
   "sigs": [
@@ -75,7 +80,8 @@
   "kit": {
    "optic": "irons",
    "barrel": "s_runnerchoke",
-   "mag": "s_squalldrum"
+   "mag": "s_squalldrum",
+   "grip": "handstop"
   },
   "sigs": [
    "s_runnerchoke",
@@ -84,8 +90,7 @@
  },
  "coach": {
   "kit": {
-   "optic": "laserbox",
-   "barrel": "rifled",
+   "optic": "reflex",
    "mag": "s_buckball",
    "grip": "s_twintriggers"
   },
@@ -96,7 +101,7 @@
  },
  "lmg": {
   "kit": {
-   "mag": "k_assaultbox",
+   "barrel": "compensator",
    "grip": "s_prespun"
   },
   "sigs": [
@@ -105,7 +110,7 @@
  },
  "saw": {
   "kit": {
-   "optic": "canted",
+   "optic": "longeye",
    "barrel": "s_quickbarrel",
    "mag": "apmag",
    "grip": "s_droversling"
@@ -117,9 +122,10 @@
  },
  "rotary": {
   "kit": {
-   "optic": "prism",
+   "optic": "canted",
    "barrel": "s_lightbarrels",
-   "mag": "s_overdrive"
+   "mag": "s_overdrive",
+   "grip": "brace"
   },
   "sigs": [
    "s_lightbarrels",
@@ -128,7 +134,9 @@
  },
  "dmr": {
   "kit": {
-   "optic": "s_cheekpiece"
+   "optic": "s_cheekpiece",
+   "barrel": "heavybarrel",
+   "mag": "tapedmag"
   },
   "sigs": [
    "s_cheekpiece"
@@ -136,8 +144,9 @@
  },
  "battle": {
   "kit": {
-   "optic": "reflex",
+   "optic": "canted",
    "barrel": "s_pinbarrel",
+   "mag": "apmag",
    "grip": "s_hairtrigger"
   },
   "sigs": [
@@ -147,7 +156,8 @@
  },
  "lever": {
   "kit": {
-   "optic": "steady",
+   "optic": "reticle",
+   "mag": "speedmag",
    "grip": "s_looplever"
   },
   "sigs": [
@@ -157,6 +167,7 @@
  "sniper": {
   "kit": {
    "optic": "snapsight",
+   "barrel": "heavybarrel",
    "mag": "speedmag",
    "grip": "s_heavybolt"
   },
@@ -166,7 +177,7 @@
  },
  "antimat": {
   "kit": {
-   "optic": "snapsight",
+   "optic": "hunter",
    "barrel": "s_monobrake",
    "mag": "s_siege"
   },
@@ -188,8 +199,6 @@
  },
  "carbine": {
   "kit": {
-   "optic": "reflex",
-   "mag": "speedmag",
    "grip": "s_dashsling"
   },
   "sigs": [
@@ -198,7 +207,8 @@
  },
  "heavysmg": {
   "kit": {
-   "optic": "canted",
+   "optic": "ghostring",
+   "barrel": "suppressor",
    "mag": "s_ramrounds"
   },
   "sigs": [
@@ -207,7 +217,9 @@
  },
  "slug": {
   "kit": {
-   "mag": "s_sabot"
+   "optic": "reflex",
+   "mag": "s_sabot",
+   "grip": "angled"
   },
   "sigs": [
    "s_sabot"
@@ -216,7 +228,6 @@
  "lightlmg": {
   "kit": {
    "optic": "steady",
-   "barrel": "suppressor",
    "mag": "s_box75"
   },
   "sigs": [
@@ -226,7 +237,6 @@
  "crossbow": {
   "kit": {
    "optic": "canted",
-   "barrel": "longbarrel",
    "mag": "s_broadhead",
    "grip": "s_recurve"
   },
@@ -237,9 +247,8 @@
  },
  "rampar": {
   "kit": {
-   "optic": "prism",
+   "optic": "reticle",
    "barrel": "heavybarrel",
-   "mag": "speedmag",
    "grip": "s_lightwheel"
   },
   "sigs": [
@@ -259,9 +268,7 @@
  },
  "hushsmg": {
   "kit": {
-   "optic": "ghostring",
-   "barrel": "longbarrel",
-   "mag": "extmag",
+   "optic": "reflex",
    "grip": "s_muffledbolt"
   },
   "sigs": [
@@ -270,6 +277,8 @@
  },
  "drumsmg": {
   "kit": {
+   "optic": "ghostring",
+   "mag": "lightmag",
    "grip": "s_gyro"
   },
   "sigs": [
@@ -278,7 +287,8 @@
  },
  "magshot": {
   "kit": {
-   "optic": "laserbox",
+   "optic": "reflex",
+   "barrel": "rifled",
    "mag": "s_boxtwelve",
    "grip": "vertical"
   },
@@ -288,10 +298,9 @@
  },
  "flechette": {
   "kit": {
-   "optic": "holo",
+   "optic": "irons",
    "barrel": "s_needlechoke",
-   "mag": "s_barbed",
-   "grip": "angled"
+   "mag": "s_barbed"
   },
   "sigs": [
    "s_needlechoke",
@@ -300,8 +309,7 @@
  },
  "beltlmg": {
   "kit": {
-   "optic": "canted",
-   "barrel": "suppressor",
+   "optic": "longeye",
    "mag": "s_longbelt",
    "grip": "s_bedded"
   },
@@ -312,7 +320,8 @@
  },
  "twinshot": {
   "kit": {
-   "optic": "steady",
+   "optic": "longeye",
+   "barrel": "stub",
    "grip": "s_lockstep"
   },
   "sigs": [
@@ -321,8 +330,6 @@
  },
  "hushdmr": {
   "kit": {
-   "optic": "canted",
-   "barrel": "longbarrel",
    "mag": "s_hollowpoint"
   },
   "sigs": [
@@ -331,7 +338,8 @@
  },
  "scout": {
   "kit": {
-   "optic": "prism",
+   "optic": "snapsight",
+   "barrel": "floated",
    "mag": "s_stripper",
    "grip": "s_wingbolt"
   },
@@ -342,10 +350,10 @@
  },
  "rail": {
   "kit": {
-   "optic": "prism",
+   "optic": "snapsight",
    "barrel": "s_overcharge",
    "mag": "s_capacitor",
-   "grip": "angled"
+   "grip": "thumbrest"
   },
   "sigs": [
    "s_capacitor",

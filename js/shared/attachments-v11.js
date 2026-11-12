@@ -112,13 +112,13 @@ const LIST = [
 
   sig('s_ramrounds', 'heavysmg', 'mag', 'Ram Rounds', 25,
     'The bruiser that shoots through the crate you hide behind.',
-    'Keeps more damage through cover. Slower fire, fewer rounds.',
-    { penetrate: 1.35, rpm: 0.92, magazine: 0.85 }, { look: { mag: 'apmag' } }),
+    'Keeps more damage through cover. Fewer rounds.',
+    { penetrate: 1.35, magazine: 0.85 }, { look: { mag: 'apmag' } }),
 
   sig('s_muffledbolt', 'hushsmg', 'grip', 'Muffled Bolt', 16,
     'For the ghost who is always moving.',
-    'Fires sooner out of a sprint, moves faster aimed. Shorter range.',
-    { sprintToFire: 0.85, adsMoveMult: 1.1, range: 0.9 }, { look: { grip: 'wrap' } }),
+    'Fires sooner out of a sprint, moves faster aimed. Slower to swap.',
+    { sprintToFire: 0.85, adsMoveMult: 1.1, swapTime: 1.1 }, { look: { grip: 'wrap' } }),
   conv('k_openmuzzle', 'hushsmg', 'barrel', 'Open Muzzle', 26,
     'Trades the Murmur\'s silence for real reach.',
     'No longer suppressed: shows on the minimap and is loud. Reaches much further and fades less.',
@@ -443,7 +443,8 @@ export const SIG_GAIN = 1.5, SIG_GAIN_CORE = 1.25, SIG_COST = 0.5;
 // for that one signature; 1 means the strength is its base value, still a clear upgrade over its pre-boost self
 // (its costs stay halved), below 1 a little less than base.
 export const SIG_TRIM = {
-  s_prespun: { gain: 1 },        // Bulwark: starting fire rate +30% (boosted +45%) took it to 1.36 mirrored.
+  s_prespun: { gain: 0.6 },      // Bulwark: starting fire rate +30% (boosted +45%) took it to 1.36 mirrored, still 1.31-1.33 at +30%; now +18%.
+  s_mule: { core: 0.75 },        // Drayman: damage +8% (boosted +10%) stretched its three-shot reach: 1.23-1.29; now +6%.
   s_overdrive: { core: 1 },      // Millrace: fire rate +10% (boosted +12.5%) with Light Barrels: 1.30.
   s_looplever: { core: 1 },      // Prospector: fire rate +20% (boosted +25%): the biggest duel gain of any signature.
   s_capacitor: { gain: 1 },      // Lodestone: charge time -28% (boosted -42%): its best build ran 1.24, with both signatures 1.30.
