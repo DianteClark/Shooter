@@ -3,9 +3,9 @@
 //   node dev/sim-br.mjs --quick    one quads match and the unit checks (--map=brtest for the test map)
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
-import { BR } from '../js/shared/modes.js';
+import { BR, RB } from '../js/shared/modes.js';
 import { SIM_HZ, MAX_HP, WEAPON_IDS, WEAPON_CATEGORY } from '../js/shared/constants.js';
-import { BR_KIND, flightLine, brHandWant, brDef, brArm, HANDS } from '../js/sim/br.js';
+import { BR_KIND, flightLine, brHandWant, brDef, brArm, HANDS, recallBeacons, reboundArea } from '../js/sim/br.js';
 import { stepPlayer } from '../js/sim/player.js';
 import { brMode, cleanSquad } from '../js/ui/br-squad.js';
 
@@ -375,6 +375,121 @@ function followUnits() {
   check(moveSame / n < 0.2 && aimSame / n < 0.12, `squadmates do not walk or aim with the human (${(moveSame / n * 100).toFixed(0)}%, ${(aimSame / n * 100).toFixed(0)}%)`);
 }
 
+// ---- Recall Beacons (owner notes): a fallen squadmate's tag, taken to a beacon, brings them back ----
+function recallUnits() {
+  console.log('recall beacons');
+  const bs = recallBeacons(MAP);
+  const gap = Math.min(...bs.flatMap((a, i) => bs.slice(i + 1).map(b => Math.hypot(a.x - b.x, a.z - b.z))));
+  check(bs.length === BR.recall.count && gap >= BR.recall.gap, `${bs.length} beacons on ${MAP.id}, ${gap.toFixed(0)} m or more apart (${bs.map(b => b.poi).join(', ')})`);
+  check(bs.every(b => b.x > 0 && b.z > 0 && b.x < MAP.width && b.z < MAP.height), 'all on the map');
+  let inArea = 0, n = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const A = reboundArea(MAP, seed), rb = recallBeacons(MAP, A);
+    n++; if (rb.length >= 2 && rb.every(b => Math.hypot(b.x - A.x, b.z - A.z) < A.r)) inArea++;
+  }
+  check(inArea === n, `Rebound: two or more beacons inside the area for every seed (${inArea}/${n})`);
+
+  const humans = [{ id: 'h1', name: 'Me', team: 0 }, { id: 'h2', name: 'Pal', team: 0 }];
+  const sim = makeSim('br', 3, humans), guest = makeSim('br', 3, humans);
+  while (sim.phase !== 'live') sim.step(STEP);
+  const me = sim.byId.get('h1'), pal = sim.byId.get('h2'), R = sim.br;
+  for (const p of sim.players) { p.brAir = 0; p.br.landed = true; }
+  for (const p of sim.players) if (p.team !== me.team) { p.ps.x = 5; p.ps.z = 5; p.spawnProtect = 1e9; }
+  const bc = R.beacons[0];
+  me.ps.x = bc.x + 8; me.ps.z = bc.z; pal.ps.x = bc.x + 12; pal.ps.z = bc.z;
+  for (let i = 0; i < 20; i++) sim.step(STEP);
+  check(R.recallOn, 'beacons online in the early circles');
+  const foe = sim.players.find(p => p.team !== me.team);
+  pal.spawnProtect = 0; sim._damage(pal, foe, 500, 'ar', 10); sim._damage(pal, foe, 500, 'ar', 10);
+  check(!pal.alive && !R.squadsOut.has(me.team), 'a squadmate dies; the squad is still in');
+  const tag = R.items.find(it => it && it.kind === BR_KIND.tag && it.v === pal.index);
+  check(!!tag, 'their tag drops where they fell');
+  sim.drainEvents();
+  let view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h1'))), 'h1');
+  check(view.players.find(p => p.id === 'h2').recallable && view.br.recallOn && view.br.beacons.length === bs.length, 'a guest sees the squadmate can be recalled and the beacons online');
+  check(!sim.applyCommand('h1', { cmd: 'br', act: 'recall' }), 'no recall without the tag');
+  me.ps.x = tag.x; me.ps.z = tag.z;
+  for (let i = 0; i < 4; i++) sim.step(STEP);
+  check(me.br.tags.includes(pal.index) && !R.items[tag.id], 'walking over the tag picks it up');
+  check(sim.drainEvents().some(e => e.t === 'brtag' && e.id === 'h1' && e.who === 'h2'), 'the phone is told (brtag)');
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h1'))), 'h1');
+  check(view.br.inv.tags[0] === 'h2' && view.players.find(p => p.id === 'h1').tagged, 'the carried tag is in the guest\'s inventory');
+  // At the beacon: hold it for BR.recall.time. A shot stops it, and so does walking off.
+  me.ps.x = bc.x + 0.5; me.ps.z = bc.z;
+  check(sim.applyCommand('h1', { cmd: 'br', act: 'recall', b: bc.id }) && me.br.recall && bc.user === 'h1', 'recall started at the beacon');
+  check(sim.drainEvents().some(e => e.t === 'brrecall' && e.kind === 'start'), 'everyone hears it start (brrecall)');
+  for (let i = 0; i < SIM_HZ; i++) sim.step(STEP);
+  R.onShot(me);
+  check(!me.br.recall && !bc.user, 'firing stops the recall');
+  sim.applyCommand('h1', { cmd: 'br', act: 'recall', b: bc.id });
+  me.ps.x = bc.x + 6;
+  sim.step(STEP);
+  check(!me.br.recall, 'walking off stops it');
+  me.ps.x = bc.x + 0.5;
+  sim.applyCommand('h1', { cmd: 'br', act: 'recall', b: bc.id });
+  for (let i = 0; i < SIM_HZ * 3; i++) { me.ps.x = bc.x + 0.5; me.ps.z = bc.z; sim.step(STEP); }
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h1'))), 'h1');
+  check(view.br.inv.recall && view.br.inv.recall.k > 0.3 && view.br.inv.recall.k < 0.7 && view.br.beacons[bc.id].k > 0.3, `the progress rides the wire (${view.br.inv.recall?.k})`);
+  sim.drainEvents();
+  for (let i = 0; i < SIM_HZ * (BR.recall.time - 2.9); i++) { me.ps.x = bc.x + 0.5; me.ps.z = bc.z; sim.step(STEP); }
+  const evs = sim.drainEvents();
+  check(pal.alive && pal.brAir === 2 && bc.used && !me.br.tags.length, 'the squadmate parachutes back in, the beacon is spent');
+  check(evs.some(e => e.t === 'brinv' && e.id === 'h2' && e.air === 2) && pal.br.guns[0] && pal.br.guns[1]?.id === 'pistol', 'with a basic kit sent to their phone');
+  check(Math.hypot(pal.br.dropX - bc.x, pal.br.dropZ - bc.z) < 8, 'landing beside the beacon');
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h1'))), 'h1');
+  check(view.br.beacons[bc.id].used, 'a guest sees the beacon spent');
+  // One use: a second death, a second tag, the same beacon refuses.
+  for (let i = 0; i < SIM_HZ * (BR.glide + 1); i++) sim.step(STEP);
+  pal.spawnProtect = 0; sim._damage(pal, foe, 500, 'ar', 10); sim._damage(pal, foe, 500, 'ar', 10);
+  const tag2 = R.items.find(it => it && it.kind === BR_KIND.tag && it.v === pal.index);
+  me.ps.x = tag2.x; me.ps.z = tag2.z; for (let i = 0; i < 4; i++) sim.step(STEP);
+  me.ps.x = bc.x + 0.5; me.ps.z = bc.z;
+  check(!sim.applyCommand('h1', { cmd: 'br', act: 'recall', b: bc.id }), 'a spent beacon takes no second recall');
+  // An enemy walks over a tag and leaves it.
+  me.ps.x = 30; me.ps.z = 30;
+  const other = R.beacons[1];
+  me.ps.x = other.x + 0.5; me.ps.z = other.z;
+  const carrierDies = me.br.tags.length === 1;
+  // The carrier dies: the tag goes down with them (and theirs).
+  const bot = sim.players.find(p => p.team === me.team && p.isBot && p.alive);
+  bot.ps.x = 3; bot.ps.z = 3;
+  me.spawnProtect = 0; sim._damage(me, foe, 500, 'ar', 10); sim._damage(me, foe, 500, 'ar', 10);
+  const down = R.items.filter(it => it && it.kind === BR_KIND.tag);
+  check(carrierDies && down.some(it => it.v === pal.index) && down.some(it => it.v === me.index), `a carrier's death drops the tags it held and its own (${down.length})`);
+  foe.ps.x = down[0].x; foe.ps.z = down[0].z; foe.spawnProtect = 0;
+  R._pickups(foe);
+  check(R.items[down[0].id] && !foe.br.tags.length, 'an enemy cannot take a tag');
+  // Circle 5: offline, and the tags are gone.
+  R.phase = BR.recall.off; sim.step(STEP);
+  check(!R.recallOn && !R.items.some(it => it && it.kind === BR_KIND.tag), 'from circle 5 the beacons are offline and tags are gone');
+  check(sim.drainEvents().some(e => e.t === 'brbeacons' && !e.on), 'everyone is told (brbeacons)');
+
+  // Rebound: beacons wait until the redeploys are over.
+  const rb = makeSim('rb', 4);
+  while (rb.phase !== 'live') rb.step(STEP);
+  rb.step(STEP);
+  check(!rb.br.recallOn && rb.br.beacons.length >= 2, `Rebound: beacons offline while redeploys run (${rb.br.beacons.length} in the area)`);
+  rb.br.phase = RB.recall.from; rb.step(STEP);
+  check(rb.br.recallOn, `Rebound: online from circle ${RB.recall.from + 1}, when redeploys end`);
+  rb.br.phase = RB.recall.off; rb.step(STEP);
+  check(!rb.br.recallOn, 'Rebound: offline for the last circle');
+}
+
+// Bots use beacons in real matches: tags fetched and squadmates recalled.
+function recallBots() {
+  let tags = 0, done = 0, starts = 0, n = 0;
+  for (const seed of [31, 32, 33]) {
+    const sim = makeSim('br', seed);
+    while (sim.phase !== 'ended' && sim.time < 60 * 15) {
+      sim.step(STEP);
+      for (const e of sim.drainEvents()) { if (e.t === 'brtag') tags++; if (e.t === 'brrecall' && e.kind === 'done') done++; if (e.t === 'brrecall' && e.kind === 'start') starts++; }
+    }
+    n++;
+  }
+  console.log(`  bots over ${n} quads matches: ${tags} tags picked up, ${starts} recalls started, ${done} squadmates recalled`);
+  check(tags >= 3 && done >= 2, `bots pick up tags and recall squadmates (${tags} tags, ${done} recalls)`);
+}
+
 // ---- The transport (owner notes): how many are still aboard, the same on a guest as on the host ----
 function planeUnits(mode = 'br') {
   console.log(`transport: players aboard (${mode})`);
@@ -442,6 +557,7 @@ function handsUnits() {
 }
 
 if (args.includes('--follow')) { followUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
+if (args.includes('--recall')) { recallUnits(); if (!QUICK) recallBots(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes('--plane')) { planeUnits('br'); planeUnits('rb'); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes('--hands')) { handsUnits(); console.log(failed ? `${failed} FAILED` : 'all ok'); process.exit(failed ? 1 : 0); }
 if (args.includes("--flight")) { flightUnits(); console.log(failed ? failed + " FAILED" : "all ok"); process.exit(failed ? 1 : 0); }
@@ -449,6 +565,7 @@ squadUnits();
 planeUnits('br');
 planeUnits('rb');
 handsUnits();
+recallUnits();
 healUnits();
 flightUnits();
 followUnits();
