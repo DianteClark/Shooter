@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: '1111-23', date: '2026-11-11', title: 'A cleaner match HUD',
+    items: [
+      'The weapon and ammo panel now sits up by the top corner, clear of the aim stick, on every iPhone size.',
+      'Battle royale and extraction: each teammate is one tidy row with their name, a health bar and a thin plates bar. Downed shows red with a down mark, out is greyed. Longer names fit.',
+      'When you are out and spectating, the weapon panel goes away and the Eliminated banner moves up, clear of both sticks.',
+      'The FPS readout is now one small line in the bottom corner, so it no longer covers the contract tracker or anything else.',
+      'Kill feed rows always stay inside their box: long names are shortened, and the words (like "was infected") stay readable.',
+      'New HUD size option (Small, Normal, Large) in Options.',
+    ],
+  },
+  {
     build: '1111-22', date: '2026-11-11', title: 'Controllers and voice chat',
     items: [
       'Play with a controller: PlayStation, Xbox and iPhone (MFi) controllers work on iPhone and Android. Left stick moves, right stick aims, triggers aim and fire, and every action has a button, including reload and melee.',

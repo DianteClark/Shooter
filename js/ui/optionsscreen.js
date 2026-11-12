@@ -1,5 +1,5 @@
 // The settings screen. Every control is a tap target (no drags), and a tap patches only its own row.
-import { Options, QUALITY_LEVELS, STEPPED } from './options.js';
+import { Options, QUALITY_LEVELS, HUD_SIZES, STEPPED } from './options.js';
 import { esc } from './widgets.js';
 import { ico, header } from './yard.js';
 import { pop } from './motion.js';
@@ -71,8 +71,12 @@ export function optionsScreen(menu, opts) {
         ${stepper('sensitivity')}
         ${stepper('aimAssist')}
         <div class="opt-row">
-          <div class="opt-name"><b>Left-handed</b><small>Mirrors the sticks and buttons</small></div>
+          <div class="opt-name"><b>Left-handed</b><small>Mirrors the sticks, buttons and HUD</small></div>
           ${toggle('optLefty')}
+        </div>
+        <div class="opt-row opt-hudsize">
+          <div class="opt-name"><b>HUD size</b><small>Health, weapon, feed and objectives</small></div>
+          <div class="opt-segs">${HUD_SIZES.map(([id, label]) => `<button class="seg" data-act="optHudSize" data-id="${id}">${label}</button>`).join('')}</div>
         </div>
         <div class="opt-row">
           <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
@@ -106,6 +110,7 @@ export function optionsScreen(menu, opts) {
   const paint = () => {
     const v = Options.values;
     for (const b of menu.el.querySelectorAll('[data-act="optQuality"]')) b.classList.toggle('on', b.dataset.id === v.quality);
+    for (const b of menu.el.querySelectorAll('[data-act="optHudSize"]')) b.classList.toggle('on', b.dataset.id === v.hudSize);
     const fps = q('.opt-fps');
     fps.classList.toggle('on', v.fps);
     fps.querySelector('b').textContent = v.fps ? 'On' : 'Off';
@@ -150,6 +155,7 @@ export function optionsScreen(menu, opts) {
   menu.on({
     optBack: () => onBack(),
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
+    optHudSize: ({ id }) => { Options.set('hudSize', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
     optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },

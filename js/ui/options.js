@@ -4,8 +4,11 @@ const KEY = 'switchyard-options';
 // Ids match QUALITY_STEPS in js/render/quality.js. 'high' and 'low' keep their meaning from older saves.
 export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['potato', 'Potato']];
 
+// The in-match HUD's panels (js/ui/hud.js setHudSize): the streak tiles never go below their touch size.
+export const HUD_SIZES = [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']];
+
 export const OPTION_DEFAULTS = Object.freeze({
-  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, voice: 1, sound: 1, music: 1, matchMusic: false, fps: false, touchDebug: false, autoRespawn: false,
+  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, hudSize: 'normal', voice: 1, sound: 1, music: 1, matchMusic: false, fps: false, touchDebug: false, autoRespawn: false,
   squad: '',     // Squad tag for public rooms (js/net/lobbies.js): letters and digits, up to 10; '' for none.
   hardcore: false,   // The Hardcore switch on the Multiplayer screen (and what a hosted friend room starts with).
   voiceMode: 'open',   // 'open': the mic sends while it is on. 'ptt': push to talk, only while the mic (or Talk) is held.
@@ -35,6 +38,7 @@ function load() {
     const out = { ...OPTION_DEFAULTS };
     for (const key of Object.keys(OPTION_DEFAULTS)) if (typeof raw[key] === typeof OPTION_DEFAULTS[key]) out[key] = raw[key];
     if (!QUALITY_LEVELS.some(([id]) => id === out.quality)) out.quality = 'auto';
+    if (!HUD_SIZES.some(([id]) => id === out.hudSize)) out.hudSize = 'normal';
     if (out.voiceMode !== 'open' && out.voiceMode !== 'ptt') out.voiceMode = 'open';
     const map = {};
     if (out.padMap && typeof out.padMap === 'object' && !Array.isArray(out.padMap)) {

@@ -34,8 +34,17 @@ export function glyph(id, size = 20, cls = 'gl') {
 const MINIMAP_HZ = 10;
 const MM_SCALE = 2;              // Backing-store pixels per CSS pixel; fixed so the canvas is never resized.
 const MM_WIDTH = 118;            // CSS pixels; the height follows the map's aspect.
-const FEED_ROWS = 4;
-const FEED_LIFE = 5.5;
+const FEED_ROWS = 3;              // Short and quick: the feed never reaches down to the move stick.
+const FEED_LIFE = 4;
+const FEED_ROW_H = 22;            // A feed row and its gap.
+const HUD_SCALE = { small: 0.88, normal: 1, large: 1.14 };   // Options: HUD size.
+const DOCK_BOTTOM = 6;           // Health and the tiles sit this far off the bottom edge.
+const DOCK_GAP = 4;
+const LANE_H = 46;               // The prompt lane over the dock.
+const LANE_MAX = 300;
+const OUT_H = 46;                // The battle royale's out plate while watching.
+const ARMS_EDGE = 8;             // The weapon panel's inset from the side.
+const STRIP_ROW_H = [36, 30, 24];   // Least height kept for each objective strip row (content comes and goes).
 const HIT_LIFE = 0.22;
 const DMG_LIFE = 1.3;
 const MEDAL_LIFE = 1.6;
@@ -139,7 +148,7 @@ const SND_CSS = `
 .theirs .snd-pips { flex-direction: row-reverse; }
 .snd-pips i { flex: 1; background: rgba(231,234,228,.3); transform: skewX(-24deg); }
 .snd-pips i.on { background: var(--team); box-shadow: 0 0 6px var(--team); }
-.snd-alive { position: absolute; left: 50%; top: calc(var(--st) + 43px); transform: translateX(-50%); align-items: center; gap: 8px;
+.snd-alive { align-items: center; gap: 8px;
   padding: 3px 8px; pointer-events: none; background: var(--hud-glass-lo); box-shadow: var(--hud-edge); }
 .sa-side { display: flex; gap: 2px; }
 .sa-side.theirs { flex-direction: row-reverse; }
@@ -151,7 +160,6 @@ const SND_CSS = `
 .sa-mid b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .sa-mid small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
 .sa-mid small[data-role="defend"] { color: var(--c-blue, #38b6ff); }
-.hud.snd-on .death-col, .hud.snd-on .picker { top: calc(var(--st) + 72px); }
 .death.snd-life-buy, .death.snd-life-spec { background: none; pointer-events: none; }
 .death.snd-life-buy .death-top, .death.snd-life-spec .death-top, .death.snd-life-buy .death-go, .death.snd-life-spec .death-go { display: none !important; }
 /* During a death replay the Next round line drops below the killcam banner and the alive strip. */
@@ -183,7 +191,7 @@ const SND_CSS = `
 .snd-ring small { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-shadow: var(--text-lift); }
 .snd-ring[data-kind="defuse"] { --rc: var(--c-blue, #38b6ff); }
 .snd-ring[data-kind="enemy"] { --rc: var(--c-red, #ff4d3d); }
-.snd-carry, .snd-spec { position: absolute; left: 50%; bottom: calc(var(--sb) + 10px); transform: translateX(-50%); align-items: center; gap: 10px;
+.snd-carry, .snd-spec { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 60px); transform: translateX(-50%); max-width: var(--lane-w, 300px); align-items: center; gap: 10px;
   padding: 6px 14px 7px 12px; background: var(--hud-glass); box-shadow: var(--hud-edge), inset 0 -2px 0 var(--c-sodium);
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
 .snd-carry { pointer-events: none; color: var(--c-sodium); }
@@ -204,7 +212,6 @@ const SND_CSS = `
 .snd-big[data-side="mine"] { --sb-c: var(--my-team); }
 .snd-big[data-side="enemy"] { --sb-c: var(--enemy-team); }
 .snd-big[data-side="gold"] { --sb-c: var(--c-gold, #ffcf40); }
-.hud.snd-on .medals { top: calc(var(--st) + 66px); }
 .hud.snd-out .status { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .snd-mark[data-state="planted"] .sm-plate { animation: none; } }
 `;
@@ -233,8 +240,7 @@ const CTF_CSS = `
 .hud.ctf-on .ctf-ui:not([hidden]) { display: flex; }
 .hud.ctf-on .sb-track { display: none; }
 .hud.ctf-on .snd-pips { display: flex; }
-.hud.ctf-on .medals { top: calc(var(--st) + 70px); }
-.ctf-status { position: absolute; left: 50%; top: calc(var(--st) + 43px); transform: translateX(-50%); gap: 4px; pointer-events: none; }
+.ctf-status { gap: 4px; pointer-events: none; }
 .cf-side { display: flex; align-items: center; gap: 6px; width: 148px; height: 24px; padding: 0 8px; background: var(--hud-glass-lo);
   box-shadow: var(--hud-edge), inset 0 -2px 0 var(--team); --cut: var(--cut-xs);
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
@@ -262,7 +268,7 @@ const CTF_CSS = `
 .ctf-mark[data-state="dropped"] small { color: var(--c-sodium); }
 .ctf-mark .sm-arrow { display: none; }
 .ctf-mark.off .sm-arrow { display: block; }
-.ctf-carry { position: absolute; left: 50%; bottom: calc(var(--sb) + 92px); transform: translateX(-50%); align-items: center; gap: 10px; pointer-events: none;
+.ctf-carry { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 92px); transform: translateX(-50%); align-items: center; gap: 10px; pointer-events: none;
   padding: 6px 14px 7px 12px; color: var(--enemy-team); --icon-accent: currentColor; background: var(--hud-glass);
   box-shadow: var(--hud-edge), inset 0 -2px 0 var(--enemy-team); --cut: var(--cut-sm);
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
@@ -358,6 +364,37 @@ function killCause(e) {
   return weaponName(e.weapon);
 }
 
+// The objective strip: up to three centred rows under the score bar (at the top edge where a mode has no score bar)
+// that every mode's state renders into, instead of each mode placing its own plates. A layer mounts its element into a
+// row once (`hud.strip.mount(node, { row, order })`) and keeps updating it as before; the HUD's layout pass places the
+// rows clear of the minimap, the squad panel, the corner and the weapon panel, and narrows them to fit.
+//   row 0  the mode's state: flags, the hardpoint clock, alive counts, the circle, extraction's clock and lives
+//   row 1  its detail: the mode's status plate, the extraction contract
+//   row 2  live progress while it lasts: the zone meter, exfil hold, reviving
+export class ObjStrip {
+  constructor(hudEl, after) {
+    this.el = document.createElement('div');
+    this.el.className = 'ostrip';
+    this.rows = [0, 1, 2].map(n => {
+      const r = document.createElement('div');
+      r.className = 'os-row';
+      r.dataset.row = n;
+      this.el.appendChild(r);
+      return r;
+    });
+    if (after) after.after(this.el);
+    else hudEl.appendChild(this.el);
+  }
+
+  mount(node, { row = 0, order = 0 } = {}) {
+    if (!node) return null;
+    node.classList.add('os-item');
+    node.style.order = order;
+    this.rows[row].appendChild(node);
+    return node;
+  }
+}
+
 export class HUD {
   #range;
 
@@ -374,6 +411,7 @@ export class HUD {
     this.badges = new Map();      // Player id -> { prestige, level }, from the match roster.
     this.mode = 'tdm';
     this.camera = null;           // World markers project through this; handed over once per match.
+    this.hudK = 1;
     this.viewW = root.clientWidth || innerWidth;
     this.viewH = root.clientHeight || innerHeight;
     this.markObstacles = [];
@@ -406,16 +444,191 @@ export class HUD {
     this.viewW = this.root.clientWidth;
     this.viewH = this.root.clientHeight;
     this.safe = safeInsets();
+    this.layout();
     this.markObstacles = [];
-    const add = r => this.markObstacles.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom });
+    const add = r => { if (r.width > 0) this.markObstacles.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom }); };
     for (const r of Object.values(this.controls?.rects ?? {})) this.markObstacles.push(r);
-    add(this.el.querySelector('.minimap').getBoundingClientRect());
-    add(this.el.querySelector('.corner').getBoundingClientRect());
+    for (const sel of ['.minimap', '.corner', '.arms', '.vitals', '.feed', '.br-squad', '.ex-squad', '.zm-crew', '.os-row[data-row="0"]', '.os-row[data-row="1"]']) add(this.el.querySelector(sel).getBoundingClientRect());
     // The Pro layer is drawn at CSS pixels: a few thin shapes do not need the phone's full pixel ratio.
     this.proCanvas.width = Math.max(1, Math.round(this.viewW));
     this.proCanvas.height = Math.max(1, Math.round(this.viewH));
     this.proDrawn = true;
   }
+
+  // Options: HUD size (Small, Normal, Large) scales the panels; the layout pass keeps them clear of the thumbs.
+  setHudSize(size) {
+    this.hudK = HUD_SCALE[size] ?? 1;
+    this.root.style.setProperty('--hud-k', this.hudK);
+    this.layout();
+  }
+
+  // The layout pass: where the dock (health, streak tiles or the battle royale's kit), the prompt lane over it, the
+  // weapon panel and the objective strip's rows go, from the measured stick zones and buttons (js/ui/controls.js
+  // geometry: they move with the move stick size, the fire ring and the sensitivity) and the panels' own sizes. The
+  // results are CSS custom properties on the shared root, so the HUD and the controls read the same numbers. Runs on a
+  // new match, rotation, and a change of HUD size or hand; never per frame.
+  layout() {
+    const ctl = this.controls;
+    if (!ctl?.enabled || !this.el.classList.contains('on')) return;
+    const W = this.root.clientWidth, H = this.root.clientHeight;
+    if (!W || !H) return;
+    const k = this.hudK ?? 1, lefty = this.el.classList.contains('lefty');
+    const st = this.root.style, px = v => `${Math.round(v)}px`;
+    const { zones, rects } = ctl.geometry();
+    if (!zones) return;
+    const ins = safeInsets(), safe = { t: ins.top, r: ins.right, b: ins.bottom, l: ins.left };
+    const box = el => (el && el.getClientRects().length ? el.getBoundingClientRect() : null);
+    const buttons = ['slide', 'swap', 'tactical', 'lethal'].filter(b => ctl.buttons[b].style.display !== 'none').map(b => rects[b]).filter(r => r && r.x1 > r.x0);
+    const circles = [zones.move, zones.aim];
+    // The performance overlay's one line in the bottom corner (css/hud.css) is kept clear like a button.
+    const perf = box(document.querySelector('.perf:not([hidden])'));
+    if (perf && perf.width) buttons.push({ x0: perf.left, y0: perf.top, x1: perf.right, y1: perf.bottom });
+
+    // Free stretches of a horizontal band [y0, y1] once the stick circles and the buttons are taken out.
+    const free = (y0, y1, lo = safe.l + 6, hi = W - safe.r - 6) => {
+      const cut = [];
+      for (const c of circles) {
+        const dy = c.y < y0 ? y0 - c.y : c.y > y1 ? c.y - y1 : 0;
+        if (dy < c.r) { const dx = Math.sqrt(c.r * c.r - dy * dy); cut.push([c.x - dx, c.x + dx]); }
+      }
+      for (const r of buttons) if (r.y1 > y0 && r.y0 < y1) cut.push([r.x0, r.x1]);
+      cut.sort((a, b) => a[0] - b[0]);
+      const out = [];
+      let x = lo;
+      for (const [a, b] of cut) { if (a - DOCK_GAP > x) out.push([x, a - DOCK_GAP]); x = Math.max(x, b + DOCK_GAP); }
+      if (hi > x) out.push([x, hi]);
+      return out;
+    };
+    // The stretch nearest the middle of the screen that is at least `need` wide (else the widest).
+    const pick = (spans, need, mid = W / 2) => {
+      let best = null, bestD = Infinity;
+      for (const s of spans) {
+        const d = s[1] - s[0] >= need ? Math.max(0, s[0] - mid, mid - s[1]) : 1e6 - (s[1] - s[0]);
+        if (d < bestD) { bestD = d; best = s; }
+      }
+      return best ?? [W / 2 - need / 2, W / 2 + need / 2];
+    };
+
+    // Dock: health beside the streak tiles (or the battle royale's plate and medkit buttons), along the bottom edge
+    // between the sticks. The tiles go on the aim thumb's side, as the buttons do.
+    const vit = this.vitals, tiles = ctl.el.querySelector('.streaks'), inv = this.el.querySelector('.br-inv');
+    const right = this.br ? inv : tiles?.style.display !== 'none' && [...ctl.tiles].some(t => t.node.style.display !== 'none') ? tiles : null;
+    // The first sizing that fits a free stretch: as chosen, then the tiles at their touch size, then health smaller.
+    const tryK = [[k, this.tileK()], [k, 1], [Math.min(k, 1), 1], [HUD_SCALE.small, 1]];
+    let fit = null;
+    for (const [vk, tk] of tryK) {
+      const rk = right === tiles ? tk : vk;
+      const vw = vit.offsetWidth * vk, rw = right ? right.offsetWidth * rk : 0;
+      const dockH = Math.max(vit.offsetHeight * vk, right ? right.offsetHeight * rk : 0);
+      const y1 = H - safe.b - DOCK_BOTTOM, y0 = y1 - dockH;
+      const total = vw + (right ? DOCK_GAP * 2 + rw : 0);
+      const span = pick(free(y0, y1), total);
+      fit = { vk, tk, vw, rw, y0, total, span };
+      if (span[1] - span[0] >= total) break;
+    }
+    const { vk, tk, vw, rw, y0, total, span } = fit;
+    st.setProperty('--vit-k', vk);
+    st.setProperty('--tile-k', tk);
+    const cx = Math.max(span[0] + total / 2, Math.min(span[1] - total / 2, W / 2));
+    const left = cx - total / 2;
+    const vitX = right && !lefty ? left : right ? left + rw + DOCK_GAP * 2 : left;
+    const rpX = right && !lefty ? left + vw + DOCK_GAP * 2 : left;
+    st.setProperty('--vit-x', px(vitX));
+    st.setProperty('--rp-x', px(rpX));
+    st.setProperty('--dock-top', px(y0));
+
+    // Prompt lane: just over the dock, between the sticks (take a gun, call exfil, the bomb, a flag, reviving).
+    const ly1 = y0 - DOCK_GAP * 2, ly0 = ly1 - LANE_H * k;
+    const lane = pick(free(ly0, ly1), 140 * k, cx);
+    st.setProperty('--lane-x', px((lane[0] + lane[1]) / 2));
+    st.setProperty('--lane-w', px(Math.min(LANE_MAX * k, lane[1] - lane[0])));
+    st.setProperty('--lane-b', px(H - ly1));
+
+    // Weapon panel: under the corner chips, on the aim thumb's side, above the button cluster. It keeps its size
+    // unless the buttons under it would be covered (a short screen at Large).
+    const corner = box(this.el.querySelector('.corner'));
+    const top = Math.max(corner && corner.height ? corner.bottom : 0, safe.t + 44 * Math.max(1, k)) + 6;
+    const arms = this.arms, aw = arms.offsetWidth * k, ah = arms.offsetHeight;
+    const ax0 = lefty ? safe.l + ARMS_EDGE : W - safe.r - ARMS_EDGE - aw, ax1 = ax0 + aw;
+    let floor = H;
+    for (const r of buttons) if (r.x1 > ax0 && r.x0 < ax1) floor = Math.min(floor, r.y0);
+    for (const c of circles) if (c.x + c.r > ax0 && c.x - c.r < ax1) floor = Math.min(floor, c.y - c.r);
+    const armsK = Math.max(0.7, Math.min(k, (floor - DOCK_GAP - top) / Math.max(1, ah)));
+    st.setProperty('--arms-y', px(top));
+    st.setProperty('--arms-k', armsK.toFixed(3));
+
+    // Kill feed: under the minimap (square and zoomed in battle royale and extraction), as many rows as fit above the
+    // move stick, two or three.
+    const mm = box(this.el.querySelector('.minimap'));
+    const fx0 = lefty ? W - safe.r - 8 - 210 * k : safe.l + 8, fx1 = fx0 + 210 * k;
+    // The squad panels beside the minimap fill in after the layout: take them at their full size (three teammates in
+    // battle royale and extraction, a crew of four in Graveyard Shift). The feed also clears them.
+    const squads = [];
+    for (const [sel, rows, rowH] of [['.br-squad', 3, 31], ['.ex-squad', 3, 31], ['.zm-crew', 4, 26]]) {
+      const r = box(this.el.querySelector(sel));
+      if (r && r.width) squads.push({ left: r.left, right: r.right, top: r.top, bottom: r.top + rows * rowH * k });
+    }
+    let feedTop = mm && mm.height ? mm.bottom + 8 : safe.t + 50;
+    for (const r of squads) if (r.right > fx0 && r.left < fx1) feedTop = Math.max(feedTop, r.bottom + 6);
+    let feedFloor = H;
+    for (const c of circles) if (c.x + c.r > fx0 && c.x - c.r < fx1) feedFloor = Math.min(feedFloor, c.y - c.r);
+    for (const r of buttons) if (r.x1 > fx0 && r.x0 < fx1) feedFloor = Math.min(feedFloor, r.y0);
+    this.feedRows = Math.max(2, Math.min(FEED_ROWS, Math.floor((feedFloor - DOCK_GAP - feedTop) / (FEED_ROW_H * k))));
+    st.setProperty('--feed-y', px(feedTop));
+    while (this.feed.length > this.feedRows) this.feed.pop().row.remove();
+
+    // Objective strip rows: centred under the score bar where there is one (else in the free stretch of the top edge),
+    // clear of the minimap, the squad panel, the feed, the corner and the weapon panel.
+    const bar = box(this.el.querySelector('.scorebar'));
+    const base = bar && bar.height ? bar.bottom + 4 : safe.t + 6;
+    const armsBox = box(this.arms);
+    const obstacles = ['.minimap', '.corner', '.range-leave', '.mh-mods']
+      .map(sel => box(this.el.querySelector(sel))).filter(r => r && r.width > 0);
+    if (armsBox?.width) obstacles.push(armsBox);
+    // The squad panels and the feed fill in after the layout: take their full size now.
+    const feed = this.feedEl.getBoundingClientRect();
+    obstacles.push({ left: feed.left, right: feed.left + this.feedEl.offsetWidth * k, top: feed.top, bottom: feed.top + this.feedRows * FEED_ROW_H * k });
+    obstacles.push(...squads);
+    let y = base;
+    const tops = [];
+    this.strip.rows.forEach((row, n) => {
+      tops.push(y);
+      const h = Math.max(row.offsetHeight, STRIP_ROW_H[n]) * k;
+      let lo = safe.l + 6, hi = W - safe.r - 6;
+      for (const r of obstacles) {
+        if (r.bottom <= y + 2 || r.top >= y + h - 2) continue;
+        if ((r.left + r.right) / 2 < W / 2) lo = Math.max(lo, r.right + DOCK_GAP * 2);
+        else hi = Math.min(hi, r.left - DOCK_GAP * 2);
+      }
+      const centred = bar && bar.height;
+      const x = centred ? W / 2 : (lo + hi) / 2;
+      const max = centred ? 2 * Math.min(x - lo, hi - x) : hi - lo;
+      st.setProperty(`--os-x${n}`, px(x));
+      st.setProperty(`--os-y${n}`, px(y));
+      st.setProperty(`--os-w${n}`, px(Math.max(80, max) / k));
+      y += h + 4;
+    });
+    // Out and watching (battle royale, extraction): the out plate goes under the strip's state row, in the widest free
+    // stretch there (the weapon panel is hidden while you are out), clear of both sticks.
+    {
+      const oy = tops[1], oh = OUT_H * k;
+      let lo = safe.l + 6, hi = W - safe.r - 6;
+      for (const r of obstacles) {
+        if (r === armsBox || r.bottom <= oy + 2 || r.top >= oy + oh - 2) continue;
+        if ((r.left + r.right) / 2 < W / 2) lo = Math.max(lo, r.right + DOCK_GAP * 2);
+        else hi = Math.min(hi, r.left - DOCK_GAP * 2);
+      }
+      st.setProperty('--out-x', px((lo + hi) / 2));
+      st.setProperty('--out-y', px(oy));
+      st.setProperty('--out-w', px(hi - lo));
+    }
+    // The death screen's column starts under the strip's state row (and extraction's contract), which stay readable.
+    st.setProperty('--death-y', px(this.ex ? tops[2] : tops[1]));
+    ctl.remeasure();
+  }
+
+  // Streak tiles grow with Large but never shrink below their touch size.
+  tileK() { return Math.max(1, this.hudK ?? 1); }
 
   #markBlocked(x, y) {
     for (const r of this.markObstacles) {
@@ -435,8 +648,11 @@ export class HUD {
   // Battle royale, out of the match: Leave goes to the results now (js/ui/br-hud.js); main.js decides what that means.
   onBrLeave(cb) { this.brLeaveCb = cb; }
 
+  // Options: left-handed mirrors the sticks and buttons (js/ui/controls.js) and with them every panel.
   setLefty(on) {
     this.el.classList.toggle('lefty', on);
+    this.root.classList.toggle('hud-lefty', on);
+    this.layout();
   }
 
   // Tiles and buttons need something to draw before the first frame that carries real slots.
@@ -459,6 +675,7 @@ export class HUD {
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
     this.modeId = mode;                 // As picked, e.g. 'gwdom'.
+    this.armsPair = null;
     // The rule set it plays by, e.g. 'dom'; a modes-overhaul mode is drawn as the rule set it looks like (its `look`),
     // and its own layer (this.modeHud) says the rest.
     this.mode = MODES[mode]?.look ?? modeRules(mode);
@@ -513,8 +730,6 @@ export class HUD {
     if (c?.buttons?.swap) c.buttons.swap.style.display = on ? 'none' : '';
     if (c?.scoreBox) c.scoreBox.style.display = on ? 'none' : '';
     this.el.querySelector('.death-next').style.display = on ? 'none' : '';
-    // The ladder strip sits where the Respawn row would; the row (and the killer card under it) steps below it.
-    this.el.querySelector('.death-act').style.marginTop = on ? '58px' : '';
   }
 
   // Search and Destroy has no scorestreaks, so their tiles and the score counter go; everything else stays.
@@ -825,15 +1040,18 @@ export class HUD {
       </div>
       <div class="status">
         <div class="vitals">
-          <div class="hp-line"><span class="protect" hidden>Spawn shield</span><span class="hp-armor-num" hidden style="font:400 var(--fs-title)/1 var(--f-stencil);color:var(--c-sodium);text-shadow:var(--text-lift)"></span><span class="hp-num">100</span></div>
-          <i class="hp-track"><i class="hp-loss"></i><i class="hp-fill"></i><i class="hp-ticks"></i><i class="hp-armor" style="position:absolute;left:0;right:0;top:0;height:40%;background:var(--c-sodium);transform-origin:left center;transform:scaleX(0)"></i></i>
+          <span class="hp-tags"><span class="protect" hidden>Spawn shield</span><span class="hp-armor-num" hidden></span></span>
+          <span class="hp-num">100</span>
+          <span class="hp-bars"><i class="hp-track"><i class="hp-loss"></i><i class="hp-fill"></i><i class="hp-ticks"></i><i class="hp-armor"></i></i></span>
         </div>
         <div class="arms">
-          <i class="heat" hidden><i class="heat-fill"></i></i>
-          <div class="arms-top"><span class="arms-icon"></span><span class="arms-name"><span></span></span></div>
-          <div class="arms-count"><b class="ammo">30</b><span class="reserve">150</span></div>
-          <i class="mag"><i class="mag-fill"></i></i>
-          <i class="reload-track"><i class="reload-fill"></i></i>
+          <div class="arms-main">
+            <div class="arms-top"><div class="arms-count"><b class="ammo">30</b><span class="reserve">150</span></div><span class="arms-icon"></span></div>
+            <div class="arms-sub"><span class="arms-name"><span></span></span><span class="arms-alt" hidden>${icon('swap', { size: 11, accent: 'currentColor' })}<span></span></span></div>
+            <i class="mag"><i class="mag-fill"></i></i>
+            <i class="reload-track"><i class="reload-fill"></i></i>
+            <i class="heat" hidden><i class="heat-fill"></i></i>
+          </div>
         </div>
       </div>
       <div class="over-banner"><b>Overheated</b><small>Swap to sidearm</small></div>
@@ -867,7 +1085,7 @@ export class HUD {
         <div class="obj-chips"></div>
         <div class="obj-timer" hidden><small>Moves in</small><b>0:30</b></div>
       </div>
-      <div class="gun-rung" hidden style="position:absolute;left:50%;top:calc(var(--st) + 50px);transform:translateX(-50%);min-width:210px;padding:5px 12px 6px;background:var(--hud-glass);box-shadow:var(--hud-edge);clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%,0 8px);pointer-events:none;display:flex;flex-direction:column;gap:3px">
+      <div class="gun-rung" hidden style="min-width:210px;padding:5px 12px 6px;background:var(--hud-glass);box-shadow:var(--hud-edge);clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%,0 8px);pointer-events:none;display:flex;flex-direction:column;gap:3px">
         <div style="display:flex;align-items:center;gap:7px;color:var(--c-chalk)"><span class="gr-icon" style="color:#fff"></span><b class="gr-name" style="font:400 15px/1 var(--f-stencil);letter-spacing:var(--tr-stencil)"></b><b class="gr-n" style="margin-left:auto;font:400 15px/1 var(--f-stencil);color:var(--c-sodium);font-variant-numeric:tabular-nums"></b></div>
         <div class="gr-pips" style="display:flex;gap:2px"></div>
         <div class="gr-next" style="display:flex;align-items:center;gap:5px;font:400 var(--fs-caption)/1 var(--f-plate);letter-spacing:var(--tr-plate);color:rgba(231,234,228,.75)"></div>
@@ -925,6 +1143,14 @@ export class HUD {
     this.root.appendChild(el);
 
     const $ = sel => el.querySelector(sel);
+    // Every mode's state in one place: the objective strip under the score bar (see ObjStrip and layout()).
+    this.strip = new ObjStrip(el, $('.scorebar'));
+    this.strip.mount($('.obj-strip'), { order: 1 });
+    this.strip.mount($('.snd-alive'), { order: 1 });
+    this.strip.mount($('.ctf-status'), { order: 1 });
+    this.strip.mount($('.gun-rung'), { order: 1 });
+    this.strip.mount($('.range-panel'), { order: 1 });
+    this.strip.mount($('.obj-meter'), { row: 2 });
     this.vignette = $('.vignette');
     this.proCanvas = $('.pro-layer');
     this.proCtx = this.proCanvas.getContext('2d');
@@ -980,6 +1206,8 @@ export class HUD {
     this.hitX = $('.hit-x');
     this.armsName = $('.arms-name span');
     this.armsIcon = $('.arms-icon');
+    this.armsAlt = $('.arms-alt');
+    this.armsAltName = $('.arms-alt span');
     this.magFill = $('.mag-fill');
     this.hpLoss = $('.hp-loss');
     this.scorePop = $('.score-pop');
@@ -1343,6 +1571,9 @@ export class HUD {
     this.#updateObjectives(view, me, c);
     this.#updateGun(view, me, c);
 
+    // Out of play (dead, spectating, out of a battle royale): the weapon panel and health step back.
+    const down = !me.alive;
+    if (down !== c.meDown) { c.meDown = down; this.el.classList.toggle('me-down', down); }
     this.#updateVitals(me, c, view);
     this.#updateArms(me, c);
     this.controls?.notePlayerAim(me.aim);
@@ -1969,6 +2200,7 @@ export class HUD {
       c.magazine = effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
       c.tag = null;                // The status line may need to return to the weapon's name.
       this.armsIcon.innerHTML = glyph(me.weapon, 15);
+      this.#otherGun(me.weapon, c);
       // Rounds as notches when they can be counted at a glance; a belt-fed gun gets a plain gauge.
       this.arms.style.setProperty('--mag', c.magazine <= 40 ? c.magazine : 1);
       if (c.weaponSeen) this.arms.animate(ARMS_SWAP, { duration: 260, easing: 'cubic-bezier(.2,.9,.3,1)' });
@@ -2013,6 +2245,25 @@ export class HUD {
       this.controls?.setSwapHint(empty);
     }
     this.#updateHeat(me, c);
+  }
+
+  // The gun Swap brings out, under the one in hand. Known from the loadout the player spawned with; a gun from
+  // anywhere else (the Armory, a pickup) pairs with the one it replaced. Modes that deal one gun show none.
+  #otherGun(weapon, c) {
+    const lo = Progress.loadout();
+    let pair = this.armsPair;
+    if (!pair || !pair.includes(weapon)) {
+      pair = [lo.primary, lo.secondary].includes(weapon) ? [lo.primary, lo.secondary] : [weapon, c.lastWeapon ?? ''];
+    }
+    this.armsPair = pair;
+    c.lastWeapon = weapon;
+    const other = this.gun || this.br || this.modeHud.dealt || this.el.classList.contains('range-on') && !pair[1] ? '' : pair[0] === weapon ? pair[1] : pair[0];
+    const name = other && other !== weapon ? weaponName(other) : '';
+    if (name !== c.altName) {
+      c.altName = name;
+      this.armsAlt.hidden = !name;
+      this.armsAltName.textContent = name;
+    }
   }
 
   #updateHeat(me, c) {
@@ -2548,7 +2799,7 @@ export class HUD {
     row.animate([{ transform: 'translateX(-18px)', opacity: 0, filter: 'brightness(2)' }, { transform: 'none', opacity: 1, filter: 'brightness(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.9,.3,1)' });
     this.feedEl.prepend(row);
     this.feed.unshift({ row, life: FEED_LIFE });
-    while (this.feed.length > FEED_ROWS) this.feed.pop().row.remove();
+    while (this.feed.length > (this.feedRows ?? FEED_ROWS)) this.feed.pop().row.remove();
   }
 
   // A few seconds on the host's notice line, then the feed keeps a record of it.

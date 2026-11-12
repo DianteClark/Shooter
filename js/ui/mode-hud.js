@@ -21,12 +21,13 @@ const MARK_Y = 2.6;          // Metres above the ground a head tag floats.
 
 const CSS = `
 .mh-ui { position: absolute; inset: 0; pointer-events: none; }
-.mh-status { position: absolute; left: 50%; top: calc(var(--st) + 43px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+.mh-status { display: flex; align-items: center; gap: 8px;
   min-height: 30px; padding: 3px 12px 3px 8px; background: var(--hud-glass, rgba(16,20,26,.78)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); white-space: nowrap; }
 .mh-status[hidden], .mh-wait[hidden], .mh-tag[hidden], .mh-mods[hidden] { display: none; }
 .mh-status .mh-ico { display: grid; place-items: center; width: 24px; height: 24px; color: var(--mh-accent, var(--c-sodium)); }
-.mh-status .mh-txt { display: flex; flex-direction: column; gap: 2px; }
+.mh-status .mh-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mh-status .mh-txt b, .mh-status .mh-txt small { overflow: hidden; text-overflow: ellipsis; }
 .mh-status b { font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .mh-status small { font: 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
 .mh-status .mh-num { font: 400 20px/1 var(--f-stencil); color: var(--mh-accent, var(--c-sodium)); font-variant-numeric: tabular-nums; margin-left: 4px; }
@@ -80,7 +81,8 @@ export class ModeHud {
       <div class="mh-mods" hidden></div>
       ${'<div class="mh-tag" hidden><span></span></div>'.repeat(3)}`;
     hud.el.appendChild(el);
-    this.status = el.querySelector('.mh-status');
+    // The status plate renders into the HUD's objective strip (js/ui/hud.js ObjStrip), beside the zone chips.
+    this.status = hud.strip.mount(el.querySelector('.mh-status'), { order: 2 });
     this.sIco = this.status.querySelector('.mh-ico');
     this.sWord = this.status.querySelector('b');
     this.sSub = this.status.querySelector('small');
@@ -108,7 +110,8 @@ export class ModeHud {
     this.wait.hidden = true;
     for (const t of this.tags) t.root.hidden = true;
     this.hud.el.classList.toggle('mh-on', this.on);
-    this.hud.el.classList.toggle('mh-dealt', this.rules === 'oic' || this.rules === 'inf');
+    this.dealt = this.rules === 'oic' || this.rules === 'inf';     // Everyone's kit is dealt: no loadout, no second gun.
+    this.hud.el.classList.toggle('mh-dealt', this.dealt);
     this.hud.el.classList.remove('mh-held', 'mh-watch');
     this.watching = false;
     this.hud.el.classList.toggle('hc-on', mods.includes('hardcore'));
@@ -262,6 +265,8 @@ export class ModeHud {
     const hud = this.hud, me = view.players?.find(p => p.id === view.localId);
     if (!me) return;
     const name = id => esc(view.players.find(p => p.id === id)?.name ?? '');
+    // A name in a feed row: its own part, so a long one ellipsizes and the words after it stay.
+    const who = id => `<em>${name(id)}</em>`;
     const ours = t => t === me.team;
     switch (e.t) {
       case 'hq':
@@ -273,20 +278,20 @@ export class ModeHud {
       case 'ko':
         if (e.kind === 'vip' && e.id === me.id) hud.banner('You are the VIP', 'Every enemy can see you. Stay with your team', 2000, 'mine');
         else if (e.kind === 'kill') {
-          if (e.by) hud.pushFeed(`<span class="f-note">${icon('ui:crown', { size: 13 })} ${name(e.by)} killed the VIP ${name(e.id)}</span>`, e.by === me.id, ours(e.team) ? 'enemy' : 'mine');
+          if (e.by) hud.pushFeed(`<span class="f-ico">${icon('ui:crown', { size: 13 })}</span>${who(e.by)}<span class="f-note">killed VIP</span>${who(e.id)}`, e.by === me.id, ours(e.team) ? 'foe' : 'ally');
           if (!ours(e.team)) hud.banner('VIP Down', '+1 for your team', 1100, 'mine');
         }
         break;
       case 'inf':
         if (e.kind === 'first') hud.banner(e.id === me.id ? 'You are Infected' : 'Infection Started', e.id === me.id ? 'Turn them all before the clock runs out' : `${name(e.id)} turned. Do not let them reach you`, 2200, e.id === me.id ? 'enemy' : '');
         else if (e.kind === 'infected') {
-          hud.pushFeed(`<span class="f-note">${icon('ui:skull', { size: 13 })} ${name(e.id)} was infected</span>`, e.id === me.id, 'enemy');
+          hud.pushFeed(`<span class="f-ico">${icon('ui:skull', { size: 13 })}</span>${who(e.id)}<span class="f-note">was infected</span>`, e.id === me.id, 'foe');
           if (e.id === me.id) hud.banner('Infected', 'Now hunt the survivors', 1800, 'enemy');
         } else if (e.kind === 'last') hud.banner(e.id === me.id ? 'Last Survivor' : 'One Left', e.id === me.id ? 'Hold out until the clock runs out' : `Find ${name(e.id)}`, 1800, 'alert');
         break;
       case 'oic':
         if (e.kind === 'out') {
-          hud.pushFeed(`<span class="f-note">${name(e.id)} is out</span>`, e.id === me.id);
+          hud.pushFeed(`${who(e.id)}<span class="f-note">is out</span>`, e.id === me.id);
           if (e.id === me.id) hud.banner('Out of Lives', 'Watch the rest play it out', 1800, 'enemy');
         } else if (e.kind === 'last') hud.banner(`${e.n} Left`, 'Last one standing wins', 1300, 'alert');
         break;
@@ -304,7 +309,7 @@ export class ModeHud {
       }
       case 'grind':
         if (e.kind === 'bank' && e.id === me.id) hud.banner(`Banked ${e.n}`, `+${e.n} for your team`, 1100, 'mine');
-        else if (e.kind === 'bank') hud.pushFeed(`<span class="f-note">${name(e.id)} banked ${e.n}</span>`, false, view.players.find(p => p.id === e.id)?.team === me.team ? 'mine' : 'enemy');
+        else if (e.kind === 'bank') hud.pushFeed(`${who(e.id)}<span class="f-note">banked ${e.n}</span>`, false, view.players.find(p => p.id === e.id)?.team === me.team ? 'ally' : 'foe');
         break;
       default: break;
     }

@@ -28,10 +28,10 @@ const CSS = `
 .ex-ui [data-tap] { pointer-events: auto; }
 .ex-ui .ex-map, .ex-ui .ex-offers { z-index: var(--z-overlay); }
 .hud.ex-on .scorebar, .hud.ex-on .obj-strip, .hud.ex-on .gun-rung { display: none !important; }
-.hud.ex-on .feed { top: calc(var(--st) + 134px); }
 .hud.ex-held .death { display: none !important; }
 .hud.ex-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
-.ex-top { position: absolute; left: 50%; top: calc(var(--st) + 6px); transform: translateX(-50%); display: flex; gap: 4px; }
+.ex-top { display: flex; gap: 4px; }
+.hud:not(.ex-on) .ex-top, .hud:not(.ex-on) .ex-con, .hud:not(.ex-on) .ex-hold, .hud:not(.ex-on) .ex-rev, .hud:not(.ex-on) .ex-lives-note { display: none !important; }
 .ex-chip { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 50px; height: 38px; padding: 0 8px;
   background: linear-gradient(180deg, rgba(42,51,61,.94), rgba(16,20,26,.9)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
@@ -44,39 +44,29 @@ const CSS = `
 .ex-chip.warn b { color: var(--c-sodium); }
 .ex-exfil { min-width: 96px; }
 .ex-pot b { color: var(--c-sodium); }
-.ex-squad { position: absolute; left: calc(var(--sl) + 134px); top: calc(var(--st) + 6px); display: flex; flex-direction: column; gap: 3px; width: 84px; }
-.ex-mate { display: grid; grid-template-columns: 1fr auto; gap: 1px 4px; padding: 3px 5px 3px 7px; background: var(--hud-glass-lo, rgba(16,20,26,.6)); box-shadow: inset 2px 0 0 var(--team); }
-.ex-mate b { font: 11px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ex-mate em { font: 9px/1 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-haze); }
-.ex-mate i { grid-column: 1 / 3; height: 4px; background: rgba(231,234,228,.12); position: relative; overflow: hidden; }
-.ex-mate i::after { content: ''; position: absolute; inset: 0; background: var(--bar, var(--c-chalk)); transform-origin: left; transform: scaleX(var(--k, 0)); }
-.ex-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
-.ex-mate.down em { color: #ff9a8c; }
-.ex-mate.out { opacity: .4; }
-.ex-mate.lifted { box-shadow: inset 2px 0 0 #59d36b; }
-.ex-mate.lifted em { color: #8ff09c; }
 .hud.lefty .ex-squad { left: auto; right: calc(var(--sr) + 134px); }
-.ex-con { position: absolute; right: calc(var(--sr) + 8px); top: calc(var(--st) + 48px); width: 178px; padding: 7px 9px 8px; display: grid; grid-template-columns: 26px 1fr; gap: 2px 7px;
+/* The contract: the objective strip's detail row (js/ui/hud.js ObjStrip), one compact plate. */
+.ex-con { width: min(300px, var(--os-w1, 300px)); padding: 4px 9px 5px 7px; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 1px 6px; text-align: left;
   background: linear-gradient(180deg, rgba(42,51,61,.9), rgba(16,20,26,.86)); box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-sodium);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
-.ex-con .ci { grid-row: 1 / 3; color: var(--c-sodium); display: grid; place-items: center; }
-.ex-con b { font: 400 15px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-con .ci { grid-row: 1 / 4; color: var(--c-sodium); display: grid; place-items: center; }
+.ex-con b { font: 400 13px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-con small { font: 9px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ex-con p { grid-column: 1 / 3; margin: 3px 0 0; font: 11px/1.25 var(--f-plate); letter-spacing: .02em; color: var(--c-chalk); }
+.ex-con p { grid-column: 2; margin: 1px 0 0; font: 10px/1.2 var(--f-plate); letter-spacing: .02em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-con p em { font-style: normal; color: var(--c-sodium); }
-.ex-con .ex-bar { grid-column: 1 / 3; height: 4px; margin-top: 3px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
+.ex-con .ex-bar { grid-column: 1 / 3; height: 3px; margin-top: 2px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
 .ex-con .ex-bar div { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--k, 0)); }
 .ex-con.warn { box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-red); }
 .ex-con.warn .ex-bar div { background: var(--c-red); }
-.hud.lefty .ex-con { right: auto; left: calc(var(--sl) + 8px); top: calc(var(--st) + 92px); }
-.ex-acts { position: absolute; left: 50%; bottom: calc(var(--sb) + 66px); transform: translateX(-50%); display: flex; gap: 8px; }
-.ex-act { height: 48px; min-width: 128px; padding: 0 16px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+/* Call exfil and Contracts ride the prompt lane over the dock, between the sticks (js/ui/hud.js layout). */
+.ex-acts { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 66px); transform: translateX(-50%); max-width: var(--lane-w, 300px); display: flex; gap: 8px; }
+.ex-act { height: 44px; min-width: 124px; padding: 0 16px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   font: 400 21px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-sodium);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); box-shadow: 0 0 0 2px #fff inset; }
 .ex-act small { font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); margin-top: 2px; }
 .ex-act.alt { color: var(--c-chalk); background: linear-gradient(180deg, rgba(74,62,30,.96), rgba(32,28,16,.94)); box-shadow: 0 0 0 2px var(--c-sodium) inset; }
 .ex-act:active { filter: brightness(1.3); }
-.ex-hold { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); width: 210px; padding: 5px 10px 7px; text-align: center;
+.ex-hold { width: 210px; padding: 5px 10px 7px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 .ex-hold b { display: block; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #8ff09c; }
 .ex-hold.contested b { color: #ff8a7c; }
@@ -91,7 +81,7 @@ const CSS = `
 .ex-tag.open span { background: var(--c-chalk); }
 .ex-tag.phone span { background: rgba(224,169,42,.85); }
 .ex-tag.warn span { background: #ff8a7c; }
-.ex-down { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); width: 250px; text-align: center; }
+.ex-down { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 66px); transform: translateX(-50%); width: 250px; text-align: center; }
 .ex-down b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff6b5c; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
 .ex-down small { display: block; font: 12px/1.3 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); margin: 5px 0 8px; text-shadow: var(--text-lift); }
 .ex-down .bleed, .ex-down .rev { height: 6px; background: rgba(16,20,26,.8); margin: 4px 0; position: relative; overflow: hidden; }
@@ -99,13 +89,13 @@ const CSS = `
 .ex-down .bleed i { background: var(--c-red); }
 .ex-down .rev i { background: #59d36b; }
 .hud.ex-down-on .vignette { opacity: 1 !important; background: radial-gradient(ellipse at center, transparent 40%, rgba(150,20,12,.55)); }
-.ex-rev { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); width: 190px; padding: 6px 10px 7px; text-align: center;
+.ex-rev { width: 190px; padding: 6px 10px 7px; text-align: center;
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 .ex-rev b { display: block; font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #7be08a; }
 .ex-rev i { display: block; height: 5px; margin-top: 5px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .ex-rev i i { position: absolute; inset: 0; margin: 0; height: auto; background: #59d36b; transform-origin: left; transform: scaleX(0); }
 .ex-held.won b, .ex-held.won .place { color: #8ff09c; }
-.ex-lives-note { position: absolute; left: 50%; top: calc(var(--st) + 50px); transform: translateX(-50%); padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
+.ex-lives-note { padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
   color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.78)); white-space: nowrap; }
 .hud.ex-offers-on .ex-acts { visibility: hidden; }
 .ex-offers { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(10,13,17,.66); pointer-events: auto; }
@@ -134,13 +124,11 @@ const CSS = `
 .ex-callout small { display: block; margin-top: 4px; font: 13px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-chalk); text-shadow: var(--text-lift); }
 @keyframes ex-call { 0% { opacity: 0; transform: translateX(-50%) scale(1.3); } 10% { opacity: 1; transform: translateX(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (max-width: 700px) {
-  .ex-top { gap: 3px; transform: translateX(calc(-50% + 14px)); }
+  .ex-top { gap: 3px; }
   .ex-chip { min-width: 40px; padding: 0 5px; }
   .ex-chip b { font-size: 16px; }
   .ex-chip small { font-size: 8px; }
   .ex-exfil { min-width: 80px; }
-  .ex-squad { width: 74px; }
-  .ex-con { width: 160px; }
   .ex-offer { width: 150px; }
 }
 `;
@@ -181,7 +169,12 @@ export class ExHud {
         <div class="ex-map-side"><h3>Frontier</h3><p>Gold: your contract. Rings: exfil sites (white open, amber called, green down). Yellow squares: contract phones.</p><button class="ex-map-close" data-tap="1">Close map</button></div>
       </div>`;
     hud.el.appendChild(el);
-    const $ = s => el.querySelector(s);
+    // Clock, lives, pending and exfil are the objective strip's state row; the contract its detail row; the exfil hold,
+    // your revive bar and the lives note its progress row (js/ui/hud.js ObjStrip).
+    hud.strip.mount(el.querySelector('.ex-top'), { order: 0 });
+    hud.strip.mount(el.querySelector('.ex-con'), { row: 1 });
+    for (const sel of ['.ex-hold', '.ex-rev', '.ex-lives-note']) hud.strip.mount(el.querySelector(sel), { row: 2 });
+    const $ = s => hud.el.querySelector(s);
     this.$ = $;
     this.clockEl = $('.ex-clock b'); this.clockS = $('.ex-clock small');
     this.livesChip = $('.ex-lives'); this.livesEl = $('.ex-lives span');
@@ -305,11 +298,12 @@ export class ExHud {
     const key = mates.map(p => `${p.id}|${Math.ceil(p.hp / 10)}|${p.alive}|${p.downed}|${p.out}|${p.away}`).join(';');
     if (this.c.squad === key) return;
     this.c.squad = key;
+    // The battle royale's compact rows: name and health; downed a red bar and a down mark, dead a greyed row, lifted
+    // out a green edge.
     this.squadEl.innerHTML = mates.map(p => {
       const state = p.out ? 'lifted' : !p.alive ? 'out' : p.downed ? 'down' : '';
-      const note = p.out ? 'Out' : !p.alive ? 'Dead' : p.downed ? 'Down' : p.away ? 'Away' : '';
-      return `<div class="ex-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${note}</em>
-        <i style="--bar:${p.downed ? 'var(--c-red)' : 'var(--c-chalk)'};--k:${p.alive ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></div>`;
+      return `<div class="ex-mate ${state}" style="--team:${TEAMS[p.team]?.css ?? '#fff'}"><b>${nameHtml(p.name)}</b><em>${p.downed && p.alive ? icon('ui:down', { size: 10, accent: 'currentColor' }) : ''}</em>
+        <span class="mbars"><i style="flex:1;--bar:${p.downed ? 'var(--c-red)' : p.out ? '#59d36b' : 'var(--c-chalk)'};--k:${p.alive || p.out ? Math.max(0, Math.min(1, p.hp / MAX_HP)).toFixed(2) : 0}"></i></span></div>`;
     }).join('');
   }
 
@@ -349,22 +343,7 @@ export class ExHud {
     return { x: k.x, z: k.z };
   }
 
-  // Call exfil and Contracts sit where the battle royale's take prompt does (js/ui/br-hud.js #placeTake): bottom-centre in
-  // the gap between the vitals and the aim stick's ring, never on a stick or a button. Measured once per screen size.
-  #placeActs() {
-    const key = `${innerWidth}x${innerHeight}`;
-    if (this.actsAt === key) return;
-    this.actsAt = key;
-    const ring = document.querySelector('.controls .stick-aim .ring-fire')?.getBoundingClientRect();
-    const vit = this.hud.el.querySelector('.vitals')?.getBoundingClientRect();
-    const lo = (vit?.width ? vit.right : innerWidth * 0.3) + 6, hi = (ring?.width ? ring.left : innerWidth * 0.62) - 6;
-    const st = this.$('.ex-acts').style;
-    st.left = `${Math.round((lo + hi) / 2)}px`;
-    st.maxWidth = `${Math.max(140, Math.round(hi - lo))}px`;
-  }
-
   #actions(view, me, ex, squad) {
-    this.#placeActs();
     const up = me.alive && !me.downed && view.phase === 'live';
     const zone = up ? (ex.exfils ?? []).find(e => e.state === 1 && Math.hypot(me.x - e.x, me.z - e.z) <= e.r) : null;
     if (this.c.call !== !!zone) { this.c.call = !!zone; this.callBtn.hidden = !zone; }
