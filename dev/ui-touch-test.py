@@ -25,6 +25,15 @@ the screen edge) and released, and one frame (16 ms of event time) later iOS can
 stick must stay held and sprinting, the grenade must still go, a new thumb on the left must take the stick at once,
 and a kept stick that nothing confirms must be let go of after Controls' HOLD_MAX_MS. A touchcancel that follows no
 release (a system gesture) still lets go at once.
+
+Part 5 (item 40) drives real multi-touch throws through CDP with the move thumb held, and after each one steers the
+thumb right, up and left and checks the stick follows: drag-throws released before or after the thumb, quick taps,
+rapid alternating taps, throws cancelled by dragging back, a throw finger that drifts across onto the stick area, slide
+then throw, a touchcancel mid-throw, two grenade fingers with the aim thumb down, the aim thumb throwing, the thumb
+lifted and re-planted while a throw is held, a spare finger beside the stick, and a long held throw at full sprint. Then
+the iOS lists that used to stop the stick: a still thumb (sprinting, sending nothing) left out of a grenade press's
+touchstart list and out of the throw finger's moves, a thumb whose moves come only inside another finger's list, and a
+stick kept through a cancel brought back by a list that shows it moving.
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -285,6 +294,8 @@ async def main():
                 await S('touchend', [T], [[11, LX + 60, LY]]); await S('touchend', [[11, LX + 60, LY]], [])
                 await ctx.close()
 
+            print('Item 40: multi-touch throws, then the move thumb must still steer')
+            await throw_cases(browser, failures, errors)
             print('V8: live match, iOS cancels the still move thumb right after a grenade release')
             for mode in ('training', 'solo'):
                 await live_cases(browser, mode, failures, errors)
@@ -296,6 +307,158 @@ async def main():
         print('FAILED:', *failures, sep='\n  ')
         sys.exit(1)
     print('PASS')
+
+
+async def open_match(browser, vw, vh, errors):
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit')
+    await pg.wait_for_timeout(800)
+    await pg.evaluate("window.__game.Progress.name='Tester'")
+    await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click(no_wait_after=True)
+    await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
+    return ctx, pg
+
+
+# The stick as Controls holds it: which finger, and the direction from its base (unit-ish, capped at the radius).
+STICK = """(() => { const c = window.__game.controls, l = c.left, on = l.id !== null;
+  const dx = l.x - l.ox, dy = l.y - l.oz, d = Math.max(Math.hypot(dx, dy), c.leftRadius);
+  return { id: l.id, mx: on ? +(dx / d).toFixed(2) : 0, mz: on ? +(dy / d).toFixed(2) : 0, th: c.throw?.slot ?? null, kept: !!c.hold }; })()"""
+
+
+async def throw_cases(browser, failures, errors):
+    vw, vh = 932, 430
+    ctx, pg = await open_match(browser, vw, vh, errors)
+    await pg.evaluate(SYNTH)
+    cdp = await ctx.new_cdp_session(pg)
+    rects = await pg.evaluate('JSON.parse(JSON.stringify(window.__game.controls.rects))')
+    C = lambda r: ((r['x0'] + r['x1']) / 2, (r['y0'] + r['y1']) / 2)
+    tac, leth, slide = C(rects['tactical']), C(rects['lethal']), C(rects['slide'])
+    LX, LY, RX, RY = vw * 0.15, vh * 0.62, vw * 0.66, vh * 0.62
+    pts = {}
+    wait = pg.wait_for_timeout
+    stick = lambda: pg.evaluate(STICK)
+
+    async def send(kind, points):
+        await cdp.send('Input.dispatchTouchEvent', {'type': kind, 'touchPoints': [{'x': x, 'y': y, 'id': i} for i, (x, y) in points.items()]})
+    async def down(i, xy): pts[i] = xy; await send('touchStart', pts)
+    async def mv(i, xy): pts[i] = xy; await send('touchMove', pts)
+    async def up(i): await send('touchEnd', {i: pts.pop(i)})
+    async def cancel_all(): pts.clear(); await send('touchCancel', {})
+
+    def report(name, ok, s):
+        print(f'  {vw}x{vh} {name:<58} {"ok" if ok else "FAIL"} {s}')
+        if not ok: failures.append(f'item40 {name}: {s}')
+
+    async def steers(name):
+        bad = None
+        for dx, dy, key, sign in ((70, 0, 'mx', 1), (0, -70, 'mz', -1), (-70, 0, 'mx', -1)):
+            await mv(1, (LX + dx, LY + dy)); await wait(40)
+            s = await stick()
+            if not (s['id'] == 1 and s[key] * sign > 0.5): bad = bad or {'to': (dx, dy), **s}
+        report(name + ': thumb steers after', bad is None, bad or 'follows right, up, left')
+
+    async def case(name, body):
+        pts.clear()
+        await pg.evaluate('(() => { const m = window.__game.app.match, me = m.sim.byId.get(m.localId); if (me?.ps) { me.ps.lethalLeft = 3; me.ps.tacticalLeft = 3; } })()')
+        await down(1, (LX, LY)); await mv(1, (LX + 70, LY)); await wait(30)
+        await body()
+        await steers(name)
+        await cancel_all(); await wait(60)
+        s = await stick()
+        report(name + ': all lifted', s['id'] is None and s['th'] is None, s)
+
+    async def drag_throw():
+        await down(3, leth); await wait(120)
+        for k in range(6): await mv(3, (leth[0] - 15 * k, leth[1] + 5 * k)); await mv(1, (LX + 60, LY + k * 3)); await wait(16)
+        await up(3)
+    async def thumb_first():
+        await down(3, leth)
+        for k in range(4): await mv(3, (leth[0] - 20 * k, leth[1])); await wait(16)
+        await up(1); await wait(30); await down(1, (LX, LY)); await mv(1, (LX + 60, LY))
+        await up(3)
+    async def quick_tap():
+        await down(3, tac); await wait(30); await up(3)
+    async def rapid():
+        for k in range(8):
+            await down(3 + k % 2, leth if k % 2 else tac); await wait(15); await up(3 + k % 2); await wait(10)
+    async def cancelled():
+        await down(3, leth)
+        for k in range(5): await mv(3, (leth[0] - 12 * k, leth[1])); await wait(16)
+        for k in range(5): await mv(3, (leth[0] - 48 + 12 * k, leth[1])); await wait(16)
+        await up(3)
+    async def drift():
+        await down(3, leth)
+        for k in range(30): await mv(3, (leth[0] - 26 * k, leth[1] + 2 * k)); await wait(8)
+        await up(3)
+    async def slide_then():
+        await down(4, slide); await wait(20); await up(4)
+        await down(3, leth)
+        for k in range(5): await mv(3, (leth[0] - 20 * k, leth[1])); await wait(16)
+        await up(3)
+    async def cancel_mid():
+        await down(3, leth); await wait(100)
+        await cancel_all(); await wait(30)
+        await down(1, (LX + 10, LY))
+    async def two_grenades():
+        await down(2, (RX, RY)); await mv(2, (RX + 20, RY))
+        await down(3, leth); await down(4, tac)
+        for k in range(5): await mv(3, (leth[0] - 20 * k, leth[1])); await mv(4, (tac[0], tac[1] - 10 * k)); await wait(16)
+        await up(4); await up(3); await up(2)
+    async def aim_thumb():
+        await down(2, (RX, RY)); await wait(30); await up(2)
+        await down(2, leth)
+        for k in range(5): await mv(2, (leth[0] - 20 * k, leth[1] - 10 * k)); await wait(16)
+        await up(2)
+    async def spare():
+        await down(5, (LX + 120, LY - 60)); await wait(30)
+        await down(3, leth); await wait(30); await up(3); await up(5)
+    async def long_sprint():
+        await mv(1, (LX + 140, LY)); await down(3, leth); await wait(600)
+        for k in range(5): await mv(3, (leth[0] - 20 * k, leth[1])); await mv(1, (LX + 150, LY + k)); await wait(16)
+        await up(3)
+        await up(1); await down(1, (LX, LY))     # re-centre the base for the steering check
+    for name, body in (('drag-throw, grenade released first', drag_throw), ('thumb lifted and re-planted mid-throw', thumb_first),
+                       ('quick tap Tactical', quick_tap), ('rapid alternating taps', rapid), ('throw cancelled by dragging back', cancelled),
+                       ('throw finger drifts onto the stick area', drift), ('slide, then throw', slide_then), ('touchcancel mid-throw', cancel_mid),
+                       ('aim thumb + two grenade fingers', two_grenades), ('aim thumb does the throw', aim_thumb),
+                       ('spare finger beside the stick + throw', spare), ('long held throw at full sprint', long_sprint)):
+        await case(name, body)
+
+    # The iOS lists, replayed. The match loop stays off so nothing else reads the stick between steps.
+    await pg.evaluate("window.__game.app.match.running = false")
+    S = lambda kind, ch, all_: pg.evaluate('([k,c,t]) => window.__synth(k,c,t)', [kind, ch, all_])
+    L, T = [11, LX + 70, LY], [13, leth[0], leth[1]]
+    await S('touchstart', [[11, LX, LY]], [[11, LX, LY]]); await S('touchmove', [L], [L])
+    await wait(400)                                      # Still thumb at full stick: no events of its own.
+    await S('touchstart', [T], [T])                      # The press's list leaves the thumb out...
+    s = await stick(); report('still thumb left out of the press list', s['id'] == 11 and s['mx'] > 0.9, s)
+    for k in range(6):                                   # ...and so do the throw finger's moves.
+        await S('touchmove', [[13, leth[0] - 15 * k, leth[1]]], [[13, leth[0] - 15 * k, leth[1]]]); await wait(30)
+    s = await stick(); report('  ... and out of the throw finger\'s moves', s['id'] == 11 and s['mx'] > 0.9 and s['th'] == 'lethal', s)
+    await S('touchend', [[13, leth[0] - 75, leth[1]]], [])
+    s = await stick(); report('  ... the throw lets go, the stick stays', s['id'] == 11 and s['mx'] > 0.9, s)
+    # The thumb's moves arrive only inside the other finger's list: the stick follows them.
+    await S('touchstart', [T], [L, T])
+    await S('touchmove', [[13, leth[0] - 30, leth[1]]], [[11, LX, LY - 70], [13, leth[0] - 30, leth[1]]])
+    s = await stick(); report('thumb moved only in another finger\'s list', s['id'] == 11 and s['mz'] < -0.5, s)
+    await S('touchend', [[13, leth[0] - 30, leth[1]]], [[11, LX, LY - 70]])
+    await S('touchend', [[11, LX, LY - 70]], [])
+    # Kept through a cancel right after a release, then seen moving in a list: alive, and steering again.
+    await S('touchstart', [[11, LX, LY]], [[11, LX, LY]]); await S('touchmove', [L], [L])
+    await S('touchstart', [T], [L, T]); await S('touchend', [T], [L])
+    await S('touchcancel', [L], [])
+    s = await stick(); report('cancel just after a release keeps the stick', s['id'] == 11 and s['kept'], s)
+    await S('touchstart', [[14, RX, RY]], [[11, LX, LY + 70], [14, RX, RY]])
+    s = await stick(); report('  ... a list showing the thumb moved brings it back', s['id'] == 11 and not s['kept'] and s['mz'] > 0.5, s)
+    await S('touchend', [[14, RX, RY], [11, LX, LY + 70]], [])
+    s = await stick(); report('  ... all lifted', s['id'] is None, s)
+    await ctx.close()
 
 
 LIVE = """(() => { const c = window.__game.controls, m = window.__game.app.match;

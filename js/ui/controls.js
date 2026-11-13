@@ -24,6 +24,8 @@ const SWAP_MIN_PX = 150;        // Both thumbs would have to jump this far toget
 // Controlled throws: the thumb that pressed Tactical or Lethal keeps going and sets direction and distance.
 const THROW_HOLD_MS = 160;      // A press shorter than this, without leaving the button, is a quick throw.
 const MISSING_DROP_MS = 250;    // How long a held finger must go unseen in every touch list before it is let go.
+const THROW_GRACE_MS = 400;     // After a throw lets go, the move thumb keeps a held throw's patience this long.
+const MISS_LISTS = 3;           // Touch lists in a row that must leave a quiet stick finger out before it is let go.
 const TAKEOVER_MS = 120;        // A new thumb on a stick whose finger has gone unseen this long takes the stick at once.
 // The move stick through a touchcancel that follows another finger's release (see #end). The owner's recording shows it
 // frame by frame: Frag lets go in one frame, the move stick goes idle in the next, before the grenade even leaves the
@@ -95,10 +97,13 @@ export class Controls {
     this.sprintOn = false;
     this.edge = { slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
     this.seen = { left: 0, right: 0 };      // When each stick's finger last appeared in any touch list.
+    this.miss = { left: null, right: null };  // Per stick: the run of touch lists that left its finger out ({ at, n }).
+    this.throwEndAt = -Infinity;   // Event time the last throw finger let go (see #reconcile).
     this.lastRelease = -Infinity;  // Event time of the last finger lifted normally (touchend), whoever held it.
     this.hold = null;              // { at, id } while the move stick is kept through a cancel right after a release.
     this.suspect = new Map();      // stick touch id -> event time of a touchend its own touch list contradicted.
     this.buttonSeen = new Map();   // touch id -> when that button finger last appeared in a touch list.
+    this.buttonMiss = new Map();   // touch id -> touch lists in a row that left that button finger out.
     this.throw = null;             // The press in aim mode: { slot, id, cx, cy, x, y, at, left, cancel }.
     this.throwHeld = { slot: '', aim: 0, dist: 0 };    // Reused while a throw is held; returned from read().
     this.throwReleased = null;     // The aim of a throw released since the last read, or null for a quick one.
@@ -524,6 +529,7 @@ export class Controls {
         else this.#keep(this.spare, t.identifier, 'stick');
       }
     }
+    this.#follow(e, at);
     if (ours && !tuner) {
       e.preventDefault();
       // A focused field arms iOS's three-finger editing gestures; a match never has one.
@@ -681,6 +687,7 @@ export class Controls {
   #endThrow(at) {
     const th = this.throw;
     this.throw = null;
+    this.throwEndAt = at;
     this.paintDirty = true;
     if (th.cancel) return;
     const aimed = this.#throwAim(th, at);
@@ -694,6 +701,7 @@ export class Controls {
     this.hold = null;
     this.suspect.delete(id);
     l.id = id; l.ox = x; l.oz = y; l.x = x; l.y = y;
+    this.miss.left = null;
     this.paintDirty = true;
   }
 
@@ -702,6 +710,7 @@ export class Controls {
     this.seen.right = t;
     this.suspect.delete(id);
     r.id = id; r.ox = x; r.oz = y; r.x = x; r.y = y;
+    this.miss.right = null;
     r.aim = null; r.firing = false;
     this.aimFilter.reset();
     this.aimFilter.push(0, 0, t);
@@ -735,6 +744,7 @@ export class Controls {
         this.#adopt(t, at);
       }
     }
+    this.#follow(e, at);
     if (!tuner && e.cancelable) e.preventDefault();
   }
 
@@ -796,6 +806,7 @@ export class Controls {
     if (!cancelled) this.lastRelease = at;
     this.#seeList(e.touches, at);
     this.#revive(e.touches, at);
+    this.#follow(e, at);
   }
 
   // cancelled: the system took the finger, or it was found to be gone. Nothing it was doing should fire.
@@ -831,6 +842,7 @@ export class Controls {
         (this.buttons[btn] ?? this.tileById(btn).node).classList.remove('down');
         this.buttonTouch.delete(id);
         this.buttonSeen.delete(id);
+        this.buttonMiss.delete(id);
         if (cancelled) this.#keep(this.spare, id, 'button');   // A button finger that turns out to be alive stays a button press.
       }
     }
@@ -841,6 +853,24 @@ export class Controls {
     this.seen[side] = at;
     if (this.suspect.delete(id)) this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} moved after its touchend: kept`);
     if (side === 'left' && this.hold) { this.hold = null; this.debug?.(`L #${id} moved after a cancel: kept`); }
+  }
+
+  // Every touch event carries where every finger is, not only the ones it is about. A stick finger that iOS leaves out
+  // of changedTouches (coalesced moves, or moves folded into another finger's event while a grenade is aimed) still
+  // shows its new place in the list, so the stick follows the thumb from any event. A list entry that has moved is also
+  // proof of life for a stick kept through a cancel or a contradicted touchend: stale lists repeat old places exactly.
+  #follow(e, at) {
+    const touches = e.touches, changed = e.changedTouches;
+    for (let i = 0; i < touches.length; i++) {
+      const t = touches[i], id = t.identifier;
+      const side = id === this.left.id ? 'left' : id === this.right.id ? 'right' : null;
+      if (!side || inList(changed, id)) continue;
+      const s = this[side];
+      if (Math.abs(t.clientX - s.x) < 0.5 && Math.abs(t.clientY - s.y) < 0.5) continue;
+      this.#confirm(side, id, at);
+      if (side === 'left') { s.x = t.clientX; s.y = t.clientY; this.paintDirty = true; }
+      else this.#aimMove(t.clientX, t.clientY, at);
+    }
   }
 
   // Every finger named in a touch list is alive right now.
@@ -872,17 +902,33 @@ export class Controls {
         this.#drop(id, at, true);
         return;
       }
-      if (inList(touches, id) || at - this.seen[side] < MISSING_DROP_MS) return;
+      if (inList(touches, id)) { this.miss[side] = null; return; }
       // A stick kept through a cancel is missing from every list by definition; only a new thumb, its own end or
       // HOLD_MAX_MS let go of it.
       if (side === 'left' && this.hold) return;
+      // One list that leaves the finger out proves nothing. A perfectly still thumb (held at full sprint) sends no events
+      // of its own, so "unseen for a while" is always true of it; iOS then leaving it out of the touchstart of a grenade
+      // press used to drop the stick on that one list, and the player stopped dead mid-throw. Now the finger must be
+      // left out of MISS_LISTS lists in a row, or of every list for MISSING_DROP_MS. While a throw is held, and for
+      // THROW_GRACE_MS after it lets go, the move thumb is only let go of after HOLD_MAX_MS of lists without it: that is
+      // when iOS sends its odd lists, and a new thumb on the left still takes the stick at once (#gone).
+      const miss = this.miss[side] ??= { at, n: 0 };
+      miss.n++;
+      if (at - this.seen[side] < MISSING_DROP_MS) return;
+      if (side === 'left' && (this.throw || at - this.throwEndAt < THROW_GRACE_MS)) {
+        if (at - miss.at < HOLD_MAX_MS) return;
+      } else if (miss.n < MISS_LISTS && at - miss.at < MISSING_DROP_MS) return;
       this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} unseen ${Math.round(at - this.seen[side])}ms: let go`);
       this.#drop(id, at, true);
     };
     check('left');
     check('right');
+    // A held button (a grenade being aimed) is judged the same way: one odd list must not cancel a throw.
     for (const [id, seenAt] of this.buttonSeen) {
-      if (!inList(touches, id) && at - seenAt >= MISSING_DROP_MS) {
+      if (inList(touches, id)) { this.buttonMiss.delete(id); continue; }
+      const n = (this.buttonMiss.get(id) ?? 0) + 1;
+      this.buttonMiss.set(id, n);
+      if (n >= MISS_LISTS && at - seenAt >= MISSING_DROP_MS) {
         this.debug?.(`btn #${id} unseen: let go`);
         this.#drop(id, at, true);
       }
@@ -915,6 +961,8 @@ export class Controls {
     for (const t of this.tiles) t.node.classList.remove('down');
     this.buttonTouch.clear();
     this.buttonSeen.clear();
+    this.buttonMiss.clear();
+    this.miss.left = this.miss.right = null;
     this.lost.clear();              // Nothing is picked up again across a pause or a match boundary.
     this.suspect.clear();
     this.spare.clear();
