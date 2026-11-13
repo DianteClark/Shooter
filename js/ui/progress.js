@@ -80,7 +80,7 @@ import {
   MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
   recordCareer, careerWeek, masteryCompleted, blankCareer,
-  recordZmBest, recordZmFeat,
+  recordZmBest, recordZmFeat, recordBests,
   masterOf, masterProgress, prestigeRankRewards, masterRewardsBetween, nextMasterReward, MASTER_REWARDS,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
@@ -248,9 +248,16 @@ function gatedKits(loadout) {
   return out;
 }
 
+// The best ranked division ever reached (0 Bronze .. 6 Champion; -1 never placed): past seasons' paid divisions and this
+// season's peak.
+function rankedBest() {
+  const rk = data.season?.rk;
+  return Math.max(-1, ...Object.values(data.season?.rr ?? {}).map(v => v | 0), rk && placed(rk) ? division(Math.max(rk.peak ?? 0, rk.sr ?? 0)).div : -1);
+}
+
 function careerStats() {
   const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id),
-    zmFeats: data.zmFeats ?? {} };
+    zmFeats: data.zmFeats ?? {}, zmBest: data.zmBest ?? {}, records: data.records ?? {}, rankedBest: rankedBest() };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
 }
@@ -532,6 +539,9 @@ export const Progress = {
     return r;
   },
   zmFeats(mapId) { const f = data.zmFeats?.[mapId] ?? [0, 0]; return { escaped: f[0] ?? 0, boss: !!f[1] }; },
+  // Personal bests (the Trophy Case): { streak, long (m), brPlace (0 none), exSecs (0 none), rankedBest (-1 never) }.
+  records() { const r = data.records ?? {}; return { streak: r.st ?? 0, long: r.lk ?? 0, brPlace: r.bp ?? 0, exSecs: r.ex ?? 0, rankedBest: rankedBest() }; },
+  zmBestAll() { return { ...(data.zmBest ?? {}) }; },
   skins(op) {
     const got = masteryRewards(data);
     return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));
@@ -758,7 +768,8 @@ export const Progress = {
   // `career` ({ kills, deaths, won, br, place, extracted }, see recordCareer) feeds the leaderboard totals; `extracted`
   // (extraction mode) also counts the save's lifetime `extractions`.
   // `zmFeat` ({escaped, boss}, Graveyard Shift) is recorded here, after the card list is taken, so Lantern Out is stamped.
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null }) {
+  // `records` ({ streak, long, brPlace, exSecs }) are this match's personal bests for the Trophy Case (recordBests).
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null, records = null }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel, masterBefore = masterNow();
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
@@ -770,6 +781,7 @@ export const Progress = {
     // Mastery first, so the ladder only counts for guns that were already level 30 when the match began.
     const tiers = applyMasteryGains(data, mastery ?? {});
     const feat = zmFeat && mapId ? recordZmFeat(data, mapId, zmFeat) : null;
+    const bests = records ? recordBests(data, records) : [];
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
@@ -844,6 +856,7 @@ export const Progress = {
       proProgress,
       mastery: tiers.moved,
       zmFeat: feat,
+      bests,
     };
   },
 

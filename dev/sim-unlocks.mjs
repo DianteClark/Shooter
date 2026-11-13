@@ -207,7 +207,7 @@ function runMode(mode, seed) {
   const tallies = ids.map(id => new ChallengeTally(id));
   const pros = roster.map(r => new ProTracker(r.id, r.loadout?.perks ?? []));
   const masts = roster.map(r => new MasteryTracker(r.id, { loadout: r.loadout, bounced: () => true }));
-  const s = seen[mode] ??= { tally: {}, pro: {}, mastery: {}, ladder: {}, medals: {}, ex: {}, matches: 0, ended: 0 };
+  const s = seen[mode] ??= { tally: {}, pro: {}, mastery: {}, ladder: {}, medals: {}, ex: {}, matches: 0, ended: 0, best: { streak: 0, long: 0 } };
   const m = MODES[mode], span = m.rounds ? m.timeLimit * (m.scoreLimit * 2 - 1) : m.timeLimit;
   const limit = Math.min(QUICK && mode !== 'snd' && mode !== 'ctf' ? 420 : 1600, (span ?? 600) + 120);
   let view = null;
@@ -234,7 +234,10 @@ function runMode(mode, seed) {
       won = pay.extracted;
       for (const [key, n] of Object.entries(pay.life)) bump(s.ex, key, n);
     }
-    const counts = tallies[k].finish({ won, place: ended ? place : null });
+    const brPlace = view.br && me ? (won ? 1 : me.place || null) : null;
+    const counts = tallies[k].finish({ won, place: ended ? place : null, brPlace });
+    const rec = tallies[k].records();
+    s.best.streak = Math.max(s.best.streak, rec.streak); s.best.long = Math.max(s.best.long, rec.long);
     for (const [st, n] of Object.entries(counts)) bump(s.tally, st, n);
     for (const [st, n] of Object.entries(pros[k].raw)) bump(s.pro, st, n);
     const g = masts[k].finish({ won });

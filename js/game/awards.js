@@ -59,6 +59,7 @@ export class MatchAwards {
     this.ranked = null;
     this.observers = [];
     this.result = null;
+    this.outAt = null;
   }
 
   observe(fn) { this.observers.push(fn); }
@@ -112,6 +113,7 @@ export class MatchAwards {
     if (view.phase !== 'live' || !(dt > 0)) return;
     this.live += dt;
     const me = view.players?.find(p => p.id === this.localId);
+    if (me?.out && this.outAt == null) this.outAt = this.live;      // Extraction: lifted out (the fastest-extraction record).
     if (me?.alive && me.weapon) this.held[me.weapon] = (this.held[me.weapon] ?? 0) + dt;
   }
 
@@ -270,8 +272,9 @@ export class MatchAwards {
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
     // Challenges settle first so the XP they pay is part of this match's total. A failure here costs only them.
     let challenges = [], tallied = null;
+    const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
     try {
-      tallied = this.tally.finish({ won: exWon ?? won, place });
+      tallied = this.tally.finish({ won: exWon ?? won, place, brPlace });
       const settled = Challenges.apply(tallied);
       challenges = settled.moved;
       for (const period of ['daily', 'weekly']) {
@@ -291,11 +294,12 @@ export class MatchAwards {
     // Lifetime totals take the same counts the challenges do, plus where it was played and whether it was won.
     // Career totals for the leaderboards: kills and deaths as the scoreboard has them, a battle royale's placing, and
     // whether this player's squad got out of an extraction.
-    const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
     const career = { kills: zm ? 0 : me?.kills ?? this.kills, deaths: zm ? 0 : me?.deaths ?? 0, br: !!view?.br, place: brPlace, extracted: !!ex?.extracted };     // The horde stays off the K/D boards.
     const life = { ...(tallied ?? this.tally.counts()) };
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat });
+    // Personal bests for the Trophy Case (the horde's kills are not in the tally's, see hordeView).
+    const records = { ...this.tally.records(), brPlace, exSecs: ex?.extracted ? Math.max(1, Math.round(this.outAt ?? this.live)) : 0 };
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records });
     if (zm && applied.zmFeat) Object.assign(zm, { bestEscape: applied.zmFeat.escaped, freshEscape: applied.zmFeat.freshEscape, freshBoss: applied.zmFeat.freshBoss });
     if (ex) {
       // Exclusive unlock progress this match, and anything it opened.
