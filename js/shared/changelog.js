@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-13', title: 'Quality of life',
+    build: '1113-3', date: '2026-11-13', title: 'Quality of life',
     items: [
       'Results: the main button says what one tap queues next (the same playlist, or the same map and mode). In a friend room the host starts the rematch and guests get a Ready button.',
       'Dead in Control or waiting on a standing Headquarters, you can still change the class for your next life.',
