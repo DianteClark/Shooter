@@ -135,7 +135,8 @@ console.log('ranking');
   const pool = B.poolEntries(Date.now());
   ok(pool.every(p => p.wk.k >= 0 && p.wk.k <= p.k && p.wk.w >= 0), 'pool weekly numbers are within their totals');
   ok(pool.every(p => p.mst >= 0 && p.mst <= P.MASTERY_TOTAL()), 'pool mastery within what there is to finish');
-  ok(pool.every(p => p.ex === 0), 'no extractions before the mode launches');
+  // Pinned to the day before Extraction launched (2026-11-11): with Date.now() this went false once the mode was live.
+  ok(B.poolEntries(Date.UTC(2026, 10, 10, 12)).every(p => p.ex === 0), 'no extractions before the mode launches');
   const { BOT_POOL } = await import('../js/shared/botpool.js');
   ok(pool.length === BOT_POOL.length && pool.every((p, i) => p.name === BOT_POOL[i].name && p.card === BOT_POOL[i].card && p.emblem === BOT_POOL[i].emblem), 'pool rows wear the tag, card and emblem they wear in lobbies');
   ok(pool.every(p => p.clan === null || /^[A-Z0-9]{2,4}$/.test(p.clan)), 'clan tags only from clanOf, when the pool has it');

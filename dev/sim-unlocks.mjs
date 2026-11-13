@@ -340,8 +340,9 @@ test('mastery tracks: every tier stat of every tactical, lethal, streak and oper
   // Bots may never do some of these (a Trophy save needs an enemy throw into it): report, fail only on a whole kind.
   for (const kind of ['tactical', 'lethal', 'streak', 'operator']) {
     const stats = new Set(MASTERY_TRACKS.filter(t => t.kind === kind).flatMap(t => t.tiers.map(c => c.stat)));
-    // wallKills: bots never aim a Drill at a wall; the Drill test above shows it bores through.
-    if (!QUICK) for (const st of stats) if (st !== 'wallKills') assert.ok(MASTERY_TRACKS.filter(t => t.kind === kind).some(t => anywhere('mastery', `${t.id}.${st}`)), `${kind} stat ${st} never counted for any item`);
+    // Bot-rare (hand-checked, docs/UNLOCKS-AUDIT-2026-11-12.md): wallKills (bots never aim a Drill at a wall; the
+    // Drill test above shows it bores through), melted (a Thermite on a device or Rampart), stolen (an enemy Airdrop).
+    if (!QUICK) for (const st of stats) if (!['wallKills', 'melted', 'stolen'].includes(st)) assert.ok(MASTERY_TRACKS.filter(t => t.kind === kind).some(t => anywhere('mastery', `${t.id}.${st}`)), `${kind} stat ${st} never counted for any item`);
   }
 });
 

@@ -62,8 +62,9 @@ every one reachable (B); 70 of the 75 pool entries come up. Every gun goal names
 class with one. Season weekly sets of both seasons checked in B.
 
 Bot-rare but reachable (hand-checked, reported by the test, not failed): Drill wall kills (bots never aim at walls; the
-test throws Drills into thin cover on four maps and they bore through), lethal and streak multi-kills, Sticky kills
-from 12 m, Tripwire kills (1 in two elite matches), Thermite melts, stolen Airdrops (the event carries `stolen`).
+test throws Drills into thin cover on four maps and 22 of 79 bore through), lethal and streak multi-kills, Sticky kills
+from 12 m, Impact direct hits, Tripwire kills (1 in two elite matches), Thermite melts (1 in two), stolen Airdrops
+(the event carries `stolen`; bots never open an enemy crate), S&D defuses (about 1 a match in 4, so S&D plays 6 seeds).
 
 ## 3. Broken and fixed
 
@@ -108,6 +109,26 @@ every daily/weekly challenge row on the results says what the stored challenge s
   S&D and CTF (none for Headquarters, Kill Order, Control, Grind, Infected, One in the Chamber, Showdown, battle royale,
   Rebound, Extraction or Graveyard Shift beyond Lantern Out).
 
-## 6. Test runs (end of the branch)
+8. **A battle royale match ended with the winning squad still in** (the host ending it; the sweep's forced ending)
+   showed Victory but paid as a loss: squads are placed only as they go out, so the winner's place read 0. A place of
+   0 with the sim naming the squad the winner is now first (natural endings already set place 1). js/game/awards.js.
 
-(filled in below)
+Stale test fixed on the way: `dev/sim-boards.mjs` "no extractions before the mode launches" read `Date.now()`, so it
+failed from the day Extraction launched (2026-11-11); it now asks the pool for 2026-11-10.
+
+## 6. Test runs (end of the branch, after `git merge dev`)
+
+| test | result |
+|---|---|
+| `node dev/sim-unlocks.mjs` (full; `quick` too) | 22 checks pass; 2,755 unlocks stamped over the 90-match career, none twice, none silent |
+| `node dev/ui-mastery-test.mjs` | 23 pass |
+| `node dev/sim-seasons.mjs` | all ok |
+| `node dev/sim-boards.mjs` | all ok (after the stale date above) |
+| `node dev/sim-extract.mjs`, `sim-streaks-v9.mjs`, `sim-zombies.mjs`, `sim-gear.mjs` | pass (371/371 zombies; one earlier run had a perf max-tick blip that did not repeat) |
+| `python3 dev/ui-sweep-play.py` (PLAY_S=30) | 43/43 clean; every case's XP lines equal the save's gain and every challenge row equals the stored challenge (a known set with "Play N matches" is set before each case) |
+| `python3 dev/ui-endings-test.py` | 34/34 |
+| `python3 dev/ui-results-test.py`, `dev/ui-flow-test.py` | PASS, no console errors |
+| `python3 dev/ui-overflow-test.py --only menus` | 248 states, 0 overflow failures, 0 errors |
+
+The sweep's HUD notes show the kill feed's badge 3 px past the left edge at 932x430 in a few cases (`f-bdg -3`), as in
+earlier sweeps; not touched here.
