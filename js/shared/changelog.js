@@ -4,6 +4,20 @@
 
 export const CHANGELOG = [
   {
+    build: '1113-3', date: '2026-11-13', title: 'Quality of life',
+    items: [
+      'Results: the main button says what one tap queues next (the same playlist, or the same map and mode). In a friend room the host starts the rematch and guests get a Ready button.',
+      'Dead in Control or waiting on a standing Headquarters, you can still change the class for your next life.',
+      'Challenges: every daily, weekly and season challenge has a Play button that opens Multiplayer on the playlist or mode where it counts. The Gunsmith\'s Camo tab shows the gun\'s next camo challenge with its progress and a Play button.',
+      'The game remembers your Multiplayer tab and playlist, your friend room\'s battle royale squad size, your Custom map and mode, and pre-votes the Graveyard Shift map you played last.',
+      'New unlocks (guns, attachments, camos, perks, streaks, equipment, operators, skins, finishers, emotes, calling cards, emblems) wear a small dot until you have seen them, and so do the menu buttons that lead to them.',
+      'Options has a search field: type a word to find any setting, including Accessibility and Controller ones.',
+      'Leaving a match now asks first and says what it costs; a host leaving a room with friends in it is told the room passes to someone else.',
+      'Spectating shows who you are watching: name, operator, gun, health, kills and kills this round, with Previous and Next buttons (LB and RB on a controller). Showdown and Graveyard Shift let you watch your team when you are out.',
+      'Tap the room code in a lobby to copy it. Guests see who will start the match.',
+    ],
+  },
+  {
     build: '1113-2', date: '2026-11-13', title: 'Juicier hits, kills and menus',
     items: [
       'Hit markers pop when they land. Headshots get a gold marker with a ringing halo and a cleaner "ting"; kills get a red X with a quick flash, and the points float up off it into your score.',

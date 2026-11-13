@@ -9,6 +9,7 @@ import { controllerScreen } from './controllerscreen.js';
 import { a11yScreen } from './a11yscreen.js';
 import { hapticsSupported } from './haptics.js';
 import { fullscreenSupported, enterFullscreen } from './android.js';
+import { Pad } from './gamepad.js';
 
 const stepLabel = id => QUALITY_STEPS.find(s => s.id === id)?.label ?? id;
 
@@ -42,11 +43,46 @@ const toggle = (act, cls = '') => `<button class="opt-toggle${cls ? ' ' + cls : 
 // spare, as Controls' Controller button does: the columns are full at 393 px tall.
 const voiceModeChip = `<button class="seg opt-voicemode" data-act="optVoiceMode" aria-label="Microphone mode"><small>Mic</small><b></b></button>`;
 
+// ---- Settings search (QoL) ----------------------------------------------------------------------------------------
+// A field in the header filters the rows of every column in place. The Accessibility and Controller screens are drawn
+// once into a detached page to read their rows, so a row added there is found without a list to keep: a match there is
+// a jump button that opens that screen on the row. The words typed stay for this visit, so Back returns to the hits.
+let lastQuery = '';
+const words = q => q.toLowerCase().split(/\s+/).filter(Boolean);
+const hits = (text, ws) => { const t = text.toLowerCase(); return ws.every(w => t.includes(w)); };
+
+function harvest(screenFn, section, to) {
+  const stub = { el: document.createElement('div'), on() {}, show() {}, toast() {}, deny() {} };
+  const keep = Pad.input?.onChange;
+  try { screenFn(stub, { onBack() {} }); } catch (err) { console.error('settings search', err); return []; } finally { if (Pad.input) Pad.input.onChange = keep; }
+  const out = [];
+  for (const row of stub.el.querySelectorAll('.opt-row, .pad-bind, .pad-reset')) {
+    const label = (row.querySelector('.opt-name b, span, b')?.textContent ?? '').trim();
+    if (!label) continue;
+    const text = `${section} ${row.textContent}`.replace(/\s+/g, ' ');
+    out.push({ section, to, label: row.classList.contains('pad-bind') ? `Button: ${label}` : label, find: label, text });
+  }
+  return out;
+}
+let subIndex = null;
+const subRows = () => (subIndex ??= [...harvest(a11yScreen, 'Accessibility', 'a11y'), ...harvest(controllerScreen, 'Controller', 'pad')]);
+
+// Opened from a search hit: the row is scrolled to and lit for a moment.
+function lightRow(menu, label) {
+  const row = [...menu.el.querySelectorAll('.opt-row, .pad-bind, .pad-reset')].find(r => (r.querySelector('.opt-name b, span, b')?.textContent ?? '').trim() === label);
+  if (!row) return;
+  row.scrollIntoView?.({ block: 'nearest' });
+  row.classList.add('opt-hit');
+  setTimeout(() => row.classList.remove('opt-hit'), 1800);
+}
+
+const searchField = `<label class="opt-search" aria-label="Search settings">${ico('ui:search')}<input class="opt-search-in" type="search" placeholder="Search settings" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="24"><button class="opt-search-x" data-act="optSearchClear" aria-label="Clear search" hidden>${ico('close')}</button></label>`;
+
 export function optionsScreen(menu, opts) {
   const { onBack, onPreviewSound, onSquad } = opts;
   menu.el.dataset.screen = 'options';
   menu.el.innerHTML = `
-    ${header({ back: 'optBack', label: 'Done', title: 'Options' })}
+    ${header({ back: 'optBack', label: 'Done', title: 'Options', cls: 'opt-bar', extra: searchField })}
     <div class="opt-cols">
       <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('graphics')}Graphics<button class="seg opt-pad opt-a11y" data-act="optA11y" aria-label="Accessibility settings">${ico('ui:eye')}<b>Accessibility</b></button></h4>
@@ -110,6 +146,8 @@ export function optionsScreen(menu, opts) {
         </div>
         <p class="opt-note">${ico('info')}Settings stay on this phone and are not part of your save code.</p>
       </section>
+      <section class="opt-col opt-found scroll-y" hidden><h4>${ico('next')}More settings</h4><div class="opt-found-list"></div></section>
+      <p class="opt-none" hidden>${ico('info')}No setting matches. Try a word like sound, aim or colour.</p>
     </div>`;
   // Each column scrolls natively when it is taller than the screen, so no row is ever squeezed onto the next.
   for (const col of menu.el.querySelectorAll('.opt-col')) col.classList.add('scroll-y');
@@ -159,8 +197,42 @@ export function optionsScreen(menu, opts) {
       for (const b of row.querySelectorAll('.opt-step')) b.disabled = b.dataset.d < 0 ? v[key] <= s.min + 1e-6 : v[key] >= s.max - 1e-6;
     }
   };
+  // The search: rows of these columns hide when they miss; a column whose heading matches shows whole.
+  const input = q('.opt-search-in'), found = q('.opt-found'), none = q('.opt-none'), cols = [...menu.el.querySelectorAll('.opt-col:not(.opt-found)')];
+  const search = () => {
+    const ws = words(input.value);
+    lastQuery = input.value;
+    q('.opt-search-x').hidden = !ws.length;
+    menu.el.classList.toggle('opt-searching', ws.length > 0);
+    let shown = 0;
+    for (const col of cols) {
+      const whole = ws.length && hits(col.querySelector('h4')?.textContent ?? '', ws);
+      let n = 0;
+      for (const row of col.querySelectorAll('.opt-row')) {
+        const on = !ws.length || whole || hits(row.textContent, ws);
+        row.hidden = !on;
+        if (on) n++;
+      }
+      col.hidden = ws.length > 0 && !n;
+      shown += n;
+    }
+    const subs = ws.length ? subRows().filter(r => hits(r.text, ws)) : [];
+    found.hidden = !subs.length;
+    q('.opt-found-list').innerHTML = subs.slice(0, 12).map(r => `<button class="seg opt-jump" data-act="optJump" data-to="${r.to}" data-find="${esc(r.find)}"><small>${esc(r.section)}</small><b>${esc(r.label)}</b>${ico('next')}</button>`).join('');
+    none.hidden = !ws.length || shown + subs.length > 0;
+  };
+  input.addEventListener('input', search);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  if (lastQuery) { input.value = lastQuery; search(); }
+  const reopen = () => optionsScreen(menu, opts);
   menu.on({
-    optBack: () => onBack(),
+    optSearchClear: () => { input.value = ''; search(); },
+    optJump: ({ to, find }) => {
+      if (to === 'a11y') a11yScreen(menu, { onBack: reopen });
+      else controllerScreen(menu, { onBack: reopen });
+      lightRow(menu, find);
+    },
+    optBack: () => { lastQuery = ''; onBack(); },
     optQuality: ({ id }) => { Options.set('quality', id); paint(); },
     optHudSize: ({ id }) => { Options.set('hudSize', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
@@ -179,8 +251,8 @@ export function optionsScreen(menu, opts) {
     optSquad: () => onSquad?.(),
     optSquadClear: () => { Options.set('squad', ''); paint(); },
     optVoiceMode: () => { Options.set('voiceMode', Options.get('voiceMode') === 'ptt' ? 'open' : 'ptt'); paint(); },
-    optPad: () => controllerScreen(menu, { onBack: () => optionsScreen(menu, opts) }),
-    optA11y: () => a11yScreen(menu, { onBack: () => optionsScreen(menu, opts) }),
+    optPad: () => controllerScreen(menu, { onBack: reopen }),
+    optA11y: () => a11yScreen(menu, { onBack: reopen }),
     optVoice: () => { Options.set('voice', Options.get('voice') > 0 ? 0 : 1); paint(); },
     optStep: ({ key, d }) => {
       Options.step(key, Number(d));

@@ -29,6 +29,7 @@ import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.
 import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
 import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
+import { SpectateCard } from './spectate-card.js';     // QoL: who you are watching, with Previous and Next.
 import { ctfOf } from '../sim/ctf.js';
 import { AIR_HP } from '../sim/streaks-v9.js';
 
@@ -750,6 +751,7 @@ export class HUD {
     this.el.classList.toggle('ctf-on', this.ctf);
     for (const pips of this.sndEl.pips) pips.innerHTML = this.snd || this.ctf ? '<i></i>'.repeat(scoreLimit) : '';
     spectate.reset();
+    this.specCard.prepare(roster);
     this.boardMode.textContent = playlistName(mode, mods);
     this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : this.ctf ? `first to ${scoreLimit} captures` : `first to ${scoreLimit}`}`;
     this.el.classList.toggle('ffa-on', this.ffa);
@@ -928,8 +930,7 @@ export class HUD {
     this.flashEl.style.opacity = '0';
     this.dazeT = 0;
     this.dazeEl.style.opacity = '0';
-    this.leaveArmed = false;
-    this.leaveBtn.textContent = 'Leave match';
+    this.#disarmLeave();
     this.feed = [];
     this.medalQueue = [];
     this.medalClock = 0;
@@ -1117,7 +1118,7 @@ export class HUD {
       <div class="board" hidden>
         <div class="board-top"><b class="board-mode"></b><span class="board-goal"></span></div>
         <div class="board-grid"></div>
-        <div class="board-foot"><small class="board-tip">Tap the score to close</small><button class="board-leave" data-tap="1">Leave match</button></div>
+        <div class="board-foot"><small class="board-tip">Tap the score to close</small><button class="board-stay" data-tap="1" data-sound="back" hidden>Stay</button><button class="board-leave" data-tap="1">Leave match</button></div>
       </div>
       <div class="range-panel" hidden>
         <div class="rp-head">Firing Range</div>
@@ -1324,6 +1325,7 @@ export class HUD {
     this.streakHitEl = $('.streak-hit');
     this.respawnEl = $('.respawn-flash');
     this.#range = new RangeReadout(el);
+    this.specCard = new SpectateCard(el);
     if (!document.getElementById('snd-hud-style')) {
       const st = document.createElement('style');
       st.id = 'snd-hud-style';
@@ -1352,6 +1354,8 @@ export class HUD {
     });
     $('.range-leave').addEventListener('click', () => this.leaveCb?.());
     this.leaveBtn.addEventListener('click', () => this.#tapLeave());
+    this.stayBtn = $('.board-stay');
+    this.stayBtn.addEventListener('click', () => this.#disarmLeave());
 
     this.micBtn.addEventListener('click', () => this.micCb?.());
     this.speakerBtn.addEventListener('click', () => this.speakerCb?.());
@@ -1360,15 +1364,32 @@ export class HUD {
     this.#buildBoard();
   }
 
-  // Two taps on purpose: a stray thumb on the open scoreboard must not end the match.
+  // Two taps on purpose: a stray thumb on the open scoreboard must not end the match. The first asks, in words that say
+  // what leaving costs here (main.js leaveText: progress lost, the slot held, the room handed over), with Stay beside it.
   #tapLeave() {
     if (!this.leaveArmed) {
       this.leaveArmed = true;
-      this.leaveBtn.textContent = 'Tap again to leave';
+      this.leaveBtn.textContent = 'Leave';
+      this.stayBtn.hidden = false;
+      const foot = this.leaveBtn.parentElement;
+      foot.classList.add('armed');
+      let text = 'Leave this match?';
+      try { text = this.leaveText?.() || text; } catch (err) { console.error('leave text', err); }
+      foot.querySelector('.board-tip').textContent = text;
       return;
     }
     this.toggleBoard();
     this.leaveCb?.();
+  }
+
+  #disarmLeave() {
+    this.leaveArmed = false;
+    if (!this.leaveBtn) return;
+    this.leaveBtn.textContent = 'Leave match';
+    this.stayBtn.hidden = true;
+    const foot = this.leaveBtn.parentElement;
+    foot.classList.remove('armed');
+    foot.querySelector('.board-tip').textContent = 'Tap the score to close';
   }
 
   // Twelve rows made once and only ever retexted, so an open board costs a few text writes a second.
@@ -1392,8 +1413,7 @@ export class HUD {
     this.boardOpen = !this.boardOpen;
     this.boardEl.hidden = !this.boardOpen;
     this.boardClock = 0;
-    this.leaveArmed = false;
-    this.leaveBtn.textContent = 'Leave match';
+    this.#disarmLeave();
     if (this.boardOpen && this.view) this.#paintBoard(this.view);
   }
 
@@ -1657,6 +1677,7 @@ export class HUD {
     }
     if (this.ctf) this.#updateCtf(view, me, c);
     this.modeHud.update(view, me);
+    this.specCard.update(view, me);
     this.finHud.update(view, me);
     this.cues.update(view, me);
     this.streakTags.update(view, me, dt);
@@ -3139,7 +3160,7 @@ export class HUD {
     // A flag carrier shows on the enemy minimap wherever they are (the price of carrying it).
     const ctf = this.ctf ? ctfOf(view) : null;
     // Out for the round, you see what the teammate you watch sees.
-    const eyeId = (this.snd || this.br || this.ex) && !me.alive ? spectate.target(view, me.id) : null;
+    const eyeId = !me.alive ? spectate.target(view, me.id) : null;
     const eye = eyeId ? view.players.find(p => p.id === eyeId) ?? me : me;
 
     for (const p of view.players) {

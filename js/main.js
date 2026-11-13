@@ -61,6 +61,8 @@ import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes,
 import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
+import { Recall } from './ui/recall.js';     // Remembered menu choices (QoL).
+import { NewDots } from './ui/newdots.js';    // QoL: dots on unlocks not yet seen.
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
 
@@ -112,8 +114,10 @@ let gamepad = null, voiceUi = null;
 // Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
 // keep it moving. Nothing of the backdrop exists while a match owns the canvas.
 const STILL_SCREENS = new Set(['loadouts', 'gunsmith', 'operators', 'results']);
+const DOT_SCREENS = new Set(['title', 'loadouts', 'gunsmith', 'operators', 'profile']);
 menu.onScreen = screen => {
   uiRoot.dataset.menu = screen;
+  if (DOT_SCREENS.has(screen)) NewDots.refresh();     // Unlocks can land between visits (a prestige, a season claim).
   music.screen(screen, app.inMatch);
   if (app.inMatch) return;
   if (screen === 'results') return;            // The match renderer has only just let go; the next screen builds it.
@@ -146,19 +150,26 @@ const app = {
   vote: null,               // { key, options, votes (host) or counts (guest), left, winner, resolved, mine }
   resultsAt: 0,             // When the results screen last appeared.
   voteTakeover: 0,          // Guest: timer that moves results on to a vote that opened while they were showing.
-  soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
+  soloPick: recalledSoloPick(),         // Custom's map and mode, as last picked on this phone.
   // The map and mode the last match was played on, as rolled. Rematch replays the halves that were chosen, and the
   // room's next vote offers it as a Rematch card unless the winning card was Random.
   lastPlayed: null,
   // The pick as chosen, before rolling. A Random half stays Random on Rematch, so each rematch rolls again.
   // Multiplayer: { mp: {tab, sel} }, so the next match searches the same playlist; Training: { training: true }.
   lastPick: null,
-  mp: { tab: 'standard', sels: {} },   // Multiplayer: the open tab and each tab's pick ({playlist, modes}).
+  mp: Recall.mp(MP_TAB_IDS),           // Multiplayer: the open tab and each tab's pick ({playlist, modes}), as last left.
   mpSearch: null,                      // The matchmaking moment's timers.
   customTab: 'match',                  // Custom: 'match' or 'training'.
   customFrom: null,                    // 'lobby' while a host edits the friend lobby's custom settings.
   training: loadTraining(),            // Custom > Training's settings (js/ui/playscreens.js).
 };
+// Custom's last pick, if its map still exists and still hosts its mode; else the default.
+function recalledSoloPick() {
+  const p = Recall.get('soloPick');
+  const mapOk = p?.mapId === RANDOM || !!MAPS[p?.mapId];
+  const modeOk = p?.mode === RANDOM || (!!MODES[p?.mode] && (p.mapId === RANDOM || modeFits(MAPS[p.mapId], p.mode)));
+  return mapOk && modeOk ? { mapId: p.mapId, mode: p.mode } : { mapId: DEFAULT_MAP, mode: 'tdm' };
+}
 const RESULTS_FALLBACK_MS = 2500;  // Results come up by this long after a match ends even if the end banner failed.
 
 // The canvas size, the HUD's numbers and the touch rectangles are all derived from the visible area.
@@ -200,7 +211,7 @@ function blockIosGestures() {
     }
   }, { passive: false });
   // Safari still offers text selection on long-press through some layered elements.
-  const unlessField = e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); };
+  const unlessField = e => { if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') e.preventDefault(); };     // INPUT: the settings search.
   document.addEventListener('selectstart', unlessField);
   document.addEventListener('contextmenu', unlessField);
 
@@ -313,7 +324,7 @@ menu.on({
   season: () => openSeason(),
   lobbyRanked: () => setLobbyRanked(!app.lobby.ranked),
   help: () => openHelp(),
-  challenges: () => menu.challenges({ onBack: afterEditing }),
+  challenges: () => openChallenges(),
   history: () => openHistory(),
   rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
   range: () => { needName(startRange); },
@@ -373,11 +384,12 @@ menu.on({
     if (row) row.hidden = true;
     if (!backdrop.emote(Number(i))) menu.toast(e.name);
   },
-  leaveLobby: () => goTitle(),
+  leaveLobby: () => leaveRoom(),
+  copyCode: () => copyRoomCode(),
   toggleReady: () => toggleReady(),
   start: () => startVote(),
   voteCast: ({ i }) => castVote(Number(i)),
-  voteLeave: () => { if (app.vote?.solo) { stopVote(); renderMp(); } else goTitle(); },
+  voteLeave: () => { if (app.vote?.solo) { stopVote(); renderMp(); } else leaveRoom(); },
   soloBack: () => leaveCustom(),
   soloMap: ({ id }) => pickSoloMap(id),
   soloMode: ({ id }) => pickSoloMode(id),
@@ -389,6 +401,42 @@ menu.on({
   lobbyMic: () => app.voice?.toggleMic(),
   voiceMute: ({ id }) => voiceUi?.toggleMute(id),
 });
+
+// A short question over the menu: Stay (or B) closes it, the red button does the thing (QoL).
+function confirmSheet({ title, body, yes = 'Leave', no = 'Stay', onYes }) {
+  menu.overlay(`
+    <div class="sheet slim qol-confirm" role="alertdialog" aria-label="${title.replace(/"/g, '')}">
+      <h2>${title}</h2>
+      <p>${body}</p>
+      <div class="sheet-row">
+        <button class="btn" data-act="qolNo" data-sound="back">${no}</button>
+        <button class="btn is-danger" data-act="qolYes" data-sound="confirm">${yes}</button>
+      </div>
+    </div>`);
+  menu.on({ qolNo: () => menu.overlay(''), qolYes: () => { menu.overlay(''); onYes(); } });
+}
+
+// Tap to copy the room code (QoL). A browser that refuses the clipboard still shows the code to read out.
+function copyRoomCode() {
+  const code = app.code;
+  if (!code) return;
+  const said = () => menu.toast(`Room code ${code} copied`);
+  try {
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(said, () => menu.toast(`Room code: ${code}`));
+    else menu.toast(`Room code: ${code}`);
+  } catch { menu.toast(`Room code: ${code}`); }
+}
+
+// Leaving a friend room: a host with friends in it is asked first, since the room passes to one of them.
+function leaveRoom() {
+  const others = app.net && app.isHost ? app.lobby.humans.filter(h => h.id !== app.net.localId).length : 0;
+  if (!others) { goTitle(); return; }
+  confirmSheet({
+    title: 'Leave your room?',
+    body: `You are hosting ${others} other player${others === 1 ? '' : 's'}. One of them becomes host and the room stays open without you.`,
+    yes: 'Leave room', onYes: () => goTitle(),
+  });
+}
 
 function needName(next) {
   if (Progress.name) next();
@@ -429,7 +477,7 @@ function shareLoadout() {
 }
 
 function openGunsmith(loadoutIndex, onBack = afterEditing, weapon) {
-  menu.gunsmith({ loadoutIndex, weapon, onBack, onChange: shareLoadout });
+  menu.gunsmith({ loadoutIndex, weapon, onBack, onChange: shareLoadout, onPlay: shortcutOk() ? () => playShortcut({ tab: 'standard', sel: { playlist: 'qp', modes: [] }, name: 'Quick Play' }) : null });
 }
 
 function openOperators(loadoutIndex, onBack = afterEditing) {
@@ -477,13 +525,32 @@ function editSquad() {
   });
 }
 
+// Challenge shortcuts (QoL): Multiplayer opens on the tab with the pick where the challenge counts; Find match is the
+// player's tap. Not from inside a friend room, which plays what its host picks.
+function playShortcut(where) {
+  if (!where || !MP_TAB_IDS.includes(where.tab)) return;
+  needName(() => {
+    resetToSolo();
+    app.customFrom = null;
+    app.mp.tab = where.tab;
+    app.mp.sels[where.tab] = { playlist: where.sel.playlist ?? null, modes: [...(where.sel.modes ?? [])] };
+    renderMp();
+    menu.toast(`Counts in ${where.name}`);
+  });
+}
+const shortcutOk = () => !app.net;
+
+function openChallenges(back = afterEditing) {
+  menu.challenges({ onBack: back, onPlay: shortcutOk() ? playShortcut : null });
+}
+
 function openStats(back = afterEditing) {
   statsScreen(menu, { onBack: back, onBoards: () => openBoards(() => openStats(back)) });
 }
 
 // The Season screen (js/ui/season.js): the track, the weekly sets and ranked; Play Ranked searches the Ranked playlist.
 function openSeason(back = afterEditing) {
-  menu.season({ onBack: back, onPlayRanked: () => needName(() => findMatch('standard', { playlist: 'ranked', modes: [] })) });
+  menu.season({ onBack: back, onPlayRanked: () => needName(() => findMatch('standard', { playlist: 'ranked', modes: [] })), onPlay: shortcutOk() ? playShortcut : null });
 }
 
 function openBoards(back = afterEditing) {
@@ -534,6 +601,7 @@ function renderLobby() {
 function setBrSquad(n) {
   if (!app.isHost || !app.net || app.vote?.winner != null) return;
   app.lobby.brSquad = cleanBrSquad(Number(n));
+  Recall.set('brSquad', app.lobby.brSquad);
   broadcastLobby();
   if (app.vote) { broadcastVote(); renderVote(); } else if (menuShows('lobby')) renderLobby();
 }
@@ -662,6 +730,7 @@ function startHosting({ custom = null } = {}) {
     botSkill: custom?.skill ?? MP_BOT_SKILL,
     mods: custom?.mods ?? withHardcore([], Options.get('hardcore')),     // A map-vote room starts with the Hardcore switch.
     custom,
+    brSquad: cleanBrSquad(Recall.get('brSquad', 4)),     // The squad size this phone last hosted with.
   };
   app.customFrom = null;
   wireSharedNet(net);
@@ -1109,6 +1178,7 @@ function mpSel(tab = app.mp.tab) {
 }
 
 function renderMp() {
+  Recall.saveMp(app.mp);
   menu.multiplayer({ tab: app.mp.tab, sel: mpSel(), hardcore: !!Options.get('hardcore') });
 }
 
@@ -1133,6 +1203,7 @@ function findMatch(tab, sel) {
   app.mp.tab = tab;
   app.mp.sels[tab] = { playlist: sel.playlist ?? null, modes: [...(sel.modes ?? [])] };
   app.lastPick = { mp: { tab, sel: app.mp.sels[tab] } };
+  Recall.saveMp(app.mp);
   const size = lobbySize(tab, r.modes);
   const ui = menu.matchSearch({ name: r.name, tab, size });
   const t0 = performance.now();
@@ -1151,6 +1222,9 @@ function startMpVote(tab, r, size) {
     winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name, ranked: !!r.ranked,
     timer: setInterval(mpVoteTick, 1000),
   };
+  // Graveyard Shift: the map this phone last played it on starts with this player's ballot, if it is on offer.
+  const zmLast = tab === 'zombies' ? options.findIndex(o => o.mapId === Recall.get('zmMap')) : -1;
+  if (zmLast >= 0) { app.vote.mine = zmLast; app.vote.votes.set('local', zmLast); }
   renderVote();
 }
 
@@ -1275,6 +1349,7 @@ function maybeOfferTutorial() {
 }
 
 function renderSoloPick() {
+  Recall.set('soloPick', { ...app.soloPick });
   menu.custom({ tab: 'match', pick: app.soloPick, lobby: app.customFrom === 'lobby' });
 }
 
@@ -1506,6 +1581,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.lastPlayed = mode === 'range' ? null : { mapId, mode };
+  if (isZm(mode) && !training) Recall.set('zmMap', mapId);
   app.matchInfo = { roster, seed, mapId, mode, mods, scoreLimit, timeLimit, training };
   if (net) rememberRoom(app.code);
   stopVote();
@@ -1675,7 +1751,7 @@ function showResults(results) {
       challenges: results.challenges ?? [],
       proProgress: results.proProgress ?? [],
       finalKill: lastKill && !results.zm?.escaped ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
-      rematchLabel: app.lastPick?.mp && !app.net ? 'Next match' : 'Rematch',
+      ...rematchChoice(),
       snd: results.snd,
       br: results.br,
       ex: results.ex ?? null, exView: results.exView ?? null,
@@ -1693,8 +1769,32 @@ function showResults(results) {
     menu.show();
   }
   app.resultsAt = performance.now();
+  NewDots.refresh();               // The match may have unlocked something: the next screen scans again.
   shareCareer();
   voteBehindResults();
+}
+
+// Quick rematch: what the results screen's main button says, and under it what one tap queues. Solo Multiplayer searches
+// the same playlist (the squad size is the playlist's); Custom replays its map and mode; in a friend room it is the
+// host's call, so a guest's button readies them for it.
+function rematchChoice() {
+  const pick = app.lastPick, last = app.lastPlayed;
+  const place = (mapId, mode) => [mapId === RANDOM ? 'Random map' : MAPS[mapId]?.name, mode === RANDOM ? 'Random mode' : MODES[mode]?.name].filter(Boolean).join(' · ');
+  if (app.match?.headless) return { rematchLabel: 'Rematch', rematchSub: 'When your room\'s match ends' };
+  if (app.net) {
+    if (!app.isHost) return { rematchLabel: 'Ready', rematchSub: 'The host starts the next match' };
+    const n = app.lobby.humans.length;
+    return { rematchLabel: 'Rematch', rematchSub: app.lobby.custom ? place(app.lobby.custom.mapId, app.lobby.custom.mode) || 'Same room' : `Same room · ${n} player${n === 1 ? '' : 's'} · map vote` };
+  }
+  if (app.lastMode === 'range') return { rematchLabel: 'Again', rematchSub: 'Firing range' };
+  if (pick?.training) return { rematchLabel: 'Train again', rematchSub: MAPS[app.training.map]?.name ?? 'Training' };
+  if (pick?.mp) {
+    let name = '';
+    try { name = resolveSelection(pick.mp.tab, pick.mp.sel, { hardcore: !!Options.get('hardcore') }).name; } catch { /* the label alone */ }
+    return { rematchLabel: 'Next match', rematchSub: name };
+  }
+  const mapId = pick?.mapId === RANDOM ? RANDOM : last?.mapId ?? pick?.mapId, mode = pick?.mode === RANDOM ? RANDOM : last?.mode ?? pick?.mode;
+  return { rematchLabel: 'Rematch', rematchSub: place(mapId, mode) };
 }
 
 function afterResults() {
@@ -1716,6 +1816,7 @@ function afterResults() {
 }
 
 function applyOptions(v, changed) {
+  if (changed === 'recall') return;     // Remembered menu picks: nothing to apply.
   controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
   hud.setLefty(v.lefty);
   if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
@@ -1783,6 +1884,16 @@ installTaps();
 // One sound per tap, chosen by tap.js from the element (data-sound, back-ish actions, disabled controls).
 setTapSound(kind => audio.uiSound?.(kind));
 hud.onLeaveMatch(leaveMatch);
+// What leaving the running match costs, for the scoreboard's Leave question (QoL).
+hud.leaveText = () => {
+  if (app.matchInfo?.training || app.lastMode === 'range') return 'Leave training? Nothing is lost: it pays and records nothing.';
+  const lost = 'XP, challenge and weapon progress from this match are lost.';
+  if (!app.net) return `Leave this match? ${lost}`;
+  const others = app.lobby.humans.filter(h => h.id !== app.net.localId).length;
+  if (app.isHost && others) return `Leave and hand over the room? Another player becomes host and the match goes on without you. ${lost}`;
+  if (app.isHost) return `Leave this match? The room closes. ${lost}`;
+  return `Leave the room? Your slot is held for a few minutes if you rejoin with code ${app.code}. ${lost}`;
+};
 hud.onBrLeave(leaveBrEarly);
 // The interpolated view does not carry the range tracker, so the readout takes it from the newest snapshot.
 hud.rangeSource = () => app.match?.interp.newest?.range ?? null;
@@ -1797,9 +1908,10 @@ hud.onArmory?.(loadout => {
 // A touch that lands with the audio engine asleep must wake it even when the action would start sound itself.
 Options.subscribe(applyOptions);
 showTitle({ arrive: true });
+NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 

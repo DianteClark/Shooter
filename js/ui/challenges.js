@@ -9,6 +9,7 @@ import { esc } from './widgets.js';
 import { icon } from './icons.js';
 import { ico, header } from './yard.js';
 import { enter, pop, sweep } from './motion.js';
+import { playFor } from './shortcuts.js';
 
 const PERIOD_NAME = { daily: 'Daily', weekly: 'Weekly' };
 const fmtXp = n => Math.round(n).toLocaleString('en-US');
@@ -43,10 +44,17 @@ export function titleChallenges() {
 }
 
 // ---- Challenges screen ------------------------------------------------------------------------------------------
-function card(c, i, { canReroll, arming }) {
+// The challenge's icon tile, or for one still open with somewhere to play it (QoL), a Play button in its place.
+export function playTile(c, cls, size, canPlay) {
+  const where = canPlay && !c.done ? playFor(c.stat) : null;
+  if (!where) return `<span class="${cls}">${mark(c.icon, size)}${c.done ? `<i class="chc-check">${ico('check')}</i>` : ''}</span>`;
+  return `<button class="${cls} ch-play" data-act="chPlay" data-stat="${esc(c.stat)}" data-sound="confirm" aria-label="Play ${esc(where.name)}: ${esc(c.label)}">${mark(c.icon, size)}<small class="ch-play-tag">${ico('play')}Play</small></button>`;
+}
+
+function card(c, i, { canReroll, arming, canPlay }) {
   const state = c.done ? ' done' : arming ? ' arming' : '';
   return `<div class="chc${state}" data-id="${esc(c.id)}" style="--i:${i}" data-in="up">
-    <span class="chc-ico">${mark(c.icon, 30)}${c.done ? `<i class="chc-check">${ico('check')}</i>` : ''}</span>
+    ${playTile(c, 'chc-ico', 30, canPlay)}
     <span class="chc-body">
       <b class="chc-lb">${esc(c.label)}</b>
       <span class="chc-prog"><i class="chc-bar"><i style="transform:scaleX(${frac(c).toFixed(3)})"></i></i><small class="t-num">${c.value.toLocaleString('en-US')} / ${c.goal.toLocaleString('en-US')}</small></span>
@@ -64,13 +72,13 @@ function panel(period, list, optsFor) {
   </section>`;
 }
 
-export function challengesScreen(menu, { onBack }) {
+export function challengesScreen(menu, { onBack, onPlay = null }) {
   let arming = null;                // The card whose Swap was tapped once; a second tap confirms.
   menu.el.dataset.screen = 'challenges';
   const paint = (fresh = null) => {
     const { daily, weekly } = Challenges.all();
     const can = Challenges.canReroll();
-    const optsFor = id => ({ canReroll: can, arming: arming === id });
+    const optsFor = id => ({ canReroll: can, arming: arming === id, canPlay: !!onPlay });
     menu.el.innerHTML = `
       ${header({ back: 'chBack', label: 'Done', title: 'Challenges', cls: 'ch-bar', extra: `<span class="ch-swaps${can ? '' : ' used'}">${ico('refresh')}${can ? '1 swap left today' : 'Swap used today'}</span>` })}
       <div class="ch-cols">
@@ -84,6 +92,7 @@ export function challengesScreen(menu, { onBack }) {
   };
   menu.on({
     chBack: () => onBack(),
+    chPlay: ({ stat }) => { const where = playFor(stat); if (where) onPlay?.(where); },
     chReroll: ({ id }, el) => {
       if (!Challenges.canReroll()) { menu.deny(el, 'One swap a day'); return; }
       if (arming !== id) { arming = id; paint(); const b = menu.el.querySelector(`.chc[data-id="${CSS.escape(id)}"] .chc-swap`); if (b) pop(b, { scale: 1.12 }); return; }

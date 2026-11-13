@@ -241,6 +241,10 @@
 #ui .room { display: flex; align-items: center; gap: var(--sp-3); }
 #ui .room > span { font: 400 var(--fs-caption)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); width: 40px; }
 #ui .room .code-tiles b { width: 38px; height: 44px; font-size: 30px; }
+/* Tap to copy (QoL): the code is a button; its label says so in a second line. */
+#ui .room-copy { padding: 0; background: none; color: inherit; text-align: left; transition: transform var(--dur-fast) var(--ease-out); }
+#ui .room-copy.pressed { transform: scale(.96); }
+#ui .room-copy > span small { display: block; margin-top: 3px; font: inherit; font-size: 9px; color: var(--c-sodium); }
 #ui .room-tip { margin-left: auto; font: 400 var(--fs-body)/1.2 var(--f-body); color: var(--c-haze); max-width: 30ch; text-align: right; }
 #ui .auto-start { flex: none; display: flex; flex-direction: column; align-items: center; padding: 3px 12px; background: rgba(75,209,138,.12); box-shadow: inset 0 0 0 1px rgba(75,209,138,.45); }
 #ui .auto-start span { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-go); }
@@ -1231,3 +1235,33 @@
 #ui .help-body.scroll-y > .help-grid, #ui .help-body.scroll-y > .help-stats, #ui .help-body.scroll-y > .help-streaks { height: auto; grid-auto-rows: max-content; }
 #ui .help-body.scroll-y > .help-streaks { display: block; }
 @media (max-width: 760px) { #ui[data-menu="help"] .help-tabs .seg b { display: none; } #ui[data-menu="help"] .help-tabs .seg.on b { display: inline; } }
+
+/* ---- Settings search (QoL, js/ui/optionsscreen.js): a field in the Options header filters every column ------------ */
+#ui .opt-bar { gap: var(--sp-3); }
+#ui .opt-search {
+  margin-left: auto; flex: 0 1 260px; min-width: 120px; height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px;
+  background: rgba(16,20,26,.6); box-shadow: var(--edge), inset 0 -2px 0 var(--c-line-hi);
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+#ui .opt-search:focus-within { box-shadow: var(--edge), inset 0 -2px 0 var(--c-sodium); }
+#ui .opt-search > .ico { height: 16px; color: var(--c-haze); }
+#ui .opt-search-in {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--c-chalk); -webkit-appearance: none; appearance: none;
+  font: 400 16px/1 var(--f-body); letter-spacing: var(--tr-body); user-select: text; -webkit-user-select: text;
+}
+#ui .opt-search-in::placeholder { color: var(--c-haze); opacity: .8; }
+#ui .opt-search-in::-webkit-search-cancel-button { display: none; }
+#ui .opt-search-x { flex: none; width: 34px; height: 34px; display: grid; place-items: center; color: var(--c-chalk); }
+#ui .opt-search-x .ico { height: 14px; }
+#ui .opt-search-x[hidden], #ui .opt-cols [hidden] { display: none !important; }
+/* While searching, the columns that still have hits close up from the left; the jump list follows them. */
+#ui .opt-searching .opt-col { align-self: start; max-height: 100%; }
+#ui .opt-found-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+#ui .opt-jump { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 3px 8px; min-height: 44px; height: auto; padding: 6px 10px; text-align: left; }
+#ui .opt-jump small { grid-column: 1; font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
+#ui .opt-jump b { grid-column: 1; font: 400 var(--fs-body)/1.1 var(--f-stencil); letter-spacing: var(--tr-stencil); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ui .opt-jump .ico { grid-column: 2; grid-row: 1 / 3; height: 14px; color: var(--c-sodium); }
+#ui .opt-none { grid-column: 1 / -1; align-self: start; display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-4); font: 400 var(--fs-lead)/1.3 var(--f-body); color: var(--c-haze); }
+#ui .opt-none .ico { height: 16px; color: var(--c-rail); }
+#ui .opt-hit { animation: opt-hit 1.6s var(--ease-out) both; }
+@keyframes opt-hit { 0%, 40% { box-shadow: inset 0 0 0 2px var(--c-sodium), 0 0 14px var(--c-sodium-glow); } 100% { box-shadow: none; } }
