@@ -305,16 +305,18 @@ cap.
 ## Performance (dev/sim-zombies.mjs, 24 live, every gate open, every trap running, two sentries, two drones, tier-3 guns)
 | map | round | host tick mean | p99 | max | snapshot mean / max |
 |---|---|---|---|---|---|
-| neon | 20 | 0.49 ms | 5.0 ms | 6.6 ms | 957 / 1587 B |
-| neon | 30 | 0.28 ms | 4.5 ms | 4.9 ms | 958 / 1600 B |
-| ruins | 20 | 0.28 ms | 2.9 ms | 4.7 ms | 972 / 1605 B |
-| ruins | 30 | 0.34 ms | 3.7 ms | 6.2 ms | 959 / 1591 B |
-| foundry | 20 | 0.61 ms | 4.2 ms | 6.3 ms | 990 / 1713 B |
-| foundry | 30 | 0.35 ms | 3.2 ms | 5.4 ms | 988 / 1658 B |
-| ashgrove | 20 | 0.23 ms | 1.4 ms | 4.0 ms | 984 / 1631 B |
-| ashgrove | 30 | 0.25 ms | 2.2 ms | 5.2 ms | 975 / 1614 B |
+| neon | 20 | 0.47 ms | 5.5 ms | 11.2 ms | 954 / 1594 B |
+| neon | 30 | 0.39 ms | 4.7 ms | 9.5 ms | 958 / 1613 B |
+| ruins | 20 | 0.50 ms | 9.9 ms | 31.8 ms | 972 / 1620 B |
+| ruins | 30 | 0.24 ms | 3.6 ms | 4.7 ms | 967 / 1649 B |
+| foundry | 20 | 0.50 ms | 5.2 ms | 6.4 ms | 1008 / 1652 B |
+| foundry | 30 | 0.31 ms | 3.2 ms | 5.2 ms | 979 / 1611 B |
+| ashgrove | 20 | 0.41 ms | 3.7 ms | 5.0 ms | 981 / 1636 B |
+| ashgrove | 30 | 0.35 ms | 3.6 ms | 6.4 ms | 1001 / 1627 B |
 
-Inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms). The renderer adds no per-zombie draw calls; the
+Build NEXT, with the special zombies in the mix (rounds 20 and 30 deal Spitters, Bloaters, Crawlers and
+Shieldbearers): inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms; the one 31.8 ms tick on Ruins is a
+single outlier, its p99 9.9 ms). The renderer adds no per-zombie draw calls; the
 economy adds about eighteen fixed ones (gear is instanced).
 
 ## Tests
