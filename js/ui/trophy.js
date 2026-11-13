@@ -101,7 +101,7 @@ export function trophyScreen(menu, { onBack }) {
         </section>
         <section class="tc-rare" data-in="up">
           <h4>${ico('star')}Rarest unlocks</h4>
-          ${rare.length ? `<div class="tc-rare-row scroll-x">${rare.map(x => `<button class="tc-tile k-${x.kind}" data-act="tcOpen" data-kind="${x.kind}" data-id="${esc(x.id)}"${x.weapon ? ` data-w="${x.weapon}"` : ''}><span class="tc-art">${x.art}</span><b>${esc(x.name)}</b></button>`).join('')}</div>`
+          ${rare.length ? `<div class="tc-rare-row">${rare.map(x => `<button class="tc-tile k-${x.kind}" data-act="tcOpen" data-kind="${x.kind}" data-id="${esc(x.id)}"${x.weapon ? ` data-w="${x.weapon}"` : ''}><span class="tc-art">${x.art}</span><b>${esc(x.name)}</b></button>`).join('')}</div>`
             : '<p class="tc-none">Nothing rare yet. Gold calling cards, feat emblems and mastery camos land here.</p>'}
         </section>
       </div>`;
