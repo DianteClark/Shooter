@@ -35,7 +35,7 @@ THEMES.jungle = {
     { kind: 'mote', count: 26, box: [46, 3.5, 36], vel: [0.5, 0.02, 0.2], size: 4.4, col: [0.9, 0.95, 0.75], alpha: 0.06 },
     { kind: 'mote', count: 70, box: [38, 5, 30], vel: [0.3, 0.12, 0.15], size: 0.08, col: [1.0, 0.95, 0.6], alpha: 0.6 },
     { kind: 'mote', count: 24, box: [36, 2.5, 28], vel: [0.4, 0.3, -0.2], size: 0.13, col: [0.75, 1.0, 0.45], alpha: 0.85 },
-    { kind: 'leaf', count: 14, box: [40, 8, 30], vel: [0.35, -0.5, 0.15], size: 0.24, col: [0.36, 0.56, 0.2], alpha: 0.92 },
+    { kind: 'leaf', count: 22, box: [40, 8, 30], vel: [0.35, -0.5, 0.15], size: 0.5, col: [0.42, 0.64, 0.22], alpha: 0.92 },
   ] },
 };
 

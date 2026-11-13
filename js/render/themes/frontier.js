@@ -52,7 +52,7 @@ THEMES.frontier = {
     { kind: 'mote', count: 90, box: [42, 6, 32], vel: [0.8, 0.12, 0.3], size: 0.09, col: [1.0, 0.86, 0.6], alpha: 0.45 },
     { kind: 'mote', count: 14, box: [48, 2.5, 36], vel: [1.0, 0.02, 0.3], size: 4, col: [0.86, 0.84, 0.8], alpha: 0.04 },
     // A few dry leaves blowing through (js/render/weather.js 'leaf').
-    { kind: 'leaf', count: 14, box: [42, 7, 32], vel: [1.1, -0.55, 0.35], size: 0.2, col: [0.78, 0.5, 0.22], alpha: 0.9 },
+    { kind: 'leaf', count: 22, box: [42, 7, 32], vel: [1.1, -0.55, 0.35], size: 0.5, col: [0.96, 0.62, 0.26], alpha: 0.92 },
   ] },
 };
 
