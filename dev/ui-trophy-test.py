@@ -26,7 +26,8 @@ SIZES = [(640, 360), (667, 375), (852, 393), (956, 440)]
 OUT = '/tmp/trophy'
 
 TROPHY = """(() => { const q = s => document.querySelector(s), all = s => [...document.querySelectorAll(s)];
-  const over = all('.tc-wrap *').filter(el => { const b = el.getBoundingClientRect(); return b.width > 0 && (b.right > innerWidth + 1 || b.left < -1) ; }).length;
+  const over = all('.tc-wrap *').filter(el => { if (el.closest('.ccard')) return false;   // A card clips its own art (and its animated sheen).
+    const b = el.getBoundingClientRect(); return b.width > 0 && (b.right > innerWidth + 1 || b.left < -1); }).length;
   return { screen: window.__game.menu.el.dataset.screen, cats: all('.tc-cat').length, total: q('.tc-total b')?.textContent ?? '',
     recs: all('.tc-rec').map(r => [r.querySelector('small').textContent, r.querySelector('b').textContent]), zm: all('.tc-zm > div').map(d => d.textContent),
     rare: all('.tc-tile').map(t => t.dataset.kind + ':' + t.dataset.id), none: !!q('.tc-none'), over,
