@@ -27,6 +27,7 @@ import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.
 import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
 import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
+import { SpectateCard } from './spectate-card.js';     // QoL: who you are watching, with Previous and Next.
 import { ctfOf } from '../sim/ctf.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
@@ -740,6 +741,7 @@ export class HUD {
     this.el.classList.toggle('ctf-on', this.ctf);
     for (const pips of this.sndEl.pips) pips.innerHTML = this.snd || this.ctf ? '<i></i>'.repeat(scoreLimit) : '';
     spectate.reset();
+    this.specCard.prepare(roster);
     this.boardMode.textContent = playlistName(mode, mods);
     this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : this.ctf ? `first to ${scoreLimit} captures` : `first to ${scoreLimit}`}`;
     this.el.classList.toggle('ffa-on', this.ffa);
@@ -1303,6 +1305,7 @@ export class HUD {
     this.streakHitEl = $('.streak-hit');
     this.respawnEl = $('.respawn-flash');
     this.#range = new RangeReadout(el);
+    this.specCard = new SpectateCard(el);
     if (!document.getElementById('snd-hud-style')) {
       const st = document.createElement('style');
       st.id = 'snd-hud-style';
@@ -1654,6 +1657,7 @@ export class HUD {
     }
     if (this.ctf) this.#updateCtf(view, me, c);
     this.modeHud.update(view, me);
+    this.specCard.update(view, me);
     this.finHud.update(view, me);
     this.cues.update(view, me);
     this.#decayEffects(dt);
@@ -3054,7 +3058,7 @@ export class HUD {
     // A flag carrier shows on the enemy minimap wherever they are (the price of carrying it).
     const ctf = this.ctf ? ctfOf(view) : null;
     // Out for the round, you see what the teammate you watch sees.
-    const eyeId = (this.snd || this.br || this.ex) && !me.alive ? spectate.target(view, me.id) : null;
+    const eyeId = !me.alive ? spectate.target(view, me.id) : null;
     const eye = eyeId ? view.players.find(p => p.id === eyeId) ?? me : me;
 
     for (const p of view.players) {

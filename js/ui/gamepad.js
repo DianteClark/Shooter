@@ -90,7 +90,7 @@ const AXIS_NAV = 0.55;
 const TRIGGER_ON = 0.35;
 
 // Shown over in-match play: the first visible one takes the focus ring instead of the sticks.
-const MATCH_PANELS = ['.qc-wheel', '.em-wheel', '.br-map', '.ex-map', '.ex-offers', '.zm-shop', '.armory', '.br-out', '.hud .death.show.picking .picker', '.hud .death.show'];
+const MATCH_PANELS = ['.qc-wheel', '.em-wheel', '.br-map', '.ex-map', '.ex-offers', '.zm-shop', '.armory', '.br-out', '.hud .death.show.picking .picker', '.hud .death.show', '.spec-card'];
 // The in-match buttons Interact presses, first visible wins: leave the transport, take loot, buy, call exfil, revive.
 const INTERACT = ['.br-jump-main', '.br-take', '.br-recall', '.zm-use', '.ex-call', '.ex-phone', '.br-self', '.hud .death.show .death-go'];
 const BACKISH = '.back, .pk-close, .close, .br-map-close, .ex-map-close, .arm-close, [data-sound="back"], [data-act$="Back"], [data-act$="back"], [data-act$="Close"], [data-act$="close"], [data-act*="Cancel"]';
@@ -468,7 +468,12 @@ export class GamepadInput {
 
     if (this.pressed(STD.A) && this.focusEl) activate(this.focusEl);
     else if (this.pressed(STD.B)) this.#back(scope, inMatch);
-    else if (this.pressed(STD.LB) || this.pressed(STD.RB)) this.#tab(scope, this.pressed(STD.RB) ? 1 : -1);
+    else if (this.pressed(STD.LB) || this.pressed(STD.RB)) {
+      // Spectating (js/ui/spectate-card.js): the shoulders switch who is watched, whatever panel holds the ring.
+      const spec = inMatch && this.hud?.specCard?.shown ? this.hud.specCard : null;
+      if (spec) spec.step(this.pressed(STD.RB) ? 1 : -1);
+      else this.#tab(scope, this.pressed(STD.RB) ? 1 : -1);
+    }
     else if (inMatch && this.pressed(this.#act('pause')) && this.paused) this.#back(scope, true);
   }
 
