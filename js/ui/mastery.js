@@ -192,7 +192,7 @@ export function masteryScreen(menu, { onBack }) {
           <nav class="m-tabs">${TABS.map(k => `<button class="m-tab${k === tab ? ' on' : ''}" data-act="mTab" data-tab="${k}" data-sound="tab"><b>${KIND_NAME[k]}</b><small>${counts[k]}</small></button>`).join('')}</nav>
           <div class="m-case">
             <small>Badges ${badges.length}</small>
-            <div class="m-case-grid">${badges.length ? badges.slice(0, 12).map(b => masteryBadge(b.item, b.grade, { size: 26 })).join('') : '<em>Finish tier II of any track for a badge</em>'}</div>
+            <div class="m-case-grid${badges.length ? ' scroll-x' : ' empty'}">${badges.length ? badges.map(b => `<button class="m-badge" data-act="mOpen" data-id="${esc(b.kind === 'weapon' ? `gun:${b.item}` : b.item)}" aria-label="${esc(b.name ?? b.item)}">${masteryBadge(b.item, b.grade, { size: 26 })}</button>`).join('') : '<em>Finish tier II of any track for a badge</em>'}</div>
           </div>
         </aside>
         <div class="m-grid scroll-y">${list.map(trackCard).join('')}</div>
