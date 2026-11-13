@@ -9,7 +9,7 @@
 import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
+import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
 // The relic quest's clue, once from round 3 (dev/ui-zombies-test.py checks it reads whole at every width).
 export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still warm';
 
@@ -270,7 +270,7 @@ export class ZmHud {
       case 'ammo': return [`AMMO ${gun}`, price];
       case 'box': return ['MYSTERY CRATE', price];
       case 'take': return [`TAKE ${gun}`, 'Free: it is yours'];
-      case 'power': return [u.label.toUpperCase(), 'Free: lights the perk machines'];
+      case 'power': return u.off ? ['POWER IS ON', why()] : [u.label.toUpperCase(), 'Free: lights the perk machines'];
       case 'perk': return [u.label.toUpperCase(), u.why ? why(fmt(u.cost)) : u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : price];
       case 'slot': return ['PERK SLOT', u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · Hold up to ${ZM.perkMax} perks` : price];
       case 'terminal': return ['SUPPLY TERMINAL', 'Sentries, strikes, drones, lures, vests'];
@@ -381,7 +381,7 @@ export class ZmHud {
   quietKill(e, view) {
     const t = view?.players?.find(p => p.id === e.target);
     if (!t?.ai) return false;
-    return t.zk < 4;           // The Yardmaster's (4) and the Gravewarden's (5) deaths make the feed.
+    return t.zk !== 4 && t.zk !== 5;     // The Yardmaster's (4) and the Gravewarden's (5) deaths make the feed.
   }
 
   onEvent(e, view) {
@@ -390,7 +390,8 @@ export class ZmHud {
     const name = id => view?.players?.find(p => p.id === id)?.name ?? '';
     switch (e.t) {
       case 'zround': {
-        this.hud.banner(`Round ${e.round}`, e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', 1800, 'enemy');
+        const sp = ZM_ROUND_NAMES[e.special];     // A special round: its own banner (js/sim/zm-kinds.js).
+        this.hud.banner(sp ? `Round ${e.round}: ${sp[0]}` : `Round ${e.round}`, sp ? sp[1] : e.boss ? `The ${ZM_KIND_NAMES.boss} walks tonight` : 'Here they come', sp ? 2600 : 1800, 'enemy');
         const z = objOf(view);
         if (e.round === 1 && z?.layout?.power && !z.power) this.hud.notify(`Power out: the switch is in the ${z.layout.bands[z.layout.power.band]?.name ?? 'yard'}`);
         break;
@@ -398,7 +399,7 @@ export class ZmHud {
       case 'zbreak': this.hud.banner(`Round ${e.round} survived`, `Next round in ${ZM.between} s`, 1600); break;
       case 'zpower': this.hud.banner(ZM_POWERUP_NAMES[e.kind] ?? 'Power-up', e.kind === 'ammo' ? 'Every gun topped up' : e.kind === 'double' ? `Double points for ${ZM.drop.double} s` : 'The horde drops where it stands', 1500); break;
       case 'zdoor': this.hud.notify(`${name(e.by)} opened a gate`); break;
-      case 'zlights': this.hud.banner('The power is on', `${name(e.by)} threw the switch: the perk machines are live`, 1800); break;
+      case 'zlights': this.hud.banner(`${name(e.by) || 'Someone'} turned on the power`, 'The perk machines are live', 2200); break;
       case 'zbox':
         if (e.state === 2 && e.by === me?.id) this.hud.notify(`The crate offers a ${WEAPONS[e.gun]?.name ?? e.gun}: take it`);
         if (e.state === 3) this.hud.notify('The crate is moving on');

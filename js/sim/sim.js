@@ -1383,6 +1383,7 @@ export class Sim {
       e.id = p.id; e.team = p.team; e.alive = p.alive && !p.brAir;
       if (age > 0) this.posAt(p, age, e);
       else { e.x = p.ps.x; e.z = p.ps.z; e.sliding = p.ps.sliding; }
+      if (p.zLow) e.sliding = true;      // Graveyard Shift's Crawler: low, a small target (js/sim/zm-kinds.js).
     }
     const rays = traceShot(shot, this.map, scratch, id, w);
     const turretHits = this.turrets.length > 0 ? this._raysVsTurrets(shot, rays, shooter) : null;

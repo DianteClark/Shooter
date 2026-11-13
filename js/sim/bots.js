@@ -42,7 +42,7 @@ const DEG = Math.PI / 180;
 export const SKILLS = {
   recruit: {
     thinkHz: 5, reaction: [0.55, 0.95], aimError: 0.2, aimFloor: 0.085, settle: 1.15, turnRate: 5.5, lag: 0.26,
-    fov: 110 * DEG, sight: 18, hearing: 7, hearErr: 1.4, notice: 0.5, memory: 1.2, close: 3,
+    aimIn: 0.6, fov: 110 * DEG, sight: 18, hearing: 7, hearErr: 1.4, notice: 0.5, memory: 1.2, close: 3,
     retreatHp: 0, strafe: 0.15, adsUse: 0.3, flank: 0.03, holdProb: 0.15, holdTime: [1, 2.5], slide: 0.02,
     arcTries: 0, sprint: 0.6, callouts: false, coverReload: 0.1, pistolSwap: false, fireTol: 0.15, burst: 0, streakDelay: 6,
     nade: 0.25, nadeCd: [14, 26], smoke: 0, flash: 0.1, stimHp: 22, heatStop: 1, heatResume: 0.2, heatSlip: 1, suppress: 3.5, turret: null,
@@ -51,7 +51,7 @@ export const SKILLS = {
   },
   regular: {
     thinkHz: 7, reaction: [0.36, 0.6], aimError: 0.13, aimFloor: 0.05, settle: 0.8, turnRate: 9, lag: 0.18,
-    fov: 130 * DEG, sight: 22, hearing: 10, hearErr: 1.15, notice: 0.75, memory: 2, close: 4,
+    aimIn: 0.4, fov: 130 * DEG, sight: 22, hearing: 10, hearErr: 1.15, notice: 0.75, memory: 2, close: 4,
     retreatHp: 30, strafe: 0.5, adsUse: 0.65, flank: 0.12, holdProb: 0.33, holdTime: [1.5, 4], slide: 0.1,
     arcTries: 0, sprint: 0.9, callouts: false, coverReload: 0.5, pistolSwap: false, fireTol: 0.1, burst: 0.25, streakDelay: 3,
     nade: 0.5, nadeCd: [10, 18], smoke: 0.25, flash: 0.3, stimHp: 35, heatStop: 0.72, heatResume: 0.35, heatSlip: 0.22, suppress: 2.6, turret: 'cover',
@@ -60,7 +60,7 @@ export const SKILLS = {
   },
   veteran: {
     thinkHz: 9, reaction: [0.26, 0.42], aimError: 0.09, aimFloor: 0.036, settle: 0.6, turnRate: 13, lag: 0.14,
-    fov: 160 * DEG, sight: 26, hearing: 13, hearErr: 1, notice: 0.92, memory: 3, close: 5,
+    aimIn: 0.25, fov: 160 * DEG, sight: 26, hearing: 13, hearErr: 1, notice: 0.92, memory: 3, close: 5,
     retreatHp: 42, strafe: 0.85, adsUse: 0.9, flank: 0.28, holdProb: 0.45, holdTime: [2, 5], slide: 0.3,
     arcTries: 2, sprint: 1, callouts: true, calloutDelay: 1.6, calloutErr: 4.5, coverReload: 0.9, pistolSwap: true, fireTol: 0.075, burst: 0.2, streakDelay: 1.5,
     nade: 0.75, nadeCd: [7, 13], smoke: 0.55, flash: 0.5, stimHp: 45, heatStop: 0.66, heatResume: 0.4, heatSlip: 0.1, suppress: 2, turret: 'shoot',
@@ -69,7 +69,7 @@ export const SKILLS = {
   },
   elite: {
     thinkHz: 12, reaction: [0.15, 0.25], aimError: 0.06, aimFloor: 0.018, settle: 0.4, turnRate: 18, lag: 0.09,
-    fov: 190 * DEG, sight: 28, hearing: 16, hearErr: 0.85, notice: 0.98, memory: 4, close: 6,
+    aimIn: 0.12, fov: 190 * DEG, sight: 28, hearing: 16, hearErr: 0.85, notice: 0.98, memory: 4, close: 6,
     retreatHp: 55, strafe: 1, adsUse: 1, flank: 0.42, holdProb: 0.5, holdTime: [2, 5.5], slide: 0.5,
     arcTries: 4, sprint: 1, callouts: true, calloutDelay: 1, calloutErr: 3.2, coverReload: 1, pistolSwap: true, fireTol: 0.06, burst: 0.15, streakDelay: 0.6,
     nade: 0.9, nadeCd: [6, 11], smoke: 0.7, flash: 0.6, stimHp: 52, heatStop: 0.6, heatResume: 0.4, heatSlip: 0.05, suppress: 1.5, turret: 'shoot',
@@ -147,6 +147,12 @@ function styleOf(id, ps) {
 // LMG 1.20 to 1.17; the first shot of a fight decides most of them, and an SMG that would not fire past 15 m never had it.
 const RUSH_REACH = 0.72;
 const REACH = new WeakMap();
+// What a person on a phone sees (js/render/renderer.js: VIEW_WIDTH 30 m across, the camera leading `camLook` 7.5 m
+// toward the aim at full ADS). A bot sees no further than a human could on screen: HUMAN_VIEW unaimed, and toward
+// where it aims up to ADS_LOOK more, scaled by how far its sights are up (ps.adsT, the same aiming state a human has, so
+// the pose and laser show it and the gun's ADS time and aimed walk apply). Beyond HUMAN_VIEW it must aim in first.
+export const HUMAN_VIEW = 20;
+export const ADS_LOOK = 7.5;
 const ADS_RANGE = 12;           // botUse.adsMin applies past this distance, or always on a gun with an adsGate.
 const PRECISE_BODY = 0.5;       // botUse.precise: metres either side of the target's centre the sights must be inside...
 const PRECISE_SLOP = 0.25;      // ...plus this fraction of the tier's usual trigger tolerance (worse bots still jerk it).
@@ -979,7 +985,10 @@ export class BotBrain {
     const sameTarget = this.target;
     // Engagements stay on-screen distances; a scoped rifle reaches further by what its botUse.sight says.
     // Battle royale: a bot with its head down in the loot sees less of what is around it (sightK, set by js/sim/br.js).
-    const sightRange = (S.sight + (styleOf(ps.weapon, ps).sight || 0)) * (this.sightK ?? 1);
+    const tierSight = S.sight + (styleOf(ps.weapon, ps).sight || 0);
+    const sightK = this.sightK ?? 1;
+    const sightRange = (this.human ? tierSight : Math.min(tierSight, HUMAN_VIEW + ADS_LOOK * ps.adsT)) * sightK;
+    const ca = Math.cos(ps.aim), sa = Math.sin(ps.aim);
     for (let i = 0; i < sim.players.length; i++) {
       const q = sim.players[i];
       // Battle royale: nobody in the air is a target (js/sim/br.js).
@@ -987,6 +996,8 @@ export class BotBrain {
       const dx = q.ps.x - ps.x, dz = q.ps.z - ps.z;
       const d = Math.hypot(dx, dz);
       if (d > sightRange) continue;
+      // The aimed lead only reaches out where the sights point (the camera pans that way): a screen, not a bubble.
+      if (!this.human && d > HUMAN_VIEW * sightK && d > Math.min(tierSight, HUMAN_VIEW + ADS_LOOK * ps.adsT * Math.max(0, (dx * ca + dz * sa) / d)) * sightK) continue;
       // Keeping track of someone just seen needs no cone; it stops mattering the moment they have been gone a while.
       const tracking = q === sameTarget && sim.time - this.sawT < SIGHT_KEEP;
       // Someone within arm's reach is noticed without looking only if they make a noise doing it.
@@ -1001,7 +1012,8 @@ export class BotBrain {
       // Tunnel vision: busy with one enemy, a weaker player does not take in the next.
       if (!tracking && !noisy && this.targetVisible && sameTarget?.alive && q !== sameTarget && sim.rng() < S.tunnel) continue;
       // A downed enemy is finished off, but only once nobody standing is a threat.
-      const score = d - (tracking ? 4 : 0) + q.hp * 0.03 + (q.downed ? 14 : 0);
+      // Graveyard Shift: Bloaters popped while still far, shields facing us left for later (js/sim/zm-kinds.js).
+      const score = d - (tracking ? 4 : 0) + q.hp * 0.03 + (q.downed ? 14 : 0) + (this.kite && q.zk != null ? sim.rules?.kinds?.score(q, ps, d) ?? 0 : 0);
       if (score < bestScore) { bestScore = score; best = q; bestD = d; }
       if (S.callouts && !sim.ffa && sim.time - sim.calledAt[p.team][q.index] > CALLOUT_GAP) this._callOut(q);
     }
@@ -2092,8 +2104,9 @@ export class BotBrain {
     if (!this.canHit && !holdingPoint) fwd = 1;
     // Overpeeking: a weaker player walks out of the angle it was holding, toward what it saw.
     else if (atHold && this.overpeek && !holdingPoint) fwd = 1;
-    // Graveyard Shift (js/sim/zombies.js sets `kite`): against a melee horde, backpedal from anyone inside it.
-    else if (this.kite && d < this.kite) fwd = -1;
+    // Graveyard Shift (js/sim/zombies.js sets `kite`): against a melee horde, backpedal from anyone inside it, and
+    // further from a Bloater (its burst reaches ZM_BLAST.r).
+    else if (this.kite && d < (q.zk === 6 ? 6.5 : this.kite)) fwd = -1;
     else if (!atHold) {
       // A close gun wants to be at its distance, not near it; a long gun gives ground to anyone inside its own.
       if (d > style.pref + (style.rush ? 1 : 4)) fwd = 1;
@@ -2106,6 +2119,8 @@ export class BotBrain {
       this.strafeDir = sim.rng() < S.strafe ? (sim.rng() < 0.5 ? -1 : 1) : 0;
     }
 
+    // A Shieldbearer's shield facing this bot: walk round it, one way, and keep going until the flank is open.
+    if (this.kite && sim.rules?.kinds?.facing(q, ps)) { this.strafeDir = this.flankDir ||= (p => (p.index & 1 ? 1 : -1))(this.p); if (fwd > 0) fwd = 0.3; }
     let mx = ux * fwd - uz * this.strafeDir, mz = uz * fwd + ux * this.strafeDir;
     const len = Math.hypot(mx, mz);
     if (len > 1) { mx /= len; mz /= len; }
@@ -2229,6 +2244,8 @@ export class BotBrain {
       // Sprinters and rushers on a close weapon don't bother scoping in.
       if (style.rush && !style.scoped && d < style.pref + 1) I.aiming = false;
       else if (WEAPONS[ps.weapon].category === 'Shotgun' && this.reactLeft <= 0 && !rushing) I.aiming = true;
+      // Past what fits on an unaimed screen the target is only in view through the sights: keep them up.
+      if (!this.human && !rushing && d > HUMAN_VIEW - 1.5) I.aiming = true;
       // Don't sprint while fighting; left stick is already at walking pace.
     } else {
       this.moving = this._followPath(true);
@@ -2244,6 +2261,9 @@ export class BotBrain {
         this.peek += dt * 1.8;
         desired = Math.atan2(this.knownZ - ps.z, this.knownX - ps.x) + (Math.sin(this.peek) * 0.65 + this.knownBias) * spread;
         if ((this.mode === 'hold' || this.mode === 'close') && this.arrived) I.aiming = true;
+        // A contact further off than an unaimed screen shows: sights up toward it to see that far (walking at the
+        // aimed pace), unless a close gun is closing the gap.
+        else if (!this.human && dist > HUMAN_VIEW - 2 && !(styleOf(ps.weapon, ps).rush && !this.arrived)) I.aiming = true;
       } else if ((this.mode === 'hold' || this.mode === 'close' || (this.mode === 'peek' && !this.peekIn)) && this.arrived) {
         this.peek += dt * 1.2;
         desired = this.holdAim + Math.sin(this.peek) * 0.28;
@@ -2265,11 +2285,22 @@ export class BotBrain {
         && !(this.hasKnown && !this.knownSoft && sim.time - this.knownT < 1.5)) I.aiming = false;
     }
 
+    // Putting the sights up to look (not to answer a fight, which reactLeft already paces) waits on the decision: an
+    // elite's sights come up almost at once, a recruit's after a beat. Then the gun's own ADS time (stepPlayer).
+    if (I.aiming) { this.aimWait = (this.aimWait || 0) + dt; if (!fighting && !this.human && this.aimWait < S.aimIn) I.aiming = false; }
+    else this.aimWait = 0;
+
     // Soft separation, only while walking the map.
     if (!fighting && this.moving && (this.sepX || this.sepZ)) {
       I.mx += this.sepX * 0.5; I.mz += this.sepZ * 0.5;
       const len = Math.hypot(I.mx, I.mz);
       if (len > 1) { I.mx /= len; I.mz /= len; }
+    }
+
+    // Graveyard Shift: off the acid (a Spitter's puddle, or where its glob is about to land).
+    if (this.kite) {
+      const off = sim.rules?.kinds?.dodge(ps);
+      if (off) { I.mx = off.x; I.mz = off.z; I.sprint = false; }
     }
 
     if (this.escapeT > 0) {

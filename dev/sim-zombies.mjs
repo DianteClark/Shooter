@@ -29,7 +29,8 @@ import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS, MAP_IDS } from '../js/shared/map.js';
 import { NavGrid } from '../js/sim/nav.js';
 import { MODES, modeFitsMap, mapModes } from '../js/shared/modes.js';
-import { ZM, ZM_MAP_IDS, ZM_TEAM, roundCount, roundHp, roundMix, isBossRound, zmLayout, placeZmWalls, clearZmWalls, bandOpen, zmUsable } from '../js/shared/zombies.js';
+import { ZM, ZM_MAP_IDS, ZM_TEAM, roundCount, roundHp, roundMix, isBossRound, zmLayout, placeZmWalls, clearZmWalls, bandOpen, zmUsable,
+  ZK, ZM_SPIT, ZM_BLAST, ZM_SHIELD, ZM_SPECIAL, ZM_ROUNDS, specialMix, specialRound } from '../js/shared/zombies.js';
 import { packZombie, unpackZombie } from '../js/sim/zombies.js';
 import { blankSave, sanitizeSave, encodeSave, decodeSave, recordZmBest } from '../js/shared/progression.js';
 import { SIM_HZ } from '../js/shared/constants.js';
@@ -452,10 +453,42 @@ section('ashgrove');
   syncZmDoors(sim.map, R.open);
   const us = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
   ok(us?.kind === 'power' && us.ok && us.cost === 0, `the switch is offered (${us?.kind})`);
+  // Every approach: a player walking at the switch from any side (real movement against the walls) gets the prompt
+  // before stopping, and from the panel face too.
+  {
+    const { stepPlayer } = await import('../js/sim/player.js');
+    const IDLE = { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false };
+    let tried = 0, got = 0; const miss = [];
+    for (let a = 0; a < 24; a++) {
+      const ang = a / 24 * Math.PI * 2, sx = L.power.wx + Math.cos(ang) * 5, sz = L.power.wz + Math.sin(ang) * 5;
+      if (!sim.nav.isWalkable(sx, sz)) continue;
+      tried++;
+      const ps = { ...me.ps, x: sx, z: sz, vx: 0, vz: 0 };
+      let seen = false;
+      for (let i = 0; i < 4 * SIM_HZ && !seen; i++) {
+        const dx = L.power.wx - ps.x, dz = L.power.wz - ps.z, l = Math.hypot(dx, dz) || 1;
+        stepPlayer(ps, { ...IDLE, mx: dx / l, mz: dz / l, aim: Math.atan2(dz, dx) }, DT, sim.map, sim.rng);
+        seen = zmUsable(L, ps.x, ps.z, R._stateFor(me))?.kind === 'power';
+      }
+      if (seen) got++; else miss.push(`${(ang * 180 / Math.PI).toFixed(0)}deg`);
+    }
+    ok(tried >= 6 && got === tried, `the switch prompt shows from every walkable approach (${got}/${tried}${miss.length ? ', missed ' + miss.join(' ') : ''})`);
+    ok(zmUsable(L, L.power.wx, L.power.wz, R._stateFor(me))?.kind === 'power', 'and right against the panel');
+  }
   sim.drainEvents();
   ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && R.power === 1 && me.zm.pts === 9000, 'throwing the switch is free');
   ok(sim.drainEvents().some(e => e.t === 'zlights' && e.by === me.id), 'zlights event');
-  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.kind !== 'power', 'the switch is not offered again');
+  const again = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(again?.kind === 'power' && again.off && !again.ok && again.label === 'Power is on', `once on, the switch says "Power is on" (${again?.label})`);
+  ok(!sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && sim.drainEvents().every(e => e.t !== 'zlights'), 'and cannot be thrown again');
+  // A bot that throws it tells the whole crew too (the banner names it).
+  {
+    const s2 = makeSim('ashgrove', 62); toLive(s2);
+    const R2 = s2.rules, bot = R2.crew.find(p => p.isBot);
+    s2.drainEvents();
+    R2._use(bot, { kind: 'power', i: 0, cost: 0, ok: true });
+    ok(bot && s2.drainEvents().some(e => e.t === 'zlights' && e.by === bot.id), 'a bot throwing the switch emits zlights with its id');
+  }
   me.ps.x = mercy.x; me.ps.z = mercy.z;
   ok(sim.applyCommand(me.id, { cmd: 'zm', act: 'use' }) && me.zm.perks.includes('mercy') && me.zm.pts === 9000 - ZM_PERKS.mercy.cost, 'with the power on the machine sells');
   // Other maps: no switch, machines always on.
@@ -881,6 +914,194 @@ section('econ');
 }
 
 // ---- Determinism ----
+// ---- Special zombies and special rounds (js/sim/zm-kinds.js) ----
+section('specials');
+{
+  // Introduced gradually: none before round 8, all four by 15, shares growing with the round.
+  const share = (r, k) => specialMix(r).find(m => m.kind === k).share;
+  ok(specialMix(7).every(m => m.share === 0), 'no specials before round 8');
+  ok(share(8, ZK.crawler) > 0 && share(9, ZK.spitter) > 0 && share(11, ZK.bloater) > 0 && share(13, ZK.shield) > 0 && share(12, ZK.shield) === 0, 'crawler 8, spitter 9, bloater 11, shieldbearer 13');
+  ok(specialMix(15).every(m => m.share > 0) && specialMix(25).every((m, i) => m.share >= specialMix(15)[i].share), 'all four by round 15, growing after');
+  // Special rounds: every five to seven rounds from 6 or 7, never a boss round, the three in turn, the same everywhere.
+  for (const seed of [1, 7, 99, 12345]) {
+    const at = [];
+    for (let r = 1; r <= 60; r++) if (specialRound(r, seed)) at.push([r, specialRound(r, seed)]);
+    const gaps = at.slice(1).map((a, i) => a[0] - at[i][0]);
+    ok(at[0][0] >= 6 && at[0][0] <= 8 && gaps.every(g => g >= 5 && g <= 8) && at.every(a => !isBossRound(a[0])), `seed ${seed}: special rounds ${at.map(a => a[0]).join(' ')}`);
+    ok(at.every((a, i) => a[1] === ZM_ROUNDS[i % 3]), `seed ${seed}: sprint, fog, bloat in turn`);
+  }
+  // A small arena on Foundry: the crew's first member alone (the others away, the bots' own brains off), one zombie raised.
+  const open = (sim, len) => {
+    for (let z = 6; z < sim.map.height - 6; z += 1) for (let x = 6; x < sim.map.width - len - 6; x += 1) {
+      if ([-1, 0, 1].every(dz => sim.nav.segmentClear(x, z + dz, x + len, z + dz)) && sim.nav.segmentClear(x, z - 3, x, z + 3) && sim.nav.segmentClear(x + len, z - 3, x + len, z + 3)) return { x, z };
+    }
+    throw new Error('no open ground');
+  };
+  const arena = (seed, round = 15) => {
+    const sim = makeSim('foundry', seed);
+    toLive(sim);
+    const R = sim.rules;
+    for (const p of R.crew) if (p.bot) p.bot.update = () => [];
+    R.plan = () => {}; R._crewPlan = null;
+    R.round = round; R.hp = roundHp(round); R.state = 2; R.timer = 999;
+    const me = R.crew[0], A = open(sim, 16);
+    for (const p of R.crew) { p.spawnProtect = 0; if (p !== me) { p.away = true; p.ps.x = A.x; p.ps.z = A.z + 30; } }
+    me.ps.x = A.x; me.ps.z = A.z; me.hp = 100; me.ps.vx = me.ps.vz = 0;
+    sim.drainEvents();
+    const raise = (kind, x, z) => { const seat = R.horde.find(q => !q.alive); R._raise(seat, kind, { x, z }); return seat; };
+    return { sim, R, me, A, raise };
+  };
+  const holdStill = (sim, p) => { p.bot && (p.bot.update = () => []); };
+  // Spitter: keeps its distance, winds up, lobs a glob at the target; standing still it lands, a sidestep dodges it.
+  for (const dodge of [false, true]) {
+    const { sim, R, me, A, raise } = arena(201);
+    holdStill(sim, me);
+    const sp = raise(ZK.spitter, A.x + 11, A.z);
+    sp.zSpitCd = 0;
+    let spit = null, minD = Infinity, hp0 = me.hp, dodged = false;
+    for (let i = 0; i < 6 * SIM_HZ && !spit; i++) {
+      me.ps.x = A.x; me.ps.z = A.z; me.ps.vx = me.ps.vz = 0;
+      sim.step(DT);
+      minD = Math.min(minD, Math.hypot(sp.ps.x - me.ps.x, sp.ps.z - me.ps.z));
+      spit = sim.drainEvents().find(e => e.t === 'zspit');
+    }
+    ok(!!spit && Math.hypot(spit.x - A.x, spit.z - A.z) < 0.6 && spit.dur > 0.6 && spit.dur < 1.6, `spitter lobs a glob at a standing target (${spit ? `lands ${Math.hypot(spit.x - A.x, spit.z - A.z).toFixed(2)} m off, ${spit.dur} s` : 'none'})`);
+    ok(minD > ZM_SPIT.near - 0.5, `spitter keeps its distance (closest ${minD.toFixed(1)} m)`);
+    if (dodge) { me.ps.x = A.x; me.ps.z = A.z + 2.6; dodged = true; }
+    let hurt = 0;
+    for (let i = 0; i < (spit?.dur ?? 1) * SIM_HZ + 2; i++) {
+      sim.step(DT);
+      for (const e of sim.drainEvents()) if (e.t === 'hit' && e.target === me.id) hurt += e.dmg ?? 0;
+      if (dodged) { me.ps.x = A.x; me.ps.z = A.z + 2.6; }
+      else { me.ps.x = A.x; me.ps.z = A.z; }
+    }
+    if (dodge) ok(me.hp === hp0 && hurt === 0, `a sidestep dodges the glob (hp ${me.hp})`);
+    else ok(me.hp < hp0, `a glob that lands hurts (hp ${hp0} -> ${Math.round(me.hp)})`);
+    // The puddle burns for a while, then is gone.
+    if (!dodge) {
+      me.hp = 100; me.regenT = 99;
+      R.kinds.globs.length = 0;
+      sp.alive = false;
+      run(sim, 1);
+      const burnt = 100 - me.hp;
+      ok(burnt > 5 && burnt < 40, `the puddle burns whoever stands in it (${burnt.toFixed(0)} in 1 s)`);
+      run(sim, ZM_SPIT.life);
+      me.hp = 100;
+      run(sim, 1);
+      ok(me.hp === 100 && R.kinds.puddles.length === 0, 'and dries up after a few seconds');
+    }
+  }
+  // Bloater: killed, it bursts where it falls: the crew near it hurt (not the far shooter), the horde round it too.
+  {
+    const { sim, R, me, A, raise } = arena(202);
+    const far = R.crew[1]; far.away = false; far.ps.x = A.x + 16; far.ps.z = A.z; far.hp = 100; far.regenT = 99; me.regenT = 99;
+    const bl = raise(ZK.bloater, A.x + 3, A.z), sh = raise(ZK.shambler, A.x + 5.5, A.z + 1);
+    const shHp = sh.hp;
+    ok(bl.hp > sh.hp * 2, `a bloater is tough (${bl.hp} vs ${sh.hp})`);
+    sim._damage(bl, far, bl.hp + 1, 'ar', 13);
+    let ev = [];
+    for (let i = 0; i < 3; i++) { sim.step(DT); ev = ev.concat(sim.drainEvents()); }
+    const blast = ev.find(e => e.t === 'zblast');
+    ok(!bl.alive && !!blast && ev.some(e => e.t === 'explosion'), 'a dead bloater bursts (zblast + explosion)');
+    ok(me.hp < 100 - 20 && far.hp === 100, `the burst hurts the crew in range (${Math.round(me.hp)}), not the shooter far off (${far.hp})`);
+    ok(!sh.alive || sh.hp < shHp, 'and the horde round it');
+  }
+  {
+    // Reaching you, it swells and bursts.
+    const { sim, R, me, A, raise } = arena(203);
+    me.regenT = 99;
+    const bl = raise(ZK.bloater, A.x + 1.2, A.z);
+    let blast = false;
+    for (let i = 0; i < 3 * SIM_HZ && !blast; i++) { me.ps.x = A.x; me.ps.z = A.z; sim.step(DT); blast = sim.drainEvents().some(e => e.t === 'zblast'); }
+    ok(blast && !bl.alive && me.hp < 60, `a bloater that reaches you bursts (hp ${Math.round(me.hp)})`);
+  }
+  // Crawler: low and quick, and a smaller target than a shambler (a shot just wide of centre misses it).
+  {
+    const { sim, R, me, A, raise } = arena(204);
+    const cr = raise(ZK.crawler, A.x + 8, A.z + 0.42), sh = raise(ZK.shambler, A.x + 8, A.z - 0.58);
+    ok(cr.zLow && cr.zPace > sh.zPace * 1.8, `crawler: low, and quick (${cr.zPace.toFixed(2)} vs ${sh.zPace.toFixed(2)})`);
+    const crHp = cr.hp, shHp = sh.hp;
+    me.ps.aim = 0;
+    sim.applyShot(me.id, { weapon: me.ps.weapon, ox: A.x, oz: A.z, aim: 0, angles: [0] });
+    me.ps.z = A.z - 1;
+    sim.applyShot(me.id, { weapon: me.ps.weapon, ox: A.x, oz: A.z - 1, aim: 0, angles: [0] });
+    ok(cr.hp === crHp && sh.hp < shHp, `a shot 0.42 m off centre misses a crawler (${cr.hp}/${crHp}) and hits a shambler (${sh.hp}/${shHp})`);
+  }
+  // Shieldbearer: bullets from the front hit the shield; from behind, the body; enough damage breaks it; a frag goes round.
+  {
+    const { sim, R, me, A, raise } = arena(205);
+    const sb = raise(ZK.shield, A.x + 6, A.z);
+    sb.ps.aim = Math.PI;      // Facing the crew.
+    const hp0 = sb.hp, sh0 = sb.zShield;
+    ok(sh0 > hp0, `the shield holds more than its bearer (${sh0} vs ${hp0})`);
+    sim._damage(sb, me, 50, 'ar', 6);
+    ok(sb.hp === hp0 && sb.zShield === sh0 - 50, 'a shot from the front hits the shield');
+    const pts = me.zm.pts;
+    sim._damage(sb, me, 50, 'frag', 6, null, false, 'frag');
+    ok(sb.hp < hp0, 'a frag goes round it');
+    me.ps.x = A.x + 12;       // Behind it now.
+    const hp1 = sb.hp;
+    sim._damage(sb, me, 40, 'ar', 6);
+    ok(sb.hp < hp1 && sb.zShield === sh0 - 50, 'from behind, the body takes it');
+    me.ps.x = A.x;
+    sim.drainEvents();
+    sim._damage(sb, me, sh0, 'ar', 6);
+    const ev = sim.drainEvents();
+    ok(sb.zShield === 0 && ev.some(e => e.t === 'zshield' && e.broke), 'enough damage breaks the shield');
+    const hp2 = sb.hp;
+    sim._damage(sb, me, 30, 'ar', 6);
+    ok(sb.hp < hp2, 'broken, the front is open');
+    // On the wire: kind 9 is a broken shield.
+    const enc = sim.rules.encode()[8];
+    const { unpackZombie: un } = await import('../js/sim/zombies.js');
+    ok(enc.map(un).some(z => z.kind === 9), 'the broken shield rides the packed kind (9)');
+  }
+  // Bots: a bloater far off is shot first; a shield facing the bot is left for later.
+  {
+    const { sim, R, me, A, raise } = arena(206);
+    const bl = raise(ZK.bloater, A.x + 12, A.z), sh = raise(ZK.shambler, A.x + 6, A.z), sb = raise(ZK.shield, A.x + 5, A.z + 1);
+    sb.ps.aim = Math.atan2(A.z - sb.ps.z, A.x - sb.ps.x);
+    const K = R.kinds;
+    ok(K.score(bl, me.ps, 12) + 12 < K.score(sh, me.ps, 6) + 6, 'bots: a far bloater outranks a nearer shambler');
+    ok(K.facing(sb, me.ps) && K.score(sb, me.ps, 5) > 5, 'bots: a shield facing them goes to the back of the queue');
+    R.kinds.puddles.push({ x: me.ps.x + 0.3, z: me.ps.z, until: sim.time + 5, by: sh });
+    const off = K.dodge(me.ps);
+    ok(off && off.x < 0, 'bots: step off a puddle');
+  }
+  // Special rounds in play: a sprint round is all runners (and brutes), a bloater swarm mostly bloaters, the fog cuts
+  // crew bots' sight; the round's special rides the snapshot and the zround event.
+  for (const want of ['sprint', 'bloat', 'fog']) {
+    const sim = makeSim('neon', 300);
+    toLive(sim);
+    const R = sim.rules;
+    let r = 1; while (specialRound(r, R.seed) !== want) r++;
+    for (const d of R.L.doors) R.open |= 1 << d.i;
+    for (const p of R.crew) p.spawnProtect = 1e9;
+    sim.drainEvents();
+    R._startRound(r);
+    const ev = sim.drainEvents().find(e => e.t === 'zround');
+    ok(R.special === want && ev?.special === want, `round ${r}: ${want} (event ${ev?.special})`);
+    const kinds = {};
+    for (let k = 0; k < 400 && R.spawned < R.count; k++) { R.spawnT = 0; R._stepSpawns(DT); for (const p of R.horde) if (p.alive && !p.counted) { p.counted = 1; kinds[p.zk] = (kinds[p.zk] ?? 0) + 1; } for (const p of R.horde) if (p.alive && p.counted) { p.alive = false; p.counted = 0; p.zFree = 0; } }
+    const tot = Object.values(kinds).reduce((a, b) => a + b, 0);
+    if (want === 'sprint') ok(Object.keys(kinds).every(k => +k === 1 || +k === 2), `sprint: runners only (${JSON.stringify(kinds)})`);
+    if (want === 'bloat') ok((kinds[ZK.bloater] ?? 0) > tot * 0.4, `bloat: mostly bloaters (${JSON.stringify(kinds)})`);
+    if (want === 'fog') ok(R.crew.filter(p => p.bot).every(p => p.bot.sightK < 0.6), 'fog: crew bots see less');
+    ok(sim.encodeSnapshotFor && JSON.stringify(R.encode()).includes(`,${ZM_ROUNDS.indexOf(want)}]`), 'the special rides the snapshot');
+  }
+  // The mix past round 15 really has all four (a full round's spawns at round 16).
+  {
+    const sim = makeSim('neon', 301); toLive(sim);
+    const R = sim.rules;
+    let r = 16; while (specialRound(r, R.seed) || isBossRound(r)) r++;
+    for (const d of R.L.doors) R.open |= 1 << d.i;
+    R._startRound(r);
+    const seen = new Set();
+    for (let k = 0; k < 600 && R.spawned < R.count; k++) { R.spawnT = 0; R._stepSpawns(DT); for (const p of R.horde) if (p.alive) { seen.add(p.zk); p.alive = false; p.zFree = 0; } }
+    ok([ZK.crawler, ZK.spitter, ZK.bloater, ZK.shield].every(k => seen.has(k)), `round ${r}: every special shows up (${[...seen].sort()})`);
+  }
+}
+
 section('determinism');
 {
   const sig = sim => JSON.stringify([sim.tick, sim.rules.round, sim.rules.killed, sim.rules.crew.map(p => [p.zm.pts, Math.round(p.ps.x * 100), Math.round(p.ps.z * 100)]),
@@ -910,7 +1131,7 @@ for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) for (const round of 
   // Fill every seat from the risers (runners, brutes and shamblers as the round deals them).
   for (let k = 0; k < 200 && R.horde.some(p => !p.alive); k++) { R.spawnT = 0; R._stepSpawns(DT); }
   const live = R.horde.filter(p => p.alive).length;
-  ok(live === ZM.seats, `${id} r${round}: ${live} live`);
+  ok(live === ZM.seats, `${id} r${round}: ${live} live (${R.horde.filter(p => p.alive && p.zk >= 5).length} specials)`);
   // The economy at its busiest: traps running, a sentry and a drone each for two of the crew, tier-3 guns all round.
   R.econ.traps.forEach(t => { t.state = 1; t.timer = 999; });
   R.crew.slice(0, 2).forEach(p => { R.econ._supply(p, 'sentry'); R.econ._supply(p, 'drone'); });

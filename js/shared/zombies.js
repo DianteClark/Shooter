@@ -37,6 +37,11 @@ export const ZM = {
     boss: { hp: 30, dmg: 90, speed: 0.62, reach: 1.9, windup: 0.7, cool: 1.5 },          // hp 22 on 1111-32.
     // The Gravewarden: only the altar's quest raises it (ZE.quest), never a round.
     warden: { hp: 55, dmg: 110, speed: 0.66, reach: 2.1, windup: 0.75, cool: 1.35 },       // hp 40 on 1111-32.
+    // Specials (build NEXT, rounds 8-15 on; ZM_SPECIAL): each wants answering differently.
+    spitter: { hp: 0.8, dmg: 22, speed: 0.5, reach: 1.25, windup: 0.45, cool: 1.2 },      // Stands off and lobs acid (ZM_SPIT).
+    bloater: { hp: 2.4, dmg: 0, speed: 0.3, reach: 1.7, windup: 0.55, cool: 1 },          // Bursts in reach or on death (ZM_BLAST).
+    crawler: { hp: 0.55, dmg: 30, speed: 0.92, reach: 1.1, windup: 0.3, cool: 0.9 },      // Low, quick, a small target.
+    shield: { hp: 1.5, dmg: 55, speed: 0.42, reach: 1.4, windup: 0.5, cool: 1.2 },        // A door for a shield (ZM_SHIELD).
   },
   roundMax: 220,                       // Zombies in one round, at most.
   // Account XP in place of the usual kill lines (awards.js, zmXp). Owner notes (1111-32): an escape on round 18 paid
@@ -48,8 +53,52 @@ export const ZM = {
   weaponXp: 0.1, weaponXpCap: 5000,
   perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };
-export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden'];
-export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster', warden: 'Gravewarden' };
+export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield'];
+export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster', warden: 'Gravewarden',
+  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer' };
+// Kind indices (p.zk on the host; the view's zk is one more).
+export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8 };
+export const isBossKind = k => k === 3 || k === 4;
+// The Spitter's acid: it keeps `keep` metres off (backing away inside `near`), winds up `windup` s (head back, a gurgle),
+// then lobs a glob that flies `flight` s plus `perM` s a metre (an arc with its landing spot marked on the ground the
+// whole way: a sidestep clears it), aimed `lead` s ahead of a moving target. Landing: `hit` to anyone within `hitR`, and
+// a puddle of radius `r` that burns `dps` for `life` s. Damage grows with the round like a claw's (clawDmg).
+export const ZM_SPIT = { range: 16, keep: 10, near: 6, windup: 0.7, cool: [3.2, 4.6], flight: 0.55, perM: 0.055, lead: 0.35, hit: 24, hitR: 1.0, r: 1.6, life: 3, dps: 16, max: 6 };
+// The Bloater's burst: in reach it swells for its windup and bursts; killed, it bursts where it falls. `dmg` at the
+// centre to `min` at the edge of `r` to the crew (walls shelter; Ironhide halves), and `horde` of a round's health to
+// any zombie within `r` (credited to whoever killed it): popping one in a crowd is worth it, next to you it is not.
+export const ZM_BLAST = { r: 4.2, dmg: 85, min: 22, horde: 1.6 };
+// The Shieldbearer's shield: bullets and blades from within `arc` rad of its facing hit the shield, which holds `hp`
+// times its bearer's health; explosives, traps, the terminal's gear and a Bloater's burst go round it. Broken, it is gone.
+export const ZM_SHIELD = { arc: 1.15, hp: 1.4 };
+// The special kinds by round: each from its first round, its share of the horde growing `per` a round to `max`, and at
+// most `cap` (+1 every five rounds past its first) alive at once. The rest of the mix is as before (roundMix).
+export const ZM_SPECIAL = [
+  { kind: 7, from: 8, share: 0.04, per: 0.012, max: 0.14, cap: 5 },     // Crawler
+  { kind: 5, from: 9, share: 0.03, per: 0.008, max: 0.08, cap: 2 },     // Spitter
+  { kind: 6, from: 11, share: 0.03, per: 0.008, max: 0.08, cap: 2 },    // Bloater
+  { kind: 8, from: 13, share: 0.03, per: 0.008, max: 0.07, cap: 2 },    // Shieldbearer
+];
+export function specialMix(r) {
+  return ZM_SPECIAL.map(s => ({ kind: s.kind, share: r < s.from ? 0 : Math.min(s.max, s.share + s.per * (r - s.from)), cap: s.cap + Math.floor(Math.max(0, r - s.from) / 5) }));
+}
+// Special rounds (announced with a banner): every five to seven rounds from round 6 or 7, never on a boss round (it
+// moves to the next), in turn: a sprint (every zombie a runner, quicker), a fog (sight cut to ZM_FOG metres: the
+// screen darkens past it and bots see no further), a bloater swarm (fewer zombies, most of them Bloaters).
+// Deterministic from the match seed, so every phone and a migrated host agree.
+export const ZM_ROUNDS = ['sprint', 'fog', 'bloat'];
+export const ZM_ROUND_NAMES = { sprint: ['Sprint round', 'Every one of them runs'], fog: ['Fog round', 'You will not see them coming'], bloat: ['Bloater swarm', 'Pop them far away'] };
+export const ZM_FOG = 9;
+export function specialRound(r, seed = 0) {
+  const h = k => { let x = Math.imul((seed >>> 0) ^ 0x5bd1e995, 31 + k * 977) >>> 0; x ^= x >>> 13; x = Math.imul(x, 0x85ebca6b) >>> 0; return (x ^ (x >>> 16)) >>> 0; };
+  let at = 6 + (h(0) % 2);
+  for (let k = 0; ; k++) {
+    if (isBossRound(at)) at++;
+    if (at > r) return null;
+    if (at === r) return ZM_ROUNDS[k % ZM_ROUNDS.length];
+    at += 5 + (h(k + 1) % 3);
+  }
+}
 
 // Perk machines, our own: what each does is applied by the host (js/sim/zombies.js), Quickdraw also on the phone.
 export const ZM_PERKS = {
@@ -178,13 +227,13 @@ export function roundHp(r) {
 // A zombie's full health: the round's, by kind; the bosses also by crew seats, everything by people past the first.
 export function zmMaxHp(kind, hp, crew, humans = 1) {
   const K = ZM.kinds[ZM_KINDS[kind]];
-  return Math.round(hp * K.hp * (kind >= 3 ? 1 + 0.1 * crew : 1) * (1 + ZM_LATE.perHuman.hp * humansPast(humans)));
+  return Math.round(hp * K.hp * (isBossKind(kind) ? 1 + 0.1 * crew : 1) * (1 + ZM_LATE.perHuman.hp * humansPast(humans)));
 }
 // A claw's damage in round r.
 export const clawDmg = (kind, r) => ZM.kinds[ZM_KINDS[kind]].dmg * Math.min(ZM_LATE.dmgMax, 1 + ZM_LATE.dmgPerRound * Math.max(0, r - ZM_LATE.from));
 // A zombie's pace (share of a run) in round r: shamblers quicken early (paceBonus), runners late.
 export const zmPace = (kind, r) => Math.min(1, ZM.kinds[ZM_KINDS[kind]].speed
-  + (kind === 0 ? paceBonus(r) : kind === 1 ? Math.min(ZM_LATE.runnerMax, ZM_LATE.runnerPerRound * Math.max(0, r - 12)) : 0));
+  + (kind === 0 || kind === 6 ? paceBonus(r) : kind === 1 || kind === 7 ? Math.min(ZM_LATE.runnerMax, ZM_LATE.runnerPerRound * Math.max(0, r - 12)) : 0));
 // Brutes up at once: three, one more every five rounds past round 10, at most six.
 export const bruteCap = r => Math.min(6, 3 + Math.floor(Math.max(0, r - ZM_LATE.from) / 5));
 export const isBossRound = r => r > 0 && r % 10 === 0;
@@ -723,9 +772,16 @@ export function zmUsable(L, x, z, st) {
     else if (full) best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: true, why: `Perk limit: ${limit}` };
     else best = { kind: 'perk', i: m.i, cost: ZM_PERKS[m.perk].cost, perk: m.perk, label: ZM_PERKS[m.perk].name, off: dark || undefined };
   }
-  if (dark && bandOpen(L, st.open, L.power.band)) {
-    const dist = near(L.power.x, L.power.z);
-    if (dist >= 0) { bestD = dist; best = { kind: 'power', i: 0, cost: 0, label: 'Turn on the power' }; }
+  // The switch answers from its spot or from the panel face itself (a player pressed against the wall beside it), and
+  // once thrown it still answers, as "Power is on" (shown, never usable), so nobody wonders whether a mate got there.
+  if (L.power && bandOpen(L, st.open, L.power.band)) {
+    const a = near(L.power.x, L.power.z), b = near(L.power.wx, L.power.wz);
+    const dist = a < 0 ? b : b < 0 ? a : Math.min(a, b);
+    if (dist >= 0) {
+      bestD = dist;
+      best = dark ? { kind: 'power', i: 0, cost: 0, label: 'Turn on the power' }
+        : { kind: 'power', i: 0, cost: 0, label: 'Power is on', off: true, why: 'The perk machines are live' };
+    }
   }
   // The economy (ROADMAP item 36).
   const at = (p, make) => {

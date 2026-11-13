@@ -78,11 +78,23 @@ const RECIPES = {
   over: [3.5, (d, sr) => { [392, 349, 311, 262, 196].forEach((f, k) => bell(d, sr, k * 0.55, f / 2, 0.7, 1.8)); }, 0.6],
   power: [1.0, (d, sr) => { for (let k = 0; k < 8; k++) tone(d, sr, { at: k * 0.06, dur: 0.35, gain: 0.5, f0: 1200 + k * 180, decay: 5, attack: 0.003 }); }, 0.4],
   drop: [1.2, (d, sr, r) => { noise(d, sr, r, { dur: 1.1, gain: 0.6, f0: 3000, f1: 6000, decay: 2.5, attack: 0.2, hp: 2000 }); tone(d, sr, { dur: 1, gain: 0.4, f0: 880, f1: 1320, decay: 2, attack: 0.2 }); }, 0.35],
+  // The specials (js/sim/zm-kinds.js): a Spitter's wet hawk and the glob's splash, its gurgling voice; a Bloater's
+  // burst (a wet thud under the frag's bang) and its bubbling; a Crawler's dry skitter; a shield's iron clang and its
+  // break; a special round's horn.
+  spit: [0.5, (d, sr, r) => { noise(d, sr, r, { dur: 0.35, gain: 1, f0: 1400, f1: 500, decay: 4, attack: 0.02, hp: 300 }); tone(d, sr, { dur: 0.3, gain: 0.5, f0: 260, f1: 520, decay: 5, square: 0.4 }); }, 0.5],
+  splash: [0.7, (d, sr, r) => { noise(d, sr, r, { dur: 0.6, gain: 1, f0: 900, f1: 300, decay: 4.5, attack: 0.005, hp: 150 }); tone(d, sr, { dur: 0.25, gain: 0.4, f0: 140, f1: 60, decay: 9 }); }, 0.5],
+  gurgle: [0.9, (d, sr, r) => { tone(d, sr, { dur: 0.85, gain: 1, f0: 210, f1: 150, decay: 2, attack: 0.08, square: 0.5, vib: [16, 0.2] }); noise(d, sr, r, { dur: 0.8, gain: 0.4, f0: 1100, decay: 2.2, attack: 0.08, hp: 400 }); }, 0.5],
+  burst: [1.2, (d, sr, r) => { tone(d, sr, { dur: 0.5, gain: 1, f0: 90, f1: 35, decay: 5 }); noise(d, sr, r, { dur: 1.1, gain: 0.9, f0: 700, f1: 160, decay: 3, attack: 0.004, hp: 60 }); noise(d, sr, r, { at: 0.08, dur: 0.6, gain: 0.5, f0: 2400, f1: 900, decay: 6, hp: 800 }); }, 0.75],
+  bubble: [1.0, (d, sr) => { for (let k = 0; k < 6; k++) tone(d, sr, { at: k * 0.14, dur: 0.12, gain: 0.7, f0: 120 + (k % 3) * 40, f1: 220 + (k % 2) * 60, decay: 9, square: 0.3 }); }, 0.45],
+  skitter: [0.5, (d, sr, r) => { for (let k = 0; k < 7; k++) click(d, sr, r, k * 0.06, 0.7, 300 + (k % 3) * 120); noise(d, sr, r, { dur: 0.45, gain: 0.3, f0: 3000, decay: 4, hp: 1500 }); }, 0.4],
+  clang: [0.6, (d, sr, r) => { click(d, sr, r, 0, 1, 90); tone(d, sr, { dur: 0.55, gain: 0.7, f0: 820, decay: 7 }); tone(d, sr, { dur: 0.5, gain: 0.45, f0: 1310, decay: 8 }); }, 0.45],
+  shatter: [0.9, (d, sr, r) => { click(d, sr, r, 0, 1, 80); noise(d, sr, r, { dur: 0.8, gain: 0.9, f0: 3200, f1: 900, decay: 4, hp: 700 }); tone(d, sr, { dur: 0.4, gain: 0.6, f0: 300, f1: 120, decay: 6, square: 0.5 }); }, 0.6],
+  horn: [2.2, (d, sr, r) => { tone(d, sr, { dur: 2, gain: 1, f0: 82, f1: 78, decay: 0.8, attack: 0.3, square: 0.7 }); tone(d, sr, { dur: 2, gain: 0.5, f0: 123, f1: 117, decay: 0.8, attack: 0.3, square: 0.5 }); noise(d, sr, r, { dur: 2, gain: 0.15, f0: 400, decay: 1, attack: 0.4 }); }, 0.7],
   down: [0.9, (d, sr) => { tone(d, sr, { dur: 0.35, gain: 1, f0: 700, f1: 600, decay: 1.5, square: 0.4 }); tone(d, sr, { at: 0.38, dur: 0.5, gain: 1, f0: 500, f1: 350, decay: 2, square: 0.4 }); }, 0.5],
 };
 const GROANS = ['groan', 'moan', 'groan', 'moan'];
 // Undead kinds as the view has them (p.zk, js/sim/zombies.js playerView): 1 shambler, 2 runner, 3 brute, 4 the boss.
-const VOICE = { 1: GROANS, 2: ['rasp', 'groan'], 3: ['bellow', 'moan'], 4: ['bellow'] };
+const VOICE = { 1: GROANS, 2: ['rasp', 'groan'], 3: ['bellow', 'moan'], 4: ['bellow'], 6: ['gurgle'], 7: ['bubble', 'moan'], 8: ['skitter', 'rasp'], 9: ['bellow', 'groan'] };
 
 export class ZmSfx {
   constructor(engine) {
@@ -90,6 +102,7 @@ export class ZmSfx {
     this.b = bake(engine, RECIPES, 911, {});
     this.nextGroan = 0;
     this.near = [];
+    this.splashes = [];     // [x, z, when] for globs in flight.
   }
 
   #world(name, x, z, range = 30, { gain = 1, rate = 1 } = {}) {
@@ -116,7 +129,10 @@ export class ZmSfx {
           if (by?.zk) { if (e.target === me) this.#ui('clawHit', 0.8); else this.#world('clawHit', e.x, e.z, 18, { gain: 0.6 }); }
           break;
         }
-        case 'zround': this.#ui(e.boss ? 'bossStart' : 'roundStart', 0.9); break;
+        case 'zround': this.#ui(e.boss ? 'bossStart' : 'roundStart', 0.9); if (e.special) this.#ui('horn', 0.8); break;
+        case 'zspit': this.#world('spit', e.ox, e.oz, 26, { gain: 0.9 }); this.splashes.push([e.x, e.z, (this.e.ctx?.currentTime ?? 0) + e.dur]); break;
+        case 'zblast': this.#world('burst', e.x, e.z, 40, { gain: 1 }); break;
+        case 'zshield': this.#world(e.broke ? 'shatter' : 'clang', e.x, e.z, 26, { gain: e.broke ? 1 : 0.6, rate: 0.9 + Math.random() * 0.2 }); break;
         case 'zbreak': this.#ui('roundEnd', 0.7); break;
         case 'zover': this.#ui('over', 0.9); break;
         case 'zdoor': { const p = this.#pos(view, e.by); if (p) this.#world('gate', p.x, p.z, 40, { gain: 1 }); break; }
@@ -142,6 +158,11 @@ export class ZmSfx {
         case 'down': { const t = view?.players?.find(q => q.id === e.target), m = view?.players?.find(q => q.id === me); if (t && m && t.team === m.team && !t.zk) this.#ui('down', e.target === me ? 0.9 : 0.6); break; }
         default: break;
       }
+    }
+    // A glob lands where its event said, when it said.
+    if (this.splashes.length) {
+      const now = this.e.ctx?.currentTime ?? 0;
+      for (let i = this.splashes.length - 1; i >= 0; i--) if (this.splashes[i][2] <= now) { const [x, z] = this.splashes[i]; this.splashes.splice(i, 1); this.#world('splash', x, z, 24, { gain: 0.8 }); }
     }
     this.#groans(view);
   }

@@ -24,10 +24,12 @@ import { hasLineOfSight } from '../shared/geometry.js';
 import {
   ZM, ZE, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
   roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmMaxHp, clawDmg, zmPace, bruteCap, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
+  specialRound, ZM_ROUNDS, ZK,
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
-import { ZmEcon } from './zm-econ.js';     // ROADMAP item 36: the upgrade bench, the terminal, plates, traps, exfil, quest.
+import { ZmEcon } from './zm-econ.js';
+import { ZmKinds } from './zm-kinds.js';     // Spitters, Bloaters, Crawlers, Shieldbearers and the special rounds.     // ROADMAP item 36: the upgrade bench, the terminal, plates, traps, exfil, quest.
 import { zmTierDef } from './zm-phone.js';
 
 const PLAN_EVERY = 15;
@@ -46,16 +48,17 @@ function mulberry32(a) {
   };
 }
 
-// One zombie on the wire: seat, x and z in decimetres, aim in 64ths of a turn, kind, and two flags (winding up, a
-// boss): one number, about a dozen characters. Positions up to 204.7 m.
+// One zombie on the wire: seat, x and z in decimetres, aim in 64ths of a turn, kind (0..15: ZK, and 9 for a
+// Shieldbearer whose shield is broken) and the winding-up flag: one number, about a dozen characters. Positions up to
+// 204.7 m.
 export function packZombie(seat, x, z, aim, kind, swing) {
   const xi = Math.max(0, Math.min(2047, Math.round(x * 10))), zi = Math.max(0, Math.min(2047, Math.round(z * 10)));
   const a = ((Math.round(aim / (Math.PI * 2) * 64) % 64) + 64) % 64;
-  return ((((seat * 2048 + xi) * 2048 + zi) * 64 + a) * 8 + kind) * 2 + (swing ? 1 : 0);
+  return ((((seat * 2048 + xi) * 2048 + zi) * 64 + a) * 16 + kind) * 2 + (swing ? 1 : 0);
 }
 export function unpackZombie(n) {
   const swing = n % 2; n = Math.floor(n / 2);
-  const kind = n % 8; n = Math.floor(n / 8);
+  const kind = n % 16; n = Math.floor(n / 16);
   const a = n % 64; n = Math.floor(n / 64);
   const zi = n % 2048; n = Math.floor(n / 2048);
   const xi = n % 2048; n = Math.floor(n / 2048);
@@ -87,6 +90,8 @@ export class ZmRules {
     this._zs = [];            // Guest: decoded zombies.
     this._prev = new Map();   // Guest: last positions per seat, for velocities.
     this.econ = new ZmEcon(this);
+    this.special = null;      // This round's special ('sprint' | 'fog' | 'bloat'), from specialRound.
+    this.kinds = new ZmKinds(this);
   }
 
   // A crew member's mode state: points, perks (and the cap on them), the economy's plates and gun tiers.
@@ -158,6 +163,7 @@ export class ZmRules {
       if (this.killed >= this.count) this._endRound();
     }
     this.econ.step(dt);
+    this.kinds.step(dt);
     if (this.state === 3) return;
     for (const p of this.crew) {
       if (!p.alive || p.away) continue;
@@ -180,6 +186,9 @@ export class ZmRules {
     this.dropsThisRound = 0;
     this.hp = roundHp(r);
     this.bossDue = isBossRound(r);
+    this.special = specialRound(r, this.seed);
+    if (this.special === 'bloat') this.count = Math.max(6, Math.round(this.count * 0.7));
+    this.kinds.startRound();
     sim.scores[0] = r;
     // Everyone who bled out is back, with the pistol, at a teammate's side.
     for (const p of this.crew) {
@@ -187,7 +196,7 @@ export class ZmRules {
       if (!p.alive) sim._placeAt(p, this._spotNear(p), 0);
       if (p.isBot && p.alive) this._topUp(p);
     }
-    sim._emit({ t: 'zround', round: r, boss: this.bossDue ? 1 : 0 });
+    sim._emit({ t: 'zround', round: r, boss: this.bossDue ? 1 : 0, special: this.special ?? undefined });
   }
 
   _endRound() {
@@ -246,6 +255,7 @@ export class ZmRules {
       const mix = roundMix(this.round), u = this.rng();
       const brutes = this.horde.filter(q => q.alive && q.zk === 2).length;
       kind = u < mix.brute && brutes < bruteCap(this.round) ? 2 : u < mix.brute + mix.runner ? 1 : 0;
+      kind = this.kinds.pick(kind);
     }
     this._raise(seat, kind, spot);
     this.spawned++;
@@ -259,6 +269,8 @@ export class ZmRules {
     p.zSwing = 0; p.zCool = 0.4 + this.rng() * 0.4; p.zT = null; p.zStuck = 0; p.zLastX = spot.x; p.zLastZ = spot.z; p.zStuckT = 0;
     p.zPace = zmPace(kind, this.round) * (0.92 + this.rng() * 0.16);
     p.ps.tacticalLeft = 0; p.ps.lethalLeft = 0;
+    p.zWindup = K.windup;
+    this.kinds.raise(p);
     if (kind === 3) this.bossSeat = p.index;
   }
 
@@ -411,9 +423,12 @@ export class ZmRules {
       I.aim = Math.atan2(dz, dx);
       if (p.zSwing <= 0) {
         p.zCool = K.cool;
+        if (this.kinds.swungOut(p)) return;      // A Bloater bursts instead.
         const hit = this._clawTarget(p, K.reach + 0.45);
         if (hit) sim._damage(hit, p, clawDmg(p.zk, this.round), NO_GUN, Math.hypot(hit.ps.x - ps.x, hit.ps.z - ps.z));
       }
+    } else if (this.kinds.claw(p, p.zCool <= 0 && !!this._clawTarget(p, K.reach))) {
+      // A special's own claw (a Bloater swells).
     } else if (p.zCool <= 0 && this._clawTarget(p, K.reach)) {
       p.zSwing = K.windup;
       sim._emit({ t: 'zswing', id: p.id });
@@ -456,6 +471,7 @@ export class ZmRules {
     const pace = p.zSwing > 0 ? 0.15 : p.zPace * (p.zSlowT > sim.time ? 0.45 : 1);     // Rime rounds slow.
     if (ml > 1e-4) { I.mx = mx / ml * pace; I.mz = mz / ml * pace; }
     I.aim = d < 3 ? Math.atan2(dz, dx) : ml > 1e-4 ? Math.atan2(mz, mx) : ps.aim;
+    if (p.zSwing <= 0 && this.kinds.steer(p, tgt, d, dt, I)) { if (p.zSlowT > sim.time) { I.mx *= 0.45; I.mz *= 0.45; } }
     // Turn at a zombie's pace, not a soldier's.
     const da = Math.atan2(Math.sin(I.aim - ps.aim), Math.cos(I.aim - ps.aim));
     I.aim = ps.aim + Math.max(-7 * dt, Math.min(7 * dt, da));
@@ -492,10 +508,12 @@ export class ZmRules {
 
   // `streak`: the economy's own sources ('ztrap', 'zsentry', 'zdrone', 'zstrike', 'zlure', 'zfx' for a tier-3 round's
   // effect) pay no hit points and take no perk or tier on top: their damage is already what it should be.
-  damage(target, attacker, dmg, weapon, streak) {
+  damage(target, attacker, dmg, weapon, streak, equip) {
     if (this.isZ(target)) {
       if (!attacker?.zm) return dmg;
       if (streak && streak[0] === 'z') return dmg;
+      dmg = this.kinds.shield(target, attacker, dmg, weapon, streak, equip);
+      if (!(dmg > 0)) return 0;
       if (attacker.zm.perks.includes('hammer')) dmg *= 1.5;
       dmg = this.econ.gunHit(target, attacker, dmg, weapon);
       this._pay(attacker, ZM.pts.hit);
@@ -568,6 +586,7 @@ export class ZmRules {
       target.zFree = sim.time + 0.6;
       if (info.away) { this._sink(target); return; }
       if (!target.zExtra) this.killed++;
+      this.kinds.onDeath(target, killer, info);
       const boss = target.zk === 3;
       if (boss) this.bossSeat = -1;
       this.econ.onKill(target, killer);
@@ -952,7 +971,7 @@ export class ZmRules {
 
   playerView(p, v) {
     v.ai = !!p.ai;
-    if (this.isZ(p)) { v.zk = p.alive ? p.zk + 1 : 0; v.zswing = p.zSwing > 0; return; }
+    if (this.isZ(p)) { v.zk = p.alive ? p.zk + 1 : 0; v.zswing = p.zSwing > 0 || p.zSpitT > 0; v.zshield = p.zShield > 0; return; }
     if (!p.zm) return;
     v.downed = !!p.downed;
     v.reviveK = p.downed ? p.zm.reviveT / ZM.reviveTime : 0;
@@ -966,7 +985,7 @@ export class ZmRules {
   view() {
     const V = this.V, b = this.box;
     V.round = this.round; V.state = STATES[this.state]; V.timer = this.timer; V.left = Math.max(0, this.count - this.killed);
-    V.count = this.count; V.open = this.open; V.doubleT = this.doubleT; V.best = this.best; V.power = this.power;
+    V.count = this.count; V.open = this.open; V.doubleT = this.doubleT; V.best = this.best; V.power = this.power; V.special = this.special;
     V.box = { spot: b.spot, state: b.state, gun: b.gun >= 0 ? BOX_GUNS[b.gun] : null, owner: b.owner, timer: b.timer };
     V.drops = this.drops;
     V.layout = this.L;
@@ -999,13 +1018,14 @@ export class ZmRules {
       return [z.pts, bits, z.kills, z.revives, Math.round(z.plates), z.breathAt ?? 0, tiers, z.earned ?? 0, z.spent ?? 0];
     });
     const zs = [];
-    for (const p of this.horde) if (p.alive) zs.push(packZombie(p.index - this.horde[0].index, p.ps.x, p.ps.z, p.ps.aim, p.zk, p.zSwing > 0));
+    for (const p of this.horde) if (p.alive) zs.push(packZombie(p.index - this.horde[0].index, p.ps.x, p.ps.z, p.ps.aim, p.zk === ZK.shield && !(p.zShield > 0) ? 9 : p.zk, p.zSwing > 0 || p.zSpitT > 0));
     const boss = this.bossSeat >= 0 ? sim.players[this.bossSeat] : null;
     return [this.round, this.state, Math.round(this.timer * 10), Math.max(0, this.count - this.killed), this.open,
       [b.spot, b.state, b.gun, b.owner, Math.round(b.timer * 10)], Math.round(this.doubleT * 10), crew, zs,
       this.drops.flatMap(d => [d.id, ZM_POWERUPS.indexOf(d.kind), r1(d.x), r1(d.z)]),
       boss?.alive && boss.zk === 3 ? Math.round(boss.hp / Math.max(1, boss.zMax) * 100) : -1, this.count, this.best, this.power, this.econ.encode(),
-      (() => { const w = this.econ.wardenSeat >= 0 ? sim.players[this.econ.wardenSeat] : null; return w?.alive && w.zk === 4 ? Math.round(w.hp / Math.max(1, w.zMax) * 100) : -1; })()];
+      (() => { const w = this.econ.wardenSeat >= 0 ? sim.players[this.econ.wardenSeat] : null; return w?.alive && w.zk === 4 ? Math.round(w.hp / Math.max(1, w.zMax) * 100) : -1; })(),
+      this.special ? ZM_ROUNDS.indexOf(this.special) : -1];
   }
 
   // Zombie seats never go out as player records to a guest: the block above carries them.
@@ -1022,8 +1042,9 @@ export class ZmRules {
       return this.view();
     }
     if (a) {
-      const [round, state, timer, left, open, box, dbl, crew, zs, drops, boss, count, best, power, econ, ward] = a;
+      const [round, state, timer, left, open, box, dbl, crew, zs, drops, boss, count, best, power, econ, ward, special] = a;
       this.power = power ?? 1;
+      this.special = ZM_ROUNDS[special] ?? null;
       this.econ.decode(econ);
       this._wardHp = ward ?? -1;
       this.round = round; this.state = state; this.timer = timer / 10; this.count = count ?? 0; this.killed = Math.max(0, this.count - left);
@@ -1069,9 +1090,10 @@ export class ZmRules {
         vx = prev.vx + (vx - prev.vx) * 0.5; vz = prev.vz + (vz - prev.vz) * 0.5;
       }
       if (!prev || now !== prev.t) this._prev.set(z.seat, { x: z.x, z: z.z, t: now, vx, vz });
-      Object.assign(v, { alive: true, x: z.x, z: z.z, aim: z.aim, vx, vz, zk: z.kind + 1, zswing: z.swing, weapon: NO_GUN, hp: 100, spawnProtect: false, sprinting: false, sliding: false, reloadT: 0, adsT: 0 });
+      const kind = z.kind === 9 ? ZK.shield : z.kind;
+      Object.assign(v, { alive: true, x: z.x, z: z.z, aim: z.aim, vx, vz, zk: kind + 1, zshield: kind === ZK.shield && z.kind !== 9, zswing: z.swing, weapon: NO_GUN, hp: 100, spawnProtect: false, sprinting: false, sliding: false, reloadT: 0, adsT: 0 });
       const sp = sim.players[h0 + z.seat];
-      if (sp) { sp.zk = z.kind; }
+      if (sp) { sp.zk = kind; sp.zLow = kind === ZK.crawler; sp.zShield = v.zshield ? 1 : 0; }
     }
     return this.view();
   }
@@ -1088,6 +1110,7 @@ export class ZmRules {
       this.drops = old.drops.map(d => ({ ...d, t: sim.time }));
       this.doubleT = old.doubleT;
       this.power = old.power ?? 1;
+      this.special = old.special ?? null;
       this.econ.restore(old.econ);
       this._bossHp = old._bossHp; this._wardHp = old._wardHp;
     }
@@ -1106,6 +1129,10 @@ export class ZmRules {
           p.zSwing = 0; p.zCool = 0.5; p.zStuck = 0; p.zStuckT = 0; p.zLastX = p.ps.x; p.zLastZ = p.ps.z;
           p.zPace = zmPace(p.zk, this.round);
           p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0;
+          const hadShield = !!v?.zshield;
+          p.zWindup = K.windup;
+          this.kinds.raise(p);
+          if (p.zk === ZK.shield && !hadShield) p.zShield = 0;
           // The bosses keep what the bar showed.
           if (p.zk === 3) { this.bossSeat = p.index; if (this._bossHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._bossHp / 100)); }
           if (p.zk === 4) { this.econ.wardenSeat = p.index; p.zExtra = true; live--; if (this._wardHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._wardHp / 100)); }
@@ -1123,6 +1150,7 @@ export class ZmRules {
       if (p.downed) p.hp = Math.max(1, v.hp ?? 50);
     });
     this.spawned = Math.min(this.count, this.killed + live);
+    this.kinds.startRound();
     if (sim.nav) for (const d of this.L.doors) if (this.open & (1 << d.i)) reblockNav(sim.nav, sim.map, d);
     this.fields.clear();
   }

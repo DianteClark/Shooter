@@ -257,6 +257,13 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     try: await pg.wait_for_function(f"{G}.match.sim.rules.power === 1", timeout=6000)
     except Exception: failures.append(f'{tag}: the switch did not turn the power on')
     if await ev(f"{G}.match.sim.rules.crew.find(p => p.id === {G}.match.localId).zm.pts") != pts: failures.append(f'{tag}: the switch cost points')
+    # Everyone is told who did it, and the switch now says so instead of going quiet.
+    try: await pg.wait_for_function("[...document.querySelectorAll('.banner, .hud-banner, [class*=banner]')].some(b => /turned on the power/i.test(b.textContent))", timeout=3000)
+    except Exception: failures.append(f'{tag}: no "<name> turned on the power" banner')
+    try: await pg.wait_for_function("document.querySelector('.zm-use:not([hidden]) .t')?.textContent === 'POWER IS ON' && document.querySelector('.zm-use').classList.contains('poor')", timeout=4000)
+    except Exception: failures.append(f'{tag}: the switch does not say POWER IS ON once thrown: ' + str(await ev("document.querySelector('.zm-use')?.textContent")))
+    lamp = await ev(f"(() => {{ const p = {G}.renderer?.zmFx?.power ?? {G}.match?.renderer?.zmFx?.power; return p ? [p.lamp.material.color.getHex(), p.lever.rotation.z] : null; }})()")
+    if lamp is not None and (lamp[0] != 0x4fe36a): failures.append(f'{tag}: the switch lamp is not green once on ({lamp})')
     await pg.wait_for_timeout(1200)
     await shot('04-power-on')
     await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x - 3; m.ps.z = L.power.z + 2.5; }})()")
@@ -435,6 +442,70 @@ async def run_econ(browser, vw, vh, failures, errors):
     await ctx.close()
 
 
+async def run_specials(browser, vw, vh, failures, errors):
+    """The special zombies (js/sim/zm-kinds.js) on Foundry: one of each raised in front of the player (looks, the
+    Shieldbearer's shield, a Crawler on all fours), a Spitter's glob with its landing mark and puddle, a Bloater's burst,
+    then a fog round's banner and darkness. Screenshots of each; no console errors."""
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'specials {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'specials {vw}: PAGEERR {e} {getattr(e, "stack", "")}'))
+    tag = f'specials {vw}x{vh}'
+    async def shot(name):
+        print(f'  {tag} {name}', flush=True)
+        await pg.screenshot(path=f'{OUT}/specials-{name}-{vw}x{vh}.png')
+    ev = lambda js: pg.evaluate(js)
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=foundry&mode=zm', timeout=120000)
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, R = sim.rules; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
+      for (const p of R.crew) if (p.bot) {{ p.bot.update = () => []; }} R.plan = () => {{}}; R._crewPlan = null; }})()""")
+    await pg.wait_for_function(f"{G}.match.sim.rules.round === 1", timeout=60000)
+    # Hold the round, clear the horde, raise one of each special a few metres off, frozen in place (their drive skipped).
+    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, R = sim.rules; R.spawnT = 1e9; R.round = 15; R.hp = 2000;
+      for (const z of R.horde) if (z.alive) {{ z.alive = false; z.hp = 0; }}
+      const me = sim.byId.get(m.localId), x = me.ps.x, z = me.ps.z;
+      const free = (dx, dz) => {{ const k = sim.nav.nearestFree(x + dx, z + dz); return {{ x: k % sim.nav.w + 0.5, z: Math.floor(k / sim.nav.w) + 0.5 }}; }};
+      window.__sp = [[5, -4, -2.5], [6, 4, -2.5], [7, -4, 1.2], [8, 4, 1.2]].map(([k, dx, dz]) => {{ const seat = R.horde.find(q => !q.alive); R._raise(seat, k, free(dx, dz)); seat.ps.aim = Math.atan2(z - seat.ps.z, x - seat.ps.x); return seat; }});
+      const drive = R._driveZombie.bind(R); R._driveZombie = (p, dt) => {{ if (window.__sp.includes(p) && window.__freeze) return; drive(p, dt); }}; window.__freeze = true; }})()""")
+    await pg.wait_for_timeout(1500)
+    await shot('01-lineup')
+    got = await ev(f"(() => {{ const v = {G}.match.interp.newest; return v.players.filter(p => p.alive && p.zk >= 6).map(p => [p.zk, !!p.zshield]); }})()")
+    kinds = sorted(k for k, _ in got)
+    if kinds != [6, 7, 8, 9]: failures.append(f'{tag}: the view has kinds {got}')
+    if not any(k == 9 and sh for k, sh in got): failures.append(f'{tag}: the Shieldbearer has no shield in the view')
+    sh = await ev(f"{G}.renderer?.zmFx?.kinds?.shieldMesh.count ?? {G}.match?.renderer?.zmFx?.kinds?.shieldMesh.count ?? -1")
+    if sh is not None and sh == 0: failures.append(f'{tag}: no shield drawn')
+    # The Spitter spits: the glob in flight with its landing mark, then the puddle.
+    await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules, sp = window.__sp[0]; R.kinds._spit(sp, m.sim.byId.get(m.localId)); }})()")
+    await pg.wait_for_timeout(350)
+    await shot('02-glob')
+    marks = await ev(f"{G}.renderer?.zmFx?.kinds?.markMesh.count ?? -1")
+    if marks == 0: failures.append(f'{tag}: no landing mark under the glob')
+    await pg.wait_for_timeout(1200)
+    await shot('03-puddle')
+    # The Bloater bursts.
+    await ev(f"(() => {{ const m = {G}.match, sim = m.sim, R = sim.rules, b = window.__sp[1]; sim._damage(b, sim.byId.get(m.localId), b.hp + 1, 'ar', 5); }})()")
+    await pg.wait_for_timeout(250)
+    await shot('04-burst')
+    # A fog round: its banner, and the dark past a few metres.
+    await ev(f"""(() => {{ const R = {G}.match.sim.rules;
+      R.special = null; R.state = 2; R.timer = 0.05; R.round = 11;
+      const orig = R._startRound.bind(R); R._startRound = (r) => {{ orig(r); R.special = 'fog'; R.kinds.startRound(); R.sim._emit({{ t: 'zround', round: r, special: 'fog' }}); }}; }})()""")
+    try: await pg.wait_for_function("/Fog round/.test(document.querySelector('.obj-banner')?.textContent ?? '')", timeout=6000)
+    except Exception: failures.append(f'{tag}: no fog round banner: ' + str(await ev("document.querySelector('.obj-banner')?.textContent")))
+    await pg.wait_for_timeout(2500)
+    fog = await ev(f"(() => {{ const k = {G}.renderer?.zmFx?.kinds; return k ? [k.fog.visible, k.fogK] : null; }})()")
+    if fog is not None and not fog[0]: failures.append(f'{tag}: the fog is not drawn on a fog round ({fog})')
+    await shot('05-fog')
+    await ev('clearInterval(window.__shield)')
+    await ctx.close()
+
+
 # Every Graveyard Shift message (feed notes and hints, banners, the use button's two lines) at each width from 640 to
 # 956: fired through the real layer (js/ui/zm-hud.js onEvent) on Ashgrove and measured: nothing cut, clamped or off screen.
 MSG_SIZES = [(640, 360), (667, 375), (852, 393), (932, 430), (956, 440)]
@@ -543,6 +614,9 @@ async def main():
             for vw, vh in [(852, 393), (667, 375)] if os.environ.get('ZM_ONLY') in (None, '', 'econ') else []:
                 try: await run_econ(browser, vw, vh, failures, errors)
                 except Exception as e: failures.append(f'econ {vw}x{vh}: {type(e).__name__}: {e}')
+            for vw, vh in [(852, 393)] if os.environ.get('ZM_ONLY') in (None, '', 'specials') else []:
+                try: await run_specials(browser, vw, vh, failures, errors)
+                except Exception as e: failures.append(f'specials {vw}x{vh}: {type(e).__name__}: {e}')
             await browser.close()
     finally:
         server.terminate()

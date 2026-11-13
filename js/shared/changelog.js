@@ -12,6 +12,16 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1111-35', date: '2026-11-12', title: 'New undead, special rounds and fairer bot eyesight',
+    items: [
+      'Graveyard Shift: four new undead from round 8. Spitters keep their distance and lob acid (watch for the ring where it will land and step aside), Bloaters burst when they reach you or die (pop them from far away, ideally in a crowd), Crawlers are small, low and quick, and Shieldbearers block bullets from the front until the shield breaks (flank them, or use explosives and traps).',
+      'Graveyard Shift: special rounds every five to seven rounds, announced with a banner: a sprint round where every one of them runs, a fog round where you can only see a few metres, and a Bloater swarm.',
+      'Bot teammates handle the new undead: they pop Bloaters early, walk round shields and step out of acid.',
+      'Ashgrove Halt: the power switch shows its state at a glance (red lamp off, green lamp and lever down on), says "Power is on" once someone has thrown it, and everyone sees who turned it on.',
+      'Bots no longer spot and shoot you from further than you can see without aiming. To fight at longer range they now aim down sights first, and you can see them do it: the pose, the laser and the slower aimed walk. Better bots are quicker to raise their sights.',
+    ],
+  },
+  {
     build: '1111-34', date: '2026-11-12', title: 'Bug sweep',
     items: [
       'Graveyard Shift is harder after round 10: tougher, faster and harder-hitting undead, more runners and brutes, quicker spawns, tougher bosses, and a longer, rougher exfil. Rounds 1 to 10 are unchanged. Each extra player in the crew adds more undead with more health.',
