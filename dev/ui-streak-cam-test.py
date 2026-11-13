@@ -78,11 +78,11 @@ async def main():
             await pg.wait_for_timeout(300)
             await pg.evaluate(f'({CALL})("recon")')
             start = await pg.evaluate("(() => { const g = window.__game.app.match.sim.gunships.find(g => g.kind === 'recon'); return g && { x: g.x, z: g.z, t: window.__game.app.match.sim.time }; })()")
-            await pg.wait_for_timeout(250)
+            await pg.wait_for_function("(() => { const m = window.__game.app.match; return m.sim.time > %s + 0.5; })()" % start['t'], timeout=20000)
             after = await pg.evaluate("(() => { const m = window.__game.app.match, g = m.sim.gunships.find(g => g.kind === 'recon'); return g && { x: g.x, z: g.z, t: m.sim.time, ads: m.ps.adsT, sprint: m.ps.sprinting }; })()")
-            # Judged on the host's own clock: full speed (10 m/s) straight away, give or take the first tick.
+            # Judged on the host's own clock: at most a quarter second to turn round (14 rad/s), then full speed (10 m/s).
             dt = after and start and after['t'] - start['t']
-            moved = bool(dt) and (after['z'] - start['z']) >= 8 * dt - 0.2
+            moved = bool(dt) and (after['z'] - start['z']) >= 8 * (dt - 0.25)
             print(f'  recon flies on the first push (sprinting, ads {after and after["ads"]:.2f}): moved {after and round(after["z"] - start["z"], 2)} m in {dt and round(dt, 2)} s  {"ok" if moved else "FAIL"}')
             if not moved: failures.append(f'recon slow to respond: {start} -> {after}')
             await pg.evaluate("(() => { const c = window.__game.controls; c.read = c.__read; })()")
