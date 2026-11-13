@@ -35,6 +35,11 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const SWEEP_R = 36, SWEEP_MARK = 4, SWEEP_GAP = 6;
 // Recon Drone: piloted like the Cruise Missile, but slower, over rooftops, and it never blows up.
 export const SCOUT_LIFE = 12, SCOUT_SPEED = 10, SCOUT_EYE = 8, SCOUT_MARK = 3, SCOUT_EVERY = 0.5;
+const SCOUT_TURN = 14, SCOUT_TURN_BOT = 4;     // rad/s.
+// A human pilot steers while the aim stick is held. That used to be read from ADS, which takes a moment to come up and
+// never comes up while sprinting, swapping or reloading, so a fresh drone sat still under a held stick (roadmap 40).
+// The phone now sends the held stick itself (encodeHumanState's steering bit); ADS still counts for older guests.
+const steering = o => !!o.ps.steer || o.ps.adsT > 0.05;
 // Airdrop: lands DROP_DELAY after the call; teammates open it fast, enemies slowly (stealing it).
 export const DROP_DELAY = 3, CRATE_LIFE = 40, CRATE_HP = 250, CRATE_REACH = 1.6, OPEN_OWN = 0.8, OPEN_ENEMY = 2.5;
 const AIRDROP_POOL = [['uav', 3], ['sweep', 2], ['resupply', 2], ['plates', 2], ['missile', 2], ['turret', 2], ['hound', 2],
@@ -410,9 +415,11 @@ function stepScout(sim, g) {
       g.goalX = sim.map.width * (0.2 + sim.rng() * 0.6); g.goalZ = sim.map.height * (0.2 + sim.rng() * 0.6);
     }
     want = Math.atan2(g.goalZ - g.z, g.goalX - g.x) + Math.sin(g.age * 1.7) * 0.5; fly = true;
-  } else if (o.alive && o.ps.adsT > 0.05) { want = o.ps.aim; fly = true; }
+  } else if (o.alive && steering(o)) { want = o.ps.aim; fly = true; }
   if (fly) {
-    g.aim = wrap(g.aim + clamp(angleDiff(want, g.aim), -4 * STEP, 4 * STEP));
+    // A human pilot gets the turn at once (the stick's direction is the drone's); a bot weaves at a drone's pace.
+    const turn = (o.isBot ? SCOUT_TURN_BOT : SCOUT_TURN) * STEP;
+    g.aim = wrap(g.aim + clamp(angleDiff(want, g.aim), -turn, turn));
     g.x = clamp(g.x + Math.cos(g.aim) * SCOUT_SPEED * STEP, 0.5, sim.map.width - 0.5);
     g.z = clamp(g.z + Math.sin(g.aim) * SCOUT_SPEED * STEP, 0.5, sim.map.height - 0.5);
   }
@@ -498,7 +505,7 @@ function bell(rng) { return (rng() + rng() + rng() - 1.5) / 1.5; }
 function stepReticle(sim, g) {
   const o = g.owner;
   if (!o.alive) return true;                     // The pilot died drawing it: nothing drops, the streak is spent.
-  const held = o.ps.adsT > 0.05;
+  const held = steering(o);
   if (held) {
     if (!g.held) { g.held = true; if (g.path.length === 0) g.path.push(g.x, g.z); }
     g.aim = o.ps.aim;

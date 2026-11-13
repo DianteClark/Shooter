@@ -405,6 +405,9 @@ export class Match {
     }
     // Steering your own Cruise Missile: the aim stick flies it, so the gun holds fire and an idle stick keeps course.
     // V9: the Scout Drone and the Carpet Line reticle fly the same way; letting go of the stick drops a Carpet Line.
+    // The held aim stick goes to the host as it is (encodeHumanState's steering bit), so a drone flies on the very first
+    // frame of a push, before ADS has come up and even while sprinting.
+    this.ps.steer = !!input.aiming && input.aim !== null && input.aim !== undefined;
     const pilot = view.gunships?.find(g => g.kind === 'missile' && g.owner === this.localId)
       ?? view.drones?.find(g => (g.kind === 'recon' || g.kind === 'reticle') && g.owner === this.localId);
     if (pilot) {

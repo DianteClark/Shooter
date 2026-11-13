@@ -1268,7 +1268,7 @@ export class Sim {
     ps.x = d.x; ps.z = d.z; ps.aim = d.aim; ps.vx = d.vx; ps.vz = d.vz;
     ps.slot = d.slot; ps.primary = d.primary; ps.weapon = d.weapon;
     if (d.secondary && SECONDARY_IDS.includes(d.secondary)) ps.secondary = d.secondary;
-    ps.sprinting = d.sprinting; ps.sliding = d.sliding;
+    ps.sprinting = d.sprinting; ps.sliding = d.sliding; ps.steer = !!d.steer;
     ps.ammo[0] = d.ammo[0]; ps.ammo[1] = d.ammo[1];
     ps.reserve[0] = d.reserve[0]; ps.reserve[1] = d.reserve[1];
     ps.reloadT = d.reloadT; ps.reloadDur = d.reloadDur;

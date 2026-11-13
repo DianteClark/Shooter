@@ -879,12 +879,13 @@ function selfTeamOf(ps, players) {
   return undefined;
 }
 
-// Wire format: one flat array. Bits in the flags value: 1 slot, 2 sprinting, 4 sliding, 8 overheated.
+// Wire format: one flat array. Bits in the flags value: 1 slot, 2 sprinting, 4 sliding, 8 overheated, 16 steering (the
+// aim stick is held: a piloted streak flies on it at once, whatever ADS is doing).
 export function encodeHumanState(ps) {
   return [
     Math.round(ps.x * 100), Math.round(ps.z * 100), Math.round(ps.aim * 1000),
     Math.round(ps.vx * 10), Math.round(ps.vz * 10),
-    (ps.slot & 1) | (ps.sprinting ? 2 : 0) | (ps.sliding ? 4 : 0) | (ps.overheated ? 8 : 0),
+    (ps.slot & 1) | (ps.sprinting ? 2 : 0) | (ps.sliding ? 4 : 0) | (ps.overheated ? 8 : 0) | (ps.steer ? 16 : 0),
     WEAPON_IDS.indexOf(ps.primary), ps.ammo[0], ps.ammo[1], ps.reserve[0], ps.reserve[1],
     Math.round(ps.reloadT * 100), Math.round(ps.reloadDur * 100),
     Math.round(ps.adsT * 100), Math.round(ps.bloom * 100),
@@ -903,7 +904,7 @@ export function decodeHumanState(d) {
     x: d[0] / 100, z: d[1] / 100, aim: d[2] / 1000,
     vx: d[3] / 10, vz: d[4] / 10,
     slot, primary, secondary, weapon: slot === 0 ? primary : secondary,
-    sprinting: !!(flags & 2), sliding: !!(flags & 4),
+    sprinting: !!(flags & 2), sliding: !!(flags & 4), steer: !!(flags & 16),
     ammo: [d[7], d[8]], reserve: [d[9], d[10]],
     reloadT: d[11] / 100, reloadDur: d[12] / 100,
     adsT: d[13] / 100, bloom: d[14] / 100,
