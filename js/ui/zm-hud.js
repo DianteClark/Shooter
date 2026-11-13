@@ -10,6 +10,9 @@ import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
 import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
+// The relic quest's clue, once from round 3 (dev/ui-zombies-test.py checks it reads whole at every width).
+export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still warm';
+
 
 const CSS = `
 .zm-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
@@ -47,11 +50,13 @@ const CSS = `
 .zm-mate span i { width: 10px; height: 6px; background: var(--k); box-shadow: 0 0 4px var(--k); }
 .zm-mate.down { box-shadow: inset 2px 0 0 var(--c-red); background: rgba(120,28,20,.55); }
 .zm-mate.dead { opacity: .45; }
-.zm-use { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, calc(var(--sb) + 62px)); transform: translateX(-50%); height: 50px; min-width: 150px; max-width: 46vw; padding: 0 16px; border: 0;
+.zm-use { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, calc(var(--sb) + 62px)); transform: translateX(-50%); min-height: 50px; min-width: 150px; width: max-content; max-width: 46vw; padding: 6px 16px; box-sizing: border-box; border: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   font: 400 19px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-night); background: var(--c-sodium); white-space: nowrap;
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); box-shadow: 0 0 0 2px #fff inset; }
-.zm-use small { font: 10px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* The second line wraps (three lines at most, on the narrowest phones) rather than cutting a reason or a perk's
+   description short. */
+.zm-use small { font: 10px/1.2 var(--f-plate); letter-spacing: var(--tr-plate); margin-top: 3px; overflow: hidden; max-width: 100%; white-space: normal; text-align: center; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .hud .zm-use { max-width: min(46vw, var(--lane-w, 46vw)); }
 .zm-use.poor { color: var(--c-chalk); background: linear-gradient(180deg, rgba(60,60,60,.92), rgba(28,28,28,.9)); box-shadow: 0 0 0 2px rgba(255,255,255,.25) inset; }
 .zm-use:active { filter: brightness(1.3); }
@@ -348,7 +353,7 @@ export class ZmHud {
     // A hint at the quest: from round 3, once, while nobody has found a relic.
     if (!this.hinted && z.round >= 3 && z.state === 'round' && q && !q.got && z.layout?.relics?.length) {
       this.hinted = true;
-      this.hud.notify('Something glows in the dead ends: old lanterns, still warm');
+      this.hud.notify(QUEST_HINT);
     }
   }
 

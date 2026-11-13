@@ -1017,8 +1017,9 @@ export class HUD {
     this.#pushFeed(`<em style="color:${TEAMS[p?.team ?? e.team].css}">${esc(p?.name ?? '?')}</em><span class="f-note">hijacked a Sentry</span>`, mine, p?.team === this.#findLocal(view)?.team ? 'ally' : 'foe');
   }
 
+  // A note row wraps (up to three lines) instead of ellipsizing: hints such as Graveyard Shift's relic clue must read whole.
   notify(text) {
-    this.#pushFeed(`<span class="f-note">${esc(text)}</span>`);
+    this.#pushFeed(`<span class="f-note">${esc(text)}</span>`, false, 'note');
   }
 
   // Name of the player being watched, or null.

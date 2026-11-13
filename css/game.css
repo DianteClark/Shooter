@@ -975,11 +975,12 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 .obj-banner {
   position: absolute; left: 50%; top: calc(var(--st) + 116px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
   padding: 6px 30px 8px; opacity: 0; white-space: nowrap; pointer-events: none; z-index: var(--z-hud-alert);
+  width: max-content; max-width: calc(100% - var(--sl, 0px) - var(--sr, 0px) - 24px); box-sizing: border-box;
   background: linear-gradient(90deg, transparent, rgba(16,20,26,.88) 14%, rgba(16,20,26,.88) 86%, transparent);
   box-shadow: inset 0 2px 0 var(--bn, var(--c-sodium));
 }
 .obj-banner b { font: 400 34px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--bn, var(--c-chalk)); }
-.obj-banner small { font: var(--fs-body)/1.15 var(--f-body); color: var(--c-haze); margin-top: 2px; }
+.obj-banner small { font: var(--fs-body)/1.15 var(--f-body); color: var(--c-haze); margin-top: 2px; white-space: normal; text-align: center; max-width: 100%; }   /* A long line wraps. */
 .obj-banner[data-side="mine"] { --bn: var(--my-team); }
 .obj-banner[data-side="enemy"] { --bn: var(--enemy-team); }
 

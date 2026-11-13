@@ -15,6 +15,8 @@ at the bench through the use button (the gun goes in, comes out at tier 1 with i
 sheet and a sentry bought from it, a trap armed at its switch, plates at the armour bench, the exfil called at round 15,
 the relics set on the altar and the Gravewarden's bar. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove or
 ZM_ONLY=econ runs only that part.
+Last, every Graveyard Shift message (hints, feed notes, banners, the use button's lines) is fired through the real layer
+at 640x360 to 956x440 and must read whole: nothing cut, clamped or off screen (ZM_ONLY=messages runs only that).
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -433,6 +435,91 @@ async def run_econ(browser, vw, vh, failures, errors):
     await ctx.close()
 
 
+# Every Graveyard Shift message (feed notes and hints, banners, the use button's two lines) at each width from 640 to
+# 956: fired through the real layer (js/ui/zm-hud.js onEvent) on Ashgrove and measured: nothing cut, clamped or off screen.
+MSG_SIZES = [(640, 360), (667, 375), (852, 393), (932, 430), (956, 440)]
+FIRE = r"""(async () => {
+  const g = window.__game, hud = g.hud, zh = hud.zmHud, view = hud.view;
+  const { ZM_PERK_IDS, ZM_PERKS, ZE, ZM_FX, zmFxOf } = await import('/js/shared/zombies.js');
+  const { QUEST_HINT } = await import('/js/ui/zm-hud.js');
+  const { WEAPONS } = await import('/js/shared/weapons.js');
+  const me = view.players.find(p => p.id === view.localId), mate = view.players.find(p => p.team === me.team && p.id !== me.id && !p.ai) ?? me;
+  const long = 'Maximilian-Longname';
+  me.name = long; if (mate !== me) mate.name = long;
+  const W = innerWidth, H = innerHeight, bad = [];
+  const box = (el, what) => {
+    const r = el.getBoundingClientRect();
+    if (r.left < -1 || r.right > W + 1 || r.top < -1 || r.bottom > H + 1) bad.push(`${what}: off screen ${Math.round(r.left)}..${Math.round(r.right)}`);
+  };
+  const cut = (el, what) => {
+    if (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1) bad.push(`${what}: cut (${el.scrollWidth}x${el.scrollHeight} in ${el.clientWidth}x${el.clientHeight}) "${el.textContent}"`);
+  };
+  const feed = () => { for (const f of hud.feed.splice(0)) f.row.remove(); };
+  const notes = what => { for (const a of document.querySelectorAll('.hud .f-row')) for (const an of a.getAnimations()) an.finish(); for (const n of document.querySelectorAll('.hud .f-row .f-note')) { cut(n, what); box(n.closest('.f-row'), what); } feed(); };
+  const banner = what => { const b = document.querySelector('.obj-banner'); for (const a of b.getAnimations()) a.finish?.(); box(b, what); cut(b.querySelector('small'), what + ' (sub)'); cut(b.querySelector('b'), what + ' (title)'); };
+  const fire = (e, what) => { feed(); zh.onEvent(e, view); notes(what); banner(what); };
+  hud.notify(QUEST_HINT); notes('relic hint');
+  const guns = Object.keys(WEAPONS), longGun = guns.reduce((a, b) => ((WEAPONS[b].name ?? b).length > (WEAPONS[a].name ?? a).length ? b : a));
+  fire({ t: 'zround', round: 1 }, 'round 1 / power out');
+  fire({ t: 'zround', round: 10, boss: true }, 'boss round');
+  fire({ t: 'zbreak', round: 9 }, 'round survived');
+  for (const kind of ['ammo', 'double', 'nuke']) fire({ t: 'zpower', kind }, 'power-up ' + kind);
+  fire({ t: 'zdoor', by: mate.id }, 'gate');
+  fire({ t: 'zlights', by: mate.id }, 'power on');
+  fire({ t: 'zbox', state: 2, by: me.id, gun: longGun }, 'crate offer'); fire({ t: 'zbox', state: 3 }, 'crate moves');
+  for (const perk of ZM_PERK_IDS) fire({ t: 'zperk', id: me.id, perk }, 'perk ' + perk);
+  fire({ t: 'down', target: mate.id }, 'mate down'); fire({ t: 'revive', id: me.id, by: mate.id }, 'revived'); fire({ t: 'zbreath', id: me.id }, 'last breath');
+  for (const st of [1, 2]) fire({ t: 'zbench', state: st, by: me.id, gun: longGun, tier: 3 }, 'bench ' + st);
+  for (const gun of guns) if (ZM_FX[zmFxOf(gun)]) fire({ t: 'zbench', state: 0, by: me.id, gun, tier: 3 }, 'bench fx ' + gun);
+  for (const item of Object.keys(ZE.supply)) fire({ t: 'zsupply', by: mate.id, item }, 'supply ' + item);
+  const L = g.app.match.sim.rules.L ?? {};
+  (L.traps ?? []).forEach((tr, i) => fire({ t: 'ztrap', state: 1, i, by: mate.id }, 'trap ' + i));
+  fire({ t: 'zexfil', state: 1 }, 'exfil called'); fire({ t: 'zexfil', state: 0, fail: true }, 'exfil missed');
+  fire({ t: 'zescape', ids: [me.id], round: 20 }, 'escaped'); fire({ t: 'zescape', ids: [], round: 20 }, 'they got out');
+  fire({ t: 'zrelic', n: 1, of: 3, by: mate.id }, 'relic found'); fire({ t: 'zrelic', n: 3, of: 3, by: me.id }, 'relics all');
+  fire({ t: 'zwarden', state: 1 }, 'warden wakes'); fire({ t: 'zwarden', state: 2 }, 'warden falls');
+  // The use button's longest lines.
+  const use = zh.useEl, lines = [['UPGRADE ' + (WEAPONS[longGun].name ?? longGun).toUpperCase(), '12,000 · tier 3 · ' + Object.values(ZM_FX).map(f => f.name).reduce((a, b) => (b.length > a.length ? b : a))],
+    ['SUPPLY TERMINAL', 'Sentries, strikes, drones, lures, vests'], ['UPGRADE BENCH', 'Hold a gun to upgrade it'], ['THE ALTAR', 'Find all the relics first'],
+    ['CALL EXFIL', '20,000 · hold the pad ' + ZE.exfil.hold + ' s'], ['ARMOUR PLATE', '2,500 · up to ' + ZE.plate.max + ' plates'],
+    ...ZM_PERK_IDS.map(k => [ZM_PERKS[k].name.toUpperCase(), `${ZM_PERKS[k].cost.toLocaleString('en-US')} · ${ZM_PERKS[k].desc}`]),
+    ...ZM_PERK_IDS.map(k => [ZM_PERKS[k].name.toUpperCase(), `${ZM_PERKS[k].cost.toLocaleString('en-US')} · No power: find the switch`])];
+  const was = use.hidden;
+  for (const [t, sub] of lines) {
+    use.hidden = false; zh.useT.textContent = t; zh.useS.textContent = sub;
+    cut(zh.useT, 'use ' + t); cut(zh.useS, 'use ' + t + ' (sub)'); box(use, 'use ' + t);
+  }
+  use.hidden = was;
+  return bad;
+})()"""
+
+async def run_messages(browser, failures, errors):
+    ctx = await browser.new_context(viewport={'width': 932, 'height': 430}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'msg: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'msg: PAGEERR {e}'))
+    ev = lambda js: pg.evaluate(js)
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=ashgrove&mode=zm', timeout=120000)
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    await ev(f"(() => {{ const sim = {G}.match.sim; setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200); }})()")
+    for vw, vh in MSG_SIZES:
+        await pg.set_viewport_size({'width': vw, 'height': vh})
+        await pg.wait_for_timeout(700)
+        bad = await ev(FIRE)
+        print(f'  messages {vw}x{vh}: {len(bad)} cut', flush=True)
+        for b in bad: failures.append(f'messages {vw}x{vh}: {b}')
+        if vw in (640, 932):
+            await ev("import('/js/ui/zm-hud.js').then(m => window.__game.hud.notify(m.QUEST_HINT))")
+            await pg.wait_for_timeout(300)
+            await pg.screenshot(path=f'{OUT}/msg-hint-{vw}x{vh}.png')
+    await ctx.close()
+
+
 async def main():
     os.makedirs(OUT, exist_ok=True)
     server = subprocess.Popen([sys.executable, '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -450,6 +537,9 @@ async def main():
             if os.environ.get('ZM_ONLY') in (None, '', 'ashgrove'):
                 try: await run_ashgrove(browser, 932, 430, failures, errors)
                 except Exception as e: failures.append(f'ashgrove: {type(e).__name__}: {e}')
+            if os.environ.get('ZM_ONLY') in (None, '', 'messages'):
+                try: await run_messages(browser, failures, errors)
+                except Exception as e: failures.append(f'messages: {type(e).__name__}: {e}')
             for vw, vh in [(852, 393), (667, 375)] if os.environ.get('ZM_ONLY') in (None, '', 'econ') else []:
                 try: await run_econ(browser, vw, vh, failures, errors)
                 except Exception as e: failures.append(f'econ {vw}x{vh}: {type(e).__name__}: {e}')
