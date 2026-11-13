@@ -208,7 +208,7 @@ function blockIosGestures() {
     }
   }, { passive: false });
   // Safari still offers text selection on long-press through some layered elements.
-  const unlessField = e => { if (e.target.tagName !== 'TEXTAREA') e.preventDefault(); };
+  const unlessField = e => { if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') e.preventDefault(); };     // INPUT: the settings search.
   document.addEventListener('selectstart', unlessField);
   document.addEventListener('contextmenu', unlessField);
 
