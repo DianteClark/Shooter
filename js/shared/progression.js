@@ -426,6 +426,13 @@ const BURN_GAP = 1.5;            // Burn ticks closer together than this are one
 const CLOSE_KILL = 8;
 const FLANK = 1.3;               // Radians between a victim's aim and the way to the killer: a kill from the side or behind.
 
+// Graveyard Shift (docs/ZOMBIES.md, docs/UNLOCKS-AUDIT-2026-11-12.md): the horde is not soldiers. Its kills (and the hits
+// that lead to them) count for the mode's own rewards and the capped weapon XP awards.js pays, and for nothing else: no
+// kill, class or gun challenge, Pro step, mastery tier, camo challenge, operator unlock or lifetime kill tally. Each
+// tracker drops them at the door; ChallengeTally keeps them apart as `zm:kills` / `zm:head` for the mode's own cards.
+export const hordeView = view => modeRules(view?.modeId ?? view?.mode) === 'zm';
+const soldierEvents = (events, id) => events.filter(e => e.t !== 'kill' && !(e.t === 'hit' && e.by === id));
+
 // Counts what one player did in one match, for the Pro challenges. Pure: no DOM, no storage, runs in node.
 // Feed onEvents(events, view) every frame with that player's view (its `t` is the clock). gains() returns
 // {perk: {stat: n}} for the perks that were equipped when each thing happened; setPerks() whenever the loadout in use
@@ -459,6 +466,7 @@ export class ProTracker {
     const id = this.id, me = view?.players?.find(p => p.id === id);
     const t = view?.t ?? 0, dt = this.prevT === null ? 0 : Math.min(0.25, Math.max(0, t - this.prevT));
     let healed = false, spawned = false;
+    if (hordeView(view)) events = soldierEvents(events, id);
     for (const e of events) {
       switch (e.t) {
         case 'kill':
@@ -942,6 +950,11 @@ export class MasteryTracker {
     this.t = t;
     if (me) this.team = me.team;
     const op = this.op;
+    if (hordeView(view)) {
+      // A death still ends the life's run of kills; nothing the horde dies of counts here.
+      if (events.some(e => e.t === 'kill' && e.target === id)) this.life = {};
+      events = soldierEvents(events, id);
+    }
     for (const e of events) {
       switch (e.t) {
         case 'throw':
@@ -1135,7 +1148,7 @@ export const CARDS = [
   card('level-30', 'Thirty Up', 'Career', 'Reach level 30', c => c.peakLevel >= 30, { p: 'hazard', c: ['#24180a', '#5c3c14', '#ffd9a0', '#ff9f1c'], e: 'ui:rank' }, c => [c.peakLevel, 30]),
   card('pro-5', 'Pro Shop', 'Career', 'Earn 5 Pro perks', c => c.pro.length >= 5, { p: 'circuit', c: ['#221a08', '#6a5214', '#fff0b8', '#ffd659'], e: 'ui:star', gold: true }, c => [c.pro.length, 5]),
   // Graveyard Shift's hidden quest (ROADMAP item 36): the Gravewarden put down, on any map.
-  card('zm-warden', 'Lantern Out', 'Career', 'Put down the Gravewarden in Graveyard Shift', c => zmWardenDown(c.zmFeats), { p: 'rays', c: ['#120e1c', '#3a2a5a', '#d8c8ff', '#b070ff'], e: 'ui:skull', gold: true }),
+  card('zm-warden', 'Lantern Out', 'Zombies', 'Put down the Gravewarden in Graveyard Shift', c => zmWardenDown(c.zmFeats), { p: 'rays', c: ['#120e1c', '#3a2a5a', '#d8c8ff', '#b070ff'], e: 'ui:skull', gold: true }),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),
@@ -1352,7 +1365,28 @@ export function blankSave() {
     // Graveyard Shift feats (ROADMAP item 36): per map id [best round escaped on (0 none), Gravewarden put down (0/1)].
     // Appended; only ever goes up.
     zmFeats: {},
+    // Personal bests (the Trophy Case): st longest kill streak, lk longest gun kill (m), bp best battle royale placing
+    // (0 none yet), ex fastest extraction (seconds, 0 none yet). Appended; each only ever improves.
+    records: {},
   };
+}
+
+// The personal bests block: known keys, whole numbers in range; absent keys mean none yet.
+const RECORD_MAX = { st: 999, lk: 999, bp: 99, ex: 99999 };
+export function cleanRecords(raw) {
+  const out = {};
+  if (!isObj(raw)) return out;
+  for (const k of Object.keys(RECORD_MAX)) { const n = count(raw[k], RECORD_MAX[k]); if (n > 0) out[k] = n; }
+  return out;
+}
+// One match's bests into the save: m { streak, long, brPlace, exSecs }. Higher is better for st and lk, lower for bp
+// and ex. Returns the keys that improved. Mutates the save.
+export function recordBests(save, m = {}) {
+  const r = save.records ??= {}, fresh = [];
+  const up = (k, v) => { const n = count(v, RECORD_MAX[k]); if (n > 0 && n > (r[k] ?? 0)) { r[k] = n; fresh.push(k); } };
+  const down = (k, v) => { const n = count(v, RECORD_MAX[k]); if (n > 0 && (!r[k] || n < r[k])) { r[k] = n; fresh.push(k); } };
+  up('st', m.streak); up('lk', m.long); down('bp', m.brPlace); down('ex', m.exSecs);
+  return fresh;
 }
 
 // The Graveyard Shift record block: {mapId: rounds}, map ids as short ids, rounds 0..999.
@@ -1459,6 +1493,7 @@ export function sanitizeSave(raw) {
   s.zmBest = cleanZmBest(raw.zmBest);
   s.finishers = cleanFinisherPicks(raw.finishers);
   s.zmFeats = cleanZmFeats(raw.zmFeats);
+  s.records = cleanRecords(raw.records);
   return s;
 }
 
@@ -1558,7 +1593,9 @@ function packTail(s) {
   // Gravewarden), the same way. Trailing nothings are left off.
   const tail = [career, season, s.zmBest && Object.keys(s.zmBest).length ? s.zmBest : null,
     s.finishers && Object.keys(s.finishers).length ? s.finishers : null,
-    s.zmFeats && Object.keys(s.zmFeats).length ? s.zmFeats : null];
+    s.zmFeats && Object.keys(s.zmFeats).length ? s.zmFeats : null,
+    // [22] personal bests (the Trophy Case), the same way.
+    s.records && Object.keys(s.records).length ? s.records : null];
   while (tail.length && tail[tail.length - 1] === null) tail.pop();
   return tail;
 }
@@ -1600,6 +1637,7 @@ function unpack(a) {
     ...(a[19] && typeof a[19] === 'object' && !Array.isArray(a[19]) ? { zmBest: a[19] } : {}),
     ...(a[20] && typeof a[20] === 'object' && !Array.isArray(a[20]) ? { finishers: a[20] } : {}),
     ...(a[21] && typeof a[21] === 'object' && !Array.isArray(a[21]) ? { zmFeats: a[21] } : {}),
+    ...(a[22] && typeof a[22] === 'object' && !Array.isArray(a[22]) ? { records: a[22] } : {}),
   };
 }
 
@@ -2017,11 +2055,23 @@ export function rerollChallenge(state, id, now = new Date()) {
 
 // Counts what the local player did in one match, for the challenges. Pure, like ProTracker: feed onEvents(events,
 // view) every frame, then finish({won, place}) once. counts() is {stat: n}.
+// Feats (docs/UNLOCKS-AUDIT-2026-11-12.md, the feat emblems and the Trophy Case) are counted here too, as lifetime
+// tallies: ace (the whole enemy side alone in one Search and Destroy or Showdown round), streak10, finishers, long40 (a
+// gun kill from LONG_FEAT m), gf:flawless (Showdown won 6-0), inf:survived (an Infected clock survived), br:won / br:top5
+// / br:lone (won with every squadmate out) and the same for Rebound (rb:*). `best` holds this match's records: the
+// longest kill streak and the longest gun kill, in metres.
+export const LONG_FEAT = 40;
+const ROUND_RULES = new Set(['snd', 'gf']);
 export class ChallengeTally {
   constructor(localId) {
     this.id = localId;
     this.n = {};
     this.rules = null;
+    this.modeId = null;
+    this.best = { streak: 0, long: 0 };
+    this.run = 0;                // Kills since this player last died.
+    this.roundKills = 0;
+    this.team = null; this.scores = null; this.mates = 0; this.matesUp = 0;
   }
 
   add(stat, k = 1) { this.n[stat] = (this.n[stat] ?? 0) + k; }
@@ -2029,17 +2079,35 @@ export class ChallengeTally {
   onEvents(events, view) {
     const id = this.id;
     const mode = view?.modeId ?? view?.mode;
-    if (mode) this.rules = modeRules(mode);
+    if (mode) { this.rules = modeRules(mode); this.modeId = view?.modeId ?? this.modeId ?? mode; }
     let me = null;
+    if (view?.players) {
+      const self = view.players.find(p => p.id === id);
+      if (self) {
+        this.team = self.team;
+        const mates = view.players.filter(p => p.id !== id && p.team === self.team && !p.dummy);
+        this.mates = mates.length; this.matesUp = mates.filter(p => p.alive && !p.downed && !p.out).length;
+      }
+      if (view.scores) this.scores = view.scores.slice?.() ?? null;
+    }
     for (const e of events) {
       switch (e.t) {
         case 'kill': {
+          if (e.target === id && this.rules !== 'zm') this.run = 0;
+          if (this.rules === 'zm') {        // The horde: the mode's own tally only (see hordeView).
+            if (e.by === id && e.target !== id) { this.add('zm:kills'); if (e.head) this.add('zm:head'); }
+            break;
+          }
           if (e.assist === id) this.add('assists');
           if (e.by !== id || e.target === id) break;
           this.add('kills');
+          this.run++; this.roundKills++;
+          if (this.run > this.best.streak) this.best.streak = this.run;
           if (e.streak) { this.add('streakKills'); break; }
           if (e.equip) { if (LETHALS[e.equip]) this.add('equipKills'); break; }
           me ??= view?.players?.find(p => p.id === id) ?? {};
+          if (WEAPONS[e.weapon] && (e.dist ?? 0) > this.best.long) this.best.long = e.dist;
+          if ((e.dist ?? 0) >= LONG_FEAT) this.add('long40');
           const cat = WEAPON_CATEGORY[e.weapon];
           if (cat) this.add(`cat:${cat}`);
           this.add(`gun:${e.weapon}`);
@@ -2062,10 +2130,20 @@ export class ChallengeTally {
           else if (e.medal === 'flag_capture') { this.add('flagCaps'); this.add('captures'); }
           else if (e.medal === 'flag_return') this.add('flagReturns');
           else if (e.medal === 'carrier_kill') this.add('carrierKills');
+          else if (e.medal === 'streak10') this.add('streak10');
+          // Infected: alive when the clock ran out (the sim pays these to each survivor still standing).
+          else if (e.medal === 'survivor' || e.medal === 'last_stand') this.add('inf:survived');
+          break;
+        case 'fin': if (e.by === id && this.rules !== 'zm') this.add('finishers'); break;
+        case 'gf':
+          if (e.kind === 'go') this.roundKills = 0;
+          else if (e.kind === 'end') this.#ace(view);
           break;
         case 'slide': if (e.id === id) this.add('slides'); break;
         case 'throw': if (e.id === id) this.add('throws'); break;
         case 'snd': {
+          if (e.kind === 'go') this.roundKills = 0;
+          if (e.kind === 'end') this.#ace(view);
           // A Search and Destroy round won by this player's side (operator challenges read it from the lifetime tally).
           if (e.kind !== 'end' || e.winner == null) break;
           me ??= view?.players?.find(p => p.id === id) ?? {};
@@ -2077,14 +2155,32 @@ export class ChallengeTally {
     }
   }
 
-  finish({ won = false, place = null } = {}) {
+  // An ace: this round, this player alone took out as many as the other side fielded (two or more).
+  #ace(view) {
+    if (!ROUND_RULES.has(this.rules) || this.team == null) { this.roundKills = 0; return; }
+    const foes = (view?.players ?? []).filter(p => p.team !== this.team && !p.dummy).length;
+    if (foes >= 2 && this.roundKills >= foes) this.add('ace');
+    this.roundKills = 0;
+  }
+
+  // `brPlace`: a battle royale squad's placing (1 = won), from awards.js; null elsewhere.
+  finish({ won = false, place = null, brPlace = null } = {}) {
     const rules = this.rules ?? 'tdm';
     this.add('played');
     this.add(`played:${rules}`);
     if (won) { this.add('wins'); this.add(`won:${rules}`); }
     if (place !== null && place <= 3) { this.add('top3'); this.add(`top3:${rules}`); }
+    if (rules === 'br') {
+      const k = MODES[this.modeId]?.rebound ? 'rb' : 'br', at = won ? 1 : brPlace;
+      if (Number.isFinite(at) && at > 0 && at <= 5) this.add(`${k}:top5`);
+      if (at === 1) { this.add(`${k}:won`); if (this.mates > 0 && this.matesUp === 0) this.add(`${k}:lone`); }
+    }
+    if (rules === 'gf' && won && this.team != null && this.scores && (this.scores[1 - this.team] ?? 1) === 0) this.add('gf:flawless');
     return this.n;
   }
+
+  // This match's records: { streak, long (metres) }.
+  records() { return { streak: this.best.streak, long: Math.round(this.best.long) }; }
 
   counts() { return this.n; }
 }

@@ -164,6 +164,27 @@ test('weapon ladder counters: kills, kills while hurt, five-kill lives, multi-ki
 });
 
 /* ---------- Applying ---------- */
+test('Graveyard Shift: zombie kills move no mastery track, ladder or Pro step; time alive and throws still count', () => {
+  const { ProTracker } = P;
+  const m = new MasteryTracker(ME, { loadout: { operator: 'ghoul' } }), pro = new ProTracker(ME, ['ghost', 'scavenger', 'hardline']);
+  const zv = t => view(t, {}, { modeId: 'zm', mode: 'zm' });
+  m.onEvents([], zv(0)); pro.onEvents([], zv(0));
+  for (let i = 1; i <= 8; i++) {
+    const ev = [kill({ target: `z${i}`, head: true }), { t: 'hit', by: ME, target: `z${i}`, w: 'ar' }, { t: 'throw', id: ME, kind: 'frag', dist: 6 }];
+    m.onEvents(ev, zv(i * 0.2)); pro.onEvents(ev, zv(i * 0.2));
+  }
+  const g = m.finish({ won: false });
+  assert.equal(g.tracks.ghoul?.kills ?? 0, 0, 'operator kills');
+  assert.deepEqual(g.weapons, {}, 'ladder');
+  assert.equal(pro.raw.kills, 0, 'Pro kills'); assert.equal(pro.raw.hits, 0, 'Pro hits');
+  assert.ok(g.tracks.ghoul.secs > 1.4, `time alive counts (${g.tracks.ghoul?.secs})`);
+  assert.equal(g.tracks.frag.uses, 8, 'throws count');
+  // The same events in a team mode count.
+  const t = new MasteryTracker(ME, { loadout: { operator: 'ghoul' } });
+  t.onEvents([kill()], view(1, {}, { modeId: 'tdm' }));
+  assert.equal(t.finish({}).tracks.ghoul.kills, 1, 'a soldier counts');
+});
+
 test('tiers complete in order, pay XP and grant reward ids; a retuned goal never takes a tier back', () => {
   const s = blankSave();
   let r = applyMasteryGains(s, { tracks: { frag: { uses: 30, kills: 30, multi: 10 } } });

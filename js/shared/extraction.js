@@ -17,6 +17,7 @@ export const EX_UNLOCKS = [
 const BY_ID = new Map(EX_UNLOCKS.map(u => [u.id, u]));
 export const exUnlock = (kind, item) => BY_ID.get(`${kind}:${item}`) ?? null;
 export const BIG_HAUL = 4;          // Contracts in one extraction that count for Exfil Flare.
+export const CLEAN_HAUL = 4;        // Contracts banked, every one taken, for the Full Manifest feat emblem.
 
 // {value, goal, done, label} for one exclusive item against a save's lifetime counts.
 export function exUnlockStatus(u, life = {}) {
@@ -42,6 +43,8 @@ export function extractionPay(squad, { primary = null, operator = null } = {}) {
     life['ex:out'] = 1;
     if (banked.length) life['ex:contracts'] = banked.length;
     if (banked.length >= BIG_HAUL) life['ex:big'] = 1;
+    // A clean run (the Full Manifest feat emblem): every contract the squad took finished and banked, CLEAN_HAUL or more.
+    if (banked.length >= Math.max(CLEAN_HAUL, squad.taken ?? 0)) life['ex:clean'] = 1;
   } else lines.push(['Took part', EX.stayXp]);
   const lost = squad.extracted ? squad.pot ?? [] : [...(squad.banked ?? []), ...(squad.pot ?? [])];
   return { extracted: !!squad.extracted, lines, weaponXp: primary ? weaponXp : 0, opSecs: operator ? opSecs : 0, life, banked, lost };

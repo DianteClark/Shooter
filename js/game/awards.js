@@ -17,7 +17,7 @@ import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally, MasteryT
 import { landingOf, maxThrowRange } from '../sim/equipment.js';
 import { MAPS } from '../shared/map.js';
 import { FFA_TEAM } from '../shared/constants.js';
-import { isFfa, BR } from '../shared/modes.js';
+import { isFfa, isZm, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
 import { ZM, zmXp } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
@@ -59,6 +59,7 @@ export class MatchAwards {
     this.ranked = null;
     this.observers = [];
     this.result = null;
+    this.outAt = null;
   }
 
   observe(fn) { this.observers.push(fn); }
@@ -81,6 +82,16 @@ export class MatchAwards {
 
   #onKill(e, view) {
     this.kills++;
+    // Graveyard Shift: a zombie pays the mode's own XP lines and the gun's (capped) weapon XP, and counts for nothing
+    // else (progression.js hordeView): no gun kills, headshots or longshots for camo challenges, class goals or cards.
+    if (isZm(this.mode)) {
+      if (e.streak || e.equip) return;
+      if (e.head) this.headshots++;
+      const b = this.#bucket(e.weapon);
+      b.xp += WEAPON_XP.kill + (e.head ? WEAPON_XP.headshot : 0) + ((e.dist ?? 0) >= longshotDist(e.weapon) ? WEAPON_XP.longshot : 0)
+        + (view?.players?.find(p => p.id === this.localId)?.sliding ? WEAPON_XP.slide : 0) + (this.usedEquipment ? 0 : WEAPON_XP.clean);
+      return;
+    }
     // Weapon stats and camo challenges credit gunplay only; a sim kill's weapon is a gun id even for grenades.
     if (e.streak) { this.streakKills++; return; }
     if (e.equip) { this.equipKills++; return; }
@@ -102,6 +113,7 @@ export class MatchAwards {
     if (view.phase !== 'live' || !(dt > 0)) return;
     this.live += dt;
     const me = view.players?.find(p => p.id === this.localId);
+    if (me?.out && this.outAt == null) this.outAt = this.live;      // Extraction: lifted out (the fastest-extraction record).
     if (me?.alive && me.weapon) this.held[me.weapon] = (this.held[me.weapon] ?? 0) + dt;
   }
 
@@ -249,8 +261,10 @@ export class MatchAwards {
       // The feat itself is recorded by applyMatch (below), after it has taken the card list, so Lantern Out is stamped.
       zmFeat = escaped || warden ? { escaped: escaped ? zmObj.round : 0, boss: warden } : null;
       for (const b of Object.values(this.weapons)) b.xp = Math.min(ZM.weaponXpCap, Math.round(b.xp * ZM.weaponXp));
-      let rec = { best: survived, before: 0, fresh: false };
-      try { rec = Progress.recordZm?.(this.mapId, survived) ?? rec; } catch (err) { console.error('zm record', err); }
+      // The map's best round is recorded by applyMatch (below), after it has taken the card list, so the round cards
+      // are stamped; until then the record shown is the one the save had.
+      const was = Progress.zmBest?.(this.mapId) ?? 0;
+      const rec = { best: Math.max(was, survived), before: was, fresh: survived > was && survived > 0 };
       zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',
         escaped: escaped ? zmObj.round : 0, warden, bestEscape: Progress.zmFeats?.(this.mapId)?.escaped ?? 0, freshEscape: false, freshBoss: false };
     }
@@ -260,8 +274,9 @@ export class MatchAwards {
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
     // Challenges settle first so the XP they pay is part of this match's total. A failure here costs only them.
     let challenges = [], tallied = null;
+    const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
     try {
-      tallied = this.tally.finish({ won: exWon ?? won, place });
+      tallied = this.tally.finish({ won: exWon ?? won, place, brPlace });
       const settled = Challenges.apply(tallied);
       challenges = settled.moved;
       for (const period of ['daily', 'weekly']) {
@@ -281,11 +296,13 @@ export class MatchAwards {
     // Lifetime totals take the same counts the challenges do, plus where it was played and whether it was won.
     // Career totals for the leaderboards: kills and deaths as the scoreboard has them, a battle royale's placing, and
     // whether this player's squad got out of an extraction.
-    const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
     const career = { kills: zm ? 0 : me?.kills ?? this.kills, deaths: zm ? 0 : me?.deaths ?? 0, br: !!view?.br, place: brPlace, extracted: !!ex?.extracted };     // The horde stays off the K/D boards.
     const life = { ...(tallied ?? this.tally.counts()) };
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat });
+    // Personal bests for the Trophy Case (the horde's kills are not in the tally's, see hordeView).
+    const records = { ...this.tally.records(), brPlace, exSecs: ex?.extracted ? Math.max(1, Math.round(this.outAt ?? this.live)) : 0 };
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records, zmRounds: zm ? zm.survived : null });
+    if (zm && applied.zmRecord) Object.assign(zm, { best: applied.zmRecord.best, before: applied.zmRecord.before, fresh: applied.zmRecord.fresh });
     if (zm && applied.zmFeat) Object.assign(zm, { bestEscape: applied.zmFeat.escaped, freshEscape: applied.zmFeat.freshEscape, freshBoss: applied.zmFeat.freshBoss });
     if (ex) {
       // Exclusive unlock progress this match, and anything it opened.

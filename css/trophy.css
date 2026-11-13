@@ -1,0 +1,64 @@
+/* The Trophy Case (js/ui/trophy.js) and its way in from the service record. Phone first: two columns from 600 px,
+   the rarest unlocks in a row across the bottom; everything scrolls in one column below that. */
+#ui .menu[data-screen="trophy"] { gap: var(--sp-2); --menu-scrim: radial-gradient(110% 90% at 70% 0%, rgba(52,42,22,.95), rgba(16,20,26,.97) 70%); }
+.tc-wrap {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: grid; gap: var(--sp-3) var(--sp-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-areas: "done recs" "rare rare"; align-content: start;
+  padding-bottom: var(--sp-3);
+}
+.tc-done { grid-area: done; } .tc-recs { grid-area: recs; } .tc-rare { grid-area: rare; min-width: 0; }
+.tc-col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+#ui .tc-wrap h4 { display: flex; align-items: center; gap: 6px; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); margin: 2px 0 0; }
+#ui .tc-wrap h4 .ico { height: 14px; color: var(--c-sodium); }
+#ui .tc-wrap h4 small { margin-left: auto; font: inherit; color: var(--c-haze); opacity: .8; }
+.tc-total {
+  display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); background: var(--face-steel);
+  box-shadow: var(--bevel), var(--edge), inset 3px 0 0 var(--c-gold);
+}
+.tc-total b { font: 400 38px/1 var(--f-stencil); color: var(--c-gold); }
+.tc-total b small { font-size: 18px; }
+.tc-total span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+#ui .tc-total span small, #ui .tc-total em { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; font-style: normal; }
+.tc-bar { position: relative; display: block; height: 6px; background: rgba(231,234,228,.12); overflow: hidden; }
+.tc-bar > i { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; }
+.tc-total .tc-bar > i { background: var(--c-gold); }
+.tc-cat { display: flex; align-items: center; gap: var(--sp-3); padding: 7px var(--sp-3); background: rgba(16,20,26,.55); box-shadow: var(--edge); }
+.tc-cat > .ico { flex: none; height: 18px; color: var(--c-sodium); }
+.tc-cat span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+#ui .tc-cat span b { font: 400 13px/1 var(--f-body); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-cat em { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font: 400 16px/1 var(--f-stencil); font-style: normal; color: var(--c-chalk); min-width: 54px; }
+#ui .tc-cat em small { font: 400 10px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); font-variant-numeric: tabular-nums; }
+.tc-rec-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
+.tc-rec { display: flex; flex-direction: column; gap: 3px; padding: 7px var(--sp-2); background: rgba(16,20,26,.55); box-shadow: var(--edge); min-width: 0; }
+.tc-rec .ico { height: 16px; color: var(--c-sodium); }
+#ui .tc-rec b { font: 400 20px/1 var(--f-stencil); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .tc-rec small { font: 400 10px/1.15 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); text-transform: uppercase; }
+.tc-zm { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); }
+.tc-zm > div { display: flex; flex-direction: column; gap: 3px; padding: 6px var(--sp-2); background: rgba(24,18,34,.6); box-shadow: inset 0 0 0 1px rgba(176,112,255,.25); min-width: 0; }
+#ui .tc-zm b { font: 400 20px/1 var(--f-stencil); color: #d8d0f0; }
+#ui .tc-zm small { font: 400 10px/1.1 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-zm em { font: 400 9px/1 var(--f-plate); font-style: normal; letter-spacing: .04em; color: #7aff9a; text-transform: uppercase; }
+.tc-zm em.w { color: #d8c8ff; }
+.tc-rare-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-bottom: 4px; }
+.tc-tile {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 5px; width: 162px; min-height: 92px;
+  padding: 6px; background: rgba(16,20,26,.6); box-shadow: inset 0 0 0 1px rgba(255,214,89,.35); color: var(--c-chalk);
+}
+.tc-tile .tc-art { flex: 1; display: grid; place-items: center; min-height: 48px; }
+.tc-tile b { font: 400 11px/1.1 var(--f-plate); letter-spacing: .04em; text-transform: uppercase; text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-tile.k-emblem, .tc-tile.k-camo, .tc-tile.k-skin { width: 104px; }
+.tc-sw { display: block; width: 34px; height: 34px; transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(255,255,255,.4); }
+#ui .tc-none { font: 13px/1.3 var(--f-body); color: var(--c-haze); padding: var(--sp-2) 0; }
+@media (max-width: 600px) {
+  .tc-wrap { grid-template-columns: minmax(0, 1fr); grid-template-areas: "done" "recs" "rare"; }
+}
+@media (max-height: 400px) {
+  .tc-total b { font-size: 30px; }
+  .tc-cat { padding: 5px var(--sp-3); }
+  .tc-rec { padding: 5px var(--sp-2); }
+}
+
+/* The service record's way in: a header button beside Mastery, gold. */
+#ui .pf-trophy { margin-left: auto; }
+#ui .pf-trophy + .pf-mastery { margin-left: var(--sp-2); }
+#ui .pf-trophy .ico { color: var(--c-gold); }

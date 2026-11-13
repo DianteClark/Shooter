@@ -15,6 +15,7 @@
 //      ICON_IDS lists every id; ITEM_ICONS (id -> inner markup on the 32 grid) is kept for older callers.
 
 import { v10Icons } from './icons-v10.js';
+import { mapIcons } from './icons-maps.js';
 
 // ---- Geometry. Polygons are flat [x, y, x, y, ...] arrays. ----------------------------------------------------------
 
@@ -471,6 +472,8 @@ const SQUARE = {
   unknown: { f: [O(16, 16, 12.5)], h: [O(16, 16, 9)], a: [O(16, 16, 4.5)] },
 };
 
+Object.assign(SQUARE, mapIcons({ P, R, O, bar }));          // Every later map's icon (icons-maps.js).
+
 // Categories: each is its family's archetype, fitted to the square at a climb.
 const CATEGORY_WEAPON = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher', Melee: 'knife' };
 
@@ -482,6 +485,7 @@ const ALIAS = {
   tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry', ashgrove: 'map:ashgrove',
+  ...Object.fromEntries(['turnstile', 'overpass', 'downtown', 'oasis', 'canyon', 'ruins', 'canopy', 'riverbend', 'expedition', 'icebreaker'].map(m => [m, 'map:' + m])),
   'map:range': 'ui:aim', range: 'ui:aim',
   // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).
   'medal:hq_capture': 'medal:capture', hq_capture: 'medal:capture', 'medal:hq_destroy': 'medal:carrier_kill', hq_destroy: 'medal:carrier_kill',

@@ -13,6 +13,7 @@ import { esc, badgeMark, ROMAN, levelRequirement, swatchCss } from './widgets.js
 import { ico, header } from './yard.js';
 import { rollNumber } from './motion.js';
 import { masteryScreen, masteryTotals } from './mastery.js';
+import { trophyScreen, trophyTotals } from './trophy.js';
 import { playUi } from '../audio/audio.js';
 
 const KIND_LABEL = { rank: 'Rank icon', emblem: 'Emblem', camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator', pro: 'Pro perk', card: 'Calling card' };
@@ -84,7 +85,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     const hint = peaked ? (mp ? 'Master Prestige' : `Master at ${MAX_LEVEL}`) : lp.level >= MAX_LEVEL ? 'Prestige' : `Prestige at ${MAX_LEVEL}`;
     const frac = bar.maxed ? 1 : bar.into / bar.span;
     menu.el.innerHTML = `
-      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: masteryButton() })}
+      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: trophyButton() + masteryButton() })}
       <div class="pf">
         <div class="pf-card${can ? ' ready' : ''}" data-in="left">
           <div class="pf-badge">${badgeMark(p, 96, lp.master)}</div>
@@ -140,6 +141,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     pfCards: () => cardsSheet(menu, { onChange: () => onChange?.(), onClose: render }),
     pfBack: onBack,
     pfMastery: () => masteryScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
+    pfTrophy: () => trophyScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
     pfPrestigeView: () => prestigeScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }), onChange }),
     pfRename: onRename,
     pfSave: onSave,
@@ -153,6 +155,12 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
 function masteryButton() {
   const { done, of } = masteryTotals();
   return `<button class="btn pf-mastery" data-act="pfMastery">${ico('star')}<b>Mastery</b><small>${done}/${of}</small></button>`;
+}
+
+// The way into the Trophy Case (js/ui/trophy.js): how complete the collection is.
+function trophyButton() {
+  const { have, of } = trophyTotals();
+  return `<button class="btn pf-mastery pf-trophy" data-act="pfTrophy" aria-label="Trophy case">${ico('star')}<b>Trophy case</b><small>${Math.floor((have / Math.max(1, of)) * 100)}%</small></button>`;
 }
 
 // Big totals in the space of a tile: 9,870 stays as it is, 200,000 reads 200K, 3,400,000 reads 3.4M.
@@ -250,7 +258,7 @@ export function masterStampHtml(m, before = 0) {
 
 // Stamps for the rank rewards in the results reel: a new Master icon tier, a rank camo (every gun), the Master emblem.
 export function rankStamp(u) {
-  const rank = u.kind === 'rank', every = u.kind === 'camo' && u.every, emb = u.kind === 'emblem' && u.level;
+  const rank = u.kind === 'rank', every = u.kind === 'camo' && u.every, emb = u.kind === 'emblem' && (u.level || u.feat);
   if (!rank && !every && !emb) return null;
   const mark = rank ? `<span class="rx-mark">${rewardMark(u, 92)}</span>`
     : every ? `<span class="rx-swatch" style="background:${swatchCss(getCamo(u.id))}"></span>`

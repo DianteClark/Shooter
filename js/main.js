@@ -58,13 +58,14 @@ import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
 import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
 // Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
-import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
+import { MP_TAB_IDS, playlistsFor, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Recall } from './ui/recall.js';     // Remembered menu choices (QoL).
 import { NewDots } from './ui/newdots.js';    // QoL: dots on unlocks not yet seen.
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
+import { unlockSheet, setPlayNow } from './ui/unlocksheet.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -379,7 +380,7 @@ menu.on({
   titleEmotePlay: ({ i }) => {
     const e = Progress.emotes()[Number(i)];
     if (!e) return;
-    if (!e.unlocked) { menu.toast(`${e.name}: ${e.requirement}`, 'warn'); return; }
+    if (!e.unlocked) { unlockSheet(menu, 'emote', e.id); return; }
     const row = menu.el.querySelector('.ttl-emotes');
     if (row) row.hidden = true;
     if (!backdrop.emote(Number(i))) menu.toast(e.name);
@@ -1172,6 +1173,15 @@ function openMultiplayer() {
   app.customFrom = null;
   renderMp();
 }
+
+// An unlock sheet's Play now (js/ui/unlocksheet.js): Multiplayer opened on the playlist or mode where that unlock counts.
+setPlayNow(({ tab, playlist = null, modes = [] } = {}) => {
+  if (!MP_TAB_IDS.includes(tab)) return;
+  menu.overlay('');
+  if (!shortcutOk()) { menu.toast('Leave the room to start a match from here'); return; }
+  const name = (playlist ? playlistsFor(tab).find(p => p.id === playlist)?.name : MODES[modes[0]]?.name) ?? 'Multiplayer';
+  playShortcut({ tab, sel: { playlist, modes }, name });
+});
 
 function mpSel(tab = app.mp.tab) {
   return (app.mp.sels[tab] ??= defaultSelection(tab));

@@ -55,9 +55,11 @@ test('ids are unique in every unlock table', () => {
   assert.deepEqual(dupes(CHALLENGE_POOL.map(c => c.id)), [], 'daily and weekly pool');
   for (const def of SEASON_DEFS) assert.deepEqual(dupes(weeklyAll(def).flat().map(c => c.id)), [], `${def.id} weekly ids`);
   // Names a player sees side by side in one picker.
-  // Known, for the owner (docs/UNLOCKS-AUDIT-2026-11-12.md): the Nightjar rifle and the Nightjar operator share a name,
-  // so both Master cards read "Nightjar Master".
-  assert.deepEqual(dupes(CARDS.map(c => c.name)).filter(n => n !== 'Nightjar Master'), [], 'calling card names');
+  // The rifle once shared the Nightjar operator's name (both Master cards read "Nightjar Master"); it is the Lapwing now.
+  assert.deepEqual(dupes(CARDS.map(c => c.name)), [], 'calling card names');
+  assert.equal(WEAPONS.hushdmr.name, 'Lapwing', 'the rifle keeps its id under its new name');
+  assert.equal(CARDS.find(c => c.id === 'gun-hushdmr')?.name, 'Lapwing Master');
+  assert.equal(CARDS.find(c => c.id === 'mastery-nightjar')?.name.includes('Lapwing'), false);
   assert.deepEqual(dupes(ALL_EMBLEMS.map(e => e.name)), [], 'emblem names');
   assert.deepEqual(dupes(CAMOS.map(c => c.name)), [], 'camo names');
 });
@@ -205,7 +207,7 @@ function runMode(mode, seed) {
   const tallies = ids.map(id => new ChallengeTally(id));
   const pros = roster.map(r => new ProTracker(r.id, r.loadout?.perks ?? []));
   const masts = roster.map(r => new MasteryTracker(r.id, { loadout: r.loadout, bounced: () => true }));
-  const s = seen[mode] ??= { tally: {}, pro: {}, mastery: {}, ladder: {}, medals: {}, ex: {}, matches: 0, ended: 0 };
+  const s = seen[mode] ??= { tally: {}, pro: {}, mastery: {}, ladder: {}, medals: {}, ex: {}, matches: 0, ended: 0, best: { streak: 0, long: 0 } };
   const m = MODES[mode], span = m.rounds ? m.timeLimit * (m.scoreLimit * 2 - 1) : m.timeLimit;
   const limit = Math.min(QUICK && mode !== 'snd' && mode !== 'ctf' ? 420 : 1600, (span ?? 600) + 120);
   let view = null;
@@ -232,7 +234,10 @@ function runMode(mode, seed) {
       won = pay.extracted;
       for (const [key, n] of Object.entries(pay.life)) bump(s.ex, key, n);
     }
-    const counts = tallies[k].finish({ won, place: ended ? place : null });
+    const brPlace = view.br && me ? (won ? 1 : me.place || null) : null;
+    const counts = tallies[k].finish({ won, place: ended ? place : null, brPlace });
+    const rec = tallies[k].records();
+    s.best.streak = Math.max(s.best.streak, rec.streak); s.best.long = Math.max(s.best.long, rec.long);
     for (const [st, n] of Object.entries(counts)) bump(s.tally, st, n);
     for (const [st, n] of Object.entries(pros[k].raw)) bump(s.pro, st, n);
     const g = masts[k].finish({ won });
@@ -296,7 +301,8 @@ const lifeReach = key => {
 test('lifetime-tally unlocks (operators, emblems, calling cards) read stats the matches really count', () => {
   const out = [];
   for (const op of OPERATORS) if (op.unlock?.life) out.push(...lifeReach(op.unlock.life).map(x => `operator ${op.id}: ${x}`));
-  for (const e of ALL_EMBLEMS) if (e.rule?.life) out.push(...lifeReach(e.rule.life).map(x => `emblem ${e.id}: ${x}`));
+  // Feat emblems are checked below, with the bot-rare ones (a Showdown won 6-0) proved by synthetic matches.
+  for (const e of ALL_EMBLEMS) if (e.rule?.life && !e.feat) out.push(...lifeReach(e.rule.life).map(x => `emblem ${e.id}: ${x}`));
   for (const u of EX_UNLOCKS) out.push(...lifeReach(u.key).map(x => `${u.id}: ${x}`));
   // Calling cards read `life(...)` inside their rules: find the keys by calling each rule with a recording career.
   const asked = new Set();
@@ -351,6 +357,108 @@ test('weapon ladder and unlock challenges: their stats are counted', () => {
   for (const k of Object.keys(UNLOCK_CHALLENGES)) assert.ok(UNLOCK_CHALLENGES[k].label, k);
 });
 
+test('Graveyard Shift: zombie kills count only as the mode\'s own (zm:kills), never as kills, class, gun, Pro, mastery or ladder stats', () => {
+  const z = seen.zm;
+  assert.ok(z && z.matches > 0, 'zm was played');
+  assert.ok((z.tally['zm:kills'] ?? 0) > 0, 'the horde was killed (zm:kills)');
+  const killish = Object.keys(z.tally).filter(k => /^(kills|head|long|closeKills|slideKills|hipKills|assists|streakKills|equipKills|multi|streak3|streak5|cat:|gun:)/.test(k));
+  assert.deepEqual(killish, [], 'kill stats in the challenge tally');
+  const proKills = ['kills', 'woundedKills', 'lowKills', 'closeKills', 'swapKills', 'flankKills', 'equipKills', 'hits', 'assists', 'multi', 'streak3'].filter(k => (z.pro[k] ?? 0) > 0);
+  assert.deepEqual(proKills, [], 'Pro kill steps');
+  assert.deepEqual(Object.keys(z.mastery).filter(k => /\.(kills|hurtKills|head|closeKills|slideKills|upKills|suitKills|multi|assists|\w+Kills)$/.test(k)), [], 'mastery kill stats');
+  assert.deepEqual(z.ladder, {}, 'weapon ladder');
+  assert.deepEqual(z.medals, {}, 'medals');
+});
+
+// The rewards pass (docs/UNLOCKS-AUDIT-2026-11-12.md): the feat tallies and the new cards' stats.
+const FEAT_MODES = {
+  ace: ['snd', 'gf'], 'gf:flawless': ['gf'], 'inf:survived': ['inf', 'gwinf'], 'br:won': ['br', 'brduo', 'brsolo'], 'br:top5': ['br', 'brduo', 'brsolo'],
+  'br:lone': ['br', 'brduo'], 'rb:won': ['rb', 'rbduo'], 'rb:top5': ['rb', 'rbduo'], 'rb:lone': ['rb', 'rbduo'], 'zm:kills': ['zm'],
+};
+// Seen rarely or never in bot play (bots seldom survive Infected's clock, win a Showdown 6-0 or outlast a squad in a
+// battle royale cut at 1,600 s): reported, and proved by the synthetic matches below.
+const FEAT_RARE = new Set(['gf:flawless', 'inf:survived', 'br:won', 'br:lone', 'rb:won', 'rb:lone', 'long40', 'ace', 'br:top5']);
+test('feat tallies count only in their own modes, and never in Graveyard Shift', () => {
+  const bad = [], rare = [];
+  for (const [k, ok] of Object.entries(FEAT_MODES)) {
+    const w = where('tally', k);
+    for (const m of w) if (!ok.includes(m)) bad.push(`${k} counted in ${m}`);
+    if (!w.length) (FEAT_RARE.has(k) ? rare : bad).push(`${k} never counted`);
+  }
+  for (const k of ['streak10', 'finishers', 'long40', 'ace']) if ((seen.zm?.tally?.[k] ?? 0) > 0) bad.push(`${k} counted in zm`);
+  for (const k of ['streak10', 'finishers']) if (!anywhere('tally', k)) bad.push(`${k} never counted`);
+  if (!MODE_IDS.some(m => (seen[m]?.ex?.['ex:clean'] ?? 0) > 0)) rare.push('ex:clean never banked');
+  if (rare.length) console.log(`     bot-rare feats (proved synthetically below): ${rare.join(', ')}`);
+  const best = Object.fromEntries(MODE_IDS.map(m => [m, seen[m]?.best]));
+  console.log(`     longest bot kill ${Math.max(...Object.values(best).map(b => b?.long ?? 0))} m, best streak ${Math.max(...Object.values(best).map(b => b?.streak ?? 0))}; zm ${JSON.stringify(best.zm)}`);
+  assert.equal(best.zm?.streak ?? 0, 0, 'no streak record from the horde');
+  assert.deepEqual(bad, []);
+});
+
+test('feat tallies from synthetic matches: ace, Showdown 6-0, Infected survivor, BR and Rebound lone wins, long kills', () => {
+  const pl = (id, team, extra = {}) => ({ id, team, alive: true, x: 0, z: 0, ...extra });
+  const view = (modeId, players, extra = {}) => ({ t: 1, phase: 'live', modeId, mode: modeId, players, scores: [0, 0], ...extra });
+  // Showdown: both enemies in one round, then the match 6-0.
+  let t = new ChallengeTally('a');
+  let v = view('gf', [pl('a', 0), pl('b', 0), pl('x', 1), pl('y', 1)]);
+  t.onEvents([{ t: 'gf', kind: 'go' }, { t: 'kill', by: 'a', target: 'x', weapon: 'ar', dist: 10 }, { t: 'kill', by: 'a', target: 'y', weapon: 'ar', dist: 41 }, { t: 'gf', kind: 'end', winner: 0 }], v);
+  t.onEvents([], { ...v, scores: [6, 0] });
+  let n = t.finish({ won: true });
+  assert.equal(n.ace, 1, 'ace'); assert.equal(n['gf:flawless'], 1, 'flawless'); assert.equal(n.long40, 1, 'long40');
+  t = new ChallengeTally('a'); t.onEvents([], { ...v, scores: [6, 1] }); assert.equal(t.finish({ won: true })['gf:flawless'], undefined, 'not 6-1');
+  // An ace needs the whole side: one of two is not one.
+  t = new ChallengeTally('a'); t.onEvents([{ t: 'gf', kind: 'go' }, { t: 'kill', by: 'a', target: 'x', weapon: 'ar' }, { t: 'gf', kind: 'end' }], v); assert.equal(t.finish({}).ace, undefined, 'half a side');
+  // Search and Destroy ace across a 6 v 6.
+  const six = [0, 1, 2, 3, 4, 5].flatMap(i => [pl(`m${i}`, 0), pl(`e${i}`, 1)]);
+  t = new ChallengeTally('m0');
+  t.onEvents([{ t: 'snd', kind: 'go' }, ...[0, 1, 2, 3, 4, 5].map(i => ({ t: 'kill', by: 'm0', target: `e${i}`, weapon: 'smg' })), { t: 'snd', kind: 'end', winner: 0 }], view('snd', six));
+  assert.equal(t.finish({ won: true }).ace, 1, 'S&D ace');
+  // Infected: the survivor medal.
+  t = new ChallengeTally('a'); t.onEvents([{ t: 'medal', id: 'a', medal: 'survivor' }], view('inf', [pl('a', 0)])); assert.equal(t.finish({ won: true })['inf:survived'], 1, 'survivor');
+  // Battle royale: won with every squadmate out is a lone win; Rebound counts as Rebound.
+  for (const [mode, k] of [['br', 'br'], ['rb', 'rb']]) {
+    t = new ChallengeTally('a');
+    t.onEvents([], view(mode, [pl('a', 0), pl('b', 0, { alive: false }), pl('c', 0, { alive: false }), pl('x', 1, { alive: false })], { br: {} }));
+    n = t.finish({ won: true, brPlace: 1 });
+    assert.ok(n[`${k}:won`] === 1 && n[`${k}:top5`] === 1 && n[`${k}:lone`] === 1, `${mode}: ${JSON.stringify(n)}`);
+    assert.equal(n[`${k === 'br' ? 'rb' : 'br'}:won`], undefined, `${mode} only`);
+  }
+  t = new ChallengeTally('a'); t.onEvents([], view('br', [pl('a', 0), pl('b', 0)], { br: {} })); n = t.finish({ won: false, brPlace: 4 });
+  assert.ok(n['br:top5'] === 1 && !n['br:won'], 'a fourth place is a top five');
+  // Records: the run of kills resets on a death; the horde adds nothing.
+  t = new ChallengeTally('a');
+  t.onEvents([1, 2, 3].map(i => ({ t: 'kill', by: 'a', target: `x${i}`, weapon: 'ar', dist: 12 })), view('tdm', [pl('a', 0)]));
+  t.onEvents([{ t: 'kill', by: 'x', target: 'a', weapon: 'ar' }, { t: 'kill', by: 'a', target: 'y', weapon: 'ar', dist: 30 }], view('tdm', [pl('a', 0)]));
+  assert.deepEqual(t.records(), { streak: 3, long: 30 });
+  t = new ChallengeTally('a'); t.onEvents([{ t: 'kill', by: 'a', target: 'z1', weapon: 'ar', dist: 60 }, { t: 'fin', by: 'a', target: 'z1' }], view('zm', [pl('a', 0)]));
+  assert.deepEqual(t.records(), { streak: 0, long: 0 }); assert.equal(t.finish({}).finishers, undefined, 'no finisher count from the horde');
+  // Extraction: every contract the squad took, four or more, is a clean run.
+  assert.equal(extractionPay({ extracted: true, banked: [1, 2, 3, 4].map(() => ({ type: 'intel', tier: 1 })), pot: [], taken: 4 }).life['ex:clean'], 1, 'clean run');
+  assert.equal(extractionPay({ extracted: true, banked: [1, 2, 3, 4].map(() => ({ type: 'intel', tier: 1 })), pot: [], taken: 6 }).life['ex:clean'], undefined, 'contracts dropped');
+});
+
+test('every new calling card and feat emblem reads a stat the game counts, in its own mode', () => {
+  const out = [];
+  const newCards = CARDS.filter(c => /^(map-.+-[23]|modes-|zm-(escape|map))/.test(c.id) || (/^map-/.test(c.id) && !['railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'harvest'].includes(c.id.slice(4))));
+  assert.ok(newCards.length >= 95, `${newCards.length} new cards`);
+  for (const c of newCards) {
+    assert.ok(c.art?.tier || c.group === 'Zombies', `${c.id} tier`);
+    assert.ok(c.play?.tab, `${c.id} has a Play now`);
+    const m = /^modes-(\w+)-(\d)$/.exec(c.id);
+    if (m) {
+      const stat = { br: 'br:', rb: 'rb:', ex: 'ex:out', zm: null }[m[1]] ?? `won:${MODES[m[1]].rules}`;
+      // Quick plays each mode once and cuts it at 420 s, before most are won: there the mode is only shown to be played.
+      if (stat && stat.startsWith('won:')) out.push(...lifeReach(QUICK ? stat.replace('won:', 'played:') : stat).map(x => `${c.id}: ${x}`));
+    }
+  }
+  for (const e of ALL_EMBLEMS.filter(e => e.feat)) {
+    assert.ok(e.play?.tab && e.rule.label, `${e.id} play and label`);
+    if (e.rule.life && !FEAT_RARE.has(e.rule.life) && !e.rule.life.startsWith('ex:')) out.push(...lifeReach(e.rule.life).map(x => `${e.id}: ${x}`));
+  }
+  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 12, 'twelve feat emblems');
+  assert.deepEqual(out, []);
+});
+
 /* ================= D. Generators ================= */
 test('120 days of dailies and 18 weeks of weeklies: three a set, no family twice, nothing unreachable', () => {
   const start = new Date(2026, 10, 12);
@@ -402,14 +510,26 @@ const diff = (a, b) => [...b].filter(x => !a.has(x));
 const TALLY_STATS = [...new Set(MODE_IDS.flatMap(m => Object.keys(seen[m]?.tally ?? {})))];
 const EX_KEYS = [...new Set(EX_UNLOCKS.map(u => u.key)), 'ex:out'];
 const MAP_LIST = Object.keys(MAPS).filter(m => m !== 'range' && m !== 'brtest');
+// The rewards pass: every map's plays and wins (the map cards' gold tier is 75 wins), every rule set's wins, and every
+// feat tally, so every new card and feat emblem opens over the career; Graveyard Shift's maps get round 31 and an escape
+// on round 26 through applyMatch (matches 84-87), so their cards are stamped too.
+const FEAT_KEYS = ['ace', 'streak10', 'finishers', 'long40', 'gf:flawless', 'inf:survived', 'br:won', 'br:top5', 'br:lone', 'rb:won', 'rb:top5', 'rb:lone', 'ex:clean', 'ex:out', 'zm:kills'];
+const RULES = [...new Set(MODE_IDS.map(modeRules))];
+const ZM_MAPS = MODES.zm.maps;
 function bigMatch(i) {
   const life = Object.fromEntries([...TALLY_STATS, ...EX_KEYS].map(k => [k, k.startsWith('ex:') ? 2 : 8]));
+  for (const m of MAP_LIST) { life[`map:${m}`] = 2; life[`mapwon:${m}`] = 1; }
+  for (const r of RULES) life[`won:${r}`] = Math.max(life[`won:${r}`] ?? 0, 1);
+  for (const k of FEAT_KEYS) life[k] = Math.max(life[k] ?? 0, 1);
+  const zmAt = i >= 84 && i < 88 ? ZM_MAPS[i - 84] : null;
   const weapons = Object.fromEntries(WEAPON_IDS.filter(w => w !== GOLDEN_ID).map(w => [w, { xp: 9000, kills: 40, head: 12, long: 6, slide: 8, clean: 16 }]));
   const pro = Object.fromEntries(PERK_IDS.map(p => [p, Object.fromEntries((PRO_CHALLENGES[p] ?? []).map(c => [c.stat, Math.ceil(c.goal / 4)]))]));
   const tracks = Object.fromEntries(MASTERY_TRACKS.map(t => [t.id, Object.fromEntries(t.stats.map(st => [st, Math.ceil(Math.max(...t.tiers.map(c => (c.stat === st ? c.goal : 0)), 1) / 6)]))]));
   const ladder = Object.fromEntries(WEAPON_IDS.map(w => [w, { kills: 60, hurt: 6, multi: 3, run5: 1 }]));
-  return { xp: 220000, weapons, pro, mastery: { tracks, weapons: ladder }, life, mapId: MAP_LIST[i < 80 ? i % 8 : i % MAP_LIST.length], won: true,
-    career: { kills: 40, deaths: 20, br: false, place: null, extracted: true }, extracted: true, zmFeat: i === 7 ? { escaped: 21, boss: true } : null };
+  return { xp: 220000, weapons, pro, mastery: { tracks, weapons: ladder }, life, mapId: zmAt ?? MAP_LIST[i < 80 ? i % 8 : i % MAP_LIST.length], won: true,
+    career: { kills: 40, deaths: 20, br: false, place: null, extracted: true }, extracted: true,
+    zmFeat: i === 7 ? { escaped: 21, boss: true } : zmAt ? { escaped: 26, boss: false } : null, zmRounds: zmAt ? 31 : null,
+    records: { streak: 5 + (i % 20), long: 20 + (i % 30), brPlace: 1 + (i % 7), exSecs: 600 - i } };
 }
 
 const stamped = new Map();      // 'kind:id' -> matches it was stamped in
@@ -425,12 +545,15 @@ test('a whole career: every unlock that opens is stamped on the results once, an
       if (u.kind === 'mastery') { for (const x of u.rewards) if (x.kind === 'card' && !x.had) keys.push(`card:${x.id.slice(5)}`); keys.push(`mastery:${u.id}`); continue; }
       if (u.kind === 'camo') keys.push(`camo:${u.weapon ?? 'all'}/${u.id}`);
       else if (u.kind === 'attachment') keys.push(`attachment:${u.weapon}/${u.id}`);
+      else if (u.kind === 'emblem' && u.feat) keys.push(`emblem:${u.id}`);
       else keys.push(`${u.kind}:${u.id}`);
     }
     for (const k of keys) { if (stamped.has(k)) twice.push(`${k} (matches ${stamped.get(k)} and ${i})`); stamped.set(k, i); }
     for (const id of diff(before.card, after.card)) if (!keys.includes(`card:${id}`)) silent.push(`card ${id}`);
     for (const id of diff(before.operator, after.operator)) if (!keys.includes(`operator:${id}`)) silent.push(`operator ${id}`);
     for (const id of diff(before.pro, after.pro)) if (!keys.includes(`pro:${id}`)) silent.push(`pro ${id}`);
+    // Feat emblems are stamped like cards (Champion excepted: ranked moves after the match is applied, and never here).
+    for (const id of diff(before.emblem, after.emblem)) if (EMB.getEmblem(id)?.feat && !keys.includes(`emblem:${id}`)) silent.push(`emblem ${id}`);
     for (const id of diff(before.gear, after.gear)) if (!keys.includes(id)) silent.push(`gear ${id}`);
     for (const id of diff(before.attachment, after.attachment)) if (!keys.includes(`attachment:${id}`)) silent.push(`attachment ${id}`);
     for (const id of diff(before.camo, after.camo)) {
@@ -458,7 +581,8 @@ test('after that career everything not tied to a season is open, in every menu',
   assert.deepEqual(camoLocked.slice(0, 20), [], `camos (${camoLocked.length})`);
   const skinLocked = SKINS.filter(s => !s.season && !o.skin.has(s.id)).map(s => s.id);
   assert.deepEqual(skinLocked, [], 'skins');
-  assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
+  // Champion (a feat emblem) is the best ranked division ever reached: checked with a ranked save below.
+  assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && e.id !== 'feat-champion' && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
   assert.deepEqual(FINISHERS.filter(f => !f.unlock.season && !o.finisher.has(f.id)).map(f => f.id), [], 'finishers');
   assert.deepEqual(EMOTES.filter(f => !f.unlock.season && !o.emote.has(f.id)).map(f => f.id), [], 'emotes');
   assert.deepEqual(Object.entries(GEAR_KINDS).flatMap(([k, t]) => Object.keys(t).map(id => `${k}:${id}`)).filter(k => !o.gear.has(k)), [], 'gear');
@@ -500,7 +624,7 @@ test('SY4 code round trip: every unlock and every pick survives, and the code re
   // Graveyard Shift records ride the code too: the best round and the feats (Lantern Out's Gravewarden was match 7).
   const picks = () => ({ card: Progress.card, emblem: Progress.emblem(), camo: Progress.camo('ar'), skin: Progress.operatorSkin('anvil'), fin: Progress.finisherFor('trooper'),
     zm: [Progress.zmBest('ashgrove'), JSON.stringify(Progress.zmFeats(MAP_LIST[7]))] });
-  const want = opened(), wantPicks = picks();
+  const want = opened(), wantPicks = picks(), wantRecords = Progress.records();
   const code = Progress.exportCode();
   assert.ok(code.startsWith('SY4.'));
   const blank = encodeSave(P.blankSave());
@@ -513,6 +637,27 @@ test('SY4 code round trip: every unlock and every pick survives, and the code re
   assert.equal(Progress.exportCode(), code, 'byte for byte');
   const back = decodeSave(code);
   assert.ok(back.ok);
+  // The personal bests ride the code (tail [22]); a code from before them imports and re-exports unchanged.
+  assert.ok(Object.keys(back.save.records ?? {}).length === 4, `records in the code: ${JSON.stringify(back.save.records)}`);
+  const old = { ...back.save }; delete old.records;
+  const oldCode = encodeSave({ ...old, records: {} });
+  assert.ok(Progress.importCode(oldCode).ok, 'a code without records imports');
+  assert.equal(Progress.exportCode(), oldCode, 'and re-exports byte for byte');
+  assert.equal(Progress.records().streak, 0, 'no records from it');
+  assert.ok(Progress.importCode(code).ok);
+  assert.equal(Progress.records().streak, wantRecords.streak, 'records back');
+});
+
+test('Champion (feat emblem): the best ranked division ever reached, from a past season or this one', () => {
+  const champ = ALL_EMBLEMS.find(e => e.id === 'feat-champion');
+  assert.equal(EMB.emblemUnlocked(champ, { ...C.careerNow(), rankedBest: 5 }).unlocked, false, 'Master is not Champion');
+  assert.equal(EMB.emblemUnlocked(champ, { ...C.careerNow(), rankedBest: 6 }).unlocked, true, 'Champion');
+  const code = Progress.exportCode(), s = decodeSave(code).save;
+  s.season = { ...s.season, rr: { ...(s.season?.rr ?? {}), S1: 6 } };
+  assert.ok(Progress.importCode(encodeSave(s)).ok);
+  assert.equal(Progress.records().rankedBest, 6, 'a past season paid Champion');
+  assert.ok(C.emblems().find(x => x.emblem.id === 'feat-champion')?.unlocked, 'the emblem shows earned');
+  assert.ok(Progress.importCode(code).ok);
 });
 
 test('mastery rewards: every skin and card a track grants shows up once its tier is reached', () => {
@@ -535,6 +680,43 @@ test('daily and weekly challenges: a real match tally moves them by exactly what
     assert.equal(after, Math.min(c.goal, before + 1), c.id);
     if (before < c.goal) assert.ok(out.moved.some(m => m.id === c.id), `${c.id} reported`);
   }
+});
+
+test('Graveyard Shift through MatchAwards: weapon XP (capped) and the mode\'s records move; kills, challenges, camos and boards do not', async () => {
+  const { MatchAwards } = await import('../js/game/awards.js');
+  const { ZM } = await import('../js/shared/zombies.js');
+  Challenges.reset();
+  const now = new Date();
+  const roster = buildRoster([], { mode: 'zm', mapId: 'neon', seed: 4 });
+  const sim = new Sim({ roster, map: 'neon', seed: 4, mode: 'zm' });
+  const me = roster.find(r => !r.zk && !r.isZombie && r.loadout);
+  const aw = new MatchAwards({ localId: me.id, team: me.team, loadout: me.loadout });
+  const lifeBefore = Progress.lifetime(), boardBefore = Progress.careerCard();
+  const statsBefore = Object.fromEntries(WEAPON_IDS.map(w => [w, Progress.weaponStats(w)]));
+  const chalBefore = JSON.stringify(Challenges.all(now));
+  let view = null;
+  for (let i = 0; i < 300 * SIM_HZ && sim.phase !== 'ended'; i++) {
+    sim.step(1 / SIM_HZ);
+    view = sim.getView(me.id);
+    aw.onEvents(sim.drainEvents(), view);
+  }
+  const r = aw.finish(view);
+  assert.ok(r.zm && aw.kills > 0, `the horde was killed (${aw.kills})`);
+  for (const w of WEAPON_IDS) {
+    const a = statsBefore[w], b = Progress.weaponStats(w);
+    for (const k of ['kills', 'head', 'long', 'slide', 'clean']) assert.equal(b[k] ?? 0, a[k] ?? 0, `${w} ${k}`);
+  }
+  assert.ok(r.weapons.some(w => w.xpGained > 0) && r.weapons.every(w => w.xpGained <= ZM.weaponXpCap), 'weapon XP, capped');
+  const life = Progress.lifetime();
+  for (const k of Object.keys(life)) if (/^(kills|head|long|cat:|gun:|hipKills|closeKills|slideKills)/.test(k)) assert.equal(life[k], lifeBefore[k], `lifetime ${k}`);
+  assert.ok((life['zm:kills'] ?? 0) > (lifeBefore['zm:kills'] ?? 0), 'lifetime zm:kills');
+  assert.equal(Progress.careerCard().k, boardBefore.k, 'board kills');
+  const chal = Challenges.all(now);
+  for (const c of [...chal.daily, ...chal.weekly]) if (!/^played|^wins|^mode\.zm/.test(c.stat ?? '') && !/played/.test(P.getChallenge(c.id).stat)) {
+    const was = JSON.parse(chalBefore)[c.period].find(x => x.id === c.id);
+    assert.equal(c.value, was.value, `${c.id} (${P.getChallenge(c.id).stat}) moved in Graveyard Shift`);
+  }
+  assert.equal(r.unlocks.filter(u => u.kind === 'camo' || u.kind === 'operator' || u.kind === 'pro').length, 0, 'no camo, operator or Pro unlock from the horde');
 });
 
 /* ================= Report ================= */

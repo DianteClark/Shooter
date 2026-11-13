@@ -66,7 +66,7 @@ import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { dropCareerMemo } from './cardbook.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
-import { getEmblem, emblemUnlocked } from './emblems.js';
+import { getEmblem, emblemUnlocked, FEAT_EMBLEMS } from './emblems.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor, unlockMet } from '../shared/attachments.js';
 import {
@@ -80,7 +80,7 @@ import {
   MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
   recordCareer, careerWeek, masteryCompleted, blankCareer,
-  recordZmBest, recordZmFeat,
+  recordZmBest, recordZmFeat, recordBests,
   masterOf, masterProgress, prestigeRankRewards, masterRewardsBetween, nextMasterReward, MASTER_REWARDS,
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
@@ -248,9 +248,16 @@ function gatedKits(loadout) {
   return out;
 }
 
+// The best ranked division ever reached (0 Bronze .. 6 Champion; -1 never placed): past seasons' paid divisions and this
+// season's peak.
+function rankedBest() {
+  const rk = data.season?.rk;
+  return Math.max(-1, ...Object.values(data.season?.rr ?? {}).map(v => v | 0), rk && placed(rk) ? division(Math.max(rk.peak ?? 0, rk.sr ?? 0)).div : -1);
+}
+
 function careerStats() {
   const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id),
-    zmFeats: data.zmFeats ?? {} };
+    zmFeats: data.zmFeats ?? {}, zmBest: data.zmBest ?? {}, records: data.records ?? {}, rankedBest: rankedBest() };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
 }
@@ -532,6 +539,12 @@ export const Progress = {
     return r;
   },
   zmFeats(mapId) { const f = data.zmFeats?.[mapId] ?? [0, 0]; return { escaped: f[0] ?? 0, boss: !!f[1] }; },
+  // Personal bests (the Trophy Case): { streak, long (m), brPlace (0 none), exSecs (0 none), rankedBest (-1 never) }.
+  records() { const r = data.records ?? {}; return { streak: r.st ?? 0, long: r.lk ?? 0, brPlace: r.bp ?? 0, exSecs: r.ex ?? 0, rankedBest: rankedBest() }; },
+  zmBestAll() { return { ...(data.zmBest ?? {}) }; },
+  // What finisher, emote and gear unlocks are judged on: { level (peak), opTier (best operator mastery tier), season }.
+  unlockCtx() { return finisherCtx(); },
+  zmFeatsAll() { return { ...(data.zmFeats ?? {}) }; },
   skins(op) {
     const got = masteryRewards(data);
     return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));
@@ -758,11 +771,15 @@ export const Progress = {
   // `career` ({ kills, deaths, won, br, place, extracted }, see recordCareer) feeds the leaderboard totals; `extracted`
   // (extraction mode) also counts the save's lifetime `extractions`.
   // `zmFeat` ({escaped, boss}, Graveyard Shift) is recorded here, after the card list is taken, so Lantern Out is stamped.
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null }) {
+  // `records` ({ streak, long, brPlace, exSecs }) are this match's personal bests for the Trophy Case (recordBests).
+  // `zmRounds` (Graveyard Shift) is the rounds survived: the map's best round is recorded here, after the card list is
+  // taken, so the round cards are stamped (the result carries `zmRecord`: { best, before, fresh }).
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null, records = null, zmRounds = null }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel, masterBefore = masterNow();
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
     const cardsBefore = new Set(cardsEarned(cardCareer()));
+    const featsBefore = new Set(FEAT_EMBLEMS.filter(e => emblemUnlocked(e, looksCareer()).unlocked).map(e => e.id));
     const proBefore = PERK_IDS.map(id => [id, proStatus(id, data.pro, data.proDone)]);
     const goldenBefore = goldenEarned();
     const gatedBefore = openGated();
@@ -770,6 +787,8 @@ export const Progress = {
     // Mastery first, so the ladder only counts for guns that were already level 30 when the match began.
     const tiers = applyMasteryGains(data, mastery ?? {});
     const feat = zmFeat && mapId ? recordZmFeat(data, mapId, zmFeat) : null;
+    const bests = records ? recordBests(data, records) : [];
+    const zmRecord = zmRounds != null && mapId ? recordZmBest(data, mapId, zmRounds) : null;
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
@@ -805,7 +824,10 @@ export const Progress = {
     // second "New calling card" (`had`).
     const ups = tiers.ups.map(u => (u.rewards.some(r => r.kind === 'card' && cardsBefore.has(r.id.slice(5)))
       ? { ...u, rewards: u.rewards.map(r => (r.kind === 'card' && cardsBefore.has(r.id.slice(5)) ? { ...r, had: true } : r)) } : u));
-    unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks);
+    // Feat emblems (js/ui/emblems.js) earned this match, stamped like the cards.
+    const featUnlocks = FEAT_EMBLEMS.filter(e => !featsBefore.has(e.id) && emblemUnlocked(e, looksCareer()).unlocked)
+      .map(e => ({ kind: 'emblem', id: e.id, name: e.name, req: e.rule.label, feat: true }));
+    unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks, ...featUnlocks);
     // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
     // cards are already in cardUnlocks, so they are not stamped twice).
     const masterAfter = masterNow();
@@ -844,6 +866,8 @@ export const Progress = {
       proProgress,
       mastery: tiers.moved,
       zmFeat: feat,
+      zmRecord,
+      bests,
     };
   },
 

@@ -27,6 +27,8 @@ import { setCareerExtras, careerExtras } from './cardbook.js';
 import { getSkin, skinsFor, skinUnlock, baseSkin, isGrantSkin, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice, OPERATORS } from './operators.js';
 import { seasonAt } from '../shared/seasons.js';
 import { EMBLEMS, ALL_EMBLEMS, getEmblem, cleanEmblem, emblemUnlocked, emblemHtml } from './emblems.js';
+import { REWARD_PATTERNS, TIER_FRAME, tierMarks } from './cardart.js';
+import { unlockSheet } from './unlocksheet.js';
 
 export { getCard, getSkin, skinsFor, getEmblem };
 
@@ -50,6 +52,7 @@ setCareerExtras(() => {
     cats, masteredIn, masteredSet, mastered: masteredSet.size, catSize: CAT_SIZE, camoOn,
     chal: w => { const l = Progress.challenges(w); return [l.filter(c => c.done).length, l.length]; },
     life: Progress.lifetime?.() ?? {}, granted: id => !!Progress.hasReward?.(id),
+    zmBest: Progress.zmBestAll?.() ?? {}, zmFeats: Progress.zmFeatsAll?.() ?? {}, rankedBest: Progress.records?.().rankedBest ?? -1,
   };
 });
 export const careerNow = () => careerExtras();
@@ -510,6 +513,8 @@ const PATTERNS = {
   },
 };
 
+Object.assign(PATTERNS, REWARD_PATTERNS);     // Every map, the later modes and Graveyard Shift (js/ui/cardart.js).
+
 const CUT = 10;
 const HOUSE = `${CUT},0 ${W},0 ${W},${H - CUT} ${W - CUT},${H} 0,${H} 0,${CUT}`;
 const ground = new Map();       // Card id -> SVG ground markup, drawn once.
@@ -540,14 +545,17 @@ function artOf(card) {
 function groundSvg(card) {
   let s = ground.get(card.id);
   if (s) return s;
-  const { p, c, gold } = artOf(card);
+  const { p, c, gold, tier } = artOf(card);
   const r = seeded(card.id);
-  // Ground, the pattern, a dark wash behind the text, and the frame (gold for Pro and mastery).
+  // Ground, the pattern, a dark wash behind the text, and the frame (gold for Pro and mastery; a tiered card's frame is
+  // its tier's bronze, silver or gold, with its pips in the corner).
+  const frame = tier ? TIER_FRAME[tier] : gold ? '#ffd659' : 'rgba(231,234,228,.28)';
   s = `<svg class="cc-bg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
     + poly([[0, 0], [W, 0], [W, H], [0, H]], c[0]) + (PATTERNS[p] ?? PATTERNS.hazard)(c, r)
     + poly([[60, 0], [215, 0], [185, H], [60, H]], c[0], ' opacity=".55"')
-    + `<polygon points="${HOUSE}" fill="none" stroke="${gold ? '#ffd659' : 'rgba(231,234,228,.28)'}" stroke-width="${gold ? 4 : 2}"/>`
-    + (gold ? `<polygon points="${CUT + 4},4 ${W - 4},4 ${W - 4},${H - CUT - 2} ${W - CUT - 2},${H - 4} 4,${H - 4} 4,${CUT + 2}" fill="none" stroke="#ffd659" stroke-width="1" opacity=".45"/>` : '')
+    + `<polygon points="${HOUSE}" fill="none" stroke="${frame}" stroke-width="${gold ? 4 : tier ? 3 : 2}"/>`
+    + (gold ? `<polygon points="${CUT + 4},4 ${W - 4},4 ${W - 4},${H - CUT - 2} ${W - CUT - 2},${H - 4} 4,${H - 4} 4,${CUT + 2}" fill="none" stroke="${frame}" stroke-width="1" opacity=".45"/>` : '')
+    + (tier ? tierMarks(tier) : '')
     + '</svg>';
   ground.set(card.id, s);
   return s;
@@ -643,14 +651,14 @@ export function cardsSheet(menu, { onClose, onChange, tab = 'cards' } = {}) {
     csGroup: ({ g }) => { group = g; render(); },
     csPick: ({ id }) => {
       const card = getCard(id);
-      if (!Progress.setCard(id)) { menu.toast(`${card.name}: ${card.req}`); return; }
+      if (!Progress.setCard(id)) { unlockSheet(menu, 'card', card.id); return; }
       onChange?.(id);
       render();
       pop(menu.overlayEl.querySelector('.cs-now .ccard'));
     },
     esPick: ({ id }) => {
       const e = getEmblem(id);
-      if (!setEmblem(e ? e.id : null)) { menu.toast(`${e.name}: ${emblemUnlocked(e, careerNow()).requirement}`); return; }
+      if (!setEmblem(e ? e.id : null)) { unlockSheet(menu, 'emblem', e.id); return; }
       onChange?.(id);
       render();
       pop(menu.overlayEl.querySelector('.es-now'));

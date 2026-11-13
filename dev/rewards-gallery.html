@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- The rewards pass at a glance (docs/UNLOCKS-AUDIT-2026-11-12.md): every map, mode and Graveyard Shift calling card
+     and every feat emblem, earned and locked. Serve the repo (python3 -m http.server) and open dev/rewards-gallery.html;
+     ?only=maps|modes|zombies|emblems narrows it. dev/ui-trophy-test.py screenshots it. -->
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="../css/game.css">
+<style>
+  body { background: #0b0e12; color: #e7eae4; padding: 12px; overflow: auto; height: auto; position: static; }
+  h2 { font: 14px sans-serif; margin: 14px 0 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .em { display: inline-flex; flex-direction: column; align-items: center; width: 92px; font: 11px sans-serif; gap: 4px; text-align: center; }
+</style></head><body>
+<div id="out"></div>
+<script type="module">
+  globalThis.localStorage.clear?.();
+  const { CARDS } = await import('../js/shared/progression.js');
+  const C = await import('../js/ui/cards.js');
+  const E = await import('../js/ui/emblems.js');
+  const only = new URLSearchParams(location.search).get('only');
+  const groups = [['maps', c => /^map-/.test(c.id)], ['modes', c => /^modes-(?!zm)/.test(c.id)], ['zombies', c => c.group === 'Zombies']];
+  let html = '';
+  for (const [g, f] of groups) {
+    if (only && only !== g) continue;
+    html += `<h2>${g}</h2><div class="row">${CARDS.filter(f).map(c => C.cardHtml(c.id, { size: 300, sub: c.req })).join('')}</div>`;
+  }
+  if (!only || only === 'emblems') {
+    html += `<h2>feat emblems</h2><div class="row">${E.FEAT_EMBLEMS.map(e => `<span class="em">${E.emblemSvg(e.id, 64)}<b>${e.name}</b><small>${e.rule.label ?? ''}</small></span>`).join('')}</div>`;
+    html += `<h2>feat emblems 16 px</h2><div class="row">${E.FEAT_EMBLEMS.map(e => E.emblemHtml(e.id, { size: 16 })).join('')}</div>`;
+  }
+  if (only === 'locked') html += `<h2>locked</h2><div class="row">${CARDS.filter(c => /^(map|modes)-/.test(c.id)).slice(0, 12).map(c => C.cardHtml(c.id, { size: 228, locked: true, sub: c.req })).join('')}</div>`;
+  document.getElementById('out').innerHTML = html;
+  document.body.dataset.ready = '1';
+</script></body></html>
