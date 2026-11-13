@@ -151,3 +151,9 @@ on every push, keep 2% of weekly usage for bugs.
     read from total XP, icon tiers every 100, cards, camos and an emblem on the way); Prestige view and reveal. docs/PRESTIGE.md.
 Ideas held for later (owner to decide after 36-39): tournaments vs bot clans, weekly events, custom lobby extras and a
 party playlist, new operators and skins, replays, match history detail.
+
+## Owner's notes (2026-11-13, 02:07), queued for the next free builder
+40. Wingman: the camera follows the streak instead of your character. Move stick still goes unresponsive while
+    throwing grenades. Recon drone takes a moment to respond after activation. Shooting down streaks is unclear
+    (teach it: help, first-time hint, reticle/health on air streaks). Mastery screen: the badge strip bottom-left
+    cannot scroll to show all badges.
