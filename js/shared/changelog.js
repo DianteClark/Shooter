@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-13', title: 'Rewards check',
+    build: '1113-1', date: '2026-11-13', title: 'Rewards check',
     items: [
       'Calling cards earned in a match now show up on the results as new cards: map wins, mode cards, weapon class cards, the career cards and every gun\'s Master card used to unlock without a word.',
       'Graveyard Shift: putting down the Gravewarden now shows the Lantern Out calling card on the results.',
