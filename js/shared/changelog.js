@@ -18,6 +18,18 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1113-2', date: '2026-11-13', title: 'Juicier hits, kills and menus',
+    items: [
+      'Hit markers pop when they land. Headshots get a gold marker with a ringing halo and a cleaner "ting"; kills get a red X with a quick flash, and the points float up off it into your score.',
+      'The kill feed snaps in sharper, and double kills, kill streaks, calling in a scorestreak and the final kill give the camera a small punch.',
+      'New option: Damage numbers (Options, Controls). Each hit\'s damage rises off the target. Off by default.',
+      'Guns throw spent casings (a few a second, so busy fights stay clear), footsteps kick up more dust on sand and snow, and leaves drift across Harvest, the Frontier and the Jungle maps, with ash falling over Ashgrove.',
+      'Low health now muffles the world a little under the heartbeat. A clean click tells you a reload is done, two soft ticks warn you are low on ammo, and an empty magazine has its own clack.',
+      'Menus: buttons sink into their rail when pressed and spring back, screens slide in the direction you are going, results counters tick up with sound, and level ups and unlocks burst into shards with a bigger fanfare.',
+      'Reduce shake and flashes (Options, Accessibility) also tones all of this down: smaller punches and pops, dimmer flashes, nothing flying across the screen.',
+    ],
+  },
+  {
     build: '1113-1', date: '2026-11-13', title: 'Rewards check',
     items: [
       'Calling cards earned in a match now show up on the results as new cards: map wins, mode cards, weapon class cards, the career cards and every gun\'s Master card used to unlock without a word.',

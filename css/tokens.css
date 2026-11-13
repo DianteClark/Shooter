@@ -209,6 +209,9 @@
 .btn.is-quiet { background: transparent; box-shadow: var(--edge); color: var(--c-haze); }
 /* .press opts any other tappable into the same feedback (only on elements not positioned by transform). */
 .btn.pressed, .plate.pressed, .press.pressed { transform: scale(.96); filter: brightness(.86); transition-duration: var(--dur-instant); }
+/* The press also sinks the plate into its rail (an inset shadow), and the release springs back with a hair of overshoot. */
+.btn { transition: transform var(--dur-fast) var(--ease-snap), filter var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.btn.pressed, .plate.pressed { box-shadow: var(--bevel-pressed), var(--edge); }
 .btn:disabled, .btn[aria-disabled="true"] { background: var(--c-ballast); color: var(--c-rail); box-shadow: var(--edge); }
 .btn svg, .ico { flex: none; display: block; }
 :focus-visible { outline: 2px solid var(--c-sodium); outline-offset: 2px; }

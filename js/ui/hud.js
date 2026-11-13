@@ -20,6 +20,7 @@ import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
 import { reducedMotion } from './motion.js';
+import { feelMotion, feelFlash } from '../render/feel.js';   // Reduce shake and flashes: punches and flashes scale down.
 import { isPlaced, scaleOf } from './layout.js';
 import { icon, resolveIcon } from './icons.js';
 import { ArmorySheet } from './trainarmory.js';
@@ -57,6 +58,9 @@ const MEDAL_LIFE = 1.6;
 const MEDAL_GAP = 0.55;
 const LOW_AMMO = 0.25;
 const SKULL_LIFE = 0.55;         // A kill marker lingers longer than a hit tick so it registers mid-fight.
+const HIT_POP = 0.075;           // Seconds the marker spends popping in (oversized) before it settles.
+const XP_FLOAT_MS = 760;
+const DMG_NUM_MS = 640;
 const HEAT_WARN = 0.72;          // Heat fraction where the bar starts to pulse.
 const FLASH_HOLD = 1.6;          // Seconds of solid white at full flash strength, before the fade.
 const FLASH_FADE = 1.8;
@@ -907,7 +911,7 @@ export class HUD {
     this.hitT = 0;
     this.hitKill = false;
     this.hitHead = false;
-    this.hitArmor = false; this.hitWeak = false; this.hitScale = 1;
+    this.hitArmor = false; this.hitWeak = false; this.hitScale = 1; this.hitPop = 0;
     this.coverShotT = -9; this.clockT = 0;
     this.hitLife = HIT_LIFE;
     this.flashT = 0;
@@ -1069,8 +1073,12 @@ export class HUD {
       <div class="hit">
         <svg class="hit-x" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-15 -15l8 8M15 -15l-8 8M-15 15l8 -8M15 15l-8 -8" /></svg>
         <svg class="hit-armor" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-16 -8V-16H-8M8 -16H16V-8M16 8V16H8M-8 16H-16V8M-5 0H5M0 -5V5" /></svg>
-        <svg class="hit-skull" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M0 -17C-11 -17 -16 -10 -16 -3C-16 3 -13 6 -10 8L-9 14H-5V10H-2V14H2V10H5V14H9L10 8C13 6 16 3 16 -3C16 -10 11 -17 0 -17ZM-9 -6A4.5 4.5 0 1 1 -9 3A4.5 4.5 0 1 1 -9 -6ZM9 -6A4.5 4.5 0 1 1 9 3A4.5 4.5 0 1 1 9 -6ZM0 2L3 7H-3Z" fill-rule="evenodd"/></svg>
+        <svg class="hit-kx" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M-17 -17l11 11M17 -17l-11 11M-17 17l11 -11M17 17l-11 -11" /></svg>
+        <svg class="hit-ring" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M0 -19l2.5 4h-5zM19 0l-4 2.5v-5zM0 19l-2.5 -4h5zM-19 0l4 -2.5v5z" /><circle r="12.5" /></svg>
+        <i class="hit-flash" aria-hidden="true"></i>
       </div>
+      <div class="xp-floats" aria-hidden="true"><b></b><b></b><b></b></div>
+      <div class="dmg-nums" aria-hidden="true">${'<b></b>'.repeat(8)}</div>
       <div class="score-pop"><b>+100</b><small></small></div>
       ${[0, 1, 2, 3].map(() => '<svg class="dmg" viewBox="-110 -110 220 220" aria-hidden="true"><path class="dmg-arc" d="M-50 -96 A108 108 0 0 1 50 -96 L40 -78 A88 88 0 0 0 -40 -78 Z" /><path class="dmg-tip" d="M-9 -100 L0 -110 L9 -100 Z" /></svg>').join('')}
       <div class="corner">
@@ -1255,6 +1263,11 @@ export class HUD {
     this.dazeT = 0; this.dazeLen = 1; this.dazeAmt = 1;
     this.healEl = $('.heal-veil');
     this.hitX = $('.hit-x');
+    this.hitRing = $('.hit-ring');
+    this.hitFlash = $('.hit-flash');
+    this.xpFloats = [...this.el.querySelectorAll('.xp-floats b')]; this.xpNext = 0;
+    this.dmgNums = [...this.el.querySelectorAll('.dmg-nums b')]; this.dmgNext = 0;
+    this.juice = { hits: 0, heads: 0, kills: 0, floats: 0, nums: 0, flashPeak: 0, pop: 0 };   // Counters for dev/ui-juice-test.py.
     this.armsName = $('.arms-name span');
     this.armsIcon = $('.arms-icon');
     this.armsAlt = $('.arms-alt');
@@ -2560,7 +2573,10 @@ export class HUD {
       this.hitT = Math.max(0, this.hitT - dt);
       const f = this.hitT / this.hitLife;
       this.hitEl.style.opacity = Math.min(1, f * 2);
-      this.hitEl.style.transform = `translate3d(-50%,-50%,0) scale(${(this.hitScale * (1 + (1 - f) * 0.35)).toFixed(3)})`;
+      // Pops in oversized and snaps down (a punch), then opens out a little as it fades.
+      const age = this.hitLife - this.hitT, pop = age < HIT_POP ? 1 - age / HIT_POP : 0;
+      const k = this.hitScale * (1 + pop * pop * this.hitPop + (1 - f) * 0.2);
+      this.hitEl.style.transform = `translate3d(-50%,-50%,0) scale(${k.toFixed(3)})`;
     }
     if (this.flashT > 0) {
       this.flashT = Math.max(0, this.flashT - dt);
@@ -2674,6 +2690,24 @@ export class HUD {
       // A heavy round lands a bigger marker than a light one: 0.85x for a graze up to 1.25x for a sniper hit.
       this.hitScale = kill ? 1 : Math.max(0.85, Math.min(1.25, 0.8 + (e.dmg || 25) / 110)) * (weak ? 0.85 : 1);
       if ((head || kill || armor) && !REDUCED_MOTION.matches) this.hitEl.animate(HIT_PUNCH, { duration: 160, easing: 'ease-out' });
+      // The pop: bigger for a head or a kill. Reduce shake and flashes keeps it to a nudge.
+      const motion = feelMotion();
+      this.hitPop = (kill ? 0.75 : head ? 0.6 : 0.4) * motion;
+      this.juice.hits++; this.juice.pop = this.hitPop;
+      if (head) {
+        // The head ting, seen: a gold halo with four points rings out from the marker.
+        this.juice.heads++;
+        this.hitRing.animate(motion < 1 ? [{ opacity: 0.9 }, { opacity: 0 }] : [{ opacity: 1, transform: 'scale(.7)' }, { opacity: 0, transform: 'scale(1.7)' }],
+          { duration: motion < 1 ? 160 : 260, easing: 'cubic-bezier(.16,.84,.3,1)' });
+      }
+      if (kill) {
+        this.juice.kills++;
+        const peak = 0.9 * feelFlash();
+        this.juice.flashPeak = peak;
+        this.hitFlash.animate(motion < 1 ? [{ opacity: peak }, { opacity: 0 }] : [{ opacity: peak, transform: 'scale(.5)' }, { opacity: 0, transform: 'scale(1.35)' }],
+          { duration: motion < 1 ? 120 : 200, easing: 'ease-out' });
+      }
+      if (Options.get('dmgNumbers')) this.#damageNumber(e, kill, head);
     }
     if (e.target === localId && e.by !== localId) this.#damageFrom(e);
   }
@@ -2772,7 +2806,10 @@ export class HUD {
     const head = (e.head ? `<span class="f-hs">${glyph('medal:headshot', 14)}</span>` : '') + (e.fin ? '<span class="f-fin">FINISHED</span>' : '');
     const side = byP?.team === view.players.find(p => p.id === view.localId)?.team ? 'ally' : 'foe';
     this.#pushFeed(`${this.#feedBadge(e.by)}<em style="color:${byCss}">${nameHtml(byName)}</em>${cause}${head}${this.#feedBadge(e.target)}<em style="color:${tgtCss}">${nameHtml(tgtName)}</em>`, mine, side);
-    if (e.by === view.localId && e.target !== view.localId) this.#scorePop(SCORE.kill + (e.head ? SCORE.headshot : 0), e.fin ? 'Finisher' : e.head ? 'Headshot' : 'Kill');
+    if (e.by === view.localId && e.target !== view.localId) {
+      this.#scorePop(SCORE.kill + (e.head ? SCORE.headshot : 0), e.fin ? 'Finisher' : e.head ? 'Headshot' : 'Kill');
+      this.#xpFloat(SCORE.kill + (e.head ? SCORE.headshot : 0), !!e.head);
+    }
     else if (e.assist === view.localId) this.#scorePop(SCORE.assist, 'Assist');
 
     if (e.target === view.localId) {
@@ -2880,11 +2917,56 @@ export class HUD {
     this.scorePopAnim = this.scorePop.animate(fresh ? SCORE_POP_IN : SCORE_POP_BUMP, { duration: SCORE_POP_LIFE * 1000 + 300, easing: 'cubic-bezier(.2,.9,.3,1)' });
   }
 
+  // Kill confirm: the points pop up off the marker, hang a beat, then fly down into the score pop ("+100 Kill") and
+  // merge with it. Three pooled nodes, so each kill of a multi-kill shows its own.
+  #xpFloat(points, head) {
+    const el = this.xpFloats[this.xpNext];
+    this.xpNext = (this.xpNext + 1) % this.xpFloats.length;
+    el.textContent = `+${points}`;
+    el.classList.toggle('head', head);
+    el.animate(REDUCED_MOTION.matches ? [{ opacity: 1 }, { opacity: 1, offset: 0.6 }, { opacity: 0 }] : [
+      { opacity: 0, transform: 'translate3d(0,6px,0) scale(1.6)' },
+      { opacity: 1, transform: 'translate3d(0,-6px,0) scale(1)', offset: 0.16 },
+      { opacity: 1, transform: 'translate3d(0,-12px,0) scale(1)', offset: 0.55 },
+      { opacity: 0, transform: 'translate3d(22px,46px,0) scale(.55)' },
+    ], { duration: XP_FLOAT_MS, easing: 'cubic-bezier(.3,.7,.4,1)' });
+    this.juice.floats++;
+  }
+
+  // Options > Damage numbers (off by default): the hit's damage rises off the target. Eight pooled nodes.
+  #damageNumber(e, kill, head) {
+    const cam = this.camera;
+    if (!cam || !(e.dmg > 0) || !Number.isFinite(e.x)) return;
+    const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements, x = e.x, y = 1.9, z = e.z;
+    const vx = v[0] * x + v[4] * y + v[8] * z + v[12], vy = v[1] * x + v[5] * y + v[9] * z + v[13], vz = v[2] * x + v[6] * y + v[10] * z + v[14];
+    const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15];
+    if (w <= 0.01) return;
+    const sx = Math.round(((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * this.viewW + (Math.random() - 0.5) * 18);
+    const sy = Math.round((0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * this.viewH);
+    const el = this.dmgNums[this.dmgNext];
+    this.dmgNext = (this.dmgNext + 1) % this.dmgNums.length;
+    el.textContent = String(Math.max(1, Math.round(e.dmg)));
+    el.className = kill ? 'kill' : head ? 'head' : '';
+    const still = REDUCED_MOTION.matches;
+    el.animate(still ? [{ opacity: 1, transform: `translate3d(${sx}px,${sy}px,0)` }, { opacity: 0, transform: `translate3d(${sx}px,${sy}px,0)` }] : [
+      { opacity: 0, transform: `translate3d(${sx}px,${sy + 4}px,0) scale(1.4)` },
+      { opacity: 1, transform: `translate3d(${sx}px,${sy}px,0) scale(1)`, offset: 0.15 },
+      { opacity: 0, transform: `translate3d(${sx}px,${sy - 26}px,0) scale(.9)` },
+    ], { duration: DMG_NUM_MS, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    this.juice.nums++;
+  }
+
   #pushFeed(html, mine = false, side = '') {
     const row = document.createElement('div');
     row.className = `f-row${mine ? ' mine' : ''}${side ? ' ' + side : ''}`;
     row.innerHTML = html;
-    row.animate([{ transform: 'translateX(-18px)', opacity: 0, filter: 'brightness(2)' }, { transform: 'none', opacity: 1, filter: 'brightness(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    // A sharp slide that overshoots its stop by a hair, lit up on arrival (yours brighter): reads at a glance mid-fight.
+    if (REDUCED_MOTION.matches) row.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120 });
+    else row.animate([
+      { transform: 'translateX(-28px) scaleY(.6)', opacity: 0, filter: `brightness(${mine ? 2.6 : 2})` },
+      { transform: 'translateX(3px) scaleY(1)', opacity: 1, offset: 0.55 },
+      { transform: 'none', opacity: 1, filter: 'brightness(1)' },
+    ], { duration: 200, easing: 'cubic-bezier(.16,.84,.3,1)' });
     this.feedEl.prepend(row);
     this.feed.unshift({ row, life: FEED_LIFE });
     while (this.feed.length > (this.feedRows ?? FEED_ROWS)) this.feed.pop().row.remove();

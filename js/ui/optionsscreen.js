@@ -119,6 +119,10 @@ export function optionsScreen(menu, opts) {
           <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
           ${toggle('optAutoRespawn', 'opt-autorespawn')}
         </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>Damage numbers</b><small>Each hit's damage rises off the target</small></div>
+          ${toggle('optDmgNumbers', 'opt-dmgnumbers')}
+        </div>
         ${hapticsSupported() ? `<div class="opt-row">
           <div class="opt-name"><b>Vibrate on hits</b><small>A buzz when you are hit or land a hit</small></div>
           ${toggle('optHaptics', 'opt-haptics')}
@@ -161,7 +165,7 @@ export function optionsScreen(menu, opts) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
-    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen']]) {
+    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers']]) {
       const t = q(cls);
       if (!t) continue;
       t.classList.toggle('on', v[key] === true);
@@ -233,6 +237,7 @@ export function optionsScreen(menu, opts) {
     optHudSize: ({ id }) => { Options.set('hudSize', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
+    optDmgNumbers: () => { Options.set('dmgNumbers', !Options.get('dmgNumbers')); paint(); },
     optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },
     optHaptics: () => { Options.set('haptics', !Options.get('haptics')); if (Options.get('haptics')) try { navigator.vibrate?.(20); } catch { /* blocked */ } paint(); },
     optFullscreen: () => {

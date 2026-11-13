@@ -27,6 +27,8 @@ export const OPTION_DEFAULTS = Object.freeze({
   padDead: 0.15, padSens: 1, padInvertY: false, padMap: {},
   // Accessibility. layout: the touch layout editor's custom places and sizes (js/ui/layout.js), {} for the default.
   colorMode: 'off', textSize: 'normal', calm: false, cues: 'nades', layout: {},
+  // Juice: damage numbers rising off the target when your rounds land (js/ui/hud.js). Off by default.
+  dmgNumbers: false,
   recall: {},   // Remembered menu choices (js/ui/recall.js): Multiplayer tab and picks, squad size, Custom picks.
 });
 

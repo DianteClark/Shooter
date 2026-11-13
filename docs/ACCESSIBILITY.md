@@ -85,6 +85,10 @@ panel checks; `dev/ui-hud-layout-test.py` covers the default layout in every mod
 - The flashbang still blinds, with a dark veil instead of a white flash.
 - Blinking warnings hold still (low-health pulse, the enemy UAV tag, killcam REC, Swap's urge, Search's planted bomb),
   and the scripted UI motion of `js/ui/motion.js` (`setReducedMotion`) and the HUD's hit punch and respawn flash are off.
+- Juice (dev/ui-juice-test.py checks each): screen punches on kills, multi-kills, streaks and the final kill at a
+  quarter (`renderer.punch`, the final kill's push-in at half); the hit marker's pop at a quarter; the kill marker's
+  flash at about a third, with no scale; the head halo, the XP float, damage numbers and the killfeed entrance fade in
+  place instead of moving; no celebration shards on level ups and unlocks (`motion.celebrate`).
 
 ## Sound cues
 

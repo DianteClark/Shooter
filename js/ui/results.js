@@ -9,7 +9,7 @@ import { matchScore, Progress } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, nameHtml, SLOT_LABEL, ROMAN } from './widgets.js';
 import { kindLabel, rankStamp, masterStampHtml } from './prestige.js';
 import { icon, resolveIcon } from './icons.js';
-import { rollNumber, sweep, reducedMotion } from './motion.js';
+import { rollNumber, sweep, reducedMotion, celebrate } from './motion.js';
 import { playerBanner, proProgressHtml, unlockStamp, cardHtml, cardProgressHtml, cardsInReach } from './cards.js';
 import { challengeStamp, challengeStrip } from './challenges.js';
 import { modeColumn } from './mode-hud.js';
@@ -34,6 +34,19 @@ function beforeState(curve, total, gained, levelBefore) {
   const was = Math.max(0, total - gained);
   const p = curve.progress(was);
   return { level: levelBefore, frac: fillFrac(p) };
+}
+
+// Counters that tick up with a sound: a detent every few frames, rising in pitch as the number climbs, a firmer one
+// where it lands. Under reduced motion the number lands at once and only the landing plays.
+function counterTick(base = 1) {
+  let last = -1;
+  return (v, f) => {
+    const now = performance.now();
+    if (f >= 1) { playUi('tick', { pitch: base * 1.35, gain: 1.1 }); return; }
+    if (now - last < 55) return;
+    last = now;
+    playUi('tick', { pitch: base * (0.85 + 0.45 * f), gain: 0.7 });
+  };
 }
 
 class Reel {
@@ -111,6 +124,9 @@ class Reel {
     m.on({ reelTap: () => this.wake?.() });
     const card = m.overlayEl?.querySelector('.rx-card');
     if (card) sweep(card, { delay: 380 });
+    // Every ceremony throws shards as its stamp lands; a level up throws more of them.
+    const cer = m.overlayEl?.querySelector('.rx-cer');
+    if (cer) setTimeout(() => { if (!this.dead && cer.isConnected) celebrate(cer, { count: /rx-level|rx-m-/.test(html) ? 34 : 20 }); }, 160);
     await this.sleep(ms);
     if (!this.dead) m.overlay('');
   }
@@ -433,9 +449,9 @@ async function runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineN
   }
   if (reel.dead) return;
   root.classList.add('in');
-  if (typeof mineNum === 'number') rollNumber(q('.rs-mine'), mineNum, { from: 0, duration: 600 });
+  if (typeof mineNum === 'number') rollNumber(q('.rs-mine'), mineNum, { from: 0, duration: 600, onTick: counterTick() });
   if (themNum !== null) rollNumber(q('.rs-them'), themNum, { from: 0, duration: 600 });
-  rollNumber(q('.xp-total'), xp?.total ?? 0, { from: 0, duration: 900, delay: 300 });
+  rollNumber(q('.xp-total'), xp?.total ?? 0, { from: 0, duration: 900, delay: 300, onTick: counterTick(1.15) });
   await reel.sleep(520);
   if (reel.dead) return;
 

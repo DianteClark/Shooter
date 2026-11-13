@@ -93,6 +93,43 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }`;
 
+// Leaves (and ash flakes): a mote that tumbles as it falls and sways on the air. Still one instanced draw, still no CPU.
+const LEAF_VERT = /* glsl */`
+${GLSL_WRAP}
+uniform vec3 uVel;
+uniform float uTime, uSize;
+attribute vec4 aSeed;
+varying vec2 vP;
+varying float vShade;
+void main() {
+  float ph = aSeed.x * 37.0 + aSeed.z * 11.0;
+  vec3 base = aSeed.xyz * uBox + uVel * uTime * (0.7 + 0.6 * aSeed.w);
+  base.x += sin(uTime * 1.3 + ph) * 0.9;
+  base.z += cos(uTime * 0.9 + ph) * 0.5;
+  vec3 p = wrapBox(base);
+  p.y = max(p.y, 0.04);
+  float s = uSize * (0.7 + 0.6 * aSeed.w);
+  float spin = uTime * 0.8 + ph, flip = cos(uTime * (1.4 + 2.0 * aSeed.w) + ph);
+  vec2 q = position.xy;
+  vec2 r = vec2(q.x * cos(spin) - q.y * sin(spin), q.x * sin(spin) + q.y * cos(spin));
+  r.y *= 0.3 + 0.7 * abs(flip);
+  vShade = 0.7 + 0.3 * flip;
+  vP = position.xy * 2.0;
+  vec3 world = p + vec3(r.x, r.y * 0.82, r.y * 0.57) * s;
+  gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+}`;
+
+const LEAF_FRAG = /* glsl */`
+uniform vec3 uCol;
+uniform float uAlpha;
+varying vec2 vP;
+varying float vShade;
+void main() {
+  if (abs(vP.x) * 1.7 + vP.y * vP.y > 1.0) discard;
+  float rib = abs(vP.x) < 0.07 ? 0.78 : 1.0;
+  gl_FragColor = vec4(uCol * vShade * rib, uAlpha);
+}`;
+
 const MOTE_FRAG = /* glsl */`
 uniform vec3 uCol;
 uniform float uAlpha;
@@ -127,6 +164,10 @@ function makeField(spec, rnd, sharedBox) {
   } else if (spec.kind === 'ripple') {
     vertexShader = RIPPLE_VERT; fragmentShader = RIPPLE_FRAG;
     u.uLife = { value: spec.life };
+    u.uSize = { value: spec.size };
+  } else if (spec.kind === 'leaf') {
+    vertexShader = LEAF_VERT; fragmentShader = LEAF_FRAG;
+    u.uVel = { value: new THREE.Vector3(...spec.vel) };
     u.uSize = { value: spec.size };
   } else {
     vertexShader = MOTE_VERT; fragmentShader = MOTE_FRAG;

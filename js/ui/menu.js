@@ -33,7 +33,7 @@ import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
 import { esc, badgeMark, badgeMarkOf, badgeLevel, ROMAN } from './widgets.js';
 import { vetOf, vetTag } from './cards.js';
-import { play, enter, sweep, shake, reducedMotion, DUR } from './motion.js';
+import { play, enter, sweep, shake, reducedMotion, DUR, EASE } from './motion.js';
 import { featuredButton, modsChip } from './modifiers.js';
 import { featured, MODS } from '../shared/playlist.js';
 import { MODES as ALL_MODES } from '../shared/modes.js';
@@ -141,7 +141,10 @@ export class Menu {
     this.onScreen?.(screen);
     const back = prev !== null && (DEPTH[screen] ?? 1) < (DEPTH[prev] ?? 1);
     this.el.dataset.dir = back ? 'back' : 'forward';
-    play(this.el, [{ opacity: prev === null ? 0 : 0.4 }, { opacity: 1 }], { duration: DUR.fast, fill: 'none' });
+    // One timing for every screen: a short slide in the direction of travel under the fade (compositor-only, so a
+    // low-tier phone keeps its frame rate). Reduced motion keeps the fade alone (motion.js play).
+    const x = prev === null ? 0 : back ? -14 : 14;
+    play(this.el, [{ opacity: prev === null ? 0 : 0.35, transform: `translate3d(${x}px,0,0)` }, { opacity: 1, transform: 'none' }], { duration: DUR.base, easing: EASE.out, fill: 'none' });
     this.stagger(this.el, back ? 60 : 40);
   }
 
