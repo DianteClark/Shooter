@@ -366,23 +366,24 @@ export class Menu {
       </div>`;
     };
     const isReady = me?.ready;
+    const hostName = humans.find(h => h.host)?.name || 'the host';
     const start = isHost
       ? `<button class="btn is-primary lb-go" data-sound="confirm" data-act="start" ${counting || allReady ? '' : 'disabled'}>${ico(counting || allReady ? 'play' : 'wait')}<b>${counting ? 'Start now' : allReady ? 'Start match' : 'Waiting for ready'}</b></button>`
       : counting
         ? `<div class="btn is-primary lb-go static">${ico('play')}<b>Rematch soon</b></div>`
         : rematchWait
-          ? `<div class="btn lb-go static">${ico('wait')}<b>Waiting for host</b></div>`
+          ? `<div class="btn lb-go static">${ico('wait')}<b>Waiting for ${esc(hostName)}</b></div>`
           : `<button class="btn lb-go ${isReady ? 'is-go' : 'is-primary'}" data-act="toggleReady">${ico(isReady ? 'ready' : 'check')}<b>${isReady ? 'Ready' : 'Tap when ready'}</b></button>`;
     this.el.innerHTML = `
       <header class="bar lb-bar" data-in="down">
         ${backButton('leaveLobby', 'Leave')}
-        <div class="room">
-          <span>Room code</span>
+        <button class="room room-copy" data-act="copyCode" data-sound="confirm" aria-label="Room code ${esc([...code].join(' '))}. Tap to copy">
+          <span>Room code<small>Tap to copy</small></span>
           <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
-        </div>
+        </button>
         ${voice ? `<button class="chip lb-mic" data-act="lobbyMic" data-state="off" aria-label="Party voice">${ico('ui:mic')}<b>Mic</b></button>` : ''}
         ${isHost ? inviteControls({ listed }) : listed ? `<span class="inv-listed static">${ico('ui:signal')}<b>Public</b></span>` : ''}
-        ${br ? squadMarkup(brSquad, isHost) : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : 'Tap your name to swap teams.'}</p>`}
+        ${br ? squadMarkup(brSquad, isHost) : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : `${isReady ? `Ready. ${esc(hostName)} starts the match.` : `${esc(hostName)} starts the match when everyone is ready.`} Tap your name to swap teams.`}</p>`}
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
       </header>
       <div class="yard-lines">

@@ -385,6 +385,7 @@ menu.on({
     if (!backdrop.emote(Number(i))) menu.toast(e.name);
   },
   leaveLobby: () => leaveRoom(),
+  copyCode: () => copyRoomCode(),
   toggleReady: () => toggleReady(),
   start: () => startVote(),
   voteCast: ({ i }) => castVote(Number(i)),
@@ -413,6 +414,17 @@ function confirmSheet({ title, body, yes = 'Leave', no = 'Stay', onYes }) {
       </div>
     </div>`);
   menu.on({ qolNo: () => menu.overlay(''), qolYes: () => { menu.overlay(''); onYes(); } });
+}
+
+// Tap to copy the room code (QoL). A browser that refuses the clipboard still shows the code to read out.
+function copyRoomCode() {
+  const code = app.code;
+  if (!code) return;
+  const said = () => menu.toast(`Room code ${code} copied`);
+  try {
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(said, () => menu.toast(`Room code: ${code}`));
+    else menu.toast(`Room code: ${code}`);
+  } catch { menu.toast(`Room code: ${code}`); }
 }
 
 // Leaving a friend room: a host with friends in it is asked first, since the room passes to one of them.

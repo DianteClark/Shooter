@@ -241,6 +241,10 @@
 #ui .room { display: flex; align-items: center; gap: var(--sp-3); }
 #ui .room > span { font: 400 var(--fs-caption)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); width: 40px; }
 #ui .room .code-tiles b { width: 38px; height: 44px; font-size: 30px; }
+/* Tap to copy (QoL): the code is a button; its label says so in a second line. */
+#ui .room-copy { padding: 0; background: none; color: inherit; text-align: left; transition: transform var(--dur-fast) var(--ease-out); }
+#ui .room-copy.pressed { transform: scale(.96); }
+#ui .room-copy > span small { display: block; margin-top: 3px; font: inherit; font-size: 9px; color: var(--c-sodium); }
 #ui .room-tip { margin-left: auto; font: 400 var(--fs-body)/1.2 var(--f-body); color: var(--c-haze); max-width: 30ch; text-align: right; }
 #ui .auto-start { flex: none; display: flex; flex-direction: column; align-items: center; padding: 3px 12px; background: rgba(75,209,138,.12); box-shadow: inset 0 0 0 1px rgba(75,209,138,.45); }
 #ui .auto-start span { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-go); }
