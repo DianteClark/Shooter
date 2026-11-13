@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-13', title: 'Trophy Case, map and mode cards, feat emblems',
+    build: '1113-4', date: '2026-11-13', title: 'Trophy Case, map and mode cards, feat emblems',
     items: [
       'Trophy Case: open it from your service record to see your rarest unlocks, your personal bests (longest streak, longest kill, best battle royale finish, fastest extraction, best Graveyard Shift round on each map, rank) and how much of each collection you have, with a total.',
       'Tap anything locked (a calling card, emblem, camo, operator, skin, finisher, emote, attachment, gun, perk, piece of gear or scorestreak) to see exactly how to get it and how far along you are. Play now takes you straight to the playlist where it counts.',
