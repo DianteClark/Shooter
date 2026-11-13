@@ -13,6 +13,7 @@ import { esc, badgeMark, ROMAN, levelRequirement, swatchCss } from './widgets.js
 import { ico, header } from './yard.js';
 import { rollNumber } from './motion.js';
 import { masteryScreen, masteryTotals } from './mastery.js';
+import { trophyScreen, trophyTotals } from './trophy.js';
 import { playUi } from '../audio/audio.js';
 
 const KIND_LABEL = { rank: 'Rank icon', emblem: 'Emblem', camo: 'Camo', tracer: 'Tracer', killFx: 'Kill effect', perk: 'Perk', tactical: 'Tactical', lethal: 'Lethal', streak: 'Streak', attachment: 'Attachment', operator: 'Operator', pro: 'Pro perk', card: 'Calling card' };
@@ -103,6 +104,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
           </div>
         </div>
         <div class="pf-side">
+          <section data-in="up">${trophyButton()}</section>
           <section data-in="up">
             <button class="pf-ladder-open" data-act="pfPrestigeView" aria-label="Prestige: every rank's rewards">
               <h4>${ico('rank')}Rank ladder<small>${mp ? `Master ${lp.master}` : `${p} of ${MAX_PRESTIGE}`}</small><em class="pf-ladder-go">Rewards${ico('next')}</em></h4>
@@ -140,6 +142,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     pfCards: () => cardsSheet(menu, { onChange: () => onChange?.(), onClose: render }),
     pfBack: onBack,
     pfMastery: () => masteryScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
+    pfTrophy: () => trophyScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
     pfPrestigeView: () => prestigeScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }), onChange }),
     pfRename: onRename,
     pfSave: onSave,
@@ -153,6 +156,12 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
 function masteryButton() {
   const { done, of } = masteryTotals();
   return `<button class="btn pf-mastery" data-act="pfMastery">${ico('star')}<b>Mastery</b><small>${done}/${of}</small></button>`;
+}
+
+// The way into the Trophy Case (js/ui/trophy.js): how complete the collection is.
+function trophyButton() {
+  const { have, of } = trophyTotals(), f = have / Math.max(1, of);
+  return `<button class="pf-trophy" data-act="pfTrophy" aria-label="Trophy case">${ico('star')}<span><b>Trophy case</b><small>Rarest unlocks, personal bests, collections</small></span><em>${Math.floor(f * 100)}%</em><i class="pf-trophy-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i></button>`;
 }
 
 // Big totals in the space of a tile: 9,870 stays as it is, 200,000 reads 200K, 3,400,000 reads 3.4M.

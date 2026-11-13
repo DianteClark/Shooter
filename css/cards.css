@@ -281,6 +281,8 @@
 .ul-art.is-card { width: auto; }
 .ul-art.is-card .ccard { --cw: min(260px, 38vw) !important; }
 .ul-art > svg { max-width: 100%; height: auto; }
+#ui .ul-art > .ico { height: 64px; width: auto; max-width: 112px; color: var(--c-chalk); }
+#ui .tc-tile .tc-art > .ico { height: 40px; width: auto; }
 .ul-swatch { display: block; width: 84px; height: 84px; transform: rotate(45deg) scale(.8); box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
 .ul-skin { background: linear-gradient(135deg, var(--a) 0 45%, var(--b) 45% 80%, var(--c) 80%); }
 .ul-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
@@ -288,8 +290,8 @@
 .ul-kick em { font-style: normal; padding: 2px 5px 1px; background: rgba(255,159,28,.16); color: var(--c-sodium, #ff9f1c); }
 .ul-kick em.ok { background: rgba(63,220,106,.16); color: #3fdc6a; }
 .ul-body h2 { font: 400 26px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); text-transform: uppercase; overflow-wrap: anywhere; }
-.ul-desc { font: 13px/1.3 var(--body, sans-serif); color: #c8ced3; }
-.ul-how { display: flex; flex-direction: column; gap: 3px; font: 15px/1.3 var(--body, sans-serif); letter-spacing: 0; color: #e7eae4; }
+.ul-desc { font: 13px/1.3 var(--f-body); color: #c8ced3; }
+.ul-how { display: flex; flex-direction: column; gap: 3px; font: 15px/1.3 var(--f-body); letter-spacing: 0; color: #e7eae4; }
 .ul-how b { font: 400 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze, #9aa4ad); }
 .ul-prog { display: flex; align-items: center; gap: 10px; }
 .ul-bar { position: relative; flex: 1; height: 8px; background: rgba(231,234,228,.12); overflow: hidden; }

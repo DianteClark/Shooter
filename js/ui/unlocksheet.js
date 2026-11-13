@@ -61,7 +61,7 @@ export function unlockInfo(kind, id, { weapon = null, operator = null } = {}) {
       const c = getCard(id), x = Progress.cards().find(e => e.card.id === id);
       const p = x?.progress ?? (x?.unlocked ? { value: 1, goal: 1 } : null);
       return { ...base, name: c.name, how: c.req, unlocked: !!x?.unlocked, ...(p ?? { value: x?.unlocked ? 1 : 0, goal: 1 }), play: c.play ?? (c.group === 'Season' || c.group === 'Ranked' ? null : QUICK),
-        art: cardHtml(id, { size: 300, sub: c.group, locked: !x?.unlocked }), noBar: !p };
+        art: cardHtml(id, { size: 300, sub: c.group }), noBar: !p };
     }
     if (kind === 'emblem') {
       const e = getEmblem(id), c = careerNow(), st = emblemUnlocked(e, c), [v, g] = emblemProgress(e, c);
