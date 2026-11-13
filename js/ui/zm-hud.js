@@ -452,7 +452,7 @@ export class ZmHud {
     }
     endEl.dataset.result = 'loss';
     endEl.querySelector('b').textContent = 'Overrun';
-    endEl.querySelector('small').textContent = `You survived ${Math.max(0, (z?.round ?? 1) - 1)} round${(z?.round ?? 1) - 1 === 1 ? '' : 's'}`;
+    endEl.querySelector('small').textContent = `Survived ${Math.max(0, (z?.round ?? 1) - 1)} round${(z?.round ?? 1) - 1 === 1 ? '' : 's'}`;
   }
 }
 

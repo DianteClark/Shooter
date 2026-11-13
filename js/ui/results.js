@@ -17,6 +17,7 @@ import { playlistName } from '../shared/playlist.js';
 import { masteryStamp, masteryStrip } from './mastery.js';
 import { playUi } from '../audio/audio.js';
 import { seasonStrip, seasonStamp } from './season.js';
+import { matchHeader, ffaStandings, brPlacing, ORDINAL } from './outcome.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
@@ -24,14 +25,6 @@ const UNLOCK_MS = 1250;
 const HERO_MS = 1500;           // The outcome word holds the screen this long before the tables take over.
 const BOARD_ROWS = 6;           // Rows per team table, the last one a "+N more" line on bigger teams.
 
-const OUTCOME = {
-  win: ['Victory', 'The yard is yours'],
-  loss: ['Defeat', 'The yard is lost'],
-  draw: ['Stalemate', 'Neither side broke through'],
-};
-
-const ORDINAL = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
-const FFA_LINE = { 1: 'Nobody else came close', 2: 'One short of the top', 3: 'On the podium' };
 
 const fillFrac = p => (p.maxed ? 1 : p.into / p.span);
 const art = (id, size, cls = '') => (id != null && resolveIcon(id) !== 'unknown' ? icon(id, { size, cls }) : '');
@@ -137,68 +130,33 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   // The modes overhaul's rule sets bring their own column (js/ui/mode-hud.js).
   const ownCol = modeColumn(rules);
   if (ownCol) { modeHead = ownCol.head; modeStat = ownCol.stat; }
-  let [word, line] = OUTCOME[outcome] ?? OUTCOME.draw;
+  // The header (word, line, tone, score) comes from js/ui/outcome.js, the table in docs/MODES.md.
+  const head = matchHeader(data);
+  const { word, line, tone } = head;
+  const sc = head.score;
+  const mineNum = sc.kind === 'pair' ? sc.mine : sc.kind === 'one' ? sc.value : 0, themNum = sc.kind === 'pair' ? sc.them : null;
+  const mineCss = sc.mineCss ?? 'var(--c-sodium)', themCss = sc.themCss ?? 'var(--c-haze)';
   const winTeam = outcome === 'win' ? myTeam : outcome === 'loss' ? 1 - myTeam : null;
-  let tone = TEAMS[winTeam]?.css ?? 'var(--c-sodium)';      // A free-for-all sets its own below.
 
-  // Free-for-all: placement, not sides. Standings by the mode's score, then fewer deaths, then kills.
+  // Free-for-all: placement, not sides.
   const ffa = isFfa(data.modeId ?? data.mode), gun = rules === 'gun';
-  const scoreOf = p => scores?.[p.team] ?? 0;
-  const ranked = ffa ? roster.filter(p => !p.dummy).sort((a, b) => scoreOf(b) - scoreOf(a) || a.deaths - b.deaths || b.kills - a.kills) : [];
-  const me = ranked.find(p => p.id === data.localId);
-  const place = me ? ranked.indexOf(me) + 1 : 0;
-  // The pair of numbers by the outcome word: yours against your team's rival, or in a free-for-all against the best
-  // score that is not yours.
-  let mineNum = scores?.[myTeam] ?? 0, themNum = scores?.[1 - myTeam] ?? 0, mineCss = TEAMS[myTeam]?.css, themCss = TEAMS[1 - myTeam]?.css;
+  const { ranked, place, scoreOf } = ffa ? ffaStandings(data) : { ranked: [], place: 0, scoreOf: p => scores?.[p.team] ?? 0 };
   const shown = p => (gun ? `${Math.min(GUN_LADDER.length, scoreOf(p))}/${GUN_LADDER.length}` : `${scoreOf(p)}`);
-  if (ffa) {
-    const rival = ranked[0] === me ? ranked[1] : ranked[0];
-    word = place ? `${ORDINAL(place)} place` : 'Match over';
-    line = place === 1 ? (outcome === 'draw' ? 'Tied at the top' : gun ? 'Through every gun to the Verdict' : FFA_LINE[1]) : FFA_LINE[place] ?? `${ranked[0]?.name ?? 'Someone'} took the yard`;
-    tone = place === 1 ? 'var(--c-gold)' : place <= 3 ? 'var(--c-sodium)' : TEAMS[ranked[0]?.team]?.css ?? 'var(--c-sodium)';
-    mineNum = me ? scoreOf(me) : 0; themNum = rival ? scoreOf(rival) : 0;
-    mineCss = TEAMS[myTeam]?.css; themCss = rival ? TEAMS[rival.team]?.css : 'var(--c-haze)';
-  }
 
   // Battle royale (js/sim/br.js): placement among the squads, your squad's own numbers, and how the squads finished.
   // data.br.stats is per roster index: [damage, revives, downs dealt, placement, seconds alive x10].
   const br = rules === 'br';
   const brStat = p => data.br?.stats?.[roster.indexOf(p)] ?? [0, 0, 0, p.place ?? 0, 0];
   const solo = MODES[data.modeId ?? data.mode]?.squad === 1;
-  const squadTeams = br ? [...new Set(roster.map(p => p.team))] : [];
-  const myPlace = br ? (outcome === 'win' ? 1 : roster.find(p => p.id === data.localId)?.place || squadTeams.length) : 0;
-  if (br) {
-    word = outcome === 'win' ? 'Victory' : `${ORDINAL(myPlace)} place`;
-    line = outcome === 'win' ? (solo ? 'Last one standing' : 'Last squad standing') : `out of ${squadTeams.length} ${solo ? 'players' : 'squads'}`;
-    tone = myPlace === 1 ? 'var(--c-gold)' : myPlace <= 3 ? 'var(--c-sodium)' : 'var(--c-haze)';
-    mineNum = myPlace; themNum = squadTeams.length; mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
-  }
+  const { squadTeams, myPlace } = br ? brPlacing(data) : { squadTeams: [], myPlace: 0 };
   const mmss = ds => { const s = Math.round(ds / 10); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   // Extraction (js/sim/extract.js): out or not, what the squad banked or lost, and the exclusive unlocks' progress.
   // data.ex is this phone's pay (js/game/awards.js); data.exView the match's final squads and per-roster [revives, downs].
   const exr = rules === 'ex';
   const exSquadView = exr ? data.exView?.squads?.find(s => s.team === myTeam) ?? null : null;
-  if (exr) {
-    const out = !!(data.ex?.extracted ?? exSquadView?.extracted);
-    const banked = data.ex?.banked ?? exSquadView?.banked ?? [], lost = data.ex?.lost ?? [];
-    word = out ? 'Extracted' : 'Missing in action';
-    line = out ? `${banked.length} contract${banked.length === 1 ? '' : 's'} banked for the squad` : lost.length ? `${lost.length} contract${lost.length === 1 ? '' : 's'} lost: nobody got out` : 'Nobody in the squad got out';
-    tone = out ? 'var(--c-gold)' : 'var(--c-haze)';
-    mineNum = banked.length; themNum = banked.length + lost.length; mineCss = 'var(--c-gold)'; themCss = 'var(--c-haze)';
-  }
   // Graveyard Shift (js/sim/zombies.js): how many rounds the crew lasted, the map's record, and the crew's own numbers.
   // data.zm is this phone's record line (js/game/awards.js); data.zmView the match's final round and crew.
   const zmr = rules === 'zm';
-  if (zmr) {
-    const z = data.zm ?? {}, survived = z.survived ?? Math.max(0, (data.zmView?.round ?? 1) - 1);
-    word = z.escaped ? 'Escaped' : 'Overrun';
-    line = z.escaped ? `Escaped on round ${z.escaped}${z.freshEscape ? ': a new record on this map' : ''}`
-      : `Survived ${survived} round${survived === 1 ? '' : 's'}${z.fresh ? ': a new record on this map' : z.best ? ` · best ${z.best}` : ''}`;
-    if (z.warden) line += ' · the Gravewarden is down';
-    tone = z.fresh || z.escaped ? 'var(--c-gold)' : 'var(--c-haze)';
-    // One number, not a pair: the round the crew reached (or got out on), read "Round 18", never "18 - 18".
-    mineNum = z.escaped || data.zmView?.round || survived; themNum = null; mineCss = tone; themCss = 'var(--c-haze)';
-  }
   const zmCrew = () => {
     const crew = data.zmView?.crew ?? [];
     const mates = roster.filter(p => p.team === myTeam && !p.ai);
@@ -371,11 +329,6 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
   const history = rules === 'snd' ? data.snd?.history ?? [] : [];
   const roundStrip = history.length ? `<span class="rs-rounds" style="display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle">${history.map((h, i) =>
     `<i title="Round ${i + 1}: ${ROUND_WORD[h.reason] ?? ''}" style="width:14px;height:14px;display:grid;place-items:center;line-height:0;color:#fff;--icon-accent:currentColor;background:${TEAMS[h.winner]?.css};box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);opacity:${h.winner === myTeam ? 1 : 0.75}">${art(ROUND_ICON[h.reason], 10)}</i>`).join('')}</span>` : '';
-  if (rules === 'snd' && !ffa) line = outcome === 'win' ? `Won ${mineNum} rounds to ${themNum}` : outcome === 'loss' ? `Lost ${mineNum} rounds to ${themNum}` : line;
-  if (rules === 'ctf') {
-    const caps = `${mineNum} ${mineNum === 1 ? 'capture' : 'captures'} to ${themNum}`;
-    line = outcome === 'win' ? `Won ${caps}` : outcome === 'loss' ? `Lost ${caps}` : `Level at ${caps}`;
-  }
   // Challenges and Pro challenges get a card of their own, so Rematch and Menu always keep their column. A single row
   // would leave that card nearly empty, so one row sits over the buttons instead, where it fits on every phone.
   // Mastery tracks that moved: main.js may pass them as data.mastery; MatchAwards also leaves them with Progress.
@@ -391,8 +344,8 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     <div class="rs" data-outcome="${outcome}" style="--tone:${tone}">
       <div class="rs-top">
         <div class="rs-word"><h2>${esc(word)}</h2><small>${esc(modeName)}${roundStrip}</small></div>
-        ${zmr ? `<span class="rs-score rs-round"><small>Round</small><u class="rs-mine" style="color:${mineCss}">0</u></span>`
-          : `<span class="rs-score"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>`}
+        ${sc.kind === 'one' ? `<span class="rs-score rs-round" data-kind="one"><small>${esc(sc.label)}</small><u class="rs-mine" style="color:${mineCss}">${typeof mineNum === 'number' ? 0 : esc(mineNum)}</u></span>`
+          : sc.kind === 'pair' ? `<span class="rs-score" data-kind="pair"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>` : ''}
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
       </div>
@@ -424,7 +377,8 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rs-hero" data-act="resHero">
         <i class="rs-hero-band"></i>
         <h1>${esc(word)}</h1>
-        <p class="rs-hero-score">${zmr ? `<small>Round</small><u style="color:${mineCss}">${mineNum}</u>` : `<u style="color:${mineCss}">${mineNum}</u><i></i><u style="color:${themCss}">${themNum}</u>`}</p>
+        ${sc.kind === 'one' ? `<p class="rs-hero-score"><small>${esc(sc.label)}</small><u style="color:${mineCss}">${esc(mineNum)}</u></p>`
+          : sc.kind === 'pair' ? `<p class="rs-hero-score"><u style="color:${mineCss}">${mineNum}</u><i></i><u style="color:${themCss}">${themNum}</u></p>` : ''}
         <small>${esc(line)}</small>
       </div>
     </div>`;
@@ -479,7 +433,7 @@ async function runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineN
   }
   if (reel.dead) return;
   root.classList.add('in');
-  rollNumber(q('.rs-mine'), mineNum, { from: 0, duration: 600 });
+  if (typeof mineNum === 'number') rollNumber(q('.rs-mine'), mineNum, { from: 0, duration: 600 });
   if (themNum !== null) rollNumber(q('.rs-them'), themNum, { from: 0, duration: 600 });
   rollNumber(q('.xp-total'), xp?.total ?? 0, { from: 0, duration: 900, delay: 300 });
   await reel.sleep(520);

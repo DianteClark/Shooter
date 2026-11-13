@@ -662,7 +662,7 @@ export class Match {
       snd: view.snd ?? view.points?.snd ?? null,
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
-      zmView: objOf(view)?.zm ? { round: objOf(view).round, best: objOf(view).best, crew: objOf(view).crew } : null,
+      zmView: objOf(view)?.zm ? { round: objOf(view).round, best: objOf(view).best, crew: objOf(view).crew, escaped: objOf(view).escaped ?? [] } : null,
       early: !!this.early,
       ...awards,
     });

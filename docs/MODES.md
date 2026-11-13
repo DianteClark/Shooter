@@ -131,3 +131,27 @@ Solo is you and a bot against two bots; two friends in a room play the bots. Lob
   rosters solo and with a friend, determinism, bot matches on every small map: rounds of 7-12 s of play, 2.3-3.9 minute
   matches). `python3 dev/ui-modes2-test.py [port]` (playlist, the match on a small map, the plate, one kit, enemy health
   tags, the watch plate, round 2, results).
+
+## End of match: what the banner and results header say
+One function decides it for every mode, `matchHeader` in `js/ui/outcome.js`: the results header (`js/ui/results.js`)
+draws it, and the end banners (`js/ui/hud.js`, `ex-hud.js`) use its word and line, so the two always agree (battle
+royale's and Graveyard Shift's banners say the same in their own layers). A score sits by the word only where it
+means something. `python3 dev/ui-endings-test.py [port]` ends a match of every mode and checks this table.
+
+| Mode | Headline | Line under it | Score by the headline |
+|---|---|---|---|
+| TDM, Kill Confirmed, Domination, Hardpoint, Headquarters, Kill Order, Grind (and their Ground War versions) | Victory / Defeat / Draw | The yard is yours / lost / Neither side broke through | team score, yours - theirs |
+| Search and Destroy, Control, Showdown | Victory / Defeat / Draw | Won 4 rounds to 2 (Lost ..., Level at N rounds each); S&D's banner adds how the last round went | rounds won, 6 - 4 |
+| Capture the Flag | Victory / Defeat / Draw | Won 3 captures to 1 (Lost ..., Level at ...) | captures, yours - theirs |
+| Infected | Victory / Defeat (by the side you ended on) | You held out to the end / N survivors held out / Everyone was infected | one number: Survivors N |
+| Free-for-All, Gun Game, One in the Chamber | 1st place / 2nd place / ... | Nobody else came close, One short of the top, On the podium, or who took the yard (Gun Game: Through every gun) | your score - the best other score (Gun Game: guns) |
+| Battle Royale, Duos, Solos, Rebound | Victory, or 3rd place | Last squad standing, or #3 of 8 squads (players in Solos) | one number: #3, "of 8 squads" |
+| Extraction (Quads, Duos) | Extracted / Squad wiped / Out of time / Left the match | 2 contracts banked · 2,550 XP, or 3 contracts lost: nobody got out | none |
+| Graveyard Shift | Escaped / Overrun / Left behind (the crew got out without you) | Escaped on round 18, or Survived 12 rounds · best 15 (records and the Gravewarden added) | one number: Round N |
+| Ranked (any ranked mode) | as the mode | as the mode, then · +24 SR (or · Placement 2/5, · Placed) | as the mode |
+| Training (Custom > Training) | Training over | Practice: no XP, no record | none (only if its 100-minute clock ever runs out; leaving goes back to Training) |
+| Firing range, tutorial | no results screen: the range is left from its menu, the tutorial ends on its own sheet | | |
+
+Left a team match early: Defeat, "You left before the end". Before this, Extraction's header put contracts banked
+against contracts lost as if they were a score ("0 - 2" after a wipe), battle royale's put the place against the
+squad count ("3 - 8"), and draws said Stalemate on the banner.

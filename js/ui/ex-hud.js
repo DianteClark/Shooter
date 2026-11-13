@@ -16,6 +16,7 @@ import { objOf } from '../sim/rules.js';
 import { spectate } from '../sim/snd.js';
 import { esc, nameHtml } from './widgets.js';
 import { icon } from './icons.js';
+import { matchHeader } from './outcome.js';
 
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const MAP_PX = 640, MINI_SPAN = 120, MARK_Y = 1.6, TAGS = 6;
@@ -689,11 +690,12 @@ export class ExHud {
   }
 
   endBanner(endEl, winner, myTeam, view) {
+    // The results header's word and line (js/ui/outcome.js): Extracted, Squad wiped or Out of time; no score.
     const ex = objOf(view), squad = ex?.squads?.find(s => s.team === myTeam);
-    const out = !!squad?.extracted, n = squad?.banked?.length ?? 0;
-    endEl.dataset.result = out ? 'win' : 'loss';
-    endEl.querySelector('b').textContent = out ? 'Extracted' : 'Missing in action';
-    endEl.querySelector('small').textContent = out ? `${n} contract${n === 1 ? '' : 's'} banked` : `${(squad?.pot?.length ?? 0) + (squad?.banked?.length ?? 0)} contracts lost`;
+    const head = matchHeader({ modeId: this.mode, outcome: squad?.extracted ? 'win' : 'loss', myTeam, scores: view?.scores, roster: view?.players ?? [], localId: view?.localId, exView: { squads: ex?.squads ?? [] } });
+    endEl.dataset.result = squad?.extracted ? 'win' : 'loss';
+    endEl.querySelector('b').textContent = head.word;
+    endEl.querySelector('small').textContent = head.line;
   }
 }
 

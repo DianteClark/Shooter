@@ -1681,6 +1681,7 @@ function showResults(results) {
       ex: results.ex ?? null, exView: results.exView ?? null,
       zm: results.zm ?? null, zmView: results.zmView ?? null,
       early: !!results.early,
+      practice: !!results.practice,
       mastery: results.mastery,
       season: results.season ?? null,
       ranked: results.ranked ?? null,

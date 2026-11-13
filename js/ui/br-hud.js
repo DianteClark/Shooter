@@ -963,7 +963,7 @@ export class BrHud {
     const place = won ? 1 : me?.place || squads;
     endEl.dataset.result = won ? 'win' : place <= 3 ? 'draw' : 'loss';
     endEl.querySelector('b').textContent = won ? 'Victory' : `${ORD(place)} place`;
-    endEl.querySelector('small').textContent = won ? (MODES[this.mode]?.squad === 1 ? 'Last one standing' : 'Last squad standing') : `of ${squads} ${MODES[this.mode]?.squad === 1 ? 'players' : 'squads'}`;
+    endEl.querySelector('small').textContent = won ? (MODES[this.mode]?.squad === 1 ? 'Last one standing' : 'Last squad standing') : `#${place} of ${squads} ${MODES[this.mode]?.squad === 1 ? 'players' : 'squads'}`;
   }
 }
 

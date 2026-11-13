@@ -12,6 +12,7 @@ import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/F
 import { ZmHud } from './zm-hud.js';
 import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
+import { matchHeader } from './outcome.js';    // End banners say what the results header says.
 import { playlistName } from '../shared/playlist.js';
 import { Progress, matchScore } from './progress.js';
 import { badgeMarkOf, badgeLevel, badgeKey, nameHtml, weaponLevelHtml } from './widgets.js';
@@ -747,6 +748,7 @@ export class HUD {
     this.#sndControls(this.snd || this.br || this.ex || this.zm);   // Battle royale and extraction have no scorestreaks either.
     this.reset();
     const practice = mode === 'range' || !!training;
+    this.training = practice;
     this.#range.prepare(practice, { training: !!training });
     this.el.classList.toggle('range-on', practice);
     this.el.classList.toggle('training-on', !!training);
@@ -2931,26 +2933,18 @@ export class HUD {
       this.endEl.classList.add('show');
       return;
     }
-    if (this.ffa && view) {
-      // Placement, not sides: first is a win, the podium is a good day, the rest is a loss.
-      const ranked = ffaRank(view), at = ranked.findIndex(p => p.team === myTeam) + 1;
-      const won = winner === myTeam, leader = ranked[0];
-      this.endEl.dataset.result = won ? 'win' : winner === null || winner === undefined ? 'draw' : at <= 3 ? 'draw' : 'loss';
-      this.endEl.querySelector('b').textContent = won ? '1st place' : at ? `${ORDINAL(at)} place` : 'Match over';
-      this.endEl.querySelector('small').textContent = won ? (this.gun ? 'Through every gun' : 'Last one standing') : `${leader?.name ?? 'Someone'} took the yard`;
-      this.endEl.classList.add('show');
-      return;
-    }
-    const won = winner === myTeam, drawn = winner === null || winner === undefined;
-    this.endEl.dataset.result = drawn ? 'draw' : won ? 'win' : 'loss';
-    this.endEl.querySelector('b').textContent = drawn ? 'Stalemate' : won ? 'Victory' : 'Defeat';
+    // Every other mode: the results header's word and line (js/ui/outcome.js, docs/MODES.md), so the two agree.
+    const drawn = winner === null || winner === undefined;
+    let won = winner === myTeam, at = 0;
+    if (this.ffa && view) { at = ffaRank(view).findIndex(p => p.team === myTeam) + 1; won = won || (!drawn && at === 1); }
+    const outcome = drawn ? 'draw' : won ? 'win' : 'loss';
+    const head = matchHeader({ modeId: this.modeId, outcome, scores: view?.scores, myTeam, roster: view?.players ?? [], localId: view?.localId, practice: !!this.training });
+    this.endEl.dataset.result = this.ffa ? (won ? 'win' : drawn || at <= 3 ? 'draw' : 'loss') : outcome;
+    this.endEl.querySelector('b').textContent = head.word;
     // Search and Destroy: the score in rounds and how the last one went.
     const last = this.snd ? sndOf(view)?.history?.at(-1) : null;
     const tally = this.snd && view?.scores ? `${view.scores[myTeam]} rounds to ${view.scores[1 - myTeam]}` : '';
-    const caps = this.ctf && view?.scores ? `${view.scores[myTeam]} ${view.scores[myTeam] === 1 ? 'capture' : 'captures'} to ${view.scores[1 - myTeam]}` : '';
-    this.endEl.querySelector('small').textContent = last ? `${tally}. ${SND_WHY[last.reason]?.[last.winner === myTeam ? 0 : 1] ?? ''}`
-      : caps ? (drawn ? `Level at ${caps}` : caps)
-      : drawn ? 'Neither side broke through' : won ? 'The yard is yours' : 'The yard is lost';
+    this.endEl.querySelector('small').textContent = last ? `${tally}. ${SND_WHY[last.reason]?.[last.winner === myTeam ? 0 : 1] ?? ''}` : head.line;
     this.ctfEl.carry.hidden = true;
     this.sndEl.big.hidden = true;
     this.endEl.classList.add('show');
