@@ -1148,7 +1148,7 @@ export const CARDS = [
   card('level-30', 'Thirty Up', 'Career', 'Reach level 30', c => c.peakLevel >= 30, { p: 'hazard', c: ['#24180a', '#5c3c14', '#ffd9a0', '#ff9f1c'], e: 'ui:rank' }, c => [c.peakLevel, 30]),
   card('pro-5', 'Pro Shop', 'Career', 'Earn 5 Pro perks', c => c.pro.length >= 5, { p: 'circuit', c: ['#221a08', '#6a5214', '#fff0b8', '#ffd659'], e: 'ui:star', gold: true }, c => [c.pro.length, 5]),
   // Graveyard Shift's hidden quest (ROADMAP item 36): the Gravewarden put down, on any map.
-  card('zm-warden', 'Lantern Out', 'Career', 'Put down the Gravewarden in Graveyard Shift', c => zmWardenDown(c.zmFeats), { p: 'rays', c: ['#120e1c', '#3a2a5a', '#d8c8ff', '#b070ff'], e: 'ui:skull', gold: true }),
+  card('zm-warden', 'Lantern Out', 'Zombies', 'Put down the Gravewarden in Graveyard Shift', c => zmWardenDown(c.zmFeats), { p: 'rays', c: ['#120e1c', '#3a2a5a', '#d8c8ff', '#b070ff'], e: 'ui:skull', gold: true }),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),
@@ -2056,11 +2056,11 @@ export function rerollChallenge(state, id, now = new Date()) {
 // Counts what the local player did in one match, for the challenges. Pure, like ProTracker: feed onEvents(events,
 // view) every frame, then finish({won, place}) once. counts() is {stat: n}.
 // Feats (docs/UNLOCKS-AUDIT-2026-11-12.md, the feat emblems and the Trophy Case) are counted here too, as lifetime
-// tallies: ace (the whole enemy side alone in one Search and Destroy or Showdown round), streak10, finishers, long50 (a
+// tallies: ace (the whole enemy side alone in one Search and Destroy or Showdown round), streak10, finishers, long40 (a
 // gun kill from LONG_FEAT m), gf:flawless (Showdown won 6-0), inf:survived (an Infected clock survived), br:won / br:top5
 // / br:lone (won with every squadmate out) and the same for Rebound (rb:*). `best` holds this match's records: the
 // longest kill streak and the longest gun kill, in metres.
-export const LONG_FEAT = 50;
+export const LONG_FEAT = 40;
 const ROUND_RULES = new Set(['snd', 'gf']);
 export class ChallengeTally {
   constructor(localId) {
@@ -2107,7 +2107,7 @@ export class ChallengeTally {
           if (e.equip) { if (LETHALS[e.equip]) this.add('equipKills'); break; }
           me ??= view?.players?.find(p => p.id === id) ?? {};
           if (WEAPONS[e.weapon] && (e.dist ?? 0) > this.best.long) this.best.long = e.dist;
-          if ((e.dist ?? 0) >= LONG_FEAT) this.add('long50');
+          if ((e.dist ?? 0) >= LONG_FEAT) this.add('long40');
           const cat = WEAPON_CATEGORY[e.weapon];
           if (cat) this.add(`cat:${cat}`);
           this.add(`gun:${e.weapon}`);

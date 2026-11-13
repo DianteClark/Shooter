@@ -17,7 +17,7 @@ export const EX_UNLOCKS = [
 const BY_ID = new Map(EX_UNLOCKS.map(u => [u.id, u]));
 export const exUnlock = (kind, item) => BY_ID.get(`${kind}:${item}`) ?? null;
 export const BIG_HAUL = 4;          // Contracts in one extraction that count for Exfil Flare.
-export const CLEAN_HAUL = 3;        // Contracts banked, every one taken, for the Full Manifest feat emblem.
+export const CLEAN_HAUL = 4;        // Contracts banked, every one taken, for the Full Manifest feat emblem.
 
 // {value, goal, done, label} for one exclusive item against a save's lifetime counts.
 export function exUnlockStatus(u, life = {}) {
