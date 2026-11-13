@@ -426,6 +426,13 @@ const BURN_GAP = 1.5;            // Burn ticks closer together than this are one
 const CLOSE_KILL = 8;
 const FLANK = 1.3;               // Radians between a victim's aim and the way to the killer: a kill from the side or behind.
 
+// Graveyard Shift (docs/ZOMBIES.md, docs/UNLOCKS-AUDIT-2026-11-12.md): the horde is not soldiers. Its kills (and the hits
+// that lead to them) count for the mode's own rewards and the capped weapon XP awards.js pays, and for nothing else: no
+// kill, class or gun challenge, Pro step, mastery tier, camo challenge, operator unlock or lifetime kill tally. Each
+// tracker drops them at the door; ChallengeTally keeps them apart as `zm:kills` / `zm:head` for the mode's own cards.
+export const hordeView = view => modeRules(view?.modeId ?? view?.mode) === 'zm';
+const soldierEvents = (events, id) => events.filter(e => e.t !== 'kill' && !(e.t === 'hit' && e.by === id));
+
 // Counts what one player did in one match, for the Pro challenges. Pure: no DOM, no storage, runs in node.
 // Feed onEvents(events, view) every frame with that player's view (its `t` is the clock). gains() returns
 // {perk: {stat: n}} for the perks that were equipped when each thing happened; setPerks() whenever the loadout in use
@@ -459,6 +466,7 @@ export class ProTracker {
     const id = this.id, me = view?.players?.find(p => p.id === id);
     const t = view?.t ?? 0, dt = this.prevT === null ? 0 : Math.min(0.25, Math.max(0, t - this.prevT));
     let healed = false, spawned = false;
+    if (hordeView(view)) events = soldierEvents(events, id);
     for (const e of events) {
       switch (e.t) {
         case 'kill':
@@ -942,6 +950,11 @@ export class MasteryTracker {
     this.t = t;
     if (me) this.team = me.team;
     const op = this.op;
+    if (hordeView(view)) {
+      // A death still ends the life's run of kills; nothing the horde dies of counts here.
+      if (events.some(e => e.t === 'kill' && e.target === id)) this.life = {};
+      events = soldierEvents(events, id);
+    }
     for (const e of events) {
       switch (e.t) {
         case 'throw':
@@ -2034,6 +2047,10 @@ export class ChallengeTally {
     for (const e of events) {
       switch (e.t) {
         case 'kill': {
+          if (this.rules === 'zm') {        // The horde: the mode's own tally only (see hordeView).
+            if (e.by === id && e.target !== id) { this.add('zm:kills'); if (e.head) this.add('zm:head'); }
+            break;
+          }
           if (e.assist === id) this.add('assists');
           if (e.by !== id || e.target === id) break;
           this.add('kills');

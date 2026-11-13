@@ -353,6 +353,19 @@ test('weapon ladder and unlock challenges: their stats are counted', () => {
   for (const k of Object.keys(UNLOCK_CHALLENGES)) assert.ok(UNLOCK_CHALLENGES[k].label, k);
 });
 
+test('Graveyard Shift: zombie kills count only as the mode\'s own (zm:kills), never as kills, class, gun, Pro, mastery or ladder stats', () => {
+  const z = seen.zm;
+  assert.ok(z && z.matches > 0, 'zm was played');
+  assert.ok((z.tally['zm:kills'] ?? 0) > 0, 'the horde was killed (zm:kills)');
+  const killish = Object.keys(z.tally).filter(k => /^(kills|head|long|closeKills|slideKills|hipKills|assists|streakKills|equipKills|multi|streak3|streak5|cat:|gun:)/.test(k));
+  assert.deepEqual(killish, [], 'kill stats in the challenge tally');
+  const proKills = ['kills', 'woundedKills', 'lowKills', 'closeKills', 'swapKills', 'flankKills', 'equipKills', 'hits', 'assists', 'multi', 'streak3'].filter(k => (z.pro[k] ?? 0) > 0);
+  assert.deepEqual(proKills, [], 'Pro kill steps');
+  assert.deepEqual(Object.keys(z.mastery).filter(k => /\.(kills|hurtKills|head|closeKills|slideKills|upKills|suitKills|multi|assists|\w+Kills)$/.test(k)), [], 'mastery kill stats');
+  assert.deepEqual(z.ladder, {}, 'weapon ladder');
+  assert.deepEqual(z.medals, {}, 'medals');
+});
+
 /* ================= D. Generators ================= */
 test('120 days of dailies and 18 weeks of weeklies: three a set, no family twice, nothing unreachable', () => {
   const start = new Date(2026, 10, 12);
@@ -537,6 +550,43 @@ test('daily and weekly challenges: a real match tally moves them by exactly what
     assert.equal(after, Math.min(c.goal, before + 1), c.id);
     if (before < c.goal) assert.ok(out.moved.some(m => m.id === c.id), `${c.id} reported`);
   }
+});
+
+test('Graveyard Shift through MatchAwards: weapon XP (capped) and the mode\'s records move; kills, challenges, camos and boards do not', async () => {
+  const { MatchAwards } = await import('../js/game/awards.js');
+  const { ZM } = await import('../js/shared/zombies.js');
+  Challenges.reset();
+  const now = new Date();
+  const roster = buildRoster([], { mode: 'zm', mapId: 'neon', seed: 4 });
+  const sim = new Sim({ roster, map: 'neon', seed: 4, mode: 'zm' });
+  const me = roster.find(r => !r.zk && !r.isZombie && r.loadout);
+  const aw = new MatchAwards({ localId: me.id, team: me.team, loadout: me.loadout });
+  const lifeBefore = Progress.lifetime(), boardBefore = Progress.careerCard();
+  const statsBefore = Object.fromEntries(WEAPON_IDS.map(w => [w, Progress.weaponStats(w)]));
+  const chalBefore = JSON.stringify(Challenges.all(now));
+  let view = null;
+  for (let i = 0; i < 300 * SIM_HZ && sim.phase !== 'ended'; i++) {
+    sim.step(1 / SIM_HZ);
+    view = sim.getView(me.id);
+    aw.onEvents(sim.drainEvents(), view);
+  }
+  const r = aw.finish(view);
+  assert.ok(r.zm && aw.kills > 0, `the horde was killed (${aw.kills})`);
+  for (const w of WEAPON_IDS) {
+    const a = statsBefore[w], b = Progress.weaponStats(w);
+    for (const k of ['kills', 'head', 'long', 'slide', 'clean']) assert.equal(b[k] ?? 0, a[k] ?? 0, `${w} ${k}`);
+  }
+  assert.ok(r.weapons.some(w => w.xpGained > 0) && r.weapons.every(w => w.xpGained <= ZM.weaponXpCap), 'weapon XP, capped');
+  const life = Progress.lifetime();
+  for (const k of Object.keys(life)) if (/^(kills|head|long|cat:|gun:|hipKills|closeKills|slideKills)/.test(k)) assert.equal(life[k], lifeBefore[k], `lifetime ${k}`);
+  assert.ok((life['zm:kills'] ?? 0) > (lifeBefore['zm:kills'] ?? 0), 'lifetime zm:kills');
+  assert.equal(Progress.careerCard().k, boardBefore.k, 'board kills');
+  const chal = Challenges.all(now);
+  for (const c of [...chal.daily, ...chal.weekly]) if (!/^played|^wins|^mode\.zm/.test(c.stat ?? '') && !/played/.test(P.getChallenge(c.id).stat)) {
+    const was = JSON.parse(chalBefore)[c.period].find(x => x.id === c.id);
+    assert.equal(c.value, was.value, `${c.id} (${P.getChallenge(c.id).stat}) moved in Graveyard Shift`);
+  }
+  assert.equal(r.unlocks.filter(u => u.kind === 'camo' || u.kind === 'operator' || u.kind === 'pro').length, 0, 'no camo, operator or Pro unlock from the horde');
 });
 
 /* ================= Report ================= */

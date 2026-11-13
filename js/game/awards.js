@@ -17,7 +17,7 @@ import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally, MasteryT
 import { landingOf, maxThrowRange } from '../sim/equipment.js';
 import { MAPS } from '../shared/map.js';
 import { FFA_TEAM } from '../shared/constants.js';
-import { isFfa, BR } from '../shared/modes.js';
+import { isFfa, isZm, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
 import { ZM, zmXp } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
@@ -81,6 +81,16 @@ export class MatchAwards {
 
   #onKill(e, view) {
     this.kills++;
+    // Graveyard Shift: a zombie pays the mode's own XP lines and the gun's (capped) weapon XP, and counts for nothing
+    // else (progression.js hordeView): no gun kills, headshots or longshots for camo challenges, class goals or cards.
+    if (isZm(this.mode)) {
+      if (e.streak || e.equip) return;
+      if (e.head) this.headshots++;
+      const b = this.#bucket(e.weapon);
+      b.xp += WEAPON_XP.kill + (e.head ? WEAPON_XP.headshot : 0) + ((e.dist ?? 0) >= longshotDist(e.weapon) ? WEAPON_XP.longshot : 0)
+        + (view?.players?.find(p => p.id === this.localId)?.sliding ? WEAPON_XP.slide : 0) + (this.usedEquipment ? 0 : WEAPON_XP.clean);
+      return;
+    }
     // Weapon stats and camo challenges credit gunplay only; a sim kill's weapon is a gun id even for grenades.
     if (e.streak) { this.streakKills++; return; }
     if (e.equip) { this.equipKills++; return; }
