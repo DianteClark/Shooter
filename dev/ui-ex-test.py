@@ -2,7 +2,8 @@
 """Extraction end to end in a real browser (docs/EXTRACT.md): python3 dev/ui-ex-test.py [port] [outdir]
 
 Serves the repo, opens Multiplayer, the Extraction tab, Quads, Find match, rides the search and the vote into a match
-on Frontier, opens the full map, takes a contract at a phone, does it (the local player is moved to the objective; a
+on Frontier, opens the full map, finds the phone greyed while a contract is under way, holds Abandon on the
+contract card, takes a contract at the phone, does it (the local player is moved to the objective; a
 commander is shot on the host), waits for the first exfil window (the match clock is wound forward on the host), calls
 the helicopter, holds the zone, gets lifted out and checks the extraction results screen. Screenshots at 852x393 and
 667x375 go to outdir (default /tmp/exfil). Fails on any console error, and on HUD panels that spill off the screen.
@@ -86,6 +87,34 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_selector('.ex-phone:not([hidden])', timeout=8000)
     await pg.wait_for_timeout(300)
     await shot('05-phone')
+    # One contract at a time: with one under way the phone is greyed, says why, and opens nothing.
+    busy = await ev("(() => { const b = document.querySelector('.ex-phone'); return [b.classList.contains('off'), b.querySelector('small').textContent]; })()")
+    if not busy[0] or busy[1] != 'Finish your current contract first': failures.append(f'{tag}: phone with a contract under way shows {busy}')
+    await pg.locator('.ex-phone').first.click(force=True)
+    await pg.wait_for_timeout(300)
+    if await ev("!document.querySelector('.ex-offers').hidden"): failures.append(f'{tag}: the greyed phone opened the offers')
+    # Abandon on the contract card: a short press does nothing, a held one (about 1 s, the bar fills) drops it.
+    cid = f"{G}.match.sim.rules.squads.get({G}.match.sim.byId.get({G}.match.localId).team).contract?.id ?? null"
+    c0 = await ev(cid)
+    ab = pg.locator('.ex-con .ex-ab').first
+    box = await ab.bounding_box()
+    if not box: failures.append(f'{tag}: no abandon button on the contract card')
+    else:
+        await ev("document.querySelector('.ex-con .ex-ab').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        await pg.wait_for_timeout(300)
+        await ev("document.querySelector('.ex-con .ex-ab').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))")
+        await pg.wait_for_timeout(1300)
+        if await ev(cid) != c0: failures.append(f'{tag}: a short press abandoned the contract')
+        await ev("document.querySelector('.ex-con .ex-ab').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))")
+        await pg.wait_for_timeout(500)
+        k = await ev("document.querySelector('.ex-con .ex-ab i').style.transform")
+        await shot('05b-abandon-hold')
+        if 'scaleX(0)' == k or not k: failures.append(f'{tag}: the abandon hold bar did not fill ({k!r})')
+        try: await pg.wait_for_function(f"({cid}) === null", timeout=6000)
+        except Exception: failures.append(f'{tag}: holding abandon did not drop the contract')
+        await ev("document.querySelector('.ex-con .ex-ab').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))")
+    try: await pg.wait_for_selector('.ex-phone:not(.off):not([hidden])', timeout=5000)
+    except Exception: failures.append(f'{tag}: the phone stayed greyed after abandoning')
     await pg.locator('.ex-phone').first.click()
     await pg.wait_for_timeout(400)
     await shot('06-offers')

@@ -56,6 +56,12 @@ const CSS = `
 .ex-con p em { font-style: normal; color: var(--c-sodium); }
 .ex-con .ex-bar { grid-column: 1 / 3; height: 3px; margin-top: 2px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
 .ex-con .ex-bar div { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--k, 0)); }
+.ex-con .ex-ab { grid-column: 1 / 3; justify-self: end; position: relative; overflow: hidden; margin-top: 3px; height: 26px; min-width: 112px; padding: 0 10px; border: 0;
+  pointer-events: auto; touch-action: none; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk);
+  background: rgba(42,51,61,.95); box-shadow: inset 0 0 0 1px rgba(255,138,124,.6); user-select: none; -webkit-user-select: none; }
+.ex-con .ex-ab i { position: absolute; inset: 0; background: rgba(255,107,92,.55); transform-origin: left; transform: scaleX(0); pointer-events: none; }
+.ex-con .ex-ab span { position: relative; }
+.ex-act.off { color: var(--c-haze); background: rgba(42,51,61,.9); box-shadow: 0 0 0 2px rgba(231,234,228,.25) inset; filter: grayscale(1); }
 .ex-con.warn { box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-red); }
 .ex-con.warn .ex-bar div { background: var(--c-red); }
 /* Call exfil and Contracts ride the prompt lane over the dock, between the sticks (js/ui/hud.js layout). */
@@ -151,7 +157,7 @@ export class ExHud {
         <div class="ex-chip ex-exfil"><b>3:30</b><small>Exfil opens</small></div>
       </div>
       <div class="ex-squad"></div>
-      <div class="ex-con" hidden><span class="ci"></span><b></b><small></small><p></p><div class="ex-bar"><div></div></div></div>
+      <div class="ex-con" hidden><span class="ci"></span><b></b><small></small><p></p><div class="ex-bar"><div></div></div><button class="ex-ab" data-tap="1" aria-label="Hold to abandon this contract"><i></i><span>HOLD: ABANDON</span></button></div>
       <div class="ex-acts">
         <button class="ex-act ex-call" data-tap="1" hidden>CALL EXFIL<small>Helicopter in ${EX.inbound} s</small></button>
         <button class="ex-act alt ex-phone" data-tap="1" hidden>CONTRACTS<small>Pick a new one</small></button>
@@ -163,7 +169,7 @@ export class ExHud {
       <div class="ex-rev" hidden><b>Reviving</b><i><i></i></i></div>
       <div class="br-out ex-held" hidden><div class="txt"><b></b><div class="place"></div><small></small></div>
         <div class="acts"><button data-tap="1" class="br-spec go ex-spec">Spectate</button><button data-tap="1" class="br-spec-next quiet ex-spec-next" hidden>Next player</button><button data-tap="1" class="br-spec-squad quiet ex-spec-squad" hidden>Next squad</button><button data-tap="1" class="br-leave ex-leave">Leave</button></div></div>
-      <div class="ex-offers" hidden data-tap="1"><h3>Contract phone<small>Take one: it replaces the contract your squad has now</small></h3><div class="ex-offer-row"></div><button class="close" data-tap="1">Close</button></div>
+      <div class="ex-offers" hidden data-tap="1"><h3>Contract phone<small>Take one: your squad works one contract at a time</small></h3><div class="ex-offer-row"></div><button class="close" data-tap="1">Close</button></div>
       <div class="ex-map" hidden data-tap="1">
         <div class="ex-map-frame"><canvas width="${MAP_PX}" height="${MAP_PX}"></canvas></div>
         <div class="ex-map-side"><h3>Frontier</h3><p>Gold: your contract. Rings: exfil sites (white open, amber called, green down). Yellow squares: contract phones.</p><button class="ex-map-close" data-tap="1">Close map</button></div>
@@ -190,7 +196,15 @@ export class ExHud {
     this.mapEl = $('.ex-map'); this.mapCanvas = $('.ex-map canvas'); this.mapG = this.mapCanvas.getContext('2d');
     const act = (node, fn) => node.addEventListener('click', e => { e.stopPropagation(); fn(e); });
     act(this.callBtn, () => this.cmd?.('call'));
-    act(this.phoneBtn, () => this.#openOffers(true));
+    act(this.phoneBtn, () => { if (!this.phoneBusy) this.#openOffers(true); });
+    // Abandon: hold the button EX.abandonHold s (the bar fills); letting go early does nothing.
+    this.abBtn = $('.ex-ab'); this.abBar = $('.ex-ab i'); this.abT = -1;
+    const abStart = e => { e.preventDefault(); e.stopPropagation(); this.abT = 0; };
+    const abStop = () => { this.abT = -1; this.abBar.style.transform = 'scaleX(0)'; };
+    this.abBtn.addEventListener('pointerdown', abStart);
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) this.abBtn.addEventListener(ev, abStop);
+    this.abBtn.addEventListener('click', e => e.stopPropagation());
+    this.abStop = abStop;
     act($('.ex-offers .close'), () => this.#openOffers(false));
     this.offersEl.addEventListener('click', e => { if (e.target === this.offersEl) this.#openOffers(false); });
     this.offerRow.addEventListener('click', e => {
@@ -222,7 +236,7 @@ export class ExHud {
     this.hud.el.classList.remove('ex-held', 'ex-down-on');
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId; this.mode = mode;
-    this.c = {}; this.base = null; this.phone = null;
+    this.c = {}; this.base = null; this.phone = null; this.phoneBusy = undefined;
     this.#openOffers(false);
     this.toggleMap(false);
     const mm = this.hud.el.querySelector('.minimap');
@@ -251,7 +265,7 @@ export class ExHud {
   update(view, me, dt) {
     const ex = objOf(view);
     if (!this.on || !ex?.ex) return;
-    this.view = view;
+    this.view = view; this.dt = dt;
     const c = this.c;
     const squad = ex.squads?.find(s => s.team === me.team) ?? null;
     const live = view.phase === 'live';
@@ -312,7 +326,16 @@ export class ExHud {
     const k = squad?.contract;
     const show = !!k && view.phase !== 'ended' && !squad?.done && !me.out;      // Lifted out: nothing left to do.
     if (this.c.conShow !== show) { this.c.conShow = show; this.conEl.hidden = !show; }
-    if (!show) return;
+    if (!show) { if (this.abT >= 0) this.abStop(); return; }
+    // The abandon hold: alive and up only; the command goes once the bar is full.
+    const canAb = view.phase === 'live' && me.alive;
+    if (this.c.ab !== canAb) { this.c.ab = canAb; this.abBtn.hidden = !canAb; if (!canAb) this.abStop(); }
+    if (this.abT >= 0) {
+      this.abT += this.dt ?? 0;
+      const k = Math.min(1, this.abT / EX.abandonHold);
+      this.abBar.style.transform = `scaleX(${k.toFixed(3)})`;
+      if (k >= 1) { this.abStop(); this.cmd?.('abandon'); }
+    }
     const poi = objOf(view).pois?.[k.poi];
     const goal = this.#goal(k, me);
     const d = Math.round(Math.hypot(goal.x - me.x, goal.z - me.z));
@@ -350,6 +373,15 @@ export class ExHud {
     let phone = null;
     if (up && !squad?.done) for (const ph of ex.phones ?? []) if (Math.hypot(me.x - ph.x, me.z - ph.z) <= EX.phoneReach) { phone = ph.i; break; }
     if (this.phone !== phone) { this.phone = phone; this.phoneBtn.hidden = phone === null; if (phone === null && this.offersOpen) this.#openOffers(false); }
+    // One contract at a time: with one under way the phone is greyed and takes nothing.
+    const busy = !!squad?.contract;
+    if (this.phoneBusy !== busy) {
+      this.phoneBusy = busy;
+      this.phoneBtn.classList.toggle('off', busy);
+      this.phoneBtn.setAttribute('aria-disabled', busy ? 'true' : 'false');
+      this.phoneBtn.querySelector('small').textContent = busy ? 'Finish your current contract first' : 'Pick a new one';
+      if (busy && this.offersOpen) this.#openOffers(false);
+    }
     if (this.offersOpen && phone !== null) {
       const taken = squad?.taken ?? 0, key = `${phone}|${taken}|${squad?.contract?.id}`;
       if (this.c.offers !== key) {
@@ -518,6 +550,7 @@ export class ExHud {
         if (!mine(e.team)) break;
         if (e.done) { this.#callout('Contract complete', `${CONTRACT_NAMES[e.type]}: +${(EX.reward.xp[e.tier] ?? 0).toLocaleString('en-US')} XP pending. Extract to keep it.`); this.hud.audio?.uiSound?.('confirm'); }
         else if (e.taken) this.hud.notify(`New contract: ${CONTRACT_NAMES[e.type]}`);
+        else if (e.abandoned) this.hud.notify(e.lost ? 'Contract lost: a new one is on its way' : `Contract abandoned: take one at a phone, or one comes in ${e.wait ?? EX.abandonWait} s`);
         break;
       case 'excase':
         if (mine(e.team)) this.hud.notify(e.drop ? 'The case is down: pick it up' : e.id === me.id ? 'You have the case: get it to the drop' : 'Case secured');

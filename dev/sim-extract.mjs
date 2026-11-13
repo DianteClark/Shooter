@@ -147,7 +147,40 @@ function units() {
     const ph = R.phones[4];
     place(me, ph.x, ph.z);
     const o = R.offers(ph.i, team, s.taken)[1];
-    check(sim.applyCommand(me.id, { cmd: 'ex', act: 'take', phone: ph.i, k: 1 }) && s.contract.type === o.type && s.contract.poi === o.poi, `a phone deals the offer picked (${o.type})`);
+    // One contract at a time: with one under way the phone deals nothing and the contract stays.
+    const c0 = s.contract;
+    check(!!c0 && !sim.applyCommand(me.id, { cmd: 'ex', act: 'take', phone: ph.i, k: 1 }) && s.contract === c0 && c0.state !== -1, 'a phone takes nothing while the squad has a contract');
+    const evs = [];
+    check(sim.applyCommand(me.id, { cmd: 'ex', act: 'abandon' }) && !s.contract && c0.state === -1, 'abandon drops the contract on purpose');
+    for (const e of sim.drainEvents()) evs.push(e);
+    check(evs.some(e => e.t === 'excontract' && e.abandoned && e.team === team), 'abandon tells the squad');
+    check(!sim.applyCommand(me.id, { cmd: 'ex', act: 'abandon' }), 'nothing to abandon twice');
+    run(sim, 3);
+    check(!s.contract, `no new contract dealt for ${EX.abandonWait} s after an abandon`);
+    check(sim.applyCommand(me.id, { cmd: 'ex', act: 'take', phone: ph.i, k: 1 }) && s.contract.type === o.type && s.contract.poi === o.poi, `with none under way, a phone deals the offer picked (${o.type})`);
+    check(!sim.applyCommand(me.id, { cmd: 'ex', act: 'take', phone: ph.i, k: 0 }) && s.contract.type === o.type, 'and the next offer is refused until it is done or abandoned');
+    sim.applyCommand(me.id, { cmd: 'ex', act: 'abandon' });
+    run(sim, EX.abandonWait + 1);
+    check(!!s.contract, 'the dealer deals one itself once the wait is over');
+  }
+
+  // An HVT contract whose group is gone without the commander falling cannot be done: it is dropped and replaced.
+  {
+    const { sim } = makeSim('exq', 14);
+    live(sim);
+    freeze(sim);
+    const R = sim.rules, s = squadOf(sim, FFA_TEAM), me = sim.players.find(p => p.team === FFA_TEAM);
+    const ph = R.phones.find(p => R.offers(p.i, FFA_TEAM, s.taken + 0).some(o => o.type === 'hvt')) ?? R.phones[0];
+    sim.applyCommand(me.id, { cmd: 'ex', act: 'abandon' });
+    place(me, ph.x, ph.z);
+    const k = R.offers(ph.i, FFA_TEAM, s.taken).findIndex(o => o.type === 'hvt');
+    if (k >= 0 && sim.applyCommand(me.id, { cmd: 'ex', act: 'take', phone: ph.i, k })) {
+      const c = s.contract;
+      R.groups = R.groups.filter(g => g.id !== c.group);
+      let lost = false;
+      run(sim, 5, e => { if (e.t === 'excontract' && e.lost) lost = true; });
+      check(lost && c.state === -1 && s.contract && s.contract !== c, 'an impossible HVT contract is dropped and a new one dealt');
+    } else check(false, 'found a phone offering an HVT contract');
   }
 
   // Exfil: call, land, contest, lift; rewards banked for the whole squad by one member; not for those who stay.
@@ -267,6 +300,30 @@ function units() {
     let ok = true;
     try { for (let i = 0; i < SIM_HZ * 40 && host2.phase !== 'ended'; i++) { host2.step(STEP); host2.drainEvents(); } } catch (err) { ok = false; console.log(err); }
     check(ok && R2.exfils[e.i].state >= 3, 'the new host plays on: the helicopter lands');
+  }
+
+  // An abandon reaches the guest's mirror, and a host that takes over keeps the squad without a contract (the wait
+  // rides the backup) and still refuses a second contract while one is under way.
+  {
+    const { sim, roster } = makeSim('exq', 23, [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }]);
+    const guest = new Sim({ roster, map: MAP, seed: 23, mode: 'exq' });
+    for (const p of sim.players) if (!p.isBot) p.wantRespawn = true;
+    let view = null;
+    const pump = n => { for (let i = 0; i < n && sim.phase !== 'ended'; i++) { sim.step(STEP); sim.drainEvents(); if (sim.tick % 2 === 0) view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2'); } };
+    pump(SIM_HZ * 30);
+    const h2 = sim.byId.get('h2'), s = squadOf(sim, h2.team);
+    const had = objOf(view).squads.find(q => q.team === h2.team)?.contract;
+    check(!!had && sim.applyCommand('h2', { cmd: 'ex', act: 'abandon' }), 'a guest abandons its squad\'s contract');
+    pump(SIM_HZ * 3);
+    check(!objOf(view).squads.find(q => q.team === h2.team)?.contract, 'the guest\'s mirror shows the squad without a contract');
+    const host2 = Sim.fromSnapshot(view, roster, { map: MAP, seed: 23, gone: ['h1'] });
+    const s2 = host2.rules.squads.get(h2.team);
+    for (let i = 0; i < SIM_HZ * 5; i++) { host2.step(STEP); host2.drainEvents(); }
+    check(!s2.contract && Math.abs(s2.nextAt - s.nextAt) < 0.2, `the new host keeps the wait after an abandon (${s2.nextAt.toFixed(1)} / ${s.nextAt.toFixed(1)})`);
+    for (let i = 0; i < SIM_HZ * (EX.abandonWait + 2); i++) { host2.step(STEP); host2.drainEvents(); }
+    const g2 = host2.byId.get('h2'), ph = host2.rules.phones[0];
+    place(g2, ph.x, ph.z);
+    check(!!s2.contract && !host2.applyCommand('h2', { cmd: 'ex', act: 'take', phone: ph.i, k: 0 }), 'the new host deals one later and refuses a phone while it is under way');
   }
 }
 

@@ -8,7 +8,8 @@
 //   with the pool empty the dead spectate their squad. Lethal damage downs you while a squadmate is up (battle
 //   royale's crawl, bleed and revive).
 //   Contracts: every squad starts with one; completing it pays into the squad's pending pot and reveals the next.
-//   Contract phones (one per place) offer three others to swap to. Types: intel (carry a case to a drop), hvt (kill a
+//   One contract per squad at a time: phones (one per place) offer three others only while the squad has none, so a
+//   squad switches on purpose by abandoning its contract first ({cmd:'ex', act:'abandon'}). Types: intel (carry a case to a drop), hvt (kill a
 //   commander and guards), cache (plant a charge, defend the fuse), hack (hold the terminal's area), escort (walk an
 //   asset to a point; it only moves with you beside it and nobody hostile near).
 //   AI patrols (side EX_AI_TEAM, hostile to every squad): one or two groups per place, tougher toward the centre and at
@@ -21,7 +22,7 @@
 // The match ends at EX.length, or once no human is left in play (or every squad is done, with no humans).
 //
 // Events: {t:'down', ...} and {t:'revive', id, by} as in battle royale; {t:'exammo', id, mags} (the phone owns its
-// gun); {t:'excontract', team, type, tier, done?, taken?}; {t:'excall', site, team}; {t:'exland', site};
+// gun); {t:'excontract', team, type, tier, done?, taken?, abandoned?}; {t:'excall', site, team}; {t:'exland', site};
 // {t:'exfil', site, team, ids}; {t:'exleave', site}; {t:'exwindow', sites, final?}; {t:'excase', team, id?, drop?};
 // {t:'explant', team, x, z, defused?}; {t:'exboom', x, z, team}; {t:'exwave', x, z}; {t:'exwipe', team}.
 
@@ -462,7 +463,7 @@ export class ExtractRules {
       if ((sim.tick + p.index) % 3 === 0) this._pickups(p);
     }
     for (const s of this.squads.values()) {
-      if (s.contract) this._stepContract(s.contract, dt);
+      if (s.contract) { if (sim.tick % 30 === 11 && this._impossible(s.contract)) this._dropContract(s, 2.5, true); else this._stepContract(s.contract, dt); }
       else if (!s.done && this.t >= s.nextAt) this._assign(s);
     }
     for (const [i, until] of this.boxDown) if (this.t >= until) { this.boxDown.delete(i); this._lootDirty(); }
@@ -650,7 +651,6 @@ export class ExtractRules {
     if (poi === undefined) return;
     const c = this._contract(s.team, type, poi);
     if (!c) { s.nextAt = this.t + 3; return; }
-    if (s.contract) this._abandon(s.contract);
     s.contract = c;
     s.lastType = type;
     sim._emit({ t: 'excontract', team: s.team, type, tier: c.tier, poi, taken: true });
@@ -693,6 +693,26 @@ export class ExtractRules {
       if (g) { g.contract = null; if (g.state === 'asleep') g.wiped = true; }
     }
     c.state = -1;
+  }
+
+  // The squad lets its contract go (by choice, or because it can no longer be done): no pay, a new one later.
+  _dropContract(s, wait, lost = false) {
+    const c = s.contract;
+    if (!c) return;
+    this._abandon(c);
+    s.contract = null;
+    s.nextAt = this.t + wait;
+    this.sim._emit({ t: 'excontract', team: s.team, type: c.type, tier: c.tier, abandoned: true, wait, lost });
+    this._dirty();
+    this._enc = BACKUP_EVERY / 2 - 1;      // The wait rides the next snapshot's backup, for a host migration.
+  }
+
+  // A contract nothing can finish any more: an HVT whose commander's group is gone without him falling. Bots never
+  // abandon otherwise (they take no phone offers); this is the one way a contract ends unfinished for them.
+  _impossible(c) {
+    if (c.type !== 'hvt') return false;
+    const g = this.groups.find(x => x.id === c.group);
+    return !g || (g.wiped && !g.commanderDead && !g.members.length);
   }
 
   _complete(c) {
@@ -885,10 +905,20 @@ export class ExtractRules {
     if (msg.act === 'take') {
       const ph = this.phones[msg.phone | 0], s = this.squadOf(p);
       if (!ph || !s || s.done || !this._up(p) || Math.hypot(p.ps.x - ph.x, p.ps.z - ph.z) > EX.phoneReach + 1) return false;
+      // One contract at a time: finish it, or abandon it on purpose (below), before a phone deals another.
+      if (s.contract) return false;
       const o = this.offers(ph.i, s.team, s.taken)[msg.k | 0];
       if (!o) return false;
       s.taken++;
       this._assign(s, o);
+      return true;
+    }
+    // Abandon the squad's contract (a held button on the contract card): nothing is paid, the phones open up, and the
+    // dealer waits EX.abandonWait before it deals one itself.
+    if (msg.act === 'abandon') {
+      const s = this.squadOf(p);
+      if (!s || s.done || !s.contract || p.ex.out) return false;
+      this._dropContract(s, EX.abandonWait);
       return true;
     }
     return false;

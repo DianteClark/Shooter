@@ -188,7 +188,7 @@ export const EX = {
   extractXp: 1000,       // Banked on top of the pot by an extraction (even with no contracts done).
   stayXp: 300,           // Participation for a squad that never got out.
   intelReach: 1.6, plantTime: 3, fuse: 30, defuseTime: 5, cacheReach: 1.8, hackTime: 55, hackR: 6,
-  escortSpeed: 1.4, escortNear: 8, escortBlock: 11, phoneReach: 3,
+  escortSpeed: 1.4, escortNear: 8, escortBlock: 11, phoneReach: 3, abandonWait: 20, abandonHold: 1,
   ammoReach: 1.5, boxMags: 2, dropMags: 1, boxBack: 60, dropLife: 45,
   aiSlots: 48,           // AI patrol seats in the roster; groups take them as players come near and give them back.
   wake: 80, sleep: 110,  // A patrol group appears when a player is this near its place, and goes when none is near.

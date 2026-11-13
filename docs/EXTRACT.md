@@ -33,8 +33,16 @@ Frontier only (any map listing `br` with eight or more places hosts it, `modeFit
   - Hack Terminal: 55 s of the squad alone within 6 m (another squad or AI inside pauses it).
   - Escort Asset: a tracked cargo mule walks the nav path (1.4 m/s) to a point about 85 m off, only with a squad member
     within 8 m and nobody hostile within 11 m.
-  - Contract phones (one per place): three offers seeded by phone, squad and contracts taken (every phone computes the
-    same, nothing on the wire); taking one replaces the squad's contract (`{cmd:'ex', act:'take', phone, k}`).
+  - One contract per squad at a time. Contract phones (one per place): three offers seeded by phone, squad and
+    contracts taken (every phone computes the same, nothing on the wire); a phone deals one (`{cmd:'ex', act:'take',
+    phone, k}`) only while the squad has none. With one under way the phone's prompt is greyed ("Finish your current
+    contract first") and the host refuses the take.
+  - Abandon: the contract card's Abandon button, held 1 s (`EX.abandonHold`, a bar fills; letting go early does
+    nothing), sends `{cmd:'ex', act:'abandon'}`: nothing is paid, phones open up, and the dealer deals one itself after
+    20 s (`EX.abandonWait`). The event `{t:'excontract', abandoned, wait, lost}` tells the squad. The wait rides the
+    migration backup (one is forced on the next snapshot), the contract's absence the full block.
+  - Bots never take phone offers and never abandon; a contract that cannot be done any more (an HVT whose group is gone
+    without the commander falling) is dropped for everyone (`lost`) and a new one dealt 2.5 s later.
   - Rewards by site tier (1 best): 1,500 / 1,050 / 700 XP, 900 / 650 / 450 weapon XP to the primary, 240 / 180 / 120
     seconds of operator mastery.
 - **AI patrols** (side `EX_AI_TEAM`, hostile to every squad, bots from the roster's AI seats): every place has a post
@@ -101,7 +109,7 @@ timers, per-player downs); `restore` rebuilds from the guest's mirror plus that 
   last, the first four named Commander).
 - `js/shared/extraction.js` (exclusives and pay), `js/shared/modes.js` (`EX`, `exq`, `exd`, `EX_AI_TEAM`).
 - UI: `js/ui/ex-hud.js`, its own module and elements so the HUD redesign can move them (chips, squad, contract card,
-  Call exfil and the phone sheet placed like the battle royale's take prompt, screen markers, downed panel, the battle
+  Call exfil and the phone sheet (greyed while a contract is under way) and the card's hold-to-abandon placed like the battle royale's take prompt, screen markers, downed panel, the battle
   royale's out panel markup with Spectate / Next player / Next squad / Leave through `spectate.any` and main.js
   `leaveBrEarly` (Match.leaveNow, `early` into the results), zoomed minimap and full map; `hud.music?.cue('exfil')` when
   your squad calls the helicopter, a no-op until the music engine lands), `js/render/ex-fx.js` (landing zones, helicopters, contract things, phones, ammo,
