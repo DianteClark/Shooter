@@ -3,7 +3,7 @@
    season's accent, --sg its ground. Scoped under #ui like menus.css. */
 
 /* ---- Rank badge ---- */
-.rk-badge { flex: none; display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.rk-badge { flex: none; display: block; }   /* Shadow drawn in the SVG (js/ui/season.js rankBadge). */
 #ui .rk-chip { display: inline-flex; align-items: center; gap: 4px; font-style: normal; white-space: nowrap; }
 #ui .rk-chip b { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; }
 #ui .car-id .rk-badge { margin-right: 2px; }

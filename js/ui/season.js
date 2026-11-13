@@ -40,7 +40,7 @@ export function rankBadge(code, size = 24) {
   if (!r) glyph = `<text x="16" y="21.5" text-anchor="middle" font-size="14" font-family="sans-serif" font-weight="700" fill="${d.light}">?</text>`;
   else if (r.tier === null) glyph = `<polygon points="8,20 8,10 12,14 16,8 20,14 24,10 24,20" fill="${d.light}"/><rect x="8" y="21" width="16" height="2.6" fill="${d.color}"/>`;
   else glyph = Array.from({ length: r.tier + 1 }, (_, i) => `<polygon points="9,${20 - i * 5} 16,${16 - i * 5} 23,${20 - i * 5} 23,${22.6 - i * 5} 16,${18.6 - i * 5} 9,${22.6 - i * 5}" fill="${d.light}"/>`).join('');
-  return `<svg class="rk-badge" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><polygon points="${outer}" fill="${d.color}"/><polygon points="${inner}" fill="${d.dark}"/>${glyph}</svg>`;
+  return `<svg class="rk-badge" viewBox="0 0 32 32" width="${size}" height="${size}" overflow="visible" aria-hidden="true"><polygon points="${outer}" fill="#000" opacity=".4" transform="translate(0 1.2)"/><polygon points="${outer}" fill="${d.color}"/><polygon points="${inner}" fill="${d.dark}"/>${glyph}</svg>`;
 }
 export const rankName = code => fromCode(code)?.name ?? 'Unranked';
 export const rankChip = (code, { size = 16, label = true } = {}) =>

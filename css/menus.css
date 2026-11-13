@@ -167,7 +167,7 @@
 #ui .pcard.ready { box-shadow: var(--bevel), inset 0 0 0 1.5px var(--c-sodium), inset 3px 0 0 var(--c-sodium); }
 #ui .pcard.ready::after { content: ''; position: absolute; inset: 0; background: radial-gradient(80% 120% at 0% 50%, rgba(242,166,59,.28), transparent 70%); animation: pc-glow 1.6s var(--ease-inout) infinite alternate; pointer-events: none; }
 @keyframes pc-glow { from { opacity: .3; } to { opacity: 1; } }
-.pc-badge { flex: none; line-height: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.pc-badge { flex: none; line-height: 0; --bshadow-y: 2px; }
 .pc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .pc-top { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 #ui .pc-name { font: 400 22px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -449,7 +449,7 @@
   --cut: var(--cut-lg); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
 #ui .pf-card::before { content: ''; position: absolute; right: -60px; top: -70px; width: 260px; height: 260px; background: repeating-conic-gradient(rgba(242,166,59,.08) 0 8deg, transparent 8deg 20deg); border-radius: 50%; animation: rays 40s linear infinite; pointer-events: none; }
-#ui .pf-badge { position: absolute; right: var(--sp-4); top: var(--sp-3); line-height: 0; filter: drop-shadow(0 4px 10px rgba(0,0,0,.55)); }
+#ui .pf-badge { position: absolute; right: var(--sp-4); top: var(--sp-3); line-height: 0; --bshadow-y: 4px; }
 #ui .pf-id { position: relative; display: flex; flex-direction: column; gap: var(--sp-1); margin-top: 0; padding-right: 104px; min-height: 96px; justify-content: flex-end; }
 .pf-rankname { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-gold); }
 #ui .pf-name { display: flex; align-items: center; gap: var(--sp-2); text-align: left; padding: 0; min-width: 0; max-width: 100%; }
@@ -1036,7 +1036,7 @@
 @keyframes rays { to { rotate: 360deg; } }
 @keyframes rays-in { from { opacity: 0; transform: scale(.4); } }
 #ui .cer-emblem { position: relative; z-index: 1; display: grid; place-items: center; line-height: 0; flex: none; }
-#ui .cer-badge { animation: stamp-in .55s var(--ease-snap) both; filter: drop-shadow(0 8px 18px rgba(0,0,0,.5)); }
+#ui .cer-badge { animation: stamp-in .55s var(--ease-snap) both; --bshadow-y: 8px; }
 @keyframes stamp-in { from { transform: scale(2.6) rotate(-10deg); opacity: 0; } to { transform: none; opacity: 1; } }
 #ui .cer-gun { position: relative; width: 320px; height: 190px; animation: stamp-in .5s var(--ease-snap) both; }
 #ui .cer-numeral { position: absolute; left: 0; top: 0; font: 400 72px/1 var(--f-stencil); color: var(--c-gold); text-shadow: 0 2px 0 rgba(0,0,0,.5); animation: stamp-in .55s .1s var(--ease-snap) both; }

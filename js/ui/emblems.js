@@ -22,10 +22,12 @@ const PLATES = {
   cut: () => [[7, 2], [30, 2], [30, 25], [25, 30], [2, 30], [2, 7]],
   oct: () => ngon(15, 8, Math.PI / 8),
 };
+// The drop shadow is drawn in (an offset copy of the plate), not a CSS filter: WebKit can leave a filtered inline SVG
+// unpainted until something on the page repaints it (emblems that only appeared once the screen was tapped).
 function plate(kind, rim, face = '#151a20') {
   const outer = PLATES[kind]();
   const inner = outer.map(([x, y]) => [16 + (x - 16) * 0.8, 16 + (y - 16) * 0.8]);
-  return poly(outer, rim) + poly(inner, face);
+  return poly(outer.map(([x, y]) => [x, y + 1.6]), '#000', ' opacity=".5"') + poly(outer, rim) + poly(inner, face);
 }
 
 // Glyphs, each in the inner area (about 5..27). a: main colour, b: second colour.
@@ -120,7 +122,7 @@ export function emblemSvg(id, size = 18) {
   const key = `${id}:${size}`;
   let s = cache.get(key);
   if (!s) {
-    s = `<svg class="emb-svg" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${plate(e.plate, e.rim)}${GLYPHS[e.glyph](e.colours[0], e.colours[1])}</svg>`;
+    s = `<svg class="emb-svg" viewBox="0 0 32 32" width="${size}" height="${size}" overflow="visible" aria-hidden="true">${plate(e.plate, e.rim)}${GLYPHS[e.glyph](e.colours[0], e.colours[1])}</svg>`;
     cache.set(key, s);
   }
   return s;

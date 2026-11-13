@@ -194,7 +194,7 @@
 
 /* ---- Emblems: the small badge before a name ---- */
 .emb { display: inline-flex; flex: none; line-height: 0; vertical-align: middle; margin-right: 4px; font-style: normal; }
-.emb .emb-svg { display: block; filter: drop-shadow(0 1px 0 rgba(0,0,0,.55)); }
+.emb .emb-svg { display: block; }   /* Its shadow is drawn in the SVG (js/ui/emblems.js): no CSS filter. */
 .emb + .vet-tag { margin-left: 0; }
 .emb.emb-none { width: 26px; height: 26px; box-shadow: inset 0 0 0 1px rgba(231,234,228,.25); background: repeating-linear-gradient(-45deg, rgba(231,234,228,.08) 0 3px, transparent 3px 6px); }
 
@@ -218,7 +218,7 @@
 .es-cell b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); text-transform: uppercase; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .es-cell small { font: 400 9.5px/1.15 var(--f-plate); letter-spacing: .04em; color: var(--c-haze); text-align: center; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .es-cell.locked { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.025) 0 5px, transparent 5px 10px), var(--c-ballast); }
-.es-cell.locked .emb { filter: grayscale(.9) brightness(.55); }
+.es-cell.locked .emb { opacity: .4; }   /* Not a CSS filter: see the badge shadow note in css/tokens.css. */
 .es-cell.locked b { color: var(--c-haze); }
 .es-cell.locked small { color: var(--c-sodium); }
 .es-lock { position: absolute; right: 7px; top: 7px; color: var(--c-haze); line-height: 0; }

@@ -101,7 +101,8 @@
   --edge-hi: inset 0 0 0 1px var(--c-line-hi);
   --ring-focus: inset 0 0 0 2px var(--c-sodium);
 
-  /* Outer shadows: only on unclipped elements (or as filter: drop-shadow on a wrapper of a clipped one). */
+  /* Outer shadows: only on unclipped elements (or as filter: drop-shadow on a wrapper of a clipped one; not round an
+     inline SVG badge or emblem, see the badge shadow plates below). */
   --shadow-1: 0 1px 0 rgba(0, 0, 0, .35), 0 2px 6px rgba(0, 0, 0, .3);
   --shadow-2: 0 2px 0 rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .42);
   --shadow-3: 0 3px 0 rgba(0, 0, 0, .4), 0 14px 36px rgba(0, 0, 0, .55);
@@ -168,6 +169,15 @@
 .cut-tl { clip-path: polygon(var(--cut, 7px) 0, 100% 0, 100% 100%, 0 100%, 0 var(--cut, 7px)); }
 .cut-br { clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut, 7px)), calc(100% - var(--cut, 7px)) 100%, 0 100%); }
 .cut-4 { clip-path: polygon(var(--cut, 7px) 0, calc(100% - var(--cut, 7px)) 0, 100% var(--cut, 7px), 100% calc(100% - var(--cut, 7px)), calc(100% - var(--cut, 7px)) 100%, var(--cut, 7px) 100%, 0 calc(100% - var(--cut, 7px)), 0 var(--cut, 7px)); }
+/* Rank badges and reward marks: a soft shadow plate behind the SVG instead of filter: drop-shadow, which WebKit can
+   leave unpainted on an inline SVG until something repaints the screen (badges and emblems that only showed on a tap).
+   --bshadow-y drops it below the mark. */
+.pc-badge, #ui .pr-big, #ui .rx-emblem, #ui .rx-mark, #ui .cer-badge { position: relative; }
+.pc-badge, #ui .pf-badge, #ui .pr-big, #ui .rx-emblem, #ui .rx-mark, #ui .cer-badge { isolation: isolate; }
+.pc-badge::before, #ui .pf-badge::before, #ui .pr-big::before, #ui .rx-emblem::before, #ui .rx-mark::before, #ui .cer-badge::before {
+  content: ''; position: absolute; z-index: -1; pointer-events: none; left: 6%; right: 6%; top: calc(10% + var(--bshadow-y, 3px)); bottom: calc(4% - var(--bshadow-y, 3px));
+  background: radial-gradient(closest-side, rgba(0, 0, 0, .55), rgba(0, 0, 0, .3) 60%, rgba(0, 0, 0, 0));
+}
 
 /* A steel plate: face, bevel, chamfer glint. Variants change the face only. */
 .plate {

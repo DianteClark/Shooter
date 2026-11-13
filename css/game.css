@@ -1270,7 +1270,7 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 @keyframes rx-rays-in { from { opacity: 0; transform: scale(.3); } }
 #ui .rx-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: var(--tex-hazard); opacity: .7; }
 #ui .rx-card { position: relative; z-index: 1; overflow: hidden; display: flex; align-items: center; gap: 22px; padding: 18px 30px; }
-#ui .rx-level .rx-emblem { line-height: 0; filter: drop-shadow(0 8px 20px rgba(0,0,0,.55)); animation: rx-stamp .55s var(--ease-snap) both; }
+#ui .rx-level .rx-emblem { line-height: 0; --bshadow-y: 8px; animation: rx-stamp .55s var(--ease-snap) both; }
 #ui .rx-text { display: flex; flex-direction: column; gap: 4px; animation: rs-up .4s .25s var(--ease-out) both; }
 #ui .rx-kick { font: var(--fs-body)/1 var(--f-plate); letter-spacing: .14em; color: var(--c-sodium); }
 #ui .rx-card h2 { font: 400 64px/1 var(--f-stencil); letter-spacing: .03em; color: var(--c-chalk); text-shadow: 0 3px 0 rgba(0,0,0,.5); white-space: nowrap; }
@@ -1279,7 +1279,7 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 #ui .rx-unlock h2 { font-size: 50px; animation: rs-up .35s .2s var(--ease-out) both; }
 #ui .rx-unlock .rx-kick { animation: fade-in .3s .15s both; }
 #ui .rx-unlock small { font: var(--fs-body)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
-#ui .rx-mark { display: grid; place-items: center; min-height: 92px; color: var(--c-chalk); filter: drop-shadow(0 6px 14px rgba(0,0,0,.5)); animation: rx-stamp .45s var(--ease-snap) both; }
+#ui .rx-mark { display: grid; place-items: center; min-height: 92px; color: var(--c-chalk); --bshadow-y: 6px; animation: rx-stamp .45s var(--ease-snap) both; }
 #ui .rx-mark.gun { min-height: 80px; }
 #ui .rx-swatch { display: block; width: 74px; height: 74px; margin: 10px 0 14px; transform: rotate(45deg); box-shadow: 0 0 0 3px var(--c-chalk), 0 8px 18px rgba(0,0,0,.5); animation: rx-stamp-sw .45s var(--ease-snap) both; }
 @keyframes rx-stamp { from { opacity: 0; transform: scale(2.4) rotate(-8deg); } }
