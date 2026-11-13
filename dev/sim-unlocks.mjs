@@ -356,6 +356,14 @@ test('120 days of dailies and 18 weeks of weeklies: three a set, no family twice
     }
   }
   console.log(`     ${used.size} of ${CHALLENGE_POOL.length} pool challenges came up in 120 days`);
+  // A fresh player can do every gun and class goal: each names a level 1 gun, or a class with one.
+  for (const c of CHALLENGE_POOL) {
+    if (c.stat.startsWith('gun:')) assert.equal(P.itemUnlockLevel('weapon', c.stat.slice(4)), 1, `${c.id}: a level 1 gun`);
+    if (c.stat.startsWith('cat:')) assert.ok(WEAPON_IDS.some(w => WEAPON_CATEGORY[w] === c.stat.slice(4) && P.itemUnlockLevel('weapon', w) <= 1), `${c.id}: a level 1 gun in the class`);
+    if (c.mode) assert.ok(MODES[c.mode], c.id);
+  }
+  // No mode is date-locked in the schedule now; the draw leaves out any that a season will lock.
+  for (let d = 0; d < 120; d++) assert.deepEqual(P.lockedChallenges(new Date(2026, 10, 12 + d)), []);
 });
 
 /* ================= C. Progress: a whole career through the real save ================= */
@@ -478,7 +486,10 @@ test('a season: the track pays its tiers once and every reward shows as owned an
 test('SY4 code round trip: every unlock and every pick survives, and the code re-exports byte for byte', () => {
   assert.ok(Progress.setFinisher('trooper', 'derail'));
   Progress.setOperatorSkin('anvil', 'skin:anvil-5');
-  const picks = () => ({ card: Progress.card, emblem: Progress.emblem(), camo: Progress.camo('ar'), skin: Progress.operatorSkin('anvil'), fin: Progress.finisherFor('trooper') });
+  Progress.recordZm('ashgrove', 23);
+  // Graveyard Shift records ride the code too: the best round and the feats (Lantern Out's Gravewarden was match 7).
+  const picks = () => ({ card: Progress.card, emblem: Progress.emblem(), camo: Progress.camo('ar'), skin: Progress.operatorSkin('anvil'), fin: Progress.finisherFor('trooper'),
+    zm: [Progress.zmBest('ashgrove'), JSON.stringify(Progress.zmFeats(MAP_LIST[7]))] });
   const want = opened(), wantPicks = picks();
   const code = Progress.exportCode();
   assert.ok(code.startsWith('SY4.'));

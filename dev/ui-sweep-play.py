@@ -12,7 +12,7 @@ or the tutorial), the save written, a match history entry, and no console errors
 and the results go to outdir (default /tmp/sweep-play). Filters pick cases whose name contains any of them.
 Sizes alternate: Multiplayer cases at 932x430, single-mode cases at 667x375 (SWEEP_SIZE=WxH forces one).
 """
-import asyncio, subprocess, sys, time, os, json, random
+import asyncio, subprocess, sys, time, os, json, random, re
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -54,6 +54,12 @@ STATE = f"""(() => {{ const a = {G}, m = a.match; return {{ screen: window.__gam
 SAVE = """(() => { const P = window.__game.Progress; let hist = 0;
   try { hist = JSON.parse(localStorage.getItem('switchyard-history') || '[]').length; } catch (e) {}
   return { xp: P.totalXp, raw: (localStorage.getItem('switchyard.save') || '').length, keys: Object.keys(localStorage) }; })()"""
+
+# Each daily/weekly challenge row on the results, with what the stored challenge state says.
+CHAL_ROWS = """import('/js/ui/progress.js').then(m => { const all = [...m.Challenges.list('daily'), ...m.Challenges.list('weekly')];
+  return [...document.querySelectorAll('.rs-ch')].filter(b => b.querySelector('.rs-ch-h')?.textContent.trim() === 'Challenges')
+    .flatMap(b => [...b.querySelectorAll('.rs-ch-row')]).map(r => { const label = r.querySelector('b').textContent, c = all.find(x => x.label === label);
+      return { label, txt: r.querySelector('small').textContent.trim(), value: c?.value ?? null, goal: c?.goal ?? null, done: r.classList.contains('done') }; }); })"""
 
 OVERFLOW = """(() => {
   const W = innerWidth, H = innerHeight, bad = [];
@@ -168,6 +174,17 @@ async def run_case(browser, name, kind, arg, size, report):
             notes.append(f'results: {word}; xp rows {len(xp)}')
             after = await ev(SAVE)
             if after['xp'] <= before['xp']: fails.append(f"no XP paid ({before['xp']} -> {after['xp']})")
+            # The results screen's numbers are the save's: the XP lines add up to what the save gained, and every
+            # challenge row says what the stored challenge says (docs/UNLOCKS-AUDIT-2026-11-12.md).
+            shown = sum(int(re.sub(r'[^0-9]', '', r.rsplit('+', 1)[-1]) or 0) for r in xp)
+            if xp and shown != after['xp'] - before['xp']: fails.append(f"XP lines add to {shown}, the save gained {after['xp'] - before['xp']}")
+            if xp: notes.append(f'xp {shown}')
+            rows = await ev(CHAL_ROWS)
+            for r in rows:
+                if r['value'] is None: fails.append(f"challenge row {r['label']!r} is not a current challenge")
+                elif r['done'] and r['value'] != r['goal']: fails.append(f"challenge {r['label']!r} shown done, saved {r['value']}/{r['goal']}")
+                elif not r['done'] and r['txt'] != f"{r['value']}/{r['goal']}": fails.append(f"challenge {r['label']!r} shows {r['txt']}, saved {r['value']}/{r['goal']}")
+            if rows: notes.append(f'challenges {len(rows)} rows match the save')
             hist = await ev("import('/js/ui/progress.js').then(m => m.MatchHistory.list().length)")
             if hist < 1: fails.append('no match history entry')
             # Back to the menu from the results.

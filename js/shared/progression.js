@@ -9,7 +9,7 @@ import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 import { V10_UNLOCKS } from './weapons-v10.js';
 import { EX_UNLOCKS } from './extraction.js';
-import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById } from './seasons.js';
+import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
 // progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
@@ -1880,9 +1880,9 @@ function buildPool() {
   const extra = new Map();
   for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules)) extra.set(m.rules, m);
   for (const [rules, m] of extra) {
-    pool.push(d(`mode.${rules}`, 'mode', `played:${rules}`, 2, 1500, `mode:${m.id}`, `Play 2 ${m.name} matches`));
+    pool.push({ ...d(`mode.${rules}`, 'mode', `played:${rules}`, 2, 1500, `mode:${m.id}`, `Play 2 ${m.name} matches`), mode: m.id });
     // Counted per rule set (`top3:<rules>`): the label names one mode, so a Gun Game podium does not move a Free-for-All one.
-    if (m.ffa || rules === 'ffa') pool.push(w(`top3.${rules}`, 'mode', `top3:${rules}`, 5, 6500, `mode:${m.id}`, `Finish top 3 in ${m.name} 5 times`));
+    if (m.ffa || rules === 'ffa') pool.push({ ...w(`top3.${rules}`, 'mode', `top3:${rules}`, 5, 6500, `mode:${m.id}`, `Finish top 3 in ${m.name} 5 times`), mode: m.id });
   }
   return pool;
 }
@@ -1948,9 +1948,13 @@ export function drawChallenges(period, key, { count = CHALLENGE_COUNT, exclude =
   return out;
 }
 
+// A mode a season has not opened yet (season-items.js `content`) is never asked for: those challenges sit out the draw.
+export const lockedChallenges = (now = new Date()) => CHALLENGE_POOL.filter(c => c.mode && dateLocked('mode', c.mode, now)).map(c => c.id);
 const blankPeriod = (period, now) => {
   const key = periodKey(period, now);
-  return { key, ids: drawChallenges(period, key), prog: {}, done: [], retired: [] };
+  // A weekly is judged on its last day, so a mode opening mid-week can be asked for that week.
+  const until = period === 'weekly' ? new Date(periodEnd(period, now) - 1) : now;
+  return { key, ids: drawChallenges(period, key, { exclude: lockedChallenges(until) }), prog: {}, done: [], retired: [] };
 };
 
 export function blankChallengeState(now = new Date()) {
@@ -2000,7 +2004,7 @@ export function rerollChallenge(state, id, now = new Date()) {
   if (i < 0 || p.done.includes(id)) return null;
   const others = p.ids.filter(x => x !== id);
   const [next] = drawChallenges(period, `${p.key}:r${p.retired.length + 1}`, {
-    count: 1, exclude: [...p.ids, ...p.retired], families: others.map(x => getChallenge(x).family),
+    count: 1, exclude: [...p.ids, ...p.retired, ...lockedChallenges(now)], families: others.map(x => getChallenge(x).family),
   });
   if (!next) return null;
   p.retired.push(id);

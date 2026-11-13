@@ -29,8 +29,10 @@ ids in `SKINS` (js/ui/operators.js), which keeps which skin is worn in its own s
 `skin:relay-5` `skin:yarddog-3` `skin:yarddog-5` `skin:ronin-3` `skin:ronin-5` `skin:ghoul-3` `skin:ghoul-5`
 `skin:ram-3` `skin:ram-5` `skin:monarch-3` `skin:monarch-5`
 
-### Weapon mastery cards: `card:mastery-<weapon>`
-Granted when a gun finishes its mastery ladder (tier 5). The rows are cardbook.js's (`mastery-<weapon>`).
+### Weapon mastery cards: `card:gun-<weapon>`
+Granted when a gun finishes its mastery ladder (tier 5); also earned by every camo challenge on it. The rows are
+cardbook.js's (`gun-<weapon>`, "<Gun> Master"); the Golden gun has none. (Until 2026-11-12 the ladder granted
+`card:mastery-<weapon>`, a card that never existed.)
 
 ### Reading grants, skins, emblem, lifetime
 - `Progress.hasReward(id)` -> bool for any reward id (`card:...`, `skin:...`, `badge:...`): use it as `granted(id)`.
