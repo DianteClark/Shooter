@@ -1692,7 +1692,7 @@ function showResults(results) {
       challenges: results.challenges ?? [],
       proProgress: results.proProgress ?? [],
       finalKill: lastKill && !results.zm?.escaped ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
-      rematchLabel: app.lastPick?.mp && !app.net ? 'Next match' : 'Rematch',
+      ...rematchChoice(),
       snd: results.snd,
       br: results.br,
       ex: results.ex ?? null, exView: results.exView ?? null,
@@ -1712,6 +1712,29 @@ function showResults(results) {
   app.resultsAt = performance.now();
   shareCareer();
   voteBehindResults();
+}
+
+// Quick rematch: what the results screen's main button says, and under it what one tap queues. Solo Multiplayer searches
+// the same playlist (the squad size is the playlist's); Custom replays its map and mode; in a friend room it is the
+// host's call, so a guest's button readies them for it.
+function rematchChoice() {
+  const pick = app.lastPick, last = app.lastPlayed;
+  const place = (mapId, mode) => [mapId === RANDOM ? 'Random map' : MAPS[mapId]?.name, mode === RANDOM ? 'Random mode' : MODES[mode]?.name].filter(Boolean).join(' · ');
+  if (app.match?.headless) return { rematchLabel: 'Rematch', rematchSub: 'When your room\'s match ends' };
+  if (app.net) {
+    if (!app.isHost) return { rematchLabel: 'Ready', rematchSub: 'The host starts the next match' };
+    const n = app.lobby.humans.length;
+    return { rematchLabel: 'Rematch', rematchSub: app.lobby.custom ? place(app.lobby.custom.mapId, app.lobby.custom.mode) || 'Same room' : `Same room · ${n} player${n === 1 ? '' : 's'} · map vote` };
+  }
+  if (app.lastMode === 'range') return { rematchLabel: 'Again', rematchSub: 'Firing range' };
+  if (pick?.training) return { rematchLabel: 'Train again', rematchSub: MAPS[app.training.map]?.name ?? 'Training' };
+  if (pick?.mp) {
+    let name = '';
+    try { name = resolveSelection(pick.mp.tab, pick.mp.sel, { hardcore: !!Options.get('hardcore') }).name; } catch { /* the label alone */ }
+    return { rematchLabel: 'Next match', rematchSub: name };
+  }
+  const mapId = pick?.mapId === RANDOM ? RANDOM : last?.mapId ?? pick?.mapId, mode = pick?.mode === RANDOM ? RANDOM : last?.mode ?? pick?.mode;
+  return { rematchLabel: 'Rematch', rematchSub: place(mapId, mode) };
 }
 
 function afterResults() {

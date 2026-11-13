@@ -369,7 +369,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
         ${progCard ? `<div class="rs-card prog-card scroll-y">${progress}</div>` : ''}
         <div class="res-choice">
           ${progCard ? '' : progress}
-          <button class="rs-btn primary" data-act="resRematch">${esc(data.rematchLabel)}</button>
+          <button class="rs-btn primary rs-again" data-act="resRematch"${data.rematchSub ? ` aria-label="${esc(`${data.rematchLabel}: ${data.rematchSub}`)}"` : ''}><span class="rs-again-tx"><b>${esc(data.rematchLabel)}</b>${data.rematchSub ? `<small>${esc(data.rematchSub)}</small>` : ''}</span></button>
           <button class="rs-btn" data-act="resMenu">Menu</button>
           <p class="res-note">${esc(data.note ?? '')}</p>
         </div>

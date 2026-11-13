@@ -97,7 +97,7 @@ async def main():
 
             print('Consecutive solo matches')
             st1 = await play('1 quick play (random)', tap('[data-act="quickPlay"]'))
-            label = await pg.evaluate("document.querySelector('[data-act=\"resRematch\"]')?.textContent.trim()")
+            label = await pg.evaluate("(document.querySelector('[data-act=\"resRematch\"] b') ?? document.querySelector('[data-act=\"resRematch\"]'))?.textContent.trim()")
             st2 = await play('2 next match searches quick play again', tap('[data-act="resRematch"]'))
             pick = await pg.evaluate('window.__game.app.lastPick')
             ok = pick and pick.get('mp', {}).get('tab') == 'standard' and pick['mp']['sel']['playlist'] == 'qp' and label == 'Next match'
