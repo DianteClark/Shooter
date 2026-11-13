@@ -259,7 +259,7 @@ export function masterStampHtml(m, before = 0) {
 
 // Stamps for the rank rewards in the results reel: a new Master icon tier, a rank camo (every gun), the Master emblem.
 export function rankStamp(u) {
-  const rank = u.kind === 'rank', every = u.kind === 'camo' && u.every, emb = u.kind === 'emblem' && u.level;
+  const rank = u.kind === 'rank', every = u.kind === 'camo' && u.every, emb = u.kind === 'emblem' && (u.level || u.feat);
   if (!rank && !every && !emb) return null;
   const mark = rank ? `<span class="rx-mark">${rewardMark(u, 92)}</span>`
     : every ? `<span class="rx-swatch" style="background:${swatchCss(getCamo(u.id))}"></span>`

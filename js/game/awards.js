@@ -261,8 +261,10 @@ export class MatchAwards {
       // The feat itself is recorded by applyMatch (below), after it has taken the card list, so Lantern Out is stamped.
       zmFeat = escaped || warden ? { escaped: escaped ? zmObj.round : 0, boss: warden } : null;
       for (const b of Object.values(this.weapons)) b.xp = Math.min(ZM.weaponXpCap, Math.round(b.xp * ZM.weaponXp));
-      let rec = { best: survived, before: 0, fresh: false };
-      try { rec = Progress.recordZm?.(this.mapId, survived) ?? rec; } catch (err) { console.error('zm record', err); }
+      // The map's best round is recorded by applyMatch (below), after it has taken the card list, so the round cards
+      // are stamped; until then the record shown is the one the save had.
+      const was = Progress.zmBest?.(this.mapId) ?? 0;
+      const rec = { best: Math.max(was, survived), before: was, fresh: survived > was && survived > 0 };
       zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',
         escaped: escaped ? zmObj.round : 0, warden, bestEscape: Progress.zmFeats?.(this.mapId)?.escaped ?? 0, freshEscape: false, freshBoss: false };
     }
@@ -299,7 +301,8 @@ export class MatchAwards {
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
     // Personal bests for the Trophy Case (the horde's kills are not in the tally's, see hordeView).
     const records = { ...this.tally.records(), brPlace, exSecs: ex?.extracted ? Math.max(1, Math.round(this.outAt ?? this.live)) : 0 };
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records });
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records, zmRounds: zm ? zm.survived : null });
+    if (zm && applied.zmRecord) Object.assign(zm, { best: applied.zmRecord.best, before: applied.zmRecord.before, fresh: applied.zmRecord.fresh });
     if (zm && applied.zmFeat) Object.assign(zm, { bestEscape: applied.zmFeat.escaped, freshEscape: applied.zmFeat.freshEscape, freshBoss: applied.zmFeat.freshBoss });
     if (ex) {
       // Exclusive unlock progress this match, and anything it opened.

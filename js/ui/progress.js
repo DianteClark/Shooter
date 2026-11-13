@@ -66,7 +66,7 @@ import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { dropCareerMemo } from './cardbook.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
-import { getEmblem, emblemUnlocked } from './emblems.js';
+import { getEmblem, emblemUnlocked, FEAT_EMBLEMS } from './emblems.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SLOTS, ATTACHMENTS, availableFor, attachmentsFor, normalizeKit, unlockFor, unlockMet } from '../shared/attachments.js';
 import {
@@ -772,11 +772,14 @@ export const Progress = {
   // (extraction mode) also counts the save's lifetime `extractions`.
   // `zmFeat` ({escaped, boss}, Graveyard Shift) is recorded here, after the card list is taken, so Lantern Out is stamped.
   // `records` ({ streak, long, brPlace, exSecs }) are this match's personal bests for the Trophy Case (recordBests).
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null, records = null }) {
+  // `zmRounds` (Graveyard Shift) is the rounds survived: the map's best round is recorded here, after the card list is
+  // taken, so the round cards are stamped (the result carries `zmRecord`: { best, before, fresh }).
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null, records = null, zmRounds = null }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel, masterBefore = masterNow();
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
     const cardsBefore = new Set(cardsEarned(cardCareer()));
+    const featsBefore = new Set(FEAT_EMBLEMS.filter(e => emblemUnlocked(e, looksCareer()).unlocked).map(e => e.id));
     const proBefore = PERK_IDS.map(id => [id, proStatus(id, data.pro, data.proDone)]);
     const goldenBefore = goldenEarned();
     const gatedBefore = openGated();
@@ -785,6 +788,7 @@ export const Progress = {
     const tiers = applyMasteryGains(data, mastery ?? {});
     const feat = zmFeat && mapId ? recordZmFeat(data, mapId, zmFeat) : null;
     const bests = records ? recordBests(data, records) : [];
+    const zmRecord = zmRounds != null && mapId ? recordZmBest(data, mapId, zmRounds) : null;
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
@@ -820,7 +824,10 @@ export const Progress = {
     // second "New calling card" (`had`).
     const ups = tiers.ups.map(u => (u.rewards.some(r => r.kind === 'card' && cardsBefore.has(r.id.slice(5)))
       ? { ...u, rewards: u.rewards.map(r => (r.kind === 'card' && cardsBefore.has(r.id.slice(5)) ? { ...r, had: true } : r)) } : u));
-    unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks);
+    // Feat emblems (js/ui/emblems.js) earned this match, stamped like the cards.
+    const featUnlocks = FEAT_EMBLEMS.filter(e => !featsBefore.has(e.id) && emblemUnlocked(e, looksCareer()).unlocked)
+      .map(e => ({ kind: 'emblem', id: e.id, name: e.name, req: e.rule.label, feat: true }));
+    unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks, ...featUnlocks);
     // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
     // cards are already in cardUnlocks, so they are not stamped twice).
     const masterAfter = masterNow();
@@ -859,6 +866,7 @@ export const Progress = {
       proProgress,
       mastery: tiers.moved,
       zmFeat: feat,
+      zmRecord,
       bests,
     };
   },

@@ -29,7 +29,7 @@ import { CAMOS, TRACERS, KILL_EFFECTS } from '../js/shared/camos.js';
 import { MAPS } from '../js/shared/map.js';
 import { MODES } from '../js/shared/modes.js';
 import { OPERATORS, SKINS, getSkin } from '../js/ui/operators.js';
-import { EMBLEMS } from '../js/ui/emblems.js';
+import { EMBLEMS, FEAT_EMBLEMS } from '../js/ui/emblems.js';
 
 const { BOT_POOL, formRating, pickPoolBots, careerAt, humanRating, tierOf, POOL_EPOCH, EXTRACTION_LAUNCH, HUMAN_BASE, STYLES, TIER_RATING } = Pool;
 let failed = 0;
@@ -69,7 +69,7 @@ const walk = (o, depth = 0) => {
   if (Array.isArray(o)) o.forEach(x => walk(x, depth + 1));
   else if (typeof o === 'object') { add(o.name); if (depth < 2) for (const k in o) if (typeof o[k] === 'object') walk(o[k], depth + 1); }
 };
-[WEAPONS, ATTACHMENTS, V11_ATTACHMENTS, PERKS, PRO, TACTICALS, LETHALS, STREAKS, OPERATORS, SKINS, EMBLEMS, CARDS, CAMOS, TRACERS, KILL_EFFECTS, MAPS, MODES].forEach(t => walk(t));
+[WEAPONS, ATTACHMENTS, V11_ATTACHMENTS, PERKS, PRO, TACTICALS, LETHALS, STREAKS, OPERATORS, SKINS, EMBLEMS, FEAT_EMBLEMS, CARDS, CAMOS, TRACERS, KILL_EFFECTS, MAPS, MODES].forEach(t => walk(t));
 for (let i = 0; i <= MAX_PRESTIGE; i++) add(prestigeName(i));
 const hud = readFileSync(fileURLToPath(new URL('../js/ui/hud.js', import.meta.url)), 'utf8');
 const medals = hud.slice(hud.indexOf('const MEDALS = {'), hud.indexOf('};', hud.indexOf('const MEDALS = {')));
@@ -85,6 +85,8 @@ for (const t of [...names, ...Pool.CLANS.map(c => c.name)]) {
   }
 }
 ok(items.size > 500, 'item names collected', items.size);
+// The rewards pass: the rifle once called Nightjar is the Lapwing, the new cards and feat emblems are in the list.
+ok(items.has('Lapwing') && items.has('Nightjar') && items.has('Drop Zone') && items.has('Tenfold'), 'renamed rifle, map cards and feat emblems collected');
 ok(clashes.length === 0, 'no tag matches an item, map or mode name', clashes.slice(0, 8).join(', '));
 
 // ---- Profiles ----
