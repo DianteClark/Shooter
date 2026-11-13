@@ -85,7 +85,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     const hint = peaked ? (mp ? 'Master Prestige' : `Master at ${MAX_LEVEL}`) : lp.level >= MAX_LEVEL ? 'Prestige' : `Prestige at ${MAX_LEVEL}`;
     const frac = bar.maxed ? 1 : bar.into / bar.span;
     menu.el.innerHTML = `
-      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: masteryButton() })}
+      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: trophyButton() + masteryButton() })}
       <div class="pf">
         <div class="pf-card${can ? ' ready' : ''}" data-in="left">
           <div class="pf-badge">${badgeMark(p, 96, lp.master)}</div>
@@ -104,7 +104,6 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
           </div>
         </div>
         <div class="pf-side">
-          <section data-in="up">${trophyButton()}</section>
           <section data-in="up">
             <button class="pf-ladder-open" data-act="pfPrestigeView" aria-label="Prestige: every rank's rewards">
               <h4>${ico('rank')}Rank ladder<small>${mp ? `Master ${lp.master}` : `${p} of ${MAX_PRESTIGE}`}</small><em class="pf-ladder-go">Rewards${ico('next')}</em></h4>
@@ -160,8 +159,8 @@ function masteryButton() {
 
 // The way into the Trophy Case (js/ui/trophy.js): how complete the collection is.
 function trophyButton() {
-  const { have, of } = trophyTotals(), f = have / Math.max(1, of);
-  return `<button class="pf-trophy" data-act="pfTrophy" aria-label="Trophy case">${ico('star')}<span><b>Trophy case</b><small>Rarest unlocks, personal bests, collections</small></span><em>${Math.floor(f * 100)}%</em><i class="pf-trophy-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i></button>`;
+  const { have, of } = trophyTotals();
+  return `<button class="btn pf-mastery pf-trophy" data-act="pfTrophy" aria-label="Trophy case">${ico('star')}<b>Trophy case</b><small>${Math.floor((have / Math.max(1, of)) * 100)}%</small></button>`;
 }
 
 // Big totals in the space of a tile: 9,870 stays as it is, 200,000 reads 200K, 3,400,000 reads 3.4M.

@@ -167,6 +167,10 @@ const SCENES = {
   'prestige-reveal': menuScene('Prestige reveal', async ({ menu }) => { const { prestigeReveal } = await import('./js/ui/prestige.js'); menu.title({}); prestigeReveal(menu, { prestige: 4 }); }),
   'title-master': menuScene('Title, Master 137', ({ menu }) => menu.title({}), { seed: 'master' }),
   'profile-master': menuScene('Profile, Master 137', ({ menu }) => menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }), { seed: 'master' }),
+  // The rewards pass (docs/UNLOCKS-AUDIT-2026-11-12.md): the Trophy Case, fresh and on a Master save, and an unlock sheet.
+  'trophy': menuScene('Trophy case, fresh', ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfTrophy"]').click(); }),
+  'trophy-master': menuScene('Trophy case, Master 137', ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfTrophy"]').click(); }, { seed: 'master' }),
+  'unlock-sheet': menuScene('Unlock sheet over the card picker', async ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfCards"]').click(); (await import('../js/ui/unlocksheet.js')).unlockSheet(menu, 'card', 'modes-oic-3'); }),
   'results-master': menuScene('Results: win, Master levels', ({ menu, results }) => menu.results(results('win'), { rematch: noop, menu: noop }), { gl: true, settle: 4500, seed: 'master' }),
   'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),
   'options': menuScene('Options', ({ menu }) => menu.options({ onBack: noop, onPreviewSound: noop })),

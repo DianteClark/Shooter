@@ -37,7 +37,9 @@ SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-mode
           # Seasons and ranked (docs/SEASONS.md): on a day in Season 1 (dev/ui-gallery.html sets the date).
           'title-season', 'season-track', 'season-weekly', 'season-ranked', 'season-pre', 'mp-ranked', 'boards-season', 'boards-ranked', 'results-season', 'lobby-ranked', 'lobby-unranked',
           # Prestige and Master Prestige (docs/PRESTIGE.md).
-          'prestige', 'prestige-master', 'prestige-reveal', 'title-master', 'profile-master', 'results-master']
+          'prestige', 'prestige-master', 'prestige-reveal', 'title-master', 'profile-master', 'results-master',
+          # The rewards pass (docs/UNLOCKS-AUDIT-2026-11-12.md).
+          'trophy', 'trophy-master', 'unlock-sheet']
 # A spread of guns: long names, no attachments, signature parts and kits, melee, launchers, the akimbo pair.
 GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper', 'golden', 'akimbo', 'knife', 'beltlmg']
 
