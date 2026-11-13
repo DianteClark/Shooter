@@ -210,7 +210,7 @@ test('Kiln: no bloom, a heat bar that locks it after 17 rounds, and it cools wit
   assert.ok(!ps.overheated && run(ps, 0.3, AIM_FIRE).length > 0, 'fires again after the lockout');
 });
 
-test('Murmur, Nightjar, Gaff, Maul: suppressed by nature, and cannot take a Hush Can', () => {
+test('Murmur, Lapwing, Gaff, Maul: suppressed by nature, and cannot take a Hush Can', () => {
   for (const id of ['hushsmg', 'hushdmr', 'knife', 'maul']) {
     const ps = shooter(id);
     const shots = run(ps, 1, { fire: true });

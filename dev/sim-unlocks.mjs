@@ -55,9 +55,11 @@ test('ids are unique in every unlock table', () => {
   assert.deepEqual(dupes(CHALLENGE_POOL.map(c => c.id)), [], 'daily and weekly pool');
   for (const def of SEASON_DEFS) assert.deepEqual(dupes(weeklyAll(def).flat().map(c => c.id)), [], `${def.id} weekly ids`);
   // Names a player sees side by side in one picker.
-  // Known, for the owner (docs/UNLOCKS-AUDIT-2026-11-12.md): the Nightjar rifle and the Nightjar operator share a name,
-  // so both Master cards read "Nightjar Master".
-  assert.deepEqual(dupes(CARDS.map(c => c.name)).filter(n => n !== 'Nightjar Master'), [], 'calling card names');
+  // The rifle once shared the Nightjar operator's name (both Master cards read "Nightjar Master"); it is the Lapwing now.
+  assert.deepEqual(dupes(CARDS.map(c => c.name)), [], 'calling card names');
+  assert.equal(WEAPONS.hushdmr.name, 'Lapwing', 'the rifle keeps its id under its new name');
+  assert.equal(CARDS.find(c => c.id === 'gun-hushdmr')?.name, 'Lapwing Master');
+  assert.equal(CARDS.find(c => c.id === 'mastery-nightjar')?.name.includes('Lapwing'), false);
   assert.deepEqual(dupes(ALL_EMBLEMS.map(e => e.name)), [], 'emblem names');
   assert.deepEqual(dupes(CAMOS.map(c => c.name)), [], 'camo names');
 });

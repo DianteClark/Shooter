@@ -138,7 +138,7 @@ export const V10_WEAPONS = {
   // A short suppressed rifle: two quiet rounds kill inside a room, three past it, and nobody's minimap ever shows
   // where they came from. Handles like a carbine and fades like one.
   hushdmr: {
-    id: 'hushdmr', name: 'Nightjar', role: 'Quiet rifle', auto: false, suppressed: true,
+    id: 'hushdmr', name: 'Lapwing', role: 'Quiet rifle', auto: false, suppressed: true,
     damage: 52, rpm: 255, magazine: 10, reserve: 70, reload: 2.2, range: 44,
     falloff: { start: 14, end: 28, min: 0.72 }, penetrate: 0.6,
     adsSpread: 0.0035, hipSpread: 0.07, bloomPerShot: 0.4, bloomRecover: 2.4, bloomScale: 1.2, turnCap: 11,

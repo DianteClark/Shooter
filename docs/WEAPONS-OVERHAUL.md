@@ -272,7 +272,7 @@ camera's ADS lead (`adsLook` 7.5 m); `tapAll` is an option for a careful tapper.
 
 ### Other Pass 2 changes (V10 guns)
 Hopper 24 damage, 920 rpm, full damage to 11 m at 55%; Trammel one-shot range 7.5 m, feet 1.08; Thistle full damage to
-13 m, feet 1.03; Tandem 290 rpm, bloom 0.18, full damage to 25 m at 75%; Nightjar 52 damage, 255 rpm, 72% at range;
+13 m, feet 1.03; Tandem 290 rpm, bloom 0.18, full damage to 25 m at 75%; Lapwing 52 damage, 255 rpm, 72% at range;
 Harrier 130 rpm, aims in 0.21 s; Lodestone charge 0.3 s, reload 2.8 s, aims in 0.32 s; Kiln 605 rpm. Bulwark turns at
 2.6 rad/s. Halyard 670 rpm; Drayman full damage to 18 m.
 
@@ -308,7 +308,7 @@ Foreman     1.15 -> 0.89 | 1.00 -> 0.85
 Prospector  0.90 -> 0.89 | 1.00 -> 0.97
 Bodkin      0.81 -> 0.77 | 0.96 -> 0.81
 Tandem      0.86 -> 0.89 | 1.00 -> 1.09
-Nightjar    1.07 -> 1.02 | 0.96 -> 1.07
+Lapwing    1.07 -> 1.02 | 0.96 -> 1.07
 Lancet      0.83 -> 0.75 | 1.08 -> 0.96
 Monolith    0.87 -> 0.87 | 1.18 -> 1.20
 Kestrel     0.59 -> 0.64 | 1.08 -> 1.24 (1.14 once hip shots went 65% -> 60%; focused run)
@@ -388,7 +388,7 @@ biggest drops (duel-best, match-worse): Shunter 1.10 -> 0.98, Doublet 0.97 -> 0.
 
 Changes made from those runs: Gantry 565 rpm (was 580; best build 1.25), Ballast full damage to 10 m (was 9; stock and
 best build 0.83-0.84), Needle Choke falloff x1.3 (was 1.4), Capacitor Bank charge x0.72 (was 0.65) and slower to aim
-(Lodestone 1.23), Hollow Points keeps half its pierce instead of none (Nightjar 0.81 with it), Sabot Slugs 5 shells
+(Lodestone 1.23), Hollow Points keeps half its pierce instead of none (Lapwing 0.81 with it), Sabot Slugs 5 shells
 (was 4), Siege Rounds reworked (Monolith's pierce was already at the cap), Twin Tube reload x2 and slower swap.
 Most-picked parts in best builds: Canted Dot 7 of 23 guns that take it, Speed Mag 6/34, Holo 5/29: no part is in every
 best build. Sidearms (`--sidearms`, not a target): pistols 0.87-1.16 with best builds; launchers were already above
@@ -447,7 +447,7 @@ the band stock (Breaker 1.44, Bombard 1.43) and stay there.
 | Marksman | Bodkin | Broadhead Bolts | Sig | mag | unaimed damage +25%, damage +10% | reload +20%, range -20% | Level 19 |
 | Marksman | Bodkin | Recurve Limbs | Sig | grip | range +25% | time to aim +10%, move speed -3% | Mastery I |
 | Marksman | Tandem | Lockstep Sear | Sig | grip | gap in a burst -40% | recoil sway +30%, bloom per shot +20% | Level 19 |
-| Marksman | Nightjar | Hollow Points | Sig | mag | damage +12% | damage through cover -50%, magazine -1 | Level 19 |
+| Marksman | Lapwing | Hollow Points | Sig | mag | damage +12% | damage through cover -50%, magazine -1 | Level 19 |
 | Sniper | Lancet | Heavy Bolt | Sig | grip | scope kept per shot +60% | fire rate -12% | Level 16 |
 | Sniper | Lancet | Self-Loader | Kit | mag | Semi-automatic, fire rate +120%, scope kept per shot +100%, magazine +3 | aimed spread +35%, damage -22% | Level 25 |
 | Sniper | Monolith | Siege Rounds | Sig | mag | unaimed damage +45% | magazine -1, range -15%, reload +15% | Level 16 |
@@ -664,7 +664,7 @@ with every signature of the gun fitted (dev/sig-builds.mjs).
 | Shotgun | Thistle | 0.84 | 0.87 | 1.10 | 1.03 | 1.13 | 1.10 |
 | LMG | Stanchion | 1.13 | 1.13 | 1.05 | 1.04 | 1.13 | 1.09 |
 | Marksman | Tandem | 1.01 | 1.05 | 1.02 | 1.04 | 1.06 | 1.02 |
-| Marksman | Nightjar | 1.00 | 1.05 | 1.11 | 1.09 | 1.06 | 1.04 |
+| Marksman | Lapwing | 1.00 | 1.05 | 1.11 | 1.09 | 1.06 | 1.04 |
 | Sniper | Harrier | 1.07 | 1.09 | 1.08 | 1.19 | 1.07 | 1.18 |
 | Sniper | Lodestone | 1.10 | 1.07 | 1.11 | 1.18 | 1.16 | 1.04 |
 

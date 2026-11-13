@@ -314,7 +314,7 @@ export function v10Factories(h) {
     return { geometry: b.build(), muzzle: [mx === null ? end + 0.17 : mx, 0.12, 0], fore, eject: [0.1, 0.22, 0.17], length: 2.55 };
   }
 
-  // Nightjar: a bullpup. The magazine sits behind the grip in a deep thumbhole butt, and a slim suppressor longer
+  // Lapwing: a bullpup. The magazine sits behind the grip in a deep thumbhole butt, and a slim suppressor longer
   // than the fore-end carries on from it. From above: thick at the shoulder, a long thin stem in front.
   function hushdmr(a) {
     const k = kit(), b = k.b, m = magLook(a.mag), f = m.len;
