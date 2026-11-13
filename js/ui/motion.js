@@ -199,3 +199,40 @@ export function settle(el) {
   if (!el?.getAnimations) return;
   for (const a of el.getAnimations({ subtree: true })) a.finish?.();
 }
+
+// Celebration: a burst of low-poly shards (level up, an unlock). Each shard is one absolutely placed <i> with a
+// triangle clip, thrown out from `origin` (fractions of the host's box) on an arc and falling away: transform and
+// opacity only, a fixed count, all removed when the longest lands. Reduced motion: no shards (the stamp still plays).
+const SHARD_COLORS = ['var(--c-sodium, #f2a63b)', 'var(--c-sodium-hi, #ffd27a)', 'var(--c-chalk, #e9e4d8)', 'var(--c-gold, #ffcf40)', '#7fd0ff'];
+const SHARD_CLIPS = ['polygon(50% 0, 100% 100%, 0 80%)', 'polygon(0 0, 100% 30%, 40% 100%)', 'polygon(20% 0, 100% 50%, 0 100%)', 'polygon(0 20%, 100% 0, 70% 100%)'];
+export const celebrated = { bursts: 0, shards: 0 };
+export function celebrate(host, { count = 24, origin = [0.5, 0.42], spread = 1 } = {}) {
+  if (!host || reducedMotion()) return Promise.resolve();
+  const box = document.createElement('div');
+  box.className = 'fx-shards';
+  box.setAttribute('aria-hidden', 'true');
+  box.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:3;contain:strict;';
+  const W = host.clientWidth || 800, H = host.clientHeight || 400;
+  const ox = origin[0] * W, oy = origin[1] * H;
+  const n = Math.min(40, count), runs = [];
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('i');
+    const size = 7 + Math.random() * 12;
+    s.style.cssText = `position:absolute;left:${ox.toFixed(0)}px;top:${oy.toFixed(0)}px;width:${size.toFixed(0)}px;height:${(size * (0.7 + Math.random() * 0.6)).toFixed(0)}px;` +
+      `background:${SHARD_COLORS[i % SHARD_COLORS.length]};clip-path:${SHARD_CLIPS[i % SHARD_CLIPS.length]};will-change:transform,opacity;opacity:0;`;
+    box.appendChild(s);
+    const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, v = (0.55 + Math.random() * 0.6) * spread;
+    const dx = Math.cos(a) * W * 0.32 * v, up = Math.sin(a) * H * 0.3 * v - H * 0.12, fall = H * (0.35 + Math.random() * 0.25);
+    const r0 = Math.random() * 360, r1 = r0 + (Math.random() < 0.5 ? -1 : 1) * (240 + Math.random() * 400);
+    const dur = 1000 + Math.random() * 600;
+    runs.push(done(s.animate([
+      { opacity: 1, transform: `translate3d(0,0,0) rotate(${r0}deg) scale(.3)` },
+      { opacity: 1, transform: `translate3d(${dx.toFixed(0)}px,${up.toFixed(0)}px,0) rotate(${((r0 + r1) / 2).toFixed(0)}deg) scale(1)`, offset: 0.35 },
+      { opacity: 0, transform: `translate3d(${(dx * 1.25).toFixed(0)}px,${(up + fall).toFixed(0)}px,0) rotate(${r1.toFixed(0)}deg) scale(.8)` },
+    ], { duration: dur, delay: Math.random() * 90, easing: 'cubic-bezier(.2,.7,.4,1)', fill: 'both' })));
+  }
+  if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+  host.appendChild(box);
+  celebrated.bursts++; celebrated.shards += n;
+  return Promise.all(runs).then(() => box.remove());
+}

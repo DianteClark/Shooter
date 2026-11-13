@@ -58,8 +58,10 @@ const CSS = `
   clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
 .hud.hc-on .minimap { display: none !important; }
 .hud.mh-on .ctf-status, .hud.mh-on .obj-strip { display: none !important; }
-/* Held off the field: the wait plate takes the Respawn row, and the respawn clock (which is not running) goes. */
-.hud.mh-held .death-next, .hud.mh-held .death-go, .hud.mh-held .death-timer { display: none !important; }
+/* Held off the field: the wait plate takes the Respawn row, and the respawn clock (which is not running) goes. The
+   Next life line stays (QoL): the class for the life after the wait can still be swapped while it runs. */
+.hud.mh-held .death-go, .hud.mh-held .death-timer { display: none !important; }
+.hud.mh-held .death-act { flex-wrap: wrap; }
 /* Control, out of lives: the death screen steps aside for the player being watched; the wait plate cycles who. */
 .hud.mh-watch .death { background: none; }
 .hud.mh-watch .death-top { display: none !important; }

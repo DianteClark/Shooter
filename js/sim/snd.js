@@ -419,7 +419,12 @@ export const spectate = {
     const ex = view?.obj?.ex ? view.obj : view?.points?.obj?.ex ? view.points.obj : null;
     // Search and Destroy between rounds, or a battle royale squad member who is out (js/sim/br.js).
     const ctlView = view?.obj?.kind === 'ctl' || view?.points?.obj?.kind === 'ctl';
-    if ((!snd && !view?.br && !ex && !ctlView) || snd?.state === 'freeze' || view.phase === 'ended') return null;
+    // Showdown, out for the round (your partner, then anyone), and Graveyard Shift, bled out until the next round (the
+    // crew): the same eyes-of-a-teammate view (QoL).
+    const o = view?.obj ?? view?.points?.obj ?? null;
+    const gf = o?.kind === 'gf' ? o : null, zm = o?.zm ? o : null;
+    if ((!snd && !view?.br && !ex && !ctlView && !gf && !zm) || snd?.state === 'freeze' || view.phase === 'ended') return null;
+    if (gf && gf.state !== 'live') return null;
     const players = view.players;
     let me = null;
     for (let i = 0; i < players.length; i++) if (players[i].id === localId) { me = players[i]; break; }
@@ -434,7 +439,7 @@ export const spectate = {
       if (p.id === this.pick) return p.id;
       first ??= p.id;
     }
-    if (first === null && ((this.any && (view.br || ex)) || ctl)) {
+    if (first === null && ((this.any && (view.br || ex)) || ctl || gf)) {
       for (let i = 0; i < players.length; i++) {
         const p = players[i];
         if (!p.alive || p.id === localId || p.air === 1 || p.ai) continue;     // Extraction: squads, not the AI patrols.
@@ -451,7 +456,8 @@ export const spectate = {
     const me = view.players.find(p => p.id === localId);
     let list = view.players.filter(p => me && p.team === me.team && p.alive && p.id !== localId);
     const ex = view?.obj?.ex || view?.points?.obj?.ex;
-    if (!list.length && ((this.any && (view.br || ex)) || this.ctlOut(view, me))) list = view.players.filter(p => p.alive && p.id !== localId && p.air !== 1 && !p.ai).sort((a, b) => a.team - b.team);
+    const gf = (view?.obj ?? view?.points?.obj)?.kind === 'gf';
+    if (!list.length && ((this.any && (view.br || ex)) || this.ctlOut(view, me) || gf)) list = view.players.filter(p => p.alive && p.id !== localId && p.air !== 1 && !p.ai).sort((a, b) => a.team - b.team);
     if (!list.length) return null;
     const i = Math.max(0, list.findIndex(p => p.id === now));
     let j = (i + step + list.length) % list.length;

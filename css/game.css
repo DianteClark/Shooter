@@ -490,17 +490,30 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
   100% { opacity: 0; transform: rotate(var(--tilt)) scale(1) translateY(-10px); }
 }
 
-/* Hit marks: four ticks around the crosshair; a skull on a kill; gold for the head. Outlined to read on snow. */
+/* Hit marks: four ticks around the crosshair; a red X with a flash on a kill; gold and a ringing halo for the head.
+   Outlined to read on snow. */
 .hit { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; opacity: 0; will-change: transform, opacity; transform: translate3d(-50%,-50%,0); z-index: var(--z-hud-alert); filter: drop-shadow(0 0 1.5px rgba(0,0,0,.9)); }
 .hit svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .hit-x path { fill: none; stroke: #fff; stroke-width: 3.5; stroke-linecap: square; }
-.hit-skull { display: none; }
-.hit-skull path { fill: var(--c-red); stroke: #fff; stroke-width: 1.4; }
+.hit-kx, .hit-ring, .hit-flash { display: none; }
 .hit.kill .hit-x { display: none; }
-.hit.kill .hit-skull { display: block; }
+.hit.kill .hit-kx { display: block; }
 .hit.head .hit-x path { stroke: var(--c-gold); stroke-width: 4.5; }
-.hit.head .hit-skull path { fill: var(--c-gold); stroke: #fff; }
-.hit.kill { width: 34px; height: 34px; }
+.hit.kill { width: 44px; height: 44px; }
+.hit-kx path { fill: none; stroke: var(--c-red); stroke-width: 5; stroke-linecap: square; }
+.hit.kill.head .hit-kx path { stroke: var(--c-gold); }
+.hit.head .hit-ring { display: block; opacity: 0; }
+.hit-ring path { fill: var(--c-gold); }
+.hit-ring circle { fill: none; stroke: var(--c-gold); stroke-width: 1.6; }
+.hit.kill .hit-flash { display: block; position: absolute; inset: -14px; border-radius: 50%; opacity: 0; background: radial-gradient(circle, rgba(255,255,255,.95) 0 22%, rgba(255,92,72,.55) 42%, rgba(255,92,72,0) 70%); }
+html[data-cb="contrast"] .hit-kx path { stroke-width: 6.5; }
+/* Kill confirms: the points float up off the marker. Damage numbers (Options, off by default) rise off the target. */
+.xp-floats, .dmg-nums { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
+.xp-floats b { position: absolute; left: calc(50% + 14px); top: calc(50% - 30px); opacity: 0; will-change: transform, opacity; font: 400 20px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium-hi); text-shadow: var(--text-lift); white-space: nowrap; }
+.xp-floats b.head { color: var(--c-gold); }
+.dmg-nums b { position: absolute; left: 0; top: 0; opacity: 0; will-change: transform, opacity; font: 400 calc(15px * var(--hud-k, 1))/1 var(--f-stencil); color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px rgba(0,0,0,.9); white-space: nowrap; }
+.dmg-nums b.head { color: var(--c-gold); font-size: calc(18px * var(--hud-k, 1)); }
+.dmg-nums b.kill { color: #ff6a55; }
 
 /* "+100": below and right of the crosshair, so it never sits on the next target. */
 .score-pop { position: absolute; left: calc(50% + 34px); top: calc(50% + 18px); display: flex; align-items: baseline; gap: 5px; opacity: 0; will-change: transform, opacity; transform-origin: left center; pointer-events: none; z-index: var(--z-hud-alert); }
@@ -697,8 +710,17 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .lb-row.me { background: linear-gradient(90deg, rgba(242,166,59,.24), rgba(242,166,59,.06)); box-shadow: inset 2px 0 0 var(--c-sodium); }
 .board-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .board-tip { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+/* Leave asks first (QoL): the tip turns into what leaving costs, with Stay beside Leave. */
+.board-foot.armed { align-items: center; }
+.board-foot.armed .board-tip { flex: 1 1 auto; min-width: 0; color: var(--c-chalk); font-size: var(--fs-caption); line-height: 1.3; white-space: normal; }
+.board-stay {
+  flex: none; height: 32px; padding: 0 14px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk);
+  background: var(--face-steel-hi); box-shadow: var(--bevel-hi), var(--edge); pointer-events: auto;
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.board-stay[hidden] { display: none; }
 .board-leave {
-  height: 32px; padding: 0 14px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff;
+  flex: none; height: 32px; padding: 0 14px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff;
   background: var(--face-red); box-shadow: var(--bevel-sodium); pointer-events: auto;
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
@@ -1147,7 +1169,7 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 }
 #ui .rs-btn.primary { background: var(--face-sodium); color: var(--c-sodium-ink); box-shadow: var(--bevel-sodium); font-size: 18px; }
 #ui .rs-btn.quiet { min-height: 34px; padding: 0 12px; font-size: 13px; background: transparent; box-shadow: var(--edge-hi); color: var(--c-haze); }
-#ui .rs-btn.pressed { transform: scale(.96); filter: brightness(.86); transition-duration: var(--dur-instant); }
+#ui .rs-btn.pressed { transform: scale(.96); filter: brightness(.86); box-shadow: var(--bevel-pressed); transition-duration: var(--dur-instant); }
 
 /* Team tables. The winner's side gets a lit header. */
 #ui .rb-pair { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1239,6 +1261,11 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 /* Rematch takes the column's spare height, up to a generous plate; Menu stays a plain 44 px button under it. */
 #ui .res-choice .rs-btn.primary { flex: 1 1 52px; min-height: 52px; max-height: 92px; }
 #ui .res-note:empty { display: none; }
+/* Quick rematch (QoL): the label, and under it what one tap queues (the playlist, the map and mode, or the host's call). */
+#ui .rs-again-tx { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; max-width: 100%; }
+#ui .rs-again-tx b { font: inherit; letter-spacing: inherit; }
+#ui .rs-again-tx small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font: var(--fs-micro)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); opacity: .8; white-space: normal; text-align: center;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
 /* Challenges and Pro challenges, one card. Labels keep to one line where the row is tight and get two where the card is
    tall enough (the SE's 427 design px). */

@@ -60,6 +60,8 @@ const BIG_KILL = new Set(['Sniper', 'Marksman', 'Launcher']);
 const DEFAULT_KICK = { ar: 0.5, smg: 0.36, shotgun: 1.1, lmg: 0.7, sniper: 1.4, pistol: 0.45 };
 const TRACER_BASE = 0.13;       // Metres of half-width for a weapon whose tracerWidth is 1.
 
+const PUNCH = { double: 0.03, triple: 0.045, fury: 0.06, streak3: 0.03, streak5: 0.045, streak10: 0.06 };
+
 function kickOf(id) {
   const k = WEAPONS[id] && WEAPONS[id].kickCam;
   return Number.isFinite(k) ? k : (DEFAULT_KICK[id] ?? 0.5);
@@ -369,11 +371,15 @@ export class GameRenderer {
             const big = BIG_KILL.has(WEAPONS[ev.weapon] && WEAPONS[ev.weapon].category) || ev.weapon === 'revolver';
             this.hitStop = 0.05 + (ev.head ? 0.03 : 0) + (big ? 0.04 : 0);
             this.hitEase = 0.17;
-            this.zoomPunch = Math.max(this.zoomPunch, 0.05 + (ev.head ? 0.02 : 0));
+            const motion = feelMotion();
+            this.zoomPunch = Math.max(this.zoomPunch, (0.05 + (ev.head ? 0.02 : 0)) * motion);
             this.trauma = Math.min(1, this.trauma + 0.25);
           }
           break;
         }
+        // Screen punches: a multi-kill, a kill streak and calling in your own scorestreak land a small camera kick.
+        case 'medal': if (ev.id === localId && PUNCH[ev.medal]) this.punch(PUNCH[ev.medal]); break;
+        case 'streak': if (ev.id === localId) this.punch(0.05); break;
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
@@ -566,7 +572,7 @@ export class GameRenderer {
       const k = 1 - Math.exp(-f.t * 2.2);
       tx += (f.x - tx) * Math.min(1, dt * 5);
       tz += (f.z - tz) * Math.min(1, dt * 5);
-      this.zoomPunch = 0.42 * k;
+      this.zoomPunch = 0.42 * k * (feelMotion() < 1 ? 0.5 : 1);
     } else if (local) {
       const aimX = Math.cos(local.aim), aimZ = Math.sin(local.aim);
       const ads = local.adsT || 0;
@@ -812,6 +818,17 @@ export class GameRenderer {
   // Lets a replay add a jolt on the kill.
   addShake(a) { this.trauma = Math.min(1, this.trauma + a); }
 
+  // A screen punch: a quick push in plus a jolt. amount ~0.03 (a double kill) .. 0.08 (the final kill). Reduce shake and
+  // flashes (Options, or the system setting) takes it to a quarter; the Camera kick slider scales it too.
+  punch(amount) {
+    if (this.cine) return;
+    const k = amount * feelMotion() * TUNING.camKick;
+    this.zoomPunch = Math.max(this.zoomPunch, k);
+    this.trauma = Math.min(1, this.trauma + amount * 3);
+    this.punches = (this.punches || 0) + 1;
+    this.lastPunch = k;
+  }
+
   // Render budget readout for the demo and profiling.
   getStats() { return this.frameStats; }
 
@@ -819,6 +836,7 @@ export class GameRenderer {
   playFinalKill(lastKill) {
     if (!lastKill) return;
     const r = this.chars.rigs.get(lastKill.by);
+    this.punch(0.08);
     this.finalKill = {
       by: lastKill.by,
       x: r ? r.x : lastKill.x,

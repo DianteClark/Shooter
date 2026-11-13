@@ -222,6 +222,7 @@ THEMES.harvest = {
     { kind: 'mote', count: 110, box: [42, 6, 32], vel: [-0.6, 0.15, 0.3], size: 0.09, col: [1.0, 0.86, 0.55], alpha: 0.55 },
     { kind: 'streak', count: 40, box: [40, 3, 30], vel: [-5, 0.05, 1.0], len: 1.4, width: 0.02, col: [0.95, 0.85, 0.6], alpha: 0.12 },
     { kind: 'mote', count: 20, box: [48, 2.5, 36], vel: [-0.8, 0.02, 0.2], size: 4.2, col: [0.86, 0.86, 0.8], alpha: 0.05 },
+    { kind: 'leaf', count: 22, box: [42, 7, 32], vel: [-0.9, -0.5, 0.3], size: 0.5, col: [0.96, 0.66, 0.28], alpha: 0.92 },
   ] },
 };
 

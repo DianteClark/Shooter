@@ -80,8 +80,9 @@ const TABS = [['attach', 'Attach', 'optic'], ['camo', 'Camo', 'camo'], ['fx', 'E
 const REWARD_ICON = { xp: 'star', badge: 'star', card: 'flag', camos: 'camo' };
 
 export class Gunsmith {
-  constructor(menu, { loadoutIndex = Progress.activeLoadout, weapon, onBack, onChange, onRename }) {
+  constructor(menu, { loadoutIndex = Progress.activeLoadout, weapon, onBack, onChange, onRename, onPlay = null }) {
     this.menu = menu;
+    this.onPlay = onPlay;     // QoL: Play on the next camo challenge (main.js playShortcut), or null in a friend room.
     this.index = loadoutIndex;
     this.onChange = onChange;
     this.onBack = onBack;
@@ -117,6 +118,7 @@ export class Gunsmith {
       gsFx: ({ kind, id }) => this.tapFx(kind, id),
       gsApply: () => this.apply(),
       gsPrestige: () => this.prestige(),
+      gsPlay: () => this.play(),
     });
   }
 
@@ -158,6 +160,25 @@ export class Gunsmith {
     this.onChange?.();
     this.paintEquip();
     this.menu.toast(`${this.name} equipped`);
+  }
+
+  // The camo challenge closest to its next unlock: the lowest goal not met, the furthest along of those.
+  nextCamoChallenge() {
+    const open = Progress.challenges(this.weapon).filter(c => !c.done);
+    if (!open.length) return null;
+    const goal = Math.min(...open.map(c => c.goal));
+    return open.filter(c => c.goal === goal).sort((a, b) => b.value / b.goal - a.value / a.goal)[0];
+  }
+
+  // Play for a camo challenge: the gun goes into this loadout (and the loadout becomes the one played), then Quick Play.
+  play() {
+    if (!this.onPlay) return;
+    if (!this.isEquipped && Progress.isItemUnlocked('weapon', this.weapon)) {
+      Progress.updateLoadout(this.index, { [slotOf(this.weapon)]: this.weapon });
+      this.onChange?.();
+    }
+    if (Progress.activeLoadout !== this.index) Progress.activeLoadout = this.index;
+    this.onPlay();
   }
 
   get isEquipped() { return this.loadout[slotOf(this.weapon)] === this.weapon; }
@@ -653,7 +674,7 @@ export class Gunsmith {
   // The panel's bottom strip: names the thing under the thumb and how to act on it.
   paintFoot() {
     const foot = this.footEl;
-    let title = '', desc = '', action = '', enabled = false, locked = false;
+    let title = '', desc = '', action = '', enabled = false, locked = false, play = false;
     if (this.tab === 'attach') {
       const kit = this.kit, id = this.tryAtt;
       if (id === null) {
@@ -675,7 +696,13 @@ export class Gunsmith {
       }
     } else if (this.tab === 'camo') {
       const id = this.tryCamo;
-      if (id === null) {
+      const next = id === null ? this.nextCamoChallenge() : null;
+      if (next) {
+        // QoL: the next camo challenge, its progress, and Play.
+        title = `Next: ${getCamo(next.camo)?.name ?? 'camo'}`;
+        desc = `${next.value}/${next.goal} ${next.label}`;
+        play = true;
+      } else if (id === null) {
         const c = getCamo(Progress.camo(this.weapon)), all = Progress.challenges(this.weapon);
         const done = all.filter(x => x.done).length;
         title = c.name;
@@ -689,6 +716,7 @@ export class Gunsmith {
           const ch = Progress.challenges(this.weapon).find(x => x.camo === id);
           desc = ch ? `${ch.value}/${ch.goal} ${ch.label}` : camoRequirement(c);
           action = 'How to unlock'; locked = true;
+          if (ch) play = true;
         } else if (Progress.camo(this.weapon) === id) {
           desc = 'Equipped on this weapon.';
         } else {
@@ -720,8 +748,10 @@ export class Gunsmith {
       foot.innerHTML = `<div class="foot-text"><b>${esc(title)}</b></div><button class="btn is-primary" data-act="gsPrestige" data-sound="confirm" ${can ? '' : 'disabled'}>${ico('prestige')}<b>Prestige</b></button>`;
       return;
     }
+    play = play && !!this.onPlay;
     foot.innerHTML = `
       <div class="foot-text"><b>${esc(title)}</b><small>${esc(desc)}</small></div>
+      ${play ? `<button class="btn is-primary gs-play" data-act="gsPlay" data-sound="confirm">${ico('play')}<b>Play</b></button>` : ''}
       ${action ? `<button class="btn ${enabled ? 'is-primary' : ''}" data-act="gsApply" data-sound="${locked ? 'tap' : 'confirm'}" ${enabled || locked ? '' : 'disabled'}>${ico(enabled ? (action === 'Remove' ? 'close' : 'check') : 'lock')}<b>${esc(action)}</b></button>` : ''}`;
   }
 

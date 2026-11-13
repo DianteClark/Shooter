@@ -22,6 +22,8 @@ import { DIVISIONS, DIVISION_SPAN } from '../shared/season-items.js';
 import { fromCode, division, RANKED_RULES, MOVE, PLACEMENTS, CHAMPION } from '../shared/ranked.js';
 import { getCard } from '../shared/progression.js';
 import { enter, play, pop, DUR, reducedMotion } from './motion.js';
+import { playTile } from './challenges.js';     // QoL: a weekly challenge's Play shortcut.
+import { playFor } from './shortcuts.js';
 
 const fmt = n => Math.round(n).toLocaleString('en-US');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -130,7 +132,7 @@ function trackPane(s, open) {
     </div>`;
 }
 
-function weeklyPane(s, week) {
+function weeklyPane(s, week, canPlay = false) {
   const weeks = Progress.weekly();
   if (!weeks.length) return `<p class="sz-empty">${ico('ui:info', '', 14)}Weekly sets open with Season ${(s.info.next ?? s.info.def).n} on ${dateText(s.info.endsAt)}: five challenges a week, each worth one or two stars, a star a tier.</p>`;
   const w = weeks[Math.max(0, Math.min(weeks.length - 1, week))];
@@ -141,7 +143,7 @@ function weeklyPane(s, week) {
     }).join('')}</nav>
     <div class="sz-chs scroll-y">${w.list.map((c, i) => `
       <div class="sz-ch${c.done ? ' done' : ''}${w.open ? '' : ' shut'}" style="--i:${i}">
-        <span class="sz-ch-ico">${icon(c.icon, { size: 22, square: true })}</span>
+        ${w.open && canPlay ? playTile(c, 'sz-ch-ico', 22, true) : `<span class="sz-ch-ico">${icon(c.icon, { size: 22, square: true })}</span>`}
         <span class="sz-ch-body"><b>${esc(c.label)}</b><span class="sz-ch-prog"><i class="sz-bar"><i style="transform:scaleX(${(c.value / c.goal).toFixed(3)})"></i></i><small class="t-num">${w.open ? `${fmt(c.value)} / ${fmt(c.goal)}` : `Opens ${dateText(w.opensAt)}`}</small></span></span>
         <span class="sz-ch-stars">${'<i></i>'.repeat(c.stars)}<small>${c.done ? 'Earned' : `${c.stars} tier${c.stars > 1 ? 's' : ''}`}</small></span>
       </div>`).join('')}
@@ -180,7 +182,7 @@ function rankedPane(s) {
     </div>`;
 }
 
-export function seasonScreen(menu, { onBack, onPlayRanked, tab = last.tab }) {
+export function seasonScreen(menu, { onBack, onPlayRanked, onPlay = null, tab = last.tab }) {
   const state = { tab: TABS.some(t => t[0] === tab) ? tab : 'track', open: null, week: null, claiming: false };
   menu.el.dataset.screen = 'season';
   const paint = (first = false) => {
@@ -188,7 +190,7 @@ export function seasonScreen(menu, { onBack, onPlayRanked, tab = last.tab }) {
     const def = s.info.def ?? s.info.next;
     if (state.open === null) state.open = s.info.def ? Math.min(TRACK_TIERS, Math.max(1, s.claimable ? s.claimed + 1 : s.tier + 1)) : 1;
     if (state.week === null) state.week = s.info.week;
-    const body = state.tab === 'track' ? trackPane(s, state.open) : state.tab === 'weekly' ? weeklyPane(s, state.week) : rankedPane(s);
+    const body = state.tab === 'track' ? trackPane(s, state.open) : state.tab === 'weekly' ? weeklyPane(s, state.week, !!onPlay) : rankedPane(s);
     menu.el.style.setProperty('--sa', def.theme[3]);
     menu.el.style.setProperty('--sg', def.theme[1]);
     menu.el.innerHTML = `
@@ -243,6 +245,7 @@ export function seasonScreen(menu, { onBack, onPlayRanked, tab = last.tab }) {
     },
     szClaim: () => { claim(); },
     szWeek: ({ w }) => { state.week = Number(w); paint(); },
+    chPlay: ({ stat }) => { const where = playFor(stat); if (where) onPlay?.(where); },
     szPlayRanked: () => onPlayRanked?.(),
   });
   paint(true);

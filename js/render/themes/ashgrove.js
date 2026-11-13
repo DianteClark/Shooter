@@ -34,6 +34,8 @@ THEMES.ashgrove = {
     { kind: 'mote', count: 16, box: [46, 4, 34], vel: [0.2, 0.03, -0.1], size: 7, col: [0.5, 0.56, 0.64], alpha: 0.05 },
     // Moths round the lamps, and a few embers off the lamp glass.
     { kind: 'mote', count: 40, box: [40, 5, 30], vel: [0.1, 0.25, 0.05], size: 0.07, col: [1, 0.85, 0.55], alpha: 0.45 },
+    // Ash drifting down off the burnt grove.
+    { kind: 'leaf', count: 26, box: [42, 8, 32], vel: [0.25, -0.4, 0.1], size: 0.22, col: [0.42, 0.42, 0.44], alpha: 0.75 },
   ] },
 };
 
