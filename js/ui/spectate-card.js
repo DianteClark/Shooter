@@ -72,6 +72,7 @@ export class SpectateCard {
     this.parts = { badge: $('.spc-who i'), lv: $('.spc-who u'), name: $('.spc-who b'), op: $('.spc-op'), gun: $('.spc-gun'), hp: $('.spc-hp'), stats: $('.spc-stats'), prev: $('.spc-prev'), next: $('.spc-next') };
     this.parts.prev.addEventListener('click', () => this.step(-1));
     this.parts.next.addEventListener('click', () => this.step(1));
+    addEventListener('resize', () => { this.placeIn = 3; });     // A rotation or a new size: place again once the HUD has laid out.
     this.reset();
   }
 

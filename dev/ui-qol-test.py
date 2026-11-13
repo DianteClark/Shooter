@@ -351,6 +351,9 @@ async def spectating(ctx):
     await ev(pg, "sim.phaseT = 0.05;")
     await pg.wait_for_timeout(800)
     await ev(pg, "const foe = sim.players.find(p => p.team !== me.team); me.spawnProtect = 0; sim._damage(me, foe, 999, 'ar', 5);")
+    # The death replay starts a moment after the death and owns the camera while it runs: wait it out.
+    try: await pg.wait_for_function("document.body.classList.contains('killcam-on')", timeout=10000)
+    except Exception: pass
     await pg.wait_for_function("document.querySelector('.spec-card') && !document.querySelector('.spec-card').hidden && !document.body.classList.contains('killcam-on')", timeout=20000)
     await pg.wait_for_timeout(600)
     card = await pg.evaluate("""(() => { const g = window.__game, w = g.app.renderer.watching, p = g.app.match.interp.newest.players.find(q => q.id === w);
