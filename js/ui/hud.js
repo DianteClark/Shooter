@@ -917,8 +917,7 @@ export class HUD {
     this.flashEl.style.opacity = '0';
     this.dazeT = 0;
     this.dazeEl.style.opacity = '0';
-    this.leaveArmed = false;
-    this.leaveBtn.textContent = 'Leave match';
+    this.#disarmLeave();
     this.feed = [];
     this.medalQueue = [];
     this.medalClock = 0;
@@ -1102,7 +1101,7 @@ export class HUD {
       <div class="board" hidden>
         <div class="board-top"><b class="board-mode"></b><span class="board-goal"></span></div>
         <div class="board-grid"></div>
-        <div class="board-foot"><small class="board-tip">Tap the score to close</small><button class="board-leave" data-tap="1">Leave match</button></div>
+        <div class="board-foot"><small class="board-tip">Tap the score to close</small><button class="board-stay" data-tap="1" data-sound="back" hidden>Stay</button><button class="board-leave" data-tap="1">Leave match</button></div>
       </div>
       <div class="range-panel" hidden>
         <div class="rp-head">Firing Range</div>
@@ -1332,6 +1331,8 @@ export class HUD {
     });
     $('.range-leave').addEventListener('click', () => this.leaveCb?.());
     this.leaveBtn.addEventListener('click', () => this.#tapLeave());
+    this.stayBtn = $('.board-stay');
+    this.stayBtn.addEventListener('click', () => this.#disarmLeave());
 
     this.micBtn.addEventListener('click', () => this.micCb?.());
     this.speakerBtn.addEventListener('click', () => this.speakerCb?.());
@@ -1340,15 +1341,32 @@ export class HUD {
     this.#buildBoard();
   }
 
-  // Two taps on purpose: a stray thumb on the open scoreboard must not end the match.
+  // Two taps on purpose: a stray thumb on the open scoreboard must not end the match. The first asks, in words that say
+  // what leaving costs here (main.js leaveText: progress lost, the slot held, the room handed over), with Stay beside it.
   #tapLeave() {
     if (!this.leaveArmed) {
       this.leaveArmed = true;
-      this.leaveBtn.textContent = 'Tap again to leave';
+      this.leaveBtn.textContent = 'Leave';
+      this.stayBtn.hidden = false;
+      const foot = this.leaveBtn.parentElement;
+      foot.classList.add('armed');
+      let text = 'Leave this match?';
+      try { text = this.leaveText?.() || text; } catch (err) { console.error('leave text', err); }
+      foot.querySelector('.board-tip').textContent = text;
       return;
     }
     this.toggleBoard();
     this.leaveCb?.();
+  }
+
+  #disarmLeave() {
+    this.leaveArmed = false;
+    if (!this.leaveBtn) return;
+    this.leaveBtn.textContent = 'Leave match';
+    this.stayBtn.hidden = true;
+    const foot = this.leaveBtn.parentElement;
+    foot.classList.remove('armed');
+    foot.querySelector('.board-tip').textContent = 'Tap the score to close';
   }
 
   // Twelve rows made once and only ever retexted, so an open board costs a few text writes a second.
@@ -1372,8 +1390,7 @@ export class HUD {
     this.boardOpen = !this.boardOpen;
     this.boardEl.hidden = !this.boardOpen;
     this.boardClock = 0;
-    this.leaveArmed = false;
-    this.leaveBtn.textContent = 'Leave match';
+    this.#disarmLeave();
     if (this.boardOpen && this.view) this.#paintBoard(this.view);
   }
 

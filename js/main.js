@@ -381,11 +381,11 @@ menu.on({
     if (row) row.hidden = true;
     if (!backdrop.emote(Number(i))) menu.toast(e.name);
   },
-  leaveLobby: () => goTitle(),
+  leaveLobby: () => leaveRoom(),
   toggleReady: () => toggleReady(),
   start: () => startVote(),
   voteCast: ({ i }) => castVote(Number(i)),
-  voteLeave: () => { if (app.vote?.solo) { stopVote(); renderMp(); } else goTitle(); },
+  voteLeave: () => { if (app.vote?.solo) { stopVote(); renderMp(); } else leaveRoom(); },
   soloBack: () => leaveCustom(),
   soloMap: ({ id }) => pickSoloMap(id),
   soloMode: ({ id }) => pickSoloMode(id),
@@ -397,6 +397,31 @@ menu.on({
   lobbyMic: () => app.voice?.toggleMic(),
   voiceMute: ({ id }) => voiceUi?.toggleMute(id),
 });
+
+// A short question over the menu: Stay (or B) closes it, the red button does the thing (QoL).
+function confirmSheet({ title, body, yes = 'Leave', no = 'Stay', onYes }) {
+  menu.overlay(`
+    <div class="sheet slim qol-confirm" role="alertdialog" aria-label="${title.replace(/"/g, '')}">
+      <h2>${title}</h2>
+      <p>${body}</p>
+      <div class="sheet-row">
+        <button class="btn" data-act="qolNo" data-sound="back">${no}</button>
+        <button class="btn is-danger" data-act="qolYes" data-sound="confirm">${yes}</button>
+      </div>
+    </div>`);
+  menu.on({ qolNo: () => menu.overlay(''), qolYes: () => { menu.overlay(''); onYes(); } });
+}
+
+// Leaving a friend room: a host with friends in it is asked first, since the room passes to one of them.
+function leaveRoom() {
+  const others = app.net && app.isHost ? app.lobby.humans.filter(h => h.id !== app.net.localId).length : 0;
+  if (!others) { goTitle(); return; }
+  confirmSheet({
+    title: 'Leave your room?',
+    body: `You are hosting ${others} other player${others === 1 ? '' : 's'}. One of them becomes host and the room stays open without you.`,
+    yes: 'Leave room', onYes: () => goTitle(),
+  });
+}
 
 function needName(next) {
   if (Progress.name) next();
@@ -1824,6 +1849,16 @@ installTaps();
 // One sound per tap, chosen by tap.js from the element (data-sound, back-ish actions, disabled controls).
 setTapSound(kind => audio.uiSound?.(kind));
 hud.onLeaveMatch(leaveMatch);
+// What leaving the running match costs, for the scoreboard's Leave question (QoL).
+hud.leaveText = () => {
+  if (app.matchInfo?.training || app.lastMode === 'range') return 'Leave training? Nothing is lost: it pays and records nothing.';
+  const lost = 'XP, challenge and weapon progress from this match are lost.';
+  if (!app.net) return `Leave this match? ${lost}`;
+  const others = app.lobby.humans.filter(h => h.id !== app.net.localId).length;
+  if (app.isHost && others) return `Leave and hand over the room? Another player becomes host and the match goes on without you. ${lost}`;
+  if (app.isHost) return `Leave this match? The room closes. ${lost}`;
+  return `Leave the room? Your slot is held for a few minutes if you rejoin with code ${app.code}. ${lost}`;
+};
 hud.onBrLeave(leaveBrEarly);
 // The interpolated view does not carry the range tracker, so the readout takes it from the newest snapshot.
 hud.rangeSource = () => app.match?.interp.newest?.range ?? null;

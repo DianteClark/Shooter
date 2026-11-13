@@ -696,8 +696,17 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .lb-row.me { background: linear-gradient(90deg, rgba(242,166,59,.24), rgba(242,166,59,.06)); box-shadow: inset 2px 0 0 var(--c-sodium); }
 .board-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .board-tip { font: var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); }
+/* Leave asks first (QoL): the tip turns into what leaving costs, with Stay beside Leave. */
+.board-foot.armed { align-items: center; }
+.board-foot.armed .board-tip { flex: 1 1 auto; min-width: 0; color: var(--c-chalk); font-size: var(--fs-caption); line-height: 1.3; white-space: normal; }
+.board-stay {
+  flex: none; height: 32px; padding: 0 14px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk);
+  background: var(--face-steel-hi); box-shadow: var(--bevel-hi), var(--edge); pointer-events: auto;
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.board-stay[hidden] { display: none; }
 .board-leave {
-  height: 32px; padding: 0 14px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff;
+  flex: none; height: 32px; padding: 0 14px; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff;
   background: var(--face-red); box-shadow: var(--bevel-sodium); pointer-events: auto;
   --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
