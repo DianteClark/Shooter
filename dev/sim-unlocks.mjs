@@ -101,8 +101,17 @@ test('every calling card has a name, a requirement and art, and judges a blank c
   }
 });
 
-test('every emblem draws; every camo pattern exists in the shader; every skin names a real operator', async () => {
+const { readFileSync } = await import('node:fs');
+test('every emblem draws; every camo pattern exists in the shader; every skin names a real operator', () => {
   for (const e of ALL_EMBLEMS) assert.ok(emblemSvg(e.id, 18).includes('<polygon'), `${e.id} draws`);
+  // The shader imports three.js, so its pattern table is read as text.
+  const src = readFileSync(new URL('../js/render/camo-shader.js', import.meta.url), 'utf8');
+  const ids = new Set([.../PATTERN_IDS = \{([^}]+)\}/.exec(src)[1].matchAll(/(\w+):/g)].map(m => m[1]));
+  for (const c of CAMOS) {
+    assert.ok(ids.has(c.pattern), `${c.id}: pattern ${c.pattern}`);
+    assert.ok(c.colors?.length >= 1 && c.colors.length <= 4 && c.scale > 0, `${c.id} colours and scale`);
+  }
+  for (const k of SKINS) assert.ok(opIds.has(k.operator), `${k.id}: operator ${k.operator}`);
 });
 
 test('every finisher and emote rule is one the unlock check knows', () => {

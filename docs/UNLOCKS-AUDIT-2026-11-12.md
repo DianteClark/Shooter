@@ -102,7 +102,6 @@ every daily/weekly challenge row on the results says what the stored challenge s
 - **Graveyard Shift kills count for everything except the boards**: daily/weekly kill goals, class goals ("50 SMG
   kills" operators, the Arms cards), camo challenges and operator mastery all count zombie kills (weapon XP is cut,
   K/D boards are not). Easy farming; intended?
-- **Podium card ("Finish top three 50 times")** counts only free-for-all placings, not battle royale.
 - Weekly "Clutch 2 Search and Destroy rounds" also counts Showdown clutches, and "Confirm 8 kills in Kill Confirmed"
   also counts Grind tags. Generous, left as is.
 - Map cards exist for the first eight maps only (14 newer maps have none); mode cards for the original six modes,

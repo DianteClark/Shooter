@@ -146,7 +146,10 @@ export class MatchAwards {
     if (objOf(view)?.ex) return null;        // Extraction squads are not placed: they get out or they do not.
     const ffa = isFfa(this.mode) || (me?.team ?? 0) >= FFA_TEAM;
     if (!ffa || !me) return null;
-    if (Number.isFinite(me.place)) return me.place;
+    if (Number.isFinite(me.place) && me.place > 0) return me.place;
+    // Battle royale squads are placed as they go out (place 0 until then): a match ended with the squad still in
+    // (a host ending it, a test) is a win for the side the sim named, as the results header says.
+    if (view?.br && view.winner === me.team) return 1;
     const score = p => view.scores?.[p.team] ?? p.kills ?? 0;
     const ahead = p => score(p) - score(me) || (me.deaths ?? 0) - (p.deaths ?? 0) || (p.kills ?? 0) - (me.kills ?? 0);
     let place = 1;

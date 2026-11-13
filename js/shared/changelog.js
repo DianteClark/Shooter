@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-13', title: 'Rewards check',
+    items: [
+      'Calling cards earned in a match now show up on the results as new cards: map wins, mode cards, weapon class cards, the career cards and every gun\'s Master card used to unlock without a word.',
+      'Graveyard Shift: putting down the Gravewarden now shows the Lantern Out calling card on the results.',
+      'Finishing a gun\'s mastery ladder now shows that gun\'s own Master calling card, instead of the starter card. If you had already earned it from the camo challenges, it is not shown twice.',
+      'Vulture is called in, announced and credited as Vulture (it said Attack Chopper), so its kills and its mastery track count.',
+      '"Finish top 3 in Free-for-All" (and in Gun Game, One in the Chamber) counts only that mode.',
+      'Taking the HQ in Headquarters or a zone in Control counts toward "Capture flags or zones" challenges and the objective mastery tiers.',
+    ],
+  },
+  {
     build: '1111-37', date: '2026-11-12', title: 'One contract at a time, clearer match endings',
     items: [
       'Extraction: your squad works one contract at a time. Taking a new one at a contract phone no longer cancels the one you are on without warning: while one is under way the phone says "Finish your current contract first".',

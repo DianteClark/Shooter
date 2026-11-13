@@ -55,6 +55,10 @@ SAVE = """(() => { const P = window.__game.Progress; let hist = 0;
   try { hist = JSON.parse(localStorage.getItem('switchyard-history') || '[]').length; } catch (e) {}
   return { xp: P.totalXp, raw: (localStorage.getItem('switchyard.save') || '').length, keys: Object.keys(localStorage) }; })()"""
 
+SET_CHALLENGES = """import('/js/shared/progression.js').then(P => { const now = new Date(), set = (period, ids) => ({ key: P.periodKey(period, now), ids, prog: {}, done: [], retired: [] });
+  localStorage.setItem('switchyard.challenges', JSON.stringify({ v: P.CHALLENGE_VERSION, daily: set('daily', ['d.played', 'd.kills', 'd.assist']),
+    weekly: set('weekly', ['w.played', 'w.kills', 'w.assist']), reroll: '' })); })"""
+
 # Each daily/weekly challenge row on the results, with what the stored challenge state says.
 CHAL_ROWS = """import('/js/ui/progress.js').then(m => { const all = [...m.Challenges.list('daily'), ...m.Challenges.list('weekly')];
   return [...document.querySelectorAll('.rs-ch')].filter(b => b.querySelector('.rs-ch-h')?.textContent.trim() === 'Challenges')
@@ -92,6 +96,8 @@ async def run_case(browser, name, kind, arg, size, report):
         await pg.goto(f'http://localhost:{PORT}/{q}')
         await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
         await ev("window.__game.Progress.name='Sweeper'; window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.setFlag('aimHint')")
+        # Today's challenges include "Play N matches", so every case has challenge rows to check against the save.
+        await ev(SET_CHALLENGES)
         await pg.reload()
         await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
         await pg.wait_for_timeout(1200)
