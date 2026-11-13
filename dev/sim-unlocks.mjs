@@ -447,7 +447,8 @@ test('every new calling card and feat emblem reads a stat the game counts, in it
     const m = /^modes-(\w+)-(\d)$/.exec(c.id);
     if (m) {
       const stat = { br: 'br:', rb: 'rb:', ex: 'ex:out', zm: null }[m[1]] ?? `won:${MODES[m[1]].rules}`;
-      if (stat && stat.startsWith('won:')) out.push(...lifeReach(stat).map(x => `${c.id}: ${x}`));
+      // Quick plays each mode once and cuts it at 420 s, before most are won: there the mode is only shown to be played.
+      if (stat && stat.startsWith('won:')) out.push(...lifeReach(QUICK ? stat.replace('won:', 'played:') : stat).map(x => `${c.id}: ${x}`));
     }
   }
   for (const e of ALL_EMBLEMS.filter(e => e.feat)) {

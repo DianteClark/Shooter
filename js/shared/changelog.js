@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-13', title: 'Trophy Case, map and mode cards, feat emblems',
+    items: [
+      'Trophy Case: open it from your service record to see your rarest unlocks, your personal bests (longest streak, longest kill, best battle royale finish, fastest extraction, best Graveyard Shift round on each map, rank) and how much of each collection you have, with a total.',
+      'Tap anything locked (a calling card, emblem, camo, operator, skin, finisher, emote, attachment, gun, perk, piece of gear or scorestreak) to see exactly how to get it and how far along you are. Play now takes you straight to the playlist where it counts.',
+      'Every map has calling cards now, in bronze, silver and gold, and the gold one is animated. So do Headquarters, Kill Order, Control, Grind, Infected, One in the Chamber, Showdown, Battle Royale, Rebound and Extraction.',
+      'Graveyard Shift has its own cards: reach round 10, 20 and 30, escape for the first time, escape on round 25 or later, and survive to round 15 on each of its maps.',
+      'Twelve feat emblems for big moments: an ace, a 10-kill streak, a Battle Royale win, winning as the last of your squad, a full extraction, round 30 and an escape in Graveyard Shift, 25 finishers, a 6-0 Showdown, surviving Infected, a 40 m kill and reaching Champion in Ranked.',
+      'The Nightjar rifle is now called the Lapwing, so it no longer shares a name with the Nightjar operator. Same gun, same stats, your progress stays.',
+      'Graveyard Shift: zombie kills still pay the mode\'s own XP and some weapon XP, but no longer count toward kill challenges, class goals, camo challenges, operator unlocks and mastery, or your career kills.',
+    ],
+  },
+  {
     build: '1113-1', date: '2026-11-13', title: 'Rewards check',
     items: [
       'Calling cards earned in a match now show up on the results as new cards: map wins, mode cards, weapon class cards, the career cards and every gun\'s Master card used to unlock without a word.',

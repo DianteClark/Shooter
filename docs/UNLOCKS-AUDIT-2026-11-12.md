@@ -16,8 +16,8 @@ Branch `scrub`. New test: `node dev/sim-unlocks.mjs [quick]` (about 4 minutes; q
 | Weapon mastery ladder | 47 guns x 5 tiers | `WEAPON_LADDER` | past weapon level 30 |
 | Gear / streak / operator mastery tracks | 80 tracks, 349 tiers (14 tactical, 14 lethal, 23 streak, 29 operator) | `MASTERY_TRACKS` | per-item counters (`MasteryTracker`) |
 | Pro perks | 16 | `PRO_CHALLENGES` | per-perk counters (`ProTracker`) |
-| Calling cards | 306: Starter 1, Pro 16, Prestige 13 (incl. 3 Master), Mastery 137, Career 17, Maps 8, Modes 12, Arms 8, Season 80, Ranked 14 | `CARDS` (progression.js) + `js/ui/cardbook.js` | career, lifetime tallies, mastery grants, season track, ranked |
-| Emblems | 117: 22 base, 94 season + ranked, 1 Master | `js/ui/emblems.js` | starter, level, prestige, Master, career, lifetime tallies, grants |
+| Calling cards | 403 (was 306): Starter 1, Pro 16, Prestige 13 (incl. 3 Master), Mastery 137, Career 16, Maps 66, Modes 42, Arms 8, Zombies 10, Season 80, Ranked 14 | `CARDS` (progression.js) + `js/ui/cardbook.js`, art `js/ui/cards.js` + `js/ui/cardart.js` | career, lifetime tallies, Graveyard Shift records, mastery grants, season track, ranked |
+| Emblems | 129: 22 base, 94 season + ranked, 1 Master, 12 feat | `js/ui/emblems.js` | starter, level, prestige, Master, career, lifetime tallies, feats, grants |
 | Operators | 29: 3 at start, 12 by level, 3 by prestige, 2 by career stat, 9 by lifetime tally (2 of them Extraction) | `js/ui/operators.js` | |
 | Operator skins | 190: 29 issue, 29 field (career rule), 116 mastery (tiers 2-5), 16 season | `js/ui/operators.js` `SKINS` | |
 | Finishers / emotes | 6 / 8 | `js/shared/finishers.js` | level, any operator's mastery tier, a season track tier |
@@ -27,7 +27,8 @@ Branch `scrub`. New test: `node dev/sim-unlocks.mjs [quick]` (about 4 minutes; q
 | Season track | 100 tiers a season x 2 seasons (then replays) | `js/shared/season-items.js` `trackRewards` | 5,000 XP a tier, weekly stars |
 | Season weekly sets | 5 a week x 6 weeks a season, from 20 templates | `js/shared/seasons.js` | `ChallengeTally` + ranked |
 | Ranked rewards | card + emblem per division per season | `rankedCards` / `rankedEmblems` | best division at season end |
-| Graveyard Shift records | best round per map, escape round and Gravewarden per map, the Lantern Out card | `recordZmBest`, `recordZmFeat` | |
+| Graveyard Shift records | best round per map, escape round and Gravewarden per map; 10 Zombies cards, 2 feat emblems | `recordZmBest`, `recordZmFeat` (both inside `applyMatch` now) | |
+| Personal bests | best streak, longest gun kill, best BR placing, fastest extraction (save block `records`, SY4 tail [22]) | `recordBests` | `ChallengeTally.records()`, awards.js |
 | Medals | 37 kinds emitted by the sim, every one with a HUD row and an icon | `js/sim/*`, `js/ui/hud.js` | |
 
 ## 2. What was checked (`dev/sim-unlocks.mjs`)
@@ -98,6 +99,9 @@ every daily/weekly challenge row on the results says what the stored challenge s
 
 ## 5. For the owner to decide
 
+(Resolved 2026-11-13, see 7: the rifle is the Lapwing; Graveyard Shift kills count for the mode only; every map and mode
+has cards.)
+
 - **Nightjar**: the rifle (`hushdmr`) and the Extraction operator share the name, so both Master cards read "Nightjar
   Master" side by side in the Mastery group. Rename one (the operator came later).
 - **Graveyard Shift kills count for everything except the boards**: daily/weekly kill goals, class goals ("50 SMG
@@ -132,3 +136,52 @@ failed from the day Extraction launched (2026-11-11); it now asks the pool for 2
 
 The sweep's HUD notes show the kill feed's badge 3 px past the left edge at 932x430 in a few cases (`f-bdg -3`), as in
 earlier sweeps; not touched here.
+
+## 7. Rewards pass, 2026-11-13 (branch `rewards2`, owner-approved)
+
+1. **Nightjar rifle renamed Lapwing** (`hushdmr`: id, stats, levels, camos and its `gun-hushdmr` card kept; the card reads
+   "Lapwing Master"). The Extraction operator keeps Nightjar. `dev/sim-unlocks.mjs` now fails on any two cards sharing a
+   name; `dev/sim-botpool.mjs` checks the new name, the new cards and the feat emblems against every bot tag.
+2. **Graveyard Shift kills count for the mode only.** `progression.js hordeView`: in a `zm` match ChallengeTally keeps
+   zombie kills apart as `zm:kills` / `zm:head` (no `kills`, `head`, `cat:*`, `gun:*`, assists, records, finishers), and
+   ProTracker and MasteryTracker drop the kill and hit events (time alive and throws still count). awards.js pays a
+   zombie kill's weapon XP (then cut and capped as before) without counting gun kills, headshots or longshots, so camo
+   challenges, class goals, the gun ladder, operator unlocks and mastery, daily/weekly/season challenges, the lifetime
+   tally and the boards never see them. The mode's own XP lines, records and cards are unchanged. Tests: the zm bot
+   matches count none of those stats (sim-unlocks B), a zm match through the real MatchAwards leaves weapon kills,
+   lifetime kill tallies, board kills, challenges and camo/operator/Pro unlocks alone and pays capped weapon XP
+   (sim-unlocks), and the trackers on synthetic horde events (ui-mastery-test).
+3. **Calling cards for every map and mode.** 22 maps x 3 tiers (`map-<id>` keeps its 10 wins as bronze, `map-<id>-2`
+   30 wins silver, `map-<id>-3` 75 wins gold, animated; Frontier and Ashgrove Halt count matches played, 10/40/100);
+   11 modes x 3 (`modes-<mode>-<tier>`: wins, 5/20/50, One in the Chamber 3/10/25; Battle Royale and Rebound top 5 x5,
+   then 3 and 10 wins; Extraction 5/20/50 extractions; Graveyard Shift best round 10/20/30); Graveyard Shift's own:
+   First Light (an escape), Dawn Patrol (an escape on round 25+), a round 15 card per map; Lantern Out moves to the new
+   Zombies group. Each map and mode has its own drawn ground (`js/ui/cardart.js`), tiers show a bronze/silver/gold
+   frame and pips, the gold tier animates (gold sweep for maps, prism for modes, a new green mist for Graveyard Shift).
+   Ten maps got their icons (`js/ui/icons-maps.js`). All appended: no id changed, old SY4 codes import as before.
+   New lifetime tallies: `br:top5/won/lone`, `rb:top5/won/lone` (Rebound apart from battle royale), `ex:clean`.
+4. **12 feat emblems** on a new seal plate (`FEAT_EMBLEMS`, kept out of `EMBLEMS` for the bot pool): Ace (the whole
+   enemy side alone in one S&D or Showdown round), Tenfold (`streak10`), Last Squad (BR win), Lone Survivor (squads BR
+   won as the last of the squad), Full Manifest (extract with every contract taken, 4+), Thirty Nights (round 30), Way
+   Out (an escape), Executioner (25 finishers), Flawless (Showdown 6-0), Still Standing (survive Infected's clock), Over
+   the Horizon (a gun kill from 40 m; bots reach 51 m), Champion (best ranked division ever, any season). Each is stamped
+   on the results like a card (Champion excepted: ranked moves after the match is applied).
+5. **Trophy Case** (`js/ui/trophy.js`, from the service record): completion per collection (cards, camos, emblems,
+   operators and skins, finishers and emotes) and a total, personal bests, Graveyard Shift best round per map, and the
+   rarest earned items (animated and gold cards, feat emblems, top mastery camos, Specialist skins).
+6. **Unlock previews** (`js/ui/unlocksheet.js`): a tap on anything locked in the calling card and emblem picker, the
+   gunsmith (guns, attachments, camos, tracers, kill effects; the locked foot button now reads "How to unlock"), the
+   loadout (guns, perks, tactical, lethal, streaks), the operator screen (operators, skins, finishers) and the title's
+   emotes opens a sheet: the item, how to get it, a bar with numbers, and Play now (Multiplayer on the playlist or mode
+   where it counts) where one fits. It layers over a picker without closing it.
+
+Also fixed on the way: the Graveyard Shift best round was written before `applyMatch` took its card list, which would
+have kept every round card from being stamped; it is recorded inside `applyMatch` now (`zmRounds`), like the feats.
+
+Owner notes: total completion counts every item equally, so camos (about 1,400 of 1,950) dominate it; the per-category
+bars are the better read. Bots never won a Showdown 6-0 in the sweep (the rule is proved on synthetic events).
+
+### Test runs (rewards2, after `git merge dev`)
+
+| test | result |
+|---|---|
