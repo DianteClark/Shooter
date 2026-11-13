@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'New undead, special rounds and fairer bot eyesight',
+    build: '1111-35', date: '2026-11-12', title: 'New undead, special rounds and fairer bot eyesight',
     items: [
       'Graveyard Shift: four new undead from round 8. Spitters keep their distance and lob acid (watch for the ring where it will land and step aside), Bloaters burst when they reach you or die (pop them from far away, ideally in a crowd), Crawlers are small, low and quick, and Shieldbearers block bullets from the front until the shield breaks (flank them, or use explosives and traps).',
       'Graveyard Shift: special rounds every five to seven rounds, announced with a banner: a sprint round where every one of them runs, a fog round where you can only see a few metres, and a Bloater swarm.',
