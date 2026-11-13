@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-13', title: 'Steadier sticks, clearer streaks',
+    items: [
+      'The move stick keeps steering while you throw. Holding the stick still at full sprint and pressing a grenade could stop you dead for a moment; it no longer does, however the fingers land, drag, cancel or lift.',
+      'Calling in a Wingman, Sentry or any streak you do not fly keeps the camera on you, and its kills no longer freeze the picture as if you took the shot. Only the Cruise Missile, Recon Drone and Carpet Line move the camera.',
+      'The Recon Drone and Carpet Line answer the aim stick the moment you push it, even while sprinting, and the drone turns at once.',
+      'Enemy streaks you can shoot down now show a red ring and a health bar when you aim at them or they come close, with about how many of your hits they still take. Hits on them get a hit marker, the first time you meet each one says what brings it down, and wrecking a Sentry or Rover gets a feed line.',
+      'How to play, Streaks: a new Shooting streaks down table lists what can be shot, rifle and launcher hits for each, and what cannot.',
+      'Mastery: the badge case shows every badge you have earned in a strip you can swipe (or walk with a controller). Tap a badge to open its track.',
+    ],
+  },
+  {
     build: '1113-3', date: '2026-11-13', title: 'Quality of life',
     items: [
       'Results: the main button says what one tap queues next (the same playlist, or the same map and mode). In a friend room the host starts the rematch and guests get a Ready button.',
