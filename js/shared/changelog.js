@@ -4,6 +4,14 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'Steadier buildings, emblems and hints',
+    items: [
+      'Rooftops, roof edges and wall trims no longer flicker as the camera moves, on every map including the Frontier battle royale and Ashgrove Halt.',
+      'Emblems and rank badges show straight away in the menus (title card, boards, service record, lobby, results) instead of only after a tap.',
+      'Graveyard Shift: the relic clue and every other hint, banner and prompt now wrap onto a second line instead of being cut off on smaller screens.',
+    ],
+  },
+  {
     build: '1111-34', date: '2026-11-12', title: 'Bug sweep',
     items: [
       'Graveyard Shift is harder after round 10: tougher, faster and harder-hitting undead, more runners and brutes, quicker spawns, tougher bosses, and a longer, rougher exfil. Rounds 1 to 10 are unchanged. Each extra player in the crew adds more undead with more health.',
