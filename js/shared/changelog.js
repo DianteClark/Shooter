@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-13', title: 'Steadier sticks, clearer streaks',
+    build: '1113-5', date: '2026-11-13', title: 'Steadier sticks, clearer streaks',
     items: [
       'The move stick keeps steering while you throw. Holding the stick still at full sprint and pressing a grenade could stop you dead for a moment; it no longer does, however the fingers land, drag, cancel or lift.',
       'Calling in a Wingman, Sentry or any streak you do not fly keeps the camera on you, and its kills no longer freeze the picture as if you took the shot. Only the Cruise Missile, Recon Drone and Carpet Line move the camera.',
