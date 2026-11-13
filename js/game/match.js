@@ -25,6 +25,8 @@ import { brAmmo, brArm, brHandWant, downedInput, glideStep, HANDS, land } from '
 import { hapticEvents } from '../ui/haptics.js';
 import { finishable, FIN } from '../shared/finishers.js';       // Finishing moves (docs/FINISHERS.md).
 import { hasLineOfSight } from '../shared/geometry.js';
+import { PILOTED } from '../sim/streaks-v9.js';     // Streaks the aim stick flies: only these hold the gun and move the camera.
+const PILOT_CALL_S = 0.4;     // A piloted streak just called counts as flown this long, until it shows up in the view.
 
 // Smallest signed rotation from b to a.
 function angleDiffSigned(a, b) {
@@ -408,13 +410,15 @@ export class Match {
     // The held aim stick goes to the host as it is (encodeHumanState's steering bit), so a drone flies on the very first
     // frame of a push, before ADS has come up and even while sprinting.
     this.ps.steer = !!input.aiming && input.aim !== null && input.aim !== undefined;
-    const pilot = view.gunships?.find(g => g.kind === 'missile' && g.owner === this.localId)
-      ?? view.drones?.find(g => (g.kind === 'recon' || g.kind === 'reticle') && g.owner === this.localId);
+    // From the call itself, not only once the drone reaches this phone's view: the stick flies it from the first frame.
+    const pilot = view.gunships?.find(g => PILOTED.has(g.kind) && g.owner === this.localId)
+      ?? view.drones?.find(g => PILOTED.has(g.kind) && g.owner === this.localId)
+      ?? (this.now() - (this.pilotCallAt ?? -9) < PILOT_CALL_S ? { kind: this.pilotCallKind } : null);
     if (pilot) {
       r.fire = false;
       const idle = input.aim === null || input.aim === undefined;
       if (idle) aim = this.lastAim;
-      if (pilot.kind === 'reticle' && idle && this.pilotHeld) this.#command({ cmd: 'aimdone' });
+      if (pilot.kind === 'reticle' && pilot.owner !== undefined && idle && this.pilotHeld) this.#command({ cmd: 'aimdone' });
       this.pilotHeld = !idle;
     } else this.pilotHeld = false;
     this.lastAim = aim;
@@ -507,7 +511,12 @@ export class Match {
       }
     }
     if (this.ps.overheatEdge) this.frameEvents.push({ t: 'overheat', id: this.localId });
-    if (r.streak >= 0) this.#command({ cmd: 'streak', slot: r.streak });
+    if (r.streak >= 0) {
+      const kind = this.controls.tiles?.[r.streak]?.kind;
+      const flown = kind === 'bombrun' ? 'reticle' : kind;
+      if (PILOTED.has(flown)) { this.pilotCallAt = this.now(); this.pilotCallKind = flown; }
+      this.#command({ cmd: 'streak', slot: r.streak });
+    }
     if (r.tactical) this.#throw('tactical', r);
     if (r.lethal) this.#throw('lethal', r);
     // Battle royale camos go with the gun in hand: each gun wears your camo for it, if you have one.

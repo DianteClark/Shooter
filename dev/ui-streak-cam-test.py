@@ -18,6 +18,7 @@ PILOTED = {'missile', 'recon', 'bombrun'}
 CALL = """(kind) => { const g = window.__game, m = g.app.match, sim = m.sim, p = sim.byId.get(m.localId);
   if (!p?.alive) return 'dead';
   sim.gunships.length = 0; sim.turrets.length = 0;
+  sim.streakDenied = () => null;      // Limits and airspace are not under test: the last streak may still be up.
   p.score.slots = [{ kind, cost: 1, held: true, blocked: false }]; p.score.capped = false;
   const r = sim.useStreak(m.localId, 0); return r ?? 'refused'; }"""
 
@@ -79,8 +80,10 @@ async def main():
             start = await pg.evaluate("(() => { const g = window.__game.app.match.sim.gunships.find(g => g.kind === 'recon'); return g && { x: g.x, z: g.z, t: window.__game.app.match.sim.time }; })()")
             await pg.wait_for_timeout(250)
             after = await pg.evaluate("(() => { const m = window.__game.app.match, g = m.sim.gunships.find(g => g.kind === 'recon'); return g && { x: g.x, z: g.z, t: m.sim.time, ads: m.ps.adsT, sprint: m.ps.sprinting }; })()")
-            moved = after and start and (after['z'] - start['z']) > 1.0
-            print(f'  recon flies on the first push (sprinting, ads {after and after["ads"]:.2f}): moved {after and round(after["z"] - start["z"], 2)} m in {after and round(after["t"] - start["t"], 2)} s  {"ok" if moved else "FAIL"}')
+            # Judged on the host's own clock: full speed (10 m/s) straight away, give or take the first tick.
+            dt = after and start and after['t'] - start['t']
+            moved = bool(dt) and (after['z'] - start['z']) >= 8 * dt - 0.2
+            print(f'  recon flies on the first push (sprinting, ads {after and after["ads"]:.2f}): moved {after and round(after["z"] - start["z"], 2)} m in {dt and round(dt, 2)} s  {"ok" if moved else "FAIL"}')
             if not moved: failures.append(f'recon slow to respond: {start} -> {after}')
             await pg.evaluate("(() => { const c = window.__game.controls; c.read = c.__read; })()")
             await browser.close()

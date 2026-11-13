@@ -22,7 +22,9 @@ import { hexRGB, setThemeLighting, getTheme } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
 import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
 import { TUNING } from '../shared/tuning.js';
-import { spectate } from '../sim/snd.js';   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
+import { spectate } from '../sim/snd.js';
+import { PILOTED } from '../sim/streaks-v9.js';
+const STEERED_KILLS = new Set([...PILOTED, 'bombrun']);   // Streak kills that still punch the camera: ones you aimed.   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
 import { feelMotion } from './feel.js';   // Reduced motion scales the camera kick a gun adds.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
@@ -366,7 +368,9 @@ export class GameRenderer {
             if (ev.head) vfx.headBurst(ev.x, ev.z);
             vfx.killEffect(ev.by, ev.x, ev.z, ev.weapon);
           }
-          if (ev.by === localId && ev.target !== localId && !this.cine) {
+          // A kill your Wingman, Sentry, Chopper or other unsteered streak makes is not a shot you took: the picture stays
+          // on you, unfrozen (roadmap 40). Your own gun, grenades and the streaks you fly still punch.
+          if (ev.by === localId && ev.target !== localId && !this.cine && (!ev.streak || STEERED_KILLS.has(ev.streak))) {
             // The kill freezes the picture for a few frames; bigger guns and headshots hold it longer.
             const big = BIG_KILL.has(WEAPONS[ev.weapon] && WEAPONS[ev.weapon].category) || ev.weapon === 'revolver';
             this.hitStop = 0.05 + (ev.head ? 0.03 : 0) + (big ? 0.04 : 0);
@@ -582,8 +586,10 @@ export class GameRenderer {
       tx = local.x + this.lookX;
       tz = local.z + this.lookZ;
       // Flying your own Cruise Missile: the camera rides with it so a long flight never leaves the screen.
-      const missile = view?.gunships?.find(g => g.kind === 'missile' && g.owner === view.localId)
-        ?? view?.drones?.find(g => (g.kind === 'recon' || g.kind === 'reticle') && g.owner === view.localId);   // V9 piloted streaks.
+      // Only a streak you steer (PILOTED: Cruise Missile, Recon Drone, Carpet Line's reticle) moves the camera; Wingman,
+      // Sentry, Rover, the aircraft and the rest leave it on you (roadmap 40, dev/ui-streak-cam-test.py).
+      const missile = view?.gunships?.find(g => PILOTED.has(g.kind) && g.owner === view.localId)
+        ?? view?.drones?.find(g => PILOTED.has(g.kind) && g.owner === view.localId);
       const mc = this.missileCam ?? 0;
       this.missileCam = mc + ((missile ? 1 : 0) - mc) * Math.min(1, dt * 5);
       if (missile) { this.missileX = missile.x; this.missileZ = missile.z; }
