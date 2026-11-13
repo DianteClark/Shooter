@@ -838,15 +838,23 @@ function renderUiSounds(sr) {
       });
       addNoise(d, sr, r, { at: 0.15, dur: 0.4, gain: 0.08, f0: 9000, f1: 6000, hp: 5000, decay: 5 });
     }, 0.8),
-    // Level up: thump, then a rising major arpeggio that lands on a held fifth.
-    levelUp: mk(1.0, 308, (d, r) => {
-      addTone(d, sr, { dur: 0.12, gain: 1, f0: 120, f1: 60, decay: 4, shape: 1.2 });
-      addClick(d, sr, r, { dur: 0.004, gain: 0.8, hp: 1500 });
-      [[0, 0.03], [4, 0.11], [7, 0.19], [12, 0.27]].forEach(([semi, at], i) => {
-        addTone(d, sr, { at, dur: i === 3 ? 0.7 : 0.3, gain: i === 3 ? 0.65 : 0.5, f0: note(semi), decay: i === 3 ? 3.5 : 5, attack: 0.004, shape: 0.5 });
+    // Level up: a slam and a shard-burst of noise, a rising major arpeggio doubled an octave up, then a held major chord
+    // with a shimmer over it. Bigger than an unlock, smaller than a rank up.
+    levelUp: mk(1.7, 308, (d, r) => {
+      addTone(d, sr, { dur: 0.2, gain: 1.15, f0: 120, f1: 48, decay: 3.6, shape: 1.4 });
+      addClick(d, sr, r, { dur: 0.005, gain: 0.9, hp: 1500 });
+      addNoise(d, sr, r, { dur: 0.22, gain: 0.35, f0: 6000, f1: 1200, hp: 600, decay: 5 });
+      addMetal(d, sr, { at: 0.004, dur: 0.3, gain: 0.3, f: 880, decay: 5 });
+      [[0, 0.04], [4, 0.11], [7, 0.18], [12, 0.25], [16, 0.32]].forEach(([semi, at]) => {
+        addTone(d, sr, { at, dur: 0.28, gain: 0.46, f0: note(semi), decay: 5, attack: 0.004, shape: 0.5 });
+        addTone(d, sr, { at, dur: 0.18, gain: 0.14, f0: note(semi + 12), decay: 7, attack: 0.003 });
       });
-      addTone(d, sr, { at: 0.27, dur: 0.7, gain: 0.3, f0: note(19), decay: 3.5, attack: 0.01, shape: 0.3 });
-    }, 0.85),
+      for (const semi of [0, 4, 7, 12, 19]) addTone(d, sr, { at: 0.4, dur: 1.25, gain: semi === 19 ? 0.22 : 0.36, f0: note(semi), decay: 2.8, attack: 0.012, shape: 0.4 });
+      addTone(d, sr, { at: 0.4, dur: 1.2, gain: 0.35, f0: note(-12), decay: 3, attack: 0.01, shape: 0.9 });
+      addNoise(d, sr, r, { at: 0.4, dur: 1.1, gain: 0.07, f0: 11000, f1: 7000, hp: 6000, decay: 3 });
+      [[24, 0.46], [28, 0.56], [31, 0.66]].forEach(([semi, at]) => addTone(d, sr, { at, dur: 0.22, gain: 0.12, f0: note(semi), decay: 7, attack: 0.002 }));
+      for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.85);
+    }, 0.88),
     // Rank up (prestige, weapon mastery): a low slam, a chord stab, and a long climb.
     rankUp: mk(1.6, 309, (d, r) => {
       addTone(d, sr, { dur: 0.3, gain: 1.2, f0: 90, f1: 42, decay: 3.5, shape: 1.6 });
@@ -943,11 +951,13 @@ function renderSfx(sr) {
       addTone(d, sr, { at: 0.2, dur: 1.15, gain: 0.7, f0: 220, decay: 2, attack: 0.02, shape: 1.5 });
     }, 0.75),
     // A bright ping over a dull knock: instantly distinct from the ordinary tick, and it has to feel earned.
-    headshot: mk(0.3, (d, r) => {
+    // The ting rings on a struck-bell partial set and a long, clean tail: satisfying, and it never smears into the next tick.
+    headshot: mk(0.44, (d, r) => {
       addClick(d, sr, r, { dur: 0.004, gain: 1.2, hp: 4200 });
       addTone(d, sr, { dur: 0.05, gain: 0.8, f0: 720, f1: 240, decay: 6, shape: 0.8 });
-      addTone(d, sr, { at: 0.006, dur: 0.26, gain: 0.95, f0: 3320, f1: 3180, decay: 6.5, attack: 0.0005 });
-      addTone(d, sr, { at: 0.006, dur: 0.16, gain: 0.5, f0: 5130, f1: 4950, decay: 7, attack: 0.0005 });
+      addTone(d, sr, { at: 0.006, dur: 0.4, gain: 0.95, f0: 3320, f1: 3240, decay: 6, attack: 0.0005 });
+      addTone(d, sr, { at: 0.006, dur: 0.18, gain: 0.5, f0: 5130, f1: 4950, decay: 7, attack: 0.0005 });
+      addMetal(d, sr, { at: 0.004, dur: 0.38, gain: 0.32, f: 1660, spread: 1.01, decay: 5 });
     }),
     heatTick: mk(0.05, (d, r) => { addTone(d, sr, { dur: 0.04, gain: 1, f0: 1500, decay: 6, shape: 1 }); addClick(d, sr, r, { dur: 0.002, gain: 0.5, hp: 4000 }); }, 0.7),
     vent: mk(1.7, (d, r) => {
@@ -1145,13 +1155,27 @@ function renderSfx(sr) {
       addClick(d, sr, r, { at: 0.018, dur: 0.003, gain: 0.4, hp: 5000 });
     }, 0.6),
     // The last round gone: the bolt locking back on an empty magazine.
-    empty: mk(0.12, (d, r) => {
+    // A hollow two-part clack (bolt home, then the empty box): unlike any shot or tick, so it says "reload" by itself.
+    empty: mk(0.16, (d, r) => {
       addClick(d, sr, r, { dur: 0.006, gain: 1, hp: 1500 });
       addMetal(d, sr, { at: 0.002, dur: 0.09, gain: 0.6, f: 1250, decay: 7 });
       addTone(d, sr, { at: 0.002, dur: 0.04, gain: 0.5, f0: 330, f1: 200, decay: 6 });
+      addClick(d, sr, r, { at: 0.055, dur: 0.005, gain: 0.7, hp: 900 });
+      addTone(d, sr, { at: 0.056, dur: 0.07, gain: 0.45, f0: 240, f1: 150, decay: 5 });
     }, 0.7),
     // Laid over the gun's own shot in the last rounds of a magazine: the spring and follower ringing in a nearly
     // empty box. Played higher and louder with every round, so the ear counts the magazine down.
+    // The magazine seated and the gun ready again: a crisp latch with a bright little chime, on the feedback bus.
+    reloadDone: mk(0.16, (d, r) => {
+      addClick(d, sr, r, { dur: 0.005, gain: 1.1, hp: 2400 });
+      addMetal(d, sr, { at: 0.002, dur: 0.12, gain: 0.5, f: 2350, spread: 1.02, decay: 7 });
+      addClick(d, sr, r, { at: 0.045, dur: 0.003, gain: 0.55, hp: 4200 });
+    }, 0.6),
+    // Crossing into the last rounds: two quick soft ticks, once, so the warning is heard before the ring takes over.
+    lowWarn: mk(0.14, (d) => {
+      addTone(d, sr, { dur: 0.035, gain: 0.8, f0: 2640, decay: 9 });
+      addTone(d, sr, { at: 0.07, dur: 0.035, gain: 0.8, f0: 2640, decay: 9 });
+    }, 0.5),
     lowAmmo: mk(0.09, (d, r) => {
       addMetal(d, sr, { dur: 0.08, gain: 0.8, f: 1900, spread: 1.03, decay: 8 });
       addClick(d, sr, r, { dur: 0.003, gain: 0.5, hp: 5200 });
@@ -1369,7 +1393,7 @@ function roomImpulse(ctx, theme) {
 // The newest engine, for screens that play an outcome sound without holding the engine (see playUi).
 let current = null;
 // Plays an interface sound (uiSound kinds: unlock, levelUp, rankUp, ...) on the app's engine, if there is one yet.
-export function playUi(kind) { current?.uiSound(kind); }
+export function playUi(kind, opts) { current?.uiSound(kind, opts); }
 
 export class AudioEngine {
   constructor() {
@@ -1494,7 +1518,12 @@ export class AudioEngine {
     // firefight does not sit at full scale for its whole length.
     this.postComp = ctx.createGain(); this.postComp.gain.value = 0.7;
     this.comp.connect(this.postComp);
-    this.postComp.connect(this.master);
+    // Low health: a gentle low-pass over the world (the feedback bus and the heartbeat stay clear). Open at full health.
+    this.hurtFilter = ctx.createBiquadFilter();
+    this.hurtFilter.type = 'lowpass'; this.hurtFilter.frequency.value = 20000; this.hurtFilter.Q.value = 0.5;
+    this.hurtCut = 20000;
+    this.postComp.connect(this.hurtFilter);
+    this.hurtFilter.connect(this.master);
     this.ui.connect(this.master);
     // Music sits with the feedback: it is not world sound and must not be ducked by a firefight.
     this.music = ctx.createGain(); this.music.gain.value = 0.7;
@@ -1811,8 +1840,27 @@ export class AudioEngine {
       const p = players[i];
       if (p.id === view.localId) {
         this.lx = p.x; this.lz = p.z; this.localAlive = p.alive; this.localHp = p.hp; this.localTeam = p.team;
+        this._localGun(p);
         return;
       }
+    }
+  }
+
+  // The local gun between shots: the reload finishing (a ready click), and the magazine crossing into its last rounds.
+  _localGun(p) {
+    const G = this.gun ??= { reloading: false, from: 0, weapon: '', low: false };
+    const reloading = p.reloadT > 0, def = WEAPONS[p.weapon];
+    if (p.weapon !== G.weapon) { G.weapon = p.weapon; G.reloading = reloading; G.from = p.ammo; G.low = true; return; }
+    if (reloading && !G.reloading) G.from = p.ammo;
+    if (!reloading && G.reloading && p.alive && typeof p.ammo === 'number' && p.ammo > G.from && this.sfx.reloadDone) {
+      this.reloadDones = (this.reloadDones || 0) + 1;
+      this._play(this.sfx.reloadDone, { bus: this.ui, priority: PR.ui, cls: 'ammo', gain: 0.5, rate: 1 - 0.12 * Math.min(1, weightOf(p.weapon, def)) });
+    }
+    G.reloading = reloading;
+    if (def && def.magazine >= 5 && typeof p.ammo === 'number' && p.alive) {
+      const low = p.ammo > 0 && p.ammo <= Math.min(8, Math.max(2, Math.round(def.magazine * LOW_AMMO_SHARE)));
+      if (low && !G.low && !reloading && this.sfx.lowWarn) { this.lowWarns = (this.lowWarns || 0) + 1; this._play(this.sfx.lowWarn, { bus: this.ui, priority: PR.ui, cls: 'ammo', gain: 0.4 }); }
+      G.low = low;
     }
   }
 
@@ -2559,6 +2607,13 @@ export class AudioEngine {
       }
     } else {
       this.heartT = 0;
+    }
+    // The muffle follows health: from 35 HP down to 5 the world closes in from 9 kHz to about 1.2 kHz.
+    const hurt = this.localAlive && this.localHp <= 35 ? Math.max(0, Math.min(1, (35 - this.localHp) / 30)) : -1;
+    const cut = hurt < 0 ? 20000 : Math.round(9000 * Math.pow(1200 / 9000, hurt));
+    if (Math.abs(cut - this.hurtCut) > 60 && this.hurtFilter) {
+      this.hurtCut = cut;
+      this.hurtFilter.frequency.setTargetAtTime(cut, this.ctx.currentTime, hurt < 0 ? 0.12 : 0.25);
     }
 
     this._drainImpacts(this.ctx.currentTime);
