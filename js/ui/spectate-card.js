@@ -16,6 +16,7 @@ const CSS = `
   transform: scale(var(--chips-k, 1)); transform-origin: right top; }
 .hud.lefty .spec-card { right: auto; left: calc(var(--sl) + 8px); transform-origin: left top; }
 .spec-card[hidden] { display: none; }
+body.killcam-on .spec-card { visibility: hidden; }     /* The replay is the killer's view, not anyone's to switch. */
 .spc-step { display: grid; place-items: center; min-height: 44px; color: var(--c-chalk); font: 400 24px/1 var(--f-stencil); touch-action: manipulation; }
 .spc-step:active, .spc-step.pressed { background: rgba(231,234,228,.12); }
 .spc-step[disabled] { opacity: .3; }
