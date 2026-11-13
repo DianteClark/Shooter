@@ -79,7 +79,7 @@ export function unlockInfo(kind, id, { weapon = null, operator = null } = {}) {
       else if (camo.chal && w) p = pair(Progress.weaponStats(w)[camo.chal.track], camo.chal.goal);
       else if (camo.season) { noBar = true; play = null; }
       const unlocked = row ? row.unlocked : w ? Progress.isUnlocked(w, id) : false;
-      return { ...base, name: camo.name, how: `${row?.requirement ?? ''}${w ? ` (${WEAPONS[w]?.name ?? w})` : ''}`.trim(), unlocked, ...(unlocked ? { value: p.goal, goal: p.goal } : p), play, noBar,
+      return { ...base, name: camo.name, how: `${row?.requirement ?? ''}${w && (camo.prestige || camo.mastery || camo.chal) ? ` (${WEAPONS[w]?.name ?? w})` : camo.exfil || camo.pp || camo.mlv ? ' (every gun)' : ''}`.trim(), unlocked, ...(unlocked ? { value: p.goal, goal: p.goal } : p), play, noBar,
         art: `<i class="ul-swatch" style="background:${swatchCss(camo)}"></i>` };
     }
     if (kind === 'tracer' || kind === 'killFx') {
