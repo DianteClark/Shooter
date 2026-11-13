@@ -62,6 +62,7 @@ import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySiz
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Recall } from './ui/recall.js';     // Remembered menu choices (QoL).
+import { NewDots } from './ui/newdots.js';    // QoL: dots on unlocks not yet seen.
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
 
@@ -113,8 +114,10 @@ let gamepad = null, voiceUi = null;
 // Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
 // keep it moving. Nothing of the backdrop exists while a match owns the canvas.
 const STILL_SCREENS = new Set(['loadouts', 'gunsmith', 'operators', 'results']);
+const DOT_SCREENS = new Set(['title', 'loadouts', 'gunsmith', 'operators', 'profile']);
 menu.onScreen = screen => {
   uiRoot.dataset.menu = screen;
+  if (DOT_SCREENS.has(screen)) NewDots.refresh();     // Unlocks can land between visits (a prestige, a season claim).
   music.screen(screen, app.inMatch);
   if (app.inMatch) return;
   if (screen === 'results') return;            // The match renderer has only just let go; the next screen builds it.
@@ -1754,6 +1757,7 @@ function showResults(results) {
     menu.show();
   }
   app.resultsAt = performance.now();
+  NewDots.refresh();               // The match may have unlocked something: the next screen scans again.
   shareCareer();
   voteBehindResults();
 }
@@ -1892,9 +1896,10 @@ hud.onArmory?.(loadout => {
 // A touch that lands with the audio engine asleep must wake it even when the action would start sound itself.
 Options.subscribe(applyOptions);
 showTitle({ arrive: true });
+NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
 
