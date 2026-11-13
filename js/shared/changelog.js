@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-12', title: 'One contract at a time, clearer match endings',
+    items: [
+      'Extraction: your squad works one contract at a time. Taking a new one at a contract phone no longer cancels the one you are on without warning: while one is under way the phone says "Finish your current contract first".',
+      'Extraction: to switch on purpose, hold Abandon on the contract card for a second. Then take another at any phone, or a new one is dealt after 20 seconds.',
+      'Extraction results say how it ended: Extracted, Squad wiped or Out of time, with the contracts and XP banked or lost. No more "0-2" score after a wipe.',
+      'Every mode ends with a headline that fits it: Victory, Defeat or Draw with the score in team modes, rounds won in Search and Destroy, Control and Showdown, your place in Free-for-All, "#3 of 8 squads" in battle royale and Rebound, survivors in Infected, the round in Graveyard Shift (Left behind if the crew got out without you), and your SR change in Ranked.',
+    ],
+  },
+  {
     build: '1111-36', date: '2026-11-12', title: 'Steadier buildings, emblems and hints',
     items: [
       'Rooftops, roof edges and wall trims no longer flicker as the camera moves, on every map including the Frontier battle royale and Ashgrove Halt.',
