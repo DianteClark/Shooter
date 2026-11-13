@@ -185,3 +185,9 @@ bars are the better read. Bots never won a Showdown 6-0 in the sweep (the rule i
 
 | test | result |
 |---|---|
+| `node dev/sim-unlocks.mjs` (full) | 28 checks pass (was 22): 2,863 unlocks stamped over the 90-match career, none twice, none silent; every new card and feat emblem open; feats only in their modes (bots reached all but a Showdown 6-0, proved synthetically); longest bot kill 51 m; zm counts no kill stats |
+| `node dev/ui-mastery-test.mjs` | 24 pass (new: horde kills move no mastery, ladder or Pro step) |
+| `node dev/sim-botpool.mjs`, `sim-seasons.mjs`, `sim-boards.mjs`, `sim-zombies.mjs` | all ok (371/371 zombies) |
+| `python3 dev/ui-trophy-test.py` (new; 640x360, 667x375, 852x393, 956x440) | PASS, no console errors |
+| `python3 dev/ui-overflow-test.py --only menus` | 260 states (new: trophy, trophy-master, unlock-sheet), 0 overflow failures, 0 errors |
+| `python3 dev/ui-results-test.py`, `dev/ui-flow-test.py` | PASS, no console errors (each failed once on a timing flake: a ranked match not ending in 120 s, a ballot tap at 100 ms; both passed on the rerun) |
