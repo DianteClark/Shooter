@@ -11,6 +11,8 @@ import { completeFx, impactBus, feelFlash } from './feel.js';
 const TRACERS = 180;
 const PARTS = 1100;
 const SHELLS = 72;
+const SHELL_RATE = 9;            // Casings a second, everyone together.
+const SHELL_BANK = 4;            // Casings banked for the first rounds of a burst.
 const SHARDS = 240;
 const FLASHES = 64;                // A shaped flash is up to three stars, and 32 guns can be firing.
 const BALLS = 24;
@@ -154,6 +156,7 @@ export class VFX {
     this.swirls = 0;               // Smoke swirls spent this frame.
     this.smokers = Array.from({ length: SMOKERS }, () => ({ rig: null, t: 0, next: 0, k: 0 }));
     this.tracerSeq = 0;
+    this.shellTokens = SHELL_BANK;
     this._tint = [0, 0, 0];
     this._buildTracers();
     this._buildParticles();
@@ -614,8 +617,10 @@ export class VFX {
       if (sprint > 0.4) for (let i = 0; i < 2; i++) this.spawn(x, 0.1, z, rand(-1, 1), rand(1.4, 2.6), rand(-1, 1), rand(0.16, 0.28), 0.05, 0.02, WATER, 0.65, 12, 0.5);
       return;
     }
-    const n = sprint > 0.4 ? 2 : 1;
-    for (let i = 0; i < n; i++) this.spawn(x + rand(-0.1, 0.1), 0.08, z + rand(-0.1, 0.1), rand(-0.5, 0.5), rand(0.2, 0.6), rand(-0.5, 0.5), rand(0.26, 0.42), 0.09, 0.36, this.dustRGB, 0.34, -0.3, 2.4);
+    // Loose ground shows it: sand and snow kick up an extra puff, snow in its own colour.
+    const kind = this.groundKind, loose = kind === 'sand' || kind === 'snow';
+    const n = (sprint > 0.4 ? 2 : 1) + (loose && this.fxScale >= 0.75 ? 1 : 0), rgb = kind === 'snow' ? SNOW_RGB : this.dustRGB;
+    for (let i = 0; i < n; i++) this.spawn(x + rand(-0.1, 0.1), 0.08, z + rand(-0.1, 0.1), rand(-0.5, 0.5), rand(0.2, 0.6) * (loose ? 1.3 : 1), rand(-0.5, 0.5), rand(0.26, 0.42), 0.09, loose ? 0.42 : 0.36, rgb, loose ? 0.42 : 0.34, -0.3, 2.4);
   }
 
   // Skids and body parts both scatter small, fast things that cost almost nothing.
@@ -1066,7 +1071,12 @@ export class VFX {
   }
 
   // Casing style from SHELL_LOOK; brass stays on the floor a little before it goes.
+  // Pooled (SHELLS slots) and rationed: SHELL_RATE casings a second across everyone, a short burst banked, so a
+  // firefight of SMGs litters the floor without flooding it.
   shell(x, y, z, dirX, dirZ, kind = 'rifle') {
+    if (this.shellTokens < 1) return;
+    this.shellTokens--;
+    this.shellsOut = (this.shellsOut || 0) + 1;
     const L = SHELL_LOOK[kind] || SHELL_LOOK.rifle;
     this._emitPhys(this.sh, x, y, z, dirX * rand(2.2, 4.2), rand(2.5, 4.5), dirZ * rand(2.2, 4.2), rand(1.3, 2.2), L.rgb, L.s * rand(1, 1.3));
   }
@@ -1415,6 +1425,7 @@ export class VFX {
   /* ---------- Per-frame simulation and buffer upload ---------- */
   step(dt) {
     this.clock += dt;
+    this.shellTokens = Math.min(SHELL_BANK, this.shellTokens + dt * SHELL_RATE);
     this.swirls = 0;
     this._stepSmokers(dt);
     this._stepDelayed(dt);
