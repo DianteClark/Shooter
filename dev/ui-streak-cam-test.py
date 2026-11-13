@@ -11,7 +11,7 @@ import asyncio, subprocess, sys, time, os, json
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8476
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8643
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 PILOTED = {'missile', 'recon', 'bombrun'}
 
@@ -86,6 +86,41 @@ async def main():
             print(f'  recon flies on the first push (sprinting, ads {after and after["ads"]:.2f}): moved {after and round(after["z"] - start["z"], 2)} m in {dt and round(dt, 2)} s  {"ok" if moved else "FAIL"}')
             if not moved: failures.append(f'recon slow to respond: {start} -> {after}')
             await pg.evaluate("(() => { const c = window.__game.controls; c.read = c.__read; })()")
+
+            print('Shooting streaks down')
+            def check(name, ok, info=''):
+                print(f'  {name:<60} {"ok" if ok else "FAIL"} {info}')
+                if not ok: failures.append(f'{name}: {info}')
+            await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim; sim.gunships.length = 0;
+              window.__game.Progress.flag('shootHint_hound') && delete window.__game.Progress.data?.flags?.shootHint_hound;
+              const me = sim.byId.get(m.localId), foe = sim.players.find(q => q.team !== me.team && q.alive);
+              foe.ps.x = me.ps.x + 4; foe.ps.z = me.ps.z; window.__foe = foe.id;
+              foe.score.slots = [{ kind: 'hound', cost: 1, held: true, blocked: false }]; sim.streakDenied = () => null; sim.useStreak(foe.id, 0);
+              const g = sim.gunships.find(g => g.kind === 'hound'); g.x = me.ps.x + 3; g.z = me.ps.z; window.__hound = g; })()""")
+            await pg.wait_for_timeout(1500)
+            tag = await pg.evaluate("""(() => { const t = document.querySelector('.stag.on'); return t && { name: t.querySelector('.sg-name b').textContent, hits: t.querySelector('.sg-name small').textContent,
+              bar: t.querySelector('.sg-bar i').style.transform, tf: t.style.transform }; })()""")
+            await pg.screenshot(path='/tmp/streak-tag.png')
+            check('enemy Wingman close by is tagged (ring, bar, name, hits)', bool(tag) and tag.get('tf', '').startswith('translate3d') and tag['name'] == 'Wingman' and 'hit' in tag['hits'], tag)
+            call = await pg.evaluate("document.querySelector('.callout')?.textContent ?? ''")
+            check('first sight: "shoot it down" callout', 'shoot it down' in call.lower(), call)
+            await pg.evaluate("""import('/js/sim/streaks-v9.js').then(V9 => { const m = window.__game.app.match, sim = m.sim; V9.hurtAir(sim, window.__hound, 120, sim.byId.get(m.localId)); })""")
+            await pg.wait_for_timeout(400)
+            s2 = await pg.evaluate("""(() => { const t = document.querySelector('.stag.on'), h = window.__game.hud;
+              return { bar: t?.querySelector('.sg-bar i').style.transform, marker: h.hitT > 0 || h.juice?.hits > 0, hits: h.juice?.hits }; })()""")
+            check('a hit lands a hit marker and drops the bar', s2['marker'] and s2['bar'] and s2['bar'] != (tag or {}).get('bar'), s2)
+            medals0 = await pg.evaluate("window.__game.app.match.awards.medals.shootdown ?? 0")
+            await pg.evaluate("""import('/js/sim/streaks-v9.js').then(V9 => { const m = window.__game.app.match, sim = m.sim; V9.hurtAir(sim, window.__hound, 999, sim.byId.get(m.localId)); })""")
+            await pg.wait_for_timeout(500)
+            s3 = await pg.evaluate("""(() => { const h = window.__game.hud, m = window.__game.app.match;
+              return { kills: h.juice?.kills, feed: document.querySelector('.feed')?.textContent ?? '', medal: m.awards.medals.shootdown ?? 0 }; })()""")
+            check('bringing it down: feed line and Shot Down medal', 'shot down' in s3['feed'] and s3['medal'] > medals0, s3)
+            await pg.evaluate("window.__game.app.match.running = false")
+            await pg.evaluate("window.__game.app.leaveNow?.() ?? window.__game.app.match.stop()")
+            # How to play, Streaks tab, drawn on a scratch menu element.
+            text = await pg.evaluate("""import('/js/ui/help.js').then(h => { const el = document.createElement('div'); document.body.appendChild(el);
+              h.helpScreen({ el, on() {}, show() {} }, { onBack() {}, tab: 'streaks' }); const t = el.querySelector('.help-down')?.textContent ?? ''; el.remove(); return t; })""")
+            check('How to play lists what can be shot down', 'Shooting streaks down' in text and 'Wingman' in text and 'launcher' in text, text[:90])
             await browser.close()
     finally:
         srv.terminate()

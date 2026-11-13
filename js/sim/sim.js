@@ -2135,6 +2135,8 @@ export class Sim {
 
   _hurtTurret(t, dmg, by = null) {
     t.hp -= dmg;
+    // An enemy's hit on a machine is shown to whoever landed it: a hit marker and the health bar (roadmap 40).
+    if (by && by.team !== t.team && dmg > 0) V9.streakHit(this, by, V9.kindOf(t) === 'sentry' ? 'turret' : V9.kindOf(t), t.hp / (t.maxHp || TURRET_HP), t.x, t.z);
     if (t.hp <= 0) { this._removeTurret(t); V9.machineDestroyed(this, t, by); }
   }
 

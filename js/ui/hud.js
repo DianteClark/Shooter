@@ -10,6 +10,7 @@ import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
 import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/FINISHERS.md).
 import { ZmHud } from './zm-hud.js';
+import { StreakTags } from './streak-tags.js';  // Enemy streaks you can shoot down: ring, health, hits left (roadmap 40).
 import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { matchHeader } from './outcome.js';    // End banners say what the results header says.
@@ -29,6 +30,7 @@ import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/playe
 import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
 import { ctfOf } from '../sim/ctf.js';
+import { AIR_HP } from '../sim/streaks-v9.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
 // for that id, so callers can fall back to words.
@@ -434,6 +436,7 @@ export class HUD {
     this.modeHud = new ModeHud(this);
     this.finHud = new FinHud(this);
     this.cues = new CuesHud(this);
+    this.streakTags = new StreakTags(this);
     this.#drawMapBase();
     this.reset();
   }
@@ -446,6 +449,9 @@ export class HUD {
   onZmCommand(cb) { this.zmHud.onCommand(cb); }
   // The Finish button and the emote wheel ('finish', or 'emote' with its index).
   onFinCommand(cb) { this.finHud.onCommand(cb); }
+
+  // A short centre callout, for the HUD's own layers (js/ui/streak-tags.js).
+  callout(text) { this.#callout(text); }
 
   // A mode banner, for the modes' own layers (js/ui/mode-hud.js).
   banner(title, sub, duration, side) { this.#banner(title, sub, duration, side); }
@@ -889,6 +895,7 @@ export class HUD {
   setCamera(camera) { this.camera = camera; }
 
   reset() {
+    this.streakTags?.reset();
     // Cached display values. NaN and '' can never equal a real value, so the first update writes everything.
     this.cache = {
       myScore: NaN, otherScore: NaN, teamFlip: NaN, time: NaN, phase: '', hp: NaN, hpFrac: NaN, ammo: NaN, reserve: NaN,
@@ -1652,6 +1659,7 @@ export class HUD {
     this.modeHud.update(view, me);
     this.finHud.update(view, me);
     this.cues.update(view, me);
+    this.streakTags.update(view, me, dt);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
     this.#tickMedals(dt);
@@ -2584,6 +2592,7 @@ export class HUD {
       switch (e.t) {
         case 'shot': if (e.by === this.view?.localId && e.rays) this.#onOwnShot(e); break;
         case 'hit': this.#onHit(e); break;
+        case 'streak_hit': this.#onStreakHit(e); break;
         case 'kill': this.#onKill(e); break;
         case 'medal': this.#onMedal(e); break;
         case 'spawn':
@@ -2686,7 +2695,7 @@ export class HUD {
         this.hitFlash.animate(motion < 1 ? [{ opacity: peak }, { opacity: 0 }] : [{ opacity: peak, transform: 'scale(.5)' }, { opacity: 0, transform: 'scale(1.35)' }],
           { duration: motion < 1 ? 120 : 200, easing: 'ease-out' });
       }
-      if (Options.get('dmgNumbers')) this.#damageNumber(e, kill, head);
+      if (Options.get('dmgNumbers') && !e.streak) this.#damageNumber(e, kill, head);
     }
     if (e.target === localId && e.by !== localId) this.#damageFrom(e);
   }
@@ -2818,6 +2827,17 @@ export class HUD {
     // The ones that change what this player can see or do get a callout as well as a feed line.
     if (!friendly && STREAK_WARN[e.kind]) this.#callout(STREAK_WARN[e.kind]);
     else if (p.id === me.id) this.#callout(PILOT_HINT[e.kind] && e.kind !== 'bombrun' ? `${name}: ${PILOT_HINT[e.kind]}` : `${name} ${verb}`);
+  }
+
+  // Your hit on an enemy streak: the same hit marker as on a player (the X for the hit that brings it down), and its tag.
+  // A machine you wreck gets its feed line here; an aircraft's comes with air_down (#onV9).
+  #onStreakHit(e) {
+    const me = this.view?.localId;
+    if (e.by !== me) return;
+    const down = !(e.hpf > 0);
+    this.#onHit({ by: me, killed: down, dmg: 30, streak: true });
+    this.streakTags.onHit(e);
+    if (down && !(e.kind in AIR_HP)) this.notify(`You destroyed an enemy ${e.kind === 'turret' ? 'Sentry' : e.kind === 'crate' ? 'Airdrop' : STREAKS[e.kind]?.name ?? e.kind}`);
   }
 
   // V9 scorestreak events: drawing a Carpet Line, shoot-downs, Airdrops and plates.

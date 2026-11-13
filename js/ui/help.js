@@ -2,6 +2,7 @@
 // (js/game/tutorial.js) whenever the player wants it. Everything here restates rules that live in the sim;
 // the streak section is the one players ask about most.
 import { STREAKS, STREAK_ROLE_NAME, TACTICALS, LETHALS, PERKS } from '../shared/catalog.js';
+import { AIR_HP, MACHINE_HP, hitsToDown } from '../sim/streaks-v9.js';
 import { esc } from './widgets.js';
 import { ATTACHMENTS } from '../shared/attachments.js';
 import { WEAPONS } from '../shared/weapons.js';
@@ -16,6 +17,21 @@ const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Ass
 const gear = kind => t => `<div class="help-stat"><dt>${esc(t.name)} <small>${kind}: ${esc(t.job ?? '')}</small></dt><dd>${esc(t.desc)}. <b>Counter:</b> ${esc(t.counter ?? '')}.</dd></div>`;
 
 // One help card: an icon, a stencil heading and a sentence or two.
+// Which enemy streaks can be shot down, and roughly what it takes (roadmap 40). Hits from js/sim/streaks-v9.js, so the
+// table follows any change to toughness: a rifle (the Halyard) and a launcher (the Breaker), every round on target.
+const SHOOTABLE = [['recon', 'air'], ['missile', 'air'], ['swarm', 'air', 'each drone'], ['hound', 'air'], ['chopper', 'air'], ['gunship', 'air'],
+  ['turret', 'machine'], ['rover', 'machine'], ['dome', 'machine', 'the emitter'], ['airdrop', 'machine', 'the crate']];
+function shootDown() {
+  const rows = SHOOTABLE.map(([id, what, note]) => {
+    const air = what === 'air', hp = air ? AIR_HP[id] : MACHINE_HP[id === 'airdrop' ? 'crate' : id];
+    const rifle = hitsToDown(hp, WEAPONS.ar, air), boom = hitsToDown(hp, WEAPONS.launcher, air);
+    return `<span class="help-down-row">${ico(id)}<b>${esc(STREAKS[id]?.name ?? id)}${note ? ` <small>${esc(note)}</small>` : ''}</b><em>${rifle} rifle hit${rifle === 1 ? '' : 's'}</em><em>${boom} launcher</em></span>`;
+  }).join('');
+  return `<div class="help-down"><h4>Shooting streaks down</h4>
+    <p>Aim at an enemy streak and a red ring and health bar show on it, with about how many of your hits it still takes; every hit lands a hit marker, and bringing it down pays streak score and a Shot Down medal. Aircraft take half a bullet's damage and four times a launcher round's, so launchers are the answer to Choppers and Gunships. Cannot be shot: UAV, Overwatch, Blackbird, Jammer, Airstrike, Mortar Team and Carpet Line (get out from under them; EMP clears the radar ones).</p>
+    <div class="help-down-rows">${rows}</div></div>`;
+}
+
 const card = (icon, title, body, wide = false) => `<div class="help-card${wide ? ' wide' : ''}"><h4>${ico(icon)}<span>${esc(title)}</span></h4><p>${body}</p></div>`;
 
 // One weapon stat: what the bar in the Gunsmith measures and what it means in a fight.
@@ -77,6 +93,7 @@ const PANELS = {
         <li><b>Airdrop</b>: stand on the crate to open a random streak. Enemies can stand on it longer to steal it. <b>Aegis Dome</b>: grenades and streak blasts cannot hurt your team inside; bullets still can. <b>Plate Drop</b>: 100 armour for everyone near you.</li>
         <li><b>EMP</b> downs enemy aircraft and machines and locks enemy streaks for 12 s. An <b>Engineer</b>'s machines survive it, damaged, and their kit stays up.</li>
       </ol>
+      ${shootDown()}
 
     </div>`,
   modes: () => `

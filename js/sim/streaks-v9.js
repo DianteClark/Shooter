@@ -64,9 +64,18 @@ export const EMP_LOCK = 12, EMP_KIT = 6;
 // tilted 55 degrees (js/render/renderer.js TILT), so something AIR_Y up is drawn 0.7 * AIR_Y north of where it is.
 export const AIR_HP = { gunship: 1800, chopper: 1100, missile: 40, swarm: 80, recon: 180, hound: 300 };
 const AIR_R = { gunship: 2.4, chopper: 1.8, missile: 0.55, swarm: 0.6, recon: 0.8, hound: 0.8 };
-const AIR_Y = { gunship: 7.5, chopper: 5.6, missile: 1.7, swarm: 2.9, recon: 4, hound: 2.6 };
+export const AIR_Y = { gunship: 7.5, chopper: 5.6, missile: 1.7, swarm: 2.9, recon: 4, hound: 2.6 };
 const TILT_K = 1 / Math.tan(55 * Math.PI / 180);
 export const LAUNCHER_AIR = 4, BULLET_AIR = 0.5;
+// Machines that can be shot to pieces, and their toughness (the Sentry's is sim.js TURRET_HP).
+export const MACHINE_HP = { turret: 180, rover: ROVER_HP, dome: DOME_HP, crate: CRATE_HP };
+// Shots (every pellet on target) that bring down `hp` of a streak with gun `w`: what the HUD's first-time hint, the
+// target tags and How to play quote. Air takes BULLET_AIR of a bullet and LAUNCHER_AIR of a launcher round.
+export function hitsToDown(hp, w, air) {
+  if (!w || !(hp > 0)) return 0;
+  const per = w.explosive ? w.explosive.damage * (air ? LAUNCHER_AIR : 1) : (w.damage ?? 20) * (w.pellets ?? 1) * (air ? BULLET_AIR : 1);
+  return Math.max(1, Math.ceil(hp / per));
+}
 const ENGINEER_AIR = 1.25, ENGINEER_TURRET = 1.5;
 
 // Kinds by where they live and how the wire names them. Appended only (indices are on the wire).
@@ -587,6 +596,7 @@ export function shootAir(sim, shooter, shot, rays, w) {
 export function hurtAir(sim, g, dmg, by) {
   airHp(g);
   g.hp -= dmg;
+  if (by && by.team !== g.team && dmg > 0) streakHit(sim, by, g.kind, g.hp / g.maxHp, g.x, g.z);
   if (g.hp > 0) return false;
   const i = sim.gunships.indexOf(g);
   if (i < 0) return true;
@@ -595,6 +605,12 @@ export function hurtAir(sim, g, dmg, by) {
   sim._dropAir(i);
   if (by && by.team !== g.team) reward(sim, by, g.kind, true);
   return true;
+}
+
+// A hit on an enemy streak, for the one who landed it: the HUD's hit marker and the target's health bar (roadmap 40).
+// hpf is what is left (0 or less: this hit brought it down).
+export function streakHit(sim, by, kind, hpf, x, z) {
+  sim._emit({ t: 'streak_hit', by: by.id, kind, hpf: round2(Math.max(0, hpf)), x: round2(x), z: round2(z) });
 }
 
 // Streak score for bringing one down: more for dearer ones. A swarm drone is a third of its swarm.
