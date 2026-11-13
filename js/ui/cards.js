@@ -28,6 +28,7 @@ import { getSkin, skinsFor, skinUnlock, baseSkin, isGrantSkin, localSkin, setLoc
 import { seasonAt } from '../shared/seasons.js';
 import { EMBLEMS, ALL_EMBLEMS, getEmblem, cleanEmblem, emblemUnlocked, emblemHtml } from './emblems.js';
 import { REWARD_PATTERNS, TIER_FRAME, tierMarks } from './cardart.js';
+import { unlockSheet } from './unlocksheet.js';
 
 export { getCard, getSkin, skinsFor, getEmblem };
 
@@ -650,14 +651,14 @@ export function cardsSheet(menu, { onClose, onChange, tab = 'cards' } = {}) {
     csGroup: ({ g }) => { group = g; render(); },
     csPick: ({ id }) => {
       const card = getCard(id);
-      if (!Progress.setCard(id)) { menu.toast(`${card.name}: ${card.req}`); return; }
+      if (!Progress.setCard(id)) { unlockSheet(menu, 'card', card.id); return; }
       onChange?.(id);
       render();
       pop(menu.overlayEl.querySelector('.cs-now .ccard'));
     },
     esPick: ({ id }) => {
       const e = getEmblem(id);
-      if (!setEmblem(e ? e.id : null)) { menu.toast(`${e.name}: ${emblemUnlocked(e, careerNow()).requirement}`); return; }
+      if (!setEmblem(e ? e.id : null)) { unlockSheet(menu, 'emblem', e.id); return; }
       onChange?.(id);
       render();
       pop(menu.overlayEl.querySelector('.es-now'));

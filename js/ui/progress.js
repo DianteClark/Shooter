@@ -542,6 +542,8 @@ export const Progress = {
   // Personal bests (the Trophy Case): { streak, long (m), brPlace (0 none), exSecs (0 none), rankedBest (-1 never) }.
   records() { const r = data.records ?? {}; return { streak: r.st ?? 0, long: r.lk ?? 0, brPlace: r.bp ?? 0, exSecs: r.ex ?? 0, rankedBest: rankedBest() }; },
   zmBestAll() { return { ...(data.zmBest ?? {}) }; },
+  // What finisher, emote and gear unlocks are judged on: { level (peak), opTier (best operator mastery tier), season }.
+  unlockCtx() { return finisherCtx(); },
   zmFeatsAll() { return { ...(data.zmFeats ?? {}) }; },
   skins(op) {
     const got = masteryRewards(data);

@@ -9,6 +9,7 @@ import { masteryChip } from './mastery.js';
 import { esc, hex } from './widgets.js';
 import { ico, header } from './yard.js';
 import { flash, pop } from './motion.js';
+import { unlockSheet } from './unlocksheet.js';
 
 const GLOW_CLASS = ['', 'lit', 'pulse', 'prism'];
 // Brings a card into the list's view without moving the page.
@@ -46,7 +47,8 @@ export class OperatorsScreen {
 
   tap(id) {
     if (id === this.preview) {
-      if (id !== this.equipped && Progress.isOperatorUnlocked(id)) this.equip();
+      if (!Progress.isOperatorUnlocked(id)) unlockSheet(this.menu, 'operator', id);
+      else if (id !== this.equipped) this.equip();
       return;
     }
     this.preview = id;
@@ -59,7 +61,8 @@ export class OperatorsScreen {
   tapSkin(id) {
     if (id === this.skin) {
       const st = skinStatus(this.preview).find(s => s.skin.id === id);
-      if (st?.unlocked && !st.equipped && Progress.isOperatorUnlocked(this.preview)) this.equip();
+      if (st && !st.unlocked) unlockSheet(this.menu, 'skin', id);
+      else if (st?.unlocked && !st.equipped && Progress.isOperatorUnlocked(this.preview)) this.equip();
       return;
     }
     this.skin = id;
@@ -78,12 +81,12 @@ export class OperatorsScreen {
   equip() {
     const entry = Progress.operators().find(o => o.op.id === this.preview);
     if (!entry?.unlocked) {
-      this.menu.deny(this.menu.el.querySelector('.op-detail'), `${entry?.op.name}: ${entry?.requirement}`);
+      unlockSheet(this.menu, 'operator', this.preview);
       return;
     }
     const st = skinStatus(this.preview).find(s => s.skin.id === this.skin);
     if (!st?.unlocked) {
-      this.menu.deny(this.menu.el.querySelector('.op-detail'), `${st?.skin.name}: ${st?.requirement}`);
+      unlockSheet(this.menu, 'skin', this.skin);
       return;
     }
     const opChanged = this.preview !== this.equipped && Progress.setOperator(this.index, this.preview);
@@ -102,7 +105,7 @@ export class OperatorsScreen {
     const f = Progress.finishers(this.preview).find(x => x.id === id);
     if (!f) return;
     const chip = this.menu.el.querySelector(`.op-finchip[data-id="${id}"]`);
-    if (!f.unlocked) { this.menu.deny(chip, `${f.name}: ${f.requirement}`); return; }
+    if (!f.unlocked) { unlockSheet(this.menu, 'finisher', id, { operator: this.preview }); return; }
     if (f.equipped) { this.menu.toast(`${f.name}: ${f.desc}`); return; }
     if (Progress.setFinisher(this.preview, id)) {
       this.onChange?.();

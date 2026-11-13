@@ -16,6 +16,7 @@ import { playUi } from '../audio/audio.js';
 import { ico, backButton } from './yard.js';
 import { stagger, flash, sweep, pop } from './motion.js';
 import { masteryPips, masteryDetail } from './mastery.js';
+import { unlockSheet } from './unlocksheet.js';
 
 const HERO_STATS = ['damage', 'rate', 'range', 'aimed', 'recoil', 'move', 'reload'];
 
@@ -345,7 +346,8 @@ export class LoadoutsScreen {
   equipBrowsed() {
     const id = this.panel.browse;
     if (!owned(id)) {
-      this.menu.toast(`${gunName(id)}: ${lockText(id)}`);
+      if (id === GOLDEN_ID) this.menu.toast(`${gunName(id)}: ${lockText(id)}`);
+      else unlockSheet(this.menu, 'weapon', id);
       return;
     }
     Progress.updateLoadout(this.selected, { [slotOf(id)]: id });
@@ -427,7 +429,7 @@ export class LoadoutsScreen {
   choose(key, id) {
     const sec = GEAR[key], l = this.loadout;
     if (!Progress.isItemUnlocked(sec.kind, id)) {
-      this.menu.toast(`${sec.table[id].name}: ${lockOf(sec.kind, id)}`);
+      unlockSheet(this.menu, sec.kind, id);
       return;
     }
     if (key !== 'perks') this.panel.focus = id;

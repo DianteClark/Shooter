@@ -1,3 +1,4 @@
+
 // The gunsmith, in two views (V12, the owner's design):
 //   pick   weapon classes as big tiles in a horizontal scroller across the top, that class's guns as big cards in a
 //          vertical scroller below (picture, name, level, mastery progress). Both scroll natively (.scroll-x/.scroll-y).
@@ -19,6 +20,7 @@ import { prestigeWeaponNow, kindLabel } from './prestige.js';
 import { ico, backButton } from './yard.js';
 import { flash, pop, stagger } from './motion.js';
 import { masteryBadge } from './mastery.js';
+import { unlockSheet } from './unlocksheet.js';
 
 const STOCK = 'stock';
 
@@ -131,7 +133,7 @@ export class Gunsmith {
   // Opens a gun's bench. Looking only: what is equipped is untouched until equip().
   selectWeapon(id) {
     if (!Progress.isItemUnlocked('weapon', id)) {
-      this.menu.toast(`${WEAPONS[id]?.name ?? id}: ${levelRequirement(Progress.itemUnlockLevel('weapon', id))}`);
+      unlockSheet(this.menu, 'weapon', id);
       return;
     }
     if (id !== this.weapon) {
@@ -233,7 +235,7 @@ export class Gunsmith {
     const id = this.tryAtt;
     if (id === null) return;
     const def = id === STOCK ? null : this.available(this.slot).find(a => a.id === id);
-    if (def && !def.unlocked) { this.menu.toast(`${def.name}: ${lockRequirement(def.unlockLevel)}`); return; }
+    if (def && !def.unlocked) { unlockSheet(this.menu, 'attachment', def.id, { weapon: this.weapon }); return; }
     const fitted = this.kit[this.slot];
     const target = def ? (fitted === id ? null : id) : null;
     if (!Progress.setAttachment(this.index, this.slot, target, this.weapon)) return;
@@ -248,7 +250,7 @@ export class Gunsmith {
     const id = this.tryCamo;
     if (id === null) return;
     if (!Progress.isUnlocked(this.weapon, id)) {
-      this.menu.toast(`${getCamo(id).name}: ${camoRequirement(getCamo(id))}`);
+      unlockSheet(this.menu, 'camo', id, { weapon: this.weapon });
       return;
     }
     Progress.setCamo(this.weapon, id);
@@ -264,7 +266,7 @@ export class Gunsmith {
     if (!t) return;
     const ok = t.kind === 'tracer' ? Progress.setTracer(this.weapon, t.id) : Progress.setKillFx(this.weapon, t.id);
     if (!ok) {
-      this.menu.toast('Locked: prestige this weapon to earn it');
+      unlockSheet(this.menu, t.kind, t.id, { weapon: this.weapon });
       return;
     }
     this.onChange?.();
@@ -651,7 +653,7 @@ export class Gunsmith {
   // The panel's bottom strip: names the thing under the thumb and how to act on it.
   paintFoot() {
     const foot = this.footEl;
-    let title = '', desc = '', action = '', enabled = false;
+    let title = '', desc = '', action = '', enabled = false, locked = false;
     if (this.tab === 'attach') {
       const kit = this.kit, id = this.tryAtt;
       if (id === null) {
@@ -667,7 +669,7 @@ export class Gunsmith {
         const def = this.available(this.slot).find(a => a.id === id);
         title = def.name;
         desc = def.for ?? def.desc;
-        if (!def.unlocked) { action = unlockLabel(def.unlockLevel); enabled = false; desc = `Locked: ${lockRequirement(def.unlockLevel)}.`; }
+        if (!def.unlocked) { action = 'How to unlock'; locked = true; desc = `Locked: ${lockRequirement(def.unlockLevel)}.`; }
         else if (kit[this.slot] === id) { action = 'Remove'; enabled = true; }
         else { action = 'Fit'; enabled = true; }
       }
@@ -680,12 +682,13 @@ export class Gunsmith {
         const lad = Progress.weaponLadder(this.weapon);
         desc = `Challenges ${done}/${all.length}, mastery ladder ${lad.tier}/${lad.count}. Both open the mastery camos.`;
       } else {
-        const c = getCamo(id), locked = !Progress.isUnlocked(this.weapon, id);
+        const c = getCamo(id);
+        locked = !Progress.isUnlocked(this.weapon, id);
         title = c.name;
         if (locked) {
           const ch = Progress.challenges(this.weapon).find(x => x.camo === id);
           desc = ch ? `${ch.value}/${ch.goal} ${ch.label}` : camoRequirement(c);
-          action = 'Locked';
+          action = 'How to unlock'; locked = true;
         } else if (Progress.camo(this.weapon) === id) {
           desc = 'Equipped on this weapon.';
         } else {
@@ -701,8 +704,8 @@ export class Gunsmith {
       } else {
         const item = (t.kind === 'tracer' ? TRACERS : KILL_EFFECTS).find(i => i.id === t.id);
         title = item.name;
-        const locked = (t.kind === 'tracer' ? Progress.tracers(this.weapon) : Progress.killEffects(this.weapon)).find(x => x.item.id === t.id && !x.unlocked);
-        if (locked) { desc = `Weapon Prestige ${item.prestige} on this weapon`; action = 'Locked'; }
+        locked = !!(t.kind === 'tracer' ? Progress.tracers(this.weapon) : Progress.killEffects(this.weapon)).find(x => x.item.id === t.id && !x.unlocked);
+        if (locked) { desc = `Weapon Prestige ${item.prestige} on this weapon`; action = 'How to unlock'; }
         else if ((t.kind === 'tracer' ? Progress.tracer(this.weapon) : Progress.killFx(this.weapon)) === t.id) desc = 'Equipped on this weapon.';
         else { desc = 'Tap again to apply.'; action = 'Apply'; enabled = true; }
       }
@@ -719,7 +722,7 @@ export class Gunsmith {
     }
     foot.innerHTML = `
       <div class="foot-text"><b>${esc(title)}</b><small>${esc(desc)}</small></div>
-      ${action ? `<button class="btn ${enabled ? 'is-primary' : ''}" data-act="gsApply" data-sound="confirm" ${enabled ? '' : 'disabled'}>${ico(enabled ? (action === 'Remove' ? 'close' : 'check') : 'lock')}<b>${esc(action)}</b></button>` : ''}`;
+      ${action ? `<button class="btn ${enabled ? 'is-primary' : ''}" data-act="gsApply" data-sound="${locked ? 'tap' : 'confirm'}" ${enabled || locked ? '' : 'disabled'}>${ico(enabled ? (action === 'Remove' ? 'close' : 'check') : 'lock')}<b>${esc(action)}</b></button>` : ''}`;
   }
 
   // Bench effect: a streak of the tried tracer colour, or a ring for a kill effect, on transforms only.

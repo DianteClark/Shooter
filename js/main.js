@@ -63,6 +63,7 @@ import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js'
 import { MenuBackdrop } from './ui/backdrop.js';
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
+import { unlockSheet, setPlayNow } from './ui/unlocksheet.js';
 
 const GAME_NAME = 'Switchyard';
 const DRAG_SLOP = 12;           // Pixels of travel before a touch stops being a possible tap.
@@ -368,7 +369,7 @@ menu.on({
   titleEmotePlay: ({ i }) => {
     const e = Progress.emotes()[Number(i)];
     if (!e) return;
-    if (!e.unlocked) { menu.toast(`${e.name}: ${e.requirement}`, 'warn'); return; }
+    if (!e.unlocked) { unlockSheet(menu, 'emote', e.id); return; }
     const row = menu.el.querySelector('.ttl-emotes');
     if (row) row.hidden = true;
     if (!backdrop.emote(Number(i))) menu.toast(e.name);
@@ -1103,6 +1104,17 @@ function openMultiplayer() {
   app.customFrom = null;
   renderMp();
 }
+
+// An unlock sheet's Play now (js/ui/unlocksheet.js): Multiplayer opened on the playlist or mode where that unlock counts.
+setPlayNow(({ tab, playlist = null, modes = [] } = {}) => {
+  if (!MP_TAB_IDS.includes(tab)) return;
+  menu.overlay('');
+  resetToSolo();
+  app.customFrom = null;
+  app.mp.tab = tab;
+  app.mp.sels[tab] = { playlist, modes: [...modes] };
+  renderMp();
+});
 
 function mpSel(tab = app.mp.tab) {
   return (app.mp.sels[tab] ??= defaultSelection(tab));
