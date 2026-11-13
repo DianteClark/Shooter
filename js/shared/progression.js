@@ -419,7 +419,7 @@ export function isVeteran({ prestige = 0, level = 1, pro = 0 } = {}) {
 const BLAST_EQUIP = new Set(['frag', 'sticky', 'mine', 'cluster']);
 const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm', 'bombrun']);
 const MULTI_MEDALS = new Set(['double', 'triple', 'fury']);
-const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'gunship', 'missile', 'swarm', 'recon', 'hound', 'rover', 'dome']);
+const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'vulture', 'gunship', 'missile', 'swarm', 'recon', 'hound', 'rover', 'dome']);
 const FAR_THROW = 13;            // Past the base throw range (js/sim/equipment.js THROW_RANGE): a Strong Arm throw.
 const SWAP_WINDOW = 2.5;
 const BURN_GAP = 1.5;            // Burn ticks closer together than this are one fire.
@@ -721,7 +721,9 @@ export function ladderTrack(w) {
   t = makeTrack('weapon', w, name, w, WEAPON_LADDER, (tier, n) => [
     { kind: 'xp', xp: LADDER_XP[tier - 1], name: `${LADDER_XP[tier - 1].toLocaleString('en-US')} XP` },
     ...(tier === 2 ? [{ kind: 'badge', id: `badge:${w}-1`, name: `${name} bronze badge` }] : []),
-    ...(tier === n ? [{ kind: 'badge', id: `badge:${w}-2`, name: `${name} gold badge` }, { kind: 'card', id: `card:mastery-${w}`, name: `${name} Master` }, { kind: 'camos', name: 'Mastery camos open' }] : []),
+    // The card is the gun's own Master card (js/ui/cardbook.js `gun-<id>`, also earned by every camo challenge); the
+    // Golden gun has none. It was `card:mastery-<id>`, a card that never existed, so the stamp drew the starter card.
+    ...(tier === n ? [{ kind: 'badge', id: `badge:${w}-2`, name: `${name} gold badge` }, ...(w === GOLDEN_ID ? [] : [{ kind: 'card', id: `card:gun-${w}`, name: `${name} Master` }]), { kind: 'camos', name: 'Mastery camos open' }] : []),
   ]);
   t.id = `gun:${w}`;
   t.stats = LADDER_STATS;
@@ -868,7 +870,7 @@ const BANG_KILL_SECS = 0.4;      // A Drill or Impact kill this soon after its b
 const STREAK_MULTI_GAP = 1.5;
 const LONG_THROW = 12;
 const BANK_WINDOW = 3.5;         // A frag kill this soon after a banked throw is the banked frag's.
-const OBJ_MEDALS = new Set(['capture', 'confirm', 'plant', 'defuse', 'flag_capture', 'flag_return']);
+const OBJ_MEDALS = new Set(['capture', 'confirm', 'plant', 'defuse', 'flag_capture', 'flag_return', 'hq_capture', 'ctl_capture']);
 
 // Counts one match for the mastery tracks and the weapon ladder. Pure, like ProTracker: feed onEvents(events, view)
 // every frame; setLoadout(loadout) at each spawn (the operator in use); finish({won}) once. gains() is
@@ -1879,7 +1881,8 @@ function buildPool() {
   for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules)) extra.set(m.rules, m);
   for (const [rules, m] of extra) {
     pool.push(d(`mode.${rules}`, 'mode', `played:${rules}`, 2, 1500, `mode:${m.id}`, `Play 2 ${m.name} matches`));
-    if (m.ffa || rules === 'ffa') pool.push(w(`top3.${rules}`, 'mode', 'top3', 5, 6500, `mode:${m.id}`, `Finish top 3 in ${m.name} 5 times`));
+    // Counted per rule set (`top3:<rules>`): the label names one mode, so a Gun Game podium does not move a Free-for-All one.
+    if (m.ffa || rules === 'ffa') pool.push(w(`top3.${rules}`, 'mode', `top3:${rules}`, 5, 6500, `mode:${m.id}`, `Finish top 3 in ${m.name} 5 times`));
   }
   return pool;
 }
@@ -2047,7 +2050,8 @@ export class ChallengeTally {
           if (e.id !== id) break;
           if (MULTI_MEDALS.has(e.medal)) this.add('multi');
           else if (e.medal === 'streak3' || e.medal === 'streak5') this.add(e.medal);
-          else if (e.medal === 'capture') this.add('captures');
+          // "Flags or zones": Headquarters and Control zones too (their own medals), as the labels promise.
+          else if (e.medal === 'capture' || e.medal === 'hq_capture' || e.medal === 'ctl_capture') this.add('captures');
           else if (e.medal === 'confirm') this.add('confirms');
           else if (e.medal === 'plant' || e.medal === 'defuse') { this.add(`${e.medal}s`); this.add('bombs'); }
           else if (e.medal === 'clutch') this.add('clutches');
@@ -2074,7 +2078,7 @@ export class ChallengeTally {
     this.add('played');
     this.add(`played:${rules}`);
     if (won) { this.add('wins'); this.add(`won:${rules}`); }
-    if (place !== null && place <= 3) this.add('top3');
+    if (place !== null && place <= 3) { this.add('top3'); this.add(`top3:${rules}`); }
     return this.n;
   }
 

@@ -1866,7 +1866,7 @@ export class Sim {
         this._emit({ t: 'streak', id, kind, team: p.team });
         break;
       case 'vulture': {
-        this._launchChopper(p);
+        this._launchChopper(p, 'vulture');
         const g = this.gunships[this.gunships.length - 1];
         if (g?.kind === 'chopper' && g.owner === p) { g.life *= VULTURE_LIFE; g.variant = 'vulture'; g.hp = g.maxHp = V9.AIR_HP.chopper * 1.5; }
         break;
@@ -2159,13 +2159,15 @@ export class Sim {
   }
 
   // Comes in from the map edge behind its owner.
-  _launchChopper(p) {
+  // `kind` is the streak called: an Attack Chopper, or the Vulture (the same airframe), so the feed, the mastery track and
+  // the killfeed name the right one.
+  _launchChopper(p, kind = 'chopper') {
     const west = this.ffa ? p.ps.x < this.map.width / 2 : p.team === 0;     // A free-for-all chopper uses the nearer edge.
     // V9: from at most CHOPPER_ENTRY behind its owner, so on a huge map it does not spend its life flying in.
     const g = { kind: 'chopper', team: p.team, owner: p, x: Math.max(2, Math.min(this.map.width - 2, p.ps.x + (west ? -26 : 26))), z: p.ps.z, aim: west ? 0 : Math.PI,
       life: CHOPPER_LIFE * this._engineerMult(p, ENGINEER_AIR), angle: 0, dir: 1, pause: 1, burstLeft: 0, cooldown: 0, target: null, aimX: 0, aimZ: 0, retarget: 0 };
     this.gunships.push(g);
-    this._emit({ t: 'streak', id: p.id, kind: 'chopper', team: p.team });
+    this._emit({ t: 'streak', id: p.id, kind, team: p.team });
     this._emit({ t: 'gunship', team: p.team, owner: p.id, kind: 'chopper' });
   }
 
@@ -2295,7 +2297,7 @@ export class Sim {
       if (hit >= 0 && hit < bestT) { bestT = hit; victim = v; }
     }
     this._emit({ t: 'gunship_shot', kind: 'chopper', ox: round2(g.x), oz: round2(g.z), x: round2(g.x + dirX * bestT), z: round2(g.z + dirZ * bestT) });
-    if (victim) this._damage(victim, g.owner, CHOPPER_DAMAGE, g.owner.ps.weapon, bestT, 'chopper');
+    if (victim) this._damage(victim, g.owner, CHOPPER_DAMAGE, g.owner.ps.weapon, bestT, g.variant ?? 'chopper');
   }
 
   // ---- V8 streaks: Cruise Missile, Drone Swarm, Juggernaut ----

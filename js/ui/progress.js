@@ -64,6 +64,7 @@
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
 import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
+import { dropCareerMemo } from './cardbook.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
 import { getEmblem, emblemUnlocked } from './emblems.js';
 import { WEAPONS } from '../shared/weapons.js';
@@ -176,6 +177,7 @@ const GOLDEN_UNLOCK = () => ({ kind: 'weapon', id: GOLDEN_ID, name: WEAPONS[GOLD
 
 function save() {
   write(KEY, JSON.stringify(data));
+  dropCareerMemo();
 }
 
 const isOpen = (kind, id) => itemOpen(data, kind, id);
@@ -755,7 +757,8 @@ export const Progress = {
   // ({kind:'pro', id:perk, name, desc} and {kind:'card', id, name, req}), Pro first: they are the bigger moment.
   // `career` ({ kills, deaths, won, br, place, extracted }, see recordCareer) feeds the leaderboard totals; `extracted`
   // (extraction mode) also counts the save's lifetime `extractions`.
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false }) {
+  // `zmFeat` ({escaped, boss}, Graveyard Shift) is recorded here, after the card list is taken, so Lantern Out is stamped.
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel, masterBefore = masterNow();
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
@@ -766,6 +769,7 @@ export const Progress = {
 
     // Mastery first, so the ladder only counts for guns that were already level 30 when the match began.
     const tiers = applyMasteryGains(data, mastery ?? {});
+    const feat = zmFeat && mapId ? recordZmFeat(data, mapId, zmFeat) : null;
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
@@ -797,7 +801,11 @@ export const Progress = {
       const [kind, id] = k.split(':');
       unlocks.push({ kind, id, name: ITEM_TABLES[kind]?.[id]?.name ?? id, req: UNLOCK_CHALLENGES[k].label });
     }
-    unlocks.unshift(...proUnlocks, ...tiers.ups, ...cardUnlocks);
+    // A gun's Master card can be earned before its ladder's last tier (every camo challenge): that tier then shows no
+    // second "New calling card" (`had`).
+    const ups = tiers.ups.map(u => (u.rewards.some(r => r.kind === 'card' && cardsBefore.has(r.id.slice(5)))
+      ? { ...u, rewards: u.rewards.map(r => (r.kind === 'card' && cardsBefore.has(r.id.slice(5)) ? { ...r, had: true } : r)) } : u));
+    unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks);
     // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
     // cards are already in cardUnlocks, so they are not stamped twice).
     const masterAfter = masterNow();
@@ -835,6 +843,7 @@ export const Progress = {
       unlocks,
       proProgress,
       mastery: tiers.moved,
+      zmFeat: feat,
     };
   },
 

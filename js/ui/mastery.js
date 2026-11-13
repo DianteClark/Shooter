@@ -100,7 +100,7 @@ export function masteryStrip(list = [], max = 3) {
 // reward is shown whole, since it gets no ceremony of its own.
 export function masteryStamp(u) {
   if (u?.kind !== 'mastery') return null;
-  const card = u.rewards.find(r => r.kind === 'card');
+  const card = u.rewards.find(r => r.kind === 'card' && !r.had);     // `had`: earned before this tier (js/ui/progress.js).
   // The badge as it stands after this tier: bronze from tier II, gold at the top.
   const st = statusOf(u.track);
   const grade = st ? gradeOf({ ...st, tier: u.tier }) : 0;

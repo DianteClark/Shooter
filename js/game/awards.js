@@ -235,7 +235,7 @@ export class MatchAwards {
     // Graveyard Shift: the horde is not soldiers. Kills, headshots and medals pay the mode's own (smaller) lines, rounds
     // survived pay, the guns earn a share of the usual weapon XP, and the map's best round goes into the save.
     const zmObj = objOf(view)?.zm ? objOf(view) : null;
-    let zm = null;
+    let zm = null, zmFeat = null;
     if (zmObj && me) {
       const mine = zmObj.crew?.find(c => c.id === me.id) ?? {};
       // An escape (the exfil, ROADMAP item 36) counts the round it got out on as survived.
@@ -243,13 +243,13 @@ export class MatchAwards {
       const survived = Math.max(0, (zmObj.round ?? 1) - (escaped ? 0 : 1));
       lines.length = 0;
       lines.push(...zmXp({ kills: this.kills, head: this.headshots, survived, escaped: escaped ? zmObj.round ?? 0 : 0, warden, played: MATCH_XP.played }).lines);
-      let feat = null;
-      if (escaped || warden) { try { feat = Progress.recordZmFeat?.(this.mapId, { escaped: escaped ? zmObj.round : 0, boss: warden }) ?? null; } catch (err) { console.error('zm feat', err); } }
+      // The feat itself is recorded by applyMatch (below), after it has taken the card list, so Lantern Out is stamped.
+      zmFeat = escaped || warden ? { escaped: escaped ? zmObj.round : 0, boss: warden } : null;
       for (const b of Object.values(this.weapons)) b.xp = Math.min(ZM.weaponXpCap, Math.round(b.xp * ZM.weaponXp));
       let rec = { best: survived, before: 0, fresh: false };
       try { rec = Progress.recordZm?.(this.mapId, survived) ?? rec; } catch (err) { console.error('zm record', err); }
       zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',
-        escaped: escaped ? zmObj.round : 0, warden, bestEscape: feat?.escaped ?? 0, freshEscape: !!feat?.freshEscape, freshBoss: !!feat?.freshBoss };
+        escaped: escaped ? zmObj.round : 0, warden, bestEscape: Progress.zmFeats?.(this.mapId)?.escaped ?? 0, freshEscape: false, freshBoss: false };
     }
     const exWon = ex ? ex.extracted : null;
     if (exWon !== null) { /* The Extracted line is the win. */ }
@@ -282,7 +282,8 @@ export class MatchAwards {
     const career = { kills: zm ? 0 : me?.kills ?? this.kills, deaths: zm ? 0 : me?.deaths ?? 0, br: !!view?.br, place: brPlace, extracted: !!ex?.extracted };     // The horde stays off the K/D boards.
     const life = { ...(tallied ?? this.tally.counts()) };
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted });
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat });
+    if (zm && applied.zmFeat) Object.assign(zm, { bestEscape: applied.zmFeat.escaped, freshEscape: applied.zmFeat.freshEscape, freshBoss: applied.zmFeat.freshBoss });
     if (ex) {
       // Exclusive unlock progress this match, and anything it opened.
       const after = Progress.lifetime();

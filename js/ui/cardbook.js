@@ -29,6 +29,9 @@ function extras() {
   return memo;
 }
 export function setCareerExtras(fn) { source = fn; memo = null; }
+// The save changed (js/ui/progress.js save()): the next card check reads it again, even in the same pass. Without this,
+// applyMatch's before and after card lists shared one memo and no map, mode, arms or career card was ever stamped.
+export function dropCareerMemo() { memo = null; }
 export const careerExtras = () => extras();
 
 const n = v => (Number.isFinite(v) ? v : 0);
@@ -112,7 +115,8 @@ const EXTRA = [
   // that the equipment, streak and operator tracks grant (docs/PROGRESSION.md), which cards.js restyles.
   ...WEAPON_IDS.filter(w => w !== GOLDEN_ID).map((w, i) => {
     const anim = i % 3 === 2 ? 'prism' : 'gold';
-    return card(`gun-${w}`, `${WEAPONS[w]?.name ?? w} Master`, 'Mastery', `Master the ${WEAPONS[w]?.name ?? w}`, () => !!extras().masteredSet?.has(w),
+    // Every camo challenge on it, or its mastery ladder finished (the ladder's last tier grants `card:gun-<id>`).
+    return card(`gun-${w}`, `${WEAPONS[w]?.name ?? w} Master`, 'Mastery', `Master the ${WEAPONS[w]?.name ?? w}`, () => !!extras().masteredSet?.has(w) || extras().granted(`card:gun-${w}`),
       { p: anim === 'prism' ? 'speed' : 'rays', c: anim === 'prism' ? PRISM : GOLD, e: w, gold: true, anim }, () => extras().chal?.(w) ?? [0, 1]);
   }),
 ];
