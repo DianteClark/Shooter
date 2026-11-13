@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-12', title: 'Steadier buildings, emblems and hints',
+    build: '1111-36', date: '2026-11-12', title: 'Steadier buildings, emblems and hints',
     items: [
       'Rooftops, roof edges and wall trims no longer flicker as the camera moves, on every map including the Frontier battle royale and Ashgrove Halt.',
       'Emblems and rank badges show straight away in the menus (title card, boards, service record, lobby, results) instead of only after a tap.',
