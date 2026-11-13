@@ -61,6 +61,7 @@ import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes,
 import { MP_TAB_IDS, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
 import { loadTraining, saveTraining, TRAIN_MAX_BOTS } from './ui/playscreens.js';
 import { MenuBackdrop } from './ui/backdrop.js';
+import { Recall } from './ui/recall.js';     // Remembered menu choices (QoL).
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
 
@@ -146,19 +147,26 @@ const app = {
   vote: null,               // { key, options, votes (host) or counts (guest), left, winner, resolved, mine }
   resultsAt: 0,             // When the results screen last appeared.
   voteTakeover: 0,          // Guest: timer that moves results on to a vote that opened while they were showing.
-  soloPick: { mapId: DEFAULT_MAP, mode: 'tdm' },
+  soloPick: recalledSoloPick(),         // Custom's map and mode, as last picked on this phone.
   // The map and mode the last match was played on, as rolled. Rematch replays the halves that were chosen, and the
   // room's next vote offers it as a Rematch card unless the winning card was Random.
   lastPlayed: null,
   // The pick as chosen, before rolling. A Random half stays Random on Rematch, so each rematch rolls again.
   // Multiplayer: { mp: {tab, sel} }, so the next match searches the same playlist; Training: { training: true }.
   lastPick: null,
-  mp: { tab: 'standard', sels: {} },   // Multiplayer: the open tab and each tab's pick ({playlist, modes}).
+  mp: Recall.mp(MP_TAB_IDS),           // Multiplayer: the open tab and each tab's pick ({playlist, modes}), as last left.
   mpSearch: null,                      // The matchmaking moment's timers.
   customTab: 'match',                  // Custom: 'match' or 'training'.
   customFrom: null,                    // 'lobby' while a host edits the friend lobby's custom settings.
   training: loadTraining(),            // Custom > Training's settings (js/ui/playscreens.js).
 };
+// Custom's last pick, if its map still exists and still hosts its mode; else the default.
+function recalledSoloPick() {
+  const p = Recall.get('soloPick');
+  const mapOk = p?.mapId === RANDOM || !!MAPS[p?.mapId];
+  const modeOk = p?.mode === RANDOM || (!!MODES[p?.mode] && (p.mapId === RANDOM || modeFits(MAPS[p.mapId], p.mode)));
+  return mapOk && modeOk ? { mapId: p.mapId, mode: p.mode } : { mapId: DEFAULT_MAP, mode: 'tdm' };
+}
 const RESULTS_FALLBACK_MS = 2500;  // Results come up by this long after a match ends even if the end banner failed.
 
 // The canvas size, the HUD's numbers and the touch rectangles are all derived from the visible area.
@@ -534,6 +542,7 @@ function renderLobby() {
 function setBrSquad(n) {
   if (!app.isHost || !app.net || app.vote?.winner != null) return;
   app.lobby.brSquad = cleanBrSquad(Number(n));
+  Recall.set('brSquad', app.lobby.brSquad);
   broadcastLobby();
   if (app.vote) { broadcastVote(); renderVote(); } else if (menuShows('lobby')) renderLobby();
 }
@@ -662,6 +671,7 @@ function startHosting({ custom = null } = {}) {
     botSkill: custom?.skill ?? MP_BOT_SKILL,
     mods: custom?.mods ?? withHardcore([], Options.get('hardcore')),     // A map-vote room starts with the Hardcore switch.
     custom,
+    brSquad: cleanBrSquad(Recall.get('brSquad', 4)),     // The squad size this phone last hosted with.
   };
   app.customFrom = null;
   wireSharedNet(net);
@@ -1109,6 +1119,7 @@ function mpSel(tab = app.mp.tab) {
 }
 
 function renderMp() {
+  Recall.saveMp(app.mp);
   menu.multiplayer({ tab: app.mp.tab, sel: mpSel(), hardcore: !!Options.get('hardcore') });
 }
 
@@ -1133,6 +1144,7 @@ function findMatch(tab, sel) {
   app.mp.tab = tab;
   app.mp.sels[tab] = { playlist: sel.playlist ?? null, modes: [...(sel.modes ?? [])] };
   app.lastPick = { mp: { tab, sel: app.mp.sels[tab] } };
+  Recall.saveMp(app.mp);
   const size = lobbySize(tab, r.modes);
   const ui = menu.matchSearch({ name: r.name, tab, size });
   const t0 = performance.now();
@@ -1151,6 +1163,9 @@ function startMpVote(tab, r, size) {
     winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name, ranked: !!r.ranked,
     timer: setInterval(mpVoteTick, 1000),
   };
+  // Graveyard Shift: the map this phone last played it on starts with this player's ballot, if it is on offer.
+  const zmLast = tab === 'zombies' ? options.findIndex(o => o.mapId === Recall.get('zmMap')) : -1;
+  if (zmLast >= 0) { app.vote.mine = zmLast; app.vote.votes.set('local', zmLast); }
   renderVote();
 }
 
@@ -1275,6 +1290,7 @@ function maybeOfferTutorial() {
 }
 
 function renderSoloPick() {
+  Recall.set('soloPick', { ...app.soloPick });
   menu.custom({ tab: 'match', pick: app.soloPick, lobby: app.customFrom === 'lobby' });
 }
 
@@ -1506,6 +1522,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   app.dead.clear();
   app.lastMode = mode ?? 'tdm';
   app.lastPlayed = mode === 'range' ? null : { mapId, mode };
+  if (isZm(mode) && !training) Recall.set('zmMap', mapId);
   app.matchInfo = { roster, seed, mapId, mode, mods, scoreLimit, timeLimit, training };
   if (net) rememberRoom(app.code);
   stopVote();
@@ -1716,6 +1733,7 @@ function afterResults() {
 }
 
 function applyOptions(v, changed) {
+  if (changed === 'recall') return;     // Remembered menu picks: nothing to apply.
   controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
   hud.setLefty(v.lefty);
   if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
