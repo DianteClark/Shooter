@@ -321,7 +321,7 @@ menu.on({
   season: () => openSeason(),
   lobbyRanked: () => setLobbyRanked(!app.lobby.ranked),
   help: () => openHelp(),
-  challenges: () => menu.challenges({ onBack: afterEditing }),
+  challenges: () => openChallenges(),
   history: () => openHistory(),
   rejoin: () => { needName(() => startJoining(rejoinOffer()?.code ?? '')); },
   range: () => { needName(startRange); },
@@ -462,7 +462,7 @@ function shareLoadout() {
 }
 
 function openGunsmith(loadoutIndex, onBack = afterEditing, weapon) {
-  menu.gunsmith({ loadoutIndex, weapon, onBack, onChange: shareLoadout });
+  menu.gunsmith({ loadoutIndex, weapon, onBack, onChange: shareLoadout, onPlay: shortcutOk() ? () => playShortcut({ tab: 'standard', sel: { playlist: 'qp', modes: [] }, name: 'Quick Play' }) : null });
 }
 
 function openOperators(loadoutIndex, onBack = afterEditing) {
@@ -510,13 +510,32 @@ function editSquad() {
   });
 }
 
+// Challenge shortcuts (QoL): Multiplayer opens on the tab with the pick where the challenge counts; Find match is the
+// player's tap. Not from inside a friend room, which plays what its host picks.
+function playShortcut(where) {
+  if (!where || !MP_TAB_IDS.includes(where.tab)) return;
+  needName(() => {
+    resetToSolo();
+    app.customFrom = null;
+    app.mp.tab = where.tab;
+    app.mp.sels[where.tab] = { playlist: where.sel.playlist ?? null, modes: [...(where.sel.modes ?? [])] };
+    renderMp();
+    menu.toast(`Counts in ${where.name}`);
+  });
+}
+const shortcutOk = () => !app.net;
+
+function openChallenges(back = afterEditing) {
+  menu.challenges({ onBack: back, onPlay: shortcutOk() ? playShortcut : null });
+}
+
 function openStats(back = afterEditing) {
   statsScreen(menu, { onBack: back, onBoards: () => openBoards(() => openStats(back)) });
 }
 
 // The Season screen (js/ui/season.js): the track, the weekly sets and ranked; Play Ranked searches the Ranked playlist.
 function openSeason(back = afterEditing) {
-  menu.season({ onBack: back, onPlayRanked: () => needName(() => findMatch('standard', { playlist: 'ranked', modes: [] })) });
+  menu.season({ onBack: back, onPlayRanked: () => needName(() => findMatch('standard', { playlist: 'ranked', modes: [] })), onPlay: shortcutOk() ? playShortcut : null });
 }
 
 function openBoards(back = afterEditing) {

@@ -401,3 +401,13 @@
 #ui .gs-tab .ico { height: 13px; }
 #ui .gs-tab b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ui .rs-mastery .rs-ch-h .ico { height: 10px; width: auto; }
+
+/* ---- Challenge shortcuts (QoL): an open challenge's icon tile is a Play button for where it counts ---------------- */
+#ui .ch-play { position: relative; overflow: hidden; color: var(--c-chalk); background: rgba(16,20,26,.55); box-shadow: inset 0 0 0 1.5px var(--c-sodium); transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast); }
+#ui .ch-play.pressed { transform: scale(.94); filter: brightness(.9); }
+#ui .ch-play svg { transform: translateY(-5px); }
+#ui .ch-play-tag { position: absolute; left: 0; right: 0; bottom: 0; height: 14px; display: flex; align-items: center; justify-content: center; gap: 2px;
+  font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-sodium-ink); background: var(--c-sodium); }
+#ui .ch-play-tag .ico { height: 8px; width: auto; --icon-accent: currentColor; }
+#ui .sz-ch-ico.ch-play { width: 44px; height: 44px; }
+#ui .sz-ch:has(.ch-play) { grid-template-columns: 44px minmax(0, 1fr) 74px; }
