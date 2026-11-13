@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-13', title: 'Juicier hits, kills and menus',
+    build: '1113-2', date: '2026-11-13', title: 'Juicier hits, kills and menus',
     items: [
       'Hit markers pop when they land. Headshots get a gold marker with a ringing halo and a cleaner "ting"; kills get a red X with a quick flash, and the points float up off it into your score.',
       'The kill feed snaps in sharper, and double kills, kill streaks, calling in a scorestreak and the final kill give the camera a small punch.',
