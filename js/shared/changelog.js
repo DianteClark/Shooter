@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Weekly events',
+    build: '1118-1', date: '2026-11-18', title: 'Weekly events',
     items: [
       'Weekly events: every Monday a new event takes over the top of Multiplayer for the week, with three or four challenges of its own and a calling card or emblem for finishing them all. Event matches also pay 10% more XP.',
       'Nine events take turns: Gloves Only (Rebound with boxing gloves and no guns), Snipers Only Rebound, Night Graveyard (fog every round, double points), Pistols at Dawn, Gun Game Gauntlet, Infected Overrun, Showdown Shuffle, Blade Brawl and Iron Hill.',
