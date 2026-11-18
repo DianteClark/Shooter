@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Balance pass 4, gun stats by mode',
+    build: '1118-2', date: '2026-11-18', title: 'Balance pass 4, gun stats by mode',
     items: [
       'Shotguns reach a little further: the Thresher, Doublet, Trammel and Squall keep their full hit about a metre further out. The Thresher pumps faster, the Doublet reloads faster, and the Trammel, Thistle and Railspike fire a little faster.',
       'The Murmur fires faster and keeps more of its damage at range. The Stanchion fires a little slower.',
