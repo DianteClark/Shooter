@@ -16,6 +16,14 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1118-3', date: '2026-11-18', title: 'Six new operators',
+    items: [
+      'Six new operators, each unlocked by a challenge in a different mode: Skylark (finish top 5 in Rebound 10 times), Gambit (win 10 Showdown matches), Corvid (kill 500 in Graveyard Shift), Linnet (extract 25 times in Extraction), Garrison (get 300 kills in Ground War) and Brigid (win 10 Ranked matches).',
+      'Each has their own look, a field skin, four mastery skins and a signature emote at mastery tier 3: Ripcord, Heads or Tails, Last Rites, Empty Pockets, Advance and Podium. Once earned, a signature emote joins your emote wheel and plays on any operator.',
+      'Season 2: Signal Fire adds six more operator skins to its track, for Yard Dog, Wren, Cipher, Tinker, Halcyon and Rook. Every other reward stays on the tier it was on. They arrive with the season on December 28.',
+    ],
+  },
+  {
     build: '1118-2', date: '2026-11-18', title: 'Fresh start',
     items: [
       'Fresh start: all progress has been reset for everyone. Levels, prestige, unlocks, mastery, stats, match history, records, friends\' cards, challenges and season and ranked progress all start again from zero, and your callsign is asked again.',

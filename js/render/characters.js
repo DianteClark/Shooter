@@ -75,7 +75,7 @@ const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke:
 // widths narrow or widen every torso vertex by its height, so one kit fits every build.
 // Skins ride on the same instances: aOp.y is the gear slot plus 4 x the glow mode, aSkin the gear recolour (rgb,
 // strength) and, on torsos and heads, aTint the accent colour (zero keeps the baked one). The tag is described at tag().
-export const MAX_OPERATORS = 32;
+export const MAX_OPERATORS = 40;
 // Graveyard Shift: the undead take four slots after the roster's MAX_OPERATORS (renderer only; see zm-looks.js), so the
 // uniform tables hold OP_SLOTS. ALL_OPS is the table the shader uniforms and per-operator numbers are built from.
 const ZM_OP_BASE = MAX_OPERATORS;

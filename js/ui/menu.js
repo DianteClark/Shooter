@@ -48,7 +48,7 @@ import { icon } from './icons.js';
 function titleEmotes() {
   const list = Progress.emotes();
   return `<div class="ttl-emote-box">
-    <div class="ttl-emotes" hidden>${list.map((e, i) => `<button class="ttl-em${e.unlocked ? '' : ' locked'}" data-act="titleEmotePlay" data-i="${i}" data-sound="none">${icon(e.unlocked ? e.icon : 'ui:lock', { size: 14 })}<b>${esc(e.name)}</b></button>`).join('')}</div>
+    <div class="ttl-emotes" hidden>${list.map((e, i) => (e.unlock?.sig && !e.unlocked ? '' : `<button class="ttl-em${e.unlocked ? '' : ' locked'}" data-act="titleEmotePlay" data-i="${i}" data-sound="none">${icon(e.unlocked ? e.icon : 'ui:lock', { size: 14 })}<b>${esc(e.name)}</b></button>`)).join('')}</div>
     <button class="ttl-emote" data-act="titleEmote" data-sound="tab" aria-label="Emotes">${icon('ui:user', { size: 17 })}<b>Emote</b></button>
   </div>`;
 }

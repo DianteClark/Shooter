@@ -53,6 +53,11 @@ to everyone; the character plays it (`emotePose`) until it ends or its player mo
 a finisher. During battle royale's pregame (aboard the transport, where nobody is drawn) a squadmate's emote shows as a
 feed line. On the title screen the Emote button plays one on the operator in the yard.
 
+Signature emotes (appended after the eight): one per Season 2 operator, earned at that operator's own mastery tier 3
+(`unlock: { sig, who, tier }`, judged on `ctx.ops`; the track lists it as an `emote:<id>` reward) and then played as any
+operator: Ripcord (Skylark), Heads or Tails (Gambit), Last Rites (Corvid), Empty Pockets (Linnet), Advance (Garrison),
+Podium (Brigid). The wheel and the title row show them only once earned, so a new save still sees the 4 x 2 wheel.
+
 ## Graveyard Shift sounds
 `js/audio/zm-sfx.js`, all synthesised: groans from the undead near you (runners rasp, brutes and the boss bellow; more
 often the more there are), claw swipes and hits, the mystery crate (lid, music box while it rolls, offer chime, the

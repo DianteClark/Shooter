@@ -1,5 +1,5 @@
 // Finishing moves and emotes, headless (docs/FINISHERS.md, roadmap item 32): node dev/sim-finishers.mjs [--quick]
-//   data         six finishers, eight emotes, unique ids, lengths 1.2..1.8 s, unlock rules and texts
+//   data         six finishers, eight emotes and six signature ones, unique ids, lengths 1.2..1.8 s, unlock rules and texts
 //   rules        reach and facing: from behind yes, face to face no, a downed enemy from any side, teammates never,
 //                walls block, spawn protection blocks, Graveyard Shift has none
 //   finish       a phone's 'finish' command pins both players for the move's length, then the target dies with the
@@ -57,7 +57,11 @@ function data() {
   section('data');
   ok(FINISHERS.length >= 4 && FINISHERS.length <= 6 && new Set(FINISHERS.map(f => f.id)).size === FINISHERS.length, `${FINISHERS.length} finishers, unique ids`);
   ok(FINISHERS.every(f => f.dur >= 1.2 && f.dur <= 1.8), 'every finisher lasts 1.2 to 1.8 s');
-  ok(EMOTES.length >= 6 && EMOTES.length <= 8 && new Set(EMOTES.map(e => e.id)).size === EMOTES.length, `${EMOTES.length} emotes, unique ids`);
+  // Eight shared emotes, then one signature emote per Season 2 operator (unlock.sig: earned on that operator's track).
+  const shared = EMOTES.filter(e => !e.unlock.sig), sigs = EMOTES.filter(e => e.unlock.sig);
+  ok(shared.length === 8 && sigs.length === 6 && EMOTES.slice(0, 8).every(e => !e.unlock.sig) && new Set(EMOTES.map(e => e.id)).size === EMOTES.length, `${EMOTES.length} emotes (${sigs.length} signature), unique ids`);
+  ok(sigs.every(e => unlockText(e.unlock) === `Reach ${e.unlock.who} mastery tier ${e.unlock.tier}` && !unlockOk(e.unlock, { level: 999, opTier: 5, season: 100 }) && unlockOk(e.unlock, { ops: { [e.unlock.sig]: e.unlock.tier } })),
+    'signature emotes open only on their own operator\'s tier');
   ok(EMOTES.filter(e => !Object.keys(e.unlock).length).length >= 3 && EMOTES.some(e => Object.keys(e.unlock).length), 'some emotes are default, some unlock');
   ok(FINISHERS.some(f => f.unlock.opTier) && FINISHERS.some(f => f.unlock.season) && FINISHERS.some(f => f.unlock.level), 'finishers unlock by level, operator mastery and the season track');
   ok(unlockOk({}, {}) && !unlockOk({ level: 8 }, { level: 7 }) && unlockOk({ level: 8 }, { level: 8 }) && !unlockOk({ opTier: 3 }, { opTier: 2 }) && unlockOk({ season: 30 }, { season: 31 }), 'unlock rules');

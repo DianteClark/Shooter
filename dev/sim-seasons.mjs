@@ -308,6 +308,13 @@ console.log('season 2');
       : r.kind === 'weapon' ? !!WEAPONS[r.id] : r.kind === 'operator' ? OPERATORS.some(o => o.id === r.id) : false);
     ok(tr.length === 100 && tr.every(real), 'Season 2: 100 tiers, every reward in its table', tr.filter(r => !real(r)).map(r => r.own).join(','));
     ok(tr[24].id === 'antimat' && tr[74].id === 'mako', 'tier 25 the Anti-Materiel, tier 75 Mako');
+    // The Signal Fire set: 14 skins, the six new ones on tiers that held an emblem; every other tier as the S1 layout.
+    const base = I.trackRewards(S1);
+    ok(tr.filter(r => r.kind === 'skin').length === 14 && S2.fillerSkinTiers.every((t, i) => tr[t - 1].id === `skin:${S2.skins[8 + i][0]}-s2` && base[t - 1].kind === 'emblem'),
+      'Season 2: six more skins on former emblem tiers');
+    ok(tr.every((r, i) => S2.fillerSkinTiers.includes(r.tier) || r.kind === base[i].kind) && new Set(tr.map(r => r.own)).size === 100, 'every other Season 2 reward keeps its tier; no reward twice');
+    ok(I.seasonEmblems(S2).every(e => tr.some(r => r.id === e[0])), 'every Season 2 emblem is still on the track');
+    ok(S2.skins.every(([op]) => S.dateLocked('skin', `skin:${op}-s2`, at(2026, 12, 27)) && !S.dateLocked('skin', `skin:${op}-s2`, at(2026, 12, 28))), 'the whole Signal Fire set waits for Season 2');
     ok(Progress.camos('ar').some(c => c.camo.id === s2camo), 'Season 2 camos show in the picker now');
     Progress.applySeasonMatch({ xp: S.TIER_XP * 100, counts: {}, career: { kills: 1, deaths: 1, won: true } });
     const got = Progress.claimSeason();
@@ -398,7 +405,8 @@ console.log('names');
   // list the same way.
   // + the weekly events' emblems (js/shared/events.js) and the tournament crest (docs/TOURNAMENTS.md), kept out the same way.
   const { EVENT_EMBLEMS, TOURNEY_EMBLEMS } = await import('../js/ui/emblems.js');
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 + 1 + 12 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
+  // 94 - 6: Season 2's Signal Fire skin set took six emblem tiers (fillerSkinTiers), and those emblems left the season.
+  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 - 6 + 1 + 12 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
   // The weekly events' rewards and names clash with nothing either.
   const { EVENTS } = await import('../js/shared/events.js');
   const evNames = EVENTS.flatMap(e => [e.reward.name]);

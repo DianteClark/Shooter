@@ -1,6 +1,6 @@
 // The rules of progression as pure functions and data: no DOM, no storage, runs in node.
 // js/ui/progress.js holds the one save and applies these rules to it.
-import { FINISHER_IDS } from './finishers.js';
+import { FINISHER_IDS, signatureEmote } from './finishers.js';
 import { CAMOS, TRACERS, KILL_EFFECTS } from './camos.js';
 import { PERKS, PERK_IDS, PRO, TACTICALS, LETHALS, STREAKS, normalizeLoadout, gatePerks } from './catalog.js';
 import { MAX_HP, PRIMARY_IDS, WEAPON_IDS, WEAPON_CATEGORY, FFA_TEAM, GOLDEN_ID } from './constants.js';
@@ -643,7 +643,9 @@ const MASTERY_OPERATORS = [['trooper', 'Trooper'], ['wisp', 'Wisp'], ['anvil', '
   ['cipher', 'Cipher'], ['harrow', 'Harrow'], ['sable', 'Sable'], ['marshal', 'Marshal'], ['flint', 'Flint'], ['nyx', 'Nyx'],
   ['halcyon', 'Halcyon'], ['tinker', 'Tinker'], ['rook', 'Rook'], ['mako', 'Mako'], ['seraph', 'Seraph'], ['warden', 'Warden'],
   // Extraction exclusives.
-  ['courier', 'Courier'], ['nightjar', 'Nightjar']];
+  ['courier', 'Courier'], ['nightjar', 'Nightjar'],
+  // Season 2 operators.
+  ['skylark', 'Skylark'], ['gambit', 'Gambit'], ['corvid', 'Corvid'], ['linnet', 'Linnet'], ['garrison', 'Garrison'], ['brigid', 'Brigid']];
 const OPERATOR_SIGNATURE = {
   trooper: T('multi', 15, 'Get 15 multi-kills'),
   wisp: T('slideKills', 20, 'Get 20 kills while sliding'),
@@ -674,6 +676,12 @@ const OPERATOR_SIGNATURE = {
   warden: T('streak5', 10, 'Reach a 5-kill streak 10 times'),
   courier: T('assists', 40, 'Get 40 assists'),
   nightjar: T('long', 25, 'Get 25 longshots'),
+  skylark: T('slideKills', 20, 'Get 20 kills while sliding'),
+  gambit: T('closeKills', 50, 'Get 50 kills within 8 m'),
+  corvid: T('hurtKills', 40, 'Get 40 kills while hurt'),
+  linnet: T('obj', 20, 'Capture, confirm, plant or defuse 20 times'),
+  garrison: T('assists', 40, 'Get 40 assists'),
+  brigid: T('multi', 15, 'Get 15 multi-kills'),
 };
 const operatorTiers = (id, name) => [
   T('secs', 900, `Play 15 minutes as ${name}`), T('kills', 50, `Get 50 kills as ${name}`),
@@ -681,7 +689,7 @@ const operatorTiers = (id, name) => [
 ];
 
 // Rewards by tier. Gear (4 tiers): XP, bronze badge, calling card, gold badge and XP. Operators (5 tiers): XP, bronze
-// badge and veteran skin, elite skin, calling card and specialist skin, mastery skin with the gold badge and XP. Skin ids
+// badge and veteran skin, elite skin (and a signature emote, Season 2 operators), calling card and specialist skin, mastery skin with the gold badge and XP. Skin ids
 // are the operator roster's own (js/ui/operators.js SKINS: 'skin:<op>-2' .. 'skin:<op>-5'); the tier 2 and 4 skins came
 // with the operators wave, and saves past those tiers have them at once (rewards are read from the tiers reached).
 // Cards are rows in CARDS; badges are drawn by js/ui/mastery.js.
@@ -691,6 +699,10 @@ function trackRewards(kind, item, name, tier, count) {
   if (tier === 1) out.push({ kind: 'xp', xp: 1000, name: '1,000 XP' });
   if (tier === 2) out.push({ kind: 'badge', id: `badge:${item}-1`, name: `${name} bronze badge` });
   if (op && tier >= 2) out.push({ kind: 'skin', id: `skin:${item}-${tier}`, name: `${name} ${OP_SKIN_NAME[tier]} skin` });
+  // A signature emote (js/shared/finishers.js EMOTES, unlock.sig) at the tier it names. Its unlock is read from the
+  // track's tier directly; the id here is for the track's reward list and the results stamp.
+  const sig = op ? signatureEmote(item) : null;
+  if (sig && tier === sig.unlock.tier) out.push({ kind: 'emote', id: `emote:${sig.id}`, name: `${sig.name} emote` });
   if (tier === (op ? 4 : 3)) out.push({ kind: 'card', id: `card:mastery-${item}`, name: `${name} Master` });
   if (tier === count) out.push({ kind: 'badge', id: `badge:${item}-2`, name: `${name} gold badge` }, { kind: 'xp', xp: op ? 5000 : 3000, name: `${op ? '5,000' : '3,000'} XP` });
   return out;
@@ -2131,6 +2143,7 @@ export class ChallengeTally {
           if (cat) this.add(`cat:${cat}`);
           this.add(`gun:${e.weapon}`);
           if (e.head) this.add('head');
+          if (MODES[this.modeId]?.large && MODES[this.modeId]?.teamSize >= 16) this.add('gw:kills');     // Ground War (an operator challenge).
           if ((e.dist ?? 0) >= longshotDist(e.weapon)) this.add('long');
           if ((e.dist ?? 99) <= CLOSE_RANGE) this.add('closeKills');
           if (me.sliding) this.add('slideKills');
@@ -2183,11 +2196,13 @@ export class ChallengeTally {
   }
 
   // `brPlace`: a battle royale squad's placing (1 = won), from awards.js; null elsewhere.
-  finish({ won = false, place = null, brPlace = null } = {}) {
+  // `ranked`: a Ranked playlist match (awards.js), for the ranked:played / ranked:won lifetime tallies.
+  finish({ won = false, place = null, brPlace = null, ranked = false } = {}) {
     const rules = this.rules ?? 'tdm';
     this.add('played');
     this.add(`played:${rules}`);
     if (won) { this.add('wins'); this.add(`won:${rules}`); }
+    if (ranked) { this.add('ranked:played'); if (won) this.add('ranked:won'); }
     if (place !== null && place <= 3) { this.add('top3'); this.add(`top3:${rules}`); }
     if (rules === 'br') {
       const k = MODES[this.modeId]?.rebound ? 'rb' : 'br', at = won ? 1 : brPlace;
