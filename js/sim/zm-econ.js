@@ -9,16 +9,20 @@
 //   plates    the armour bench: plates soak claws before health (the bar of three in the HUD)
 //   traps     armed for points, they hurt everything standing in them; kills pay ZE.trap.pay
 //   exfil     from round ZE.exfil.from: a final wave for ZE.exfil.hold s, then whoever is on the pad gets out
-//   quest     relics picked up across the map, set on the altar: the Gravewarden rises
+//   quest     relics picked up across the map, set on the altar: the Gravewarden rises; or (Polestar Relay, the layout's
+//             questKind 'radio') three radios tuned with the power on, then the console: the Listener rises
+//   wonders   the crate's wonder weapons (ZM_WONDERS): the Stormcoil's chain lightning, the Rimecaster's freeze
 // Events: {t:'zbench', state, by, gun, tier}, {t:'ztrap', i, state, by}, {t:'zsupply', item, by, x, z},
 // {t:'zfx', k: 'arc'|'burn'|'frost', ox?, oz?, x, z}, {t:'turret_shot', ox, oz, x, z} (sentry and drone fire, drawn as
 // the turret's), {t:'explosion', ...} (strike shells, lures, burst rounds), {t:'zexfil', state, by?, fail?},
 // {t:'zescape', round, ids}, {t:'zrelic', i, by, n}, {t:'zwarden', state, by}, {t:'zbreath', id} (Last Breath),
+// {t:'ztune', i, state: 1 tuning | 0 lost, by} (a radio), {t:'zpulse', x, z, r, wind} (the Listener's frost pulse),
+// {t:'zfx', k: 'freeze'|'shatter', x, z} (the Rimecaster),
 // {t:'plates_break', id} as the Plate Drop streak's.
 import { WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { ZM, ZE, ZM_KINDS, ZM_TRAP_KINDS, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, supplyCost, roundMix, isBossKind } from '../shared/zombies.js';
+import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg } from '../shared/zombies.js';
 import { brArm } from './br.js';
 import { zmTierDef } from './zm-phone.js';
 
@@ -36,7 +40,7 @@ export class ZmEcon {
     this.gear = [];
     this.gearId = 0;
     this.exfil = { state: 0, timer: 0, by: -1, spawnT: 0 };
-    this.quest = { got: 0, state: 0, respawnT: 0, callT: 0 };
+    this.quest = { got: 0, state: 0, respawnT: 0, callT: 0, tuneI: -1, tuneBy: -1, tuneT: 0, pulseT: 0, pulse: null };
     this.wardenSeat = -1;
     this.escaped = null;      // Ids that got out, once the exfil lands.
     this._fxT = new Map();    // Per attacker: when a tier-3 effect last fired (a rate limit).
@@ -53,6 +57,7 @@ export class ZmEcon {
     if (this.gear.length) this._stepGear(dt);
     this._stepBurns(dt);
     if (this.exfilOn) this._stepExfil(dt);
+    if (this.quest.tuneI >= 0) this._stepTune(dt);
     if (this.quest.state === 1) this._stepWarden(dt);
     // Bots wear their upgraded gun's look (a phone sets its own, js/game/match.js).
     if (sim.tick % 15 === 3) {
@@ -124,6 +129,13 @@ export class ZmEcon {
       case 'relic': {
         const q = this.quest;
         if (q.state || q.got & (1 << u.i)) return null;
+        if (this.L.questKind === 'radio') {
+          // A radio: it needs the power, and someone standing by it while it locks on (_stepTune).
+          if (!R.power || q.tuneI >= 0) return null;
+          Object.assign(q, { tuneI: u.i, tuneBy: p.index, tuneT: 0 });
+          sim._emit({ t: 'ztune', i: u.i, state: 1, by: p.id });
+          return 0;
+        }
         q.got |= 1 << u.i;
         const n = this.L.relics.filter(r => q.got & (1 << r.i)).length;
         sim._emit({ t: 'zrelic', i: u.i, by: p.id, n, of: this.L.relics.length });
@@ -132,8 +144,8 @@ export class ZmEcon {
       case 'altar': {
         const q = this.quest;
         if (q.state || this.L.relics.some(r => !(q.got & (1 << r.i)))) return null;
-        q.state = 1; q.respawnT = 0.5; q.callT = 8;
-        sim._emit({ t: 'zwarden', state: 1, by: p.id });
+        q.state = 1; q.respawnT = 0.5; q.callT = 8; q.pulseT = ZM_LISTENER.every;
+        sim._emit({ t: 'zwarden', state: 1, by: p.id, k: this.bossKind });
         return 0;
       }
       default: return null;
@@ -189,6 +201,7 @@ export class ZmEcon {
   gunHit(target, attacker, dmg, weapon) {
     const t = attacker.zm.tiers[weapon] ?? 0;
     if (!t) return dmg;
+    if (t >= 5) return this._wonder(target, attacker, weapon);
     dmg *= ZE.tiers[t].dmg;
     if (t >= 3) this._effect(target, attacker, dmg, weapon);
     return dmg;
@@ -224,6 +237,57 @@ export class ZmEcon {
         if (q === target || !q.alive || Math.hypot(q.ps.x - x, q.ps.z - z) > 2.6) continue;
         sim._damage(q, attacker, dmg * 0.5, weapon, 0, 'zfx');
       }
+    }
+  }
+
+  // ---- Wonder weapons (ZM_WONDERS) ----
+
+  // A wonder weapon's hit: its damage (a share of the round's health) and its effect. Returns the damage.
+  _wonder(target, attacker, weapon) {
+    const W = zmWonderOf(weapon), sim = this.sim, R = this.R, now = sim.time;
+    if (!W) return 0;
+    const share = k => (isBossKind(target.zk) ? Math.max(1, (target.zMax ?? 1) * W.boss) : Math.max(1, R.hp * k));
+    if (W.id === 'coil') {
+      // The bolt jumps on from the one it hit to the nearest not yet struck, each jump a little weaker.
+      let from = target, k = W.chainK;
+      const hit = new Set([target]);
+      for (let n = 0; n < W.chain; n++) {
+        let best = null, bd = W.chainR;
+        for (const q of R.horde) {
+          if (!q.alive || hit.has(q)) continue;
+          const d = Math.hypot(q.ps.x - from.ps.x, q.ps.z - from.ps.z);
+          if (d < bd && hasLineOfSight(sim.map, from.ps.x, from.ps.z, q.ps.x, q.ps.z)) { bd = d; best = q; }
+        }
+        if (!best) break;
+        hit.add(best);
+        sim._emit({ t: 'zfx', k: 'arc', ox: r2(from.ps.x), oz: r2(from.ps.z), x: r2(best.ps.x), z: r2(best.ps.z) });
+        sim._damage(best, attacker, isBossKind(best.zk) ? Math.max(1, best.zMax * W.boss * k) : R.hp * W.hit * k, weapon, 0, 'zfx');
+        from = best; k *= W.chainK;
+      }
+      return share(W.hit);
+    }
+    // The Rimecaster: chill builds with each hit (and thaws a second after the last); at `chill` the zombie freezes.
+    if (!isBossKind(target.zk)) {
+      if (!(target.zChillT > now)) target.zChill = 0;
+      target.zChill = (target.zChill ?? 0) + 1; target.zChillT = now + 1;
+      if (target.zChill >= W.chill && !(target.zFrozenT > now)) {
+        target.zFrozenT = now + W.freeze; target.zFrozeBy = attacker.index; target.zSwing = 0;
+        sim._emit({ t: 'zfx', k: 'freeze', x: r2(target.ps.x), z: r2(target.ps.z) });
+      }
+    }
+    target.zSlowT = Math.max(target.zSlowT ?? 0, now + 1.5);
+    return share(W.hit);
+  }
+
+  // A zombie killed frozen shatters, and the shards cut the undead round it.
+  _shatter(target, killer) {
+    const W = zmWonderOf('machpistol'), sim = this.sim, x = target.ps.x, z = target.ps.z;
+    target.zFrozenT = 0;
+    sim._emit({ t: 'zfx', k: 'shatter', x: r2(x), z: r2(z) });
+    if (!killer?.zm) return;
+    for (const q of this.R.horde) {
+      if (q === target || !q.alive || Math.hypot(q.ps.x - x, q.ps.z - z) > W.shatterR) continue;
+      sim._damage(q, killer, isBossKind(q.zk) ? Math.max(1, q.zMax * W.boss * 4) : this.R.hp * W.shatterK, W.gun, 0, 'zfx');
     }
   }
 
@@ -445,9 +509,30 @@ export class ZmEcon {
 
   // ---- The quest's boss ----
 
+  // The quest's boss: the Gravewarden, or on a radio quest the Listener.
+  get bossKind() { return this.L.questKind === 'radio' ? ZK.listener : ZK.warden; }
+
+  // A radio locking on: its tuner has to stay by it (up, in reach) for ZE.quest.tune s, or it is lost.
+  _stepTune(dt) {
+    const sim = this.sim, q = this.quest, r = this.L.relics[q.tuneI], p = sim.players[q.tuneBy];
+    const near = r && p?.zm && p.alive && !p.downed && !p.away && Math.hypot(p.ps.x - r.x, p.ps.z - r.z) < ZM.useReach + 0.6;
+    if (!near || q.state) {
+      sim._emit({ t: 'ztune', i: q.tuneI, state: 0, by: p?.id ?? null });
+      Object.assign(q, { tuneI: -1, tuneBy: -1, tuneT: 0 });
+      return;
+    }
+    q.tuneT += dt;
+    if (q.tuneT < ZE.quest.tune) return;
+    q.got |= 1 << q.tuneI;
+    const n = this.L.relics.filter(x => q.got & (1 << x.i)).length;
+    sim._emit({ t: 'zrelic', i: q.tuneI, by: p.id, n, of: this.L.relics.length, radio: 1 });
+    Object.assign(q, { tuneI: -1, tuneBy: -1, tuneT: 0 });
+  }
+
   _stepWarden(dt) {
-    const sim = this.sim, R = this.R, q = this.quest;
+    const sim = this.sim, R = this.R, q = this.quest, kind = this.bossKind;
     const w = this.wardenSeat >= 0 ? sim.players[this.wardenSeat] : null;
+    if (w?.alive && w.zk === ZK.listener) { this._stepListener(w, dt); return; }
     if (w?.alive && w.zk === 4) {
       // It calls two runners up beside it every so often.
       q.callT -= dt;
@@ -470,8 +555,39 @@ export class ZmEcon {
     }
     const spot = R._bossSpot() ?? this._nearAltar() ?? R._riser();
     if (!spot) return;
-    const seat = this._extra(4, spot);
+    const seat = this._extra(kind, spot);
     if (seat) { this.wardenSeat = seat.index; sim._emit({ t: 'zwarden', state: 3 }); }
+  }
+
+  // The Listener: a frost pulse round it every so often (the ring is drawn while it swells: step out), and Crawlers.
+  _stepListener(w, dt) {
+    const sim = this.sim, R = this.R, q = this.quest, P = ZM_LISTENER;
+    q.callT -= dt;
+    if (q.callT <= 0) {
+      q.callT = P.call;
+      for (let k = 0; k < P.calls; k++) {
+        const a = R.rng() * Math.PI * 2, x = w.ps.x + Math.cos(a) * 3, z = w.ps.z + Math.sin(a) * 3;
+        if (sim.nav?.isWalkable(x, z)) this._extra(ZK.crawler, { x, z });
+      }
+    }
+    if (q.pulse) {
+      q.pulse.t -= dt;
+      if (q.pulse.t > 0) return;
+      const { x, z } = q.pulse;
+      q.pulse = null;
+      for (const p of R.crew) {
+        if (!p.alive || p.downed || p.away || Math.hypot(p.ps.x - x, p.ps.z - z) > P.r) continue;
+        if (!hasLineOfSight(sim.map, x, z, p.ps.x, p.ps.z)) continue;
+        sim._damage(p, w, P.dmg * clawDmg(ZK.listener, R.round) / ZM.kinds.listener.dmg, NO_GUN, 0);
+      }
+      sim._emit({ t: 'zfx', k: 'shatter', x: r2(x), z: r2(z), r: P.r });
+      return;
+    }
+    q.pulseT -= dt;
+    if (q.pulseT > 0) return;
+    q.pulseT = P.every;
+    q.pulse = { x: w.ps.x, z: w.ps.z, t: P.wind };
+    sim._emit({ t: 'zpulse', x: r2(w.ps.x), z: r2(w.ps.z), r: P.r, wind: P.wind });
   }
 
   _nearAltar() {
@@ -486,11 +602,12 @@ export class ZmEcon {
 
   // A zombie down: the Gravewarden's end pays everyone.
   onKill(target, killer) {
-    if (target.index !== this.wardenSeat || target.zk !== 4) return;
+    if (target.zFrozenT > this.sim.time) this._shatter(target, killer);
+    if (target.index !== this.wardenSeat || !isQuestBoss(target.zk)) return;
     this.wardenSeat = -1;
     this.quest.state = 2;
     for (const p of this.R.crew) if (p.zm && !p.away) this.R._pay(p, ZE.quest.pts, false);
-    this.sim._emit({ t: 'zwarden', state: 2, by: killer?.id ?? null });
+    this.sim._emit({ t: 'zwarden', state: 2, by: killer?.id ?? null, k: this.bossKind });
   }
 
   // The warden sank (stuck): it rises again.
@@ -559,7 +676,7 @@ export class ZmEcon {
       this.traps.flatMap(t => [t.state, r1(t.timer)]),
       this.gear.flatMap(g => [GEAR_KINDS.indexOf(g.kind), r1(g.x), r1(g.z), ((Math.round(g.aim / (Math.PI * 2) * 64) % 64) + 64) % 64, r1(Math.max(0, g.life)), g.owner]),
       [this.exfil.state, r1(this.exfil.timer), this.exfil.by, this.R.crew.reduce((m, p, k) => m | (this.escaped?.includes(p.id) ? 1 << k : 0), 0)],
-      [this.quest.got, this.quest.state], this.wardenSeat];
+      [this.quest.got, this.quest.state, this.quest.tuneI, r1(this.quest.tuneT), this.quest.tuneBy], this.wardenSeat];
   }
 
   decode(a) {
@@ -578,7 +695,7 @@ export class ZmEcon {
       Object.assign(this.exfil, { state: ex[0], timer: ex[1] / 10, by: ex[2] });
       this.escaped = ex[3] ? this.R.crew.filter((p, k) => ex[3] & (1 << k)).map(p => p.id) : null;
     }
-    if (q) Object.assign(this.quest, { got: q[0], state: q[1] });
+    if (q) Object.assign(this.quest, { got: q[0], state: q[1], tuneI: q[2] ?? -1, tuneT: (q[3] ?? 0) / 10, tuneBy: q[4] ?? -1 });
     this.wardenSeat = ws ?? -1;
   }
 
@@ -591,7 +708,8 @@ export class ZmEcon {
     this.gearId = this.gear.reduce((m, g) => Math.max(m, g.id), 0) + 10;
     for (const g of this.gear) if (g.kind === 'lure') { g.index = 1000 + g.id; g.ps = { x: g.x, z: g.z }; }
     Object.assign(this.exfil, old.exfil, { spawnT: 1 });
-    Object.assign(this.quest, { got: old.quest.got, state: old.quest.state, respawnT: 0.5, callT: 8 });
+    Object.assign(this.quest, { got: old.quest.got, state: old.quest.state, respawnT: 0.5, callT: 8, pulseT: ZM_LISTENER.every, pulse: null,
+      tuneI: old.quest.tuneI ?? -1, tuneBy: old.quest.tuneBy ?? -1, tuneT: old.quest.tuneT ?? 0 });
     this.wardenSeat = old.wardenSeat;
   }
 
@@ -602,7 +720,7 @@ export class ZmEcon {
       traps: this.traps.map(t => ({ state: t.state, timer: t.timer })),
       gear: this.gear,
       exfil: { state: this.exfil.state, timer: this.exfil.timer, by: this.exfil.by },
-      quest: { got: this.quest.got, state: this.quest.state },
+      quest: { got: this.quest.got, state: this.quest.state, tuneI: this.quest.tuneI, tuneT: this.quest.tuneT, tuneBy: this.quest.tuneBy },
       escaped: this.escaped,
     };
   }

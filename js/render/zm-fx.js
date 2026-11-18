@@ -16,7 +16,7 @@
 // About eleven draw calls whatever the round, a few hundred triangles each (docs/BR-PERF.md: no per-zombie cost).
 import * as THREE from 'three';
 import { getGun } from './guns.js';
-import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS } from '../shared/zombies.js';
+import { ZM, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, zmWonderOf } from '../shared/zombies.js';
 import { ZmPowerFx } from './zm-power.js';     // A layout with a power switch (Ashgrove Halt): the switch, dark machines.
 import { ZmEconFx } from './zm-econ-fx.js';     // ROADMAP item 36: bench, terminal, armour, traps, exfil, quest, gear.
 import { ZmKindsFx } from './zm-kinds-fx.js';   // Specials: acid globs and puddles, shields, bursts, the fog round.
@@ -251,9 +251,9 @@ export class ZmFx {
       if (gun !== this.offerGun) {
         if (this.offer) { this.crate.remove(this.offer); this.offer = null; }
         this.offerGun = gun;
-        const proto = gun ? getGun(gun) : null;
+        const proto = gun ? getGun(zmWonderOf(gun)?.model ?? gun) : null;     // A wonder weapon in its own model.
         if (proto?.geometry) {
-          this.offer = new THREE.Mesh(proto.geometry, new THREE.MeshBasicMaterial({ color: b.state === 2 ? 0xfff0b0 : 0x9fd8ff }));
+          this.offer = new THREE.Mesh(proto.geometry, new THREE.MeshBasicMaterial({ color: b.state === 2 ? (zmWonderOf(gun) ? 0x8fe8ff : 0xfff0b0) : 0x9fd8ff }));
           this.offer.scale.setScalar(1.25);
           this.crate.add(this.offer);
         }

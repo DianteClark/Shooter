@@ -1281,6 +1281,35 @@ const FACTORIES = {
 Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, longGunGrips,
   fitShellCuff, fitGuideRail, fitVenturi }));
 
+// Graveyard Shift's wonder weapons (js/shared/zombies.js ZM_WONDERS): our own models, drawn in place of the gun they
+// ride on in that mode only (characters.js, zm-fx.js). Both low-poly, both read from above by their silhouettes.
+// Stormcoil: a stubby body with a fat copper coil wound round the barrel (three bright rings), two prongs at the
+// muzzle and a glass capacitor on top. Rimecaster: a squat tank on the back, a flared emitter with frosted fins.
+FACTORIES['zw-coil'] = () => {
+  const k = kit(), b = k.b;
+  k.body().box(0, 0.2, 0, 0.5, 0.26, 0.18, 0.03);                                         // Receiver.
+  k.dark().prismX(0.22, 0.86, 0.22, 0, 0.06, 0.06, 6);                                    // Core rod.
+  k.metal(); for (let i = 0; i < 4; i++) b.prismX(0.3 + i * 0.13, 0.38 + i * 0.13, 0.22, 0, 0.13, 0.13, 8);   // Copper windings.
+  k.accent(); for (let i = 0; i < 3; i++) b.prismX(0.39 + i * 0.13, 0.42 + i * 0.13, 0.22, 0, 0.11, 0.11, 8); // Lit gaps.
+  k.dark().box(0.9, 0.3, 0, 0.12, 0.04, 0.04); k.dark().box(0.9, 0.14, 0, 0.12, 0.04, 0.04);                  // Prongs.
+  k.accent().prismY(0.33, 0.5, -0.08, 0, 0.07, 0.07, 6);                                  // Capacitor.
+  k.metal().box(-0.08, 0.52, 0, 0.18, 0.04, 0.16);
+  pistolGrip(k, -0.08, 0.32, 0.14);
+  return { geometry: b.build(), muzzle: [0.98, 0.22, 0], fore: [0.3, 0.02, -0.05], eject: [0.05, 0.3, 0.1], length: 1.0 };
+};
+FACTORIES['zw-rime'] = () => {
+  const k = kit(), b = k.b;
+  k.body().box(0.05, 0.2, 0, 0.56, 0.22, 0.2, 0.03);                                      // Body.
+  k.metal().prismX(-0.42, -0.05, 0.3, 0, 0.14, 0.14, 8);                                  // Coolant tank.
+  k.accent().prismX(-0.36, -0.3, 0.3, 0, 0.15, 0.15, 8);
+  k.dark().prismX(0.32, 0.62, 0.2, 0, 0.06, 0.12, 6);                                     // Emitter flare.
+  k.accent(); for (let i = 0; i < 3; i++) b.box(0.42 + i * 0.08, 0.2, 0, 0.03, 0.3, 0.3);  // Frost fins.
+  k.accent().prismX(0.62, 0.68, 0.2, 0, 0.1, 0.1, 6);
+  k.dark().prismX(-0.05, 0.3, 0.36, 0, 0.025, 0.025, 4);                                  // Feed line.
+  pistolGrip(k, 0.04, 0.32, 0.14);
+  return { geometry: b.build(), muzzle: [0.7, 0.2, 0], fore: [0.36, 0.02, -0.05], eject: [0.1, 0.3, 0.1], length: 1.1 };
+};
+
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.
 const cache = new Map();
 // Stable kit object -> Map(weaponId -> gun). Kits are canonical objects, so a per-frame call does no string work.

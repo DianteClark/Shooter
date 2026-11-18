@@ -9,9 +9,12 @@
 import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost } from '../shared/zombies.js';
+import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost, zmGunName, zmWonderOf } from '../shared/zombies.js';
 // The relic quest's clue, once from round 3 (dev/ui-zombies-test.py checks it reads whole at every width).
 export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still warm';
+// Polestar Relay's radio quest (layout questKind 'radio'): its own clue, and the names that go with it.
+export const RADIO_HINT = 'Static on the radios: with the power on, something might be listening';
+const questBossName = z => ZM_KIND_NAMES[z?.layout?.questKind === 'radio' ? 'listener' : 'warden'];
 
 
 const CSS = `
@@ -216,7 +219,7 @@ export class ZmHud {
     if (c.dbl !== dbl) { c.dbl = dbl; this.dblEl.hidden = !dbl; this.dblB.textContent = dbl; }
     this.bossEl.hidden = !z.boss;
     if (z.boss) this.bossBar.style.setProperty('--k', Math.max(0, z.boss.hp).toFixed(3));
-    const bossName = z.boss?.warden ? ZM_KIND_NAMES.warden : ZM_KIND_NAMES.boss;
+    const bossName = z.boss?.warden ? questBossName(z) : ZM_KIND_NAMES.boss;
     if (c.bossName !== bossName) { c.bossName = bossName; this.bossEl.querySelector('b').textContent = bossName; }
     this.#econ(z, me);
     this.#crew(view, me);
@@ -245,7 +248,9 @@ export class ZmHud {
       limit: me.zlimit ?? ZM.perkLimit, held, tier, bench: z.bench, traps: z.traps?.map(t => t.state), plates: me.zplates ?? 0, exfil: z.exfil?.state ?? 0, round: z.round, quest: z.quest }) : null;
     this.use = u;
     if (this.shopOpen && u?.kind !== 'terminal') this.#shop(false);     // Walked away from the terminal.
-    const key = u ? `${u.kind}:${u.i}:${u.ok}:${u.gun ?? ''}:${u.off ? 1 : 0}:${u.why ?? ''}:${u.cost}:${u.tier ?? ''}` : '';
+    // A radio being tuned shows how far it has got.
+    this.tunePct = u?.kind === 'relic' && z.quest?.tuneI === u.i ? Math.min(99, Math.floor((z.quest.tuneT ?? 0) / ZE.quest.tune * 100)) : -1;
+    const key = u ? `${u.kind}:${u.i}:${u.ok}:${u.gun ?? ''}:${u.off ? 1 : 0}:${u.why ?? ''}:${u.cost}:${u.tier ?? ''}:${this.tunePct}` : '';
     if (c.use !== key) {
       c.use = key;
       this.useEl.hidden = !u;
@@ -261,7 +266,7 @@ export class ZmHud {
 
   // The use button's two lines for what is in reach.
   #prompt(u, pts) {
-    const gun = u.gun ? WEAPONS[u.gun]?.name ?? u.gun : '';
+    const gun = u.gun ? zmGunName(u.gun, WEAPONS) : '';
     const price = u.ok || u.off ? fmt(u.cost) : `${fmt(u.cost)} · need ${fmt(u.cost - pts)} more`;
     const why = (lead = '') => (u.why ? `${lead ? `${lead} · ` : ''}${u.why}` : lead);
     switch (u.kind) {
@@ -269,7 +274,7 @@ export class ZmHud {
       case 'wall': return [`BUY ${gun}`, price];
       case 'ammo': return [`AMMO ${gun}`, price];
       case 'box': return ['MYSTERY CRATE', price];
-      case 'take': return [`TAKE ${gun}`, 'Free: it is yours'];
+      case 'take': return [`TAKE ${gun}`, zmWonderOf(u.gun) ? `Wonder weapon: ${zmWonderOf(u.gun).desc.toLowerCase()}` : 'Free: it is yours'];
       case 'power': return u.off ? ['POWER IS ON', why()] : [u.label.toUpperCase(), 'Free: lights the perk machines'];
       case 'perk': return [u.label.toUpperCase(), u.why ? why(fmt(u.cost)) : u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : price];
       case 'slot': return ['PERK SLOT', u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · Hold up to ${ZM.perkMax} perks` : price];
@@ -284,8 +289,13 @@ export class ZmHud {
       case 'benchtake': return [`TAKE ${gun}`, `Tier ${u.tier}: it is yours`];
       case 'trap': return [u.label.toUpperCase(), u.off ? why() : u.ok ? `${fmt(u.cost)} · armed for ${ZE.trap.on} s` : price];
       case 'exfil': return ['CALL EXFIL', u.off ? why(fmt(u.cost)) : u.ok ? `${fmt(u.cost)} · hold the pad ${ZE.exfil.hold} s` : price];
-      case 'relic': return ['PICK IT UP', 'An old lantern, still warm'];
-      case 'altar': return [u.off ? 'THE ALTAR' : 'SET THE RELICS', u.off ? why() : 'Something will answer'];
+      case 'relic':
+        if (u.label === 'Tuning') return [`TUNING ${Math.max(0, this.tunePct)}%`, why()];
+        if (u.label === 'Dead radio' || u.label === 'Tune the radio') return [u.label.toUpperCase(), u.off ? why() : `Free: stay by it ${ZE.quest.tune} s`];
+        return ['PICK IT UP', 'An old lantern, still warm'];
+      case 'altar':
+        if (u.label === 'Transmit' || u.label === 'Relay console') return [u.off ? 'RELAY CONSOLE' : 'TRANSMIT', u.off ? why() : 'Something out there will hear'];
+        return [u.off ? 'THE ALTAR' : 'SET THE RELICS', u.off ? why() : 'Something will answer'];
       default: return [u.label.toUpperCase(), price];
     }
   }
@@ -328,9 +338,11 @@ export class ZmHud {
     if (c.tier !== tk) {
       c.tier = tk;
       this.tierEl.hidden = !tier;
-      const col = tier >= 3 ? ZM_FX[zmFxOf(gun)].css : tier === 2 ? '#ffd659' : '#8fe08a';
+      // A wonder weapon (tier 5 and up): every pip lit in its own colour.
+      const W = tier >= 5 ? zmWonderOf(gun) : null;
+      const col = W ? W.css : tier >= 3 ? ZM_FX[zmFxOf(gun)].css : tier === 2 ? '#ffd659' : '#8fe08a';
       [...this.tierEl.children].forEach((n, i) => { n.classList.toggle('on', i < tier); n.style.setProperty('--k', col); });
-      this.tierEl.title = tier ? `Tier ${tier}${tier >= 3 ? `: ${ZM_FX[zmFxOf(gun)].name}` : ''}` : '';
+      this.tierEl.title = W ? `${W.name}: ${W.desc}` : tier ? `Tier ${tier}${tier >= 3 ? `: ${ZM_FX[zmFxOf(gun)].name}` : ''}` : '';
     }
     const X = z.exfil;
     const ex = X?.state === 1 ? String(Math.max(0, Math.ceil(X.timer))) : '';
@@ -349,11 +361,14 @@ export class ZmHud {
     }
     const q = z.quest, n = q && !q.state ? (z.layout?.relics ?? []).filter(r => q.got & (1 << r.i)).length : 0;
     const rel = n ? `${n}/${z.layout.relics.length}` : '';
-    if (c.relic !== rel) { c.relic = rel; this.relicEl.hidden = !rel; this.relicB.textContent = rel; }
+    if (c.relic !== rel) {
+      c.relic = rel; this.relicEl.hidden = !rel; this.relicB.textContent = rel;
+      this.relicB.nextElementSibling.textContent = z.layout?.questKind === 'radio' ? 'Radios' : 'Relics';
+    }
     // A hint at the quest: from round 3, once, while nobody has found a relic.
     if (!this.hinted && z.round >= 3 && z.state === 'round' && q && !q.got && z.layout?.relics?.length) {
       this.hinted = true;
-      this.hud.notify(QUEST_HINT);
+      this.hud.notify(z.layout.questKind === 'radio' ? RADIO_HINT : QUEST_HINT);
     }
   }
 
@@ -381,7 +396,7 @@ export class ZmHud {
   quietKill(e, view) {
     const t = view?.players?.find(p => p.id === e.target);
     if (!t?.ai) return false;
-    return t.zk !== 4 && t.zk !== 5;     // The Yardmaster's (4) and the Gravewarden's (5) deaths make the feed.
+    return t.zk !== 4 && t.zk !== 5 && t.zk !== 11;     // The Yardmaster's (4), the Gravewarden's (5) and the Listener's (11) deaths make the feed.
   }
 
   onEvent(e, view) {
@@ -401,7 +416,8 @@ export class ZmHud {
       case 'zdoor': this.hud.notify(`${name(e.by)} opened a gate`); break;
       case 'zlights': this.hud.banner(`${name(e.by) || 'Someone'} turned on the power`, 'The perk machines are live', 2200); break;
       case 'zbox':
-        if (e.state === 2 && e.by === me?.id) this.hud.notify(`The crate offers a ${WEAPONS[e.gun]?.name ?? e.gun}: take it`);
+        if (e.state === 2 && e.by === me?.id && zmWonderOf(e.gun)) this.hud.banner(zmWonderOf(e.gun).name, 'A wonder weapon: take it', 1800);
+        else if (e.state === 2 && e.by === me?.id) this.hud.notify(`The crate offers a ${WEAPONS[e.gun]?.name ?? e.gun}: take it`);
         if (e.state === 3) this.hud.notify('The crate is moving on');
         break;
       case 'zperk': if (e.id === me?.id && e.perk) this.hud.notify(`${ZM_PERKS[e.perk]?.name}: ${ZM_PERKS[e.perk]?.desc}`); break;
@@ -427,15 +443,24 @@ export class ZmHud {
         else if (e.fail) this.hud.banner('Nobody on the pad', 'The exfil left without you', 1800);
         break;
       case 'zescape': this.hud.banner(e.ids?.includes(me?.id) ? 'Escaped' : 'They got out', `Round ${e.round}`, 2400); break;
+      case 'ztune':
+        if (e.state === 1) this.hud.notify(`${e.by === me?.id ? 'You are' : `${name(e.by)} is`} tuning a radio: stay by it`);
+        else this.hud.notify('The radio lost the signal');
+        break;
       case 'zrelic': {
         const z = objOf(view);
+        if (e.radio || z?.layout?.questKind === 'radio') {
+          const con = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
+          this.hud.notify(e.n >= e.of ? `Radio ${e.n} of ${e.of} tuned: transmit from the console${con ? ` in the ${con}` : ''}` : `${e.by === me?.id ? 'You' : name(e.by)} tuned a radio: ${e.n} of ${e.of}`);
+          break;
+        }
         const altar = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
         this.hud.notify(e.n >= e.of ? `Relic ${e.n} of ${e.of}: set them on the altar${altar ? ` in the ${altar}` : ''}` : `${e.by === me?.id ? 'You' : name(e.by)} found a relic: ${e.n} of ${e.of}`);
         break;
       }
       case 'zwarden':
-        if (e.state === 1) this.hud.banner('The relics are set', `The ${ZM_KIND_NAMES.warden} wakes`, 2000, 'enemy');
-        else if (e.state === 2) this.hud.banner(`The ${ZM_KIND_NAMES.warden} falls`, `+${fmt(ZE.quest.pts)} each, and a calling card`, 2400);
+        if (e.state === 1) this.hud.banner(e.k === 10 ? 'Transmitting' : 'The relics are set', e.k === 10 ? `The ${ZM_KIND_NAMES.listener} answers` : `The ${ZM_KIND_NAMES.warden} wakes`, 2000, 'enemy');
+        else if (e.state === 2) this.hud.banner(`The ${e.k === 10 ? ZM_KIND_NAMES.listener : ZM_KIND_NAMES.warden} falls`, `+${fmt(ZE.quest.pts)} each, and a calling card`, 2400);
         break;
       default:
     }

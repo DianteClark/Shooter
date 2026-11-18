@@ -24,7 +24,7 @@ import { hasLineOfSight } from '../shared/geometry.js';
 import {
   ZM, ZE, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
   roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmMaxHp, clawDmg, zmPace, bruteCap, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
-  specialRound, ZM_ROUNDS, ZK,
+  specialRound, ZM_ROUNDS, ZK, isQuestBoss, isBossKind, zmWonderOf, ZM_WONDERS, ZM_WONDER_IDS, ZM_WONDER_ROLL, BOX_ROLL,
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
@@ -266,7 +266,7 @@ export class ZmRules {
 
   _raise(p, kind, spot) {
     const sim = this.sim, K = ZM.kinds[ZM_KINDS[kind]];
-    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0;
+    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0; p.zFrozenT = 0; p.zChill = 0;
     sim._placeAt(p, spot, Math.atan2(sim.map.height / 2 - spot.z, sim.map.width / 2 - spot.x));
     p.hp = p.zMax = zmMaxHp(kind, this.hp, this.crew.length, this.humans);
     p.zSwing = 0; p.zCool = 0.4 + this.rng() * 0.4; p.zT = null; p.zStuck = 0; p.zLastX = spot.x; p.zLastZ = spot.z; p.zStuckT = 0;
@@ -394,6 +394,8 @@ export class ZmRules {
     const I = this._zIn ??= { mx: 0, mz: 0, aim: 0, aiming: false, fire: false, sprint: false, slide: false, swap: false, tactical: false, lethal: false, streak: -1 };
     I.mx = 0; I.mz = 0; I.aim = ps.aim; I.sprint = false;
     if (this.state === 3) { stepPlayer(ps, I, dt, sim.map, sim.rng); return; }
+    // Frozen solid (the Rimecaster): it neither walks nor claws until it thaws.
+    if (p.zFrozenT > sim.time) { p.zSwing = 0; p.zStuckT = 0; stepPlayer(ps, I, dt, sim.map, sim.rng); return; }
     // Target: the nearest player who is up, by path. A zombie shouldering a wall stands in a cell the grid calls blocked:
     // it reads the field from the nearest free one.
     let cell = nav.idx(ps.x, ps.z);
@@ -648,7 +650,7 @@ export class ZmRules {
     } else if (kind === 'double') {
       this.doubleT = ZM.drop.double;
     } else if (kind === 'nuke') {
-      for (const z of this.horde) if (z.alive && z.zk !== 3) sim._selfKill(z, 'nuke');
+      for (const z of this.horde) if (z.alive && !isBossKind(z.zk)) sim._selfKill(z, 'nuke');     // Not the bosses (the Yardmaster, the quest's).
       for (const q of this.crew) this._pay(q, ZM.pts.nuke, false);
     }
   }
@@ -747,11 +749,16 @@ export class ZmRules {
 
   _rollGun(p) {
     const own = [p.ps.primary, p.ps.secondary];
+    // Now and then a wonder weapon (ZM_WONDERS), one the roller does not hold already.
+    if (this.rng() < ZM_WONDER_ROLL) {
+      const w = ZM_WONDERS[ZM_WONDER_IDS[Math.floor(this.rng() * ZM_WONDER_IDS.length)]];
+      if (!own.includes(w.gun)) return BOX_GUNS.indexOf(w.gun);
+    }
     for (let k = 0; k < 8; k++) {
-      const i = Math.floor(this.rng() * BOX_GUNS.length);
+      const i = Math.floor(this.rng() * BOX_ROLL);
       if (!own.includes(BOX_GUNS[i]) && WEAPONS[BOX_GUNS[i]]) return i;
     }
-    return BOX_GUNS.findIndex(g => !own.includes(g));
+    return BOX_GUNS.slice(0, BOX_ROLL).findIndex(g => !own.includes(g));
   }
 
   _stepBox(dt) {
@@ -789,6 +796,9 @@ export class ZmRules {
     if (ps.primary === gun) slot = 0; else if (ps.secondary === gun) slot = 1;
     const old = slot === 0 ? ps.primary : ps.secondary;
     if (p.zm && old !== gun) delete p.zm.tiers[old];        // A gun given up loses its bench tier.
+    // A wonder weapon goes in at its own tier: its def (zmTierDef) and the host's effect come from that.
+    const W = zmWonderOf(gun);
+    if (W && p.zm) { p.zm.tiers[gun] = W.tier; this.econ._arm(p, slot, gun, W.tier); ps.slot = slot; ps.weapon = gun; return; }
     brArm(ps, slot, gun);
     ps.slot = slot; ps.weapon = gun;
     if (WEAPONS[gun].unlimitedReserve) ps.reserve[slot] = 999; else ps.reserve[slot] = WEAPONS[gun].reserve ?? WEAPONS[gun].magazine * 3;
@@ -996,9 +1006,9 @@ export class ZmRules {
       plates: p.zm?.plates ?? 0, limit: p.zm?.limit ?? ZM.perkLimit, earned: p.zm?.earned ?? 0, spent: p.zm?.spent ?? 0 }));
     const boss = this.bossSeat >= 0 ? this.sim.players[this.bossSeat] : null;
     const ward = this.econ.wardenSeat >= 0 ? this.sim.players[this.econ.wardenSeat] : null;
-    V.boss = ward?.alive && ward.zk === 4 ? { hp: ward.hp / Math.max(1, ward.zMax), warden: true } : boss?.alive && boss.zk === 3 ? { hp: boss.hp / Math.max(1, boss.zMax) } : null;
+    V.boss = ward?.alive && isQuestBoss(ward.zk) ? { hp: ward.hp / Math.max(1, ward.zMax), warden: true, k: ward.zk } : boss?.alive && boss.zk === 3 ? { hp: boss.hp / Math.max(1, boss.zMax) } : null;
     // A guest has the bars from the block (its own seats carry no health).
-    if (!this.authority) V.boss = this._wardHp >= 0 ? { hp: this._wardHp / 100, warden: true } : this._bossHp >= 0 ? { hp: this._bossHp / 100 } : null;
+    if (!this.authority) V.boss = this._wardHp >= 0 ? { hp: this._wardHp / 100, warden: true, k: this.econ.bossKind } : this._bossHp >= 0 ? { hp: this._bossHp / 100 } : null;
     Object.assign(V, this.econ.view());
     return V;
   }
@@ -1027,7 +1037,7 @@ export class ZmRules {
       [b.spot, b.state, b.gun, b.owner, Math.round(b.timer * 10)], Math.round(this.doubleT * 10), crew, zs,
       this.drops.flatMap(d => [d.id, ZM_POWERUPS.indexOf(d.kind), r1(d.x), r1(d.z)]),
       boss?.alive && boss.zk === 3 ? Math.round(boss.hp / Math.max(1, boss.zMax) * 100) : -1, this.count, this.best, this.power, this.econ.encode(),
-      (() => { const w = this.econ.wardenSeat >= 0 ? sim.players[this.econ.wardenSeat] : null; return w?.alive && w.zk === 4 ? Math.round(w.hp / Math.max(1, w.zMax) * 100) : -1; })(),
+      (() => { const w = this.econ.wardenSeat >= 0 ? sim.players[this.econ.wardenSeat] : null; return w?.alive && isQuestBoss(w.zk) ? Math.round(w.hp / Math.max(1, w.zMax) * 100) : -1; })(),
       this.special ? ZM_ROUNDS.indexOf(this.special) : -1];
   }
 
@@ -1138,7 +1148,7 @@ export class ZmRules {
           if (p.zk === ZK.shield && !hadShield) p.zShield = 0;
           // The bosses keep what the bar showed.
           if (p.zk === 3) { this.bossSeat = p.index; if (this._bossHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._bossHp / 100)); }
-          if (p.zk === 4) { this.econ.wardenSeat = p.index; p.zExtra = true; live--; if (this._wardHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._wardHp / 100)); }
+          if (isQuestBoss(p.zk)) { this.econ.wardenSeat = p.index; p.zExtra = true; live--; if (this._wardHp > 0) p.hp = Math.max(1, Math.round(p.zMax * this._wardHp / 100)); }
         }
         return;
       }

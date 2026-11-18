@@ -2,7 +2,7 @@
 // low-poly soldier, greyed and torn. They exist only in the renderer: js/render/characters.js appends them to its
 // operator table after the roster's MAX_OPERATORS slots (five more uniform slots), so menus,
 // progression and the bot pool never see them. A seat's look comes from the view each frame (`zk`: 1 shambler,
-// 2 runner, 3 brute, 4 boss, 5 the Gravewarden, 6 Spitter, 7 Bloater, 8 Crawler, 9 Shieldbearer), because one roster seat raises many zombies of different kinds.
+// 2 runner, 3 brute, 4 boss, 5 the Gravewarden, 6 Spitter, 7 Bloater, 8 Crawler, 9 Shieldbearer, 11 the Listener), because one roster seat raises many zombies of different kinds.
 export const ZM_OPERATORS = [
   { id: 'zm-shambler', name: 'Shambler', kit: { core: 'light', back: null, extra: null, gear: null, hair: 'long', face: 'plain' },
     look: { w: 0.96, h: 0.96, l: 0.97, sh: 0.92, hip: 1, head: 1.02, skin: 0x7d9468, hair: 0x2b2a22, sleeve: 0x4d463a, trouser: 0x37342c } },
@@ -29,7 +29,14 @@ export const ZM_OPERATORS = [
   // Shieldbearer: broad, helmeted, in iron grey; the shield itself is drawn by js/render/zm-kinds-fx.js.
   { id: 'zm-shield', name: 'Shieldbearer', kit: { core: 'heavy', back: null, extra: 'bandolier', gear: 'helmet', hair: null, face: 'beard' },
     look: { w: 1.22, h: 1.08, l: 1.2, sh: 1.14, hip: 1.02, head: 0.96, skin: 0x667a5a, hair: 0x14120e, sleeve: 0x4a4e54, trouser: 0x2e3034 } },
+  // Slot 10 is never drawn (kind 9 is the wire's broken-shield code, decoded to a Shieldbearer): the Shieldbearer again.
+  { id: 'zm-shield2', name: 'Shieldbearer', kit: { core: 'heavy', back: null, extra: 'bandolier', gear: 'helmet', hair: null, face: 'beard' },
+    look: { w: 1.22, h: 1.08, l: 1.2, sh: 1.14, hip: 1.02, head: 0.96, skin: 0x667a5a, hair: 0x14120e, sleeve: 0x4a4e54, trouser: 0x2e3034 } },
+  // The Listener (Polestar Relay's radios raise it): the tallest and thinnest thing on the ice, frost-white skin, a
+  // parka's hood, the station's radio pack on its back glowing a cold cyan. Nothing like the Gravewarden's black.
+  { id: 'zm-listener', name: 'Listener', kit: { core: 'light', back: 'radio', extra: 'bandolier', gear: 'hood', hair: null, face: 'plain' },
+    look: { w: 1.1, h: 1.7, l: 1.8, sh: 1.04, hip: 0.92, head: 0.86, skin: 0xc8dce6, hair: 0xe8f4ff, sleeve: 0x2e4a5a, trouser: 0x1c2c38 } },
 ];
-const ZM_ACCENT = { 3: 0xff7a1a, 4: 0xb070ff, 5: 0x9cff3a, 6: 0xffb040 };
+const ZM_ACCENT = { 3: 0xff7a1a, 4: 0xb070ff, 5: 0x9cff3a, 6: 0xffb040, 10: 0x5af0ff };
 // Per-kind clothes for the instance data (skins carry sleeve and trouser colours; no gear recolour, the boss glows).
 export const ZM_SKIN_LOOKS = ZM_OPERATORS.map((o, k) => ({ sleeve: o.look.sleeve, trouser: o.look.trouser, accent: ZM_ACCENT[k] ?? null, glow: ZM_ACCENT[k] ? 1 : 0 }));

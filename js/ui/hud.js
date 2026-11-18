@@ -10,6 +10,7 @@ import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
 import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/FINISHERS.md).
 import { ZmHud } from './zm-hud.js';
+import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons go by their own names.
 import { StreakTags } from './streak-tags.js';  // Enemy streaks you can shoot down: ring, health, hits left (roadmap 40).
 import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
@@ -372,6 +373,8 @@ const ringMarkup = '<svg class="o-ring" viewBox="-17 -17 34 34" aria-hidden="tru
 
 const pad2 = n => (n < 10 ? '0' + n : '' + n);
 const weaponName = id => WEAPONS[id]?.name ?? (id === 'strike' ? 'Strike' : id ?? '');
+// Graveyard Shift: a wonder weapon (ZM_WONDERS) goes by its own name on the panel, not the gun it rides on.
+const zmWeaponName = id => zmWonderOf(id)?.name ?? weaponName(id);
 
 // What the feed names for a kill: a gun id alone would credit the gun for a grenade or streak kill.
 function killCause(e) {
@@ -2298,7 +2301,7 @@ export class HUD {
       c.kit = me.attachments;
       // Battle royale fists are the blade's slot, but boxing gloves (owner notes): named and drawn as such.
       const fists = this.br && me.weapon === 'knife';
-      this.armsName.textContent = fists ? 'Fists' : weaponName(me.weapon);
+      this.armsName.textContent = fists ? 'Fists' : this.gunName(me.weapon);
       c.magazine = effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
       c.tag = null;                // The status line may need to return to the weapon's name.
       this.armsIcon.innerHTML = fists ? icon('ui:glove', { size: 17 }) : glyph(me.weapon, 15);
@@ -2340,7 +2343,7 @@ export class HUD {
     if (tag !== c.tag) {
       c.tag = tag;
       this.arms.dataset.tag = tag;
-      this.armsName.textContent = empty ? 'Out of ammo' : reloading ? 'Reloading' : low ? 'Low ammo' : this.br && me.weapon === 'knife' ? 'Fists' : weaponName(me.weapon);
+      this.armsName.textContent = empty ? 'Out of ammo' : reloading ? 'Reloading' : low ? 'Low ammo' : this.br && me.weapon === 'knife' ? 'Fists' : this.gunName(me.weapon);
     }
     if (empty !== c.swapHint) {
       c.swapHint = empty;
@@ -3679,3 +3682,6 @@ const gunLine = id => `<span class="pk-gun">${esc(weaponName(id))}</span>${weapo
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+// The weapon panel's name: in Graveyard Shift a wonder weapon's own (js/shared/zombies.js ZM_WONDERS).
+HUD.prototype.gunName = function gunName(id) { return this.el?.classList.contains('zm-on') ? zmWeaponName(id) : weaponName(id); };

@@ -19,6 +19,7 @@ import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
 import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
+import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
 import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
 import { EMOTES, getFinisher } from '../shared/finishers.js';
 
@@ -1107,6 +1108,7 @@ export class Characters {
     let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
     const glove = this.glove;
     const fullReach = this._fullReach(view, localId);
+    const zmOn = !!(view.obj ?? view.points?.obj)?.zm;     // Graveyard Shift: wonder weapons wear their own models.
     let nRing = 0;
     for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
     let localPlayer = null;
@@ -1321,7 +1323,8 @@ export class Characters {
       _gun.compose(_p, _qGun, _s).premultiply(_body);
 
       // Muzzle and ejection port, needed even for hidden shooters so tracers start correctly.
-      const proto = getGun(p.weapon, p.attachments);
+      const wonder = zmOn ? zmWonderOf(p.weapon) : null;
+      const proto = wonder ? getGun(wonder.model) : getGun(p.weapon, p.attachments);
       _v.set(proto.muzzle[0], proto.muzzle[1], proto.muzzle[2]).applyMatrix4(_gun);
       r.muzzle[0] = _v.x; r.muzzle[1] = _v.y; r.muzzle[2] = _v.z;
       _v.set(proto.eject[0], proto.eject[1], proto.eject[2]).applyMatrix4(_gun);

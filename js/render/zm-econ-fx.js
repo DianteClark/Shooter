@@ -108,7 +108,18 @@ export class ZmEconFx {
     }
     // The altar: a plinth with three sockets (lit by the quest, below).
     const Al = L.altar;
-    if (Al) {
+    if (Al && L.questKind === 'radio') {
+      // Polestar Relay: the relay console (a steel desk, a tilted panel, a handset) and the three radio sets, each on
+      // a packing case with its aerial up. Their lamps are drawn below (dead, live, tuning, tuned).
+      st.at(Al.wx, Al.wz, Al.face);
+      st.box(0.5, 0.45, 0, 0.8, 0.9, 1.6, 0x3c444e).box(0.3, 1.15, 0, 0.36, 0.5, 1.5, 0x56606c).box(0.7, 0.96, 0.5, 0.25, 0.1, 0.18, 0x16181c);
+      glow.at(Al.wx, Al.wz, Al.face);
+      glow.box(0.49, 1.2, 0, 0.02, 0.32, 1.2, 0x5af0d0, 0, false);
+      for (const r of L.relics) {
+        st.at(r.x, r.z, 0);
+        st.box(0, 0.35, 0, 0.9, 0.7, 0.6, 0x6e5a3a).box(0, 0.88, 0, 0.66, 0.36, 0.42, 0x3c4a3c).box(0.18, 1.5, 0.12, 0.04, 0.9, 0.04, 0x9aa4ae);
+      }
+    } else if (Al) {
       st.at(Al.wx, Al.wz, Al.face);
       st.box(0.6, 0.42, 0, 1.0, 0.84, 1.5, 0x5d5a55).box(0.6, 0.88, 0, 1.12, 0.09, 1.64, 0x726e68).box(0.14, 1.3, 0, 0.18, 0.9, 0.5, 0x4a4743);
     }
@@ -247,7 +258,15 @@ export class ZmEconFx {
     // Relics and the altar's sockets.
     const q = obj.quest ?? { got: 0, state: 0 };
     let n = 0;
+    const radio = L.questKind === 'radio';
     for (const r of L.relics) {
+      if (radio) {
+        // A radio's lamp: dark with no power, amber live, cyan blinking while tuned, green once it is locked on.
+        const got = q.got & (1 << r.i), tuning = q.tuneI === r.i, live = obj.power ?? 1;
+        M4.compose(V.set(r.x - 0.2, 1.12, r.z + 0.22), Q.identity(), S.setScalar(tuning ? 0.55 + 0.25 * Math.abs(Math.sin(t * 9)) : 0.5));
+        this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(got || q.state ? 0x59d36b : tuning ? 0x5af0ff : live ? 0xffb040 : 0x2a1a14)); n++;
+        continue;
+      }
       if (q.got & (1 << r.i)) continue;
       Q.setFromEuler(E.set(0, t * 1.6 + r.i, 0));
       M4.compose(V.set(r.x, 0.9 + Math.sin(t * 2 + r.i) * 0.08, r.z), Q, S.set(1, 1.5, 1));
@@ -258,7 +277,7 @@ export class ZmEconFx {
       for (const r of L.relics) {
         const lit = q.got & (1 << r.i), c = Math.cos(Al.face), s = Math.sin(Al.face), side = (r.i - 1) * 0.42;
         M4.compose(V.set(Al.wx + c * 0.6 - s * side, 1.0, Al.wz + s * 0.6 + c * side), Q.identity(), S.setScalar(lit ? 0.8 + 0.15 * Math.sin(t * 3 + r.i) : 0.5));
-        this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(q.state === 2 ? 0x59d36b : lit ? (q.state ? 0xff4dff : 0xb070ff) : 0x202024)); n++;
+        this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(q.state === 2 ? 0x59d36b : lit ? (q.state ? (radio ? 0x5af0ff : 0xff4dff) : radio ? 0x59d36b : 0xb070ff) : 0x202024)); n++;
       }
     }
     this.relics.count = n;

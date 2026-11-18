@@ -136,9 +136,40 @@ export const ammoCost = cost => Math.round(cost * 0.4 / 10) * 10;
 // What the crate can hand out: the specialists, the heavy hitters and a few sidearms. Never the start pistol.
 export const BOX_GUNS = ['rotary', 'beltlmg', 'drumsmg', 'heavysmg', 'lightlmg', 'saw', 'rampar', 'heatar', 'magshot', 'flechette', 'slug', 'lever', 'battle',
   'twinshot', 'revolver', 'akimbo', 'thumper', 'launcher', 'salvo', 'crossbow', 'semisnipe', 'rail', 'antimat', 'carbine', 'tacsmg', 'hushsmg', 'burst', 'coach',
-  'scatter', 'deuce', 'maul', 'heavyar', 'lmg', 'autoshot'];
+  'scatter', 'deuce', 'maul', 'heavyar', 'lmg', 'autoshot',
+  // The wonder weapons (ZM_WONDERS) last, so every older index on the wire holds; a roll reaches them only by ZM_WONDER_ROLL.
+  'nailer', 'machpistol'];
 export const START_GUN = 'pistol';
 export const NO_GUN = 'knife';
+
+// ---- Wonder weapons (docs/ZOMBIES.md "Wonder weapons"): two specials only the mystery crate hands out, on every map ----
+// Each rides on a gun id that no wall and no ordinary roll ever gives in this mode (`gun`), at its own tier (`tier`,
+// past the bench's three) that makes its def (js/sim/zm-phone.js zmTierDef) and that the host reads to apply its
+// effect (js/sim/zm-econ.js gunHit). The renderer draws our own model in its place in this mode (js/render/guns.js
+// 'zw-coil' / 'zw-rime'). Damage is in shares of a round's health (roundHp), so they stay worth it at round 30 and
+// do nothing anywhere else: the mode is the only place they exist. They cannot go on the upgrade bench.
+//   coil  the Stormcoil: a slow bolt of lightning that jumps to `chain` more within `chainR` m of the last, each jump
+//         worth `chainK` of the one before; `hit` of a round's health on the first (a boss takes `boss` of its own)
+//   rime  the Rimecaster: a short freezing beam; `chill` hits freeze a zombie solid for `freeze` s (it neither walks
+//         nor claws), and one killed frozen shatters: `shatterK` of a round's health to the undead within `shatterR` m
+export const ZM_WONDERS = {
+  coil: { id: 'coil', name: 'Stormcoil', gun: 'nailer', tier: 5, model: 'zw-coil', css: '#7ad8ff', camo: 'wire', desc: 'Lightning that jumps from one to the next',
+    def: { damage: 60, rpm: 120, magazine: 6, reserve: 36, reload: 2.6, range: 30, auto: false, hipSpread: 0.012, adsSpread: 0.006, penetrate: 0.9, tracerWidth: 2 },
+    hit: 1.3, chain: 5, chainR: 6.5, chainK: 0.9, boss: 0.012 },
+  rime: { id: 'rime', name: 'Rimecaster', gun: 'machpistol', tier: 6, model: 'zw-rime', css: '#bff4ff', camo: 'pp-silver', desc: 'A freezing beam: they stop dead, then shatter',
+    def: { damage: 20, rpm: 600, magazine: 50, reserve: 200, reload: 2.4, range: 13, auto: true, hipSpread: 0.02, adsSpread: 0.014, tracerWidth: 1.6 },
+    hit: 0.14, chill: 3, freeze: 2.5, shatterR: 2.6, shatterK: 0.9, boss: 0.0025 },
+};
+export const ZM_WONDER_IDS = Object.keys(ZM_WONDERS);
+// The chance a crate roll offers a wonder weapon (one of the two, never one the roller holds) in place of a gun.
+export const ZM_WONDER_ROLL = 0.08;
+const WONDER_BY_GUN = Object.fromEntries(Object.values(ZM_WONDERS).map(w => [w.gun, w]));
+// The wonder weapon a gun id carries in this mode (null for an ordinary gun).
+export const zmWonderOf = gun => WONDER_BY_GUN[gun] ?? null;
+// The guns the crate rolls among (the wonder carriers come only by ZM_WONDER_ROLL).
+export const BOX_ROLL = BOX_GUNS.length - ZM_WONDER_IDS.length;
+// A gun's name in this mode: a wonder weapon's own, else the weapon's.
+export const zmGunName = (gun, names) => zmWonderOf(gun)?.name ?? names?.[gun]?.name ?? gun;
 
 // ---- The economy (ROADMAP item 36, docs/ZOMBIES.md "Economy"): somewhere for points to go after the perks ----
 //   bench     the upgrade bench: the gun in your hands through three tiers (damage, magazine, reserve; tier 3 adds a
@@ -183,8 +214,8 @@ const FX_BY_CATEGORY = { SMG: 'fire', Pistol: 'fire', Assault: 'shock', LMG: 'sh
 export const zmFxOf = gun => FX_BY_CATEGORY[WEAPON_CATEGORY[gun]] ?? 'shock';
 export const ZM_TIER_CAMO = [null, 'pp-laurel', 'gold'];
 // The camo a gun wears at a tier (null: its own).
-export const zmTierCamo = (gun, tier) => (tier >= 3 ? ZM_FX[zmFxOf(gun)].camo : ZM_TIER_CAMO[tier] ?? null);
-export const zmUpgradable = gun => !!gun && gun !== NO_GUN && WEAPON_CATEGORY[gun] !== 'Melee' && !!WEAPON_CATEGORY[gun];
+export const zmTierCamo = (gun, tier) => (tier >= 5 ? zmWonderOf(gun)?.camo ?? null : tier >= 3 ? ZM_FX[zmFxOf(gun)].camo : ZM_TIER_CAMO[tier] ?? null);
+export const zmUpgradable = gun => !!gun && gun !== NO_GUN && WEAPON_CATEGORY[gun] !== 'Melee' && !!WEAPON_CATEGORY[gun] && !zmWonderOf(gun);
 export const supplyCost = (item, round) => Math.round(ZE.supply[item].cost * (1 + ZE.supplyScale * Math.max(0, (round | 0) - 1)) / 50) * 50;
 
 // The account XP lines of a run (js/game/awards.js shows them; dev/sim-zm-runs.mjs totals them): one source for both.
@@ -818,6 +849,7 @@ export function zmUsable(L, x, z, st) {
       : { kind: 'benchwait', i: 0, cost: 0, gun: b.gun, tier: b.tier, label: 'Upgrading', off: true, why: 'Working on it' };
     if (b.state) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'In use' };
     const g = st.held, t = st.tier ?? 0;
+    if (zmWonderOf(g)) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'A wonder weapon is as good as it gets' };
     if (!zmUpgradable(g)) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'Hold a gun to upgrade it' };
     if (t >= 3) return { kind: 'bench', i: 0, cost: 0, gun: g, tier: 3, label: 'Upgrade bench', off: true, why: 'Fully upgraded' };
     return { kind: 'bench', i: 0, gun: g, tier: t + 1, cost: ZE.bench.cost[t], label: 'Upgrade' };
@@ -837,7 +869,18 @@ export function zmUsable(L, x, z, st) {
     }
   }
   const q = st.quest ?? { got: 0, state: 0 };
-  if (!q.state) {
+  if (!q.state && L.questKind === 'radio') {
+    // Polestar Relay: radios that need the power, each tuned by standing at it a few seconds; then the console.
+    for (const r of L.relics ?? []) {
+      if (q.got & (1 << r.i)) continue;
+      at(r, () => (!st.power ? { kind: 'relic', i: r.i, cost: 0, label: 'Dead radio', off: true, why: 'No power: find the switch' }
+        : q.tuneI === r.i ? { kind: 'relic', i: r.i, cost: 0, label: 'Tuning', off: true, why: q.tuneBy === st.me ? 'Stay with it' : 'Someone is on it' }
+          : q.tuneI >= 0 ? { kind: 'relic', i: r.i, cost: 0, label: 'Tune the radio', off: true, why: 'One at a time' }
+            : { kind: 'relic', i: r.i, cost: 0, label: 'Tune the radio' }));
+    }
+    const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
+    at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Transmit' : 'Relay console', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 3} radios tuned` }));
+  } else if (!q.state) {
     for (const r of L.relics ?? []) if (!(q.got & (1 << r.i))) at(r, () => ({ kind: 'relic', i: r.i, cost: 0, label: 'Pick it up' }));
     const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
     at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Set the relics' : 'The altar', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 3} relics found` }));

@@ -436,8 +436,12 @@ export class GameRenderer {
           if (ev.k === 'arc') { vfx.tracer(ev.ox, 1.1, ev.oz, ev.x, 1.1, ev.z, ZM_ARC, 0.14, 4, 0.12, 120); vfx.sparks(ev.x, 1, ev.z, 0, 0, ZM_ARC, 4, 7); vfx.pop(ev.x, 1.2, ev.z, 2.5, ZM_ARC, 0.12); }
           else if (ev.k === 'burn') { for (let k = 0; k < 6; k++) vfx.ember(ev.x + (Math.random() - 0.5) * 0.6, 0.6 + Math.random(), ev.z + (Math.random() - 0.5) * 0.6, FIRE_SPARK); vfx.pop(ev.x, 1, ev.z, 2, FIRE_SPARK, 0.2); }
           else if (ev.k === 'frost') { vfx.sparks(ev.x, 1, ev.z, 0, 0, ZM_FROST, 6, 4); vfx.ring(ev.x, ev.z, 0.2, 1.1, 0.35, ZM_FROST, 0.6); }
+          // The Rimecaster (a zombie frozen solid, one shattering) and the Listener's pulse going off.
+          else if (ev.k === 'freeze') { vfx.pop(ev.x, 1, ev.z, 1.6, ZM_FROST, 0.5); vfx.ring(ev.x, ev.z, 0.3, 0.9, 2.4, ZM_FROST, 0.5); }
+          else if (ev.k === 'shatter') { const r = ev.r ?? 2.6; vfx.sparks(ev.x, 1, ev.z, 0, 0, ZM_FROST, ev.r ? 16 : 10, 9); vfx.ring(ev.x, ev.z, 0.3, r, 0.4, ZM_FROST, 0.8); vfx.pop(ev.x, 1, ev.z, r * 0.8, ZM_FROST, 0.2); }
           break;
         }
+        case 'zpulse': vfx.ring(ev.x, ev.z, ev.r, ev.r, ev.wind, ZM_FROST, 0.55); vfx.ring(ev.x, ev.z, 0.4, ev.r, ev.wind, ZM_FROST, 0.35); break;     // The Listener's frost pulse, winding up.
         case 'turret_shot': {
           if (ev.zm === 'drone') { vfx.tracer(ev.ox, 2.3, ev.oz, ev.x, 1.05, ev.z, ZM_DRONE, 0.08); vfx.sparks(ev.x, 0.6, ev.z, 0, 0, ZM_DRONE, 2, 6); break; }
           vfx.tracer(ev.ox, 1.0, ev.oz, ev.x, 1.05, ev.z, TURRET_TRACER, 0.1);

@@ -25,6 +25,15 @@
 //                switch gates the perk machines (dark until thrown, free, synced to guests and kept by a migration); a
 //                bot throws it solo after round 2 and not with two humans; the boss rises in the Burial Field when it is
 //                open (an ordinary riser when not); determinism
+//   polestar     the second purpose-built map: seven areas in a loop, the Boiler House off two sides, four dead ends,
+//                the economy on its spots; the radio quest (dead without power, tuning takes a stand and is lost by
+//                walking off, the console waits for all three) and the Listener (rises in the Mast Field, its bar, the
+//                frost pulse hurts inside the ring only, Crawlers at its call, pays everyone, off the count); the quest
+//                and the Listener on a guest and through a migration; a bot throws the power
+//   wonders      the crate's wonder weapons: rolled about 8% of the time, never one held, never on a wall; in hand at
+//                their tier with their own def (host and phone), their own name, refused by the bench; the Stormcoil's
+//                bolt jumps through a crowd; the Rimecaster freezes in three hits, a frozen zombie stands still and
+//                shatters on its neighbours; bosses are slowed, never frozen
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS, MAP_IDS } from '../js/shared/map.js';
 import { NavGrid } from '../js/sim/nav.js';
@@ -563,6 +572,248 @@ section('ashgrove');
     ok(boss?.alive && boss.zk === 3 && inField === fieldOpen, `boss round, field ${fieldOpen ? 'open: rises in the Burial Field' : 'shut: rises elsewhere'} (${boss?.ps.x.toFixed(1)}, ${boss?.ps.z.toFixed(1)})`);
     clearZmWalls(sim.map);
   }
+}
+
+// ---- Polestar Relay: the second purpose-built map, its radio quest and the Listener ----
+section('polestar');
+{
+  const map = MAPS.polestar, L = zmLayout(map);
+  const { syncZmDoors, reblockNav, ZE, ZM_LISTENER } = await import('../js/shared/zombies.js');
+  const area = id => L.bands.findIndex(b => b.id === id);
+  ok(map.zmOnly && map.hidden && !MAP_IDS.includes('polestar') && mapModes(map).join() === 'zm' && map.theme === 'polestar', 'Graveyard Shift only: hidden, hosts zm alone, its own theme');
+  ok(L.graph && L.bands.length === 7 && L.bands.every(b => b.cells.length > 150), `seven areas, all with floor (${L.bands.map(b => b.cells.length)})`);
+  ok(L.bands[L.start].id === 'mess' && L.doors.length === 8, 'starts in the Mess Hall, eight gates');
+  const joins = (x, y) => L.doors.some(d => (d.a === area(x) && d.b === area(y)) || (d.a === area(y) && d.b === area(x)));
+  ok(['mess', 'kennel', 'lab', 'mast', 'depot', 'hangar', 'mess'].every((x, i, a) => i === 0 || joins(a[i - 1], x)), 'the gates make a loop');
+  ok(joins('lab', 'boiler') && joins('hangar', 'boiler'), 'the Boiler House opens from the Lab Block and the Hangar');
+  ok(L.power && L.power.band === area('boiler'), 'the power switch is in the Boiler House');
+  ok(L.boss && L.boss.band === area('mast') && L.boss.spots.every(p => L.band[L.cellAt(p.x, p.z)] === L.boss.band), 'boss spots in the Mast Field');
+  ok(L.bands[area('mast')].cells.length >= 450, `the boss arena is the roomiest (${L.bands[area('mast')].cells.length} m2)`);
+  ok(L.boxSpots.length === 4 && new Set(L.boxSpots.map(b => b.band)).size === 4, 'four crate spots in four areas');
+  ok(L.machines.length === 6 && L.wallBuys.length >= 10 && L.bands.every(b => L.risers[b.i].length >= 6), 'six machines, ten-plus wall-buys, spawn windows in every area');
+  ok(L.bench.band === area('hangar') && L.terminal.band === L.start && L.armour.band === area('kennel') && L.exfil.band === area('depot'), 'bench in the Hangar, terminal at the start, armour one gate out, exfil at the depot');
+  ok(L.traps.length === 3 && L.traps.every(t => L.doors.some(d => Math.hypot(d.cx - t.x, d.cz - t.z) < 4)), 'three traps, each at a gate');
+  ok(L.questKind === 'radio' && L.altar.band === area('mast') && L.relics.map(r => L.bands[r.band].id).sort().join() === 'depot,hangar,kennel', 'a radio quest: the console in the Mast Field, radios in the Kennels, Hangar and Fuel Depot');
+  placeZmWalls(map, (1 << L.doors.length) - 1);
+  const nav = new NavGrid(map);
+  for (const [name, inside, door] of [['dog run', [4, 4], [5.5, 10]], ['cold store', [52, 4], [51.5, 9.5]], ['radio room', [28, 49], [28, 44.5]], ['tank alcove', [76, 48], [78.5, 42.5]]]) {
+    const saved = nav.blocked.slice();
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -1; dz <= 1; dz++) nav.blocked[nav.idx(door[0] + dx, door[1] + dz)] = 1;
+    const seen = reach(nav, inside[0], inside[1]);
+    let n = 0; for (let k = 0; k < seen.length; k++) n += seen[k];
+    ok(n > 10 && n < 100, `${name}: a dead end (${n} cells behind its one doorway)`);
+    nav.blocked.set(saved);
+  }
+  clearZmWalls(map);
+  ok(L.doors.every(d => Object.keys(d.stand).length === 2), 'every gate has a stand point on each side');
+
+  // The quest: dead radios without power; tuning takes a stand; leaving loses it; the console; the Listener.
+  const sim = makeSim('polestar', 91, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, E = R.econ, me = R.crew.find(p => !p.isBot);
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  R._startRound(12); R.spawnT = 999;
+  const use = () => sim.applyCommand(me.id, { cmd: 'zm', act: 'use' });
+  const r0 = L.relics[0];
+  me.ps.x = r0.x; me.ps.z = r0.z;
+  const dead = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(dead?.kind === 'relic' && dead.off && /power/i.test(dead.why) && !use(), `a radio is dead with the power off (${dead?.label})`);
+  R.power = 1;
+  sim.drainEvents();
+  ok(use() && E.quest.tuneI === 0 && sim.drainEvents().some(e => e.t === 'ztune' && e.state === 1), 'with the power on it starts tuning (free)');
+  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.label === 'Tuning', 'the prompt says Tuning');
+  run(sim, 2);
+  me.ps.x = L.terminal.x; me.ps.z = L.terminal.z;
+  let lost = false;
+  run(sim, 0.2, e => { if (e.t === 'ztune' && e.state === 0) lost = true; });
+  ok(lost && E.quest.tuneI === -1 && !E.quest.got, 'walking off loses the signal');
+  me.ps.x = L.altar.x; me.ps.z = L.altar.z;
+  const con = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(con?.kind === 'altar' && con.off && /0 of 3/.test(con.why) && !use(), `the console waits for the radios (${con?.why})`);
+  const got = [];
+  for (const r of L.relics) {
+    me.ps.x = r.x; me.ps.z = r.z;
+    ok(use(), `radio ${r.i} tuning`);
+    run(sim, ZE.quest.tune - 0.5);
+    const early = E.quest.got & (1 << r.i);
+    run(sim, 0.7, e => { if (e.t === 'zrelic') got.push(e.n); });
+    ok(!early && E.quest.got & (1 << r.i), `radio ${r.i} locks on after ${ZE.quest.tune} s, not before`);
+  }
+  ok(got.join() === '1,2,3' && E.quest.got === 7, `radios counted (${got})`);
+  me.ps.x = L.altar.x; me.ps.z = L.altar.z;
+  sim.drainEvents();
+  ok(use() && E.quest.state === 1 && sim.drainEvents().some(e => e.t === 'zwarden' && e.state === 1 && e.k === ZK.listener), 'transmitting from the console');
+  run(sim, 1.5);
+  const w = sim.players[E.wardenSeat];
+  ok(w?.alive && w.zk === ZK.listener && w.zMax >= R.hp * ZM.kinds.listener.hp, `the Listener rises (${w?.zMax} hp)`);
+  ok(w && L.band[L.cellAt(w.ps.x, w.ps.z)] === area('mast'), 'in the Mast Field');
+  ok(R.view().boss?.warden && R.view().boss.k === ZK.listener, 'its bar shows, as the Listener');
+  // The frost pulse: a ring that winds up, then hurts the crew inside it in its sight, not those outside.
+  const mate = R.crew.find(p => p.isBot);
+  w.ps.x = 66; w.ps.z = 22; w.zFrozenT = 1e9;     // Hold it still for the test.
+  me.ps.x = 66 + ZM_LISTENER.r + 3; me.ps.z = 22; mate.ps.x = 67.5; mate.ps.z = 22.5; mate.hp = 100; me.hp = 100;
+  mate.spawnProtect = 0; me.spawnProtect = 0;
+  E.quest.pulseT = 0.05; E.quest.callT = 999;
+  let pulse = null;
+  run(sim, 0.2, e => { if (e.t === 'zpulse') pulse = e; });
+  ok(pulse && pulse.r === ZM_LISTENER.r && pulse.wind === ZM_LISTENER.wind, 'a frost pulse winds up (zpulse)');
+  const hp0 = mate.hp;
+  run(sim, ZM_LISTENER.wind + 0.1);
+  ok(mate.hp < hp0 || mate.downed, `a mate inside the ring is hurt (${hp0} -> ${mate.hp})`);
+  ok(me.hp === 100, 'a player outside it is not');
+  E.quest.callT = 0.01;
+  const crawl0 = R.horde.filter(q => q.alive && q.zk === ZK.crawler).length;
+  run(sim, 0.1);
+  ok(R.horde.filter(q => q.alive && q.zk === ZK.crawler).length > crawl0, 'it calls Crawlers');
+  w.zFrozenT = 0;
+  for (const p of R.crew) p.spawnProtect = 1e9;
+  // Wire: the packed Listener round-trips; a guest sees the quest and its bar; a migration keeps it.
+  const z = unpackZombie(packZombie(3, w.ps.x, w.ps.z, 0, ZK.listener, false));
+  ok(z.kind === ZK.listener, 'the Listener packs (kind 10)');
+  const k0 = R.killed, pts = R.crew.map(p => p.zm.pts);
+  let down = null;
+  sim._damage(w, me, w.hp + 10, 'ar', 5);
+  run(sim, 0.1, e => { if (e.t === 'zwarden' && e.state === 2) down = e; });
+  ok(!w.alive && E.quest.state === 2 && down?.k === ZK.listener, 'put down: the quest is done');
+  ok(R.killed === k0 && R.crew.every((p, k) => p.zm.pts >= pts[k] + ZE.quest.pts), 'it pays everyone and is off the round count');
+  clearZmWalls(sim.map);
+}
+{
+  // The quest across the wire and a host migration: the tuning radio, the Listener and its bar.
+  const { syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const humans = [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }];
+  const roster = buildRoster(humans, { mode: 'zm', mapId: 'polestar', seed: 6 });
+  const host = new Sim({ roster, map: 'polestar', seed: 6, mode: 'zm' });
+  host.step(DT); toLive(host);
+  const R = host.rules, L = R.L, E = R.econ;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(host.map, R.open); for (const d of L.doors) reblockNav(host.nav, host.map, d); R.fields.clear();
+  R.power = 1; R._startRound(11); R.spawnT = 999;
+  const h1 = host.players.find(p => p.id === 'h1');
+  h1.ps.x = L.relics[1].x; h1.ps.z = L.relics[1].z;
+  host.applyCommand('h1', { cmd: 'zm', act: 'use' });
+  run(host, 2);
+  const map2 = { ...MAPS.polestar, walls: MAPS.polestar.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+  const guest = new Sim({ roster, map: map2, seed: 6, mode: 'zm' });
+  let view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  const q = (view.obj ?? view.points.obj).quest;
+  ok(q.tuneI === 1 && q.tuneT > 1.5 && q.tuneT < 2.5, `a guest sees the radio tuning (${q.tuneI}, ${q.tuneT})`);
+  E.quest.tuneI = -1; E.quest.got = 7;
+  h1.ps.x = L.altar.x; h1.ps.z = L.altar.z;
+  host.applyCommand('h1', { cmd: 'zm', act: 'use' });
+  run(host, 1.5);
+  const w = host.players[E.wardenSeat];
+  w.hp = Math.round(w.zMax * 0.6);
+  host.step(DT); host.drainEvents();
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  const obj = view.obj ?? view.points.obj;
+  ok(obj.boss?.warden && obj.boss.k === ZK.listener && Math.abs(obj.boss.hp - 0.6) < 0.02, `a guest sees the Listener's bar (${obj.boss?.hp?.toFixed(2)})`);
+  ok(view.players[w.index].zk === ZK.listener + 1, 'and the Listener itself (view zk 11)');
+  if (guest._restoreMode) {
+    guest.players.forEach((p, i) => { const v = view.players[i]; p.alive = v.alive; p.ps.x = v.x; p.ps.z = v.z; });
+    guest._restoreMode(view);
+    const G = guest.rules, gw = guest.players[G.econ.wardenSeat];
+    ok(G.econ.quest.state === 1 && gw?.zk === ZK.listener && Math.abs(gw.hp / gw.zMax - 0.6) < 0.02, 'a migration keeps the Listener at the health its bar showed');
+    for (const p of G.crew) p.spawnProtect = 1e9;
+    let pulsed = false;
+    for (let i = 0; i < 12 * SIM_HZ && !pulsed; i++) { guest.step(DT); pulsed = guest.drainEvents().some(e => e.t === 'zpulse'); }
+    ok(pulsed, 'and the new host carries on with its pulses');
+  }
+  clearZmWalls(map2); clearZmWalls(host.map);
+}
+{
+  // A bot throws the power on Polestar too (solo, from round 3), buying the gates on the way.
+  const sim = makeSim('polestar', 93, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.zm) p.zm.pts = 6000; }
+  R._startRound(3);
+  R.spawnT = 999;
+  let by = null;
+  run(sim, 120, e => { if (e.t === 'zlights') by = e.by; });
+  ok(R.power === 1 && R.crew.find(p => p.id === by)?.bot, `a bot teammate throws the power (${by})`);
+  clearZmWalls(sim.map);
+}
+
+// ---- Wonder weapons: the crate's Stormcoil and Rimecaster, on every map ----
+section('wonders');
+{
+  const { ZE, ZM_WONDERS, ZM_WONDER_ROLL, BOX_GUNS, BOX_ROLL, zmWonderOf, zmGunName, zmUpgradable, syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const { zmTierDef, zmEvent } = await import('../js/sim/zm-phone.js');
+  const { WEAPONS } = await import('../js/shared/weapons.js');
+  const { WEAPON_IDS } = await import('../js/shared/constants.js');
+  const C = ZM_WONDERS.coil, F = ZM_WONDERS.rime;
+  ok(BOX_GUNS.slice(BOX_ROLL).join() === [C.gun, F.gun].join() && BOX_GUNS.slice(0, BOX_ROLL).every(g => !zmWonderOf(g)), 'the wonder carriers ride at the end of the crate list');
+  for (const id of ZM_MAP_IDS) ok(zmLayout(MAPS[id]).wallBuys.every(w => !zmWonderOf(w.gun)), `${id}: no wall sells a wonder carrier`);
+  ok(!zmUpgradable(C.gun) && !zmUpgradable(F.gun) && zmUpgradable('ar'), 'wonder weapons cannot be upgraded');
+  // Rolls: about ZM_WONDER_ROLL of them, both kinds, never one the roller holds.
+  const sim = makeSim('neon', 95, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, me = R.crew.find(p => !p.isBot);
+  let wn = 0; const kinds = new Set();
+  for (let i = 0; i < 3000; i++) { const g = BOX_GUNS[R._rollGun(me)]; if (zmWonderOf(g)) { wn++; kinds.add(g); } }
+  ok(Math.abs(wn / 3000 - ZM_WONDER_ROLL) < 0.025 && kinds.size === 2, `a roll offers a wonder ${(wn / 30).toFixed(1)}% of the time, both kinds`);
+  R._give(me, C.gun);
+  let held = 0;
+  for (let i = 0; i < 2000; i++) if (BOX_GUNS[R._rollGun(me)] === C.gun) held++;
+  ok(held === 0, 'never the wonder already held');
+  // Given: at its tier, its own def (name, magazine), and the phone told with the tier.
+  ok(me.zm.tiers[C.gun] === C.tier && me.ps.defs[me.ps.slot].zw === 'coil' && me.ps.ammo[me.ps.slot] === C.def.magazine, `the Stormcoil in hand at tier ${C.tier}, ${C.def.magazine} rounds`);
+  const arm = sim.drainEvents().find(e => e.t === 'zarm' && e.id === me.id);
+  ok(arm && arm.tier === C.tier && WEAPON_IDS[arm.w] === C.gun, 'the phone is told (zarm with the wonder tier)');
+  const phone = { ...me.ps, defs: [null, null], ammo: [0, 0], reserve: [0, 0], perks: [] };
+  zmEvent(phone, arm);
+  ok(phone.defs[arm.slot]?.name === C.name && phone.defs[arm.slot].magazine === C.def.magazine && phone.defs[arm.slot].rpm === C.def.rpm, 'the phone arms the same def');
+  ok(zmGunName(C.gun, WEAPONS) === 'Stormcoil' && zmGunName('ar', WEAPONS) === WEAPONS.ar.name, 'it goes by its own name');
+  ok(zmTierDef(F.gun, F.tier).auto && zmTierDef(F.gun, F.tier).range === F.def.range, 'the Rimecaster: an automatic short beam');
+  // The bench refuses it.
+  for (const d of R.L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of R.L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  me.ps.weapon = C.gun; me.ps.x = R.L.bench.x; me.ps.z = R.L.bench.z;
+  const ub = zmUsable(R.L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(ub?.kind === 'bench' && ub.off && /wonder/i.test(ub.why), `the bench will not take it (${ub?.why})`);
+  // The Stormcoil: one hit puts a round's shambler down and the bolt jumps through a crowd.
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  R._startRound(10); R.spawnT = 999;
+  const raise = (x, zz, kind = 0) => { const s = R.horde.find(q => !q.alive); R._raise(s, kind, { x, z: zz }); s.zFrozenT = 0; return s; };
+  const bx = R.L.bands[R.L.start].cx, bz = R.L.bands[R.L.start].cz;
+  const spot = (dx, dz) => { const k = sim.nav.nearestFree(bx + dx, bz + dz); return [k % sim.nav.w + 0.5, Math.floor(k / sim.nav.w) + 0.5]; };
+  const crowd = [[0, 0], [1.6, 0], [3.2, 0.3], [4.6, 0.8], [1, 1.6], [2.4, -1.4]].map(([dx, dz]) => raise(...spot(dx, dz)));
+  me.ps.x = bx - 6; me.ps.z = bz;
+  sim.drainEvents();
+  sim._damage(crowd[0], me, 50, C.gun, 6);
+  const arcs = sim.drainEvents().filter(e => e.t === 'zfx' && e.k === 'arc').length;
+  ok(!crowd[0].alive, 'a Stormcoil hit puts a shambler down');
+  ok(arcs >= 3 && arcs <= C.chain && crowd.filter(q => !q.alive).length >= 3, `the bolt jumps (${arcs} arcs, ${crowd.filter(q => !q.alive).length} down)`);
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.zFree = 0; }
+  // The Rimecaster: three hits freeze one solid (it stays put), killed frozen it shatters on its neighbours.
+  R._give(me, F.gun);
+  ok(me.ps.defs[me.ps.slot].zw === 'rime' && me.zm.tiers[F.gun] === F.tier, 'the Rimecaster in hand');
+  const a = raise(...spot(0, 0)), b = raise(...spot(1.4, 0.3));
+  a.hp = a.zMax = b.hp = b.zMax = R.hp * 10;
+  for (let i = 0; i < F.chill; i++) sim._damage(a, me, 20, F.gun, 5);
+  ok(a.zFrozenT > sim.time, 'frozen after three hits');
+  const ax = a.ps.x, az = a.ps.z;
+  me.ps.x = a.ps.x + 1.5; me.ps.z = a.ps.z;
+  run(sim, 1);
+  ok(Math.hypot(a.ps.x - ax, a.ps.z - az) < 0.05 && a.zSwing <= 0, 'a frozen zombie neither walks nor claws');
+  const bh = b.hp;
+  sim.drainEvents();
+  a.hp = 1;
+  sim._damage(a, me, 20, F.gun, 5);
+  const shat = sim.drainEvents().some(e => e.t === 'zfx' && e.k === 'shatter');
+  ok(!a.alive && shat && b.hp < bh - R.hp * 0.5, `killed frozen, it shatters on its neighbour (${Math.round(bh - b.hp)} damage)`);
+  // A boss is only slowed, and takes a sliver of its own health a hit.
+  const boss = raise(...spot(-2, 0), 3);
+  for (let i = 0; i < 6; i++) sim._damage(boss, me, 20, F.gun, 5);
+  ok(!(boss.zFrozenT > sim.time) && boss.zSlowT > sim.time && boss.hp > boss.zMax * 0.97, 'a boss is slowed, never frozen, and barely scratched');
+  clearZmWalls(sim.map);
 }
 
 // ---- The economy (ROADMAP item 36): streaks off, the bench, the terminal, plates, traps, perks, exfil, the quest ----
@@ -1106,7 +1357,7 @@ section('determinism');
 {
   const sig = sim => JSON.stringify([sim.tick, sim.rules.round, sim.rules.killed, sim.rules.crew.map(p => [p.zm.pts, Math.round(p.ps.x * 100), Math.round(p.ps.z * 100)]),
     sim.rules.horde.map(p => (p.alive ? [Math.round(p.ps.x * 100), Math.round(p.ps.z * 100), Math.round(p.hp)] : 0))]);
-  for (const id of ['foundry', 'ashgrove']) {
+  for (const id of ['foundry', 'ashgrove', 'polestar']) {
     const a = makeSim(id, 77), b = makeSim(id, 77);
     let same = true;
     for (let t = 0; t < (QUICK ? 40 : 80) && same; t++) { run(a, 1); run(b, 1); same = sig(a) === sig(b); }
@@ -1116,7 +1367,7 @@ section('determinism');
 
 // ---- Performance: a round-20 and a round-30 horde, with the economy busy (every trap armed, sentries, drones) ----
 section('perf');
-for (const id of QUICK ? ['neon', 'ashgrove'] : ZM_MAP_IDS) for (const round of [20, 30]) {
+for (const id of QUICK ? ['neon', 'ashgrove', 'polestar'] : ZM_MAP_IDS) for (const round of [20, 30]) {
   const sim = makeSim(id, 99);
   toLive(sim);
   const R = sim.rules;
