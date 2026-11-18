@@ -709,3 +709,147 @@ Marksman            43  44  45  51  50            43  45  48  51  49
 Sniper              34  37  54  68  64            34  38  49  66  62
 ```
 Each class still owns its distance: shotguns 4 m, SMGs 10 m, ARs 20 m, snipers 35 m and beyond.
+
+## Balance pass 4 (owner's 99-match stats, 2026-11-18)
+
+Source: docs/stats-2026-11-18.txt (decode with `decodeStatsCode`, js/game/telemetry.js), summary in
+docs/stats-2026-11-18-summary.txt. 99 matches; 56 have no build tag (before 1111-9), and only 16 were played on
+1111-34 or later (after pass 3 landed at 1111-33), 15 of them after bots started aiming in to see past 20 m (1111-35).
+
+### Reading the owner's numbers
+- **Every mode is folded together.** The code had no mode split: 6v6, Ground War, battle royale and Rebound, Extraction,
+  Showdown and Graveyard Shift all count the same. Graveyard Shift zombie kills dominate some rows: Squall 129-9 and
+  Skitter 102-8 in scope m (and Thresher 8-0, Tallyman 8-0, Shunter 10-0) are almost certainly zombies. Battle royale
+  rows are looted guns against armour. Scope h and m are discounted entirely for this pass.
+- **Scope a minus h** (the bots in his lobbies) is the big sample, but it is mostly old builds (56 untagged matches
+  predate pass 1's shotgun and sniper bot behaviour) and since the bot pool (ROADMAP 15) a gun's numbers are largely
+  whoever carries it: a lobby of pool bots near his rating has a few regulars with fixed favourites, so on 1111-34+
+  Thresher reads 4.86 (34-7), Prospector 2.42, Foreman 0.37 and Bulwark 0.39 on 20-100 events each. Used here as a
+  sanity check only.
+- **Pistols and launchers are not primaries and their K/D is a selection effect.** Bots switch to the sidearm only
+  as Veterans and Elites (`pistolSwap`), only with the primary empty or overheated and only inside 14 m of a target
+  they are already fighting (js/sim/bots.js), or to a launcher at 8-34 m by choice: the pistol finishes a fight the
+  primary started and is rarely held when its holder dies. Flicker 3.40, Gnat 1.81, Breaker 1.75 (bots only, all
+  builds) are that, not stats. Not changed.
+- **The next stats code is split by mode** (below), so pass 5 can read 6v6 on its own.
+
+So this pass leans on the rig: mirrored 6 v 6 (dev/balance-pass.sh, Regular bots, 6 seeds x 2 rounds) and the
+realistic preset (dev/balance-sim.mjs --realistic: pool rosters with kits, perks, equipment and streaks, Quick Play
+maps and modes; 4 seeds x 50 rounds x 6 lobbies = 1,200 lobbies a side, bots only). In the realistic lobbies the mean bot
+gun K/D is 0.88 (deaths to streaks and thrown kit count, their kills do not), so 0.80 there is par minus 10%.
+
+### Diagnosis, outlier by outlier
+- **Shotguns** (owner lobbies 0.34-0.65): mirrored 0.86-0.95, realistic 0.74-0.86. Kills all land inside 10 m
+  (headless kill-distance log: 0 kills past 15 m, a third of deaths at 10-20 m while closing). Bot behaviour is doing
+  what it should (bound cover to cover, charge the last 2 m, `precise` trigger); nothing broken found. The old owner
+  numbers predate pass 1's shotgun behaviour; the realistic gap is the equipment effect pass 2 found. Fixed with stats:
+  a metre more reach and a little more pace on every shotgun.
+- **Snipers** (owner 0.53-0.75): mirrored 0.95-1.09, realistic 0.80-1.01, so not a stat problem. Suspected bot
+  bug: since 1111-35 a bot sees no further than a phone screen (20 m unaimed, 27.5 m aimed toward its aim), while
+  Lancet, Lodestone and Monolith have `pref` 30-32 m, so a sniper bot backs away from a target at 24-27 m
+  (`_combatMove`) and can lose it off its screen. Tried: capping the distance bots act on at 23.5 m. Measured worse
+  in both rigs (realistic Lancet 0.87 -> 0.82, Monolith 0.88 -> 0.81, Harrier 0.92 -> 0.87; mirrored Lodestone
+  1.01 -> 0.88, Harrier 0.96 -> 0.89): giving ground costs a sniper the odd target, standing closer costs it more.
+  Reverted; bots keep backing off to their gun's distance. Kill distances say the screen is the real ceiling: in a
+  mirrored sniper and shotgun log only a handful of kills land past 30 m; snipers kill mostly at 10-25 m.
+- **Murmur** (owner 0.65 all builds, 0.93 on 1111-34+): low in both rigs (mirrored 0.81, realistic 0.75): a stat
+  problem. Buffed.
+- **Gantry, Tallyman** (owner ~0.65; 0.76 and 0.80 on 1111-34+): mirrored 1.11 / 1.11, realistic 0.90 / 1.39. Both
+  fine or strong in the rigs, and both were trimmed in pass 3 after most of the owner's matches: left alone.
+- **Stanchion**: mirrored 1.28 (owner 0.82, realistic 0.94): trimmed.
+- **Strong guns** (Flywheel 1.35 in the summary, Foreman 1.23, Cadence 1.17, Millrace 1.13): Flywheel 1.01 bots-only
+  (the 1.35 is mostly the owner's own 457-211), the rest inside the band in both rigs. Not changed.
+
+### What changed
+Guns (js/shared/weapons.js, weapons-v10.js):
+- Thresher 160 rpm (was 150), full damage to 10 m and spent at 14.5 m (was 9 / 13.5).
+- Doublet full damage to 9.5 m, spent at 13.5 m (was 8.5 / 12.5), reload 1.5 s (was 1.6).
+- Trammel 240 rpm (was 230), full damage to 9 m, spent at 12.5 m (was 8 / 11.5).
+- Squall full damage to 8 m, spent at 12 m (was 7 / 11.5).
+- Thistle 170 rpm (was 160). Railspike 240 rpm (was 230).
+- Murmur 1,000 rpm (was 960), full damage to 11 m, spent at 18 m, 60% at range (was 10 / 17 / 55%).
+- Stanchion 620 rpm (was 650).
+Bots: unchanged (the sniper distance cap above was reverted).
+
+### Stats split by mode (js/game/telemetry.js, js/ui/stats.js)
+Each match record carries `mg`, its mode group: `core` (the 6v6 modes, Ranked included), `gw` (Ground War), `br`
+(battle royale and Rebound), `ex` (Extraction), `sd` (Showdown), `zm` (Graveyard Shift); `?` for records and archives
+from before. The aggregate keeps `byGroup` next to `byBuild`. Graveyard Shift counts only in its own group, never in
+the totals. The export code appends `~g:<group>=<matches>.<live>,...` and `~<scope>!<group>:<pm>:<rows>` after the
+build parts (rows left out when the one group is the totals); older decoders skip both, and old codes decode as before.
+The Stats screen has a mode button (All modes, then each group with matches). `node dev/sim-telemetry.mjs` checks the
+round trips (groups, builds, gear rows with their colon, the owner's three older codes, a decoder that ignores groups).
+
+### Results
+Bots only. Owner columns: scope a minus scope h of his code (all modes, see above; in brackets under 40 events).
+Mirrored: 6 seeds x 2 rounds, Regular, stock guns (before = the code at the start of this pass, after = this pass).
+Realistic: 4 seeds x 50 rounds x 6 Quick Play lobbies, pool bots, equipment and streaks on. The "after" runs had the
+sniper distance cap in; it is reverted, so the snipers ship at their "before" numbers (their guns did not change).
+
+| Class | Gun | Owner lobbies, bots, all builds | Owner lobbies, bots, 1111-34 on | Mirrored before | Mirrored after | Realistic before | Realistic after |
+|---|---|---|---|---|---|---|---|
+| Assault | Halyard | 0.98 | 0.89 | 1.10 | 1.11 | 1.03 | 0.99 |
+| Assault | Cadence | 1.17 | 1.16 | 1.11 | 1.15 | 0.94 | 0.95 |
+| Assault | Drayman | 0.87 | 0.58 | 1.06 | 1.14 | 0.84 | 0.84 |
+| Assault | Shunter | 0.97 | 1.31 | 1.03 | 1.05 | 0.95 | 0.96 |
+| Assault | Flywheel | 1.01 | 0.92 | 1.01 | 1.02 | 0.87 | 0.86 |
+| Assault | Kiln | 0.93 | 0.85 | 1.08 | 1.08 | 1.02 | 1.02 |
+| SMG | Skitter | 0.88 | 0.64 | 0.95 | 0.92 | 0.86 | 0.85 |
+| SMG | Rasp | 0.79 | 0.60 | 0.94 | 0.95 | 0.87 | 0.85 |
+| SMG | Stitch | 0.83 | 0.49 | 1.00 | 0.92 | 0.75 | 0.75 |
+| SMG | Ballast | 1.02 | 0.91 | 0.97 | 0.96 | 0.93 | 0.91 |
+| SMG | Murmur | 0.65 | 0.93 | 0.81 | 0.86 | 0.75 | 0.77 |
+| SMG | Hopper | 0.97 | 0.92 | 0.98 | 0.95 | 0.83 | 0.81 |
+| Shotgun | Thresher | 0.50 | 4.86 | 0.86 | 0.94 | 0.74 | 0.84 |
+| Shotgun | Squall | 0.34 | (-) | 0.94 | 0.91 | 0.77 | 0.78 |
+| Shotgun | Doublet | 0.48 | 0.52 | 0.92 | 0.95 | 0.86 | 0.89 |
+| Shotgun | Railspike | 0.54 | - | 0.86 | 0.96 | 0.81 | 0.80 |
+| Shotgun | Trammel | 0.42 | 0.85 | 0.95 | 1.01 | 0.84 | 0.87 |
+| Shotgun | Thistle | 0.65 | (0.00) | 0.87 | 0.86 | 0.78 | 0.84 |
+| LMG | Bulwark | 0.91 | 0.39 | 1.17 | 1.16 | 0.99 | 0.98 |
+| LMG | Drover | 1.05 | 1.44 | 1.17 | 1.19 | 0.78 | 0.78 |
+| LMG | Millrace | 1.13 | 1.44 | 1.18 | 1.12 | 0.85 | 0.84 |
+| LMG | Gantry | 0.64 | 0.76 | 1.11 | 1.23 | 0.90 | 0.90 |
+| LMG | Stanchion | 0.82 | 1.01 | 1.28 | 1.16 | 0.94 | 0.91 |
+| Marksman | Tallyman | 0.67 | 0.80 | 1.11 | 1.02 | 1.39 | 1.40 |
+| Marksman | Foreman | 1.19 | 0.37 | 0.96 | 0.96 | 0.77 | 0.76 |
+| Marksman | Prospector | 0.86 | 2.42 | 0.90 | 0.88 | 1.21 | 1.22 |
+| Marksman | Bodkin | 0.69 | 0.72 | 0.90 | 0.90 | 0.82 | 0.80 |
+| Marksman | Tandem | 1.13 | 1.27 | 1.10 | 1.11 | 1.14 | 1.18 |
+| Marksman | Lapwing | 1.11 | 0.44 | 1.07 | 1.09 | 0.78 | 0.79 |
+| Sniper | Lancet | 0.93 | - | 1.09 | 1.03 | 0.87 | 0.82 |
+| Sniper | Monolith | 0.72 | (0.00) | 0.95 | 0.95 | 0.88 | 0.81 |
+| Sniper | Kestrel | 0.53 | (0.50) | 1.02 | 1.00 | 1.01 | 0.99 |
+| Sniper | Harrier | 0.65 | 0.59 | 0.96 | 0.89 | 0.92 | 0.87 |
+| Sniper | Lodestone | 0.75 | (1.75) | 1.01 | 0.88 | 0.80 | 0.81 |
+| Pistol | Flicker | 3.40 | 14.00 | | | | |
+| Pistol | Gnat | 1.81 | - | | | | |
+| Launcher | Breaker | 1.75 | (1.00) | | | | |
+| Pistol | Verdict | 0.74 | (0.25) | | | | |
+
+Pistol and launcher rows are for reference (see above; not primaries, not tuned).
+
+Mirrored: 0.81-1.28 before (Murmur 0.81, Stanchion 1.28 outside 0.85-1.20) -> 0.86-1.23 after (Gantry 1.23, unchanged
+gun, inside the run's +-0.07 noise for 6 seeds; it was 1.11 before). Every primary is inside 0.80-1.25 mirrored.
+Shotguns 0.86-0.95 -> 0.86-1.01, Murmur 0.81 -> 0.86, Stanchion 1.28 -> 1.16.
+
+Realistic (par 0.88): shotguns 0.74-0.86 -> 0.78-0.89 (Thresher 0.74 -> 0.84, Thistle 0.78 -> 0.84), Murmur 0.75 ->
+0.77. Still outside 0.80-1.25 there: Tallyman 1.40 (Prospector 1.22 and Tandem 1.18 just inside), and Stitch 0.75, Foreman 0.76, Murmur 0.77, Drover 0.78, Squall 0.78, Lapwing 0.79. Those disagree with the mirrored rig
+(Tallyman 1.02, Drover 1.19, Lapwing 1.09, Stitch 0.92) by more than any stat change could explain, and the realistic
+rosters are pool bots with fixed favourite guns and their own ratings, so a gun's realistic number is partly its
+carriers' skill (the owner's 1111-34+ rows show the same effect harder). Not tuned on that alone. Next: with the next
+stats code split by mode, read the owner's 6v6 rows on 1111-34+ builds; if Murmur, Squall and Stitch still sit under
+0.8 there, they are the next buffs, and Tallyman the next trim.
+
+### Leftovers fixed in the same branch (docs/BUGSWEEP-2026-11-12.md "Open")
+- Ground War Domination: off-screen objective markers that point the same way are pushed apart along the screen edge
+  (js/ui/hud.js `#spreadMarks`, at least 40 px centre to centre, each keeps its arrow and order).
+- Turnstile: the outer stair gaps moved to the half metre (10.5-13.5 and 41.5-44.5, and their images in the south
+  wall): on whole metres the nav grid saw one free cell through a 3 m gap and bots meeting there stuck on each other.
+  The east platform bench moved clear of the gap. Stuck counts per 300 s match: TDM 4 -> 3, all modes 28 -> 31 spread
+  over single cells (no hotspot; the old one was 8 at one cell in a 60 s TDM).
+- Frontier: an enterable building is built whole by the tile its roof's centre is in (`buildingTiles`,
+  js/render/themes/frontier.js), so its parapet caps, inner wall caps and roof trims settle together across a 32 m
+  tile edge. dev/zfight-check.py --maps frontier: tops 3 -> 1 (the three seam overlaps at roof height are gone; one
+  2 cm floor-level sliver at a wall base of building 17, x 227.5, appeared), walls 14 (unchanged, faces under the
+  terrain, known).

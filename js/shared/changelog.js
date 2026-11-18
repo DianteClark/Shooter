@@ -14,6 +14,17 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1118-2', date: '2026-11-18', title: 'Balance pass 4, gun stats by mode',
+    items: [
+      'Shotguns reach a little further: the Thresher, Doublet, Trammel and Squall keep their full hit about a metre further out. The Thresher pumps faster, the Doublet reloads faster, and the Trammel, Thistle and Railspike fire a little faster.',
+      'The Murmur fires faster and keeps more of its damage at range. The Stanchion fires a little slower.',
+      'Gun stats: Graveyard Shift no longer counts in your gun stats totals (zombie kills are not gunfights). A new mode button on the Stats screen shows each kind of mode on its own: 6v6, Ground War, Battle Royale, Extraction, Showdown and Graveyard Shift. Exported codes carry the split.',
+      'Ground War Domination: flag markers off the edge of the screen no longer pile on top of each other.',
+      'Turnstile: the stairs at either end of the platforms are easier to get through without catching on the walls.',
+      'Frontier: roof edges on buildings that sit across two parts of the map no longer flicker.',
+    ],
+  },
+  {
     build: '1118-1', date: '2026-11-18', title: 'Weekly events',
     items: [
       'Weekly events: every Monday a new event takes over the top of Multiplayer for the week, with three or four challenges of its own and a calling card or emblem for finishing them all. Event matches also pay 10% more XP.',

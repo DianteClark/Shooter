@@ -3,7 +3,7 @@
 // Mount like the options screen: statsScreen(menu, { onBack }).
 import { CATEGORIES, WEAPON_CATEGORY, WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
-import { DIST_LABELS, GunStats, gunRows, gearRows } from '../game/telemetry.js';
+import { DIST_LABELS, GunStats, gunRows, gearRows, MODE_GROUPS, MODE_GROUP_LABEL, UNKNOWN_GROUP } from '../game/telemetry.js';
 import { TACTICALS, LETHALS } from '../shared/catalog.js';
 import { esc } from './widgets.js';
 import { ico, backButton } from './yard.js';
@@ -33,15 +33,23 @@ const GEAR_COLUMNS = [
   { key: 'usesPerPick', label: 'Use/c', fmt: r => num(r.usesPerPick, 1) },
 ];
 
+// Mode filter: every mode but Graveyard Shift (the totals), or one mode group. Tapping steps to the next group that has
+// matches recorded.
+const ALL_MODES = 'all';
+const modeLabel = g => g === ALL_MODES ? 'All modes' : MODE_GROUP_LABEL[g];
+
 const num = (v, d) => v === null || v === undefined ? '-' : v.toFixed(d);
 const pct = v => v === null || v === undefined ? '-' : `${Math.round(v * 100)}%`;
 
 export function statsScreen(menu, { onBack, onBoards }) {
-  const state = { scope: 'a', cat: 'All', sort: 'kills', open: null, code: null };
+  const state = { scope: 'a', cat: 'All', sort: 'kills', open: null, code: null, group: ALL_MODES };
   menu.el.dataset.screen = 'stats';
 
   const paint = () => {
-    const agg = GunStats.totals();
+    const all = GunStats.totals();
+    const groups = [ALL_MODES, ...[...MODE_GROUPS, UNKNOWN_GROUP].filter(g => all.byGroup?.[g]?.matches)];
+    if (!groups.includes(state.group)) state.group = ALL_MODES;
+    const agg = state.group === ALL_MODES ? all : all.byGroup[state.group];
     const gear = state.cat === GEAR_TAB, cols = gear ? GEAR_COLUMNS : COLUMNS;
     if (!cols.some(c => c.key === state.sort)) state.sort = cols[0].key;
     const ids = WEAPON_IDS.filter(id => state.cat === 'All' || WEAPON_CATEGORY[id] === state.cat);
@@ -54,6 +62,7 @@ export function statsScreen(menu, { onBack, onBoards }) {
       return col.low ? va - vb : vb - va;
     });
     const empty = agg.matches === 0;
+    const nothing = empty && groups.length === 1;     // Nothing recorded in any mode: nothing to clear or export.
     const scopeEmpty = !empty && agg.pm[state.scope] === 0;
     const first = !menu.el.querySelector('.st-table');
     menu.el.innerHTML = `
@@ -62,6 +71,7 @@ export function statsScreen(menu, { onBack, onBoards }) {
         <h2 class="bar-title">Gun stats</h2>
         <div class="st-segs">${Object.entries(SCOPE_LABEL).map(([s, l]) =>
           `<button class="seg${state.scope === s ? ' on' : ''}" data-act="stScope" data-s="${s}">${ico(SCOPE_ICON[s])}${l}</button>`).join('')}</div>
+        ${groups.length > 2 || (groups.length === 2 && groups[1] !== 'core') ? `<button class="seg st-mode on" data-act="stMode" aria-label="Mode filter">${esc(modeLabel(state.group))}</button>` : ''}
         <small class="st-count">${ico('timer')}${agg.matches} match${agg.matches === 1 ? '' : 'es'}</small>
       </header>
       <div class="st-cats scroll-x"${first ? ' data-in="fade"' : ''}>${['All', ...CATEGORIES, GEAR_TAB].map(c =>
@@ -94,8 +104,8 @@ export function statsScreen(menu, { onBack, onBoards }) {
           <button class="btn" data-act="stHide">${ico('close')}<b>Close</b></button>`
         : `<p>Kills and K/D count gunfire only. TTK runs from the first hit to the kill. Pick is the share of players who used the gun. K/min is per minute held.</p>
           ${onBoards ? `<button class="btn st-boards" data-act="stBoards">${ico('ui:crown')}<b>Boards</b></button>` : ''}
-          <button class="btn${state.confirm ? ' is-danger' : ''}" data-act="stClear"${empty ? ' disabled' : ''}>${ico('trash')}<b>${state.confirm ? 'Tap again to clear' : 'Clear'}</b></button>
-          <button class="btn is-primary" data-sound="confirm" data-act="stExport"${empty ? ' disabled' : ''}>${ico('export')}<b>Export code</b></button>`}
+          <button class="btn${state.confirm ? ' is-danger' : ''}" data-act="stClear"${nothing ? ' disabled' : ''}>${ico('trash')}<b>${state.confirm ? 'Tap again to clear' : 'Clear'}</b></button>
+          <button class="btn is-primary" data-sound="confirm" data-act="stExport"${nothing ? ' disabled' : ''}>${ico('export')}<b>Export code</b></button>`}
       </footer>`;
     const body = menu.el.querySelector('.st-body');
     if (body) body.scrollTop = state.scroll || 0;
@@ -106,6 +116,12 @@ export function statsScreen(menu, { onBack, onBoards }) {
     stBack: () => onBack(),
     stBoards: () => onBoards?.(),
     stScope: ({ s }) => { state.scope = s; state.open = null; state.scroll = 0; paint(); },
+    stMode: () => {
+      const all = GunStats.totals();
+      const groups = [ALL_MODES, ...[...MODE_GROUPS, UNKNOWN_GROUP].filter(g => all.byGroup?.[g]?.matches)];
+      state.group = groups[(groups.indexOf(state.group) + 1) % groups.length];
+      state.open = null; state.scroll = 0; paint();
+    },
     stCat: ({ c }) => { state.cat = c; state.open = null; state.scroll = 0; paint(); },
     stSort: ({ k }) => { state.sort = k; state.scroll = 0; paint(); },
     stRow: ({ id }) => { keepScroll(); state.open = state.open === id ? null : id; paint(); },

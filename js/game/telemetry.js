@@ -27,6 +27,26 @@ const PICK_SECONDS = 3;          // Held at least this long in a match counts as
 const MAX_BUILDS = 6;            // Builds the archive keeps apart; older ones fold into UNKNOWN_BUILD.
 export const UNKNOWN_BUILD = '?';  // Matches recorded before records carried their build.
 
+// Mode groups (pass 4): every match also counts in the group of the mode it was played in, kept apart in an aggregate's
+// byGroup. The groups play differently enough (looted guns and armour in battle royale, zombies in Graveyard Shift) that
+// a gun's 6v6 numbers should not be read through them. Graveyard Shift is not PvP: its matches count only in their own
+// group, never in the totals. UNKNOWN_GROUP holds matches recorded before records carried their group (and an older
+// record whose rule set does not say, such as 'tdm', which may have been Ground War).
+export const MODE_GROUPS = ['core', 'gw', 'br', 'ex', 'sd', 'zm'];
+export const UNKNOWN_GROUP = '?';
+export const MODE_GROUP_LABEL = { core: '6v6', gw: 'Ground War', br: 'Battle royale', ex: 'Extraction', sd: 'Showdown', zm: 'Graveyard Shift', '?': 'Older' };
+// The group of a mode id (js/shared/modes.js); with only a rule set (an older record), the group when the rules say.
+export function modeGroupOf(modeId, rules) {
+  const d = MODES[modeId];
+  const r = d?.rules ?? rules;
+  if (r === 'zm') return 'zm';
+  if (r === 'br' || d?.br) return 'br';
+  if (r === 'ex' || d?.ex) return 'ex';
+  if (r === 'gf') return 'sd';
+  if (!d) return UNKNOWN_GROUP;
+  return d.large ? 'gw' : 'core';
+}
+
 // Damage by distance: buckets ending at these ranges (metres); the last one is open.
 export const DIST_EDGES = [5, 10, 20, 30, 45];
 export const DIST_LABELS = ['0-5', '5-10', '10-20', '20-30', '30-45', '45+'];
@@ -99,6 +119,7 @@ export class MatchTelemetry {
     this.live = 0;                             // Seconds of live phase.
     this.mapId = null;
     this.mode = null;
+    this.modeId = null;
     this.practice = false;
     this.result = undefined;
   }
@@ -150,6 +171,7 @@ export class MatchTelemetry {
     this.mapId = view.mapId ?? this.mapId;
     // The rule set, as before the modes overhaul: view.mode is what a new mode's zones look like (HQ draws as 'hard').
     this.mode = MODES[view.modeId]?.rules ?? view.mode ?? this.mode;
+    this.modeId = view.modeId ?? this.modeId;
     if (this.players.size === 0) for (const v of view.players) this.#player(v);
     this.#heldTime(view);
     for (let i = 0; i < events.length; i++) {
@@ -278,7 +300,9 @@ export class MatchTelemetry {
       g[s] = out;
     }
     // b: the build that played the match (js/build.js), so an export can tell builds apart (see encodeStatsCode).
-    const record = { at: Date.now(), b: BUILD, map: this.mapId, mode: this.mode, live: Math.round(this.live), pm, g };
+    // mg: its mode group (MODE_GROUPS), so the totals can leave Graveyard Shift out and an export can split by mode.
+    const record = { at: Date.now(), b: BUILD, map: this.mapId, mode: this.mode, mg: modeGroupOf(this.modeId, this.mode),
+      live: Math.round(this.live), pm, g };
     GunStats.add(record);
     return (this.result = record);
   }
@@ -294,6 +318,15 @@ function emptyAggregate() {
 // build that played them, in byBuild: {build: aggregate, with `last` = newest match time}. A record without a build
 // (saved before builds were recorded) and an aggregate without byBuild count as UNKNOWN_BUILD.
 function fold(agg, rec) {
+  const groups = agg.byGroup || (agg.byGroup = {});
+  const intoGroup = (k, src) => foldNumbers(groups[k] || (groups[k] = emptyAggregate()), src);
+  if (rec.matches === undefined) {
+    // One match: its group, and the totals unless it was Graveyard Shift.
+    const k = rec.mg ?? modeGroupOf(null, rec.mode);
+    intoGroup(k, rec);
+    if (k === 'zm') return agg;
+  } else if (rec.byGroup) for (const k in rec.byGroup) intoGroup(k, rec.byGroup[k]);
+  else if (rec.matches) intoGroup(UNKNOWN_GROUP, rec);
   foldNumbers(agg, rec);
   const by = agg.byBuild || (agg.byBuild = {});
   const into = (b, src) => {
@@ -358,6 +391,11 @@ function read() {
   if (!data.archive.byBuild && data.archive.matches) {
     const { byBuild, ...numbers } = data.archive;
     data.archive.byBuild = { [UNKNOWN_BUILD]: { ...structuredClone(numbers), last: 0 } };
+  }
+  // ...and one saved before mode groups: all of it is of an unknown group.
+  if (!data.archive.byGroup && data.archive.matches) {
+    const { byBuild, byGroup, ...numbers } = data.archive;
+    data.archive.byGroup = { [UNKNOWN_GROUP]: structuredClone(numbers) };
   }
   cache = data;
   return data;
@@ -452,6 +490,11 @@ function stanceOf(r) {
 //   ~<scope>@<build>:<pm>:<guns>                   that build's own rows, only when there is more than one build
 // A decoder from before this skips both (their scope is not a, h or m), so every code reads everywhere; a code from
 // before this simply has no byBuild.
+// Pass 4, appended after those and optional the same way: the mode groups (MODE_GROUPS, '?' for older matches).
+//   ~g:<group>=<matches>.<live s>,...              every group with matches, in MODE_GROUPS order, '?' last
+//   ~<scope>!<group>:<pm>:<guns>                   that group's own rows, unless the totals already are them (one group
+//                                                  that is not 'zm': Graveyard Shift is never in the totals)
+// Older decoders skip both ('g' and 'a!core' are not scopes); a code from before this has no byGroup.
 
 const buildKey = b => String(b).replace(/[^\w.?-]/g, '') || UNKNOWN_BUILD;
 // Newest first: by newest match for a live aggregate, by listed order for a decoded one.
@@ -472,6 +515,14 @@ export function encodeStatsCode(agg) {
     parts.push(`b:${builds.map(b => `${buildKey(b)}=${by[b].matches.toString(36)}.${Math.round(by[b].live).toString(36)}`).join(',')}`);
     if (builds.length > 1) for (const b of builds) for (const s of SCOPES) {
       parts.push(`${s}@${buildKey(b)}:${(by[b].pm[s] || 0).toString(36)}:${scopeBody(by[b], s)}`);
+    }
+  }
+  const bg = agg.byGroup;
+  const groups = bg ? [...MODE_GROUPS, UNKNOWN_GROUP].filter(k => bg[k]?.matches) : [];
+  if (groups.length) {
+    parts.push(`g:${groups.map(k => `${k}=${bg[k].matches.toString(36)}.${Math.round(bg[k].live).toString(36)}`).join(',')}`);
+    if (groups.length > 1 || groups[0] === 'zm') for (const k of groups) for (const s of SCOPES) {
+      parts.push(`${s}!${k}:${(bg[k].pm[s] || 0).toString(36)}:${scopeBody(bg[k], s)}`);
     }
   }
   return parts.join('~');
@@ -501,7 +552,7 @@ export function decodeStatsCode(code) {
         dst[gun] = row;
       }
     };
-    let listed = null;
+    let listed = null, groups = null;
     for (const p of parts.slice(2)) {
       // Only the first two colons split: gear rows inside the body are named like 'eq:frag'.
       const c1 = p.indexOf(':'), c2 = p.indexOf(':', c1 + 1);
@@ -517,6 +568,24 @@ export function decodeStatsCode(code) {
         for (const { b, bm, bl, order } of listed) agg.byBuild[b] = { ...emptyAggregate(), matches: bm, live: bl, order };
         continue;
       }
+      if (key === 'g') {
+        groups = pm.split(',').filter(Boolean).map(item => {
+          const [k, nums] = item.split('=');
+          const [gm, gl] = (nums || '').split('.').map(x => parseInt(x, 36) || 0);
+          return { k, gm, gl };
+        });
+        agg.byGroup = {};
+        for (const { k, gm, gl } of groups) agg.byGroup[k] = { ...emptyAggregate(), matches: gm, live: gl };
+        continue;
+      }
+      if (key.includes('!')) {
+        const [s, k] = key.split('!');
+        const dst = agg.byGroup?.[k];
+        if (!SCOPES.includes(s) || !dst) continue;
+        dst.pm[s] = parseInt(pm, 36);
+        readBody(dst.g[s], body);
+        continue;
+      }
       const [s, b] = key.split('@');
       if (!SCOPES.includes(s)) continue;
       const dst = b === undefined ? agg : agg.byBuild?.[b];
@@ -527,6 +596,11 @@ export function decodeStatsCode(code) {
     // One build: its rows are the totals.
     if (listed && listed.length === 1) {
       const sub = agg.byBuild[listed[0].b];
+      for (const s of SCOPES) { sub.pm[s] = agg.pm[s]; for (const gun in agg.g[s]) sub.g[s][gun] = agg.g[s][gun].slice(); }
+    }
+    // One group that is not Graveyard Shift: its rows are the totals too.
+    if (groups && groups.length === 1 && groups[0].k !== 'zm') {
+      const sub = agg.byGroup[groups[0].k];
       for (const s of SCOPES) { sub.pm[s] = agg.pm[s]; for (const gun in agg.g[s]) sub.g[s][gun] = agg.g[s][gun].slice(); }
     }
     return agg;

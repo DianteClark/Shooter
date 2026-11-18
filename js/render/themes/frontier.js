@@ -181,6 +181,19 @@ function geometry(attrs) {
   return g;
 }
 
+// An enterable building (js/shared/maps/br-kit.js: walls, floor and roof share `bld`, the roof's id) is built whole by
+// the tile its roof's centre is in. Each tile settles its own trims and caps (settleCoplanar), so a building split by a
+// 32 m tile edge used to keep a parapet cap, an inner wall's cap or a sill in one tile's mesh and the roof trim or floor
+// it overlaps in the next one's, coplanar and flickering. Returns piece -> tile for building pieces.
+function buildingTiles(map, tileAt) {
+  const roofTile = new Map();
+  for (const r of map.roofs ?? []) if (r.id != null) roofTile.set(r.id, tileAt(r.x + r.w / 2, r.z + r.d / 2));
+  const out = new Map();
+  for (const r of map.roofs ?? []) if (roofTile.has(r.id)) out.set(r, roofTile.get(r.id));
+  for (const p of [...map.walls, ...(map.rooms ?? [])]) if (p.bld != null && roofTile.has(p.bld)) out.set(p, roofTile.get(p.bld));
+  return out;
+}
+
 export function buildGiantWorld(map, fogUniforms, X) {
   const theme = THEMES.frontier;
   const W = map.width, Hh = map.height;
@@ -240,9 +253,11 @@ export function buildGiantWorld(map, fogUniforms, X) {
     const i = Math.max(ti0, Math.min(ti1, Math.floor(x / TILE))), j = Math.max(tj0, Math.min(tj1, Math.floor(z / TILE)));
     return tiles[(j - tj0) * NI + (i - ti0)];
   };
-  for (const w of map.walls) tileAt(w.x + w.w / 2, w.z + w.d / 2).walls.push(w);
-  for (const r of map.rooms ?? []) tileAt(r.x + r.w / 2, r.z + r.d / 2).rooms.push(r);
-  for (const r of map.roofs ?? []) tileAt(r.x + r.w / 2, r.z + r.d / 2).roofs.push(r);
+  // A building is built whole by one tile, so its caps, trims and floors settle together (buildingTiles).
+  const home = buildingTiles(map, tileAt);
+  for (const w of map.walls) (home.get(w) ?? tileAt(w.x + w.w / 2, w.z + w.d / 2)).walls.push(w);
+  for (const r of map.rooms ?? []) (home.get(r) ?? tileAt(r.x + r.w / 2, r.z + r.d / 2)).rooms.push(r);
+  for (const r of map.roofs ?? []) (home.get(r) ?? tileAt(r.x + r.w / 2, r.z + r.d / 2)).roofs.push(r);
   const waters = map.walls.filter(w => w.kind === 'water');
   const zones = map.zones ?? [];
   const roads = map.roads ?? [];
