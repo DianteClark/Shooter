@@ -56,7 +56,7 @@ export const MODES = {
   // Infected on a huge map: 32 players, two start infected (`inf` overrides INF in js/sim/inf.js; tuned in dev/sim-modes-v10.mjs).
   // Graveyard Shift (docs/ZOMBIES.md): co-op wave survival for up to four (bots fill the seats) against a horde on its
   // own side. Played only on the maps js/shared/zombies.js lays out (`maps`); `zm` marks the family for menus and the HUD.
-  zm:    { id: 'zm',    rules: 'zm',  teamSize: 4, zm: true, maps: ['neon', 'ruins', 'foundry', 'ashgrove'], name: 'Graveyard Shift', short: 'GRAVE', scoreLimit: 999, timeLimit: 7200, desc: 'Up to four hold off the undead, round after round. Buy guns off the walls, open the gates, drink the perks. How long can you last?' },
+  zm:    { id: 'zm',    rules: 'zm',  teamSize: 4, zm: true, maps: ['neon', 'ruins', 'foundry', 'ashgrove', 'polestar'], name: 'Graveyard Shift', short: 'GRAVE', scoreLimit: 999, timeLimit: 7200, desc: 'Up to four hold off the undead, round after round. Buy guns off the walls, open the gates, drink the perks. How long can you last?' },
   gwinf: { id: 'gwinf', rules: 'inf',  teamSize: 16, large: true, everyHuge: true, inf: { firsts: 2, holds: 2, spawnNear: 120, respawn: 5 }, name: 'Ground War Infected', short: 'GW INF', scoreLimit: 32, timeLimit: 300, desc: '32 players, two start infected. Killed by them, you join them. Survive the clock.' },
   // Rebound (ROADMAP 27, docs/BR.md "Rebound"): a small, fast battle royale on one part of a BR map, with redeploys.
   // The same rule set as battle royale (`rules: 'br'`, so every BR system, HUD and menu applies); `rebound` switches
