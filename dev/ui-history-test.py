@@ -76,6 +76,8 @@ async def main():
 
             async def tdm():
                 await pg.wait_for_timeout(4500)                  # Held time for the gun table (3 s counts as used).
+                # A match only gets a gun stats record once someone has fired: wait for the bots' first shots.
+                await pg.wait_for_function(f"Object.values({G}.match.telemetry.scopes?.a || {{}}).some(r => r[2] > 0)", timeout=45000)
                 for _ in range(3):
                     await pg.evaluate(f'({KILL})(1)')
                     await pg.wait_for_timeout(700)
