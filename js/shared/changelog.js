@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'Weekly events',
+    items: [
+      'Weekly events: every Monday a new event takes over the top of Multiplayer for the week, with three or four challenges of its own and a calling card or emblem for finishing them all. Event matches also pay 10% more XP.',
+      'Nine events take turns: Gloves Only (Rebound with boxing gloves and no guns), Snipers Only Rebound, Night Graveyard (fog every round, double points), Pistols at Dawn, Gun Game Gauntlet, Infected Overrun, Showdown Shuffle, Blade Brawl and Iron Hill.',
+      'The event\'s challenges sit on the title under your daily ones and in their own panel on the Challenges screen, each with a Play button. A banner on the title says when a new event starts.',
+      'Season 2: Signal Fire starts on December 28: a new 100-tier track, weekly challenges, the Lights Out event and fresh Ranked placements. The title says so on the day.',
+    ],
+  },
+  {
     build: '1113-5', date: '2026-11-13', title: 'Steadier sticks, clearer streaks',
     items: [
       'The move stick keeps steering while you throw. Holding the stick still at full sprint and pressing a grenade could stop you dead for a moment; it no longer does, however the fingers land, drag, cancel or lift.',
