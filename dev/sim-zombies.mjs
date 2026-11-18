@@ -386,7 +386,7 @@ section('wire');
   ok(!recordZmBest(s, 'neon', 5).fresh && s.zmBest.neon === 7, 'a worse run keeps it');
   recordZmBest(s, 'ruins', 12);
   const code = encodeSave(s);
-  ok(code.startsWith('SY4.'), 'still SY4');
+  ok(code.startsWith('SY4R1.'), 'still SY4');
   const back = decodeSave(code);
   ok(back.ok && back.save.zmBest.neon === 7 && back.save.zmBest.ruins === 12, 'records survive an export code');
   const plain = encodeSave(blankSave());

@@ -321,13 +321,15 @@ test('save codes: v4 round trip keeps mastery, ladder, grants and skins; an SY3 
   assert.deepEqual(back.save.weapons.smg.lad, s.weapons.smg.lad);
   assert.equal(back.save.weapons.smg.ladT, 1);
   assert.deepEqual(back.save.granted, s.granted);
-  assert.ok(encodeSave(s).startsWith('SY4.'));
+  assert.ok(encodeSave(s).startsWith('SY4R1.'));
   s.skins = { anvil: 'skin:anvil-field', wisp: 'skin:anvil-3' }; s.emblem = 'rivet'; s.life = { kills: 40, 'mapwon:dust': 2, __proto__x: 1 };
   const looks = decodeSave(encodeSave(s)).save;
   assert.deepEqual(looks.skins, { anvil: 'skin:anvil-field' }, 'a skin filed under another operator is dropped');
   assert.equal(looks.emblem, 'rivet');
   assert.deepEqual(looks.life, { kills: 40, 'mapwon:dust': 2, __proto__x: 1 });
-  const old = decodeSave(asV3Code(sanitizeSave({ ...v3Save(), version: 4 })));
+  // SY3 codes come from before the progress reset (docs/RESET.md): the game refuses them; read past that, they migrate.
+  assert.equal(decodeSave(asV3Code(sanitizeSave({ ...v3Save(), version: 4 }))).error, 'reset');
+  const old = decodeSave(asV3Code(sanitizeSave({ ...v3Save(), version: 4 })), { preReset: true });
   assert.ok(old.ok, old.error);
   assert.ok(old.save.granted.includes('lethal:cluster'));
   assert.ok(old.save.weapons.smg.owned.includes('gold'));
@@ -346,7 +348,8 @@ test('Progress: migrated save keeps gated gear in its loadout and stores v4', ()
 // mastered, Anvil at tier 3, three skins worn, 60 lifetime SMG kills.
 const PRE_OPS_CODE = 'SY4.WzQsIk9sZE9wcyIsMCwwLDEsMzAsMCxbXSxbWyJBc3NhdWx0IiwiYXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSwicmFtIl0sWyJSdXNoIiwic21nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sIm1vbmFyY2giXSxbIkJyZWFjaCIsInNob3RndW4iLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIlN1cHByZXNzIiwibG1nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sbnVsbF0sWyJPdmVyd2F0Y2giLCJzbmlwZXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXV0sW10sW10sInlhcmQiLFtbInRyb29wZXIiLDUsWzAsNDAwLDEwMDAsMjAsMTJdXSxbImFudmlsIiwzLFswLDYwLDkwMCw0MSwzXV1dLFtdLFtbImFudmlsIiwic2tpbjphbnZpbC0zIl0sWyJ0cm9vcGVyIiwic2tpbjp0cm9vcGVyLTUiXSxbIndpc3AiLCJza2luOndpc3AtZmllbGQiXV0sbnVsbCxbWyJraWxscyIsNTAwXSxbImNhdDpTTUciLDYwXSxbInBsYW50cyIsMl1dXQ.9fu58v';
 test('operators wave: a save code from before it loads with its operators, skins and mastery, and earns the new skins', () => {
-  const r = decodeSave(PRE_OPS_CODE);
+  assert.equal(decodeSave(PRE_OPS_CODE).error, 'reset', 'a code from before the progress reset is refused');
+  const r = decodeSave(PRE_OPS_CODE, { preReset: true });
   assert.ok(r.ok, r.error);
   const s = r.save;
   assert.deepEqual(s.loadouts.slice(0, 3).map(l => l.operator), ['ram', 'monarch', null]);
@@ -460,7 +463,7 @@ test('Progress: applyMatch moves tracks, stamps tier-ups first, pays mastery XP,
     assert.equal(masterOf(back.save.prestige, levelOf(back.save.xp), back.save.totalXp), 124);
     assert.equal(encodeSave(back.save), code, 'append-only: the code re-exports byte for byte (nothing new stored)');
     // A code written by the build before the rework reads the same.
-    assert.ok(code.startsWith('SY4.'));
+    assert.ok(code.startsWith('SY4R1.'));
   });
 
   test('Progress: prestige reveal rewards, the rank camo on every gun, then Master levels with their icons and milestones', () => {

@@ -4,6 +4,24 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'Six new operators',
+    items: [
+      'Six new operators, each unlocked by a challenge in a different mode: Skylark (finish top 5 in Rebound 10 times), Gambit (win 10 Showdown matches), Corvid (kill 500 in Graveyard Shift), Linnet (extract 25 times in Extraction), Garrison (get 300 kills in Ground War) and Brigid (win 10 Ranked matches).',
+      'Each has their own look, a field skin, four mastery skins and a signature emote at mastery tier 3: Ripcord, Heads or Tails, Last Rites, Empty Pockets, Advance and Podium. Once earned, a signature emote joins your emote wheel and plays on any operator.',
+      'Season 2: Signal Fire adds six more operator skins to its track, for Yard Dog, Wren, Cipher, Tinker, Halcyon and Rook. Every other reward stays on the tier it was on. They arrive with the season on December 28.',
+    ],
+  },
+  {
+    build: '1118-2', date: '2026-11-18', title: 'Fresh start',
+    items: [
+      'Fresh start: all progress has been reset for everyone. Levels, prestige, unlocks, mastery, stats, match history, records, friends\' cards, challenges and season and ranked progress all start again from zero, and your callsign is asked again.',
+      'Your settings were kept: graphics, sound, controls and touch layout, HUD size, accessibility, controller buttons, vibration and full screen.',
+      'Everyone starts level 1 together, the bot players on the leaderboards too: from the reset day they climb day by day, so the boards fill up again as everyone plays. They still play exactly as well as before.',
+      'The current season carries on by date, but season tiers, Ranked placements and SR start fresh.',
+      'Save codes made before the reset no longer load. Codes made from now on work as before.',
+    ],
+  },
+  {
     build: '1118-2', date: '2026-11-18', title: 'Balance pass 4, gun stats by mode',
     items: [
       'Shotguns reach a little further: the Thresher, Doublet, Trammel and Squall keep their full hit about a metre further out. The Thresher pumps faster, the Doublet reloads faster, and the Trammel, Thistle and Railspike fire a little faster.',
