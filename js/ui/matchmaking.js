@@ -79,7 +79,7 @@ export function playlistsFor(tab, date = new Date()) {
     // The weekend tournament: live from Friday 18:00 to Sunday midnight, a countdown to the next one otherwise. Its card
     // opens the bracket (js/ui/tourney.js) rather than becoming a pick.
     const tn = tourneyAt(date), cup = tn.cup;
-    list.splice(1, 0, { id: 'tourney', name: cup.name, icon: 'ui:cup', modes: [...new Set(cup.rounds.flat())], mods: [], sub: cup.note, tourney: true, live: tn.live });
+    list.splice(list.findIndex(p => p.id === 'event') + 1 || 1, 0, { id: 'tourney', name: cup.name, icon: 'ui:cup', modes: [...new Set(cup.rounds.flat())], mods: [], sub: cup.note, tourney: true, live: tn.live });
     const f = featured(date);
     list.push({ id: 'featured', name: f.name, icon: 'star', modes: [f.mode], mods: f.mods, sub: 'A new one every day', featured: true });
   }

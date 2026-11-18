@@ -64,7 +64,7 @@ function tnCard(p) {
   let s;
   try { s = tourneySpot(); } catch (err) { console.error('tourney', err); s = { live: false, brow: 'Weekend tournament', name: p.name, sub: p.sub }; }
   return `
-          <button class="mp-pl tn${s.live ? ' live' : ''}" data-act="mpTourney" data-in="up" aria-label="${esc(s.name)}">
+          <button class="mp-pl tn${s.live ? ' live' : ''}" data-act="mpTourney" data-id="tourney" data-in="up" aria-label="${esc(s.name)}">
             <span class="mp-brow">${esc(s.brow)}</span>
             <span class="mp-pl-ico">${ico(p.icon)}</span>
             <span class="mp-pl-tx"><b>${esc(s.name)}</b><small>${esc(s.sub)}</small></span>
