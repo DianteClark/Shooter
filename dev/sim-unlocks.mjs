@@ -574,7 +574,8 @@ test('a whole career: every unlock that opens is stamped on the results once, an
 
 test('after that career everything not tied to a season is open, in every menu', () => {
   const o = opened();
-  const lockedCards = CARDS.filter(c => !c.season && !o.card.has(c.id)).map(c => c.id);
+  // Season and weekly event rewards (js/shared/events.js: dev/sim-events.mjs pays those) wait for their calendar.
+  const lockedCards = CARDS.filter(c => !c.season && !c.event && !o.card.has(c.id)).map(c => c.id);
   assert.deepEqual(lockedCards, [], 'calling cards still locked');
   assert.deepEqual(OPERATORS.filter(op => !o.operator.has(op.id)).map(op => op.id), [], 'operators');
   const camoLocked = WEAPON_IDS.filter(w => w !== GOLDEN_ID).flatMap(w => Progress.camos(w).filter(c => !c.unlocked && !c.camo.season).map(c => `${w}/${c.camo.id}`));
@@ -582,7 +583,7 @@ test('after that career everything not tied to a season is open, in every menu',
   const skinLocked = SKINS.filter(s => !s.season && !o.skin.has(s.id)).map(s => s.id);
   assert.deepEqual(skinLocked, [], 'skins');
   // Champion (a feat emblem) is the best ranked division ever reached: checked with a ranked save below.
-  assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && e.id !== 'feat-champion' && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
+  assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && !e.event && e.id !== 'feat-champion' && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
   assert.deepEqual(FINISHERS.filter(f => !f.unlock.season && !o.finisher.has(f.id)).map(f => f.id), [], 'finishers');
   assert.deepEqual(EMOTES.filter(f => !f.unlock.season && !o.emote.has(f.id)).map(f => f.id), [], 'emotes');
   assert.deepEqual(Object.entries(GEAR_KINDS).flatMap(([k, t]) => Object.keys(t).map(id => `${k}:${id}`)).filter(k => !o.gear.has(k)), [], 'gear');
