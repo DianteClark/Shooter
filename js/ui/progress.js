@@ -23,7 +23,7 @@
  *            updateLoadout(i,part)  renameLoadout(i,name)  setAttachment(i,slot,id|null,weapon=loadout primary) -> bool
  *            kitFor(i,weapon) -> the unlocked kit loadout i keeps for any gun, equipped or not
  *            setEquipment(part)  (edits the active loadout)
- * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'}
+ * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'|'reset'}
  * Pro        proStatus(perk) -> {perk,name,desc,steps:[{stat,label,goal,value,done}],done}  isPro(perk)  proPerks() -> [ids]
  *            Challenge rules and the Pro list live in js/shared/progression.js (PRO_CHALLENGES) and catalog.js (PRO).
  * Cards      cards() -> [{card,unlocked,equipped,progress:{value,goal}|null}]  card (get) -> equipped id  setCard(id) -> bool
@@ -64,6 +64,7 @@
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
 import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
+import { RESET_GEN } from '../shared/reset.js';
 import { dropCareerMemo } from './cardbook.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
 import { getEmblem, emblemUnlocked, FEAT_EMBLEMS } from './emblems.js';
@@ -885,7 +886,7 @@ export const Progress = {
     const c = data.career ?? blankCareer(), wk = careerWeek(c, now);
     const lo = this.loadout();
     return {
-      v: 1, name: this.name || 'Rookie', level: levelOf(data.xp), prestige: data.prestige, xp: data.totalXp,
+      v: 1, rg: RESET_GEN, name: this.name || 'Rookie', level: levelOf(data.xp), prestige: data.prestige, xp: data.totalXp,
       m: c.m, k: c.k, w: c.w, brm: c.brm, brw: c.brw, br5: c.br5, ex: c.ex, kdm: c.kdm, kdk: c.kdk, d: c.d,
       mst: masteryCompleted(data), wk: { key: wk.key, k: wk.k, w: wk.w },
       op: lo.operator ?? null, skin: lo.skin ?? null, card: equippedCard(), emblem: currentEmblemId(),

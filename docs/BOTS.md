@@ -67,7 +67,11 @@ profiles, drawn into each match by matchmaking, each playing at a per-match form
 level, prestige, days }` as of `date` (a Date or ms):
 - Deterministic (same answer on every phone) and every total non-decreasing in the date (tested daily, then every
   nine days, over two years for all 200).
-- Before `POOL_EPOCH` (2026-11-01 UTC) it is the profile's `base`. After, each week adds `activity x 7 x busy`
+- The progress reset (ROADMAP item 41, docs/RESET.md): careers count from `CAREER_START` (= js/shared/reset.js
+  `RESET_AT`, 2026-11-19 UTC), and every profile's `base` is zero, so on the reset date every bot is level 1 with
+  nothing, like every player. The history a profile had by `POOL_EPOCH` is still drawn (so every later roll, the looks
+  included, is unchanged) but counts for nothing. Skill (`mu`, `form`) is untouched: bots play exactly as well as before.
+- Up to `CAREER_START` it is the profile's `base` (all zero). After, each week adds `activity x 7 x busy`
   matches (busy 0..2 from a hash of id and week) at the profile's rates (from `skill.mu`: kills a match 7..20, K/D
   0.55..2.1, team win rate 0.40..0.62, BR win 1..14%, top five 12..52%, XP a match 1,700..3,600) times a weekly form
   (0.8..1.2). The current week counts its days so far. Integers, floored.
@@ -75,8 +79,11 @@ level, prestige, days }` as of `date` (a Date or ms):
 - `extractions` stays 0 until `EXTRACTION_LAUNCH` (2026-11-11, the day extraction mode shipped); never move it (that
   would rewrite every career). From then extraction matches come out of the team share.
 - Cost: about 25 ms for the whole pool two years on (one loop step per week). Cache per day if a board needs it often.
-- Never change `POOL_SEED`, `POOL_EPOCH`, the tag order or `rates()` once boards are live: every bot's history would
-  change under the players' eyes. New profiles go on the end of `TAGS`.
+- `looksAt(profile, career)`: the card, skin, camo and emblem a bot shows with that career. The profile's own once the
+  career backs it (a prestige card at that prestige, a mastery skin tier after enough matches, top camos with prestige),
+  the plain ones until then; boards and lobbies (`pickPoolBots` puts it on each pick as `looks`) both use it, so they agree.
+- Never change `POOL_SEED`, `POOL_EPOCH`, `CAREER_START`, the tag order or `rates()` once boards are live: every bot's
+  history would change under the players' eyes. New profiles go on the end of `TAGS`.
 
 ## Behaviour (js/sim/bots.js)
 Ratings between tiers read `SKILLS` in between (`skillAt`); the tiers sit at 0, 1/3, 2/3 and 1, so a forced tier

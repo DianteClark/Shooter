@@ -159,7 +159,7 @@ party playlist, new operators and skins, replays, match history detail.
     cannot scroll to show all badges.
 
 ## Owner's request (2026-11-18): full progress reset, hard wipe, no way back
-41. One-time wipe on the update that ships it (a RESET epoch constant; on load, if the stored epoch differs): clear every
+41. DONE (NEXT, docs/RESET.md). One-time wipe on the update that ships it (a RESET epoch constant; on load, if the stored epoch differs): clear every
     progress key on the phone (save, stats tracker and match history, friends' career cards, seen/new dots, records,
     season and ranked state, tournament/event state, the player name), keep only device settings (graphics, audio,
     controls and layout, accessibility, controller). Save codes made before the reset are refused. Bot pool careers,

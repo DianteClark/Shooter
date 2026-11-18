@@ -360,17 +360,19 @@ function poolBotEntry(n, team, pick, botSkill, seed) {
   // The favourite most matches, the others now and then.
   const r = mulberry32((seed ?? 0) ^ (prof.index * 0x9e3779b1))();
   const primary = prof.guns[r < 0.6 ? 0 : r < 0.85 ? 1 : 2] ?? prof.guns[0];
+  // Looks as of the match date (botpool looksAt): what the career since the progress reset has earned.
+  const looks = pick.looks ?? prof;
   const loadout = normalizeLoadout({
-    primary, secondary: SECONDARY_IDS.includes(prof.secondary) ? prof.secondary : 'pistol', camo: prof.camo,
+    primary, secondary: SECONDARY_IDS.includes(prof.secondary) ? prof.secondary : 'pistol', camo: looks.camo,
     attachments: { [primary]: botAttachments(primary, usual, prof.kit[primary] ?? 0) },
     tactical: prof.tactical, lethal: prof.lethal, perks: prof.perks.slice(), streaks: prof.streaks.slice(),
   });
   if (PRO_SKILLS.has(usual) || pick.badge.prestige > 0) loadout.pro = loadout.perks.slice();
-  loadout.card = prof.card;
-  Object.assign(loadout, { operator: prof.operator, skin: prof.skin, emblem: prof.emblem });
+  loadout.card = looks.card;
+  Object.assign(loadout, { operator: prof.operator, skin: looks.skin, emblem: looks.emblem });
   return {
     id: `bot${n}`, name: displayName(prof), team, isBot: true, skill, rating, style: prof.style, pool: prof.id,
-    primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...pick.badge }, operator: prof.operator, skin: prof.skin,
+    primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...pick.badge }, operator: prof.operator, skin: looks.skin,
   };
 }
 

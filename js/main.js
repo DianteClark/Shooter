@@ -1,4 +1,6 @@
 // App flow: title, lobby, gunsmith, match, results. Owns the session (Net) and the match lifecycle.
+// First: the progress reset's wipe (docs/RESET.md) runs before any module below reads the save or the stats.
+import { WIPE } from './ui/wipe.js';
 import { Match } from './game/match.js';
 import { GameRenderer } from './render/renderer.js';
 import { AudioEngine } from './audio/audio.js';
@@ -70,6 +72,7 @@ import { NewDots } from './ui/newdots.js';    // QoL: dots on unlocks not yet se
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
 import { maybeEventBanner } from './ui/eventbanner.js';
+import { maybeResetNotice } from './ui/resetnotice.js';     // The progress reset's one-time notice (docs/RESET.md).
 import { weeklyEventAt } from './shared/events.js';     // Weekly events: the banner on the week's first visit.
 import { unlockSheet, setPlayNow } from './ui/unlocksheet.js';
 
@@ -2036,8 +2039,9 @@ Options.subscribe(applyOptions);
 showTitle({ arrive: true });
 NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
-const offeredTutorial = !invite && maybeOfferTutorial();
-if (params.has('debug')) window.__game = { app, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+// Just after the progress reset's wipe, its notice comes first and the training offer follows it.
+const offeredTutorial = !invite && (maybeResetNotice(menu, { then: maybeOfferTutorial }) || maybeOfferTutorial());
+if (params.has('debug')) window.__game = { app, wipe: WIPE, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else {
   if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });

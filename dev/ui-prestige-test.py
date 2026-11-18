@@ -61,7 +61,7 @@ async def main():
                 await pg.goto(f'http://localhost:{PORT}/?debug=1')
                 await pg.wait_for_function('window.__game?.Progress', timeout=30000)
                 # A fresh save: the first-run training offer would cover the title, so mark it seen and reload.
-                await pg.evaluate("localStorage.clear(); window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.name = 'Tester'")
+                await pg.evaluate("localStorage.clear(); localStorage.setItem('switchyard.resetGen', '1'); window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.name = 'Tester'")
                 await pg.reload()
                 await pg.wait_for_function("window.__game?.menu?.el?.dataset.screen === 'title'", timeout=30000)
                 await pg.wait_for_timeout(600)

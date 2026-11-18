@@ -70,7 +70,7 @@ async def main():
                 pg.on('pageerror', lambda e, tag=tag: errors.append(f'{tag}: PAGEERR {e}'))
                 await pg.goto(f'http://localhost:{PORT}/?debug=1')
                 await pg.wait_for_function('window.__game?.Progress', timeout=30000)
-                await pg.evaluate("localStorage.clear(); window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.name = 'Tester'")
+                await pg.evaluate("localStorage.clear(); localStorage.setItem('switchyard.resetGen', '1'); window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.name = 'Tester'")
                 await pg.reload()
                 await pg.wait_for_function("window.__game?.menu?.el?.dataset.screen === 'title'", timeout=30000)
                 await pg.wait_for_timeout(600)
