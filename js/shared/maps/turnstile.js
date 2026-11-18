@@ -17,8 +17,10 @@ function build() {
   const W = 56, H = 34;
   const walls = [];
   rotated(walls, W, H, [
-    // Tiled wall between the north ticket hall and the north platform: stair gaps at x 11-14, 26.5-29.5 and 42-45.
-    tile(6, 7, 5, 1), tile(14, 7, 12.5, 1), tile(29.5, 7, 12.5, 1), tile(45, 7, 5, 1),
+    // Tiled wall between the north ticket hall and the north platform: stair gaps at x 10.5-13.5, 26.5-29.5 and
+    // 41.5-44.5. The outer two sit on the half metre (they were 11-14 and 42-45): on whole metres the nav grid saw only
+    // one free cell through a 3 m gap, and bots meeting in it there stuck on each other (bug sweep 2026-11-12).
+    tile(6, 7, 4.5, 1), tile(13.5, 7, 13, 1), tile(29.5, 7, 12, 1), tile(44.5, 7, 5.5, 1),
 
     // Ticket hall: the ticket office in the middle, a turnstile bank either side of it.
     [25, 2.4, 6, 2.6, 2.8, 'shop', { ticket: true }],
@@ -30,7 +32,7 @@ function build() {
     column(9.5, 13.2), column(20, 11.4), column(40.5, 11.4), column(48, 13.2),
     stairs(31, 8, 6, 2.6),
     [25.5, 11.6, 3, 1.6, 2.4, 'shop', { kiosk: true }],
-    vending(16, 8), bench(20.5, 8), bench(40.6, 8, 1.8),
+    vending(16, 8), bench(20.5, 8), bench(39.4, 8, 1.8),
 
     // Train: outer car (x 9.5-20.5), side panels with two 1.8 m doors a side; the far car is its image.
     car(9.5, 15.5, 2.1, 0.3), car(13.4, 15.5, 3.2, 0.3), car(18.4, 15.5, 2.1, 0.3),
