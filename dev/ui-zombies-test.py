@@ -13,7 +13,9 @@ Screenshots at 852x393, 667x375 and 932x430 go to outdir (default /tmp/zombies).
 panels that spill off the screen. Then the economy (ROADMAP item 36) on Ashgrove at 852x393 and 667x375: a gun upgraded
 at the bench through the use button (the gun goes in, comes out at tier 1 with its pips and look), the supply terminal's
 sheet and a sentry bought from it, a trap armed at its switch, plates at the armour bench, the exfil called at round 15,
-the relics set on the altar and the Gravewarden's bar. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove or
+the relics set on the altar and the Gravewarden's bar. Then Polestar Relay at 932x430: the power, a radio tuned through
+the use button (TUNING n%, the Radios count), the console, and the crate handing over a wonder weapon (its name on the
+weapon panel) fired into a crowd. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove, polestar or
 ZM_ONLY=econ runs only that part.
 Last, every Graveyard Shift message (hints, feed notes, banners, the use button's lines) is fired through the real layer
 at 640x360 to 956x440 and must read whole: nothing cut, clamped or off screen (ZM_ONLY=messages runs only that).
@@ -81,7 +83,7 @@ async def run(browser, vw, vh, failures, errors):
     mode = await ev(f'{G}.match.mode')
     if mode != 'zm': failures.append(f'{tag}: match mode {mode}')
     mapId = await ev(f'{G}.match.mapId')
-    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove'): failures.append(f'{tag}: zombies on {mapId}')
+    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove', 'polestar'): failures.append(f'{tag}: zombies on {mapId}')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=30000)
     # Nobody on the crew dies by accident while the test drives (spawn protection holds the claws off).
     await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200); }})()""")
@@ -279,6 +281,123 @@ async def run_ashgrove(browser, vw, vh, failures, errors):
     except Exception: failures.append(f'{tag}: the perk machine did not sell once the power was on')
     await pg.wait_for_timeout(500)
     await shot('06-perked')
+    await ev('clearInterval(window.__shield)')
+    await ctx.close()
+
+
+async def run_polestar(browser, vw, vh, failures, errors):
+    """Polestar Relay (docs/ZOMBIES.md "Polestar Relay") at 932x430: the match starts on it with the power out, the power
+    switch in the Boiler House through the use button, a radio tuned (dead without power, TUNING with its percentage,
+    then the Radios count on the round plate), the console, and the mystery crate handing over a wonder weapon (the
+    Stormcoil: its own name whole on the weapon panel, its model in hand) that is fired into a crowd (arcs)."""
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'pol {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'pol {vw}: PAGEERR {e} {getattr(e, "stack", "")}'))
+    tag = f'polestar {vw}x{vh}'
+    async def shot(name):
+        print(f'  {tag} {name}', flush=True)
+        await pg.screenshot(path=f'{OUT}/pol-{name}-{vw}x{vh}.png')
+    ev = lambda js: pg.evaluate(js)
+    use_t = "document.querySelector('.zm-use:not([hidden]) .t')?.textContent"
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=polestar&mode=zm', timeout=120000)
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    mapId, mode = await ev(f'[{G}.match.mapId, {G}.match.mode]')
+    if (mapId, mode) != ('polestar', 'zm'): failures.append(f'{tag}: match on {mapId} / {mode}')
+    await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
+      for (const p of sim.rules.crew) if (p.bot) {{ p.bot.update = () => []; }} sim.rules.plan = () => {{}}; sim.rules._crewPlan = null; }})()""")
+    await pg.wait_for_function(f"{G}.match.sim.rules.round === 1 && {G}.match.sim.rules.horde.some(p => p.alive)", timeout=60000)
+    await pg.wait_for_timeout(2500)
+    await shot('01-round1')
+    await check_fit(pg, ['.zm-top', '.zm-crew', '.minimap'], f'{tag} hud', failures)
+    if await ev(f'{G}.match.sim.rules.power') != 0: failures.append(f'{tag}: the power is not off at the start')
+    # Every gate open (on the host), points to spend; a radio first: dead with the power out.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, L = R.L, me = m.sim.byId.get(m.localId); me.zm.pts = 30000;
+      for (const d of L.doors) R._use(me, {{ kind: 'door', i: d.i, cost: 0, ok: true }});
+      const r = L.relics[0]; m.ps.x = r.x; m.ps.z = r.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    try: await pg.wait_for_function(f"{use_t} === 'DEAD RADIO'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no DEAD RADIO prompt with the power out: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(900)
+    await shot('02-radio-dead')
+    # The switch in the Boiler House, through the use button.
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x - 3; m.ps.z = L.power.z + 2.5; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    await pg.wait_for_timeout(1500)
+    await shot('03a-switch-view')
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x; m.ps.z = L.power.z; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'TURN ON THE POWER'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no TURN ON THE POWER prompt: ' + str(await ev(use_t)))
+    where = await ev(CLEAR_OF_STICKS)
+    if where: failures.append(f'{tag}: use button not clear of the sticks: {where}')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.power === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the switch did not turn the power on')
+    try: await pg.wait_for_function("[...document.querySelectorAll('.banner, .hud-banner, [class*=banner]')].some(b => /turned on the power/i.test(b.textContent))", timeout=3000)
+    except Exception: failures.append(f'{tag}: no "<name> turned on the power" banner')
+    await pg.wait_for_timeout(900)
+    await shot('03-power-on')
+    # A radio: tune it with the use button, stay by it, it locks on (the Radios count shows).
+    await ev(f"(() => {{ const m = {G}.match, r = m.sim.rules.L.relics[0]; m.ps.x = r.x; m.ps.z = r.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'TUNE THE RADIO'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no TUNE THE RADIO prompt: ' + str(await ev(use_t)))
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"/^TUNING \\d+%$/.test({use_t} ?? '') && parseInt({use_t}.slice(7)) > 20", timeout=6000)
+    except Exception: failures.append(f'{tag}: no TUNING n% while it locks on: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(300)
+    await shot('04-radio-tuning')
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.got === 1", timeout=9000)
+    except Exception: failures.append(f'{tag}: the radio never locked on')
+    try: await pg.wait_for_function("(() => { const n = document.querySelector('.zm-relic'); return n && !n.hidden && n.textContent.includes('1/3') && n.textContent.includes('Radios'); })()", timeout=3000)
+    except Exception: failures.append(f'{tag}: the round plate does not count Radios 1/3: ' + str(await ev("document.querySelector('.zm-relic')?.textContent")))
+    await pg.wait_for_timeout(600)
+    await shot('05-radio-tuned')
+    await ev(f"(() => {{ const m = {G}.match, A = m.sim.rules.L.altar; m.ps.x = A.x; m.ps.z = A.z + 0.4; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'RELAY CONSOLE'", timeout=8000)
+    except Exception: failures.append(f'{tag}: no RELAY CONSOLE prompt: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(900)
+    await shot('06-console')
+    # The crate hands over a wonder weapon: forced on the host's roll, taken with the use button.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; R.box.state = 0; R.box.uses = 0; R.box.moveAt = 99;
+      const W = R.rng; R.rng = () => 0; R._rollGunOrig = R._rollGun; R._rollGun = p => {{ const i = R._rollGunOrig(p); R.rng = W; return i; }};
+      const bs = R.L.boxSpots[R.box.spot]; m.ps.x = bs.x; m.ps.z = bs.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    await pg.wait_for_function(f"{use_t}?.toUpperCase().includes('CRATE')", timeout=10000)
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.box.state === 2", timeout=8000)
+    except Exception: failures.append(f'{tag}: the crate never offered')
+    offer = await ev(f"(() => {{ const R = {G}.match.sim.rules; return R.view().box.gun; }})()")
+    if offer not in ('nailer', 'machpistol'): failures.append(f'{tag}: the crate offered {offer!r}, not a wonder weapon')
+    try: await pg.wait_for_function(f"/^TAKE (STORMCOIL|RIMECASTER)$/i.test({use_t} ?? '')", timeout=4000)
+    except Exception: failures.append(f'{tag}: the take prompt does not name the wonder weapon: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(700)
+    await shot('07-crate-wonder')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"!!{G}.match.ps.defs[{G}.match.ps.slot]?.zw", timeout=6000)
+    except Exception: failures.append(f'{tag}: the phone did not arm the wonder weapon')
+    name = await ev("document.querySelector('.arms-name span')?.textContent")
+    if name not in ('Stormcoil', 'Rimecaster'): failures.append(f'{tag}: the weapon panel says {name!r}')
+    pips = await ev("document.querySelectorAll('.zm-tier:not([hidden]) i.on').length")
+    if pips: failures.append(f'{tag}: the wonder weapon shows {pips} tier pips (want none: its name needs the room)')
+    cut = await ev("(() => { const n = document.querySelector('.arms-name span'); return n ? n.scrollWidth > n.clientWidth + 1 : true; })()")
+    if cut: failures.append(f'{tag}: the wonder weapon\'s name is cut on the weapon panel')
+    # In a crowd: raise a few in front, fire through the host and watch the effect.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId), nav = m.sim.nav;
+      R.state = 1; R.spawnT = 999; for (const q of R.horde) if (q.alive) {{ q.alive = false; q.zFree = 0; }}
+      const L = R.L, b = L.bands.find(x => x.id === 'mast'); m.ps.x = b.cx - 5; m.ps.z = b.cz + 3; m.ps.aim = 0;
+      for (const [dx, dz] of [[0, 0], [1.5, 0.4], [3, -0.4], [4.4, 0.6], [1, 1.8]]) {{ const s = R.horde.find(q => !q.alive), k = nav.nearestFree(b.cx + dx, b.cz + 3 + dz);
+        R._raise(s, 0, {{ x: k % nav.w + 0.5, z: Math.floor(k / nav.w) + 0.5 }}); s.zPace = 0.01; }} }})()""")
+    await pg.wait_for_timeout(1400)
+    await shot('08-wonder-in-hand')
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId); window.__fx = 0;
+      const t = R.horde.find(q => q.alive); for (let i = 0; i < 4 && t; i++) m.sim._damage(R.horde.find(q => q.alive) ?? t, me, 30, me.ps.weapon, 5); }})()""")
+    await pg.wait_for_timeout(250)
+    await shot('09-wonder-effect')
+    left = await ev(f"{G}.match.sim.rules.horde.filter(q => q.alive).length")
+    if left > 3: failures.append(f'{tag}: the wonder weapon left {left} of 5 standing')
+    await check_fit(pg, ['.zm-top', '.zm-use', '.arms'], f'{tag} wonder hud', failures)
     await ev('clearInterval(window.__shield)')
     await ctx.close()
 
@@ -511,8 +630,8 @@ async def run_specials(browser, vw, vh, failures, errors):
 MSG_SIZES = [(640, 360), (667, 375), (852, 393), (932, 430), (956, 440)]
 FIRE = r"""(async () => {
   const g = window.__game, hud = g.hud, zh = hud.zmHud, view = hud.view;
-  const { ZM_PERK_IDS, ZM_PERKS, ZE, ZM_FX, zmFxOf } = await import('/js/shared/zombies.js');
-  const { QUEST_HINT } = await import('/js/ui/zm-hud.js');
+  const { ZM_PERK_IDS, ZM_PERKS, ZE, ZM_FX, zmFxOf, ZM_WONDERS } = await import('/js/shared/zombies.js');
+  const { QUEST_HINT, RADIO_HINT } = await import('/js/ui/zm-hud.js');
   const { WEAPONS } = await import('/js/shared/weapons.js');
   const me = view.players.find(p => p.id === view.localId), mate = view.players.find(p => p.team === me.team && p.id !== me.id && !p.ai) ?? me;
   const long = 'Maximilian-Longname';
@@ -529,7 +648,7 @@ FIRE = r"""(async () => {
   const notes = what => { for (const a of document.querySelectorAll('.hud .f-row')) for (const an of a.getAnimations()) an.finish(); for (const n of document.querySelectorAll('.hud .f-row .f-note')) { cut(n, what); box(n.closest('.f-row'), what); } feed(); };
   const banner = what => { const b = document.querySelector('.obj-banner'); for (const a of b.getAnimations()) a.finish?.(); box(b, what); cut(b.querySelector('small'), what + ' (sub)'); cut(b.querySelector('b'), what + ' (title)'); };
   const fire = (e, what) => { feed(); zh.onEvent(e, view); notes(what); banner(what); };
-  hud.notify(QUEST_HINT); notes('relic hint');
+  hud.notify(QUEST_HINT); notes('relic hint'); hud.notify(RADIO_HINT); notes('radio hint');
   const guns = Object.keys(WEAPONS), longGun = guns.reduce((a, b) => ((WEAPONS[b].name ?? b).length > (WEAPONS[a].name ?? a).length ? b : a));
   fire({ t: 'zround', round: 1 }, 'round 1 / power out');
   fire({ t: 'zround', round: 10, boss: true }, 'boss round');
@@ -549,9 +668,17 @@ FIRE = r"""(async () => {
   fire({ t: 'zescape', ids: [me.id], round: 20 }, 'escaped'); fire({ t: 'zescape', ids: [], round: 20 }, 'they got out');
   fire({ t: 'zrelic', n: 1, of: 3, by: mate.id }, 'relic found'); fire({ t: 'zrelic', n: 3, of: 3, by: me.id }, 'relics all');
   fire({ t: 'zwarden', state: 1 }, 'warden wakes'); fire({ t: 'zwarden', state: 2 }, 'warden falls');
+  // Polestar Relay's radios and the Listener; the crate's wonder weapons.
+  fire({ t: 'ztune', state: 1, i: 0, by: mate.id }, 'tuning'); fire({ t: 'ztune', state: 0, i: 0 }, 'signal lost');
+  fire({ t: 'zrelic', n: 1, of: 3, by: mate.id, radio: 1 }, 'radio tuned'); fire({ t: 'zrelic', n: 3, of: 3, by: me.id, radio: 1 }, 'radios all');
+  fire({ t: 'zwarden', state: 1, k: 10 }, 'listener answers'); fire({ t: 'zwarden', state: 2, k: 10 }, 'listener falls');
+  for (const w of Object.values(ZM_WONDERS)) fire({ t: 'zbox', state: 2, by: me.id, gun: w.gun }, 'wonder offer ' + w.id);
   // The use button's longest lines.
   const use = zh.useEl, lines = [['UPGRADE ' + (WEAPONS[longGun].name ?? longGun).toUpperCase(), '12,000 · tier 3 · ' + Object.values(ZM_FX).map(f => f.name).reduce((a, b) => (b.length > a.length ? b : a))],
     ['SUPPLY TERMINAL', 'Sentries, strikes, drones, lures, vests'], ['UPGRADE BENCH', 'Hold a gun to upgrade it'], ['THE ALTAR', 'Find all the relics first'],
+    ['UPGRADE BENCH', 'A wonder weapon is as good as it gets'], ['DEAD RADIO', 'No power: find the switch'], ['TUNING 99%', 'Someone is on it'],
+    ['TUNE THE RADIO', `Free: stay by it ${ZE.quest.tune} s`], ['RELAY CONSOLE', '2 of 3 radios tuned'], ['TRANSMIT', 'Something out there will hear'],
+    ...Object.values(ZM_WONDERS).map(w => ['TAKE ' + w.name.toUpperCase(), `Wonder weapon: ${w.desc.toLowerCase()}`]),
     ['CALL EXFIL', '20,000 · hold the pad ' + ZE.exfil.hold + ' s'], ['ARMOUR PLATE', '2,500 · up to ' + ZE.plate.max + ' plates'],
     ...ZM_PERK_IDS.map(k => [ZM_PERKS[k].name.toUpperCase(), `${ZM_PERKS[k].cost.toLocaleString('en-US')} · ${ZM_PERKS[k].desc}`]),
     ...ZM_PERK_IDS.map(k => [ZM_PERKS[k].name.toUpperCase(), `${ZM_PERKS[k].cost.toLocaleString('en-US')} · No power: find the switch`])];
@@ -608,6 +735,9 @@ async def main():
             if os.environ.get('ZM_ONLY') in (None, '', 'ashgrove'):
                 try: await run_ashgrove(browser, 932, 430, failures, errors)
                 except Exception as e: failures.append(f'ashgrove: {type(e).__name__}: {e}')
+            if os.environ.get('ZM_ONLY') in (None, '', 'polestar'):
+                try: await run_polestar(browser, 932, 430, failures, errors)
+                except Exception as e: failures.append(f'polestar: {type(e).__name__}: {e}')
             if os.environ.get('ZM_ONLY') in (None, '', 'messages'):
                 try: await run_messages(browser, failures, errors)
                 except Exception as e: failures.append(f'messages: {type(e).__name__}: {e}')

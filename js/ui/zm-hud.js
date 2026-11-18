@@ -337,9 +337,9 @@ export class ZmHud {
     const tk = `${tier}:${gun}`;
     if (c.tier !== tk) {
       c.tier = tk;
-      this.tierEl.hidden = !tier;
-      // A wonder weapon (tier 5 and up): every pip lit in its own colour.
+      // A wonder weapon (tier 5 and up): no pips (its own name says it all, and needs the room).
       const W = tier >= 5 ? zmWonderOf(gun) : null;
+      this.tierEl.hidden = !tier || !!W;
       const col = W ? W.css : tier >= 3 ? ZM_FX[zmFxOf(gun)].css : tier === 2 ? '#ffd659' : '#8fe08a';
       [...this.tierEl.children].forEach((n, i) => { n.classList.toggle('on', i < tier); n.style.setProperty('--k', col); });
       this.tierEl.title = W ? `${W.name}: ${W.desc}` : tier ? `Tier ${tier}${tier >= 3 ? `: ${ZM_FX[zmFxOf(gun)].name}` : ''}` : '';

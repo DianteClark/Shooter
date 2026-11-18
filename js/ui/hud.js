@@ -2302,7 +2302,9 @@ export class HUD {
       // Battle royale fists are the blade's slot, but boxing gloves (owner notes): named and drawn as such.
       const fists = this.br && me.weapon === 'knife';
       this.armsName.textContent = fists ? 'Fists' : this.gunName(me.weapon);
-      c.magazine = effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
+      // Graveyard Shift: the gun in hand may be a bench tier or a wonder weapon, with its own magazine (the phone's def).
+      const zd = this.el.classList.contains('zm-on') ? this.zmHud?.hands?.()?.defs : null, zps = zd ? this.zmHud.hands() : null;
+      c.magazine = (zps?.weapon === me.weapon ? zd[zps.slot]?.magazine : null) ?? effectiveWeapon(me.weapon, me.attachments)?.magazine ?? 30;
       c.tag = null;                // The status line may need to return to the weapon's name.
       this.armsIcon.innerHTML = fists ? icon('ui:glove', { size: 17 }) : glyph(me.weapon, 15);
       this.#otherGun(me.weapon, c);
