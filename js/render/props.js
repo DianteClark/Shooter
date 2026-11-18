@@ -29,6 +29,7 @@ const SETS = {
   pier: [CRATE, BARREL, CRATE, CONE],
   foundry: [BARREL, BARREL, CRATE, CONE, BARREL],
   ashgrove: [CRATE, BARREL, JAR, CRATE],
+  polestar: [BARREL, CRATE, BARREL, CONE],
   range: [CRATE, BARREL, CONE],
 };
 const COVER_KINDS = new Set(['container', 'crate', 'barrier', 'wall', 'building', 'shop', 'stall', 'adobe', 'rock', 'sandbag', 'tent', 'hull']);

@@ -13,6 +13,7 @@ import * as coast from './themes/coast.js';
 import * as industrial from './themes/industrial.js';
 import * as frontier from './themes/frontier.js';
 import { ashgrove } from './themes/ashgrove.js';
+import { polestar } from './themes/polestar.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
@@ -3141,6 +3142,7 @@ const DRESS = {
   pier: { ...RAILYARD_DRESS, ...coast.pier.dress },
   foundry: { ...RAILYARD_DRESS, ...industrial.foundry.dress },
   ashgrove: { ...RAILYARD_DRESS, ...ashgrove.dress },
+  polestar: { ...RAILYARD_DRESS, ...polestar.dress },
 };
 
 const THEME_STAGES = {
@@ -3165,6 +3167,7 @@ const THEME_STAGES = {
   pier: coast.pier.stage,
   foundry: industrial.foundry.stage,
   ashgrove: ashgrove.stage,
+  polestar: polestar.stage,
 };
 
 // What theme modules (js/render/themes/) may draw with, handed over on ctx.kit: they cannot import world.js back.
@@ -3410,6 +3413,7 @@ const THUMB_STYLE = {
   pier: coast.pier.thumb,
   foundry: industrial.foundry.thumb,
   ashgrove: ashgrove.thumb,
+  polestar: polestar.thumb,
   frontier: frontier.thumb,
 };
 

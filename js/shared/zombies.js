@@ -42,6 +42,9 @@ export const ZM = {
     bloater: { hp: 2.4, dmg: 0, speed: 0.3, reach: 1.7, windup: 0.55, cool: 1 },          // Bursts in reach or on death (ZM_BLAST).
     crawler: { hp: 0.55, dmg: 30, speed: 0.92, reach: 1.1, windup: 0.3, cool: 0.9 },      // Low, quick, a small target.
     shield: { hp: 1.5, dmg: 55, speed: 0.42, reach: 1.4, windup: 0.5, cool: 1.2 },        // A door for a shield (ZM_SHIELD).
+    // The Listener (Polestar Relay's quest boss, raised by the radios, never a round): leaner and quicker than the
+    // Gravewarden, less health, and it fights differently (ZM_LISTENER): frost pulses round it, Crawlers at its call.
+    listener: { hp: 48, dmg: 95, speed: 0.72, reach: 2, windup: 0.6, cool: 1.3 },
   },
   roundMax: 220,                       // Zombies in one round, at most.
   // Account XP in place of the usual kill lines (awards.js, zmXp). Owner notes (1111-32): an escape on round 18 paid
@@ -53,12 +56,19 @@ export const ZM = {
   weaponXp: 0.1, weaponXpCap: 5000,
   perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };
-export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield'];
+// Index 9 is the wire's code for a Shieldbearer whose shield is broken (never a host kind), so the Listener is 10.
+export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield', 'shield', 'listener'];
 export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster', warden: 'Gravewarden',
-  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer' };
+  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer', listener: 'Listener' };
 // Kind indices (p.zk on the host; the view's zk is one more).
-export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8 };
-export const isBossKind = k => k === 3 || k === 4;
+export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8, listener: 10 };
+export const isBossKind = k => k === 3 || k === 4 || k === 10;
+// The quest's boss (the Gravewarden, or the Listener on Polestar Relay): raised by the quest, off the round's count.
+export const isQuestBoss = k => k === 4 || k === 10;
+// The Listener's frost pulse: every `every` s a ring of `r` m swells round it for `wind` s (drawn on the ground the
+// whole time: step out), then `dmg` (grown with the round like a claw) to the crew inside it in its sight. It calls
+// `calls` Crawlers up beside it every `call` s.
+export const ZM_LISTENER = { every: 8, r: 5.5, wind: 1.2, dmg: 34, call: 12, calls: 2 };
 // The Spitter's acid: it keeps `keep` metres off (backing away inside `near`), winds up `windup` s (head back, a gurgle),
 // then lobs a glob that flies `flight` s plus `perM` s a metre (an arc with its landing spot marked on the ground the
 // whole way: a sidestep clears it), aimed `lead` s ahead of a moving target. Landing: `hit` to anyone within `hitR`, and
@@ -158,7 +168,7 @@ export const ZE = {
   gearMax: 8,                       // Sentries, drones, lures and strikes in play at once (the crew's).
   trap: { cost: 1000, on: 30, cool: 45, playerDps: 14, pay: 10, dps: 1.4, boss: 0.012, r: 1.7 },
   exfil: { from: 15, cost: 15000, hold: 75, r: 3.2, gap: 0.32 },     // 1111-32: 12000, 60 s, 0.42 s; the wave's brutes at the round's full share.
-  quest: { pts: 3000 },
+  quest: { pts: 3000, tune: 5 },        // tune: seconds a radio takes to lock on (Polestar Relay's quest).
 };
 export const ZM_TRAP_KINDS = ['shock', 'vent', 'blade'];
 export const ZM_TRAP_NAMES = { shock: 'Live Rail', vent: 'Firedamp Vents', blade: 'Threshers' };
