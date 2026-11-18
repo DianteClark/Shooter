@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Graveyard Shift: Polestar Relay',
+    build: '1118-6', date: '2026-11-18', title: 'Graveyard Shift: Polestar Relay',
     items: [
       'A new map built for Graveyard Shift: Polestar Relay, an iced-in polar station under the northern lights. Start in the mess hall and open your way round the kennels, the lab, the relay mast, the fuel depot and the hangar.',
       'The power is out here too: the switch is in the boiler house in the middle of the station, and the perk machines stay dark until someone throws it.',
