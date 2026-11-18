@@ -23,7 +23,7 @@
  *            updateLoadout(i,part)  renameLoadout(i,name)  setAttachment(i,slot,id|null,weapon=loadout primary) -> bool
  *            kitFor(i,weapon) -> the unlocked kit loadout i keeps for any gun, equipped or not
  *            setEquipment(part)  (edits the active loadout)
- * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'}
+ * Save       exportCode() -> string   importCode(code) -> {ok:true}|{ok:false,error:'format'|'checksum'|'version'|'data'|'reset'}
  * Pro        proStatus(perk) -> {perk,name,desc,steps:[{stat,label,goal,value,done}],done}  isPro(perk)  proPerks() -> [ids]
  *            Challenge rules and the Pro list live in js/shared/progression.js (PRO_CHALLENGES) and catalog.js (PRO).
  * Cards      cards() -> [{card,unlocked,equipped,progress:{value,goal}|null}]  card (get) -> equipped id  setCard(id) -> bool

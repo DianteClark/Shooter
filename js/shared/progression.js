@@ -10,6 +10,7 @@ import { WEAPONS } from './weapons.js';
 import { V10_UNLOCKS } from './weapons-v10.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
+import { RESET_GEN } from './reset.js';     // Save codes carry the progress reset's generation (docs/RESET.md).
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
 // progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
@@ -1540,7 +1541,7 @@ export function migrateV1(v1) {
   return grandfather(s);
 }
 
-/* ---------- Export code: "SY4.<base64url>.<checksum>" (SY2 and SY3 codes still import) ---------- */
+/* ---------- Export code: "SY4R1.<base64url>.<checksum>" (older codes: see decodeSave and the reset) ---------- */
 const CODE_MAX = 32768;
 
 function fnv1a(str) {
@@ -1641,22 +1642,31 @@ function unpack(a) {
   };
 }
 
+// The progress reset (js/shared/reset.js, docs/RESET.md): a code carries the reset generation after its version,
+// "SY4R1.<body>.<sum>", and the checksum covers it, so a code from before the reset (plain "SY4.", or an older
+// generation) is refused with 'reset' and cannot be dressed up as a new one. Builds from before the reset read a new
+// code as 'format'.
+const genSum = (gen, body) => fnv1a(`R${gen}.${body}`);
+
 export function encodeSave(s) {
   const body = toBase64Url(JSON.stringify(pack(s)));
-  return `SY${SAVE_VERSION}.${body}.${fnv1a(body)}`;
+  return `SY${SAVE_VERSION}R${RESET_GEN}.${body}.${genSum(RESET_GEN, body)}`;
 }
 
 // Returns {ok:true, save} or {ok:false, error}. A checksum catches typos and truncated pastes; it is not security.
-export function decodeSave(code) {
+// preReset: read a code from before the reset anyway (dev tests of old codes' migration only; the game never does).
+export function decodeSave(code, { preReset = false } = {}) {
   if (typeof code !== 'string' || code.length > CODE_MAX) return { ok: false, error: 'format' };
-  const m = /^SY(\d+)\.([A-Za-z0-9_-]+)\.([0-9a-z]+)$/.exec(code.trim());
+  const m = /^SY(\d+)(?:R(\d+))?\.([A-Za-z0-9_-]+)\.([0-9a-z]+)$/.exec(code.trim());
   if (!m) return { ok: false, error: 'format' };
-  const version = Number(m[1]);
+  const version = Number(m[1]), gen = m[2] === undefined ? 0 : Number(m[2]), body = m[3];
   if (version < 2 || version > SAVE_VERSION) return { ok: false, error: 'version' };
-  if (fnv1a(m[2]) !== m[3]) return { ok: false, error: 'checksum' };
+  if (gen > RESET_GEN) return { ok: false, error: 'version' };
+  if (gen < RESET_GEN && !preReset) return { ok: false, error: 'reset' };
+  if ((gen ? genSum(gen, body) : fnv1a(body)) !== m[4]) return { ok: false, error: 'checksum' };
   let parsed;
   try {
-    parsed = unpack(JSON.parse(fromBase64Url(m[2])));
+    parsed = unpack(JSON.parse(fromBase64Url(body)));
   } catch {
     return { ok: false, error: 'data' };
   }

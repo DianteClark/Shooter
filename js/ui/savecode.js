@@ -10,6 +10,7 @@ const ERRORS = {
   checksum: 'That code is incomplete or was changed. Copy the whole thing.',
   version: 'That code is from a different version of the game.',
   data: 'That code is damaged and cannot be read.',
+  reset: 'This code is from before the reset. All progress was reset for everyone, so it cannot be loaded.',
 };
 
 export function saveScreen(menu, { onBack, onImported }) {
