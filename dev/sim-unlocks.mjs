@@ -627,7 +627,7 @@ test('SY4 code round trip: every unlock and every pick survives, and the code re
     zm: [Progress.zmBest('ashgrove'), JSON.stringify(Progress.zmFeats(MAP_LIST[7]))] });
   const want = opened(), wantPicks = picks(), wantRecords = Progress.records();
   const code = Progress.exportCode();
-  assert.ok(code.startsWith('SY4.'));
+  assert.ok(code.startsWith('SY4R1.'));
   const blank = encodeSave(P.blankSave());
   assert.ok(Progress.importCode(blank).ok);
   assert.ok(opened().card.size < want.card.size, 'a blank save has the cards locked again');

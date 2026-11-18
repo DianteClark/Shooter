@@ -218,22 +218,24 @@ console.log('ranked');
 console.log('save');
 {
   const OLD = 'SY4.WzQsIk9sZE9wcyIsMCwwLDEsMzAsMCxbXSxbWyJBc3NhdWx0IiwiYXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSwicmFtIl0sWyJSdXNoIiwic21nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sIm1vbmFyY2giXSxbIkJyZWFjaCIsInNob3RndW4iLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIlN1cHByZXNzIiwibG1nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sbnVsbF0sWyJPdmVyd2F0Y2giLCJzbmlwZXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXV0sW10sW10sInlhcmQiLFtbInRyb29wZXIiLDUsWzAsNDAwLDEwMDAsMjAsMTJdXSxbImFudmlsIiwzLFswLDYwLDkwMCw0MSwzXV1dLFtdLFtbImFudmlsIiwic2tpbjphbnZpbC0zIl0sWyJ0cm9vcGVyIiwic2tpbjp0cm9vcGVyLTUiXSxbIndpc3AiLCJza2luOndpc3AtZmllbGQiXV0sbnVsbCxbWyJraWxscyIsNTAwXSxbImNhdDpTTUciLDYwXSxbInBsYW50cyIsMl1dXQ.9fu58v';
-  const d = P.decodeSave(OLD);
-  ok(d.ok, 'an SY4 code from before seasons loads');
+  // A code from before the progress reset (docs/RESET.md) is refused by the game; read past that, it still migrates.
+  ok(P.decodeSave(OLD).error === 'reset', 'a code from before the reset is refused');
+  const d = P.decodeSave(OLD, { preReset: true });
+  ok(d.ok, 'an SY4 code from before seasons loads (read past the reset)');
   // (This one gains its prestige's peak level on its first load, before seasons; from then on it is stable.)
   const NORM = P.encodeSave(d.save);
   ok(P.encodeSave(P.decodeSave(NORM).save) === NORM, 'and its code re-exports unchanged');
   // A boards-era code (career entry, no season): loads and re-exports unchanged too.
-  const withCareer = P.decodeSave(OLD).save;
+  const withCareer = P.decodeSave(OLD, { preReset: true }).save;
   P.recordCareer(withCareer, { kills: 7, deaths: 3, won: true });
   const boardsCode = P.encodeSave(withCareer);
   ok(P.encodeSave(P.decodeSave(boardsCode).save) === boardsCode, 'a code with the boards entry and no season re-exports unchanged');
   // A rolled but untouched season block stays out of the code.
-  const rolled = P.decodeSave(OLD).save;
+  const rolled = P.decodeSave(OLD, { preReset: true }).save;
   S.rollover(rolled.season, at(2026, 11, 20));
   ok(P.encodeSave(rolled) === NORM, 'a season block that only knows the date adds nothing');
   // This build's codes: the season block is the 19th entry, with null in the 18th when there is no career entry.
-  const s = P.decodeSave(OLD).save;
+  const s = P.decodeSave(OLD, { preReset: true }).save;
   S.rollover(s.season, at(2026, 11, 20));
   S.applySeasonMatch(s.season, { xp: S.TIER_XP * 12, counts: { kills: 70 }, ranked: null }, at(2026, 11, 20));
   S.claimTiers(s.season);

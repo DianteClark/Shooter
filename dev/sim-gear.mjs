@@ -123,7 +123,7 @@ test('a save with new gear round-trips through an SY4 code; an old loadout keeps
   n.loadouts[0] = cleanLoadout({ name: 'Gear', primary: 'ar', secondary: 'pistol', perks: ['marathon', 'scavenger', 'tracker'], tactical: 'bulwark', lethal: 'charge', streaks: ['uav', 'turret', 'gunship'] }, 0);
   n.loadouts[1] = cleanLoadout({ name: 'Old', primary: 'smg', perks: ['marathon', 'scavenger', 'tracker'], tactical: 'shock', lethal: 'drill', streaks: ['uav', 'turret', 'gunship'] }, 1);
   const code = encodeSave(sanitizeSave(n));
-  assert.ok(code.startsWith('SY4.'));
+  assert.ok(code.startsWith('SY4R1.'));
   const back = decodeSave(code);
   assert.ok(back.ok);
   assert.equal(back.save.loadouts[0].tactical, 'bulwark'); assert.equal(back.save.loadouts[0].lethal, 'charge');

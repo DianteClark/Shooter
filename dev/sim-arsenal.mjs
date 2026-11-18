@@ -425,7 +425,8 @@ test('new guns take their class kit; class exclusions hold', () => {
 const OLD_CODE = 'SY4.WzQsIk9sZCBIYW5kIiw4MTUzNiw0MDAwMDAsMCw1MCwwLFtbImFyIiwxMjEyMiwzMCwwLDQyMCw3MCwzMSw0NCwzMDAsWyJhc2giXSwiYXNoIiwibm9uZSIsIm5vbmUiLFs2MCwwLDAsMF0sMF0sWyJjcm9zc2JvdyIsNTAwMCwxNSwwLDEyLDAsMCwwLDAsW10sIm5vbmUiLCJub25lIiwibm9uZSIsWzAsMCwwLDBdLDBdXSxbWyJNYWluIiwiYXIiLCJzY2F0dGVyIix7ImFyIjp7Im9wdGljIjoicmVmbGV4IiwibWFnIjoiYXBtYWciLCJncmlwIjoiaGVhdnlzdG9jayJ9LCJzY2F0dGVyIjp7ImJhcnJlbCI6InN1cHByZXNzb3IifX0sWyJtYXJhdGhvbiIsInNjYXZlbmdlciIsInRyYWNrZXIiXSwic21va2UiLCJmcmFnIixbInVhdiIsInR1cnJldCIsImd1bnNoaXAiXSxudWxsXSxbIlJ1c2giLCJzbWciLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIkJyZWFjaCIsInNob3RndW4iLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIlN1cHByZXNzIiwibG1nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sbnVsbF0sWyJPdmVyd2F0Y2giLCJzbmlwZXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXV0sW10sW10sInlhcmQiLFtdLFtdLFtdLG51bGwsW11d.pd3bly';
 
 test('a save code from before V10 imports unchanged, and re-exports to the same code', () => {
-  const r = decodeSave(OLD_CODE);
+  assert.equal(decodeSave(OLD_CODE).error, 'reset', 'a code from before the progress reset is refused');
+  const r = decodeSave(OLD_CODE, { preReset: true });
   assert.ok(r.ok, `decodes: ${r.error}`);
   const s = r.save;
   assert.equal(s.name, 'Old Hand'); assert.equal(s.peakLevel, 50);
@@ -433,7 +434,9 @@ test('a save code from before V10 imports unchanged, and re-exports to the same 
   assert.equal(s.weapons.crossbow.kills, 12);
   assert.deepEqual(s.loadouts[0].attachments.ar, { optic: 'reflex', mag: 'apmag', grip: 'heavystock' });
   assert.equal(s.loadouts[0].secondary, 'scatter');
-  assert.equal(encodeSave(s), OLD_CODE, 'the code format has not moved');
+  // The body has not moved; only the header now carries the reset generation (SY4R1, docs/RESET.md).
+  assert.equal(encodeSave(s).split('.')[1], OLD_CODE.split('.')[1], 'the code format has not moved');
+  assert.ok(encodeSave(s).startsWith('SY4R1.'));
   for (const id of NEW) assert.ok(itemOpen(s, 'weapon', id), `level 50 has the ${id}`);
 });
 

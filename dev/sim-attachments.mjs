@@ -227,7 +227,8 @@ test('wire: old kit ints unchanged, every new kit survives, an older build sees 
 const OLD_CODE = 'SY4.WzQsIk9sZCBIYW5kIiw4MTUzNiw0MDAwMDAsMCw1MCwwLFtbImFyIiwxMjEyMiwzMCwwLDQyMCw3MCwzMSw0NCwzMDAsWyJhc2giXSwiYXNoIiwibm9uZSIsIm5vbmUiLFs2MCwwLDAsMF0sMF0sWyJjcm9zc2JvdyIsNTAwMCwxNSwwLDEyLDAsMCwwLDAsW10sIm5vbmUiLCJub25lIiwibm9uZSIsWzAsMCwwLDBdLDBdXSxbWyJNYWluIiwiYXIiLCJzY2F0dGVyIix7ImFyIjp7Im9wdGljIjoicmVmbGV4IiwibWFnIjoiYXBtYWciLCJncmlwIjoiaGVhdnlzdG9jayJ9LCJzY2F0dGVyIjp7ImJhcnJlbCI6InN1cHByZXNzb3IifX0sWyJtYXJhdGhvbiIsInNjYXZlbmdlciIsInRyYWNrZXIiXSwic21va2UiLCJmcmFnIixbInVhdiIsInR1cnJldCIsImd1bnNoaXAiXSxudWxsXSxbIlJ1c2giLCJzbWciLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIkJyZWFjaCIsInNob3RndW4iLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXSxbIlN1cHByZXNzIiwibG1nIiwicGlzdG9sIix7fSxbIm1hcmF0aG9uIiwic2NhdmVuZ2VyIiwidHJhY2tlciJdLCJzbW9rZSIsImZyYWciLFsidWF2IiwidHVycmV0Iiwic3RyaWtlIl0sbnVsbF0sWyJPdmVyd2F0Y2giLCJzbmlwZXIiLCJwaXN0b2wiLHt9LFsibWFyYXRob24iLCJzY2F2ZW5nZXIiLCJ0cmFja2VyIl0sInNtb2tlIiwiZnJhZyIsWyJ1YXYiLCJ0dXJyZXQiLCJzdHJpa2UiXSxudWxsXV0sW10sW10sInlhcmQiLFtdLFtdLFtdLG51bGwsW11d.pd3bly';
 
 test('SY4 codes: an old code with attachments loads; a save with signatures and kits round-trips', () => {
-  const old = decodeSave(OLD_CODE);
+  assert.equal(decodeSave(OLD_CODE).error, 'reset', 'a code from before the progress reset is refused');
+  const old = decodeSave(OLD_CODE, { preReset: true });
   assert.ok(old.ok, old.error);
   assert.deepEqual(old.save.loadouts[0].attachments.ar, { optic: 'reflex', mag: 'apmag', grip: 'heavystock' });
   assert.deepEqual(old.save.loadouts[0].attachments.scatter, { barrel: 'suppressor' });
@@ -412,7 +413,7 @@ test('wave 2: every new part survives the wire and save codes; older builds read
   assert.deepEqual(back.save.loadouts[0].attachments.launcher, { optic: 'rangefinder', barrel: 'guiderail', mag: 'lightrocket', grip: 'thumbrest' });
   assert.deepEqual(back.save.loadouts[0].attachments.pistol, { grip: 'beavertail', mag: 'tapedmag' });
   assert.equal(encodeSave(back.save), encodeSave(s));
-  assert.ok(decodeSave(OLD_CODE).ok, 'the old code still loads');
+  assert.ok(decodeSave(OLD_CODE, { preReset: true }).ok, 'the old code still loads (read past the reset)');
 });
 
 test('wave 2: every new part has its own model piece on every gun that takes it, inside the gun\'s reach', () => {
