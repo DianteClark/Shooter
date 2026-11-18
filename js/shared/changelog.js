@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Match details',
+    build: '1118-5', date: '2026-11-18', title: 'Match details',
     items: [
       'History: tap any match to open its details. The header shows the mode, map, result, date, length and the XP you earned.',
       'A map of the match marks where you got your kills and where you went down, with a line to where you were shot from.',
