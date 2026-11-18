@@ -394,9 +394,9 @@ console.log('names');
   ok(!dup.length, 'and none repeats', dup.join(', '));
   // + 1: the Master Prestige emblem (docs/PRESTIGE.md), + 12 feat emblems (the rewards pass), kept out of the pool's
   // list the same way.
-  // + the weekly events' emblems (js/shared/events.js), kept out the same way.
-  const { EVENT_EMBLEMS } = await import('../js/ui/emblems.js');
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 + 1 + 12 + EVENT_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
+  // + the weekly events' emblems (js/shared/events.js) and the tournament crest (docs/TOURNAMENTS.md), kept out the same way.
+  const { EVENT_EMBLEMS, TOURNEY_EMBLEMS } = await import('../js/ui/emblems.js');
+  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 + 1 + 12 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
   // The weekly events' rewards and names clash with nothing either.
   const { EVENTS } = await import('../js/shared/events.js');
   const evNames = EVENTS.flatMap(e => [e.reward.name]);
