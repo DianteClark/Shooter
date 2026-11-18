@@ -168,8 +168,8 @@ export const WEAPONS = {
   // further. Seven shells, loaded one at a time, fire to interrupt.
   shotgun: {
     id: 'shotgun', name: 'Thresher', role: 'Breach', auto: false,
-    damage: 22, rpm: 150, magazine: 7, reserve: 42, reload: 0.42, range: 16,
-    falloff: { start: 9, end: 13.5, min: 0.3 },
+    damage: 22, rpm: 160, magazine: 7, reserve: 42, reload: 0.42, range: 16,
+    falloff: { start: 10, end: 14.5, min: 0.3 },
     adsSpread: 0.036, hipSpread: 0.06, bloomPerShot: 0.15, bloomRecover: 1.6, bloomScale: 0.45, turnCap: 7,
     adsTime: 0.17, sprintToFire: 0.1, swapTime: 0.42, moveMult: 1.09, adsMoveMult: 0.68,
     pellets: 8, shellReload: true, kickCam: 1, tracerWidth: 0.55, longshot: 10,
@@ -181,7 +181,7 @@ export const WEAPONS = {
   autoshot: {
     id: 'autoshot', name: 'Squall', role: 'Doorway', auto: true,
     damage: 17, rpm: 320, magazine: 14, reserve: 56, reload: 2.4, range: 13,
-    falloff: { start: 7, end: 11.5, min: 0.3 },
+    falloff: { start: 8, end: 12, min: 0.3 },
     adsSpread: 0.055, hipSpread: 0.075, bloomPerShot: 0.12, bloomRecover: 1.8, bloomScale: 0.5,
     pattern: { amp: 0.02, freq: 1.1, ramp: 3 }, turnCap: 6.5,
     adsTime: 0.2, sprintToFire: 0.11, swapTime: 0.46, moveMult: 1.08, adsMoveMult: 0.78,
@@ -193,8 +193,8 @@ export const WEAPONS = {
   // 7.5 m, and it still kills at ten) and the quickest out of a sprint: two chances to end a fight and no third.
   coach: {
     id: 'coach', name: 'Doublet', role: 'Ambush', auto: false,
-    damage: 20, rpm: 280, magazine: 2, reserve: 30, reload: 1.6, range: 15,
-    falloff: { start: 8.5, end: 12.5, min: 0.35 },
+    damage: 20, rpm: 280, magazine: 2, reserve: 30, reload: 1.5, range: 15,
+    falloff: { start: 9.5, end: 13.5, min: 0.35 },
     adsSpread: 0.035, hipSpread: 0.065, bloomPerShot: 0.1, bloomRecover: 2.2, bloomScale: 0.4, turnCap: 8,
     adsTime: 0.15, sprintToFire: 0.06, swapTime: 0.36, moveMult: 1.12, adsMoveMult: 0.75,
     pellets: 10, kickCam: 1.15, tracerWidth: 0.55, longshot: 9,
@@ -205,7 +205,7 @@ export const WEAPONS = {
   // punches through cover. No one-shot at arm's length and a hip head hit is not lethal, so it has to be aimed.
   slug: {
     id: 'slug', name: 'Railspike', role: 'Slug thrower', auto: false,
-    damage: 62, rpm: 230, magazine: 6, reserve: 40, reload: 0.42, range: 30,
+    damage: 62, rpm: 240, magazine: 6, reserve: 40, reload: 0.42, range: 30,
     falloff: { start: 13, end: 24, min: 0.55 }, penetrate: 0.8,
     adsSpread: 0.006, hipSpread: 0.028, bloomPerShot: 0.5, bloomRecover: 2.2, bloomScale: 1, turnCap: 9,
     adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.42, moveMult: 1.03, adsMoveMult: 0.8,
