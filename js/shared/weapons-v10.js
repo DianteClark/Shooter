@@ -59,8 +59,8 @@ export const V10_WEAPONS = {
   // It pays in reach instead, the shortest of the SMGs.
   hushsmg: {
     id: 'hushsmg', name: 'Murmur', role: 'Ghost', auto: true, suppressed: true,
-    damage: 24, rpm: 960, magazine: 30, reserve: 180, reload: 1.8, range: 24,
-    falloff: { start: 10, end: 17, min: 0.55 },
+    damage: 24, rpm: 1000, magazine: 30, reserve: 180, reload: 1.8, range: 24,
+    falloff: { start: 11, end: 18, min: 0.6 },
     adsSpread: 0.016, hipSpread: 0.032, bloomPerShot: 0.05, bloomRecover: 3.2, bloomScale: 1.3,
     pattern: { amp: 0.008, freq: 1.1, ramp: 3 },
     adsTime: 0.14, sprintToFire: 0.08, swapTime: 0.27, moveMult: 1.06, adsMoveMult: 0.8,
@@ -86,8 +86,8 @@ export const V10_WEAPONS = {
   // shells. Lighter pattern than the Thresher, so it wants two at anything past arm's length.
   magshot: {
     id: 'magshot', name: 'Trammel', role: 'Mag-fed', auto: false,
-    damage: 20, rpm: 230, magazine: 8, reserve: 42, reload: 1.7, range: 14,
-    falloff: { start: 8, end: 11.5, min: 0.3 },
+    damage: 20, rpm: 240, magazine: 8, reserve: 42, reload: 1.7, range: 14,
+    falloff: { start: 9, end: 12.5, min: 0.3 },
     adsSpread: 0.045, hipSpread: 0.078, bloomPerShot: 0.14, bloomRecover: 1.8, bloomScale: 0.45, turnCap: 8,
     adsTime: 0.17, sprintToFire: 0.12, swapTime: 0.4, moveMult: 1.08, adsMoveMult: 0.7,
     pellets: 8, kickCam: 0.9, tracerWidth: 0.5, longshot: 9,
@@ -98,7 +98,7 @@ export const V10_WEAPONS = {
   // twenty metres, where every other shotgun is spent, and the darts go through a crate.
   flechette: {
     id: 'flechette', name: 'Thistle', role: 'Flechette', auto: false,
-    damage: 19, rpm: 160, magazine: 5, reserve: 40, reload: 0.5, range: 30,
+    damage: 19, rpm: 170, magazine: 5, reserve: 40, reload: 0.5, range: 30,
     falloff: { start: 13, end: 24, min: 0.6 }, penetrate: 0.6,
     adsSpread: 0.013, hipSpread: 0.045, bloomPerShot: 0.3, bloomRecover: 2, bloomScale: 0.6, turnCap: 9,
     adsTime: 0.21, sprintToFire: 0.16, swapTime: 0.42, moveMult: 1.03, adsMoveMult: 0.66,
@@ -111,7 +111,7 @@ export const V10_WEAPONS = {
   // the fifteenth it is the tightest automatic in the game. No heat bar. Let go and it has to settle again.
   beltlmg: {
     id: 'beltlmg', name: 'Stanchion', role: 'Settles in', auto: true,
-    damage: 29, rpm: 650, magazine: 90, reserve: 180, reload: 4.3, range: 52,
+    damage: 29, rpm: 620, magazine: 90, reserve: 180, reload: 4.3, range: 52,
     falloff: { start: 22, end: 38, min: 0.72 }, penetrate: 0.75,
     adsSpread: 0.005, hipSpread: 0.08, bloomPerShot: 0, bloomRecover: 1.5, bloomScale: 1.5,
     settle: { shots: 15, from: 4.5 },

@@ -80,6 +80,10 @@ const MARK_PAD_X = 34;
 const MARK_PAD_T = 56;
 const MARK_PAD_B = 100;
 const MARK_CLEAR = 30;           // A marker's radius plus its arrow: how far a marker keeps from what it must not cover.
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+// Signed difference of two bearings, wrapped to -PI..PI.
+const angleGap = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+const MARK_SEP = 40;             // Off-screen objective markers (36 px) keep at least this far apart, centre to centre.
 const MARK_WALK = 0.05;          // Fraction of the way in per step when walking a marker clear.
 const MARK_Y = { dom: 4.3, hard: 3.6 };   // Metres above the ground to pin a marker: flag tip or zone wall.
 const HARD_WARN = 5;             // Seconds of warning before a hardpoint moves.
@@ -3434,6 +3438,7 @@ export class HUD {
       const m = this.objNodes[i].mark, gone = i >= n;
       if (gone !== m.gone) { m.gone = gone; m.root.style.visibility = gone ? 'hidden' : ''; }
     }
+    const place = [];
     for (let i = 0; i < n; i++) {
       const pt = points[i], m = this.objNodes[i].mark;
       this.#paintPoint(m, pt, i, me.team);
@@ -3463,16 +3468,51 @@ export class HUD {
         edge -= MARK_WALK;
         off = true;
       }
-      const px = Math.round(W / 2 + dx * edge), py = Math.round(H / 2 + dy * edge);
+      place.push({ m, x: W / 2 + dx * edge, y: H / 2 + dy * edge, off, a: Math.atan2(dy, dx) });
+    }
+    // Off-screen markers that point the same way end up on the same stretch of edge (Ground War's flags beyond one
+    // side of the screen): push them apart along the edge, keeping each one's order and arrow, so they never stack.
+    this.#spreadMarks(place, W, H);
+    for (const { m, x, y, off, a: ang } of place) {
+      const px = Math.round(x), py = Math.round(y);
       if (px !== m.x || py !== m.y) {
         m.x = px; m.y = py;
         m.root.style.transform = `translate3d(${px}px,${py}px,0)`;
       }
       if (off !== m.off) { m.off = off; m.root.classList.toggle('off', off); }
       if (off) {
-        const a = Math.round(Math.atan2(dy, dx) * 12) / 12;
+        const a = Math.round(ang * 12) / 12;
         if (a !== m.a) { m.a = a; m.arrow.style.transform = `rotate(${a}rad) translateX(23px)`; }
       }
+    }
+  }
+
+  // Relaxation over the off-screen markers: any two closer than MARK_SEP are pushed apart along the tangent of their
+  // bearing from the screen centre (the edge they ride), then held inside the safe box. A few rounds settle a run of
+  // three or four. On-screen markers sit over their points and are left alone.
+  #spreadMarks(place, W, H) {
+    const off = place.filter(q => q.off);
+    if (off.length < 2) return;
+    const s = this.safe;
+    const minX = (s?.left ?? 0) + MARK_PAD_X, maxX = W - (s?.right ?? 0) - MARK_PAD_X;
+    const minY = (s?.top ?? 0) + MARK_PAD_T, maxY = H - (s?.bottom ?? 0) - MARK_PAD_B;
+    for (let round = 0; round < 6; round++) {
+      let moved = false;
+      for (let i = 0; i < off.length; i++) for (let j = i + 1; j < off.length; j++) {
+        const A = off[i], B = off[j];
+        const gx = B.x - A.x, gy = B.y - A.y, d = Math.hypot(gx, gy);
+        if (d >= MARK_SEP) continue;
+        // Along the edge: the tangent of the pair's mean bearing, signed so each keeps its side of the other.
+        const mb = Math.atan2(Math.sin(A.a) + Math.sin(B.a), Math.cos(A.a) + Math.cos(B.a));
+        const tx = -Math.sin(mb), ty = Math.cos(mb);
+        let side = gx * tx + gy * ty;
+        if (Math.abs(side) < 0.5) side = angleGap(B.a, A.a) || (j - i);
+        const k = (MARK_SEP - d) / 2 * Math.sign(side);
+        A.x = clamp(A.x - tx * k, minX, maxX); A.y = clamp(A.y - ty * k, minY, maxY);
+        B.x = clamp(B.x + tx * k, minX, maxX); B.y = clamp(B.y + ty * k, minY, maxY);
+        moved = true;
+      }
+      if (!moved) break;
     }
   }
 
