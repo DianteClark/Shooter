@@ -98,6 +98,8 @@ async def week_of_snipers(browser):
     await pg.wait_for_timeout(700)
     st = await pg.evaluate("({ s: window.__game.menu.el.dataset.screen, on: document.querySelector('.mp-pl.on')?.dataset.id, spot: [...document.querySelectorAll('.mp-sec-spot .mp-pl')].map(b => b.dataset.id), brow: document.querySelector('.mp-pl.wk .mp-brow')?.textContent, sub: document.querySelector('.mp-pl.wk small')?.textContent })")
     check('the banner opens Multiplayer on the event playlist', st['s'] == 'multiplayer' and st['on'] == 'wkevent', st)
+    # (The weekend cup's card, docs/TOURNAMENTS.md, always leads the Spotlight: left out here.)
+    st['spot'] = [x for x in st['spot'] if x != 'tourney']
     check('the Spotlight: the event first, then Ranked, then featured', st['spot'][:1] == ['wkevent'] and st['spot'].index('ranked') < st['spot'].index('featured'), st['spot'])
     check('  eyebrow and days left', st['brow'] == 'Weekly event' and 'days left' in (st['sub'] or ''), st)
     await shot(pg, 'mp-event')
@@ -182,7 +184,7 @@ async def season_two(browser):
     rkcard = await pg.evaluate("document.querySelector('.mp-pl.rk')?.textContent.replace(/\\s+/g, ' ').trim()")
     check('  the Ranked playlist says Placements 0/5', rkcard is not None and 'Placements 0/5' in rkcard, rkcard)
     # What's new: the next update's sheet mentions both.
-    await pg.evaluate("localStorage.removeItem('switchyard.seenBuild')")
+    await pg.evaluate("localStorage.setItem('switchyard.seenBuild', '1113-5')")      # The build before this update: its entries show.
     await pg.reload(); await pg.wait_for_timeout(1400)
     wn = await pg.evaluate("document.querySelector('.whats-new')?.innerText ?? ''")
     check("What's new lists this update (weekly events, Season 2)", 'event' in wn.lower() and 'Season 2' in wn, wn[:160].replace('\n', ' '))
@@ -195,6 +197,7 @@ async def season_two(browser):
     await pg.evaluate("window.__game.menu.overlay('')")
     await tap(pg, '[data-act="multiplayer"]', 700)
     spot = await pg.evaluate("[...document.querySelectorAll('.mp-sec-spot .mp-pl')].map(b => [b.dataset.id, b.querySelector('b')?.textContent])")
+    spot = [s for s in spot if s[0] != 'tourney']      # The weekend cup's card (docs/TOURNAMENTS.md) always leads.
     ids = [s[0] for s in spot]
     check('the Spotlight: weekly event, Lights Out, Ranked, featured', ids == ['wkevent', 'event', 'ranked', 'featured'] and spot[1][1] == 'Lights Out', spot)
     await shot(pg, 'mp-s2-events')
