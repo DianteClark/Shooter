@@ -64,6 +64,7 @@
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
 import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
+import { RESET_GEN } from '../shared/reset.js';
 import { dropCareerMemo } from './cardbook.js';
 import { OPERATORS, DEFAULT_OPERATOR, OPERATOR_IDS, operatorUnlock, getOperator, getSkin, skinUnlock, localSkin, setLocalSkin, equippedEmblem, setEmblemChoice } from './operators.js';
 import { getEmblem, emblemUnlocked, FEAT_EMBLEMS } from './emblems.js';
@@ -881,7 +882,7 @@ export const Progress = {
     const c = data.career ?? blankCareer(), wk = careerWeek(c, now);
     const lo = this.loadout();
     return {
-      v: 1, name: this.name || 'Rookie', level: levelOf(data.xp), prestige: data.prestige, xp: data.totalXp,
+      v: 1, rg: RESET_GEN, name: this.name || 'Rookie', level: levelOf(data.xp), prestige: data.prestige, xp: data.totalXp,
       m: c.m, k: c.k, w: c.w, brm: c.brm, brw: c.brw, br5: c.br5, ex: c.ex, kdm: c.kdm, kdk: c.kdk, d: c.d,
       mst: masteryCompleted(data), wk: { key: wk.key, k: wk.k, w: wk.w },
       op: lo.operator ?? null, skin: lo.skin ?? null, card: equippedCard(), emblem: currentEmblemId(),

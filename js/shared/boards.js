@@ -12,6 +12,7 @@
 // Bots you played against do not get a bump from that match: it would live only on the phones that were there, so
 // two friends' boards would disagree about the same bot. Their careers stay a function of the date alone.
 import * as Pool from './botpool.js';
+import { RESET_GEN } from './reset.js';
 import { CARD_IDS, MAX_LEVEL, MAX_PRESTIGE, MASTERY_TOTAL, weekStart, periodKey, dayKey, masterOf, rankValue } from './progression.js';
 import { OPERATOR_IDS, getSkin } from '../ui/operators.js';
 import { cleanEmblem } from '../ui/emblems.js';
@@ -76,6 +77,8 @@ export function cleanFriends(raw) {
 // A card seen now: replaces that friend's older one; past the cap the friend seen longest ago drops off.
 // Returns the new list, or null if the card or id was no good. selfId is never stored as a friend.
 export function seeFriend(list, id, raw, now = Date.now(), selfId = null) {
+  // A card from a phone still on a build from before the progress reset (no or older `rg`) is not kept.
+  if (!raw || (raw.rg ?? 0) < RESET_GEN) return null;
   const card = cleanCard(raw);
   if (!card || typeof id !== 'string' || !PID.test(id) || id === selfId) return null;
   const next = [{ id, at: now, card }, ...list.filter(f => f.id !== id && f.id !== selfId)];

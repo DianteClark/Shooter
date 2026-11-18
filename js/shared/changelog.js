@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Fresh start',
+    build: '1118-2', date: '2026-11-18', title: 'Fresh start',
     items: [
       'Fresh start: all progress has been reset for everyone. Levels, prestige, unlocks, mastery, stats, match history, records, friends\' cards, challenges and season and ranked progress all start again from zero, and your callsign is asked again.',
       'Your settings were kept: graphics, sound, controls and touch layout, HUD size, accessibility, controller buttons, vibration and full screen.',

@@ -78,7 +78,7 @@ console.log('career');
   const me = Progress.careerCard();
   ok(me.m === 2 && me.k === 12 && me.d === 10 && me.w === 1 && me.brm === 1 && me.br5 === 1 && me.wk.k === 12, 'Progress.applyMatch feeds careerCard', JSON.stringify(me));
   const keys = Object.keys(me).sort().join(',');
-  ok(keys === 'br5,brm,brw,card,d,emblem,ex,k,kdk,kdm,level,m,mst,name,op,prestige,skin,sn,v,w,wk,xp', 'the card holds totals and looks only', keys);
+  ok(keys === 'br5,brm,brw,card,d,emblem,ex,k,kdk,kdm,level,m,mst,name,op,prestige,rg,skin,sn,v,w,wk,xp', 'the card holds totals and looks only', keys);
   ok(JSON.stringify(me).length < 400, 'the card is compact', `${JSON.stringify(me).length} bytes`);
   ok(B.cleanCard(me) !== null, 'my own card passes cleanCard');
 }
@@ -86,7 +86,7 @@ console.log('career');
 // ---- Friends ----
 console.log('friends');
 {
-  const card = (name, k = 10, extra = {}) => ({ v: 1, name, level: 10, prestige: 0, xp: 1000, m: 30, k, w: 5, brm: 0, brw: 0, br5: 0, ex: 0, kdm: 30, kdk: k, d: 10, mst: 0, wk: { key: 'W2026-11-09', k: 3, w: 1 }, op: 'anvil', skin: null, card: 'yard', emblem: null, ...extra });
+  const card = (name, k = 10, extra = {}) => ({ v: 1, rg: 1, name, level: 10, prestige: 0, xp: 1000, m: 30, k, w: 5, brm: 0, brw: 0, br5: 0, ex: 0, kdm: 30, kdk: k, d: 10, mst: 0, wk: { key: 'W2026-11-09', k: 3, w: 1 }, op: 'anvil', skin: null, card: 'yard', emblem: null, ...extra });
   ok(B.cleanCard(null) === null && B.cleanCard({ v: 2, name: 'x' }) === null && B.cleanCard({ v: 1, name: '' }) === null, 'junk is not a card');
   const dirty = B.cleanCard({ ...card('<script>Ann'), op: 'nope', card: 'nope', emblem: 'nope', skin: 'skin:wisp-base', level: 999, prestige: -2, brw: 50, brm: 3, extra: 'leak', wk: { key: 'bad', k: 9 } });
   ok(dirty.name === 'scriptAnn' && dirty.op === null && dirty.card === 'yard' && dirty.emblem === null && dirty.skin === null && dirty.level === 50 && dirty.prestige === 0 && dirty.brw === 3 && !('extra' in dirty) && dirty.wk.key === '',
@@ -94,6 +94,7 @@ console.log('friends');
   Friends.clear();
   const t0 = Date.UTC(2026, 10, 1);
   ok(!Friends.see('bad id!', card('A'), t0), 'a bad player id is refused');
+  ok(!Friends.see('Pold', card('Old', 10, { rg: 0 }), t0), 'a card from a phone still on a pre-reset build is not kept');
   ok(!Friends.see('Pself', card('Me'), t0, 'Pself'), 'your own card is never stored as a friend');
   ok(Friends.see('Pann', card('Ann', 10), t0) && Friends.see('Pann', card('Ann', 50), t0 + DAY), 'a card is stored, then replaced');
   let list = Friends.list();
