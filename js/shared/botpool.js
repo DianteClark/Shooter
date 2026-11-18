@@ -11,6 +11,7 @@
 //   pickPoolBots(opts)       matchmaking: draws a match's bots near the humans' rating and level, never one twice
 //   humanRating(info)        a human's place on the same 0..1 scale, from their level and recent K/D
 //   careerAt(profile, date)  career totals as of a date (see the leaderboard notes at careerAt)
+//   looksAt(profile, career) the card, skin and camo a bot shows with that career (what it has earned since the reset)
 //
 // A profile:
 //   id, name, index           'p017', 'Brakie', 17
@@ -21,7 +22,9 @@
 //   operator, skin, card, emblem, camo   looks; skin is a skin id (js/ui/operators.js), emblem may be null
 //   skill: { locked: null | tier, mu, form }   mu: their usual rating; form: sigma of the per-match roll
 //   activity                  average matches a day; brShare the share of them that are battle royale
-//   joined                    days after POOL_EPOCH the player started (negative: before it); base, the career then
+//   joined                    days after POOL_EPOCH the player started (negative: before it); base, the career on
+//                             CAREER_START: zero for everyone since the progress reset (docs/RESET.md)
+//   card, skin, camo          what they wear once earned: looksAt shows each only when the career backs it
 import { WEAPONS } from './weapons.js';
 import { PRIMARY_IDS } from './constants.js';
 import { PERKS, TACTICALS, LETHALS, STREAKS } from './catalog.js';
@@ -29,14 +32,18 @@ import { CARDS, PLAYER_CURVE, MAX_LEVEL, MAX_PRESTIGE, masterOf } from './progre
 import { OPERATORS } from '../ui/operators.js';
 import { EMBLEMS } from '../ui/emblems.js';
 import { EX_UNLOCKS } from './extraction.js';
+import { RESET_AT } from './reset.js';
 // Extraction's exclusive items never reach the pool: bots cannot have earned them, and adding them must not reshuffle
 // the profiles the boards already show.
 const EXCLUSIVE = new Set(EX_UNLOCKS.map(u => u.item));
 const POOL_OPERATORS = OPERATORS.filter(o => !EXCLUSIVE.has(o.id));
 
 export const POOL_SEED = 0x5717c4a2;
-// Day zero of careers. Fixed: changing it would change every bot's career at every date.
+// Day zero of the pool. Fixed: profiles (looks, habits, history used for their looks) are built from it.
 export const POOL_EPOCH = Date.UTC(2026, 10, 1);
+// Day zero of careers since the progress reset (js/shared/reset.js RESET_AT, 2026-11-19, docs/RESET.md): every bot
+// starts from nothing that day, like every player, and grows day by day at the same rates as before.
+export const CAREER_START = RESET_AT;
 const DAY = 86400000;
 // The day extraction mode (ROADMAP item 17) went live (2026-11-11); before it extractions stay 0. Set once, never move it.
 export const EXTRACTION_LAUNCH = Date.UTC(2026, 10, 11);
@@ -258,14 +265,17 @@ function buildProfile(index) {
   const activity = Math.round((0.15 + rng() ** 1.8 * 3.6) * 100) / 100;    // Matches a day: most play a little, a few a lot.
   const brShare = Math.round(clamp01((style === 'sniper' || style === 'flanker' ? 0.3 : 0.18) + gauss(rng) * 0.12) * 100) / 100;
   const joined = -Math.round(rng() ** 0.8 * 240);                           // Up to eight months before the epoch.
-  const base = careerBase(mu, activity, -joined, brShare, rng);
+  // What they had played by the epoch: no longer part of any career (the reset zeroed them), but still drawn, so every
+  // later roll and the looks it shaped stay exactly as before. looksAt hides what the new career has not earned yet.
+  const history = careerBase(mu, activity, -joined, brShare, rng);
+  const base = ZERO_CAREER;
 
   // Looks: better-established players wear more of what they have earned.
-  const seniority = clamp01(base.xp / (PLAYER_CURVE.cap * 5));
+  const seniority = clamp01(history.xp / (PLAYER_CURVE.cap * 5));
   const op = POOL_OPERATORS[Math.floor(rng() * POOL_OPERATORS.length)].id;
   const step = Math.min(5, Math.floor(rng() * 3 + seniority * 4 + (locked === 'elite' ? 1 : 0)));
   const skin = `skin:${op}-${SKIN_STEPS[step]}`;
-  const card = pickCard(rng, base, perks, locked, mu);
+  const card = pickCard(rng, history, perks, locked, mu);
   const emblem = rng() < 0.7 ? EMBLEMS[Math.floor(rng() * EMBLEMS.length)].id : null;
   // Camo on the favourite gun: plenty run none; the rest wear what their time in the game has earned.
   const cr = rng() + seniority * 0.5;
@@ -277,7 +287,7 @@ function buildProfile(index) {
     perks: Object.freeze(perks), tactical, lethal, streaks: Object.freeze(streaks),
     operator: op, skin, card, emblem, camo,
     skill: Object.freeze({ locked, mu: Math.round(mu * 1000) / 1000, form: Math.round(form * 1000) / 1000 }),
-    activity, brShare, joined, base: Object.freeze(base),
+    activity, brShare, joined, base,
   });
 }
 
@@ -313,6 +323,8 @@ function rates(mu) {
   };
 }
 
+const ZERO_CAREER = Object.freeze({ matches: 0, kills: 0, deaths: 0, wins: 0, brMatches: 0, brWins: 0, brTop5: 0, xp: 0 });
+
 function careerBase(mu, activity, days, brShare, rng) {
   const R = rates(mu);
   const matches = Math.floor(activity * days * (0.6 + rng() * 0.6));
@@ -342,18 +354,18 @@ const WEEK = 7;
 // careerAt(profile, date): a bot's career totals as of `date` (a Date or ms), for leaderboards (ROADMAP item 16).
 //   { matches, kills, deaths, kd, wins, brMatches, brWins, brTop5, extractions, xp, level, prestige, master, days }
 // Deterministic: the same profile and date give the same numbers on every phone, and every total is non-decreasing in
-// the date (dev/sim-botpool.mjs checks it). Growth: each week since POOL_EPOCH (or since the player joined, if later)
-// they play activity x 7 x a weekly factor (0..2, from a hash of id and week: some weeks off, some binges) matches, at
+// the date (dev/sim-botpool.mjs checks it). Growth: each week since CAREER_START (the progress reset; everyone had
+// joined by then) they play activity x 7 x a weekly factor (0..2, from a hash of id and week: some weeks off, some binges) matches, at
 // their rates (from skill.mu) times a weekly form factor (0.8..1.2), so boards move week to week and nobody's K/D is a
-// straight line. The current week counts its days so far. Dates before the epoch return the base career. Integers
-// throughout (floored), apart from kd. Cheap: one loop step per week since the epoch.
+// straight line. The current week counts its days so far. Dates up to CAREER_START return the base career (all zero).
+// Integers throughout (floored), apart from kd. Cheap: one loop step per week since CAREER_START.
 export function careerAt(profile, date = Date.now()) {
   const t = typeof date === 'number' ? date : date.getTime();
-  const days = Math.max(0, Math.floor((t - POOL_EPOCH) / DAY));
+  const days = Math.max(0, Math.floor((t - CAREER_START) / DAY));
   const p = profile, R = rates(p.skill.mu), b = p.base;
   const sum = { matches: b.matches, kills: b.kills, deaths: b.deaths, wins: b.wins, brMatches: b.brMatches, brWins: b.brWins, brTop5: b.brTop5, xp: b.xp, extractions: 0 };
-  const start = Math.max(0, p.joined);
-  const extraFrom = EXTRACTION_LAUNCH === null ? Infinity : Math.max(0, Math.floor((EXTRACTION_LAUNCH - POOL_EPOCH) / DAY));
+  const start = Math.max(0, p.joined + Math.floor((POOL_EPOCH - CAREER_START) / DAY));     // 0: all joined before it.
+  const extraFrom = EXTRACTION_LAUNCH === null ? Infinity : Math.max(0, Math.floor((EXTRACTION_LAUNCH - CAREER_START) / DAY));
   for (let d0 = start; d0 < days; d0 += WEEK) {
     const span = Math.min(WEEK, days - d0), wk = Math.floor(d0 / WEEK);
     const busy = 2 * unit(p.id, 'week', wk);
@@ -370,6 +382,29 @@ export function careerAt(profile, date = Date.now()) {
   Object.assign(out, levelFromXp(out.xp));
   out.days = days;
   return out;
+}
+
+// What a bot shows with a career (careerAt): its profile's card, skin and camo once the career backs them, the plain
+// ones until then, so on the reset's first days a level 3 does not wear a prestige card or a mastery skin. Grows with
+// the career, so with the date alone: every phone agrees. { card, skin, camo, emblem }
+const SKIN_MATCHES = { 2: 40, 3: 80, 4: 150, 5: 250 };     // Matches a skin tier takes to earn (a bot has no tracks).
+export function looksAt(profile, c) {
+  const p = profile, card = p.card;
+  const earned = card === 'yard' ? true
+    : card.startsWith('prestige-') ? c.prestige >= Number(card.slice(9))
+    : card.startsWith('pro-') ? c.matches >= 60
+    : card === 'kills-100' ? c.kills >= 100
+    : card === 'kills-1000' ? c.kills >= 1000
+    : card === 'level-30' ? c.prestige > 0 || c.level >= 30
+    : card === 'veteran' ? c.prestige > 0
+    : card.startsWith('mastery-') || card.startsWith('camo-') ? c.prestige >= 2
+    : c.kills >= 1500;
+  const step = p.skin.slice(p.skin.lastIndexOf('-') + 1);
+  const tier = Number(step);
+  const skinOk = step === 'base' || c.matches >= (step === 'field' ? 10 : SKIN_MATCHES[tier] ?? 250);
+  const ci = CAMO_STEPS.findIndex(list => list.includes(p.camo));
+  const camoOk = p.camo === 'none' || (ci === 0 ? c.matches >= 25 : ci === 1 ? c.prestige >= 1 : c.prestige >= 3);
+  return { card: earned ? card : 'yard', skin: skinOk ? p.skin : `skin:${p.operator}-base`, camo: camoOk ? p.camo : 'none', emblem: c.matches >= 15 ? p.emblem : null };
 }
 
 export const BOT_POOL = Object.freeze(TAGS.map((_, i) => buildProfile(i)));
@@ -470,7 +505,7 @@ export function pickPoolBots({ count, seed = 0, target = HUMAN_BASE, level = nul
   const take = (p, group, apart = null) => {
     const rating = formRating(p, seed);
     const c = careerAt(p, date);
-    out.push({ profile: p, rating, tier: tierOf(rating), badge: { prestige: c.prestige, level: c.level, master: c.master }, party: group, apart });
+    out.push({ profile: p, rating, tier: tierOf(rating), badge: { prestige: c.prestige, level: c.level, master: c.master }, looks: looksAt(p, c), party: group, apart });
   };
   const pickFrom = list => {
     let total = 0;

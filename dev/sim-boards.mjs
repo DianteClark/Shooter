@@ -8,7 +8,8 @@
 //   ranking   highest first, shared ranks on ties, K/D only at the minimum matches (and the note for you below it),
 //             views Everyone / Friends / Around me
 //   pool      the bots' rows on the board are identical for two phones (fresh processes, different time zones) on the
-//             same date; totals never fall from day to day
+//             same date; totals never fall from day to day; the progress reset (docs/RESET.md): on the reset date every
+//             bot row is level 1 with zeros and plain looks, season and ranked fresh, and the boards still rank sensibly
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -64,8 +65,9 @@ console.log('career');
   arr.length = 17;
   const body2 = Buffer.from(JSON.stringify(arr)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   let h = 0x811c9dc5; for (let i = 0; i < body2.length; i++) { h ^= body2.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-  const legacy = P.decodeSave(`SY4.${body2}.${(h >>> 0).toString(36)}`);
-  ok(legacy.ok && legacy.save.career.m === 40 && legacy.save.career.k === 600, 'an SY4 code without a career still loads', legacy.error ?? '');
+  const legacy = P.decodeSave(`SY4.${body2}.${(h >>> 0).toString(36)}`, { preReset: true });
+  ok(legacy.ok && legacy.save.career.m === 40 && legacy.save.career.k === 600, 'an SY4 code without a career still loads (read past the reset)', legacy.error ?? '');
+  ok(P.decodeSave(`SY4.${body2}.${(h >>> 0).toString(36)}`).error === 'reset', 'the game itself refuses it: it is from before the reset');
   // Junk in the career field.
   const junk = P.sanitizeSave({ version: 4, career: { m: -5, k: 'x', brw: 9, brm: 2, kdm: 99, m2: 1, wk: { key: '<b>', k: 5 } } }).career;
   ok(junk.m === 0 && junk.k === 0 && junk.brw === 2 && junk.kdm === 0 && junk.wk.key === '', 'a bad career field is cleaned', JSON.stringify(junk));
@@ -132,15 +134,18 @@ console.log('ranking');
   ok(lvl.rows[0].e.kind === 'me' && lvl.rows[0].text.startsWith('Master 1000'), 'level ranks prestige, then Master level, first', lvl.rows[0].text);
   const wk = B.buildBoard({ me: meCard, friends: [{ id: 'Pold', at: 1, card: B.cleanCard({ v: 1, name: 'Old', wk: { key: 'W2020-01-06', k: 9999, w: 99 } }) }], cat: 'wkills', view: 'friends' });
   ok(wk.rows.find(r => r.e.id === 'Pold').value === 0, "a friend's card from an earlier week counts zero on the weekly boards");
-  const pool = B.poolEntries(Date.now());
+  const pool = B.poolEntries(Date.UTC(2027, 1, 10, 12));
   ok(pool.every(p => p.wk.k >= 0 && p.wk.k <= p.k && p.wk.w >= 0), 'pool weekly numbers are within their totals');
   ok(pool.every(p => p.mst >= 0 && p.mst <= P.MASTERY_TOTAL()), 'pool mastery within what there is to finish');
   // Pinned to the day before Extraction launched (2026-11-11): with Date.now() this went false once the mode was live.
   ok(B.poolEntries(Date.UTC(2026, 10, 10, 12)).every(p => p.ex === 0), 'no extractions before the mode launches');
   const { BOT_POOL } = await import('../js/shared/botpool.js');
-  ok(pool.length === BOT_POOL.length && pool.every((p, i) => p.name === BOT_POOL[i].name && p.card === BOT_POOL[i].card && p.emblem === BOT_POOL[i].emblem), 'pool rows wear the tag, card and emblem they wear in lobbies');
+  const { careerAt, looksAt, pickPoolBots } = await import('../js/shared/botpool.js');
+  const lobbyLooks = new Map(pickPoolBots({ count: BOT_POOL.length, seed: 3, recent: [], remember: false, date: Date.UTC(2027, 1, 10, 12) }).map(b => [b.profile.id, b.looks]));
+  ok(pool.length === BOT_POOL.length && pool.every((p, i) => p.name === BOT_POOL[i].name && p.card === lobbyLooks.get(p.id).card && p.emblem === lobbyLooks.get(p.id).emblem && p.skin === lobbyLooks.get(p.id).skin), 'pool rows wear the tag, card and emblem they wear in lobbies');
+  ok(pool.filter((p, i) => p.card === BOT_POOL[i].card).length > 100, 'months after the reset, many wear their own cards again');
   ok(pool.every(p => p.clan === null || /^[A-Z0-9]{2,4}$/.test(p.clan)), 'clan tags only from clanOf, when the pool has it');
-  const wkStart = P.weekStart(new Date()), win = B.poolWindow(wkStart, Date.now());
+  const wkStart = P.weekStart(new Date(Date.UTC(2027, 1, 10, 12))), win = B.poolWindow(wkStart, Date.UTC(2027, 1, 10, 12));
   ok(win.length === BOT_POOL.length && win.every((w, i) => w.k === pool[i].wk.k), 'poolWindow (the hook for seasonal boards) gives the weekly numbers for this week');
 }
 
@@ -162,7 +167,7 @@ console.log('master');
   ok(lv.rows.find(r => r.e.name === 'Almost').text === 'P10 · 49' && lv.rows.find(r => r.e.name === 'Nine').text === 'P9 · 50', 'below Master the row reads prestige and level as before');
   // A card from a build before Master levels has no such field: its Master level is read from its XP all the same.
   ok(B.masterOfEntry(pals[0].card) === 301 && B.masterOfEntry(pals[2].card) === 0 && B.masterOfEntry({ prestige: 10, level: 50, xp: 0 }) === 1, 'Master level comes from rank and total XP (older cards too)');
-  const all = B.buildBoard({ me: card('Me', 10, 50, S + 40 * X), cat: 'level' });
+  const all = B.buildBoard({ me: card('Me', 10, 50, S + 40 * X), cat: 'level', now: Date.UTC(2027, 5, 1, 12) });
   ok(all.rows.every((r, i) => !i || r.value <= all.rows[i - 1].value), 'whole Level board sorted highest first');
   const bots = all.rows.filter(r => r.e.kind === 'pool' && B.masterOfEntry(r.e) > 0);
   ok(bots.length > 10 && bots.every(r => r.text.startsWith(`Master ${B.masterOfEntry(r.e)}`)), 'pool Masters rank and read as Masters', `${bots.length} on the board, top ${bots[0]?.text}`);
@@ -179,7 +184,7 @@ console.log('pool');
   // Never falling: every total over 60 days of boards.
   let prev = null, fine = true;
   for (let d = 0; d < 60; d++) {
-    const rows = B.poolEntries(Date.UTC(2026, 10, 1) + d * DAY + 12 * 3600e3);
+    const rows = B.poolEntries(Date.UTC(2026, 10, 15) + d * DAY + 12 * 3600e3);     // Across the reset date.
     if (prev) for (let i = 0; i < rows.length; i++) {
       for (const k of ['m', 'k', 'd', 'w', 'brm', 'brw', 'br5', 'xp', 'mst']) if (rows[i][k] < prev[i][k]) fine = false;
       if (B.getCategory('level').value(rows[i]) < B.getCategory('level').value(prev[i])) fine = false;     // Level, Master included.
@@ -191,6 +196,36 @@ console.log('pool');
   B.poolEntries(Date.UTC(2027, 5, 1));
   const ms = performance.now() - t;
   ok(ms < 200, 'a day of pool rows is cheap', `${ms.toFixed(0)} ms`);
+}
+
+// ---- The progress reset: the boards on day one ----
+console.log('reset');
+{
+  const { BOT_POOL, CAREER_START } = await import('../js/shared/botpool.js');
+  const { PLACEMENTS } = await import('../js/shared/ranked.js');
+  for (const [label, t] of [['the reset date', CAREER_START + 15 * 3600e3], ['the day before', CAREER_START - 9 * 3600e3]]) {
+    const rows = B.poolEntries(t);
+    ok(rows.length === BOT_POOL.length && rows.every(r => r.level === 1 && r.prestige === 0 && r.xp === 0 && r.m === 0 && r.k === 0 && r.d === 0 && r.w === 0 && r.brm === 0 && r.ex === 0 && r.mst === 0),
+      `${label}: every bot row level 1 with zeros`);
+    ok(rows.every(r => r.card === 'yard' && r.emblem === null && /-base$/.test(r.skin)), `${label}: plain looks`);
+    ok(rows.every(r => r.wk.k === 0 && r.sn.m === 0 && r.sn.t === 0 && r.sn.sr === -1), `${label}: week, season tier and ranked all fresh`);
+  }
+  const t1 = CAREER_START + 15 * 3600e3;
+  const me = { v: 1, name: 'Me', level: 1, prestige: 0, xp: 0 };
+  const lvl = B.buildBoard({ me, cat: 'level', now: t1 });
+  ok(lvl.total === BOT_POOL.length + 1 && lvl.rows.every(r => r.text === '1') && lvl.rows[lvl.me].e.kind === 'me', 'day one Level board: everyone reads level 1, you among them', lvl.rows.slice(0, 3).map(r => r.text).join(' '));
+  const kd = B.buildBoard({ me, cat: 'kd', now: t1 });
+  ok(kd.rows.length === 0 && kd.me === -1, 'day one K/D board: nobody ranked yet (no one has the matches)');
+  const rk = B.buildBoard({ me, cat: 'ranked', now: t1 });
+  ok(rk.rows.length === 0, 'day one Ranked board: nobody placed yet');
+  const kills = B.buildBoard({ me: { ...me, k: 3, m: 1 }, cat: 'kills', now: t1 });
+  ok(kills.rows[kills.me].rank === 1, 'day one: three kills top the Kills board', `rank ${kills.rows[kills.me].rank}`);
+  // A week on: the boards fill again, the season window counts only days since the reset.
+  const wk = B.poolEntries(CAREER_START + 7 * DAY + 12 * 3600e3);
+  ok(wk.filter(r => r.m > 0).length > 150 && wk.every(r => r.sn.m <= r.m && r.sn.k <= r.k), 'a week on: most bots have played; season numbers within the career since the reset', wk.filter(r => r.m > 0).length);
+  ok(Math.max(...wk.map(r => r.prestige)) <= 3, 'a week on: still low levels', `top prestige ${Math.max(...wk.map(r => r.prestige))}`);
+  const placed = B.poolEntries(CAREER_START + 30 * DAY + 12 * 3600e3).filter(r => r.sn.sr >= 0).length;
+  ok(placed > 0, `ranked placements come back as bots play (${PLACEMENTS} matches)`, placed);
 }
 
 console.log(failed ? `\n${failed} FAILED` : '\nall ok');

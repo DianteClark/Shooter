@@ -8,7 +8,8 @@
 //              same for the same match on every phone, with the odd bad night and hot streak
 //   matchmaking  no bot twice in a lobby; draws follow the target rating and level with spread; back-to-back lobbies
 //              seldom repeat; rosters for TDM, FFA, Gun Game, Ground War and battle royale; even teams; Custom's tier override
-//   careerAt   deterministic, every total non-decreasing over two years of dates, sane rates, cheap
+//   careerAt   deterministic, every total non-decreasing over two years of dates, sane rates, cheap; since the progress
+//              reset (docs/RESET.md) every career is zero on CAREER_START and grows from it; looksAt follows the career
 //   skillAt    the tiers at their ratings, and everything between them in between
 //   clans      20-25 clans of 3-8 with 2-4 capital tags, regular duos, loners; skill profiles; clanmates queue together
 //              (same lobby, same side or squad, within the mode's party cap) and clans turn up across modes
@@ -31,7 +32,7 @@ import { MODES } from '../js/shared/modes.js';
 import { OPERATORS, SKINS, getSkin } from '../js/ui/operators.js';
 import { EMBLEMS, FEAT_EMBLEMS } from '../js/ui/emblems.js';
 
-const { BOT_POOL, formRating, pickPoolBots, careerAt, humanRating, tierOf, POOL_EPOCH, EXTRACTION_LAUNCH, HUMAN_BASE, STYLES, TIER_RATING } = Pool;
+const { BOT_POOL, formRating, pickPoolBots, careerAt, looksAt, humanRating, tierOf, POOL_EPOCH, CAREER_START, EXTRACTION_LAUNCH, HUMAN_BASE, STYLES, TIER_RATING } = Pool;
 let failed = 0;
 const ok = (cond, label, info = '') => { console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${label}${info ? `: ${info}` : ''}`); if (!cond) failed++; };
 const DAY = 86400000;
@@ -47,12 +48,15 @@ ok(fresh === digest, 'a fresh process builds the identical pool');
 const src = readFileSync(here, 'utf8');
 ok(!/Math\.random/.test(src), 'no Math.random in the pool');
 ok(BOT_POOL.length >= 250 && BOT_POOL.length <= 320, 'pool size', BOT_POOL.length);
-// The first 200 (before the clans) and their careers, as they were: leaderboards already show them.
-const first = BOT_POOL.slice(0, 200), at200 = new Date(POOL_EPOCH + 200 * DAY);
-// `master` (docs/PRESTIGE.md) is read from xp by levelFromXp, so it is left out: the careers themselves must not move.
+// Every profile as it was before the progress reset: tags, habits, skill and looks (all but `base`, the career on day
+// zero, which the reset zeroed). 1436256f: the 300 profiles at the reset.
+const profHash = createHash('sha256').update(JSON.stringify(BOT_POOL.map(({ base, ...p }) => p))).digest('hex').slice(0, 16);
+ok(profHash === '1436256f973e20eb', 'every profile unchanged by the reset (all but its zeroed base career)', profHash);
+// Careers since the reset: 200 days on from CAREER_START, pinned so they never move. `master` is read from xp by
+// levelFromXp, so it is left out.
+const first = BOT_POOL.slice(0, 200), at200 = new Date(CAREER_START + 200 * DAY);
 const firstHash = createHash('sha256').update(JSON.stringify(first) + JSON.stringify(first.map(p => { const { master, ...c } = careerAt(p, at200); return c; }))).digest('hex').slice(0, 16);
-// 31a0665d: EXTRACTION_LAUNCH set (2026-11-11), so careers from that day carry extractions (d74e12f3 before it).
-ok(firstHash === '31a0665dbfcc76eb', 'the first 200 profiles and their careers are unchanged', firstHash);
+ok(firstHash === '1c963863acffd519', 'the first 200 profiles and their careers since the reset are unchanged', firstHash);
 ok(new Set(BOT_POOL.map(p => p.id)).size === BOT_POOL.length, 'ids unique');
 const norm = s => s.toLowerCase().replace(/[^a-z]/g, '');
 const names = BOT_POOL.map(p => p.name);
@@ -149,7 +153,7 @@ console.log('matchmaking');
 Pool.forgetRecentLobbies();
 const lobby = pickPoolBots({ count: 31, seed: 9, recent: [] });
 ok(new Set(lobby.map(b => b.profile.id)).size === 31, 'no bot twice in a 32-player lobby');
-ok(JSON.stringify(pickPoolBots({ count: 11, seed: 77, recent: [], date: POOL_EPOCH })) === JSON.stringify(pickPoolBots({ count: 11, seed: 77, recent: [], date: POOL_EPOCH })), 'deterministic for a seed');
+ok(JSON.stringify(pickPoolBots({ count: 11, seed: 77, recent: [], date: CAREER_START + 9 * DAY })) === JSON.stringify(pickPoolBots({ count: 11, seed: 77, recent: [], date: CAREER_START + 9 * DAY })), 'deterministic for a seed');
 const ex = lobby.slice(0, 20).map(b => b.profile.id);
 ok(pickPoolBots({ count: 40, seed: 3, exclude: ex, recent: [] }).every(b => !ex.includes(b.profile.id)), 'excluded profiles are never drawn');
 const drawMean = (target, extra = {}) => mean(Array.from({ length: 40 }, (_, k) => mean(pickPoolBots({ count: 11, seed: 500 + k, target, recent: [], ...extra }).map(b => b.profile.skill.mu))));
@@ -157,7 +161,7 @@ const lo = drawMean(0.2), mid = drawMean(0.5), hi = drawMean(0.8);
 ok(lo < mid - 0.1 && mid < hi - 0.1, 'lobbies follow the target rating', `${lo.toFixed(2)} / ${mid.toFixed(2)} / ${hi.toFixed(2)} for 0.2 / 0.5 / 0.8`);
 const spreadIn = sd(pickPoolBots({ count: 60, seed: 5, target: 0.5, recent: [] }).map(b => b.rating));
 ok(spreadIn > 0.1 && spreadIn < 0.35, 'with spread: a lobby holds weaker and stronger players', spreadIn.toFixed(2));
-const date = POOL_EPOCH + 30 * DAY;
+const date = CAREER_START + 180 * DAY;
 const rankOf = b => b.badge.prestige * MAX_LEVEL + b.badge.level;
 const newbies = mean(Array.from({ length: 20 }, (_, k) => mean(pickPoolBots({ count: 11, seed: 900 + k, level: { prestige: 0, level: 5 }, recent: [], date }).map(rankOf))));
 const vets = mean(Array.from({ length: 20 }, (_, k) => mean(pickPoolBots({ count: 11, seed: 900 + k, level: { prestige: 8, level: 30 }, recent: [], date }).map(rankOf))));
@@ -207,8 +211,8 @@ const KEYS = ['matches', 'kills', 'deaths', 'wins', 'brMatches', 'brWins', 'brTo
 let mono = true, where = '';
 for (const p of BOT_POOL) {
   let last = careerAt(p, POOL_EPOCH - 5 * DAY);
-  for (let d = 0; d <= 730 && mono; d += (d < 30 ? 1 : 9)) {
-    const c = careerAt(p, POOL_EPOCH + d * DAY + 3600e3);
+  for (let d = -20; d <= 730 && mono; d += (d < 30 ? 1 : 9)) {
+    const c = careerAt(p, CAREER_START + d * DAY + 3600e3);
     for (const k of KEYS) if (c[k] < last[k]) { mono = false; where = `${p.name} ${k} day ${d}`; }
     if (c.prestige * MAX_LEVEL + c.level < last.prestige * MAX_LEVEL + last.level) { mono = false; where = `${p.name} level day ${d}`; }
     if (rankValue(c) < rankValue(last) || c.master < last.master) { mono = false; where = `${p.name} master day ${d}`; }
@@ -216,23 +220,50 @@ for (const p of BOT_POOL) {
   }
 }
 ok(mono, 'every total non-decreasing over two years', where);
-const a = careerAt(BOT_POOL[7], new Date(POOL_EPOCH + 100 * DAY)), b = careerAt(BOT_POOL[7], POOL_EPOCH + 100 * DAY);
+const a = careerAt(BOT_POOL[7], new Date(CAREER_START + 100 * DAY)), b = careerAt(BOT_POOL[7], CAREER_START + 100 * DAY);
 ok(JSON.stringify(a) === JSON.stringify(b), 'a Date and its time give the same career');
-ok(BOT_POOL.every(p => { const c = careerAt(p, POOL_EPOCH - DAY); return c.kills === Math.floor(p.base.kills) && c.matches === p.base.matches; }), 'before the epoch: the base career');
+// The progress reset: every career is zero up to and on the reset date, for every bot.
+ok(CAREER_START === Date.UTC(2026, 10, 19), 'careers start on the reset date (2026-11-19)');
+const zeroAll = d => BOT_POOL.every(p => { const c = careerAt(p, d); return KEYS.every(k => c[k] === 0) && c.level === 1 && c.prestige === 0 && c.master === 0 && c.kd === 0; });
+ok(zeroAll(POOL_EPOCH - DAY) && zeroAll(EXTRACTION_LAUNCH) && zeroAll(CAREER_START - 1) && zeroAll(CAREER_START + 12 * 3600e3), 'day one: every career zero (level 1), and before it');
+ok(BOT_POOL.every(p => Object.values(p.base).every(v => v === 0)), 'the base career (day zero) is zero for everyone');
+ok(BOT_POOL.filter(p => careerAt(p, CAREER_START + DAY).matches > 0).length > 80, 'day two: plenty have played', BOT_POOL.filter(p => careerAt(p, CAREER_START + DAY).matches > 0).length);
+const d1 = BOT_POOL.map(p => careerAt(p, CAREER_START + DAY));
+ok(d1.every(c => c.prestige === 0) && Math.max(...d1.map(c => c.level)) <= 30, 'day two: everyone still low level', `top level ${Math.max(...d1.map(c => c.level))}`);
 ok(BOT_POOL.every(p => careerAt(p, EXTRACTION_LAUNCH - DAY).extractions === 0), 'no extractions before the mode exists');
-ok(BOT_POOL.filter(p => careerAt(p, POOL_EPOCH + 400 * DAY).extractions > 0).length > 100, 'extractions pile up once it does (EXTRACTION_LAUNCH)');
-const yr = BOT_POOL.map(p => careerAt(p, POOL_EPOCH + 365 * DAY));
+ok(BOT_POOL.filter(p => careerAt(p, CAREER_START + 400 * DAY).extractions > 0).length > 100, 'extractions pile up from the reset on');
+const yr = BOT_POOL.map(p => careerAt(p, CAREER_START + 365 * DAY));
 ok(yr.every(c => c.level >= 1 && c.level <= MAX_LEVEL && c.prestige >= 0 && c.prestige <= MAX_PRESTIGE && c.wins <= c.matches && c.brWins <= c.brTop5 && c.brTop5 <= c.brMatches), 'levels, prestige and wins in range');
 const strong = BOT_POOL.filter(p => p.skill.mu > 0.75), weak = BOT_POOL.filter(p => p.skill.mu < 0.25);
-const kdOf = list => mean(list.map(p => careerAt(p, POOL_EPOCH + 365 * DAY).kd));
+const kdOf = list => mean(list.map(p => careerAt(p, CAREER_START + 365 * DAY).kd));
 ok(kdOf(strong) > kdOf(weak) + 0.6, 'strong players\' careers read strong', `K/D ${kdOf(strong).toFixed(2)} vs ${kdOf(weak).toFixed(2)}`);
 const t0 = performance.now();
-for (const p of BOT_POOL) careerAt(p, POOL_EPOCH + 730 * DAY);
+for (const p of BOT_POOL) careerAt(p, CAREER_START + 730 * DAY);
 const ms = performance.now() - t0;
 ok(ms < 60, 'the whole pool two years on is cheap', `${ms.toFixed(1)} ms`);
-const nowC = BOT_POOL.map(p => careerAt(p, POOL_EPOCH + 10 * DAY));
+const nowC = BOT_POOL.map(p => careerAt(p, CAREER_START + 60 * DAY));
 const prest = nowC.map(c => c.prestige);
-ok(prest.filter(v => v === 0).length > 10 && prest.filter(v => v === MAX_PRESTIGE).length < BOT_POOL.length * 0.4, 'levels spread at launch', `${prest.filter(v => v === 0).length} unprestiged, ${prest.filter(v => v === MAX_PRESTIGE).length} at the top`);
+ok(prest.filter(v => v === 0).length > 10 && prest.filter(v => v > 0).length > 60 && prest.filter(v => v === MAX_PRESTIGE).length < BOT_POOL.length * 0.4, 'levels spread two months on', `${prest.filter(v => v === 0).length} unprestiged, ${prest.filter(v => v === MAX_PRESTIGE).length} at the top`);
+// Looks follow the career: plain on day one, the profile's own once earned.
+const looks0 = BOT_POOL.map(p => looksAt(p, careerAt(p, CAREER_START)));
+ok(looks0.every((l, i) => l.card === 'yard' && l.camo === 'none' && l.emblem === null && l.skin === `skin:${BOT_POOL[i].operator}-base`), 'day one: plain card, camo and skin');
+const looksY = BOT_POOL.map((p, i) => looksAt(p, yr[i]));
+ok(looksY.filter((l, i) => l.card === BOT_POOL[i].card && l.skin === BOT_POOL[i].skin && l.camo === BOT_POOL[i].camo).length > BOT_POOL.length * 0.5, 'a year on most wear their own looks again', looksY.filter((l, i) => l.card === BOT_POOL[i].card).length);
+ok(looksY.every(l => cardIds.has(l.card) && getSkin(l.skin) && camoIds.has(l.camo)), 'looksAt names things that exist');
+let looksMono = true;
+for (const p of BOT_POOL.slice(0, 80)) {
+  let was = null;
+  for (let d = 0; d <= 400; d += 5) {
+    const l = looksAt(p, careerAt(p, CAREER_START + d * DAY));
+    const n = (l.card === p.card) + (l.skin === p.skin) + (l.camo === p.camo) + (l.emblem === p.emblem);
+    if (was !== null && n < was) looksMono = false;
+    was = n;
+  }
+}
+ok(looksMono, 'looks, once earned, stay');
+const lobby0 = pickPoolBots({ count: 11, seed: 4, recent: [], date: CAREER_START, remember: false });
+ok(lobby0.every(b => b.badge.level === 1 && b.badge.prestige === 0 && b.looks.card === 'yard'), 'a day-one lobby: level 1 bots in plain looks');
+ok(lobby0.every(b => b.rating === formRating(b.profile, 4)), '...still playing at their own skill (mu and form unchanged)');
 
 // ---- Master Prestige (docs/PRESTIGE.md) ----
 console.log('master');
@@ -252,9 +283,9 @@ console.log('master');
   ok(up, 'and the Master level never falls as XP grows');
   ok(levelFromXp(MASTER_START_XP - 1).master === 0 && levelFromXp(MASTER_START_XP).master === 1 && levelFromXp(MASTER_START_XP + MASTER_LEVEL_XP).master === 2
     && levelFromXp(1e12).master === MASTER_MAX, 'Master 1 at Prestige X level 50, one a step, capped', MASTER_START_XP);
-  ok(BOT_POOL.every(p => { const c = careerAt(p, POOL_EPOCH + 300 * DAY); return c.master === masterOf(c.prestige, c.level, c.xp); }), 'a bot\'s Master level follows the players\' rule (masterOf)');
-  // Same numbers per date: careers are a function of the date (and a fresh process agrees).
-  const date = Date.UTC(2026, 10, 12), here2 = fileURLToPath(new URL('../js/shared/botpool.js', import.meta.url));
+  ok(BOT_POOL.every(p => { const c = careerAt(p, CAREER_START + 300 * DAY); return c.master === masterOf(c.prestige, c.level, c.xp); }), 'a bot\'s Master level follows the players\' rule (masterOf)');
+  // Same numbers per date: careers are a function of the date (and a fresh process agrees). A year after the reset.
+  const date = CAREER_START + 180 * DAY, here2 = fileURLToPath(new URL('../js/shared/botpool.js', import.meta.url));
   const mine = JSON.stringify(BOT_POOL.map(p => careerAt(p, date).master));
   const theirs = execFileSync(process.execPath, ['--input-type=module', '-e', `import('${here2}').then(m => process.stdout.write(JSON.stringify(m.BOT_POOL.map(p => m.careerAt(p, ${date}).master))))`], { encoding: 'utf8', maxBuffer: 1 << 24 });
   ok(mine === theirs, 'Master levels are the same per date in a fresh process');
