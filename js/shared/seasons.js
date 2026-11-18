@@ -16,6 +16,7 @@
 // up to rr[id]. Nothing is lost at a rollover: reached tiers are claimed for the player first.
 import { SEASON_DEFS, SEASON_DAYS, SEASON_WEEKS, TRACK_TIERS, trackRewards, rankedCards, DIVISIONS, rankRewardId, seasonCamos } from './season-items.js';
 import { blankRanked, cleanRanked, rolloverRanked } from './ranked.js';
+import { blankEventState, cleanEventState, eventOwned } from './events.js';     // Weekly events: their state rides in this block.
 
 export { SEASON_DEFS, SEASON_DAYS, SEASON_WEEKS, TRACK_TIERS, trackRewards };
 export const TIER_XP = 5000;           // Match XP per tier.
@@ -163,7 +164,7 @@ export function tierProgress(xp) {
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const cnt = (v, max = 1e9) => (Number.isFinite(v) ? Math.min(max, Math.max(0, Math.floor(v))) : 0);
 const blankWindow = (key = '') => ({ key, m: 0, k: 0, d: 0, w: 0, brw: 0, br5: 0, ex: 0 });
-export const blankSeasonState = () => ({ k: '', xp: 0, st: 0, c: 0, wc: {}, cl: {}, rr: {}, rk: blankRanked(), sn: blankWindow() });
+export const blankSeasonState = () => ({ k: '', xp: 0, st: 0, c: 0, wc: {}, cl: {}, rr: {}, rk: blankRanked(), sn: blankWindow(), ev: blankEventState() });
 const KEY_OK = k => typeof k === 'string' && !!parseKey(k);
 
 export function cleanSeasonState(raw) {
@@ -186,6 +187,7 @@ export function cleanSeasonState(raw) {
     s.sn = blankWindow(raw.sn.key);
     for (const k of ['m', 'k', 'd', 'w', 'brw', 'br5', 'ex']) s.sn[k] = cnt(raw.sn[k]);
   }
+  s.ev = cleanEventState(raw.ev);
   return s;
 }
 // Whether a block says anything (an untouched one stays out of the save code, so old codes re-export unchanged).
@@ -193,14 +195,15 @@ export function cleanSeasonState(raw) {
 export function seasonStateEmpty(raw) {
   if (!raw) return true;
   const s = cleanSeasonState(raw), b = blankSeasonState();
-  s.k = ''; s.rk.k = ''; s.sn.key = '';
+  s.k = ''; s.rk.k = ''; s.sn.key = ''; s.ev.k = '';
+  if (!Object.keys(s.ev.c).length && !s.ev.got.length) s.ev = b.ev;
   return JSON.stringify(s) === JSON.stringify(b);
 }
 
 // Everything a block owns: Set of 'card:..', 'emblem:..', 'camo:..', 'skin:..', 'weapon:..', 'operator:..'.
 const ownCache = { key: null, set: null };
 export function seasonOwned(s) {
-  const key = JSON.stringify([s?.cl ?? {}, s?.rr ?? {}]);
+  const key = JSON.stringify([s?.cl ?? {}, s?.rr ?? {}, s?.ev?.got ?? []]);
   if (ownCache.key === key) return ownCache.set;
   const set = new Set();
   for (const d of SEASON_DEFS) {
@@ -208,6 +211,7 @@ export function seasonOwned(s) {
     const rr = s?.rr?.[d.id];
     if (Number.isFinite(rr)) for (let i = 0; i <= rr; i++) { set.add(`card:${rankRewardId(d, i)}`); set.add(`emblem:${rankRewardId(d, i)}`); }
   }
+  for (const id of eventOwned(s?.ev)) set.add(id);
   ownCache.key = key; ownCache.set = set;
   return set;
 }

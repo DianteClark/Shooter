@@ -256,6 +256,120 @@ console.log('save');
   ok(junk.k === '' && junk.xp === 0 && junk.c === 100 && junk.cl.S1 === 100 && !junk.cl.S9 && junk.rr.S1 === 6 && junk.rk.sr === R.SR_MAX && junk.rk.pm === 5, 'junk is cleaned', JSON.stringify(junk));
 }
 
+// ---- Season 2: the switch on 2026-12-28, played through Progress on a mocked clock, then Season Replay ----
+console.log('season 2');
+{
+  const { register } = await import('node:module');
+  register('data:text/javascript,' + encodeURIComponent(`export async function resolve(s, c, next) {
+    if (s === 'three') return { url: ${JSON.stringify(new URL('../vendor/three.min.js', import.meta.url).href)}, shortCircuit: true };
+    return next(s, c); }`));
+  const { playlistsFor } = await import('../js/ui/matchmaking.js');
+  const { WEAPONS } = await import('../js/shared/weapons.js');
+  const { weeklyEventAt } = await import('../js/shared/events.js');
+  const { CARD_IDS } = P;
+  // Date is mocked the way the browser tests do it (every `new Date()` and Date.now() read the fake clock), so the code
+  // paths that take no date (Progress.season(), the pickers, the boards) are exercised too.
+  const Real = Date;
+  let clock = new Real(2026, 11, 27, 22, 0).getTime();
+  class Fake extends Real { constructor(...a) { if (a.length) super(...a); else super(clock); } static now() { return clock; } }
+  globalThis.Date = Fake;
+  const setNow = (...a) => { clock = new Real(...a).getTime(); };
+  try {
+    store.clear();
+    ok(Progress.importCode(P.encodeSave(P.blankSave())).ok, 'a fresh save');
+    // The last evening of Season 1: 20 tiers reached, 10 claimed, placed in Diamond (peak), a weekly challenge moved.
+    ok(Progress.season().info.key === 'S1' && Progress.season().info.daysLeft === 1, 'Dec 27: Season 1, last day');
+    Progress.applySeasonMatch({ xp: S.TIER_XP * 10, counts: { kills: 30 }, career: { kills: 30, deaths: 10, won: true } });
+    Progress.claimSeason();
+    Progress.applySeasonMatch({ xp: S.TIER_XP * 10, counts: {}, career: { kills: 5, deaths: 5, won: false } });
+    const rk = Progress.ranked();
+    for (let i = 0; i < 5; i++) Progress.applySeasonMatch({ xp: 0, counts: {}, ranked: { outcome: 'win', perf: 1, lobby: 3600, rating: 0.9 } });
+    ok(Progress.ranked().placed && rk.pm === 0, 'placed in Season 1', String(Progress.ranked().sr));
+    const s1sr = Progress.ranked().sr, s1peak = R.division(Math.max(Progress.ranked().peak, s1sr)).div;
+    // (The ranked matches finish a weekly ranked challenge too: its stars are tiers.)
+    const s1tier = Progress.season().tier;
+    ok(s1tier >= 20 && s1tier < 40 && Progress.season().claimed === 10, '20+ tiers reached, 10 claimed', String(s1tier));
+    const s2camo = I.seasonCamos(S2)[0].id;
+    ok(!Progress.camos('ar').some(c => c.camo.id === s2camo), 'a Season 2 camo is not in the picker before it starts');
+    // Midnight: Season 2.
+    setNow(2026, 11, 28, 0, 0, 30);
+    const s = Progress.season();
+    ok(s.info.key === 'S2' && s.info.title === 'Season 2: Signal Fire' && s.info.daysLeft === 42 && s.info.week === 0, 'Dec 28 00:00: Season 2: Signal Fire, 42 days', s.info.title);
+    ok(s.tier === 0 && s.claimed === 0 && s.claimable === 0 && s.xp === 0, 'the track starts at tier 0');
+    const ro = Progress.takeRollover();
+    ok(ro && ro.claimed.length === s1tier - 10 && ro.ranked?.peakDiv === s1peak, 'the rollover claimed the waiting tiers and paid ranked', JSON.stringify([ro?.claimed.length, ro?.ranked?.peakDiv]));
+    ok(I.trackRewards(S1).slice(0, s1tier).every(r => Progress.hasReward(r.own)) && !Progress.hasReward(I.trackRewards(S1)[s1tier].own), 'the Season 1 tiers reached are kept, the next is not');
+    ok(Progress.hasReward(`card:rk-s1-${I.DIVISIONS[s1peak].id}`), 'the Season 1 ranked card is owned');
+    // The track: 100 tiers, every reward real.
+    const tr = I.trackRewards(S2), emb = new Set(ALL_EMBLEMS.map(e => e.id)), cards = new Set(CARD_IDS), camos = new Set(CAMOS.map(c => c.id)), skins = new Set(SKINS.map(x => x.id));
+    const real = r => (r.kind === 'card' ? cards.has(r.id) : r.kind === 'emblem' ? emb.has(r.id) : r.kind === 'camo' ? camos.has(r.id) : r.kind === 'skin' ? skins.has(r.id)
+      : r.kind === 'weapon' ? !!WEAPONS[r.id] : r.kind === 'operator' ? OPERATORS.some(o => o.id === r.id) : false);
+    ok(tr.length === 100 && tr.every(real), 'Season 2: 100 tiers, every reward in its table', tr.filter(r => !real(r)).map(r => r.own).join(','));
+    ok(tr[24].id === 'antimat' && tr[74].id === 'mako', 'tier 25 the Anti-Materiel, tier 75 Mako');
+    ok(Progress.camos('ar').some(c => c.camo.id === s2camo), 'Season 2 camos show in the picker now');
+    Progress.applySeasonMatch({ xp: S.TIER_XP * 100, counts: {}, career: { kills: 1, deaths: 1, won: true } });
+    const got = Progress.claimSeason();
+    ok(got.length === 100 && got.every(g => g.fresh) && Progress.isItemUnlocked('weapon', 'antimat') && Progress.isOperatorUnlocked('mako'), 'all 100 claim; the early paths open', String(got.length));
+    ok(Progress.setCard(tr[0].id) && Progress.setCamo('smg', s2camo) !== false, 'Season 2 cosmetics equip');
+    // Weekly sets.
+    const wk = Progress.weekly();
+    ok(wk.length === 6 && wk.filter(w => w.open).length === 1 && wk[0].list.every(c => c.id.startsWith('S2.w1.')), 'Season 2 weekly: six sets, the first open', wk[0].list[0]?.id);
+    const one = wk[0].list[0];
+    const m = Progress.applySeasonMatch({ xp: 0, counts: { [one.stat]: one.goal }, career: null });
+    ok(m.track.challenges.some(c => c.id === one.id && c.fresh), 'a Season 2 weekly challenge completes');
+    setNow(2027, 0, 4, 0, 0, 30);
+    ok(Progress.weekly().filter(w => w.open).length === 2, 'Jan 4: week 2 opens');
+    // The event playlist: Lights Out from day 7 to day 20 (Jan 4 - Jan 17), in the Spotlight.
+    const ev = S.eventAt();
+    const pl = playlistsFor('standard').find(p => p.id === 'event');
+    ok(ev?.id === 'lightsout' && pl?.name === 'Lights Out' && pl.modes[0] === 'ko' && pl.mods.includes('hardcore'), 'Lights Out (Hardcore Kill Order) is in the Spotlight', pl?.sub);
+    const order = playlistsFor('standard').filter(p => p.wkevent || p.event || p.ranked || p.featured).map(p => p.id);
+    ok(order.includes('wkevent') && order.includes('event') && order.includes('ranked') && order.includes('featured'), 'the weekly event, the season event, Ranked and the featured playlist share the Spotlight', order.join(','));
+    setNow(2026, 11, 28, 12);
+    ok(!playlistsFor('standard').some(p => p.id === 'event'), 'not before day 7');
+    setNow(2027, 0, 17, 23, 59);
+    ok(playlistsFor('standard').some(p => p.id === 'event'), 'still on Jan 17');
+    setNow(2027, 0, 18, 0, 1);
+    ok(!playlistsFor('standard').some(p => p.id === 'event'), 'gone on Jan 18');
+    // Ranked: placements again from 75% of the SR.
+    const r2 = Progress.ranked();
+    ok(r2.k === 'S2' && !r2.placed && r2.pm === 0 && r2.base === Math.floor(s1sr * R.CARRY), 'Season 2 Ranked: placements again from three quarters of the SR', JSON.stringify([r2.base, s1sr]));
+    for (let i = 0; i < 5; i++) Progress.applySeasonMatch({ xp: 0, counts: {}, ranked: { outcome: i % 2 ? 'loss' : 'win', perf: 0.3, lobby: r2.base, rating: 0.9 } });
+    const r3 = Progress.ranked();
+    ok(r3.placed && Math.abs(r3.sr - r2.base) < 600 && r3.sr <= R.PLACEMENT_CAP, 'placed near the carried SR', `${r3.sr} from ${r2.base}`);
+    // The seasonal boards: the Season view reads the Season 2 window.
+    const card = Progress.careerCard();
+    ok(card.sn.key === 'S2' && card.sn.m === 1 && card.sn.k === 1, "the career card's season window is Season 2's alone", JSON.stringify(card.sn));
+    const sb = B.buildBoard({ me: card, cat: 'kills', view: 'season', now: Date.now() });
+    const meRow = sb.rows[sb.me];
+    ok(sb.rows.length > 50 && meRow && meRow.value === card.sn.k, 'the Season board ranks Season 2 (mine: this season only)', `${meRow?.value} / ${card.sn.k}`);
+    const rb = B.buildBoard({ me: card, cat: 'ranked', view: 'season', now: Date.now() });
+    ok(rb.rows[rb.me]?.value === r3.sr, 'the Ranked board has my Season 2 SR', String(rb.rows[rb.me]?.value));
+    // The weekly event rolls on in Season 2: a new one on Dec 28 (a Monday).
+    ok(weeklyEventAt(new Real(2026, 11, 28, 1)).key !== weeklyEventAt(new Real(2026, 11, 27, 23)).key, 'the weekly event turns over with the season');
+    // Season Replay after Season 2 (Feb 8): Cold Iron again, fresh; owned rewards stay owned.
+    setNow(2027, 1, 7, 23, 59);
+    ok(Progress.season().info.key === 'S2' && Progress.season().info.daysLeft === 1, 'Feb 7: Season 2, last day');
+    setNow(2027, 1, 8, 0, 0, 30);
+    const rp = Progress.season();
+    ok(rp.info.key === 'S1R1' && rp.info.title === 'Season Replay: Cold Iron' && rp.info.short === 'Replay' && rp.tier === 0, 'Feb 8: Season Replay: Cold Iron starts fresh', rp.info.title);
+    const ro2 = Progress.takeRollover();
+    ok(ro2?.ranked?.def?.id === 'S2' && Progress.hasReward(`card:rk-s2-${I.DIVISIONS[ro2.ranked.peakDiv].id}`), 'Season 2 ranked pays at the end', JSON.stringify(ro2?.ranked?.peakDiv));
+    ok(tr.every(r => Progress.hasReward(r.own) || r.kind === 'weapon' || r.kind === 'operator'), 'every Season 2 reward is still owned');
+    Progress.applySeasonMatch({ xp: S.TIER_XP * (s1tier + 5), counts: {}, career: null });
+    const again = Progress.claimSeason();
+    ok(again.length === s1tier + 5 && again.slice(0, s1tier).every(g => !g.fresh) && again.slice(s1tier).every(g => g.fresh), 'the replay track shows owned rewards as owned and pays the rest', `${again.filter(g => g.fresh).length} fresh of ${again.length}`);
+    ok(Progress.weekly()[0].list.every(c => c.id.startsWith('S1.w1.')) && Progress.weekly()[0].list.every(c => c.value === 0), 'the replay\'s weekly sets start over');
+    const rr = Progress.ranked();
+    ok(rr.k === 'S1R1' && !rr.placed && rr.base === Math.floor(r3.sr * R.CARRY), 'replay Ranked: placements again', JSON.stringify([rr.k, rr.base]));
+    setNow(2027, 1, 22, 12);
+    ok(S.eventAt()?.id === 'coldsnap' && playlistsFor('standard').some(p => p.id === 'event' && p.name === 'Cold Snap'), 'the replay brings Cold Snap back to the Spotlight');
+    setNow(2027, 2, 22, 0, 0, 30);
+    ok(Progress.season().info.key === 'S2R1' && Progress.season().info.title === 'Season Replay: Signal Fire', 'then Signal Fire again (Mar 22)');
+    ok(Progress.exportCode().length < 4000 && P.decodeSave(Progress.exportCode()).ok, 'the save code stays short and loads');
+  } finally { globalThis.Date = Real; }
+}
+
 // ---- Names ----
 console.log('names');
 {
@@ -280,7 +394,15 @@ console.log('names');
   ok(!dup.length, 'and none repeats', dup.join(', '));
   // + 1: the Master Prestige emblem (docs/PRESTIGE.md), + 12 feat emblems (the rewards pass), kept out of the pool's
   // list the same way.
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 + 1 + 12 && getEmblem('s1-emb-01'), 'season emblems stay out of the pool\'s list');
+  // + the weekly events' emblems (js/shared/events.js), kept out the same way.
+  const { EVENT_EMBLEMS } = await import('../js/ui/emblems.js');
+  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 + 1 + 12 + EVENT_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
+  // The weekly events' rewards and names clash with nothing either.
+  const { EVENTS } = await import('../js/shared/events.js');
+  const evNames = EVENTS.flatMap(e => [e.reward.name]);
+  const evCards = new Set(EVENTS.map(e => e.reward.name.toLowerCase()));
+  const evClash = evNames.filter(n => others.filter(o => !evCards.has(o)).includes(n.toLowerCase()) || fresh.includes(n));
+  ok(!evClash.length && new Set(evNames).size === evNames.length, 'weekly event rewards have names of their own', evClash.join(', '));
   const sk = SKINS.find(s => s.id === 'skin:anvil-s1');
   ok(sk && skinUnlock(sk, { granted: () => false }).requirement === 'Season 1 reward track', 'season skins name their track');
 }

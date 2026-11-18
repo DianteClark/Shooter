@@ -59,6 +59,7 @@ const USE_KINDS = [null, 'plate', 'med', 'self'];
 const CAT_WEIGHT = { Assault: 3, SMG: 3, LMG: 2, Marksman: 2, Shotgun: 2.2, Sniper: 1.4, Pistol: 1.6, Launcher: 0.5 };
 const GUN_POOL = WEAPON_IDS.filter(id => id !== GOLDEN_ID && CAT_WEIGHT[WEAPON_CATEGORY[id]]);
 const GUN_W = GUN_POOL.map(id => CAT_WEIGHT[WEAPON_CATEGORY[id]]);
+const SNIPER_POOL = GUN_POOL.filter(id => WEAPON_CATEGORY[id] === 'Sniper');     // Snipers Only (a weekly event).
 // How much a bot wants a gun of each category: two long guns or a close one and a long one, never pistols if it can help it.
 const CAT_SCORE = { Assault: 3.2, SMG: 3, LMG: 2.7, Marksman: 2.6, Shotgun: 2.4, Sniper: 2.2, Pistol: 1, Launcher: 0.6, Melee: 0 };
 // Rarity rolls by where the loot lies: [common .. legendary] weights for tier 1, 2, 3, and a chest.
@@ -338,6 +339,11 @@ export class BrRules {
     this.phases = this.rb ? RB.phases : BR.phases;
     this.phR = this.phases.map(ph => (this.rb ? ph.k * this.area.r : ph.r * map.width));     // Each phase's radius, metres.
     this.authority = false;          // Set on the first host step; a guest's copy only mirrors.
+    // Weekly event loot rules (js/shared/playlist.js): Gloves Only (no guns at all: plates and meds where guns and
+    // ammo would lie, no starting pistol, redeploys with the gloves) or Snipers Only (every floor gun a sniper rifle).
+    // The rolls draw the same numbers either way, so the loot table stays in step on every phone.
+    this.gloves = !!sim.mods?.includes('gloves');
+    this.snipers = !this.gloves && !!sim.mods?.includes('snipers');
     const rng = mulberry32((seed ^ 0x6b7a11) >>> 0);
     this.lootRng = rng;
     // Flight line: the map's own, or a random heading through the middle, a third or near an edge (flightLine).
@@ -401,7 +407,8 @@ export class BrRules {
   // ---- Loot table ----
 
   _rollGun(rng, tier) {
-    const id = GUN_POOL[pickW(rng, GUN_W)];
+    const pick = pickW(rng, GUN_W);
+    const id = this.snipers ? SNIPER_POOL[pick % SNIPER_POOL.length] : GUN_POOL[pick];
     const r = pickW(rng, RARITY_ROLL[tier] ?? RARITY_ROLL[3]);
     let kit = NO_ATTACHMENTS;
     if (r > 0) {
@@ -421,7 +428,19 @@ export class BrRules {
     return { kind: K.gun, v: WEAPON_IDS.indexOf(id), r, n: 1, kit };
   }
 
+  // Gloves Only: what lies where a gun or ammo would (rolled as usual first, so the draws stay the same).
+  _ungun(it) {
+    if (!this.gloves) return it;
+    if (it.kind === K.gun) return { kind: K.plate, v: 0, r: 0, n: 1 };
+    if (it.kind === K.ammo) return { kind: K.med, v: 0, r: 0, n: 1 };
+    return it;
+  }
+
   _rollItem(rng, tier, kindName = null) {
+    return this._ungun(this._rollItem0(rng, tier, kindName));
+  }
+
+  _rollItem0(rng, tier, kindName = null) {
     const kind = kindName ?? FLOOR_ROLL[pickW(rng, FLOOR_ROLL.map(k => k[1]))][0];
     switch (kind) {
       case 'gun': return this._rollGun(rng, tier);
@@ -437,10 +456,10 @@ export class BrRules {
 
   _buildLoot(rng) {
     for (const s of this.def.loot ?? []) {
-      const it = this._rollItem(rng, s.tier);
-      this._addItem({ ...it, x: s.x, z: s.z }, false);
+      const it = this._rollItem0(rng, s.tier);
+      this._addItem({ ...this._ungun(it), x: s.x, z: s.z }, false);
       // A gun on the floor comes with some ammo for it, most of the time.
-      if (it.kind === K.gun && rng() < 0.6) {
+      if (it.kind === K.gun && rng() < 0.6 && !this.gloves) {
         const type = ammoOf(WEAPON_IDS[it.v]);
         if (type) this._addItem({ kind: K.ammo, v: AMMO_TYPES.indexOf(type), r: 0, n: AMMO_PACK[type], x: s.x + 0.6, z: s.z + 0.3 }, false);
       }
@@ -515,12 +534,15 @@ export class BrRules {
     ps.perks = []; ps.pro = [];
     brArm(ps, 0, KNIFE);
     const side = WEAPONS.pistol;
-    p.br.guns[1] = { id: 'pistol', r: 0, kit: NO_ATTACHMENTS };
-    brArm(ps, 1, 'pistol', NO_ATTACHMENTS, 0, side.magazine, side.magazine * 2);
+    if (this.gloves) { p.br.guns[1] = null; brArm(ps, 1, KNIFE); }      // Gloves Only: gloves in both hands.
+    else {
+      p.br.guns[1] = { id: 'pistol', r: 0, kit: NO_ATTACHMENTS };
+      brArm(ps, 1, 'pistol', NO_ATTACHMENTS, 0, side.magazine, side.magazine * 2);
+    }
     ps.slot = 0; ps.weapon = KNIFE;
     p.primary = KNIFE;
     p.kits[0] = NO_ATTACHMENTS; p.kits[1] = NO_ATTACHMENTS;
-    if (redeploy) {
+    if (redeploy && !this.gloves) {
       // Rebound: a redeploy brings a common or uncommon long gun (no launchers or sniper rifles) with two spare magazines.
       let g;
       for (let i = 0; i < 8; i++) {
@@ -1316,8 +1338,8 @@ export class BrRules {
       const a = i / kinds.length * Math.PI * 2 + rng() * 0.6;
       const roll = kind === 'gun' ? this._rollGun(rng, 'chest') : this._rollItem(rng, 1, kind);
       const at = this._spot(it.x + Math.cos(a) * 1.1, it.z + Math.sin(a) * 1.1);
-      this._addItem({ ...roll, x: at.x, z: at.z });
-      if (kind === 'gun') {
+      this._addItem({ ...this._ungun(roll), x: at.x, z: at.z });
+      if (kind === 'gun' && !this.gloves) {
         const type = ammoOf(WEAPON_IDS[roll.v]);
         const at2 = this._spot(it.x + Math.cos(a + 0.4) * 1.5, it.z + Math.sin(a + 0.4) * 1.5);
         if (type) this._addItem({ kind: K.ammo, v: AMMO_TYPES.indexOf(type), r: 0, n: AMMO_PACK[type] * 2, x: at2.x, z: at2.z });

@@ -107,8 +107,9 @@ async def main():
             check('Multiplayer screen', await screen() == 'multiplayer')
             if SHOTS: await shots(pg, 'multiplayer-standard')
             pls = await pg.evaluate("[...document.querySelectorAll('.mp-pl')].map(b => b.dataset.id)")
-            # The Spotlight first (Ranked, the season's event while it runs, today's featured; docs/SEASONS.md), then the rest.
-            check('Standard playlists: spotlight (ranked, (event), featured), quick play, objective, party, showdown', [p for p in pls if p != 'event'] == ['ranked', 'featured', 'qp', 'obj', 'party', 'showdown'], pls)
+            # The Spotlight first (the weekly event, the season's event while it runs, Ranked, today's featured;
+            # docs/SEASONS.md), then the rest.
+            check('Standard playlists: spotlight ((events), ranked, featured), quick play, objective, party, showdown', [p for p in pls if p not in ('event', 'wkevent')] == ['ranked', 'featured', 'qp', 'obj', 'party', 'showdown'] and pls[0] == 'wkevent', pls)
             spot = await pg.evaluate("[...document.querySelectorAll('.mp-sec-spot .mp-pl')].map(b => b.dataset.id)")
             check('  ranked and featured in the Spotlight', 'ranked' in spot and 'featured' in spot, spot)
             sc = await pg.evaluate("(() => { const b = document.querySelector('.mp-body'); return !!b && b.classList.contains('scroll-y') && document.querySelectorAll('.mp .scroll-y').length === 1; })()")

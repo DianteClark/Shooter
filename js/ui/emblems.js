@@ -6,6 +6,7 @@
 // calling card sheet (js/ui/cards.js), opened from the service record.
 
 import { SEASON_DEFS, seasonEmblems, rankedEmblems } from '../shared/season-items.js';
+import { EVENTS, rewardHow, rewardPlay } from '../shared/events.js';
 
 const f1 = v => Math.round(v * 10) / 10;
 const pts = list => list.map(p => `${f1(p[0])},${f1(p[1])}`).join(' ');
@@ -144,7 +145,14 @@ const FEAT_ROWS = [
   ['feat-champion', 'Champion', '#ff4a5a', ['#ffe0b0', '#ff4a5a'], 'laurel', { ranked: 6, label: 'Reach Champion in Ranked' }, { tab: 'standard', playlist: 'ranked' }],
 ];
 export const FEAT_EMBLEMS = FEAT_ROWS.map(([id, name, rim, colours, glyph, rule, play]) => ({ id, name, plate: 'seal', rim, colours, glyph, rule, feat: true, play }));
-export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS, ...RANK_EMBLEMS, ...FEAT_EMBLEMS];
+// Weekly events (js/shared/events.js): one emblem for some events, granted through the save's season block. The label
+// and Play now follow the calendar (on now, or when the event is back).
+export const EVENT_EMBLEMS = EVENTS.filter(e => e.reward.kind === 'emblem').map(e => {
+  const [plate, rim, colours, glyph] = e.reward.row;
+  return { id: e.reward.id, name: e.reward.name, plate, rim, colours, glyph, event: e.id,
+    rule: { grant: true, get label() { return rewardHow(e.id); } }, get play() { return rewardPlay(e.id); } };
+});
+export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS, ...RANK_EMBLEMS, ...FEAT_EMBLEMS, ...EVENT_EMBLEMS];
 const BY_ID = new Map(ALL_EMBLEMS.map(e => [e.id, e]));
 export const getEmblem = id => BY_ID.get(id) ?? null;
 export const cleanEmblem = id => (BY_ID.has(id) ? id : null);
@@ -152,7 +160,7 @@ export const cleanEmblem = id => (BY_ID.has(id) ? id : null);
 const fmt = v => Number(v).toLocaleString('en-US');
 export function emblemUnlocked(e, c) {
   const r = e.rule;
-  if (c.granted?.(`emblem:${e.id}`)) return { unlocked: true, requirement: e.season ? r.label : 'Earned on a mastery track' };
+  if (c.granted?.(`emblem:${e.id}`)) return { unlocked: true, requirement: e.season || e.event ? r.label : 'Earned on a mastery track' };
   if (r.starter) return { unlocked: true, requirement: 'Starter emblem' };
   if (r.grant) return { unlocked: false, requirement: r.label };
   if (r.level) return { unlocked: c.level >= r.level, requirement: `Reach level ${r.level}` };

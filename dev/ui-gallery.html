@@ -32,7 +32,9 @@
   try { Object.defineProperty(window, 'localStorage', { value: store, configurable: true }); } catch { /* falls back to the real one */ }
   // Seasons (docs/SEASONS.md): &date=YYYY-MM-DD runs the frame on that local date; season scenes default to a day in
   // Season 1 (week 3, the Cold Snap event on).
-  const day = q.get('date') ?? (/^(season-(track|weekly|ranked)|boards-season|boards-ranked|results-season|mp-ranked|title-season)/.test(q.get('frame') ?? '') ? '2026-12-02' : null);
+  // Weekly event scenes (docs/SEASONS.md "Weekly events") default to the week of the longest event name.
+  const day = q.get('date') ?? (/^(season-(track|weekly|ranked)|boards-season|boards-ranked|results-season|mp-ranked|title-season)/.test(q.get('frame') ?? '') ? '2026-12-02'
+    : /-event$/.test(q.get('frame') ?? '') ? '2026-11-25' : null);
   if (day) {
     const Real = Date, offset = new Real(`${day}T12:00:00`).getTime() - Real.now();
     class FakeDate extends Real {
@@ -170,6 +172,13 @@ const SCENES = {
   // The rewards pass (docs/UNLOCKS-AUDIT-2026-11-12.md): the Trophy Case, fresh and on a Master save, and an unlock sheet.
   'trophy': menuScene('Trophy case, fresh', ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfTrophy"]').click(); }),
   'trophy-master': menuScene('Trophy case, Master 137', ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfTrophy"]').click(); }, { seed: 'master' }),
+  // Weekly events (js/shared/events.js): the title's banner, the Challenges screen's event panel, the Spotlight and the
+  // reward's unlock sheet with Play now.
+  'title-event': menuScene('Title, weekly event banner', async ({ menu }) => { menu.title({}); const { eventBannerHtml } = await import('../js/ui/eventbanner.js'); const { weeklyEventAt } = await import('../js/shared/events.js'); menu.el.insertAdjacentHTML('beforeend', eventBannerHtml(weeklyEventAt())); }),
+  'title-season-event': menuScene('Title, new season banner (Season 2)', async ({ menu }) => { menu.title({}); const { seasonBannerHtml } = await import('../js/ui/eventbanner.js'); const { seasonAt } = await import('../js/shared/seasons.js'); menu.el.insertAdjacentHTML('beforeend', seasonBannerHtml(seasonAt(new Date(2026, 11, 28, 12)))); }),
+  'challenges-event': menuScene('Challenges, weekly event', ({ menu }) => menu.challenges({ onBack: noop, onPlay: noop })),
+  'mp-event': menuScene('Multiplayer: the weekly event picked', ({ menu }) => menu.multiplayer({ tab: 'standard', sel: { playlist: 'wkevent', modes: [] } })),
+  'unlock-event': menuScene('Unlock sheet: a weekly event reward', async ({ menu }) => { const { weeklyEventAt } = await import('../js/shared/events.js'); const r = weeklyEventAt().def.reward; menu.title({}); const u = await import('../js/ui/unlocksheet.js'); u.setPlayNow(noop); u.unlockSheet(menu, r.kind, r.id); }),
   'unlock-sheet': menuScene('Unlock sheet over the card picker', async ({ menu }) => { menu.profile({ onBack: noop, onChange: noop, onRename: noop, onSave: noop }); menu.el.querySelector('[data-act="pfCards"]').click(); (await import('../js/ui/unlocksheet.js')).unlockSheet(menu, 'card', 'modes-oic-3'); }),
   'results-master': menuScene('Results: win, Master levels', ({ menu, results }) => menu.results(results('win'), { rematch: noop, menu: noop }), { gl: true, settle: 4500, seed: 'master' }),
   'save-code': menuScene('Save code', ({ menu }) => menu.saveCode({ onBack: noop, onImported: noop })),
