@@ -68,7 +68,7 @@ async def main():
                 return pg
 
             async def fresh(pg, name='Tester'):
-                await pg.evaluate(f"localStorage.clear(); sessionStorage.clear(); {G}.Progress.setFlag('tutorialOffered'); {G}.Progress.name = '{name}'")
+                await pg.evaluate(f"localStorage.clear(); sessionStorage.clear(); localStorage.setItem('switchyard.resetGen', '1'); {G}.Progress.setFlag('tutorialOffered'); {G}.Progress.name = '{name}'")
                 await pg.reload()
                 await pg.wait_for_function(f"{G}?.menu?.el?.dataset.screen === 'title'", timeout=30000)
                 await pg.wait_for_timeout(500)
