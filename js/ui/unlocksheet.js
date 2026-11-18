@@ -54,7 +54,18 @@ export function playForStat(key = '') {
 const level = () => Progress.unlockCtx?.().level ?? 1;
 const pair = (v, g) => ({ value: Math.max(0, Math.min(g, Math.floor(Number.isFinite(v) ? v : 0))), goal: Math.max(1, g) });
 
-export function unlockInfo(kind, id, { weapon = null, operator = null } = {}) {
+// A weekly event's reward (js/shared/events.js) while its event runs: the challenges done so far, as the bar.
+function eventBar(info, eventId) {
+  const ev = eventId && !info.unlocked ? Progress.weeklyEvent?.() : null;
+  return ev && ev.info.id === eventId ? { ...info, ...pair(ev.done, ev.list.length), noBar: false } : info;
+}
+
+export function unlockInfo(kind, id, opts = {}) {
+  const info = unlockInfo0(kind, id, opts);
+  try { return eventBar(info, kind === 'card' ? getCard(id)?.event : kind === 'emblem' ? getEmblem(id)?.event : null); } catch { return info; }
+}
+
+function unlockInfo0(kind, id, { weapon = null, operator = null } = {}) {
   const base = { kind, id, label: KIND[kind] ?? kind, play: QUICK, art: '' };
   try {
     if (kind === 'card') {

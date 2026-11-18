@@ -32,6 +32,11 @@
 .tch-foot u { text-decoration: none; color: var(--c-chalk); }
 .tch-foot small { margin-left: auto; text-transform: none; }
 #ui .tch-go { height: 12px; color: var(--c-sodium); }
+/* The weekly event's line (js/shared/events.js): its name and how many of its challenges are done. */
+.tch-ev { border-top-style: dashed; padding-top: 3px; }
+.tch-ev > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tch-ev u:first-child { color: #ff9ad8; }
+.tch-ev.all u:last-child { color: var(--c-go); }
 
 /* ---- Challenges screen ------------------------------------------------------------------------------------------ */
 #ui .menu[data-screen="challenges"] { gap: var(--sp-2); }
@@ -40,6 +45,19 @@
 #ui .ch-swaps .ico { height: 14px; }
 .ch-swaps.used { color: var(--c-haze); background: none; box-shadow: var(--edge); }
 .ch-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+/* With the weekly event: a third column, its head line saying what the event is and what it pays. */
+.ch-cols.has-ev { grid-template-rows: auto auto; align-content: start; overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--sp-2); }
+.ch-cols.has-ev .chp-list { flex: none; }
+.chp[data-period="event"] { grid-column: 1 / -1; }
+.chp[data-period="event"] .chp-list { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2) var(--sp-4); }
+.chp[data-period="event"] .chp-head em { color: #ff9ad8; }
+.chp[data-period="event"] .chp-head span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chp[data-period="event"] .chc { box-shadow: var(--bevel), var(--edge), inset 3px 0 0 rgba(255,122,208,.6); }
+.chp-ev { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 2px 6px; align-items: center; margin: -2px 2px 0; font: 400 11px/1.25 var(--f-body); color: var(--c-haze); }
+#ui .chp-ev .ico { height: 13px; color: #ff9ad8; }
+.chp-ev span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.chp-ev small { grid-column: 2; font: 400 var(--fs-micro)/1.2 var(--f-plate); letter-spacing: .04em; color: var(--c-chalk); }
+.chp-ev.owned small { color: var(--c-go); }
 .chp { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .chp-head { display: flex; align-items: baseline; gap: var(--sp-3); padding: 0 2px; }
 .chp-head span { font: 400 var(--fs-heading)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
@@ -419,3 +437,21 @@
 #ui .ch-play-tag .ico { height: 8px; width: auto; --icon-accent: currentColor; }
 #ui .sz-ch-ico.ch-play { width: 44px; height: 44px; }
 #ui .sz-ch:has(.ch-play) { grid-template-columns: 44px minmax(0, 1fr) 74px; }
+
+/* ---- Title: the weekly event's banner (js/ui/eventbanner.js), once a week, in the gap under the wordmark ----------- */
+#ui .ev-banner {
+  position: absolute; top: calc(var(--st) + 92px); left: calc(max(var(--sl), 12px) + 8px); z-index: 6; width: 300px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); padding: 7px var(--sp-2) 7px var(--sp-3); color: var(--c-chalk);
+  background: linear-gradient(172deg, rgba(74,30,62,.97), rgba(32,18,34,.97)); box-shadow: var(--bevel), var(--edge), inset 3px 0 0 #ff7ad0;
+  --cut: var(--cut-sm); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  animation: evb-in 280ms var(--ease-out) both; transition: opacity .35s, transform .35s;
+}
+#ui .ev-banner.out { opacity: 0; transform: translateX(-16px); pointer-events: none; }
+@keyframes evb-in { from { opacity: 0; transform: translateX(-16px); } }
+#ui .evb-ico .ico { height: 22px; color: #ff9ad8; }
+.evb-tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left; }
+.evb-tx small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: #ff9ad8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evb-tx b { font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evb-go { display: flex; align-items: center; gap: 4px; padding: 6px 8px; background: #ff7ad0; color: #1a0a16; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; }
+#ui .evb-go .ico { height: 12px; }
+@media (prefers-reduced-motion: reduce) { #ui .ev-banner { animation: none; } }

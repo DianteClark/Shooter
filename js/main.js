@@ -65,6 +65,8 @@ import { Recall } from './ui/recall.js';     // Remembered menu choices (QoL).
 import { NewDots } from './ui/newdots.js';    // QoL: dots on unlocks not yet seen.
 import { Updater, BUILD } from './ui/updater.js';
 import { maybeShowWhatsNew } from './ui/whatsnew.js';
+import { maybeEventBanner } from './ui/eventbanner.js';
+import { weeklyEventAt } from './shared/events.js';     // Weekly events: the banner on the week's first visit.
 import { unlockSheet, setPlayNow } from './ui/unlocksheet.js';
 
 const GAME_NAME = 'Switchyard';
@@ -334,6 +336,8 @@ menu.on({
   solo: () => { startSolo(); },
   quickPlay: () => { needName(quickPlay); },
   featured: () => { needName(playFeatured); },
+  // The weekly event's banner on the title: Multiplayer on the event's playlist.
+  eventBanner: () => { if (shortcutOk()) playShortcut({ tab: 'standard', sel: { playlist: 'wkevent', modes: [] }, name: weeklyEventAt().name }); },
   // Multiplayer (js/ui/playscreens.js): a playlist, or one or more ticked modes, then Find match.
   mpBack: () => showTitle(),
   mpTab: ({ tab }) => { if (MP_TAB_IDS.includes(tab)) { app.mp.tab = tab; renderMp(); } },
@@ -1927,6 +1931,9 @@ NewDots.install(menu);
 const offeredTutorial = !invite && maybeOfferTutorial();
 if (params.has('debug')) window.__game = { app, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
-else if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
+else {
+  if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });
+  if (!offeredTutorial && !maybeShowWhatsNew(menu, { fresh: Progress.totalXp === 0 })) maybeInstallPrompt();
+}
 
 
