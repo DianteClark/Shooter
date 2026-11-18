@@ -57,6 +57,8 @@ export class MatchAwards {
     this.mode = null;
     this.practice = false;
     this.ranked = null;
+    // Weekend tournaments (docs/TOURNAMENTS.md): { key, round } for a tournament round; the result moves the run.
+    this.tourney = null;
     this.observers = [];
     this.result = null;
     this.outAt = null;
@@ -272,6 +274,14 @@ export class MatchAwards {
     if (exWon !== null) { /* The Extracted line is the win. */ }
     else if (won) lines.push(['Win', MATCH_XP.win]);
     else if (drawn) lines.push(['Draw', MATCH_XP.draw]);
+    // A tournament round: a win moves the run on, anything else (a draw too) knocks it out; its XP joins this match's.
+    let tourney = null;
+    if (this.tourney) {
+      try {
+        tourney = Progress.applyTourneyRound({ key: this.tourney.key, round: this.tourney.round, won: !!won });
+        if (tourney) { lines.push(...tourney.xp); tourney = { ...tourney, ...this.tourney }; }
+      } catch (err) { console.error('tourney', err); }
+    }
     // Challenges settle first so the XP they pay is part of this match's total. A failure here costs only them.
     let challenges = [], tallied = null;
     const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
@@ -333,6 +343,7 @@ export class MatchAwards {
       history,
       season: season?.track ?? null,
       ranked: season?.ranked ?? null,
+      tourney,
       medals: { ...this.medals },
       ex,
       zm,

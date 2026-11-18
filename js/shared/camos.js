@@ -17,6 +17,7 @@
 //
 // Append new camos at the end. Index order is what snapshots and the shader uniform array use.
 import { SEASON_DEFS, seasonCamos } from './season-items.js';
+import { TOURNEY_CAMO } from './tourney-items.js';
 
 export const CAMOS = [
   { id: 'none',    name: 'Factory',     pattern: 'solid',    colors: [0x3b4048],                               scale: 1.0,                 tier: 0, unlockKills: 0 },
@@ -61,6 +62,8 @@ export const RANK_CAMOS = [
   { id: 'ml-lamps',   name: 'Thousand Lamps', pattern: 'aurora',      colors: [0x05030a, 0xffd659, 0xff4d7a, 0xffffff], scale: 4.0, animated: true, tier: 4, tint: 0xffd659, mlv: 750 },
 ];
 CAMOS.push(...RANK_CAMOS);
+// Weekend tournaments (docs/TOURNAMENTS.md): the champion's camo, every gun, owned through the save's tournament block.
+CAMOS.push(TOURNEY_CAMO);
 
 const BY_ID = new Map(CAMOS.map(c => [c.id, c]));
 

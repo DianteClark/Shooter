@@ -10,6 +10,7 @@ import { WEAPONS } from './weapons.js';
 import { V10_UNLOCKS } from './weapons-v10.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
+import { blankTourney, cleanTourney, tourneyEmpty } from './tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
 // progress and the calling card (V7). Every older save, and every SY2/SY3 code, migrates without losing anything.
@@ -211,7 +212,7 @@ export function isMastered(w) {
 // The rule for one camo on one weapon, ignoring grandfathered ownership. `rank` is the player's {prestige, master}, for
 // the player-prestige and Master camos (every gun at once; docs/PRESTIGE.md).
 export function camoGateOpen(camo, w, life = null, rank = null) {
-  if (camo.season) return false;
+  if (camo.season || camo.tourney) return false;
   if (camo.pp) return (rank?.prestige ?? 0) >= camo.pp;
   if (camo.mlv) return (rank?.master ?? 0) >= camo.mlv;        // A season's camo is owned through the save's season block (js/ui/progress.js).
   if (camo.exfil) { const u = EX_UNLOCKS.find(x => x.id === camo.exfil); return !!u && (life?.[u.key] ?? 0) >= u.goal; }
@@ -225,6 +226,7 @@ export function camoGateOpen(camo, w, life = null, rank = null) {
 export function camoRequirement(camo) {
   if (camo.exfil) return EX_UNLOCKS.find(u => u.id === camo.exfil)?.label ?? 'Extraction exclusive';
   if (camo.season) return `Season ${defById(camo.season)?.n ?? ''} reward track`;
+  if (camo.tourney) return 'Win a weekend tournament';
   if (camo.pp) return `Reach Prestige ${camo.pp}`;
   if (camo.mlv) return `Reach Master level ${camo.mlv}`;
   if (camo.prestige) return `Weapon Prestige ${camo.prestige} on this weapon`;
@@ -1368,6 +1370,9 @@ export function blankSave() {
     // Personal bests (the Trophy Case): st longest kill streak, lk longest gun kill (m), bp best battle royale placing
     // (0 none yet), ex fastest extraction (seconds, 0 none yet). Appended; each only ever improves.
     records: {},
+    // Weekend tournaments (docs/TOURNAMENTS.md, js/shared/tourney-items.js): this weekend's run and the shelf of every
+    // weekend played. Appended.
+    tn: blankTourney(),
   };
 }
 
@@ -1494,6 +1499,7 @@ export function sanitizeSave(raw) {
   s.finishers = cleanFinisherPicks(raw.finishers);
   s.zmFeats = cleanZmFeats(raw.zmFeats);
   s.records = cleanRecords(raw.records);
+  s.tn = cleanTourney(raw.tn);
   return s;
 }
 
@@ -1595,7 +1601,9 @@ function packTail(s) {
     s.finishers && Object.keys(s.finishers).length ? s.finishers : null,
     s.zmFeats && Object.keys(s.zmFeats).length ? s.zmFeats : null,
     // [22] personal bests (the Trophy Case), the same way.
-    s.records && Object.keys(s.records).length ? s.records : null];
+    s.records && Object.keys(s.records).length ? s.records : null,
+    // [23] weekend tournaments (docs/TOURNAMENTS.md), the same way.
+    s.tn && !tourneyEmpty(s.tn) ? s.tn : null];
   while (tail.length && tail[tail.length - 1] === null) tail.pop();
   return tail;
 }
@@ -1638,6 +1646,7 @@ function unpack(a) {
     ...(a[20] && typeof a[20] === 'object' && !Array.isArray(a[20]) ? { finishers: a[20] } : {}),
     ...(a[21] && typeof a[21] === 'object' && !Array.isArray(a[21]) ? { zmFeats: a[21] } : {}),
     ...(a[22] && typeof a[22] === 'object' && !Array.isArray(a[22]) ? { records: a[22] } : {}),
+    ...(a[23] && typeof a[23] === 'object' && !Array.isArray(a[23]) ? { tn: a[23] } : {}),
   };
 }
 

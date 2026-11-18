@@ -6,6 +6,7 @@
 // calling card sheet (js/ui/cards.js), opened from the service record.
 
 import { SEASON_DEFS, seasonEmblems, rankedEmblems } from '../shared/season-items.js';
+import { TOURNEY_EMBLEM_ROW } from '../shared/tourney-items.js';
 
 const f1 = v => Math.round(v * 10) / 10;
 const pts = list => list.map(p => `${f1(p[0])},${f1(p[1])}`).join(' ');
@@ -144,7 +145,10 @@ const FEAT_ROWS = [
   ['feat-champion', 'Champion', '#ff4a5a', ['#ffe0b0', '#ff4a5a'], 'laurel', { ranked: 6, label: 'Reach Champion in Ranked' }, { tab: 'standard', playlist: 'ranked' }],
 ];
 export const FEAT_EMBLEMS = FEAT_ROWS.map(([id, name, rim, colours, glyph, rule, play]) => ({ id, name, plate: 'seal', rim, colours, glyph, rule, feat: true, play }));
-export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS, ...RANK_EMBLEMS, ...FEAT_EMBLEMS];
+// Weekend tournaments (docs/TOURNAMENTS.md): the champion's crest, granted through the save's tournament block.
+export const TOURNEY_EMBLEMS = [TOURNEY_EMBLEM_ROW].map(([id, name, plateKind, rim, colours, glyph]) => ({ id, name, plate: plateKind, rim, colours, glyph,
+  tourney: true, rule: { grant: true, label: 'Win a weekend tournament' } }));
+export const ALL_EMBLEMS = [...EMBLEMS, ...SEASON_EMBLEMS, ...RANK_EMBLEMS, ...FEAT_EMBLEMS, ...TOURNEY_EMBLEMS];
 const BY_ID = new Map(ALL_EMBLEMS.map(e => [e.id, e]));
 export const getEmblem = id => BY_ID.get(id) ?? null;
 export const cleanEmblem = id => (BY_ID.has(id) ? id : null);
@@ -152,7 +156,7 @@ export const cleanEmblem = id => (BY_ID.has(id) ? id : null);
 const fmt = v => Number(v).toLocaleString('en-US');
 export function emblemUnlocked(e, c) {
   const r = e.rule;
-  if (c.granted?.(`emblem:${e.id}`)) return { unlocked: true, requirement: e.season ? r.label : 'Earned on a mastery track' };
+  if (c.granted?.(`emblem:${e.id}`)) return { unlocked: true, requirement: e.season || e.tourney ? r.label : 'Earned on a mastery track' };
   if (r.starter) return { unlocked: true, requirement: 'Starter emblem' };
   if (r.grant) return { unlocked: false, requirement: r.label };
   if (r.level) return { unlocked: c.level >= r.level, requirement: `Reach level ${r.level}` };

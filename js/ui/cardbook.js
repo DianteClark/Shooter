@@ -18,6 +18,7 @@ import { MAPS, MAP_IDS } from '../shared/map.js';
 import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SEASON_DEFS, seasonCards, rankedCards, trackRewards } from '../shared/season-items.js';
+import { TOURNEY_CARDS } from '../shared/tourney-items.js';
 
 const NONE = { cats: {}, life: {}, mastered: 0, masteredIn: {}, masteredSet: new Set(), catSize: {}, camoOn: {}, granted: () => false, zmBest: {}, zmFeats: {} };
 let source = () => NONE;
@@ -226,3 +227,6 @@ registerCards(SEASON_DEFS.flatMap(def => [
   ...seasonCards(def).map(c => ({ id: c.id, name: c.name, group: 'Season', req: `Season ${def.n} reward track, tier ${tierOf(def, c.id)}`, need: k => !!k?.rewards?.has(`card:${c.id}`), art: c.art, season: def.id })),
   ...rankedCards(def).map(c => ({ id: c.id, name: c.name, group: 'Ranked', req: `Reach ${c.name.slice(def.name.length + 1)} in Season ${def.n} Ranked`, need: k => !!k?.rewards?.has(`card:${c.id}`), art: c.art, season: def.id })),
 ]));
+// Weekend tournaments (docs/TOURNAMENTS.md): a card per placing, granted through the save's tournament block.
+const TN_REQ = ['', 'Play a weekend tournament', 'Reach a tournament semi-final', 'Reach a tournament final', 'Win a weekend tournament'];
+registerCards(TOURNEY_CARDS.map(c => ({ id: c.id, name: c.name, group: 'Tournament', req: TN_REQ[c.place], need: k => !!k?.rewards?.has(`card:${c.id}`), art: c.art })));

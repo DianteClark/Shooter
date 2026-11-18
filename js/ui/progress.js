@@ -88,6 +88,7 @@ import { cleanFriends, seeFriend } from '../shared/boards.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP } from '../shared/seasons.js';
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
+import { tourneyOwned, tourneyAt, runStatus, enterTourney, joinTourney, applyTourneyRound, rollTourney, cleanTourney, startRound, settleForfeit } from '../shared/tourney-items.js';     // docs/TOURNAMENTS.md
 import { FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
 
 export { levelOf };
@@ -207,6 +208,7 @@ const validIndex = i => Number.isInteger(i) && i >= 0 && i < LOADOUT_COUNT;
 const plainOnly = w => w === GOLDEN_ID;
 const hasCamo = (w, camo) => (plainOnly(w) ? camo.id === 'none'
   : camo.season ? seasonOwned(data.season).has(`camo:${camo.id}`)
+  : camo.tourney ? tourneyOwned(data.tn).has(`camo:${camo.id}`)
   : readWeapon(w).owned.includes(camo.id) || camoGateOpen(camo, readWeapon(w), data.life, rankNow()));
 // The player's rank for the rank camos: prestige and Master level (docs/PRESTIGE.md).
 const masterNow = () => masterOf(data.prestige, levelOf(data.xp), data.totalXp);
@@ -215,12 +217,14 @@ const rankNow = () => ({ prestige: data.prestige, master: masterNow() });
 function allRewards() {
   const set = new Set(masteryRewards(data));
   for (const id of seasonOwned(data.season)) set.add(id);
+  for (const id of tourneyOwned(data.tn)) set.add(id);
   return set;
 }
 // A season cosmetic shows in a picker once owned, or while its season runs; never before its season starts.
 const seasonShown = (season, owned) => owned || (season === seasonAt().def?.id);
 // The season block rolled to today: a new season claims the old track's reached tiers and pays its ranked rewards first.
 let lastRollover = null;
+let lastForfeit = null;      // Weekend tournaments: a round left unfinished, settled as lost.
 function seasonNow(now = new Date()) {
   const r = rollover(data.season, now);
   if (r.changed) {
@@ -256,7 +260,7 @@ function rankedBest() {
 }
 
 function careerStats() {
-  const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id),
+  const c = { level: data.peakLevel, prestige: data.prestige, master: masterNow(), kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: data.life ?? {}, granted: id => seasonOwned(data.season).has(id) || tourneyOwned(data.tn).has(id),
     zmFeats: data.zmFeats ?? {}, zmBest: data.zmBest ?? {}, records: data.records ?? {}, rankedBest: rankedBest() };
   for (const w of Object.values(data.weapons)) for (const k of ['kills', 'head', 'long', 'slide', 'clean']) c[k] += w[k] ?? 0;
   return c;
@@ -466,7 +470,7 @@ export const Progress = {
     return MASTERY_TRACKS.filter(t => !kind || t.kind === kind).map(t => trackStatus(t, data.mastery[t.id]));
   },
   weaponLadder(w) { return ladderStatus(w, readWeapon(w)); },
-  hasReward(id) { return masteryRewards(data).has(id) || seasonOwned(data.season).has(id); },
+  hasReward(id) { return masteryRewards(data).has(id) || seasonOwned(data.season).has(id) || tourneyOwned(data.tn).has(id); },
   rewards() { return allRewards(); },
   // Emblem badges earned: {id, item, grade (1 bronze, 2 gold), name, kind}, best grade per item only.
   badges() {
@@ -919,6 +923,40 @@ export const Progress = {
     save();
     return { track: track ? { ...track, tierXp: TIER_XP } : null, ranked: ranked ? { ...ranked, rk: { ...st.rk }, placements: PLACEMENTS } : null };
   },
+
+  /* ---------- Weekend tournaments (js/shared/tourney-items.js, docs/TOURNAMENTS.md) ---------- */
+  // { info: tourneyAt(), run: runStatus (this weekend's, or a blank one when none is live), owner, log, best }
+  tourney(now = new Date()) {
+    const info = tourneyAt(now), t = data.tn ??= cleanTourney(null);
+    // A round's match that never finished (left, or the app closed mid-match) was lost.
+    const forfeit = t.pl ? settleForfeit(t) : null;
+    if (forfeit || t.pl) { t.pl = 0; save(); }
+    if (forfeit) lastForfeit = forfeit;
+    const run = runStatus(t, info.key ?? -1);
+    return { info, run, owner: info.key && t.k === info.key ? t.o : '', log: t.log.map(r => r.slice()), best: Math.max(0, ...t.log.map(r => r[2])) };
+  },
+  // Enters (or re-enters) this weekend's cup in `owner`'s bracket. false when no cup is live or no entry is left.
+  enterTourney(owner, now = new Date()) {
+    const info = tourneyAt(now);
+    if (!info.live) return false;
+    const ok = enterTourney(data.tn, info.key, owner);
+    if (ok) save();
+    return ok;
+  },
+  // A round's match begins (main.js): from here, not finishing it is a loss.
+  startTourneyRound(key, round) { const ok = startRound(data.tn, key, round); if (ok) save(); return ok; },
+  // A forfeit settled since the last look, once (the bracket screen says so).
+  takeForfeit() { const r = lastForfeit; lastForfeit = null; return r; },
+  // A party guest's match in the host's bracket: this phone's run follows the host's.
+  joinTourney(key, owner, round) { joinTourney(data.tn, key, owner, round); save(); },
+  // One finished round (js/game/awards.js). { key, round, won } -> applyTourneyRound's result, or null.
+  applyTourneyRound(ctx) {
+    const r = applyTourneyRound(data.tn, ctx);
+    if (r) save();
+    return r;
+  },
+  // Tests: forget this weekend's run (the shelf stays).
+  debugResetTourney() { rollTourney(data.tn, -1); data.tn.k = 0; save(); },
 };
 
 /* ---------- Daily and weekly challenges ---------- */
