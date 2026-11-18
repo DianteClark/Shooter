@@ -62,7 +62,7 @@ export function masteryChip(id) {
 function rewardChips(rewards, { got = false } = {}) {
   return rewards.map(r => {
     const mark = r.kind === 'badge' ? masteryBadge(r.id.slice(6, r.id.lastIndexOf('-')), Number(r.id.slice(-1)), { size: 18 })
-      : ico(r.kind === 'xp' ? 'star' : r.kind === 'card' ? 'flag' : r.kind === 'skin' ? 'operator' : 'camo');
+      : ico(r.kind === 'xp' ? 'star' : r.kind === 'card' ? 'flag' : r.kind === 'skin' ? 'operator' : r.kind === 'emote' ? 'ui:chat' : 'camo');
     return `<span class="m-rw k-${r.kind}${got ? ' got' : ''}">${mark}<small>${esc(r.kind === 'xp' ? `+${fmt(r.xp)} XP` : r.name)}</small></span>`;
   }).join('');
 }

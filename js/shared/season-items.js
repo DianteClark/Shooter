@@ -10,7 +10,9 @@
 //                                 unlocks keep working as before
 //   content [{ kind: 'map'|'mode'|'weapon'|'operator', id }]   optional date-locked content: hidden until the start
 //   camos [slug, name, pattern, colors, scale, animated?, tint?]   10, ids `s<n>-<slug>`, appended to CAMOS
-//   skins [operator, name, [gear, sleeve, trouser, accent, glow]]  8, ids `skin:<operator>-s<n>`, appended to SKINS
+//   skins [operator, name, [gear, sleeve, trouser, accent, glow]]  8, ids `skin:<operator>-s<n>`, appended to SKINS;
+//         rows past the eighth go on `fillerSkinTiers` (one each, in order): tiers that held an emblem, which then
+//         leaves the season (seasonEmblems drops it) while every other reward keeps its tier
 //   cards [adjectives x 10, nouns x 10], emblems [adjectives x 10, nouns x 10]   40 each, named from the pairs
 // Everything a season grants is cosmetic or an early unlock; nothing is bought and nothing boosts XP.
 
@@ -95,7 +97,15 @@ export const SEASON_DEFS = [
       ['morse', 'Night Wire', [0x1a1a22, 0x24242e, 0x121218, 0xffd659, 1]],
       ['seraph', 'Flareborn', [0xffe0c0, 0xd8b898, 0x8a6a4a, 0xff7a2a, 2]],
       ['monarch', 'Bonfire King', [0x3a1408, 0x5a2410, 0x24100a, 0xffd23f, 3]],
+      // The Signal Fire set (FILLER_SKIN_TIERS below): six more operators, on tiers that held an emblem.
+      ['yarddog', 'Lampman', [0x3a2a1c, 0x4a3424, 0x22180e, 0xff9f1c, 1]],
+      ['wren', 'Flare Wing', [0x2a1e1c, 0x3a2622, 0x1c1412, 0xff6a2a, 1]],
+      ['cipher', 'Red Channel', [0x1c1416, 0x2a1a1e, 0x140e10, 0xff4a2a, 1]],
+      ['tinker', 'Boilerplate', [0x4a3a2a, 0x3a2c20, 0x261c14, 0xffcf40, 0]],
+      ['halcyon', 'Hearthwatch', [0xe8d8c8, 0xb89a80, 0x6a4a3a, 0xff7a2a, 1]],
+      ['rook', 'Torchbearer', [0x2a1810, 0x3a2016, 0x1c100a, 0xff5a10, 2]],
     ],
+    fillerSkinTiers: [7, 17, 42, 64, 77, 89],
     cards: [['Signal', 'Flare', 'Ember', 'Cinder', 'Night', 'Redline', 'Smoke', 'Torch', 'Kindled', 'Bright'],
       ['Tower', 'Beacon', 'Watch', 'Lookout', 'Crossing', 'Platform', 'Semaphore', 'Lamp Room', 'Firebox', 'Footplate']],
     emblems: [['Fire', 'Burning', 'Blaze', 'Glow', 'Spark', 'Coal', 'Ash', 'Heat', 'Flash', 'Scorch'],
@@ -129,8 +139,13 @@ export function seasonCards(def) {
   });
 }
 
-// A season's 40 emblems: [id, name, plate, rim, [glyph colours], glyph] rows like js/ui/emblems.js ROWS.
+// A season's emblems: [id, name, plate, rim, [glyph colours], glyph] rows like js/ui/emblems.js ROWS. Forty are
+// generated (ids by position, so they never move); one whose tier a filler skin took is left out (see trackRewards).
 export function seasonEmblems(def) {
+  const gone = displacedEmblems(def);
+  return allEmblems(def).filter((_, k) => !gone.has(k));
+}
+function allEmblems(def) {
   return Array.from({ length: 40 }, (_, k) => {
     const [a, b] = PAIR(k), pal = def.palettes[(k + 2) % def.palettes.length];
     return [emblemId(def, k), `${def.emblems[0][a]} ${def.emblems[1][b]}`, EMBLEM_PLATES[(k + def.n) % EMBLEM_PLATES.length], pal[3], [pal[2], pal[3]],
@@ -149,19 +164,39 @@ export function seasonCamos(def) {
 // The 100 tiers: [{ tier, kind: 'card'|'emblem'|'camo'|'skin'|'weapon'|'operator', id, own }] where `own` is the id the
 // save keeps once claimed ('card:..', 'emblem:..', 'camo:..', 'skin:..', 'weapon:..', 'operator:..').
 const trackCache = new Map();
-export function trackRewards(def) {
-  if (trackCache.has(def.id)) return trackCache.get(def.id);
-  const out = [], cards = seasonCards(def), embs = seasonEmblems(def), camos = seasonCamos(def);
+// The base layout: per tier { kind, at } where `at` indexes that kind's list (camos, skins, cards, emblems).
+function baseLayout() {
+  const out = [];
   let ci = 0, ei = 0;
   for (let tier = 1; tier <= TRACK_TIERS; tier++) {
-    let r;
     const camoAt = CAMO_TIERS.indexOf(tier), skinAt = SKIN_TIERS.indexOf(tier);
-    if (tier === PATH_TIERS.weapon) r = { kind: 'weapon', id: def.paths.weapon };
-    else if (tier === PATH_TIERS.operator) r = { kind: 'operator', id: def.paths.operator };
-    else if (camoAt >= 0) r = { kind: 'camo', id: camos[camoAt].id };
-    else if (skinAt >= 0) r = { kind: 'skin', id: seasonSkinId(def, def.skins[skinAt][0]) };
-    else if (tier === 1 || (ci <= ei && ci < cards.length)) r = { kind: 'card', id: cards[ci++].id };
-    else r = { kind: 'emblem', id: embs[ei++][0] };
+    if (tier === PATH_TIERS.weapon) out.push({ kind: 'weapon' });
+    else if (tier === PATH_TIERS.operator) out.push({ kind: 'operator' });
+    else if (camoAt >= 0) out.push({ kind: 'camo', at: camoAt });
+    else if (skinAt >= 0) out.push({ kind: 'skin', at: skinAt });
+    else if (tier === 1 || (ci <= ei && ci < 40)) out.push({ kind: 'card', at: ci++ });
+    else out.push({ kind: 'emblem', at: ei++ });
+  }
+  return out;
+}
+const BASE = baseLayout();
+// Emblem positions a season's filler skins took ({ k }); only emblem tiers count.
+function displacedEmblems(def) {
+  return new Set((def.fillerSkinTiers ?? []).map(t => BASE[t - 1]).filter(b => b?.kind === 'emblem').map(b => b.at));
+}
+export function trackRewards(def) {
+  if (trackCache.has(def.id)) return trackCache.get(def.id);
+  const out = [], cards = seasonCards(def), embs = allEmblems(def), camos = seasonCamos(def), filler = def.fillerSkinTiers ?? [];
+  for (let tier = 1; tier <= TRACK_TIERS; tier++) {
+    let r;
+    const b = BASE[tier - 1], fillAt = filler.indexOf(tier);
+    if (fillAt >= 0 && b.kind === 'emblem') r = { kind: 'skin', id: seasonSkinId(def, def.skins[SKIN_TIERS.length + fillAt][0]) };
+    else if (b.kind === 'weapon') r = { kind: 'weapon', id: def.paths.weapon };
+    else if (b.kind === 'operator') r = { kind: 'operator', id: def.paths.operator };
+    else if (b.kind === 'camo') r = { kind: 'camo', id: camos[b.at].id };
+    else if (b.kind === 'skin') r = { kind: 'skin', id: seasonSkinId(def, def.skins[b.at][0]) };
+    else if (b.kind === 'card') r = { kind: 'card', id: cards[b.at].id };
+    else r = { kind: 'emblem', id: embs[b.at][0] };
     r.tier = tier;
     r.own = r.kind === 'skin' ? r.id : `${r.kind}:${r.id}`;
     out.push(r);

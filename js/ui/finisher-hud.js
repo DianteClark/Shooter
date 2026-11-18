@@ -1,8 +1,8 @@
 // Finishers and emotes on the match HUD (docs/FINISHERS.md), its own module like zm-hud.js:
 //  - the Finish button, in the prompt lane over the dock, while an enemy is in finishing reach (view.finTarget, which
 //    js/game/match.js works out every frame). A controller's Melee does the same (match.js), so does a blade's swing.
-//  - an Emote chip in the HUD corner beside quick chat, opening a 4 x 2 wheel in the quick chat wheel's style: a tap
-//    plays the emote (locked ones say what earns them). Moving or firing ends an emote early (js/render/characters.js).
+//  - an Emote chip in the HUD corner beside quick chat, opening a 4-wide wheel in the quick chat wheel's style: a tap
+//    plays the emote (locked ones say what earns them; signature emotes show only once earned). Moving or firing ends an emote early (js/render/characters.js).
 //  - while a squadmate (or you) is aboard the battle royale transport, where nobody is drawn, an emote shows as a line
 //    in the feed instead.
 // js/ui/hud.js makes one and forwards prepare/update/onEvent; main.js wires onCommand to the match.
@@ -109,8 +109,10 @@ export class FinHud {
   stop() { this.enabled = false; this.chip.hidden = true; this.btn.hidden = true; this.#show(false); }
 
   #fill() {
+    // Signature emotes join the wheel once earned (a locked one would only crowd it).
     this.wheel.innerHTML = EMOTES.map((em, i) => {
       const on = this.open.has(em.id);
+      if (em.unlock.sig && !on) return '';
       return `<button class="em-item${on ? '' : ' locked'}" type="button" role="menuitem" data-tap="emote" data-e="${i}" data-sound="none">
         <span class="qc-ico">${icon(on ? em.icon : 'ui:lock', { size: 15 })}</span><b>${esc(em.name)}</b></button>`;
     }).join('');

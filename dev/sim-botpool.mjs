@@ -53,6 +53,9 @@ const first = BOT_POOL.slice(0, 200), at200 = new Date(POOL_EPOCH + 200 * DAY);
 const firstHash = createHash('sha256').update(JSON.stringify(first) + JSON.stringify(first.map(p => { const { master, ...c } = careerAt(p, at200); return c; }))).digest('hex').slice(0, 16);
 // 31a0665d: EXTRACTION_LAUNCH set (2026-11-11), so careers from that day carry extractions (d74e12f3 before it).
 ok(firstHash === '31a0665dbfcc76eb', 'the first 200 profiles and their careers are unchanged', firstHash);
+// Every profile, the clan era included, as it stood before the Season 2 operators (adding operators must not move one).
+const allHash = createHash('sha256').update(JSON.stringify(BOT_POOL)).digest('hex').slice(0, 16);
+ok(allHash === '31989056c8f323ad', 'every profile is unchanged', allHash);
 ok(new Set(BOT_POOL.map(p => p.id)).size === BOT_POOL.length, 'ids unique');
 const norm = s => s.toLowerCase().replace(/[^a-z]/g, '');
 const names = BOT_POOL.map(p => p.name);
@@ -122,7 +125,10 @@ ok(styles.size === Object.keys(STYLES).length, 'every play style present', [...s
 const mus = BOT_POOL.filter(p => !p.skill.locked).map(p => p.skill.mu);
 ok(Math.min(...mus) < 0.2 && Math.max(...mus) > 0.8 && Math.abs(mean(mus) - 0.5) < 0.08, 'usual levels span weak to strong', `${Math.min(...mus).toFixed(2)}..${Math.max(...mus).toFixed(2)}, mean ${mean(mus).toFixed(2)}`);
 const opsUsed = new Set(BOT_POOL.map(p => p.operator)), gunsUsed = new Set(BOT_POOL.flatMap(p => p.guns));
-ok(opsUsed.size >= OPERATORS.length - 3, 'operators spread', `${opsUsed.size}/${OPERATORS.length}`);
+// The pool dresses from the roster up to Nightjar (js/shared/botpool.js POOL_ROSTER): later operators never appear.
+const poolRoster = OPERATORS.slice(0, OPERATORS.findIndex(o => o.id === 'nightjar') + 1);
+ok(opsUsed.size >= poolRoster.length - 3, 'operators spread', `${opsUsed.size}/${poolRoster.length}`);
+ok([...opsUsed].every(id => poolRoster.some(o => o.id === id)), 'no operator added after the pool was made is drawn');
 ok(gunsUsed.size >= primaries.size * 0.8, 'favourite guns spread', `${gunsUsed.size}/${primaries.size}`);
 
 // ---- Form ----

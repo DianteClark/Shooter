@@ -280,6 +280,24 @@ export const BACK = {
     b.prismY(0.98, 1.02, -0.32, 0.0, 0.07, 0.05, 6);
     tag(b, ACC, () => b.setPart(0).setColor(0xffc96b).prismY(0.78, 0.98, -0.32, 0.0, 0.06, 0.06, 6));
   },
+  // Season 2 operators. A squat parachute container with the pilot chute bundled on top and a lit ripcord handle on
+  // the left strap: a wide, flat block over the shoulders from above.
+  chute(b) {
+    b.setPart(0).setColor(0x3a4048).box(-0.27, 0.36, 0, 0.18, 0.46, 0.5, 0.05);
+    b.setPart(1).box(-0.27, 0.62, 0, 0.16, 0.06, 0.46);
+    b.setPart(0).setColor(0x2a2e34).prismY(0.65, 0.73, -0.27, 0, 0.12, 0.1, 8);
+    b.setColor(0x24262a).box(0.0, 0.5, 0.2, 0.4, 0.035, 0.05).box(0.0, 0.5, -0.2, 0.4, 0.035, 0.05);
+    tag(b, ACC, () => b.setPart(0).setColor(0xff4a2a).box(0.2, 0.42, 0.2, 0.04, 0.06, 0.06));
+  },
+  // A gravedigger's spade slung corner to corner over a small pack, blade up past the shoulder.
+  spade(b) {
+    b.setPart(0).setColor(0x2e2a28).box(-0.24, 0.34, 0, 0.12, 0.34, 0.32, 0.03);
+    b.setColor(0x5a4030);
+    seg(b, [-0.3, 0.0, -0.22], [-0.3, 0.86, 0.14], 0.022, 0.022, 4);
+    b.setColor(0x7a7e84);
+    plate(b, [-0.3, 0.84, 0.13], [-0.3, 1.08, 0.23], 0.16, 0.025);
+    tag(b, ACC, () => b.setPart(0).setColor(0x9ad8ff).box(-0.33, 0.2, -0.16, 0.03, 0.08, 0.06));
+  },
 };
 
 export const EXTRA = {
@@ -355,6 +373,13 @@ export const EXTRA = {
     b.setPart(0).setColor(0x5a4030).box(0, 0.12, 0, 0.34, 0.07, 0.48);
     b.setColor(0x6a5038).box(0.05, 0.04, 0.26, 0.16, 0.16, 0.08).box(0.05, 0.04, -0.26, 0.16, 0.16, 0.08);
     b.setColor(0x8a9098).box(-0.1, 0.0, 0.28, 0.06, 0.06, 0.04);
+  },
+  // Season 2 operators. A team-coloured sash from the left shoulder to the right hip with a lit medal on it.
+  sash(b) {
+    b.setPart(1);
+    plate(b, [0.2, 0.62, 0.2], [0.2, 0.08, -0.22], 0.1, 0.03);
+    plate(b, [-0.19, 0.62, 0.2], [-0.19, 0.08, -0.22], 0.1, 0.03);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffd659).prismX(0.215, 0.235, 0.4, 0.04, 0.05, 0.05, 8));
   },
 };
 
@@ -493,6 +518,13 @@ export const GEAR = {
     b.setPart(1).prismY(0.27, 0.31, -0.005, 0, 0.178, 0.178, 8, Math.PI / 8);
     b.setPart(0).setColor(0x2a2c30).prismX(0.12, 0.2, 0.34, 0.07, 0.055, 0.055, 7).prismX(0.12, 0.2, 0.34, -0.07, 0.055, 0.055, 7);
     tag(b, ACC, () => b.setPart(0).setColor(0x5dff7a).prismX(0.2, 0.215, 0.34, 0.07, 0.045, 0.045, 7).prismX(0.2, 0.215, 0.34, -0.07, 0.045, 0.045, 7));
+  },
+  // Season 2 operators. A wide-brimmed hat with a team band: the broadest disc on the roster from above.
+  brimhat(b) {
+    b.setPart(0).setColor(0x2a2420).prismY(0.27, 0.295, 0, 0, 0.36, 0.36, 12);
+    b.prismY(0.295, 0.44, -0.01, 0, 0.19, 0.16, 8, Math.PI / 8);
+    b.setPart(1).prismY(0.3, 0.34, -0.01, 0, 0.195, 0.19, 8, Math.PI / 8);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xd9b44a).box(0.16, 0.32, 0.08, 0.03, 0.04, 0.04));
   },
 };
 

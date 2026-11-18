@@ -25,6 +25,7 @@ const { MAPS } = await import('../js/shared/map.js');
 const { Sim, buildRoster } = await import('../js/sim/sim.js');
 const { objOf } = await import('../js/sim/rules.js');
 const { EX_UNLOCKS, extractionPay } = await import('../js/shared/extraction.js');
+const { RANKED_RULES } = await import('../js/shared/ranked.js');
 const { FINISHERS, EMOTES } = await import('../js/shared/finishers.js');
 const { SEASON_DEFS, trackRewards, seasonCards, rankedCards, seasonCamos, seasonEmblems, rankedEmblems } = await import('../js/shared/season-items.js');
 const { weeklyAll } = await import('../js/shared/seasons.js');
@@ -75,6 +76,7 @@ const exists = own => {
   if (kind === 'operator') return opIds.has(id);
   if (kind === 'weapon') return !!WEAPONS[id];
   if (kind === 'badge') return true;        // Drawn from the track itself (js/ui/mastery.js).
+  if (kind === 'emote') return EMOTES.some(e => e.id === id && e.unlock.sig);     // A signature emote (Season 2 operators).
   return false;
 };
 
@@ -119,7 +121,13 @@ test('every emblem draws; every camo pattern exists in the shader; every skin na
 test('every finisher and emote rule is one the unlock check knows', () => {
   for (const f of [...FINISHERS, ...EMOTES]) {
     const keys = Object.keys(f.unlock);
-    assert.ok(keys.every(k => ['level', 'opTier', 'season'].includes(k)), `${f.id}: ${keys}`);
+    assert.ok(keys.every(k => ['level', 'opTier', 'season', 'sig', 'who', 'tier'].includes(k)), `${f.id}: ${keys}`);
+    // A signature emote: a real operator, its name, a tier its track has, and that tier lists the emote as a reward.
+    if (f.unlock.sig) {
+      const op = OPERATORS.find(o => o.id === f.unlock.sig), t = P.getTrack(f.unlock.sig);
+      assert.ok(op && op.name === f.unlock.who && t && f.unlock.tier >= 1 && f.unlock.tier <= t.tiers.length, `${f.id}: ${f.unlock.sig}`);
+      assert.ok(t.tiers[f.unlock.tier - 1].rewards.some(r => r.id === `emote:${f.id}`), `${f.id}: on its track`);
+    }
     if (f.unlock.level) assert.ok(f.unlock.level <= P.MAX_LEVEL, f.id);
     if (f.unlock.opTier) assert.ok(f.unlock.opTier <= 5, f.id);
     if (f.unlock.season) assert.ok(f.unlock.season <= 100, f.id);
@@ -291,6 +299,8 @@ test('season weekly sets: every template counts somewhere', () => {
 const lifeReach = key => {
   if (/^map(won)?:/.test(key)) return MAPS[key.split(':')[1]] ? [] : [`no map ${key}`];
   if (key.startsWith('ex:')) return MODE_IDS.some(m => (seen[m]?.ex?.[key] ?? 0) > 0) ? [] : [`'${key}' never banked by a bot squad`];
+  // Ranked matches (ChallengeTally.finish({ ranked })) are a playlist of ordinary modes: those modes must exist.
+  if (key.startsWith('ranked:')) return RANKED_RULES.modes.every(m => MODES[m]) && ['ranked:played', 'ranked:won'].includes(key) ? [] : [`'${key}' is not a ranked tally`];
   const rules = rulesOf(key);
   const w = where('tally', key);
   if (!w.length) return [`'${key}' never counted`];
@@ -513,7 +523,8 @@ const MAP_LIST = Object.keys(MAPS).filter(m => m !== 'range' && m !== 'brtest');
 // The rewards pass: every map's plays and wins (the map cards' gold tier is 75 wins), every rule set's wins, and every
 // feat tally, so every new card and feat emblem opens over the career; Graveyard Shift's maps get round 31 and an escape
 // on round 26 through applyMatch (matches 84-87), so their cards are stamped too.
-const FEAT_KEYS = ['ace', 'streak10', 'finishers', 'long40', 'gf:flawless', 'inf:survived', 'br:won', 'br:top5', 'br:lone', 'rb:won', 'rb:top5', 'rb:lone', 'ex:clean', 'ex:out', 'zm:kills'];
+const FEAT_KEYS = ['ace', 'streak10', 'finishers', 'long40', 'gf:flawless', 'inf:survived', 'br:won', 'br:top5', 'br:lone', 'rb:won', 'rb:top5', 'rb:lone', 'ex:clean', 'ex:out', 'zm:kills',
+  'ranked:played', 'ranked:won'];
 const RULES = [...new Set(MODE_IDS.map(modeRules))];
 const ZM_MAPS = MODES.zm.maps;
 function bigMatch(i) {

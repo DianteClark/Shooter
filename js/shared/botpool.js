@@ -32,7 +32,13 @@ import { EX_UNLOCKS } from './extraction.js';
 // Extraction's exclusive items never reach the pool: bots cannot have earned them, and adding them must not reshuffle
 // the profiles the boards already show.
 const EXCLUSIVE = new Set(EX_UNLOCKS.map(u => u.item));
-const POOL_OPERATORS = OPERATORS.filter(o => !EXCLUSIVE.has(o.id));
+// The pool dresses from the roster as it stood when the pool was made: operators added after Nightjar (the Season 2
+// operators onwards) are never drawn, so every profile's operator, skin and Master card stay as the boards show them.
+// The roster is append only, so this slice never changes.
+const POOL_ROSTER = OPERATORS.slice(0, OPERATORS.findIndex(o => o.id === 'nightjar') + 1);
+const POOL_ROSTER_IDS = new Set(POOL_ROSTER.map(o => o.id));
+const POOL_OPERATORS = POOL_ROSTER.filter(o => !EXCLUSIVE.has(o.id));
+const LATER_OPS = new Set(OPERATORS.filter(o => !POOL_ROSTER_IDS.has(o.id)).map(o => o.id));
 
 export const POOL_SEED = 0x5717c4a2;
 // Day zero of careers. Fixed: changing it would change every bot's career at every date.
@@ -292,7 +298,8 @@ function pickCard(rng, base, perks, locked, mu) {
     return career[Math.floor(rng() * career.length)];
   }
   if (r < 0.88 && (mu > 0.55 || locked === 'elite')) {
-    const gold = CARDS.filter(c => c.group === 'Mastery' && !EXCLUSIVE.has(c.id.replace(/^mastery-/, '')));
+    // Gear and the pool's own operators: a later operator's Master card is not in the list (see POOL_ROSTER).
+    const gold = CARDS.filter(c => c.group === 'Mastery' && !EXCLUSIVE.has(c.id.replace(/^mastery-/, '')) && !LATER_OPS.has(c.id.replace(/^mastery-/, '')));
     return gold[Math.floor(rng() * gold.length)].id;
   }
   return 'yard';

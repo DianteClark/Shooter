@@ -277,9 +277,10 @@ function gateGun(id, list, fallback) {
 // What the finisher and emote unlocks are judged on: peak level, the best operator mastery tier, the best season tier.
 function finisherCtx() {
   let opTier = 0, season = 0;
-  for (const t of MASTERY_TRACKS) if (t.kind === 'operator') opTier = Math.max(opTier, data.mastery?.[t.id]?.t ?? 0);
+  const ops = {};
+  for (const t of MASTERY_TRACKS) if (t.kind === 'operator') { ops[t.id] = data.mastery?.[t.id]?.t ?? 0; opTier = Math.max(opTier, ops[t.id]); }
   for (const v of Object.values(data.season?.cl ?? {})) season = Math.max(season, v | 0);
-  return { level: data.peakLevel ?? 1, opTier, season };
+  return { level: data.peakLevel ?? 1, opTier, season, ops };
 }
 function finisherFor(op) {
   const id = data.finishers?.[op], f = FINISHERS.find(x => x.id === id);

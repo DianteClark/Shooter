@@ -278,7 +278,7 @@ export class MatchAwards {
     let challenges = [], tallied = null;
     const brPlace = view?.br ? (won ? 1 : place || new Set((view.players ?? []).map(p => p.team)).size) : null;
     try {
-      tallied = this.tally.finish({ won: exWon ?? won, place, brPlace });
+      tallied = this.tally.finish({ won: exWon ?? won, place, brPlace, ranked: !!this.ranked });
       const settled = Challenges.apply(tallied);
       challenges = settled.moved;
       for (const period of ['daily', 'weekly']) {

@@ -127,6 +127,32 @@ export const OPERATORS = [
     bio: 'Takes the jobs at the far end of the board, after dark, and comes back with all of them. The radio only ever says "done".',
     unlock: { life: 'ex:contracts', goal: 20, label: 'Bank 20 contracts in Extraction' }, kit: { core: 'plate', back: 'radio', extra: 'scrim', gear: 'nvg', hair: null, face: 'balaclava' },
     look: { w: 1.02, h: 1.02, l: 1, sh: 1.02, hip: 1, head: 1, skin: 0x8a5a3c, hair: 0x0e0c0a, sleeve: 0x1e2428, trouser: 0x181c20 } },
+  // Season 2 operators: one challenge each, tied to a mode. Each has a signature emote at mastery tier 3
+  // (js/shared/finishers.js EMOTES, unlock.sig). The bot pool never draws them (js/shared/botpool.js POOL_OPERATORS).
+  { id: 'skylark', name: 'Skylark', role: 'Redeploy jumper with the chute on her back', voice: F,
+    bio: 'Has jumped back into the same fight eleven times in one night. Packs her own chute and trusts nobody else to.',
+    unlock: { life: 'rb:top5', goal: 10, label: 'Finish top 5 in Rebound 10 times' }, kit: { core: 'light', back: 'chute', extra: null, gear: 'flight', hair: 'highbun', face: 'goggles' },
+    look: { w: 0.88, h: 0.98, l: 0.86, sh: 0.88, hip: 1.02, head: 0.95, skin: 0xd8a888, hair: 0x6a3a1c, sleeve: 0x4a5560, trouser: 0x343c46 } },
+  { id: 'gambit', name: 'Gambit', role: 'Duellist in a long coat and a wide-brimmed hat', voice: M,
+    bio: 'Plays two against two for money, then for pride, then for the hat. He has never lost the hat.',
+    unlock: { life: 'won:gf', goal: 10, label: 'Win 10 Showdown matches' }, kit: { core: 'coat', back: null, extra: 'bandolier', gear: 'brimhat', hair: 'crop', face: 'moustache' },
+    look: { w: 0.96, h: 1.03, l: 0.92, sh: 1, hip: 0.98, head: 1, skin: 0xb07850, hair: 0x2a1a10, sleeve: 0x4a3a2c, trouser: 0x2e2620 } },
+  { id: 'corvid', name: 'Corvid', role: 'Night gravedigger, hood up, spade on his back', voice: M,
+    bio: 'Dug in the cemetery past the depot long before anything started climbing back out. Now he fills the holes faster.',
+    unlock: { life: 'zm:kills', goal: 500, label: 'Kill 500 of the horde in Graveyard Shift' }, kit: { core: 'parka', back: 'spade', extra: 'scrim', gear: 'hood', hair: null, face: 'balaclava' },
+    look: { w: 1.02, h: 1.04, l: 1, sh: 1.02, hip: 1, head: 1, skin: 0xc89878, hair: 0x0e0c0a, sleeve: 0x26282c, trouser: 0x1e2024 } },
+  { id: 'linnet', name: 'Linnet', role: 'Scavenger with a pack taller than she is', voice: F,
+    bio: 'Goes in light and comes out heavy. Whatever the contract was for, she has it, and three things nobody asked for.',
+    unlock: { life: 'ex:out', goal: 25, label: 'Extract 25 times in Extraction' }, kit: { core: 'plate', back: 'snowpack', extra: 'belts', gear: 'beanie', hair: 'braid', face: 'shades' },
+    look: { w: 0.9, h: 0.96, l: 0.88, sh: 0.9, hip: 1.03, head: 0.96, skin: 0x7a5038, hair: 0x1a120c, sleeve: 0x5a5440, trouser: 0x40402e } },
+  { id: 'garrison', name: 'Garrison', role: 'Big-front sergeant with the company radio', voice: M,
+    bio: 'Has held every yard on the line at least once, sixteen to a side, and still knows every name in his platoon.',
+    unlock: { life: 'gw:kills', goal: 300, label: 'Get 300 kills in Ground War' }, kit: { core: 'heavy', back: 'radio', extra: 'epaulettes', gear: 'helmet', hair: null, face: 'moustache' },
+    look: { w: 1.16, h: 1.04, l: 1.16, sh: 1.06, hip: 1, head: 1.02, skin: 0x9a6a48, hair: 0x5a5a5a, sleeve: 0x4a5040, trouser: 0x363c30 } },
+  { id: 'brigid', name: 'Brigid', role: 'Ranked climber, sash and medal over the plate', voice: F,
+    bio: 'Keeps a notebook of every match she has lost and why. It gets shorter every season.',
+    unlock: { life: 'ranked:won', goal: 10, label: 'Win 10 Ranked matches' }, kit: { core: 'plate', back: 'smallpack', extra: 'sash', gear: 'cap', hair: 'long', face: 'plain' },
+    look: { w: 0.9, h: 1.01, l: 0.88, sh: 0.9, hip: 1.02, head: 0.96, skin: 0xe8c0a0, hair: 0xc8562a, sleeve: 0x3a3a4a, trouser: 0x2c2c38 } },
 ];
 
 export const OPERATOR_IDS = OPERATORS.map(o => o.id);
@@ -272,6 +298,12 @@ const SKIN_ROWS = {
   warden: [['Keeper', 'slate', { prestige: 6 }], ['Lamplighter', 'olive'], ['Watchfire', 'ember'], ['Last Light', 'night'], ['Eternal Flame', 'gold']],
   courier: [['Dead Drop', 'desert', { life: 'ex:out', goal: 10, label: 'Extract 10 times' }], ['Night Run', 'night'], ['Contraband', 'rust'], ['Black Bag', 'violet'], ['Gilded Case', 'gold']],
   nightjar: [['Moonless', 'moon', { life: 'ex:hvt', goal: 10, label: 'Bank 10 Eliminate HVT contracts' }], ['Thicket', 'moss'], ['Ashfall', 'ash'], ['Low Burn', 'ember'], ['Prism Eye', 'prism']],
+  skylark: [['Drop Zone', 'sky', { life: 'rb:won', goal: 3, label: 'Win 3 Rebound matches' }], ['Canopy', 'woodland'], ['Free Fall', 'navy'], ['Ripcord', 'crimson'], ['Thermal', 'aurora']],
+  gambit: [['High Stakes', 'ivory', { life: 'gf:flawless', goal: 1, label: 'Win a Showdown 6-0' }], ['Felt', 'moss'], ['Dead Man\'s Hand', 'night'], ['House Edge', 'violet'], ['Royal Flush', 'royal']],
+  corvid: [['Churchyard', 'ash', { life: 'zm:head', goal: 300, label: 'Get 300 headshots on the horde' }], ['Peat', 'olive'], ['Crowfoot', 'night'], ['Wake', 'toxic'], ['Revenant', 'wraith']],
+  linnet: [['Salvage', 'rust', { life: 'ex:contracts', goal: 30, label: 'Bank 30 contracts in Extraction' }], ['Pickings', 'desert'], ['Lockbox', 'slate'], ['Jackpot', 'teal'], ['Treasure', 'gold']],
+  garrison: [['Parade', 'ivory', { stat: 'kills', goal: 800 }], ['Company', 'olive'], ['Frontline', 'urban'], ['Breakthrough', 'ember'], ['Iron Line', 'molten']],
+  brigid: [['Placement', 'urban', { life: 'ranked:played', goal: 25, label: 'Play 25 Ranked matches' }], ['Climb', 'sky'], ['Promotion', 'crimson'], ['Top Table', 'navy'], ['Champion\'s Due', 'prism']],
 };
 
 const ROW_TIERS = ['field', 2, 3, 4, 5];

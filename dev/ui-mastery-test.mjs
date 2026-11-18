@@ -13,6 +13,8 @@ const { MasteryTracker, applyMasteryGains, blankSave, sanitizeSave, migrateSave,
 const { CAMOS } = await import('../js/shared/camos.js');
 const { TACTICALS, LETHALS, STREAKS } = await import('../js/shared/catalog.js');
 const OPS = await import('../js/ui/operators.js');
+const FIN = await import('../js/shared/finishers.js');
+const OPERATOR_IDS_NOW = () => OPS.OPERATOR_IDS;
 const { OPERATORS } = OPS;
 
 let passed = 0;
@@ -43,13 +45,13 @@ test('every tactical, lethal, streak and operator has a track of 3 to 5 tiers wi
   }
 });
 
-test('operators wave: 27 operators (29 with the two Extraction exclusives), the first nine in their old order, women and men, every unlock kind', () => {
+test('operators wave: 27 operators (29 with the two Extraction exclusives, 35 with Season 2\'s six), the first nine in their old order, women and men, every unlock kind', () => {
   const { OPERATOR_IDS, operatorUnlock, botOrder, botOperator, skinsFor, SKIN_TIERS, getSkin } = OPS;
   assert.deepEqual(OPERATOR_IDS.slice(0, 9), ['trooper', 'wisp', 'anvil', 'relay', 'yarddog', 'ronin', 'ghoul', 'ram', 'monarch'], 'ids are appended, never reordered');
-  assert.equal(OPERATORS.length, 29);
-  assert.equal(new Set(OPERATOR_IDS).size, 29);
+  assert.equal(OPERATORS.length, 35);
+  assert.equal(new Set(OPERATOR_IDS).size, 35);
   const women = OPERATORS.filter(o => o.voice === 'f').length;
-  assert.ok(women >= 8 && women <= 10, `${women} women`);
+  assert.ok(women >= 11 && women <= 13, `${women} women`);
   for (const op of OPERATORS) {
     assert.ok(op.name && op.role && op.bio, op.id);
     assert.equal(skinsFor(op.id).filter(k => !k.season).length, 6, `${op.id}: issue, field and four mastery skins`);
@@ -71,11 +73,46 @@ test('operators wave: 27 operators (29 with the two Extraction exclusives), the 
   assert.ok(operatorUnlock(get('morse'), { ...career, level: 16 }).unlocked);
   // Bots: every operator once before any repeat, women and men alternating, the same order on every client.
   const o = botOrder(1234);
-  assert.equal(new Set(o).size, 29);
+  assert.equal(new Set(o).size, 35);
   assert.deepEqual(botOrder(1234), o);
   for (let i = 0; i < 6; i++) assert.notEqual(get(o[2 * i]).voice === 'f', get(o[2 * i + 1]).voice === 'f', 'alternates');
-  assert.equal(botOperator(1234, 29), o[0]);
+  assert.equal(botOperator(1234, 35), o[0]);
   assert.notDeepEqual(botOrder(99), o);
+});
+
+test('Season 2 operators: three women, a challenge per mode, four mastery skins and a signature emote at tier 3', () => {
+  const { operatorUnlock } = OPS;
+  const ids = ['skylark', 'gambit', 'corvid', 'linnet', 'garrison', 'brigid'];
+  const ops = ids.map(id => OPERATORS.find(o => o.id === id));
+  assert.deepEqual(OPERATOR_IDS_NOW().slice(29), ids, 'appended after the Extraction exclusives');
+  assert.equal(ops.filter(o => o.voice === 'f').length, 3);
+  assert.deepEqual(ops.map(o => o.unlock.life), ['rb:top5', 'won:gf', 'zm:kills', 'ex:out', 'gw:kills', 'ranked:won'], 'Rebound, Showdown, Graveyard Shift, Extraction, Ground War, Ranked');
+  const blank = { level: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: {} };
+  for (const op of ops) {
+    assert.equal(operatorUnlock(op, blank).unlocked, false, `${op.id} locked`);
+    assert.ok(operatorUnlock(op, { ...blank, life: { [op.unlock.life]: op.unlock.goal } }).unlocked, `${op.id} opens at its goal`);
+    // Parts kit silhouettes: no two operators share the same core, back, extra and gear.
+    const sig = o => [o.kit?.core, o.kit?.back, o.kit?.extra, o.kit?.gear].join('/');
+    assert.equal(OPERATORS.filter(o => o.kit && sig(o) === sig(op)).length, 1, `${op.id} kit is its own`);
+    const t = getTrack(op.id);
+    assert.deepEqual(t.tiers.flatMap(c => c.rewards).filter(r => r.kind === 'skin').map(r => r.id), [2, 3, 4, 5].map(n => `skin:${op.id}-${n}`));
+    const emote = FIN.signatureEmote(op.id);
+    assert.ok(emote && t.tiers[2].rewards.some(r => r.kind === 'emote' && r.id === `emote:${emote.id}`), `${op.id} signature emote on tier 3`);
+    assert.equal(FIN.unlockOk(emote.unlock, { ops: { [op.id]: 2 } }), false);
+    assert.ok(FIN.unlockOk(emote.unlock, { ops: { [op.id]: 3 } }) && !FIN.unlockOk(emote.unlock, { opTier: 5, ops: {} }), 'only that operator\'s own tier opens it');
+  }
+  // The tallies the new challenges read.
+  const gw = new P.ChallengeTally(ME), v = view(1, {}, { mode: 'gwtdm' });
+  gw.onEvents([{ t: 'kill', by: ME, target: 'x', weapon: 'ar', dist: 10 }], v);
+  assert.equal(gw.counts()['gw:kills'], 1, 'Ground War kills');
+  const rk = new P.ChallengeTally(ME);
+  rk.onEvents([], view(1, {}, { mode: 'hard' }));
+  rk.finish({ won: true, ranked: true });
+  assert.ok(rk.counts()['ranked:won'] === 1 && rk.counts()['ranked:played'] === 1, 'ranked wins');
+  const tdm = new P.ChallengeTally(ME);
+  tdm.onEvents([{ t: 'kill', by: ME, target: 'x', weapon: 'ar', dist: 10 }], view(1, {}, { mode: 'tdm' }));
+  tdm.finish({ won: true });
+  assert.ok(!tdm.counts()['gw:kills'] && !tdm.counts()['ranked:won'], 'not outside them');
 });
 
 test('the lifetime tally counts Search and Destroy rounds won', () => {

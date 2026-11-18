@@ -175,6 +175,44 @@ const EMOTE = {
   },
   taunt(t, o) { const c = Math.sin(t * 7) ** 2; o.lw = 1; o.lx = 0.75 - c * 0.3; o.ly = 1.3 + c * 0.08; o.lz = -0.18; o.lean = -0.1; o.head = -0.15; o.twist = -0.12; },
   turntable(t, o, dur) { const u = Math.min(1, t / dur); o.twist = sm(u) * Math.PI * 2; o.lw = 1; o.lx = 0.2; o.ly = 1.8; o.lz = -0.4; o.drop = Math.abs(Math.sin(t * 8)) * 0.05; },
+  // Signature emotes (Season 2 operators).
+  // Skylark: reach over the shoulder for the ripcord and yank it down, then a little bounce.
+  ripcord(t, o, dur) {
+    const u = t / dur, pull = seg(u, 0.3, 0.42), bounce = Math.max(0, Math.sin((u - 0.42) * 18)) * (1 - seg(u, 0.5, 0.85));
+    o.lw = 1; o.lx = 0.25 + pull * 0.1; o.ly = 1.62 - pull * 0.55; o.lz = 0.18 - pull * 0.05;
+    o.lean = -0.12 * (1 - pull) + pull * 0.08; o.drop = u > 0.42 ? bounce * 0.06 : 0; o.head = -0.2 * (1 - pull);
+  },
+  // Gambit: flip a coin off the thumb, watch it up and down, catch it and slap it on the back of the hand.
+  coinflip(t, o, dur) {
+    const u = t / dur, up = hold(u, 0.15, 0.3, 0.55, 0.72), slap = strike(u, 0.75, 0.06);
+    o.lw = 1; o.lx = 0.55; o.ly = 1.25 + up * 0.08 - slap * 0.05; o.lz = -0.12;
+    o.head = -up * 0.45 + seg(u, 0.72, 0.8) * 0.3; o.lean = -up * 0.06 + slap * 0.04;
+  },
+  // Corvid: head bowed, hand to the chest, a slow nod.
+  lastrites(t, o, dur) {
+    const u = t / dur, bow = hold(u, 0.05, 0.3, 0.75, 0.95);
+    o.lw = 1; o.lx = 0.3; o.ly = 1.3; o.lz = 0.05;
+    o.head = bow * 0.55 + Math.sin(t * 2.5) * 0.04 * bow; o.lean = bow * 0.18; o.kneel = bow * 0.12;
+  },
+  // Linnet: pat the hip, pat the chest, turn the hand out empty and shrug.
+  pockets(t, o, dur) {
+    const u = t / dur, pat = Math.abs(Math.sin(t * 14)) * (1 - seg(u, 0.55, 0.62)), shrug = hold(u, 0.6, 0.7, 0.88, 0.98);
+    const high = seg(u, 0.25, 0.35);
+    o.lw = 1; o.lx = 0.28 + shrug * 0.3; o.ly = 0.95 + high * 0.35 + pat * 0.04 + shrug * 0.15; o.lz = -0.28 - shrug * 0.2;
+    o.drop = -shrug * 0.04; o.roll = shrug * 0.06; o.head = shrug * -0.1 + (1 - shrug) * 0.25 * (1 - seg(u, 0.55, 0.62));
+  },
+  // Garrison: sweep the arm forward over the head, then march on the spot.
+  advance(t, o, dur) {
+    const u = t / dur, sweep = seg(u, 0.05, 0.35), march = seg(u, 0.4, 0.5) * (1 - seg(u, 0.9, 1));
+    o.lw = 1 - march * 0.6; o.lx = -0.1 + sweep * 1.2; o.ly = 2.0 - sweep * 0.45; o.lz = -0.3;
+    o.lean = sweep * 0.12 * (1 - march); o.drop = Math.abs(Math.sin(t * 9)) * 0.05 * march; o.roll = Math.sin(t * 9) * 0.05 * march;
+  },
+  // Brigid: one fist punched up high, chin up, a beat, then a nod to the crowd.
+  podium(t, o, dur) {
+    const u = t / dur, up = hold(u, 0.05, 0.2, 0.7, 0.85), nod = strike(u, 0.8, 0.07);
+    o.lw = 1; o.lx = 0.25; o.ly = 1.4 + up * 0.85; o.lz = -0.2;
+    o.head = -up * 0.25 + nod * 0.35; o.lean = -up * 0.1; o.drop = -up * 0.03;
+  },
 };
 const TARGETS = new Set(['lx', 'ly', 'lz', 'rx', 'ry', 'rz']);
 export function emotePose(id, t, dur, o) {

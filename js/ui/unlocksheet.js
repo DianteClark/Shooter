@@ -111,7 +111,7 @@ function unlockInfo0(kind, id, { weapon = null, operator = null } = {}) {
     if (kind === 'finisher' || kind === 'emote') {
       const list = kind === 'finisher' ? Progress.finishers(operator) : Progress.emotes(), f = list.find(x => x.id === id) ?? (kind === 'finisher' ? FINISHERS : EMOTES).find(x => x.id === id);
       const ctx = Progress.unlockCtx?.() ?? {}, u = f.unlock ?? {};
-      const p = u.level ? pair(ctx.level, u.level) : u.opTier ? pair(ctx.opTier, u.opTier) : u.season ? pair(ctx.season, u.season) : { value: 1, goal: 1 };
+      const p = u.level ? pair(ctx.level, u.level) : u.opTier ? pair(ctx.opTier, u.opTier) : u.season ? pair(ctx.season, u.season) : u.sig ? pair(ctx.ops?.[u.sig] ?? 0, u.tier) : { value: 1, goal: 1 };
       return { ...base, name: f.name, how: f.requirement ?? '', unlocked: !!f.unlocked, ...p, play: u.season ? null : QUICK, art: icon(kind === 'finisher' ? 'ui:skull' : 'ui:chat', { size: 64 }), desc: f.desc };
     }
     if (kind === 'attachment') {

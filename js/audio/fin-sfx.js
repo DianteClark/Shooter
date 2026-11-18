@@ -28,8 +28,12 @@ const RECIPES = {
   step: [0.25, (d, sr, r) => { click(d, sr, r, 0, 0.8, 70); tone(d, sr, { dur: 0.15, gain: 0.7, f0: 120, f1: 80, decay: 9 }); }, 0.35],
   beckon: [0.5, (d, sr, r) => { tone(d, sr, { dur: 0.3, gain: 1, f0: 420, f1: 300, decay: 3, square: 0.4, attack: 0.01 }); noise(d, sr, r, { dur: 0.25, gain: 0.3, f0: 1500, decay: 5 }); }, 0.3],
   spin: [0.8, (d, sr, r) => { noise(d, sr, r, { dur: 0.75, gain: 1, f0: 700, f1: 2000, decay: 1.5, attack: 0.1, hp: 300 }); }, 0.3],
+  // Signature emotes: a coin's ping and the cloth snap of a pulled ripcord.
+  ping: [0.6, (d, sr, r) => { click(d, sr, r, 0, 0.5, 30); tone(d, sr, { dur: 0.5, gain: 1, f0: 3100, f1: 3000, decay: 6 }); tone(d, sr, { at: 0.42, dur: 0.12, gain: 0.6, f0: 900, decay: 12 }); }, 0.3],
+  snap: [0.45, (d, sr, r) => { click(d, sr, r, 0, 1, 80); noise(d, sr, r, { dur: 0.4, gain: 0.9, f0: 2400, f1: 500, decay: 5, hp: 400 }); }, 0.4],
 };
-const EMOTE_SOUND = { wave: 'whistle', salute: 'heel', point: 'beckon', thumbs: 'clap', laugh: 'chuckle', shuffle: 'step', taunt: 'beckon', turntable: 'spin' };
+const EMOTE_SOUND = { wave: 'whistle', salute: 'heel', point: 'beckon', thumbs: 'clap', laugh: 'chuckle', shuffle: 'step', taunt: 'beckon', turntable: 'spin',
+  ripcord: 'snap', coinflip: 'ping', lastrites: 'heel', pockets: 'step', advance: 'beckon', podium: 'clap' };
 
 export class FinSfx {
   constructor(engine) {

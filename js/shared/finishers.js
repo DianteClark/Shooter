@@ -8,7 +8,8 @@
 //
 // hits: the moments (0..1 through it) a blow lands, for the sound and the target's jolt.
 // unlock: {} default | { level } peak player level | { opTier } any operator's mastery tier | { season } a season
-// track tier reached (any season, kept once claimed).
+// track tier reached (any season, kept once claimed) | { sig, who, tier } that operator's own mastery tier (a signature
+// emote; ctx.ops is { operator: tier }).
 
 export const FINISHERS = [
   { id: 'lights', name: 'Lights Out', dur: 1.3, hits: [0.36, 0.64], unlock: {}, desc: 'A stock to the back of the head, then a second for good measure.' },
@@ -33,9 +34,19 @@ export const EMOTES = [
   { id: 'shuffle', name: 'Yard Shuffle', icon: 'ui:party', dur: 3.0, unlock: { level: 15 } },
   { id: 'taunt', name: 'Come On', icon: 'ui:warning', dur: 2.0, unlock: { level: 28 } },
   { id: 'turntable', name: 'Turntable', icon: 'ui:refresh', dur: 2.6, unlock: { season: 20 } },
+  // Signature emotes (Season 2 operators): each one is earned at its operator's mastery tier 3 (the track lists it as a
+  // reward) and then plays as any operator. `who` is the operator's name for the unlock text (no imports here).
+  { id: 'ripcord', name: 'Ripcord', icon: 'ui:up', dur: 2.2, unlock: { sig: 'skylark', who: 'Skylark', tier: 3 } },
+  { id: 'coinflip', name: 'Heads or Tails', icon: 'ui:random', dur: 2.4, unlock: { sig: 'gambit', who: 'Gambit', tier: 3 } },
+  { id: 'lastrites', name: 'Last Rites', icon: 'ui:skull', dur: 2.6, unlock: { sig: 'corvid', who: 'Corvid', tier: 3 } },
+  { id: 'pockets', name: 'Empty Pockets', icon: 'ui:crate', dur: 2.4, unlock: { sig: 'linnet', who: 'Linnet', tier: 3 } },
+  { id: 'advance', name: 'Advance', icon: 'ui:flag', dur: 2.4, unlock: { sig: 'garrison', who: 'Garrison', tier: 3 } },
+  { id: 'podium', name: 'Podium', icon: 'ui:crown', dur: 2.4, unlock: { sig: 'brigid', who: 'Brigid', tier: 3 } },
 ];
 export const EMOTE_IDS = EMOTES.map(e => e.id);
 export const getEmote = id => EMOTES.find(e => e.id === id) ?? null;
+// The signature emote an operator's mastery track grants, or null.
+export const signatureEmote = op => EMOTES.find(e => e.unlock.sig === op) ?? null;
 
 // The rules of a finisher, shared by the host (which decides) and the phone (which shows the Finish button).
 export const FIN = {
@@ -58,16 +69,18 @@ export function finishable(a, v, slack = 0) {
   return (Math.cos(v.aim) * dx + Math.sin(v.aim) * dz) / d < FIN.behindCos;
 }
 
-// What a save has reached, for the unlock rules: { level, opTier, season }.
+// What a save has reached, for the unlock rules: { level, opTier, season, ops }.
 export function unlockOk(unlock, ctx = {}) {
   if (unlock.level && (ctx.level ?? 1) < unlock.level) return false;
   if (unlock.opTier && (ctx.opTier ?? 0) < unlock.opTier) return false;
   if (unlock.season && (ctx.season ?? 0) < unlock.season) return false;
+  if (unlock.sig && (ctx.ops?.[unlock.sig] ?? 0) < unlock.tier) return false;
   return true;
 }
 export function unlockText(unlock) {
   if (unlock.level) return `Reach level ${unlock.level}`;
   if (unlock.opTier) return `Reach operator mastery tier ${unlock.opTier} with any operator`;
   if (unlock.season) return `Reach tier ${unlock.season} on a season track`;
+  if (unlock.sig) return `Reach ${unlock.who} mastery tier ${unlock.tier}`;
   return 'Default';
 }
