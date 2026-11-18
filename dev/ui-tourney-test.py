@@ -123,6 +123,13 @@ async def main():
                 check('the enemy wears the clan tag', len(enemy) == 4 and all(n.startswith(f'[{tag}] ') for n in enemy), enemy)
                 check('results: entry and round XP lines', 'Tournament entry' in res['lines'] and 'Quarter-final won' in res['lines'], res['lines'][:300])
                 check('results button goes to the bracket', 'Bracket' in res['primary'], res['primary'])
+                try:
+                    await pg.wait_for_selector('.rx-tn', timeout=30000)
+                    stamp = await pg.evaluate("document.querySelector('.rx-tn').textContent.replace(/\\s+/g, ' ').trim()")
+                except Exception:
+                    stamp = ''
+                check('the reel stamps the round', 'Quarter-final won' in stamp and 'Into the Semi-final' in stamp, stamp)
+                await shot(pg, 'qf-stamp')
                 st = await pg.evaluate(f"(() => {{ const t = {G}.Progress.tourney(); return {{ run: t.run, entrant: {G}.Progress.hasReward('card:tn-entrant'), semi: {G}.Progress.hasReward('card:tn-semi'), fin: {G}.Progress.hasReward('card:tn-finalist') }}; }})()")
                 check('QF won: semi-final next; entrant and semi-finalist cards', st['run']['round'] == 1 and st['entrant'] and st['semi'] and not st['fin'], st)
                 await tap(pg, '.res-choice .primary', 900)
