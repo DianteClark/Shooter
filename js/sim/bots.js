@@ -137,11 +137,22 @@ const DEFAULT_STYLE = { pref: 15, hold: 1, flank: 1, advance: 3 };
 function styleOf(id, ps) {
   const d = ps ? weaponDef(ps, id) : WEAPONS[id];
   const b = STYLE[id] || (d && d.botUse) || DEFAULT_STYLE;
-  if (!b.rush || b.fireMax || !d) return b;
+  const reach = b.rush && !b.fireMax && d, far = b.pref > PREF_MAX;
+  if (!reach && !far) return b;
   let r = REACH.get(b);
-  if (!r) REACH.set(b, r = { ...b, rush: Math.max(b.rush, d.range * RUSH_REACH) });
+  if (!r) {
+    r = { ...b };
+    if (reach) r.rush = Math.max(b.rush, d.range * RUSH_REACH);
+    if (far) r.pref = PREF_MAX;
+    REACH.set(b, r);
+  }
   return r;
 }
+// Balance pass 4: no gun fights further off than a bot can see down its sights (HUMAN_VIEW + ADS_LOOK, the screen a
+// person has), less a margin for the sights' cone. Since bots see only what fits on that screen (1111-35) a sniper whose
+// pref was 30-32 m backed away from whoever it was shooting at 24-27 m until they dropped off its screen, then lost them:
+// snipers were giving up their own fights. The data's pref stays as the gun's ideal; this caps what bots act on.
+const PREF_MAX = 23.5;
 // Bot overhaul: a close gun that still hits at range (an SMG: no fireMax) fights out to RUSH_REACH of its range instead
 // of sprinting mute at whoever is shooting it. Measured on small maps (bot lobbies from the pool): SMG K/D 0.81 to 0.96,
 // LMG 1.20 to 1.17; the first shot of a fight decides most of them, and an SMG that would not fire past 15 m never had it.
