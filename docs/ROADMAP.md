@@ -157,3 +157,11 @@ party playlist, new operators and skins, replays, match history detail.
     throwing grenades. Recon drone takes a moment to respond after activation. Shooting down streaks is unclear
     (teach it: help, first-time hint, reticle/health on air streaks). Mastery screen: the badge strip bottom-left
     cannot scroll to show all badges.
+
+## Owner's request (2026-11-18): full progress reset, hard wipe, no way back
+41. One-time wipe on the update that ships it (a RESET epoch constant; on load, if the stored epoch differs): clear every
+    progress key on the phone (save, stats tracker and match history, friends' career cards, seen/new dots, records,
+    season and ranked state, tournament/event state, the player name), keep only device settings (graphics, audio,
+    controls and layout, accessibility, controller). Save codes made before the reset are refused. Bot pool careers,
+    levels, ranked SR and leaderboards restart from the reset date too (everyone starts level 1 together; bots then grow
+    day by day as before, deterministic on every phone). Ship it after balance 4 (clean per-mode stats from day one).
