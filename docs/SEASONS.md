@@ -23,7 +23,9 @@ claimed) in the free slot of the button grid, and the division badge on the prof
   (`TIER_XP`). Weekly season challenges pay stars, one tier a star. Never paid, no XP boosts.
 - Each season: 40 calling cards (group Season; tier 1 is the season's own card, 37-40 animated), 40 emblems, 10 camos
   (8 static, 2 animated, every gun), 8 operator skins (`skin:<op>-s<n>`, tier label Season), and two existing locked items
-  early (tier 25 a gun, tier 75 an operator; their level or challenge still opens them too).
+  early (tier 25 a gun, tier 75 an operator; their level or challenge still opens them too). A season may add skin rows
+  past the eighth with `fillerSkinTiers` (one tier each, emblem tiers only): the emblem there leaves the season and
+  every other reward keeps its tier. Season 2 does: the Signal Fire set, six more skins on tiers 7, 17, 42, 64, 77, 89.
 - Claim on the Season screen's Track tab (tiles pop in turn); results stamp each tier reached. A season that ends
   claims whatever was reached for the player.
 - Season cosmetics are hidden in pickers until owned or their season is running, and locked before their season starts
