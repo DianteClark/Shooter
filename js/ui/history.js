@@ -74,7 +74,7 @@ function detail(e) {
       ${stat('Kills', e.kills)}${stat('Deaths', e.deaths)}${stat('Assists', e.assists)}${stat('K/D', kd(e))}
       ${stat('Score', e.score.toLocaleString('en-US'))}${stat('Headshots', e.head)}${stat(e.obj ? 'Objective' : 'Longshots', e.obj || e.long)}${stat('Medals', e.medals)}
     </div>
-    <div class="hd-guns">
+    <div class="hd-guns scroll-y">
       <small class="hd-h">Guns used</small>
       ${e.guns.length ? e.guns.map(g => `<span class="hd-gun">${icon(g.id, { size: 13 })}<b>${esc(WEAPONS[g.id]?.name ?? g.id)}</b><small>${g.kills} ${g.kills === 1 ? 'kill' : 'kills'}${g.secs ? ` · ${mmss(g.secs)}` : ''}</small></span>`).join('')
         : '<span class="hd-none">No gun held long enough to count</span>'}
