@@ -139,7 +139,7 @@ export const OPERATORS = [
     look: { w: 0.96, h: 1.03, l: 0.92, sh: 1, hip: 0.98, head: 1, skin: 0xb07850, hair: 0x2a1a10, sleeve: 0x4a3a2c, trouser: 0x2e2620 } },
   { id: 'corvid', name: 'Corvid', role: 'Night gravedigger, hood up, spade on his back', voice: M,
     bio: 'Dug in the cemetery past the depot long before anything started climbing back out. Now he fills the holes faster.',
-    unlock: { life: 'zm:kills', goal: 500, label: 'Kill 500 of the horde in Graveyard Shift' }, kit: { core: 'parka', back: 'spade', extra: 'scrim', gear: 'hood', hair: null, face: 'balaclava' },
+    unlock: { life: 'zm:kills', goal: 500, label: 'Kill 500 in Graveyard Shift' }, kit: { core: 'parka', back: 'spade', extra: 'scrim', gear: 'hood', hair: null, face: 'balaclava' },
     look: { w: 1.02, h: 1.04, l: 1, sh: 1.02, hip: 1, head: 1, skin: 0xc89878, hair: 0x0e0c0a, sleeve: 0x26282c, trouser: 0x1e2024 } },
   { id: 'linnet', name: 'Linnet', role: 'Scavenger with a pack taller than she is', voice: F,
     bio: 'Goes in light and comes out heavy. Whatever the contract was for, she has it, and three things nobody asked for.',
