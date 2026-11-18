@@ -664,7 +664,7 @@ export class Match {
     this.ended = true;
     if (this.headless) { this.controls.setEnabled(false); this.hud.setVisible?.(false); }
     else try { this.stop(); } catch (err) { this.running = false; console.error('match stop', err); }
-    try { this.telemetry.finish(view); } catch (err) { console.error('match stats', err); }
+    try { this.awards.statsAt = this.telemetry.finish(view)?.at ?? 0; } catch (err) { console.error('match stats', err); }
     let awards = {};
     try { awards = this.awards.finish(view) ?? {}; } catch (err) { console.error('match awards', err); }
     this.onEnd({

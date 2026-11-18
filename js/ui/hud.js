@@ -145,6 +145,8 @@ const MEDALS = {
   survivor: ['Survivor', 'Made it to the end', 2], oic_last: ['Last Gun Standing', 'One round to spare', 3],
   ctl_capture: ['Zone Taken', `+${SCORE.capture}`, 2], ctl_hold: ['Held the Line', '+150', 2], grind_bank: ['Tags Banked', 'Points on the board', 2],
 };
+// A medal's name for other screens (the match history's detail); null for one the HUD does not name.
+export const medalTitle = id => MEDALS[id]?.[0] ?? null;
 
 // Search and Destroy wording. Why a round ended, from the winner's side and the loser's.
 const SND_WHY = {
