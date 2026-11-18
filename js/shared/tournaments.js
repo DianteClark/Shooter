@@ -32,7 +32,9 @@ const r3 = v => Math.round(v * 1000) / 1000;
 // Seeds into bracket positions (quarter-finals pair positions 0-1, 2-3, 4-5, 6-7): 1v8, 4v5, 2v7, 3v6.
 const SEED_ORDER = [1, 8, 4, 5, 2, 7, 3, 6];
 // How much the enemy plays up, by round, over its blend of its own form and the player's level.
-export const ROUND_STEP = [0, 0.05, 0.1];
+export const ROUND_STEP = [0.02, 0.06, 0.1];
+// How much of the enemy's match rating is the members' own form (the rest is the player's level).
+const ENEMY_FORM = 0.4;
 // How strongly a squad's strength gap decides a bot-against-bot match (logistic slope on the 0..1 rating scale).
 const SLOPE = 9;
 
@@ -167,7 +169,7 @@ export function resolveBracket(b, run = null, { all = false } = {}) {
 // The pool picks for the player's match in `round`: sides [[team 0 bots], [team 1 bots]] in the shape pickPoolBots
 // returns (js/sim/sim.js buildPoolRoster `sides`). humans: how many people sit on the player's side (they take the
 // first teammates' seats); target: the humans' rating (humanRating). The enemy's rating blends each member's form with
-// the player's level, then plays up ROUND_STEP[round].
+// the player's level (ENEMY_FORM), then plays up ROUND_STEP[round].
 export function matchSides(b, round, opponent, { humans = 1, target = HUMAN_BASE, date = Date.now(), seed = 0 } = {}) {
   const size = b.cup.size;
   const pickOf = (p, rating) => {
@@ -178,7 +180,7 @@ export function matchSides(b, round, opponent, { humans = 1, target = HUMAN_BASE
   const mates = you.members.slice(0, Math.max(0, size - humans)).map(profileById).filter(Boolean)
     .map(p => pickOf(p, 0.5 * formRating(p, hash32('tn-form', b.key, round)) + 0.5 * clamp01(target + 0.04)));
   const them = opponent.members.map(profileById).filter(Boolean)
-    .map(p => pickOf(p, 0.5 * formRating(p, hash32('tn-form', b.key, round)) + 0.5 * target + ROUND_STEP[round]));
+    .map(p => pickOf(p, ENEMY_FORM * formRating(p, hash32('tn-form', b.key, round)) + (1 - ENEMY_FORM) * target + ROUND_STEP[round]));
   // The clan queues as one party.
   for (const t of them) t.party = 0;
   return [mates, them];
