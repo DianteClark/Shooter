@@ -74,6 +74,8 @@ const GLYPHS = {
     + poly([[11, 24], [13, 22.5], [15.5, 25], [21, 19.5], [23, 21], [15.5, 28.5]], b),
   tomb: (a, b) => poly([[10, 24], [10, 11], [12, 7.5], [16, 6], [20, 7.5], [22, 11], [22, 24]], a) + rect(8, 24, 16, 2.2, a)
     + [11.6, 15, 18.4].map(x => poly([[x, 13], [x + 1.2, 13], [x + 3, 20], [x + 1.8, 20]], b) + poly([[x + 1.8, 13], [x + 3, 13], [x + 1.2, 20], [x, 20]], b)).join(''),
+  mast: (a, b) => poly([[12, 28], [16, 5], [20, 28], [18.4, 28], [16, 10], [13.6, 28]], a) + rect(13, 14, 6, 1.6, a) + rect(12.4, 21, 7.2, 1.6, a)
+    + poly(ngon(2.2, 6, 0, 16, 4), b) + poly([[5, 9], [8, 6], [8.6, 7], [6.2, 9.4], [8.6, 11.8], [8, 12.8]], b) + poly([[27, 9], [24, 6], [23.4, 7], [25.8, 9.4], [23.4, 11.8], [24, 12.8]], b),
   exit: (a, b) => rect(6, 10, 3, 18, a) + rect(23, 10, 3, 18, a) + poly([[6, 10], [16, 4], [26, 10], [26, 12], [16, 6.6], [6, 12]], a)
     + poly([[16, 9], [22, 16], [18.2, 16], [18.2, 26], [13.8, 26], [13.8, 16], [10, 16]], b),
   blades: (a, b) => poly([[7, 25], [22.5, 6.5], [25.5, 5], [24.5, 8.5], [9, 27]], a) + poly([[25, 25], [9.5, 6.5], [6.5, 5], [7.5, 8.5], [23, 27]], a)
@@ -138,6 +140,7 @@ const FEAT_ROWS = [
   ['feat-brlone', 'Lone Survivor', '#d8d4ff', ['#d8d4ff', '#ffd659'], 'lone', { life: 'br:lone', goal: 1, label: 'Win a squads or duos Battle Royale as the last of your squad standing' }, { tab: 'br', playlist: 'quads' }],
   ['feat-exclean', 'Full Manifest', '#ff5a2a', ['#f0ecd0', '#3fdc6a'], 'heli', { life: 'ex:clean', goal: 1, label: 'Extract with every contract your squad took, 4 or more' }, { tab: 'extraction', playlist: 'exquads' }],
   ['feat-zm30', 'Thirty Nights', '#9a8cff', ['#d8d0f0', '#7aff9a'], 'tomb', { zmround: 30, label: 'Survive to round 30 in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
+  ['feat-listener', 'Signal Lost', '#5affb0', ['#c8f4ff', '#5affb0'], 'mast', { zmboss: 'polestar', label: 'Put down the Listener on Polestar Relay in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-zmescape', 'Way Out', '#7aff9a', ['#d8d0f0', '#7aff9a'], 'exit', { zmescape: 1, label: 'Escape Graveyard Shift on the helicopter' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-finishers', 'Executioner', '#c8ccd2', ['#e6ecf2', '#ff4d3d'], 'blades', { life: 'finishers', goal: 25, label: 'Perform 25 finishers' }, { tab: 'standard', playlist: 'qp' }],
   ['feat-flawless', 'Flawless', '#38b6ff', ['#e6ecf2', '#ffd659'], 'flawless', { life: 'gf:flawless', goal: 1, label: 'Win a Showdown 6-0' }, { tab: 'standard', playlist: 'showdown' }],
@@ -191,6 +194,7 @@ export function emblemProgress(e, c) {
   if (r.mastered) return cap(c.mastered, r.mastered);
   if (r.camo) return cap(c.camoOn?.[r.camo], r.goal);
   if (r.zmround) return cap(Math.max(0, ...Object.values(c.zmBest ?? {}).map(num)), r.zmround);
+  if (r.zmboss) return cap(Array.isArray(c.zmFeats?.[r.zmboss]) && c.zmFeats[r.zmboss][1] ? 1 : 0, 1);
   if (r.zmescape) return cap(Object.values(c.zmFeats ?? {}).some(v => Array.isArray(v) && v[0] > 0) ? 1 : 0, 1);
   if (r.ranked) return cap(num(c.rankedBest ?? -1) + 1, r.ranked + 1);
   if (r.life) return cap(c.life?.[r.life], r.goal);

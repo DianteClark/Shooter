@@ -20,7 +20,7 @@ import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa, isZm, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, zmXp } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
+import { ZM, zmXp, zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
 import { getCamo } from '../shared/camos.js';
 import { performance } from '../shared/ranked.js';
 import { EVENT_XP_BONUS, eventById } from '../shared/events.js';
@@ -259,18 +259,21 @@ export class MatchAwards {
       const mine = zmObj.crew?.find(c => c.id === me.id) ?? {};
       // An escape (the exfil, ROADMAP item 36) counts the round it got out on as survived.
       const escaped = !!zmObj.escaped?.includes(me.id), warden = zmObj.quest?.state === 2;
+      const bossName = zmObj.layout?.questKind === 'radio' ? 'Listener' : 'Gravewarden';     // The quest's boss on this map.
       const survived = Math.max(0, (zmObj.round ?? 1) - (escaped ? 0 : 1));
       lines.length = 0;
-      lines.push(...zmXp({ kills: this.kills, head: this.headshots, survived, escaped: escaped ? zmObj.round ?? 0 : 0, warden, played: MATCH_XP.played }).lines);
+      lines.push(...zmXp({ kills: this.kills, head: this.headshots, survived, escaped: escaped ? zmObj.round ?? 0 : 0, warden, played: MATCH_XP.played, boss: bossName }).lines);
       // The feat itself is recorded by applyMatch (below), after it has taken the card list, so Lantern Out is stamped.
       zmFeat = escaped || warden ? { escaped: escaped ? zmObj.round : 0, boss: warden } : null;
       for (const b of Object.values(this.weapons)) b.xp = Math.min(ZM.weaponXpCap, Math.round(b.xp * ZM.weaponXp));
+      // A wonder weapon's kills (the crate's, ZM_WONDERS) level nothing: the gun it rides on is not the one fired.
+      for (const [id, b] of Object.entries(this.weapons)) if (zmWonderOf(id)) b.xp = 0;
       // The map's best round is recorded by applyMatch (below), after it has taken the card list, so the round cards
       // are stamped; until then the record shown is the one the save had.
       const was = Progress.zmBest?.(this.mapId) ?? 0;
       const rec = { best: Math.max(was, survived), before: was, fresh: survived > was && survived > 0 };
       zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',
-        escaped: escaped ? zmObj.round : 0, warden, bestEscape: Progress.zmFeats?.(this.mapId)?.escaped ?? 0, freshEscape: false, freshBoss: false };
+        escaped: escaped ? zmObj.round : 0, warden, bossName, bestEscape: Progress.zmFeats?.(this.mapId)?.escaped ?? 0, freshEscape: false, freshBoss: false };
     }
     const exWon = ex ? ex.extracted : null;
     if (exWon !== null) { /* The Extracted line is the win. */ }

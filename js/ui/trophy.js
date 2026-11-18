@@ -86,7 +86,7 @@ export function trophyScreen(menu, { onBack }) {
     menu.el.dataset.screen = 'trophy';
     const c = collections(), t = trophyTotals(c), pct = v => Math.floor((v.have / Math.max(1, v.of)) * 100);
     const rare = rarest(c);
-    const zm = (MODES.zm?.maps ?? []).filter(id => MAPS[id]).map(id => [MAPS[id].name, Progress.zmBest(id), Progress.zmFeats(id)]);
+    const zm = (MODES.zm?.maps ?? []).filter(id => MAPS[id]).map(id => [MAPS[id].name, Progress.zmBest(id), Progress.zmFeats(id), MAPS[id].zm?.quest?.kind === 'radio' ? 'Listener' : 'Warden']);
     menu.el.innerHTML = `
       ${header({ back: 'tcBack', label: 'Back', title: 'Trophy case', extra: `<span class="hdr-tag">${ico('star')}${pct(t)}% complete</span>` })}
       <div class="tc-wrap scroll-y">
@@ -98,7 +98,7 @@ export function trophyScreen(menu, { onBack }) {
           <h4>${ico('stats')}Personal bests</h4>
           <div class="tc-rec-grid">${records().map(([label, value, ic]) => `<div class="tc-rec">${icon(ic, { size: 18 })}<b>${esc(value)}</b><small>${esc(label)}</small></div>`).join('')}</div>
           <h4>${icon('mode:zm', { size: 16 })}Graveyard Shift<small>best round</small></h4>
-          <div class="tc-zm">${zm.map(([name, best, f]) => `<div><b>${best || '-'}</b><small>${esc(name)}</small>${f.escaped ? `<em>Escaped ${f.escaped}</em>` : ''}${f.boss ? '<em class="w">Warden</em>' : ''}</div>`).join('')}</div>
+          <div class="tc-zm">${zm.map(([name, best, f, bossTag]) => `<div><b>${best || '-'}</b><small>${esc(name)}</small>${f.escaped ? `<em>Escaped ${f.escaped}</em>` : ''}${f.boss ? `<em class="w">${bossTag}</em>` : ''}</div>`).join('')}</div>
         </section>
         ${(() => { try { return tourneyShelf(); } catch (err) { console.error('tourney shelf', err); return ''; } })()}
         <section class="tc-rare" data-in="up">

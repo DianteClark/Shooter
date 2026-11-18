@@ -161,6 +161,17 @@ export const REWARD_PATTERNS = {
     for (let i = 0; i < 20; i++) s += circ(96 + r() * 204, r() * H, 0.9, c[2], op('.55'));
     return s;
   },
+  mast(c, r) {             // Polestar Relay: a lattice radio mast with its red beacon, a hut, the aurora over it.
+    let s = '';
+    for (let k = 0; k < 3; k++) s += path(`M${96 + k * 18} ${16 + k * 8} q50 -${14 - k * 3} 100 0 t100 0`, c[3], 3 - k * 0.6, op((0.5 - k * 0.12).toFixed(2)));
+    s += rect(96, 62, 204, 8, c[2], op('.35'));
+    s += poly([[240, 64], [252, 8], [264, 64]], 'none', ` stroke="${c[1]}" stroke-width="2"`);
+    for (let y = 16; y < 64; y += 9) s += line(252 - (64 - y) * 0.22, y, 252 + (64 - y) * 0.22, y, c[1], 1.2);
+    s += line(252, 8, 252, 0, c[1], 1.4) + circ(252, 2, 2.2, '#ff4a3a') + circ(252, 2, 7, '#ff4a3a', op('.2'));
+    s += rect(176, 50, 30, 14, c[1]) + rect(181, 54, 5, 4, c[3], op('.8')) + rect(192, 54, 5, 4, c[3], op('.8')) + rect(174, 48, 34, 3, c[2], op('.7'));
+    for (let i = 0; i < 18; i++) s += circ(96 + r() * 204, r() * H, 0.8, c[2], op('.6'));
+    return s;
+  },
   zone(c) {                // Frontier: the closing circle over the land, a plane's drop line across it.
     let s = '';
     for (let k = 0; k < 5; k++) s += path(`M${92 + k * 30} ${H} q30 -14 60 0`, c[1], 1, op('.6'));

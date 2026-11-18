@@ -68,20 +68,21 @@ const MAP_ART = {
   expedition: ['Base Camp', 'peaks', ['#121820', '#34465a', '#e8f0f8', '#ff6a3a']],
   icebreaker: ['Pack Ice', 'icebow', ['#0e1a26', '#2a4a66', '#eaf6ff', '#ff4a3a']],
   ashgrove:   ['Lamplight', 'grove', ['#120e16', '#3a3040', '#e0d8e8', '#ffb84a']],
+  polestar:   ['Night Watch', 'mast', ['#06101a', '#24384a', '#d8ecf4', '#5affb0']],
   frontier:   ['Drop Zone', 'zone', ['#101a14', '#2a4630', '#d8f0d0', '#ff9f1c']],
 };
 const MAP_WINS = 10;
 // Map cards come in three tiers (bronze, silver, gold; the gold one animated): wins on the map, or for the maps that
-// host no team win (Frontier's battle royale and extraction, Ashgrove's Graveyard Shift) matches played there.
+// host no team win (Frontier's battle royale and extraction, Ashgrove's and Polestar's Graveyard Shift) matches played there.
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'ashgrove']);
+const PLAYS_ONLY = new Set(['frontier', 'ashgrove', 'polestar']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },
   zm: { tab: 'zombies', playlist: 'zmsolo' }, gf: { tab: 'standard', playlist: 'showdown' } }[mode] ?? { tab: 'standard', modes: [mode] });
-const mapPlay = id => (id === 'frontier' ? playFor('br') : id === 'ashgrove' ? playFor('zm') : MAPS[id]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : STANDARD);
+const mapPlay = id => (id === 'frontier' ? playFor('br') : MAPS[id]?.zmOnly ? playFor('zm') : MAPS[id]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : STANDARD);
 
 // Per mode: [id, name, req, lifetime stat, goal, pattern, palette, emblem].
 const MODE_CARDS = [
@@ -158,7 +159,7 @@ const ZM_PALETTE = ['#0e0c16', '#3e3858', '#d8d0f0', '#7aff9a'];
 const zmFeats = () => Object.values(extras().zmFeats ?? {}).filter(Array.isArray);
 const zmEscaped = () => Math.max(0, ...zmFeats().map(v => n(v[0])));
 const ZM_MAP_ROUND = 15;
-const ZM_MAP_NAMES = { neon: 'Neon Dead', ruins: 'Overgrown', foundry: 'Slag Heap', ashgrove: 'Ash and Bone' };
+const ZM_MAP_NAMES = { neon: 'Neon Dead', ruins: 'Overgrown', foundry: 'Slag Heap', ashgrove: 'Ash and Bone', polestar: 'Long Night' };
 const ZM_CARDS = [
   card('zm-escape', 'First Light', 'Zombies', 'Escape Graveyard Shift on the helicopter', () => zmEscaped() > 0, { p: 'rescue', c: ['#0c0e18', '#2a3048', '#d8e0ff', '#ffd659'], e: 'mode:zm', gold: true }, null, playFor('zm')),
   card('zm-escape25', 'Dawn Patrol', 'Zombies', 'Escape Graveyard Shift on round 25 or later', () => zmEscaped() >= 25, { p: 'dawn', c: ['#160c10', '#4a2430', '#ffe0c8', '#ff8a3a'], e: 'mode:zm', gold: true, anim: 'gold' },

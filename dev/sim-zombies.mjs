@@ -1183,6 +1183,16 @@ section('econ');
   ok(JSON.stringify(sanitizeSave({ zmFeats: { neon: [-1, 'x'], ruins: [2000, 0], __proto__: [1, 1] } }).zmFeats) === '{"neon":[0,1],"ruins":[999,0]}', 'feats sanitised');
   const card = CARDS.find(c => c.id === 'zm-warden');
   ok(card && card.need({ zmFeats: s.zmFeats }) && !card.need({ zmFeats: { neon: [12, 0] } }), 'the Gravewarden card follows the flag');
+  // Polestar Relay's boss flag is the Listener's: its own card (Dead Air) and emblem (Signal Lost), not Lantern Out.
+  const dead = CARDS.find(c => c.id === 'zm-listener');
+  const { getEmblem, emblemProgress } = await import('../js/ui/emblems.js');
+  const sig = getEmblem('feat-listener');
+  const ps = blankSave();
+  ok(recordZmFeat(ps, 'polestar', { boss: true }).freshBoss && decodeSave(encodeSave(ps)).save.zmFeats.polestar[1] === 1, 'the Listener flag, through an export code');
+  ok(dead?.need({ zmFeats: ps.zmFeats }) && !card.need({ zmFeats: ps.zmFeats }) && !dead.need({ zmFeats: { ashgrove: [0, 1] } }), 'Dead Air follows the Listener, Lantern Out the Gravewarden');
+  ok(sig && emblemProgress(sig, { zmFeats: ps.zmFeats })[0] === 1 && emblemProgress(sig, { zmFeats: { ashgrove: [0, 1] } })[0] === 0, 'the Signal Lost emblem too');
+  const { EXTRA_CARD_IDS } = await import('../js/ui/cardbook.js');
+  ok(EXTRA_CARD_IDS.includes('zm-map-polestar') && EXTRA_CARD_IDS.includes('map-polestar'), 'Polestar has its round-15 card (Long Night) and map cards');
   void cardsEarned;
 }
 

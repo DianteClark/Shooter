@@ -190,7 +190,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
     const rows = [['Round reached', data.zmView?.round ?? 0], ['Rounds survived', z.survived ?? 0], [`Best on ${esc(map) || 'this map'}`, z.best ?? 0], ['Undead put down', z.kills ?? 0]];
     // Values stay short: the column is a number's width at 667 px (owner notes: "Round 18" and "Down: card earned" spilled).
     if (z.escaped || z.bestEscape) rows.push(['Best escape', z.bestEscape ? `R${z.bestEscape}` : '-']);
-    if (z.warden) rows.push([z.freshBoss ? 'Gravewarden (card earned)' : 'Gravewarden', 'Down']);
+    if (z.warden) rows.push([z.freshBoss ? `${z.bossName ?? 'Gravewarden'} (card earned)` : z.bossName ?? 'Gravewarden', 'Down']);
     return `<div class="rb theirs" style="--team:#b8241c">
       <div class="rb-head"><b class="rb-team">Graveyard Shift</b><b class="rb-pts">${z.fresh ? 'Record' : ''}</b><span></span><span></span><span></span><span></span><span class="wide"></span></div>
       ${rows.map(([k, v], i) => `<div class="rb-row" style="--i:${i}"><span class="rb-name" style="grid-column:span 5"><b>${k}</b></span><span class="wide" style="color:${i === 2 && z.fresh ? 'var(--c-gold)' : 'var(--c-chalk)'}">${v}</span></div>`).join('')}

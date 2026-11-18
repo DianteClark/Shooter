@@ -220,7 +220,7 @@ export const supplyCost = (item, round) => Math.round(ZE.supply[item].cost * (1 
 
 // The account XP lines of a run (js/game/awards.js shows them; dev/sim-zm-runs.mjs totals them): one source for both.
 // `played` is MATCH_XP.played, passed in so this module keeps off progression.js.
-export function zmXp({ kills = 0, head = 0, survived = 0, escaped = 0, warden = false, played = 200 }) {
+export function zmXp({ kills = 0, head = 0, survived = 0, escaped = 0, warden = false, played = 200, boss = 'Gravewarden' }) {
   const X = ZM.xp, lines = [['Match played', played]];
   // Diminishing: the first killSoft undead pay `kill` each, the rest `killPast`.
   const killLine = kills ? [`Undead put down x${kills}`, Math.min(kills, X.killSoft) * X.kill + Math.max(0, kills - X.killSoft) * X.killPast] : null;
@@ -230,7 +230,7 @@ export function zmXp({ kills = 0, head = 0, survived = 0, escaped = 0, warden = 
   const bosses = Math.floor(survived / 10);
   if (bosses) lines.push([`Bosses put down x${bosses}`, bosses * X.boss]);
   if (escaped) lines.push([`Escaped on round ${escaped}`, X.escape + X.escapeRound * escaped]);
-  if (warden) lines.push(['Gravewarden put down', X.warden]);
+  if (warden) lines.push([`${boss} put down`, X.warden]);     // The quest's boss: the Gravewarden, or the Listener.
   // The run's cap comes off the undead line, which says so.
   const over = lines.reduce((a, l) => a + l[1], 0) - X.cap;
   if (over > 0 && killLine) { killLine[1] = Math.max(0, killLine[1] - over); killLine[0] += ' (run cap)'; }

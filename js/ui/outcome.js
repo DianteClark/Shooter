@@ -88,7 +88,7 @@ export function matchHeader(data) {
     word = z.escaped ? 'Escaped' : left ? 'Left behind' : 'Overrun';
     line = z.escaped ? `Escaped on round ${z.escaped}${z.freshEscape ? ': a new record on this map' : ''}`
       : `Survived ${plural(survived, 'round')}${z.fresh ? ': a new record on this map' : z.best ? ` · best ${z.best}` : ''}`;
-    if (z.warden) line += ' · the Gravewarden is down';
+    if (z.warden) line += ` · the ${z.bossName ?? 'Gravewarden'} is down`;
     tone = z.fresh || z.escaped ? 'var(--c-gold)' : 'var(--c-haze)';
     score = { kind: 'one', label: 'Round', value: z.escaped || data.zmView?.round || survived, mineCss: tone };
   } else if (rules === 'inf') {
