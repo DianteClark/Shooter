@@ -1,8 +1,8 @@
 # Graveyard Shift (ROADMAP item 26)
 
 Our own co-op wave survival: up to four players (friends from the lobby, bot teammates in every empty seat) hold off a
-horde round after round on Night Market (`neon`), Ruins (`ruins`), Foundry (`foundry`) and Ashgrove Halt (`ashgrove`, built
-for the mode: see "Ashgrove Halt" below). Everyone starts with a
+horde round after round on Night Market (`neon`), Ruins (`ruins`), Foundry (`foundry`), Ashgrove Halt (`ashgrove`) and
+Polestar Relay (`polestar`), the last two built for the mode (see "Ashgrove Halt" and "Polestar Relay" below). Everyone starts with a
 pistol and the blade; points from hits and kills buy guns off the walls, the mystery crate, gates into the rest of the
 map, six perk machines and the late-game economy (the upgrade bench, the supply terminal, armour plates, traps, the exfil
 and a hidden quest: "Economy" below). The match ends when nobody is left up, or when the crew gets out. All names are our
@@ -10,7 +10,7 @@ own.
 
 | id | name | players | maps |
 |---|---|---|---|
-| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove |
+| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove, polestar |
 
 Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, formulas and layouts in
 `js/shared/zombies.js` (`ZM`), mode entry `MODES.zm` (`js/shared/modes.js`, `maps` lists where it plays).
@@ -83,7 +83,7 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
 - **Wall-buys**: two or three per band, better guns deeper in (SMG and shotgun at the start; ARs, then heavies and LMGs).
   Buying one you hold buys ammo (40% of the price).
 - **Mystery crate**: 950 points, rolls 3 s, offers one gun from `BOX_GUNS` (specialists and heavy hitters, never one you
-  hold) to whoever paid for 9 s. After 4-8 rolls a roll comes up empty: the money back, and the crate moves to another
+  hold) to whoever paid for 9 s; 8% of rolls offer a wonder weapon instead (see "Wonder weapons"). After 4-8 rolls a roll comes up empty: the money back, and the crate moves to another
   spot after 6 s.
 - **Power** (a layout with `power: true`, Ashgrove Halt only): the perk machines stand dark and sell nothing (the use
   button shows the machine greyed, "No power: find the switch") until someone throws the power switch: free, but it
@@ -313,6 +313,8 @@ cap.
 | foundry | 30 | 0.31 ms | 3.2 ms | 5.2 ms | 979 / 1611 B |
 | ashgrove | 20 | 0.41 ms | 3.7 ms | 5.0 ms | 981 / 1636 B |
 | ashgrove | 30 | 0.35 ms | 3.6 ms | 6.4 ms | 1001 / 1627 B |
+| polestar | 20 | 0.41 ms | 4.0 ms | 4.6 ms | 1005 / 1655 B |
+| polestar | 30 | 0.38 ms | 4.1 ms | 4.3 ms | 983 / 1615 B |
 
 Build NEXT, with the special zombies in the mix (rounds 20 and 30 deal Spitters, Bloaters, Crawlers and
 Shieldbearers): inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms; the one 31.8 ms tick on Ruins is a
@@ -417,8 +419,86 @@ nothing and neither a human (touch tiles were already hidden; a controller's Str
 (`Sim.useStreak` refuses). The supply terminal sells the mode's own instead. Before this, one test run on Ruins saw six
 UAVs, five turrets and three gunships from the bots in eight rounds.
 
+## Polestar Relay (build NEXT)
+An iced-in polar research station and its radio relay, in the middle of the long night: `js/shared/maps/polestar.js`
+(medium, 80 x 52, region arctic), theme `js/render/themes/polestar.js`. Our own place and names. Built for Graveyard
+Shift alone, like Ashgrove (`hidden`, `modes: []`, `zmOnly`; `MODES.zm.maps` lists it). Where Ashgrove is a foggy
+churchyard in amber lamplight, grass and flint, Polestar is blue snow and steel under a green aurora: no sun, the
+aurora is the key light, sodium floods throw orange pools, the ochre huts' windows are lit and a red beacon blinks up the
+relay mast.
+
+| area | id | where | what is there |
+|---|---|---|---|
+| Mess Hall (start) | `mess` | south-west | the mess hut; SMG and shotgun on the walls, Mercy Run, the supply terminal |
+| Kennels | `kennel` | west | the dog shed (the armour bench), a snowcat (Fleetfoot), the dog run (a dead end: crate spot, radio 1); AR, DMR |
+| Lab Block | `lab` | north | the lab hut (Quickdraw), the cold store (a dead end: crate spot); PDW, heavy SMG; a trap at the Kennels gate |
+| Boiler House (power) | `boiler` | centre | the boiler with the power switch, the header tank (Hammerfall); heavy AR; a trap at the Hangar gate. Walled in, reached from the Lab Block or the Hangar |
+| Mast Field (boss arena) | `mast` | north-east | open snow and ice round the relay mast (the console at its foot), the dish; LMG, Last Breath, a crate spot; 561 m2 |
+| Fuel Depot | `depot` | south-east | the helipad (the exfil), a fuel tank, the tank alcove (a dead end: crate spot, radio 3); saw, battle rifle; a trap at the Hangar gate |
+| Hangar | `hangar` | south | the hangar (the upgrade bench at its west door), a snowcat, the radio room (a dead end: radio 2, Ironhide on its wall); carbine, auto shotgun |
+
+Gates: Mess-Kennels 750, Mess-Hangar 750, Kennels-Lab 1000, Hangar-Depot 1000, Lab-Boiler 1250, Hangar-Boiler 1250,
+Lab-Mast 1500, Depot-Mast 1500. One loop (Mess Hall, Kennels, Lab Block, Mast Field, Fuel Depot, Hangar, back to the Mess
+Hall), every gate a chokepoint; the Boiler House (the power) is off two sides of it. Spawn windows: six per area. The
+boss rounds' Yardmaster and the quest's Listener rise in the Mast Field when it is open. Economy spots (`map.zm.reserved`)
+as on Ashgrove, each with its note: bench (Hangar), terminal (Mess Hall), armour (Kennels), three traps at gates, exfil
+(the helipad).
+
+**The quest: the radios** (`map.zm.quest = { kind: 'radio', console, radios }`; graphLayout puts them in the same slots
+as Ashgrove's altar and relics and sets `L.questKind = 'radio'`, so the economy, the wire, the validator and the tests
+keep one shape). Different steps from Ashgrove's: the radios are dead until the power is on ("DEAD RADIO, No power"); a
+radio is tuned by using it and **staying by it** for `ZE.quest.tune` = 5 s (one at a time; the use button shows "TUNING
+n%"; walking off, going down or leaving loses the signal, `ztune` state 0); the round plate counts "Radios n/3"; with
+all three tuned, TRANSMIT at the relay console at the mast's foot. **The Listener** answers (`ZK.listener` = 10; kind 9
+stays the wire's broken-shield code): 48x a round's health (+10% per crew seat), quicker and leaner than the Gravewarden,
+and it fights differently (`ZM_LISTENER`): every 8 s a **frost pulse** winds up round it, a 5.5 m ring drawn on the snow
+for 1.2 s (`zpulse`), then 34 (grown with the round like a claw) to the crew inside it in its sight, so you step out;
+every 12 s it calls up two Crawlers. Its look (js/render/zm-looks.js): the tallest, thinnest thing on the ice, frost-white,
+hooded, the station's radio pack on its back glowing cyan. Putting it down pays 3000 each and 1500 XP ("Listener put
+down"), the **Dead Air** calling card and the **Signal Lost** feat emblem (`save.zmFeats.polestar[1]`: on Polestar the
+feat's boss flag is the Listener's, `ZM_LISTENER_MAPS` in js/shared/progression.js, so it does not count for Lantern
+Out). The quest's tuning (radio, seconds, who) is on the wire and kept by a host migration; the Listener comes back at
+the health its bar showed and carries on pulsing. The round-15 card is **Long Night**; the map cards are Night Watch.
+
+**Bots** throw the power on Polestar as on Ashgrove (solo, from round 3, buying the gates on the way), shop, and (on
+every map) step off a running trap's floor (js/sim/zm-kinds.js `dodge`). They never do the quest.
+
+**Art and budget**: about 27k triangles in the world's 3 draw calls (Ashgrove 26k, Foundry 39k), 25 flood poles and the
+huts' windows baked in; the radios and the console are part of the economy's merged station mesh (no new draw calls).
+
+**Pacing** (`node dev/sim-zm-econ.mjs --map=polestar`): rounds 1-20, 50,300 earned, 45,400 spent (90%); the perks wait
+for the power like Ashgrove's, the bench from round 13, two to five of the economy's buys in reach from round 14.
+
+**Tests**: `node dev/map-validate.mjs polestar` (the layout, every spot, a 300 s bot crew match: round 8, power on);
+the `polestar` section of dev/sim-zombies.mjs (layout, loop, dead ends, the radio quest step by step, the Listener's
+pulse and calls, wire and migration, bots throwing the power and stepping off traps); the Polestar part of
+dev/ui-zombies-test.py (932x430: power out, a dead radio, the switch, TUNING n%, Radios 1/3, the console, a wonder
+weapon from the crate fired into a crowd); `dev/ui-hud-layout-test.py --only zm` runs Polestar too (a wonder weapon in
+hand, the Radios count).
+
+## Wonder weapons (build NEXT)
+Two crate-only specials on every Graveyard Shift map (`ZM_WONDERS` in js/shared/zombies.js). A crate roll offers one 8%
+of the time (`ZM_WONDER_ROLL`; never one you hold); no wall sells them and the bench will not take them ("Wonders stay as
+they are"). Each rides on a gun id the mode never otherwise hands out (`gun`: the Tacker and the machine pistol, last in
+`BOX_GUNS` so every older index holds), at its own tier past the bench's three (`tier` 5 and 6), which gives its def
+(js/sim/zm-phone.js `zmTierDef`, the same on the host and the phone) and which the host reads for its effect
+(js/sim/zm-econ.js `_wonder`). Damage is a share of the round's health, so they stay worth it at round 30 and mean
+nothing anywhere else; their kills earn no weapon XP for the carrier gun. In this mode the renderer draws our own models
+in their place (js/render/guns.js `zw-coil`, `zw-rime`, in hand and floating over the crate), the weapon panel and the
+prompts use their own names (`zmGunName`).
+
+| weapon | what | numbers |
+|---|---|---|
+| **Stormcoil** | a stubby coil gun, copper windings lit between: a slow bolt of lightning that jumps on from the one it hits to the nearest not yet struck | 120 rpm, 6 + 36 rounds; 1.3x a round's health on the hit, then up to 5 jumps within 6.5 m, each 0.9 of the one before (bosses 1.2% of their own) |
+| **Rimecaster** | a squat freezing projector, a coolant tank on the back: a short automatic beam; three hits freeze a zombie solid for 2.5 s (it neither walks nor claws), and one killed frozen shatters | 600 rpm, 50 + 200 rounds, 13 m; 0.14x a round's health a hit; the shatter 0.9x to the undead within 2.6 m; bosses are slowed, never frozen (0.25% a hit) |
+
+Their prompts: TAKE STORMCOIL with the line "Wonder weapon: ...", a banner when the crate offers one. The wonders' arcs,
+freeze and shatter are `zfx` events (`arc`, `freeze`, `shatter`). Tests: the `wonders` section of dev/sim-zombies.mjs
+(the roll share, never held, never on a wall, given at its tier with its def on host and phone, its name, the bench
+refusing it, the bolt through a crowd, the freeze holding a zombie still, the shatter, a boss only slowed).
+
 ## Open
 - The economy on the banded maps sits where the placement rules put it; a hand-placed pass (like Ashgrove's) would read
   better on Foundry, whose deepest bands are big.
-- A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove)
-  and a pass of the layout tests.
+- A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove
+  and Polestar) and a pass of the layout tests.

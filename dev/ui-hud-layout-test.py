@@ -43,7 +43,7 @@ MATCHES = [
     ('topside', 'ctl'), ('topside', 'grind'),
     ('harvest', 'gwtdm'), ('harvest', 'gwdom'), ('harvest', 'gwhq'), ('harvest', 'gwko'), ('harvest', 'gwinf'),
     ('frontier', 'br'), ('frontier', 'brduo'), ('frontier', 'brsolo'), ('frontier', 'exq'), ('frontier', 'exd'),
-    ('neon', 'zm'), ('frontier', 'rb'), ('frontier', 'rbduo'), ('pier', 'gf'),
+    ('neon', 'zm'), ('polestar', 'zm'), ('frontier', 'rb'), ('frontier', 'rbduo'), ('pier', 'gf'),
     ('', 'training'), ('', 'range'), ('', 'tutorial'),
 ]
 ONLY = opt('--only', '')
@@ -178,6 +178,8 @@ async def start(pg, mp, mode):
         # and the relic count on the round plate, an upgrade prompt (the longest) in the lane.
         await pg.evaluate(f"""(() => {{ const m = {G}.app.match, sim = m.sim, R = sim.rules, me = sim.byId.get(m.localId);
           me.zm.plates = 150; me.zm.pts = 99999; R._give(me, 'heavyar'); R.econ._arm(me, me.ps.slot, 'heavyar', 2); me.zm.tiers.heavyar = 2;
+          // Polestar Relay: a wonder weapon in hand (its name on the panel) and the Radios count on the round plate.
+          if (R.L.questKind === 'radio') R._give(me, 'nailer');
           R.round = 15; R.econ.exfil.state = 1; R.econ.exfil.timer = 999; R.econ.quest.got = 3;
           for (const d of R.L.doors) R.open |= 1 << d.i; m.ps.x = R.L.bench.x; m.ps.z = R.L.bench.z; }})()""")
     await pg.wait_for_timeout(2500)

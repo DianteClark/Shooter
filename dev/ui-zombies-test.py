@@ -676,7 +676,7 @@ FIRE = r"""(async () => {
   // The use button's longest lines.
   const use = zh.useEl, lines = [['UPGRADE ' + (WEAPONS[longGun].name ?? longGun).toUpperCase(), '12,000 · tier 3 · ' + Object.values(ZM_FX).map(f => f.name).reduce((a, b) => (b.length > a.length ? b : a))],
     ['SUPPLY TERMINAL', 'Sentries, strikes, drones, lures, vests'], ['UPGRADE BENCH', 'Hold a gun to upgrade it'], ['THE ALTAR', 'Find all the relics first'],
-    ['UPGRADE BENCH', 'A wonder weapon is as good as it gets'], ['DEAD RADIO', 'No power: find the switch'], ['TUNING 99%', 'Someone is on it'],
+    ['UPGRADE BENCH', 'Wonders stay as they are'], ['DEAD RADIO', 'No power: find the switch'], ['TUNING 99%', 'Someone is on it'],
     ['TUNE THE RADIO', `Free: stay by it ${ZE.quest.tune} s`], ['RELAY CONSOLE', '2 of 3 radios tuned'], ['TRANSMIT', 'Something out there will hear'],
     ...Object.values(ZM_WONDERS).map(w => ['TAKE ' + w.name.toUpperCase(), `Wonder weapon: ${w.desc.toLowerCase()}`]),
     ['CALL EXFIL', '20,000 · hold the pad ' + ZE.exfil.hold + ' s'], ['ARMOUR PLATE', '2,500 · up to ' + ZE.plate.max + ' plates'],

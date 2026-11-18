@@ -849,7 +849,7 @@ export function zmUsable(L, x, z, st) {
       : { kind: 'benchwait', i: 0, cost: 0, gun: b.gun, tier: b.tier, label: 'Upgrading', off: true, why: 'Working on it' };
     if (b.state) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'In use' };
     const g = st.held, t = st.tier ?? 0;
-    if (zmWonderOf(g)) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'A wonder weapon is as good as it gets' };
+    if (zmWonderOf(g)) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'Wonders stay as they are' };
     if (!zmUpgradable(g)) return { kind: 'bench', i: 0, cost: 0, label: 'Upgrade bench', off: true, why: 'Hold a gun to upgrade it' };
     if (t >= 3) return { kind: 'bench', i: 0, cost: 0, gun: g, tier: 3, label: 'Upgrade bench', off: true, why: 'Fully upgraded' };
     return { kind: 'bench', i: 0, gun: g, tier: t + 1, cost: ZE.bench.cost[t], label: 'Upgrade' };
