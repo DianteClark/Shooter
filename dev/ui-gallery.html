@@ -175,6 +175,7 @@ const SCENES = {
   // Weekly events (js/shared/events.js): the title's banner, the Challenges screen's event panel, the Spotlight and the
   // reward's unlock sheet with Play now.
   'title-event': menuScene('Title, weekly event banner', async ({ menu }) => { menu.title({}); const { eventBannerHtml } = await import('../js/ui/eventbanner.js'); const { weeklyEventAt } = await import('../js/shared/events.js'); menu.el.insertAdjacentHTML('beforeend', eventBannerHtml(weeklyEventAt())); }),
+  'title-season-event': menuScene('Title, new season banner (Season 2)', async ({ menu }) => { menu.title({}); const { seasonBannerHtml } = await import('../js/ui/eventbanner.js'); const { seasonAt } = await import('../js/shared/seasons.js'); menu.el.insertAdjacentHTML('beforeend', seasonBannerHtml(seasonAt(new Date(2026, 11, 28, 12)))); }),
   'challenges-event': menuScene('Challenges, weekly event', ({ menu }) => menu.challenges({ onBack: noop, onPlay: noop })),
   'mp-event': menuScene('Multiplayer: the weekly event picked', ({ menu }) => menu.multiplayer({ tab: 'standard', sel: { playlist: 'wkevent', modes: [] } })),
   'unlock-event': menuScene('Unlock sheet: a weekly event reward', async ({ menu }) => { const { weeklyEventAt } = await import('../js/shared/events.js'); const r = weeklyEventAt().def.reward; menu.title({}); const u = await import('../js/ui/unlocksheet.js'); u.setPlayNow(noop); u.unlockSheet(menu, r.kind, r.id); }),

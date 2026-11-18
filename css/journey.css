@@ -454,4 +454,7 @@
 .evb-tx b { font: 400 15px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .evb-go { display: flex; align-items: center; gap: 4px; padding: 6px 8px; background: #ff7ad0; color: #1a0a16; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; }
 #ui .evb-go .ico { height: 12px; }
+#ui .ev-banner.sn { background: linear-gradient(172deg, rgba(53,64,76,.97), rgba(22,26,32,.97)); box-shadow: var(--bevel), var(--edge), inset 3px 0 0 var(--sa, var(--c-sodium)); }
+#ui .ev-banner.sn .evb-ico .ico, .ev-banner.sn .evb-tx small { color: var(--sa, var(--c-sodium)); }
+#ui .ev-banner.sn .evb-go { background: var(--sa, var(--c-sodium)); }
 @media (prefers-reduced-motion: reduce) { #ui .ev-banner { animation: none; } }

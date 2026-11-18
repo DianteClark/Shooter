@@ -41,7 +41,7 @@ SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-mode
           # The rewards pass (docs/UNLOCKS-AUDIT-2026-11-12.md).
           'trophy', 'trophy-master', 'unlock-sheet',
           # Weekly events (docs/SEASONS.md "Weekly events"): on a day of the week with the longest event name.
-          'title-event', 'challenges-event', 'mp-event', 'unlock-event']
+          'title-event', 'title-season-event', 'challenges-event', 'mp-event', 'unlock-event']
 # A spread of guns: long names, no attachments, signature parts and kits, melee, launchers, the akimbo pair.
 GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper', 'golden', 'akimbo', 'knife', 'beltlmg']
 
