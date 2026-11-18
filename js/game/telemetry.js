@@ -424,6 +424,9 @@ export const GunStats = {
 
   matchCount() { const d = read(); return d.archive.matches + d.recent.length; },
 
+  // One recent match's record by its `at` (the match history's detail keeps it), or null once it has been folded away.
+  match(at) { return (at && read().recent.find(r => r.at === at)) || null; },
+
   clear() {
     cache = { v: STATS_VERSION, archive: emptyAggregate(), recent: [] };
     try { localStorage.removeItem(STORE_KEY); } catch { /* ignore */ }
@@ -454,6 +457,19 @@ export function gunRows(agg, scope, ids) {
       ...stanceOf(r),
     };
   });
+}
+
+// The local player's guns in one match record (GunStats.match), most used first: kills, deaths, damage dealt, accuracy
+// and headshot share of kills (null without shots or kills), seconds held. Equipment rows are left out.
+export function matchGunRows(rec) {
+  const g = rec?.g?.m || {};
+  return Object.keys(g).filter(id => !id.startsWith(EQ_PREFIX)).map(id => {
+    const r = g[id];
+    const kills = r[F.kills] || 0, shots = r[F.shots] || 0;
+    return { id, kills, deaths: r[F.deaths] || 0, dmg: r[F.dmg] || 0, shots, hits: r[F.hits] || 0, held: r[F.heldS] || 0,
+      acc: shots ? Math.min(1, (r[F.hits] || 0) / shots) : null, head: kills ? (r[F.headKills] || 0) / kills : null };
+  }).filter(x => x.kills || x.deaths || x.shots || x.held >= PICK_SECONDS)
+    .sort((a, b) => b.kills - a.kills || b.held - a.held || b.dmg - a.dmg).slice(0, 8);
 }
 
 // One row per piece of equipment in a scope: uses, kills, hits, damage and effects, per carrier and per use.

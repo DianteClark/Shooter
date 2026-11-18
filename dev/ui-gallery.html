@@ -217,6 +217,16 @@ const SCENES = {
   'boards-kd': menuScene('Boards: K/D, too few matches', ({ menu }) => boardsScene(menu, 'everyone', 'kd')),
   'challenges': menuScene('Challenges', ({ menu }) => menu.challenges({ onBack: noop })),
   'history': menuScene('Match history', ({ menu }) => menu.history({ onBack: noop, onStats: noop })),
+  // The match detail (js/ui/history.js): a few seeded matches of different modes; &tab= picks the detail's tab.
+  'history-list': menuScene('Match history, played in', async ({ menu }) => { await seedHistory(); menu.history({ onBack: noop, onStats: noop }); }),
+  'history-match': menuScene('Match detail: TDM', async ({ menu }) => { await seedHistory(); openHistory(menu, 0, q.get('tab')); }),
+  'history-awards': menuScene('Match detail: medals', async ({ menu }) => { await seedHistory(); openHistory(menu, 0, 'awards'); }),
+  'history-ch': menuScene('Match detail: challenges', async ({ menu }) => { await seedHistory(); openHistory(menu, 0, 'ch'); }),
+  'history-br': menuScene('Match detail: battle royale', async ({ menu }) => { await seedHistory(); openHistory(menu, 1, 'mode'); }),
+  'history-ex': menuScene('Match detail: extraction', async ({ menu }) => { await seedHistory(); openHistory(menu, 2, 'mode'); }),
+  'history-zm': menuScene('Match detail: Graveyard Shift', async ({ menu }) => { await seedHistory(); openHistory(menu, 3, 'mode'); }),
+  'history-sd': menuScene('Match detail: Showdown', async ({ menu }) => { await seedHistory(); openHistory(menu, 4, 'mode'); }),
+  'history-old': menuScene('Match detail: an older match, summary only', async ({ menu }) => { await seedHistory(); openHistory(menu, 5); }),
   // Some kills on a few guns, so locked cards show their progress bars part-way.
   'cards': menuScene('Calling cards picker', async ({ menu }) => {
     const { cardsSheet } = await import('./js/ui/cards.js');
@@ -328,6 +338,39 @@ async function seedMaster() {
 
 // A season played in: 16 matches (12 of them ranked: placed, then a few more), some tiers claimed, some waiting.
 // Returns the last match's season result, for the results scene.
+// Match history with detail: newest first TDM, battle royale, extraction, Graveyard Shift, Showdown, then an older one.
+async function seedHistory() {
+  const { MatchHistory, Challenges } = await import('./js/ui/progress.js');
+  const { GunStats, FIELDS } = await import('./js/game/telemetry.js');
+  MatchHistory.clear();
+  GunStats.clear();
+  const F = Object.fromEntries(FIELDS.map((k, i) => [k, i]));
+  const row = (o) => { const r = FIELDS.map(() => 0); for (const k in o) r[F[k]] = o[k]; return r; };
+  const now = Date.now(), ch = Challenges.list('daily').slice(0, 3).map((c, i) => [c.id, Math.max(0, c.goal - 3 - i), c.goal - i]);
+  const base = { field: 12, team: 0, scores: [75, 61], kills: 18, deaths: 7, assists: 4, score: 2450, head: 5, long: 2, medals: 9, obj: 0, xp: 4820, level: 23, bots: 11, humans: 1, secs: 512, guns: [{ id: 'ar', kills: 12, head: 4, secs: 300 }, { id: 'smg', kills: 6, head: 1, secs: 180 }], challenges: [] };
+  const spots = { k: [[20, 30], [34, 18], [52, 44], [61, 22], [40, 40], [12, 50]], x: [[30, 30, 44, 26], [55, 50, 60, 41], [10, 12]] };
+  const add = (at, e) => { MatchHistory.add({ at, ...base, ...e }); };
+  // Oldest first: MatchHistory.add puts each on top.
+  add(now - 9 * 864e5, { map: 'dust', mode: 'tdm', result: 'loss', place: null });
+  add(now - 5 * 36e5, { map: 'pier', mode: 'gf', result: 'win', place: null, scores: [6, 4], d: { ...spots, md: { double: 1 }, sd: 'wwlwdlww'.slice(0, 10) } });
+  add(now - 4 * 36e5, { map: 'ashgrove', mode: 'zm', result: 'loss', place: null, kills: 140, d: { k: spots.k, x: [[30, 30]], md: { headshot: 4 }, zm: { round: 14, survived: 13, escaped: 0, warden: true, fresh: true } } });
+  add(now - 3 * 36e5, { map: 'frontier', mode: 'ex', result: 'win', place: null, d: { ...spots, ex: { out: true, c: [['intel', 2], ['hvt', 3], ['cache', 1]], lost: 1, lives: 2 } } });
+  add(now - 2 * 36e5, { map: 'expedition', mode: 'br', result: 'loss', place: 3, field: 40, d: { k: [[100, 120], [180, 200]], x: [[210, 190, 230, 170]], br: { place: 3, of: 10, dmg: 1840, rev: 2, knocks: 5, guns: 4, rar: 3, items: 17 } } });
+  const at = now - 25 * 60e3;
+  GunStats.add({ at, b: 'NEXT', map: 'railyard', mode: 'tdm', mg: 'core', live: 512, pm: { a: 12, h: 1, m: 1 }, g: { a: {}, h: {}, m: {
+    ar: row({ kills: 12, deaths: 4, shots: 210, hits: 74, headKills: 4, dmg: 2310, heldS: 301 }),
+    smg: row({ kills: 6, deaths: 2, shots: 160, hits: 51, headKills: 1, dmg: 1120, heldS: 180 }),
+    pistol: row({ kills: 0, deaths: 1, shots: 12, hits: 3, dmg: 60, heldS: 14 }),
+    'eq:frag': row({ shots: 3, hits: 2, dmg: 90 }) } } });
+  add(at, { map: 'railyard', mode: 'tdm', result: 'win', place: null, d: { gs: at, ...spots, md: { double: 2, longshot: 1, streak5: 1, first_blood: 1, headshot: 5 }, sk: ['uav', 'turret', 'strike'], ch } });
+}
+// Opens match i of the history; tab: one of the detail's tabs.
+function openHistory(menu, i, tab) {
+  menu.history({ onBack: noop, onStats: noop });
+  menu.el.querySelector(`[data-act="hsRow"][data-i="${i}"]`).click();
+  if (tab) menu.el.querySelector(`[data-act="hmTab"][data-tab="${tab}"]`)?.click();
+}
+
 async function seedSeason() {
   const { Progress } = await import('./js/ui/progress.js');
   const { seasonUnlocks } = await import('./js/ui/season.js');

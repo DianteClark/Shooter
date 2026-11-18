@@ -3427,7 +3427,7 @@ const INTERNALS = {
 
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is
 // pixels per metre. Team spawns are the two team colours, domination points are the little diamonds.
-export function mapThumbnail(map, { width = 160, teams = null } = {}) {
+export function mapThumbnail(map, { width = 160, teams = null, spawns = true } = {}) {
   const s = THUMB_STYLE[map.theme] || THUMB_STYLE.railyard;
   const k = width / map.width;
   const height = Math.round(map.height * k);
@@ -3451,7 +3451,7 @@ export function mapThumbnail(map, { width = 160, teams = null } = {}) {
   g.lineWidth = 2;
   g.strokeRect(1, 1, width - 2, height - 2);
   const colors = (teams || [{ css: '#38b6ff' }, { css: '#ff4d3d' }]).map(t => t.css);
-  map.spawns.forEach((list, team) => {
+  if (spawns) map.spawns.forEach((list, team) => {
     g.fillStyle = colors[team];
     for (const p of list) g.fillRect(p.x * k - 1.5, p.z * k - 1.5, 3, 3);
   });

@@ -98,7 +98,8 @@ export function matchHeader(data) {
     score = { kind: 'one', label: 'Survivors', value: survivors, mineCss: TEAMS[0]?.css };
   } else if (rules === 'snd' || rules === 'ctl' || rules === 'gf') {
     const m = score.mine, t = score.them;
-    line = outcome === 'win' ? `Won ${m} rounds to ${t}` : outcome === 'loss' ? `Lost ${m} rounds to ${t}` : `Level at ${m} rounds each`;
+    const rd = n => `${n} round${n === 1 ? '' : 's'}`;
+    line = outcome === 'win' ? `Won ${rd(m)} to ${t}` : outcome === 'loss' ? `Lost ${rd(m)} to ${t}` : `Level at ${rd(m)} each`;
   } else if (rules === 'ctf') {
     const caps = `${plural(score.mine, 'capture')} to ${score.them}`;
     line = outcome === 'win' ? `Won ${caps}` : outcome === 'loss' ? `Lost ${caps}` : `Level at ${caps}`;

@@ -55,7 +55,8 @@
  *            Challenges.list(period) -> [{id,period,label,icon,goal,xp,value,done}]  period: 'daily'|'weekly'
  *            Challenges.endsAt(period) -> ms   canReroll()   reroll(id) -> new id | null
  *            Challenges.apply(counts) -> {moved, xp}   used by js/game/awards.js only; it pays the XP through applyMatch.
- * History    MatchHistory.list() -> newest first, at most 20 (cleanHistoryEntry shape)   add(entry)   clear()
+ * History    MatchHistory.list() -> newest first, at most HISTORY_MAX (cleanHistoryEntry shape; the newest HISTORY_DETAIL
+ *            keep their detail `d`)   add(entry)   clear()
  */
 
 // Everything that outlives a match, in one versioned localStorage save. Private browsing can throw on any
@@ -77,7 +78,7 @@ import {
   blankWeapon, blankSave, sanitizeSave, migrateV1, migrateSave, cleanLoadout, encodeSave, decodeSave, badgeSvg,
   proStatus, applyProGains, isVeteran, CARDS, CARD_IDS, cardsEarned, getCard,
   sanitizeChallengeState, challengeList, canReroll, rerollChallenge, applyChallengeTally, periodEnd, CHALLENGE_PERIODS,
-  cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX, goldenStatus, GOLDEN_REQUIREMENT,
+  cleanHistory, cleanHistoryEntry, HISTORY_VERSION, HISTORY_MAX, HISTORY_DETAIL, goldenStatus, GOLDEN_REQUIREMENT,
   MASTERY_TRACKS, getTrack, trackStatus, ladderStatus, masteryRewards, operatorSkins, applyMasteryGains,
   unlockChallenge, itemOpen, UNLOCK_CHALLENGES, addLife,
   recordCareer, careerWeek, masteryCompleted, blankCareer,
@@ -1025,6 +1026,7 @@ export const MatchHistory = {
     const h = history();
     h.list.unshift(e);
     h.list.length = Math.min(h.list.length, HISTORY_MAX);
+    for (const old of h.list.slice(HISTORY_DETAIL)) delete old.d;      // Older matches keep the summary only.
     write(HISTORY_KEY, JSON.stringify({ v: HISTORY_VERSION, list: h.list }));
     return e;
   },

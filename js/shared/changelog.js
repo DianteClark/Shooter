@@ -15,6 +15,16 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1118-5', date: '2026-11-18', title: 'Match details',
+    items: [
+      'History: tap any match to open its details. The header shows the mode, map, result, date, length and the XP you earned.',
+      'A map of the match marks where you got your kills and where you went down, with a line to where you were shot from.',
+      'Your guns that match: kills, deaths, damage, accuracy, headshots and how long you held each one.',
+      'Medals earned, streaks called and the challenges you moved, plus each mode\'s own story: battle royale and Rebound placing and loot, Extraction contracts banked, Graveyard Shift rounds and escape, and Showdown round by round.',
+      'History now keeps your last 50 matches; the newest 40 keep their full details. Use Newer and Older to step between matches.',
+    ],
+  },
+  {
     build: '1118-4', date: '2026-11-18', title: 'Weekend tournaments',
     items: [
       'Weekend cups: every Friday from 18:00 to Sunday midnight, Multiplayer\'s Spotlight has a tournament. Eight squads, single elimination: you and your squad against seven clans, quarter-final, semi-final and final.',

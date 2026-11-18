@@ -2251,8 +2251,58 @@ export function applyChallengeTally(state, counts, now = new Date()) {
 // The last HISTORY_MAX matches, newest first, built by MatchAwards at the end of each match and kept by
 // js/ui/progress.js. Versioned: a store from another version starts over.
 export const HISTORY_VERSION = 1;
-export const HISTORY_MAX = 20;
+export const HISTORY_MAX = 50;
+// The newest HISTORY_DETAIL entries also keep `d`, the match detail (cleanHistoryDetail); older ones keep the summary.
+export const HISTORY_DETAIL = 40;
+// Spots on the match detail's map, whole metres: kills [x, z] where the victim fell, deaths [x, z, fromX, fromZ] where
+// you fell and where the killer stood (just [x, z] for a death without one: a fall, the zone, your own grenade).
+export const HISTORY_SPOTS = { kills: 30, deaths: 20 };
 const RESULTS = ['win', 'loss', 'draw'];
+const ROUND_MARKS = /^[wld]{0,16}$/;
+
+// The match detail (V7 history detail, 2026-11): map spots, medals, streaks called, challenge progress, the gun stats
+// record's time (js/game/telemetry.js GunStats.match) and the mode's own numbers. Everything optional; null if empty.
+//   gs  telemetry record `at`            k / x  kill and death spots (HISTORY_SPOTS)     md  {medal: n}
+//   sk  streak kinds called, in order    ch     [[challenge id, before, after]]
+//   br  {place, of, dmg, rev, knocks, guns, rar, items}   battle royale and Rebound: placing and loot picked up
+//   ex  {out, c: [[type, tier]], lost, lives}             extraction: contracts banked (or lost)
+//   zm  {round, survived, escaped, warden, fresh}         Graveyard Shift
+//   sd  'wlw...'                                          Showdown: each round won, lost or drawn, in order
+export function cleanHistoryDetail(raw) {
+  if (!isObj(raw)) return null;
+  const n = v => count(v, 1e6), m = v => (Number.isFinite(v) ? Math.max(-9999, Math.min(9999, Math.round(v))) : null);
+  const spot = (p, len) => (Array.isArray(p) && p.length >= len ? p.slice(0, len).map(m) : null);
+  const d = {};
+  if (Number.isFinite(raw.gs) && raw.gs > 0) d.gs = raw.gs;
+  const k = (Array.isArray(raw.k) ? raw.k : []).map(p => spot(p, 2)).filter(p => p && !p.includes(null)).slice(0, HISTORY_SPOTS.kills);
+  const x = (Array.isArray(raw.x) ? raw.x : []).map(p => spot(p, p?.length >= 4 ? 4 : 2)).filter(p => p && !p.includes(null)).slice(0, HISTORY_SPOTS.deaths);
+  if (k.length) d.k = k;
+  if (x.length) d.x = x;
+  if (isObj(raw.md)) {
+    const md = Object.entries(raw.md).filter(([id, v]) => idText(id) && n(v) > 0).slice(0, 24);
+    if (md.length) d.md = Object.fromEntries(md.map(([id, v]) => [id, n(v)]));
+  }
+  const sk = (Array.isArray(raw.sk) ? raw.sk : []).filter(idText).slice(0, 12);
+  if (sk.length) d.sk = sk;
+  const ch = (Array.isArray(raw.ch) ? raw.ch : []).filter(c => Array.isArray(c) && getChallenge(c[0])).slice(0, 8)
+    .map(([id, b, v]) => [id, n(b), n(v)]);
+  if (ch.length) d.ch = ch;
+  if (isObj(raw.br)) {
+    const b = raw.br;
+    d.br = { place: n(b.place), of: n(b.of), dmg: n(b.dmg), rev: n(b.rev), knocks: n(b.knocks), guns: n(b.guns), rar: count(b.rar, 9), items: n(b.items) };
+  }
+  if (isObj(raw.ex)) {
+    const e = raw.ex;
+    d.ex = { out: !!e.out, c: (Array.isArray(e.c) ? e.c : []).filter(c => Array.isArray(c) && idText(c[0])).slice(0, 8).map(([t, tier]) => [t, count(tier, 9)]),
+      lost: n(e.lost), lives: n(e.lives) };
+  }
+  if (isObj(raw.zm)) {
+    const z = raw.zm;
+    d.zm = { round: n(z.round), survived: n(z.survived), escaped: n(z.escaped), warden: !!z.warden, fresh: !!z.fresh };
+  }
+  if (typeof raw.sd === 'string' && raw.sd && ROUND_MARKS.test(raw.sd)) d.sd = raw.sd;
+  return Object.keys(d).length ? d : null;
+}
 
 // Anything to one valid entry, or null.
 export function cleanHistoryEntry(raw) {
@@ -2262,6 +2312,7 @@ export function cleanHistoryEntry(raw) {
     .map(g => ({ id: g.id, kills: n(g.kills), head: n(g.head), secs: n(g.secs) })) : [];
   const done = Array.isArray(raw.challenges) ? raw.challenges.filter(c => isObj(c) && getChallenge(c.id))
     .slice(0, 6).map(c => ({ id: c.id, xp: n(c.xp) })) : [];
+  const detail = cleanHistoryDetail(raw.d);
   return {
     at: raw.at, map: idText(raw.map) || 'railyard', mode: idText(raw.mode) || 'tdm',
     result: RESULTS.includes(raw.result) ? raw.result : 'draw',
@@ -2272,10 +2323,13 @@ export function cleanHistoryEntry(raw) {
     head: n(raw.head), long: n(raw.long), medals: n(raw.medals), obj: n(raw.obj),
     xp: n(raw.xp), level: Math.max(1, n(raw.level)), levelUp: !!raw.levelUp, mvp: !!raw.mvp,
     bots: n(raw.bots), humans: n(raw.humans), secs: n(raw.secs), guns, challenges: done,
+    ...(detail ? { d: detail } : {}),
   };
 }
 
 export function cleanHistory(raw) {
   if (!isObj(raw) || raw.v !== HISTORY_VERSION || !Array.isArray(raw.list)) return { v: HISTORY_VERSION, list: [] };
-  return { v: HISTORY_VERSION, list: raw.list.map(cleanHistoryEntry).filter(Boolean).slice(0, HISTORY_MAX) };
+  const list = raw.list.map(cleanHistoryEntry).filter(Boolean).slice(0, HISTORY_MAX);
+  for (const e of list.slice(HISTORY_DETAIL)) delete e.d;
+  return { v: HISTORY_VERSION, list };
 }

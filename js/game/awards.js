@@ -13,7 +13,7 @@
 // `practice = true` (the tutorial) makes finish() record and pay nothing. observe(fn) hands fn(events, view) every
 // frame's events after the awards have seen them, for the tutorial's prompts.
 import { Progress, Challenges, MatchHistory, matchScore } from '../ui/progress.js';
-import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally, MasteryTracker } from '../shared/progression.js';
+import { MATCH_XP, WEAPON_XP, longshotDist, ProTracker, ChallengeTally, MasteryTracker, HISTORY_SPOTS } from '../shared/progression.js';
 import { landingOf, maxThrowRange } from '../sim/equipment.js';
 import { MAPS } from '../shared/map.js';
 import { FFA_TEAM } from '../shared/constants.js';
@@ -64,6 +64,13 @@ export class MatchAwards {
     this.observers = [];
     this.result = null;
     this.outAt = null;
+    // The history's match detail (cleanHistoryDetail): spots on the map, streaks called, battle royale pickups, Showdown
+    // rounds. statsAt: the gun stats record of this match (js/game/match.js sets it from MatchTelemetry.finish).
+    this.spots = { k: [], x: [] };
+    this.called = [];
+    this.loot = { guns: 0, rar: 0, items: 0 };
+    this.rounds = '';
+    this.statsAt = 0;
   }
 
   observe(fn) { this.observers.push(fn); }
@@ -132,6 +139,22 @@ export class MatchAwards {
         case 'kill':
           if (e.by === this.localId && e.target !== this.localId) this.#onKill(e, view);
           if (e.assist === this.localId) this.assists++;
+          this.#spot(e, view);
+          break;
+        case 'streak':
+          if (e.id === this.localId && this.called.length < 12) this.called.push(e.kind);
+          break;
+        case 'brgive':
+          if (e.id === this.localId) { this.loot.guns++; this.loot.rar = Math.max(this.loot.rar, e.r ?? 0); }
+          break;
+        case 'brpick':
+          if (e.id === this.localId) this.loot.items++;
+          break;
+        case 'gf':
+          if (e.kind === 'end' && this.rounds.length < 16) {
+            const mine = view?.players?.find(p => p.id === this.localId)?.team ?? this.team;
+            this.rounds += e.winner === mine ? 'w' : e.winner === -1 || e.winner == null ? 'd' : 'l';
+          }
           break;
         case 'medal':
           if (e.id === this.localId) { this.medals[e.medal] = (this.medals[e.medal] ?? 0) + 1; this.medalCount++; }
@@ -154,6 +177,32 @@ export class MatchAwards {
     for (const fn of this.observers) {
       try { fn(events, view); } catch (err) { console.error('awards observer', err); }
     }
+  }
+
+  // A kill spot (where the victim fell) or a death spot (where this player fell, and where the killer stood).
+  #spot(e, view) {
+    if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) return;
+    const x = Math.round(e.x), z = Math.round(e.z);
+    if (e.target === this.localId) {
+      if (this.spots.x.length >= HISTORY_SPOTS.deaths) return;
+      const k = e.by !== this.localId ? view?.players?.find(p => p.id === e.by) : null;
+      this.spots.x.push(k && Number.isFinite(k.x) && Number.isFinite(k.z) ? [x, z, Math.round(k.x), Math.round(k.z)] : [x, z]);
+    } else if (e.by === this.localId && this.spots.k.length < HISTORY_SPOTS.kills) this.spots.k.push([x, z]);
+  }
+
+  // The match detail for the history (see cleanHistoryDetail in js/shared/progression.js).
+  #detail(view, me, place, challenges, ex, zm) {
+    const d = { gs: this.statsAt || 0, k: this.spots.k, x: this.spots.x, md: { ...this.medals }, sk: this.called,
+      ch: challenges.filter(c => c.value > c.before).map(c => [c.id, c.before, c.value]) };
+    if (view?.br && me) {
+      const st = view.br.stats?.[view.players.indexOf(me)] ?? [0, 0, 0, 0, 0];
+      const of = new Set((view.players ?? []).filter(p => !p.dummy).map(p => p.team)).size;
+      d.br = { place: place || (view.winner === me.team ? 1 : of), of, dmg: st[0], rev: st[1], knocks: st[2], ...this.loot };
+    }
+    if (ex) d.ex = { out: !!ex.extracted, c: (ex.extracted ? ex.banked : []).map(c => [c.type, c.tier]), lost: ex.lost?.length ?? 0, lives: ex.lives };
+    if (zm) d.zm = { round: zm.round, survived: zm.survived, escaped: zm.escaped, warden: !!zm.warden, fresh: !!zm.fresh };
+    if (this.rounds) d.sd = this.rounds;
+    return d;
   }
 
   // Placing in a free-for-all, 1 = first; null in team modes. Ranked as the sim and the results screen rank it: each
@@ -182,7 +231,7 @@ export class MatchAwards {
   }
 
   // The history entry for this match (see cleanHistoryEntry in js/shared/progression.js).
-  #historyEntry(view, me, outcome, place, xpTotal, level, challenges) {
+  #historyEntry(view, me, outcome, place, xpTotal, level, challenges, ex = null, zm = null) {
     const guns = Object.keys({ ...this.held, ...this.weapons })
       .map(id => ({ id, kills: this.weapons[id]?.kills ?? 0, head: this.weapons[id]?.head ?? 0, secs: Math.round(this.held[id] ?? 0) }))
       .filter(g => g.kills > 0 || g.secs >= GUN_SECONDS)
@@ -205,6 +254,7 @@ export class MatchAwards {
       xp: xpTotal, level: level?.after ?? 1, levelUp: (level?.after ?? 0) > (level?.before ?? 0),
       bots: players.filter(p => p.isBot).length, humans: players.filter(p => !p.isBot).length, secs: Math.round(this.live),
       guns, challenges: challenges.filter(c => c.fresh).map(c => ({ id: c.id, xp: c.xp })),
+      d: this.#detail(view, me, place, challenges, ex, zm),
     };
   }
 
@@ -350,7 +400,7 @@ export class MatchAwards {
       });
     } catch (err) { console.error('season', err); }
     let history = null;
-    try { history = MatchHistory.add(this.#historyEntry(view, me, outcome, place, total, applied.level, challenges)); } catch (err) { console.error('match history', err); }
+    try { history = MatchHistory.add(this.#historyEntry(view, me, outcome, place, total, applied.level, challenges, ex, zm)); } catch (err) { console.error('match history', err); }
     this.result = {
       xp: { total, lines },
       level: applied.level,
