@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Weekend tournaments',
+    build: '1118-4', date: '2026-11-18', title: 'Weekend tournaments',
     items: [
       'Weekend cups: every Friday from 18:00 to Sunday midnight, Multiplayer\'s Spotlight has a tournament. Eight squads, single elimination: you and your squad against seven clans, quarter-final, semi-final and final.',
       'The cups take turns: the Team Cup (4 v 4, a different mode each round, with Search and Destroy or Control in the final) and the Showdown Cup (2 v 2 Showdown).',
