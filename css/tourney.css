@@ -82,3 +82,6 @@
 .tc-tn-t.p3, .tc-tn-t.p4 { color: var(--c-gold); box-shadow: inset 0 0 0 1px rgba(255,214,89,.45); }
 #ui .tc-tn-t b { font: 400 13px/1 var(--f-stencil); color: var(--c-chalk); }
 #ui .tc-tn-t small, #ui .tc-tn-t em { font: 400 9px/1.1 var(--f-plate); letter-spacing: .04em; text-transform: uppercase; font-style: normal; color: var(--c-haze); white-space: nowrap; }
+#ui .tn-host { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font: 400 var(--fs-micro)/1.2 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); }
+#ui .tn-host .ico { color: var(--c-blue); flex: none; }
+#ui .chip.tn-room .ico { color: var(--c-gold); }

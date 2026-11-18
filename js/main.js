@@ -54,8 +54,9 @@ import { cleanMods, withHardcore } from './shared/playlist.js';
 // Seasons and ranked (docs/SEASONS.md).
 import { seasonUnlocks } from './ui/season.js';
 // Weekend tournaments (docs/TOURNAMENTS.md).
-import { tourneyScreen, tourneyUnlocks, tourneySpot } from './ui/tourney.js';
+import { tourneyUnlocks, tourneySpot } from './ui/tourney.js';
 import { matchSides, roundTitle } from './shared/tournaments.js';
+import { tourneyAt } from './shared/tourney-items.js';
 import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
 import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
@@ -77,7 +78,7 @@ const REMATCH_SECONDS = 15;
 const VOTE_REVEAL_MS = 1700;
 const RESULTS_MIN_MS = 6000;     // A guest's results stay up at least this long before a vote the host started takes over.
 const REJOIN_MINUTES = 15;       // How long after dropping the title screen still offers the way back.
-const EDIT_SCREENS = ['gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats', 'challenges', 'history'];   // A lobby update must not pull a guest out of these.
+const EDIT_SCREENS = ['tourney', 'gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats', 'challenges', 'history'];   // A lobby update must not pull a guest out of these.
 const LAST_ROOM = 'switchyard-last-room';
 const invite = takeInvite();     // Reads and strips ?join=CODE before anything else looks at the URL.
 const params = new URLSearchParams(location.search);
@@ -327,6 +328,7 @@ menu.on({
   boards: () => openBoards(),
   season: () => openSeason(),
   lobbyRanked: () => setLobbyRanked(!app.lobby.ranked),
+  lobbyTourney: () => openPartyTourney(),
   help: () => openHelp(),
   challenges: () => openChallenges(),
   history: () => openHistory(),
@@ -586,6 +588,7 @@ function localHuman() {
 function renderLobby() {
   if (!app.net) return;
   if (app.isHost && app.customFrom === 'lobby') return;     // The host is in the custom picker; Back repaints.
+  if (app.tnView) return;                                    // On the weekend cup's bracket; Back repaints.
   updateVoiceTeam();
   menu.lobby({
     voice: !!app.voice && app.voice.state !== 'unavailable',
@@ -599,6 +602,7 @@ function renderLobby() {
     custom: app.lobby.custom ?? null,
     br: isBr(roomMode()), brSquad: app.lobby.brSquad ?? 4,
     ranked: rankedRoom(), rankedOn: !!app.lobby.ranked, rankedFull: (app.lobby.humans ?? []).length >= RANKED_PARTY,
+    cup: lobbyCup(),
   });
 }
 
@@ -613,7 +617,7 @@ function setBrSquad(n) {
 
 function broadcastLobby() {
   if (!app.isHost || !app.net) return;
-  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], custom: app.lobby.custom ?? null, brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD, ...(app.lobby.ranked ? { ranked: true } : {}) });
+  app.net.sendLobby({ t: 'state', humans: app.lobby.humans, botSkill: app.lobby.botSkill, mods: app.lobby.mods ?? [], custom: app.lobby.custom ?? null, brSquad: app.lobby.brSquad ?? 4, countdown: app.rematch?.left ?? null, public: app.public, build: BUILD, ...(app.lobby.ranked ? { ranked: true } : {}), ...hostTourney() });
 }
 
 // --- Public rooms: announced to Browse games while public, in the lobby and in a match with a seat to offer ---
@@ -971,6 +975,7 @@ function guestLobbyMessage(msg) {
       app.lobby.custom = msg.custom && typeof msg.custom === 'object' ? msg.custom : null;
       app.lobby.brSquad = cleanBrSquad(msg.brSquad);
       app.lobby.ranked = msg.ranked === true;
+      app.lobby.tn = cleanHostRun(msg.tn);
       app.countdown = msg.countdown ?? null;
       app.public = !!msg.public;
       if (app.voice) updateVoiceTeam();
@@ -994,6 +999,7 @@ function guestLobbyMessage(msg) {
         roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode),
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
         hostId: app.net.hostId, isHost: false, rejoin: !!msg.rejoin, ranked: msg.ranked === true && !msg.rejoin ? {} : null,
+        tourney: guestTourney(msg),
       });
       break;
     case 'refused': {
@@ -1231,7 +1237,7 @@ function findMatch(tab, sel) {
 const squadName = () => `${myName()}'s squad`;
 function openTourney() {
   resetToSolo();
-  tourneyScreen(menu, {
+  menu.tourney({
     onBack: () => renderMp(), onPlay: playTourneyRound, owner: selfId(), name: squadName(),
     onReward: (kind, id) => unlockSheet(menu, kind, id),
   });
@@ -1254,6 +1260,68 @@ function playTourneyRound({ key, round, plan, opponent, bracket }) {
     hostId: id, isHost: true, localId: id,
     tourney: { key, round, title: roundTitle(round, opponent), cup: bracket.cup.name, opponent: opponent.tag ? `[${opponent.tag}] ${opponent.name}` : opponent.name },
   });
+}
+
+// A friend room in the weekend cup: the host's bracket (owner: the host's id), the room's players as the squad (bots take
+// the seats left), every phone's run following the host's. Guests can look at the bracket; the host plays the rounds.
+function lobbyCup() {
+  const info = tourneyAt();
+  if (!info.live || !app.net || app.lobby.custom) return null;
+  return { name: info.cup.name, size: info.cup.size, fits: (app.lobby.humans ?? []).length <= info.cup.size };
+}
+// The host's run, for the guests' view of the bracket: in the room's state messages while a cup is live.
+function hostTourney() {
+  if (!tourneyAt().live) return {};
+  try { const t = Progress.tourney(); return { tn: { ...t.run, owner: t.owner || app.net.localId } }; } catch { return {}; }
+}
+function cleanHostRun(tn) {
+  if (!tn || typeof tn !== 'object' || typeof tn.owner !== 'string') return null;
+  const n = v => (Number.isFinite(v) ? Math.max(0, Math.min(3, v | 0)) : 0);
+  return { entered: !!tn.entered, out: !!tn.out, champion: !!tn.champion, canReenter: !!tn.canReenter, roundsWon: n(tn.roundsWon), entriesLeft: n(tn.entriesLeft), best: n(tn.best), round: tn.round === null ? null : n(tn.round), owner: tn.owner.slice(0, 24) };
+}
+// A guest's tournament round from the host's start message: this phone's run follows the host's bracket.
+function guestTourney(msg) {
+  const t = msg.tourney;
+  if (!t || msg.rejoin || typeof t.owner !== 'string' || !Number.isInteger(t.key) || !Number.isInteger(t.round) || t.round < 0 || t.round > 2) return null;
+  try { Progress.joinTourney(t.key, t.owner, t.round); } catch (err) { console.error('tourney', err); return null; }
+  return { key: t.key, round: t.round, title: String(t.title ?? '').slice(0, 60), cup: String(t.cup ?? '').slice(0, 30), opponent: String(t.opponent ?? '').slice(0, 40) };
+}
+function openPartyTourney() {
+  if (!app.net) return;
+  const hostId = app.net.hostId ?? app.net.localId;
+  const hostName = app.lobby.humans.find(h => h.id === hostId)?.name ?? 'Host';
+  app.tnView = true;
+  menu.tourney({
+    onBack: () => { app.tnView = false; renderLobby(); }, onPlay: playTourneyParty, party: true,
+    owner: app.isHost ? app.net.localId : app.lobby.tn?.owner ?? hostId, name: `${hostName}'s squad`,
+    hostRun: app.isHost ? null : app.lobby.tn ?? { entered: false, out: false, champion: false, canReenter: false, roundsWon: 0, entriesLeft: 2, best: 0, round: null },
+    hostName: app.isHost ? null : hostName,
+    onReward: (kind, id) => unlockSheet(menu, kind, id),
+  });
+}
+function playTourneyParty({ key, round, plan, opponent, bracket }) {
+  const net = app.net;
+  if (!net || !app.isHost) return;
+  const size = bracket.cup.size;
+  if (app.lobby.humans.length > size) { menu.toast(`The ${bracket.cup.name} seats ${size} a squad`, 'warn'); return; }
+  app.tnView = false;
+  stopRematch();
+  stopVote();
+  const clean = app.lobby.humans.map(({ id, name, primary, camo, loadout, badge }) => ({ id, name, team: 0, primary, camo, loadout, badge }));
+  const seed = randomSeed();
+  const pool = poolFor(clean);
+  const sides = matchSides(bracket, round, opponent, { humans: clean.length, target: pool.target ?? undefined, seed });
+  const roster = pickBotsForMatch({ humans: clean, mode: plan.mode, mapId: plan.mapId, seed, pool: { ...pool, sides } });
+  if (!Progress.startTourneyRound(key, round)) { menu.toast('That round is not open', 'warn'); return; }
+  app.lastPick = { tourney: true, party: true };
+  const tourney = { key, round, owner: net.localId, title: roundTitle(round, opponent), cup: bracket.cup.name, opponent: opponent.tag ? `[${opponent.tag}] ${opponent.name}` : opponent.name };
+  const payload = {
+    t: 'start', seed, mapId: plan.mapId, mode: plan.mode, mods: [],
+    scoreLimit: LIMIT_OVERRIDE || plan.scoreLimit, timeLimit: TIME_OVERRIDE || plan.timeLimit,
+    roster: withBadges(roster, clean, seed), tourney,
+  };
+  net.sendLobby(payload);
+  beginMatch({ ...payload, hostId: net.localId, isHost: true });
 }
 
 // The pre-match lobby: the same vote screen a friend room uses, with the other players' ballots coming in as it runs.
@@ -1830,6 +1898,7 @@ function rematchChoice() {
   if (app.match?.headless) return { rematchLabel: 'Rematch', rematchSub: 'When your room\'s match ends' };
   if (app.net) {
     if (!app.isHost) return { rematchLabel: 'Ready', rematchSub: 'The host starts the next match' };
+    if (pick?.tourney && pick.party) return { rematchLabel: 'Bracket', rematchSub: 'The weekend cup, with your room' };
     const n = app.lobby.humans.length;
     return { rematchLabel: 'Rematch', rematchSub: app.lobby.custom ? place(app.lobby.custom.mapId, app.lobby.custom.mode) || 'Same room' : `Same room · ${n} player${n === 1 ? '' : 's'} · map vote` };
   }
@@ -1850,6 +1919,7 @@ function afterResults() {
   if (!app.net) return rematchSolo();
   if (app.vote && !app.isHost) return renderVote();   // The host has already opened the next vote.
   const me = localHuman();
+  if (app.isHost && app.lastPick?.tourney && app.lastPick.party) return openPartyTourney();
   if (app.isHost) {
     for (const h of app.lobby.humans) h.ready = !!h.host;
     startRematchCountdown();

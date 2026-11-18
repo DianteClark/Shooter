@@ -572,17 +572,18 @@ test('a whole career: every unlock that opens is stamped on the results once, an
   assert.deepEqual(silent.slice(0, 40), [], `opened without a stamp (${silent.length})`);
 });
 
-test('after that career everything not tied to a season is open, in every menu', () => {
+// Weekend tournament rewards (docs/TOURNAMENTS.md) come only from playing the cups, like a season's.
+test('after that career everything not tied to a season or a tournament is open, in every menu', () => {
   const o = opened();
-  const lockedCards = CARDS.filter(c => !c.season && !o.card.has(c.id)).map(c => c.id);
+  const lockedCards = CARDS.filter(c => !c.season && c.group !== 'Tournament' && !o.card.has(c.id)).map(c => c.id);
   assert.deepEqual(lockedCards, [], 'calling cards still locked');
   assert.deepEqual(OPERATORS.filter(op => !o.operator.has(op.id)).map(op => op.id), [], 'operators');
-  const camoLocked = WEAPON_IDS.filter(w => w !== GOLDEN_ID).flatMap(w => Progress.camos(w).filter(c => !c.unlocked && !c.camo.season).map(c => `${w}/${c.camo.id}`));
+  const camoLocked = WEAPON_IDS.filter(w => w !== GOLDEN_ID).flatMap(w => Progress.camos(w).filter(c => !c.unlocked && !c.camo.season && !c.camo.tourney).map(c => `${w}/${c.camo.id}`));
   assert.deepEqual(camoLocked.slice(0, 20), [], `camos (${camoLocked.length})`);
   const skinLocked = SKINS.filter(s => !s.season && !o.skin.has(s.id)).map(s => s.id);
   assert.deepEqual(skinLocked, [], 'skins');
   // Champion (a feat emblem) is the best ranked division ever reached: checked with a ranked save below.
-  assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && e.id !== 'feat-champion' && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
+  assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && !e.tourney && e.id !== 'feat-champion' && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
   assert.deepEqual(FINISHERS.filter(f => !f.unlock.season && !o.finisher.has(f.id)).map(f => f.id), [], 'finishers');
   assert.deepEqual(EMOTES.filter(f => !f.unlock.season && !o.emote.has(f.id)).map(f => f.id), [], 'emotes');
   assert.deepEqual(Object.entries(GEAR_KINDS).flatMap(([k, t]) => Object.keys(t).map(id => `${k}:${id}`)).filter(k => !o.gear.has(k)), [], 'gear');

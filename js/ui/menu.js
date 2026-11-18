@@ -15,6 +15,7 @@ import { OperatorsScreen } from './operatorscreen.js';
 import { voteMarkup, paintVote, soloMarkup, paintSolo } from './vote.js';
 import { squadMarkup, paintVoteSquad } from './br-squad.js';
 import { botMatchSummary } from './botsettings.js';
+import { tourneyScreen } from './tourney.js';
 import { mpMarkup, paintMp, searchMarkup, customHead, trainingMarkup, paintTraining, customLine } from './playscreens.js';
 import { followMapArt } from './mapthumb.js';
 import { Gunsmith } from './gunsmith.js';
@@ -336,7 +337,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false, voice = false } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false, voice = false, cup = null } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -398,6 +399,7 @@ export class Menu {
         <button class="chip" data-act="loadout">${ico('loadout')}<b>${esc(Progress.loadouts()[Progress.activeLoadout].name)}</b></button>
         ${custom ? '' : rankedOn && rankedFull ? '' : modsChip(mods, { fixed: !isHost })}
         ${!custom && !br && rankedFull ? `<button class="chip rk-room${rankedOn ? ' on' : ''}" ${isHost ? 'data-act="lobbyRanked"' : 'disabled'}>${ico('ui:rank')}<span><small>${rankedOn ? 'Ranked room' : 'Full room'}</small><b>${rankedOn ? 'Ranked: on' : isHost ? 'Make ranked' : 'Unranked'}</b></span></button>` : ''}
+        ${cup ? `<button class="chip tn-room${cup.fits ? ' on' : ''}" data-act="lobbyTourney">${ico('ui:cup')}<span><small>${cup.fits ? 'Weekend cup' : `Up to ${cup.size} players`}</small><b>${esc(cup.name)}</b></span></button>` : ''}
         <button class="chip" data-act="gunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
         <button class="chip" data-act="operators">${ico('operator')}<b>Operators</b></button>
         ${start}
@@ -544,6 +546,13 @@ export class Menu {
   season(opts) {
     this.#stopPreview();
     seasonScreen(this, opts);
+  }
+
+  // Weekend tournaments (js/ui/tourney.js): the bracket, often straight from the results screen.
+  tourney(opts) {
+    this.#stopPreview();
+    this.#endReel();
+    return tourneyScreen(this, opts);
   }
 
   challenges(opts) {

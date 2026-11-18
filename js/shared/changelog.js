@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'Weekend tournaments',
+    items: [
+      'Weekend cups: every Friday from 18:00 to Sunday midnight, Multiplayer\'s Spotlight has a tournament. Eight squads, single elimination: you and your squad against seven clans, quarter-final, semi-final and final.',
+      'The cups take turns: the Team Cup (4 v 4, a different mode each round, with Search and Destroy or Control in the final) and the Showdown Cup (2 v 2 Showdown).',
+      'The bracket shows every squad with its clan tag. Other results fill in as you go, and each round gets tougher. The match intro names the round and who you are up against.',
+      'Lose and your run is over for the weekend, but you get one re-entry. Leaving a round part-way through counts as a loss.',
+      'Bring friends: host a room and tap the cup in the lobby to play the rounds together. Everyone in the room sees the same bracket.',
+      'Rewards: XP for every round you win, a calling card for entering, the semi-final, the final and winning, and for champions a crest emblem and the animated Champion\'s Laurel camo for every gun.',
+      'Trophy Case: a new Tournaments shelf lists every weekend you played, with the cup and how far you got.',
+    ],
+  },
+  {
     build: '1113-5', date: '2026-11-13', title: 'Steadier sticks, clearer streaks',
     items: [
       'The move stick keeps steering while you throw. Holding the stick still at full sprint and pressing a grenade could stop you dead for a moment; it no longer does, however the fingers land, drag, cancel or lift.',

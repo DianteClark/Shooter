@@ -84,8 +84,8 @@ function rewardsHtml(best, weekBest) {
 }
 
 // state for the side panel: what the player can do now.
-function sideHtml(t, b, res, { party }) {
-  const info = t.info, r = t.run;
+function sideHtml(t, b, res, { party, r, hostName }) {
+  const info = t.info;
   let kick, line, sub = '', btn = '';
   if (!info.live) {
     kick = 'Next weekend';
@@ -99,10 +99,11 @@ function sideHtml(t, b, res, { party }) {
     line = roundTitle(res.next.round, res.next.opponent);
     sub = planLine(plan);
     const label = r.entered ? `Play ${ROUND_NAMES[res.next.round]}` : 'Enter and play';
-    btn = `<button class="btn is-primary tn-play" data-act="tnPlay" data-sound="confirm">${ico('play')}<span><b>${esc(label)}</b><small>${party ? `With your party · ${esc(sub)}` : esc(sub)}</small></span></button>`;
+    btn = hostName ? `<p class="tn-host">${ico('ui:party', '', 14)}<span>${esc(hostName)} starts each round for the room</span></p>`
+      : `<button class="btn is-primary tn-play" data-act="tnPlay" data-sound="confirm">${ico('play')}<span><b>${esc(label)}</b><small>${party ? `With your room · ${esc(sub)}` : esc(sub)}</small></span></button>`;
   } else if (r.canReenter) {
     kick = 'Knocked out'; line = `Out in the ${ROUND_NAMES[r.roundsWon]}`; sub = `One re-entry left this weekend: back to the quarter-final.`;
-    btn = `<button class="btn is-primary tn-play" data-act="tnReenter" data-sound="confirm">${ico('reload')}<span><b>Re-enter</b><small>${MAX_ENTRIES - 1} re-entry a weekend</small></span></button>`;
+    btn = hostName ? '' : `<button class="btn is-primary tn-play" data-act="tnReenter" data-sound="confirm">${ico('reload')}<span><b>Re-enter</b><small>${MAX_ENTRIES - 1} re-entry a weekend</small></span></button>`;
   } else {
     kick = 'Knocked out'; line = `Out in the ${ROUND_NAMES[r.roundsWon] ?? 'Final'}`; sub = `Best this weekend: ${placeName(r.best) || 'none'}. The next cup opens Friday.`;
   }
@@ -120,14 +121,18 @@ function sideHtml(t, b, res, { party }) {
 // The bracket screen. owner: whose bracket (this player's id, or the party host's); name: that squad's name; party:
 // true in a friend room (the host plays the rounds with everyone in it). onPlay({ key, round, plan, opponent, bracket,
 // enter }) starts a round (enter: this tap enters or re-enters the cup first).
-export function tourneyScreen(menu, { onBack, onPlay, owner, name, party = false, onReward = null }) {
+// hostRun / hostName: a guest in a friend room looks at the host's run (runStatus shape, from the room's state) and
+// cannot play the rounds.
+export function tourneyScreen(menu, { onBack, onPlay, owner, name, party = false, onReward = null, hostRun = null, hostName = null }) {
   const render = (fresh = false) => {
     menu.el.dataset.screen = 'tourney';
     const now = new Date(), t = Progress.tourney(now), info = t.info;
     const key = info.live ? info.key : info.next.key;
-    const runOwner = info.live && t.owner ? t.owner : owner;
+    const r = hostRun ?? t.run;
+    // A run already under way in someone's bracket (a party round in the host's) shows that bracket.
+    const runOwner = hostRun ? owner : info.live && t.owner && t.run.entered ? t.owner : owner;
     const b = bracketFor(key, runOwner, { name });
-    const run = info.live && t.run.entered ? { roundsWon: t.run.roundsWon, out: t.run.out } : null;
+    const run = info.live && r.entered ? { roundsWon: r.roundsWon, out: r.out } : null;
     const res = resolveBracket(b, run, { all: false });
     const shown = shownBracket(res);
     const champ = res.reveal >= 3 ? res.champion : null;
@@ -136,7 +141,7 @@ export function tourneyScreen(menu, { onBack, onPlay, owner, name, party = false
       ${header({ back: 'tnBack', label: 'Back', title: `${b.cup.name}${info.live ? '' : ' · preview'}`, cls: 'tn-bar', extra: `<span class="hdr-tag tn-left${info.live ? ' live' : ''}">${tag}</span>` })}
       <div class="tn-wrap" data-cup="${b.cup.id}">
         <div class="tn-main scroll-x">${bracketHtml(b, shown, champ)}</div>
-        <aside class="tn-side scroll-y" data-in="left">${sideHtml(t, b, res, { party })}</aside>
+        <aside class="tn-side scroll-y" data-in="left">${sideHtml(t, b, res, { party, r, hostName })}</aside>
       </div>`;
     if (fresh) stagger(menu.el.querySelectorAll('.tn-m'), 'up', { step: 18, max: 8 });
     const forfeit = Progress.takeForfeit();
@@ -148,6 +153,7 @@ export function tourneyScreen(menu, { onBack, onPlay, owner, name, party = false
     view = render();
     const { b, res, t } = view;
     if (!t.info.live) { menu.toast('The cup is not open yet'); return; }
+    if (hostName) return;
     if (enter) {
       if (!Progress.enterTourney(owner)) { menu.toast('No entries left this weekend', 'warn'); return; }
       view = render();
