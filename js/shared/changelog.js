@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'Fresh start',
+    items: [
+      'Fresh start: all progress has been reset for everyone. Levels, prestige, unlocks, mastery, stats, match history, records, friends\' cards, challenges and season and ranked progress all start again from zero, and your callsign is asked again.',
+      'Your settings were kept: graphics, sound, controls and touch layout, HUD size, accessibility, controller buttons, vibration and full screen.',
+      'Everyone starts level 1 together, the bot players on the leaderboards too: from the reset day they climb day by day, so the boards fill up again as everyone plays. They still play exactly as well as before.',
+      'The current season carries on by date, but season tiers, Ranked placements and SR start fresh.',
+      'Save codes made before the reset no longer load. Codes made from now on work as before.',
+    ],
+  },
+  {
     build: '1118-1', date: '2026-11-18', title: 'Weekly events',
     items: [
       'Weekly events: every Monday a new event takes over the top of Multiplayer for the week, with three or four challenges of its own and a calling card or emblem for finishing them all. Event matches also pay 10% more XP.',
