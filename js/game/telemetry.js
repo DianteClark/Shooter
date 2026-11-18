@@ -503,7 +503,9 @@ export function decodeStatsCode(code) {
     };
     let listed = null;
     for (const p of parts.slice(2)) {
-      const [key, pm, body] = p.split(':');
+      // Only the first two colons split: gear rows inside the body are named like 'eq:frag'.
+      const c1 = p.indexOf(':'), c2 = p.indexOf(':', c1 + 1);
+      const key = p.slice(0, c1), pm = c2 < 0 ? p.slice(c1 + 1) : p.slice(c1 + 1, c2), body = c2 < 0 ? '' : p.slice(c2 + 1);
       if (key === 'b') {
         // pm holds the build list here.
         listed = pm.split(',').filter(Boolean).map((item, order) => {
