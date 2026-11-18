@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Six new operators',
+    build: '1118-3', date: '2026-11-18', title: 'Six new operators',
     items: [
       'Six new operators, each unlocked by a challenge in a different mode: Skylark (finish top 5 in Rebound 10 times), Gambit (win 10 Showdown matches), Corvid (kill 500 in Graveyard Shift), Linnet (extract 25 times in Extraction), Garrison (get 300 kills in Ground War) and Brigid (win 10 Ranked matches).',
       'Each has their own look, a field skin, four mastery skins and a signature emote at mastery tier 3: Ripcord, Heads or Tails, Last Rites, Empty Pockets, Advance and Podium. Once earned, a signature emote joins your emote wheel and plays on any operator.',
