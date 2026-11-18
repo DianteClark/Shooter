@@ -189,7 +189,7 @@
 .hm-key { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px var(--sp-3); font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; white-space: nowrap; }
 .hm-key span { display: flex; align-items: center; gap: 5px; }
 .hm-key i { width: 9px; height: 9px; }
-.hm-key .k { background: var(--c-gold); transform: rotate(45deg) scale(.85); }
+.hm-key .k { background: var(--c-gold); border-radius: 50%; }
 .hm-key .x { background: linear-gradient(45deg, transparent 40%, var(--c-red) 40% 60%, transparent 60%), linear-gradient(-45deg, transparent 40%, var(--c-red) 40% 60%, transparent 60%); }
 .hm-key .l { height: 0; width: 14px; border-top: 2px dashed #ff8a7d; }
 .hm-side { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }

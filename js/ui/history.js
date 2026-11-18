@@ -137,7 +137,7 @@ function spotsSvg(map, d) {
   const W = map.width, H = map.height, r = Math.max(W, H) / 70;
   const deaths = (d?.x ?? []).map(([x, z, kx, kz]) => `<g class="hm-death">${kx !== undefined ? `<line x1="${kx}" y1="${kz}" x2="${x}" y2="${z}"/><circle class="hm-from" cx="${kx}" cy="${kz}" r="${r * 0.45}"/>` : ''}
     <path d="M${x - r} ${z - r}L${x + r} ${z + r}M${x + r} ${z - r}L${x - r} ${z + r}"/><path class="c" d="M${x - r} ${z - r}L${x + r} ${z + r}M${x + r} ${z - r}L${x - r} ${z + r}"/></g>`).join('');
-  const kills = (d?.k ?? []).map(([x, z]) => `<path class="hm-kill" d="M${x} ${z - r * 1.15}L${x + r * 1.15} ${z}L${x} ${z + r * 1.15}L${x - r * 1.15} ${z}Z"/>`).join('');
+  const kills = (d?.k ?? []).map(([x, z]) => `<circle class="hm-kill" cx="${x}" cy="${z}" r="${r * 0.9}"/>`).join('');
   return `<svg class="hm-spots" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${deaths}${kills}</svg>`;
 }
 
