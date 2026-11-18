@@ -53,6 +53,9 @@ import { modsSheet, soloMods } from './ui/modifiers.js';     // Modes overhaul: 
 import { cleanMods, withHardcore } from './shared/playlist.js';
 // Seasons and ranked (docs/SEASONS.md).
 import { seasonUnlocks } from './ui/season.js';
+// Weekend tournaments (docs/TOURNAMENTS.md).
+import { tourneyScreen, tourneyUnlocks, tourneySpot } from './ui/tourney.js';
+import { matchSides, roundTitle } from './shared/tournaments.js';
 import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
 import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
@@ -345,6 +348,7 @@ menu.on({
     renderMp();
   },
   mpFind: () => findMatch(app.mp.tab, mpSel()),
+  mpTourney: () => needName(openTourney),
   // The Hardcore switch: saved on this device, on top of every pick it fits (and a room this phone hosts).
   mpHardcore: () => { Options.set('hardcore', !Options.get('hardcore')); renderMp(); },
   mpCancel: () => { stopSearch(); renderMp(); },
@@ -1223,6 +1227,35 @@ function findMatch(tab, sel) {
   };
 }
 
+// --- Weekend tournaments (docs/TOURNAMENTS.md): the bracket screen, then each round straight into its match ---
+const squadName = () => `${myName()}'s squad`;
+function openTourney() {
+  resetToSolo();
+  tourneyScreen(menu, {
+    onBack: () => renderMp(), onPlay: playTourneyRound, owner: selfId(), name: squadName(),
+    onReward: (kind, id) => unlockSheet(menu, kind, id),
+  });
+}
+
+// A round of the player's run: their squad (pool teammates) against the clan in the bracket, on the round's mode and
+// map, no vote. Starting it marks the round as being played, so leaving it counts as a loss.
+function playTourneyRound({ key, round, plan, opponent, bracket }) {
+  resetToSolo();
+  const id = 'local', seed = randomSeed();
+  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  const pool = poolFor(humans);
+  const sides = matchSides(bracket, round, opponent, { humans: humans.length, target: pool.target ?? undefined, seed });
+  const roster = pickBotsForMatch({ humans, mode: plan.mode, mapId: plan.mapId, seed, pool: { ...pool, sides } });
+  app.lastPick = { tourney: true };
+  if (!Progress.startTourneyRound(key, round)) { menu.toast('That round is not open', 'warn'); openTourney(); return; }
+  beginMatch({
+    roster: withBadges(roster, humans, seed), seed, mapId: plan.mapId, mode: plan.mode, mods: [],
+    scoreLimit: LIMIT_OVERRIDE || plan.scoreLimit, timeLimit: TIME_OVERRIDE || plan.timeLimit,
+    hostId: id, isHost: true, localId: id,
+    tourney: { key, round, title: roundTitle(round, opponent), cup: bracket.cup.name, opponent: opponent.tag ? `[${opponent.tag}] ${opponent.name}` : opponent.name },
+  });
+}
+
 // The pre-match lobby: the same vote screen a friend room uses, with the other players' ballots coming in as it runs.
 function startMpVote(tab, r, size) {
   const options = mpVoteOptions(tab, r.modes, Math.random, { ranked: !!r.ranked });
@@ -1380,6 +1413,7 @@ function pickSoloMode(mode) {
 function rematchSolo() {
   if (app.lastMode === 'range') return startRange();
   if (app.lastPick?.training) return needName(startTraining);
+  if (app.lastPick?.tourney) return needName(openTourney);
   if (app.lastPick?.mp) return needName(() => findMatch(app.lastPick.mp.tab, app.lastPick.mp.sel));
   const pick = app.lastPick, last = app.lastPlayed;
   if (!pick && !last) return startSolo();
@@ -1579,7 +1613,7 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null, ranked = null }) {
+function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null, ranked = null, tourney = null }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
@@ -1600,7 +1634,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   backdrop.stop();
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro, training });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro, training, title: tourney?.title ?? null });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.shownState ?? 'off') : 'hidden', app.voice?.muted);
@@ -1628,6 +1662,9 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   // Ranked (the Ranked playlist, or a full friend room the host made ranked): the rating moves at the end.
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;
+  // A weekend tournament round: the result moves this phone's run (js/game/awards.js).
+  if (tourney && !training && !tutorial) app.match.awards.tourney = { key: tourney.key, round: tourney.round, cup: tourney.cup, opponent: tourney.opponent };
+  app.matchInfo.tourney = tourney;
   app.match.telemetry.mapId = mapId;
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
   hud.onRespawn(msg => app.match?.requestRespawn(msg));
@@ -1757,7 +1794,7 @@ function showResults(results) {
       level: results.level,
       weapons: results.weapons ?? [],
       // Finished challenges get their stamp in the reel first; `challenges` is everything that moved (js/ui/challenges.js).
-      unlocks: [...seasonUnlocks(results.season, results.ranked), ...(results.challenges ?? []).filter(c => c.fresh).map(challengeUnlock), ...(results.unlocks ?? [])],
+      unlocks: [...tourneyUnlocks(results.tourney), ...seasonUnlocks(results.season, results.ranked), ...(results.challenges ?? []).filter(c => c.fresh).map(challengeUnlock), ...(results.unlocks ?? [])],
       challenges: results.challenges ?? [],
       proProgress: results.proProgress ?? [],
       finalKill: lastKill && !results.zm?.escaped ? { weapon: lastKill.weapon, camo: lastKill.camo, byName: killer?.name ?? '', targetName: victim?.name ?? '' } : null,
@@ -1798,6 +1835,7 @@ function rematchChoice() {
   }
   if (app.lastMode === 'range') return { rematchLabel: 'Again', rematchSub: 'Firing range' };
   if (pick?.training) return { rematchLabel: 'Train again', rematchSub: MAPS[app.training.map]?.name ?? 'Training' };
+  if (pick?.tourney) { let sub = ''; try { sub = tourneySpot().sub; } catch { /* the label alone */ } return { rematchLabel: 'Bracket', rematchSub: sub }; }
   if (pick?.mp) {
     let name = '';
     try { name = resolveSelection(pick.mp.tab, pick.mp.sel, { hardcore: !!Options.get('hardcore') }).name; } catch { /* the label alone */ }

@@ -3,7 +3,7 @@
 // Everything is a function of the weekend key and the bracket owner's id, so a reload, or a friend in the owner's party,
 // sees the same bracket, the same rounds and the same results of every bot-against-bot match.
 //
-//   bracketFor(key, owner, { name, rating })   { key, cup, squads[8], rounds[3], ... } (see below)
+//   bracketFor(key, owner, { name })   { key, cup, squads[8], rounds[3], ... } (see below)
 //   resolveBracket(bracket, run)               every match with its two squads and its winner as far as it is known
 //   roundPlan(key)                             the mode, map and limits each round plays that weekend
 //   matchSides(bracket, round, { humans, target, date })   the pool picks for both sides of the player's match
@@ -63,11 +63,12 @@ function lineUp(clan, key, size) {
 }
 const meanMu = list => list.reduce((a, p) => a + p.skill.mu, 0) / Math.max(1, list.length);
 
-// The player's bot teammates for the weekend: players with no clan near the player's level (a little above it: they
-// signed up for a cup), the same all weekend.
-function teammates(key, owner, rating, count, exclude) {
+// The player's bot teammates for the weekend: players with no clan, around a middling level (TEAMMATE_MU: they signed
+// up for a cup), the same all weekend whatever the player's form does (the match blends their rating with the player's).
+const TEAMMATE_MU = 0.4;
+function teammates(key, owner, count, exclude) {
   if (count <= 0) return [];
-  const want = clamp01(rating + 0.06);
+  const want = TEAMMATE_MU;
   const cand = BOT_POOL.filter(p => !clanInfo(p) && !exclude.has(p.id))
     .map(p => ({ p, d: Math.abs(p.skill.mu - want) + unit('tn-mate', key, owner, p.id) * 0.12 }))
     .sort((a, b) => a.d - b.d);
@@ -81,12 +82,11 @@ function teammates(key, owner, rating, count, exclude) {
 }
 
 const cache = new Map();
-// The bracket of a weekend for an owner. name: the owner's squad name; rating: the owner's humanRating (only picks the
-// bot teammates, so a party guest whose phone passes another rating still sees the same clans and results).
+// The bracket of a weekend for an owner. name: the owner's squad name (party guests pass the host's).
 // { key, date ('YYYY-MM-DD' Friday), cup, owner, rounds: roundPlan, squads: [{ slot (0..7, bracket position), seed,
 //   kind: 'you'|'clan', tag, name, members: [profile ids], strength (mean usual rating, clans), skill }] }
-export function bracketFor(key, owner, { name = 'Your squad', rating = HUMAN_BASE } = {}) {
-  const ck = `${key}|${owner}|${name}|${rating}`;
+export function bracketFor(key, owner, { name = 'Your squad' } = {}) {
+  const ck = `${key}|${owner}|${name}`;
   if (cache.has(ck)) return cache.get(ck);
   const cup = cupFor(key), size = cup.size;
   const rng = mulberry32(hash32('tn-bracket', key, owner));
@@ -104,7 +104,7 @@ export function bracketFor(key, owner, { name = 'Your squad', rating = HUMAN_BAS
   // Seeds 2..8 by strength (ties by tag, so the order never depends on the draw).
   clans.sort((a, b) => b.strength - a.strength || (a.tag < b.tag ? -1 : 1));
   const taken = new Set(clans.flatMap(c => c.members));
-  const mates = teammates(key, owner, rating, size - 1, taken);
+  const mates = teammates(key, owner, size - 1, taken);
   const you = { kind: 'you', tag: null, name, members: mates.map(p => p.id), strength: null, skill: null };
   const bySeed = [you, ...clans];
   const squads = SEED_ORDER.map((seed, slot) => ({ ...bySeed[seed - 1], seed, slot }));

@@ -1,0 +1,84 @@
+/* Weekend tournaments (js/ui/tourney.js, docs/TOURNAMENTS.md): the bracket screen, the Spotlight card, the intro's
+   round line, the results stamp and the Trophy Case shelf. Phone landscape first: the bracket takes the width it can
+   (scrolling sideways when the phone is narrow), the run and the rewards sit in a column on the right. */
+#ui .menu[data-screen="tourney"] { gap: var(--sp-2); --menu-scrim: radial-gradient(110% 90% at 30% 0%, rgba(58,44,18,.95), rgba(16,20,26,.97) 70%); }
+#ui .tn-left { white-space: nowrap; }
+#ui .tn-left.live { color: var(--c-gold); }
+.tn-wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 236px; gap: var(--sp-3); }
+.tn-main { min-width: 0; min-height: 0; overflow-x: auto; overflow-y: auto; }
+.tn-bracket { display: grid; grid-template-columns: repeat(3, minmax(124px, 1fr)) minmax(96px, .8fr); gap: var(--sp-2); min-height: 100%; min-width: 480px; }
+.tn-col { display: flex; flex-direction: column; min-width: 0; }
+#ui .tn-col h4 { display: flex; flex-direction: column; gap: 2px; margin: 0 0 var(--sp-1); min-width: 0; }
+#ui .tn-col h4 b { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-sodium); }
+#ui .tn-col h4 small { font: 400 var(--fs-micro)/1.1 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-ms { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: var(--sp-1); }
+.tn-m { display: flex; flex-direction: column; gap: 1px; background: rgba(16,20,26,.6); box-shadow: var(--edge); }
+.tn-m.mine { box-shadow: inset 0 0 0 1px rgba(56,182,255,.55); }
+.tn-sq { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 5px; min-width: 0; background: rgba(42,51,61,.55); }
+.tn-sq .tn-seed { flex: none; width: 11px; font: 400 9px/1 var(--f-plate); font-style: normal; color: var(--c-rail); text-align: right; }
+.tn-sq u { flex: none; text-decoration: none; font: 400 9px/1 var(--f-plate); letter-spacing: .04em; color: var(--c-sodium); }
+.tn-sq u.me { color: var(--c-blue); line-height: 0; }
+.tn-sq b { flex: 1; min-width: 0; font: 400 11px/1 var(--f-body); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-sq em { flex: none; color: var(--c-go); line-height: 0; }
+.tn-sq.you b { color: var(--c-blue); }
+.tn-sq.win { background: rgba(75,209,138,.14); }
+.tn-sq.lose b, .tn-sq.lose u { opacity: .45; }
+.tn-sq.tbd b { color: var(--c-rail); font-style: italic; }
+.tn-cup { align-items: center; gap: 6px; padding: 10px 6px; text-align: center; color: var(--c-gold); }
+#ui .tn-cup b { font: 400 12px/1.1 var(--f-stencil); color: var(--c-chalk); overflow-wrap: anywhere; }
+.tn-cup.mine { box-shadow: inset 0 0 0 2px var(--c-gold); }
+
+.tn-side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-3); }
+.tn-now { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-2) var(--sp-3); background: var(--face-steel); box-shadow: var(--bevel), var(--edge), inset 3px 0 0 var(--c-gold); }
+#ui .tn-kick { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-gold); }
+#ui .tn-line { font: 400 var(--fs-lead)/1.1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); overflow-wrap: anywhere; }
+#ui .tn-sub { font: 400 var(--fs-micro)/1.25 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); }
+#ui .tn-play { margin-top: 4px; min-height: var(--tap-min); justify-content: flex-start; }
+#ui .tn-play span { display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; }
+#ui .tn-play small { font: 400 9px/1.1 var(--f-plate); letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .tn-h { display: flex; align-items: center; gap: 6px; margin: 2px 0 0; font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+#ui .tn-h .ico { color: var(--c-sodium); }
+#ui .tn-h small { margin-left: auto; font: inherit; opacity: .8; }
+.tn-rw { display: flex; flex-direction: column; gap: 4px; }
+#ui .tn-rw-row { position: relative; display: flex; align-items: center; gap: var(--sp-2); padding: 3px 6px 3px 3px; min-height: 40px; background: rgba(16,20,26,.55); box-shadow: var(--edge); color: var(--c-chalk); text-align: left; }
+#ui .tn-rw-row.now { box-shadow: inset 0 0 0 1px rgba(255,215,94,.5); }
+.tn-rw-card { flex: none; width: 74px; line-height: 0; overflow: hidden; }
+.tn-rw-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ui .tn-rw-tx b { font: 400 12px/1 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .tn-rw-tx small { font: 400 9px/1.1 var(--f-plate); letter-spacing: .03em; color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn-ok { flex: none; display: grid; place-items: center; width: 18px; height: 18px; background: var(--c-go); color: var(--c-night); }
+.tn-rw-x { display: flex; gap: 4px; }
+#ui .tn-rw-mini { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; background: rgba(16,20,26,.55); box-shadow: var(--edge); color: var(--c-haze); opacity: .6; }
+#ui .tn-rw-mini.own { opacity: 1; box-shadow: inset 0 0 0 1px rgba(255,215,94,.5); color: var(--c-gold); }
+#ui .tn-rw-mini small { font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; }
+.tn-sw { display: block; width: 22px; height: 22px; transform: rotate(45deg); box-shadow: 0 0 0 1px rgba(255,255,255,.4); }
+@media (max-width: 700px) {
+  .tn-wrap { grid-template-columns: minmax(0, 1fr) 200px; }
+  .tn-rw-card { width: 58px; }
+}
+@media (max-height: 380px) {
+  .tn-sq { height: 20px; }
+}
+
+/* The Spotlight card on Multiplayer > Standard. */
+#ui .mp-pl.tn { min-height: 64px; padding-top: 16px; grid-template-columns: 28px minmax(0, 1fr); }
+#ui .mp-pl.tn::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: repeating-linear-gradient(-45deg, var(--c-rail) 0 6px, var(--c-night) 6px 12px); }
+#ui .mp-pl.tn.live::before { background: repeating-linear-gradient(-45deg, var(--c-gold) 0 6px, var(--c-night) 6px 12px); }
+#ui .mp-pl.tn .mp-brow, #ui .mp-pl.tn .mp-pl-ico .ico { color: var(--c-gold); }
+#ui .mp-pl.tn:not(.live) .mp-brow { color: var(--c-haze); }
+#ui .mp-pl.tn .mp-tick .ico { opacity: 1; }
+
+/* The match intro's round line, under the rules. */
+.in-tn { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; font: 400 var(--fs-caption)/1.1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-gold); }
+
+/* The results reel's tournament stamp. */
+#ui .rx-tn .rx-mark { color: var(--c-gold); line-height: 0; }
+#ui .rx-tn:not(.won) .rx-mark { color: var(--c-haze); }
+
+/* The Trophy Case shelf. */
+.tc-tn { grid-area: tn; display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.tc-tn-row { display: flex; gap: var(--sp-2); overflow-x: auto; padding-bottom: 4px; }
+.tc-tn-t { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 104px; padding: 6px; background: rgba(16,20,26,.6); box-shadow: inset 0 0 0 1px rgba(231,234,228,.18); color: var(--c-haze); }
+.tc-tn-t.p3, .tc-tn-t.p4 { color: var(--c-gold); box-shadow: inset 0 0 0 1px rgba(255,214,89,.45); }
+#ui .tc-tn-t b { font: 400 13px/1 var(--f-stencil); color: var(--c-chalk); }
+#ui .tc-tn-t small, #ui .tc-tn-t em { font: 400 9px/1.1 var(--f-plate); letter-spacing: .04em; text-transform: uppercase; font-style: normal; color: var(--c-haze); white-space: nowrap; }

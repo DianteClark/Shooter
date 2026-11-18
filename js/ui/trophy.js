@@ -18,6 +18,7 @@ import { ico, header } from './yard.js';
 import { icon } from './icons.js';
 import { stagger, pop } from './motion.js';
 import { unlockSheet } from './unlocksheet.js';
+import { tourneyShelf } from './tourney.js';     // Weekend tournaments: the shelf of cups played.
 
 const GUNS = WEAPON_IDS.filter(w => w !== GOLDEN_ID);
 const shown = x => !x.season || x.unlocked;           // A season's item counts once earned, or while it is on offer.
@@ -99,6 +100,7 @@ export function trophyScreen(menu, { onBack }) {
           <h4>${icon('mode:zm', { size: 16 })}Graveyard Shift<small>best round</small></h4>
           <div class="tc-zm">${zm.map(([name, best, f]) => `<div><b>${best || '-'}</b><small>${esc(name)}</small>${f.escaped ? `<em>Escaped ${f.escaped}</em>` : ''}${f.boss ? '<em class="w">Warden</em>' : ''}</div>`).join('')}</div>
         </section>
+        ${(() => { try { return tourneyShelf(); } catch (err) { console.error('tourney shelf', err); return ''; } })()}
         <section class="tc-rare" data-in="up">
           <h4>${ico('star')}Rarest unlocks</h4>
           ${rare.length ? `<div class="tc-rare-row">${rare.map(x => `<button class="tc-tile k-${x.kind}" data-act="tcOpen" data-kind="${x.kind}" data-id="${esc(x.id)}"${x.weapon ? ` data-w="${x.weapon}"` : ''}><span class="tc-art">${x.art}</span><b>${esc(x.name)}</b></button>`).join('')}</div>`

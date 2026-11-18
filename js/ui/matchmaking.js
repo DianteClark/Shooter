@@ -15,6 +15,7 @@ import { MODES } from '../shared/modes.js';
 import { featured, cleanMods, playlistName, withHardcore, hardcoreFits } from '../shared/playlist.js';
 import { eventAt, dateLocked } from '../shared/seasons.js';
 import { RANKED_RULES } from '../shared/ranked.js';
+import { tourneyAt } from '../shared/tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
 import { buildRoster } from '../sim/sim.js';
 import { modeFits, weightedMap, tierOf, BR_PICK } from './vote.js';
 
@@ -75,6 +76,10 @@ export function playlistsFor(tab, date = new Date()) {
       const mods = cleanMods(ev.mods, ev.mode);
       list.splice(1, 0, { id: 'event', name: ev.name, icon: 'ui:timer', modes: [ev.mode], mods, sub: `${playlistName(ev.mode, mods)} · ${ev.daysLeft} day${ev.daysLeft === 1 ? '' : 's'} left`, event: true });
     }
+    // The weekend tournament: live from Friday 18:00 to Sunday midnight, a countdown to the next one otherwise. Its card
+    // opens the bracket (js/ui/tourney.js) rather than becoming a pick.
+    const tn = tourneyAt(date), cup = tn.cup;
+    list.splice(1, 0, { id: 'tourney', name: cup.name, icon: 'ui:cup', modes: [...new Set(cup.rounds.flat())], mods: [], sub: cup.note, tourney: true, live: tn.live });
     const f = featured(date);
     list.push({ id: 'featured', name: f.name, icon: 'star', modes: [f.mode], mods: f.mods, sub: 'A new one every day', featured: true });
   }
@@ -91,7 +96,7 @@ export const HARDCORE_TABS = ['standard', 'groundwar'];
 // What a pick plays: a playlist's modes and modifiers, or the ticked modes (in the tab's order) with none. The Hardcore
 // switch adds Hardcore to the pick (per mode at launch, cleanMods) on the tabs it applies to, never to Ranked.
 export function resolveSelection(tab, sel, { hardcore = false } = {}) {
-  const p = sel?.playlist && playlistsFor(tab).find(x => x.id === sel.playlist);
+  const p = sel?.playlist && playlistsFor(tab).find(x => x.id === sel.playlist && !x.tourney);
   let r;
   if (p) r = { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked, friends: !!p.friends };
   else {

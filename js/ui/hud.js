@@ -723,8 +723,9 @@ export class HUD {
 
   // Call before each match.
   // `training` (Custom > Training): the firing range's readout and armory on an ordinary map.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [], training = null } = {}) {
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [], training = null, title = null } = {}) {
     this.map = MAPS[mapId] ?? this.map;
+    this.introTitle = title;          // A tournament round's name over the map card ("Semi-final vs [VXN] Vexen").
     this.scoreLimit = scoreLimit;
     this.timeLimit = timeLimit;
     this.modeId = mode;                 // As picked, e.g. 'gwdom'.
@@ -862,6 +863,7 @@ export class HUD {
           <div class="in-mode">${glyph(`mode:${mode}`, 15, 'gl in-mode-icon')}<span>${esc(m?.name ?? '')}</span></div>
           <h2>${esc(map?.name ?? '')}</h2>
           <p class="in-rules">${rules}</p>
+          ${this.introTitle ? `<p class="in-tn">${glyph('ui:cup', 13, 'gl')}<span>${esc(this.introTitle)}</span></p>` : ''}
         </div>
         <div class="in-count"><b>3</b></div>
         <p class="in-tip">${esc(m?.desc ?? TIPS[Math.floor(Math.random() * TIPS.length)])}</p>

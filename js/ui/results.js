@@ -17,6 +17,7 @@ import { playlistName } from '../shared/playlist.js';
 import { masteryStamp, masteryStrip } from './mastery.js';
 import { playUi } from '../audio/audio.js';
 import { seasonStrip, seasonStamp } from './season.js';
+import { tourneyStamp } from './tourney.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
 import { matchHeader, ffaStandings, brPlacing, ORDINAL } from './outcome.js';
 
 const FILL_MS = 520;
@@ -521,7 +522,7 @@ function cardsStrip(list) {
 
 function unlockCard(u) {
   // Pro perks and calling cards have their own ceremony (js/ui/cards.js), mastery tiers theirs (js/ui/mastery.js).
-  const special = rankStamp(u) ?? unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u) ?? seasonStamp(u);
+  const special = rankStamp(u) ?? unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u) ?? seasonStamp(u) ?? tourneyStamp(u);
   if (special) return special;
   let mark;
   if (u.kind === 'camo') {

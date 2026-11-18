@@ -451,6 +451,12 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
   }
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(humanEntry);
+  // Fixed sides (weekend tournaments, js/shared/tournaments.js matchSides): [team 0 picks, team 1 picks], seated as given.
+  if (pool.sides) {
+    let n = 0;
+    for (let t = 0; t < 2; t++) for (const p of pool.sides[t] ?? []) roster.push(poolBotEntry(n++, t, p, botSkill, seed));
+    return roster;
+  }
   const open = [0, 1].map(t => Math.max(0, teamSize - roster.filter(r => r.team === t).length));
   const picks = draw(open[0] + open[1]);
   // Even teams, as matchmaking would make them: strongest first, each to the side with the lower total so far, with the

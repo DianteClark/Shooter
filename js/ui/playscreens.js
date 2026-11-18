@@ -15,6 +15,7 @@ import { MP_TABS, playlistsFor, modesFor, resolveSelection, HARDCORE_TABS } from
 import { SKILLS } from './botsettings.js';
 import { Progress } from './progress.js';
 import { rankBadge } from './season.js';      // Seasons: the Ranked playlist wears the player's rank.
+import { tourneySpot } from './tourney.js';     // Weekend tournaments: the cup's card opens its bracket.
 
 // The Ranked playlist's line: the player's division and SR, or how far through placements they are.
 function rankedSub(p) {
@@ -44,8 +45,8 @@ const TAB_NOTE = {
 // The tab's playlists in groups: [{ name, note, items }].
 function mpGroups(tab, lists) {
   if (tab === 'standard') {
-    const spot = lists.filter(p => p.ranked || p.event || p.featured);
-    return [{ id: 'spot', name: 'Spotlight', note: 'Ranked and today\'s featured playlist', items: spot },
+    const spot = lists.filter(p => p.ranked || p.event || p.featured || p.tourney);
+    return [{ id: 'spot', name: 'Spotlight', note: 'Ranked, the weekend cup and today\'s featured playlist', items: spot },
       { id: 'pl', name: 'Playlists', note: '6 v 6 and 2 v 2', items: lists.filter(p => !spot.includes(p)) }];
   }
   if (tab === 'br') {
@@ -58,7 +59,21 @@ function mpGroups(tab, lists) {
 
 const EYEBROW = p => (p.ranked ? 'Ranked' : p.event ? 'Limited event' : p.featured ? 'Featured today' : '');
 
+// The weekend tournament's card: live state or a countdown; a tap opens the bracket.
+function tnCard(p) {
+  let s;
+  try { s = tourneySpot(); } catch (err) { console.error('tourney', err); s = { live: false, brow: 'Weekend tournament', name: p.name, sub: p.sub }; }
+  return `
+          <button class="mp-pl tn${s.live ? ' live' : ''}" data-act="mpTourney" data-in="up" aria-label="${esc(s.name)}">
+            <span class="mp-brow">${esc(s.brow)}</span>
+            <span class="mp-pl-ico">${ico(p.icon)}</span>
+            <span class="mp-pl-tx"><b>${esc(s.name)}</b><small>${esc(s.sub)}</small></span>
+            <i class="mp-tick">${ico('play')}</i>
+          </button>`;
+}
+
 function plCard(p, group, big) {
+  if (p.tourney) return tnCard(p);
   // Under a family's head the card drops the family from its title: "Rebound Quads" reads "Quads" under Rebound.
   const title = group && p.name.startsWith(group.name + ' ') ? p.name.slice(group.name.length + 1) : p.name;
   const brow = EYEBROW(p);
