@@ -465,7 +465,7 @@ test('every new calling card and feat emblem reads a stat the game counts, in it
     assert.ok(e.play?.tab && e.rule.label, `${e.id} play and label`);
     if (e.rule.life && !FEAT_RARE.has(e.rule.life) && !e.rule.life.startsWith('ex:')) out.push(...lifeReach(e.rule.life).map(x => `${e.id}: ${x}`));
   }
-  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 12, 'twelve feat emblems');
+  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 13, 'thirteen feat emblems (Signal Lost: the Listener on Polestar Relay)');
   assert.deepEqual(out, []);
 });
 
@@ -522,7 +522,7 @@ const EX_KEYS = [...new Set(EX_UNLOCKS.map(u => u.key)), 'ex:out'];
 const MAP_LIST = Object.keys(MAPS).filter(m => m !== 'range' && m !== 'brtest');
 // The rewards pass: every map's plays and wins (the map cards' gold tier is 75 wins), every rule set's wins, and every
 // feat tally, so every new card and feat emblem opens over the career; Graveyard Shift's maps get round 31 and an escape
-// on round 26 through applyMatch (matches 84-87), so their cards are stamped too.
+// on round 26 through applyMatch (matches 84 on, one per map; the Listener down in Polestar's), so their cards are stamped too.
 const FEAT_KEYS = ['ace', 'streak10', 'finishers', 'long40', 'gf:flawless', 'inf:survived', 'br:won', 'br:top5', 'br:lone', 'rb:won', 'rb:top5', 'rb:lone', 'ex:clean', 'ex:out', 'zm:kills',
   'ranked:played', 'ranked:won'];
 const RULES = [...new Set(MODE_IDS.map(modeRules))];
@@ -532,14 +532,15 @@ function bigMatch(i) {
   for (const m of MAP_LIST) { life[`map:${m}`] = 2; life[`mapwon:${m}`] = 1; }
   for (const r of RULES) life[`won:${r}`] = Math.max(life[`won:${r}`] ?? 0, 1);
   for (const k of FEAT_KEYS) life[k] = Math.max(life[k] ?? 0, 1);
-  const zmAt = i >= 84 && i < 88 ? ZM_MAPS[i - 84] : null;
+  const zmAt = i >= 84 && i < 84 + ZM_MAPS.length ? ZM_MAPS[i - 84] : null;
   const weapons = Object.fromEntries(WEAPON_IDS.filter(w => w !== GOLDEN_ID).map(w => [w, { xp: 9000, kills: 40, head: 12, long: 6, slide: 8, clean: 16 }]));
   const pro = Object.fromEntries(PERK_IDS.map(p => [p, Object.fromEntries((PRO_CHALLENGES[p] ?? []).map(c => [c.stat, Math.ceil(c.goal / 4)]))]));
   const tracks = Object.fromEntries(MASTERY_TRACKS.map(t => [t.id, Object.fromEntries(t.stats.map(st => [st, Math.ceil(Math.max(...t.tiers.map(c => (c.stat === st ? c.goal : 0)), 1) / 6)]))]));
   const ladder = Object.fromEntries(WEAPON_IDS.map(w => [w, { kills: 60, hurt: 6, multi: 3, run5: 1 }]));
   return { xp: 220000, weapons, pro, mastery: { tracks, weapons: ladder }, life, mapId: zmAt ?? MAP_LIST[i < 80 ? i % 8 : i % MAP_LIST.length], won: true,
     career: { kills: 40, deaths: 20, br: false, place: null, extracted: true }, extracted: true,
-    zmFeat: i === 7 ? { escaped: 21, boss: true } : zmAt ? { escaped: 26, boss: false } : null, zmRounds: zmAt ? 31 : null,
+    // Polestar Relay's boss flag is the Listener's (Dead Air, Signal Lost): put down there in its match.
+    zmFeat: i === 7 ? { escaped: 21, boss: true } : zmAt ? { escaped: 26, boss: zmAt === 'polestar' } : null, zmRounds: zmAt ? 31 : null,
     records: { streak: 5 + (i % 20), long: 20 + (i % 30), brPlace: 1 + (i % 7), exSecs: 600 - i } };
 }
 
