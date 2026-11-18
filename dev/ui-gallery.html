@@ -182,7 +182,15 @@ const SCENES = {
   'help-install': menuScene('Help: Install', ({ menu }) => menu.help({ onBack: noop, tab: 'install' })),
   'help-updates': menuScene('Help: Updates (the changelog, scrolls)', ({ menu }) => menu.help({ onBack: noop, tab: 'updates' })),
   'help-modes': menuScene('Help: Modes (scrolls)', ({ menu }) => menu.help({ onBack: noop, tab: 'modes' })),
-  'stats': menuScene('Stats', async ({ menu }) => { const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop }); }),
+  'stats': menuScene('Stats', async ({ menu }) => {
+    // A few matches in three mode groups, so the mode filter shows (Graveyard Shift stays out of All modes).
+    const { GunStats, FIELDS } = await import('./js/game/telemetry.js');
+    const row = k => FIELDS.map((_, i) => (k * 13 + i * 7) % 60 + 1);
+    GunStats.clear();
+    [['core', 1], ['gw', 2], ['zm', 3], ['core', 4]].forEach(([mg, k]) => GunStats.add({ at: k, b: 'NEXT', map: 'pier', mode: 'tdm', mg, live: 300,
+      pm: { a: 12, h: 1, m: 1 }, g: { a: { ar: row(k), pdw: row(k + 1), shotgun: row(k + 2) }, h: { ar: row(k) }, m: { ar: row(k) } } }));
+    const { statsScreen } = await import('./js/ui/stats.js'); statsScreen(menu, { onBack: noop, onBoards: noop });
+  }),
   // Leaderboards: a played-in save, three friends (one with a long tag, one from last week) and the pool.
   // Seasons and ranked: a played-in season (tiers claimed and some to claim, placed in ranked), on a day in Season 1.
   'title-season': menuScene('Title, in Season 1', async ({ menu }) => { await seedSeason(); menu.title({}); }),
