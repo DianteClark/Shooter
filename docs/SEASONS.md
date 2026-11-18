@@ -57,6 +57,59 @@ A fourth view, Season: the season's window (pool rows from `poolWindow(season st
 from their card's `sn` when it is this season's): kills, K/D (10+ matches), wins, BR wins/top 5, Ranked, Tier. A Ranked
 category in every view (placed players only). Career cards gain an optional `sn` {key, m, k, d, w, brw, br5, t, sr}.
 
+## Weekly events
+One event a week, every week, from `EVENT_EPOCH` (Monday 2026-11-16): Monday 00:00 local to the next Monday, the same on
+every phone for the same local date, round and round the list for ever (no update needed). Owner: events
+(`js/shared/events.js` data, dates, state; `js/ui/eventbanner.js`; the event bits of `js/ui/challenges.js`,
+`js/ui/matchmaking.js`, `js/game/awards.js`). Tests: `node dev/sim-events.mjs [quick]`, `python3 dev/ui-events-test.py
+[port]`; overflow scenes `title-event`, `title-season-event`, `challenges-event`, `mp-event`, `unlock-event` (the
+gallery runs them on 2026-11-25).
+
+| # | Event | Plays | Reward |
+|---|---|---|---|
+| 0 | Gloves Only | Rebound Quads, `gloves`: no guns on the floor or in chests (plates and meds instead), no starting pistol, redeploys with the gloves | card Glass Jaw |
+| 1 | Snipers Only Rebound | Rebound Quads, `snipers`: every floor gun a sniper rifle (the pistol stays) | emblem Long Watch |
+| 2 | Night Graveyard | Graveyard Shift with bots, `night`: the fog every round but the boss rounds, every point paid double | card Lantern Hour |
+| 3 | Pistols at Dawn | TDM, `pistols`: primaries (and a launcher sidearm) become pistols | emblem High Noon Duel |
+| 4 | Gun Game Gauntlet | Hardcore Gun Game | card Every Rung |
+| 5 | Infected Overrun | Ground War Infected | emblem Patient Zero |
+| 6 | Showdown Shuffle | Showdown 2v2 | card Dealt In |
+| 7 | Blade Brawl | Melee Only TDM | emblem Cold Edge |
+| 8 | Iron Hill | Hardcore Hardpoint, No Streaks | card King of the Hill |
+
+- Where: the Multiplayer Spotlight (Standard tab) carries the event's playlist (`wkevent`, eyebrow Weekly event, days
+  left) whichever tab its mode belongs to; Find match takes the lobby size and the maps from that tab (`tab`). The
+  Spotlight's order rule for every builder: a tournament, then the events (weekly, then the season's limited-time one),
+  then Ranked, then the featured playlist (`js/ui/playscreens.js` mpGroups).
+- Challenges: three or four per event, ChallengeTally stats (plus `zm:rounds`, the rounds survived), counted only in
+  matches played from the event's playlist (main.js tags them, `MatchAwards.event`); a match from last week's playlist
+  that ends after Monday midnight counts for nothing. 1,500 XP each, once a week. Event matches pay a 10% bonus on the
+  match's XP (`Weekly event bonus` line). Shown on the title's challenge plate (one line) and in their own panel on the
+  Challenges screen, each with Play (the event playlist).
+- Reward: finishing every challenge pays the event's calling card (group Events) or emblem, once ever; the event coming
+  round again resets the challenges but pays no second reward. Its unlock sheet says how and when the event is next
+  on, shows the challenges done while it runs, and offers Play now only then.
+- Banner: the week's first visit to the title (not on a brand-new save) shows a strip under the wordmark for 8 seconds;
+  a tap opens the playlist. The week a new season or replay opens it announces the season instead (opens the Season
+  screen). Stored per phone (`switchyard.eventSeen`, `switchyard.seasonSeen`).
+- Event modifiers (`js/shared/playlist.js` `EVENT_MODS`) never show in the pickers. `gloves` and `snipers` are the only
+  modifiers battle royale takes (the loot rolls draw the same numbers either way, so every phone's loot table agrees);
+  `night` is Graveyard Shift's alone.
+- Save: `save.season.ev` `{ k: 'w<week>', c: {challengeId: progress}, got: [event ids paid] }`, in the season block (so
+  in the save code); ownership comes from `got`.
+- Adding an event: append to `EVENTS` (never reorder: ids are in saves, and the list order is the rotation, so an
+  appended event changes which event future weeks get). Run `node dev/sim-events.mjs`: it plays the event's mode with its
+  modifiers and checks every challenge moves there and the goals are in reach.
+
+## Season 2 readiness (checked 2026-11-18)
+`dev/sim-seasons.mjs` "season 2" plays the switch through Progress on a mocked clock (Dec 27 22:00 to Dec 28 00:00):
+reached tiers claimed for the player, Season 1 ranked paid, the Signal Fire track (100 tiers, every reward in its
+table, Anti-Materiel and Mako early), Season 2 camos in the picker only from the 28th, six weekly sets (week 2 on Jan 4),
+Lights Out in the Spotlight Jan 4-17 only, placements again from 75% of the SR, the Season boards on the Season 2 window;
+then Season Replay on Feb 8 (Cold Iron fresh, owned rewards stay owned, Cold Snap back, Signal Fire again on Mar 22).
+`dev/ui-events-test.py` checks the same in the page: the new-season banner, the Season chip, the Season screen, Ranked
+placements, What's new. Nothing needed fixing for the switch itself.
+
 ## Save
 `save.season` (appended to v4, no version bump), the save code's 19th entry (null in the 18th when there is no career
 entry). Left out while it only knows the date, so older codes re-export unchanged. Ownership is derived from `cl`
