@@ -14,6 +14,7 @@ import { MAPS, MAP_IDS, SIZES } from '../shared/map.js';
 import { MODES } from '../shared/modes.js';
 import { featured, cleanMods, playlistName, withHardcore, hardcoreFits } from '../shared/playlist.js';
 import { eventAt, dateLocked } from '../shared/seasons.js';
+import { weeklyEventAt } from '../shared/events.js';
 import { RANKED_RULES } from '../shared/ranked.js';
 import { buildRoster } from '../sim/sim.js';
 import { modeFits, weightedMap, tierOf, BR_PICK } from './vote.js';
@@ -75,6 +76,13 @@ export function playlistsFor(tab, date = new Date()) {
       const mods = cleanMods(ev.mods, ev.mode);
       list.splice(1, 0, { id: 'event', name: ev.name, icon: 'ui:timer', modes: [ev.mode], mods, sub: `${playlistName(ev.mode, mods)} · ${ev.daysLeft} day${ev.daysLeft === 1 ? '' : 's'} left`, event: true });
     }
+    // The weekly event (js/shared/events.js): its playlist sits in the Spotlight here whichever tab it plays on (`tab`:
+    // the lobby size and the maps come from there).
+    const we = weeklyEventAt(date), wd = we.def;
+    if (MODES[wd.mode] && !dateLocked('mode', wd.mode, date)) {
+      const mods = cleanMods(wd.mods, wd.mode);
+      list.splice(1, 0, { id: 'wkevent', name: wd.name, icon: wd.icon, modes: [wd.mode], mods, sub: `${playlistName(wd.mode, mods)} · ${we.daysLeft <= 1 ? 'last day' : `${we.daysLeft} days left`}`, desc: wd.desc, left: we.endsAt, wkevent: wd.id, tab: wd.tab });
+    }
     const f = featured(date);
     list.push({ id: 'featured', name: f.name, icon: 'star', modes: [f.mode], mods: f.mods, sub: 'A new one every day', featured: true });
   }
@@ -93,13 +101,13 @@ export const HARDCORE_TABS = ['standard', 'groundwar'];
 export function resolveSelection(tab, sel, { hardcore = false } = {}) {
   const p = sel?.playlist && playlistsFor(tab).find(x => x.id === sel.playlist);
   let r;
-  if (p) r = { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked, friends: !!p.friends };
+  if (p) r = { modes: p.modes.slice(), mods: p.mods.slice(), name: p.name, ranked: !!p.ranked, friends: !!p.friends, tab: p.tab ?? tab, event: p.wkevent ?? null };
   else {
     const modes = modesFor(tab).filter(id => sel?.modes?.includes(id));
     if (!modes.length) return { modes: [], mods: [], name: '' };
-    r = { modes, mods: [], name: modes.length === 1 ? MODES[modes[0]].name : `${modes.length} modes: ${short(modes)}` };
+    r = { modes, mods: [], name: modes.length === 1 ? MODES[modes[0]].name : `${modes.length} modes: ${short(modes)}`, tab, event: null };
   }
-  if (hardcore && HARDCORE_TABS.includes(tab) && !r.ranked && r.modes.some(hardcoreFits) && !r.mods.includes('hardcore')) {
+  if (hardcore && HARDCORE_TABS.includes(r.tab) && !r.ranked && r.modes.some(hardcoreFits) && !r.mods.includes('hardcore')) {
     r.mods = withHardcore(r.mods, true);
     r.name = `Hardcore ${r.name}`;
   }

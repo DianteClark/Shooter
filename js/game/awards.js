@@ -23,6 +23,7 @@ import { objOf } from '../sim/rules.js';
 import { ZM, zmXp } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
 import { getCamo } from '../shared/camos.js';
 import { performance } from '../shared/ranked.js';
+import { EVENT_XP_BONUS, eventById } from '../shared/events.js';
 
 const MAX_FRAME = 0.5;           // A longer gap between frames (backgrounded tab) adds no held time.
 const GUN_SECONDS = 3;           // Held at least this long counts as a gun used, for the history.
@@ -57,6 +58,7 @@ export class MatchAwards {
     this.mode = null;
     this.practice = false;
     this.ranked = null;
+    this.event = null;             // Weekly events (js/shared/events.js): the event id when played from its playlist.
     this.observers = [];
     this.result = null;
     this.outAt = null;
@@ -284,6 +286,20 @@ export class MatchAwards {
         if (done.length) lines.push([`${period === 'daily' ? 'Daily' : 'Weekly'} challenge${done.length > 1 ? ` x${done.length}` : ''}`, done.reduce((n, c) => n + c.xp, 0)]);
       }
     } catch (err) { console.error('challenges', err); }
+    // Weekly event (played from its playlist): its challenges, then the small bonus on the match's XP so far.
+    let event = null;
+    if (this.event) {
+      try {
+        event = Progress.applyEventMatch(this.event, { ...(tallied ?? this.tally.counts()), ...(zm ? { 'zm:rounds': zm.survived } : {}) });
+        if (event) {
+          challenges = challenges.concat(event.moved);
+          const done = event.moved.filter(c => c.fresh);
+          if (done.length) lines.push([`Event challenge${done.length > 1 ? ` x${done.length}` : ''}`, event.xp]);
+          const sum = lines.reduce((n, l) => n + l[1], 0);
+          lines.push(['Weekly event bonus', Math.round(sum * EVENT_XP_BONUS)]);
+        }
+      } catch (err) { console.error('event', err); }
+    }
     // Mastery tiers this match finishes pay their XP here too; the save itself changes in applyMatch.
     let mastery = {};
     try {
@@ -302,6 +318,7 @@ export class MatchAwards {
     // Personal bests for the Trophy Case (the horde's kills are not in the tally's, see hordeView).
     const records = { ...this.tally.records(), brPlace, exSecs: ex?.extracted ? Math.max(1, Math.round(this.outAt ?? this.live)) : 0 };
     const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records, zmRounds: zm ? zm.survived : null });
+    if (event?.reward?.fresh) applied.unlocks.unshift({ kind: event.reward.kind, id: event.reward.id, name: event.reward.name, req: `Weekly event: ${eventById(event.event)?.name ?? ''}`, feat: true });
     if (zm && applied.zmRecord) Object.assign(zm, { best: applied.zmRecord.best, before: applied.zmRecord.before, fresh: applied.zmRecord.fresh });
     if (zm && applied.zmFeat) Object.assign(zm, { bestEscape: applied.zmFeat.escaped, freshEscape: applied.zmFeat.freshEscape, freshBoss: applied.zmFeat.freshBoss });
     if (ex) {
@@ -333,6 +350,7 @@ export class MatchAwards {
       history,
       season: season?.track ?? null,
       ranked: season?.ranked ?? null,
+      event,
       medals: { ...this.medals },
       ex,
       zm,

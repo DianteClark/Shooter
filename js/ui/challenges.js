@@ -11,7 +11,7 @@ import { ico, header } from './yard.js';
 import { enter, pop, sweep } from './motion.js';
 import { playFor } from './shortcuts.js';
 
-const PERIOD_NAME = { daily: 'Daily', weekly: 'Weekly' };
+const PERIOD_NAME = { daily: 'Daily', weekly: 'Weekly', event: 'Event' };
 const fmtXp = n => Math.round(n).toLocaleString('en-US');
 
 // "5h 12m", "3d 4h", "12m": time until a timestamp, for the reset labels.

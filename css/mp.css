@@ -67,9 +67,11 @@
 #ui .mp-pl.rk::before, #ui .mp-pl.ev::before, #ui .mp-pl.feat::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--tex-hazard); opacity: .9; }
 #ui .mp-pl.rk::before { background: repeating-linear-gradient(-45deg, var(--c-gold) 0 6px, var(--c-night) 6px 12px); }
 #ui .mp-pl.ev::before { background: repeating-linear-gradient(-45deg, #7cd8ff 0 6px, var(--c-night) 6px 12px); }
+#ui .mp-pl.ev.wk::before { background: repeating-linear-gradient(-45deg, #ff7ad0 0 6px, var(--c-night) 6px 12px); }
 #ui .mp-brow { position: absolute; left: var(--sp-3); top: 7px; font: 400 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-sodium); }
 #ui .mp-pl.rk .mp-brow { color: var(--c-gold); }
 #ui .mp-pl.ev .mp-brow, #ui .mp-pl.ev .mp-pl-ico .ico { color: #7cd8ff; }
+#ui .mp-pl.ev.wk .mp-brow, #ui .mp-pl.ev.wk .mp-pl-ico .ico { color: #ff7ad0; }
 #ui .mp-pl.feat .mp-pl-ico .ico { color: var(--c-gold); }
 #ui .mp-pl.rk, #ui .mp-pl.ev, #ui .mp-pl.feat { box-shadow: var(--bevel), var(--edge); }
 #ui .mp-pl.rk.on, #ui .mp-pl.ev.on, #ui .mp-pl.feat.on { box-shadow: var(--bevel), inset 0 0 0 2px var(--c-sodium); }

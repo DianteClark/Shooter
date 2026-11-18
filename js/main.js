@@ -1214,12 +1214,14 @@ function findMatch(tab, sel) {
   app.mp.sels[tab] = { playlist: sel.playlist ?? null, modes: [...(sel.modes ?? [])] };
   app.lastPick = { mp: { tab, sel: app.mp.sels[tab] } };
   Recall.saveMp(app.mp);
-  const size = lobbySize(tab, r.modes);
-  const ui = menu.matchSearch({ name: r.name, tab, size });
+  // A weekly event's playlist sits on Standard but plays where its mode lives (r.tab): the lobby and the maps from there.
+  const playTab = r.tab ?? tab;
+  const size = lobbySize(playTab, r.modes);
+  const ui = menu.matchSearch({ name: r.name, tab: playTab, size });
   const t0 = performance.now();
   app.mpSearch = {
     tick: setInterval(() => ui.found(Math.min(size, 1 + Math.floor((performance.now() - t0) / SEARCH_MS * size))), 90),
-    timer: setTimeout(() => { stopSearch(); startMpVote(tab, r, size); }, SEARCH_MS),
+    timer: setTimeout(() => { stopSearch(); startMpVote(playTab, r, size); }, SEARCH_MS),
   };
 }
 
@@ -1229,7 +1231,7 @@ function startMpVote(tab, r, size) {
   if (!options.length) { renderMp(); menu.toast('No map hosts that pick', 'warn'); return; }
   app.vote = {
     solo: true, key: `mp:${Date.now()}`, options, votes: new Map(), left: MP_VOTE_SECONDS, seconds: MP_VOTE_SECONDS,
-    winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name, ranked: !!r.ranked,
+    winner: null, resolved: null, mine: null, total: size, mods: r.mods, name: r.name, ranked: !!r.ranked, event: r.event ?? null,
     timer: setInterval(mpVoteTick, 1000),
   };
   // Graveyard Shift: the map this phone last played it on starts with this player's ballot, if it is on offer.
@@ -1249,11 +1251,11 @@ function mpVoteTick() {
   clearInterval(vote.timer);
   vote.winner = tallyWinner(voteCounts(vote));
   vote.resolved = { mapId: vote.options[vote.winner].mapId, mode: vote.options[vote.winner].mode };
-  vote.reveal = setTimeout(() => launchMp(vote.resolved.mapId, vote.resolved.mode, vote.mods, vote.ranked), VOTE_REVEAL_MS);
+  vote.reveal = setTimeout(() => launchMp(vote.resolved.mapId, vote.resolved.mode, vote.mods, vote.ranked, vote.event), VOTE_REVEAL_MS);
   renderVote();
 }
 
-function launchMp(mapId, mode, mods = [], ranked = false) {
+function launchMp(mapId, mode, mods = [], ranked = false, event = null) {
   stopVote();
   const id = 'local', seed = randomSeed();
   const humans = [{ id, name: myName(), team: 0, ...seatData() }];
@@ -1264,7 +1266,7 @@ function launchMp(mapId, mode, mods = [], ranked = false) {
   const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool });
   beginMatch({
     roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: ranked ? [] : cleanMods(mods, mode), ...limitsFor(mode),
-    hostId: id, isHost: true, localId: id, ranked: ranked ? { rating } : null,
+    hostId: id, isHost: true, localId: id, ranked: ranked ? { rating } : null, event,
   });
 }
 
@@ -1579,7 +1581,7 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x7fffffff);
 }
 
-function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null, ranked = null }) {
+function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null, ranked = null, event = null }) {
   const net = app.net;
   const id = localId ?? net?.localId;
   app.inMatch = true;
@@ -1628,6 +1630,8 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   // Ranked (the Ranked playlist, or a full friend room the host made ranked): the rating moves at the end.
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;
+  // A weekly event's playlist (js/shared/events.js): its challenges and the small XP bonus at the end.
+  if (event && !training && !tutorial) app.match.awards.event = event;
   app.match.telemetry.mapId = mapId;
   hud.onSetLoadout(loadout => app.match?.setNextLoadout(loadout));
   hud.onRespawn(msg => app.match?.requestRespawn(msg));
