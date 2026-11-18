@@ -12,6 +12,7 @@ import { previewThrow, maxThrowRange } from '../sim/equipment.js';
 import { Interpolator } from './interp.js';
 import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
+import { ReplayRecorder } from './replay.js';     // The last 30 s, for Watch replay on the results (docs/REPLAYS.md).
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
 import { BR, isBr, isEx, isZm } from '../shared/modes.js';
@@ -79,6 +80,7 @@ export class Match {
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
     this.telemetry = new MatchTelemetry({ localId: this.localId });
     this.killcam = new Killcam({ renderer: this.renderer, localId: this.localId });
+    this.recorder = new ReplayRecorder({ localId: this.localId });
     this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });
     // Practice pays and records nothing: the firing range and Custom > Training (`training`) never count toward XP,
     // mastery, challenges, history, gun stats or telemetry. Both trackers check `practice` before writing anything.
@@ -667,6 +669,13 @@ export class Match {
     try { this.awards.statsAt = this.telemetry.finish(view)?.at ?? 0; } catch (err) { console.error('match stats', err); }
     let awards = {};
     try { awards = this.awards.finish(view) ?? {}; } catch (err) { console.error('match awards', err); }
+    let replay = null;
+    try {
+      replay = this.recorder.finish({
+        mapId: this.mapId, mode: view.modeId ?? this.mode, mods: this.mods ?? [], roster: this.roster, lastKill: view.lastKill,
+        myTeam: view.players.find(p => p.id === this.localId)?.team ?? this.me.team,
+      });
+    } catch (err) { console.error('match replay', err); }
     this.onEnd({
       scores: view.scores, winner: view.winner, lastKill: view.lastKill, localId: this.localId, modeId: view.modeId ?? this.mode, mods: this.mods ?? [],
       // The side at the end: Infected moves players between sides during the match.
@@ -676,6 +685,7 @@ export class Match {
       exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
       zmView: objOf(view)?.zm ? { round: objOf(view).round, best: objOf(view).best, crew: objOf(view).crew, escaped: objOf(view).escaped ?? [] } : null,
       early: !!this.early,
+      replay,
       ...awards,
     });
   }
@@ -707,6 +717,7 @@ export class Match {
 
     const events = this.frameEvents;
     try {
+      try { this.recorder.record(view, events, dt); } catch (err) { this.recorder.stopped = true; console.error('replay record', err); }
       this.killcam.render(view, events, dt);
       if (this.renderer.ambient?.strikeNow) this.audio.lightning();
       this.hud.onEvents(events);

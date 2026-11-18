@@ -133,7 +133,8 @@ class Reel {
   }
 }
 
-export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
+export function resultsScreen(menu, data, handlers) {
+  const { rematch, menu: toMenu } = handlers;
   menu.el.dataset.screen = 'results';
   const { outcome, scores, myTeam, roster, badges, mvp, xp, level, weapons, unlocks, finalKill: fk } = data;
   const badgeOf = id => badges?.get(id) ?? null;
@@ -370,6 +371,7 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>
+          ${data.replay ? `<button class="rs-btn fk-replay" data-act="resReplay" aria-label="Watch replay of the last 30 seconds">${art('ui:play', 12) || '<i class="fk-tri"></i>'}<b>Watch replay</b></button>` : ''}
           <div class="fk-cap">${fk ? `<small>Final kill</small><b>${esc(fk.byName)}</b><span>on ${esc(fk.targetName)}</span><em>${art(fk.weapon, 10)}${esc(WEAPONS[fk.weapon]?.name ?? fk.weapon)}</em>` : zmr && data.zm?.escaped ? `<small>Escaped</small><span>Out on the exfil on round ${data.zm.escaped}</span>` : '<small>Final kill</small><span>The match ended without one</span>'}</div>
         </div>
         <div class="rs-card xp-card">
@@ -400,6 +402,8 @@ export function resultsScreen(menu, data, { rematch, menu: toMenu }) {
       </div>
     </div>`;
   menu.on({ resRematch: () => { menu.overlay(''); rematch(); }, resMenu: () => { menu.overlay(''); toMenu(); } });
+  // Watch replay (docs/REPLAYS.md): the reel is hurried to its end first, so no ceremony lands while the replay plays.
+  menu.on({ resReplay: () => { menu.overlay(''); menu.reel?.tapThrough?.(); handlers.replay?.(); } });
   // The screen is up before anything that could fail: the turntable needs WebGL, which a phone can refuse or lose.
   menu.show();
   if (fk) {

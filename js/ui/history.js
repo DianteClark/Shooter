@@ -18,6 +18,7 @@ import { mapImage } from './mapthumb.js';
 import { esc } from './widgets.js';
 import { icon } from './icons.js';
 import { ico, header } from './yard.js';
+import { listClips, deleteClip, MAX_CLIPS } from './clips.js';      // Saved replay clips (docs/REPLAYS.md).
 
 const RESULT = { win: 'Victory', loss: 'Defeat', draw: 'Draw' };
 const ord = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
@@ -281,18 +282,23 @@ function fitMap(root) {
   fit();
 }
 
-export function historyScreen(menu, { onBack, onStats, open: start = 0 }) {
+// The two tabs: the matches, and the saved replay clips.
+const tabsHtml = tab => `<nav class="hs-tabs">${[['matches', 'Matches', 'ui:clock'], ['clips', 'Clips', 'ui:play']].map(([id, label, i]) =>
+  `<button class="seg${id === tab ? ' on' : ''}" data-act="hsTab" data-tab="${id}" data-sound="tab">${ico(i)}<b>${label}</b></button>`).join('')}</nav>`;
+
+export function historyScreen(menu, { onBack, onStats, open: start = 0, tab = 'matches', onWatch = null }) {
+  if (tab === 'clips') { clipsScreen(menu, { onBack, onStats, onWatch }); return; }
   const list = MatchHistory.list();
   let open = list[start] ? start : 0;
   const detailOf = n => matchDetail(menu, list, n, i => {
-    historyScreen(menu, { onBack, onStats, open: i });
+    historyScreen(menu, { onBack, onStats, open: i, onWatch });
     const row = menu.el.querySelector(`.hs-body .hs-row[data-i="${i}"]`);
     row?.scrollIntoView?.({ block: 'nearest' });
   });
   menu.el.dataset.screen = 'history';
   const wins = list.filter(e => e.result === 'win').length;
   menu.el.innerHTML = `
-    ${header({ back: 'hsBack', label: 'Done', title: 'Match history', cls: 'hs-bar', extra: `${list.length ? `<small class="hs-count">${ico('timer')}Last ${list.length} match${list.length === 1 ? '' : 'es'} · ${wins} won</small>` : ''}${onStats ? `<button class="btn hs-stats" data-act="hsStats">${ico('stats')}<b>Gun stats</b></button>` : ''}` })}
+    ${header({ back: 'hsBack', label: 'Done', title: 'Match history', cls: 'hs-bar', extra: `${tabsHtml('matches')}${list.length ? `<small class="hs-count">${ico('timer')}Last ${list.length} match${list.length === 1 ? '' : 'es'} · ${wins} won</small>` : ''}${onStats ? `<button class="btn hs-stats" data-act="hsStats">${ico('stats')}<b>Gun stats</b></button>` : ''}` })}
     ${list.length ? `<div class="hs-split">
       <div class="hs-list" data-in="up">
         <div class="hs-row hs-head"><i></i><span></span><span class="hs-where">Match</span><span class="hs-res">Result</span><span class="hs-kda">K/D/A</span><span class="hs-score">Score</span><span class="hs-xp">XP</span></div>
@@ -304,6 +310,7 @@ export function historyScreen(menu, { onBack, onStats, open: start = 0 }) {
     hsBack: () => onBack(),
     hsStats: () => onStats?.(),
     hsOpen: () => detailOf(open),
+    hsTab: ({ tab: t }) => { if (t === 'clips') clipsScreen(menu, { onBack, onStats, onWatch }); },
     // Tapping a match opens its detail; the summary beside the list follows the last one looked at.
     hsRow: ({ i }) => {
       const n = Number(i);
@@ -311,4 +318,49 @@ export function historyScreen(menu, { onBack, onStats, open: start = 0 }) {
     },
   });
   menu.show();
+}
+
+/* ---------- Clips ---------- */
+
+const clipRow = (c, i) => {
+  const m = modeOf(c.mode);
+  return `<div class="hc-row" data-i="${i}" style="--i:${i}">
+    <span class="hs-mode">${icon(`mode:${m.id}`, { size: 18 })}</span>
+    <span class="hs-where"><b>${esc(mapName(c.mapId))}</b><small>${esc(m.name)} · ${esc(clock(c.at))}</small></span>
+    <span class="hc-len t-num">${mmss(Math.round(c.dur ?? 0))}${c.kills ? `<small>${c.kills} ${c.kills === 1 ? 'kill' : 'kills'}</small>` : ''}</span>
+    <button class="btn hc-watch" data-act="hcWatch" data-id="${esc(c.id)}">${ico('ui:play')}<b>Watch</b></button>
+    <button class="btn hc-del" data-act="hcDel" data-id="${esc(c.id)}" data-sound="deny" aria-label="Delete clip">${ico('ui:close')}<b>Delete</b></button>
+  </div>`;
+};
+
+async function clipsScreen(menu, { onBack, onStats, onWatch }) {
+  menu.el.dataset.screen = 'history';
+  const paint = clips => {
+    menu.el.innerHTML = `
+      ${header({ back: 'hsBack', label: 'Done', title: 'Match history', cls: 'hs-bar', extra: `${tabsHtml('clips')}<small class="hs-count">${ico('ui:play')}${clips.length} of ${MAX_CLIPS} clips</small>` })}
+      ${clips.length ? `<div class="hc-list scroll-y" data-in="up">${clips.map(clipRow).join('')}</div>`
+        : `<div class="hs-empty" data-in="up">${ico('ui:play')}<b>No clips yet</b><p>After a match, tap Watch replay on the results, then Save clip to keep the last 30 seconds here. Up to ${MAX_CLIPS} clips.</p></div>`}`;
+  };
+  paint([]);
+  menu.on({
+    hsBack: () => onBack(),
+    hsStats: () => onStats?.(),
+    hsTab: ({ tab: t }) => { if (t === 'matches') historyScreen(menu, { onBack, onStats, onWatch }); },
+    hcWatch: ({ id }) => onWatch?.(id),
+    hcDel: ({ id }) => {
+      // A second tap on the same Delete confirms.
+      const b = menu.el.querySelector(`.hc-del[data-id="${CSS.escape(id)}"]`);
+      if (b && !b.classList.contains('arm')) {
+        b.classList.add('arm');
+        b.querySelector('b').textContent = 'Sure?';
+        setTimeout(() => { if (b.isConnected) { b.classList.remove('arm'); b.querySelector('b').textContent = 'Delete'; } }, 2500);
+        return;
+      }
+      deleteClip(id).then(() => clipsScreen(menu, { onBack, onStats, onWatch }));
+    },
+  });
+  menu.show();
+  const clips = await listClips();
+  if (menu.el.dataset.screen !== 'history' || !menu.el.querySelector('.hs-tabs .seg.on[data-tab="clips"]')) return;     // Left meanwhile.
+  paint(clips);
 }

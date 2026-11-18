@@ -379,7 +379,7 @@ const weaponName = id => WEAPONS[id]?.name ?? (id === 'strike' ? 'Strike' : id ?
 const zmWeaponName = id => zmWonderOf(id)?.name ?? weaponName(id);
 
 // What the feed names for a kill: a gun id alone would credit the gun for a grenade or streak kill.
-function killCause(e) {
+export function killCause(e) {
   if (e.equip === 'bomb') return 'Bomb';
   if (e.equip) return LETHALS[e.equip]?.name ?? e.equip;
   if (typeof e.streak === 'string') return STREAKS[e.streak]?.name ?? e.streak;

@@ -62,6 +62,8 @@ import { tourneyAt } from './shared/tourney-items.js';
 import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
 import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
+import { ReplayPlayer } from './game/replay-player.js';      // Watch replay and saved clips (docs/REPLAYS.md).
+import { saveClip, loadClip, deleteClip, listClips } from './ui/clips.js';
 import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
 // Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
 import { MP_TAB_IDS, playlistsFor, defaultSelection, resolveSelection, mpVoteOptions, lobbySize, pickBotsForMatch, MP_BOT_SKILL } from './ui/matchmaking.js';
@@ -120,6 +122,7 @@ const quickChat = new QuickChat(hud, { audio });
 const backdrop = new MenuBackdrop(canvas);
 // Created at the end of this file's setup, once app exists; see wireExtras.
 let gamepad = null, voiceUi = null;
+let replayView = null;             // The replay player while one is open (openReplay).
 
 // Screens with a turntable of their own run a second WebGL context, so the yard holds still behind them; the rest
 // keep it moving. Nothing of the backdrop exists while a match owns the canvas.
@@ -129,7 +132,7 @@ menu.onScreen = screen => {
   uiRoot.dataset.menu = screen;
   if (DOT_SCREENS.has(screen)) NewDots.refresh();     // Unlocks can land between visits (a prestige, a season claim).
   music.screen(screen, app.inMatch);
-  if (app.inMatch) return;
+  if (app.inMatch || replayView) return;       // A replay playing over the menus owns the canvas until it closes.
   if (screen === 'results') return;            // The match renderer has only just let go; the next screen builds it.
   if (STILL_SCREENS.has(screen)) backdrop.still();
   else {
@@ -571,8 +574,48 @@ function openBoards(back = afterEditing) {
   boardsScreen(menu, { onBack: back, myId: app.net?.localId ?? selfId() });
 }
 
-function openHistory() {
-  menu.history({ onBack: afterEditing, onStats: () => openStats(openHistory) });
+function openHistory(tab = 'matches') {
+  menu.history({ onBack: afterEditing, onStats: () => openStats(openHistory), tab, onWatch: watchClip });
+}
+
+// The match replay player (js/game/replay-player.js) on the game canvas, over whatever menu screen is up (hidden by
+// body.replay-on while it plays). Returns false when nothing could be played. Never during a match.
+function openReplay(clip, { onClose = null, saved = false, title = '' } = {}) {
+  if (!clip || replayView || app.inMatch) return false;
+  backdrop.stop();
+  menu.pausePreview();
+  try {
+    replayView = new ReplayPlayer({
+      canvas, root: uiRoot, clip, saved, title, quality: Options.get('quality'),
+      onSave: saved ? null : c => saveClip(c),
+      onClose: () => {
+        replayView = null;
+        app.renderer = null;
+        menu.resumePreview();
+        onClose?.();
+      },
+    });
+  } catch (err) {
+    console.error('replay', err);
+    replayView = null;
+    menu.resumePreview();
+    onClose?.();
+    return false;
+  }
+  app.renderer = replayView.renderer;     // Resizes, the quality option and the perf overlay follow it.
+  return true;
+}
+
+// History > Clips: a saved clip, back to the Clips tab (and the yard behind it) when it closes.
+async function watchClip(id) {
+  const clip = await loadClip(id);
+  const back = () => {
+    if (app.inMatch) return;
+    openHistory('clips');
+    backdrop.setLoadout(myLoadout());
+    backdrop.live();
+  };
+  if (!clip || !openReplay(clip, { saved: true, onClose: back })) back();
 }
 
 function openHelp(tab) {
@@ -1693,6 +1736,7 @@ function randomSeed() {
 function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimit, hostId, isHost, localId, rejoin = false, rangeDummies: dummies = null, intro = !rejoin, tutorial = false, training = null, ranked = null, event = null, tourney = null }) {
   const net = app.net;
   const id = localId ?? net?.localId;
+  replayView?.close();             // A rematch or a host's start can come while a replay plays: the match takes the canvas.
   app.inMatch = true;
   wakeLock.set(true);
   updater.paint();
@@ -1888,7 +1932,8 @@ function showResults(results) {
       season: results.season ?? null,
       ranked: results.ranked ?? null,
       note: counting ? `Rematch starts in ${app.countdown}` : '',
-    }, { rematch: () => afterResults(), menu: () => goTitle() });
+      replay: !!results.replay,
+    }, { rematch: () => afterResults(), menu: () => goTitle(), replay: () => openReplay(results.replay) });
   } catch (err) {
     // Whatever broke, the screen with Rematch and Menu still comes up.
     console.error('results screen', err);
@@ -2041,7 +2086,7 @@ NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 // Just after the progress reset's wipe, its notice comes first and the training offer follows it.
 const offeredTutorial = !invite && (maybeResetNotice(menu, { then: maybeOfferTutorial }) || maybeOfferTutorial());
-if (params.has('debug')) window.__game = { app, wipe: WIPE, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, wipe: WIPE, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else {
   if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });

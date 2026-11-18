@@ -683,6 +683,16 @@ export class Menu {
     this.reel = null;
   }
 
+  // A replay playing over this screen (js/game/replay-player.js): the turntable holds still under it, then carries on.
+  pausePreview() {
+    cancelAnimationFrame(this.previewRaf);
+    this.previewRaf = 0;
+  }
+
+  resumePreview() {
+    if (this.previewCanvas?.isConnected && this.ticking) this.#runPreview();
+  }
+
   // Stops drawing and takes the canvas off the page. The context is kept for the next screen.
   #stopPreview() {
     cancelAnimationFrame(this.previewRaf);

@@ -5,7 +5,8 @@
 //   RESET_GEN                   the reset generation; bump it (and the date) only for another full wipe
 //   wipeProgress(storage)       on app start (js/ui/wipe.js, before anything reads progress): a phone whose stored
 //                               generation differs loses every progress key, keeps its settings, then stores RESET_GEN.
-//                               Returns { wiped: [keys removed], notice: bool }.
+//                               Returns { wiped: [keys removed], notice: bool, ran: bool }; with `ran` the caller also
+//                               deletes the IndexedDB databases in WIPE_DBS (saved clips).
 //
 // Save codes carry the generation too (js/shared/progression.js encodeSave: "SY4R1.<body>.<sum>"), so a code made
 // before the reset is refused on import. The bot pool's careers start from RESET_AT (js/shared/botpool.js CAREER_START).
@@ -38,6 +39,11 @@ export const WIPE_KEYS = Object.freeze([
   'switchyard-backdrop',
 ]);
 
+// IndexedDB databases that hold progress: saved replay clips (js/ui/clips.js). js/ui/wipe.js deletes each of these
+// whenever wipeProgress runs (`ran`), so a wipe takes them with the localStorage keys.
+export const CLIPS_DB = 'switchyard-clips';
+export const WIPE_DBS = Object.freeze([CLIPS_DB]);
+
 const PREFIX = /^switchyard[.-]/;
 
 // Keys in a Storage (or anything with length/key(i)), or a Map stand-in's own keys.
@@ -54,8 +60,8 @@ function keysOf(storage) {
 // buildId: the running build (js/build.js), recorded as seen so "What's new" stays quiet: the notice speaks instead.
 export function wipeProgress(storage, { buildId = null } = {}) {
   let gen = null;
-  try { gen = storage.getItem(GEN_KEY); } catch { return { wiped: [], notice: false }; }
-  if (gen === String(RESET_GEN)) return { wiped: [], notice: false };
+  try { gen = storage.getItem(GEN_KEY); } catch { return { wiped: [], notice: false, ran: false }; }
+  if (gen === String(RESET_GEN)) return { wiped: [], notice: false, ran: false };
   const wiped = [];
   try {
     for (const k of new Set([...WIPE_KEYS, ...keysOf(storage).filter(k => PREFIX.test(k))])) {
@@ -80,10 +86,10 @@ export function wipeProgress(storage, { buildId = null } = {}) {
     if (notice) storage.setItem(NOTICE_KEY, String(RESET_GEN));
     if (buildId) storage.setItem('switchyard.seenBuild', buildId);
     storage.setItem(GEN_KEY, String(RESET_GEN));
-    return { wiped, notice };
+    return { wiped, notice, ran: true };
   } catch {
     // Private mode or a full store: whatever was removed stays removed; the next start tries again.
-    return { wiped, notice: false };
+    return { wiped, notice: false, ran: true };
   }
 }
 

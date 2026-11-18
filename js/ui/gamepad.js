@@ -118,6 +118,7 @@ body.pad-on .st-tile.held::after { content: var(--pad-streak, ""); position: abs
 `;
 
 export const Pad = {
+  owner: null,         // An object with padTick(input, dt) that takes every press while it is set (the replay player).
   family: 'xbox',
   connected: false,
   name: '',
@@ -255,6 +256,14 @@ export class GamepadInput {
       return;
     }
 
+    // A screen that takes the pad whole (the match replay player, js/game/replay-player.js): its own button map.
+    const owner = Pad.owner;
+    if (owner) {
+      this.#endPlay();
+      this.#ring(null);
+      owner.padTick(this, dt);
+      return;
+    }
     this.#voiceButton();
     const live = this.inMatch?.() && this.controls?.enabled;
     const panel = live ? this.#matchPanel() : null;

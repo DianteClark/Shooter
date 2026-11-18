@@ -788,7 +788,8 @@ export class GameRenderer {
     this._updateCull();
     this.world.setCutters?.(view.players, local);
     // A replay's camera can look anywhere, so it gets every tile; frustum culling still applies.
-    this.world.setView(this.camera, this.camTarget.x, this.camTarget.z, cine || this.finalKill ? Infinity : this.worldCut);
+    // (A match replay's top-down cameras say so with cine.cut: they keep the step's distance cut, js/game/replay-player.js.)
+    this.world.setView(this.camera, this.camTarget.x, this.camTarget.z, cine ? cine.cut ?? Infinity : this.finalKill ? Infinity : this.worldCut);
     this.world.update(fxDt);
     this.weather.update(fxDt, this.camTarget.x, this.camTarget.z, this.world.material);
     webgl.render(this.scene, this.camera);
