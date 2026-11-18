@@ -727,6 +727,28 @@ section('polestar');
   clearZmWalls(map2); clearZmWalls(host.map);
 }
 {
+  // Bots step off a running trap (its floor hurts the crew too), and do not wander back onto it.
+  const { syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const sim = makeSim('polestar', 92, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, L = R.L, bot = R.crew.find(p => p.isBot), me = R.crew.find(p => !p.isBot);
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  for (const p of R.crew) p.spawnProtect = 0;
+  R._startRound(4); R.spawnT = 999;
+  const T = L.traps[1];
+  R.econ.traps[1].state = 1; R.econ.traps[1].timer = 30; R.econ.traps[1].by = me.index;
+  me.ps.x = T.x + 4; me.ps.z = T.z - 4;
+  bot.ps.x = T.x; bot.ps.z = T.z; bot.hp = 100;
+  // Even told to hold right on it (the worst case: a crew plan or a lead standing there).
+  R.plan = () => {}; R._crewPlan = null;
+  bot.bot.setObjective({ key: 'ztest', role: 'defend', x: T.x, z: T.z, r: 0.8 }); bot.bot.kite = 4.5;     // As _planCrew sets it.
+  let inside = 0;
+  for (let i = 0; i < 6 * SIM_HZ; i++) { sim.step(DT); sim.drainEvents(); if (i > SIM_HZ && Math.hypot(bot.ps.x - T.x, bot.ps.z - T.z) < T.r) inside++; }
+  ok(inside < SIM_HZ * 1.5 && bot.alive && !bot.downed, `a bot steps off a running trap and keeps off it (${inside} ticks inside after the first second)`);
+  clearZmWalls(sim.map);
+}
+{
   // A bot throws the power on Polestar too (solo, from round 3), buying the gates on the way.
   const sim = makeSim('polestar', 93, [{ id: 'me', name: 'Me', team: 0 }]);
   toLive(sim);

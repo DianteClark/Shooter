@@ -224,13 +224,17 @@ export class ZmKinds {
     const a = Math.atan2(ps.z - q.ps.z, ps.x - q.ps.x);
     return Math.abs(Math.atan2(Math.sin(a - q.ps.aim), Math.cos(a - q.ps.aim))) < ZM_SHIELD.arc;
   }
-  // Where a bot standing at ps should step to get off acid (a puddle, or a glob's landing spot): a unit vector or null.
+  // Where a bot standing at ps should step to get off acid (a puddle, or a glob's landing spot) or off a running trap:
+  // a unit vector or null.
   dodge(ps) {
     let best = null, bd = Infinity;
     const now = this.R.sim.time;
     const check = (x, z, r) => { const d = Math.hypot(ps.x - x, ps.z - z); if (d < r + 0.7 && d < bd) { bd = d; best = { x, z, d }; } };
     for (const g of this.globs) if (g.at - now < 1.2) check(g.x, g.z, ZM_SPIT.hitR + 0.6);
     for (const pd of this.puddles) check(pd.x, pd.z, ZM_SPIT.r);
+    // A running trap hurts the crew too: off its floor (the bots' route goes round it, docs/ZOMBIES.md).
+    const E = this.R.econ;
+    if (E) E.traps.forEach((t, i) => { if (t.state === 1) { const T = this.R.L.traps[i]; check(T.x, T.z, T.r); } });
     if (!best) return null;
     const dx = ps.x - best.x, dz = ps.z - best.z, l = Math.hypot(dx, dz);
     return l > 0.05 ? { x: dx / l, z: dz / l } : { x: 1, z: 0 };
