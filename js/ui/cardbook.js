@@ -19,6 +19,7 @@ import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { SEASON_DEFS, seasonCards, rankedCards, trackRewards } from '../shared/season-items.js';
 import { TOURNEY_CARDS } from '../shared/tourney-items.js';
+import { EVENTS, rewardHow, rewardPlay } from '../shared/events.js';
 
 const NONE = { cats: {}, life: {}, mastered: 0, masteredIn: {}, masteredSet: new Set(), catSize: {}, camoOn: {}, granted: () => false, zmBest: {}, zmFeats: {} };
 let source = () => NONE;
@@ -230,3 +231,11 @@ registerCards(SEASON_DEFS.flatMap(def => [
 // Weekend tournaments (docs/TOURNAMENTS.md): a card per placing, granted through the save's tournament block.
 const TN_REQ = ['', 'Play a weekend tournament', 'Reach a tournament semi-final', 'Reach a tournament final', 'Win a weekend tournament'];
 registerCards(TOURNEY_CARDS.map(c => ({ id: c.id, name: c.name, group: 'Tournament', req: TN_REQ[c.place], need: k => !!k?.rewards?.has(`card:${c.id}`), art: c.art })));
+
+// Weekly events (js/shared/events.js): a calling card for some events (group Events), granted through the save's season
+// block. The requirement and Play now follow the calendar.
+registerCards(EVENTS.filter(e => e.reward.kind === 'card').map(e => ({
+  id: e.reward.id, name: e.reward.name, group: 'Events', event: e.id, art: e.reward.art,
+  get req() { return rewardHow(e.id); }, get play() { return rewardPlay(e.id); },
+  need: k => !!k?.rewards?.has(`card:${e.reward.id}`),
+})));

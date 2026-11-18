@@ -45,8 +45,11 @@ const TAB_NOTE = {
 // The tab's playlists in groups: [{ name, note, items }].
 function mpGroups(tab, lists) {
   if (tab === 'standard') {
-    const spot = lists.filter(p => p.ranked || p.event || p.featured || p.tourney);
-    return [{ id: 'spot', name: 'Spotlight', note: 'Ranked, the weekend cup and today\'s featured playlist', items: spot },
+    // Spotlight order (one rule for every builder): a tournament, then the events (the weekly one, the season's
+    // limited-time one), then Ranked, then today's featured playlist.
+    const rank = p => (p.tournament ? 0 : p.wkevent ? 1 : p.event ? 2 : p.ranked ? 3 : p.featured ? 4 : 5);
+    const spot = lists.filter(p => rank(p) < 5).sort((a, b) => rank(a) - rank(b));
+    return [{ id: 'spot', name: 'Spotlight', note: 'Events, Ranked and today\'s featured playlist', items: spot },
       { id: 'pl', name: 'Playlists', note: '6 v 6 and 2 v 2', items: lists.filter(p => !spot.includes(p)) }];
   }
   if (tab === 'br') {
@@ -57,7 +60,7 @@ function mpGroups(tab, lists) {
   return [{ id: 'pl', name: 'Playlists', note: '', items: lists }];
 }
 
-const EYEBROW = p => (p.ranked ? 'Ranked' : p.event ? 'Limited event' : p.featured ? 'Featured today' : '');
+const EYEBROW = p => (p.ranked ? 'Ranked' : p.wkevent ? 'Weekly event' : p.event ? 'Limited event' : p.featured ? 'Featured today' : '');
 
 // The weekend tournament's card: live state or a countdown; a tap opens the bracket.
 function tnCard(p) {
@@ -79,7 +82,7 @@ function plCard(p, group, big) {
   const brow = EYEBROW(p);
   const desc = big ? MODES[p.modes[0]]?.desc : '';
   return `
-          <button class="mp-pl${p.featured ? ' feat' : ''}${p.ranked ? ' rk' : ''}${p.event ? ' ev' : ''}${big ? ' big' : ''}" data-act="mpPlaylist" data-id="${p.id}" data-in="up" aria-label="${esc(p.name)}">
+          <button class="mp-pl${p.featured ? ' feat' : ''}${p.ranked ? ' rk' : ''}${p.event || p.wkevent ? ' ev' : ''}${p.wkevent ? ' wk' : ''}${big ? ' big' : ''}" data-act="mpPlaylist" data-id="${p.id}" data-in="up" aria-label="${esc(p.name)}">
             ${brow ? `<span class="mp-brow">${esc(brow)}</span>` : ''}
             ${p.ranked ? rankedSub(p) : `<span class="mp-pl-ico">${ico(p.icon)}</span>
             <span class="mp-pl-tx"><b>${esc(title)}</b><small>${esc(p.sub)}</small>${desc ? `<em>${esc(desc)}</em>` : ''}</span>`}

@@ -4,14 +4,14 @@
 //
 // Results hook (results.js): `unlockStamp(u) ?? challengeStamp(u)` in unlockCard, and `${challengeStrip(data.challenges)}`
 // in .res-choice. main.js passes `challenges` and puts one {kind:'challenge'} unlock first per finished challenge.
-import { Challenges } from './progress.js';
+import { Challenges, Progress } from './progress.js';
 import { esc } from './widgets.js';
 import { icon } from './icons.js';
 import { ico, header } from './yard.js';
 import { enter, pop, sweep } from './motion.js';
 import { playFor } from './shortcuts.js';
 
-const PERIOD_NAME = { daily: 'Daily', weekly: 'Weekly' };
+const PERIOD_NAME = { daily: 'Daily', weekly: 'Weekly', event: 'Event' };
 const fmtXp = n => Math.round(n).toLocaleString('en-US');
 
 // "5h 12m", "3d 4h", "12m": time until a timestamp, for the reset labels.
@@ -25,11 +25,18 @@ export function timeLeft(at, now = Date.now()) {
 const mark = (id, size) => icon(id, { size, square: true });
 const frac = c => Math.min(1, c.value / c.goal);
 
+// The weekly event (js/shared/events.js) for the plate and the screen: Progress.weeklyEvent() or null.
+function weeklyEvent() {
+  try { return Progress.weeklyEvent(); } catch (err) { console.error('weekly event', err); return null; }
+}
+
 // ---- Title plate --------------------------------------------------------------------------------------------------
-// Today's three, a bar each, and a line for the week. The whole plate opens the Challenges screen.
+// Today's three, a bar each, a line for the week and one for the weekly event. The whole plate opens the Challenges
+// screen.
 export function titleChallenges() {
   let daily, weekly;
   try { ({ daily, weekly } = Challenges.all()); } catch (err) { console.error('challenges', err); return ''; }
+  const ev = weeklyEvent();
   const dn = daily.filter(c => c.done).length, wn = weekly.filter(c => c.done).length;
   return `<button class="tch${dn === daily.length ? ' all' : ''}" data-act="challenges" data-in="right" aria-label="Challenges">
     <span class="tch-head"><b>${ico('ui:flag')}Daily</b><em>${dn}/${daily.length}</em><small>${ico('timer')}${timeLeft(Challenges.endsAt('daily'))}</small></span>
@@ -40,21 +47,29 @@ export function titleChallenges() {
       <small class="tch-n">${c.done ? 'Done' : `${c.value}/${c.goal}`}</small>
     </span>`).join('')}
     <span class="tch-foot"><span>Weekly <u>${wn}/${weekly.length}</u></span><small>${timeLeft(Challenges.endsAt('weekly'))} left</small>${ico('next', 'tch-go')}</span>
+    ${ev ? `<span class="tch-foot tch-ev${ev.done === ev.list.length ? ' all' : ''}"><span>Event <u>${esc(ev.info.name)}</u> <u>${ev.done}/${ev.list.length}</u></span><small>${timeLeft(ev.info.endsAt)} left</small></span>` : ''}
   </button>`;
 }
 
 // ---- Challenges screen ------------------------------------------------------------------------------------------
+// The weekly event's challenges count only in its own playlist: Play opens that.
+const EVENT_PLAY = () => ({ tab: 'standard', sel: { playlist: 'wkevent', modes: [] }, name: weeklyEvent()?.info.name ?? 'Weekly event' });
+// The event panel's line under its head: the reward, owned or still to earn.
+function eventHead(ev) {
+  const r = ev.info.def.reward;
+  return `<p class="chp-ev${ev.owned ? ' owned' : ''}" data-in="fade">${ico(ev.owned ? 'check' : 'ui:star')}<span>${esc(ev.info.def.desc)}</span><small>${ev.owned ? 'Reward earned' : `Finish all ${ev.list.length}: ${r.kind === 'card' ? 'calling card' : 'emblem'} ${esc(r.name)}`}</small></p>`;
+}
 // The challenge's icon tile, or for one still open with somewhere to play it (QoL), a Play button in its place.
-export function playTile(c, cls, size, canPlay) {
-  const where = canPlay && !c.done ? playFor(c.stat) : null;
+export function playTile(c, cls, size, canPlay, event = false) {
+  const where = canPlay && !c.done ? (event ? EVENT_PLAY() : playFor(c.stat)) : null;
   if (!where) return `<span class="${cls}">${mark(c.icon, size)}${c.done ? `<i class="chc-check">${ico('check')}</i>` : ''}</span>`;
-  return `<button class="${cls} ch-play" data-act="chPlay" data-stat="${esc(c.stat)}" data-sound="confirm" aria-label="Play ${esc(where.name)}: ${esc(c.label)}">${mark(c.icon, size)}<small class="ch-play-tag">${ico('play')}Play</small></button>`;
+  return `<button class="${cls} ch-play" data-act="chPlay" data-stat="${esc(c.stat)}"${event ? ' data-ev="1"' : ''} data-sound="confirm" aria-label="Play ${esc(where.name)}: ${esc(c.label)}">${mark(c.icon, size)}<small class="ch-play-tag">${ico('play')}Play</small></button>`;
 }
 
-function card(c, i, { canReroll, arming, canPlay }) {
+function card(c, i, { canReroll, arming, canPlay, event = false }) {
   const state = c.done ? ' done' : arming ? ' arming' : '';
   return `<div class="chc${state}" data-id="${esc(c.id)}" style="--i:${i}" data-in="up">
-    ${playTile(c, 'chc-ico', 30, canPlay)}
+    ${playTile(c, 'chc-ico', 30, canPlay, event)}
     <span class="chc-body">
       <b class="chc-lb">${esc(c.label)}</b>
       <span class="chc-prog"><i class="chc-bar"><i style="transform:scaleX(${frac(c).toFixed(3)})"></i></i><small class="t-num">${c.value.toLocaleString('en-US')} / ${c.goal.toLocaleString('en-US')}</small></span>
@@ -64,10 +79,12 @@ function card(c, i, { canReroll, arming, canPlay }) {
   </div>`;
 }
 
-function panel(period, list, optsFor) {
+function panel(period, list, optsFor, ev = null) {
   const n = list.filter(c => c.done).length;
+  const ends = ev ? ev.info.endsAt : Challenges.endsAt(period);
   return `<section class="chp" data-period="${period}">
-    <h3 class="chp-head" data-in="fade"><span>${PERIOD_NAME[period]}</span><em>${n}/${list.length}</em><small>${ico('timer')}Resets in ${timeLeft(Challenges.endsAt(period))}</small></h3>
+    <h3 class="chp-head" data-in="fade"><span>${ev ? esc(ev.info.name) : PERIOD_NAME[period]}</span><em>${n}/${list.length}</em><small>${ico('timer')}${ev ? 'Ends' : 'Resets'} in ${timeLeft(ends)}</small></h3>
+    ${ev ? eventHead(ev) : ''}
     <div class="chp-list">${list.map((c, i) => card(c, i, optsFor(c.id))).join('')}</div>
   </section>`;
 }
@@ -77,12 +94,13 @@ export function challengesScreen(menu, { onBack, onPlay = null }) {
   menu.el.dataset.screen = 'challenges';
   const paint = (fresh = null) => {
     const { daily, weekly } = Challenges.all();
+    const ev = weeklyEvent();
     const can = Challenges.canReroll();
     const optsFor = id => ({ canReroll: can, arming: arming === id, canPlay: !!onPlay });
     menu.el.innerHTML = `
       ${header({ back: 'chBack', label: 'Done', title: 'Challenges', cls: 'ch-bar', extra: `<span class="ch-swaps${can ? '' : ' used'}">${ico('refresh')}${can ? '1 swap left today' : 'Swap used today'}</span>` })}
-      <div class="ch-cols">
-        ${panel('daily', daily, optsFor)}${panel('weekly', weekly, optsFor)}
+      <div class="ch-cols${ev ? ' has-ev scroll-y' : ''}">
+        ${panel('daily', daily, optsFor)}${panel('weekly', weekly, optsFor)}${ev ? panel('event', ev.list, () => ({ canReroll: false, arming: false, canPlay: !!onPlay, event: true }), ev) : ''}
       </div>
       <p class="ch-foot" data-in="fade">${ico('info')}Every match counts, bots included. A finished challenge pays its XP at the end of that match.</p>`;
     if (fresh) {
@@ -92,7 +110,7 @@ export function challengesScreen(menu, { onBack, onPlay = null }) {
   };
   menu.on({
     chBack: () => onBack(),
-    chPlay: ({ stat }) => { const where = playFor(stat); if (where) onPlay?.(where); },
+    chPlay: ({ stat, ev }) => { const where = ev ? EVENT_PLAY() : playFor(stat); if (where) onPlay?.(where); },
     chReroll: ({ id }, el) => {
       if (!Challenges.canReroll()) { menu.deny(el, 'One swap a day'); return; }
       if (arming !== id) { arming = id; paint(); const b = menu.el.querySelector(`.chc[data-id="${CSS.escape(id)}"] .chc-swap`); if (b) pop(b, { scale: 1.12 }); return; }

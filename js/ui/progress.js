@@ -87,6 +87,7 @@ import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { cleanFriends, seeFriend } from '../shared/boards.js';
 import { WEAPON_IDS } from '../shared/constants.js';
 import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP } from '../shared/seasons.js';
+import { weeklyEventAt, eventStatus, eventRoll, applyEventMatch } from '../shared/events.js';     // Weekly events.
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
 import { tourneyOwned, tourneyAt, runStatus, enterTourney, joinTourney, applyTourneyRound, rollTourney, cleanTourney, startRound, settleForfeit } from '../shared/tourney-items.js';     // docs/TOURNAMENTS.md
 import { FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
@@ -957,6 +958,21 @@ export const Progress = {
   },
   // Tests: forget this weekend's run (the shelf stays).
   debugResetTourney() { rollTourney(data.tn, -1); data.tn.k = 0; save(); },
+
+  /* ---------- Weekly events (js/shared/events.js, docs/SEASONS.md "Weekly events") ---------- */
+  // { info: weeklyEventAt(), list: [{...challenge, value, done}], done, owned (the reward is this player's) }
+  weeklyEvent(now = new Date()) {
+    const st = seasonNow(now), info = weeklyEventAt(now), list = eventStatus(st.ev, now);
+    return { info, list, done: list.filter(c => c.done).length, owned: st.ev.got.includes(info.id) };
+  },
+  // One match played from the event's playlist (js/game/awards.js): { moved, xp, reward } or null.
+  applyEventMatch(eventId, counts, now = new Date()) {
+    const st = seasonNow(now);
+    eventRoll(st.ev, now);
+    const r = applyEventMatch(st.ev, eventId, counts, now);
+    save();
+    return r;
+  },
 };
 
 /* ---------- Daily and weekly challenges ---------- */

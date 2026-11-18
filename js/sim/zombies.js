@@ -91,6 +91,7 @@ export class ZmRules {
     this._prev = new Map();   // Guest: last positions per seat, for velocities.
     this.econ = new ZmEcon(this);
     this.special = null;      // This round's special ('sprint' | 'fog' | 'bloat'), from specialRound.
+    this.night = !!this.sim.mods?.includes('night');      // Night Graveyard (a weekly event).
     this.kinds = new ZmKinds(this);
   }
 
@@ -187,6 +188,8 @@ export class ZmRules {
     this.hp = roundHp(r);
     this.bossDue = isBossRound(r);
     this.special = specialRound(r, this.seed);
+    // Night Graveyard (a weekly event, the 'night' modifier): the fog in every round but the boss rounds.
+    if (this.night && !this.bossDue) this.special = 'fog';
     if (this.special === 'bloat') this.count = Math.max(6, Math.round(this.count * 0.7));
     this.kinds.startRound();
     sim.scores[0] = r;
@@ -611,7 +614,7 @@ export class ZmRules {
 
   _pay(p, n, double = true) {
     if (!p?.zm) return;
-    const v = n * (double && this.doubleT > 0 ? 2 : 1);
+    const v = n * (double && this.doubleT > 0 ? 2 : 1) * (this.night ? 2 : 1);     // Night Graveyard pays double.
     p.zm.pts += v; p.zm.earned += v;
   }
 

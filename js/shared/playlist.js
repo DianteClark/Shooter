@@ -7,6 +7,11 @@
 //              room gets a spread of rifles (the sidearm stays)
 //   melee      blades only: the Gaff and the Maul, Hatchets to throw, no scorestreaks
 //   nostreaks  no scorestreaks
+// Weekly event modifiers (js/shared/events.js), never offered in the pickers (EVENT_MODS):
+//   pistols    sidearms only: a primary becomes a pistol (picked by the gun it replaces) and a launcher sidearm too
+//   gloves     battle royale only: no guns on the floor or in chests, no starting pistol: boxing gloves (js/sim/br.js)
+//   night      Graveyard Shift only: the fog in every round but the boss rounds, and every point paid double
+// Battle royale takes snipers too (every floor gun a sniper rifle, js/sim/br.js), only from an event playlist.
 // Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected, Showdown) ignore snipers and melee; battle
 // royale takes none.
 import { WEAPONS } from './weapons.js';
@@ -18,14 +23,21 @@ export const MODS = {
   snipers:   { id: 'snipers',   name: 'Snipers Only', short: 'SNP',  desc: 'Sniper rifles and sidearms only.' },
   melee:     { id: 'melee',     name: 'Melee Only',   short: 'MEL',  desc: 'Blades and Hatchets. No guns, no streaks.' },
   nostreaks: { id: 'nostreaks', name: 'No Streaks',   short: 'NOST', desc: 'Scorestreaks are off.' },
+  pistols:   { id: 'pistols',   name: 'Pistols Only',  short: 'PST',  desc: 'Sidearms only.', event: true },
+  gloves:    { id: 'gloves',    name: 'Gloves Only',   short: 'GLV',  desc: 'No guns: boxing gloves.', event: true },
+  night:     { id: 'night',     name: 'Night',         short: 'NGT',  desc: 'Fog every round, double points.', event: true },
 };
-export const MOD_IDS = Object.keys(MODS);
+// Every modifier in order (cleanMods keeps this order); the pickers offer MOD_IDS, the weekly events the rest too.
+const ALL_MOD_IDS = Object.keys(MODS);
+export const MOD_IDS = ALL_MOD_IDS.filter(id => !MODS[id].event);
+export const EVENT_MODS = ALL_MOD_IDS.filter(id => MODS[id].event);
 export const HARDCORE_DAMAGE = 3;
 // Modifiers that cannot be played together: the later one in a list wins.
-const EXCLUSIVE = [['snipers', 'melee']];
+const EXCLUSIVE = [['snipers', 'melee', 'pistols']];
 // Rule sets that deal every gun themselves.
 const DEALT = new Set(['gun', 'oic', 'inf', 'gf']);
 const SNIPERS = Object.keys(WEAPONS).filter(id => WEAPONS[id].category === 'Sniper');
+const PISTOLS = Object.keys(WEAPONS).filter(id => WEAPONS[id].category === 'Pistol' && id !== 'golden');
 const BLADE = 'knife', SLEDGE = 'maul';
 
 // The modifiers that apply to a mode, in MOD_IDS order, from any list (unknown ids, repeats and clashes dropped).
@@ -37,11 +49,15 @@ export function cleanMods(list, modeId = null) {
     if (hit.length > 1) keep = keep.filter(id => !pair.includes(id) || id === hit[hit.length - 1]);
   }
   const rules = MODES[modeId]?.rules ?? modeId;
-  if (rules === 'br' || rules === 'ex' || rules === 'range') return [];        // Battle royale, extraction and the range take no modifiers.
+  // Battle royale takes only the event loot rules (Gloves Only, Snipers Only), one of them.
+  if (rules === 'br') return ['gloves', 'snipers'].filter(id => keep.includes(id)).slice(-1);
+  keep = keep.filter(id => id !== 'gloves');
+  if (rules !== 'zm') keep = keep.filter(id => id !== 'night');       // Night is Graveyard Shift's alone.
+  if (rules === 'ex' || rules === 'range') return [];        // Extraction and the range take no modifiers.
   if (MODES[modeId]?.noMods) return [];                                     // A mode can opt out (co-op modes).
-  if (DEALT.has(rules)) keep = keep.filter(id => id !== 'snipers' && id !== 'melee');
+  if (DEALT.has(rules)) keep = keep.filter(id => id !== 'snipers' && id !== 'melee' && id !== 'pistols');
   if (rules === 'snd') keep = keep.filter(id => id !== 'nostreaks');      // S&D has none to begin with.
-  return MOD_IDS.filter(id => keep.includes(id));
+  return ALL_MOD_IDS.filter(id => keep.includes(id));
 }
 
 // What a modifier list does to a loadout: a new object, the input untouched. Identity, cosmetics and perks stay.
@@ -52,6 +68,12 @@ export function dealLoadout(l, mods) {
     let h = 0;
     for (const c of String(out.primary)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
     out.primary = SNIPERS[h % SNIPERS.length];
+  }
+  if (mods.includes('pistols')) {
+    const pick = (gun, salt) => { let h = salt; for (const c of String(gun)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PISTOLS[h % PISTOLS.length]; };
+    if (WEAPONS[out.primary]?.category !== 'Pistol') out.primary = pick(out.primary, 0);
+    if (WEAPONS[out.secondary]?.category !== 'Pistol') out.secondary = pick(out.secondary, 7);
+    if (out.secondary === out.primary) out.secondary = PISTOLS[(PISTOLS.indexOf(out.primary) + 1) % PISTOLS.length];
   }
   if (mods.includes('melee')) {
     out.primary = BLADE; out.secondary = SLEDGE; out.lethal = 'hatchet';
