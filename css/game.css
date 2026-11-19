@@ -578,7 +578,7 @@ html[data-cb="contrast"] .hit-kx path { stroke-width: 6.5; }
 }
 .qc-wheel[hidden] { display: none; }
 @keyframes qc-in { from { opacity: 0; transform: translateY(-6px) scale(.96); } }
-.qc-wheel[data-mode="snd"] { grid-template-columns: repeat(var(--cols, 7), 76px); }
+.qc-wheel[data-mode="snd"], .qc-wheel[data-wide] { grid-template-columns: repeat(var(--cols, 7), 76px); }
 .hud.lefty .qc-wheel { right: auto; left: calc(var(--sl) + 8px); transform-origin: top left; }
 .qc-item {
   display: flex; align-items: center; gap: 5px; padding: 0 6px; min-width: 0; text-align: left; color: var(--c-chalk);
@@ -593,6 +593,7 @@ html[data-cb="contrast"] .hit-kx path { stroke-width: 6.5; }
 .f-row.qc-row { gap: 6px; }
 .qc-row .qc-ico { width: 14px; }
 .qc-say { color: var(--c-chalk); }
+.qc-row.qc-bot .qc-say { color: var(--c-haze); }      /* Bot chatter (js/sim/chatter.js): a shade quieter than a person's callout. */
 .qc-ping {
   position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; pointer-events: none;
   box-shadow: 0 0 0 2px var(--c), 0 0 6px var(--c); animation: qc-ping 1s var(--ease-out) 3 both;

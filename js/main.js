@@ -1826,6 +1826,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   });
   // The interpolated view does not carry the map id; history and gun stats need it.
   app.match.awards.mapId = mapId;
+  if (tutorial) app.match.chatter = null;      // The tutorial's bots keep quiet (js/sim/chatter.js).
   // Ranked (the Ranked playlist, or a full friend room the host made ranked): the rating moves at the end.
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;

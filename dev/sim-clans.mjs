@@ -11,6 +11,9 @@
 //             carry it, newest rename names a player clan; a friend clan you are not in still ranks
 //   names     taggedName and the host's guest naming; a tournament bracket shows your clan for your squad
 //   reset     wipeProgress removes switchyard.clan
+//   chatter   bot chatter (js/sim/chatter.js) over full pool-bot matches: the same seed says the same lines at the same
+//             ticks; a line every so often but never two inside the gap, never more than the cap a minute; only bots
+//             speak; clanmates cheer with their tag; quick chat's callouts and wheels stay in range
 const store = new Map();
 globalThis.localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k),
   get length() { return store.size; }, key: i => [...store.keys()][i] ?? null };
@@ -161,6 +164,85 @@ console.log('reset');
   const res = R.wipeProgress(localStorage);
   Clan.reload();
   ok(res.wiped.includes('switchyard.clan') && !store.has('switchyard.clan') && Clan.get() === null, 'a wipe removes the clan', res.wiped.join(','));
+}
+
+console.log('chatter');
+{
+  const { Sim, buildRoster } = await import('../js/sim/sim.js');
+  const { SIM_HZ } = await import('../js/shared/constants.js');
+  const Ch = await import('../js/sim/chatter.js');
+  const run = (mode, map, seed, seconds) => {
+    const humans = [{ id: 'h1', name: '[RAIL] Dee', team: 0, primary: 'ar', camo: 'none', loadout: { primary: 'ar' } }];
+    const roster = buildRoster(humans, { botSkill: 'mixed', mapId: map, mode, seed, pool: { target: 0.5 } });
+    const sim = new Sim({ roster, map, seed, mode });
+    const chat = new Ch.BotChatter(sim, seed, { ffa: !!sim.ffa });
+    // A second host with the same seed, hearing the same events (the sim's bots are not themselves replayable): it must
+    // say exactly what the first says.
+    const twin = new Ch.BotChatter(sim, seed, { ffa: !!sim.ffa });
+    const lines = [], twinLines = [];
+    let tick = 0;
+    const human = sim.players.find(p => p.id === 'h1');
+    for (let i = Math.round(seconds * SIM_HZ); i > 0; i--) {
+      if (human) { human.alive = false; human.respawnT = 999; }     // Out of the way: bots only.
+      sim.step(1 / SIM_HZ);
+      tick++;
+      const ev = sim.drainEvents();
+      for (const c of chat.observe(ev)) lines.push({ tick, t: sim.time, ...c });
+      for (const c of twin.observe(ev)) twinLines.push({ tick, t: sim.time, ...c });
+      if (sim.phase === 'ended') {
+        for (let k = 0; k < SIM_HZ * 3; k++) {
+          sim.step(1 / SIM_HZ); tick++;
+          const ev2 = sim.drainEvents();
+          for (const c of chat.observe(ev2)) lines.push({ tick, t: sim.time, ...c });
+          for (const c of twin.observe(ev2)) twinLines.push({ tick, t: sim.time, ...c });
+        }
+        break;
+      }
+    }
+    return { sim, lines, twinLines };
+  };
+  const a = run('dom', 'railyard', 4242, 240), b = run('dom', 'railyard', 4242, 240);
+  ok(JSON.stringify(a.lines) === JSON.stringify(a.twinLines) && JSON.stringify(b.lines) === JSON.stringify(b.twinLines), 'the same seed and events say the same lines at the same ticks', a.lines.length);
+  ok(a.lines.length >= 4 && a.lines.length <= 4 * 7 + 6, 'a few lines over four minutes, not spam', a.lines.length);
+  const paced = a.lines.filter(l => !['glhf', 'gg', 'wp'].includes(Ch.CHATTER[l.l].id));
+  const tight = paced.find((l, i) => i && l.t - paced[i - 1].t < Ch.GAP_S - 1e-9);
+  ok(!tight, `never two within ${Ch.GAP_S} s`, tight && JSON.stringify([paced[paced.indexOf(tight) - 1], tight]));
+  ok(paced.every(l => paced.filter(m => m.t > l.t - Ch.WINDOW_S && m.t <= l.t).length <= Ch.WINDOW_MAX), `at most ${Ch.WINDOW_MAX} a minute`);
+  ok(a.lines.every(l => { const p = a.sim.byId.get(l.id); return p && p.isBot && !p.ai; }), 'only bots speak');
+  ok(a.lines.every(l => Ch.CHATTER[l.l]), 'every line is in CHATTER');
+  const kinds = new Set(a.lines.map(l => Ch.CHATTER[l.l].id));
+  console.log(`      lines: ${[...kinds].join(', ')}`);
+  ok(a.lines.length && b.lines.length, 'chatter happens');
+  const c = run('dom', 'railyard', 99, 240);
+  ok(JSON.stringify(c.lines) !== JSON.stringify(a.lines), 'another seed, other lines');
+  // A chatter with another seed on the same events picks differently.
+  {
+    const sim = a.sim, x = new Ch.BotChatter(sim, 1), y = new Ch.BotChatter(sim, 2);
+    let diff = 0;
+    for (let i = 0; i < 400; i++) { const ev = [{ t: 'kill', by: sim.players[1].id, target: sim.players[sim.players.length - 1].id }]; sim.time += 6;
+      const p = x.observe(ev).map(e => e.l + e.id).join(), q = y.observe(ev).map(e => e.l + e.id).join(); if (p !== q) diff++; }
+    ok(diff > 0, 'the seed decides who speaks and what', diff);
+  }
+  // Many matches: clanmates cheer with their tag, and the text fills it in.
+  let cheers = 0, seen = new Set();
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    const r = run('tdm', 'railyard', seed * 101, 300);
+    for (const l of r.lines) {
+      seen.add(Ch.CHATTER[l.l].id);
+      if (Ch.CHATTER[l.l].id.startsWith('cheer')) { cheers++; const name = r.sim.byId.get(l.id).name; ok(Ch.tagOf(name) && Ch.chatterText(l.l, name).includes(Ch.tagOf(name)), `cheer carries the tag: ${Ch.chatterText(l.l, name)}`); }
+    }
+  }
+  console.log(`      over six TDM matches: ${[...seen].join(', ')} (${cheers} cheers)`);
+  ok(seen.size >= 4, 'a mix of lines', seen.size);
+  ok(Ch.chatterText(Ch.CHATTER.findIndex(x => x.id === 'cheer'), 'Plain') === "Let's go team!", 'a cheer without a tag reads "team"');
+  // Quick chat's callouts: wheels only name callouts that exist; appended, so old indices never moved.
+  const qcSrc = (await import('node:fs')).readFileSync(new URL('../js/ui/quickchat.js', import.meta.url), 'utf8');
+  const ids = [...qcSrc.matchAll(/\{ id: '(\w+)', text:/g)].map(m => m[1]);
+  ok(ids.slice(0, 13).join() === 'enemy,help,onme,goA,goB,defend,nice,thanks,sorry,gg,planting,defusing,bombdown' && ids.length >= 23, 'callouts appended, the first 13 unmoved', ids.length);
+  for (const w of qcSrc.matchAll(/const (\w+_WHEEL) = \[([^\]]+)\]/g)) {
+    const list = [...w[2].matchAll(/'(\w+)'/g)].map(m => m[1]);
+    ok(list.every(id => ids.includes(id)) && list.length <= 14, `${w[1]}: ${list.length} callouts, all known`);
+  }
 }
 
 console.log(failed ? `\n${failed} FAILED` : '\nall ok');

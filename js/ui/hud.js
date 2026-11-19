@@ -2638,6 +2638,7 @@ export class HUD {
           }
           break;
         case 'streak': this.#onStreak(e); break;
+        case 'chatter': this.onChatter?.(e); break;      // Bot chatter (js/sim/chatter.js): js/ui/quickchat.js draws it.
         case 'streak_denied': this.#onDenied(e); break;
         case 'incoming': this.#onIncoming(e); break;
         case 'emp': this.#onEmp(e); break;
