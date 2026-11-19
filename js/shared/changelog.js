@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'Clans and bot chatter',
+    items: [
+      'Clans: found your own in Profile > Clan. Pick a tag of 2 to 4 letters or numbers, a name, a colour and a mark. Tags already used by other clans are taken.',
+      'Your tag shows before your name in the lobby, the scoreboard, the kill feed, the boards and the results.',
+      'Bring friends in: share your clan\'s join code, or play a friend lobby together and they can tap Join [TAG]. The founder can rename the clan; anyone can leave.',
+      'Boards has a Clans view: every clan ranked by its members\' totals, yours and your friends\' included.',
+      'In the weekend tournament your squad plays under your clan\'s tag and name.',
+      'Quick chat has more callouts: Push up, Fall back, Reloading, Need a revive, Flag\'s ours, UAV up, Yes, No and Loot here, with wheels to suit Capture the Flag and squad modes.',
+      'Bots talk a little now: a short line now and then in the kill feed ("Nice shot", "Flag\'s ours", "Need a revive!"), and clanmates cheer each other on. Turn it off in Options > Bot chatter.',
+    ],
+  },
+  {
     build: '1118-7', date: '2026-11-18', title: 'Replays',
     items: [
       'Watch replay: after any match, tap Watch replay on the final kill card to see the last 30 seconds again.',
