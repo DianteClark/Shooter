@@ -66,6 +66,8 @@ export function unpackZombie(n) {
   return { seat: n, x: xi / 10, z: zi / 10, aim: a / 64 * Math.PI * 2, kind, swing: !!swing };
 }
 
+export const ALLY_PAY = 1.75;
+
 export class ZmRules {
   constructor(sim, seed) {
     this.sim = sim;
@@ -617,7 +619,9 @@ export class ZmRules {
 
   _pay(p, n, double = true) {
     if (!p?.zm) return;
-    const v = n * (double && this.doubleT > 0 ? 2 : 1) * (this.night ? 2 : 1);     // Night Graveyard pays double.
+    // Ally bots earn ALLY_PAY times as much, so a bot crew can afford a bench tier before the round-10 boss
+    // (docs/ZOMBIES.md "Ally bots"); humans' points are unchanged.
+    const v = Math.round(n * (double && this.doubleT > 0 ? 2 : 1) * (this.night ? 2 : 1) * (p.isBot ? ALLY_PAY : 1));     // Night Graveyard pays double.
     p.zm.pts += v; p.zm.earned += v;
   }
 

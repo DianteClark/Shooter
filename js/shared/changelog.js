@@ -4,6 +4,12 @@
 
 export const CHANGELOG = [
   {
+    build: '1119-7', date: '2026-11-19', title: 'Stronger allies',
+    items: [
+      'Graveyard Shift ally bots earn 1.75 times the points per kill, so they can reach the upgrade bench before the round-10 boss. Your own points are unchanged.',
+    ],
+  },
+  {
     build: '1119-6', date: '2026-11-19', title: 'Graveyard Shift: bot teammates who pull their weight',
     items: [
       'Bot teammates in Graveyard Shift each have a personality: aggressive, support, hoarder or shopper. You will see it in how they fight, what they buy and what they say.',
