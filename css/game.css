@@ -1387,3 +1387,8 @@ html[data-calm] .daze-veil, html[data-calm] .snd-mark .sm-plate, html[data-calm]
 /* Text size (menus only; the HUD has HUD size). Grows the type tokens every menu reads. */
 html[data-text="large"] .menu, html[data-text="large"] .overlay { --fs-micro: 10.5px; --fs-caption: 12px; --fs-body: 14px; --fs-lead: 16px; --fs-title: 18.5px; }
 html[data-text="larger"] .menu, html[data-text="larger"] .overlay { --fs-micro: 11px; --fs-caption: 13px; --fs-body: 15px; --fs-lead: 17px; --fs-title: 19px; }
+
+/* In-match controls take no browser gestures at all. Buttons default to touch-action: manipulation (above), which still
+   lets iOS consider a pinch while a second finger is down; two owner touch reports (dev/touch-reports/2026-11-19-*)
+   show iOS cancelling the move thumb ~10 ms after a grenade button is released, then never reporting it again. */
+.controls, .controls *, #ui .hud button { touch-action: none; }
