@@ -320,5 +320,26 @@
   "score": 0.6225,
   "stock": 0.5625,
   "evals": 45
+ },
+ "burstsmg": {
+  "kit": {
+   "optic": "canted",
+   "barrel": "stub",
+   "mag": "speedmag"
+  },
+  "score": 0.6275,
+  "stock": 0.565,
+  "evals": 57
+ },
+ "heavyshot": {
+  "kit": {
+   "optic": "laserbox",
+   "barrel": "choke",
+   "mag": "lightmag",
+   "grip": "angled"
+  },
+  "score": 0.6,
+  "stock": 0.4975,
+  "evals": 53
  }
 }

@@ -25,13 +25,13 @@ export const W3_WEAPONS = {
   // is already done by the time the second burst leaves.
   burstsmg: {
     id: 'burstsmg', name: 'Clatter', role: 'Burst SMG', auto: true,
-    damage: 27, rpm: 650, burst: { count: 3, gap: 0.045 }, magazine: 30, reserve: 180, reload: 1.9, range: 36,
+    damage: 27, rpm: 760, burst: { count: 3, gap: 0.04 }, magazine: 30, reserve: 180, reload: 1.9, range: 36,
     falloff: { start: 17, end: 28, min: 0.62 },
-    adsSpread: 0.007, hipSpread: 0.04, bloomPerShot: 0.05, bloomRecover: 3.4, bloomScale: 1.2,
+    adsSpread: 0.007, hipSpread: 0.034, bloomPerShot: 0.05, bloomRecover: 3.4, bloomScale: 1.2,
     pattern: { amp: 0.005, freq: 1.1, ramp: 1 },
     adsTime: 0.15, sprintToFire: 0.1, swapTime: 0.28, moveMult: 1.05, adsMoveMult: 0.76,
     pellets: 1, slideFire: true, kickCam: 0.38, tracerWidth: 0.8, longshot: 19,
-    botUse: { pref: 11, hold: 0.8, flank: 1.2, advance: 3, rush: 20 },
+    botUse: { pref: 13, hold: 0.9, flank: 1.1, advance: 3 },
     feel: {
       fx: { shape: 'cross', flash: [1.2, 0.9, 1.1] },
       voice: { pitch: 1.12 },
@@ -44,8 +44,8 @@ export const W3_WEAPONS = {
   // can, and it goes through a crate. Then the pump: two thirds of a second, four in the tube, a slow hand on each.
   heavyshot: {
     id: 'heavyshot', name: 'Bullhead', role: 'Ten-gauge', auto: false,
-    damage: 23, rpm: 95, magazine: 4, reserve: 32, reload: 0.5, range: 19,
-    falloff: { start: 12.5, end: 17, min: 0.3 }, penetrate: 0.45,
+    damage: 23, rpm: 90, magazine: 4, reserve: 32, reload: 0.5, range: 19,
+    falloff: { start: 12, end: 16.5, min: 0.3 }, penetrate: 0.45,
     adsSpread: 0.03, hipSpread: 0.056, bloomPerShot: 0.2, bloomRecover: 1.5, bloomScale: 0.45, turnCap: 6.5,
     adsTime: 0.19, sprintToFire: 0.13, swapTime: 0.46, moveMult: 1.05, adsMoveMult: 0.66,
     pellets: 9, shellReload: true, kickCam: 1.25, tracerWidth: 0.6, longshot: 12,
