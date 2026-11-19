@@ -464,7 +464,6 @@ export class ExtractRules {
     }
     for (const s of this.squads.values()) {
       if (s.contract) { if (sim.tick % 30 === 11 && this._impossible(s.contract)) this._dropContract(s, 2.5, true); else this._stepContract(s.contract, dt); }
-      else if (!s.done && this.t >= s.nextAt) this._assign(s);
     }
     for (const [i, until] of this.boxDown) if (this.t >= until) { this.boxDown.delete(i); this._lootDirty(); }
     if (this.drops.length && this.drops[0].t + EX.dropLife < this.t) { this.drops.shift(); this._lootDirty(); }
@@ -474,9 +473,9 @@ export class ExtractRules {
     this._checkEnd();
   }
 
+  // Nothing is dealt: every squad picks its contracts up at a phone (bot squads walk to one, _planSquad).
   _start() {
     this.started = true;
-    for (const s of this.squads.values()) this._assign(s);
   }
 
   _checkEnd() {
@@ -484,17 +483,23 @@ export class ExtractRules {
     if (sim.phase !== 'live') return;
     if (this.t >= EX.length) { this._finish(); return; }
     const humans = sim.players.filter(p => !p.isBot && !p.ai && !p.dummy);
+    const allDone = [...this.squads.values()].every(s => s.done);
     if (humans.length) {
-      // A human is still in it while they can play on, or while squadmates who have not got out yet could still bank
-      // the pot for them (spectating).
-      const playing = humans.some(p => {
-        if (p.away || p.ex?.out) return false;
+      // A human is still in it while they can play on, while squadmates who have not got out yet could still bank
+      // the pot for them, while they chose Spectate ({cmd:'ex', act:'watch'}, until Leave or the end), and for
+      // EX.decide s after they are off the field for good (lifted out or out of lives) so they can choose.
+      const playing = !allDone && humans.some(p => {
+        if (p.away || !p.ex || p.ex.left) return false;
         const s = this.squadOf(p);
-        if (p.alive || (s?.lives ?? 0) > 0) return true;
-        return !!s && !s.extracted && !s.done && sim.players.some(q => q.team === p.team && q.alive && !q.ex?.out);
+        const held = p.ex.out || (!p.alive && (s?.lives ?? 0) <= 0);
+        if (!held) { p.ex.heldAt = undefined; return true; }
+        if (p.ex.watch) return true;
+        p.ex.heldAt ??= this.t;
+        if (this.t - p.ex.heldAt < EX.decide) return true;
+        return !p.ex.out && !!s && !s.extracted && !s.done && sim.players.some(q => q.team === p.team && q.alive && !q.ex?.out);
       });
       if (!playing) { this.endT = (this.endT ?? 0) + sim.dt; if (this.endT > 3) this._finish(); } else this.endT = 0;
-    } else if ([...this.squads.values()].every(s => s.done)) this._finish();
+    } else if (allDone) this._finish();
   }
 
   _finish() {
@@ -618,7 +623,8 @@ export class ExtractRules {
 
   // ---- Contracts ----
 
-  // Deals the squad its next contract: a type it has done least, at a place a fair walk away.
+  // Gives the squad a contract: the phone offer it took (pick), or with none a type it has done least, at a place a
+  // fair walk away (only tests and tools call it so: nothing deals contracts on its own any more).
   _assign(s, pick = null) {
     const sim = this.sim;
     const members = sim.players.filter(p => p.team === s.team && !p.ai && p.alive && !p.ex?.out);
@@ -653,6 +659,7 @@ export class ExtractRules {
     if (!c) { s.nextAt = this.t + 3; return; }
     s.contract = c;
     s.lastType = type;
+    s.plan.phone = null;
     sim._emit({ t: 'excontract', team: s.team, type, tier: c.tier, poi, taken: true });
     this._dirty();
   }
@@ -695,7 +702,8 @@ export class ExtractRules {
     c.state = -1;
   }
 
-  // The squad lets its contract go (by choice, or because it can no longer be done): no pay, a new one later.
+  // The squad lets its contract go (by choice, or because it can no longer be done): no pay; the next comes from a
+  // phone. `wait` is kept for the wire and the backup (older phones read it) but nothing is dealt when it runs out.
   _dropContract(s, wait, lost = false) {
     const c = s.contract;
     if (!c) return;
@@ -708,7 +716,7 @@ export class ExtractRules {
   }
 
   // A contract nothing can finish any more: an HVT whose commander's group is gone without him falling. Bots never
-  // abandon otherwise (they take no phone offers); this is the one way a contract ends unfinished for them.
+  // abandon otherwise; this is the one way a contract ends unfinished for them.
   _impossible(c) {
     if (c.type !== 'hvt') return false;
     const g = this.groups.find(x => x.id === c.group);
@@ -902,6 +910,14 @@ export class ExtractRules {
   command(p, msg) {
     if (!p || !p.ex || this.sim.phase !== 'live') return false;
     if (msg.act === 'call') return this._callExfil(p);
+    // Off the field for good (lifted out, or out of lives): Spectate keeps the match going for this player until they
+    // Leave (act 'leave', main.js leaveBrEarly) or it ends; results then come as usual.
+    if (msg.act === 'watch' || msg.act === 'leave') {
+      if (p.isBot) return false;
+      p.ex.watch = msg.act === 'watch';
+      p.ex.left = msg.act === 'leave';
+      return true;
+    }
     if (msg.act === 'take') {
       const ph = this.phones[msg.phone | 0], s = this.squadOf(p);
       if (!ph || !s || s.done || !this._up(p) || Math.hypot(p.ps.x - ph.x, p.ps.z - ph.z) > EX.phoneReach + 1) return false;
@@ -913,8 +929,7 @@ export class ExtractRules {
       this._assign(s, o);
       return true;
     }
-    // Abandon the squad's contract (a held button on the contract card): nothing is paid, the phones open up, and the
-    // dealer waits EX.abandonWait before it deals one itself.
+    // Abandon the squad's contract (a held button beside the tracker): nothing is paid and the phones open up.
     if (msg.act === 'abandon') {
       const s = this.squadOf(p);
       if (!s || s.done || !s.contract || p.ex.out) return false;
@@ -1225,6 +1240,8 @@ export class ExtractRules {
       }
     }
     plan.fight = fight;
+    // A human of the squad still in play (alive, or waiting on a respawn) picks the contracts.
+    const humanIn = !c && sim.players.some(q => q.team === s.team && !q.ai && !q.isBot && !q.ex?.out && (q.alive || s.lives > 0 || q.ex?.free));
 
     bots.forEach((p, i) => {
       const bot = p.bot;
@@ -1278,9 +1295,46 @@ export class ExtractRules {
         bot.setObjective({ key: `tp:${Math.round(at.x / 5)}:${Math.round(at.z / 5)}`, role: 'collect', x: at.x, z: at.z, r: 2 });
         return;
       }
-      if (!c) { const at = this._walk(ax + spread(i, 4).dx, az + spread(i, 4).dz); bot.setObjective({ key: `wait:${Math.round(at.x / 6)}:${Math.round(at.z / 6)}`, role: 'hold', x: at.x, z: at.z, r: 3 }); return; }
+      if (!c) {
+        // No contract: walk to a phone and take one there (a human squad's bots leave that to their human while
+        // one is still in play).
+        const ph = !humanIn && this._phoneFor(s, ax, az);
+        if (ph) {
+          if (Math.hypot(p.ps.x - ph.x, p.ps.z - ph.z) <= EX.phoneReach && this._botTake(s, p, ph)) return;
+          const o = spread(i, 1.6), at = this._walk(ph.x + o.dx, ph.z + o.dz);
+          bot.setObjective({ key: `ph:${ph.i}:${i}`, role: 'collect', x: at.x, z: at.z, r: 1 });
+          return;
+        }
+        const at = this._walk(ax + spread(i, 4).dx, az + spread(i, 4).dz); bot.setObjective({ key: `wait:${Math.round(at.x / 6)}:${Math.round(at.z / 6)}`, role: 'hold', x: at.x, z: at.z, r: 3 }); return;
+      }
       bot.setObjective(this._contractOrder(s, c, p, i, bots, spread));
     });
+  }
+
+  // The phone a bot squad heads for: the nearest to it, kept until it has taken a contract.
+  _phoneFor(s, x, z) {
+    const plan = s.plan;
+    let ph = plan.phone != null ? this.phones[plan.phone] : null;
+    if (!ph) {
+      let bd = Infinity;
+      for (const q of this.phones) { const d = Math.hypot(q.x - x, q.z - z); if (d < bd) { bd = d; ph = q; } }
+      plan.phone = ph?.i ?? null;
+    }
+    return ph;
+  }
+
+  // A bot at the phone takes the offer its squad has done least, the nearer the better (better sites break ties).
+  _botTake(s, p, ph) {
+    const offers = this.offers(ph.i, s.team, s.taken);
+    let k = -1, best = Infinity;
+    offers.forEach((o, j) => {
+      const q = this.pois[o.poi], d = q ? Math.hypot(q.x - ph.x, q.z - ph.z) : 100;
+      const w = s.banked.concat(s.pot).filter(x => x.type === o.type).length + (s.lastType === o.type ? 2 : 0) + o.tier * 0.4 + d / 70 + this.rng() * 0.5;
+      if (w < best) { best = w; k = j; }
+    });
+    if (k < 0 || !this.command(p, { act: 'take', phone: ph.i, k })) return false;
+    s.plan.phone = null;
+    return true;
   }
 
   _nearBox(x, z, r) {

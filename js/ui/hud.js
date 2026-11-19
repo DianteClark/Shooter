@@ -53,6 +53,7 @@ const DOCK_GAP = 4;
 const LANE_H = 46;               // The prompt lane over the dock.
 const LANE_MAX = 300;
 const OUT_H = 46;                // The battle royale's out plate while watching.
+const OUT_H_EX = 84;             // Extraction's watching plate: its text over a row of buttons (js/ui/ex-hud.js).
 const ARMS_EDGE = 8;             // The weapon panel's inset from the side.
 const STRIP_ROW_H = [36, 30, 24];   // Least height kept for each objective strip row (content comes and goes).
 const HIT_LIFE = 0.22;
@@ -653,10 +654,11 @@ export class HUD {
     // Out and watching (battle royale, extraction): the out plate goes under the strip's state row, in the widest free
     // stretch there (the weapon panel is hidden while you are out), clear of both sticks.
     {
-      const oy = tops[1], oh = OUT_H * k;
+      const oy = tops[1], oh = (this.ex ? OUT_H_EX : OUT_H) * k;
       let lo = safe.l + 6, hi = W - safe.r - 6;
       for (const r of obstacles) {
-        if (r === armsBox || r.bottom <= oy + 2 || r.top >= oy + oh - 2) continue;
+        // Extraction: the spectate card takes the weapon panel's place while you watch, so the plate keeps clear of it.
+        if ((r === armsBox && !this.ex) || r.bottom <= oy + 2 || r.top >= oy + oh - 2) continue;
         if ((r.left + r.right) / 2 < W / 2) lo = Math.max(lo, r.right + DOCK_GAP * 2);
         else hi = Math.min(hi, r.left - DOCK_GAP * 2);
       }
