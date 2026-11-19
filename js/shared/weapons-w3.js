@@ -25,7 +25,7 @@ export const W3_WEAPONS = {
   // is already done by the time the second burst leaves.
   burstsmg: {
     id: 'burstsmg', name: 'Clatter', role: 'Burst SMG', auto: true,
-    damage: 27, rpm: 760, burst: { count: 3, gap: 0.04 }, magazine: 30, reserve: 180, reload: 1.9, range: 36,
+    damage: 27, rpm: 700, burst: { count: 3, gap: 0.04 }, magazine: 30, reserve: 180, reload: 1.9, range: 36,
     falloff: { start: 17, end: 28, min: 0.62 },
     adsSpread: 0.007, hipSpread: 0.034, bloomPerShot: 0.05, bloomRecover: 3.4, bloomScale: 1.2,
     pattern: { amp: 0.005, freq: 1.1, ramp: 1 },

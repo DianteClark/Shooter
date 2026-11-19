@@ -853,3 +853,104 @@ stats code split by mode, read the owner's 6v6 rows on 1111-34+ builds; if Murmu
   tile edge. dev/zfight-check.py --maps frontier: tops 3 -> 1 (the three seam overlaps at roof height are gone; one
   2 cm floor-level sliver at a wall base of building 17, x 227.5, appeared), walls 14 (unchanged, faces under the
   terrain, known).
+
+## Wave 3 (three guns for the gaps the roster still had)
+
+Data in js/shared/weapons-w3.js (merged into WEAPONS by one line in weapons.js; constants.js appends its ids after the
+V10 guns in every list, so every older id keeps its wire index), models in js/render/guns-w3.js (one line in guns.js),
+icons in js/ui/icons-w3.js, signatures in js/shared/attachments-w3.js (appended after wave 2, so packKit's slot lists
+and every older kit int keep their meaning).
+
+**What was missing.** Read against the roster: no SMG fires in bursts (Cadence, Tandem and Deuce are the burst guns);
+every pellet shotgun's one-shot range ends at 8-10 m and none trades rate for reach; no sidearm holds a three-shot kill
+across a lane at pace (the Verdict is two shots in a room, three past 18 m at 140 rpm). A lever-action rifle was
+suggested but the Prospector already is one, so that slot went to the battle pistol.
+
+| Gun | Id | Class | Identity | Range band | Unlock |
+|---|---|---|---|---|---|
+| **Clatter** | `burstsmg` | SMG | Three-round bursts (0.04 s apart, 700 rpm cadence); two bursts kill out to 17 m, where every other SMG needs more rounds. Slower in a room than every SMG but the Hopper, and only if the whole first burst lands. | 10-20 m: the SMG that fights at the AR's near edge | Level 25 |
+| **Bullhead** | `heavyshot` | Shotgun | Ten-gauge pump: nine heavy pellets in a tight fan, one shell kills to 12 m (the longest of any pellet gun), through a crate; four shells, 90 rpm, the slowest pump. | 6-12 m: the ambusher's shotgun | Level 29 |
+| **Gavel** | `battlepistol` | Pistol | Battle pistol: three to the body to 22 m at 270 rpm, the quickest sidearm kill past 18 m; the Verdict still wins a room, the Flicker out-paces it close. | 15-30 m sidearm | Level 27 |
+
+Unlock levels are ones no other gun opens on. Each gun has its own `feel` (js/render/feel.js): Clatter a braked cross
+flash, a higher voice and a light, twisting kick; Bullhead the biggest fan flash and muzzle light of the shotguns, a
+low long boom and the heaviest shove; Gavel a star flash, a low pistol crack and the steepest climb of the sidearms.
+Reloads, carry and death throw borrow the Stitch, Thresher and Flicker (`W3_LIKE`, read by weapons-v10.js fillV10).
+
+**Models.** Clatter: a flat receiver under a rib with three bright burst studs, a slotted slab jacket and a three-fin
+muzzle (one fin per round), open wire stock. Bullhead: one fat barrel over a full-length tube, a deep ribbed pump, a
+shell carrier on the right and a thick ring collar at the muzzle, the widest single barrel from above. Gavel: the
+longest and widest slide of the sidearms with a vented rib, a squared nose over an accessory rail and a hump over the
+hand. Every part each gun takes is fitted where the gun's shape puts it; dev/sim-attachments.mjs checks all 73 pairs
+are drawn, differ from stock and from every other part in that slot, stay within 0.5 m of the gun, and give finite hand
+points.
+
+**Attachments.** Class lists give each gun 5-7 options a slot; with the signatures 6-8. Two signatures each (same rules
+and boost as V11: strengths x1.5, damage and rate x1.25, costs halved), one on a level that fills the gun's last gap
+(no gun goes more than four levels without a new part), one at Mastery I:
+
+| Gun | Part | Slot | Gives | Costs | Unlock |
+|---|---|---|---|---|---|
+| Clatter | Clatter Shroud | barrel | range +15%, damage at range +9% | sprint to fire +6%, swap time +5% | Level 26 |
+| Clatter | Snap Sear | grip | gap in a burst -38%, fire rate +6% | recoil sway +15%, bloom per shot +12% | Mastery I |
+| Bullhead | Slick Pump | grip | fire rate +18% | swap time +5%, move speed -2% | Level 26 |
+| Bullhead | Goose Loads | mag | range +12%, aimed spread -18% | magazine -1, reload +8% | Mastery I |
+| Gavel | Match Slide | barrel | bloom per shot -38%, settle speed +22% | swap time +6%, sprint to fire +5% | Level 25 |
+| Gavel | Hot Loads | mag | range +12%, damage at range +9% | reload +8%, bloom per shot +8% | Mastery I |
+
+**Mastery and camos.** Nothing special was needed: weapon levels, the mastery ladder (and its Master card), camo
+challenges and the Golden Gun requirement all come from WEAPON_IDS.
+
+**Bots.** The two primaries join BOT_PRIMARIES and the Gavel BOT_SECONDARIES after the V10 guns; each has three bot kits
+(`W3_BOT_KITS`, so battle royale's deals 0, 2, 4 reach all of them). The Clatter's `botUse` has no `rush`: as a close
+gun its bots hip-fired inside 12 m (ADS 14% against 31-67% for the other SMGs) and died closing (0.79-0.89); played as a
+mid-range gun it sits at 0.93-1.04.
+
+**Bot pool.** Favourites stay exactly as they were (dev/sim-botpool.mjs pins every profile by hash): the pool's
+GUNS_BY_CLASS and Master-card list leave wave 3 out, since a longer class list would reshuffle every profile the boards
+show. Instead `tryoutOf(profile)` (js/shared/botpool.js) gives about half the players a new gun of one of their classes
+and a fifth the Gavel, from a stream of its own; sim.js poolBotEntry carries the tryout one match in three, drawn after
+the favourite roll, so which favourite a bot brings is unchanged.
+
+**Battle royale and Graveyard Shift.** BR floor loot reaches the new guns by class weight like any other (and an epic or
+legendary one rolls its signatures; dev/sim-attachments.mjs checks the floor deals all three and at least four of the
+six signatures). Graveyard Shift: Clatter on band 3's wall list (1,400), Bullhead on the deepest (1,600); all three in
+the mystery crate, before the wonder-weapon carriers so those stay last.
+
+**Balance.** Mirrored 6 v 6 (dev/balance-sim.mjs, Regular bots, Pier/Turnstile, Railyard/Dust, Foundry/Canyon x TDM and
+Domination). Tuning runs focused on the new guns (`--gun=burstsmg,heavyshot`, 8-10 seeds x 2 rounds):
+- Clatter: first cut (650 rpm, `rush: 20`) 0.79; 740 rpm 0.85-0.89; bots playing it mid-range (`pref` 13, no `rush`) at
+  800 rpm 1.04, 760 rpm 0.93 (1.02 in the full pass below). Ships at 700 rpm so it is slow in a room (ideal time to
+  kill 0.26 s at 5 m, against 0.17-0.24 for the Rasp, Ballast, Stitch, Skitter and Murmur) and wins on reach instead:
+  0.95 stock (focused, 10 seeds), 1.00 best build (Tac Laser, Clatter Shroud), 0.94 signatures.
+- Bullhead: first cut (95 rpm, one shell to 12.5 m) 1.19; ships at 90 rpm, one shell to 12 m: 1.06 stock, 1.06 best
+  build (Tac Laser, Choke, Light Mag, Angled), 1.06 signatures.
+- Gavel (`--sidearms`, not a target table): 1.15 stock, 1.05 best build (Flip Irons, Long Barrel, Wrap).
+
+Full stock pass, 12 seeds x 2 rounds, every primary, before (dev without wave 3) -> after (with the Clatter at 760 rpm;
+it ships 60 rpm slower, focused 0.93 -> 0.95, so the field is unchanged within noise):
+```
+Clatter    -    -> 1.02        Bullhead   -    -> 1.11
+Stanchion 1.20 -> 1.23   Millrace 1.18 -> 1.22   Gantry 1.19 -> 1.21   Bulwark 1.12 -> 1.16   Drover 1.12 -> 1.15
+Hopper    0.94 -> 0.85   Lancet   0.99 -> 1.06   Halyard 1.08 -> 1.13   Rasp 0.98 -> 0.93
+every other primary within +-0.04 of before
+```
+The new guns sit inside the band. A gun's K/D over 12 seeds carries about +-0.05; Hopper and Lancet move by more, in
+opposite directions to their classmates, which reads as the deal reshuffling (two more guns change every set of six).
+The LMGs move together (+0.02 to +0.04): two more close guns in the field feed the long lanes on the small maps, the
+known small-map residue (pass 3). Stanchion, Millrace and Gantry were already 1.18-1.20 before; if the next stats code
+agrees, they are the next trims, not the new guns.
+
+Ideal body-shot time to kill (dev/ttk-table.mjs; the sidearms by the same rule), shots/seconds at 5, 10, 20, 35 m:
+```
+Clatter    4/0.26 4/0.26 5/0.30 6/0.34     Skitter  5/0.24 5/0.24 8/0.43 -     Halyard 4/0.27 4/0.27 5/0.36 6/0.45
+Bullhead   1      1      -      -          Thresher 1      1      -      -
+Gavel      3/0.44 3/0.44 3/0.44 4/0.67     Verdict  2/0.43 2/0.43 3/0.86 -       Flicker 3/0.30 3/0.30 5/0.60 -
+```
+The Clatter's 20 m number beats the Halyard's on paper; in play the burst's kick and the bots' 35% hit rate at that
+range decide it (duels at 20 m: Clatter 59%, Halyard 60%; at 35 m 44% against 55%).
+
+Tests: dev/sim-arsenal.mjs (each gun fires, reloads, kills; each one's identity: the Clatter's bursts and 17 m reach,
+the Bullhead's one-shot reach over every other pellet gun, the Gavel's kill time past 18 m against every sidearm),
+dev/sim-attachments.mjs (two wave 3 tests: models, choice per slot, bot kits and BR loot), dev/ui-attachments-test.py
+(the three guns in the Gunsmith, one with a locked Mastery I part).

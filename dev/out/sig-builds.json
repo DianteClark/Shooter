@@ -362,9 +362,8 @@
  },
  "burstsmg": {
   "kit": {
-   "optic": "canted",
+   "optic": "laserbox",
    "barrel": "s_clattershroud",
-   "mag": "speedmag",
    "grip": "s_snapsear"
   },
   "sigs": [

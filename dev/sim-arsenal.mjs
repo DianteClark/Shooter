@@ -516,7 +516,7 @@ test('wave 3: three guns in their classes, with names, feel, a borrowed reload, 
   for (const u of W3_UNLOCKS) assert.equal(levels.filter(v => v.level === u.level).length, 1, `${u.id}: level ${u.level} is its own`);
 });
 
-test('Clatter: three rounds a pull, a hair apart; two bursts kill to 17 m, where every other SMG needs more', () => {
+test('Clatter: three rounds a pull, a hair apart; two bursts kill to 17 m, where every other SMG needs more; slow in a room', () => {
   const w = WEAPONS.burstsmg;
   const ps = shooter('burstsmg');
   const t = [...run(ps, 1.0, { fire: true }).map(s => s.t), ...run(ps, 0.15).map(s => 1.0 + s.t)];   // Let go: a started burst finishes.
@@ -525,7 +525,10 @@ test('Clatter: three rounds a pull, a hair apart; two bursts kill to 17 m, where
   assert.ok(Math.abs(t[3] - t[0] - 3 * 60 / w.rpm) < 0.03, 'bursts at its rpm');
   assert.equal(shotsToKill(w, 17), 4);
   for (const id of WEAPON_IDS.filter(id => WEAPONS[id].category === 'SMG' && id !== 'burstsmg')) assert.ok(shotsToKill(WEAPONS[id], 17) > 4, `${id} needs more at 17 m`);
-  assert.ok(shotsToKill(w, 5) * 60 / w.rpm > 4 * 60 / WEAPONS.smg.rpm, 'slower up close than a Skitter');
+  // Ideal time to the killing round: whole bursts at the cadence, then the gap inside the last one.
+  const ttk = (d, x) => { const n = shotsToKill(d, x) - 1; return d.burst ? Math.floor(n / d.burst.count) * d.burst.count * 60 / d.rpm + (n % d.burst.count) * d.burst.gap : n * 60 / d.rpm; };
+  for (const id of ['smg', 'pdw', 'tacsmg', 'heavysmg', 'hushsmg']) assert.ok(ttk(w, 5) > ttk(WEAPONS[id], 5), `slower in a room than the ${id}`);
+  for (const id of WEAPON_IDS.filter(id => WEAPONS[id].category === 'SMG' && id !== 'burstsmg')) assert.ok(ttk(w, 17) < ttk(WEAPONS[id], 17), `quicker at 17 m than the ${id}`);
 });
 
 test('Bullhead: one shell kills further out than any other pellet gun, four in the tube, through a crate', () => {
