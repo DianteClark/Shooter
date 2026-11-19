@@ -24,7 +24,7 @@ import { hasLineOfSight } from '../shared/geometry.js';
 import {
   ZM, ZE, ZM_TEAM, ZM_KINDS, ZM_PERK_IDS, ZM_PERKS, ZM_POWERUPS, BOX_GUNS, START_GUN, NO_GUN,
   roundCount, roundHp, roundMix, spawnGap, paceBonus, isBossRound, zmMaxHp, clawDmg, zmPace, bruteCap, zmLayout, placeZmWalls, syncZmDoors, reblockNav, zmUsable, bandOpen, zmDoorStand,
-  specialRound, ZM_ROUNDS, ZK, isQuestBoss, isBossKind, zmWonderOf, ZM_WONDERS, ZM_WONDER_IDS, ZM_WONDER_ROLL, BOX_ROLL,
+  specialRound, ZM_ROUNDS, ZK, isQuestBoss, isBossKind, zmWonderOf, ZM_WONDERS, ZM_WONDER_IDS, ZM_WONDER_ROLL, BOX_ROLL, zmUpgradable,
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
@@ -848,7 +848,9 @@ export class ZmRules {
       const down = goTo.get(bot);
       if (down) {
         if (dist(p, down) < ZM.reviveReach) bot.zStill = down.ps;      // In reach: stand still over them (bots.js).
-        bot.setObjective({ key: `zrev${down.index}:${Math.round(down.ps.x)}:${Math.round(down.ps.z)}`, role: 'collect', x: down.ps.x, z: down.ps.z, r: 0.8, commit: true });
+        // Clear round them: straight in, nothing on the way stops it. Undead over them: fight in (kiting as usual).
+        const hot = this._count(down, 3.5) >= 2;
+        bot.setObjective({ key: `zrev${down.index}:${Math.round(down.ps.x)}:${Math.round(down.ps.z)}${hot ? 'h' : ''}`, role: 'collect', x: down.ps.x, z: down.ps.z, r: 0.8, commit: !hot });
         continue;
       }
       // The exfil is on: everyone to the pad.
@@ -1018,9 +1020,15 @@ export class ZmRules {
     const worth = g => (g === START_GUN || g === NO_GUN ? 0 : (L.wallBuys.find(w => w.gun === g)?.cost ?? 1600) + (z.tiers[g] ?? 0) * 1500);
     const held = Math.max(worth(ps.primary), worth(ps.secondary));
     const c = P.cushion;
-    // The next perk on its list it can reach: its points are kept back from gates and the crate.
-    const perkM = this.power && z.perks.length < z.limit ? P.perks.map(k => L.machines.find(m => m.perk === k && !z.perks.includes(k) && bandOpen(L, this.open, m.band))).find(Boolean) : null;
+    // The next perk on its list (health and revives first): its points are kept back from the rest, and a gate to its
+    // machine is worth opening.
+    const perkM = this.power && z.perks.length < z.limit ? P.perks.map(k => L.machines.find(m => m.perk === k && !z.perks.includes(k))).find(Boolean) : null;
     const perkNeed = perkM ? ZM_PERKS[perkM.perk].cost : 0;
+    // The bench's next tier, banked toward (a share by persona) once it has a gun worth it: everything but the gun, its
+    // first perk, Ironhide, ammo, a first plate and the way to the bench waits on it. A hoarder banks for tier 2 too.
+    const tierNow = Math.max(0, ...[ps.primary, ps.secondary].filter(g => g !== START_GUN && zmUpgradable(g)).map(g => z.tiers[g] ?? 0));
+    const bank = L.bench && this.round >= P.bench - 2 && held >= 1000 && tierNow < (P.benchBias >= 10 ? 2 : 1) ? Math.round(ZE.bench.cost[tierNow] * P.save) : 0;
+    const keep = perkNeed + bank;
     for (const w of L.wallBuys) {
       if (!bandOpen(L, this.open, w.band)) continue;
       const own = ps.primary === w.gun || ps.secondary === w.gun;
@@ -1030,7 +1038,7 @@ export class ZmRules {
         const slot = ps.primary === w.gun ? 0 : 1;
         if (ps.reserve[slot] < (WEAPONS[w.gun].magazine ?? 30) * 1.5 && z.pts >= w.ammo + 200) consider({ kind: 'ammo', i: w.i, x: w.x, z: w.z }, 50 - d * 0.5);
       } else if (!hasGun && z.pts >= w.cost) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 44 + w.cost / 100 - d * 0.5);
-      else if (hasGun && z.pts >= w.cost + 400 * c && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 36 + (w.cost - held) / 40 - d * 0.5);
+      else if (hasGun && z.pts >= w.cost + 400 * c + (held >= 1000 ? bank : 0) && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 36 + (w.cost - held) / 40 - d * 0.5);
     }
     const full = z.perks.length >= z.limit;
     for (const m of L.machines) {
@@ -1043,30 +1051,33 @@ export class ZmRules {
         continue;
       }
       const cost = ZM_PERKS[m.perk].cost, rank = P.perks.indexOf(m.perk);
-      if (z.pts >= cost + (hasGun ? 200 : 1200) * c) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 38 - rank * 3 - d * 0.5);
+      const next = m === perkM || m.perk === 'iron';
+      if (z.pts >= cost + (hasGun ? 200 : 1200) * c + (next ? 0 : bank + perkNeed)) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 38 - rank * 3 - d * 0.5);
     }
     // The crate, once the basics are bought and there are points to burn (once a round), while the gun in hand has no
     // tier worth keeping.
     const bs = this.box.state === 0 && this.box.spot >= 0 ? L.boxSpots[this.box.spot] : null;
     const tiered = [ps.primary, ps.secondary].some(g => (z.tiers[g] ?? 0) > 0);
-    if (bs && bandOpen(L, this.open, bs.band) && hasGun && z.perks.length >= 2 && !tiered && z.boxRound !== this.round && z.pts >= ZM.box.cost + perkNeed + P.box) {
+    if (bs && bandOpen(L, this.open, bs.band) && hasGun && z.perks.length >= 2 && !tiered && z.boxRound !== this.round && z.pts >= ZM.box.cost + keep + P.box) {
       const d = dist(bs.x, bs.z);
       if (d < 45) consider({ kind: 'box', i: bs.i, x: bs.x, z: bs.z }, 18 + (held < 1300 ? 8 : 0) - d * 0.5);
     }
-    this.econ.botWants(p, consider, P, perkNeed);
+    this.econ.botWants(p, consider, P, keep);
     // Gates: with nobody else to open them, the next one out; with a person, one beside them (a hand through) or toward
     // a better gun, the bench or a perk it lacks; never with the points its next perk wants.
     {
       for (const d of L.doors) {
-        if (this.open & (1 << d.i) || z.pts < d.cost + perkNeed + (humans ? 1500 : 400) * c) continue;
+        if (this.open & (1 << d.i)) continue;
         const at = zmDoorStand(L, this.open, d);
         if (!at) continue;
         const far = bandOpen(L, this.open, d.a ?? d.from) ? (d.b ?? d.opens) : (d.a ?? d.from);
-        const worthIt = L.wallBuys.some(w => w.band === far && w.cost > held + 150) || L.bench?.band === far || L.machines.some(m => m.band === far && !z.perks.includes(m.perk));
+        const toPerk = perkM?.band === far, toBench = L.bench?.band === far;
+        if (z.pts < d.cost + (toPerk ? 0 : perkNeed) + (toBench || toPerk ? 0 : bank) + (humans ? 1500 : 400) * c) continue;
+        const worthIt = toPerk || toBench || L.wallBuys.some(w => w.band === far && w.cost > held + 150) || L.machines.some(m => m.band === far && !z.perks.includes(m.perk));
         const byLead = lead && lead !== p && !lead.isBot && Math.hypot(lead.ps.x - d.cx, lead.ps.z - d.cz) < 8;
         if (humans && !worthIt && !byLead && z.pts < 6000) continue;
         const dd = dist(d.cx, d.cz);
-        if (dd < 50) consider({ kind: 'door', i: d.i, x: at.x, z: at.z }, (worthIt ? 16 : 5) + (byLead ? 8 : 0) - dd * 0.4);
+        if (dd < 50) consider({ kind: 'door', i: d.i, x: at.x, z: at.z }, (worthIt ? 16 : 5) + (toPerk ? 14 : 0) + (byLead ? 8 : 0) - dd * 0.4);
       }
     }
     if (close && best && Math.hypot(best.x - ps.x, best.z - ps.z) > 7) return null;

@@ -24,6 +24,18 @@ export const CHATTER = [
   { id: 'thanks', text: 'Thanks for the pick-up', icon: 'ui:check' },
   { id: 'uav', text: 'UAV up', icon: 'ui:eye' },
   { id: 'wp', text: 'Well played', icon: 'ui:cup', all: true },
+  // Graveyard Shift (the `zm` option): ally bots on their buys, revives, the boss and the quest.
+  { id: 'zgun', text: 'New gun. Much better', icon: 'ui:aim' },
+  { id: 'zperk', text: 'Perked up', icon: 'ui:star' },
+  { id: 'zbench', text: 'Upgrading my gun', icon: 'ui:star' },
+  { id: 'zstreak', text: 'Calling it in!', icon: 'ui:warning' },
+  { id: 'zup', text: 'Up you get', icon: 'ui:check' },
+  { id: 'zboss', text: 'Big one coming. Stay close', icon: 'ui:warning' },
+  { id: 'zbossa', text: 'Bring the big one', icon: 'ui:skull' },
+  { id: 'zcrate', text: 'Rolling the crate', icon: 'ui:party' },
+  { id: 'zrelic', text: 'Got one for the quest', icon: 'ui:check' },
+  { id: 'zyours', text: 'Quest is ready. Your call', icon: 'ui:flag' },
+  { id: 'zsave', text: 'Saving up for the bench', icon: 'ui:timer' },
 ];
 const L = Object.fromEntries(CHATTER.map((c, i) => [c.id, i]));
 
@@ -48,9 +60,12 @@ function mulberry32(a) {
 
 export class BotChatter {
   // sim: anything with time, phase, mode, players [{ id, team, isBot, ai, dummy, alive, name, streak }]; ffa: no sides.
-  constructor(sim, seed = 1, { ffa = false } = {}) {
+  // zm: Graveyard Shift (no lines on every zombie kill; ally bots talk about their buys, revives, the boss, the quest,
+  // a little more often by their persona, js/sim/zm-allies.js).
+  constructor(sim, seed = 1, { ffa = false, zm = false } = {}) {
     this.sim = sim;
     this.ffa = ffa;
+    this.zm = zm;
     this.rng = mulberry32((seed ^ 0x2c1b3c6d) >>> 0);
     this.last = -99;
     this.recent = [];
@@ -78,6 +93,7 @@ export class BotChatter {
   observe(events) {
     const sim = this.sim, r = () => this.rng();
     for (const e of events) {
+      if (this.zm && this.#zm(e, r)) continue;
       switch (e.t) {
         case 'phase':
           if (e.phase === 'live' && !this.saidStart) {
@@ -137,6 +153,48 @@ export class BotChatter {
       }
     }
     return this.#due();
+  }
+
+  // Graveyard Shift's events; true when the event is handled here (kills and reloads are skipped: a horde would spam them).
+  #zm(e, r) {
+    const p = this.#byId(e.id ?? e.by), lean = (k, ...ids) => (ids.includes(p?.zPersona) ? k * 1.4 : k);
+    switch (e.t) {
+      case 'kill': case 'reload': return true;
+      case 'zbuy':
+        if (!this.#talker(p)) return true;
+        if (e.kind === 'wall' && r() < lean(0.45, 'aggressive', 'shopper')) this.#say(p, L.zgun, 0.6);
+        else if (e.kind === 'perk' && r() < lean(0.3, 'support')) this.#say(p, L.zperk, 0.6);
+        else if (e.kind === 'box' && r() < lean(0.35, 'shopper')) this.#say(p, L.zcrate, 0.3);
+        return true;
+      case 'zbench': if (e.state === 1 && this.#talker(p) && r() < lean(0.55, 'aggressive', 'hoarder')) this.#say(p, L.zbench, 0.4); return true;
+      case 'zsupply': if (e.item !== 'vest' && this.#talker(p) && r() < 0.6) this.#say(p, L.zstreak, 0.1); return true;
+      case 'revive': {
+        const by = this.#byId(e.by), v = this.#byId(e.id);
+        if (!by || by === v) return true;
+        if (this.#talker(by) && r() < lean(0.3, 'support')) this.#say(by, L.zup, 0.3);
+        else if (this.#talker(v) && r() < 0.35) this.#say(v, L.thanks, 0.6);
+        return true;
+      }
+      case 'zround': {
+        if (!e.boss || r() > 0.8) return true;
+        const b = this.#mate(0);
+        if (b) this.#say(b, b.zPersona === 'aggressive' ? L.zbossa : L.zboss, 1);
+        return true;
+      }
+      case 'zbreak': {
+        const h = this.#mate(0, null, q => q.zPersona === 'hoarder' && (q.zm?.pts ?? 0) > 3000);
+        if (h && r() < 0.2) this.#say(h, L.zsave, 2);
+        return true;
+      }
+      case 'zrelic': {
+        if (!this.#talker(p)) return true;
+        const people = this.sim.players.some(q => q.team === p.team && !q.isBot && !q.away);
+        if (e.n >= e.of && people) this.#say(p, L.zyours, 0.8);
+        else if (r() < 0.4) this.#say(p, L.zrelic, 0.6);
+        return true;
+      }
+      default: return false;
+    }
   }
 
   #teams() {

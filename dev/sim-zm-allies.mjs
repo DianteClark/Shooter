@@ -28,15 +28,18 @@ function run(map, seed) {
   const me = sim.byId.get('me');
   me.isBot = false;                // The rules see a person in the seat (lead, revive first, the quest's last step).
   const R = sim.rules, allies = R.crew.filter(p => p !== me);
-  const chat = new BotChatter(sim, seed);
-  const o = { downs: 0, bleeds: 0, meDowns: 0, revMe: 0, revAlly: 0, perks: 0, deploys: 0, buys: {}, tierMax: 0, wallMax: 0, quest: 0, lines: {}, kills: 0 };
+  const chat = new BotChatter(sim, seed, { zm: true });
+  const o = { downs: 0, bleeds: 0, meDowns: 0, revMe: 0, revAlly: 0, perks: 0, deploys: 0, buys: {}, by: {}, early: 0, tierMax: 0, wallMax: 0, quest: 0, lines: {}, kills: 0 };
   const wallCost = g => sim.rules.L.wallBuys.find(w => w.gun === g)?.cost ?? 0;
   const isAlly = id => allies.some(p => p.id === id);
   for (let i = 0; i < SIM_HZ * 60 * 90 && sim.phase !== 'ended' && R.round <= CAP; i++) {
     sim.step(DT);
     const ev = sim.drainEvents();
     for (const e of [...ev, ...chat.observe(ev)]) {
-      if (e.t === 'down') { if (e.target === me.id) o.meDowns++; else if (isAlly(e.target)) o.downs++; }
+      if (e.t === 'down') {
+        if (e.target === me.id) o.meDowns++;
+        else if (isAlly(e.target)) { o.downs++; if (R.round <= 8) o.early++; const k = sim.byId.get(e.target).zPersona ?? 'none'; o.by[k] = (o.by[k] ?? 0) + 1; }
+      }
       if (e.t === 'kill' && isAlly(e.target) && !R.isZ(sim.byId.get(e.target))) o.bleeds++;
       if (e.t === 'kill' && isAlly(e.by) && R.isZ(sim.byId.get(e.target))) o.kills++;
       if (e.t === 'revive' && isAlly(e.by) && e.by !== e.id) { if (e.id === me.id) o.revMe++; else o.revAlly++; }
@@ -70,4 +73,6 @@ for (const map of MAPS) {
   }
   console.log(`${map}: rounds ${rows.map(r => r.round).join(' ')} (mean ${f1(mean(rows.map(r => r.round)))}); ally downs/round ${f1(mean(rows.map(r => r.dpr)))}; spent ${Math.round(mean(rows.map(r => r.share)) * 100)}%; tier ${f1(mean(rows.map(r => r.tierMax)))}; perks ${f1(mean(rows.map(r => r.perks)))}`);
 }
-console.log(`ALL: rounds mean ${f1(mean(all.map(r => r.round)))}; ally downs/round ${f1(mean(all.map(r => r.dpr)))}; bleeds ${f1(mean(all.map(r => r.bleeds)))}; human revived by allies ${f1(mean(all.map(r => r.revMe)))}; spent ${Math.round(mean(all.map(r => r.share)) * 100)}%; tier ${f1(mean(all.map(r => r.tierMax)))}; wall ${Math.round(mean(all.map(r => r.wallMax)))}; perks ${f1(mean(all.map(r => r.perks)))}; streaks ${f1(mean(all.map(r => r.deploys)))}`);
+const by = {};
+for (const r of all) for (const k in r.by) by[k] = (by[k] ?? 0) + r.by[k];
+console.log(`ALL: rounds mean ${f1(mean(all.map(r => r.round)))}; ally downs/round ${f1(mean(all.map(r => r.dpr)))}; ally downs in rounds 1-8 ${f1(mean(all.map(r => r.early)))} (by persona ${JSON.stringify(by)}); bleeds ${f1(mean(all.map(r => r.bleeds)))}; human revived by allies ${f1(mean(all.map(r => r.revMe)))}; spent ${Math.round(mean(all.map(r => r.share)) * 100)}%; tier ${f1(mean(all.map(r => r.tierMax)))}; wall ${Math.round(mean(all.map(r => r.wallMax)))}; perks ${f1(mean(all.map(r => r.perks)))}; streaks ${f1(mean(all.map(r => r.deploys)))}`);

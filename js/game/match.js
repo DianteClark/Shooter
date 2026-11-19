@@ -87,8 +87,8 @@ export class Match {
     // Practice pays and records nothing: the firing range and Custom > Training (`training`) never count toward XP,
     // mastery, challenges, history, gun stats or telemetry. Both trackers check `practice` before writing anything.
     if (this.isPractice()) { this.awards.practice = true; this.telemetry.practice = true; }
-    // Only the host decides what bots say (seeded by the match), outside practice and Graveyard Shift.
-    this.chatter = this.isHost && !this.isPractice() && !this.zm ? new BotChatter(this.sim, this.seed, { ffa: !!this.sim.ffa }) : null;
+    // Only the host decides what bots say (seeded by the match), outside practice; Graveyard Shift's allies have their own.
+    this.chatter = this.isHost && !this.isPractice() ? new BotChatter(this.sim, this.seed, { ffa: !!this.sim.ffa, zm: !!this.zm }) : null;
     this.interp = new Interpolator(this.isHost ? STEP * 1.5 : INTERP_DELAY);
     this.frame = this.frame.bind(this);
     this.#wireNet();

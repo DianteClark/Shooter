@@ -656,15 +656,15 @@ export class ZmEcon {
   // ---- Bots ----
 
   // What a bot would walk over to buy from the economy, by its persona P (js/sim/zm-allies.js): a tier on its best gun,
-  // plates, a kit refill, a trap a crowd funnels into, a streak for its held slot. perkNeed: the points its next perk
-  // wants (kept back from the extras). `consider(item, score)` as ZmRules._botWant's.
-  botWants(p, consider, P, perkNeed = 0) {
+  // plates, a kit refill, a trap a crowd funnels into, a streak for its held slot. keep: the points kept back from the
+  // extras (its next perk, its share of the next bench tier). `consider(item, score)` as ZmRules._botWant's.
+  botWants(p, consider, P, keep = 0) {
     const L = this.L, R = this.R, z = p.zm, ps = p.ps, open = R.open, c = P?.cushion ?? 1;
     const dist = (x, zz) => Math.hypot(x - ps.x, zz - ps.z);
     const reach = s => s && bandOpen(L, open, s.band);
     const fight = R.state === 1;
     // The upgrade bench, for its best gun worth it (not the pistol), from the persona's round, with a cushion.
-    if (reach(L.bench) && !this.bench.state && R.round >= (P?.bench ?? 6)) {
+    if (reach(L.bench) && !this.bench.state && R.round >= (P?.bench ?? 6) - 1) {
       const guns = [ps.primary, ps.secondary].filter(g => zmUpgradable(g) && g !== START_GUN && (z.tiers[g] ?? 0) < 3);
       const gun = guns.sort((a, b) => (z.tiers[b] ?? 0) - (z.tiers[a] ?? 0) || (L.wallBuys.find(w => w.gun === b)?.cost ?? 1600) - (L.wallBuys.find(w => w.gun === a)?.cost ?? 1600))[0];
       const t = gun ? z.tiers[gun] ?? 0 : 0;
@@ -673,22 +673,20 @@ export class ZmEcon {
         if (d < 70) consider({ kind: 'bench', i: 0, x: L.bench.x, z: L.bench.z, gun }, 40 + t * 4 + (P?.benchBias ?? 0) - d * 0.4);
       }
     }
-    // A hoarder banks for its next tier past the basics: the extras wait.
-    const saving = P === undefined ? 0 : (P.benchBias >= 10 && R.round >= P.bench - 1 && z.perks.length >= 2) ? 2500 : 0;
     // Plates when short of them.
-    if (reach(L.armour) && z.plates <= PLATE_MAX - ZE.plate.hp && z.pts >= ZE.plate.cost + 600 * c + saving) {
+    if (reach(L.armour) && z.plates <= PLATE_MAX - ZE.plate.hp && z.pts >= ZE.plate.cost + 600 * c + (z.plates < ZE.plate.hp ? 0 : keep)) {
       const d = dist(L.armour.x, L.armour.z);
       if (d < 45) consider({ kind: 'armour', i: 0, x: L.armour.x, z: L.armour.z }, 22 - d * 0.5 + (z.plates < ZE.plate.hp ? 10 : 0));
     }
     // A kit refill (the lethal and tactical) with plates full, when there is money over.
-    if (reach(L.armour) && z.plates > PLATE_MAX - ZE.plate.hp && kitRoom(ps) && z.pts >= ZE.kit.cost + perkNeed + 1500 * c + saving) {
+    if (reach(L.armour) && z.plates > PLATE_MAX - ZE.plate.hp && kitRoom(ps) && z.pts >= ZE.kit.cost + keep + 1500 * c) {
       const d = dist(L.armour.x, L.armour.z);
       if (d < 35) consider({ kind: 'kit', i: 0, x: L.armour.x, z: L.armour.z }, 10 - d * 0.5);
     }
     // A trap with three or more undead in or near it, mid-round.
     if (fight) {
       L.traps.forEach((T, i) => {
-        if (this.traps[i].state || z.pts < ZE.trap.cost + 1000 * c) return;
+        if (this.traps[i].state || z.pts < ZE.trap.cost + 1000 * c + keep / 2) return;
         const sb = L.band[L.cellAt(T.sx, T.sz)];
         if (!bandOpen(L, open, sb >= 0 ? sb : T.band)) return;
         const d = dist(T.sx, T.sz);
@@ -702,7 +700,7 @@ export class ZmEcon {
     // persona's own, a strike once the crowds are big), called in later (ZmRules._botStreak).
     if (reach(L.terminal) && R.round >= 4) {
       const d = dist(L.terminal.x, L.terminal.z);
-      const can = it => (z.supply[it] ?? -1) !== R.round && z.pts >= supplyCost(it, R.round) + perkNeed + 1500 * c + saving;
+      const can = it => (z.supply[it] ?? -1) !== R.round && z.pts >= supplyCost(it, R.round) + keep + 1500 * c;
       let item = null;
       if (z.plates < ZE.plate.hp && can('vest') && !reach(L.armour)) item = 'vest';
       else if (!z.stk) {
