@@ -24,7 +24,7 @@ export const OPERATORS = [
   { id: 'wisp', name: 'Wisp', role: 'Lean scout in a boonie hat', voice: M,
     bio: 'Walks point, talks little. Has been behind you for a while now.',
     unlock: null, look: { w: 0.88, h: 0.97, l: 0.84, sleeve: 0x6b6147, trouser: 0x4f4a3a } },
-  { id: 'anvil', name: 'Anvil', role: 'Heavy plate and a drum on the back', voice: M,
+  { id: 'anvil', name: 'Anvil', role: 'Heavy plate, tiered pauldrons and a belt-fed drum', voice: M,
     bio: 'Carries more steel than the rest of the squad together and complains about none of it.',
     unlock: { level: 4 }, look: { w: 1.18, h: 1.03, l: 1.22, sleeve: 0x2e3238, trouser: 0x272a30 } },
   { id: 'relay', name: 'Relay', role: 'Signals, radio mast and side cap', voice: M,
@@ -50,9 +50,9 @@ export const OPERATORS = [
     bio: 'Patched up half the yard crews in the district before she ever picked up a rifle. Still carries more bandages than magazines.',
     unlock: null, kit: { core: 'light', back: 'medpack', extra: 'armband', gear: 'helmet', hair: 'bun', face: 'plain' },
     look: { w: 0.9, h: 0.95, l: 0.86, sh: 0.9, hip: 1.02, head: 0.96, skin: 0x8d5a3b, hair: 0x1e1612, sleeve: 0x4a5244, trouser: 0x3a4036 } },
-  { id: 'coyote', name: 'Coyote', role: 'Desert scout, cap and shades', voice: M,
+  { id: 'coyote', name: 'Coyote', role: 'Desert scout in a poncho, dust goggles on his cap', voice: M,
     bio: 'Grew up on the salt flats past the end of the line. Can find water, shade and your flank, in that order.',
-    unlock: { level: 3 }, kit: { core: 'light', back: 'canteen', extra: 'bandolier', gear: 'desertcap', hair: null, face: 'beard+shades' },
+    unlock: { level: 3 }, kit: { core: 'light', back: 'canteen', extra: 'poncho', gear: 'dustcap', hair: null, face: 'beard+shades' },
     look: { w: 0.96, h: 1.02, l: 0.94, sh: 1, hip: 1, head: 1, skin: 0xb27a52, hair: 0x2a1c12, sleeve: 0x8a7656, trouser: 0x6b5a40 } },
   { id: 'vesper', name: 'Vesper', role: 'Marksman with a long braid and a drag bag', voice: F,
     bio: 'Counts her breaths, not her shots. The braid is regulation length; she checked.',
@@ -252,7 +252,7 @@ const SKIN_ROWS = {
   ],
   anvil: [
     ['Forgehand', [0x8a4420, 0x5a2f1a, 0x3a2418, 0xffb14a, 0], { stat: 'kills', goal: 600 }], ['Gunmetal', 'urban'],
-    ['Bastion', [0x3a4a66, 0x34405a, 0x252c3c, 0xff4a2a, 1]], ['Slag', 'ember'], ['Molten', [0x2a1410, 0x3a1a12, 0x22100c, 0xff5a10, 2]],
+    ['Bastion', [0x3a4a66, 0x34405a, 0x252c3c, 0xff4a2a, 1]], ['Slag', 'ember'], ['Molten Titan', [0x5a5f66, 0x3a3e44, 0x2a2d32, 0xff6a10, 2]],
   ],
   relay: [
     ['Arctic Signal', [0xd8dee2, 0xc4ccd2, 0x8f9aa2, 0x4dc8ff, 0], { level: 20 }], ['Field Telephone', 'desert'],
@@ -279,7 +279,7 @@ const SKIN_ROWS = {
     ['Usurper', [0x1c1420, 0x2a1e30, 0x161018, 0xb04aff, 1]], ['Regent', 'crimson'], ['Sovereign Prism', [0x2a2236, 0x3a2e4c, 0x221a2c, 0xffd659, 3]],
   ],
   sparrow: [['Field Hospital', 'ivory', { stat: 'kills', goal: 150 }], ['Hedgerow', 'woodland'], ['Night Ward', 'night'], ['Lifeline', 'teal'], ['Golden Hour', 'gold']],
-  coyote: [['Salt Flat', 'ash', { stat: 'long', goal: 40 }], ['Dune', 'desert'], ['Mirage', 'ember'], ['Sirocco', 'rust'], ['Sun Dog', 'molten']],
+  coyote: [['Salt Flat', 'ash', { stat: 'long', goal: 40 }], ['Dune', 'desert'], ['Mirage', 'ember'], ['Sirocco', 'rust'], ['Sun Bear', [0x6b4423, 0x6b4423, 0x5a381c, 0xffc040, 2]]],
   vesper: [['Hide', 'moss', { stat: 'long', goal: 80 }], ['Frost Hide', 'arctic'], ['Dusk', 'violet'], ['Evening Star', 'navy'], ['Northern Lights', 'aurora']],
   wren: [['Grey Wing', 'urban', { stat: 'kills', goal: 300 }], ['High Desert', 'desert'], ['Night Flight', 'night'], ['Clear Sky', 'sky'], ['Prism Rotor', 'prism']],
   ox: [['Yard Brown', 'rust', { stat: 'kills', goal: 500 }], ['Drab', 'olive'], ['Smelter', 'ember'], ['Iron', 'slate'], ['Golden Yoke', 'gold']],
@@ -306,6 +306,15 @@ const SKIN_ROWS = {
   brigid: [['Placement', 'urban', { life: 'ranked:played', goal: 25, label: 'Play 25 Ranked matches' }], ['Climb', 'sky'], ['Promotion', 'crimson'], ['Top Table', 'navy'], ['Champion\'s Due', 'prism']],
 };
 
+// Showpiece art (docs/OPERATORS-ART.md), keyed by skin id and merged into the skin: `fx` is an animated "active" effect
+// drawn by the operator shader over the gear (SKIN_FX), `suit: true` swaps the whole torso and head for the operator's
+// suit (js/render/operator-kit.js SUITS). Pure looks: ids, unlocks and saves are untouched.
+export const SKIN_FX = { holo: 1, circuit: 2, shimmer: 3 };
+const SKIN_ART = {
+  'skin:anvil-3': { fx: 'circuit' }, 'skin:anvil-5': { suit: true },
+  'skin:coyote-3': { fx: 'shimmer' }, 'skin:coyote-5': { suit: true },
+};
+
 const ROW_TIERS = ['field', 2, 3, 4, 5];
 export const SKINS = OPERATORS.flatMap(op => [
   { id: `skin:${op.id}-base`, operator: op.id, tier: 'base', name: `${op.name} issue`, slot: 0, glow: 0,
@@ -326,6 +335,7 @@ for (const def of SEASON_DEFS) {
       season: def.id, unlock: { season: def.id, label: `Season ${def.n} reward track` } });
   }
 }
+for (const s of SKINS) if (SKIN_ART[s.id]) Object.assign(s, SKIN_ART[s.id]);
 SKINS.forEach((s, i) => { s.index = i; });
 const SKIN_BY_ID = new Map(SKINS.map(s => [s.id, s]));
 

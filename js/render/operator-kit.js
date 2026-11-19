@@ -16,8 +16,9 @@ import * as THREE from 'three';
 
 // Vertex tags. ACC pieces take the skin's accent and glow; KEEP pieces are never recoloured by a skin; ELITE / MASTERY
 // pieces exist only with that gear slot, NO_ELITE / NO_MASTERY ones are dropped with it; TONE and LOCKS pieces take the
-// operator's skin tone and hair colour (they are KEEP too).
-export const ACC = 1, KEEP = 2, ELITE = 4, MASTERY = 8, NO_ELITE = 16, NO_MASTERY = 32, TONE = 64 | KEEP, LOCKS = 128 | KEEP;
+// operator's skin tone and hair colour (they are KEEP too). SUIT pieces are an operator's showpiece suit (SUITS below):
+// shown only while a suit skin is worn, and then nothing else of the torso and head is.
+export const ACC = 1, KEEP = 2, ELITE = 4, MASTERY = 8, NO_ELITE = 16, NO_MASTERY = 32, TONE = 64 | KEEP, LOCKS = 128 | KEEP, SUIT = 256;
 export function tag(b, t, draw) {
   const from = b.pos.length / 3;
   draw();
@@ -28,7 +29,7 @@ const TAU = Math.PI * 2;
 const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _up = new THREE.Vector3();
 
 // A prism from point a to point b (radius r0 at a, r1 at b), for straps, braids, wings and anything not axis aligned.
-function seg(b, a, c, r0, r1 = r0, sides = 6) {
+export function seg(b, a, c, r0, r1 = r0, sides = 6) {
   _x.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
   const len = _x.length();
   _x.divideScalar(len);
@@ -44,7 +45,7 @@ function seg(b, a, c, r0, r1 = r0, sides = 6) {
   return b;
 }
 // A flat plate from a to c, `w` wide across and `t` thick; `roll` turns it about its own length.
-function plate(b, a, c, w, t, roll = 0) {
+export function plate(b, a, c, w, t, roll = 0) {
   _x.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
   const len = _x.length();
   _x.divideScalar(len);
@@ -301,6 +302,17 @@ export const BACK = {
 };
 
 export const EXTRA = {
+  // A striped poncho over the shoulders, in the team colour: from above, a wide octagon past the shoulders with a lit
+  // trim (the accent), hanging to the belt front and back. A hood lies on the back of it with the elite gear.
+  poncho(b) {
+    b.setPart(1).prismY(0.46, 0.64, 0, 0, 0.45, 0.2, 8, Math.PI / 8);
+    b.box(0.19, 0.33, 0, 0.04, 0.28, 0.42).box(-0.2, 0.33, 0, 0.04, 0.3, 0.44);
+    b.setPart(0).setColor(0x5a2e1a).prismY(0.495, 0.535, 0, 0, 0.405, 0.36, 8, Math.PI / 8);
+    b.setColor(0x2a2018).prismY(0.63, 0.68, 0, 0, 0.21, 0.19, 8, Math.PI / 8);
+    b.box(0.215, 0.24, 0, 0.012, 0.05, 0.42).box(-0.225, 0.24, 0, 0.012, 0.05, 0.44);
+    tag(b, ACC, () => b.setPart(0).setColor(0xe8c070).prismY(0.45, 0.47, 0, 0, 0.465, 0.458, 8, Math.PI / 8));
+    tag(b, ELITE, () => b.setPart(1).box(-0.21, 0.6, 0, 0.12, 0.12, 0.3, 0.03));
+  },
   armband(b) {
     tag(b, ACC, () => b.setPart(0).setColor(0xf2f2ea).box(0, 0.54, 0.29, 0.2, 0.06, 0.05).box(0, 0.54, -0.29, 0.2, 0.06, 0.05));
     b.setPart(0).setColor(0x3a4038).box(0.03, 0.12, 0.24, 0.16, 0.14, 0.08);     // Hip med pouch.
@@ -471,6 +483,16 @@ export const GEAR = {
     b.box(-0.15, 0.17, 0, 0.08, 0.2, 0.36);
     b.box(-0.03, 0.2, 0.18, 0.2, 0.16, 0.04).box(-0.03, 0.2, -0.18, 0.2, 0.16, 0.04);
   },
+  // Coyote's cap: a havelock flap trailing well behind and dust goggles pushed up on the crown, lenses in the accent.
+  dustcap(b) {
+    b.setPart(1).prismY(0.26, 0.38, 0, 0, 0.19, 0.17, 8, Math.PI / 8);
+    b.setPart(0).setColor(0xa48a5e).box(0.2, 0.27, 0, 0.18, 0.022, 0.3);
+    b.box(-0.17, 0.2, 0, 0.1, 0.18, 0.38);
+    plate(b, [-0.2, 0.3, 0], [-0.4, 0.08, 0], 0.36, 0.03);
+    b.box(-0.03, 0.2, 0.185, 0.22, 0.16, 0.04).box(-0.03, 0.2, -0.185, 0.22, 0.16, 0.04);
+    b.setColor(0x2a2420).box(0.08, 0.385, 0, 0.11, 0.05, 0.3);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffb14a).prismY(0.41, 0.43, 0.08, 0.075, 0.05, 0.05, 6).prismY(0.41, 0.43, 0.08, -0.075, 0.05, 0.05, 6));
+  },
   // A ball cap turned backwards, headphones over it.
   backcap(b) {
     b.setPart(1).prismY(0.26, 0.38, 0, 0, 0.185, 0.17, 8, Math.PI / 8);
@@ -616,6 +638,87 @@ const FEATURES = {
 };
 // What every kit head shares, drawn once for all of them: the skull, the elite earpiece light, the mastery eye bar and
 // halo. Faces are only the features on top of it, joined by '+' ('beard+shades'); 'plain' is the bare skull.
+/* ---------- Suits ---------- */
+// An operator's showpiece suit (docs/OPERATORS-ART.md): `torso(b)` and `head(b)` in the frames above, drawn whole in
+// place of the operator's torso and head while a skin with `suit: true` is worn. Everything inside is tagged SUIT by the
+// renderer; use KEEP for colours that must not take the skin's gear colour, ACC for lit parts (accent and glow), part 1
+// for team colour (keep a good share of it: it is what tells sides apart). `limbs`: bulk thickens arms and legs, `hands`
+// recolours gloves and boots (null: the skin's gear colour). Works for hand-made and kit operators alike.
+const FUR = 0x6b4423, MUZZLE = 0xc89a64, NOSE = 0x1a1210;
+export const SUITS = {
+  // A bear suit: round furry body, a bear-head hood with ears and snout, chunky paws, a team scarf and a honey pot.
+  coyote: {
+    limbs: { bulk: 1.38, hands: 0x603c22 },
+    torso(b) {
+      tag(b, KEEP, () => {
+        b.setPart(0).setColor(FUR);
+        b.prismY(-0.06, 0.18, 0, 0, 0.29, 0.36, 8, Math.PI / 8);
+        b.prismY(0.18, 0.48, 0, 0, 0.36, 0.36, 8, Math.PI / 8);
+        b.prismY(0.48, 0.68, 0, 0, 0.36, 0.24, 8, Math.PI / 8);
+        b.setColor(MUZZLE).box(0.33, 0.3, 0, 0.05, 0.32, 0.26, 0.03);          // Belly patch.
+        b.setColor(0x4a2c16).box(-0.35, 0.1, 0, 0.1, 0.12, 0.12, 0.03);        // Tail.
+        b.setColor(0x3a2a1a).prismY(0.0, 0.03, 0.0, 0.33, 0.1, 0.1, 7);        // Honey pot's base and lid.
+        b.prismY(0.19, 0.22, 0.0, 0.33, 0.07, 0.075, 7);
+      });
+      b.setPart(1).prismY(0.66, 0.75, 0, 0, 0.27, 0.25, 8, Math.PI / 8);      // Team scarf, its tail and a little pack.
+      b.box(-0.27, 0.52, 0.1, 0.05, 0.22, 0.1);
+      b.box(-0.39, 0.4, -0.04, 0.1, 0.24, 0.28, 0.03);
+      tag(b, ACC, () => b.setPart(0).setColor(0xffc040).prismY(0.03, 0.19, 0.0, 0.33, 0.1, 0.09, 7));
+    },
+    head(b) {
+      tag(b, KEEP, () => {
+        b.setPart(0).setColor(FUR);
+        b.prismY(0.02, 0.2, 0, 0, 0.25, 0.27, 8, Math.PI / 8);
+        b.prismY(0.2, 0.42, 0, 0, 0.27, 0.16, 8, Math.PI / 8);
+        b.prismY(0.36, 0.5, -0.03, 0.18, 0.09, 0.08, 6).prismY(0.36, 0.5, -0.03, -0.18, 0.09, 0.08, 6);      // Ears.
+        b.setColor(MUZZLE).box(0.26, 0.16, 0, 0.17, 0.13, 0.19, 0.03);                                     // Snout.
+        b.box(0.035, 0.44, 0.18, 0.03, 0.07, 0.09).box(0.035, 0.44, -0.18, 0.03, 0.07, 0.09);              // Inner ears.
+        b.setColor(NOSE).box(0.35, 0.2, 0, 0.04, 0.06, 0.09);
+        b.box(0.225, 0.29, 0.09, 0.03, 0.05, 0.05).box(0.225, 0.29, -0.09, 0.03, 0.05, 0.05);              // Eyes.
+      });
+    },
+  },
+  // Mech armour: a boxy team-plated chest, tall shoulder pylons with lit tips, a thruster pack whose nozzles burn in
+  // the accent, and a block helm with a lit V visor and swept horn fins.
+  anvil: {
+    limbs: { bulk: 1.3, hands: null },
+    torso(b) {
+      b.setPart(0).setColor(0x1c1e22).box(0, 0.06, 0, 0.36, 0.22, 0.52);
+      b.box(0.02, 0.2, 0, 0.34, 0.14, 0.5);
+      b.box(0, 0.7, 0, 0.36, 0.08, 0.44);                                                  // Collar.
+      b.setColor(0x3a3f47).box(0.02, 0.06, 0.31, 0.34, 0.22, 0.08).box(0.02, 0.06, -0.31, 0.34, 0.22, 0.08);    // Hip plates.
+      b.setPart(1).box(0.02, 0.42, 0, 0.5, 0.5, 0.74, 0.05);                               // Team chest.
+      b.setPart(0).setColor(0x3a3f47).box(0.29, 0.4, 0, 0.06, 0.34, 0.5, 0.02);          // Front plate.
+      b.box(0, 0.62, 0.47, 0.44, 0.26, 0.26, 0.03).box(0, 0.62, -0.47, 0.44, 0.26, 0.26, 0.03);       // Shoulder blocks.
+      b.setColor(0x5a6068).box(-0.06, 0.94, 0.47, 0.11, 0.44, 0.11).box(-0.06, 0.94, -0.47, 0.11, 0.44, 0.11);   // Pylons.
+      b.setPart(1).box(-0.06, 0.9, 0.47, 0.125, 0.07, 0.125).box(-0.06, 0.9, -0.47, 0.125, 0.07, 0.125);
+      b.setPart(0).setColor(0x2a2d33).box(-0.38, 0.44, 0, 0.24, 0.46, 0.5, 0.03);       // Thruster pack.
+      b.setColor(0x3a3f47).prismY(0.12, 0.66, -0.47, 0.15, 0.1, 0.1, 8).prismY(0.12, 0.66, -0.47, -0.15, 0.1, 0.1, 8);
+      b.setColor(0x1c1e22).prismY(0.0, 0.12, -0.47, 0.15, 0.12, 0.08, 8).prismY(0.0, 0.12, -0.47, -0.15, 0.12, 0.08, 8);
+      tag(b, ACC, () => {
+        b.setPart(0).setColor(0xff8a2a);
+        b.box(0.325, 0.44, 0, 0.02, 0.12, 0.16);                                           // Reactor.
+        b.box(-0.06, 1.18, 0.47, 0.07, 0.05, 0.07).box(-0.06, 1.18, -0.47, 0.07, 0.05, 0.07);
+        b.prismY(-0.16, 0.0, -0.47, 0.15, 0.025, 0.085, 6).prismY(-0.16, 0.0, -0.47, -0.15, 0.025, 0.085, 6);   // Burn.
+      });
+    },
+    head(b) {
+      b.setPart(0).setColor(0x3a3f47).box(0.02, 0.24, 0, 0.44, 0.34, 0.44, 0.04);
+      b.setColor(0x5a6068).box(0.17, 0.37, 0, 0.14, 0.06, 0.46);
+      plate(b, [0.08, 0.36, 0.2], [-0.16, 0.58, 0.3], 0.08, 0.04);
+      plate(b, [0.08, 0.36, -0.2], [-0.16, 0.58, -0.3], 0.08, 0.04);
+      b.setColor(0x1c1e22).box(0.235, 0.22, 0, 0.04, 0.16, 0.38).box(0.22, 0.09, 0, 0.1, 0.08, 0.24);
+      b.prismZ(0.22, 0.27, 0.0, 0.24, 0.08, 0.08, 6).prismZ(-0.27, -0.22, 0.0, 0.24, 0.08, 0.08, 6);
+      b.setPart(1).box(-0.02, 0.44, 0, 0.36, 0.08, 0.09);
+      tag(b, ACC, () => {
+        b.setPart(0).setColor(0xff8a2a);
+        plate(b, [0.26, 0.2, 0], [0.26, 0.27, 0.17], 0.04, 0.014);
+        plate(b, [0.26, 0.2, 0], [0.26, 0.27, -0.17], 0.04, 0.014);
+      });
+    },
+  },
+};
+
 export function headBase(b) {
   skull(b);
   tag(b, ACC | ELITE, () => b.setPart(0).setColor(0x5dff7a).box(0.04, 0.2, 0.175, 0.05, 0.05, 0.03));

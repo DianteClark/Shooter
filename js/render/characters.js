@@ -12,8 +12,8 @@ import { fillV10 } from '../shared/weapons-v10.js';
 import { BR } from '../shared/modes.js';
 import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
-import { OPERATORS, DEFAULT_OPERATOR, SKINS, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
-import { ACC, KEEP, ELITE, MASTERY, NO_ELITE, NO_MASTERY, tag, masteryTorso, halo, TORSO_SLOTS, HEAD_SLOTS, face as kitFace, headBase } from './operator-kit.js';
+import { OPERATORS, DEFAULT_OPERATOR, SKINS, SKIN_FX, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
+import { ACC, KEEP, ELITE, MASTERY, NO_ELITE, NO_MASTERY, SUIT, SUITS, tag, seg, masteryTorso, halo, TORSO_SLOTS, HEAD_SLOTS, face as kitFace, headBase } from './operator-kit.js';
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
@@ -78,8 +78,9 @@ const GRENADE_RGB = { frag: [0.35, 0.42, 0.28], sticky: [0.75, 0.2, 0.6], smoke:
 // soldier. Pick 31 is always shown (the single-variant distance meshes); 30 means "nothing in this slot".
 // uLook is the operator's build and colours: [skin rgb, shoulder width], [hair rgb, hip width]; the shoulder and hip
 // widths narrow or widen every torso vertex by its height, so one kit fits every build.
-// Skins ride on the same instances: aOp.y is the gear slot plus 4 x the glow mode, aSkin the gear recolour (rgb,
-// strength) and, on torsos and heads, aTint the accent colour (zero keeps the baked one). The tag is described at tag().
+// Skins ride on the same instances: aOp.y is the gear slot + 4 x the glow mode + 16 x suit (0/1) + 32 x the active effect
+// (operators.js SKIN_FX), aSkin the gear recolour (rgb, strength) and, on torsos and heads, aTint the accent colour (zero
+// keeps the baked one). The tag is described at tag(). docs/OPERATORS-ART.md has the showpiece API.
 export const MAX_OPERATORS = 40;
 // Graveyard Shift: the undead take four slots after the roster's MAX_OPERATORS (renderer only; see zm-looks.js), so the
 // uniform tables hold OP_SLOTS. ALL_OPS is the table the shader uniforms and per-operator numbers are built from.
@@ -103,6 +104,8 @@ attribute vec2 aFx;
 varying vec3 vCol;
 varying vec3 vLight;
 varying vec2 vFx;
+varying vec4 vEff;
+varying vec3 vAcc;
 ${GLSL_LIGHT}
 void main() {
   float tag = floor(aVar / 256.0 + 0.001);
@@ -114,14 +117,18 @@ void main() {
   float s4 = part > 3.5 ? part - 4.0 : part;
   float want = s4 < 0.5 ? sel.x : s4 < 1.5 ? sel.y : s4 < 2.5 ? sel.z : sel.w;
   float slot = mod(aOp.y, 4.0);
-  float glow = floor(aOp.y / 4.0 + 0.001);
+  float glow = mod(floor(aOp.y / 4.0 + 0.001), 4.0);
+  float suit = mod(floor(aOp.y / 16.0 + 0.001), 2.0);
+  float fxK = floor(aOp.y / 32.0 + 0.001);
   float showM = mod(floor(tag / 4.0), 4.0);
   float hideM = mod(floor(tag / 16.0), 4.0);
   // Bit k-1 of a mask is gear slot k (1 elite, 2 mastery).
   float inShow = slot < 0.5 ? 0.0 : mod(floor(showM / slot), 2.0);
   float inHide = slot < 0.5 ? 0.0 : mod(floor(hideM / slot), 2.0);
-  if ((pick < 30.5 && abs(pick - want) > 0.5) || (showM > 0.5 && inShow < 0.5) || inHide > 0.5) {
-    gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vCol = vec3(0.0); vLight = vec3(0.0); vFx = vec2(0.0); return;
+  // A suit skin shows its SUIT pieces and nothing else; any other skin never shows them.
+  float isSuit = mod(floor(tag / 256.0 + 0.001), 2.0);
+  if ((pick < 30.5 && abs(pick - want) > 0.5) || (showM > 0.5 && inShow < 0.5 && suit < 0.5) || (inHide > 0.5 && suit < 0.5) || abs(isSuit - suit) > 0.5) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vCol = vec3(0.0); vLight = vec3(0.0); vFx = vec2(0.0); vEff = vec4(0.0); vAcc = vec3(0.0); return;
   }
   vec4 lookA = uLook[oi], lookB = uLook[oi + 1];
   vec3 pos = position;
@@ -132,7 +139,7 @@ void main() {
   vec3 light = duskLight(n);
   float acc = mod(tag, 2.0), keep = mod(floor(tag / 2.0), 2.0);
   vec3 base = aCol;
-  if (tag > 127.5) base = lookB.rgb;                       // Hair.
+  if (mod(floor(tag / 128.0 + 0.001), 2.0) > 0.5) base = lookB.rgb;   // Hair.
   else if (mod(floor(tag / 64.0), 2.0) > 0.5) base = lookA.rgb;   // Skin.
   float emit = 0.0;
   if (aPart < 0.5) {
@@ -162,17 +169,49 @@ void main() {
   vCol = lit;
   vLight = light;
   vFx = aFx;
+  // Active skins (fxK > 0): the fragment shader animates the gear (plain part-0 pieces) in the accent colour.
+  vEff = vec4(aPart < 0.5 && acc < 0.5 && keep < 0.5 ? fxK : 0.0, position);
+  vAcc = aTint.r + aTint.g + aTint.b > 0.0 ? aTint : vec3(0.4, 0.9, 1.0);
   gl_Position = projectionMatrix * viewMatrix * world * vec4(pos, 1.0);
 }`;
 
+// Active skin effects (operators.js SKIN_FX), on the gear of an instance whose skin has one, in object space so the
+// pattern rides with the body. Everything else skips them on one branch. 1 holo: an iridescent sheen that shifts with
+// time, with scan lines climbing it. 2 circuit: traces in the accent with pulses running up them. 3 shimmer: heat-haze
+// ripples of the accent rolling across the gear.
 const CHAR_FRAG = /* glsl */`
+uniform float uTime;
 varying vec3 vCol;
 varying vec3 vLight;
 varying vec2 vFx;
+varying vec4 vEff;
+varying vec3 vAcc;
 ${GLSL_DITHER}
+vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
+  float t = uTime;
+  if (k < 1.5) {
+    vec3 h = 0.55 + 0.45 * cos(6.2832 * (p.y * 1.7 + (p.x + p.z) * 0.9 + t * 0.3 + vec3(0.0, 0.33, 0.67)));
+    float scan = smoothstep(0.82, 1.0, fract(p.y * 12.0 - t * 1.4));
+    return mix(c, h * (0.35 + 0.65 * vLight), 0.6) + h * scan * 0.35;
+  }
+  if (k < 2.5) {
+    vec3 q = p * 9.0;
+    float row = floor(q.y);
+    float hl = step(0.42, abs(fract(q.y) - 0.5));
+    float vl = step(0.44, abs(fract(q.z + q.x + row * 0.37) - 0.5)) * step(0.5, fract(row * 0.618 + 0.2));
+    float line = max(hl, vl);
+    float pulse = pow(0.5 + 0.5 * sin(t * 3.2 - p.y * 11.0 + p.z * 3.0), 6.0);
+    return c * 0.8 + a * line * (0.3 + 1.3 * pulse);
+  }
+  float w = sin(p.y * 16.0 + sin(p.x * 11.0 + p.z * 9.0 + t * 2.6) * 2.2 - t * 5.0);
+  float w2 = 0.5 + 0.5 * w;
+  return mix(c, a * (0.55 + 0.45 * vLight), 0.18 + 0.32 * w2) + a * pow(w2, 10.0) * 0.7;
+}
 void main() {
   if (vFx.x < 0.999 && vFx.x < screenDither(gl_FragCoord.xy)) discard;
-  gl_FragColor = vec4(vCol + vFx.y * vec3(1.1), 1.0);
+  vec3 c = vCol;
+  if (vEff.x > 0.5) c = skinFx(c, vEff.x, vEff.yzw, vAcc);
+  gl_FragColor = vec4(c + vFx.y * vec3(1.1), 1.0);
 }`;
 
 function addCharInstanceAttrs(g, capacity) {
@@ -228,9 +267,16 @@ const TORSOS = {
     pelvis(b, 0.5, 0x24272c);
     chest(b, 0.46, 0.54, 0.66, 0.08);
     b.setPart(0).setColor(0x2a2d33).box(0.26, 0.36, 0, 0.07, 0.42, 0.52);         // Front plate.
-    b.setColor(0x3a3f47).prismZ(-0.26, 0.26, -0.36, 0.36, 0.26, 0.26, 8);         // Ammo drum across the back.
-    b.setPart(1).prismZ(-0.08, 0.08, -0.36, 0.36, 0.272, 0.272, 8);               // Team band around it.
+    b.setColor(0x3a3f47).prismZ(-0.28, 0.28, -0.38, 0.38, 0.29, 0.29, 8);         // Ammo drum across the back.
+    b.setPart(1).prismZ(-0.08, 0.08, -0.38, 0.38, 0.302, 0.302, 8);               // Team band around it.
+    b.setPart(0).setColor(0x8a6a34);                                              // Belt feed over the right shoulder to the gun.
+    seg(b, [-0.3, 0.62, -0.22], [-0.08, 0.9, -0.24], 0.05, 0.05, 4);
+    seg(b, [-0.08, 0.9, -0.24], [0.16, 0.84, -0.22], 0.05, 0.05, 4);
+    seg(b, [0.16, 0.84, -0.22], [0.3, 0.52, -0.16], 0.05, 0.05, 4);
+    b.setColor(0x24272c).prismY(0.6, 0.76, 0, 0, 0.25, 0.23, 8, Math.PI / 8);   // Raised gorget: a ring round the helm.
     pauldrons(b, 0.42, 0.26, 0.36, 0.41, 0.62);
+    b.setPart(0).setColor(0x3a3f47).box(0, 0.78, 0.4, 0.36, 0.08, 0.3, 0.03).box(0, 0.78, -0.4, 0.36, 0.08, 0.3, 0.03);   // Tiered pauldrons.
+    b.setPart(1).box(-0.01, 0.84, 0.39, 0.24, 0.05, 0.2).box(-0.01, 0.84, -0.39, 0.24, 0.05, 0.2);
     tag(b, ELITE, () => b.setPart(0).setColor(0x2a2d33).box(0.3, 0.2, 0, 0.05, 0.2, 0.6));       // Bulwark skirt plate.
     masteryTorso(b, 0.295, -0.63, 0.41, 0.77);
   },
@@ -340,6 +386,7 @@ const HEADS = {
     neck(b, 0x2a2d33);
     b.setPart(1).box(0, 0.22, 0, 0.5, 0.32, 0.5, 0.03);                           // Square helm.
     b.setPart(0).setColor(0x2a2d33).box(0, 0.4, 0, 0.32, 0.07, 0.36);
+    b.box(0.02, 0.16, 0.28, 0.34, 0.22, 0.06, 0.02).box(0.02, 0.16, -0.28, 0.34, 0.22, 0.06, 0.02);   // Cheek plates widen it.
     tag(b, NO_ELITE, () => b.setPart(0).setColor(0x101215).box(0.25, 0.22, 0, 0.02, 0.1, 0.42));
     tag(b, ACC | NO_ELITE, () => b.setPart(0).setColor(0xffc96b).box(0.262, 0.22, 0, 0.012, 0.035, 0.4));
     tag(b, ELITE, () => b.setPart(0).setColor(0x101215).box(0.25, 0.2, 0, 0.02, 0.22, 0.4));
@@ -443,7 +490,7 @@ const HEADS = {
 
 // Every vertex's tag: the OR of the tag() ranges around it.
 function vertexTags(b) {
-  const n = b.pos.length / 3, out = new Uint8Array(n);
+  const n = b.pos.length / 3, out = new Uint16Array(n);
   for (const [from, to, t] of b.tags ?? []) for (let i = from; i < to; i++) out[i] |= t;
   return out;
 }
@@ -452,6 +499,11 @@ function vertexTags(b) {
 // per part some operator uses, numbered in the order the roster first uses them. PICKS maps both ways.
 const LEGACY = OPERATORS.filter(o => !o.kit).map(o => o.id);
 const NONE = 30, ALWAYS = 31;
+// Kit operators with a suit (SUITS): suit k is pick k of the kit bank's slot 0 (torso) and 4 (head), which the kit
+// operators otherwise leave empty (the shared head base is pick ALWAYS there). A hand-made operator's suit is merged
+// into its own variant.
+const KIT_SUITS = [...OPERATORS, ...ZM_OPERATORS].filter(o => o.kit && SUITS[o.id]).map(o => o.id);
+if (KIT_SUITS.length > NONE) throw new Error('operator kit: too many suits');
 export const PICKS = (() => {
   const out = {};
   for (const [name] of [...TORSO_SLOTS, ...HEAD_SLOTS]) {
@@ -462,17 +514,17 @@ export const PICKS = (() => {
   }
   return out;
 })();
-// Per operator: [torso picks 0..3], [head picks 4..7] for uSel. Kit operators share one head base in slot 4, after the
-// hand-made heads (KIT_HEAD).
-const KIT_HEAD = LEGACY.length;
+// Per operator: [torso picks 0..3], [head picks 4..7] for uSel. Kit operators use slots 0 and 4 for their suit, if any.
 function opPicks(op) {
-  const legacy = LEGACY.indexOf(op.id);
+  const legacy = LEGACY.indexOf(op.id), suit = op.kit ? KIT_SUITS.indexOf(op.id) : -1;
   const pick = name => { const i = PICKS[name].indexOf(op.kit?.[name]); return i < 0 ? NONE : i; };
+  const own = legacy >= 0 ? legacy : suit >= 0 ? suit : NONE;
   return [
-    [legacy < 0 ? NONE : legacy, ...TORSO_SLOTS.map(([n]) => pick(n))],
-    [legacy < 0 ? KIT_HEAD : legacy, ...HEAD_SLOTS.map(([n]) => pick(n))],
+    [own, ...TORSO_SLOTS.map(([n]) => pick(n))],
+    [own, ...HEAD_SLOTS.map(([n]) => pick(n))],
   ];
 }
+const suitPart = (b, id, base) => { const s = SUITS[id]; if (s) tag(b, SUIT, () => (base === 4 ? s.head : s.torso)(b)); };
 
 function pushBuilt(acc, b, part, pick) {
   const tags = vertexTags(b);
@@ -496,12 +548,13 @@ function toGeometry(acc) {
 // TORSOS or HEADS) and the kit (`slots` are its slots for that mesh). `base` is 0 for the torso and 4 for the head.
 function legacyGeometry(legacy, base) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
-  LEGACY.forEach((id, i) => { const b = new MeshBuilder(); (legacy[id] ?? legacy.trooper)(b); pushBuilt(acc, b, base, i); });
+  LEGACY.forEach((id, i) => { const b = new MeshBuilder(); (legacy[id] ?? legacy.trooper)(b); suitPart(b, id, base); pushBuilt(acc, b, base, i); });
   return toGeometry(acc);
 }
 function kitGeometry(slots, base) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
-  if (base === 4) { const b = new MeshBuilder(); headBase(b); pushBuilt(acc, b, base, KIT_HEAD); }
+  if (base === 4) { const b = new MeshBuilder(); headBase(b); pushBuilt(acc, b, base, ALWAYS); }
+  KIT_SUITS.forEach((id, k) => { const b = new MeshBuilder(); suitPart(b, id, base); pushBuilt(acc, b, base, k); });
   slots.forEach(([name, table], k) => PICKS[name].forEach((part, i) => {
     const b = new MeshBuilder();
     (table ? table[part] : kitFace(part))(b);
@@ -774,17 +827,25 @@ export class Characters {
     }));
     // Per-skin instance data, likewise precomputed. `lite` is what the distance LOD gets: no gear slot (its mesh has
     // none of the gear pieces), the same colours and glow.
+    // A suit skin (operators.js `suit`, operator-kit.js SUITS) also thickens the limbs (`bulk`) and recolours gloves and
+    // boots (`limb`, a skin look for those meshes); the distance mesh keeps the effect but not the suit.
     this.skinLooks = SKINS.map(k => {
       const gear = k.gear != null ? [...hexRGB(k.gear), 1] : [0, 0, 0, 0];
       const acc = k.accent != null ? hexRGB(k.accent) : [0, 0, 0];
-      const look = { gear, acc, pack: k.slot + 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser) };
-      look.lite = { ...look, pack: 4 * k.glow };
+      const suit = k.suit ? SUITS[k.operator] ?? null : null, fx = 32 * (SKIN_FX[k.fx] ?? 0);
+      const look = { gear, acc, pack: k.slot + 4 * k.glow + (suit ? 16 : 0) + fx, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser),
+        bulk: suit?.limbs?.bulk ?? 1, limb: null };
+      if (suit) {
+        const hands = suit.limbs?.hands ?? k.gear;
+        look.limb = { pack: 0, gear: hands != null ? [...hexRGB(hands), 1] : NO_GEAR };
+      }
+      look.lite = { ...look, pack: 4 * k.glow + fx };
       return look;
     });
     this.baseSkin = ALL_OPS.map(o => getSkin(`skin:${o.id}-base`)?.index ?? 0);
     // The undead's clothes, as skin looks (see ZM_SKIN_LOOKS).
     this.zmSkins = ZM_SKIN_LOOKS.map(k => {
-      const look = { gear: [0, 0, 0, 0], acc: k.accent != null ? hexRGB(k.accent) : [0, 0, 0], pack: 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser) };
+      const look = { gear: [0, 0, 0, 0], acc: k.accent != null ? hexRGB(k.accent) : [0, 0, 0], pack: 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser), bulk: 1, limb: null };
       look.lite = look;
       return look;
     });
@@ -1415,7 +1476,7 @@ export class Characters {
 
       // Arms: shoulder to hand through a solved elbow. Right hand on the grip, left on the fore point.
       const shoulderY = 0.42 * CHAR_SCALE * look.h;
-      const armT = 1.15 * look.l;
+      const armT = 1.15 * look.l * sk.bulk;
       const fwd = _body.elements;       // Column 0 is the body's forward axis, column 2 its right.
       for (let side = -1; side <= 1; side += 2) {
         _a.set(0.02, shoulderY, side * look.armZ).applyMatrix4(_body);
@@ -1499,7 +1560,7 @@ export class Characters {
         setStretch(_m, _joint[0], _joint[1], _joint[2], _b.x, _b.y, _b.z, armT, armT);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
         _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
-        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB);
+        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb);
         nA++;
         if (fists && nG < MAX_PLAYERS * 2) {
           // The glove on the hand, along the forearm (elbow to hand).
@@ -1515,7 +1576,7 @@ export class Characters {
 
       // Legs follow travel direction, independent of aim, through a stance and a swing phase.
       const legLen = 0.54 * look.h;
-      const legT = 1.42 * look.l;
+      const legT = 1.42 * look.l * sk.bulk;
       const standK = 1 - Math.min(1, speed / 1.6);
       const faceX = moving ? r.moveX : aimX, faceZ = moving ? r.moveZ : aimZ;
       const bootYaw = Math.atan2(faceZ, faceX);
@@ -1577,7 +1638,7 @@ export class Characters {
         _m.compose(_p, _q, _s);
         _m.toArray(boot.instanceMatrix.array, nB * 16);
         _m.toArray(r.pose, (side < 0 ? P.BOOT_L : P.BOOT_R) * 16);
-        this._writeFx(boot, nB, fade, flash, team, 0, null);
+        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.limb);
         nB++;
 
         if (li === plantLeg && vfx && Math.abs(footX - this.focusX) < 22 && Math.abs(footZ - this.focusZ) < 16) {
