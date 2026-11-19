@@ -1,5 +1,6 @@
 // Finishers and emotes on the match HUD (docs/FINISHERS.md), its own module like zm-hud.js:
-//  - the Finish button, in the prompt lane over the dock, while an enemy is in finishing reach (view.finTarget, which
+//  - the Finish button, just above the aim stick's resting place (the thumb that fires presses it; follows left-handed
+//    and custom layouts, measured when it shows), while an enemy is in finishing reach (view.finTarget, which
 //    js/game/match.js works out every frame). A controller's Melee does the same (match.js), so does a blade's swing.
 //  - an Emote chip in the HUD corner beside quick chat, opening a 4-wide wheel in the quick chat wheel's style: a tap
 //    plays the emote (locked ones say what earns them; signature emotes show only once earned). Moving or firing ends an emote early (js/render/characters.js).
@@ -151,12 +152,26 @@ export class FinHud {
       this.target = id;
       this.btn.hidden = !id;
       if (id) {
+        this.#place();
         const p = view.players.find(q => q.id === id);
         this.btnName.textContent = p ? `${p.downed ? 'Downed: ' : ''}${p.name}` : '';
       }
     }
     const alive = !!me?.alive;
     if (this.chip.hidden === alive) { this.chip.hidden = !alive; if (!alive) this.#show(false); }
+  }
+
+  // Over the aim stick's rest (js/ui/controls.js .rest-r, which the layout editor and left-handed mode move), clamped
+  // on screen. Without touch controls (a controller, a mouse) it keeps the CSS place in the prompt lane.
+  #place() {
+    const rest = document.querySelector('.controls .rest-r'), host = this.hud.el.getBoundingClientRect();
+    const r = rest?.getBoundingClientRect();
+    if (!r || !host.width || rest.closest('.controls')?.offsetParent === null) { this.btn.style.left = ''; this.btn.style.bottom = ''; return; }
+    // A little toward the middle, clear of the Smoke/Frag column beside the stick.
+    const rx = r.left - host.left, x = Math.max(80, Math.min(host.width - 80, rx + (rx > host.width / 2 ? -24 : 24)));
+    const b = Math.max(8, Math.min(host.height - 60, host.bottom - r.top + 70));
+    this.btn.style.left = `${Math.round(x)}px`;
+    this.btn.style.bottom = `${Math.round(b)}px`;
   }
 
   // Emotes nobody can see (aboard the transport) go in the feed for the emoter's side.
