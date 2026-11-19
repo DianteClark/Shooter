@@ -118,7 +118,8 @@ const CSS = `
 .br-map-side { display: flex; flex-direction: column; gap: 8px; max-width: 200px; }
 .br-map-side h3 { margin: 0; font: 400 24px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
 .br-map-side p { margin: 0; font: 12px/1.35 var(--f-body); color: var(--c-haze); }
-.br-map-side .br-jump { position: static; transform: none; }
+/* left/bottom auto: the controller's focus ring makes it position: relative, and the lane offsets then pushed it off-screen. */
+.br-map-side .br-jump { position: static; transform: none; left: auto; bottom: auto; }
 .hud.br-on .minimap { cursor: pointer; pointer-events: auto; z-index: var(--z-hud-alert); }
 .hud.lefty .br-squad { left: auto; right: calc(var(--sr) + 134px); }
 /* Hands: both guns and fists as three slots over the ammo readout, and the ammo pouch (rounds for guns not in hand). */
