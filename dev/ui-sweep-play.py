@@ -33,6 +33,9 @@ FAKE_PAD = """(() => {
   window.__setAxes = (a) => { for (let i = 0; i < 4; i++) if (a[i] !== undefined && a[i] !== null) pad.axes[i] = a[i]; pad.timestamp = performance.now(); };
   window.__connect = on => { window.__padOn = on; const e = new Event(on ? 'gamepadconnected' : 'gamepaddisconnected'); e.gamepad = pad; window.dispatchEvent(e); };
 })()"""
+FAKE_DATE = """(() => { const Real = Date, offset = new Real('%s').getTime() - Real.now();
+  class FakeDate extends Real { constructor(...a) { if (a.length) super(...a); else super(Real.now() + offset); } static now() { return Real.now() + offset; } }
+  window.Date = FakeDate; })();"""
 A, B, X, Y, LB, RB, LT, RT, SELECT, START, L3, R3, UP, DOWN, LEFT, RIGHT = range(16)
 
 STANDARD = ['tdm', 'dom', 'kc', 'hard', 'hq', 'snd', 'ctf', 'ffa', 'ko', 'ctl', 'grind', 'gun', 'inf', 'oic', 'gf']
@@ -47,6 +50,13 @@ CASES = [('mp-' + pl, 'mp', (tab, pl)) for tab, pls in [
 CASES += [('custom-' + m, 'custom', ('random', m)) for m in STANDARD + GW]
 CASES += [('custom-zm-' + mp, 'custom', (mp, 'zm')) for mp in ['neon', 'ruins', 'foundry', 'ashgrove']]
 CASES += [('special-' + s, 'special', s) for s in ['training', 'range', 'tutorial']]
+# 1118 wave: Millbrook in every mode a small map hosts, Graveyard Shift on Polestar Relay, the weekly event's playlist
+# (this week's and three later weeks' on a fake date: a zombies, a Standard and a Ground War twist), and a weekend
+# tournament played round by round on a fake Saturday (each round forced won, so the next one opens).
+CASES += [('custom-millbrook-' + m, 'custom', ('millbrook', m)) for m in ['tdm', 'dom', 'kc', 'hard', 'snd', 'ctf', 'ffa', 'gun', 'gf']]
+CASES += [('custom-zm-polestar', 'custom', ('polestar', 'zm'))]
+CASES += [('mp-wkevent' + ('' if d is None else '-' + d), 'wkevent', d) for d in [None, '2026-11-30T12:00:00', '2026-12-07T12:00:00', '2026-12-14T12:00:00', '2026-12-21T12:00:00']]
+CASES += [('tourney', 'tourney', '2026-11-21T12:00:00')]
 
 STATE = f"""(() => {{ const a = {G}, m = a.match; return {{ screen: window.__game.menu.el.dataset.screen, inMatch: !!a.inMatch,
   phase: m?.interp?.newest?.phase ?? null, mode: m?.mode ?? null, mapId: m?.mapId ?? null }}; }})()"""
@@ -60,7 +70,7 @@ SET_CHALLENGES = """import('/js/shared/progression.js').then(P => { const now = 
     weekly: set('weekly', ['w.played', 'w.kills', 'w.assist']), reroll: '' })); })"""
 
 # Each daily/weekly challenge row on the results, with what the stored challenge state says.
-CHAL_ROWS = """import('/js/ui/progress.js').then(m => { const all = [...m.Challenges.list('daily'), ...m.Challenges.list('weekly')];
+CHAL_ROWS = """import('/js/ui/progress.js').then(m => { const all = [...m.Challenges.list('daily'), ...m.Challenges.list('weekly'), ...m.Progress.weeklyEvent().list];
   return [...document.querySelectorAll('.rs-ch')].filter(b => b.querySelector('.rs-ch-h')?.textContent.trim() === 'Challenges')
     .flatMap(b => [...b.querySelectorAll('.rs-ch-row')]).map(r => { const label = r.querySelector('b').textContent, c = all.find(x => x.label === label);
       return { label, txt: r.querySelector('small').textContent.trim(), value: c?.value ?? null, goal: c?.goal ?? null, done: r.classList.contains('done') }; }); })"""
@@ -70,9 +80,12 @@ OVERFLOW = """(() => {
   const root = document.getElementById('ui');
   for (const n of root.querySelectorAll('.hud *, .controls > *')) {
     if (n.closest('[hidden]') || n.offsetParent === null) continue;
-    const cs = getComputedStyle(n); if (cs.visibility === 'hidden' || cs.opacity === '0' || cs.position === 'fixed' && false) continue;
+    const cs = getComputedStyle(n); if (cs.visibility === 'hidden') continue;
+    // Invisible through an ancestor too (a streak tag parked at 0,0 with opacity 0 until it has a target).
+    let see = true; for (let a = n; a && a !== root; a = a.parentElement) if (getComputedStyle(a).opacity === '0') { see = false; break; }
+    if (!see) continue;
     const r = n.getBoundingClientRect(); if (r.width < 4 || r.height < 4) continue;
-    if (r.left < -2 || r.top < -2 || r.right > W + 2 || r.bottom > H + 2) bad.push(`${n.className || n.tagName} ${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}`);
+    if (r.left < -2 || r.top < -2 || r.right > W + 2 || r.bottom > H + 2) bad.push(`${n.getAttribute('class') || n.tagName} ${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}`);
   }
   return bad.slice(0, 8);
 })()"""
@@ -82,6 +95,7 @@ async def run_case(browser, name, kind, arg, size, report):
     vw, vh = size
     ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
     await ctx.add_init_script(FAKE_PAD)
+    if kind in ('wkevent', 'tourney') and arg: await ctx.add_init_script(FAKE_DATE % arg)
     pg = await ctx.new_page()
     errors, fails, notes = [], [], []
     pg.on('console', lambda m: errors.append(m.text[:300]) if m.type == 'error' else None)
@@ -102,12 +116,48 @@ async def run_case(browser, name, kind, arg, size, report):
         await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
         await pg.wait_for_timeout(1200)
         before = await ev(SAVE)
-        if kind == 'mp':
+        if kind == 'wkevent':
+            ev_ = await ev("import('/js/shared/events.js').then(E => { const e = E.weeklyEventAt(); return { id: e.id, tab: e.def.tab }; })")
+            notes.append(f"event {ev_['id']}")
+            arg = (ev_['tab'], 'wkevent')
+        rounds = 3 if kind == 'tourney' else 1
+        for rnd_i in range(rounds):
+            await play_once(pg, ev, name, kind, arg, notes, fails, shot if rnd_i == 0 else (lambda n, r=rnd_i: pg.screenshot(path=f'{OUT}/{name}-r{r + 1}-{n}-{vw}x{vh}.png')), before, rnd_i)
+            if fails: break
+            before = await ev(SAVE)
+    except Exception as e:
+        fails.append(f'exception: {str(e)[:300]}')
+        try: await shot('fail')
+        except Exception: pass
+    errs = [e for e in errors if 'favicon' not in e]
+    if errs: fails.append(f'console errors: {errs[:6]}')
+    line = f"{'FAIL' if fails else 'ok  '} {tag} {round(time.time() - t0)}s | {'; '.join(notes)}" + (f" | {' / '.join(fails)}" if fails else '')
+    print(line, flush=True)
+    report.append({'case': tag, 'ok': not fails, 'notes': notes, 'fails': fails})
+    await ctx.close()
+
+
+async def play_once(pg, ev, name, kind, arg, notes, fails, shot, before, rnd_i):
+        if kind == 'tourney':
+            await pg.locator('[data-act="multiplayer"]').first.click()
+            await pg.wait_for_timeout(700)
+            await pg.locator('[data-act="mpTourney"]').first.click()
+            await pg.wait_for_timeout(900)
+            if rnd_i == 0: await shot('bracket')
+            title = await ev("document.querySelector('.tn-next, .tn-play, [data-act=\"tnPlay\"]')?.textContent?.replace(/\\s+/g, ' ').trim() ?? ''")
+            notes.append(f'round {rnd_i + 1}: {title[:60]}')
+            await pg.locator('[data-act="tnPlay"]').first.click()
+        elif kind in ('mp', 'wkevent'):
             tab, pl = arg
             await pg.locator('[data-act="multiplayer"]').first.click()
             await pg.wait_for_timeout(500)
             await pg.locator(f'[data-act="mpTab"][data-tab="{tab}"]').first.click()
             await pg.wait_for_timeout(400)
+            if kind == 'wkevent' and not await pg.locator(f'[data-act="mpPlaylist"][data-id="{pl}"]').count():
+                notes.append(f'not on the {tab} tab')
+                await pg.locator('[data-act="mpTab"][data-tab="standard"]').first.click()
+                await pg.wait_for_timeout(400)
+            if kind == 'wkevent': await shot('event-card')
             await pg.locator(f'[data-act="mpPlaylist"][data-id="{pl}"]').first.click()
             await pg.wait_for_timeout(300)
             await pg.locator('[data-act="mpFind"]').first.click()
@@ -166,7 +216,7 @@ async def run_case(browser, name, kind, arg, size, report):
                 notes.append(f'forced end after {played}s')
                 await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
                   if (m.mode === 'zm') {{ for (const p of sim.players) if (p.team === 0 && p.alive) {{ p.spawnProtect = 0; p.downed = false; sim._selfKill(p, 'bleed'); }} }}
-                  else if (sim.br || /^(ex|rb|br)/.test(m.mode)) sim._end(me ? me.team : 0); else sim._end(sim.scores[0] === sim.scores[1] ? null : sim.scores[0] > sim.scores[1] ? 0 : 1); }})()""")
+                  else if (sim.br || /^(ex|rb|br)/.test(m.mode) || {'true' if kind == 'tourney' else 'false'}) sim._end(me ? me.team : 0); else sim._end(sim.scores[0] === sim.scores[1] ? null : sim.scores[0] > sim.scores[1] ? 0 : 1); }})()""")
             else:
                 notes.append(f'ended on its own after {played}s')
             try:
@@ -205,16 +255,7 @@ async def run_case(browser, name, kind, arg, size, report):
                 await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
                 xp2 = await ev("window.__game.Progress.totalXp")
                 if xp2 != after['xp']: fails.append(f"XP after reload {xp2} != {after['xp']}")
-    except Exception as e:
-        fails.append(f'exception: {str(e)[:300]}')
-        try: await shot('fail')
-        except Exception: pass
-    errs = [e for e in errors if 'favicon' not in e]
-    if errs: fails.append(f'console errors: {errs[:6]}')
-    line = f"{'FAIL' if fails else 'ok  '} {tag} {round(time.time() - t0)}s | {'; '.join(notes)}" + (f" | {' / '.join(fails)}" if fails else '')
-    print(line, flush=True)
-    report.append({'case': tag, 'ok': not fails, 'notes': notes, 'fails': fails})
-    await ctx.close()
+                await pg.wait_for_timeout(1000)
 
 
 async def main():

@@ -22,7 +22,10 @@ Q = next((a[4:] for a in sys.argv[1:] if a.startswith('--q=')), 'low')
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
 G = 'window.__game.app'
-CASES = [('br', 'frontier', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm')]
+CASES = [('br', 'frontier', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
+         # 1118 wave: Millbrook, Graveyard Shift round 20 on Polestar Relay, and a replay's playback (a TDM on Railyard,
+         # ended after 20 s, Watch replay from the results: the replay player's own renderer and frame cost).
+         ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('replay', 'railyard', 'tdm')]
 
 ZM20 = f"""(async () => {{
   const m = {G}.match, sim = m.sim, R = sim.rules;
@@ -67,11 +70,21 @@ async def run(browser, name, mapId, mode, rows):
         await pg.wait_for_timeout(2000)
     if name.startswith('zm20'):
         extra = f'horde {await ev(ZM20)}'
+    stats_js = f"(() => {{ const s = {G}.renderer?.getStats(); return s ? {{ calls: s.calls, tris: s.triangles }} : null; }})()"
+    if name == 'replay':
+        await pg.wait_for_timeout(20000)
+        await ev(f"(() => {{ const m = {G}.match, s = m.sim, me = s.byId.get(m.localId); if (s.phase !== 'ended') s._end(me.team); }})()")
+        await pg.wait_for_selector('.menu[data-screen="results"] .rs', timeout=120000)
+        await pg.wait_for_timeout(2000)
+        await pg.locator('[data-act="resReplay"]').first.click()
+        await pg.wait_for_timeout(2000)
+        stats_js = "(() => { const v = window.__game.replay(), s = v?.renderer?.renderer?.info?.render ?? null; const g = v?.renderer?.getStats?.(); return g ? { calls: g.calls, tris: g.triangles } : s ? { calls: s.calls, tris: s.triangles } : null; })()"
+        extra = 'playback'
     await pg.wait_for_timeout(3000)
     calls, tris, script, frame, lines = [], [], [], [], None
     for i in range(24):
         await pg.wait_for_timeout(500)
-        st = await ev(f"(() => {{ const s = {G}.renderer?.getStats(); return s ? {{ calls: s.calls, tris: s.triangles }} : null; }})()")
+        st = await ev(stats_js)
         txt = await ev("[...document.querySelectorAll('.perf > div')].map(n => n.textContent)")
         if st: calls.append(st['calls']); tris.append(st['tris'])
         m = re.search(r'script ([\d.]+) ms', txt[1] if len(txt) > 1 else '')
@@ -85,6 +98,9 @@ async def run(browser, name, mapId, mode, rows):
            'tris_k': round(med(tris) / 1000, 1) if tris else None, 'tris_max_k': round(max(tris) / 1000, 1) if tris else None,
            'script_ms': med(script), 'script_max': max(script) if script else None, 'frame_ms': med(frame), 'overlay': lines, 'extra': extra,
            'errors': errors[:5]}
+    if name == 'replay':
+        rs = await ev("(() => { const s = window.__game.replay()?.stats; return s ? { frames: s.frames, mean_ms: +(s.totalMs / Math.max(1, s.frames)).toFixed(1), render_ms: +(s.renderMs / Math.max(1, s.frames)).toFixed(1), max_ms: +s.maxMs.toFixed(1) } : null; })()")
+        row['extra'] = f'playback {rs}'
     print(json.dumps(row), flush=True)
     rows.append(row)
     await ctx.close()
