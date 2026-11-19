@@ -4,6 +4,19 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-19', title: 'Graveyard Shift: bot teammates who pull their weight',
+    items: [
+      'Bot teammates in Graveyard Shift each have a personality: aggressive, support, hoarder or shopper. You will see it in how they fight, what they buy and what they say.',
+      'They shop with a plan: better wall guns as the rounds go up, Ironhide and Mercy Run before other perks, plates and kit refills, upgrades at the bench (they save up for them), a crate pull when rich.',
+      'They buy supply streaks into their own held slot and call them in when the horde gets big, someone is down or the boss turns up.',
+      'They revive you first, then each other, stand still over you while they do it, and fight their way to you when the undead are on you.',
+      'They spread out over the gates near you instead of bunching up, back away from the undead instead of standing still, slip out of corners and fall back when hurt.',
+      'They only open gates that lead somewhere worth it, and never with the points they need for their next perk.',
+      'They help with the quest when it is safe (relics, radios) but leave the last step, at the altar or the console, to you.',
+      'Bot chatter now works in Graveyard Shift: new guns, upgrades, revives, the boss round. Turn it off in Options > Bot chatter.',
+    ],
+  },
+  {
     build: '1119-5', date: '2026-11-19', title: 'Touch reports for a stuck move stick',
     items: [
       'New option in Options > Controls: Record touches (for bug reports). While it is on, the game keeps your last 20 seconds of touches on this phone.',
