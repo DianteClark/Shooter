@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Clans and bot chatter',
+    build: '1118-8', date: '2026-11-18', title: 'Clans and bot chatter',
     items: [
       'Clans: found your own in Profile > Clan. Pick a tag of 2 to 4 letters or numbers, a name, a colour and a mark. Tags already used by other clans are taken.',
       'Your tag shows before your name in the lobby, the scoreboard, the kill feed, the boards and the results.',
@@ -30,7 +30,7 @@ export const CHANGELOG = [
     items: [
       'A new map built for Graveyard Shift: Polestar Relay, an iced-in polar station under the northern lights. Start in the mess hall and open your way round the kennels, the lab, the relay mast, the fuel depot and the hangar.',
       'The power is out here too: the switch is in the boiler house in the middle of the station, and the perk machines stay dark until someone throws it.',
-      'Polestar has its own secret: get the power on, find the three old radios and stay with each while it tunes in, then transmit from the console at the foot of the mast. Something out on the ice is listening. Put it down for a lot of XP, points for the whole crew, the Dead Air calling card and the Signal Lost emblem.',
+      'Polestar has its own secret: get the power on, find the three old radios and stay with each while it tunes in, then transmit from the console at the foot of the mast. Something out on the ice is listening. Put it down for a lot of XP, points for the whole crew, the Dead Air calling card and the Dead Frequency emblem.',
       'Two wonder weapons can now come out of the mystery crate on every Graveyard Shift map: the Stormcoil, whose lightning jumps from one zombie to the next, and the Rimecaster, a freezing beam that stops them dead and shatters them. They are rare, and they cannot go on the upgrade bench.',
       'Bot teammates now step out of a running trap instead of standing in it.',
       'Reach round 15 on Polestar Relay for the Long Night calling card.',

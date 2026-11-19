@@ -465,7 +465,7 @@ test('every new calling card and feat emblem reads a stat the game counts, in it
     assert.ok(e.play?.tab && e.rule.label, `${e.id} play and label`);
     if (e.rule.life && !FEAT_RARE.has(e.rule.life) && !e.rule.life.startsWith('ex:')) out.push(...lifeReach(e.rule.life).map(x => `${e.id}: ${x}`));
   }
-  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 13, 'thirteen feat emblems (Signal Lost: the Listener on Polestar Relay)');
+  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 13, 'thirteen feat emblems (Dead Frequency: the Listener on Polestar Relay)');
   assert.deepEqual(out, []);
 });
 
@@ -539,7 +539,7 @@ function bigMatch(i) {
   const ladder = Object.fromEntries(WEAPON_IDS.map(w => [w, { kills: 60, hurt: 6, multi: 3, run5: 1 }]));
   return { xp: 220000, weapons, pro, mastery: { tracks, weapons: ladder }, life, mapId: zmAt ?? MAP_LIST[i < 80 ? i % 8 : i % MAP_LIST.length], won: true,
     career: { kills: 40, deaths: 20, br: false, place: null, extracted: true }, extracted: true,
-    // Polestar Relay's boss flag is the Listener's (Dead Air, Signal Lost): put down there in its match.
+    // Polestar Relay's boss flag is the Listener's (Dead Air, Dead Frequency): put down there in its match.
     zmFeat: i === 7 ? { escaped: 21, boss: true } : zmAt ? { escaped: 26, boss: zmAt === 'polestar' } : null, zmRounds: zmAt ? 31 : null,
     records: { streak: 5 + (i % 20), long: 20 + (i % 30), brPlace: 1 + (i % 7), exSecs: 600 - i } };
 }

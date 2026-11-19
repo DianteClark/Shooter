@@ -1446,7 +1446,7 @@ export function recordZmFeat(save, mapId, { escaped = 0, boss = false } = {}) {
 export const ZM_LISTENER_MAPS = ['polestar'];
 // Whether the Gravewarden has gone down on any map (its calling card).
 export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && Array.isArray(v) && v[1]);
-// Whether the Listener has (its calling card, Dead Air, and the Signal Lost emblem).
+// Whether the Listener has (its calling card, Dead Air, and the Dead Frequency emblem).
 export const zmListenerDown = feats => isObj(feats) && ZM_LISTENER_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 
 // The finisher picks block: known operators to known finisher ids (whether each is still unlocked is read at use).
