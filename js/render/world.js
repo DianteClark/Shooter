@@ -14,6 +14,7 @@ import * as industrial from './themes/industrial.js';
 import * as frontier from './themes/frontier.js';
 import { ashgrove } from './themes/ashgrove.js';
 import { polestar } from './themes/polestar.js';
+import { millrace } from './themes/millrace.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
@@ -3143,6 +3144,7 @@ const DRESS = {
   foundry: { ...RAILYARD_DRESS, ...industrial.foundry.dress },
   ashgrove: { ...RAILYARD_DRESS, ...ashgrove.dress },
   polestar: { ...RAILYARD_DRESS, ...polestar.dress },
+  millrace: { ...RAILYARD_DRESS, ...millrace.dress },
 };
 
 const THEME_STAGES = {
@@ -3168,6 +3170,7 @@ const THEME_STAGES = {
   foundry: industrial.foundry.stage,
   ashgrove: ashgrove.stage,
   polestar: polestar.stage,
+  millrace: millrace.stage,
 };
 
 // What theme modules (js/render/themes/) may draw with, handed over on ctx.kit: they cannot import world.js back.
@@ -3414,6 +3417,7 @@ const THUMB_STYLE = {
   foundry: industrial.foundry.thumb,
   ashgrove: ashgrove.thumb,
   polestar: polestar.thumb,
+  millrace: millrace.thumb,
   frontier: frontier.thumb,
 };
 

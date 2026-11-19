@@ -25,9 +25,9 @@ function build() {
   const walls = [];
   rotated(walls, W, H, [
     // ---- The creek (x 25.5..28.5): listed north of the mill bridge; rotation gives the south half.
-    water(25.5, 0, 3, 2.5), water(25.5, 6.5, 3, 2), water(25.5, 14, 3, 1.5),
+    water(25.5, 0, 3, 2.5), water(25.5, 6.5, 3, 2.5), water(25.5, 13, 3, 2.5),
     // The mill straddles the creek between the north footbridge and the mill bridge; its image is the cider house.
-    [23, 8.5, 8, 5.5, 5.2, 'building', { mill: true, landmark: true }],
+    [23, 9, 8, 4, 5.2, 'building', { mill: true, landmark: true }],
     // Mill bridge parapets, waist high: the bridge is 4.4 m wide between them.
     parapet(25.5, 15.5, 3, 0.3),
 
@@ -47,7 +47,7 @@ function build() {
 
     // ---- South-west: the pig pen (fenced) beside the stable, the silo, a hay stack screening the spawns.
     stack(5.8, 24.6),
-    fence(10, 24.4, 3, 0.4), fence(15, 24.4, 2.6, 0.4), fence(17.2, 24.8, 0.4, 2.4),
+    fence(10, 24.4, 3, 0.4), fence(15, 24.4, 2.6, 0.4),
     trough(12, 27.6, 2.2, 0.7),
     house(9.6, 31, 6.6, 5, 3.6),                 // The stable, against the south hedge.
     [17.4, 27.2, 3, 3, 8, 'building', { silo: true }],
