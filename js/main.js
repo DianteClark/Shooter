@@ -86,7 +86,7 @@ const REMATCH_SECONDS = 15;
 const VOTE_REVEAL_MS = 1700;
 const RESULTS_MIN_MS = 6000;     // A guest's results stay up at least this long before a vote the host started takes over.
 const REJOIN_MINUTES = 15;       // How long after dropping the title screen still offers the way back.
-const EDIT_SCREENS = ['tourney', 'gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats', 'challenges', 'history'];   // A lobby update must not pull a guest out of these.
+const EDIT_SCREENS = ['tourney', 'clan', 'gunsmith', 'loadouts', 'operators', 'profile', 'save', 'keypad', 'options', 'help', 'stats', 'challenges', 'history'];   // A lobby update must not pull a guest out of these.
 const LAST_ROOM = 'switchyard-last-room';
 const invite = takeInvite();     // Reads and strips ?join=CODE before anything else looks at the URL.
 const params = new URLSearchParams(location.search);

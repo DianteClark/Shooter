@@ -6,7 +6,8 @@
 .cl-plate.big { gap: 8px; padding: 8px 12px; font: 400 var(--fs-heading)/1 var(--f-stencil); letter-spacing: .06em;
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
 #ui .cl-plate .ico { height: 1em; color: inherit; }
-#ui .pf-name .cl-plate { margin-right: 6px; }
+#ui .pf-name .cl-plate { margin-right: 6px; font-size: var(--fs-body); }
+#ui .pf-name .cl-plate b { font: inherit; }
 #ui .pf-clan + .pf-trophy { margin-left: var(--sp-2); }
 
 #ui .menu[data-screen="clan"] { gap: var(--sp-3); }
@@ -43,7 +44,9 @@
 #ui .cl-mk .ico { height: 18px; }
 
 /* The lobby's offer to join a clanmate's clan. */
-#ui .lobby-foot .cl-offer { box-shadow: inset 0 0 0 1px var(--c-sodium); }
+#ui .lobby-foot .cl-offer { flex-direction: row; gap: 6px; padding: 0 var(--sp-3); box-shadow: var(--bevel), inset 0 0 0 1px var(--c-sodium); }
+#ui .cl-offer span { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+#ui .cl-offer small { font: 400 9px/1 var(--f-plate); color: var(--c-haze); text-transform: uppercase; }
 
 /* Boards: the Clans view. */
 #ui .bd-row.cl-row { grid-template-columns: 40px 64px minmax(0, 1fr) auto; }

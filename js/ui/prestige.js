@@ -156,7 +156,7 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
 // The way into the Clan screen (js/ui/clanscreen.js): your tag, or the way to found or join one.
 function clanButton() {
   const c = Clan.get();
-  return `<button class="btn pf-mastery pf-clan" data-act="pfClan" aria-label="Clan">${ico('ui:party')}<b>Clan</b><small>${c ? esc(`[${c.tag}]`) : 'None'}</small></button>`;
+  return `<button class="btn pf-mastery pf-clan" data-act="pfClan" aria-label="Clan">${ico('ui:party')}<b>${c ? esc(c.tag) : 'Clan'}</b></button>`;
 }
 
 // The way into the Mastery screen, in the header: tiers done across every track and weapon ladder.

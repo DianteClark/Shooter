@@ -20,7 +20,7 @@ import { enter } from './motion.js';
 // Clans: bot clans and the player clans this phone knows (yours, friends'), by their members' summed totals.
 const VIEWS = [...PLAYER_VIEWS, 'clans'];
 const VIEW_LABEL = { everyone: 'Everyone', friends: 'Friends', around: 'Around me', season: 'Season', clans: 'Clans' };
-const VIEW_ICON = { everyone: 'ui:party', friends: 'ui:user', around: 'ui:aim', season: 'ui:star', clans: 'ui:flag' };
+const VIEW_ICON = { everyone: 'ui:party', friends: 'ui:user', around: 'ui:aim', season: 'ui:star', clans: 'ui:crown' };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dateText = at => { const d = new Date(at); return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; };
 const n = v => Math.round(v).toLocaleString('en-US');
