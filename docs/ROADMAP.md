@@ -176,3 +176,16 @@ party playlist, new operators and skins, replays, match history detail.
 43. Movement stick still drops during grenade throws on iPhone: add an Options touch recorder that produces a report code of
     the raw touch lists so the iOS case can be reproduced. Graveyard Shift ally bots need personality: shopping plan (wall
     guns, crate, perks, plates, bench), their own bought streak, revive priority, holding chokepoints, quest help, chatter.
+
+## NEXT WEEK'S WAVE (owner, 2026-11-19): the art overhaul. 85% art + melee weapons, 15% kept for hiccups
+Order (adjust by what lands):
+44. Operator overhaul (~20%): distinct silhouettes per operator; low tiers recolours, Elite and up showpieces (animated
+    holo/active skins like weapon camos, wild themes: animal/bear suit, mech/transformer armour...), each top skin special.
+45. Second BR map + matching large maps (~20%): a new biome island (e.g. jungle ruins or flooded coastal city) for BR,
+    Rebound and Extraction, plus two Ground War maps in its region.
+46. Weapons and streaks visual overhaul (~20%): better gun models per class, inspect and reload visuals, 4-6 new melee
+    weapons (katana, bat, shovel, axe, sickle...) with their own animations and finishers, proper streak models
+    (aircraft, drones), explosions and call-in animations; 2-3 new streaks if they fit.
+47. Zombies art and variety (~15%): unique models per zombie type (not recoloured soldiers), boss intros, hit effects.
+48. Maps and world art pass (~10%): lighting, props, ambient life and landmarks on the older maps; menus and UI art.
+Keep every addition inside docs/BR-PERF.md budgets (the phone runs hot on heavy scenes); measure each with the perf sweep.
