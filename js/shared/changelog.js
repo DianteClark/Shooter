@@ -4,6 +4,12 @@
 
 export const CHANGELOG = [
   {
+    build: '1119-12', date: '2026-11-19', title: 'Sun Bear in team colours',
+    items: [
+      "Coyote's Sun Bear suit now wears a team-colour belt and harness straps, so you can tell its side at a glance.",
+    ],
+  },
+  {
     build: '1119-11', date: '2026-11-19', title: 'Anvil and Coyote, remade',
     items: [
       'Anvil has a new outline: tiered shoulder plates, a raised collar, cheek plates on the helm and a belt feed running from his drum over his shoulder.',

@@ -661,6 +661,10 @@ export const SUITS = {
         b.prismY(0.19, 0.22, 0.0, 0.33, 0.07, 0.075, 7);
       });
       b.setPart(1).prismY(0.66, 0.75, 0, 0, 0.27, 0.25, 8, Math.PI / 8);      // Team scarf, its tail and a little pack.
+      // Team harness (1119-12): a belt and two front straps over the fur, so the bear reads as its side at a glance.
+      b.prismY(0.15, 0.24, 0, 0, 0.375, 0.375, 8, Math.PI / 8);
+      b.box(0.355, 0.47, 0.15, 0.04, 0.3, 0.07).box(0.355, 0.47, -0.15, 0.04, 0.3, 0.07);
+      b.box(-0.355, 0.47, 0.15, 0.04, 0.3, 0.07).box(-0.355, 0.47, -0.15, 0.04, 0.3, 0.07);
       b.box(-0.27, 0.52, 0.1, 0.05, 0.22, 0.1);
       b.box(-0.39, 0.4, -0.04, 0.1, 0.24, 0.28, 0.03);
       tag(b, ACC, () => b.setPart(0).setColor(0xffc040).prismY(0.03, 0.19, 0.0, 0.33, 0.1, 0.09, 7));
