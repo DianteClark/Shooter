@@ -84,9 +84,11 @@ The follow cameras keep the quality step's world distance cut (`shot.cut`, a sma
 an 80 m cut. HUD: the replay tag, names over heads (at most 14), the kill feed of the last 6 s, kill ticks on the scrub
 bar (yours gold, your deaths red).
 
-Measured on Low (as docs/BR-PERF.md): battle royale follow camera 13 calls / 9k triangles, overview 24 calls / 14k;
-Graveyard Shift round 20 follow 44 / 140k (the match itself: 57 to 61 / 130 to 135k), overview 55 / 174k. The auto
-quality governor runs in the replay as in a match.
+Measured on Low (as docs/BR-PERF.md; two runs, the numbers depend on where the record is): battle royale follow camera
+13 to 35 calls / 9k to 57k triangles, overview 24 to 42 / 14k to 68k (the match itself, dev/ui-sweep-perf.py: 37 to 42
+/ 43k to 45k); Graveyard Shift round 20 follow 44 / 108k to 140k (the match: 57 to 61 / 130k to 135k), overview 50 to
+55 / 174k. Playback script time per frame, renderer included: 2.8 to 3.1 ms TDM, 4.2 to 5.1 ms battle royale, 5.6 to
+6.0 ms Graveyard Shift (SwiftShader, CPU side). The auto quality governor runs in the replay as in a match.
 
 Controller: A or Menu play/pause, B close, X save, Y next camera, LB/RB speed, d-pad left/right 5 s, LT/RT hold to
 rewind / fast-forward, sticks pan (switching to the overview). Touch: every control is a button; the scrub bar takes a
