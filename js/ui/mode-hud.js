@@ -56,7 +56,9 @@ const CSS = `
 .mh-mods { position: absolute; left: calc(50% + 184px); top: calc(var(--st) + 10px); display: flex; gap: 3px; }
 .mh-mods i { font: 400 10px/1 var(--f-stencil); font-style: normal; letter-spacing: var(--tr-stencil); padding: 3px 5px; color: var(--c-night); background: var(--c-sodium);
   clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
-.hud.hc-on .minimap { display: none !important; }
+/* Hardcore: no minimap, except while your team has a radar streak up (js/ui/hud.js hc-radar). Hidden, not removed: the
+   layout keeps its corner free (the feed starts under it), so it can appear without landing on anything. */
+.hud.hc-on:not(.hc-radar) .minimap { visibility: hidden !important; pointer-events: none !important; }
 .hud.mh-on .ctf-status, .hud.mh-on .obj-strip { display: none !important; }
 /* Held off the field: the wait plate takes the Respawn row, and the respawn clock (which is not running) goes. The
    Next life line stays (QoL): the class for the life after the wait can still be swapped while it runs. */

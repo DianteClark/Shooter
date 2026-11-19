@@ -501,6 +501,28 @@ const C = await import('../js/ui/cards.js');           // Registers the card car
 const { Progress, Challenges } = await import('../js/ui/progress.js');
 const { seasonAt, TIER_XP } = await import('../js/shared/seasons.js');
 const GEAR_KINDS = { perk: PERKS, tactical: TACTICALS, lethal: LETHALS, streak: STREAKS, weapon: WEAPONS };
+
+// Every calling card's unlock sheet says what it really takes (js/ui/unlocksheet.js cardRequirement), not just its name
+// or a bare label like "Marathon Pro" or "Season 1 reward track, tier 3", and shows how far along you are (a bar, or a
+// status line where there is nothing to count).
+const UL = await import('../js/ui/unlocksheet.js');
+const cardTexts = label => test(`every calling card has a specific requirement and progress on its unlock sheet (${label})`, () => {
+  const bad = [], seenHow = new Map();
+  for (const c of CARDS) {
+    const info = UL.unlockInfo('card', c.id), how = String(info.how ?? '').trim();
+    if (info.id !== c.id || info.name !== c.name) bad.push(`${c.id}: sheet is for ${info.id}`);
+    if (how.length < 30) bad.push(`${c.id}: too short: ${JSON.stringify(how)}`);
+    if (/keep playing/i.test(how) || how === c.req || how === c.name || how.startsWith(`${c.group} card:`)) bad.push(`${c.id}: not specific: ${JSON.stringify(how)}`);
+    if (seenHow.has(how)) bad.push(`${c.id}: same text as ${seenHow.get(how)}`);
+    seenHow.set(how, c.id);
+    if (info.noBar ? !String(info.status ?? '').trim() : !(info.goal >= 1 && info.value >= 0 && info.value <= info.goal)) bad.push(`${c.id}: no progress (${info.value}/${info.goal}, status ${JSON.stringify(info.status)})`);
+    for (const st of info.steps ?? []) if (typeof st !== 'string' && !(st.label && st.goal >= 1)) bad.push(`${c.id}: bad step ${JSON.stringify(st)}`);
+    if (!/<p class="ul-how"><b>How to get it<\/b>[^<]{30,}/.test(UL.unlockSheetHtml(info))) bad.push(`${c.id}: the sheet does not show the text`);
+  }
+  assert.ok(CARDS.length > 300, `${CARDS.length} cards`);
+  assert.deepEqual(bad, []);
+});
+cardTexts('a new player');
 const opened = () => {
   const careerNow = C.careerNow();
   return {
@@ -735,6 +757,8 @@ test('Graveyard Shift through MatchAwards: weapon XP (capped) and the mode\'s re
   }
   assert.equal(r.unlocks.filter(u => u.kind === 'camo' || u.kind === 'operator' || u.kind === 'pro').length, 0, 'no camo, operator or Pro unlock from the horde');
 });
+
+cardTexts('after the whole career');
 
 /* ================= Report ================= */
 export { seen, problems, test, store };

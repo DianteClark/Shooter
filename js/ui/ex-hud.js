@@ -22,6 +22,7 @@ const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)
 const MAP_PX = 640, MINI_SPAN = 120, MARK_Y = 1.6, TAGS = 6;
 export const AI_CSS = '#ff6a3c';
 const TIER = ['', 'Tier 1', 'Tier 2', 'Tier 3'];
+const CARD_FULL = 4;      // Seconds the full contract card shows after a contract is taken (or the tracker tapped).
 const xpOf = list => list.reduce((n, c) => n + (EX.reward.xp[c.tier] ?? 0), 0);
 
 const CSS = `
@@ -46,22 +47,38 @@ const CSS = `
 .ex-exfil { min-width: 96px; }
 .ex-pot b { color: var(--c-sodium); }
 .hud.lefty .ex-squad { left: auto; right: calc(var(--sr) + 134px); }
-/* The contract: the objective strip's detail row (js/ui/hud.js ObjStrip), one compact plate. */
-.ex-con { width: min(300px, var(--os-w1, 300px)); padding: 4px 9px 5px 7px; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 1px 6px; text-align: left;
+/* The contract: the objective strip's detail row (js/ui/hud.js ObjStrip). The full card for a few seconds after it is
+   taken (or tapped), then a one-line tracker: the next step and how far. Abandon is a small held button at its side. */
+.ex-con { width: min(300px, var(--os-w1, 300px)); padding: 4px 5px 5px 7px; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: 1px 6px; text-align: left;
+  position: relative; pointer-events: auto;
   background: linear-gradient(180deg, rgba(42,51,61,.9), rgba(16,20,26,.86)); box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-sodium);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
 .ex-con .ci { grid-row: 1 / 4; color: var(--c-sodium); display: grid; place-items: center; }
-.ex-con b { font: 400 13px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ex-con small { font: 9px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-con b { grid-column: 2 / 4; font: 400 13px/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-con small { grid-column: 2 / 4; font: 9px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-con p { grid-column: 2; margin: 1px 0 0; font: 10px/1.2 var(--f-plate); letter-spacing: .02em; color: var(--c-chalk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-con p em { font-style: normal; color: var(--c-sodium); }
-.ex-con .ex-bar { grid-column: 1 / 3; height: 3px; margin-top: 2px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
+.ex-con .dist { grid-column: 3; grid-row: 3; align-self: end; font: 400 12px/1.1 var(--f-stencil); letter-spacing: var(--tr-stencil); font-style: normal; color: var(--c-sodium); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ex-con .dist:empty { display: none; }
+.ex-con .ex-bar { grid-column: 1 / -1; height: 3px; margin-top: 2px; background: rgba(231,234,228,.14); position: relative; overflow: hidden; }
 .ex-con .ex-bar div { position: absolute; inset: 0; background: var(--c-sodium); transform-origin: left; transform: scaleX(var(--k, 0)); }
-.ex-con .ex-ab { grid-column: 1 / 3; justify-self: end; position: relative; overflow: hidden; margin-top: 3px; height: 26px; min-width: 112px; padding: 0 10px; border: 0;
-  pointer-events: auto; touch-action: none; font: 400 12px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk);
-  background: rgba(42,51,61,.95); box-shadow: inset 0 0 0 1px rgba(255,138,124,.6); user-select: none; -webkit-user-select: none; }
+.ex-con .ex-ab { grid-column: 4; grid-row: 1 / 4; align-self: center; position: relative; overflow: hidden; width: 34px; height: 30px; padding: 0; border: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  pointer-events: auto; touch-action: none; color: #ffb3a8; background: rgba(16,20,26,.7); box-shadow: inset 0 0 0 1px rgba(255,138,124,.55);
+  user-select: none; -webkit-user-select: none; }
 .ex-con .ex-ab i { position: absolute; inset: 0; background: rgba(255,107,92,.55); transform-origin: left; transform: scaleX(0); pointer-events: none; }
-.ex-con .ex-ab span { position: relative; }
+.ex-con .ex-ab svg, .ex-con .ex-ab span { position: relative; }
+.ex-con .ex-ab span { font: 7px/1 var(--f-plate); letter-spacing: .06em; color: var(--c-haze); }
+.ex-con.mini { padding: 2px 4px 3px 6px; grid-template-columns: 16px minmax(0, 1fr) auto auto; align-items: center; }
+.ex-con.mini .dist { grid-row: 1; align-self: center; }
+.ex-con.mini .ci { grid-row: 1; }
+.ex-con.mini b, .ex-con.mini small { display: none; }
+.ex-con.mini p { grid-row: 1; margin: 0; font-size: 11px; }
+.ex-con.mini .ex-ab { grid-row: 1; width: 28px; height: 22px; }
+.ex-con.mini .ex-ab span { display: none; }
+.ex-con.mini .ex-bar { margin-top: 1px; height: 2px; }
+.ex-con.none { box-shadow: var(--hud-edge), inset 3px 0 0 rgba(224,169,42,.6); }
+.ex-con.none .ex-ab, .ex-con.none .ex-bar { display: none; }
 .ex-act.off { color: var(--c-haze); background: rgba(42,51,61,.9); box-shadow: 0 0 0 2px rgba(231,234,228,.25) inset; filter: grayscale(1); }
 .ex-con.warn { box-shadow: var(--hud-edge), inset 3px 0 0 var(--c-red); }
 .ex-con.warn .ex-bar div { background: var(--c-red); }
@@ -87,6 +104,7 @@ const CSS = `
 .ex-tag.go span { background: #8ff09c; }
 .ex-tag.open span { background: var(--c-chalk); }
 .ex-tag.phone span { background: rgba(224,169,42,.85); }
+.ex-tag.phone.need span { background: var(--c-sodium); box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
 .ex-tag.warn span { background: #ff8a7c; }
 .ex-down { position: absolute; left: var(--lane-x, 50%); bottom: var(--lane-b, 66px); transform: translateX(-50%); width: 250px; text-align: center; }
 .ex-down b { display: block; font: 400 30px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff6b5c; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
@@ -102,6 +120,17 @@ const CSS = `
 .ex-rev i { display: block; height: 5px; margin-top: 5px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .ex-rev i i { position: absolute; inset: 0; margin: 0; height: auto; background: #59d36b; transform-origin: left; transform: scaleX(0); }
 .ex-held.won b, .ex-held.won .place { color: #8ff09c; }
+.br-out.ex-held { max-width: calc(100vw - var(--sl, 0px) - var(--sr, 0px) - 24px); }
+.br-out.ex-held .place { font-size: 30px; white-space: nowrap; margin-top: 4px; }
+.br-out.ex-held:not(.watching) small { max-width: 360px; margin-left: auto; margin-right: auto; }
+.br-out.ex-held .acts { flex-wrap: wrap; }
+/* Watching: a compact plate under the chips (js/ui/hud.js --out-*), text over a row of small buttons, so it fits the gap
+   between the squad list and the spectate card at every size. */
+.hud .br-out.ex-held.watching { flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 10px 7px; width: max-content; max-width: min(420px, var(--out-w, calc(100vw - 24px))); }
+.br-out.ex-held.watching b { font-size: 16px; }
+.br-out.ex-held.watching small { max-width: none; margin-top: 2px; font-size: 11px; }
+.br-out.ex-held.watching .acts { margin-top: 0; gap: 5px; justify-content: flex-start; flex-wrap: nowrap; }
+.br-out.ex-held.watching button { height: 30px; min-width: 0; padding: 0 9px; font-size: 13px; flex: 1 0 auto; white-space: nowrap; }
 .ex-lives-note { padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
   color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.78)); white-space: nowrap; }
 .hud.ex-offers-on .ex-acts { visibility: hidden; }
@@ -158,7 +187,7 @@ export class ExHud {
         <div class="ex-chip ex-exfil"><b>3:30</b><small>Exfil opens</small></div>
       </div>
       <div class="ex-squad"></div>
-      <div class="ex-con" hidden><span class="ci"></span><b></b><small></small><p></p><div class="ex-bar"><div></div></div><button class="ex-ab" data-tap="1" aria-label="Hold to abandon this contract"><i></i><span>HOLD: ABANDON</span></button></div>
+      <div class="ex-con" hidden data-tap="1"><span class="ci"></span><b></b><small></small><p></p><em class="dist"></em><button class="ex-ab" data-tap="1" aria-label="Hold to abandon this contract" title="Hold to abandon"><i></i>${icon('ui:close', { size: 12 })}<span>HOLD</span></button><div class="ex-bar"><div></div></div></div>
       <div class="ex-acts">
         <button class="ex-act ex-call" data-tap="1" hidden>CALL EXFIL<small>Helicopter in ${EX.inbound} s</small></button>
         <button class="ex-act alt ex-phone" data-tap="1" hidden>CONTRACTS<small>Pick a new one</small></button>
@@ -206,6 +235,8 @@ export class ExHud {
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) this.abBtn.addEventListener(ev, abStop);
     this.abBtn.addEventListener('click', e => e.stopPropagation());
     this.abStop = abStop;
+    // A tap on the tracker opens the full card again for a few seconds.
+    this.conEl.addEventListener('click', e => { e.stopPropagation(); this.fullUntil = performance.now() + CARD_FULL * 1000; });
     act($('.ex-offers .close'), () => this.#openOffers(false));
     this.offersEl.addEventListener('click', e => { if (e.target === this.offersEl) this.#openOffers(false); });
     this.offerRow.addEventListener('click', e => {
@@ -219,11 +250,12 @@ export class ExHud {
     this.mapEl.addEventListener('click', e => { if (e.target === this.mapEl) this.toggleMap(false); });
     // The battle royale's out panel (js/ui/br-hud.js #out), driven the same way: Spectate opens anyone still playing
     // once your squad has nobody left to watch, Next player / Next squad step through them.
-    act($('.ex-spec'), () => { spectate.any = true; this.c.held = null; });
+    // Spectate tells the host too ({act:'watch'}): the match goes on for you until you Leave or it ends.
+    act($('.ex-spec'), () => { spectate.any = true; this.watching = true; this.cmd?.('watch'); this.c.held = null; });
     act($('.ex-spec-next'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1); this.c.held = null; });
     act($('.ex-spec-squad'), () => { if (this.view) spectate.cycle(this.view, this.view.localId, 1, true); this.c.held = null; });
     // Out for good: results now for this phone (main.js leaveBrEarly, the battle royale's own Leave), the match goes on.
-    act($('.ex-leave'), () => this.hud.brLeaveCb?.());
+    act($('.ex-leave'), () => { this.cmd?.('leave'); this.hud.brLeaveCb?.(); });
     this.c = {};
     this.phone = null;
   }
@@ -237,7 +269,7 @@ export class ExHud {
     this.hud.el.classList.remove('ex-held', 'ex-down-on');
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId; this.mode = mode;
-    this.c = {}; this.base = null; this.phone = null; this.phoneBusy = undefined;
+    this.c = {}; this.base = null; this.phone = null; this.phoneBusy = undefined; this.watching = false;
     this.#openOffers(false);
     this.toggleMap(false);
     const mm = this.hud.el.querySelector('.minimap');
@@ -286,7 +318,7 @@ export class ExHud {
     const ef = this.#exfilStatus(ex, me);
     if (c.ef !== ef.key) { c.ef = ef.key; this.exfilEl.textContent = ef.big; this.exfilS.textContent = ef.small; this.exfilChip.className = `ex-chip ex-exfil ${ef.cls}`; }
     this.#squad(view, me, ex);
-    this.#contract(view, me, squad);
+    this.#contract(view, me, squad, ex);
     this.#actions(view, me, ex, squad);
     this.#marks(view, me, ex, squad);
     this.#downed(me);
@@ -322,40 +354,64 @@ export class ExHud {
     }).join('');
   }
 
-  // The squad's contract: the next step in words, its progress, how far.
-  #contract(view, me, squad) {
+  // The squad's contract: the full card for CARD_FULL s once taken, then a one-line tracker (the next step, how far).
+  // With none, the tracker points at the nearest contract phone.
+  #contract(view, me, squad, ex) {
     const k = squad?.contract;
-    const show = !!k && view.phase !== 'ended' && !squad?.done && !me.out;      // Lifted out: nothing left to do.
+    const live = view.phase !== 'ended' && !squad?.done && !me.out;      // Lifted out: nothing left to do.
+    const show = live && (!!k || view.phase === 'live');
     if (this.c.conShow !== show) { this.c.conShow = show; this.conEl.hidden = !show; }
-    if (!show) { if (this.abT >= 0) this.abStop(); return; }
+    if (!show || !k) { if (this.abT >= 0) this.abStop(); }
+    if (!show) return;
+    const now = performance.now();
+    if (k && this.c.conId !== k.id) { this.c.conId = k.id; this.fullUntil = now + CARD_FULL * 1000; }
+    const mini = !k || now >= (this.fullUntil ?? 0);
+    const eye = me.alive ? me : view.players.find(p => p.id === spectate.target(view, me.id)) ?? me;
+    if (!k) {
+      // No contract: the nearest phone.
+      let ph = null, pd = Infinity;
+      for (const p of ex.phones ?? []) { const d = Math.hypot(p.x - eye.x, p.z - eye.z); if (d < pd) { pd = d; ph = p; } }
+      const step = ph ? (pd <= EX.phoneReach ? 'At a phone: open Contracts' : 'No contract: pick one up at a phone') : 'No contract';
+      const dist = ph && pd > EX.phoneReach ? `${Math.round(pd)} m` : '';
+      const key = `none|${step}|${dist}`;
+      if (this.c.con !== key) {
+        this.c.con = key;
+        this.conEl.className = 'ex-con os-item mini none';
+        this.conEl.querySelector('.ci').innerHTML = icon('ui:phone', { size: 15 });
+        this.conEl.querySelector('p').textContent = step;
+        this.conEl.querySelector('.dist').textContent = dist;
+      }
+      return;
+    }
     // The abandon hold: alive and up only; the command goes once the bar is full.
     const canAb = view.phase === 'live' && me.alive;
     if (this.c.ab !== canAb) { this.c.ab = canAb; this.abBtn.hidden = !canAb; if (!canAb) this.abStop(); }
     if (this.abT >= 0) {
       this.abT += this.dt ?? 0;
-      const k = Math.min(1, this.abT / EX.abandonHold);
-      this.abBar.style.transform = `scaleX(${k.toFixed(3)})`;
-      if (k >= 1) { this.abStop(); this.cmd?.('abandon'); }
+      const f = Math.min(1, this.abT / EX.abandonHold);
+      this.abBar.style.transform = `scaleX(${f.toFixed(3)})`;
+      if (f >= 1) { this.abStop(); this.cmd?.('abandon'); }
     }
-    const poi = objOf(view).pois?.[k.poi];
-    const goal = this.#goal(k, me);
-    const d = Math.round(Math.hypot(goal.x - me.x, goal.z - me.z));
+    const poi = ex.pois?.[k.poi];
+    const goal = this.#goal(k, eye);
+    const dist = `${Math.round(Math.hypot(goal.x - eye.x, goal.z - eye.z))} m`;
     let step = '', prog = k.prog ?? 0, warn = false;
     switch (k.type) {
-      case 'intel': step = k.carrier >= 0 ? (view.players[k.carrier]?.id === me.id ? `Carry the case to the drop <em>${d} m</em>` : `${esc(view.players[k.carrier]?.name ?? 'A teammate')} has the case: cover them`) : k.state === 2 ? `The case is down: pick it up <em>${d} m</em>` : `Find the intel case <em>${d} m</em>`; prog = k.carrier >= 0 ? 0.5 : 0; break;
-      case 'hvt': step = `Kill the commander and his guards <em>${d} m</em>`; break;
-      case 'cache': warn = k.state === 1 && k.def > 0; step = k.state === 1 ? (warn ? 'They are pulling the charge!' : 'Charge set: get clear and defend it') : prog > 0 ? 'Planting the charge...' : `Reach the cache and stand still to plant <em>${d} m</em>`; break;
-      case 'hack': warn = !!k.contested; step = warn ? 'Contested: clear the area' : prog > 0 ? `Hacking: stay within ${EX.hackR} m` : `Hold the terminal area <em>${d} m</em>`; break;
-      case 'escort': warn = !k.moving && prog > 0; step = k.moving ? 'Moving: stay beside it' : `Walk with the mule to its point <em>${d} m</em>`; break;
+      case 'intel': step = k.carrier >= 0 ? (view.players[k.carrier]?.id === me.id ? `Carry the case to the drop` : `${esc(view.players[k.carrier]?.name ?? 'A teammate')} has the case: cover them`) : k.state === 2 ? `The case is down: pick it up` : `Find the intel case`; prog = k.carrier >= 0 ? 0.5 : 0; break;
+      case 'hvt': step = `Kill the commander and guards`; break;
+      case 'cache': warn = k.state === 1 && k.def > 0; step = k.state === 1 ? (warn ? `They are pulling the charge!` : `Charge set: defend it`) : prog > 0 ? 'Planting the charge...' : `Reach the cache, stand still to plant`; break;
+      case 'hack': warn = !!k.contested; step = warn ? `Contested: clear the area` : prog > 0 ? `Hacking: stay within ${EX.hackR} m` : `Hold the terminal area`; break;
+      case 'escort': warn = !k.moving && prog > 0; step = k.moving ? `Moving: stay beside it` : `Walk with the mule`; break;
     }
-    const key = `${k.id}|${k.type}|${step}|${warn}`;
+    const key = `${k.id}|${k.type}|${step}|${warn}|${mini}|${dist}`;
     if (this.c.con !== key) {
       this.c.con = key;
-      this.conEl.querySelector('.ci').innerHTML = icon(`ex:${k.type}`, { size: 24 });
+      this.conEl.className = `ex-con os-item${mini ? ' mini' : ''}${warn ? ' warn' : ''}`;
+      this.conEl.querySelector('.ci').innerHTML = icon(`ex:${k.type}`, { size: mini ? 15 : 24 });
       this.conEl.querySelector('b').textContent = CONTRACT_NAMES[k.type] ?? 'Contract';
       this.conEl.querySelector('small').textContent = `${poi?.name ?? ''} · ${TIER[k.tier] ?? ''} · ${(EX.reward.xp[k.tier] ?? 0).toLocaleString('en-US')} XP`;
       this.conEl.querySelector('p').innerHTML = step;
-      this.conEl.classList.toggle('warn', warn);
+      this.conEl.querySelector('.dist').textContent = dist;
     }
     const pk = Math.round(prog * 100) / 100;
     if (this.c.conK !== pk) { this.c.conK = pk; this.conEl.querySelector('.ex-bar div').style.setProperty('--k', pk.toFixed(2)); }
@@ -427,10 +483,12 @@ export class ExHud {
       if ((e.state === 1 && d > 220) || d < e.r) continue;      // Standing in it, the ring says enough.
       n = this.#tag(n, e.x, e.z, e.state === 3 ? 'go' : e.state === 2 ? '' : 'open', `${icon('mode:ex', { size: 13 })}${e.final ? 'Final exfil' : 'Exfil'} <small>${d} m</small>`, eye);
     }
-    // The nearest phone, when close enough to matter.
-    let ph = null, pd = 60;
+    // The nearest phone: when close enough to matter, or wherever it is while the squad has no contract (pinned to the
+    // screen edge, so the way to one always shows).
+    const need = !k && !!squad && !squad.done && !me.out;
+    let ph = null, pd = need ? Infinity : 60;
     for (const p of ex.phones ?? []) { const d = Math.hypot(p.x - eye.x, p.z - eye.z); if (d < pd && d > EX.phoneReach) { pd = d; ph = p; } }
-    if (ph && n < TAGS && view.phase === 'live') n = this.#tag(n, ph.x, ph.z, 'phone', `${icon('ui:chat', { size: 12 })}Phone`, eye, false);
+    if (ph && n < TAGS && view.phase === 'live') n = this.#tag(n, ph.x, ph.z, need ? 'phone need' : 'phone', `${icon('ui:phone', { size: 12 })}${need ? 'Contract phone' : 'Phone'}${need ? ` <small>${Math.round(pd)} m</small>` : ''}`, eye, need);
     for (let i = n; i < TAGS; i++) if (!this.tags[i].root.hidden) this.tags[i].root.hidden = true;
   }
 
@@ -496,39 +554,50 @@ export class ExHud {
     if (pat) this.revEl.querySelector('i i').style.transform = `scaleX(${Math.min(1, pat.reviveK).toFixed(3)})`;
   }
 
-  // Off the field for good: out of lives, or lifted out. The death screen goes and the battle royale's out panel says what
-  // is left to happen: watch your squad (it can still bank the pot for you), anyone once nobody of yours is left, or leave
-  // for your results now (main.js leaveBrEarly: Match.leaveNow, headless for a host with others still playing).
+  // Off the field for good: out of lives, or lifted out. The death screen goes and the battle royale's out panel asks
+  // what next: Spectate (the host keeps the match going for you, {act:'watch'}, until you Leave or it ends; your squad
+  // first, then anyone) or Leave for your results now (main.js leaveBrEarly: Match.leaveNow, headless for a host with
+  // others still playing). Choosing nothing for EX.decide s lets a match with nobody else in it end as before.
   #held(view, me, squad) {
     const live = view.phase === 'live';
     const lifted = !!me.out;
     const held = live && !me.alive && (lifted || (squad?.lives ?? 0) <= 0);
     const note = live && !me.alive && !held ? `Squad lives left: ${squad?.lives ?? 0}. Respawn near a squadmate.` : '';
     if (this.c.note !== note) { this.c.note = note; this.noteEl.hidden = !note; this.noteEl.textContent = note; }
-    const watch = held ? spectate.target(view, me.id) : null;
+    const watching = held && this.watching;
+    const watch = watching ? spectate.target(view, me.id) : null;
     const mates = held ? view.players.filter(p => p.team === me.team && p.alive && p.id !== me.id).length : 0;
-    const key = held ? `${lifted}|${watch}|${mates}|${spectate.any}|${squad?.extracted ?? 0}|${squad?.banked?.length ?? 0}` : '';
+    const key = held ? `${lifted}|${watching}|${watch}|${mates}|${squad?.extracted ?? 0}|${squad?.banked?.length ?? 0}|${squad?.pot?.length ?? 0}|${squad?.done}` : '';
     if (this.c.held === key) return;
     this.c.held = key;
     this.heldEl.hidden = !held;
     this.hud.el.classList.toggle('ex-held', held);
-    if (held) this.hud.controls?.setDown(true);
+    if (held) { this.hud.controls?.setDown(true); this.toggleMap(false); this.#openOffers(false); if (!watching) this.el.querySelector('.ex-callout')?.remove(); }
     if (!held) return;
     const w = watch && view.players.find(p => p.id === watch);
-    const others = !mates && !!w, choosing = !mates && !spectate.any;
+    const theirs = !!w && w.team !== me.team;
     const banked = squad?.banked ?? [], out = lifted || !!squad?.extracted;
     const $ = q => this.heldEl.querySelector(q);
-    this.heldEl.classList.toggle('watching', !!w);
+    this.heldEl.classList.toggle('watching', watching);
     this.heldEl.classList.toggle('won', out);
-    $('b').innerHTML = others ? `Watching ${nameHtml(w.name)}` : lifted ? 'Extracted' : out ? 'Squad got out' : 'Out of lives';
-    $('.place').textContent = out ? `${banked.length} banked` : `${squad?.pot?.length ?? 0} pending`;
-    $('small').textContent = mates ? (out ? `Watching ${w?.name ?? 'your squad'}. Leave whenever you like: it is banked.` : `Watching ${w?.name ?? 'your squad'}. If anyone of your squad gets out, the pot is banked for you too.`)
-      : others ? `${out ? `${banked.length} banked` : 'Nothing banked'}  /  ${view.players.filter(p => p.team === w.team && p.alive).length} of theirs up`
-      : choosing ? 'Watch the rest, or see your results now.' : 'Nobody left to watch.';
-    $('.ex-spec').hidden = !choosing;
-    $('.ex-spec-next').hidden = choosing || (mates ? mates < 2 : !w);
-    $('.ex-spec-next').textContent = mates ? 'Next teammate' : 'Next player';
-    $('.ex-spec-squad').hidden = !others;
+    const wiped = !out && !mates && (squad?.done || squad?.wiped);
+    $('b').innerHTML = watching ? (w ? `Watching ${nameHtml(w.name)}` : 'Spectating') : lifted ? 'Extracted' : out ? 'Squad got out' : wiped ? 'Squad wiped' : 'Out of lives';
+    $('.place').textContent = out ? `${banked.length} banked` : wiped ? 'Nothing banked' : `${squad?.pot?.length ?? 0} pending`;
+    $('small').textContent = !watching
+      ? (out ? 'Banked. Spectate to keep watching the match, or Leave for your results.'
+        : mates ? 'If anyone of your squad gets out, the pot is banked for you too. Spectate them, or Leave for your results.'
+        : 'Spectate the rest of the match, or Leave for your results.')
+      : !w ? 'Nobody left to watch. Results come when the match ends.'
+      : theirs ? `${out ? `${banked.length} banked` : 'Nothing banked'}  /  ${view.players.filter(p => p.team === w.team && p.alive).length} of theirs up`
+      : out ? 'Banked. Results when the match ends, or Leave now.' : 'If they get out, the pot is banked for you too.';
+    $('.ex-spec').hidden = watching;
+    $('.ex-spec-next').hidden = !watching || !w;
+    // Short labels: the plate shares its row with the squad list and the spectate card.
+    $('.ex-spec-next').textContent = 'Next';
+    $('.ex-spec-next').setAttribute('aria-label', mates ? 'Next teammate' : 'Next player');
+    $('.ex-spec-squad').textContent = 'Other squad';
+    $('.ex-spec-squad').setAttribute('aria-label', 'Next squad');
+    $('.ex-spec-squad').hidden = !watching || !w;
   }
 
   // ---- Events: feed lines and callouts ----
@@ -551,7 +620,7 @@ export class ExHud {
         if (!mine(e.team)) break;
         if (e.done) { this.#callout('Contract complete', `${CONTRACT_NAMES[e.type]}: +${(EX.reward.xp[e.tier] ?? 0).toLocaleString('en-US')} XP pending. Extract to keep it.`); this.hud.audio?.uiSound?.('confirm'); }
         else if (e.taken) this.hud.notify(`New contract: ${CONTRACT_NAMES[e.type]}`);
-        else if (e.abandoned) this.hud.notify(e.lost ? 'Contract lost: a new one is on its way' : `Contract abandoned: take one at a phone, or one comes in ${e.wait ?? EX.abandonWait} s`);
+        else if (e.abandoned) this.hud.notify(e.lost ? 'Contract lost: take a new one at a phone' : 'Contract abandoned: take a new one at a phone');
         break;
       case 'excase':
         if (mine(e.team)) this.hud.notify(e.drop ? 'The case is down: pick it up' : e.id === me.id ? 'You have the case: get it to the drop' : 'Case secured');
@@ -592,6 +661,8 @@ export class ExHud {
 
   #callout(title, sub) {
     this.el.querySelector('.ex-callout')?.remove();
+    // The out panel (lifted out, out of lives, squad wiped) says the same in the middle of the screen: no callout on it.
+    if (!this.heldEl.hidden && !this.heldEl.classList.contains('watching')) return;
     const n = document.createElement('div');
     n.className = 'ex-callout';
     n.innerHTML = `<b>${esc(title)}</b><small>${esc(sub)}</small>`;
@@ -641,7 +712,19 @@ export class ExHud {
     const ex = objOf(view);
     if (!this.on || !ex?.ex) return;
     const t = performance.now() / 1000;
-    for (const ph of ex.phones ?? []) { g.fillStyle = 'rgba(224,169,42,.9)'; g.fillRect(ph.x * sx - 2.5, ph.z * sz - 2.5, 5, 5); }
+    const sq = ex.squads?.find(s => s.team === me.team);
+    // Contract phones; with no contract they stand out (bigger, ringed, pulsing): that is where the next one is.
+    const need = !!sq && !sq.contract && !sq.done && !me.out;
+    for (const ph of ex.phones ?? []) {
+      const x = ph.x * sx, y = ph.z * sz;
+      if (need) {
+        const r = 6 + Math.sin(t * 4) * 1.5;
+        g.strokeStyle = 'rgba(255,194,74,.9)'; g.lineWidth = 1.5;
+        g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = '#ffc24a'; g.fillRect(x - 3.5, y - 3.5, 7, 7);
+        g.strokeStyle = 'rgba(10,13,17,.85)'; g.lineWidth = 1; g.strokeRect(x - 3.5, y - 3.5, 7, 7);
+      } else { g.fillStyle = 'rgba(224,169,42,.75)'; g.fillRect(x - 2, y - 2, 4, 4); }
+    }
     for (const e of ex.exfils ?? []) {
       if (e.state < 1 || e.state > 3) continue;
       g.strokeStyle = e.state === 3 ? (e.contested ? '#ff6a5a' : '#7be08a') : e.state === 2 ? '#ffc24a' : '#f2f0e6';
@@ -668,7 +751,17 @@ export class ExHud {
       g.fillStyle = poi.tier === 1 ? '#ff9a6a' : poi.tier === 2 ? '#f2f0e6' : '#b8bfb6';
       g.fillText(poi.name.toUpperCase(), x, y - 10);
     }
-    for (const ph of ex.phones ?? []) { g.fillStyle = '#e0a92a'; g.fillRect(ph.x * s - 4, ph.z * s - 4, 8, 8); }
+    const need = !!squad && !squad.contract && !squad.done && !me.out;
+    for (const ph of ex.phones ?? []) {
+      if (need) { g.strokeStyle = '#ffc24a'; g.lineWidth = 2; g.beginPath(); g.arc(ph.x * s, ph.z * s, 10, 0, Math.PI * 2); g.stroke(); }
+      g.fillStyle = need ? '#ffc24a' : '#e0a92a'; g.fillRect(ph.x * s - (need ? 5 : 4), ph.z * s - (need ? 5 : 4), need ? 10 : 8, need ? 10 : 8);
+    }
+    if (this.c.mapNeed !== need) {
+      this.c.mapNeed = need;
+      this.mapEl.querySelector('.ex-map-side p').textContent = need
+        ? 'No contract yet: go to a contract phone (ringed yellow squares) and take one. Rings: exfil sites (white open, amber called, green down).'
+        : 'Gold: your contract. Rings: exfil sites (white open, amber called, green down). Yellow squares: contract phones.';
+    }
     for (const e of ex.exfils ?? []) {
       g.lineWidth = 3;
       g.strokeStyle = e.state === 3 ? '#7be08a' : e.state === 2 ? '#ffc24a' : e.state === 1 ? '#f2f0e6' : 'rgba(242,240,230,.25)';

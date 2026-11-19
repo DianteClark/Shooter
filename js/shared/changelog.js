@@ -12,6 +12,17 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1118-11', date: '2026-11-18', title: 'Extraction contracts, Spectate and radar fixes',
+    items: [
+      'Extraction: contracts are no longer handed out on their own. Pick each one up at a contract phone (one at a time, as before). With no contract, the tracker, a marker and the minimap point you to the nearest phone. Bot squads walk to phones too.',
+      'Extraction: after you take a contract its full card shows for a few seconds, then shrinks to a one-line tracker with the next step and the distance. Tap it to see the card again. Abandon is a small button at its side: hold it for a second.',
+      'Extraction: Spectate after extracting (or running out of lives) now really lets you watch the rest of the match, until you tap Leave or it ends. Your results then show as usual.',
+      'Extraction: the Squad wiped screen no longer has text on top of text, and the spectating bar fits beside the player card on smaller phones.',
+      'Calling cards: every locked card now says exactly what it takes and how far along you are: Pro challenges, prestige and Master levels, mastery tiers, map and mode tiers, Graveyard Shift records, season track tiers, ranked ranks, tournaments and weekly events.',
+      'Hardcore: your team\'s UAV, Overwatch, Blackbird, Sonar Sweep and Recon Drone now light up the minimap while they run (it stays hidden otherwise). An enemy Jammer still blanks it.',
+    ],
+  },
+  {
     build: '1118-10', date: '2026-11-18', title: 'Three new guns',
     items: [
       'Clatter, a burst SMG: three rounds a pull, and two bursts still kill at ranges where other SMGs give up. Slower than the others in a tight room. Opens at level 25.',

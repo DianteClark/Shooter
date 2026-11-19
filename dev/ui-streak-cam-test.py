@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """Scorestreak camera and piloting check (roadmap 40).
 
-Run: python3 dev/ui-streak-cam-test.py [port]. Starts a solo match, then calls every scorestreak as the local player
+Run: python3 dev/ui-streak-cam-test.py [port] [--radar]. Starts a solo match, then calls every scorestreak as the local player
 and records how far the camera's target strays from the player over the next 2.5 s while the player walks. Only the
 piloted streaks (Cruise Missile, Recon Drone, Carpet Line) may move the camera off the player; every other streak,
 Wingman included, must leave it on the player. For the Recon Drone it also checks that a push of the aim stick moves the
 drone on the first host ticks after the call, while sprinting, with no ADS in between.
+
+Radar (also alone with --radar): in a Hardcore match the minimap is hidden until the local team calls a tracking streak
+(UAV, Overwatch, Blackbird, Sonar Sweep, Recon Drone); then it shows with the enemies that streak reveals and hides again
+when it runs out; an enemy Jammer still fills it with static. The same streaks in a normal match reveal enemies on the
+always-shown minimap. Screenshots in /tmp/radar.
 """
 import asyncio, subprocess, sys, time, os, json
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8643
+PORT = int(next((a for a in sys.argv[1:] if a.isdigit()), 8643))
+RADAR_ONLY = '--radar' in sys.argv
+TRACKING = ['uav', 'overwatch', 'blackbird', 'sweep', 'recon']
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 PILOTED = {'missile', 'recon', 'bombrun'}
 
@@ -28,7 +35,98 @@ SAMPLE = """() => { const m = window.__game.app.match, r = m.renderer, ps = m.ps
   return { dx: +(r.camTarget.x - px).toFixed(2), dz: +(r.camTarget.z - pz).toFixed(2), x: ps.x, z: ps.z }; }"""
 
 
+# Enemy markers on the minimap: pixels in an enemy team's colour (squares are friendlies, so only enemies count).
+ENEMY_PX = """() => { const g = window.__game, m = g.app.match, me = m.sim.byId.get(m.localId), c = document.querySelector('.minimap canvas');
+  return import('/js/shared/constants.js').then(({ TEAMS }) => {
+    const hex = TEAMS[1 - me.team].css, want = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - want[0]) + Math.abs(d[i + 1] - want[1]) + Math.abs(d[i + 2] - want[2]) < 60) n++;
+    return n; }); }"""
+MM_STATE = """() => { const mm = document.querySelector('.minimap'), cs = getComputedStyle(mm), r = mm.getBoundingClientRect();
+  return { shown: cs.visibility !== 'hidden' && cs.display !== 'none' && r.width > 0, radar: document.querySelector('.hud').classList.contains('hc-radar'), jammed: mm.classList.contains('jammed') }; }"""
+
+
+async def radar_check(browser, hardcore, failures, errors):
+    label = 'hardcore' if hardcore else 'normal'
+    os.makedirs('/tmp/radar', exist_ok=True)
+    ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
+    def check(name, ok, info=''):
+        print(f'  {label:<8} {name:<58} {"ok" if ok else "FAIL"} {info}')
+        if not ok: failures.append(f'{label}: {name}: {info}')
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit')
+    await pg.wait_for_timeout(800)
+    await pg.evaluate("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.evaluate(f"import('/js/ui/modifiers.js').then(m => m.setSoloMods({json.dumps(['hardcore'] if hardcore else [])}))")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click(no_wait_after=True)
+    await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
+    mods = await pg.evaluate('window.__game.app.match.sim.mods')
+    check('match modifiers', ('hardcore' in mods) == hardcore, mods)
+    # Nobody moves or dies; enemies stand 20-30 m off (out of the open, so radar is what shows them).
+    await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId);
+      for (const p of sim.players) if (p.bot) p.bot.update = () => [];
+      const dmg = sim._damage.bind(sim); sim._damage = (v, ...a) => (v.team === me.team ? undefined : dmg(v, ...a));
+      sim.streakDenied = () => null; })()""")
+    await pg.wait_for_timeout(1200)
+    st = await pg.evaluate(f'({MM_STATE})()')
+    check('minimap before any streak', st['shown'] != hardcore, st)
+    for kind in TRACKING:
+        # Two enemies close (Sonar Sweep's 36 m, the drone's path), the rest where they stand.
+        await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId);
+          sim.uav.fill(0); sim.overwatch.fill(0); sim.jam.fill(0); sim.gunships.length = 0; if (sim.v9) sim.v9.sweeps.length = 0;
+          window.__game.hud.radarUntil = 0;
+          const foes = sim.players.filter(q => q.team !== me.team && q.alive);
+          foes.slice(0, 2).forEach((q, i) => { q.ps.x = me.ps.x + 6 + i * 3; q.ps.z = me.ps.z + 4; q.markT = 0; });
+          for (const q of sim.players) q.ps.firingT = 0; })()""")
+        await pg.wait_for_timeout(900)
+        res = await pg.evaluate(f'({CALL})({json.dumps(kind)})')
+        await pg.wait_for_timeout(1600 if kind in ('sweep', 'recon') else 900)
+        st = await pg.evaluate(f'({MM_STATE})()')
+        seen = await pg.evaluate("""(() => { const m = window.__game.app.match, v = m.interp.newest, me = v.players.find(p => p.id === m.localId);
+          return { uav: v.uav[me.team], marked: v.players.filter(p => p.team !== me.team && p.alive && p.firingT > 0).length }; })()""")
+        px = await pg.evaluate(f'({ENEMY_PX})()')
+        await pg.screenshot(path=f'/tmp/radar/{label}-{kind}.png')
+        revealed = (seen['uav'] > 0 if kind in ('uav', 'overwatch', 'blackbird') else seen['marked'] > 0) and px > 0
+        check(f'{kind}: called, minimap shown, enemies on it', res not in ('refused', 'dead') and st['shown'] and (st['radar'] or not hardcore) and revealed, {**st, **seen, 'px': px, 'res': res})
+        if kind == 'uav':
+            # An enemy Jammer still blanks it: static on the minimap, which stays up while the UAV runs.
+            await pg.evaluate("(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId); sim.jam[me.team] = 6; })()")
+            await pg.wait_for_timeout(900)
+            st2 = await pg.evaluate(f'({MM_STATE})()')
+            await pg.screenshot(path=f'/tmp/radar/{label}-uav-jammed.png')
+            check('uav under an enemy Jammer: static', st2['shown'] and st2['jammed'], st2)
+            await pg.evaluate("window.__game.app.match.sim.jam.fill(0)")
+        # Run it out: the minimap goes again in Hardcore.
+        await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim; sim.uav.fill(0); sim.overwatch.fill(0); sim.gunships.length = 0;
+          if (sim.v9) sim.v9.sweeps.length = 0; for (const q of sim.players) q.markT = 0; window.__game.hud.radarUntil = 0; })()""")
+        await pg.wait_for_timeout(900)
+        st3 = await pg.evaluate(f'({MM_STATE})()')
+        check(f'{kind}: run out', st3['shown'] != hardcore, st3)
+    await ctx.close()
+
+
 async def main():
+    if RADAR_ONLY:
+        srv = subprocess.Popen(['python3', '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(0.8)
+        failures, errors = [], []
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(args=ARGS)
+                for hc in (True, False): await radar_check(browser, hc, failures, errors)
+                await browser.close()
+        finally:
+            srv.terminate()
+        print('console errors:', errors[:5] or 'none')
+        if failures or errors:
+            print('FAILED:', *failures, sep='\n  ')
+            sys.exit(1)
+        print('PASS')
+        return
     srv = subprocess.Popen(['python3', '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(0.8)
     failures, errors, table = [], [], []
@@ -121,6 +219,8 @@ async def main():
             text = await pg.evaluate("""import('/js/ui/help.js').then(h => { const el = document.createElement('div'); document.body.appendChild(el);
               h.helpScreen({ el, on() {}, show() {} }, { onBack() {}, tab: 'streaks' }); const t = el.querySelector('.help-down')?.textContent ?? ''; el.remove(); return t; })""")
             check('How to play lists what can be shot down', 'Shooting streaks down' in text and 'Wingman' in text and 'launcher' in text, text[:90])
+            print('Radar in Hardcore and normal')
+            for hc in (True, False): await radar_check(browser, hc, failures, errors)
             await browser.close()
     finally:
         srv.terminate()
