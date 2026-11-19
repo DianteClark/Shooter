@@ -29,6 +29,7 @@ import {
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
 import { ZmEcon, kitRoom, kitRefill } from './zm-econ.js';
+import { personaOf } from './zm-allies.js';      // Ally bots' personas: how each shops, fights and talks.
 import { ZmKinds } from './zm-kinds.js';     // Spitters, Bloaters, Crawlers, Shieldbearers and the special rounds.     // ROADMAP item 36: the upgrade bench, the terminal, plates, traps, exfil, quest.
 import { zmTierDef } from './zm-phone.js';
 
@@ -808,9 +809,11 @@ export class ZmRules {
     else sim._emit({ t: 'zarm', id: p.id, slot, w: WEAPON_IDS.indexOf(gun) });
   }
 
-  // ---- Bot teammates ----
+  // ---- Bot teammates (docs/ZOMBIES.md "Ally bots"; who each one is: js/sim/zm-allies.js) ----
 
-  // Revive first, then spend (a better gun, a perk, and when rich and on their own, a gate), else stay with the lead.
+  // Revive first (a person before a bot), then hold together: fall back when hurt, call the held streak in when it is
+  // needed, the power and the quest when it is safe, shop by plan, else a spot of its own near the lead (a gate near
+  // them when there is one).
   plan(team, crew) {
     if (team === ZM_TEAM) { for (const b of crew) b.setObjective(null); return; }
     this._crewPlan = crew;
@@ -819,122 +822,254 @@ export class ZmRules {
   _planCrew() {
     const sim = this.sim, crew = this._crewPlan;
     if (!crew || this.state === 3) return;
-    const lead = this.crew.find(p => !p.isBot && p.alive && !p.downed && !p.away) ?? this.crew.find(p => p.alive && !p.downed);
-    const humans = this.crew.some(p => !p.isBot && !p.away);
-    crew.forEach((bot, k) => {
+    const people = this.crew.filter(p => !p.isBot && !p.away);
+    const human = people.find(p => p.alive && !p.downed);
+    const lead = human ?? people.find(p => p.alive) ?? this.crew.find(p => p.alive && !p.downed);
+    const humans = people.length > 0;
+    const up = crew.filter(b => b.p.alive && !b.p.downed && b.p.zm);
+    const dist = (a, b) => Math.hypot(a.ps.x - b.ps.x, a.ps.z - b.ps.z);
+    // Who goes to whom: the downed, a person first, then whoever has bled longest; two go to a person, one to a bot,
+    // the nearest free ones within their reach of the path. A reviver with three undead on it shoots first.
+    const goTo = new Map();
+    const downs = this.crew.filter(q => q.alive && q.downed && !q.away && !(q.zm?.selfT > 0)).sort((a, b) => (a.isBot - b.isBot) || a.hp - b.hp);
+    for (const d of downs) {
+      const free = up.filter(b => !goTo.has(b) && dist(b.p, d) < personaOf(b.p, this.crew).revive && this._count(b.p, 2.5) < 3).sort((a, b) => dist(a.p, d) - dist(b.p, d));
+      for (const b of free.slice(0, d.isBot ? 1 : 2)) goTo.set(b, d);
+    }
+    let spot = 0;
+    for (const bot of crew) {
       const p = bot.p;
-      if (!p.alive || p.downed || !p.zm) return;
-      bot.kite = 4.5;
-      // A downed mate within reach of the path.
-      const down = this.crew.filter(q => q.alive && q.downed).sort((a, b) => Math.hypot(a.ps.x - p.ps.x, a.ps.z - p.ps.z) - Math.hypot(b.ps.x - p.ps.x, b.ps.z - p.ps.z))[0];
-      if (down && Math.hypot(down.ps.x - p.ps.x, down.ps.z - p.ps.z) < 45 && !this._near(p, 2.2)) {
-        bot.setObjective({ key: `zrev${down.index}`, role: 'collect', x: down.ps.x, z: down.ps.z, r: 0.8 });
-        return;
+      if (!p.alive || p.downed || !p.zm) continue;
+      const P = personaOf(p, this.crew);
+      bot.kite = P.kite;
+      bot.zStill = null;
+      // The held streak: called in where it stands when the crowd is big, a mate is down or the boss is up.
+      if (p.zm.stk) this._botStreak(p, P);
+      const down = goTo.get(bot);
+      if (down) {
+        if (dist(p, down) < ZM.reviveReach) bot.zStill = down.ps;      // In reach: stand still over them (bots.js).
+        bot.setObjective({ key: `zrev${down.index}:${Math.round(down.ps.x)}:${Math.round(down.ps.z)}`, role: 'collect', x: down.ps.x, z: down.ps.z, r: 0.8, commit: true });
+        continue;
       }
       // The exfil is on: everyone to the pad.
       const X = this.econ.exfil, pad = this.L.exfil;
       if (X.state === 1 && pad) {
-        const a = (k + 1) * 1.7, x = pad.x + Math.cos(a) * pad.r * 0.5, z = pad.z + Math.sin(a) * pad.r * 0.5;
+        const a = (spot++ + 1) * 1.7, x = pad.x + Math.cos(a) * pad.r * 0.5, z = pad.z + Math.sin(a) * pad.r * 0.5;
         const at = this._walk(x, z);
         bot.setObjective({ key: 'zexfil', role: 'defend', x: at.x, z: at.z, r: pad.r * 0.6 });
-        return;
+        continue;
       }
       // Its gun on the upgrade bench: wait by it, take it.
       const bn = this.econ.bench, bb = this.L.bench;
       if (bn.state && bn.owner === p.index && bb) {
-        if (bn.state === 2 && Math.hypot(bb.x - p.ps.x, bb.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); return; }
+        if (bn.state === 2 && Math.hypot(bb.x - p.ps.x, bb.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); continue; }
         bot.setObjective({ key: 'zbench', role: 'collect', x: bb.x, z: bb.z, r: 0.8 });
-        return;
+        continue;
       }
       // Its roll at the crate: wait for it, take it.
       const bx = this.box;
       if ((bx.state === 1 || bx.state === 2) && bx.owner === p.index && !bx.moving) {
         const bs = this.L.boxSpots[bx.spot];
-        if (bx.state === 2 && Math.hypot(bs.x - p.ps.x, bs.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); return; }
+        if (bx.state === 2 && Math.hypot(bs.x - p.ps.x, bs.z - p.ps.z) < ZM.useReach * 0.9) { this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p))); bot.setObjective(null); continue; }
         bot.setObjective({ key: `zbox${bx.spot}`, role: 'collect', x: bs.x, z: bs.z, r: 0.8 });
-        return;
+        continue;
+      }
+      // Hurt, no plates, undead on it: fall back past the lead, away from the crowd, and fight from there.
+      if (this.state === 1 && p.hp < P.low && p.zm.plates < 1 && this._count(p, 7) >= 2) {
+        const back = this._fallBack(p, lead);
+        if (back) { bot.setObjective({ key: `zback${Math.round(back.x / 3)}:${Math.round(back.z / 3)}`, role: 'collect', x: back.x, z: back.z, r: 1.5, commit: true }); continue; }
       }
       // The power, on a map with a switch: solo with bots, one bot goes and throws it after round 2 if nobody has.
-      const run = this._powerRun(p, crew);
+      const run = this._powerRun(p, crew) ?? this._questRun(p, crew, humans);
       if (run) {
-        if (Math.hypot(run.x - p.ps.x, run.z - p.ps.z) < ZM.useReach * 0.8) { this._use(p, run.use); bot.setObjective(null); return; }
-        bot.setObjective({ key: `zpow${run.use.kind}${run.use.i}`, role: 'collect', x: run.x, z: run.z, r: 0.8 });
-        return;
+        if (Math.hypot(run.x - p.ps.x, run.z - p.ps.z) < ZM.useReach * 0.8) {
+          // A radio locking on (its tuner has to stay by it): stand with it.
+          if (this.econ.quest.tuneI >= 0 && this.econ.quest.tuneBy === p.index) { bot.zStill = run; continue; }
+          this._use(p, run.use);
+          if (this.econ.quest.tuneBy === p.index) bot.zStill = run;
+          else bot.setObjective(null);
+          continue;
+        }
+        bot.setObjective({ key: `zq${run.use.kind}${run.use.i}`, role: 'collect', x: run.x, z: run.z, r: 0.8, commit: run.use.kind === 'relic' });
+        continue;
       }
       // Something to buy near.
-      const want = this._botWant(p, humans);
+      const want = this._botWant(p, humans, lead);
       if (want) {
         const d = Math.hypot(want.x - p.ps.x, want.z - p.ps.z);
         if (d < ZM.useReach * 0.8) {
           // The bench upgrades the gun in hand: a bot takes the one it came for out first.
           if (want.kind === 'bench' && want.gun && p.ps.weapon !== want.gun) { const sl = p.ps.primary === want.gun ? 0 : 1; p.ps.slot = sl; p.ps.weapon = want.gun; }
-          this._use(p, zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p)), want);
+          const u = zmUsable(this.L, p.ps.x, p.ps.z, this._stateFor(p));
+          if (want.kind === 'box' && u?.kind === 'box') p.zm.boxRound = this.round;
+          this._use(p, u, want);
           bot.setObjective(null);
-          return;
+          continue;
         }
         bot.setObjective({ key: `zbuy${want.kind}${want.i}`, role: 'collect', x: want.x, z: want.z, r: 0.8 });
-        return;
+        continue;
       }
-      // With the lead: a loose ring round them, never far.
+      // With the lead: a spot of its own, a gate near them first, else round them, never far.
       if (lead && lead !== p) {
-        const a = (k + 1) * 2.1 + (lead.index % 3), x = lead.ps.x + Math.cos(a) * 3, z = lead.ps.z + Math.sin(a) * 3;
-        const at = this._walk(x, z);
-        const far = Math.hypot(lead.ps.x - p.ps.x, lead.ps.z - p.ps.z);
-        if (far > 6 || !bot.objective) bot.setObjective({ key: `zf${Math.round(at.x / 3)}:${Math.round(at.z / 3)}`, role: 'defend', x: at.x, z: at.z, r: 2.5 });
+        const at = this._holdSpot(p, lead, spot++, up.length, P);
+        const far = dist(lead, p);
+        if (far > P.ring + 5 || !bot.objective || bot.objKey?.startsWith('zs')) bot.setObjective({ key: `zs${Math.round(at.x / 3)}:${Math.round(at.z / 3)}`, role: 'defend', x: at.x, z: at.z, r: 2.2 });
       } else bot.setObjective({ key: 'zhold', role: 'defend', x: this.L.bands[this.L.start].cx, z: this.L.bands[this.L.start].cz, r: 5 });
-    });
+    }
   }
 
-  // What a bot would walk over to buy now: a better wall gun than the pistol, a perk it can afford with a cushion, and
-  // (only with no humans, or when rich) the cheapest closed gate. Never in the middle of a fight it is losing.
-  _botWant(p, humans) {
-    const L = this.L, z = p.zm, ps = p.ps;
-    if (this.state === 1 && this._near(p, 6)) return null;
+  // Undead (alive) within r of p.
+  _count(p, r) {
+    let n = 0;
+    for (const q of this.horde) if (q.alive && Math.abs(q.ps.x - p.ps.x) < r && Math.abs(q.ps.z - p.ps.z) < r && Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < r) n++;
+    return n;
+  }
+
+  // Where a hurt bot falls back to: 7 m from the crowd near it, toward the lead's side when that is the way out.
+  _fallBack(p, lead) {
+    let cx = 0, cz = 0, n = 0;
+    for (const q of this.horde) if (q.alive && Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < 9) { cx += q.ps.x; cz += q.ps.z; n++; }
+    if (!n) return null;
+    cx /= n; cz /= n;
+    let ux = p.ps.x - cx, uz = p.ps.z - cz, l = Math.hypot(ux, uz) || 1;
+    ux /= l; uz /= l;
+    if (lead && lead !== p) {
+      const lx = lead.ps.x - p.ps.x, lz = lead.ps.z - p.ps.z, ll = Math.hypot(lx, lz);
+      if (ll > 2 && (lx * ux + lz * uz) / ll > -0.2) { ux = ux * 0.4 + lx / ll * 0.6; uz = uz * 0.4 + lz / ll * 0.6; l = Math.hypot(ux, uz) || 1; ux /= l; uz /= l; }
+    }
+    const nav = this.sim.nav;
+    for (const s of [7, 5, 3]) {
+      const x = p.ps.x + ux * s, z = p.ps.z + uz * s;
+      if (nav.isWalkable(x, z) && !this._inTrap(x, z)) return { x, z };
+    }
+    return null;
+  }
+
+  _inTrap(x, z, pad = 1.2) {
+    return this.L.traps.some((T, i) => this.econ.traps[i]?.state === 1 && Math.hypot(T.x - x, T.z - z) < T.r + pad);
+  }
+
+  // A bot's own spot near the lead: the open gates within 14 m of them, one bot to each (3.5 m back on the lead's
+  // side), the rest spread round the lead at the persona's ring. Never on a running trap.
+  _holdSpot(p, lead, k, n, P) {
+    const L = this.L, lx = lead.ps.x, lz = lead.ps.z;
+    const gates = (this._gateCache?.open === this.open && this._gateCache.t > this.sim.time - 1 && this._gateCache.lead === lead) ? this._gateCache.list
+      : (this._gateCache = { open: this.open, t: this.sim.time, lead, list: L.doors.filter(d => this.open & (1 << d.i) && Math.hypot(d.cx - lx, d.cz - lz) < 14).sort((a, b) => Math.hypot(a.cx - lx, a.cz - lz) - Math.hypot(b.cx - lx, b.cz - lz)) }).list;
+    if (k < gates.length) {
+      const d = gates[k], l = Math.hypot(lx - d.cx, lz - d.cz) || 1, s = Math.min(3.5, l);
+      const at = this._walk(d.cx + (lx - d.cx) / l * s, d.cz + (lz - d.cz) / l * s);
+      if (!this._inTrap(at.x, at.z)) return at;
+    }
+    const a = lead.index * 0.7 + (k / Math.max(1, n)) * Math.PI * 2;
+    for (let t = 0; t < 4; t++) {
+      const at = this._walk(lx + Math.cos(a + t * 0.8) * P.ring, lz + Math.sin(a + t * 0.8) * P.ring);
+      if (!this._inTrap(at.x, at.z)) return at;
+    }
+    return this._walk(lx, lz);
+  }
+
+  // The held supply streak (bought at the terminal into the one slot): a strike on a crowd, a sentry or drone when the
+  // crowd is building, a mate is down near or the boss is up.
+  _botStreak(p, P) {
+    if (this.state !== 1 || this.econ.gear.length >= ZE.gearMax) return;
+    const n = this._count(p, 14), item = p.zm.stk;
+    const mate = this.crew.some(q => q !== p && q.alive && q.downed && Math.hypot(q.ps.x - p.ps.x, q.ps.z - p.ps.z) < 20);
+    const boss = this.bossSeat >= 0 && this.sim.players[this.bossSeat]?.alive && Math.hypot(this.sim.players[this.bossSeat].ps.x - p.ps.x, this.sim.players[this.bossSeat].ps.z - p.ps.z) < 25;
+    const go = item === 'strike' ? n >= P.streak || (boss && n >= 2) : n >= P.streak - 2 || (mate && n >= 2) || boss;
+    if (go) this.econ.deploy(p);
+  }
+
+  // The quest, when it is safe (between rounds, or nobody within 12 m): one bot (the last one up) picks up the relics
+  // or tunes the radios once the power is on. The last step (the altar, the console) is a person's moment: a bot only
+  // takes it with no person in the crew.
+  _questRun(p, crew, humans) {
+    const L = this.L, E = this.econ, q = E.quest;
+    if (!L.relics?.length || q.state || this.round < 3 || this.state === 3) return null;
+    const mine = q.tuneI >= 0 && q.tuneBy === p.index;
+    if (!mine && [...crew].reverse().find(b => b.p.alive && !b.p.downed && b.p.zm && b.p.isBot)?.p !== p) return null;
+    if (!mine && this.state === 1 && (this._count(p, 12) > 0 || this.killed < this.count * 0.15)) return null;
+    if (mine) { const r = L.relics[q.tuneI]; return { x: r.x, z: r.z, use: { kind: 'relic', i: r.i, cost: 0, ok: true } }; }
+    const left = L.relics.filter(r => !(q.got & (1 << r.i)) && bandOpen(L, this.open, r.band));
+    const all = L.relics.every(r => q.got & (1 << r.i));
+    if (all) {
+      if (humans || !L.altar || !bandOpen(L, this.open, L.altar.band ?? L.band[L.cellAt(L.altar.x, L.altar.z)])) return null;
+      if (this.round < 8) return null;
+      return { x: L.altar.x, z: L.altar.z, use: { kind: 'altar', i: 0, cost: 0, ok: true } };
+    }
+    if (L.questKind === 'radio' && (!this.power || q.tuneI >= 0)) return null;
+    let best = null, bd = 50;
+    for (const r of left) { const d = Math.hypot(r.x - p.ps.x, r.z - p.ps.z); if (d < bd) { bd = d; best = r; } }
+    return best ? { x: best.x, z: best.z, use: { kind: 'relic', i: best.i, cost: 0, ok: true } } : null;
+  }
+
+  // What a bot would walk over to buy now, by its plan: a better wall gun as the rounds go up, perks in its persona's
+  // order (health and revives first), plates and kit, the bench's tiers, the crate when rich, a held streak, a trap a
+  // crowd funnels into (js/sim/zm-econ.js), gates when they lead somewhere worth it (never with the next perk's points).
+  // Never in the middle of a fight it is losing.
+  _botWant(p, humans, lead = null) {
+    const L = this.L, z = p.zm, ps = p.ps, P = personaOf(p, this.crew);
+    // Undead close: only what is within a step or two (a plate, the terminal, a trap's switch), never a walk.
+    const close = this.state === 1 && this._near(p, 6);
     let best = null, bestS = -Infinity;
     const consider = (item, score) => { if (score > bestS) { bestS = score; best = item; } };
     const dist = (x, zz) => Math.hypot(x - ps.x, zz - ps.z);
     const hasGun = ps.primary !== START_GUN || (ps.secondary !== NO_GUN && ps.secondary !== START_GUN);
-    // What the gun in the hands is worth, by its wall price (a crate gun counts as a good one).
-    const worth = g => (g === START_GUN || g === NO_GUN ? 0 : L.wallBuys.find(w => w.gun === g)?.cost ?? 1600);
+    // What a gun is worth, by its wall price (a crate gun counts as a good one), a bench tier on top.
+    const worth = g => (g === START_GUN || g === NO_GUN ? 0 : (L.wallBuys.find(w => w.gun === g)?.cost ?? 1600) + (z.tiers[g] ?? 0) * 1500);
     const held = Math.max(worth(ps.primary), worth(ps.secondary));
+    const c = P.cushion;
+    // The next perk on its list it can reach: its points are kept back from gates and the crate.
+    const perkM = this.power && z.perks.length < z.limit ? P.perks.map(k => L.machines.find(m => m.perk === k && !z.perks.includes(k) && bandOpen(L, this.open, m.band))).find(Boolean) : null;
+    const perkNeed = perkM ? ZM_PERKS[perkM.perk].cost : 0;
     for (const w of L.wallBuys) {
       if (!bandOpen(L, this.open, w.band)) continue;
       const own = ps.primary === w.gun || ps.secondary === w.gun;
       const d = dist(w.x, w.z);
-      if (d > 40) continue;
+      if (d > 55) continue;
       if (own) {
         const slot = ps.primary === w.gun ? 0 : 1;
-        if (ps.reserve[slot] < (WEAPONS[w.gun].magazine ?? 30) && z.pts >= w.ammo + 200) consider({ kind: 'ammo', i: w.i, x: w.x, z: w.z }, 50 - d);
-      } else if (!hasGun && z.pts >= w.cost) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 40 + w.cost / 100 - d);
-      else if (hasGun && z.pts >= w.cost + 400 && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 35 + (w.cost - held) / 50 - d);
+        if (ps.reserve[slot] < (WEAPONS[w.gun].magazine ?? 30) * 1.5 && z.pts >= w.ammo + 200) consider({ kind: 'ammo', i: w.i, x: w.x, z: w.z }, 50 - d * 0.5);
+      } else if (!hasGun && z.pts >= w.cost) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 44 + w.cost / 100 - d * 0.5);
+      else if (hasGun && z.pts >= w.cost + 400 * c && w.cost > held + 150) consider({ kind: 'wall', i: w.i, x: w.x, z: w.z }, 36 + (w.cost - held) / 40 - d * 0.5);
     }
     const full = z.perks.length >= z.limit;
     for (const m of L.machines) {
       if (!bandOpen(L, this.open, m.band) || z.perks.includes(m.perk) || !this.power) continue;
+      const d = dist(m.x, m.z);
+      if (d > 50) continue;
       // At the cap: a perk slot when there is plenty over (the next machine visit buys the perk itself).
       if (full) {
-        if (z.limit < ZM.perkMax && z.pts >= ZM.slotCost + 2500 && dist(m.x, m.z) < 45) consider({ kind: 'slot', i: m.i, x: m.x, z: m.z }, 20 - dist(m.x, m.z));
+        if (z.limit < ZM.perkMax && z.pts >= ZM.slotCost + 2500 * c) consider({ kind: 'slot', i: m.i, x: m.x, z: m.z }, 34 - d * 0.5);
         continue;
       }
-      const cost = ZM_PERKS[m.perk].cost, d = dist(m.x, m.z);
-      if (z.pts >= cost + (hasGun ? 300 : 1200) && d < 45) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 30 - d + (m.perk === 'iron' ? 10 : 0));
+      const cost = ZM_PERKS[m.perk].cost, rank = P.perks.indexOf(m.perk);
+      if (z.pts >= cost + (hasGun ? 200 : 1200) * c) consider({ kind: 'perk', i: m.i, x: m.x, z: m.z }, 38 - rank * 3 - d * 0.5);
     }
-    // The crate now and then, once the basics are bought.
+    // The crate, once the basics are bought and there are points to burn (once a round), while the gun in hand has no
+    // tier worth keeping.
     const bs = this.box.state === 0 && this.box.spot >= 0 ? L.boxSpots[this.box.spot] : null;
-    if (bs && bandOpen(L, this.open, bs.band) && hasGun && z.perks.length >= 2 && z.pts >= ZM.box.cost + 1500 && held < 1700) {
+    const tiered = [ps.primary, ps.secondary].some(g => (z.tiers[g] ?? 0) > 0);
+    if (bs && bandOpen(L, this.open, bs.band) && hasGun && z.perks.length >= 2 && !tiered && z.boxRound !== this.round && z.pts >= ZM.box.cost + perkNeed + P.box) {
       const d = dist(bs.x, bs.z);
-      if (d < 40) consider({ kind: 'box', i: bs.i, x: bs.x, z: bs.z }, 15 - d);
+      if (d < 45) consider({ kind: 'box', i: bs.i, x: bs.x, z: bs.z }, 18 + (held < 1300 ? 8 : 0) - d * 0.5);
     }
-    this.econ.botWants(p, consider);
-    if (!humans || z.pts > 4000) {
+    this.econ.botWants(p, consider, P, perkNeed);
+    // Gates: with nobody else to open them, the next one out; with a person, one beside them (a hand through) or toward
+    // a better gun, the bench or a perk it lacks; never with the points its next perk wants.
+    {
       for (const d of L.doors) {
-        if (this.open & (1 << d.i) || z.pts < d.cost + (humans ? 2000 : 600)) continue;
+        if (this.open & (1 << d.i) || z.pts < d.cost + perkNeed + (humans ? 1500 : 400) * c) continue;
         const at = zmDoorStand(L, this.open, d);
         if (!at) continue;
+        const far = bandOpen(L, this.open, d.a ?? d.from) ? (d.b ?? d.opens) : (d.a ?? d.from);
+        const worthIt = L.wallBuys.some(w => w.band === far && w.cost > held + 150) || L.bench?.band === far || L.machines.some(m => m.band === far && !z.perks.includes(m.perk));
+        const byLead = lead && lead !== p && !lead.isBot && Math.hypot(lead.ps.x - d.cx, lead.ps.z - d.cz) < 8;
+        if (humans && !worthIt && !byLead && z.pts < 6000) continue;
         const dd = dist(d.cx, d.cz);
-        if (dd < 50) consider({ kind: 'door', i: d.i, x: at.x, z: at.z }, 5 - dd);
+        if (dd < 50) consider({ kind: 'door', i: d.i, x: at.x, z: at.z }, (worthIt ? 16 : 5) + (byLead ? 8 : 0) - dd * 0.4);
       }
     }
+    if (close && best && Math.hypot(best.x - ps.x, best.z - ps.z) > 7) return null;
     return best;
   }
 

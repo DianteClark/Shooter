@@ -2137,9 +2137,17 @@ export class BotBrain {
       this.strafeDir = -this.strafeDir;
       mx = ux * fwd - uz * this.strafeDir; mz = uz * fwd + ux * this.strafeDir;
       if (!sim.nav.isWalkable(ps.x + mx * 1.3, ps.z + mz * 1.3)) { mx = 0; mz = 0; }
+      // Graveyard Shift: backed into a wall, slip out sideways along it rather than stand and take the claws.
+      if (!mx && !mz && this.kite && fwd < 0) {
+        for (const s of [this.strafeDir || 1, -(this.strafeDir || 1)]) {
+          if (sim.nav.isWalkable(ps.x - uz * s * 1.3, ps.z + ux * s * 1.3)) { this.strafeDir = s; mx = -uz * s; mz = ux * s; break; }
+        }
+      }
     }
-    // Strafe all it likes, but do not dance off the point it is holding.
-    if (holdingPoint && Math.hypot(ps.x + mx * 1.3 - o.x, ps.z + mz * 1.3 - o.z) > o.r * 0.9) {
+    // Graveyard Shift: over a downed mate (js/sim/zombies.js sets `zStill`), stand still and shoot.
+    if (this.zStill && Math.hypot(this.zStill.x - ps.x, this.zStill.z - ps.z) < 1.8) { I.mx = 0; I.mz = 0; return; }
+    // Strafe all it likes, but do not dance off the point it is holding (a kiting bot backs off it, and walks back).
+    if (holdingPoint && !(this.kite && fwd < 0) && Math.hypot(ps.x + mx * 1.3 - o.x, ps.z + mz * 1.3 - o.z) > o.r * 0.9) {
       this.strafeDir = -this.strafeDir;
       mx = 0; mz = 0;
     }

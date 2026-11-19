@@ -113,9 +113,8 @@ export class ZmEcon {
         const cost = supplyCost(item, R.round);
         if (z.pts < cost) return null;
         // The vest goes on at once. A streak (sentry, strike, drone, lure) goes into the one held slot, called in when
-        // its owner chooses (deploy); nobody holds two. Bots call theirs in on the spot, as before.
-        if (item === 'vest' || p.isBot) {
-          if (item !== 'vest' && this.gear.length >= ZE.gearMax) return null;
+        // its owner chooses (deploy); nobody holds two. Bots hold theirs too (ZmRules._botStreak calls it in).
+        if (item === 'vest') {
           if (!this._supply(p, item)) return null;
           sim._emit({ t: 'zsupply', item, by: p.id, x: Math.round(p.ps.x * 10) / 10, z: Math.round(p.ps.z * 10) / 10 });
         } else {
@@ -656,33 +655,40 @@ export class ZmEcon {
 
   // ---- Bots ----
 
-  // What a bot would walk over to buy from the economy: a tier on its gun, plates, a trap with a crowd in it, a supply
-  // item when there is money to spare. `consider(item, score)` as ZmRules._botWant's.
-  botWants(p, consider) {
-    const L = this.L, R = this.R, z = p.zm, ps = p.ps, open = R.open;
+  // What a bot would walk over to buy from the economy, by its persona P (js/sim/zm-allies.js): a tier on its best gun,
+  // plates, a kit refill, a trap a crowd funnels into, a streak for its held slot. perkNeed: the points its next perk
+  // wants (kept back from the extras). `consider(item, score)` as ZmRules._botWant's.
+  botWants(p, consider, P, perkNeed = 0) {
+    const L = this.L, R = this.R, z = p.zm, ps = p.ps, open = R.open, c = P?.cushion ?? 1;
     const dist = (x, zz) => Math.hypot(x - ps.x, zz - ps.z);
     const reach = s => s && bandOpen(L, open, s.band);
     const fight = R.state === 1;
-    // The upgrade bench, for a gun worth it (not the pistol), from round 6, with a cushion.
-    if (reach(L.bench) && !this.bench.state && R.round >= 6) {
-      for (const gun of [ps.primary, ps.secondary]) {
-        if (!zmUpgradable(gun) || gun === START_GUN) continue;
-        const t = z.tiers[gun] ?? 0;
-        if (t >= 3 || z.pts < ZE.bench.cost[t] + (t ? 1000 : 1500)) continue;
+    // The upgrade bench, for its best gun worth it (not the pistol), from the persona's round, with a cushion.
+    if (reach(L.bench) && !this.bench.state && R.round >= (P?.bench ?? 6)) {
+      const guns = [ps.primary, ps.secondary].filter(g => zmUpgradable(g) && g !== START_GUN && (z.tiers[g] ?? 0) < 3);
+      const gun = guns.sort((a, b) => (z.tiers[b] ?? 0) - (z.tiers[a] ?? 0) || (L.wallBuys.find(w => w.gun === b)?.cost ?? 1600) - (L.wallBuys.find(w => w.gun === a)?.cost ?? 1600))[0];
+      const t = gun ? z.tiers[gun] ?? 0 : 0;
+      if (gun && z.pts >= ZE.bench.cost[t] + 600 * c) {
         const d = dist(L.bench.x, L.bench.z);
-        if (d < 60) consider({ kind: 'bench', i: 0, x: L.bench.x, z: L.bench.z, gun }, 32 + t * 4 - d * 0.4);
-        break;
+        if (d < 70) consider({ kind: 'bench', i: 0, x: L.bench.x, z: L.bench.z, gun }, 40 + t * 4 + (P?.benchBias ?? 0) - d * 0.4);
       }
     }
+    // A hoarder banks for its next tier past the basics: the extras wait.
+    const saving = P === undefined ? 0 : (P.benchBias >= 10 && R.round >= P.bench - 1 && z.perks.length >= 2) ? 2500 : 0;
     // Plates when short of them.
-    if (reach(L.armour) && z.plates <= PLATE_MAX - ZE.plate.hp && z.pts >= ZE.plate.cost + 800) {
+    if (reach(L.armour) && z.plates <= PLATE_MAX - ZE.plate.hp && z.pts >= ZE.plate.cost + 600 * c + saving) {
       const d = dist(L.armour.x, L.armour.z);
-      if (d < 45) consider({ kind: 'armour', i: 0, x: L.armour.x, z: L.armour.z }, 24 - d * 0.5 + (z.plates < ZE.plate.hp ? 6 : 0));
+      if (d < 45) consider({ kind: 'armour', i: 0, x: L.armour.x, z: L.armour.z }, 22 - d * 0.5 + (z.plates < ZE.plate.hp ? 10 : 0));
+    }
+    // A kit refill (the lethal and tactical) with plates full, when there is money over.
+    if (reach(L.armour) && z.plates > PLATE_MAX - ZE.plate.hp && kitRoom(ps) && z.pts >= ZE.kit.cost + perkNeed + 1500 * c + saving) {
+      const d = dist(L.armour.x, L.armour.z);
+      if (d < 35) consider({ kind: 'kit', i: 0, x: L.armour.x, z: L.armour.z }, 10 - d * 0.5);
     }
     // A trap with three or more undead in or near it, mid-round.
     if (fight) {
       L.traps.forEach((T, i) => {
-        if (this.traps[i].state || z.pts < ZE.trap.cost + 1500) return;
+        if (this.traps[i].state || z.pts < ZE.trap.cost + 1000 * c) return;
         const sb = L.band[L.cellAt(T.sx, T.sz)];
         if (!bandOpen(L, open, sb >= 0 ? sb : T.band)) return;
         const d = dist(T.sx, T.sz);
@@ -692,16 +698,18 @@ export class ZmEcon {
         if (n >= 3) consider({ kind: 'trap', i, x: T.sx, z: T.sz }, 26 + n - d);
       });
     }
-    // The terminal, with money to spare: plates first (a vest), then a sentry, a drone, a strike on a crowd.
+    // The terminal: a vest when short of plates and the armour bench is shut; else a streak for the held slot (the
+    // persona's own, a strike once the crowds are big), called in later (ZmRules._botStreak).
     if (reach(L.terminal) && R.round >= 4) {
       const d = dist(L.terminal.x, L.terminal.z);
-      const can = it => (z.supply[it] ?? -1) !== R.round && z.pts >= supplyCost(it, R.round) + 2500 && (it === 'vest' || this.gear.length < ZE.gearMax);
+      const can = it => (z.supply[it] ?? -1) !== R.round && z.pts >= supplyCost(it, R.round) + perkNeed + 1500 * c + saving;
       let item = null;
       if (z.plates < ZE.plate.hp && can('vest') && !reach(L.armour)) item = 'vest';
-      else if (fight && can('sentry')) item = 'sentry';
-      else if (fight && can('drone')) item = 'drone';
-      else if (fight && R.round >= 8 && can('strike') && R.horde.filter(q => q.alive && dist(q.ps.x, q.ps.z) < 20).length >= 6) item = 'strike';
-      if (item && d < 40) consider({ kind: 'terminal', i: 0, x: L.terminal.x, z: L.terminal.z, item }, 14 - d * 0.5);
+      else if (!z.stk) {
+        const want = P?.item === 'strike' && R.round < 8 ? 'sentry' : P?.item ?? 'sentry';
+        item = [want, 'sentry', 'drone'].find(can) ?? null;
+      }
+      if (item && d < 45) consider({ kind: 'terminal', i: 0, x: L.terminal.x, z: L.terminal.z, item }, 24 - d * 0.5);
     }
   }
 
