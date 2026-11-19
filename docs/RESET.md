@@ -52,6 +52,7 @@ Found by grepping `localStorage` and the key constants across js/ (the vendor sc
 | `switchyard-last-room` | last room, for Rejoin | js/main.js |
 | `switchyard-player` | this device's player id (rejoin slot, friends' cards key) | js/net/star.js |
 | `switchyard-backdrop` | the title backdrop's map rotation | js/ui/backdrop.js |
+| `switchyard.clan` | this phone's player clan (tag, name, colour, mark) | js/ui/progress.js `Clan` |
 | `switchyard-options` `recall` entry | remembered menu picks: Multiplayer tab and playlists, Custom map and mode, squad size, last Graveyard map | js/ui/recall.js |
 | any other `switchyard.*` / `switchyard-*` key | tournament state or anything added later | (prefix sweep) |
 

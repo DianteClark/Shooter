@@ -32,7 +32,7 @@ import { fingerDown } from './tap.js';
 import { scrolling } from './scroll.js';
 import { yardBackdrop, ico, backButton, header } from './yard.js';
 import { GunThumbs } from './gunthumbs.js';
-import { esc, badgeMark, badgeMarkOf, badgeLevel, ROMAN } from './widgets.js';
+import { esc, nameHtml, badgeMark, badgeMarkOf, badgeLevel, ROMAN } from './widgets.js';
 import { vetOf, vetTag } from './cards.js';
 import { play, enter, sweep, shake, reducedMotion, DUR, EASE } from './motion.js';
 import { featuredButton, modsChip } from './modifiers.js';
@@ -337,7 +337,7 @@ export class Menu {
     this.#stopPreview();
     this.#endReel();
     this.el.dataset.screen = 'lobby';
-    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false, voice = false, cup = null } = state;
+    const { code, humans, botSkill, isHost, localId, countdown = null, rematchWait = false, ffa = false, public: listed = false, mods = [], br = false, brSquad = 4, custom = null, rankedOn = false, rankedFull = false, voice = false, cup = null, clanOffer = null } = state;
     const counting = countdown !== null;
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
@@ -353,7 +353,7 @@ export class Menu {
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           // voice: party voice runs in this room (js/ui/voice-ui.js paints the talking dot and the mute button).
           const car = `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
-            <span class="car-id">${voice ? `<i class="vc-dot">${ico('ui:mic', '', 13)}</i>` : ''}${h.badge ? badgeMarkOf(h.badge, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${esc(h.name)}</b></span>
+            <span class="car-id">${voice ? `<i class="vc-dot">${ico('ui:mic', '', 13)}</i>` : ''}${h.badge ? badgeMarkOf(h.badge, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${nameHtml(h.name)}</b></span>
             <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge ? badgeLevel(h.badge) : null, emblem: h.loadout?.emblem })}<small>${self ? 'You' : status}</small></span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
@@ -400,6 +400,7 @@ export class Menu {
         ${custom ? '' : rankedOn && rankedFull ? '' : modsChip(mods, { fixed: !isHost })}
         ${!custom && !br && rankedFull ? `<button class="chip rk-room${rankedOn ? ' on' : ''}" ${isHost ? 'data-act="lobbyRanked"' : 'disabled'}>${ico('ui:rank')}<span><small>${rankedOn ? 'Ranked room' : 'Full room'}</small><b>${rankedOn ? 'Ranked: on' : isHost ? 'Make ranked' : 'Unranked'}</b></span></button>` : ''}
         ${cup ? `<button class="chip tn-room${cup.fits ? ' on' : ''}" data-act="lobbyTourney">${ico('ui:cup')}<span><small>${cup.fits ? 'Weekend cup' : `Up to ${cup.size} players`}</small><b>${esc(cup.name)}</b></span></button>` : ''}
+        ${clanOffer ? `<button class="chip cl-offer on" data-act="lobbyClanJoin" data-sound="confirm">${ico('ui:party')}<span><small>${clanOffer.switching ? 'Switch clan' : 'Clan'}</small><b>Join [${esc(clanOffer.tag)}]</b></span></button>` : ''}
         <button class="chip" data-act="gunsmith">${ico('gunsmith')}<b>Gunsmith</b></button>
         <button class="chip" data-act="operators">${ico('operator')}<b>Operators</b></button>
         ${start}

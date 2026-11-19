@@ -19,6 +19,7 @@ import { cleanEmblem } from '../ui/emblems.js';
 // Seasons and ranked (docs/SEASONS.md): the Season view ranks the season's window, the Ranked category everyone's SR.
 import { seasonAt, TIER_XP, TRACK_TIERS } from './seasons.js';
 import { ratingToSr, division, PLACEMENTS, SR_MAX } from './ranked.js';
+import { cardClan, CLAN_COLORS } from './clans.js';     // Player clans (append-only card field `cl`).
 
 export const CARD_VERSION = 1;
 export const FRIENDS_MAX = 100;
@@ -48,6 +49,11 @@ export function cleanCard(raw) {
   c.brw = Math.min(c.brw, c.brm); c.br5 = Math.min(Math.max(c.br5, c.brw), c.brm);
   c.kdm = Math.min(c.kdm, c.m); c.kdk = Math.min(c.kdk, c.k);
   if (c.op && getSkin(raw.skin)?.operator === c.op) c.skin = getSkin(raw.skin).id;
+  // The reset generation travels with the card (seeFriend refuses cards from before the reset), and so does the
+  // player's clan (js/shared/clans.js; a bot clan's tag or junk is dropped).
+  if (raw.rg !== undefined) c.rg = num(raw.rg);
+  const cl = cardClan(raw.cl);
+  if (cl) c.cl = cl;
   if (isObj(raw.wk) && typeof raw.wk.key === 'string' && /^W\d{4}-\d{2}-\d{2}$/.test(raw.wk.key)) c.wk = { key: raw.wk.key, k: num(raw.wk.k), w: num(raw.wk.w) };
   // Seasons (optional; older phones send none): this season's window, track tier and SR (-1 unranked).
   if (isObj(raw.sn) && typeof raw.sn.key === 'string' && /^(pre|S\d{1,3}(R\d{1,4})?)$/.test(raw.sn.key)) {
@@ -88,6 +94,8 @@ export function seeFriend(list, id, raw, now = Date.now(), selfId = null) {
 
 /* ---------- Entries ---------- */
 const entryOf = (id, kind, card, extra = {}) => ({ id, kind, ...card, ...extra });
+// Me and friends: a player clan's tag shows before the name like a pool bot's.
+const playerEntry = (id, kind, card, extra = {}) => entryOf(id, kind, card, { clan: card.cl?.tag ?? null, ...extra });
 
 // A friend's or my weekly numbers count only in the week they were for.
 const weekly = (e, key) => (e.wk?.key === key ? e.wk : { key, k: 0, w: 0 });
@@ -218,8 +226,8 @@ export function rankEntries(entries, catId, now = Date.now()) {
 // The board one screen shows. me: my card (Progress.careerCard()), friends: the Friends list, view: everyone |
 // friends | around. Returns { rows: [{e, value, rank, text}], me: index of my row or -1, total ranked, note }.
 export function buildBoard({ me, myId = 'me', friends = [], cat = 'level', view = 'everyone', now = Date.now() }) {
-  const mine = entryOf(myId, 'me', cleanCard(me) ?? cleanCard({ v: CARD_VERSION, name: 'Rookie' }));
-  const pals = friends.map(f => entryOf(f.id, 'friend', f.card, { asOf: f.at }));
+  const mine = playerEntry(myId, 'me', cleanCard(me) ?? cleanCard({ v: CARD_VERSION, name: 'Rookie' }));
+  const pals = friends.map(f => playerEntry(f.id, 'friend', f.card, { asOf: f.at }));
   let entries = view === 'friends' ? [mine, ...pals] : [mine, ...pals, ...poolEntries(now)];
   const key = seasonAt(new Date(now)).key;
   entries = entries.map(e => (e.sn && e.sn.key !== key ? { ...e, sn: null } : e));      // Another season's numbers say nothing now.
@@ -245,4 +253,45 @@ export function buildBoard({ me, myId = 'me', friends = [], cat = 'level', view 
     }
   }
   return { rows: list, me: at, total: rows.length, note, cat: c };
+}
+
+/* ---------- Clans ---------- */
+// The Clans view: every bot clan (its members' pool rows) and every player clan known on this phone (yours, and those
+// on friends' cards), ranked by their members' summed numbers. Player clans group by id; the newest rename (highest rv)
+// names them. Categories: totals that add up (no K/D, level or SR).
+const CLAN_CAT_IDS = ['xp', 'kills', 'wins', 'brwins', 'extract', 'mastery', 'wkills', 'wwins'];
+const XP_CAT = { id: 'xp', label: 'XP', icon: 'star', value: e => e.xp, fmt: v => compactNum(v) };
+export const CLAN_CATEGORIES = CLAN_CAT_IDS.map(id => (id === 'xp' ? XP_CAT : getCategory(id)));
+export const getClanCategory = id => CLAN_CATEGORIES.find(c => c.id === id) ?? CLAN_CATEGORIES[0];
+
+// Returns { rows: [{ key, kind: 'pool'|'player', tag, name, color, c, mark, members: [entries], value, rank, text, mine }],
+// me: index of your clan's row or -1, total, cat }.
+export function clanBoard({ me, myId = 'me', friends = [], cat = 'xp', now = Date.now() }) {
+  const c = getClanCategory(cat), wk = periodKey('weekly', new Date(now));
+  const groups = new Map();
+  const names = new Map(Pool.CLANS.map(k => [k.tag, k.name]));
+  for (const e of poolEntries(now)) {
+    if (!e.clan) continue;
+    const key = `bot:${e.clan}`;
+    if (!groups.has(key)) groups.set(key, { key, kind: 'pool', tag: e.clan, name: names.get(e.clan) ?? e.clan, color: null, mark: null, members: [], rv: 0, mine: false });
+    groups.get(key).members.push(e);
+  }
+  const mine = playerEntry(myId, 'me', cleanCard(me) ?? cleanCard({ v: CARD_VERSION, name: 'Rookie' }));
+  const players = [mine, ...friends.map(f => playerEntry(f.id, 'friend', f.card, { asOf: f.at }))];
+  for (const e of players) {
+    const cl = e.cl;
+    if (!cl) continue;
+    const key = `p:${cl.id}`;
+    let g = groups.get(key);
+    if (!g) groups.set(key, g = { key, kind: 'player', tag: cl.tag, name: cl.name, color: CLAN_COLORS[cl.c], c: cl.c, mark: cl.mk, members: [], rv: -1, mine: false });
+    if (cl.rv > g.rv || (e.kind === 'me' && cl.rv >= g.rv)) Object.assign(g, { tag: cl.tag, name: cl.name, color: CLAN_COLORS[cl.c], c: cl.c, mark: cl.mk, rv: cl.rv });
+    g.members.push(e);
+    if (e.kind === 'me') g.mine = true;
+  }
+  const rows = [...groups.values()].map(g => ({ ...g, value: g.members.reduce((a, e) => a + (c.value(e, wk) || 0), 0) }));
+  rows.sort((a, b) => b.value - a.value || b.members.length - a.members.length || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0) || (a.key < b.key ? -1 : 1));
+  let rank = 0;
+  rows.forEach((r, i) => { r.rank = i && r.value === rows[i - 1].value ? rank : (rank = i + 1); r.text = c.fmt(r.value, r); });
+  for (const r of rows) r.members.sort((a, b) => (c.value(b, wk) || 0) - (c.value(a, wk) || 0) || (a.name < b.name ? -1 : 1));
+  return { rows, me: rows.findIndex(r => r.mine), total: rows.length, cat: c };
 }

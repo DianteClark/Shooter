@@ -62,6 +62,7 @@ SEED = """(async () => {
   put('switchyard-last-room', { code: 'ABCD', at: Date.now() });
   put('switchyard-player', 'Pold00000000');
   put('switchyard-backdrop', '7');
+  put('switchyard.clan', { v: 1, clan: { id: 'a1b2c3', tag: 'RAIL', name: 'Rail Dogs', c: 1, mk: 2, rv: 0, own: true } });
   put('switchyard.tournament.cup', { round: 3 });
   put('switchyard-options', { sound: 0.3, music: 0.2, quality: 'low', hudSize: 'large', lefty: true, haptics: true, fullscreen: false,
     padMap: { fire: 3 }, colorMode: 'deutan', textSize: 'large', squad: 'YARD', recall: { mpTab: 'core', soloPick: { mapId: 'pier' } } });
@@ -90,7 +91,8 @@ DUMP = "JSON.stringify(Object.fromEntries(Object.keys(localStorage).map(k => [k,
 
 PROGRESS_KEYS = ['switchyard.save.bak', 'switchyard.save.bad', 'switchyard.progress.v1', 'switchyard.gunstats', 'switchyard.history',
                  'switchyard.friends', 'switchyard-seen', 'switchyard.custom.v1', 'switchyard-mods', 'switchyard-botmatch',
-                 'switchyard-training', 'switchyard-last-room', 'switchyard-player', 'switchyard-backdrop', 'switchyard.tournament.cup']
+                 'switchyard-training', 'switchyard-last-room', 'switchyard-player', 'switchyard-backdrop', 'switchyard.tournament.cup',
+                 'switchyard.clan']
 KEPT = ['switchyard-quality', 'switchyard.tuning.v1', 'switchyard.tuner.ui.v1', 'other-app']
 
 
@@ -144,6 +146,8 @@ async def main():
             history = await pg.evaluate("(async () => (await import('./js/ui/progress.js')).MatchHistory.list().length)()")
             stats = await pg.evaluate("(async () => (await import('./js/game/telemetry.js')).GunStats.totals().matches)()")
             check('friends, match history and gun stats are empty', friends == 0 and history == 0 and stats == 0, (friends, history, stats))
+            clan = await pg.evaluate("(async () => (await import('./js/ui/progress.js')).Clan.get())()")
+            check('the player clan is gone', clan is None and 'switchyard.clan' not in after, clan)
             clips = await pg.evaluate("window.__game.clips.listClips().then(l => l.length)")
             check('saved replay clips (IndexedDB) are gone', clips == 0, clips)
             # A clip saved after the reset, for the reload below.

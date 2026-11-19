@@ -140,7 +140,7 @@ const FEAT_ROWS = [
   ['feat-brlone', 'Lone Survivor', '#d8d4ff', ['#d8d4ff', '#ffd659'], 'lone', { life: 'br:lone', goal: 1, label: 'Win a squads or duos Battle Royale as the last of your squad standing' }, { tab: 'br', playlist: 'quads' }],
   ['feat-exclean', 'Full Manifest', '#ff5a2a', ['#f0ecd0', '#3fdc6a'], 'heli', { life: 'ex:clean', goal: 1, label: 'Extract with every contract your squad took, 4 or more' }, { tab: 'extraction', playlist: 'exquads' }],
   ['feat-zm30', 'Thirty Nights', '#9a8cff', ['#d8d0f0', '#7aff9a'], 'tomb', { zmround: 30, label: 'Survive to round 30 in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
-  ['feat-listener', 'Signal Lost', '#5affb0', ['#c8f4ff', '#5affb0'], 'mast', { zmboss: 'polestar', label: 'Put down the Listener on Polestar Relay in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
+  ['feat-listener', 'Dead Frequency', '#5affb0', ['#c8f4ff', '#5affb0'], 'mast', { zmboss: 'polestar', label: 'Put down the Listener on Polestar Relay in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-zmescape', 'Way Out', '#7aff9a', ['#d8d0f0', '#7aff9a'], 'exit', { zmescape: 1, label: 'Escape Graveyard Shift on the helicopter' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-finishers', 'Executioner', '#c8ccd2', ['#e6ecf2', '#ff4d3d'], 'blades', { life: 'finishers', goal: 25, label: 'Perform 25 finishers' }, { tab: 'standard', playlist: 'qp' }],
   ['feat-flawless', 'Flawless', '#38b6ff', ['#e6ecf2', '#ffd659'], 'flawless', { life: 'gf:flawless', goal: 1, label: 'Win a Showdown 6-0' }, { tab: 'standard', playlist: 'showdown' }],

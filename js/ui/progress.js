@@ -87,6 +87,7 @@ import {
 } from '../shared/progression.js';
 import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { cleanFriends, seeFriend } from '../shared/boards.js';
+import { cleanClan, foundClan, renameClan, newerClan, readClanCode, cardClan } from '../shared/clans.js';     // Player clans.
 import { WEAPON_IDS } from '../shared/constants.js';
 import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP } from '../shared/seasons.js';
 import { weeklyEventAt, eventStatus, eventRoll, applyEventMatch } from '../shared/events.js';     // Weekly events.
@@ -892,6 +893,8 @@ export const Progress = {
       m: c.m, k: c.k, w: c.w, brm: c.brm, brw: c.brw, br5: c.br5, ex: c.ex, kdm: c.kdm, kdk: c.kdk, d: c.d,
       mst: masteryCompleted(data), wk: { key: wk.key, k: wk.k, w: wk.w },
       op: lo.operator ?? null, skin: lo.skin ?? null, card: equippedCard(), emblem: currentEmblemId(),
+      // This phone's clan (js/shared/clans.js), when it is in one: appended, older builds ignore it.
+      ...(Clan.get() ? { cl: cardClan(Clan.get()) } : {}),
       // Seasons: this season's window (the Season boards) and the ranked standing.
       sn: (() => { const st = seasonNow(now), sn = st.sn; return { key: sn.key, m: sn.m, k: sn.k, d: sn.d, w: sn.w, brw: sn.brw, br5: sn.br5, t: tierProgress(st.xp).tier, sr: placed(st.rk) ? st.rk.sr : -1 }; })(),
     };
@@ -1052,4 +1055,56 @@ export const Friends = {
     return true;
   },
   clear() { friendsCache = []; try { localStorage.removeItem(FRIENDS_KEY); } catch { /* ignore */ } },
+};
+
+/* ---------- Player clan (js/shared/clans.js) ---------- */
+// Kept apart from the save like Friends: membership belongs to this phone, not to the save code. One clan at a time.
+const CLAN_KEY = 'switchyard.clan';
+let clanCache;
+const clanNow = () => (clanCache === undefined ? (clanCache = cleanClan(parse(read(CLAN_KEY))?.clan, { keepOwn: true })) : clanCache);
+const clanListeners = new Set();
+function storeClan(c) {
+  clanCache = c;
+  if (c) write(CLAN_KEY, JSON.stringify({ v: 1, clan: c }));
+  else try { localStorage.removeItem(CLAN_KEY); } catch { /* ignore */ }
+  for (const fn of clanListeners) fn(c);
+}
+
+export const Clan = {
+  get() { return clanNow(); },
+  tag() { return clanNow()?.tag ?? null; },
+  // Found a clan: { tag, name, c, mk }. Returns { clan } or { error } (a bad or taken tag, no name).
+  create(spec, rand = Math.random) {
+    const r = foundClan(spec, rand);
+    if (r.clan) storeClan(r.clan);
+    return r;
+  },
+  // Join one: a clan object (a clanmate's card) or a join code string. Returns { clan } or { error }.
+  join(from) {
+    const c = typeof from === 'string' ? readClanCode(from) : cleanClan(from);
+    if (!c) return { error: typeof from === 'string' ? 'That code is not a clan code' : 'That clan cannot be joined' };
+    const cur = clanNow();
+    // Joining the clan you are already in keeps your copy (and whether you founded it), taking a newer rename.
+    if (cur && cur.id === c.id) { const nx = newerClan(cur, c); if (nx) storeClan(nx); return { clan: clanNow() }; }
+    storeClan(c);
+    return { clan: c };
+  },
+  leave() { storeClan(null); },
+  rename(spec) {
+    const cur = clanNow();
+    if (!cur) return { error: 'Not in a clan' };
+    const r = renameClan(cur, spec);
+    if (r.clan) storeClan(r.clan);
+    return r;
+  },
+  // A clanmate's card arrived: take their newer rename of this clan. Returns true if anything changed.
+  sawCard(card) {
+    const nx = newerClan(clanNow(), card?.cl);
+    if (!nx) return false;
+    storeClan(nx);
+    return true;
+  },
+  onChange(fn) { clanListeners.add(fn); return () => clanListeners.delete(fn); },
+  // Tests and the reset: forget the cached copy so the next read comes from storage.
+  reload() { clanCache = undefined; },
 };

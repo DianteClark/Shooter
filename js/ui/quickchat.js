@@ -1,4 +1,4 @@
-// Quick chat: ten callouts for friends playing without voice.
+// Quick chat: callouts for friends playing without voice, and the bots' own chatter (js/sim/chatter.js).
 //
 // A Chat chip sits in the HUD's top corner, beside the mic, well clear of both thumbs. Tapping it drops a compact
 // 5 x 2 wheel of callouts under it; a tap sends one and closes the wheel (so does the chip again, or a few idle
@@ -9,12 +9,16 @@
 // in free-for-all). It shows as a short line in the kill feed with the sender's name, and as a ping at the sender's
 // position on the minimap. Sending is rate limited here; receiving is limited per sender, so a stuck client cannot flood.
 // In a solo match, teammate bots now and then answer a few callouts.
+// Bot chatter: the host's { t: 'chatter' } events (hud.onChatter) show as the same short lines, the speaker's team only
+// (GG and the like to everyone), unless Options > Bot chatter is off. The host already throttles them.
 //
 // HUD hooks used when present (js/ui/hud.js): hud.chatLine({ name, text, team, mine, icon }) for the feed line and
 // hud.pingMinimap(x, z, { team, kind:'chat', seconds }) for the ping. Without them this module draws both itself, into
 // the HUD's .feed and over its .minimap.
 import { icon } from './icons.js';
-import { esc } from './widgets.js';
+import { esc, nameHtml } from './widgets.js';
+import { Options } from './options.js';
+import { CHATTER, chatterText } from '../sim/chatter.js';
 import { TEAMS } from '../shared/constants.js';
 import { MAPS } from '../shared/map.js';
 
@@ -33,11 +37,28 @@ export const CALLOUTS = [
   { id: 'planting', text: 'Planting', icon: 'ui:timer' },
   { id: 'defusing', text: 'Defusing', icon: 'ui:warning' },
   { id: 'bombdown', text: 'Bomb down', icon: 'ui:skull' },
+  // Wave two (appended): pushing and falling back, reloads, revives, the flag, a UAV, yes and no.
+  { id: 'push', text: 'Push up', icon: 'ui:next' },
+  { id: 'fallback', text: 'Fall back', icon: 'ui:back' },
+  { id: 'reloading', text: 'Reloading', icon: 'ui:timer' },
+  { id: 'revive', text: 'Need a revive!', icon: 'ui:warning' },
+  { id: 'flagours', text: "Flag's ours", icon: 'ui:flag' },
+  { id: 'flaggone', text: 'They have our flag', icon: 'ui:warning' },
+  { id: 'uav', text: 'UAV up', icon: 'ui:eye' },
+  { id: 'yes', text: 'Yes', icon: 'ui:check' },
+  { id: 'no', text: 'No', icon: 'ui:close' },
+  { id: 'loot', text: 'Loot here', icon: 'ui:crate' },
 ];
-const BASE_WHEEL = ['enemy', 'help', 'onme', 'goA', 'goB', 'defend', 'nice', 'thanks', 'sorry', 'gg'];
-// S&D trades On me and Sorry for the bomb calls: seven columns, still two rows, still clear of the buttons.
+// Seven columns at most, two rows, clear of the buttons (the S&D wheel set the width).
+const BASE_WHEEL = ['enemy', 'help', 'onme', 'goA', 'goB', 'defend', 'push', 'fallback', 'reloading', 'nice', 'thanks', 'sorry', 'yes', 'gg'];
+// S&D trades On me and Sorry for the bomb calls.
 const SND_WHEEL = ['enemy', 'help', 'goA', 'goB', 'planting', 'defusing', 'bombdown', 'defend', 'onme', 'nice', 'thanks', 'sorry', 'gg'];
-const wheelFor = mode => (mode === 'snd' ? SND_WHEEL : BASE_WHEEL).map(id => CALLOUTS.findIndex(c => c.id === id));
+const CTF_WHEEL = ['enemy', 'help', 'onme', 'flagours', 'flaggone', 'defend', 'push', 'fallback', 'reloading', 'nice', 'thanks', 'sorry', 'yes', 'gg'];
+// Battle royale, Rebound and Extraction: downs and loot, no A and B.
+const SQUAD_WHEEL = ['enemy', 'help', 'onme', 'revive', 'loot', 'push', 'fallback', 'reloading', 'uav', 'nice', 'thanks', 'yes', 'no', 'gg'];
+const SQUAD_MODES = /^(br|brduo|brsolo|rb|rbduo|exq|exd|zm)$/;
+const wheelFor = mode => (mode === 'snd' ? SND_WHEEL : mode === 'ctf' ? CTF_WHEEL : SQUAD_MODES.test(mode) ? SQUAD_WHEEL : BASE_WHEEL)
+  .map(id => CALLOUTS.findIndex(c => c.id === id));
 
 const SEND_GAP_MS = 1100;        // Shortest gap between two of your own callouts.
 const BURST = 3, BURST_MS = 8000;              // At most this many of your own in this window.
@@ -55,6 +76,10 @@ const BOT_REPLIES = {
   enemy: { say: ['Copy'], as: 'enemy' }, nice: { say: ['Thanks'], as: 'thanks' }, sorry: { say: ['All good'], as: 'thanks' },
   gg: { say: ['GG'], as: 'gg' }, planting: { say: ['Covering you'], as: 'defend' },
   defusing: { say: ['Covering you'], as: 'defend' }, bombdown: { say: ['On it'], as: 'onme' },
+  push: { say: ['Moving up', 'With you'], as: 'push' }, fallback: { say: ['Falling back'], as: 'fallback' },
+  reloading: { say: ['Covering you'], as: 'defend' }, revive: { say: ['On my way', 'Coming to you'], as: 'onme' },
+  flagours: { say: ['Nice!'], as: 'nice' }, flaggone: { say: ['On it'], as: 'onme' }, uav: { say: ['Copy'], as: 'enemy' },
+  loot: { say: ['Copy'], as: 'onme' },
 };
 const BOT_REPLY_CHANCE = 0.45;
 
@@ -68,6 +93,18 @@ export class QuickChat {
     this.lines = [];
     this.timers = new Set();
     this.#build();
+    hud.onChatter = e => this.chatter(e);
+  }
+
+  // A bot's line from the host (js/sim/chatter.js). Its own team hears it; an `all` line (GG) everyone; free-for-all
+  // everyone. Hidden with Options > Bot chatter off.
+  chatter(e) {
+    const ctx = this.ctx, line = CHATTER[e?.l];
+    if (!ctx || !line || Options.get('botChatter') === false) return;
+    const who = ctx.roster.get(e.id), me = ctx.roster.get(ctx.localId);
+    if (!who || !who.isBot) return;
+    if (!ctx.ffa && !line.all && me && who.team !== me.team) return;
+    this.#line({ name: who.name, text: chatterText(e.l, who.name), team: who.team, mine: false, icon: line.icon, bot: true });
   }
 
   #build() {
@@ -102,6 +139,7 @@ export class QuickChat {
   #fill(mode) {
     const list = wheelFor(mode);
     this.wheel.dataset.mode = mode === 'snd' ? 'snd' : '';
+    this.wheel.toggleAttribute('data-wide', list.length > 10);
     this.wheel.style.setProperty('--cols', Math.ceil(list.length / 2));
     this.wheel.innerHTML = list.map(i => `<button class="qc-item" type="button" role="menuitem" data-tap="chat" data-c="${i}" data-sound="none">
       <span class="qc-ico">${icon(CALLOUTS[i].icon, { size: 15 })}</span><b>${esc(CALLOUTS[i].text)}</b></button>`).join('');
@@ -217,8 +255,8 @@ export class QuickChat {
     if (!feed) { this.hud.notify?.(`${msg.name}: ${msg.text}`); return; }
     const myTeam = this.ctx.roster.get(this.ctx.localId)?.team;
     const row = document.createElement('div');
-    row.className = `f-row qc-row ${msg.mine ? 'mine' : this.ctx.ffa || msg.team !== myTeam ? 'foe' : 'ally'}`;
-    row.innerHTML = `<span class="qc-ico">${icon(msg.icon, { size: 12 })}</span><em style="color:${TEAMS[msg.team]?.css ?? '#fff'}">${esc(msg.name)}</em><span class="qc-say">${esc(msg.text)}</span>`;
+    row.className = `f-row qc-row ${msg.mine ? 'mine' : this.ctx.ffa || msg.team !== myTeam ? 'foe' : 'ally'}${msg.bot ? ' qc-bot' : ''}`;
+    row.innerHTML = `<span class="qc-ico">${icon(msg.icon, { size: 12 })}</span><em style="color:${TEAMS[msg.team]?.css ?? '#fff'}">${nameHtml(msg.name)}</em><span class="qc-say">${esc(msg.text)}</span>`;
     feed.prepend(row);
     this.lines.push(row);
     while (this.lines.length > LINES) this.lines.shift().remove();

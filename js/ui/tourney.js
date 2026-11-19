@@ -123,7 +123,8 @@ function sideHtml(t, b, res, { party, r, hostName }) {
 // enter }) starts a round (enter: this tap enters or re-enters the cup first).
 // hostRun / hostName: a guest in a friend room looks at the host's run (runStatus shape, from the room's state) and
 // cannot play the rounds.
-export function tourneyScreen(menu, { onBack, onPlay, owner, name, party = false, onReward = null, hostRun = null, hostName = null }) {
+// clan: the owner's player clan ({ tag, name }), if any: their squad shows as "[TAG] Clan name" in the bracket.
+export function tourneyScreen(menu, { onBack, onPlay, owner, name, clan = null, party = false, onReward = null, hostRun = null, hostName = null }) {
   const render = (fresh = false) => {
     menu.el.dataset.screen = 'tourney';
     const now = new Date(), t = Progress.tourney(now), info = t.info;
@@ -131,7 +132,7 @@ export function tourneyScreen(menu, { onBack, onPlay, owner, name, party = false
     const r = hostRun ?? t.run;
     // A run already under way in someone's bracket (a party round in the host's) shows that bracket.
     const runOwner = hostRun ? owner : info.live && t.owner && t.run.entered ? t.owner : owner;
-    const b = bracketFor(key, runOwner, { name });
+    const b = bracketFor(key, runOwner, { name, clan });
     const run = info.live && r.entered ? { roundsWon: r.roundsWon, out: r.out } : null;
     const res = resolveBracket(b, run, { all: false });
     const shown = shownBracket(res);

@@ -29,6 +29,7 @@ export const OPTION_DEFAULTS = Object.freeze({
   colorMode: 'off', textSize: 'normal', calm: false, cues: 'nades', layout: {},
   // Juice: damage numbers rising off the target when your rounds land (js/ui/hud.js). Off by default.
   dmgNumbers: false,
+  botChatter: true,   // Bots' short lines in the kill feed (js/sim/chatter.js, js/ui/quickchat.js).
   recall: {},   // Remembered menu choices (js/ui/recall.js): Multiplayer tab and picks, squad size, Custom picks.
 });
 
