@@ -11,6 +11,7 @@
 //   pistols    sidearms only: a primary becomes a pistol (picked by the gun it replaces) and a launcher sidearm too
 //   gloves     battle royale only: no guns on the floor or in chests, no starting pistol: boxing gloves (js/sim/br.js)
 //   night      Graveyard Shift only: the fog in every round but the boss rounds, and every point paid double
+//   bats       Home Run Derby: everyone swings the Slugger (a Gaff on the other hand, Hatchets to throw), no streaks
 // Battle royale takes snipers too (every floor gun a sniper rifle, js/sim/br.js), only from an event playlist.
 // Modes that deal everyone's gun themselves (Gun Game, One in the Chamber, Infected, Showdown) ignore snipers and melee; battle
 // royale takes none.
@@ -26,6 +27,7 @@ export const MODS = {
   pistols:   { id: 'pistols',   name: 'Pistols Only',  short: 'PST',  desc: 'Sidearms only.', event: true },
   gloves:    { id: 'gloves',    name: 'Gloves Only',   short: 'GLV',  desc: 'No guns: boxing gloves.', event: true },
   night:     { id: 'night',     name: 'Night',         short: 'NGT',  desc: 'Fog every round, double points.', event: true },
+  bats:      { id: 'bats',      name: 'Bats Only',     short: 'BAT',  desc: 'Everyone swings the Slugger. No guns, no streaks.', event: true },
 };
 // Every modifier in order (cleanMods keeps this order); the pickers offer MOD_IDS, the weekly events the rest too.
 const ALL_MOD_IDS = Object.keys(MODS);
@@ -33,12 +35,12 @@ export const MOD_IDS = ALL_MOD_IDS.filter(id => !MODS[id].event);
 export const EVENT_MODS = ALL_MOD_IDS.filter(id => MODS[id].event);
 export const HARDCORE_DAMAGE = 3;
 // Modifiers that cannot be played together: the later one in a list wins.
-const EXCLUSIVE = [['snipers', 'melee', 'pistols']];
+const EXCLUSIVE = [['snipers', 'melee', 'pistols', 'bats']];
 // Rule sets that deal every gun themselves.
 const DEALT = new Set(['gun', 'oic', 'inf', 'gf']);
 const SNIPERS = Object.keys(WEAPONS).filter(id => WEAPONS[id].category === 'Sniper');
 const PISTOLS = Object.keys(WEAPONS).filter(id => WEAPONS[id].category === 'Pistol' && id !== 'golden');
-const BLADE = 'knife', SLEDGE = 'maul';
+const BLADE = 'knife', SLEDGE = 'maul', BAT = 'bat';
 
 // The modifiers that apply to a mode, in MOD_IDS order, from any list (unknown ids, repeats and clashes dropped).
 export function cleanMods(list, modeId = null) {
@@ -55,7 +57,7 @@ export function cleanMods(list, modeId = null) {
   if (rules !== 'zm') keep = keep.filter(id => id !== 'night');       // Night is Graveyard Shift's alone.
   if (rules === 'ex' || rules === 'range') return [];        // Extraction and the range take no modifiers.
   if (MODES[modeId]?.noMods) return [];                                     // A mode can opt out (co-op modes).
-  if (DEALT.has(rules)) keep = keep.filter(id => id !== 'snipers' && id !== 'melee' && id !== 'pistols');
+  if (DEALT.has(rules)) keep = keep.filter(id => id !== 'snipers' && id !== 'melee' && id !== 'pistols' && id !== 'bats');
   if (rules === 'snd') keep = keep.filter(id => id !== 'nostreaks');      // S&D has none to begin with.
   return ALL_MOD_IDS.filter(id => keep.includes(id));
 }
@@ -77,6 +79,10 @@ export function dealLoadout(l, mods) {
   }
   if (mods.includes('melee')) {
     out.primary = BLADE; out.secondary = SLEDGE; out.lethal = 'hatchet';
+    out.streaks = [];
+  }
+  if (mods.includes('bats')) {
+    out.primary = BAT; out.secondary = BLADE; out.lethal = 'hatchet';
     out.streaks = [];
   }
   if (mods.includes('nostreaks')) out.streaks = [];

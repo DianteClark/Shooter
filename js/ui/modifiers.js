@@ -28,7 +28,7 @@ export function toggleMod(mods, id) {
   return mods.includes(id) ? mods.filter(m => m !== id) : cleanMods([...mods, id]);
 }
 
-const ICON = { hardcore: 'skull', snipers: 'aim', melee: 'shiv', nostreaks: 'lock' };
+const ICON = { hardcore: 'skull', snipers: 'aim', melee: 'shiv', nostreaks: 'lock', bats: 'shiv' };
 
 // One row per modifier: name, what it does, and an on/off seg. A modifier the mode ignores is shown disabled with why.
 export function modsRows(mods, mode = null) {

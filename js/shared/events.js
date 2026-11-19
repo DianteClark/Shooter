@@ -117,6 +117,17 @@ export const EVENTS = [
       C('kills', 'kills', 30, 'ui:skull', 'Get 30 kills'),
     ],
   },
+  // Appended after the first rotation, so every week already announced keeps its event.
+  {
+    id: 'derby', name: 'Home Run Derby', tab: 'standard', mode: 'ffa', mods: ['bats'], icon: 'bat',
+    desc: 'Free-for-All where everyone swings the Slugger. No guns, no streaks: knock them out of the park.',
+    reward: { kind: 'card', id: 'ev-derby', name: 'Out of the Park', art: { p: 'rings', c: ['#0c1a10', '#2f6a3a', '#f4ead0', '#ffd23a'], e: 'ui:cup', gold: true } },
+    challenges: [
+      C('play', 'played:ffa', 3, 'mode:ffa', 'Play 3 Home Run Derby matches'),
+      C('bat', 'gun:bat', 15, 'bat', 'Get 15 kills with the Slugger'),
+      C('podium', 'top3:ffa', 2, 'mode:ffa', 'Finish top 3 in Home Run Derby twice'),
+    ],
+  },
 ];
 export const EVENT_IDS = EVENTS.map(e => e.id);
 export const eventById = id => EVENTS.find(e => e.id === id) ?? null;
