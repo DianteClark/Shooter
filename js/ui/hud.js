@@ -620,9 +620,11 @@ export class HUD {
     let feedFloor = H;
     for (const c of circles) if (c.x + c.r > fx0 && c.x - c.r < fx1) feedFloor = Math.min(feedFloor, c.y - c.r);
     for (const r of buttons) if (r.x1 > fx0 && r.x0 < fx1) feedFloor = Math.min(feedFloor, r.y0);
-    this.feedRows = Math.max(2, Math.min(FEED_ROWS, Math.floor((feedFloor - DOCK_GAP - feedTop) / (FEED_ROW_H * k))));
+    // Never more rows than fit above the stick: on a short screen (640x360, a tall top-right stack in the left-handed
+    // layout) that can be a single row, which beats a second row lying on the move stick.
+    this.feedRows = Math.max(1, Math.min(FEED_ROWS, Math.floor((feedFloor - DOCK_GAP - feedTop) / (FEED_ROW_H * k))));
     st.setProperty('--feed-y', px(feedTop));
-    while (this.feed.length > this.feedRows) this.feed.pop().row.remove();
+    this.fitFeed();
 
     // Objective strip rows: centred under the score bar where there is one (else in the free stretch of the top edge),
     // clear of the minimap, the squad panel, the feed, the corner and the weapon panel.
@@ -679,6 +681,17 @@ export class HUD {
     // The death screen's column starts under the strip's state row (and extraction's contract), which stay readable.
     st.setProperty('--death-y', px(this.ex ? tops[2] : tops[1]));
     ctl.remeasure();
+    // The pass above can move the sticks' rests (the dock, a Large HUD): the feed keeps clear of where they are now.
+    const z = ctl.zones;
+    if (z) {
+      let floor2 = H;
+      for (const c of [z.move, z.aim]) if (c.x + c.r > fx0 && c.x - c.r < fx1) floor2 = Math.min(floor2, c.y - c.r);
+      const rows2 = Math.max(1, Math.floor((floor2 - DOCK_GAP - feedTop) / (FEED_ROW_H * k)));
+      if (rows2 < this.feedRows) {
+        this.feedRows = rows2;
+        this.fitFeed();
+      }
+    }
   }
 
   // Streak tiles grow with Large but never shrink below their touch size.
@@ -3024,7 +3037,15 @@ export class HUD {
     ], { duration: 200, easing: 'cubic-bezier(.16,.84,.3,1)' });
     this.feedEl.prepend(row);
     this.feed.unshift({ row, life: FEED_LIFE });
-    while (this.feed.length > (this.feedRows ?? FEED_ROWS)) this.feed.pop().row.remove();
+    this.fitFeed();
+  }
+
+  // The feed holds no more rows than its layout gave it (js/ui/hud.js layout), quick chat lines included
+  // (js/ui/quickchat.js puts those in the feed too): the oldest kill rows go first, then the oldest lines of any kind.
+  fitFeed() {
+    const n = this.feedRows ?? FEED_ROWS;
+    while (this.feedEl.children.length > n && this.feed.length) this.feed.pop().row.remove();
+    while (this.feedEl.children.length > n) this.feedEl.lastElementChild.remove();
   }
 
   // A few seconds on the host's notice line, then the feed keeps a record of it.

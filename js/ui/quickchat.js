@@ -258,6 +258,7 @@ export class QuickChat {
     row.className = `f-row qc-row ${msg.mine ? 'mine' : this.ctx.ffa || msg.team !== myTeam ? 'foe' : 'ally'}${msg.bot ? ' qc-bot' : ''}`;
     row.innerHTML = `<span class="qc-ico">${icon(msg.icon, { size: 12 })}</span><em style="color:${TEAMS[msg.team]?.css ?? '#fff'}">${nameHtml(msg.name)}</em><span class="qc-say">${esc(msg.text)}</span>`;
     feed.prepend(row);
+    this.hud.fitFeed?.();
     this.lines.push(row);
     while (this.lines.length > LINES) this.lines.shift().remove();
     this.#later(() => row.classList.add('out'), LINE_MS);
