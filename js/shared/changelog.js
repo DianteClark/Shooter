@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Replays',
+    build: '1118-7', date: '2026-11-18', title: 'Replays',
     items: [
       'Watch replay: after any match, tap Watch replay on the final kill card to see the last 30 seconds again.',
       'Play, pause and drag the bar to any moment; kills are marked on it. Watch at half speed, normal or double.',
