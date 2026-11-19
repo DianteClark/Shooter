@@ -1250,6 +1250,13 @@ export class BotBrain {
     else if (S.pistolSwap && visible && ps.slot === 0 && WEAPONS[ps.secondary].explosive && ps.ammo[1] > 0 && this.targetDist > 8 && this.targetDist < Math.min(34, WEAPONS[ps.secondary].range - 2) && sim.rng() < 0.12) this.wantSwap = true;
     else if (visible && ps.slot === 1 && ps.ammo[1] === 0 && ps.swapT <= 0 && ps.ammo[0] > 0) this.wantSwap = true;
 
+    // A close gun (an infected's knife) holding an angle on someone out of its reach would wait forever: the hold
+    // runs out while they are in sight too, and the bot goes back to closing in (Pier Infected stood still for 120 s).
+    if (visible && this.mode === 'hold' && this.arrived && bu.rush && this.targetDist > bu.rush) {
+      this.holdT -= this.interval;
+      if (this.holdT <= 0) this._setMode('none');
+    }
+
     if (visible) return;   // drive() fights; the strategic goal stays where it was.
 
     const o = this.objective;

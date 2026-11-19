@@ -23,7 +23,7 @@ function build() {
 
     // Fish market hall around the centre: doors on every side, so the middle lane is a room to clear.
     hall(22, 13, 4, 0.5), hall(29.5, 13, 2.5, 0.5),
-    hall(22, 13.5, 0.5, 2.5),
+    hall(22, 13.5, 0.5, 2),               // Ends on the half metre: bots rounding it into the west door cleared it.
 
     // North boardwalk: the boathouse on the sea wall, fish box stacks that break the long line.
     boathouse(11, 0, 6, 4),
@@ -35,7 +35,7 @@ function build() {
     [7, 25.5, 1, 5, 2.4, 'wall'],
 
     // Middle lane west: the bait shed and loose cover in front of the hall.
-    shed(10, 14.5, 3.4, 3),
+    shed(10, 14.5, 3.5, 3),             // Corners on the half metre (bots caught on them, like Turnstile's stairs).
     pots(15.5, 12.9),
     nets(17.5, 18.4, 0.6, 2.6),
     pots(13.6, 19.6),
@@ -43,7 +43,7 @@ function build() {
     // South lane west: the slipway shed on the sea wall, a dinghy on its trolley, a pot stack.
     shed(12, 30, 6, 4),
     [19.5, 27.6, 3.4, 1.6, 1.1, 'barrier', { dinghy: true }],
-    fishbox(5, 15.6, 2, 2.2),
+    fishbox(5, 15.5, 2, 2),
   ]);
   // The gutting counter in the middle of the hall is its own image.
   walls.push(wall(25.5, 16.6, 3, 0.8, 1.0, 'barrier', { nets: true, counter: true }));
