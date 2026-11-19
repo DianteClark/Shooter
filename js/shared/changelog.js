@@ -4,6 +4,12 @@
 
 export const CHANGELOG = [
   {
+    build: '1119-9', date: '2026-11-19', title: 'Steadier move stick',
+    items: [
+      'A likely fix for the move stick going dead after throwing a grenade or smoke: in matches the buttons no longer let iOS start its own gestures. If it still happens, send another Stick died? report.',
+    ],
+  },
+  {
     build: '1119-8', date: '2026-11-19', title: 'Stronger allies',
     items: [
       'Graveyard Shift ally bots earn 1.75 times the points per kill, so they can reach the upgrade bench before the round-10 boss. Your own points are unchanged.',
