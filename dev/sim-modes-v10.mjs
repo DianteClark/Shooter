@@ -176,7 +176,7 @@ await test('hq: a host migration in the gap and while held still opens the next 
     if (when === 'held') next.rules._destroy(1 - next.rules.zone.owner);
     const w = hqWatch();
     if (when === 'held') w.closes = 1, w.at = next.time;
-    runAsHost(next, 30, w.on);
+    runAsHost(next, 90, w.on);     // Long enough for the new HQ to be taken and destroyed, or to expire.
     assert.ok(w.opens >= 1, `${when}: the next HQ opened after the migration`);
     w.check(next, `migration in ${when}`);
   }
