@@ -293,6 +293,12 @@
 .ul-desc { font: 13px/1.3 var(--f-body); color: #c8ced3; }
 .ul-how { display: flex; flex-direction: column; gap: 3px; font: 15px/1.3 var(--f-body); letter-spacing: 0; color: #e7eae4; }
 .ul-how b { font: 400 10px/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze, #9aa4ad); }
+.ul-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.ul-steps li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 7px; font: 12px/1.25 var(--f-body); color: #d6dbd8; background: rgba(231,234,228,.06); }
+.ul-steps li em { flex: none; font: 400 12px/1.25 var(--f-plate); font-style: normal; letter-spacing: var(--tr-plate); color: var(--c-sodium, #ff9f1c); font-variant-numeric: tabular-nums; }
+.ul-steps li.ok { color: #9aa4ad; }
+.ul-steps li.ok em { color: #3fdc6a; }
+.ul-status { font: 12px/1.3 var(--f-body); color: #c8ced3; }
 .ul-prog { display: flex; align-items: center; gap: 10px; }
 .ul-bar { position: relative; flex: 1; height: 8px; background: rgba(231,234,228,.12); overflow: hidden; }
 .ul-bar i { position: absolute; inset: 0; background: var(--c-sodium, #ff9f1c); transform-origin: left; }

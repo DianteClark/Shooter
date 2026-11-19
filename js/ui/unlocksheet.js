@@ -6,7 +6,11 @@
 //             tactical | lethal | streak. `play` is { tab, playlist?, modes? } (js/ui/matchmaking.js) or null.
 //   unlockSheet(menu, kind, id, opts)   the sheet, layered over whatever is open (a picker overlay or a screen).
 //   setPlayNow(fn)                      main.js: fn({tab, playlist, modes}) opens Multiplayer on that pick.
-import { getCard, itemUnlockLevel, MAX_WEAPON_LEVEL } from '../shared/progression.js';
+import { getCard, itemUnlockLevel, MAX_WEAPON_LEVEL, MAX_LEVEL, MAX_PRESTIGE, VETERAN, MASTERY_TRACKS, CARDS } from '../shared/progression.js';
+import { PERKS as PERK_DEFS } from '../shared/catalog.js';
+import { SEASON_DEFS, TRACK_TIERS } from '../shared/season-items.js';
+import { PLACES } from '../shared/tourney-items.js';
+import { division } from '../shared/ranked.js';
 import { getCamo, TRACERS, KILL_EFFECTS } from '../shared/camos.js';
 import { FINISHERS, EMOTES } from '../shared/finishers.js';
 import { PERKS, TACTICALS, LETHALS, STREAKS } from '../shared/catalog.js';
@@ -70,9 +74,10 @@ function unlockInfo0(kind, id, { weapon = null, operator = null } = {}) {
   try {
     if (kind === 'card') {
       const c = getCard(id), x = Progress.cards().find(e => e.card.id === id);
-      const p = x?.progress ?? (x?.unlocked ? { value: 1, goal: 1 } : null);
-      return { ...base, name: c.name, how: c.req, unlocked: !!x?.unlocked, ...(p ?? { value: x?.unlocked ? 1 : 0, goal: 1 }), play: 'play' in c ? c.play : (c.group === 'Season' || c.group === 'Ranked' || c.group === 'Tournament' ? null : QUICK),
-        art: cardHtml(id, { size: 300, sub: c.group }), noBar: !p };
+      const r = cardRequirement(c, x);
+      return { ...base, name: c.name, how: r.how, steps: r.steps, status: r.status, unlocked: !!x?.unlocked, ...r.bar, noBar: r.noBar,
+        play: 'play' in c ? c.play : (c.group === 'Season' || c.group === 'Ranked' || c.group === 'Tournament' ? null : QUICK),
+        art: cardHtml(id, { size: 300, sub: c.group }) };
     }
     if (kind === 'emblem') {
       const e = getEmblem(id), c = careerNow(), st = emblemUnlocked(e, c), [v, g] = emblemProgress(e, c);
@@ -131,6 +136,107 @@ function unlockInfo0(kind, id, { weapon = null, operator = null } = {}) {
   return { ...base, name: id, how: '', unlocked: false, value: 0, goal: 1, noBar: true, play: null };
 }
 
+/* ---------- Calling cards: what each one really asks, and how far along you are ---------- */
+const plural = (n, one, many = `${one}s`) => `${fmt(n)} ${n === 1 ? one : many}`;
+const TRACK_OF_CARD = new Map();
+for (const t of MASTERY_TRACKS) for (const tier of t.tiers) for (const r of tier.rewards) if (r.kind === 'card') TRACK_OF_CARD.set(r.id.slice(5), { track: t, tier: tier.tier });
+const KIND_USE = { tactical: 'Equip it and use it in matches', lethal: 'Equip it and use it in matches',
+  streak: 'Equip it and call it in during matches', operator: 'Play matches as this operator' };
+const dayText = ms => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const MASTER_HOW = 'A gun is mastered once every camo challenge on it is done (the Gunsmith\'s camo list shows each one).';
+
+// cardRequirement(card, row) -> { how, steps?: [{label, value, goal, done}], status?, bar: {value, goal}, noBar }
+// `row` is Progress.cards()'s entry ({unlocked, progress}); every card id gives a specific, non-empty `how`.
+export function cardRequirement(c, row = null) {
+  const unlocked = !!row?.unlocked;
+  const prog = row?.progress ?? null;
+  let how = c.req ?? '', steps = null, status = '', bar = prog ? { value: prog.value, goal: prog.goal } : null;
+  const id = c.id, art = c.art ?? {};
+  const tierWord = t => (t ? ` This is tier ${t} of 3.` : '');
+  try {
+    if (id === 'yard') how = 'Every player starts with it: equip it any time from Calling cards.';
+    else if (c.group === 'Pro' && PERK_DEFS[id.slice(4)]) {
+      const perk = id.slice(4), st = Progress.proStatus(perk), name = PERK_DEFS[perk].name;
+      how = `Earn ${name} Pro: with the ${name} perk in your loadout, finish ${st.steps.length === 2 ? 'both' : `all ${st.steps.length}`} of its Pro challenges (they count in any mode).`;
+      steps = st.steps.map(x => ({ label: x.label, value: x.value, goal: x.goal, done: x.done }));
+      bar = { value: st.steps.filter(x => x.done).length, goal: st.steps.length };
+    } else if (/^prestige-\d+$/.test(id)) {
+      const n = Number(id.slice(9)), now = Progress.prestige ?? 0;
+      how = `Reach Prestige ${n}: get to level ${MAX_LEVEL}, then Prestige on the Prestige screen${n > 1 ? `, ${n} times in all` : ''}.`;
+      status = `You are ${now ? `Prestige ${now}` : 'not prestiged yet'}, level ${Progress.level ?? 1}.`;
+      bar = { value: Math.min(now, n), goal: n };
+    } else if (c.group === 'Prestige') {
+      const lv = Number(/Master level (\d+)/.exec(c.req)?.[1] ?? 0), now = Progress.master ?? 0;
+      how = `Reach Master level ${fmt(lv)}: after Prestige ${MAX_PRESTIGE} every level you gain past ${MAX_LEVEL} counts as a Master level.`;
+      status = `Master level now: ${fmt(now)}${(Progress.prestige ?? 0) < MAX_PRESTIGE ? ` (Prestige ${MAX_PRESTIGE} first; you are Prestige ${Progress.prestige ?? 0})` : ''}.`;
+      bar = { value: Math.min(now, lv), goal: lv };
+    } else if (/^camo-(gold|molten|prism)$/.test(id)) {
+      const cm = getCamo(id.slice(5));
+      how = `Unlock the ${cm.name} camo on any one gun: it is a mastery camo, so master the gun (every camo challenge and its mastery ladder after weapon level ${MAX_WEAPON_LEVEL})${cm.masteryKills ? ` and get ${fmt(cm.masteryKills)} kills with it` : ''}.`;
+      bar = { value: 0, goal: 1 };
+    } else if (/^(gilt-10|prism-5|molten-5)$/.test(id)) {
+      const n = Number(id.split('-')[1]);
+      how = `${c.req}: unlock that mastery camo on ${n} different guns (master each gun${id === 'gilt-10' ? '' : ` and reach its kill count`}). ${MASTER_HOW}`;
+    } else if (id === 'mastery-5') how = `Master 5 different guns. ${MASTER_HOW}`;
+    else if (/^master-/.test(id)) how = `${c.req} in the category: master each one. ${MASTER_HOW}`;
+    else if (/^gun-/.test(id)) {
+      const w = id.slice(4), list = Progress.challenges(w) ?? [];
+      how = `Master the ${WEAPONS[w]?.name ?? w}: finish every camo challenge on it, or its mastery ladder after weapon level ${MAX_WEAPON_LEVEL}.`;
+      if (list.length) { steps = list.slice(0, 8).map(x => ({ label: x.label, value: x.value, goal: x.goal, done: x.done })); bar = { value: list.filter(x => x.done).length, goal: list.length }; }
+    } else if (TRACK_OF_CARD.has(id)) {
+      const { track, tier } = TRACK_OF_CARD.get(id), st = Progress.mastery(track.id);
+      how = `Reach tier ${tier} of the ${track.name} mastery track (Mastery screen). ${KIND_USE[track.kind] ?? 'Use it in matches'}: each tier has its own goal.`;
+      steps = (st?.tiers ?? track.tiers).slice(0, tier).map(x => ({ label: `Tier ${x.tier}: ${x.label}`, value: x.value ?? 0, goal: x.goal, done: !!x.done }));
+      bar = { value: Math.min(tier, st?.tier ?? 0), goal: tier };
+    } else if (id === 'veteran') {
+      how = `Become a Veteran: reach Prestige ${VETERAN.prestige}, or reach level ${VETERAN.level} and earn ${VETERAN.pro} Pro perks.`;
+    } else if (id === 'pro-5' || id === 'pro-all') how = `${c.req}: each perk turns Pro once you finish its Pro challenges with it equipped (see each perk in the loadout).`;
+    else if (c.group === 'Career') how = `${c.req}, added up over all your matches in any mode.`;
+    else if (c.group === 'Arms') how = `${c.req}, added up over all your matches: every gun of that class counts.`;
+    else if (c.group === 'Maps') how = `${c.req}, in any mode played there.${tierWord(art.tier)}`;
+    else if (id === 'zm-warden') {
+      how = 'In Graveyard Shift, finish the hidden quest on a map and put down the Gravewarden it raises (any map but Polestar Relay).';
+      status = 'Not done yet.';
+    } else if (id === 'zm-listener') {
+      how = 'In Graveyard Shift on Polestar Relay, wake the radios and put down the Listener they raise.';
+      status = 'Not done yet.';
+    } else if (id === 'zm-escape' || id === 'zm-escape25') {
+      const best = Math.max(0, ...Object.values(Progress.zmFeatsAll?.() ?? {}).map(v => (Array.isArray(v) ? v[0] ?? 0 : 0)));
+      how = `${c.req}: call the helicopter once the round allows it and get aboard alive.`;
+      status = best ? `Your latest escape: round ${best}.` : 'No escape yet.';
+    } else if (c.group === 'Zombies') {
+      const best = Math.max(0, ...Object.values(Progress.zmBestAll?.() ?? {}));
+      how = `${c.req}.${tierWord(art.tier)}`;
+      status = `Your best round in Graveyard Shift: ${best || 'none yet'}.`;
+    } else if (c.group === 'Modes') how = `${c.req}, added up over all your matches of that mode.${tierWord(art.tier)}`;
+    else if (c.group === 'Season') {
+      const def = SEASON_DEFS.find(d => d.id === c.season), tier = Number(/tier (\d+)/.exec(c.req)?.[1] ?? 0), s = Progress.season?.();
+      how = `Reach tier ${tier} of ${TRACK_TIERS} on the Season ${def?.n ?? ''} (${def?.name ?? ''}) reward track: every match you finish earns season XP, then claim the tier on the Season screen.`;
+      if (s?.info?.def?.id === c.season) { status = `You are on tier ${s.tier}. ${plural(s.info.daysLeft ?? 0, 'day')} left in the season.`; bar = { value: Math.min(tier, s.tier), goal: tier }; }
+      else status = s?.info?.def && (s.info.def.n ?? 0) > (def?.n ?? 0) ? `Season ${def?.n} is over: its track comes back only if the season is replayed.` : `Season ${def?.n} has not started yet.`;
+    } else if (c.group === 'Ranked') {
+      const def = SEASON_DEFS.find(d => d.id === c.season), div = /Reach (.+?) in Season/.exec(c.req)?.[1] ?? '', rk = Progress.ranked?.();
+      how = `Reach ${div} in Season ${def?.n ?? ''} Ranked (the Ranked playlist in Multiplayer): play your ${rk?.placements ?? 5} placement matches, then win to climb. It is awarded when the season ends, for the best rank you reached in it (a later drop does not take it away).`;
+      status = rk && Progress.season?.()?.info?.def?.id === c.season ? (rk.placed ? `Your rank now: ${rk.division?.name ?? 'unranked'}; best this season: ${division(rk.peak ?? 0)?.name ?? 'none'}.` : `Placement matches played: ${rk.pm ?? 0} of ${rk.placements}.`) : `Only in Season ${def?.n ?? ''}.`;
+    } else if (c.group === 'Tournament') {
+      const place = PLACES.findIndex(x => x?.card === c.name), t = Progress.tourney?.();
+      how = `${c.req}. Weekend tournaments open on Friday evening and close at the end of Sunday (from Multiplayer): win rounds in your bracket to go further.`;
+      status = t ? `${t.info.live ? 'A tournament is open now.' : t.info.opensAt ? `Next one opens ${dayText(t.info.opensAt)}.` : ''} Your best: ${PLACES[t.best]?.name ?? 'not entered yet'}.`.trim() : '';
+      if (place > 0 && t) bar = { value: Math.min(place, t.best ?? 0), goal: place };
+    } else if (c.group === 'Events') {
+      how = `${c.req}. The challenges only count while the event is on (Play now opens it).`;
+      status = /\(on now\)/.test(c.req) ? 'On this week: your progress is the bar below.' : 'Not on this week: the date it comes back is above.';
+    }
+    else if (!how || how === c.name) how = `${c.group} card: ${c.req || c.name}`;
+  } catch (err) { console.error('card requirement', id, err); }
+  if (unlocked) status = 'Unlocked: equip it from Calling cards.';
+  const noBar = !bar;
+  if (!bar) bar = { value: unlocked ? 1 : 0, goal: 1 };
+  if (unlocked) bar = { value: bar.goal, goal: bar.goal };
+  return { how, steps, status, bar, noBar };
+}
+export const CARD_REQ_IDS = () => CARDS.map(c => c.id);
+
 const hex = v => (typeof v === 'number' ? `#${(v >>> 0).toString(16).padStart(6, '0').slice(-6)}` : typeof v === 'string' ? v : '#5a6470');
 const fmt = n => Number(n).toLocaleString('en-US');
 
@@ -145,6 +251,8 @@ export function unlockSheetHtml(info) {
         <h2>${esc(info.name)}</h2>
         ${info.desc ? `<p class="ul-desc">${esc(info.desc)}</p>` : ''}
         <p class="ul-how"><b>How to get it</b>${esc(info.how || 'Keep playing')}</p>
+        ${info.steps?.length ? `<ul class="ul-steps">${info.steps.map(x => (typeof x === 'string' ? `<li><span>${esc(x)}</span></li>` : `<li class="${x.done ? 'ok' : ''}"><span>${esc(x.label)}</span><em>${x.done ? 'Done' : `${fmt(Math.min(x.value ?? 0, x.goal))} / ${fmt(x.goal)}`}</em></li>`)).join('')}</ul>` : ''}
+        ${info.status ? `<p class="ul-status">${esc(info.status)}</p>` : ''}
         ${info.noBar ? '' : `<div class="ul-prog"><i class="ul-bar"><i style="transform:scaleX(${f.toFixed(3)})"></i></i><small><b>${fmt(info.value)}</b> / ${fmt(info.goal)}</small></div>`}
         <div class="ul-btns">
           <button class="btn" data-act="ulClose" data-sound="back">${icon('ui:close', { size: 16 })}<b>Close</b></button>
