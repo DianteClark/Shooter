@@ -11,6 +11,7 @@ Run from anywhere: python3 dev/ui-reset-test.py [port]. It serves the repo itsel
   The notice shows once on the title, with the exact words; Got it goes on to the training offer.
   The save screen refuses a code from before the reset with "This code is from before the reset"; a code made now
   imports and round-trips byte for byte.
+  Saved replay clips (IndexedDB, switchyard-clips) are wiped with the progress; one saved after the reset stays.
   Reload: no second wipe, no second notice, the new progress stays.
 """
 import asyncio, subprocess, sys, time, os, json
@@ -69,6 +70,19 @@ SEED = """(async () => {
   put('switchyard.tuning.v1', { camZoom: 1.1 });
   put('switchyard.tuner.ui.v1', { dock: 'left' });
   put('other-app', 'keep me');
+  // A saved replay clip in IndexedDB (js/ui/clips.js): progress, so the wipe deletes its database too.
+  await new Promise((res, rej) => {
+    const r = indexedDB.open('switchyard-clips', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('meta', { keyPath: 'id' }); r.result.createObjectStore('data', { keyPath: 'id' }); };
+    r.onsuccess = () => {
+      const d = r.result, tx = d.transaction(['meta', 'data'], 'readwrite');
+      tx.objectStore('meta').put({ id: 'old', at: 1, mapId: 'pier', mode: 'tdm', dur: 30 });
+      tx.objectStore('data').put({ id: 'old', rec: {} });
+      tx.oncomplete = () => { d.close(); res(); };
+      tx.onerror = () => rej(tx.error);
+    };
+    r.onerror = () => rej(r.error);
+  });
   return oldCode;
 })()"""
 
@@ -130,6 +144,11 @@ async def main():
             history = await pg.evaluate("(async () => (await import('./js/ui/progress.js')).MatchHistory.list().length)()")
             stats = await pg.evaluate("(async () => (await import('./js/game/telemetry.js')).GunStats.totals().matches)()")
             check('friends, match history and gun stats are empty', friends == 0 and history == 0 and stats == 0, (friends, history, stats))
+            clips = await pg.evaluate("window.__game.clips.listClips().then(l => l.length)")
+            check('saved replay clips (IndexedDB) are gone', clips == 0, clips)
+            # A clip saved after the reset, for the reload below.
+            await pg.evaluate("""new Promise(res => { const r = indexedDB.open('switchyard-clips', 1); r.onsuccess = () => { const d = r.result, tx = d.transaction(['meta'], 'readwrite');
+              tx.objectStore('meta').put({ id: 'new', at: Date.now(), mapId: 'pier', mode: 'tdm', dur: 30 }); tx.oncomplete = () => { d.close(); res(); }; }; })""")
 
             print('The notice')
             text = await pg.evaluate("document.querySelector('.reset-notice')?.textContent ?? ''")
@@ -178,6 +197,7 @@ async def main():
             kept = await pg.evaluate("(() => { const P = window.__game.Progress; return [P.name, P.totalXp]; })()")
             check('the new progress stays', kept == ['Fresh', 9000], kept)
             check('options still kept', await pg.evaluate("window.__game.Options.get('sound') === 0.3 && window.__game.Options.get('quality') === 'low'"))
+            check('a clip saved after the reset stays', await pg.evaluate("window.__game.clips.listClips().then(l => l.length)") == 1)
 
             print('A brand-new phone')
             ctx2 = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True)

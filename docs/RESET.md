@@ -22,6 +22,9 @@ the save, the stats tracker, friends or options at load. `wipeProgress(localStor
 5. `switchyard.seenBuild` is set to the running build, so "What's new" stays quiet: the notice speaks instead.
 6. `switchyard.resetGen` is set to `RESET_GEN`. A store that throws (private mode, full) leaves the generation unset,
    so the next start tries again.
+7. Whenever the wipe ran (`ran` in its result), js/ui/wipe.js also deletes the IndexedDB databases in `WIPE_DBS`:
+   `switchyard-clips`, the saved replay clips (docs/REPLAYS.md). The delete is queued ahead of any later open, so no
+   old clip is ever read. Add any future IndexedDB database that holds progress to `WIPE_DBS`.
 
 `window.__game.wipe` (with `?debug=1`) is `{ wiped: [keys], notice }` for this start.
 
