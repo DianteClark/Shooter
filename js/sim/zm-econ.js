@@ -80,8 +80,12 @@ export class ZmEcon {
         const tier = (z.tiers[gun] ?? 0) + 1;
         if (tier > 3) return null;
         Object.assign(b, { state: 1, owner: p.index, slot: ps.slot, gun, tier, timer: ZE.bench.time });
-        // The gun goes in: out of the hands (the blade in its place) until it is taken back.
-        this._arm(p, ps.slot, NO_GUN, 0);
+        // The gun goes in: out of the hands (the blade in its place) until it is taken back. The other gun, if there
+        // is one, comes up at once, so the hand-in does not leave its owner holding a knife.
+        const other = 1 - ps.slot, otherGun = other === 0 ? ps.primary : ps.secondary;
+        const to = otherGun && otherGun !== NO_GUN ? other : undefined;
+        this._arm(p, ps.slot, NO_GUN, 0, to);
+        if (to !== undefined) { ps.slot = to; ps.weapon = otherGun; }
         sim._emit({ t: 'zbench', state: 1, by: p.id, gun, tier });
         return ZE.bench.cost[tier - 1];
       }
@@ -169,7 +173,7 @@ export class ZmEcon {
   }
 
   // A gun into a hand at a tier: the host's copy of the hands, and (for a human) the phone's through zarm.
-  _arm(p, slot, gun, tier) {
+  _arm(p, slot, gun, tier, to) {
     const ps = p.ps, w = WEAPONS[gun];
     brArm(ps, slot, gun);
     if (tier > 0) {
@@ -179,7 +183,7 @@ export class ZmEcon {
       ps.reserve[slot] = def.unlimitedReserve ? 999 : def.reserve;
     } else if (w && !w.melee) ps.reserve[slot] = w.unlimitedReserve ? 999 : (w.reserve ?? w.magazine * 3);
     if (p.isBot) p.primary = ps.primary;
-    else this.sim._emit({ t: 'zarm', id: p.id, slot, w: WEAPON_IDS.indexOf(gun), tier: tier || undefined });
+    else this.sim._emit({ t: 'zarm', id: p.id, slot, w: WEAPON_IDS.indexOf(gun), tier: tier || undefined, to });
   }
 
   _stepBench(dt) {

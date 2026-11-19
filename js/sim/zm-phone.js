@@ -1,7 +1,8 @@
 // Graveyard Shift on the phone that owns a gun (docs/ZOMBIES.md): what the host's events hand the local player. The
 // host does the same to bots directly (js/sim/zombies.js); a human's guns, ammo and reload live on their phone.
 //   {t:'zarm', id, slot, w, tier?}  a wall-buy, the crate or the upgrade bench: gun w (a WEAPON_IDS index) into that
-//                              slot, full; `tier` (1..3) gives it the bench's bigger magazine and reserve (zmTierDef)
+//                              slot, full; `tier` (1..3) gives it the bench's bigger magazine and reserve (zmTierDef);
+//                              `to` (0/1) the slot in hand afterwards when not that one (a gun handed in at the bench)
 //   {t:'zammo', id, slot?}     a refill of that slot (both when omitted)
 //   {t:'zperk', id, perk|lost} Quickdraw adds Fast Hands' reload, Fleetfoot Marathon's sprint; going down loses them
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -45,7 +46,8 @@ export function zmEvent(ps, e) {
         const d = zmTierDef(id, e.tier);
         ps.defs[slot] = d; ps.ammo[slot] = d.magazine; ps.reserve[slot] = d.unlimitedReserve ? 999 : d.reserve;
       }
-      ps.slot = slot; ps.weapon = id;
+      const to = e.to === 0 || e.to === 1 ? e.to : slot;
+      ps.slot = to; ps.weapon = to === slot ? id : to === 0 ? ps.primary : ps.secondary;
       return;
     }
     case 'zammo':
