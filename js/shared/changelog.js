@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'Fixes',
+    build: '1119-2', date: '2026-11-19', title: 'Fixes',
     items: [
       'Left-handed or not, the kill feed no longer reaches down onto the move stick on small screens: quick chat lines count toward its rows too.',
       'What\'s new now lists every update since you last played (up to ten; the rest are in How to play > Updates), not just the newest three.',
