@@ -124,6 +124,10 @@ export function optionsScreen(menu, opts) {
           ${toggle('optDmgNumbers', 'opt-dmgnumbers')}
         </div>
         <div class="opt-row">
+          <div class="opt-name"><b>Battery saver: 30 fps</b><small>Graveyard Shift at 30 frames a second: cooler and longer on battery</small></div>
+          ${toggle('optBatterySaver', 'opt-batterysaver')}
+        </div>
+        <div class="opt-row">
           <div class="opt-name"><b>Bot chatter</b><small>Bots' short lines in the kill feed</small></div>
           ${toggle('optBotChatter', 'opt-botchatter')}
         </div>
@@ -169,7 +173,7 @@ export function optionsScreen(menu, opts) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
-    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter']]) {
+    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter'], ['.opt-batterysaver', 'batterySaver']]) {
       const t = q(cls);
       if (!t) continue;
       t.classList.toggle('on', v[key] === true);
@@ -241,6 +245,7 @@ export function optionsScreen(menu, opts) {
     optHudSize: ({ id }) => { Options.set('hudSize', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
+    optBatterySaver: () => { Options.set('batterySaver', !Options.get('batterySaver')); paint(); },
     optDmgNumbers: () => { Options.set('dmgNumbers', !Options.get('dmgNumbers')); paint(); },
     optBotChatter: () => { Options.set('botChatter', !Options.get('botChatter')); paint(); },
     optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },

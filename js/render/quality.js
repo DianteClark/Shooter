@@ -220,7 +220,23 @@ export class Governor {
     this.thermalUntil = 0;
     this.lastRatio = 0;
     this.reason = '';
+    this.heavy = false;        // Graveyard Shift's big hordes: step down sooner (see setHeavy).
+    this.forced30 = false;     // The Battery saver option holds this mode at 30 fps: that is the target, not a slow phone.
     host.setStep(startStep);
+  }
+
+  // Graveyard Shift (phone heat): never climb past Medium, and step down on half the evidence. forced30: the match
+  // draws at most 30 frames a second (Options, Battery saver), so 33 ms is on time.
+  setHeavy(on, forced30 = false) {
+    this.heavy = on;
+    if (on) this.ceiling = Math.max(this.ceiling, stepIndex('medium'));
+    if (forced30 !== this.forced30) {
+      this.forced30 = forced30;
+      this.cap30 = forced30;
+      this.target = forced30 ? 1000 / 30 : 1000 / 60;
+      this.slowStreak = 0; this.goodStreak = 0;
+    }
+    if (on && this.host.step < this.ceiling) this._setStep(this.ceiling, 'heavy mode');
   }
 
   // intervalMs: time since the previous frame. workMs: script time of the last whole frame (0 if unknown).
@@ -258,8 +274,9 @@ export class Governor {
       this.slowStreak = 0; this.goodStreak = 0;
       return;
     }
-    if (this.cap30 && avg < 24) { this.cap30 = false; this.target = 1000 / 60; }
-    if (!this.cap30 && capped > 0.85 && work < 12 && this.clock >= this.probeAfter) {
+    if (this.forced30) this.probe = null;
+    else if (this.cap30 && avg < 24) { this.cap30 = false; this.target = 1000 / 60; }
+    if (!this.forced30 && !this.cap30 && capped > 0.85 && work < 12 && this.clock >= this.probeAfter) {
       this.probe = { res: host.resScale, until: this.clock + 2 };
       host.setResScale(Math.min(host.resScale, 1 / host.maxDpr));
       return;
@@ -285,7 +302,7 @@ export class Governor {
     if (slow) {
       this.goodStreak = 0;
       this.verySlow = avg > this.target * VERY_SLOW ? this.verySlow + 1 : 0;
-      if (this.verySlow >= VERY_SLOW_WINDOWS && host.step < QUALITY_STEPS.length - 1 && this.clock - this.lastStepAt > 2.5) {
+      if (this.verySlow >= (this.heavy ? 2 : VERY_SLOW_WINDOWS) && host.step < QUALITY_STEPS.length - 1 && this.clock - this.lastStepAt > 2.5) {
         this.verySlow = 0;
         this._setStep(host.step + 1, 'low frame rate');
         return;
@@ -296,7 +313,7 @@ export class Governor {
         if (this.clock - this.raisedAt < 6) this.raiseWait = Math.min(40, this.raiseWait * 2);
         host.setResScale(Math.max(RES_FLOOR, host.resScale * 0.9));
         this.slowStreak = 0;
-      } else if (++this.slowStreak >= 3 && host.step < QUALITY_STEPS.length - 1 && this.clock - this.lastStepAt > 2.5) {
+      } else if (++this.slowStreak >= (this.heavy ? 2 : 3) && host.step < QUALITY_STEPS.length - 1 && this.clock - this.lastStepAt > 2.5) {
         this._setStep(host.step + 1, 'slow frames');
       }
       return;
@@ -354,7 +371,7 @@ export class Governor {
     if (ratio > THERMAL_RATIO) { this.hotPeriods++; this.coolPeriods = 0; }
     else if (ratio < 1.12) { this.coolPeriods++; this.hotPeriods = 0; }
     else { this.hotPeriods = 0; this.coolPeriods = 0; }
-    if (this.hotPeriods >= THERMAL_PERIODS) {
+    if (this.hotPeriods >= (this.heavy ? 2 : THERMAL_PERIODS)) {
       if (!this.thermal) this.stepUpWait = Math.max(this.stepUpWait, 120);
       this.thermal = true;
       this.thermalUntil = this.clock + THERMAL_HOLD;

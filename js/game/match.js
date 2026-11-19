@@ -24,6 +24,7 @@ import { WEAPON_IDS } from '../shared/constants.js';
 import { unpackKit } from '../shared/attachments.js';
 import { brAmmo, brArm, brHandWant, downedInput, glideStep, HANDS, land } from '../sim/br.js';
 import { hapticEvents } from '../ui/haptics.js';
+import { Options } from '../ui/options.js';
 import { finishable, FIN } from '../shared/finishers.js';       // Finishing moves (docs/FINISHERS.md).
 import { hasLineOfSight } from '../shared/geometry.js';
 import { PILOTED } from '../sim/streaks-v9.js';
@@ -701,6 +702,13 @@ export class Match {
     requestAnimationFrame(this.frame);
 
     const nowMs = performance.now();
+    if (this.zm && !this.headless) {
+      // Graveyard Shift is the heaviest mode to draw (phone heat): Auto steps down sooner, and the Battery saver option
+      // holds it at 30 fps (a skipped frame steps and draws nothing; the next one's dt covers both).
+      const save = Options.get('batterySaver') === true, g = this.renderer?.governor;
+      if (g && (!g.heavy || g.forced30 !== save)) g.setHeavy(true, save);
+      if (save && nowMs - this.lastTime < 1000 / 30 - 4) return;
+    }
     const dt = this.dt = Math.min(MAX_FRAME, (nowMs - this.lastTime) / 1000);
     this.lastTime = nowMs;
 

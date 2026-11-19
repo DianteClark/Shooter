@@ -33,6 +33,10 @@ const CULL_MARGIN = 3;       // Metres outside the camera's ground footprint a s
 // single-variant mesh: the operator-merged ones carry nine variants' triangles per instance. Hysteresis stops flicker.
 const LOD_FAR = 13, LOD_BACK = 11.5;
 const FULL_MAX = 10;         // And only the ten nearest the focus get the full meshes, however many crowd the screen.
+// Graveyard Shift (phone heat): an undead in full is the kit bank's merged variants (about 7.8k triangles), and a round-20
+// horde put nine of them on screen. There only the few nearest get it, closer in, and fewer still in a big horde; the
+// rest wear the one-variant distance meshes and cast no contact shadow.
+const ZM_FULL_MAX = 4, ZM_FULL_CROWD = 2, ZM_CROWD = 12, ZM_LOD_FAR = 7.5, ZM_LOD_BACK = 6.5;
 const TAU = Math.PI * 2;
 const NO_GEAR = [0, 0, 0, 0];
 
@@ -921,9 +925,14 @@ export class Characters {
   }
 
   // Squared focus distance inside which a soldier may be drawn in full this frame: the FULL_MAX-th nearest on screen.
-  _fullReach(view, localId) {
+  _fullReach(view, localId, zm = false) {
     const d = this._lodD, c = this.cull;
-    let n = 0;
+    let n = 0, max = FULL_MAX;
+    if (zm) {
+      let alive = 0;
+      for (let i = 0; i < view.players.length; i++) if (view.players[i].alive && view.players[i].zk) alive++;
+      max = alive > ZM_CROWD ? ZM_FULL_CROWD : ZM_FULL_MAX;
+    }
     for (let i = 0; i < view.players.length && n < d.length; i++) {
       const p = view.players[i];
       if (!p.alive || p.id === localId) continue;
@@ -933,7 +942,7 @@ export class Characters {
       while (j > 0 && d[j - 1] > v) { d[j] = d[j - 1]; j--; }
       d[j] = v;
     }
-    return n > FULL_MAX ? d[FULL_MAX - 1] : Infinity;
+    return n > max ? d[max - 1] : Infinity;
   }
 
   // One instanced mesh per distinct gun model (weapon plus visible attachments), built the first time it is held.
@@ -1107,8 +1116,8 @@ export class Characters {
     const vfx = this.vfx, clock = this.time.value;
     let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
     const glove = this.glove;
-    const fullReach = this._fullReach(view, localId);
     const zmOn = !!(view.obj ?? view.points?.obj)?.zm;     // Graveyard Shift: wonder weapons wear their own models.
+    const fullReach = this._fullReach(view, localId, zmOn);
     let nRing = 0;
     for (let i = 0; i < this.gunList.length; i++) this.gunList[i].count = 0;
     let localPlayer = null;
@@ -1341,7 +1350,8 @@ export class Characters {
       const flash = r.flash;
 
       const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz;
-      r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > (r.lite ? LOD_BACK * LOD_BACK : LOD_FAR * LOD_FAR));
+      const lodR = zk ? (r.lite ? ZM_LOD_BACK : ZM_LOD_FAR) : r.lite ? LOD_BACK : LOD_FAR;
+      r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > lodR * lodR);
       const kit = !r.lite && this.isKit[r.op];
       const tMesh = r.lite ? this.torsoLite : kit ? this.torsoKit : torso, hMesh = r.lite ? this.headLite : kit ? this.headKit : head;
       // The distance meshes show their one variant whoever wears them; the operator still sets the build and colours.
@@ -1576,7 +1586,8 @@ export class Characters {
       // y: 1 the local player (brighter), -1 an enemy (dashed rim in a colour mode), 0 a teammate.
       this.ring.geometry.attributes.aFx.setXY(nRing, r.reveal, local ? 1 : p.team === localTeam ? 0 : -1);
       this.ring.geometry.attributes.aTeam.setXYZ(nRing, team[0], team[1], team[2]);
-      const shade = 0.9 / (1 + r.alt * 0.06);       // The shadow shrinks the higher a glider is.
+      // The shadow shrinks the higher a glider is; a distance-LOD undead casts none (Graveyard Shift's horde, phone heat).
+      const shade = zk && r.lite ? 0 : 0.9 / (1 + r.alt * 0.06);
       _s.set(shade, 1, shade);
       _m.compose(_p, _q, _s);
       _m.toArray(this.blob.instanceMatrix.array, nRing * 16);
