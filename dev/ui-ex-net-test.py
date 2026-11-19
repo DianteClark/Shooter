@@ -3,7 +3,7 @@
 python3 dev/ui-ex-net-test.py [port] [outdir]
 
 The host opens a room, a second tab joins, the room's vote card is set to Extraction Quads, and both land in one squad.
-Checks: same squad, both phones show the squad's contract; primary ammo the host hands the guest reaches the guest's own
+Checks: same squad, the host takes a contract at a phone and both phones show it; primary ammo the host hands the guest reaches the guest's own
 gun (exammo); the guest goes down and the host revives it; the guest calls the helicopter from its own phone; both hold
 the zone and are lifted out; both see the extraction results. The small BR test map keeps two software-rendered tabs
 near real time.
@@ -87,7 +87,18 @@ async def main():
             gid = await guest.evaluate(f'{G}.match.localId')
             info = await host.evaluate(f"[{G}.match.sim.byId.get('{hid}').team, {G}.match.sim.byId.get('{gid}').team, {G}.match.mode]")
             check(info[0] == info[1] and info[2] == 'exq', f'both humans in one squad of an Extraction match ({info})')
-            await host.wait_for_function(f'{G}.match.sim.phase === "live" && {G}.match.sim.rules.squads.get({info[0]}).contract', timeout=90000)
+            await host.wait_for_function(f'{G}.match.sim.phase === "live"', timeout=90000)
+            # Contracts are taken at phones (nothing is dealt): the host walks (teleports) to the nearest phone and takes
+            # the first offer for the squad.
+            await host.evaluate(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId);
+              const ph = R.phones.slice().sort((a, b) => Math.hypot(a.x - me.ps.x, a.z - me.ps.z) - Math.hypot(b.x - me.ps.x, b.z - me.ps.z))[0];
+              m.ps.x = ph.x; m.ps.z = ph.z + 1; }})()""")
+            await host.wait_for_selector('.ex-phone:not([hidden]):not(.off)', timeout=15000)
+            await host.wait_for_timeout(300)
+            await host.locator('.ex-phone').first.click()
+            await host.wait_for_timeout(400)
+            await host.locator('.ex-offer[data-k="0"]').first.click()
+            await host.wait_for_function(f'{G}.match.sim.rules.squads.get({info[0]}).contract', timeout=15000)
             # Shield the squad and keep the AI off it; the guest reads its contract from the wire.
             await host.evaluate(f"""(() => {{ const sim = {G}.match.sim;
               window.__keep = setInterval(() => {{ for (const p of sim.players) {{ if (p.team === {info[0]}) p.spawnProtect = window.__noShield ? 0 : 99; if (p.ai && p.alive) {{ p.alive = false; p.hp = 0; p.exGroup = null; }} }} }}, 150); }})()""")
