@@ -87,12 +87,14 @@ const CSS = `
 .zm-xbig span b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff; }
 .zm-xbig span small { font: 11px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: #c8f0cc; white-space: nowrap; }
 .zm-xbig.on b:first-child { color: #fff; }
-.zm-stk { position: absolute; left: calc(50% + 70px); bottom: calc(var(--sb) + 8px); height: 44px; min-width: 104px; padding: 0 12px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+/* The held supply streak: over the move stick (the other thumb's side from Finish and the use button's lane). */
+.zm-stk { position: absolute; left: calc(var(--sl) + 66px); bottom: calc(var(--sb) + 178px); height: 44px; min-width: 104px; padding: 0 12px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: #fff; background: linear-gradient(180deg, rgba(255,194,61,.95), rgba(176,112,10,.92)); box-shadow: inset 0 0 0 2px rgba(255,255,255,.7);
   clip-path: polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); touch-action: manipulation; }
 .zm-stk b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #1a1408; }
 .zm-stk small { font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: #2a1e08; margin-top: 3px; }
 .zm-stk:active { filter: brightness(1.2); }
+.hud.lefty .zm-stk { left: auto; right: calc(var(--sr) + 66px); }
 .zm-exfil { box-shadow: var(--hud-edge), inset 0 -3px 0 #59d36b; } .zm-exfil b { color: #8ff09c; }
 .zm-relic { box-shadow: var(--hud-edge), inset 0 -2px 0 #b070ff; } .zm-relic b { color: #d8b8ff; }
 /* Plates: three segments over the health bar (as battle royale's). */

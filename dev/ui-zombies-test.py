@@ -443,7 +443,8 @@ async def run_econ(browser, vw, vh, failures, errors):
     where = await ev(CLEAR_OF_STICKS)
     if where: failures.append(f'{tag}: use button not clear of the sticks: {where}')
     await pg.locator('.zm-use').first.click()
-    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.bench.state === 1 && {G}.match.ps.weapon === 'knife'", timeout=6000)
+    # The gun goes in and the other hand comes up (the knife only when there is no other gun).
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.bench.state === 1 && ({G}.match.ps.primary === 'knife' || {G}.match.ps.secondary === 'knife')", timeout=6000)
     except Exception: failures.append(f'{tag}: the bench did not take the gun')
     await pg.wait_for_timeout(1200)
     await crop('02-bench-working')
@@ -483,8 +484,13 @@ async def run_econ(browser, vw, vh, failures, errors):
     n = await ev("document.querySelectorAll('.zm-shop .zm-item').length")
     if n < 4 or n > 5: failures.append(f'{tag}: the terminal offers {n} items')
     await pg.locator('.zm-item[data-item="sentry"]').first.click()
-    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.gear.some(g => g.kind === 'sentry')", timeout=6000)
-    except Exception: failures.append(f'{tag}: buying a sentry from the sheet did nothing')
+    # Held first (its own button), called in with a tap.
+    try:
+        await pg.wait_for_selector('.zm-stk:not([hidden])', timeout=6000)
+        await shot('05b-held-streak')
+        await pg.locator('.zm-stk').first.click()
+        await pg.wait_for_function(f"{G}.match.sim.rules.econ.gear.some(g => g.kind === 'sentry')", timeout=6000)
+    except Exception: failures.append(f'{tag}: buying a sentry from the sheet and calling it in did nothing')
     if not await ev("document.querySelector('.zm-shop').hidden"): failures.append(f'{tag}: the sheet stayed open after a buy')
     # Zombies in front of it: it fires.
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, g = R.econ.gear.find(x => x.kind === 'sentry');
