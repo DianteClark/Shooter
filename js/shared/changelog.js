@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-19', title: 'Anvil and Coyote, remade',
+    items: [
+      'Anvil has a new outline: tiered shoulder plates, a raised collar, cheek plates on the helm and a belt feed running from his drum over his shoulder.',
+      'Coyote now wears a striped poncho in your team colour, with dust goggles on his cap and a long neck flap.',
+      'Their Elite skins are now animated: Anvil\'s Bastion has glowing circuit lines with pulses running up them, and Coyote\'s Mirage ripples with heat haze.',
+      'Their Mastery skins are whole new suits: Anvil\'s Molten Titan is mech armour with shoulder pylons, a lit visor and thrusters, and Coyote\'s Sun Bear is a bear suit with ears, a snout and big paws. Anything you already earned is kept.',
+    ],
+  },
+  {
     build: '1119-10', date: '2026-11-19', title: 'The Slugger and Home Run Derby',
     items: [
       'New melee weapon: the Slugger, a baseball bat. A two-handed level swing that kills in two hits, quicker than the Maul and harder than the Gaff. A kill with it sends the body flying. Unlocks at level 32.',
