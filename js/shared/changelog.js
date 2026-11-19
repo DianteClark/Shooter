@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'Graveyard Shift: bot teammates who pull their weight',
+    build: '1119-6', date: '2026-11-19', title: 'Graveyard Shift: bot teammates who pull their weight',
     items: [
       'Bot teammates in Graveyard Shift each have a personality: aggressive, support, hoarder or shopper. You will see it in how they fight, what they buy and what they say.',
       'They shop with a plan: better wall guns as the rounds go up, Ironhide and Mercy Run before other perks, plates and kit refills, upgrades at the bench (they save up for them), a crate pull when rich.',
