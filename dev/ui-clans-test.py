@@ -138,18 +138,23 @@ async def main():
             await host.wait_for_timeout(300)
             await host.locator('[data-act="start"]').first.click()
             await host.wait_for_function(f'{G}.vote?.options', timeout=10000)
-            for pg in pages:      # A team mode, so both sides have bots (the chatter checks need a teammate and an enemy).
-                for want in ('Team Deathmatch', 'Kill Confirmed', 'Domination', 'Hardpoint', 'Capture the Flag', 'Headquarters'):
-                    card = pg.locator('.vote-card').filter(has_text=want)
-                    if await card.count():
-                        try: await card.first.click(timeout=3000); break
-                        except Exception: pass
-                else:
-                    try: await pg.locator('.vote-card').filter(has_not_text='Battle Royale').first.click(timeout=3000)
+            # A 6v6 team mode, so both sides have bots (the chatter checks need a teammate and an enemy). Matched on the
+            # card's mode name, not its text: a description can name another mode, and a Ground War, Gunfight or
+            # Showdown card leaves the two humans with no bot beside them.
+            pick = """(() => { const want = ['Team Deathmatch', 'Kill Confirmed', 'Domination', 'Hardpoint', 'Capture the Flag', 'Headquarters'];
+              const cards = [...document.querySelectorAll('.vote-card')].filter(c => !c.classList.contains('random') && !c.querySelector('.vc-gw'));
+              for (const w of want) { const i = cards.findIndex(c => c.querySelector('.vc-mode-name')?.textContent.trim() === w); if (i >= 0) return cards[i].dataset.i; }
+              return null; })()"""
+            idx = await host.evaluate(pick)
+            print(f'     vote: card {idx}')
+            for pg in pages:
+                if idx is not None:
+                    try: await pg.locator(f'.vote-card[data-i="{idx}"]').first.click(timeout=3000)
                     except Exception: pass
             await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=30000)
             await guest.wait_for_function(f'{G}.inMatch && !!{G}.match', timeout=30000)
             for pg in pages: await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")
+            print('     mode:', await host.evaluate(f"{G}.match.mode"))
             names = await guest.evaluate(f"{G}.matchInfo.roster.filter(r => !r.isBot).map(r => r.name)")
             check(sorted(names) == ['[RAIL] Guesty', '[RAIL] Hosty'], f'both humans carry the tag on the roster: {names}')
             check(await host.evaluate(f"!!{G}.match.chatter") and await guest.evaluate(f"!{G}.match.chatter"), 'the host runs bot chatter, the guest does not')
@@ -173,10 +178,12 @@ async def main():
                 check(any('GG' in r for r in rows), f'an enemy\'s GG is for everyone: {rows}')
                 await guest.screenshot(path=os.path.join(OUT, 'match-chatter-852x393.png'))
                 await guest.evaluate("window.__game.Options.set('botChatter', false)")
-                before = len(await guest.evaluate(feed))
+                # Count the line itself: other rows fade out meanwhile on a slow machine, so the feed's length can drop.
+                reloading = f"{feed}.filter(t => t.includes('Reloading')).length"
+                before = await guest.evaluate(reloading)
                 await guest.evaluate(f"window.__game.hud.onEvents([{{ t: 'chatter', id: '{ids[0]}', l: 2 }}])")
                 await guest.wait_for_timeout(100)
-                check(len(await guest.evaluate(feed)) == before, 'Options > Bot chatter off hides the lines')
+                check(await guest.evaluate(reloading) <= before, 'Options > Bot chatter off hides the lines')
                 await guest.evaluate("window.__game.Options.set('botChatter', true)")
             else:
                 check(False, f'bots on both sides to test chatter: {ids}')
@@ -196,6 +203,23 @@ async def main():
             check(res.count('RAIL') >= 2, f'results show the tag on both: {res.count("RAIL")} RAIL of {len(res)}')
             await guest.screenshot(path=os.path.join(OUT, 'results-852x393.png'))
             juggler.cancel()
+            # Out of the room before the menus: the host's rematch countdown opens the next vote on its own, and a vote
+            # takes the guest's screen wherever they are (the Clan screen too), so tapping Leave there raced it.
+            # By now the vote may have taken the results over (RESULTS_MIN_MS), or the next match begun: leave from there.
+            await guest.bring_to_front()
+            for _ in range(60):
+                if await guest.evaluate(f"!{G}.net"): break
+                for sel in ('[data-act="resMenu"]', '[data-act="voteLeave"]', '[data-act="leaveLobby"]', '[data-act="qolYes"]'):
+                    loc = guest.locator(sel)
+                    if await loc.count() and await loc.first.is_visible():
+                        try: await loc.first.click(timeout=3000)
+                        except Exception: pass
+                        break
+                await guest.wait_for_timeout(500)
+            await guest.wait_for_timeout(500)
+            check(await guest.evaluate(f"!{G}.net"), f'the guest left the room: {await screen(guest)}')
+            # The host's tab would play on alone (its next vote, a bot match) and starve the guest's taps on a busy machine.
+            await host.close()
 
             # ---- Boards > Clans ----
             print('Boards and leaving')
