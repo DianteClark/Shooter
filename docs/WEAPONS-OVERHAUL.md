@@ -892,11 +892,11 @@ and boost as V11: strengths x1.5, damage and rate x1.25, costs halved), one on a
 | Gun | Part | Slot | Gives | Costs | Unlock |
 |---|---|---|---|---|---|
 | Clatter | Clatter Shroud | barrel | range +15%, damage at range +9% | sprint to fire +6%, swap time +5% | Level 26 |
-| Clatter | Snap Sear | grip | gap in a burst -38%, fire rate +6% | recoil sway +15%, bloom per shot +12% | Mastery I |
-| Bullhead | Slick Pump | grip | fire rate +18% | swap time +5%, move speed -2% | Level 26 |
-| Bullhead | Goose Loads | mag | range +12%, aimed spread -18% | magazine -1, reload +8% | Mastery I |
-| Gavel | Match Slide | barrel | bloom per shot -38%, settle speed +22% | swap time +6%, sprint to fire +5% | Level 25 |
-| Gavel | Hot Loads | mag | range +12%, damage at range +9% | reload +8%, bloom per shot +8% | Mastery I |
+| Clatter | Snap Sear | grip | gap in a burst -37%, fire rate +6% | recoil sway +15%, bloom per shot +12% | Mastery I |
+| Bullhead | Slick Pump | grip | fire rate +18% | swap time +5%, move speed -1% | Level 26 |
+| Bullhead | Goose Loads | mag | range +12%, aimed spread -18% | magazine -1, reload +7% | Mastery I |
+| Gavel | Match Slide | barrel | bloom per shot -37%, settle speed +23% | swap time +6%, sprint to fire +5% | Level 25 |
+| Gavel | Hot Loads | mag | range +12%, damage at range +9% | reload +7%, bloom per shot +8% | Mastery I |
 
 **Mastery and camos.** Nothing special was needed: weapon levels, the mastery ladder (and its Master card), camo
 challenges and the Golden Gun requirement all come from WEAPON_IDS.
