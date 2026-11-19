@@ -9,7 +9,8 @@ Run from anywhere: python3 dev/ui-results-test.py [port]. It serves the repo its
   4. Rematch, with the end banner and the final-kill turntable made to throw -> results must still come up
   5. Menu -> Custom -> Harvest (Ground War) -> Start -> results, 16 a side
 After each: the results screen is on and its tables are in, the match is gone, and no Killcam Skip button is left
-behind. Also checks that Random only ever rolls pairs a map hosts, and that the vote's Rematch card is the last match.
+behind. Last, a match that unlocks a great many items at once (at 640 px): Skip lands on one "Unlocked" summary with a
+single celebration, its tiles match the unlocks the save reported, a tile opens its unlock sheet, and it can be reopened. Also checks that Random only ever rolls pairs a map hosts, and that the vote's Rematch card is the last match.
 """
 import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
@@ -82,10 +83,23 @@ async def main():
                 await pg.screenshot(path=f'/tmp/results-{name.split()[0]}.png')
                 return st
 
-            tap = lambda sel: (lambda: pg.locator(sel).first.tap())
+            # The "Unlocked" summary can cover the results after a match that earned something: Continue clears it.
+            async def skip_reel():          # The reel may still be playing (a ceremony carries its own Skip): to its end.
+                for sel in ('.overlay [data-act="resSkip"]', '.res-skip:not([hidden])'):
+                    if await pg.locator(sel).count():
+                        await pg.locator(sel).first.tap()
+                        await pg.wait_for_timeout(900)
+                        return
+            async def tap_res(sel):
+                await skip_reel()
+                if await pg.locator('.overlay [data-act="uxDone"]').count():
+                    await pg.locator('.overlay [data-act="uxDone"]').first.tap()
+                    await pg.wait_for_timeout(250)
+                await pg.locator(sel).first.tap()
+            tap = lambda sel: (lambda: tap_res(sel))
 
             async def via_picker(map_id):
-                await pg.locator('[data-act="resMenu"]').first.tap()
+                await tap_res('[data-act="resMenu"]')
                 await pg.wait_for_timeout(700)
                 await pg.locator('[data-act="custom"]').first.tap()
                 await pg.wait_for_timeout(700)
@@ -129,7 +143,7 @@ async def main():
             ok = rk0['pm'] == 0 and rk0['w'] + rk0['l'] + rk0['d'] == 0
             print(f'  {"custom matches never count for ranked":<44} {"ok" if ok else "FAIL"} {rk0["pm"]}')
             if not ok: failures.append(f'custom moved ranked {rk0}')
-            await pg.locator('[data-act="resMenu"]').first.tap()
+            await tap_res('[data-act="resMenu"]')
             await pg.wait_for_timeout(700)
             async def ranked_start():
                 await pg.locator('[data-act="season"]').first.tap()
@@ -144,6 +158,47 @@ async def main():
             ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy') and rk1['pm'] == 1 and row
             print(f'  {"ranked: ruleset, a placement, the results row":<44} {"ok" if ok else "FAIL"} {mi.get("mode")} {mi.get("mapId")} pm={rk1["pm"]} row={row}')
             if not ok: failures.append(f'ranked {mi} {rk1} {row}')
+            # Bundled unlocks: one match's worth of XP that climbs dozens of levels.
+            await tap_res('[data-act="resMenu"]')
+            await pg.wait_for_timeout(600)
+            await pg.set_viewport_size({'width': 640, 'height': 360})
+            n_unl = await pg.evaluate("""(async () => { const g = window.__game, P = g.Progress;
+              const mo = await import('./js/ui/motion.js'); window.__b0 = mo.celebrated.bursts;
+              const r = P.applyMatch({ xp: 600000, weapons: {} }); window.__r = r;
+              g.menu.results({ outcome: 'win', mode: 'tdm', modeId: 'tdm', mods: [], scores: [10, 4], myTeam: 0, localId: 'me',
+                roster: [{ id: 'me', name: 'Tester', team: 0, kills: 9, deaths: 2 }], badges: new Map(), mvp: null,
+                xp: { total: 600000, lines: [['Match', 600000]] }, level: r.level, weapons: [], unlocks: r.unlocks,
+                challenges: [], proProgress: [], finalKill: null, rematchLabel: 'Rematch', mastery: [] },
+                { rematch: () => {}, menu: () => {} });
+              return r.unlocks.length; })()""")
+            await pg.wait_for_timeout(2400)
+            await skip_reel()
+            await pg.wait_for_function("!!document.querySelector('.overlay .ux')", timeout=8000)
+            ux = await pg.evaluate("""(async () => { const mo = await import('./js/ui/motion.js'), P = window.__game.Progress, r = window.__r;
+              const box = document.querySelector('.overlay .ux');
+              const gear = r.unlocks.filter(u => ['weapon', 'perk', 'tactical', 'lethal', 'streak'].includes(u.kind));
+              return { box: !!box, tiles: document.querySelectorAll('.ux .ux-tile').length, n: document.querySelector('.ux-n')?.textContent,
+                stamps: document.querySelectorAll('.rx-cer').length, bursts: mo.celebrated.bursts - window.__b0,
+                saved: gear.every(u => P.isItemUnlocked(u.kind, u.id)), gear: gear.length,
+                fits: box ? box.scrollWidth <= box.clientWidth + 1 : false, groups: [...document.querySelectorAll('.ux-grp')].map(g => g.dataset.g) }; })()""")
+            ok = ux['box'] and n_unl >= 8 and ux['tiles'] == n_unl and ux['n'] == str(n_unl) and ux['stamps'] == 0 and ux['bursts'] <= 1 and ux['saved'] and ux['fits']
+            print(f'  {"many unlocks: skip -> one summary, counts":<44} {"ok" if ok else "FAIL"} unlocks={n_unl} {ux}')
+            if not ok: failures.append(f'unlocked summary {n_unl} {ux}')
+            await pg.screenshot(path='/tmp/results-unlocked.png')
+            await pg.locator('.ux [data-act="uxItem"]').first.tap()
+            await pg.wait_for_timeout(500)
+            sheet = await pg.evaluate("!!document.querySelector('.overlay .ul-layer')")
+            await pg.locator('.ul-layer button[data-act="ulClose"]').first.tap()
+            await pg.wait_for_timeout(300)
+            await pg.locator('[data-act="uxDone"]').first.tap()
+            await pg.wait_for_timeout(300)
+            gone = await pg.evaluate("!document.querySelector('.overlay .ux')")
+            await pg.locator('[data-act="resUnlocked"]').first.tap()
+            await pg.wait_for_timeout(400)
+            back = await pg.evaluate("document.querySelectorAll('.overlay .ux .ux-tile').length")
+            ok = sheet and gone and back == n_unl
+            print(f'  {"tile opens its sheet; Continue, then reopen":<44} {"ok" if ok else "FAIL"} sheet={sheet} gone={gone} back={back}')
+            if not ok: failures.append(f'summary interactions sheet={sheet} gone={gone} back={back}')
             await browser.close()
     finally:
         srv.terminate()

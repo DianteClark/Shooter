@@ -100,6 +100,12 @@ class Reel {
   async climb(bar, label, from, to, onLevel) {
     let level = from.level, frac = from.frac;
     while (level < to.level && !this.dead) {
+      if (this.fast) {           // Skipped: straight to the last level, so a big climb does not hold up the summary.
+        level = to.level; frac = 0;
+        label.textContent = `${to.prefix ?? 'Lv'} ${level}`;
+        onLevel?.(level);
+        break;
+      }
       await this.fill(bar, frac, 1);
       level++;
       frac = 0;
@@ -119,6 +125,7 @@ class Reel {
     m.overlay(`<div class="rx-cer" data-act="reelTap"><i class="rx-rays"></i><i class="rx-floor"></i>${html}
       <small class="rx-tap">Tap to continue</small>
       <div class="rx-cer-actions">
+        <button class="rs-btn quiet" data-act="resSkip">Skip</button>
         <button class="rs-btn primary" data-act="resRematch">${esc(this.rematchLabel)}</button>
         <button class="rs-btn" data-act="resMenu">Menu</button>
       </div></div>`);
