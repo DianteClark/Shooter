@@ -946,9 +946,15 @@ section('econ');
     const p0 = me.zm.pts;
     me.zm.plates = 0;
     items[item] = use({ item }) && me.zm.pts === p0 - supplyCost(item, R.round);
+    if (item !== 'vest') {
+      // Held, not placed: nothing else from the terminal until it is called in.
+      const other = item === 'sentry' ? 'drone' : 'sentry', held = me.zm.stk === item && !E.gear.some(g => g.kind === item);
+      const p1 = me.zm.pts;
+      items[item] &&= held && !use({ item: other }) && me.zm.pts === p1 && sim.applyCommand(me.id, { cmd: 'zm', act: 'deploy' }) && !me.zm.stk && E.gear.some(g => g.kind === item);
+    }
   }
   ok(Object.values(items).every(Boolean), `every item sold at its price (${JSON.stringify(items)})`);
-  ok(E.gear.map(g => g.kind).sort().join() === 'drone,lure,sentry,strike' && me.zm.plates === ZE.plate.hp * ZE.plate.max, 'sentry, drone, lure and strike in play; the vest fills the plates');
+  ok(E.gear.map(g => g.kind).sort().join() === 'drone,lure,sentry,strike' && me.zm.plates === ZE.plate.hp * ZE.plate.max, 'sentry, drone, lure and strike held one at a time, then in play; the vest fills the plates');
   ok(!use({ item: 'sentry' }), 'one of each a round');
   // Zombies in front of the sentry and the strike's mark: they take fire.
   const sentry = E.gear.find(g => g.kind === 'sentry');

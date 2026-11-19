@@ -98,7 +98,7 @@ export class ZmRules {
   // A crew member's mode state: points, perks (and the cap on them), the economy's plates and gun tiers.
   static crewState() {
     return { pts: ZM.startPts, perks: [], kills: 0, downs: 0, revives: 0, reviveT: 0, downedBy: null, spent: 0, bought: 0, head: 0,
-      earned: 0, limit: ZM.perkLimit, plates: 0, tiers: {}, supply: {}, breathAt: 0, selfT: 0, spentBy: {} };
+      earned: 0, limit: ZM.perkLimit, plates: 0, tiers: {}, supply: {}, stk: null, breathAt: 0, selfT: 0, spentBy: {} };
   }
 
   // ---- Seats ----
@@ -673,7 +673,9 @@ export class ZmRules {
 
   // The phone's 'use' tap: whatever zmUsable says is in reach, if the points are there.
   command(p, msg) {
-    if (!p || !p.zm || msg?.act !== 'use' || !p.alive || p.downed || this.state === 3) return false;
+    if (!p || !p.zm || !p.alive || p.downed || this.state === 3) return false;
+    if (msg?.act === 'deploy') return this.econ.deploy(p);     // The held supply streak, when its owner calls it.
+    if (msg?.act !== 'use') return false;
     return this._use(p, this._usableFor(p), msg);
   }
 
@@ -991,6 +993,7 @@ export class ZmRules {
     v.zpts = p.zm.pts;
     v.zperks = p.zm.perks;
     v.zplates = p.zm.plates;
+    v.zstk = p.zm.stk;
     v.zlimit = p.zm.limit;
     v.zbreath = p.zm.perks.includes('breath') ? ((p.zm.breathAt ?? 0) <= this.round ? 1 : 0) : -1;
   }
@@ -1028,7 +1031,7 @@ export class ZmRules {
       // Gun tiers (the guns in hand only: a host migration keeps them), as [weapon index, tier] pairs.
       const tiers = [];
       for (const g of [p.ps.primary, p.ps.secondary]) if (z.tiers[g]) tiers.push(WEAPON_IDS.indexOf(g), z.tiers[g]);
-      return [z.pts, bits, z.kills, z.revives, Math.round(z.plates), z.breathAt ?? 0, tiers, z.earned ?? 0, z.spent ?? 0];
+      return [z.pts, bits, z.kills, z.revives, Math.round(z.plates), z.breathAt ?? 0, tiers, z.earned ?? 0, z.spent ?? 0, z.stk ? ZE.supplyOrder.indexOf(z.stk) + 1 : 0];
     });
     const zs = [];
     for (const p of this.horde) if (p.alive) zs.push(packZombie(p.index - this.horde[0].index, p.ps.x, p.ps.z, p.ps.aim, p.zk === ZK.shield && !(p.zShield > 0) ? 9 : p.zk, p.zSwing > 0 || p.zSpitT > 0));
@@ -1081,11 +1084,11 @@ export class ZmRules {
       p.zm ??= ZmRules.crewState();
       p.zm.pts = c[0]; p.zm.perks = ZM_PERK_IDS.filter((_, i) => c[1] & (1 << i)); p.zm.kills = c[2] ?? 0; p.zm.revives = c[3] ?? 0;
       p.zm.plates = c[4] ?? 0; p.zm.breathAt = c[5] ?? 0; p.zm.limit = c[1] & (1 << 11) ? ZM.perkMax : ZM.perkLimit;
-      p.zm.earned = c[7] ?? 0; p.zm.spent = c[8] ?? 0;
+      p.zm.earned = c[7] ?? 0; p.zm.spent = c[8] ?? 0; p.zm.stk = ZE.supplyOrder[(c[9] ?? 0) - 1] ?? null;
       p.zm.tiers = {};
       const T = c[6] ?? [];
       for (let i = 0; i + 1 < T.length; i += 2) if (WEAPON_IDS[T[i]]) p.zm.tiers[WEAPON_IDS[T[i]]] = T[i + 1];
-      v.zpts = c[0]; v.zperks = p.zm.perks; v.zplates = p.zm.plates; v.zlimit = p.zm.limit;
+      v.zpts = c[0]; v.zperks = p.zm.perks; v.zplates = p.zm.plates; v.zstk = p.zm.stk; v.zlimit = p.zm.limit;
       v.zbreath = p.zm.perks.includes('breath') ? (p.zm.breathAt <= this.round ? 1 : 0) : -1;
       v.downed = !!(c[1] & 64); v.reviveK = ((c[1] >> 7) & 15) / 15;
       v.ai = false;

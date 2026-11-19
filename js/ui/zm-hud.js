@@ -87,6 +87,12 @@ const CSS = `
 .zm-xbig span b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff; }
 .zm-xbig span small { font: 11px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: #c8f0cc; white-space: nowrap; }
 .zm-xbig.on b:first-child { color: #fff; }
+.zm-stk { position: absolute; left: calc(50% + 70px); bottom: calc(var(--sb) + 8px); height: 44px; min-width: 104px; padding: 0 12px; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; background: linear-gradient(180deg, rgba(255,194,61,.95), rgba(176,112,10,.92)); box-shadow: inset 0 0 0 2px rgba(255,255,255,.7);
+  clip-path: polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); touch-action: manipulation; }
+.zm-stk b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #1a1408; }
+.zm-stk small { font: 9px/1 var(--f-plate); letter-spacing: var(--tr-plate); color: #2a1e08; margin-top: 3px; }
+.zm-stk:active { filter: brightness(1.2); }
 .zm-exfil { box-shadow: var(--hud-edge), inset 0 -3px 0 #59d36b; } .zm-exfil b { color: #8ff09c; }
 .zm-relic { box-shadow: var(--hud-edge), inset 0 -2px 0 #b070ff; } .zm-relic b { color: #d8b8ff; }
 /* Plates: three segments over the health bar (as battle royale's). */
@@ -144,6 +150,7 @@ export class ZmHud {
       <div class="zm-xbig" hidden><b>60</b><span><b>EXFIL</b><small>Get to the pad</small><small class="xn">0 undead coming</small></span></div>
       <div class="zm-boss" hidden><b>Yardmaster</b><i><i></i></i></div>
       <div class="zm-crew"></div>
+      <button class="zm-stk" data-tap="1" hidden><b>SENTRY</b><small>Tap to call it in</small></button>
       <button class="zm-use" data-tap="1" hidden><span class="t">BUY</span><small></small></button>
       <div class="zm-down" hidden><b>Down</b><small>Hold on: a teammate can get you up</small><i class="bl"><i></i></i><i class="rv"><i></i></i></div>
       <div class="zm-rev" hidden><b>Reviving</b><i><i></i></i></div>
@@ -163,6 +170,8 @@ export class ZmHud {
     this.xbig = $('.zm-xbig'); this.xbigB = $('.zm-xbig > b'); this.xbigS = $('.zm-xbig span small'); this.xbigN = $('.zm-xbig .xn');
     this.exfilEl = $('.zm-exfil'); this.exfilB = $('.zm-exfil b'); this.exfilS = $('.zm-exfil small');
     this.relicEl = $('.zm-relic'); this.relicB = $('.zm-relic b');
+    this.stkEl = $('.zm-stk'); this.stkB = $('.zm-stk b');
+    this.stkEl.addEventListener('click', e => { e.stopPropagation(); this.cmd?.('deploy'); });
     this.shopEl = $('.zm-shop'); this.shopRow = $('.zm-shop-row');
     this.shopRow.innerHTML = ZE.supplyOrder.map(k => `<button class="zm-item" data-tap="1" data-item="${k}"><b>${ZE.supply[k].name}</b><small>${ZE.supply[k].desc}</small><em></em></button>`).join('');
     this.shopRow.addEventListener('click', e => {
@@ -273,7 +282,9 @@ export class ZmHud {
         this.useEl.classList.toggle('poor', !u.ok);
       }
     }
-    if (this.shopOpen) this.#shopItems(z, pts);
+    const stk = me.alive && !me.downed ? me.zstk ?? null : null;
+    if (c.stk !== stk) { c.stk = stk; this.stkEl.hidden = !stk; if (stk) this.stkB.textContent = ZE.supply[stk].name.toUpperCase(); this.c.shop = null; }
+    if (this.shopOpen) this.#shopItems(z, pts, me.zstk ?? null);
   }
 
   // The use button's two lines for what is in reach.
@@ -314,14 +325,15 @@ export class ZmHud {
   }
 
   // The terminal's sheet: each item's price this round, greyed when bought already or too dear.
-  #shopItems(z, pts) {
-    const key = `${z.round}:${pts}:${JSON.stringify(this.bought)}`;
+  #shopItems(z, pts, stk = null) {
+    const key = `${z.round}:${pts}:${stk}:${JSON.stringify(this.bought)}`;
     if (this.c.shop === key) return;
     this.c.shop = key;
     for (const b of this.shopRow.children) {
       const k = b.dataset.item, cost = supplyCost(k, z.round), had = this.bought[k] === z.round;
-      b.querySelector('em').textContent = had ? 'Bought this round' : fmt(cost);
-      b.classList.toggle('off', had || cost > pts);
+      const full = !!stk && k !== 'vest';     // One held streak at a time: call it in first.
+      b.querySelector('em').textContent = had ? 'Bought this round' : full ? 'Holding one' : fmt(cost);
+      b.classList.toggle('off', had || full || cost > pts);
     }
   }
 
@@ -445,8 +457,11 @@ export class ZmHud {
         if (e.state === 2 && e.by === me?.id) this.hud.notify(`Your ${WEAPONS[e.gun]?.name ?? e.gun} is ready at the bench`);
         if (e.state === 0 && e.by === me?.id && e.tier >= 3) this.hud.banner(ZM_FX[zmFxOf(e.gun)].name, `${WEAPONS[e.gun]?.name ?? e.gun}: ${ZM_FX[zmFxOf(e.gun)].desc.toLowerCase()}`, 1600);
         break;
+      case 'zstk':     // A supply streak bought into the held slot (js/sim/zm-econ.js): called in from its button.
+        if (e.by === me?.id) { this.bought[e.item] = objOf(view)?.round ?? 0; this.hud.notify(`${ZE.supply[e.item]?.name ?? e.item} held: tap it to call it in`); }
+        break;
       case 'zsupply':
-        if (e.by === me?.id) this.bought[e.item] = objOf(view)?.round ?? 0;
+        if (e.by === me?.id && e.item === 'vest') this.bought[e.item] = objOf(view)?.round ?? 0;
         this.hud.notify(`${e.by === me?.id ? 'You' : name(e.by)} called ${ZE.supply[e.item]?.name ?? e.item}`);
         break;
       case 'ztrap': {

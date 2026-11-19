@@ -112,10 +112,18 @@ export class ZmEcon {
         if ((z.supply[item] ?? -1) === R.round) return null;     // One of each a round.
         const cost = supplyCost(item, R.round);
         if (z.pts < cost) return null;
-        if (item !== 'vest' && this.gear.length >= ZE.gearMax) return null;
-        if (!this._supply(p, item)) return null;
+        // The vest goes on at once. A streak (sentry, strike, drone, lure) goes into the one held slot, called in when
+        // its owner chooses (deploy); nobody holds two. Bots call theirs in on the spot, as before.
+        if (item === 'vest' || p.isBot) {
+          if (item !== 'vest' && this.gear.length >= ZE.gearMax) return null;
+          if (!this._supply(p, item)) return null;
+          sim._emit({ t: 'zsupply', item, by: p.id, x: Math.round(p.ps.x * 10) / 10, z: Math.round(p.ps.z * 10) / 10 });
+        } else {
+          if (z.stk) return null;
+          z.stk = item;
+          sim._emit({ t: 'zstk', item, by: p.id });
+        }
         z.supply[item] = R.round;
-        sim._emit({ t: 'zsupply', item, by: p.id, x: Math.round(p.ps.x * 10) / 10, z: Math.round(p.ps.z * 10) / 10 });
         u.cost = cost; u.item = item;
         return cost;
       }
@@ -342,6 +350,16 @@ export class ZmEcon {
   }
 
   // ---- The supply terminal ----
+
+  // The held streak called in where its owner stands. False with none held or the field full of gear.
+  deploy(p) {
+    const z = p.zm, item = z?.stk;
+    if (!item || this.gear.length >= ZE.gearMax) return false;
+    if (!this._supply(p, item)) return false;
+    z.stk = null;
+    this.sim._emit({ t: 'zsupply', item, by: p.id, x: Math.round(p.ps.x * 10) / 10, z: Math.round(p.ps.z * 10) / 10 });
+    return true;
+  }
 
   _supply(p, item) {
     const R = this.R, ps = p.ps, S = ZE.supply[item];
