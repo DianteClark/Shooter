@@ -1,5 +1,6 @@
 // Global tuning constants shared by every module. Units are metres and seconds.
 import { V10_GUNS } from './weapons-v10.js';
+import { W3_GUNS } from './weapons-w3.js';
 export const SIM_HZ = 30;              // Host simulation rate.
 export const SNAPSHOT_EVERY = 2;       // Host sends a snapshot every N sim ticks (15 Hz).
 export const STATE_SEND_HZ = 20;       // Guest sends its own player state at this rate.
@@ -54,7 +55,10 @@ for (const c in V8_GUNS) GUNS_BY_CATEGORY[c].push(...V8_GUNS[c]);
 // V10 guns (js/shared/weapons-v10.js), the same way: after the V8 ones in every list, so no older id moves.
 const V10_IDS = cats => cats.flatMap(c => V10_GUNS[c] || []);
 for (const c in V10_GUNS) GUNS_BY_CATEGORY[c].push(...V10_GUNS[c]);
-const NEW_IDS = cats => [...V8_IDS(cats), ...V10_IDS(cats)];
+// Weapons wave 3 (js/shared/weapons-w3.js), after the V10 ones in every list.
+const W3_IDS = cats => cats.flatMap(c => W3_GUNS[c] || []);
+for (const c in W3_GUNS) GUNS_BY_CATEGORY[c].push(...W3_GUNS[c]);
+const NEW_IDS = cats => [...V8_IDS(cats), ...V10_IDS(cats), ...W3_IDS(cats)];
 // The Golden Gun: a pistol-category secondary kept out of GUNS_BY_CATEGORY on purpose, so no attachment allow-list,
 // bot list or category default ever picks it up. It is the last pre-V8 weapon id, so every older id keeps its wire index.
 export const GOLDEN_ID = 'golden';
@@ -72,6 +76,6 @@ export const PRIMARY_IDS = [...OLD_PRIMARY, ...NEW_IDS(PRIMARY_CATS)];
 export const SECONDARY_IDS = [...OLD_SECONDARY, GOLDEN_ID, ...NEW_IDS(SECONDARY_CATS)];
 // Wire order: the pre-V8 list unchanged (golden last of it), then the V8 guns, then the V10 guns.
 export const WEAPON_IDS = [...OLD_PRIMARY, ...OLD_SECONDARY, GOLDEN_ID, ...V8_IDS(PRIMARY_CATS), ...V8_IDS(SECONDARY_CATS),
-  ...V10_IDS(PRIMARY_CATS), ...V10_IDS(SECONDARY_CATS)];
+  ...V10_IDS(PRIMARY_CATS), ...V10_IDS(SECONDARY_CATS), ...W3_IDS(PRIMARY_CATS), ...W3_IDS(SECONDARY_CATS)];
 export const SECONDARY_ID = 'pistol';
 export const BOT_SKILLS = ['recruit', 'regular', 'veteran', 'elite'];
