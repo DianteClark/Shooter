@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'Unlocks after a match, all in one place',
+    build: '1119-3', date: '2026-11-19', title: 'Unlocks after a match, all in one place',
     items: [
       'Everything a match unlocks now shows once, in one Unlocked panel after the XP bar, grouped by kind (calling cards, emblems, camos, attachments, operators, level rewards, challenges, season and tournament rewards) instead of one pop-up after another.',
       'Only the match\'s biggest moment (a level up, Master Prestige, the Golden Gun or a tournament win) still gets its own reveal; the rest are listed at the top of the panel.',
