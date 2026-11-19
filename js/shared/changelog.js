@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Bug sweep',
+    build: '1119-1', date: '2026-11-18', title: 'Bug sweep',
     items: [
       'With a controller, the Jump button on the battle royale drop map no longer slides off the screen.',
       'Objective markers on the big Ground War maps no longer get stuck in the top-left corner when the objective is far behind you: they ride the screen edge and point the way.',
