@@ -46,6 +46,7 @@ import { installAndroid } from './ui/android.js';
 import { installSheet } from './ui/installguide.js';
 import { PerfOverlay } from './ui/perf.js';
 import { TouchDebug } from './ui/touchdebug.js';
+import { TouchRecorder, ReportSheet } from './ui/touchrec.js';
 import { statsScreen } from './ui/stats.js';
 import { installFrameClock } from './render/quality.js';
 import { Tutorial, tutorialRoster, TUTORIAL_MAP, TUTORIAL_MODE, TUTORIAL_LIMITS } from './game/tutorial.js';
@@ -2064,6 +2065,7 @@ function applyOptions(v, changed) {
   backdrop.quality = v.quality;
   if (!changed || changed === 'fps') { perf.setVisible(v.fps || FPS_PARAM); hud.layout(); }
   if (!changed || changed === 'touchDebug') touchDebug.setEnabled(v.touchDebug || TOUCHDEBUG_PARAM);
+  if (!changed || changed === 'touchRec') { touchRec.setEnabled(v.touchRec || TOUCHREC_PARAM); touchReport.sync(); }
 }
 
 // --- Startup ---
@@ -2091,6 +2093,11 @@ const FPS_PARAM = params.get('fps') === '1';
 const perf = new PerfOverlay(document.body, () => app.renderer?.getStats() ?? null);
 const TOUCHDEBUG_PARAM = params.get('touchdebug') === '1';
 const touchDebug = new TouchDebug(controls);
+// Options > Controls > Record touches: the last 20 s of touches, frozen into a report code by Stick died? (js/ui/touchrec.js).
+const TOUCHREC_PARAM = params.get('touchrec') === '1';
+const touchRec = new TouchRecorder(controls, { build: BUILD });
+const touchReport = new ReportSheet(touchRec);
+touchReport.attachBoard(document.querySelector('.board-foot'));
 followViewport();
 blockIosGestures();
 // Android: full screen and landscape lock in a tab, the back gesture walks the menus, the install worker.
@@ -2133,7 +2140,7 @@ NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 // Just after the progress reset's wipe, its notice comes first and the training offer follows it.
 const offeredTutorial = !invite && (maybeResetNotice(menu, { then: maybeOfferTutorial }) || maybeOfferTutorial());
-if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, wipe: WIPE, NewDots, updater, hud, controls, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else {
   if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });

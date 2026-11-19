@@ -4,6 +4,14 @@
 
 export const CHANGELOG = [
   {
+    build: '1119-5', date: '2026-11-19', title: 'Touch reports for a stuck move stick',
+    items: [
+      'New option in Options > Controls: Record touches (for bug reports). While it is on, the game keeps your last 20 seconds of touches on this phone.',
+      'If the move stick stops responding, open the scoreboard and tap Stick died?, or tap the screen with three fingers at once. A report code is copied for you (there is also a Copy button).',
+      'Paste the code to us with a few words about what happened, and we can play your exact touches back to find the bug.',
+    ],
+  },
+  {
     build: '1119-4', date: '2026-11-19', title: 'Cooler Graveyard Shift, and quality of life',
     items: [
       'Graveyard Shift runs cooler on phones: undead past a few metres are drawn simpler and cast no shadow in a big horde, and Auto graphics steps down sooner there.',

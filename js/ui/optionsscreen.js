@@ -121,6 +121,10 @@ export function optionsScreen(menu, opts) {
           ${toggle('optAutoSprint', 'opt-autosprint')}
         </div>
         <div class="opt-row">
+          <div class="opt-name"><b>Record touches (for bug reports)</b><small>Keeps the last 20 seconds of touches. If the move stick stops, tap Stick died? on the scoreboard (or tap with three fingers) and paste us the code</small></div>
+          ${toggle('optTouchRec', 'opt-touchrec')}
+        </div>
+        <div class="opt-row">
           <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
           ${toggle('optAutoRespawn', 'opt-autorespawn')}
         </div>
@@ -182,7 +186,7 @@ export function optionsScreen(menu, opts) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
-    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter'], ['.opt-batterysaver', 'batterySaver'], ['.opt-autosprint', 'autoSprint']]) {
+    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter'], ['.opt-batterysaver', 'batterySaver'], ['.opt-autosprint', 'autoSprint'], ['.opt-touchrec', 'touchRec']]) {
       const t = q(cls);
       if (!t) continue;
       t.classList.toggle('on', v[key] === true);
@@ -267,6 +271,7 @@ export function optionsScreen(menu, opts) {
       paint();
     },
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
+    optTouchRec: () => { Options.set('touchRec', !Options.get('touchRec')); paint(); },
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optSquad: () => onSquad?.(),
     optSeenAll: () => { const n = NewDots.count(); NewDots.seeAll(); const b = q('.opt-ndall b'); if (b) b.textContent = n ? `${n} cleared` : 'None new'; },

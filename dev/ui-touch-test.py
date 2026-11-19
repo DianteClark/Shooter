@@ -39,7 +39,10 @@ import asyncio, subprocess, sys, time, os
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8461
+ARGV = [a for a in sys.argv[1:] if not a.startswith('--')]
+PORT = int(ARGV[0]) if ARGV else 8461
+REC_ONLY = '--rec' in sys.argv      # Only part 6, the touch recorder (and any saved reports in dev/touch-reports).
+REPORTS = os.path.join(ROOT, 'dev', 'touch-reports')
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 
 # Synthetic touch events, built the way WebKit fills them in.
@@ -61,7 +64,9 @@ async def main():
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
-            for vw, vh in ((844, 390), (956, 440)):
+            print('Touch recorder: record, export, re-import, replay')
+            await record_cases(browser, failures, errors)
+            for vw, vh in (() if REC_ONLY else ((844, 390), (956, 440))):
                 ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
                 pg = await ctx.new_page()
                 pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
@@ -294,11 +299,12 @@ async def main():
                 await S('touchend', [T], [[11, LX + 60, LY]]); await S('touchend', [[11, LX + 60, LY]], [])
                 await ctx.close()
 
-            print('Item 40: multi-touch throws, then the move thumb must still steer')
-            await throw_cases(browser, failures, errors)
-            print('V8: live match, iOS cancels the still move thumb right after a grenade release')
-            for mode in ('training', 'solo'):
-                await live_cases(browser, mode, failures, errors)
+            if not REC_ONLY:
+                print('Item 40: multi-touch throws, then the move thumb must still steer')
+                await throw_cases(browser, failures, errors)
+                print('V8: live match, iOS cancels the still move thumb right after a grenade release')
+                for mode in ('training', 'solo'):
+                    await live_cases(browser, mode, failures, errors)
             await browser.close()
     finally:
         srv.terminate()
@@ -575,6 +581,145 @@ async def live_cases(browser, mode, failures, errors):
     s = await state()
     check('touchcancel with no release before it lets go', s['id'] is None and not s['kept'], s)
     await pg.screenshot(path=f'/tmp/touch-live-{mode}.png')
+    await ctx.close()
+
+
+async def record_cases(browser, failures, errors):
+    """Part 6: the touch recorder (Options > Record touches). A live solo match records a grenade sequence through Chrome's
+    real touch pipeline (the move thumb sprinting, Frag dragged and released, iOS cancelling the thumb one frame later, a
+    new thumb taking the stick) and two of iOS's broken streams as synthetic events (a lifted thumb that stale lists keep
+    naming; a thumb re-planted while its touchstart is swallowed). The report code is exported, decoded and re-encoded,
+    and dev/touch-replay.html must replay it through controls.js to the same stick decisions at every step. Then the
+    report sheet (Stick died? on the scoreboard, and a three-finger tap) and every saved report in dev/touch-reports."""
+    vw, vh = 932, 430
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=topside&mode=tdm&bots=recruit')
+    await pg.wait_for_timeout(800)
+    await pg.evaluate("window.__game.Progress.name='Tester'")
+    await pg.evaluate("window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.evaluate("window.__game.Options.set('touchRec', true)")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click(no_wait_after=True)
+    await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
+    await pg.evaluate(SYNTH)
+    cdp = await ctx.new_cdp_session(pg)
+
+    def check(name, ok, info=''):
+        print(f'  rec {name:<56} {"ok" if ok else "FAIL"} {info}')
+        if not ok: failures.append(f'rec {name}: {info}')
+
+    async def touch(kind, pts, ts=None):
+        msg = {'type': kind, 'touchPoints': [{'x': x, 'y': y, 'id': i} for i, (x, y) in pts.items()]}
+        if ts is not None: msg['timestamp'] = ts
+        await cdp.send('Input.dispatchTouchEvent', msg)
+
+    rects = await pg.evaluate('JSON.parse(JSON.stringify(window.__game.controls.rects))')
+    C = lambda r: ((r['x0'] + r['x1']) / 2, (r['y0'] + r['y1']) / 2)
+    leth = C(rects['lethal'])
+    LX, LY, RX, RY = vw * 0.15, vh * 0.62, vw * 0.66, vh * 0.62
+    sig = lambda: pg.evaluate("window.__game.controls.left.id")
+
+    # Real touches: sprint, aim, Frag dragged and released, iOS cancels the still thumb 16 ms later, a new thumb.
+    pts = {1: (LX, LY)}
+    await touch('touchStart', pts)
+    for k in range(6):
+        pts[1] = (LX + 16 * (k + 1), LY); await touch('touchMove', pts); await pg.wait_for_timeout(16)
+    pts[2] = (RX, RY); await touch('touchStart', pts)
+    pts[3] = leth; await touch('touchStart', pts)
+    for k in range(8):
+        pts[3] = (leth[0] - 12 * (k + 1), leth[1] - 5 * (k + 1)); pts[2] = (RX + k, RY)
+        await touch('touchMove', pts); await pg.wait_for_timeout(16)
+    at = time.time()
+    await touch('touchEnd', {3: pts.pop(3)}, at)
+    await touch('touchCancel', {}, at + 0.016)
+    await pg.wait_for_timeout(200)
+    held = await sig()
+    await touch('touchStart', {7: (LX + 20, LY)})
+    await touch('touchMove', {7: (LX + 90, LY)})
+    await pg.wait_for_timeout(100)
+    await touch('touchEnd', {})
+    await pg.wait_for_timeout(100)
+
+    # Synthetic iOS streams. 1: the thumb lifts, stale lists keep naming it, a re-planted thumb takes the stick.
+    S = lambda kind, ch, all_: pg.evaluate('([k,c,t]) => window.__synth(k,c,t)', [kind, ch, all_])
+    L, R = [11, LX, LY], [12, RX, RY]
+    await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+    await S('touchstart', [R], [[11, LX + 60, LY], R])
+    await S('touchend', [[11, LX + 60, LY]], [[11, LX + 60, LY], R])
+    for k in range(4):
+        await pg.wait_for_timeout(70)
+        await S('touchmove', [[12, RX + k, RY]], [[11, LX + 60, LY], [12, RX + k, RY]])
+    await S('touchstart', [[43, LX, LY]], [[11, LX + 60, LY], [12, RX, RY], [43, LX, LY]])
+    await S('touchmove', [[43, LX + 62, LY]], [[43, LX + 62, LY], [12, RX, RY]])
+    await S('touchend', [[43, LX + 62, LY], [12, RX, RY]], [])
+    # 2: a grenade finger lifts as the thumb re-plants; the touchstart never comes, only moves.
+    T = [13, leth[0], leth[1]]
+    await S('touchstart', [L], [L]); await S('touchmove', [[11, LX + 60, LY]], [[11, LX + 60, LY]])
+    await S('touchstart', [T], [[11, LX + 60, LY], T])
+    await S('touchend', [[11, LX + 60, LY]], [T])
+    await S('touchend', [T], [])
+    for k in range(5): await S('touchmove', [[21, LX + 8 + k * 14, LY]], [[21, LX + 8 + k * 14, LY]])
+    await S('touchend', [[21, LX + 64, LY]], [])
+    await pg.wait_for_timeout(100)
+
+    code = await pg.evaluate('window.__game.touchRec.exportCode()')
+    n = await pg.evaluate('window.__game.touchRec.ring.length')
+    check('report code made', code.startswith('SWT1d.') and n > 40, f'{len(code)} chars, {n} entries, L during cancel #{held}')
+    # Re-import: decode, encode again, decode: the same report.
+    same = await pg.evaluate("""async code => { const m = await import('/js/ui/touchrec.js');
+      const a = await m.decodeReport(code); const b = await m.decodeReport(await m.encodeReport(a));
+      return JSON.stringify(a) === JSON.stringify(b) && a.ring.length > 40; }""", code)
+    check('decode / encode / decode round trip', same)
+
+    # The sheet: Stick died? on the scoreboard, then a three-finger tap.
+    btn = await pg.evaluate("(() => { const b = document.querySelector('.board-stickrep'); return !!b && !b.hidden && !!b.dataset.tap; })()")
+    check('Stick died? button on the scoreboard', btn)
+    await pg.evaluate("window.__game.hud.toggleBoard()")
+    await pg.locator('.board-stickrep').click()
+    await pg.wait_for_function("document.querySelector('.trec-code')?.value.startsWith('SWT1')", timeout=5000)
+    check('Stick died? opens the sheet with the code', await pg.evaluate("!document.querySelector('.trec-sheet').hidden"))
+    await pg.locator('.trec-close').click()
+    await pg.evaluate("window.__game.hud.toggleBoard()")
+    await pg.evaluate("document.querySelector('.trec-code').value = ''")
+    three = {31: (vw * 0.4, vh * 0.3), 32: (vw * 0.5, vh * 0.3), 33: (vw * 0.6, vh * 0.3)}
+    t0 = time.time()   # Event times, so a slow software-rendered frame between the fingers does not spread them out.
+    for n, i in enumerate((31, 32, 33)):
+        await touch('touchStart', {k: v for k, v in three.items() if k <= i}, t0 + n * 0.03)
+    await touch('touchEnd', {}, t0 + 0.15)
+    ok = True
+    try: await pg.wait_for_function("document.querySelector('.trec-code')?.value.startsWith('SWT1')", timeout=5000)
+    except Exception: ok = False
+    check('three-finger tap opens the sheet', ok and await pg.evaluate("!document.querySelector('.trec-sheet').hidden"))
+    await ctx.close()
+
+    # Replay on its own page: the same decisions at every step.
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('pageerror', lambda e: errors.append(f'PAGEERR replay {e}'))
+    await pg.goto(f'http://localhost:{PORT}/dev/touch-replay.html')
+    await pg.wait_for_function('typeof window.replayTouches === "function"', timeout=10000)
+
+    async def replay(code, name):
+        res = await pg.evaluate("async c => { const r = await replayTouches(c); return { lines: r.lines, mm: r.mismatches.length, steps: r.steps.length, losses: r.losses.length, died: r.died.length }; }", code)
+        for line in res['lines']:
+            if not line.startswith(('+', ' ')) or 'L ' in line[:20] or 'MISMATCH' in line: pass
+        print('\n'.join('      ' + l for l in res['lines'] if not 'phone:' in l and not 'replay:' in l))
+        return res
+
+    res = await replay(code, 'synthetic')
+    check('replay gives the same stick states at every step', res['mm'] == 0 and res['steps'] > 40, f"{res['steps']} steps, {res['mm']} mismatches")
+    check('replay finds the stick losses and no dead stick', res['losses'] >= 3 and res['died'] == 0, f"{res['losses']} let-gos, {res['died']} died")
+    # Saved real reports: each must replay to the phone's own decisions. Their analysis is printed for the record.
+    if os.path.isdir(REPORTS):
+        for fn in sorted(os.listdir(REPORTS)):
+            if not fn.endswith('.txt'): continue
+            print(f'    report {fn}')
+            res = await replay(open(os.path.join(REPORTS, fn)).read().strip(), fn)
+            check(f'report {fn} replays faithfully', res['mm'] == 0, f"{res['steps']} steps, {res['mm']} mismatches, {res['died']} dead-stick moments")
     await ctx.close()
 
 

@@ -125,6 +125,7 @@ export class Controls {
                                    // finger beside a held stick) takes that stick when it frees up; a 'button' one never does.
     this.watched = new WeakSet();  // Touch targets with listeners of their own; see #watch.
     this.debug = null;             // (text) => void while the touch debug overlay is on (js/ui/touchdebug.js).
+    this.rec = null;               // The touch recorder (js/ui/touchrec.js) while Options > Record touches is on.
     this.pad = null;               // js/ui/gamepad.js: merges a controller into read()'s Input.
     this.tiles = [];               // Cached display state per streak tile, so writes happen only on change.
     this.equip = { tactical: { kind: '', left: NaN }, lethal: { kind: '', left: NaN } };
@@ -139,17 +140,18 @@ export class Controls {
     onTune(key => { if (key === null || key === 'fireRing' || key === 'leftSize') this.#applyTuning(); });
     this.tuner = mountTuner(this.root);
     this.handled = new WeakSet();  // Events the window listeners took, so a node listener never runs one twice.
-    this.onTouchStart = e => { this.handled.add(e); this.#start(e); };
-    this.onTouchMove = e => { this.handled.add(e); this.#move(e); };
-    this.onTouchEnd = e => { this.handled.add(e); this.#end(e); };
+    this.onTouchStart = e => { this.handled.add(e); this.#start(e); this.rec?.event(e); };
+    this.onTouchMove = e => { this.handled.add(e); this.#move(e); this.rec?.event(e); };
+    this.onTouchEnd = e => { this.handled.add(e); this.#end(e); this.rec?.event(e); };
     // An event whose target has left the document travels to that node alone: it never reaches window. These run only
     // for such events; while the target is attached the window listeners above have them.
     this.onDetached = e => {
       // A target removed while its own event was on the way reaches here after window already had it.
       if (e.target?.isConnected !== false || this.handled.has(e)) return;
-      this.debug?.(`detached ${e.type} on ${nodeName(e.target)}`);
+      this.#say(`detached ${e.type} on ${nodeName(e.target)}`);
       if (e.type === 'touchmove') this.#move(e);
       else this.#end(e);
+      this.rec?.event(e, true);
     };
     const opts = { passive: false, capture: true };
     window.addEventListener('touchstart', this.onTouchStart, opts);
@@ -160,9 +162,15 @@ export class Controls {
     window.addEventListener('orientationchange', () => this.remeasure());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) return;
-      this.debug?.('release: page hidden');
+      this.#say('release: page hidden');
       this.#release();
     });
+  }
+
+  // The controls' own account of a decision: to the debug overlay and the touch recorder, whichever are on.
+  #say(text) {
+    this.debug?.(text);
+    this.rec?.note(text);
   }
 
   #build() {
@@ -328,6 +336,7 @@ export class Controls {
     this.restRight = { x: r.left, y: r.top };
     this.#measureZones();
     this.paintDirty = true;
+    this.rec?.mark('G');
   }
 
   // Where each stick rests, as a circle the HUD keeps clear of: the move rim, and the aim ring with its ticks. The
@@ -348,8 +357,9 @@ export class Controls {
   }
 
   setEnabled(on) {
-    if (this.enabled !== on) this.debug?.(on ? 'controls on' : 'controls off (release)');
+    if (this.enabled !== on) this.#say(on ? 'controls on' : 'controls off (release)');
     this.enabled = on;
+    this.rec?.mark('E', on);
     this.el.classList.toggle('live', on);
     this.tuner.setLive(on);
     if (on) {
@@ -437,6 +447,7 @@ export class Controls {
   // kind is a TACTICALS or LETHALS id; left is the remaining count.
   setEquip(which, kind, left) {
     const e = this.equip[which], b = this.buttons[which];
+    if (this.rec && ((kind && e.kind !== kind) || e.left !== left)) this.rec.mark('Q', which, kind || e.kind, left);
     if (kind && e.kind !== kind) {
       e.kind = kind;
       // Into a stable wrapper: nothing under a finger is ever replaced, only its contents.
@@ -455,6 +466,7 @@ export class Controls {
     on = !!on;
     if (this.detonate === on) return;
     this.detonate = on;
+    this.rec?.mark('D', on);
     const b = this.buttons.lethal, e = this.equip.lethal;
     b.classList.toggle('detonate', on);
     b.querySelector('.tbtn-label').textContent = on ? 'Detonate' : (LETHALS[e.kind]?.name ?? e.kind);
@@ -550,7 +562,7 @@ export class Controls {
   }
 
   #takeOver(side, at) {
-    this.debug?.(`${side === 'left' ? 'L' : 'R'} #${this[side].id} unseen ${Math.round(at - this.seen[side])}ms: new thumb takes it`);
+    this.#say(`${side === 'left' ? 'L' : 'R'} #${this[side].id} unseen ${Math.round(at - this.seen[side])}ms: new thumb takes it`);
     this.#drop(this[side].id, at, true);
   }
 
@@ -589,11 +601,11 @@ export class Controls {
       if (was.side === 'left' && this.left.id === null) {
         this.#grabLeft(id, was.ox, was.oz, at);
         this.left.x = x; this.left.y = y;
-        this.debug?.(`L picked up again by #${id}`);
+        this.#say(`L picked up again by #${id}`);
       } else if (was.side === 'right' && this.right.id === null) {
         this.#grabRight(id, was.ox, was.oz, at);
         this.#aimMove(x, y, at);
-        this.debug?.(`R picked up again by #${id}`);
+        this.#say(`R picked up again by #${id}`);
       } else {
         this.#keep(this.spare, id, 'stick');
       }
@@ -605,11 +617,11 @@ export class Controls {
     if (leftSide && this.left.id === null) {
       this.spare.delete(id);
       this.#grabLeft(id, x, y, at);
-      this.debug?.(`L taken by ${spare ? 'spare' : 'unseen'} #${id}`);
+      this.#say(`L taken by ${spare ? 'spare' : 'unseen'} #${id}`);
     } else if (!leftSide && this.right.id === null) {
       this.spare.delete(id);
       this.#grabRight(id, x, y, at);
-      this.debug?.(`R taken by ${spare ? 'spare' : 'unseen'} #${id}`);
+      this.#say(`R taken by ${spare ? 'spare' : 'unseen'} #${id}`);
     } else if (!spare) {
       this.#keep(this.spare, id, 'stick');
     }
@@ -617,7 +629,7 @@ export class Controls {
 
   #forgetStale(id) {
     if (id === this.left.id || id === this.right.id || this.buttonTouch.has(id)) {
-      this.debug?.(`#${id} reused while held: old finger dropped`);
+      this.#say(`#${id} reused while held: old finger dropped`);
       this.#drop(id, performance.now(), true);
     }
   }
@@ -787,20 +799,20 @@ export class Controls {
     if (!this.enabled) return;
     if (e.cancelable && !hudTap(e.target) && !onTuner(e.target)) e.preventDefault();
     const at = e.timeStamp, cancelled = e.type === 'touchcancel';
-    if (cancelled) this.debug?.(`touchcancel ${[...e.changedTouches].map(t => `#${t.identifier}`).join(' ')}`);
+    if (cancelled) this.#say(`touchcancel ${[...e.changedTouches].map(t => `#${t.identifier}`).join(' ')}`);
     for (const t of e.changedTouches) {
       const id = t.identifier;
       // An event that ends a stick finger while its own list still names it contradicts itself: the finger is down.
       if ((id === this.left.id || id === this.right.id) && inList(e.touches, id) && !this.suspect.has(id)) {
         this.suspect.set(id, performance.now());
-        this.debug?.(`${e.type} for #${id}, still listed: kept until it moves`);
+        this.#say(`${e.type} for #${id}, still listed: kept until it moves`);
         continue;
       }
       // iOS cancelling the move thumb just after another finger lifted (a grenade released, a button let go). The thumb
       // is still down, and no event will ever say so again: keep the stick as it is. See COLLATERAL_MS.
       if (cancelled && id === this.left.id && at - this.lastRelease <= COLLATERAL_MS && !document.hidden) {
         this.hold = { at: performance.now(), id };   // Page clock: read() times it out against performance.now().
-        this.debug?.(`L #${id} kept through a touchcancel ${Math.round(at - this.lastRelease)}ms after a release`);
+        this.#say(`L #${id} kept through a touchcancel ${Math.round(at - this.lastRelease)}ms after a release`);
         continue;
       }
       this.#drop(id, at, cancelled);
@@ -853,8 +865,8 @@ export class Controls {
   // A stick finger that moved: alive beyond doubt, whatever was believed about it.
   #confirm(side, id, at) {
     this.seen[side] = at;
-    if (this.suspect.delete(id)) this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} moved after its touchend: kept`);
-    if (side === 'left' && this.hold) { this.hold = null; this.debug?.(`L #${id} moved after a cancel: kept`); }
+    if (this.suspect.delete(id)) this.#say(`${side === 'left' ? 'L' : 'R'} #${id} moved after its touchend: kept`);
+    if (side === 'left' && this.hold) { this.hold = null; this.#say(`L #${id} moved after a cancel: kept`); }
   }
 
   // Every touch event carries where every finger is, not only the ones it is about. A stick finger that iOS leaves out
@@ -900,7 +912,7 @@ export class Controls {
       const ended = this.suspect.get(id);
       if (ended !== undefined) {
         if (performance.now() - ended < SUSPECT_MS) return;
-        this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} ended and never moved again: let go`);
+        this.#say(`${side === 'left' ? 'L' : 'R'} #${id} ended and never moved again: let go`);
         this.#drop(id, at, true);
         return;
       }
@@ -920,7 +932,7 @@ export class Controls {
       if (side === 'left' && (this.throw || at - this.throwEndAt < THROW_GRACE_MS)) {
         if (at - miss.at < HOLD_MAX_MS) return;
       } else if (miss.n < MISS_LISTS && at - miss.at < MISSING_DROP_MS) return;
-      this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} unseen ${Math.round(at - this.seen[side])}ms: let go`);
+      this.#say(`${side === 'left' ? 'L' : 'R'} #${id} unseen ${Math.round(at - this.seen[side])}ms: let go`);
       this.#drop(id, at, true);
     };
     check('left');
@@ -931,7 +943,7 @@ export class Controls {
       const n = (this.buttonMiss.get(id) ?? 0) + 1;
       this.buttonMiss.set(id, n);
       if (n >= MISS_LISTS && at - seenAt >= MISSING_DROP_MS) {
-        this.debug?.(`btn #${id} unseen: let go`);
+        this.#say(`btn #${id} unseen: let go`);
         this.#drop(id, at, true);
       }
     }
@@ -990,7 +1002,7 @@ export class Controls {
 
     const l = this.left;
     if (this.hold && performance.now() - this.hold.at > HOLD_MAX_MS) {
-      this.debug?.(`L #${l.id} kept ${HOLD_MAX_MS}ms with no sign of the thumb: let go`);
+      this.#say(`L #${l.id} kept ${HOLD_MAX_MS}ms with no sign of the thumb: let go`);
       this.#drop(l.id, performance.now(), true);
     }
     // A stick whose touchend arrived and that has not moved since: let go even if no other finger sends an event.
@@ -999,11 +1011,12 @@ export class Controls {
       for (const side of ['left', 'right']) {
         const id = this[side].id, ended = id === null ? undefined : this.suspect.get(id);
         if (ended !== undefined && now - ended >= SUSPECT_MS) {
-          this.debug?.(`${side === 'left' ? 'L' : 'R'} #${id} ended and never moved again: let go`);
+          this.#say(`${side === 'left' ? 'L' : 'R'} #${id} ended and never moved again: let go`);
           this.#drop(id, now, true);
         }
       }
     }
+    this.rec?.frame(performance.now());
     let mx = 0, mz = 0;
     if (l.id !== null) {
       let dx = l.x - l.ox, dy = l.y - l.oz;
