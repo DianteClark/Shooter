@@ -539,7 +539,7 @@ async def run_econ(browser, vw, vh, failures, errors):
     await shot('10-exfil')
     await crop('10-exfil')
     await check_fit(pg, ['.zm-top'], f'{tag} exfil', failures)
-    if await ev("document.querySelector('.zm-exfil').hidden"): failures.append(f'{tag}: no exfil clock on the plate')
+    if await ev("document.querySelector('.zm-xbig').hidden"): failures.append(f'{tag}: no exfil clock')
     await ev(f"(() => {{ const R = {G}.match.sim.rules; R.econ.exfil.state = 0; for (const z of R.horde) if (z.alive) {{ z.alive = false; z.hp = 0; }} R.econ.quest.got = 3; }})()")
     await goto('L.relics[2]')
     await pg.wait_for_timeout(600)

@@ -78,6 +78,14 @@ const CSS = `
 .zm-pop.spend { color: #ff8a7c; }
 @keyframes zmPop { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-22px); } }
 .zm-ui [hidden] { display: none !important; }
+.zm-xbig { position: absolute; left: 50%; top: calc(var(--st) + 58px); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 6px 16px 7px;
+  background: linear-gradient(180deg, rgba(20,48,28,.94), rgba(10,22,14,.9)); box-shadow: inset 0 0 0 2px #59d36b, 0 0 18px rgba(89,211,107,.35);
+  clip-path: polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px); }
+.zm-xbig > b { font: 400 40px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #8ff09c; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(89,211,107,.5); }
+.zm-xbig span { display: flex; flex-direction: column; gap: 3px; }
+.zm-xbig span b { font: 400 16px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #fff; }
+.zm-xbig span small { font: 11px/1.1 var(--f-plate); letter-spacing: var(--tr-plate); color: #c8f0cc; white-space: nowrap; }
+.zm-xbig.on b:first-child { color: #fff; }
 .zm-exfil { box-shadow: var(--hud-edge), inset 0 -3px 0 #59d36b; } .zm-exfil b { color: #8ff09c; }
 .zm-relic { box-shadow: var(--hud-edge), inset 0 -2px 0 #b070ff; } .zm-relic b { color: #d8b8ff; }
 /* Plates: three segments over the health bar (as battle royale's). */
@@ -132,6 +140,7 @@ export class ZmHud {
         <div class="zm-chip zm-exfil" hidden><b>60</b><small>Hold the pad</small></div>
         <div class="zm-chip zm-relic" hidden><b>0/3</b><small>Relics</small></div>
       </div>
+      <div class="zm-xbig" hidden><b>60</b><span><b>EXFIL</b><small>Get to the pad</small><small class="xn">0 undead coming</small></span></div>
       <div class="zm-boss" hidden><b>Yardmaster</b><i><i></i></i></div>
       <div class="zm-crew"></div>
       <button class="zm-use" data-tap="1" hidden><span class="t">BUY</span><small></small></button>
@@ -150,6 +159,7 @@ export class ZmHud {
     this.downEl = $('.zm-down'); this.bleedBar = $('.zm-down .bl i'); this.revBar = $('.zm-down .rv i');
     this.revEl = $('.zm-rev'); this.revMine = $('.zm-rev i i');
     this.heldEl = $('.zm-held');
+    this.xbig = $('.zm-xbig'); this.xbigB = $('.zm-xbig > b'); this.xbigS = $('.zm-xbig span small'); this.xbigN = $('.zm-xbig .xn');
     this.exfilEl = $('.zm-exfil'); this.exfilB = $('.zm-exfil b'); this.exfilS = $('.zm-exfil small');
     this.relicEl = $('.zm-relic'); this.relicB = $('.zm-relic b');
     this.shopEl = $('.zm-shop'); this.shopRow = $('.zm-shop-row');
@@ -221,7 +231,7 @@ export class ZmHud {
     if (z.boss) this.bossBar.style.setProperty('--k', Math.max(0, z.boss.hp).toFixed(3));
     const bossName = z.boss?.warden ? questBossName(z) : ZM_KIND_NAMES.boss;
     if (c.bossName !== bossName) { c.bossName = bossName; this.bossEl.querySelector('b').textContent = bossName; }
-    this.#econ(z, me);
+    this.#econ(z, me, view);
     this.#crew(view, me);
     // Downed, reviving, out until the next round.
     const down = !!me.downed && me.alive;
@@ -313,7 +323,7 @@ export class ZmHud {
   }
 
   // The plate bar, the weapon panel's tier pips, the exfil clock and the relic count.
-  #econ(z, me) {
+  #econ(z, me, view) {
     const c = this.c;
     if (!this.platesEl) {
       const vit = this.hud.el.querySelector('.vitals');
@@ -344,21 +354,24 @@ export class ZmHud {
       [...this.tierEl.children].forEach((n, i) => { n.classList.toggle('on', i < tier); n.style.setProperty('--k', col); });
       this.tierEl.title = W ? `${W.name}: ${W.desc}` : tier ? `Tier ${tier}${tier >= 3 ? `: ${ZM_FX[zmFxOf(gun)].name}` : ''}` : '';
     }
+    // The exfil: a big clock under the strip, with the pad and the undead still on their way (the round plate's own
+    // count stands still while the exfil holds the round). The small chip stays out of the strip's way.
     const X = z.exfil;
-    const ex = X?.state === 1 ? String(Math.max(0, Math.ceil(X.timer))) : '';
+    const ex = X?.state === 1 ? (t => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`)(Math.max(0, Math.ceil(X.timer))) : '';
     if (c.exfil !== ex) {
       c.exfil = ex;
-      this.exfilEl.hidden = !ex;
-      this.exfilB.textContent = ex;
-      if (ex && z.layout?.exfil) {
-        const d = Math.hypot(me.x - z.layout.exfil.x, me.z - z.layout.exfil.z);
-        this.exfilS.textContent = d < z.layout.exfil.r + 0.8 ? 'On the pad' : 'Get to the pad';
-      }
+      this.exfilEl.hidden = true;
+      this.xbig.hidden = !ex;
+      this.xbigB.textContent = ex;
     }
-    if (ex && z.layout?.exfil) {
-      const on = Math.hypot(me.x - z.layout.exfil.x, me.z - z.layout.exfil.z) < z.layout.exfil.r + 0.8;
-      if (c.onPad !== on) { c.onPad = on; this.exfilS.textContent = on ? 'On the pad' : 'Get to the pad'; }
-    }
+    if (ex) {
+      let n = 0;
+      for (const p of view.players) if (p.zk && p.alive) n++;
+      const nk = `${n}`;
+      if (c.xn !== nk) { c.xn = nk; this.xbigN.textContent = `${n} undead coming`; }
+      const on = z.layout?.exfil ? Math.hypot(me.x - z.layout.exfil.x, me.z - z.layout.exfil.z) < z.layout.exfil.r + 0.8 : false;
+      if (c.onPad !== on) { c.onPad = on; this.xbigS.textContent = on ? 'On the pad: hold it' : 'Get to the pad'; this.xbig.classList.toggle('on', on); }
+    } else c.onPad = undefined;
     const q = z.quest, n = q && !q.state ? (z.layout?.relics ?? []).filter(r => q.got & (1 << r.i)).length : 0;
     const rel = n ? `${n}/${z.layout.relics.length}` : '';
     if (c.relic !== rel) {
