@@ -3456,8 +3456,11 @@ export class HUD {
       if (near) continue;
       const vx = v[0] * pt.x + v[4] * y + v[8] * pt.z + v[12], vy = v[1] * pt.x + v[5] * y + v[9] * pt.z + v[13], vz = v[2] * pt.x + v[6] * y + v[10] * pt.z + v[14];
       const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15];
-      if (w <= 0.01) continue;
-      const nx = (p[0] * vx + p[8] * vz + p[12]) / w, ny = (p[5] * vy + p[9] * vz + p[13]) / w;
+      // A point behind the camera's plane (far past the bottom edge on Ground War's big maps) used to be skipped, so a
+      // marker never placed sat at the screen's top-left corner. Project it with |w| (the right direction) and push it
+      // well off-screen: it rides the edge and points at it like any other off-screen objective.
+      let nx = (p[0] * vx + p[8] * vz + p[12]) / Math.max(0.01, Math.abs(w)), ny = (p[5] * vy + p[9] * vz + p[13]) / Math.max(0.01, Math.abs(w));
+      if (w <= 0.01) { const k = 4 / Math.max(1e-6, Math.abs(nx), Math.abs(ny)); nx *= k; ny *= k; }
       const sx = (nx * 0.5 + 0.5) * W, sy = (0.5 - ny * 0.5) * H;
       const dx = sx - W / 2, dy = sy - H / 2;
       const s = this.safe;
