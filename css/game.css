@@ -1321,6 +1321,39 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 #ui .rx-cer-actions { position: absolute; z-index: 2; right: max(var(--sr), 14px); bottom: max(var(--sb), 14px); display: flex; gap: 6px; }
 #ui .rx-cer-actions .rs-btn { min-height: 40px; font-size: 14px; }
 
+/* The "Unlocked" summary: everything a match earned, grouped, once. Fits 640 to 956 px wide, scrolls when long. */
+#ui .overlay.show:has(> .ux) { background: var(--c-night); padding: 0; z-index: 6; }
+#ui .ux { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden;
+  padding: max(var(--st, 0px), 12px) max(var(--sr), 16px) max(var(--sb), 10px) max(var(--sl), 16px);
+  background: radial-gradient(ellipse 70% 60% at 50% 30%, #3a3324, var(--c-night) 75%); }
+#ui .ux-head { display: flex; align-items: baseline; gap: 12px; flex: none; }
+#ui .ux-head h2 { font: 400 32px/1 var(--f-stencil); letter-spacing: .03em; color: var(--c-chalk); }
+#ui .ux-head h2 u { text-decoration: none; color: var(--c-gold); }
+#ui .ux-hl { display: flex; gap: 8px; flex: none; overflow-x: auto; }
+#ui .ux-hl-i { flex: none; display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 6px; line-height: 0;
+  background: linear-gradient(90deg, rgba(255,207,64,.22), rgba(255,207,64,.06)); box-shadow: inset 0 0 0 1px rgba(255,207,64,.55); }
+#ui .ux-hl-i > span { display: flex; flex-direction: column; gap: 3px; line-height: 1; }
+#ui .ux-hl-i small { font: var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-gold); }
+#ui .ux-hl-i b { font: 400 17px/1 var(--f-stencil); color: #fff4bf; white-space: nowrap; }
+#ui .ux-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+#ui .ux-grp h4 { display: flex; gap: 6px; align-items: baseline; margin: 0 0 4px; font: var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-sodium); }
+#ui .ux-grp h4 small { color: var(--c-haze); }
+#ui .ux-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 4px; }
+#ui .ux-tile { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px 4px 4px; text-align: left; border: 0; color: var(--c-chalk);
+  background: rgba(255,255,255,.06); box-shadow: inset 2px 0 0 var(--c-sodium); }
+#ui .ux-tile.still { cursor: default; box-shadow: inset 2px 0 0 var(--c-haze); }
+#ui .ux-tile:not(.still):active { transform: scale(.97); }
+#ui .ux-mk { flex: none; width: 40px; height: 36px; display: grid; place-items: center; overflow: hidden; line-height: 0; color: var(--c-chalk); }
+#ui .ux-mk .pr-cd { transform: scale(.4); }
+#ui .ux-tx { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ui .ux-tx b { font: 400 14px/1.1 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .ux-tx small { font: var(--fs-caption)/1 var(--f-body); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ui .ux-actions { flex: none; display: flex; gap: 6px; justify-content: flex-end; }
+#ui .ux-actions .rs-btn { min-height: 40px; font-size: 14px; }
+#ui .ux-grp, #ui .ux-hl-i { animation: rs-up .3s var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { #ui .ux-grp, #ui .ux-hl-i { animation: none !important; } }
+html[data-calm] #ui .ux-grp, html[data-calm] #ui .ux-hl-i { animation: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   #ui .rs.in > *, #ui .rs.in .rb-row, #ui .rs.in .xp-row, #ui .rs.in > .rs-cards > *, #ui .rx-rays, #ui .rx-emblem, #ui .rx-text, #ui .rx-mark, #ui .rx-swatch, #ui .rx-unlock h2 { animation: none !important; }
 }

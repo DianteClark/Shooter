@@ -1,28 +1,28 @@
-// The end-of-match screen and its reel: the outcome moment, then the tables, XP fills, level-up ceremony, weapon
-// bars and unlocks one by one. All of it is transform and opacity via WAAPI; the reel can be tapped through, and a tap
+// The end-of-match screen and its reel: the outcome moment, then the tables, XP fills, the match's one big reveal
+// (level up, Master, Golden Gun or a cup), weapon bars, then one "Unlocked" summary of everything earned. All of it is transform and opacity via WAAPI; the reel can be tapped through, and a tap
 // ends the wait in progress. Rematch and Menu work from the first frame.
 import { TEAMS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { GUN_LADDER, isFfa, MODES, modeRules, EX, CONTRACT_NAMES } from '../shared/modes.js';
-import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL, MASTER_CURVE } from '../shared/progression.js';
+import { PLAYER_CURVE, WEAPON_CURVE, MAX_LEVEL, MASTER_CURVE, MAX_PRESTIGE } from '../shared/progression.js';
 import { matchScore, Progress } from './progress.js';
 import { esc, hex, badgeMark, badgeTag, nameHtml, SLOT_LABEL, ROMAN } from './widgets.js';
-import { kindLabel, rankStamp, masterStampHtml } from './prestige.js';
+import { kindLabel, masterStampHtml, rewardMark } from './prestige.js';
+import { unlockSheet } from './unlocksheet.js';
+import { tourneyStamp } from './tourney.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
 import { icon, resolveIcon } from './icons.js';
 import { rollNumber, sweep, reducedMotion, celebrate } from './motion.js';
-import { playerBanner, proProgressHtml, unlockStamp, cardHtml, cardProgressHtml, cardsInReach } from './cards.js';
-import { challengeStamp, challengeStrip } from './challenges.js';
+import { playerBanner, proProgressHtml, cardHtml, cardProgressHtml, cardsInReach } from './cards.js';
+import { challengeStrip } from './challenges.js';
 import { modeColumn } from './mode-hud.js';
 import { playlistName } from '../shared/playlist.js';
-import { masteryStamp, masteryStrip } from './mastery.js';
+import { masteryStrip } from './mastery.js';
 import { playUi } from '../audio/audio.js';
-import { seasonStrip, seasonStamp } from './season.js';
-import { tourneyStamp } from './tourney.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
+import { seasonStrip } from './season.js';
 import { matchHeader, ffaStandings, brPlacing, ORDINAL } from './outcome.js';
 
 const FILL_MS = 520;
 const STAMP_MS = 1700;
-const UNLOCK_MS = 1250;
 const HERO_MS = 1500;           // The outcome word holds the screen this long before the tables take over.
 const BOARD_ROWS = 6;           // Rows per team table, the last one a "+N more" line on bigger teams.
 
@@ -366,6 +366,7 @@ export function resultsScreen(menu, data, handlers) {
           : sc.kind === 'pair' ? `<span class="rs-score" data-kind="pair"><u class="rs-mine" style="color:${mineCss}">0</u><i></i><u class="rs-them" style="color:${themCss}">0</u></span>` : ''}
         ${mvpCard}
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
+        <button class="rs-btn quiet res-unlocked" data-act="resUnlocked" hidden>Unlocked${unlocks?.length ? ` ${unlocks.length}` : ''}</button>
       </div>
       <div class="rb-pair">${zmr ? zmCrew() + zmRecord() : exr ? exSquad() + exRewards() : br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
@@ -468,27 +469,13 @@ async function runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineN
     : { level: lp.level, frac: lp.maxed ? 1 : lp.into / lp.span };
   await reel.climb(bar, label, xpFrom, to);
   if (reel.dead) return;
-  if (master && master.level > master.before) {
-    // A Master level (or several): its own stamp, with the tier's icon.
-    q('.xp-card').classList.add('levelled');
-    playUi('levelUp');
-    await reel.stamp(masterStampHtml(lp.master, lp.masterBefore));
-    if (reel.dead) return;
-  } else if (!master && lp.master > 0) {
-    // This match reached Prestige X level 50: Master Prestige begins, with its reveal.
-    q('.xp-card').classList.add('levelled');
-    playUi('prestige');
-    label.textContent = `M ${lp.master}`;
-    await reel.stamp(masterStampHtml(lp.master, 0), STAMP_MS + 600);
-    if (reel.dead) return;
-  } else if (lp.after > lp.before) {
-    q('.xp-card').classList.add('levelled');
-    playUi('levelUp');
-    await reel.stamp(`
-      <div class="rx-card rx-level">
-        <div class="rx-emblem">${badgeMark(lp.prestige ?? 0, 92)}</div>
-        <div class="rx-text"><span class="rx-kick">Level up</span><h2>Level ${lp.level}</h2><p>${lp.level >= MAX_LEVEL ? 'Maximum level. Prestige awaits.' : 'New gear may be waiting in the armory'}</p></div>
-      </div>`);
+  // One full reveal per match, the biggest; every other moment is a line at the top of the summary.
+  const moments = bigMoments(lp, master, unlocks), top = moments[0];
+  if (moments.some(m => m.xp)) q('.xp-card').classList.add('levelled');
+  if (top?.key === 'masterStart') label.textContent = `M ${lp.master}`;
+  if (top?.xp) {
+    playUi(top.key === 'masterStart' ? 'prestige' : 'levelUp');
+    await reel.stamp(top.html, top.key === 'masterStart' ? STAMP_MS + 600 : STAMP_MS);
     if (reel.dead) return;
   }
 
@@ -504,17 +491,122 @@ async function runReel(menu, reel, { lp, master, xpFrom, weapons, unlocks, mineN
     if (reel.dead) return;
   }
 
-  // Unlocks, one card each, then done.
-  for (const u of unlocks) {
-    playUi('unlock');
-    await reel.stamp(unlockCard(u), UNLOCK_MS);
+  // The Golden Gun or a cup won: the match's one reveal comes after the bars.
+  if (top && !top.xp) {
+    playUi(top.key === 'golden' ? 'prestige' : 'unlock');
+    await reel.stamp(top.html);
     if (reel.dead) return;
   }
-  if (reel.dead) return;
+  // Then everything earned, once, in one panel (Skip lands here too).
   q('.res-skip')?.setAttribute('hidden', '');
   const primary = q('.res-choice .primary');
   if (primary) sweep(primary);
   reel.dead = true;              // Finished: nothing left for a later screen to cancel.
+  if ((unlocks.length || moments.length > 1) && root.isConnected && menu.el.dataset.screen === 'results') {
+    const again = q('.res-unlocked');
+    if (again) again.hidden = false;
+    menu.on({ resUnlocked: () => unlockedSummary(menu, unlocks, moments, reel.rematchLabel) });
+    unlockedSummary(menu, unlocks, moments, reel.rematchLabel, { cheer: true });
+  }
+}
+
+// The match's big moments, biggest first: the Golden Gun, Master Prestige reached, a cup won, a new Master tier, Master
+// levels, a level up. `xp` ones land on the XP bar; `html` is the full reveal used when that moment is the biggest.
+function bigMoments(lp, master, unlocks) {
+  const out = [];
+  const golden = unlocks.find(u => u.golden);
+  if (golden) out.push({ key: 'golden', kick: 'Golden Gun', title: `${golden.name} unlocked`, mark: art(golden.id, 30), html: unlockCard(golden) });
+  if (!master && lp.master > 0) out.push({ key: 'masterStart', xp: true, kick: 'Master Prestige', title: `Master ${lp.master}`, mark: badgeMark(MAX_PRESTIGE, 30, lp.master), html: masterStampHtml(lp.master, 0) });
+  const champ = unlocks.find(u => u.kind === 'tourney' && u.champion);
+  if (champ) out.push({ key: 'champion', kick: champ.cup || 'Tournament', title: 'Champion', mark: art('ui:crown', 30), html: unlockCard(champ) });
+  if (master && master.level > master.before) {
+    const html = masterStampHtml(lp.master, lp.masterBefore);
+    const tier = /rx-kick">([^<]+) Master</.exec(html)?.[1];
+    out.push({ key: tier ? 'masterTier' : 'master', xp: true, kick: tier ? `${tier} Master` : 'Master level up', title: `Master ${lp.master}`, mark: badgeMark(MAX_PRESTIGE, 30, lp.master), html });
+  } else if (!master && !lp.master && lp.after > lp.before) {
+    out.push({ key: 'level', xp: true, kick: 'Level up', title: `Level ${lp.level}`, mark: badgeMark(lp.prestige ?? 0, 30),
+      html: `
+      <div class="rx-card rx-level">
+        <div class="rx-emblem">${badgeMark(lp.prestige ?? 0, 92)}</div>
+        <div class="rx-text"><span class="rx-kick">Level up</span><h2>Level ${lp.level}</h2><p>${lp.level >= MAX_LEVEL ? 'Maximum level. Prestige awaits.' : 'New gear may be waiting in the armory'}</p></div>
+      </div>` });
+  }
+  return out;
+}
+
+// Groups of the summary, in order; the first that claims an unlock takes it.
+const GROUPS = [
+  ['card', 'Calling cards', u => u.kind === 'card'],
+  ['emblem', 'Emblems', u => u.kind === 'emblem'],
+  ['camo', 'Camos', u => ['camo', 'tracer', 'killFx'].includes(u.kind)],
+  ['attachment', 'Attachments', u => u.kind === 'attachment'],
+  ['operator', 'Operators and skins', u => u.kind === 'operator' || u.kind === 'skin'],
+  ['finisher', 'Finishers and emotes', u => u.kind === 'finisher' || u.kind === 'emote'],
+  ['level', 'Level rewards', u => u.level != null || ['rank', 'weapon', 'perk', 'tactical', 'lethal', 'streak'].includes(u.kind)],
+  ['pro', 'Pro perks', u => u.kind === 'pro'],
+  ['mastery', 'Mastery', u => u.kind === 'mastery'],
+  ['challenge', 'Challenges', u => u.kind === 'challenge'],
+  ['event', 'Season, event and tournament', u => u.kind === 'season' || u.kind === 'tourney' || u.kind === 'event'],
+  ['more', 'More', () => true],
+];
+// Kinds the unlock sheet (js/ui/unlocksheet.js) can open.
+const SHEET_KINDS = new Set(['card', 'emblem', 'camo', 'tracer', 'killFx', 'operator', 'skin', 'finisher', 'emote', 'attachment', 'weapon', 'perk', 'tactical', 'lethal', 'streak']);
+
+function tileOf(u) {
+  let mark = '', name = u.name ?? '', sub = '';
+  if (u.kind === 'camo' && u.colors) {
+    const c = u.colors.map(hex);
+    mark = `<i class="pr-mk pr-sw" style="--s:30px;background:linear-gradient(135deg, ${c[0]} 0 34%, ${c[1] ?? c[0]} 34% 67%, ${c[2] ?? c[0]} 67%)"></i>`;
+  } else if (['rank', 'camo', 'card', 'emblem'].includes(u.kind)) mark = rewardMark(u, 30);
+  else if (u.kind === 'attachment') mark = art(u.slot, 30);
+  else if (u.kind === 'operator' || u.kind === 'skin') mark = art('ui:operator', 30);
+  else if (u.kind === 'challenge') mark = art(u.icon ?? 'ui:flag', 30);
+  else if (u.kind === 'mastery') mark = art(u.item, 30);
+  else if (u.kind === 'tourney') mark = art(u.what === 'emblem' ? 'ui:star' : u.champion ? 'ui:crown' : 'ui:cup', 30);
+  else if (u.kind === 'season') mark = art('ui:star', 30);
+  else mark = art(u.id, 30);
+  if (!mark) mark = art('ui:new', 30);
+  if (u.kind === 'season') { name = u.what === 'tier' ? `Season tier ${u.tier}` : u.name ?? ''; sub = u.what === 'tier' ? 'Claim on the Season screen' : u.what === 'placed' ? 'Placement complete' : 'Promoted'; }
+  else if (u.kind === 'tourney') { name = u.what === 'emblem' ? "Champion's Crest" : u.champion ? 'Champion' : u.won ? `${u.cup || 'Tournament'}: round won` : u.cup || 'Tournament'; sub = u.what === 'emblem' ? 'Emblem' : u.cup ?? ''; }
+  else if (u.kind === 'challenge') sub = `+${(u.xp ?? 0).toLocaleString('en-US')} XP`;
+  else if (u.kind === 'mastery') sub = `Tier ${u.tier} of ${u.count}`;
+  else sub = u.weaponName ?? (u.kind === 'weapon' ? 'Weapon' : kindLabel(u.kind));
+  const opens = SHEET_KINDS.has(u.kind) && u.id != null;
+  const attrs = opens ? ` data-act="uxItem" data-kind="${esc(u.kind)}" data-id="${esc(u.id)}"${u.weapon ? ` data-w="${esc(u.weapon)}"` : ''}` : ' tabindex="-1"';
+  return `<button class="ux-tile${opens ? '' : ' still'}"${attrs}><span class="ux-mk">${mark}</span><span class="ux-tx"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`;
+}
+
+// Everything the match unlocked, grouped, shown once with one celebration. The results screen's "Unlocked" button
+// brings it back. Tapping a tile opens its unlock sheet over it.
+function unlockedSummary(menu, unlocks, moments, rematchLabel, { cheer = false } = {}) {
+  const groups = [];
+  const left = [...unlocks];
+  for (const [key, title, test] of GROUPS) {
+    const mine = left.filter(test);
+    if (!mine.length) continue;
+    for (const u of mine) left.splice(left.indexOf(u), 1);
+    groups.push(`<section class="ux-grp" data-g="${key}"><h4>${esc(title)}<small>${mine.length}</small></h4><div class="ux-grid">${mine.map(tileOf).join('')}</div></section>`);
+  }
+  const hl = moments.length ? `<div class="ux-hl">${moments.map(m => `<span class="ux-hl-i" data-k="${m.key}">${m.mark}<span><small>${esc(m.kick)}</small><b>${esc(m.title)}</b></span></span>`).join('')}</div>` : '';
+  menu.overlay(`<div class="ux" role="dialog" aria-label="Unlocked this match">
+      <div class="ux-head"><span class="rx-kick">This match</span><h2>Unlocked <u class="ux-n">${unlocks.length}</u></h2></div>
+      ${hl}
+      <div class="ux-body scroll-y">${groups.join('') || '<small class="empty">Nothing new this time</small>'}</div>
+      <div class="ux-actions">
+        <button class="rs-btn primary is-primary" data-act="uxDone">Continue</button>
+        <button class="rs-btn" data-act="resRematch">${esc(rematchLabel)}</button>
+        <button class="rs-btn" data-act="resMenu">Menu</button>
+      </div></div>`);
+  if (unlocks.some(u => u.golden)) Progress.markGoldenCelebrated();      // Revealed here: the armory does not reveal it again.
+  menu.on({
+    uxDone: () => menu.overlay(''),
+    uxItem: (_d, el) => { if (el?.dataset) unlockSheet(menu, el.dataset.kind, el.dataset.id, el.dataset.w ? { weapon: el.dataset.w } : {}); },
+  });
+  const box = menu.overlayEl?.querySelector('.ux');
+  if (cheer && box) {
+    playUi('unlock');
+    celebrate(box, { count: Math.min(40, 18 + unlocks.length * 2) });
+  }
 }
 
 // Calling cards still being earned, closest first: a sliver of the card, its name and its progress bar.
@@ -524,10 +616,9 @@ function cardsStrip(list) {
     <div class="rs-cc-row">${cardHtml(card.id, { size: 64, title: '', sub: '', locked: true })}<b>${esc(card.name)}</b>${cardProgressHtml(progress)}</div>`).join('')}</div>`;
 }
 
+// The full reveal for the Golden Gun or a cup won (bigMoments).
 function unlockCard(u) {
-  // Pro perks and calling cards have their own ceremony (js/ui/cards.js), mastery tiers theirs (js/ui/mastery.js).
-  const special = rankStamp(u) ?? unlockStamp(u) ?? challengeStamp(u) ?? masteryStamp(u) ?? seasonStamp(u) ?? tourneyStamp(u);
-  if (special) return special;
+  if (u.kind === 'tourney') return tourneyStamp(u);
   let mark;
   if (u.kind === 'camo') {
     const c = (u.colors ?? [0x888888]).map(hex);
