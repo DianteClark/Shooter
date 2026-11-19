@@ -12,6 +12,7 @@ import { placeControls, scaleOf } from './layout.js';
 // (fireRing). Changing one re-measures and repaints the sticks; see #applyTuning.
 const LEFT_DEAD = 0.07;
 const SPRINT_HYST = 0.06;       // Sprint drops this far below the threshold that started it.
+const AUTO_SPRINT_AT = 0.85;    // The Auto-sprint option's threshold (fraction of the move stick).
 const LEFT_DRAG = 1.3;          // Beyond this many radii the base follows the thumb, so sprint survives drift.
 
 const AIM_ZONE = 30;            // Drawn only: the dashed inner ring, a hint of where aiming starts.
@@ -241,7 +242,8 @@ export class Controls {
 
   // Stick feel, the swapped layout and the throw reach are settings; they can change between matches.
   // sensitivity 0.6..1.6 scales how far the aim thumb travels before it fires.
-  applyOptions({ sensitivity = 1, lefty = false } = {}) {
+  applyOptions({ sensitivity = 1, lefty = false, autoSprint = true } = {}) {
+    this.autoSprint = !!autoSprint;
     this.sensitivity = Math.max(0.6, Math.min(1.6, sensitivity));
     this.lefty = !!lefty;
     this.el.classList.toggle('lefty', this.lefty);
@@ -1020,7 +1022,9 @@ export class Controls {
         mz = (dy / d) * len;
       }
       // A threshold of 1 still needs to be reachable: len tops out at exactly 1.
-      const on = Math.min(TUNING.sprintAt, 0.999);
+      // Auto-sprint (Options, on by default): past 85% of the stick; off, only at its very edge. The sim drops a sprint
+      // while aiming or firing either way (js/sim/player.js).
+      const on = this.autoSprint === false ? 0.985 : Math.min(TUNING.sprintAt, AUTO_SPRINT_AT, 0.999);
       this.sprintOn = this.sprintOn ? len >= on - SPRINT_HYST : len >= on;
     } else {
       this.sprintOn = false;

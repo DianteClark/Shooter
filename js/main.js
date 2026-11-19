@@ -2038,7 +2038,7 @@ function afterResults() {
 
 function applyOptions(v, changed) {
   if (changed === 'recall') return;     // Remembered menu picks: nothing to apply.
-  controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty });
+  controls.applyOptions({ sensitivity: v.sensitivity, lefty: v.lefty, autoSprint: v.autoSprint !== false });
   hud.setLefty(v.lefty);
   if (!changed || changed === 'hudSize') hud.setHudSize(v.hudSize);
   // Accessibility (docs/ACCESSIBILITY.md).

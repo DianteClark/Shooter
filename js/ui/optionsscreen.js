@@ -117,6 +117,10 @@ export function optionsScreen(menu, opts) {
           <div class="opt-segs">${HUD_SIZES.map(([id, label]) => `<button class="seg" data-act="optHudSize" data-id="${id}">${label}</button>`).join('')}</div>
         </div>
         <div class="opt-row">
+          <div class="opt-name"><b>Auto-sprint</b><small>Push the move stick past 85% to sprint (off: only at its very edge)</small></div>
+          ${toggle('optAutoSprint', 'opt-autosprint')}
+        </div>
+        <div class="opt-row">
           <div class="opt-name"><b>Auto-respawn</b><small>Respawn as soon as the timer ends</small></div>
           ${toggle('optAutoRespawn', 'opt-autorespawn')}
         </div>
@@ -178,7 +182,7 @@ export function optionsScreen(menu, opts) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
-    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter'], ['.opt-batterysaver', 'batterySaver']]) {
+    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter'], ['.opt-batterysaver', 'batterySaver'], ['.opt-autosprint', 'autoSprint']]) {
       const t = q(cls);
       if (!t) continue;
       t.classList.toggle('on', v[key] === true);
@@ -250,6 +254,7 @@ export function optionsScreen(menu, opts) {
     optHudSize: ({ id }) => { Options.set('hudSize', id); paint(); },
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
+    optAutoSprint: () => { Options.set('autoSprint', Options.get('autoSprint') === false); paint(); },
     optBatterySaver: () => { Options.set('batterySaver', !Options.get('batterySaver')); paint(); },
     optDmgNumbers: () => { Options.set('dmgNumbers', !Options.get('dmgNumbers')); paint(); },
     optBotChatter: () => { Options.set('botChatter', !Options.get('botChatter')); paint(); },
