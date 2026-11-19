@@ -564,7 +564,8 @@ function tileOf(u) {
   if (u.kind === 'camo' && u.colors) {
     const c = u.colors.map(hex);
     mark = `<i class="pr-mk pr-sw" style="--s:30px;background:linear-gradient(135deg, ${c[0]} 0 34%, ${c[1] ?? c[0]} 34% 67%, ${c[2] ?? c[0]} 67%)"></i>`;
-  } else if (['rank', 'camo', 'card', 'emblem'].includes(u.kind)) mark = rewardMark(u, 30);
+  } else if (u.kind === 'card' && u.id != null) mark = `<i class="pr-mk ux-card">${cardHtml(u.id, { size: 168, title: '', sub: '' })}</i>`;   // Big enough to read.
+  else if (['rank', 'camo', 'card', 'emblem'].includes(u.kind)) mark = rewardMark(u, 30);
   else if (u.kind === 'attachment') mark = art(u.slot, 30);
   else if (u.kind === 'operator' || u.kind === 'skin') mark = art('ui:operator', 30);
   else if (u.kind === 'challenge') mark = art(u.icon ?? 'ui:flag', 30);
@@ -580,7 +581,7 @@ function tileOf(u) {
   else sub = u.weaponName ?? (u.kind === 'weapon' ? 'Weapon' : kindLabel(u.kind));
   const opens = SHEET_KINDS.has(u.kind) && u.id != null;
   const attrs = opens ? ` data-act="uxItem" data-kind="${esc(u.kind)}" data-id="${esc(u.id)}"${u.weapon ? ` data-w="${esc(u.weapon)}"` : ''}` : ' tabindex="-1"';
-  return `<button class="ux-tile${opens ? '' : ' still'}"${attrs}><span class="ux-mk">${mark}</span><span class="ux-tx"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`;
+  return `<button class="ux-tile${opens ? '' : ' still'}${u.kind === 'card' ? ' is-card' : ''}"${attrs}><span class="ux-mk">${mark}</span><span class="ux-tx"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`;
 }
 
 // Everything the match unlocked, grouped, shown once with one celebration. The results screen's "Unlocked" button

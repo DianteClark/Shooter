@@ -120,7 +120,7 @@ export function optionsScreen(menu, opts) {
           <div class="opt-name"><b>Auto-sprint</b><small>Push the move stick past 85% to sprint (off: only at its very edge)</small></div>
           ${toggle('optAutoSprint', 'opt-autosprint')}
         </div>
-        <div class="opt-row">
+        <div class="opt-row" data-words="record recorder recording touch touches report bug stick died replay code">
           <div class="opt-name"><b>Record touches (for bug reports)</b><small>Keeps the last 20 seconds of touches. If the move stick stops, tap Stick died? on the scoreboard (or tap with three fingers) and paste us the code</small></div>
           ${toggle('optTouchRec', 'opt-touchrec')}
         </div>
@@ -230,7 +230,7 @@ export function optionsScreen(menu, opts) {
       const whole = ws.length && hits(col.querySelector('h4')?.textContent ?? '', ws);
       let n = 0;
       for (const row of col.querySelectorAll('.opt-row')) {
-        const on = !ws.length || whole || hits(row.textContent, ws);
+        const on = !ws.length || whole || hits(`${row.textContent} ${row.dataset.words ?? ''}`, ws);   // data-words: other words for it.
         row.hidden = !on;
         if (on) n++;
       }

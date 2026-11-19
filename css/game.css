@@ -1345,6 +1345,12 @@ body:not(.killcam-on) .hud.lefty .death-timer { left: auto; right: 100%; margin:
 #ui .ux-tile:not(.still):active { transform: scale(.97); }
 #ui .ux-mk { flex: none; width: 40px; height: 36px; display: grid; place-items: center; overflow: hidden; line-height: 0; color: var(--c-chalk); }
 #ui .ux-mk .pr-cd { transform: scale(.4); }
+/* Calling cards get a tile of their own, the card at full size over its name: a 30 px sliver could not be read. */
+#ui .ux-grp[data-g="card"] .ux-grid { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 6px; }
+#ui .ux-tile.is-card { flex-direction: column; align-items: stretch; gap: 5px; padding: 5px; }
+#ui .ux-tile.is-card .ux-mk { width: 100%; height: auto; place-items: center; }
+#ui .ux-tile.is-card .ux-card { display: block; max-width: 100%; }
+#ui .ux-tile.is-card .ux-card > * { max-width: 100%; }
 #ui .ux-tx { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 #ui .ux-tx b { font: 400 14px/1.1 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .ux-tx small { font: var(--fs-caption)/1 var(--f-body); color: var(--c-haze); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
