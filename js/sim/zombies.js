@@ -28,7 +28,7 @@ import {
 } from '../shared/zombies.js';
 import { stepPlayer } from './player.js';
 import { brArm, downedInput } from './br.js';
-import { ZmEcon } from './zm-econ.js';
+import { ZmEcon, kitRoom, kitRefill } from './zm-econ.js';
 import { ZmKinds } from './zm-kinds.js';     // Spitters, Bloaters, Crawlers, Shieldbearers and the special rounds.     // ROADMAP item 36: the upgrade bench, the terminal, plates, traps, exfil, quest.
 import { zmTierDef } from './zm-phone.js';
 
@@ -646,7 +646,7 @@ export class ZmRules {
     const sim = this.sim;
     sim._emit({ t: 'zpower', kind, by: by.id });
     if (kind === 'ammo') {
-      for (const q of this.crew) if (q.alive) this._refill(q, -1);
+      for (const q of this.crew) if (q.alive) { this._refill(q, -1); kitRefill(q.ps); }     // Grenades and tacticals too.
     } else if (kind === 'double') {
       this.doubleT = ZM.drop.double;
     } else if (kind === 'nuke') {
@@ -683,7 +683,7 @@ export class ZmRules {
   _stateFor(p) {
     const E = this.econ;
     return { open: this.open, box: { spot: this.box.spot, state: this.box.state, gun: this.box.gun, owner: this.box.owner }, pts: p.zm.pts, perks: p.zm.perks, guns: [p.ps.primary, p.ps.secondary], me: p.index, power: this.power,
-      limit: p.zm.limit, held: p.ps.weapon, tier: p.zm.tiers[p.ps.weapon] ?? 0, bench: E.bench, traps: E.traps.map(t => t.state), plates: p.zm.plates,
+      limit: p.zm.limit, held: p.ps.weapon, tier: p.zm.tiers[p.ps.weapon] ?? 0, bench: E.bench, traps: E.traps.map(t => t.state), plates: p.zm.plates, kitRoom: kitRoom(p.ps),
       exfil: E.exfil.state, round: this.round, quest: E.quest };
   }
 

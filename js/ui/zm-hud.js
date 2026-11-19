@@ -10,6 +10,7 @@ import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
 import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost, zmGunName, zmWonderOf } from '../shared/zombies.js';
+import { kitRoom } from '../sim/zm-econ.js';     // The armour bench's kit refill, the same test as the host's.
 // The relic quest's clue, once from round 3 (dev/ui-zombies-test.py checks it reads whole at every width).
 export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still warm';
 // Polestar Relay's radio quest (layout questKind 'radio'): its own clue, and the names that go with it.
@@ -255,7 +256,8 @@ export class ZmHud {
     const guns = this.guns?.() ?? [me.weapon];
     const ps = this.hands?.(), held = ps?.weapon ?? me.weapon, tier = ps?.defs?.[ps.slot]?.zt ?? 0;
     const u = me.alive && !me.downed ? zmUsable(z.layout, me.x, me.z, { open: z.open, box: { spot: z.box?.spot ?? -1, state: z.box?.state ?? 0, gun: z.box?.gun, owner: z.box?.owner ?? -1 }, pts, perks: me.zperks ?? [], guns, me: idx, power: z.power ?? 1,
-      limit: me.zlimit ?? ZM.perkLimit, held, tier, bench: z.bench, traps: z.traps?.map(t => t.state), plates: me.zplates ?? 0, exfil: z.exfil?.state ?? 0, round: z.round, quest: z.quest }) : null;
+      limit: me.zlimit ?? ZM.perkLimit, held, tier, bench: z.bench, traps: z.traps?.map(t => t.state), plates: me.zplates ?? 0, exfil: z.exfil?.state ?? 0, round: z.round, quest: z.quest,
+      kitRoom: me.tacticalLeft != null && me.lethalLeft != null && kitRoom({ perks: me.perks ?? this.hands?.()?.perks ?? [], tactical: me.tactical, lethal: me.lethal, tacticalLeft: me.tacticalLeft, lethalLeft: me.lethalLeft }) }) : null;
     this.use = u;
     if (this.shopOpen && u?.kind !== 'terminal') this.#shop(false);     // Walked away from the terminal.
     // A radio being tuned shows how far it has got.
@@ -289,6 +291,7 @@ export class ZmHud {
       case 'perk': return [u.label.toUpperCase(), u.why ? why(fmt(u.cost)) : u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · ${ZM_PERKS[u.perk].desc}` : price];
       case 'slot': return ['PERK SLOT', u.off ? `${fmt(u.cost)} · No power: find the switch` : u.ok ? `${fmt(u.cost)} · Hold up to ${ZM.perkMax} perks` : price];
       case 'terminal': return ['SUPPLY TERMINAL', 'Sentries, strikes, drones, lures, vests'];
+      case 'kit': return ['KIT REFILL', u.ok ? `${fmt(u.cost)} · grenades and tacticals to full` : price];
       case 'armour': return ['ARMOUR PLATE', u.off ? why() : u.ok ? `${fmt(u.cost)} · up to ${ZE.plate.max} plates` : price];
       case 'bench': {
         if (u.off) return [u.gun ? `UPGRADE ${gun}` : 'UPGRADE BENCH', why()];

@@ -24,6 +24,18 @@ import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg } from '../shared/zombies.js';
 import { brArm } from './br.js';
+import { TACTICALS, LETHALS } from '../shared/catalog.js';
+
+// The armour bench's kit refill and the Full Crate: a player's lethal and tactical back to full (Bandolier's extra too).
+export function kitRoom(ps) {
+  const extra = ps.perks?.includes('bandolier') ? 1 : 0;
+  return ps.tacticalLeft < (TACTICALS[ps.tactical]?.count ?? 0) + extra || ps.lethalLeft < (LETHALS[ps.lethal]?.count ?? 0) + extra;
+}
+export function kitRefill(ps) {
+  const extra = ps.perks?.includes('bandolier') ? 1 : 0;
+  ps.tacticalLeft = Math.max(ps.tacticalLeft, (TACTICALS[ps.tactical]?.count ?? 0) + extra);
+  ps.lethalLeft = Math.max(ps.lethalLeft, (LETHALS[ps.lethal]?.count ?? 0) + extra);
+}
 import { zmTierDef } from './zm-phone.js';
 
 export const GEAR_KINDS = ['sentry', 'drone', 'lure', 'strike'];
@@ -111,6 +123,11 @@ export class ZmEcon {
         if (z.plates >= PLATE_MAX - 0.5) return null;
         z.plates = Math.min(PLATE_MAX, Math.floor(z.plates / ZE.plate.hp + 1e-6) * ZE.plate.hp + ZE.plate.hp);
         return ZE.plate.cost;
+      }
+      case 'kit': {
+        if (!kitRoom(p.ps) || z.pts < ZE.kit.cost) return null;
+        kitRefill(p.ps);
+        return ZE.kit.cost;
       }
       case 'trap': {
         const t = this.traps[u.i];

@@ -874,7 +874,8 @@ section('econ');
   sim.drainEvents();
   ok(use() && E.bench.state === 1 && me.zm.pts === 100000 - ZE.bench.cost[0], 'tier 1 paid, the gun goes in');
   const evs = sim.drainEvents();
-  ok(me.ps.weapon === 'knife' && evs.some(e => e.t === 'zarm' && e.id === me.id) && evs.some(e => e.t === 'zbench' && e.state === 1), 'out of the hands meanwhile (zarm, zbench)');
+  const other = me.ps.slot === 0 ? me.ps.primary : me.ps.secondary;
+  ok(me.ps.weapon !== 'ar' && (me.ps.weapon === 'knife' || me.ps.weapon === other) && (me.ps.primary === 'knife' || me.ps.secondary === 'knife') && evs.some(e => e.t === 'zarm' && e.id === me.id) && evs.some(e => e.t === 'zbench' && e.state === 1), `out of the hands meanwhile, the other gun up (zarm, zbench; ${me.ps.weapon})`);
   const mate = R.crew.find(p => p.isBot);
   ok(zmUsable(L, L.bench.x, L.bench.z, R._stateFor(mate))?.off && !R._use(mate, zmUsable(L, L.bench.x, L.bench.z, R._stateFor(mate))), 'nobody else can use the bench meanwhile');
   ok(usable()?.kind === 'benchwait' && !use(), 'its owner waits');
@@ -979,6 +980,13 @@ section('econ');
   ok(usable()?.kind === 'armour' && use() && me.zm.plates === ZE.plate.hp && me.zm.pts === p1 - ZE.plate.cost, 'a plate for 500');
   use(); use();
   ok(me.zm.plates === ZE.plate.hp * 3 && usable()?.off && !use(), 'three at most');
+  {
+    const lt = me.ps.lethalLeft, tt = me.ps.tacticalLeft, pk = me.zm.pts;
+    me.ps.lethalLeft = 0; me.ps.tacticalLeft = 0;
+    ok(usable()?.kind === 'kit' && use() && me.ps.lethalLeft >= lt && me.ps.tacticalLeft >= tt && me.zm.pts === pk - ZE.kit.cost && usable()?.kind === 'armour', 'with plates full the armour bench refills the kit');
+    me.ps.lethalLeft = 0; R._power('ammo', me);
+    ok(me.ps.lethalLeft >= lt, 'the Full Crate refills grenades too');
+  }
   const claw = R.horde[0];
   R._raise(claw, 0, { x: me.ps.x + 1, z: me.ps.z });
   me.hp = 100;

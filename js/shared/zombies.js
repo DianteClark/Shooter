@@ -186,6 +186,7 @@ export const ZE = {
   // Per tier: damage, magazine and reserve multipliers (tier 0 is the gun as bought).
   tiers: [{ dmg: 1, mag: 1, res: 1 }, { dmg: 1.8, mag: 1.35, res: 1.7 }, { dmg: 3, mag: 1.7, res: 2.3 }, { dmg: 4.4, mag: 1.7, res: 2.6 }],
   plate: { hp: 50, max: 3, cost: 500 },
+  kit: { cost: 750 },                  // The armour bench's kit refill: the lethal and the tactical back to full.
   // Supply terminal items: base price (rising `scale` a round past round 1, rounded to 50), and one of each per player
   // per round. Damage is in round-health shares (roundHp), so a sentry stays useful at round 30.
   supply: {
@@ -777,9 +778,10 @@ export function reblockNav(nav, map, r) {
 
 // state: { open (door bits), box: {spot, state, gun, owner}, pts, perks: [ids], guns: [primary, secondary], power, me,
 // and for the economy: limit (perk limit), held (gun in hand), tier (its tier), bench {state, owner, gun, tier}, traps
-// [state per trap: 0 idle, 1 running, 2 cooling], plates (hp), exfil (0 idle), round, quest {got bits, state} }.
+// [state per trap: 0 idle, 1 running, 2 cooling], plates (hp), kitRoom (a lethal or tactical spent), exfil (0 idle),
+// round, quest {got bits, state} }.
 // Returns { kind, i, cost, label, ok, off?, why? } for the nearest usable thing, or null. Kinds: door, wall, ammo, box,
-// take, perk, slot, power, terminal, armour, bench, benchwait, benchtake, trap, exfil, relic, altar. `off`: shown, never
+// take, perk, slot, power, terminal, armour, kit, bench, benchwait, benchtake, trap, exfil, relic, altar. `off`: shown, never
 // ok (a dark machine, a busy bench, a running trap...); `why` says why.
 export function zmUsable(L, x, z, st) {
   if (!L) return null;
@@ -842,6 +844,8 @@ export function zmUsable(L, x, z, st) {
   at(L.terminal, () => ({ kind: 'terminal', i: 0, cost: 0, label: 'Supply terminal' }));
   at(L.armour, () => {
     const full = (st.plates ?? 0) >= ZE.plate.hp * ZE.plate.max - 0.5;
+    // Plates first; with plates full and a grenade or tactical spent, the bench sells a kit refill instead.
+    if (full && st.kitRoom) return { kind: 'kit', i: 0, cost: ZE.kit.cost, label: 'Kit refill' };
     return { kind: 'armour', i: 0, cost: ZE.plate.cost, label: 'Armour plate', off: full || undefined, why: full ? 'Plates full' : undefined };
   });
   at(L.bench, () => {
