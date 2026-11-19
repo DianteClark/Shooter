@@ -48,7 +48,6 @@ function build() {
     // ---- South-west: the pig pen (fenced) beside the stable, the silo, a hay stack screening the spawns.
     stack(5.8, 24.6),
     fence(10, 24.4, 3, 0.4), fence(15, 24.4, 2.6, 0.4),
-    trough(12, 27.6, 2.2, 0.7),
     house(9.6, 31, 6.6, 5, 3.6),                 // The stable, against the south hedge.
     [17.4, 27.2, 3, 3, 8, 'building', { silo: true }],
     bale(20.8, 32.6),
