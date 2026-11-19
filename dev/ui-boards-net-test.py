@@ -69,8 +69,7 @@ async def main():
             await host.wait_for_function(f'{G}.vote?.options', timeout=10000)
             for pg in pages:      # A vote nobody casts resolves by itself after a few seconds (?vote=5).
                 # Every friend vote carries a Battle Royale card; a clock-ended match needs a timed mode.
-                try: await pg.locator('.vote-card').filter(has_not_text='Battle Royale').first.click(timeout=3000)
-                except Exception: pass
+                await pg.evaluate("[...document.querySelectorAll('.vote-card')].find(c => !/battle royale/i.test(c.textContent))?.click()")
             await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=30000)
             await guest.wait_for_function(f'{G}.inMatch', timeout=30000)
             for pg in pages: await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")

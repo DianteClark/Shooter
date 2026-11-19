@@ -18,7 +18,7 @@ ONLY = sys.argv[3:]
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows']
 G = 'window.__game.app'
-URL = f'http://localhost:{PORT}/?debug=1&net=local&vote=4'
+URL = f'http://localhost:{PORT}/?debug=1&net=local&vote=10'
 FAKE_PAD = """(() => {
   const pad = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', index: 0, connected: true,
     mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
@@ -84,8 +84,8 @@ async def run_case(browser, name, mapId, mode, fails):
             await host.wait_for_function(f'{G}.vote?.options', timeout=20000)
             await host.evaluate(f"(() => {{ const o = {G}.vote.options; o[0] = {{ ...o[0], mapId: '{mapId}', mode: '{mode}' }}; }})()")
             for pg in pages:
-                try: await pg.locator('.vote-card[data-i="0"]').click(timeout=4000)
-                except Exception: pass
+                await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=20000)
+                await pg.evaluate("document.querySelector('.vote-card[data-i=\\"0\\"]')?.click()")     # Skips the animation's stability wait.
         await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=60000)
         await guest.wait_for_function(f'{G}.inMatch && !!{G}.match?.interp?.newest', timeout=60000)
         got = await host.evaluate(f"[{G}.match.mapId, {G}.match.mode]")

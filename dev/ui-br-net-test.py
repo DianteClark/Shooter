@@ -68,7 +68,7 @@ async def main():
             await host.evaluate(f"{G}.vote.options[{i}].mapId = 'brtest'")
             for pg in (host, guest):
                 await pg.wait_for_selector(f'.vote-card[data-i="{i}"]', timeout=10000)
-                await pg.locator(f'.vote-card[data-i="{i}"]').click(timeout=4000)
+                await pg.evaluate(f"document.querySelector('.vote-card[data-i=\\"{i}\\"]').click()")     # Not a Playwright click: the card's enter animation can outlast its stability wait under load.
             for _ in range(30):
                 st = await host.evaluate(f"JSON.stringify([{G}.inMatch, {G}.vote && {G}.vote.winner, {G}.vote && {G}.vote.left, {G}.matchInfo && {G}.matchInfo.mapId, !!({G}.match && {G}.match.interp.newest)])")
                 if st.endswith("true]"):
