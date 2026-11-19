@@ -217,7 +217,9 @@ function runMode(mode, seed) {
   const masts = roster.map(r => new MasteryTracker(r.id, { loadout: r.loadout, bounced: () => true }));
   const s = seen[mode] ??= { tally: {}, pro: {}, mastery: {}, ladder: {}, medals: {}, ex: {}, matches: 0, ended: 0, best: { streak: 0, long: 0 } };
   const m = MODES[mode], span = m.rounds ? m.timeLimit * (m.scoreLimit * 2 - 1) : m.timeLimit;
-  const limit = Math.min(QUICK && mode !== 'snd' && mode !== 'ctf' ? 420 : 1600, (span ?? 600) + 120);
+  // Quick cuts a match at 7 minutes, except the round modes and extraction: a squad banks its contracts on the late
+  // helicopters, so a cut extraction match banks next to nothing and the ex:* keys (Courier's Secure Intel) go missing.
+  const limit = Math.min(QUICK && mode !== 'snd' && mode !== 'ctf' && !m.ex ? 420 : 1600, (span ?? 600) + 120);
   let view = null;
   for (let i = 0; i < limit * SIM_HZ && sim.phase !== 'ended'; i++) {
     sim.step(1 / SIM_HZ);
