@@ -69,6 +69,7 @@ const MAP_ART = {
   icebreaker: ['Pack Ice', 'icebow', ['#0e1a26', '#2a4a66', '#eaf6ff', '#ff4a3a']],
   ashgrove:   ['Lamplight', 'grove', ['#120e16', '#3a3040', '#e0d8e8', '#ffb84a']],
   polestar:   ['Night Watch', 'mast', ['#06101a', '#24384a', '#d8ecf4', '#5affb0']],
+  millbrook:   ['Millstream', 'millwheel', ['#0e1a14', '#2c4a34', '#e6f0dc', '#f2b6c8']],
   frontier:   ['Drop Zone', 'zone', ['#101a14', '#2a4630', '#d8f0d0', '#ff9f1c']],
 };
 const MAP_WINS = 10;

@@ -123,6 +123,10 @@ export function optionsScreen(menu, opts) {
           <div class="opt-name"><b>Damage numbers</b><small>Each hit's damage rises off the target</small></div>
           ${toggle('optDmgNumbers', 'opt-dmgnumbers')}
         </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>Bot chatter</b><small>Bots' short lines in the kill feed</small></div>
+          ${toggle('optBotChatter', 'opt-botchatter')}
+        </div>
         ${hapticsSupported() ? `<div class="opt-row">
           <div class="opt-name"><b>Vibrate on hits</b><small>A buzz when you are hit or land a hit</small></div>
           ${toggle('optHaptics', 'opt-haptics')}
@@ -165,7 +169,7 @@ export function optionsScreen(menu, opts) {
     const ar = q('.opt-autorespawn');
     ar.classList.toggle('on', v.autoRespawn === true);
     ar.querySelector('b').textContent = v.autoRespawn === true ? 'On' : 'Off';
-    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers']]) {
+    for (const [cls, key] of [['.opt-haptics', 'haptics'], ['.opt-fullscreen', 'fullscreen'], ['.opt-dmgnumbers', 'dmgNumbers'], ['.opt-botchatter', 'botChatter']]) {
       const t = q(cls);
       if (!t) continue;
       t.classList.toggle('on', v[key] === true);
@@ -238,6 +242,7 @@ export function optionsScreen(menu, opts) {
     optLefty: () => { Options.set('lefty', !Options.get('lefty')); paint(); },
     optAutoRespawn: () => { Options.set('autoRespawn', !Options.get('autoRespawn')); paint(); },
     optDmgNumbers: () => { Options.set('dmgNumbers', !Options.get('dmgNumbers')); paint(); },
+    optBotChatter: () => { Options.set('botChatter', !Options.get('botChatter')); paint(); },
     optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },
     optHaptics: () => { Options.set('haptics', !Options.get('haptics')); if (Options.get('haptics')) try { navigator.vibrate?.(20); } catch { /* blocked */ } paint(); },
     optFullscreen: () => {

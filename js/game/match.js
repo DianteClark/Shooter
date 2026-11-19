@@ -26,7 +26,8 @@ import { brAmmo, brArm, brHandWant, downedInput, glideStep, HANDS, land } from '
 import { hapticEvents } from '../ui/haptics.js';
 import { finishable, FIN } from '../shared/finishers.js';       // Finishing moves (docs/FINISHERS.md).
 import { hasLineOfSight } from '../shared/geometry.js';
-import { PILOTED } from '../sim/streaks-v9.js';     // Streaks the aim stick flies: only these hold the gun and move the camera.
+import { PILOTED } from '../sim/streaks-v9.js';
+import { BotChatter } from '../sim/chatter.js';     // Bot chatter: the host's bots' short lines, sent as events.     // Streaks the aim stick flies: only these hold the gun and move the camera.
 const PILOT_CALL_S = 0.4;     // A piloted streak just called counts as flown this long, until it shows up in the view.
 
 // Smallest signed rotation from b to a.
@@ -85,6 +86,8 @@ export class Match {
     // Practice pays and records nothing: the firing range and Custom > Training (`training`) never count toward XP,
     // mastery, challenges, history, gun stats or telemetry. Both trackers check `practice` before writing anything.
     if (this.isPractice()) { this.awards.practice = true; this.telemetry.practice = true; }
+    // Only the host decides what bots say (seeded by the match), outside practice and Graveyard Shift.
+    this.chatter = this.isHost && !this.isPractice() && !this.zm ? new BotChatter(this.sim, this.seed, { ffa: !!this.sim.ffa }) : null;
     this.interp = new Interpolator(this.isHost ? STEP * 1.5 : INTERP_DELAY);
     this.frame = this.frame.bind(this);
     this.#wireNet();
@@ -380,6 +383,7 @@ export class Match {
       this.sim.step(STEP);
       this.tick++;
       const events = this.sim.drainEvents();
+      if (this.chatter) for (const c of this.chatter.observe(events)) events.push(c);
       // Big maps send each guest its own cut of the events and snapshot (sim interest management).
       const perGuest = this.net && this.sim.interest ? this.net.guests : null;
       if (events.length) {

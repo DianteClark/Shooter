@@ -455,7 +455,7 @@ and it fights differently (`ZM_LISTENER`): every 8 s a **frost pulse** winds up 
 for 1.2 s (`zpulse`), then 34 (grown with the round like a claw) to the crew inside it in its sight, so you step out;
 every 12 s it calls up two Crawlers. Its look (js/render/zm-looks.js): the tallest, thinnest thing on the ice, frost-white,
 hooded, the station's radio pack on its back glowing cyan. Putting it down pays 3000 each and 1500 XP ("Listener put
-down"), the **Dead Air** calling card and the **Signal Lost** feat emblem (`save.zmFeats.polestar[1]`: on Polestar the
+down"), the **Dead Air** calling card and the **Dead Frequency** feat emblem (`save.zmFeats.polestar[1]`: on Polestar the
 feat's boss flag is the Listener's, `ZM_LISTENER_MAPS` in js/shared/progression.js, so it does not count for Lantern
 Out). The quest's tuning (radio, seconds, who) is on the wire and kept by a host migration; the Listener comes back at
 the health its bar showed and carries on pulsing. The round-15 card is **Long Night**; the map cards are Night Watch.

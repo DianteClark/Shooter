@@ -4,6 +4,27 @@
 
 export const CHANGELOG = [
   {
+    build: '1118-9', date: '2026-11-18', title: 'New map: Millbrook',
+    items: [
+      'A new small map in Farmland: Millbrook, a stone water mill on a brook through an apple orchard in blossom, on a spring morning after rain.',
+      'Three ways over the brook: a footbridge at each end and the wide mill bridge in the middle, between the mill and its waterwheel on one side and the cider house on the other.',
+      'Plays every 6 v 6 mode, Free-for-All, Gun Game and the 2 v 2 Showdown.',
+      'Three calling cards for winning there: Millstream, Millbrook Elite and Millbrook Master.',
+    ],
+  },
+  {
+    build: '1118-8', date: '2026-11-18', title: 'Clans and bot chatter',
+    items: [
+      'Clans: found your own in Profile > Clan. Pick a tag of 2 to 4 letters or numbers, a name, a colour and a mark. Tags already used by other clans are taken.',
+      'Your tag shows before your name in the lobby, the scoreboard, the kill feed, the boards and the results.',
+      'Bring friends in: share your clan\'s join code, or play a friend lobby together and they can tap Join [TAG]. The founder can rename the clan; anyone can leave.',
+      'Boards has a Clans view: every clan ranked by its members\' totals, yours and your friends\' included.',
+      'In the weekend tournament your squad plays under your clan\'s tag and name.',
+      'Quick chat has more callouts: Push up, Fall back, Reloading, Need a revive, Flag\'s ours, UAV up, Yes, No and Loot here, with wheels to suit Capture the Flag and squad modes.',
+      'Bots talk a little now: a short line now and then in the kill feed ("Nice shot", "Flag\'s ours", "Need a revive!"), and clanmates cheer each other on. Turn it off in Options > Bot chatter.',
+    ],
+  },
+  {
     build: '1118-7', date: '2026-11-18', title: 'Replays',
     items: [
       'Watch replay: after any match, tap Watch replay on the final kill card to see the last 30 seconds again.',
@@ -18,7 +39,7 @@ export const CHANGELOG = [
     items: [
       'A new map built for Graveyard Shift: Polestar Relay, an iced-in polar station under the northern lights. Start in the mess hall and open your way round the kennels, the lab, the relay mast, the fuel depot and the hangar.',
       'The power is out here too: the switch is in the boiler house in the middle of the station, and the perk machines stay dark until someone throws it.',
-      'Polestar has its own secret: get the power on, find the three old radios and stay with each while it tunes in, then transmit from the console at the foot of the mast. Something out on the ice is listening. Put it down for a lot of XP, points for the whole crew, the Dead Air calling card and the Signal Lost emblem.',
+      'Polestar has its own secret: get the power on, find the three old radios and stay with each while it tunes in, then transmit from the console at the foot of the mast. Something out on the ice is listening. Put it down for a lot of XP, points for the whole crew, the Dead Air calling card and the Dead Frequency emblem.',
       'Two wonder weapons can now come out of the mystery crate on every Graveyard Shift map: the Stormcoil, whose lightning jumps from one zombie to the next, and the Rimecaster, a freezing beam that stops them dead and shatters them. They are rare, and they cannot go on the upgrade bench.',
       'Bot teammates now step out of a running trap instead of standing in it.',
       'Reach round 15 on Polestar Relay for the Long Night calling card.',

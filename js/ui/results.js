@@ -234,7 +234,7 @@ export function resultsScreen(menu, data, handlers) {
   };
   // A squad's names; a clan squad wears its tag once, before them all.
   const squadNames = ms => {
-    const tags = ms.map(p => /^\[([A-Z]{2,4})\] /.exec(p.name)?.[1] ?? null);
+    const tags = ms.map(p => /^\[([A-Z0-9]{2,4})\] /.exec(p.name)?.[1] ?? null);
     if (ms.length > 1 && tags[0] && tags.every(t => t === tags[0])) return `<i class="ctag">${tags[0]}</i> ${ms.map(p => esc(p.name.slice(tags[0].length + 3))).join(', ')}`;
     return ms.map(p => nameHtml(p.name)).join(', ');
   };

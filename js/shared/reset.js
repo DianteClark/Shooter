@@ -36,7 +36,7 @@ export const WIPE_KEYS = Object.freeze([
   'switchyard.challenges', 'switchyard.history', 'switchyard.friends', 'switchyard.gunstats',
   'switchyard-seen', 'switchyard.custom.v1', 'switchyard-mods', 'switchyard-botmatch', 'switchyard-training',
   'switchyard.eventSeen', 'switchyard.seasonSeen', 'switchyard.seenBuild', 'switchyard-last-room', 'switchyard-player',
-  'switchyard-backdrop',
+  'switchyard-backdrop', 'switchyard.clan',
 ]);
 
 // IndexedDB databases that hold progress: saved replay clips (js/ui/clips.js). js/ui/wipe.js deletes each of these

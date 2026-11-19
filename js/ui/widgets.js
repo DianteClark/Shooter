@@ -9,7 +9,7 @@ export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<':
 // A player name for markup. A pool bot in a clan is named "[VXN] Name" (js/shared/botpool.js displayName): the tag is
 // drawn as a small plate before the name (.ctag, css/tokens.css), so a short name column keeps the name readable.
 export function nameHtml(name) {
-  const m = /^\[([A-Z]{2,4})\] (.+)$/.exec(String(name ?? ''));
+  const m = /^\[([A-Z0-9]{2,4})\] (.+)$/.exec(String(name ?? ''));      // Player clans may use digits too.
   return m ? `<i class="ctag">${m[1]}</i> ${esc(m[2])}` : esc(name ?? '');
 }
 export const hex = n => '#' + n.toString(16).padStart(6, '0');
