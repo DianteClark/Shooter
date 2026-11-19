@@ -187,7 +187,11 @@ async def season_two(browser):
     await pg.evaluate("localStorage.setItem('switchyard.seenBuild', '1113-5')")      # The build before this update: its entries show.
     await pg.reload(); await pg.wait_for_timeout(1400)
     wn = await pg.evaluate("document.querySelector('.whats-new')?.innerText ?? ''")
-    check("What's new lists this update (weekly events, Season 2)", 'event' in wn.lower() and 'Season 2' in wn, wn[:160].replace('\n', ' '))
+    # The sheet shows the newest three unseen entries; later builds pushed weekly events (1118-1) down, so the sheet must
+    # show the newest entry and the unseen list (all of which Help > Updates has) must carry the weekly events one.
+    unseen = await pg.evaluate("import('/js/ui/whatsnew.js').then(m => m.unseenEntries('1113-5').map(e => e.title + ' ' + e.items.join(' ')).join(' | '))")
+    newest = await pg.evaluate("import('/js/shared/changelog.js').then(m => m.CHANGELOG[0].title)")
+    check("What's new lists this update (weekly events, Season 2)", newest.lower() in wn.lower() and 'weekly event' in unseen.lower() and 'Season 2' in unseen, wn[:160].replace('\n', ' '))
     await ctx.close()
 
     print('2027-01-05: Lights Out and the weekly event')
