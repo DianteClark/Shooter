@@ -15,10 +15,11 @@
 //   ?view=game    the match camera's tilt and lens, at match scale (what a phone shows)
 //   ?view=close   the same tilt, close up        ?view=front   eye level, from the front
 //   &skin=base|field|2|3|4|5   the skin tier everyone wears      &team=0|1     &weapon=ar      &ops=a,b,c (a subset)
+//   &fx=holo|circuit|shimmer   try an active-skin effect on everyone (docs/OPERATORS-ART.md)
 //   &w=852&h=393  canvas size    &aim=0.8  facing (radians; 1.57 faces the camera)   &move=1  walk in place
 import * as THREE from 'three';
 import { Characters } from '../js/render/characters.js';
-import { OPERATORS } from '../js/ui/operators.js';
+import { OPERATORS, SKIN_FX } from '../js/ui/operators.js';
 
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 852), H = +(q.get('h') || 393), view = q.get('view') || 'close';
@@ -44,6 +45,7 @@ const players = ids.map((id, i) => {
 });
 const tier = q.get('skin') || 'base';
 chars.setRoster(players.map(p => ({ id: p.id, operator: p.id, skin: `skin:${p.id}-${tier}` })));
+if (SKIN_FX[q.get('fx')]) chars.skinLooks = chars.skinLooks.map(L => ({ ...L, pack: (L.pack % 32) + 32 * SKIN_FX[q.get('fx')] }));
 const rows = Math.ceil(ids.length / per);
 const cam = new THREE.PerspectiveCamera(view === 'front' ? 30 : 26, W / H, 0.5, 200);
 const cz = (rows - 1) * gap * (view === 'front' ? 0.8 : 0.62);
