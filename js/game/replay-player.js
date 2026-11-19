@@ -21,7 +21,7 @@ import { esc } from '../ui/widgets.js';
 const SPEEDS = [0.5, 1, 2];
 const TILT = THREE.MathUtils.degToRad(55);         // The match camera's tilt (js/render/renderer.js).
 const FOLLOW_DIST = 30, FOLLOW_FOV = 26;
-const OVER_DIST = 78, OVER_FOV = 32, OVER_CUT = 95;
+const OVER_DIST = 64, OVER_FOV = 32, OVER_CUT = 80;     // About 2x the ground of the match camera; see docs/REPLAYS.md.
 const FEED_S = 6, FEED_ROWS = 4;
 const MAX_NAMES = 14;
 const CAMS = [['me', 'You'], ['killer', 'Killer'], ['free', 'Overview']];
@@ -174,7 +174,7 @@ export class ReplayPlayer {
     if (this.cam === 'free') {
       this.pan.x = Math.max(0, Math.min(map.width, this.pan.x));
       this.pan.z = Math.max(0, Math.min(map.height, this.pan.z));
-      tx = this.pan.x; tz = this.pan.z; dist = OVER_DIST; fov = OVER_FOV; cut = Math.max(OVER_CUT, this.renderer.worldCut === Infinity ? Infinity : OVER_CUT);
+      tx = this.pan.x; tz = this.pan.z; dist = OVER_DIST; fov = OVER_FOV; cut = OVER_CUT;
     } else {
       const p = this.#find(view, this.cam === 'killer' ? this.killer : this.clip.localId);
       if (p) { this.follow.x = p.x; this.follow.z = p.z; this.follow.ok = true; }
