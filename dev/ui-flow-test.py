@@ -91,7 +91,7 @@ async def main():
                 # A DOM click on the card: under load its enter animation can keep it "unstable" for Playwright's whole
                 # tap timeout, past the vote's own clock. The button's handler is the same one a tap reaches.
                 await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=20000)
-                await pg.evaluate("document.querySelector('.vote-card[data-i=\\"0\\"]')?.click()")
+                await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]')?.click()")
                 await pg.wait_for_timeout(100)
                 mine = await pg.evaluate("window.__game.app.vote?.mine")
                 # A one-card vote (Battle Royale has one giant map) can resolve before the tap lands.

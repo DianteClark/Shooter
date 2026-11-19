@@ -226,7 +226,12 @@ async def run(browser, vw, vh, failures, errors):
     # The end: every other squad finished off on the host.
     await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
       for (let k = 0; k < 3; k++) for (const p of sim.players) if (p.team !== me.team && p.alive) {{ p.brAir = 0; sim._damage(p, me, 999, me.ps.weapon, 10); }} }})()""")
-    await pg.wait_for_selector('.rs', timeout=30000)
+    try:
+        await pg.wait_for_selector('.rs', timeout=90000)      # The end banner and final kill hold come first; slow under load.
+    except Exception:
+        st = await ev(f"(() => {{ const m = {G}.match, s = m?.sim; return {{ screen: window.__game.menu.el.dataset.screen, inMatch: {G}.inMatch, phase: s?.phase, alive: s ? s.players.filter(p => p.alive).map(p => [p.team, !!p.ai, p.downed ?? null]).slice(0, 12) : null }}; }})()")
+        print('    no results:', st, flush=True)
+        raise
     await pg.wait_for_timeout(2500)
     await shot('12-results')
     skip = pg.locator('[data-act="resSkip"]')

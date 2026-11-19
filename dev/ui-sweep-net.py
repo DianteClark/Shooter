@@ -85,7 +85,7 @@ async def run_case(browser, name, mapId, mode, fails):
             await host.evaluate(f"(() => {{ const o = {G}.vote.options; o[0] = {{ ...o[0], mapId: '{mapId}', mode: '{mode}' }}; }})()")
             for pg in pages:
                 await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=20000)
-                await pg.evaluate("document.querySelector('.vote-card[data-i=\\"0\\"]')?.click()")     # Skips the animation's stability wait.
+                await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]')?.click()")     # Skips the animation's stability wait.
         await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=60000)
         await guest.wait_for_function(f'{G}.inMatch && !!{G}.match?.interp?.newest', timeout=60000)
         got = await host.evaluate(f"[{G}.match.mapId, {G}.match.mode]")
