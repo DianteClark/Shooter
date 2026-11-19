@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'New map: Millbrook',
+    items: [
+      'A new small map in Farmland: Millbrook, a stone water mill on a brook through an apple orchard in blossom, on a spring morning after rain.',
+      'Three ways over the brook: a footbridge at each end and the wide mill bridge in the middle, between the mill and its waterwheel on one side and the cider house on the other.',
+      'Plays every 6 v 6 mode, Free-for-All, Gun Game and the 2 v 2 Showdown.',
+      'Three calling cards for winning there: Millstream, Millbrook Elite and Millbrook Master.',
+    ],
+  },
+  {
     build: '1118-8', date: '2026-11-18', title: 'Clans and bot chatter',
     items: [
       'Clans: found your own in Profile > Clan. Pick a tag of 2 to 4 letters or numbers, a name, a colour and a mark. Tags already used by other clans are taken.',
