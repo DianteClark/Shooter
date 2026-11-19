@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'Touch reports for a stuck move stick',
+    build: '1119-5', date: '2026-11-19', title: 'Touch reports for a stuck move stick',
     items: [
       'New option in Options > Controls: Record touches (for bug reports). While it is on, the game keeps your last 20 seconds of touches on this phone.',
       'If the move stick stops responding, open the scoreboard and tap Stick died?, or tap the screen with three fingers at once. A report code is copied for you (there is also a Copy button).',
