@@ -10,6 +10,7 @@ import { a11yScreen } from './a11yscreen.js';
 import { hapticsSupported } from './haptics.js';
 import { fullscreenSupported, enterFullscreen } from './android.js';
 import { Pad } from './gamepad.js';
+import { NewDots } from './newdots.js';
 
 const stepLabel = id => QUALITY_STEPS.find(s => s.id === id)?.label ?? id;
 
@@ -152,6 +153,10 @@ export function optionsScreen(menu, opts) {
             <button class="opt-step opt-squad-clear" data-act="optSquadClear" aria-label="Clear squad tag">${ico('close')}</button>
           </div>
         </div>
+        <div class="opt-row">
+          <div class="opt-name"><b>New-unlock dots</b><small>Clear every dot on new items at once</small></div>
+          <button class="seg opt-ndall" data-act="optSeenAll"><b>Mark all seen</b></button>
+        </div>
         <p class="opt-note">${ico('info')}Settings stay on this phone and are not part of your save code.</p>
       </section>
       <section class="opt-col opt-found scroll-y" hidden><h4>${ico('next')}More settings</h4><div class="opt-found-list"></div></section>
@@ -259,6 +264,7 @@ export function optionsScreen(menu, opts) {
     optFps: () => { Options.set('fps', !Options.get('fps')); paint(); },
     optTouchDebug: () => { Options.set('touchDebug', !Options.get('touchDebug')); paint(); },
     optSquad: () => onSquad?.(),
+    optSeenAll: () => { const n = NewDots.count(); NewDots.seeAll(); const b = q('.opt-ndall b'); if (b) b.textContent = n ? `${n} cleared` : 'None new'; },
     optSquadClear: () => { Options.set('squad', ''); paint(); },
     optVoiceMode: () => { Options.set('voiceMode', Options.get('voiceMode') === 'ptt' ? 'open' : 'ptt'); paint(); },
     optPad: () => controllerScreen(menu, { onBack: reopen }),

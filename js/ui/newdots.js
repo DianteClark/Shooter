@@ -10,6 +10,7 @@
 //   NewDots.install(menu)     decorate menu screens as they render (a MutationObserver, batched to a frame)
 //   NewDots.refresh()         rescan after something may have unlocked (results, prestige, a season claim)
 //   NewDots.fresh()           the Set of new keys (tests and the gallery)
+//   NewDots.seeAll()          mark every new unlock seen (the "Mark all seen" chip any dotted menu shows, and Options)
 import { Progress } from './progress.js';
 import { ITEM_TABLES } from '../shared/progression.js';
 import { WEAPON_IDS } from '../shared/constants.js';
@@ -141,6 +142,10 @@ function leads(menu) {
 const CSS = `
 .nd-dot { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--c-sodium, #ffc23d);
   box-shadow: 0 0 0 2px rgba(16,20,26,.85), 0 0 8px var(--c-sodium-glow, rgba(255,194,61,.6)); pointer-events: none; z-index: 2; }
+.nd-all { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--sb, 0px) + 6px); z-index: 30; display: flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px; border: 0; color: var(--c-chalk, #e7eae4); background: rgba(16,20,26,.82); box-shadow: inset 0 0 0 1px rgba(231,234,228,.18);
+  font: 400 var(--fs-caption, 12px)/1 var(--f-plate, sans-serif); letter-spacing: .04em; pointer-events: auto; touch-action: manipulation; }
+.nd-all::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--c-sodium, #ffc23d); }
 `;
 
 let observer = null, seenObserver = null, queued = false;
@@ -149,6 +154,32 @@ function decorate(menu) {
   queued = false;
   if (dirty) scan();
   for (const root of [menu.el, menu.overlayEl]) if (root) decorateRoot(menu, root);
+  // A dotted screen offers to clear them all at once.
+  const root = menu.el, chip = root.querySelector(':scope > .nd-all');
+  const dotted = !!root.querySelector('.nd-dot') || !!menu.overlayEl?.querySelector('.nd-dot');
+  if (dotted && !chip) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'nd-all';
+    b.dataset.sound = 'tab';
+    b.textContent = 'Mark all seen';
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      seeAll();
+      for (const r of [menu.el, menu.overlayEl]) for (const dot of r?.querySelectorAll('.nd-dot') ?? []) {
+        const host = dot.parentElement;
+        dot.remove();
+        if (host) { delete host.dataset.nd; delete host.dataset.ndKeep; delete host.dataset.ndKey; }
+      }
+      decorate(menu);
+    });
+    root.appendChild(b);
+  } else if (!dotted && chip) chip.remove();
+}
+
+function seeAll() {
+  if (dirty || !known) scan();
+  see([...fresh]);
 }
 
 function decorateRoot(menu, root) {
@@ -203,7 +234,7 @@ export const NewDots = {
     }
     observer = new MutationObserver(muts => {
       // The dots' own insertions change nothing else: only a repaint by the screen schedules a pass.
-      if (muts.every(m => [...m.addedNodes, ...m.removedNodes].every(n => n.classList?.contains('nd-dot')))) return;
+      if (muts.every(m => [...m.addedNodes, ...m.removedNodes].every(n => n.classList?.contains('nd-dot') || n.classList?.contains('nd-all')))) return;
       if (queued) return;
       queued = true;
       requestAnimationFrame(() => decorate(menu));
@@ -213,6 +244,8 @@ export const NewDots = {
     decorate(menu);
   },
   refresh() { dirty = true; },
+  seeAll() { seeAll(); return true; },
+  count() { if (dirty) scan(); return fresh.size; },
   fresh() { if (dirty) scan(); return new Set(fresh); },
   // Tests: forget a key as seen, so it shows as new on the next scan.
   forget(key) { if (dirty) scan(); known.delete(hash(key)); store(); dirty = true; },
