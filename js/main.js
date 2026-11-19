@@ -17,7 +17,8 @@ import { MAX_LEVEL, MAX_PRESTIGE, MASTER_MAX } from './shared/progression.js';
 import { Controls } from './ui/controls.js';
 import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
-import { Progress, matchScore, MatchHistory, Friends } from './ui/progress.js';
+import { Progress, matchScore, MatchHistory, Friends, Clan } from './ui/progress.js';
+import { taggedName, tagOk } from './shared/clans.js';     // Player clans: "[TAG] Name" on the roster.
 import { cleanCard } from './shared/boards.js';
 import { boardsScreen } from './ui/boards.js';
 import { humanRating } from './shared/botpool.js';
@@ -237,6 +238,15 @@ function blockIosGestures() {
 function myName() {
   return Progress.name || 'Rookie';
 }
+// The name this player plays under: "[TAG] Name" in a clan (js/shared/clans.js), like a pool bot in one.
+function myTagName() {
+  return taggedName(myName(), Clan.tag());
+}
+// A guest's name as the host seats it: their callsign (12 at most) behind their clan tag, if it is a good one.
+function guestName(msg) {
+  const name = String(msg.name ?? '').slice(0, 12) || 'Player';
+  return typeof msg.clan === 'string' && tagOk(msg.clan) ? taggedName(name, msg.clan) : name;
+}
 
 function myLoadout() {
   return Progress.loadout();
@@ -324,6 +334,7 @@ function storeCareer(id, raw) {
   const card = cleanCard(raw);
   if (!card || !app.net || id === app.net.localId) return null;
   Friends.see(id, card, Date.now(), app.net.localId);
+  if (Clan.sawCard(card)) menu.toast(`Your clan is now [${Clan.tag()}] ${Clan.get().name}`);
   return card;
 }
 
@@ -403,6 +414,7 @@ menu.on({
   },
   leaveLobby: () => leaveRoom(),
   copyCode: () => copyRoomCode(),
+  lobbyClanJoin: () => joinOfferedClan(),
   toggleReady: () => toggleReady(),
   start: () => startVote(),
   voteCast: ({ i }) => castVote(Number(i)),
@@ -653,8 +665,38 @@ function renderLobby() {
     br: isBr(roomMode()), brSquad: app.lobby.brSquad ?? 4,
     ranked: rankedRoom(), rankedOn: !!app.lobby.ranked, rankedFull: (app.lobby.humans ?? []).length >= RANKED_PARTY,
     cup: lobbyCup(),
+    clanOffer: clanOffer(),
   });
 }
+
+// "Join [TAG]": a clan on the card of someone in this lobby (their career card, stored with the friends), when this
+// phone is not in it. The first such player in the room's order offers theirs.
+function clanOffer() {
+  if (!app.net) return null;
+  const mine = Clan.get(), cards = new Map(Friends.list(app.net.localId).map(f => [f.id, f.card]));
+  for (const h of app.lobby.humans ?? []) {
+    const cl = h.id !== app.net.localId ? cards.get(h.id)?.cl : null;
+    if (cl && cl.id !== mine?.id) return { tag: cl.tag, name: cl.name, from: h.id, switching: !!mine };
+  }
+  return null;
+}
+function joinOfferedClan() {
+  const offer = clanOffer();
+  const cl = offer ? Friends.list(app.net?.localId).find(f => f.id === offer.from)?.card.cl : null;
+  if (!cl) return;
+  const r = Clan.join(cl);
+  if (r.error) { menu.toast(r.error, 'warn'); return; }
+  menu.toast(`Joined [${r.clan.tag}] ${r.clan.name}`);
+  renderLobby();
+}
+// Whenever this phone's clan changes (founded, joined, edited, left, a clanmate's rename): in a lobby the seat takes the
+// new tag (guests send their join again; the host keeps the seat and takes the new name) and the card goes round again.
+Clan.onChange(() => {
+  if (!app.net || app.inMatch) return;
+  if (app.isHost) { const me = localHuman(); if (me) me.name = myTagName(); broadcastLobby(); }
+  else app.net.sendLobby({ t: 'join', name: myName(), clan: Clan.tag() ?? undefined, build: BUILD, ...seatData() });
+  shareCareer();
+});
 
 // Battle royale squad size for the room (js/ui/br-squad.js): the host's call, shown on the lobby and the vote.
 function setBrSquad(n) {
@@ -785,7 +827,7 @@ function startHosting({ custom = null } = {}) {
   app.code = code;
   app.isHost = true;
   app.lobby = {
-    humans: [{ id: net.localId, name: myName(), team: 0, ready: true, host: true, ...seatData() }],
+    humans: [{ id: net.localId, name: myTagName(), team: 0, ready: true, host: true, ...seatData() }],
     botSkill: custom?.skill ?? MP_BOT_SKILL,
     mods: custom?.mods ?? withHardcore([], Options.get('hardcore')),     // A map-vote room starts with the Hardcore switch.
     custom,
@@ -815,7 +857,7 @@ function holdsSlot(id) {
 function seatOpenSlot(id, msg) {
   if (!app.net || !app.match?.isHost) return false;
   const seat = seatFrom(msg);
-  const name = String(msg.name ?? '').slice(0, 12) || 'Player';
+  const name = guestName(msg);
   const operator = cleanOperator(seat.loadout?.operator);
   const info = { badge: seat.badge, operator, skin: seat.loadout?.skin ?? null, emblem: seat.loadout?.emblem ?? null };
   const entry = app.match.claimOpenSlot(id, name, { ...seat.loadout, operator }, info);
@@ -863,9 +905,9 @@ function hostLobbyMessage(msg, from) {
           return;
         }
         // Friends default to the same side; overflow goes to the other team.
-        guest = { id: from, name: String(msg.name).slice(0, 12), team: teamOpen(0) ? 0 : 1, ready: false, ...seatFrom(msg) };
+        guest = { id: from, name: guestName(msg), team: teamOpen(0) ? 0 : 1, ready: false, ...seatFrom(msg) };
         humans.push(guest);
-      }
+      } else guest.name = guestName(msg);      // A guest who joined a clan in the lobby sends its join again.
       break;
     }
     case 'cast': {
@@ -883,6 +925,7 @@ function hostLobbyMessage(msg, from) {
       (app.careers ??= new Map()).set(from, card);
       if (!app.careers.has(app.net.localId)) try { app.careers.set(app.net.localId, Progress.careerCard()); } catch (err) { console.error('career card', err); }
       broadcastCareers();
+      if (menuShows('lobby')) renderLobby();      // A clanmate's card can offer "Join [TAG]".
       return;
     }
     case 'ready': if (guest) guest.ready = !!msg.ready; break;
@@ -997,7 +1040,7 @@ function startJoining(code) {
   menu.searching(code, () => goTitle());
   wireSharedNet(net);
   net.onConnected(() => {
-    net.sendLobby({ t: 'join', name: myName(), build: BUILD, ...seatData() });
+    net.sendLobby({ t: 'join', name: myName(), clan: Clan.tag() ?? undefined, build: BUILD, ...seatData() });
     shareCareer();
   });
   net.onJoinFailed(() => {
@@ -1037,6 +1080,7 @@ function guestLobbyMessage(msg) {
       break;
     case 'careers':
       for (const r of Array.isArray(msg.list) ? msg.list.slice(0, 16) : []) if (typeof r?.id === 'string') storeCareer(r.id, r.c);
+      if (menuShows('lobby')) renderLobby();
       break;
     case 'start':
       // A guest that never left this match hears its own rejoin announcement after a brief drop.
@@ -1216,7 +1260,7 @@ function startTraining() {
   resetToSolo();
   if (t.map === 'range' || !MAPS[t.map]) return launchRange();
   const id = 'local', seed = randomSeed();
-  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  const humans = [{ id, name: myTagName(), team: 0, ...seatData() }];
   // Every bot on the other side: buildRoster fills both sides to `bots`, and training keeps the enemy half.
   const roster = buildRoster(humans, { botSkill: t.skill, mode: 'tdm', mapId: t.map, seed, teamSize: t.bots }).filter(r => !r.isBot || r.team === 1);
   app.lastPick = { training: true };
@@ -1290,7 +1334,7 @@ const squadName = () => `${myName()}'s squad`;
 function openTourney() {
   resetToSolo();
   menu.tourney({
-    onBack: () => renderMp(), onPlay: playTourneyRound, owner: selfId(), name: squadName(),
+    onBack: () => renderMp(), onPlay: playTourneyRound, owner: selfId(), name: squadName(), clan: Clan.get(),
     onReward: (kind, id) => unlockSheet(menu, kind, id),
   });
 }
@@ -1300,7 +1344,7 @@ function openTourney() {
 function playTourneyRound({ key, round, plan, opponent, bracket }) {
   resetToSolo();
   const id = 'local', seed = randomSeed();
-  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  const humans = [{ id, name: myTagName(), team: 0, ...seatData() }];
   const pool = poolFor(humans);
   const sides = matchSides(bracket, round, opponent, { humans: humans.length, target: pool.target ?? undefined, seed });
   const roster = pickBotsForMatch({ humans, mode: plan.mode, mapId: plan.mapId, seed, pool: { ...pool, sides } });
@@ -1346,6 +1390,8 @@ function openPartyTourney() {
   menu.tourney({
     onBack: () => { app.tnView = false; renderLobby(); }, onPlay: playTourneyParty, party: true,
     owner: app.isHost ? app.net.localId : app.lobby.tn?.owner ?? hostId, name: `${hostName}'s squad`,
+    // The host's clan names the squad: this phone's own, or the one on the host's career card.
+    clan: app.isHost ? Clan.get() : Friends.list(app.net.localId).find(f => f.id === hostId)?.card.cl ?? null,
     hostRun: app.isHost ? null : app.lobby.tn ?? { entered: false, out: false, champion: false, canReenter: false, roundsWon: 0, entriesLeft: 2, best: 0, round: null },
     hostName: app.isHost ? null : hostName,
     onReward: (kind, id) => unlockSheet(menu, kind, id),
@@ -1409,7 +1455,7 @@ function mpVoteTick() {
 function launchMp(mapId, mode, mods = [], ranked = false, event = null) {
   stopVote();
   const id = 'local', seed = randomSeed();
-  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  const humans = [{ id, name: myTagName(), team: 0, ...seatData() }];
   // Ranked looks for players near this player's rating (their SR once placed), in a narrower band, with no modifiers.
   const pool = poolFor(humans), rating = pool.target;
   if (ranked) Object.assign(pool, { target: rankedTarget(Progress.ranked(), rating), spread: RANKED_SPREAD });
@@ -1461,7 +1507,7 @@ function startRange() {
 // The sim adds the dummies itself; the renderer still needs them on its roster to name and draw them.
 function launchRange() {
   const id = 'local', seed = randomSeed();
-  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  const humans = [{ id, name: myTagName(), team: 0, ...seatData() }];
   beginMatch({
     roster: withBadges(buildRoster(humans, { teamSize: 0, seed }), humans, seed),
     seed, mapId: 'range', mode: 'range', ...limitsFor('range'),
@@ -1474,7 +1520,7 @@ function startTutorial() {
   Progress.setFlag('tutorialOffered');
   resetToSolo();
   const id = 'local', seed = randomSeed();
-  const human = { id, name: myName(), team: 0, ...seatData() };
+  const human = { id, name: myTagName(), team: 0, ...seatData() };
   const roster = withBadges(tutorialRoster(human), [human], seed);
   beginMatch({
     roster, seed, mapId: TUTORIAL_MAP, mode: TUTORIAL_MODE, ...TUTORIAL_LIMITS,
@@ -1570,7 +1616,7 @@ function launchSolo(pickMap, pickMode, mods = soloMods()) {
   const devGiant = params.has('debug') && MAPS[pickMap]?.size === 'giant' && MODES[pickMode];
   const { mapId, mode } = devGiant ? { mapId: pickMap, mode: pickMode } : resolvePick({ mapId: pickMap, mode: pickMode });
   const id = 'local', seed = randomSeed();
-  const humans = [{ id, name: myName(), team: 0, ...seatData() }];
+  const humans = [{ id, name: myTagName(), team: 0, ...seatData() }];
   // The picker's bot match settings (js/ui/botsettings.js); ?bots= and the limit test hooks still win.
   const set = BotMatch.resolve(mode, MAPS[mapId]);
   const botSkill = params.get('bots') || set.skill;

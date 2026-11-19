@@ -87,8 +87,11 @@ const cache = new Map();
 // The bracket of a weekend for an owner. name: the owner's squad name (party guests pass the host's).
 // { key, date ('YYYY-MM-DD' Friday), cup, owner, rounds: roundPlan, squads: [{ slot (0..7, bracket position), seed,
 //   kind: 'you'|'clan', tag, name, members: [profile ids], strength (mean usual rating, clans), skill }] }
-export function bracketFor(key, owner, { name = 'Your squad' } = {}) {
-  const ck = `${key}|${owner}|${name}`;
+// clan: the owner's player clan ({ tag, name }, js/shared/clans.js), if any: the squad plays under its tag and name. It
+// changes only the label, never the draw.
+export function bracketFor(key, owner, { name = 'Your squad', clan = null } = {}) {
+  const cl = clan && typeof clan.tag === 'string' && /^[A-Z0-9]{2,4}$/.test(clan.tag) && !CLANS.some(c => c.tag === clan.tag) && clan.name ? clan : null;
+  const ck = `${key}|${owner}|${name}|${cl ? `${cl.tag}|${cl.name}` : ''}`;
   if (cache.has(ck)) return cache.get(ck);
   const cup = cupFor(key), size = cup.size;
   const rng = mulberry32(hash32('tn-bracket', key, owner));
@@ -107,7 +110,7 @@ export function bracketFor(key, owner, { name = 'Your squad' } = {}) {
   clans.sort((a, b) => b.strength - a.strength || (a.tag < b.tag ? -1 : 1));
   const taken = new Set(clans.flatMap(c => c.members));
   const mates = teammates(key, owner, size - 1, taken);
-  const you = { kind: 'you', tag: null, name, members: mates.map(p => p.id), strength: null, skill: null };
+  const you = { kind: 'you', tag: cl ? cl.tag : null, name: cl ? String(cl.name) : name, members: mates.map(p => p.id), strength: null, skill: null };
   const bySeed = [you, ...clans];
   const squads = SEED_ORDER.map((seed, slot) => ({ ...bySeed[seed - 1], seed, slot }));
   const out = { key, date: dayIso(key), cup, owner, rounds: roundPlan(key), squads };

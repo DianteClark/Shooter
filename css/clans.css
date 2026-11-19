@@ -1,0 +1,60 @@
+/* Player clans (js/ui/clanscreen.js, js/shared/clans.js): the clan plate, the Clan screen, the lobby's Join offer and
+   the Clans view on the boards. Fits 667x375 and up. */
+.cl-plate { --cl: var(--c-sodium); display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; color: var(--c-night); background: var(--cl);
+  font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); vertical-align: middle;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px); }
+.cl-plate.big { gap: 8px; padding: 8px 12px; font: 400 var(--fs-heading)/1 var(--f-stencil); letter-spacing: .06em;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+#ui .cl-plate .ico { height: 1em; color: inherit; }
+#ui .pf-name .cl-plate { margin-right: 6px; }
+#ui .pf-clan + .pf-trophy { margin-left: var(--sp-2); }
+
+#ui .menu[data-screen="clan"] { gap: var(--sp-3); }
+.cl { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
+.cl-none { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); width: min(620px, 100%); }
+#ui .cl-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; text-align: left; color: var(--c-chalk);
+  background: var(--face-steel); box-shadow: var(--bevel), var(--edge); }
+#ui .cl-card .ico { height: 30px; color: var(--c-sodium); }
+.cl-card b { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); }
+.cl-card small { font: 400 var(--fs-body)/1.3 var(--f-body); color: var(--c-haze); }
+.cl-note { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 0; font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }
+#ui .cl-note .ico { height: 14px; flex: none; color: var(--c-sodium); }
+
+.cl-mine, .cl-edit { width: min(560px, 100%); display: flex; flex-direction: column; gap: var(--sp-3); padding: 12px; background: var(--face-steel); box-shadow: var(--bevel), var(--edge); }
+.cl-head, .cl-preview { display: flex; align-items: center; gap: 12px; }
+.cl-head span { display: flex; flex-direction: column; gap: 4px; }
+.cl-head b, .cl-preview > b { font: 400 var(--fs-heading)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-chalk); }
+.cl-head small { font: 400 var(--fs-caption)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+.cl-code { display: flex; flex-direction: column; gap: 4px; }
+.cl-code > small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+#ui .cl-codebtn { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; color: var(--c-sodium); background: rgba(16,20,26,.6); box-shadow: var(--edge); }
+.cl-codebtn b { font: 400 var(--fs-lead)/1 var(--f-plate); letter-spacing: .08em; word-break: break-all; text-align: left; }
+.cl-code p { margin: 0; font: 400 var(--fs-caption)/1.3 var(--f-body); color: var(--c-haze); }
+.cl-acts, .cl-go { display: flex; gap: var(--sp-2); justify-content: flex-end; align-items: center; }
+.cl-acts .cl-note { margin-right: auto; }
+.cl-fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+#ui .cl-field { justify-content: flex-start; gap: 8px; min-height: 40px; }
+.cl-field small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+#ui .cl-field .ico { margin-left: auto; height: 14px; }
+.cl-swatches, .cl-marks { display: flex; gap: 6px; flex-wrap: wrap; }
+#ui .cl-sw { width: 34px; height: 30px; background: var(--cl); box-shadow: var(--edge); }
+#ui .cl-sw.on, #ui .cl-mk.on { box-shadow: 0 0 0 2px var(--c-chalk); }
+#ui .cl-mk { width: 34px; height: 30px; display: grid; place-items: center; color: var(--c-chalk); background: rgba(16,20,26,.5); box-shadow: var(--edge); }
+#ui .cl-mk .ico { height: 18px; }
+
+/* The lobby's offer to join a clanmate's clan. */
+#ui .lobby-foot .cl-offer { box-shadow: inset 0 0 0 1px var(--c-sodium); }
+
+/* Boards: the Clans view. */
+#ui .bd-row.cl-row { grid-template-columns: 40px 64px minmax(0, 1fr) auto; }
+#ui .bd-body .bd-row.cl-row.mine { background: linear-gradient(90deg, rgba(242,166,59,.30), rgba(242,166,59,.10)); box-shadow: inset 3px 0 0 var(--c-sodium); }
+.cl-row .cl-n { font: 400 var(--fs-caption)/1 var(--f-plate); color: var(--c-haze); }
+.bd-row .bot-cl { color: var(--c-chalk); background: var(--c-plate); }
+.cld { gap: var(--sp-2); }
+.cld-head { display: flex; align-items: center; gap: 8px; }
+.cld-head b { font: 400 var(--fs-title)/1.1 var(--f-stencil); color: var(--c-chalk); }
+.cld-head small { display: block; font: 400 var(--fs-micro)/1.2 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
+.cld-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.cld-m { display: flex; justify-content: space-between; gap: 8px; padding: 4px 2px; border-bottom: 1px solid var(--c-line); font: 400 var(--fs-body)/1.2 var(--f-body); color: var(--c-chalk); }
+.cld-m.me { color: var(--c-sodium); }
+.cld-m span { font: 400 var(--fs-body)/1 var(--f-plate); color: var(--c-haze); font-variant-numeric: tabular-nums; }

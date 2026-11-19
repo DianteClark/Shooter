@@ -8,7 +8,8 @@ import { WEAPON_IDS } from '../shared/constants.js';
 import { PERK_IDS, PERKS, PRO } from '../shared/catalog.js';
 import { cardHtml, cardsSheet, vetTag, currentEmblem } from './cards.js';
 import { icon } from './icons.js';
-import { Progress } from './progress.js';
+import { Progress, Clan } from './progress.js';
+import { clanScreen, clanPlate } from './clanscreen.js';     // Player clans.
 import { esc, badgeMark, ROMAN, levelRequirement, swatchCss } from './widgets.js';
 import { ico, header } from './yard.js';
 import { rollNumber } from './motion.js';
@@ -85,13 +86,13 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     const hint = peaked ? (mp ? 'Master Prestige' : `Master at ${MAX_LEVEL}`) : lp.level >= MAX_LEVEL ? 'Prestige' : `Prestige at ${MAX_LEVEL}`;
     const frac = bar.maxed ? 1 : bar.into / bar.span;
     menu.el.innerHTML = `
-      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: trophyButton() + masteryButton() })}
+      ${header({ back: 'pfBack', label: 'Done', title: 'Service record', extra: clanButton() + trophyButton() + masteryButton() })}
       <div class="pf">
         <div class="pf-card${can ? ' ready' : ''}" data-in="left">
           <div class="pf-badge">${badgeMark(p, 96, lp.master)}</div>
           <div class="pf-id">
             <span class="pf-rankname">${esc(rankName(p, lp.master))}${vetTag(Progress.isVeteran(), { emblem: currentEmblem() })}</span>
-            <button class="pf-name" data-act="pfRename"><b>${esc(Progress.name || 'Rookie')}</b>${ico('edit')}</button>
+            <button class="pf-name" data-act="pfRename">${Clan.get() ? clanPlate(Clan.get(), 'small') : ''}<b>${esc(Progress.name || 'Rookie')}</b>${ico('edit')}</button>
           </div>
           <div class="pf-level">
             <span class="pf-lvbig"><small>${mp ? 'Master' : 'Level'}</small><b class="pf-lvn">${mp ? lp.master : lp.level}</b></span>
@@ -143,12 +144,19 @@ export function profileScreen(menu, { onBack, onChange, onRename, onSave }) {
     pfMastery: () => masteryScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
     pfTrophy: () => trophyScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
     pfPrestigeView: () => prestigeScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }), onChange }),
+    pfClan: () => clanScreen(menu, { onBack: () => profileScreen(menu, { onBack, onChange, onRename, onSave }) }),
     pfRename: onRename,
     pfSave: onSave,
     pfPrestige: () => enterPrestige(menu, { onChange, onDone: render }),
   });
   render();
   menu.show();
+}
+
+// The way into the Clan screen (js/ui/clanscreen.js): your tag, or the way to found or join one.
+function clanButton() {
+  const c = Clan.get();
+  return `<button class="btn pf-mastery pf-clan" data-act="pfClan" aria-label="Clan">${ico('ui:party')}<b>Clan</b><small>${c ? esc(`[${c.tag}]`) : 'None'}</small></button>`;
 }
 
 // The way into the Mastery screen, in the header: tiers done across every track and weapon ladder.
