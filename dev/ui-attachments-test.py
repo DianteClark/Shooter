@@ -38,6 +38,11 @@ CASES = [
     ('akimbo', 'grip', 'rubber', 'mag:tapedmag'),
     ('thumper', 'barrel', 'venturi', 'mag:lightrocket,optic:laserbox'),
     ('dmr', 'grip', 'vertical', 'optic:prism,barrel:flashhider'),   # The longest grip list there is (nine parts).
+    # Weapons wave 3 (js/shared/weapons-w3.js): each new gun with a signature tried and class parts fitted.
+    ('burstsmg', 'barrel', 's_clattershroud', 'optic:reflex,mag:extmag,grip:angled'),
+    ('heavyshot', 'grip', 's_slickpump', 'barrel:choke,optic:holo,mag:magnum'),
+    ('battlepistol', 'barrel', 's_matchslide', 'optic:laserbox,grip:thumbrest,mag:extmag'),
+    ('battlepistol', 'mag', 's_hotloads', ''),     # Mastery I: locked on a veteran save.
 ]
 
 CHECK = """() => {

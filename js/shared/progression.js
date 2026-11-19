@@ -8,6 +8,7 @@ import { MODES, modeRules } from './modes.js';
 import { attachmentsFor } from './attachments.js';
 import { WEAPONS } from './weapons.js';
 import { V10_UNLOCKS } from './weapons-v10.js';
+import { W3_UNLOCKS } from './weapons-w3.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
 import { blankTourney, cleanTourney, tourneyEmpty } from './tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
@@ -149,6 +150,7 @@ export const UNLOCK_SCHEDULE = [
   { level: 16, kind: 'weapon',   id: 'lightlmg' },
   { level: 18, kind: 'weapon',   id: 'crossbow' },
   ...V10_UNLOCKS,   // V10 guns, levels 3 to 40 (js/shared/weapons-v10.js).
+  ...W3_UNLOCKS,    // Weapons wave 3, levels 25, 27 and 29 (js/shared/weapons-w3.js).
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 const V1_GRANT_LEVEL = 15;

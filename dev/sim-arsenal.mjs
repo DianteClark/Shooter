@@ -7,6 +7,7 @@ import { Sim, buildRoster } from '../js/sim/sim.js';
 import { createPlayerState, stepPlayer, currentSpread, weaponDef, MOVE } from '../js/sim/player.js';
 import { WEAPONS, shotsToKill } from '../js/shared/weapons.js';
 import { V10_WEAPONS, V10_GUNS, V10_LIKE, V10_UNLOCKS } from '../js/shared/weapons-v10.js';
+import { W3_WEAPONS, W3_GUNS, W3_LIKE, W3_UNLOCKS } from '../js/shared/weapons-w3.js';
 import { SIM_HZ, WEAPON_IDS, PRIMARY_IDS, SECONDARY_IDS, CATEGORIES, WEAPON_CATEGORY } from '../js/shared/constants.js';
 import { ATTACHMENTS, MOD_INFO, SLOTS, availableFor, isAvailable, modsFor, normalizeKit, packKit, unpackKit, trackFor, applyAttachments } from '../js/shared/attachments.js';
 import { GUN_LADDER } from '../js/shared/modes.js';
@@ -19,6 +20,7 @@ import { statBars, weaponFacts, compareStats } from '../js/ui/gunstats.js';
 
 const STEP = 1 / SIM_HZ, DT = 1 / 60;
 const NEW = Object.keys(V10_WEAPONS);
+const W3 = Object.keys(W3_WEAPONS);                    // Weapons wave 3 (weapons-w3.js), after the V10 guns.
 const NEW_ATTACHMENTS = ['steady', 'ghostring', 'breacher', 'floated', 'satchel', 'tapedmag', 'bipod', 'handstop'];
 const OLD_IDS = ['ar', 'burst', 'heavyar', 'smg', 'pdw', 'tacsmg', 'shotgun', 'autoshot', 'coach', 'lmg', 'saw', 'rotary', 'dmr', 'battle', 'lever',
   'sniper', 'antimat', 'semisnipe', 'pistol', 'revolver', 'machpistol', 'deuce', 'launcher', 'thumper', 'golden',
@@ -125,7 +127,11 @@ test('sixteen new guns, every class gains at least one, and a Melee class', () =
 
 test('older ids keep their wire index; the new ones are appended, primaries then secondaries', () => {
   assert.deepEqual(WEAPON_IDS.slice(0, OLD_IDS.length), OLD_IDS);
-  assert.deepEqual([...WEAPON_IDS.slice(OLD_IDS.length)].sort(), [...NEW].sort());
+  assert.deepEqual([...WEAPON_IDS.slice(OLD_IDS.length, OLD_IDS.length + NEW.length)].sort(), [...NEW].sort());
+  const w3 = WEAPON_IDS.slice(OLD_IDS.length + NEW.length);
+  assert.deepEqual([...w3].sort(), [...W3].sort(), 'wave 3 after the V10 guns');
+  assert.deepEqual(w3.map(id => SECONDARY_IDS.includes(id)), [...w3].map(id => SECONDARY_IDS.includes(id)).sort(), 'wave 3: primaries, then secondaries');
+  for (const id of W3) assert.equal(PRIMARY_IDS.includes(id) + SECONDARY_IDS.includes(id), 1, `${id} is in exactly one slot list`);
   assert.equal(new Set(WEAPON_IDS).size, WEAPON_IDS.length);
   for (const id of NEW) assert.equal(PRIMARY_IDS.includes(id) + SECONDARY_IDS.includes(id), 1, `${id} is in exactly one slot list`);
   for (const id of ['akimbo', 'nailer', 'salvo', 'knife', 'maul']) assert.ok(SECONDARY_IDS.includes(id));
@@ -142,7 +148,7 @@ test('unlock levels are spread through the level curve, one gun per level', () =
 });
 
 test('each has an icon, stat bars, facts, and joins the bot rotations and Gun Game', () => {
-  for (const id of NEW) {
+  for (const id of [...NEW, ...W3]) {
     assert.ok(hasIcon(id), `${id} icon`);
     assert.ok(statBars(id).length >= (WEAPONS[id].melee ? 5 : 11) && statBars(id).every(b => b.score >= 0 && b.score <= 1), `${id} stat bars`);
     assert.equal(weaponFacts(id).length, 6);
@@ -151,7 +157,7 @@ test('each has an icon, stat bars, facts, and joins the bot rotations and Gun Ga
   assert.ok(statBars('rail').some(b => b.id === 'charge') && statBars('heatar').some(b => b.id === 'heat'));
   const carried = new Set();
   for (const mapId of Object.keys(MAPS)) for (const mode of ['tdm', 'dom', 'kc']) for (const r of buildRoster([], { botSkill: 'regular', teamSize: 6, mapId, mode, seed: 3 })) { carried.add(r.loadout.primary); carried.add(r.loadout.secondary); }
-  for (const id of NEW) assert.ok(carried.has(id), `bots are dealt the ${id}`);
+  for (const id of [...NEW, ...W3]) assert.ok(carried.has(id), `bots are dealt the ${id}`);
   assert.ok(['rampar', 'magshot', 'twinshot', 'akimbo'].every(id => GUN_LADDER.includes(id)));
   assert.equal(GUN_LADDER[GUN_LADDER.length - 1], 'revolver', 'the ladder still ends on the Verdict');
   assert.equal(new Set(GUN_LADDER).size, GUN_LADDER.length);
@@ -159,7 +165,7 @@ test('each has an icon, stat bars, facts, and joins the bot rotations and Gun Ga
 
 /* ---------------- Every gun: fires, reloads, kills ---------------- */
 
-for (const id of NEW) {
+for (const id of [...NEW, ...W3]) {
   const w = WEAPONS[id];
   test(`${w.name} (${id}): fires at its cadence, reloads, and kills`, () => {
     const ps = shooter(id);
@@ -180,7 +186,8 @@ for (const id of NEW) {
       run(ps, (w.shellReload ? w.reload * w.magazine : w.reload) + 0.6);
       assert.equal(ps.ammo[ps.slot], w.magazine, 'reload fills the magazine');
     }
-    const dist = w.melee ? 1.8 : Math.min(w.botUse.pref, w.range * 0.6, 20);
+    // The lane has waist-high cover at 7.5 m: a light round (no penetrate) is tested short of it.
+    const dist = w.melee ? 1.8 : Math.min(w.botUse.pref, w.range * 0.6, 20, w.penetrate || w.explosive ? 99 : 7);
     const t = killTime(id, dist);
     assert.ok(t >= 0, `kills a standing target at ${dist} m`);
     const expect = (shotsToKill(w, dist) - 1) * 60 / w.rpm + (w.charge ? w.charge.time : 0);
@@ -494,9 +501,59 @@ test('mastery: a new gun has camo challenges and a ladder, kills count, and the 
 
 /* ---------------- Bots ---------------- */
 
+/* ---------------- Weapons wave 3 (js/shared/weapons-w3.js) ---------------- */
+
+test('wave 3: three guns in their classes, with names, feel, a borrowed reload, and a level no other gun opens on', () => {
+  assert.deepEqual(Object.values(W3_GUNS).flat().sort(), [...W3].sort());
+  for (const id of W3) {
+    const w = WEAPONS[id];
+    assert.equal(w.category, WEAPON_CATEGORY[id]);
+    assert.ok(w.feel && w.feel.fx && w.feel.voice && w.feel.recoil, `${id} has its own flash, voice and kick`);
+    for (const key of ['sound', 'fx', 'reload', 'hold', 'force']) assert.ok(OLD_IDS.includes(W3_LIKE[id][key]), `${id} borrows a real ${key}`);
+    assert.ok(w.headMult >= 1 && Number.isFinite(w.headMult));
+  }
+  const levels = UNLOCK_SCHEDULE.filter(u => u.kind === 'weapon');
+  for (const u of W3_UNLOCKS) assert.equal(levels.filter(v => v.level === u.level).length, 1, `${u.id}: level ${u.level} is its own`);
+});
+
+test('Clatter: three rounds a pull, a hair apart; two bursts kill to 17 m, where every other SMG needs more; slow in a room', () => {
+  const w = WEAPONS.burstsmg;
+  const ps = shooter('burstsmg');
+  const t = [...run(ps, 1.0, { fire: true }).map(s => s.t), ...run(ps, 0.15).map(s => 1.0 + s.t)];   // Let go: a started burst finishes.
+  assert.ok(t.length >= 6 && t.length % 3 === 0, `${t.length} rounds`);
+  for (let i = 0; i + 2 < t.length; i += 3) assert.ok(Math.abs(t[i + 1] - t[i] - w.burst.gap) < 0.02 && Math.abs(t[i + 2] - t[i + 1] - w.burst.gap) < 0.02, 'burst gap');
+  assert.ok(Math.abs(t[3] - t[0] - 3 * 60 / w.rpm) < 0.03, 'bursts at its rpm');
+  assert.equal(shotsToKill(w, 17), 4);
+  for (const id of WEAPON_IDS.filter(id => WEAPONS[id].category === 'SMG' && id !== 'burstsmg')) assert.ok(shotsToKill(WEAPONS[id], 17) > 4, `${id} needs more at 17 m`);
+  // Ideal time to the killing round: whole bursts at the cadence, then the gap inside the last one.
+  const ttk = (d, x) => { const n = shotsToKill(d, x) - 1; return d.burst ? Math.floor(n / d.burst.count) * d.burst.count * 60 / d.rpm + (n % d.burst.count) * d.burst.gap : n * 60 / d.rpm; };
+  for (const id of ['smg', 'pdw', 'tacsmg', 'heavysmg', 'hushsmg']) assert.ok(ttk(w, 5) > ttk(WEAPONS[id], 5), `slower in a room than the ${id}`);
+  for (const id of WEAPON_IDS.filter(id => WEAPONS[id].category === 'SMG' && id !== 'burstsmg')) assert.ok(ttk(w, 17) < ttk(WEAPONS[id], 17), `quicker at 17 m than the ${id}`);
+});
+
+test('Bullhead: one shell kills further out than any other pellet gun, four in the tube, through a crate', () => {
+  const w = WEAPONS.heavyshot;
+  assert.equal(shotsToKill(w, 12), 1);
+  const reach = d => { let r = 0; for (let x = 0.5; x < 30; x += 0.25) if (shotsToKill(d, x) === 1) r = x; return r; };
+  for (const id of WEAPON_IDS.filter(id => (WEAPONS[id].pellets || 1) > 1 && id !== 'heavyshot')) assert.ok(reach(w) > reach(WEAPONS[id]), `${id} reaches ${reach(WEAPONS[id])} m`);
+  assert.ok(w.magazine === 4 && w.shellReload && w.penetrate > 0);
+  assert.ok(60 / w.rpm > 60 / WEAPONS.shotgun.rpm, 'the slowest pump');
+});
+
+test('Gavel: three to the body out to 22 m, the quickest sidearm kill from 18 m out, at a slower pace than the Flicker', () => {
+  const w = WEAPONS.battlepistol;
+  assert.equal(shotsToKill(w, 22), 3);
+  const ttk = (d, x) => (shotsToKill(d, x) - 1) * 60 / d.rpm;
+  for (const id of WEAPON_IDS.filter(id => WEAPONS[id].category === 'Pistol' && !WEAPONS[id].golden && id !== 'battlepistol')) {
+    for (const x of [18, 22, 28]) if (WEAPONS[id].range > x) assert.ok(ttk(w, x) < ttk(WEAPONS[id], x), `${id} at ${x} m`);
+  }
+  assert.ok(ttk(w, 6) > ttk(WEAPONS.revolver, 6), 'the Verdict still wins a room');
+  assert.ok(w.rpm < WEAPONS.pistol.rpm && SECONDARY_IDS.includes('battlepistol'));
+});
+
 if (!process.argv.includes('quick')) {
   const line = [];
-  for (const id of NEW) {
+  for (const id of [...NEW, ...W3.filter(id => PRIMARY_IDS.includes(id))]) {
     test(`bots carrying the ${WEAPONS[id].name} get kills with it in a 60 s match`, () => {
       let best = 0, note = '';
       // Two seeds on two maps: a gun has to work somewhere on its own, not ride one lucky spawn.

@@ -320,5 +320,25 @@
   "score": 0.6225,
   "stock": 0.5625,
   "evals": 45
+ },
+ "burstsmg": {
+  "kit": {
+   "optic": "laserbox",
+   "barrel": "s_clattershroud"
+  },
+  "score": 0.645,
+  "stock": 0.5775,
+  "evals": 57
+ },
+ "heavyshot": {
+  "kit": {
+   "optic": "laserbox",
+   "barrel": "choke",
+   "mag": "lightmag",
+   "grip": "angled"
+  },
+  "score": 0.6,
+  "stock": 0.4975,
+  "evals": 53
  }
 }

@@ -452,7 +452,7 @@ export const SIG_TRIM = {
   s_bedded: { gain: 1 },         // Stanchion: with Long Belt it ran 1.28 (stock 1.10): both back to base strength.
   s_longbelt: { gain: 1 },
 };
-function boostSignature(a) {
+export function boostSignature(a) {
   if (a.kind !== 'sig') return a;
   const mods = {}, trim = SIG_TRIM[a.id] ?? {};
   for (const [k, v] of Object.entries(a.mods)) {

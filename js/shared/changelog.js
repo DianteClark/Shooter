@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: '1118-10', date: '2026-11-18', title: 'Three new guns',
+    items: [
+      'Clatter, a burst SMG: three rounds a pull, and two bursts still kill at ranges where other SMGs give up. Slower than the others in a tight room. Opens at level 25.',
+      'Gavel, a battle pistol: three shots to the body across a whole lane, the quickest sidearm kill at range. Opens at level 27.',
+      'Bullhead, a ten-gauge pump shotgun: one shell kills further out than any other shotgun and goes through crates, but it holds four and pumps slowly. Opens at level 29.',
+      'Each has its own look, sound and kick, a full set of attachments, two signature attachments of its own, camos and mastery like every other gun.',
+      'Find them in battle royale loot and the Graveyard Shift mystery crate; the Clatter and the Bullhead are also on the walls there. Bots use them too.',
+    ],
+  },
+  {
     build: '1118-9', date: '2026-11-18', title: 'New map: Millbrook',
     items: [
       'A new small map in Farmland: Millbrook, a stone water mill on a brook through an apple orchard in blossom, on a spring morning after rain.',

@@ -359,5 +359,28 @@
    "s_capacitor",
    "s_overcharge"
   ]
+ },
+ "burstsmg": {
+  "kit": {
+   "optic": "laserbox",
+   "barrel": "s_clattershroud",
+   "grip": "s_snapsear"
+  },
+  "sigs": [
+   "s_clattershroud",
+   "s_snapsear"
+  ]
+ },
+ "heavyshot": {
+  "kit": {
+   "optic": "laserbox",
+   "barrel": "choke",
+   "mag": "s_gooseloads",
+   "grip": "s_slickpump"
+  },
+  "sigs": [
+   "s_slickpump",
+   "s_gooseloads"
+  ]
  }
 }

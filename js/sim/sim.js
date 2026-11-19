@@ -9,6 +9,7 @@ import { EX, EX_AI_TEAM, GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor 
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_PRIMARIES } from '../shared/weapons-v10.js';
+import { W3_BOT_PRIMARIES } from '../shared/weapons-w3.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange, COLD_MARK, syncCover } from './equipment.js';
 import { NavGrid } from './nav.js';
@@ -21,7 +22,7 @@ import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
 import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module per mode (js/sim/rules.js).
 import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
-import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
+import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING, tryoutOf } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 import { clearZmWalls, ZM, ZM_SQUAD, ZM_TEAM } from '../shared/zombies.js';   // Graveyard Shift (docs/ZOMBIES.md).
 import * as Fin from './finishers.js';     // Finishing moves and emotes (docs/FINISHERS.md).
 import { cleanFinisher, FINISHER_IDS } from '../shared/finishers.js';
@@ -159,6 +160,7 @@ const BOT_PRIMARIES = [
   'saw', 'carbine', 'coach', 'heavysmg', 'lever', 'slug', 'semisnipe', 'lightlmg', 'rotary', 'crossbow', 'antimat',
 ];
 BOT_PRIMARIES.push(...V10_BOT_PRIMARIES);   // V10 guns join the rotation after the older ones.
+BOT_PRIMARIES.push(...W3_BOT_PRIMARIES);    // Weapons wave 3 after them.
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 // Every tactical and lethal. A match deals them from an offset (see botLoadout), so over a session each is carried.
 const BOT_TACTICALS = Object.keys(TACTICALS);
@@ -358,12 +360,16 @@ function poolBotEntry(n, team, pick, botSkill, seed) {
   // Gear follows the player's usual level, not tonight's form: a strong player who is off still carries a full kit.
   const usual = forced ? botSkill : prof.skill.locked ?? (prof.skill.mu < 0.17 ? 'recruit' : prof.skill.mu < 0.5 ? 'regular' : prof.skill.mu < 0.83 ? 'veteran' : 'elite');
   // The favourite most matches, the others now and then.
-  const r = mulberry32((seed ?? 0) ^ (prof.index * 0x9e3779b1))();
-  const primary = prof.guns[r < 0.6 ? 0 : r < 0.85 ? 1 : 2] ?? prof.guns[0];
+  const roll = mulberry32((seed ?? 0) ^ (prof.index * 0x9e3779b1)), r = roll();
+  // Weapons wave 3: a player who has picked up a newer gun (botpool tryoutOf) brings it about one match in three. The
+  // later draws come after the favourite's, so the favourite roll is as before.
+  const tryout = tryoutOf(prof), rt = roll(), rs = roll();
+  const primary = tryout.primary && rt < 0.34 ? tryout.primary : prof.guns[r < 0.6 ? 0 : r < 0.85 ? 1 : 2] ?? prof.guns[0];
+  const secondary = tryout.secondary && rs < 0.34 ? tryout.secondary : prof.secondary;
   // Looks as of the match date (botpool looksAt): what the career since the progress reset has earned.
   const looks = pick.looks ?? prof;
   const loadout = normalizeLoadout({
-    primary, secondary: SECONDARY_IDS.includes(prof.secondary) ? prof.secondary : 'pistol', camo: looks.camo,
+    primary, secondary: SECONDARY_IDS.includes(secondary) ? secondary : 'pistol', camo: looks.camo,
     attachments: { [primary]: botAttachments(primary, usual, prof.kit[primary] ?? 0) },
     tactical: prof.tactical, lethal: prof.lethal, perks: prof.perks.slice(), streaks: prof.streaks.slice(),
   });
