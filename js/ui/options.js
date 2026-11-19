@@ -30,6 +30,7 @@ export const OPTION_DEFAULTS = Object.freeze({
   // Juice: damage numbers rising off the target when your rounds land (js/ui/hud.js). Off by default.
   dmgNumbers: false,
   batterySaver: false,
+  touchRec: false,   // Record touches (js/ui/touchrec.js): the last 20 s of touch events, for a "Stick died?" report.
   autoSprint: true,   // Pushing the move stick past 85% sprints (js/ui/controls.js); off: only at the very edge.   // Battery saver: Graveyard Shift's big hordes drawn at 30 fps (js/game/match.js), cooler and longer.
   botChatter: true,   // Bots' short lines in the kill feed (js/sim/chatter.js, js/ui/quickchat.js).
   recall: {},   // Remembered menu choices (js/ui/recall.js): Multiplayer tab and picks, squad size, Custom picks.
