@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'The Slugger and Home Run Derby',
+    build: '1119-10', date: '2026-11-19', title: 'The Slugger and Home Run Derby',
     items: [
       'New melee weapon: the Slugger, a baseball bat. A two-handed level swing that kills in two hits, quicker than the Maul and harder than the Gaff. A kill with it sends the body flying. Unlocks at level 32.',
       'New weekly event in the rotation: Home Run Derby, a Free-for-All where everyone swings the Slugger. Three challenges and a calling card, Out of the Park.',
