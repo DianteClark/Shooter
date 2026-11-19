@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Extraction contracts, Spectate and radar fixes',
+    build: '1118-11', date: '2026-11-18', title: 'Extraction contracts, Spectate and radar fixes',
     items: [
       'Extraction: contracts are no longer handed out on their own. Pick each one up at a contract phone (one at a time, as before). With no contract, the tracker, a marker and the minimap point you to the nearest phone. Bot squads walk to phones too.',
       'Extraction: after you take a contract its full card shows for a few seconds, then shrinks to a one-line tracker with the next step and the distance. Tap it to see the card again. Abandon is a small button at its side: hold it for a second.',
