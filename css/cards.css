@@ -256,6 +256,9 @@
 .op-skin.pulse .op-sw::after, .op-skin.prism .op-sw::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
 .op-skin.pulse .op-sw::after { background: radial-gradient(70% 60% at 50% 100%, var(--a), transparent 70%); animation: cc-breathe 1.4s ease-in-out infinite alternate; }
 .op-skin.prism .op-sw::after { right: auto; width: 200%; opacity: .45; mix-blend-mode: color-dodge; background: linear-gradient(90deg, #ff2bd6, #ffd659 25%, #18e8ff 50%, #ff2bd6 50%, #ffd659 75%, #18e8ff); animation: cc-prism 3s linear infinite; }
+/* Showpieces (docs/OPERATORS-ART.md): an active skin's swatch has a band of its accent sweeping across; a suit's has a gold frame. */
+.op-skin.active .op-sw::after { content: ''; position: absolute; inset: 0; right: auto; width: 200%; pointer-events: none; opacity: .55; mix-blend-mode: screen; background: repeating-linear-gradient(115deg, transparent 0 18%, var(--a) 24%, transparent 30%); animation: cc-prism 2.2s linear infinite; }
+.op-skin.suit .op-sw { box-shadow: inset 0 0 0 2px #ffd659, inset 0 -3px 0 var(--a); }
 
 @media (prefers-reduced-motion: reduce) {
   .ccard .cc-fx, .op-skin .op-sw::after { animation: none; }

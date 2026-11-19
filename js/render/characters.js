@@ -115,7 +115,10 @@ void main() {
   int oi = int(aOp.x + 0.5) * 2;
   vec4 sel = uSel[oi + (part > 3.5 ? 1 : 0)];
   float s4 = part > 3.5 ? part - 4.0 : part;
-  float want = s4 < 0.5 ? sel.x : s4 < 1.5 ? sel.y : s4 < 2.5 ? sel.z : sel.w;
+  float wantRaw = s4 < 0.5 ? sel.x : s4 < 1.5 ? sel.y : s4 < 2.5 ? sel.z : sel.w;
+  // Slots 0 and 4 also carry the operator's suit (32 x (suit + 1)), which the suit bank's pieces are picked by.
+  float isSuit = mod(floor(tag / 256.0 + 0.001), 2.0);
+  float want = isSuit > 0.5 ? floor(wantRaw / 32.0 + 0.001) - 1.0 : mod(wantRaw, 32.0);
   float slot = mod(aOp.y, 4.0);
   float glow = mod(floor(aOp.y / 4.0 + 0.001), 4.0);
   float suit = mod(floor(aOp.y / 16.0 + 0.001), 2.0);
@@ -126,7 +129,6 @@ void main() {
   float inShow = slot < 0.5 ? 0.0 : mod(floor(showM / slot), 2.0);
   float inHide = slot < 0.5 ? 0.0 : mod(floor(hideM / slot), 2.0);
   // A suit skin shows its SUIT pieces and nothing else; any other skin never shows them.
-  float isSuit = mod(floor(tag / 256.0 + 0.001), 2.0);
   if ((pick < 30.5 && abs(pick - want) > 0.5) || (showM > 0.5 && inShow < 0.5 && suit < 0.5) || (inHide > 0.5 && suit < 0.5) || abs(isSuit - suit) > 0.5) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0); vCol = vec3(0.0); vLight = vec3(0.0); vFx = vec2(0.0); vEff = vec4(0.0); vAcc = vec3(0.0); return;
   }
@@ -499,11 +501,11 @@ function vertexTags(b) {
 // per part some operator uses, numbered in the order the roster first uses them. PICKS maps both ways.
 const LEGACY = OPERATORS.filter(o => !o.kit).map(o => o.id);
 const NONE = 30, ALWAYS = 31;
-// Kit operators with a suit (SUITS): suit k is pick k of the kit bank's slot 0 (torso) and 4 (head), which the kit
-// operators otherwise leave empty (the shared head base is pick ALWAYS there). A hand-made operator's suit is merged
-// into its own variant.
-const KIT_SUITS = [...OPERATORS, ...ZM_OPERATORS].filter(o => o.kit && SUITS[o.id]).map(o => o.id);
-if (KIT_SUITS.length > NONE) throw new Error('operator kit: too many suits');
+// Suits (operator-kit.js SUITS) live in a bank of their own, drawn only for someone wearing one, so nobody else's
+// vertex shader walks them: suit k is pick k of that bank's slots 0 and 4, and an operator's suit rides in the high bits
+// of its slot 0 / 4 selection (own pick + 32 x (k + 1)).
+const ALL_SUITS = ALL_OPS.filter((o, i) => SUITS[o.id] && ALL_OPS.findIndex(q => q.id === o.id) === i).map(o => o.id);
+if (ALL_SUITS.length > NONE) throw new Error('operator kit: too many suits');
 export const PICKS = (() => {
   const out = {};
   for (const [name] of [...TORSO_SLOTS, ...HEAD_SLOTS]) {
@@ -514,11 +516,11 @@ export const PICKS = (() => {
   }
   return out;
 })();
-// Per operator: [torso picks 0..3], [head picks 4..7] for uSel. Kit operators use slots 0 and 4 for their suit, if any.
+// Per operator: [torso picks 0..3], [head picks 4..7] for uSel. The kit head base is pick ALWAYS of its bank.
 function opPicks(op) {
-  const legacy = LEGACY.indexOf(op.id), suit = op.kit ? KIT_SUITS.indexOf(op.id) : -1;
+  const legacy = LEGACY.indexOf(op.id);
   const pick = name => { const i = PICKS[name].indexOf(op.kit?.[name]); return i < 0 ? NONE : i; };
-  const own = legacy >= 0 ? legacy : suit >= 0 ? suit : NONE;
+  const own = (legacy >= 0 ? legacy : NONE) + 32 * (ALL_SUITS.indexOf(op.id) + 1);
   return [
     [own, ...TORSO_SLOTS.map(([n]) => pick(n))],
     [own, ...HEAD_SLOTS.map(([n]) => pick(n))],
@@ -548,13 +550,12 @@ function toGeometry(acc) {
 // TORSOS or HEADS) and the kit (`slots` are its slots for that mesh). `base` is 0 for the torso and 4 for the head.
 function legacyGeometry(legacy, base) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
-  LEGACY.forEach((id, i) => { const b = new MeshBuilder(); (legacy[id] ?? legacy.trooper)(b); suitPart(b, id, base); pushBuilt(acc, b, base, i); });
+  LEGACY.forEach((id, i) => { const b = new MeshBuilder(); (legacy[id] ?? legacy.trooper)(b); pushBuilt(acc, b, base, i); });
   return toGeometry(acc);
 }
 function kitGeometry(slots, base) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
   if (base === 4) { const b = new MeshBuilder(); headBase(b); pushBuilt(acc, b, base, ALWAYS); }
-  KIT_SUITS.forEach((id, k) => { const b = new MeshBuilder(); suitPart(b, id, base); pushBuilt(acc, b, base, k); });
   slots.forEach(([name, table], k) => PICKS[name].forEach((part, i) => {
     const b = new MeshBuilder();
     (table ? table[part] : kitFace(part))(b);
@@ -563,6 +564,11 @@ function kitGeometry(slots, base) {
   return toGeometry(acc);
 }
 
+function suitGeometry(base) {
+  const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
+  ALL_SUITS.forEach((id, k) => { const b = new MeshBuilder(); suitPart(b, id, base); pushBuilt(acc, b, base, k); });
+  return toGeometry(acc);
+}
 const torsoGeometry = () => legacyGeometry(TORSOS, 0);
 const torsoKitGeometry = () => kitGeometry(TORSO_SLOTS, 0);
 // The trooper's issue kit alone, without any gear-slot pieces: the distance LOD (every instance costs one variant's
@@ -834,7 +840,7 @@ export class Characters {
       const acc = k.accent != null ? hexRGB(k.accent) : [0, 0, 0];
       const suit = k.suit ? SUITS[k.operator] ?? null : null, fx = 32 * (SKIN_FX[k.fx] ?? 0);
       const look = { gear, acc, pack: k.slot + 4 * k.glow + (suit ? 16 : 0) + fx, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser),
-        bulk: suit?.limbs?.bulk ?? 1, limb: null };
+        suit: !!suit, bulk: suit?.limbs?.bulk ?? 1, limb: null };
       if (suit) {
         const hands = suit.limbs?.hands ?? k.gear;
         look.limb = { pack: 0, gear: hands != null ? [...hexRGB(hands), 1] : NO_GEAR };
@@ -845,7 +851,7 @@ export class Characters {
     this.baseSkin = ALL_OPS.map(o => getSkin(`skin:${o.id}-base`)?.index ?? 0);
     // The undead's clothes, as skin looks (see ZM_SKIN_LOOKS).
     this.zmSkins = ZM_SKIN_LOOKS.map(k => {
-      const look = { gear: [0, 0, 0, 0], acc: k.accent != null ? hexRGB(k.accent) : [0, 0, 0], pack: 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser), bulk: 1, limb: null };
+      const look = { gear: [0, 0, 0, 0], acc: k.accent != null ? hexRGB(k.accent) : [0, 0, 0], pack: 4 * k.glow, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser), suit: false, bulk: 1, limb: null };
       look.lite = look;
       return look;
     });
@@ -879,6 +885,9 @@ export class Characters {
     this.torsoKit = add(torsoKitGeometry(), MAX_PLAYERS);
     this.headKit = add(headKitGeometry(), MAX_PLAYERS);
     this.isKit = ALL_OPS.map(o => !!o.kit);
+    // The suit bank: only drawn when someone on screen wears a suit skin.
+    this.torsoSuit = add(suitGeometry(0), MAX_PLAYERS);
+    this.headSuit = add(suitGeometry(4), MAX_PLAYERS);
     this.upper = add(upperLimbGeometry(), cap * 4);      // Upper arms and thighs.
     this.arm = add(armGeometry(), cap * 2);
     this.leg = add(legGeometry(), cap * 2);
@@ -913,6 +922,8 @@ export class Characters {
     this.xrayHead = xrayOf(this.head, HEADS, 4);
     this.xrayTorsoKit = xrayOf(this.torsoKit, TORSOS, 0);
     this.xrayHeadKit = xrayOf(this.headKit, HEADS, 4);
+    this.xrayTorsoSuit = xrayOf(this.torsoSuit, TORSOS, 0);
+    this.xrayHeadSuit = xrayOf(this.headSuit, HEADS, 4);
     this.torsoLite = add(liteGeometry(TORSOS, 0), cap);
     this.headLite = add(liteGeometry(HEADS, 4), cap);
     this.xrayTorsoLite = xrayOf(this.torsoLite, TORSOS, 0);
@@ -967,7 +978,7 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit, this.torsoSuit, this.headSuit];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
@@ -1175,7 +1186,7 @@ export class Characters {
     this.ringMat.uniforms.uShapes.value = colorMode() === 'off' ? 0 : 1;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
-    let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
+    let nT = 0, nTL = 0, nK = 0, nS = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
     const glove = this.glove;
     const zmOn = !!(view.obj ?? view.points?.obj)?.zm;     // Graveyard Shift: wonder weapons wear their own models.
     const fullReach = this._fullReach(view, localId, zmOn);
@@ -1422,10 +1433,11 @@ export class Characters {
       const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz;
       const lodR = zk ? (r.lite ? ZM_LOD_BACK : ZM_LOD_FAR) : r.lite ? LOD_BACK : LOD_FAR;
       r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > lodR * lodR);
-      const kit = !r.lite && this.isKit[r.op];
-      const tMesh = r.lite ? this.torsoLite : kit ? this.torsoKit : torso, hMesh = r.lite ? this.headLite : kit ? this.headKit : head;
+      const suit = !r.lite && sk.suit, kit = !r.lite && !suit && this.isKit[r.op];
+      const tMesh = r.lite ? this.torsoLite : suit ? this.torsoSuit : kit ? this.torsoKit : torso;
+      const hMesh = r.lite ? this.headLite : suit ? this.headSuit : kit ? this.headKit : head;
       // The distance meshes show their one variant whoever wears them; the operator still sets the build and colours.
-      const ti = r.lite ? nTL++ : kit ? nK++ : nT, op = r.op;
+      const ti = r.lite ? nTL++ : suit ? nS++ : kit ? nK++ : nT, op = r.op;
       _s.set(look.w, look.h, look.w);
       _m.copy(_body).scale(_s);
       _m.toArray(tMesh.instanceMatrix.array, ti * 16);
@@ -1440,7 +1452,7 @@ export class Characters {
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.HEAD * 16);
       this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
-      if (!r.lite && !kit) nT++;
+      if (!r.lite && !kit && !suit) nT++;
 
       // Gun (the undead carry none).
       const gunMesh = this._gunMesh(proto);
@@ -1670,6 +1682,8 @@ export class Characters {
     this.xrayTorso.count = revealAll ? 0 : nT; this.xrayHead.count = revealAll ? 0 : nT;
     this.xrayTorsoKit.count = revealAll ? 0 : nK; this.xrayHeadKit.count = revealAll ? 0 : nK;
     this.torsoKit.count = nK; this.headKit.count = nK;
+    this.xrayTorsoSuit.count = revealAll ? 0 : nS; this.xrayHeadSuit.count = revealAll ? 0 : nS;
+    this.torsoSuit.count = nS; this.headSuit.count = nS;
     this.xrayTorsoLite.count = revealAll ? 0 : nTL; this.xrayHeadLite.count = revealAll ? 0 : nTL;
     this.ring.count = nRing; this.blob.count = nRing;
     this.counts.nT = nT; this.counts.nTL = nTL; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
@@ -1702,6 +1716,7 @@ export class Characters {
     }
     this.xrayTorso.geometry.dispose(); this.xrayHead.geometry.dispose();
     this.xrayTorsoKit.geometry.dispose(); this.xrayHeadKit.geometry.dispose();
+    this.xrayTorsoSuit.geometry.dispose(); this.xrayHeadSuit.geometry.dispose();
     this.xrayTorsoLite.geometry.dispose(); this.xrayHeadLite.geometry.dispose();
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();

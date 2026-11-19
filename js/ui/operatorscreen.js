@@ -164,7 +164,7 @@ export class OperatorsScreen {
     const box = this.menu.el.querySelector('.op-skins');
     box.innerHTML = skinStatus(this.preview).map(({ skin, unlocked, equipped }) => {
       const gear = skin.gear ?? skin.sleeve;
-      return `<button class="op-skin${unlocked ? '' : ' locked'}${equipped ? ' equipped' : ''} ${GLOW_CLASS[skin.glow]}" data-act="opSkin" data-id="${skin.id}"
+      return `<button class="op-skin${unlocked ? '' : ' locked'}${equipped ? ' equipped' : ''} ${GLOW_CLASS[skin.glow]}${skin.fx ? ' active' : ''}${skin.suit ? ' suit' : ''}" data-act="opSkin" data-id="${skin.id}"
         style="--g:${hex(gear)};--s:${hex(skin.sleeve)};--t:${hex(skin.trouser)};--a:${skin.accent != null ? hex(skin.accent) : 'var(--c-rail)'}" aria-label="${esc(skin.name)}">
         <i class="op-sw" aria-hidden="true"></i>${unlocked ? '' : ico('lock', 'op-sk-lock')}<small>${esc(SKIN_TIERS[skin.tier].label)}</small>
       </button>`;
