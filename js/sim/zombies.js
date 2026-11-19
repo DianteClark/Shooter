@@ -621,7 +621,7 @@ export class ZmRules {
     if (!p?.zm) return;
     // Ally bots earn ALLY_PAY times as much, so a bot crew can afford a bench tier before the round-10 boss
     // (docs/ZOMBIES.md "Ally bots"); humans' points are unchanged.
-    const v = Math.round(n * (double && this.doubleT > 0 ? 2 : 1) * (this.night ? 2 : 1) * (p.isBot ? ALLY_PAY : 1));     // Night Graveyard pays double.
+    const v = Math.round(n * (double && this.doubleT > 0 ? 2 : 1) * (this.night ? 2 : 1) * (p.isBot && this.crew.some(q => !q.isBot) ? ALLY_PAY : 1));     // Night Graveyard pays double.
     p.zm.pts += v; p.zm.earned += v;
   }
 

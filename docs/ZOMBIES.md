@@ -541,5 +541,5 @@ refusing it, the bolt through a crowd, the freeze holding a zombie still, the sh
 - A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove
   and Polestar) and a pass of the layout tests.
 
-Ally pay (1119-7): ally bots earn `ALLY_PAY` (1.75x) points per kill (js/sim/zombies.js `_pay`); humans unchanged. Bot crews
+Ally pay (1119-7): ally bots in a crew with a human earn `ALLY_PAY` (1.75x) points per kill (js/sim/zombies.js `_pay`); humans unchanged. Bot crews
 (dev/sim-zm-allies.mjs, 9 runs): mean round reached 9.8 -> 12.4, ally downs per round 0.32, human revived by allies 1.3 a run.

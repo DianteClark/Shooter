@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: '1119-7', date: '2026-11-19', title: 'Stronger allies',
+    build: '1119-8', date: '2026-11-19', title: 'Stronger allies',
     items: [
       'Graveyard Shift ally bots earn 1.75 times the points per kill, so they can reach the upgrade bench before the round-10 boss. Your own points are unchanged.',
     ],
