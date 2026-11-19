@@ -2347,7 +2347,7 @@ export class HUD {
       this.arms.style.setProperty('--mag', c.magazine <= 40 ? c.magazine : 1);
       if (c.weaponSeen) this.arms.animate(ARMS_SWAP, { duration: 260, easing: 'cubic-bezier(.2,.9,.3,1)' });
       c.weaponSeen = true;
-      c.ammo = NaN;
+      c.ammo = NaN; c.reserve = NaN;
     }
     if (me.ammo !== c.ammo) {
       c.ammo = me.ammo;
@@ -2358,8 +2358,14 @@ export class HUD {
     }
     if (me.reserve !== c.reserve) {
       c.reserve = me.reserve;
-      // Sidearms carry unlimited reserve, reported as a huge number.
-      this.reserveEl.textContent = me.reserve > 900 ? '\u221e' : `${me.reserve}`;
+      // Sidearms carry unlimited reserve, reported as a huge number. Graveyard Shift's starting pistol never drains
+      // either, but starts with its plain reserve count: the gun in hand's def says so from the first round.
+      let unl = me.reserve > 900;
+      if (!unl && this.el.classList.contains('zm-on')) {
+        const zps = this.zmHud?.hands?.(), d = zps?.weapon === me.weapon ? zps.defs?.[zps.slot] : null;
+        unl = !!(d ?? WEAPONS[me.weapon])?.unlimitedReserve;
+      }
+      this.reserveEl.textContent = unl ? '\u221e' : `${me.reserve}`;
     }
     const reloading = me.reloadT > 0 && me.reloadDur > 0;
     if (reloading !== c.reloadOn) {
