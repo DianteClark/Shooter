@@ -518,7 +518,8 @@ test('wave 3: three guns in their classes, with names, feel, a borrowed reload, 
 
 test('Clatter: three rounds a pull, a hair apart; two bursts kill to 17 m, where every other SMG needs more', () => {
   const w = WEAPONS.burstsmg;
-  const t = run(shooter('burstsmg'), 1.0, { fire: true }).map(s => s.t);
+  const ps = shooter('burstsmg');
+  const t = [...run(ps, 1.0, { fire: true }).map(s => s.t), ...run(ps, 0.15).map(s => 1.0 + s.t)];   // Let go: a started burst finishes.
   assert.ok(t.length >= 6 && t.length % 3 === 0, `${t.length} rounds`);
   for (let i = 0; i + 2 < t.length; i += 3) assert.ok(Math.abs(t[i + 1] - t[i] - w.burst.gap) < 0.02 && Math.abs(t[i + 2] - t[i + 1] - w.burst.gap) < 0.02, 'burst gap');
   assert.ok(Math.abs(t[3] - t[0] - 3 * 60 / w.rpm) < 0.03, 'bursts at its rpm');
