@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-19', title: 'The Slugger and Home Run Derby',
+    items: [
+      'New melee weapon: the Slugger, a baseball bat. A two-handed level swing that kills in two hits, quicker than the Maul and harder than the Gaff. A kill with it sends the body flying. Unlocks at level 32.',
+      'New weekly event in the rotation: Home Run Derby, a Free-for-All where everyone swings the Slugger. Three challenges and a calling card, Out of the Park.',
+      'Options search now finds Record touches (try "recorder" or "bug report").',
+      'Calling cards you unlock now show at full size in the Unlocked panel after a match.',
+    ],
+  },
+  {
     build: '1119-8', date: '2026-11-19', title: 'Stronger allies',
     items: [
       'Graveyard Shift ally bots earn 1.75 times the points per kill, so they can reach the upgrade bench before the round-10 boss. Your own points are unchanged.',
