@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'Anvil and Coyote, remade',
+    build: '1119-11', date: '2026-11-19', title: 'Anvil and Coyote, remade',
     items: [
       'Anvil has a new outline: tiered shoulder plates, a raised collar, cheek plates on the helm and a belt feed running from his drum over his shoulder.',
       'Coyote now wears a striped poncho in your team colour, with dust goggles on his cap and a long neck flap.',
