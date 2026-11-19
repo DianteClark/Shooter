@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-18', title: 'Replays',
+    items: [
+      'Watch replay: after any match, tap Watch replay on the final kill card to see the last 30 seconds again.',
+      'Play, pause and drag the bar to any moment; kills are marked on it. Watch at half speed, normal or double.',
+      'Three cameras: follow yourself, follow the player who got the final kill, or a high overview you can drag around the map.',
+      'Names over heads and the kill feed play along. Controllers work too: A plays and pauses, Y changes camera, the bumpers change speed.',
+      'Save clip keeps a replay on your phone. Up to 5 clips; find them in History under the new Clips tab, with the map, mode and date, and delete the ones you no longer want.',
+    ],
+  },
+  {
     build: '1118-6', date: '2026-11-18', title: 'Graveyard Shift: Polestar Relay',
     items: [
       'A new map built for Graveyard Shift: Polestar Relay, an iced-in polar station under the northern lights. Start in the mess hall and open your way round the kennels, the lab, the relay mast, the fuel depot and the hangar.',
