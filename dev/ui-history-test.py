@@ -131,10 +131,12 @@ async def main():
             print('A short Showdown match')
 
             async def showdown():
-                await pg.wait_for_function(f'{G}.match.sim.rules?.state === "live" || {G}.match.sim.rules?.live || true')
-                await pg.wait_for_timeout(5000)
+                # The round must be live: the freeze takes no damage, and on a busy machine 5 s was not always past it.
+                await pg.wait_for_function(f'{G}.match.sim.rules?.state === "live"', timeout=60000)
+                await pg.wait_for_timeout(500)
                 await pg.evaluate(f'({KILL})(2)')
-                await pg.wait_for_timeout(2500)
+                await pg.wait_for_function(f'{G}.match.sim.rules?.state !== "live"', timeout=30000)
+                await pg.wait_for_timeout(1500)
             await play('pier', 'gf', showdown)
             hist = json.loads(await pg.evaluate("localStorage.getItem('switchyard.history')"))['list']
             sd = (hist[0].get('d') or {}).get('sd', '')
