@@ -33,6 +33,7 @@ import { OPERATORS } from '../ui/operators.js';
 import { EMBLEMS } from '../ui/emblems.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { RESET_AT } from './reset.js';
+import { W3_GUNS } from './weapons-w3.js';
 // Extraction's exclusive items never reach the pool: bots cannot have earned them, and adding them must not reshuffle
 // the profiles the boards already show.
 const EXCLUSIVE = new Set(EX_UNLOCKS.map(u => u.item));
@@ -208,10 +209,31 @@ const SIDEARMS = {
   objective: ['pistol', 'launcher', 'thumper', 'revolver'], sniper: ['revolver', 'machpistol', 'pistol', 'deuce'], support: ['launcher', 'pistol', 'thumper', 'nailer'],
 };
 
+// Favourites come from the guns that existed when the pool was made: a gun added later (weapons wave 3 on) would
+// reshuffle every profile the boards show. New guns reach pool players as tryouts instead (tryoutOf, below).
+const LATER_GUNS = new Set(Object.values(W3_GUNS).flat());
 const GUNS_BY_CLASS = {};
 for (const id of PRIMARY_IDS) {
   const w = WEAPONS[id];
-  if (w && !w.golden) (GUNS_BY_CLASS[w.category] ??= []).push(id);
+  if (w && !w.golden && !LATER_GUNS.has(id)) (GUNS_BY_CLASS[w.category] ??= []).push(id);
+}
+// A new gun a pool player has picked up since: { primary, secondary } (either may be null), from the player's own
+// classes, drawn from its own stream so no profile and no older roll moves. sim.js poolBotEntry carries it now and then.
+const TRYOUT_SEED = 0x7a3c0b11;
+const LATER_BY_CLASS = {};
+for (const c in W3_GUNS) for (const id of W3_GUNS[c]) (LATER_BY_CLASS[c] ??= []).push(id);
+const LATER_SIDEARMS = W3_GUNS.Pistol ?? [];
+const TRYOUTS = new Map();
+export function tryoutOf(profile) {
+  let t = TRYOUTS.get(profile.id);
+  if (t) return t;
+  const rng = mulberry32(hash32(TRYOUT_SEED, profile.index));
+  const pool = profile.classes.flatMap(c => LATER_BY_CLASS[c] ?? []).filter(id => PRIMARY_IDS.includes(id));
+  const primary = pool.length && rng() < 0.5 ? pool[Math.floor(rng() * pool.length)] : null;
+  const secondary = LATER_SIDEARMS.length && rng() < 0.2 ? LATER_SIDEARMS[Math.floor(rng() * LATER_SIDEARMS.length)] : null;
+  t = Object.freeze({ primary, secondary });
+  TRYOUTS.set(profile.id, t);
+  return t;
 }
 const CARD_IDS = new Set(CARDS.map(c => c.id));
 const SKIN_STEPS = ['base', 'field', 2, 3, 4, 5];
@@ -309,7 +331,9 @@ function pickCard(rng, base, perks, locked, mu) {
   }
   if (r < 0.88 && (mu > 0.55 || locked === 'elite')) {
     // Gear and the pool's own operators: a later operator's Master card is not in the list (see POOL_ROSTER).
-    const gold = CARDS.filter(c => c.group === 'Mastery' && !EXCLUSIVE.has(c.id.replace(/^mastery-/, '')) && !LATER_OPS.has(c.id.replace(/^mastery-/, '')));
+    // The same for guns: a later gun's Master card (weapons wave 3 on) is not in it either.
+    const gold = CARDS.filter(c => c.group === 'Mastery' && !EXCLUSIVE.has(c.id.replace(/^mastery-/, '')) && !LATER_OPS.has(c.id.replace(/^mastery-/, ''))
+      && !LATER_GUNS.has(c.id.replace(/^gun-/, '')));
     return gold[Math.floor(rng() * gold.length)].id;
   }
   return 'yard';

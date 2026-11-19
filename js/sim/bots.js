@@ -16,6 +16,7 @@ import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam 
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
+import { W3_BOT_SECONDARIES, W3_BOT_KITS } from '../shared/weapons-w3.js';
 import { isAvailable, availableFor } from '../shared/attachments.js';
 import { SND } from '../shared/modes.js';
 import { STYLES, TIERS } from '../shared/botpool.js';
@@ -288,11 +289,12 @@ const BOT_KITS = {
     { optic: 'laserbox', barrel: 'venturi', grip: 'angled', mag: 'warhead' },
   ],
 };
+Object.assign(BOT_KITS, W3_BOT_KITS);   // Weapons wave 3 (weapons-w3.js).
 // Kit lists are 3 or 5 long: battle royale loot deals 0, 2 or 4 (br.js _rollGun), and that reaches every kit.
 
 // Sidearms bots carry, dealt in turn: each one equally often, so per-gun stats compare like with like.
 const BOT_SECONDARIES = ['pistol', 'revolver', 'deuce', 'launcher', 'machpistol', 'thumper', 'scatter'];
-BOT_SECONDARIES.push(...V10_BOT_SECONDARIES);
+BOT_SECONDARIES.push(...V10_BOT_SECONDARIES, ...W3_BOT_SECONDARIES);
 export function botSecondary(i) { return BOT_SECONDARIES[i % BOT_SECONDARIES.length]; }
 // A gun without its own kits borrows its category's base gun's, minus what it cannot take.
 const KIT_FALLBACK = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher' };

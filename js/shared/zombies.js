@@ -129,14 +129,15 @@ const WALL_GUNS = [
   [['smg', 1000], ['shotgun', 900]],
   [['ar', 1200], ['pdw', 1100], ['dmr', 1000]],
   [['heavyar', 1500], ['autoshot', 1500], ['carbine', 1300]],
-  [['lmg', 1800], ['heavysmg', 1400], ['battle', 1600]],
-  [['saw', 1800], ['slug', 1500]],
+  [['lmg', 1800], ['heavysmg', 1400], ['battle', 1600], ['burstsmg', 1400]],   // Weapons wave 3: the Clatter.
+  [['saw', 1800], ['slug', 1500], ['heavyshot', 1600]],                        // And the Bullhead, deep in.
 ];
 export const ammoCost = cost => Math.round(cost * 0.4 / 10) * 10;
 // What the crate can hand out: the specialists, the heavy hitters and a few sidearms. Never the start pistol.
 export const BOX_GUNS = ['rotary', 'beltlmg', 'drumsmg', 'heavysmg', 'lightlmg', 'saw', 'rampar', 'heatar', 'magshot', 'flechette', 'slug', 'lever', 'battle',
   'twinshot', 'revolver', 'akimbo', 'thumper', 'launcher', 'salvo', 'crossbow', 'semisnipe', 'rail', 'antimat', 'carbine', 'tacsmg', 'hushsmg', 'burst', 'coach',
   'scatter', 'deuce', 'maul', 'heavyar', 'lmg', 'autoshot',
+  'burstsmg', 'heavyshot', 'battlepistol',   // Weapons wave 3 (weapons-w3.js).
   // The wonder weapons (ZM_WONDERS) last, so every older index on the wire holds; a roll reaches them only by ZM_WONDER_ROLL.
   'nailer', 'machpistol'];
 export const START_GUN = 'pistol';

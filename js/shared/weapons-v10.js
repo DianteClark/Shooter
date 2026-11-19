@@ -1,7 +1,8 @@
 // V10 arsenal: sixteen guns added in one wave, kept in their own file so the older table in weapons.js can be
 // rebalanced without touching them. weapons.js merges V10_WEAPONS into WEAPONS; constants.js reads V10_GUNS for the
 // category and id lists; everything else that keeps a per-gun table reads V10_LIKE so a new gun borrows an existing
-// gun's sound, reload animation, tracer and carry until it gets its own. No imports: constants.js imports this.
+// gun's sound, reload animation, tracer and carry until it gets its own. Imports only weapons-w3.js (which imports
+// nothing): constants.js imports this.
 //
 // Stats follow the contract at the top of weapons.js. Three small mechanics are new in this wave (js/sim/player.js):
 //   settle   {shots, from}: the cone starts `from` times wider and tightens to its rated spread over `shots` rounds of
@@ -11,6 +12,8 @@
 //            also have `heat`, and belongs in the primary slot.
 //   melee    true: the swing spends no ammunition. `lunge` (m/s) throws the player forward along the aim on each swing;
 //            ordinary braking takes it off again within about a metre and a half.
+
+import { W3_LIKE } from './weapons-w3.js';
 
 // Category -> ids, in display order. Melee is a new secondary-slot category (constants.js CATEGORIES).
 export const V10_GUNS = {
@@ -268,9 +271,11 @@ export const V10_LIKE = {
   knife: like('crossbow', { hold: 'pistol', reload: 'pistol', force: 'pistol' }),
   maul: like('crossbow', { hold: 'shotgun', reload: 'pistol', force: 'coach' }),
 };
-// Fills a per-gun table in place: every V10 gun without its own entry gets its lookalike's. `key` picks the column.
+// Fills a per-gun table in place: every V10 (and wave 3, weapons-w3.js) gun without its own entry gets its
+// lookalike's. `key` picks the column.
+const ALL_LIKE = { ...V10_LIKE, ...W3_LIKE };
 export function fillV10(table, key) {
-  for (const id in V10_LIKE) if (table[id] === undefined && table[V10_LIKE[id][key]] !== undefined) table[id] = table[V10_LIKE[id][key]];
+  for (const id in ALL_LIKE) if (table[id] === undefined && table[ALL_LIKE[id][key]] !== undefined) table[id] = table[ALL_LIKE[id][key]];
   return table;
 }
 

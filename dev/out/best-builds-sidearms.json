@@ -92,5 +92,15 @@
   "score": 0.3416666666666667,
   "stock": 0.23333333333333334,
   "evals": 35
+ },
+ "battlepistol": {
+  "kit": {
+   "optic": "irons",
+   "barrel": "longbarrel",
+   "grip": "wrap"
+  },
+  "score": 0.6583333333333333,
+  "stock": 0.5916666666666667,
+  "evals": 49
  }
 }
