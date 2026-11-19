@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'New map: Millbrook',
+    build: '1118-9', date: '2026-11-18', title: 'New map: Millbrook',
     items: [
       'A new small map in Farmland: Millbrook, a stone water mill on a brook through an apple orchard in blossom, on a spring morning after rain.',
       'Three ways over the brook: a footbridge at each end and the wide mill bridge in the middle, between the mill and its waterwheel on one side and the cider house on the other.',
