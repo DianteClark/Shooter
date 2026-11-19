@@ -223,7 +223,7 @@ export class ReplayRecorder {
       strings: this.strings.slice(),
       dur: at[F - 1], frames: { at, n, data }, x, fins,
       evAt: Float32Array.from(evAt), ev,
-      lastKill,
+      lastKill, quality: meta.quality ?? null,
     };
   }
 }
@@ -389,7 +389,7 @@ export function packClip(clip) {
   const castJson = JSON.stringify(clip.cast);
   const rec = {
     v: clip.v, hz: clip.hz, stride: clip.stride, at: clip.at, localId: clip.localId, mapId: clip.mapId, mode: clip.mode,
-    mods: clip.mods, myTeam: clip.myTeam, roster: clip.roster, strings: clip.strings, dur: clip.dur, lastKill: clip.lastKill,
+    mods: clip.mods, myTeam: clip.myTeam, roster: clip.roster, strings: clip.strings, dur: clip.dur, lastKill: clip.lastKill, quality: clip.quality ?? null,
     fat: clip.frames.at, fn: clip.frames.n, fdata: clip.frames.data, xi, xt: table, fins: JSON.stringify(clip.fins ?? []),
     evAt: clip.evAt, ev: evJson, cast: castJson,
   };
@@ -410,7 +410,7 @@ export function unpackClip(rec) {
   return {
     v: rec.v, hz: rec.hz, stride: rec.stride, at: rec.at, localId: rec.localId, mapId: rec.mapId, mode: rec.mode, mods: rec.mods ?? [],
     myTeam: rec.myTeam ?? 0, roster: rec.roster ?? [], cast: JSON.parse(rec.cast), strings: rec.strings, dur: rec.dur,
-    lastKill: rec.lastKill ?? null, frames: { at: rec.fat, n: rec.fn, data: rec.fdata }, x, fins: JSON.parse(rec.fins ?? '[]'),
+    lastKill: rec.lastKill ?? null, quality: rec.quality ?? null, frames: { at: rec.fat, n: rec.fn, data: rec.fdata }, x, fins: JSON.parse(rec.fins ?? '[]'),
     evAt: rec.evAt, ev: JSON.parse(rec.ev),
   };
 }

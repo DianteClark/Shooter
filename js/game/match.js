@@ -677,6 +677,8 @@ export class Match {
     try {
       replay = this.recorder.finish({
         mapId: this.mapId, mode: view.modeId ?? this.mode, mods: this.mods ?? [], roster: this.roster, lastKill: view.lastKill,
+        // The graphics quality the match ran at ('auto' or the pinned step): the replay plays at the same one.
+        quality: this.renderer?.qualityMode ?? null,
         myTeam: view.players.find(p => p.id === this.localId)?.team ?? this.me.team,
       });
     } catch (err) { console.error('match replay', err); }

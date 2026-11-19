@@ -56,7 +56,8 @@ export class ReplayPlayer {
     this.map = map;
     const r = this.renderer = new GameRenderer(canvas, map);
     r.resize();
-    r.setQuality?.(quality);
+    // The quality the match was played at (kept with the clip), else the player's setting: never a different one.
+    r.setQuality?.(clip.quality || quality);
     r.chars.setRoster(clip.roster);
     r.vfx.setLoadouts(clip.roster);
     r.setLocal(null);
