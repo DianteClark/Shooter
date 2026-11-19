@@ -103,7 +103,7 @@ War HQ, through host migrations in the gap and while held, and Control's lone ca
 
 ## Showdown (ROADMAP item 31)
 The roadmap's "Gunfight": 2 v 2 rounds. Mode `gf` (js/shared/modes.js; rules js/sim/gf.js, registered in js/sim/rules.js),
-`sizes: ['small']`, so it plays on Pier, Turnstile, Oasis and Ruins. On the Standard tab as its own playlist (Showdown
+`sizes: ['small']`, so it plays on Pier, Turnstile, Oasis, Ruins and Millbrook. On the Standard tab as its own playlist (Showdown
 2v2) and a tickable mode; in the featured rotation; its rule set brings a "Play 2 Showdown matches" daily challenge.
 Solo is you and a bot against two bots; two friends in a room play the bots. Lobby size 4.
 - Rounds as in Control: freeze (`GF.freeze` 5 s, sim phase warmup), live, post (4 s). One life a round (`holdDead`), no
