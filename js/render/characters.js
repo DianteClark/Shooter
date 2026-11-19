@@ -994,10 +994,10 @@ export class Characters {
     const def = weapon ? WEAPONS[weapon] : null;
     if (def && def.melee) {
       // Melee swings instead of kicking: a timed arc the gun pose follows (see SWINGS), alternating sides for a blade.
-      r.swingSide = def.swing === 'overhead' ? 1 : -(r.swingSide || 1);
-      r.swingKind = def.swing === 'overhead' ? 'overhead' : 'slash';
+      r.swingSide = def.swing === 'overhead' || def.swing === 'level' ? 1 : -(r.swingSide || 1);
+      r.swingKind = def.swing === 'overhead' || def.swing === 'level' ? def.swing : 'slash';
       r.swingT = 0;
-      r.swingDur = def.swing === 'overhead' ? 0.62 : 0.26;
+      r.swingDur = def.swing === 'overhead' ? 0.62 : def.swing === 'level' ? 0.44 : 0.26;
       r.sv[ROCK] += 1 + strength;
       return;
     }
@@ -1288,6 +1288,15 @@ export class Characters {
           gunX += -lift * 0.22 + drive * 0.2;
           gunYaw += lift * 0.5 - drive * 0.15;
           gunRoll += lift * 0.25;
+        } else if (r.swingKind === 'level') {
+          // A two-handed bat swing: cocked up behind the right shoulder, then flat round through the front at waist
+          // height and on past the left side, the wrists rolling over in the follow-through.
+          const cock = wind * (1 - hit), through = hit * (1 - back);
+          gunYaw += cock * 1.7 - hit * 1.5 * (1 - back * 0.85);
+          gunPitch += cock * 1.1 - through * 0.15;
+          gunY += cock * 0.3 - through * 0.12;
+          gunX += -cock * 0.16 + through * 0.18;
+          gunRoll += cock * 0.4 - through * 0.9;
         } else {
           // Across the body, wide to one side and through to the other.
           const sweep = wind * (1 - hit) - hit * (1 - back);

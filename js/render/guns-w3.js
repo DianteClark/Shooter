@@ -131,5 +131,19 @@ export function w3Factories(h) {
     return { geometry: b.build(), muzzle: [mx === null ? 0.72 : mx, 0.18, 0], fore: [-0.1, -0.2, -0.05], eject: [0.12, 0.3, 0.1], length: 1.2 };
   }
 
-  return { burstsmg, heavyshot, battlepistol };
+  // Slugger: a hardwood bat. A flared knob, a taped handle, a long taper and a fat barrel with a cupped end; held in
+  // both hands at the knob. From above: a long club, thin at the hands and wide at the far end.
+  function bat() {
+    const k = kit(), b = k.b, y = 0.08;
+    k.dark().prismX(-0.3, -0.22, y, 0, 0.058, 0.04, 8, OCT);                                   // Knob.
+    k.grip().prismX(-0.22, 0.32, y, 0, 0.034, 0.038, 8, OCT);                                  // Taped handle.
+    k.accent(); for (let i = 0; i < 2; i++) b.prismX(-0.16 + i * 0.36, -0.12 + i * 0.36, y, 0, 0.041, 0.042, 8, OCT);
+    k.body().prismX(0.32, 0.78, y, 0, 0.038, 0.074, 8, OCT);                                   // Taper (takes a camo).
+    k.body().prismX(0.78, 1.12, y, 0, 0.074, 0.08, 8, OCT);                                    // Barrel.
+    k.dark().prismX(1.12, 1.15, y, 0, 0.08, 0.06, 8, OCT);                                     // Cupped end.
+    k.accent().prismX(0.86, 0.9, y, 0, 0.077, 0.077, 8, OCT);                                  // Maker's band.
+    return { geometry: b.build(), muzzle: [1.15, y, 0], fore: [-0.12, y, 0], eject: [0.6, 0.2, 0], length: 1.5 };
+  }
+
+  return { burstsmg, heavyshot, battlepistol, bat };
 }

@@ -157,7 +157,8 @@ test('each has an icon, stat bars, facts, and joins the bot rotations and Gun Ga
   assert.ok(statBars('rail').some(b => b.id === 'charge') && statBars('heatar').some(b => b.id === 'heat'));
   const carried = new Set();
   for (const mapId of Object.keys(MAPS)) for (const mode of ['tdm', 'dom', 'kc']) for (const r of buildRoster([], { botSkill: 'regular', teamSize: 6, mapId, mode, seed: 3 })) { carried.add(r.loadout.primary); carried.add(r.loadout.secondary); }
-  for (const id of [...NEW, ...W3]) assert.ok(carried.has(id), `bots are dealt the ${id}`);
+  for (const id of [...NEW, ...W3].filter(i => i !== 'bat')) assert.ok(carried.has(id), `bots are dealt the ${id}`);
+  assert.ok(!carried.has('bat'), 'the Slugger stays out of the bot rotations');
   assert.ok(['rampar', 'magshot', 'twinshot', 'akimbo'].every(id => GUN_LADDER.includes(id)));
   assert.equal(GUN_LADDER[GUN_LADDER.length - 1], 'revolver', 'the ladder still ends on the Verdict');
   assert.equal(new Set(GUN_LADDER).size, GUN_LADDER.length);
@@ -354,7 +355,7 @@ test('Ripple: one pull is three rockets and three blasts, none of which kills al
 });
 
 test('Gaff and Maul: reach three metres and no further, the Gaff lunges and the Maul swings in place, two swings and one', () => {
-  for (const [id, swings] of [['knife', 2], ['maul', 1]]) {
+  for (const [id, swings] of [['knife', 2], ['bat', 2], ['maul', 1]]) {
     const w = WEAPONS[id];
     assert.equal(shotsToKill(w, 1.5), swings);
     assert.equal(killTime(id, 6, 60 / w.rpm - 0.05), -1, `${id}: a swing does nothing at 6 m`);
@@ -362,12 +363,13 @@ test('Gaff and Maul: reach three metres and no further, the Gaff lunges and the 
     const x0 = ps.x;
     const shots = run(ps, DT * 2, { fire: true });
     assert.equal(shots.length, 1);
-    if (w.lunge) {
+    if (w.lunge >= 8) {
       assert.ok(Math.hypot(ps.vx, ps.vz) > MOVE.run * 1.5, `${id} lunges: ${Math.hypot(ps.vx, ps.vz).toFixed(1)} m/s`);
     }
     run(ps, 0.5);
     const moved = ps.x - x0;
-    if (w.lunge) assert.ok(moved > 0.6 && moved < 3.2, `${id} carried ${moved.toFixed(2)} m`);
+    if (w.lunge >= 8) assert.ok(moved > 0.6 && moved < 3.2, `${id} carried ${moved.toFixed(2)} m`);
+    else if (w.lunge) assert.ok(moved > 0.1 && moved < 1.2, `${id} steps in: ${moved.toFixed(2)} m`);   // The Slugger: a short step.
     else assert.ok(Math.abs(moved) < 0.3, `${id} swings in place: ${moved.toFixed(2)} m`);   // The Maul is an overhead swing, not a charge.
     assert.ok(Math.hypot(ps.vx, ps.vz) < 0.2, 'and stops');
     // V11: a blade takes only its own signature attachments, never the gun attachments.

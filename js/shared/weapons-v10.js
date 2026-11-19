@@ -287,7 +287,7 @@ export const V10_DENY = {
   rail: ['suppressor'],                                     // Nothing to suppress on a coil.
   nailer: ['suppressor'],
   akimbo: ['reflex', 'holo', 'pointdot', 'ghostring'],      // Nobody sights down a pair.
-  knife: '*', maul: '*',
+  knife: '*', maul: '*', bat: '*',                          // Blades and clubs (the Slugger is weapons-w3.js).
 };
 
 // Where the new guns join the bot rotations (sim.js BOT_PRIMARIES, bots.js BOT_SECONDARIES) and Gun Game's ladder

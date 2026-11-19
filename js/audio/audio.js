@@ -1098,6 +1098,16 @@ function renderSfx(sr) {
       addNoise(d, sr, r, { dur: 0.06, gain: 0.7, f0: 2400, f1: 600, decay: 7 });
       addClick(d, sr, r, { dur: 0.004, gain: 0.6, hp: 1800 });
     }, 0.8),
+    // The Slugger connecting: a dry wooden crack (a sharp click, a hard knock and the bat's own short ring), with the
+    // body blow underneath it.
+    batCrack: mk(0.32, (d, r) => {
+      addClick(d, sr, r, { dur: 0.003, gain: 1.1, hp: 2600 });
+      addNoise(d, sr, r, { dur: 0.035, gain: 0.9, f0: 4200, f1: 1600, hp: 900, decay: 14 });
+      addTone(d, sr, { dur: 0.09, gain: 0.8, f0: 980, f1: 900, decay: 18, shape: 0.6 });
+      addTone(d, sr, { dur: 0.07, gain: 0.5, f0: 1620, f1: 1540, decay: 22, shape: 0.6 });
+      addTone(d, sr, { dur: 0.16, gain: 0.35, f0: 430, f1: 410, decay: 11, shape: 0.8 });
+      addTone(d, sr, { at: 0.004, dur: 0.12, gain: 0.8, f0: 140, f1: 60, decay: 6, shape: 1.2 });
+    }, 0.85),
     // Battle royale fists are boxing gloves: a padded thump and a cartoon spring, the pitch wobbling down.
     boing: mk(0.42, (d, r) => {
       addTone(d, sr, { dur: 0.08, gain: 0.9, f0: 140, f1: 60, decay: 7, shape: 1.2 });
@@ -2110,6 +2120,12 @@ export class AudioEngine {
       return;
     }
     if (!b) return;
+    if (e.w === 'bat' && this.sfx.batCrack) {
+      const crack = this.sfx.batCrack, rate = 0.96 + Math.random() * 0.08;
+      if (e.by === this.localId || e.target === this.localId) this._play(crack, { bus: this.ui, priority: PR.hit, cls: 'foley', gain: 1, rate });
+      else this._world(crack, e.x, e.z, FOLEY_RANGE * 1.4, { gain: 0.8, priority: PR.gun, cls: 'foley', rate });
+      return;
+    }
     const rate = 1.35 / Math.max(0.75, Math.sqrt(weightOf(e.w) / 0.3));
     if (e.by === this.localId || e.target === this.localId) this._play(b, { bus: this.ui, priority: PR.hit, cls: 'foley', gain: 0.9, rate });
     else this._world(b, e.x, e.z, FOLEY_RANGE, { gain: 0.7, priority: PR.gun, cls: 'foley', rate });

@@ -10,6 +10,9 @@
 //   Gavel    (Pistol)   a battle pistol: three to the body out to 22 m at twice the Verdict's pace, the quickest
 //                       sidearm kill past 18 m; slower than the Flicker and heavier to draw, and the Verdict still
 //                       wins a room.
+//   Slugger  (Melee)    a baseball bat, appended later: a two-handed level swing between the Gaff and the Maul. Two
+//                       swings kill, a short step in, and a kill sends the body a long way (cosmetic, corpses.js).
+//                       Never in the bot rotations or the pool's picks (botpool.js LATER_GUNS keeps it out).
 //
 // Each carries its own `feel` (js/render/feel.js): flash shape and size, voice pitch and weight, recoil.
 
@@ -17,6 +20,7 @@ export const W3_GUNS = {
   SMG: ['burstsmg'],
   Shotgun: ['heavyshot'],
   Pistol: ['battlepistol'],
+  Melee: ['bat'],
 };
 
 export const W3_WEAPONS = {
@@ -75,10 +79,27 @@ export const W3_WEAPONS = {
       recoil: { back: 0.7, climb: 2.7, twist: 0.25 },
     },
   },
+
+  // A hardwood bat, taped at the handle. A flat two-handed swing across the body: two kill, a quarter of a second
+  // quicker to recover than the Maul's one and a short step in where the Gaff throws you; reaches a hair past the Gaff.
+  bat: {
+    id: 'bat', name: 'Slugger', role: 'Club', auto: false, suppressed: true, melee: true, swing: 'level', lunge: 6,
+    damage: 75, rpm: 100, magazine: 1, reserve: 999, reload: 0.5, range: 2.85,
+    falloff: { start: 99, end: 100, min: 1 },
+    adsSpread: 0.025, hipSpread: 0.025, bloomPerShot: 0, bloomRecover: 3, bloomScale: 1, turnCap: 13,
+    adsTime: 0.12, sprintToFire: 0.07, swapTime: 0.22, moveMult: 1.09, adsMoveMult: 0.95,
+    pellets: 1, slideFire: true, unlimitedReserve: true, kickCam: 0.8, tracerWidth: 0.7, longshot: 2.8,
+    botUse: { pref: 1.3, hold: 0.3, flank: 1.6, advance: 3, rush: 2.6, fireMax: 3.2 },
+    feel: {
+      fx: { shape: 'none' },
+      voice: { pitch: 0.9 },
+      recoil: { back: -1.4, climb: -0.3, twist: 2.1 },   // Level through the target, the wrists rolling over.
+    },
+  },
 };
 
 // Player levels (js/shared/progression.js UNLOCK_SCHEDULE): on levels no gun opened yet.
-export const W3_UNLOCKS = [[25, 'burstsmg'], [27, 'battlepistol'], [29, 'heavyshot']]
+export const W3_UNLOCKS = [[25, 'burstsmg'], [27, 'battlepistol'], [29, 'heavyshot'], [32, 'bat']]
   .map(([level, id]) => ({ level, kind: 'weapon', id }));
 
 // The older gun whose hand-made reload, carry and death throw each new gun borrows (weapons-v10.js fillV10).
@@ -87,9 +108,10 @@ export const W3_LIKE = {
   burstsmg: like('tacsmg'),
   heavyshot: like('shotgun', { force: 'coach' }),
   battlepistol: like('pistol', { force: 'revolver' }),
+  bat: like('crossbow', { hold: 'shotgun', reload: 'pistol', force: 'coach' }),   // Its own throw: corpses.js FORCE.bat.
 };
 
-// Bot rotations (sim.js BOT_PRIMARIES, bots.js BOT_SECONDARIES), appended after the V10 ones.
+// Bot rotations (sim.js BOT_PRIMARIES, bots.js BOT_SECONDARIES), appended after the V10 ones. The Slugger is in none.
 export const W3_BOT_PRIMARIES = ['burstsmg', 'heavyshot'];
 export const W3_BOT_SECONDARIES = ['battlepistol'];
 
