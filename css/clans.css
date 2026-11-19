@@ -54,8 +54,12 @@
 .cl-row .cl-n { font: 400 var(--fs-caption)/1 var(--f-plate); color: var(--c-haze); }
 .bd-row .bot-cl { color: var(--c-chalk); background: var(--c-plate); }
 .cld { gap: var(--sp-2); }
-.cld-head { display: flex; align-items: center; gap: 8px; }
-.cld-head b { font: 400 var(--fs-title)/1.1 var(--f-stencil); color: var(--c-chalk); }
+.cld-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cld-head > .cl-plate { flex: none; }
+/* A 16-letter name in the stencil face is wider than the panel at phone widths: it truncates (sweep 2026-11-18). */
+.cld-head > span:last-child { flex: 1; min-width: 0; }
+.cld-head > span:last-child > b, .cld-head > span:last-child > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cld-head b { display: block; font: 400 var(--fs-title)/1.1 var(--f-stencil); color: var(--c-chalk); }
 .cld-head small { display: block; font: 400 var(--fs-micro)/1.2 var(--f-plate); letter-spacing: var(--tr-plate); text-transform: uppercase; color: var(--c-haze); }
 .cld-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .cld-m { display: flex; justify-content: space-between; gap: 8px; padding: 4px 2px; border-bottom: 1px solid var(--c-line); font: 400 var(--fs-body)/1.2 var(--f-body); color: var(--c-chalk); }
