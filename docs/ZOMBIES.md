@@ -102,11 +102,9 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
   with the pistol, beside a teammate. Nobody up: game over (the horde's side wins; `zover`).
 - **Power-ups**: a kill drops one 3% of the time (four a round at most, 25 s on the ground); the boss always drops Full
   Crate. Full Crate (everyone's guns full), Double Pay (30 s), Clean Sweep (every zombie but the boss, +400 each).
-- **Bot teammates**: revive first; then take their own crate roll; then shop (a wall gun better than what they hold,
-  perks with a cushion, ammo when low, the crate once they have two perks and a middling gun, gates only with no humans
-  or when rich); otherwise a loose ring round the lead human. On a map with a power switch, solo (at most one human)
-  from round 3, the first bot up goes and throws it if nobody has, buying the gates on the way to it when it can. They backpedal from anything inside 4.5 m (`bot.kite`),
-  and never walk off to shop in the middle of a fight.
+- **Bot teammates**: see "Ally bots" below: revive first (a person before a bot), then their own crate roll and bench
+  gun, fall back when hurt, call a held streak in, the power and the quest when safe, shop by plan, else a spot of their
+  own near the lead. They backpedal from anything inside their persona's `kite`, never walk off to shop in a fight.
 
 ## Economy (ROADMAP item 36)
 The owner reached round 12 with lots of points and all four perks and nothing to spend on. Numbers in `ZE`
@@ -129,11 +127,51 @@ two gates, so two traps), the exfil pad on open ground (2 m clear all round) awa
 against a wall in another, the relics in the floor cell furthest from the middle of three different bands. Each trap's
 switch stands just outside it (`finishEcon`).
 
-**Bots** buy sensibly with spare points: a tier for a gun worth it (not the pistol) from round 6 with a cushion, plates
-when one short, a trap with three or more undead in or near it, the terminal from round 4 with 2500 over (a vest when
-short of plates and the armour bench is shut, else a sentry, a drone, a strike on a crowd of six from round 8), a perk
-slot when 2500 over its price. During an exfil every bot goes to the pad; a bot with its gun on the bench waits for it.
-They never call the exfil or do the quest.
+**Bots** shop by plan (see "Ally bots"); during an exfil every bot goes to the pad; a bot with its gun on the bench
+waits for it. They never call the exfil.
+
+## Ally bots (build NEXT, owner: "they don't buy new weapons, they don't do much of anything except die")
+`js/sim/zm-allies.js` (personas), `ZmRules._planCrew` / `_botWant` / `_questRun` / `_botStreak` (js/sim/zombies.js),
+`ZmEcon.botWants` (js/sim/zm-econ.js), the `zm` lines in js/sim/chatter.js.
+- **Personas**: a pool bot's play style picks one (rusher, flanker: aggressive; support, objective: support; anchor:
+  hoarder; sniper: shopper); a dealt bot takes the next of support, aggressive, shopper, hoarder by its seat, so three
+  bots are three different teammates. Each sets its backpedal distance, how close it keeps to the lead, its cushion, its
+  perk order, when it starts on the bench and how much of the next tier it banks, how rich before the crate, how big a
+  crowd before its held streak, the health it falls back at, how far it goes to revive and its terminal item.
+- **Shopping plan** (scored, nearest first): a gun (any wall gun off the pistol; then one dearer than what it holds, a
+  bench tier counting 1500); perks in its order (Ironhide, then Mercy Run; the aggressive takes Hammerfall second; the
+  next perk's points kept back from everything else, and the gate to its machine worth opening); plates (a first one
+  always), a kit refill with plates full; the bench's next tier from round 4-5 (its persona banks a share of the price
+  first: the extras wait on it; a hoarder banks for tier 2 too); the crate once a round with two perks and points to burn
+  while its gun has no tier; a supply streak into its held slot (sentry, drone, a strike from round 8) called in when
+  the crowd within 14 m reaches its persona's number, a mate is down near or the boss is up; a trap with three in it;
+  gates: with no person, the next one out; with a person, one they stand by or toward a better gun, the bench or a perk
+  it lacks, never with its next perk's points. With undead within 6 m it only buys what is within 7 m.
+- **Survival**: downed mates are shared out (a person gets the two nearest, a bot one; a person first); a clear body is
+  run to straight (nothing stops it, `commit`), a body with undead over it is fought to; in reach the bot stands still
+  over it (`bot.zStill`, bots.js) and shoots. Hurt below its persona's line with no plates and two undead within 7 m,
+  it falls back 7 m from the crowd toward the lead. Kiting bots back off a held spot (and walk back) and, backed into a
+  wall, slip out along it. Each bot holds its own spot: the open gates within 14 m of the lead, one each, 3.5 m back on
+  the lead's side, the rest round the lead at their ring; never on a running trap.
+- **Quest**: the last bot up does it when safe (between rounds, or nobody within 12 m and the round under way): picks up
+  relics, tunes radios once the power is on (standing with it). The last step (altar, console) is left to a person;
+  with no person in the crew a bot sets it from round 8. It says "Quest is ready. Your call".
+- **Chatter** (Options > Bot chatter; the host's `BotChatter` with `zm`): no lines on zombie kills or reloads; a new
+  gun, a perk, the bench, the crate, a streak called in, a revive given ("Up you get") or taken, the boss round ("Big
+  one coming. Stay close" or, aggressive, "Bring the big one"), a relic, a hoarder saving up. A persona says its own a
+  little more often. The usual limits (a line every 4.5 s, 22 s a speaker, seven a minute).
+- **Measure**: `node dev/sim-zm-allies.mjs [--maps=] [--runs=] [--seed=]`: a human-like stand-in seated as the person
+  and three allies on Ashgrove, Polestar and Night Market until overrun. 24 runs a set, the build before -> this one:
+
+  | set | rounds reached | ally downs in rounds 1-8 | ally downs a round | human revived by allies | points spent | bench tier | perks bought |
+  |---|---|---|---|---|---|---|---|
+  | `--seed=7` | 8.96 -> 9.79 | 1.25 -> 0.88 | 0.33 -> 0.38 | 0.92 -> 1.0 | 69% -> 75% | 0.08 -> 0.38 | 3.7 -> 5.1 |
+  | `--seed=1` | 9.38 -> 9.71 | 0.96 -> 0.79 | 0.34 -> 0.35 | 0.42 -> 1.04 | 72% -> 73% | 0 -> 0.21 | 5.2 -> 5.7 |
+
+  Downs a round barely move because the crews now live into rounds 10-12, where everyone goes down more. The wall is
+  still the round-10 boss (the stand-in's legs, and an ally's ~600 points a round: tier 1 is 5000); an upper bound with
+  tier 1 handed to the allies at round 6 reaches 11.8, tier 2 14.6, Ironhide alone 10.9. `dev/sim-zm-econ.mjs` (held
+  up, bots only): 91% of points spent by round 20 (89% before, by round 16).
 
 **HUD**: the use button's prompts for each piece (UPGRADE <gun> with the tier and effect, UPGRADING, TAKE, SUPPLY
 TERMINAL, ARMOUR PLATE, the trap's name, PERK SLOT, CALL EXFIL, PICK IT UP, SET THE RELICS), the plate bar over health,
