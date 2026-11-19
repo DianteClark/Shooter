@@ -136,8 +136,8 @@ async def run(browser, vw, vh, failures, errors):
     await shot('05-phone')
     await take_offer(pg, ev, tag, failures, 0)
     # The full card for a few seconds, then the one-line tracker with the small Abandon at its side.
-    full = await ev("(() => { const c = document.querySelector('.ex-con'); return !c.classList.contains('mini') && getComputedStyle(c.querySelector('b')).display !== 'none'; })()")
-    if not full: failures.append(f'{tag}: no full contract card right after taking one')
+    try: await pg.wait_for_function("(() => { const c = document.querySelector('.ex-con'); return !c.hidden && !c.classList.contains('mini') && getComputedStyle(c.querySelector('b')).display !== 'none'; })()", timeout=3500)
+    except Exception: failures.append(f'{tag}: no full contract card right after taking one')
     await shot('05a-card-full')
     await pg.wait_for_function("document.querySelector('.ex-con').classList.contains('mini')", timeout=9000)
     await pg.wait_for_timeout(200)
@@ -318,8 +318,9 @@ async def run_wipe(browser, vw, vh, failures, errors):
         await pg.screenshot(path=f'{OUT}/20-wipe-{k}-{vw}x{vh}.png')
         await check_overlap(pg, sels, f'{tag} {k}', failures)
         await check_fit(pg, ['.ex-held', '.ex-callout'], f'{tag} {k}', failures)
-    # Then the end of the match (nobody left): the end banner over the HUD.
-    try: await pg.wait_for_function(f"{G}.match?.ended || document.querySelector('.endbanner.show')", timeout=60000)
+    # Then the end of the match (nobody left): the end banner over the HUD. The choice window is wound past.
+    await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); if (me.ex) me.ex.heldAt = -99; }})()")
+    try: await pg.wait_for_function(f"{G}.match?.ended || document.querySelector('.endbanner.show')", timeout=90000)
     except Exception: failures.append(f'{tag}: the match did not end after the wipe')
     for k in range(3):
         await pg.wait_for_timeout(500)

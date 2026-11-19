@@ -660,6 +660,12 @@ export class HUD {
     {
       const oy = tops[1], oh = (this.ex ? OUT_H_EX : OUT_H) * k;
       let lo = safe.l + 6, hi = W - safe.r - 6;
+      // Extraction: the spectate card (js/ui/spectate-card.js, clamp(164px, 50vw - 152px, 214px) wide, 8 px in from the
+      // side) shows while you watch; the plate keeps clear of it.
+      if (this.ex) {
+        const sw = Math.max(164, Math.min(214, W / 2 - 152)) * k + 8 + DOCK_GAP * 2;
+        if (this.el.classList.contains('lefty')) lo = Math.max(lo, safe.l + sw); else hi = Math.min(hi, W - safe.r - sw);
+      }
       for (const r of obstacles) {
         // Extraction: the spectate card takes the weapon panel's place while you watch, so the plate keeps clear of it.
         if ((r === armsBox && !this.ex) || r.bottom <= oy + 2 || r.top >= oy + oh - 2) continue;
