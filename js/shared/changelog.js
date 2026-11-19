@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-18', title: 'Three new guns',
+    build: '1118-10', date: '2026-11-18', title: 'Three new guns',
     items: [
       'Clatter, a burst SMG: three rounds a pull, and two bursts still kill at ranges where other SMGs give up. Slower than the others in a tight room. Opens at level 25.',
       'Gavel, a battle pistol: three shots to the body across a whole lane, the quickest sidearm kill at range. Opens at level 27.',
