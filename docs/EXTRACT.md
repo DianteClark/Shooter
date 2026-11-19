@@ -14,7 +14,10 @@ Frontier only (any map listing `br` with eight or more places hosts it, `modeFit
 ## Rules (the owner's, with our numbers)
 - **Match**: 8 s at the insertion points, then 15:00. Squads start round the edge, each in its own slice, at the spot
   furthest from any place. The match ends at 15:00, or once no human is left in play (with no humans, once every squad
-  is done). A human whose squad has not got out yet keeps watching while squadmates can still bank the pot.
+  is done). A human whose squad has not got out yet keeps watching while squadmates can still bank the pot. Off the field
+  for good (lifted out, or out of lives), a human gets EX.decide (15 s) to choose: Spectate (`{cmd:'ex', act:'watch'}`)
+  keeps the match going for them until Leave (`{act:'leave'}`, then main.js leaveBrEarly) or its end, when results show
+  as usual; no choice and nobody else playing ends it as before. Once every squad is done the match ends regardless.
 - **Loadouts**: your own (guns, attachments, perks, equipment, operator). No scorestreaks (`_cleanLoadout`). No loot
   but ammo for the primary: ammo boxes at every place (3 at tier 1, 2 elsewhere; +2 magazines; back after 60 s) and a
   drop where anyone dies (+1 magazine, 45 s). The phone owns its gun: the host sends `{t:'exammo', id, mags}`.
@@ -24,8 +27,8 @@ Frontier only (any map listing `br` with eight or more places hosts it, `modeFit
   (no newcomers: `closed`) and comes back without spending a life.
 - **Downs**: battle royale's (crawl, 30 s bleed, a squadmate standing by revives in 4 s to 35 HP). Nobody up in the squad:
   everyone down dies.
-- **Contracts** (one active per squad; a finished one pays into the pot and the next is dealt 2.5 s later, a type the
-  squad has done least, at a place about 115 m away and away from other squads' work):
+- **Contracts** (one active per squad; a finished one pays into the pot; nothing is dealt automatically: every squad,
+  bots included, picks its contracts up at the contract phones):
   - Secure Intel: a case indoors at a place; walk over it, carry it to a drop 50-150 m off. Carrier down or dead: the
     case drops (back home after 60 s untouched).
   - Eliminate HVT: a commander (elite, LMG, takes 45% damage) and two guards at a place. Done when he dies.
@@ -37,12 +40,13 @@ Frontier only (any map listing `br` with eight or more places hosts it, `modeFit
     contracts taken (every phone computes the same, nothing on the wire); a phone deals one (`{cmd:'ex', act:'take',
     phone, k}`) only while the squad has none. With one under way the phone's prompt is greyed ("Finish your current
     contract first") and the host refuses the take.
-  - Abandon: the contract card's Abandon button, held 1 s (`EX.abandonHold`, a bar fills; letting go early does
-    nothing), sends `{cmd:'ex', act:'abandon'}`: nothing is paid, phones open up, and the dealer deals one itself after
-    20 s (`EX.abandonWait`). The event `{t:'excontract', abandoned, wait, lost}` tells the squad. The wait rides the
-    migration backup (one is forced on the next snapshot), the contract's absence the full block.
-  - Bots never take phone offers and never abandon; a contract that cannot be done any more (an HVT whose group is gone
-    without the commander falling) is dropped for everyone (`lost`) and a new one dealt 2.5 s later.
+  - Abandon: the small button at the side of the contract tracker, held 1 s (`EX.abandonHold`, a bar fills; letting go
+    early does nothing), sends `{cmd:'ex', act:'abandon'}`: nothing is paid and the phones open up. The event
+    `{t:'excontract', abandoned, wait, lost}` tells the squad (`wait` is legacy: nothing is dealt after it).
+  - Bot squads (no human of theirs in play) walk to the nearest phone and take the offer they have done least, nearer
+    places first (`_phoneFor`, `_botTake`); a human squad's bots leave the phones to their humans. Bots never abandon; a
+    contract that cannot be done any more (an HVT whose group is gone without the commander falling) is dropped
+    (`lost`) and the squad goes back to a phone.
   - Rewards by site tier (1 best): 1,500 / 1,050 / 700 XP, 900 / 650 / 450 weapon XP to the primary, 240 / 180 / 120
     seconds of operator mastery.
 - **AI patrols** (side `EX_AI_TEAM`, hostile to every squad, bots from the roster's AI seats): every place has a post
@@ -108,7 +112,9 @@ timers, per-player downs); `restore` rebuilds from the guest's mirror plus that 
   `ownSpawns`, `metaEvery`, AI interest); `js/sim/bots.js` `calm`; `buildExRoster` (squads like battle royale, AI seats
   last, the first four named Commander).
 - `js/shared/extraction.js` (exclusives and pay), `js/shared/modes.js` (`EX`, `exq`, `exd`, `EX_AI_TEAM`).
-- UI: `js/ui/ex-hud.js`, its own module and elements so the HUD redesign can move them (chips, squad, contract card,
+- UI: `js/ui/ex-hud.js`, its own module and elements so the HUD redesign can move them (chips, squad, contract card
+  (in full for 4 s after taking one or a tap, then a one-line tracker: the next step and the distance; with no contract
+  it points at the nearest phone, a pinned marker shows the way and the minimap and full map ring the phones),
   Call exfil and the phone sheet (greyed while a contract is under way) and the card's hold-to-abandon placed like the battle royale's take prompt, screen markers, downed panel, the battle
   royale's out panel markup with Spectate / Next player / Next squad / Leave through `spectate.any` and main.js
   `leaveBrEarly` (Match.leaveNow, `early` into the results), zoomed minimap and full map; `hud.music?.cue('exfil')` when
