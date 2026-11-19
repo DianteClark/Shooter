@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-19', title: 'Cooler Graveyard Shift, and quality of life',
+    build: '1119-4', date: '2026-11-19', title: 'Cooler Graveyard Shift, and quality of life',
     items: [
       'Graveyard Shift runs cooler on phones: undead past a few metres are drawn simpler and cast no shadow in a big horde, and Auto graphics steps down sooner there.',
       'New option, Battery saver: 30 fps. With it on, Graveyard Shift runs at 30 frames a second to save battery and heat.',
