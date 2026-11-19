@@ -165,3 +165,9 @@ party playlist, new operators and skins, replays, match history detail.
     controls and layout, accessibility, controller). Save codes made before the reset are refused. Bot pool careers,
     levels, ranked SR and leaderboards restart from the reset date too (everyone starts level 1 together; bots then grow
     day by day as before, deterministic on every phone). Ship it after balance 4 (clean per-mode stats from day one).
+
+## Next week, first up (owner, 2026-11-18): operator overhaul
+42. Operators are starting to look alike. Take time with each operator: stronger silhouettes and details, and make
+    their achievement skins special. Recolours are fine for the low tiers, but Elite and above must stand out:
+    holo/animated "active" skins like the weapon camos, wild themes (an animal/bear suit, a mech/transformer
+    armour, etc.), each operator's top skin a showpiece. Keep phone budgets (shader-driven builds/colours).
