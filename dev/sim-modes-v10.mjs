@@ -74,7 +74,7 @@ const PLAN = {
   ko: [['turnstile', 900], ['dust', 900]],
   inf: [['oasis', 400], ['canyon', 400]],
   oic: [['ruins', 400], ['railyard', 400]],
-  ctl: [['pier', 1200], ['overpass', 1200]],
+  ctl: [['pier', 1200], ['overpass', 1200], ['millbrook', 1200]],
   grind: [['railyard', 900], ['icebreaker', 900]],
   gwhq: [['harvest', 1000]],
   gwko: [['downtown', 1000]],

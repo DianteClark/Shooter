@@ -172,6 +172,21 @@ export const REWARD_PATTERNS = {
     for (let i = 0; i < 18; i++) s += circ(96 + r() * 204, r() * H, 0.8, c[2], op('.6'));
     return s;
   },
+  millwheel(c, r) {        // Millbrook: a stone mill's gable, its waterwheel in the race, blossom drifting over.
+    let s = fillPath('M90 66 C150 62 220 70 300 64 L300 80 L90 80 Z', c[1], op('.9'));
+    s += path('M96 72 C150 68 220 75 296 70', c[2], 1, op('.35') + ' stroke-dasharray="7 6"');
+    s += rect(214, 26, 60, 40, c[1]) + poly([[208, 28], [244, 6], [280, 28]], c[1]) + poly([[214, 28], [244, 10], [274, 28]], '#000', op('.18'));
+    s += rect(236, 46, 14, 20, '#000', op('.35')) + rect(222, 34, 6, 6, c[2], op('.5')) + rect(258, 34, 6, 6, c[2], op('.5'));
+    const wx = 186, wy = 56, R = 18;
+    s += circ(wx, wy, R, 'none', ` stroke="${c[2]}" stroke-width="3"`) + circ(wx, wy, R - 6, 'none', ` stroke="${c[2]}" stroke-width="1.2"` + op('.6'));
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      s += line(wx + Math.cos(a) * 4, wy + Math.sin(a) * 4, wx + Math.cos(a) * (R + 3), wy + Math.sin(a) * (R + 3), c[2], 1.4);
+    }
+    s += circ(wx, wy, 3.2, c[3]);
+    for (let i = 0; i < 26; i++) s += circ(96 + r() * 204, r() * 60, 0.9 + r() * 1.3, c[3], op((0.45 + r() * 0.45).toFixed(2)));
+    return s;
+  },
   zone(c) {                // Frontier: the closing circle over the land, a plane's drop line across it.
     let s = '';
     for (let k = 0; k < 5; k++) s += path(`M${92 + k * 30} ${H} q30 -14 60 0`, c[1], 1, op('.6'));

@@ -1,11 +1,11 @@
-// Farmland, small. Millrace: a stone water mill on a creek through an apple orchard, on a wet spring morning, 54 x 36 m.
+// Farmland, small. Millbrook: a stone water mill on a creek through an apple orchard, on a wet spring morning, 54 x 36 m.
 // The creek runs north to south down the middle; it can be seen and shot across but not waded. Three ways over it: a
 // plank footbridge on the north lane, the wide stone mill bridge in the middle (flag B, open to both banks and boxed
 // in by the mill to the north and the cider house to the south), and the footbridge on the south lane. West of the
 // creek the farmhouse, the orchard rows, the pig pen and the grain silo; the east bank is their 180-degree image.
 import { rotated, perimeter, edgeSpawns, navGrid, symmetricPoints, bombSites, flagBases } from './build.js';
 
-// Pieces by what they are. Each is a wall kind (see build.js) plus a flag for the renderer (js/render/themes/millrace.js).
+// Pieces by what they are. Each is a wall kind (see build.js) plus a flag for the renderer (js/render/themes/millbrook.js).
 const water = (x, z, w, d) => [x, z, w, d, 0, 'water', { creek: true }];
 const house = (x, z, w, d, h = 4.4) => [x, z, w, d, h, 'building', { house: true }];
 const tree = (x, z, s = 1) => [x, z, s, s, 3.2, 'wall', { apple: true }];        // Apple tree: trunk blocks, crown above.
@@ -79,7 +79,7 @@ function build() {
   ];
 
   return {
-    id: 'millrace', name: 'Millrace', theme: 'millrace', size: 'small', region: 'farmland',
+    id: 'millbrook', name: 'Millbrook', theme: 'millbrook', size: 'small', region: 'farmland',
     width: W, height: H, walls, spawns, lanes, nav, points, rooms,
   };
 }

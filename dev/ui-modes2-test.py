@@ -131,7 +131,7 @@ async def showdown(browser, vw, vh, failures, errors):
     await pg.wait_for_function(f'{G}.match?.interp.newest?.obj?.kind === "gf" || {G}.match?.interp.newest?.points?.obj?.kind === "gf"', timeout=60000)
     mode, mapId, n = await ev(f'[{G}.match.mode, {G}.match.mapId, {G}.match.sim.players.length]')
     if mode != 'gf': failures.append(f'{tag}: match mode {mode}')
-    if mapId not in ('pier', 'turnstile', 'oasis', 'ruins'): failures.append(f'{tag}: on {mapId}, not a small map')
+    if mapId not in ('pier', 'turnstile', 'oasis', 'ruins', 'millbrook'): failures.append(f'{tag}: on {mapId}, not a small map')
     if n != 4: failures.append(f'{tag}: {n} players')
     await pg.wait_for_timeout(1500)
     await shot('02-freeze')

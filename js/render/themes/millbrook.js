@@ -1,8 +1,8 @@
-// Millrace's theme (farmland, small; js/shared/maps/millrace.js): a stone water mill on a creek through an apple
+// Millbrook's theme (farmland, small; js/shared/maps/millbrook.js): a stone water mill on a creek through an apple
 // orchard, on a spring morning just after rain. Soft, fairly high light from the south-east, short cool shadows, wet
 // grass and puddles on the tracks, blossom on the trees and petals on the wind, mist low over the creek. Clearly not
 // Harvest (low gold autumn sun, stubble, oxblood barns) nor Ashgrove (night, lamps, ash): fresh green, whitewash, grey
-// stone and slate. world.js reads `millrace` ({ dress, stage, thumb }) into its tables and hands every drawer ctx.kit.
+// stone and slate. world.js reads `millbrook` ({ dress, stage, thumb }) into its tables and hands every drawer ctx.kit.
 import { THEMES, hexRGB } from '../art.js';
 import { box3, emissive, scale, mix, WATER_Y, waterBanks, rimPoints, skyRing } from './kit.js';
 
@@ -10,8 +10,8 @@ const norm = v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[
 const ink = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, hexRGB(v)]));
 const sc = scale;
 
-THEMES.millrace = {
-  id: 'millrace',
+THEMES.millbrook = {
+  id: 'millbrook',
   light: { dir: norm([0.42, 0.78, 0.46]), sun: [0.86, 0.84, 0.74], sky: [0.44, 0.5, 0.56], amb: [0.32, 0.34, 0.35] },
   clear: 0x26302e,
   fog: [0.56, 0.62, 0.62], fogSeam: [0.12, 0.14, 0.1], desatTint: [0.84, 0.9, 0.86],
@@ -514,7 +514,7 @@ function millDecor(ctx) {
   skyRing(ctx, { low: [0.44, 0.5, 0.48], mid: [0.64, 0.72, 0.74], warm: [0.9, 0.86, 0.74], high: [0.5, 0.62, 0.74], warmDir: [1, 0.4], y0: -4, y1: 12, y2: 60 });
 }
 
-export const millrace = {
+export const millbrook = {
   dress: { building: millBuilding, wall: millWall, container: millContainer, crate: roundBale, barrier: millBarrier, water: creekBank, border: millBorder },
   stage: { lights: () => {}, ground: millGround, paint: millPaint, decor: millDecor },
   thumb: { ground: '#667a4c', solid: '#9a948a', low: '#b4a272', water: '#2a4a4c', edge: '#1c2418' },

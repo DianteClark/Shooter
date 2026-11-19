@@ -23,7 +23,7 @@ export function mapIcons({ P, R, O, bar }) {
     'map:expedition': { f: [P(1, 29.5, 13, 6, 18, 14, 22, 10, 31, 29.5), R(23.6, 4, 1.6, 8)], h: [P(13, 6, 9.5, 13, 12, 12, 13.5, 14, 15.5, 11)], a: [P(25.2, 4, 30, 6, 25.2, 8)] },
     // Icebreaker: a bow riding up over floes, its bridge and stack.
     'map:icebreaker': { f: [P(1, 18, 22, 18, 30, 11, 27, 24, 4, 24), R(7, 11, 9, 7, [1, 1, 0, 0]), R(18, 7, 3.4, 11)], h: [R(9, 13, 2, 2), R(12.5, 13, 2, 2)], a: [P(2, 27, 9, 26, 12, 29.5, 1, 29.5), P(15, 27, 24, 26, 29, 29.5, 13, 29.5)] },
-    // Millrace: a stone mill with a pitched roof, its waterwheel turning in the race below.
-    'map:millrace': { f: [R(15, 12, 15, 17.5), P(13, 12.5, 22.5, 4, 32, 12.5), O(9, 20, 7.5)], h: [O(9, 20, 5.4), R(20.5, 20, 4, 9.5, [2, 2, 0, 0])], a: [O(9, 20, 1.8), bar(3.4, 20, 14.6, 20, 1.4), bar(9, 14.4, 9, 25.6, 1.4), R(1, 28.5, 30, 2)] },
+    // Millbrook: a stone mill with a pitched roof, its waterwheel turning in the race below.
+    'map:millbrook': { f: [R(15, 12, 15, 17.5), P(13, 12.5, 22.5, 4, 32, 12.5), O(9, 20, 7.5)], h: [O(9, 20, 5.4), R(20.5, 20, 4, 9.5, [2, 2, 0, 0])], a: [O(9, 20, 1.8), bar(3.4, 20, 14.6, 20, 1.4), bar(9, 14.4, 9, 25.6, 1.4), R(1, 28.5, 30, 2)] },
   };
 }
