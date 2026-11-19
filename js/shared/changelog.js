@@ -4,6 +4,21 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-19', title: 'Cooler Graveyard Shift, and quality of life',
+    items: [
+      'Graveyard Shift runs cooler on phones: undead past a few metres are drawn simpler and cast no shadow in a big horde, and Auto graphics steps down sooner there.',
+      'New option, Battery saver: 30 fps. With it on, Graveyard Shift runs at 30 frames a second to save battery and heat.',
+      'The Finish button now sits just above the aim stick, where your thumb already is (mirrored when left-handed).',
+      'New-unlock dots: a Mark all seen button on any menu that shows them, and one in Options.',
+      'Graveyard Shift: handing your gun in at the upgrade bench brings up your other weapon at once.',
+      'Graveyard Shift: the starting pistol shows its infinite ammo from the first round.',
+      'Graveyard Shift: a big exfil countdown, with how many undead are still coming.',
+      'Graveyard Shift: once your plates are full, the armour bench sells a kit refill (grenades and tacticals), and the Full Crate refills them too.',
+      'New option, Auto-sprint (on by default): push the move stick past 85% to sprint.',
+      'Graveyard Shift: streaks from the supply terminal are held until you call them in with their own button. You can hold one at a time.',
+    ],
+  },
+  {
     build: '1119-3', date: '2026-11-19', title: 'Unlocks after a match, all in one place',
     items: [
       'Everything a match unlocks now shows once, in one Unlocked panel after the XP bar, grouped by kind (calling cards, emblems, camos, attachments, operators, level rewards, challenges, season and tournament rewards) instead of one pop-up after another.',
