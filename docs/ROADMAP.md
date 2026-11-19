@@ -171,3 +171,8 @@ party playlist, new operators and skins, replays, match history detail.
     their achievement skins special. Recolours are fine for the low tiers, but Elite and above must stand out:
     holo/animated "active" skins like the weapon camos, wild themes (an animal/bear suit, a mech/transformer
     armour, etc.), each operator's top skin a showpiece. Keep phone budgets (shader-driven builds/colours).
+
+## Owner's notes (2026-11-19 midday) not fitting this week, first after the operator overhaul (or before it)
+43. Movement stick still drops during grenade throws on iPhone: add an Options touch recorder that produces a report code of
+    the raw touch lists so the iOS case can be reproduced. Graveyard Shift ally bots need personality: shopping plan (wall
+    guns, crate, perks, plates, bench), their own bought streak, revive priority, holding chokepoints, quest help, chatter.
