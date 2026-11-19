@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-19', title: 'Unlocks after a match, all in one place',
+    items: [
+      'Everything a match unlocks now shows once, in one Unlocked panel after the XP bar, grouped by kind (calling cards, emblems, camos, attachments, operators, level rewards, challenges, season and tournament rewards) instead of one pop-up after another.',
+      'Only the match\'s biggest moment (a level up, Master Prestige, the Golden Gun or a tournament win) still gets its own reveal; the rest are listed at the top of the panel.',
+      'Skip, on the results or on a reveal, jumps straight to the panel. Nothing is lost, and the Unlocked button brings the panel back.',
+      'Tap anything in the panel to see its details.',
+    ],
+  },
+  {
     build: '1119-2', date: '2026-11-19', title: 'Fixes',
     items: [
       'Left-handed or not, the kill feed no longer reaches down onto the move stick on small screens: quick chat lines count toward its rows too.',
