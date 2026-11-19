@@ -7,6 +7,7 @@ import { esc } from './widgets.js';
 import { ico } from './yard.js';
 
 const SEEN = 'switchyard.seenBuild';
+const MAX_SHOWN = 10;                 // Entries on the sheet at most; the rest are in Help > Updates.
 const order = b => CHANGELOG.findIndex(e => e.build === b);
 
 // Entries newer than `since` (newest first); all of them when `since` is unknown to the log but older entries exist.
@@ -30,12 +31,14 @@ export function maybeShowWhatsNew(menu, { fresh = false } = {}) {
   const mark = () => { try { localStorage.setItem(SEEN, BUILD); } catch { /* private mode */ } };
   if (seen === BUILD) return false;
   if (fresh || !CHANGELOG.length) { mark(); return false; }
-  const list = unseenEntries(seen).slice(0, 3);
+  // Every entry since the last build this phone saw (a player back after a few weeks catches up on all of them), on
+  // a scrolling sheet; past the cap the rest wait in Help > Updates.
+  const all = unseenEntries(seen), list = all.slice(0, MAX_SHOWN), more = all.length - list.length;
   if (!list.length) { mark(); return false; }
   menu.overlay(`
     <div class="sheet slim whats-new" role="dialog" aria-label="What's new">
       <div class="sheet-head">${ico('star')}<h2>What's new</h2></div>
-      <div class="wn-body scroll-y">${changelogHtml(list)}</div>
+      <div class="wn-body scroll-y">${changelogHtml(list)}${more > 0 ? `<p class="wn-more">${more === 1 ? 'One more update' : `${more} more updates`}: see all in How to play &gt; Updates.</p>` : ''}</div>
       <div class="sheet-row">
         <small class="wn-note">${ico('info')}Every update is in How to play &gt; Updates.</small>
         <button class="btn is-primary" data-sound="confirm" data-act="wnClose">${ico('check')}<b>Got it</b></button>
