@@ -32,7 +32,8 @@ import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
 import { SpectateCard } from './spectate-card.js';     // QoL: who you are watching, with Previous and Next.
 import { ctfOf } from '../sim/ctf.js';
-import { AIR_HP } from '../sim/streaks-v9.js';
+import { AIR_HP, SWEEP_GAP, SWEEP_MARK, SCOUT_LIFE, SCOUT_MARK } from '../sim/streaks-v9.js';
+import { RADAR_TIMES } from '../sim/sim.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
 // for that id, so callers can fall back to words.
@@ -93,6 +94,9 @@ const DPS_WINDOW = 2.4;
 const INCOMING_WARN_M = 9;       // An enemy shell landing this close gets a callout.
 const INCOMING_GAP_MS = 1500;    // A five-shell barrage is one warning, not five.
 const STATIC_FRAMES = 3;         // Pre-drawn noise frames the jammed minimap cycles through.
+// Streaks that put enemies on your team's minimap, and for how long (s). Hardcore has no minimap but shows it while one
+// of your team's is up (the UAV family is also read live from view.uav; sweep and recon from these clocks).
+const TRACKING = { ...RADAR_TIMES, sweep: SWEEP_GAP + SWEEP_MARK + 0.5, recon: SCOUT_LIFE + SCOUT_MARK + 0.5 };
 // Feed wording per streak, after its name: "Enemy Airstrike inbound".
 const STREAK_VERB = {
   uav: 'online', jammer: 'jamming radar', resupply: 'dropped', turret: 'deployed', mortar: 'firing',
@@ -928,6 +932,9 @@ export class HUD {
     this.objTally = new Map();
     this.hardMoves = 0;
     this.mmClock = 0;
+    this.radarUntil = 0;            // Hardcore: the minimap shows until then (performance.now ms), for a radar streak.
+    this.hcRadar = false;
+    this.el?.classList.remove('hc-radar');
     this.hitT = 0;
     this.hitKill = false;
     this.hitHead = false;
@@ -1707,6 +1714,11 @@ export class HUD {
       }
     }
 
+    // Hardcore hides the minimap; while your team's UAV, Overwatch, Blackbird, Sonar Sweep or Recon Drone is up it shows,
+    // with what that streak reveals (an enemy Jammer still fills it with static).
+    const hc = this.el.classList.contains('hc-on');
+    const radar = hc && me && view.phase === 'live' && ((view.uav?.[me.team] ?? 0) > 0 || performance.now() < this.radarUntil);
+    if (radar !== this.hcRadar) { this.hcRadar = radar; this.el.classList.toggle('hc-radar', radar); if (radar) this.mmClock = 1; }
     this.mmClock += dt;
     if (this.mmClock >= 1 / MINIMAP_HZ) {
       this.mmClock = 0;
@@ -2858,6 +2870,7 @@ export class HUD {
     const me = this.#findLocal(view);
     if (!p || !me) return;
     const friendly = p.team === me.team;
+    if (friendly && TRACKING[e.kind]) this.radarUntil = Math.max(this.radarUntil, performance.now() + TRACKING[e.kind] * 1000);
     const name = STREAKS[e.kind]?.name ?? e.kind;
     const verb = STREAK_VERB[e.kind] ?? 'called in';
     this.notify(`${friendly ? '' : 'Enemy '}${name} ${verb}`);

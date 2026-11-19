@@ -46,6 +46,8 @@ const LONGSHOT = 26;
 
 const UAV_TIME = 20, JAM_TIME = 15, OVERWATCH_TIME = 30, EMP_JAM_TIME = 8;
 const BLACKBIRD_TIME = 45, VULTURE_LIFE = 38 / 24;    // Extraction exclusives (js/shared/catalog.js).
+// How long each radar streak keeps the team's minimap lit (the HUD shows Hardcore's minimap for that long).
+export const RADAR_TIMES = { uav: UAV_TIME, overwatch: OVERWATCH_TIME, blackbird: BLACKBIRD_TIME };
 const HARD_TARGET = 0.85, HARD_TARGET_PRO = 1;         // Hard Target: gunfire taken while sprinting or sliding; Evasive: seconds after.
 const AIR_TEAM_MAX = 3, AIR_TOTAL_MAX = 5;   // Airspace: at most this many air streaks up per team, and on the map in total.
 const SUPPLY_RADIUS = 14, SUPPLY_MAGS = 3;
