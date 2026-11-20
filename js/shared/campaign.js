@@ -47,7 +47,7 @@ export const CP = {
 export const CP_DIFFS = [
   { id: 'recruit', name: 'Recruit', count: 0.7, deal: 0.3, take: 1.25, rating: 0.04, respawn: 8, boss: 0.7, timer: 1.25, xp: 1200, blurb: 'Fewer guards, softer aim. For learning the missions.' },
   { id: 'regular', name: 'Regular', count: 1, deal: 0.45, take: 1, rating: 0.22, respawn: 12, boss: 1, timer: 1, xp: 2000, blurb: 'The operation as planned.' },
-  { id: 'veteran', name: 'Veteran', count: 1.35, deal: 0.66, take: 0.85, rating: 0.48, respawn: 18, boss: 1.25, timer: 0.85, xp: 3000, blurb: 'More of them, and they shoot straight. The skin and emblem are here.' },
+  { id: 'veteran', name: 'Veteran', count: 1.25, deal: 0.56, take: 0.88, rating: 0.45, respawn: 15, boss: 1.25, timer: 0.85, xp: 3000, blurb: 'More of them, and they shoot straight. The skin and emblem are here.' },
 ];
 export const CP_STAR_XP = 400;       // Each star earned.
 export const CP_FIRST_XP = 1000;     // The first clear of a mission (any difficulty).
@@ -280,8 +280,8 @@ export const MISSIONS = [
       { type: 'plant', sites: ['h2'], plant: 3, fuse: 8, label: 'Blow the gate to his yard', checkpoint: true, cp: 'd0',
         spawn: [{ role: 'guard', at: 'h2', n: 2 }, { role: 'assault', at: 'h3', n: 3 }],
         say: [L('lantern', 'His yard is gated. Put a charge on it.')] },
-      { type: 'boss', at: 'd1', r: 30, label: 'Bring down Marshal Kordell', checkpoint: true, cp: 'd0',
-        spawn: [{ role: 'boss', at: 'd1', n: 1, fixed: true, name: 'Marshal Kordell' }, { role: 'guard', at: 'd2', n: 2 }],
+      { type: 'boss', at: 'h3', r: 30, label: 'Bring down Marshal Kordell', checkpoint: true, cp: 'h2',
+        spawn: [{ role: 'boss', at: 'h3', n: 1, fixed: true, name: 'Marshal Kordell' }, { role: 'guard', at: 'd2', n: 2 }],
         say: [L('lantern', 'That\'s him. Watch the ground: rings mean his barrage is coming.')],
         on: [{ when: { phase: 1 }, say: [L('kordell', 'Guard! To me!')] }, { when: { phase: 2 }, say: [L('kordell', 'Enough. I\'ll do it myself.')] }],
         done: [L('lantern', 'Kordell is down. The Line is ours again. Operation Nightrail is complete. Thank you, all of you.')] },

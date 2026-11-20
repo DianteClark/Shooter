@@ -343,14 +343,17 @@ export class Menu {
     const me = humans.find(h => h.id === localId);
     const allReady = humans.every(h => h.ready || h.id === localId);
     const skillName = (SKILLS.find(([id]) => id === botSkill) ?? SKILLS[4])[1];
+    // A co-op room (the campaign, docs/CAMPAIGN.md): one squad of four, whatever sides the lobby had.
+    const coop = custom?.mode === 'cp';
+    const seats = coop ? 4 : TEAM_SIZE;
     const train = team => {
-      const cars = humans.filter(h => h.team === team);
+      const cars = coop ? humans : humans.filter(h => h.team === team);
       let cells = '';
-      for (let i = 0; i < TEAM_SIZE; i++) {
+      for (let i = 0; i < seats; i++) {
         const h = cars[i];
         if (h) {
           const self = h.id === localId;
-          const can = !ffa && (isHost || self);
+          const can = !ffa && !coop && (isHost || self);
           const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
           // voice: party voice runs in this room (js/ui/voice-ui.js paints the talking dot and the mute button).
           const car = `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
@@ -366,7 +369,7 @@ export class Menu {
         }
       }
       return `<div class="train" style="--team:${TEAMS[team].css}" data-in="rail">
-        <h3><i class="lamp"></i>${esc(TEAMS[team].name)}<small>${cars.length}/${TEAM_SIZE}</small></h3>
+        <h3><i class="lamp"></i>${esc(coop ? 'Squad' : TEAMS[team].name)}<small>${cars.length}/${seats}</small></h3>
         <div class="consist">${cells}</div>
       </div>`;
     };
@@ -388,12 +391,12 @@ export class Menu {
         </button>
         ${voice ? `<button class="chip lb-mic" data-act="lobbyMic" data-state="off" aria-label="Party voice">${ico('ui:mic')}<b>Mic</b></button>` : ''}
         ${isHost ? inviteControls({ listed }) : listed ? `<span class="inv-listed static">${ico('ui:signal')}<b>Public</b></span>` : ''}
-        ${br ? squadMarkup(brSquad, isHost) : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : `${isReady ? `Ready. ${esc(hostName)} starts the match.` : `${esc(hostName)} starts the match when everyone is ready.`} Tap your name to swap teams.`}</p>`}
+        ${br ? squadMarkup(brSquad, isHost) : coop ? `<p class="room-tip">${isHost ? 'Invite friends, or read them this code. Co-op: one squad of four, bots in the empty seats.' : `Co-op: one squad. ${esc(hostName)} starts the mission.`}</p>` : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : `${isReady ? `Ready. ${esc(hostName)} starts the match.` : `${esc(hostName)} starts the match when everyone is ready.`} Tap your name to swap teams.`}</p>`}
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}
       </header>
       <div class="yard-lines">
         ${train(0)}
-        ${train(1)}
+        ${coop ? '' : train(1)}
       </div>
       <footer class="lobby-foot" data-in="up">
         <button class="chip cu-chip${custom ? ' on' : ''}" ${isHost ? 'data-act="lobbyCustom"' : 'disabled'}>${ico(custom ? 'options' : 'map')}<span><small>${custom ? 'Custom match' : isHost ? 'Map vote. Tap for custom' : 'Map vote'}</small><b>${esc(custom ? customLine(custom) : 'Bots: Mixed')}</b></span></button>

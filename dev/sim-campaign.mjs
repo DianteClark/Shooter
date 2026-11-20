@@ -35,6 +35,8 @@ const until = (sim, pred, secs, onEvent = null) => {
 const place = (p, x, z) => { p.ps.x = x; p.ps.z = z; p.ps.vx = 0; p.ps.vz = 0; for (let i = 0; i < p.hx.length; i++) { p.hx[i] = x; p.hz[i] = z; } };
 const freeze = sim => { for (const p of sim.players) if (p.bot) p.bot.update = () => []; };
 const squadOf = sim => sim.players.filter(p => p.team === 0 && !p.ai);
+// Straight to a mission's first step of a kind (the script starts it as if the steps before were done).
+const jump = (sim, pred) => { until(sim, () => sim.rules.state === 1, 20); const i = sim.rules.m.steps.findIndex(pred); sim.rules._begin(i); return i; };
 const killAll = sim => { for (const p of squadOf(sim)) if (p.alive) { p.downed = false; sim._selfKill(p, 'bleed'); } };
 
 function units() {
@@ -114,7 +116,7 @@ function units() {
     const k = MISSIONS.findIndex(m => m.steps.some(s => s.type === 'plant' && s.timer));
     const { sim } = makeSim(k, 1, 3);
     const R = sim.rules;
-    until(sim, () => R.cur?.type === 'plant' && R.cur.timer, 300);
+    jump(sim, s => s.type === 'plant' && s.timer);
     freeze(sim);
     R.timer = 0.5;
     const ev = [];
@@ -125,7 +127,7 @@ function units() {
     const k = MISSIONS.findIndex(m => m.steps.some(s => s.type === 'defend'));
     const { sim } = makeSim(k, 1, 3);
     const R = sim.rules;
-    until(sim, () => R.cur?.type === 'defend', 300);
+    jump(sim, s => s.type === 'defend');
     freeze(sim);
     const at = R.geo(R.stepI).at, foe = sim.players.find(p => p.team === CP.team && p.alive) ?? sim.players.find(p => p.team === CP.team);
     if (!foe.alive) sim._placeAt(foe, at, 0);
@@ -139,7 +141,7 @@ function units() {
     const k = MISSIONS.findIndex(m => m.steps.some(s => s.type === 'kill' && s.spawn?.some(g => g.route)));
     const { sim } = makeSim(k, 1, 4);
     const R = sim.rules;
-    until(sim, () => R.cur?.type === 'kill' && R.target, 300);
+    jump(sim, s => s.type === 'kill' && s.spawn?.some(g => g.route));
     freeze(sim);
     for (const p of squadOf(sim)) place(p, 5, 5);
     const T = R.target, last = T.route[T.route.length - 1];

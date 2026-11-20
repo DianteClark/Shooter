@@ -85,7 +85,7 @@ export class CampaignRules {
     this.V = { cp: true, rules: this };
     this.t = 0; this.state = 0; this.stateT = 0;
     this.stepI = -1; this.stepT = 0; this.prog = 0; this.fired = 0; this.timer = 0; this.gate = 0; this.lost = 0; this.hold = 0;
-    this.cpStep = 0; this.cpGate = 0; this.cpTimer = 0; this.cpAlarm = 0; this.cpAt = null; this.cpBoss = null;
+    this.cpStep = 0; this.cpGate = 0; this.cpTimer = 0; this.cpAlarm = 0; this.cpAt = null; this.cpBoss = null; this.cpStepT = 0;
     this.alarm = 0; this.alarmT = 0; this.alarmLater = false;
     this.bonusOk = true; this.fails = 0; this.deaths = 0; this.why = -1;
     this.sites = []; this.fuseT = -1; this.hazards = []; this.groups = []; this.gid = 0;
@@ -259,7 +259,8 @@ export class CampaignRules {
 
   damage(target, attacker, dmg, weapon) {
     const sim = this.sim;
-    if (target.id === 'cp-vip') return dmg * (this.diff === 0 ? 0.28 : this.diff === 1 ? 0.38 : 0.5);
+    // The VIP: hit only on the move (escort steps); once delivered she is in cover (the platform's shelter).
+    if (target.id === 'cp-vip') return this.cur?.type === 'escort' ? dmg * (this.diff === 0 ? 0.2 : this.diff === 1 ? 0.26 : 0.32) : 0;
     if (attacker?.team === CP.team && !this._raw) dmg *= attacker.cpDeal ?? this.D.deal;
     if (target.team !== CP.team) return dmg;
     const g = target.cpGroup;
@@ -381,7 +382,14 @@ export class CampaignRules {
     const G = this.geo(i);
     this.sites = G.sites.map((p, k) => ({ i: k, x: p.x, z: p.z, state: 0, prog: 0, def: 0 }));
     if (s.checkpoint && !retry) this._checkpoint(G.cp);
-    for (const def of s.spawn ?? []) this._spawnGroup(def, i);
+    for (const def of s.spawn ?? []) {
+      // Back at a checkpoint part way through a step: no posts on top of the squad (a stop it already took).
+      if (retry && this.cpAt && (def.role === 'guard' || def.role === 'patrol' || def.role === 'sniper')) {
+        const h = this._pt(def.at);
+        if (dist(h.x, h.z, this.cpAt.x, this.cpAt.z) < 22 && (this.cpGate > 0 || this.cpStepT > 0)) continue;
+      }
+      this._spawnGroup(def, i);
+    }
     for (const l of s.say ?? []) this._say(l);
     if (s.type === 'escort') this._startVip(retry);
     sim._emit({ t: 'cpstep', i });
@@ -391,7 +399,7 @@ export class CampaignRules {
 
   _checkpoint(at) {
     if (!at) return;
-    this.cpBoss = null;
+    this.cpBoss = null; this.cpStepT = 0;
     this.cpAt = { x: at.x, z: at.z }; this.cpStep = this.stepI; this.cpGate = this.gate; this.cpTimer = this.timer; this.cpAlarm = this.alarm;
     this.sim._emit({ t: 'cpcheck', x: r1(at.x) / 10, z: r1(at.z) / 10 });
   }
@@ -431,14 +439,17 @@ export class CampaignRules {
     const vip = this._vip();
     if (vip) { vip.alive = false; vip.hp = 0; }
     this.state = 1; this.stateT = 0;
-    const i = this.cpStep, gate = this.cpGate, timer = this.cpTimer;
+    const i = this.cpStep, gate = this.cpGate, timer = this.cpTimer, held = this.cpStepT ?? 0;
     sim._emit({ t: 'cpretry', i });
     this._begin(i, true);
     this.gate = gate;
     if (this.m.steps[i].timer) this.timer = Math.max(timer, 45 * this.D.timer);
     // The checkpoint's gate: its triggers have been and gone.
-    (this.m.steps[i].on ?? []).forEach((tr, k) => { if (tr.when.gate && tr.when.gate <= gate) this.fired |= 1 << k; });
+    (this.m.steps[i].on ?? []).forEach((tr, k) => { if ((tr.when.gate && tr.when.gate <= gate) || (held && tr.when.t !== undefined && tr.when.t < held)) this.fired |= 1 << k; });
+    if (held && this.m.steps[i].type === 'defend') { this.stepT = held; this.cpStepT = held; }
     if (this.target && gate > 0) this._placeTargetAt(gate);
+    // Past the escort (holding the platform), the VIP stands up at the checkpoint with the squad.
+    if (vip && this.m.vip && this.cur.type !== 'escort' && this.m.steps.slice(0, i).some(s => s.type === 'escort')) this._startVip(true);
     for (const p of this._squad()) { p.alive = false; p.downed = false; }
     const at = this.cpAt ?? this._pt(this.m.insert);
     const ahead = this.geo(i).route[gate] ?? this.geo(i).at ?? at;
@@ -460,6 +471,11 @@ export class CampaignRules {
         || (w.planted !== undefined && when.planted >= w.planted) || (w.phase !== undefined && when.phase >= w.phase);
       if (!hit) continue;
       this.fired |= 1 << k;
+      // A wave into a defence is a checkpoint of its own: a retry starts the hold from this wave, not the first.
+      if (w.t !== undefined && w.t > 10 && this.cur?.type === 'defend' && this.state === 1) {
+        this.cpStepT = w.t;
+        if (this.cpStep === this.stepI) this.sim._emit({ t: 'cpcheck', x: r1(this.cpAt?.x ?? 0) / 10, z: r1(this.cpAt?.z ?? 0) / 10 });
+      }
       for (const def of on[k].spawn ?? []) this._spawnGroup(def, this.stepI);
       for (const l of on[k].say ?? []) this._say(l);
       this._dirty();
@@ -1358,7 +1374,7 @@ export class CampaignRules {
       r1(g.alertX), r1(g.alertZ), Math.round(g.alertT), g.stealth ? 1 : 0, g.route.flatMap(w => [r1(w.x), r1(w.z)]), g.name ?? 0]);
     const ai = sim.players.map(p => (p.ai && p.alive ? [Math.round((p.cpTake ?? 1) * 100), Math.round((p.cpDeal ?? 1) * 100), Math.round((p.rating ?? 0.2) * 100)] : 0));
     return [this.gid, this.fired, this.stepT * 10 | 0, this.cpStep, this.cpGate, r1(this.cpTimer), this.cpAlarm, r1(this.alarmT), this.alarmLater ? 1 : 0, groups, ai,
-      B ? [Math.round(B.pool), Math.round(B.max), r1(B.atk), B.n ?? 0] : 0, T ? [r1(T.holdT), T.started ? 1 : 0, r1(T.home.x), r1(T.home.z)] : 0, r1(this.pingT), this.hold * 10 | 0, this.cpBoss ?? 0];
+      B ? [Math.round(B.pool), Math.round(B.max), r1(B.atk), B.n ?? 0] : 0, T ? [r1(T.holdT), T.started ? 1 : 0, r1(T.home.x), r1(T.home.z)] : 0, r1(this.pingT), this.hold * 10 | 0, this.cpBoss ?? 0, r1(this.cpStepT ?? 0)];
   }
 
   restore(view) {
@@ -1384,7 +1400,8 @@ export class CampaignRules {
     });
     this.groups = [];
     if (bk) {
-      const [gid, fired, stepT, cpStep, cpGate, cpTimer, cpAlarm, alarmT, alarmLater, groups, ai, boss, target, pingT, hold, cpBoss] = bk;
+      const [gid, fired, stepT, cpStep, cpGate, cpTimer, cpAlarm, alarmT, alarmLater, groups, ai, boss, target, pingT, hold, cpBoss, cpStepT] = bk;
+      this.cpStepT = (cpStepT ?? 0) / 10;
       Object.assign(this, { gid, fired, stepT: stepT / 10, cpStep, cpGate, cpTimer: cpTimer / 10, cpAlarm, alarmT: alarmT / 10, alarmLater: !!alarmLater, pingT: pingT / 10, hold: hold / 10, cpBoss: cpBoss || null });
       ai.forEach((e, i) => { const p = sim.players[i]; if (p && e) { p.cpTake = e[0] / 100; p.cpDeal = e[1] / 100; p.rating = e[2] / 100; } });
       for (const e of groups) {
