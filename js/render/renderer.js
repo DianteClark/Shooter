@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { TEAMS } from '../shared/constants.js';
 import { TEAM_RGB } from '../shared/palette.js';   // [r, g, b] per side, rewritten in place by the colour modes.
 import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
-import { ExFx } from './ex-fx.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
+import { ExFx } from './ex-fx.js';
+import { CpFx } from './cp-fx.js';     // The co-op campaign: objectives, charges, the boss's telegraphs, torches (docs/CAMPAIGN.md).     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
 import { ZmFx } from './zm-fx.js';
 import { ZmFairFx } from './zm-fair-fx.js';     // Wrenfield Fair: the Barker's marked lanes, the Whirligig's whirls.     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
 import { clearZmWalls } from '../shared/zombies.js';
@@ -388,6 +389,7 @@ export class GameRenderer {
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
+        case 'cpboom': this._boom(ev.x, ev.z, Math.min(7, ev.r || 4)); break;     // The campaign: a charge, a barrage shell.
         case 'zswing': chars.onShot(ev.id, 0.3, 'knife'); break;     // Graveyard Shift: a zombie's claw.
         case 'zspit': case 'zblast': case 'zshield': this.zmFx?.onEvent(ev); break;     // Specials (js/render/zm-kinds-fx.js).
         case 'zcharge': case 'zwhirl': (this.fairFx ??= new ZmFairFx(this.scene)).onEvent(ev); break;     // js/render/zm-fair-fx.js.
@@ -753,6 +755,7 @@ export class GameRenderer {
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
     if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, this.chars);
     if ((view.obj ?? view.points?.obj)?.ex) (this.exFx ??= new ExFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, localTeam);
+    if ((view.obj ?? view.points?.obj)?.cp) (this.cpFx ??= new CpFx(this.scene, this.map)).update(view, fxDt);
     const zmObj = (view.obj ?? view.points?.obj)?.zm ? (view.obj ?? view.points.obj) : null;
     if (zmObj?.layout) (this.zmFx ??= new ZmFx(this.scene, this.map, zmObj.layout)).update(view, fxDt);
     this.fairFx?.update(fxDt);
@@ -867,6 +870,7 @@ export class GameRenderer {
     this.chars.dispose();
     this.brFx?.dispose();
     this.exFx?.dispose(); this.exFx = null;
+    this.cpFx?.dispose(); this.cpFx = null;
     this.zmFx?.dispose(); this.zmFx = null;
     this.fairFx?.dispose(); this.fairFx = null;
     this.vfx.dispose();

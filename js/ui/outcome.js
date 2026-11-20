@@ -91,6 +91,14 @@ export function matchHeader(data) {
     if (z.warden) line += ` · the ${z.bossName ?? 'Gravewarden'} is down`;
     tone = z.fresh || z.escaped ? 'var(--c-gold)' : 'var(--c-haze)';
     score = { kind: 'one', label: 'Round', value: z.escaped || data.zmView?.round || survived, mineCss: tone };
+  } else if (rules === 'cp') {
+    // The campaign: cleared or not, the stars, the time against par. One number: the stars.
+    const c = data.cp ?? {}, v = data.cpView ?? {};
+    const done = c.done ?? (v.state === 'complete'), mm = s => `${Math.floor((s ?? 0) / 60)}:${String(Math.round(s ?? 0) % 60).padStart(2, '0')}`;
+    word = done ? 'Mission complete' : 'Mission failed';
+    line = done ? `${c.n ?? ''}. ${c.name ?? ''} · ${c.diffName ?? ''} · ${mm(c.secs ?? v.t)}${c.first ? ' · first clear' : ''}` : `${c.n ?? ''}. ${c.name ?? ''} · ${v.fails ? plural(v.fails, 'retry', 'retries') : 'aborted'}`;
+    tone = done ? (c.starCount === 3 ? 'var(--c-gold)' : '#7cc8ff') : 'var(--c-haze)';
+    score = done ? { kind: 'one', label: 'Stars', value: `${c.starCount ?? 0}/3`, mineCss: tone } : { kind: 'none' };
   } else if (rules === 'inf') {
     // Sides change hands all match: the number is how many held out, not a side's score.
     const survivors = scores?.[0] ?? 0;
@@ -105,7 +113,7 @@ export function matchHeader(data) {
     line = outcome === 'win' ? `Won ${caps}` : outcome === 'loss' ? `Lost ${caps}` : `Level at ${caps}`;
   }
   // Left a team match early: a loss, said plainly.
-  if (data.early && !['br', 'ex', 'zm'].includes(rules) && !isFfa(modeId)) { word = 'Defeat'; line = 'You left before the end'; }
+  if (data.early && !['br', 'ex', 'zm', 'cp'].includes(rules) && !isFfa(modeId)) { word = 'Defeat'; line = 'You left before the end'; }
   // Ranked: the rating's move rides the line.
   const r = data.ranked;
   if (r) line += r.after && r.before ? ` · ${r.delta > 0 ? '+' : ''}${r.delta} SR` : r.placedNow ? ' · Placed' : r.placement ? ` · Placement ${r.placement}/${r.placements}` : '';

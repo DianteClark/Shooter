@@ -16,6 +16,8 @@ import { SKILLS } from './botsettings.js';
 import { Progress } from './progress.js';
 import { rankBadge } from './season.js';      // Seasons: the Ranked playlist wears the player's rank.
 import { tourneySpot } from './tourney.js';     // Weekend tournaments: the cup's card opens its bracket.
+import { campaignTabMarkup, paintCampaignTab, campaignLobbyLine } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
+import { cpDecode } from '../shared/campaign.js';
 
 // The Ranked playlist's line: the player's division and SR, or how far through placements they are.
 function rankedSub(p) {
@@ -92,8 +94,13 @@ function plCard(p, group, big) {
 
 const sectionHead = (icon, name, note) => `<h3 class="mp-h">${ico(icon)}<b>${esc(name)}</b>${note ? `<small>${esc(note)}</small>` : ''}</h3>`;
 
-// state: { tab, sel: {playlist, modes} }
-export function mpMarkup({ tab }) {
+// state: { tab, sel: {playlist, modes}, cpPick: {k, diff} }. The Campaign tab is its own (js/ui/campaign.js).
+export function mpMarkup({ tab, cpPick = null }) {
+  if (tab === 'campaign') {
+    return `
+    ${header({ back: 'mpBack', title: 'Multiplayer', cls: 'mp-bar', extra: tabsNav('mpTab', MP_TABS, tab) })}
+    <div class="mp mp-cpg" data-tab="campaign">${campaignTabMarkup({ ...(cpPick ?? { k: 0, diff: 1 }), cp: Progress.campaign() })}</div>`;
+  }
   const lists = playlistsFor(tab), modes = modesFor(tab), big = BIG.includes(tab);
   const groups = mpGroups(tab, lists).filter(g => g.items.length);
   const body = big
@@ -126,7 +133,8 @@ export function mpMarkup({ tab }) {
     </div>`;
 }
 
-export function paintMp(root, { tab, sel, hardcore = false }) {
+export function paintMp(root, { tab, sel, hardcore = false, cpPick = null }) {
+  if (tab === 'campaign') { paintCampaignTab(root, { ...(cpPick ?? { k: 0, diff: 1 }), cp: Progress.campaign() }); return; }
   const r = resolveSelection(tab, sel, { hardcore });
   const hc = root.querySelector('.mp-hc');
   if (hc) { const on = hardcore && HARDCORE_TABS.includes(tab); hc.classList.toggle('on', on); hc.setAttribute('aria-pressed', String(on)); }
@@ -252,6 +260,7 @@ export function paintTraining(root, t) {
 // custom: { mapId, mode, mods, skill, bots, scoreLimit, timeLimit } or null (the room plays the map vote).
 export function customLine(custom) {
   if (!custom) return 'Map vote';
+  if (custom.mode === 'cp') { const c = cpDecode(custom.scoreLimit); return campaignLobbyLine(c.k, c.diff); }
   const mode = custom.mode === 'random' ? 'Any mode' : MODES[custom.mode]?.name ?? '';
   const map = custom.mapId === 'random' ? 'any map' : MAPS[custom.mapId]?.name ?? '';
   const mods = (custom.mods ?? []).map(id => MODS[id]?.short).filter(Boolean).join(' ');

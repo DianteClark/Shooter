@@ -10,6 +10,7 @@ import { BrHud } from './br-hud.js';    // Battle royale layer (docs/BR.md).
 import { ExHud, AI_CSS } from './ex-hud.js';    // Extraction layer (docs/EXTRACT.md).
 import { FinHud } from './finisher-hud.js';      // Finishers and emotes (docs/FINISHERS.md).
 import { ZmHud } from './zm-hud.js';
+import { CpHud } from './cp-hud.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons go by their own names.
 import { StreakTags } from './streak-tags.js';  // Enemy streaks you can shoot down: ring, health, hits left (roadmap 40).
 import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
@@ -448,6 +449,7 @@ export class HUD {
     this.brHud = new BrHud(this);
     this.exHud = new ExHud(this);
     this.zmHud = new ZmHud(this);
+    this.cpHud = new CpHud(this);
     this.modeHud = new ModeHud(this);
     this.finHud = new FinHud(this);
     this.cues = new CuesHud(this);
@@ -462,6 +464,7 @@ export class HUD {
   onExCommand(cb) { this.exHud.onCommand(cb); }
   // Graveyard Shift's use button (a gate, a wall-buy, the crate, a perk machine).
   onZmCommand(cb) { this.zmHud.onCommand(cb); }
+  onCpCommand(cb) { this.cpHud.onCommand(cb); }
   // The Finish button and the emote wheel ('finish', or 'emote' with its index).
   onFinCommand(cb) { this.finHud.onCommand(cb); }
 
@@ -775,6 +778,7 @@ export class HUD {
     this.br = isBr(mode);                     // Battle royale: its own layer replaces the scorebar and death screen.
     this.ex = isEx(mode);                     // Extraction: its own layer replaces the scorebar; respawns go on until the lives do.
     this.zm = MODES[mode]?.rules === 'zm';    // Graveyard Shift: its own layer replaces the scorebar and death screen.
+    this.cp = MODES[mode]?.rules === 'cp';    // The campaign: its own layer replaces the scorebar; respawns at checkpoints.
     this.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
     setRosterIdentity(roster);
     this.prints.reset();
@@ -792,7 +796,7 @@ export class HUD {
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
-    this.#sndControls(this.snd || this.br || this.ex || this.zm);   // Battle royale and extraction have no scorestreaks either.
+    this.#sndControls(this.snd || this.br || this.ex || this.zm || this.cp);   // Battle royale and extraction have no scorestreaks either.
     this.reset();
     const practice = mode === 'range' || !!training;
     this.training = practice;
@@ -802,10 +806,11 @@ export class HUD {
     this.#hideIntro();
     this.remeasured = false;
     // Battle royale opens on its drop map instead of the team card.
-    this.pendingIntro = intro && mode !== 'range' && !this.br && !this.ex && !this.zm ? { mapId, mode, roster, localId } : null;
+    this.pendingIntro = intro && mode !== 'range' && !this.br && !this.ex && !this.zm && !this.cp ? { mapId, mode, roster, localId } : null;
     this.brHud.prepare(this.br, { map: this.map, roster, localId, mode });
     this.exHud.prepare(this.ex, { map: this.map, roster, localId, mode });
     this.zmHud.prepare(this.zm, { map: this.map, roster, localId, mode });
+    this.cpHud.prepare(this.cp, { map: this.map, roster, localId, mode, scoreLimit });
     if (this.br || this.ex) {
       const mine = TEAMS[roster.find(r => r.id === localId)?.team ?? 2]?.css ?? '#38b6ff';
       this.el.style.setProperty('--my-team', mine);
@@ -1712,6 +1717,7 @@ export class HUD {
     else {
       if (this.ex) this.exHud.update(view, me, dt);
       if (this.zm) this.zmHud.update(view, me, dt);
+      if (this.cp) this.cpHud.update(view, me, dt);
       this.#updateDeath(me, c, view);
     }
     if (this.ctf) this.#updateCtf(view, me, c);
@@ -2660,6 +2666,7 @@ export class HUD {
       if (this.br) this.brHud.onEvent(e, this.view);
       if (this.ex) this.exHud.onEvent(e, this.view);
       if (this.zm) this.zmHud.onEvent(e, this.view);
+      if (this.cp) this.cpHud.onEvent(e, this.view);
       this.modeHud.onEvent(e, this.view);
       this.finHud.onEvent(e, this.view);
       switch (e.t) {
@@ -3113,6 +3120,11 @@ export class HUD {
       this.endEl.classList.add('show');
       return;
     }
+    if (this.cp) {
+      this.cpHud.endBanner(this.endEl, winner, myTeam, view);
+      this.endEl.classList.add('show');
+      return;
+    }
     if (this.zm) {
       this.zmHud.endBanner(this.endEl, winner, myTeam, view);
       this.endEl.classList.add('show');
@@ -3168,7 +3180,7 @@ export class HUD {
     let sx = this.mmX, sz = this.mmZ;
     // Battle royale: the minimap shows your surroundings, not the whole 400 m map (js/ui/br-hud.js); everything below
     // draws in map metres times sx, so a translate and a bigger scale are all it takes.
-    const zoomer = this.br && this.brHud.on ? this.brHud : this.ex && this.exHud.on ? this.exHud : null;
+    const zoomer = this.br && this.brHud.on ? this.brHud : this.ex && this.exHud.on ? this.exHud : this.cp && this.cpHud.on && this.map?.size === 'giant' ? this.cpHud : null;
     const zoom = zoomer ? zoomer.miniWindow(view, me, this.mmCanvas.width, this.mmCanvas.height) : null;
     if (zoom) { zoomer.drawMiniBase(g, zoom); g.save(); g.translate(-zoom.ox * zoom.k, -zoom.oz * zoom.k); sx = sz = zoom.k; }
     else g.drawImage(this.mmBase, 0, 0);
@@ -3276,6 +3288,7 @@ export class HUD {
     this.#drawProMini(view, me, sx, sz, g, clock);
     if (this.br) this.brHud.drawMini(g, view, me, sx, sz);
     if (this.ex) this.exHud.drawMini(g, view, me, sx, sz);
+    if (this.cp) this.cpHud.drawMini(g, view, me, sx, sz);
     this.modeHud.drawMini(g, view, me, sx, sz, clock);
 
     this.#drawSelf(g, me, sx, sz);

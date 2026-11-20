@@ -32,6 +32,7 @@ import { StreaksSfx } from './streaks-sfx.js';
 import { music } from './music.js';                 // Synthesised music (roadmap 24).
 import { FinSfx } from './fin-sfx.js';
 import { ZmSfx } from './zm-sfx.js';
+import { CpSfx } from './cp-sfx.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { objOf } from '../sim/rules.js';
 import { BrSfx } from './br-sfx.js';               // Battle royale sounds (docs/BR.md).       // Scorestreaks overhaul sounds (2026-11).
 
@@ -1407,6 +1408,8 @@ function roomImpulse(ctx, theme) {
 let current = null;
 // Plays an interface sound (uiSound kinds: unlock, levelUp, rankUp, ...) on the app's engine, if there is one yet.
 export function playUi(kind, opts) { current?.uiSound(kind, opts); }
+// The campaign's radio blip (js/ui/cp-hud.js), on whichever engine is running.
+export function cpRadio(who) { current?.cpRadio?.(who); }
 
 export class AudioEngine {
   constructor() {
@@ -1696,6 +1699,8 @@ export class AudioEngine {
     this.uiLive.push({ src, g, end: now + buf.duration / pitch });
   }
   uiClick() { this.uiSound('tap'); }
+  // The campaign's radio: a squelch and two beeps as a line comes up on the HUD (js/ui/cp-hud.js).
+  cpRadio(who) { if (this._running()) (this.cpSfx ??= new CpSfx(this)).radio(who); }
   uiTap() { this.uiSound('tap'); }
   uiBack() { this.uiSound('back'); }
   uiConfirm() { this.uiSound('confirm'); }
@@ -2142,6 +2147,7 @@ export class AudioEngine {
     if (view?.br) (this.brSfx ??= new BrSfx(this)).onEvents(events, view);
     (this.finSfx ??= new FinSfx(this)).onEvents(events, view);       // Finishers and emotes (docs/FINISHERS.md).
     if (objOf(view)?.zm) (this.zmSfx ??= new ZmSfx(this)).onEvents(events, view);     // Graveyard Shift (docs/ZOMBIES.md).
+    if (objOf(view)?.cp) (this.cpSfx ??= new CpSfx(this)).onEvents(events, view);     // The campaign (docs/CAMPAIGN.md).
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];

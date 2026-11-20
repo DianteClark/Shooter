@@ -18,6 +18,7 @@ import { botMatchSummary } from './botsettings.js';
 import { tourneyScreen } from './tourney.js';
 import { mpMarkup, paintMp, searchMarkup, customHead, trainingMarkup, paintTraining, customLine } from './playscreens.js';
 import { followMapArt } from './mapthumb.js';
+import { briefingMarkup } from './campaign.js';     // The co-op campaign's briefing (docs/CAMPAIGN.md).
 import { Gunsmith } from './gunsmith.js';
 import { profileScreen } from './prestige.js';
 import { resultsScreen } from './results.js';
@@ -64,7 +65,7 @@ const SWEEP_EVERY_MS = 6500;    // The title's primary button and wordmark catch
 const SKILLS = [['recruit', 'Recruit'], ['regular', 'Regular'], ['veteran', 'Veteran'], ['elite', 'Elite'], ['mixed', 'Mixed']];
 
 // How deep each screen sits, so a move toward the title plays as "back".
-const DEPTH = { prestige: 2, controller: 2, a11y: 2, season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, historyMatch: 2, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
+const DEPTH = { prestige: 2, controller: 2, a11y: 2, season: 1, title: 0, keypad: 1, solo: 1, multiplayer: 1, cpbrief: 2, custom: 1, training: 1, mpsearch: 2, searching: 1, browse: 1, lobby: 1, loadouts: 1, profile: 1, options: 1, help: 1, stats: 1, boards: 1, challenges: 1, history: 1, historyMatch: 2, operators: 2, gunsmith: 2, save: 2, vote: 2, results: 3 };
 
 // Tap the wordmark: the yard's PA has opinions.
 const YARD_PA = [
@@ -453,8 +454,21 @@ export class Menu {
       this.el.dataset.screen = 'multiplayer';
       this.el.innerHTML = mpMarkup(state);
       if (!fresh) this.stagger(this.el.querySelector('.mp'));
+      // Six tabs can run past a narrow phone's bar: the open one scrolls into view.
+      const on = this.el.querySelector('.mp-tabs .seg.on'), nav = on?.parentNode;
+      if (on && nav && on.offsetLeft + on.offsetWidth > nav.clientWidth) nav.scrollLeft = on.offsetLeft + on.offsetWidth - nav.clientWidth;
     }
     paintMp(this.el, state);
+    this.show();
+  }
+
+  // The campaign's briefing (js/ui/campaign.js), over the Campaign tab.
+  campaignBrief(state) {
+    this.#stopPreview();
+    this.#endReel();
+    this.el.dataset.screen = 'cpbrief';
+    this.el.innerHTML = briefingMarkup({ ...state, cp: Progress.campaign() });
+    followMapArt(this.el);
     this.show();
   }
 
