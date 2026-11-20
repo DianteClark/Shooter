@@ -52,6 +52,7 @@ import { applyAttachments, setAfterApply } from './attachments.js';
 import { MAX_HP, WEAPON_CATEGORY } from './constants.js';
 import { V10_WEAPONS } from './weapons-v10.js';
 import { W3_WEAPONS } from './weapons-w3.js';
+import { W4_WEAPONS } from './weapons-w4.js';
 
 // A ray passing this close to a target's centre is a head hit. Top-down, so the head is the bullseye.
 // Shrunk from 0.2 for Wave 5: with lethal heads, 0.2 let 35-50% of ordinary hits kill outright. 0.1 is about one hit
@@ -461,6 +462,7 @@ export const WEAPONS = {
 
 Object.assign(WEAPONS, V10_WEAPONS);   // The V10 arsenal lives in weapons-v10.js; merged here so everything below covers it.
 Object.assign(WEAPONS, W3_WEAPONS);    // Weapons wave 3 (weapons-w3.js), the same way.
+Object.assign(WEAPONS, W4_WEAPONS);    // Weapons wave 4, six melee weapons (weapons-w4.js).
 
 // Any head hit kills, at any range, from the hip, through cover. Rather than a magic number per gun, the multiplier
 // is derived from each gun's weakest possible round (full falloff, un-aimed, through the most cover). The 1.25

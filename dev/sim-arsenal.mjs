@@ -8,6 +8,8 @@ import { createPlayerState, stepPlayer, currentSpread, weaponDef, MOVE } from '.
 import { WEAPONS, shotsToKill } from '../js/shared/weapons.js';
 import { V10_WEAPONS, V10_GUNS, V10_LIKE, V10_UNLOCKS } from '../js/shared/weapons-v10.js';
 import { W3_WEAPONS, W3_GUNS, W3_LIKE, W3_UNLOCKS } from '../js/shared/weapons-w3.js';
+import { W4_WEAPONS, W4_GUNS, W4_LIKE, W4_UNLOCKS } from '../js/shared/weapons-w4.js';
+import { FINISHERS, weaponFinisher, OPERATOR_FINISHERS } from '../js/shared/finishers.js';
 import { SIM_HZ, WEAPON_IDS, PRIMARY_IDS, SECONDARY_IDS, CATEGORIES, WEAPON_CATEGORY } from '../js/shared/constants.js';
 import { ATTACHMENTS, MOD_INFO, SLOTS, availableFor, isAvailable, modsFor, normalizeKit, packKit, unpackKit, trackFor, applyAttachments } from '../js/shared/attachments.js';
 import { GUN_LADDER } from '../js/shared/modes.js';
@@ -21,6 +23,7 @@ import { statBars, weaponFacts, compareStats } from '../js/ui/gunstats.js';
 const STEP = 1 / SIM_HZ, DT = 1 / 60;
 const NEW = Object.keys(V10_WEAPONS);
 const W3 = Object.keys(W3_WEAPONS);                    // Weapons wave 3 (weapons-w3.js), after the V10 guns.
+const W4 = Object.keys(W4_WEAPONS);                    // Weapons wave 4's melee (weapons-w4.js), after wave 3.
 const NEW_ATTACHMENTS = ['steady', 'ghostring', 'breacher', 'floated', 'satchel', 'tapedmag', 'bipod', 'handstop'];
 const OLD_IDS = ['ar', 'burst', 'heavyar', 'smg', 'pdw', 'tacsmg', 'shotgun', 'autoshot', 'coach', 'lmg', 'saw', 'rotary', 'dmr', 'battle', 'lever',
   'sniper', 'antimat', 'semisnipe', 'pistol', 'revolver', 'machpistol', 'deuce', 'launcher', 'thumper', 'golden',
@@ -128,8 +131,9 @@ test('sixteen new guns, every class gains at least one, and a Melee class', () =
 test('older ids keep their wire index; the new ones are appended, primaries then secondaries', () => {
   assert.deepEqual(WEAPON_IDS.slice(0, OLD_IDS.length), OLD_IDS);
   assert.deepEqual([...WEAPON_IDS.slice(OLD_IDS.length, OLD_IDS.length + NEW.length)].sort(), [...NEW].sort());
-  const w3 = WEAPON_IDS.slice(OLD_IDS.length + NEW.length);
+  const w3 = WEAPON_IDS.slice(OLD_IDS.length + NEW.length, OLD_IDS.length + NEW.length + W3.length);
   assert.deepEqual([...w3].sort(), [...W3].sort(), 'wave 3 after the V10 guns');
+  assert.deepEqual(WEAPON_IDS.slice(OLD_IDS.length + NEW.length + W3.length), W4, 'then wave 4\'s melee, in order, and nothing else');
   assert.deepEqual(w3.map(id => SECONDARY_IDS.includes(id)), [...w3].map(id => SECONDARY_IDS.includes(id)).sort(), 'wave 3: primaries, then secondaries');
   for (const id of W3) assert.equal(PRIMARY_IDS.includes(id) + SECONDARY_IDS.includes(id), 1, `${id} is in exactly one slot list`);
   assert.equal(new Set(WEAPON_IDS).size, WEAPON_IDS.length);
@@ -551,6 +555,63 @@ test('Gavel: three to the body out to 22 m, the quickest sidearm kill from 18 m 
   }
   assert.ok(ttk(w, 6) > ttk(WEAPONS.revolver, 6), 'the Verdict still wins a room');
   assert.ok(w.rpm < WEAPONS.pistol.rpm && SECONDARY_IDS.includes('battlepistol'));
+});
+
+/* ---------------- Weapons wave 4: six melee weapons (js/shared/weapons-w4.js) ---------------- */
+
+test('wave 4: six melee secondaries with their own swings, names, levels, finishers and a signature each; no bot carries one', () => {
+  assert.deepEqual(W4_GUNS.Melee, W4);
+  const names = new Set(Object.values(WEAPONS).map(w => w.name));
+  assert.equal(names.size, Object.keys(WEAPONS).length, 'every weapon has its own name');
+  const swings = new Set();
+  for (const id of W4) {
+    const w = WEAPONS[id];
+    assert.ok(w.melee && w.category === 'Melee' && SECONDARY_IDS.includes(id) && !PRIMARY_IDS.includes(id), id);
+    assert.ok(w.feel && w.feel.recoil, `${id} has its own kick`);
+    for (const key of ['sound', 'fx', 'reload', 'hold', 'force']) assert.ok(WEAPONS[W4_LIKE[id][key]], `${id} borrows a real ${key}`);
+    assert.ok(hasIcon(id), `${id} has an icon`);
+    assert.ok(availableFor(id).length === 1 && availableFor(id)[0].kind === 'sig', `${id}: one signature, no gun parts`);
+    assert.ok(weaponFinisher(id) && FINISHERS.includes(weaponFinisher(id)) && !OPERATOR_FINISHERS.includes(weaponFinisher(id)), `${id} has its own finisher`);
+    swings.add(w.swing);
+  }
+  assert.ok(availableFor('bat').length === 1, 'the Slugger has its signature');
+  assert.deepEqual([...swings].sort(), ['double', 'jab', 'level', 'overhead', 'slash', 'thrust']);
+  const levels = UNLOCK_SCHEDULE.filter(u => u.kind === 'weapon');
+  for (const u of W4_UNLOCKS) assert.equal(levels.filter(v => v.level === u.level).length, 1, `${u.id}: level ${u.level} is its own`);
+  const carried = new Set();
+  for (const mapId of Object.keys(MAPS)) for (const mode of ['tdm', 'dom', 'kc']) for (const r of buildRoster([], { botSkill: 'regular', teamSize: 6, mapId, mode, seed: 3 })) { carried.add(r.loadout.primary); carried.add(r.loadout.secondary); }
+  for (const id of W4) assert.ok(!carried.has(id), `bots never carry the ${id}`);
+});
+
+test('wave 4: each blade has its own identity: hits to kill, reach, lunge and pace', () => {
+  const W = WEAPONS, swing = id => 60 / W[id].rpm;
+  // Hits to kill (a burst's cuts each count).
+  for (const [id, n] of [['katana', 2], ['fireaxe', 1], ['shovel', 2], ['kama', 3], ['machete', 2], ['tonfa', 3]]) assert.equal(shotsToKill(W[id], 1.5), n, id);
+  // The Spade reaches furthest of any melee; the Kagero lunges furthest.
+  for (const id of WEAPON_IDS.filter(i => W[i].melee && i !== 'shovel')) assert.ok(W.shovel.range > W[id].range, `the Spade outreaches the ${id}`);
+  for (const id of WEAPON_IDS.filter(i => W[i].melee && i !== 'katana')) assert.ok(W.katana.lunge > (W[id].lunge ?? 0), `the Kagero lunges past the ${id}`);
+  // Kindling: one blow like the Maul, sooner again, but shorter.
+  assert.ok(swing('fireaxe') < swing('maul') && W.fireaxe.range < W.maul.range);
+  // The Nightstick swings fastest of all.
+  for (const id of WEAPON_IDS.filter(i => W[i].melee && i !== 'tonfa')) assert.ok(W.tonfa.rpm > W[id].rpm, `the Nightstick out-paces the ${id}`);
+  // Bushwhack: a little more reach than the Gaff, a shorter lunge, a hair slower.
+  assert.ok(W.machete.range > W.knife.range && W.machete.lunge < W.knife.lunge && W.machete.rpm < W.knife.rpm);
+});
+
+test('wave 4: every blade swings, reaches no further than its range, and the Gleaner cuts twice a pull', () => {
+  for (const id of W4) {
+    const w = WEAPONS[id];
+    assert.equal(killTime(id, w.range + 1.5, 60 / w.rpm - 0.05), -1, `${id}: a swing does nothing past its reach`);
+    const ps = shooter(id);
+    const x0 = ps.x;
+    const shots = run(ps, w.burst ? 0.3 : DT * 2, { fire: true });
+    assert.equal(shots.length, w.burst ? 2 : 1, `${id}: ${shots.length} cuts a pull`);
+    run(ps, 0.6);
+    const moved = ps.x - x0;
+    if (!w.lunge) assert.ok(Math.abs(moved) < 0.3, `${id} swings in place: ${moved.toFixed(2)} m`);
+    else assert.ok(moved > 0.1 && moved < 4.2, `${id} steps in: ${moved.toFixed(2)} m`);
+    assert.ok(Math.hypot(ps.vx, ps.vz) < 0.2, `${id} stops`);
+  }
 });
 
 if (!process.argv.includes('quick')) {

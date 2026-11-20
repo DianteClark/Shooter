@@ -34,6 +34,7 @@ import { EMBLEMS } from '../ui/emblems.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { RESET_AT } from './reset.js';
 import { W3_GUNS } from './weapons-w3.js';
+import { W4_GUNS } from './weapons-w4.js';
 // Extraction's exclusive items never reach the pool: bots cannot have earned them, and adding them must not reshuffle
 // the profiles the boards already show.
 const EXCLUSIVE = new Set(EX_UNLOCKS.map(u => u.item));
@@ -211,7 +212,7 @@ const SIDEARMS = {
 
 // Favourites come from the guns that existed when the pool was made: a gun added later (weapons wave 3 on) would
 // reshuffle every profile the boards show. New guns reach pool players as tryouts instead (tryoutOf, below).
-const LATER_GUNS = new Set(Object.values(W3_GUNS).flat());
+const LATER_GUNS = new Set([...Object.values(W3_GUNS).flat(), ...Object.values(W4_GUNS).flat()]);   // Wave 4's melee too.
 const GUNS_BY_CLASS = {};
 for (const id of PRIMARY_IDS) {
   const w = WEAPONS[id];

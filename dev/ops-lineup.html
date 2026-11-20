@@ -17,6 +17,7 @@
 //   &skin=base|field|2|3|4|5   the skin tier everyone wears      &team=0|1     &weapon=ar      &ops=a,b,c (a subset)
 //   &fx=holo|circuit|shimmer   try an active-skin effect on everyone (docs/OPERATORS-ART.md)
 //   &w=852&h=393  canvas size    &aim=0.8  facing (radians; 1.57 faces the camera)   &move=1  walk in place
+//   &zoom=2       move the camera in (close and front views)     &far=1  everyone drawn with the distance meshes
 import * as THREE from 'three';
 import { Characters } from '../js/render/characters.js';
 import { OPERATORS, SKIN_FX } from '../js/ui/operators.js';
@@ -49,11 +50,12 @@ if (SKIN_FX[q.get('fx')]) chars.skinLooks = chars.skinLooks.map(L => ({ ...L, pa
 const rows = Math.ceil(ids.length / per);
 const cam = new THREE.PerspectiveCamera(view === 'front' ? 30 : 26, W / H, 0.5, 200);
 const cz = (rows - 1) * gap * (view === 'front' ? 0.8 : 0.62);
-if (view === 'front') { cam.position.set(0, 1.6, cz + 15); cam.lookAt(0, 1.0, cz); }
+const zoom = +(q.get('zoom') || 1);
+if (view === 'front') { cam.position.set(0, 1.4 + 0.2 / zoom, cz + 15 / zoom); cam.lookAt(0, 1.0, cz); }
 else {
   const TILT = THREE.MathUtils.degToRad(55);
   // The match frames 30 m across the screen at its target; close-up frames the lineup.
-  const dist = view === 'game' ? 30 / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H)) : (per * gap + 1) / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H));
+  const dist = (view === 'game' ? 30 / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H)) : (per * gap + 1) / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H))) / (view === 'game' ? 1 : zoom);
   cam.position.set(0, dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
   cam.lookAt(0, 0, cz);
 }
@@ -62,7 +64,8 @@ const move = +(q.get('move') || 0);
 for (let i = 0; i < 90; i++) {
   time.value += 1 / 60; v.t = time.value;
   if (move) for (const p of players) { p.vx = Math.cos(p.aim) * 4; p.vz = Math.sin(p.aim) * 4; }
-  chars.update(v, 1 / 60, { localId: 'none', localTeam: 0, uav: false, revealAll: true });
+  if (q.get('far')) { chars.focusX = 500; chars.focusZ = 500; }
+  chars.update(v, 1 / 60, { localId: 'none', localTeam: +(q.get('team') || 0), uav: false, revealAll: !q.get('far') });
 }
 webgl.render(scene, cam);
 if (!q.get('nolabels')) {
@@ -78,6 +81,24 @@ if (!q.get('nolabels')) {
 const g = chars.torso.geometry.attributes.position.count, h = chars.head.geometry.attributes.position.count;
 const bySlot = m => { const o = {}; for (const v of m.geometry.attributes.aVar.array) { const k = Math.floor((v % 256) / 32); o[k] = (o[k] ?? 0) + 1; } return o; };
 window.stats = { torsoVerts: g, headVerts: h, torsoBySlot: bySlot(chars.torso), headBySlot: bySlot(chars.head), kitBySlot: [bySlot(chars.torsoKit), bySlot(chars.headKit)], liteT: chars.torsoLite.geometry.attributes.position.count, liteH: chars.headLite.geometry.attributes.position.count };
+// &bench=N: N more frames of pose and draw, timed (finished on the GPU each frame), for before/after cost checks.
+if (+q.get('bench')) {
+  const N = +q.get('bench'), px = new Uint8Array(4), gl = webgl.getContext();
+  const t0 = performance.now();
+  let tu = 0;
+  for (let i = 0; i < N; i++) {
+    time.value += 1 / 60; v.t = time.value;
+    for (const p of players) p.aim += 0.02;
+    const a = performance.now();
+    chars.update(v, 1 / 60, { localId: 'none', localTeam: 0, uav: false, revealAll: !q.get('far') });
+    tu += performance.now() - a;
+    webgl.render(scene, cam);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  }
+  window.stats.benchMs = +((performance.now() - t0) / N).toFixed(2);
+  window.stats.updateMs = +(tu / N).toFixed(2);
+  window.stats.calls = webgl.info.render.calls; window.stats.tris = webgl.info.render.triangles;
+}
 window.ready = true;
 </script>
 </body>
