@@ -76,12 +76,12 @@ export function shoreColour(map, x, z, c, noise) {
   const cells = map.cells;
   if (!cells) return null;
   if (inShallows(map, x, z)) return mix(WETSAND, SHOAL, 0.25 + noise(x * 0.2, z * 0.2) * 0.3);
-  const n = cells.n, S = cells.size, i = Math.floor(x / S), j = Math.floor(z / S);
+  const n = cells.n, nz = cells.nz ?? n, S = cells.size, i = Math.floor(x / S), j = Math.floor(z / S);
   let wet = 9, bank = 9;
   const R = Math.round(6 / S);
   for (let b = -R; b <= R; b++) for (let a = -R; a <= R; a++) {
     const ii = i + a, jj = j + b, d = Math.max(Math.abs(a), Math.abs(b));
-    const v = ii < 0 || jj < 0 || ii >= n || jj >= n ? 0 : cells.cls[jj * n + ii];
+    const v = cells.cls[Math.max(0, Math.min(nz - 1, jj)) * n + Math.max(0, Math.min(n - 1, ii))];   // Past the edge: as the edge.
     if (v === 0 || v === 1) wet = Math.min(wet, d);
     else if (v === 3) bank = Math.min(bank, d);
   }
@@ -136,20 +136,20 @@ const SHEET_MEMO = new WeakMap();
 function sheetField(map) {
   let f = SHEET_MEMO.get(map);
   if (f) return f;
-  const cells = map.cells, n = cells.n, cls = cells.cls;
-  const sh = (i, j) => (i < 0 || j < 0 || i >= n || j >= n ? 0 : cls[j * n + i] === 1 ? 1 : 0);
-  const A = new Float32Array((n + 1) * (n + 1));
-  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+  const cells = map.cells, n = cells.n, nz = cells.nz ?? n, cls = cells.cls;
+  const sh = (i, j) => (i < 0 || j < 0 || i >= n || j >= nz ? 0 : cls[j * n + i] === 1 ? 1 : 0);
+  const A = new Float32Array((n + 1) * (nz + 1));
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= n; i++) {
     let s = 0;
     for (let b = -2; b < 2; b++) for (let a = -2; a < 2; a++) s += sh(i + a, j + b) * (a === -2 || a === 1 || b === -2 || b === 1 ? 0.5 : 1);
     A[j * (n + 1) + i] = Math.round(0.55 * Math.max(0, Math.min(1, (s / 8 - 0.12) / 0.5)) * 100) / 100;
   }
   // Never over a causeway, pier or bridge: those stand clear of the water.
   const decks = (map.rooms ?? []).filter(r => r.floor === 'causeway' || r.floor === 'pier' || r.floor === 'bridge');
-  const skip = new Uint8Array(n * n);
+  const skip = new Uint8Array(n * nz);
   for (const r of decks) {
     for (let j = Math.floor(r.z / cells.size); j < Math.ceil((r.z + r.d) / cells.size); j++) for (let i = Math.floor(r.x / cells.size); i < Math.ceil((r.x + r.w) / cells.size); i++) {
-      if (i >= 0 && j >= 0 && i < n && j < n) skip[j * n + i] = 1;
+      if (i >= 0 && j >= 0 && i < n && j < nz) skip[j * n + i] = 1;
     }
   }
   f = { A, skip };
@@ -160,8 +160,8 @@ export function sheetTile(map, x0, z0, x1, z1) {
   const pos = [], alpha = [], y = SHEET_Y;
   if (!map.cells) return { pos, alpha };
   const { A, skip } = sheetField(map);
-  const n = map.cells.n, S = map.cells.size, n1 = n + 1;
-  const i0 = Math.max(0, Math.floor(x0 / S)), i1 = Math.min(n, Math.ceil(x1 / S)), j0 = Math.max(0, Math.floor(z0 / S)), j1 = Math.min(n, Math.ceil(z1 / S));
+  const n = map.cells.n, nz = map.cells.nz ?? n, S = map.cells.size, n1 = n + 1;
+  const i0 = Math.max(0, Math.floor(x0 / S)), i1 = Math.min(n, Math.ceil(x1 / S)), j0 = Math.max(0, Math.floor(z0 / S)), j1 = Math.min(nz, Math.ceil(z1 / S));
   for (let j = j0; j < j1; j++) {
     for (let i = i0; i < i1;) {
       const a = A[j * n1 + i], b = A[(j + 1) * n1 + i], c = A[(j + 1) * n1 + i + 1], d = A[j * n1 + i + 1];
@@ -187,10 +187,10 @@ export function sheetTile(map, x0, z0, x1, z1) {
 export function islandBank(ctx, w, k) {
   const { b, rnd } = ctx;
   const map = ctx.full ?? ctx.map, cells = map.cells;
-  const S = cells.size, n = cells.n;
+  const S = cells.size, n = cells.n, nz = cells.nz ?? n;
   const cls = (x, z) => {
     const i = Math.floor(x / S), j = Math.floor(z / S);
-    return i < 0 || j < 0 || i >= n || j >= n ? 0 : cells.cls[j * n + i];
+    return i < 0 || j < 0 || i >= n || j >= nz ? 0 : cells.cls[j * n + i];
   };
   const steep = !!w.channel;
   const under = map.underDecks ?? [];

@@ -546,7 +546,7 @@ function build() {
     id: 'jadefall', name: 'Jadefall', theme: 'jadefall', size: 'giant', region: 'mixed', width: W, height: H,
     walls: P.walls, spawns, lanes, nav, points: { dom: [], hard: [] },
     rooms: P.rooms, roofs: P.roofs, zones: P.zones, roads: P.roads, rails: [], regionSeeds: REGION_SEEDS,
-    shallows, underDecks, cells: { size: CELL, n: N, cls },
+    shallows, underDecks, cells: { size: CELL, n: N, nz: N, cls },
     modes: ['br'], large: true,
     br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias, reboundAreas },
     skipped,
