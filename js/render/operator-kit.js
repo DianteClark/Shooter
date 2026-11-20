@@ -299,6 +299,87 @@ export const BACK = {
     plate(b, [-0.3, 0.84, 0.13], [-0.3, 1.08, 0.23], 0.16, 0.025);
     tag(b, ACC, () => b.setPart(0).setColor(0x9ad8ff).box(-0.33, 0.2, -0.16, 0.03, 0.08, 0.06));
   },
+  // Operators remade (roadmap 49): one signature piece for every kit operator that shared its outline with others.
+  // Flint brings her own door: a breaching door leaning up her back, taller than her head, a team panel on it.
+  door(b) {
+    b.setPart(0).setColor(0x5a4a38);
+    plate(b, [-0.24, -0.04, 0], [-0.4, 0.94, 0], 0.5, 0.06);
+    b.setColor(0x2a2c30).box(-0.27, 0.3, 0, 0.08, 0.06, 0.52).box(-0.33, 0.66, 0, 0.08, 0.06, 0.52);
+    b.setPart(1);
+    plate(b, [-0.3, 0.68, 0], [-0.38, 0.86, 0], 0.4, 0.07);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffb14a).box(-0.33, 0.44, 0.17, 0.06, 0.04, 0.06));          // Handle.
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff4a2a).prismY(0.92, 0.98, -0.4, 0, 0.04, 0.03, 6));   // Charge light.
+  },
+  // Morse's field telephone: a wire reel across the top of her pack, team rims, copper wire, a whip aerial.
+  spool(b) {
+    b.setPart(0).setColor(0x3f4a3a).box(-0.26, 0.32, 0, 0.16, 0.38, 0.32, 0.03);
+    b.setColor(0x2a2e2a).prismZ(-0.2, 0.2, -0.3, 0.62, 0.05, 0.05, 6);
+    tag(b, KEEP, () => b.setPart(0).setColor(0xb87333).prismZ(-0.16, 0.16, -0.3, 0.62, 0.13, 0.13, 7));
+    b.setPart(1).prismZ(0.16, 0.2, -0.3, 0.62, 0.17, 0.17, 7).prismZ(-0.2, -0.16, -0.3, 0.62, 0.17, 0.17, 7);
+    b.setPart(0).setColor(0x181a1c).prismY(0.5, 1.1, -0.34, -0.12, 0.016, 0.008, 4);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffcc33).box(-0.345, 0.38, 0.06, 0.012, 0.05, 0.08));
+  },
+  // Nyx's twin blades crossed on her back, team hilts over the shoulders.
+  blades(b) {
+    b.setPart(0).setColor(0x22262c).box(-0.23, 0.36, 0, 0.1, 0.3, 0.28, 0.02);
+    b.setColor(0x1a1c20);
+    seg(b, [-0.28, 0.1, 0.26], [-0.3, 0.78, -0.22], 0.03, 0.012, 4);
+    seg(b, [-0.28, 0.1, -0.26], [-0.3, 0.78, 0.22], 0.03, 0.012, 4);
+    b.setPart(1);
+    seg(b, [-0.3, 0.78, -0.22], [-0.31, 0.92, -0.32], 0.035, 0.035, 4);
+    seg(b, [-0.3, 0.78, 0.22], [-0.31, 0.92, 0.32], 0.035, 0.035, 4);
+    tag(b, ACC | ELITE, () => {
+      b.setPart(0).setColor(0x5dff7a);
+      seg(b, [-0.31, 0.18, 0.2], [-0.32, 0.7, -0.17], 0.012, 0.006, 4);
+      seg(b, [-0.31, 0.18, -0.2], [-0.32, 0.7, 0.17], 0.012, 0.006, 4);
+    });
+  },
+  // Rook's sledgehammer slung corner to corner, its head over the shoulder: a block and a bar from above.
+  sledge(b) {
+    b.setPart(0).setColor(0x34373f).box(-0.24, 0.34, 0, 0.12, 0.34, 0.34, 0.03);
+    b.setColor(0x6a4a2a);
+    seg(b, [-0.3, -0.06, 0.3], [-0.32, 0.86, -0.24], 0.028, 0.028, 4);
+    b.setColor(0x3a3f47).box(-0.32, 0.9, -0.26, 0.16, 0.14, 0.3);
+    b.setPart(1).box(-0.32, 0.9, -0.26, 0.17, 0.15, 0.08);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xffb000).box(-0.32, 0.98, -0.26, 0.12, 0.012, 0.24));
+  },
+  // Courier's hard case, flat on her back on a team strap, the lock lit.
+  briefcase(b) {
+    b.setPart(0).setColor(0x8a9098).box(-0.27, 0.38, 0, 0.1, 0.36, 0.5, 0.02);
+    b.setColor(0x2a2c30).box(-0.27, 0.58, 0, 0.06, 0.04, 0.14);
+    b.setPart(1).box(-0.25, 0.38, 0, 0.12, 0.06, 0.54);
+    b.setPart(0).setColor(0x3a3430).box(-0.02, 0.1, 0.26, 0.18, 0.14, 0.08);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffcc33).box(-0.325, 0.46, 0.12, 0.012, 0.04, 0.04).box(-0.325, 0.46, -0.12, 0.012, 0.04, 0.04));
+  },
+  // Linnet's scavenger frame: a pack taller than she is, a bedroll on top, a pot and a lamp hanging off it.
+  junkpack(b) {
+    b.setPart(0).setColor(0x5a5440).box(-0.3, 0.58, 0, 0.22, 0.9, 0.42, 0.03);
+    b.setColor(0x2a2c30).box(-0.42, 0.58, 0.2, 0.03, 1.0, 0.03).box(-0.42, 0.58, -0.2, 0.03, 1.0, 0.03);
+    b.setPart(1).box(-0.3, 0.66, 0, 0.23, 0.08, 0.43);
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x8a7a5a).prismZ(-0.28, 0.28, -0.32, 1.1, 0.09, 0.09, 6);
+      b.setColor(0x6a6e74).prismY(0.3, 0.44, -0.3, 0.27, 0.07, 0.08, 6);
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0xffb14a).prismY(0.2, 0.3, -0.36, -0.25, 0.04, 0.04, 6));
+  },
+  // Garrison's company radio: a big set, a tall whip with a team pennant flying from it.
+  bigradio(b) {
+    b.setPart(0).setColor(0x3f4a3a).box(-0.29, 0.36, 0, 0.2, 0.5, 0.4, 0.03);
+    b.setColor(0x181a1c).prismY(0.6, 1.62, -0.34, -0.14, 0.018, 0.01, 4);
+    b.box(-0.2, 0.5, 0.22, 0.06, 0.12, 0.05);
+    b.setPart(1);
+    plate(b, [-0.34, 1.56, -0.14], [-0.44, 1.48, 0.2], 0.16, 0.012);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffcc33).box(-0.395, 0.46, -0.06, 0.012, 0.06, 0.12));
+  },
+  // Brigid's champion's cape, in the team colour with a gold clasp.
+  cape(b) {
+    b.setPart(1).box(-0.25, 0.2, 0, 0.04, 0.82, 0.62);
+    b.prismY(0.56, 0.66, -0.05, 0, 0.36, 0.3, 8, Math.PI / 8);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffd659).box(0.18, 0.6, 0.18, 0.04, 0.05, 0.05).box(0.18, 0.6, -0.18, 0.04, 0.05, 0.05);
+      b.box(-0.275, -0.17, 0, 0.012, 0.04, 0.62);
+    });
+  },
 };
 
 export const EXTRA = {
@@ -392,6 +473,15 @@ export const EXTRA = {
     plate(b, [0.2, 0.62, 0.2], [0.2, 0.08, -0.22], 0.1, 0.03);
     plate(b, [-0.19, 0.62, 0.2], [-0.19, 0.08, -0.22], 0.1, 0.03);
     tag(b, ACC, () => b.setPart(0).setColor(0xffd659).prismX(0.215, 0.235, 0.4, 0.04, 0.05, 0.05, 8));
+  },
+  // Nightjar's hunting cloak: a mantle wider than the shoulders with a team edge, the cloak to the knees behind and
+  // the hood down on the back.
+  cloak(b) {
+    b.setPart(0).setColor(0x22282c).prismY(0.54, 0.68, -0.04, 0, 0.38, 0.27, 8, Math.PI / 8);
+    b.box(-0.27, 0.08, 0, 0.05, 0.86, 0.62);
+    b.box(-0.25, 0.62, 0, 0.12, 0.12, 0.28);
+    b.setPart(1).prismY(0.52, 0.56, -0.04, 0, 0.385, 0.385, 8, Math.PI / 8);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff4a2a).box(0.2, 0.62, 0, 0.04, 0.05, 0.08));
   },
 };
 
@@ -547,6 +637,58 @@ export const GEAR = {
     b.prismY(0.295, 0.44, -0.01, 0, 0.19, 0.16, 8, Math.PI / 8);
     b.setPart(1).prismY(0.3, 0.34, -0.01, 0, 0.195, 0.19, 8, Math.PI / 8);
     tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xd9b44a).box(0.16, 0.32, 0.08, 0.03, 0.04, 0.04));
+  },
+  // Operators remade (roadmap 49). Sparrow's helmet with a white cross on the crown: a medic from above.
+  medhelm(b) {
+    GEAR.helmet(b);
+    tag(b, ACC, () => b.setPart(0).setColor(0xf2f2ea).box(-0.01, 0.405, 0, 0.24, 0.025, 0.07).box(-0.01, 0.405, 0, 0.07, 0.025, 0.24));
+  },
+  // Garrison's wide, flat dish helmet: the broadest helmet on the roster from above.
+  brodie(b) {
+    b.setPart(1).prismY(0.25, 0.28, 0, 0, 0.34, 0.34, 10);
+    b.prismY(0.28, 0.42, -0.005, 0, 0.21, 0.1, 10);
+    b.setPart(0).setColor(0x23262b).box(0.1, 0.16, 0.17, 0.03, 0.18, 0.02).box(0.1, 0.16, -0.17, 0.03, 0.18, 0.02);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xffcc33).box(0.0, 0.43, 0, 0.18, 0.02, 0.05));
+  },
+  // Vesper's cap under a scrim veil that falls over her shoulders; a flip-down monocular with the elite set.
+  veilhood(b) {
+    b.setPart(1).prismY(0.26, 0.39, 0, 0, 0.19, 0.18, 8, Math.PI / 8);
+    b.setPart(0).setColor(0x2a2c30).box(0.19, 0.27, 0, 0.14, 0.022, 0.26);
+    b.setColor(0x5a6040).prismY(0.0, 0.3, -0.08, 0, 0.32, 0.2, 7);
+    b.setColor(0x4c5a32);
+    for (const [x, z] of [[-0.24, 0.16], [-0.3, -0.06], [-0.12, -0.27], [-0.1, 0.28]]) b.box(x, 0.12, z, 0.08, 0.12, 0.08);
+    tag(b, ELITE, () => b.setPart(0).setColor(0x1a1c20).prismX(0.12, 0.26, 0.24, -0.06, 0.035, 0.035, 6));
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xc8ff6a).prismX(0.26, 0.27, 0.24, -0.06, 0.03, 0.03, 6));
+  },
+  // Nyx's hood pulled up over the four-eyed night set.
+  nvghood(b) {
+    b.setPart(1).prismY(0.04, 0.38, -0.04, 0, 0.24, 0.21, 8, Math.PI / 8);
+    b.prismY(0.38, 0.48, -0.06, 0, 0.21, 0.08, 8, Math.PI / 8);
+    b.setPart(0).setColor(0x1a1c20).box(0.21, 0.3, 0, 0.08, 0.07, 0.14);
+    b.box(0.25, 0.24, 0, 0.08, 0.08, 0.24);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0x5dff7a);
+      for (const z of [-0.1, -0.035, 0.035, 0.1]) b.prismX(0.29, 0.31, 0.24, z, 0.026, 0.026, 6);
+    });
+  },
+  // Corvid's gravedigger's cowl, peaked to the rear, no fur.
+  cowl(b) {
+    b.setPart(1).prismY(0.02, 0.36, -0.05, 0, 0.25, 0.22, 8, Math.PI / 8);
+    b.prismY(0.36, 0.6, -0.14, 0, 0.21, 0.0, 8, Math.PI / 8);
+    b.setPart(0).setColor(0x1e2024).prismY(0.0, 0.08, -0.05, 0, 0.27, 0.26, 8, Math.PI / 8);
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0x9ad8ff).box(0.18, 0.06, 0.12, 0.03, 0.08, 0.03));
+  },
+  // Brigid's gold laurel over her hair; a team band under it.
+  laurel(b) {
+    b.setPart(1).prismY(0.26, 0.3, -0.005, 0, 0.182, 0.18, 8, Math.PI / 8);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffd659);
+      for (let i = 0; i < 9; i++) {
+        const a = ((i + 1) / 10) * TAU;
+        b.box(Math.cos(a) * 0.19 - 0.005, 0.32 + (i % 2) * 0.02, Math.sin(a) * 0.19, 0.08, 0.04, 0.05);
+      }
+    });
+    tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff3a2a).prismX(0.17, 0.19, 0.33, 0, 0.03, 0.03, 6));
   },
 };
 
