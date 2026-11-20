@@ -8,8 +8,9 @@ card, the radio subtitle), the squad wiped (the failed panel: reason, Retry now,
 checkpoint, every step's progress kept), then the rest of the steps forced done on the host. The results screen says
 Mission complete with the stars and the campaign's XP lines; the save has mission 1 cleared, its calling card is
 earned, and the Campaign tab now opens mission 2. Then, with every mission opened in the save, a look at mission 2's
-watchmen and their torches and at mission 8's boss with his barrage rings, and the briefing at 667x375. Screenshots go
-to outdir (default /tmp/campaign). Fails on any console error and on HUD panels that spill off the screen.
+watchmen and their torches and at mission 8's boss with his barrage rings, a friend room set to mission 3 (one squad
+of four) started, the briefing at 667x375, and a guest over the local net in the host's squad, following the script.
+Screenshots go to outdir (default /tmp/campaign). Fails on any console error and on HUD panels that spill off the screen.
 """
 import asyncio, subprocess, sys, time, os, json
 from playwright.async_api import async_playwright
@@ -43,6 +44,69 @@ OVERFLOW = """((sels) => {
 OPEN_ALL = """(() => { const s = JSON.parse(localStorage.getItem('switchyard.save'));
   s.cp = { m1: [2, 1, 400], m2: [2, 0, 500], m3: [2, 0, 500], m4: [2, 0, 500], m5: [2, 0, 500], m6: [2, 0, 500], m7: [2, 0, 500] };
   localStorage.setItem('switchyard.save', JSON.stringify(s)); })()"""
+
+
+# Two tabs over the local net (?net=local): the host opens a campaign room, a guest joins and readies, the host starts;
+# the guest's phone shows the mission (its objective card) and follows the host's script to the next step.
+async def coop_net(browser):
+    print('Co-op over the local net: a guest in the squad')
+    ctx = await browser.new_context(viewport={'width': 667, 'height': 375}, has_touch=True, is_mobile=True)
+    async def page(tag, name):
+        pg = await ctx.new_page()
+        pg.on('console', lambda m: errors.append(f'{tag}: {m.text}') if m.type == 'error' else None)
+        pg.on('pageerror', lambda e: errors.append(f'{tag}: PAGEERR {e}'))
+        await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local', timeout=120000)
+        await pg.wait_for_timeout(900)
+        await pg.evaluate(f"window.__game.Progress.name='{name}'; window.__game.Progress.setFlag('tutorialOffered')")
+        await pg.reload(timeout=120000)
+        await pg.wait_for_timeout(1000)
+        return pg
+    host = await page('host', 'Hosty')
+    for sel in ['[data-act="multiplayer"]', '[data-act="mpTab"][data-tab="campaign"]', '[data-act="cpFriends"]']:
+        await host.locator(sel).first.click()
+        await host.wait_for_timeout(600)
+    await host.wait_for_function(f'{G}.code')
+    code = await host.evaluate(f'{G}.code')
+    guest = await page('guest', 'Guesty')
+    pages = [host, guest]
+    async def juggle():
+        while True:
+            for pg in pages:
+                try: await pg.bring_to_front()
+                except Exception: pass
+                await asyncio.sleep(0.12)
+    juggler = asyncio.create_task(juggle())
+    try:
+        await guest.evaluate(f"window.__game.join('{code}')")
+        await host.wait_for_function(f'{G}.lobby.humans.length === 2', timeout=60000)
+        await guest.wait_for_selector('[data-act="toggleReady"]', timeout=20000)
+        await guest.locator('[data-act="toggleReady"]').first.click()
+        await host.wait_for_function(f'{G}.lobby.humans.every(h => h.ready || h.host)', timeout=20000)
+        await host.locator('[data-act="start"]').first.click()
+        try: await guest.wait_for_function(f'{G}.match?.interp.newest?.points?.obj?.cp', timeout=60000)
+        except Exception:
+            # The two-tab channel sometimes leaves a guest without snapshots; the same phone rejoins its held slot.
+            print('     guest has no snapshots: rejoining', flush=True)
+            await guest.reload()
+            await guest.wait_for_timeout(1500)
+            await guest.evaluate(f"window.__game.join('{code}')")
+            await guest.wait_for_function(f'{G}.match?.interp.newest?.points?.obj?.cp', timeout=90000)
+        await host.wait_for_function(f'{G}.match.sim.rules.state === 1', timeout=90000)
+        await guest.wait_for_timeout(3000)
+        a = await guest.evaluate(f"({{ card: document.querySelector('.cp-card b')?.textContent, team: {G}.match.sim.byId.get({G}.match.localId).team, mode: {G}.match.mode }})")
+        check('the guest is in the squad and sees the mission', a['mode'] == 'cp' and a['team'] == 0 and bool(a['card']), a)
+        step = await host.evaluate(f"{G}.match.sim.rules.stepI")
+        await host.evaluate(f"{G}.match.sim.rules._complete()")
+        nxt = await host.evaluate(f"{G}.match.sim.rules.cur.label")
+        ok = False
+        for _ in range(60):
+            if await guest.evaluate("document.querySelector('.cp-card b')?.textContent") == nxt: ok = True; break
+            await guest.wait_for_timeout(250)
+        check('  the host moves the script on: the guest\'s card follows', ok, [step, nxt])
+        await guest.screenshot(path=f'{OUT}/21-guest-mission-667x375.png')
+    finally:
+        juggler.cancel()
+        await ctx.close()
 
 
 async def main():
@@ -273,6 +337,7 @@ async def main():
             await tap('[data-act="cpBrief"]', 600)
             await shot('15-briefing')
             await fit(['.cpb-side', '.cpb-go', '.cpb-title'], 'briefing 667')
+            await coop_net(browser)
             await browser.close()
     finally:
         server.terminate()
