@@ -20,7 +20,7 @@ import { uploadUsed } from './dynbuf.js';
 import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
-import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
+import { blankPose, emotePose, finPose, CALL_PROPS, CALL_DUR, callInOf } from './finisher-anim.js';    // Finishers, emotes, streak call-ins.
 import { swingDurOf, swingKindOf, swingPose, swingSideNext } from './melee-anim.js';   // Melee swings.
 import { CYCLE, cycleKindOf, cyclePose } from './gun-actions.js';   // Pump, bolt and lever worked between shots.
 import { EMOTES, getFinisher } from '../shared/finishers.js';
@@ -1102,6 +1102,12 @@ export class Characters {
     if (!r || !def || r.finK) return;
     r.emote = def.id; r.emoteT = 0; r.emoteDur = def.dur;
   }
+  // A scorestreak called in (the 'streak' event): a laptop, a flare or a radio for a moment (finisher-anim.js).
+  onCallIn(id, kind) {
+    const r = this.rigs.get(id), c = callInOf(kind);
+    if (!r || !c || r.finK) return;
+    r.emote = c; r.emoteT = 0; r.emoteDur = CALL_DUR;
+  }
   onThrow(id, kind) { const r = this.rigs.get(id); if (r) { r.throwT = 1; r.throwKind = kind || 'frag'; } }
 
   // Replaces a rig with flying parts. Returns false when the rig has not been drawn recently (never seen).
@@ -1182,7 +1188,8 @@ export class Characters {
     }
     if (r.emote) {
       r.emoteT += dt;
-      if (r.emoteT >= r.emoteDur || speed > 0.8 || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
+      const call = CALL_PROPS[r.emote] !== undefined;     // A call-in plays on the move; an emote stops for it.
+      if (r.emoteT >= r.emoteDur || (speed > 0.8 && !call) || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
       return emotePose(r.emote, r.emoteT, r.emoteDur, r.fp);
     }
     return NO_POSE;
@@ -1557,6 +1564,16 @@ export class Characters {
           const fx = Math.cos(faceA), fz = Math.sin(faceA), hx3 = side < 0 ? A.lx : A.rx, hy3 = side < 0 ? A.ly : A.ry, hz3 = side < 0 ? A.lz : A.rz;
           _v.set(p.x + fx * hx3 - fz * hz3, hy3 * look.h, p.z + fz * hx3 + fx * hz3);
           _b.lerp(_v, hw);
+        }
+        const prop = side < 0 && r.emote ? CALL_PROPS[r.emote] : null;
+        if (prop && hw > 0.5 && nH < MAX_PLAYERS) {
+          // The call-in's prop in the left hand, square to the body; a flare or a laptop screen glows.
+          const sz = prop.size;
+          _s.set(sz[0], sz[1], sz[2]);
+          _m.copy(_body).scale(_s).setPosition(_b);
+          _m.toArray(held.instanceMatrix.array, nH * 16);
+          this._writeFx(held, nH, fade, prop.glow ? Math.max(flash, 0.35 + 0.25 * Math.sin(clock * 18)) : flash, team, 0, prop.rgb);
+          nH++;
         }
         // Elbows hang out and down; the pole leans back so the hands read as gripping forward.
         solveJoint(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 0.4 * look.l, 0.44 * look.l,

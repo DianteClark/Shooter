@@ -383,7 +383,7 @@ export class GameRenderer {
         }
         // Screen punches: a multi-kill, a kill streak and calling in your own scorestreak land a small camera kick.
         case 'medal': if (ev.id === localId && PUNCH[ev.medal]) this.punch(PUNCH[ev.medal]); break;
-        case 'streak': if (ev.id === localId) this.punch(0.05); break;
+        case 'streak': if (ev.id === localId) this.punch(0.05); chars.onCallIn(ev.id, ev.kind); break;   // Laptop, flare or radio.
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;

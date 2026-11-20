@@ -300,6 +300,45 @@ const EMOTE = {
     o.head = -up * 0.25 + nod * 0.35; o.lean = -up * 0.1; o.drop = -up * 0.03;
   },
 };
+// Scorestreak call-ins (ROADMAP item 52): played like emotes (never on the wheel or the wire: characters.js onCallIn
+// starts one from the 'streak' event), with a prop in the hands (CALL_PROPS). The gun is slung for the laptop.
+Object.assign(EMOTE, {
+  // Air support and drones: a laptop held low in both hands, head down, a few quick taps, then a nod up.
+  'call:laptop'(t, o, dur) {
+    const u = t / dur, tap = Math.abs(Math.sin(t * 22)) * 0.03 * (1 - seg(u, 0.7, 0.8));
+    o.hide = hold(u, 0, 0.12, 0.8, 0.95) * 0.95;
+    o.lw = 1; o.lx = 0.42; o.ly = 1.02 + tap; o.lz = -0.12;
+    o.rw = 1; o.rx = 0.42; o.ry = 1.02 + tap * 0.6; o.rz = 0.12;
+    o.head = 0.42 * (1 - seg(u, 0.72, 0.85)) - 0.1 * seg(u, 0.75, 0.9); o.lean = 0.12;
+  },
+  // Drops and the airstrike: a flare struck and held up, then thrown out ahead.
+  'call:flare'(t, o, dur) {
+    const u = t / dur, up = seg(u, 0, 0.25), thr = seg(u, 0.5, 0.62);
+    o.lw = 1 - seg(u, 0.75, 0.95); o.lx = 0.15 + thr * 0.85; o.ly = 1.2 + up * 0.7 - thr * 0.35; o.lz = -0.32 + thr * 0.1;
+    o.twist = up * 0.25 - thr * 0.4; o.lean = -up * 0.05 + thr * 0.15; o.head = -up * 0.2;
+  },
+  // Machines and artillery: a handset to the ear, a word, then a point at where it goes.
+  'call:radio'(t, o, dur) {
+    const u = t / dur, ear = hold(u, 0, 0.15, 0.6, 0.72), point = hold(u, 0.62, 0.74, 0.9, 1);
+    o.lw = Math.max(ear, point); o.lx = ear > point ? 0.1 : 1.0; o.ly = ear > point ? 1.62 : 1.45; o.lz = ear > point ? -0.2 : -0.3;
+    o.head = -0.1 * ear + 0.15 * Math.sin(t * 9) * ear * 0.3; o.twist = -point * 0.3;
+  },
+});
+// The prop in the left hand per call-in: size (metres) and colour, and which streaks call which.
+export const CALL_PROPS = {
+  'call:laptop': { size: [0.34, 0.035, 0.26], rgb: [0.2, 0.22, 0.24], glow: [0.35, 0.85, 1.0] },
+  'call:flare': { size: [0.05, 0.24, 0.05], rgb: [1.0, 0.25, 0.15], glow: [1.0, 0.55, 0.3] },
+  'call:radio': { size: [0.08, 0.2, 0.06], rgb: [0.28, 0.32, 0.22], glow: null },
+};
+const CALL_OF = {
+  uav: 'laptop', overwatch: 'laptop', blackbird: 'laptop', recon: 'laptop', missile: 'laptop', swarm: 'laptop', hound: 'laptop',
+  jammer: 'laptop', bombrun: 'laptop', emp: 'laptop', sweep: 'laptop',
+  resupply: 'flare', airdrop: 'flare', plates: 'flare', strike: 'flare',
+  mortar: 'radio', chopper: 'radio', vulture: 'radio', gunship: 'radio', rover: 'radio', dome: 'radio', turret: 'radio', juggernaut: 'radio',
+};
+export const CALL_DUR = 1.4;
+export const callInOf = kind => (CALL_OF[kind] ? 'call:' + CALL_OF[kind] : null);
+
 const TARGETS = new Set(['lx', 'ly', 'lz', 'rx', 'ry', 'rz']);
 export function emotePose(id, t, dur, o) {
   clearPose(o);

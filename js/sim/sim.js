@@ -1982,7 +1982,9 @@ export class Sim {
   _engineerMult(p, mult) { return p.ps.perks.includes('engineer') ? mult : 1; }
 
   _launchStrike(p, spot) {
-    this._emit({ t: 'streak', id: p.id, kind: 'strike', team: p.team, x: round2(spot.x), z: round2(spot.z) });
+    // dx, dz (the line's direction) and delay (to the first bomb) let the renderer fly the jets along it.
+    this._emit({ t: 'streak', id: p.id, kind: 'strike', team: p.team, x: round2(spot.x), z: round2(spot.z), dx: round2(spot.dx ?? 1), dz: round2(spot.dz ?? 0),
+      delay: STRIKE_DELAY, step: STRIKE_STEP, n: STRIKE_COUNT, gap: STRIKE_SPACING });
     for (let i = 0; i < STRIKE_COUNT; i++) {
       const k = i - (STRIKE_COUNT - 1) / 2;
       this.strikes.push({
