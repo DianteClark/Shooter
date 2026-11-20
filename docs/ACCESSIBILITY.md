@@ -1,4 +1,4 @@
-# Accessibility (roadmap item 23)
+# Accessibility (roadmap items 23 and 63)
 
 Options > Accessibility (the button on the Graphics heading, `js/ui/a11yscreen.js`) holds every setting below. Each is
 an Options key (`js/ui/options.js`), applied in `main.js applyOptions`, kept on the phone like the rest of Options.
@@ -10,6 +10,16 @@ an Options key (`js/ui/options.js`), applied in `main.js applyOptions`, kept on 
 | Reduce shake and flashes | `calm` | `false`, `true` |
 | Sound cues | `cues` | `nades` (grenades), `off`, `all` (grenades and steps) |
 | Touch layout | `layout` | `{}` (the default layout), or the editor's places and sizes |
+| High-contrast HUD | `hudContrast` | `false`, `true` (roadmap 63) |
+| Gunfire marks | `shotCues` | `false`, `true` (roadmap 63) |
+| Sound captions | `captions` | `false`, `true` (roadmap 63) |
+| Haptics | `haptics` | `false`, `true` (also Options > Vibrate on hits; only where `navigator.vibrate` exists) |
+| Left-handed | `lefty` | `false`, `true` (also Options > Controls) |
+| Controller aim | `padAim` | `hold`, `toggle` (roadmap 63) |
+| Controller sprint | `padSprint` | `toggle`, `hold` (roadmap 63) |
+
+Every key lives in `switchyard-options`, which the progress reset keeps (`js/shared/reset.js KEEP_KEYS`); the node test
+`dev/help-videos-test.mjs` loads the new keys through a reset.
 
 ## Colour modes
 
@@ -102,12 +112,55 @@ panel checks; `dev/ui-hud-layout-test.py` covers the default layout in every mod
 
 Text callouts already cover the other key sounds (incoming mortars, enemy streaks, UAV, EMP, the bomb).
 
+## Roadmap 63: accessibility depth
+
+What was already in place (above) was kept as it was; this pass added only what was missing.
+
+- **High-contrast HUD** (`hudContrast`, `html[data-hc]`): the solid HUD plates, heavier hit marks, damage arcs and button
+  outlines of the High contrast colour mode, as a switch of its own so it combines with Protanopia, Deuteranopia or
+  Tritanopia; plus a solid dark lift under HUD text, solid kill feed rows, and full-strength sound marks. Rules in
+  `css/game.css` next to the colour mode ones.
+- **Gunfire marks** (`shotCues`, `js/ui/cues-hud.js`): an enemy's unsuppressed shot within 40 m draws a short dashed red
+  arc on its side (dashed, so it differs from the solid step arc in shape as well as colour), fading in 0.8 s. Four at
+  most. Suppressed fire is left out, as the minimap leaves it out.
+- **Sound captions** (`captions`, same file): one line per important sound with the side it came from, as the screen
+  shows it (`sideOf`: right, below left, above...): gunfire, explosions and grenade blasts within 34 m, enemy streaks
+  called, EMP. Three lines at most, each for 3 s; a repeat within 2.5 s refreshes its line instead of adding one. The
+  layer is `role="log" aria-live="polite"`. The campaign radio already has subtitles (`js/ui/cp-hud.js`); captions and
+  the help video captions follow Menu text size.
+- **Cost when off**: `HUD.onEvents` hands events to the cues only when gunfire marks or captions are on, and their fade
+  runs only then: nothing is added to a frame with both off. The cue layer is hidden when all three cue settings are off.
+- **Hold or toggle** (`js/ui/gamepad.js`): a controller's Aim held (default) or toggled (a press aims in, the next aims
+  out, sprinting aims out); Sprint toggled by a click (default) or held. Touch aim is a hold by nature; voice has Open or
+  Hold to talk (Options > Audio > Mic).
+- **Screen-reader names** (`js/ui/aria.js`, `watchLabels` from main.js): one pass over the menu and overlay layers (never
+  the HUD) at most once a frame after they change. Every control gets a name: its own `aria-label`, its words, a
+  title, or its action (`data-act="optSquadClear"` -> "Squad clear"); clickable non-buttons get `role="button"`, sheets
+  `role="dialog"`, icons `aria-hidden`. Help's tabs are a `tablist` with `aria-selected`; Accessibility's switches are
+  `role="switch"` with `aria-checked`, its choices `radiogroup`/`radio`. The help video player is a labelled dialog with
+  `aria-live` captions; the tutorial card and mode tips are live regions.
+- **Reduced motion audit**: scripted one-off animations outside `js/ui/motion.js` played whatever the setting. They now
+  go through `anim(el, frames, opts)` (motion.js), which under reduced motion (the system setting or Reduce shake and
+  flashes) drops transforms and filters from the keyframes, keeps fades, and skips frames left with nothing: the HUD's
+  weapon, score, timer, countdown, banner, callout, streak tile and heal pops, the Pro perk toast, the tutorial card and
+  its nudge and finish stamp, the results screen's label pop. Already respecting it before: the hit punch, respawn
+  flash, kill marker, damage numbers, XP float and feed entrance (they check `reducedMotion()` themselves), and every
+  `motion.js` helper. The help video player and mode tips have no movement of their own beyond the game view.
+- **Colour modes** reach team colours, enemy outlines (dashed rings), the minimap, the HUD and the hit and kill markers
+  already (the kill marker reads `--c-red`, which the palette swaps); the new gunfire marks read `--c-red` too.
+
 ## Menu text size
 
 Large and Larger raise the type tokens (`--fs-micro` to `--fs-title`) inside menus and overlays. The HUD has its own
 HUD size.
 
 ## Tests
+
+`python3 dev/ui-access-test.py [port]` (roadmap 63): the new Accessibility rows (named switches and radios), every visible
+menu control named on the title, Options, Accessibility and every Help tab, the calm keyframes, high contrast, the
+gunfire mark's side and the captions in a match (and their text size), the layer hidden with everything off, controller
+aim toggle and sprint hold through a fake pad, first-time tips (once, Got it, Show again) and the tutorial's controller
+words. `node dev/help-videos-test.mjs quick` covers the pure parts.
 
 `python3 dev/ui-a11y-test.py [port]`: each colour mode changes the palette (tokens, TEAMS, rarity; in a match the
 renderer's colours, the ring shape and a HUD element), the editor's drag, overlap push, top band and resize, Save, the
