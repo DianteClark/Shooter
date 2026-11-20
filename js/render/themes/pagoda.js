@@ -26,11 +26,11 @@ THEMES.pagoda = {
     concrete: 0x86848a, crate: 0x7a5a3a, crateD: 0x4a3626,
     rail: 0x8a8e96, tie: 0x3a302a, hazardY: 0xa8803a, hazardK: 0x262228,
     paint: 0xd0c8b8, glow: 0xffc070, glowCool: 0xc8d8ff,
-    moss: 0x4e5a36, mossD: 0x3e4a2e, mossL: 0x5e6a3e, rake: 0xa8a6ae, rakeD: 0x8e8c96, step: 0x76727a, stepD: 0x5c5862,
+    moss: 0x4e5a36, mossD: 0x3e4a2e, mossL: 0x5e6a3e, rake: 0x8a8892, rakeD: 0x787682, step: 0x76727a, stepD: 0x5c5862,
     plaster: 0xd2cabc, plasterD: 0xb4ac9e, tile: 0x34383e, tileD: 0x26292e, timber: 0x4a3226, timberD: 0x30201a,
     vermilion: 0xa83a26, vermilionD: 0x7a2a1e, black: 0x1e1c20, gold: 0xb08a3a, stone: 0x7a7680, stoneD: 0x5a5662,
     maple: 0xb03a22, mapleO: 0xc0602a, mapleY: 0xb88a30, mapleD: 0x7e2a1c, bark: 0x3a2c26, bamboo: 0x8a8a52, bambooD: 0x6a6a3e,
-    thatch: 0x7a6a4a, paper: 0xf0d8a8, cedar: 0x24302a, cedarD: 0x1c2620, koi: 0xd06a2a, lily: 0x3e5a36,
+    leafbed: 0x5a3626, thatch: 0x7a6a4a, paper: 0xf0d8a8, cedar: 0x24302a, cedarD: 0x1c2620, koi: 0xd06a2a, lily: 0x3e5a36,
   }),
   containers: [0x5a3a2c, 0x3e4a3a, 0x4e4434],
   weather: { fields: [
@@ -59,7 +59,7 @@ function pagGround(ctx) {
     ctx.groundWet = 0.1;
     if (x < 0 || z < 0 || x > W || z > H) {
       const n = noise(x * 0.1, z * 0.1);
-      return sc(n > 0.55 ? I.mapleD : n > 0.4 ? I.mossD : I.cedarD, k * 0.8);
+      return sc(n > 0.58 ? I.leafbed : n > 0.4 ? I.mossD : I.cedarD, k * 0.8);
     }
     // Raked gravel round the pagoda and in each garden.
     const garden = gardens.some(g => Math.hypot(x - g.x - g.w / 2, z - g.z - g.d / 2) < 4.2);
@@ -73,7 +73,7 @@ function pagGround(ctx) {
     if (dl < 1.1) return sc(I.stepD, k);
     // Moss, with drifts of fallen leaves.
     const n = noise(x * 0.16 + 9, z * 0.16);
-    if (n > 0.66) return sc(I.mapleD, k);
+    if (n > 0.7) return sc(I.leafbed, k);
     return sc(n > 0.52 ? I.mossL : n < 0.34 ? I.mossD : I.moss, k);
   };
 }
@@ -122,7 +122,6 @@ function pagLights(ctx) {
     if (w.hall) { const fz = w.z + w.d + 1.4; lamps.push({ x: cx, z: fz, r: 7 }); glow.halo(cx, fz - 0.6, 3.6, [0.12, 0.06, 0.02]); }
     if (w.teahouse) lamps.push({ x: cx, z: w.z - 1.2, r: 5.5 });
     if (w.kura) lamps.push({ x: cx, z: w.z + w.d + 1.2, r: 5, col: [0.4, 0.24, 0.1] });
-    if (w.pagoda) { for (const [ox, oz] of [[-5, 0], [5, 0], [0, 4.2], [0, -4.2]]) lamps.push({ x: cx + ox, z: cz + oz, r: 5.5 }); }
   }
 }
 
@@ -177,7 +176,7 @@ function pagodaTower(ctx, w) {
     const s = bw - 0.6, r = s / 2 + 0.6;
     for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.prismY(1.9, 2.5, cx + ox * r, cz + oz * r, 0.2, 0.2, 6);
   });
-  glow.halo(cx, cz, 7.5, [0.08, 0.05, 0.02]);
+  glow.halo(cx, cz, 6.5, [0.05, 0.03, 0.01]);
 }
 
 function hall(ctx, w) {
