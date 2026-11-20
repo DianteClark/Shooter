@@ -200,6 +200,40 @@ export const REWARD_PATTERNS = {
     for (let i = 0; i < 14; i++) s += circ(96 + r() * 204, r() * 30, 0.7, c[2], op('.5'));
     return s;
   },
+  liftoff(c, r) {          // Launchpad: the rocket climbing off its tower on a pillar of flame and cloud.
+    let s = poly([[90, H], [90, 70], [300, 66], [300, H]], c[1], op('.8'));
+    for (let i = 0; i < 9; i++) s += circ(190 + (r() - 0.5) * 70, 70 + r() * 6, 8 + r() * 10, c[2], op((0.25 + r() * 0.3).toFixed(2)));
+    s += rect(150, 14, 7, 54, c[3], op('.75'));
+    for (let y = 18; y < 66; y += 8) s += line(150, y, 157, y + 6, c[0], 1);
+    s += rect(186, 22, 9, 30, c[2]) + poly([[186, 22], [190.5, 8], [195, 22]], c[2]) + poly([[186, 46], [180, 54], [186, 52]], c[2]) + poly([[195, 46], [201, 54], [195, 52]], c[2]);
+    s += rect(186, 30, 9, 3, c[0]) + poly([[187, 52], [190.5, 68], [194, 52]], c[3]);
+    for (let i = 0; i < 14; i++) s += circ(96 + r() * 200, r() * 40, 0.8, c[2], op('.5'));
+    return s;
+  },
+  stardome(c, r) {         // Observatory: the dome on its peak, slit open, a trail of stars wheeling over it.
+    let s = poly([[90, H], [140, 44], [170, 56], [214, 30], [262, 52], [300, 40], [300, H]], c[1]);
+    s += poly([[214, 30], [204, 40], [216, 37], [226, 42]], c[2], op('.7'));
+    s += rect(200, 34, 28, 14, c[2], op('.9')) + fillPath('M200 34 A14 14 0 0 1 228 34 Z', c[2]) + rect(212, 21, 4, 13, c[0]);
+    for (let k = 0; k < 5; k++) s += path(`M${120 + k * 10} 6 A${60 + k * 12} ${60 + k * 12} 0 0 1 ${270 - k * 4} ${20 + k * 3}`, c[2], 0.8, op('.35'));
+    for (let i = 0; i < 16; i++) s += circ(96 + r() * 200, r() * 30, 0.7 + r() * 0.6, c[2], op('.7'));
+    return s + circ(280, 12, 5, c[3], op('.8'));
+  },
+  tiers(c, r) {            // Pagoda: five flared roofs against the dusk, maple leaves drifting, a lantern.
+    let s = '';
+    const cx = 220;
+    for (let k = 0; k < 5; k++) {
+      const y = 72 - k * 13, w = 64 - k * 10;
+      s += rect(cx - w / 2 + 10, y - 7, w - 20, 7, c[2], op('.55'));
+      s += poly([[cx - w / 2 - 4, y - 6], [cx + w / 2 + 4, y - 6], [cx + w / 2 - 6, y - 11], [cx - w / 2 + 6, y - 11]], c[1]);
+    }
+    s += rect(cx - 1, 2, 2, 12, c[3]);
+    for (let i = 0; i < 22; i++) {
+      const x = 96 + r() * 200, y = r() * 76, a = r() * Math.PI;
+      s += poly([[x + Math.cos(a) * 2.6, y + Math.sin(a) * 2.6], [x - Math.sin(a) * 1.4, y + Math.cos(a) * 1.4], [x - Math.cos(a) * 2.6, y - Math.sin(a) * 2.6], [x + Math.sin(a) * 1.4, y - Math.cos(a) * 1.4]], c[3], op((0.5 + r() * 0.4).toFixed(2)));
+    }
+    s += circ(130, 60, 6, c[2], op('.85')) + rect(128.5, 66, 3, 14, c[1]);
+    return s;
+  },
   zone(c) {                // Frontier: the closing circle over the land, a plane's drop line across it.
     let s = '';
     for (let k = 0; k < 5; k++) s += path(`M${92 + k * 30} ${H} q30 -14 60 0`, c[1], 1, op('.6'));

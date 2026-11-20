@@ -622,6 +622,7 @@
 #ui .sm-region[data-region="jungle"] { --region: #6fae5a; }
 #ui .sm-region[data-region="arctic"] { --region: #cfe2f2; }
 #ui .sm-region[data-region="farmland"] { --region: #c8b05a; }
+#ui .sm-region[data-region="mountain"] { --region: #c89ab8; }
 /* Long names ("Night Market") take a second line on narrow phones rather than an ellipsis. */
 #ui .solo-grid .sm-name { align-items: flex-end; }
 #ui .solo-grid .sm-name .ico { flex: none; margin-bottom: 2px; }

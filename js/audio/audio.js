@@ -597,6 +597,11 @@ THEME_AUDIO.harvest = { ir: { len: 0.6, damp: 0.16, gain: 0.16 }, slaps: [[0.27,
 THEME_AUDIO.frost = THEME_AUDIO.arctic;
 THEME_AUDIO.ashgrove = THEME_AUDIO.harvest;
 THEME_AUDIO.millbrook = THEME_AUDIO.harvest;
+// ROADMAP 56: the salt flat is open and dry with one far slap off the tank farm; the summit is snow; the temple court
+// is timber and plaster, a soft close return.
+THEME_AUDIO.launchpad = { ir: { len: 0.5, damp: 0.12, gain: 0.18 }, slaps: [[0.24, 0.6], [0.42, 0.22]], f0: 1900, f1: 520, metal: 600, wash: 0.02 };
+THEME_AUDIO.observatory = THEME_AUDIO.arctic;
+THEME_AUDIO.pagoda = { ir: { len: 0.7, damp: 0.3, gain: 0.26 }, slaps: [[0.07, 0.7], [0.15, 0.4]], f0: 2000, f1: 480, metal: 0, wash: 0.06 };
 THEME_AUDIO.polestar = THEME_AUDIO.arctic;
 THEME_AUDIO.wrenfield = THEME_AUDIO.harvest;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;

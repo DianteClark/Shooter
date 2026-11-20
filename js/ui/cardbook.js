@@ -71,6 +71,10 @@ const MAP_ART = {
   polestar:   ['Night Watch', 'mast', ['#06101a', '#24384a', '#d8ecf4', '#5affb0']],
   wrenfield:  ['Midway', 'wheel', ['#140a1c', '#4a2a5a', '#ffe0b0', '#ff7ad8']],
   millbrook:   ['Millstream', 'millwheel', ['#0e1a14', '#2c4a34', '#e6f0dc', '#f2b6c8']],
+  // ROADMAP 56 (appended).
+  launchpad:  ['T-Minus', 'liftoff', ['#141a24', '#3a4a5e', '#eef2f6', '#ff7a3a']],
+  observatory: ['First Light', 'stardome', ['#1a1428', '#4a3a5e', '#f6e6ee', '#ffb48a']],
+  pagoda:     ['Maple Dusk', 'tiers', ['#10142a', '#2e3456', '#f0d8b0', '#e0482a']],
   frontier:   ['Drop Zone', 'zone', ['#101a14', '#2a4630', '#d8f0d0', '#ff9f1c']],
 };
 const MAP_WINS = 10;

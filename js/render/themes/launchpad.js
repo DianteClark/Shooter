@@ -13,7 +13,7 @@ const sc = scale;
 
 THEMES.launchpad = {
   id: 'launchpad',
-  light: { dir: norm([0.26, 0.92, 0.3]), sun: [1.04, 1.0, 0.92], sky: [0.5, 0.56, 0.68], amb: [0.38, 0.4, 0.45] },
+  light: { dir: norm([0.26, 0.92, 0.3]), sun: [0.9, 0.88, 0.82], sky: [0.46, 0.52, 0.64], amb: [0.33, 0.35, 0.4] },
   clear: 0x7c96b2,
   fog: [0.74, 0.78, 0.84], fogSeam: [0.1, 0.1, 0.12], desatTint: [0.9, 0.92, 0.96],
   shadow: { col: [0.5, 0.56, 0.72], strength: 0.62, len: 0.42 },
@@ -25,7 +25,7 @@ THEMES.launchpad = {
     concrete: 0xa4a39e, crate: 0x8a7a5a, crateD: 0x5a4e3a,
     rail: 0x8a9096, tie: 0x4a4440, hazardY: 0xb89a3a, hazardK: 0x2c2c30,
     paint: 0xd8d4c4, glow: 0xffe6b0, glowCool: 0xdcecff,
-    salt: 0xc4bfb0, saltL: 0xd0ccbe, saltD: 0xa8a294, crack: 0x8c867a, damp: 0x9a978e,
+    salt: 0xb4afa2, saltL: 0xbcb7aa, saltD: 0xa8a396, crack: 0x8a8478, damp: 0x9e9a90,
     conc: 0x9a9a98, concL: 0xb0b0ac, concD: 0x7a7a7a, scorch: 0x3a3634, gravelD: 0x6e6a64,
     orange: 0xa85a36, orangeD: 0x7a4028, white: 0xd6d6d2, whiteD: 0xb4b4b2, black: 0x2a2a2e,
     steel: 0x9aa0a6, steelD: 0x6c7278, yellow: 0xb89a3a, blue: 0x3e5670, glass: 0x34404c,
