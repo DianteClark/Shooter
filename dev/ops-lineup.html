@@ -81,6 +81,20 @@ if (!q.get('nolabels')) {
 const g = chars.torso.geometry.attributes.position.count, h = chars.head.geometry.attributes.position.count;
 const bySlot = m => { const o = {}; for (const v of m.geometry.attributes.aVar.array) { const k = Math.floor((v % 256) / 32); o[k] = (o[k] ?? 0) + 1; } return o; };
 window.stats = { torsoVerts: g, headVerts: h, torsoBySlot: bySlot(chars.torso), headBySlot: bySlot(chars.head), kitBySlot: [bySlot(chars.torsoKit), bySlot(chars.headKit)], liteT: chars.torsoLite.geometry.attributes.position.count, liteH: chars.headLite.geometry.attributes.position.count };
+// &bench=N: N more frames of pose and draw, timed (finished on the GPU each frame), for before/after cost checks.
+if (+q.get('bench')) {
+  const N = +q.get('bench'), px = new Uint8Array(4), gl = webgl.getContext();
+  const t0 = performance.now();
+  for (let i = 0; i < N; i++) {
+    time.value += 1 / 60; v.t = time.value;
+    for (const p of players) p.aim += 0.02;
+    chars.update(v, 1 / 60, { localId: 'none', localTeam: 0, uav: false, revealAll: !q.get('far') });
+    webgl.render(scene, cam);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  }
+  window.stats.benchMs = +((performance.now() - t0) / N).toFixed(2);
+  window.stats.calls = webgl.info.render.calls; window.stats.tris = webgl.info.render.triangles;
+}
 window.ready = true;
 </script>
 </body>
