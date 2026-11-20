@@ -11,6 +11,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
 import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost, zmGunName, zmWonderOf } from '../shared/zombies.js';
 import { kitRoom } from '../sim/zm-econ.js';     // The armour bench's kit refill, the same test as the host's.
+import { ZmIntroCard } from './zm-intro.js';     // A boss's title card when it rises (ROADMAP item 50).
 // The relic quest's clue, once from round 3 (dev/ui-zombies-test.py checks it reads whole at every width).
 export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still warm';
 // Polestar Relay's radio quest (layout questKind 'radio'): its own clue, and the names that go with it.
@@ -159,6 +160,7 @@ export class ZmHud {
       <div class="zm-held" hidden><b>Bled out</b><small>Back with the pistol next round</small></div>
       <div class="zm-shop" hidden data-tap="1"><h3>Supply terminal<small>Paid from your points. One of each a round.</small></h3><div class="zm-shop-row"></div><button class="close" data-tap="1">Close</button></div>`;
     hud.el.appendChild(el);
+    this.intro = new ZmIntroCard(el);
     const $ = s => el.querySelector(s);
     this.roundEl = $('.zm-round'); this.roundB = $('.zm-round b');
     this.leftB = $('.zm-left b'); this.ptsB = $('.zm-pts b');
@@ -205,7 +207,7 @@ export class ZmHud {
     this.on = on;
     this.el.hidden = !on;
     this.topEl.hidden = !on;
-    if (!on) this.bossEl.hidden = true;
+    if (!on) { this.bossEl.hidden = true; this.intro.hide(); }
     this.hud.el.classList.toggle('zm-on', on);
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId;
@@ -223,6 +225,7 @@ export class ZmHud {
 
   update(view, me, dt) {
     if (!this.on || !me) return;
+    this.intro.update();
     const z = objOf(view);
     if (!z?.zm) return;
     const c = this.c;

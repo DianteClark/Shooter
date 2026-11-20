@@ -60,6 +60,7 @@ export class ZmKindsFx {
     this.fog.frustumCulled = false;
     this.fog.visible = false;
     this.fogK = 0;
+    this.drawShields = true;     // Off where js/render/zm-bodies.js draws the Shieldbearer (its door is in its model).
     for (const m of [this.poolMesh, this.markMesh, this.globMesh, this.shieldMesh, this.fog]) group.add(m);
   }
 
@@ -109,7 +110,7 @@ export class ZmKindsFx {
     // Shields, on the Shieldbearers that still have one.
     n = 0;
     for (const p of view.players) {
-      if (p.zk !== 9 || !p.alive || !p.zshield || n >= 8) continue;
+      if (!this.drawShields || p.zk !== 9 || !p.alive || !p.zshield || n >= 8) continue;
       E.set(0, -p.aim, 0); Q.setFromEuler(E);
       M4.compose(V.set(p.x, 0, p.z), Q, S.set(1, 1, 1));
       this.shieldMesh.setMatrixAt(n++, M4);

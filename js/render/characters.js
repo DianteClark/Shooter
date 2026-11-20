@@ -988,6 +988,7 @@ export class Characters {
     this.counts = { nT: 0, nTL: 0, nU: 0, nA: 0, nL: 0, nB: 0 };
     this.corpses = new Corpses(this);
     this.vfx = null;           // Set by GameRenderer; the operator preview runs without effects.
+    this.zm = null;            // Graveyard Shift's undead bodies (js/render/zm-bodies.js), set by GameRenderer in that mode.
     this.surf = null;
     this.focusX = 0; this.focusZ = 0;    // Camera focus: footfalls and small dust only happen near it.
     // Ground rectangle the camera sees, written by GameRenderer each frame. Soldiers outside it are not posed or
@@ -1102,6 +1103,7 @@ export class Characters {
     const r = this.rigs.get(id);
     if (!r) return false;
     r.down = true; r.downT = 1.2; r.sawDead = false;
+    if (r.zk && this.zm) return this.zm.onKill(r, info);     // Graveyard Shift: the undead fall their own way (zm-bodies.js).
     return this.corpses.spawn(r, info);
   }
 
@@ -1112,6 +1114,7 @@ export class Characters {
       r.sx.fill(0); r.sv.fill(0); r.aimVel = 0;
     }
     this.corpses.clear();
+    this.zm?.clear();
   }
 
   // `skin` is a skinLooks entry for torsos and heads; limbs, boots, held items and corpse parts pass none, which
@@ -1125,6 +1128,26 @@ export class Characters {
     a.aSkin.setXYZW(i, g[0], g[1], g[2], g[3]);
     if (tint) a.aTint.setXYZ(i, tint[0], tint[1], tint[2]);
     else a.aTint.setXYZ(i, 0, 0, 0);
+  }
+
+  // The ground ring and contact shadow under a soldier (or an undead): instance n of each; returns n + 1.
+  // The shadow shrinks the higher a glider is; a distance-LOD undead casts none (Graveyard Shift's horde, phone heat).
+  _ringBlob(nRing, p, r, localId, localTeam, team, shade) {
+    _p.set(p.x, 0, p.z); _q.identity();
+    const local = p.id === localId;
+    const ringScale = local ? 0.92 : 1.0;
+    _s.set(ringScale, 1, ringScale);
+    _m.compose(_p, _q, _s);
+    _m.toArray(this.ring.instanceMatrix.array, nRing * 16);
+    // y: 1 the local player (brighter), -1 an enemy (dashed rim in a colour mode), 0 a teammate.
+    this.ring.geometry.attributes.aFx.setXY(nRing, r.reveal, local ? 1 : p.team === localTeam ? 0 : -1);
+    this.ring.geometry.attributes.aTeam.setXYZ(nRing, team[0], team[1], team[2]);
+    _s.set(shade, 1, shade);
+    _m.compose(_p, _q, _s);
+    _m.toArray(this.blob.instanceMatrix.array, nRing * 16);
+    this.blob.geometry.attributes.aFx.setXY(nRing, r.reveal, 0);
+    this.blob.geometry.attributes.aTeam.setXYZ(nRing, 0, 0, 0);
+    return nRing + 1;
   }
 
   // Local visibility test for an enemy: centre and both shoulders, so a peeking shoulder still shows.
@@ -1302,6 +1325,18 @@ export class Characters {
       r.reveal = Math.min(1, Math.max(0, r.reveal));
       if (!p.alive || r.down || p.air === 1) r.reveal = 0;
       r.visible = r.reveal > 0.005;
+      if (zk && this.zm) {
+        // Graveyard Shift: the undead have bodies of their own (js/render/zm-bodies.js poses and draws them); here only
+        // who is seen, the distance LOD (the same budget: full detail for the few nearest), the ring and the shadow.
+        r.zk = zk;
+        if (r.visible) {
+          r.posed = clock;
+          const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz, lodR = r.lite ? ZM_LOD_BACK : ZM_LOD_FAR;
+          r.lite = !revealAll && (fd2 > fullReach || fd2 > lodR * lodR);
+          nRing = this._ringBlob(nRing, p, r, localId, localTeam, ZM_TINT, r.lite ? 0 : 0.9);
+        }
+        continue;
+      }
 
       const ads = p.adsT || 0;
       const sprint = r.sprint, slide = r.slide;
@@ -1659,23 +1694,7 @@ export class Characters {
       }
       if (vfx && slide > 0.5 && speed > 2 && Math.random() < dt * 45) vfx.slideTrail(p.x - r.moveX * 0.5, p.z - r.moveZ * 0.5);
 
-      _p.set(p.x, 0, p.z); _q.identity();
-      const local = p.id === localId;
-      const ringScale = local ? 0.92 : 1.0;
-      _s.set(ringScale, 1, ringScale);
-      _m.compose(_p, _q, _s);
-      _m.toArray(this.ring.instanceMatrix.array, nRing * 16);
-      // y: 1 the local player (brighter), -1 an enemy (dashed rim in a colour mode), 0 a teammate.
-      this.ring.geometry.attributes.aFx.setXY(nRing, r.reveal, local ? 1 : p.team === localTeam ? 0 : -1);
-      this.ring.geometry.attributes.aTeam.setXYZ(nRing, team[0], team[1], team[2]);
-      // The shadow shrinks the higher a glider is; a distance-LOD undead casts none (Graveyard Shift's horde, phone heat).
-      const shade = zk && r.lite ? 0 : 0.9 / (1 + r.alt * 0.06);
-      _s.set(shade, 1, shade);
-      _m.compose(_p, _q, _s);
-      _m.toArray(this.blob.instanceMatrix.array, nRing * 16);
-      this.blob.geometry.attributes.aFx.setXY(nRing, r.reveal, 0);
-      this.blob.geometry.attributes.aTeam.setXYZ(nRing, 0, 0, 0);
-      nRing++;
+      nRing = this._ringBlob(nRing, p, r, localId, localTeam, team, zk && r.lite ? 0 : 0.9 / (1 + r.alt * 0.06));
     }
 
     // No silhouettes through walls in a replay: the camera there is low, and they read as ghosts.
