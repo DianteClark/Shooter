@@ -14,6 +14,15 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1120-3', date: '2026-11-20', title: 'Every operator remade',
+    items: [
+      'Every Mastery skin is now a full costume, each one different: a knight, a samurai, a lion king, a shark, a spider, a dragon, a deep-sea diver, a wizard, a walking tank, a scarecrow with his crow and more. All of them keep your team colour where it shows from above.',
+      'Every Elite skin now has its own living effect running over the whole outfit: flames, frost, lightning, code rain, a heartbeat trace, thermal vision, falling snow and plenty more.',
+      'Operators who looked alike got something only they carry: a door on Flint\'s back, a sledgehammer for Rook, a champion\'s cape for Brigid, a company radio with a pennant for Garrison, and others.',
+      'Costumes still read across the map: far-off players keep the shape of their costume instead of turning back into a plain soldier.',
+    ],
+  },
+  {
     build: '1120-2', date: '2026-11-20', title: 'Six new melee weapons, sharper guns, bigger streaks',
     items: [
       'Six new melee weapons: the Kagero (a katana that thrusts and lunges further than anything), Kindling (a fire axe that kills in one quicker overhead), the Spade (a shovel with the longest reach, swung in place), the Gleaner (a sickle that cuts twice a pull), Bushwhack (a machete) and the Nightstick (a tonfa, the fastest swings in the game). Each has its own swing, sound and finishing move. They unlock from level 31 to 45.',
