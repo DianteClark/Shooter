@@ -14,11 +14,10 @@
 import { wall } from './build.js';
 import { Plan, mulberry, valueNoise, segDist } from './br-kit.js';
 import { templeCourt } from './jungle-kit.js';
+import { CELL, DEEP, SHALLOW, LAND, STEEP, rectsOf as latticeRects } from './isle-kit.js';
 
 const W = 400, H = 400;
-export const CELL = 2;                        // Land/water lattice (metres).
-const N = W / CELL;
-export const DEEP = 0, SHALLOW = 1, LAND = 2, STEEP = 3;   // STEEP: deep water with earth banks (channels, pools).
+const N = W / CELL;                           // Land/water lattice: CELL metres, N x N (isle-kit.js).
 const CX = 200, CZ = 200;
 
 // Region seeds for the renderer's ground and dressing: [region, x, z, bias].
@@ -159,29 +158,7 @@ export function islandCells() {
   return cls;
 }
 
-// Rects covering every cell of class `c`: runs along each row, merged down while the next row has the same run.
-function rectsOf(cls, c, mask = null) {
-  const out = [];
-  const open = new Map();       // "i0,i1" -> rect being grown.
-  for (let j = 0; j <= N; j++) {
-    const runs = new Set();
-    if (j < N) {
-      for (let i = 0; i < N;) {
-        if (cls[j * N + i] !== c || (mask && !mask(i, j))) { i++; continue; }
-        let k = i;
-        while (k < N && cls[j * N + k] === c && (!mask || mask(k, j))) k++;
-        runs.add(`${i},${k}`);
-        i = k;
-      }
-    }
-    for (const [key, r] of open) if (!runs.has(key)) { out.push(r); open.delete(key); }
-    for (const key of runs) {
-      if (open.has(key)) open.get(key).d += CELL;
-      else { const [a, b] = key.split(',').map(Number); open.set(key, { x: a * CELL, z: j * CELL, w: (b - a) * CELL, d: CELL }); }
-    }
-  }
-  return out;
-}
+const rectsOf = (cls, c, mask = null) => latticeRects({ size: CELL, n: N, nz: N, cls }, c, mask);
 
 // Paths: dirt trails round each island and the stone causeways; the renderer paints them.
 const ROADS = [
