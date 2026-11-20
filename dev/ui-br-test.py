@@ -89,6 +89,9 @@ async def run(browser, vw, vh, failures, errors):
         failures.append(f'{vw}: squadmates still in the air after the app switch')
     # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
     await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 999; }})()")
+    # The squad bots give their shield up when they shoot: keep it topped up until the recall needs one of them to fall
+    # (a hot landing on a busy island could otherwise leave nobody to recall).
+    await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) p.spawnProtect = 999; }}, 100); }})()")
     # Loot: walk (teleport) over the nearest few items, then stand by a ground gun.
     took = await ev(f"""(async () => {{
       const m = {G}.match, rules = m.sim.br, out = [];
@@ -187,7 +190,7 @@ async def run(browser, vw, vh, failures, errors):
     except Exception:
         failures.append(f'{vw}: no squadmate revived the human')
     # Recall Beacons: a squadmate falls, their tag is picked up, held at a beacon, and they parachute back in.
-    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
+    await ev(f"""(() => {{ clearInterval(window.__shield); const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
       const mate = sim.players.find(p => p.team === me.team && p !== me && p.alive); window.__mate = mate.id;
       const bc = sim.br.beacons[0]; window.__bc = bc.id;
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - bc.x, p.ps.z - bc.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }}
