@@ -979,11 +979,13 @@ section('wrenfield');
   // A heat gun handed into the second slot (this mode deals guns into either) cools like one in the first: a bot
   // with a hot saw behind a shotgun stood waiting on it for good before (found on Wrenfield's pacing run).
   const b = R.crew.find(p => p.isBot);
-  R._give(b, 'autoshot'); R._give(b, 'saw');
-  const sl = b.ps.primary === 'saw' ? 0 : 1;
+  const { WEAPONS: WD } = await import('../js/shared/weapons.js');
+  if (WD[b.ps.primary]?.heat) R._give(b, 'autoshot');
+  b.ps.secondary = 'knife'; b.ps.slot = 0; b.ps.weapon = b.ps.primary;
+  R._give(b, 'saw');
   b.ps.heat = 0.7; b.ps.heatIdle = 9;
   run(sim, 1.5);
-  ok(sl === 1 && b.ps.heat < 0.2, `a saw in the second slot cools (${b.ps.heat.toFixed(2)})`);
+  ok(b.ps.secondary === 'saw' && !WD[b.ps.primary]?.heat && b.ps.heat < 0.2, `a saw in the second slot cools (${b.ps.primary}/${b.ps.secondary}, ${b.ps.heat.toFixed(2)})`);
   clearZmWalls(sim.map);
 }
 
