@@ -304,6 +304,8 @@ export const ZM_MAPS = {
   ashgrove: { graph: true, power: true },
   // The second (docs/ZOMBIES.md "Polestar Relay"): its quest is the radios (`quest.kind: 'radio'`), its boss the Listener.
   polestar: { graph: true, power: true },
+  // The third (docs/ZOMBIES.md "Wrenfield Fair"): its quest is the lanterns (`quest.kind: 'lantern'`), its boss the Barker.
+  wrenfield: { graph: true, power: true },
 };
 export const ZM_MAP_IDS = Object.keys(ZM_MAPS);
 
@@ -695,8 +697,10 @@ function graphLayout(map, def) {
   const st = s => (s ? { i: 0, ...onWall(s) } : null);
   // The quest: relics set on an altar (Ashgrove), or radios tuned and a console (`kind: 'radio'`, Polestar Relay). Both
   // ride the same slots (relics: the steps; altar: where it ends), so the economy, the wire and the tests keep one shape.
-  const Q0 = Z.quest ?? {}, radio = Q0.kind === 'radio';
-  const Q = radio ? { altar: Q0.console, relics: Q0.radios } : Q0;
+  // Wrenfield Fair's lanterns (`kind: 'lantern'`) ride them too: the lanterns are the steps, the high striker the end,
+  // and the Oracle that tells the order is one more spot (`oracle`).
+  const Q0 = Z.quest ?? {}, radio = Q0.kind === 'radio', lantern = Q0.kind === 'lantern';
+  const Q = radio ? { altar: Q0.console, relics: Q0.radios } : lantern ? { altar: Q0.striker, relics: Q0.lanterns } : Q0;
   const L = {
     mapId: map.id, def, graph: true, start, bands, fences: [], doors, wallBuys, boxSpots, machines, risers, starts: Z.starts.map(p => ({ x: p.x, z: p.z })),
     power, boss, reserved, W, H, main, band, cellAt,
@@ -704,7 +708,8 @@ function graphLayout(map, def) {
     traps: (Z.reserved?.traps ?? []).map((t, i) => ({ i, x: t.x, z: t.z, r: t.r ?? ZE.trap.r, band: bandAt(t.x, t.z) })),
     exfil: Z.reserved?.exfil ? { x: Z.reserved.exfil.x, z: Z.reserved.exfil.z, r: Z.reserved.exfil.r ?? ZE.exfil.r, band: bandAt(Z.reserved.exfil.x, Z.reserved.exfil.z) } : null,
     altar: st(Q.altar), relics: (Q.relics ?? []).map((r, i) => ({ i, x: r.x, z: r.z, band: bandAt(r.x, r.z) })),
-    questKind: radio ? 'radio' : 'relic',
+    questKind: radio ? 'radio' : lantern ? 'lantern' : 'relic',
+    oracle: lantern && Q0.oracle ? st(Q0.oracle) : null,
   };
   finishEcon(L);
   Object.defineProperty(map, '_zmLayout', { value: L, configurable: true, writable: true, enumerable: false });
