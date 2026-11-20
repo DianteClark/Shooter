@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Music for every mode, and a sound pass',
+    build: '1120-10', date: '2026-11-20', title: 'Music for every mode, and a sound pass',
     items: [
       'Every mode has its own music now, and it follows the match: Team Deathmatch and the other 6 v 6 modes, Ranked, the round modes, Ground War, Battle Royale (the drop, a calm landing, tension as the circle closes, the final circle), Extraction (and a rush when your exfil is called), Graveyard Shift (eerier every few rounds, with a theme for the bosses), each Campaign mission, and Infected.',
       'The music builds with the fight and peaks in the last minute or at match point, then gives way for the victory or defeat sting.',
