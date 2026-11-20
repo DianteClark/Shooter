@@ -66,7 +66,7 @@ const CSS = `
 .cp-radio b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--who, #7cc8ff); margin-right: 8px; }
 .cp-radio b::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--who, #7cc8ff); box-shadow: 0 0 6px var(--who, #7cc8ff); vertical-align: 1px; animation: cp-blink .35s steps(2) infinite; }
 .cp-radio span { font: 400 14px/1.3 var(--f-body); color: var(--c-chalk); }
-.cp-eye { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); width: 120px; text-align: center; }
+.cp-eye { position: absolute; left: 50%; top: calc(var(--st, 0px) + 150px); transform: translateX(-50%); width: 120px; text-align: center; }
 .cp-eye b { display: block; font: 400 14px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ffd27c; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
 .cp-eye i { display: block; height: 5px; margin-top: 4px; background: rgba(16,20,26,.8); position: relative; overflow: hidden; }
 .cp-eye i i { position: absolute; inset: 0; margin: 0; height: auto; background: #ffb21a; transform-origin: left; transform: scaleX(var(--k, 0)); }

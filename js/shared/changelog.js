@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Campaign: Operation Nightrail',
+    items: [
+      'A co-op campaign: Operation Nightrail, eight story missions against the Meridian Line, the company that has taken over the railways. Play it alone with three bot squadmates or with up to three friends. Find it on the new Campaign tab in Multiplayer.',
+      'Every mission is different: hack a signal terminal, sneak through Night Market past watchmen with torches, hold a pier relay against waves, walk a defector across Downtown, blow up a foundry, hunt a broker across Frontier, race a convoy to the dam, and face Marshal Kordell in a juggernaut suit.',
+      'Briefings before each mission and radio chatter during it tell the story. Checkpoints along the way: if your squad is wiped, you go back to the last one, or abort.',
+      'Three difficulties: Recruit, Regular and Veteran. Earn up to three stars a mission: the bonus objective, beating the par time, and nobody dying.',
+      'Rewards: XP, a calling card for every mission, and for clearing every mission on Veteran, Marshal\'s Nightrail skin and the Nightrail emblem.',
+    ],
+  },
+  {
     build: '1120-1', date: '2026-11-20', title: 'Graveyard Shift: Wrenfield Fair',
     items: [
       'A third map built for Graveyard Shift: Wrenfield Fair, a travelling fair left standing in a field at night. Seven areas in a loop behind gates: the Ticket Gate, the Midway, Carousel Green, the Wheel Yard, the Generator Yard (the power), the burned-out Big Top and the Ghost Train.',

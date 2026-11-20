@@ -150,7 +150,7 @@ const FEAT_ROWS = [
   ['feat-survivor', 'Still Standing', '#8cff3a', ['#e6ecf2', '#ff4d3d'], 'survivor', { life: 'inf:survived', goal: 1, label: 'Survive the clock in Infected' }, { tab: 'standard', modes: ['inf'] }],
   ['feat-longshot', 'Over the Horizon', '#7cc8ff', ['#ffd659', '#7cc8ff'], 'bullet', { life: 'long40', goal: 1, label: 'Get a gun kill from 40 m or more' }, { tab: 'br', playlist: 'quads' }],
   // The co-op campaign (docs/CAMPAIGN.md): every Operation Nightrail mission cleared on Veteran.
-  ['feat-nightrail', 'Nightrail', '#7cc8ff', ['#e6ecf2', '#7cc8ff'], 'laurel', { life: 'cp:vetall', goal: 1, label: 'Clear every Operation Nightrail mission on Veteran' }, { tab: 'campaign' }],
+  ['feat-nightrail', 'Nightrail', '#7cc8ff', ['#e6ecf2', '#7cc8ff'], 'laurel', { life: 'cp:vetall', goal: 1, label: 'Clear every Operation Nightrail mission on Veteran' }, { tab: 'campaign', modes: ['cp'] }],
   ['feat-champion', 'Champion', '#ff4a5a', ['#ffe0b0', '#ff4a5a'], 'laurel', { ranked: 6, label: 'Reach Champion in Ranked' }, { tab: 'standard', playlist: 'ranked' }],
 ];
 export const FEAT_EMBLEMS = FEAT_ROWS.map(([id, name, rim, colours, glyph, rule, play]) => ({ id, name, plate: 'seal', rim, colours, glyph, rule, feat: true, play }));

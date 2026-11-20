@@ -1698,7 +1698,7 @@ export class HUD {
       }
     }
 
-    if (view.phase === 'warmup' && !this.modeBannerShown && view.mode === this.mode && !this.snd) {
+    if (view.phase === 'warmup' && !this.modeBannerShown && view.mode === this.mode && !this.snd && !this.cp) {     // The campaign shows its own intro card.
       this.modeBannerShown = true;
       this.#banner(MODES[this.modeId]?.name ?? '', MODES[this.modeId]?.desc ?? '', 3200);
     }
