@@ -276,7 +276,7 @@ function playMission(k, diff, seed) {
   const R = sim.rules;
   const won = sim.phase === 'ended' && sim.winner === 0;
   const stars = cpStars({ bonus: R.bonusOk, secs: R.t, par: m.par, deaths: R.deaths, fails: R.fails }).n;
-  check(won, `${m.name.padEnd(16)} ${CP_DIFFS[diff].name.padEnd(8)} seed ${seed}: ${won ? 'complete' : 'NOT complete'} in ${Math.round(R.t)} s, ${R.fails} fails, ${R.deaths} deaths, ${stars} stars (${Date.now() - t0} ms, ${(Date.now() - t0) / ticks * 1000 / 1000 | 0} us/tick, snapshot ~${Math.round(bytes / Math.max(1, snaps))} B)`);
+  check(won, `${m.name.padEnd(16)} ${CP_DIFFS[diff].name.padEnd(8)} seed ${seed}: ${won ? 'complete' : 'NOT complete'} in ${Math.round(R.t)} s, ${R.fails} fails, ${R.deaths} deaths, ${stars} stars (${Date.now() - t0} ms, ${Math.round((Date.now() - t0) / ticks * 1000)} us/tick, snapshot ~${Math.round(bytes / Math.max(1, snaps))} B)`);
   return { won, t: R.t, fails: R.fails };
 }
 

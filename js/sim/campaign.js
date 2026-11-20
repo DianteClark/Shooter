@@ -367,6 +367,7 @@ export class CampaignRules {
     if (sim.tick % PLAN_EVERY === 7) this._planSquad();
     const vip = this._vip();
     if (vip?.alive) this.vipMin = Math.min(this.vipMin, vip.hp);
+    if (this.m.bonus?.id === 'vip' && this.vipMin < 50 && this.bonusOk) { this.bonusOk = false; this._dirty(); }
     sim.timeLeft = Math.max(0, this.timer);
   }
 
@@ -1225,7 +1226,7 @@ export class CampaignRules {
         if (dist(tx, tz, p.ps.x, p.ps.z) < 0.8 && this.vipPi + 2 < this.vipPath.length) this.vipPi += 2; else break;
       }
       const dx = tx - p.ps.x, dz = tz - p.ps.z, d = Math.hypot(dx, dz);
-      if (d > 0.2) { I.mx = dx / d * 0.6; I.mz = dz / d * 0.6; I.aim = Math.atan2(dz, dx); }
+      if (d > 0.2) { I.mx = dx / d * 0.45; I.mz = dz / d * 0.45; I.aim = Math.atan2(dz, dx); }
     }
     stepPlayer(p.ps, I, dt, sim.map, sim.rng);
   }
