@@ -54,7 +54,8 @@ export class Voice {
 
     // iOS refuses to start media without a gesture and pauses it on backgrounding: every later touch retries.
     this.resume = () => this.#resumePlayback();
-    document.addEventListener('touchend', this.resume, { passive: true });
+    this.resumeTouch = e => { if (!e.touches?.length) this.#resumePlayback(); };     // Not with a thumb still down (wakelock.js).
+    document.addEventListener('touchend', this.resumeTouch, { passive: true });
     document.addEventListener('click', this.resume, { passive: true });
     this.onVisible = () => { if (!document.hidden) this.#resumePlayback(); };
     document.addEventListener('visibilitychange', this.onVisible);
@@ -219,7 +220,7 @@ export class Voice {
   dispose() {
     this.#stopMic();
     for (const id of [...this.players.keys()]) this.#removeRemote(id);
-    document.removeEventListener('touchend', this.resume);
+    document.removeEventListener('touchend', this.resumeTouch);
     document.removeEventListener('click', this.resume);
     document.removeEventListener('visibilitychange', this.onVisible);
     if (this.room) this.room.onPeerStream = null;

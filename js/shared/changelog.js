@@ -4,6 +4,12 @@
 
 export const CHANGELOG = [
   {
+    build: '1119-13', date: '2026-11-19', title: 'Move stick fix, take two',
+    items: [
+      'Your third report showed iOS still cancelling the move thumb right after a grenade release. The game no longer restarts audio, voice or the screen-awake video while another finger is down, the likely trigger. Keep recording touches and send a report if it happens again.',
+    ],
+  },
+  {
     build: '1119-12', date: '2026-11-19', title: 'Sun Bear in team colours',
     items: [
       "Coyote's Sun Bear suit now wears a team-colour belt and harness straps, so you can tell its side at a glance.",

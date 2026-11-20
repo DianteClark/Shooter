@@ -232,7 +232,7 @@ function blockIosGestures() {
 
   // Audio must start from a user gesture, and iOS can suspend it again after backgrounding.
   const unlock = () => audio.unlock();
-  document.addEventListener('touchend', unlock, { passive: true });
+  document.addEventListener('touchend', e => { if (!e.touches?.length) unlock(); }, { passive: true });     // Not with a thumb still down (wakelock.js).
   document.addEventListener('click', unlock, { passive: true });
 }
 

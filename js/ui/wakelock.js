@@ -36,7 +36,9 @@ class WakeLockKeeper {
       this.wanted = false;
       this.#drop();
     }, 15000);
-    document.addEventListener('touchend', retry, { passive: true });
+    // Not while another finger is still down: starting media inside that touchend makes iOS cancel the other thumb
+    // (the move stick going dead after a grenade release; dev/touch-reports/2026-11-19-*).
+    document.addEventListener('touchend', e => { if (!e.touches?.length) retry(); }, { passive: true });
     document.addEventListener('click', retry, { passive: true });
   }
 

@@ -1447,7 +1447,8 @@ export class AudioEngine {
     this.medalPending = null; this.medalBusyUntil = 0;
 
     // Unlock on the first gesture, and again whenever iOS suspends audio (calls, Siri, backgrounding).
-    this._onGesture = () => this.unlock();
+    // A touchend with another finger still down does not unlock: media starting there makes iOS cancel that thumb.
+    this._onGesture = e => { if (e?.type === 'touchend' && e.touches?.length) return; this.unlock(); };
     if (typeof document !== 'undefined') {
       for (const type of ['touchend', 'pointerup', 'click', 'keydown']) {
         document.addEventListener(type, this._onGesture, { passive: true, capture: true });
