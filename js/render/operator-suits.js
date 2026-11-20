@@ -742,5 +742,305 @@ MORE_SUITS.monarch = {
     });
   },
 };
+// Sparrow: a plague doctor. A long waxed coat flaring past the knees, a team capelet, a belt of lit vials, a wide
+// black hat with a team band (the brim is the disc from above) and the beaked mask with round lit goggles.
+const WAX = 0x2a2622;
+MORE_SUITS.sparrow = {
+  limbs: { bulk: 1.1, hands: 0x2a2420, feet: 0x1a1612, sleeve: 0x2c2824, trouser: 0x221e1a },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(WAX).prismY(-0.36, 0.2, 0, 0, 0.36, 0.27, 8, Math.PI / 8);
+      b.prismY(0.2, 0.62, 0, 0, 0.27, 0.29, 8, Math.PI / 8);
+      b.setColor(0x4a3a28).box(0, 0.16, 0, 0.58, 0.05, 0.6);                                     // Belt.
+      b.setColor(0x6a5236).box(-0.04, 0.0, 0.33, 0.2, 0.2, 0.08);                                 // Satchel.
+      b.setColor(0x1a1612).box(0.27, 0.3, 0, 0.02, 0.5, 0.04);
+    });
+    b.setPart(1).prismY(0.48, 0.66, -0.02, 0, 0.4, 0.3, 8, Math.PI / 8);                         // Capelet.
+    b.prismY(0.66, 0.72, -0.02, 0, 0.3, 0.2, 8, Math.PI / 8);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffe08a);
+      for (const z of [-0.18, -0.06, 0.06, 0.18]) b.prismY(0.18, 0.28, 0.29, z, 0.03, 0.025, 5);  // Vials.
+      b.box(0.0, 0.04, 0.375, 0.04, 0.12, 0.012).box(0.0, 0.04, 0.375, 0.12, 0.04, 0.012);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x1e1c1a).prismY(0.0, 0.34, -0.03, 0, 0.22, 0.2, 8, Math.PI / 8);     // Hood.
+      b.setColor(0x141210).prismY(0.34, 0.37, -0.02, 0, 0.4, 0.4, 12);                           // Brim.
+      b.prismY(0.37, 0.58, -0.02, 0, 0.19, 0.16, 8, Math.PI / 8);
+      b.setColor(0xc8b48a).box(0.16, 0.2, 0, 0.08, 0.22, 0.26, 0.02);                            // Mask and beak.
+      b.setColor(0xd8c8a0);
+      chain(b, [[0.18, 0.18, 0], [0.34, 0.15, 0], [0.48, 0.08, 0], [0.56, -0.02, 0]], 0.08, 0.012, 5);
+      b.setColor(0x8a6a2a).prismX(0.18, 0.21, 0.27, 0.075, 0.055, 0.055, 8).prismX(0.18, 0.21, 0.27, -0.075, 0.055, 0.055, 8);
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0xffe08a).prismX(0.21, 0.222, 0.27, 0.075, 0.042, 0.042, 8).prismX(0.21, 0.222, 0.27, -0.075, 0.042, 0.042, 8));
+    b.setPart(1).prismY(0.37, 0.43, -0.02, 0, 0.196, 0.19, 8, Math.PI / 8);                       // Hat band.
+    b.box(-0.02, 0.36, 0, 0.62, 0.012, 0.08);
+  },
+};
+
+// Vesper: an owl. A round brown body with a pale barred breast, folded wings whose coverts are the team colour, a big
+// round head with two pale facial discs round huge lit eyes, and team ear tufts (two horns from above).
+const OWL = 0x7a5a3a, OWL_D = 0x5a3e26;
+MORE_SUITS.vesper = {
+  limbs: { bulk: 1.28, hands: 0x3a2a1a, feet: 0xd8a020, sleeve: 0x7a5a3a, trouser: 0x6a4a2e },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(OWL);
+      roundBody(b, 0.32, 0.66);
+      b.setColor(0xd8c8a8).box(0.3, 0.3, 0, 0.07, 0.46, 0.34, 0.03);                             // Breast.
+      b.setColor(OWL_D);
+      for (const [y, z] of [[0.18, 0.08], [0.18, -0.08], [0.3, 0], [0.42, 0.08], [0.42, -0.08], [0.52, 0]]) b.box(0.338, y, z, 0.012, 0.035, 0.06);
+      for (const s of [1, -1]) plate(b, [0.04, 0.6, s * 0.33], [-0.2, -0.04, s * 0.4], 0.3, 0.06);   // Primaries.
+      b.setColor(OWL_D);
+      for (const z of [-0.12, 0, 0.12]) plate(b, [-0.28, 0.12, z * 0.6], [-0.46, -0.14, z], 0.1, 0.03);   // Tail.
+    });
+    b.setPart(1);
+    for (const s of [1, -1]) plate(b, [0.08, 0.68, s * 0.34], [-0.06, 0.34, s * 0.41], 0.34, 0.065);   // Coverts.
+    b.prismY(0.64, 0.7, 0, 0, 0.23, 0.2, 8, Math.PI / 8);
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(OWL).prismY(0.02, 0.36, 0, 0, 0.25, 0.25, 8, Math.PI / 8);
+      b.prismY(0.36, 0.46, 0, 0, 0.25, 0.14, 8, Math.PI / 8);
+      b.setColor(0xe8dcc0).prismX(0.17, 0.235, 0.24, 0.1, 0.12, 0.11, 8).prismX(0.17, 0.235, 0.24, -0.1, 0.12, 0.11, 8);
+      b.setColor(0xd8a020).prismX(0.22, 0.33, 0.15, 0, 0.045, 0.0, 4);                           // Beak.
+      b.setColor(0x0c0a08).prismX(0.245, 0.255, 0.25, 0.1, 0.03, 0.03, 6).prismX(0.245, 0.255, 0.25, -0.1, 0.03, 0.03, 6);
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0x5affb0).prismX(0.235, 0.245, 0.25, 0.1, 0.065, 0.065, 8).prismX(0.235, 0.245, 0.25, -0.1, 0.065, 0.065, 8));
+    b.setPart(1);
+    for (const s of [1, -1]) seg(b, [0.02, 0.38, s * 0.14], [-0.04, 0.6, s * 0.26], 0.07, 0.02, 5);   // Ear tufts.
+  },
+};
+
+// Wren: a bee (her drones were always bees). A striped body with a stinger, two pairs of wings off the back (the big
+// pair in the team colour: from above a team X), a fuzzy collar, a black head with big lit eyes and two antennae.
+const BEE_Y = 0xf0c020, BEE_K = 0x1a1a1a;
+MORE_SUITS.wren = {
+  limbs: { bulk: 1.22, hands: BEE_K, feet: BEE_K, sleeve: 0x222222, trouser: 0x1e1e1e },
+  torso(b) {
+    tag(b, KEEP, () => {
+      const bands = [[-0.1, 0.06, BEE_Y, 0.27, 0.31], [0.06, 0.2, BEE_K, 0.31, 0.33], [0.2, 0.34, BEE_Y, 0.33, 0.33], [0.34, 0.48, BEE_K, 0.33, 0.32], [0.48, 0.6, BEE_Y, 0.32, 0.28], [0.6, 0.7, BEE_K, 0.28, 0.18]];
+      for (const [y0, y1, c, r0, r1] of bands) b.setPart(0).setColor(c).prismY(y0, y1, 0, 0, r0, r1, 8, Math.PI / 8);
+      b.setColor(BEE_Y).prismX(-0.5, -0.24, 0.14, 0, 0.0, 0.17, 6);                              // Abdomen tip.
+      b.setColor(BEE_K).prismX(-0.62, -0.49, 0.14, 0, 0.0, 0.04, 4);                             // Stinger.
+      b.setColor(0xf6dc6a).prismY(0.64, 0.74, 0, 0, 0.24, 0.2, 8, Math.PI / 8);                  // Fuzz collar.
+      b.setColor(0xd8eef8);
+      for (const s of [1, -1]) plate(b, [-0.22, 0.5, s * 0.08], [-0.46, 0.68, s * 0.38], 0.16, 0.018, s * 0.3);
+    });
+    b.setPart(1);
+    for (const s of [1, -1]) plate(b, [-0.2, 0.62, s * 0.08], [-0.42, 0.98, s * 0.5], 0.24, 0.02, s * 0.3);   // Big wings.
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(BEE_K).prismY(0.02, 0.36, 0, 0, 0.21, 0.18, 8, Math.PI / 8);
+      b.setColor(0xf0c020).box(0.18, 0.12, 0, 0.06, 0.08, 0.14);
+      b.setColor(BEE_K);
+      for (const s of [1, -1]) chain(b, [[0.1, 0.34, s * 0.06], [0.16, 0.52, s * 0.12], [0.28, 0.6, s * 0.2]], 0.02, 0.014, 4);
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0x18e8ff).prismX(0.1, 0.22, 0.24, 0.12, 0.11, 0.09, 6).prismX(0.1, 0.22, 0.24, -0.12, 0.11, 0.09, 6));
+    b.setPart(1).prismY(0.58, 0.66, 0.28, 0.2, 0.05, 0.04, 6).prismY(0.58, 0.66, 0.28, -0.2, 0.05, 0.04, 6);
+    b.box(-0.02, 0.37, 0, 0.26, 0.04, 0.2);
+  },
+};
+
+// Ox: a silverback gorilla. A huge hunched black body with a silver saddle across the back, crossed team ammo belts
+// with brass rounds, a heavy brow, and a team headband with its tails flying.
+const APE = 0x24221f, APE_SKIN = 0x3a3633;
+MORE_SUITS.ox = {
+  limbs: { bulk: 1.5, hands: 0x2a2826, feet: 0x2a2826, sleeve: 0x26241f, trouser: 0x24221f },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(APE).prismY(-0.06, 0.2, 0, 0, 0.31, 0.36, 8, Math.PI / 8);
+      b.prismY(0.2, 0.5, 0, 0, 0.36, 0.4, 8, Math.PI / 8);
+      b.prismY(0.5, 0.78, 0, 0, 0.42, 0.26, 8, Math.PI / 8);
+      b.setColor(0xa8a8a4).prismY(0.48, 0.8, -0.12, 0, 0.3, 0.16, 8, Math.PI / 8);              // Silver saddle.
+      b.box(-0.3, 0.38, 0, 0.12, 0.3, 0.46, 0.03);
+      b.setColor(APE_SKIN).box(0.36, 0.48, 0.1, 0.06, 0.18, 0.16, 0.03).box(0.36, 0.48, -0.1, 0.06, 0.18, 0.16, 0.03);   // Chest.
+    });
+    b.setPart(1);
+    for (const s of [1, -1]) { plate(b, [0.38, 0.76, -0.26 * s], [0.38, 0.06, 0.28 * s], 0.09, 0.05); plate(b, [-0.38, 0.76, -0.26 * s], [-0.38, 0.06, 0.28 * s], 0.09, 0.05); }
+    b.prismY(0.12, 0.2, 0, 0, 0.37, 0.37, 8, Math.PI / 8);
+    for (const s of [1, -1]) b.box(0, 0.79, s * 0.24, 0.62, 0.05, 0.1);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffcc33);
+      for (let i = 0; i < 5; i++) { const t = 0.12 + i * 0.18; b.box(0.41, 0.76 - 0.7 * t, -0.26 + 0.54 * t, 0.02, 0.06, 0.03).box(0.41, 0.76 - 0.7 * t, 0.26 - 0.54 * t, 0.02, 0.06, 0.03); }
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(APE).prismY(0.02, 0.34, 0.0, 0, 0.21, 0.19, 8, Math.PI / 8);
+      b.box(-0.02, 0.38, 0, 0.24, 0.07, 0.1);                                                    // Crest.
+      b.setColor(APE_SKIN).box(0.15, 0.17, 0, 0.12, 0.22, 0.28, 0.03);
+      b.box(0.23, 0.09, 0, 0.1, 0.1, 0.22, 0.02);                                                 // Muzzle.
+      b.setColor(0x0c0b0a).box(0.21, 0.29, 0, 0.1, 0.055, 0.32);                                 // Brow.
+      b.box(0.285, 0.12, 0.04, 0.012, 0.03, 0.03).box(0.285, 0.12, -0.04, 0.012, 0.03, 0.03);
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0xffcc33).box(0.215, 0.235, 0.07, 0.012, 0.025, 0.04).box(0.215, 0.235, -0.07, 0.012, 0.025, 0.04));
+    b.setPart(1).prismY(0.24, 0.3, 0.0, 0, 0.215, 0.205, 8, Math.PI / 8);                        // Headband and tails.
+    seg(b, [-0.2, 0.27, 0.04], [-0.42, 0.18, 0.14], 0.035, 0.02, 4);
+    seg(b, [-0.2, 0.27, -0.04], [-0.44, 0.22, -0.08], 0.035, 0.02, 4);
+  },
+};
+
+// Morse: a panda in a beret. A round white body with the black shoulder band, a stalk of bamboo slung on the back, a
+// team scarf, black ears and eye patches, and her team beret with the lit cap badge.
+const PANDA_W = 0xf0f0ea, PANDA_K = 0x1a1a1c;
+MORE_SUITS.morse = {
+  limbs: { bulk: 1.32, hands: 0x161616, feet: 0x161616, sleeve: PANDA_K, trouser: PANDA_K },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(PANDA_W).prismY(-0.06, 0.18, 0, 0, 0.28, 0.34, 8, Math.PI / 8);
+      b.prismY(0.18, 0.44, 0, 0, 0.34, 0.34, 8, Math.PI / 8);
+      b.setColor(PANDA_K).prismY(0.44, 0.68, 0, 0, 0.34, 0.24, 8, Math.PI / 8);                  // Shoulder band.
+      b.setColor(PANDA_W).box(0.31, 0.3, 0, 0.06, 0.24, 0.24, 0.03);
+      b.setColor(0x5a9a3a);                                                                       // Bamboo.
+      seg(b, [-0.36, -0.1, 0.3], [-0.38, 1.0, -0.26], 0.035, 0.03, 5);
+      b.setColor(0x3a6a28);
+      for (const t of [0.25, 0.5, 0.75]) b.prismY(-0.1 + 1.1 * t - 0.015, -0.1 + 1.1 * t + 0.015, -0.365, 0.3 - 0.56 * t, 0.045, 0.045, 5);
+      b.setColor(0x6aba4a);
+      plate(b, [-0.38, 0.96, -0.24], [-0.3, 1.12, -0.12], 0.08, 0.012);
+      plate(b, [-0.38, 0.9, -0.22], [-0.46, 1.04, -0.08], 0.07, 0.012);
+    });
+    b.setPart(1).prismY(0.62, 0.74, 0, 0, 0.27, 0.24, 8, Math.PI / 8);                          // Scarf.
+    seg(b, [0.2, 0.66, 0.12], [0.32, 0.36, 0.18], 0.05, 0.04, 4);
+    b.setPart(0).setColor(0x3f4a3a).box(-0.32, 0.3, 0, 0.12, 0.26, 0.3, 0.02);                    // The radio, as ever.
+    tag(b, ACC, () => b.setPart(0).setColor(0xffd659).box(-0.385, 0.34, 0.06, 0.012, 0.04, 0.08));
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(PANDA_W).prismY(0.02, 0.36, 0, 0, 0.24, 0.21, 8, Math.PI / 8);
+      b.setColor(PANDA_K);
+      for (const s of [1, -1]) b.prismZ(s > 0 ? 0.14 : -0.22, s > 0 ? 0.22 : -0.14, -0.02, 0.36, 0.09, 0.09, 7);   // Ears.
+      for (const s of [1, -1]) plate(b, [0.205, 0.29, s * 0.045], [0.2, 0.2, s * 0.15], 0.085, 0.04);   // Eye patches.
+      b.box(0.24, 0.14, 0, 0.04, 0.05, 0.08);
+      b.setColor(PANDA_W).box(0.2, 0.12, 0, 0.08, 0.1, 0.16, 0.02);
+      b.setColor(PANDA_K).box(0.245, 0.15, 0, 0.012, 0.04, 0.07);
+      b.setColor(0xf8f8f0).box(0.232, 0.25, 0.1, 0.012, 0.025, 0.025).box(0.232, 0.25, -0.1, 0.012, 0.025, 0.025);
+    });
+    b.setPart(1).prismY(0.33, 0.42, -0.01, 0.04, 0.25, 0.17, 10);                                // Beret.
+    tag(b, ACC, () => b.setPart(0).setColor(0xffd659).box(0.21, 0.37, -0.08, 0.03, 0.05, 0.04));
+  },
+};
+
+// Cipher: a little green man in a team flight suit. A flared silver collar standing up behind the head (a ring from
+// above), a lit chest emblem, a ray gun on the hip, and a huge bulbous head with black almond eyes and two antennae.
+const ALIEN = 0x8ab89a, SILVER = 0xc8ccd4;
+MORE_SUITS.cipher = {
+  limbs: { bulk: 0.95, hands: ALIEN, feet: 0x2a2e34, sleeve: 0x3a3f4a, trouser: 0x343a44 },
+  torso(b) {
+    b.setPart(1).prismY(-0.06, 0.6, 0, 0, 0.25, 0.27, 8, Math.PI / 8);                           // Flight suit.
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(SILVER).box(0, 0.12, 0, 0.52, 0.06, 0.56);
+      b.prismY(0.58, 0.64, 0, 0, 0.28, 0.25, 8, Math.PI / 8);
+      for (let i = 0; i < 9; i++) {                                                               // Flared collar.
+        const a = Math.PI * 0.5 + (i / 8) * Math.PI, c = Math.cos(a), s = Math.sin(a);
+        plate(b, [c * 0.18, 0.62, s * 0.18], [c * 0.34, 0.92, s * 0.34], 0.13, 0.02);
+      }
+      for (const s of [1, -1]) b.box(0.0, 0.62, s * 0.3, 0.26, 0.06, 0.16, 0.02);                // Shoulder pads.
+      b.setColor(0x4a5058).box(0.02, 0.02, 0.32, 0.18, 0.1, 0.06);                              // Ray gun.
+      b.setColor(SILVER).prismX(0.1, 0.26, 0.04, 0.32, 0.025, 0.04, 6);
+    });
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xc6ff2a).prismX(0.26, 0.28, 0.42, 0, 0.07, 0.07, 6);
+      b.prismX(0.26, 0.3, 0.04, 0.32, 0.03, 0.03, 6);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(ALIEN).prismY(0.0, 0.12, 0, 0, 0.07, 0.08, 6);
+      b.prismY(0.08, 0.3, 0.02, 0, 0.13, 0.26, 8, Math.PI / 8);
+      b.prismY(0.3, 0.52, -0.01, 0, 0.26, 0.24, 8, Math.PI / 8);
+      b.prismY(0.52, 0.6, -0.01, 0, 0.24, 0.12, 8, Math.PI / 8);
+      b.setColor(0x08090a);
+      for (const s of [1, -1]) plate(b, [0.17, 0.2, s * 0.03], [0.15, 0.34, s * 0.2], 0.12, 0.05, s * 0.5);   // Eyes.
+      b.setColor(0x3a5a44).box(0.15, 0.13, 0, 0.012, 0.012, 0.06);
+      b.setColor(ALIEN);
+      for (const s of [1, -1]) chain(b, [[0.0, 0.58, s * 0.08], [-0.02, 0.72, s * 0.14], [0.04, 0.82, s * 0.2]], 0.018, 0.012, 4);
+    });
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xc6ff2a).prismY(0.81, 0.88, 0.04, 0.2, 0.04, 0.035, 6).prismY(0.81, 0.88, 0.04, -0.2, 0.04, 0.035, 6);
+      for (const s of [1, -1]) b.box(0.185, 0.3, s * 0.14, 0.012, 0.03, 0.03);
+    });
+  },
+};
+
+// Harrow: a yeti. A huge shaggy white body, an ice axe and a team harness, a blue-grey face with fangs and lit eyes,
+// small horns, and a team bobble hat (from above: a white mound with a team dot).
+const YETI = [0xe8ecf0, 0xdae0e8, 0xf4f6f8, 0xc8d4e0];
+MORE_SUITS.harrow = {
+  limbs: { bulk: 1.48, hands: 0x6a8aa0, feet: 0x6a8aa0, sleeve: 0xe0e6ec, trouser: 0xd8dee6 },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(YETI[0]);
+      b.prismY(-0.06, 0.2, 0, 0, 0.32, 0.37, 8, Math.PI / 8);
+      b.prismY(0.2, 0.52, 0, 0, 0.37, 0.39, 8, Math.PI / 8);
+      b.prismY(0.52, 0.76, 0, 0, 0.39, 0.24, 8, Math.PI / 8);
+      shag(b, 17, 34, { y0: 0.0, y1: 0.7, r0: 0.34, r1: 0.4, drop: 0.5, len: 0.2, w: 0.06, cols: YETI });
+      b.setColor(0x2a2c30);
+      seg(b, [-0.42, 0.0, -0.2], [-0.42, 0.9, -0.3], 0.025, 0.025, 4);                            // Ice axe.
+      b.setColor(0x8a9098).box(-0.42, 0.9, -0.3, 0.04, 0.04, 0.26);
+    });
+    harness(b, 0.38, 0.22);
+    b.prismY(0.66, 0.76, 0, 0, 0.3, 0.26, 8, Math.PI / 8);
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(YETI[0]).prismY(0.02, 0.34, -0.02, 0, 0.26, 0.24, 8, Math.PI / 8);
+      shag(b, 29, 12, { y0: 0.06, y1: 0.3, r0: 0.2, r1: 0.26, drop: 0.6, len: 0.16, w: 0.05, cols: YETI, skipFront: 0.7 });
+      b.setColor(0x6a8aa0).box(0.18, 0.18, 0, 0.1, 0.22, 0.26, 0.03);                            // Face.
+      b.setColor(0x1a2028).box(0.235, 0.1, 0, 0.02, 0.05, 0.16);
+      b.setColor(0xf8f8f0).box(0.24, 0.1, 0.05, 0.015, 0.06, 0.025).box(0.24, 0.1, -0.05, 0.015, 0.06, 0.025);
+      b.setColor(0xd8d0b8);
+      for (const s of [1, -1]) chain(b, [[0.0, 0.3, s * 0.2], [0.02, 0.4, s * 0.3], [0.1, 0.46, s * 0.32]], 0.04, 0.015, 4);
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0x9ad8ff).box(0.235, 0.23, 0.07, 0.012, 0.035, 0.05).box(0.235, 0.23, -0.07, 0.012, 0.035, 0.05));
+    b.setPart(1).prismY(0.3, 0.46, -0.03, 0, 0.23, 0.12, 8, Math.PI / 8);                        // Bobble hat.
+    b.prismY(0.44, 0.56, -0.04, 0, 0.08, 0.06, 7);
+    tag(b, KEEP, () => b.setPart(0).setColor(0xf4f6f8).prismY(0.28, 0.34, -0.03, 0, 0.245, 0.245, 8, Math.PI / 8));
+  },
+};
+
+// Sable: a pharaoh. A linen shift under a broad collar of team and gold rings (concentric rings from above), a gold
+// belt and a team apron, a crook on the back, and the striped nemes headdress flaring past her shoulders with a lit
+// cobra on the brow.
+const GOLD = 0xd9b44a, LINEN = 0xe8e0cc;
+MORE_SUITS.sable = {
+  limbs: { bulk: 1.06, hands: GOLD, feet: 0xb08a3a, sleeve: 0xa86f4c, trouser: LINEN },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(LINEN).prismY(-0.14, 0.58, 0, 0, 0.27, 0.25, 8, Math.PI / 8);
+      b.setColor(GOLD);
+      seg(b, [-0.3, -0.05, 0.16], [-0.32, 0.96, -0.1], 0.025, 0.025, 4);                          // Crook.
+      chain(b, [[-0.32, 0.96, -0.1], [-0.32, 1.08, -0.06], [-0.32, 1.1, 0.04], [-0.32, 1.02, 0.08]], 0.025, 0.025, 4);
+    });
+    b.setPart(1).prismY(0.56, 0.6, 0, 0, 0.4, 0.38, 12);                                         // Usekh collar.
+    b.prismY(0.63, 0.66, 0, 0, 0.3, 0.29, 12);
+    b.box(0.27, -0.02, 0, 0.03, 0.3, 0.2);                                                       // Apron.
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(GOLD).prismY(0.6, 0.63, 0, 0, 0.36, 0.33, 12);
+      b.prismY(0.66, 0.69, 0, 0, 0.26, 0.22, 12);
+      b.box(0, 0.14, 0, 0.56, 0.06, 0.58);
+      b.box(0.29, -0.02, 0, 0.012, 0.26, 0.04);
+    });
+  },
+  head(b) {
+    tag(b, TONE, () => b.setPart(0).setColor(0x7a5c43).prismY(0.04, 0.3, 0, 0, 0.16, 0.16, 7));
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x0c0a08).box(0.158, 0.21, 0.07, 0.02, 0.025, 0.07).box(0.158, 0.21, -0.07, 0.02, 0.025, 0.07);
+      b.setColor(GOLD).prismY(0.14, 0.4, -0.04, 0, 0.23, 0.2, 8, Math.PI / 8);                   // Nemes.
+      b.prismY(0.4, 0.47, -0.04, 0, 0.2, 0.1, 8, Math.PI / 8);
+      for (const s of [1, -1]) b.box(0.07, 0.0, s * 0.2, 0.1, 0.32, 0.1);                         // Lappets.
+      b.box(-0.2, 0.02, 0, 0.1, 0.3, 0.2);
+    });
+    b.setPart(1).prismY(0.0, 0.26, -0.08, 0, 0.32, 0.25, 8, Math.PI / 8);                         // The flare and its stripes.
+    for (const y of [0.2, 0.28, 0.36]) b.prismY(y, y + 0.03, -0.04, 0, 0.233, 0.225, 8, Math.PI / 8);
+    for (const s of [1, -1]) for (const y of [-0.08, 0.04]) b.box(0.07, y, s * 0.2, 0.105, 0.04, 0.105);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xff5a10).box(0.19, 0.33, 0, 0.04, 0.03, 0.2);
+      chain(b, [[0.19, 0.34, 0], [0.24, 0.42, 0], [0.22, 0.5, 0]], 0.03, 0.02, 4);
+    });
+  },
+};
 
 Object.assign(SUITS, MORE_SUITS);
