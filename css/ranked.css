@@ -104,7 +104,7 @@ body.caster-on #ui .hud, body.caster-on .controls { visibility: hidden; }
 .cs-kill i { font-style: normal; color: #9aa4ad; }
 @keyframes cs-in { from { opacity: 0; transform: translateX(12px); } }
 .cs-foot { position: absolute; bottom: max(8px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; pointer-events: auto; }
-.cs-who { min-width: 150px; max-width: 40vw; height: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 12px; background: rgba(10,13,17,.78); }
+.cs-who { width: min(200px, 40vw); height: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 12px; background: rgba(10,13,17,.78); }
 .cs-who b { font: 400 13px/1.05 var(--f-plate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .cs-who small { font: 400 9.5px/1 var(--f-plate); color: #9aa4ad; white-space: nowrap; }
 .cs-who i { width: 100%; height: 3px; margin-top: 3px; background: rgba(231,234,228,.12); }

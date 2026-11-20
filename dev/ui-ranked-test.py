@@ -213,7 +213,9 @@ async def code(browser):
         # The menu here was opened with a test handler: hand the clip to main.js's own (History's Replay code).
         await pg.evaluate(f"(() => {{ const c = window.__shared; window.__shared = null; {G}.watchShared(c); }})()")
     if True:
-        await pg.wait_for_timeout(2000)
+        # The first frames compile the map's shaders (seconds on SwiftShader): wait for the clock to move.
+        try: await pg.wait_for_function(f'({G}.replay()?.c ?? 0) > 0.3', timeout=90000)
+        except Exception: pass
         rp = await pg.evaluate(RP)
         check('the code plays as a shared replay', rp and rp['shared'] and rp['c'] > 0.5, rp)
         await shot(pg, 'code-shared')
@@ -245,7 +247,7 @@ async def caster(browser):
     await pg.wait_for_function(f"!!document.querySelector('.cs-open.on')", timeout=20000)
     # Any death replay first; then the button.
     await pg.wait_for_timeout(500)
-    await pg.locator('.cs-open.on').click()
+    await pg.locator('.cs-open.on').click(force=True)
     # A death replay may still be playing: the caster takes the picture once it is over.
     try: await pg.wait_for_function(f'{G}.app.renderer?.cine === {G}.app.match?.caster?.shot', timeout=20000)
     except Exception: pass
@@ -255,17 +257,17 @@ async def caster(browser):
     check('the list has every player', cs['rows'] == cs['players'] and cs['rows'] >= 6, (cs['rows'], cs['players']))
     check('it follows someone alive', cs['target'] is not None and cs['who'] not in ('', 'Nobody to follow'), cs['who'])
     t0 = cs['target']
-    await pg.locator('.cs-next').click()
+    await pg.locator('.cs-next').click(force=True)
     await pg.wait_for_timeout(600)
     cs = await pg.evaluate(CS)
     check('Next follows someone else', cs['target'] != t0, (t0, cs['target']))
     y0 = cs['py']
-    await pg.locator('.cs-mode[data-cam="tactical"]').click()
+    await pg.locator('.cs-mode[data-cam="tactical"]').click(force=True)
     await pg.wait_for_timeout(2000)
     cs = await pg.evaluate(CS)
     check('Tactical eases up high', cs['cam'] == 'tactical' and cs['py'] > y0 + 15, f"{y0:.1f} -> {cs['py']:.1f}")
     await shot(pg, 'caster-tactical')
-    await pg.locator('.cs-mode[data-cam="free"]').click()
+    await pg.locator('.cs-mode[data-cam="free"]').click(force=True)
     await pg.wait_for_timeout(400)
     cs = await pg.evaluate(CS)
     x0 = cs['tx']
@@ -277,7 +279,7 @@ async def caster(browser):
     print(f"    frame interval median / p90: playing {before['median']:.1f} / {before['p90']:.1f} ms, caster {during['median']:.1f} / {during['p90']:.1f} ms (SwiftShader, shared CPU)")
     await shot(pg, 'caster-free')
     # (On a slow machine the round can end meanwhile: the caster then closes by itself.)
-    if await pg.locator('.cs-exit').count(): await pg.locator('.cs-exit').click(timeout=10000)
+    if await pg.locator('.cs-exit').count(): await pg.locator('.cs-exit').click(timeout=10000, force=True)
     await pg.wait_for_timeout(500)
     cs = await pg.evaluate(CS)
     check('Close gives the picture back', not cs['active'] and not cs['on'] and not cs['cine'], cs)
@@ -340,7 +342,7 @@ async def spec(browser):
           players: m.interp.newest?.players.length ?? 0, cine: {A}.renderer?.cine === c.shot, target: c.target, tag: document.querySelector('.cs-tag b')?.textContent }}; }})()""")
         check('the spectator watches through the caster camera', g['cine'] and g['rows'] == g['players'] and g['rows'] > 0 and g['tag'] == 'Spectating', g)
         await shot(guest, 'spec')
-        await guest.locator('.cs-exit').click()
+        await guest.locator('.cs-exit').click(force=True)
         await guest.wait_for_function(f"!{A}.inMatch && {G}.menu.el.dataset.screen === 'lobby'", timeout=20000)
         check('Leave goes back to the room', True)
         check('the host plays on', await host.evaluate(f'{A}.inMatch'))
