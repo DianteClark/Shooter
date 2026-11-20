@@ -14,6 +14,7 @@ import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR, SKINS, SKIN_FX, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
 import { ACC, KEEP, ELITE, MASTERY, NO_ELITE, NO_MASTERY, SUIT, SUITS, tag, seg, masteryTorso, halo, TORSO_SLOTS, HEAD_SLOTS, face as kitFace, headBase } from './operator-kit.js';
+import { SKIN_FX_GLSL, FX_TABLE, farSuitBuilder, FAR_BUDGET } from './operator-suits.js';     // Every suit after the pilot's, the active-skin effects and the suits' distance versions.
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
@@ -177,15 +178,15 @@ void main() {
   vLight = light;
   vFx = aFx;
   // Active skins (fxK > 0): the fragment shader animates the gear (plain part-0 pieces) in the accent colour.
-  vEff = vec4(aPart < 0.5 && acc < 0.5 && keep < 0.5 ? fxK : 0.0, position);
+  // The limb meshes (part 2) take it over their tint.
+  vEff = vec4((aPart < 0.5 && acc < 0.5 && keep < 0.5) || aPart > 1.5 ? fxK : 0.0, position);
   vAcc = aTint.r + aTint.g + aTint.b > 0.0 ? aTint : vec3(0.4, 0.9, 1.0);
   gl_Position = projectionMatrix * viewMatrix * world * vec4(pos, 1.0);
 }`;
 
 // Active skin effects (operators.js SKIN_FX), on the gear of an instance whose skin has one, in object space so the
-// pattern rides with the body. Everything else skips them on one branch. 1 holo: an iridescent sheen that shifts with
-// time, with scan lines climbing it. 2 circuit: traces in the accent with pulses running up them. 3 shimmer: heat-haze
-// ripples of the accent rolling across the gear.
+// pattern rides with the body. Everything else skips them on one branch. skinFx() lives in operator-suits.js with the
+// list of effects.
 const CHAR_FRAG = /* glsl */`
 uniform float uTime;
 varying vec3 vCol;
@@ -194,26 +195,7 @@ varying vec2 vFx;
 varying vec4 vEff;
 varying vec3 vAcc;
 ${GLSL_DITHER}
-vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
-  float t = uTime;
-  if (k < 1.5) {
-    vec3 h = 0.55 + 0.45 * cos(6.2832 * (p.y * 1.7 + (p.x + p.z) * 0.9 + t * 0.3 + vec3(0.0, 0.33, 0.67)));
-    float scan = smoothstep(0.82, 1.0, fract(p.y * 12.0 - t * 1.4));
-    return mix(c, h * (0.35 + 0.65 * vLight), 0.6) + h * scan * 0.35;
-  }
-  if (k < 2.5) {
-    vec3 q = p * 9.0;
-    float row = floor(q.y);
-    float hl = step(0.42, abs(fract(q.y) - 0.5));
-    float vl = step(0.44, abs(fract(q.z + q.x + row * 0.37) - 0.5)) * step(0.5, fract(row * 0.618 + 0.2));
-    float line = max(hl, vl);
-    float pulse = pow(0.5 + 0.5 * sin(t * 3.2 - p.y * 11.0 + p.z * 3.0), 6.0);
-    return c * 0.8 + a * line * (0.3 + 1.3 * pulse);
-  }
-  float w = sin(p.y * 16.0 + sin(p.x * 11.0 + p.z * 9.0 + t * 2.6) * 2.2 - t * 5.0);
-  float w2 = 0.5 + 0.5 * w;
-  return mix(c, a * (0.55 + 0.45 * vLight), 0.18 + 0.32 * w2) + a * pow(w2, 10.0) * 0.7;
-}
+${SKIN_FX_GLSL}
 void main() {
   if (vFx.x < 0.999 && vFx.x < screenDither(gl_FragCoord.xy)) discard;
   vec3 c = vCol;
@@ -509,8 +491,15 @@ const NONE = 30, ALWAYS = 31;
 // Suits (operator-kit.js SUITS) live in a bank of their own, drawn only for someone wearing one, so nobody else's
 // vertex shader walks them: suit k is pick k of that bank's slots 0 and 4, and an operator's suit rides in the high bits
 // of its slot 0 / 4 selection (own pick + 32 x (k + 1)).
+// With a suit for every operator the one bank grew past what each wearer should walk (docs/OPERATORS-ART.md), so suits
+// are dealt into banks of SUIT_BANK in roster order: a wearer walks only its own bank's suits, and a bank is drawn (two
+// calls) only while someone on screen wears one of its suits. Each bank has a distance twin (farSuitBuilder): the same
+// suits cut to their biggest pieces, so a suit still reads at range for a few hundred vertices.
+const SUIT_BANK = 10;
 const ALL_SUITS = ALL_OPS.filter((o, i) => SUITS[o.id] && ALL_OPS.findIndex(q => q.id === o.id) === i).map(o => o.id);
-if (ALL_SUITS.length > NONE) throw new Error('operator kit: too many suits');
+const SUIT_BANKS = [];
+for (let i = 0; i < ALL_SUITS.length; i += SUIT_BANK) SUIT_BANKS.push(ALL_SUITS.slice(i, i + SUIT_BANK));
+const suitSlot = id => { const g = ALL_SUITS.indexOf(id); return g < 0 ? null : { bank: Math.floor(g / SUIT_BANK), k: g % SUIT_BANK }; };
 export const PICKS = (() => {
   const out = {};
   for (const [name] of [...TORSO_SLOTS, ...HEAD_SLOTS]) {
@@ -525,7 +514,7 @@ export const PICKS = (() => {
 function opPicks(op) {
   const legacy = LEGACY.indexOf(op.id);
   const pick = name => { const i = PICKS[name].indexOf(op.kit?.[name]); return i < 0 ? NONE : i; };
-  const own = (legacy >= 0 ? legacy : NONE) + 32 * (ALL_SUITS.indexOf(op.id) + 1);
+  const own = (legacy >= 0 ? legacy : NONE) + 32 * ((suitSlot(op.id)?.k ?? -1) + 1);
   return [
     [own, ...TORSO_SLOTS.map(([n]) => pick(n))],
     [own, ...HEAD_SLOTS.map(([n]) => pick(n))],
@@ -569,9 +558,13 @@ function kitGeometry(slots, base) {
   return toGeometry(acc);
 }
 
-function suitGeometry(base) {
+function suitGeometry(ids, base, far = false) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
-  ALL_SUITS.forEach((id, k) => { const b = new MeshBuilder(); suitPart(b, id, base); pushBuilt(acc, b, base, k); });
+  ids.forEach((id, k) => {
+    const b = far ? farSuitBuilder() : new MeshBuilder();
+    suitPart(b, id, base);
+    pushBuilt(acc, far ? b.cut(FAR_BUDGET[base === 4 ? 1 : 0]) : b, base, k);
+  });
   return toGeometry(acc);
 }
 const torsoGeometry = () => legacyGeometry(TORSOS, 0);
@@ -847,10 +840,16 @@ export class Characters {
       const look = { gear, acc, pack: k.slot + 4 * k.glow + (suit ? 16 : 0) + fx, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser),
         suit: !!suit, bulk: suit?.limbs?.bulk ?? 1, limb: null };
       if (suit) {
-        const hands = suit.limbs?.hands ?? k.gear;
+        const L = suit.limbs ?? {}, hands = L.hands ?? k.gear, feet = L.feet ?? hands;
         look.limb = { pack: 0, gear: hands != null ? [...hexRGB(hands), 1] : NO_GEAR };
+        look.foot = feet === hands ? look.limb : { pack: 0, gear: feet != null ? [...hexRGB(feet), 1] : NO_GEAR };
+        // A suit can dress the arms and legs too (fur, a wetsuit, a robot's joints): sleeve and trouser colours.
+        if (L.sleeve != null) look.sleeveRGB = hexRGB(L.sleeve);
+        if (L.trouser != null) look.trouserRGB = hexRGB(L.trouser);
       }
       look.lite = { ...look, pack: 4 * k.glow + fx };
+      // An active skin runs over the sleeves, trousers, gloves and boots too (the limb meshes' tint is part 2).
+      look.limbFx = fx ? { pack: fx, gear: NO_GEAR } : null;
       return look;
     });
     this.baseSkin = ALL_OPS.map(o => getSkin(`skin:${o.id}-base`)?.index ?? 0);
@@ -870,7 +869,7 @@ export class Characters {
       uLook.push(new THREE.Vector4(...hexRGB(L.skin ?? 0x7a5c43), L.sh ?? 1), new THREE.Vector4(...hexRGB(L.hair ?? 0x1e1612), L.hip ?? 1));
     }
     const charMat = new THREE.ShaderMaterial({ vertexShader: CHAR_VERT, fragmentShader: CHAR_FRAG,
-      uniforms: { uTime: time, uSel: { value: uSel }, uLook: { value: uLook } } });
+      uniforms: { uTime: time, uSel: { value: uSel }, uLook: { value: uLook }, FXT: { value: FX_TABLE } } });
     this.charMat = charMat;
     const add = (geom, cap) => {
       addCharInstanceAttrs(geom, cap);
@@ -890,9 +889,10 @@ export class Characters {
     this.torsoKit = add(torsoKitGeometry(), MAX_PLAYERS);
     this.headKit = add(headKitGeometry(), MAX_PLAYERS);
     this.isKit = ALL_OPS.map(o => !!o.kit);
-    // The suit bank: only drawn when someone on screen wears a suit skin.
-    this.torsoSuit = add(suitGeometry(0), MAX_PLAYERS);
-    this.headSuit = add(suitGeometry(4), MAX_PLAYERS);
+    // The suit banks (SUIT_BANK): each only drawn when someone on screen wears one of its suits; `far` is its distance twin.
+    this.suitBanks = SUIT_BANKS.map(ids => ({ t: add(suitGeometry(ids, 0), MAX_PLAYERS), h: add(suitGeometry(ids, 4), MAX_PLAYERS),
+      ft: add(suitGeometry(ids, 0, true), MAX_PLAYERS), fh: add(suitGeometry(ids, 4, true), MAX_PLAYERS), n: 0, nf: 0 }));
+    this.suitBankOf = ALL_OPS.map(o => suitSlot(o.id)?.bank ?? -1);
     this.upper = add(upperLimbGeometry(), cap * 4);      // Upper arms and thighs.
     this.arm = add(armGeometry(), cap * 2);
     this.leg = add(legGeometry(), cap * 2);
@@ -927,8 +927,10 @@ export class Characters {
     this.xrayHead = xrayOf(this.head, HEADS, 4);
     this.xrayTorsoKit = xrayOf(this.torsoKit, TORSOS, 0);
     this.xrayHeadKit = xrayOf(this.headKit, HEADS, 4);
-    this.xrayTorsoSuit = xrayOf(this.torsoSuit, TORSOS, 0);
-    this.xrayHeadSuit = xrayOf(this.headSuit, HEADS, 4);
+    for (const B of this.suitBanks) {
+      B.xt = xrayOf(B.t, TORSOS, 0); B.xh = xrayOf(B.h, HEADS, 4);
+      B.xft = xrayOf(B.ft, TORSOS, 0); B.xfh = xrayOf(B.fh, HEADS, 4);
+    }
     this.torsoLite = add(liteGeometry(TORSOS, 0), cap);
     this.headLite = add(liteGeometry(HEADS, 4), cap);
     this.xrayTorsoLite = xrayOf(this.torsoLite, TORSOS, 0);
@@ -983,7 +985,7 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit, this.torsoSuit, this.headSuit];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit, ...this.suitBanks.flatMap(B => [B.t, B.h, B.ft, B.fh])];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
@@ -1200,7 +1202,9 @@ export class Characters {
     this.ringMat.uniforms.uShapes.value = colorMode() === 'off' ? 0 : 1;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
-    let nT = 0, nTL = 0, nK = 0, nS = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
+    const banks = this.suitBanks;
+    for (let i = 0; i < banks.length; i++) { banks[i].n = 0; banks[i].nf = 0; }
+    let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
     const glove = this.glove;
     const zmOn = !!(view.obj ?? view.points?.obj)?.zm;     // Graveyard Shift: wonder weapons wear their own models.
     const fullReach = this._fullReach(view, localId, zmOn);
@@ -1432,16 +1436,19 @@ export class Characters {
       const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz;
       const lodR = zk ? (r.lite ? ZM_LOD_BACK : ZM_LOD_FAR) : r.lite ? LOD_BACK : LOD_FAR;
       r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > lodR * lodR);
-      const suit = !r.lite && sk.suit, kit = !r.lite && !suit && this.isKit[r.op];
-      const tMesh = r.lite ? this.torsoLite : suit ? this.torsoSuit : kit ? this.torsoKit : torso;
-      const hMesh = r.lite ? this.headLite : suit ? this.headSuit : kit ? this.headKit : head;
+      // A suit wearer far off gets its suit bank's distance twin, so the suit still reads at range.
+      const B = sk.suit && !zk ? banks[this.suitBankOf[r.op]] : null;
+      const suit = !!B, kit = !r.lite && !suit && this.isKit[r.op];
+      const tMesh = suit ? (r.lite ? B.ft : B.t) : r.lite ? this.torsoLite : kit ? this.torsoKit : torso;
+      const hMesh = suit ? (r.lite ? B.fh : B.h) : r.lite ? this.headLite : kit ? this.headKit : head;
       // The distance meshes show their one variant whoever wears them; the operator still sets the build and colours.
-      const ti = r.lite ? nTL++ : suit ? nS++ : kit ? nK++ : nT, op = r.op;
+      const ti = suit ? (r.lite ? B.nf++ : B.n++) : r.lite ? nTL++ : kit ? nK++ : nT, op = r.op;
+      const skT = r.lite && !suit ? sk.lite : sk;
       _s.set(look.w, look.h, look.w);
       _m.copy(_body).scale(_s);
       _m.toArray(tMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.TORSO * 16);
-      this._writeFx(tMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
+      this._writeFx(tMesh, ti, fade, flash, team, op, sk.acc, skT);
 
       _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(look.head, look.head, look.head);
@@ -1450,7 +1457,7 @@ export class Characters {
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.HEAD * 16);
-      this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
+      this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, skT);
       if (!r.lite && !kit && !suit) nT++;
 
       // Gun (the undead carry none).
@@ -1581,12 +1588,12 @@ export class Characters {
         setStretch(_m, _a.x, _a.y, _a.z, _joint[0], _joint[1], _joint[2], armT, armT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side > 0 ? P.UPPER_R : P.UPPER_L) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB, sk.limbFx);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], _b.x, _b.y, _b.z, armT, armT);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
         _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
-        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb);
+        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb ?? sk.limbFx);
         nA++;
         if (fists && nG < MAX_PLAYERS * 2) {
           // The glove on the hand, along the forearm (elbow to hand).
@@ -1649,12 +1656,12 @@ export class Characters {
         setStretch(_m, hipX, y, hipZ, _joint[0], _joint[1], _joint[2], legT, legT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side < 0 ? P.THIGH_L : P.THIGH_R) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB, sk.limbFx);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], footX, footY, footZ, legT * 0.82, legT * 0.82);
         _m.toArray(leg.instanceMatrix.array, nL * 16);
         _m.toArray(r.pose, (side < 0 ? P.SHIN_L : P.SHIN_R) * 16);
-        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB);
+        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB, sk.limbFx);
         nL++;
 
         _e.set(0, -bootYaw, lift * -2.2 + slide * (side < 0 ? 0.7 : -0.2));
@@ -1664,7 +1671,7 @@ export class Characters {
         _m.compose(_p, _q, _s);
         _m.toArray(boot.instanceMatrix.array, nB * 16);
         _m.toArray(r.pose, (side < 0 ? P.BOOT_L : P.BOOT_R) * 16);
-        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.limb);
+        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.foot ?? sk.limb ?? sk.limbFx);
         nB++;
 
         if (li === plantLeg && vfx && Math.abs(footX - this.focusX) < 22 && Math.abs(footZ - this.focusZ) < 16) {
@@ -1696,8 +1703,14 @@ export class Characters {
     this.xrayTorso.count = revealAll ? 0 : nT; this.xrayHead.count = revealAll ? 0 : nT;
     this.xrayTorsoKit.count = revealAll ? 0 : nK; this.xrayHeadKit.count = revealAll ? 0 : nK;
     this.torsoKit.count = nK; this.headKit.count = nK;
-    this.xrayTorsoSuit.count = revealAll ? 0 : nS; this.xrayHeadSuit.count = revealAll ? 0 : nS;
-    this.torsoSuit.count = nS; this.headSuit.count = nS;
+    for (let i = 0; i < banks.length; i++) {
+      const B = banks[i];
+      B.t.count = B.h.count = B.n; B.ft.count = B.fh.count = B.nf;
+      B.xt.count = B.xh.count = revealAll ? 0 : B.n; B.xft.count = B.xfh.count = revealAll ? 0 : B.nf;
+      // An empty bank stays out of the render list altogether (no program or state changes for it).
+      B.t.visible = B.h.visible = B.xt.visible = B.xh.visible = B.n > 0;
+      B.ft.visible = B.fh.visible = B.xft.visible = B.xfh.visible = B.nf > 0;
+    }
     this.xrayTorsoLite.count = revealAll ? 0 : nTL; this.xrayHeadLite.count = revealAll ? 0 : nTL;
     this.ring.count = nRing; this.blob.count = nRing;
     this.counts.nT = nT; this.counts.nTL = nTL; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
@@ -1730,7 +1743,7 @@ export class Characters {
     }
     this.xrayTorso.geometry.dispose(); this.xrayHead.geometry.dispose();
     this.xrayTorsoKit.geometry.dispose(); this.xrayHeadKit.geometry.dispose();
-    this.xrayTorsoSuit.geometry.dispose(); this.xrayHeadSuit.geometry.dispose();
+    for (const B of this.suitBanks) for (const m of [B.xt, B.xh, B.xft, B.xfh]) m.geometry.dispose();
     this.xrayTorsoLite.geometry.dispose(); this.xrayHeadLite.geometry.dispose();
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();
