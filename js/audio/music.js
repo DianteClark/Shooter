@@ -90,6 +90,7 @@ export class Music {
   }
 
   detach() {
+    clearTimeout(this._radioT); clearTimeout(this._postTimer);
     this._stopAll(true);
     this.seq.detach();
     this.ctx = null; this.engine = null;
@@ -207,7 +208,7 @@ export class Music {
   }
 
   _duck(tc) {
-    if (!this.duck) return;
+    if (!this.duck || !this.ctx) return;
     const target = this._duckTarget();
     this.duckLevel = target;
     this.duck.gain.setTargetAtTime(target, this.ctx.currentTime, tc);
