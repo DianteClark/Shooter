@@ -8,6 +8,7 @@
 // Suit frames are operator-kit.js's: forward +X, up +Y, the wearer's left +Z; torso origin at the hips (chest top ~0.62),
 // head origin at the top of the chest (a face's front at x ~0.17). Plain part-0 pieces take the skin's gear colour, KEEP
 // pieces keep theirs, ACC pieces take the accent and glow, TONE pieces the operator's skin tone, part 1 the team colour.
+import * as THREE from 'three';
 import { MeshBuilder } from './meshbuild.js';
 import { ACC, KEEP, TONE, LOCKS, SUITS, tag, seg, plate } from './operator-kit.js';
 
@@ -359,5 +360,387 @@ function harness(b, r = 0.36, y = 0.2) {
   b.box(-r + 0.005, 0.47, 0.15, 0.04, 0.3, 0.07).box(-r + 0.005, 0.47, -0.15, 0.04, 0.3, 0.07);
 }
 
+// A flat profile (z, y points) standing upright across the body at depth x0..x1: shields, banners, wings seen edge on.
+const _rot = new THREE.Matrix4();
+function profileX(b, pts, x0, x1) {
+  const keep = b.matrix;
+  _rot.makeRotationY(Math.PI / 2).setPosition(x0, 0, 0);
+  if (keep) _rot.premultiply(keep);
+  b.matrix = _rot;
+  b.extrude(pts.map(([z, y]) => [-z, y]), 0, x1 - x0);
+  b.matrix = keep;
+  return b;
+}
+// A flat profile (x, z points) lying level at height y0..y1: capes and wings seen from above.
+const _rot2 = new THREE.Matrix4();
+function profileY(b, pts, y0, y1) {
+  const keep = b.matrix;
+  _rot2.makeRotationX(-Math.PI / 2);
+  if (keep) _rot2.premultiply(keep);
+  b.matrix = _rot2;
+  b.extrude(pts.map(([x, z]) => [x, -z]), y0, y1);
+  b.matrix = keep;
+  return b;
+}
+// Seeded strips hanging off a body: shaggy fur, ghillie, straw. `cols` are KEEP colours picked at random.
+function shag(b, seed, n, { y0, y1, r0, r1, drop, len = 0.2, w = 0.035, cols, skipFront = 0, cx = 0 }) {
+  const R = rng(seed);
+  for (let i = 0; i < n; i++) {
+    const a = R() * TAU;
+    if (skipFront && Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < skipFront) continue;
+    const y = y0 + (y1 - y0) * R(), ca = Math.cos(a), sa = Math.sin(a), l = len * (0.7 + 0.6 * R());
+    b.setColor(cols[Math.floor(R() * cols.length)]);
+    seg(b, [cx + ca * r0, y, sa * r0], [cx + ca * (r1 + l * 0.3), y - drop * l * 3, sa * (r1 + l * 0.3)], w, w * 0.5, 4);
+  }
+}
+
 export const MORE_SUITS = {};
+// Trooper: a knight in plate. Layered pauldrons and a cuirass in the skin's metal, a team tabard, a kite shield on the
+// back with a lit cross, and a great helm with a gold circlet and a long team plume (the plume is what reads from above).
+MORE_SUITS.trooper = {
+  limbs: { bulk: 1.16, hands: null, sleeve: 0x7a828c, trouser: 0x5c626a },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x50565e).prismY(-0.12, 0.16, 0, 0, 0.29, 0.27, 8, Math.PI / 8);      // Mail skirt.
+      b.setColor(0x3a2a1c).box(0, 0.15, 0, 0.5, 0.06, 0.6);                                       // Sword belt.
+      b.setColor(0x2a2a2e).prismY(-0.02, 0.2, 0.06, 0.32, 0.03, 0.03, 4);
+    });
+    b.setPart(0).setColor(0x8a9098);
+    b.prismY(0.16, 0.5, 0, 0, 0.26, 0.3, 8, Math.PI / 8);                                         // Cuirass.
+    b.prismY(0.5, 0.66, 0, 0, 0.3, 0.2, 8, Math.PI / 8);
+    b.setColor(0x6a7078).prismY(0.62, 0.72, 0, 0, 0.19, 0.17, 8, Math.PI / 8);                   // Gorget.
+    for (const s of [1, -1]) {                                                                     // Three lames a shoulder.
+      b.setColor(0x9aa0a8).box(0.0, 0.7, s * 0.33, 0.32, 0.07, 0.26, 0.025);
+      b.setColor(0x7a8088).box(0.0, 0.63, s * 0.38, 0.3, 0.07, 0.22, 0.02);
+      b.setColor(0x6a7078).box(0.0, 0.56, s * 0.42, 0.26, 0.07, 0.16, 0.02);
+      b.setPart(1).box(0.0, 0.745, s * 0.33, 0.2, 0.025, 0.14).setPart(0);
+    }
+    b.setPart(1);                                                                                  // Tabard front and back.
+    b.box(0.31, 0.2, 0, 0.025, 0.66, 0.3).box(-0.31, 0.26, 0, 0.025, 0.56, 0.32);
+    profileX(b, [[0, 0.8], [0.21, 0.7], [0.21, 0.42], [0, 0.04], [-0.21, 0.42], [-0.21, 0.7]], -0.43, -0.36);   // Kite shield.
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffe08a);
+      b.box(-0.44, 0.48, 0, 0.02, 0.56, 0.06).box(-0.44, 0.58, 0, 0.02, 0.06, 0.32);                 // Cross on the shield.
+      b.box(0.325, 0.36, 0, 0.012, 0.3, 0.05).box(0.325, 0.42, 0, 0.012, 0.05, 0.2);              // And on the tabard.
+    });
+  },
+  head(b) {
+    b.setPart(0).setColor(0x9aa0a8).prismY(0.02, 0.36, 0, 0, 0.215, 0.225, 8, Math.PI / 8);      // Great helm.
+    b.setColor(0x8a9098).prismY(0.36, 0.45, 0, 0, 0.225, 0.11, 8, Math.PI / 8);
+    b.setColor(0x6a7078).box(0.2, 0.18, 0, 0.06, 0.2, 0.06);                                     // Nasal ridge.
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x0c0d10).box(0.2, 0.25, 0, 0.06, 0.04, 0.36);                       // Eye slit.
+      for (const z of [-0.1, -0.05, 0.05, 0.1]) b.box(0.212, 0.12, z, 0.03, 0.025, 0.025);         // Breaths.
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0xffe08a).prismY(0.3, 0.335, 0, 0, 0.232, 0.232, 8, Math.PI / 8));   // Circlet.
+    b.setPart(1);
+    chain(b, [[0.02, 0.43, 0], [-0.04, 0.6, 0], [-0.18, 0.68, 0], [-0.34, 0.6, 0], [-0.44, 0.42, 0]], 0.065, 0.03, 5);   // Plume.
+    b.box(0.0, 0.47, 0, 0.12, 0.05, 0.05);
+  },
+};
+
+// Wisp: a ghillie monster. A shaggy mound of strips in four greens with team tufts across the shoulders, two lit eyes
+// in the dark of the hood, and will-o'-the-wisps hanging round it (the accent, prism-cycling on the mastery skin).
+const GHILLIE = [0x4c5a32, 0x5a6a3a, 0x6b6147, 0x3e4a2a, 0x7a7040, 0x55603e];
+MORE_SUITS.wisp = {
+  limbs: { bulk: 1.3, hands: 0x3a4028, sleeve: 0x4c5a32, trouser: 0x3e4a2a },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x3a4628).prismY(-0.1, 0.62, 0, 0, 0.34, 0.27, 7);
+      b.setColor(0x4c5a32).prismY(0.62, 0.72, 0, 0, 0.27, 0.16, 7);
+      shag(b, 11, 46, { y0: -0.05, y1: 0.66, r0: 0.28, r1: 0.36, drop: 0.55, len: 0.26, w: 0.055, cols: GHILLIE });
+    });
+    b.setPart(1).prismY(0.6, 0.7, 0, 0, 0.33, 0.29, 7);                                         // Team scrim and tufts.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * TAU + 0.2, c = Math.cos(a), s = Math.sin(a);
+      seg(b, [c * 0.2, 0.72, s * 0.2], [c * 0.48, 0.48, s * 0.48], 0.065, 0.03, 4);
+    }
+    tag(b, ACC, () => {                                                                           // The wisps.
+      b.setPart(0).setColor(0x9fffd0);
+      for (const [x, y, z] of [[-0.42, 0.95, 0.3], [0.1, 1.1, -0.42], [-0.3, 0.75, -0.5], [0.35, 0.85, 0.46]]) b.prismY(y, y + 0.08, x, z, 0.04, 0.04, 5);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x3e4a2a).prismY(0.0, 0.4, -0.02, 0, 0.27, 0.14, 7);
+      shag(b, 23, 22, { y0: 0.18, y1: 0.42, r0: 0.12, r1: 0.26, drop: 0.7, len: 0.22, w: 0.04, cols: GHILLIE, skipFront: 0.5 });
+      b.setColor(0x0a0c08).box(0.19, 0.2, 0, 0.08, 0.16, 0.24);                                   // The dark under the hood.
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0x9fffd0).prismX(0.22, 0.24, 0.23, 0.06, 0.03, 0.03, 6).prismX(0.22, 0.24, 0.23, -0.06, 0.03, 0.03, 6));
+    b.setPart(1);
+    seg(b, [0, 0.38, 0], [-0.08, 0.6, 0.06], 0.05, 0.02, 4);
+    seg(b, [0, 0.38, 0], [-0.12, 0.54, -0.1], 0.045, 0.02, 4);
+  },
+};
+
+// Relay: a tin robot. A riveted silver body with a team chest panel and team shoulder joints, a set of lit dials, the
+// radio set on its back with a mast taller than anyone's, and a box head with round lit eyes and its own antenna.
+const TIN = 0xa8b0b8, TIN_D = 0x6a727c;
+MORE_SUITS.relay = {
+  limbs: { bulk: 1.22, hands: 0x4a5058, sleeve: 0x8a929c, trouser: 0x7a828c },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(TIN_D).box(0, 0.02, 0, 0.32, 0.22, 0.44);
+      b.setColor(TIN).box(0, 0.38, 0, 0.42, 0.58, 0.58, 0.04);
+      b.setColor(0x8a929c).box(0, 0.7, 0, 0.3, 0.06, 0.4);
+      b.setColor(0x2a2e34);
+      for (const y of [0.2, 0.56]) for (const z of [-0.22, 0.22]) b.box(0.215, y, z, 0.012, 0.03, 0.03);   // Rivets.
+    });
+    b.setPart(1).box(0.215, 0.4, 0, 0.02, 0.28, 0.32);                                            // Team chest panel.
+    b.prismZ(0.27, 0.36, 0, 0.56, 0.12, 0.11, 8).prismZ(-0.36, -0.27, 0, 0.56, 0.11, 0.12, 8);    // Shoulder joints.
+    b.box(-0.3, 0.5, 0, 0.17, 0.06, 0.42);
+    b.setPart(0).setColor(0x3f4a3a).box(-0.3, 0.32, 0, 0.18, 0.38, 0.4, 0.03);                   // Radio set.
+    b.setColor(0x1a1c1e).prismY(0.55, 1.8, -0.34, 0.12, 0.028, 0.012, 4);                         // Mast.
+    b.prismY(0.55, 1.2, -0.34, -0.12, 0.022, 0.01, 4);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0x7cf8ff);
+      b.prismX(0.225, 0.24, 0.47, 0.08, 0.04, 0.04, 8).prismX(0.225, 0.24, 0.47, -0.08, 0.04, 0.04, 8);   // Dials.
+      b.box(0.232, 0.33, 0, 0.012, 0.04, 0.2);
+      b.prismY(1.8, 1.88, -0.34, 0.12, 0.05, 0.05, 6).prismY(1.2, 1.26, -0.34, -0.12, 0.04, 0.04, 6);
+      b.box(-0.395, 0.38, 0.08, 0.012, 0.06, 0.12);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(TIN).box(0.02, 0.24, 0, 0.4, 0.34, 0.4, 0.03);
+      b.setColor(TIN_D).box(0.0, 0.06, 0, 0.18, 0.08, 0.18);                                     // Neck.
+      b.setColor(0x1a1c20).box(0.22, 0.13, 0, 0.02, 0.08, 0.22);                                  // Mouth grille.
+      b.setColor(0x8a929c);
+      for (const z of [-0.06, 0, 0.06]) b.box(0.232, 0.13, z, 0.012, 0.08, 0.015);
+      b.setColor(0x2a2e34).prismX(0.2, 0.225, 0.27, 0.09, 0.075, 0.075, 8).prismX(0.2, 0.225, 0.27, -0.09, 0.075, 0.075, 8);
+    });
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0x7cf8ff).prismX(0.225, 0.24, 0.27, 0.09, 0.055, 0.055, 8).prismX(0.225, 0.24, 0.27, -0.09, 0.055, 0.055, 8);
+      b.prismY(0.68, 0.76, -0.04, 0, 0.045, 0.045, 6);
+    });
+    b.setPart(1).box(0.02, 0.42, 0, 0.3, 0.025, 0.3);                                             // Team lid and ear bolts.
+    b.prismZ(0.2, 0.27, 0.02, 0.26, 0.07, 0.06, 6).prismZ(-0.27, -0.2, 0.02, 0.26, 0.06, 0.07, 6);
+    b.setPart(0).setColor(0x1a1c20).prismY(0.43, 0.68, -0.04, 0, 0.016, 0.012, 4);
+  },
+};
+
+// Yard Dog: a firefighter. A turnout coat with lit reflective bands, an air cylinder and an axe on the back, a coiled
+// hose over the shoulder, and the classic helmet with its long back brim in the team colour and a lit front shield.
+const TURNOUT = 0x8a7848;
+MORE_SUITS.yarddog = {
+  limbs: { bulk: 1.26, hands: 0x2a2620, feet: 0x161616, sleeve: 0x7e6e42, trouser: 0x6e603a },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(TURNOUT).box(0, 0.26, 0, 0.44, 0.78, 0.62, 0.05);
+      b.setColor(0x6a5a34).box(0.225, 0.3, 0, 0.02, 0.6, 0.06);                                 // Storm flap.
+      b.setColor(0xb02a20);                                                                       // Hose coil over the left shoulder.
+      chain(b, [[0.16, 0.2, 0.3], [0.18, 0.5, 0.26], [0.06, 0.72, 0.2], [-0.12, 0.72, 0.2], [-0.24, 0.5, 0.26], [-0.22, 0.2, 0.3]], 0.04, 0.04, 5);
+      b.setColor(0x3a2a1a);
+      seg(b, [-0.4, 0.05, -0.18], [-0.4, 0.82, -0.28], 0.025, 0.025, 4);                          // Axe.
+      b.setColor(0xb02a20).box(-0.4, 0.8, -0.34, 0.05, 0.08, 0.16);
+      b.setColor(0x8a9098).box(-0.4, 0.8, -0.44, 0.03, 0.16, 0.04);
+    });
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xfff1a0);
+      for (const y of [0.0, 0.4]) b.box(0, y, 0, 0.45, 0.05, 0.63);                                // Reflective bands.
+      b.box(0, 0.66, 0.2, 0.3, 0.012, 0.05).box(0, 0.66, -0.2, 0.3, 0.012, 0.05);
+    });
+    b.setPart(0).setColor(0x8a9098).prismY(0.08, 0.6, -0.33, 0, 0.1, 0.1, 8);                     // Air cylinder.
+    b.setColor(0x2a2c30).prismY(0.6, 0.66, -0.33, 0, 0.05, 0.04, 6);
+    b.setPart(1).box(-0.225, 0.26, 0, 0.02, 0.2, 0.5);                                            // Team back panel and yoke.
+    b.box(0, 0.65, 0, 0.36, 0.04, 0.56);
+    b.prismY(0.36, 0.42, -0.33, 0, 0.106, 0.106, 8);
+  },
+  head(b) {
+    tag(b, TONE, () => b.setPart(0).setColor(0x7a5c43).prismY(0.04, 0.26, 0, 0, 0.16, 0.16, 7));
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x15110e).box(0.152, 0.21, 0.06, 0.02, 0.025, 0.04).box(0.152, 0.21, -0.06, 0.02, 0.025, 0.04);
+      b.setColor(TURNOUT).box(-0.15, 0.12, 0, 0.08, 0.2, 0.32);                                   // Neck flap.
+    });
+    b.setPart(1);
+    b.prismY(0.22, 0.28, -0.02, 0, 0.23, 0.23, 8, Math.PI / 8);
+    b.prismY(0.28, 0.46, -0.02, 0, 0.23, 0.13, 8, Math.PI / 8);
+    b.box(-0.14, 0.24, 0, 0.42, 0.03, 0.5);                                                      // The long back brim.
+    b.box(0.2, 0.25, 0, 0.12, 0.03, 0.36);
+    b.setPart(0).setColor(0xc9a240).box(-0.04, 0.46, 0, 0.42, 0.05, 0.05);                       // Comb.
+    tag(b, ACC, () => b.setPart(0).setColor(0xfff1a0).box(0.24, 0.36, 0, 0.03, 0.16, 0.14));     // Front shield.
+  },
+};
+
+// Ronin: a samurai. A lacquered do in the team colour with dark lacing, broad sode on the shoulders, a plated skirt,
+// two swords, a sashimono banner on the back, and a kabuto whose team neck guard flares wide under a gold crescent.
+MORE_SUITS.ronin = {
+  limbs: { bulk: 1.14, hands: 0x2a1a1a, sleeve: 0x26222e, trouser: 0x1c1a24 },
+  torso(b) {
+    b.setPart(1).prismY(0.12, 0.6, 0, 0, 0.25, 0.29, 8, Math.PI / 8);                             // Do.
+    b.prismY(0.6, 0.68, 0, 0, 0.29, 0.2, 8, Math.PI / 8);
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x14121a);
+      for (const y of [0.22, 0.32, 0.42, 0.52]) b.box(0.0, y, 0, 0.56, 0.018, 0.6);               // Lacing rows.
+      b.setColor(0x1a1820);                                                                       // Swords on the left hip.
+      seg(b, [0.24, 0.14, 0.3], [-0.62, 0.02, 0.38], 0.03, 0.025, 4);
+      seg(b, [0.2, 0.18, 0.34], [-0.36, 0.12, 0.42], 0.026, 0.022, 4);
+      b.setColor(0xd8d0c0);
+      seg(b, [0.24, 0.14, 0.3], [0.42, 0.17, 0.28], 0.026, 0.026, 4);
+      b.setColor(0x3a2a1c);
+      seg(b, [-0.24, 0.2, 0], [-0.3, 1.5, 0], 0.022, 0.018, 4);                                   // Banner pole.
+    });
+    b.setPart(0).setColor(0x2a2a3a);
+    for (const [x, z, w] of [[0.24, 0, 0.3], [-0.24, 0, 0.32], [0, 0.26, 0.3], [0, -0.26, 0.3]]) {   // Kusazuri.
+      if (z) b.box(0.0, 0.0, z, w, 0.26, 0.05); else b.box(x, 0.0, 0, 0.05, 0.26, w);
+    }
+    for (const s of [1, -1]) {                                                                     // Sode.
+      plate(b, [0.04, 0.72, s * 0.32], [0.0, 0.36, s * 0.46], 0.34, 0.04);
+      b.setPart(1);
+      plate(b, [0.04, 0.73, s * 0.33], [0.035, 0.64, s * 0.36], 0.35, 0.046);
+      b.setPart(0);
+    }
+    b.setPart(1);
+    profileX(b, [[-0.02, 1.48], [0.22, 1.48], [0.22, 0.98], [-0.02, 0.98]], -0.32, -0.3);          // Sashimono.
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xd9b44a);
+      b.prismX(-0.34, -0.33, 1.23, 0.1, 0.07, 0.07, 8);
+      for (const s of [1, -1]) plate(b, [0.04, 0.665, s * 0.33], [0.0, 0.48, s * 0.42], 0.36, 0.05, 0);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0x6a1a1a).box(0.18, 0.14, 0, 0.08, 0.16, 0.26, 0.02);                 // Menpo.
+      b.setColor(0x0c0a0e).box(0.17, 0.24, 0, 0.06, 0.06, 0.28);
+      b.setColor(0xe8e0d0).box(0.225, 0.11, 0, 0.012, 0.03, 0.12);
+    });
+    b.setPart(0).setColor(0x2a2a3a).prismY(0.22, 0.42, 0, 0, 0.22, 0.09, 8, Math.PI / 8);          // Bowl.
+    b.setPart(1).prismY(0.08, 0.24, -0.05, 0, 0.36, 0.24, 8, Math.PI / 8);                       // Shikoro, flared.
+    b.setPart(0).setColor(0x2a2a3a);
+    for (const s of [1, -1]) plate(b, [0.16, 0.24, s * 0.2], [0.04, 0.3, s * 0.34], 0.14, 0.03);  // Fukigaeshi.
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xd9b44a).box(0.2, 0.31, 0, 0.06, 0.06, 0.08);
+      for (const s of [1, -1]) chain(b, [[0.21, 0.32, 0], [0.26, 0.44, s * 0.1], [0.24, 0.58, s * 0.2], [0.18, 0.7, s * 0.26]], 0.032, 0.012, 4);
+    });
+  },
+};
+
+// Ghoul: a hazmat suit. Puffed yellow coveralls with team tape round the chest and waist, an air cylinder on the back
+// with a hose to the chest and a lit biohazard mark, and a hood whose broad visor glows (the accent).
+const HAZ = 0xd8b830;
+MORE_SUITS.ghoul = {
+  limbs: { bulk: 1.32, hands: 0x1a1a1a, feet: 0x1a1a1a, sleeve: 0xd0b02c, trouser: 0xc8a828 },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(HAZ);
+      roundBody(b, 0.33, 0.68);
+      b.setColor(0x8a9098).prismY(0.1, 0.6, -0.4, 0, 0.11, 0.11, 8);                              // Cylinder.
+      b.setColor(0x1a1a1a);
+      chain(b, [[-0.36, 0.6, 0.06], [-0.18, 0.74, 0.22], [0.12, 0.66, 0.26], [0.3, 0.44, 0.16]], 0.03, 0.03, 4);
+      b.box(0.33, 0.3, 0, 0.03, 0.4, 0.04);                                                      // Zip.
+    });
+    b.setPart(1);
+    b.prismY(0.16, 0.22, 0, 0, 0.34, 0.34, 8, Math.PI / 8).prismY(0.44, 0.5, 0, 0, 0.34, 0.34, 8, Math.PI / 8);
+    b.prismY(0.66, 0.7, 0, 0, 0.24, 0.23, 8, Math.PI / 8);
+    b.prismY(0.42, 0.48, -0.4, 0, 0.115, 0.115, 8);
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xff2bd6);
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * TAU + Math.PI / 2; b.prismX(-0.52, -0.51, 0.34 + Math.sin(a) * 0.045, Math.cos(a) * 0.045, 0.035, 0.035, 6); }
+      b.box(0.335, 0.52, 0.12, 0.015, 0.06, 0.06);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(HAZ).prismY(0.0, 0.38, -0.03, 0, 0.26, 0.26, 8, Math.PI / 8);
+      b.prismY(0.38, 0.48, -0.03, 0, 0.26, 0.14, 8, Math.PI / 8);
+      b.setColor(0x1a1a1a).box(0.22, 0.25, 0, 0.05, 0.22, 0.36);                                 // Visor frame.
+      b.prismX(0.2, 0.34, 0.08, 0.1, 0.055, 0.06, 6).prismX(0.2, 0.34, 0.08, -0.1, 0.055, 0.06, 6);   // Filters.
+    });
+    tag(b, ACC, () => b.setPart(0).setColor(0xff2bd6).box(0.248, 0.25, 0, 0.012, 0.17, 0.31));
+    b.setPart(1).prismY(0.47, 0.51, -0.03, 0, 0.17, 0.12, 8, Math.PI / 8);
+    b.box(-0.02, 0.3, 0, 0.5, 0.05, 0.56);
+  },
+};
+
+// Ram: a bighorn. A wool coat in fat cream curls with a team harness and a brass bell, a long dark face, and two huge
+// horns curling round the ears in the team colour: from above, two team spirals either side of the head.
+const WOOL = 0xe8e0d0, RAMFACE = 0x5a4a3a;
+function ramHorn(b, s) {
+  const pts = [];
+  for (let i = 0; i <= 10; i++) {
+    const th = (i / 10) * TAU * 0.86, r = 0.2 - i * 0.01;
+    pts.push([-0.02 - Math.sin(th) * r, 0.28 + Math.cos(th) * r, s * (0.22 + i * 0.016)]);
+  }
+  chain(b, pts, 0.085, 0.03, 6);
+}
+MORE_SUITS.ram = {
+  limbs: { bulk: 1.3, hands: 0x3a3028, feet: 0x2a2420, sleeve: 0xd8d0c0, trouser: 0x5a4a3a },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(WOOL);
+      roundBody(b, 0.34, 0.68);
+      const R = rng(5);
+      for (let i = 0; i < 26; i++) {
+        const a = R() * TAU, y = 0.0 + R() * 0.66, r = y > 0.5 ? 0.3 : 0.35;
+        b.setColor(R() < 0.5 ? 0xf0eadc : 0xd8cfbe).box(Math.cos(a) * r, y, Math.sin(a) * r, 0.13, 0.11, 0.13);
+      }
+      b.setColor(0x5a4a3a).box(-0.36, 0.14, 0, 0.08, 0.1, 0.1);
+    });
+    harness(b, 0.35, 0.2);
+    b.prismY(0.64, 0.7, 0, 0, 0.27, 0.25, 8, Math.PI / 8);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffcf4a).prismY(0.5, 0.62, 0.3, 0, 0.06, 0.04, 6));
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(WOOL).prismY(0.18, 0.42, -0.04, 0, 0.23, 0.13, 8, Math.PI / 8);
+      b.setColor(RAMFACE).box(0.08, 0.2, 0, 0.22, 0.22, 0.26, 0.03);
+      b.box(0.24, 0.12, 0, 0.18, 0.16, 0.18, 0.03);                                               // Long snout.
+      b.setColor(0x2a2018).box(0.335, 0.14, 0, 0.02, 0.05, 0.1);
+      b.setColor(0xd0a020).box(0.19, 0.27, 0.12, 0.04, 0.035, 0.03).box(0.19, 0.27, -0.12, 0.04, 0.035, 0.03);
+      b.setColor(0x15110e).box(0.205, 0.27, 0.12, 0.012, 0.018, 0.03).box(0.205, 0.27, -0.12, 0.012, 0.018, 0.03);
+      b.setColor(RAMFACE).box(-0.02, 0.26, 0.24, 0.1, 0.05, 0.08).box(-0.02, 0.26, -0.24, 0.1, 0.05, 0.08);   // Ears.
+    });
+    b.setPart(1);
+    ramHorn(b, 1); ramHorn(b, -1);
+  },
+};
+
+// Monarch: a lion king. Golden fur, a team cape with an ermine collar over the shoulders, a tufted tail, a great mane
+// all round the head (the biggest disc on the roster from above) and a crown in the accent.
+const LION = 0xc89030, MANE = [0x8a4a1a, 0x9a5a22, 0x7a3e16];
+MORE_SUITS.monarch = {
+  limbs: { bulk: 1.3, hands: 0x8a5a28, feet: 0x6a4420, sleeve: 0xc08a2c, trouser: 0xb07a22 },
+  torso(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(LION);
+      roundBody(b, 0.32, 0.66);
+      b.setColor(0xe8c878).box(0.3, 0.3, 0, 0.06, 0.34, 0.26, 0.03);                             // Pale belly.
+      b.setColor(LION);
+      chain(b, [[-0.3, 0.06, 0], [-0.52, -0.06, 0.08], [-0.68, 0.04, 0.2], [-0.74, 0.2, 0.26]], 0.035, 0.03, 4);
+      b.setColor(0x6a3412).box(-0.75, 0.24, 0.27, 0.12, 0.12, 0.12);                             // Tuft.
+      b.setColor(0xf2f0ea).prismY(0.62, 0.72, -0.02, 0, 0.33, 0.29, 10);                           // Ermine collar.
+      b.setColor(0x15110e);
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU + 0.3; b.box(Math.cos(a) * 0.31 - 0.02, 0.73, Math.sin(a) * 0.31, 0.03, 0.02, 0.05); }
+    });
+    b.setPart(1);                                                                                  // Cape.
+    b.prismY(0.48, 0.62, -0.05, 0, 0.42, 0.36, 10);
+    profileX(b, [[-0.36, 0.6], [0.36, 0.6], [0.42, -0.12], [-0.42, -0.12]], -0.39, -0.34);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffd659).box(-0.4, -0.08, 0, 0.02, 0.05, 0.84));
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(LION).prismY(0.04, 0.38, 0, 0, 0.2, 0.17, 8, Math.PI / 8);
+      b.setColor(0xe8c878).box(0.18, 0.13, 0, 0.12, 0.12, 0.18, 0.02);                            // Muzzle.
+      b.setColor(0x2a1810).box(0.245, 0.18, 0, 0.03, 0.05, 0.08);
+      b.setColor(0x15110e).box(0.165, 0.27, 0.075, 0.03, 0.03, 0.05).box(0.165, 0.27, -0.075, 0.03, 0.03, 0.05);
+      b.setColor(LION).box(-0.02, 0.4, 0.13, 0.06, 0.07, 0.07).box(-0.02, 0.4, -0.13, 0.06, 0.07, 0.07);
+      // Mane: a disc framing the face and two rings of spikes round it, like a sun from the front, a wide fan from above.
+      b.setColor(MANE[0]).prismX(-0.16, 0.06, 0.2, 0, 0.36, 0.3, 10);
+      const R = rng(9);
+      for (const [n, r0, r1, x0, x1, w] of [[14, 0.2, 0.46, -0.04, -0.16, 0.085], [11, 0.16, 0.36, 0.04, -0.04, 0.07]]) {
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU + r0, c = Math.cos(a), s = Math.sin(a);
+          if (c < -0.85) continue;
+          b.setColor(MANE[Math.floor(R() * MANE.length)]);
+          seg(b, [x0, 0.2 + c * r0, s * r0], [x1, 0.2 + c * r1 * (0.9 + 0.2 * R()), s * r1 * (0.9 + 0.2 * R())], w, 0.025, 5);
+        }
+      }
+    });
+    tag(b, ACC, () => {                                                                           // Crown.
+      b.setPart(0).setColor(0xffd659).prismY(0.4, 0.45, -0.01, 0, 0.14, 0.14, 8, Math.PI / 8);
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; b.prismY(0.45, 0.56, -0.01 + Math.cos(a) * 0.12, Math.sin(a) * 0.12, 0.035, 0.008, 4); }
+    });
+  },
+};
+
 Object.assign(SUITS, MORE_SUITS);
