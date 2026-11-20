@@ -7,6 +7,10 @@ import { PART } from './camo-shader.js';
 import { kitKey, normalizeKit, NO_ATTACHMENTS, ATTACHMENTS, SLOTS } from '../shared/attachments.js';
 import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
 import { w3Factories } from './guns-w3.js';
+import { w4Factories } from './guns-w4.js';
+import { detailGun } from './guns-detail.js';
+import { WEAPON_CATEGORY } from '../shared/constants.js';
+import { fairWonderFactories } from './zm-wonder-models.js';     // Graveyard Shift's Whirligig (Wrenfield Fair).
 import { fitOpticW2, fitBarrelW2, fitWrapW2, W2_WRAPS, W2_MAG_LOOK, fitVentRib, fitShellCuff, fitGuideRail, fitVenturi } from './guns-w2.js';
 
 const C = {
@@ -18,9 +22,11 @@ const C = {
   white: 0xffffff,
 };
 
+// The visual pass (guns-detail.js) hooks the next kit() made: its detailing runs just before that kit's geometry is built.
+let detailHook = null;
 function kit() {
   const b = new MeshBuilder();
-  return {
+  const k = {
     b,
     body()   { b.setPart(PART.BODY).setColor(C.body);    return b; },
     body2()  { b.setPart(PART.BODY).setColor(C.bodyL);   return b; },
@@ -29,6 +35,12 @@ function kit() {
     dark()   { b.setPart(PART.METAL).setColor(C.dark);   return b; },
     accent() { b.setPart(PART.ACCENT).setColor(C.white); return b; },
   };
+  if (detailHook) {
+    const hook = detailHook, own = b.build.bind(b);
+    detailHook = null;
+    b.build = () => { hook(k); return own(); };
+  }
+  return k;
 }
 
 // Heavy forward-canted pistol grip, shared so every gun holds the same in hand.
@@ -1283,6 +1295,8 @@ Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fi
   fitShellCuff, fitGuideRail, fitVenturi }));
 // Weapons wave 3's models (guns-w3.js), the same way.
 Object.assign(FACTORIES, w3Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, fitShellCuff, fitVentRib }));
+// Weapons wave 4's six melee weapons (guns-w4.js).
+Object.assign(FACTORIES, w4Factories({ kit }));
 
 // Graveyard Shift's wonder weapons (js/shared/zombies.js ZM_WONDERS): our own models, drawn in place of the gun they
 // ride on in that mode only (characters.js, zm-fx.js). Both low-poly, both read from above by their silhouettes.
@@ -1313,6 +1327,8 @@ FACTORIES['zw-rime'] = () => {
   return { geometry: b.build(), muzzle: [0.7, 0.2, 0], fore: [0.36, 0.02, -0.05], eject: [0.1, 0.3, 0.1], length: 1.1 };
 };
 
+Object.assign(FACTORIES, fairWonderFactories({ kit, pistolGrip }));
+
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.
 const cache = new Map();
 // Stable kit object -> Map(weaponId -> gun). Kits are canonical objects, so a per-frame call does no string work.
@@ -1335,7 +1351,15 @@ export function modelKit(kit) {
 
 function build(id, kit, key) {
   const make = FACTORIES[id] || FACTORIES.ar;
-  const g = make(modelKit(kit));
+  const a = modelKit(kit);
+  let g = make(a);
+  // The visual pass: drawn again with the small parts (guns-detail.js) placed from the first draw's muzzle and port.
+  const cls = WEAPON_CATEGORY[id];
+  if (cls && FACTORIES[id]) {
+    const first = g;
+    detailHook = k => detailGun(id, cls, k, a, first);
+    try { g = make(a); } finally { detailHook = null; }
+  }
   g.geometry.computeBoundingBox();
   g.geometry.computeBoundingSphere();
   g.key = key;

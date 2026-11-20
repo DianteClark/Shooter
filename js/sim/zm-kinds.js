@@ -235,6 +235,9 @@ export class ZmKinds {
     // A running trap hurts the crew too: off its floor (the bots' route goes round it, docs/ZOMBIES.md).
     const E = this.R.econ;
     if (E) E.traps.forEach((t, i) => { if (t.state === 1) { const T = this.R.L.traps[i]; check(T.x, T.z, T.r); } });
+    // The Barker's marked lane (Wrenfield Fair): out of it sideways, before anything else.
+    const lane = E?.laneDodge?.(ps);
+    if (lane) return lane;
     if (!best) return null;
     const dx = ps.x - best.x, dz = ps.z - best.z, l = Math.hypot(dx, dz);
     return l > 0.05 ? { x: dx / l, z: dz / l } : { x: 1, z: 0 };

@@ -118,6 +118,7 @@ function build() {
       { x: 60, z: 30.3, wall: 's', gun: 'lmg', cost: 1800 },            // Mast Field: the depot wall.
       { x: 74.5, z: 41.3, wall: 's', gun: 'saw', cost: 1800 },          // Fuel Depot: the tank alcove's wall.
       { x: 56.7, z: 49, wall: 'w', gun: 'battle', cost: 1600 },         // Fuel Depot: the hangar wall.
+      { x: 40, z: 28.7, wall: 'n', gun: 'fireaxe', cost: 900 },         // Boiler House: the fire point's axe, the boiler's south side.
     ],
     // Mystery crate spots: the first two are where it can start.
     boxes: [

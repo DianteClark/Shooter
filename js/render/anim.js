@@ -125,7 +125,8 @@ export const SHELL_CYCLE = track([
   [1.00,  0, -0.07, 0.02, 0.85, -0.08, 0.20, -0.26, -0.56, -0.34, 1, 1],
 ]);
 
-// What the support hand carries (drawn with the shared box mesh) and when the old one leaves the gun.
+// What the support hand carries (drawn with the shared box mesh) and when the old one leaves the gun. `belt` (LMGs): when
+// the new belt's loose links spill as the feed cover shuts (characters.js).
 const BOX_MAG = { size: [0.13, 0.42, 0.09], rgb: [0.15, 0.16, 0.19], drop: 0.2 };
 export const RELOADS = {
   ar:       { track: RIFLE, mag: BOX_MAG },
@@ -134,7 +135,7 @@ export const RELOADS = {
   sniper:   { track: BOLT, mag: { size: [0.16, 0.26, 0.1], rgb: BOX_MAG.rgb, drop: 0.2 } },
   smg:      { track: SIDE_MAG, mag: { size: [0.11, 0.11, 0.5], rgb: BOX_MAG.rgb, drop: 0.22 } },
   pdw:      { track: TOP_MAG, mag: { size: [0.46, 0.09, 0.15], rgb: BOX_MAG.rgb, drop: 0.22 } },
-  lmg:      { track: LMG, mag: { size: [0.46, 0.46, 0.28], rgb: [0.2, 0.22, 0.2], drop: 0.28 } },
+  lmg:      { track: LMG, mag: { size: [0.46, 0.46, 0.28], rgb: [0.2, 0.22, 0.2], drop: 0.28, belt: 0.83 } },
   autoshot: { track: RIFLE, mag: { size: [0.42, 0.42, 0.22], rgb: [0.22, 0.2, 0.17], drop: 0.2 } },
   pistol:   { track: PISTOL, mag: { size: [0.1, 0.3, 0.07], rgb: BOX_MAG.rgb, drop: 0.2 } },
   revolver: { track: REVOLVER, mag: { size: [0.16, 0.16, 0.16], rgb: [0.5, 0.42, 0.22], drop: -1, dump: 0.2 } },
@@ -145,8 +146,8 @@ export const RELOADS = {
   tacsmg:   { track: RIFLE, mag: { size: [0.11, 0.34, 0.08], rgb: BOX_MAG.rgb, drop: 0.2 } },
   battle:   { track: RIFLE, mag: { size: [0.14, 0.48, 0.09], rgb: BOX_MAG.rgb, drop: 0.2 } },
   coach:    { track: REVOLVER, mag: { size: [0.2, 0.09, 0.09], rgb: [0.72, 0.13, 0.1], drop: -1, dump: 0.2, dumpN: 2, dumpKind: 'hull' } },
-  saw:      { track: LMG, mag: { size: [0.3, 0.3, 0.22], rgb: [0.2, 0.22, 0.2], drop: 0.28 } },
-  rotary:   { track: LMG, mag: { size: [0.42, 0.36, 0.3], rgb: [0.24, 0.26, 0.2], drop: 0.28 } },
+  saw:      { track: LMG, mag: { size: [0.3, 0.3, 0.22], rgb: [0.2, 0.22, 0.2], drop: 0.28, belt: 0.83 } },
+  rotary:   { track: LMG, mag: { size: [0.42, 0.36, 0.3], rgb: [0.24, 0.26, 0.2], drop: 0.28, belt: 0.83 } },
   lever:    { track: null, mag: { size: [0.16, 0.06, 0.06], rgb: [0.9, 0.7, 0.3], drop: -1 } },
   antimat:  { track: BOLT, mag: { size: [0.18, 0.3, 0.12], rgb: BOX_MAG.rgb, drop: 0.2 } },
   semisnipe:{ track: BOLT, mag: { size: [0.15, 0.24, 0.1], rgb: BOX_MAG.rgb, drop: 0.2 } },
@@ -157,7 +158,7 @@ export const RELOADS = {
   carbine:  { track: RIFLE, mag: { size: [0.12, 0.36, 0.09], rgb: BOX_MAG.rgb, drop: 0.2 } },
   heavysmg: { track: RIFLE, mag: { size: [0.12, 0.42, 0.1], rgb: BOX_MAG.rgb, drop: 0.2 } },
   slug:     { track: null, mag: { size: [0.2, 0.09, 0.09], rgb: [0.85, 0.62, 0.2], drop: -1 } },
-  lightlmg: { track: LMG, mag: { size: [0.34, 0.36, 0.26], rgb: [0.2, 0.22, 0.2], drop: 0.28 } },
+  lightlmg: { track: LMG, mag: { size: [0.34, 0.36, 0.26], rgb: [0.2, 0.22, 0.2], drop: 0.28, belt: 0.83 } },
   crossbow: { track: null, mag: { size: [0.5, 0.04, 0.04], rgb: [0.9, 0.85, 0.7], drop: -1 } },
   scatter:  { track: REVOLVER, mag: { size: [0.16, 0.08, 0.08], rgb: [0.72, 0.13, 0.1], drop: -1, dump: 0.2, dumpN: 1, dumpKind: 'hull' } },
 };

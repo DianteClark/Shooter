@@ -18,7 +18,7 @@ import { compareStats, deltaText, weaponFacts, rangeStrip, RANGE_AXIS } from './
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
 import { prestigeWeaponNow, kindLabel } from './prestige.js';
 import { ico, backButton } from './yard.js';
-import { flash, pop, stagger } from './motion.js';
+import { flash, pop, stagger, reducedMotion } from './motion.js';
 import { masteryBadge } from './mastery.js';
 import { unlockSheet } from './unlocksheet.js';
 
@@ -111,6 +111,7 @@ export class Gunsmith {
       gsWeapon: ({ id }) => this.selectWeapon(id),
       gsCat: ({ cat }) => this.selectCategory(cat),
       gsEquip: () => this.equip(),
+      gsInspect: () => this.menu.preview?.inspect(),     // The bench flourish (renderer.js GunPreview.inspect).
       gsTab: ({ tab }) => this.selectTab(tab),
       gsSlot: ({ slot }) => { this.slot = slot; this.tryAtt = null; this.renderPanel(); this.update(); },
       gsAtt: ({ id }) => this.tapAttachment(id),
@@ -393,6 +394,7 @@ export class Gunsmith {
               <button class="btn gs-equip" data-act="gsEquip" data-sound="confirm">${ico('equip')}<b></b></button>
             </div>
             <span class="gs-lvl"><b class="gs-lvn"></b><i class="xp"><i class="gs-xp"></i></i><small class="gs-xpn"></small></span>
+            <button class="btn gs-inspect" data-act="gsInspect" data-sound="tap" aria-label="Inspect">${ico('rejoin')}<b>Inspect</b></button>
           </div>
           <div class="gs-stats"></div>
           <div class="gs-facts"></div>
@@ -420,6 +422,7 @@ export class Gunsmith {
     this.factsHtml = this.rangeHtml = this.infoHtml = null;
     this.tabs = [...m.el.querySelectorAll('.gs-tab')];
     m.previewMount(this.benchEl, this.weapon, Progress.camo(this.weapon), this.kit);
+    if (!reducedMotion()) m.preview?.inspect();          // A gun put on the bench is turned over once to show it off.
     this.paintTabs();
     this.renderStats();
     this.renderPanel();

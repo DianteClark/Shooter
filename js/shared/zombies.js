@@ -7,6 +7,7 @@
 // across every open run it crosses except one, which takes a door; buying the door opens the next band. Players start
 // in band `start`. Everything placed (wall-buys, crate spots, machines, risers) sits on open floor reachable inside its
 // band, found from the map's walls on a 1 m grid, so the layout is the same on the host and every guest.
+import { W4_BOX } from './weapons-w4.js';
 import { PLAYER_RADIUS, WEAPON_CATEGORY } from './constants.js';
 import { wallsInBox } from './geometry.js';
 
@@ -45,6 +46,9 @@ export const ZM = {
     // The Listener (Polestar Relay's quest boss, raised by the radios, never a round): leaner and quicker than the
     // Gravewarden, less health, and it fights differently (ZM_LISTENER): frost pulses round it, Crawlers at its call.
     listener: { hp: 48, dmg: 95, speed: 0.72, reach: 2, windup: 0.6, cool: 1.3 },
+    // The Barker (Wrenfield Fair's quest boss, called out by the high striker's bell, never a round): heavier than the
+    // Listener and slower on its feet, and it fights differently again (ZM_BARKER): it charges down a lane it marks.
+    barker: { hp: 52, dmg: 100, speed: 0.6, reach: 2, windup: 0.65, cool: 1.35 },
   },
   roundMax: 220,                       // Zombies in one round, at most.
   // Account XP in place of the usual kill lines (awards.js, zmXp). Owner notes (1111-32): an escape on round 18 paid
@@ -56,15 +60,48 @@ export const ZM = {
   weaponXp: 0.1, weaponXpCap: 5000,
   perkLimit: 4, perkMax: 6, slotCost: 8000,   // Perks a player may hold; one perk slot (bought at any machine) raises it.
 };
-// Index 9 is the wire's code for a Shieldbearer whose shield is broken (never a host kind), so the Listener is 10.
-export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield', 'shield', 'listener'];
+// Index 9 is the wire's code for a Shieldbearer whose shield is broken (never a host kind), so the Listener is 10 and
+// the Barker 11 (the wire's kind is 4 bits: room up to 15).
+export const ZM_KINDS = ['shambler', 'runner', 'brute', 'boss', 'warden', 'spitter', 'bloater', 'crawler', 'shield', 'shield', 'listener', 'barker'];
 export const ZM_KIND_NAMES = { shambler: 'Shambler', runner: 'Runner', brute: 'Brute', boss: 'Yardmaster', warden: 'Gravewarden',
-  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer', listener: 'Listener' };
+  spitter: 'Spitter', bloater: 'Bloater', crawler: 'Crawler', shield: 'Shieldbearer', listener: 'Listener', barker: 'Barker' };
 // Kind indices (p.zk on the host; the view's zk is one more).
-export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8, listener: 10 };
-export const isBossKind = k => k === 3 || k === 4 || k === 10;
-// The quest's boss (the Gravewarden, or the Listener on Polestar Relay): raised by the quest, off the round's count.
-export const isQuestBoss = k => k === 4 || k === 10;
+export const ZK = { shambler: 0, runner: 1, brute: 2, boss: 3, warden: 4, spitter: 5, bloater: 6, crawler: 7, shield: 8, listener: 10, barker: 11 };
+export const isBossKind = k => k === 3 || k === 4 || k === 10 || k === 11;
+// The quest's boss (the Gravewarden, the Listener on Polestar Relay, the Barker on Wrenfield Fair): raised by the
+// quest, off the round's count.
+export const isQuestBoss = k => k === 4 || k === 10 || k === 11;
+// Each quest's boss, by the layout's questKind: its kind, its name's key (ZM_KIND_NAMES), the opening banner.
+export const ZM_QUEST_BOSS = {
+  relic: { kind: 4, key: 'warden', name: 'Gravewarden', rise: ['The relics are set', 'The Gravewarden wakes'] },
+  radio: { kind: 10, key: 'listener', name: 'Listener', rise: ['Transmitting', 'The Listener answers'] },
+  lantern: { kind: 11, key: 'barker', name: 'Barker', rise: ['The bell rings', 'The Barker steps into the ring'] },
+};
+export const zmQuestBoss = L => ZM_QUEST_BOSS[L?.questKind] ?? ZM_QUEST_BOSS.relic;
+export const questBossByKind = k => Object.values(ZM_QUEST_BOSS).find(b => b.kind === k) ?? ZM_QUEST_BOSS.relic;
+// The Barker's charge: every `every` s, with someone up within `range` m in its sight, it stops and marks a lane on
+// the ground toward them (`len` m long, `w` wide, drawn the whole `wind` s: get out of it sideways), then runs it in
+// `dash` s; anyone in the lane takes `dmg` (grown with the round like a claw), once. It calls `calls` runners up beside
+// it every `call` s (the fair's barkers bring a crowd), never more than `crowd` of them up at once.
+export const ZM_BARKER = { every: 7, range: 18, wind: 1.1, len: 13, w: 2.4, dash: 0.45, dmg: 55, call: 15, calls: 3, crowd: 6 };
+// Wrenfield Fair's lanterns, by index (the map's `quest.lanterns` order): their colours and names.
+export const ZM_LANTERNS = [
+  { id: 'red', name: 'Red', css: '#ff4a3a', hex: 0xff4a3a },
+  { id: 'green', name: 'Green', css: '#5adf6a', hex: 0x5adf6a },
+  { id: 'blue', name: 'Blue', css: '#4aa8ff', hex: 0x4aa8ff },
+  { id: 'gold', name: 'Gold', css: '#ffc23a', hex: 0xffc23a },
+];
+// The order the Oracle tells (a permutation of the lanterns), the same for a seed on every phone.
+export function lanternOrder(seed, n = 4) {
+  const a = Array.from({ length: n }, (_, i) => i);
+  let x = ((seed >>> 0) ^ 0x6c8e9cf5) >>> 0;
+  for (let i = n - 1; i > 0; i--) {
+    x = Math.imul(x ^ (x >>> 15), 0x2c1b3c6d) >>> 0; x = (x ^ (x >>> 12)) >>> 0;
+    const j = x % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 // The Listener's frost pulse: every `every` s a ring of `r` m swells round it for `wind` s (drawn on the ground the
 // whole time: step out), then `dmg` (grown with the round like a claw) to the crew inside it in its sight. It calls
 // `calls` Crawlers up beside it every `call` s.
@@ -138,12 +175,13 @@ export const BOX_GUNS = ['rotary', 'beltlmg', 'drumsmg', 'heavysmg', 'lightlmg',
   'twinshot', 'revolver', 'akimbo', 'thumper', 'launcher', 'salvo', 'crossbow', 'semisnipe', 'rail', 'antimat', 'carbine', 'tacsmg', 'hushsmg', 'burst', 'coach',
   'scatter', 'deuce', 'maul', 'heavyar', 'lmg', 'autoshot',
   'burstsmg', 'heavyshot', 'battlepistol',   // Weapons wave 3 (weapons-w3.js).
+  ...W4_BOX,                                  // Weapons wave 4's melee: the Kagero, Kindling and Bushwhack.
   // The wonder weapons (ZM_WONDERS) last, so every older index on the wire holds; a roll reaches them only by ZM_WONDER_ROLL.
-  'nailer', 'machpistol'];
+  'nailer', 'machpistol', 'scout'];
 export const START_GUN = 'pistol';
 export const NO_GUN = 'knife';
 
-// ---- Wonder weapons (docs/ZOMBIES.md "Wonder weapons"): two specials only the mystery crate hands out, on every map ----
+// ---- Wonder weapons (docs/ZOMBIES.md "Wonder weapons"): three specials only the mystery crate hands out, on every map ----
 // Each rides on a gun id that no wall and no ordinary roll ever gives in this mode (`gun`), at its own tier (`tier`,
 // past the bench's three) that makes its def (js/sim/zm-phone.js zmTierDef) and that the host reads to apply its
 // effect (js/sim/zm-econ.js gunHit). The renderer draws our own model in its place in this mode (js/render/guns.js
@@ -160,9 +198,16 @@ export const ZM_WONDERS = {
   rime: { id: 'rime', name: 'Rimecaster', gun: 'machpistol', tier: 6, model: 'zw-rime', css: '#bff4ff', camo: 'pp-silver', desc: 'A freezing beam: they stop dead, then shatter',
     def: { damage: 20, rpm: 600, magazine: 50, reserve: 200, reload: 2.4, range: 13, auto: true, hipSpread: 0.02, adsSpread: 0.014, tracerWidth: 1.6 },
     hit: 0.14, chill: 3, freeze: 2.5, shatterR: 2.6, shatterK: 0.9, boss: 0.0025 },
+  // The Whirligig (Wrenfield Fair's, in every crate): a carnival top launcher. A hit sets a whirl spinning where it
+  // lands: for `life` s it drags the undead within `r` m in toward its eye (`pull` m/s at the edge, never through a
+  // wall) and grinds them (`dps` of a round's health a second within `core` m), then bursts: `pop` of a round's health
+  // within `popR` m. Bosses are not moved and take `boss` of their own health from a hit.
+  whirl: { id: 'whirl', name: 'Whirligig', gun: 'scout', tier: 7, model: 'zw-whirl', css: '#ff7ad8', camo: 'spectrum', desc: 'A spinning top that drags them in, then bursts',
+    def: { damage: 40, rpm: 80, magazine: 4, reserve: 24, reload: 2.8, range: 32, auto: false, hipSpread: 0.01, adsSpread: 0.005, tracerWidth: 2.4 },
+    hit: 0.6, r: 5.5, life: 2.4, pull: 6, core: 1.6, dps: 0.7, pop: 1.3, popR: 3.4, boss: 0.012, max: 3 },
 };
 export const ZM_WONDER_IDS = Object.keys(ZM_WONDERS);
-// The chance a crate roll offers a wonder weapon (one of the two, never one the roller holds) in place of a gun.
+// The chance a crate roll offers a wonder weapon (one of the three, never one the roller holds) in place of a gun.
 export const ZM_WONDER_ROLL = 0.08;
 const WONDER_BY_GUN = Object.fromEntries(Object.values(ZM_WONDERS).map(w => [w.gun, w]));
 // The wonder weapon a gun id carries in this mode (null for an ordinary gun).
@@ -201,7 +246,9 @@ export const ZE = {
   gearMax: 8,                       // Sentries, drones, lures and strikes in play at once (the crew's).
   trap: { cost: 1000, on: 30, cool: 45, playerDps: 14, pay: 10, dps: 1.4, boss: 0.012, r: 1.7 },
   exfil: { from: 15, cost: 15000, hold: 75, r: 3.2, gap: 0.32 },     // 1111-32: 12000, 60 s, 0.42 s; the wave's brutes at the round's full share.
-  quest: { pts: 3000, tune: 5 },        // tune: seconds a radio takes to lock on (Polestar Relay's quest).
+  // tune: seconds a radio takes to lock on (Polestar Relay's quest); burn: seconds the lanterns burn from the first one
+  // lit (Wrenfield Fair's: all four in order before then, or they all go out); wrong: runners a wrong lantern calls up.
+  quest: { pts: 3000, tune: 5, burn: 75, wrong: 3 },
 };
 export const ZM_TRAP_KINDS = ['shock', 'vent', 'blade'];
 export const ZM_TRAP_NAMES = { shock: 'Live Rail', vent: 'Firedamp Vents', blade: 'Threshers' };
@@ -304,6 +351,8 @@ export const ZM_MAPS = {
   ashgrove: { graph: true, power: true },
   // The second (docs/ZOMBIES.md "Polestar Relay"): its quest is the radios (`quest.kind: 'radio'`), its boss the Listener.
   polestar: { graph: true, power: true },
+  // The third (docs/ZOMBIES.md "Wrenfield Fair"): its quest is the lanterns (`quest.kind: 'lantern'`), its boss the Barker.
+  wrenfield: { graph: true, power: true },
 };
 export const ZM_MAP_IDS = Object.keys(ZM_MAPS);
 
@@ -695,8 +744,10 @@ function graphLayout(map, def) {
   const st = s => (s ? { i: 0, ...onWall(s) } : null);
   // The quest: relics set on an altar (Ashgrove), or radios tuned and a console (`kind: 'radio'`, Polestar Relay). Both
   // ride the same slots (relics: the steps; altar: where it ends), so the economy, the wire and the tests keep one shape.
-  const Q0 = Z.quest ?? {}, radio = Q0.kind === 'radio';
-  const Q = radio ? { altar: Q0.console, relics: Q0.radios } : Q0;
+  // Wrenfield Fair's lanterns (`kind: 'lantern'`) ride them too: the lanterns are the steps, the high striker the end,
+  // and the Oracle that tells the order is one more spot (`oracle`).
+  const Q0 = Z.quest ?? {}, radio = Q0.kind === 'radio', lantern = Q0.kind === 'lantern';
+  const Q = radio ? { altar: Q0.console, relics: Q0.radios } : lantern ? { altar: Q0.striker, relics: Q0.lanterns } : Q0;
   const L = {
     mapId: map.id, def, graph: true, start, bands, fences: [], doors, wallBuys, boxSpots, machines, risers, starts: Z.starts.map(p => ({ x: p.x, z: p.z })),
     power, boss, reserved, W, H, main, band, cellAt,
@@ -704,7 +755,8 @@ function graphLayout(map, def) {
     traps: (Z.reserved?.traps ?? []).map((t, i) => ({ i, x: t.x, z: t.z, r: t.r ?? ZE.trap.r, band: bandAt(t.x, t.z) })),
     exfil: Z.reserved?.exfil ? { x: Z.reserved.exfil.x, z: Z.reserved.exfil.z, r: Z.reserved.exfil.r ?? ZE.exfil.r, band: bandAt(Z.reserved.exfil.x, Z.reserved.exfil.z) } : null,
     altar: st(Q.altar), relics: (Q.relics ?? []).map((r, i) => ({ i, x: r.x, z: r.z, band: bandAt(r.x, r.z) })),
-    questKind: radio ? 'radio' : 'relic',
+    questKind: radio ? 'radio' : lantern ? 'lantern' : 'relic',
+    oracle: lantern && Q0.oracle ? st(Q0.oracle) : null,
   };
   finishEcon(L);
   Object.defineProperty(map, '_zmLayout', { value: L, configurable: true, writable: true, enumerable: false });
@@ -779,9 +831,9 @@ export function reblockNav(nav, map, r) {
 // state: { open (door bits), box: {spot, state, gun, owner}, pts, perks: [ids], guns: [primary, secondary], power, me,
 // and for the economy: limit (perk limit), held (gun in hand), tier (its tier), bench {state, owner, gun, tier}, traps
 // [state per trap: 0 idle, 1 running, 2 cooling], plates (hp), kitRoom (a lethal or tactical spent), exfil (0 idle),
-// round, quest {got bits, state} }.
+// round, quest {got bits, state, and on Wrenfield Fair read (the Oracle asked), order} }.
 // Returns { kind, i, cost, label, ok, off?, why? } for the nearest usable thing, or null. Kinds: door, wall, ammo, box,
-// take, perk, slot, power, terminal, armour, kit, bench, benchwait, benchtake, trap, exfil, relic, altar. `off`: shown, never
+// take, perk, slot, power, terminal, armour, kit, bench, benchwait, benchtake, trap, exfil, relic, altar, oracle. `off`: shown, never
 // ok (a dark machine, a busy bench, a running trap...); `why` says why.
 export function zmUsable(L, x, z, st) {
   if (!L) return null;
@@ -885,6 +937,18 @@ export function zmUsable(L, x, z, st) {
     }
     const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
     at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Transmit' : 'Relay console', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 3} radios tuned` }));
+  } else if (!q.state && L.questKind === 'lantern') {
+    // Wrenfield Fair: the Oracle (it needs the power) tells the order; the lanterns are lit in it; then the bell.
+    const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 4);
+    at(L.oracle, () => (!st.power ? { kind: 'oracle', i: 0, cost: 0, label: 'The Oracle', off: true, why: 'No power: find the switch' }
+      : q.read ? { kind: 'oracle', i: 0, cost: 0, label: 'The Oracle', off: true, why: lanternOrderText(q.order) }
+        : { kind: 'oracle', i: 0, cost: 0, label: 'Ask the Oracle' }));
+    for (const r of L.relics ?? []) {
+      if (q.got & (1 << r.i)) continue;
+      at(r, () => (!q.read ? { kind: 'relic', i: r.i, cost: 0, label: 'Cold lantern', lantern: r.i, off: true, why: 'Which first? Ask the Oracle' }
+        : { kind: 'relic', i: r.i, cost: 0, label: 'Light the lantern', lantern: r.i }));
+    }
+    at(L.altar, () => ({ kind: 'altar', i: 0, cost: 0, label: all ? 'Ring the bell' : 'High striker', off: all ? undefined : true, why: all ? undefined : `${n} of ${L.relics?.length ?? 4} lanterns lit` }));
   } else if (!q.state) {
     for (const r of L.relics ?? []) if (!(q.got & (1 << r.i))) at(r, () => ({ kind: 'relic', i: r.i, cost: 0, label: 'Pick it up' }));
     const n = (L.relics ?? []).filter(r => q.got & (1 << r.i)).length, all = n >= (L.relics?.length ?? 3);
@@ -893,6 +957,9 @@ export function zmUsable(L, x, z, st) {
   if (best) best.ok = !best.off && best.cost <= (st.pts ?? 0);
   return best;
 }
+
+// The Oracle's order as words ("Red, Gold, Blue, Green").
+export const lanternOrderText = order => (order ?? []).map(i => ZM_LANTERNS[i]?.name ?? '?').join(', ');
 
 // Where a player stands to open door d from an area that is open now (null when neither side is).
 export function zmDoorStand(L, open, d) {

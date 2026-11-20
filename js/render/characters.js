@@ -21,8 +21,13 @@ import { uploadUsed } from './dynbuf.js';
 import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
-import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
+import { blankPose, emotePose, finPose, CALL_PROPS, CALL_DUR, callInOf } from './finisher-anim.js';    // Finishers, emotes, streak call-ins.
+import { swingDurOf, swingKindOf, swingPose, swingSideNext } from './melee-anim.js';   // Melee swings.
+import { CYCLE, cycleKindOf, cyclePose } from './gun-actions.js';   // Pump, bolt and lever worked between shots.
 import { EMOTES, getFinisher } from '../shared/finishers.js';
+
+const SWING = { x: 0, y: 0, yaw: 0, pitch: 0, roll: 0 };     // Scratch for melee-anim.js swingPose.
+const CYC = { roll: 0, pitch: 0, x: 0, fore: 0, bolt: 0 };     // Scratch for gun-actions.js cyclePose.
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -1068,13 +1073,15 @@ export class Characters {
     const def = weapon ? WEAPONS[weapon] : null;
     if (def && def.melee) {
       // Melee swings instead of kicking: a timed arc the gun pose follows (see SWINGS), alternating sides for a blade.
-      r.swingSide = def.swing === 'overhead' || def.swing === 'level' ? 1 : -(r.swingSide || 1);
-      r.swingKind = def.swing === 'overhead' || def.swing === 'level' ? def.swing : 'slash';
+      r.swingSide = swingSideNext(def, r.swingSide);     // melee-anim.js: the kinds of swing and their timings.
+      r.swingKind = swingKindOf(def);
       r.swingT = 0;
-      r.swingDur = def.swing === 'overhead' ? 0.62 : def.swing === 'level' ? 0.44 : 0.26;
+      r.swingDur = swingDurOf(def);
       r.sv[ROCK] += 1 + strength;
       return;
     }
+    r.cycle = weapon ? cycleKindOf(weapon) : null;      // A pump, bolt or lever to work before the next shot.
+    if (r.cycle) r.cycleT = -CYCLE[r.cycle].delay;
     const R = r.recoil = weapon ? recoilOf(weapon) : RECOIL_NONE;
     r.kickSide = -(r.kickSide || 1);
     r.kickRoll = (r.kickRoll || 0) + r.kickSide * R.twist * (0.25 + strength * 0.3);
@@ -1096,6 +1103,12 @@ export class Characters {
     const r = this.rigs.get(id), def = EMOTES[e];
     if (!r || !def || r.finK) return;
     r.emote = def.id; r.emoteT = 0; r.emoteDur = def.dur;
+  }
+  // A scorestreak called in (the 'streak' event): a laptop, a flare or a radio for a moment (finisher-anim.js).
+  onCallIn(id, kind) {
+    const r = this.rigs.get(id), c = callInOf(kind);
+    if (!r || !c || r.finK) return;
+    r.emote = c; r.emoteT = 0; r.emoteDur = CALL_DUR;
   }
   onThrow(id, kind) { const r = this.rigs.get(id); if (r) { r.throwT = 1; r.throwKind = kind || 'frag'; } }
 
@@ -1177,7 +1190,8 @@ export class Characters {
     }
     if (r.emote) {
       r.emoteT += dt;
-      if (r.emoteT >= r.emoteDur || speed > 0.8 || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
+      const call = CALL_PROPS[r.emote] !== undefined;     // A call-in plays on the move; an emote stops for it.
+      if (r.emoteT >= r.emoteDur || (speed > 0.8 && !call) || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
       return emotePose(r.emote, r.emoteT, r.emoteDur, r.fp);
     }
     return NO_POSE;
@@ -1353,32 +1367,17 @@ export class Characters {
       if (r.swingT !== undefined && r.swingT < 1) {
         // u 0..1 through the swing: a wind-up, a fast strike through the target, a slow recovery.
         const u = r.swingT, side = r.swingSide || 1;
-        const wind = u < 0.32 ? smooth01(u / 0.32) : 1;
-        const hit = u < 0.32 ? 0 : u < 0.5 ? smooth01((u - 0.32) / 0.18) : 1;
-        const back = u < 0.5 ? 0 : smooth01((u - 0.5) / 0.5);
-        if (r.swingKind === 'overhead') {
-          // Up over the shoulder, then down in front: the head of the sledge travels an arc over the operator's head.
-          const lift = wind * (1 - hit), drive = hit * (1 - back);
-          gunPitch += lift * 1.9 - drive * 0.9;
-          gunY += lift * 0.42 - drive * 0.1;
-          gunX += -lift * 0.22 + drive * 0.2;
-          gunYaw += lift * 0.5 - drive * 0.15;
-          gunRoll += lift * 0.25;
-        } else if (r.swingKind === 'level') {
-          // A two-handed bat swing: cocked up behind the right shoulder, then flat round through the front at waist
-          // height and on past the left side, the wrists rolling over in the follow-through.
-          const cock = wind * (1 - hit), through = hit * (1 - back);
-          gunYaw += cock * 1.7 - hit * 1.5 * (1 - back * 0.85);
-          gunPitch += cock * 1.1 - through * 0.15;
-          gunY += cock * 0.3 - through * 0.12;
-          gunX += -cock * 0.16 + through * 0.18;
-          gunRoll += cock * 0.4 - through * 0.9;
-        } else {
-          // Across the body, wide to one side and through to the other.
-          const sweep = wind * (1 - hit) - hit * (1 - back);
-          gunYaw += sweep * 1.25 * side;
-          gunX += hit * (1 - back) * 0.14;
-          gunRoll += sweep * 0.5 * side;
+        swingPose(r.swingKind, u, side, SWING);
+        gunX += SWING.x; gunY += SWING.y; gunYaw += SWING.yaw; gunPitch += SWING.pitch; gunRoll += SWING.roll;
+      }
+      CYC.fore = CYC.bolt = 0;
+      if (r.cycle && r.cycleT !== undefined && p.reloadT <= 0) {
+        const c = CYCLE[r.cycle];
+        r.cycleT += dt;
+        if (r.cycleT >= c.dur) r.cycle = null;
+        else if (r.cycleT > 0) {
+          cyclePose(r.cycle, r.cycleT / c.dur, CYC);
+          gunX += CYC.x; gunRoll += CYC.roll; gunPitch += CYC.pitch;
         }
       }
       gunX -= throwActive * 0.08 + r.throwHold * 0.12;
@@ -1487,6 +1486,10 @@ export class Characters {
           _v.set(0.12, -0.42, 0).applyMatrix4(_gun);
           vfx.dropMag(_v.x, _v.y, _v.z, rel.mag.rgb, rel.mag.size);
         }
+        if (rel.mag.belt !== undefined && lastU < rel.mag.belt && r.reloadU >= rel.mag.belt) {
+          // An LMG: the fresh belt laid in the tray, its loose tail links spilling off the far side as the cover shuts.
+          for (let k = 0; k < 4; k++) vfx.shell(r.eject[0], r.eject[1] + 0.05, r.eject[2], (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, 'link');
+        }
         if (rel.mag.dump !== undefined && lastU < rel.mag.dump && r.reloadU >= rel.mag.dump) {
           const n = rel.mag.dumpN ?? 6, kind = rel.mag.dumpKind ?? 'pistol';
           for (let k = 0; k < n; k++) vfx.shell(r.eject[0], r.eject[1], r.eject[2], (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, kind);
@@ -1515,8 +1518,9 @@ export class Characters {
             side * (0.21 - Math.max(0, mine) * 0.16)).applyMatrix4(_body);
         } else if (side > 0) {
           _b.set(0, 0, 0).applyMatrix4(_gun);
+          if (CYC.bolt > 0) { _v.set(proto.eject[0] - 0.12, proto.eject[1] + 0.02, proto.eject[2] + 0.16).applyMatrix4(_gun); _b.lerp(_v, CYC.bolt); }
         } else {
-          _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
+          _b.set(proto.fore[0] - CYC.fore, proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
           if (handW > 0) { _v.set(hx, hy, hz).applyMatrix4(_gun); _b.lerp(_v, handW); }
           const slideHand = slide * (1 - R);
           if (slideHand > 0.01) {
@@ -1567,6 +1571,16 @@ export class Characters {
           const fx = Math.cos(faceA), fz = Math.sin(faceA), hx3 = side < 0 ? A.lx : A.rx, hy3 = side < 0 ? A.ly : A.ry, hz3 = side < 0 ? A.lz : A.rz;
           _v.set(p.x + fx * hx3 - fz * hz3, hy3 * look.h, p.z + fz * hx3 + fx * hz3);
           _b.lerp(_v, hw);
+        }
+        const prop = side < 0 && r.emote ? CALL_PROPS[r.emote] : null;
+        if (prop && hw > 0.5 && nH < MAX_PLAYERS) {
+          // The call-in's prop in the left hand, square to the body; a flare or a laptop screen glows.
+          const sz = prop.size;
+          _s.set(sz[0], sz[1], sz[2]);
+          _m.copy(_body).scale(_s).setPosition(_b);
+          _m.toArray(held.instanceMatrix.array, nH * 16);
+          this._writeFx(held, nH, fade, prop.glow ? Math.max(flash, 0.35 + 0.25 * Math.sin(clock * 18)) : flash, team, 0, prop.rgb);
+          nH++;
         }
         // Elbows hang out and down; the pole leans back so the hands read as gripping forward.
         solveJoint(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 0.4 * look.l, 0.44 * look.l,

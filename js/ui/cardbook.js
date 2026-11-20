@@ -69,6 +69,7 @@ const MAP_ART = {
   icebreaker: ['Pack Ice', 'icebow', ['#0e1a26', '#2a4a66', '#eaf6ff', '#ff4a3a']],
   ashgrove:   ['Lamplight', 'grove', ['#120e16', '#3a3040', '#e0d8e8', '#ffb84a']],
   polestar:   ['Night Watch', 'mast', ['#06101a', '#24384a', '#d8ecf4', '#5affb0']],
+  wrenfield:  ['Midway', 'wheel', ['#140a1c', '#4a2a5a', '#ffe0b0', '#ff7ad8']],
   millbrook:   ['Millstream', 'millwheel', ['#0e1a14', '#2c4a34', '#e6f0dc', '#f2b6c8']],
   frontier:   ['Drop Zone', 'zone', ['#101a14', '#2a4630', '#d8f0d0', '#ff9f1c']],
 };
@@ -78,7 +79,7 @@ const MAP_WINS = 10;
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'ashgrove', 'polestar']);
+const PLAYS_ONLY = new Set(['frontier', 'ashgrove', 'polestar', 'wrenfield']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },
@@ -160,7 +161,7 @@ const ZM_PALETTE = ['#0e0c16', '#3e3858', '#d8d0f0', '#7aff9a'];
 const zmFeats = () => Object.values(extras().zmFeats ?? {}).filter(Array.isArray);
 const zmEscaped = () => Math.max(0, ...zmFeats().map(v => n(v[0])));
 const ZM_MAP_ROUND = 15;
-const ZM_MAP_NAMES = { neon: 'Neon Dead', ruins: 'Overgrown', foundry: 'Slag Heap', ashgrove: 'Ash and Bone', polestar: 'Long Night' };
+const ZM_MAP_NAMES = { neon: 'Neon Dead', ruins: 'Overgrown', foundry: 'Slag Heap', ashgrove: 'Ash and Bone', polestar: 'Long Night', wrenfield: 'Closing Time' };
 const ZM_CARDS = [
   card('zm-escape', 'First Light', 'Zombies', 'Escape Graveyard Shift on the helicopter', () => zmEscaped() > 0, { p: 'rescue', c: ['#0c0e18', '#2a3048', '#d8e0ff', '#ffd659'], e: 'mode:zm', gold: true }, null, playFor('zm')),
   card('zm-escape25', 'Dawn Patrol', 'Zombies', 'Escape Graveyard Shift on round 25 or later', () => zmEscaped() >= 25, { p: 'dawn', c: ['#160c10', '#4a2430', '#ffe0c8', '#ff8a3a'], e: 'mode:zm', gold: true, anim: 'gold' },

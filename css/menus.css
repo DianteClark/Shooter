@@ -1153,6 +1153,9 @@
 #ui [data-screen="gunsmith"] .gs-lvl .xp { flex: 0 1 72px; min-width: 30px; }
 #ui [data-screen="gunsmith"] .gs-xpn { flex: none; min-width: 0; white-space: nowrap; }
 #ui [data-screen="gunsmith"] .gs-view .gs-equip { position: static; flex: none; pointer-events: auto; min-height: 34px; height: 34px; padding: 0 var(--sp-3); font-size: var(--fs-caption); }
+/* The inspect button (ROADMAP item 51): bottom-left of the bench view, small, out of the stat bars' way. */
+#ui [data-screen="gunsmith"] .gs-view .gs-inspect { position: absolute; z-index: 2; right: var(--sp-2); bottom: 38px; min-height: 30px; height: 30px; padding: 0 var(--sp-3); font-size: var(--fs-caption); gap: 6px; pointer-events: auto; opacity: .85; }
+#ui [data-screen="gunsmith"] .gs-view .gs-inspect .ico { height: 14px; }
 
 #ui [data-screen="gunsmith"] .gs-panel { gap: var(--sp-2); }
 #ui [data-screen="gunsmith"] .gs-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
