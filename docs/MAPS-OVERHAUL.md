@@ -53,3 +53,10 @@ fields and footprint against the tier, nav reachability of spawns, objectives, l
 pockets, gaps narrower than a player (2 x PLAYER_RADIUS + 0.1 m) between blocking pieces, spawn-to-objective
 fairness (mean walk per team within 10%), the longest sight lines, and a bot-only match per hosted mode (kills,
 objective events, bots stuck pushing into a wall). It exits non-zero on a failure; read the warnings too.
+
+## Jadefall's region (docs/BR.md "Jadefall")
+The second battle royale island and two Ground War maps cut from its coast (Tidebreak, Coral Quarter). Those two set
+`giantWorld: true` and `theme: 'jadefall'`: js/render/world.js hands them to the giant-world streamer
+(js/render/themes/frontier.js) with the island's palette, so they share the island's buildings (enterable, roofs that
+dissolve round you), beaches, shallows (walkable, slow: `map.shallows`) and landmarks. Build such a map with
+js/shared/maps/isle-kit.js: a symmetric land/water lattice (`lattice`, `water`) and `twins` for each piece and its image.

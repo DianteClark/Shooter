@@ -309,3 +309,52 @@ js/sim/br.js).
   enemies, offline from circle 5, Rebound's window, and bots over three matches); `--plane` (aboard counts, BR and
   Rebound); `--hands` (automatic fists both ways, bots). `python3 dev/ui-br-test.py [port]` covers the aboard panel,
   no gun slots, automatic fists and back, and a recall from tag to drop-in.
+
+## Jadefall (ROADMAP item 54)
+The second island (`jadefall`, js/shared/maps/br-jadefall.js), a jungle-ruins archipelago, 400 x 400 m, `size: 'giant'`,
+`theme: 'jadefall'`. Four islands make a ring round a warm shallow lagoon, cut apart by four deep channels on the
+diagonals; the Jade Pyramid stands on its islet in the middle, joined to each island by a stone causeway. Everything
+else about the modes is battle royale's own: `BR_MAP_IDS` lists it, so the Battle Royale and Extraction tabs vote
+between Frontier and Jadefall (`mpVoteOptions`: one card per island), a friend lobby's battle royale card is either
+island (`voteOptions`), and the solo picker's battle royale section shows both.
+- Water. A 2 m lattice (`map.cells`: `{ size, n, nz, cls }`, 0 sea, 1 shallow, 2 land, 3 steep: channels, blue holes,
+  the falls' pool) is the truth; deep water becomes 'water' walls (rows merged into rects, js/shared/maps/isle-kit.js),
+  shallow water becomes `map.shallows`. Shallow water (the lagoon, sandbars, an 8 m surf along every beach, the fords,
+  the falls' stream) is walkable at `SHALLOW_SLOW` (0.62) of the pace, sprint included, and nobody starts a slide in it
+  (js/shared/geometry.js `inShallows`, read by `stepMovement` in js/sim/player.js, so the phone's own movement and the
+  host agree). Deep water blocks, as on Frontier. A glide that ends over deep water lands on the nearest open ground
+  (`land` in js/sim/br.js, `openPoint`; the host's nav snap comes first as before).
+- Crossings: each channel has a plank bridge (`rooms` floor `bridge`, `underDecks` keeps water drawn under it) and a ford
+  (shallow), so every island has two dry-ish ways off plus the slow way through the lagoon; four causeways (`causeway`
+  floors) cross the lagoon to the pyramid.
+- 18 places (`br.pois`), tier 1: Jade Pyramid, Sky Temple, Port Coral, Fort Sentinel, Serpent Ruins; tier 2: Cascade
+  Falls, Cannery Wharf, Pearl Village, Research Camp, Plantation, Turtle Bay; tier 3: Signal Peak, Lighthouse Key, Coral
+  Flats (the reef islet over a sandbar), Shipwreck Cove, Smugglers' Den, Mangrove Maze, Stilt Market (stalls on piers in
+  the lagoon). Landmarks: the stepped pyramid with its jade crown, the Sky Temple's great stone head, a waterfall over the
+  north cliffs, Port Coral's bell tower and plaza fountain, the star fort's bastions and cannons, the galleon wreck,
+  the lighthouse, the radio masts. 76 enterable buildings in four new styles (`colonial`, `market`, `thatch`, `tin`)
+  plus `temple`, `coast`; about 520 loot spots (380 indoors), 40 caches, `circleBias` on the places and four open
+  spots, `drop: null` (flight lines as Frontier's).
+- Rebound: `br.reboundAreas` (read by `reboundArea`): four compact areas of 124 m, one per island with the lagoon and
+  the pyramid, each with six or more places.
+- Extraction: `br.exfils` (read by js/sim/extract.js when present): six landing-zone clearings round the ring between the
+  places (scatter keeps off them), the final exfil out on one of the four causeways (seeded), and eight beach landings
+  round the coast that the squads are dealt from a seeded start (`inserts`). Phones, boxes and patrols are built from
+  the places as on Frontier.
+- Rendering: the giant-world streamer (js/render/themes/frontier.js) draws it with the island's palette and tables from
+  js/render/themes/jadefall.js (a morning sun from the east, region ground for `jungle`, `ruins`, `beach`, `mangrove`,
+  `highland`, sand along every shore from the lattice, earth banks along channels, a sunken sand shelf under the
+  shallows). The shallows are a see-through rippling sheet whose corners fade with how much shallow water lies round
+  them (soft shorelines), built per streamed tile (`sheetTile`) and culled and dropped with it; runs of cells at full
+  opacity are one quad. Its edges are open sea (`border` walls with `open`; off-map sea on every side). Art:
+  assets/maps/jadefall.jpg (card) and assets/maps/jadefall-overview.jpg (dev/br-overview.mjs).
+- Ground War in the same region (`giantWorld: true`: the same streamer and palette on a huge map, 180-degree symmetric
+  through `twins` in isle-kit.js): Tidebreak (js/shared/maps/gw-tidebreak.js, the lagoon breaking out to the sea:
+  causeways, the shrine islet as flag C, stilt villages, ruined temples) and Coral Quarter (js/shared/maps/gw-coral.js,
+  Port Coral's old town: walk-through houses, market halls, harbour basins with the customs houses, the plaza and its
+  fountain as flag C, a tidal flat in each corner). Both host the Ground War modes.
+- Cards: Jade Crown / Jadefall Elite / Jadefall Master (plays, like Frontier), Causeway and Bell Tower (wins) with their
+  tiers; icons `map:jadefall`, `map:tidebreak`, `map:coral`.
+- Tests: `node dev/map-validate.mjs jadefall tidebreak coral`, `node dev/sim-br.mjs --map=jadefall`,
+  `node dev/sim-resurgence.mjs --map=jadefall`, `node dev/sim-extract.mjs --map=jadefall`,
+  `python3 dev/ui-br-test.py [port] [out] --map=jadefall`, `python3 dev/ui-sweep-perf.py [port] [out] brjade`.

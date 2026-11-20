@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Battle royale end to end in a real browser (docs/BR.md): python3 dev/ui-br-test.py [port] [outdir]
+"""Battle royale end to end in a real browser (docs/BR.md): python3 dev/ui-br-test.py [port] [outdir] [--map=jadefall]
 
 Serves the repo, picks Battle Royale on the BR map from the Custom match picker, rides the transport, jumps from the drop
 map, glides, lands, picks loot up by walking over it, swaps a ground gun with the Take button, plates up, fights the
@@ -11,6 +11,8 @@ import asyncio, subprocess, sys, time, os, json
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MAP = next((a[6:] for a in sys.argv[1:] if a.startswith('--map=')), 'frontier')
+sys.argv = [a for a in sys.argv if not a.startswith('--map=')]
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8273
 OUT = sys.argv[2] if len(sys.argv) > 2 else '/tmp/br-mode'
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
@@ -48,7 +50,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1200)
     await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_timeout(700)
-    await pg.locator('[data-act="soloMap"][data-id="frontier"]').first.click()
+    await pg.locator(f'[data-act="soloMap"][data-id="{MAP}"]').first.click()
     await pg.wait_for_timeout(300)
     await pg.locator('[data-act="soloMode"][data-id="br"]').first.click()
     await pg.wait_for_timeout(400)
@@ -258,7 +260,7 @@ async def lobby_shots(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1200)
     await pg.locator('[data-act="host"]').first.click()
     await pg.wait_for_function(f'{G}.code')
-    await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: 'frontier' }}")
+    await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: '{MAP}' }}")
     await pg.locator('[data-act="moveTeam"]').first.click()      # Any lobby repaint picks up the BR room.
     await pg.wait_for_timeout(500)
     if await pg.locator('.br-size').count() == 0: failures.append(f'lobby {vw}: no squad size option after a BR match')

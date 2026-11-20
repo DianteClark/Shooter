@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Jadefall: a second island',
+    items: [
+      'New battle royale island: Jadefall, a jungle archipelago of four islands round a warm lagoon, with the Jade Pyramid on its islet in the middle. Eighteen places to drop, from the Sky Temple and its stone head to Port Coral\'s bell tower, Fort Sentinel\'s bastions, a waterfall over the north cliffs and a market on stilts in the lagoon.',
+      'Water matters there: you can wade the lagoon, sandbars, fords and beaches, but shallow water slows you and stops slides. Deep channels split the islands; cross on the rope bridges, the stone causeways or the fords.',
+      'Battle Royale, Rebound and Extraction now vote between Frontier and Jadefall. Rebound on Jadefall plays one island and the lagoon beside it; Extraction lands squads on the beaches, with exfil clearings round the islands and the final ride out on a causeway.',
+      'Two new Ground War maps from the same coast: Tidebreak, where the lagoon breaks out to the sea, and Coral Quarter, the old harbour town.',
+      'New calling cards for Jadefall, Tidebreak and Coral Quarter, each in three tiers.',
+    ],
+  },
+  {
     build: '1119-13', date: '2026-11-19', title: 'Move stick fix, take two',
     items: [
       'Your third report showed iOS still cancelling the move thumb right after a grenade release. The game no longer restarts audio, voice or the screen-awake video while another finger is down, the likely trigger. Keep recording touches and send a report if it happens again.',

@@ -660,7 +660,7 @@ function scatter(P, cellAt, keep = []) {
         P.add(x, z, w, d, h, kind, extra);
         placed++;
       }
-      if (placed && rnd() < 0.3) P.outdoorLoot(cx, cz, 5, 1, 3);
+      if (placed && rnd() < 0.42) P.outdoorLoot(cx, cz, 5, 1, 3);
     }
   }
 }
