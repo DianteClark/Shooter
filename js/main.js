@@ -2026,7 +2026,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
     app.tutorial.start();
   }
   app.match.start();
-  modeTips.show(mode, { enabled: !tutorial && !training && !rejoin && mode !== 'range' && (!params.has('debug') || params.get('tips') === '1') });
+  modeTips.showWhen(() => app.match?.interp.newest?.phase === 'live' && !uiRoot.querySelector('.hud .intro.show'), mode, { enabled: !tutorial && !training && !rejoin && mode !== 'range' && (!params.has('debug') || params.get('tips') === '1') });
 
   clearInterval(app.netPoll);
   if (net) {

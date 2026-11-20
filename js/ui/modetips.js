@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 
 const SHOW_MS = 14000;
 const CSS = `
-#ui .mtip { position: absolute; left: 50%; top: calc(var(--env-t, 0px) + 22%); transform: translateX(-50%); z-index: var(--z-hud-alert); width: max-content; max-width: min(440px, 66vw);
+#ui .mtip { position: absolute; left: 50%; top: calc(var(--env-t, 0px) + 30%); transform: translateX(-50%); z-index: var(--z-hud-alert); width: max-content; max-width: min(440px, 66vw);
   display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 12px; padding: 10px 12px 10px 14px; background: rgba(10,12,16,.9);
   box-shadow: inset 3px 0 0 var(--c-sodium), inset 0 0 0 1px rgba(255,255,255,.14); color: var(--c-chalk); pointer-events: auto; }
 #ui .mtip[hidden] { display: none; }
@@ -32,7 +32,8 @@ export class ModeTips {
 
   // At a match's start. Returns the tip shown, or null. enabled false: the tutorial, Training, the range, replays.
   show(mode, { enabled = true } = {}) {
-    this.hide();
+    clearInterval(this.poll);
+    clearTimeout(this.timer);
     if (!enabled) return null;
     const tip = tipFor(mode, Options.get('tipsSeen'));
     if (!tip) return null;
@@ -58,7 +59,22 @@ export class ModeTips {
     return tip;
   }
 
+  // Waits for the match intro to finish (ready() true: the match is live) before showing, so the tip never sits over the
+  // intro's map card. Polled four times a second, never per frame; given up after a minute.
+  showWhen(ready, mode, opts) {
+    this.hide();
+    if (opts?.enabled === false) return;
+    let n = 0;
+    this.poll = setInterval(() => {
+      if (++n > 240) { clearInterval(this.poll); return; }
+      if (!ready()) return;
+      clearInterval(this.poll);
+      this.show(mode, opts);
+    }, 250);
+  }
+
   hide() {
+    clearInterval(this.poll);
     clearTimeout(this.timer);
     if (this.el) this.el.hidden = true;
   }
