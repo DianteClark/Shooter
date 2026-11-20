@@ -23,6 +23,7 @@ import { THEMES } from './music-themes.js';
 export const TICK_MS = 60;         // Scheduler period.
 export const AHEAD = 0.32;         // Seconds: a bar is scheduled once its start is this close.
 const FADE = 2.4;                  // Seconds: a theme crossfade.
+const MATCH_LEVEL = 0.55;          // Match music sits under the game: about 5 dB below the title theme.
 
 // The kit. base: the MIDI note the sample sounds at. loop: [start, end] seconds of a held note. ring: gains per channel.
 // pan, send (echo), level: the channel's place in the mix.
@@ -188,7 +189,7 @@ export class Sequencer {
   // out: where the music goes (the director's loop bus).
   attach(ctx, out) {
     this.ctx = ctx;
-    this.bus = ctx.createGain(); this.bus.gain.value = 1; this.bus.connect(out);
+    this.bus = ctx.createGain(); this.bus.gain.value = MATCH_LEVEL; this.bus.connect(out);
     // The space: a dotted-eighth echo with a damped feedback loop and a short second tap for width. Two delay lines,
     // far cheaper than a second convolver.
     this.echoIn = ctx.createGain(); this.echoIn.gain.value = 0.32;

@@ -1,7 +1,7 @@
 // Node tests for the live match music (docs/AUDIO.md): the kit (js/audio/music-seq.js KIT), every theme at every
 // level (js/audio/music-themes.js), the lookahead scheduler on a stand-in AudioContext with a clock we move by hand,
 // the theme state machine (pickTheme) across every mode family, and the director (js/audio/music.js) driving it all.
-// Run: node dev/sim-audio.mjs [wav]     `wav` also renders short previews of every theme to /tmp/audio/ (a node
+// Run: node dev/sim-audio.mjs [wav]     `wav` also renders short previews of every theme to /tmp/audio/node/ (a node
 // mixdown of exactly what the scheduler asks the AudioContext to play: same notes, rates, gains and loop points).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -446,7 +446,7 @@ function writeWav(path, data, sr = MUSIC_RATE, ch = 2) {
   fs.writeFileSync(path, buf);
 }
 if (WAV) {
-  fs.mkdirSync('/tmp/audio', { recursive: true });
+  fs.mkdirSync('/tmp/audio/node', { recursive: true });
   // Each theme climbing through its levels, a few bars each.
   const list = [
     ['tdm', 'standard-6v6', [0, 1, 2, 3], 9], ['ranked', 'ranked', [0, 1, 2, 3], 8], ['tactical', 'snd-control-showdown', [0, 2, 3], 8],
@@ -457,8 +457,8 @@ if (WAV) {
     ['inf', 'infected', [0, 1, 2, 3], 8.2],
   ];
   const t = cpu();
-  for (const [id, name, levels, secs] of list) writeWav(`/tmp/audio/theme-${name}.wav`, mixdown(id, levels, secs));
-  console.log(`     ${list.length} theme previews in /tmp/audio (${Math.round(cpu() - t)} ms)`);
+  for (const [id, name, levels, secs] of list) writeWav(`/tmp/audio/node/theme-${name}.wav`, mixdown(id, levels, secs));
+  console.log(`     ${list.length} theme previews in /tmp/audio/node (${Math.round(cpu() - t)} ms)`);
 }
 
 console.log(`\n${passed} passed`);

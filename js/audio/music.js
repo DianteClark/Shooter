@@ -298,7 +298,8 @@ export class Music {
     if (theme && x.air) { theme = 'brdrop'; level = 3; }
     else if (theme && x.circle) { theme = 'brfinal'; level = Math.max(2, level); }
     if (theme && x.last) level = 3;
-    if (sting && this.mode !== 'off') this.sting(sting, { gain: 0.85, duckTo: 0.4 });
+    // Into the peak: the theme only dips under the sting (a boss's entrance takes more of the room).
+    if (sting && this.mode !== 'off') this.sting(sting, { gain: 0.85, duckTo: sting === 'boss' ? 0.5 : 0.7 });
     if (theme && this.mode === 'all' && !this.hidden && !ended && (this.engine?.musicVolume ?? 1) > 0) this.seq.play(theme, level, P.transpose);
     else if (this.seq.themeId) this.seq.stop(ended ? 0.8 : 1.2);
 

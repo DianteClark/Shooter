@@ -1700,6 +1700,12 @@ export class AudioEngine {
       } while (i < jobs.length && performance.now() - t0 < 4);
       if (i < jobs.length) setTimeout(runNext, 0);
       else { this._startFarLayer(); this._warmThrowBuffers(); this.ready = true; if (this.theme !== null) this.setTheme(this.themeAsked);   // The weather loops wait for the buffers.
+        // The sound modules every match uses, baked now, in the menus, a recipe a turn: not in the first seconds of a
+        // match, where each recipe was a few milliseconds taken out of a frame.
+        this.modeSfx ??= new ModeSfx(this);
+        this.gearSfx ??= new EquipmentSfx(this);
+        this.streakSfx ??= new StreaksSfx(this);
+        this.finSfx ??= new FinSfx(this);
         this.setMicActive(this.micActive); this._readyDone(); }
     };
     setTimeout(runNext, 0);

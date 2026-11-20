@@ -1069,6 +1069,7 @@ function beginSpectating(msg) {
   app.inMatch = true;
   wakeLock.set(true);
   app.matchInfo = { roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode), scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit, spectating: true };
+  music.match({ mode: msg.mode, rules: MODES[msg.mode]?.rules ?? msg.mode, large: !!MODES[msg.mode]?.large });     // docs/AUDIO.md
   stopVote();
   net.resetGameHandlers();
   backdrop.stop();
