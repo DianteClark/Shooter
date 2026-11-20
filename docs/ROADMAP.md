@@ -189,3 +189,18 @@ Order (adjust by what lands):
 47. Zombies art and variety (~15%): unique models per zombie type (not recoloured soldiers), boss intros, hit effects.
 48. Maps and world art pass (~10%): lighting, props, ambient life and landmarks on the older maps; menus and UI art.
 Keep every addition inside docs/BR-PERF.md budgets (the phone runs hot on heavy scenes); measure each with the perf sweep.
+
+## THE MASSIVE UPDATE (owner, 2026-11-20): Ultra plan, "do everything except the App Store stuff", up to 5 builders
+Supersedes items 44-48 ordering. Waves run continuously; a sweep after each merge batch.
+A. Art: 49. All operators remade (Anvil/Coyote pilot style: silhouettes, animated Elite fx, showpiece suits: bear, mech,
+   shark, knight, astronaut...). 50. Unique zombie models per type + boss intros + hit effects. 51. Weapons visual pass
+   (better models per class, inspect and reload visuals) + 6 melee weapons with animations and finishers. 52. Streak
+   visuals (aircraft, drones, explosions, call-ins). 53. World art pass on older maps (lighting, props, landmarks, ambient).
+B. Content: 54. Second BR island in a new biome (BR, Rebound, Extraction) + 2-3 Ground War maps in its region.
+   55. Graveyard Shift map 3 with its own quest and boss. 56. New 6v6 maps (one or two per wave). 57. Season 3 content.
+C. Big features: 58. Map editor on the phone + share maps as codes, play them in custom matches/friend rooms.
+   59. Co-op campaign: scripted missions for 1-4 players with bots, set pieces, a boss. 60. Ranked seasons with rewards,
+   a spectator/caster camera for friend lobbies, shareable replay codes.
+D. Polish: 61. Sound design pass and music for every mode. 62. Animation pass (vault/mantle, reload variety, deaths).
+   63. Tutorial and help videos (in-engine), accessibility depth.
+Every addition stays within docs/BR-PERF.md budgets and 60 fps on the owner's iPhone.
