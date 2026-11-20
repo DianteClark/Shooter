@@ -46,15 +46,16 @@ const { ALL_EMBLEMS, EMBLEMS, getEmblem } = await import('../js/ui/emblems.js');
 let failed = 0;
 const ok = (cond, label, info = '') => { console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${label}${info ? `: ${info}` : ''}`); if (!cond) failed++; };
 const at = (y, m, d, h = 12, mi = 0) => new Date(y, m - 1, d, h, mi);
-const [S1, S2] = I.SEASON_DEFS;
+const [S1, S2, S3] = I.SEASON_DEFS;
 
 // ---- Schedule ----
 console.log('schedule');
 {
   const cases = [
     [[2026, 11, 11, 12], 'pre'], [[2026, 11, 15, 23, 59], 'pre'], [[2026, 11, 16, 0, 0], 'S1'], [[2026, 11, 16, 0, 1], 'S1'],
-    [[2026, 12, 27, 23, 59], 'S1'], [[2026, 12, 28, 0, 0], 'S2'], [[2027, 2, 7, 23, 59], 'S2'], [[2027, 2, 8, 0, 0], 'S1R1'],
-    [[2027, 3, 21, 23, 59], 'S1R1'], [[2027, 3, 22, 0, 0], 'S2R1'], [[2027, 5, 3, 0, 0], 'S1R2'], [[2031, 6, 1, 9], null],
+    [[2026, 12, 27, 23, 59], 'S1'], [[2026, 12, 28, 0, 0], 'S2'], [[2027, 2, 7, 23, 59], 'S2'], [[2027, 2, 8, 0, 0], 'S3'],
+    [[2027, 3, 21, 23, 59], 'S3'], [[2027, 3, 22, 0, 0], 'S1R1'], [[2027, 5, 2, 23, 59], 'S1R1'], [[2027, 5, 3, 0, 0], 'S2R1'],
+    [[2027, 6, 14, 0, 0], 'S3R1'], [[2027, 7, 26, 0, 0], 'S1R2'], [[2031, 6, 1, 9], null],
   ];
   for (const [t, key] of cases) if (key) ok(S.seasonAt(at(...t)).key === key, `${t.join('-')} is ${key}`, S.seasonAt(at(...t)).key);
   const s1 = S.seasonAt(at(2026, 11, 16, 9));
@@ -65,8 +66,12 @@ console.log('schedule');
   ok(!S.eventAt(at(2026, 11, 29, 23)) && S.eventAt(at(2026, 11, 30, 0, 1))?.id === 'coldsnap' && S.eventAt(at(2026, 12, 13, 23))?.id === 'coldsnap' && !S.eventAt(at(2026, 12, 14, 0, 1)),
     'Cold Snap runs days 14 to 27 of Season 1');
   ok(S.eventAt(at(2027, 1, 4, 10))?.id === 'lightsout', 'Lights Out runs in Season 2');
+  ok(!S.eventAt(at(2027, 2, 14, 23, 59)) && S.eventAt(at(2027, 2, 15, 0, 1))?.id === 'lightningrod' && S.eventAt(at(2027, 2, 28, 23, 59))?.id === 'lightningrod' && !S.eventAt(at(2027, 3, 1, 0, 1)),
+    'Lightning Rod runs days 7 to 20 of Season 3 (Feb 15 - Feb 28)');
+  const s3 = S.seasonAt(at(2027, 2, 8, 0, 0));
+  ok(s3.title === 'Season 3: Third Rail' && s3.daysLeft === 42 && new Date(s3.endsAt).getMonth() === 2 && new Date(s3.endsAt).getDate() === 22, 'Season 3: Third Rail, 42 days to Mar 22', s3.title);
   // Five time zones, fresh processes: the same local times resolve alike everywhere.
-  const times = [[2026, 11, 15, 23, 59], [2026, 11, 16, 0, 0], [2026, 11, 22, 23, 59], [2026, 11, 23, 0, 0], [2026, 11, 30, 0, 0], [2026, 12, 28, 0, 0], [2027, 2, 8, 0, 0], [2027, 6, 1, 13, 0]];
+  const times = [[2026, 11, 15, 23, 59], [2026, 11, 16, 0, 0], [2026, 11, 22, 23, 59], [2026, 11, 23, 0, 0], [2026, 11, 30, 0, 0], [2026, 12, 28, 0, 0], [2027, 2, 8, 0, 0], [2027, 2, 15, 0, 0], [2027, 3, 22, 0, 0], [2027, 6, 1, 13, 0]];
   const runs = ['UTC', 'Pacific/Auckland', 'America/Los_Angeles', 'Asia/Kolkata', 'Pacific/Honolulu'].map(tz =>
     JSON.parse(execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--child', JSON.stringify(times)], { env: { ...process.env, TZ: tz } }).toString()));
   ok(runs.every(r => JSON.stringify(r.out) === JSON.stringify(runs[0].out)), 'every time zone resolves the same local times alike', JSON.stringify(runs[0].out.map(o => o[0])));
@@ -98,18 +103,22 @@ console.log('weekly');
 // ---- Season Replay ----
 console.log('replay');
 {
-  const r1 = S.seasonAt(at(2027, 2, 8, 10)), r2 = S.seasonAt(at(2027, 3, 22, 10)), r3 = S.seasonAt(at(2027, 5, 3, 10));
-  ok(r1.def.id === 'S1' && r1.replay === 1 && r1.title === 'Season Replay: Cold Iron', 'after Season 2: Cold Iron again', r1.title);
-  ok(r2.def.id === 'S2' && r2.replay === 1 && r3.def.id === 'S1' && r3.replay === 2, 'then Signal Fire, then round again');
-  ok(S.eventAt(at(2027, 2, 24, 10))?.id === 'coldsnap', "a replay brings its season's event back");
+  // Season Replay starts once Season 3 ends (Mar 22, 2027): Cold Iron, Signal Fire, Third Rail, then round again.
+  const r1 = S.seasonAt(at(2027, 3, 22, 10)), r2 = S.seasonAt(at(2027, 5, 3, 10)), r3 = S.seasonAt(at(2027, 6, 14, 10)), r4 = S.seasonAt(at(2027, 7, 26, 10));
+  ok(r1.def.id === 'S1' && r1.replay === 1 && r1.title === 'Season Replay: Cold Iron', 'after Season 3: Cold Iron again', r1.title);
+  ok(r2.def.id === 'S2' && r2.replay === 1 && r3.def.id === 'S3' && r3.replay === 1 && r3.title === 'Season Replay: Third Rail' && r4.def.id === 'S1' && r4.replay === 2,
+    'then Signal Fire, then Third Rail, then round again', [r1, r2, r3, r4].map(r => r.key).join(','));
+  ok(r1.startDay === S.seasonAt(at(2027, 3, 21, 23)).endDay && [r1, r2, r3, r4].every((r, i, a) => !i || r.startDay === a[i - 1].endDay) && [r1, r2, r3, r4].every(r => r.endDay - r.startDay === 42),
+    'the replays run back to back from the end of Season 3, 42 days each');
+  ok(S.eventAt(at(2027, 4, 7, 10))?.id === 'coldsnap' && S.eventAt(at(2027, 6, 22, 10))?.id === 'lightningrod', "a replay brings its season's event back");
   const st = S.blankSeasonState();
-  S.rollover(st, at(2027, 2, 1));
-  S.applySeasonMatch(st, { xp: S.TIER_XP * 30 }, at(2027, 2, 1));
-  const ro = S.rollover(st, at(2027, 2, 9));
-  ok(ro.changed && ro.claimed.length === 30 && st.k === 'S1R1' && st.xp === 0 && st.cl.S2 === 30, 'Season 2 ending claims its 30 reached tiers and starts the replay fresh', JSON.stringify([st.k, st.cl]));
-  S.applySeasonMatch(st, { xp: S.TIER_XP * 5 }, at(2027, 2, 9));
+  S.rollover(st, at(2027, 3, 15));
+  S.applySeasonMatch(st, { xp: S.TIER_XP * 30 }, at(2027, 3, 15));
+  const ro = S.rollover(st, at(2027, 3, 23));
+  ok(ro.changed && ro.claimed.length === 30 && st.k === 'S1R1' && st.xp === 0 && st.cl.S3 === 30, 'Season 3 ending claims its 30 reached tiers and starts the replay fresh', JSON.stringify([st.k, st.cl]));
+  S.applySeasonMatch(st, { xp: S.TIER_XP * 5 }, at(2027, 3, 23));
   ok(S.claimTiers(st).length === 5 && st.cl.S1 === 5, 'the replay track pays its tiers');
-  ok(S.weeklyStatus(st, at(2027, 2, 9)).length === 6, 'the replay has its weekly sets');
+  ok(S.weeklyStatus(st, at(2027, 3, 23)).length === 6, 'the replay has its weekly sets');
 }
 
 // ---- Track and ownership ----
@@ -150,6 +159,9 @@ console.log('dated');
   ok(S.dateLocked('skin', `skin:${S2.skins[0][0]}-s2`, at(2026, 12, 1)) && !S.dateLocked('skin', `skin:${S2.skins[0][0]}-s2`, at(2027, 1, 1)), 'so does its skin set');
   ok(!S.dateLocked('map', 'railyard', at(2026, 11, 1)) && !S.dateLocked('weapon', 'ar', at(2026, 11, 1)), 'content no season names is never locked');
   ok(S.lockDay('camo', c.id) === S.dayNumber(at(2026, 12, 28)), 'its lock day is the season start');
+  ok(I.seasonCamos(S3).every(x => S.dateLocked('camo', x.id, at(2027, 2, 7, 23, 59)) && !S.dateLocked('camo', x.id, at(2027, 2, 8, 0, 0)) && S.lockDay('camo', x.id) === S.dayNumber(at(2027, 2, 8))),
+    'every Season 3 camo waits for Feb 8');
+  ok(S3.skins.every(([op]) => S.dateLocked('skin', `skin:${op}-s3`, at(2027, 2, 7)) && !S.dateLocked('skin', `skin:${op}-s3`, at(2027, 2, 8))), 'so does the Third Rail skin set');
 }
 
 // ---- Ranked ----
@@ -258,14 +270,14 @@ console.log('save');
   ok(junk.k === '' && junk.xp === 0 && junk.c === 100 && junk.cl.S1 === 100 && !junk.cl.S9 && junk.rr.S1 === 6 && junk.rk.sr === R.SR_MAX && junk.rk.pm === 5, 'junk is cleaned', JSON.stringify(junk));
 }
 
-// ---- Season 2: the switch on 2026-12-28, played through Progress on a mocked clock, then Season Replay ----
-console.log('season 2');
+// ---- Season 2 (2026-12-28) and Season 3 (2027-02-08): the switches, played through Progress on a mocked clock, then Season Replay ----
+console.log('season 2 and season 3');
 {
   const { register } = await import('node:module');
   register('data:text/javascript,' + encodeURIComponent(`export async function resolve(s, c, next) {
     if (s === 'three') return { url: ${JSON.stringify(new URL('../vendor/three.min.js', import.meta.url).href)}, shortCircuit: true };
     return next(s, c); }`));
-  const { playlistsFor } = await import('../js/ui/matchmaking.js');
+  const { playlistsFor, resolveSelection } = await import('../js/ui/matchmaking.js');
   const { WEAPONS } = await import('../js/shared/weapons.js');
   const { weeklyEventAt } = await import('../js/shared/events.js');
   const { CARD_IDS } = P;
@@ -356,25 +368,77 @@ console.log('season 2');
     ok(rb.rows[rb.me]?.value === r3.sr, 'the Ranked board has my Season 2 SR', String(rb.rows[rb.me]?.value));
     // The weekly event rolls on in Season 2: a new one on Dec 28 (a Monday).
     ok(weeklyEventAt(new Real(2026, 11, 28, 1)).key !== weeklyEventAt(new Real(2026, 11, 27, 23)).key, 'the weekly event turns over with the season');
-    // Season Replay after Season 2 (Feb 8): Cold Iron again, fresh; owned rewards stay owned.
+    // Season 3 (Feb 8): Third Rail. Season 2 pays out; the new track, its camos and skins, weekly sets and event.
     setNow(2027, 1, 7, 23, 59);
     ok(Progress.season().info.key === 'S2' && Progress.season().info.daysLeft === 1, 'Feb 7: Season 2, last day');
+    const s3cam = I.seasonCamos(S3), s3camo = s3cam[0].id, s3anim = s3cam.filter(c => c.animated);
+    ok(!Progress.camos('ar').some(c => s3cam.some(x => x.id === c.camo.id)), 'no Season 3 camo is in the picker before it starts');
+    ok(!Progress.isItemUnlocked('weapon', 'rail') && !Progress.isOperatorUnlocked('halcyon'), 'the Lodestone and Halcyon are still locked (level 40, 10 S&D rounds)');
     setNow(2027, 1, 8, 0, 0, 30);
-    const rp = Progress.season();
-    ok(rp.info.key === 'S1R1' && rp.info.title === 'Season Replay: Cold Iron' && rp.info.short === 'Replay' && rp.tier === 0, 'Feb 8: Season Replay: Cold Iron starts fresh', rp.info.title);
+    const s3 = Progress.season();
+    ok(s3.info.key === 'S3' && s3.info.title === 'Season 3: Third Rail' && s3.info.daysLeft === 42 && s3.info.week === 0 && s3.tier === 0, 'Feb 8 00:00: Season 3: Third Rail, 42 days, tier 0', s3.info.title);
     const ro2 = Progress.takeRollover();
     ok(ro2?.ranked?.def?.id === 'S2' && Progress.hasReward(`card:rk-s2-${I.DIVISIONS[ro2.ranked.peakDiv].id}`), 'Season 2 ranked pays at the end', JSON.stringify(ro2?.ranked?.peakDiv));
     ok(tr.every(r => Progress.hasReward(r.own) || r.kind === 'weapon' || r.kind === 'operator'), 'every Season 2 reward is still owned');
+    const tr3 = I.trackRewards(S3), k3 = k => tr3.filter(r => r.kind === k).length;
+    ok(tr3.length === 100 && tr3.every(real) && new Set(tr3.map(r => r.own)).size === 100, 'Season 3: 100 tiers, every reward in its table, none twice', tr3.filter(r => !real(r)).map(r => r.own).join(','));
+    ok(k3('camo') === 10 && k3('skin') === 8 && k3('card') === 40 && k3('emblem') === 40 && k3('weapon') === 1 && k3('operator') === 1, 'Season 3: 10 camos, 8 skins, 40 cards, 40 emblems, two early unlocks',
+      ['camo', 'skin', 'card', 'emblem'].map(k3).join('/'));
+    ok(tr3[24].kind === 'weapon' && tr3[24].id === 'rail' && tr3[74].kind === 'operator' && tr3[74].id === 'halcyon', 'tier 25 the Lodestone early, tier 75 Halcyon early');
+    const c3 = I.seasonCards(S3);
+    ok(tr3[0].id === c3[0].id && c3[0].name === 'Third Rail' && c3[0].art.c === S3.theme && c3.slice(36).every(c => c.art.anim) && c3.slice(0, 36).every(c => !c.art.anim), "tier 1 is the season's own card; cards 37-40 animated");
+    const basePatterns = new Set(CAMOS.filter(c => !c.season).map(c => c.pattern)), baseAnim = new Set(CAMOS.filter(c => !c.season && c.animated).map(c => c.pattern));
+    ok(s3cam.length === 10 && s3anim.length === 2 && s3cam.every(c => basePatterns.has(c.pattern)) && s3anim.every(c => baseAnim.has(c.pattern)), 'Season 3 camos: 8 static, 2 animated, all on existing shader patterns');
+    ok(I.seasonEmblems(S3).length === 40 && I.seasonEmblems(S3).every(e => !EMBLEMS.some(x => x.id === e[0]) && getEmblem(e[0])), "Season 3 emblems: in ALL_EMBLEMS, never in the pool's list");
+    ok(S3.skins.every(([op]) => getSkin(`skin:${op}-s3`)?.season === 'S3'), 'the Third Rail skin set is in the skin table');
+    ok(Progress.camos('ar').some(c => c.camo.id === s3camo), 'Season 3 camos show in the picker now');
+    const wk3 = Progress.weekly();
+    ok(wk3.length === 6 && wk3.filter(w => w.open).length === 1 && wk3.every((w, i) => w.list.length === 5 && w.list.every(c => c.id.startsWith(`S3.w${i + 1}.`))), 'Season 3 weekly: six sets of five, the first open', wk3[0].list[0]?.id);
+    const r4 = Progress.ranked();
+    ok(r4.k === 'S3' && !r4.placed && r4.base === Math.floor(r3.sr * R.CARRY), 'Season 3 Ranked: placements again', JSON.stringify([r4.base, r3.sr]));
+    Progress.applySeasonMatch({ xp: S.TIER_XP * 100, counts: {}, career: { kills: 1, deaths: 1, won: true } });
+    const got3 = Progress.claimSeason();
+    ok(got3.length === 100 && got3.every(g => g.fresh) && Progress.isItemUnlocked('weapon', 'rail') && Progress.isOperatorUnlocked('halcyon'), 'all 100 claim; the Lodestone and Halcyon open', String(got3.length));
+    const sk3 = getSkin(`skin:${S3.skins[0][0]}-s3`);
+    ok(Progress.setCard(tr3[0].id) && Progress.setCamo('rail', s3anim[0].id) !== false && Progress.camo('rail') === s3anim[0].id && Progress.setOperatorSkin(sk3.operator, sk3.id), 'Season 3 cosmetics equip (an animated camo on the Lodestone)');
+    // Lightning Rod: Snipers Only Grind, days 7-20 (Feb 15 - Feb 28), in the Spotlight.
+    setNow(2027, 1, 14, 23, 59);
+    ok(!playlistsFor('standard').some(p => p.id === 'event'), 'no season event before day 7');
+    setNow(2027, 1, 15, 0, 1);
+    const pl3 = playlistsFor('standard').find(p => p.id === 'event');
+    ok(S.eventAt()?.id === 'lightningrod' && pl3?.name === 'Lightning Rod' && pl3.modes[0] === 'grind' && pl3.mods.includes('snipers'), 'Lightning Rod (Snipers Only Grind) is in the Spotlight', pl3?.sub);
+    const sel3 = resolveSelection('standard', { playlist: 'event', modes: [] });
+    ok(sel3.modes[0] === 'grind' && sel3.mods.includes('snipers') && !sel3.ranked, 'and Find match plays it', JSON.stringify(sel3));
+    ok(Progress.weekly().filter(w => w.open).length === 2, 'Feb 15: week 2 opens');
+    setNow(2027, 1, 28, 23, 59);
+    ok(playlistsFor('standard').some(p => p.id === 'event'), 'still on Feb 28');
+    setNow(2027, 2, 1, 0, 1);
+    ok(!playlistsFor('standard').some(p => p.id === 'event'), 'gone on Mar 1');
+    // Season Replay after Season 3 (Mar 22): Cold Iron again, fresh; owned rewards stay owned.
+    setNow(2027, 2, 21, 23, 59);
+    ok(Progress.season().info.key === 'S3' && Progress.season().info.daysLeft === 1, 'Mar 21: Season 3, last day');
+    setNow(2027, 2, 22, 0, 0, 30);
+    const rp = Progress.season();
+    ok(rp.info.key === 'S1R1' && rp.info.title === 'Season Replay: Cold Iron' && rp.info.short === 'Replay' && rp.tier === 0, 'Mar 22: Season Replay: Cold Iron starts fresh', rp.info.title);
+    const ro3 = Progress.takeRollover();
+    ok(!ro3?.claimed?.length, 'the Season 3 rollover had nothing left to claim (all 100 were)', JSON.stringify(ro3?.claimed?.length));
+    ok(tr3.every(r => Progress.hasReward(r.own) || r.kind === 'weapon' || r.kind === 'operator') && Progress.isItemUnlocked('weapon', 'rail'), 'every Season 3 reward is still owned');
     Progress.applySeasonMatch({ xp: S.TIER_XP * (s1tier + 5), counts: {}, career: null });
     const again = Progress.claimSeason();
     ok(again.length === s1tier + 5 && again.slice(0, s1tier).every(g => !g.fresh) && again.slice(s1tier).every(g => g.fresh), 'the replay track shows owned rewards as owned and pays the rest', `${again.filter(g => g.fresh).length} fresh of ${again.length}`);
     ok(Progress.weekly()[0].list.every(c => c.id.startsWith('S1.w1.')) && Progress.weekly()[0].list.every(c => c.value === 0), 'the replay\'s weekly sets start over');
     const rr = Progress.ranked();
-    ok(rr.k === 'S1R1' && !rr.placed && rr.base === Math.floor(r3.sr * R.CARRY), 'replay Ranked: placements again', JSON.stringify([rr.k, rr.base]));
-    setNow(2027, 1, 22, 12);
-    ok(S.eventAt()?.id === 'coldsnap' && playlistsFor('standard').some(p => p.id === 'event' && p.name === 'Cold Snap'), 'the replay brings Cold Snap back to the Spotlight');
-    setNow(2027, 2, 22, 0, 0, 30);
-    ok(Progress.season().info.key === 'S2R1' && Progress.season().info.title === 'Season Replay: Signal Fire', 'then Signal Fire again (Mar 22)');
+    ok(rr.k === 'S1R1' && !rr.placed, 'replay Ranked: placements again', JSON.stringify([rr.k, rr.base]));
+    setNow(2027, 3, 7, 12);
+    ok(S.eventAt()?.id === 'coldsnap' && playlistsFor('standard').some(p => p.id === 'event' && p.name === 'Cold Snap'), 'the replay brings Cold Snap back to the Spotlight (Apr 7)');
+    setNow(2027, 4, 3, 0, 0, 30);
+    ok(Progress.season().info.key === 'S2R1' && Progress.season().info.title === 'Season Replay: Signal Fire', 'then Signal Fire again (May 3)');
+    setNow(2027, 5, 14, 0, 0, 30);
+    ok(Progress.season().info.key === 'S3R1' && Progress.season().info.title === 'Season Replay: Third Rail', 'then Third Rail again (Jun 14)');
+    setNow(2027, 5, 22, 12);
+    ok(playlistsFor('standard').some(p => p.id === 'event' && p.name === 'Lightning Rod'), 'with Lightning Rod back in the Spotlight');
+    setNow(2027, 6, 26, 0, 0, 30);
+    ok(Progress.season().info.key === 'S1R2', 'and round again (Jul 26)');
     ok(Progress.exportCode().length < 4000 && P.decodeSave(Progress.exportCode()).ok, 'the save code stays short and loads');
   } finally { globalThis.Date = Real; }
 }
@@ -405,9 +469,9 @@ console.log('names');
   // list the same way.
   // + the weekly events' emblems (js/shared/events.js) and the tournament crest (docs/TOURNAMENTS.md), kept out the same way.
   const { EVENT_EMBLEMS, TOURNEY_EMBLEMS } = await import('../js/ui/emblems.js');
-  // 13 feats: the Listener's Dead Frequency (Polestar Relay, 1118-6) is the thirteenth.
-  // 94 - 6: Season 2's Signal Fire skin set took six emblem tiers (fillerSkinTiers), and those emblems left the season.
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 - 6 + 1 + 13 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
+  // 14 feats: the Listener's Dead Frequency (Polestar Relay, 1118-6) is the thirteenth, the Barker's (Wrenfield Fair) the fourteenth.
+  // 141 (three seasons of 40 + 7 ranked crests) - 6: Season 2's Signal Fire skin set took six emblem tiers (fillerSkinTiers), and those emblems left the season.
+  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 141 - 6 + 1 + 14 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
   // The weekly events' rewards and names clash with nothing either.
   const { EVENTS } = await import('../js/shared/events.js');
   const evNames = EVENTS.flatMap(e => [e.reward.name]);
