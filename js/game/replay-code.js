@@ -7,16 +7,17 @@
 //
 // Code: "SYR1.<base64url body>.<checksum>". The body is deflate-raw of one binary record:
 //   varint header length, header JSON { v, map, mode, mods, hz, dur, me (cast index or -1), team, cast, str, lk, at }
-//   varint keyframes F; per keyframe: varint step gap (in 1/hz), varint players n; per player: varint cast index,
-//     u8 flags (bit 0..5 alive sprint slide protect ghost downed; 6: weapon, camo, team, hp follow; 7: ADS),
-//     zigzag x and z in 1/16 m (against this cast member's last position; absolute the first time), u8 aim (256 steps),
-//     then on bit 6: varint weapon string, varint camo string, varint team, varint hp; else zigzag hp change.
+//   five length-prefixed column streams over the keyframes (deflate finds far more in each than in one interleaved):
+//     heads: varint F, then per keyframe a varint step gap (in 1/hz), varint players n, and each player's cast index;
+//     flags: u8 (bit 0..5 alive sprint slide protect ghost downed; 6: changed, then varint weapon, camo and team; 7 ADS);
+//     positions: zigzag x and z in 1/16 m, the error of a straight-line guess from that player's last two (absolute
+//       the first time); aims: zigzag turn since last time, 256 steps a circle; health: varint on a change, else delta.
 //   varint extras-table length, the table JSON (distinct objective/score values), per keyframe a varint index.
 //   varint events length, the events JSON: [[gap in ms, type, ...fields in EV_FIELDS order]] with player ids as cast
 //     indices, a shot's pellets down to its first ray.
 // A shared replay is smaller than a saved clip: 10 keyframes a second (the clip keeps 15), no velocities, reloads or
-// heat (velocity comes back from the positions), only the events the picture and the kill feed use. A highlight (the
-// eight seconds around the final kill) is about 2 to 5 KB of text; the whole 30 seconds 6 to 15 KB.
+// heat (velocity comes back from the positions), only the events the picture and the kill feed use. A 6v6 highlight (the
+// 8.5 seconds around the final kill) is about 4,000 characters, the whole 30 seconds about 10,000; Ground War 2.5x that.
 // Refused cleanly: anything without the prefix ('format'), another version ('version'), a typo or cut paste
 // ('checksum'), a body that will not read ('data'), a map this build lacks ('map'), too long ('size').
 import { STRIDE, REC_HZ } from './replay.js';
