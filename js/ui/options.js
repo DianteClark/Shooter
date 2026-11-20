@@ -10,13 +10,15 @@ export const QUALITY_LEVELS = [['auto', 'Auto'], ['ultra', 'Ultra'], ['high', 'H
 
 // The in-match HUD's panels (js/ui/hud.js setHudSize): the streak tiles never go below their touch size.
 export const HUD_SIZES = [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']];
+// Where music plays (js/audio/music.js setMode): everywhere, menus and stings only, or nowhere.
+export const MUSIC_MODES = [['all', 'Everywhere'], ['menus', 'Menus only'], ['off', 'Off']];
 
 // Accessibility (js/ui/a11yscreen.js, docs/ACCESSIBILITY.md). Colour modes are js/shared/palette.js COLOR_MODES.
 export const TEXT_SIZES = [['normal', 'Normal'], ['large', 'Large'], ['larger', 'Larger']];
 export const CUE_LEVELS = [['off', 'Off'], ['nades', 'Grenades'], ['all', 'Grenades and steps']];
 
 export const OPTION_DEFAULTS = Object.freeze({
-  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, hudSize: 'normal', voice: 1, sound: 1, music: 1, matchMusic: false, fps: false, touchDebug: false, autoRespawn: false,
+  quality: 'auto', sensitivity: 1, aimAssist: 1, lefty: false, hudSize: 'normal', voice: 1, sound: 1, music: 0.6, musicMode: 'all', fps: false, touchDebug: false, autoRespawn: false,
   squad: '',     // Squad tag for public rooms (js/net/lobbies.js): letters and digits, up to 10; '' for none.
   hardcore: false,   // The Hardcore switch on the Multiplayer screen (and what a hosted friend room starts with).
   voiceMode: 'open',   // 'open': the mic sends while it is on. 'ptt': push to talk, only while the mic (or Talk) is held.
@@ -57,6 +59,7 @@ function load() {
     if (!QUALITY_LEVELS.some(([id]) => id === out.quality)) out.quality = 'auto';
     if (!HUD_SIZES.some(([id]) => id === out.hudSize)) out.hudSize = 'normal';
     if (out.voiceMode !== 'open' && out.voiceMode !== 'ptt') out.voiceMode = 'open';
+    if (!MUSIC_MODES.some(([id]) => id === out.musicMode)) out.musicMode = 'all';
     const map = {};
     if (out.padMap && typeof out.padMap === 'object' && !Array.isArray(out.padMap)) {
       for (const [k, v] of Object.entries(out.padMap)) if (Number.isInteger(v) && v >= -1 && v < 20) map[k] = v;

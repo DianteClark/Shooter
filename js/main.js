@@ -1958,6 +1958,8 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   // Ranked (the Ranked playlist, or a full friend room the host made ranked): the rating moves at the end.
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;
+  // The match music's theme (docs/AUDIO.md): by mode, Ground War, ranked, and the campaign's mission.
+  music.match({ mode, rules: MODES[mode]?.rules ?? mode, ranked: !!ranked, large: !!MODES[mode]?.large, mission: MODES[mode]?.cp ? Math.floor((scoreLimit | 0) / 10) : 0 });
   // The caster camera (docs/RANKED.md): out-of-play players may watch with it, except where seeing everyone would be
   // unfair (Ranked) or makes no sense (Training, the tutorial, the range).
   if (app.match.caster) {
@@ -2204,7 +2206,7 @@ function applyOptions(v, changed) {
   controls.aimAssist = v.aimAssist;
   if (!changed || changed === 'sound') audio.setVolume?.(v.sound);
   if (!changed || changed === 'music') audio.setMusicVolume?.(v.music);
-  if (!changed || changed === 'matchMusic') music.setMatchMusic(v.matchMusic);
+  if (!changed || changed === 'musicMode') music.setMode(v.musicMode);
   if (!changed || changed === 'voice') app.voice?.setVolume(v.voice);
   if (!changed || changed === 'voiceMode') app.voice?.setMode(v.voiceMode);
   if (changed === 'quality') app.renderer?.setQuality?.(v.quality);

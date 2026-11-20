@@ -1,27 +1,32 @@
-// The music director: builds the stems from music-synth.js into AudioBuffers in the background, and plays them as
-// scenes (menu, lobby, match and its layers, battle royale flight) with crossfades, plus one-shot stings.
+// The music director (docs/AUDIO.md). Menus play stems pre-rendered by music-synth.js (the title theme and its calm
+// variant, the lobby loop) and one-shot stings; matches play a theme per mode, sequenced live by music-seq.js from
+// music-themes.js, its intensity following the match. Crossfades between all of them.
 //
 // One instance, `music`, shared by everything: the audio engine attaches it to its context and its music bus, main.js
-// tells it which screen is up, the engine's update feeds it the match view each frame, and anyone can cue it:
-//   music.cue('exfil')            the extraction "exfil called" tension layer on; music.cue('exfil', false) off
-//   music.cue('finalCircle' | 'lastMinute' | 'drop', on)   force a layer (normally derived from the match view)
+// tells it which screen is up and what match is starting (match()), the engine's update feeds it the match view each
+// frame and its events, and anyone can cue it:
+//   music.cue('exfil')            the extraction "exfil called" theme; music.cue('exfil', false) back
+//   music.cue('finalCircle' | 'lastMinute' | 'drop', on)   force a moment (normally read from the match view)
 //   music.cue('menu' | 'lobby' | 'match' | 'none')        a scene
-//   music.cue('victory' | 'defeat' | 'intro' | 'levelUp' | 'unlock' | 'prestige')   a sting
+//   music.cue('victory' | 'defeat' | 'intro' | 'boss' | 'matchPoint' | 'levelUp' | 'unlock' | 'prestige')   a sting
 //
-// Graph: per-stem source -> gain -> loopBus -> stingDuck -> duck (fights, voice) -> filter (calm, dead, muffle) -> out
-//        stings -> stingBus -> out;   out -> engine.music (the engine's music bus: volume, mic mode) -> master -> limiter.
-// Loops of one group share a clock, so a layer joins in time with the underscore it sits on.
-// Nothing here allocates per frame: frame() compares a few flags and touches the graph only when one changes.
+// Graph: stems and the sequencer -> loopBus -> stingDuck -> duck (fights, mic, voices, radio) -> filter (calm, dead,
+//        muffle) -> out;  stings -> stingBus -> out;  out -> engine.music (volume, mic mode) -> master -> limiter.
+// Nothing here allocates per frame: frame() compares a few numbers and touches the graph only when one changes.
 import { TRACKS, BUILD_ORDER, MUSIC_RATE, renderTrack, releaseScratch } from './music-synth.js';
+import { Sequencer, renderKit } from './music-seq.js';
+import { pickTheme, pickEvent, newPickState } from './music-themes.js';
 
 const FADE = 1.2;              // Seconds: a scene crossfade.
 const IDLE_MS = 75000;         // Title screen untouched this long: the calm variant.
 const SLICE_MS = 4;            // Build work per turn.
 const SLICE_GAP = 10;          // Ms between turns in menus (the rest of the frame stays free).
 const SLICE_GAP_MATCH = 40;    // And in a match, should a build still be running.
-const GROUP = { match: 'match', last: 'match', circle: 'match', exfil: 'match' };
+const GROUP = {};
 const LOOPS = new Set(Object.keys(TRACKS).filter(k => TRACKS[k].loop));
 const UI_STING = { levelUp: ['levelUp', 1], rankUp: ['levelUp', 1.122], unlock: ['unlock', 1], prestige: ['prestige', 1] };
+export const MUSIC_MODES = ['all', 'menus', 'off'];   // Options: music everywhere, menus and stings only, none.
+const MATCH_DUCK = 0.45;       // How far a full firefight pushes the match music down.
 const OPEN = 10000;            // Filter wide open (the stems stop at 11 kHz anyway).
 
 // Menu screens that count as the lobby: you are waiting on other players.
@@ -36,7 +41,11 @@ export class Music {
     this.scene = 'none';
     this.f = { air: false, last: false, circle: false, ended: false, alive: true };
     this.forced = { exfil: false, last: false, circle: false, air: false };
-    this.matchMusic = false;
+    this.mode = 'all';               // MUSIC_MODES
+    this.seq = new Sequencer();
+    this.pick = newPickState();
+    this.info = { mode: 'tdm', rules: 'tdm', ranked: false, large: false, mission: 0 };
+    this.talking = false; this.radioUntil = 0;
     this.calm = false; this.hidden = false; this.muffled = false;
     this.lastInput = Date.now();
     this.duckLevel = 1; this.stingUntil = 0; this.stingAt = {};
@@ -58,6 +67,7 @@ export class Music {
     this.loopBus = ctx.createGain(); this.loopBus.connect(this.stingDuck);
     this.stingBus = ctx.createGain(); this.stingBus.connect(this.out);
     this.bufs = {}; this.live.clear(); this.clock = {}; this.bytes = 0;
+    this.seq.attach(ctx, this.loopBus);
     if (!this._listening && typeof document !== 'undefined') {
       this._listening = true;
       const touch = () => {
@@ -81,6 +91,7 @@ export class Music {
 
   detach() {
     this._stopAll(true);
+    this.seq.detach();
     this.ctx = null; this.engine = null;
   }
 
@@ -95,17 +106,17 @@ export class Music {
       const start = performance.now();
       do {
         if (!it) {
-          if (ti >= BUILD_ORDER.length) {
+          if (ti > BUILD_ORDER.length) {
             this.built = true; this.buildWallMs = performance.now() - t0; releaseScratch(); this._builtDone();
             return;
           }
-          it = renderTrack(TRACKS[BUILD_ORDER[ti]]);
+          it = ti < BUILD_ORDER.length ? renderTrack(TRACKS[BUILD_ORDER[ti]]) : renderKit();
         }
         const t = performance.now();
         const r = it.next();
         const ms = performance.now() - t;
         this.buildMs += ms; if (ms > this.maxJobMs) this.maxJobMs = ms;
-        if (r.done) { this._store(BUILD_ORDER[ti], r.value); it = null; ti++; }
+        if (r.done) { if (ti < BUILD_ORDER.length) this._store(BUILD_ORDER[ti], r.value); else this._storeKit(r.value); it = null; ti++; }
       } while (performance.now() - start < SLICE_MS);
       setTimeout(run, this.scene === 'match' ? SLICE_GAP_MATCH : SLICE_GAP);
     };
@@ -124,15 +135,83 @@ export class Music {
     if (LOOPS.has(track)) this._apply();
   }
 
-  // ---- Options and inputs. ----
-  setMatchMusic(on) {
-    if (this.matchMusic === !!on) return;
-    this.matchMusic = !!on;
-    if (this.scene === 'match') this._apply();
+  _storeKit(samples) {
+    const bufs = {};
+    let bytes = 0;
+    for (const [name, data] of Object.entries(samples)) {
+      const buf = this.ctx.createBuffer(1, data.length, MUSIC_RATE);
+      buf.getChannelData(0).set(data);
+      bufs[name] = buf; bytes += data.length * 4;
+    }
+    this.bytes += bytes;
+    this.seq.setKit(bufs, bytes);
   }
 
-  // The engine's tension loop gives way when match music is on: the last-minute layer does that job in time.
-  get ownsTension() { return this.scene === 'match' && this.matchMusic && !!this.bufs.last; }
+  // ---- Options and inputs. ----
+  // 'all': music everywhere; 'menus': menus and stings, nothing under play; 'off': none at all.
+  setMode(mode) {
+    if (!MUSIC_MODES.includes(mode)) mode = 'all';
+    if (this.mode === mode) return;
+    this.mode = mode;
+    if (mode !== 'all') this.seq.stop(1);
+    this._apply(1);
+  }
+  get matchMusic() { return this.mode === 'all'; }
+  setMatchMusic(on) { this.setMode(on ? 'all' : 'menus'); }     // The old two-way switch.
+
+  // The engine's own tension loop gives way while a theme plays: the theme's peak level does that job in time.
+  get ownsTension() { return this.scene === 'match' && this.mode === 'all' && !!this.seq.themeId; }
+
+  // From main.js, as a match starts: what it is, for the choice of theme.
+  //   { mode, rules, ranked, large, mission }   mission: the campaign mission's number (1-8)
+  match(info) {
+    this.info = { mode: info.mode ?? 'tdm', rules: info.rules ?? info.mode ?? 'tdm', ranked: !!info.ranked, large: !!info.large, mission: info.mission | 0 };
+    this.pick = newPickState();
+  }
+
+  // Match events (from AudioEngine.onEvents): the few the theme choice needs.
+  onEvents(events, localTeam) {
+    if (this.scene !== 'match') return;
+    for (let i = 0; i < events.length; i++) {
+      const e = events[i];
+      if (e.t === 'excall' || e.t === 'exfil' || e.t === 'exwipe' || e.t === 'exleave' || e.t === 'exwindow' || e.t === 'cpphase') pickEvent(this.pick, e, localTeam);
+    }
+  }
+
+  // Someone on voice chat is talking (js/ui/voice-ui.js): the music steps back while they do.
+  talk(on) {
+    if (this.talking === !!on) return;
+    this.talking = !!on;
+    this._duck(on ? 0.12 : 0.6);
+  }
+
+  // A spoken callout (campaign radio): the music dips for `secs`.
+  callout(secs = 2.5) {
+    if (!this.ctx) return;
+    const until = this.ctx.currentTime + secs;
+    const was = this.ctx.currentTime < this.radioUntil;
+    this.radioUntil = Math.max(this.radioUntil, until);
+    if (!was) this._duck(0.08);
+    clearTimeout(this._radioT);
+    this._radioT = setTimeout(() => this._duck(0.6), secs * 1000 + 30);
+  }
+
+  _duckTarget() {
+    const eng = this.engine;
+    let k = 1;
+    if (this.scene === 'match') k *= 1 - MATCH_DUCK * Math.min(1, eng?.fight || 0);
+    if (eng?.micActive) k *= 0.5;
+    if (this.talking) k *= 0.55;
+    if (this.ctx && this.ctx.currentTime < this.radioUntil) k *= 0.5;
+    return k;
+  }
+
+  _duck(tc) {
+    if (!this.duck) return;
+    const target = this._duckTarget();
+    this.duckLevel = target;
+    this.duck.gain.setTargetAtTime(target, this.ctx.currentTime, tc);
+  }
 
   // From main.js: the menu screen now showing. In a match the screen hook stays out of it.
   screen(name, inMatch = false) {
@@ -152,10 +231,10 @@ export class Music {
   cue(name, on = true) {
     switch (name) {
       case 'menu': case 'lobby': case 'match': case 'none': this._scene(name); break;
-      case 'exfil': this.forced.exfil = !!on; this._apply(); break;
-      case 'lastMinute': this.forced.last = !!on; this._apply(); break;
-      case 'finalCircle': this.forced.circle = !!on; this._apply(); break;
-      case 'drop': this.forced.air = !!on; this._apply(); break;
+      case 'exfil': this.forced.exfil = !!on; break;
+      case 'lastMinute': this.forced.last = !!on; break;
+      case 'finalCircle': this.forced.circle = !!on; break;
+      case 'drop': this.forced.air = !!on; break;
       case 'victory': this.results('win'); break;
       case 'defeat': this.results('loss'); break;
       case 'muffle': this.muffled = !!on; this._filter(0.3); break;
@@ -176,7 +255,7 @@ export class Music {
   // Plays a one-shot; returns its length in seconds (0 if it could not play).
   sting(name, { gain = 1, rate = 1, duck = true, duckTo = 0.3 } = {}) {
     const buf = this.bufs[name]?.main;
-    if (!buf || !this.ctx || this.hidden || this.ctx.state === 'closed') return 0;
+    if (!buf || !this.ctx || this.hidden || this.mode === 'off' || this.ctx.state === 'closed') return 0;
     const ctx = this.ctx, now = ctx.currentTime, dur = buf.duration / rate;
     const src = ctx.createBufferSource(), g = ctx.createGain();
     src.buffer = buf; src.playbackRate.value = rate; g.gain.value = gain;
@@ -199,24 +278,31 @@ export class Music {
     if (this.scene !== 'match') {
       if (view.phase === 'ended') return;     // A last frame after the results took over.
       this._scene('match', 0.8);
-      f.air = f.last = f.circle = f.ended = false; f.alive = true;
+      f.ended = false; f.alive = true;
       if (view.mode !== 'range' && !view.br) this.sting('intro', { gain: 0.9 });
     }
-    let air = false, alive = true;
-    const ps = view.players, me = eng.localId;
-    for (let i = 0; i < ps.length; i++) if (ps[i].id === me) { air = !!ps[i].air; alive = ps[i].alive !== false; break; }
+    let me = null;
+    const ps = view.players, id = eng.localId;
+    for (let i = 0; i < ps.length; i++) if (ps[i].id === id) { me = ps[i]; break; }
+    const alive = me ? me.alive !== false : true;
     const ended = view.phase === 'ended';
-    const live = view.phase === 'live' && !ended && view.mode !== 'range';
-    const last = live && !view.br && (!!eng.tension || (view.timeLeft > 0 && view.timeLeft <= 60));
-    const circle = live && view.br?.state === 'final';
-    if (air !== f.air || last !== f.last || circle !== f.circle || ended !== f.ended) {
-      const fade = ended ? 0.5 : air !== f.air ? 2 : FADE;
-      f.air = air; f.last = last; f.circle = circle; f.ended = ended;
-      this._apply(fade);
-    }
+    if (ended !== f.ended) { f.ended = ended; if (ended) this.seq.stop(0.8); }
     if (alive !== f.alive) { f.alive = alive; this._filter(alive ? 1 : 0.4); }
-    // Firefights and the open mic push the loops down; stings are left alone.
-    const target = (1 - 0.55 * Math.min(1, eng.fight || 0)) * (eng.micActive ? 0.5 : 1);
+
+    // The theme and its level, from the mode and the moment.
+    const P = this.pick, x = this.forced;
+    if (x.exfil) P.exfil = true;
+    const sting = pickTheme(P, this.info, view, me, eng.fight || 0, !!eng.tension, this.ctx.currentTime);
+    let theme = P.theme, level = P.level;
+    if (theme && x.air) { theme = 'brdrop'; level = 3; }
+    else if (theme && x.circle) { theme = 'brfinal'; level = Math.max(2, level); }
+    if (theme && x.last) level = 3;
+    if (sting && this.mode !== 'off') this.sting(sting, { gain: 0.85, duckTo: 0.4 });
+    if (theme && this.mode === 'all' && !this.hidden && !ended && (this.engine?.musicVolume ?? 1) > 0) this.seq.play(theme, level, P.transpose);
+    else if (this.seq.themeId) this.seq.stop(ended ? 0.8 : 1.2);
+
+    // Firefights, the open mic, voices and radio push the music down; stings are left alone.
+    const target = this._duckTarget();
     if (Math.abs(target - this.duckLevel) > 0.04) {
       const fall = target < this.duckLevel;
       this.duckLevel = target;
@@ -224,11 +310,10 @@ export class Music {
     }
   }
 
-  // Voice chat outside a match (lobbies): the engine calls this when the mic opens or closes.
-  voice(active) {
-    if (!this.ctx || this.scene === 'match') return;
-    this.duckLevel = active ? 0.5 : 1;
-    this.duck.gain.setTargetAtTime(this.duckLevel, this.ctx.currentTime, 0.15);
+  // The local mic opened or closed (the engine calls this).
+  voice() {
+    if (!this.ctx) return;
+    this._duck(0.15);
   }
 
   // ---- Scenes. ----
@@ -238,10 +323,11 @@ export class Music {
     if (name === 'menu') this.lastInput = Date.now();
     if (this.scene === 'match' && name !== 'match') {
       this.f.alive = true;
-      this.duckLevel = 1;
-      this.duck?.gain.setTargetAtTime(1, this.ctx.currentTime, 0.3);
+      this.seq.stop(Math.max(0.3, fade));
+      for (const k in this.forced) this.forced[k] = false;
     }
     this.scene = name;
+    this._duck(0.3);
     this._apply(fade);
   }
 
@@ -249,20 +335,11 @@ export class Music {
   _targets() {
     const t = {};
     if (this.hidden) return t;
-    const m = this.matchMusic, f = this.f, x = this.forced;
+    if (this.mode === 'off') return t;
     switch (this.scene) {
       case 'menu': t['menu.bed'] = 0.9; if (!this.calm) t['menu.drive'] = 0.9; break;
       case 'lobby': t['lobby.main'] = 0.75; break;
       case 'post': t['lobby.main'] = 0.45; break;
-      case 'match': {
-        if (f.ended) break;
-        if (f.air || x.air) { t['brdrop.main'] = 0.8; break; }
-        if (m) t['match.main'] = 0.6;
-        if (m && (f.last || x.last)) t['last.main'] = 0.7;
-        if (f.circle || x.circle) t['circle.main'] = m ? 0.7 : 0.35;
-        if (x.exfil) t['exfil.main'] = m ? 0.75 : 0.4;
-        break;
-      }
       default: break;
     }
     return t;
@@ -270,6 +347,7 @@ export class Music {
 
   _apply(fade = FADE) {
     if (!this.ctx || this.ctx.state === 'closed') return;
+    if (this.hidden && this.seq.themeId) this.seq.stop(0);       // frame() brings the theme back when visible.
     const want = this._targets(), now = this.ctx.currentTime, tc = Math.max(0.01, fade / 3);
     for (const [key, v] of this.live) {
       const lvl = want[key] || 0;
@@ -322,9 +400,14 @@ export class Music {
   }
 
   // For tests and the lead: what is playing, and what the music costs.
-  nowPlaying() { return [...this.live.keys()].sort(); }
+  // nowPlaying: the stems playing, and the sequenced theme as 'theme:<id>:<level>'.
+  nowPlaying() {
+    const out = [...this.live.keys()].sort();
+    if (this.seq.themeId) out.push(`theme:${this.seq.themeId}:${this.seq.level}`);
+    return out;
+  }
   stats() {
-    return { bytes: this.bytes, buildMs: Math.round(this.buildMs), maxJobMs: +this.maxJobMs.toFixed(1), wallMs: Math.round(this.buildWallMs), built: this.built, tracks: Object.keys(this.bufs).length };
+    return { bytes: this.bytes, buildMs: Math.round(this.buildMs), maxJobMs: +this.maxJobMs.toFixed(1), wallMs: Math.round(this.buildWallMs), built: this.built, tracks: Object.keys(this.bufs).length, kit: this.seq.ready, seq: this.seq.stats() };
   }
 }
 

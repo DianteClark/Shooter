@@ -1707,7 +1707,7 @@ export class AudioEngine {
   }
   uiClick() { this.uiSound('tap'); }
   // The campaign's radio: a squelch and two beeps as a line comes up on the HUD (js/ui/cp-hud.js).
-  cpRadio(who) { if (this._running()) (this.cpSfx ??= new CpSfx(this)).radio(who); }
+  cpRadio(who) { if (this._running()) { (this.cpSfx ??= new CpSfx(this)).radio(who); music.callout(2.6); } }
   uiTap() { this.uiSound('tap'); }
   uiBack() { this.uiSound('back'); }
   uiConfirm() { this.uiSound('confirm'); }
@@ -2156,6 +2156,7 @@ export class AudioEngine {
     (this.finSfx ??= new FinSfx(this)).onEvents(events, view);       // Finishers and emotes (docs/FINISHERS.md).
     if (objOf(view)?.zm) (this.zmSfx ??= new ZmSfx(this)).onEvents(events, view);     // Graveyard Shift (docs/ZOMBIES.md).
     if (objOf(view)?.cp) (this.cpSfx ??= new CpSfx(this)).onEvents(events, view);     // The campaign (docs/CAMPAIGN.md).
+    music.onEvents(events, this.localTeam);                           // The few events the match music follows.
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];

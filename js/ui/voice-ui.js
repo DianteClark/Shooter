@@ -8,6 +8,7 @@
 // In a match a short list of who is talking sits under the HUD's corner chips. Styles: css/voice.css.
 import { icon } from './icons.js';
 import { esc } from './widgets.js';
+import { music } from '../audio/music.js';      // Music steps back while a teammate talks (docs/AUDIO.md).
 
 const PAINT_MS = 150;
 
@@ -108,6 +109,9 @@ export class VoiceUI {
     // In a match: who is talking, under the corner chips. Others only: your own mic button already says so.
     const self = v?.localId;
     const names = [...speaking].filter(id => id !== self).map(id => this.nameOf?.(id)).filter(Boolean);
+    let others = false;
+    for (const id of speaking) if (id !== self) { others = true; break; }
+    music.talk(others);
     const key = names.join('|');
     if (key !== this.talkKey) {
       this.talkKey = key;
