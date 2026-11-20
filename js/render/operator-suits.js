@@ -60,28 +60,30 @@ const FX_ROWS = {
   tracer: { dir: [-0.3, 0, 1.4], speed: 2, sharp: 8, band: 0.3, cells: [14, 0.45, 0, 0], both: 2.2, pal: 1, base: 0.8, gain: 1 },
   shockwave: { dir: [3, 0, 0], speed: 1.3, sharp: 12, band: 1.4, pal: 0, base: 0.78, gain: 1, mode: 1 },
 };
+// A beat is one pulse a second, carried as a negative gain.
 const fxRow = r => {
   const d = r.dir ?? [0, 1, 0], w = r.warp ?? [0, 0], c = r.cells ?? [1, 0, 0, 0];
   return [d[0], d[1], d[2], r.speed ?? 0, w[0], w[1], r.sharp ?? 1, r.band ?? 0, c[0], c[1], c[2], c[3],
-    r.cell ?? 0, r.both ?? 0, r.pal ?? 0, r.mode ?? 0, r.base ?? 1, r.gain ?? 1, r.amb ?? 0, r.step ?? 0, r.beat ?? 0, 0, 0, 0];
+    r.cell ?? 0, r.both ?? 0, r.pal ?? 0, r.mode ?? 0, r.base ?? 1, (r.gain ?? 1) * (r.beat ? -1 : 1), r.amb ?? 0, r.step ?? 0];
 };
-const ROW = 6;     // vec4s a row
+const ROW = 5;     // vec4s a row
 // SKIN_FX names in order (kept in step with js/ui/operators.js SKIN_FX: append only).
 const FX_ORDER = ['flame', 'frost', 'glitch', 'starfield', 'lightning', 'camo', 'lava', 'aurora', 'hex', 'void', 'sparkle', 'caustics',
   'radar', 'bubbles', 'coderain', 'embers', 'hazard', 'morse', 'heartbeat', 'thermal', 'sandstorm', 'chevron', 'ink', 'checker',
   'clouds', 'snow', 'rays', 'scan', 'smoke', 'harlequin', 'tracer', 'shockwave'];
 const FX_FIRST = 4;
-const f = v => (Number.isInteger(v) ? `${v}.0` : String(+v.toFixed(4)));
+// The table is a uniform array, not a const one: a software renderer copies a dynamically indexed const array into
+// every fragment's own memory. 160 vec4s of the fragment budget (WebGL 2 guarantees 224).
 const FXT = FX_ORDER.flatMap(n => fxRow(FX_ROWS[n]));
-const FXT_GLSL = `const vec4 FXT[${(FXT.length / 4)}] = vec4[](${Array.from({ length: FXT.length / 4 }, (_, i) => `vec4(${FXT.slice(i * 4, i * 4 + 4).map(f).join(', ')})`).join(', ')});`;
+export const FX_TABLE = Array.from({ length: FXT.length / 4 }, (_, i) => new THREE.Vector4(...FXT.slice(i * 4, i * 4 + 4)));
 
 export const SKIN_FX_GLSL = /* glsl */`
 float fxH3(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
-${FXT_GLSL}
+uniform vec4 FXT[${FXT.length / 4}];
 vec3 fxUber(vec3 c, int i, vec3 p, vec3 a, float lum) {
   float t = uTime;
   vec4 A = FXT[i], B = FXT[i + 1], C = FXT[i + 2], D = FXT[i + 3], E = FXT[i + 4];
-  float beat = FXT[i + 5].x;
+  float beat = E.y < 0.0 ? 1.0 : 0.0;
   float st = E.w > 0.0 ? floor(t * E.w) : 0.0;
   vec3 pz = D.w > 3.5 ? vec3(p.xy, abs(p.z)) : p;
   float u = dot(pz, A.xyz);
@@ -103,7 +105,7 @@ vec3 fxUber(vec3 c, int i, vec3 p, vec3 a, float lum) {
   float h = fxH3(q + (C.z < 0.0 ? floor(t * -C.z) : 0.0) * vec3(1.7, 3.1, 0.7));
   float cell = C.y >= 1.0 ? h : step(1.0 - C.y, h) * (C.z > 0.0 ? 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * C.z + h * 40.0), 3.0) : 1.0);
   float m = band * B.w + cell * D.x + band * cell * D.y;
-  float g = E.y * (beat > 0.0 ? 0.6 + 0.8 * pow(max(0.0, sin(t * beat * 6.2832)), 8.0) : 1.0);
+  float g = abs(E.y) * (beat > 0.0 ? 0.6 + 0.8 * pow(max(0.0, sin(t * beat * 6.2832)), 8.0) : 1.0);
   if (E.w > 0.0) g *= step(0.3, fract(sin(st * 12.9898) * 43758.5453));
   vec3 pal = a;
   if (D.z > 0.5 && D.z < 1.5) pal = mix(a, vec3(1.0, 0.9, 0.45), clamp(band * band, 0.0, 1.0));

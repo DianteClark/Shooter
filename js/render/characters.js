@@ -14,7 +14,7 @@ import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR, SKINS, SKIN_FX, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
 import { ACC, KEEP, ELITE, MASTERY, NO_ELITE, NO_MASTERY, SUIT, SUITS, tag, seg, masteryTorso, halo, TORSO_SLOTS, HEAD_SLOTS, face as kitFace, headBase } from './operator-kit.js';
-import { SKIN_FX_GLSL, farSuitBuilder, FAR_BUDGET } from './operator-suits.js';     // Every suit after the pilot's, the active-skin effects and the suits' distance versions.
+import { SKIN_FX_GLSL, FX_TABLE, farSuitBuilder, FAR_BUDGET } from './operator-suits.js';     // Every suit after the pilot's, the active-skin effects and the suits' distance versions.
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
@@ -864,7 +864,7 @@ export class Characters {
       uLook.push(new THREE.Vector4(...hexRGB(L.skin ?? 0x7a5c43), L.sh ?? 1), new THREE.Vector4(...hexRGB(L.hair ?? 0x1e1612), L.hip ?? 1));
     }
     const charMat = new THREE.ShaderMaterial({ vertexShader: CHAR_VERT, fragmentShader: CHAR_FRAG,
-      uniforms: { uTime: time, uSel: { value: uSel }, uLook: { value: uLook } } });
+      uniforms: { uTime: time, uSel: { value: uSel }, uLook: { value: uLook }, FXT: { value: FX_TABLE } } });
     this.charMat = charMat;
     const add = (geom, cap) => {
       addCharInstanceAttrs(geom, cap);

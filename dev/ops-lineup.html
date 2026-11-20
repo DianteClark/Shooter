@@ -85,14 +85,18 @@ window.stats = { torsoVerts: g, headVerts: h, torsoBySlot: bySlot(chars.torso), 
 if (+q.get('bench')) {
   const N = +q.get('bench'), px = new Uint8Array(4), gl = webgl.getContext();
   const t0 = performance.now();
+  let tu = 0;
   for (let i = 0; i < N; i++) {
     time.value += 1 / 60; v.t = time.value;
     for (const p of players) p.aim += 0.02;
+    const a = performance.now();
     chars.update(v, 1 / 60, { localId: 'none', localTeam: 0, uav: false, revealAll: !q.get('far') });
+    tu += performance.now() - a;
     webgl.render(scene, cam);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
   }
   window.stats.benchMs = +((performance.now() - t0) / N).toFixed(2);
+  window.stats.updateMs = +(tu / N).toFixed(2);
   window.stats.calls = webgl.info.render.calls; window.stats.tris = webgl.info.render.triangles;
 }
 window.ready = true;
