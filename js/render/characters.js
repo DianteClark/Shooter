@@ -22,9 +22,11 @@ import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Sh
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
 import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
 import { swingDurOf, swingKindOf, swingPose, swingSideNext } from './melee-anim.js';   // Melee swings.
+import { CYCLE, cycleKindOf, cyclePose } from './gun-actions.js';   // Pump, bolt and lever worked between shots.
 import { EMOTES, getFinisher } from '../shared/finishers.js';
 
 const SWING = { x: 0, y: 0, yaw: 0, pitch: 0, roll: 0 };     // Scratch for melee-anim.js swingPose.
+const CYC = { roll: 0, pitch: 0, x: 0, fore: 0, bolt: 0 };     // Scratch for gun-actions.js cyclePose.
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -1076,6 +1078,8 @@ export class Characters {
       r.sv[ROCK] += 1 + strength;
       return;
     }
+    r.cycle = weapon ? cycleKindOf(weapon) : null;      // A pump, bolt or lever to work before the next shot.
+    if (r.cycle) r.cycleT = -CYCLE[r.cycle].delay;
     const R = r.recoil = weapon ? recoilOf(weapon) : RECOIL_NONE;
     r.kickSide = -(r.kickSide || 1);
     r.kickRoll = (r.kickRoll || 0) + r.kickSide * R.twist * (0.25 + strength * 0.3);
@@ -1355,6 +1359,16 @@ export class Characters {
         swingPose(r.swingKind, u, side, SWING);
         gunX += SWING.x; gunY += SWING.y; gunYaw += SWING.yaw; gunPitch += SWING.pitch; gunRoll += SWING.roll;
       }
+      CYC.fore = CYC.bolt = 0;
+      if (r.cycle && r.cycleT !== undefined && p.reloadT <= 0) {
+        const c = CYCLE[r.cycle];
+        r.cycleT += dt;
+        if (r.cycleT >= c.dur) r.cycle = null;
+        else if (r.cycleT > 0) {
+          cyclePose(r.cycle, r.cycleT / c.dur, CYC);
+          gunX += CYC.x; gunRoll += CYC.roll; gunPitch += CYC.pitch;
+        }
+      }
       gunX -= throwActive * 0.08 + r.throwHold * 0.12;
       gunY -= throwActive * 0.2 + r.throwHold * 0.24;
       gunRoll += throwActive * 0.5 + r.throwHold * 0.5;
@@ -1458,6 +1472,10 @@ export class Characters {
           _v.set(0.12, -0.42, 0).applyMatrix4(_gun);
           vfx.dropMag(_v.x, _v.y, _v.z, rel.mag.rgb, rel.mag.size);
         }
+        if (rel.mag.belt !== undefined && lastU < rel.mag.belt && r.reloadU >= rel.mag.belt) {
+          // An LMG: the fresh belt laid in the tray, its loose tail links spilling off the far side as the cover shuts.
+          for (let k = 0; k < 4; k++) vfx.shell(r.eject[0], r.eject[1] + 0.05, r.eject[2], (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, 'link');
+        }
         if (rel.mag.dump !== undefined && lastU < rel.mag.dump && r.reloadU >= rel.mag.dump) {
           const n = rel.mag.dumpN ?? 6, kind = rel.mag.dumpKind ?? 'pistol';
           for (let k = 0; k < n; k++) vfx.shell(r.eject[0], r.eject[1], r.eject[2], (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, kind);
@@ -1486,8 +1504,9 @@ export class Characters {
             side * (0.21 - Math.max(0, mine) * 0.16)).applyMatrix4(_body);
         } else if (side > 0) {
           _b.set(0, 0, 0).applyMatrix4(_gun);
+          if (CYC.bolt > 0) { _v.set(proto.eject[0] - 0.12, proto.eject[1] + 0.02, proto.eject[2] + 0.16).applyMatrix4(_gun); _b.lerp(_v, CYC.bolt); }
         } else {
-          _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
+          _b.set(proto.fore[0] - CYC.fore, proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
           if (handW > 0) { _v.set(hx, hy, hz).applyMatrix4(_gun); _b.lerp(_v, handW); }
           const slideHand = slide * (1 - R);
           if (slideHand > 0.01) {
