@@ -53,6 +53,18 @@ function along(pts, t) {
   }
   return { x: pts[0][0], z: pts[0][1], ux: 1, uz: 0 };
 }
+// Each polyline's bounding box, so the lattice skips the segment tests far from it.
+const BOX = new WeakMap();
+const boxOf = pts => {
+  let b = BOX.get(pts);
+  if (!b) BOX.set(pts, b = [Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1]))]);
+  return b;
+};
+// Distance to a polyline, or Infinity when (x, z) is further than m from its box.
+const nearLine = (pts, x, z, m) => {
+  const b = boxOf(pts);
+  return x < b[0] - m || z < b[1] - m || x > b[2] + m || z > b[3] + m ? Infinity : polyDist(pts, x, z);
+};
 const polyDist = (pts, x, z) => {
   let d = Infinity;
   for (let i = 1; i < pts.length; i++) d = Math.min(d, segDist(x, z, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
@@ -89,16 +101,17 @@ export function islandCells() {
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
       const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL, dx = x - CX, dz = z - CZ;
-      const ring = Math.pow(Math.pow(Math.abs(dx), 3) + Math.pow(Math.abs(dz), 3), 1 / 3);
-      const a = Math.atan2(dz, dx);
-      const outer = 168 + (n1(x * 0.03, z * 0.03) - 0.5) * 30 + Math.sin(a * 5 + 1) * 5;
-      const inner = 74 + (n2(x * 0.035, z * 0.035) - 0.5) * 18;
+      const ax = Math.abs(dx), az = Math.abs(dz), ring = Math.cbrt(ax * ax * ax + az * az * az);
       const rr = Math.hypot(dx, dz);
+      // The noisy edges only matter in their bands (outer 148-188 m, inner 65-83 m, the islet 27-33 m): cheap
+      // tests decide the rest (this runs on every phone at start-up).
+      const outer = ring < 148 ? 1e9 : ring > 188 ? -1 : 168 + (n1(x * 0.03, z * 0.03) - 0.5) * 30 + Math.sin(Math.atan2(dz, dx) * 5 + 1) * 5;
+      const inner = rr < 65 ? 1e9 : rr > 83 ? -1 : 74 + (n2(x * 0.035, z * 0.035) - 0.5) * 18;
       let c = DEEP;
       if (ring < outer && rr > inner) c = LAND;
       else if (rr <= inner) c = SHALLOW;                  // The lagoon.
-      if (rr < 30 + (n1(x * 0.1 + 9, z * 0.1) - 0.5) * 6) c = LAND;   // The pyramid's islet.
-      for (const [hx, hz, hr] of HOLES) if (Math.hypot(x - hx, z - hz) < hr) c = STEEP;
+      if (rr < 27 || (rr < 33 && rr < 30 + (n1(x * 0.1 + 9, z * 0.1) - 0.5) * 6)) c = LAND;   // The pyramid's islet.
+      for (let h = 0; h < HOLES.length; h++) if (Math.hypot(x - HOLES[h][0], z - HOLES[h][1]) < HOLES[h][2]) c = STEEP;
       // The SE reef islet and its sandbars.
       const reef = Math.hypot((x - 352) / 30, (z - 352) / 22);
       if (reef < 1) c = LAND; else if (reef < 1.7 && c === DEEP) c = SHALLOW;
@@ -109,34 +122,39 @@ export function islandCells() {
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
       const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL;
-      for (const c of CHANNELS) {
-        const wob = (n2(x * 0.06 + 3, z * 0.06) - 0.5) * 4;
-        if (polyDist(c.pts, x, z) < c.w / 2 + wob) cls[j * N + i] = STEEP;
+      let wob = null;
+      for (let k = 0; k < CHANNELS.length; k++) {
+        const c = CHANNELS[k], d = nearLine(c.pts, x, z, c.w / 2 + 3);
+        if (d === Infinity || d > c.w / 2 + 2) continue;
+        wob ??= (n2(x * 0.06 + 3, z * 0.06) - 0.5) * 4;
+        if (d < c.w / 2 + wob) cls[j * N + i] = STEEP;
       }
-      if (polyDist(STREAM, x, z) < 3 && cls[j * N + i] === LAND) cls[j * N + i] = SHALLOW;
+      if (cls[j * N + i] === LAND && nearLine(STREAM, x, z, 4) < 3) cls[j * N + i] = SHALLOW;
       if (x > FALLS_POOL.x && x < FALLS_POOL.x + FALLS_POOL.w && z > FALLS_POOL.z && z < FALLS_POOL.z + FALLS_POOL.d) cls[j * N + i] = STEEP;
     }
   }
   // A channel's mouth past the coast is open sea.
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL, dx = x - CX, dz = z - CZ;
-    if (cls[j * N + i] === STEEP && Math.pow(Math.pow(Math.abs(dx), 3) + Math.pow(Math.abs(dz), 3), 1 / 3) > 182) cls[j * N + i] = DEEP;
+    if (cls[j * N + i] === STEEP && Math.cbrt(Math.abs(dx) ** 3 + Math.abs(dz) ** 3) > 182) cls[j * N + i] = DEEP;
   }
   // Surf: open sea next to a beach is shallow (8 m out); channels keep their steep banks.
+  // Land within `reach` cells (a square), by two running passes: along each row, then down each column.
+  const reach = Math.round(8 / CELL), rowLand = new Uint8Array(N * N), landNear = new Uint8Array(N * N);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    for (let a = Math.max(0, i - reach), e = Math.min(N - 1, i + reach); a <= e; a++) if (cls[j * N + a] === LAND) { rowLand[j * N + i] = 1; break; }
+  }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    for (let b = Math.max(0, j - reach), e = Math.min(N - 1, j + reach); b <= e; b++) if (rowLand[b * N + i]) { landNear[j * N + i] = 1; break; }
+  }
   const near = new Uint8Array(N * N);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    if (at(i, j) !== DEEP) continue;
+    if (at(i, j) !== DEEP || !landNear[j * N + i]) continue;
     const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL;
-    if (CHANNELS.some(c => polyDist(c.pts, x, z) < c.w / 2 + 6)) continue;
+    if (CHANNELS.some(c => nearLine(c.pts, x, z, c.w / 2 + 6) < c.w / 2 + 6)) continue;
     if (HOLES.some(([hx, hz, hr]) => Math.hypot(x - hx, z - hz) < hr + 2)) continue;
     if (x > FALLS_POOL.x - 4 && x < FALLS_POOL.x + FALLS_POOL.w + 4 && z > FALLS_POOL.z - 4 && z < FALLS_POOL.z + FALLS_POOL.d + 4) continue;
-    let land = false;
-    const reach = Math.round(8 / CELL);
-    for (let b = -reach; b <= reach && !land; b++) for (let a = -reach; a <= reach; a++) {
-      const ii = i + a, jj = j + b;
-      if (ii >= 0 && jj >= 0 && ii < N && jj < N && at(ii, jj) === LAND) { land = true; break; }
-    }
-    if (land) near[j * N + i] = 1;
+    near[j * N + i] = 1;
   }
   for (let k = 0; k < N * N; k++) if (near[k]) cls[k] = SHALLOW;
   // Crossings and causeways: fords shallow, decks and causeways solid.
@@ -150,9 +168,8 @@ export function islandCells() {
   // Speckle: a lone land cell in water, or a lone water cell on land, goes with its neighbours.
   for (let pass = 0; pass < 2; pass++) {
     for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
-      const v = at(i, j);
-      const nb = [at(i - 1, j), at(i + 1, j), at(i, j - 1), at(i, j + 1)];
-      if (nb.every(q => q !== v)) cls[j * N + i] = nb.includes(LAND) ? LAND : nb.sort()[3];
+      const v = at(i, j), a = at(i - 1, j), b = at(i + 1, j), c = at(i, j - 1), d = at(i, j + 1);
+      if (a !== v && b !== v && c !== v && d !== v) cls[j * N + i] = a === LAND || b === LAND || c === LAND || d === LAND ? LAND : Math.max(a, b, c, d);
     }
   }
   return cls;
@@ -209,13 +226,13 @@ function build() {
   for (const r of rectsOf(cls, STEEP)) A(r.x, r.z, r.w, r.d, 0, 'water', { channel: true });
   const shallows = rectsOf(cls, SHALLOW);
   // Bridges: plank decks over the channels, with water drawn under them (looks only).
-  const underDecks = [];
-  for (const c of CROSSINGS) {
-    if (c.kind === 'bridge') {
-      P.rooms.push({ x: c.x, z: c.z, w: c.w, d: c.d, floor: 'bridge' });
-      for (const r of rectsOf(cls, LAND, (i, j) => crossingAt(i, j))) underDecks.push(r);
-    }
+  for (const c of CROSSINGS) if (c.kind === 'bridge') P.rooms.push({ x: c.x, z: c.z, w: c.w, d: c.d, floor: 'bridge' });
+  const decked = new Uint8Array(N * N);
+  for (const r of CROSSINGS) {
+    if (r.kind !== 'bridge') continue;
+    for (let j = Math.max(0, Math.floor(r.z / CELL)); j < Math.min(N, Math.ceil((r.z + r.d) / CELL)); j++) for (let i = Math.max(0, Math.floor(r.x / CELL)); i < Math.min(N, Math.ceil((r.x + r.w) / CELL)); i++) decked[j * N + i] = crossingAt(i, j) ? 1 : 0;
   }
+  const underDecks = rectsOf(cls, LAND, (i, j) => decked[j * N + i] === 1);
   for (const r of CAUSEWAYS) P.rooms.push({ ...r, floor: 'causeway' });
   void underDecks;
 
@@ -583,7 +600,7 @@ function scatter(P, cellAt, keep = []) {
   const STEP = 14;
   const near = (x, z) => P.pois.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 4);
   const onRoad = (x, z, m) => P.roads.some(r => {
-    for (let i = 1; i < r.pts.length; i++) if (segDist(x, z, ...r.pts[i - 1], ...r.pts[i]) < r.w / 2 + m) return true;
+    for (let i = 1; i < r.pts.length; i++) if (segDist(x, z, r.pts[i - 1][0], r.pts[i - 1][1], r.pts[i][0], r.pts[i][1]) < r.w / 2 + m) return true;
     return false;
   });
   const field = regionOf;

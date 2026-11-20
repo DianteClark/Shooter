@@ -165,9 +165,12 @@ async def run(browser, vw, vh, failures, errors):
       if (me.downed) {{ me.downed = false; me.hp = 100; }}
       me.br.armor = 0; sim._damage(me, foe, 999, 'ar', 10);
       // Down, and kept safe from everyone else while the squad comes: the test is the revive, not a third party.
-      me.spawnProtect = 999; for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }} }})()""")
+      me.spawnProtect = 999; for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }}
+      // The squadmates too: the recall below needs one alive to fall at the beacon.
+      for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) p.spawnProtect = 999; }})()""")
     await pg.wait_for_timeout(900)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed")
+    print(f'{vw}: squadmates at the down (alive, downed, hp): {await ev("JSON.stringify(window.__mates)")}', flush=True)
     if not downed: failures.append(f'{vw}: not downed (squadmates {await ev("JSON.stringify(window.__mates)")}, me alive {await ev(f"{G}.match.sim.byId.get({G}.match.localId).alive")})')
     await pg.wait_for_timeout(600)
     await shot('09-downed')
