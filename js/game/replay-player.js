@@ -17,6 +17,7 @@ import { ClipReader } from './replay.js';
 import { Pad } from '../ui/gamepad.js';
 import { killCause } from '../ui/hud.js';
 import { esc } from '../ui/widgets.js';
+import { shareSheet } from '../ui/replaycode.js';     // Share as a replay code (docs/REPLAYS.md).
 
 const SPEEDS = [0.5, 1, 2];
 const TILT = THREE.MathUtils.degToRad(55);         // The match camera's tilt (js/render/renderer.js).
@@ -224,6 +225,17 @@ export class ReplayPlayer {
     this.setCam(ids[(i + step + ids.length) % ids.length]);
   }
 
+  // Share: the code sheet over the player, paused meanwhile (docs/REPLAYS.md, replay codes).
+  async share() {
+    if (this.sharing) return;
+    this.sharing = true;
+    const was = this.playing;
+    this.setPlaying(false);
+    const map = this.map.name ?? this.clip.mapId, mode = MODES[this.clip.mode]?.name ?? '';
+    try { await shareSheet(this.clip, { title: this.clip.title || `${map} · ${mode}` }); } finally { this.sharing = false; }
+    if (!this.closed && was) this.setPlaying(true);
+  }
+
   async #save() {
     if (this.saved || !this.onSave || this.saving) return;
     this.saving = true;
@@ -280,6 +292,7 @@ export class ReplayPlayer {
         <span class="rp-dur t-num">${mmss(this.reader.duration)}</span>
         <nav class="rp-speeds">${SPEEDS.map((s, i) => `<button class="seg rp-speed${i === this.speedI ? ' on' : ''}" data-i="${i}" data-sound="tab"><b>${s}x</b></button>`).join('')}</nav>
         ${canSave ? '<button class="rp-save" aria-label="Save clip"><b>Save clip</b></button>' : this.saved ? '<button class="rp-save done" disabled><b>Saved</b></button>' : ''}
+        <button class="rp-share" aria-label="Share as a replay code"><b>Share</b></button>
       </div>
       <small class="rp-pad">A play · LB RB speed · Y camera · ◀ ▶ 5 s · LT RT rewind, forward${canSave ? ' · X save' : ''} · B close</small>
       <p class="rp-toast"></p>`;
@@ -298,6 +311,7 @@ export class ReplayPlayer {
     for (const b of this.ui.speeds) b.addEventListener('click', () => this.setSpeed(Number(b.dataset.i)));
     for (const b of this.ui.cams) b.addEventListener('click', () => this.setCam(b.dataset.cam));
     this.ui.save?.addEventListener('click', () => this.#save());
+    el.querySelector('.rp-share').addEventListener('click', () => this.share());
     // Scrubbing: press anywhere on the bar and drag; the picture follows the finger, paused, and play resumes on release.
     const bar = this.ui.bar;
     bar.addEventListener('pointerdown', e => {

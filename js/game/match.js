@@ -12,7 +12,8 @@ import { previewThrow, maxThrowRange } from '../sim/equipment.js';
 import { Interpolator } from './interp.js';
 import { MatchAwards } from './awards.js';
 import { Killcam } from './killcam.js';
-import { ReplayRecorder } from './replay.js';     // The last 30 s, for Watch replay on the results (docs/REPLAYS.md).
+import { ReplayRecorder } from './replay.js';
+import { CasterCam } from './caster.js';     // The spectator / caster camera (docs/RANKED.md).     // The last 30 s, for Watch replay on the results (docs/REPLAYS.md).
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
 import { BR, isBr, isEx, isZm } from '../shared/modes.js';
@@ -83,6 +84,10 @@ export class Match {
     this.telemetry = new MatchTelemetry({ localId: this.localId });
     this.killcam = new Killcam({ renderer: this.renderer, localId: this.localId });
     this.recorder = new ReplayRecorder({ localId: this.localId });
+    // The caster camera: players out of play (and a friend room's spectators, js/game/spectator.js) watch the match with
+    // a camera of their own. main.js turns it off for Ranked, Training, the tutorial and the range (canOpen).
+    this.caster = this.renderer && typeof document !== 'undefined' ? new CasterCam({ renderer: this.renderer, map: this.map, localId: this.localId, title: this.casterTitle ?? '' }) : null;
+    if (this.caster) this.killcam.director = this.caster;
     this.awards = new MatchAwards({ localId: this.localId, team: this.me.team, loadout: this.me.loadout });
     // Practice pays and records nothing: the firing range and Custom > Training (`training`) never count toward XP,
     // mastery, challenges, history, gun stats or telemetry. Both trackers check `practice` before writing anything.
@@ -124,6 +129,7 @@ export class Match {
     this.running = false;
     this.controls.setEnabled(false);
     this.killcam.dispose();
+    this.caster?.dispose();
   }
 
   // Tap to respawn: the host holds a dead human until they ask (or its auto-respawn timeout).
@@ -731,6 +737,7 @@ export class Match {
 
     const events = this.frameEvents;
     try {
+      try { this.caster?.frame(view, events, dt); } catch (err) { console.error('caster', err); }
       try { this.recorder.record(view, events, dt); } catch (err) { this.recorder.stopped = true; console.error('replay record', err); }
       this.killcam.render(view, events, dt);
       if (this.renderer.ambient?.strikeNow) this.audio.lightning();

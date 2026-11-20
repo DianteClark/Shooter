@@ -19,7 +19,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { MODES } from '../shared/modes.js';
 import { TRACK_TIERS, trackRewards, seasonAt, rankedRewards, SEASON_DEFS } from '../shared/seasons.js';
 import { DIVISIONS, DIVISION_SPAN } from '../shared/season-items.js';
-import { fromCode, division, RANKED_RULES, MOVE, PLACEMENTS, CHAMPION } from '../shared/ranked.js';
+import { fromCode, division, RANKED_RULES, MOVE, PLACEMENTS, CHAMPION, ladder, carriedSr, countdownText } from '../shared/ranked.js';
 import { getCard } from '../shared/progression.js';
 import { enter, play, pop, DUR, reducedMotion } from './motion.js';
 import { playTile } from './challenges.js';     // QoL: a weekly challenge's Play shortcut.
@@ -95,6 +95,7 @@ export function profileRank() {
 /* ---------- The Season screen ---------- */
 const TABS = [['track', 'Track', 'ui:star'], ['weekly', 'Weekly', 'timer'], ['ranked', 'Ranked', 'ui:rank']];
 const last = { tab: 'track' };
+let countdownTimer = 0;
 
 function trackTile(r, s, open) {
   const reached = s.info.def && r.tier <= s.tier, claimed = r.tier <= s.claimed && reached;
@@ -150,36 +151,74 @@ function weeklyPane(s, week, canPlay = false) {
     </div>`;
 }
 
+// The Ranked hub (docs/RANKED.md, ROADMAP item 60): your division and progress (placement pips while placing), the
+// season's countdown and soft reset, the rewards track (every division's card, crest and title, the ranked camo at
+// Gold) and the titles to wear. The countdown ticks on a 30 s timer while the tab shows (seasonScreen), never per frame.
 function rankedPane(s) {
   const rk = s.ranked, def = s.info.def;
   const d = rk.division;
   const into = d ? (d.next === null ? 1 : (rk.sr - d.floor) / (d.next - d.floor)) : rk.pm / PLACEMENTS;
   const rewards = def ? rankedRewards(def) : [];
-  const peak = rk.placed ? division(rk.peak).div : -1;
+  const steps = ladder(rk), peak = rk.placed ? division(Math.max(rk.peak, rk.sr)).div : -1;
   const modes = RANKED_RULES.modes.map(m => MODES[m]?.name ?? m).join(', ');
+  const worn = Progress.title(), titles = Progress.titles().filter(t => t.owned);
+  const carry = carriedSr(rk);
+  const pips = Array.from({ length: PLACEMENTS }, (_, i) => `<i class="${i < rk.pw ? 'w' : i < rk.pm ? 'l' : ''}"></i>`).join('');
+  // Where your SR sits along the track (Champion's column open-ended).
+  const at = rk.placed ? Math.min(6.5, rk.sr >= CHAMPION ? 6 + Math.min(0.5, (rk.sr - CHAMPION) / 1800) : rk.sr / DIVISION_SPAN) : -1;
+  const col = (st, i) => {
+    const dv = DIVISIONS[i], rw = rewards[i];
+    const state = st.current ? 'now' : st.reached ? 'got' : 'later';
+    return `<div class="rk-step ${state}" style="--dc:${dv.color};--dl:${dv.light}">
+      <span class="rk-step-h">${rankBadge(i === 6 ? 18 : i * 3 + (st.current && d ? d.tier ?? 0 : 0), 30)}<b>${esc(dv.name)}</b><small class="t-num">${i === 6 ? `${fmt(CHAMPION)}+` : fmt(i * DIVISION_SPAN)}</small></span>
+      ${rw ? `<span class="rk-step-rw">
+        <span class="rk-rw-card">${cardHtml(rw.card, { size: 62, title: '', sub: '' })}</span>
+        <span class="rk-rw-row">${emblemSvg(rw.emblem, 22)}${rw.camo ? `<i class="rk-rw-camo" style="background:${swatchCss(getCamo(rw.camo))}" title="${esc(getCamo(rw.camo).name)} camo"></i>` : ''}</span>
+        <small class="rk-rw-title">${esc(rw.titleName)}</small>
+      </span>` : '<span class="rk-step-rw"><small class="rk-rw-title">Rewards from Season 1</small></span>'}
+      ${st.reached ? `<i class="rk-step-ok">${ico('check', '', 12)}</i>` : ''}
+    </div>`;
+  };
   return `
-    <div class="sz-rk">
+    <div class="sz-rk rk-hub">
       <div class="sz-rk-me">
-        <span class="sz-rk-badge">${rankBadge(rk.code, 74)}</span>
+        <span class="sz-rk-badge">${rankBadge(rk.code, 70)}</span>
         <b class="sz-rk-name">${esc(d ? d.name : rk.pm ? 'Placements' : 'Unranked')}</b>
         <small class="sz-rk-sr">${d ? `${fmt(rk.sr)} SR${rk.last ? ` <em class="${rk.last > 0 ? 'up' : 'down'}">${rk.last > 0 ? '+' : ''}${rk.last}</em>` : ''}` : `${rk.pm} of ${PLACEMENTS} placement matches`}</small>
-        <i class="sz-bar"><i style="transform:scaleX(${Math.max(0, Math.min(1, into)).toFixed(3)})"></i></i>
-        <small class="sz-rk-next">${d ? (d.next === null ? 'Top division' : `${fmt(d.next - rk.sr)} SR to ${esc(division(d.next).name)}`) : `${PLACEMENTS - rk.pm} to go`}</small>
+        ${d ? `<i class="sz-bar"><i style="transform:scaleX(${Math.max(0, Math.min(1, into)).toFixed(3)})"></i></i>` : `<span class="rk-pips" aria-label="${rk.pw} won of ${rk.pm} placements">${pips}</span>`}
+        <small class="sz-rk-next">${d ? (d.next === null ? 'Top division' : `${fmt(d.next - rk.sr)} SR to ${esc(division(d.next).name)}`) : `${PLACEMENTS - rk.pm} to go${rk.base >= 0 ? ` · from ${fmt(rk.base)} SR` : ''}`}</small>
         <span class="sz-rk-wl"><span><b>${rk.w}</b><small>Wins</small></span><span><b>${rk.l}</b><small>Losses</small></span><span><b>${rk.placed ? fmt(rk.peak) : '-'}</b><small>Best</small></span></span>
+        <button class="rk-worn${worn ? '' : ' none'}" data-act="rkTitles" data-sound="tab">${ico('ui:rank', '', 12)}<b>${esc(worn ? worn.name : titles.length ? 'Wear a title' : 'No titles yet')}</b>${worn ? `<small>S${worn.n}</small>` : ''}</button>
         <button class="btn is-primary sz-rk-play" data-act="szPlayRanked" data-sound="confirm">${ico('play')}<b>Play Ranked</b></button>
       </div>
       <div class="sz-rk-side scroll-y">
-        <p class="sz-rk-rules"><b>${esc(s.info.title)} Ranked</b> ${esc(modes)} on medium maps, set rules, no modifiers. ${PLACEMENTS} placement matches, then a win moves you about +${MOVE.win} and a loss about -${MOVE.loss}, more or less by how you played and who you played. You meet players near your rating. Training and Custom never count. ${def ? `Resets ${dateText(s.info.endsAt)}: three quarters of your rating carries over.` : `Preseason: resets when Season 1 opens ${dateText(s.info.endsAt)}.`}</p>
-        <div class="sz-divs">${DIVISIONS.map((dv, i) => {
-          const rw = rewards[i];
-          return `<div class="sz-div${i === peak ? ' peak' : ''}${i <= peak ? ' got' : ''}" style="--dc:${dv.color}">
-            ${rankBadge(i === 6 ? 18 : i * 3, 26)}<span><b>${esc(dv.name)}</b><small>${i === 6 ? `${fmt(CHAMPION)}+ SR` : `${fmt(i * DIVISION_SPAN)} SR`}</small></span>
-            ${rw ? `<span class="sz-div-rw">${cardHtml(rw.card, { size: 58, title: '', sub: '' })}${emblemSvg(rw.emblem, 22)}</span>` : ''}
-          </div>`;
-        }).join('')}</div>
-        <p class="sz-rk-note">${def ? 'End-of-season rewards: the calling card and crest of every division you reached.' : 'Season 1 pays a calling card and crest for every division reached.'}</p>
+        <div class="rk-season">
+          <span class="rk-sn">${ico('ui:star', '', 13)}<b>${esc(s.info.def ? s.info.title : 'Preseason')}</b><small>Ranked</small></span>
+          <span class="rk-count">${ico('timer', '', 13)}<b class="rk-count-t t-num" data-ends="${s.info.endsAt}">${countdownText(s.info.endsAt - Date.now())}</b><small>${def ? 'left' : 'to Season 1'}</small></span>
+          <small class="rk-reset">${def ? `Soft reset ${dateText(s.info.endsAt)}: ${rk.placed ? `you would carry ${fmt(carry)} SR into next season's placements` : 'three quarters of your SR carries into next season\'s placements'}.` : `Season 1 opens ${dateText(s.info.endsAt)}.`}</small>
+        </div>
+        <div class="rk-track scroll-x" style="--at:${at}">
+          ${at >= 0 ? '<i class="rk-you" aria-hidden="true"></i>' : ''}
+          ${steps.map(col).join('')}
+        </div>
+        <p class="sz-rk-note">${def ? `End of season: the calling card, crest and title of every division up to your best, and the ${esc(getCamo(rewards[2]?.camo ?? '').name)} camo from ${DIVISIONS[2].name} up.${peak >= 0 ? ` So far: ${esc(DIVISIONS[peak].name)}.` : ''}` : 'Season 1 pays a calling card, crest and title for every division reached, and a camo from Gold up.'}</p>
+        <p class="sz-rk-rules"><b>${esc(s.info.title)} Ranked</b> ${esc(modes)} on medium maps, set rules, no modifiers. ${PLACEMENTS} placement matches, then a win moves you about +${MOVE.win} and a loss about -${MOVE.loss}, more or less by how you played and who you played. You meet players near your rating. The first loss that would drop you out of a division stops on its floor. Training and Custom never count.</p>
       </div>
     </div>`;
+}
+
+// The title picker: every title owned (newest season first), and None.
+function titlesSheet() {
+  const all = Progress.titles().filter(t => t.owned).sort((a, b) => b.n - a.n || b.division - a.division);
+  return `<div class="rk-titles" data-in="up">
+    <b class="rk-titles-h">Titles</b>
+    <div class="rk-titles-list scroll-y">
+      <button class="rk-tl${all.some(t => t.worn) ? '' : ' on'}" data-act="rkWear" data-id="" data-sound="tab"><b>None</b></button>
+      ${all.map(t => `<button class="rk-tl${t.worn ? ' on' : ''}" data-act="rkWear" data-id="${esc(t.id)}" data-sound="tab" style="--dc:${DIVISIONS[t.division].color}"><b>${esc(t.name)}</b><small>Season ${t.n}</small></button>`).join('')}
+    </div>
+    ${all.length ? '' : '<small class="rk-titles-none">Titles are paid when a season ends: one for every division you reached.</small>'}
+    <button class="btn rk-titles-done" data-act="rkTitlesDone" data-sound="back"><b>Done</b></button>
+  </div>`;
 }
 
 export function seasonScreen(menu, { onBack, onPlayRanked, onPlay = null, tab = last.tab }) {
@@ -247,7 +286,21 @@ export function seasonScreen(menu, { onBack, onPlayRanked, onPlay = null, tab = 
     szWeek: ({ w }) => { state.week = Number(w); paint(); },
     chPlay: ({ stat }) => { const where = playFor(stat); if (where) onPlay?.(where); },
     szPlayRanked: () => onPlayRanked?.(),
+    // Ranked hub: the title picker over the pane.
+    rkTitles: () => {
+      if (menu.el.querySelector('.rk-titles')) return;
+      menu.el.querySelector('.sz')?.insertAdjacentHTML('beforeend', titlesSheet());
+    },
+    rkWear: ({ id }) => { if (Progress.setTitle(id || null)) { paint(); menu.el.querySelector('.sz')?.insertAdjacentHTML('beforeend', titlesSheet()); } },
+    rkTitlesDone: () => menu.el.querySelector('.rk-titles')?.remove(),
   });
+  // The hub's countdown: every 30 s while the Season screen shows (the timer stops itself once it is gone).
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    const el = menu.el.querySelector('.rk-count-t');
+    if (menu.el.dataset.screen !== 'season') { clearInterval(countdownTimer); return; }
+    if (el) el.textContent = countdownText(Number(el.dataset.ends) - Date.now());
+  }, 30000);
   paint(true);
   menu.show();
   // A season that ended since the last look: say what was claimed and paid for the player.

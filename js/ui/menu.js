@@ -40,7 +40,8 @@ import { featured, MODS } from '../shared/playlist.js';
 import { MODES as ALL_MODES } from '../shared/modes.js';
 // The featured pairing in a few words for the Multiplayer button: modifiers plus the mode's short name.
 const shortFeatured = () => { const f = featured(); const m = ALL_MODES[f.mode]; return [...f.mods.map(id => MODS[id]?.name ?? id), (f.mods.length ? m?.short : m?.name) ?? f.name].join(' '); };     // Modes overhaul: modifiers and the featured playlist.
-import { seasonChip, profileRank, seasonScreen, rankBadge } from './season.js';      // Seasons and ranked (docs/SEASONS.md).
+import { seasonChip, profileRank, seasonScreen, rankBadge } from './season.js';
+import { titleById } from '../shared/seasons.js';     // Ranked titles on the lobby cars (docs/RANKED.md).      // Seasons and ranked (docs/SEASONS.md).
 import { icon } from './icons.js';
 
 // The title's emote button (docs/FINISHERS.md): the operator in the yard behind the menu plays the one tapped. The
@@ -220,7 +221,7 @@ export class Menu {
       <button class="pcard${can ? ' ready' : ''}" data-act="profile" data-in="right">
         <span class="pc-badge">${badgeMark(lp.prestige, 46, lp.master)}</span>
         <span class="pc-body">
-          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${mp ? '<em class="pc-pr">M</em>' : lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}${profileRank()}</span>
+          <span class="pc-top"><b class="pc-name">${esc(name)}</b>${mp ? '<em class="pc-pr">M</em>' : lp.prestige ? `<em class="pc-pr">${ROMAN[lp.prestige]}</em>` : ''}${profileRank()}</span>${(() => { try { const t = Progress.title(); return t ? `<em class="pc-tl">${esc(t.name)}</em>` : ''; } catch { return ''; } })()}
           <span class="pc-lv"><b>${mp ? 'Master' : 'Level'} <u class="pc-lvn">${mp ? lp.master : lp.level}</u></b><small>${can ? 'Prestige ready' : bar.maxed ? 'Max level' : `${Math.round(bar.into).toLocaleString('en-US')} / ${bar.span.toLocaleString('en-US')} XP`}</small></span>
           <i class="xp"><i style="transform:scaleX(${frac.toFixed(3)})"></i></i>
         </span>
@@ -350,11 +351,12 @@ export class Menu {
         if (h) {
           const self = h.id === localId;
           const can = !ffa && (isHost || self);
-          const status = h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
+          const status = h.spec ? 'Watching' : h.host ? 'Host' : h.ready ? 'Ready' : 'Not ready';
+          const tl = h.badge?.tl ? titleById(h.badge.tl) : null;     // A worn ranked title (docs/RANKED.md).
           // voice: party voice runs in this room (js/ui/voice-ui.js paints the talking dot and the mute button).
           const car = `<button class="car human${self ? ' self' : ''}${h.ready || h.host ? ' ready' : ''}" ${can ? `data-act="moveTeam" data-id="${esc(h.id)}"` : 'disabled'}>
             <span class="car-id">${voice ? `<i class="vc-dot">${ico('ui:mic', '', 13)}</i>` : ''}${h.badge ? badgeMarkOf(h.badge, 22) : ''}${h.badge && h.badge.rk >= 0 ? rankBadge(h.badge.rk, 18) : ''}<b>${nameHtml(h.name)}</b></span>
-            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge ? badgeLevel(h.badge) : null, emblem: h.loadout?.emblem })}<small>${self ? 'You' : status}</small></span>
+            <span class="car-st"><i class="lamp"></i>${h.host ? ico('crown', 'car-crown') : ''}${vetTag(vetOf(h), { short: true, level: h.badge ? badgeLevel(h.badge) : null, emblem: h.loadout?.emblem })}<small>${self ? (h.spec ? 'You · Watching' : 'You') : status}</small>${tl ? `<em class="car-tl">${esc(tl.name)}</em>` : ''}</span>
             ${can && humans.length > 1 ? ico('swapteam', 'car-swap') : ''}
           </button>`;
           cells += voice
@@ -386,6 +388,7 @@ export class Menu {
           <div class="code-tiles">${[...code].map(c => `<b>${esc(c)}</b>`).join('')}</div>
         </button>
         ${voice ? `<button class="chip lb-mic" data-act="lobbyMic" data-state="off" aria-label="Party voice">${ico('ui:mic')}<b>Mic</b></button>` : ''}
+        ${!isHost && me ? `<button class="chip lb-watch${me.spec ? ' on' : ''}" data-act="toggleWatch" data-sound="tab" aria-pressed="${me.spec ? 'true' : 'false'}" aria-label="Watch the next match as a spectator">${ico('ui:play')}<b>${me.spec ? 'Watching' : 'Watch'}</b></button>` : ''}
         ${isHost ? inviteControls({ listed }) : listed ? `<span class="inv-listed static">${ico('ui:signal')}<b>Public</b></span>` : ''}
         ${br ? squadMarkup(brSquad, isHost) : `<p class="room-tip">${ffa ? (isHost && !counting ? 'Invite friends, or read them this code. Free-for-All: everyone for themselves.' : 'Free-for-All: everyone for themselves.') : isHost ? (counting ? 'Tap a player to swap teams.' : 'Invite friends, or read them this code. Tap a player to swap their team.') : `${isReady ? `Ready. ${esc(hostName)} starts the match.` : `${esc(hostName)} starts the match when everyone is ready.`} Tap your name to swap teams.`}</p>`}
         ${counting ? `<div class="auto-start"><span>Starting in</span><b class="auto-n">${countdown}</b></div>` : ''}

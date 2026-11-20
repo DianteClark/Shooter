@@ -18,7 +18,8 @@ import { mapImage } from './mapthumb.js';
 import { esc } from './widgets.js';
 import { icon } from './icons.js';
 import { ico, header } from './yard.js';
-import { listClips, deleteClip, MAX_CLIPS } from './clips.js';      // Saved replay clips (docs/REPLAYS.md).
+import { listClips, deleteClip, MAX_CLIPS } from './clips.js';
+import { pasteSheet } from './replaycode.js';     // Replay codes: watch one a friend shared (docs/REPLAYS.md).      // Saved replay clips (docs/REPLAYS.md).
 
 const RESULT = { win: 'Victory', loss: 'Defeat', draw: 'Draw' };
 const ord = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
@@ -286,12 +287,12 @@ function fitMap(root) {
 const tabsHtml = tab => `<nav class="hs-tabs">${[['matches', 'Matches', 'ui:clock'], ['clips', 'Clips', 'ui:play']].map(([id, label, i]) =>
   `<button class="seg${id === tab ? ' on' : ''}" data-act="hsTab" data-tab="${id}" data-sound="tab">${ico(i)}<b>${label}</b></button>`).join('')}</nav>`;
 
-export function historyScreen(menu, { onBack, onStats, open: start = 0, tab = 'matches', onWatch = null }) {
-  if (tab === 'clips') { clipsScreen(menu, { onBack, onStats, onWatch }); return; }
+export function historyScreen(menu, { onBack, onStats, open: start = 0, tab = 'matches', onWatch = null, onWatchCode = null }) {
+  if (tab === 'clips') { clipsScreen(menu, { onBack, onStats, onWatch, onWatchCode }); return; }
   const list = MatchHistory.list();
   let open = list[start] ? start : 0;
   const detailOf = n => matchDetail(menu, list, n, i => {
-    historyScreen(menu, { onBack, onStats, open: i, onWatch });
+    historyScreen(menu, { onBack, onStats, open: i, onWatch, onWatchCode });
     const row = menu.el.querySelector(`.hs-body .hs-row[data-i="${i}"]`);
     row?.scrollIntoView?.({ block: 'nearest' });
   });
@@ -310,7 +311,7 @@ export function historyScreen(menu, { onBack, onStats, open: start = 0, tab = 'm
     hsBack: () => onBack(),
     hsStats: () => onStats?.(),
     hsOpen: () => detailOf(open),
-    hsTab: ({ tab: t }) => { if (t === 'clips') clipsScreen(menu, { onBack, onStats, onWatch }); },
+    hsTab: ({ tab: t }) => { if (t === 'clips') clipsScreen(menu, { onBack, onStats, onWatch, onWatchCode }); },
     // Tapping a match opens its detail; the summary beside the list follows the last one looked at.
     hsRow: ({ i }) => {
       const n = Number(i);
@@ -333,20 +334,21 @@ const clipRow = (c, i) => {
   </div>`;
 };
 
-async function clipsScreen(menu, { onBack, onStats, onWatch }) {
+async function clipsScreen(menu, { onBack, onStats, onWatch, onWatchCode }) {
   menu.el.dataset.screen = 'history';
   const paint = clips => {
     menu.el.innerHTML = `
-      ${header({ back: 'hsBack', label: 'Done', title: 'Match history', cls: 'hs-bar', extra: `${tabsHtml('clips')}<small class="hs-count">${ico('ui:play')}${clips.length} of ${MAX_CLIPS} clips</small>` })}
+      ${header({ back: 'hsBack', label: 'Done', title: 'Match history', cls: 'hs-bar', extra: `${tabsHtml('clips')}<small class="hs-count">${ico('ui:play')}${clips.length} of ${MAX_CLIPS} clips</small>${onWatchCode ? `<button class="btn hc-code" data-act="hcCode" data-sound="tab">${ico('ui:play')}<b>Replay code</b></button>` : ''}` })}
       ${clips.length ? `<div class="hc-list scroll-y" data-in="up">${clips.map(clipRow).join('')}</div>`
-        : `<div class="hs-empty" data-in="up">${ico('ui:play')}<b>No clips yet</b><p>After a match, tap Watch replay on the results, then Save clip to keep the last 30 seconds here. Up to ${MAX_CLIPS} clips.</p></div>`}`;
+        : `<div class="hs-empty" data-in="up">${ico('ui:play')}<b>No clips yet</b><p>After a match, tap Watch replay on the results, then Save clip to keep the last 30 seconds here. Up to ${MAX_CLIPS} clips. A friend's replay code plays from Replay code above.</p></div>`}`;
   };
   paint([]);
   menu.on({
     hsBack: () => onBack(),
     hsStats: () => onStats?.(),
-    hsTab: ({ tab: t }) => { if (t === 'matches') historyScreen(menu, { onBack, onStats, onWatch }); },
+    hsTab: ({ tab: t }) => { if (t === 'matches') historyScreen(menu, { onBack, onStats, onWatch, onWatchCode }); },
     hcWatch: ({ id }) => onWatch?.(id),
+    hcCode: () => pasteSheet({ onWatch: clip => onWatchCode?.(clip) }),
     hcDel: ({ id }) => {
       // A second tap on the same Delete confirms.
       const b = menu.el.querySelector(`.hc-del[data-id="${CSS.escape(id)}"]`);
@@ -356,7 +358,7 @@ async function clipsScreen(menu, { onBack, onStats, onWatch }) {
         setTimeout(() => { if (b.isConnected) { b.classList.remove('arm'); b.querySelector('b').textContent = 'Delete'; } }, 2500);
         return;
       }
-      deleteClip(id).then(() => clipsScreen(menu, { onBack, onStats, onWatch }));
+      deleteClip(id).then(() => clipsScreen(menu, { onBack, onStats, onWatch, onWatchCode }));
     },
   });
   menu.show();

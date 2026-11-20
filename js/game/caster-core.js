@@ -4,7 +4,7 @@
 export const TILT = 55 * Math.PI / 180;       // The match camera's tilt (js/render/renderer.js, js/game/replay-player.js).
 export const FOLLOW_DIST = 30, FOLLOW_FOV = 26;
 export const FREE_DIST = 44, FREE_FOV = 30, FREE_MIN = 22, FREE_MAX = 90;
-export const TACTICAL_MIN = 56, TACTICAL_MAX = 130, TACTICAL_FOV = 34;
+export const TACTICAL_MIN = 56, TACTICAL_MAX = 96, TACTICAL_FOV = 34;
 export const EASE_FOLLOW = 6, EASE_FREE = 12, EASE_TACTICAL = 2.4;
 
 // The living players worth a camera: not the undead, not extraction's patrols, not someone aboard the plane.
