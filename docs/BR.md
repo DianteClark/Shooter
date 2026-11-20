@@ -335,7 +335,7 @@ island (`voteOptions`), and the solo picker's battle royale section shows both.
   the lighthouse, the radio masts. 76 enterable buildings in four new styles (`colonial`, `market`, `thatch`, `tin`)
   plus `temple`, `coast`; about 520 loot spots (380 indoors), 40 caches, `circleBias` on the places and four open
   spots, `drop: null` (flight lines as Frontier's).
-- Rebound: `br.reboundAreas` (read by `reboundArea`): four compact areas of 138 m, one per island with the lagoon and
+- Rebound: `br.reboundAreas` (read by `reboundArea`): four areas of 148 m, each leaning over one island with the lagoon and
   the pyramid, each with six or more places.
 - Extraction: `br.exfils` (read by js/sim/extract.js when present): six landing-zone clearings round the ring between the
   places (scatter keeps off them), the final exfil out on one of the four causeways (seeded), and eight beach landings

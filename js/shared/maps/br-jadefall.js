@@ -560,9 +560,9 @@ function build() {
   const lanes = [{ id: 'north', z: 80 }, { id: 'mid', z: 200 }, { id: 'south', z: 320 }];
   const circleBias = P.pois.map(p => ({ x: p.x, z: p.z, w: p.tier === 1 ? 1 : p.tier === 2 ? 0.8 : 0.5 }))
     .concat([[120, 200], [280, 200], [200, 130], [200, 270]].map(([x, z]) => ({ x, z, w: 0.3 })));
-  // Rebound's compact areas: four, each an island, the lagoon next to it and the pyramid (138 m, a little smaller than
+  // Rebound's compact areas: four, each an island, the lagoon next to it and the pyramid (148 m, about
   // Frontier's 150 m, so each stays on the map).
-  const reboundAreas = [{ x: 200, z: 140, r: 138 }, { x: 260, z: 200, r: 138 }, { x: 200, z: 260, r: 138 }, { x: 140, z: 200, r: 138 }];
+  const reboundAreas = [{ x: 200, z: 152, r: 148 }, { x: 248, z: 200, r: 148 }, { x: 200, z: 248, r: 148 }, { x: 152, z: 200, r: 148 }];
 
   return {
     id: 'jadefall', name: 'Jadefall', theme: 'jadefall', size: 'giant', region: 'mixed', width: W, height: H,
