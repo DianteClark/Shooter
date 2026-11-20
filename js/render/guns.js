@@ -8,6 +8,8 @@ import { kitKey, normalizeKit, NO_ATTACHMENTS, ATTACHMENTS, SLOTS } from '../sha
 import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
 import { w3Factories } from './guns-w3.js';
 import { w4Factories } from './guns-w4.js';
+import { detailGun } from './guns-detail.js';
+import { WEAPON_CATEGORY } from '../shared/constants.js';
 import { fitOpticW2, fitBarrelW2, fitWrapW2, W2_WRAPS, W2_MAG_LOOK, fitVentRib, fitShellCuff, fitGuideRail, fitVenturi } from './guns-w2.js';
 
 const C = {
@@ -19,9 +21,11 @@ const C = {
   white: 0xffffff,
 };
 
+// The visual pass (guns-detail.js) hooks the next kit() made: its detailing runs just before that kit's geometry is built.
+let detailHook = null;
 function kit() {
   const b = new MeshBuilder();
-  return {
+  const k = {
     b,
     body()   { b.setPart(PART.BODY).setColor(C.body);    return b; },
     body2()  { b.setPart(PART.BODY).setColor(C.bodyL);   return b; },
@@ -30,6 +34,12 @@ function kit() {
     dark()   { b.setPart(PART.METAL).setColor(C.dark);   return b; },
     accent() { b.setPart(PART.ACCENT).setColor(C.white); return b; },
   };
+  if (detailHook) {
+    const hook = detailHook, own = b.build.bind(b);
+    detailHook = null;
+    b.build = () => { hook(k); return own(); };
+  }
+  return k;
 }
 
 // Heavy forward-canted pistol grip, shared so every gun holds the same in hand.
@@ -1338,7 +1348,15 @@ export function modelKit(kit) {
 
 function build(id, kit, key) {
   const make = FACTORIES[id] || FACTORIES.ar;
-  const g = make(modelKit(kit));
+  const a = modelKit(kit);
+  let g = make(a);
+  // The visual pass: drawn again with the small parts (guns-detail.js) placed from the first draw's muzzle and port.
+  const cls = WEAPON_CATEGORY[id];
+  if (cls && FACTORIES[id]) {
+    const first = g;
+    detailHook = k => detailGun(id, cls, k, a, first);
+    try { g = make(a); } finally { detailHook = null; }
+  }
   g.geometry.computeBoundingBox();
   g.geometry.computeBoundingSphere();
   g.key = key;

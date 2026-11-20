@@ -26,6 +26,7 @@ register('data:text/javascript,' + encodeURIComponent(`export async function res
   if (s === 'three') return { url: ${JSON.stringify(new URL('../vendor/three.min.js', import.meta.url).href)}, shortCircuit: true };
   return next(s, c); }`));
 const { getGun, modelKit } = await import('../js/render/guns.js');
+const { GUN_TRI_CAP } = await import('../js/render/guns-detail.js');
 
 let passed = 0;
 function test(name, fn) {
@@ -205,6 +206,16 @@ test('every signature attachment and kit model fits its gun: drawn, and inside t
     drawn++;
   }
   assert.ok(drawn >= 60, `${drawn} with a visible model change`);
+});
+
+test('the visual pass keeps every gun inside its triangle budget (guns are drawn once per player)', () => {
+  let sum = 0;
+  for (const w of WEAPON_IDS) {
+    const t = getGun(w).geometry.attributes.position.count / 3;
+    assert.ok(t <= GUN_TRI_CAP, `${w}: ${t} triangles`);
+    sum += t;
+  }
+  assert.ok(sum / WEAPON_IDS.length <= 620, `${(sum / WEAPON_IDS.length).toFixed(0)} triangles a gun on average`);
 });
 
 /* ---------------- Wire, saves, unlocks, bots ---------------- */
