@@ -9,7 +9,9 @@ a helicopter out that banks it. Nothing counts until someone in the squad gets o
 | `exd` | Extraction Duos | 8 of 2 | 5 | 16 + up to 48 AI seats |
 
 Rule set `ex` (`js/sim/extract.js`, registered in `js/sim/rules.js`), numbers in `EX` (`js/shared/modes.js`).
-Frontier only (any map listing `br` with eight or more places hosts it, `modeFitsMap`). No solos.
+Frontier and Jadefall (any map listing `br` with eight or more places hosts it, `modeFitsMap`; the tab votes between
+them). A map may lay out its own exfil sites and landings in `br.exfils` (`ring`, `final` choices, `inserts` round the
+coast, dealt to the squads from a seeded start): Jadefall does, since its edges are sea (docs/BR.md "Jadefall"). No solos.
 
 ## Rules (the owner's, with our numbers)
 - **Match**: 8 s at the insertion points, then 15:00. Squads start round the edge, each in its own slice, at the spot

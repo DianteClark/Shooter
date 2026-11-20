@@ -5,8 +5,11 @@ import { TEAMS } from '../shared/constants.js';
 import { TEAM_RGB } from '../shared/palette.js';   // [r, g, b] per side, rewritten in place by the colour modes.
 import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
 import { ExFx } from './ex-fx.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
-import { ZmFx } from './zm-fx.js';
-import { ZmFairFx } from './zm-fair-fx.js';     // Wrenfield Fair: the Barker's marked lanes, the Whirligig's whirls.     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
+import { ZmFx } from './zm-fx.js';     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
+import { ZmBodies } from './zm-bodies.js';     // Graveyard Shift: each undead kind's own model and animation (ROADMAP item 50).
+import { ZM_INTRO } from '../ui/zm-intro.js';     // A boss's intro: the camera beat (the card is the zombies HUD's).
+import { ZmFairFx } from './zm-fair-fx.js';     // Wrenfield Fair: the Barker's marked lanes, the Whirligig's whirls.
+import { CpFx } from './cp-fx.js';     // The co-op campaign: objectives, charges, the boss's telegraphs, torches (docs/CAMPAIGN.md).
 import { clearZmWalls } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
@@ -347,7 +350,8 @@ export class GameRenderer {
         case 'hit': {
           const r = chars.rigs.get(ev.target);
           if (r && (r.visible || r.team === localTeam)) {
-            vfx.bodyHit(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
+            if (r.zk && this.zmBodies) { this._pushDir(ev.by, r.x, r.z); this.zmBodies.onHit(ev, r, this._dx, this._dz); }     // Ichor, per kind.
+            else vfx.bodyHit(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
             this._pushDir(ev.by, r.x, r.z);
             chars.onHit(ev.target, this._dx, this._dz, Math.min(1, (ev.dmg || 25) / 40));
@@ -364,8 +368,8 @@ export class GameRenderer {
             this._pushDir(ev.by, r.x, r.z);
             K.dirX = this._dx; K.dirZ = this._dz; K.weapon = ev.weapon; K.head = !!ev.head;
             K.explosive = !!(WEAPONS[ev.weapon] && WEAPONS[ev.weapon].explosive) || ev.weapon === 'launcher' || !!ev.streak || (!!ev.equip && ev.equip !== 'flash');
-            chars.onKill(ev.target, K);
-            vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
+            // The undead's deaths are their bodies' own (zm-bodies.js: they fall, lose limbs, spill ichor).
+            if (!chars.onKill(ev.target, K) || !(r.zk && this.zmBodies)) vfx.deathBurst(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
             vfx.killEffect(ev.by, ev.x, ev.z, ev.weapon);
           }
@@ -388,9 +392,10 @@ export class GameRenderer {
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
+        case 'cpboom': this._boom(ev.x, ev.z, Math.min(7, ev.r || 4)); break;     // The campaign: a charge, a barrage shell.
         case 'zswing': chars.onShot(ev.id, 0.3, 'knife'); break;     // Graveyard Shift: a zombie's claw.
-        case 'zspit': case 'zblast': case 'zshield': this.zmFx?.onEvent(ev); break;     // Specials (js/render/zm-kinds-fx.js).
-        case 'zcharge': case 'zwhirl': (this.fairFx ??= new ZmFairFx(this.scene)).onEvent(ev); break;     // js/render/zm-fair-fx.js.
+        case 'zspit': case 'zblast': case 'zshield': this.zmFx?.onEvent(ev); if (ev.t === 'zshield') this.zmBodies?.onShield(ev); break;     // Specials (js/render/zm-kinds-fx.js).
+        case 'zcharge': case 'zwhirl': (this.fairFx ??= new ZmFairFx(this.scene)).onEvent(ev); if (ev.t === 'zcharge') this.zmBodies?.onCharge(ev); break;     // js/render/zm-fair-fx.js.
         case 'explosion': {
           // A launcher's blast waits for its rocket to get there.
           if (!vfx.rocketInbound(ev.x, ev.z, ev.radius || 4)) this._boom(ev.x, ev.z, ev.radius || 4);
@@ -575,6 +580,7 @@ export class GameRenderer {
     }
 
     let tx = this.camTarget.x, tz = this.camTarget.z;
+    this.introK = 0;
     if (this.finalKill) {
       const f = this.finalKill;
       f.t += dt;
@@ -604,6 +610,16 @@ export class GameRenderer {
         tx += ((this.missileX ?? tx) - tx) * this.missileCam;
         tz += ((this.missileZ ?? tz) - tz) * this.missileCam;
       }
+      // Graveyard Shift: a boss rising leans the camera toward it for a moment (js/ui/zm-intro.js); never with
+      // reduced motion, and tapping the title card sends it straight back.
+      const ik = ZM_INTRO.cam();
+      this.introK = ik;
+      if (ik > 0) {
+        let bx = ZM_INTRO.x - tx, bz = ZM_INTRO.z - tz;
+        const bl = Math.hypot(bx, bz);
+        if (bl > 13) { bx *= 13 / bl; bz *= 13 / bl; }
+        tx += bx * 0.8 * ik; tz += bz * 0.8 * ik;
+      }
     }
 
     // Keep the view inside the dressed area of the map.
@@ -631,7 +647,7 @@ export class GameRenderer {
     const lr = local && view?.br ? this.chars.rigs.get(local.id) : null;
     const altGoal = !lr || !local.alive ? 0 : local.air === 1 ? GLIDE_ALT : lr.alt;
     const alt = altGoal;
-    const dist = this.distance * TUNING.camZoom * (1 - this.zoomPunch + this.camEase) * (1 + alt * 0.012);
+    const dist = this.distance * TUNING.camZoom * (1 - this.zoomPunch + this.camEase - (this.introK || 0) * 0.16) * (1 + alt * 0.012);
     const cx = tx + sx + this.kickX, cz = tz + sz + this.kickZ;
     cam.position.set(cx, alt + dist * Math.sin(TILT), cz + dist * Math.cos(TILT));
     // Depth range fitted to the shot, for depth precision: the near plane sits as far out as it can without cutting the
@@ -745,16 +761,23 @@ export class GameRenderer {
 
     const opts = this._charOpts;
     opts.localId = localId; opts.localTeam = localTeam; opts.uav = uav; opts.revealAll = !!this.finalKill || !!cine;
+    const zmObj = (view.obj ?? view.points?.obj)?.zm ? (view.obj ?? view.points.obj) : null;
+    if (zmObj && !this.zmBodies) { this.zmBodies = new ZmBodies(this.scene, this.vfx); this.chars.zm = this.zmBodies; }
     this.chars.update(view, fxDt, opts);
     this._handleEvents(events, localId, localTeam);
+    if (this.zmBodies) this.zmBodies.update(view, fxDt, this.chars, { cine: !!cine });
+    if (!cine) ZM_INTRO.step(realDt);
     this.combat.onEvents(events, localId, localTeam);
     this.vfx.step(fxDt);
     this.combat.smokeAlpha = cine ? 0.16 : 1;
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
     if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, this.chars);
     if ((view.obj ?? view.points?.obj)?.ex) (this.exFx ??= new ExFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, localTeam);
-    const zmObj = (view.obj ?? view.points?.obj)?.zm ? (view.obj ?? view.points.obj) : null;
-    if (zmObj?.layout) (this.zmFx ??= new ZmFx(this.scene, this.map, zmObj.layout)).update(view, fxDt);
+    if ((view.obj ?? view.points?.obj)?.cp) (this.cpFx ??= new CpFx(this.scene, this.map)).update(view, fxDt);
+    if (zmObj?.layout) {
+      (this.zmFx ??= new ZmFx(this.scene, this.map, zmObj.layout)).update(view, fxDt);
+      this.zmFx.kinds.drawShields = !this.zmBodies;     // The Shieldbearer's door is part of its body now.
+    }
     this.fairFx?.update(fxDt);
     this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill && !cine) this._drawLaser(local);
@@ -771,7 +794,7 @@ export class GameRenderer {
     this.hurt = Math.max(0, this.hurt - realDt * 3.4);
     this.overlayU.uAlpha.value = low * 0.72;
     this.overlayU.uFlash.value = this.hurt * 0.3;
-    this.bars += ((cine ? cine.bars : 0) - this.bars) * Math.min(1, realDt * 9);
+    this.bars += ((cine ? cine.bars : (this.introK || 0) * 0.11) - this.bars) * Math.min(1, realDt * 9);
     if (this.bars < 0.001) this.bars = 0;
     this.overlayU.uBars.value = this.bars;
     this.overlay.visible = low > 0.001 || this.hurt > 0.001 || this.bars > 0;
@@ -867,7 +890,9 @@ export class GameRenderer {
     this.chars.dispose();
     this.brFx?.dispose();
     this.exFx?.dispose(); this.exFx = null;
+    this.cpFx?.dispose(); this.cpFx = null;
     this.zmFx?.dispose(); this.zmFx = null;
+    this.zmBodies?.dispose(); this.zmBodies = null; this.chars.zm = null; ZM_INTRO.reset();
     this.fairFx?.dispose(); this.fairFx = null;
     this.vfx.dispose();
     this.combat.dispose();

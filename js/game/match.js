@@ -15,7 +15,7 @@ import { Killcam } from './killcam.js';
 import { ReplayRecorder } from './replay.js';     // The last 30 s, for Watch replay on the results (docs/REPLAYS.md).
 import { ctfCarrying } from '../sim/ctf.js';
 import { MatchTelemetry } from './telemetry.js';
-import { BR, isBr, isEx, isZm } from '../shared/modes.js';
+import { BR, isBr, isEx, isZm, isCp } from '../shared/modes.js';
 import { zmEvent } from '../sim/zm-phone.js';
 import { zmTierCamo } from '../shared/zombies.js';     // Graveyard Shift: guns, ammo and perks the host hands this phone.
 import { exAmmo } from '../sim/extract.js';
@@ -67,6 +67,7 @@ export class Match {
     // Extraction (js/sim/extract.js): this phone crawls when down and takes the primary ammo the host hands it.
     this.ex = isEx(this.mode);
     this.zm = isZm(this.mode);     // Graveyard Shift (js/sim/zombies.js): crawls when down, takes the guns the host hands it.
+    this.cp = isCp(this.mode);     // The campaign (js/sim/campaign.js): crawls when down.
     this.glideT = 0;
     this.planeF = 0;
     this.brWeapon = null;
@@ -317,6 +318,12 @@ export class Match {
     this.#command({ cmd: 'zm', act, ...extra });
   }
 
+  // The campaign's failed panel: retry now, or abort the mission.
+  cpCommand(act, extra = {}) {
+    if (!this.cp) return;
+    this.#command({ cmd: 'cp', act, ...extra });
+  }
+
   // Extraction commands from the HUD: call (the helicopter, standing in an open zone), take (a contract at a phone).
   exCommand(act, extra = {}) {
     if (!this.ex) return;
@@ -497,7 +504,7 @@ export class Match {
       if (this.brSwapWant) { r.swap = true; this.brSwapWant = false; }
       if (me?.downed) { downedInput(r); r.reload = false; }
       else this.#brDry(view, dt);
-    } else if (this.ex || this.zm) {
+    } else if (this.ex || this.zm || this.cp) {
       const me = view.players.find(p => p.id === this.localId);
       if (me?.downed) downedInput(r);
     }
@@ -691,6 +698,7 @@ export class Match {
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
       zmView: objOf(view)?.zm ? { round: objOf(view).round, best: objOf(view).best, crew: objOf(view).crew, escaped: objOf(view).escaped ?? [] } : null,
+      cpView: objOf(view)?.cp ? { id: objOf(view).id, k: objOf(view).k, diff: objOf(view).diff, state: objOf(view).state, t: objOf(view).t, fails: objOf(view).fails, deaths: objOf(view).deaths, bonusOk: objOf(view).bonusOk, why: objOf(view).why } : null,
       early: !!this.early,
       replay,
       ...awards,

@@ -13,6 +13,7 @@ import { W4_UNLOCKS } from './weapons-w4.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
 import { blankTourney, cleanTourney, tourneyEmpty } from './tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
+import { cleanCampaign, CP_CARDS, CP_LIFE, MISSIONS as CP_MISSIONS } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { RESET_GEN } from './reset.js';     // Save codes carry the progress reset's generation (docs/RESET.md).
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
@@ -1172,6 +1173,9 @@ export const CARDS = [
   card('zm-listener', 'Dead Air', 'Zombies', 'Put down the Listener on Polestar Relay in Graveyard Shift', c => zmListenerDown(c.zmFeats), { p: 'waves', c: ['#04121a', '#16384a', '#c8f4ff', '#5affb0'], e: 'map:polestar', gold: true }),
   // Wrenfield Fair's: the Barker, called out by the high striker's bell once the lanterns are lit (docs/ZOMBIES.md).
   card('zm-barker', 'Show\'s Over', 'Zombies', 'Put down the Barker on Wrenfield Fair in Graveyard Shift', c => zmBarkerDown(c.zmFeats), { p: 'wheel', c: ['#140a1c', '#4a1e3a', '#ffe0b0', '#ff7ad8'], e: 'map:wrenfield', gold: true }),
+  // The co-op campaign (docs/CAMPAIGN.md): one card per Operation Nightrail mission, for clearing it on any difficulty.
+  ...CP_CARDS.map(([id, name, p, c], k) => card(id, name, 'Campaign', `Clear ${name} in Operation Nightrail`, cc => (cc.life?.[CP_LIFE(CP_MISSIONS[k].id)] ?? 0) >= 1,
+    { p, c, e: `map:${CP_MISSIONS[k].map}`, ...(k === CP_CARDS.length - 1 ? { gold: true } : {}) })),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),
@@ -1394,6 +1398,9 @@ export function blankSave() {
     // Weekend tournaments (docs/TOURNAMENTS.md, js/shared/tourney-items.js): this weekend's run and the shelf of every
     // weekend played. Appended.
     tn: blankTourney(),
+    // The co-op campaign (docs/CAMPAIGN.md, js/shared/campaign.js): per mission [cleared difficulties as bits, best
+    // stars, best time]. Appended; only ever improves.
+    cp: {},
   };
 }
 
@@ -1529,6 +1536,7 @@ export function sanitizeSave(raw) {
   s.zmFeats = cleanZmFeats(raw.zmFeats);
   s.records = cleanRecords(raw.records);
   s.tn = cleanTourney(raw.tn);
+  s.cp = cleanCampaign(raw.cp);
   return s;
 }
 
@@ -1632,7 +1640,9 @@ function packTail(s) {
     // [22] personal bests (the Trophy Case), the same way.
     s.records && Object.keys(s.records).length ? s.records : null,
     // [23] weekend tournaments (docs/TOURNAMENTS.md), the same way.
-    s.tn && !tourneyEmpty(s.tn) ? s.tn : null];
+    s.tn && !tourneyEmpty(s.tn) ? s.tn : null,
+    // [24] the co-op campaign (docs/CAMPAIGN.md), the same way.
+    s.cp && Object.keys(s.cp).length ? s.cp : null];
   while (tail.length && tail[tail.length - 1] === null) tail.pop();
   return tail;
 }
@@ -1676,6 +1686,7 @@ function unpack(a) {
     ...(a[21] && typeof a[21] === 'object' && !Array.isArray(a[21]) ? { zmFeats: a[21] } : {}),
     ...(a[22] && typeof a[22] === 'object' && !Array.isArray(a[22]) ? { records: a[22] } : {}),
     ...(a[23] && typeof a[23] === 'object' && !Array.isArray(a[23]) ? { tn: a[23] } : {}),
+    ...(a[24] && typeof a[24] === 'object' && !Array.isArray(a[24]) ? { cp: a[24] } : {}),
   };
 }
 
@@ -1963,7 +1974,8 @@ function buildPool() {
   // Modes beyond the four team rule sets (Free-for-All, Gun Game, ...) join the pool when they exist. A free-for-all
   // also brings a placing goal.
   const extra = new Map();
-  for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules)) extra.set(m.rules, m);
+  // (The campaign stays out: its missions are not matches to grind, and adding it would reshuffle everyone's dailies.)
+  for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules) && !m.cp) extra.set(m.rules, m);
   for (const [rules, m] of extra) {
     pool.push({ ...d(`mode.${rules}`, 'mode', `played:${rules}`, 2, 1500, `mode:${m.id}`, `Play 2 ${m.name} matches`), mode: m.id });
     // Counted per rule set (`top3:<rules>`): the label names one mode, so a Gun Game podium does not move a Free-for-All one.

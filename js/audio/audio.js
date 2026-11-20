@@ -33,6 +33,7 @@ import { music } from './music.js';                 // Synthesised music (roadma
 import { FinSfx } from './fin-sfx.js';
 import { MeleeSfx, hasMeleeSound } from './melee-sfx.js';   // Weapons wave 4's melee hits.
 import { ZmSfx } from './zm-sfx.js';
+import { CpSfx } from './cp-sfx.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { objOf } from '../sim/rules.js';
 import { BrSfx } from './br-sfx.js';               // Battle royale sounds (docs/BR.md).       // Scorestreaks overhaul sounds (2026-11).
 
@@ -590,6 +591,7 @@ THEME_AUDIO.desert = THEME_AUDIO.dust;
 THEME_AUDIO.arctic = { ir: { len: 0.45, damp: 0.12, gain: 0.18 }, slaps: [[0.11, 0.6]], f0: 1400, f1: 360, metal: 0, wash: 0.02 };
 // Leaves and trunks: no hard slap, a soft scatter of small returns.
 THEME_AUDIO.jungle = { ir: { len: 0.7, damp: 0.2, gain: 0.26 }, slaps: [[0.06, 0.55], [0.13, 0.45], [0.24, 0.3]], f0: 1700, f1: 420, metal: 0, wash: 0.1 };
+THEME_AUDIO.jadefall = { ...THEME_AUDIO.jungle, wash: 0.16 };   // Jadefall and its Ground War maps: the jungle's air, more surf.
 // Indoors under a steel roof: the longest, brightest room in the game, and it rings.
 THEME_AUDIO.foundry = { ir: { len: 1.4, damp: 0.4, gain: 0.4 }, slaps: [[0.05, 1], [0.12, 0.8], [0.21, 0.5]], f0: 2600, f1: 600, metal: 1200, wash: 0.1 };
 // Open fields: almost nothing comes back, and what does is late.
@@ -1413,6 +1415,8 @@ function roomImpulse(ctx, theme) {
 let current = null;
 // Plays an interface sound (uiSound kinds: unlock, levelUp, rankUp, ...) on the app's engine, if there is one yet.
 export function playUi(kind, opts) { current?.uiSound(kind, opts); }
+// The campaign's radio blip (js/ui/cp-hud.js), on whichever engine is running.
+export function cpRadio(who) { current?.cpRadio?.(who); }
 
 export class AudioEngine {
   constructor() {
@@ -1702,6 +1706,8 @@ export class AudioEngine {
     this.uiLive.push({ src, g, end: now + buf.duration / pitch });
   }
   uiClick() { this.uiSound('tap'); }
+  // The campaign's radio: a squelch and two beeps as a line comes up on the HUD (js/ui/cp-hud.js).
+  cpRadio(who) { if (this._running()) (this.cpSfx ??= new CpSfx(this)).radio(who); }
   uiTap() { this.uiSound('tap'); }
   uiBack() { this.uiSound('back'); }
   uiConfirm() { this.uiSound('confirm'); }
@@ -2149,6 +2155,7 @@ export class AudioEngine {
     if (view?.br) (this.brSfx ??= new BrSfx(this)).onEvents(events, view);
     (this.finSfx ??= new FinSfx(this)).onEvents(events, view);       // Finishers and emotes (docs/FINISHERS.md).
     if (objOf(view)?.zm) (this.zmSfx ??= new ZmSfx(this)).onEvents(events, view);     // Graveyard Shift (docs/ZOMBIES.md).
+    if (objOf(view)?.cp) (this.cpSfx ??= new CpSfx(this)).onEvents(events, view);     // The campaign (docs/CAMPAIGN.md).
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];

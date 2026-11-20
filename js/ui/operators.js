@@ -10,6 +10,7 @@
 // Mastery skins are equipped through Progress (operatorSkin / setOperatorSkin); js/ui/cards.js wraps both paths.
 // The local picks live in their own small save (STORE_KEY) so this module needs nothing from Progress.
 import './cardbook.js';
+import { CP_SKIN, CP_VET_LIFE } from '../shared/campaign.js';     // The co-op campaign's skin (docs/CAMPAIGN.md).
 import { SEASON_DEFS } from '../shared/season-items.js';     // Registers the extra calling cards before progress.js reads the save (it imports this file).
 
 // The first nine are modelled by hand in characters.js (TORSOS / HEADS). Every operator after them is assembled from
@@ -219,6 +220,7 @@ export const SKIN_TIERS = {
   4:     { label: 'Specialist', slot: 1, order: 4 },
   5:     { label: 'Mastery', slot: 2, order: 5 },
   season: { label: 'Season', slot: 1, order: 6 },
+  campaign: { label: 'Campaign', slot: 2, order: 7 },
 };
 const STAT_LABEL = { kills: 'gun kills', head: 'headshots', long: 'longshots', slide: 'slide kills', clean: 'equipment-free kills' };
 
@@ -347,6 +349,12 @@ for (const def of SEASON_DEFS) {
     SKINS.push({ id: `skin:${op}-s${def.n}`, operator: op, tier: 'season', name, slot: glow >= 2 ? 2 : 1, glow, gear, sleeve, trouser, accent,
       season: def.id, unlock: { season: def.id, label: `Season ${def.n} reward track` } });
   }
+}
+// The co-op campaign (docs/CAMPAIGN.md): Marshal's Nightrail, for clearing every Operation Nightrail mission on Veteran.
+// Appended after the season skins, so the indices the renderer packs only grow.
+if (OPERATORS.some(o => o.id === CP_SKIN.operator)) {
+  SKINS.push({ id: CP_SKIN.id, operator: CP_SKIN.operator, tier: 'campaign', name: CP_SKIN.name, slot: 2, glow: 2, gear: 0x18222e, sleeve: 0x1e2c3a, trouser: 0x121a24, accent: 0x7cc8ff,
+    unlock: { life: CP_VET_LIFE, goal: 1, label: CP_SKIN.label } });
 }
 for (const s of SKINS) if (SKIN_ART[s.id]) Object.assign(s, SKIN_ART[s.id]);
 SKINS.forEach((s, i) => { s.index = i; });

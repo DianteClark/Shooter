@@ -78,3 +78,10 @@ the earlier maps never change; their calling cards are appended to `MAP_ART` in 
   (icons-maps.js + the alias list in icons.js), calling-card pattern (cardart.js: `liftoff`, `stardome`, `tiers`),
   vote art assets/maps/<id>.jpg. `ball` (sphere/dome bands) and `lattice` (square lattice tower) were added to
   themes/kit.js for them. dev/sim-modes-v10.mjs plays HQ on Launchpad, Kill Order on Pagoda, Control on Observatory.
+
+## Jadefall's region (docs/BR.md "Jadefall")
+The second battle royale island and two Ground War maps cut from its coast (Tidebreak, Coral Quarter). Those two set
+`giantWorld: true` and `theme: 'jadefall'`: js/render/world.js hands them to the giant-world streamer
+(js/render/themes/frontier.js) with the island's palette, so they share the island's buildings (enterable, roofs that
+dissolve round you), beaches, shallows (walkable, slow: `map.shallows`) and landmarks. Build such a map with
+js/shared/maps/isle-kit.js: a symmetric land/water lattice (`lattice`, `water`) and `twins` for each piece and its image.

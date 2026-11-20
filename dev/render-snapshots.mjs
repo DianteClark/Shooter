@@ -3,7 +3,7 @@
 //   node dev/render-snapshots.mjs frost sunken    just these
 //   node dev/render-snapshots.mjs --review        also writes full-size PNGs to /tmp/map-art/ for checking
 //   node dev/render-snapshots.mjs --port=8172     serve on this port (default: any free one)
-//   SNAP_TIMEOUT=900000 node dev/render-snapshots.mjs ...   wait longer for a page on a loaded machine (default 120 s)
+//   SNAP_TIMEOUT=900000 node dev/render-snapshots.mjs ...   wait longer for a page on a loaded machine (default 400 s)
 // Needs Playwright and Chrome (the same setup as docs/ARCHITECTURE.md). Serves the repo itself on a free port.
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -56,7 +56,7 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.goto(`http://127.0.0.1:${port}/dev/render-maps.html?map=${id}&shot=art`);
-    await page.waitForFunction('window.ready === true', null, { timeout: Number(process.env.SNAP_TIMEOUT || 120000) });
+    await page.waitForFunction('window.ready === true', null, { timeout: Number(process.env.SNAP_TIMEOUT || 400000) });   // Giant-world maps take a while on SwiftShader.
     // Highest quality that fits the size budget.
     let bytes = null, q = 0.86;
     for (; q >= 0.5; q -= 0.06) {

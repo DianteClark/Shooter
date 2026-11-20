@@ -692,6 +692,8 @@ export class ExHud {
     if (this.base) return this.base;
     const map = this.map, c = document.createElement('canvas');
     c.width = c.height = MAP_PX;
+    const h3 = this.mapEl?.querySelector('.ex-map-side h3');
+    if (h3) h3.textContent = map.name;
     const g = c.getContext('2d'), s = MAP_PX / Math.max(map.width, map.height);
     const img = new Image();
     img.onload = () => { g.drawImage(img, 0, 0, MAP_PX, MAP_PX); g.fillStyle = 'rgba(10,13,17,.18)'; g.fillRect(0, 0, MAP_PX, MAP_PX); };

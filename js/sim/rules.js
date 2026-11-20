@@ -30,8 +30,9 @@ import { GrindRules } from './grind.js';
 import { ExtractRules } from './extract.js';     // Extraction (docs/EXTRACT.md).
 import { ZmRules } from './zombies.js';         // Graveyard Shift (docs/ZOMBIES.md).
 import { GfRules } from './gf.js';             // Showdown, 2 v 2 rounds (docs/MODES.md).
+import { CampaignRules } from './campaign.js';  // The co-op campaign (docs/CAMPAIGN.md).
 
-export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules, zm: ZmRules, gf: GfRules };
+export const MODE_RULES = { hq: HqRules, ko: KoRules, inf: InfRules, oic: OicRules, ctl: CtlRules, grind: GrindRules, ex: ExtractRules, zm: ZmRules, gf: GfRules, cp: CampaignRules };
 
 // The mode state on any view: the sim's and decoded views carry it as `view.obj`; an interpolated view (js/game/interp.js
 // copies a fixed list of fields) still has it on the point list it does copy.

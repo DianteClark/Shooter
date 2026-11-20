@@ -26,6 +26,9 @@ import ashgrove from './maps/ashgrove.js';   // Graveyard Shift only (hidden, no
 import polestar from './maps/polestar.js';   // Graveyard Shift only, like Ashgrove.
 import wrenfield from './maps/wrenfield.js';   // Graveyard Shift only: the third built for it.
 import frontier from './maps/br-frontier.js';
+import jadefall from './maps/br-jadefall.js';
+import tidebreak from './maps/gw-tidebreak.js';   // Ground War on Jadefall's coast.
+import coral from './maps/gw-coral.js';   // The second battle royale island (docs/BR.md "Jadefall").
 import brtest from './maps/brtest.js';     // Battle royale test map: small, fast to build, used by dev/sim-br.mjs.
 // ROADMAP 56: new 6v6 maps, appended (ids and order of the ones above never change).
 import launchpad from './maps/launchpad.js';
@@ -33,7 +36,7 @@ import observatory from './maps/observatory.js';
 import pagoda from './maps/pagoda.js';
 import { MODE_IDS, MODES } from './modes.js';
 
-export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, brtest, launchpad, observatory, pagoda };
+export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // What the vote and match setup offer. The firing range is reached from its own menu entry only.

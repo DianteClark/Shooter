@@ -22,6 +22,7 @@ import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.
 import { objOf } from '../sim/rules.js';
 import { ZM, zmXp, zmWonderOf, zmQuestBoss } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
 import { getCamo } from '../shared/camos.js';
+import { missionById, cpStars, cpXp, campaignCleared, CP_DIFFS } from '../shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { performance } from '../shared/ranked.js';
 import { EVENT_XP_BONUS, eventById } from '../shared/events.js';
 
@@ -325,6 +326,20 @@ export class MatchAwards {
       zm = { survived, round: zmObj.round ?? 0, best: rec.best, before: rec.before, fresh: rec.fresh, kills: mine.kills ?? this.kills, mapName: MAPS[this.mapId]?.name ?? '',
         escaped: escaped ? zmObj.round : 0, warden, bossName, bestEscape: Progress.zmFeats?.(this.mapId)?.escaped ?? 0, freshEscape: false, freshBoss: false };
     }
+    // The campaign: a cleared mission pays by difficulty, per star and once for the first clear; the save keeps its
+    // cleared difficulties, best stars and best time (applyMatch, below).
+    const cpObj = objOf(view)?.cp ? objOf(view) : null;
+    let cp = null;
+    if (cpObj && me) {
+      const m = missionById(cpObj.id), done = view?.winner === 0 && cpObj.state === 'complete';
+      const st = done ? cpStars({ bonus: cpObj.bonusOk, secs: cpObj.t, par: m?.par ?? 600, deaths: cpObj.deaths, fails: cpObj.fails }) : { list: [false, false, false], n: 0 };
+      const was = Progress.campaign?.()?.[cpObj.id] ?? [0, 0, 0];
+      const first = done && !campaignCleared(Progress.campaign?.() ?? {}, cpObj.id);
+      if (done) lines.push(...cpXp({ diff: cpObj.diff, stars: st.n, first }));
+      cp = { id: cpObj.id, k: cpObj.k, diff: cpObj.diff, diffName: CP_DIFFS[cpObj.diff]?.name ?? '', done, stars: st.list, secs: Math.round(cpObj.t ?? 0), par: m?.par ?? 600,
+        fails: cpObj.fails ?? 0, deaths: cpObj.deaths ?? 0, bonus: m?.bonus?.label ?? '', bonusOk: !!cpObj.bonusOk, first, bestStars: was[1], bestSecs: was[2], why: cpObj.why ?? null, name: m?.name ?? '', n: m?.n ?? 0 };
+      cp.starCount = st.n;
+    }
     const exWon = ex ? ex.extracted : null;
     if (exWon !== null) { /* The Extracted line is the win. */ }
     else if (won) lines.push(['Win', MATCH_XP.win]);
@@ -380,7 +395,9 @@ export class MatchAwards {
     if (ex) for (const [k, n] of Object.entries(ex.life)) life[k] = (life[k] ?? 0) + n;
     // Personal bests for the Trophy Case (the horde's kills are not in the tally's, see hordeView).
     const records = { ...this.tally.records(), brPlace, exSecs: ex?.extracted ? Math.max(1, Math.round(this.outAt ?? this.live)) : 0 };
-    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records, zmRounds: zm ? zm.survived : null });
+    const applied = Progress.applyMatch({ xp: total, weapons: this.weapons, pro: this.pro.gains(), mastery, life, mapId: this.mapId, won: exWon ?? won, career, extracted: !!ex?.extracted, zmFeat, records, zmRounds: zm ? zm.survived : null,
+      cpRun: cp?.done ? { id: cp.id, diff: cp.diff, stars: cp.starCount, secs: cp.secs } : null });
+    if (cp && applied.cp) Object.assign(cp, { bestStars: applied.cp.stars, bestSecs: applied.cp.secs, vetAll: !!applied.cp.vetAll });
     if (event?.reward?.fresh) applied.unlocks.unshift({ kind: event.reward.kind, id: event.reward.id, name: event.reward.name, req: `Weekly event: ${eventById(event.event)?.name ?? ''}`, feat: true });
     if (zm && applied.zmRecord) Object.assign(zm, { best: applied.zmRecord.best, before: applied.zmRecord.before, fresh: applied.zmRecord.fresh });
     if (zm && applied.zmFeat) Object.assign(zm, { bestEscape: applied.zmFeat.escaped, freshEscape: applied.zmFeat.freshEscape, freshBoss: applied.zmFeat.freshBoss });
@@ -418,6 +435,7 @@ export class MatchAwards {
       medals: { ...this.medals },
       ex,
       zm,
+      cp,
       stats: {
         kills: this.kills, headshots: this.headshots, longshots: this.longshots, slideKills: this.slideKills,
         equipmentKills: this.equipKills, streakKills: this.streakKills, assists: this.assists,

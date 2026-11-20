@@ -241,6 +241,32 @@ export const REWARD_PATTERNS = {
     s += line(96, 8, 300, 30, c[2], 1, op('.6') + ' stroke-dasharray="2 4"') + poly([[262, 26], [276, 27.5], [262, 29]], c[2]);
     return s + circ(236, 46, 4, c[3]);
   },
+  isles(c, r) {            // Jadefall: the stepped pyramid on its islet, a ring of islands round the lagoon, a jade light.
+    let s = '';
+    for (let k = 0; k < 4; k++) s += path(`M${96 + k * 52} ${70 + (k % 2) * 3} q13 -5 26 0 t26 0`, c[2], 1, op('.35'));
+    s += fillPath('M100 80 C120 52 160 50 176 62 C186 70 200 70 206 80 Z', c[1], op('.8'));
+    s += fillPath('M262 80 C268 64 286 56 300 58 L300 80 Z', c[1], op('.8'));
+    s += fillPath('M196 66 C214 58 258 58 276 66 L276 70 L196 70 Z', c[2], op('.18'));
+    for (let t = 0; t < 5; t++) s += rect(206 + t * 7, 62 - t * 9, 60 - t * 14, 9, t % 2 ? c[1] : c[2], op((0.55 + t * 0.08).toFixed(2)));
+    s += rect(232, 10, 8, 7, c[3]) + circ(236, 8, 14, c[3], op('.18')) + circ(236, 8, 7, c[3], op('.3'));
+    for (let i = 0; i < 14; i++) s += circ(96 + r() * 204, 4 + r() * 40, 0.7 + r() * 0.8, c[2], op((0.25 + r() * 0.35).toFixed(2)));
+    return s;
+  },
+  causeway(c) {            // Tidebreak: a stone causeway over the lagoon, a broken shrine on its islet, the surf.
+    let s = '';
+    for (let k = 0; k < 6; k++) s += path(`M${92 + k * 36} ${58 + (k % 2) * 6} q9 -4 18 0 t18 0`, c[2], 1.2, op('.4'));
+    s += rect(92, 44, 208, 8, c[1]) + rect(92, 42, 208, 2.4, c[2], op('.6'));
+    for (let x = 104; x < 300; x += 30) s += rect(x, 52, 5, 18, c[1], op('.85'));
+    s += rect(220, 20, 7, 22, c[2], op('.85')) + rect(246, 26, 7, 16, c[2], op('.7')) + rect(216, 16, 40, 5, c[2], op('.8'));
+    return s + circ(236, 30, 3.2, c[3]) + circ(236, 30, 9, c[3], op('.2'));
+  },
+  belfry(c) {              // Coral Quarter: the church tower over the rooftops, its bell lit, the harbour beyond.
+    let s = rect(92, 70, 208, 10, c[1], op('.5'));
+    for (const [x, w, h] of [[104, 30, 22], [140, 24, 30], [262, 34, 26], [288, 12, 18]]) s += rect(x, 80 - h, w, h, c[1]) + poly([[x - 2, 80 - h], [x + w / 2, 80 - h - 8], [x + w + 2, 80 - h]], c[3], op('.75'));
+    s += rect(212, 18, 22, 62, c[2], op('.92')) + poly([[208, 18], [223, 2], [238, 18]], c[3]);
+    s += rect(217, 26, 12, 12, c[0]) + circ(223, 33, 3.6, c[3]) + rect(219, 50, 8, 12, c[0], op('.6'));
+    return s;
+  },
 
   /* ---- Modes ---- */
   beacon(c) {              // Headquarters: a command post with a beacon pulsing out.

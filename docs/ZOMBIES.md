@@ -45,9 +45,13 @@ Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, f
   lid opens and guns cycle up out of it, slowing as it settles; the offer floats and turns; the lid shuts once it is
   taken; a move lifts it up the beam and drops it in at its new spot), power-ups. About eleven draw calls whatever the
   round; the x-ray passes are one merged mesh for every wall-buy and one box for the crate.
-- `js/render/zm-looks.js` + `js/render/characters.js`: the undead (shambler, runner, brute, boss) in the operators'
-  parts kit, greyed and torn, as four extra operator uniform slots after `MAX_OPERATORS`. They ride the same instanced
-  character meshes as soldiers (no extra draw calls); a horde seat's look comes from the view (`zk`).
+- `js/render/zm-models.js` + `js/render/zm-bodies.js`: the undead's own bodies (ROADMAP item 50, see "Bodies"): a
+  low-poly model per kind, posed and animated on the CPU (walk, attack, rise, hit, death, gibs), drawn one call per kind
+  on screen from a bone texture. `js/render/characters.js` still decides who is seen and the distance LOD for a horde
+  seat and draws its ring and shadow, then hands it over (`Characters.zm`); a seat's kind comes from the view (`zk`).
+  `js/ui/zm-intro.js`: the boss intros' state (the renderer's camera beat) and title card (the zombies HUD).
+- `js/render/zm-looks.js`: the old look (the undead in the operators' parts kit as extra uniform slots after
+  `MAX_OPERATORS`), still built by characters.js; only drawn where no bodies exist (a renderer outside the mode).
 - `js/ui/zm-hud.js`: round plate (round, undead left or the break countdown, points, Double Pay, boss health), crew list
   (points, perk chips, downed), the use button bottom-centre between the sticks (OPEN GATE, BUY <gun>, AMMO, MYSTERY
   CRATE, TAKE, perk name; greyed with "need N more" when short), downed/reviving bars, the back-next-round panel, point
@@ -303,9 +307,8 @@ answered differently:
 - Bots: a Bloater still far off is shot first (and backed away from inside 6.5 m), Spitters and Crawlers early, a
   Shieldbearer facing them goes to the back of the queue and is walked round (one way, kept up) rather than shot into;
   they step off puddles and out from under a glob's landing ring.
-- Looks (js/render/zm-looks.js, parts already in the kit: no new geometry): Spitter tall and thin, hooded, acid-green
-  tanks glowing; Bloater short and enormous, violet, amber glowing pouches; Crawler small and dark on all fours (the
-  downed crawl); Shieldbearer broad, helmeted, an iron shield (js/render/zm-kinds-fx.js, instanced). Globs, landing
+- Looks: see "Bodies" (each special its own model; the Shieldbearer's door is part of its body, so
+  js/render/zm-kinds-fx.js no longer draws a shield where the bodies are on: `drawShields`). Globs, landing
   rings, puddles and burst splashes are instanced too: five draw calls, nothing drawn when empty; the fog is one quad on
   a fog round only.
 - Sounds (js/audio/zm-sfx.js, synthesised): a wet hawk and a splash where the glob lands, gurgling Spitters, bubbling
@@ -314,6 +317,63 @@ answered differently:
 - Wire: the packed zombie's kind is 4 bits now (kind 9 is a Shieldbearer with its shield broken); the round's special
   is one more number on the block. Globs and bursts are events (`zspit` with its flight time, `zblast`, `zshield`): no
   per-tick state.
+
+## Bodies (ROADMAP item 50)
+The undead were recoloured soldiers; each kind now has a low-poly model and animation of its own
+(js/render/zm-models.js builds them, js/render/zm-bodies.js poses and draws them).
+
+| kind (view `zk`) | silhouette | gait and attack | eyes |
+|---|---|---|---|
+| Shambler (1) | hunched, a torn shirt open over the ribs, one sleeve gone, one shin bare | a limp (the right leg drags) and a lurch, head tilted and twitching, one arm groping out in front; claws up, raked down | yellow-green |
+| Runner (2) | lean and wiry, ragged vest, bare ribs, hair streaming | sprinting with the arms pumping, leant hard into it; slower, both arms out; the claw lunge | red |
+| Brute (3) | hulking: barrel chest, hump, fists like rocks, iron cuffs, the head sunk between the shoulders | heavy stomp, arms swinging wide; both fists overhead and slammed down | orange |
+| Spitter (6) | tall and thin in a hospital gown, a long neck, a swollen throat sac veined in glowing acid | stooped, head craned forward; head back and the sac swelling, then the head snaps forward | acid |
+| Bloater (7) | short, a vast belly strapped with split belts, studded with glowing amber pustules | a waddle, the belly breathing and bouncing; swelling and shuddering before it bursts | amber |
+| Crawler (8) | a torso with no legs, dragging its spine and rags | on its belly, arms reaching and pulling in turn, head craned up; rears and slams | pale blue |
+| Shieldbearer (9) | broad, riot helmet, a battered door with iron straps held up in front | braced behind the door; draws back and shoves it. The door breaks off in pieces (`zshield` broke), the wire's kind 9 then draws it without | red |
+| Yardmaster (4, boss) | 1.65x: a railway foreman, rusted shoulder plates, a signal lantern burning on its back, a coupling spike for a hand | heavy and limping; spike and fist overhead, slammed | orange, pulsing |
+| Gravewarden (5) | 1.7x: a sexton's black robe to the ankles, long white hair, a spade, a lantern burning violet on its chain | a glide, the lantern swinging; the spade over the shoulder and down | violet |
+| Listener (11) | 1.8x, the thinnest: parka hood with no face but a cyan slit, the radio pack on its back, a whip aerial | stilted strides, head cocked and turning; arms spread wide, then closed | cyan |
+| Barker (12) | 1.62x: a showman in a red tailcoat whose tails flap, gold epaulettes, a peaked cap, chalk face paint, red hair, a brass speaking-trumpet | a strut, chest out; marking its lane (`zcharge`) it raises the trumpet to its mouth, then leans into the run; a backhand with the trumpet | gold |
+
+- **Rising**: a zombie that comes up claws out of the ground: hands first, then the head, then it hauls itself out
+  (about a second; bosses 1.6 s), throwing dirt and leaving a dark ring. Not for a horde already up when a phone joins.
+- **Hits** (the 'hit' event, instead of the soldiers' team-coloured burst): dark ichor flung along the shot, never
+  blood, and each kind's own matter: acid sparks off a Spitter, violet goo and amber off a Bloater, frost shards off the
+  Listener, violet motes off the Gravewarden, sparks off the Yardmaster's iron; splinters and sparks off a Shieldbearer's
+  door (`zshield`). A flash and a flinch on springs (bosses a third as much). The gold headshot star stays.
+- **Deaths** (Characters.onKill hands a horde seat here, so the soldiers' tumbling parts are not used): the body
+  topples away from the shot about its feet, the limbs flopping on overshooting springs toward a random limp pose
+  (ragdoll-ish), bounces once, lies 2.4 s darkening, then sinks and dithers out. A headshot takes the head off; an
+  explosive kill throws the body and takes one to three limbs (or the head); a melee kill may take a forearm; a Bloater
+  bursts (belly and chest gone, head and arms flung); a Shieldbearer drops its door. Gibs tumble, bounce, trail ichor,
+  leave a stain and sink after 3.2 s. Stumps spurt. Bosses keep their limbs. A seat that leaves without a kill (sunk
+  by the sim) sinks into the ground.
+- **Boss intros** (js/ui/zm-intro.js): when the Yardmaster, the Gravewarden, the Listener or the Barker rises (not in a replay, not
+  for a boss already up when a phone joins), the camera leans 80% of the way to it (13 m at most), pulls in 16% and
+  letterboxes for 2.9 s, easing in and out; a title card ("Boss / The Yardmaster / Foreman of the dead shift") sits in
+  the upper third. Tapping the card skips (the camera eases straight back). The match runs on underneath and the
+  sticks keep working. Reduced motion (the system setting): the card fades in and out, the camera does not move.
+- **How it draws**: twelve rigid bones a body (pelvis, chest, head, upper and fore arms, thighs, shins, and one extra:
+  the Spitter's sac, the Bloater's belly, the door, the lantern, the aerial, the Barker's coat-tails, the Crawler's
+  trailing spine). The CPU
+  composes the bones' world matrices (about 300 matrix products for 24) into one RGBA float texture, three texels a
+  bone and a row a body (80 rows: the living, the dying, the gibs); one `InstancedBufferGeometry` mesh per kind reads
+  its rows by `gl_InstanceID`. Vertex lighting, the screen-door fade and the hit flash match the soldiers'. Models are
+  600 to 1,260 triangles (the operator kit's merged variants were about 7,800 for an undead drawn in full).
+- **LOD**: the same budget as 1119-4: Characters picks the four nearest the camera's focus within 7.5 m (two in a
+  horde of more than 12) for full detail; the rest drop their "fine" pieces (rags, ribs, fingers, rivets, hair: a
+  flag on the vertices, collapsed in the vertex shader) and cast no contact shadow.
+- **Perf** (`python3 dev/ui-sweep-perf.py 8611 out zm20 zm20polestar`, round 20, horde 24, every gate open, traps
+  and sentries on; SwiftShader, Low; dev before -> this build, the mean of two interleaved runs each): Ashgrove 58.8 ->
+  56.5 draw calls (max 64 -> 59-64), 74.8k -> 62.0k triangles (max 83.6k -> 66.7k); Polestar 60.3 -> 58.5 calls, 79.4k
+  -> 67.7k triangles (max 87.3k -> 75.3k). Round 20 is a boss round, so the sweep now ends the boss's intro before it
+  measures (the camera beat pulls the camera in). CPU per frame for the characters and the undead together (a probe
+  wrapping `Characters.update` and `ZmBodies.update`): Ashgrove 0.90 -> 0.59 ms, Polestar 0.64 -> 0.66 ms. The
+  overlay's script and frame ms wander 2x between runs of the same build on this shared 2-CPU box (frame 270 to 675 ms
+  for either), so `dev/zm-bodies-bench.html` measures the horde alone: the same 24 undead drawn the old way and the new
+  way, alternated, each frame synced with readPixels (SwiftShader, 932x430, the distance LOD on): **old 120 / 123 ms a
+  frame, new 49 / 53 ms**, 15 -> 11 draw calls, 34.2k -> 19.2k triangles.
 
 ## Wire
 The horde never goes out as player records. The rules block (`encode`) carries round, state, timer, undead left, the
@@ -359,8 +419,10 @@ cap.
 
 Build NEXT, with the special zombies in the mix (rounds 20 and 30 deal Spitters, Bloaters, Crawlers and
 Shieldbearers): inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms; the one 31.8 ms tick on Ruins is a
-single outlier, its p99 9.9 ms). The renderer adds no per-zombie draw calls; the
-economy adds about eighteen fixed ones (gear is instanced).
+single outlier, its p99 9.9 ms). The renderer adds one draw call per undead kind on screen (see "Bodies": fewer
+calls and triangles than the operator-kit look they replaced); the economy adds about eighteen fixed ones (gear is
+instanced). The host tick is untouched by item 50 (`node dev/sim-zombies.mjs --quick` after it, this machine: neon
+0.84 / 0.74 ms mean at rounds 20 / 30, Ashgrove 0.61 / 0.68, Polestar 0.53 / 0.38, worst tick 11.6 ms).
 
 ## Tests
 - `node dev/sim-zombies.mjs [--quick]`: layout (sealed bands, reachability, placements), Ashgrove (the loop, dead ends,
@@ -391,6 +453,12 @@ economy adds about eighteen fixed ones (gear is instanced).
   (`ZM_ONLY=specials`, Foundry): one of each special in front of the player (kinds and the shield in the view), a glob
   with its landing ring, the puddle, a Bloater's burst, a fog round's banner and darkness. The Ashgrove part checks the
   "turned on the power" banner, POWER IS ON at the switch and the green lamp.
+- `python3 dev/ui-zm-bodies-test.py [port] [outdir]` (item 50): on Foundry, every common kind raised round the player
+  and frozen (rising, the lineup at match scale and close, each kind close up), walking, winding up and striking;
+  deaths by a headshot, explosives and a melee kill (corpses and gibs counted, then all sunk away), a Shieldbearer's
+  door breaking; each boss rising with its intro (camera beat, title card, a tap skips it) and again with reduced
+  motion (card only, the camera still). `dev/zm-lineup.html` shows every kind side by side for review
+  (`?view=game|close|front&anim=idle|walk|run|windup|strike|rise|death|head|blast&kinds=1,2,3`); `dev/zm-bodies-bench.html` times the horde drawn the old way and the new.
 - `python3 dev/ui-gamepad-test.py`: the terminal's sheet from a controller (Interact opens it, the d-pad walks it, A buys,
   B closes). `python3 dev/ui-hud-layout-test.py --only zm`: the plates, tier pips, exfil clock, relic count and an
   upgrade prompt clear of each other and the sticks at every size.
@@ -494,7 +562,7 @@ all three tuned, TRANSMIT at the relay console at the mast's foot. **The Listene
 stays the wire's broken-shield code): 48x a round's health (+10% per crew seat), quicker and leaner than the Gravewarden,
 and it fights differently (`ZM_LISTENER`): every 8 s a **frost pulse** winds up round it, a 5.5 m ring drawn on the snow
 for 1.2 s (`zpulse`), then 34 (grown with the round like a claw) to the crew inside it in its sight, so you step out;
-every 12 s it calls up two Crawlers. Its look (js/render/zm-looks.js): the tallest, thinnest thing on the ice, frost-white,
+every 12 s it calls up two Crawlers. Its look (js/render/zm-models.js, "Bodies"): the tallest, thinnest thing on the ice, frost-white,
 hooded, the station's radio pack on its back glowing cyan. Putting it down pays 3000 each and 1500 XP ("Listener put
 down"), the **Dead Air** calling card and the **Dead Frequency** feat emblem (`save.zmFeats.polestar[1]`: on Polestar the
 feat's boss flag is the Listener's, `ZM_LISTENER_MAPS` in js/shared/progression.js, so it does not count for Lantern
@@ -557,8 +625,8 @@ last 15 s); burnt out, they all go dark ("light them again, faster"). A wrong on
 `ZE.quest.wrong` = 3 runners at whoever lit it. All four lit stay lit; then RING THE BELL on the high striker in the Big
 Top (its lamps climb the scale as the lanterns are lit).
 
-**The Barker** answers (`ZK.barker` = 11, view zk 12; its look in js/render/zm-barker-look.js, hooked into
-js/render/zm-looks.js by one line: a showman gone wrong in a red tailcoat and gold epaulettes, a peaked cap, chalk face
+**The Barker** answers (`ZK.barker` = 11, view zk 12; its body in js/render/zm-models.js, see "Bodies" (the old
+operator-kit look stays in js/render/zm-barker-look.js): a showman gone wrong in a red tailcoat and gold epaulettes, a peaked cap, chalk face
 paint, a fairground-gold glow). 52x a round's health (+10% per crew seat), slower than the Listener, and it fights
 differently again (`ZM_BARKER`): every 7 s, with one of the crew up within 18 m in its sight, it stops and **marks a
 lane** on the ground toward them (13 m, 2.4 m wide, up to a wall: a red band with a fill creeping along it, a steam

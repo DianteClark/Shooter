@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Battle royale end to end in a real browser (docs/BR.md): python3 dev/ui-br-test.py [port] [outdir]
+"""Battle royale end to end in a real browser (docs/BR.md): python3 dev/ui-br-test.py [port] [outdir] [--map=jadefall]
 
 Serves the repo, picks Battle Royale on the BR map from the Custom match picker, rides the transport, jumps from the drop
 map, glides, lands, picks loot up by walking over it, swaps a ground gun with the Take button, plates up, fights the
@@ -11,6 +11,8 @@ import asyncio, subprocess, sys, time, os, json
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MAP = next((a[6:] for a in sys.argv[1:] if a.startswith('--map=')), 'frontier')
+sys.argv = [a for a in sys.argv if not a.startswith('--map=')]
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8273
 OUT = sys.argv[2] if len(sys.argv) > 2 else '/tmp/br-mode'
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
@@ -48,7 +50,7 @@ async def run(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1200)
     await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_timeout(700)
-    await pg.locator('[data-act="soloMap"][data-id="frontier"]').first.click()
+    await pg.locator(f'[data-act="soloMap"][data-id="{MAP}"]').first.click()
     await pg.wait_for_timeout(300)
     await pg.locator('[data-act="soloMode"][data-id="br"]').first.click()
     await pg.wait_for_timeout(400)
@@ -87,6 +89,9 @@ async def run(browser, vw, vh, failures, errors):
         failures.append(f'{vw}: squadmates still in the air after the app switch')
     # Shielded until the down test, so a stray fight cannot end the run early (bots also ignore a shielded player).
     await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); for (const p of sim.players) if (p.team === me.team) p.spawnProtect = 999; }})()")
+    # The squad bots give their shield up when they shoot: keep it topped up until the recall needs one of them to fall
+    # (a hot landing on a busy island could otherwise leave nobody to recall).
+    await ev(f"(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId); window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) p.spawnProtect = 999; }}, 100); }})()")
     # Loot: walk (teleport) over the nearest few items, then stand by a ground gun.
     took = await ev(f"""(async () => {{
       const m = {G}.match, rules = m.sim.br, out = [];
@@ -163,9 +168,12 @@ async def run(browser, vw, vh, failures, errors):
       if (me.downed) {{ me.downed = false; me.hp = 100; }}
       me.br.armor = 0; sim._damage(me, foe, 999, 'ar', 10);
       // Down, and kept safe from everyone else while the squad comes: the test is the revive, not a third party.
-      me.spawnProtect = 999; for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }} }})()""")
+      me.spawnProtect = 999; for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }}
+      // The squadmates too: the recall below needs one alive to fall at the beacon.
+      for (const p of sim.players) if (p.team === me.team && p !== me && p.alive) p.spawnProtect = 999; }})()""")
     await pg.wait_for_timeout(900)
     downed = await ev(f"{G}.match.interp.newest.players.find(p => p.id === {G}.match.localId).downed")
+    print(f'{vw}: squadmates at the down (alive, downed, hp): {await ev("JSON.stringify(window.__mates)")}', flush=True)
     if not downed: failures.append(f'{vw}: not downed (squadmates {await ev("JSON.stringify(window.__mates)")}, me alive {await ev(f"{G}.match.sim.byId.get({G}.match.localId).alive")})')
     await pg.wait_for_timeout(600)
     await shot('09-downed')
@@ -182,7 +190,7 @@ async def run(browser, vw, vh, failures, errors):
     except Exception:
         failures.append(f'{vw}: no squadmate revived the human')
     # Recall Beacons: a squadmate falls, their tag is picked up, held at a beacon, and they parachute back in.
-    await ev(f"""(() => {{ const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
+    await ev(f"""(() => {{ clearInterval(window.__shield); const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId), foe = sim.players.find(p => p.team !== me.team);
       const mate = sim.players.find(p => p.team === me.team && p !== me && p.alive); window.__mate = mate.id;
       const bc = sim.br.beacons[0]; window.__bc = bc.id;
       for (const p of sim.players) if (p.team !== me.team && Math.hypot(p.ps.x - bc.x, p.ps.z - bc.z) < 120) {{ p.ps.x = 3; p.ps.z = 3; }}
@@ -258,7 +266,7 @@ async def lobby_shots(browser, vw, vh, failures, errors):
     await pg.wait_for_timeout(1200)
     await pg.locator('[data-act="host"]').first.click()
     await pg.wait_for_function(f'{G}.code')
-    await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: 'frontier' }}")
+    await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: '{MAP}' }}")
     await pg.locator('[data-act="moveTeam"]').first.click()      # Any lobby repaint picks up the BR room.
     await pg.wait_for_timeout(500)
     if await pg.locator('.br-size').count() == 0: failures.append(f'lobby {vw}: no squad size option after a BR match')

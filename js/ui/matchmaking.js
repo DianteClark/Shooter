@@ -26,6 +26,8 @@ export const MP_TABS = [
   { id: 'br', name: 'Battle Royale', note: '20-32 players', icon: 'mode:br' },
   { id: 'extraction', name: 'Extraction', note: '16 players', icon: 'mode:ex' },
   { id: 'zombies', name: 'Zombies', note: 'Co-op, 1-4', icon: 'mode:zm' },
+  // The co-op campaign (docs/CAMPAIGN.md): its own tab (js/ui/campaign.js), not playlists.
+  { id: 'campaign', name: 'Campaign', note: 'Co-op, 1-4', icon: 'mode:cp' },
 ];
 export const MP_TAB_IDS = MP_TABS.filter(t => !t.soon).map(t => t.id);
 

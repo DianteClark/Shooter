@@ -13,6 +13,35 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1120-6', date: '2026-11-20', title: 'Campaign: Operation Nightrail',
+    items: [
+      'A co-op campaign: Operation Nightrail, eight story missions against the Meridian Line, the company that has taken over the railways. Play it alone with three bot squadmates or with up to three friends. Find it on the new Campaign tab in Multiplayer.',
+      'Every mission is different: hack a signal terminal, sneak through Night Market past watchmen with torches, hold a pier relay against waves, walk a defector across Downtown, blow up a foundry, hunt a broker across Frontier, race a convoy to the dam, and face Marshal Kordell in a juggernaut suit.',
+      'Briefings before each mission and radio chatter during it tell the story. Checkpoints along the way: if your squad is wiped, you go back to the last one, or abort.',
+      'Three difficulties: Recruit, Regular and Veteran. Earn up to three stars a mission: the bonus objective, beating the par time, and nobody dying.',
+      'Rewards: XP, a calling card for every mission, and for clearing every mission on Veteran, Marshal\'s Nightrail skin and the Nightrail emblem.',
+    ],
+  },
+  {
+    build: '1120-5', date: '2026-11-20', title: 'Jadefall: a second island',
+    items: [
+      'New battle royale island: Jadefall, a jungle archipelago of four islands round a warm lagoon, with the Jade Pyramid on its islet in the middle. Eighteen places to drop, from the Sky Temple and its stone head to Port Coral\'s bell tower, Fort Sentinel\'s bastions, a waterfall over the north cliffs and a market on stilts in the lagoon.',
+      'Water matters there: you can wade the lagoon, sandbars, fords and beaches, but shallow water slows you and stops slides. Deep channels split the islands; cross on the rope bridges, the stone causeways or the fords.',
+      'Battle Royale, Rebound and Extraction now vote between Frontier and Jadefall. Rebound on Jadefall plays one island and the lagoon beside it; Extraction lands squads on the beaches, with exfil clearings round the islands and the final ride out on a causeway.',
+      'Two new Ground War maps from the same coast: Tidebreak, where the lagoon breaks out to the sea, and Coral Quarter, the old harbour town.',
+      'New calling cards for Jadefall, Tidebreak and Coral Quarter, each in three tiers.',
+    ],
+  },
+  {
+    build: '1120-4', date: '2026-11-20', title: 'The undead, remade',
+    items: [
+      'Every kind of undead in Graveyard Shift has its own body now: the hunched, limping Shambler in a torn shirt, the lean Runner pumping its arms, the hulking Brute, the legless Crawler dragging itself along, the Spitter with its swollen glowing throat, the Bloater studded with glowing pustules, and the Shieldbearer behind a battered door.',
+      'The Yardmaster, the Gravewarden, the Listener and the Barker are huge and each one its own: a coupling spike and a lantern on its back, a robe and a violet lantern, a faceless hood and a radio aerial, a red tailcoat and a brass trumpet.',
+      'Their eyes glow. They claw up out of the ground, wind up their attacks where you can see them coming, and topple over when they die. A headshot takes the head off, explosives take limbs, a Bloater bursts and a Shieldbearer drops its door. Hits spill dark ichor, never blood.',
+      'When a boss rises the camera takes a quick look at it and its name comes up. Tap the card to skip it; with reduced motion on, only the card shows.',
+    ],
+  },
+  {
     build: '1120-3', date: '2026-11-20', title: 'Every operator remade',
     items: [
       'Every Mastery skin is now a full costume, each one different: a knight, a samurai, a lion king, a shark, a spider, a dragon, a deep-sea diver, a wizard, a walking tank, a scarecrow with his crow and more. All of them keep your team colour where it shows from above.',
