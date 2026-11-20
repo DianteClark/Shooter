@@ -34,7 +34,15 @@ export const OPTION_DEFAULTS = Object.freeze({
   autoSprint: true,   // Pushing the move stick past 85% sprints (js/ui/controls.js); off: only at the very edge.   // Battery saver: Graveyard Shift's big hordes drawn at 30 fps (js/game/match.js), cooler and longer.
   botChatter: true,   // Bots' short lines in the kill feed (js/sim/chatter.js, js/ui/quickchat.js).
   recall: {},   // Remembered menu choices (js/ui/recall.js): Multiplayer tab and picks, squad size, Custom picks.
+  // Roadmap 63 (docs/ACCESSIBILITY.md, docs/TUTORIAL.md). tipsSeen: first-time mode tips already shown (js/shared/mode-tips.js
+  // key -> 1); Options > Tips: Show again empties it. hudContrast: solid HUD plates and heavier marks in any colour mode.
+  // captions: sound captions on the HUD. shotCues: enemy gunfire as a direction mark. padAim / padSprint: a controller's
+  // Aim and Sprint buttons held or toggled.
+  tipsSeen: {}, hudContrast: false, captions: false, shotCues: false, padAim: 'hold', padSprint: 'toggle',
 });
+
+// Controller buttons that can be held or toggled (js/ui/gamepad.js).
+export const HOLD_MODES = [['hold', 'Hold'], ['toggle', 'Toggle']];
 
 // Slider-style settings: unit is the on-screen step, and what the bar and label report.
 export const STEPPED = {
@@ -66,6 +74,11 @@ function load() {
     if (!TEXT_SIZES.some(([id]) => id === out.textSize)) out.textSize = 'normal';
     if (!CUE_LEVELS.some(([id]) => id === out.cues)) out.cues = 'nades';
     out.layout = sanitizeLayout(out.layout);
+    const seen = {};
+    if (out.tipsSeen && typeof out.tipsSeen === 'object' && !Array.isArray(out.tipsSeen)) for (const k of Object.keys(out.tipsSeen).slice(0, 64)) if (/^[a-z]{1,12}$/.test(k)) seen[k] = 1;
+    out.tipsSeen = seen;
+    if (out.padAim !== 'hold' && out.padAim !== 'toggle') out.padAim = 'hold';
+    if (out.padSprint !== 'hold' && out.padSprint !== 'toggle') out.padSprint = 'toggle';
     out.squad = out.squad.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
     for (const [key, s] of Object.entries(STEPPED)) out[key] = clamp(out[key], s.min, s.max);
     return out;

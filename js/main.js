@@ -68,6 +68,8 @@ import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
 import { ReplayPlayer } from './game/replay-player.js';
 import { VIDEOS, VIDEO_BY_ID } from './shared/help-videos.js';
+import { ModeTips } from './ui/modetips.js';
+import { watchLabels } from './ui/aria.js';
 import { SpectatorMatch } from './game/spectator.js';      // A friend room's spectator seat (docs/RANKED.md).      // Watch replay and saved clips (docs/REPLAYS.md).
 import { saveClip, loadClip, deleteClip, listClips } from './ui/clips.js';
 import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
@@ -115,10 +117,15 @@ document.title = GAME_NAME;
 
 const canvas = document.getElementById('game');
 const uiRoot = document.getElementById('ui');
+// First-time mode tips (docs/TUTORIAL.md). Test pages (?debug=1) keep them off unless they ask with &tips=1, so a
+// fresh profile's first match in every other test looks as it always did.
+const modeTips = new ModeTips(uiRoot);
 const controls = new Controls(uiRoot);
 const hud = new HUD(uiRoot);
 hud.bindControls(controls);
 const menu = new Menu(uiRoot);
+// Screen-reader names on every menu control (js/ui/aria.js): the menu and overlay layers only, never the HUD.
+watchLabels(menu.el, menu.overlayEl);
 // "Update ready" on the title screen when the site has a newer build than this (often stale Home Screen) copy.
 const updater = new Updater({ canShow: () => !app.inMatch && menu.el.dataset.screen === 'title' });
 new MutationObserver(() => updater.paint()).observe(menu.el, { attributes: true, attributeFilter: ['data-screen'] });
@@ -1943,6 +1950,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   const net = app.net;
   const id = localId ?? net?.localId;
   replayView?.close();             // A rematch or a host's start can come while a replay plays: the match takes the canvas.
+  if (helpVideo && helpVideo !== 'loading') helpVideo.close();
   app.inMatch = true;
   wakeLock.set(true);
   updater.paint();
@@ -2018,6 +2026,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
     app.tutorial.start();
   }
   app.match.start();
+  modeTips.show(mode, { enabled: !tutorial && !training && !rejoin && mode !== 'range' && (!params.has('debug') || params.get('tips') === '1') });
 
   clearInterval(app.netPoll);
   if (net) {
@@ -2035,6 +2044,7 @@ function endLocalMatch() {
   app.match = null;
   app.tutorial?.dispose();
   app.tutorial = null;
+  modeTips.hide();
   app.inMatch = false;
   app.matchInfo = null;
   clearInterval(app.netPoll);
@@ -2229,6 +2239,8 @@ function applyOptions(v, changed) {
   }
   if (!changed || changed === 'textSize') document.documentElement.dataset.text = v.textSize;
   if (!changed || changed === 'cues') hud.setCues(v.cues);
+  if (!changed || changed === 'shotCues' || changed === 'captions') hud.setSoundAids({ shots: v.shotCues === true, captions: v.captions === true });
+  if (!changed || changed === 'hudContrast') document.documentElement.toggleAttribute('data-hc', v.hudContrast === true);
   if (!changed || changed === 'layout' || changed === 'lefty' || changed === 'sensitivity') {
     controls.applyLayout(v.layout);
     hud.setChipScale(scaleOf(v.layout, 'chips'));
@@ -2318,7 +2330,7 @@ NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 // Just after the progress reset's wipe, its notice comes first and the training offer follows it.
 const offeredTutorial = !invite && (maybeResetNotice(menu, { then: maybeOfferTutorial }) || maybeOfferTutorial());
-if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, watchShared, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, helpVideo: () => helpVideo, openHelpVideo, openHelp, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, watchShared, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, helpVideo: () => helpVideo, openHelpVideo, openHelp, modeTips, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else {
   if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });

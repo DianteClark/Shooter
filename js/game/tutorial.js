@@ -12,6 +12,10 @@
 import { normalizeLoadout, LETHALS, TACTICALS } from '../shared/catalog.js';
 import { addScore } from '../sim/streaks.js';
 import { BotBrain } from '../sim/bots.js';
+import { buttonName, bindingOf } from '../ui/gamepad.js';
+import { anim } from '../ui/motion.js';
+
+const padName = id => buttonName(bindingOf(id));
 
 export const TUTORIAL_MAP = 'railyard';
 export const TUTORIAL_MODE = 'tdm';
@@ -47,16 +51,28 @@ export function tutorialRoster(human) {
   return [me, ...targets];
 }
 
-// Steps in order. `zone` places the hint: a stick side or a control's selector.
-const STEPS = [
-  { id: 'move', title: 'Move', text: 'Drag anywhere on the left half of the screen to walk. Push all the way to sprint.', zone: 'left' },
-  { id: 'aim', title: 'Aim', text: 'Touch and hold the right half to aim down sights. Turn toward the targets.', zone: 'right' },
-  { id: 'fire', title: 'Fire', text: 'Push past the outer ring to fire. Drop two targets.', zone: 'ring', goal: FIRE_KILLS },
-  { id: 'slide', title: 'Slide', text: 'While moving, tap Slide. A slide makes you a smaller target.', zone: '.tbtn-slide' },
-  { id: 'throw', title: 'Throw', text: 'Hold Frag, drag away from it to aim the arc, then let go.', zone: '.tbtn-lethal' },
-  { id: 'streak', title: 'Scorestreak', text: 'Kills fill your streaks. Your UAV is ready: tap its tile to reveal enemies.', zone: '.st-tile[data-slot="0"]' },
+// Steps in order. `zone` places the hint: a stick side or a control's selector (touch only). `pad` is the step's words
+// for a controller, where {action} is the button bound to that action (js/ui/gamepad.js); stepPrompt picks and fills.
+export const STEPS = [
+  { id: 'move', title: 'Move', text: 'Drag anywhere on the left half of the screen to walk. Push all the way to sprint.', pad: 'Walk with the left stick. Click {sprint} to sprint.', zone: 'left' },
+  { id: 'aim', title: 'Aim', text: 'Touch and hold the right half to aim down sights. Turn toward the targets.', pad: 'Hold {aim} to aim down sights. Turn toward the targets with the right stick.', zone: 'right' },
+  { id: 'fire', title: 'Fire', text: 'Push past the outer ring to fire. Drop two targets.', pad: 'Pull {fire} to fire. Drop two targets.', zone: 'ring', goal: FIRE_KILLS },
+  { id: 'slide', title: 'Slide', text: 'While moving, tap Slide. A slide makes you a smaller target.', pad: 'While moving, press {slide}. A slide makes you a smaller target.', zone: '.tbtn-slide' },
+  { id: 'swap', title: 'Swap', text: 'Tap Swap for your sidearm. Reloads are automatic: swap when you are out.', pad: 'Press {swap} for your sidearm. Reloads are automatic; {reload} reloads early.', zone: '.tbtn-swap' },
+  { id: 'throw', title: 'Throw', text: 'Hold Frag, drag away from it to aim the arc, then let go.', pad: 'Hold {lethal}, aim the arc with the right stick, then let go.', zone: '.tbtn-lethal' },
+  { id: 'streak', title: 'Scorestreak', text: 'Kills fill your streaks. Your UAV is ready: tap its tile to reveal enemies.', pad: 'Kills fill your streaks. Your UAV is ready: press {streak} to reveal enemies.', zone: '.st-tile[data-slot="0"]' },
   { id: 'fight', title: 'Live fire', text: 'The targets fight back now. Win the fight: three kills.', zone: null, goal: FIGHT_KILLS },
 ];
+
+// The words for a step on this device ('touch' or 'pad'); nameOf(action) gives a button's name ('' when unbound).
+export function stepPrompt(step, device = 'touch', nameOf = () => '') {
+  const raw = device === 'pad' && step.pad ? step.pad : step.text;
+  return raw.replace(/\{(\w+)\}/g, (_, id) => nameOf(id) || id[0].toUpperCase() + id.slice(1));
+}
+
+// The nudge when a throw was a quick tap, per device.
+const QUICK_TAP = { touch: 'That was a quick tap: it throws where you face. Now hold the button and drag to aim.', pad: 'That was a quick tap: it throws where you face. Now hold the button and aim with the right stick.' };
+
 
 export class Tutorial {
   constructor({ match, root, audio = null, onFinish }) {
@@ -79,6 +95,8 @@ export class Tutorial {
   }
 
   get sim() { return this.match.sim; }
+  // A controller in use (js/ui/gamepad.js sets body.pad-on): the words name its buttons and the touch hints hide.
+  get device() { return typeof document !== 'undefined' && document.body.classList.contains('pad-on') ? 'pad' : 'touch'; }
   get me() { return this.sim.byId?.get(this.match.localId) ?? null; }
 
   start() {
@@ -133,7 +151,7 @@ export class Tutorial {
     c.classList.remove('ok');
     c.querySelectorAll('.tut-dots i').forEach((d, k) => { d.className = step !== null && k < step ? 'on' : k === step ? 'now' : ''; });
     this.#count();
-    c.animate?.([{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,.84,.3,1)' });
+    anim(c, [{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,.84,.3,1)' });
     this.#placeHint();
   }
 
@@ -146,7 +164,7 @@ export class Tutorial {
   // A ghost thumb on a stick side, or a pulsing ring around the control the step is about.
   #placeHint() {
     const s = this.state === 'step' ? STEPS[this.i] : null;
-    const zone = s?.zone ?? null;
+    const zone = this.device === 'pad' ? null : s?.zone ?? null;     // A controller has no thumbs to point at.
     this.hint.hidden = !(zone === 'left' || zone === 'right' || zone === 'ring');
     this.hint.dataset.zone = zone ?? '';
     this.target.hidden = true;
@@ -164,7 +182,7 @@ export class Tutorial {
     const el = this.card.querySelector('.tut-text');
     if (el.textContent === text) return;
     el.textContent = text;
-    this.card.animate?.([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], { duration: 260 });
+    anim(this.card, [{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], { duration: 260 });
   }
 
   // ---- Steps ---------------------------------------------------------------------------------------------------
@@ -176,7 +194,7 @@ export class Tutorial {
     this.state = 'step';
     if (s.id === 'streak') this.#grantStreak();
     if (s.id === 'fight') this.#wake();
-    this.#show({ title: s.title, text: s.text, step: this.i });
+    this.#show({ title: s.title, text: stepPrompt(s, this.device, padName), step: this.i });
   }
 
   #pass() {
@@ -197,7 +215,7 @@ export class Tutorial {
     done.innerHTML = `<b>Training complete</b><small>You are ready for the yard</small>`;
     done.hidden = false;
     this.card.hidden = true;
-    done.animate?.([{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.4)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(.97)', offset: .6 }, { opacity: 1, transform: 'translate(-50%,-50%)' }], { duration: 520, easing: 'cubic-bezier(.3,1.55,.45,1)' });
+    anim(done, [{ opacity: 0, transform: 'translate(-50%,-50%) scale(1.4)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(.97)', offset: .6 }, { opacity: 1, transform: 'translate(-50%,-50%)' }], { duration: 520, easing: 'cubic-bezier(.3,1.55,.45,1)' });
     this.timer = setTimeout(() => this.#end(true), 2200);
   }
 
@@ -249,6 +267,13 @@ export class Tutorial {
     }
     if (this.state !== 'step') return;
     const id = this.match.localId, s = STEPS[this.i];
+    // A controller picked up (or put down) mid-step: the same step in its words, the hints to match.
+    const device = this.device;
+    if (device !== this.shownDevice) {
+      this.shownDevice = device;
+      this.card.querySelector('.tut-text').textContent = stepPrompt(s, device, padName);
+      this.#placeHint();
+    }
     const me = view.players?.find(p => p.id === id);
     const input = this.match.resolvedInput ?? {};
     switch (s.id) {
@@ -274,7 +299,10 @@ export class Tutorial {
         break;
       case 'slide':
         if (events.some(e => e.t === 'slide' && e.id === id)) this.#pass();
-        else if (input.slide && !me?.sliding) this.#nudge('A slide needs speed: run first, then tap Slide while still moving.');
+        else if (input.slide && !me?.sliding) this.#nudge(stepPrompt({ text: 'A slide needs speed: run first, then tap Slide while still moving.', pad: 'A slide needs speed: run first, then press {slide} while still moving.' }, this.device, padName));
+        break;
+      case 'swap':
+        if (events.some(e => e.t === 'swap' && e.id === id)) this.#pass();
         break;
       case 'throw': {
         this.#refill();
@@ -286,7 +314,7 @@ export class Tutorial {
         for (const e of events) {
           if (e.t !== 'throw' || e.id !== id) continue;
           if (t - this.armedAt <= DRAG_WINDOW) { this.#pass(); break; }
-          this.#nudge('That was a quick tap: it throws where you face. Now hold the button and drag to aim.');
+          this.#nudge(QUICK_TAP[this.device]);
         }
         break;
       }

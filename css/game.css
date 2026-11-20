@@ -511,7 +511,7 @@ body:has(.hud .board:not([hidden])) .controls .tbtn { opacity: .22; }
 .hit-ring path { fill: var(--c-gold); }
 .hit-ring circle { fill: none; stroke: var(--c-gold); stroke-width: 1.6; }
 .hit.kill .hit-flash { display: block; position: absolute; inset: -14px; border-radius: 50%; opacity: 0; background: radial-gradient(circle, rgba(255,255,255,.95) 0 22%, rgba(255,92,72,.55) 42%, rgba(255,92,72,0) 70%); }
-html[data-cb="contrast"] .hit-kx path { stroke-width: 6.5; }
+html[data-cb="contrast"] .hit-kx path, html[data-hc] .hit-kx path { stroke-width: 6.5; }
 /* Kill confirms: the points float up off the marker. Damage numbers (Options, off by default) rise off the target. */
 .xp-floats, .dmg-nums { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
 .xp-floats b { position: absolute; left: calc(50% + 14px); top: calc(50% - 30px); opacity: 0; will-change: transform, opacity; font: 400 20px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: var(--c-sodium-hi); text-shadow: var(--text-lift); white-space: nowrap; }
@@ -1373,10 +1373,16 @@ html[data-calm] #ui .ux-grp, html[data-calm] #ui .ux-hl-i { animation: none !imp
 /* Colour modes: the kill feed's enemy rows get a hatched edge, so ally and enemy differ in shape as well as colour. */
 html[data-cb] .f-row.foe:not(.mine) { box-shadow: inset 3px 0 0 transparent; background-image: repeating-linear-gradient(180deg, var(--enemy-team) 0 3px, transparent 3px 5px); background-size: 3px 100%; background-repeat: no-repeat; background-color: var(--hud-glass-lo); }
 /* High contrast: solid HUD plates, heavier hit marks and damage arcs, the low health bar outlined. */
-html[data-cb="contrast"] .hud, html[data-cb="contrast"] .controls { --hud-glass: rgba(10,12,16,.94); --hud-glass-lo: rgba(10,12,16,.88); --hud-edge: inset 0 0 0 1.5px rgba(255,255,255,.55); }
-html[data-cb="contrast"] .hit-x path { stroke-width: 5; }
-html[data-cb="contrast"] .dmg-arc { stroke: #fff; stroke-width: 3; }
-html[data-cb="contrast"] .tbtn { box-shadow: inset 0 0 0 2.5px rgba(255,255,255,.85), 0 2px 6px rgba(0,0,0,.4); }
+html[data-cb="contrast"] .hud, html[data-cb="contrast"] .controls, html[data-hc] .hud, html[data-hc] .controls { --hud-glass: rgba(10,12,16,.94); --hud-glass-lo: rgba(10,12,16,.88); --hud-edge: inset 0 0 0 1.5px rgba(255,255,255,.55); }
+html[data-cb="contrast"] .hit-x path, html[data-hc] .hit-x path { stroke-width: 5; }
+html[data-cb="contrast"] .dmg-arc, html[data-hc] .dmg-arc { stroke: #fff; stroke-width: 3; }
+html[data-cb="contrast"] .tbtn, html[data-hc] .tbtn { box-shadow: inset 0 0 0 2.5px rgba(255,255,255,.85), 0 2px 6px rgba(0,0,0,.4); }
+/* High-contrast HUD (its own switch, with any colour mode): text over the world gets a solid dark lift, the feed and
+   prompts solid plates, the sound marks and captions full strength. */
+html[data-hc] .hud { --text-lift: 0 0 2px #000, 0 1px 2px #000, 0 0 4px #000; }
+html[data-hc] .hud .f-row, html[data-hc] .cue-cap { background-color: rgba(6,8,10,.96) !important; }
+html[data-hc] .cue-step path { stroke: #fff; stroke-width: 6; }
+html[data-hc] .cue-shot path { stroke-width: 8; }
 /* Battle royale rarity: pips for the tier (1 common .. 5 legendary) on the Take prompt, in every colour mode. */
 html[data-cb] .br-take[data-r]::after { content: attr(data-pips); position: absolute; right: 6px; top: 2px; font: 8px/1 var(--f-plate); letter-spacing: 1px; color: var(--rar, #fff); text-shadow: var(--text-lift); }
 

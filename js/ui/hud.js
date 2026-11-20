@@ -22,7 +22,7 @@ import { badgeMarkOf, badgeLevel, badgeKey, nameHtml, weaponLevelHtml } from './
 import { LOADOUT_COUNT } from '../shared/progression.js';
 import { safeInsets } from './viewport.js';
 import { Options } from './options.js';
-import { reducedMotion } from './motion.js';
+import { reducedMotion, anim } from './motion.js';
 import { feelMotion, feelFlash } from '../render/feel.js';   // Reduce shake and flashes: punches and flashes scale down.
 import { isPlaced, scaleOf } from './layout.js';
 import { icon, resolveIcon } from './icons.js';
@@ -496,6 +496,7 @@ export class HUD {
 
   // Options > Accessibility > Sound cues: 'off', 'nades' or 'all' (js/ui/cues-hud.js).
   setCues(level) { this.cues.setLevel(level); }
+  setSoundAids({ shots, captions }) { this.cues.setShots(shots); this.cues.setCaptions(captions); }
 
   // Options: HUD size (Small, Normal, Large) scales the panels; the layout pass keeps them clear of the thumbs.
   setHudSize(size) {
@@ -852,7 +853,7 @@ export class HUD {
       : '<small class="gr-final">Final gun: one kill wins</small>';
     const pips = this.gunEl.querySelector('.gr-pips');
     pips.innerHTML = GUN_LADDER.map((_, i) => `<i style="flex:1;height:3px;background:${i < level ? 'var(--c-sodium)' : i === level ? '#fff' : 'rgba(231,234,228,.18)'}"></i>`).join('');
-    if (!first) this.gunEl.animate(up ? SCORE_POP_IN : HP_KNOCK, { duration: up ? 520 : 300, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    if (!first) anim(this.gunEl, up ? SCORE_POP_IN : HP_KNOCK, { duration: up ? 520 : 300, easing: 'cubic-bezier(.2,.9,.3,1)' });
   }
 
   // A Gun Game rung change for the local player: the gun is already in hand; this says why.
@@ -923,7 +924,7 @@ export class HUD {
     if (left === this.introShown) return;
     this.introShown = left;
     this.introCount.textContent = left;
-    this.introCount.animate(COUNT_POP, { duration: 380, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    anim(this.introCount, COUNT_POP, { duration: 380, easing: 'cubic-bezier(.2,.9,.3,1)' });
   }
 
   #hideIntro(go = false) {
@@ -931,7 +932,7 @@ export class HUD {
     this.introOn = false;
     this.introEl.classList.remove('show');
     this.controls?.el.classList.remove('intro-on');
-    if (go) this.goEl.animate(GO_FLASH, { duration: INTRO_GO_MS, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    if (go) anim(this.goEl, GO_FLASH, { duration: INTRO_GO_MS, easing: 'cubic-bezier(.2,.9,.3,1)' });
   }
 
   // The match renderer's camera. Markers need a world-to-screen transform and nothing else from it.
@@ -1061,7 +1062,7 @@ export class HUD {
     this.proToast.querySelector('b').textContent = p.name;
     this.proToast.querySelector('small').textContent = PRO_LINE[perk] ?? '';
     this.proToast.getAnimations().forEach(a => a.cancel());
-    this.proToast.animate([
+    anim(this.proToast, [
       { opacity: 0, transform: 'translate(-50%, 6px) scale(.92)' }, { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: 0.12 },
       { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: 0.8 }, { opacity: 0, transform: 'translate(-50%, -4px) scale(1)' },
     ], { duration: 1700, easing: 'ease-out' });
@@ -1591,7 +1592,7 @@ export class HUD {
     clearTimeout(this.pickTimer);
     this.pickTimer = setTimeout(() => {
       this.#openPicker(false);
-      this.nextEl.animate([{ filter: 'brightness(1.8)' }, { filter: 'none' }], { duration: 380, easing: 'ease-out' });
+      anim(this.nextEl, [{ filter: 'brightness(1.8)' }, { filter: 'none' }], { duration: 380, easing: 'ease-out' });
     }, 220);
   }
 
@@ -1653,14 +1654,14 @@ export class HUD {
       this.#paintTeams(myTeam);
     }
     if (c.myScore !== view.scores[myTeam]) {
-      if (c.myScore < view.scores[myTeam]) this.sbMine.score.animate(SCORE_POP, { duration: 280 });
+      if (c.myScore < view.scores[myTeam]) anim(this.sbMine.score, SCORE_POP, { duration: 280 });
       c.myScore = view.scores[myTeam];
       this.sbMine.score.textContent = c.myScore;
       this.sbMine.fill.style.transform = `scaleX(${Math.min(1, c.myScore / this.scoreLimit)})`;
     }
     if (this.snd || this.ctf) this.#sndPips(myTeam, view, c);
     if (c.otherScore !== view.scores[other]) {
-      if (c.otherScore < view.scores[other]) this.sbTheirs.score.animate(SCORE_POP, { duration: 280 });
+      if (c.otherScore < view.scores[other]) anim(this.sbTheirs.score, SCORE_POP, { duration: 280 });
       c.otherScore = view.scores[other];
       this.sbTheirs.score.textContent = c.otherScore;
       this.sbTheirs.fill.style.transform = `scaleX(${Math.min(1, c.otherScore / this.scoreLimit)})`;
@@ -1687,7 +1688,7 @@ export class HUD {
       c.time = shown;
       this.timeEl.textContent = `${pad2(Math.floor(shown / 60))}:${pad2(shown % 60)}`;
       this.timeEl.classList.toggle('urgent', (view.phase === 'live' && shown <= 30 && snd?.state !== 'post') || planted);
-      if ((view.phase === 'live' && shown <= 10 && shown > 0 && snd?.state !== 'post') || planted) this.timeEl.animate(COUNT_POP, { duration: 300, easing: 'ease-out' });
+      if ((view.phase === 'live' && shown <= 10 && shown > 0 && snd?.state !== 'post') || planted) anim(this.timeEl, COUNT_POP, { duration: 300, easing: 'ease-out' });
     }
 
     if (view.phase !== previousPhase) {
@@ -1724,7 +1725,7 @@ export class HUD {
     this.modeHud.update(view, me);
     this.specCard.update(view, me);
     this.finHud.update(view, me);
-    this.cues.update(view, me);
+    this.cues.update(view, me, dt);
     this.streakTags.update(view, me, dt);
     this.#decayEffects(dt);
     this.#tickFeed(dt);
@@ -1828,7 +1829,7 @@ export class HUD {
         big.bigTitle.textContent = title;
         big.bigSub.textContent = sub;
         big.big.dataset.side = side;
-        big.big.animate([{ opacity: 0, transform: 'scale(1.18)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.9,.3,1)' });
+        anim(big.big, [{ opacity: 0, transform: 'scale(1.18)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.9,.3,1)' });
       }
       c.sndCount = NaN;
     }
@@ -1836,7 +1837,7 @@ export class HUD {
     if (count !== c.sndCount) {
       c.sndCount = count;
       big.bigCount.textContent = count ? String(count) : '';
-      if (count) big.bigCount.animate(COUNT_POP, { duration: 320, easing: 'ease-out' });
+      if (count) anim(big.bigCount, COUNT_POP, { duration: 320, easing: 'ease-out' });
     }
   }
 
@@ -2305,7 +2306,7 @@ export class HUD {
       if (hp < was && me.alive) {
         this.hpLossAnim = this.hpLoss.animate([{ transform: `scaleX(${was / MAX_HP})` }, { transform: `scaleX(${hp / MAX_HP})` }],
           { duration: 420, delay: 260, easing: 'ease-in', fill: 'both' });
-        this.vitals.animate(HP_KNOCK, { duration: 220, easing: 'ease-out' });
+        anim(this.vitals, HP_KNOCK, { duration: 220, easing: 'ease-out' });
       } else {
         this.hpLoss.style.transform = `scaleX(${hp / MAX_HP})`;
       }
@@ -2351,7 +2352,7 @@ export class HUD {
       this.#otherGun(me.weapon, c);
       // Rounds as notches when they can be counted at a glance; a belt-fed gun gets a plain gauge.
       this.arms.style.setProperty('--mag', c.magazine <= 40 ? c.magazine : 1);
-      if (c.weaponSeen) this.arms.animate(ARMS_SWAP, { duration: 260, easing: 'cubic-bezier(.2,.9,.3,1)' });
+      if (c.weaponSeen) anim(this.arms, ARMS_SWAP, { duration: 260, easing: 'cubic-bezier(.2,.9,.3,1)' });
       c.weaponSeen = true;
       c.ammo = NaN; c.reserve = NaN;
     }
@@ -2481,7 +2482,7 @@ export class HUD {
     el.querySelector('.sh-icon').innerHTML = glyph(kind, 34);
     el.querySelector('b').textContent = `${name} ready`;
     el.querySelector('small').textContent = STREAKS[kind]?.desc ?? 'Tap its tile to call it in';
-    el.animate(STREAK_HIT, { duration: 1300, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    anim(el, STREAK_HIT, { duration: 1300, easing: 'cubic-bezier(.2,.9,.3,1)' });
     this.streakEdge.animate([{ opacity: 0.85 }, { opacity: 0 }], { duration: 650, easing: 'ease-out' });
   }
 
@@ -2511,7 +2512,7 @@ export class HUD {
     if (left !== c.respawn) {
       c.respawn = left;
       this.deathCount.textContent = left;
-      this.deathCount.animate(COUNT_POP, { duration: 320, easing: 'ease-out' });
+      anim(this.deathCount, COUNT_POP, { duration: 320, easing: 'ease-out' });
     }
     // The ring empties toward the respawn, in 1/40 steps so it repaints a few dozen times rather than every frame.
     const ring = Math.round(Math.max(0, Math.min(1, wait / this.respawnTotal)) * 40) / 40;
@@ -2603,7 +2604,7 @@ export class HUD {
       // Waiting: a steel plate (still tappable: the tap is kept until the wait is over). Ready: the sodium plate.
       b.classList.toggle('is-primary', state !== 'wait');
       b.setAttribute('aria-pressed', r.asked ? 'true' : 'false');
-      if (state === 'ready') b.animate([{ filter: 'brightness(1.9)' }, { filter: 'none' }], { duration: 420, easing: 'ease-out' });
+      if (state === 'ready') anim(b, [{ filter: 'brightness(1.9)' }, { filter: 'none' }], { duration: 420, easing: 'ease-out' });
     }
   }
 
@@ -2661,6 +2662,7 @@ export class HUD {
 
   // --- Events ---
   onEvents(events) {
+    if (this.cues.shotsOn || this.cues.capsOn) this.cues.onEvents(events, this.view, this.view?.players.find(p => p.id === this.view.localId));
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       if (this.br) this.brHud.onEvent(e, this.view);
@@ -2697,7 +2699,7 @@ export class HUD {
         case 'pickup': if (e.id === this.view?.localId) this.notify('Shiv recovered'); break;
         case 'flashed': if (e.id === this.view?.localId) this.#onFlashed(e.amount ?? 1); break;
         case 'dazed': if (e.id === this.view?.localId) this.#onDazed(e); break;
-        case 'heal': if (e.id === this.view?.localId) this.healEl.animate(HEAL_PULSE, { duration: 520 }); break;
+        case 'heal': if (e.id === this.view?.localId) anim(this.healEl, HEAL_PULSE, { duration: 520 }); break;
         case 'capture': this.#onCapture(e); break;
         case 'hard_move': this.#onHardMove(e); break;
         case 'pro': if (e.id === this.view?.localId) this.#onPro(e.perk); break;
@@ -2806,13 +2808,13 @@ export class HUD {
     el.querySelector('b').textContent = title;
     el.querySelector('small').textContent = sub;
     el.dataset.side = side;
-    el.animate(BANNER_POP, { duration, easing: 'ease-out' });
+    anim(el, BANNER_POP, { duration, easing: 'ease-out' });
   }
 
   #callout(text) {
     const el = this.calloutEl;
     if (el.textContent !== text) el.textContent = text;
-    el.animate(CALLOUT_POP, { duration: 900, easing: 'cubic-bezier(.2,.9,.3,1)' });
+    anim(el, CALLOUT_POP, { duration: 900, easing: 'cubic-bezier(.2,.9,.3,1)' });
   }
 
   // amount 0..1 sets how long the player stays blind; the screen always starts fully white.

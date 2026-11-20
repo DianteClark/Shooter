@@ -285,7 +285,12 @@ export class GamepadInput {
     if (pr('slide')) this.latch.slide = true;
     if (pr('swap')) this.latch.swap = true;
     if (pr('reload')) this.latch.reload = true;
-    if (pr('sprint')) this.sprint = !this.sprint;
+    // Sprint toggles on a click by default; held (Options > Accessibility, padSprint 'hold') only while the button is down.
+    if (Options.get('padSprint') === 'hold') this.sprint = this.down(this.#act('sprint'));
+    else if (pr('sprint')) this.sprint = !this.sprint;
+    // Aim held by default; toggled (padAim 'toggle'): a press aims in, the next aims out.
+    if (Options.get('padAim') === 'toggle' && pr('aim')) this.adsOn = !this.adsOn;
+    else if (pr('sprint') && this.sprint) this.adsOn = false;      // Sprinting out of a toggled aim.
     for (const slot of ['tactical', 'lethal']) this.#throwButton(slot);
     const tiles = this.controls?.tiles ?? [];
     if (pr('streak')) {
@@ -363,6 +368,7 @@ export class GamepadInput {
   #endPlay() {
     this.throwHeld = null;
     this.sprint = false;
+    this.adsOn = false;
     this.aim = null;
     this.rightLive = false;
   }
@@ -389,7 +395,7 @@ export class GamepadInput {
     }
     const moving = Math.hypot(mx, mz);
     const fire = this.down(this.#act('fire'));
-    const ads = this.down(this.#act('aim'));
+    const ads = Options.get('padAim') === 'toggle' ? !!this.adsOn : this.down(this.#act('aim'));
     if (moving < 0.3 || fire || ads) this.sprint = false;
     inp.mx = mx; inp.mz = mz;
     inp.sprint = this.sprint && moving > 0.5;

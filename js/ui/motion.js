@@ -236,3 +236,26 @@ export function celebrate(host, { count = 24, origin = [0.5, 0.42], spread = 1 }
   celebrated.bursts++; celebrated.shards += n;
   return Promise.all(runs).then(() => box.remove());
 }
+
+// One-off element animations outside these helpers (HUD pops, the tutorial card): anim(el, frames, opts) plays them
+// as given, or, under reduced motion (the system setting or Reduce shake and flashes), without their movement and
+// flashes: transforms and filters come out, a fade stays, and frames left with nothing to animate do not play.
+// docs/ACCESSIBILITY.md (reduced motion audit). calmFrames is the pure part.
+const MOVING = new Set(['transform', 'filter', 'scale', 'translate', 'rotate']);
+const KEEP = new Set(['offset', 'easing', 'composite']);
+const calmCache = new WeakMap();
+export function calmFrames(frames) {
+  if (!Array.isArray(frames)) return null;
+  if (calmCache.has(frames)) return calmCache.get(frames);
+  const out = frames.map(f => Object.fromEntries(Object.entries(f).filter(([k]) => !MOVING.has(k))));
+  const live = out.some(f => Object.keys(f).some(k => !KEEP.has(k)));
+  const res = live ? out : null;
+  calmCache.set(frames, res);
+  return res;
+}
+export function anim(el, frames, opts) {
+  if (!el?.animate) return null;
+  if (!reducedMotion()) return el.animate(frames, opts);
+  const calm = calmFrames(frames);
+  return calm ? el.animate(calm, opts) : null;
+}

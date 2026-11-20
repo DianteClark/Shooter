@@ -11,7 +11,7 @@ import { kindLabel, masterStampHtml, rewardMark } from './prestige.js';
 import { unlockSheet } from './unlocksheet.js';
 import { tourneyStamp } from './tourney.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
 import { icon, resolveIcon } from './icons.js';
-import { rollNumber, sweep, reducedMotion, celebrate } from './motion.js';
+import { rollNumber, sweep, reducedMotion, celebrate, anim } from './motion.js';
 import { playerBanner, proProgressHtml, cardHtml, cardProgressHtml, cardsInReach } from './cards.js';
 import { challengeStrip } from './challenges.js';
 import { modeColumn } from './mode-hud.js';
@@ -110,7 +110,7 @@ class Reel {
       level++;
       frac = 0;
       label.textContent = `${to.prefix ?? 'Lv'} ${level}`;
-      label.animate([{ transform: 'scale(1.5)', color: '#fff' }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.3,1.55,.45,1)' });
+      anim(label, [{ transform: 'scale(1.5)', color: '#fff' }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.3,1.55,.45,1)' });
       onLevel?.(level);
       await this.sleep(70);
     }
