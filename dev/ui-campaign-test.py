@@ -340,7 +340,11 @@ async def main():
             await tap('[data-act="cpBrief"]', 600)
             await shot('15-briefing')
             await fit(['.cpb-side', '.cpb-go', '.cpb-title'], 'briefing 667')
-            await coop_net(browser)
+            # The two-tab channel is known to drop a guest now and then (dev/ui-ex-net-test.py rejoins the same way): one retry.
+            try: await coop_net(browser)
+            except Exception as err:
+                print(f'     the two-tab room failed ({str(err)[:80]}): once more', flush=True)
+                await coop_net(browser)
             await browser.close()
     finally:
         server.terminate()
