@@ -7,6 +7,7 @@ import { PART } from './camo-shader.js';
 import { kitKey, normalizeKit, NO_ATTACHMENTS, ATTACHMENTS, SLOTS } from '../shared/attachments.js';
 import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
 import { w3Factories } from './guns-w3.js';
+import { w4Factories } from './guns-w4.js';
 import { fitOpticW2, fitBarrelW2, fitWrapW2, W2_WRAPS, W2_MAG_LOOK, fitVentRib, fitShellCuff, fitGuideRail, fitVenturi } from './guns-w2.js';
 
 const C = {
@@ -1283,6 +1284,8 @@ Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fi
   fitShellCuff, fitGuideRail, fitVenturi }));
 // Weapons wave 3's models (guns-w3.js), the same way.
 Object.assign(FACTORIES, w3Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, fitShellCuff, fitVentRib }));
+// Weapons wave 4's six melee weapons (guns-w4.js).
+Object.assign(FACTORIES, w4Factories({ kit }));
 
 // Graveyard Shift's wonder weapons (js/shared/zombies.js ZM_WONDERS): our own models, drawn in place of the gun they
 // ride on in that mode only (characters.js, zm-fx.js). Both low-poly, both read from above by their silhouettes.

@@ -15,6 +15,7 @@ import { ATTACHMENTS, MOD_INFO, IDENTITY_MODS, SLOTS, LADDER_BASE, availableFor,
 import { V11_ATTACHMENTS } from '../js/shared/attachments-v11.js';
 import { W2_ATTACHMENTS, W2_EXTEND } from '../js/shared/attachments-w2.js';
 import { W3_ATTACHMENTS } from '../js/shared/attachments-w3.js';
+import { W4_ATTACHMENTS } from '../js/shared/attachments-w4.js';
 import { blankSave, encodeSave, decodeSave, cleanLoadout, WEAPON_LADDER } from '../js/shared/progression.js';
 import { botAttachments } from '../js/sim/bots.js';
 import { MAPS } from '../js/shared/map.js';
@@ -32,8 +33,9 @@ function test(name, fn) {
   catch (err) { console.error(`FAIL ${name}\n${err.stack}`); process.exit(1); }
 }
 
-const V11 = Object.values(V11_ATTACHMENTS), W3A = Object.values(W3_ATTACHMENTS);
-const NEW = [...V11, ...W3A];   // Every signature and kit: V11's, then weapons wave 3's (attachments-w3.js).
+const V11 = Object.values(V11_ATTACHMENTS), W3A = Object.values(W3_ATTACHMENTS), W4A = Object.values(W4_ATTACHMENTS);
+// Every signature and kit: V11's, then weapons wave 3's (attachments-w3.js), then wave 4's melee ones (attachments-w4.js).
+const NEW = [...V11, ...W3A, ...W4A];
 const SIGS = NEW.filter(a => a.kind === 'sig'), KITS = NEW.filter(a => a.kind === 'kit');
 const DT = 1 / 60;
 const MAP = MAPS.railyard;
@@ -74,7 +76,7 @@ test('60-80 signature attachments and 8-12 kits, one gun each, appended after ev
   assert.deepEqual(ids.slice(first, first + V11.length), V11.map(a => a.id), 'V11 ids follow the older table, in order');
   const w2 = Object.keys(W2_ATTACHMENTS);
   assert.deepEqual(ids.slice(first + V11.length, first + V11.length + w2.length), w2, 'wave 2 comes after V11');
-  assert.deepEqual(ids.slice(first + V11.length + w2.length), W3A.map(a => a.id), 'then weapons wave 3\'s signatures, and nothing else');
+  assert.deepEqual(ids.slice(first + V11.length + w2.length), [...W3A, ...W4A].map(a => a.id), 'then weapons wave 3\'s signatures, wave 4\'s, and nothing else');
   assert.ok(ids.slice(0, first).every(id => !ATTACHMENTS[id].kind));
   for (const a of NEW) {
     assert.ok(a.name && a.desc && a.for && SLOTS.includes(a.slot), a.id);
@@ -323,7 +325,7 @@ const W2_PAIRS = [...W2.flatMap(a => GUNS.filter(w => isAvailable(w, a.id)).map(
 test('wave 2: sixteen general parts, appended after V11, plain trade-offs on MOD_INFO keys', () => {
   assert.equal(W2.length, 16);
   const ids = Object.keys(ATTACHMENTS);
-  assert.deepEqual(ids.slice(-W2.length - W3A.length, ids.length - W3A.length), W2.map(a => a.id), 'wave 2 is the tail of the table (before weapons wave 3\'s signatures)');
+  assert.deepEqual(ids.slice(-W2.length - W3A.length - W4A.length, ids.length - W3A.length - W4A.length), W2.map(a => a.id), 'wave 2 is the tail of the table (before weapons waves 3 and 4\'s signatures)');
   for (const a of W2) {
     assert.ok(a.name && a.desc && a.for && SLOTS.includes(a.slot) && !a.kind && !a.set && !a.look, a.id);
     assert.ok(Number.isInteger(a.unlock) && a.unlock >= 2 && a.unlock <= 30, `${a.id} unlock ${a.unlock}`);
@@ -400,7 +402,7 @@ test('wave 2: every new part survives the wire and save codes; older builds read
     assert.ok(Number.isSafeInteger(n));
     assert.deepEqual(unpackKit(w, n), normalizeKit(w, kit), `${a.id} on ${w}`);
     // An older build (V11: its slot list stops before wave 2) finds no part at that index.
-    const i = SLOTS.indexOf(a.slot), v11Len = Object.values(ATTACHMENTS).filter(x => x.slot === a.slot && !W2_IDS.has(x.id) && !W3_ATTACHMENTS[x.id]).length;
+    const i = SLOTS.indexOf(a.slot), v11Len = Object.values(ATTACHMENTS).filter(x => x.slot === a.slot && !W2_IDS.has(x.id) && !W3_ATTACHMENTS[x.id] && !W4_ATTACHMENTS[x.id]).length;
     const nib = (n % 65536 >>> (i * 4)) & 15, ext = Math.floor(n / 65536 / 2 ** (i * 7)) % 128;
     if (W2_IDS.has(a.id)) assert.ok((ext || nib) > v11Len, `${a.id}: index ${ext || nib} is past an older build's ${v11Len}`);
   }

@@ -21,7 +21,10 @@ import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
 import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
+import { swingDurOf, swingKindOf, swingPose, swingSideNext } from './melee-anim.js';   // Melee swings.
 import { EMOTES, getFinisher } from '../shared/finishers.js';
+
+const SWING = { x: 0, y: 0, yaw: 0, pitch: 0, roll: 0 };     // Scratch for melee-anim.js swingPose.
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -1066,10 +1069,10 @@ export class Characters {
     const def = weapon ? WEAPONS[weapon] : null;
     if (def && def.melee) {
       // Melee swings instead of kicking: a timed arc the gun pose follows (see SWINGS), alternating sides for a blade.
-      r.swingSide = def.swing === 'overhead' || def.swing === 'level' ? 1 : -(r.swingSide || 1);
-      r.swingKind = def.swing === 'overhead' || def.swing === 'level' ? def.swing : 'slash';
+      r.swingSide = swingSideNext(def, r.swingSide);     // melee-anim.js: the kinds of swing and their timings.
+      r.swingKind = swingKindOf(def);
       r.swingT = 0;
-      r.swingDur = def.swing === 'overhead' ? 0.62 : def.swing === 'level' ? 0.44 : 0.26;
+      r.swingDur = swingDurOf(def);
       r.sv[ROCK] += 1 + strength;
       return;
     }
@@ -1349,33 +1352,8 @@ export class Characters {
       if (r.swingT !== undefined && r.swingT < 1) {
         // u 0..1 through the swing: a wind-up, a fast strike through the target, a slow recovery.
         const u = r.swingT, side = r.swingSide || 1;
-        const wind = u < 0.32 ? smooth01(u / 0.32) : 1;
-        const hit = u < 0.32 ? 0 : u < 0.5 ? smooth01((u - 0.32) / 0.18) : 1;
-        const back = u < 0.5 ? 0 : smooth01((u - 0.5) / 0.5);
-        if (r.swingKind === 'overhead') {
-          // Up over the shoulder, then down in front: the head of the sledge travels an arc over the operator's head.
-          const lift = wind * (1 - hit), drive = hit * (1 - back);
-          gunPitch += lift * 1.9 - drive * 0.9;
-          gunY += lift * 0.42 - drive * 0.1;
-          gunX += -lift * 0.22 + drive * 0.2;
-          gunYaw += lift * 0.5 - drive * 0.15;
-          gunRoll += lift * 0.25;
-        } else if (r.swingKind === 'level') {
-          // A two-handed bat swing: cocked up behind the right shoulder, then flat round through the front at waist
-          // height and on past the left side, the wrists rolling over in the follow-through.
-          const cock = wind * (1 - hit), through = hit * (1 - back);
-          gunYaw += cock * 1.7 - hit * 1.5 * (1 - back * 0.85);
-          gunPitch += cock * 1.1 - through * 0.15;
-          gunY += cock * 0.3 - through * 0.12;
-          gunX += -cock * 0.16 + through * 0.18;
-          gunRoll += cock * 0.4 - through * 0.9;
-        } else {
-          // Across the body, wide to one side and through to the other.
-          const sweep = wind * (1 - hit) - hit * (1 - back);
-          gunYaw += sweep * 1.25 * side;
-          gunX += hit * (1 - back) * 0.14;
-          gunRoll += sweep * 0.5 * side;
-        }
+        swingPose(r.swingKind, u, side, SWING);
+        gunX += SWING.x; gunY += SWING.y; gunYaw += SWING.yaw; gunPitch += SWING.pitch; gunRoll += SWING.roll;
       }
       gunX -= throwActive * 0.08 + r.throwHold * 0.12;
       gunY -= throwActive * 0.2 + r.throwHold * 0.24;

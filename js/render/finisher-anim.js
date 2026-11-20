@@ -144,6 +144,92 @@ const TARGET = {
   },
 };
 
+// Weapons wave 4: each melee weapon's own finisher (js/shared/finishers.js `weapon`). The weapon stays in hand (no
+// `hide`); the gun offsets carry the blade or the club through each blow.
+const swingAt = (u, t, w = 0.07) => strike(u, t, w);
+Object.assign(ATTACKER, {
+  // Katana: low at the hip as if sheathed, a step through, one drawn cut right to left, then a flick and the blade back.
+  iai(u, o) {
+    const sheath = hold(u, 0.03, 0.2, 0.42, 0.48), cut = seg(u, 0.44, 0.54), flick = strike(u, 0.72, 0.06), home = seg(u, 0.82, 0.98);
+    o.gy = -sheath * 0.28 + cut * 0.06 * (1 - home); o.gx = -sheath * 0.18 + cut * 0.3 * (1 - home);
+    o.gyaw = sheath * 1.1 - cut * 2.3 * (1 - home) + home * 0; o.groll = sheath * 0.6 - cut * 0.4 * (1 - home) + flick * 0.8;
+    o.gpitch = -sheath * 0.2;
+    o.twist = sheath * 0.35 - cut * 0.6 * (1 - home); o.lean = -sheath * 0.08 + cut * 0.3 * (1 - home);
+    o.push = cut * 0.45 * (1 - home) + sheath * 0.05; o.kneel = sheath * 0.25 + cut * 0.15 * (1 - home);
+    o.head = -sheath * 0.15;
+  },
+  // Fire axe: a low chop to the legs, then the axe all the way up and down.
+  felling(u, o) {
+    const low = hold(u, 0.05, 0.3, 0.36, 0.44), raise = hold(u, 0.42, 0.62, 0.66, 0.72), slam = hold(u, 0.66, 0.72, 0.84, 0.98);
+    const c1 = swingAt(u, 0.38);
+    o.gpitch = -low * 0.5 + c1 * -0.7 + raise * 2.0 - slam * 1.1; o.gy = -low * 0.3 + raise * 0.6 - slam * 0.35;
+    o.gyaw = low * 0.8 - c1 * 1.2; o.gx = -raise * 0.25 + slam * 0.3 + c1 * 0.2;
+    o.kneel = low * 0.35 + slam * 0.5; o.lean = low * 0.25 - raise * 0.2 + slam * 0.55; o.twist = low * 0.4 - c1 * 0.5;
+    o.push = slam * 0.15; o.head = -raise * 0.3;
+  },
+  // Shovel: a flat swing to the head, then the blade driven straight down like breaking ground.
+  graveside(u, o) {
+    const cock = hold(u, 0.04, 0.26, 0.3, 0.38), raise = hold(u, 0.4, 0.58, 0.62, 0.68), drive = hold(u, 0.62, 0.68, 0.84, 0.98);
+    const c1 = swingAt(u, 0.34, 0.06);
+    o.gyaw = cock * 1.6 - c1 * 1.4 - seg(u, 0.34, 0.4) * 0.6 * (1 - raise); o.groll = cock * 0.4 - c1 * 0.8;
+    o.gpitch = cock * 0.9 + raise * 1.6 - drive * 1.4; o.gy = cock * 0.25 + raise * 0.55 - drive * 0.5; o.gx = drive * 0.35 - raise * 0.1;
+    o.twist = cock * 0.5 - c1 * 0.6; o.lean = drive * 0.7 - raise * 0.15; o.kneel = drive * 0.45; o.push = drive * 0.12;
+  },
+  // Kama: hook the ankle from low, pull, and three quick cuts on the way down.
+  harvest(u, o) {
+    const hook = hold(u, 0.04, 0.2, 0.28, 0.34), cuts = hold(u, 0.34, 0.4, 0.66, 0.8);
+    const s = Math.sin((u - 0.3) * Math.PI * 2 / 0.16) * cuts;
+    o.gy = -hook * 0.55 + cuts * 0.1; o.gpitch = -hook * 0.7 + cuts * 0.4; o.gx = hook * 0.25;
+    o.gyaw = hook * 0.6 + s * 0.9; o.groll = s * 0.6;
+    o.kneel = hook * 0.6 + cuts * 0.4; o.lean = hook * 0.4 + cuts * 0.35; o.push = -hook * 0.08 + cuts * 0.1;
+  },
+  // Machete: two wide cuts, forehand then back, clearing brush.
+  clearing(u, o) {
+    const c1 = hold(u, 0.04, 0.28, 0.32, 0.38), c2 = hold(u, 0.4, 0.54, 0.56, 0.62), rest = seg(u, 0.62, 0.95);
+    o.gyaw = c1 * 1.4 * (1 - seg(u, 0.32, 0.4)) - seg(u, 0.32, 0.4) * 1.3 * (1 - seg(u, 0.42, 0.56)) + seg(u, 0.56, 0.62) * 1.2 * (1 - rest);
+    o.groll = c1 * 0.6 - c2 * 0.6; o.gy = (c1 + c2) * 0.15; o.gx = (swingAt(u, 0.36) + swingAt(u, 0.6)) * 0.25;
+    o.twist = c1 * 0.5 - seg(u, 0.32, 0.4) * 0.5 * (1 - rest) + c2 * 0.3; o.lean = (swingAt(u, 0.36) + swingAt(u, 0.6)) * 0.3; o.push = seg(u, 0.3, 0.6) * 0.15;
+  },
+  // Tonfa: spin the batons up, four blows in a rhythm, the last one straight down.
+  beatdown(u, o) {
+    const spin = hold(u, 0.0, 0.08, 0.16, 0.2), b = [0.24, 0.4, 0.56].reduce((m, t) => Math.max(m, swingAt(u, t, 0.06)), 0), last = hold(u, 0.62, 0.7, 0.76, 0.9);
+    o.groll = spin * Math.sin(u * 60) * 1.4 + hold(u, 0.18, 0.22, 0.6, 0.66) * 0.3;   // Batons twirled, then held for the blows. o.gpitch = -b * 0.6 + last * 1.4 - swingAt(u, 0.74, 0.05) * 2.2;
+    o.gx = b * 0.35; o.gy = last * 0.4 - swingAt(u, 0.74, 0.05) * 0.5; o.gyaw = Math.sin(u * 40) * 0.4 * hold(u, 0.2, 0.24, 0.56, 0.6);
+    o.lean = b * 0.25 + swingAt(u, 0.74, 0.06) * 0.6; o.kneel = swingAt(u, 0.74, 0.08) * 0.5; o.push = b * 0.1;
+  },
+});
+Object.assign(TARGET, {
+  iai(u, o) {
+    const freeze = seg(u, 0.48, 0.52), fall = seg(u, 0.66, 0.92);
+    o.lean = freeze * 0.1 + fall * 0.3; o.kneel = seg(u, 0.6, 0.72) * 0.6 * (1 - seg(u, 0.8, 0.92));
+    o.lie = fall; o.head = freeze * 0.3; o.hide = freeze;
+  },
+  felling(u, o) {
+    const leg = seg(u, 0.36, 0.44), slam = seg(u, 0.7, 0.78);
+    o.kneel = leg * 0.85 * (1 - slam); o.lean = leg * 0.25 + slam * 0.6; o.lie = seg(u, 0.72, 0.9); o.head = slam * 0.7; o.hide = leg;
+  },
+  graveside(u, o) {
+    const hit = seg(u, 0.32, 0.4), drive = seg(u, 0.66, 0.74);
+    o.twist = hit * 0.9; o.side = hit * 0.3; o.lean = hit * 0.3 + drive * 0.4; o.kneel = hit * 0.6 * (1 - drive);
+    o.lie = seg(u, 0.64, 0.82); o.lieUp = 0; o.head = hit * 0.6; o.hide = hit;
+  },
+  harvest(u, o) {
+    const sweep = seg(u, 0.26, 0.38);
+    o.lean = -sweep * 0.9; o.push = -sweep * 0.2; o.lie = seg(u, 0.32, 0.5); o.lieUp = 1;
+    o.head = [0.46, 0.62].reduce((m, t) => Math.max(m, strike(u, t, 0.05)), 0) * 0.5; o.hide = sweep;
+  },
+  clearing(u, o) {
+    const c1 = seg(u, 0.34, 0.42), c2 = seg(u, 0.58, 0.66);
+    o.twist = c1 * 0.6 - c2 * 0.9; o.lean = c1 * 0.2 + c2 * 0.4; o.kneel = c1 * 0.5 * (1 - seg(u, 0.7, 0.85));
+    o.lie = seg(u, 0.66, 0.9); o.head = c1 * 0.4 - c2 * 0.3; o.hide = c1;
+  },
+  beatdown(u, o) {
+    const j = [0.24, 0.4, 0.56].reduce((m, t) => Math.max(m, strike(u, t, 0.05)), 0), last = seg(u, 0.72, 0.8);
+    o.lean = j * 0.25 + seg(u, 0.24, 0.6) * 0.2 + last * 0.5; o.kneel = seg(u, 0.4, 0.6) * 0.7 * (1 - last);
+    o.head = j * 0.5 + last * 0.6; o.lie = seg(u, 0.74, 0.92); o.hide = seg(u, 0.22, 0.3);
+  },
+});
+
 // A downed target is already flat: it only jolts with each blow (the finisher's own `hits`).
 const blowTimes = k => getFinisher(k).hits ?? [0.5];
 

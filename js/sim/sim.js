@@ -25,7 +25,7 @@ import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
 import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING, tryoutOf } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 import { clearZmWalls, ZM, ZM_SQUAD, ZM_TEAM } from '../shared/zombies.js';   // Graveyard Shift (docs/ZOMBIES.md).
 import * as Fin from './finishers.js';     // Finishing moves and emotes (docs/FINISHERS.md).
-import { cleanFinisher, FINISHER_IDS } from '../shared/finishers.js';
+import { cleanFinisher, FINISHER_IDS, OPERATOR_FINISHER_IDS } from '../shared/finishers.js';
 
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
@@ -618,7 +618,7 @@ export class Sim {
         ackX: 0, ackZ: 0, ackT: 0,
         bot: null,
         // The finisher this player plays (the operator's pick; bots by seat), and the one running on them, if any.
-        finisher: r.isBot ? (r.loadout?.finisher ? cleanFinisher(r.loadout.finisher) : FINISHER_IDS[(index * 7 + (seed >>> 0)) % FINISHER_IDS.length]) : cleanFinisher(r.loadout?.finisher ?? r.finisher),
+        finisher: r.isBot ? (r.loadout?.finisher ? cleanFinisher(r.loadout.finisher) : OPERATOR_FINISHER_IDS[(index * 7 + (seed >>> 0)) % OPERATOR_FINISHER_IDS.length]) : cleanFinisher(r.loadout?.finisher ?? r.finisher),
         fin: null, finCool: 0, emoteAt: -99,
       };
     });
