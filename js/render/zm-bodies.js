@@ -539,7 +539,7 @@ export class ZmBodies {
           b.dirtT = 0.07;
           const sc = def.dims.s;
           for (let k = vfx._n(3); k > 0; k--) { const a = rand(0, TAU), sp2 = rand(0.8, 2.5); vfx.spawn(b.x + Math.cos(a) * 0.3 * sc, 0.1, b.z + Math.sin(a) * 0.3 * sc, Math.cos(a) * sp2, rand(2, 4.5), Math.sin(a) * sp2, rand(0.4, 0.7), rand(0.06, 0.12) * sc, 0.03, Math.random() < 0.5 ? DIRT : DIRT_D, 1, 14, 1, 0.02); }
-          if (b.riseT < 0.08) { vfx.groundMark(b.x, b.z, 0.75 * sc, DIRT_D, 0.9); vfx.spawn(b.x, 0.3, b.z, 0, 0.6, 0, 0.6, 0.4 * sc, 1.1 * sc, DIRT, 0.7, 0, 1.5); }
+          if (b.riseT < 0.08) { vfx.groundMark(b.x, b.z, 0.6 * sc, DIRT_D, 0.85); vfx.ring(b.x, b.z, 0.2, 0.9 * sc, 0.3, DIRT, 0.5); }
         }
       }
       const fade = r ? r.reveal : 1;
@@ -558,7 +558,7 @@ export class ZmBodies {
       if (c.fallAng < c.maxFall) {
         c.fallV += (2.5 + 9 * Math.sin(c.fallAng)) * dt;
         c.fallAng += c.fallV * dt;
-        if (c.fallAng >= c.maxFall) { c.fallAng = c.maxFall - 0.02; c.fallV = -c.fallV * 0.22; if (Math.abs(c.fallV) < 0.4) c.fallV = 0; if (vfx && c.age < 1.5) { const s = def.dims.s; vfx.spawn(c.x + c.dx * def.dims.hip * s, 0.15, c.z + c.dz * def.dims.hip * s, 0, 0.5, 0, 0.5, 0.3 * s, 0.9 * s, DIRT, 0.6, 0, 1.5); } }
+        if (c.fallAng >= c.maxFall) { c.fallAng = c.maxFall - 0.02; c.fallV = -c.fallV * 0.22; if (Math.abs(c.fallV) < 0.4) c.fallV = 0; if (vfx && c.age < 1.5) { const s = def.dims.s; vfx.spawn(c.x + c.dx * def.dims.hip * s, 0.15, c.z + c.dz * def.dims.hip * s, 0, 0.4, 0, 0.4, 0.15 * s, 0.45 * s, DIRT, 0.45, 0, 1.5); } }
       }
       c.x += c.dx * c.push * dt; c.z += c.dz * c.push * dt; c.push *= Math.exp(-dt * 4);
       if (c.vy || c.y > 0) { c.vy -= 16 * dt; c.y += c.vy * dt; if (c.y <= 0) { c.y = 0; c.vy = 0; } }

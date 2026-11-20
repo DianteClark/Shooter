@@ -603,8 +603,9 @@ async def run_specials(browser, vw, vh, failures, errors):
     kinds = sorted(k for k, _ in got)
     if kinds != [6, 7, 8, 9]: failures.append(f'{tag}: the view has kinds {got}')
     if not any(k == 9 and sh for k, sh in got): failures.append(f'{tag}: the Shieldbearer has no shield in the view')
-    sh = await ev(f"{G}.renderer?.zmFx?.kinds?.shieldMesh.count ?? {G}.match?.renderer?.zmFx?.kinds?.shieldMesh.count ?? -1")
-    if sh is not None and sh == 0: failures.append(f'{tag}: no shield drawn')
+    # The Shieldbearer (with its door) and each special are drawn by the undead bodies (js/render/zm-bodies.js).
+    st = await ev(f"{G}.renderer?.zmBodies?.stats() ?? null")
+    if not st or not all(str(k) in st['kinds'] for k in (6, 7, 8, 9)): failures.append(f'{tag}: the bodies drawn are {st}')
     # The Spitter spits: the glob in flight with its landing mark, then the puddle.
     await ev(f"(() => {{ const m = {G}.match, R = m.sim.rules, sp = window.__sp[0]; R.kinds._spit(sp, m.sim.byId.get(m.localId)); }})()")
     await pg.wait_for_timeout(350)

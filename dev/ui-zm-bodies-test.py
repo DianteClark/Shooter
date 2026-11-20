@@ -30,8 +30,9 @@ SETUP = f"""(() => {{ const m = {G}.match, sim = m.sim, R = sim.rules;
   const drive = R._driveZombie.bind(R);
   R._driveZombie = (p, dt) => {{ if (window.__sp.includes(p) && window.__freeze) {{ p.ps.vx = p.ps.vz = 0; return; }} drive(p, dt); }};
   window.__freeze = true;
-  // Bots stand still and hold fire.
-  for (const p of sim.players) if (p.team === 0 && p.id !== m.localId && p.bot) p.bot.update = () => [];
+  // The bot teammates stand still, out of the way (off to a far corner of the map).
+  const me = sim.byId.get(m.localId);
+  for (const p of R.crew) if (p.id !== m.localId) {{ p.bot && (p.bot.update = () => []); const k = sim.nav.nearestFree(me.ps.x > sim.map.width / 2 ? 4 : sim.map.width - 4, 4); p.ps.x = k % sim.nav.w + 0.5; p.ps.z = Math.floor(k / sim.nav.w) + 0.5; }}
 }})()"""
 
 def raise_js(kinds):
@@ -39,7 +40,7 @@ def raise_js(kinds):
   const free = (dx, dz) => {{ const k = sim.nav.nearestFree(x + dx, z + dz); return {{ x: k % sim.nav.w + 0.5, z: Math.floor(k / sim.nav.w) + 0.5 }}; }};
   for (const [k, dx, dz] of {json.dumps(kinds)}) {{ const seat = R.horde.find(q => !q.alive && !window.__sp.includes(q)) ?? R.horde.find(q => !q.alive);
     R._raise(seat, k, free(dx, dz)); seat.hp = seat.zMax = 99999; seat.ps.aim = Math.atan2(z - seat.ps.z, x - seat.ps.x); window.__sp.push(seat); }}
-  return window.__sp.length; }})()"""
+  window.__home = window.__home ?? [x, z]; return window.__sp.length; }})()"""
 
 CLEAR = f"""(() => {{ const R = {G}.match.sim.rules; for (const z of R.horde) if (z.alive) {{ z.alive = false; z.hp = 0; }} window.__sp = []; }})()"""
 STATS = f"{G}.renderer.zmBodies?.stats()"
@@ -85,9 +86,16 @@ async def main():
                     want = {'1', '2', '3', '6', '7', '8', '9'}
                     if not st or not want <= set(st['kinds'].keys()): failures.append(f'lineup: kinds drawn {st}')
                     await shot('02-lineup')
-                    await ev(f"{G}.renderer.distance = {base} * 0.32")
+                    await ev(f"{G}.renderer.distance = {base}")
                     await pg.wait_for_timeout(400)
-                    await shot('03-lineup-close')
+                    await shot('03-lineup-match-scale')
+                    await ev(f"{G}.renderer.distance = {base} * 0.4")
+                    # Each kind close up, the player stood just off it.
+                    for i, (k, dx, dz) in enumerate(RING):
+                        await ev(f"(() => {{ const m = {G}.match, z = window.__sp[{i}]; m.ps.x = z.ps.x + 2.6; m.ps.z = z.ps.z + 2.2; }})()")
+                        await pg.wait_for_timeout(350)
+                        await shot(f'11-{NAMES[k]}')
+                    await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); m.ps.x = window.__home[0]; m.ps.z = window.__home[1]; }})()")
                     # Walking toward the player (slowed so they stay in frame).
                     await ev(f"{G}.renderer.distance = {base} * 0.5")
                     await ev("(() => { for (const z of window.__sp) z.zPace = 0.6; window.__freeze = false; })()")
@@ -123,9 +131,9 @@ async def main():
                     await shot('09-door-breaks')
                     await pg.wait_for_timeout(1400)
                     await shot('10-lying')
-                    await pg.wait_for_timeout(2400)
-                    st = await ev(STATS)
-                    if st and st['corpses'] > 0: failures.append(f'bodies did not sink away: {st}')
+                    # (Game time runs slow under SwiftShader: frames are clamped to 50 ms. Wait on the state, not the clock.)
+                    try: await pg.wait_for_function(f"(() => {{ const s = {STATS}; return s && s.corpses === 0 && s.gibs === 0; }})()", timeout=60000)
+                    except Exception: failures.append(f'bodies did not sink away: {await ev(STATS)}')
                     await ev(CLEAR)
                     await pg.wait_for_timeout(500)
                 # The bosses, each with its intro.
@@ -145,15 +153,20 @@ async def main():
                     if not reduce and not camK > 0.3: failures.append(f'{name}: no camera beat ({camK})')
                     await shot(f'{"20" if not reduce else "30"}-{name}-intro')
                     if k == 4 and not reduce:
+                        t0 = await ev("import('/js/ui/zm-intro.js').then(m => m.ZM_INTRO.t)")
                         await pg.locator('.zm-intro').click()
-                        await pg.wait_for_timeout(700)
-                        on = await ev("import('/js/ui/zm-intro.js').then(m => m.ZM_INTRO.on)")
-                        if on: failures.append('tapping the card did not end the intro')
+                        sk = await ev("import('/js/ui/zm-intro.js').then(m => [m.ZM_INTRO.skipped, m.ZM_INTRO.dur - m.ZM_INTRO.t])")
+                        if not sk[0] or sk[1] > 0.55: failures.append(f'tapping the card did not skip the intro ({t0} -> {sk})')
+                        try: await pg.wait_for_function("import('/js/ui/zm-intro.js').then(m => !m.ZM_INTRO.on)", timeout=30000)
+                        except Exception: failures.append('the intro did not end after a skip')
                     else:
-                        await pg.wait_for_timeout(2600)
+                        try: await pg.wait_for_function("import('/js/ui/zm-intro.js').then(m => !m.ZM_INTRO.on)", timeout=60000)
+                        except Exception: failures.append(f'{name}: the intro never ended')
+                        try: await pg.wait_for_function("(() => { const c = document.querySelector('.zm-intro'); return !c || c.hidden; })()", timeout=10000)
+                        except Exception: failures.append(f'{name}: the card stayed up')
                     if not reduce:
                         base = await ev(f"{G}.renderer.distance")
-                        await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId), b = window.__sp[0]; m.ps.x = b.ps.x - 3.2; m.ps.z = b.ps.z + 0.6; }})()")
+                        await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId), b = window.__sp[0]; m.ps.x = b.ps.x + 3.5; m.ps.z = b.ps.z + 3.5; }})()")
                         await ev(f"{G}.renderer.distance = {base} * 0.55")
                         await pg.wait_for_timeout(500)
                         await shot(f'21-{name}-close')

@@ -41,9 +41,9 @@ const CSS = `
   text-transform: uppercase; text-shadow: 0 0 18px var(--zm-glow, rgba(255,120,30,.6)); white-space: nowrap; }
 .zm-intro i { display: block; font: italic 13px/1.2 var(--f-plate); color: var(--c-haze, #a9b0a8); font-style: italic; }
 .zm-intro em { display: block; margin-top: 7px; font: 9px/1 var(--f-plate); font-style: normal; letter-spacing: .2em; color: rgba(231,234,228,.5); text-transform: uppercase; }
-.zm-intro .bar { height: 2px; margin: 6px auto 0; width: 70%; background: var(--zm-glow, #ff7a1a); transform-origin: center; }
+.zm-intro .zm-ib { height: 2px; margin: 6px auto 0; width: 70%; background: var(--zm-glow, #ff7a1a); transform-origin: center; }
 .zm-intro.anim b { animation: zmIntroIn .5s cubic-bezier(.2,.9,.3,1.2) both; }
-.zm-intro.anim .bar { animation: zmIntroBar .6s .1s ease-out both; }
+.zm-intro.anim .zm-ib { animation: zmIntroBar .6s .1s ease-out both; }
 @keyframes zmIntroIn { from { transform: scale(1.35); letter-spacing: .4em; opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes zmIntroBar { from { transform: scaleX(0); } to { transform: none; } }
 @media (max-height: 400px) { .zm-intro { top: 17%; } .zm-intro b { font-size: 31px; } }
@@ -61,7 +61,7 @@ export class ZmIntroCard {
     el.className = 'zm-intro';
     el.dataset.tap = '1';
     el.hidden = true;
-    el.innerHTML = '<small>Boss</small><b></b><i></i><div class="bar"></div><em>Tap to skip</em>';
+    el.innerHTML = '<small>Boss</small><b></b><i></i><div class="zm-ib"></div><em>Tap to skip</em>';
     parent.appendChild(el);
     el.addEventListener('click', e => { e.stopPropagation(); ZM_INTRO.skip(); });
     el.addEventListener('touchstart', e => { e.stopPropagation(); ZM_INTRO.skip(); }, { passive: true });
