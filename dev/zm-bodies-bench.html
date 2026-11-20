@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Undead bodies bench</title>
+<style>html, body { margin: 0; background: #1b1d22; color: #ddd; font: 12px system-ui; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="c"></canvas><pre id="out"></pre>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js" } }</script>
+<script type="module">
+// A horde drawn the old way (the operator-kit look through js/render/characters.js) and the new way (each kind's own
+// body, js/render/zm-bodies.js), alternated, each frame synced with readPixels so the GPU's work is in the time
+// (dev only; docs/ZOMBIES.md "Bodies"). ?n=24 bodies, &frames=40 per round, &rounds=4, &w=932&h=430. Result in
+// window.__result: mean ms a frame for each, and the draw calls and triangles.
+import * as THREE from 'three';
+import { setThemeLighting } from '../js/render/art.js';
+import { Characters } from '../js/render/characters.js';
+import { ZmBodies } from '../js/render/zm-bodies.js';
+
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 932), H = +(q.get('h') || 430), N = +(q.get('n') || 24), FR = +(q.get('frames') || 40), ROUNDS = +(q.get('rounds') || 4);
+setThemeLighting('railyard');
+const webgl = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: false });
+webgl.setPixelRatio(1); webgl.setSize(W, H); webgl.setClearColor(0x3a3d38);
+const gl = webgl.getContext(), px = new Uint8Array(4);
+const mk = () => { const s = new THREE.Scene(); const g = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: 0x4a4d46 })); g.rotation.x = -Math.PI / 2; s.add(g); return s; };
+const sceneOld = mk(), sceneNew = mk();
+const time = { value: 0 };
+const kinds = [1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 6, 7, 8, 9, 1, 2, 2, 2, 8, 6, 3, 4];
+const players = Array.from({ length: N }, (_, i) => {
+  const a = i * 2.399, r = 1.5 + Math.sqrt(i) * 1.6;
+  return { id: 'z' + i, team: 1, zk: kinds[i % kinds.length], x: Math.cos(a) * r, z: Math.sin(a) * r, aim: a + Math.PI, vx: -Math.cos(a) * 1.5, vz: -Math.sin(a) * 1.5,
+    hp: 100, alive: true, weapon: 'knife', camo: 'none', adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, zshield: true, zswing: false };
+});
+const old = new Characters(sceneOld, { walls: [] }, time);
+old.setRoster(players.map(p => ({ id: p.id, operator: 'trooper', skin: null })));
+const nu = new Characters(sceneNew, { walls: [] }, time);
+nu.setRoster(players.map(p => ({ id: p.id, operator: 'trooper', skin: null })));
+nu.zm = new ZmBodies(sceneNew, null);
+const cam = new THREE.PerspectiveCamera(26, W / H, 0.5, 300);
+const TILT = THREE.MathUtils.degToRad(55), dist = 30 / (2 * Math.tan(THREE.MathUtils.degToRad(13)) * (W / H));
+cam.position.set(0, dist * Math.sin(TILT), dist * Math.cos(TILT)); cam.lookAt(0, 0, 0);
+const view = { t: 0, players, smokes: null, obj: { zm: 1 } };
+const opts = { localId: null, localTeam: 0, uav: false, revealAll: false };     // So the distance LOD applies, as in a match.
+function frame(chars, scene, dt) {
+  view.t += dt; time.value += dt;
+  chars.focusX = 0; chars.focusZ = 0;
+  chars.update(view, dt, opts);
+  chars.zm?.update(view, dt, chars);
+  webgl.render(scene, cam);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+}
+const res = { old: [], new: [], calls: {}, tris: {} };
+for (let i = 0; i < 10; i++) { frame(old, sceneOld, 1 / 60); frame(nu, sceneNew, 1 / 60); }
+for (const [k, c, s] of [['old', old, sceneOld], ['new', nu, sceneNew]]) { webgl.info.reset(); webgl.info.autoReset = false; frame(c, s, 1 / 60); res.calls[k] = webgl.info.render.calls; res.tris[k] = webgl.info.render.triangles; webgl.info.autoReset = true; }
+for (let r = 0; r < ROUNDS; r++) for (const [k, c, s] of r % 2 ? [['new', nu, sceneNew], ['old', old, sceneOld]] : [['old', old, sceneOld], ['new', nu, sceneNew]]) {
+  const t0 = performance.now();
+  for (let i = 0; i < FR; i++) frame(c, s, 1 / 60);
+  res[k].push((performance.now() - t0) / FR);
+}
+const mean = a => +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(2);
+window.__result = { oldMs: mean(res.old), newMs: mean(res.new), rounds: { old: res.old.map(v => +v.toFixed(2)), new: res.new.map(v => +v.toFixed(2)) }, calls: res.calls, tris: res.tris };
+document.getElementById('out').textContent = JSON.stringify(window.__result, null, 1);
+</script>
+</body>
+</html>

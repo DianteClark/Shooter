@@ -365,11 +365,15 @@ The undead were recoloured soldiers; each kind now has a low-poly model and anim
   horde of more than 12) for full detail; the rest drop their "fine" pieces (rags, ribs, fingers, rivets, hair: a
   flag on the vertices, collapsed in the vertex shader) and cast no contact shadow.
 - **Perf** (`python3 dev/ui-sweep-perf.py 8611 out zm20 zm20polestar`, round 20, horde 24, every gate open, traps
-  and sentries on; SwiftShader, Low; before -> after): Ashgrove 58.5 -> 55 draw calls (max 64 -> 59), 79.4k -> 55.6k
-  triangles (max 88.1k -> 68.6k); Polestar 62 -> 56 calls, 84.7k -> 61.9k triangles (max 92.6k -> 78.4k). CPU per
-  frame for the characters and the undead together (a probe wrapping `Characters.update` and `ZmBodies.update`):
-  Ashgrove 0.90 -> 0.59 ms, Polestar 0.64 -> 0.66 ms. The overlay's script ms on this shared 2-CPU box wanders
-  between runs (6.2 -> 10.3 Ashgrove, 7.5 -> 7.7 Polestar); the probe is the like-for-like figure.
+  and sentries on; SwiftShader, Low; dev before -> this build, the mean of two interleaved runs each): Ashgrove 58.8 ->
+  56.5 draw calls (max 64 -> 59-64), 74.8k -> 62.0k triangles (max 83.6k -> 66.7k); Polestar 60.3 -> 58.5 calls, 79.4k
+  -> 67.7k triangles (max 87.3k -> 75.3k). Round 20 is a boss round, so the sweep now ends the boss's intro before it
+  measures (the camera beat pulls the camera in). CPU per frame for the characters and the undead together (a probe
+  wrapping `Characters.update` and `ZmBodies.update`): Ashgrove 0.90 -> 0.59 ms, Polestar 0.64 -> 0.66 ms. The
+  overlay's script and frame ms wander 2x between runs of the same build on this shared 2-CPU box (frame 270 to 675 ms
+  for either), so `dev/zm-bodies-bench.html` measures the horde alone: the same 24 undead drawn the old way and the new
+  way, alternated, each frame synced with readPixels (SwiftShader, 932x430, the distance LOD on): **old 120 / 123 ms a
+  frame, new 49 / 53 ms**, 15 -> 11 draw calls, 34.2k -> 19.2k triangles.
 
 ## Wire
 The horde never goes out as player records. The rules block (`encode`) carries round, state, timer, undead left, the
@@ -454,7 +458,7 @@ instanced). The host tick is untouched by item 50 (`node dev/sim-zombies.mjs --q
   deaths by a headshot, explosives and a melee kill (corpses and gibs counted, then all sunk away), a Shieldbearer's
   door breaking; each boss rising with its intro (camera beat, title card, a tap skips it) and again with reduced
   motion (card only, the camera still). `dev/zm-lineup.html` shows every kind side by side for review
-  (`?view=game|close|front&anim=idle|walk|run|windup|strike|rise|death|head|blast&kinds=1,2,3`).
+  (`?view=game|close|front&anim=idle|walk|run|windup|strike|rise|death|head|blast&kinds=1,2,3`); `dev/zm-bodies-bench.html` times the horde drawn the old way and the new.
 - `python3 dev/ui-gamepad-test.py`: the terminal's sheet from a controller (Interact opens it, the d-pad walks it, A buys,
   B closes). `python3 dev/ui-hud-layout-test.py --only zm`: the plates, tier pips, exfil clock, relic count and an
   upgrade prompt clear of each other and the sticks at every size.

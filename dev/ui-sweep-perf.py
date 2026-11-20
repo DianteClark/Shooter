@@ -70,6 +70,10 @@ async def run(browser, name, mapId, mode, rows):
         await pg.wait_for_timeout(2000)
     if name.startswith('zm20'):
         extra = f'horde {await ev(ZM20)}'
+        # Round 20 is a boss round: let the boss's intro (camera beat, title card) start, then end it, so the numbers
+        # are the horde's steady state (builds before item 50 have no intro).
+        await pg.wait_for_timeout(1500)
+        await ev("import('/js/ui/zm-intro.js').then(m => m.ZM_INTRO.reset()).catch(() => 0)")
     stats_js = f"(() => {{ const s = {G}.renderer?.getStats(); return s ? {{ calls: s.calls, tris: s.triangles }} : null; }})()"
     if name == 'replay':
         await pg.wait_for_timeout(20000)
