@@ -1700,5 +1700,48 @@ MORE_SUITS.brigid = {
     for (const x of [0.12, 0.0, -0.12]) b.prismY(0.35, 0.45, x, 0, 0.05, 0.0, 4, Math.PI / 4);
   },
 };
+// Marshal: a nutcracker. A team tunic with white cross belts, gold buttons and big gold epaulettes (two gold bars from
+// above), a wooden face with painted cheeks, a great white moustache and beard, and a tall black shako with gold bands,
+// a team cockade and plume.
+const WOOD = 0xe8c8a0;
+MORE_SUITS.marshal = {
+  limbs: { bulk: 1.12, hands: 0xf2f2ea, feet: 0x141414, sleeve: 0x2a2a3a, trouser: 0xf2f2ea },
+  torso(b) {
+    b.setPart(1).prismY(-0.1, 0.62, 0, 0, 0.27, 0.29, 8, Math.PI / 8);                            // Tunic and its tails.
+    b.box(-0.26, -0.12, 0, 0.06, 0.34, 0.36);
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(0xf2f2ea);
+      for (const x of [0.29, -0.29]) { plate(b, [x, 0.62, 0.2], [x, 0.1, -0.2], 0.07, 0.02); plate(b, [x, 0.62, -0.2], [x, 0.1, 0.2], 0.07, 0.02); }
+      b.setColor(0x141414).box(0, 0.1, 0, 0.6, 0.07, 0.62);
+      b.setColor(0xc9a240);
+      for (const s of [1, -1]) for (let i = 0; i < 5; i++) b.box(0.0, 0.6, s * (0.3 + i * 0.03), 0.22 - i * 0.02, 0.14 - i * 0.01, 0.012);   // Fringe.
+    });
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffd659);
+      for (const s of [1, -1]) b.box(0.0, 0.67, s * 0.31, 0.26, 0.05, 0.2, 0.02);                 // Epaulettes.
+      for (const z of [0.08, -0.08]) for (const y of [0.22, 0.34, 0.46]) b.box(0.29, y, z, 0.012, 0.035, 0.035);
+      b.box(0.31, 0.1, 0, 0.012, 0.06, 0.08);
+    });
+  },
+  head(b) {
+    tag(b, KEEP, () => {
+      b.setPart(0).setColor(WOOD).box(0.02, 0.18, 0, 0.3, 0.3, 0.3, 0.03);                       // Wooden head.
+      b.setColor(0xf2f2ea).box(0.12, 0.04, 0, 0.14, 0.14, 0.32, 0.03);                            // Beard.
+      b.box(0.19, 0.14, 0, 0.04, 0.05, 0.3);                                                       // Moustache.
+      b.setColor(0x7a3a2a).box(0.165, 0.09, 0, 0.012, 0.025, 0.12);                               // The hinge of the mouth.
+      b.setColor(0x141414).box(0.17, 0.23, 0.07, 0.012, 0.04, 0.035).box(0.17, 0.23, -0.07, 0.012, 0.04, 0.035);
+      b.setColor(0xe86a6a).box(0.168, 0.17, 0.11, 0.012, 0.035, 0.035).box(0.168, 0.17, -0.11, 0.012, 0.035, 0.035);
+      b.setColor(WOOD).box(0.2, 0.19, 0, 0.05, 0.05, 0.04);
+      b.setColor(0x141414).prismY(0.32, 0.74, -0.01, 0, 0.18, 0.21, 8, Math.PI / 8);              // Shako.
+    });
+    tag(b, ACC, () => {
+      b.setPart(0).setColor(0xffd659).prismY(0.32, 0.36, -0.01, 0, 0.185, 0.188, 8, Math.PI / 8);
+      b.prismY(0.7, 0.74, -0.01, 0, 0.205, 0.212, 8, Math.PI / 8);
+      b.box(0.17, 0.56, 0, 0.012, 0.03, 0.18);
+    });
+    b.setPart(1).prismX(0.17, 0.21, 0.48, 0, 0.06, 0.06, 8);                                      // Cockade and plume.
+    chain(b, [[0.12, 0.72, 0], [0.12, 0.86, 0], [0.06, 0.96, 0]], 0.06, 0.03, 5);
+  },
+};
 
 Object.assign(SUITS, MORE_SUITS);
