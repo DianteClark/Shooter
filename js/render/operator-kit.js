@@ -312,7 +312,7 @@ export const BACK = {
   },
   // Morse's field telephone: a wire reel across the top of her pack, team rims, copper wire, a whip aerial.
   spool(b) {
-    b.setPart(0).setColor(0x3f4a3a).box(-0.26, 0.32, 0, 0.16, 0.38, 0.32, 0.03);
+    b.setPart(0).setColor(0x3f4a3a).box(-0.26, 0.32, 0, 0.16, 0.38, 0.32);
     b.setColor(0x2a2e2a).prismZ(-0.2, 0.2, -0.3, 0.62, 0.05, 0.05, 6);
     tag(b, KEEP, () => b.setPart(0).setColor(0xb87333).prismZ(-0.16, 0.16, -0.3, 0.62, 0.13, 0.13, 7));
     b.setPart(1).prismZ(0.16, 0.2, -0.3, 0.62, 0.17, 0.17, 7).prismZ(-0.2, -0.16, -0.3, 0.62, 0.17, 0.17, 7);
@@ -321,7 +321,7 @@ export const BACK = {
   },
   // Nyx's twin blades crossed on her back, team hilts over the shoulders.
   blades(b) {
-    b.setPart(0).setColor(0x22262c).box(-0.23, 0.36, 0, 0.1, 0.3, 0.28, 0.02);
+    b.setPart(0).setColor(0x22262c).box(-0.23, 0.36, 0, 0.1, 0.3, 0.28);
     b.setColor(0x1a1c20);
     seg(b, [-0.28, 0.1, 0.26], [-0.3, 0.78, -0.22], 0.03, 0.012, 4);
     seg(b, [-0.28, 0.1, -0.26], [-0.3, 0.78, 0.22], 0.03, 0.012, 4);
@@ -336,7 +336,7 @@ export const BACK = {
   },
   // Rook's sledgehammer slung corner to corner, its head over the shoulder: a block and a bar from above.
   sledge(b) {
-    b.setPart(0).setColor(0x34373f).box(-0.24, 0.34, 0, 0.12, 0.34, 0.34, 0.03);
+    b.setPart(0).setColor(0x34373f).box(-0.24, 0.34, 0, 0.12, 0.34, 0.34);
     b.setColor(0x6a4a2a);
     seg(b, [-0.3, -0.06, 0.3], [-0.32, 0.86, -0.24], 0.028, 0.028, 4);
     b.setColor(0x3a3f47).box(-0.32, 0.9, -0.26, 0.16, 0.14, 0.3);
@@ -345,7 +345,7 @@ export const BACK = {
   },
   // Courier's hard case, flat on her back on a team strap, the lock lit.
   briefcase(b) {
-    b.setPart(0).setColor(0x8a9098).box(-0.27, 0.38, 0, 0.1, 0.36, 0.5, 0.02);
+    b.setPart(0).setColor(0x8a9098).box(-0.27, 0.38, 0, 0.1, 0.36, 0.5);
     b.setColor(0x2a2c30).box(-0.27, 0.58, 0, 0.06, 0.04, 0.14);
     b.setPart(1).box(-0.25, 0.38, 0, 0.12, 0.06, 0.54);
     b.setPart(0).setColor(0x3a3430).box(-0.02, 0.1, 0.26, 0.18, 0.14, 0.08);
@@ -353,7 +353,7 @@ export const BACK = {
   },
   // Linnet's scavenger frame: a pack taller than she is, a bedroll on top, a pot and a lamp hanging off it.
   junkpack(b) {
-    b.setPart(0).setColor(0x5a5440).box(-0.3, 0.58, 0, 0.22, 0.9, 0.42, 0.03);
+    b.setPart(0).setColor(0x5a5440).box(-0.3, 0.58, 0, 0.22, 0.9, 0.42);
     b.setColor(0x2a2c30).box(-0.42, 0.58, 0.2, 0.03, 1.0, 0.03).box(-0.42, 0.58, -0.2, 0.03, 1.0, 0.03);
     b.setPart(1).box(-0.3, 0.66, 0, 0.23, 0.08, 0.43);
     tag(b, KEEP, () => {
@@ -364,7 +364,7 @@ export const BACK = {
   },
   // Garrison's company radio: a big set, a tall whip with a team pennant flying from it.
   bigradio(b) {
-    b.setPart(0).setColor(0x3f4a3a).box(-0.29, 0.36, 0, 0.2, 0.5, 0.4, 0.03);
+    b.setPart(0).setColor(0x3f4a3a).box(-0.29, 0.36, 0, 0.2, 0.5, 0.4);
     b.setColor(0x181a1c).prismY(0.6, 1.62, -0.34, -0.14, 0.018, 0.01, 4);
     b.box(-0.2, 0.5, 0.22, 0.06, 0.12, 0.05);
     b.setPart(1);

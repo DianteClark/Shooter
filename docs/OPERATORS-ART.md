@@ -131,7 +131,7 @@ Suits are dealt into banks of `SUIT_BANK` (10) in roster order (characters.js `S
 walks only its own bank, and a bank is drawn (+2 calls, and its x-ray pair) only while someone on screen wears one of
 its suits. Suit k of a bank is picked through the high bits of the operator's slot 0 / 4 selection (`own + 32 x (k + 1)`
 in `uSel`): no new uniforms. Measured (node, item 49): 73.5k suit vertices in all, banks of 23.5k, 20.1k, 19.3k and
-10.7k, so a suit wearer costs about what a kit soldier does (kit bank 29.8k). Keep a new suit around 1.2k-2.5k.
+10.7k, so a suit wearer costs about what a kit soldier does (kit bank 28.9k). Keep a new suit around 1.2k-2.5k.
 
 ### Distance twins
 
@@ -155,7 +155,7 @@ unbevelled boxes and 6-8 sided prisms; aim for the top-down read: shoulders, pac
   (`door`), Nyx's crossed blades and night hood (`blades`, `nvghood`), Rook's sledgehammer (`sledge`), Courier's hard
   case (`briefcase`), Nightjar's hunting cloak (`cloak`), Corvid's cowl (`cowl`), Linnet's scavenger frame taller than
   she is (`junkpack`), Garrison's company radio with a team pennant and his dish helmet (`bigradio`, `brodie`),
-  Brigid's champion's cape and laurel (`cape`, `laurel`). Kit bank (with the undead's parts): 24.4k -> 29.8k vertices.
+  Brigid's champion's cape and laurel (`cape`, `laurel`). Kit bank (with the undead's parts): 24.4k -> 28.9k vertices.
 
 ## Review tools
 
