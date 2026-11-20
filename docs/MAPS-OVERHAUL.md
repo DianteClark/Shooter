@@ -6,7 +6,7 @@ their landmark buildings, so build landmarks as reusable pieces.
 
 ## Map fields (new, required on every map)
 - `size`: `'small' | 'medium' | 'large' | 'huge'` (giant comes with battle royale).
-- `region`: `'metro' | 'desert' | 'jungle' | 'arctic' | 'coast' | 'industrial' | 'farmland'` (labels and tag colours:
+- `region`: `'metro' | 'desert' | 'jungle' | 'arctic' | 'coast' | 'industrial' | 'farmland' | 'mountain'` (labels and tag colours:
   `REGIONS` in js/shared/map.js and `.sm-region` in css/menus.css).
 - Footprints (metres, W x H): small 46-58 x 30-38; medium 64-84 x 42-52 (today's maps); large 92-112 x 56-70 (6v6,
   long lanes, vehicles-free); huge 120-150 x 72-92 (16v16 only: `modes: ['gwtdm', 'gwdom'], large: true`, like Harvest).
@@ -53,3 +53,28 @@ fields and footprint against the tier, nav reachability of spawns, objectives, l
 pockets, gaps narrower than a player (2 x PLAYER_RADIUS + 0.1 m) between blocking pieces, spawn-to-objective
 fairness (mean walk per team within 10%), the longest sight lines, and a bot-only match per hosted mode (kills,
 objective events, bots stuck pushing into a wall). It exits non-zero on a failure; read the warnings too.
+
+## New 6v6 maps (ROADMAP 56)
+Three maps, each its own theme module, palette and time of day, appended to `MAPS` after `brtest` (ids and order of
+the earlier maps never change; their calling cards are appended to `MAP_ART` in js/ui/cardbook.js the same way).
+- **Launchpad** (`launchpad`, large 104 x 64, desert; js/shared/maps/launchpad.js, js/render/themes/launchpad.js):
+  a rocket and its orange service tower on a raised apron dead centre of a white salt flat at high noon. North-west
+  tank farm (spherical tanks, pipe rack, horizontal tank, pump shed), south-west tracking station (radar dish, uplink
+  hut, generator), a launch-control blockhouse in each spawn; the east half is the image. Five lanes: the two edge
+  roads (the 50 m+ lanes), the crawlerway either side of the middle (crawler parked on it), the pad road. Short blue
+  shadows, cracked salt crust, heat haze and blown salt. Four hardpoints (no centre one: the apron fills too much of a
+  centre zone).
+- **Observatory** (`observatory`, medium 76 x 46, mountain): a summit observatory at sunrise, alpenglow pink snow and
+  lilac shadows. The telescope dome in its walled courtyard splits the middle lane; ridge path north (tor, instrument
+  hut, radio mast, solar row), pine slope south (weather screen, tor, drifts); each team's cable-car top station at
+  its corner, the lodge and the snow groomer screening its spawn. A sea of cloud and neighbouring peaks round it.
+- **Pagoda** (`pagoda`, medium 72 x 44, mountain): a hillside temple at blue hour in autumn. A five-storey pagoda
+  between two koi ponds (each crossed by a plank bridge), worship hall and bell tower at each end, vermilion gates
+  on the north path, the raked gravel garden and the tea house on the south one; stone lanterns light the paths.
+- `mountain` is a new region (label Mountain, tag colour in css/menus.css): Observatory on the summit, Pagoda on the
+  slope below it, for the battle royale world to stitch later.
+- Wiring per map, as for the others: map.js import + key; world.js import + DRESS/THEME_STAGES/THUMB_STYLE entries;
+  SETS (props.js), LIFE (ambient.js), THEME_AUDIO (audio.js), ART (dev/render-maps.html), `map:<id>` icon
+  (icons-maps.js + the alias list in icons.js), calling-card pattern (cardart.js: `liftoff`, `stardome`, `tiers`),
+  vote art assets/maps/<id>.jpg. `ball` (sphere/dome bands) and `lattice` (square lattice tower) were added to
+  themes/kit.js for them. dev/sim-modes-v10.mjs plays HQ on Launchpad, Kill Order on Pagoda, Control on Observatory.

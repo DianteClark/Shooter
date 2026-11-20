@@ -147,7 +147,7 @@ function domeHouse(ctx, w) {
     [[cx + 0.6, dy + R * 0.98, cz - 0.4], [cx + 0.6, dy + R * 0.78, cz + R * 0.62], [cx + 0.6, dy + 0.3, cz + R * 0.99]],
   ]);
   b.setColor(I.silverD);
-  for (const s of [-1, 1]) box3(b, cx + s * 0.62 - (s < 0 ? 0.12 : 0), dy, cz - R * 0.6, 0.12, R * 0.98, R * 1.55);
+  for (const s of [-1, 1]) box3(b, cx + s * 0.62 - (s < 0 ? 0.12 : 0), dy + R * 0.55, cz - R * 0.75, 0.12, R * 0.5, R * 1.1);
   b.setColor(I.white);
   b.prismZ(cz + R * 0.2, cz + R * 0.85, cx, dy + R * 0.62, 0.32, 0.4, 8);
   // Door, windows, a copper weathervane and an aircraft beacon.

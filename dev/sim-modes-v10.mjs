@@ -70,11 +70,11 @@ await test('maps: 6v6 modes on every small, medium and large map, never on huge 
 /* ---------------- Every mode to an end on two sizes ---------------- */
 
 const PLAN = {
-  hq: [['pier', 900], ['foundry', 900]],
-  ko: [['turnstile', 900], ['dust', 900]],
+  hq: [['pier', 900], ['foundry', 900], ['launchpad', 900]],
+  ko: [['turnstile', 900], ['dust', 900], ['pagoda', 900]],
   inf: [['oasis', 400], ['canyon', 400]],
   oic: [['ruins', 400], ['railyard', 400]],
-  ctl: [['pier', 1200], ['overpass', 1200], ['millbrook', 1200]],
+  ctl: [['pier', 1200], ['overpass', 1200], ['millbrook', 1200], ['observatory', 1200]],
   grind: [['railyard', 900], ['icebreaker', 900]],
   gwhq: [['harvest', 1000]],
   gwko: [['downtown', 1000]],

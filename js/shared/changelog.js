@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Three new maps: Launchpad, Observatory and Pagoda',
+    items: [
+      'Launchpad (large, desert): fight round a rocket on its pad in a white salt flat at high noon. A tank farm on one flank, a radar station on the other, and the crawler parked on the road between.',
+      'Observatory (medium, mountain): a summit observatory at sunrise, the snow pink with alpenglow. The middle lane splits round the telescope dome; the ridge path and the pine slope carry the flanks, and each team rides up on its own cable car.',
+      'Pagoda (medium, mountain): a hillside temple at dusk with the maples in full red. A five-storey pagoda between two koi ponds, vermilion gates on the north path, a raked gravel garden on the south one, lanterns lit everywhere.',
+      'All three host every 6 v 6 mode, turn up in the map vote and the picker under the new Mountain tag, and each has its own calling cards to earn.',
+    ],
+  },
+  {
     build: '1120-3', date: '2026-11-20', title: 'Every operator remade',
     items: [
       'Every Mastery skin is now a full costume, each one different: a knight, a samurai, a lion king, a shark, a spider, a dragon, a deep-sea diver, a wizard, a walking tank, a scarecrow with his crow and more. All of them keep your team colour where it shows from above.',
