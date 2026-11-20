@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Six new melee weapons, sharper guns, bigger streaks',
+    build: '1120-2', date: '2026-11-20', title: 'Six new melee weapons, sharper guns, bigger streaks',
     items: [
       'Six new melee weapons: the Kagero (a katana that thrusts and lunges further than anything), Kindling (a fire axe that kills in one quicker overhead), the Spade (a shovel with the longest reach, swung in place), the Gleaner (a sickle that cuts twice a pull), Bushwhack (a machete) and the Nightstick (a tonfa, the fastest swings in the game). Each has its own swing, sound and finishing move. They unlock from level 31 to 45.',
       'The new blades also turn up on the floor in Battle Royale, in the Graveyard Shift crate, and on two walls: the Spade in Ashgrove\'s Burial Field, Kindling by Polestar\'s boiler.',
