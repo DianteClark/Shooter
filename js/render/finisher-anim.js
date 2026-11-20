@@ -6,6 +6,7 @@
 // (-); twist turns the upper body with the aim (+ is to the left, as the rig's yaw runs). `lie` 0..1 lowers the body to
 // the ground, face down when lieUp is 0 and on the back when it is 1. Hands: lw/rw weights of the left/right hand
 // targets (lx, ly, lz)/(rx, ry, rz); the right hand otherwise holds the gun, the left its fore grip.
+// `carry` 1 (deaths, js/render/death-anim.js): the hand targets travel with the body's push and side step.
 // `hit` is 1 on the frames a blow lands (flinch and sound cues read it once per crossing).
 
 import { getFinisher } from '../shared/finishers.js';
@@ -19,12 +20,12 @@ const strike = (u, at, w = 0.08) => Math.max(0, 1 - Math.abs(u - at) / w);
 export function blankPose() {
   return { lean: 0, roll: 0, twist: 0, drop: 0, push: 0, side: 0, kneel: 0, lie: 0, lieUp: 0,
     gx: 0, gy: 0, gz: 0, groll: 0, gyaw: 0, gpitch: 0, hide: 0,
-    lw: 0, lx: 0, ly: 0, lz: 0, rw: 0, rx: 0, ry: 0, rz: 0, head: 0 };
+    lw: 0, lx: 0, ly: 0, lz: 0, rw: 0, rx: 0, ry: 0, rz: 0, head: 0, carry: 0 };
 }
 export function clearPose(o) {
   o.lean = o.roll = o.twist = o.drop = o.push = o.side = o.kneel = o.lie = o.lieUp = 0;
   o.gx = o.gy = o.gz = o.groll = o.gyaw = o.gpitch = o.hide = 0;
-  o.lw = o.lx = o.ly = o.lz = o.rw = o.rx = o.ry = o.rz = o.head = 0;
+  o.lw = o.lx = o.ly = o.lz = o.rw = o.rx = o.ry = o.rz = o.head = o.carry = 0;
   return o;
 }
 

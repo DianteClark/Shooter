@@ -181,9 +181,10 @@ const PISTOL_TAC = track([
   [1.00,  0,     0,    0,     0,    0,     0,     -0.06, -0.36, -0.02, 0, 0],
 ]);
 const TACTICAL = new Map([[RIFLE, RIFLE_TAC], [BOLT, BOLT_TAC], [SIDE_MAG, SIDE_MAG_TAC], [TOP_MAG, TOP_MAG_TAC], [PISTOL, PISTOL_TAC]]);
-// The track a reload plays: the empty one (rounds 0 when it began) or its tactical twin where the gun has one.
-export const reloadTrack = (rel, empty) => (empty ? rel.track : TACTICAL.get(rel.track) ?? rel.track);
-export const hasTactical = rel => TACTICAL.has(rel.track);
+// The track a reload plays: the empty one (rounds 0 when it began) or its tactical twin where the gun has one (`tac`,
+// filled in on every RELOADS entry below, so the frame loop reads a field rather than looking it up).
+export const reloadTrack = (rel, empty) => (empty || !rel.tac ? rel.track : rel.tac);
+export const hasTactical = rel => !!rel.tac;
 
 // What the support hand carries (drawn with the shared box mesh) and when the old one leaves the gun. `belt` (LMGs): when
 // the new belt's loose links spill as the feed cover shuts (characters.js).
@@ -226,6 +227,7 @@ fillV10(RELOADS, 'reload');   // V10 guns reload like their nearest older gun.
 
 // A gun with no entry (a new one) reloads like the gun it names in `feel.like`, or like its class: see feel.js.
 fillGaps(RELOADS, (id, def, cls) => RELOADS[reloadLike(id, def, cls)]);
+for (const id in RELOADS) if (RELOADS[id]) RELOADS[id].tac = TACTICAL.get(RELOADS[id].track) ?? null;
 
 const sstep = t => t * t * (3 - 2 * t);
 

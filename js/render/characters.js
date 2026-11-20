@@ -762,6 +762,10 @@ class Rig {
     this.phase = 0;
     this.kick = 0;
     this.kickRoll = 0; this.kickSide = 1; this.recoil = null;   // Per-gun recoil shape, set by onShot.
+    // Every field a frame or an event writes is declared here, so all rigs share one shape and the frame loop's
+    // property reads stay monomorphic: melee swing (onShot), the pump/bolt/lever cycle, the undead kind, tracer cadence.
+    this.swingT = 1; this.swingDur = 0.3; this.swingSide = 1; this.swingKind = 'slash';
+    this.cycle = null; this.cycleT = 0; this.zk = 0; this.tracerClock = 0; this.swapPending = false;
     this.fxHot = 0; this.fxShotAt = -99;                         // Barrel heat from sustained fire (VFX owns these).
     this.reload = 0;
     this.reloadU = 0;
@@ -819,7 +823,7 @@ class Rig {
     // Locomotion: smoothed travel along the aim (+ forward, - backpedal) and across it; in water; slide state last frame.
     this.locF = 0; this.locS = 0; this.wade = 0; this.wasSliding = false; this.wasKneeling = false;
     // Dying (death-anim.js): the fall's springs and clock, the frozen view it is drawn from, the pose, the dropped gun.
-    this.dying = false;
+    this.dying = false; this.dieSettled = false;     // Settled: lying still, its limbs redrawn from `pose` rather than solved again.
     this.die = { kind: 0, side: 1, dist: 1, t: 0, v: 0, calm: 0, x: new Float32Array(DIE_CH), vel: new Float32Array(DIE_CH) };
     this.dpose = blankPose();
     this.dview = { id, team: 0, x: 0, z: 0, aim: 0, vx: 0, vz: 0, alive: true, weapon: 'ar', camo: 'none', attachments: undefined,
@@ -831,6 +835,10 @@ class Rig {
 }
 
 const NO_POSE = blankPose();
+// Seconds into a fall after which the body lies still enough to stop solving its limbs (death-anim.js springs).
+const DIE_SETTLE = 1.15;
+// Limb parts redrawn from a settled body's pose: upper arms, forearms, thighs, shins, boots (meshes picked in order).
+const SETTLED_PARTS = [P.UPPER_R, P.UPPER_L, P.FORE_R, P.FORE_L, P.THIGH_L, P.THIGH_R, P.SHIN_L, P.SHIN_R, P.BOOT_L, P.BOOT_R];
 const POSE_FIXED = new Set(['lx', 'ly', 'lz', 'rx', 'ry', 'rz', 'lieUp']);     // Targets and flags: never eased.
 
 const smooth01 = t => t * t * (3 - 2 * t);
@@ -1163,7 +1171,7 @@ export class Characters {
     if (kind === DIE.EXPLODE || dying >= (this.maxDying ?? this.corpses.limit)) { r.dying = false; return this.corpses.spawn(r, info); }
     if (kind === DIE.FIN) { for (const k in r.fp) r.dpose[k] = r.fp[k]; r.dpose.hide = 1; r.dpose.carry = 0; }
     startDeath(r.die, kind, PICK.side, Math.min(2.6, Math.max(1.1, push / 5.5)), calm);
-    r.dying = true; r.downT = DIE_LIFE + 0.1; r.flash = 1;
+    r.dying = true; r.dieSettled = false; r.downT = DIE_LIFE + 0.1; r.flash = 1;
     // The frozen view the body is drawn from: where it stood, what it held.
     const d = r.dview;
     d.team = r.team; d.x = r.x; d.z = r.z; d.aim = r.aim; d.weapon = r.weapon; d.camo = r.lastCamo; d.attachments = r.lastAtt;
@@ -1193,7 +1201,7 @@ export class Characters {
   resetTransient() {
     for (const r of this.rigs.values()) {
       r.down = false; r.sawDead = false; r.reveal = 0; r.kick = 0; r.flash = 0; r.throwT = 0; r.swap = 0;
-      r.dying = false; r.swapU = 1; r.swapPending = false; r.wasReloading = false; r.wasSliding = false; r.wasKneeling = false;
+      r.dying = r.dieSettled = false; r.swapU = 1; r.swapPending = false; r.wasReloading = false; r.wasSliding = false; r.wasKneeling = false;
       r.sx.fill(0); r.sv.fill(0); r.aimVel = 0;
     }
     this.corpses.clear();
@@ -1322,6 +1330,9 @@ export class Characters {
     }
 
     const motion = feelMotion();
+    // The per-frame easing factors every rig uses, worked out once (Math.exp is the costly part of easing).
+    const d6 = damp(6, dt), d8 = damp(8, dt), d9 = damp(9, dt), d10 = damp(10, dt), d12 = damp(12, dt), d14 = damp(14, dt);
+    const d16 = damp(16, dt), d18 = damp(18, dt), e13 = Math.exp(-dt * 13), e16 = Math.exp(-dt * 16);
     for (let pi = 0; pi < view.players.length; pi++) {
       let p = view.players[pi];
       const r = this.rig(p.id);
@@ -1333,7 +1344,7 @@ export class Characters {
       }
       // Falling dead (death-anim.js): drawn from the view frozen at the kill until it has faded or the player is back.
       if (r.dying) {
-        if (!r.down || r.die.t >= DIE_LIFE) r.dying = false;
+        if (!r.down || r.die.t >= DIE_LIFE) r.dying = r.dieSettled = false;
         else p = r.dview;
       }
       const dying = r.dying;
@@ -1366,16 +1377,16 @@ export class Characters {
       const vx = p.vx || 0, vz = p.vz || 0;
       const rawSpeed = r.alt > 0.05 ? 0 : Math.sqrt(vx * vx + vz * vz);     // Hanging under a canopy: no stride.
       const moving = rawSpeed > 0.3;
-      r.speed += (rawSpeed - r.speed) * damp(12, dt);
+      r.speed += (rawSpeed - r.speed) * d12;
       const speed = r.speed;
       const runK = Math.min(1, speed / 4.2);
 
-      r.moveX += ((moving ? vx / rawSpeed : 0) - r.moveX) * damp(14, dt);
-      r.moveZ += ((moving ? vz / rawSpeed : 0) - r.moveZ) * damp(14, dt);
-      r.kick *= Math.exp(-dt * 13);
+      r.moveX += ((moving ? vx / rawSpeed : 0) - r.moveX) * d14;
+      r.moveZ += ((moving ? vz / rawSpeed : 0) - r.moveZ) * d14;
+      r.kick *= e13;
       if (r.swingT !== undefined && r.swingT < 1) r.swingT = Math.min(1, r.swingT + dt / (r.swingDur || 0.3));
-      if (r.kickRoll) r.kickRoll *= Math.exp(-dt * 16);
-      r.flash *= Math.exp(-dt * 16);
+      if (r.kickRoll) r.kickRoll *= e16;
+      r.flash *= e16;
       if (r.swapU < 1) r.swapU = Math.min(1, r.swapU + dt / r.swapDur);
       // Reloads: tactical or empty by the rounds left when it began; a tube loaded from empty is racked once it is full.
       const reloading = p.reloadT > 0;
@@ -1388,19 +1399,19 @@ export class Characters {
       // Down into a slide and back up out of it: the body drops into the legs, then pops up (a spring, so it overshoots).
       if (p.sliding !== r.wasSliding) { r.sv[DIP] += (p.sliding ? -2.6 : 1.5) * motion; r.wasSliding = !!p.sliding; }
       const reloadTarget = p.reloadT > 0 ? 1 : 0;
-      r.reload += (reloadTarget - r.reload) * damp(reloadTarget ? 14 : 18, dt);
+      r.reload += (reloadTarget - r.reload) * (reloadTarget ? d14 : d18);
       const slideTarget = p.sliding ? 1 : 0;
-      r.slide += (slideTarget - r.slide) * damp(14, dt);
+      r.slide += (slideTarget - r.slide) * d14;
       const sprintTarget = p.sprinting && !p.sliding && !(p.adsT > 0.2) ? 1 : 0;
-      r.sprint += (sprintTarget - r.sprint) * damp(9, dt);
+      r.sprint += (sprintTarget - r.sprint) * d9;
       if (r.throwT > 0) r.throwT = Math.max(0, r.throwT - dt / 0.5);
       const throwAiming = view.throwPreview && p.id === localId ? 1 : 0;
-      r.throwHold += (throwAiming - r.throwHold) * damp(14, dt);
-      r.crawl += (((p.downed && p.alive) || zk === 8 ? 1 : 0) - r.crawl) * damp(8, dt);     // A Crawler (zk 8) is always on all fours.
+      r.throwHold += (throwAiming - r.throwHold) * d14;
+      r.crawl += (((p.downed && p.alive) || zk === 8 ? 1 : 0) - r.crawl) * d8;     // A Crawler (zk 8) is always on all fours.
       const patient = revivers.get(p.id);
       if (patient) { r.kneelX = patient.x; r.kneelZ = patient.z; }
       if (!!patient !== r.wasKneeling) { r.sv[DIP] += (patient ? -1.4 : 1.1) * motion; r.wasKneeling = !!patient; }
-      r.kneel += ((patient ? 1 : 0) - r.kneel) * damp(10, dt);
+      r.kneel += ((patient ? 1 : 0) - r.kneel) * d10;
       // A finisher or an emote over everything else (finisher-anim.js); a fall over everything when dying (death-anim.js).
       const A = dying ? (r.die.kind === DIE.FIN ? (r.die.t += dt, r.dpose) : stepDeath(r.die, dt, r.dpose)) : this._layer(r, p, dt, speed);
       const crawl = Math.max(r.crawl, A.lie), kneel = Math.min(1, r.kneel + A.kneel);
@@ -1417,7 +1428,7 @@ export class Characters {
       if (da > Math.PI) da -= TAU; else if (da < -Math.PI) da += TAU;
       r.lastAim = p.aim;
       const av = dt > 1e-4 ? clamp(da / dt, -14, 14) : r.aimVel;
-      r.aimVel += (av - r.aimVel) * damp(16, dt);
+      r.aimVel += (av - r.aimVel) * d16;
 
       const aimX = Math.cos(p.aim), aimZ = Math.sin(p.aim);
       const fwdV = (vx * aimX + vz * aimZ) / 7, sideV = (-vx * aimZ + vz * aimX) / 7;
@@ -1432,9 +1443,9 @@ export class Characters {
       spring(r, KNOCK, 0, 180, 14, dt);
       // Which way the legs carry the body relative to where it aims: forward, backpedalling, strafing (smoothed, so a
       // change of direction blends through the gaits rather than snapping).
-      r.locF += ((r.moveX * aimX + r.moveZ * aimZ) - r.locF) * damp(8, dt);
-      r.locS += ((-r.moveX * aimZ + r.moveZ * aimX) - r.locS) * damp(8, dt);
-      if (this.surf) r.wade += ((this.surf.isWater(p.x, p.z) ? 1 : 0) - r.wade) * damp(6, dt);
+      r.locF += ((r.moveX * aimX + r.moveZ * aimZ) - r.locF) * d8;
+      r.locS += ((-r.moveX * aimZ + r.moveZ * aimX) - r.locS) * d8;
+      if (this.surf) r.wade += ((this.surf.isWater(p.x, p.z) ? 1 : 0) - r.wade) * d6;
 
       const friendly = p.team === localTeam;
       r.heat = p.heat ?? 0;
@@ -1539,7 +1550,7 @@ export class Characters {
       if (p.reloadT > 0 && p.reloadDur > 0) {
         const u = clamp(1 - p.reloadT / p.reloadDur, 0, 1);
         if (u < r.reloadU - 0.25) r.reloadU = u;
-        r.reloadU += (u - r.reloadU) * damp(18, dt);
+        r.reloadU += (u - r.reloadU) * d18;
       } else {
         r.reloadU = 0;
       }
@@ -1646,6 +1657,21 @@ export class Characters {
         }
       }
 
+      // A body that has come to rest keeps the limbs it was last posed with: copied, not solved again (the CPU budget).
+      if (dying && r.dieSettled) {
+        const pose = r.pose;
+        for (let k = 0; k < 10; k++) {
+          const part = SETTLED_PARTS[k], arms = k < 4, mesh = k < 2 || (k >= 4 && k < 6) ? upper : k < 4 ? arm : k < 8 ? leg : boot;
+          const slot = mesh === upper ? nU++ : mesh === arm ? nA++ : mesh === leg ? nL++ : nB++;
+          const e = mesh.instanceMatrix.array, o = part * 16, j = slot * 16;
+          for (let c = 0; c < 16; c++) e[j + c] = pose[o + c];
+          if (k >= 8) this._writeFx(boot, slot, fade, flash, team, 0, null, sk.foot ?? sk.limb ?? sk.limbFx);
+          else this._writeFx(mesh, slot, fade, flash, team, 0, arms ? sk.sleeveRGB : sk.trouserRGB, mesh === arm ? sk.limb ?? sk.limbFx : sk.limbFx);
+        }
+        continue;
+      }
+      if (dying && r.die.t > DIE_SETTLE) r.dieSettled = true;     // Posed in full once more below, then kept.
+
       // Arms: shoulder to hand through a solved elbow. Right hand on the grip, left on the fore point.
       const shoulderY = 0.42 * CHAR_SCALE * look.h;
       const armT = 1.15 * look.l * sk.bulk;
@@ -1673,6 +1699,8 @@ export class Characters {
           _b.set(proto.fore[0] - CYC.fore, proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
           if (handW > 0) { _v.set(hx, hy, hz).applyMatrix4(_gun); _b.lerp(_v, handW); }
           if (swapLower > 0.01) { _v.set(0.16, shoulderY - 0.38, -look.armZ - 0.04).applyMatrix4(_body); _b.lerp(_v, swapLower * 0.75); }     // Off the gun while it changes.
+          // A glide's touch-down: the off hand goes to the ground beside the lead foot (a three-point landing).
+          if (r.landT > 0) { const w = Math.sin(Math.PI * Math.min(1, (1 - r.landT) * 1.4)); _v.set(p.x + aimX * 0.35 - rightX * 0.45, 0.08, p.z + aimZ * 0.35 - rightZ * 0.45); _b.lerp(_v, w * 0.9); }
           const slideHand = slide * (1 - R);
           if (slideHand > 0.01) {
             // Off hand trails on the ground through a slide.

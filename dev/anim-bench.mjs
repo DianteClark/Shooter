@@ -1,7 +1,7 @@
 // Characters CPU before/after (docs/ANIMATION.md "Performance"): drives dev/anim-bench.html in headless Chromium for
 // this checkout and, with --base, another one (an export of an older commit), alternating rounds so machine load hits
 // both alike. Prints the mean of the per-round means for each crowd size.
-//   node dev/anim-bench.mjs [--base=/tmp/anim-base] [--n=12,32] [--rounds=4] [--frames=600] [--port=9601]
+//   node dev/anim-bench.mjs [--base=/tmp/anim-base] [--n=12,32] [--rounds=4] [--frames=600] [--port=9601] [--extra=deaths=0]
 //   (an export: mkdir /tmp/anim-base && git archive <commit> js vendor | tar -x -C /tmp/anim-base)
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -16,7 +16,7 @@ const opt = (k, d) => args.find(a => a.startsWith(`--${k}=`))?.split('=')[1] ?? 
 const PORT = Number(opt('port', 9601));
 const BASE = opt('base', null);
 const NS = opt('n', '12,32').split(',').map(Number);
-const ROUNDS = Number(opt('rounds', 4)), FRAMES = Number(opt('frames', 600));
+const ROUNDS = Number(opt('rounds', 4)), FRAMES = Number(opt('frames', 600)), PAGE_EXTRA = opt('extra', '');
 
 async function loadPlaywright() {
   try { return await import('playwright'); } catch { /* the global install */ }
@@ -46,7 +46,7 @@ try {
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', e => errors.push(e.message));
-        await page.goto(`http://127.0.0.1:${PORT}/dev/anim-bench.html?n=${n}&frames=${FRAMES}&root=${root}`);
+        await page.goto(`http://127.0.0.1:${PORT}/dev/anim-bench.html?n=${n}&frames=${FRAMES}&root=${root}${PAGE_EXTRA ? '&' + PAGE_EXTRA : ''}`);
         await page.waitForFunction('window.__result', null, { timeout: 600000 });
         const r = await page.evaluate(() => window.__result);
         if (errors.length) console.log('ERRORS', root, errors.join(' | '));

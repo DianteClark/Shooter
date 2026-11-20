@@ -13,9 +13,9 @@
 // A scripted crowd that walks, strafes, backpedals, sprints, slides, shoots, reloads (tactical and empty), swaps, throws,
 // gets hit and dies and respawns, the same script whichever checkout is measured.
 //   ?n=12 (TDM) or 32 (BR)   &frames=600   &root=/ (this checkout) or /base/ (another, served by dev/anim-bench.mjs)
-//   &mix=1  every third player in a Mastery suit, every third a kit operator
+//   &deaths=0  nobody dies (the falls are the costliest part: this isolates the rest)
 const q = new URLSearchParams(location.search);
-const N = +(q.get('n') || 12), FRAMES = +(q.get('frames') || 600), ROOT = q.get('root') || '/', BR = N > 16;
+const NODEATH = q.get('deaths') === '0', N = +(q.get('n') || 12), FRAMES = +(q.get('frames') || 600), ROOT = q.get('root') || '/', BR = N > 16;
 const THREE = await import('three');
 const { Characters } = await import(ROOT + 'js/render/characters.js');
 const { OPERATORS, SKINS } = await import(ROOT + 'js/ui/operators.js');
@@ -52,8 +52,9 @@ function script(p, i, t, dt) {
   if (u >= 2.2 && u < 2.2 + dt) chars.onHit(p.id, 1, 0, 0.7);
   if (u >= 5.2 && u < 5.2 + dt) chars.onThrow(p.id, 'frag');
   if (u >= 3.5 && u < 3.5 + dt) { p.weapon = W[(W.indexOf(p.weapon) + 1) % W.length]; chars.onSwap(p.id); }
-  // A death every 12 s per player, a respawn 3 s later.
-  const d = (t + i * 1.1) % 12;
+  // A death every 24 s per player (a busy TDM is nearer one a minute), a respawn 3 s later.
+  const d = (t + i * 1.9) % 24;
+  if (NODEATH) return;
   if (d < dt && t > 1) { kill.dirX = Math.cos(i); kill.dirZ = Math.sin(i); kill.head = i % 4 === 0; kill.explosive = i % 5 === 0; kill.weapon = p.weapon; chars.onKill(p.id, kill); }
   p.alive = !(d > 0.15 && d < 3);
 }
