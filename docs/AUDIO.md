@@ -85,7 +85,11 @@ only** (menus and stings, nothing under play: the old default), **Off** (no musi
 far guns, steps, tails) and hard per-class caps; guns past 30 m never take a voice and only raise one looped far
 firefight layer; per-shooter and global rate limits on shots, tails and reflections. dev/ui-audio-test.py runs a
 32-player Ground War fight with the music on through the real graph: the budget and every cap hold, the output does
-not clip, and the engine's main-thread cost is reported per frame.
+not clip, and the engine's main-thread cost is reported per frame. Last run (headless Chrome, loaded 2-core box,
+2019 events in 12 s): 19 voices at the peak, every class at or under its cap, output peak 0.86, engine cost per frame
+median 0.10 ms, p95 0.40 ms. The sound modules every match uses (mode, equipment, streaks, finishers) now bake in the
+menus when the engine is ready, not at the first event of a match (the stress test's first frame went from ~1 s
+offline to 26 ms).
 
 ## iOS rules (do not regress)
 The context is created and resumed only inside the engine's gesture handler, and never on a `touchend` that leaves
