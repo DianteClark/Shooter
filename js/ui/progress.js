@@ -94,6 +94,7 @@ import { weeklyEventAt, eventStatus, eventRoll, applyEventMatch } from '../share
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
 import { tourneyOwned, tourneyAt, runStatus, enterTourney, joinTourney, applyTourneyRound, rollTourney, cleanTourney, startRound, settleForfeit } from '../shared/tourney-items.js';     // docs/TOURNAMENTS.md
 import { OPERATOR_FINISHERS as FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
+import { cleanCampaign, recordCampaign, CP_LIFE, CP_VET_LIFE, CP_SKIN } from '../shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 
 export { levelOf };
 
@@ -554,6 +555,8 @@ export const Progress = {
   // What finisher, emote and gear unlocks are judged on: { level (peak), opTier (best operator mastery tier), season }.
   unlockCtx() { return finisherCtx(); },
   zmFeatsAll() { return { ...(data.zmFeats ?? {}) }; },
+  // The co-op campaign (docs/CAMPAIGN.md): the save block, {missionId: [cleared bits, best stars, best time]}.
+  campaign() { return cleanCampaign(data.cp); },
   skins(op) {
     const got = masteryRewards(data);
     return operatorSkins(op).map(k => ({ ...k, unlocked: got.has(k.id), requirement: `${getTrack(op)?.name ?? op} mastery tier ${k.tier}` }));
@@ -783,7 +786,7 @@ export const Progress = {
   // `records` ({ streak, long, brPlace, exSecs }) are this match's personal bests for the Trophy Case (recordBests).
   // `zmRounds` (Graveyard Shift) is the rounds survived: the map's best round is recorded here, after the card list is
   // taken, so the round cards are stamped (the result carries `zmRecord`: { best, before, fresh }).
-  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null, records = null, zmRounds = null }) {
+  applyMatch({ xp, weapons, pro, mastery, life, mapId, won, career, extracted = false, zmFeat = null, records = null, zmRounds = null, cpRun = null }) {
     const beforeLevel = levelOf(data.xp), beforePeak = data.peakLevel, masterBefore = masterNow();
     const opsBefore = new Set(this.operators().filter(o => o.unlocked).map(o => o.op.id));
     const diffs = new Map(Object.keys(weapons).map(w => [w, weaponDiffBase(w)]));
@@ -798,6 +801,10 @@ export const Progress = {
     const feat = zmFeat && mapId ? recordZmFeat(data, mapId, zmFeat) : null;
     const bests = records ? recordBests(data, records) : [];
     const zmRecord = zmRounds != null && mapId ? recordZmBest(data, mapId, zmRounds) : null;
+    // A cleared campaign mission: the save block, and the lifetime tallies its cards, emblem and skin read.
+    const cpSkinBefore = cpRun ? skinUnlock(getSkin(CP_SKIN.id) ?? { unlock: null }, looksCareer()).unlocked : true;
+    const cpRec = cpRun ? recordCampaign(data, cpRun) : null;
+    if (cpRec) life = { ...(life ?? {}), [CP_LIFE(cpRun.id)]: 1, ...(cpRec.vetAll ? { [CP_VET_LIFE]: 1 } : {}) };
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
@@ -837,6 +844,7 @@ export const Progress = {
     const featUnlocks = FEAT_EMBLEMS.filter(e => !featsBefore.has(e.id) && emblemUnlocked(e, looksCareer()).unlocked)
       .map(e => ({ kind: 'emblem', id: e.id, name: e.name, req: e.rule.label, feat: true }));
     unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks, ...featUnlocks);
+    if (!cpSkinBefore && getSkin(CP_SKIN.id) && skinUnlock(getSkin(CP_SKIN.id), looksCareer()).unlocked) unlocks.unshift({ kind: 'skin', id: CP_SKIN.id, name: `${CP_SKIN.name} (Marshal)`, req: CP_SKIN.label });
     // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
     // cards are already in cardUnlocks, so they are not stamped twice).
     const masterAfter = masterNow();
@@ -877,6 +885,7 @@ export const Progress = {
       zmFeat: feat,
       zmRecord,
       bests,
+      cp: cpRec,
     };
   },
 

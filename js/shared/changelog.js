@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: '1120-6', date: '2026-11-20', title: 'Campaign: Operation Nightrail',
+    items: [
+      'A co-op campaign: Operation Nightrail, eight story missions against the Meridian Line, the company that has taken over the railways. Play it alone with three bot squadmates or with up to three friends. Find it on the new Campaign tab in Multiplayer.',
+      'Every mission is different: hack a signal terminal, sneak through Night Market past watchmen with torches, hold a pier relay against waves, walk a defector across Downtown, blow up a foundry, hunt a broker across Frontier, race a convoy to the dam, and face Marshal Kordell in a juggernaut suit.',
+      'Briefings before each mission and radio chatter during it tell the story. Checkpoints along the way: if your squad is wiped, you go back to the last one, or abort.',
+      'Three difficulties: Recruit, Regular and Veteran. Earn up to three stars a mission: the bonus objective, beating the par time, and nobody dying.',
+      'Rewards: XP, a calling card for every mission, and for clearing every mission on Veteran, Marshal\'s Nightrail skin and the Nightrail emblem.',
+    ],
+  },
+  {
     build: '1120-5', date: '2026-11-20', title: 'Jadefall: a second island',
     items: [
       'New battle royale island: Jadefall, a jungle archipelago of four islands round a warm lagoon, with the Jade Pyramid on its islet in the middle. Eighteen places to drop, from the Sky Temple and its stone head to Port Coral\'s bell tower, Fort Sentinel\'s bastions, a waterfall over the north cliffs and a market on stilts in the lagoon.',

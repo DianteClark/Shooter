@@ -38,6 +38,7 @@ SEED = """(async () => {
   s.weapons = { ...s.weapons, ar: { ...(s.weapons?.ar ?? {}), xp: 40000, kills: 900 } };
   s.life = { played: 300, kills: 4200, wins: 160 };
   s.records = { st: 14, lk: 61 };
+  s.cp = { m1: [7, 3, 300], m2: [2, 1, 500] };      // The co-op campaign (docs/CAMPAIGN.md): cleared missions, stars, times.
   const fnv = str => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); };
   const body = P.encodeSave(P.sanitizeSave(s)).split('.')[1];
   const oldCode = `SY4.${body}.${fnv(body)}`;
@@ -65,7 +66,7 @@ SEED = """(async () => {
   put('switchyard.clan', { v: 1, clan: { id: 'a1b2c3', tag: 'RAIL', name: 'Rail Dogs', c: 1, mk: 2, rv: 0, own: true } });
   put('switchyard.tournament.cup', { round: 3 });
   put('switchyard-options', { sound: 0.3, music: 0.2, quality: 'low', hudSize: 'large', lefty: true, haptics: true, fullscreen: false,
-    padMap: { fire: 3 }, colorMode: 'deutan', textSize: 'large', squad: 'YARD', recall: { mpTab: 'core', soloPick: { mapId: 'pier' } } });
+    padMap: { fire: 3 }, colorMode: 'deutan', textSize: 'large', squad: 'YARD', recall: { mpTab: 'core', soloPick: { mapId: 'pier' }, cpPick: { k: 1, diff: 2 } } });
   put('switchyard-quality', { step: 'medium', at: 1 });
   put('switchyard-gpu', 'ANGLE (SwiftShader)');
   put('switchyard.tuning.v1', { camZoom: 1.1 });
@@ -128,6 +129,8 @@ async def main():
             check('none of them came back', not back, back)
             prog = await pg.evaluate("""(() => { const P = window.__game.Progress; return { name: P.name, xp: P.totalXp, level: P.level, prestige: P.prestige, kills: P.records().streak ?? 0 }; })()""")
             check('the save reads as new: no name, level 1, no XP, no records', prog == {'name': '', 'xp': 0, 'level': 1, 'prestige': 0, 'kills': 0}, prog)
+            camp = await pg.evaluate("window.__game.Progress.campaign()")
+            check('the campaign starts over: no mission cleared', camp == {}, camp)
             if 'switchyard.save' in after:
                 s = json.loads(after['switchyard.save'])
                 check('a stored save, if any, is a blank one', s.get('name', '') == '' and s.get('totalXp', 0) == 0, s.get('name'))

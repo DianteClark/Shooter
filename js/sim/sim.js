@@ -25,6 +25,7 @@ import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
 import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING, tryoutOf } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 import { clearZmWalls, ZM, ZM_SQUAD, ZM_TEAM } from '../shared/zombies.js';   // Graveyard Shift (docs/ZOMBIES.md).
 import * as Fin from './finishers.js';     // Finishing moves and emotes (docs/FINISHERS.md).
+import { CP } from '../shared/campaign.js';   // The co-op campaign (docs/CAMPAIGN.md).
 import { cleanFinisher, FINISHER_IDS, OPERATOR_FINISHER_IDS } from '../shared/finishers.js';
 
 const STEP = 1 / SIM_HZ;
@@ -234,6 +235,7 @@ export function buildRoster(humans, { botSkill = 'mixed', teamSize = null, mapId
   if (MODES[mode]?.rules === 'br') return buildBrRoster(humans, { botSkill, mode });
   if (MODES[mode]?.rules === 'ex') return buildExRoster(humans, { botSkill, mode });
   if (MODES[mode]?.rules === 'zm') return buildZmRoster(humans, { botSkill, mode });
+  if (MODES[mode]?.rules === 'cp') return buildCpRoster(humans, { botSkill, mode });
   if (MODES[mode]?.ffa) return buildFfaRoster(humans, { botSkill, mapId, mode, seed, players: teamSize });
   teamSize ??= mode ? teamSizeFor(mode) : TEAM_SIZE;
   const roster = humans.map(h => {
@@ -333,6 +335,31 @@ function buildZmRoster(humans, { botSkill, mode }) {
   for (let k = 0; k < ZM.seats; k++) {
     roster.push({ id: `zm-${k}`, name: 'Undead', team: ZM_TEAM, isBot: true, ai: true, skill: 'recruit', primary: 'knife', camo: 'none',
       loadout: { primary: 'knife', secondary: 'knife', camo: 'none', perks: [], streaks: [], operator: 'trooper' } });
+  }
+  return roster;
+}
+
+// The campaign (docs/CAMPAIGN.md): every human on team 0 (four at most), bot squadmates in the empty seats, one seat for
+// an escorted VIP (team 0, AI, off the field unless a mission has one), then the Meridian Line's seats on team CP.team.
+// The rules dress and place the Line (js/sim/campaign.js).
+function buildCpRoster(humans, { botSkill }) {
+  const roster = [];
+  humans.slice(0, CP.squad).forEach(h => {
+    const loadout = normalizeLoadout({ ...h.loadout, primary: h.loadout?.primary || h.primary, camo: h.loadout?.camo || h.camo });
+    roster.push({ ...h, team: 0, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout });
+  });
+  const skill = botSkill === 'mixed' ? 'veteran' : botSkill;
+  for (let k = roster.length, n = 0; k < CP.squad; k++, n++) {
+    const loadout = botLoadout(BOT_PRIMARIES[(k * 5 + 1) % BOT_PRIMARIES.length], k + 1, skill, k, 3);
+    roster.push({ id: `bot${n}`, name: BOT_NAMES[(k * 7 + 5) % BOT_NAMES.length], team: 0, isBot: true, skill, primary: loadout.primary, camo: loadout.camo, loadout });
+  }
+  const vip = normalizeLoadout({ primary: 'pistol', secondary: 'pistol', camo: 'none', operator: 'sparrow', perks: [], streaks: [] });
+  roster.push({ id: 'cp-vip', name: 'Kestrel', team: 0, isBot: true, ai: true, skill: 'recruit', primary: 'pistol', camo: 'none', operator: 'sparrow',
+    badge: { prestige: 0, level: 0 }, loadout: vip });
+  for (let i = 0; i < CP.seats; i++) {
+    const loadout = normalizeLoadout({ primary: 'ar', secondary: 'pistol', camo: 'none', operator: 'ghoul' });
+    roster.push({ id: `cp${i}`, name: 'Meridian', team: CP.team, isBot: true, ai: true, skill: 'regular', primary: 'ar', camo: 'none',
+      operator: 'ghoul', badge: { prestige: 0, level: 0 }, loadout });
   }
   return roster;
 }
@@ -443,9 +470,9 @@ function buildPoolRoster(humans, { botSkill, teamSize, mapId, mode, seed, pool }
     return { id: h.id, name: h.name, team: h.team, isBot: false, skill: null, primary: loadout.primary, camo: loadout.camo, loadout };
   };
   // Battle royale and free-for-all keep their own seating; only who sits in the bot seats changes.
-  if (m?.rules === 'br' || m?.rules === 'ex' || m?.rules === 'zm' || m?.ffa) {
+  if (m?.rules === 'br' || m?.rules === 'ex' || m?.rules === 'zm' || m?.rules === 'cp' || m?.ffa) {
     const base = m.rules === 'br' ? buildBrRoster(humans, { botSkill: 'regular', mode }) : m.rules === 'ex' ? buildExRoster(humans, { botSkill: 'regular', mode })
-      : m.rules === 'zm' ? buildZmRoster(humans, { botSkill: 'regular', mode })
+      : m.rules === 'zm' ? buildZmRoster(humans, { botSkill: 'regular', mode }) : m.rules === 'cp' ? buildCpRoster(humans, { botSkill: 'veteran', mode })
       : buildFfaRoster(humans, { botSkill: 'regular', mapId, mode, seed, players: teamSize });
     const seats = base.filter(r => r.isBot && !r.ai);      // Extraction's AI patrol seats are not players.
     const drawn = draw(seats.length);
@@ -1326,7 +1353,7 @@ export class Sim {
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
     if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
     if (msg.cmd === 'br') return !!this.br && this.br.command(this.byId.get(id), msg);
-    if (msg.cmd === 'ex' || msg.cmd === 'zm') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
+    if (msg.cmd === 'ex' || msg.cmd === 'zm' || msg.cmd === 'cp') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     if (msg.cmd === 'trainSwap') return this._trainSwap(id);
     // Finishers and emotes (js/sim/finishers.js): the phone names the target it saw; the host checks it with some slack.

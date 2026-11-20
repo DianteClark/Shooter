@@ -33,7 +33,7 @@ Found by grepping `localStorage` and the key constants across js/ (the vendor sc
 
 | Key | What it held | Written by |
 | --- | --- | --- |
-| `switchyard.save` | the save: name, XP, prestige, weapons, loadouts, unlocks, mastery, Pro, cards, skins, emblems, career totals, season track and ranked SR/placements, records (Trophy Case), Graveyard Shift bests and feats, finishers, first-run flags | js/ui/progress.js |
+| `switchyard.save` | the save: name, XP, prestige, weapons, loadouts, unlocks, mastery, Pro, cards, skins, emblems, career totals, season track and ranked SR/placements, records (Trophy Case), Graveyard Shift bests and feats, finishers, the co-op campaign's cleared missions, stars and times, first-run flags | js/ui/progress.js |
 | `switchyard.progress.v1` | the v1 save, kept as a backup after migration | js/ui/progress.js |
 | `switchyard.save.bad` | a save that could not be read | js/ui/progress.js |
 | `switchyard.save.bak` | the save an import replaced | js/ui/progress.js |
@@ -53,7 +53,7 @@ Found by grepping `localStorage` and the key constants across js/ (the vendor sc
 | `switchyard-player` | this device's player id (rejoin slot, friends' cards key) | js/net/star.js |
 | `switchyard-backdrop` | the title backdrop's map rotation | js/ui/backdrop.js |
 | `switchyard.clan` | this phone's player clan (tag, name, colour, mark) | js/ui/progress.js `Clan` |
-| `switchyard-options` `recall` entry | remembered menu picks: Multiplayer tab and playlists, Custom map and mode, squad size, last Graveyard map | js/ui/recall.js |
+| `switchyard-options` `recall` entry | remembered menu picks: Multiplayer tab and playlists, Custom map and mode, squad size, last Graveyard map, the Campaign tab's mission and difficulty | js/ui/recall.js |
 | any other `switchyard.*` / `switchyard-*` key | tournament state or anything added later | (prefix sweep) |
 
 The player name lives in the save, so it goes with it; the callsign is asked again the first time they play.
