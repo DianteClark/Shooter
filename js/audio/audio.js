@@ -35,6 +35,7 @@ import { MeleeSfx, hasMeleeSound } from './melee-sfx.js';   // Weapons wave 4's 
 import { ZmSfx } from './zm-sfx.js';
 import { CpSfx } from './cp-sfx.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { objOf } from '../sim/rules.js';
+import { ModeSfx } from './mode-sfx.js';         // Mode and objective sounds (the sound pass, docs/AUDIO.md).
 import { BrSfx } from './br-sfx.js';               // Battle royale sounds (docs/BR.md).       // Scorestreaks overhaul sounds (2026-11).
 
 const MAX_VOICES = 26;
@@ -59,6 +60,14 @@ const HEAR_RANGE = 58;
 // V8 lethals on the frag body: [gain, rate]. Impact is a sharp crack, Claymore a deep slam, Drill muffled by its wall.
 const V8_BANG = { impact: [1.55, 1.18], claymore: [1.85, 0.84], drill: [1.5, 1.06] };
 const STEP_RANGE = 24;
+const DISTANT = 44;              // Metres: world sounds (explosions, aircraft, tails) past this go through the distant bus.
+// The ground underfoot by map theme (renderSfx stepSet); anything not listed is concrete and pavement.
+const STEP_SURFACE = {
+  railyard: 'stepsGravel', frontier: 'stepsDirt', launchpad: 'stepsSand', dust: 'stepsSand', desert: 'stepsSand',
+  jungle: 'stepsDirt', jadefall: 'stepsDirt', harvest: 'stepsDirt', ashgrove: 'stepsDirt', millbrook: 'stepsDirt', wrenfield: 'stepsDirt',
+  arctic: 'stepsSnow', frost: 'stepsSnow', observatory: 'stepsSnow', polestar: 'stepsSnow',
+  harbor: 'stepsWood', pier: 'stepsWood', pagoda: 'stepsWood', foundry: 'stepsMetal', topside: 'stepsMetal',
+};
 const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
 const OCCLUDE_RECHECK = 0.3;     // Seconds a shooter's "is there a wall between us" answer is kept.
 const OCCLUDE_GAIN = 0.6;        // A gun behind a wall: this much of its level, and most of its top end gone.
@@ -903,7 +912,58 @@ function renderSfx(sr) {
     }
     return out;
   };
+  // Footsteps by surface (the sound pass): the map's ground, from its theme (STEP_SURFACE). Three or four takes each,
+  // a heel and a toe, so a run never repeats one sample.
+  const stepSet = (n, len, fill) => () => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const d = new Float32Array(Math.floor(len * sr));
+      fill(d, rngFrom(seed + i * 53 + len * 1000), i);
+      out.push(normalize(d, 0.85));
+    }
+    return out;
+  };
+  const surfaces = {
+    // Gravel and ballast: a scatter of small stones under a soft thud.
+    stepsGravel: stepSet(3, 0.18, (d, r, i) => {
+      addTone(d, sr, { dur: 0.06, gain: 0.7, f0: 105 - i * 6, f1: 55, decay: 6 });
+      for (let k = 0; k < 9; k++) addClick(d, sr, r, { at: 0.004 + k * 0.011 + (r() + 1) * 0.004, dur: 0.003, gain: 0.35 + 0.25 * (r() + 1) / 2, hp: 1800 + k * 120 });
+      addNoise(d, sr, r, { dur: 0.12, gain: 0.45, f0: 2600, f1: 900, decay: 6, hp: 700 });
+    }),
+    // Packed earth, grass and leaf litter: low and soft.
+    stepsDirt: stepSet(3, 0.16, (d, r, i) => {
+      addNoise(d, sr, r, { dur: 0.11, gain: 1, f0: 700 + i * 90, f1: 180, decay: 6 });
+      addTone(d, sr, { dur: 0.08, gain: 0.9, f0: 92 - i * 5, f1: 48, decay: 5 });
+      addNoise(d, sr, r, { at: 0.03, dur: 0.08, gain: 0.25, f0: 3200, f1: 1800, decay: 7, hp: 1500 });
+    }),
+    // Snow: the squeaky crunch of it packing down.
+    stepsSnow: stepSet(3, 0.22, (d, r, i) => {
+      for (let k = 0; k < 14; k++) addClick(d, sr, r, { at: 0.01 + k * 0.009, dur: 0.004, gain: 0.3 + 0.2 * Math.sin(k * 0.5), hp: 2200 });
+      addNoise(d, sr, r, { dur: 0.16, gain: 0.6, f0: 2400 + i * 200, f1: 1300, decay: 4, hp: 900 });
+      addTone(d, sr, { dur: 0.07, gain: 0.5, f0: 80, f1: 45, decay: 6 });
+    }),
+    // Sand: a dry hiss and almost no heel.
+    stepsSand: stepSet(3, 0.18, (d, r, i) => {
+      addNoise(d, sr, r, { dur: 0.15, gain: 1, f0: 3600 - i * 200, f1: 1500, decay: 4.5, hp: 900 });
+      addTone(d, sr, { dur: 0.05, gain: 0.35, f0: 85, f1: 50, decay: 6 });
+    }),
+    // Boards: a hollow knock that rings a little.
+    stepsWood: stepSet(3, 0.17, (d, r, i) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 0.7, hp: 1200 });
+      addTone(d, sr, { dur: 0.1, gain: 0.9, f0: 190 + i * 14, f1: 170, decay: 6 });
+      addTone(d, sr, { dur: 0.07, gain: 0.45, f0: 340 + i * 20, f1: 320, decay: 8 });
+      addNoise(d, sr, r, { dur: 0.06, gain: 0.35, f0: 1500, f1: 500, decay: 6 });
+    }),
+    // Steel deck and grating: a ring and a rattle.
+    stepsMetal: stepSet(3, 0.2, (d, r, i) => {
+      addClick(d, sr, r, { dur: 0.004, gain: 0.8, hp: 2000 });
+      addMetal(d, sr, { dur: 0.16, gain: 0.45, f: 620 + i * 70, spread: 1.02, decay: 9 });
+      addTone(d, sr, { dur: 0.06, gain: 0.7, f0: 110, f1: 60, decay: 6 });
+      addClick(d, sr, r, { at: 0.035, dur: 0.003, gain: 0.35, hp: 3000 });
+    }),
+  };
   return {
+    ...surfaces,
     // The tick has to cut through gunfire, so it sits above the guns' energy.
     hit: mk(0.075, (d, r) => { addTone(d, sr, { dur: 0.05, gain: 1, f0: 2500, f1: 1900, decay: 8 }); addClick(d, sr, r, { dur: 0.003, gain: 0.8, hp: 5000 }); }),
     // The kill confirm: a body-blow thump, a hard metal strike, then a bright two-note sting that lifts off it.
@@ -1523,6 +1583,12 @@ export class AudioEngine {
     this.farFilter = ctx.createBiquadFilter();
     this.farFilter.type = 'lowpass'; this.farFilter.frequency.value = 1500; this.farFilter.Q.value = 0.4;
     this.far = ctx.createGain(); this.far.gain.value = 0.9;
+    // The distant bus (the sound pass): a second, darker step past the far bus, for explosions and aircraft heard
+    // from across a big map. One shared filter, so it costs nothing per voice.
+    this.distantFilter = ctx.createBiquadFilter();
+    this.distantFilter.type = 'lowpass'; this.distantFilter.frequency.value = 620; this.distantFilter.Q.value = 0.35;
+    this.distant = ctx.createGain(); this.distant.gain.value = 1.15;
+    this.distant.connect(this.distantFilter);
     this.ui = ctx.createGain(); this.ui.gain.value = 0.78;      // Hitmarkers, medals: never distance-filtered.
     this.roomSend = ctx.createGain(); this.roomSend.gain.value = 1;
     this.room = ctx.createConvolver();
@@ -1535,6 +1601,7 @@ export class AudioEngine {
     this.own = ctx.createGain(); this.own.gain.value = 1;
     this.dry.connect(this.worldDuck);
     this.far.connect(this.farFilter); this.farFilter.connect(this.worldDuck);
+    this.distantFilter.connect(this.worldDuck);
     this.roomSend.connect(this.room); this.room.connect(this.roomOut); this.roomOut.connect(this.worldDuck);
     this.worldDuck.connect(this.comp);
     this.own.connect(this.comp);
@@ -1790,7 +1857,7 @@ export class AudioEngine {
   }
 
   // The single place sound starts. Returns the voice, or null when the budget refuses it.
-  _play(buffer, { gain = 1, pan = 0, far = 0, rate = 1, bus = null, priority = 1, cls = 'world', when = 0, room = 0 } = {}) {
+  _play(buffer, { gain = 1, pan = 0, far = 0, dist = 0, rate = 1, bus = null, priority = 1, cls = 'world', when = 0, room = 0 } = {}) {
     if (!buffer || !this._running()) return null;
     const ctx = this.ctx, now = ctx.currentTime;
     this._reap(now);
@@ -1815,8 +1882,11 @@ export class AudioEngine {
       tail.connect(bus);
     } else {
       // Crossfade between the bright dry path and the dull far path by distance.
-      if (far < 0.95) tail.connect(this.dry);
-      if (far > 0.05) tail.connect(this.far);
+      if (dist) tail.connect(this.distant);         // Far across the map: only the low end arrives.
+      else {
+        if (far < 0.95) tail.connect(this.dry);
+        if (far > 0.05) tail.connect(this.far);
+      }
     }
     if (room > 0) {
       const send = ctx.createGain();
@@ -1849,6 +1919,7 @@ export class AudioEngine {
     this.sGain = 1 / (1 + Math.pow(d / 11, 1.7));
     this.sPan = Math.max(-0.85, Math.min(0.85, dx / 18));
     this.sFar = Math.min(1, Math.max(0, (d - 9) / 28));
+    this.sDist = d > DISTANT ? 1 : 0;     // Past this, the air takes nearly all the top end (the distant bus).
     return d;
   }
 
@@ -2032,7 +2103,7 @@ export class AudioEngine {
         const k = d / 34;
         // The tail falls off far more slowly than the bang, and its share of the sound grows with distance.
         const gain = (0.32 + 0.26 * this.sFar) / (1 + k * k * Math.sqrt(k));
-        this._play(g.tail, { gain, pan: this.sPan, far: Math.max(0.55, this.sFar), rate: 0.94 + Math.random() * 0.1, priority: PR.tail, cls: 'tail' });
+        this._play(g.tail, { gain, pan: this.sPan, far: Math.max(0.55, this.sFar), dist: this.sDist, rate: 0.94 + Math.random() * 0.1, priority: PR.tail, cls: 'tail' });
       }
     }
     if (sup || now - this.reflectAt < REFLECT_GAP) return;
@@ -2088,7 +2159,7 @@ export class AudioEngine {
 
   _world(buffer, x, z, range, opts) {
     if (this._spatial(x, z) > range) return;
-    this._play(buffer, { gain: (opts.gain ?? 1) * this.sGain, pan: this.sPan, far: this.sFar, priority: opts.priority ?? PR.world, cls: opts.cls ?? 'world', room: opts.room ?? 0, rate: opts.rate ?? 1 });
+    this._play(buffer, { gain: (opts.gain ?? 1) * this.sGain, pan: this.sPan, far: this.sFar, dist: this.sDist, priority: opts.priority ?? PR.world, cls: opts.cls ?? 'world', room: opts.room ?? 0, rate: opts.rate ?? 1 });
   }
 
   // Medal priority: when several land together (they do, on a multi-kill), the rarest one is the one you hear.
@@ -2156,6 +2227,7 @@ export class AudioEngine {
     (this.finSfx ??= new FinSfx(this)).onEvents(events, view);       // Finishers and emotes (docs/FINISHERS.md).
     if (objOf(view)?.zm) (this.zmSfx ??= new ZmSfx(this)).onEvents(events, view);     // Graveyard Shift (docs/ZOMBIES.md).
     if (objOf(view)?.cp) (this.cpSfx ??= new CpSfx(this)).onEvents(events, view);     // The campaign (docs/CAMPAIGN.md).
+    (this.modeSfx ??= new ModeSfx(this)).onEvents(events, view);    // Extraction, Infected, HQ, KO, rounds, marks, jets.
     music.onEvents(events, this.localTeam);                           // The few events the match music follows.
     const me = this.localId;
     for (let i = 0; i < events.length; i++) {
@@ -2664,7 +2736,9 @@ export class AudioEngine {
   }
 
   _step(p) {
-    const buf = this.sfx.steps[Math.floor(Math.random() * this.sfx.steps.length)];
+    const bank = this.sfx[STEP_SURFACE[this.themeAsked] ?? STEP_SURFACE[this.theme]] ?? this.sfx.steps;
+    if (!bank) return;
+    const buf = bank[Math.floor(Math.random() * bank.length)];
     if (p.id === this.localId) {
       this._play(buf, { priority: PR.step, cls: 'step', gain: 0.14, rate: 0.95 + Math.random() * 0.1 });
       return;
