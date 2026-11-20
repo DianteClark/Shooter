@@ -5,7 +5,7 @@
 //
 // A finisher {a, v, k, t, dur, ax, az, aaim, vx, vz, vaim}: the attacker and target sim players, the FINISHERS index, the
 // seconds played and its length, and the pinned positions. Both players carry it as p.fin while it runs.
-import { EMOTES, FIN, FINISHERS, FINISHER_IDS, finishable, finisherIndex, getFinisher } from '../shared/finishers.js';
+import { EMOTES, FIN, FINISHERS, FINISHER_IDS, finishable, finisherIndex, getFinisher, weaponFinisher } from '../shared/finishers.js';
 import { hasLineOfSight } from '../shared/geometry.js';
 import { SIM_HZ } from '../shared/constants.js';
 
@@ -60,7 +60,8 @@ export function startFinisher(sim, a, targetId = null, slack = 0) {
   let v = targetId != null ? sim.byId.get(targetId) : null;
   if (!v || !canFinish(sim, a, v, slack)) v = finisherTarget(sim, a, slack);
   if (!v) return false;
-  const def = getFinisher(a.finisher);
+  // A melee weapon with its own finisher (weapons wave 4) plays that one, whatever the operator's pick.
+  const def = weaponFinisher(a.ps.weapon) ?? getFinisher(a.finisher);
   const dx = a.ps.x - v.ps.x, dz = a.ps.z - v.ps.z, d = Math.hypot(dx, dz) || 1;
   // The attacker steps in to arm's length on the line they came from (clear: they could see the target along it).
   const ax = v.ps.x + dx / d * FIN.stand, az = v.ps.z + dz / d * FIN.stand;

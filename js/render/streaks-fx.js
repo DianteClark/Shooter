@@ -24,20 +24,22 @@ import { hexRGB } from './art.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { BOMB_DELAY, BOMB_RADIUS, BOMB_STEP, DOME_R, DROP_DELAY, SWEEP_R, SCOUT_EYE } from '../sim/streaks-v9.js';
 
-const M = { recon: 0, hound: 1, rover: 2, emitter: 3, crate: 4, bomber: 5 };
-const MAX = 24, MAX_DOMES = 6, MAX_DROPS = 6, MAX_LINES = 4, TRAIL = 48, MAX_TRAILS = 4;
+const M = { recon: 0, hound: 1, rover: 2, emitter: 3, crate: 4, bomber: 5, jet: 6 };
+const MAX = 24, MAX_DOMES = 6, MAX_DROPS = 6, MAX_LINES = 4, TRAIL = 48, MAX_TRAILS = 4, MAX_RUNS = 4;
+const JET_Y = 6.8, JET_SPEED = 40;   // Airstrike jets: height and ground speed (m/s), a pair passing over the line.
 const SCOUT_Y = 4, HOUND_Y = 2.6, BOMBER_Y = 9, DROP_FROM = 9;
 const MAX_MARKS = 96;          // Overlay rings: the Carpet Line reticle, its trail and the dropped line's markers.
 const RED = hexRGB(0xff3a2a), WHITE = [1, 1, 1], HOT = [1, 0.86, 0.5], SMOKE = [0.16, 0.16, 0.18], DEBRIS = [0.32, 0.34, 0.37];
 const STEEL = hexRGB(0x9fb8d0), SONAR = hexRGB(0x6fe0ff), LIME = hexRGB(0x7dff9a);
 const rand = (a, b) => a + Math.random() * (b - a);
+const FLARED = new Set(['resupply', 'airdrop', 'plates', 'strike']), FLARE_SMOKE = [0.75, 0.2, 0.16], FLARE_HOT = [1, 0.5, 0.3];
 
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
 const _axisY = new THREE.Vector3(0, 1, 0);
 const _rgb = [0, 0, 0];
 
 // Origin at the centre on the ground (drones: at their body), +X forward.
-function buildModels(ModelSet) {
+export function buildModels(ModelSet) {
   const S = new ModelSet();
   const rotors = (b, S, arm, y, size) => {
     for (const [x, z] of [[arm, arm], [-arm, arm], [arm, -arm], [-arm, -arm]]) {
@@ -114,6 +116,20 @@ function buildModels(ModelSet) {
     b.setPart(1).box(0.1, 0.08, -4.2, 0.5, 0.02, 0.6); b.box(0.1, 0.08, 4.2, 0.5, 0.02, 0.6);
     b.setPart(2).box(-3.25, 0.1, -1.7, 0.12, 0.08, 0.12); b.box(-3.25, 0.1, 1.7, 0.12, 0.08, 0.12);
   });
+  S.model(M.jet, b => {                 // Airstrike fighter: a dart nose, a cropped delta, twin canted fins, two hot nozzles.
+    b.setPart(0).setColor(0x2a2f36).prismX(-1.9, 1.3, 0, 0, 0.26, 0.2, 8, Math.PI / 8);
+    b.setColor(0x3b424c).prismX(1.3, 2.4, 0, 0, 0.2, 0.02, 8, Math.PI / 8);
+    b.setColor(0x7fa6c4).box(0.95, 0.2, 0, 0.7, 0.1, 0.2, 0.04);                        // Canopy.
+    b.setColor(0x2f353d);
+    b.matrix = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+    b.extrude([[0.9, -0.22], [-0.9, -1.85], [-1.45, -1.85], [-1.45, -0.22], [-1.45, 0.22], [-1.45, 1.85], [-0.9, 1.85], [0.9, 0.22]], -0.04, 0.04);
+    b.extrude([[0.5, -0.2], [0.2, -0.75], [-0.1, -0.75], [-0.05, 0.75], [0.2, 0.75], [0.5, 0.2]].map(([x, z]) => [x + 0.6, z]), -0.03, 0.03);   // Canards.
+    b.matrix = null;
+    for (const z of [-0.32, 0.32]) b.setColor(0x262a30).box(-1.55, 0.42, z, 0.6, 0.62, 0.05);   // Twin fins.
+    b.setPart(1).box(-0.6, 0.06, -1.55, 0.5, 0.02, 0.3); b.box(-0.6, 0.06, 1.55, 0.5, 0.02, 0.3);   // Team wingtips.
+    b.setPart(2);
+    for (const z of [-0.14, 0.14]) b.prismX(-2.15, -1.9, 0, z, 0.1, 0.13, 6);              // Afterburners.
+  });
   return S.build();
 }
 
@@ -165,6 +181,8 @@ export class StreaksFX {
     this.rovers = new Map();              // id -> {x, z, yaw, age}: smoothed body heading from the way it moves.
     this.drops = Array.from({ length: MAX_DROPS }, () => ({ t: -1, x: 0, z: 0, team: 0, delay: DROP_DELAY }));
     this.lines = Array.from({ length: MAX_LINES }, () => ({ t: -1, pts: [], team: 0, dur: 0, len: 0 }));
+    // Airstrike runs (streak 'strike'): a pair of jets along the bomb line, timed to pass over it as the bombs fall.
+    this.runs = Array.from({ length: MAX_RUNS }, () => ({ t: -1, x: 0, z: 0, dx: 1, dz: 0, team: 0, at: 1.3, len: 18 }));
     this.trails = Array.from({ length: MAX_TRAILS }, () => ({ owner: null, pts: new Float32Array(TRAIL * 2), n: 0, seen: false }));
     this.smokeT = 0;
     VFX.prewarm?.([this.mesh, this.domes, this.marks]);
@@ -331,6 +349,27 @@ export class StreaksFX {
       }
     }
 
+    // Airstrike runs: the lead jet crosses the line's middle as its middle bomb lands, the wingman a beat behind and off
+    // its shoulder; their afterburners glow.
+    for (let i = 0; i < this.runs.length; i++) {
+      const R = this.runs[i];
+      if (R.t < 0) continue;
+      R.t += dt;
+      const yaw = Math.atan2(R.dz, R.dx), cy = Math.cos(yaw), sy = Math.sin(yaw);
+      let live = false;
+      for (let j = 0; j < 2; j++) {
+        const lag = j * 0.28, side = j ? 3.2 : 0;
+        const along = (R.t - R.at - lag) * JET_SPEED;          // Metres past the line's middle.
+        if (along < -60 || along > 60) continue;
+        live = true;
+        if (n >= MAX) continue;
+        const x = R.x + cy * along - sy * side, z = R.z + sy * along + cy * side;
+        const bank = Math.sin(R.t * 2.2 + j) * 0.05;
+        n = this.#put(n, M.jet, yaw, x, JET_Y + j * 0.5 + bank, z, 0.9, team(R.team), HOT, 1, 0, 0);
+      }
+      if (!live && R.t > R.at) R.t = -1;
+    }
+
     // Plates: a thin steel ring at the feet of everyone wearing them that you can see (teammates always).
     const ps = view.players;
     if (ps) for (let i = 0; i < ps.length; i++) {
@@ -386,12 +425,24 @@ export class StreaksFX {
       const ev = events[i];
       switch (ev.t) {
         case 'streak':
+          // A flare's red smoke where the drop or the strike is coming (the caller throws it: characters.js onCallIn).
+          if (FLARED.has(ev.kind) && Number.isFinite(ev.x)) {
+            for (let j = vfx._n(10); j > 0; j--) vfx.spawn(ev.x + rand(-0.3, 0.3), rand(0.2, 1.2), ev.z + rand(-0.3, 0.3), rand(-0.5, 0.5), rand(1.2, 2.6), rand(-0.5, 0.5),
+              rand(2.2, 3.6), 0.3, rand(1.4, 2.2), FLARE_SMOKE, 0.55, -0.3, 0.7);
+            vfx.sparks(ev.x, 0.3, ev.z, 0, 0, FLARE_HOT, 8, 3);
+          }
           if (ev.kind === 'airdrop' && Number.isFinite(ev.x)) {
             const d = this.drops.find(s => s.t < 0);
             if (d) { d.t = 0; d.x = ev.x; d.z = ev.z; d.team = ev.team ?? 0; d.delay = ev.delay ?? DROP_DELAY; }
           } else if (ev.kind === 'bombrun' && Array.isArray(ev.path)) {
             const L = this.lines.find(s => s.t < 0);
             if (L) { L.t = 0; L.pts = ev.path; L.team = ev.team ?? 0; L.dur = BOMB_DELAY + (ev.path.length / 2) * BOMB_STEP; }
+          } else if (ev.kind === 'strike' && Number.isFinite(ev.x)) {
+            const R = this.runs.find(s => s.t < 0);
+            const l = Math.hypot(ev.dx ?? 1, ev.dz ?? 0) || 1;
+            // The middle bomb lands at delay + step * (n - 1) / 2 (js/sim/sim.js _launchStrike).
+            if (R) Object.assign(R, { t: 0, x: ev.x, z: ev.z, dx: (ev.dx ?? 1) / l, dz: (ev.dz ?? 0) / l, team: ev.team ?? 0,
+              at: (ev.delay ?? 1.3) + (ev.step ?? 0.2) * ((ev.n ?? 5) - 1) / 2 - 0.15 });
           } else if (ev.kind === 'dome' && Number.isFinite(ev.x)) {
             const rgb = c.teamRGB[ev.team ?? 0] ?? c.teamRGB[0];
             vfx.ring(ev.x, ev.z, 0.4, DOME_R, 0.5, rgb, 0.95);
@@ -461,6 +512,7 @@ export class StreaksFX {
     this.mesh.count = 0; this.domes.count = 0; this.marks.count = 0;
     for (const d of this.drops) d.t = -1;
     for (const L of this.lines) L.t = -1;
+    for (const R of this.runs) R.t = -1;
     for (const tr of this.trails) tr.owner = null;
     this.rovers.clear();
   }

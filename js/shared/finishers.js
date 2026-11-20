@@ -9,7 +9,8 @@
 // hits: the moments (0..1 through it) a blow lands, for the sound and the target's jolt.
 // unlock: {} default | { level } peak player level | { opTier } any operator's mastery tier | { season } a season
 // track tier reached (any season, kept once claimed) | { sig, who, tier } that operator's own mastery tier (a signature
-// emote; ctx.ops is { operator: tier }).
+// emote; ctx.ops is { operator: tier }) | { weapon, who } a melee weapon's own finisher (weapons wave 4): it plays
+// whenever that weapon is in hand, whatever the operator's pick, and is never picked on the operator screen.
 
 export const FINISHERS = [
   { id: 'lights', name: 'Lights Out', dur: 1.3, hits: [0.36, 0.64], unlock: {}, desc: 'A stock to the back of the head, then a second for good measure.' },
@@ -18,12 +19,23 @@ export const FINISHERS = [
   { id: 'railspike', name: 'Railspike', dur: 1.5, hits: [0.56], unlock: { opTier: 3 }, desc: 'Both hands up, one hammer blow straight down.' },
   { id: 'lastcall', name: 'Last Call', dur: 1.2, hits: [0.55], unlock: { season: 30 }, desc: 'Quiet and quick: a hand over the mouth and a sharp twist.' },
   { id: 'derail', name: 'Derail', dur: 1.8, hits: [0.62], unlock: { opTier: 5 }, desc: 'Lift them clean off their feet and slam them into the ballast.' },
+  // Weapons wave 4 (js/shared/weapons-w4.js): each melee weapon's own, played with that weapon in hand (`weapon`).
+  { id: 'iai', name: 'Quiet Draw', dur: 1.5, hits: [0.5], weapon: 'katana', unlock: { weapon: 'katana', who: 'Kagero' }, desc: 'Sheathe, step through, one drawn cut; the blade is back before they fall.' },
+  { id: 'felling', name: 'Felling', dur: 1.6, hits: [0.38, 0.7], weapon: 'fireaxe', unlock: { weapon: 'fireaxe', who: 'Kindling' }, desc: 'A low chop to the legs, then the axe all the way up and down.' },
+  { id: 'graveside', name: 'Graveside', dur: 1.7, hits: [0.34, 0.66], weapon: 'shovel', unlock: { weapon: 'shovel', who: 'Spade' }, desc: 'A flat swing to the head, then the blade driven down like breaking ground.' },
+  { id: 'harvest', name: 'Harvest', dur: 1.4, hits: [0.3, 0.46, 0.62], weapon: 'kama', unlock: { weapon: 'kama', who: 'Gleaner' }, desc: 'Hook the ankle, sweep, and three quick cuts on the way down.' },
+  { id: 'clearing', name: 'Clearing', dur: 1.4, hits: [0.36, 0.6], weapon: 'machete', unlock: { weapon: 'machete', who: 'Bushwhack' }, desc: 'Two wide cuts, forehand and back, like clearing brush.' },
+  { id: 'beatdown', name: 'Beat Down', dur: 1.5, hits: [0.24, 0.4, 0.56, 0.74], weapon: 'tonfa', unlock: { weapon: 'tonfa', who: 'Nightstick' }, desc: 'Spin the batons up, four blows in a rhythm, the last one straight down.' },
 ];
 export const FINISHER_IDS = FINISHERS.map(f => f.id);
 export const DEFAULT_FINISHER = 'lights';
 export const getFinisher = id => FINISHERS.find(f => f.id === id) ?? FINISHERS[0];
+// The finishers an operator can pick (not the melee weapons' own), and the one a weapon in hand brings, or null.
+export const OPERATOR_FINISHERS = FINISHERS.filter(f => !f.weapon);
+export const OPERATOR_FINISHER_IDS = OPERATOR_FINISHERS.map(f => f.id);
+export const weaponFinisher = weapon => (weapon ? FINISHERS.find(f => f.weapon === weapon) ?? null : null);
 export const finisherIndex = id => Math.max(0, FINISHER_IDS.indexOf(id));
-export const cleanFinisher = id => (FINISHER_IDS.includes(id) ? id : DEFAULT_FINISHER);
+export const cleanFinisher = id => (OPERATOR_FINISHERS.some(f => f.id === id) ? id : DEFAULT_FINISHER);
 
 export const EMOTES = [
   { id: 'wave', name: 'Wave', icon: 'ui:user', dur: 2.0, unlock: {} },
@@ -75,6 +87,7 @@ export function unlockOk(unlock, ctx = {}) {
   if (unlock.opTier && (ctx.opTier ?? 0) < unlock.opTier) return false;
   if (unlock.season && (ctx.season ?? 0) < unlock.season) return false;
   if (unlock.sig && (ctx.ops?.[unlock.sig] ?? 0) < unlock.tier) return false;
+  if (unlock.weapon && ctx.weapon !== unlock.weapon) return false;     // Only ever with that weapon in hand.
   return true;
 }
 export function unlockText(unlock) {
@@ -82,5 +95,6 @@ export function unlockText(unlock) {
   if (unlock.opTier) return `Reach operator mastery tier ${unlock.opTier} with any operator`;
   if (unlock.season) return `Reach tier ${unlock.season} on a season track`;
   if (unlock.sig) return `Reach ${unlock.who} mastery tier ${unlock.tier}`;
+  if (unlock.weapon) return `Plays when you finish with the ${unlock.who}`;
   return 'Default';
 }

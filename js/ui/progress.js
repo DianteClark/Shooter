@@ -93,7 +93,7 @@ import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProg
 import { weeklyEventAt, eventStatus, eventRoll, applyEventMatch } from '../shared/events.js';     // Weekly events.
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
 import { tourneyOwned, tourneyAt, runStatus, enterTourney, joinTourney, applyTourneyRound, rollTourney, cleanTourney, startRound, settleForfeit } from '../shared/tourney-items.js';     // docs/TOURNAMENTS.md
-import { FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
+import { OPERATOR_FINISHERS as FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
 import { cleanCampaign, recordCampaign, CP_LIFE, CP_VET_LIFE, CP_SKIN } from '../shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 
 export { levelOf };

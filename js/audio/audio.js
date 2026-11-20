@@ -31,6 +31,7 @@ import { EquipmentSfx } from './equipment-sfx.js';   // Gear wave equipment soun
 import { StreaksSfx } from './streaks-sfx.js';
 import { music } from './music.js';                 // Synthesised music (roadmap 24).
 import { FinSfx } from './fin-sfx.js';
+import { MeleeSfx, hasMeleeSound } from './melee-sfx.js';   // Weapons wave 4's melee hits.
 import { ZmSfx } from './zm-sfx.js';
 import { CpSfx } from './cp-sfx.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { objOf } from '../sim/rules.js';
@@ -2127,6 +2128,7 @@ export class AudioEngine {
       return;
     }
     if (!b) return;
+    if (hasMeleeSound(e.w) && (this.meleeSfx ??= new MeleeSfx(this)).hit(e, FOLEY_RANGE * 1.3, PR)) return;   // Wave 4 melee.
     if (e.w === 'bat' && this.sfx.batCrack) {
       const crack = this.sfx.batCrack, rate = 0.96 + Math.random() * 0.08;
       if (e.by === this.localId || e.target === this.localId) this._play(crack, { bus: this.ui, priority: PR.hit, cls: 'foley', gain: 1, rate });

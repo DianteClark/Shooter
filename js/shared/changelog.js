@@ -14,6 +14,19 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1120-2', date: '2026-11-20', title: 'Six new melee weapons, sharper guns, bigger streaks',
+    items: [
+      'Six new melee weapons: the Kagero (a katana that thrusts and lunges further than anything), Kindling (a fire axe that kills in one quicker overhead), the Spade (a shovel with the longest reach, swung in place), the Gleaner (a sickle that cuts twice a pull), Bushwhack (a machete) and the Nightstick (a tonfa, the fastest swings in the game). Each has its own swing, sound and finishing move. They unlock from level 31 to 45.',
+      'The new blades also turn up on the floor in Battle Royale, in the Graveyard Shift crate, and on two walls: the Spade in Ashgrove\'s Burial Field, Kindling by Polestar\'s boiler.',
+      'Every gun has more detail: ejection ports, rails, vents, bolt handles on snipers, belts on LMGs, shells on shotguns. The Slugger gets its own signature attachment, the Cork Handle.',
+      'Inspect: a gun on the Gunsmith bench now turns over to show itself off, and an Inspect button plays it again.',
+      'Pump shotguns are racked, sniper bolts are worked and the lever gun flicks between shots; LMG reloads spill belt links.',
+      'Airstrikes now bring a pair of jets along the bomb line. New gunship, UAV plane and cruise missile models, and a helmet on the Juggernaut suit.',
+      'Calling a streak shows it: a laptop for air support and drones, a flare (with red smoke where it lands) for drops and the airstrike, a radio for machines and artillery.',
+      'Explosions hit harder on screen: a pressure ring, big flying chunks and a thin smoke column.',
+    ],
+  },
+  {
     build: '1120-1', date: '2026-11-20', title: 'Graveyard Shift: Wrenfield Fair',
     items: [
       'A third map built for Graveyard Shift: Wrenfield Fair, a travelling fair left standing in a field at night. Seven areas in a loop behind gates: the Ticket Gate, the Midway, Carousel Green, the Wheel Yard, the Generator Yard (the power), the burned-out Big Top and the Ghost Train.',
