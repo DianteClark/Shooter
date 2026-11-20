@@ -405,9 +405,9 @@ console.log('names');
   // list the same way.
   // + the weekly events' emblems (js/shared/events.js) and the tournament crest (docs/TOURNAMENTS.md), kept out the same way.
   const { EVENT_EMBLEMS, TOURNEY_EMBLEMS } = await import('../js/ui/emblems.js');
-  // 13 feats: the Listener's Dead Frequency (Polestar Relay, 1118-6) is the thirteenth.
+  // 15 feats: the Listener's Dead Frequency (1118-6), the Barker's Last Bell (1120-1) and the Nightrail emblem (1120-6).
   // 94 - 6: Season 2's Signal Fire skin set took six emblem tiers (fillerSkinTiers), and those emblems left the season.
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 - 6 + 1 + 13 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
+  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 94 - 6 + 1 + 15 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
   // The weekly events' rewards and names clash with nothing either.
   const { EVENTS } = await import('../js/shared/events.js');
   const evNames = EVENTS.flatMap(e => [e.reward.name]);

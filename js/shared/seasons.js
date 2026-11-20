@@ -14,7 +14,7 @@
 //     sn: {key, m, k, d, w, brw, br5, ex}: this season's career window for the Season boards }
 // Ownership is derived: the rewards of tiers 1..cl[id] of each season, and the ranked card and emblem of every division
 // up to rr[id]. Nothing is lost at a rollover: reached tiers are claimed for the player first.
-import { SEASON_DEFS, SEASON_DAYS, SEASON_WEEKS, TRACK_TIERS, trackRewards, rankedCards, DIVISIONS, rankRewardId, seasonCamos } from './season-items.js';
+import { SEASON_DEFS, SEASON_DAYS, SEASON_WEEKS, TRACK_TIERS, trackRewards, rankedCards, DIVISIONS, rankRewardId, seasonCamos, rankedTitles, rankedCamoId, RANKED_CAMO_DIV } from './season-items.js';
 import { blankRanked, cleanRanked, rolloverRanked } from './ranked.js';
 import { blankEventState, cleanEventState, eventOwned } from './events.js';     // Weekly events: their state rides in this block.
 
@@ -164,6 +164,9 @@ export function tierProgress(xp) {
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const cnt = (v, max = 1e9) => (Number.isFinite(v) ? Math.min(max, Math.max(0, Math.floor(v))) : 0);
 const blankWindow = (key = '') => ({ key, m: 0, k: 0, d: 0, w: 0, brw: 0, br5: 0, ex: 0 });
+// Every ranked title id of every season (titles ride in the save's season block as `tl`).
+export const TITLE_IDS = new Set(SEASON_DEFS.flatMap(d => rankedTitles(d).map(t => t.id)));
+export const titleById = id => { for (const d of SEASON_DEFS) for (const t of rankedTitles(d)) if (t.id === id) return t; return null; };
 export const blankSeasonState = () => ({ k: '', xp: 0, st: 0, c: 0, wc: {}, cl: {}, rr: {}, rk: blankRanked(), sn: blankWindow(), ev: blankEventState() });
 const KEY_OK = k => typeof k === 'string' && !!parseKey(k);
 
@@ -188,6 +191,9 @@ export function cleanSeasonState(raw) {
     for (const k of ['m', 'k', 'd', 'w', 'brw', 'br5', 'ex']) s.sn[k] = cnt(raw.sn[k]);
   }
   s.ev = cleanEventState(raw.ev);
+  // Ranked seasons (docs/RANKED.md): the title worn, a 'rk-s<n>-<division>' id (kept only while set, so a block without
+  // one cleans, and codes re-export, exactly as before).
+  if (typeof raw.tl === 'string' && TITLE_IDS.has(raw.tl)) s.tl = raw.tl;
   return s;
 }
 // Whether a block says anything (an untouched one stays out of the save code, so old codes re-export unchanged).
@@ -209,7 +215,10 @@ export function seasonOwned(s) {
   for (const d of SEASON_DEFS) {
     for (const r of trackRewards(d).slice(0, s?.cl?.[d.id] ?? 0)) set.add(r.own);
     const rr = s?.rr?.[d.id];
-    if (Number.isFinite(rr)) for (let i = 0; i <= rr; i++) { set.add(`card:${rankRewardId(d, i)}`); set.add(`emblem:${rankRewardId(d, i)}`); }
+    if (Number.isFinite(rr)) {
+      for (let i = 0; i <= rr; i++) { set.add(`card:${rankRewardId(d, i)}`); set.add(`emblem:${rankRewardId(d, i)}`); set.add(`title:${rankRewardId(d, i)}`); }
+      if (rr >= RANKED_CAMO_DIV) set.add(`camo:${rankedCamoId(d)}`);     // Ranked seasons (docs/RANKED.md).
+    }
   }
   for (const id of eventOwned(s?.ev)) set.add(id);
   ownCache.key = key; ownCache.set = set;
@@ -298,4 +307,9 @@ export function weeklyStatus(s, now = new Date()) {
 }
 
 // The ranked rewards a season pays, for the screens: [{ div, card, emblem }].
-export const rankedRewards = def => rankedCards(def).map((c, i) => ({ div: i, card: c.id, emblem: rankRewardId(def, i) }));
+// Ranked seasons (docs/RANKED.md): each division also pays its title, and RANKED_CAMO_DIV the season's ranked camo.
+export const rankedRewards = def => rankedCards(def).map((c, i) => ({
+  div: i, card: c.id, emblem: rankRewardId(def, i), title: rankRewardId(def, i), titleName: rankedTitles(def)[i].name,
+  camo: i === RANKED_CAMO_DIV ? rankedCamoId(def) : null,
+}));
+export { RANKED_CAMO_DIV };

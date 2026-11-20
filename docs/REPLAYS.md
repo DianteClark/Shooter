@@ -17,6 +17,8 @@ the phone (up to 5), and History's **Clips** tab plays or deletes them.
 | js/ui/gamepad.js | `Pad.owner`: while a replay plays it takes every press |
 | js/shared/reset.js, js/ui/wipe.js | `WIPE_DBS`: the progress reset deletes the clips database (docs/RESET.md) |
 | css/replay.css | the player's layer and the Clips tab |
+| js/game/replay-code.js | replay codes: `encodeReplay` / `decodeReplay` / `highlightRange` (see Replay codes below) |
+| js/ui/replaycode.js | the Share sheet (replay player) and the Replay code sheet (History > Clips) |
 
 ## Recording
 What is recorded is exactly what the renderer was fed: the interpolated view (`Match.frame`'s `view`, with the local
@@ -102,7 +104,40 @@ press and drag (the picture follows, paused, while dragging).
 - `app.renderer` points at the replay's renderer while it plays, so resizes, the Graphics option and the perf overlay
   (`?fps=1`) follow it.
 
+## Replay codes (ROADMAP item 60)
+**Share** in the replay player makes a text code of the clip: the **Highlight** (the 8.5 seconds around the final kill,
+`highlightRange`) or the **Whole clip**, copied or sent with the system share sheet. Another phone pastes it in History >
+Clips > **Replay code** and watches it in the same player (title "Shared"; Save keeps it as a clip). No server: the
+code is the replay.
+
+Format `SYR1.<base64url>.<checksum>` (fnv-1a over `SYR1.<body>`, base 36, as the save code). The body is deflate-raw
+(`CompressionStream`, Safari 16.4+) of one binary record, column by column so deflate finds the repeats:
+- a JSON header: map, mode, modifiers, rate, length, which cast member was "you", the final kill, the title, and the cast
+  (name, side, operator, skin, tracer, kill effect, bot) and the string table (weapons, camos);
+- keyframes at 10 Hz (the clip keeps 15) as five streams: heads (gap, count, cast index), flags (alive, sprint, slide,
+  spawn protection, ghost, downed, ADS, and a "changed" bit followed by weapon, camo and side), positions in 1/16 m as
+  the error of a straight-line guess from the last two, aim as the turn since last time (256 steps a circle), and
+  health as changes;
+- objectives and scores as a table of distinct values and an index per keyframe (dropped if huge);
+- the events the picture and the feed use (shots with one ray, hits, kills, explosions, bangs, spawns, throws, swaps,
+  slides, emotes), ids as cast indices, times as gaps in ms.
+Decoding rebuilds an ordinary clip (`ClipReader` plays it): velocities come back from the positions, reloads, heat and
+the extras the code leaves out (grenades in flight, smokes, streaks, the battle royale circle) are simply not drawn.
+
+Sizes (dev/sim-ranked.mjs, a real bot match): TDM 6v6 highlight about 4,200 characters, whole 30 s about 10,000
+(27 KB before deflate); Ground War 16 a side highlight about 9,500, whole clip about 25,000. The same clip always makes
+the same code.
+
+Refused cleanly, with words on the sheet (`CODE_ERRORS`): not a code (`format`), another version (`version`: a new
+format bumps the number and old codes are refused, not misread), a cut paste or a typo (`checksum`), a body that does
+not read (`data`), a map this build does not have (`map`), over 200,000 characters (`size`), a browser without
+`DecompressionStream` (`unsupported`). Spaces and line breaks a chat app adds are ignored.
+
 ## Tests
+`node dev/sim-ranked.mjs` (code): a recorded bot match to a code and back, players within 0.4 m of where they were,
+every kill with its killer, victim and gun, the final kill in the highlight, every refusal, Ground War sizes.
+`python3 dev/ui-ranked-test.py [port] code`: Share in the player (highlight and whole), a bad code refused, the code
+played as a shared replay.
 `python3 dev/ui-replay-test.py [port] [tdm|pad|cap|br|zm]`: a short solo TDM to its results, Watch replay, scrub,
 speeds, pause, kill feed, the three cameras, Save, Close back to the results; History > Clips: list, watch, delete; a
 fake pad; the 5-clip cap; battle royale and Graveyard Shift with the record's cap. dev/ui-reset-test.py seeds an old

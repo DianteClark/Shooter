@@ -230,3 +230,24 @@ export function rankedCards(def) {
 export function rankedEmblems(def) {
   return DIVISIONS.map((d, i) => [rankRewardId(def, i), `${def.name} ${d.name} Crest`, i >= 5 ? 'shield' : 'hex', d.color, [d.light, d.color], RANK_GLYPHS[i]]);
 }
+
+/* ---------- Ranked seasons with rewards (docs/ROADMAP.md item 60, docs/RANKED.md) ---------- */
+// On top of the card and crest of every division reached, a season's Ranked pays a title for every division reached
+// (the best one worn under the name, a player's pick) and one camo for reaching RANKED_CAMO_DIV (Gold) or higher.
+// Ids follow the card's: 'title:rk-s1-gold'; the camo 'camo:rk-s1'. Append only, never rename (ids are in saves).
+export const RANK_TITLE_WORDS = ['Brawler', 'Striker', 'Vanguard', 'Ace', 'Virtuoso', 'Tactician', 'Champion'];
+export const RANKED_CAMO_DIV = 2;
+export function rankedTitles(def) {
+  return DIVISIONS.map((d, i) => ({
+    id: rankRewardId(def, i), name: i === 6 ? `${def.name} Champion` : `${d.name} ${RANK_TITLE_WORDS[i]}`, division: i, season: def.id, n: def.n,
+  }));
+}
+const hexNum = s => parseInt(String(s).slice(1), 16);
+export const rankedCamoId = def => `rk-s${def.n}`;
+// A CAMOS row (appended in camos.js): the season's theme in the animated gold pattern, every gun once owned.
+export function rankedCamo(def) {
+  return {
+    id: rankedCamoId(def), name: `${def.name} Contender`, pattern: 'gold', colors: [hexNum(def.theme[3]), hexNum(def.theme[1]), hexNum(def.theme[2])],
+    scale: 7.0, animated: true, tint: hexNum(def.theme[3]), tier: 3, season: def.id, ranked: RANKED_CAMO_DIV,
+  };
+}

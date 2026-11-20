@@ -57,7 +57,7 @@ export const RADIO = {
   lantern: { name: 'Lantern', css: '#7cc8ff' },
   kestrel: { name: 'Kestrel', css: '#9ff0c0' },
   line: { name: 'Meridian radio', css: '#ff8a7c' },
-  magpie: { name: 'Magpie', css: '#ffd27c' },
+  magpie: { name: 'Kingfisher', css: '#ffd27c' },
   kordell: { name: 'Marshal Kordell', css: '#ff5a4a' },
 };
 
@@ -65,7 +65,7 @@ const L = (who, text) => [who, text];
 
 export const MISSIONS = [
   {
-    id: 'm1', n: 1, name: 'Signal Box', map: 'railyard', par: 540, insert: 's0',
+    id: 'm1', n: 1, name: 'Switch Room', map: 'railyard', par: 540, insert: 's0',
     tag: 'Infiltrate and hack',
     brief: [
       ['The Line goes dark', 'Three nights ago the Meridian Line took the rail network: every junction, every signal, every yard. Nobody knows what they are moving.'],
@@ -124,7 +124,7 @@ export const MISSIONS = [
     ],
   },
   {
-    id: 'm3', n: 3, name: 'Breakwater', map: 'harbor', par: 720, insert: 's0',
+    id: 'm3', n: 3, name: 'Seawall', map: 'harbor', par: 720, insert: 's0',
     tag: 'Defend',
     brief: [
       ['The pier relay', 'The taps paid off: the Line sends its orders over a radio relay on the Harbor pier.'],
@@ -154,7 +154,7 @@ export const MISSIONS = [
         done: [L('lantern', 'Boat\'s gone. Pull back to ours.')] },
       { type: 'extract', at: 's0', r: 6, time: 4, label: 'Fall back to the boats', checkpoint: true, cp: 'd1',
         spawn: [{ role: 'assault', at: 'd2', n: 2 }],
-        done: [L('lantern', 'Breakwater is done. And someone just asked us for help.')] },
+        done: [L('lantern', 'Seawall is done. And someone just asked us for help.')] },
     ],
   },
   {
@@ -212,10 +212,10 @@ export const MISSIONS = [
     ],
   },
   {
-    id: 'm6', n: 6, name: 'Magpie', map: 'frontier', par: 840, insert: 'p2',
+    id: 'm6', n: 6, name: 'Kingfisher', map: 'frontier', par: 840, insert: 'p2',
     tag: 'Hunt',
     brief: [
-      ['Magpie', 'The plates were sold before they were cast. Magpie, a broker who sells to anyone, is meeting a Line courier at the Freight Yard.'],
+      ['Kingfisher', 'The plates were sold before they were cast. Kingfisher, a broker who sells to anyone, is meeting a Line courier at the Freight Yard.'],
       ['Your job', 'He runs the moment he smells you: Freight Yard, Downtown, Central Station, then a plane at the Airfield. Lantern pings him every twenty seconds.'],
       ['Don\'t lose him', 'If he reaches the Airfield and his plane, he is gone. Take him down and take his phone.'],
     ],
@@ -223,18 +223,18 @@ export const MISSIONS = [
     steps: [
       { type: 'goto', at: ['~', 'p2', 'p3', 0.45], r: 8, label: 'Close in on the Freight Yard', checkpoint: true, cp: 'p2',
         spawn: [{ role: 'patrol', at: ['~', 'p2', 'p3', 0.3], n: 2, route: [['~', 'p2', 'p3', 0.3], ['~', 'p2', 'p3', 0.6], ['p3', -20, 0]] }],
-        say: [L('lantern', 'Come in from the Steel Mill. Quietly: if Magpie sees you coming he is gone.')] },
-      { type: 'kill', label: 'Take down Magpie', checkpoint: true, cp: ['~', 'p2', 'p3', 0.45],
-        spawn: [{ role: 'target', at: 'p3', n: 1, fixed: true, name: 'Magpie', route: ['p0', 'p1', 'p14'], escorts: 2 },
+        say: [L('lantern', 'Come in from the Steel Mill. Quietly: if Kingfisher sees you coming he is gone.')] },
+      { type: 'kill', label: 'Take down Kingfisher', checkpoint: true, cp: ['~', 'p2', 'p3', 0.45],
+        spawn: [{ role: 'target', at: 'p3', n: 1, fixed: true, name: 'Kingfisher', route: ['p0', 'p1', 'p14'], escorts: 2 },
           { role: 'guard', at: 'p3', n: 3 }, { role: 'guard', at: 'p0', n: 3 }, { role: 'guard', at: 'p1', n: 3 }, { role: 'patrol', at: 'p14', n: 3, route: ['p14', ['p14', 20, 0], ['p14', 0, 20]] }],
-        say: [L('lantern', 'Magpie is at the Freight Yard. Grey coat, two minders. Go quietly or he runs.')],
+        say: [L('lantern', 'Kingfisher is at the Freight Yard. Grey coat, two minders. Go quietly or he runs.')],
         on: [{ when: { gate: 1 }, say: [L('magpie', 'Line, this is your buyer. I have company. Meet me at the station.')] },
           { when: { gate: 3 }, say: [L('lantern', 'He\'s at the Airfield. If that plane leaves with him, we lose him.')] }],
-        done: [L('lantern', 'Magpie is down. Get his phone.')] },
-      { type: 'goto', at: '@kill', r: 2.6, label: 'Take Magpie\'s phone',
+        done: [L('lantern', 'Kingfisher is down. Get his phone.')] },
+      { type: 'goto', at: '@kill', r: 2.6, label: 'Take Kingfisher\'s phone',
         done: [L('lantern', 'Got it. A convoy schedule... Radio Hill to Canyon Dam. Tonight. Get to Central Station: the pickup is on its way.')] },
       { type: 'defend', at: 'p1', r: 10, time: 60, label: 'Hold Central Station for the pickup', checkpoint: true, cp: '@kill',
-        on: [{ when: { t: 3 }, spawn: [{ role: 'assault', at: ['p1', 30, 0], n: 3 }] }, { when: { t: 30 }, spawn: [{ role: 'assault', at: ['p1', -25, 20], n: 4 }], say: [L('line', 'Magpie\'s killers are at the station. All units!')] }] },
+        on: [{ when: { t: 3 }, spawn: [{ role: 'assault', at: ['p1', 30, 0], n: 3 }] }, { when: { t: 30 }, spawn: [{ role: 'assault', at: ['p1', -25, 20], n: 4 }], say: [L('line', 'Kingfisher\'s killers are at the station. All units!')] }] },
       { type: 'extract', at: 'p1', r: 9, time: 5, label: 'Board the pickup', checkpoint: true, cp: 'p1',
         done: [L('lantern', 'Everyone aboard. Good hunting.')] },
     ],
@@ -243,7 +243,7 @@ export const MISSIONS = [
     id: 'm7', n: 7, name: 'Dead Man\'s Run', map: 'frontier', par: 720, insert: 'p7',
     tag: 'Chase',
     brief: [
-      ['The convoy', 'Magpie\'s phone had the schedule: a convoy of plates leaves Radio Hill for Canyon Dam tonight, on the old service track.'],
+      ['The convoy', 'Kingfisher\'s phone had the schedule: a convoy of plates leaves Radio Hill for Canyon Dam tonight, on the old service track.'],
       ['Your job', 'You can\'t stop the convoy on open ground, but you can beat it to the dam on foot. Reach each relay before the clock runs out: every relay buys you time.'],
       ['At the dam', 'The convoy\'s commander waits at Canyon Dam. Take him out before the plates cross.'],
     ],
@@ -398,12 +398,12 @@ export const CP_SKIN = { id: 'skin:marshal-nightrail', operator: 'marshal', name
 export const CP_EMBLEM = { id: 'feat-nightrail', name: 'Nightrail', label: 'Clear every Operation Nightrail mission on Veteran' };
 // One calling card per mission: id, name, art (pattern and colours for js/shared/progression.js card()).
 export const CP_CARDS = [
-  ['cp-m1', 'Signal Box', 'circuit', ['#0e1820', '#1e3a4a', '#bfe6ff', '#7cc8ff']],
+  ['cp-m1', 'Switch Room', 'circuit', ['#0e1820', '#1e3a4a', '#bfe6ff', '#7cc8ff']],
   ['cp-m2', 'Quiet Hours', 'waves', ['#120e1c', '#2a2240', '#d8c8ff', '#9a8cff']],
-  ['cp-m3', 'Breakwater', 'waves', ['#081a20', '#163a46', '#c8f4ff', '#38b6ff']],
+  ['cp-m3', 'Seawall', 'waves', ['#081a20', '#163a46', '#c8f4ff', '#38b6ff']],
   ['cp-m4', 'Kestrel', 'speed', ['#0e1c14', '#1e4a2e', '#c8ffd8', '#59d36b']],
   ['cp-m5', 'Long Fuse', 'pulse', ['#1a0d0a', '#6a2a10', '#ffd2a8', '#ff7a3a']],
-  ['cp-m6', 'Magpie', 'rings', ['#1c1a10', '#4a4220', '#fff0b8', '#ffd27c']],
+  ['cp-m6', 'Kingfisher', 'rings', ['#1c1a10', '#4a4220', '#fff0b8', '#ffd27c']],
   ['cp-m7', 'Dead Man\'s Run', 'chevrons', ['#1c120a', '#5a3414', '#ffd9a0', '#ff9f1c']],
   ['cp-m8', 'Iron Crown', 'rays', ['#1c0a0a', '#5a1414', '#ffd0c8', '#ff4a3a']],
 ];

@@ -162,6 +162,13 @@ export function poolEntries(now = Date.now()) {
   return list;
 }
 
+// Ranked seasons (docs/RANKED.md): a pool bot's ranked SR this season, as the Ranked board shows it (-1: not placed, or
+// not a ranked player). A ranked match's bots wear the division of this SR, so the lobby, the boards and the hub agree.
+export function poolSr(profileId, now = Date.now()) {
+  const e = poolEntries(now).find(x => x.id === profileId);
+  return e ? e.sn.sr : -1;
+}
+
 /* ---------- Categories ---------- */
 // An entry's Master level: from its rank and total XP, the same rule for me, friends (any build) and the pool.
 export const masterOfEntry = e => masterOf(e.prestige, e.level, e.xp);

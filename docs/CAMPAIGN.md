@@ -7,12 +7,12 @@ briefing cards and radio lines (text with a synthesised radio squelch, no voice 
 
 | # | Mission | Map | Kind | Steps |
 |---|---|---|---|---|
-| 1 | Signal Box | Railyard | Infiltrate and hack | reach the yard office, splice into the junction box, hack the signal terminal (waves at 35% and 70%), hold the box while it uploads, get out |
+| 1 | Switch Room | Railyard | Infiltrate and hack | reach the yard office, splice into the junction box, hack the signal terminal (waves at 35% and 70%), hold the box while it uploads, get out |
 | 2 | Quiet Hours | Night Market | Stealth | slip in, plant two listening taps, photograph the ledger, copy the paymaster's laptop, get out: watchmen with torches, an alarm brings waves |
-| 3 | Breakwater | Harbor | Defend | take the pier relay, plug in, hold it 3:30 against five waves, take out the harbour officer, sink his boat, fall back |
+| 3 | Seawall | Harbor | Defend | take the pier relay, plug in, hold it 3:30 against five waves, take out the harbour officer, sink his boat, fall back |
 | 4 | Kestrel | Downtown | Escort | find Kestrel at the safehouse, walk her through five stops to the east platforms, hold the platform for her train |
 | 5 | Long Fuse | Foundry | Sabotage | take the foreman's keys, set three charges inside four minutes, keep the Line off them for the 40 s fuse, hold the west hall, get clear |
-| 6 | Magpie | Frontier | Hunt | close in on the Freight Yard, take down Magpie before his plane leaves the Airfield, take his phone, hold Central Station for the pickup |
+| 6 | Kingfisher | Frontier | Hunt | close in on the Freight Yard, take down Kingfisher before his plane leaves the Airfield, take his phone, hold Central Station for the pickup |
 | 7 | Dead Man's Run | Frontier | Chase | five relays across the west of Frontier against the clock (each buys time), the convoy commander at the dam, blow the dam road |
 | 8 | Iron Crown | Canyon | Boss | push into the canyon, blow the gate to his yard, bring down Marshal Kordell in his juggernaut suit |
 
@@ -146,12 +146,12 @@ people take longer, about the par times). Per-guest snapshots about 2.4-2.7 KB.
 
 | Mission | Regular (2 seeds) | Recruit | Veteran |
 |---|---|---|---|
-| Signal Box | 3:01, 2:58 | 2:53 | 3:24, 1 retry |
+| Switch Room | 3:01, 2:58 | 2:53 | 3:24, 1 retry |
 | Quiet Hours | 1:12 (1 retry), 1:08 | 1:03 | 1:08, 1 retry |
-| Breakwater | 4:58, 4:34 | 4:33 | 7:26, 10 retries |
+| Seawall | 4:58, 4:34 | 4:33 | 7:26, 10 retries |
 | Kestrel | 3:22 (3 retries), 3:00 (1) | 2:38 | 6:28, 16 retries |
 | Long Fuse | 2:35, 2:38 | 2:21 | 2:50, 1 retry |
-| Magpie | 1:36, 1:34 | 1:33 | 3:23, 3 retries |
+| Kingfisher | 1:36, 1:34 | 1:33 | 3:23, 3 retries |
 | Dead Man's Run | 1:56, 1:50 | 1:31 | 2:15, 2 retries |
 | Iron Crown | 3:46 (8 retries), 2:58 (5) | 1:15 | 11:54, 35 retries |
 

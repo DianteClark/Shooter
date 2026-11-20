@@ -122,7 +122,9 @@ test('every emblem draws; every camo pattern exists in the shader; every skin na
 test('every finisher and emote rule is one the unlock check knows', () => {
   for (const f of [...FINISHERS, ...EMOTES]) {
     const keys = Object.keys(f.unlock);
-    assert.ok(keys.every(k => ['level', 'opTier', 'season', 'sig', 'who', 'tier'].includes(k)), `${f.id}: ${keys}`);
+    assert.ok(keys.every(k => ['level', 'opTier', 'season', 'sig', 'who', 'tier', 'weapon'].includes(k)), `${f.id}: ${keys}`);
+    // A melee weapon's own finisher (1120-2): plays whenever that weapon is in hand, never an operator pick.
+    if (f.unlock.weapon) assert.ok(WEAPONS[f.unlock.weapon], `${f.id}: ${f.unlock.weapon}`);
     // A signature emote: a real operator, its name, a tier its track has, and that tier lists the emote as a reward.
     if (f.unlock.sig) {
       const op = OPERATORS.find(o => o.id === f.unlock.sig), t = P.getTrack(f.unlock.sig);
@@ -626,7 +628,7 @@ test('after that career everything not tied to a season or a tournament is open,
   assert.deepEqual(skinLocked, [], 'skins');
   // Champion (a feat emblem) is the best ranked division ever reached: checked with a ranked save below.
   assert.deepEqual(ALL_EMBLEMS.filter(e => !e.season && !e.event && !e.tourney && e.id !== 'feat-champion' && !o.emblem.has(e.id)).map(e => e.id), [], 'emblems');
-  assert.deepEqual(FINISHERS.filter(f => !f.unlock.season && !o.finisher.has(f.id)).map(f => f.id), [], 'finishers');
+  assert.deepEqual(FINISHERS.filter(f => !f.unlock.season && !f.unlock.weapon && !o.finisher.has(f.id)).map(f => f.id), [], 'finishers');
   assert.deepEqual(EMOTES.filter(f => !f.unlock.season && !o.emote.has(f.id)).map(f => f.id), [], 'emotes');
   assert.deepEqual(Object.entries(GEAR_KINDS).flatMap(([k, t]) => Object.keys(t).map(id => `${k}:${id}`)).filter(k => !o.gear.has(k)), [], 'gear');
   assert.equal(o.pro.size, PERK_IDS.length, 'every Pro perk');

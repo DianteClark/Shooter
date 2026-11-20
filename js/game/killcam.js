@@ -72,6 +72,7 @@ export class Killcam {
     this.lastAct = -1;
     this.root = root;
     this.ui = null;
+    this.director = null;         // The caster camera, if the match has one: aims the shot while no replay plays.
   }
 
   get active() { return !!this.replay; }
@@ -84,12 +85,13 @@ export class Killcam {
     if (this.recording) this.#record(view, events);
     this.#watch(view, events);
     if (!this.replay) {
+      this.director?.direct(view, dt);      // The caster camera (js/game/caster.js), when one is open.
       this.renderer.update(view, events, dt);
       return;
     }
     this.#advance(dt);
     if (this.replay) this.renderer.update(this.out, this.replayEvents, dt);
-    else this.renderer.update(view, events, dt);
+    else { this.director?.direct(view, dt); this.renderer.update(view, events, dt); }
   }
 
   // Skip button, or any call from the HUD. A skipped final replay also sets `skipped` for Match.

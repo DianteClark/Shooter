@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: '1120-7', date: '2026-11-20', title: 'Ranked rewards, caster camera, replay codes',
+    items: [
+      'Ranked has a hub: open the Season screen\'s Ranked tab for your division, your progress to the next tier, your placement matches, the time left in the season and every reward on the way up.',
+      'End of season rewards grow: on top of the calling card and crest, every division you reach pays a title (Gold Vanguard, Platinum Ace and more) to wear under your name, and reaching Gold or higher pays the season\'s ranked camo for every gun.',
+      'A new season soft-resets your rating: three quarters of it carries into the new season\'s five placement matches. The hub shows what you would carry.',
+      'Bots in Ranked now wear the same rank they show on the Ranked board.',
+      'Caster camera: when you are out of a round or out of the match, tap Caster cam to follow anyone, look over the whole fight from above, or fly a free camera, with the player list and kill feed. Not in Ranked.',
+      'Friend rooms: tap Watch in the lobby to spectate the next match with the caster camera instead of playing.',
+      'Share a replay: Share in the replay player makes a code of the highlight or the whole clip. Your friend pastes it in History, Clips, Replay code, and watches it on their phone.',
+    ],
+  },
+  {
     build: '1120-6', date: '2026-11-20', title: 'Campaign: Operation Nightrail',
     items: [
       'A co-op campaign: Operation Nightrail, eight story missions against the Meridian Line, the company that has taken over the railways. Play it alone with three bot squadmates or with up to three friends. Find it on the new Campaign tab in Multiplayer.',

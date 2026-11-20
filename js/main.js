@@ -20,7 +20,7 @@ import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore, MatchHistory, Friends, Clan } from './ui/progress.js';
 import { taggedName, tagOk } from './shared/clans.js';     // Player clans: "[TAG] Name" on the roster.
-import { cleanCard } from './shared/boards.js';
+import { cleanCard, poolSr } from './shared/boards.js';
 import { boardsScreen } from './ui/boards.js';
 import { humanRating } from './shared/botpool.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
@@ -62,10 +62,12 @@ import { seasonUnlocks } from './ui/season.js';
 import { tourneyUnlocks, tourneySpot } from './ui/tourney.js';
 import { matchSides, roundTitle } from './shared/tournaments.js';
 import { tourneyAt } from './shared/tourney-items.js';
-import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
+import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode, rankedBots } from './shared/ranked.js';
+import { TITLE_IDS } from './shared/seasons.js';     // Ranked titles on badges (docs/RANKED.md).
 import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
-import { ReplayPlayer } from './game/replay-player.js';      // Watch replay and saved clips (docs/REPLAYS.md).
+import { ReplayPlayer } from './game/replay-player.js';
+import { SpectatorMatch } from './game/spectator.js';      // A friend room's spectator seat (docs/RANKED.md).      // Watch replay and saved clips (docs/REPLAYS.md).
 import { saveClip, loadClip, deleteClip, listClips } from './ui/clips.js';
 import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
 // Multiplayer and Custom (docs/ROADMAP.md item 14): playlists, the pre-match vote, the bot seam, Training.
@@ -258,7 +260,7 @@ function myLoadout() {
 // What every human carries in the lobby and into the roster.
 function seatData() {
   const loadout = myLoadout();
-  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...Progress.badge(), rk: Progress.rankCode() } };
+  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...Progress.badge(), rk: Progress.rankCode(), ...(Progress.title() ? { tl: Progress.title().id } : {}) } };
 }
 
 function goTitle(message) {
@@ -437,6 +439,7 @@ menu.on({
   botSkill: ({ skill }) => { app.lobby.botSkill = skill; broadcastLobby(); renderLobby(); },
   brSquad: ({ n }) => setBrSquad(n),
   moveTeam: ({ id }) => moveTeam(id),
+  toggleWatch: () => toggleWatch(),
   lobbyMic: () => app.voice?.toggleMic(),
   voiceMute: ({ id }) => voiceUi?.toggleMute(id),
 });
@@ -597,7 +600,19 @@ function openBoards(back = afterEditing) {
 }
 
 function openHistory(tab = 'matches') {
-  menu.history({ onBack: afterEditing, onStats: () => openStats(openHistory), tab, onWatch: watchClip });
+  menu.history({ onBack: afterEditing, onStats: () => openStats(openHistory), tab, onWatch: watchClip, onWatchCode: watchShared });
+}
+
+// History > Clips > Replay code: a friend's shared replay (js/game/replay-code.js), back to the Clips tab when it closes.
+// Save keeps it as a clip here like any other.
+function watchShared(clip) {
+  const back = () => {
+    if (app.inMatch) return;
+    openHistory('clips');
+    backdrop.setLoadout(myLoadout());
+    backdrop.live();
+  };
+  if (!openReplay(clip, { onClose: back, title: clip.title ? `Shared · ${clip.title}` : 'Shared replay' })) back();
 }
 
 // The match replay player (js/game/replay-player.js) on the game canvas, over whatever menu screen is up (hidden by
@@ -825,8 +840,8 @@ function roomCap() {
 
 function teamOpen(team, except = null) {
   // A free-for-all has no sides (buildRoster deals everyone their own); only the room's size matters.
-  if (ffaRoom() || isCp(app.lobby?.custom?.mode)) return app.lobby.humans.filter(h => h.id !== except).length < roomCap();
-  return app.lobby.humans.filter(h => h.team === team && h.id !== except).length < TEAM_SIZE;
+  if (ffaRoom() || isCp(app.lobby?.custom?.mode)) return app.lobby.humans.filter(h => h.id !== except && !h.spec).length < roomCap();
+  return app.lobby.humans.filter(h => h.team === team && h.id !== except && !h.spec).length < TEAM_SIZE;
 }
 
 // `custom`: Custom > Host room hosts with the picker's settings (see currentCustom); otherwise the room plays the map vote.
@@ -940,6 +955,7 @@ function hostLobbyMessage(msg, from) {
       return;
     }
     case 'ready': if (guest) guest.ready = !!msg.ready; break;
+    case 'spec': if (guest) guest.spec = !!msg.on; break;     // Watch: a spectator seat (docs/RANKED.md).
     case 'loadout': if (guest) Object.assign(guest, seatFrom(msg)); break;
     case 'team': {
       if (guest && teamOpen(msg.team, guest.id)) guest.team = msg.team;
@@ -962,7 +978,8 @@ function cleanBadge(b) {
   const prestige = n(b?.prestige, MAX_PRESTIGE, 0), level = n(b?.level, MAX_LEVEL, 1);
   // Master Prestige (docs/PRESTIGE.md): only at Prestige X level 50; older builds send none.
   const master = prestige >= MAX_PRESTIGE && level >= MAX_LEVEL ? n(b?.master, MASTER_MAX, 0) : 0;
-  return { prestige, level, master, rk: cleanCode(b?.rk) };
+  // Ranked seasons (docs/RANKED.md): the title worn, when it is one this build knows.
+  return { prestige, level, master, rk: cleanCode(b?.rk), ...(TITLE_IDS.has(b?.tl) ? { tl: b.tl } : {}) };
 }
 
 // Matchmaking for the bot player pool (js/shared/botpool.js): where the humans in this match sit, so the bots drawn
@@ -1034,6 +1051,51 @@ function moveTeam(id) {
   }
 }
 
+// Watch: a guest takes a spectator seat for the room's next matches (or back to playing). docs/RANKED.md.
+function toggleWatch() {
+  const me = localHuman();
+  if (!me || app.isHost || !app.net) return;
+  me.spec = !me.spec;
+  app.net.sendLobby({ t: 'spec', on: me.spec });
+  menu.toast(me.spec ? 'You will watch the next match with the caster camera' : 'You will play the next match');
+  renderLobby();
+}
+
+// The spectator seat's match: the caster camera over the host's snapshots. Back to the room when it ends or on Leave.
+function beginSpectating(msg) {
+  const net = app.net;
+  if (!net || !MAPS[msg.mapId]) return;
+  replayView?.close();
+  app.inMatch = true;
+  wakeLock.set(true);
+  app.matchInfo = { roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode), scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit, spectating: true };
+  stopVote();
+  net.resetGameHandlers();
+  backdrop.stop();
+  menu.hide();
+  menu.overlay('');
+  hud.setVisible(false);
+  controls.setEnabled(false);
+  const renderer = app.renderer = new GameRenderer(canvas, MAPS[msg.mapId]);
+  renderer.resize();
+  renderer.setQuality?.(Options.get('quality'));
+  renderer.chars.setRoster(msg.roster);
+  const back = () => {
+    if (!(app.match instanceof SpectatorMatch)) return;
+    endLocalMatch();
+    // Ready for the room's next match (a spectator has no results to read).
+    const me = localHuman();
+    if (me && app.net) { me.ready = true; app.net.sendLobby({ t: 'ready', ready: true }); }
+    renderLobby();
+  };
+  app.match = new SpectatorMatch({
+    mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode), seed: msg.seed, roster: msg.roster,
+    scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit, net, renderer, audio,
+    title: `${MAPS[msg.mapId]?.name ?? ''} · ${MODES[msg.mode]?.name ?? ''}`, onExit: back, onEnd: back,
+  });
+  app.match.start();
+}
+
 function toggleReady() {
   const me = localHuman();
   if (!me) return;
@@ -1100,6 +1162,11 @@ function guestLobbyMessage(msg) {
       endLocalMatch();
       app.countdown = null;
       app.rematchWait = false;
+      // A spectator (Watch in the lobby) is not in the roster: it watches the match instead (docs/RANKED.md).
+      if (Array.isArray(msg.roster) && !msg.roster.some(r => r.id === app.net.localId)) {
+        if (localHuman()?.spec) beginSpectating(msg);
+        break;
+      }
       beginMatch({
         roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode),
         scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit,
@@ -1472,7 +1539,9 @@ function launchMp(mapId, mode, mods = [], ranked = false, event = null) {
   const pool = poolFor(humans), rating = pool.target;
   if (ranked) Object.assign(pool, { target: rankedTarget(Progress.ranked(), rating), spread: RANKED_SPREAD });
   // ?bots= is a test hook; players always get the seam's default.
-  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool });
+  const drawn = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool });
+  // Ranked: each pool bot wears the division of its SR on the Ranked board (docs/RANKED.md).
+  const roster = ranked ? rankedBots(drawn, id => poolSr(id)) : drawn;
   beginMatch({
     roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: ranked ? [] : cleanMods(mods, mode), ...limitsFor(mode),
     hostId: id, isHost: true, localId: id, ranked: ranked ? { rating } : null, event,
@@ -1484,14 +1553,14 @@ function launchMp(mapId, mode, mods = [], ranked = false, event = null) {
 function rankedContext(roster, localId, ctx) {
   const me = roster.find(r => r.id === localId);
   const them = roster.filter(r => r.team !== me?.team);
-  const srs = them.map(r => (r.isBot || r.pool ? ratingToSr(r.rating ?? 0.3) : codeSr(cleanCode(r.badge?.rk)))).filter(v => Number.isFinite(v));
+  const srs = them.map(r => (r.isBot || r.pool ? (r.rankSr >= 0 ? r.rankSr : ratingToSr(r.rating ?? 0.3)) : codeSr(cleanCode(r.badge?.rk)))).filter(v => Number.isFinite(v));
   return { lobby: srs.length ? Math.round(srs.reduce((a, b) => a + b, 0) / srs.length) : null, rating: ctx?.rating ?? poolFor([{ id: localId, badge: Progress.badge() }]).target };
 }
 
 // A friend room plays Ranked only when the host opts in and every seat is a human (RANKED_PARTY): no bots, a fixed
 // ruleset, no custom settings or modifiers. Each phone moves its own player's rating.
 function rankedRoom() {
-  const hs = app.lobby.humans ?? [];
+  const hs = (app.lobby.humans ?? []).filter(h => !h.spec);
   return !!app.lobby.ranked && !app.lobby.custom && hs.length >= RANKED_PARTY && [0, 1].every(t => hs.filter(h => h.team === t).length === RANKED_PARTY / 2);
 }
 function setLobbyRanked(on) {
@@ -1816,7 +1885,8 @@ function launchHostMatch(mapId, mode, custom = null) {
   if (!net) return;
   stopVote();
   const { humans } = app.lobby;
-  const clean = humans.map(({ id, name, team, primary, camo, loadout, badge }) => ({ id, name, team, primary, camo, loadout, badge }));
+  // Spectators (Watch) are left out of the roster; the start message reaches them all the same and they watch.
+  const clean = humans.filter(h => !h.spec).map(({ id, name, team, primary, camo, loadout, badge }) => ({ id, name, team, primary, camo, loadout, badge }));
   const seed = randomSeed();
   const limits = limitsFor(mode);
   if (custom?.scoreLimit && !LIMIT_OVERRIDE) limits.scoreLimit = custom.scoreLimit;
@@ -1888,6 +1958,12 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   // Ranked (the Ranked playlist, or a full friend room the host made ranked): the rating moves at the end.
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;
+  // The caster camera (docs/RANKED.md): out-of-play players may watch with it, except where seeing everyone would be
+  // unfair (Ranked) or makes no sense (Training, the tutorial, the range).
+  if (app.match.caster) {
+    app.match.caster.canOpen = !ranked && !training && !tutorial && mode !== 'range';
+    app.match.caster.title = `${MAPS[mapId]?.name ?? ''} · ${MODES[mode]?.name ?? ''}`;
+  }
   // A weekend tournament round: the result moves this phone's run (js/game/awards.js).
   if (tourney && !training && !tutorial) app.match.awards.tourney = { key: tourney.key, round: tourney.round, cup: tourney.cup, opponent: tourney.opponent };
   app.matchInfo.tourney = tourney;
@@ -2210,7 +2286,7 @@ NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 // Just after the progress reset's wipe, its notice comes first and the training offer follows it.
 const offeredTutorial = !invite && (maybeResetNotice(menu, { then: maybeOfferTutorial }) || maybeOfferTutorial());
-if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, watchShared, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else {
   if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });

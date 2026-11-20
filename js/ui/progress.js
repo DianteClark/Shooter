@@ -89,7 +89,8 @@ import { PERK_IDS, PERKS } from '../shared/catalog.js';
 import { cleanFriends, seeFriend } from '../shared/boards.js';
 import { cleanClan, foundClan, renameClan, newerClan, readClanCode, cardClan } from '../shared/clans.js';     // Player clans.
 import { WEAPON_IDS } from '../shared/constants.js';
-import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP } from '../shared/seasons.js';
+import { seasonAt, rollover, claimTiers, applySeasonMatch, seasonOwned, tierProgress, weeklyStatus, dateLocked, TIER_XP, titleById, SEASON_DEFS as SEASONS_ALL } from '../shared/seasons.js';
+import { rankedTitles } from '../shared/season-items.js';     // Ranked seasons: titles (docs/RANKED.md).
 import { weeklyEventAt, eventStatus, eventRoll, applyEventMatch } from '../shared/events.js';     // Weekly events.
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
 import { tourneyOwned, tourneyAt, runStatus, enterTourney, joinTourney, applyTourneyRound, rollTourney, cleanTourney, startRound, settleForfeit } from '../shared/tourney-items.js';     // docs/TOURNAMENTS.md
@@ -920,6 +921,24 @@ export const Progress = {
     return { ...rk, placed: p, placements: PLACEMENTS, division: p ? division(rk.sr) : null, code: codeOf(rk) };
   },
   rankCode() { return codeOf(seasonNow().rk); },
+  // Ranked titles (docs/RANKED.md): every season's, with owned (paid at a season's end) and worn.
+  titles(now = new Date()) {
+    const st = seasonNow(now), own = seasonOwned(st);
+    return SEASONS_ALL.flatMap(d => rankedTitles(d)).map(t => ({ ...t, owned: own.has(`title:${t.id}`), worn: st.tl === t.id }));
+  },
+  // The title worn ({ id, name, division, season, n }) or null.
+  title() {
+    const st = data.season, id = st?.tl;
+    return id && seasonOwned(st).has(`title:${id}`) ? titleById(id) : null;
+  },
+  // Wears an owned title (null takes it off). False for one not owned.
+  setTitle(id) {
+    const st = seasonNow();
+    if (!id) { delete st.tl; save(); return true; }
+    if (!seasonOwned(st).has(`title:${id}`)) return false;
+    st.tl = id; save();
+    return true;
+  },
   weekly(now = new Date()) { return weeklyStatus(seasonNow(now), now); },
   // Claims every reached tier: the rewards, tier order, each { tier, kind, id, own, fresh }.
   claimSeason(now = new Date()) {

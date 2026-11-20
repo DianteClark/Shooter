@@ -12,6 +12,7 @@ import { W3_UNLOCKS } from './weapons-w3.js';
 import { W4_UNLOCKS } from './weapons-w4.js';
 import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
+import { DIVISIONS } from './season-items.js';     // Ranked seasons: the ranked camo's division (docs/RANKED.md).
 import { blankTourney, cleanTourney, tourneyEmpty } from './tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
 import { cleanCampaign, CP_CARDS, CP_LIFE, MISSIONS as CP_MISSIONS } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { RESET_GEN } from './reset.js';     // Save codes carry the progress reset's generation (docs/RESET.md).
@@ -231,6 +232,7 @@ export function camoGateOpen(camo, w, life = null, rank = null) {
 
 export function camoRequirement(camo) {
   if (camo.exfil) return EX_UNLOCKS.find(u => u.id === camo.exfil)?.label ?? 'Extraction exclusive';
+  if (camo.season && camo.ranked !== undefined) return `Reach ${DIVISIONS[camo.ranked]?.name ?? 'Gold'} or higher in Season ${defById(camo.season)?.n ?? ''} Ranked`;
   if (camo.season) return `Season ${defById(camo.season)?.n ?? ''} reward track`;
   if (camo.tourney) return 'Win a weekend tournament';
   if (camo.pp) return `Reach Prestige ${camo.pp}`;
