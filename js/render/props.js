@@ -31,6 +31,7 @@ const SETS = {
   foundry: [BARREL, BARREL, CRATE, CONE, BARREL],
   ashgrove: [CRATE, BARREL, JAR, CRATE],
   polestar: [BARREL, CRATE, BARREL, CONE],
+  wrenfield: [CRATE, BARREL, JAR, CRATE],
   millbrook: [CRATE, BARREL, JAR, CRATE],
   range: [CRATE, BARREL, CONE],
 };

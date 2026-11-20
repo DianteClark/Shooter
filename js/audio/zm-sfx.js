@@ -90,6 +90,14 @@ const RECIPES = {
   clang: [0.6, (d, sr, r) => { click(d, sr, r, 0, 1, 90); tone(d, sr, { dur: 0.55, gain: 0.7, f0: 820, decay: 7 }); tone(d, sr, { dur: 0.5, gain: 0.45, f0: 1310, decay: 8 }); }, 0.45],
   shatter: [0.9, (d, sr, r) => { click(d, sr, r, 0, 1, 80); noise(d, sr, r, { dur: 0.8, gain: 0.9, f0: 3200, f1: 900, decay: 4, hp: 700 }); tone(d, sr, { dur: 0.4, gain: 0.6, f0: 300, f1: 120, decay: 6, square: 0.5 }); }, 0.6],
   horn: [2.2, (d, sr, r) => { tone(d, sr, { dur: 2, gain: 1, f0: 82, f1: 78, decay: 0.8, attack: 0.3, square: 0.7 }); tone(d, sr, { dur: 2, gain: 0.5, f0: 123, f1: 117, decay: 0.8, attack: 0.3, square: 0.5 }); noise(d, sr, r, { dur: 2, gain: 0.15, f0: 400, decay: 1, attack: 0.4 }); }, 0.7],
+  // Wrenfield Fair (js/sim/zm-fair.js): the Barker's charge winding up (a steam organ's rising whistle and a drum
+  // roll), the Whirligig's whirr, a lantern catching (a little bell), lanterns snuffed (a falling whoosh), the
+  // striker's bell.
+  calliope: [1.3, (d, sr, r) => { [523, 659, 784, 1046].forEach((f, k) => tone(d, sr, { at: k * 0.22, dur: 0.4, gain: 0.55, f0: f, f1: f * 1.02, decay: 3, attack: 0.02, square: 0.35, vib: [7, 0.012] })); for (let k = 0; k < 10; k++) click(d, sr, r, 0.2 + k * 0.08, 0.6, 140); }, 0.6],
+  whirl: [1.2, (d, sr, r) => { tone(d, sr, { dur: 1.1, gain: 0.7, f0: 300, f1: 900, decay: 1.5, attack: 0.05, square: 0.4, vib: [22, 0.08] }); noise(d, sr, r, { dur: 1.1, gain: 0.4, f0: 1800, f1: 3600, decay: 1.6, attack: 0.1, hp: 900 }); }, 0.5],
+  ding: [1.0, (d, sr) => { bell(d, sr, 0, 880, 0.7, 1.2); tone(d, sr, { at: 0.02, dur: 0.6, gain: 0.3, f0: 1760, decay: 5 }); }, 0.45],
+  snuff: [0.8, (d, sr, r) => { noise(d, sr, r, { dur: 0.7, gain: 0.9, f0: 2400, f1: 300, decay: 3, attack: 0.02, hp: 200 }); tone(d, sr, { dur: 0.5, gain: 0.4, f0: 400, f1: 150, decay: 4, square: 0.4 }); }, 0.5],
+  striker: [2.2, (d, sr, r) => { click(d, sr, r, 0, 1, 60); bell(d, sr, 0.05, 1046, 1, 2); bell(d, sr, 0.05, 784, 0.6, 2); }, 0.6],
   down: [0.9, (d, sr) => { tone(d, sr, { dur: 0.35, gain: 1, f0: 700, f1: 600, decay: 1.5, square: 0.4 }); tone(d, sr, { at: 0.38, dur: 0.5, gain: 1, f0: 500, f1: 350, decay: 2, square: 0.4 }); }, 0.5],
 };
 const GROANS = ['groan', 'moan', 'groan', 'moan'];
@@ -134,6 +142,11 @@ export class ZmSfx {
         case 'zblast': this.#world('burst', e.x, e.z, 40, { gain: 1 }); break;
         case 'zshield': this.#world(e.broke ? 'shatter' : 'clang', e.x, e.z, 26, { gain: e.broke ? 1 : 0.6, rate: 0.9 + Math.random() * 0.2 }); break;
         case 'zbreak': this.#ui('roundEnd', 0.7); break;
+        case 'zcharge': this.#world('calliope', e.x, e.z, 45, { gain: 1 }); break;
+        case 'zwhirl': this.#world('whirl', e.x, e.z, 30, { gain: 0.8, rate: 0.9 + Math.random() * 0.2 }); break;
+        case 'zlantern': this.#ui('snuff', 0.8); break;
+        case 'zoracle': this.#ui('ding', 0.6, 0.7); break;
+        case 'zrelic': if (e.lantern) this.#ui(e.n >= e.of ? 'striker' : 'ding', 0.7, 0.85 + e.n * 0.1); break;
         case 'zover': this.#ui('over', 0.9); break;
         case 'zdoor': { const p = this.#pos(view, e.by); if (p) this.#world('gate', p.x, p.z, 40, { gain: 1 }); break; }
         case 'zbuy': {

@@ -14,6 +14,7 @@ import * as industrial from './themes/industrial.js';
 import * as frontier from './themes/frontier.js';
 import { ashgrove } from './themes/ashgrove.js';
 import { polestar } from './themes/polestar.js';
+import { wrenfield } from './themes/wrenfield.js';
 import { millbrook } from './themes/millbrook.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
@@ -3144,6 +3145,7 @@ const DRESS = {
   foundry: { ...RAILYARD_DRESS, ...industrial.foundry.dress },
   ashgrove: { ...RAILYARD_DRESS, ...ashgrove.dress },
   polestar: { ...RAILYARD_DRESS, ...polestar.dress },
+  wrenfield: { ...RAILYARD_DRESS, ...wrenfield.dress },
   millbrook: { ...RAILYARD_DRESS, ...millbrook.dress },
 };
 
@@ -3170,6 +3172,7 @@ const THEME_STAGES = {
   foundry: industrial.foundry.stage,
   ashgrove: ashgrove.stage,
   polestar: polestar.stage,
+  wrenfield: wrenfield.stage,
   millbrook: millbrook.stage,
 };
 
@@ -3417,6 +3420,7 @@ const THUMB_STYLE = {
   foundry: industrial.foundry.thumb,
   ashgrove: ashgrove.thumb,
   polestar: polestar.thumb,
+  wrenfield: wrenfield.thumb,
   millbrook: millbrook.thumb,
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,

@@ -54,7 +54,7 @@ CASES += [('special-' + s, 'special', s) for s in ['training', 'range', 'tutoria
 # (this week's and three later weeks' on a fake date: a zombies, a Standard and a Ground War twist), and a weekend
 # tournament played round by round on a fake Saturday (each round forced won, so the next one opens).
 CASES += [('custom-millbrook-' + m, 'custom', ('millbrook', m)) for m in ['tdm', 'dom', 'kc', 'hard', 'snd', 'ctf', 'ffa', 'gun', 'gf']]
-CASES += [('custom-zm-polestar', 'custom', ('polestar', 'zm'))]
+CASES += [('custom-zm-polestar', 'custom', ('polestar', 'zm')), ('custom-zm-wrenfield', 'custom', ('wrenfield', 'zm'))]
 CASES += [('mp-wkevent' + ('' if d is None else '-' + d), 'wkevent', d) for d in [None, '2026-11-30T12:00:00', '2026-12-07T12:00:00', '2026-12-14T12:00:00', '2026-12-21T12:00:00']]
 CASES += [('tourney', 'tourney', '2026-11-21T12:00:00')]
 

@@ -196,7 +196,7 @@ function extrasOf(e) {
   }
   if (d.zm) {
     const z = d.zm;
-    return ['Rounds', `<div class="hm-facts">${fact('Round reached', z.round, 'big')}${fact('Rounds survived', z.survived)}${fact('Escape', z.escaped ? `Round ${z.escaped}` : 'No')}${fact('Gravewarden', z.warden ? 'Down' : 'Standing')}</div>
+    return ['Rounds', `<div class="hm-facts">${fact('Round reached', z.round, 'big')}${fact('Rounds survived', z.survived)}${fact('Escape', z.escaped ? `Round ${z.escaped}` : 'No')}${fact({ radio: 'Listener', lantern: 'Barker' }[MAPS[e.map]?.zm?.quest?.kind] ?? 'Gravewarden', z.warden ? 'Down' : 'Standing')}</div>
       ${z.fresh ? '<p class="hm-note">A new best round on this map.</p>' : ''}`];
   }
   if (d.sd) {

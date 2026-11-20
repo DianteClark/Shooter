@@ -1,6 +1,6 @@
 // Graveyard Shift ally bots (owner: "they don't buy new weapons, they don't do much of anything except die").
 //
-//   node dev/sim-zm-allies.mjs [--maps=ashgrove,polestar,neon] [--runs=4] [--seed=1] [--cap=30] [--v]
+//   node dev/sim-zm-allies.mjs [--maps=ashgrove,polestar,wrenfield,neon] [--runs=4] [--seed=1] [--cap=30] [--v]
 //
 // A crew of one human-like stand-in (js/sim/humanlike.js, seated as the human: the allies revive it first, follow it
 // and leave it the quest's last step) and three ally bots, run until overrun, escaped or --cap. Per run: the round
@@ -13,7 +13,7 @@ import { makeHumanLike } from '../js/sim/humanlike.js';
 import { BotChatter, CHATTER } from '../js/sim/chatter.js';
 
 const arg = (k, d) => { const a = process.argv.find(x => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
-const MAPS = arg('maps', 'ashgrove,polestar,neon').split(','), RUNS = Number(arg('runs', 4)), SEED = Number(arg('seed', 1)), CAP = Number(arg('cap', 30));
+const MAPS = arg('maps', 'ashgrove,polestar,wrenfield,neon').split(','), RUNS = Number(arg('runs', 4)), SEED = Number(arg('seed', 1)), CAP = Number(arg('cap', 30));
 const V = process.argv.includes('--v');
 const DT = 1 / SIM_HZ;
 const mean = a => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
