@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Weekly events and the Season 2 switch in the real page (docs/SEASONS.md "Weekly events", js/shared/events.js).
+"""Weekly events and the Season 2 and Season 3 switches in the real page (docs/SEASONS.md "Weekly events", js/shared/events.js).
 
 Run from anywhere: python3 dev/ui-events-test.py [port] [--shots]. It serves the repo itself and runs the page on mocked
 dates (every `new Date()` and Date.now() moved to that local day, as dev/ui-gallery.html does):
@@ -10,7 +10,10 @@ dates (every `new Date()` and Date.now() moved to that local day, as dev/ui-gall
   2026-12-28  Season 2 opens: the new-season banner, the title's Season chip (Season 2, 42 days), the Season screen
               (Signal Fire, 100 tiers, six weekly sets, the first open), Ranked back in placements, What's new.
   2027-01-05  Lights Out and the weekly event in the Spotlight together, in the order rule.
-  2027-02-10  Season Replay: Cold Iron (the chip says Replay, the screen its title).
+  2027-02-08  Season 3 opens: the new-season banner (Third Rail), the chip (Season 3, 42 days), the Season screen (100
+              tiers, the Lodestone on 25, six weekly sets, S3 ids), no Season 3 camo in the Gunsmith before it.
+  2027-02-16  Lightning Rod (Snipers Only Grind) and the weekly event in the Spotlight together; Find match plays it.
+  2027-03-24  Season Replay: Cold Iron (the chip says Replay, the screen its title), after Season 3 ends.
 With --shots it saves screens to /tmp/events/.
 """
 import asyncio, subprocess, sys, time, os, json
@@ -207,8 +210,81 @@ async def season_two(browser):
     await shot(pg, 'mp-s2-events')
     await ctx.close()
 
-    print('2027-02-10: Season Replay')
-    ctx, pg = await page_on(browser, '2027-02-10')
+
+
+async def season_three(browser):
+    print('2027-02-08: Season 3 opens')
+    ctx, pg = await page_on(browser, '2027-02-07', 20)
+    await boot(pg)
+    await pg.reload(); await pg.wait_for_timeout(1200)
+    await pg.evaluate("window.__game.menu.overlay('')")
+    chip = await pg.evaluate("document.querySelector('.tsn-chip')?.textContent.replace(/\\s+/g, ' ').trim()")
+    check('Feb 7: the chip says Season 2, last day', chip is not None and 'Season 2' in chip and 'Last day' in chip, chip)
+    pre = await pg.evaluate("""(async () => { const { SEASON_DEFS, seasonCamos } = await import('/js/shared/season-items.js'); const ids = seasonCamos(SEASON_DEFS[2]).map(c => c.id);
+      return { picker: window.__game.Progress.camos('ar').filter(c => ids.includes(c.camo.id)).length, rail: window.__game.Progress.isItemUnlocked('weapon', 'rail') }; })()""")
+    check('  no Season 3 camo in the picker yet; the Lodestone still locked', pre['picker'] == 0 and not pre['rail'], pre)
+    await pg.evaluate("window.__game.Progress.applySeasonMatch({ xp: 40000, counts: {}, career: { kills: 3, deaths: 1, won: true } })")
+    store = await pg.evaluate("JSON.stringify(Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])))")
+    await ctx.close()
+    ctx, pg = await page_on(browser, '2027-02-08', 9)
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local')
+    await pg.evaluate(f"(() => {{ const s = {store}; localStorage.clear(); for (const k in s) localStorage.setItem(k, s[k]); }})()")
+    await pg.reload(); await pg.wait_for_timeout(1400)
+    ban = await pg.evaluate("document.querySelector('.ev-banner.sn')?.textContent.replace(/\\s+/g, ' ').trim() ?? null")
+    check('the new season is announced on the title: Season 3: Third Rail', ban is not None and 'Season 3: Third Rail' in ban, ban)
+    await shot(pg, 'title-s3')
+    await pg.evaluate("window.__game.menu.overlay('')")
+    chip = await pg.evaluate("document.querySelector('.tsn-chip')?.textContent.replace(/\\s+/g, ' ').trim()")
+    check('the Season chip: Season 3, 42 days left', chip is not None and 'Season 3' in chip and '42d left' in chip, chip)
+    kept = await pg.evaluate("window.__game.Progress.hasReward('card:s2-card-01') && window.__game.Progress.season().tier === 0")
+    check('  Season 2 tiers reached were claimed and kept; the new track at tier 0', kept)
+    await tap(pg, '.tsn-chip', 900)
+    sz = await pg.evaluate("({ s: window.__game.menu.el.dataset.screen, tiles: document.querySelectorAll('.sz-tile').length, txt: document.querySelector('.menu').innerText })")
+    check('the Season screen: Third Rail, 100 tiers', sz['s'] == 'season' and 'Third Rail' in sz['txt'] and sz['tiles'] == 100, {k: sz[k] for k in ('s', 'tiles')})
+    await shot(pg, 'season-s3')
+    # Scroll the track to the Lodestone (tier 25) and the animated cards at the end for the screenshots.
+    await pg.evaluate("document.querySelectorAll('.sz-tile')[24]?.scrollIntoView({ inline: 'center', block: 'nearest' })")
+    await pg.wait_for_timeout(500)
+    await shot(pg, 'season-s3-tier25')
+    await pg.evaluate("document.querySelectorAll('.sz-tile')[96]?.scrollIntoView({ inline: 'center', block: 'nearest' })")
+    await pg.wait_for_timeout(500)
+    await shot(pg, 'season-s3-end')
+    await tap(pg, '[data-act="szTab"][data-tab="weekly"], [data-tab="weekly"]', 600)
+    wk = await pg.evaluate("({ weeks: document.querySelectorAll('.sz-weeks > *').length, open: window.__game.Progress.weekly().filter(w => w.open).length, ids: window.__game.Progress.weekly()[0].list.map(c => c.id) })")
+    check('  six weekly sets, the first open, Season 3 ids', wk['weeks'] == 6 and wk['open'] == 1 and all(i.startswith('S3.w1.') for i in wk['ids']), wk)
+    await shot(pg, 'season-s3-weekly')
+    post = await pg.evaluate("""(async () => { const { SEASON_DEFS, seasonCamos } = await import('/js/shared/season-items.js'); const ids = seasonCamos(SEASON_DEFS[2]).map(c => c.id);
+      return window.__game.Progress.camos('ar').filter(c => ids.includes(c.camo.id)).length; })()""")
+    check('  the ten Season 3 camos are in the picker now (locked until earned)', post == 10, post)
+    await ctx.close()
+
+    print('2027-02-16: Lightning Rod and the weekly event')
+    ctx, pg = await page_on(browser, '2027-02-16')
+    await boot(pg)
+    await pg.reload(); await pg.wait_for_timeout(1200)
+    await pg.evaluate("window.__game.menu.overlay('')")
+    await tap(pg, '[data-act="multiplayer"]', 700)
+    spot = await pg.evaluate("[...document.querySelectorAll('.mp-sec-spot .mp-pl')].map(b => [b.dataset.id, b.querySelector('b')?.textContent])")
+    spot = [s for s in spot if s[0] != 'tourney']
+    ids = [s[0] for s in spot]
+    check('the Spotlight: weekly event, Lightning Rod, Ranked, featured', ids == ['wkevent', 'event', 'ranked', 'featured'] and spot[1][1] == 'Lightning Rod', spot)
+    await pg.evaluate("document.querySelector('.mp-pl[data-id=\"event\"]')?.click()")
+    await pg.wait_for_timeout(500)
+    await shot(pg, 'mp-s3-lightningrod')
+    await tap(pg, '[data-act="mpFind"]', 150)
+    await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'vote'", timeout=15000)
+    await pg.wait_for_function('window.__game.app.inMatch', timeout=30000)
+    await pg.wait_for_timeout(800)
+    m = await pg.evaluate("({ mode: window.__game.app.matchInfo?.mode, mods: window.__game.app.matchInfo?.mods ?? window.__game.app.match?.mods })")
+    check('  Find match plays Grind with Snipers Only', m['mode'] == 'grind' and 'snipers' in (m['mods'] or []), m)
+    await pg.wait_for_timeout(1500)
+    await shot(pg, 'match-s3-lightningrod')
+    await pg.evaluate("window.__game.hud.leaveCb()")
+    await pg.wait_for_timeout(500)
+    await ctx.close()
+
+    print('2027-03-24: Season Replay')
+    ctx, pg = await page_on(browser, '2027-03-24')
     await boot(pg)
     await pg.reload(); await pg.wait_for_timeout(1200)
     await pg.evaluate("window.__game.menu.overlay('')")
@@ -229,6 +305,7 @@ async def main():
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
             await week_of_snipers(browser)
             await season_two(browser)
+            await season_three(browser)
             await browser.close()
     finally:
         srv.terminate()

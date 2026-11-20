@@ -73,7 +73,7 @@ const MAP_ART = {
   millbrook:   ['Millstream', 'millwheel', ['#0e1a14', '#2c4a34', '#e6f0dc', '#f2b6c8']],
   // ROADMAP 56 (appended).
   launchpad:  ['T-Minus', 'liftoff', ['#141a24', '#3a4a5e', '#eef2f6', '#ff7a3a']],
-  observatory: ['First Light', 'stardome', ['#1a1428', '#4a3a5e', '#f6e6ee', '#ffb48a']],
+  observatory: ['Stargazer', 'stardome', ['#1a1428', '#4a3a5e', '#f6e6ee', '#ffb48a']],
   pagoda:     ['Maple Dusk', 'tiers', ['#10142a', '#2e3456', '#f0d8b0', '#e0482a']],
   frontier:   ['Drop Zone', 'zone', ['#101a14', '#2a4630', '#d8f0d0', '#ff9f1c']],
   jadefall:   ['Jade Crown', 'isles', ['#0a1c1c', '#1e4a40', '#c8f0e0', '#3ad89a']],

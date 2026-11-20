@@ -44,7 +44,7 @@ console.log('season');
   ok(R.countdownText(5 * 3600e3 + 20 * 60e3) === '5h 20m' && R.countdownText(14 * 60e3 + 5e3) === '14m', 'then hours and minutes, then minutes');
   const s2 = S.seasonAt(at(2026, 12, 28, 0));
   ok(s2.key === 'S2' && s2.short === 'Season 2', 'Dec 28 opens Season 2');
-  ok(S.seasonAt(at(2027, 2, 8)).key === 'S1R1', 'Feb 8 is Season Replay: Cold Iron');
+  ok(S.seasonAt(at(2027, 2, 8)).key === 'S3' && S.seasonAt(at(2027, 3, 22)).key === 'S1R1', 'Feb 8 opens Season 3, Mar 22 is Season Replay: Cold Iron');
 }
 
 /* ---------- sr ---------- */

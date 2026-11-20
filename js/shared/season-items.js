@@ -111,6 +111,47 @@ export const SEASON_DEFS = [
     emblems: [['Fire', 'Burning', 'Blaze', 'Glow', 'Spark', 'Coal', 'Ash', 'Heat', 'Flash', 'Scorch'],
       ['Sigil', 'Pin', 'Star', 'Shield', 'Wheel', 'Key', 'Ring', 'Chevron', 'Medal', 'Wing']],
   },
+  {
+    // Season 3 (ROADMAP item 57): a late-winter storm over the electrified lines. The Lodestone (a coil sniper) and
+    // Halcyon (the calm before it) come early; Lightning Rod remixes Grind as Snipers Only.
+    id: 'S3', n: 3, name: 'Third Rail', start: '2027-02-08', days: SEASON_DAYS,
+    tagline: 'Storm on the live wires',
+    theme: ['#0c1018', '#2c3a52', '#e6eeff', '#ffe14a'],
+    palettes: [
+      ['#0c1018', '#2c3a52', '#e6eeff', '#ffe14a'], ['#120e20', '#3a2e6a', '#ece6ff', '#b48aff'],
+      ['#0a161a', '#1e4450', '#d8f6ff', '#3ad8ff'], ['#141618', '#3a3e44', '#f4f6f8', '#fff3a0'],
+      ['#0a0e1c', '#1c2a5a', '#dce6ff', '#6a9cff'],
+    ],
+    event: { id: 'lightningrod', name: 'Lightning Rod', from: 7, to: 21, mode: 'grind', mods: ['snipers'], desc: 'Snipers Only Grind for two weeks. Bank the tags before the bolt finds you.' },
+    paths: { weapon: 'rail', operator: 'halcyon' },
+    content: [],
+    camos: [
+      ['cloudburst', 'Cloudburst', 'splinter', [0x4a5668, 0x2a3240, 0xc8d4e4, 0x161c26], 3.2],
+      ['downpour', 'Downpour', 'digital', [0x3a4a5c, 0x1c2632, 0x8aa8c8, 0x0e141c], 9.0],
+      ['galeforce', 'Gale Force', 'tiger', [0xd8e0ec, 0x1a2030, 0x8a9ab4], 3.4],
+      ['nimbus', 'Nimbus', 'hex', [0x6a7488, 0x3a4256, 0xe4eaf4, 0x161a24], 8.0],
+      ['stormglass', 'Stormglass', 'carbon', [0x1c2230, 0x0a0d14, 0xffe14a], 11.0],
+      ['ozone', 'Ozone', 'digital', [0x2a3a6a, 0x141c3a, 0x9ab8ff, 0x0a0e1e], 9.0],
+      ['hailstone', 'Hailstone', 'splinter', [0xe8eef6, 0x9aa8bc, 0x4a5668, 0x1a202a], 3.2],
+      ['thunderclap', 'Thunderclap', 'hex', [0xffe14a, 0xb8941a, 0x2a2410, 0x0c0a04], 8.0],
+      ['forkedbolt', 'Forked Bolt', 'livewire', [0x0c0e1a, 0xffe14a, 0xffffff], 5.0, true, 0xffe860],
+      ['stormeye', 'Eye of the Storm', 'aurora', [0x080a18, 0x8a6aff, 0x3ad8ff, 0xf4f6ff], 4.0, true, 0xa88aff],
+    ],
+    skins: [
+      ['ghoul', 'Stormcrow', [0x1c2028, 0x262c36, 0x14181e, 0xffe14a, 1]],
+      ['ram', 'Thunder Ram', [0x3a4250, 0x2c333e, 0x1c2128, 0xffe14a, 1]],
+      ['sable', 'Rain Shadow', [0x2a3240, 0x343e4e, 0x1a2028, 0x8ab4ff, 0]],
+      ['linnet', 'Flash Flood', [0x3a4a56, 0x2c3a46, 0x1c262e, 0x3ad8ff, 0]],
+      ['mako', 'Storm Surge', [0x1e3a4a, 0x26485a, 0x142a36, 0x3ad8ff, 1]],
+      ['skylark', 'Cloudbreaker', [0xd8e0ec, 0xa8b4c4, 0x5a6678, 0xffe14a, 0]],
+      ['gambit', 'Storm Chaser', [0x2a2e3a, 0x3a3e4c, 0x1c1e26, 0xb48aff, 2]],
+      ['warden', 'High Tempest', [0x14161e, 0x1e2230, 0x0c0e14, 0xb48aff, 3]],
+    ],
+    cards: [['Storm', 'Thunder', 'Rolling', 'Charged', 'Overcast', 'Driving', 'Static', 'Gusting', 'Sheet', 'Forked'],
+      ['Catenary', 'Pantograph', 'Feeder', 'Insulator', 'Substation', 'Mast', 'Contact Wire', 'Section Gap', 'Earth Rod', 'Overbridge']],
+    emblems: [['Volt', 'Rain', 'Gale', 'Cloud', 'Surge', 'Arc', 'Ozone', 'Squall', 'Tempest', 'Downburst'],
+      ['Vane', 'Rod', 'Fork', 'Coil', 'Cell', 'Fuse', 'Dial', 'Gauge', 'Clasp', 'Ward']],
+  },
 ];
 
 // Cosmetic id helpers, so every module spells them alike.
