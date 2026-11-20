@@ -173,7 +173,8 @@ void main() {
   vLight = light;
   vFx = aFx;
   // Active skins (fxK > 0): the fragment shader animates the gear (plain part-0 pieces) in the accent colour.
-  vEff = vec4(aPart < 0.5 && acc < 0.5 && keep < 0.5 ? fxK : 0.0, position);
+  // The limb meshes (part 2) take it over their tint.
+  vEff = vec4((aPart < 0.5 && acc < 0.5 && keep < 0.5) || aPart > 1.5 ? fxK : 0.0, position);
   vAcc = aTint.r + aTint.g + aTint.b > 0.0 ? aTint : vec3(0.4, 0.9, 1.0);
   gl_Position = projectionMatrix * viewMatrix * world * vec4(pos, 1.0);
 }`;
@@ -842,6 +843,8 @@ export class Characters {
         if (L.trouser != null) look.trouserRGB = hexRGB(L.trouser);
       }
       look.lite = { ...look, pack: 4 * k.glow + fx };
+      // An active skin runs over the sleeves, trousers, gloves and boots too (the limb meshes' tint is part 2).
+      look.limbFx = fx ? { pack: fx, gear: NO_GEAR } : null;
       return look;
     });
     this.baseSkin = ALL_OPS.map(o => getSkin(`skin:${o.id}-base`)?.index ?? 0);
@@ -1571,12 +1574,12 @@ export class Characters {
         setStretch(_m, _a.x, _a.y, _a.z, _joint[0], _joint[1], _joint[2], armT, armT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side > 0 ? P.UPPER_R : P.UPPER_L) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB, sk.limbFx);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], _b.x, _b.y, _b.z, armT, armT);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
         _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
-        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb);
+        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb ?? sk.limbFx);
         nA++;
         if (fists && nG < MAX_PLAYERS * 2) {
           // The glove on the hand, along the forearm (elbow to hand).
@@ -1639,12 +1642,12 @@ export class Characters {
         setStretch(_m, hipX, y, hipZ, _joint[0], _joint[1], _joint[2], legT, legT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side < 0 ? P.THIGH_L : P.THIGH_R) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB, sk.limbFx);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], footX, footY, footZ, legT * 0.82, legT * 0.82);
         _m.toArray(leg.instanceMatrix.array, nL * 16);
         _m.toArray(r.pose, (side < 0 ? P.SHIN_L : P.SHIN_R) * 16);
-        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB);
+        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB, sk.limbFx);
         nL++;
 
         _e.set(0, -bootYaw, lift * -2.2 + slide * (side < 0 ? 0.7 : -0.2));
@@ -1654,7 +1657,7 @@ export class Characters {
         _m.compose(_p, _q, _s);
         _m.toArray(boot.instanceMatrix.array, nB * 16);
         _m.toArray(r.pose, (side < 0 ? P.BOOT_L : P.BOOT_R) * 16);
-        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.foot ?? sk.limb);
+        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.foot ?? sk.limb ?? sk.limbFx);
         nB++;
 
         if (li === plantLeg && vfx && Math.abs(footX - this.focusX) < 22 && Math.abs(footZ - this.focusZ) < 16) {
