@@ -1,5 +1,5 @@
-// Graveyard Shift's boss intros (ROADMAP item 50, docs/ZOMBIES.md "Bodies"): when the Yardmaster, the Gravewarden or
-// the Listener rises, a short camera beat and a title card. The renderer's bodies (js/render/zm-bodies.js) start it,
+// Graveyard Shift's boss intros (ROADMAP item 50, docs/ZOMBIES.md "Bodies"): when the Yardmaster, the Gravewarden, the
+// Listener or the Barker rises, a short camera beat and a title card. The renderer's bodies (js/render/zm-bodies.js) start it,
 // GameRenderer steps it and leans the camera toward the boss for a moment (never taking the player's controls: the
 // match runs on underneath), and the zombies HUD shows the card. Tapping the card skips it (the camera eases straight
 // back). Reduced motion: no camera move, the card fades in and out where it stands.
@@ -9,6 +9,7 @@ const TITLES = {
   4: ['The Yardmaster', 'Foreman of the dead shift'],
   5: ['The Gravewarden', 'Keeper of the last lantern'],
   11: ['The Listener', 'It heard the radios'],
+  12: ['The Barker', 'The show must go on'],
 };
 const EASE = 0.5;
 
@@ -48,7 +49,7 @@ const CSS = `
 @keyframes zmIntroBar { from { transform: scaleX(0); } to { transform: none; } }
 @media (max-height: 400px) { .zm-intro { top: 17%; } .zm-intro b { font-size: 31px; } }
 `;
-const GLOW = { 4: 'rgba(255,122,26,.75)', 5: 'rgba(176,112,255,.75)', 11: 'rgba(90,240,255,.7)' };
+const GLOW = { 4: 'rgba(255,122,26,.75)', 5: 'rgba(176,112,255,.75)', 11: 'rgba(90,240,255,.7)', 12: 'rgba(255,192,64,.75)' };
 
 export class ZmIntroCard {
   constructor(parent) {

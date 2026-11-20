@@ -1,8 +1,9 @@
 # Graveyard Shift (ROADMAP item 26)
 
 Our own co-op wave survival: up to four players (friends from the lobby, bot teammates in every empty seat) hold off a
-horde round after round on Night Market (`neon`), Ruins (`ruins`), Foundry (`foundry`), Ashgrove Halt (`ashgrove`) and
-Polestar Relay (`polestar`), the last two built for the mode (see "Ashgrove Halt" and "Polestar Relay" below). Everyone starts with a
+horde round after round on Night Market (`neon`), Ruins (`ruins`), Foundry (`foundry`), Ashgrove Halt (`ashgrove`),
+Polestar Relay (`polestar`) and Wrenfield Fair (`wrenfield`), the last three built for the mode (see "Ashgrove Halt",
+"Polestar Relay" and "Wrenfield Fair" below). Everyone starts with a
 pistol and the blade; points from hits and kills buy guns off the walls, the mystery crate, gates into the rest of the
 map, six perk machines and the late-game economy (the upgrade bench, the supply terminal, armour plates, traps, the exfil
 and a hidden quest: "Economy" below). The match ends when nobody is left up, or when the crew gets out. All names are our
@@ -10,7 +11,7 @@ own.
 
 | id | name | players | maps |
 |---|---|---|---|
-| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove, polestar |
+| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove, polestar, wrenfield |
 
 Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, formulas and layouts in
 `js/shared/zombies.js` (`ZM`), mode entry `MODES.zm` (`js/shared/modes.js`, `maps` lists where it plays).
@@ -407,6 +408,8 @@ cap.
 | ashgrove | 30 | 0.35 ms | 3.6 ms | 6.4 ms | 1001 / 1627 B |
 | polestar | 20 | 0.41 ms | 4.0 ms | 4.6 ms | 1005 / 1655 B |
 | polestar | 30 | 0.38 ms | 4.1 ms | 4.3 ms | 983 / 1615 B |
+| wrenfield | 20 | 0.36 ms | 1.0 ms | 1.5 ms | 1036 / 1713 B |
+| wrenfield | 30 | 0.35 ms | 3.2 ms | 4.4 ms | 1035 / 1668 B |
 
 Build NEXT, with the special zombies in the mix (rounds 20 and 30 deal Spitters, Bloaters, Crawlers and
 Shieldbearers): inside docs/BR-PERF.md's gate (mean under 3 ms, no tick over 33 ms; the one 31.8 ms tick on Ruins is a
@@ -576,32 +579,123 @@ dev/ui-zombies-test.py (932x430: power out, a dead radio, the switch, TUNING n%,
 weapon from the crate fired into a crowd); `dev/ui-hud-layout-test.py --only zm` runs Polestar too (a wonder weapon in
 hand, the Radios count).
 
+## Wrenfield Fair (build NEXT, ROADMAP item 55)
+A travelling fair left standing in a field outside the farm valley, the night it never packed up:
+`js/shared/maps/wrenfield.js` (medium, 80 x 52, region farmland), theme `js/render/themes/wrenfield.js`. Our own place
+and names. Built for Graveyard Shift alone like the other two (`hidden`, `modes: []`, `zmOnly`; `MODES.zm.maps` lists
+it). Where Ashgrove is a foggy churchyard in amber lamplight and Polestar blue snow under an aurora, Wrenfield is a
+violet night lit by the fair itself: strings of coloured bulbs slung between poles (and from the carousel's crown and the
+Big Top's king pole), candy-striped hoardings, sawdust lanes, the carousel, the big wheel stopped at the top of the map
+with its rim lit, the Big Top's canvas burned to rags on its poles, the ghost train's green grin.
+
+| area | id | where | what is there |
+|---|---|---|---|
+| Ticket Gate (start) | `gate` | south-centre | the entrance arch, two ticket booths, the Oracle; SMG and shotgun on the walls, Mercy Run, the supply terminal |
+| The Midway | `midway` | south-west | game stalls (the shooting gallery: the armour bench; hoopla; the coconut shy: Fleetfoot), the prize tent (a dead end: crate spot, the red lantern); AR, DMR |
+| Carousel Green | `carousel` | north-west | the carousel (Quickdraw), the organ shed (a dead end: crate spot, the green lantern); PDW, heavy SMG |
+| Wheel Yard | `wheel` | north | the big wheel's platform (the upgrade bench, the blue lantern on its steps); auto shotgun, battle rifle; a trap at the Carousel gate |
+| Generator Yard (power) | `works` | centre | the power house with the switch (Hammerfall on its front), two show generators; heavy AR; a trap at the Midway gate. Walled in, reached from the Midway or the Big Top |
+| The Big Top (boss arena) | `ring` | north-east | the ring round the king pole, burned tent poles, bleachers (a crate spot), the high striker; LMG, saw, Last Breath; 587 m2 |
+| Ghost Train | `ghost` | south-east | the ghost train shed (Ironhide), the car park (the exfil), the tunnel exit (a dead end: crate spot, the gold lantern); carbine, Clatter |
+
+Gates: Gate-Midway 750, Gate-Ghost 750, Midway-Carousel 1000, Ghost-Ring 1500, Carousel-Wheel 1250, Wheel-Ring 1500,
+Midway-Works 1250, Ring-Works 1250. One loop (Ticket Gate, Midway, Carousel Green, Wheel Yard, Big Top, Ghost Train, back
+to the gate), every gate a chokepoint; the Generator Yard (the power) is off the Midway and the Big Top, never the start
+(2000 in gates away, as on Polestar). Three traps: the Midway gate into the Generator Yard, the Carousel gate into the
+Wheel Yard, the Ghost Train gate into the Big Top. Spawn windows: six per area. The boss rounds' Yardmaster and the
+quest's Barker rise in the Big Top when it is open. Economy spots (`map.zm.reserved`) as on the others, each with its
+note.
+
+**The quest: the lanterns** (`map.zm.quest = { kind: 'lantern', oracle, striker, lanterns }`; graphLayout puts the
+lanterns and the striker in the relics' and the altar's slots, the Oracle in `L.oracle`, and sets `L.questKind =
+'lantern'`, so the economy, the wire, the validator and the tests keep one shape; the host side is js/sim/zm-fair.js).
+Different from both others: an order to learn, a clock and a penalty. The Oracle (a fortune machine at the Ticket Gate)
+is dark until the power is on ("THE ORACLE, No power"); asked, it tells the order of the four lanterns (red, green, blue,
+gold: a permutation from the match seed, `lanternOrder`, on the wire as digits), shown in a banner ("The Oracle speaks:
+Gold, Red, Blue, Green"), on its cabinet in four lamps and on the round plate as four coloured dots. A lantern is cold
+until then ("Which first? Ask the Oracle"). LIGHT THE <COLOUR> LANTERN: the next in the order lights; the first starts
+the burn, `ZE.quest.burn` = 75 s to light the other three (the plate counts "2/4 41s", the lit lanterns gutter in the
+last 15 s); burnt out, they all go dark ("light them again, faster"). A wrong one puts every lantern out at once and sends
+`ZE.quest.wrong` = 3 runners at whoever lit it. All four lit stay lit; then RING THE BELL on the high striker in the Big
+Top (its lamps climb the scale as the lanterns are lit).
+
+**The Barker** answers (`ZK.barker` = 11, view zk 12; its look in js/render/zm-barker-look.js, hooked into
+js/render/zm-looks.js by one line: a showman gone wrong in a red tailcoat and gold epaulettes, a peaked cap, chalk face
+paint, a fairground-gold glow). 52x a round's health (+10% per crew seat), slower than the Listener, and it fights
+differently again (`ZM_BARKER`): every 7 s, with one of the crew up within 18 m in its sight, it stops and **marks a
+lane** on the ground toward them (13 m, 2.4 m wide, up to a wall: a red band with a fill creeping along it, a steam
+organ's rising whistle, `zcharge`) for 1.1 s, then **runs it** in 0.45 s: 55 (grown with the round like a claw) to
+anyone in the lane, once; step out sideways. Every 15 s it calls up three runners, never more than six of its callers up
+at once (they would starve the round's own seats). Bots step out of a marked lane (js/sim/zm-kinds.js `dodge`, from
+`ZmEcon.laneDodge`). Putting it down pays 3000 each and 1500 XP ("Barker put down"), the **Show's Over** calling card
+and the **Last Bell** feat emblem (`save.zmFeats.wrenfield[1]`: on Wrenfield the feat's boss flag is the Barker's,
+`ZM_BARKER_MAPS` in js/shared/progression.js, so it does not count for Lantern Out). The order, the burn, the lit
+lanterns and the Barker's bar are on the wire and kept by a host migration (the Barker comes back at the health its bar
+showed and carries on charging; a lane being marked is dropped). The round-15 card is **Closing Time**; the map cards are
+Midway. Each quest's boss (kind, name, banners) is one table now, `ZM_QUEST_BOSS` / `zmQuestBoss(L)`: the HUD, results,
+history and trophies read it.
+
+**Bots** throw the power (solo, from round 3, buying the gates on the way), ask the Oracle once it is on, then (the
+last bot up, when it is safe) walk the lanterns in the Oracle's order, buying the gates to a lantern still shut away
+(`_gateToward`, keeping 1500 back); with the lanterns burning they do not wait for a quiet moment. The bell is left to a
+person; with no person in the crew a bot rings it from round 8.
+
+**Art and budget**: about 27k triangles in the world's 3 draw calls (Polestar 27k, Ashgrove 26k); the bulbs are
+four-triangle points (several hundred of them), the strings' wires four segments each; the light poles, the carousel, the
+wheel, the stalls, the ghost train, the striker and each lantern's spot have baked pools. The lanterns, the Oracle and
+the striker's lamps ride the economy's merged meshes and relic instances (no new draw calls); the Barker's lanes and the
+Whirligig's whirls are js/render/zm-fair-fx.js (up to four draw calls while one shows, none otherwise).
+
+**Pacing** (`node dev/sim-zm-econ.mjs --map=wrenfield`): rounds 1-20, 53,700 earned, 51,100 spent (95%); the perks
+wait for the power (from round 7), the bench from round 13. Ally runs (`dev/sim-zm-allies.mjs --maps=wrenfield
+--runs=3`): rounds 8, 12, 10 (mean 10; Polestar 15.7 on the same seeds), the lanterns lit in two of three.
+
+**Found on the way**: a heat gun in the second slot (this mode hands guns into either) never cooled, because the heat
+step read the first slot's gun only; a bot with a saw behind a shotgun stood waiting on it for the rest of the match
+(js/sim/player.js `stepHeat` now reads either).
+
+**Tests**: `node dev/map-validate.mjs wrenfield` (the layout, every spot including the Oracle, a 300 s bot crew match:
+round 7, power on); the `wrenfield` section of dev/sim-zombies.mjs (layout, loop, dead ends, the order from the seed,
+the quest step by step: the Oracle dark then asked, a cold lantern, lit in order, a wrong one and its runners, the burn
+running out, the bell waiting for four; the Barker: rises in the Big Top, its bar, a lane marked toward the nearest, held
+still while it shows, run, hurting the one in it and not the one beside it, bots stepping out, runners at its call, pay,
+off the count; the quest and the Barker on a guest and through a migration; bots throw the power, ask the Oracle and
+light the lanterns in order; a saw in the second slot cools); the Wrenfield part of dev/ui-zombies-test.py
+(`ZM_ONLY=wrenfield`, 932x430: the Oracle dark, the switch, ASK THE ORACLE with its banner and dots, LIGHT THE <COLOUR>
+LANTERN and 1/4 with the burn, a wrong one's banner, RING THE BELL, the Barker's bar and its lane, the crate's Whirligig
+fired into a crowd that is dragged in); its messages part fires the lantern and Barker lines too.
+
 ## Wonder weapons (build NEXT)
-Two crate-only specials on every Graveyard Shift map (`ZM_WONDERS` in js/shared/zombies.js). A crate roll offers one 8%
+Three crate-only specials on every Graveyard Shift map (`ZM_WONDERS` in js/shared/zombies.js). A crate roll offers one 8%
 of the time (`ZM_WONDER_ROLL`; never one you hold); no wall sells them and the bench will not take them ("Wonders stay as
-they are"). Each rides on a gun id the mode never otherwise hands out (`gun`: the Tacker and the machine pistol, last in
-`BOX_GUNS` so every older index holds), at its own tier past the bench's three (`tier` 5 and 6), which gives its def
+they are"). Each rides on a gun id the mode never otherwise hands out (`gun`: the Tacker, the machine pistol and the
+scout rifle, last in `BOX_GUNS` so every older index holds), at its own tier past the bench's three (`tier` 5, 6 and 7),
+which gives its def
 (js/sim/zm-phone.js `zmTierDef`, the same on the host and the phone) and which the host reads for its effect
 (js/sim/zm-econ.js `_wonder`). Damage is a share of the round's health, so they stay worth it at round 30 and mean
 nothing anywhere else; their kills earn no weapon XP for the carrier gun. In this mode the renderer draws our own models
-in their place (js/render/guns.js `zw-coil`, `zw-rime`, in hand and floating over the crate), the weapon panel and the
+in their place (js/render/guns.js `zw-coil`, `zw-rime`, and `zw-whirl` from js/render/zm-wonder-models.js, in hand
+and floating over the crate), the weapon panel and the
 prompts use their own names (`zmGunName`).
 
 | weapon | what | numbers |
 |---|---|---|
 | **Stormcoil** | a stubby coil gun, copper windings lit between: a slow bolt of lightning that jumps on from the one it hits to the nearest not yet struck | 120 rpm, 6 + 36 rounds; 1.3x a round's health on the hit, then up to 5 jumps within 6.5 m, each 0.9 of the one before (bosses 1.2% of their own) |
+| **Whirligig** (Wrenfield Fair's) | a squat brass launcher with a striped drum and a top waiting in its flared muzzle: a hit sets a whirl spinning where it lands that drags the undead in toward its eye (never through a wall), grinds those at its centre, then bursts | 80 rpm, 4 + 24 rounds; 0.6x a round's health on the hit; the whirl 2.4 s, 5.5 m reach, pulling 6 m/s at its edge, 0.7x a second within 1.6 m, the burst 1.3x within 3.4 m; at most three spinning; bosses are not moved (1.2% of their own a hit) |
 | **Rimecaster** | a squat freezing projector, a coolant tank on the back: a short automatic beam; three hits freeze a zombie solid for 2.5 s (it neither walks nor claws), and one killed frozen shatters | 600 rpm, 50 + 200 rounds, 13 m; 0.14x a round's health a hit; the shatter 0.9x to the undead within 2.6 m; bosses are slowed, never frozen (0.25% a hit) |
 
 Their prompts: TAKE STORMCOIL with the line "Wonder weapon: ...", a banner when the crate offers one. The wonders' arcs,
-freeze and shatter are `zfx` events (`arc`, `freeze`, `shatter`). Tests: the `wonders` section of dev/sim-zombies.mjs
+freeze and shatter are `zfx` events (`arc`, `freeze`, `shatter`); the Whirligig's whirl is `zwhirl` (drawn by
+js/render/zm-fair-fx.js) and its burst `zfx` `whirlpop`. Tests: the `wonders` section of dev/sim-zombies.mjs
 (the roll share, never held, never on a wall, given at its tier with its def on host and phone, its name, the bench
-refusing it, the bolt through a crowd, the freeze holding a zombie still, the shatter, a boss only slowed).
+refusing it, the bolt through a crowd, the freeze holding a zombie still, the shatter, a boss only slowed, the whirl
+dragging a crowd in but not one out of its reach nor a boss, and its burst).
 
 ## Open
 - The economy on the banded maps sits where the placement rules put it; a hand-placed pass (like Ashgrove's) would read
   better on Foundry, whose deepest bands are big.
-- A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove
-  and Polestar) and a pass of the layout tests.
+- A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove,
+  Polestar and Wrenfield) and a pass of the layout tests.
 
 Ally pay (1119-7): ally bots in a crew with a human earn `ALLY_PAY` (1.75x) points per kill (js/sim/zombies.js `_pay`); humans unchanged. Bot crews
 (dev/sim-zm-allies.mjs, 9 runs): mean round reached 9.8 -> 12.4, ally downs per round 0.32, human revived by allies 1.3 a run.

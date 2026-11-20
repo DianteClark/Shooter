@@ -597,6 +597,7 @@ THEME_AUDIO.frost = THEME_AUDIO.arctic;
 THEME_AUDIO.ashgrove = THEME_AUDIO.harvest;
 THEME_AUDIO.millbrook = THEME_AUDIO.harvest;
 THEME_AUDIO.polestar = THEME_AUDIO.arctic;
+THEME_AUDIO.wrenfield = THEME_AUDIO.harvest;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;
 THEME_AUDIO.sunken = THEME_AUDIO.harbor;
 THEME_AUDIO.topside = THEME_AUDIO.railyard;

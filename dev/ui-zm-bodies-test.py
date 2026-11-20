@@ -19,7 +19,7 @@ G = 'window.__game.app'
 
 # Host kinds (p.zk on the host) and where they stand round the player, metres (dx, dz).
 RING = [(0, -2.6, -1.6), (1, 0, -2.6), (2, 2.8, -1.6), (7, -3.0, 1.0), (5, 3.2, 1.0), (6, -1.4, 2.6), (8, 1.6, 2.6)]
-NAMES = {0: 'shambler', 1: 'runner', 2: 'brute', 3: 'yardmaster', 4: 'gravewarden', 5: 'spitter', 6: 'bloater', 7: 'crawler', 8: 'shieldbearer', 10: 'listener'}
+NAMES = {0: 'shambler', 1: 'runner', 2: 'brute', 3: 'yardmaster', 4: 'gravewarden', 5: 'spitter', 6: 'bloater', 7: 'crawler', 8: 'shieldbearer', 10: 'listener', 11: 'barker'}
 
 SETUP = f"""(() => {{ const m = {G}.match, sim = m.sim, R = sim.rules;
   window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
@@ -137,7 +137,7 @@ async def main():
                     await ev(CLEAR)
                     await pg.wait_for_timeout(500)
                 # The bosses, each with its intro.
-                for k, name in [(3, 'yardmaster'), (4, 'gravewarden'), (10, 'listener')]:
+                for k, name in [(3, 'yardmaster'), (4, 'gravewarden'), (10, 'listener'), (11, 'barker')]:
                     await ev(CLEAR)
                     await pg.wait_for_timeout(300)
                     cam0 = await ev(f"[{G}.renderer.camTarget.x, {G}.renderer.camTarget.z]")

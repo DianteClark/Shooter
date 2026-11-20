@@ -9,14 +9,17 @@
 import { MODES } from '../shared/modes.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost, zmGunName, zmWonderOf } from '../shared/zombies.js';
+import { ZM, ZE, ZM_PERKS, ZM_PERK_IDS, ZM_POWERUP_NAMES, ZM_KIND_NAMES, ZM_ROUND_NAMES, ZM_FX, ZM_TRAP_NAMES, zmUsable, zmFxOf, supplyCost, zmGunName, zmWonderOf,
+  zmQuestBoss, questBossByKind, ZM_LANTERNS, lanternOrderText } from '../shared/zombies.js';
 import { kitRoom } from '../sim/zm-econ.js';     // The armour bench's kit refill, the same test as the host's.
 import { ZmIntroCard } from './zm-intro.js';     // A boss's title card when it rises (ROADMAP item 50).
 // The relic quest's clue, once from round 3 (dev/ui-zombies-test.py checks it reads whole at every width).
 export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still warm';
 // Polestar Relay's radio quest (layout questKind 'radio'): its own clue, and the names that go with it.
 export const RADIO_HINT = 'Static on the radios: with the power on, something might be listening';
-const questBossName = z => ZM_KIND_NAMES[z?.layout?.questKind === 'radio' ? 'listener' : 'warden'];
+// Wrenfield Fair's lantern quest (questKind 'lantern'): its clue.
+export const LANTERN_HINT = 'The fair\'s lanterns are cold: with the power on, the Oracle knows the order';
+const questBossName = z => zmQuestBoss(z?.layout).name;
 
 
 const CSS = `
@@ -318,11 +321,17 @@ export class ZmHud {
       case 'benchtake': return [`TAKE ${gun}`, `Tier ${u.tier}: it is yours`];
       case 'trap': return [u.label.toUpperCase(), u.off ? why() : u.ok ? `${fmt(u.cost)} · armed for ${ZE.trap.on} s` : price];
       case 'exfil': return ['CALL EXFIL', u.off ? why(fmt(u.cost)) : u.ok ? `${fmt(u.cost)} · hold the pad ${ZE.exfil.hold} s` : price];
+      case 'oracle': return u.off ? ['THE ORACLE', why()] : ['ASK THE ORACLE', 'Free: it knows the lanterns\' order'];
       case 'relic':
+        if (u.lantern !== undefined) {
+          const col = ZM_LANTERNS[u.lantern]?.name.toUpperCase() ?? '';
+          return u.off ? ['COLD LANTERN', why()] : [`LIGHT THE ${col} LANTERN`, 'Free: in the Oracle\'s order, or they all go out'];
+        }
         if (u.label === 'Tuning') return [`TUNING ${Math.max(0, this.tunePct)}%`, why()];
         if (u.label === 'Dead radio' || u.label === 'Tune the radio') return [u.label.toUpperCase(), u.off ? why() : `Free: stay by it ${ZE.quest.tune} s`];
         return ['PICK IT UP', 'An old lantern, still warm'];
       case 'altar':
+        if (u.label === 'Ring the bell' || u.label === 'High striker') return [u.off ? 'HIGH STRIKER' : 'RING THE BELL', u.off ? why() : 'Something is waiting in the wings'];
         if (u.label === 'Transmit' || u.label === 'Relay console') return [u.off ? 'RELAY CONSOLE' : 'TRANSMIT', u.off ? why() : 'Something out there will hear'];
         return [u.off ? 'THE ALTAR' : 'SET THE RELICS', u.off ? why() : 'Something will answer'];
       default: return [u.label.toUpperCase(), price];
@@ -393,15 +402,21 @@ export class ZmHud {
       if (c.onPad !== on) { c.onPad = on; this.xbigS.textContent = on ? 'On the pad: hold it' : 'Get to the pad'; this.xbig.classList.toggle('on', on); }
     } else c.onPad = undefined;
     const q = z.quest, n = q && !q.state ? (z.layout?.relics ?? []).filter(r => q.got & (1 << r.i)).length : 0;
-    const rel = n ? `${n}/${z.layout.relics.length}` : '';
+    const kind = z.layout?.questKind;
+    // Wrenfield Fair: from the Oracle on, the count, the burn's seconds and the order as coloured dots (lit ones bright).
+    const lan = kind === 'lantern' && q && !q.state && q.read;
+    const rel = lan ? `${n}/${z.layout.relics.length}${q.burnT > 0 ? ` ${Math.ceil(q.burnT)}s` : ''}|${q.got}|${(q.order ?? []).join('')}` : n ? `${n}/${z.layout.relics.length}` : '';
     if (c.relic !== rel) {
-      c.relic = rel; this.relicEl.hidden = !rel; this.relicB.textContent = rel;
-      this.relicB.nextElementSibling.textContent = z.layout?.questKind === 'radio' ? 'Radios' : 'Relics';
+      c.relic = rel; this.relicEl.hidden = !rel; this.relicB.textContent = rel.split('|')[0];
+      const label = this.relicB.nextElementSibling;
+      if (lan) label.innerHTML = (q.order ?? []).map(i => `<i style="color:${ZM_LANTERNS[i].css};opacity:${q.got & (1 << i) ? 1 : 0.35};font-style:normal">\u25cf</i>`).join('');
+      else label.textContent = kind === 'radio' ? 'Radios' : 'Relics';
+      this.relicEl.title = lan ? `Lanterns: ${lanternOrderText(q.order)}` : '';
     }
     // A hint at the quest: from round 3, once, while nobody has found a relic.
     if (!this.hinted && z.round >= 3 && z.state === 'round' && q && !q.got && z.layout?.relics?.length) {
       this.hinted = true;
-      this.hud.notify(z.layout.questKind === 'radio' ? RADIO_HINT : QUEST_HINT);
+      this.hud.notify(z.layout.questKind === 'radio' ? RADIO_HINT : z.layout.questKind === 'lantern' ? LANTERN_HINT : QUEST_HINT);
     }
   }
 
@@ -429,7 +444,7 @@ export class ZmHud {
   quietKill(e, view) {
     const t = view?.players?.find(p => p.id === e.target);
     if (!t?.ai) return false;
-    return t.zk !== 4 && t.zk !== 5 && t.zk !== 11;     // The Yardmaster's (4), the Gravewarden's (5) and the Listener's (11) deaths make the feed.
+    return t.zk !== 4 && t.zk !== 5 && t.zk !== 11 && t.zk !== 12;     // The Yardmaster's (4), the Gravewarden's (5), the Listener's (11) and the Barker's (12) deaths make the feed.
   }
 
   onEvent(e, view) {
@@ -483,8 +498,18 @@ export class ZmHud {
         if (e.state === 1) this.hud.notify(`${e.by === me?.id ? 'You are' : `${name(e.by)} is`} tuning a radio: stay by it`);
         else this.hud.notify('The radio lost the signal');
         break;
+      case 'zoracle': this.hud.banner('The Oracle speaks', lanternOrderText(e.order), 2600); break;
+      case 'zlantern':
+        if (e.state === 0) this.hud.banner('Wrong lantern', 'Every lantern went out', 1800, 'enemy');
+        else this.hud.notify('The lanterns burned out: light them again, faster');
+        break;
       case 'zrelic': {
         const z = objOf(view);
+        if (e.lantern) {
+          const ring = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
+          this.hud.notify(e.n >= e.of ? `All ${e.of} lanterns lit: ring the bell${ring ? ` in ${ring}` : ''}` : `${e.by === me?.id ? 'You' : name(e.by)} lit the ${ZM_LANTERNS[e.i]?.name ?? ''} lantern: ${e.n} of ${e.of}${e.n === 1 ? `, ${ZE.quest.burn} s to light the rest` : ''}`);
+          break;
+        }
         if (e.radio || z?.layout?.questKind === 'radio') {
           const con = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
           this.hud.notify(e.n >= e.of ? `Radio ${e.n} of ${e.of} tuned: transmit from the console${con ? ` in the ${con}` : ''}` : `${e.by === me?.id ? 'You' : name(e.by)} tuned a radio: ${e.n} of ${e.of}`);
@@ -495,8 +520,8 @@ export class ZmHud {
         break;
       }
       case 'zwarden':
-        if (e.state === 1) this.hud.banner(e.k === 10 ? 'Transmitting' : 'The relics are set', e.k === 10 ? `The ${ZM_KIND_NAMES.listener} answers` : `The ${ZM_KIND_NAMES.warden} wakes`, 2000, 'enemy');
-        else if (e.state === 2) this.hud.banner(`The ${e.k === 10 ? ZM_KIND_NAMES.listener : ZM_KIND_NAMES.warden} falls`, `+${fmt(ZE.quest.pts)} each, and a calling card`, 2400);
+        if (e.state === 1) this.hud.banner(...questBossByKind(e.k).rise, 2000, 'enemy');
+        else if (e.state === 2) this.hud.banner(`The ${questBossByKind(e.k).name} falls`, `+${fmt(ZE.quest.pts)} each, and a calling card`, 2400);
         break;
       default:
     }

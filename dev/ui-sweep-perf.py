@@ -25,7 +25,7 @@ G = 'window.__game.app'
 CASES = [('br', 'frontier', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
          # 1118 wave: Millbrook, Graveyard Shift round 20 on Polestar Relay, and a replay's playback (a TDM on Railyard,
          # ended after 20 s, Watch replay from the results: the replay player's own renderer and frame cost).
-         ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('replay', 'railyard', 'tdm')]
+         ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('zm20wrenfield', 'wrenfield', 'zm'), ('replay', 'railyard', 'tdm')]
 
 ZM20 = f"""(async () => {{
   const m = {G}.match, sim = m.sim, R = sim.rules;

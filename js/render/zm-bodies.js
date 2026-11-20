@@ -16,7 +16,7 @@
 //   die       the body topples away from the shot and goes limp on springs (ragdoll-ish), lies a moment, sinks.
 //             A headshot takes the head off, an explosive or a melee kill a limb or three (gibs tumble and bounce);
 //             a Bloater bursts; a Shieldbearer drops its door
-// Bosses (the Yardmaster, the Gravewarden, the Listener) start the intro (js/ui/zm-intro.js) when they rise.
+// Bosses (the Yardmaster, the Gravewarden, the Listener, the Barker) start the intro (js/ui/zm-intro.js) when they rise.
 import * as THREE from 'three';
 import { GLSL_DITHER } from './art.js';
 import { ZM_MODELS, ZM_MATTER, NB, PEL, CH, HD, UAL, FAL, UAR, FAR, THL, SHL, THR, SHR, EX, buildModel } from './zm-models.js';
@@ -26,7 +26,7 @@ const ROWS = 80;                 // Bodies drawn at once: 24 up, the dying, the 
 const TW = NB * 3 + 2;           // Texels a row: three per bone, then fx (fade, flash, glow, lite) and tint (rgb, k).
 const NCH = 30;                  // Pose channels (see pose()).
 const RISE = 1.05, STRIKE = 0.32, LIE = 2.4, SINK = 0.8, GIB_LIFE = 3.2;
-const BOSS = new Set([4, 5, 11]);
+const BOSS = new Set([4, 5, 11, 12]);
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -217,6 +217,13 @@ function pose(st, def, t, dt) {
       A[C.RAP] = hang + 0.3 + 0.1 * run * sL; A[C.RFA] = 0.6; A[C.RAT] = 0.4;
       A[C.EXP] = -(A[C.CPITCH] + A[C.LAP] + A[C.LFA]) + 0.25 * Math.sin(t * 2.2 + seed) + 0.2 * run * Math.sin(ph);
     }
+    if (g.strut) {
+      // The Barker struts: chest out, the trumpet arm swinging high, the free arm held out for the crowd; its tails flap.
+      A[C.CPITCH] = -(hunch + 0.1 * run) + 0.06; A[C.HPITCH] = 0.1 + 0.08 * Math.cos(ph * 2) * run;
+      A[C.RAP] = hang + 0.55 + 0.35 * run * sL; A[C.RFA] = 0.7;
+      A[C.LAP] = hang + 0.25 + 0.3 * run * sR; A[C.LAO] = 0.45 + 0.1 * Math.sin(t * 1.7 + seed); A[C.LFA] = 0.45;
+      A[C.EXP] = -0.2 * run - 0.12 * run * Math.abs(Math.sin(ph)) + 0.05 * Math.sin(t * 3);
+    }
     if (g.stilt) {
       // The Listener: long slow strides, the head cocked and turning, scanning; arms dangling to its knees.
       A[C.HYAW] = 0.45 * Math.sin(t * 0.7 + seed); A[C.HROLL] = 0.42 * Math.sin(t * 0.35 + seed) + tw * 0.2;
@@ -224,9 +231,19 @@ function pose(st, def, t, dt) {
       A[C.LFA] = A[C.RFA] = 0.15; A[C.LAO] = A[C.RAO] = 0.16;
       A[C.EXP] = -A[C.CPITCH] * 0.8 - 0.25 * run * Math.sin(ph * 2) + 0.06 * Math.sin(t * 5);
     }
+    // The Barker's lane ('zcharge'): the trumpet up to its painted mouth while the lane is marked, then the run.
+    if (g.strut && st.callT >= 0) {
+      const wind = st.callT < st.callWind, kk = wind ? sstep(0, 0.25, st.callT) : 1 - sstep(0, 0.2, st.callT - st.callWind - st.callDash);
+      if (wind) { A[C.RAP] = lerp(A[C.RAP], hang + 1.75, kk); A[C.RFA] = lerp(A[C.RFA], 1.75, kk); A[C.CPITCH] += 0.3 * kk; A[C.HPITCH] += 0.25 * kk; A[C.LAO] += 0.5 * kk; }
+      else { A[C.CPITCH] -= 0.55 * kk; A[C.HPITCH] += 0.4 * kk; A[C.LAP] -= 0.8 * kk; A[C.RAP] -= 0.6 * kk; A[C.LFA] += 0.6 * kk; A[C.RFA] += 0.6 * kk; A[C.EXP] -= 0.5 * kk; }
+    }
     // Attacks.
     if (w > 0 || k > 0) {
-      if (g.heavy || (g.boss && !g.stilt && !g.glide)) {
+      if (g.strut) {
+        // A backhand with the trumpet.
+        A[C.RAP] = lerp(lerp(A[C.RAP], hang + 2.2, w), hang + 0.4, k); A[C.RAT] = lerp(0, 0.8, w) - 0.8 * k;
+        A[C.CYAW] += 0.4 * w - 0.6 * k; A[C.CPITCH] += 0.2 * w - 0.35 * k;
+      } else if (g.heavy || (g.boss && !g.stilt && !g.glide)) {
         // Both fists (or the fist and the spike) overhead, then slammed down.
         A[C.LAP] = lerp(lerp(A[C.LAP], hang + 2.9, w), hang + 0.5, k); A[C.RAP] = lerp(lerp(A[C.RAP], hang + 2.9, w), hang + 0.5, k);
         A[C.LFA] = lerp(A[C.LFA], 0.7, w); A[C.RFA] = lerp(A[C.RFA], 0.7, w);
@@ -284,6 +301,7 @@ class Body {
     this.flash = 0; this.ff = 0; this.fv = 0; this.fs = 0; this.fsv = 0;
     this.windT = 0; this.strikeT = -1; this.swing = false; this.riseT = 1; this.dirtT = 0;
     this.goneT = -1; this.shield = false; this.lite = false; this.dead = false; this.deadT = 0;
+    this.callT = -1; this.callWind = 1.1; this.callDash = 0.45;
     this.A = new Float32Array(NCH);
     this.root = new THREE.Matrix4();
     this.M = Array.from({ length: NB }, () => new THREE.Matrix4());
@@ -389,6 +407,17 @@ export class ZmBodies {
     }
     vfx.sparks(x, y, z, ax, az, SPARK, vfx._n(ev.broke ? 8 : 3), 10);
     if (ev.broke && b && b.zk === 9 && b.seen) this._gib(9, b.M, 1 << EX, ax * 2.5, 2.5, az * 2.5);
+  }
+
+  // The Barker marks its lane ('zcharge', js/sim/zm-fair.js): whoever of the Barkers stands at its start.
+  onCharge(ev) {
+    let best = null, bd = 3;
+    for (const b of this.bodies.values()) {
+      if (!b.alive || b.zk !== 12) continue;
+      const d = Math.hypot(b.x - ev.x, b.z - ev.z);
+      if (d < bd) { bd = d; best = b; }
+    }
+    if (best) { best.callT = 0; best.callWind = ev.wind ?? 1.1; best.callDash = ev.dash ?? 0.45; }
   }
 
   // A zombie died where we could see it (Characters.onKill hands it here): a body that falls and goes limp, gibs, ichor.
@@ -524,6 +553,7 @@ export class ZmBodies {
       b.fv += (-90 * b.ff - 10 * b.fv) * dt; b.ff += b.fv * dt;
       b.fsv += (-90 * b.fs - 10 * b.fsv) * dt; b.fs += b.fsv * dt;
       b.flash *= Math.exp(-dt * 14);
+      if (b.callT >= 0) { b.callT += dt; if (b.callT > b.callWind + b.callDash + 0.3) b.callT = -1; }
       if (b.riseT < 1) b.riseT = Math.min(1, b.riseT + dt / (draw === 8 ? 0.75 : BOSS.has(draw) ? 1.6 : RISE));
       const r = chars?.rigs.get(p.id);
       const seen = r ? r.visible : true;

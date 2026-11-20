@@ -402,15 +402,60 @@ const LISTENER = {
   },
 };
 
-// By the view's zk (1 shambler ... 11 the Listener; 10, the wire's broken-shield code, is never drawn as such).
-export const ZM_MODELS = { 1: SHAMBLER, 2: RUNNER, 3: BRUTE, 4: YARDMASTER, 5: WARDEN, 6: SPITTER, 7: BLOATER, 8: CRAWLER, 9: SHIELD, 11: LISTENER };
+// The Barker (Wrenfield Fair's bell calls it): a showman gone wrong, tall and broad in a red tailcoat whose tails flap
+// behind it, gold epaulettes, a peaked showman's cap, chalk face paint over grey skin, a shock of red hair, a brass
+// speaking-trumpet in one fist; its trim burns fairground gold.
+const BARKER = {
+  dims: { hip: 0.96, waist: 0.1, chest: 0.58, neck: 0.06, shW: 0.25, hipW: 0.11, ua: 0.33, fa: 0.34, th: 0.47, sh: 0.46, s: 1.62, headX: 0.05, ex: { parent: PEL, at: [-0.12, 0.08, 0] } },
+  gait: { stride: 1.8, swing: 0.5, knee: 0.75, hunch: 0.18, lurch: 0.08, limp: 0, bob: 0.06, strut: 1, headTilt: 0.12, twitch: 0.35, boss: 1 },
+  eye: 0xffc040,
+  build(k) {
+    const coat = 0x8a1c22, coatD = 0x5e1216, gold = 0xffc040, skin = 0x8e8a84, paint = 0xe6e0d6, hair = 0xd83a2a, pants = 0x1a1418;
+    k.at(PEL, pants).box(0, 0, 0, 0.24, 0.22, 0.34);
+    k.at(CH, coat).box(0, 0.28, 0, 0.26, 0.56, 0.42, 0.04);
+    k.at(CH, 0xe8e2d0).box(0.13, 0.36, 0, 0.02, 0.36, 0.14);                                 // Shirt front.
+    k.at(CH, 0x14100e).box(0.14, 0.5, 0, 0.03, 0.05, 0.1);                                   // Bow tie.
+    k.at(CH, gold, 2).box(0.135, 0.2, 0, 0.01, 0.04, 0.05).box(0.135, 0.3, 0, 0.01, 0.04, 0.05);
+    k.detail(() => { for (const y of [0.12, 0.26, 0.4]) for (const z of [-0.09, 0.09]) k.at(CH, gold).box(0.14, y, z, 0.015, 0.03, 0.03); });
+    for (const z of [-1, 1]) {                                                                 // Epaulettes and their fringe.
+      k.at(CH, gold, 2).box(0, 0.58, z * 0.25, 0.22, 0.05, 0.16, 0.02);
+      k.detail(() => { for (const x of [-0.08, 0, 0.08]) k.at(CH, gold).box(x, 0.52, z * 0.32, 0.02, 0.09, 0.02); });
+    }
+    k.at(CH, skin).prismY(0.56, 0.66, 0.04, 0, 0.06, 0.055, 5);
+    skull(k, { skin: paint, eye: this.eye, w: 0.2, h: 0.24, d: 0.22, jaw: 0.9 });
+    k.at(HD, 0x8a1c22).box(0.12, 0.08, 0, 0.02, 0.03, 0.12);                                  // A painted grin.
+    k.at(HD, hair).box(-0.04, 0.2, 0, 0.2, 0.08, 0.26).box(-0.08, 0.12, 0, 0.1, 0.12, 0.28);
+    // The cap: a tall crown, a gold band, a peak.
+    k.at(HD, coatD).prismY(0.24, 0.42, 0.0, 0, 0.13, 0.15, 8);
+    k.at(HD, gold, 2).prismY(0.26, 0.3, 0.0, 0, 0.135, 0.135, 8);
+    k.at(HD, 0x14100e).box(0.14, 0.255, 0, 0.14, 0.02, 0.22);
+    // The tails of the coat (its own bone, so they flap).
+    k.at(EX, coat).box(-0.04, -0.3, -0.08, 0.04, 0.6, 0.14).box(-0.04, -0.3, 0.08, 0.04, 0.6, 0.14);
+    k.at(EX, gold).box(-0.06, -0.6, 0, 0.02, 0.03, 0.3);
+    k.at(UAL, coat).limb(0.33, 0.07, 0.06); k.at(FAL, coat).limb(0.26, 0.06, 0.065); k.at(FAL, gold).limb(0.03, 0.068, 0.068, 6, -0.24);
+    k.at(FAL, 0xe8e2d0).box(0.0, -0.34, 0, 0.08, 0.08, 0.08);
+    k.at(UAR, coat).limb(0.33, 0.07, 0.06); k.at(FAR, coat).limb(0.26, 0.06, 0.065); k.at(FAR, gold).limb(0.03, 0.068, 0.068, 6, -0.24);
+    k.at(FAR, 0xe8e2d0).box(0.0, -0.34, 0, 0.08, 0.08, 0.08);
+    // The speaking-trumpet in the right fist, flared forward.
+    k.at(FAR, 0xc8962a).prismX(0.02, 0.42, -0.36, 0, 0.03, 0.11, 7);
+    k.at(FAR, 0x2a1a10).prismX(0.415, 0.425, -0.36, 0, 0.1, 0.1, 7);
+    k.at(THL, pants).limb(0.47, 0.08, 0.065); k.at(THR, pants).limb(0.47, 0.08, 0.065);
+    k.detail(() => { k.at(THL, gold).box(0, -0.24, -0.075, 0.03, 0.44, 0.012); k.at(THR, gold).box(0, -0.24, 0.075, 0.03, 0.44, 0.012); });
+    k.at(SHL, pants).limb(0.46, 0.06, 0.05); foot(k, SHL, 0.46, 0x0c0a0a, 0.26);
+    k.at(SHR, pants).limb(0.46, 0.06, 0.05); foot(k, SHR, 0.46, 0x0c0a0a, 0.26);
+  },
+};
+
+// By the view's zk (1 shambler ... 11 the Listener, 12 the Barker; 10, the wire's broken-shield code, is never drawn
+// as such).
+export const ZM_MODELS = { 1: SHAMBLER, 2: RUNNER, 3: BRUTE, 4: YARDMASTER, 5: WARDEN, 6: SPITTER, 7: BLOATER, 8: CRAWLER, 9: SHIELD, 11: LISTENER, 12: BARKER };
 export const ZM_MODEL_KEYS = Object.keys(ZM_MODELS).map(Number);
 // What a hit on each kind looks like (zm-bodies.js onHit): the ichor's colour and what else flies.
 export const ZM_MATTER = {
   1: { ichor: [0.07, 0.09, 0.05] }, 2: { ichor: [0.09, 0.06, 0.05] }, 3: { ichor: [0.06, 0.08, 0.05], heavy: 1 },
   4: { ichor: [0.08, 0.06, 0.04], spark: [1, 0.55, 0.2] }, 5: { ichor: [0.08, 0.05, 0.1], glow: [0.75, 0.5, 1] },
   6: { ichor: [0.1, 0.14, 0.03], glow: [0.6, 1, 0.23] }, 7: { ichor: [0.16, 0.09, 0.16], glow: [1, 0.7, 0.25] },
-  8: { ichor: [0.05, 0.06, 0.04] }, 9: { ichor: [0.07, 0.08, 0.06] }, 11: { ichor: [0.5, 0.62, 0.7], frost: [0.6, 0.95, 1] },
+  8: { ichor: [0.05, 0.06, 0.04] }, 9: { ichor: [0.07, 0.08, 0.06] }, 11: { ichor: [0.5, 0.62, 0.7], frost: [0.6, 0.95, 1] }, 12: { ichor: [0.1, 0.05, 0.05], glow: [1, 0.75, 0.25] },
 };
 
 export function buildModel(zk) {

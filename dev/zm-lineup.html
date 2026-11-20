@@ -79,7 +79,7 @@ function step(dt) {
 const fixed = q.get('live') !== '1';
 if (fixed) { while (t < hold) step(1 / 60); window.__ready = true; webgl.render(scene, cam); }
 const lab = document.getElementById('lab');
-const names = { 1: 'Shambler', 2: 'Runner', 3: 'Brute', 4: 'Yardmaster', 5: 'Gravewarden', 6: 'Spitter', 7: 'Bloater', 8: 'Crawler', 9: 'Shieldbearer', 11: 'Listener' };
+const names = { 1: 'Shambler', 2: 'Runner', 3: 'Brute', 4: 'Yardmaster', 5: 'Gravewarden', 6: 'Spitter', 7: 'Bloater', 8: 'Crawler', 9: 'Shieldbearer', 11: 'Listener', 12: 'Barker' };
 lab.innerHTML = players.map(p => { const vv = new THREE.Vector3(p.x, 0, p.z + 1.2).project(cam); return `<span style="left:${(vv.x + 1) / 2 * W}px;top:${(1 - vv.y) / 2 * H + 4}px">${names[kinds[players.indexOf(p)]]}</span>`; }).join('');
 let last = performance.now();
 function frame(now) {
