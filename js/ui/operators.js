@@ -309,11 +309,24 @@ const SKIN_ROWS = {
 // Showpiece art (docs/OPERATORS-ART.md), keyed by skin id and merged into the skin: `fx` is an animated "active" effect
 // drawn by the operator shader over the gear (SKIN_FX), `suit: true` swaps the whole torso and head for the operator's
 // suit (js/render/operator-kit.js SUITS). Pure looks: ids, unlocks and saves are untouched.
-export const SKIN_FX = { holo: 1, circuit: 2, shimmer: 3 };
-const SKIN_ART = {
-  'skin:anvil-3': { fx: 'circuit' }, 'skin:anvil-5': { suit: true },
-  'skin:coyote-3': { fx: 'shimmer' }, 'skin:coyote-5': { suit: true },
+// Effect numbers are the shader's (js/render/operator-suits.js skinFx): append only. Every Elite (tier 3) skin has its
+// own effect and every Mastery (tier 5) skin its own suit; the season skins stay as they were.
+export const SKIN_FX = { holo: 1, circuit: 2, shimmer: 3, flame: 4, frost: 5, glitch: 6, starfield: 7, lightning: 8, camo: 9,
+  lava: 10, aurora: 11, hex: 12, void: 13, sparkle: 14, caustics: 15, radar: 16, bubbles: 17, coderain: 18, embers: 19,
+  hazard: 20, morse: 21, heartbeat: 22, thermal: 23, sandstorm: 24, chevron: 25, ink: 26, checker: 27, clouds: 28, snow: 29,
+  rays: 30, scan: 31, smoke: 32, harlequin: 33, tracer: 34, shockwave: 35 };
+const ELITE_FX = {
+  trooper: 'hex', wisp: 'camo', anvil: 'circuit', relay: 'radar', yarddog: 'hazard', ronin: 'ink', ghoul: 'bubbles', ram: 'shockwave',
+  monarch: 'starfield', sparrow: 'heartbeat', coyote: 'shimmer', vesper: 'aurora', wren: 'glitch', ox: 'lava', morse: 'morse',
+  cipher: 'coderain', harrow: 'snow', sable: 'sandstorm', marshal: 'holo', flint: 'embers', nyx: 'void', halcyon: 'frost',
+  tinker: 'lightning', rook: 'checker', mako: 'caustics', seraph: 'rays', warden: 'flame', courier: 'scan', nightjar: 'thermal',
+  skylark: 'clouds', gambit: 'harlequin', corvid: 'smoke', linnet: 'sparkle', garrison: 'tracer', brigid: 'chevron',
 };
+const SKIN_ART = {};
+for (const op of OPERATORS) {
+  if (ELITE_FX[op.id]) SKIN_ART[`skin:${op.id}-3`] = { fx: ELITE_FX[op.id] };
+  SKIN_ART[`skin:${op.id}-5`] = { suit: true };
+}
 
 const ROW_TIERS = ['field', 2, 3, 4, 5];
 export const SKINS = OPERATORS.flatMap(op => [
