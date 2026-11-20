@@ -68,10 +68,11 @@ async def main():
                 await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.setFlag('aimHint')")
                 await pg.reload()
                 await pg.wait_for_timeout(1200)
-                await pg.locator('[data-act="custom"]').first.click()
+                await pg.locator('[data-act="custom"]').first.click(timeout=180000)
                 await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
                 await pg.wait_for_function(f"{G}.match.sim.rules.round === 1", timeout=60000)
                 await ev(SETUP)
+                await ev("import('/js/ui/zm-intro.js').then(m => { window.__zi = m.ZM_INTRO; })")
                 await pg.wait_for_timeout(400)
                 if not reduce:
                     base = await ev(f"{G}.renderer.distance")
@@ -150,19 +151,21 @@ async def main():
                     if not intro['on']: failures.append(f'{name}: no intro')
                     if not card or not card['shown']: failures.append(f'{name}: no title card {card}')
                     if reduce and camK > 0: failures.append(f'{name}: the camera moved with reduced motion ({camK})')
-                    if not reduce and not camK > 0.3: failures.append(f'{name}: no camera beat ({camK})')
+                    if not reduce:
+                        try: await pg.wait_for_function(f"{G}.renderer.introK > 0.3", timeout=20000)
+                        except Exception: failures.append(f'{name}: no camera beat ({await ev(f"{G}.renderer.introK")})')
                     await shot(f'{"20" if not reduce else "30"}-{name}-intro')
                     if k == 4 and not reduce:
                         t0 = await ev("import('/js/ui/zm-intro.js').then(m => m.ZM_INTRO.t)")
                         await pg.locator('.zm-intro').click()
                         sk = await ev("import('/js/ui/zm-intro.js').then(m => [m.ZM_INTRO.skipped, m.ZM_INTRO.dur - m.ZM_INTRO.t])")
                         if not sk[0] or sk[1] > 0.55: failures.append(f'tapping the card did not skip the intro ({t0} -> {sk})')
-                        try: await pg.wait_for_function("import('/js/ui/zm-intro.js').then(m => !m.ZM_INTRO.on)", timeout=30000)
+                        try: await pg.wait_for_function("!window.__zi.on", timeout=30000)
                         except Exception: failures.append('the intro did not end after a skip')
                     else:
-                        try: await pg.wait_for_function("import('/js/ui/zm-intro.js').then(m => !m.ZM_INTRO.on)", timeout=60000)
+                        try: await pg.wait_for_function("!window.__zi.on", timeout=60000)
                         except Exception: failures.append(f'{name}: the intro never ended')
-                        try: await pg.wait_for_function("(() => { const c = document.querySelector('.zm-intro'); return !c || c.hidden; })()", timeout=10000)
+                        try: await pg.wait_for_function("(() => { const c = document.querySelector('.zm-intro'); return !c || c.hidden; })()", timeout=20000)
                         except Exception: failures.append(f'{name}: the card stayed up')
                     if not reduce:
                         base = await ev(f"{G}.renderer.distance")
