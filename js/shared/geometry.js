@@ -323,3 +323,30 @@ export function resolveCircle(map, pos, radius) {
   pos.z = Math.max(radius, Math.min(map.height - radius, pz));
   return pos;
 }
+
+// Shallow water (docs/BR.md "Jadefall"): a map's `shallows`, rects of walkable water that slow anyone wading
+// (SHALLOW_SLOW of the usual pace, sprint included). Deep water stays a 'water' wall. The lookup is a 4 m bucket grid
+// built on first use and kept per shallows array, so a map without shallows pays one property read.
+export const SHALLOW_SLOW = 0.62;
+const SHALLOW_GRIDS = new WeakMap();
+export function inShallows(map, x, z) {
+  const list = map.shallows;
+  if (!list || !list.length) return false;
+  let g = SHALLOW_GRIDS.get(list);
+  if (!g) {
+    const C = 4, nx = Math.ceil(map.width / C) + 1, nz = Math.ceil(map.height / C) + 1, cells = new Array(nx * nz);
+    list.forEach((r, i) => {
+      for (let j = Math.max(0, Math.floor(r.z / C)); j <= Math.min(nz - 1, Math.floor((r.z + r.d) / C)); j++) {
+        for (let k = Math.max(0, Math.floor(r.x / C)); k <= Math.min(nx - 1, Math.floor((r.x + r.w) / C)); k++) (cells[j * nx + k] ??= []).push(i);
+      }
+    });
+    g = { C, nx, nz, cells };
+    SHALLOW_GRIDS.set(list, g);
+  }
+  const k = Math.floor(x / g.C), j = Math.floor(z / g.C);
+  if (k < 0 || j < 0 || k >= g.nx || j >= g.nz) return false;
+  const c = g.cells[j * g.nx + k];
+  if (!c) return false;
+  for (const i of c) { const r = list[i]; if (x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) return true; }
+  return false;
+}

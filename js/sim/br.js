@@ -33,7 +33,7 @@ import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../sha
 import { WEAPONS } from '../shared/weapons.js';
 import { LETHALS, TACTICALS } from '../shared/catalog.js';
 import { applyAttachments, availableFor, kitKey, NO_ATTACHMENTS, packKit, unpackKit, normalizeKit } from '../shared/attachments.js';
-import { resolveCircle } from '../shared/geometry.js';
+import { resolveCircle, wallsInBox, wallScratch } from '../shared/geometry.js';
 import { botAttachments } from './bots.js';
 import { setSlot, stepPlayer } from './player.js';
 
@@ -231,7 +231,33 @@ export function glideStep(ps, mx, mz, dt, map) {
 // Touchdown: out of any wall the glide ended over.
 export function land(ps, map) {
   ps.vx = 0; ps.vz = 0;
+  // Over deep water or a wide roof-less block (an island map's sea): the nearest open ground, on rings 1.5 m apart.
+  if (!openPoint(map, ps.x, ps.z, 0.6)) {
+    search: for (let d = 1.5; d <= 90; d += 1.5) {
+      const n = Math.max(8, Math.round(d * 2.2));
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2, x = ps.x + Math.cos(a) * d, z = ps.z + Math.sin(a) * d;
+        if (x < 2 || z < 2 || x > map.width - 2 || z > map.height - 2 || !openPoint(map, x, z, 0.6)) continue;
+        ps.x = x; ps.z = z;
+        break search;
+      }
+    }
+  }
   for (let i = 0; i < 6; i++) resolveCircle(map, ps, 0.45);
+}
+
+let OPEN_SCRATCH = null;
+// No blocking piece within r of (x, z).
+export function openPoint(map, x, z, r) {
+  OPEN_SCRATCH = wallScratch(map, OPEN_SCRATCH);
+  const n = wallsInBox(map, x - r, z - r, x + r, z + r, OPEN_SCRATCH);
+  for (let k = 0; k < n; k++) {
+    const w = map.walls[OPEN_SCRATCH[k]];
+    if (!w.blocksMove) continue;
+    const dx = x - Math.max(w.x, Math.min(x, w.x + w.w)), dz = z - Math.max(w.z, Math.min(z, w.z + w.d));
+    if (dx * dx + dz * dz < r * r) return false;
+  }
+  return true;
 }
 
 // The transport's line for heading `a` (radians), with `u` and `lane` uniform draws in [0, 1): 40% of lines cross the
@@ -271,6 +297,12 @@ export function flightLine(W, H, a, u, lane, pois = []) {
 // gets the same area from the match seed.
 export function reboundArea(map, seed) {
   const R = Math.min(RB.area, Math.min(map.width, map.height) / 2 - 4), pois = map.br?.pois ?? [];
+  // A map can name its own compact areas (`br.reboundAreas`, centres; an island map keeps them on land).
+  const own = map.br?.reboundAreas;
+  if (own?.length) {
+    const a = own[Math.floor(mulberry32((seed ^ 0x5eb0d) >>> 0)() * own.length)];
+    return { x: a.x, z: a.z, r: Math.min(a.r ?? R, R) };
+  }
   const cands = [];
   for (let x = R; x <= map.width - R + 0.1; x += 20) {
     for (let z = R; z <= map.height - R + 0.1; z += 20) {
