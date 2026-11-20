@@ -71,19 +71,22 @@ const MAP_ART = {
   polestar:   ['Night Watch', 'mast', ['#06101a', '#24384a', '#d8ecf4', '#5affb0']],
   millbrook:   ['Millstream', 'millwheel', ['#0e1a14', '#2c4a34', '#e6f0dc', '#f2b6c8']],
   frontier:   ['Drop Zone', 'zone', ['#101a14', '#2a4630', '#d8f0d0', '#ff9f1c']],
+  jadefall:   ['Jade Crown', 'isles', ['#0a1c1c', '#1e4a40', '#c8f0e0', '#3ad89a']],
+  tidebreak:  ['Causeway', 'causeway', ['#0c1a1e', '#24505a', '#d0f0ec', '#ffc04a']],
+  coral:      ['Bell Tower', 'belfry', ['#1a120e', '#5a3a2a', '#f4e6d0', '#e0603a']],
 };
 const MAP_WINS = 10;
 // Map cards come in three tiers (bronze, silver, gold; the gold one animated): wins on the map, or for the maps that
-// host no team win (Frontier's battle royale and extraction, Ashgrove's and Polestar's Graveyard Shift) matches played there.
+// host no team win (Frontier's and Jadefall's battle royale and extraction, Ashgrove's and Polestar's Graveyard Shift) matches played there.
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'ashgrove', 'polestar']);
+const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'ashgrove', 'polestar']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },
   zm: { tab: 'zombies', playlist: 'zmsolo' }, gf: { tab: 'standard', playlist: 'showdown' } }[mode] ?? { tab: 'standard', modes: [mode] });
-const mapPlay = id => (id === 'frontier' ? playFor('br') : MAPS[id]?.zmOnly ? playFor('zm') : MAPS[id]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : STANDARD);
+const mapPlay = id => (MAPS[id]?.size === 'giant' ? playFor('br') : MAPS[id]?.zmOnly ? playFor('zm') : MAPS[id]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : STANDARD);
 
 // Per mode: [id, name, req, lifetime stat, goal, pattern, palette, emblem].
 const MODE_CARDS = [

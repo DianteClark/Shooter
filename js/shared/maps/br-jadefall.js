@@ -487,9 +487,36 @@ function build() {
   P.outdoorLoot(148, 150, 16, 5, 3);
   P.region = 'beach';
 
-  // ---- Bridges' posts and the fords' stepping stones are drawn by the renderer. -----------------------------------
+  // ---- Extraction's landing zones: six clearings round the ring between the places, kept free of scatter, and the
+  // final exfil's choices on the causeways out in the lagoon (docs/EXTRACT.md; js/sim/extract.js reads br.exfils).
+  const clear = (x, z, r) => dry(x - r, z - r, 2 * r, 2 * r) && P.near(x - r, z - r, 2 * r, 2 * r).size === 0 && !P.roofs.some(f => x > f.x - r - 1 && x < f.x + f.w + r + 1 && z > f.z - r - 1 && z < f.z + f.d + r + 1);
+  const ring = [];
+  for (const [x0, z0] of [[232, 112], [284, 160], [300, 262], [160, 290], [110, 236], [168, 112]]) {
+    let got = null;
+    for (let d = 0; d <= 24 && !got; d += 2) for (let a = 0; a < 6.28 && !got; a += 0.5) {
+      const x = Math.round(x0 + Math.cos(a) * d), z = Math.round(z0 + Math.sin(a) * d);
+      if (clear(x, z, 12) && !P.pois.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 10)) got = { x, z };
+    }
+    if (got) ring.push(got); else skipped.push(['exfil', x0, z0]);
+  }
+  // Squads come ashore on the outer beaches: eight landing points round the coast, between the channel mouths.
+  const inserts = [];
+  for (let k = 0; k < 8; k++) {
+    let got = null;
+    for (const da of [0, 0.12, -0.12, 0.24, -0.24, 0.36, -0.36]) {
+      const a = (k + 0.5) / 8 * Math.PI * 2 + da;
+      for (let r = 176; r > 118 && !got; r -= 2) {
+        const x = Math.round(CX + Math.cos(a) * r), z = Math.round(CZ + Math.sin(a) * r);
+        if (clear(x, z, 5) && !P.pois.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 12)) got = { x, z };
+      }
+      if (got) break;
+    }
+    if (got) inserts.push(got); else skipped.push(['insert', k]);
+  }
+  const exfils = { ring, final: [{ x: 248, z: 200 }, { x: 152, z: 200 }, { x: 200, z: 248 }, { x: 200, z: 152 }], inserts };
+
   // ---- Open ground: scatter by region --------------------------------------------------------------------------------
-  scatter(P, cellAt);
+  scatter(P, cellAt, [...ring, ...inserts.map(p => ({ ...p, r: 9 }))]);
 
   // The edge of the world: a low line in tile-sized lengths (open sea all round, drawn as nothing).
   for (let s = 0; s < W; s += 32) {
@@ -539,8 +566,9 @@ function build() {
   const lanes = [{ id: 'north', z: 80 }, { id: 'mid', z: 200 }, { id: 'south', z: 320 }];
   const circleBias = P.pois.map(p => ({ x: p.x, z: p.z, w: p.tier === 1 ? 1 : p.tier === 2 ? 0.8 : 0.5 }))
     .concat([[120, 200], [280, 200], [200, 130], [200, 270]].map(([x, z]) => ({ x, z, w: 0.3 })));
-  // Rebound's compact areas: four, each an island and the lagoon next to it.
-  const reboundAreas = [{ x: 200, z: 120 }, { x: 280, z: 200 }, { x: 200, z: 280 }, { x: 120, z: 200 }];
+  // Rebound's compact areas: four, each an island, the lagoon next to it and the pyramid (a little smaller than
+  // Frontier's 150 m, so each stays on the map).
+  const reboundAreas = [{ x: 200, z: 128, r: 124 }, { x: 272, z: 200, r: 124 }, { x: 200, z: 272, r: 124 }, { x: 128, z: 200, r: 124 }];
 
   return {
     id: 'jadefall', name: 'Jadefall', theme: 'jadefall', size: 'giant', region: 'mixed', width: W, height: H,
@@ -548,7 +576,7 @@ function build() {
     rooms: P.rooms, roofs: P.roofs, zones: P.zones, roads: P.roads, rails: [], regionSeeds: REGION_SEEDS,
     shallows, underDecks, cells: { size: CELL, n: N, nz: N, cls },
     modes: ['br'], large: true,
-    br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias, reboundAreas },
+    br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias, reboundAreas, exfils },
     skipped,
   };
 }
@@ -573,7 +601,7 @@ function fort(P, cx, cz) {
 }
 
 // Sparse cover in the open by region, on dry land and off the paths.
-function scatter(P, cellAt) {
+function scatter(P, cellAt, keep = []) {
   const rnd = mulberry(1907);
   const STEP = 14;
   const near = (x, z) => P.pois.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 4);
@@ -617,7 +645,7 @@ function scatter(P, cellAt) {
   for (let gz = 10; gz < P.H - 10; gz += STEP) {
     for (let gx = 10; gx < P.W - 10; gx += STEP) {
       const cx = gx + rnd() * STEP * 0.8, cz = gz + rnd() * STEP * 0.8;
-      if (near(cx, cz) || rnd() < 0.25 || cellAt(cx, cz) !== LAND) continue;
+      if (near(cx, cz) || rnd() < 0.25 || cellAt(cx, cz) !== LAND || keep.some(k => Math.hypot(k.x - cx, k.z - cz) < (k.r ?? 19))) continue;
       const region = field(cx, cz);
       P.region = region; P.tier = 3;
       const kit = KIT[region];

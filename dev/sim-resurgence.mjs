@@ -11,7 +11,7 @@ import { cleanMods } from '../js/shared/playlist.js';
 
 const STEP = 1 / SIM_HZ;
 const QUICK = process.argv.includes('--quick');
-const MAP = MAPS.frontier;
+const MAP = MAPS[(process.argv.slice(2).find(a => a.startsWith('--map=')) ?? '--map=frontier').slice(6)];   // --map=jadefall: the second island.
 let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed++; console.log(`  FAIL ${msg}`); } else console.log(`  ok   ${msg}`); };
 
@@ -41,7 +41,7 @@ function units() {
   check(fine, 'the area is on the map, the same on every phone for a seed, with 5 or more places in it');
   check(areas.size >= 3, `the seed moves it around the map (${areas.size} areas over 40 seeds)`);
   const area = MAP.width * MAP.height, part = Math.PI * RB.area * RB.area;
-  check(part < area * 0.6, `a smaller playable area: ${(part / area * 100).toFixed(0)}% of Frontier`);
+  check(part < area * 0.6, `a smaller playable area: ${(part / area * 100).toFixed(0)}% of ${MAP.name}`);
   // (The playlists, lobby size and vote are checked in the browser: dev/ui-modes2-test.py.)
   // A match: area, circle, flight line, drops inside it.
   const sim = makeSim('rb', 4, [{ id: 'h1', name: 'Me', team: 0 }, { id: 'h2', name: 'Pal', team: 0 }]);

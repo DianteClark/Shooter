@@ -38,7 +38,7 @@ const TAB_NOTE = {
   standard: 'Bots fill the seats nobody takes. The lobby votes on the map; friends join through a room code.',
   groundwar: '16 a side on the huge maps. Bots fill the seats nobody takes; the lobby votes on the map.',
   br: '32 players a drop. Friends share a squad; bots fill the seats nobody takes.',
-  extraction: '16 players on Frontier with your own loadout. Bots fill the squads; AI patrols hold the map.',
+  extraction: '16 players on Frontier or Jadefall with your own loadout. Bots fill the squads; AI patrols hold the map.',
   zombies: 'Graveyard Shift: hold off the undead round after round. Start with a pistol; your class stays home.',
 };
 

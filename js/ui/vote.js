@@ -303,7 +303,8 @@ export function voteOptions(random = Math.random, again = null) {
   pick(p => !usedModes.has(p.mode));
   pick(() => true);
   // A friend lobby always has a battle royale card: it is the mode a full room comes for.
-  const brCard = BR_PICK.find(id => !MAPS[id].devMap);
+  const brMaps = BR_PICK.filter(id => !MAPS[id].devMap);
+  const brCard = brMaps[Math.floor(random() * brMaps.length)];
   if (brCard && !out.some(o => MODES[o.mode]?.br) && out.length >= 3) out[2] = { mapId: brCard, mode: 'br' };
   out.push({ mapId: RANDOM, mode: RANDOM });
   return out;

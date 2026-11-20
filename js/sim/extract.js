@@ -191,17 +191,25 @@ export class ExtractRules {
         cands.push({ x, z, a: Math.atan2(z - cz, x - cx), dc });
       }
     }
-    const sites = [];
-    const N = 6;
-    for (let k = 0; k < N; k++) {
-      const a0 = -Math.PI + k / N * Math.PI * 2, a1 = a0 + Math.PI * 2 / N;
-      const pool = cands.filter(c => c.a >= a0 && c.a < a1 && c.dc > 95);
-      if (!pool.length) continue;
-      const c = pool[Math.floor(rng() * pool.length)];
-      sites.push({ x: c.x, z: c.z });
+    // A map can lay out its own (an island: clearings round the ring, the final out on a causeway); otherwise six
+    // sites by angle from the candidates.
+    const own = map.br?.exfils?.ring?.length && map.br.exfils.final?.length ? map.br.exfils : null;
+    let sites = [], fin;
+    if (own) {
+      sites = own.ring.map(s => ({ x: s.x, z: s.z }));
+      fin = own.final[Math.floor(rng() * own.final.length)];
+    } else {
+      const N = 6;
+      for (let k = 0; k < N; k++) {
+        const a0 = -Math.PI + k / N * Math.PI * 2, a1 = a0 + Math.PI * 2 / N;
+        const pool = cands.filter(c => c.a >= a0 && c.a < a1 && c.dc > 95);
+        if (!pool.length) continue;
+        const c = pool[Math.floor(rng() * pool.length)];
+        sites.push({ x: c.x, z: c.z });
+      }
+      const mids = cands.filter(c => c.dc < 95);
+      fin = mids.length ? mids[Math.floor(rng() * mids.length)] : (cands[0] ?? { x: cx, z: cz });
     }
-    const mids = cands.filter(c => c.dc < 95);
-    const fin = mids.length ? mids[Math.floor(rng() * mids.length)] : (cands[0] ?? { x: cx, z: cz });
     this.exfils = [...sites, fin].map((s, i) => ({ i, x: s.x, z: s.z, r: EX.zoneR, final: i === sites.length, state: 0, timer: 0, hold: 0, holder: -1, caller: -1, contested: false, waved: false }));
     this.finalSite = this.exfils.length - 1;
     // Which sites each window opens: spread round the ring, never the same pair twice in a row.
@@ -210,7 +218,17 @@ export class ExtractRules {
     // Squad insertion points round the edge.
     // Each squad's slice of the edge; the spot in it furthest from any place, so nobody lands in a patrol's lap.
     const n = this.squads.size, a0 = rng() * Math.PI * 2;
-    for (const s of this.squads.values()) {
+    // A map with its own landing points (an island's beaches, br.exfils.inserts, round the coast in order) deals them
+    // out evenly from a seeded start.
+    const lands = map.br?.exfils?.inserts;
+    if (lands?.length) {
+      const base = Math.floor(a0 / (Math.PI * 2) * lands.length);
+      for (const s of this.squads.values()) {
+        s.insert = lands[(base + Math.round(s.k * lands.length / n)) % lands.length];
+        s.insertAim = Math.atan2(cz - s.insert.z, cx - s.insert.x);
+      }
+    }
+    for (const s of lands?.length ? [] : this.squads.values()) {
       let best = null, bestS = -Infinity;
       for (let j = 0; j < 9; j++) {
         const a = a0 + (s.k + (j - 4) / 10) / n * Math.PI * 2, R = Math.min(W, H) * 0.43;
