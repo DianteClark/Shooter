@@ -111,9 +111,9 @@ vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
   if (k < 13.5) {                                          // 13 void: light falls into it, its edges burn
     vec3 q = floor(p * 26.0);
     float h = fxH3(q);
-    float rim = pow(1.0 - clamp(lum, 0.0, 1.0), 2.0) * (0.6 + 0.4 * sin(t * 2.4 + p.y * 6.0));
-    float mote = step(0.97, h) * (0.5 + 0.5 * sin(t * 2.0 + h * 30.0));
-    return c * 0.18 + a * rim * 0.9 + a * mote * 0.9 + a * 0.06;
+    float swirl = pow(0.5 + 0.5 * sin(p.y * 9.0 - t * 2.2 + sin(p.x * 7.0 + p.z * 6.0 + t) * 1.8), 6.0);
+    float mote = step(0.95, h) * (0.5 + 0.5 * sin(t * 2.0 + h * 30.0));
+    return c * 0.15 + a * swirl * 1.1 + vec3(1.0) * mote * 0.8 + a * 0.08;
   }
   if (k < 14.5) {                                          // 14 sparkle: glints twinkling, a sheen sweeping up
     vec3 q = floor(p * 18.0);
@@ -155,7 +155,7 @@ vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
     vec2 q = floor(uv), f = fract(uv) - 0.5;
     float h = fxH(q);
     float d = length(f - (vec2(h, fract(h * 13.1)) - 0.5) * 0.6);
-    float sp = step(0.62, h) * smoothstep(0.14, 0.0, d) * (0.6 + 0.4 * sin(t * 9.0 + h * 30.0));
+    float sp = step(0.45, h) * smoothstep(0.2, 0.0, d) * (0.6 + 0.4 * sin(t * 9.0 + h * 30.0));
     float smoulder = 0.5 + 0.5 * sin(t * 1.7 + p.x * 9.0 + p.y * 5.0);
     return c * 0.65 + a * smoulder * 0.25 + mix(a, vec3(1.0, 0.9, 0.5), 0.5) * sp * 2.2;
   }
@@ -190,9 +190,9 @@ vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
   if (k < 24.5) {                                          // 24 wind: streaks of sand racing past
     float row = floor(p.y * 18.0);
     float h = fxH(vec2(row, 4.0));
-    float s = pow(max(0.0, sin((p.x - p.z * 0.4 - t * (2.5 + h * 2.0)) * 4.0 + h * 20.0)), 24.0) * step(0.35, h);
-    float grain = step(0.93, fxH3(floor(p * 40.0) + floor(t * 6.0)));
-    return c * 0.85 + a * s * 1.2 + a * grain * 0.35;
+    float s = pow(max(0.0, sin((p.x - p.z * 0.4 - t * (2.5 + h * 2.0)) * 4.0 + h * 20.0)), 10.0) * step(0.25, h);
+    float grain = step(0.9, fxH3(floor(p * 40.0) + floor(t * 6.0)));
+    return c * 0.75 + a * s * 1.5 + a * grain * 0.5 + a * 0.12;
   }
   if (k < 25.5) {                                          // 25 chevron: arrows driving forward through the gear
     float v = fract(p.x * 3.0 - abs(p.z) * 2.5 + p.y * 0.4 - t * 1.4);
