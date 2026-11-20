@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'The undead, remade',
+    items: [
+      'Every kind of undead in Graveyard Shift has its own body now: the hunched, limping Shambler in a torn shirt, the lean Runner pumping its arms, the hulking Brute, the legless Crawler dragging itself along, the Spitter with its swollen glowing throat, the Bloater studded with glowing pustules, and the Shieldbearer behind a battered door.',
+      'The Yardmaster, the Gravewarden, the Listener and the Barker are huge and each one its own: a coupling spike and a lantern on its back, a robe and a violet lantern, a faceless hood and a radio aerial, a red tailcoat and a brass trumpet.',
+      'Their eyes glow. They claw up out of the ground, wind up their attacks where you can see them coming, and topple over when they die. A headshot takes the head off, explosives take limbs, a Bloater bursts and a Shieldbearer drops its door. Hits spill dark ichor, never blood.',
+      'When a boss rises the camera takes a quick look at it and its name comes up. Tap the card to skip it; with reduced motion on, only the card shows.',
+    ],
+  },
+  {
     build: '1120-1', date: '2026-11-20', title: 'Graveyard Shift: Wrenfield Fair',
     items: [
       'A third map built for Graveyard Shift: Wrenfield Fair, a travelling fair left standing in a field at night. Seven areas in a loop behind gates: the Ticket Gate, the Midway, Carousel Green, the Wheel Yard, the Generator Yard (the power), the burned-out Big Top and the Ghost Train.',

@@ -334,6 +334,7 @@ The undead were recoloured soldiers; each kind now has a low-poly model and anim
 | Yardmaster (4, boss) | 1.65x: a railway foreman, rusted shoulder plates, a signal lantern burning on its back, a coupling spike for a hand | heavy and limping; spike and fist overhead, slammed | orange, pulsing |
 | Gravewarden (5) | 1.7x: a sexton's black robe to the ankles, long white hair, a spade, a lantern burning violet on its chain | a glide, the lantern swinging; the spade over the shoulder and down | violet |
 | Listener (11) | 1.8x, the thinnest: parka hood with no face but a cyan slit, the radio pack on its back, a whip aerial | stilted strides, head cocked and turning; arms spread wide, then closed | cyan |
+| Barker (12) | 1.62x: a showman in a red tailcoat whose tails flap, gold epaulettes, a peaked cap, chalk face paint, red hair, a brass speaking-trumpet | a strut, chest out; marking its lane (`zcharge`) it raises the trumpet to its mouth, then leans into the run; a backhand with the trumpet | gold |
 
 - **Rising**: a zombie that comes up claws out of the ground: hands first, then the head, then it hauls itself out
   (about a second; bosses 1.6 s), throwing dirt and leaving a dark ring. Not for a horde already up when a phone joins.
@@ -348,13 +349,14 @@ The undead were recoloured soldiers; each kind now has a low-poly model and anim
   bursts (belly and chest gone, head and arms flung); a Shieldbearer drops its door. Gibs tumble, bounce, trail ichor,
   leave a stain and sink after 3.2 s. Stumps spurt. Bosses keep their limbs. A seat that leaves without a kill (sunk
   by the sim) sinks into the ground.
-- **Boss intros** (js/ui/zm-intro.js): when the Yardmaster, the Gravewarden or the Listener rises (not in a replay, not
+- **Boss intros** (js/ui/zm-intro.js): when the Yardmaster, the Gravewarden, the Listener or the Barker rises (not in a replay, not
   for a boss already up when a phone joins), the camera leans 80% of the way to it (13 m at most), pulls in 16% and
   letterboxes for 2.9 s, easing in and out; a title card ("Boss / The Yardmaster / Foreman of the dead shift") sits in
   the upper third. Tapping the card skips (the camera eases straight back). The match runs on underneath and the
   sticks keep working. Reduced motion (the system setting): the card fades in and out, the camera does not move.
 - **How it draws**: twelve rigid bones a body (pelvis, chest, head, upper and fore arms, thighs, shins, and one extra:
-  the Spitter's sac, the Bloater's belly, the door, the lantern, the aerial, the Crawler's trailing spine). The CPU
+  the Spitter's sac, the Bloater's belly, the door, the lantern, the aerial, the Barker's coat-tails, the Crawler's
+  trailing spine). The CPU
   composes the bones' world matrices (about 300 matrix products for 24) into one RGBA float texture, three texels a
   bone and a row a body (80 rows: the living, the dying, the gibs); one `InstancedBufferGeometry` mesh per kind reads
   its rows by `gl_InstanceID`. Vertex lighting, the screen-door fade and the hit flash match the soldiers'. Models are
@@ -619,8 +621,8 @@ last 15 s); burnt out, they all go dark ("light them again, faster"). A wrong on
 `ZE.quest.wrong` = 3 runners at whoever lit it. All four lit stay lit; then RING THE BELL on the high striker in the Big
 Top (its lamps climb the scale as the lanterns are lit).
 
-**The Barker** answers (`ZK.barker` = 11, view zk 12; its look in js/render/zm-barker-look.js, hooked into
-js/render/zm-looks.js by one line: a showman gone wrong in a red tailcoat and gold epaulettes, a peaked cap, chalk face
+**The Barker** answers (`ZK.barker` = 11, view zk 12; its body in js/render/zm-models.js, see "Bodies" (the old
+operator-kit look stays in js/render/zm-barker-look.js): a showman gone wrong in a red tailcoat and gold epaulettes, a peaked cap, chalk face
 paint, a fairground-gold glow). 52x a round's health (+10% per crew seat), slower than the Listener, and it fights
 differently again (`ZM_BARKER`): every 7 s, with one of the crew up within 18 m in its sight, it stops and **marks a
 lane** on the ground toward them (13 m, 2.4 m wide, up to a wall: a red band with a fill creeping along it, a steam
