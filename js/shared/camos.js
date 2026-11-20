@@ -16,7 +16,7 @@
 // unlockKills is the v1 kill threshold and is read only by the save migration, so saves keep what they earned.
 //
 // Append new camos at the end. Index order is what snapshots and the shader uniform array use.
-import { SEASON_DEFS, seasonCamos } from './season-items.js';
+import { SEASON_DEFS, seasonCamos, rankedCamo } from './season-items.js';
 import { TOURNEY_CAMO } from './tourney-items.js';
 
 export const CAMOS = [
@@ -64,6 +64,9 @@ export const RANK_CAMOS = [
 CAMOS.push(...RANK_CAMOS);
 // Weekend tournaments (docs/TOURNAMENTS.md): the champion's camo, every gun, owned through the save's tournament block.
 CAMOS.push(TOURNEY_CAMO);
+// Ranked seasons (docs/RANKED.md): each season's ranked camo (`season` and `ranked`: owned through the season block's
+// paid division, js/shared/seasons.js seasonOwned). Appended after everything above; peers send ids, not indices.
+for (const def of SEASON_DEFS) CAMOS.push(rankedCamo(def));
 
 const BY_ID = new Map(CAMOS.map(c => [c.id, c]));
 

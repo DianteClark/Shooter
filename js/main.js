@@ -19,7 +19,7 @@ import { HUD } from './ui/hud.js';
 import { Menu } from './ui/menu.js';
 import { Progress, matchScore, MatchHistory, Friends, Clan } from './ui/progress.js';
 import { taggedName, tagOk } from './shared/clans.js';     // Player clans: "[TAG] Name" on the roster.
-import { cleanCard } from './shared/boards.js';
+import { cleanCard, poolSr } from './shared/boards.js';
 import { boardsScreen } from './ui/boards.js';
 import { humanRating } from './shared/botpool.js';
 import { voteOptions, tallyWinner, modeFits, resolvePick, RANDOM } from './ui/vote.js';
@@ -61,7 +61,8 @@ import { seasonUnlocks } from './ui/season.js';
 import { tourneyUnlocks, tourneySpot } from './ui/tourney.js';
 import { matchSides, roundTitle } from './shared/tournaments.js';
 import { tourneyAt } from './shared/tourney-items.js';
-import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode } from './shared/ranked.js';
+import { rankedTarget, RANKED_SPREAD, RANKED_RULES, RANKED_PARTY, ratingToSr, codeSr, cleanCode, rankedBots } from './shared/ranked.js';
+import { TITLE_IDS } from './shared/seasons.js';     // Ranked titles on badges (docs/RANKED.md).
 import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
 import { ReplayPlayer } from './game/replay-player.js';      // Watch replay and saved clips (docs/REPLAYS.md).
@@ -256,7 +257,7 @@ function myLoadout() {
 // What every human carries in the lobby and into the roster.
 function seatData() {
   const loadout = myLoadout();
-  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...Progress.badge(), rk: Progress.rankCode() } };
+  return { primary: loadout.primary, camo: loadout.camo, loadout, badge: { ...Progress.badge(), rk: Progress.rankCode(), ...(Progress.title() ? { tl: Progress.title().id } : {}) } };
 }
 
 function goTitle(message) {
@@ -952,7 +953,8 @@ function cleanBadge(b) {
   const prestige = n(b?.prestige, MAX_PRESTIGE, 0), level = n(b?.level, MAX_LEVEL, 1);
   // Master Prestige (docs/PRESTIGE.md): only at Prestige X level 50; older builds send none.
   const master = prestige >= MAX_PRESTIGE && level >= MAX_LEVEL ? n(b?.master, MASTER_MAX, 0) : 0;
-  return { prestige, level, master, rk: cleanCode(b?.rk) };
+  // Ranked seasons (docs/RANKED.md): the title worn, when it is one this build knows.
+  return { prestige, level, master, rk: cleanCode(b?.rk), ...(TITLE_IDS.has(b?.tl) ? { tl: b.tl } : {}) };
 }
 
 // Matchmaking for the bot player pool (js/shared/botpool.js): where the humans in this match sit, so the bots drawn
@@ -1461,7 +1463,9 @@ function launchMp(mapId, mode, mods = [], ranked = false, event = null) {
   const pool = poolFor(humans), rating = pool.target;
   if (ranked) Object.assign(pool, { target: rankedTarget(Progress.ranked(), rating), spread: RANKED_SPREAD });
   // ?bots= is a test hook; players always get the seam's default.
-  const roster = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool });
+  const drawn = pickBotsForMatch({ humans, mode, mapId, seed, botSkill: params.get('bots') || MP_BOT_SKILL, pool });
+  // Ranked: each pool bot wears the division of its SR on the Ranked board (docs/RANKED.md).
+  const roster = ranked ? rankedBots(drawn, id => poolSr(id)) : drawn;
   beginMatch({
     roster: withBadges(roster, humans, seed), seed, mapId, mode, mods: ranked ? [] : cleanMods(mods, mode), ...limitsFor(mode),
     hostId: id, isHost: true, localId: id, ranked: ranked ? { rating } : null, event,
@@ -1473,7 +1477,7 @@ function launchMp(mapId, mode, mods = [], ranked = false, event = null) {
 function rankedContext(roster, localId, ctx) {
   const me = roster.find(r => r.id === localId);
   const them = roster.filter(r => r.team !== me?.team);
-  const srs = them.map(r => (r.isBot || r.pool ? ratingToSr(r.rating ?? 0.3) : codeSr(cleanCode(r.badge?.rk)))).filter(v => Number.isFinite(v));
+  const srs = them.map(r => (r.isBot || r.pool ? (r.rankSr >= 0 ? r.rankSr : ratingToSr(r.rating ?? 0.3)) : codeSr(cleanCode(r.badge?.rk)))).filter(v => Number.isFinite(v));
   return { lobby: srs.length ? Math.round(srs.reduce((a, b) => a + b, 0) / srs.length) : null, rating: ctx?.rating ?? poolFor([{ id: localId, badge: Progress.badge() }]).target };
 }
 

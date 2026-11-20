@@ -138,3 +138,32 @@ export function rolloverRanked(rk, key) {
   else if (rk.base >= 0) next.base = rk.base;
   return { rk: next, ended };
 }
+
+/* ---------- Ranked seasons (docs/ROADMAP.md item 60, docs/RANKED.md) ---------- */
+// What the soft reset would carry into next season's placements from this block now (-1: not placed, nothing carried
+// beyond an older base).
+export const carriedSr = rk => (placed(rk) ? num(Math.min(PLACEMENT_CAP, rk.sr * CARRY)) : rk?.base >= 0 ? rk.base : -1);
+
+// A ranked match's pool bots wear their Ranked board SR (srOf(profileId), -1 unplaced): badge.rk is its division code
+// (-1 while in placements) and rankSr the SR the lobby strength reads. Everyone else passes through untouched. Pure.
+export function rankedBots(roster, srOf) {
+  return roster.map(r => {
+    if (!r.pool) return r;
+    const sr = srOf(r.pool);
+    const ok = Number.isFinite(sr) && sr >= 0;
+    return { ...r, rankSr: ok ? sr : -1, badge: { ...(r.badge ?? {}), rk: ok ? division(sr).code : -1 } };
+  });
+}
+
+// The hub's countdown, in the largest two units: '12d 4h', '5h 20m', '14m', from ms left.
+export function countdownText(ms) {
+  const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  return d ? `${d}d ${h}h` : h ? `${h}h ${mm}m` : `${mm}m`;
+}
+
+// The ladder the hub draws: every division with its SR range and whether it is reached this season (peak) and held now.
+export function ladder(rk) {
+  const p = placed(rk), now = p ? division(rk.sr).div : -1, peak = p ? division(Math.max(rk.peak, rk.sr)).div : -1;
+  return DIVISIONS.map((d, i) => ({ div: i, id: d.id, name: d.name, from: i * DIVISION_SPAN, to: i === 6 ? null : (i + 1) * DIVISION_SPAN - 1,
+    reached: i <= peak, current: i === now }));
+}
