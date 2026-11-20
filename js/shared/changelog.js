@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Graveyard Shift: Wrenfield Fair',
+    build: '1120-1', date: '2026-11-20', title: 'Graveyard Shift: Wrenfield Fair',
     items: [
       'A third map built for Graveyard Shift: Wrenfield Fair, a travelling fair left standing in a field at night. Seven areas in a loop behind gates: the Ticket Gate, the Midway, Carousel Green, the Wheel Yard, the Generator Yard (the power), the burned-out Big Top and the Ghost Train.',
       'Its own hidden quest: with the power on, ask the Oracle at the gate for the order, then light the four coloured lanterns in that order before they burn out. Light the wrong one and they all go dark. Then ring the bell on the high striker.',
