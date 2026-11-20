@@ -21,6 +21,18 @@ skin's plain gear pieces (part 0, not ACC, not KEEP) and, since item 49, over th
 too (the limb meshes' part-2 tint, through the skin look's `limbFx`), in object space so it rides with the body,
 coloured by the skin's `accent`. Team armour (part 1), faces and accents are never touched, so sides still read.
 
+Effects 1-3 are the pilot's own GLSL. Effects 4-35 are **rows of numbers** (`FX_ROWS`) run by one parametric
+function, `fxUber()`: a band pattern (along a direction, rings out of the chest, a sweep turning round the body, a grid
+of two, or chevrons), warped and scrolled, hard or soft; a hash grid of cells, lit, twinkling, reshuffling or climbing;
+how the two mix (added or multiplied); a palette (accent, fire, prism, thermal, white); how much gear colour is kept;
+a time step (jumps and flicker) and a beat. The table is the uniform array `FXT` (5 vec4 a row, 160 vec4 of the
+fragment budget). Why not one branch of code per effect: a software renderer (SwiftShader, the perf sweeps) runs every
+branch for every character pixel under a mask, whether anyone wears the effect or not, and a phone GPU sizes its
+registers for the biggest branch; 32 branches doubled the character draw cost. Why a uniform and not a const array: a
+dynamically indexed const array is copied into every fragment's memory by the same renderer (another doubling).
+Measured with `dev/ops-lineup.html?bench=40` (12 operators at match scale, base / Elite / Mastery skins): the same as
+build 1119-13 within the machine's noise.
+
 | # | fx | look | operator (Elite skin) |
 | --- | --- | --- | --- |
 | 1 | holo | iridescent sheen, scan lines climbing | Marshal (Staff) |
@@ -63,9 +75,10 @@ Per instance it is `aOp.y` (`slot + 4 x glow + 16 x suit + 32 x fx`), so it cost
 instances without an fx skip it on one branch. The distance LOD keeps the fx. The Operators screen marks active skins
 with a sweeping band on the swatch (`.op-skin.active`, css/cards.css).
 
-**Adding an effect**: a new `k < N.5` branch in `skinFx()` (before the last one, which is the fall-through) and its
-name in `SKIN_FX`. A few ALU ops: no textures, no loops. Inputs: `c` (the lit colour), `p` (object position, metres),
-`a` (accent), `vLight`, `uTime`; `fxH` / `fxH3` are cheap hashes. Try it on everyone with `dev/ops-lineup.html?fx=name`.
+**Adding an effect**: a row in `FX_ROWS` (fields documented above it), its name appended to `FX_ORDER` and to
+`SKIN_FX` (operators.js), in the same order. Try it on everyone with `dev/ops-lineup.html?fx=name&skin=3`. Only add a
+new pattern to `fxUber()` itself when no row can make the look, and keep it branch-free (a `mix` or `step` on a row
+field, not an `if` around a block).
 
 ## 2. Suits (a whole new torso and head)
 
