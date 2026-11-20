@@ -198,7 +198,7 @@ A. Art: 49. All operators remade (Anvil/Coyote pilot style: silhouettes, animate
    visuals (aircraft, drones, explosions, call-ins). 53. World art pass on older maps (lighting, props, landmarks, ambient).
 B. Content: 54. Second BR island in a new biome (BR, Rebound, Extraction) + 2-3 Ground War maps in its region.
    55. Graveyard Shift map 3 with its own quest and boss. 56. New 6v6 maps (one or two per wave). 57. Season 3 content.
-C. Big features: 58. Map editor on the phone + share maps as codes, play them in custom matches/friend rooms.
+C. Big features: 58. (Dropped by the owner, 2026-11-20: no map editor.)
    59. Co-op campaign: scripted missions for 1-4 players with bots, set pieces, a boss. 60. Ranked seasons with rewards,
    a spectator/caster camera for friend lobbies, shareable replay codes.
 D. Polish: 61. Sound design pass and music for every mode. 62. Animation pass (vault/mantle, reload variety, deaths).
