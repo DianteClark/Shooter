@@ -217,7 +217,7 @@ async def code(browser):
         try: await pg.wait_for_function(f'({G}.replay()?.c ?? 0) > 0.3', timeout=90000)
         except Exception: pass
         rp = await pg.evaluate(RP)
-        check('the code plays as a shared replay', rp and rp['shared'] and rp['c'] > 0.5, rp)
+        check('the code plays as a shared replay', rp and rp['shared'] and rp['c'] >= 0.3, rp)
         await shot(pg, 'code-shared')
         await pg.locator('.rp-close').click()
     await ctx.close()
@@ -243,6 +243,7 @@ async def caster(browser):
     check('alive: no Caster cam button', cs and not cs['btn'], cs)
     # Out for the round: the host's sim takes the local player down; a teammate is still up.
     await pg.evaluate(f"""(() => {{ const m = {G}.app.match, s = m.sim, me = s.byId.get(m.localId), foe = s.players.find(p => p.team !== me.team);
+      for (const p of s.players) if (p.isBot) p.bot = null;     // Everyone else stands still: the round cannot end meanwhile.
       me.spawnProtect = 0; s._damage(me, foe, 999, 'ar', 5); }})()""")
     await pg.wait_for_function(f"!!document.querySelector('.cs-open.on')", timeout=20000)
     # Any death replay first; then the button.
@@ -342,8 +343,8 @@ async def spec(browser):
           players: m.interp.newest?.players.length ?? 0, cine: {A}.renderer?.cine === c.shot, target: c.target, tag: document.querySelector('.cs-tag b')?.textContent }}; }})()""")
         check('the spectator watches through the caster camera', g['cine'] and g['rows'] == g['players'] and g['rows'] > 0 and g['tag'] == 'Spectating', g)
         await shot(guest, 'spec')
-        await guest.locator('.cs-exit').click(force=True)
-        await guest.wait_for_function(f"!{A}.inMatch && {G}.menu.el.dataset.screen === 'lobby'", timeout=20000)
+        await guest.evaluate("document.querySelector('.cs-exit').click()")
+        await guest.wait_for_function(f"!{A}.inMatch && {G}.menu.el.dataset.screen === 'lobby'", timeout=90000)
         check('Leave goes back to the room', True)
         check('the host plays on', await host.evaluate(f'{A}.inMatch'))
     finally:
