@@ -187,6 +187,19 @@ export const REWARD_PATTERNS = {
     for (let i = 0; i < 26; i++) s += circ(96 + r() * 204, r() * 60, 0.9 + r() * 1.3, c[3], op((0.45 + r() * 0.45).toFixed(2)));
     return s;
   },
+  wheel(c, r) {            // Wrenfield Fair: the big wheel lit against a violet night, a striped tent, a string of bulbs.
+    let s = '';
+    const cx = 236, cy = 34, R = 26;
+    s += circ(cx, cy, R, 'none', ` stroke="${c[1]}" stroke-width="2.4"`) + circ(cx, cy, R - 3, 'none', ` stroke="${c[1]}" stroke-width="1"`);
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; s += line(cx, cy, cx + Math.cos(a) * R, cy + Math.sin(a) * R, c[1], 1.1); s += rect(cx + Math.cos(a) * R - 3, cy + Math.sin(a) * R + 1, 6, 5, k % 2 ? c[3] : c[2], op('.85')); }
+    for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2; s += circ(cx + Math.cos(a) * (R + 1.5), cy + Math.sin(a) * (R + 1.5), 1.1, k % 3 ? c[2] : c[3]); }
+    s += line(cx, cy, cx - 16, H, c[1], 2.4) + line(cx, cy, cx + 16, H, c[1], 2.4) + circ(cx, cy, 3, c[3]);
+    for (let k = 0; k < 5; k++) s += poly([[132 + k * 9, 70], [150, 44], [132 + (k + 1) * 9, 70]], k % 2 ? c[2] : '#b0302e', op('.9'));
+    s += path('M100 20 q50 18 100 4', c[1], 0.8, op('.7'));
+    for (let k = 0; k < 9; k++) s += circ(104 + k * 11, 21 + Math.sin(k / 8 * Math.PI) * 8, 1.4, k % 2 ? c[3] : c[2]);
+    for (let i = 0; i < 14; i++) s += circ(96 + r() * 204, r() * 30, 0.7, c[2], op('.5'));
+    return s;
+  },
   zone(c) {                // Frontier: the closing circle over the land, a plane's drop line across it.
     let s = '';
     for (let k = 0; k < 5; k++) s += path(`M${92 + k * 30} ${H} q30 -14 60 0`, c[1], 1, op('.6'));

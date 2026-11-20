@@ -20,7 +20,7 @@ import { FFA_TEAM } from '../shared/constants.js';
 import { isFfa, isZm, BR } from '../shared/modes.js';
 import { extractionPay, EX_UNLOCKS, exUnlockStatus } from '../shared/extraction.js';
 import { objOf } from '../sim/rules.js';
-import { ZM, zmXp, zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
+import { ZM, zmXp, zmWonderOf, zmQuestBoss } from '../shared/zombies.js';     // Graveyard Shift's own XP lines and the high-round record (docs/ZOMBIES.md).
 import { getCamo } from '../shared/camos.js';
 import { performance } from '../shared/ranked.js';
 import { EVENT_XP_BONUS, eventById } from '../shared/events.js';
@@ -309,7 +309,7 @@ export class MatchAwards {
       const mine = zmObj.crew?.find(c => c.id === me.id) ?? {};
       // An escape (the exfil, ROADMAP item 36) counts the round it got out on as survived.
       const escaped = !!zmObj.escaped?.includes(me.id), warden = zmObj.quest?.state === 2;
-      const bossName = zmObj.layout?.questKind === 'radio' ? 'Listener' : 'Gravewarden';     // The quest's boss on this map.
+      const bossName = zmQuestBoss(zmObj.layout).name;     // The quest's boss on this map (ZM_QUEST_BOSS).
       const survived = Math.max(0, (zmObj.round ?? 1) - (escaped ? 0 : 1));
       lines.length = 0;
       lines.push(...zmXp({ kills: this.kills, head: this.headshots, survived, escaped: escaped ? zmObj.round ?? 0 : 0, warden, played: MATCH_XP.played, boss: bossName }).lines);

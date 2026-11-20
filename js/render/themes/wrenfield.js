@@ -62,7 +62,7 @@ const STRINGS = [
   [top(POLES[4]), top(POLES[6])], [top(POLES[5]), top(POLES[7])], [top(POLES[7]), top(POLES[6])],
   ...[9, 10, 11, 12].map(i => [[15, 6.6, 16], top(POLES[i])]),               // The carousel's crown to the corners.
   [top(POLES[13]), top(POLES[14])],
-  ...[15, 16, 17, 18].map(i => [[67.5, 9.6, 14], top(POLES[i])]),            // The king pole to the Big Top's corners.
+  ...[15, 16, 17, 18].map(i => [[67.5, 7.4, 14], top(POLES[i])]),            // The king pole to the Big Top's corners.
   [top(POLES[19]), top(POLES[20])], [top(POLES[20]), top(POLES[21])], [top(POLES[19]), top(POLES[22])],
 ];
 // Work lights in the Generator Yard: no bulbs there, hard white floods on stands.
@@ -135,6 +135,8 @@ function wrenLights(ctx) {
   const { map, lamps, glow } = ctx;
   const warm = [1, 0.72, 0.5];
   POLES.forEach(([x, z], i) => { lamps.push({ x, z, r: 7, col: i % 3 === 0 ? [0.5, 0.34, 0.22] : i % 3 === 1 ? [0.5, 0.26, 0.36] : [0.3, 0.42, 0.4] }); glow.halo(x, z, 3.6, sc(warm, 0.08)); });
+  // Each of the quest's lanterns has a little pool of its own colour on the ground, so a dead end reads as somewhere.
+  (map.zm?.quest?.lanterns ?? []).forEach(({ x, z }, i) => { const c = [[0.5, 0.16, 0.12], [0.16, 0.42, 0.18], [0.14, 0.3, 0.5], [0.5, 0.38, 0.1]][i % 4]; lamps.push({ x, z, r: 4.5, col: c }); glow.halo(x, z, 2.2, sc(c, 0.25)); });
   for (const [x, z] of WORK) { lamps.push({ x, z, r: 8, col: [0.42, 0.44, 0.46] }); glow.halo(x, z, 4, [0.06, 0.06, 0.07]); }
   for (const w of map.walls) {
     const cx = w.x + w.w / 2, cz = w.z + w.d / 2;

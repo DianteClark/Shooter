@@ -66,7 +66,7 @@ function build() {
     wall(30, 31.5, 3, 2, 1.6, 'crate', { bowser: true }),
 
     // ---- The Big Top (boss arena): the king pole in the ring, the burned tent poles, two bleachers, the high striker.
-    wall(67, 13.5, 1, 1, 11, 'crane', { kingpole: true, landmark: true }),
+    wall(67, 13.5, 1, 1, 7.5, 'crane', { kingpole: true, landmark: true }),
     wall(58.2, 13.7, 0.6, 0.6, 6, 'crane', { tentpole: true }), wall(76.4, 13.7, 0.6, 0.6, 6, 'crane', { tentpole: true }),
     wall(67.2, 4.6, 0.6, 0.6, 6, 'crane', { tentpole: true }), wall(67.2, 22.6, 0.6, 0.6, 6, 'crane', { tentpole: true }),
     wall(58, 0, 6, 2.6, 1.6, 'barrier', { bleacher: true }), wall(71, 0, 6, 2.6, 1.6, 'barrier', { bleacher: true }),

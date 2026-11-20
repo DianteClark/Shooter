@@ -15,8 +15,10 @@ at the bench through the use button (the gun goes in, comes out at tier 1 with i
 sheet and a sentry bought from it, a trap armed at its switch, plates at the armour bench, the exfil called at round 15,
 the relics set on the altar and the Gravewarden's bar. Then Polestar Relay at 932x430: the power, a radio tuned through
 the use button (TUNING n%, the Radios count), the console, and the crate handing over a wonder weapon (its name on the
-weapon panel) fired into a crowd. ZM_SIZE=WxH runs one size of the first part; ZM_ONLY=ashgrove, polestar or
-ZM_ONLY=econ runs only that part.
+weapon panel) fired into a crowd. Then Wrenfield Fair at 932x430: the Oracle dark, the power, the Oracle asked (the
+order on the round plate), a lantern lit and a wrong one snuffing them, the bell rung, the Barker's bar and marked lane,
+and the crate's Whirligig fired into a crowd (the whirl drags it in). ZM_SIZE=WxH runs one size of the first part;
+ZM_ONLY=ashgrove, polestar, wrenfield or ZM_ONLY=econ runs only that part.
 Last, every Graveyard Shift message (hints, feed notes, banners, the use button's lines) is fired through the real layer
 at 640x360 to 956x440 and must read whole: nothing cut, clamped or off screen (ZM_ONLY=messages runs only that).
 """
@@ -83,7 +85,7 @@ async def run(browser, vw, vh, failures, errors):
     mode = await ev(f'{G}.match.mode')
     if mode != 'zm': failures.append(f'{tag}: match mode {mode}')
     mapId = await ev(f'{G}.match.mapId')
-    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove', 'polestar'): failures.append(f'{tag}: zombies on {mapId}')
+    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove', 'polestar', 'wrenfield'): failures.append(f'{tag}: zombies on {mapId}')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=30000)
     # Nobody on the crew dies by accident while the test drives (spawn protection holds the claws off).
     await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200); }})()""")
@@ -397,6 +399,168 @@ async def run_polestar(browser, vw, vh, failures, errors):
     await shot('09-wonder-effect')
     left = await ev(f"{G}.match.sim.rules.horde.filter(q => q.alive).length")
     if left > 3: failures.append(f'{tag}: the wonder weapon left {left} of 5 standing')
+    await check_fit(pg, ['.zm-top', '.zm-use', '.arms'], f'{tag} wonder hud', failures)
+    await ev('clearInterval(window.__shield)')
+    await ctx.close()
+
+
+async def run_wrenfield(browser, vw, vh, failures, errors):
+    """Wrenfield Fair (docs/ZOMBIES.md "Wrenfield Fair") at 932x430: the match starts on it with the power out, the
+    Oracle dark, the switch in the Generator Yard through the use button, the Oracle asked (its banner, the order as dots
+    on the round plate), the first lantern lit through the use button (LIGHT THE <COLOUR> LANTERN, then 1/4 and the
+    burn's seconds), a wrong one snuffing them, the rest lit, the bell rung (RING THE BELL) and the Barker's bar and its
+    marked lane, then the crate handing over the Whirligig (its name on the weapon panel) fired into a crowd (the whirl
+    drags them in, then bursts)."""
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.on('console', lambda m: errors.append(f'wren {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'wren {vw}: PAGEERR {e} {getattr(e, "stack", "")}'))
+    tag = f'wrenfield {vw}x{vh}'
+    async def shot(name):
+        print(f'  {tag} {name}', flush=True)
+        await pg.screenshot(path=f'{OUT}/wren-{name}-{vw}x{vh}.png')
+    ev = lambda js: pg.evaluate(js)
+    use_t = "document.querySelector('.zm-use:not([hidden]) .t')?.textContent"
+    chip = "(() => { const n = document.querySelector('.zm-relic'); return n && !n.hidden ? n.textContent : null; })()"
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=wrenfield&mode=zm', timeout=120000)
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    mapId, mode = await ev(f'[{G}.match.mapId, {G}.match.mode]')
+    if (mapId, mode) != ('wrenfield', 'zm'): failures.append(f'{tag}: match on {mapId} / {mode}')
+    await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
+      for (const p of sim.rules.crew) if (p.bot) {{ p.bot.update = () => []; }} sim.rules.plan = () => {{}}; sim.rules._crewPlan = null; }})()""")
+    await pg.wait_for_function(f"{G}.match.sim.rules.round === 1 && {G}.match.sim.rules.horde.some(p => p.alive)", timeout=60000)
+    await pg.wait_for_timeout(2500)
+    await shot('01-round1')
+    await check_fit(pg, ['.zm-top', '.zm-crew', '.minimap'], f'{tag} hud', failures)
+    if await ev(f'{G}.match.sim.rules.power') != 0: failures.append(f'{tag}: the power is not off at the start')
+    # Every gate open (on the host), points to spend; the Oracle first: dark with the power out.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, L = R.L, me = m.sim.byId.get(m.localId); me.zm.pts = 30000;
+      for (const d of L.doors) R._use(me, {{ kind: 'door', i: d.i, cost: 0, ok: true }});
+      const o = L.oracle; m.ps.x = o.x; m.ps.z = o.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    try: await pg.wait_for_function(f"{use_t} === 'THE ORACLE'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no dark ORACLE prompt with the power out: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(900)
+    await shot('02-oracle-dark')
+    # The switch in the Generator Yard, through the use button.
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x - 2.5; m.ps.z = L.power.z + 3; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    await pg.wait_for_timeout(1500)
+    await shot('03a-switch-view')
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x; m.ps.z = L.power.z; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'TURN ON THE POWER'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no TURN ON THE POWER prompt: ' + str(await ev(use_t)))
+    where = await ev(CLEAR_OF_STICKS)
+    if where: failures.append(f'{tag}: use button not clear of the sticks: {where}')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.power === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the switch did not turn the power on')
+    await pg.wait_for_timeout(900)
+    await shot('03-power-on')
+    # The Oracle: asked through the use button, it tells the order (a banner; dots on the round plate).
+    await ev(f"(() => {{ const m = {G}.match, o = m.sim.rules.L.oracle; m.ps.x = o.x; m.ps.z = o.z + 0.3; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'ASK THE ORACLE'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no ASK THE ORACLE prompt: ' + str(await ev(use_t)))
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.read === 1", timeout=6000)
+    except Exception: failures.append(f'{tag}: the Oracle was not asked')
+    try: await pg.wait_for_function("[...document.querySelectorAll('.banner, .hud-banner, [class*=banner]')].some(b => /Oracle speaks/i.test(b.textContent))", timeout=3000)
+    except Exception: failures.append(f'{tag}: no "The Oracle speaks" banner')
+    try: await pg.wait_for_function(f"({chip} ?? '').startsWith('0/4')", timeout=4000)
+    except Exception: failures.append(f'{tag}: the round plate does not show the lanterns 0/4: ' + str(await ev(chip)))
+    dots = await ev("document.querySelectorAll('.zm-relic small i').length")
+    if dots != 4: failures.append(f'{tag}: the round plate shows {dots} order dots (want 4)')
+    await pg.wait_for_timeout(500)
+    await shot('04-oracle')
+    # The first lantern in the order, through the use button: LIGHT THE <COLOUR> LANTERN, then 1/4 and the burn.
+    first = await ev(f"{G}.match.sim.rules.econ.quest.order[0]")
+    colour = ['RED', 'GREEN', 'BLUE', 'GOLD'][first]
+    await ev(f"(() => {{ const m = {G}.match, r = m.sim.rules.L.relics[{first}]; m.ps.x = r.x; m.ps.z = r.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'LIGHT THE {colour} LANTERN'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no LIGHT THE {colour} LANTERN prompt: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(600)
+    await shot('05a-lantern-cold')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"/^1\\/4 \\d+s/.test({chip} ?? '')", timeout=5000)
+    except Exception: failures.append(f'{tag}: the round plate does not count 1/4 with the burn: ' + str(await ev(chip)))
+    await pg.wait_for_timeout(800)
+    await shot('05-lantern-lit')
+    # A wrong one: every lantern goes out (a banner).
+    wrong = await ev(f"{G}.match.sim.rules.econ.quest.order[2]")
+    await ev(f"(() => {{ const m = {G}.match, r = m.sim.rules.L.relics[{wrong}]; m.ps.x = r.x; m.ps.z = r.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    await pg.wait_for_function(f"({use_t} ?? '').startsWith('LIGHT THE')", timeout=10000)
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function("[...document.querySelectorAll('.banner, .hud-banner, [class*=banner]')].some(b => /Wrong lantern/i.test(b.textContent))", timeout=4000)
+    except Exception: failures.append(f'{tag}: no "Wrong lantern" banner')
+    if await ev(f"{G}.match.sim.rules.econ.quest.got") != 0: failures.append(f'{tag}: a wrong lantern did not put them out')
+    await pg.wait_for_timeout(500)
+    await shot('06-wrong-lantern')
+    # All four in order (on the host), then the bell at the high striker: the Barker rises, its bar, its lane.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, me = m.sim.byId.get(m.localId);
+      for (const q of R.horde) if (q.alive) {{ q.alive = false; q.zFree = 0; }}
+      for (const i of R.econ.quest.order) R._use(me, {{ kind: 'relic', i, cost: 0, ok: true }}); }})()""")
+    await ev(f"(() => {{ const m = {G}.match, A = m.sim.rules.L.altar; m.ps.x = A.x; m.ps.z = A.z + 0.4; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'RING THE BELL'", timeout=10000)
+    except Exception: failures.append(f'{tag}: no RING THE BELL prompt: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(900)
+    await shot('07-striker')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"(() => {{ const E = {G}.match.sim.rules.econ; return E.wardenSeat >= 0 && {G}.match.sim.players[E.wardenSeat].alive; }})()", timeout=8000)
+    except Exception: failures.append(f'{tag}: the Barker never rose')
+    try: await pg.wait_for_function("(() => { const b = document.querySelector('.zm-boss'); return b && !b.hidden && /Barker/.test(b.textContent); })()", timeout=4000)
+    except Exception: failures.append(f'{tag}: no Barker boss bar')
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, E = R.econ, w = m.sim.players[E.wardenSeat];
+      w.ps.x = 62; w.ps.z = 9; m.ps.x = 71; m.ps.z = 11; m.ps.vx = 0; m.ps.vz = 0; E.quest.callT = 999; E.quest.chargeT = 0.4; }})()""")
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.charge?.t > 0.3", timeout=6000)
+    except Exception: failures.append(f'{tag}: the Barker did not mark a lane')
+    await pg.wait_for_timeout(350)
+    await shot('08-barker-lane')
+    await pg.wait_for_timeout(1500)
+    await shot('08b-barker-charged')
+    await ev(f"(() => {{ const m = {G}.match, E = m.sim.rules.econ, w = m.sim.players[E.wardenSeat]; if (w?.alive) m.sim._damage(w, m.sim.byId.get(m.localId), w.hp + 10, 'ar', 5); }})()")
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.state === 2", timeout=6000)
+    except Exception: failures.append(f'{tag}: the Barker never went down')
+    # The crate hands over the Whirligig: forced on the host's roll, taken with the use button.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules; R.box.state = 0; R.box.uses = 0; R.box.moveAt = 99;
+      R._rollGunOrig = R._rollGun;
+      const bs = R.L.boxSpots[R.box.spot]; m.ps.x = bs.x; m.ps.z = bs.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    await ev(f"""import('/js/shared/zombies.js').then(Z => {{ const R = {G}.match.sim.rules; R._rollGun = () => {{ R._rollGun = R._rollGunOrig; return Z.BOX_GUNS.indexOf('scout'); }}; }})""")
+    await pg.wait_for_function(f"{use_t}?.toUpperCase().includes('CRATE')", timeout=10000)
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.box.state === 2", timeout=8000)
+    except Exception: failures.append(f'{tag}: the crate never offered')
+    try: await pg.wait_for_function(f"/^TAKE WHIRLIGIG$/i.test({use_t} ?? '')", timeout=4000)
+    except Exception: failures.append(f'{tag}: the take prompt does not name the Whirligig: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(700)
+    await shot('09-crate-whirligig')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.ps.defs[{G}.match.ps.slot]?.zw === 'whirl'", timeout=6000)
+    except Exception: failures.append(f'{tag}: the phone did not arm the Whirligig')
+    name = await ev("document.querySelector('.arms-name span')?.textContent")
+    if name != 'Whirligig': failures.append(f'{tag}: the weapon panel says {name!r}')
+    cut = await ev("(() => { const n = document.querySelector('.arms-name span'); return n ? n.scrollWidth > n.clientWidth + 1 : true; })()")
+    if cut: failures.append(f'{tag}: the Whirligig\'s name is cut on the weapon panel')
+    # In a crowd in the ring: a hit spins a whirl up that drags them in, then bursts.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, nav = m.sim.nav;
+      R.state = 1; R.spawnT = 999; for (const q of R.horde) if (q.alive) {{ q.alive = false; q.zFree = 0; }}
+      m.ps.x = 60; m.ps.z = 20; m.ps.aim = 0;
+      window.__crowd = [];
+      for (const [dx, dz] of [[0, 0], [2.6, 1.2], [3.2, -1.4], [1, 2.6], [-1.6, -2]]) {{ const s = R.horde.find(q => !q.alive), k = nav.nearestFree(66 + dx, 20 + dz);
+        R._raise(s, 0, {{ x: k % nav.w + 0.5, z: Math.floor(k / nav.w) + 0.5 }}); s.zPace = 0.01; s.hp = s.zMax = R.hp * 4; window.__crowd.push(s); }} }})()""")
+    await pg.wait_for_timeout(1200)
+    await shot('10-whirligig-in-hand')
+    d0 = await ev(f"""(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId), c = window.__crowd;
+      m.sim._damage(c[0], me, 40, me.ps.weapon, 6); window.__eye = [c[0].ps.x, c[0].ps.z];
+      return c.slice(1).reduce((s, q) => s + Math.hypot(q.ps.x - window.__eye[0], q.ps.z - window.__eye[1]), 0); }})()""")
+    await pg.wait_for_timeout(900)
+    await shot('11-whirl')
+    d1 = await ev("window.__crowd.slice(1).reduce((s, q) => s + (q.alive ? Math.hypot(q.ps.x - window.__eye[0], q.ps.z - window.__eye[1]) : 0), 0)")
+    if not d1 < d0 * 0.8: failures.append(f'{tag}: the whirl did not drag the crowd in ({d0:.1f} -> {d1:.1f} m summed)')
+    await pg.wait_for_timeout(2200)
+    await shot('12-whirl-burst')
     await check_fit(pg, ['.zm-top', '.zm-use', '.arms'], f'{tag} wonder hud', failures)
     await ev('clearInterval(window.__shield)')
     await ctx.close()
@@ -744,6 +908,9 @@ async def main():
             if os.environ.get('ZM_ONLY') in (None, '', 'polestar'):
                 try: await run_polestar(browser, 932, 430, failures, errors)
                 except Exception as e: failures.append(f'polestar: {type(e).__name__}: {e}')
+            if os.environ.get('ZM_ONLY') in (None, '', 'wrenfield'):
+                try: await run_wrenfield(browser, 932, 430, failures, errors)
+                except Exception as e: failures.append(f'wrenfield: {type(e).__name__}: {e}')
             if os.environ.get('ZM_ONLY') in (None, '', 'messages'):
                 try: await run_messages(browser, failures, errors)
                 except Exception as e: failures.append(f'messages: {type(e).__name__}: {e}')
