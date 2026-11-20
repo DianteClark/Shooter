@@ -210,9 +210,9 @@ async def code(browser):
     await pg.locator('.rc-watch').click()
     await pg.wait_for_function(f"!!{G}.replay() || !!window.__shared", timeout=30000)
     if await pg.evaluate("!!window.__shared"):
-        await pg.evaluate(f"(() => {{ const c = window.__shared; window.__shared = null; return c; }})()")
-        check('the code decodes to a clip (test handler)', True)
-    else:
+        # The menu here was opened with a test handler: hand the clip to main.js's own (History's Replay code).
+        await pg.evaluate(f"(() => {{ const c = window.__shared; window.__shared = null; {G}.watchShared(c); }})()")
+    if True:
         await pg.wait_for_timeout(2000)
         rp = await pg.evaluate(RP)
         check('the code plays as a shared replay', rp and rp['shared'] and rp['c'] > 0.5, rp)
@@ -246,7 +246,10 @@ async def caster(browser):
     # Any death replay first; then the button.
     await pg.wait_for_timeout(500)
     await pg.locator('.cs-open.on').click()
-    await pg.wait_for_timeout(1500)
+    # A death replay may still be playing: the caster takes the picture once it is over.
+    try: await pg.wait_for_function(f'{G}.app.renderer?.cine === {G}.app.match?.caster?.shot', timeout=20000)
+    except Exception: pass
+    await pg.wait_for_timeout(500)
     cs = await pg.evaluate(CS)
     check('Caster cam opens: the HUD steps back, the shot is the caster\'s', cs['active'] and cs['on'] and cs['cine'], cs)
     check('the list has every player', cs['rows'] == cs['players'] and cs['rows'] >= 6, (cs['rows'], cs['players']))
@@ -273,7 +276,8 @@ async def caster(browser):
     during = await pg.evaluate(FPS)
     print(f"    frame interval median / p90: playing {before['median']:.1f} / {before['p90']:.1f} ms, caster {during['median']:.1f} / {during['p90']:.1f} ms (SwiftShader, shared CPU)")
     await shot(pg, 'caster-free')
-    await pg.locator('.cs-exit').click()
+    # (On a slow machine the round can end meanwhile: the caster then closes by itself.)
+    if await pg.locator('.cs-exit').count(): await pg.locator('.cs-exit').click(timeout=10000)
     await pg.wait_for_timeout(500)
     cs = await pg.evaluate(CS)
     check('Close gives the picture back', not cs['active'] and not cs['on'] and not cs['cine'], cs)

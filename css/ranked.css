@@ -74,7 +74,7 @@
 .rc-err { color: var(--c-red, #ff4d3d) !important; }
 
 /* ---------- The caster camera (js/game/caster.js) ---------- */
-body.caster-on #ui .hud { visibility: hidden; }
+body.caster-on #ui .hud, body.caster-on .controls { visibility: hidden; }
 .caster { position: fixed; inset: 0; z-index: 40; pointer-events: none; color: #e7eae4; font-family: var(--f-plate); }
 .caster * { box-sizing: border-box; }
 .cs-stage { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
@@ -90,9 +90,9 @@ body.caster-on #ui .hud { visibility: hidden; }
 .cs-exit { background: rgba(40,14,18,.85) !important; }
 .cs-list { position: absolute; left: max(8px, env(safe-area-inset-left)); top: calc(max(6px, env(safe-area-inset-top)) + 44px); bottom: 70px; width: clamp(150px, 24vw, 210px); display: flex; flex-direction: column; gap: 2px; overflow-y: auto; pointer-events: auto; overscroll-behavior: contain; }
 .cs-list.shut { display: none; }
-.cs-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1px 6px; min-height: 28px; padding: 3px 6px 4px 8px; text-align: left; width: 100%;
-  background: rgba(10,13,17,.72) !important; box-shadow: inset 3px 0 0 var(--tc, #fff) !important; }
-.cs-row.on { background: rgba(255,207,64,.2) !important; }
+.caster .cs-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; min-height: 26px; padding: 3px 6px 3px 8px; text-align: left; width: 100%;
+  background: rgba(10,13,17,.72); box-shadow: inset 3px 0 0 var(--tc, #fff); }
+.caster .cs-row.on { background: rgba(255,207,64,.22); box-shadow: inset 3px 0 0 var(--tc, #fff), inset 0 0 0 1px rgba(255,207,64,.6); }
 .cs-row.dead { opacity: .45; }
 .cs-row em { font: 400 11px/1 var(--f-plate); font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-row small { font: 400 10px/1 var(--f-plate); color: #c9cfd4; white-space: nowrap; }
@@ -118,7 +118,7 @@ body.caster-on #ui .hud { visibility: hidden; }
   border: 0; color: #e7eae4; background: rgba(10,13,17,.8); box-shadow: inset 3px 0 0 #ff4a5a; font: 400 12px/1 var(--f-plate); letter-spacing: .04em; touch-action: manipulation; }
 .cs-open.on { display: flex; }
 body.caster-on .cs-open { display: none; }
-@media (max-height: 380px) { .cs-list { width: clamp(140px, 22vw, 190px); } .cs-row { min-height: 24px; padding-top: 2px; padding-bottom: 3px; } }
+@media (max-height: 380px) { .cs-list { width: clamp(140px, 22vw, 190px); } .caster .cs-row { min-height: 22px; padding-top: 2px; padding-bottom: 2px; } }
 
 /* The lobby's Watch chip (a guest's spectator seat). */
 #ui .lb-watch { flex: none; height: 40px; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 0 10px; }
