@@ -268,7 +268,7 @@ vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
 // The far twin of a suit is the same code run through a builder that drops bevels, caps prisms at six sides and keeps
 // a record of every piece (thin ones get four sides); cut(budget) keeps the pieces that show most from the match camera (top-down area plus some
 // height, team colour weighted up so sides still read) until the vertex budget, in their original order.
-export const FAR_BUDGET = [480, 300];     // Torso, head.
+export const FAR_BUDGET = [360, 210];     // Torso, head.
 export function farSuitBuilder() {
   const b = new MeshBuilder();
   const rec = [];
