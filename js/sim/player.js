@@ -384,9 +384,10 @@ function chargeHolds(ps, w, trigger, dt) {
   return !full;
 }
 
-// Runs whichever gun is in hand, so a locked LMG keeps cooling behind the pistol.
+// Runs whichever gun is in hand, so a locked LMG keeps cooling behind the pistol. The heat gun may be the secondary
+// (Graveyard Shift hands guns into either slot): without this it heated and never cooled.
 function stepHeat(ps, dt) {
-  const h = weaponDef(ps, ps.primary).heat;
+  const h = weaponDef(ps, ps.primary)?.heat ?? weaponDef(ps, ps.secondary)?.heat;
   if (!h) return;
   ps.heatIdle += dt;
   if (ps.overheated) {

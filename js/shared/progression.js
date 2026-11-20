@@ -1170,6 +1170,8 @@ export const CARDS = [
   card('zm-warden', 'Lantern Out', 'Zombies', 'Put down the Gravewarden in Graveyard Shift', c => zmWardenDown(c.zmFeats), { p: 'rays', c: ['#120e1c', '#3a2a5a', '#d8c8ff', '#b070ff'], e: 'ui:skull', gold: true }),
   // Polestar Relay's own quest boss: the Listener, raised by the radios (docs/ZOMBIES.md "Polestar Relay").
   card('zm-listener', 'Dead Air', 'Zombies', 'Put down the Listener on Polestar Relay in Graveyard Shift', c => zmListenerDown(c.zmFeats), { p: 'waves', c: ['#04121a', '#16384a', '#c8f4ff', '#5affb0'], e: 'map:polestar', gold: true }),
+  // Wrenfield Fair's: the Barker, called out by the high striker's bell once the lanterns are lit (docs/ZOMBIES.md).
+  card('zm-barker', 'Show\'s Over', 'Zombies', 'Put down the Barker on Wrenfield Fair in Graveyard Shift', c => zmBarkerDown(c.zmFeats), { p: 'wheel', c: ['#140a1c', '#4a1e3a', '#ffe0b0', '#ff7ad8'], e: 'map:wrenfield', gold: true }),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),
@@ -1446,10 +1448,14 @@ export function recordZmFeat(save, mapId, { escaped = 0, boss = false } = {}) {
   if (idText(mapId) && (now[0] || now[1])) feats[mapId] = now;
   return { escaped: now[0], boss: !!now[1], freshEscape: esc > count(was[0], 999), freshBoss: !!b && !was[1] };
 }
-// The maps whose quest raises the Listener, not the Gravewarden (their feat's boss flag is the Listener's).
+// The maps whose quest raises the Listener, not the Gravewarden (their feat's boss flag is the Listener's), and the
+// Barker's (Wrenfield Fair).
 export const ZM_LISTENER_MAPS = ['polestar'];
+export const ZM_BARKER_MAPS = ['wrenfield'];
 // Whether the Gravewarden has gone down on any map (its calling card).
-export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && Array.isArray(v) && v[1]);
+export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && !ZM_BARKER_MAPS.includes(k) && Array.isArray(v) && v[1]);
+// Whether the Barker has (its calling card, Show's Over, and the Last Bell emblem).
+export const zmBarkerDown = feats => isObj(feats) && ZM_BARKER_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 // Whether the Listener has (its calling card, Dead Air, and the Dead Frequency emblem).
 export const zmListenerDown = feats => isObj(feats) && ZM_LISTENER_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 

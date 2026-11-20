@@ -76,6 +76,8 @@ const GLYPHS = {
     + [11.6, 15, 18.4].map(x => poly([[x, 13], [x + 1.2, 13], [x + 3, 20], [x + 1.8, 20]], b) + poly([[x + 1.8, 13], [x + 3, 13], [x + 1.2, 20], [x, 20]], b)).join(''),
   mast: (a, b) => poly([[12, 28], [16, 5], [20, 28], [18.4, 28], [16, 10], [13.6, 28]], a) + rect(13, 14, 6, 1.6, a) + rect(12.4, 21, 7.2, 1.6, a)
     + poly(ngon(2.2, 6, 0, 16, 4), b) + poly([[5, 9], [8, 6], [8.6, 7], [6.2, 9.4], [8.6, 11.8], [8, 12.8]], b) + poly([[27, 9], [24, 6], [23.4, 7], [25.8, 9.4], [23.4, 11.8], [24, 12.8]], b),
+  bell: (a, b) => poly([[9, 23], [10.4, 13], [12.4, 8.6], [16, 7], [19.6, 8.6], [21.6, 13], [23, 23], [25, 25], [7, 25]], a) + poly(ngon(2.4, 8, 0, 16, 27.4), b)
+    + rect(14.8, 3.6, 2.4, 3.6, b) + poly([[11.5, 21], [12.4, 14], [13.6, 14], [12.9, 21]], b),
   exit: (a, b) => rect(6, 10, 3, 18, a) + rect(23, 10, 3, 18, a) + poly([[6, 10], [16, 4], [26, 10], [26, 12], [16, 6.6], [6, 12]], a)
     + poly([[16, 9], [22, 16], [18.2, 16], [18.2, 26], [13.8, 26], [13.8, 16], [10, 16]], b),
   blades: (a, b) => poly([[7, 25], [22.5, 6.5], [25.5, 5], [24.5, 8.5], [9, 27]], a) + poly([[25, 25], [9.5, 6.5], [6.5, 5], [7.5, 8.5], [23, 27]], a)
@@ -141,6 +143,7 @@ const FEAT_ROWS = [
   ['feat-exclean', 'Full Manifest', '#ff5a2a', ['#f0ecd0', '#3fdc6a'], 'heli', { life: 'ex:clean', goal: 1, label: 'Extract with every contract your squad took, 4 or more' }, { tab: 'extraction', playlist: 'exquads' }],
   ['feat-zm30', 'Thirty Nights', '#9a8cff', ['#d8d0f0', '#7aff9a'], 'tomb', { zmround: 30, label: 'Survive to round 30 in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-listener', 'Dead Frequency', '#5affb0', ['#c8f4ff', '#5affb0'], 'mast', { zmboss: 'polestar', label: 'Put down the Listener on Polestar Relay in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
+  ['feat-barker', 'Last Bell', '#ff7ad8', ['#ffe0b0', '#ff7ad8'], 'bell', { zmboss: 'wrenfield', label: 'Put down the Barker on Wrenfield Fair in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-zmescape', 'Way Out', '#7aff9a', ['#d8d0f0', '#7aff9a'], 'exit', { zmescape: 1, label: 'Escape Graveyard Shift on the helicopter' }, { tab: 'zombies', playlist: 'zmsolo' }],
   ['feat-finishers', 'Executioner', '#c8ccd2', ['#e6ecf2', '#ff4d3d'], 'blades', { life: 'finishers', goal: 25, label: 'Perform 25 finishers' }, { tab: 'standard', playlist: 'qp' }],
   ['feat-flawless', 'Flawless', '#38b6ff', ['#e6ecf2', '#ffd659'], 'flawless', { life: 'gf:flawless', goal: 1, label: 'Win a Showdown 6-0' }, { tab: 'standard', playlist: 'showdown' }],

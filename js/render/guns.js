@@ -10,6 +10,7 @@ import { w3Factories } from './guns-w3.js';
 import { w4Factories } from './guns-w4.js';
 import { detailGun } from './guns-detail.js';
 import { WEAPON_CATEGORY } from '../shared/constants.js';
+import { fairWonderFactories } from './zm-wonder-models.js';     // Graveyard Shift's Whirligig (Wrenfield Fair).
 import { fitOpticW2, fitBarrelW2, fitWrapW2, W2_WRAPS, W2_MAG_LOOK, fitVentRib, fitShellCuff, fitGuideRail, fitVenturi } from './guns-w2.js';
 
 const C = {
@@ -1325,6 +1326,8 @@ FACTORIES['zw-rime'] = () => {
   pistolGrip(k, 0.04, 0.32, 0.14);
   return { geometry: b.build(), muzzle: [0.7, 0.2, 0], fore: [0.36, 0.02, -0.05], eject: [0.1, 0.3, 0.1], length: 1.1 };
 };
+
+Object.assign(FACTORIES, fairWonderFactories({ kit, pistolGrip }));
 
 // Built once per weapon+kit; the geometry is shared by every instance in every renderer.
 const cache = new Map();

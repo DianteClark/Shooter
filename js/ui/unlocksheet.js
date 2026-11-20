@@ -195,10 +195,13 @@ export function cardRequirement(c, row = null) {
     else if (c.group === 'Arms') how = `${c.req}, added up over all your matches: every gun of that class counts.`;
     else if (c.group === 'Maps') how = `${c.req}, in any mode played there.${tierWord(art.tier)}`;
     else if (id === 'zm-warden') {
-      how = 'In Graveyard Shift, finish the hidden quest on a map and put down the Gravewarden it raises (any map but Polestar Relay).';
+      how = 'In Graveyard Shift, finish the hidden quest on a map and put down the Gravewarden it raises (any map but Polestar Relay and Wrenfield Fair).';
       status = 'Not done yet.';
     } else if (id === 'zm-listener') {
       how = 'In Graveyard Shift on Polestar Relay, wake the radios and put down the Listener they raise.';
+      status = 'Not done yet.';
+    } else if (id === 'zm-barker') {
+      how = 'In Graveyard Shift on Wrenfield Fair, light the lanterns in the Oracle\'s order, ring the bell and put down the Barker.';
       status = 'Not done yet.';
     } else if (id === 'zm-escape' || id === 'zm-escape25') {
       const best = Math.max(0, ...Object.values(Progress.zmFeatsAll?.() ?? {}).map(v => (Array.isArray(v) ? v[0] ?? 0 : 0)));

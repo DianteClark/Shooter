@@ -17,12 +17,15 @@
 // the turret's), {t:'explosion', ...} (strike shells, lures, burst rounds), {t:'zexfil', state, by?, fail?},
 // {t:'zescape', round, ids}, {t:'zrelic', i, by, n}, {t:'zwarden', state, by}, {t:'zbreath', id} (Last Breath),
 // {t:'ztune', i, state: 1 tuning | 0 lost, by} (a radio), {t:'zpulse', x, z, r, wind} (the Listener's frost pulse),
-// {t:'zfx', k: 'freeze'|'shatter', x, z} (the Rimecaster),
+// {t:'zfx', k: 'freeze'|'shatter', x, z} (the Rimecaster), and Wrenfield Fair's (the lanterns, the Barker, the
+// Whirligig: js/sim/zm-fair.js),
 // {t:'plates_break', id} as the Plate Drop streak's.
 import { WEAPON_IDS } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
 import { hasLineOfSight } from '../shared/geometry.js';
-import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg } from '../shared/zombies.js';
+import { ZM, ZE, ZK, ZM_KINDS, ZM_TRAP_KINDS, ZM_LISTENER, ZM_BARKER, NO_GUN, START_GUN, bandOpen, zmFxOf, zmTierCamo, zmUpgradable, zmWonderOf, supplyCost, roundMix, isBossKind, isQuestBoss, clawDmg,
+  zmQuestBoss, lanternOrder } from '../shared/zombies.js';
+import { askOracle, lightLantern, stepLanterns, stepBarker, laneDodge, whirlHit, stepWhirls } from './zm-fair.js';     // Wrenfield Fair.
 import { brArm } from './br.js';
 import { TACTICALS, LETHALS } from '../shared/catalog.js';
 
@@ -52,7 +55,11 @@ export class ZmEcon {
     this.gear = [];
     this.gearId = 0;
     this.exfil = { state: 0, timer: 0, by: -1, spawnT: 0 };
-    this.quest = { got: 0, state: 0, respawnT: 0, callT: 0, tuneI: -1, tuneBy: -1, tuneT: 0, pulseT: 0, pulse: null };
+    this.quest = { got: 0, state: 0, respawnT: 0, callT: 0, tuneI: -1, tuneBy: -1, tuneT: 0, pulseT: 0, pulse: null,
+      // Wrenfield Fair's lanterns: the Oracle asked, the burn left, the order (from the match seed); the Barker's charge.
+      read: 0, burnT: 0, order: lanternOrder(R.seed ?? 0, this.L.relics?.length || 4), charge: null, chargeT: ZM_BARKER.every };
+    this.whirls = [];         // The Whirligig's whirls spinning (host only: short-lived, drawn from their event).
+    this._whirlT = new Map();
     this.wardenSeat = -1;
     this.escaped = null;      // Ids that got out, once the exfil lands.
     this._fxT = new Map();    // Per attacker: when a tier-3 effect last fired (a rate limit).
@@ -70,6 +77,8 @@ export class ZmEcon {
     this._stepBurns(dt);
     if (this.exfilOn) this._stepExfil(dt);
     if (this.quest.tuneI >= 0) this._stepTune(dt);
+    if (this.quest.burnT > 0) stepLanterns(this, dt);
+    if (this.whirls.length) stepWhirls(this, dt);
     if (this.quest.state === 1) this._stepWarden(dt);
     // Bots wear their upgraded gun's look (a phone sets its own, js/game/match.js).
     if (sim.tick % 15 === 3) {
@@ -164,15 +173,17 @@ export class ZmEcon {
           sim._emit({ t: 'ztune', i: u.i, state: 1, by: p.id });
           return 0;
         }
+        if (this.L.questKind === 'lantern') return lightLantern(this, p, u.i);
         q.got |= 1 << u.i;
         const n = this.L.relics.filter(r => q.got & (1 << r.i)).length;
         sim._emit({ t: 'zrelic', i: u.i, by: p.id, n, of: this.L.relics.length });
         return 0;
       }
+      case 'oracle': return this.L.questKind === 'lantern' ? askOracle(this, p) : null;
       case 'altar': {
         const q = this.quest;
         if (q.state || this.L.relics.some(r => !(q.got & (1 << r.i)))) return null;
-        q.state = 1; q.respawnT = 0.5; q.callT = 8; q.pulseT = ZM_LISTENER.every;
+        q.state = 1; q.respawnT = 0.5; q.callT = 8; q.pulseT = ZM_LISTENER.every; q.burnT = 0; q.charge = null; q.chargeT = ZM_BARKER.every;
         sim._emit({ t: 'zwarden', state: 1, by: p.id, k: this.bossKind });
         return 0;
       }
@@ -275,6 +286,7 @@ export class ZmEcon {
     const W = zmWonderOf(weapon), sim = this.sim, R = this.R, now = sim.time;
     if (!W) return 0;
     const share = k => (isBossKind(target.zk) ? Math.max(1, (target.zMax ?? 1) * W.boss) : Math.max(1, R.hp * k));
+    if (W.id === 'whirl') return whirlHit(this, target, attacker);
     if (W.id === 'coil') {
       // The bolt jumps on from the one it hit to the nearest not yet struck, each jump a little weaker.
       let from = target, k = W.chainK;
@@ -547,8 +559,10 @@ export class ZmEcon {
 
   // ---- The quest's boss ----
 
-  // The quest's boss: the Gravewarden, or on a radio quest the Listener.
-  get bossKind() { return this.L.questKind === 'radio' ? ZK.listener : ZK.warden; }
+  // The quest's boss: the Gravewarden, the Listener on a radio quest, the Barker on the lanterns (ZM_QUEST_BOSS).
+  get bossKind() { return zmQuestBoss(this.L).kind; }
+  // A bot's step out of the Barker's marked lane (js/sim/zm-kinds.js dodge).
+  laneDodge(ps) { return this.quest.charge ? laneDodge(this, ps) : null; }
 
   // A radio locking on: its tuner has to stay by it (up, in reach) for ZE.quest.tune s, or it is lost.
   _stepTune(dt) {
@@ -571,6 +585,7 @@ export class ZmEcon {
     const sim = this.sim, R = this.R, q = this.quest, kind = this.bossKind;
     const w = this.wardenSeat >= 0 ? sim.players[this.wardenSeat] : null;
     if (w?.alive && w.zk === ZK.listener) { this._stepListener(w, dt); return; }
+    if (w?.alive && w.zk === ZK.barker) { stepBarker(this, w, dt); return; }
     if (w?.alive && w.zk === 4) {
       // It calls two runners up beside it every so often.
       q.callT -= dt;
@@ -714,14 +729,15 @@ export class ZmEcon {
   // ---- Wire ----
 
   // [bench [state, owner, gun idx, tier, timer ds], traps [state, timer ds]..., gear [kind, x dm, z dm, aim 64ths,
-  //  life ds, owner]..., exfil [state, timer ds, by, escaped bits by crew seat], quest [got, state], warden seat]
+  //  life ds, owner]..., exfil [state, timer ds, by, escaped bits by crew seat], quest [got, state, tuning radio, its
+  //  time ds, its tuner, the Oracle asked, the lanterns' burn ds, their order as digits], warden seat]
   encode() {
     const b = this.bench;
     return [[b.state, b.owner, b.gun ? WEAPON_IDS.indexOf(b.gun) : -1, b.tier, r1(b.timer)],
       this.traps.flatMap(t => [t.state, r1(t.timer)]),
       this.gear.flatMap(g => [GEAR_KINDS.indexOf(g.kind), r1(g.x), r1(g.z), ((Math.round(g.aim / (Math.PI * 2) * 64) % 64) + 64) % 64, r1(Math.max(0, g.life)), g.owner]),
       [this.exfil.state, r1(this.exfil.timer), this.exfil.by, this.R.crew.reduce((m, p, k) => m | (this.escaped?.includes(p.id) ? 1 << k : 0), 0)],
-      [this.quest.got, this.quest.state, this.quest.tuneI, r1(this.quest.tuneT), this.quest.tuneBy], this.wardenSeat];
+      [this.quest.got, this.quest.state, this.quest.tuneI, r1(this.quest.tuneT), this.quest.tuneBy, this.quest.read, r1(this.quest.burnT), +this.quest.order.join('')], this.wardenSeat];
   }
 
   decode(a) {
@@ -740,7 +756,10 @@ export class ZmEcon {
       Object.assign(this.exfil, { state: ex[0], timer: ex[1] / 10, by: ex[2] });
       this.escaped = ex[3] ? this.R.crew.filter((p, k) => ex[3] & (1 << k)).map(p => p.id) : null;
     }
-    if (q) Object.assign(this.quest, { got: q[0], state: q[1], tuneI: q[2] ?? -1, tuneT: (q[3] ?? 0) / 10, tuneBy: q[4] ?? -1 });
+    if (q) {
+      Object.assign(this.quest, { got: q[0], state: q[1], tuneI: q[2] ?? -1, tuneT: (q[3] ?? 0) / 10, tuneBy: q[4] ?? -1, read: q[5] ?? 0, burnT: (q[6] ?? 0) / 10 });
+      if (q[7] !== undefined) this.quest.order = String(q[7]).padStart(this.quest.order.length, '0').split('').map(Number);
+    }
     this.wardenSeat = ws ?? -1;
   }
 
@@ -754,7 +773,8 @@ export class ZmEcon {
     for (const g of this.gear) if (g.kind === 'lure') { g.index = 1000 + g.id; g.ps = { x: g.x, z: g.z }; }
     Object.assign(this.exfil, old.exfil, { spawnT: 1 });
     Object.assign(this.quest, { got: old.quest.got, state: old.quest.state, respawnT: 0.5, callT: 8, pulseT: ZM_LISTENER.every, pulse: null,
-      tuneI: old.quest.tuneI ?? -1, tuneBy: old.quest.tuneBy ?? -1, tuneT: old.quest.tuneT ?? 0 });
+      tuneI: old.quest.tuneI ?? -1, tuneBy: old.quest.tuneBy ?? -1, tuneT: old.quest.tuneT ?? 0,
+      read: old.quest.read ?? 0, burnT: old.quest.burnT ?? 0, order: old.quest.order ?? this.quest.order, charge: null, chargeT: ZM_BARKER.every });
     this.wardenSeat = old.wardenSeat;
   }
 
@@ -765,7 +785,8 @@ export class ZmEcon {
       traps: this.traps.map(t => ({ state: t.state, timer: t.timer })),
       gear: this.gear,
       exfil: { state: this.exfil.state, timer: this.exfil.timer, by: this.exfil.by },
-      quest: { got: this.quest.got, state: this.quest.state, tuneI: this.quest.tuneI, tuneT: this.quest.tuneT, tuneBy: this.quest.tuneBy },
+      quest: { got: this.quest.got, state: this.quest.state, tuneI: this.quest.tuneI, tuneT: this.quest.tuneT, tuneBy: this.quest.tuneBy,
+        read: this.quest.read, burnT: this.quest.burnT, order: this.quest.order },
       escaped: this.escaped,
     };
   }
