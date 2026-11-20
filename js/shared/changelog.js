@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'The older maps get a fresh coat',
+    items: [
+      'Every older 6 v 6 and Ground War map has its own time of day and colours now, so no two look alike: Dust glows pink and gold at evening, Oasis wakes up in a cool misty dawn, Canyon burns red at sunset; Ruins sits in sunrise mist, Canopy drips after the rain, Riverbend shines gold and Expedition is caught in a monsoon with lightning.',
+      'In the city, Neon is back to its ultraviolet market night, Overpass sits in an orange smog dusk and Downtown in a rainy blue hour. Frostline is a night under the aurora; Icebreaker a bright, crisp polar noon.',
+      'Stronger centrepieces you can spot from anywhere: Railyard\'s water tower, the clock tower over Overpass\'s plaza, Downtown\'s fountain with its statue and jet, the tiled star and well-head in Dust\'s square, Icebreaker\'s smoking funnels, the furnace glow in Foundry and more.',
+      'More life everywhere: chimney and funnel smoke, steam off the market stalls, embers from braziers and the burning wreck, mist over the water, spray from the fountain and the mill race, gulls, doves and crows, bunting, lanterns, buoys and blinking aircraft lights.',
+      'Only the look changed: every wall, lane and objective is where it was, and the maps run as smoothly as before.',
+    ],
+  },
+  {
     build: '1120-9', date: '2026-11-20', title: 'Season 3: Third Rail is coming',
     items: [
       'Season 3: Third Rail starts on February 8, when Signal Fire ends: a storm over the live wires, 42 days long.',

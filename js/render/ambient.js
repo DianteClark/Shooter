@@ -115,7 +115,7 @@ export class Ambient {
     this.lowPower = false;
     this.clock = 0;
     this.time = { value: 0 };
-    const cfg = this.cfg = LIFE[theme.id] || NONE;
+    const cfg = this.cfg = { ...(LIFE[theme.id] || NONE), ...(theme.life || {}) };   // A map's mood can retune its theme's life.
     const n = cfg.flock + cfg.ground;
     this.nBirds = n;
     this.mesh = null;
@@ -156,6 +156,9 @@ export class Ambient {
     }
 
     this.vents = cfg.vents ? placeSpots(map, cfg.vents, 0.7).map(v => ({ x: v.x, z: v.z, t: Math.random() * 2 })) : [];
+    // Fixed emitters a map's mood places on its landmarks: chimney smoke, steam, embers, fountain spray, drips.
+    const emit = typeof cfg.emit === 'function' ? cfg.emit(map) : cfg.emit || [];
+    this.emitters = emit.map(e => ({ y: 0.2, rate: 1, ...e, t: Math.random() }));
     this.devils = Array.from({ length: cfg.devils || 0 }, () => ({
       x: Math.random() * map.width, z: Math.random() * map.height, dx: rand(0.8, 1.5), dz: rand(-0.5, 0.5), phase: Math.random() * 6.28, t: 0,
     }));
@@ -199,6 +202,7 @@ export class Ambient {
     this.#vents(dt, focusX, focusZ);
     this.#lamps(dt, focusX, focusZ);
     this.#devils(dt, focusX, focusZ);
+    if (this.emitters.length) this.#emit(dt, focusX, focusZ);
     if (this.theme.lightning) this.#lightning(dt, focusX, focusZ);
   }
 
@@ -262,6 +266,19 @@ export class Ambient {
         const sp = 8 * r;
         vfx.spawn(d.x + Math.cos(a) * r, y, d.z + Math.sin(a) * r, -Math.sin(a) * sp, rand(0.6, 1.6), Math.cos(a) * sp, rand(0.4, 0.7), 0.06, 0.4, vfx.dustRGB, 0.5, -0.5, 1);
       }
+    }
+  }
+
+  #emit(dt, fx, fz) {
+    const vfx = this.vfx, thin = this.lowPower ? 2.5 : 1;
+    for (let i = 0; i < this.emitters.length; i++) {
+      const e = this.emitters[i];
+      if (Math.abs(e.x - fx) > 22 || Math.abs(e.z - fz) > 16) continue;
+      e.t -= dt;
+      if (e.t > 0) continue;
+      const k = EMIT[e.kind] || EMIT.smoke;
+      e.t = k.every * thin / e.rate * rand(0.7, 1.3);
+      k.fn(vfx, e, this.clock);
     }
   }
 
@@ -330,6 +347,19 @@ export class Ambient {
     }
   }
 }
+
+// What a fixed emitter puts out, and how often (seconds between puffs at rate 1). All of it rides the VFX particle
+// batch, so an emitter costs no draw call; emitters off screen are skipped.
+const SMOKE = [0.3, 0.29, 0.3], EMBER = [1, 0.5, 0.16], SPRAY = [0.78, 0.86, 0.94], MIST = [0.8, 0.84, 0.88];
+const EMIT = {
+  smoke: { every: 0.22, fn: (v, e) => v.spawn(e.x + rand(-0.15, 0.15), e.y, e.z + rand(-0.15, 0.15), rand(0.2, 0.7), rand(0.9, 1.6), rand(-0.2, 0.2), rand(1.8, 2.8), 0.25, 1.3, e.col || SMOKE, 0.5, -0.15, 0.8) },
+  steam: { every: 0.16, fn: (v, e) => v.spawn(e.x + rand(-0.1, 0.1), e.y, e.z + rand(-0.1, 0.1), rand(-0.2, 0.3), rand(1.2, 2.4), rand(-0.2, 0.2), rand(0.8, 1.4), 0.14, 0.8, e.col || STEAM, 0.34, -0.5, 1.1) },
+  ember: { every: 0.12, fn: (v, e) => v.spawn(e.x + rand(-0.25, 0.25), e.y, e.z + rand(-0.25, 0.25), rand(-0.4, 0.4), rand(1.2, 2.6), rand(-0.4, 0.4), rand(0.6, 1.3), 0.07, 0.02, e.col || EMBER, 0, -0.3, 0.6) },
+  spray: { every: 0.05, fn: (v, e) => { const a = Math.random() * 6.28, s = rand(0.3, 0.9) * (e.r || 1); v.spawn(e.x, e.y, e.z, Math.cos(a) * s, rand(2.6, 3.6), Math.sin(a) * s, rand(0.7, 0.95), 0.07, 0.12, e.col || SPRAY, 0.5, 9.8, 0.2); } },
+  drip: { every: 0.5, fn: (v, e) => v.spawn(e.x + rand(-0.3, 0.3), e.y, e.z + rand(-0.3, 0.3), 0, -0.5, 0, rand(0.35, 0.5), 0.05, 0.04, e.col || SPRAY, 0.6, 9.8, 0, 0.04) },
+  mist: { every: 0.4, fn: (v, e) => v.spawn(e.x + rand(-1.2, 1.2), e.y, e.z + rand(-1.2, 1.2), rand(-0.3, 0.3), rand(0.05, 0.25), rand(-0.3, 0.3), rand(2.5, 3.5), 0.6, 1.8, e.col || MIST, 0.16, 0, 0.5) },
+  spark: { every: 1.6, fn: (v, e) => { for (let k = v._n(6); k > 0; k--) v.spawn(e.x, e.y, e.z, rand(-1.8, 1.8), rand(-0.4, 1.8), rand(-1.8, 1.8), rand(0.3, 0.7), 0.05, 0.01, e.col || SPARK, 0, 10, 0.4, 0.03); } },
+};
 
 const _scaled = [0, 0, 0];
 function scaled(c, k) { _scaled[0] = c[0] * k; _scaled[1] = c[1] * k; _scaled[2] = c[2] * k; return _scaled; }

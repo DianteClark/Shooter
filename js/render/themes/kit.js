@@ -56,6 +56,7 @@ export function mass(ctx, x, z, w, d, h, { cols, cap, levels = 3, taper = 0.28, 
 // A ring of additive gradient quads round the map, so a high camera sees a horizon (see skyRing in world.js).
 export function skyRing(ctx, sky) {
   const { glow, W, H } = ctx;
+  if (ctx.theme.sky) sky = { ...sky, ...ctx.theme.sky };    // A map's mood (themes/moods/) recolours its theme's sky.
   const cx = W / 2, cz = H / 2, R = Math.max(W, H) * 0.5 + 34, N = 28;
   const y0 = sky.y0 ?? -30, y1 = sky.y1 ?? 10, y2 = sky.y2 ?? 60;
   const wd = sky.warmDir || [-1, 0], wl = Math.hypot(wd[0], wd[1]);
