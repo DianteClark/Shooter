@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Every operator remade',
+    items: [
+      'Every Mastery skin is now a full costume, each one different: a knight, a samurai, a lion king, a shark, a spider, a dragon, a deep-sea diver, a wizard, a walking tank, a scarecrow with his crow and more. All of them keep your team colour where it shows from above.',
+      'Every Elite skin now has its own living effect running over the whole outfit: flames, frost, lightning, code rain, a heartbeat trace, thermal vision, falling snow and plenty more.',
+      'Operators who looked alike got something only they carry: a door on Flint\'s back, a sledgehammer for Rook, a champion\'s cape for Brigid, a company radio with a pennant for Garrison, and others.',
+      'Costumes still read across the map: far-off players keep the shape of their costume instead of turning back into a plain soldier.',
+    ],
+  },
+  {
     build: '1119-13', date: '2026-11-19', title: 'Move stick fix, take two',
     items: [
       'Your third report showed iOS still cancelling the move thumb right after a grenade release. The game no longer restarts audio, voice or the screen-awake video while another finger is down, the likely trigger. Keep recording touches and send a report if it happens again.',
