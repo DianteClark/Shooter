@@ -116,3 +116,23 @@ export function waterBanks(ctx, w, { face, lip, lip2, t = 0.34 }) {
   edge(w.x + w.w, w.z + w.d, w.x, w.z + w.d);
   edge(w.x, w.z + w.d, w.x, w.z);
 }
+
+// A sphere (or the upper part of one, `from` 0 = the equator, -1 = the bottom) as latitude bands of prisms: a tank,
+// a dome, a lantern's cap. `bands` per half, `sides` round.
+export function ball(b, cx, cy, cz, r, { bands = 4, sides = 10, from = -1, to = 1 } = {}) {
+  const lat = k => (k / bands) * Math.PI / 2;
+  for (let k = Math.round(from * bands); k < Math.round(to * bands); k++) {
+    const a0 = lat(k), a1 = lat(k + 1);
+    b.prismY(cy + Math.sin(a0) * r, cy + Math.sin(a1) * r, cx, cz, Math.max(0.01, Math.cos(a0) * r), Math.max(0.01, Math.cos(a1) * r), sides);
+  }
+}
+
+// A square lattice tower of four corner legs and cross-bracing every `step` metres, from y0 to y1, footprint s x s at
+// (x, z) (north-west corner). Low-poly: legs and braces are thin boxes.
+export function lattice(b, x, z, s, y0, y1, { leg = 0.16, step = 2.2, brace = 0.08 } = {}) {
+  for (const [ox, oz] of [[0, 0], [s - leg, 0], [0, s - leg], [s - leg, s - leg]]) box3(b, x + ox, y0, z + oz, leg, y1 - y0, leg);
+  for (let y = y0 + step; y < y1 - 0.2; y += step) {
+    box3(b, x, y, z, s, brace, brace); box3(b, x, y, z + s - brace, s, brace, brace);
+    box3(b, x, y, z, brace, brace, s); box3(b, x + s - brace, y, z, brace, brace, s);
+  }
+}

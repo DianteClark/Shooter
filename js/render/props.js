@@ -33,6 +33,9 @@ const SETS = {
   polestar: [BARREL, CRATE, BARREL, CONE],
   wrenfield: [CRATE, BARREL, JAR, CRATE],
   millbrook: [CRATE, BARREL, JAR, CRATE],
+  launchpad: [CONE, BARREL, CRATE, CONE, SIGN],
+  observatory: [CRATE, BARREL, CRATE, SIGN],
+  pagoda: [JAR, JAR, CRATE, JAR],
   range: [CRATE, BARREL, CONE],
 };
 const COVER_KINDS = new Set(['container', 'crate', 'barrier', 'wall', 'building', 'shop', 'stall', 'adobe', 'rock', 'sandbag', 'tent', 'hull']);

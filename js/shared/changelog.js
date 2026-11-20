@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: '1120-8', date: '2026-11-20', title: 'Three new maps: Launchpad, Observatory and Pagoda',
+    items: [
+      'Launchpad (large, desert): fight round a rocket on its pad in a white salt flat at high noon. A tank farm on one flank, a radar station on the other, and the crawler parked on the road between.',
+      'Observatory (medium, mountain): a summit observatory at sunrise, the snow pink with alpenglow. The middle lane splits round the telescope dome; the ridge path and the pine slope carry the flanks, and each team rides up on its own cable car.',
+      'Pagoda (medium, mountain): a hillside temple at dusk with the maples in full red. A five-storey pagoda between two koi ponds, vermilion gates on the north path, a raked gravel garden on the south one, lanterns lit everywhere.',
+      'All three host every 6 v 6 mode, turn up in the map vote and the picker under the new Mountain tag, and each has its own calling cards to earn.',
+    ],
+  },
+  {
     build: '1120-7', date: '2026-11-20', title: 'Ranked rewards, caster camera, replay codes',
     items: [
       'Ranked has a hub: open the Season screen\'s Ranked tab for your division, your progress to the next tier, your placement matches, the time left in the season and every reward on the way up.',

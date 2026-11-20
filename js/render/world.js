@@ -16,6 +16,9 @@ import { ashgrove } from './themes/ashgrove.js';
 import { polestar } from './themes/polestar.js';
 import { wrenfield } from './themes/wrenfield.js';
 import { millbrook } from './themes/millbrook.js';
+import { launchpad } from './themes/launchpad.js';
+import { observatory } from './themes/observatory.js';
+import { pagoda } from './themes/pagoda.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
@@ -3147,6 +3150,9 @@ const DRESS = {
   polestar: { ...RAILYARD_DRESS, ...polestar.dress },
   wrenfield: { ...RAILYARD_DRESS, ...wrenfield.dress },
   millbrook: { ...RAILYARD_DRESS, ...millbrook.dress },
+  launchpad: { ...RAILYARD_DRESS, ...launchpad.dress },
+  observatory: { ...RAILYARD_DRESS, ...observatory.dress },
+  pagoda: { ...RAILYARD_DRESS, ...pagoda.dress },
 };
 
 const THEME_STAGES = {
@@ -3174,6 +3180,9 @@ const THEME_STAGES = {
   polestar: polestar.stage,
   wrenfield: wrenfield.stage,
   millbrook: millbrook.stage,
+  launchpad: launchpad.stage,
+  observatory: observatory.stage,
+  pagoda: pagoda.stage,
 };
 
 // What theme modules (js/render/themes/) may draw with, handed over on ctx.kit: they cannot import world.js back.
@@ -3422,6 +3431,9 @@ const THUMB_STYLE = {
   polestar: polestar.thumb,
   wrenfield: wrenfield.thumb,
   millbrook: millbrook.thumb,
+  launchpad: launchpad.thumb,
+  observatory: observatory.thumb,
+  pagoda: pagoda.thumb,
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,
 };
