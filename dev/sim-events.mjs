@@ -234,7 +234,7 @@ function runEvent(e, seed) {
     if (zm) counts['zm:rounds'] = Math.max(0, (zm.round ?? 1) - 1);
     return counts;
   });
-  return { mapId, ended, t: Math.round(sim.time), per, special: zm ? sim.rules.special : null, night: zm ? sim.rules.night : null };
+  return { mapId, ended, t: Math.round(sim.time), per, scores: view.scores, special: zm ? sim.rules.special : null, night: zm ? sim.rules.night : null };
 }
 
 for (const e of EVENTS) {
@@ -283,6 +283,36 @@ await test('Night Graveyard: the fog every round but the boss rounds, points pai
   const q = { zm: { pts: 0, earned: 0 } };
   day.rules._pay(q, 50); assert.equal(q.zm.pts, 50, 'normal without Night');
 });
+
+// The seasons' limited-time events (js/shared/season-items.js `event`, days 7-20 or 14-27): each one's playlist keeps
+// its modifiers, plays to an end in bot matches, and the modifier holds (Lightning Rod, Season 3: Snipers Only Grind,
+// so sniper rifles and the secondary slot only, and the tags still bank).
+const { SEASON_DEFS } = await import('../js/shared/season-items.js');
+for (const def of SEASON_DEFS) {
+  const e = def.event;
+  if (QUICK && def.n < SEASON_DEFS.length) continue;
+  await test(`season ${def.n} event ${e.id}: ${MODES[e.mode].name} with ${e.mods.join(', ')} plays`, () => {
+    assert.ok(MODES[e.mode] && modesFor('standard').includes(e.mode), 'a Standard mode');
+    assert.deepEqual(cleanMods(e.mods, e.mode), e.mods, 'its modifiers survive cleanMods');
+    assert.ok(e.from >= 0 && e.to > e.from && e.to <= 42, 'inside the season');
+    assert.ok(!EVENTS.some(w => w.id === e.id || w.name === e.name), 'a name of its own (not a weekly event)');
+    const runs = (QUICK ? [1] : [1, 2]).map(seed => runEvent({ ...e, challenges: [] }, seed));
+    console.log(`     ${runs.map(r => `${r.mapId} ${r.t}s${r.ended ? '' : ' (cut)'}`).join(', ')}`);
+    const kills = runs.flatMap(r => r.per.map(p => p.kills ?? 0)), total = kills.reduce((a, b) => a + b, 0);
+    assert.ok(total > 10, `kills happen (${total})`);
+    if (e.mods.includes('snipers')) {
+      const cats = new Set(runs.flatMap(r => r.per.flatMap(p => Object.keys(p).filter(k => k.startsWith('cat:') && p[k] > 0))));
+      // Snipers Only in a 6v6 mode swaps the primary only: the secondary slot (a pistol or a launcher) stays, as in the pickers.
+      assert.ok([...cats].every(k => ['cat:Sniper', 'cat:Pistol', 'cat:Launcher', 'cat:Melee'].includes(k)), `Snipers Only: kills by ${[...cats]}`);
+      assert.ok(cats.has('cat:Sniper'), 'sniper kills happen');
+    }
+    if (e.mode === 'grind') {
+      const banked = runs.map(r => Object.values(r.scores ?? {}).reduce((a, b) => a + (Number(b) || 0), 0));
+      console.log(`     team scores (tags banked): ${banked.join(', ')}`);
+      assert.ok(banked.every(n => n > 0), 'tags are banked with sniper rifles too');
+    }
+  });
+}
 
 console.log(`\n${passed} passed, ${problems.length} failed${problems.length ? `: ${problems.join('; ')}` : ''}`);
 process.exit(problems.length ? 1 : 0);

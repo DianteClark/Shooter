@@ -12,7 +12,8 @@ read dates, so two phones on the same date agree wherever they are. Owner: seaso
 | Preseason | to 2026-11-15 | none; ranked plays, the track waits | |
 | Season 1: Cold Iron | 2026-11-16 to 2026-12-27 (42 days) | Cold Snap, Hardcore Infected, days 14-27 (Nov 30 - Dec 13) | Rotary (tier 25), Ghoul (tier 75) |
 | Season 2: Signal Fire | 2026-12-28 to 2027-02-07 | Lights Out, Hardcore Kill Order, days 7-20 (Jan 4 - Jan 17) | Anti-Materiel (25), Mako (75) |
-| Season Replay | from 2027-02-08, 42 days each | the replayed season's | Cold Iron (`S1R1`), Signal Fire (`S2R1`), Cold Iron (`S1R2`), ... |
+| Season 3: Third Rail | 2027-02-08 to 2027-03-21 (42 days) | Lightning Rod, Snipers Only Grind, days 7-20 (Feb 15 - Feb 28) | Lodestone (25), Halcyon (75) |
+| Season Replay | from 2027-03-22, 42 days each | the replayed season's | Cold Iron (`S1R1`, Mar 22), Signal Fire (`S2R1`, May 3), Third Rail (`S3R1`, Jun 14), Cold Iron (`S1R2`, Jul 26), ... |
 
 A season opens at local midnight of its start day. Replays are fresh instances: the track, weekly sets and ranked start
 over; rewards already owned show as owned. The title shows a Season chip (days left, a dot when tiers wait to be
@@ -108,9 +109,39 @@ gallery runs them on 2026-11-25).
 reached tiers claimed for the player, Season 1 ranked paid, the Signal Fire track (100 tiers, every reward in its
 table, Anti-Materiel and Mako early), Season 2 camos in the picker only from the 28th, six weekly sets (week 2 on Jan 4),
 Lights Out in the Spotlight Jan 4-17 only, placements again from 75% of the SR, the Season boards on the Season 2 window;
-then Season Replay on Feb 8 (Cold Iron fresh, owned rewards stay owned, Cold Snap back, Signal Fire again on Mar 22).
+then Season Replay on Feb 8 (as of 2026-11-18; Season 3 has since moved the replays to Mar 22, see below).
 `dev/ui-events-test.py` checks the same in the page: the new-season banner, the Season chip, the Season screen, Ranked
 placements, What's new. Nothing needed fixing for the switch itself.
+
+## Season 3 readiness (checked 2026-11-20)
+Season 3: Third Rail (ROADMAP item 57), `S3` in `SEASON_DEFS`, 2027-02-08 to 2027-03-21: a late-winter storm over the
+electrified lines (storm slate, electric yellow, violet). Data only, like Seasons 1 and 2: no new code paths.
+- Track: 100 tiers in the Season 1 layout (no `fillerSkinTiers`): 40 cards (tier 1 is the season's own card, Third Rail;
+  37-40 animated with the existing `gold`/`prism` card animations), 40 emblems (in `ALL_EMBLEMS` through
+  `SEASON_EMBLEMS`, never in `EMBLEMS`), 10 camos on every gun (8 static: Cloudburst, Downpour, Gale Force, Nimbus,
+  Stormglass, Ozone, Hailstone, Thunderclap; 2 animated on the existing shader patterns: Forked Bolt `livewire`, Eye of
+  the Storm `aurora`), 8 skins (`skin:<op>-s3`: Ghoul Stormcrow, Ram Thunder Ram, Sable Rain Shadow, Linnet Flash Flood,
+  Mako Storm Surge, Skylark Cloudbreaker, Gambit Storm Chaser, Warden High Tempest).
+- Early unlocks: tier 25 the Lodestone (`rail`, the coil sniper, level 40), tier 75 Halcyon (10 Search and Destroy
+  rounds won). Both still open the usual way.
+- Spotlight: Lightning Rod (`lightningrod`), Snipers Only Grind, days 7-20 (Feb 15 - Feb 28). A remix of existing rules
+  (Grind is not a dealt mode, so Snipers Only swaps primaries to sniper rifles; the sidearm stays). It sits after the
+  weekly event in the Spotlight per the order rule.
+- Weekly: six sets of five drawn from `WEEKLY_TEMPLATES` by `S3` and week (`S3.w1.*` .. `S3.w6.*`).
+- Date locks: every S3 camo and skin is `dateLocked` until Feb 8 00:00 local (hidden in pickers until then, as Season 2).
+- Replay: appending S3 moved Season Replay to start when Third Rail ends (Mar 22): Cold Iron `S1R1`, Signal Fire
+  `S2R1` (May 3), Third Rail `S3R1` (Jun 14), Cold Iron `S1R2` (Jul 26). Nobody can hold a replay key yet (the earliest
+  was Feb 8), so no save is affected.
+- Tests: `node dev/sim-seasons.mjs` (schedule and five time zones across Feb 8 / Feb 15 / Mar 22, replay order and
+  back-to-back windows, date locks, "season 2 and season 3": the Feb 8 switch through Progress on a mocked clock with
+  every reward real, Lodestone/Halcyon early, cosmetics equip, weekly sets, Lightning Rod Feb 15-28 only, then the
+  replays), `node dev/sim-events.mjs` (every season event's playlist plays in bot matches with its modifiers: Lightning
+  Rod gets only sniper/sidearm kills and tags still bank), `python3 dev/ui-events-test.py` (Feb 8 in the page: banner,
+  chip, Season screen, the Spotlight on Feb 16, Replay on Mar 24).
+- TODO (ranked owner, branch `ranked`): Season 3 gets ranked end-of-season rewards automatically (`rankedCards` /
+  `rankedEmblems` read `SEASON_DEFS`: `card:rk-s3-*`, `emblem:rk-s3-*`) and the reset runs on Feb 8 like any season
+  switch. Nothing ranked was changed here; `dev/sim-seasons.mjs` "Season 3 Ranked: placements again" asserts today's 75%
+  carry and will need the new soft-reset rule when that branch lands.
 
 ## Save
 `save.season` (appended to v4, no version bump), the save code's 19th entry (null in the 18th when there is no career

@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Season 3: Third Rail is coming',
+    items: [
+      'Season 3: Third Rail starts on February 8, when Signal Fire ends: a storm over the live wires, 42 days long.',
+      'A new 100-tier free track: 40 calling cards (the last four animated), 40 emblems, 10 camos for every gun (Forked Bolt and Eye of the Storm move), and eight storm skins for Ghoul, Ram, Sable, Linnet, Mako, Skylark, Gambit and Warden.',
+      'Get the Lodestone early at tier 25 and Halcyon at tier 75. Their usual unlocks still work too.',
+      'Lightning Rod, from February 15 to February 28: Snipers Only Grind in the Spotlight. Bank the tags before the bolt finds you.',
+      'Six new sets of weekly season challenges. Season Replay now starts after Third Rail ends, on March 22, and brings all three seasons back in turn.',
+    ],
+  },
+  {
     build: '1120-4', date: '2026-11-20', title: 'The undead, remade',
     items: [
       'Every kind of undead in Graveyard Shift has its own body now: the hunched, limping Shambler in a torn shirt, the lean Runner pumping its arms, the hulking Brute, the legless Crawler dragging itself along, the Spitter with its swollen glowing throat, the Bloater studded with glowing pustules, and the Shieldbearer behind a battered door.',

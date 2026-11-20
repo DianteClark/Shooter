@@ -4,7 +4,7 @@
 // Dates: a season opens at local midnight of its start day and every boundary is a local calendar day, read the way
 // the boards read it (the local Y-M-D taken as a UTC day number), so every phone on the same date agrees wherever it is.
 // Before Season 1: the Preseason (ranked plays, the track waits). After the last scheduled season ends: Season Replay,
-// the past seasons again in order, each a fresh SEASON_DAYS instance (`S1R1`, `S2R1`, `S1R2`, ...) with its track,
+// the past seasons again in order, each a fresh SEASON_DAYS instance (`S1R1`, `S2R1`, `S3R1`, `S1R2`, ...) with its track,
 // weekly sets and event, so there is always something to earn.
 //
 // The save's block (save.season), appended to save v4 and to the save code as its 19th entry:
