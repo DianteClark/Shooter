@@ -498,6 +498,10 @@ function vehicleModels() {
     for (const z of [-0.46, 0.46]) b.box(0, y + 0.87, z, 0.42, 0.03, 0.22);
     b.box(-0.3, y + 0.74, 0, 0.1, 0.04, 0.5);
     b.setPart(2).box(0.31, y + 0.62, 0, 0.05, 0.06, 0.42);
+    // Streak visuals pass: a bomb-suit helmet over the head with a lit visor slit, and armoured forearm guards.
+    b.setPart(0).setColor(0x2e3238).prismY(y + 0.86, y + 1.2, 0.02, 0, 0.25, 0.21, 8, Math.PI / 8);
+    b.setColor(0x3a4048).prismY(y + 1.2, y + 1.27, 0.02, 0, 0.21, 0.12, 8, Math.PI / 8);
+    b.setPart(2).box(0.24, y + 1.03, 0, 0.06, 0.05, 0.3);
   });
   return S.build();
 }
