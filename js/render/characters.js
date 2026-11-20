@@ -1693,6 +1693,9 @@ export class Characters {
       const B = banks[i];
       B.t.count = B.h.count = B.n; B.ft.count = B.fh.count = B.nf;
       B.xt.count = B.xh.count = revealAll ? 0 : B.n; B.xft.count = B.xfh.count = revealAll ? 0 : B.nf;
+      // An empty bank stays out of the render list altogether (no program or state changes for it).
+      B.t.visible = B.h.visible = B.xt.visible = B.xh.visible = B.n > 0;
+      B.ft.visible = B.fh.visible = B.xft.visible = B.xfh.visible = B.nf > 0;
     }
     this.xrayTorsoLite.count = revealAll ? 0 : nTL; this.xrayHeadLite.count = revealAll ? 0 : nTL;
     this.ring.count = nRing; this.blob.count = nRing;

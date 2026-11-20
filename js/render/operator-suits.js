@@ -13,14 +13,109 @@ import { MeshBuilder } from './meshbuild.js';
 import { ACC, KEEP, TONE, LOCKS, SUITS, tag, seg, plate } from './operator-kit.js';
 
 /* ---------- Active skins ---------- */
-// One branch per effect, a few ALU ops each: no textures, no loops. c is the lit colour, p the object position (metres),
-// a the skin's accent; vLight and uTime come from CHAR_FRAG. Numbers match operators.js SKIN_FX (append only).
+// skinFx(c, k, p, a) colours a fragment of gear wearing effect k (operators.js SKIN_FX): c is the lit colour, p the object
+// position (metres), a the skin's accent; vLight and uTime come from CHAR_FRAG. 1-3 are the pilot's own code; 4.. are
+// rows of FX_ROWS run by fxUber().
+// One parametric effect, fixed cost: every branch of a shader is paid by every fragment on a software renderer (and
+// grows the register budget on a phone GPU), so effects 4.. are rows of numbers for fxUber() rather than code of their
+// own. A row: a band pattern (direction in cycles per metre, or rings out of the chest, or a turn round the body, or a
+// grid of two), warped and scrolled; a hash grid of cells, lit, twinkling or reshuffling; how they mix and colour.
+//   dir [x, y, z] cycles/m (mode 1: rings per metre in x; mode 2: sweeps per turn in x, cycles/m up in y)
+//   speed cycles/s, warp [amount, frequency], sharp (pow; < 0 hard stripes), band (weight),
+//   cells [per metre, share lit (1: shade by hash), twinkle /s (< 0 reshuffle /s), climb m/s], cell (weight),
+//   both (weight of band x cells), pal (0 accent, 1 fire, 2 prism, 3 thermal, 4 white), base (gear kept), gain,
+//   amb (accent wash), mode (0 along dir, 1 rings, 2 turning, 3 grid, 4 chevron: |z|), step (time steps /s: jumps
+//   the warp and flickers), beat (a pulse /s on the gain)
+const FX_ROWS = {
+  flame: { dir: [0, 3.2, 0], speed: 1.6, warp: [0.25, 12], sharp: 2.5, band: 1, pal: 1, base: 0.55, gain: 1.5 },
+  frost: { dir: [1.5, 2.5, 1.0], speed: 0.1, warp: [0.3, 9], sharp: 10, band: 0.5, cells: [16, 0.12, 2.5, 0], cell: 1.1, pal: 4, base: 0.6, gain: 1, amb: 0.25 },
+  glitch: { dir: [0, 40, 0], speed: 3, sharp: 1, band: 0.12, cells: [9, 0.25, -7, 0], cell: 0.9, pal: 2, base: 0.9, gain: 1, step: 7 },
+  starfield: { dir: [0.6, 4, 3], speed: 0.3, warp: [0.4, 5], sharp: 2, band: 0.4, cells: [22, 0.07, 3, 0], cell: 1.4, pal: 0, base: 0.3, gain: 1, amb: 0.06 },
+  lightning: { dir: [2.2, 0, 3.5], speed: 0, warp: [0.12, 17], sharp: 14, band: 2.2, pal: 4, base: 0.8, gain: 1, amb: 0.1, step: 9 },
+  camo: { dir: [0, 0.7, 0], speed: 0.35, sharp: 12, band: 0.6, cells: [9, 1, -1.5, 0], cell: 0.45, pal: 0, base: 0.55, gain: 1 },
+  lava: { dir: [0.4, 1.6, 0.6], speed: 0.1, warp: [0.8, 7], sharp: 16, band: 1.6, pal: 1, base: 0.45, gain: 1, amb: 0.08 },
+  aurora: { dir: [1.2, 0, 1.6], speed: 0.4, warp: [0.4, 3], sharp: 3, band: 1.1, pal: 2, base: 0.55, gain: 1 },
+  hex: { dir: [0, 9, 6], speed: 0.4, sharp: 18, band: 0.9, cells: [9, 0.15, 3, 0], cell: 0.4, pal: 0, base: 0.8, gain: 1, mode: 3 },
+  void: { dir: [0.3, 1.4, 0.3], speed: 0.35, warp: [1.8, 6.5], sharp: 6, band: 1.1, cells: [26, 0.05, 2, 0], cell: 0.9, pal: 0, base: 0.15, gain: 1, amb: 0.08 },
+  sparkle: { dir: [0.5, 0.5, 0.2], speed: 0.33, sharp: 14, band: 0.45, cells: [18, 0.16, 4, 0], cell: 1.6, pal: 4, base: 1.05, gain: 1, amb: 0.05 },
+  caustics: { dir: [1.6, 1.4, 1.7], speed: 0.2, warp: [0.6, 10], sharp: 4, band: 1, pal: 0, base: 0.7, gain: 1, amb: 0.08 },
+  radar: { dir: [1, 0, 0], speed: 0.45, sharp: 4, band: 1.4, cells: [5, 0.2, 2, 0], cell: 0.2, pal: 0, base: 0.75, gain: 1, mode: 2 },
+  bubbles: { dir: [0, 1, 0], speed: 0.2, sharp: 2, band: 0.1, cells: [7, 0.4, 0, 0.2], cell: 1.2, pal: 0, base: 0.78, gain: 1, amb: 0.1 },
+  coderain: { dir: [0, 0.9, 0], speed: -0.45, sharp: 5, band: 0.1, cells: [16, 0.5, -4, -0.25], cell: 0.15, both: 1.3, pal: 0, base: 0.45, gain: 1 },
+  embers: { dir: [1.4, 0.8, 0], speed: 0.27, sharp: 1, band: 0.25, cells: [9, 0.3, 9, 0.3], cell: 2, pal: 1, base: 0.65, gain: 1 },
+  hazard: { dir: [2.25, 4.5, 4.5], speed: 0.9, sharp: -1, band: 0.7, pal: 0, base: 0.55, gain: 1, mode: 4, beat: 1.2 },
+  morse: { dir: [0, 11, 0], speed: 0, sharp: 4, band: 0.1, cells: [9, 0.5, -3, 0], both: 1.9, pal: 0, base: 0.78, gain: 1 },
+  heartbeat: { dir: [1, 2.6, 0], speed: 0.35, sharp: 3, band: 1.6, pal: 0, base: 0.78, gain: 1, mode: 2, beat: 1 },
+  thermal: { dir: [0, 0.64, 0], speed: 0.18, warp: [0.5, 6], sharp: 1, band: 0, pal: 3, base: 0.35, gain: 0, amb: 0.65 },
+  sandstorm: { dir: [0.64, 0, -0.26], speed: 0.9, warp: [0.3, 18], sharp: 10, band: 1.5, cells: [40, 0.1, -6, 0], cell: 0.5, pal: 0, base: 0.75, gain: 1, amb: 0.12 },
+  chevron: { dir: [3, 0.4, -2.5], speed: 1.4, sharp: 9, band: 1.2, pal: 0, base: 0.72, gain: 1, mode: 4 },
+  ink: { dir: [0, 1, 0], speed: 0.1, warp: [0.5, 5], sharp: 28, band: 1.4, cells: [7, 1, -0.5, 0], cell: 0.15, pal: 0, base: 0.5, gain: 1 },
+  checker: { dir: [7, 0, 7], speed: 0.1, sharp: -1, band: 0.7, pal: 0, base: 0.4, gain: 1, mode: 3 },
+  clouds: { dir: [1, 0.5, 0.8], speed: 0.08, warp: [1, 5], sharp: 2, band: 0.7, pal: 4, base: 0.5, gain: 1, amb: 0.3 },
+  snow: { dir: [0, 1, 0], speed: 0, sharp: 1, band: 0.05, cells: [10, 0.25, 0, -0.13], cell: 1, pal: 4, base: 0.8, gain: 1, amb: 0.1 },
+  rays: { dir: [7, 0, 0], speed: 0.2, sharp: 3, band: 1.2, pal: 4, base: 0.85, gain: 1, amb: 0.08, mode: 2 },
+  scan: { dir: [0, 0.75, 0], speed: 0.22, sharp: 10, band: 1.6, cells: [24, 0.12, 0, 0], cell: 0.3, pal: 0, base: 0.82, gain: 1 },
+  smoke: { dir: [0.7, 0.8, 0.6], speed: 0.15, warp: [2, 6], sharp: 2, band: 0.55, pal: 0, base: 0.7, gain: 1, amb: 0.05 },
+  harlequin: { dir: [3.5, 3.5, 3.5], speed: 0.06, sharp: -1, band: 0.75, pal: 0, base: 0.5, gain: 1, mode: 3 },
+  tracer: { dir: [-0.3, 0, 1.4], speed: 2, sharp: 8, band: 0.3, cells: [14, 0.45, 0, 0], both: 2.2, pal: 1, base: 0.8, gain: 1 },
+  shockwave: { dir: [3, 0, 0], speed: 1.3, sharp: 12, band: 1.4, pal: 0, base: 0.78, gain: 1, mode: 1 },
+};
+const fxRow = r => {
+  const d = r.dir ?? [0, 1, 0], w = r.warp ?? [0, 0], c = r.cells ?? [1, 0, 0, 0];
+  return [d[0], d[1], d[2], r.speed ?? 0, w[0], w[1], r.sharp ?? 1, r.band ?? 0, c[0], c[1], c[2], c[3],
+    r.cell ?? 0, r.both ?? 0, r.pal ?? 0, r.mode ?? 0, r.base ?? 1, r.gain ?? 1, r.amb ?? 0, r.step ?? 0, r.beat ?? 0, 0, 0, 0];
+};
+const ROW = 6;     // vec4s a row
+// SKIN_FX names in order (kept in step with js/ui/operators.js SKIN_FX: append only).
+const FX_ORDER = ['flame', 'frost', 'glitch', 'starfield', 'lightning', 'camo', 'lava', 'aurora', 'hex', 'void', 'sparkle', 'caustics',
+  'radar', 'bubbles', 'coderain', 'embers', 'hazard', 'morse', 'heartbeat', 'thermal', 'sandstorm', 'chevron', 'ink', 'checker',
+  'clouds', 'snow', 'rays', 'scan', 'smoke', 'harlequin', 'tracer', 'shockwave'];
+const FX_FIRST = 4;
+const f = v => (Number.isInteger(v) ? `${v}.0` : String(+v.toFixed(4)));
+const FXT = FX_ORDER.flatMap(n => fxRow(FX_ROWS[n]));
+const FXT_GLSL = `const vec4 FXT[${(FXT.length / 4)}] = vec4[](${Array.from({ length: FXT.length / 4 }, (_, i) => `vec4(${FXT.slice(i * 4, i * 4 + 4).map(f).join(', ')})`).join(', ')});`;
+
 export const SKIN_FX_GLSL = /* glsl */`
-float fxH(vec2 q) { return fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453); }
 float fxH3(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+${FXT_GLSL}
+vec3 fxUber(vec3 c, int i, vec3 p, vec3 a, float lum) {
+  float t = uTime;
+  vec4 A = FXT[i], B = FXT[i + 1], C = FXT[i + 2], D = FXT[i + 3], E = FXT[i + 4];
+  float beat = FXT[i + 5].x;
+  float st = E.w > 0.0 ? floor(t * E.w) : 0.0;
+  vec3 pz = D.w > 3.5 ? vec3(p.xy, abs(p.z)) : p;
+  float u = dot(pz, A.xyz);
+  if (D.w > 0.5 && D.w < 1.5) u = length(p - vec3(0.25, 0.4, 0.0)) * A.x;
+  else if (D.w > 1.5 && D.w < 2.5) u = (atan(p.z, p.x) / 6.2832) * A.x + p.y * A.y;
+  float u2 = A.y == 0.0 ? p.y * A.x : dot(p, vec3(A.x, -A.y, A.z));
+  float w = B.x * sin(dot(p, vec3(B.y, B.y * 0.7, B.y * 0.9)) + t * 1.7 + st * 2.3);
+  u += w - t * A.w + st * 0.37;
+  u2 += w - t * A.w;
+  float band;
+  if (B.z < 0.0) {
+    float s1 = step(0.5, fract(u));
+    band = D.w > 2.5 && D.w < 3.5 ? abs(s1 - step(0.5, fract(u2))) : s1;
+  } else {
+    band = pow(0.5 + 0.5 * sin(u * 6.2832), B.z);
+    if (D.w > 2.5 && D.w < 3.5) band = max(band, pow(0.5 + 0.5 * sin(u2 * 6.2832), B.z));
+  }
+  vec3 q = floor(vec3(p.x, p.y - t * C.w, p.z) * C.x);
+  float h = fxH3(q + (C.z < 0.0 ? floor(t * -C.z) : 0.0) * vec3(1.7, 3.1, 0.7));
+  float cell = C.y >= 1.0 ? h : step(1.0 - C.y, h) * (C.z > 0.0 ? 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * C.z + h * 40.0), 3.0) : 1.0);
+  float m = band * B.w + cell * D.x + band * cell * D.y;
+  float g = E.y * (beat > 0.0 ? 0.6 + 0.8 * pow(max(0.0, sin(t * beat * 6.2832)), 8.0) : 1.0);
+  if (E.w > 0.0) g *= step(0.3, fract(sin(st * 12.9898) * 43758.5453));
+  vec3 pal = a;
+  if (D.z > 0.5 && D.z < 1.5) pal = mix(a, vec3(1.0, 0.9, 0.45), clamp(band * band, 0.0, 1.0));
+  else if (D.z > 1.5 && D.z < 2.5) pal = 0.5 + 0.5 * cos(6.2832 * (u * 0.15 + t * 0.05 + vec3(0.0, 0.33, 0.67)));
+  else if (D.z > 2.5 && D.z < 3.5) { float v = 0.5 + 0.5 * sin(u * 6.2832); pal = clamp(vec3(v * 2.2 - 0.6, v * 2.4 - 1.3, 0.9 - abs(v * 2.0 - 0.5) * 1.6), 0.0, 1.0) * (0.6 + 0.4 * lum); }
+  else if (D.z > 3.5) pal = mix(vec3(0.92, 0.96, 1.0), a, 0.3);
+  return c * E.x + pal * m * g + (D.z > 2.5 && D.z < 3.5 ? pal : a) * E.z;
+}
 vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
   float t = uTime;
   float lum = dot(vLight, vec3(0.333));
+  if (k > ${FX_FIRST - 0.5}) return fxUber(c, (int(k + 0.5) - ${FX_FIRST}) * ${ROW}, p, a, lum);
   if (k < 1.5) {                                           // 1 holo
     vec3 h = 0.55 + 0.45 * cos(6.2832 * (p.y * 1.7 + (p.x + p.z) * 0.9 + t * 0.3 + vec3(0.0, 0.33, 0.67)));
     float scan = smoothstep(0.82, 1.0, fract(p.y * 12.0 - t * 1.4));
@@ -35,233 +130,9 @@ vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
     float pulse = pow(0.5 + 0.5 * sin(t * 3.2 - p.y * 11.0 + p.z * 3.0), 6.0);
     return c * 0.8 + a * line * (0.3 + 1.3 * pulse);
   }
-  if (k < 3.5) {                                           // 3 shimmer
-    float w = sin(p.y * 16.0 + sin(p.x * 11.0 + p.z * 9.0 + t * 2.6) * 2.2 - t * 5.0);
-    float w2 = 0.5 + 0.5 * w;
-    return mix(c, a * (0.55 + 0.45 * vLight), 0.18 + 0.32 * w2) + a * pow(w2, 10.0) * 0.7;
-  }
-  if (k < 4.5) {                                           // 4 flame: tongues licking up the gear
-    float n = sin(p.x * 13.0 + t * 4.1) * 0.5 + sin(p.z * 11.0 - t * 3.3) * 0.5;
-    float h = fract(p.y * 3.2 - t * 1.6 + n * 0.22);
-    float f = pow(1.0 - h, 2.5) * (0.6 + 0.4 * sin(t * 9.0 + p.x * 20.0));
-    vec3 fire = mix(a, vec3(1.0, 0.92, 0.45), f * f);
-    return c * 0.55 + fire * f * 1.5;
-  }
-  if (k < 5.5) {                                           // 5 frost: icy glaze and twinkling crystals
-    vec3 q = floor(p * 16.0);
-    float h = fxH3(q);
-    float tw = step(0.9, h) * pow(max(0.0, sin(t * 2.5 + h * 50.0)), 6.0);
-    float vein = 1.0 - smoothstep(0.0, 0.06, abs(sin(p.x * 9.0 + p.y * 14.0) * sin(p.z * 12.0 - p.y * 7.0)));
-    vec3 ice = mix(vec3(0.72, 0.88, 1.0), a, 0.3) * (0.45 + 0.55 * lum);
-    return mix(c, ice, 0.5) + ice * vein * 0.35 + vec3(0.9, 0.97, 1.0) * tw * 1.2;
-  }
-  if (k < 6.5) {                                           // 6 glitch: torn bands, channel swaps, stutter
-    float tick = floor(t * 7.0);
-    float band = floor(p.y * 9.0 + fxH(vec2(tick, 3.0)) * 4.0);
-    float on = step(0.78, fxH(vec2(band, tick)));
-    float scan = step(0.5, fract(p.y * 40.0 + t * 3.0));
-    vec3 g = mix(c, c.brg * 1.4 + a * 0.6, on);
-    return g * (0.9 + 0.1 * scan) + a * on * step(0.5, fxH(vec2(band + 7.0, tick))) * 0.6;
-  }
-  if (k < 7.5) {                                           // 7 starfield: deep space with twinkling stars
-    vec3 q = floor(p * 22.0);
-    float h = fxH3(q);
-    float star = step(0.94, h) * (0.4 + 0.6 * sin(t * 3.0 + h * 40.0));
-    float neb = 0.5 + 0.5 * sin(p.y * 4.0 + p.z * 3.0 + sin(p.x * 5.0 + t * 0.4) * 1.5 + t * 0.3);
-    return c * 0.3 + a * neb * neb * 0.45 + vec3(1.0) * max(star, 0.0) * 1.3;
-  }
-  if (k < 8.5) {                                           // 8 lightning: forks crawling over it, a flash with each
-    float seed = floor(t * 9.0);
-    float f = p.x * 1.4 + p.z * 2.2 + sin(p.y * 17.0 + seed * 2.3) * 0.07 + sin(p.y * 41.0 - seed) * 0.025;
-    float d = abs(fract(f * 1.6 + fxH(vec2(seed, 1.0))) - 0.5);
-    float bolt = 1.0 - smoothstep(0.0, 0.03, d);
-    float live = step(0.35, fxH(vec2(seed, 2.0)));
-    return c * 0.8 + (a + 0.35) * bolt * live * 1.6 + a * 0.12 * live;
-  }
-  if (k < 9.5) {                                           // 9 camo: digital blocks shuffling, a cloak band sweeping up
-    vec3 q = floor(p * 9.0);
-    float h = fxH3(q + floor(t * 1.5 + fxH3(q) * 3.0));
-    vec3 shade = c * (0.55 + 0.6 * h);
-    float sweep = smoothstep(0.06, 0.0, abs(fract(p.y * 0.7 - t * 0.35) - 0.5) - 0.02);
-    return mix(shade, a * (0.4 + 0.6 * lum) * (0.6 + 0.4 * h), 0.25 + 0.55 * sweep);
-  }
-  if (k < 10.5) {                                          // 10 lava: dark crust split by glowing molten veins
-    float v = abs(sin(p.x * 8.0 + sin(p.z * 7.0 + p.y * 3.0) * 1.3) * sin(p.y * 9.0 + sin(p.x * 6.0 - p.z * 5.0) * 1.2));
-    float crack = 1.0 - smoothstep(0.0, 0.14, v);
-    float glow = crack * (0.65 + 0.35 * sin(t * 2.2 + p.y * 6.0 + p.z * 4.0));
-    return c * 0.45 + mix(a, vec3(1.0, 0.85, 0.35), crack * 0.6) * glow * 1.6;
-  }
-  if (k < 11.5) {                                          // 11 aurora: shifting curtains of colour
-    float w = sin(p.z * 5.0 + sin(p.y * 3.0 + t * 0.7) * 1.6 + t * 0.5 + p.x * 3.0);
-    vec3 col = 0.5 + 0.5 * cos(6.2832 * (p.y * 0.6 + vec3(0.25, 0.45, 0.7) + t * 0.08));
-    float band = pow(0.5 + 0.5 * w, 3.0);
-    return c * 0.55 + mix(a, col, 0.55) * band * 1.1;
-  }
-  if (k < 12.5) {                                          // 12 hex: a shield grid with pulses running through it
-    vec2 uv = vec2(p.z + p.x * 0.6, p.y) * 9.0;
-    vec2 r = vec2(1.0, 1.732), hr = r * 0.5;
-    vec2 g1 = mod(uv, r) - hr, g2 = mod(uv - hr, r) - hr;
-    vec2 g = dot(g1, g1) < dot(g2, g2) ? g1 : g2;
-    g = abs(g);
-    float e = 0.5 - max(dot(g, vec2(0.5, 0.866)), g.x);
-    float line = 1.0 - smoothstep(0.0, 0.07, e);
-    float pulse = pow(0.5 + 0.5 * sin(t * 2.6 - length(p.yz - vec2(0.4, 0.0)) * 9.0), 6.0);
-    return c * 0.8 + a * line * (0.3 + 1.2 * pulse);
-  }
-  if (k < 13.5) {                                          // 13 void: light falls into it, its edges burn
-    vec3 q = floor(p * 26.0);
-    float h = fxH3(q);
-    float swirl = pow(0.5 + 0.5 * sin(p.y * 9.0 - t * 2.2 + sin(p.x * 7.0 + p.z * 6.0 + t) * 1.8), 6.0);
-    float mote = step(0.95, h) * (0.5 + 0.5 * sin(t * 2.0 + h * 30.0));
-    return c * 0.15 + a * swirl * 1.1 + vec3(1.0) * mote * 0.8 + a * 0.08;
-  }
-  if (k < 14.5) {                                          // 14 sparkle: glints twinkling, a sheen sweeping up
-    vec3 q = floor(p * 18.0);
-    float h = fxH3(q);
-    float tw = step(0.84, h) * pow(max(0.0, sin(t * 4.0 + h * 60.0)), 16.0);
-    float sheen = pow(max(0.0, sin(p.y * 3.0 - t * 2.0 + p.x * 2.0 + p.z)), 14.0);
-    return c * 1.05 + (a * 0.6 + 0.5) * tw * 1.6 + a * sheen * 0.45;
-  }
-  if (k < 15.5) {                                          // 15 caustics: light through rippling water
-    float w = sin(p.x * 10.0 + t * 1.3 + sin(p.z * 8.0 + t)) + sin(p.z * 11.0 - t * 1.1 + sin(p.y * 9.0 - t * 0.8)) + sin(p.y * 9.0 + t * 1.7 + p.x * 4.0);
-    float cs = pow(max(0.0, 1.0 - abs(w) * 0.8), 4.0);
-    return c * 0.7 + a * cs * 1.0 + a * 0.08;
-  }
-  if (k < 16.5) {                                          // 16 radar: a sweep turning round the body, range rings
-    float ang = atan(p.z, p.x) / 6.2832 + 0.5;
-    float s = fract(ang - t * 0.45);
-    float trail = pow(1.0 - s, 7.0);
-    float ring = step(0.86, fract(p.y * 5.0 - t * 0.6));
-    return c * 0.75 + a * trail * 1.0 + a * ring * (0.15 + 0.8 * trail);
-  }
-  if (k < 17.5) {                                          // 17 bubbles: rising in the gear
-    vec2 uv = vec2((p.x + p.z) * 7.0, p.y * 7.0 - t * 1.4);
-    vec2 q = floor(uv), f = fract(uv) - 0.5;
-    float h = fxH(q);
-    float d = length(f - (vec2(h, fract(h * 7.3)) - 0.5) * 0.35);
-    float bub = step(0.55, h) * (smoothstep(0.26, 0.2, d) - 0.6 * smoothstep(0.17, 0.1, d));
-    return c * 0.78 + a * bub * 1.3 + a * 0.1;
-  }
-  if (k < 18.5) {                                          // 18 code rain: glyph columns falling
-    float col = floor((p.x + p.z) * 16.0);
-    float sp = 0.6 + fxH(vec2(col, 1.0)) * 0.9;
-    float gy = floor(p.y * 22.0 + t * sp * 6.0);
-    float on = step(0.45, fxH(vec2(col, gy)));
-    float head = pow(fract(-p.y * 0.9 + t * sp * 0.45 + fxH(vec2(col, 2.0))), 5.0);
-    return c * 0.45 + a * on * (0.12 + 1.3 * head);
-  }
-  if (k < 19.5) {                                          // 19 embers: sparks rising off a smouldering glow
-    vec2 uv = vec2((p.x - p.z) * 9.0, p.y * 6.0 - t * 1.8 + sin(p.z * 9.0) * 0.3);
-    vec2 q = floor(uv), f = fract(uv) - 0.5;
-    float h = fxH(q);
-    float d = length(f - (vec2(h, fract(h * 13.1)) - 0.5) * 0.6);
-    float sp = step(0.45, h) * smoothstep(0.2, 0.0, d) * (0.6 + 0.4 * sin(t * 9.0 + h * 30.0));
-    float smoulder = 0.5 + 0.5 * sin(t * 1.7 + p.x * 9.0 + p.y * 5.0);
-    return c * 0.65 + a * smoulder * 0.25 + mix(a, vec3(1.0, 0.9, 0.5), 0.5) * sp * 2.2;
-  }
-  if (k < 20.5) {                                          // 20 hazard: chevron stripes scrolling, a beacon blink
-    float s = step(0.5, fract((p.y + abs(p.z) + p.x * 0.5) * 4.5 - t * 0.9));
-    float blink = step(0.7, fract(t * 1.2));
-    return mix(c * 0.55, a * (0.45 + 0.55 * lum), s * 0.7) + a * s * blink * 0.35;
-  }
-  if (k < 21.5) {                                          // 21 morse: dots and dashes running along the lines
-    float row = floor(p.y * 11.0);
-    float dir = mod(row, 2.0) * 2.0 - 1.0;
-    float x = (p.z + p.x) * 9.0 - t * 2.6 * dir;
-    float pat = fxH(vec2(floor(x), row));
-    float w = fract(x) - 0.5;
-    float on = pat < 0.3 ? 0.0 : pat < 0.65 ? step(abs(w), 0.14) : step(abs(w), 0.42);
-    float line = step(abs(fract(p.y * 11.0) - 0.5), 0.16);
-    return c * 0.78 + a * on * line * 1.4 + a * line * 0.06;
-  }
-  if (k < 22.5) {                                          // 22 heartbeat: a cardiogram trace running round the body
-    float x = fract(atan(p.z, p.x) / 6.2832 + 0.5 - t * 0.35);
-    float row = fract(p.y * 2.6);
-    float e = 0.5 + 0.34 * exp(-pow((x - 0.5) * 38.0, 2.0)) - 0.16 * exp(-pow((x - 0.54) * 34.0, 2.0)) + 0.06 * exp(-pow((x - 0.3) * 16.0, 2.0));
-    float line = 1.0 - smoothstep(0.0, 0.05, abs(row - e));
-    float beat = pow(max(0.0, sin(t * 6.0)), 12.0);
-    return c * 0.78 + a * line * (0.5 + 0.9 * x) + a * beat * 0.18;
-  }
-  if (k < 23.5) {                                          // 23 thermal: the hunter's view, heat bands drifting
-    float v = clamp(0.5 + 0.45 * sin(p.y * 4.0 - t * 1.1 + sin(p.x * 6.0 + p.z * 5.0 + t * 0.8) * 1.3), 0.0, 1.0);
-    vec3 th = clamp(vec3(v * 2.2 - 0.6, v * 2.4 - 1.3, 0.9 - abs(v * 2.0 - 0.5) * 1.6), 0.0, 1.0);
-    return mix(c, mix(th, a, 0.2) * (0.6 + 0.4 * lum), 0.65);
-  }
-  if (k < 24.5) {                                          // 24 wind: streaks of sand racing past
-    float row = floor(p.y * 18.0);
-    float h = fxH(vec2(row, 4.0));
-    float s = pow(max(0.0, sin((p.x - p.z * 0.4 - t * (2.5 + h * 2.0)) * 4.0 + h * 20.0)), 10.0) * step(0.25, h);
-    float grain = step(0.9, fxH3(floor(p * 40.0) + floor(t * 6.0)));
-    return c * 0.75 + a * s * 1.5 + a * grain * 0.5 + a * 0.12;
-  }
-  if (k < 25.5) {                                          // 25 chevron: arrows driving forward through the gear
-    float v = fract(p.x * 3.0 - abs(p.z) * 2.5 + p.y * 0.4 - t * 1.4);
-    float on = smoothstep(0.62, 0.7, v) * (1.0 - smoothstep(0.88, 0.96, v));
-    return c * 0.72 + a * on * 1.2;
-  }
-  if (k < 26.5) {                                          // 26 ink: brush strokes flowing, a red streak through them
-    float n = sin(p.y * 6.0 + sin(p.z * 5.0 + t * 0.6) * 1.6 + sin(p.x * 7.0 - t * 0.4));
-    float ink = smoothstep(0.25, 0.6, n);
-    float streak = pow(max(0.0, sin(p.y * 18.0 + n * 3.0 - t * 2.0)), 28.0);
-    return mix(c, vec3(0.03), ink * 0.65) + a * streak * 1.4 + a * 0.08 * (1.0 - ink);
-  }
-  if (k < 27.5) {                                          // 27 checker: board squares flipping in waves
-    vec2 q = floor(vec2(p.x + p.z, p.y) * 7.0);
-    float par = mod(q.x + q.y, 2.0);
-    float w = step(0.5, fract(t * 0.25 + fxH(q) * 0.25 + p.y * 0.3));
-    float tile = abs(par - w);
-    return mix(c * 0.4, mix(c, a, 0.55) * 1.2, tile);
-  }
-  if (k < 28.5) {                                          // 28 clouds: a sky drifting over the gear
-    float n = sin(p.x * 5.0 + t * 0.5 + sin(p.z * 4.0) * 1.5) * sin(p.z * 5.0 + sin(p.y * 6.0 + t * 0.3)) + 0.5 * sin(p.y * 9.0 + t * 0.7);
-    float cl = smoothstep(0.15, 0.6, n);
-    vec3 sky = mix(a * 0.55 + vec3(0.1, 0.2, 0.35), vec3(0.97), cl);
-    return mix(c, sky * (0.55 + 0.45 * lum), 0.6);
-  }
-  if (k < 29.5) {                                          // 29 snow: flakes falling, the gear rimed white
-    vec2 uv = vec2((p.x + p.z) * 10.0 + sin(p.y * 4.0 + t) * 0.5, p.y * 10.0 + t * 1.3);
-    vec2 q = floor(uv), f = fract(uv) - 0.5;
-    float h = fxH(q);
-    float flake = step(0.72, h) * smoothstep(0.16, 0.05, length(f));
-    return mix(c, vec3(0.86, 0.92, 1.0) * (0.5 + 0.5 * lum), 0.22) + vec3(1.0) * flake + a * 0.1;
-  }
-  if (k < 30.5) {                                          // 30 rays: radiance turning round the wearer
-    float ang = atan(p.z, p.y - 0.25);
-    float r = pow(max(0.0, sin(ang * 7.0 + t * 1.3)), 5.0);
-    float sheen = pow(max(0.0, sin(p.y * 5.0 - t * 2.4)), 10.0);
-    return c * 0.85 + mix(a, vec3(1.0), 0.45) * r * 0.65 + a * sheen * 0.4 + a * 0.08;
-  }
-  if (k < 31.5) {                                          // 31 scan: a security sweep up and down, a fine grid
-    float y = 0.5 + 0.5 * sin(t * 1.4);
-    float band = smoothstep(0.07, 0.0, abs(fract(p.y * 0.75) - y));
-    float grid = max(step(0.9, fract(p.y * 24.0)), step(0.9, fract((p.x + p.z) * 24.0)));
-    return c * 0.82 + a * band * 1.3 + a * grid * (0.1 + 0.9 * band);
-  }
-  if (k < 32.5) {                                          // 32 smoke: grave mist curling over the gear
-    float n = sin(p.x * 7.0 + t * 0.9 + sin(p.y * 5.0 - t * 1.3) * 2.0) * sin(p.z * 6.0 - t * 0.7 + sin(p.y * 4.0 + t * 0.5) * 2.0);
-    float s = smoothstep(0.0, 0.8, 0.5 + 0.5 * n);
-    return mix(c * 0.7, a * 0.5 + vec3(0.06), s * 0.55) + a * pow(s, 8.0) * 0.8;
-  }
-  if (k < 33.5) {                                          // 33 harlequin: diamonds trading colours
-    vec2 uv = vec2((p.x + p.z) * 5.0, p.y * 5.0 + t * 0.35);
-    float par = mod(floor(uv.x + uv.y) + floor(uv.x - uv.y), 2.0);
-    float flip = step(0.5, fract(t * 0.5 + floor(uv.y + uv.x) * 0.13));
-    float edge = 1.0 - smoothstep(0.0, 0.06, min(abs(fract(uv.x + uv.y) - 0.5), abs(fract(uv.x - uv.y) - 0.5)) - 0.44);
-    return mix(c * 0.5, a * (0.4 + 0.6 * lum), abs(par - flip) * 0.75) + vec3(1.0, 0.9, 0.6) * edge * 0.2;
-  }
-  if (k < 34.5) {                                          // 34 tracer: rounds streaking across, flashes behind
-    float row = floor((p.y + p.x * 0.5) * 14.0);
-    float h = fxH(vec2(row, 9.0));
-    float x = fract(p.z * 1.4 - p.x * 0.3 + t * (1.4 + h * 1.6) + h);
-    float on = step(0.55, h) * (1.0 - smoothstep(0.2, 0.35, abs(fract((p.y + p.x * 0.5) * 14.0) - 0.5)));
-    float s = smoothstep(0.75, 1.0, x) * on;
-    float tip = smoothstep(0.96, 1.0, x) * on;
-    return c * 0.8 + a * s * 1.1 + vec3(1.0, 0.95, 0.7) * tip * 1.2;
-  }
-  float dd = length(p - vec3(0.25, 0.4, 0.0));             // 35 shockwave: rings bursting out of the chest
-  float wv = fract(dd * 3.0 - t * 1.3);
-  float ring = smoothstep(0.8, 0.97, wv) * (1.0 - smoothstep(0.97, 1.0, wv));
-  return c * 0.78 + a * ring * 1.4 * (1.2 - min(dd, 1.0));
+  float w = sin(p.y * 16.0 + sin(p.x * 11.0 + p.z * 9.0 + t * 2.6) * 2.2 - t * 5.0);   // 3 shimmer
+  float w2 = 0.5 + 0.5 * w;
+  return mix(c, a * (0.55 + 0.45 * vLight), 0.18 + 0.32 * w2) + a * pow(w2, 10.0) * 0.7;
 }`;
 
 /* ---------- Distance versions ---------- */
