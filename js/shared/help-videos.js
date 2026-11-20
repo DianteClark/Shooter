@@ -97,7 +97,7 @@ export const VIDEOS = [
     star: KIT, cam: 'wide',
     captions: [[0, 'The transport crosses the island. Tap Jump over where you want to land'], [6, 'Steer the glide with the move stick'],
       [11, 'You land with fists and a pistol: walk over loot to take ammo, plates and medkits'], [17, 'Tap to swap for a better gun. Rarer colours handle better']] },
-  { id: 'brfight', title: 'Battle Royale: plates, circle, revive', group: 'big', icon: 'plates', map: 'frontier', mode: 'rb', seed: 3, len: 24, pre: 50, skill: 'regular',
+  { id: 'brfight', title: 'Battle Royale: plates, circle, revive', group: 'big', icon: 'plates', map: 'frontier', mode: 'rb', seed: 2, len: 24, pre: 26, skill: 'regular',
     star: KIT, cam: 'wide',
     captions: [[0, 'Armour plates soak damage before health. Hold Plate to put one on'], [6, 'The circle closes: outside it you lose health every second'],
       [12, 'Downed, you crawl. A squadmate can hold to revive you'], [18, 'Out? A respawn beacon or a redeploy brings you back while your squad lives']] },
