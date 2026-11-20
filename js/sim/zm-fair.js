@@ -74,7 +74,10 @@ export function stepBarker(E, w, dt) {
   q.callT -= dt;
   if (q.callT <= 0) {
     q.callT = P.call;
-    for (let k = 0; k < P.calls; k++) { const at = near(E, w.ps.x, w.ps.z, 3); if (at) E._extra(ZK.runner, at); }
+    // Never more than `crowd` of its callers up at once: the round's own still need their seats.
+    let up = 0;
+    for (const z of R.horde) if (z.alive && z.zExtra && !isBossKind(z.zk)) up++;
+    for (let k = 0; k < Math.min(P.calls, P.crowd - up); k++) { const at = near(E, w.ps.x, w.ps.z, 3); if (at) E._extra(ZK.runner, at); }
   }
   const c = q.charge;
   if (c) {

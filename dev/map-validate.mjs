@@ -481,7 +481,7 @@ function checkZm(map, out) {
       ...L.starts.map((p, i) => ['start ' + i, { ...p, band: L.start }]), ...L.risers.flatMap((list, b) => list.map((p, i) => [`riser ${L.bands[b].id} ${i}`, { ...p, band: b }])),
       ...Object.entries(L.reserved ?? {}).flatMap(([k, v]) => (Array.isArray(v) ? v.map((p, i) => [`reserved ${k} ${i}`, p]) : [[`reserved ${k}`, v]])),
       // The economy (ROADMAP item 36): its stations, trap switches, the exfil pad, the altar and the relics.
-      ...['bench', 'terminal', 'armour', 'altar', 'exfil'].filter(k => L[k]).map(k => [k, L[k]]),
+      ...['bench', 'terminal', 'armour', 'altar', 'exfil', 'oracle'].filter(k => L[k]).map(k => [k, L[k]]),
       ...(L.traps ?? []).map((t, i) => [`trap ${i} switch`, { x: t.sx, z: t.sz, band: t.band }]), ...(L.relics ?? []).map((r, i) => [`relic ${i}`, r]),
     ];
     let bad = 0;

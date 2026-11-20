@@ -976,6 +976,14 @@ section('wrenfield');
   ok(R.power === 1 && R.crew.find(p => p.id === by)?.bot, `a bot teammate throws the power (${by})`);
   ok(read && R.crew.find(p => p.id === read)?.bot, 'a bot asks the Oracle');
   ok(lit.length >= 1 && lit.every((i, k) => i === E.quest.order[k % 4]), `bots light lanterns in the Oracle's order (${lit} of ${E.quest.order})`);
+  // A heat gun handed into the second slot (this mode deals guns into either) cools like one in the first: a bot
+  // with a hot saw behind a shotgun stood waiting on it for good before (found on Wrenfield's pacing run).
+  const b = R.crew.find(p => p.isBot);
+  R._give(b, 'autoshot'); R._give(b, 'saw');
+  const sl = b.ps.primary === 'saw' ? 0 : 1;
+  b.ps.heat = 0.7; b.ps.heatIdle = 9;
+  run(sim, 1.5);
+  ok(sl === 1 && b.ps.heat < 0.2, `a saw in the second slot cools (${b.ps.heat.toFixed(2)})`);
   clearZmWalls(sim.map);
 }
 

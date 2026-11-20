@@ -81,8 +81,8 @@ export const questBossByKind = k => Object.values(ZM_QUEST_BOSS).find(b => b.kin
 // The Barker's charge: every `every` s, with someone up within `range` m in its sight, it stops and marks a lane on
 // the ground toward them (`len` m long, `w` wide, drawn the whole `wind` s: get out of it sideways), then runs it in
 // `dash` s; anyone in the lane takes `dmg` (grown with the round like a claw), once. It calls `calls` runners up beside
-// it every `call` s (the fair's barkers bring a crowd).
-export const ZM_BARKER = { every: 7, range: 18, wind: 1.1, len: 13, w: 2.4, dash: 0.45, dmg: 55, call: 15, calls: 3 };
+// it every `call` s (the fair's barkers bring a crowd), never more than `crowd` of them up at once.
+export const ZM_BARKER = { every: 7, range: 18, wind: 1.1, len: 13, w: 2.4, dash: 0.45, dmg: 55, call: 15, calls: 3, crowd: 6 };
 // Wrenfield Fair's lanterns, by index (the map's `quest.lanterns` order): their colours and names.
 export const ZM_LANTERNS = [
   { id: 'red', name: 'Red', css: '#ff4a3a', hex: 0xff4a3a },
