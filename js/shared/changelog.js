@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Graveyard Shift: Wrenfield Fair',
+    items: [
+      'A third map built for Graveyard Shift: Wrenfield Fair, a travelling fair left standing in a field at night. Seven areas in a loop behind gates: the Ticket Gate, the Midway, Carousel Green, the Wheel Yard, the Generator Yard (the power), the burned-out Big Top and the Ghost Train.',
+      'Its own hidden quest: with the power on, ask the Oracle at the gate for the order, then light the four coloured lanterns in that order before they burn out. Light the wrong one and they all go dark. Then ring the bell on the high striker.',
+      'The bell calls out the Barker, a new boss. Watch the ground: it marks a lane toward you, then charges down it. Step out sideways. Put it down for the Show\'s Over calling card and the Last Bell emblem.',
+      'New wonder weapon in every map\'s mystery crate: the Whirligig. It sets a whirl spinning that drags the undead into a heap, then bursts.',
+      'New cards: Closing Time for reaching round 15 on Wrenfield Fair, and the Midway map cards.',
+      'Fixed: a heavy gun carried as your second weapon could overheat and never cool down.',
+    ],
+  },
+  {
     build: '1119-13', date: '2026-11-19', title: 'Move stick fix, take two',
     items: [
       'Your third report showed iOS still cancelling the move thumb right after a grenade release. The game no longer restarts audio, voice or the screen-awake video while another finger is down, the likely trigger. Keep recording touches and send a report if it happens again.',
