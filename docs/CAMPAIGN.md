@@ -7,14 +7,14 @@ briefing cards and radio lines (text with a synthesised radio squelch, no voice 
 
 | # | Mission | Map | Kind | Steps |
 |---|---|---|---|---|
-| 1 | Signal Box | Railyard | Infiltrate and hack | reach the yard office, splice into the junction box, hack the signal terminal (waves at 35% and 70%), get out |
-| 2 | Quiet Hours | Night Market | Stealth | slip in, plant two listening taps, photograph the ledger, get out: watchmen with torches, an alarm brings waves |
-| 3 | Breakwater | Harbor | Defend | take the pier relay, plug in, hold it 3:30 against five waves, take out the harbour officer, fall back |
-| 4 | Kestrel | Downtown | Escort | find Kestrel at the safehouse, walk her through five stops to the east platforms |
-| 5 | Long Fuse | Foundry | Sabotage | take the foreman's keys, set three charges inside four minutes, keep the Line off them for the 40 s fuse, get clear |
-| 6 | Magpie | Frontier | Hunt | close in on the Freight Yard, take down Magpie before his plane leaves the Airfield, take his phone, get to the pickup |
-| 7 | Dead Man's Run | Frontier | Chase | five relays across the west of Frontier against the clock (each buys time), then the convoy commander at the dam |
-| 8 | Iron Crown | Canyon | Boss | push into the canyon, blow the gate, bring down Marshal Kordell in his juggernaut suit |
+| 1 | Signal Box | Railyard | Infiltrate and hack | reach the yard office, splice into the junction box, hack the signal terminal (waves at 35% and 70%), hold the box while it uploads, get out |
+| 2 | Quiet Hours | Night Market | Stealth | slip in, plant two listening taps, photograph the ledger, copy the paymaster's laptop, get out: watchmen with torches, an alarm brings waves |
+| 3 | Breakwater | Harbor | Defend | take the pier relay, plug in, hold it 3:30 against five waves, take out the harbour officer, sink his boat, fall back |
+| 4 | Kestrel | Downtown | Escort | find Kestrel at the safehouse, walk her through five stops to the east platforms, hold the platform for her train |
+| 5 | Long Fuse | Foundry | Sabotage | take the foreman's keys, set three charges inside four minutes, keep the Line off them for the 40 s fuse, hold the west hall, get clear |
+| 6 | Magpie | Frontier | Hunt | close in on the Freight Yard, take down Magpie before his plane leaves the Airfield, take his phone, hold Central Station for the pickup |
+| 7 | Dead Man's Run | Frontier | Chase | five relays across the west of Frontier against the clock (each buys time), the convoy commander at the dam, blow the dam road |
+| 8 | Iron Crown | Canyon | Boss | push into the canyon, blow the gate to his yard, bring down Marshal Kordell in his juggernaut suit |
 
 ## The mission script (`js/sim/campaign.js`)
 - **The match carries the mission**: the scoreLimit is `cpCode(mission, difficulty)` ((index + 1) x 10 + difficulty),
@@ -26,7 +26,8 @@ briefing cards and radio lines (text with a synthesised radio squelch, no voice 
 - **States**: briefing (the warmup), live, failed (`CP.failHold` 7 s on screen), complete (`CP.endHold`, then the end).
 - **Steps** (one objective each, in order): `goto`, `hack` (alone in the zone; an enemy inside pauses it), `defend`
   (hold for `time`; an enemy alone in the zone fills the lost meter, `CP.lostAfter` s to lose it), `escort` (the VIP walks
-  the nav path to each stop while a squad member is within 9 m and no enemy within 10 m has a line on her), `plant` (stand
+  the nav path to each stop while a squad member is within 9 m and no enemy within 10 m has a line on her; she can be hit
+  only on the move: delivered, she is in cover), `plant` (stand
   still on each site; with a fuse the charges blow `fuse` s after the last one is set, and an enemy standing on one pulls
   it; `timer` to set them all), `kill` (every target down; a fleeing target runs stop to stop when the squad is within
   `CP.hvtNear` or after `CP.hvtWait`, and escapes after `CP.hvtEscape` at his last stop), `chase` (gates in order before the
@@ -34,7 +35,9 @@ briefing cards and radio lines (text with a synthesised radio squelch, no voice 
 - **Triggers** on a step: `{t}` seconds in, `{prog}` progress, `{gate}` stops reached, `{planted}` charges set,
   `{phase}` boss phase; each spawns groups and/or plays radio lines once (a bit each in `fired`).
 - **Checkpoints**: a step with `checkpoint` sets the squad's respawn spot when it starts; escort stops, chase relays and
-  the fleeing target's stops move it on during the step; a boss phase is a checkpoint of its own (his health at it).
+  the fleeing target's stops move it on during the step; a boss phase is a checkpoint of its own (his health at it), and
+  so is each wave into a defence (a retry starts the hold from that wave). Back at a checkpoint part way through a step,
+  the step's posts within 22 m of it are not put back.
 - **Respawns, downs, wipes**: lethal damage downs a squad member while someone else is up (battle royale's crawl, 30 s
   bleed, a 4 s revive by a squadmate standing still beside them; bots go for the downed first). The dead come back after
   the difficulty's wait at the checkpoint, or behind a squadmate when the fight has moved more than 45 m from it.
@@ -80,11 +83,11 @@ Bots step out of rings and off the line. A retry brings him back at the phase's 
 ## Difficulty, stars, rewards
 | | Recruit | Regular | Veteran |
 |---|---|---|---|
-| Enemies | x0.7 | x1 | x1.35 |
-| Damage they deal | 30% | 45% | 66% |
-| Damage they take | 125% | 100% | 85% |
-| Skill (rating) | 0.04 | 0.22 | 0.48 |
-| Respawn wait | 8 s | 12 s | 18 s |
+| Enemies | x0.7 | x1 | x1.25 |
+| Damage they deal | 30% | 45% | 56% |
+| Damage they take | 125% | 100% | 88% |
+| Skill (rating) | 0.04 | 0.22 | 0.45 |
+| Respawn wait | 8 s | 12 s | 15 s |
 | Boss health | x0.7 | x1 | x1.25 |
 | Timers | x1.25 | x1 | x0.85 |
 | XP | 1,200 | 2,000 | 3,000 |
@@ -137,6 +140,23 @@ assault group.
   and Retry now, forced to the end, the results and rewards, the torches and alarm of mission 2, the boss of mission 8,
   screenshots in /tmp/campaign.
 
-## Measured (node dev/sim-campaign.mjs, bot squads)
-Bot squads clear every mission. Times are bots' (they rush; people take longer): see the test's output for the current
-numbers.
+## Measured (node dev/sim-campaign.mjs --full, bot squads, 2026-11-20)
+Bot squads clear every mission on every difficulty. Times are bots' (they rush, trip every alarm and never sneak;
+people take longer, about the par times). Per-guest snapshots about 2.4-2.7 KB.
+
+| Mission | Regular (2 seeds) | Recruit | Veteran |
+|---|---|---|---|
+| Signal Box | 3:01, 2:58 | 2:53 | 3:24, 1 retry |
+| Quiet Hours | 1:12 (1 retry), 1:08 | 1:03 | 1:08, 1 retry |
+| Breakwater | 4:58, 4:34 | 4:33 | 7:26, 10 retries |
+| Kestrel | 3:22 (3 retries), 3:00 (1) | 2:38 | 6:28, 16 retries |
+| Long Fuse | 2:35, 2:38 | 2:21 | 2:50, 1 retry |
+| Magpie | 1:36, 1:34 | 1:33 | 3:23, 3 retries |
+| Dead Man's Run | 1:56, 1:50 | 1:31 | 2:15, 2 retries |
+| Iron Crown | 3:46 (8 retries), 2:58 (5) | 1:15 | 11:54, 35 retries |
+
+Tuning that got here: the boss's pool (4,200, then 24,000: bots deal far less than their paper damage, so 12,000) and his
+gun (an elite LMG wiped squads in seconds: now a fair aim at 22-32% damage, the telegraphs are the threat); his phase
+health as a checkpoint; a wave into a defence as a checkpoint; no posts respawned on a squad back at a mid-step
+checkpoint (Kestrel's retries used to land on the guards of the stop she had reached); Kestrel in cover once delivered;
+Veteran at 1.25x enemies dealing 56%.

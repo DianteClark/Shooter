@@ -4,6 +4,7 @@
 //   node dev/sim-campaign.mjs            units, then every mission on Regular and Recruit (two seeds on Regular)
 //   node dev/sim-campaign.mjs --quick    units, then every mission on Regular once
 //   node dev/sim-campaign.mjs --full     as the default, plus every mission on Veteran
+//   node dev/sim-campaign.mjs --units    the units alone
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { SIM_HZ } from '../js/shared/constants.js';
@@ -124,7 +125,7 @@ function units() {
     check(ev.some(e => e.t === 'cpfail' && e.why === 'time'), 'the charges\' clock running out fails the sabotage');
   }
   {
-    const k = MISSIONS.findIndex(m => m.steps.some(s => s.type === 'defend'));
+    const k = MISSIONS.findIndex(m => m.bonus.id === 'zone' && m.steps.some(s => s.type === 'defend'));
     const { sim } = makeSim(k, 1, 3);
     const R = sim.rules;
     jump(sim, s => s.type === 'defend');
@@ -283,6 +284,7 @@ function playMission(k, diff, seed) {
 }
 
 units();
+if (args.includes('--units')) { console.log(`\n${failed ? `${failed} FAILED` : 'all passed'} (units only)`); process.exit(failed ? 1 : 0); }
 console.log('missions');
 const runs = [];
 for (let k = 0; k < MISSIONS.length; k++) {
