@@ -354,7 +354,7 @@ export class GameRenderer {
             else vfx.bodyHit(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
             this._pushDir(ev.by, r.x, r.z);
-            chars.onHit(ev.target, this._dx, this._dz, Math.min(1, (ev.dmg || 25) / 40));
+            chars.onHit(ev.target, this._dx, this._dz, Math.min(1, (ev.dmg || 25) / 40), !!ev.head);
           }
           if (ev.target === localId) { this.trauma = Math.min(1, this.trauma + 0.4); this.hurt = 1; }
           break;

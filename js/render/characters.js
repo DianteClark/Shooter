@@ -15,19 +15,22 @@ import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR, SKINS, SKIN_FX, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
 import { ACC, KEEP, ELITE, MASTERY, NO_ELITE, NO_MASTERY, SUIT, SUITS, tag, seg, masteryTorso, halo, TORSO_SLOTS, HEAD_SLOTS, face as kitFace, headBase } from './operator-kit.js';
 import { SKIN_FX_GLSL, FX_TABLE, farSuitBuilder, FAR_BUDGET } from './operator-suits.js';     // Every suit after the pilot's, the active-skin effects and the suits' distance versions.
-import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
-import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
+import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint, reloadTrack, hasTactical } from './anim.js';
+import { Corpses, MAX_CORPSES, PART as P, forceOf } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
-import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
+import { recoilOf, fillGaps, deriveHold, deriveScale, feelMotion } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
 import { blankPose, emotePose, finPose, CALL_PROPS, CALL_DUR, callInOf } from './finisher-anim.js';    // Finishers, emotes, streak call-ins.
 import { swingDurOf, swingKindOf, swingPose, swingSideNext } from './melee-anim.js';   // Melee swings.
 import { CYCLE, cycleKindOf, cyclePose } from './gun-actions.js';   // Pump, bolt and lever worked between shots.
 import { EMOTES, getFinisher } from '../shared/finishers.js';
+import { DIE, DIE_CH, DIE_LIFE, pickDeath, startDeath, stepDeath, deathFade } from './death-anim.js';   // Deaths (docs/ANIMATION.md).
 
 const SWING = { x: 0, y: 0, yaw: 0, pitch: 0, roll: 0 };     // Scratch for melee-anim.js swingPose.
 const CYC = { roll: 0, pitch: 0, x: 0, fore: 0, bolt: 0 };     // Scratch for gun-actions.js cyclePose.
+const PICK = { side: 1 };                                        // Scratch for death-anim.js pickDeath.
+const DSTATE = { downed: false, fin: false, calm: false, melee: false };
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -687,7 +690,7 @@ function blobGeometry() {
 
 const _m = new THREE.Matrix4(), _body = new THREE.Matrix4(), _gun = new THREE.Matrix4();
 const _v = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _p = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _p = new THREE.Vector3();
 const _X = new THREE.Vector3(1, 0, 0);
 const _e = new THREE.Euler(0, 0, 0, 'YZX');
 const _gunE = new THREE.Euler(0, 0, 0, 'YZX');
@@ -743,7 +746,9 @@ function glideRig(r, p, dt, vfx, fx, fz) {
 }
 
 // Spring slots on a rig: body lean and recoil rock, all under-damped so stops and shots carry weight.
-const LEAN_F = 0, LEAN_S = 1, ROCK = 2, FLINCH_F = 3, FLINCH_S = 4, SPRINGS = 5;
+// DIP: the body's height through a slide's drop and pop-up, a landing, a revive's kneel (docs/ANIMATION.md). FLINCH_T: a
+// hit twists the shoulders; SNAP: a headshot that does not kill throws the head back; KNOCK: the gun knocked off line.
+const LEAN_F = 0, LEAN_S = 1, ROCK = 2, FLINCH_F = 3, FLINCH_S = 4, DIP = 5, FLINCH_T = 6, SNAP = 7, KNOCK = 8, SPRINGS = 9;
 
 function spring(r, i, target, k, c, dt) {
   const x = r.sx[i];
@@ -807,6 +812,21 @@ class Rig {
     this.finK = null; this.finRole = null; this.finOther = null; this.finT = 0; this.finDur = 1; this.finDown = false; this.finW = 0;
     this.emote = null; this.emoteT = 0; this.emoteDur = 1;
     this.fp = blankPose();
+    // Animation pass (docs/ANIMATION.md). Reloads: whether this one began on an empty gun, and whether one ran last frame.
+    this.relEmpty = false; this.wasReloading = false;
+    // Weapon swap: 0..1 through it (1 idle), its length, the gun being put away and its attachments.
+    this.swapU = 1; this.swapDur = 0.36; this.swapFrom = null; this.swapAtt = null; this.lastAtt = undefined; this.lastCamo = 'none';
+    // Locomotion: smoothed travel along the aim (+ forward, - backpedal) and across it; in water; slide state last frame.
+    this.locF = 0; this.locS = 0; this.wade = 0; this.wasSliding = false; this.wasKneeling = false;
+    // Dying (death-anim.js): the fall's springs and clock, the frozen view it is drawn from, the pose, the dropped gun.
+    this.dying = false;
+    this.die = { kind: 0, side: 1, dist: 1, t: 0, v: 0, calm: 0, x: new Float32Array(DIE_CH), vel: new Float32Array(DIE_CH) };
+    this.dpose = blankPose();
+    this.dview = { id, team: 0, x: 0, z: 0, aim: 0, vx: 0, vz: 0, alive: true, weapon: 'ar', camo: 'none', attachments: undefined,
+      adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, overheated: false,
+      downed: false, air: 0, fin: null, zk: 0, ammo: 1, ghost: false };
+    this.gp0 = new THREE.Vector3(); this.gp1 = new THREE.Vector3(); this.gq0 = new THREE.Quaternion(); this.gq1 = new THREE.Quaternion();
+    this.gsc = new THREE.Vector3(1, 1, 1); this.gAxis = new THREE.Vector3(1, 0, 0); this.gSpin = 0;
   }
 }
 
@@ -995,6 +1015,7 @@ export class Characters {
     this.counts = { nT: 0, nTL: 0, nU: 0, nA: 0, nL: 0, nB: 0 };
     this.corpses = new Corpses(this);
     this.vfx = null;           // Set by GameRenderer; the operator preview runs without effects.
+    this.maxDying = null;      // Bodies falling at once (death-anim.js); null follows the quality step's corpse budget.
     this.zm = null;            // Graveyard Shift's undead bodies (js/render/zm-bodies.js), set by GameRenderer in that mode.
     this.surf = null;
     this.focusX = 0; this.focusZ = 0;    // Camera focus: footfalls and small dust only happen near it.
@@ -1088,17 +1109,28 @@ export class Characters {
     r.kickRoll = (r.kickRoll || 0) + r.kickSide * R.twist * (0.25 + strength * 0.3);
   }
 
-  // dirX/dirZ is the direction the hit pushes; strength roughly 0..1.
-  onHit(id, dirX = 0, dirZ = 0, strength = 0.6) {
+  // dirX/dirZ is the direction the hit pushes; strength roughly 0..1; head: a headshot (the head snaps back).
+  // A hit rocks the body away from the shot, twists the shoulders round the side it came from and knocks the gun off
+  // line; reduced motion (feel.js) keeps it to a flinch.
+  onHit(id, dirX = 0, dirZ = 0, strength = 0.6, head = false) {
     const r = this.rigs.get(id);
     if (!r) return;
     r.flash = 1;
-    const c = Math.cos(r.aim), s = Math.sin(r.aim);
-    r.sv[FLINCH_F] += -(dirX * c + dirZ * s) * 7 * strength;
-    r.sv[FLINCH_S] += (-dirX * s + dirZ * c) * 7 * strength;
+    const c = Math.cos(r.aim), s = Math.sin(r.aim), k = strength * (0.45 + 0.55 * feelMotion());
+    const along = -(dirX * c + dirZ * s), across = -dirX * s + dirZ * c;
+    r.sv[FLINCH_F] += along * 7 * k;
+    r.sv[FLINCH_S] += across * 7 * k;
+    r.sv[FLINCH_T] += across * 9 * k;
+    r.sv[KNOCK] += (5 + Math.abs(across) * 4) * k * (r.kickSide || 1);
+    if (head) r.sv[SNAP] += 14 * k;
   }
 
-  onSwap(id) { const r = this.rigs.get(id); if (r) r.swap = 1; }
+  // The swap event (the view's weapon may change a moment later; update() then keeps this swap going, not a new one).
+  onSwap(id) {
+    const r = this.rigs.get(id);
+    if (!r || r.swapU < 0.3) return;
+    r.swapU = 0; r.swapFrom = r.weapon; r.swapAtt = r.lastAtt; r.swapPending = true;
+  }
   // An emote event (index into EMOTES). Moving, firing or a finisher ends it early (see update).
   onEmote(id, e) {
     const r = this.rigs.get(id), def = EMOTES[e];
@@ -1113,19 +1145,55 @@ export class Characters {
   }
   onThrow(id, kind) { const r = this.rigs.get(id); if (r) { r.throwT = 1; r.throwKind = kind || 'frag'; } }
 
-  // Replaces a rig with flying parts. Returns false when the rig has not been drawn recently (never seen).
+  // A death seen on screen: the body falls (death-anim.js picks how from the shot) and is drawn by update() from a
+  // frozen copy of the view until it has faded; an explosion (or a crowd of the dying past the quality step's corpse
+  // budget) takes it apart instead (corpses.js). Returns false when the rig has not been drawn recently (never seen).
   onKill(id, info) {
     const r = this.rigs.get(id);
     if (!r) return false;
     r.down = true; r.downT = 1.2; r.sawDead = false;
     if (r.zk && this.zm) return this.zm.onKill(r, info);     // Graveyard Shift: the undead fall their own way (zm-bodies.js).
-    return this.corpses.spawn(r, info);
+    if (r.posed < 0 || Math.abs(this.time.value - r.posed) > 0.6) return false;
+    const push = forceOf(info.weapon), calm = feelMotion() < 1;
+    DSTATE.downed = r.crawl > 0.5; DSTATE.fin = r.finW > 0.5 && r.finRole === 'v'; DSTATE.calm = calm;
+    DSTATE.melee = !!WEAPONS[info.weapon]?.melee;
+    let dying = 0;
+    for (const q of this.rigs.values()) if (q.dying) dying++;
+    const kind = pickDeath(info, r.aim, push, DSTATE, PICK);
+    if (kind === DIE.EXPLODE || dying >= (this.maxDying ?? this.corpses.limit)) { r.dying = false; return this.corpses.spawn(r, info); }
+    if (kind === DIE.FIN) { for (const k in r.fp) r.dpose[k] = r.fp[k]; r.dpose.hide = 1; r.dpose.carry = 0; }
+    startDeath(r.die, kind, PICK.side, Math.min(2.6, Math.max(1.1, push / 5.5)), calm);
+    r.dying = true; r.downT = DIE_LIFE + 0.1; r.flash = 1;
+    // The frozen view the body is drawn from: where it stood, what it held.
+    const d = r.dview;
+    d.team = r.team; d.x = r.x; d.z = r.z; d.aim = r.aim; d.weapon = r.weapon; d.camo = r.lastCamo; d.attachments = r.lastAtt;
+    // The gun leaves the hands: from where it was drawn to the ground beside the body, flat on its side.
+    const pose = r.pose, g = P.GUN * 16;
+    _m.fromArray(pose, g).decompose(r.gp0, r.gq0, r.gsc);
+    const fa = Math.atan2(info.dirZ, info.dirX) + (Math.random() - 0.5) * 1.2, reach = 0.5 + Math.random() * 0.5;
+    r.gp1.set(r.gp0.x + Math.cos(fa) * reach, 0.07, r.gp0.z + Math.sin(fa) * reach);
+    _e.set(Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1), -(r.aim + (Math.random() - 0.5) * 2.4), 0);
+    r.gq1.setFromEuler(_e);
+    r.gAxis.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+    r.gSpin = calm ? 0 : 3 + Math.random() * 4;
+    return true;
+  }
+
+  // The dropped gun of a dying rig at its clock, into m (scale kept from the hands).
+  _droppedGun(r, m) {
+    const t = r.die.t, k = Math.min(1, t / 0.55), e = k * k * (3 - 2 * k);
+    _q.copy(r.gq0).slerp(r.gq1, e);
+    if (r.gSpin) { _q2.setFromAxisAngle(r.gAxis, (1 - e) * r.gSpin); _q.premultiply(_q2); }
+    const bounce = k < 1 ? 0 : Math.abs(Math.sin((t - 0.55) * 14)) * 0.06 * Math.exp(-(t - 0.55) * 7);
+    _p.set(r.gp0.x + (r.gp1.x - r.gp0.x) * e, r.gp0.y + (r.gp1.y - r.gp0.y) * k * k + Math.sin(Math.PI * k) * 0.22 + bounce, r.gp0.z + (r.gp1.z - r.gp0.z) * e);
+    m.compose(_p, _q, r.gsc);
   }
 
   // Replays cut in and out of time, so everything that carried over from the old timeline has to go.
   resetTransient() {
     for (const r of this.rigs.values()) {
       r.down = false; r.sawDead = false; r.reveal = 0; r.kick = 0; r.flash = 0; r.throwT = 0; r.swap = 0;
+      r.dying = false; r.swapU = 1; r.swapPending = false; r.wasReloading = false; r.wasSliding = false; r.wasKneeling = false;
       r.sx.fill(0); r.sv.fill(0); r.aimVel = 0;
     }
     this.corpses.clear();
@@ -1253,9 +1321,22 @@ export class Characters {
       }
     }
 
+    const motion = feelMotion();
     for (let pi = 0; pi < view.players.length; pi++) {
-      const p = view.players[pi];
+      let p = view.players[pi];
       const r = this.rig(p.id);
+      if (r.down) {
+        // The kill event outruns the interpolated view: stay hidden until the view agrees, then until the next life.
+        r.downT -= dt;
+        if (!p.alive) r.sawDead = true;
+        if ((r.sawDead && p.alive) || r.downT <= 0) { r.down = false; r.sawDead = false; }
+      }
+      // Falling dead (death-anim.js): drawn from the view frozen at the kill until it has faded or the player is back.
+      if (r.dying) {
+        if (!r.down || r.die.t >= DIE_LIFE) r.dying = false;
+        else p = r.dview;
+      }
+      const dying = r.dying;
       r.team = p.team;
       const zk = p.zk | 0;       // Graveyard Shift: 1..9 an undead kind on this seat (no gun, arms out, hunched).
       r.op = zk ? ZM_OP_BASE + zk - 1 : this.opById.get(p.id) ?? 0;
@@ -1263,13 +1344,14 @@ export class Characters {
       const sk = zk ? this.zmSkins[zk - 1] : this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
       if (view.br) glideRig(r, p, dt, vfx, this.focusX, this.focusZ); else r.alt = r.chute = r.landT = 0;
-      if (r.weapon !== p.weapon) { r.weapon = p.weapon; r.swap = Math.max(r.swap, 0.75); }
-      if (r.down) {
-        // The kill event outruns the interpolated view: stay hidden until the view agrees, then until the next life.
-        r.downT -= dt;
-        if (!p.alive) r.sawDead = true;
-        if ((r.sawDead && p.alive) || r.downT <= 0) { r.down = false; r.sawDead = false; }
+      if (r.weapon !== p.weapon) {
+        // A swap: the old gun goes down and the new one comes up (unless the swap event already started this one).
+        if (!(r.swapPending && r.swapU < 0.5)) { r.swapU = 0; r.swapFrom = r.weapon; r.swapAtt = r.lastAtt; }
+        r.swapPending = false;
+        r.swapDur = (WEAPONS[p.weapon]?.swapTime || 0.36);
+        r.weapon = p.weapon;
       }
+      if (!dying) { r.lastAtt = p.attachments; r.lastCamo = p.camo; }
       const cull = this.cull;
       if (cull.on && p.id !== localId && (p.x < cull.x0 - CULL_MARGIN || p.x > cull.x1 + CULL_MARGIN || p.z < cull.z0 - CULL_MARGIN || p.z > cull.z1 + CULL_MARGIN)) {
         // Off screen: keep what events read (where the muzzle is, roughly) and let it fade back in when it shows.
@@ -1294,7 +1376,17 @@ export class Characters {
       if (r.swingT !== undefined && r.swingT < 1) r.swingT = Math.min(1, r.swingT + dt / (r.swingDur || 0.3));
       if (r.kickRoll) r.kickRoll *= Math.exp(-dt * 16);
       r.flash *= Math.exp(-dt * 16);
-      r.swap *= Math.exp(-dt * 9);
+      if (r.swapU < 1) r.swapU = Math.min(1, r.swapU + dt / r.swapDur);
+      // Reloads: tactical or empty by the rounds left when it began; a tube loaded from empty is racked once it is full.
+      const reloading = p.reloadT > 0;
+      if (reloading && !r.wasReloading) r.relEmpty = p.ammo === 0;
+      else if (!reloading && r.wasReloading && r.relEmpty && !(RELOADS[p.weapon] || RELOADS.ar).track) {
+        r.cycle = cycleKindOf(p.weapon);
+        if (r.cycle) r.cycleT = 0;
+      }
+      r.wasReloading = reloading;
+      // Down into a slide and back up out of it: the body drops into the legs, then pops up (a spring, so it overshoots).
+      if (p.sliding !== r.wasSliding) { r.sv[DIP] += (p.sliding ? -2.6 : 1.5) * motion; r.wasSliding = !!p.sliding; }
       const reloadTarget = p.reloadT > 0 ? 1 : 0;
       r.reload += (reloadTarget - r.reload) * damp(reloadTarget ? 14 : 18, dt);
       const slideTarget = p.sliding ? 1 : 0;
@@ -1307,8 +1399,10 @@ export class Characters {
       r.crawl += (((p.downed && p.alive) || zk === 8 ? 1 : 0) - r.crawl) * damp(8, dt);     // A Crawler (zk 8) is always on all fours.
       const patient = revivers.get(p.id);
       if (patient) { r.kneelX = patient.x; r.kneelZ = patient.z; }
+      if (!!patient !== r.wasKneeling) { r.sv[DIP] += (patient ? -1.4 : 1.1) * motion; r.wasKneeling = !!patient; }
       r.kneel += ((patient ? 1 : 0) - r.kneel) * damp(10, dt);
-      const A = this._layer(r, p, dt, speed);     // A finisher or an emote over everything else (finisher-anim.js).
+      // A finisher or an emote over everything else (finisher-anim.js); a fall over everything when dying (death-anim.js).
+      const A = dying ? (r.die.kind === DIE.FIN ? (r.die.t += dt, r.dpose) : stepDeath(r.die, dt, r.dpose)) : this._layer(r, p, dt, speed);
       const crawl = Math.max(r.crawl, A.lie), kneel = Math.min(1, r.kneel + A.kneel);
       // Facing of the body (a finisher may turn it), and which way lying legs trail: behind, or ahead when on the back.
       const faceA = p.aim - A.twist, legDir = A.lie > r.crawl && A.lieUp ? -1 : 1;
@@ -1332,16 +1426,25 @@ export class Characters {
       spring(r, ROCK, 0, 130, 15, dt);
       spring(r, FLINCH_F, 0, 150, 15, dt);
       spring(r, FLINCH_S, 0, 150, 15, dt);
+      spring(r, DIP, 0, 95, 9, dt);
+      spring(r, FLINCH_T, 0, 140, 12, dt);
+      spring(r, SNAP, 0, 170, 13, dt);
+      spring(r, KNOCK, 0, 180, 14, dt);
+      // Which way the legs carry the body relative to where it aims: forward, backpedalling, strafing (smoothed, so a
+      // change of direction blends through the gaits rather than snapping).
+      r.locF += ((r.moveX * aimX + r.moveZ * aimZ) - r.locF) * damp(8, dt);
+      r.locS += ((-r.moveX * aimZ + r.moveZ * aimX) - r.locS) * damp(8, dt);
+      if (this.surf) r.wade += ((this.surf.isWater(p.x, p.z) ? 1 : 0) - r.wade) * damp(6, dt);
 
       const friendly = p.team === localTeam;
       r.heat = p.heat ?? 0;
       r.overheated = !!p.overheated;
       // Battle royale: nobody aboard the transport is drawn (js/sim/br.js).
-      const seen = p.alive && !r.down && p.air !== 1 && (friendly || r.alt > 0.5 || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
+      const seen = p.alive && (!r.down || dying) && p.air !== 1 && (friendly || r.alt > 0.5 || (uav && !p.ghost) || revealAll || !localPlayer || this._seenBy(lx, lz, p.x, p.z, view.smokes));
       r.seen = seen;
       r.reveal += (seen ? 1 : -1) * dt / (seen ? 0.09 : 0.18);
       r.reveal = Math.min(1, Math.max(0, r.reveal));
-      if (!p.alive || r.down || p.air === 1) r.reveal = 0;
+      if (!p.alive || (r.down && !dying) || p.air === 1) r.reveal = 0;
       r.visible = r.reveal > 0.005;
       if (zk && this.zm) {
         // Graveyard Shift: the undead have bodies of their own (js/render/zm-bodies.js poses and draws them); here only
@@ -1363,22 +1466,28 @@ export class Characters {
       const breath = Math.sin(clock * 2.1 + r.seed) * 0.012 * (1 - runK);
       const rock = r.sx[ROCK];
       // Downed: flat on the ground, face first. Reviving: down on one knee.
-      const stand = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02 - kneel * 0.36;
+      // Standing still the weight drifts from foot to foot; in water the body wades lower.
+      const idleK = (1 - Math.min(1, speed / 1.6)) * (1 - ads) * (1 - crawl), shift = Math.sin(clock * 0.8 + r.seed) * 0.035 * idleK;
+      const stand = HIP * look.h + bob + breath - slide * 0.48 - runK * 0.05 - ads * 0.05 - rock * 0.02 - kneel * 0.36 + r.sx[DIP] * 0.6 - r.wade * 0.12;
       // Touch-down: the body drops into the legs and comes back up (the feet stay planted, so the knees take it).
       const dip = r.landT > 0 ? Math.sin(Math.PI * Math.min(1, (1 - r.landT) * 1.6)) * 0.42 * Math.min(1, r.landT * 3) : 0;
       const y = stand - A.drop + (0.3 + Math.sin(r.phase * 2) * 0.02 - stand + A.drop) * crawl + r.alt - dip;
       const rightX = -aimZ, rightZ = aimX;
       const sway = sinPhase * 0.035 * runK;
-      const bodyX = p.x + rightX * (sway + A.side) + aimX * A.push, bodyZ = p.z + rightZ * (sway + A.side) + aimZ * A.push;
+      const bodyX = p.x + rightX * (sway + shift + A.side) + aimX * A.push, bodyZ = p.z + rightZ * (sway + shift + A.side) + aimZ * A.push;
 
       // A turning torso trails the aim while the gun stays on it: that gap is what reads as mass.
       const throwActive = r.throwT > 0 ? Math.sin((1 - r.throwT) * Math.PI) : 0;
+      // The throw is a whole-body move: weight back over the rear foot through the wind-up, then forward through the release.
+      const throwU = r.throwT > 0 ? 1 - r.throwT : 0;
+      const throwLean = r.throwT > 0 ? 0.16 * Math.sin(Math.PI * Math.min(1, throwU / 0.45)) - 0.3 * Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (throwU - 0.38) / 0.62)))) : 0;
       const lag = clamp(r.aimVel * 0.03, -0.32, 0.32) * (1 - ads * 0.7);
-      const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32 + A.twist;
+      const twist = sinPhase * 0.1 * runK * (1 - ads) + throwActive * 0.5 + r.throwHold * -0.32 + A.twist + r.sx[FLINCH_T] * 0.5;
       // Lying from a finisher: face down like the crawl, or on the back (lieUp).
       const lieDown = Math.max(r.crawl, A.lie * (1 - A.lieUp)), lieUp = A.lie * A.lieUp;
-      const pitch = (zk ? -0.32 - runK * 0.12 : 0) + dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - lieDown * 1.38 + lieUp * 1.38 - kneel * 0.32 - A.lean * (1 - A.lie);
-      const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK + A.roll;
+      const pitch = (zk ? -0.32 - runK * 0.12 : 0) + dip * 0.5 - sprint * 0.26 - r.sx[LEAN_F] + slide * 0.5 + ads * 0.05 + rock * 0.2 + r.sx[FLINCH_F] - lieDown * 1.38 + lieUp * 1.38 - kneel * 0.32 - A.lean * (1 - A.lie)
+        + (throwLean + r.throwHold * 0.1) * motion;
+      const roll = -slide * 0.5 + r.sx[LEAN_S] + r.sx[FLINCH_S] + sinPhase * 0.04 * runK + A.roll + shift * 0.6;
       _e.set(roll, -(p.aim - lag - twist), pitch);
       _q.setFromEuler(_e);
       _s.set(1, 1, 1);
@@ -1388,16 +1497,20 @@ export class Characters {
       // Gun pose in upper-body space: hip, ADS and sprint carry, then reload, swap and recoil layered on top.
       // Battle royale fists are boxing gloves on both hands: no blade in hand, a guard and alternating punches.
       const fists = !!view.br && !zk && p.weapon === 'knife';
-      const hold = HOLD[p.weapon] || HOLD_NONE;
+      // A swap puts the old gun away (its own model, for the first part) and brings the new one up.
+      const heldW = r.swapU < 0.42 && r.swapFrom && !dying ? r.swapFrom : p.weapon;
+      const hold = HOLD[heldW] || HOLD_NONE;
       const carry = 1 - sprint * 0.5;
-      const swap = r.swap, swapBack = Math.sin(swap * Math.PI);
+      const swapLower = r.swapU >= 1 ? 0 : r.swapU < 0.42 ? smooth01(r.swapU / 0.42) : 1 - smooth01((r.swapU - 0.42) / 0.58);
+      const swap = swapLower * 0.85, swapBack = r.swapU >= 1 ? 0 : Math.sin(r.swapU * Math.PI) * (r.swapU < 0.42 ? 0.5 : 1);
       const rec = r.recoil || RECOIL_NONE;
       let gunX = 0.34 + ads * 0.12 + hold[0] * carry - sprint * 0.06 - r.kick * 0.15 * rec.back;
       let gunY = 0.32 + ads * 0.2 + hold[1] * carry - swap * 0.55 - slide * 0.1 + Math.sin(r.phase * 2) * 0.018 * runK + breath * 0.8;
       let gunZ = 0.18 - ads * 0.1 + hold[2] * carry - sprint * 0.04 + sinPhase * 0.05 * sprint - lag * 0.06;
       let gunRoll = -swap * 0.6 + sinPhase * 0.09 * sprint + (r.kickRoll || 0);
       let gunYaw = sprint * 1.0 + swapBack * 0.35 - lag + lag * 0.15 - twist * 0.85;
-      let gunPitch = r.kick * 0.2 * rec.climb - swap * 0.9 + rock * 0.08 + A.gpitch;
+      let gunPitch = r.kick * 0.2 * rec.climb - swap * 0.9 + rock * 0.08 + A.gpitch + r.sx[KNOCK] * 0.08;
+      gunYaw += r.sx[KNOCK] * 0.35; gunRoll += r.sx[KNOCK] * 0.25;
       gunX += A.gx; gunY += A.gy; gunZ += A.gz; gunRoll += A.groll; gunYaw += A.gyaw;
       if (r.swingT !== undefined && r.swingT < 1) {
         // u 0..1 through the swing: a wind-up, a fast strike through the target, a slow recovery.
@@ -1421,7 +1534,7 @@ export class Characters {
 
       let handW = 0, magOn = 0, hx = 0, hy = 0, hz = 0;
       const R = r.reload;
-      const rel = RELOADS[p.weapon] || RELOADS.ar;
+      const rel = RELOADS[p.weapon] || RELOADS.ar, relTrack = reloadTrack(rel, r.relEmpty), tactical = !r.relEmpty && hasTactical(rel);
       const lastU = r.reloadU;
       if (p.reloadT > 0 && p.reloadDur > 0) {
         const u = clamp(1 - p.reloadT / p.reloadDur, 0, 1);
@@ -1431,7 +1544,7 @@ export class Characters {
         r.reloadU = 0;
       }
       if (R > 0.01) {
-        if (rel.track) sampleTrack(rel.track, r.reloadU, _tr);
+        if (relTrack) sampleTrack(relTrack, r.reloadU, _tr);
         else {
           const shell = (WEAPONS[p.weapon] && WEAPONS[p.weapon].reload) || 0.45;
           const inner = ((r.reloadU * p.reloadDur) / shell) % 1;
@@ -1445,14 +1558,14 @@ export class Characters {
 
       _gunE.set(gunRoll, gunYaw, gunPitch);
       _qGun.setFromEuler(_gunE);
-      const gs = fists ? 1e-4 : GUN_SCALE * (GUN_SCALES[p.weapon] || 1) * (1 - Math.max(crawl, A.hide) * 0.999);   // No gun in hand while down (or put away for a finisher).
+      const gs = fists ? 1e-4 : GUN_SCALE * (GUN_SCALES[heldW] || 1) * (1 - Math.max(crawl, A.hide) * 0.999);   // No gun in hand while down (or put away for a finisher).
       _s.set(gs, gs, gs);
       _p.set(gunX, gunY, gunZ);
       _gun.compose(_p, _qGun, _s).premultiply(_body);
 
       // Muzzle and ejection port, needed even for hidden shooters so tracers start correctly.
       const wonder = zmOn ? zmWonderOf(p.weapon) : null;
-      const proto = wonder ? getGun(wonder.model) : getGun(p.weapon, p.attachments);
+      const proto = wonder ? getGun(wonder.model) : heldW !== p.weapon ? getGun(heldW, r.swapAtt) : getGun(p.weapon, p.attachments);
       _v.set(proto.muzzle[0], proto.muzzle[1], proto.muzzle[2]).applyMatrix4(_gun);
       r.muzzle[0] = _v.x; r.muzzle[1] = _v.y; r.muzzle[2] = _v.z;
       _v.set(proto.eject[0], proto.eject[1], proto.eject[2]).applyMatrix4(_gun);
@@ -1464,6 +1577,7 @@ export class Characters {
 
       const team = zk ? ZM_TINT : this.teamRGB[p.team] || this.teamRGB[0];     // The undead wear a sickly green, not a side's colour.
       let fade = r.reveal;
+      if (dying) fade *= deathFade(r.die);
       // Spawn protection: a quick shimmer rather than a flat fade.
       if (p.spawnProtect) fade *= 0.55 + 0.45 * Math.abs(Math.sin(view.t * 16));
       const flash = r.flash;
@@ -1487,7 +1601,7 @@ export class Characters {
 
       _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(look.head, look.head, look.head);
-      _e.set(-roll * 0.5 + r.sx[FLINCH_S] * 0.6, lag * 0.85 + (twist - A.twist) * 0.5, r.kick * 0.08 + slide * -0.3 - pitch * 0.4 + r.sx[FLINCH_F] * 0.8 - A.head);
+      _e.set(-roll * 0.5 + r.sx[FLINCH_S] * 0.6, lag * 0.85 + (twist - A.twist) * 0.5, r.kick * 0.08 + slide * -0.3 - pitch * 0.4 + r.sx[FLINCH_F] * 0.8 - A.head + r.sx[SNAP] * 0.8);
       _q.setFromEuler(_e);
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
@@ -1498,6 +1612,7 @@ export class Characters {
       // Gun (the undead carry none).
       const gunMesh = this._gunMesh(proto);
       const gi = zk ? MAX_PLAYERS + MAX_CORPSES - 1 : gunMesh.count++;
+      if (dying) this._droppedGun(r, _gun);      // Out of the hands and onto the ground beside the body.
       _gun.toArray(gunMesh.instanceMatrix.array, gi * 16);
       _gun.toArray(r.pose, P.GUN * 16);
       const ga = gunMesh.geometry.attributes;
@@ -1517,7 +1632,7 @@ export class Characters {
       // Old magazines fall away from where the hand strips them; a revolver dumps its whole cylinder.
       if (vfx && R > 0.5) {
         const d = rel.mag.drop;
-        if (d >= 0 && lastU < d && r.reloadU >= d) {
+        if (d >= 0 && !tactical && lastU < d && r.reloadU >= d) {     // A tactical reload keeps its magazine.
           _v.set(0.12, -0.42, 0).applyMatrix4(_gun);
           vfx.dropMag(_v.x, _v.y, _v.z, rel.mag.rgb, rel.mag.size);
         }
@@ -1557,6 +1672,7 @@ export class Characters {
         } else {
           _b.set(proto.fore[0] - CYC.fore, proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
           if (handW > 0) { _v.set(hx, hy, hz).applyMatrix4(_gun); _b.lerp(_v, handW); }
+          if (swapLower > 0.01) { _v.set(0.16, shoulderY - 0.38, -look.armZ - 0.04).applyMatrix4(_body); _b.lerp(_v, swapLower * 0.75); }     // Off the gun while it changes.
           const slideHand = slide * (1 - R);
           if (slideHand > 0.01) {
             // Off hand trails on the ground through a slide.
@@ -1604,7 +1720,8 @@ export class Characters {
         const hw = side < 0 ? A.lw : A.rw;
         if (hw > 0.01) {
           const fx = Math.cos(faceA), fz = Math.sin(faceA), hx3 = side < 0 ? A.lx : A.rx, hy3 = side < 0 ? A.ly : A.ry, hz3 = side < 0 ? A.lz : A.rz;
-          _v.set(p.x + fx * hx3 - fz * hz3, hy3 * look.h, p.z + fz * hx3 + fx * hz3);
+          const cx = A.carry ? aimX * A.push + rightX * A.side : 0, cz = A.carry ? aimZ * A.push + rightZ * A.side : 0;
+          _v.set(p.x + cx + fx * hx3 - fz * hz3, hy3 * look.h, p.z + cz + fz * hx3 + fx * hz3);
           _b.lerp(_v, hw);
         }
         const prop = side < 0 && r.emote ? CALL_PROPS[r.emote] : null;
@@ -1642,13 +1759,18 @@ export class Characters {
         }
       }
 
-      // Legs follow travel direction, independent of aim, through a stance and a swing phase.
+      // Legs follow travel direction, independent of aim, through a stance and a swing phase. The hips (boots, knees)
+      // face the travel going forward, the aim when backpedalling (short steps, knees still forward) and part way
+      // between when strafing (feet set wider so they never cross); the weights blend, so every change of direction does.
       const legLen = 0.54 * look.h;
       const legT = 1.42 * look.l * sk.bulk;
       const standK = 1 - Math.min(1, speed / 1.6);
-      const faceX = moving ? r.moveX : aimX, faceZ = moving ? r.moveZ : aimZ;
+      const fwdK = Math.max(0, r.locF), backK = Math.max(0, -r.locF), latK = Math.min(1, Math.abs(r.locS));
+      let faceX = r.moveX * (fwdK + 0.55 * latK) + aimX * (1 - fwdK), faceZ = r.moveZ * (fwdK + 0.55 * latK) + aimZ * (1 - fwdK);
+      const faceL = Math.sqrt(faceX * faceX + faceZ * faceZ);
+      if (faceL > 1e-3) { faceX /= faceL; faceZ /= faceL; } else { faceX = aimX; faceZ = aimZ; }
       const bootYaw = Math.atan2(faceZ, faceX);
-      const strideAmp = (0.36 + 0.26 * r.sprint) * Math.min(1, speed / 3.2) * (1 - slide);
+      const strideAmp = (0.36 + 0.26 * r.sprint) * Math.min(1, speed / 3.2) * (1 - slide) * (1 - 0.3 * backK) * (1 - 0.25 * latK);
       const duty = 0.58 - r.sprint * 0.16;
       for (let li = 0; li < 2; li++) {
         const side = li === 0 ? -1 : 1;
@@ -1659,16 +1781,16 @@ export class Characters {
         else {
           const s = (u - duty) / (1 - duty), ss = s * s * (3 - 2 * s);
           off = strideAmp * (2 * ss - 1);
-          lift = Math.sin(Math.PI * s) * (0.15 + 0.2 * r.sprint) * Math.min(1, speed / 3);
+          lift = Math.sin(Math.PI * s) * (0.15 + 0.2 * r.sprint) * Math.min(1, speed / 3) * (1 + r.wade * 0.9);     // High knees through water.
         }
-        const wide = look.hipZ;
+        const wide = look.hipZ + 0.07 * latK;
         const hipX = bodyX + rightX * side * wide, hipZ = bodyZ + rightZ * side * wide;
         // A shooter's stance when standing: left foot leads, right foot braces.
         const stance = (side < 0 ? 0.16 : -0.14) * standK;
         let footX = p.x + rightX * side * (wide + 0.05 * standK) + aimX * stance + r.moveX * off;
         let footZ = p.z + rightZ * side * (wide + 0.05 * standK) + aimZ * stance + r.moveZ * off;
         let footY = 0.13 + lift + (r.alt > 0 ? r.alt - 0.06 + Math.sin(clock * 2.4 + side) * 0.05 : 0) + Math.max(0, -A.drop) * 0.9;     // Lifted off the ground in a finisher: the feet go too.
-        let poleX = r.moveX * 0.8 + aimX * 0.4 + rightX * side * 0.3, poleY = 0.15, poleZ = r.moveZ * 0.8 + aimZ * 0.4 + rightZ * side * 0.3;
+        let poleX = faceX * 0.8 + aimX * 0.4 + rightX * side * 0.3, poleY = 0.15, poleZ = faceZ * 0.8 + aimZ * 0.4 + rightZ * side * 0.3;
         if (slide > 0.01) {
           // Lead leg kicks straight out, trail leg folds under the body with its knee to the side.
           const dirX = r.moveX, dirZ = r.moveZ;
@@ -1715,7 +1837,7 @@ export class Characters {
       }
       if (vfx && slide > 0.5 && speed > 2 && Math.random() < dt * 45) vfx.slideTrail(p.x - r.moveX * 0.5, p.z - r.moveZ * 0.5);
 
-      nRing = this._ringBlob(nRing, p, r, localId, localTeam, team, zk && r.lite ? 0 : 0.9 / (1 + r.alt * 0.06));
+      if (!dying) nRing = this._ringBlob(nRing, p, r, localId, localTeam, team, zk && r.lite ? 0 : 0.9 / (1 + r.alt * 0.06));
     }
 
     // No silhouettes through walls in a replay: the camera there is low, and they read as ghosts.

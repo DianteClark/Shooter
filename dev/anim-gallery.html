@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Animation gallery</title>
+<style>html, body { margin: 0; background: #1b1d22; } canvas { display: block; }
+#lab { position: fixed; inset: 0; pointer-events: none; font: 600 11px system-ui; color: #eee; text-shadow: 0 1px 2px #000; }
+#lab span { position: absolute; transform: translate(-50%, 0); white-space: nowrap; }</style>
+</head>
+<body>
+<canvas id="c"></canvas><div id="lab"></div>
+<script type="importmap">{ "imports": { "three": "../vendor/three.min.js" } }</script>
+<script type="module">
+// The animation pass at a glance (docs/ANIMATION.md), dev only. A grid: rows are one thing, columns moments through it.
+//   ?scene=deaths   rows back, front, side, head, melee, blown, down; columns 0.08 .. 1.6 s after the kill
+//   ?scene=suits    the same falls (columns) worn by Mastery suits and kit operators (rows)
+//   ?scene=reload   rows a gun class, tactical then empty; columns through the reload (&set=0|1: which classes)
+//   ?scene=loco     rows forward, backpedal, strafe, sprint, idle, wading; columns through the stride
+//   ?scene=moves    rows swap, throw, flinch, slide in/out; columns through each
+//   &only=back,head (deaths: those rows)   &view=front|close (default close, the match camera's tilt)  &w=1400&h=820  &ops=a,b  &t=<time>  (deaths: one moment)
+import * as THREE from 'three';
+import { Characters } from '../js/render/characters.js';
+import { OPERATORS, SKINS } from '../js/ui/operators.js';
+import { WEAPONS } from '../js/shared/weapons.js';
+
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 1400), H = +(q.get('h') || 820), scene0 = q.get('scene') || 'deaths', camView = q.get('view') || 'close';
+const canvas = document.getElementById('c');
+const webgl = new THREE.WebGLRenderer({ canvas, antialias: true });
+webgl.setPixelRatio(1.5); webgl.setSize(W, H); webgl.setClearColor(0x3a3d38);
+const scene = new THREE.Scene();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: 0x4a4d46 }));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+const time = { value: 0 };
+const chars = new Characters(scene, { walls: [] }, time);
+chars.maxDying = 99;
+const players = [], labels = [], rowLabels = [];
+const GX = 2.6, GZ = 2.8;
+const mk = (id, col, row, extra = {}) => {
+  const p = { id, team: row & 1, x: col * GX, z: row * GZ, aim: +(q.get('aim') ?? -0.5), vx: 0, vz: 0, hp: 100, alive: true, weapon: 'ar', camo: 'none', ammo: 20,
+    adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, ...extra };
+  players.push(p); return p;
+};
+const roster = [];
+const view = { t: 0, players, smokes: null };
+const opts = { localId: 'none', localTeam: 0, uav: true, revealAll: true };
+const dt = 1 / 60;
+let T = 0;
+const step = (n, each) => { for (let i = 0; i < n; i++) { T += dt; time.value = T; view.t = T; each?.(T); chars.update(view, dt, opts); } };
+let cols = 0, rows = 0;     // Grid size (set by each scene).
+const suits = SKINS.filter(s => s.suit);
+const kits = OPERATORS.filter(o => o.kit);
+
+const DEATHS = [
+  ['back', a => ({ dirX: -Math.cos(a), dirZ: -Math.sin(a), weapon: 'ar' })],
+  ['front', a => ({ dirX: Math.cos(a), dirZ: Math.sin(a), weapon: 'ar' })],
+  ['side', a => ({ dirX: -Math.sin(a), dirZ: Math.cos(a), weapon: 'smg' })],
+  ['head', a => ({ dirX: -Math.cos(a), dirZ: -Math.sin(a), weapon: 'sniper', head: true })],
+  ['melee', a => ({ dirX: -Math.sin(a), dirZ: Math.cos(a), weapon: 'knife' })],
+  ['blown', a => ({ dirX: -Math.cos(a), dirZ: -Math.sin(a), weapon: 'shotgun' })],
+  ['down', a => ({ dirX: -Math.cos(a), dirZ: -Math.sin(a), weapon: 'ar' }), true],
+];
+const MOMENTS = q.get('t') ? [+q.get('t')] : [0.08, 0.2, 0.35, 0.55, 0.8, 1.6];
+
+function deaths(rowsDef) {
+  cols = MOMENTS.length; rows = rowsDef.length;
+  const killAt = [];
+  rowsDef.forEach(([name, op, skin, kind], r) => {
+    rowLabels.push(name);
+    MOMENTS.forEach((m, c) => {
+      const p = mk(`d${r}-${c}`, c, r, { weapon: ['ar', 'smg', 'lmg', 'sniper', 'shotgun', 'pistol'][c % 6] });
+      roster.push({ id: p.id, operator: op, skin });
+      const D = DEATHS.find(d => d[0] === kind);
+      if (D[2]) p.downed = true;
+      killAt.push({ p, at: 2 - m, info: { ...D[1](p.aim), head: !!D[1](p.aim).head, explosive: false } });
+    });
+  });
+  chars.setRoster(roster);
+  step(30);
+  const t0 = T;
+  for (const k of killAt) k.done = false;
+  step(Math.round(2 / dt), t => {
+    for (const k of killAt) if (!k.done && t - t0 >= k.at) { k.done = true; chars.onKill(k.p.id, k.info); k.p.alive = false; }
+  });
+  MOMENTS.forEach((m, c) => labels.push([c, -1, `${m}s`]));
+}
+
+// Two pages (&set=0|1) so a page stays inside the 34 soldiers Characters draws.
+const RELOAD_ROWS = [['ar', 'smg', 'pdw', 'pistol'], ['sniper', 'lmg', 'shotgun', 'launcher']][+(q.get('set') || 0)];
+const RU = [0.15, 0.4, 0.7, 0.9];
+function reload() {
+  cols = RU.length; rows = RELOAD_ROWS.length * 2;
+  const ps = [];
+  RELOAD_ROWS.forEach((w, i) => [0, 1].forEach(empty => {
+    const r = i * 2 + empty;
+    rowLabels.push(`${w} ${empty ? 'empty' : 'tactical'}`);
+    RU.forEach((u, c) => { const p = mk(`r${r}-${c}`, c, r, { weapon: w, ammo: empty ? 0 : 5, aim: 0.3 }); ps.push([p, u]); roster.push({ id: p.id, operator: OPERATORS[c % 9].id, isBot: true }); });
+  }));
+  chars.setRoster(roster);
+  step(20);
+  const dur = 2;
+  for (const [p] of ps) { p.reloadDur = dur; p.reloadT = dur; }
+  step(1);
+  const t0 = T;
+  step(Math.round(dur * 0.95 / dt), t => { for (const [p, u] of ps) p.reloadT = Math.max(0.001, dur * (1 - Math.min(u, (t - t0) / dur))); });
+  RU.forEach((u, c) => labels.push([c, -1, `u ${u}`]));
+}
+
+const LOCO = [['forward', 0, 3.2], ['backpedal', Math.PI, 2.4], ['strafe R', Math.PI / 2, 2.8], ['strafe L', -Math.PI / 2, 2.8], ['diag back', 2.4, 2.6], ['sprint', 0, 6.5, { sprinting: true }], ['idle', 0, 0], ['wading', 0, 2.4, { wade: true }]];
+function loco() {
+  const PH = [0, 0.17, 0.33, 0.5, 0.67, 0.83];
+  const only = q.get('only') ? q.get('only').split(',') : null, L = LOCO.filter(([n]) => !only || only.includes(n));
+  cols = PH.length; rows = L.length;
+  L.forEach(([name, rel, sp, ex], r) => {
+    rowLabels.push(name);
+    PH.forEach((ph, c) => { const p = mk(`l${r}-${c}`, c, r, { aim: +(q.get('aim') ?? 0.4), ...(ex || {}) }); p.rel = rel; p.sp = sp; p.ph = ph; roster.push({ id: p.id, operator: OPERATORS[(r + c) % 9].id, isBot: true }); });
+  });
+  chars.setRoster(roster);
+  // Water under the wading row.
+  chars.surf = { isWater: (x, z) => L[Math.round(z / GZ)]?.[0] === 'wading', groundAt: () => 0, solid: () => false };
+  for (const p of players) { const a = p.aim + p.rel; p.vx = Math.cos(a) * p.sp; p.vz = Math.sin(a) * p.sp; }
+  step(90);
+  // Phase offsets: advance each by its share of a stride (positions stay put; the gait reads the velocity).
+  for (const p of players) { const r = chars.rigs.get(p.id); r.phase += p.ph * Math.PI * 2; }
+  step(1);
+  PH.forEach((ph, c) => labels.push([c, -1, `phase ${ph}`]));
+}
+
+function moves() {
+  const U = [0.1, 0.25, 0.4, 0.55, 0.75, 0.95];
+  cols = U.length; rows = 4;
+  ['swap ar>pistol', 'throw', 'flinch (head)', 'slide in/out'].forEach(n => rowLabels.push(n));
+  const by = [];
+  for (let r = 0; r < 4; r++) U.forEach((u, c) => { const p = mk(`m${r}-${c}`, c, r, { aim: 0.4 }); by.push([p, r, u]); roster.push({ id: p.id, operator: OPERATORS[(r * 3 + c) % 9].id, isBot: true }); });
+  chars.setRoster(roster);
+  step(30);
+  const t0 = T, D = { 0: 0.4, 1: 0.5, 2: 0.5, 3: 1.2 };
+  step(Math.round(1.25 / dt), t => {
+    for (const [p, r, u] of by) {
+      const at = t - t0, start = 1.25 - D[r] * u;     // So at the end each is u of the way through its move.
+      const k = `s${r}`;
+      if (!p[k] && at >= start) {
+        p[k] = true;
+        if (r === 0) { chars.onSwap(p.id); p.weapon = 'pistol'; }
+        if (r === 1) chars.onThrow(p.id, 'frag');
+        if (r === 2) chars.onHit(p.id, -Math.cos(p.aim), -Math.sin(p.aim), 1, true);
+        if (r === 3) { p.sliding = true; p.vx = Math.cos(p.aim) * 6; p.vz = Math.sin(p.aim) * 6; }
+      }
+      if (r === 3 && p[k] && at - start > 0.6) { p.sliding = false; p.vx = 0; p.vz = 0; }
+    }
+  });
+  U.forEach((u, c) => labels.push([c, -1, `u ${u}`]));
+}
+
+await new Promise(ok => setTimeout(ok, 50));     // characters.js reads weapons.js lazily.
+if (scene0 === 'deaths') {
+  const ops = q.get('ops') ? q.get('ops').split(',') : ['trooper', 'anvil', 'wisp', 'ronin', 'ram', 'monarch', 'relay'];
+  const only = q.get('only') ? q.get('only').split(',') : null;
+  deaths(DEATHS.filter(([k]) => !only || only.includes(k)).map(([k], i) => [k, ops[i % ops.length], null, k]));
+} else if (scene0 === 'suits') {
+  const picks = [...suits.slice(0, 5).map(s => [s.id.replace('skin:', ''), s.operator, s.id]), ...kits.slice(0, 3).map(o => [o.id, o.id, null])];
+  const kinds = ['back', 'front', 'side', 'head', 'melee', 'blown', 'back', 'front'];
+  deaths(picks.map(([n, op, sk], i) => [`${n} (${kinds[i]})`, op, sk, kinds[i]]));
+} else if (scene0 === 'reload') reload();
+else if (scene0 === 'loco') loco();
+else moves();
+
+// &row=N&zoom=Z: close in on one row.
+const ROW = q.get('row'), ZOOM = +(q.get('zoom') || 1);
+const cx = (cols - 1) * GX / 2, cz = ROW != null ? +ROW * GZ : (rows - 1) * GZ / 2;
+if (ROW != null) { rows = 1; for (const p of players) if (Math.round(p.z / GZ) !== +ROW) p.alive = false; step(1); }
+const cam = new THREE.PerspectiveCamera(camView === 'front' ? 30 : 26, W / H, 0.5, 400);
+const span = Math.max(cols * GX / (W / H), rows * GZ * 0.8) + 2;
+const dist = span / (2 * Math.tan(THREE.MathUtils.degToRad(13))) / ZOOM;
+if (camView === 'front') { const d2 = (cols * GX + 1) / (2 * Math.tan(THREE.MathUtils.degToRad(15)) * (W / H)); cam.position.set(cx, 1.6 + rows * 0.8, cz + d2 + rows * GZ * 0.5); cam.lookAt(cx, 0.5, cz); }
+else { const TILT = THREE.MathUtils.degToRad(55); cam.position.set(cx, dist * Math.sin(TILT), cz + dist * Math.cos(TILT)); cam.lookAt(cx, 0, cz); }
+webgl.render(scene, cam);
+const lab = document.getElementById('lab');
+const put = (x, z, text) => { const s = new THREE.Vector3(x, 0, z).project(cam); const el = document.createElement('span'); el.textContent = text; el.style.left = `${(s.x * 0.5 + 0.5) * W}px`; el.style.top = `${(-s.y * 0.5 + 0.5) * H}px`; lab.appendChild(el); };
+for (const [c, r, t] of labels) put(c * GX, r * GZ + 1.2, t);
+rowLabels.forEach((t, r) => put(-1.9, r * GZ, t));
+window.chars = chars; window.players = players;
+window.ready = true;
+</script>
+</body>
+</html>

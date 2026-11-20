@@ -30,6 +30,8 @@ const FORCE = {
 };
 const FORCE_DEFAULT = FORCE.ar;
 fillV10(FORCE, 'force');
+// How hard a weapon shoves a body along the shot (characters.js picks a death by it: a heavy round lifts them off their feet).
+export const forceOf = id => (FORCE[id] || FORCE_DEFAULT)[0];
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
