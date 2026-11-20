@@ -12,7 +12,7 @@ import { blankSave, addLife, unlockChallenge, itemOpen, sanitizeSave } from '../
 const STEP = 1 / SIM_HZ;
 const args = process.argv.slice(2);
 const QUICK = args.includes('--quick');
-const MAP = MAPS.frontier;
+const MAP = MAPS[(process.argv.slice(2).find(a => a.startsWith('--map=')) ?? '--map=frontier').slice(6)];   // --map=jadefall: the second island.
 let failed = 0;
 const check = (ok, msg) => { if (!ok) { failed++; console.log(`  FAIL ${msg}`); } else console.log(`  ok   ${msg}`); };
 

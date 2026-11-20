@@ -590,6 +590,7 @@ THEME_AUDIO.desert = THEME_AUDIO.dust;
 THEME_AUDIO.arctic = { ir: { len: 0.45, damp: 0.12, gain: 0.18 }, slaps: [[0.11, 0.6]], f0: 1400, f1: 360, metal: 0, wash: 0.02 };
 // Leaves and trunks: no hard slap, a soft scatter of small returns.
 THEME_AUDIO.jungle = { ir: { len: 0.7, damp: 0.2, gain: 0.26 }, slaps: [[0.06, 0.55], [0.13, 0.45], [0.24, 0.3]], f0: 1700, f1: 420, metal: 0, wash: 0.1 };
+THEME_AUDIO.jadefall = { ...THEME_AUDIO.jungle, wash: 0.16 };   // Jadefall and its Ground War maps: the jungle's air, more surf.
 // Indoors under a steel roof: the longest, brightest room in the game, and it rings.
 THEME_AUDIO.foundry = { ir: { len: 1.4, damp: 0.4, gain: 0.4 }, slaps: [[0.05, 1], [0.12, 0.8], [0.21, 0.5]], f0: 2600, f1: 600, metal: 1200, wash: 0.1 };
 // Open fields: almost nothing comes back, and what does is late.

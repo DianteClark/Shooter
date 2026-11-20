@@ -49,7 +49,7 @@ export function playForStat(key = '') {
       : MODES[id]?.ex ? { tab: 'extraction', playlist: 'exquads' } : { tab: 'standard', modes: [id] };
   }
   const map = /^map(?:won)?:(.+)$/.exec(k)?.[1];
-  if (map) return map === 'frontier' ? { tab: 'br', playlist: 'quads' } : MAPS[map]?.zmOnly ? { tab: 'zombies', playlist: 'zmsolo' } : MAPS[map]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : QUICK;
+  if (map) return MAPS[map]?.size === 'giant' ? { tab: 'br', playlist: 'quads' } : MAPS[map]?.zmOnly ? { tab: 'zombies', playlist: 'zmsolo' } : MAPS[map]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : QUICK;
   const OBJ = { plants: 'snd', defuses: 'snd', clutches: 'snd', bombs: 'snd', sndRounds: 'snd', flagCaps: 'ctf', flagReturns: 'ctf', carrierKills: 'ctf', confirms: 'kc', captures: 'dom' };
   if (OBJ[k]) return { tab: 'standard', modes: [OBJ[k]] };
   return QUICK;

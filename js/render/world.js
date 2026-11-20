@@ -3226,7 +3226,7 @@ function buildDecals(map, theme) {
 
 export function buildWorld(map, teams, fogUniforms) {
   // Giant battle royale maps stream their tiles in as the camera comes near (js/render/themes/frontier.js).
-  if (map.size === 'giant') return frontier.buildGiantWorld(map, fogUniforms, INTERNALS);
+  if (map.size === 'giant' || map.giantWorld) return frontier.buildGiantWorld(map, fogUniforms, INTERNALS);
   const theme = getTheme(map.theme);
   INK = theme.ink;
   CONTAINER_COLORS = theme.containers;
@@ -3423,6 +3423,7 @@ const THUMB_STYLE = {
   wrenfield: wrenfield.thumb,
   millbrook: millbrook.thumb,
   frontier: frontier.thumb,
+  jadefall: frontier.isleThumb,
 };
 
 // What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a
@@ -3449,6 +3450,11 @@ export function mapThumbnail(map, { width = 160, teams = null, spawns = true } =
   if (s.water) {
     g.fillStyle = s.water;
     for (const w of map.walls) if (w.kind === 'water') g.fillRect(w.x * k, w.z * k, w.w * k, w.d * k);
+  }
+  // Shallow water (Jadefall's maps): walkable, so a lighter tone under everything.
+  if (s.shallow) {
+    g.fillStyle = s.shallow;
+    for (const r of map.shallows ?? []) g.fillRect(r.x * k, r.z * k, r.w * k, r.d * k);
   }
   for (const w of map.walls) {
     if (w.kind === 'border' || w.kind === 'water') continue;
