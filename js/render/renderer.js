@@ -5,7 +5,8 @@ import { TEAMS } from '../shared/constants.js';
 import { TEAM_RGB } from '../shared/palette.js';   // [r, g, b] per side, rewritten in place by the colour modes.
 import { BrFx } from './br-fx.js';     // Battle royale: circle wall, transport, loot, canopies (docs/BR.md).
 import { ExFx } from './ex-fx.js';     // Extraction: landing zones and helicopters, contract things, phones (docs/EXTRACT.md).
-import { ZmFx } from './zm-fx.js';     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
+import { ZmFx } from './zm-fx.js';
+import { ZmFairFx } from './zm-fair-fx.js';     // Wrenfield Fair: the Barker's marked lanes, the Whirligig's whirls.     // Graveyard Shift: fences, gates, wall-buys, perk machines, the crate (docs/ZOMBIES.md).
 import { clearZmWalls } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
@@ -117,7 +118,7 @@ function tracerColor(camoId, team) {
 const GUNSHIP_TRACER = [1.0, 0.42, 0.12];
 const FIRE_SPARK = [1.0, 0.6, 0.2];
 const TURRET_TRACER = [1.0, 0.72, 0.3];
-const ZM_ARC = [0.45, 0.85, 1.0], ZM_FROST = [0.75, 0.95, 1.0], ZM_DRONE = [0.4, 1.0, 0.65];   // Graveyard Shift's economy.
+const ZM_ARC = [0.45, 0.85, 1.0], ZM_FROST = [0.75, 0.95, 1.0], ZM_DRONE = [0.4, 1.0, 0.65], ZM_WHIRL = [1.0, 0.5, 0.9];   // Graveyard Shift's economy.
 
 // Cheap pseudo-noise for screen shake.
 function wobble(t, seed) {
@@ -389,6 +390,7 @@ export class GameRenderer {
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
         case 'zswing': chars.onShot(ev.id, 0.3, 'knife'); break;     // Graveyard Shift: a zombie's claw.
         case 'zspit': case 'zblast': case 'zshield': this.zmFx?.onEvent(ev); break;     // Specials (js/render/zm-kinds-fx.js).
+        case 'zcharge': case 'zwhirl': (this.fairFx ??= new ZmFairFx(this.scene)).onEvent(ev); break;     // js/render/zm-fair-fx.js.
         case 'explosion': {
           // A launcher's blast waits for its rocket to get there.
           if (!vfx.rocketInbound(ev.x, ev.z, ev.radius || 4)) this._boom(ev.x, ev.z, ev.radius || 4);
@@ -438,6 +440,7 @@ export class GameRenderer {
           else if (ev.k === 'frost') { vfx.sparks(ev.x, 1, ev.z, 0, 0, ZM_FROST, 6, 4); vfx.ring(ev.x, ev.z, 0.2, 1.1, 0.35, ZM_FROST, 0.6); }
           // The Rimecaster (a zombie frozen solid, one shattering) and the Listener's pulse going off.
           else if (ev.k === 'freeze') { vfx.pop(ev.x, 1, ev.z, 1.6, ZM_FROST, 0.5); vfx.ring(ev.x, ev.z, 0.3, 0.9, 2.4, ZM_FROST, 0.5); }
+          else if (ev.k === 'whirlpop') { const r = ev.r ?? 3; vfx.sparks(ev.x, 0.8, ev.z, 0, 0, ZM_WHIRL, 18, 10); vfx.ring(ev.x, ev.z, 0.3, r, 0.35, ZM_WHIRL, 0.9); vfx.pop(ev.x, 1, ev.z, r, ZM_WHIRL, 0.25); }     // The Whirligig's burst.
           else if (ev.k === 'shatter') { const r = ev.r ?? 2.6; vfx.sparks(ev.x, 1, ev.z, 0, 0, ZM_FROST, ev.r ? 16 : 10, 9); vfx.ring(ev.x, ev.z, 0.3, r, 0.4, ZM_FROST, 0.8); vfx.pop(ev.x, 1, ev.z, r * 0.8, ZM_FROST, 0.2); }
           break;
         }
@@ -752,6 +755,7 @@ export class GameRenderer {
     if ((view.obj ?? view.points?.obj)?.ex) (this.exFx ??= new ExFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, localTeam);
     const zmObj = (view.obj ?? view.points?.obj)?.zm ? (view.obj ?? view.points.obj) : null;
     if (zmObj?.layout) (this.zmFx ??= new ZmFx(this.scene, this.map, zmObj.layout)).update(view, fxDt);
+    this.fairFx?.update(fxDt);
     this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill && !cine) this._drawLaser(local);
     this.ambient.update(fxDt, this.camTarget.x, this.camTarget.z);
@@ -864,6 +868,7 @@ export class GameRenderer {
     this.brFx?.dispose();
     this.exFx?.dispose(); this.exFx = null;
     this.zmFx?.dispose(); this.zmFx = null;
+    this.fairFx?.dispose(); this.fairFx = null;
     this.vfx.dispose();
     this.combat.dispose();
     this.props.dispose();

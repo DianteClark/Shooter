@@ -11,7 +11,9 @@
 //   exfil      the pad's ring of lamps; from the round it can be called, a dim beacon; called, a bright one and a ring
 //              that closes as the clock runs down
 //   quest      the relics (small violet lanterns, floating where they lie, gone once found) and the altar's sockets
-//              lighting as they are found
+//              lighting as they are found; Polestar's radios and console; Wrenfield Fair's four coloured lanterns on
+//              their posts (cold, waiting, lit, guttering as the burn runs out), the Oracle's cabinet showing the order
+//              once asked, and the high striker's scale lighting a lamp a lantern
 //   gear       sentries (turning to their aim), hunter drones (hovering, bobbing), lures (a pulsing red post) and the
 //              air strike's mark on the ground: instanced, one draw call each
 //   x-ray      the stations' outlines, their lamps and the trap rings through walls and roofs (the camera looks north:
@@ -19,7 +21,7 @@
 // About eighteen draw calls whatever the round.
 import * as THREE from 'three';
 import { getGun } from './guns.js';
-import { ZE, ZM_FX, zmFxOf } from '../shared/zombies.js';
+import { ZE, ZM_FX, zmFxOf, ZM_LANTERNS } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), E = new THREE.Euler(), C = new THREE.Color();
@@ -119,6 +121,25 @@ export class ZmEconFx {
         st.at(r.x, r.z, 0);
         st.box(0, 0.35, 0, 0.9, 0.7, 0.6, 0x6e5a3a).box(0, 0.88, 0, 0.66, 0.36, 0.42, 0x3c4a3c).box(0.18, 1.5, 0.12, 0.04, 0.9, 0.04, 0x9aa4ae);
       }
+    } else if (Al && L.questKind === 'lantern') {
+      // Wrenfield Fair: each lantern hangs from a post's arm (its colour dim in the paper until lit, below); the Oracle
+      // is a fortune machine's cabinet (a turbaned automaton behind glass, a crystal ball, a card slot); the striker
+      // stands in the world (its mallet here, its lamps below).
+      for (const r of L.relics) {
+        st.at(r.x, r.z, 0);
+        st.box(-0.35, 1.25, 0, 0.12, 2.5, 0.12, 0x46321f).box(-0.1, 2.45, 0, 0.6, 0.08, 0.08, 0x46321f).box(-0.35, 0.05, 0, 0.5, 0.1, 0.5, 0x2e2c32);
+      }
+      const O = L.oracle;
+      if (O) {
+        st.at(O.wx, O.wz, O.face);
+        st.box(0.45, 0.5, 0, 0.9, 1.0, 1.3, 0x3a2650).box(0.45, 1.55, 0, 0.9, 1.1, 1.3, 0x241a30).box(0.45, 2.2, 0, 1.0, 0.2, 1.4, 0xd8a83a)
+          .box(0.35, 1.5, 0, 0.3, 0.5, 0.32, 0xb8aa8e).box(0.35, 1.85, 0, 0.34, 0.2, 0.36, 0xb0302e);
+        glow.at(O.wx, O.wz, O.face);
+        glow.box(0.92, 1.55, 0, 0.02, 0.9, 1.1, 0x5a3a9a, 0, false).box(0.65, 1.32, 0.3, 0.18, 0.18, 0.18, 0x9affd8, 0, false).box(0.92, 0.75, 0, 0.02, 0.06, 0.5, 0xffd27a, 0, false);
+        ghost.at(O.wx, O.wz, O.face).box(0.45, 1.1, 0, 0.9, 2.2, 1.3, 0xb070ff, 0, false);
+      }
+      st.at(Al.x, Al.z, 0);
+      st.box(0.6, 0.12, 0.3, 0.9, 0.12, 0.14, 0x6a4c32).box(1.0, 0.18, 0.3, 0.26, 0.26, 0.4, 0x2e2c32);
     } else if (Al) {
       st.at(Al.wx, Al.wz, Al.face);
       st.box(0.6, 0.42, 0, 1.0, 0.84, 1.5, 0x5d5a55).box(0.6, 0.88, 0, 1.12, 0.09, 1.64, 0x726e68).box(0.14, 1.3, 0, 0.18, 0.9, 0.5, 0x4a4743);
@@ -201,7 +222,7 @@ export class ZmEconFx {
     }
     // Relics, and the altar's sockets.
     const nRel = L.relics.length;
-    this.relics = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.2, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), Math.max(1, nRel * 2));
+    this.relics = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.2, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), Math.max(1, nRel * 3));
     this.relics.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.relics.frustumCulled = false;
     this.root.add(this.relics);
@@ -258,8 +279,9 @@ export class ZmEconFx {
     // Relics and the altar's sockets.
     const q = obj.quest ?? { got: 0, state: 0 };
     let n = 0;
-    const radio = L.questKind === 'radio';
-    for (const r of L.relics) {
+    const radio = L.questKind === 'radio', lantern = L.questKind === 'lantern';
+    if (lantern) n = this.#lanterns(obj, q, t);
+    for (const r of lantern ? [] : L.relics) {
       if (radio) {
         // A radio's lamp: dark with no power, amber live, cyan blinking while tuned, green once it is locked on.
         const got = q.got & (1 << r.i), tuning = q.tuneI === r.i, live = obj.power ?? 1;
@@ -273,7 +295,7 @@ export class ZmEconFx {
       this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(0xb070ff)); n++;
     }
     const Al = L.altar;
-    if (Al) {
+    if (Al && !lantern) {
       for (const r of L.relics) {
         const lit = q.got & (1 << r.i), c = Math.cos(Al.face), s = Math.sin(Al.face), side = (r.i - 1) * 0.42;
         M4.compose(V.set(Al.wx + c * 0.6 - s * side, 1.0, Al.wz + s * 0.6 + c * side), Q.identity(), S.setScalar(lit ? 0.8 + 0.15 * Math.sin(t * 3 + r.i) : 0.5));
@@ -317,6 +339,33 @@ export class ZmEconFx {
       m.setMatrixAt(k, M4);
     }
     for (const [kind, m] of Object.entries(this.gear)) { m.count = counts[kind]; m.instanceMatrix.needsUpdate = true; }
+  }
+
+  // Wrenfield Fair's lanterns, the Oracle's order and the striker's lamps, on the relic instances. Returns the count.
+  #lanterns(obj, q, t) {
+    const L = this.L, done = q.state > 0, lit = i => done || q.got & (1 << i);
+    const n0 = L.relics.filter(r => q.got & (1 << r.i)).length;
+    // Guttering in the last fifteen seconds of the burn.
+    const gutter = !done && q.burnT > 0 && q.burnT < 15 ? 0.45 + 0.55 * Math.abs(Math.sin(t * (6 + (15 - q.burnT)))) : 1;
+    let n = 0;
+    const put = (x, y, z, k, hex) => { M4.compose(V.set(x, y, z), Q.identity(), S.set(k, k * 1.4, k)); this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(hex)); n++; };
+    const dim = (hex, k) => C.setHex(hex).multiplyScalar(k).getHex();
+    for (const r of L.relics) {
+      const col = ZM_LANTERNS[r.i]?.hex ?? 0xffffff, on = lit(r.i);
+      const next = !done && q.read && (q.order?.[n0] === r.i);
+      put(r.x + 0.15, 2.05 + (on ? Math.sin(t * 2 + r.i) * 0.03 : 0), r.z, on ? 1.5 + 0.12 * Math.sin(t * 5 + r.i) : next ? 1.2 + 0.2 * Math.sin(t * 4) : 1.1,
+        on ? dim(col, gutter) : q.read ? dim(col, 0.3) : obj.power ? dim(col, 0.12) : 0x18141c);
+    }
+    // The Oracle's card, once asked: the order in four lamps over its cabinet, the lit ones bright.
+    const O = L.oracle;
+    if (O && q.read && !done) {
+      const c = Math.cos(O.face), s = Math.sin(O.face);
+      (q.order ?? []).forEach((i, k) => put(O.wx + c * 0.9 - s * (k - 1.5) * 0.32, 2.55, O.wz + s * 0.9 + c * (k - 1.5) * 0.32, 0.7, lit(i) ? ZM_LANTERNS[i].hex : dim(ZM_LANTERNS[i].hex, 0.45)));
+    }
+    // The high striker's lamps up its scale: one a lantern lit; all four ringing once the Barker is out.
+    const Al = L.altar;
+    if (Al) for (let k = 0; k < L.relics.length; k++) put(Al.wx, 1.4 + k * 0.8, Al.wz + 0.12, 0.6, k < n0 || done ? (q.state === 1 ? (Math.sin(t * 10 + k) > 0 ? 0xffd27a : 0xff4a3a) : 0xffd27a) : 0x2a2018);
+    return n;
   }
 
   dispose() {
