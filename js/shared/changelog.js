@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'The undead, remade',
+    build: '1120-4', date: '2026-11-20', title: 'The undead, remade',
     items: [
       'Every kind of undead in Graveyard Shift has its own body now: the hunched, limping Shambler in a torn shirt, the lean Runner pumping its arms, the hulking Brute, the legless Crawler dragging itself along, the Spitter with its swollen glowing throat, the Bloater studded with glowing pustules, and the Shieldbearer behind a battered door.',
       'The Yardmaster, the Gravewarden, the Listener and the Barker are huge and each one its own: a coupling spike and a lantern on its back, a robe and a violet lantern, a faceless hood and a radio aerial, a red tailcoat and a brass trumpet.',
