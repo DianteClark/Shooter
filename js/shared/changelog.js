@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Every operator remade',
+    build: '1120-3', date: '2026-11-20', title: 'Every operator remade',
     items: [
       'Every Mastery skin is now a full costume, each one different: a knight, a samurai, a lion king, a shark, a spider, a dragon, a deep-sea diver, a wizard, a walking tank, a scarecrow with his crow and more. All of them keep your team colour where it shows from above.',
       'Every Elite skin now has its own living effect running over the whole outfit: flames, frost, lightning, code rain, a heartbeat trace, thermal vision, falling snow and plenty more.',
