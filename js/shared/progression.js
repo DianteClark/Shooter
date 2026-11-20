@@ -1961,7 +1961,8 @@ function buildPool() {
   // Modes beyond the four team rule sets (Free-for-All, Gun Game, ...) join the pool when they exist. A free-for-all
   // also brings a placing goal.
   const extra = new Map();
-  for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules)) extra.set(m.rules, m);
+  // (The campaign stays out: its missions are not matches to grind, and adding it would reshuffle everyone's dailies.)
+  for (const m of Object.values(MODES)) if (!TEAM_RULES.has(m.rules) && !extra.has(m.rules) && !m.cp) extra.set(m.rules, m);
   for (const [rules, m] of extra) {
     pool.push({ ...d(`mode.${rules}`, 'mode', `played:${rules}`, 2, 1500, `mode:${m.id}`, `Play 2 ${m.name} matches`), mode: m.id });
     // Counted per rule set (`top3:<rules>`): the label names one mode, so a Gun Game podium does not move a Free-for-All one.
