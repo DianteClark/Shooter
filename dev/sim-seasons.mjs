@@ -469,9 +469,11 @@ console.log('names');
   // list the same way.
   // + the weekly events' emblems (js/shared/events.js) and the tournament crest (docs/TOURNAMENTS.md), kept out the same way.
   const { EVENT_EMBLEMS, TOURNEY_EMBLEMS } = await import('../js/ui/emblems.js');
-  // 14 feats: the Listener's Dead Frequency (Polestar Relay, 1118-6) is the thirteenth, the Barker's (Wrenfield Fair) the fourteenth.
   // 141 (three seasons of 40 + 7 ranked crests) - 6: Season 2's Signal Fire skin set took six emblem tiers (fillerSkinTiers), and those emblems left the season.
-  ok(EMBLEMS.length === 22 && ALL_EMBLEMS.length === 22 + 141 - 6 + 1 + 14 + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && getEmblem('s1-emb-01') && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list');
+  // Feats are counted rather than listed: other builders add them (the campaign's Nightrail was the fifteenth).
+  const feats = ALL_EMBLEMS.filter(e => /^feat-/.test(e.id)).length, seasonal = ALL_EMBLEMS.filter(e => e.season).length;
+  ok(EMBLEMS.length === 22 && seasonal === 141 - 6 && ALL_EMBLEMS.length === 22 + seasonal + 1 + feats + EVENT_EMBLEMS.length + TOURNEY_EMBLEMS.length && feats >= 14
+    && getEmblem('s1-emb-01') && getEmblem('s3-emb-40') && !EMBLEMS.some(e => e.season) && EVENT_EMBLEMS.length >= 4, 'season and event emblems stay out of the pool\'s list', `${seasonal} seasonal, ${feats} feats`);
   // The weekly events' rewards and names clash with nothing either.
   const { EVENTS } = await import('../js/shared/events.js');
   const evNames = EVENTS.flatMap(e => [e.reward.name]);
