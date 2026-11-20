@@ -269,7 +269,7 @@ export class ZmRules {
 
   _raise(p, kind, spot) {
     const sim = this.sim, K = ZM.kinds[ZM_KINDS[kind]];
-    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0; p.zFrozenT = 0; p.zChill = 0;
+    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0; p.zFrozenT = 0; p.zChill = 0; p.zHoldT = 0;
     sim._placeAt(p, spot, Math.atan2(sim.map.height / 2 - spot.z, sim.map.width / 2 - spot.x));
     p.hp = p.zMax = zmMaxHp(kind, this.hp, this.crew.length, this.humans);
     p.zSwing = 0; p.zCool = 0.4 + this.rng() * 0.4; p.zT = null; p.zStuck = 0; p.zLastX = spot.x; p.zLastZ = spot.z; p.zStuckT = 0;
@@ -398,7 +398,8 @@ export class ZmRules {
     I.mx = 0; I.mz = 0; I.aim = ps.aim; I.sprint = false;
     if (this.state === 3) { stepPlayer(ps, I, dt, sim.map, sim.rng); return; }
     // Frozen solid (the Rimecaster): it neither walks nor claws until it thaws.
-    if (p.zFrozenT > sim.time) { p.zSwing = 0; p.zStuckT = 0; stepPlayer(ps, I, dt, sim.map, sim.rng); return; }
+    // Held (the Barker winding up and running its charge: js/sim/zm-fair.js moves it): the same.
+    if (p.zFrozenT > sim.time || p.zHoldT > sim.time) { p.zSwing = 0; p.zStuckT = 0; stepPlayer(ps, I, dt, sim.map, sim.rng); return; }
     // Target: the nearest player who is up, by path. A zombie shouldering a wall stands in a cell the grid calls blocked:
     // it reads the field from the nearest free one.
     let cell = nav.idx(ps.x, ps.z);
@@ -993,7 +994,9 @@ export class ZmRules {
     if (!L.relics?.length || q.state || this.round < 3 || this.state === 3) return null;
     const mine = q.tuneI >= 0 && q.tuneBy === p.index;
     if (!mine && [...crew].reverse().find(b => b.p.alive && !b.p.downed && b.p.zm && b.p.isBot)?.p !== p) return null;
-    if (!mine && this.state === 1 && (this._count(p, 12) > 0 || this.killed < this.count * 0.15)) return null;
+    // Lanterns burning (Wrenfield Fair): no waiting for a quiet moment, the clock is running.
+    const burning = L.questKind === 'lantern' && q.burnT > 0;
+    if (!mine && !burning && this.state === 1 && (this._count(p, 12) > 0 || this.killed < this.count * 0.15)) return null;
     if (mine) { const r = L.relics[q.tuneI]; return { x: r.x, z: r.z, use: { kind: 'relic', i: r.i, cost: 0, ok: true } }; }
     const left = L.relics.filter(r => !(q.got & (1 << r.i)) && bandOpen(L, this.open, r.band));
     const all = L.relics.every(r => q.got & (1 << r.i));
@@ -1003,6 +1006,16 @@ export class ZmRules {
       return { x: L.altar.x, z: L.altar.z, use: { kind: 'altar', i: 0, cost: 0, ok: true } };
     }
     if (L.questKind === 'radio' && (!this.power || q.tuneI >= 0)) return null;
+    if (L.questKind === 'lantern') {
+      // The Oracle first (it needs the power), then the next lantern in its order, whichever that is.
+      if (!this.power) return null;
+      if (!q.read) return L.oracle ? { x: L.oracle.x, z: L.oracle.z, use: { kind: 'oracle', i: 0, cost: 0, ok: true } } : null;
+      const next = L.relics[q.order[L.relics.filter(r => q.got & (1 << r.i)).length]];
+      if (!next) return null;
+      if (bandOpen(L, this.open, next.band)) return { x: next.x, z: next.z, use: { kind: 'relic', i: next.i, cost: 0, ok: true } };
+      // Shut away: the gates on the way, while it keeps something back for itself.
+      return this._gateToward(p, next.band, 1500);
+    }
     let best = null, bd = 50;
     for (const r of left) { const d = Math.hypot(r.x - p.ps.x, r.z - p.ps.z); if (d < bd) { bd = d; best = r; } }
     return best ? { x: best.x, z: best.z, use: { kind: 'relic', i: best.i, cost: 0, ok: true } } : null;
@@ -1098,23 +1111,31 @@ export class ZmRules {
     if (crew.find(b => b.p.alive && !b.p.downed && b.p.zm)?.p !== p) return null;
     if (this.state === 1 && this._near(p, 5)) return null;
     if (bandOpen(L, this.open, L.power.band)) return { x: L.power.x, z: L.power.z, use: { kind: 'power', i: 0, cost: 0, ok: true } };
-    // Gates from the power area outward: how many each area is from it.
-    if (!this._pDist) {
-      const dist = L.bands.map(() => Infinity);
-      dist[L.power.band] = 0;
+    return this._gateToward(p, L.power.band);
+  }
+
+  // The next gate a bot can pay for on the way to area `band` (the one whose far side is fewest gates from it): a run
+  // { x, z, use } or null.
+  _gateToward(p, band, spare = 0) {
+    const L = this.L;
+    const dists = this._bandDist ??= new Map();
+    let dist = dists.get(band);
+    if (!dist) {
+      dist = L.bands.map(() => Infinity);
+      dist[band] = 0;
       for (let grew = true; grew;) {
         grew = false;
         for (const d of L.doors) for (const [u, v] of [[d.a ?? d.from, d.b ?? d.opens], [d.b ?? d.opens, d.a ?? d.from]]) if (dist[u] + 1 < dist[v]) { dist[v] = dist[u] + 1; grew = true; }
       }
-      this._pDist = dist;
+      dists.set(band, dist);
     }
     let best = null, bd = Infinity;
     for (const d of L.doors) {
-      if (this.open & (1 << d.i) || p.zm.pts < d.cost) continue;
+      if (this.open & (1 << d.i) || p.zm.pts < d.cost + spare) continue;
       const at = zmDoorStand(L, this.open, d);
       if (!at) continue;
       const far = bandOpen(L, this.open, d.a ?? d.from) ? (d.b ?? d.opens) : (d.a ?? d.from);
-      const sc = this._pDist[far] * 100 + Math.hypot(at.x - p.ps.x, at.z - p.ps.z);
+      const sc = dist[far] * 100 + Math.hypot(at.x - p.ps.x, at.z - p.ps.z);
       if (sc < bd) { bd = sc; best = { x: at.x, z: at.z, use: { kind: 'door', i: d.i, cost: d.cost, ok: true } }; }
     }
     return best;

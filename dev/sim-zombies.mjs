@@ -30,10 +30,18 @@
 //                walking off, the console waits for all three) and the Listener (rises in the Mast Field, its bar, the
 //                frost pulse hurts inside the ring only, Crawlers at its call, pays everyone, off the count); the quest
 //                and the Listener on a guest and through a migration; a bot throws the power
+//   wrenfield    the third purpose-built map: seven areas in a loop, the Generator Yard off two sides, three dead ends,
+//                the economy on its spots; the lantern quest (the Oracle needs the power and tells a seeded order, a cold
+//                lantern waits for it, lit in order, a wrong one puts them all out and sends runners, the burn, the
+//                bell waits for all four) and the Barker (rises in the Big Top, its bar, the charge: a lane marked
+//                toward the nearest, held still while it shows, then run, hurting only those in it; bots step out of
+//                it; runners at its call, pays everyone, off the count); the quest and the Barker on a guest and
+//                through a migration; bots throw the power, ask the Oracle and light the lanterns in order
 //   wonders      the crate's wonder weapons: rolled about 8% of the time, never one held, never on a wall; in hand at
 //                their tier with their own def (host and phone), their own name, refused by the bench; the Stormcoil's
 //                bolt jumps through a crowd; the Rimecaster freezes in three hits, a frozen zombie stands still and
-//                shatters on its neighbours; bosses are slowed, never frozen
+//                shatters on its neighbours; bosses are slowed, never frozen; the Whirligig's whirl drags a crowd in
+//                (not one out of reach, not a boss) and bursts
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS, MAP_IDS } from '../js/shared/map.js';
 import { NavGrid } from '../js/sim/nav.js';
@@ -98,7 +106,9 @@ for (const id of ZM_MAP_IDS) {
   ok(L.doors.length === (L.graph ? map.zm.gates.length : L.def.cuts.length), `${id}: one gate per ${L.graph ? 'declared gate' : 'cut'} (${L.doors.length})`);
   ok(L.machines.length === 6 && new Set(L.machines.map(m => m.perk)).size === 6, `${id}: six perk machines`);
   ok(L.bench && L.terminal && L.armour && L.exfil && L.altar, `${id}: bench, terminal, armour bench, exfil pad and altar placed`);
-  ok(L.traps.length >= 2 && L.traps.length <= 3 && L.relics.length === 3 && new Set(L.relics.map(r => r.band)).size === 3, `${id}: 2-3 traps (${L.traps.length}), three relics in three areas`);
+  // Three relics or radios; Wrenfield Fair's four lanterns.
+  const nq = L.questKind === 'lantern' ? 4 : 3;
+  ok(L.traps.length >= 2 && L.traps.length <= 3 && L.relics.length === nq && new Set(L.relics.map(r => r.band)).size === nq, `${id}: 2-3 traps (${L.traps.length}), ${nq} quest steps in ${nq} areas`);
   ok(L.bands[L.terminal.band].depth === 0, `${id}: the terminal is in the start area`);
   ok(L.wallBuys.filter(w => w.band === L.start).length >= 2, `${id}: two wall-buys in the start band`);
   ok(L.boxSpots.length >= 2, `${id}: crate spots ${L.boxSpots.length}`);
@@ -762,6 +772,213 @@ section('polestar');
   clearZmWalls(sim.map);
 }
 
+// ---- Wrenfield Fair: the third purpose-built map, the lantern quest and the Barker ----
+section('wrenfield');
+{
+  const map = MAPS.wrenfield, L = zmLayout(map);
+  const { syncZmDoors, reblockNav, ZE, ZM_BARKER, ZM_LANTERNS, lanternOrder, lanternOrderText } = await import('../js/shared/zombies.js');
+  const area = id => L.bands.findIndex(b => b.id === id);
+  ok(map.zmOnly && map.hidden && !MAP_IDS.includes('wrenfield') && mapModes(map).join() === 'zm' && map.theme === 'wrenfield', 'Graveyard Shift only: hidden, hosts zm alone, its own theme');
+  ok(L.graph && L.bands.length === 7 && L.bands.every(b => b.cells.length > 150), `seven areas, all with floor (${L.bands.map(b => b.cells.length)})`);
+  ok(L.bands[L.start].id === 'gate' && L.doors.length === 8, 'starts at the Ticket Gate, eight gates');
+  const joins = (x, y) => L.doors.some(d => (d.a === area(x) && d.b === area(y)) || (d.a === area(y) && d.b === area(x)));
+  ok(['gate', 'midway', 'carousel', 'wheel', 'ring', 'ghost', 'gate'].every((x, i, a) => i === 0 || joins(a[i - 1], x)), 'the gates make a loop');
+  ok(joins('midway', 'works') && joins('ring', 'works') && !joins('gate', 'works'), 'the Generator Yard opens from the Midway and the Big Top, not from the start');
+  ok(L.power && L.power.band === area('works'), 'the power switch is in the Generator Yard');
+  ok(L.boss && L.boss.band === area('ring') && L.boss.spots.every(p => L.band[L.cellAt(p.x, p.z)] === L.boss.band), 'boss spots in the Big Top');
+  ok(L.bands.every(b => b.i === area('ring') || b.cells.length < L.bands[area('ring')].cells.length), `the boss arena is the roomiest (${L.bands[area('ring')].cells.length} m2)`);
+  ok(L.boxSpots.length === 4 && new Set(L.boxSpots.map(b => b.band)).size === 4, 'four crate spots in four areas');
+  ok(L.machines.length === 6 && L.wallBuys.length >= 10 && L.bands.every(b => L.risers[b.i].length >= 6), 'six machines, ten-plus wall-buys, spawn windows in every area');
+  ok(L.bench.band === area('wheel') && L.terminal.band === L.start && L.armour.band === area('midway') && L.exfil.band === area('ghost'), 'bench in the Wheel Yard, terminal at the start, armour one gate out, exfil at the Ghost Train');
+  ok(L.traps.length === 3 && L.traps.every(t => L.doors.some(d => Math.hypot(d.cx - t.x, d.cz - t.z) < 4)), 'three traps, each at a gate');
+  ok(L.questKind === 'lantern' && L.altar.band === area('ring') && L.oracle?.band === L.start && L.relics.map(r => L.bands[r.band].id).sort().join() === 'carousel,ghost,midway,wheel',
+    'a lantern quest: the Oracle at the start, the striker in the Big Top, lanterns in the Midway, Carousel Green, Wheel Yard and Ghost Train');
+  placeZmWalls(map, (1 << L.doors.length) - 1);
+  const nav = new NavGrid(map);
+  for (const [name, inside, door] of [['prize tent', [3, 49], [7, 44.5]], ['organ shed', [4, 4], [7, 8.5]], ['tunnel exit', [77, 48], [78.5, 41.5]]]) {
+    const saved = nav.blocked.slice();
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -1; dz <= 1; dz++) nav.blocked[nav.idx(door[0] + dx, door[1] + dz)] = 1;
+    const seen = reach(nav, inside[0], inside[1]);
+    let n = 0; for (let k = 0; k < seen.length; k++) n += seen[k];
+    ok(n > 10 && n < 100, `${name}: a dead end (${n} cells behind its one doorway)`);
+    nav.blocked.set(saved);
+  }
+  clearZmWalls(map);
+  ok(L.doors.every(d => Object.keys(d.stand).length === 2), 'every gate has a stand point on each side');
+  // The order: a permutation of the four, from the seed, the same everywhere; seeds differ.
+  const orders = new Set();
+  for (let s = 0; s < 40; s++) { const o = lanternOrder(s); ok(o.slice().sort().join() === '0,1,2,3', `order ${o} is a permutation`); orders.add(o.join()); }
+  ok(orders.size >= 12 && lanternOrderText([3, 0, 2, 1]) === 'Gold, Red, Blue, Green' && ZM_LANTERNS.length === 4, `orders vary with the seed (${orders.size} of 24 in 40 seeds)`);
+
+  // The quest: the Oracle needs the power; a cold lantern waits for it; lit in order; a wrong one puts them all out
+  // and sends runners; the burn; the bell; the Barker.
+  const sim = makeSim('wrenfield', 81, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, E = R.econ, me = R.crew.find(p => !p.isBot);
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(sim.map, R.open); for (const d of L.doors) reblockNav(sim.nav, sim.map, d); R.fields.clear();
+  R._startRound(12); R.spawnT = 999;
+  const use = () => sim.applyCommand(me.id, { cmd: 'zm', act: 'use' });
+  const at = s => { me.ps.x = s.x; me.ps.z = s.z; };
+  const order = E.quest.order;
+  ok(order.join() === lanternOrder(81).join(), `the order comes from the match seed (${lanternOrderText(order)})`);
+  at(L.oracle);
+  const dark = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(dark?.kind === 'oracle' && dark.off && /power/i.test(dark.why) && !use(), `the Oracle is dark with the power off (${dark?.why})`);
+  at(L.relics[order[0]]);
+  const cold = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(cold?.kind === 'relic' && cold.off && /Oracle/.test(cold.why) && !use(), `a lantern is cold until the Oracle is asked (${cold?.why})`);
+  R.power = 1;
+  at(L.oracle);
+  sim.drainEvents();
+  ok(use() && E.quest.read === 1 && sim.drainEvents().some(e => e.t === 'zoracle' && e.order.join() === order.join()), 'the Oracle tells the order (free)');
+  const told = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(told?.off && told.why === lanternOrderText(order), `and keeps telling it (${told?.why})`);
+  // First two in order, then a wrong one: all out, runners come.
+  at(L.relics[order[0]]);
+  ok(use() && E.quest.got === 1 << order[0] && Math.abs(E.quest.burnT - ZE.quest.burn) < 0.1, `the first lantern lights and the burn starts (${ZE.quest.burn} s)`);
+  at(L.relics[order[1]]);
+  ok(use() && E.quest.got === ((1 << order[0]) | (1 << order[1])), 'the second in order lights');
+  const live0 = R.horde.filter(q => q.alive).length;
+  at(L.relics[order[3]]);
+  sim.drainEvents();
+  ok(use() && E.quest.got === 0 && E.quest.burnT === 0 && sim.drainEvents().some(e => e.t === 'zlantern' && e.state === 0), 'a wrong one puts every lantern out');
+  ok(R.horde.filter(q => q.alive).length >= live0 + ZE.quest.wrong - 1, 'and the fair sends runners');
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.zFree = 0; }
+  // The burn: the first lit, the clock runs out, all out.
+  at(L.relics[order[0]]); use();
+  let out = false;
+  run(sim, ZE.quest.burn - 1);
+  ok(E.quest.got === 1 << order[0], 'still burning a second before the end');
+  run(sim, 1.5, e => { if (e.t === 'zlantern' && e.state === 2) out = true; });
+  ok(out && E.quest.got === 0, 'burnt out: the lanterns go dark');
+  // The bell waits for all four.
+  at(L.altar);
+  const bell = zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me));
+  ok(bell?.kind === 'altar' && bell.off && /0 of 4/.test(bell.why) && !use(), `the striker waits for the lanterns (${bell?.why})`);
+  const got = [];
+  for (const i of order) { at(L.relics[i]); ok(use(), `lantern ${i} lit`); run(sim, 0.1, e => { if (e.t === 'zrelic') got.push(e.n); }); }
+  ok(got.join() === '1,2,3,4' && E.quest.got === 15 && E.quest.burnT === 0, `all four lit, and they stay lit (${got})`);
+  run(sim, ZE.quest.burn + 2);
+  ok(E.quest.got === 15, 'four lit do not burn down');
+  at(L.altar);
+  sim.drainEvents();
+  ok(zmUsable(L, me.ps.x, me.ps.z, R._stateFor(me))?.label === 'Ring the bell' && use() && E.quest.state === 1 && sim.drainEvents().some(e => e.t === 'zwarden' && e.state === 1 && e.k === ZK.barker), 'ringing the bell');
+  run(sim, 1.5);
+  const w = sim.players[E.wardenSeat];
+  ok(w?.alive && w.zk === ZK.barker && w.zMax >= R.hp * ZM.kinds.barker.hp, `the Barker rises (${w?.zMax} hp)`);
+  ok(w && L.band[L.cellAt(w.ps.x, w.ps.z)] === area('ring'), 'in the Big Top');
+  ok(R.view().boss?.warden && R.view().boss.k === ZK.barker, 'its bar shows, as the Barker');
+  // The charge: a lane marked toward the nearest of the crew in sight, it stands still while it winds up, then runs
+  // it: a mate in the lane is hurt, one beside it is not.
+  const mate = R.crew.find(p => p.isBot), side = R.crew.filter(p => p.isBot)[1];
+  w.ps.x = 62; w.ps.z = 8; w.zHoldT = 0;
+  for (const q of R.horde) if (q.alive && q !== w) { q.alive = false; q.zFree = 0; }
+  E.quest.callT = 999;
+  me.ps.x = 40; me.ps.z = 44;
+  mate.ps.x = 70; mate.ps.z = 8.6; mate.hp = 100; mate.spawnProtect = 0;
+  side.ps.x = 70; side.ps.z = 12.6; side.hp = 100; side.spawnProtect = 0;
+  for (const p of R.crew) p.downed = false;
+  E.quest.chargeT = 0.02;
+  let lane = null;
+  run(sim, 0.1, e => { if (e.t === 'zcharge') lane = e; });
+  ok(lane && lane.w === ZM_BARKER.w && lane.wind === ZM_BARKER.wind && lane.len >= 8 && Math.abs(lane.a - Math.atan2(mate.ps.z - 8, mate.ps.x - 62)) < 0.2, `a lane marked toward the nearest (${lane?.len} m)`);
+  const wx = w.ps.x, wz = w.ps.z;
+  run(sim, ZM_BARKER.wind - 0.3);
+  ok(Math.hypot(w.ps.x - wx, w.ps.z - wz) < 0.1 && mate.hp === 100, 'it holds still while the lane shows, nobody hurt yet');
+  run(sim, 0.3 + ZM_BARKER.dash + 0.2);
+  ok(Math.hypot(w.ps.x - wx, w.ps.z - wz) > 6, `then it runs the lane (${Math.hypot(w.ps.x - wx, w.ps.z - wz).toFixed(1)} m)`);
+  ok(mate.hp < 100 || mate.downed, `a mate in the lane is hit (${mate.hp})`);
+  ok(side.hp === 100 && !side.downed, 'one beside it is not');
+  // A bot standing in a marked lane steps out sideways.
+  E.quest.charge = { x: 60, z: 10, a: 0, len: 12, t: 1, run: 0, hit: new Set() };
+  const off = R.kinds.dodge({ x: 65, z: 10.4 });
+  ok(off && Math.abs(off.x) < 0.01 && off.z > 0.9, 'a bot in the lane steps out of it sideways');
+  ok(!R.kinds.dodge({ x: 65, z: 14 }), 'one clear of it stays put');
+  E.quest.charge = null;
+  E.quest.callT = 0.01;
+  const run0 = R.horde.filter(q => q.alive && q.zk === ZK.runner).length;
+  run(sim, 0.1);
+  ok(R.horde.filter(q => q.alive && q.zk === ZK.runner).length > run0, 'it calls runners');
+  for (const p of R.crew) p.spawnProtect = 1e9;
+  const z = unpackZombie(packZombie(3, w.ps.x, w.ps.z, 0, ZK.barker, false));
+  ok(z.kind === ZK.barker, 'the Barker packs (kind 11)');
+  const k0 = R.killed, pts = R.crew.map(p => p.zm.pts);
+  let down = null;
+  sim._damage(w, me, w.hp + 10, 'ar', 5);
+  run(sim, 0.1, e => { if (e.t === 'zwarden' && e.state === 2) down = e; });
+  ok(!w.alive && E.quest.state === 2 && down?.k === ZK.barker, 'put down: the quest is done');
+  ok(R.killed === k0 && R.crew.every((p, k) => p.zm.pts >= pts[k] + ZE.quest.pts), 'it pays everyone and is off the round count');
+  clearZmWalls(sim.map);
+}
+{
+  // The lanterns across the wire and a host migration: the order, the burn, the Barker and its bar.
+  const { syncZmDoors, reblockNav } = await import('../js/shared/zombies.js');
+  const humans = [{ id: 'h1', name: 'Host', team: 0 }, { id: 'h2', name: 'Guest', team: 0 }];
+  const roster = buildRoster(humans, { mode: 'zm', mapId: 'wrenfield', seed: 7 });
+  const host = new Sim({ roster, map: 'wrenfield', seed: 7, mode: 'zm' });
+  host.step(DT); toLive(host);
+  const R = host.rules, L = R.L, E = R.econ;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.bot) p.bot.update = () => []; }
+  R.plan = () => {}; R._crewPlan = null;
+  for (const d of L.doors) R.open |= 1 << d.i;
+  syncZmDoors(host.map, R.open); for (const d of L.doors) reblockNav(host.nav, host.map, d); R.fields.clear();
+  R.power = 1; R._startRound(11); R.spawnT = 999;
+  const h1 = host.players.find(p => p.id === 'h1');
+  const go = s => { h1.ps.x = s.x; h1.ps.z = s.z; host.applyCommand('h1', { cmd: 'zm', act: 'use' }); };
+  go(L.oracle); go(L.relics[E.quest.order[0]]);
+  run(host, 3);
+  const map2 = { ...MAPS.wrenfield, walls: MAPS.wrenfield.walls.filter(w => !w.zm).map(w => ({ ...w })) };
+  const guest = new Sim({ roster, map: map2, seed: 99, mode: 'zm' });
+  let view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  const q = (view.obj ?? view.points.obj).quest;
+  ok(q.read === 1 && q.got === 1 << E.quest.order[0] && q.order.join() === E.quest.order.join() && Math.abs(q.burnT - E.quest.burnT) < 0.2, `a guest sees the order, the lit lantern and the burn (${q.order}, ${q.burnT})`);
+  for (const i of E.quest.order.slice(1)) go(L.relics[i]);
+  go(L.altar);
+  run(host, 1.5);
+  const w = host.players[E.wardenSeat];
+  w.hp = Math.round(w.zMax * 0.6);
+  host.step(DT); host.drainEvents();
+  view = guest.decodeSnapshot(JSON.parse(JSON.stringify(host.encodeSnapshotFor('h2'))), 'h2');
+  const obj = view.obj ?? view.points.obj;
+  ok(obj.boss?.warden && obj.boss.k === ZK.barker && Math.abs(obj.boss.hp - 0.6) < 0.02, `a guest sees the Barker's bar (${obj.boss?.hp?.toFixed(2)})`);
+  ok(view.players[w.index].zk === ZK.barker + 1, 'and the Barker itself (view zk 12)');
+  if (guest._restoreMode) {
+    guest.players.forEach((p, i) => { const v = view.players[i]; p.alive = v.alive; p.ps.x = v.x; p.ps.z = v.z; });
+    guest._restoreMode(view);
+    const G = guest.rules, gw = guest.players[G.econ.wardenSeat];
+    ok(G.econ.quest.state === 1 && gw?.zk === ZK.barker && Math.abs(gw.hp / gw.zMax - 0.6) < 0.02, 'a migration keeps the Barker at the health its bar showed');
+    for (const p of G.crew) { p.spawnProtect = 1e9; p.ps.x = gw.ps.x + 6; p.ps.z = gw.ps.z; }
+    let charged = false;
+    for (let i = 0; i < 12 * SIM_HZ && !charged; i++) { guest.step(DT); charged = guest.drainEvents().some(e => e.t === 'zcharge'); }
+    ok(charged, 'and the new host carries on with its charges');
+  }
+  clearZmWalls(map2); clearZmWalls(host.map);
+}
+{
+  // Bots on Wrenfield Fair: one throws the power (solo, from round 3, buying the gates on the way), then a bot asks the
+  // Oracle and lights the lanterns in order.
+  const sim = makeSim('wrenfield', 83, [{ id: 'me', name: 'Me', team: 0 }]);
+  toLive(sim);
+  const R = sim.rules, E = R.econ;
+  for (const p of R.crew) { p.spawnProtect = 1e9; if (p.zm) p.zm.pts = 12000; }
+  R._startRound(3);
+  R.spawnT = 999;
+  let by = null, read = null;
+  const lit = [];
+  const watch = e => { if (e.t === 'zlights') by = e.by; if (e.t === 'zoracle') read = e.by; if (e.t === 'zrelic') lit.push(e.i); };
+  for (let t = 0; t < 150 && !R.power; t += 5) run(sim, 5, watch);
+  // Then a long break between rounds: the quest's quiet moment.
+  R._endRound(); R.timer = 999;
+  run(sim, 200, watch);
+  ok(R.power === 1 && R.crew.find(p => p.id === by)?.bot, `a bot teammate throws the power (${by})`);
+  ok(read && R.crew.find(p => p.id === read)?.bot, 'a bot asks the Oracle');
+  ok(lit.length >= 1 && lit.every((i, k) => i === E.quest.order[k % 4]), `bots light lanterns in the Oracle's order (${lit} of ${E.quest.order})`);
+  clearZmWalls(sim.map);
+}
+
 // ---- Wonder weapons: the crate's Stormcoil and Rimecaster, on every map ----
 section('wonders');
 {
@@ -769,17 +986,17 @@ section('wonders');
   const { zmTierDef, zmEvent } = await import('../js/sim/zm-phone.js');
   const { WEAPONS } = await import('../js/shared/weapons.js');
   const { WEAPON_IDS } = await import('../js/shared/constants.js');
-  const C = ZM_WONDERS.coil, F = ZM_WONDERS.rime;
-  ok(BOX_GUNS.slice(BOX_ROLL).join() === [C.gun, F.gun].join() && BOX_GUNS.slice(0, BOX_ROLL).every(g => !zmWonderOf(g)), 'the wonder carriers ride at the end of the crate list');
+  const C = ZM_WONDERS.coil, F = ZM_WONDERS.rime, Wh = ZM_WONDERS.whirl;
+  ok(BOX_GUNS.slice(BOX_ROLL).join() === [C.gun, F.gun, Wh.gun].join() && BOX_GUNS.slice(0, BOX_ROLL).every(g => !zmWonderOf(g)), 'the wonder carriers ride at the end of the crate list');
   for (const id of ZM_MAP_IDS) ok(zmLayout(MAPS[id]).wallBuys.every(w => !zmWonderOf(w.gun)), `${id}: no wall sells a wonder carrier`);
-  ok(!zmUpgradable(C.gun) && !zmUpgradable(F.gun) && zmUpgradable('ar'), 'wonder weapons cannot be upgraded');
+  ok(!zmUpgradable(C.gun) && !zmUpgradable(F.gun) && !zmUpgradable(Wh.gun) && zmUpgradable('ar'), 'wonder weapons cannot be upgraded');
   // Rolls: about ZM_WONDER_ROLL of them, both kinds, never one the roller holds.
   const sim = makeSim('neon', 95, [{ id: 'me', name: 'Me', team: 0 }]);
   toLive(sim);
   const R = sim.rules, me = R.crew.find(p => !p.isBot);
   let wn = 0; const kinds = new Set();
   for (let i = 0; i < 3000; i++) { const g = BOX_GUNS[R._rollGun(me)]; if (zmWonderOf(g)) { wn++; kinds.add(g); } }
-  ok(Math.abs(wn / 3000 - ZM_WONDER_ROLL) < 0.025 && kinds.size === 2, `a roll offers a wonder ${(wn / 30).toFixed(1)}% of the time, both kinds`);
+  ok(Math.abs(wn / 3000 - ZM_WONDER_ROLL) < 0.025 && kinds.size === 3, `a roll offers a wonder ${(wn / 30).toFixed(1)}% of the time, all three kinds`);
   R._give(me, C.gun);
   let held = 0;
   for (let i = 0; i < 2000; i++) if (BOX_GUNS[R._rollGun(me)] === C.gun) held++;
@@ -835,6 +1052,35 @@ section('wonders');
   const boss = raise(...spot(-2, 0), 3);
   for (let i = 0; i < 6; i++) sim._damage(boss, me, 20, F.gun, 5);
   ok(!(boss.zFrozenT > sim.time) && boss.zSlowT > sim.time && boss.hp > boss.zMax * 0.97, 'a boss is slowed, never frozen, and barely scratched');
+  // The Whirligig (Wrenfield Fair's): a hit spins a whirl up that drags the crowd in, grinds it, then bursts.
+  for (const q of R.horde) if (q.alive) { q.alive = false; q.zFree = 0; }
+  R._give(me, Wh.gun);
+  ok(me.ps.defs[me.ps.slot].zw === 'whirl' && me.zm.tiers[Wh.gun] === Wh.tier && zmGunName(Wh.gun, WEAPONS) === 'Whirligig', 'the Whirligig in hand, by its own name');
+  const eye = raise(...spot(0, 0));
+  const ring = [[3, 0.5], [-1, 3], [2.5, -2.5]].map(([dx, dz]) => raise(...spot(dx, dz)));
+  const far = raise(...spot(9, 0));
+  for (const q of [eye, ...ring, far]) q.hp = q.zMax = R.hp * 3;
+  me.ps.x = bx - 12; me.ps.z = bz;
+  const d0 = ring.map(q => Math.hypot(q.ps.x - eye.ps.x, q.ps.z - eye.ps.z));
+  const ex = eye.ps.x, ez = eye.ps.z, farHp = far.hp;
+  sim.drainEvents();
+  sim._damage(eye, me, 40, Wh.gun, 12);
+  const wz = sim.drainEvents().find(e => e.t === 'zwhirl');
+  ok(wz && wz.r === Wh.r && R.econ.whirls.length === 1, 'a hit sets a whirl spinning (zwhirl)');
+  run(sim, 1);
+  const d1 = ring.map(q => Math.hypot(q.ps.x - ex, q.ps.z - ez));
+  ok(d1.every((d, k) => d < d0[k] - 0.8), `the crowd round it is dragged in (${d0.map(v => v.toFixed(1))} -> ${d1.map(v => v.toFixed(1))})`);
+  ok(Math.hypot(far.ps.x - bx - 9, far.ps.z - bz) < 4 && far.hp === farHp, 'one out of its reach is not');
+  let pop = null;
+  run(sim, Wh.life, e => { if (e.t === 'zfx' && e.k === 'whirlpop') pop = e; });
+  ok(pop && R.econ.whirls.length === 0, 'then it bursts');
+  ok(ring.every(q => !q.alive || q.hp < q.zMax - R.hp * Wh.pop * 0.9), 'the burst hurts the crowd it gathered');
+  const big = raise(...spot(-3, 0), 3), bxx = big.ps.x;
+  big.zHoldT = sim.time + 5;     // Its own feet out of it: only the whirl could move it.
+  me.ps.x = big.ps.x - 10;
+  sim._damage(big, me, 40, Wh.gun, 10);
+  run(sim, 1);
+  ok(Math.abs(big.ps.x - bxx) < 1.5 && big.hp > big.zMax * 0.9, 'a boss is not dragged, barely scratched');
   clearZmWalls(sim.map);
 }
 
@@ -1403,7 +1649,7 @@ section('determinism');
 {
   const sig = sim => JSON.stringify([sim.tick, sim.rules.round, sim.rules.killed, sim.rules.crew.map(p => [p.zm.pts, Math.round(p.ps.x * 100), Math.round(p.ps.z * 100)]),
     sim.rules.horde.map(p => (p.alive ? [Math.round(p.ps.x * 100), Math.round(p.ps.z * 100), Math.round(p.hp)] : 0))]);
-  for (const id of ['foundry', 'ashgrove', 'polestar']) {
+  for (const id of ['foundry', 'ashgrove', 'polestar', 'wrenfield']) {
     const a = makeSim(id, 77), b = makeSim(id, 77);
     let same = true;
     for (let t = 0; t < (QUICK ? 40 : 80) && same; t++) { run(a, 1); run(b, 1); same = sig(a) === sig(b); }
@@ -1413,7 +1659,7 @@ section('determinism');
 
 // ---- Performance: a round-20 and a round-30 horde, with the economy busy (every trap armed, sentries, drones) ----
 section('perf');
-for (const id of QUICK ? ['neon', 'ashgrove', 'polestar'] : ZM_MAP_IDS) for (const round of [20, 30]) {
+for (const id of QUICK ? ['neon', 'ashgrove', 'polestar', 'wrenfield'] : ZM_MAP_IDS) for (const round of [20, 30]) {
   const sim = makeSim(id, 99);
   toLive(sim);
   const R = sim.rules;
