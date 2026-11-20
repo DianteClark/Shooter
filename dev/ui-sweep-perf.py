@@ -7,7 +7,8 @@ gw (Ground War TDM on Harvest), zm20 (Graveyard Shift round 20 on Ashgrove with 
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
 calls, triangles and script ms over 12 s, and a screenshot of each with the overlay. --root serves another checkout
 (an older build) for a before/after. --suits dresses everyone in the match in a Mastery suit, twelve different operators
-round the roster (docs/OPERATORS-ART.md: the suit banks' cost).
+round the roster (docs/OPERATORS-ART.md: the suit banks' cost; for twelve suits on screen at once use
+dev/ops-lineup.html?view=game&skin=5&bench=40).
 """
 import asyncio, subprocess, sys, time, os, json, re, statistics
 from playwright.async_api import async_playwright
@@ -70,14 +71,6 @@ async def run(browser, name, mapId, mode, rows):
         extra = 'suits ' + str(await ev(f"""(() => {{ const c = {G}.renderer.chars, ops = {json.dumps(SUIT_OPS)};
           const ids = [...c.opById.keys()];
           c.setRoster(ids.map((id, i) => ({{ id, operator: ops[i % ops.length], skin: `skin:${{ops[i % ops.length]}}-5` }})));
-          // And on screen: everyone gathered round the local player every second, kept alive.
-          const m = {G}.match, sim = m.sim, me = m.ps;
-          const gather = () => sim.players.forEach((p, i) => {{
-            if (p.id === m.localId) return;
-            const a = i * 2.4, k = sim.nav.nearestFree(me.x + Math.cos(a) * (3 + (i % 3) * 1.5), me.z + Math.sin(a) * (3 + (i % 3) * 1.5));
-            p.x = k % sim.nav.w + 0.5; p.z = Math.floor(k / sim.nav.w) + 0.5; p.hp = 100; p.alive = true;
-          }});
-          gather(); window.__gather = setInterval(gather, 1000);
           return ids.length; }})()"""))
     if name == 'br':
         await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=60000)
