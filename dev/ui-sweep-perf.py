@@ -2,7 +2,7 @@
 """Perf overlay numbers in real matches (ROADMAP item 37): python3 dev/ui-sweep-perf.py [port] [outdir] [--root=DIR] [--q=low|high] [cases]
 
 At 932x430 in headless Chromium (SwiftShader, so frame and script ms only compare runs on this machine; draw calls and
-triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground),
+triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall),
 gw (Ground War TDM on Harvest), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
 calls, triangles and script ms over 12 s, and a screenshot of each with the overlay. --root serves another checkout
@@ -22,7 +22,7 @@ Q = next((a[4:] for a in sys.argv[1:] if a.startswith('--q=')), 'low')
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
 G = 'window.__game.app'
-CASES = [('br', 'frontier', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
+CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('gw', 'harvest', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
          # 1118 wave: Millbrook, Graveyard Shift round 20 on Polestar Relay, and a replay's playback (a TDM on Railyard,
          # ended after 20 s, Watch replay from the results: the replay player's own renderer and frame cost).
          ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('replay', 'railyard', 'tdm')]
@@ -63,7 +63,7 @@ async def run(browser, name, mapId, mode, rows):
     await pg.wait_for_function(f'{G}.inMatch && {G}.match?.interp?.newest?.phase === "live"', timeout=90000)
     await ev(f"{G}.renderer?.setQuality?.('{Q}')")     # Pinned, as docs/BR-PERF.md measures (SwiftShader would drop auto to Potato).
     extra = ''
-    if name == 'br':
+    if name in ('br', 'brjade'):
         await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=60000)
         await pg.locator('.br-jump-map').first.click()
         await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=60000)

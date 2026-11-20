@@ -3223,7 +3223,7 @@ function buildDecals(map, theme) {
 
 export function buildWorld(map, teams, fogUniforms) {
   // Giant battle royale maps stream their tiles in as the camera comes near (js/render/themes/frontier.js).
-  if (map.size === 'giant') return frontier.buildGiantWorld(map, fogUniforms, INTERNALS);
+  if (map.size === 'giant' || map.giantWorld) return frontier.buildGiantWorld(map, fogUniforms, INTERNALS);
   const theme = getTheme(map.theme);
   INK = theme.ink;
   CONTAINER_COLORS = theme.containers;
@@ -3419,6 +3419,7 @@ const THUMB_STYLE = {
   polestar: polestar.thumb,
   millbrook: millbrook.thumb,
   frontier: frontier.thumb,
+  jadefall: frontier.isleThumb,
 };
 
 // What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a

@@ -16,9 +16,9 @@ import { Plan, mulberry, valueNoise, segDist } from './br-kit.js';
 import { templeCourt } from './jungle-kit.js';
 
 const W = 400, H = 400;
-export const CELL = 4;                        // Land/water lattice (metres).
+export const CELL = 2;                        // Land/water lattice (metres).
 const N = W / CELL;
-export const DEEP = 0, SHALLOW = 1, LAND = 2;
+export const DEEP = 0, SHALLOW = 1, LAND = 2, STEEP = 3;   // STEEP: deep water with earth banks (channels, pools).
 const CX = 200, CZ = 200;
 
 // Region seeds for the renderer's ground and dressing: [region, x, z, bias].
@@ -99,7 +99,7 @@ export function islandCells() {
       if (ring < outer && rr > inner) c = LAND;
       else if (rr <= inner) c = SHALLOW;                  // The lagoon.
       if (rr < 30 + (n1(x * 0.1 + 9, z * 0.1) - 0.5) * 6) c = LAND;   // The pyramid's islet.
-      for (const [hx, hz, hr] of HOLES) if (Math.hypot(x - hx, z - hz) < hr) c = DEEP;
+      for (const [hx, hz, hr] of HOLES) if (Math.hypot(x - hx, z - hz) < hr) c = STEEP;
       // The SE reef islet and its sandbars.
       const reef = Math.hypot((x - 352) / 30, (z - 352) / 22);
       if (reef < 1) c = LAND; else if (reef < 1.7 && c === DEEP) c = SHALLOW;
@@ -112,13 +112,18 @@ export function islandCells() {
       const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL;
       for (const c of CHANNELS) {
         const wob = (n2(x * 0.06 + 3, z * 0.06) - 0.5) * 4;
-        if (polyDist(c.pts, x, z) < c.w / 2 + wob) cls[j * N + i] = DEEP;
+        if (polyDist(c.pts, x, z) < c.w / 2 + wob) cls[j * N + i] = STEEP;
       }
-      if (polyDist(STREAM, x, z) < 4 && cls[j * N + i] === LAND) cls[j * N + i] = SHALLOW;
-      if (x > FALLS_POOL.x && x < FALLS_POOL.x + FALLS_POOL.w && z > FALLS_POOL.z && z < FALLS_POOL.z + FALLS_POOL.d) cls[j * N + i] = DEEP;
+      if (polyDist(STREAM, x, z) < 3 && cls[j * N + i] === LAND) cls[j * N + i] = SHALLOW;
+      if (x > FALLS_POOL.x && x < FALLS_POOL.x + FALLS_POOL.w && z > FALLS_POOL.z && z < FALLS_POOL.z + FALLS_POOL.d) cls[j * N + i] = STEEP;
     }
   }
-  // Surf: open sea next to a beach is shallow (two cells out); channels keep their steep banks.
+  // A channel's mouth past the coast is open sea.
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = (i + 0.5) * CELL, z = (j + 0.5) * CELL, dx = x - CX, dz = z - CZ;
+    if (cls[j * N + i] === STEEP && Math.pow(Math.pow(Math.abs(dx), 3) + Math.pow(Math.abs(dz), 3), 1 / 3) > 182) cls[j * N + i] = DEEP;
+  }
+  // Surf: open sea next to a beach is shallow (8 m out); channels keep their steep banks.
   const near = new Uint8Array(N * N);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     if (at(i, j) !== DEEP) continue;
@@ -127,7 +132,8 @@ export function islandCells() {
     if (HOLES.some(([hx, hz, hr]) => Math.hypot(x - hx, z - hz) < hr + 2)) continue;
     if (x > FALLS_POOL.x - 4 && x < FALLS_POOL.x + FALLS_POOL.w + 4 && z > FALLS_POOL.z - 4 && z < FALLS_POOL.z + FALLS_POOL.d + 4) continue;
     let land = false;
-    for (let b = -2; b <= 2 && !land; b++) for (let a = -2; a <= 2; a++) {
+    const reach = Math.round(8 / CELL);
+    for (let b = -reach; b <= reach && !land; b++) for (let a = -reach; a <= reach; a++) {
       const ii = i + a, jj = j + b;
       if (ii >= 0 && jj >= 0 && ii < N && jj < N && at(ii, jj) === LAND) { land = true; break; }
     }
@@ -147,7 +153,7 @@ export function islandCells() {
     for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
       const v = at(i, j);
       const nb = [at(i - 1, j), at(i + 1, j), at(i, j - 1), at(i, j + 1)];
-      if (nb.every(q => q !== v)) cls[j * N + i] = nb.sort()[2];
+      if (nb.every(q => q !== v)) cls[j * N + i] = nb.includes(LAND) ? LAND : nb.sort()[3];
     }
   }
   return cls;
@@ -221,8 +227,9 @@ function build() {
   const crossingAt = (i, j) => CROSSINGS.some(r => r.kind === 'bridge' && (i + 0.5) * CELL > r.x && (i + 0.5) * CELL < r.x + r.w && (j + 0.5) * CELL > r.z && (j + 0.5) * CELL < r.z + r.d);
   for (const r of rectsOf(cls, DEEP)) {
     const edge = r.x <= 0 || r.z <= 0 || r.x + r.w >= W || r.z + r.d >= H;
-    A(r.x, r.z, r.w, r.d, 0, 'water', edge ? { sea: true } : { channel: true });
+    A(r.x, r.z, r.w, r.d, 0, 'water', edge ? { sea: true } : {});
   }
+  for (const r of rectsOf(cls, STEEP)) A(r.x, r.z, r.w, r.d, 0, 'water', { channel: true });
   const shallows = rectsOf(cls, SHALLOW);
   // Bridges: plank decks over the channels, with water drawn under them (looks only).
   const underDecks = [];
@@ -238,7 +245,7 @@ function build() {
   // ---- Jade Pyramid (centre, tier 1) ---------------------------------------------------------------------------
   P.poi('pyramid', 'Jade Pyramid', 200, 187, 26, 'jungle', 1);
   P.region = 'ruins';
-  A(190, 190, 20, 20, 13, 'rock', { pyramid: true, landmark: true });
+  A(190, 190, 20, 20, 8.5, 'rock', { pyramid: true, landmark: true });
   // Four shrines at the foot of the stairs, enterable, the pyramid's loot.
   B(193, 174, 14, 10, { h: 3.8, style: 'temple', split: false, furnish: 1, chest: true, loot: 6, doors: [['n', 0.5], ['w', 0.5], ['e', 0.5]] });
   B(193, 216, 14, 10, { h: 3.8, style: 'temple', split: false, furnish: 1, chest: true, loot: 6, doors: [['s', 0.5], ['w', 0.5], ['e', 0.5]] });
@@ -413,7 +420,7 @@ function build() {
   B(74, 258, 14, 9, { style: 'tin', h: 3.6, furnish: 2, chest: true, doors: [['n', 0.5], ['s', 0.5], ['e', 0.5]] });
   B(94, 254, 10, 8, { style: 'tin', h: 3.4 });
   B(80, 276, 12, 8, { style: 'tin', h: 3.4 });
-  B(100, 272, 8, 7, { style: 'thatch', h: 3.2 });
+  B(102, 266, 7, 6, { style: 'thatch', h: 3.2 });
   P.skin = 'jungle';
   T(66, 274, 4.4, 2.2, 2.4, 'container', { truck: true }, 1.2);
   T(96, 286, 3, 2.4, 2.6, 'tent', { camp: true }, 1.2);
