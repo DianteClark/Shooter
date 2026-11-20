@@ -10,8 +10,9 @@ import { ico, header } from './yard.js';
 import { stagger } from './motion.js';
 import { changelogHtml } from './whatsnew.js';
 import { installPanel, installActions } from './installguide.js';
+import { VIDEOS, VIDEO_BY_ID, GROUPS } from '../shared/help-videos.js';
 
-const TABS = [['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info'], ['install', 'Install', 'phone'], ['updates', 'Updates', 'star']];
+const TABS = [['videos', 'Videos', 'ui:play'], ['controls', 'Controls', 'controls'], ['weapons', 'Guns', 'cat:Assault'], ['gear', 'Gear', 'frag'], ['streaks', 'Streaks', 'uav'], ['modes', 'Modes', 'mode:dom'], ['tips', 'Tips', 'info'], ['install', 'Install', 'phone'], ['updates', 'Updates', 'star']];
 
 // One piece of equipment: its job, what it does, and what beats it (catalog.js job / desc / counter).
 const gear = kind => t => `<div class="help-stat"><dt>${esc(t.name)} <small>${kind}: ${esc(t.job ?? '')}</small></dt><dd>${esc(t.desc)}. <b>Counter:</b> ${esc(t.counter ?? '')}.</dd></div>`;
@@ -32,7 +33,13 @@ function shootDown() {
     <div class="help-down-rows">${rows}</div></div>`;
 }
 
-const card = (icon, title, body, wide = false) => `<div class="help-card${wide ? ' wide' : ''}"><h4>${ico(icon)}<span>${esc(title)}</span></h4><p>${body}</p></div>`;
+// A Watch chip plays the in-engine video for it (js/shared/help-videos.js, js/game/help-video.js, loaded on demand).
+const watch = id => (VIDEO_BY_ID[id] ? `<button class="help-play" data-act="helpVideo" data-video="${id}" aria-label="Watch video: ${esc(VIDEO_BY_ID[id].title)}">${ico('ui:play')}<b>Watch</b></button>` : '');
+const card = (icon, title, body, wide = false, video = null) => `<div class="help-card${wide ? ' wide' : ''}"><h4>${ico(icon)}<span>${esc(title)}</span></h4><p>${body}</p>${video ? watch(video) : ''}</div>`;
+
+// The Videos tab: every help video by group, each a tile that plays it.
+const videosPanel = () => GROUPS.map(([g, label]) => `<section class="help-vgroup"><h4 class="help-vhead">${esc(label)}</h4><div class="help-vids">${VIDEOS.filter(v => v.group === g).map(v => `
+  <button class="help-vid" data-act="helpVideo" data-video="${v.id}" aria-label="Watch video: ${esc(v.title)}, ${Math.round(v.len)} seconds">${ico(v.icon)}<b>${esc(v.title)}</b><small>${Math.round(v.len)} s</small><i class="help-vid-go">${ico('ui:play')}</i></button>`).join('')}</div></section>`).join('');
 
 // One weapon stat: what the bar in the Gunsmith measures and what it means in a fight.
 const stat = (name, body) => `<div class="help-stat"><dt>${esc(name)}</dt><dd>${body}</dd></div>`;
@@ -40,6 +47,7 @@ const stat = (name, body) => `<div class="help-stat"><dt>${esc(name)}</dt><dd>${
 const PANELS = {
   updates: () => `<div class="cl-list">${changelogHtml()}</div>`,
   weapons: () => `
+    <div class="help-grid help-lead">${card('ui:gunsmith', 'The Gunsmith', 'Loadout, then a gun, then <b>Gunsmith</b>: four slots and every bar below, with exactly what each part moves.', true, 'gunsmith')}</div>
     <dl class="help-stats">
       ${stat('Damage', 'Damage of one shot at close range. Shotguns show all pellets together: inside the first range number a pump or double-barrel kills in one shell if most of the fan lands, so put the middle of it on the body. Everyone has 100 health, which comes back on its own a few seconds after you stop taking hits.')}
       ${stat('Headshots', 'The head is a small zone at the centre of a player. <b>Aimed in</b>, a headshot kills in one hit with any gun. <b>From the hip</b> it does 1.6&times; damage instead. Marksman rifles and snipers kill with a headshot either way. Explosives have no headshots.')}
@@ -74,14 +82,15 @@ const PANELS = {
     </dl>`,
   controls: () => `
     <div class="help-grid">
-      ${card('marathon', 'Left thumb', 'Drag anywhere on the left half to move. Push all the way to sprint. While firing, a full push keeps you hip-firing at full speed; ease below about 70% to settle into aiming down sights.')}
-      ${card('ui:aim', 'Right thumb', 'Touch and hold to aim. Push past the outer ring to fire. Let go and you are back to hip fire.')}
-      ${card('slide', 'Slide', 'Tap while moving. You are a smaller target while you slide.')}
+      ${card('marathon', 'Left thumb', 'Drag anywhere on the left half to move. Push all the way to sprint. While firing, a full push keeps you hip-firing at full speed; ease below about 70% to settle into aiming down sights.', false, 'move')}
+      ${card('ui:aim', 'Right thumb', 'Touch and hold to aim. Push past the outer ring to fire. Let go and you are back to hip fire.', false, 'move')}
+      ${card('slide', 'Slide', 'Tap while moving. You are a smaller target while you slide.', false, 'slide')}
       ${card('swap', 'Swap', 'Switches to your sidearm. Reloads are automatic, so swap when you are out.')}
-      ${card('frag', 'Tactical and lethal', 'Tap to throw where you are aiming. Hold and drag from the button to set direction and distance: an arc shows where it lands. Drag back onto the button to cancel.', true)}
+      ${card('frag', 'Tactical and lethal', 'Tap to throw where you are aiming. Hold and drag from the button to set direction and distance: an arc shows where it lands. Drag back onto the button to cancel.', true, 'nades')}
     </div>`,
   streaks: () => `
     <div class="help-streaks">
+      <div class="help-grid help-lead">${card('uav', 'Scorestreaks', 'Kills and objective play fill your score; each streak lights its tile when you reach its cost. Tap the tile to call it.', true, 'streaks')}</div>
       <div class="help-counters">${Object.values(STREAKS).sort((a, b) => a.cost - b.cost).map(s => `<span class="help-ctr role-${s.role}">${ico(s.id)}<b>${esc(s.name)}<em>${s.cost}</em></b><i>${esc(STREAK_ROLE_NAME[s.role] ?? '')}</i><small>${esc(s.counter ?? '')}</small></span>`).join('')}</div>
       <ol class="help-rules">
         <li>Kills score 100, headshots +25, assists 50. <b>Your score carries through death</b>, and streaks you already hold stay. Costs are high, so streaks still take real play.</li>
@@ -99,15 +108,15 @@ const PANELS = {
   modes: () => `
     <div class="help-grid">
       ${card('mode:tdm', 'Team Deathmatch', 'First team to the kill limit wins.')}
-      ${card('mode:kc', 'Kill Confirmed', 'Collect enemy tags to score. Grab your own team\'s to deny.')}
-      ${card('mode:dom', 'Domination', 'Hold the three flags. More flags, faster points.')}
-      ${card('mode:hard', 'Hardpoint', 'One zone at a time. Hold it to score, and it moves.')}
-      ${card('mode:snd', 'Search and Destroy', 'One life per round, first to 4 rounds. Attackers plant the bomb at A or B; defenders stop them or defuse it. Out? You spectate your team.')}
-      ${card('mode:ctf', 'Capture the Flag', 'Take the enemy flag home to score, first to 3. Your own flag must be home. Touch a dropped flag of yours to return it.')}
+      ${card('mode:kc', 'Kill Confirmed', 'Collect enemy tags to score. Grab your own team\'s to deny.', false, 'kc')}
+      ${card('mode:dom', 'Domination', 'Hold the three flags. More flags, faster points.', false, 'dom')}
+      ${card('mode:hard', 'Hardpoint', 'One zone at a time. Hold it to score, and it moves.', false, 'hard')}
+      ${card('mode:snd', 'Search and Destroy', 'One life per round, first to 4 rounds. Attackers plant the bomb at A or B; defenders stop them or defuse it. Out? You spectate your team.', false, 'snd')}
+      ${card('mode:ctf', 'Capture the Flag', 'Take the enemy flag home to score, first to 3. Your own flag must be home. Touch a dropped flag of yours to return it.', false, 'ctf')}
       ${card('mode:ffa', 'Free-for-All', 'Everyone for themselves. Most kills wins.')}
       ${card('mode:gun', 'Gun Game', 'Every kill moves you to the next gun. A kill with the last one wins. A thrown kill knocks the victim back a gun.')}
       ${card('mode:gwtdm', 'Ground War', '16 v 16 on the large map, as Team Deathmatch or five-flag Domination.')}
-      ${card('mode:hq', 'Headquarters', 'Capture the HQ by standing in it, then hold it: it scores a point a second, but <b>your team cannot respawn while it stands</b>. The other side destroys it by standing in it. It moves after a while either way.')}
+      ${card('mode:hq', 'Headquarters', 'Capture the HQ by standing in it, then hold it: it scores a point a second, but <b>your team cannot respawn while it stands</b>. The other side destroys it by standing in it. It moves after a while either way.', false, 'hq')}
       ${card('mode:ko', 'Kill Order', 'Each team has one marked VIP, shown to everyone. Only killing the enemy VIP scores. VIPs take less damage; guard yours.')}
       ${card('mode:inf', 'Infected', 'One player starts infected, with blades. Anyone they kill joins them. Survivors win if any are left when the clock runs out.')}
       ${card('mode:oic', 'One in the Chamber', 'Everyone has a pistol with one round and a blade. The round kills on any hit, a kill gives it back, and you have five lives. Last one standing wins.')}
@@ -117,10 +126,13 @@ const PANELS = {
       ${card('ui:options', 'Modifiers', '<b>Hardcore</b>: a third of the health, no minimap. <b>Snipers Only</b>, <b>Melee Only</b>, <b>No Streaks</b>. Set them in Custom (the settings button) or in a friend lobby; the <b>Hardcore</b> switch at the bottom of the Multiplayer screen puts Hardcore on every mode it fits (not battle royale or extraction) and on rooms you host. A <b>Featured</b> playlist in Multiplayer changes every day.', true)}
       ${card('party', 'Multiplayer', 'Pick a tab (<b>Standard</b> 6 v 6 and Showdown 2 v 2, <b>Ground War</b> 16 v 16, <b>Battle Royale</b> with Rebound, <b>Extraction</b>), then a playlist or tick one or more modes and tap <b>Find match</b>. The lobby votes on two or three maps, then you drop in. Bots fill the seats nobody takes. <b>Quick play</b> on the main menu is one tap into Standard.', true)}
       ${card('options', 'Custom', '<b>Match</b>: any map and mode, bots per side, difficulty, limits and modifiers; <b>Host room</b> lets friends join with those settings. In a friend lobby the host can swap the map vote for custom settings.', true)}
-      ${card('mode:br', 'Battle Royale', '32 players in squads of four (or duos, or solos); friends share a squad and bots fill the rest. Ride the transport and tap <b>Jump</b> over where you want to land, then steer the glide. You start with fists and a pistol: walk over loot to take ammo, armor plates, medkits and equipment, and tap to swap for a better gun (rarer colours handle better and carry more attachments). Tap <b>Plate</b> to fill your three armor slots. Stay inside the circle: it shrinks in seven phases and hurts more each time. Downed in a squad? Crawl to a teammate; standing next to you brings you back. Last squad standing wins. Two islands: Frontier, and Jadefall, a jungle archipelago round a lagoon, where shallow water slows you and deep water is a wall (cross on the bridges, causeways and fords).', true)}
-      ${card('mode:rb', 'Rebound', 'A fast battle royale on one part of Frontier or Jadefall: 24 players in squads of four (or 20 in pairs), a quicker circle, matches of about eight to ten minutes. Die while a squadmate is still in and you <b>redeploy</b>: after a short countdown you parachute in next to them with a common gun, a sidearm and a plate of armor. A squad is out only when nobody in it is left up. Redeploys end at a late circle (the note under your squad says which); after that a death is final.', true)}
-      ${card('mode:ex', 'Extraction', 'Four squads of four (or eight duos) on Frontier or Jadefall, with your own loadout and no scorestreaks. AI patrols guard every place, tougher toward the middle and at the big sites, and they call reinforcements. Do <b>contracts</b>: carry an intel case to its drop, kill a commander and his guards, plant a charge on a cache and defend it, hold a terminal while it hacks, or walk a cargo mule to its point (it only moves with you beside it). Pick contracts up yourself at the <b>contract phones</b> at each place (yellow squares on the map, ringed while you have none). A finished contract goes into your squad\'s pending pot; then take the next at a phone. Your squad works one at a time: to switch, hold the small <b>Abandon</b> button beside the contract tracker. Your squad shares a pool of lives: respawns cost one, and with none left you watch your squad. Nothing counts until you <b>get out</b>: when exfil sites open, stand in one and tap <b>Call exfil</b>, hold the zone when the helicopter lands, and anyone of your squad aboard banks the pot for all of you. Other squads can fight you for it; a final exfil lands near the end. Ammo boxes and the dead refill your main gun. Some operators, perks, streaks and camos only come from banking contracts.', true)}
-      ${card('mode:cp', 'Campaign', 'Multiplayer, then <b>Campaign</b>: Operation Nightrail, eight story missions for one to four players (bots fill the squad; <b>With friends</b> hosts a room). Pick a mission on the route map and a difficulty (Recruit, Regular, Veteran), read the <b>Briefing</b>, then <b>Deploy</b>. The card at the top says what to do next and the radio tells the story. Downed squadmates can be revived; the dead come back at the last <b>checkpoint</b>. If the whole squad goes down (or the mission\'s own fail comes up) you go back to the checkpoint, or <b>Abort</b>. In the stealth mission stay out of the watchmen\'s torchlight; against the boss, get out of the red rings on the ground. Stars for the bonus objective, the par time and nobody dying; a calling card for every mission, and a skin and an emblem for clearing them all on Veteran.', true)}
+      ${card('mode:br', 'Battle Royale', '32 players in squads of four (or duos, or solos); friends share a squad and bots fill the rest. Ride the transport and tap <b>Jump</b> over where you want to land, then steer the glide. You start with fists and a pistol: walk over loot to take ammo, armor plates, medkits and equipment, and tap to swap for a better gun (rarer colours handle better and carry more attachments). Tap <b>Plate</b> to fill your three armor slots. Stay inside the circle: it shrinks in seven phases and hurts more each time. Downed in a squad? Crawl to a teammate; standing next to you brings you back. Last squad standing wins. Two islands: Frontier, and Jadefall, a jungle archipelago round a lagoon, where shallow water slows you and deep water is a wall (cross on the bridges, causeways and fords).', true, 'br')}
+      ${card('mode:rb', 'Rebound', 'A fast battle royale on one part of Frontier or Jadefall: 24 players in squads of four (or 20 in pairs), a quicker circle, matches of about eight to ten minutes. Die while a squadmate is still in and you <b>redeploy</b>: after a short countdown you parachute in next to them with a common gun, a sidearm and a plate of armor. A squad is out only when nobody in it is left up. Redeploys end at a late circle (the note under your squad says which); after that a death is final.', true, 'brfight')}
+      ${card('mode:ex', 'Extraction', 'Four squads of four (or eight duos) on Frontier or Jadefall, with your own loadout and no scorestreaks. AI patrols guard every place, tougher toward the middle and at the big sites, and they call reinforcements. Do <b>contracts</b>: carry an intel case to its drop, kill a commander and his guards, plant a charge on a cache and defend it, hold a terminal while it hacks, or walk a cargo mule to its point (it only moves with you beside it). Pick contracts up yourself at the <b>contract phones</b> at each place (yellow squares on the map, ringed while you have none). A finished contract goes into your squad\'s pending pot; then take the next at a phone. Your squad works one at a time: to switch, hold the small <b>Abandon</b> button beside the contract tracker. Your squad shares a pool of lives: respawns cost one, and with none left you watch your squad. Nothing counts until you <b>get out</b>: when exfil sites open, stand in one and tap <b>Call exfil</b>, hold the zone when the helicopter lands, and anyone of your squad aboard banks the pot for all of you. Other squads can fight you for it; a final exfil lands near the end. Ammo boxes and the dead refill your main gun. Some operators, perks, streaks and camos only come from banking contracts.', true, 'ex')}
+      ${card('mode:cp', 'Campaign', 'Multiplayer, then <b>Campaign</b>: Operation Nightrail, eight story missions for one to four players (bots fill the squad; <b>With friends</b> hosts a room). Pick a mission on the route map and a difficulty (Recruit, Regular, Veteran), read the <b>Briefing</b>, then <b>Deploy</b>. The card at the top says what to do next and the radio tells the story. Downed squadmates can be revived; the dead come back at the last <b>checkpoint</b>. If the whole squad goes down (or the mission\'s own fail comes up) you go back to the checkpoint, or <b>Abort</b>. In the stealth mission stay out of the watchmen\'s torchlight; against the boss, get out of the red rings on the ground. Stars for the bonus objective, the par time and nobody dying; a calling card for every mission, and a skin and an emblem for clearing them all on Veteran.', true, 'cp')}
+      ${card('mode:zm', 'Graveyard Shift', 'Co-op wave survival for up to four (bots fill the crew). Hits and kills pay points: spend them on gates, wall guns, perk machines and the mystery crate. Some maps need the <b>power</b> on before perks and traps wake. Downed crewmates can be revived before they bleed out; the match ends when nobody is left up, or the crew gets out.', true, 'zm')}
+      ${card('ui:rank', 'Ranked', 'Multiplayer, Standard, <b>Ranked</b>: Hardpoint, Search and Destroy and Control on the medium maps, standard limits, no modifiers. Five placement matches, then wins add SR and losses take it, nudged by how you played and the lobby. Divisions Bronze to Master, then Champion; the season pays rewards for the best division you reach.', true, 'ranked')}
+      ${card('ui:eye', 'Caster camera', 'Out of play (Search and Destroy, a bleed-out, out of a battle royale) or a spectator in a friend room: tap <b>Caster cam</b>. Follow steps through players, Tactical frames everyone in play, Free pans and zooms. Never in Ranked.', true, 'caster')}
       ${card('ui:aim', 'Training', 'Custom, then <b>Training</b>: the firing range (dummies at marked distances), or any map with up to 12 bots. Switches for infinite ammo and no death; bots can stand, strafe, rush or play normally. A live damage and time-to-kill readout, and the <b>Armory</b> button swaps in any gun you own at once. Training never counts toward XP, mastery, challenges or stats.', true)}
     </div>`,
   tips: () => `
@@ -136,14 +148,15 @@ const PANELS = {
 };
 
 // tab: the tab to open on ('install' from the install sheet's More).
-export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }) {
-  let tab = TABS.some(([id]) => id === first) ? first : 'controls';
+export function helpScreen(menu, { onBack, onTutorial, onVideo = null, tab: first = 'controls' }) {
+  const tabList = TABS.filter(([id]) => id !== 'videos' || onVideo);
+  let tab = tabList.some(([id]) => id === first) ? first : 'controls';
   const install = {};             // The Install tab's own state (platform picked, storage answer).
   let installed = null;
   menu.el.dataset.screen = 'help';
   const training = onTutorial ? `<button class="btn is-primary help-tut" data-sound="confirm" data-act="helpTutorial">${ico('play')}<b>Training</b></button>` : '';
   menu.el.innerHTML = `
-    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs scroll-x">${TABS.map(([id, label, icon]) => `<button class="seg" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
+    ${header({ back: 'helpBack', title: 'Help', extra: `<nav class="help-tabs scroll-x" role="tablist" aria-label="Help topics">${tabList.map(([id, label, icon]) => `<button class="seg" role="tab" data-act="helpTab" data-tab="${id}">${ico(icon)}<b>${label}</b></button>`).join('')}</nav>${training}` })}
     <div class="help-body"></div>`;
   const body = menu.el.querySelector('.help-body');
   const tabs = [...menu.el.querySelectorAll('.help-tabs .seg')];
@@ -151,13 +164,15 @@ export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }
     if (tab === 'install') {
       if (!installed) { installed = installActions(install, () => { if (tab === 'install' && body.isConnected) body.innerHTML = installPanel(install); }); menu.on(installed.actions); }
       body.innerHTML = installPanel(install);
-    } else body.innerHTML = PANELS[tab]();
+    } else body.innerHTML = tab === 'videos' ? videosPanel() : PANELS[tab]();
+    // No player (a lobby, where the canvas belongs to the room): the Watch chips go.
+    if (!onVideo) for (const b of body.querySelectorAll('.help-play')) b.remove();
     // One scroller for every long tab: the body itself (native, momentum on iOS), back at the top on each tab. Install
     // keeps its own two columns, the steps scrolling inside.
     body.classList.toggle('scroll-y', tab !== 'install');
     body.scrollTop = 0;
-    stagger(body.querySelectorAll('.help-card, .help-chip, .help-rules li'), 'up', { step: 25, max: 12 });
-    for (const t of tabs) t.classList.toggle('on', t.dataset.tab === tab);
+    stagger(body.querySelectorAll('.help-card, .help-chip, .help-rules li, .help-vid'), 'up', { step: 25, max: 12 });
+    for (const t of tabs) { t.classList.toggle('on', t.dataset.tab === tab); t.setAttribute('aria-selected', String(t.dataset.tab === tab)); }
     // A narrow phone scrolls the tab strip sideways: keep the open tab in view.
     const strip = tabs[0]?.parentElement, on = tabs.find(t => t.dataset.tab === tab);
     if (strip && on && (on.offsetLeft + on.offsetWidth > strip.scrollLeft + strip.clientWidth || on.offsetLeft < strip.scrollLeft)) strip.scrollLeft = on.offsetLeft + on.offsetWidth - strip.clientWidth + 4;
@@ -165,6 +180,7 @@ export function helpScreen(menu, { onBack, onTutorial, tab: first = 'controls' }
   menu.on({
     helpBack: () => { installed?.dispose(); onBack(); },
     helpTutorial: () => onTutorial?.(),
+    helpVideo: ({ video }) => onVideo?.(video),
     helpTab: ({ tab: next }) => { tab = next; paint(); },
   });
   paint();

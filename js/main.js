@@ -67,6 +67,7 @@ import { TITLE_IDS } from './shared/seasons.js';     // Ranked titles on badges 
 import { QuickChat } from './ui/quickchat.js';
 import { GamepadInput } from './ui/gamepad.js';     // Controllers (docs/CONTROLLER.md).
 import { ReplayPlayer } from './game/replay-player.js';
+import { VIDEOS, VIDEO_BY_ID } from './shared/help-videos.js';
 import { SpectatorMatch } from './game/spectator.js';      // A friend room's spectator seat (docs/RANKED.md).      // Watch replay and saved clips (docs/REPLAYS.md).
 import { saveClip, loadClip, deleteClip, listClips } from './ui/clips.js';
 import { VoiceUI } from './ui/voice-ui.js';            // Speaking marks, mutes, push to talk.
@@ -656,8 +657,39 @@ async function watchClip(id) {
 }
 
 function openHelp(tab) {
-  // Training is solo; from a lobby it would walk out of the room, so it is only offered from the title.
-  menu.help({ onBack: afterEditing, onTutorial: app.net ? null : () => startTutorial(), tab });
+  // Training is solo; from a lobby it would walk out of the room, so it is only offered from the title. The help videos
+  // take the canvas, so they are offered wherever the menu owns it (not in a match).
+  menu.help({ onBack: afterEditing, onTutorial: app.net ? null : () => startTutorial(), onVideo: id => openHelpVideo(id), tab });
+}
+
+// A help video (js/game/help-video.js, docs/TUTORIAL.md) on the game canvas over the Help screen, which stays mounted
+// under it. The player and the renderer are loaded only now, on the first tap of a Watch chip.
+let helpVideo = null;
+async function openHelpVideo(id) {
+  const video = VIDEO_BY_ID[id];
+  if (!video || helpVideo || replayView || app.inMatch) return;
+  helpVideo = 'loading';
+  let Player;
+  try { ({ HelpVideoPlayer: Player } = await import('./game/help-video.js')); } catch (err) { console.error('help video load', err); helpVideo = null; menu.toast('Could not load the video'); return; }
+  if (app.inMatch || replayView) { helpVideo = null; return; }
+  backdrop.stop();
+  menu.pausePreview();
+  const back = () => {
+    helpVideo = null;
+    app.renderer = null;
+    menu.resumePreview();
+    if (!app.inMatch) { backdrop.setLoadout(myLoadout()); backdrop.live(); }
+  };
+  const k = VIDEOS.indexOf(video), next = VIDEOS[k + 1];
+  try {
+    helpVideo = new Player({ canvas, root: uiRoot, video, quality: Options.get('quality'), onClose: back, onNext: next ? () => openHelpVideo(next.id) : null });
+  } catch (err) {
+    console.error('help video', err);
+    back();
+    menu.toast('Could not play the video');
+    return;
+  }
+  app.renderer = helpVideo.renderer;
 }
 
 function openSave(back = afterEditing) {
@@ -2286,7 +2318,7 @@ NewDots.install(menu);
 // Arriving by an invite link goes straight to the join; the training offer waits for the next visit to the title.
 // Just after the progress reset's wipe, its notice comes first and the training offer follows it.
 const offeredTutorial = !invite && (maybeResetNotice(menu, { then: maybeOfferTutorial }) || maybeOfferTutorial());
-if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, watchShared, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
+if (params.has('debug')) window.__game = { app, replay: () => replayView, clips: { listClips, loadClip, deleteClip, saveClip }, watchShared, wipe: WIPE, NewDots, updater, hud, controls, touchRec, touchReport, menu, Progress, Options, backdrop, quickChat, join: startJoining, tutorial: startTutorial, helpVideo: () => helpVideo, openHelpVideo, openHelp, training: () => needName(startTraining), range: () => needName(startRange), gamepad, voiceUi };
 if (invite) joinFromInvite(invite, { menu, needName, join: startJoining, enterCode: askCode });
 else {
   if (!offeredTutorial) maybeEventBanner(menu, { fresh: Progress.totalXp === 0 });
