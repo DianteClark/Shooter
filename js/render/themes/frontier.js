@@ -244,7 +244,7 @@ export function buildGiantWorld(map, fogUniforms, X) {
     side: transparent ? THREE.DoubleSide : THREE.FrontSide,
   });
   const signMat = fogMat(X.SIGN_VERT, X.SIGN_FRAG, false);
-  // The shallows (themes/jadefall.js): a see-through rippling sheet, built per tile like the rest.
+  // The shallows (themes/jadefall.js): a see-through rippling sheet over the shallow water.
   const sheetMat = map.shallows?.length ? new THREE.ShaderMaterial({
     vertexShader: isle.SHEET_VERT, fragmentShader: isle.SHEET_FRAG, transparent: true, depthWrite: false,
     uniforms: { uFogTex: fogUniforms.tex, uFogXf: fogUniforms.xf, uFogOn: fogUniforms.on, uTime: timeU,
@@ -475,13 +475,9 @@ export function buildGiantWorld(map, fogUniforms, X) {
     if (sb.pos.length) add(geometry(X.floatAttrs(sb)), signMat, 0);
     if (glow.pos.length) add(geometry([{ name: 'position', data: glow.pos, size: 3 }, { name: 'aCol', data: glow.col, size: 3 }]), glowMat, 5);
     if (rb.pos.length) add(geometry([{ name: 'position', data: rb.pos, size: 3 }, { name: 'aCol', data: rb.col, size: 3 }, { name: 'aRect', data: rect, size: 4 }]), roofMat, 2);
-    let sheetTris = 0;
-    if (sheetMat) {
-      const sh = isle.sheetTile(map, x0, z0, x1, z1);
-      if (sh.pos.length) { add(geometry([{ name: 'position', data: sh.pos, size: 3 }, { name: 'aA', data: sh.alpha, size: 1 }]), sheetMat, 3); sheetTris = sh.pos.length / 9; }
-    }
+
     if (t.box) { t.box.min.y = Math.min(t.box.min.y, -1); t.box.max.y = Math.max(t.box.max.y, 1); }
-    t.tris = (b.pos.length + rb.pos.length + sb.pos.length + glow.pos.length) / 9 + dec[0].data.length / 9 + sheetTris;
+    t.tris = (b.pos.length + rb.pos.length + sb.pos.length + glow.pos.length) / 9 + dec[0].data.length / 9;
     t.built = true;
     world.lamps.push(...lamps.slice(0, 4));
   }
@@ -513,6 +509,21 @@ export function buildGiantWorld(map, fogUniforms, X) {
     m.frustumCulled = false;
     group.add(m);
   }
+  // The shallows' sheet: built once, in 100 m blocks that three culls against the view (one or two draws on screen;
+  // per 32 m tile it cost a draw call a tile for a few hundred triangles).
+  if (sheetMat) {
+    for (let bz = 0; bz < Hh; bz += 100) for (let bx = 0; bx < W; bx += 100) {
+      const sh = isle.sheetTile(map, bx, bz, bx + 100, bz + 100);
+      if (!sh.pos.length) continue;
+      const g = geometry([{ name: 'position', data: sh.pos, size: 3 }, { name: 'aA', data: sh.alpha, size: 1 }]);
+      g.computeBoundingSphere();
+      const m = new THREE.Mesh(g, sheetMat);
+      m.renderOrder = 3;
+      m.matrixAutoUpdate = false;
+      group.add(m);
+    }
+  }
+
   // One empty-ish mesh per material until the first tiles land, so the renderer's up-front compile covers them.
   const stubs = [];
   for (const [mat, attrs, parent] of [

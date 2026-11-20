@@ -345,8 +345,9 @@ island (`voteOptions`), and the solo picker's battle royale section shows both.
   js/render/themes/jadefall.js (a morning sun from the east, region ground for `jungle`, `ruins`, `beach`, `mangrove`,
   `highland`, sand along every shore from the lattice, earth banks along channels, a sunken sand shelf under the
   shallows). The shallows are a see-through rippling sheet whose corners fade with how much shallow water lies round
-  them (soft shorelines), built per streamed tile (`sheetTile`) and culled and dropped with it; runs of cells at full
-  opacity are one quad. Its edges are open sea (`border` walls with `open`; off-map sea on every side). Art:
+  them (soft shorelines), built once in 100 m blocks that are culled against the view (`sheetTile`; about 10k
+  triangles for the whole island, one or two draws on screen; per 32 m tile it cost a draw call a tile); runs of cells
+  at full opacity are one quad. Its edges are open sea (`border` walls with `open`; off-map sea on every side). Art:
   assets/maps/jadefall.jpg (card) and assets/maps/jadefall-overview.jpg (dev/br-overview.mjs).
 - Ground War in the same region (`giantWorld: true`: the same streamer and palette on a huge map, 180-degree symmetric
   through `twins` in isle-kit.js): Tidebreak (js/shared/maps/gw-tidebreak.js, the lagoon breaking out to the sea:
