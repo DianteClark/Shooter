@@ -6,7 +6,8 @@ triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Fro
 gw (Ground War TDM on Harvest), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
 calls, triangles and script ms over 12 s, and a screenshot of each with the overlay. --root serves another checkout
-(an older build) for a before/after.
+(an older build) for a before/after. --suits dresses everyone in the match in a Mastery suit, twelve different operators
+round the roster (docs/OPERATORS-ART.md: the suit banks' cost).
 """
 import asyncio, subprocess, sys, time, os, json, re, statistics
 from playwright.async_api import async_playwright
@@ -19,6 +20,8 @@ PORT = int(argv[0]) if argv and argv[0].isdigit() else 8395
 OUT = argv[1] if len(argv) > 1 else '/tmp/sweep-perf'
 ONLY = argv[2:]
 Q = next((a[4:] for a in sys.argv[1:] if a.startswith('--q=')), 'low')
+SUITS = '--suits' in sys.argv[1:]
+SUIT_OPS = ['trooper', 'ronin', 'monarch', 'coyote', 'ox', 'harrow', 'flint', 'nyx', 'tinker', 'mako', 'skylark', 'brigid']
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
 G = 'window.__game.app'
@@ -63,6 +66,11 @@ async def run(browser, name, mapId, mode, rows):
     await pg.wait_for_function(f'{G}.inMatch && {G}.match?.interp?.newest?.phase === "live"', timeout=90000)
     await ev(f"{G}.renderer?.setQuality?.('{Q}')")     # Pinned, as docs/BR-PERF.md measures (SwiftShader would drop auto to Potato).
     extra = ''
+    if SUITS:
+        extra = 'suits ' + str(await ev(f"""(() => {{ const c = {G}.renderer.chars, ops = {json.dumps(SUIT_OPS)};
+          const ids = [...c.opById.keys()];
+          c.setRoster(ids.map((id, i) => ({{ id, operator: ops[i % ops.length], skin: `skin:${{ops[i % ops.length]}}-5` }})));
+          return ids.length; }})()"""))
     if name == 'br':
         await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=60000)
         await pg.locator('.br-jump-map').first.click()
