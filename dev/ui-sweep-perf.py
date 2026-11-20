@@ -71,7 +71,7 @@ async def run(browser, name, mapId, mode, rows):
           const ids = [...c.opById.keys()];
           c.setRoster(ids.map((id, i) => ({{ id, operator: ops[i % ops.length], skin: `skin:${{ops[i % ops.length]}}-5` }})));
           // And on screen: everyone gathered round the local player every second, kept alive.
-          const m = {G}.match, sim = m.sim, me = sim.byId.get(m.localId);
+          const m = {G}.match, sim = m.sim, me = m.ps;
           const gather = () => sim.players.forEach((p, i) => {{
             if (p.id === m.localId) return;
             const a = i * 2.4, k = sim.nav.nearestFree(me.x + Math.cos(a) * (3 + (i % 3) * 1.5), me.z + Math.sin(a) * (3 + (i % 3) * 1.5));
