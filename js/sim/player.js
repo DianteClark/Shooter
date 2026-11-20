@@ -18,7 +18,7 @@
 // you can see over a crate that an SMG cannot shoot through.
 
 import { PLAYER_RADIUS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS } from '../shared/constants.js';
-import { hasLineOfSight, rayCircle, resolveCircle, wallsOnRay, wallScratch } from '../shared/geometry.js';
+import { hasLineOfSight, inShallows, rayCircle, resolveCircle, SHALLOW_SLOW, wallsOnRay, wallScratch } from '../shared/geometry.js';
 import { HEAD_RADIUS, MAX_COVER_PIECES, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
 import { DEFAULT_LOADOUT, LETHALS, TACTICALS } from '../shared/catalog.js';
@@ -467,7 +467,7 @@ function stepMovement(ps, input, w, dt, map) {
   else if (ps.sprintRecoverT > 0) ps.sprintRecoverT -= dt;
 
   const speedNow = Math.hypot(ps.vx, ps.vz);
-  if (input.slide && !ps.noSlide && !ps.sliding && ps.slideCool <= 0 && speedNow >= MOVE.slideMinSpeed) {
+  if (input.slide && !ps.noSlide && !ps.sliding && ps.slideCool <= 0 && speedNow >= MOVE.slideMinSpeed && !(map.shallows && inShallows(map, ps.x, ps.z))) {
     ps.sliding = true;
     ps.slideT = MOVE.slideDuration;
     ps.slideDirX = ps.vx / speedNow;
@@ -494,7 +494,7 @@ function stepMovement(ps, input, w, dt, map) {
     if (ps.slideT <= 0) { ps.sliding = false; ps.slideCool = slideCooldownOf(ps); }
   } else {
     const base = (ps.sprinting ? MOVE.sprint * (marathon ? MARATHON_SPRINT : 1) : MOVE.run) * w.moveMult
-      * (ps.dazeT > 0 ? 1 - DAZE_SLOW * ps.daze : 1);
+      * (ps.dazeT > 0 ? 1 - DAZE_SLOW * ps.daze : 1) * (map.shallows && inShallows(map, ps.x, ps.z) ? SHALLOW_SLOW : 1);
     // ADS caps the speed rather than scaling the stick: a part-pushed stick that is already slower than the ADS pace
     // loses nothing, which is what lets a player ease the stick off into ADS without crawling.
     const cap = ps.sprinting ? base : base * (1 + (w.adsMoveMult - 1) * ps.adsT);

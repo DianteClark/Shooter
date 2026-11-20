@@ -66,6 +66,10 @@ export const MODES = {
   // Showdown (ROADMAP 31, docs/MODES.md "Showdown"): 2 v 2 rounds on the small maps, everyone on the same dealt kit
   // (js/sim/gf.js). scoreLimit is rounds to win, timeLimit one round's clock before the overtime flag.
   gf:    { id: 'gf',    rules: 'gf',  teamSize: 2, sizes: ['small'], rounds: true, look: 'hard', name: 'Showdown', short: '2v2', scoreLimit: 6, timeLimit: 40, desc: '2 v 2 rounds on a small map, one life each. Everyone gets the same random kit, new every two rounds. First to 6.' },
+  // Co-op campaign (ROADMAP 59, docs/CAMPAIGN.md): Operation Nightrail, scripted missions for up to four against the
+  // Meridian Line (js/sim/campaign.js). Only ever started from the Campaign tab: no map or picker offers it
+  // (modeFitsMap). scoreLimit carries the mission and difficulty (js/shared/campaign.js cpCode).
+  cp:    { id: 'cp',    rules: 'cp',  teamSize: 4, cp: true, noMods: true, name: 'Operation Nightrail', short: 'OPS', scoreLimit: 11, timeLimit: 3600, desc: 'Co-op campaign: scripted missions for up to four against the Meridian Line.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 
@@ -199,6 +203,7 @@ export const CONTRACT_TYPES = ['intel', 'hvt', 'cache', 'hack', 'escort'];
 export const CONTRACT_NAMES = { intel: 'Secure Intel', hvt: 'Eliminate HVT', cache: 'Destroy Cache', hack: 'Hack Terminal', escort: 'Escort Asset' };
 export const isEx = id => MODES[id]?.rules === 'ex';
 export const isZm = id => MODES[id]?.rules === 'zm';
+export const isCp = id => MODES[id]?.rules === 'cp';
 export const isBr = id => MODES[id]?.rules === 'br' || id === 'br';
 export const squadSizeFor = id => MODES[id]?.squad ?? 4;
 
@@ -212,7 +217,7 @@ export const isFfa = id => !!(MODES[id]?.ffa || id === 'ffa' || id === 'gun');
 export function playersFor(id, map = null) {
   const m = MODES[id] ?? MODES.tdm;
   if (m.br || m.ex) return m.players;
-  if (m.zm) return m.teamSize;            // Graveyard Shift: the players' side only (the horde is not players).
+  if (m.zm || m.cp) return m.teamSize;    // Graveyard Shift and the campaign: the players' side only (the horde, the Line are not players).
   if (!m.ffa) return m.teamSize * 2;
   // A map without a size tier counts as medium (see SIZES in js/shared/map.js).
   const size = map?.large ? 'huge' : map?.size;
@@ -243,6 +248,7 @@ export function modeFitsMap(map, mode) {
   if (rules === 'br') return !!map.br?.loot?.length;
   if (rules === 'ex') return (map.br?.pois?.length ?? 0) >= 8;
   if (rules === 'zm') return !!def.maps?.includes(map.id);
+  if (rules === 'cp') return false;       // The campaign picks its own maps (js/shared/campaign.js); never offered elsewhere.
   return true;
 }
 

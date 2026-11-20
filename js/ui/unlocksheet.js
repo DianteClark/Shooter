@@ -49,7 +49,7 @@ export function playForStat(key = '') {
       : MODES[id]?.ex ? { tab: 'extraction', playlist: 'exquads' } : { tab: 'standard', modes: [id] };
   }
   const map = /^map(?:won)?:(.+)$/.exec(k)?.[1];
-  if (map) return map === 'frontier' ? { tab: 'br', playlist: 'quads' } : MAPS[map]?.zmOnly ? { tab: 'zombies', playlist: 'zmsolo' } : MAPS[map]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : QUICK;
+  if (map) return MAPS[map]?.size === 'giant' ? { tab: 'br', playlist: 'quads' } : MAPS[map]?.zmOnly ? { tab: 'zombies', playlist: 'zmsolo' } : MAPS[map]?.size === 'huge' ? { tab: 'groundwar', playlist: 'gwqp' } : QUICK;
   const OBJ = { plants: 'snd', defuses: 'snd', clutches: 'snd', bombs: 'snd', sndRounds: 'snd', flagCaps: 'ctf', flagReturns: 'ctf', carrierKills: 'ctf', confirms: 'kc', captures: 'dom' };
   if (OBJ[k]) return { tab: 'standard', modes: [OBJ[k]] };
   return QUICK;
@@ -211,6 +211,9 @@ export function cardRequirement(c, row = null) {
       const best = Math.max(0, ...Object.values(Progress.zmBestAll?.() ?? {}));
       how = `${c.req}.${tierWord(art.tier)}`;
       status = `Your best round in Graveyard Shift: ${best || 'none yet'}.`;
+    } else if (c.group === 'Campaign') {
+      how = `${c.req}: Multiplayer, the Campaign tab, on any difficulty. Missions open one after another.`;
+      status = 'Not cleared yet.';
     } else if (c.group === 'Modes') how = `${c.req}, added up over all your matches of that mode.${tierWord(art.tier)}`;
     else if (c.group === 'Season') {
       const def = SEASON_DEFS.find(d => d.id === c.season), tier = Number(/tier (\d+)/.exec(c.req)?.[1] ?? 0), s = Progress.season?.();

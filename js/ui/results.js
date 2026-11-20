@@ -204,6 +204,29 @@ export function resultsScreen(menu, data, handlers) {
       ${rows.map(([k, v], i) => `<div class="rb-row" style="--i:${i}"><span class="rb-name" style="grid-column:span 5"><b>${k}</b></span><span class="wide" style="color:${i === 2 && z.fresh ? 'var(--c-gold)' : 'var(--c-chalk)'}">${v}</span></div>`).join('')}
     </div>`;
   };
+  // The campaign (js/sim/campaign.js): the squad's numbers, then the mission's stars and records.
+  const cpr = rules === 'cp';
+  const cpSquad = () => {
+    const mates = roster.filter(p => p.team === myTeam && !p.ai);
+    return `<div class="rb ours${data.cp?.done ? ' won' : ''}" style="--team:${TEAMS[myTeam]?.css}">
+      <div class="rb-head"><b class="rb-team">Your squad</b><b class="rb-pts"></b>
+        <span>K</span><span>D</span><span>A</span><span title="Headshots">HS</span><span class="wide">Score</span></div>
+      ${mates.map((p, i) => `<div class="rb-row${p.id === data.localId ? ' me' : ''}" style="--i:${i}">
+        <span class="rb-name">${badgeTag(badgeOf(p.id), 14)}<b>${nameHtml(p.name)}</b></span><span>${p.kills}</span><span>${p.deaths}</span><span>${p.assists ?? 0}</span><span>${p.head ?? 0}</span><span class="wide">${matchScore(p)}</span>
+      </div>`).join('')}
+    </div>`;
+  };
+  const cpRecord = () => {
+    const c = data.cp ?? {}, mm = s => (s ? `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}` : '--');
+    const star = on => `<i style="display:inline-grid;place-items:center;width:16px;height:16px;color:${on ? 'var(--c-gold)' : 'var(--c-line-hi)'}">${art('ui:star', 13)}</i>`;
+    const rows = [[c.bonus || 'Bonus objective', star(c.stars?.[0])], [`Under par (${mm(c.par)})`, star(c.stars?.[1])], ['Nobody died, no retries', star(c.stars?.[2])],
+      ['Time', mm(c.secs)], ['Best', `${mm(c.bestSecs)} · ${c.bestStars ?? 0}/3`]];
+    if (c.vetAll) rows.push(['Every mission on Veteran', 'Done']);
+    return `<div class="rb theirs" style="--team:#7cc8ff">
+      <div class="rb-head"><b class="rb-team">${esc(c.done ? 'Stars' : 'Mission failed')}</b><b class="rb-pts">${c.first ? 'First clear' : ''}</b><span></span><span></span><span></span><span></span><span class="wide"></span></div>
+      ${rows.map(([k, v], i) => `<div class="rb-row" style="--i:${i}"><span class="rb-name" style="grid-column:span 5"><b>${esc(k)}</b></span><span class="wide">${v}</span></div>`).join('')}
+    </div>`;
+  };
   const exStat = p => data.exView?.stats?.[roster.indexOf(p)] ?? [0, 0];
   const exSquad = () => {
     const mates = roster.filter(p => p.team === myTeam && !p.ai);
@@ -375,7 +398,7 @@ export function resultsScreen(menu, data, handlers) {
         <button class="rs-btn quiet res-skip" data-act="resSkip">Skip</button>
         <button class="rs-btn quiet res-unlocked" data-act="resUnlocked" hidden>Unlocked${unlocks?.length ? ` ${unlocks.length}` : ''}</button>
       </div>
-      <div class="rb-pair">${zmr ? zmCrew() + zmRecord() : exr ? exSquad() + exRewards() : br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
+      <div class="rb-pair">${cpr ? cpSquad() + cpRecord() : zmr ? zmCrew() + zmRecord() : exr ? exSquad() + exRewards() : br ? brSquad() + brSquads() : ffa ? podium() + standings() : board(myTeam, 'ours') + board(1 - myTeam, 'theirs')}</div>
       <div class="rs-cards${progCard ? ' has-prog' : ''}">
         <div class="rs-card finalcard${fk ? '' : ' none'}">
           <div class="fk-canvas"></div>

@@ -24,6 +24,12 @@ export function mapIcons({ P, R, O, bar }) {
     // Icebreaker: a bow riding up over floes, its bridge and stack.
     'map:icebreaker': { f: [P(1, 18, 22, 18, 30, 11, 27, 24, 4, 24), R(7, 11, 9, 7, [1, 1, 0, 0]), R(18, 7, 3.4, 11)], h: [R(9, 13, 2, 2), R(12.5, 13, 2, 2)], a: [P(2, 27, 9, 26, 12, 29.5, 1, 29.5), P(15, 27, 24, 26, 29, 29.5, 13, 29.5)] },
     // Millbrook: a stone mill with a pitched roof, its waterwheel turning in the race below.
+    // Jadefall: the stepped pyramid, its jade crown lit, the lagoon's swell below.
+    'map:jadefall': { f: [R(5, 21, 22, 4.5), R(8.5, 16.5, 15, 4.5), R(12, 12, 8, 4.5)], h: [R(14.5, 21, 3, 4.5), R(14.8, 16.5, 2.4, 4.5)], s: [P(1, 29, 6, 26.5, 11, 29, 16, 26.5, 21, 29, 26, 26.5, 31, 29)], sw: 2, a: [P(13.5, 12, 16, 4, 18.5, 12)] },
+    // Tidebreak: a causeway on its piers over the waves, the shrine's broken arch on it.
+    'map:tidebreak': { f: [R(1, 16, 30, 4), R(4, 20, 3, 6), R(14.5, 20, 3, 6), R(25, 20, 3, 6), R(10, 5, 3, 11), R(19, 8, 3, 8), R(9, 3, 9, 3, [1, 0, 0, 1])], as: [P(1, 29.5, 5.5, 27, 10, 29.5, 14.5, 27, 19, 29.5, 23.5, 27, 28, 29.5)], sw: 2 },
+    // Coral Quarter: the church tower over two roofs, its bell lit.
+    'map:coral': { f: [R(12, 8, 8, 21.5), P(11, 8, 16, 1.5, 21, 8), R(1, 19, 9, 10.5), P(0.5, 19, 5.5, 14.5, 10.5, 19), R(22, 21, 9, 8.5), P(21.5, 21, 26.5, 16.5, 31.5, 21)], h: [R(13.8, 10.5, 4.4, 5, [2, 2, 0, 0]), R(14.5, 22, 3, 7.5, [1.5, 1.5, 0, 0])], a: [O(16, 14, 1.5)] },
     'map:millbrook': { f: [R(15, 12, 15, 17.5), P(13, 12.5, 22.5, 4, 32, 12.5), O(9, 20, 7.5)], h: [O(9, 20, 5.4), R(20.5, 20, 4, 9.5, [2, 2, 0, 0])], a: [O(9, 20, 1.8), bar(3.4, 20, 14.6, 20, 1.4), bar(9, 14.4, 9, 25.6, 1.4), R(1, 28.5, 30, 2)] },
   };
 }

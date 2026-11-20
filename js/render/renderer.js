@@ -9,6 +9,7 @@ import { ZmFx } from './zm-fx.js';     // Graveyard Shift: fences, gates, wall-b
 import { ZmBodies } from './zm-bodies.js';     // Graveyard Shift: each undead kind's own model and animation (ROADMAP item 50).
 import { ZM_INTRO } from '../ui/zm-intro.js';     // A boss's intro: the camera beat (the card is the zombies HUD's).
 import { ZmFairFx } from './zm-fair-fx.js';     // Wrenfield Fair: the Barker's marked lanes, the Whirligig's whirls.
+import { CpFx } from './cp-fx.js';     // The co-op campaign: objectives, charges, the boss's telegraphs, torches (docs/CAMPAIGN.md).
 import { clearZmWalls } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
@@ -391,6 +392,7 @@ export class GameRenderer {
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
+        case 'cpboom': this._boom(ev.x, ev.z, Math.min(7, ev.r || 4)); break;     // The campaign: a charge, a barrage shell.
         case 'zswing': chars.onShot(ev.id, 0.3, 'knife'); break;     // Graveyard Shift: a zombie's claw.
         case 'zspit': case 'zblast': case 'zshield': this.zmFx?.onEvent(ev); if (ev.t === 'zshield') this.zmBodies?.onShield(ev); break;     // Specials (js/render/zm-kinds-fx.js).
         case 'zcharge': case 'zwhirl': (this.fairFx ??= new ZmFairFx(this.scene)).onEvent(ev); if (ev.t === 'zcharge') this.zmBodies?.onCharge(ev); break;     // js/render/zm-fair-fx.js.
@@ -771,6 +773,7 @@ export class GameRenderer {
     this.combat.update(view, fxDt, local ? local.x : 0, local ? local.z : 0, localTeam, uav, !!local);
     if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, this.chars);
     if ((view.obj ?? view.points?.obj)?.ex) (this.exFx ??= new ExFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, localTeam);
+    if ((view.obj ?? view.points?.obj)?.cp) (this.cpFx ??= new CpFx(this.scene, this.map)).update(view, fxDt);
     if (zmObj?.layout) {
       (this.zmFx ??= new ZmFx(this.scene, this.map, zmObj.layout)).update(view, fxDt);
       this.zmFx.kinds.drawShields = !this.zmBodies;     // The Shieldbearer's door is part of its body now.
@@ -887,6 +890,7 @@ export class GameRenderer {
     this.chars.dispose();
     this.brFx?.dispose();
     this.exFx?.dispose(); this.exFx = null;
+    this.cpFx?.dispose(); this.cpFx = null;
     this.zmFx?.dispose(); this.zmFx = null;
     this.zmBodies?.dispose(); this.zmBodies = null; this.chars.zm = null; ZM_INTRO.reset();
     this.fairFx?.dispose(); this.fairFx = null;

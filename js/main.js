@@ -8,7 +8,8 @@ import { music } from './audio/music.js';
 import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
-import { MODES, firstModeFor, isBr, isEx, isFfa, isZm, playersFor } from './shared/modes.js';
+import { MODES, firstModeFor, isBr, isEx, isFfa, isZm, isCp, playersFor } from './shared/modes.js';
+import { MISSIONS, CP, cpCode, cpDecode, missionOpen, campaignCleared } from './shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { ZM_SQUAD } from './shared/zombies.js';     // Graveyard Shift seats four (docs/ZOMBIES.md).
 const BR_HUMANS = 8;           // Battle royale: up to eight people in a room, bots fill the rest of the 32 (docs/BR.md).
 import { normalizeLoadout } from './shared/catalog.js';
@@ -177,6 +178,7 @@ const app = {
   customTab: 'match',                  // Custom: 'match' or 'training'.
   customFrom: null,                    // 'lobby' while a host edits the friend lobby's custom settings.
   training: loadTraining(),            // Custom > Training's settings (js/ui/playscreens.js).
+  cp: null,                            // The Campaign tab's pick {k, diff} (cpPickNow), as last left.
 };
 // Custom's last pick, if its map still exists and still hosts its mode; else the default.
 function recalledSoloPick() {
@@ -373,6 +375,13 @@ menu.on({
   },
   mpFind: () => findMatch(app.mp.tab, mpSel()),
   mpTourney: () => needName(openTourney),
+  // The co-op campaign (js/ui/campaign.js): a mission on the map, its difficulty, the briefing, then solo or a room.
+  cpPick: ({ k }) => { const n = Number(k); if (MISSIONS[n]) { if (!missionOpen(Progress.campaign(), n)) menu.toast(`Clear ${MISSIONS[n - 1]?.name ?? 'the mission before'} first`); setCpPick({ k: n }); } },
+  cpDiff: ({ d }) => setCpPick({ diff: Number(d) }),
+  cpBrief: () => { if (missionOpen(Progress.campaign(), cpPickNow().k)) menu.campaignBrief(cpPickNow()); },
+  cpBriefBack: () => renderMp(),
+  cpSolo: () => needName(() => launchCampaign(cpPickNow().k, cpPickNow().diff)),
+  cpFriends: () => needName(() => hostCampaign(cpPickNow().k, cpPickNow().diff)),
   // The Hardcore switch: saved on this device, on top of every pick it fits (and a room this phone hosts).
   mpHardcore: () => { Options.set('hardcore', !Options.get('hardcore')); renderMp(); },
   mpCancel: () => { stopSearch(); renderMp(); },
@@ -808,6 +817,7 @@ const ffaRoom = () => isFfa(roomMode());
 function roomCap() {
   if (isBr(roomMode()) || isEx(roomMode())) return BR_HUMANS;     // Extraction: eight people at most, in squads.
   if (isZm(roomMode()) || isZm(app.lobby?.custom?.mode)) return ZM_SQUAD;     // Graveyard Shift: four players, all on one side.
+  if (isCp(roomMode()) || isCp(app.lobby?.custom?.mode)) return CP.squad;     // The campaign: a squad of four.
   if (!ffaRoom()) return TEAM_SIZE * 2;
   const mapId = app.matchInfo?.mapId ?? app.lastPlayed?.mapId;
   return playersFor(roomMode(), MAPS[mapId] ?? null);
@@ -815,7 +825,7 @@ function roomCap() {
 
 function teamOpen(team, except = null) {
   // A free-for-all has no sides (buildRoster deals everyone their own); only the room's size matters.
-  if (ffaRoom()) return app.lobby.humans.filter(h => h.id !== except).length < roomCap();
+  if (ffaRoom() || isCp(app.lobby?.custom?.mode)) return app.lobby.humans.filter(h => h.id !== except).length < roomCap();
   return app.lobby.humans.filter(h => h.team === team && h.id !== except).length < TEAM_SIZE;
 }
 
@@ -1182,7 +1192,7 @@ function updateVoiceTeam() {
   // Before and between matches the friend lobby is one party: everyone hears everyone.
   if (!app.inMatch) { app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id).map(h => h.id)); return; }
   // A free-for-all has no squad: voice goes to every human in the room.
-  const ffa = ffaRoom() || isZm(roomMode());     // Graveyard Shift: every human is on the one side.
+  const ffa = ffaRoom() || isZm(roomMode()) || isCp(roomMode());     // Graveyard Shift and the campaign: every human is on the one side.
   app.voice.setTeammates(app.lobby.humans.filter(h => h.id !== me.id && (ffa || h.team === me.team)).map(h => h.id));
 }
 
@@ -1230,6 +1240,7 @@ function setLobbyCustom(custom) {
   app.customFrom = null;
   if (!app.isHost || !app.net) return renderLobby();
   if (isZm(custom?.mode) && app.lobby.humans.length > ZM_SQUAD) { menu.toast(`Graveyard Shift seats ${ZM_SQUAD} players`, 'warn'); return renderLobby(); }
+  if (isCp(custom?.mode) && app.lobby.humans.length > CP.squad) { menu.toast(`A campaign squad is ${CP.squad} players`, 'warn'); return renderLobby(); }
   app.lobby.custom = custom;
   app.lobby.botSkill = custom?.skill ?? MP_BOT_SKILL;
   app.lobby.mods = custom ? custom.mods : withHardcore([], Options.get('hardcore'));
@@ -1240,7 +1251,7 @@ function setLobbyCustom(custom) {
 // A custom room's Start: its pick (a Random half rolled here), difficulty, bots per side and limits.
 function launchCustomRoom() {
   const c = app.lobby.custom;
-  const { mapId, mode } = resolvePick({ mapId: c.mapId, mode: c.mode });
+  const { mapId, mode } = isCp(c.mode) ? { mapId: c.mapId, mode: c.mode } : resolvePick({ mapId: c.mapId, mode: c.mode });
   app.lastPick = { mapId: c.mapId, mode: c.mode, custom: true };
   const set = c.mode === mode && c.bots !== null ? c : null;
   launchHostMatch(mapId, mode, {
@@ -1294,7 +1305,7 @@ function mpSel(tab = app.mp.tab) {
 
 function renderMp() {
   Recall.saveMp(app.mp);
-  menu.multiplayer({ tab: app.mp.tab, sel: mpSel(), hardcore: !!Options.get('hardcore') });
+  menu.multiplayer({ tab: app.mp.tab, sel: mpSel(), hardcore: !!Options.get('hardcore'), cpPick: cpPickNow() });
 }
 
 function stopSearch() {
@@ -1577,10 +1588,56 @@ function pickSoloMode(mode) {
 }
 
 // Rematch in solo: the same map and mode again at once; a half that was picked as Random rolls again.
+// --- The co-op campaign (docs/CAMPAIGN.md): the Campaign tab's pick, solo with bots, or a friend room ---
+// The pick: the last one this phone made, else the first mission not yet cleared.
+function cpPickNow() {
+  if (!app.cp) {
+    const cp = Progress.campaign(), was = Recall.get('cpPick');
+    const first = Math.max(0, MISSIONS.findIndex(m => !campaignCleared(cp, m.id)));
+    app.cp = was && MISSIONS[was.k] ? { k: was.k | 0, diff: Math.max(0, Math.min(2, was.diff | 0)) } : { k: first, diff: 1 };
+  }
+  return app.cp;
+}
+function setCpPick(part, paint = true) {
+  app.cp = { ...cpPickNow(), ...part };
+  Recall.set('cpPick', app.cp);
+  if (!paint) return;
+  if (menu.el.dataset.screen === 'cpbrief') menu.campaignBrief(app.cp); else renderMp();
+}
+// After a mission: the next one once this one is cleared (and the next is open), else this one again.
+function cpNext({ k, diff }) {
+  const cp = Progress.campaign();
+  return campaignCleared(cp, MISSIONS[k].id) && MISSIONS[k + 1] && missionOpen(cp, k + 1) ? { k: k + 1, diff } : { k, diff };
+}
+
+function launchCampaign(k, diff) {
+  const m = MISSIONS[k];
+  if (!m || !missionOpen(Progress.campaign(), k)) return;
+  resetToSolo();
+  app.lastPick = { cp: { k, diff } };
+  const id = 'local', seed = randomSeed();
+  const humans = [{ id, name: myTagName(), team: 0, ...seatData() }];
+  const roster = buildRoster(humans, { botSkill: params.get('bots') || 'veteran', mode: 'cp', mapId: m.map, seed, pool: poolFor(humans) });
+  beginMatch({
+    roster: withBadges(roster, humans, seed), seed, mapId: m.map, mode: 'cp', mods: [],
+    scoreLimit: cpCode(k, diff), timeLimit: MODES.cp.timeLimit, hostId: id, isHost: true, localId: id,
+  });
+}
+
+// A friend room set to the mission: friends take the bots' seats (four at most).
+function hostCampaign(k, diff) {
+  const m = MISSIONS[k];
+  if (!m || !missionOpen(Progress.campaign(), k)) return;
+  resetToSolo();
+  app.lastPick = { cp: { k, diff }, custom: true };
+  startHosting({ custom: { mapId: m.map, mode: 'cp', mods: [], skill: 'veteran', bots: 0, players: null, scoreLimit: cpCode(k, diff), timeLimit: MODES.cp.timeLimit } });
+}
+
 function rematchSolo() {
   if (app.lastMode === 'range') return startRange();
   if (app.lastPick?.training) return needName(startTraining);
   if (app.lastPick?.tourney) return needName(openTourney);
+  if (app.lastPick?.cp) { const n = cpNext(app.lastPick.cp); return needName(() => { setCpPick(n, false); menu.campaignBrief(cpPickNow()); }); }
   if (app.lastPick?.mp) return needName(() => findMatch(app.lastPick.mp.tab, app.lastPick.mp.sel));
   const pick = app.lastPick, last = app.lastPlayed;
   if (!pick && !last) return startSolo();
@@ -1842,6 +1899,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.onBrCommand((act, extra) => app.match?.brCommand(act, extra));
   hud.onExCommand((act, extra) => app.match?.exCommand(act, extra));
   hud.onZmCommand((act, extra) => app.match?.zmCommand(act, extra));
+  hud.onCpCommand((act, extra) => app.match?.cpCommand(act, extra));
   hud.onFinCommand((act, e) => (act === 'finish' ? app.match?.finish() : app.match?.emote(e)));
   hud.zmHud.guns = () => (app.match ? [app.match.ps.primary, app.match.ps.secondary] : []);
   hud.zmHud.hands = () => app.match?.ps ?? null;
@@ -1974,6 +2032,7 @@ function showResults(results) {
       br: results.br,
       ex: results.ex ?? null, exView: results.exView ?? null,
       zm: results.zm ?? null, zmView: results.zmView ?? null,
+      cp: results.cp ?? null, cpView: results.cpView ?? null,
       early: !!results.early,
       practice: !!results.practice,
       mastery: results.mastery,
@@ -2004,11 +2063,16 @@ function rematchChoice() {
     if (!app.isHost) return { rematchLabel: 'Ready', rematchSub: 'The host starts the next match' };
     if (pick?.tourney && pick.party) return { rematchLabel: 'Bracket', rematchSub: 'The weekend cup, with your room' };
     const n = app.lobby.humans.length;
+    if (isCp(app.lobby.custom?.mode)) { const c = cpDecode(app.lobby.custom.scoreLimit), nx = cpNext(c); return { rematchLabel: nx.k !== c.k ? 'Next mission' : 'Retry mission', rematchSub: `${MISSIONS[nx.k].n}. ${MISSIONS[nx.k].name} · same room` }; }
     return { rematchLabel: 'Rematch', rematchSub: app.lobby.custom ? place(app.lobby.custom.mapId, app.lobby.custom.mode) || 'Same room' : `Same room · ${n} player${n === 1 ? '' : 's'} · map vote` };
   }
   if (app.lastMode === 'range') return { rematchLabel: 'Again', rematchSub: 'Firing range' };
   if (pick?.training) return { rematchLabel: 'Train again', rematchSub: MAPS[app.training.map]?.name ?? 'Training' };
   if (pick?.tourney) { let sub = ''; try { sub = tourneySpot().sub; } catch { /* the label alone */ } return { rematchLabel: 'Bracket', rematchSub: sub }; }
+  if (pick?.cp) {
+    const next = cpNext(pick.cp);
+    return next.k !== pick.cp.k ? { rematchLabel: 'Next mission', rematchSub: `${MISSIONS[next.k].n}. ${MISSIONS[next.k].name}` } : { rematchLabel: 'Retry mission', rematchSub: `${MISSIONS[next.k].n}. ${MISSIONS[next.k].name}` };
+  }
   if (pick?.mp) {
     let name = '';
     try { name = resolveSelection(pick.mp.tab, pick.mp.sel, { hardcore: !!Options.get('hardcore') }).name; } catch { /* the label alone */ }
@@ -2025,6 +2089,12 @@ function afterResults() {
   const me = localHuman();
   if (app.isHost && app.lastPick?.tourney && app.lastPick.party) return openPartyTourney();
   if (app.isHost) {
+    // A campaign room moves on to the next mission once this one is cleared (the host's progress decides).
+    if (isCp(app.lobby.custom?.mode)) {
+      const n = cpNext(cpDecode(app.lobby.custom.scoreLimit));
+      app.lobby.custom = { ...app.lobby.custom, mapId: MISSIONS[n.k].map, scoreLimit: cpCode(n.k, n.diff) };
+      broadcastLobby();
+    }
     for (const h of app.lobby.humans) h.ready = !!h.host;
     startRematchCountdown();
     return;
