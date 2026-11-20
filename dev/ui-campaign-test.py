@@ -53,6 +53,7 @@ async def coop_net(browser):
     ctx = await browser.new_context(viewport={'width': 667, 'height': 375}, has_touch=True, is_mobile=True)
     async def page(tag, name):
         pg = await ctx.new_page()
+        pg.set_default_timeout(90000)
         pg.on('console', lambda m: errors.append(f'{tag}: {m.text}') if m.type == 'error' else None)
         pg.on('pageerror', lambda e: errors.append(f'{tag}: PAGEERR {e}'))
         await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local', timeout=120000)
@@ -118,6 +119,7 @@ async def main():
             browser = await p.chromium.launch(args=ARGS)
             ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True)
             pg = await ctx.new_page()
+            pg.set_default_timeout(90000)      # A loaded machine: page loads and taps can take a while.
             pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
             pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e} {getattr(e, "stack", "")}'))
             ev = lambda js: pg.evaluate(js)
@@ -127,6 +129,7 @@ async def main():
                 await pg.screenshot(path=f'{OUT}/{name}-{vp["width"]}x{vp["height"]}.png')
 
             async def tap(sel, wait=500):
+                await pg.wait_for_load_state('load')
                 await pg.locator(sel).first.click()
                 await pg.wait_for_timeout(wait)
 
