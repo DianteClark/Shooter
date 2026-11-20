@@ -1,5 +1,6 @@
 // O(1) lookup of what occupies a point on the map: which impact a bullet makes, where debris bounces,
 // and where a limb splashes. A one-metre grid of wall indices, built once per match.
+import { inShallows } from '../shared/geometry.js';
 
 // Cosmetic material of each wall kind. Anything unlisted reads as concrete.
 const MATERIAL = {
@@ -16,6 +17,7 @@ export class Surfaces {
     this.W = Math.ceil(map.width);
     this.H = Math.ceil(map.height);
     this.walls = map.walls;
+    this.map = map;
     this.cells = new Int16Array(this.W * this.H * PER_CELL).fill(-1);
     map.walls.forEach((w, idx) => {
       const x0 = Math.max(0, Math.floor(w.x)), x1 = Math.min(this.W - 1, Math.floor(w.x + w.w));
@@ -64,6 +66,9 @@ export class Surfaces {
     const w = this.wallAt(x, z);
     return !!w && w.kind === 'water';
   }
+
+  // Wading water (Jadefall's shallows): feet splash instead of kicking dust.
+  shallowAt(x, z) { return !!this.map.shallows && inShallows(this.map, x, z); }
 
   groundAt(x, z) { return this.isWater(x, z) ? -0.75 : 0; }
 }

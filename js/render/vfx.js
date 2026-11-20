@@ -612,6 +612,11 @@ export class VFX {
 
   // Foot plant: a scuff of whatever the map's ground is. Sprinting kicks up more.
   footfall(x, z, sprint) {
+    if (!this.wet && this.surf?.shallowAt?.(x, z)) {
+      this.ring(x, z, 0.08, 0.45 + sprint * 0.25, 0.4, WATER, 0.5, 0.16);
+      for (let i = 0; i < (sprint > 0.4 ? 3 : 1); i++) this.spawn(x, 0.18, z, rand(-1, 1), rand(1.2, 2.4), rand(-1, 1), rand(0.16, 0.28), 0.05, 0.02, WATER, 0.65, 12, 0.5);
+      return;
+    }
     if (this.wet) {
       this.ring(x, z, 0.05, 0.3 + sprint * 0.2, 0.28, WATER, 0.38);
       if (sprint > 0.4) for (let i = 0; i < 2; i++) this.spawn(x, 0.1, z, rand(-1, 1), rand(1.4, 2.6), rand(-1, 1), rand(0.16, 0.28), 0.05, 0.02, WATER, 0.65, 12, 0.5);

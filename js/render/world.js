@@ -3451,6 +3451,11 @@ export function mapThumbnail(map, { width = 160, teams = null, spawns = true } =
     g.fillStyle = s.water;
     for (const w of map.walls) if (w.kind === 'water') g.fillRect(w.x * k, w.z * k, w.w * k, w.d * k);
   }
+  // Shallow water (Jadefall's maps): walkable, so a lighter tone under everything.
+  if (s.shallow) {
+    g.fillStyle = s.shallow;
+    for (const r of map.shallows ?? []) g.fillRect(r.x * k, r.z * k, r.w * k, r.d * k);
+  }
   for (const w of map.walls) {
     if (w.kind === 'border' || w.kind === 'water') continue;
     g.fillStyle = w.kind === 'hull' && s.hull ? s.hull : w.blocksVision ? s.solid : s.low;

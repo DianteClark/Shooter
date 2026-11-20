@@ -37,7 +37,7 @@ THEMES.jadefall = {
   ] },
 };
 
-export const thumb = { ground: '#5f7a3a', solid: '#c8bc9a', low: '#8a9a5a', water: '#0f4a56', edge: '#10241a' };
+export const thumb = { ground: '#5f7a3a', solid: '#c8bc9a', low: '#8a9a5a', water: '#0f4a56', shallow: '#3e8a84', edge: '#10241a' };
 
 // ---- Tables merged into the streamer's (themes/frontier.js) -----------------------------------------------------------
 
