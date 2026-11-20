@@ -17,7 +17,7 @@ const SHARDS = 240;
 const FLASHES = 64;                // A shaped flash is up to three stars, and 32 guns can be firing.
 const BALLS = 24;
 const RINGS = 80;
-const DELAYED = 12;
+const DELAYED = 24;          // Delayed effects in flight (an airstrike's five blasts queue three each).
 const MARKS = 110;
 const ROCKETS = 6;
 const BARREL_COOL = 0.3;           // Barrel heat lost per second between rounds (1 = smoking).
@@ -464,6 +464,7 @@ export class VFX {
       d.t -= dt;
       if (d.t > 0) continue;
       if (d.kind === 1) this._secondaryBlast(d.x, d.z, d.r);
+      else if (d.kind === 2) this._smokeColumn(d.x, d.z, d.r);
       else this._implodeRelease(d.x, d.z);
     }
   }
@@ -901,9 +902,28 @@ export class VFX {
     }
     this.ring(x, z, radius * 0.2, radius * 1.7, 0.4, FIRE, 0.9);
     this.ring(x, z, radius * 0.1, radius * 2.2, 0.26, WHITE, 0.65);
+    // Streak visuals pass (ROADMAP item 52): the pressure wave, a thin pale ring that outruns everything else; a few
+    // big tumbling chunks; and a smoke column that keeps climbing after the blast (_after kind 2).
+    this.ring(x, z, radius * 0.5, radius * 3.1, 0.17, SHOCK_RGB, 0.5);
+    for (let i = this._n(5); i > 0; i--) {
+      const a = rand(0, Math.PI * 2), s = rand(4, 9);
+      this.shard(x, 0.9, z, Math.cos(a) * s, rand(8, 14), Math.sin(a) * s, i % 2 ? DEBRIS : SMOKE, rand(2.2, 3.4));
+    }
     this.scorch(x, z, radius * 0.78);
     this.pop(x, 1.8, z, radius * 3.6, FIRE_POP, 0.3);
     this._after(0.11, x, z, radius, 1);
+    this._after(0.32, x, z, radius, 2);
+  }
+
+  // The column: dark puffs stacked over the crater, rising slowly and spreading, lasting a few seconds.
+  _smokeColumn(x, z, r) {
+    // Kept thin and see-through: it marks where the blast was without hiding the fight under it from the camera.
+    for (let i = this._n(4); i > 0; i--) {
+      const h = rand(0.6, 2.6);
+      this.spawn(x + rand(-0.5, 0.5), h, z + rand(-0.5, 0.5), rand(-0.25, 0.25), rand(0.8, 1.6), rand(-0.25, 0.25),
+        rand(2, 3), r * 0.22, r * rand(0.55, 0.8), i % 3 ? SMOKE : SMOKE_PALE, 0.3, -0.15, 0.9);
+    }
+    for (let i = this._n(3); i > 0; i--) this.spawn(x + rand(-0.4, 0.4), 0.4, z + rand(-0.4, 0.4), 0, rand(0.6, 1.4), 0, rand(0.8, 1.4), 0.25, 0.06, FIRE_HOT, 0, -0.5, 1);
   }
 
   _after(t, x, z, r, kind) {
@@ -1662,6 +1682,7 @@ export class VFX {
 const WATER = [0.72, 0.84, 0.98];
 const MUZZLE_HOT = [1.0, 0.74, 0.32];
 const SMOKE_PALE = [0.3, 0.29, 0.33];
+const SHOCK_RGB = [0.85, 0.88, 0.92];     // An explosion's pressure ring.
 const CONTRAIL = [0.8, 0.84, 0.92];
 const DEBRIS = [0.2, 0.19, 0.2];
 const FIRE_HOT = [1.0, 0.76, 0.3];

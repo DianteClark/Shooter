@@ -384,7 +384,7 @@ export class GameRenderer {
         }
         // Screen punches: a multi-kill, a kill streak and calling in your own scorestreak land a small camera kick.
         case 'medal': if (ev.id === localId && PUNCH[ev.medal]) this.punch(PUNCH[ev.medal]); break;
-        case 'streak': if (ev.id === localId) this.punch(0.05); break;
+        case 'streak': if (ev.id === localId) this.punch(0.05); chars.onCallIn(ev.id, ev.kind); break;   // Laptop, flare or radio.
         case 'brchest': this.brFx?.onChest(ev.x, ev.z); break;
         case 'brping': if (ev.team === localTeam) this.brFx?.ping(ev.x, ev.z); break;     // A squadmate's landing spot.
         case 'exleave': case 'exfil': case 'exland': case 'excall': this.exFx?.onEvent(ev); break;
@@ -888,6 +888,22 @@ export class GameRenderer {
 // Turntable for one gun, for the gunsmith and end card. One instance is enough for the whole menu layer:
 // the canvas can be re-parented between screens, and each show() only rebuilds what changed.
 const KICK_DECAY = 7;
+// The gunsmith inspect (GunPreview.inspect): seconds, and the pose at t seconds in, on the pivot at the gun's centre.
+// Pitch tips the muzzle up (z), roll turns it round its barrel (x), a small lift and sway sell the toss.
+export const INSPECT_DUR = 2.1;
+const ease = t => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+export function inspectPose(t, o) {
+  if (!(t >= 0) || t > INSPECT_DUR) { o.rotation.set(0, 0, 0); o.position.set(0, 0, 0); return o; }
+  const u = t / INSPECT_DUR;
+  const tilt = ease(u / 0.22) * (1 - ease((u - 0.82) / 0.18));                         // Muzzle up, held, then down.
+  const show = ease(u / 0.22) * (1 - ease((u - 0.3) / 0.1));                           // Rolled to its left side.
+  const spin = ease((u - 0.36) / 0.34);                                                // One full turn round the barrel.
+  const toss = Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.36) / 0.34)));
+  const settle = u > 0.82 ? Math.sin((u - 0.82) / 0.18 * Math.PI * 2) * (1 - (u - 0.82) / 0.18) * 0.12 : 0;   // Overshoot.
+  o.rotation.set(-show * 0.9 + spin * Math.PI * 2, tilt * 0.22 * Math.sin(u * Math.PI * 1.5), tilt * 0.3 + settle);
+  o.position.set(0, toss * 0.07, 0);
+  return o;
+}
 const FRAME_EASE = 9;
 
 export class GunPreview {
@@ -912,8 +928,18 @@ export class GunPreview {
     this.gunW = 1; this.gunH = 1;
     this.fitDist = 2.2;
     this.dist = 0;
+    // The gunsmith's inspect flourish (inspect()): the gun turns on a pivot at its own centre.
+    this.pivot = new THREE.Group();
+    this.pivot.rotation.order = 'ZYX';      // Roll about the gun's own barrel first, then sway, then the muzzle tips up.
+    this.scene.add(this.pivot);
+    this.inspectT = -1;
     this.show('ar', 'none');
   }
+
+  // A gunsmith inspect: the gun tips its muzzle up and rolls to show its left side, spins a full turn round the barrel
+  // with a small toss, then drops back level with a little overshoot. INSPECT_DUR seconds; cheap (one transform).
+  inspect() { this.inspectT = 0; }
+  get inspecting() { return this.inspectT >= 0; }
 
   // attachments: a kit { optic?, barrel?, mag?, grip? }, optional. Changing only the camo re-uses the model.
   show(weaponId, camoId, attachments) {
@@ -921,7 +947,7 @@ export class GunPreview {
     const key = gun.key ?? weaponId;
     if (key !== this.modelKey) {
       if (this.mesh) {
-        this.scene.remove(this.mesh);
+        this.pivot.remove(this.mesh);
         this.mesh.geometry.dispose();
         this.mesh.dispose();
       }
@@ -930,7 +956,7 @@ export class GunPreview {
       this.mesh = new THREE.InstancedMesh(geom, this.material, 1);
       this.mesh.setMatrixAt(0, new THREE.Matrix4());
       this.mesh.frustumCulled = false;
-      this.scene.add(this.mesh);
+      this.pivot.add(this.mesh);
       geom.computeBoundingBox();
       const box = geom.boundingBox;
       this.goal.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, (box.min.z + box.max.z) / 2);
@@ -978,6 +1004,7 @@ export class GunPreview {
     const s = 1 + k * 0.035;
     this.mesh.scale.set(s, s, s);
     this.scene.rotation.y = yaw;
+    inspectPose(this.inspectT, this.pivot);
     this.camera.position.set(0, d * Math.sin(0.27), d * Math.cos(0.27));
     this.camera.lookAt(0, 0, 0);
     this.scene.updateMatrixWorld();
@@ -988,6 +1015,7 @@ export class GunPreview {
     this.time.value = (this.time.value + dt) % 3600;
     this.spin += dt;
     this.kick = Math.max(0, this.kick - dt * KICK_DECAY);
+    if (this.inspectT >= 0) { this.inspectT += dt; if (this.inspectT > INSPECT_DUR) this.inspectT = -1; }
     const ease = 1 - Math.exp(-FRAME_EASE * dt);
     this.centre.lerp(this.goal, ease);
     this._size();

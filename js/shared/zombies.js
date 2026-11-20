@@ -7,6 +7,7 @@
 // across every open run it crosses except one, which takes a door; buying the door opens the next band. Players start
 // in band `start`. Everything placed (wall-buys, crate spots, machines, risers) sits on open floor reachable inside its
 // band, found from the map's walls on a 1 m grid, so the layout is the same on the host and every guest.
+import { W4_BOX } from './weapons-w4.js';
 import { PLAYER_RADIUS, WEAPON_CATEGORY } from './constants.js';
 import { wallsInBox } from './geometry.js';
 
@@ -174,6 +175,7 @@ export const BOX_GUNS = ['rotary', 'beltlmg', 'drumsmg', 'heavysmg', 'lightlmg',
   'twinshot', 'revolver', 'akimbo', 'thumper', 'launcher', 'salvo', 'crossbow', 'semisnipe', 'rail', 'antimat', 'carbine', 'tacsmg', 'hushsmg', 'burst', 'coach',
   'scatter', 'deuce', 'maul', 'heavyar', 'lmg', 'autoshot',
   'burstsmg', 'heavyshot', 'battlepistol',   // Weapons wave 3 (weapons-w3.js).
+  ...W4_BOX,                                  // Weapons wave 4's melee: the Kagero, Kindling and Bushwhack.
   // The wonder weapons (ZM_WONDERS) last, so every older index on the wire holds; a roll reaches them only by ZM_WONDER_ROLL.
   'nailer', 'machpistol', 'scout'];
 export const START_GUN = 'pistol';

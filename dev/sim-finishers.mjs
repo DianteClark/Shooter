@@ -14,7 +14,8 @@ import { MAPS } from '../js/shared/map.js';
 import { SIM_HZ } from '../js/shared/constants.js';
 import { NavGrid } from '../js/sim/nav.js';
 import { hasLineOfSight } from '../js/shared/geometry.js';
-import { FINISHERS, EMOTES, FIN, finishable, unlockOk, unlockText, cleanFinisher, DEFAULT_FINISHER } from '../js/shared/finishers.js';
+import { FINISHERS, EMOTES, FIN, finishable, unlockOk, unlockText, cleanFinisher, DEFAULT_FINISHER, OPERATOR_FINISHERS, weaponFinisher } from '../js/shared/finishers.js';
+import { WEAPONS } from '../js/shared/weapons.js';
 import { canFinish } from '../js/sim/finishers.js';
 
 const QUICK = process.argv.includes('--quick');
@@ -55,7 +56,14 @@ const steps = (sim, secs, out = []) => { for (let i = 0; i < Math.round(secs * S
 
 function data() {
   section('data');
-  ok(FINISHERS.length >= 4 && FINISHERS.length <= 6 && new Set(FINISHERS.map(f => f.id)).size === FINISHERS.length, `${FINISHERS.length} finishers, unique ids`);
+  ok(OPERATOR_FINISHERS.length >= 4 && OPERATOR_FINISHERS.length <= 6 && new Set(FINISHERS.map(f => f.id)).size === FINISHERS.length, `${OPERATOR_FINISHERS.length} operator finishers, unique ids`);
+  // Weapons wave 4: six more, one per new melee weapon, appended after the operator ones and never pickable.
+  const own = FINISHERS.filter(f => f.weapon);
+  ok(own.length === 6 && FINISHERS.slice(0, OPERATOR_FINISHERS.length).every(f => !f.weapon) && own.every(f => WEAPONS[f.weapon]?.melee && weaponFinisher(f.weapon) === f),
+    'six melee weapons bring their own finisher, after the operator ones');
+  ok(own.every(f => !unlockOk(f.unlock, { level: 999, opTier: 9, season: 999 }) && cleanFinisher(f.id) === DEFAULT_FINISHER && unlockText(f.unlock).includes(f.unlock.who)),
+    'a weapon\'s finisher is never an operator pick');
+  ok(!weaponFinisher('ar') && !weaponFinisher('knife') && !weaponFinisher(null), 'other weapons play the operator\'s pick');
   ok(FINISHERS.every(f => f.dur >= 1.2 && f.dur <= 1.8), 'every finisher lasts 1.2 to 1.8 s');
   // Eight shared emotes, then one signature emote per Season 2 operator (unlock.sig: earned on that operator's track).
   const shared = EMOTES.filter(e => !e.unlock.sig), sigs = EMOTES.filter(e => e.unlock.sig);
@@ -117,6 +125,19 @@ function finish() {
   ok(!v.alive && kill?.by === 'h1' && kill?.target === 'h2' && kill.fin === 'switchback', 'then dies, the kill marked as a finisher');
   ok(!a.fin && !v.fin && sim.fins.length === 0, 'and the lock lets go');
   ok(a.kills === 1 && sim.scores[0] === 1, 'it counts as a kill for the score');
+}
+// Weapons wave 4: with a melee weapon of its own in hand, its finisher plays whatever the operator picked.
+function weaponFin() {
+  section('weapon finisher');
+  for (const w of ['katana', 'tonfa']) {
+    const { sim, a, v } = duel('railyard', { finisher: 'switchback' });
+    a.ps.secondary = w; a.ps.weapon = w; a.ps.slot = 1;
+    ok(sim.applyCommand('h1', { cmd: 'finish', target: 'h2' }), `${w}: the finish command starts it`);
+    const started = sim.drainEvents().find(e => e.t === 'fin');
+    ok(started && FINISHERS[started.k].id === weaponFinisher(w).id, `${w}: plays ${weaponFinisher(w).name}, not the operator's pick`);
+    const ev = steps(sim, weaponFinisher(w).dur + 0.15);
+    ok(ev.find(e => e.t === 'kill')?.fin === weaponFinisher(w).id, `${w}: the kill is marked with it`);
+  }
 }
 function stateOf(p) {
   const ps = p.ps;
@@ -243,6 +264,6 @@ function bots() {
   ok(downFins > 0, `Rebound bots go for finishers on downed enemies (${downFins} of ${down} downs)`);
 }
 
-data(); rules(); finish(); cancel(); downed(); wire(); emotes(); bots();
+data(); rules(); finish(); weaponFin(); cancel(); downed(); wire(); emotes(); bots();
 console.log(`\n${checks - fails}/${checks} checks passed`);
 process.exit(fails ? 1 : 0);

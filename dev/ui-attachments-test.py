@@ -43,6 +43,9 @@ CASES = [
     ('heavyshot', 'grip', 's_slickpump', 'barrel:choke,optic:holo,mag:magnum'),
     ('battlepistol', 'barrel', 's_matchslide', 'optic:laserbox,grip:thumbrest,mag:extmag'),
     ('battlepistol', 'mag', 's_hotloads', ''),     # Mastery I: locked on a veteran save.
+    # Weapons wave 4 (js/shared/weapons-w4.js): a new blade's signature, and the Slugger's.
+    ('katana', 'barrel', 's_longtang', ''),
+    ('bat', 'grip', 's_corkhandle', ''),
 ]
 
 CHECK = """() => {

@@ -14,14 +14,20 @@ import { castRay } from './fog.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { OPERATORS, DEFAULT_OPERATOR, SKINS, SKIN_FX, getSkin, cleanSkin, botSkin } from '../ui/operators.js';
 import { ACC, KEEP, ELITE, MASTERY, NO_ELITE, NO_MASTERY, SUIT, SUITS, tag, seg, masteryTorso, halo, TORSO_SLOTS, HEAD_SLOTS, face as kitFace, headBase } from './operator-kit.js';
+import { SKIN_FX_GLSL, FX_TABLE, farSuitBuilder, FAR_BUDGET } from './operator-suits.js';     // Every suit after the pilot's, the active-skin effects and the suits' distance versions.
 import { T as TK, RELOADS, SHELL_CYCLE, sampleTrack, solveJoint } from './anim.js';
 import { Corpses, MAX_CORPSES, PART as P } from './corpses.js';
 import { uploadUsed } from './dynbuf.js';
 import { recoilOf, fillGaps, deriveHold, deriveScale } from './feel.js';
 import { ZM_OPERATORS, ZM_SKIN_LOOKS } from './zm-looks.js';     // Graveyard Shift's undead (docs/ZOMBIES.md).
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons: their own models in that mode.
-import { blankPose, emotePose, finPose } from './finisher-anim.js';    // Finishers and emotes (docs/FINISHERS.md).
+import { blankPose, emotePose, finPose, CALL_PROPS, CALL_DUR, callInOf } from './finisher-anim.js';    // Finishers, emotes, streak call-ins.
+import { swingDurOf, swingKindOf, swingPose, swingSideNext } from './melee-anim.js';   // Melee swings.
+import { CYCLE, cycleKindOf, cyclePose } from './gun-actions.js';   // Pump, bolt and lever worked between shots.
 import { EMOTES, getFinisher } from '../shared/finishers.js';
+
+const SWING = { x: 0, y: 0, yaw: 0, pitch: 0, roll: 0 };     // Scratch for melee-anim.js swingPose.
+const CYC = { roll: 0, pitch: 0, x: 0, fore: 0, bolt: 0 };     // Scratch for gun-actions.js cyclePose.
 
 // weapons.js belongs to Gameplay; only the shell-loop pacing is read from it, so it stays a soft dependency.
 let WEAPONS = {};
@@ -172,15 +178,15 @@ void main() {
   vLight = light;
   vFx = aFx;
   // Active skins (fxK > 0): the fragment shader animates the gear (plain part-0 pieces) in the accent colour.
-  vEff = vec4(aPart < 0.5 && acc < 0.5 && keep < 0.5 ? fxK : 0.0, position);
+  // The limb meshes (part 2) take it over their tint.
+  vEff = vec4((aPart < 0.5 && acc < 0.5 && keep < 0.5) || aPart > 1.5 ? fxK : 0.0, position);
   vAcc = aTint.r + aTint.g + aTint.b > 0.0 ? aTint : vec3(0.4, 0.9, 1.0);
   gl_Position = projectionMatrix * viewMatrix * world * vec4(pos, 1.0);
 }`;
 
 // Active skin effects (operators.js SKIN_FX), on the gear of an instance whose skin has one, in object space so the
-// pattern rides with the body. Everything else skips them on one branch. 1 holo: an iridescent sheen that shifts with
-// time, with scan lines climbing it. 2 circuit: traces in the accent with pulses running up them. 3 shimmer: heat-haze
-// ripples of the accent rolling across the gear.
+// pattern rides with the body. Everything else skips them on one branch. skinFx() lives in operator-suits.js with the
+// list of effects.
 const CHAR_FRAG = /* glsl */`
 uniform float uTime;
 varying vec3 vCol;
@@ -189,26 +195,7 @@ varying vec2 vFx;
 varying vec4 vEff;
 varying vec3 vAcc;
 ${GLSL_DITHER}
-vec3 skinFx(vec3 c, float k, vec3 p, vec3 a) {
-  float t = uTime;
-  if (k < 1.5) {
-    vec3 h = 0.55 + 0.45 * cos(6.2832 * (p.y * 1.7 + (p.x + p.z) * 0.9 + t * 0.3 + vec3(0.0, 0.33, 0.67)));
-    float scan = smoothstep(0.82, 1.0, fract(p.y * 12.0 - t * 1.4));
-    return mix(c, h * (0.35 + 0.65 * vLight), 0.6) + h * scan * 0.35;
-  }
-  if (k < 2.5) {
-    vec3 q = p * 9.0;
-    float row = floor(q.y);
-    float hl = step(0.42, abs(fract(q.y) - 0.5));
-    float vl = step(0.44, abs(fract(q.z + q.x + row * 0.37) - 0.5)) * step(0.5, fract(row * 0.618 + 0.2));
-    float line = max(hl, vl);
-    float pulse = pow(0.5 + 0.5 * sin(t * 3.2 - p.y * 11.0 + p.z * 3.0), 6.0);
-    return c * 0.8 + a * line * (0.3 + 1.3 * pulse);
-  }
-  float w = sin(p.y * 16.0 + sin(p.x * 11.0 + p.z * 9.0 + t * 2.6) * 2.2 - t * 5.0);
-  float w2 = 0.5 + 0.5 * w;
-  return mix(c, a * (0.55 + 0.45 * vLight), 0.18 + 0.32 * w2) + a * pow(w2, 10.0) * 0.7;
-}
+${SKIN_FX_GLSL}
 void main() {
   if (vFx.x < 0.999 && vFx.x < screenDither(gl_FragCoord.xy)) discard;
   vec3 c = vCol;
@@ -504,8 +491,15 @@ const NONE = 30, ALWAYS = 31;
 // Suits (operator-kit.js SUITS) live in a bank of their own, drawn only for someone wearing one, so nobody else's
 // vertex shader walks them: suit k is pick k of that bank's slots 0 and 4, and an operator's suit rides in the high bits
 // of its slot 0 / 4 selection (own pick + 32 x (k + 1)).
+// With a suit for every operator the one bank grew past what each wearer should walk (docs/OPERATORS-ART.md), so suits
+// are dealt into banks of SUIT_BANK in roster order: a wearer walks only its own bank's suits, and a bank is drawn (two
+// calls) only while someone on screen wears one of its suits. Each bank has a distance twin (farSuitBuilder): the same
+// suits cut to their biggest pieces, so a suit still reads at range for a few hundred vertices.
+const SUIT_BANK = 10;
 const ALL_SUITS = ALL_OPS.filter((o, i) => SUITS[o.id] && ALL_OPS.findIndex(q => q.id === o.id) === i).map(o => o.id);
-if (ALL_SUITS.length > NONE) throw new Error('operator kit: too many suits');
+const SUIT_BANKS = [];
+for (let i = 0; i < ALL_SUITS.length; i += SUIT_BANK) SUIT_BANKS.push(ALL_SUITS.slice(i, i + SUIT_BANK));
+const suitSlot = id => { const g = ALL_SUITS.indexOf(id); return g < 0 ? null : { bank: Math.floor(g / SUIT_BANK), k: g % SUIT_BANK }; };
 export const PICKS = (() => {
   const out = {};
   for (const [name] of [...TORSO_SLOTS, ...HEAD_SLOTS]) {
@@ -520,7 +514,7 @@ export const PICKS = (() => {
 function opPicks(op) {
   const legacy = LEGACY.indexOf(op.id);
   const pick = name => { const i = PICKS[name].indexOf(op.kit?.[name]); return i < 0 ? NONE : i; };
-  const own = (legacy >= 0 ? legacy : NONE) + 32 * (ALL_SUITS.indexOf(op.id) + 1);
+  const own = (legacy >= 0 ? legacy : NONE) + 32 * ((suitSlot(op.id)?.k ?? -1) + 1);
   return [
     [own, ...TORSO_SLOTS.map(([n]) => pick(n))],
     [own, ...HEAD_SLOTS.map(([n]) => pick(n))],
@@ -564,9 +558,13 @@ function kitGeometry(slots, base) {
   return toGeometry(acc);
 }
 
-function suitGeometry(base) {
+function suitGeometry(ids, base, far = false) {
   const acc = { pos: [], nor: [], col: [], par: [], vars: [] };
-  ALL_SUITS.forEach((id, k) => { const b = new MeshBuilder(); suitPart(b, id, base); pushBuilt(acc, b, base, k); });
+  ids.forEach((id, k) => {
+    const b = far ? farSuitBuilder() : new MeshBuilder();
+    suitPart(b, id, base);
+    pushBuilt(acc, far ? b.cut(FAR_BUDGET[base === 4 ? 1 : 0]) : b, base, k);
+  });
   return toGeometry(acc);
 }
 const torsoGeometry = () => legacyGeometry(TORSOS, 0);
@@ -842,10 +840,16 @@ export class Characters {
       const look = { gear, acc, pack: k.slot + 4 * k.glow + (suit ? 16 : 0) + fx, sleeveRGB: hexRGB(k.sleeve), trouserRGB: hexRGB(k.trouser),
         suit: !!suit, bulk: suit?.limbs?.bulk ?? 1, limb: null };
       if (suit) {
-        const hands = suit.limbs?.hands ?? k.gear;
+        const L = suit.limbs ?? {}, hands = L.hands ?? k.gear, feet = L.feet ?? hands;
         look.limb = { pack: 0, gear: hands != null ? [...hexRGB(hands), 1] : NO_GEAR };
+        look.foot = feet === hands ? look.limb : { pack: 0, gear: feet != null ? [...hexRGB(feet), 1] : NO_GEAR };
+        // A suit can dress the arms and legs too (fur, a wetsuit, a robot's joints): sleeve and trouser colours.
+        if (L.sleeve != null) look.sleeveRGB = hexRGB(L.sleeve);
+        if (L.trouser != null) look.trouserRGB = hexRGB(L.trouser);
       }
       look.lite = { ...look, pack: 4 * k.glow + fx };
+      // An active skin runs over the sleeves, trousers, gloves and boots too (the limb meshes' tint is part 2).
+      look.limbFx = fx ? { pack: fx, gear: NO_GEAR } : null;
       return look;
     });
     this.baseSkin = ALL_OPS.map(o => getSkin(`skin:${o.id}-base`)?.index ?? 0);
@@ -865,7 +869,7 @@ export class Characters {
       uLook.push(new THREE.Vector4(...hexRGB(L.skin ?? 0x7a5c43), L.sh ?? 1), new THREE.Vector4(...hexRGB(L.hair ?? 0x1e1612), L.hip ?? 1));
     }
     const charMat = new THREE.ShaderMaterial({ vertexShader: CHAR_VERT, fragmentShader: CHAR_FRAG,
-      uniforms: { uTime: time, uSel: { value: uSel }, uLook: { value: uLook } } });
+      uniforms: { uTime: time, uSel: { value: uSel }, uLook: { value: uLook }, FXT: { value: FX_TABLE } } });
     this.charMat = charMat;
     const add = (geom, cap) => {
       addCharInstanceAttrs(geom, cap);
@@ -885,9 +889,10 @@ export class Characters {
     this.torsoKit = add(torsoKitGeometry(), MAX_PLAYERS);
     this.headKit = add(headKitGeometry(), MAX_PLAYERS);
     this.isKit = ALL_OPS.map(o => !!o.kit);
-    // The suit bank: only drawn when someone on screen wears a suit skin.
-    this.torsoSuit = add(suitGeometry(0), MAX_PLAYERS);
-    this.headSuit = add(suitGeometry(4), MAX_PLAYERS);
+    // The suit banks (SUIT_BANK): each only drawn when someone on screen wears one of its suits; `far` is its distance twin.
+    this.suitBanks = SUIT_BANKS.map(ids => ({ t: add(suitGeometry(ids, 0), MAX_PLAYERS), h: add(suitGeometry(ids, 4), MAX_PLAYERS),
+      ft: add(suitGeometry(ids, 0, true), MAX_PLAYERS), fh: add(suitGeometry(ids, 4, true), MAX_PLAYERS), n: 0, nf: 0 }));
+    this.suitBankOf = ALL_OPS.map(o => suitSlot(o.id)?.bank ?? -1);
     this.upper = add(upperLimbGeometry(), cap * 4);      // Upper arms and thighs.
     this.arm = add(armGeometry(), cap * 2);
     this.leg = add(legGeometry(), cap * 2);
@@ -922,8 +927,10 @@ export class Characters {
     this.xrayHead = xrayOf(this.head, HEADS, 4);
     this.xrayTorsoKit = xrayOf(this.torsoKit, TORSOS, 0);
     this.xrayHeadKit = xrayOf(this.headKit, HEADS, 4);
-    this.xrayTorsoSuit = xrayOf(this.torsoSuit, TORSOS, 0);
-    this.xrayHeadSuit = xrayOf(this.headSuit, HEADS, 4);
+    for (const B of this.suitBanks) {
+      B.xt = xrayOf(B.t, TORSOS, 0); B.xh = xrayOf(B.h, HEADS, 4);
+      B.xft = xrayOf(B.ft, TORSOS, 0); B.xfh = xrayOf(B.fh, HEADS, 4);
+    }
     this.torsoLite = add(liteGeometry(TORSOS, 0), cap);
     this.headLite = add(liteGeometry(HEADS, 4), cap);
     this.xrayTorsoLite = xrayOf(this.torsoLite, TORSOS, 0);
@@ -978,7 +985,7 @@ export class Characters {
     this.blob.renderOrder = 0;
     scene.add(this.blob);
 
-    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit, this.torsoSuit, this.headSuit];
+    this.bodyMeshes = [this.torso, this.head, this.upper, this.arm, this.leg, this.boot, this.held, this.glove, this.ring, this.blob, this.torsoLite, this.headLite, this.torsoKit, this.headKit, ...this.suitBanks.flatMap(B => [B.t, B.h, B.ft, B.fh])];
     this.camoMat = createCamoMaterial(time);
     this.guns = {};
     this.scene = scene;
@@ -1066,13 +1073,15 @@ export class Characters {
     const def = weapon ? WEAPONS[weapon] : null;
     if (def && def.melee) {
       // Melee swings instead of kicking: a timed arc the gun pose follows (see SWINGS), alternating sides for a blade.
-      r.swingSide = def.swing === 'overhead' || def.swing === 'level' ? 1 : -(r.swingSide || 1);
-      r.swingKind = def.swing === 'overhead' || def.swing === 'level' ? def.swing : 'slash';
+      r.swingSide = swingSideNext(def, r.swingSide);     // melee-anim.js: the kinds of swing and their timings.
+      r.swingKind = swingKindOf(def);
       r.swingT = 0;
-      r.swingDur = def.swing === 'overhead' ? 0.62 : def.swing === 'level' ? 0.44 : 0.26;
+      r.swingDur = swingDurOf(def);
       r.sv[ROCK] += 1 + strength;
       return;
     }
+    r.cycle = weapon ? cycleKindOf(weapon) : null;      // A pump, bolt or lever to work before the next shot.
+    if (r.cycle) r.cycleT = -CYCLE[r.cycle].delay;
     const R = r.recoil = weapon ? recoilOf(weapon) : RECOIL_NONE;
     r.kickSide = -(r.kickSide || 1);
     r.kickRoll = (r.kickRoll || 0) + r.kickSide * R.twist * (0.25 + strength * 0.3);
@@ -1094,6 +1103,12 @@ export class Characters {
     const r = this.rigs.get(id), def = EMOTES[e];
     if (!r || !def || r.finK) return;
     r.emote = def.id; r.emoteT = 0; r.emoteDur = def.dur;
+  }
+  // A scorestreak called in (the 'streak' event): a laptop, a flare or a radio for a moment (finisher-anim.js).
+  onCallIn(id, kind) {
+    const r = this.rigs.get(id), c = callInOf(kind);
+    if (!r || !c || r.finK) return;
+    r.emote = c; r.emoteT = 0; r.emoteDur = CALL_DUR;
   }
   onThrow(id, kind) { const r = this.rigs.get(id); if (r) { r.throwT = 1; r.throwKind = kind || 'frag'; } }
 
@@ -1175,7 +1190,8 @@ export class Characters {
     }
     if (r.emote) {
       r.emoteT += dt;
-      if (r.emoteT >= r.emoteDur || speed > 0.8 || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
+      const call = CALL_PROPS[r.emote] !== undefined;     // A call-in plays on the move; an emote stops for it.
+      if (r.emoteT >= r.emoteDur || (speed > 0.8 && !call) || !p.alive || p.downed || r.down) { r.emote = null; return NO_POSE; }
       return emotePose(r.emote, r.emoteT, r.emoteDur, r.fp);
     }
     return NO_POSE;
@@ -1186,7 +1202,9 @@ export class Characters {
     this.ringMat.uniforms.uShapes.value = colorMode() === 'off' ? 0 : 1;
     const torso = this.torso, head = this.head, upper = this.upper, arm = this.arm, leg = this.leg, boot = this.boot, held = this.held;
     const vfx = this.vfx, clock = this.time.value;
-    let nT = 0, nTL = 0, nK = 0, nS = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
+    const banks = this.suitBanks;
+    for (let i = 0; i < banks.length; i++) { banks[i].n = 0; banks[i].nf = 0; }
+    let nT = 0, nTL = 0, nK = 0, nU = 0, nA = 0, nL = 0, nB = 0, nH = 0, nG = 0;
     const glove = this.glove;
     const zmOn = !!(view.obj ?? view.points?.obj)?.zm;     // Graveyard Shift: wonder weapons wear their own models.
     const fullReach = this._fullReach(view, localId, zmOn);
@@ -1349,32 +1367,17 @@ export class Characters {
       if (r.swingT !== undefined && r.swingT < 1) {
         // u 0..1 through the swing: a wind-up, a fast strike through the target, a slow recovery.
         const u = r.swingT, side = r.swingSide || 1;
-        const wind = u < 0.32 ? smooth01(u / 0.32) : 1;
-        const hit = u < 0.32 ? 0 : u < 0.5 ? smooth01((u - 0.32) / 0.18) : 1;
-        const back = u < 0.5 ? 0 : smooth01((u - 0.5) / 0.5);
-        if (r.swingKind === 'overhead') {
-          // Up over the shoulder, then down in front: the head of the sledge travels an arc over the operator's head.
-          const lift = wind * (1 - hit), drive = hit * (1 - back);
-          gunPitch += lift * 1.9 - drive * 0.9;
-          gunY += lift * 0.42 - drive * 0.1;
-          gunX += -lift * 0.22 + drive * 0.2;
-          gunYaw += lift * 0.5 - drive * 0.15;
-          gunRoll += lift * 0.25;
-        } else if (r.swingKind === 'level') {
-          // A two-handed bat swing: cocked up behind the right shoulder, then flat round through the front at waist
-          // height and on past the left side, the wrists rolling over in the follow-through.
-          const cock = wind * (1 - hit), through = hit * (1 - back);
-          gunYaw += cock * 1.7 - hit * 1.5 * (1 - back * 0.85);
-          gunPitch += cock * 1.1 - through * 0.15;
-          gunY += cock * 0.3 - through * 0.12;
-          gunX += -cock * 0.16 + through * 0.18;
-          gunRoll += cock * 0.4 - through * 0.9;
-        } else {
-          // Across the body, wide to one side and through to the other.
-          const sweep = wind * (1 - hit) - hit * (1 - back);
-          gunYaw += sweep * 1.25 * side;
-          gunX += hit * (1 - back) * 0.14;
-          gunRoll += sweep * 0.5 * side;
+        swingPose(r.swingKind, u, side, SWING);
+        gunX += SWING.x; gunY += SWING.y; gunYaw += SWING.yaw; gunPitch += SWING.pitch; gunRoll += SWING.roll;
+      }
+      CYC.fore = CYC.bolt = 0;
+      if (r.cycle && r.cycleT !== undefined && p.reloadT <= 0) {
+        const c = CYCLE[r.cycle];
+        r.cycleT += dt;
+        if (r.cycleT >= c.dur) r.cycle = null;
+        else if (r.cycleT > 0) {
+          cyclePose(r.cycle, r.cycleT / c.dur, CYC);
+          gunX += CYC.x; gunRoll += CYC.roll; gunPitch += CYC.pitch;
         }
       }
       gunX -= throwActive * 0.08 + r.throwHold * 0.12;
@@ -1433,16 +1436,19 @@ export class Characters {
       const fdx = p.x - this.focusX, fdz = p.z - this.focusZ, fd2 = fdx * fdx + fdz * fdz;
       const lodR = zk ? (r.lite ? ZM_LOD_BACK : ZM_LOD_FAR) : r.lite ? LOD_BACK : LOD_FAR;
       r.lite = !revealAll && p.id !== localId && (fd2 > fullReach || fd2 > lodR * lodR);
-      const suit = !r.lite && sk.suit, kit = !r.lite && !suit && this.isKit[r.op];
-      const tMesh = r.lite ? this.torsoLite : suit ? this.torsoSuit : kit ? this.torsoKit : torso;
-      const hMesh = r.lite ? this.headLite : suit ? this.headSuit : kit ? this.headKit : head;
+      // A suit wearer far off gets its suit bank's distance twin, so the suit still reads at range.
+      const B = sk.suit && !zk ? banks[this.suitBankOf[r.op]] : null;
+      const suit = !!B, kit = !r.lite && !suit && this.isKit[r.op];
+      const tMesh = suit ? (r.lite ? B.ft : B.t) : r.lite ? this.torsoLite : kit ? this.torsoKit : torso;
+      const hMesh = suit ? (r.lite ? B.fh : B.h) : r.lite ? this.headLite : kit ? this.headKit : head;
       // The distance meshes show their one variant whoever wears them; the operator still sets the build and colours.
-      const ti = r.lite ? nTL++ : suit ? nS++ : kit ? nK++ : nT, op = r.op;
+      const ti = suit ? (r.lite ? B.nf++ : B.n++) : r.lite ? nTL++ : kit ? nK++ : nT, op = r.op;
+      const skT = r.lite && !suit ? sk.lite : sk;
       _s.set(look.w, look.h, look.w);
       _m.copy(_body).scale(_s);
       _m.toArray(tMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.TORSO * 16);
-      this._writeFx(tMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
+      this._writeFx(tMesh, ti, fade, flash, team, op, sk.acc, skT);
 
       _p.set(0, 0.68 * CHAR_SCALE * 0.95 * look.h - r.kick * 0.01 - bob * 0.3, 0);
       _s.set(look.head, look.head, look.head);
@@ -1451,7 +1457,7 @@ export class Characters {
       _m.compose(_p, _q, _s).premultiply(_body);
       _m.toArray(hMesh.instanceMatrix.array, ti * 16);
       _m.toArray(r.pose, P.HEAD * 16);
-      this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, r.lite ? sk.lite : sk);
+      this._writeFx(hMesh, ti, fade, flash, team, op, sk.acc, skT);
       if (!r.lite && !kit && !suit) nT++;
 
       // Gun (the undead carry none).
@@ -1479,6 +1485,10 @@ export class Characters {
         if (d >= 0 && lastU < d && r.reloadU >= d) {
           _v.set(0.12, -0.42, 0).applyMatrix4(_gun);
           vfx.dropMag(_v.x, _v.y, _v.z, rel.mag.rgb, rel.mag.size);
+        }
+        if (rel.mag.belt !== undefined && lastU < rel.mag.belt && r.reloadU >= rel.mag.belt) {
+          // An LMG: the fresh belt laid in the tray, its loose tail links spilling off the far side as the cover shuts.
+          for (let k = 0; k < 4; k++) vfx.shell(r.eject[0], r.eject[1] + 0.05, r.eject[2], (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, 'link');
         }
         if (rel.mag.dump !== undefined && lastU < rel.mag.dump && r.reloadU >= rel.mag.dump) {
           const n = rel.mag.dumpN ?? 6, kind = rel.mag.dumpKind ?? 'pistol';
@@ -1508,8 +1518,9 @@ export class Characters {
             side * (0.21 - Math.max(0, mine) * 0.16)).applyMatrix4(_body);
         } else if (side > 0) {
           _b.set(0, 0, 0).applyMatrix4(_gun);
+          if (CYC.bolt > 0) { _v.set(proto.eject[0] - 0.12, proto.eject[1] + 0.02, proto.eject[2] + 0.16).applyMatrix4(_gun); _b.lerp(_v, CYC.bolt); }
         } else {
-          _b.set(proto.fore[0], proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
+          _b.set(proto.fore[0] - CYC.fore, proto.fore[1], proto.fore[2]).applyMatrix4(_gun);
           if (handW > 0) { _v.set(hx, hy, hz).applyMatrix4(_gun); _b.lerp(_v, handW); }
           const slideHand = slide * (1 - R);
           if (slideHand > 0.01) {
@@ -1561,18 +1572,28 @@ export class Characters {
           _v.set(p.x + fx * hx3 - fz * hz3, hy3 * look.h, p.z + fz * hx3 + fx * hz3);
           _b.lerp(_v, hw);
         }
+        const prop = side < 0 && r.emote ? CALL_PROPS[r.emote] : null;
+        if (prop && hw > 0.5 && nH < MAX_PLAYERS) {
+          // The call-in's prop in the left hand, square to the body; a flare or a laptop screen glows.
+          const sz = prop.size;
+          _s.set(sz[0], sz[1], sz[2]);
+          _m.copy(_body).scale(_s).setPosition(_b);
+          _m.toArray(held.instanceMatrix.array, nH * 16);
+          this._writeFx(held, nH, fade, prop.glow ? Math.max(flash, 0.35 + 0.25 * Math.sin(clock * 18)) : flash, team, 0, prop.rgb);
+          nH++;
+        }
         // Elbows hang out and down; the pole leans back so the hands read as gripping forward.
         solveJoint(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, 0.4 * look.l, 0.44 * look.l,
           fwd[8] * side * 0.75 - fwd[0] * 0.3, -0.8, fwd[10] * side * 0.75 - fwd[2] * 0.3, _joint);
         setStretch(_m, _a.x, _a.y, _a.z, _joint[0], _joint[1], _joint[2], armT, armT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side > 0 ? P.UPPER_R : P.UPPER_L) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.sleeveRGB, sk.limbFx);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], _b.x, _b.y, _b.z, armT, armT);
         _m.toArray(arm.instanceMatrix.array, nA * 16);
         _m.toArray(r.pose, (side > 0 ? P.FORE_R : P.FORE_L) * 16);
-        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb);
+        this._writeFx(arm, nA, fade, flash, team, 0, sk.sleeveRGB, sk.limb ?? sk.limbFx);
         nA++;
         if (fists && nG < MAX_PLAYERS * 2) {
           // The glove on the hand, along the forearm (elbow to hand).
@@ -1635,12 +1656,12 @@ export class Characters {
         setStretch(_m, hipX, y, hipZ, _joint[0], _joint[1], _joint[2], legT, legT);
         _m.toArray(upper.instanceMatrix.array, nU * 16);
         _m.toArray(r.pose, (side < 0 ? P.THIGH_L : P.THIGH_R) * 16);
-        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB);
+        this._writeFx(upper, nU, fade, flash, team, 0, sk.trouserRGB, sk.limbFx);
         nU++;
         setStretch(_m, _joint[0], _joint[1], _joint[2], footX, footY, footZ, legT * 0.82, legT * 0.82);
         _m.toArray(leg.instanceMatrix.array, nL * 16);
         _m.toArray(r.pose, (side < 0 ? P.SHIN_L : P.SHIN_R) * 16);
-        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB);
+        this._writeFx(leg, nL, fade, flash, team, 0, sk.trouserRGB, sk.limbFx);
         nL++;
 
         _e.set(0, -bootYaw, lift * -2.2 + slide * (side < 0 ? 0.7 : -0.2));
@@ -1650,7 +1671,7 @@ export class Characters {
         _m.compose(_p, _q, _s);
         _m.toArray(boot.instanceMatrix.array, nB * 16);
         _m.toArray(r.pose, (side < 0 ? P.BOOT_L : P.BOOT_R) * 16);
-        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.limb);
+        this._writeFx(boot, nB, fade, flash, team, 0, null, sk.foot ?? sk.limb ?? sk.limbFx);
         nB++;
 
         if (li === plantLeg && vfx && Math.abs(footX - this.focusX) < 22 && Math.abs(footZ - this.focusZ) < 16) {
@@ -1682,8 +1703,14 @@ export class Characters {
     this.xrayTorso.count = revealAll ? 0 : nT; this.xrayHead.count = revealAll ? 0 : nT;
     this.xrayTorsoKit.count = revealAll ? 0 : nK; this.xrayHeadKit.count = revealAll ? 0 : nK;
     this.torsoKit.count = nK; this.headKit.count = nK;
-    this.xrayTorsoSuit.count = revealAll ? 0 : nS; this.xrayHeadSuit.count = revealAll ? 0 : nS;
-    this.torsoSuit.count = nS; this.headSuit.count = nS;
+    for (let i = 0; i < banks.length; i++) {
+      const B = banks[i];
+      B.t.count = B.h.count = B.n; B.ft.count = B.fh.count = B.nf;
+      B.xt.count = B.xh.count = revealAll ? 0 : B.n; B.xft.count = B.xfh.count = revealAll ? 0 : B.nf;
+      // An empty bank stays out of the render list altogether (no program or state changes for it).
+      B.t.visible = B.h.visible = B.xt.visible = B.xh.visible = B.n > 0;
+      B.ft.visible = B.fh.visible = B.xft.visible = B.xfh.visible = B.nf > 0;
+    }
     this.xrayTorsoLite.count = revealAll ? 0 : nTL; this.xrayHeadLite.count = revealAll ? 0 : nTL;
     this.ring.count = nRing; this.blob.count = nRing;
     this.counts.nT = nT; this.counts.nTL = nTL; this.counts.nU = nU; this.counts.nA = nA; this.counts.nL = nL; this.counts.nB = nB;
@@ -1716,7 +1743,7 @@ export class Characters {
     }
     this.xrayTorso.geometry.dispose(); this.xrayHead.geometry.dispose();
     this.xrayTorsoKit.geometry.dispose(); this.xrayHeadKit.geometry.dispose();
-    this.xrayTorsoSuit.geometry.dispose(); this.xrayHeadSuit.geometry.dispose();
+    for (const B of this.suitBanks) for (const m of [B.xt, B.xh, B.xft, B.xfh]) m.geometry.dispose();
     this.xrayTorsoLite.geometry.dispose(); this.xrayHeadLite.geometry.dispose();
     for (const m of this.gunList) { m.geometry.dispose(); m.dispose(); }
     for (const mat of [this.charMat, this.xrayMat, this.ringMat, this.blobMat, this.camoMat]) mat.dispose();

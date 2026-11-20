@@ -115,6 +115,7 @@ function build() {
       { x: 57.7, z: 22, wall: 'w', gun: 'lmg', cost: 1800 },            // Burial Field: the east wall.
       { x: 72, z: 34.3, wall: 's', gun: 'saw', cost: 1800 },            // Burial Field: the lane wall.
       { x: 45.3, z: 40, wall: 'e', gun: 'carbine', cost: 1300 },        // Crossing Lane: the signal box.
+      { x: 57.7, z: 25.5, wall: 'w', gun: 'shovel', cost: 750 },        // Burial Field: the sexton's Spade, by the east wall.
     ],
     // Mystery crate spots: the first two are where it can start.
     boxes: [

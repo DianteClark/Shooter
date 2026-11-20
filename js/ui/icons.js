@@ -16,6 +16,7 @@
 
 import { v10Icons } from './icons-v10.js';
 import { w3Icons } from './icons-w3.js';
+import { w4Icons } from './icons-w4.js';
 import { mapIcons } from './icons-maps.js';
 
 // ---- Geometry. Polygons are flat [x, y, x, y, ...] arrays. ----------------------------------------------------------
@@ -170,6 +171,7 @@ const WEAPON_SPECS = {
 };
 Object.assign(WEAPON_SPECS, v10Icons({ P, R, O, bar, grip }));   // The V10 arsenal's icons (icons-v10.js).
 Object.assign(WEAPON_SPECS, w3Icons({ P, R, grip }));             // Weapons wave 3 (icons-w3.js).
+Object.assign(WEAPON_SPECS, w4Icons({ P, R }));                   // Weapons wave 4's melee (icons-w4.js).
 
 // ---- Square icons on the 32 grid. ------------------------------------------------------------------------------
 

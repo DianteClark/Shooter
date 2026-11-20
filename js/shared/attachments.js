@@ -33,6 +33,7 @@ import { V10_DENY } from './weapons-v10.js';
 import { V11_ATTACHMENTS } from './attachments-v11.js';
 import { W2_ATTACHMENTS, W2_EXTEND } from './attachments-w2.js';
 import { W3_ATTACHMENTS } from './attachments-w3.js';
+import { W4_ATTACHMENTS } from './attachments-w4.js';
 
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 
@@ -367,6 +368,8 @@ Object.assign(ATTACHMENTS, W2_ATTACHMENTS);
 for (const [id, more] of W2_EXTEND) ATTACHMENTS[id].weapons = [...new Set([...ATTACHMENTS[id].weapons, ...more])];
 // Weapons wave 3 (attachments-w3.js): the new guns' signature attachments, after wave 2 for the same reason.
 Object.assign(ATTACHMENTS, W3_ATTACHMENTS);
+// Weapons wave 4 (attachments-w4.js): the melee signatures (and the Slugger's), after wave 3 for the same reason.
+Object.assign(ATTACHMENTS, W4_ATTACHMENTS);
 
 // V10 guns: exclusions a category allow-list cannot express (weapons-v10.js V10_DENY), taken out of every list above.
 // Signature attachments and kits name their one gun themselves, so the blanket exclusions (blades) skip them.

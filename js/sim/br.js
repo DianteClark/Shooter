@@ -28,6 +28,7 @@
 // {t:'revive', id, by}, {t:'bruse', id, kind, done?}, {t:'brplate', id, broke?}, {t:'brsquad', team, place},
 // {t:'brphase', phase, state}, {t:'brping', id, team, x, z}.
 
+import { W4_GUNS } from '../shared/weapons-w4.js';
 import { BR, MODES, RB } from '../shared/modes.js';
 import { FFA_TEAM, MAX_HP, WEAPON_CATEGORY, WEAPON_IDS, GOLDEN_ID } from '../shared/constants.js';
 import { WEAPONS } from '../shared/weapons.js';
@@ -61,7 +62,9 @@ const GUN_POOL = WEAPON_IDS.filter(id => id !== GOLDEN_ID && CAT_WEIGHT[WEAPON_C
 const GUN_W = GUN_POOL.map(id => CAT_WEIGHT[WEAPON_CATEGORY[id]]);
 const SNIPER_POOL = GUN_POOL.filter(id => WEAPON_CATEGORY[id] === 'Sniper');     // Snipers Only (a weekly event).
 // How much a bot wants a gun of each category: two long guns or a close one and a long one, never pistols if it can help it.
-const CAT_SCORE = { Assault: 3.2, SMG: 3, LMG: 2.7, Marksman: 2.6, Shotgun: 2.4, Sniper: 2.2, Pistol: 1, Launcher: 0.6, Melee: 0 };
+const CAT_SCORE = { Assault: 3.2, SMG: 3, LMG: 2.7, Marksman: 2.6, Shotgun: 2.4, Sniper: 2.2, Pistol: 1, Launcher: 0.6, Melee: -9 };   // Bots leave blades.
+// Weapons wave 4 (js/shared/weapons-w4.js): melee weapons on the floor beside about one loot spot in this many.
+const MELEE_LOOT = W4_GUNS.Melee, MELEE_EVERY = 14;
 // Rarity rolls by where the loot lies: [common .. legendary] weights for tier 1, 2, 3, and a chest.
 const RARITY_ROLL = { 1: [20, 30, 28, 15, 7], 2: [35, 32, 20, 10, 3], 3: [52, 30, 13, 4, 1], chest: [0, 18, 38, 30, 14] };
 // Floor item kinds by share.
@@ -191,7 +194,8 @@ export function brAmmo(ps, slot, n) {
 // with nothing to come back to: the caller marks them as automatic) or the slot (0, 1) of the gun to bring back.
 export const HANDS = { keep: -1, fists: 2, dry: 3 };
 export function brUsable(def, ammo, res, pouch = null) {
-  if (!def || def.id === KNIFE || def.melee) return false;
+  if (!def || def.id === KNIFE) return false;
+  if (def.melee) return true;                  // A blade from the floor (weapons wave 4) never runs dry.
   if (ammo > 0 || res > 0) return true;        // (An unlimited reserve shows as 999; rounds are what the fall-through swaps on.)
   const t = AMMO_TYPES.indexOf(ammoOf(def.id));
   return t >= 0 && (pouch?.[t] ?? 0) > 0;
@@ -411,7 +415,7 @@ export class BrRules {
     this.seq = 0;
     this.sentTo = new Map();
     this.gone = new Set();           // Guest: ids removed, never to come back from a re-sent add.
-    this._buildLoot(rng);
+    this._buildLoot(rng, seed);
     this.squadsOut = new Map();      // team -> place.
     this.lastOut = null;
     this.noise = [];                 // Recent gunfire: {x, z, t, team}.
@@ -486,7 +490,7 @@ export class BrRules {
     return { kind: K.med, v: 0, r: 0, n: 1 };
   }
 
-  _buildLoot(rng) {
+  _buildLoot(rng, seed) {
     for (const s of this.def.loot ?? []) {
       const it = this._rollItem0(rng, s.tier);
       this._addItem({ ...this._ungun(it), x: s.x, z: s.z }, false);
@@ -497,6 +501,15 @@ export class BrRules {
       }
     }
     for (const c of this.def.chests ?? []) this._addItem({ kind: K.chest, v: c.tier, r: 3, n: 1, x: c.x, z: c.z }, false);
+    // Weapons wave 4's melee weapons lie beside about one loot spot in MELEE_EVERY, from their own rng, after every other
+    // item: the rolls above and every older item's id stay as they were. Bots never want one (_gunScore).
+    if (this.gloves || this.snipers || seed === undefined) return;
+    const mr = mulberry32((seed ^ 0x3e1ee7) >>> 0);
+    for (const s of this.def.loot ?? []) {
+      if (mr() >= 1 / MELEE_EVERY) continue;
+      const id = MELEE_LOOT[Math.floor(mr() * MELEE_LOOT.length) % MELEE_LOOT.length];
+      this._addItem({ kind: K.gun, v: WEAPON_IDS.indexOf(id), r: Math.floor(mr() * 3), n: 1, x: s.x - 0.6, z: s.z - 0.4 }, false);
+    }
   }
 
   _cellKey(x, z) { return Math.floor(x / CELL) * 4096 + Math.floor(z / CELL); }
