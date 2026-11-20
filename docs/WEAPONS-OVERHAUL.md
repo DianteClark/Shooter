@@ -954,3 +954,68 @@ Tests: dev/sim-arsenal.mjs (each gun fires, reloads, kills; each one's identity:
 the Bullhead's one-shot reach over every other pellet gun, the Gavel's kill time past 18 m against every sidearm),
 dev/sim-attachments.mjs (two wave 3 tests: models, choice per slot, bot kits and BR loot), dev/ui-attachments-test.py
 (the three guns in the Gunsmith, one with a locked Mastery I part).
+
+## Wave 4 and the visual pass (ROADMAP items 51 and 52, 2026-11-20)
+
+### Six melee weapons (js/shared/weapons-w4.js)
+Appended after wave 3 in every id list (wire indices hold), sidearm slot, Melee class in the Gunsmith. Never in a bot
+rotation, kit or pool pick (botpool.js LATER_GUNS), so no bot loadout or finisher pick moves (sim.js deals bots only
+OPERATOR_FINISHER_IDS).
+
+| id | name | swing | hits | rpm | reach | lunge | unlock | identity |
+|---|---|---|---|---|---|---|---|---|
+| katana | Kagero | thrust | 2 | 125 | 3.1 | 15 | 45 | longest lunge in the game |
+| fireaxe | Kindling | overhead | 1 | 70 | 2.6 | 5 | 42 | one blow like the Maul, sooner again, shorter |
+| shovel | Spade | level | 2 | 88 | 3.3 | 0 | 35 | longest reach of any melee, swings in place |
+| kama | Gleaner | double | 3 cuts | 160 | 2.45 | 8 | 34 | two cuts a pull (a two-round burst) |
+| machete | Bushwhack | slash | 2 | 172 | 2.85 | 9 | 31 | a longer, steadier Gaff |
+| tonfa | Nightstick | jab | 3 | 265 | 2.5 | 7 | 38 | fastest swings there are |
+
+Each has: a model (js/render/guns-w4.js, 200-380 triangles, blades flat so they read from above), an icon
+(js/ui/icons-w4.js), a swing (js/render/melee-anim.js: thrust, double and jab beside the old slash, overhead and level;
+the Gaff, Slugger and Maul keep their exact timings), a hit sound (js/audio/melee-sfx.js: slice, chop, clang, hook,
+knock), one signature attachment (js/shared/attachments-w4.js, plus the Slugger's Cork Handle, which wave 3 left out),
+and its own finisher (js/shared/finishers.js, appended with `weapon`: Quiet Draw, Felling, Graveside, Harvest,
+Clearing, Beat Down). A weapon finisher plays whenever that weapon is in hand (js/sim/finishers.js startFinisher) and is
+never an operator pick (OPERATOR_FINISHERS; the operator screen and saves only see those). Mastery camos come with
+the per-weapon challenges like every gun.
+
+Where they turn up: battle royale floor loot beside about one loot spot in 14, rolled from their own rng after every
+other item, so every older roll and item id holds; bots never pick one up (CAT_SCORE.Melee -9), and a blade in hand
+never counts as dry (brUsable). Graveyard Shift: the crate can give the Kagero, Kindling and Bushwhack (BOX_GUNS,
+before the wonder carriers); wall-buys for the Spade in Ashgrove's Burial Field and Kindling at Polestar's boiler.
+
+### Gun visual pass (js/render/guns-detail.js)
+Every gun model is drawn twice at build time: once to learn its muzzle and port, then again with small parts placed
+by ray-casting the factory's own triangles (top surface, flanks, underside), so they sit on the gun whatever its shape
+and whichever attachments are fitted: ejection port with a bright case (right flank), toothed top rail along the flat
+of the receiver (not with an optic, never on a scope), handguard vents, sling swivel; per class a sniper bolt handle
+with a ball knob (the tell from above), an LMG belt looping into the box, a shotgun side-saddle, pistol serrations and
+a front sight, a launcher sight frame. Metal, dark and accent parts only, so camos stay on the body. Average 396 -> 507
+triangles a gun, cap 1000 (sim-attachments holds it); still one draw call per gun model.
+`dev/gun-gallery.html?cat=Sniper&views=side,top` draws every model of a class from the side and from above.
+
+Gunsmith inspect (js/render/renderer.js GunPreview.inspect): the gun tips its muzzle up and rolls to show its left
+side, spins once round its barrel with a small toss, and settles with an overshoot (2.1 s, one transform on a pivot).
+Plays when a gun opens on the bench (not with reduced motion) and from the bench's Inspect button.
+
+In matches (js/render/gun-actions.js): pump shotguns rack the fore-end between shots (the support hand slides back),
+bolt snipers' grip hand goes up to throw the bolt, the lever gun flicks its lever; LMG reloads spill loose belt links
+as the cover shuts (anim.js `belt`), beside the existing mag drops, revolver dumps and shell-by-shell loads.
+
+### Streak visuals (ROADMAP item 52)
+- Airstrike: a pair of jets (streaks-fx.js M.jet) flies the bomb line, the lead over the middle bomb as it lands; the
+  'streak' event now carries the line's direction and timing.
+- New models (combat.js vehicleModels): a four-engine gunship with props, guns out of the left flank and a beacon; a
+  recon plane with a V tail and pusher prop for the UAV; a winged cruise missile with an intake; a helmet with a lit
+  visor on the Juggernaut suit. All vehicle models together: 2172 -> 2748 triangles (one instanced draw).
+- Call-ins (finisher-anim.js 'call:*', characters.js onCallIn): a laptop held low in both hands (air support and
+  drones), a flare held up and thrown (drops and the airstrike, with red smoke where it lands), a radio to the ear then a
+  point (machines and artillery). 1.4 s, played on the move, a prop box in the hand.
+- Explosions (vfx.js): a fast pale pressure ring, a few big tumbling chunks, and a thin see-through smoke column
+  that keeps rising after the blast (kept light so it never hides the fight).
+
+Tests: dev/sim-arsenal.mjs (three wave 4 tests: data, identities, every blade swings, the Gleaner cuts twice),
+dev/sim-attachments.mjs (wave 4 signatures in order, the triangle budget), dev/sim-finishers.mjs (weapon finishers:
+appended, never picked, played with the weapon in hand), dev/sim-botpool.mjs, dev/sim-streaks-v9.mjs, dev/sim-br.mjs,
+dev/sim-zombies.mjs, dev/wpn-feel-test.py, dev/ui-attachments-test.py, dev/ui-streak-cam-test.py.
