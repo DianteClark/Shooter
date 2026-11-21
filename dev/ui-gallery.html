@@ -190,7 +190,10 @@ const SCENES = {
   'help': menuScene('Help', ({ menu }) => menu.help({ onBack: noop })),
   'help-install': menuScene('Help: Install', ({ menu }) => menu.help({ onBack: noop, tab: 'install' })),
   'help-updates': menuScene('Help: Updates (the changelog, scrolls)', ({ menu }) => menu.help({ onBack: noop, tab: 'updates' })),
-  'help-modes': menuScene('Help: Modes (scrolls)', ({ menu }) => menu.help({ onBack: noop, tab: 'modes' })),
+  'help-modes': menuScene('Help: Modes (scrolls)', ({ menu }) => menu.help({ onBack: noop, onVideo: noop, tab: 'modes' })),
+  // Help videos (docs/TUTORIAL.md): the Videos tab, and Controls with its Watch chips.
+  'help-videos': menuScene('Help: Videos (scrolls)', ({ menu }) => menu.help({ onBack: noop, onVideo: noop, tab: 'videos' })),
+  'help-controls': menuScene('Help: Controls with Watch chips', ({ menu }) => menu.help({ onBack: noop, onVideo: noop, tab: 'controls' })),
   'stats': menuScene('Stats', async ({ menu }) => {
     // A few matches in three mode groups, so the mode filter shows (Graveyard Shift stays out of All modes).
     const { GunStats, FIELDS } = await import('./js/game/telemetry.js');
