@@ -5,7 +5,7 @@ Serves the repo itself (python3 -m http.server <port>) and runs the game on a fi
   1. Saturday 2026-11-21, a fresh save: Multiplayer's Spotlight has the live Team Cup; it opens the bracket: eight
      squads with clan tags, three rounds named with mode and map, nothing past the screen's edges.
   2. Enter and play: the intro names the round ("Quarter-final vs [TAG] Name"), the enemy wears the clan's tag; a forced
-     win shows the round's stamp and XP lines; Bracket goes back to the bracket: the win is marked, the quarter-finals
+     win shows the round in the Unlocked summary and the XP lines; Bracket goes back to the bracket: the win is marked, the quarter-finals
      elsewhere are resolved, the semi-final is next; the entrant and semi-finalist cards are owned.
   3. A forced loss in the semi-final knocks the run out; Re-enter goes back to the quarter-final, and winning it again
      pays no round XP twice.
@@ -78,6 +78,8 @@ async def main():
                     await pg.screenshot(path=f'{OUT}/{name}.png')
 
             async def tap(pg, sel, wait=500):
+                # The results' Unlocked summary (an overlay after the reel) covers the screen: Continue closes it.
+                if 'ux' not in sel: await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
                 await pg.locator(sel).first.tap()
                 await pg.wait_for_timeout(wait)
 
@@ -123,12 +125,14 @@ async def main():
                 check('the enemy wears the clan tag', len(enemy) == 4 and all(n.startswith(f'[{tag}] ') for n in enemy), enemy)
                 check('results: entry and round XP lines', 'Tournament entry' in res['lines'] and 'Quarter-final won' in res['lines'], res['lines'][:300])
                 check('results button goes to the bracket', 'Bracket' in res['primary'], res['primary'])
+                # Since the results reel's one-big-reveal rule (308dd12) only a cup won gets the full stamp; a round won
+                # is a tile in the Unlocked summary after the reel.
                 try:
-                    await pg.wait_for_selector('.rx-tn', timeout=30000)
-                    stamp = await pg.evaluate("document.querySelector('.rx-tn').textContent.replace(/\\s+/g, ' ').trim()")
+                    await pg.wait_for_selector('.overlay.show .ux', timeout=60000)
+                    stamp = await pg.evaluate("[...document.querySelectorAll('.overlay.show .ux-tile')].map(t => t.textContent.replace(/\\s+/g, ' ').trim()).join(' | ')")
                 except Exception:
                     stamp = ''
-                check('the reel stamps the round', 'Quarter-final won' in stamp and 'Into the Semi-final' in stamp, stamp)
+                check('the Unlocked summary lists the round won', 'round won' in stamp, stamp)
                 await shot(pg, 'qf-stamp')
                 st = await pg.evaluate(f"(() => {{ const t = {G}.Progress.tourney(); return {{ run: t.run, entrant: {G}.Progress.hasReward('card:tn-entrant'), semi: {G}.Progress.hasReward('card:tn-semi'), fin: {G}.Progress.hasReward('card:tn-finalist') }}; }})()")
                 check('QF won: semi-final next; entrant and semi-finalist cards', st['run']['round'] == 1 and st['entrant'] and st['semi'] and not st['fin'], st)

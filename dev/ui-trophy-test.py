@@ -92,7 +92,7 @@ async def main():
                 check('trophy screen opens', t['screen'] == 'trophy', t['screen'])
                 check('five collections and a total', t['cats'] == 5 and t['total'].endswith('%'), t)
                 check('six personal bests, all empty on a fresh save', len(t['recs']) == 6 and t['recs'][0][1] == '-', t['recs'])
-                check('Graveyard Shift maps listed', len(t['zm']) == 4, t['zm'])
+                check('Graveyard Shift maps listed', len(t['zm']) == 6, t['zm'])     # Neon, Ruins, Foundry, Ashgrove, Polestar (1118), Wrenfield (1120).
                 check('rarest row empty', t['none'] and not t['rare'])
                 check('nothing past the screen edges', t['over'] == 0, t['over'])
                 await shot('trophy-fresh')
@@ -173,7 +173,7 @@ async def main():
             await pg.goto(f'http://localhost:{PORT}/dev/rewards-gallery.html')
             await pg.wait_for_selector('body[data-ready]', timeout=20000)
             n = await pg.evaluate("[document.querySelectorAll('.ccard').length, document.querySelectorAll('.em svg').length]")
-            check('gallery draws every new card and feat emblem', n[0] >= 105 and n[1] == 12, n)
+            check('gallery draws every new card and feat emblem', n[0] >= 105 and n[1] == 15, n)     # 15 feat emblems (FEAT_EMBLEMS): the Listener, the Barker and Nightrail came after the first 12.
             if SHOTS:
                 await pg.screenshot(path=f'{OUT}/gallery.png', full_page=True)
             await browser.close()
