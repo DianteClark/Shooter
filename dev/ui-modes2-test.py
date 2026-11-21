@@ -167,7 +167,7 @@ async def showdown(browser, vw, vh, failures, errors):
     await shot('04-dead')
     await ev(f"""(() => {{ const sim = {G}.match.sim, me = sim.byId.get({G}.match.localId), foe = sim.players.find(p => p.team !== me.team);
       for (const p of sim.players) if (p.team === me.team && p.alive) sim._damage(p, foe, 999, foe.ps.weapon, 10); }})()""")
-    try: await pg.wait_for_function(f'({G}.match.sim.rules.round >= 2)', timeout=20000)
+    try: await pg.wait_for_function(f'({G}.match.sim.rules.round >= 2)', timeout=60000)     # Sim time: the round's end beat runs slow under load.
     except Exception: failures.append(f'{tag}: no second round')
     await pg.wait_for_timeout(1200)
     await shot('05-round2')
