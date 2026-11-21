@@ -316,20 +316,20 @@ class Score {
 }
 
 // Chords, voiced close around D3-D4 so they move by step.
-const CH = {
+export const CH = {
   Dm: [57, 62, 65], Bb: [58, 62, 65], Gm: [58, 62, 67], A: [57, 61, 64], F: [57, 60, 65], C: [55, 60, 64],
   D: [57, 62, 66], G: [59, 62, 67], Eb: [58, 63, 67],
 };
-const ROOT = { Dm: 38, Bb: 34, Gm: 31, A: 33, F: 41, C: 36, D: 38, G: 31, Eb: 39 };
+export const ROOT = { Dm: 38, Bb: 34, Gm: 31, A: 33, F: 41, C: 36, D: 38, G: 31, Eb: 39 };
 
 // The motif: four bars over Dm, Bb, Gm, A. [bar, beat, note, beats]
-const MOTIF = [
+export const MOTIF = [
   [0, 0, 74, 0.75], [0, 1, 69, 0.5], [0, 1.5, 72, 0.5], [0, 2, 74, 1], [0, 3, 77, 0.5], [0, 3.5, 76, 0.5],
   [1, 0, 74, 1], [1, 1, 70, 0.5], [1, 1.5, 72, 0.5], [1, 2, 74, 1.75],
   [2, 0, 70, 1], [2, 1, 74, 0.5], [2, 1.5, 72, 0.5], [2, 2, 70, 1], [2, 3, 69, 1],
   [3, 0, 69, 0.5], [3, 0.5, 73, 0.5], [3, 1, 76, 1.5], [3, 3, 69, 0.5], [3, 3.5, 73, 0.5],
 ];
-const PROG = ['Dm', 'Bb', 'Gm', 'A'];
+export const PROG = ['Dm', 'Bb', 'Gm', 'A'];
 
 function motif(s, k, bar0, { shift = 0, vel = 1, bars = [0, 1, 2, 3], o = {} } = {}) {
   let prev = null;
@@ -423,96 +423,7 @@ export const TRACKS = {
     },
   },
 
-  // Match underscore: sparse, dark and low-passed, so it sits under gunfire instead of on top of it.
-  match: {
-    bpm: 88, bars: 8, loop: true, seed: 37, peak: { main: 0.4 }, verb: { main: 0.35 },
-    stems: {
-      main: s => {
-        const prog = ['Dm', 'Dm', 'Bb', 'Bb', 'Gm', 'Gm', 'A', 'A'];
-        for (let bar = 0; bar < 8; bar++) {
-          const ch = prog[bar];
-          s.add('pad', bar, 0, { ns: CH[ch], len: 4, vel: 0.55, cut: 650, att: 1.2, rel: 1.6 });
-          s.add('bass', bar, 0, { n: ROOT[ch], len: 3, vel: 0.5, cut: 200, env: 300 });
-          s.pat('hat', bar, '-...-...-...-...', { vel: 0.5, tone: 7500 });
-          if (bar % 2 === 0) joints(s, bar, 0.3, 380);
-        }
-        [[1, 2.5, 81], [3, 1, 86], [5, 3, 84], [7, 0.5, 85]].forEach(([bar, beat, n]) => s.add('pluck', bar, beat, { n, vel: 0.35, dec: 0.5, cut: 1100, send: 0.8 }));
-      },
-    },
-  },
-
-  // Layers over the underscore: four bars each at its tempo, so they lock to its clock.
-  // Last minute: a sixteenth pulse with a semitone rub, four on the floor, a tom fill.
-  last: {
-    bpm: 88, bars: 4, loop: true, seed: 41, peak: { main: 0.45 }, verb: { main: 0.15 },
-    stems: {
-      main: s => {
-        const line = [38, 38, 50, 38, 38, 38, 50, 38, 38, 38, 50, 38, 39, 38, 51, 38];
-        for (let bar = 0; bar < 4; bar++) {
-          line.forEach((n, i) => s.add('bass', bar, i / 4, { n, len: 0.2, vel: i % 4 === 0 ? 0.9 : 0.6, cut: 380, env: 1400, fdec: 0.05 }));
-          s.pat('kick', bar, 'x...x...x...x...', { vel: 0.85 });
-          s.pat('snare', bar, bar === 3 ? '....x.......x.xx' : '....x.......x...', { vel: 0.7 });
-          s.pat('hat', bar, 'xoxoxoxoxoxoxoxo', { vel: 0.5 });
-          if (bar % 2 === 0) s.add('pluck', bar, 0, { n: 62, vel: 0.3, dec: 0.5, cut: 900 }).add('pluck', bar, 0, { n: 63, vel: 0.25, dec: 0.5, cut: 900 });
-        }
-        s.pat('tom', 3, '........x.x.x.x.', { vel: 0.5 }, i => ({ n: 52 - i / 2 }));
-      },
-    },
-  },
-
-  // Final circle (battle royale): tremolo strings on the theme's chords, toms, a boom on the one.
-  circle: {
-    bpm: 88, bars: 4, loop: true, seed: 43, peak: { main: 0.55 }, verb: { main: 0.3 },
-    stems: {
-      main: s => {
-        for (let bar = 0; bar < 4; bar++) {
-          s.add('pad', bar, 0, { ns: CH[PROG[bar]].map(n => n + 12), len: 4, vel: 0.7, cut: 2200, att: 0.15, rel: 0.5, trem: 88 / 60 * 4 });
-          s.pat('tom', bar, 'x..x..x...x.x...', { vel: 0.6 }, i => ({ n: i < 8 ? 43 : 45 }));
-          s.add('bass', bar, 0, { n: ROOT[PROG[bar]], len: 3.5, vel: 0.55, cut: 240, env: 400 });
-        }
-        s.add('hit', 0, 0, { vel: 0.5 });
-      },
-    },
-  },
-
-  // Exfil called (extraction): a ticking clock, a gated low pulse and slow semitone swells, rising into the loop.
-  exfil: {
-    bpm: 88, bars: 4, loop: true, seed: 47, peak: { main: 0.45 }, verb: { main: 0.25 },
-    stems: {
-      main: s => {
-        const roots = [38, 38, 41, 40], swell = [74, 75, 74, 73];
-        for (let bar = 0; bar < 4; bar++) {
-          s.pat('hat', bar, 'x.o.x.o.x.o.x.o.', { vel: 0.55, tone: 8000 });
-          for (let i = 0; i < 8; i++) s.add('bass', bar, i / 2, { n: roots[bar], len: 0.32, vel: i % 2 ? 0.55 : 0.8, cut: 300, env: 900 });
-          s.add('lead', bar, 0, { n: swell[bar] - 12, len: 3.8, vel: 0.35, cut: 1300, drive: 1.4 });
-          s.pat('kick', bar, 'x.......x.......', { vel: 0.7 });
-        }
-        s.add('riser', 3, 0, { len: 4, vel: 0.4, f1: 4000 });
-      },
-    },
-  },
-
-  // Battle royale flight and drop: four on the floor, octave bass, wind, and the theme on the lead.
-  brdrop: {
-    bpm: 124, bars: 8, loop: true, seed: 53, peak: { main: 0.5 }, verb: { main: 0.25 },
-    stems: {
-      main: s => {
-        for (let bar = 0; bar < 8; bar++) {
-          const ch = PROG[bar % 4], r = ROOT[ch] + 12;
-          s.add('pad', bar, 0, { ns: CH[ch], len: 4, vel: 0.65, cut: 2000, att: 0.3 });
-          s.pat('kick', bar, 'x...x...x...x...', { vel: 0.9 });
-          s.pat('snare', bar, '....x.......x...', { vel: 0.65, tone: 3000 });
-          s.pat('hat', bar, '-.x.-.x.-.x.-.x.', { vel: 0.6 }, i => ({ open: i % 4 === 2 }));
-          for (let i = 0; i < 8; i++) s.add('bass', bar, i / 2, { n: r - 12 + (i % 2 ? 12 : 0), len: 0.4, vel: 0.75, cut: 500 });
-        }
-        s.add('wind', 0, 0, { len: 16, vel: 0.5 });
-        s.add('wind', 4, 0, { len: 16, vel: 0.5 });
-        motif(s, 'pluck', 0, { vel: 0.5, o: { dec: 0.3, cut: 1600 } });
-        motif(s, 'lead', 4, { shift: -12, vel: 0.65, o: { cut: 2600 } });
-        s.add('crash', 0, 0, { vel: 0.5 });
-      },
-    },
-  },
+  // In-match music is sequenced live from the kit below (js/audio/music-seq.js, music-themes.js), not rendered here.
 
   // ---- One-shots. ----
   // Match intro: a riser into a hit and the motif's head, stated big.
@@ -569,6 +480,37 @@ export const TRACKS = {
     },
   },
 
+  // A boss rises (Graveyard Shift's boss rounds, the campaign's last fight): a low riser into two booms a tritone
+  // apart, a tremolo cluster and a falling lead.
+  boss: {
+    bpm: 90, bars: 2, loop: false, tail: 2.5, seed: 87, peak: { main: 0.72 }, verb: { main: 0.4 },
+    stems: {
+      main: s => {
+        s.add('riser', 0, 0, { len: 4, vel: 0.7, f0: 120, f1: 2600 });
+        s.add('hit', 1, 0, { vel: 1 });
+        s.add('tom', 0, 3, { n: 40, vel: 0.7 }).add('tom', 0, 3.5, { n: 38, vel: 0.8 });
+        s.add('pad', 1, 0, { ns: [50, 56, 62, 63], len: 4, vel: 0.9, att: 0.02, rel: 1.8, cut: 1600, trem: 7 });
+        s.add('bass', 1, 0, { n: 26, len: 2, vel: 0.95, cut: 260 }).add('bass', 1, 2, { n: 32, len: 2, vel: 0.9, cut: 240 });
+        s.add('hit', 1, 2, { vel: 0.7 });
+        [[0, 74], [0.5, 73], [1, 68], [2, 62]].forEach(([b, n], i) => s.add('lead', 1, b, { n: n - 12, len: i === 3 ? 2 : 0.5, vel: 0.7, cut: 2000, drive: 3 }));
+      },
+    },
+  },
+
+  // Match point and the last minute: a snare roll into a hit, the motif's head stated once, sharp.
+  matchPoint: {
+    bpm: 120, bars: 2, loop: false, tail: 1.6, seed: 89, peak: { main: 0.66 }, verb: { main: 0.25 },
+    stems: {
+      main: s => {
+        for (let i = 0; i < 8; i++) s.add('snare', 0, 2 + i / 4, { vel: 0.25 + i * 0.08 });
+        s.add('riser', 0, 0, { len: 4, vel: 0.45, f1: 5000 });
+        s.add('hit', 1, 0, { vel: 0.85 });
+        s.add('pad', 1, 0, { ns: [57, 62, 65, 69], len: 2.5, vel: 0.8, att: 0.02, rel: 1, cut: 2200, trem: 8 });
+        [[0, 74], [0.5, 69], [1, 72], [1.5, 74]].forEach(([b, n]) => s.add('lead', 1, b, { n: n - 12, len: 0.5, vel: 0.75, cut: 2800 }));
+      },
+    },
+  },
+
   // Interface stingers, in the same key as the interface sounds they sit with.
   levelUp: {
     bpm: 140, bars: 1, loop: false, tail: 1.2, seed: 73, peak: { main: 0.55 }, verb: { main: 0.3 },
@@ -604,8 +546,9 @@ export const TRACKS = {
   },
 };
 
-// Order to build in: the title first (the player is there when audio unlocks), stingers next, match family last.
-export const BUILD_ORDER = ['menu', 'lobby', 'levelUp', 'unlock', 'prestige', 'victory', 'defeat', 'intro', 'brdrop', 'match', 'last', 'circle', 'exfil'];
+// Order to build in: the title first (the player is there when audio unlocks), stingers next. The in-match kit
+// (music-seq.js) builds after these.
+export const BUILD_ORDER = ['menu', 'lobby', 'levelUp', 'unlock', 'prestige', 'victory', 'defeat', 'intro', 'matchPoint', 'boss'];
 
 // Loop length in samples (one-shots: plus tail).
 export function trackLength(def, sr = MUSIC_RATE) {
@@ -706,4 +649,33 @@ export function renderNow(def, sr = MUSIC_RATE) {
   let r = it.next();
   while (!r.done) r = it.next();
   return r.value;
+}
+
+// ---- Single instrument samples for the live sequencer (music-seq.js). ----
+// spec: { k: instrument, secs: length, peak, ...the instrument's event options }. No reverb (the sequencer has its own
+// echo send). `loop: [a, b]` (seconds) makes the stretch a..b loop seamlessly: the end of it is crossfaded into what
+// comes just before a, so a source can hold a note of any length with loopStart/loopEnd.
+export function* renderSample(spec, sr = MUSIC_RATE, seed = 1) {
+  const n = Math.round(spec.secs * sr);
+  const c = new Canvas(n, false, sr, seed);
+  const e = { ...spec, t: 0 };
+  if (spec.secs && e.dur === undefined) e.dur = spec.secs;
+  const r = INSTR[spec.k](c, e);
+  if (r && r.next) yield* r;
+  yield;
+  const d = c.d;
+  if (spec.loop) {
+    const a = Math.round(spec.loop[0] * sr), b = Math.round(spec.loop[1] * sr), x = Math.min(a, Math.round(0.25 * sr));
+    for (let i = 0; i < x; i++) {
+      const w = i / x, j = b - x + i;
+      d[j] = d[j] * (1 - w) + d[a - x + i] * w;
+    }
+  } else {
+    const fade = Math.min(n >> 2, Math.round(0.03 * sr));
+    for (let i = 0; i < fade; i++) d[n - 1 - i] *= i / fade;
+  }
+  let m = 0;
+  for (let i = 0; i < n; i++) { const v = Math.abs(d[i]); if (v > m) m = v; }
+  if (m > 0) { const g = (spec.peak ?? 0.7) / m; for (let i = 0; i < n; i++) d[i] *= g; }
+  return d;
 }

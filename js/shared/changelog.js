@@ -16,6 +16,18 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1120-10', date: '2026-11-20', title: 'Music for every mode, and a sound pass',
+    items: [
+      'Every mode has its own music now, and it follows the match: Team Deathmatch and the other 6 v 6 modes, Ranked, the round modes, Ground War, Battle Royale (the drop, a calm landing, tension as the circle closes, the final circle), Extraction (and a rush when your exfil is called), Graveyard Shift (eerier every few rounds, with a theme for the bosses), each Campaign mission, and Infected.',
+      'The music builds with the fight and peaks in the last minute or at match point, then gives way for the victory or defeat sting.',
+      'Music steps back while a teammate talks on voice chat, under campaign radio, and in a firefight.',
+      'Options, Audio: Music now plays Everywhere, in Menus only, or Off, and starts at a gentler 60%.',
+      'Footsteps sound like the ground they land on: gravel, dirt, snow, sand, boards and steel.',
+      'New sounds for Extraction (flares, the helicopter coming and going, reinforcements, charges), Infected, Headquarters, Kill Order, One in the Chamber, Showdown and Control rounds, Grind banks, being marked by a sweep, hijacks, airstrike jets, and Graveyard Shift traps and exfil.',
+      'Explosions and aircraft far across a big map now sound distant, not just quieter.',
+    ],
+  },
+  {
     build: '1120-9', date: '2026-11-20', title: 'Season 3: Third Rail is coming',
     items: [
       'Season 3: Third Rail starts on February 8, when Signal Fire ends: a storm over the live wires, 42 days long.',

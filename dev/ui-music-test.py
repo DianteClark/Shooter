@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Music in the browser (js/audio/music.js). Run: python3 dev/ui-music-test.py [port]  (serves the repo itself).
 1. The whole audio graph (engine buses, limiter, soft clip) through an OfflineAudioContext, with the music driven
-   through a timeline: title theme with a prestige sting, a match with every layer and a firefight, the results
-   victory. Checks the output never reaches the limiter's ceiling and is not silent, and reports build time and memory.
+   through a timeline: title theme with a prestige sting, a match theme (sequenced live) rising to its peak and a
+   firefight, the results victory. Checks the output never reaches the limiter's ceiling and is not silent, and reports build time and memory.
 2. The live page: music starts on the title after the first tap, the vote screen switches to the lobby loop, the
-   options screen has the Music in matches toggle, a solo match plays the intro and stays quiet under play, hiding
-   the page stops the music. No console errors.
+   options screen's music switch cycles Everywhere / Menus only / Off and saves, a solo match plays the intro and its
+   theme, hiding the page stops the music. No console errors.
 """
 import asyncio, subprocess, sys, os, json
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT = int(next((a for a in sys.argv[1:] if a.isdigit()), 8393))
+PORT = int(next((a for a in sys.argv[1:] if a.isdigit()), 9531))
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required']
 errors = []; fails = []
 def check(cond, what):
@@ -29,14 +29,18 @@ OFFLINE = """async () => {
   const engineMs = performance.now() - t0;
   await music.whenBuilt;
   const st = music.stats();
-  music.setMatchMusic(true);
+  music.setMode('all');
+  music.seq.manual = true;
+  music.match({ mode: 'tdm', rules: 'tdm' });
   music.cue('menu');
   music.sting('prestige', { gain: 0.8, duckTo: 0.45 });
   const at = (t, fn) => ctx.suspend(t).then(() => { fn(); ctx.resume(); });
   const view = { phase: 'live', mode: 'tdm', players: [{ id: eng.localId, alive: true }], timeLeft: 45, br: null, scores: [0, 0] };
   const playing = {};
-  at(5, () => { music.frame(view); playing.match = music.nowPlaying(); });
-  at(7, () => { music.cue('exfil'); music.cue('finalCircle'); eng.fight = 0; music.frame(view); playing.layers = music.nowPlaying(); });
+  // The offline clock does not run timers: tick the sequencer by hand every 50 ms of render time.
+  for (let t = 0.025; t < SECS; t += 0.05) at(+t.toFixed(3), () => music.seq.tick(ctx.currentTime));
+  at(5, () => { view.timeLeft = 400; music.frame(view); playing.match = music.nowPlaying(); });
+  at(7, () => { view.timeLeft = 45; eng.fight = 0; music.frame(view); playing.layers = music.nowPlaying(); });
   at(10, () => { eng.fight = 1; music.frame(view); });
   at(13, () => { view.phase = 'ended'; music.frame(view); music.results('win'); playing.results = music.nowPlaying(); });
   const buf = await ctx.startRendering();
@@ -69,12 +73,12 @@ async def main():
             for k in ('menu', 'match', 'fight', 'victory', 'all'):
                 w = r[k]; print(f"     {k}: peak {w['peak']:.3f}, rms {w['rms']:.4f}")
             print('     playing:', json.dumps(r['playing']))
-            check(st['built'] and st['tracks'] == 13, 'all 13 tracks built')
-            check(st['bytes'] < 20 * 1048576, 'music buffers under 20 MB')
+            check(st['built'] and st['tracks'] == 10 and st['kit'], 'all 10 stems and the kit built')
+            check(st['bytes'] < 18 * 1048576, 'music buffers under 18 MB')
             check(r['all']['peak'] < 0.84, 'never reaches the limiter (-1.5 dBFS) through the whole timeline')
             check(r['menu']['rms'] > 0.01 and r['victory']['rms'] > 0.01, 'menu theme and victory are audible')
             check(r['fight']['rms'] < r['match']['rms'], 'a firefight ducks the match music')
-            check(r['playing']['match'] == ['last.main', 'match.main'] and 'exfil.main' in r['playing']['layers'] and 'circle.main' in r['playing']['layers'], 'match cues switch tracks')
+            check(r['playing']['match'] == ['theme:tdm:1'] and r['playing']['layers'] == ['theme:tdm:3'], 'the match theme, then its last-minute peak')
             check(r['playing']['results'] == [], 'results: loops out, sting on')
 
             # 2. The live page.
@@ -90,13 +94,16 @@ async def main():
             check(now == ['menu.bed', 'menu.drive'], f'title theme plays after the first tap ({now})')
             await pg.evaluate("document.querySelector('[data-act=\"options\"]')?.click()")
             await pg.wait_for_timeout(500)
-            has = await pg.evaluate("!!document.querySelector('[data-act=\"optMatchMusic\"]')")
-            check(has, 'options: Music in matches toggle')
+            has = await pg.evaluate("!!document.querySelector('[data-act=\"optMusicMode\"]')")
+            check(has, 'options: where music plays')
             if has:
-                await pg.click('[data-act="optMatchMusic"]')
-                on = await pg.evaluate(f"(async () => [{M}.matchMusic, JSON.parse(localStorage.getItem('switchyard-options')).matchMusic])()")
-                check(on == [True, True], f'toggle saves and applies ({on})')
-                await pg.click('[data-act="optMatchMusic"]')
+                seen = []
+                for _ in range(3):
+                    await pg.click('[data-act="optMusicMode"]')
+                    seen.append(await pg.evaluate(f"(async () => [{M}.mode, JSON.parse(localStorage.getItem('switchyard-options')).musicMode, document.querySelector('.opt-musicmode b').textContent])()"))
+                check([x[0] for x in seen] == ['menus', 'off', 'all'] and all(x[0] == x[1] for x in seen), f'switch cycles, saves and applies ({seen})')
+                vol = await pg.evaluate("JSON.parse(localStorage.getItem('switchyard-options')).music")
+                check(abs(vol - 0.6) < 1e-6, f'music volume defaults to a modest 60% ({vol})')
             await pg.screenshot(path='/tmp/music-options.png')
             await pg.evaluate("document.querySelector('[data-act=\"optBack\"]')?.click()")
             await pg.wait_for_timeout(400)
@@ -113,7 +120,7 @@ async def main():
                 await pg.wait_for_timeout(100)
             await pg.wait_for_timeout(1500)
             sc = await pg.evaluate(f"(async () => [{M}.scene, {M}.nowPlaying()])()")
-            check(sc[0] == 'match' and sc[1] == [], f'match: scene match, quiet under play by default ({sc})')
+            check(sc[0] == 'match' and len(sc[1]) == 1 and sc[1][0].startswith('theme:tdm:'), f'match: the Team Deathmatch theme plays ({sc})')
             await b.close()
     finally:
         srv.terminate()

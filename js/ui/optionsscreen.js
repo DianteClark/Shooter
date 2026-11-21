@@ -1,5 +1,5 @@
 // The settings screen. Every control is a tap target (no drags), and a tap patches only its own row.
-import { Options, QUALITY_LEVELS, HUD_SIZES, STEPPED } from './options.js';
+import { Options, QUALITY_LEVELS, HUD_SIZES, STEPPED, MUSIC_MODES } from './options.js';
 import { esc } from './widgets.js';
 import { ico, header } from './yard.js';
 import { pop } from './motion.js';
@@ -148,7 +148,7 @@ export function optionsScreen(menu, opts) {
       <section class="opt-col scroll-y" data-in="up">
         <h4>${ico('sound')}Audio${voiceModeChip}</h4>
         ${stepper('sound')}
-        ${stepper('music').replace('<div class="opt-name"><b>Music</b>', `<div class="opt-name opt-name-mm"><b>Music</b><button class="seg opt-matchmusic" data-act="optMatchMusic" aria-label="Music in matches"><small>In matches</small><b></b></button>`)}
+        ${stepper('music').replace('<div class="opt-name"><b>Music</b>', `<div class="opt-name opt-name-mm"><b>Music</b><button class="seg opt-musicmode" data-act="optMusicMode" aria-label="Where music plays"><small>Plays</small><b></b></button>`)}
         ${VOICE_LEVELS_WORK ? stepper('voice') : `
         <div class="opt-row">
           <div class="opt-name"><b>Team voice</b><small>Plays your squad's voice on this phone</small></div>
@@ -192,9 +192,9 @@ export function optionsScreen(menu, opts) {
       t.classList.toggle('on', v[key] === true);
       t.querySelector('b').textContent = v[key] === true ? 'On' : 'Off';
     }
-    const mm = q('.opt-matchmusic');
-    mm.classList.toggle('on', v.matchMusic === true);
-    mm.querySelector('b').textContent = v.matchMusic === true ? 'On' : 'Off';
+    const mm = q('.opt-musicmode');
+    mm.classList.toggle('on', v.musicMode !== 'off');
+    mm.querySelector('b').textContent = (MUSIC_MODES.find(([id]) => id === v.musicMode) ?? MUSIC_MODES[0])[1];
     const vm = q('.opt-voicemode');
     vm.classList.toggle('on', v.voiceMode === 'ptt');
     vm.querySelector('b').textContent = v.voiceMode === 'ptt' ? 'Hold to talk' : 'Open';
@@ -262,7 +262,7 @@ export function optionsScreen(menu, opts) {
     optBatterySaver: () => { Options.set('batterySaver', !Options.get('batterySaver')); paint(); },
     optDmgNumbers: () => { Options.set('dmgNumbers', !Options.get('dmgNumbers')); paint(); },
     optBotChatter: () => { Options.set('botChatter', !Options.get('botChatter')); paint(); },
-    optMatchMusic: () => { Options.set('matchMusic', !Options.get('matchMusic')); paint(); },
+    optMusicMode: () => { const i = MUSIC_MODES.findIndex(([id]) => id === Options.get('musicMode')); Options.set('musicMode', MUSIC_MODES[(i + 1) % MUSIC_MODES.length][0]); paint(); },
     optHaptics: () => { Options.set('haptics', !Options.get('haptics')); if (Options.get('haptics')) try { navigator.vibrate?.(20); } catch { /* blocked */ } paint(); },
     optFullscreen: () => {
       Options.set('fullscreen', !Options.get('fullscreen'));
