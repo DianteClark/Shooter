@@ -74,7 +74,7 @@ async def start_custom(pg):
     await pg.wait_for_function(f'{G}.app.inMatch && {G}.app.match?.interp?.newest?.phase === "live"', timeout=90000)
 
 
-async def to_results(pg, timeout=120000):
+async def to_results(pg, timeout=300000):     # Sim time: a 20 s match runs minutes under load.
     await pg.wait_for_function(f"{G}.menu.el.dataset.screen === 'results' && {G}.menu.el.classList.contains('on')", timeout=timeout)
     await pg.wait_for_timeout(600)
     await settle_results(pg)
