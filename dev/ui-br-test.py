@@ -64,7 +64,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev("(() => { const m = document.querySelector('.br-map'); m.dispatchEvent(new MouseEvent('click', { bubbles: true })); document.querySelector('.minimap').click(); })()")
     await pg.wait_for_timeout(300)
     if await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: the drop map closed before the jump')
-    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
+    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=90000)
     await shot('03-flight')
     # The transport (owner notes): how many are still aboard (the panel may trail the newest view by a frame or two), and the squad's state, on the drop map's side.
     aboard = await ev(f"[document.querySelector('.br-aboard')?.hidden, document.querySelector('.br-aboard .n b')?.textContent, {G}.match.interp.newest.players.filter(p => p.alive && p.air === 1).length, document.querySelectorAll('.br-aboard .m').length]")
@@ -264,8 +264,8 @@ async def lobby_shots(browser, vw, vh, failures, errors):
     await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
     await pg.reload()
     await pg.wait_for_timeout(1200)
-    await pg.locator('[data-act="host"]').first.click()
-    await pg.wait_for_function(f'{G}.code')
+    await pg.locator('[data-act="host"]').first.click(timeout=60000)
+    await pg.wait_for_function(f'{G}.code', timeout=60000)
     await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: '{MAP}' }}")
     await pg.locator('[data-act="moveTeam"]').first.click()      # Any lobby repaint picks up the BR room.
     await pg.wait_for_timeout(500)

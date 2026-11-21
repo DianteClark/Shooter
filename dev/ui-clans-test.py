@@ -146,11 +146,18 @@ async def main():
               for (const w of want) { const i = cards.findIndex(c => c.querySelector('.vc-mode-name')?.textContent.trim() === w); if (i >= 0) return cards[i].dataset.i; }
               return null; })()"""
             idx = await host.evaluate(pick)
+            if idx is None:
+                # None on offer (a friend vote has a BR card, and 1120 added more modes): the host's first card becomes
+                # Railyard TDM (the host resolves the winner from its own options) and everyone votes for it.
+                await host.evaluate(f"{G}.vote.options[0] = {{ mapId: 'railyard', mode: 'tdm' }}")
+                idx = '0'
             print(f'     vote: card {idx}')
             for pg in pages:
                 if idx is not None:
-                    try: await pg.locator(f'.vote-card[data-i="{idx}"]').first.click(timeout=3000)
+                    # Through the DOM (the card's enter animation can keep it "unstable" past a tap's timeout).
+                    try: await pg.wait_for_selector(f'.vote-card[data-i="{idx}"]', state='attached', timeout=15000)
                     except Exception: pass
+                    await pg.evaluate(f"document.querySelector('.vote-card[data-i=\"{idx}\"]')?.click()")
             await host.wait_for_function(f'{G}.inMatch && !!{G}.match?.sim', timeout=30000)
             await guest.wait_for_function(f'{G}.inMatch && !!{G}.match', timeout=30000)
             for pg in pages: await pg.evaluate(f"{G}.renderer?.setQuality?.('potato')")
