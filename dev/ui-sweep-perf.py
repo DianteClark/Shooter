@@ -3,7 +3,8 @@
 
 At 932x430 in headless Chromium (SwiftShader, so frame and script ms only compare runs on this machine; draw calls and
 triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall), gwtide and gwcoral (Ground War on Jadefall's coast),
-gw (Ground War TDM on Harvest), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
+gw (Ground War TDM on Harvest), tdmlaunch, tdmobs, tdmpagoda (the 1120 6v6 maps), cpboss (campaign mission 8 at the
+boss, from the Campaign tab), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
 calls, triangles and script ms over 12 s, and a screenshot of each with the overlay. --root serves another checkout
 (an older build) for a before/after. --suits dresses everyone in the match in a Mastery suit, twelve different operators
@@ -29,7 +30,14 @@ G = 'window.__game.app'
 CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('gw', 'harvest', 'gwtdm'), ('gwtide', 'tidebreak', 'gwtdm'), ('gwcoral', 'coral', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
          # 1118 wave: Millbrook, Graveyard Shift round 20 on Polestar Relay, and a replay's playback (a TDM on Railyard,
          # ended after 20 s, Watch replay from the results: the replay player's own renderer and frame cost).
-         ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('zm20wrenfield', 'wrenfield', 'zm'), ('replay', 'railyard', 'tdm')]
+         ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('zm20wrenfield', 'wrenfield', 'zm'), ('replay', 'railyard', 'tdm'),
+         # 1120 wave (bug sweep 2026-11-20): the three new 6v6 maps, and the campaign's mission 8 at the boss (Marshal
+         # Kordell with his crest, beam and ring, his guard, the barrage rings), started from the Campaign tab.
+         ('tdmlaunch', 'launchpad', 'tdm'), ('tdmobs', 'observatory', 'tdm'), ('tdmpagoda', 'pagoda', 'tdm'), ('cpboss', 'canyon', 'cp')]
+
+OPEN_ALL = """(() => { const s = JSON.parse(localStorage.getItem('switchyard.save'));
+  s.cp = { m1: [2, 1, 400], m2: [2, 0, 500], m3: [2, 0, 500], m4: [2, 0, 500], m5: [2, 0, 500], m6: [2, 0, 500], m7: [2, 0, 500] };
+  localStorage.setItem('switchyard.save', JSON.stringify(s)); })()"""
 
 ZM20 = f"""(async () => {{
   const m = {G}.match, sim = m.sim, R = sim.rules;
@@ -57,13 +65,21 @@ async def run(browser, name, mapId, mode, rows):
     pg.on('console', lambda m: errors.append(m.text[:200]) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
     ev = pg.evaluate
-    await pg.goto(f'http://localhost:{PORT}/?debug=1&fps=1&map={mapId}&mode={mode}')
-    await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
+    pg.set_default_timeout(90000)
+    q = '' if mode == 'cp' else f'&map={mapId}&mode={mode}'
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&fps=1{q}', timeout=120000)
+    await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
     await ev("window.__game.Progress.name='Perf'; window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.setFlag('aimHint')")
+    if mode == 'cp': await ev(OPEN_ALL)
     await pg.reload()
-    await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
+    await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
     await pg.wait_for_timeout(1000)
-    await pg.locator('[data-act="custom"]').first.click()
+    if mode == 'cp':
+        for sel in ['[data-act="multiplayer"]', '[data-act="mpTab"][data-tab="campaign"]', '[data-act="cpPick"][data-k="7"]', '[data-act="cpBrief"]', '[data-act="cpSolo"]']:
+            await pg.locator(sel).first.click()
+            await pg.wait_for_timeout(700)
+    else:
+        await pg.locator('[data-act="custom"]').first.click()
     await pg.wait_for_function(f'{G}.inMatch && {G}.match?.interp?.newest?.phase === "live"', timeout=90000)
     await ev(f"{G}.renderer?.setQuality?.('{Q}')")     # Pinned, as docs/BR-PERF.md measures (SwiftShader would drop auto to Potato).
     extra = ''
@@ -77,6 +93,18 @@ async def run(browser, name, mapId, mode, rows):
         await pg.locator('.br-jump-map').first.click()
         await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=60000)
         await pg.wait_for_timeout(2000)
+    if name == 'cpboss':
+        R = f'{G}.match.sim.rules'
+        await pg.wait_for_function(f'{R}?.state === 1', timeout=90000)
+        for _ in range(8):
+            if await ev(f'{R}.cur?.type') == 'boss': break
+            await ev(f'{R}._complete()')
+            await pg.wait_for_timeout(400)
+        await pg.wait_for_function(f'!!{R}.boss', timeout=30000)
+        # In the yard with him, unhurt; he keeps his barrage going.
+        await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, b = R.boss.p, me = m.sim.byId.get(m.localId);
+          m.sim._placeAt(me, {{ x: b.ps.x - 8, z: b.ps.z }}, 0); window.__keep = setInterval(() => {{ me.hp = 100; me.spawnProtect = 1e9; for (const p of m.sim.players) if (p.team === me.team) {{ p.hp = 100; p.downed = false; }} }}, 300); }})()""")
+        extra = f"guard {await ev(f'{R}.boss.g.members.length + {R}.groups.reduce((n, g) => n + g.members.filter(p => p.alive).length, 0)')}"
     if name.startswith('zm20'):
         extra = f'horde {await ev(ZM20)}'
         # Round 20 is a boss round: let the boss's intro (camera beat, title card) start, then end it, so the numbers
