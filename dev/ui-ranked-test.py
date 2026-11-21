@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Ranked seasons with rewards, the caster camera and replay codes (docs/RANKED.md, ROADMAP item 60), in a real page.
 
-python3 dev/ui-ranked-test.py [port] [hub] [code] [caster] [spec] [--shots]   (no part named: all of them)
+python3 dev/ui-ranked-test.py [port] [hub] [code] [caster] [spec] [--shots]   (no part named: all of them; RK_SIZE=WxH
+for another viewport than 852x393; shots go to /tmp/ranked)
   hub     on Dec 27 (Season 1's last day): five placement wins place the player; the Season screen's Ranked tab is the
           hub (division, SR bar, countdown, the seven-division rewards track with the marker, the rules). The save
           goes to Dec 28: Season 1 pays (titles, cards, crests, the Cold Iron Contender camo on every gun), the hub
@@ -22,6 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = int(next((a for a in sys.argv[1:] if a.isdigit()), 8931))
 ONLY = [a for a in sys.argv[1:] if not a.isdigit() and not a.startswith('--')]
 SHOTS = '--shots' in sys.argv
+SIZE = tuple(int(x) for x in os.environ.get('RK_SIZE', '852x393').split('x'))     # RK_SIZE=WxH: another phone.
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows']
 G = 'window.__game'
@@ -51,7 +53,7 @@ def seed_storage(items):
 
 
 async def new_page(browser, day=None, hour=12, storage=None, tag=''):
-    ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True)
+    ctx = await browser.new_context(viewport={'width': SIZE[0], 'height': SIZE[1]}, has_touch=True, is_mobile=True)
     if day: await ctx.add_init_script(fake_date(day, hour))
     if storage: await ctx.add_init_script(seed_storage(storage))
     pg = await ctx.new_page()
@@ -74,7 +76,7 @@ async def boot(pg, query=''):
 async def shot(pg, name):
     if SHOTS:
         os.makedirs('/tmp/ranked', exist_ok=True)
-        await pg.screenshot(path=f'/tmp/ranked/{name}.png')
+        await pg.screenshot(path=f'/tmp/ranked/{name}-{SIZE[0]}x{SIZE[1]}.png')
 
 
 OPEN_HUB = f"{G}.menu.season({{ onBack: () => {{}}, onPlayRanked: () => {{}}, tab: 'ranked' }})"
