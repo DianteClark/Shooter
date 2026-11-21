@@ -20,7 +20,35 @@ looked at for load before it counted, and timings only compare within a table.
 
 ### Browser (python3 dev/ui-*.py, ports 9800-9849)
 
-RESULTS_TABLE
+| test | result |
+|---|---|
+| a11y-test | pass |
+| access-test | pass |
+| anim-test | FAIL (swap, and two reduced-motion falls under load), fixed (fix 5); rerun alone: pass |
+| attachments-test | pass (19 min) |
+| audio-test | pass |
+| boards-net-test | pass |
+| br-net-test | pass |
+| br-test (Frontier) | not finished: twice timed out under load (plane wait 40 s, then the Custom tap on a title still loading). Waits raised (fix 10); not rerun to the end |
+| br-test --map=jadefall | first run: the Host tap timed out (load). Second run (21 min) reached the end with one finding at all three sizes: "both guns dry did not bring the fists out" (open, see 4) |
+| br-visuals | not finished: the Custom / Start taps timed out under load twice (load average 20+); rerun RERUN_BRV |
+| campaign-test | pass |
+| clans-test | FAIL: a random vote card (One in the Chamber) left no teammate bot (fix 9); later runs timed out on taps while the page was busy (load), tap made not to wait for navigations; rerun RERUN_CLANS |
+| devices-test | pass |
+| emblems-test | pass |
+| endings-test | pass (28 min) |
+| events-test | pass |
+| ex-net-test | first run: the guest never got snapshots (same symptom as 1118's br-net open item, two tabs under load 21). Second run: every step through both humans lifted out together, then the results screen did not show inside 90 s (load); see 4 |
+| ex-test | pass, including the 640x360 watching plate (fix 4) |
+| finishers-test | pass (with the repo served on 9849, as its docstring says) |
+| flow-test | pass |
+| gamepad-test | FAIL "A buys it" (stale since 1119: a bought streak goes into the held slot), fixed; rerun: that passes, "A sends the focused callout" failed once under load (as in 1118) |
+| hardcore-net-test | FAIL (a random card won, a mode Hardcore does not fit), vote pinned and cast through the DOM; rerun: pass |
+| help-videos-test | pass |
+| history-test | not finished: the Custom tap timed out under load; rerun RERUN_HIST |
+| hud-layout-test | `--only tutorial`: 60 findings, fixed (fix 1); `--only tutorial,tdm` after: pass. The full walk (every mode, five sizes, both hands, three HUD sizes) did not get a quiet slot to run in this sweep (see 4) |
+| juice-test | not finished: the Custom tap timed out under load; rerun RERUN_JUICE |
+
 
 ## 2. Fixes
 
@@ -59,8 +87,30 @@ RESULTS_TABLE
 
 ## 3. Screens looked at
 
-FIXME
+At 667x375, 852x393, 932x430/956x440 and 640x360 where the tests shot them: the tutorial (fix 1), extraction
+spectating (fix 4 and fix 11), the campaign tab, briefing, mission HUD, boss and guest views, the Gunsmith with the new
+melee weapons, the Accessibility screen, first-time mode tips, the controller tutorial, boards, the BR ground and
+flight on a guest, the vote and the Multiplayer tabs, Wrenfield's vote art. Found and fixed:
+
+11. **Caster cam button over the spectate card** (extraction, battle royale out of play) at every size: the button sat at a
+    fixed 96 px from the top, on the card's rows. It now measures the card (twice a second while the button is up, only
+    when the card is on its side) and sits under it (js/game/caster.js).
+
+Seen, not changed: the campaign radio subtitle types over the aim stick's area at 667x375 (a subtitle over the world,
+like the sound captions); "Damage by range" on a blade reads "100% to 4 m, 100% by 4 m, ends 4 m".
 
 ## 4. Open
 
-FIXME
+- **br-test on Jadefall: "both guns dry did not bring the fists out"** at 852, 667 and 640 (`['heavyar', -1, False]`: the
+  emptied rifle stays in hand, the Swap button lit). brHandWant keeps the hands when the other slot is usable, and a
+  floor melee weapon (weapons wave 4) is always usable, so this may be by design on Jadefall; the test now says so when
+  a melee weapon is in hand, and otherwise prints the hands (slot, guns, ammo, reserve) so the next run tells which.
+  Frontier's run never reached this step under load.
+- **The full hud-layout walk, br-test (Frontier), br-visuals, history and juice** need a quiet slot: every failure seen in
+  them was a tap or wait timing out while the page was still loading (load average 13 to 31, sweep B and two server
+  restarts alongside). A shared fix would be for these tests to wait for `__game.backdrop.state === "live"` (as
+  ui-anim-test does) before the first tap.
+- **ex-net-test**: a guest left without snapshots (first run) and the results screen not inside 90 s after the lift-out
+  (second run). Both under heavy load; not reproduced on a quiet machine.
+- **gamepad-test "A sends the focused callout"**: once under load, as in the 1118 sweep.
+
