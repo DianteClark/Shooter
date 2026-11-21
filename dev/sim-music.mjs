@@ -1,7 +1,7 @@
 // Node tests for the synthesised music (js/audio/music-synth.js, js/audio/music.js). Run: node dev/sim-music.mjs [wav]
 // Renders every track, checks length, loop seams, peaks (each stem and the stems that play together), build cost
 // and memory, then drives the director against a stand-in AudioContext to check that cues switch tracks.
-// `wav` also writes previews to /tmp/music/ (menu theme, calm variant, lobby, match with layers, BR drop, stings).
+// `wav` also writes previews to /tmp/music/ (menu theme, calm variant, lobby, stings). The match themes: dev/sim-audio.mjs.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { TRACKS, BUILD_ORDER, MUSIC_RATE, renderTrack, trackLength } from '../js/audio/music-synth.js';
@@ -21,9 +21,10 @@ for (const id of BUILD_ORDER) {
   const it = renderTrack(TRACKS[id]);
   let r;
   do {
-    const t = performance.now();
+    // CPU time, not wall time: on a shared machine the wall clock measures the neighbours.
+    const t = process.cpuUsage();
     r = it.next();
-    const ms = performance.now() - t;
+    const u = process.cpuUsage(t), ms = (u.user + u.system) / 1000;
     totalMs += ms; if (ms > maxSlice) maxSlice = ms;
     slices.push(ms);
   } while (!r.done);
@@ -86,7 +87,8 @@ await test('peaks stay under the limit, alone and together', () => {
   const BUS = 0.7, L = 0.98;
   const combos = {
     'menu full': [[stems.menu.bed, 0.9], [stems.menu.drive, 0.9]],
-    'match all layers': [[stems.match.main, 0.6], [stems.last.main, 0.7], [stems.circle.main, 0.7], [stems.exfil.main, 0.75]],
+    'menu + boss sting': [[stems.menu.bed, 0.9 * 0.4], [stems.menu.drive, 0.9 * 0.4], [stems.boss.main, 0.85]],
+    'lobby + match point': [[stems.lobby.main, 0.75 * 0.4], [stems.matchPoint.main, 0.85]],
     'lobby + level-up': [[stems.lobby.main, 0.75], [stems.levelUp.main, 0.8]],
     'menu + prestige (ducked)': [[stems.menu.bed, 0.9 * 0.45], [stems.menu.drive, 0.9 * 0.45], [stems.prestige.main, 0.8]],
     'post + victory': [[stems.lobby.main, 0.45], [stems.victory.main, 1]],
@@ -102,8 +104,8 @@ await test('building is cheap: small slices, bounded memory', () => {
   const mb = bytes / 1048576;
   slices.sort((a, b) => a - b);
   const p99 = slices[Math.floor(slices.length * 0.99)];
-  console.log(`     ${Math.round(totalMs)} ms of synthesis in all over ${slices.length} slices: p99 ${p99.toFixed(2)} ms, largest ${maxSlice.toFixed(1)} ms (GC or a busy machine); ${mb.toFixed(1)} MB of buffers`);
-  assert.ok(mb < 20, `memory ${mb} MB`);
+  console.log(`     ${Math.round(totalMs)} ms of synthesis (CPU) in all over ${slices.length} slices: p99 ${p99.toFixed(2)} ms, largest ${maxSlice.toFixed(1)} ms (JIT warm-up or GC); ${mb.toFixed(1)} MB of buffers`);
+  assert.ok(mb < 14, `memory ${mb} MB`);
   assert.ok(totalMs < 6000, `build ${totalMs} ms`);
   assert.ok(p99 < 6, `p99 slice ${p99} ms`);
   // The largest single slice is not asserted: on a shared machine it measures the neighbours (a bare loop sees 250 ms).
@@ -112,13 +114,15 @@ await test('building is cheap: small slices, bounded memory', () => {
 // ---- The director, on a stand-in AudioContext that just records what it is asked to do. ----
 class Param {
   constructor(v = 1) { this.value = v; }
-  setTargetAtTime(v) { this.value = v; } cancelScheduledValues() {} setValueAtTime(v) { this.value = v; }
+  setTargetAtTime(v) { this.value = v; } cancelScheduledValues() {} setValueAtTime(v) { this.value = v; } linearRampToValueAtTime(v) { this.value = v; }
 }
 class Node { connect() {} disconnect() {} }
 class FakeCtx {
   constructor() { this.currentTime = 0; this.state = 'running'; this.sources = []; }
   createGain() { const n = new Node(); n.gain = new Param(1); return n; }
   createBiquadFilter() { const n = new Node(); n.frequency = new Param(350); n.Q = new Param(1); return n; }
+  createDelay() { const n = new Node(); n.delayTime = new Param(0); return n; }
+  createStereoPanner() { const n = new Node(); n.pan = new Param(0); return n; }
   createBuffer(ch, len, sr) {
     const data = new Float32Array(len);
     return { duration: len / sr, length: len, getChannelData: () => data };
@@ -140,7 +144,7 @@ await test('cues switch tracks, layers lock to the underscore, stings play', asy
   m.screen('title');
   m.attach(engine);
   await m.whenBuilt;
-  assert.ok(m.built && m.stats().tracks === Object.keys(TRACKS).length);
+  assert.ok(m.built && m.stats().tracks === Object.keys(TRACKS).length && m.stats().kit, 'stems and the kit built');
   assert.deepEqual(m.nowPlaying(), ['menu.bed', 'menu.drive']);
   m.calm = true; m._apply();
   assert.deepEqual(m.nowPlaying(), ['menu.bed'], 'calm variant drops the drive stem');
@@ -148,7 +152,9 @@ await test('cues switch tracks, layers lock to the underscore, stings play', asy
   m.screen('vote');
   assert.deepEqual(m.nowPlaying(), ['lobby.main']);
 
-  // A match: the intro sting, and with match music off nothing under live play.
+  // A match: the intro sting; with music in menus only, nothing under live play. (The sequenced match themes are
+  // tested in dev/sim-audio.mjs.)
+  m.setMode('menus');
   const view = { phase: 'warmup', mode: 'tdm', players: [{ id: 'me', alive: true }], timeLeft: 600, br: null };
   const before = ctx.sources.length;
   m.frame(view);
@@ -156,24 +162,7 @@ await test('cues switch tracks, layers lock to the underscore, stings play', asy
   assert.ok(ctx.sources.slice(before).some(s => s.buffer === m.bufs.intro.main), 'intro sting');
   view.phase = 'live';
   m.frame(view);
-  assert.deepEqual(m.nowPlaying(), [], 'match music off: silent under play');
-  m.setMatchMusic(true);
-  assert.deepEqual(m.nowPlaying(), ['match.main']);
-  ctx.currentTime = 30;
-  view.timeLeft = 50; m.frame(view);
-  assert.deepEqual(m.nowPlaying(), ['last.main', 'match.main'], 'last minute layer');
-  const layer = m.live.get('last.main').src, base = m.live.get('match.main').src;
-  const expect = ((30 - base.startedAt) % layer.buffer.duration);
-  assert.ok(Math.abs(layer.offset - expect) < 1e-6, 'layer joins on the underscore clock');
-  assert.ok(m.ownsTension, 'the engine tension loop gives way');
-  m.cue('exfil');
-  assert.ok(m.nowPlaying().includes('exfil.main'), 'cue exfil');
-  m.cue('exfil', false);
-  assert.ok(!m.nowPlaying().includes('exfil.main'));
-  // Fights duck the loops.
-  engine.fight = 1; m.frame(view);
-  assert.ok(m.duck.gain.value < 0.5, 'firefight duck');
-  engine.fight = 0; m.frame(view);
+  assert.deepEqual(m.nowPlaying(), [], 'music in menus only: silent under play');
   view.phase = 'ended'; m.frame(view);
   assert.deepEqual(m.nowPlaying(), [], 'quiet at the end');
 
@@ -185,18 +174,7 @@ await test('cues switch tracks, layers lock to the underscore, stings play', asy
   assert.equal(m.scene, 'results');
   m._scene('post');
   assert.deepEqual(m.nowPlaying(), ['lobby.main']);
-
-  // Battle royale: flight music aboard, final circle layer (quiet with match music off).
-  m.setMatchMusic(false);
-  const br = { phase: 'live', mode: 'br', players: [{ id: 'me', alive: true, air: 1 }], timeLeft: 0, br: { state: 'wait' } };
   m._scene('menu');
-  m.frame(br);
-  assert.deepEqual(m.nowPlaying(), ['brdrop.main'], 'flight music');
-  br.players[0].air = 0; m.frame(br);
-  assert.deepEqual(m.nowPlaying(), []);
-  br.br.state = 'final'; m.frame(br);
-  assert.deepEqual(m.nowPlaying(), ['circle.main'], 'final circle');
-  assert.equal(m.live.get('circle.main').level, 0.35);
 
   // UI stings, rate-limited.
   const n1 = ctx.sources.length;
@@ -206,7 +184,12 @@ await test('cues switch tracks, layers lock to the underscore, stings play', asy
   m.hidden = true; m._apply(0);
   assert.deepEqual(m.nowPlaying(), []);
   m.hidden = false; m._apply(1);
-  assert.deepEqual(m.nowPlaying(), ['circle.main']);
+  assert.deepEqual(m.nowPlaying(), ['menu.bed', 'menu.drive']);
+  // Off: nothing at all, not even a sting.
+  m.setMode('off');
+  assert.deepEqual(m.nowPlaying(), []);
+  assert.equal(m.sting('victory'), 0);
+  m.setMode('all');
   m.detach();
 });
 
@@ -234,11 +217,8 @@ if (WAV) {
     'menu-theme': preview('menu-theme', [[stems.menu.bed, 0.9], [stems.menu.drive, 0.9]], 1),
     'menu-calm': preview('menu-calm', [[stems.menu.bed, 0.9]], 1),
     'lobby': preview('lobby', [[stems.lobby.main, 1]], 2),
-    'match-underscore': preview('match-underscore', [[stems.match.main, 1]], 1),
-    'match-last-minute': preview('match-last-minute', [[stems.match.main, 0.6], [stems.last.main, 0.7]], 1),
-    'br-drop': preview('br-drop', [[stems.brdrop.main, 1]], 2),
-    'br-final-circle': preview('br-final-circle', [[stems.circle.main, 1]], 2),
-    'exfil': preview('exfil', [[stems.match.main, 0.6], [stems.exfil.main, 0.75]], 1),
+    'boss-sting': preview('boss-sting', [[stems.boss.main, 1]]),
+    'match-point': preview('match-point', [[stems.matchPoint.main, 1]]),
     'victory': preview('victory', [[stems.victory.main, 1]]),
     'defeat': preview('defeat', [[stems.defeat.main, 1]]),
     'intro': preview('intro', [[stems.intro.main, 1]]),
