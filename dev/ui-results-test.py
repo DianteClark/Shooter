@@ -159,7 +159,7 @@ async def main():
             mi = st6['last'] or {}
             rk1 = await pg.evaluate('window.__game.Progress.ranked()')
             row = await pg.evaluate("!!document.querySelector('.rs-rk')")
-            ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy') and rk1['pm'] == 1 and row
+            ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy', 'observatory', 'pagoda') and rk1['pm'] == 1 and row     # Observatory and Pagoda: medium maps of 1120-8.
             print(f'  {"ranked: ruleset, a placement, the results row":<44} {"ok" if ok else "FAIL"} {mi.get("mode")} {mi.get("mapId")} pm={rk1["pm"]} row={row}')
             if not ok: failures.append(f'ranked {mi} {rk1} {row}')
             # Bundled unlocks: one match's worth of XP that climbs dozens of levels.
