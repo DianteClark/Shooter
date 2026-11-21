@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Fixes',
+    items: [
+      'The Campaign\'s mission chip and objective card no longer show at the top of every other match (they covered the training card too).',
+      'Rebound: a redeploy no longer lands you far from your squadmate when the spot beside them is inside a building or the water.',
+      'Extraction: while spectating on a small screen, the Next, Other squad and Leave buttons stay inside their panel.',
+      'Swapping to a melee weapon no longer shows it put away and drawn a second time.',
+      'The Season 3 camo Hailstone is now called Graupel (a player already went by that name).',
+    ],
+  },
+  {
     build: '1120-13', date: '2026-11-20', title: 'Help videos, a better tutorial and more accessibility',
     items: [
       'Help has videos: short demos played in the game itself, with captions, for moving and aiming, sliding, grenades, scorestreaks, every core mode, Battle Royale, Rebound, Extraction, Graveyard Shift, the Campaign, Ranked, the Gunsmith and the caster camera. Tap Watch on a card or open the new Videos tab; Skip, Replay and Loop any time.',
