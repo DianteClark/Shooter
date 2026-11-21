@@ -58,6 +58,17 @@ ZM20 = f"""(async () => {{
 }})()"""
 
 
+async def settle_results(pg):
+    """The results reel to its end (Skip), then the Unlocked summary it opens over the screen closed (Continue): that
+    overlay carries its own Menu and Rematch and covers the results' buttons (bug sweep 2026-11-20)."""
+    await pg.evaluate("document.querySelector('.res-skip:not([hidden])')?.click()")
+    try: await pg.wait_for_function("!document.querySelector('.res-skip') || document.querySelector('.res-skip').hidden", timeout=60000)
+    except Exception: pass
+    await pg.wait_for_timeout(300)
+    await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
+    await pg.wait_for_timeout(300)
+
+
 async def run(browser, name, mapId, mode, rows):
     ctx = await browser.new_context(viewport={'width': 932, 'height': 430}, has_touch=True, is_mobile=True)
     pg = await ctx.new_page()
@@ -117,6 +128,7 @@ async def run(browser, name, mapId, mode, rows):
         await ev(f"(() => {{ const m = {G}.match, s = m.sim, me = s.byId.get(m.localId); if (s.phase !== 'ended') s._end(me.team); }})()")
         await pg.wait_for_selector('.menu[data-screen="results"] .rs', timeout=120000)
         await pg.wait_for_timeout(2000)
+        await settle_results(pg)
         await pg.locator('[data-act="resReplay"]').first.click()
         await pg.wait_for_timeout(2000)
         stats_js = "(() => { const v = window.__game.replay(), s = v?.renderer?.renderer?.info?.render ?? null; const g = v?.renderer?.getStats?.(); return g ? { calls: g.calls, tris: g.triangles } : s ? { calls: s.calls, tris: s.triangles } : null; })()"

@@ -34,6 +34,17 @@ END = """() => { const s = window.__game.app.match.sim, me = s.byId.get(window._
 SHEET = """([kind, id]) => import('/js/ui/unlocksheet.js').then(m => { m.unlockSheet(window.__game.menu, kind, id); })"""
 
 
+async def settle_results(pg):
+    """The results reel to its end (Skip), then the Unlocked summary it opens over the screen closed (Continue): that
+    overlay carries its own Menu and Rematch and covers the results' buttons (bug sweep 2026-11-20)."""
+    await pg.evaluate("document.querySelector('.res-skip:not([hidden])')?.click()")
+    try: await pg.wait_for_function("!document.querySelector('.res-skip') || document.querySelector('.res-skip').hidden", timeout=60000)
+    except Exception: pass
+    await pg.wait_for_timeout(300)
+    await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
+    await pg.wait_for_timeout(300)
+
+
 async def main():
     os.makedirs(OUT, exist_ok=True)
     srv = subprocess.Popen(['python3', '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -79,11 +90,13 @@ async def main():
             await ev(END)
             await pg.wait_for_selector('.menu[data-screen="results"] .rs', timeout=120000)
             await pg.wait_for_timeout(3000)
+            await settle_results(pg)
             await tap('[data-act="resReplay"]', 2500)
             await pg.locator('.rp-save').click()
             await pg.wait_for_function("document.querySelector('.rp-save')?.textContent === 'Saved'", timeout=15000)
             await pg.locator('.rp-close').click()
             await pg.wait_for_timeout(400)
+            await settle_results(pg)
             await tap('[data-act="resMenu"]', 1000)
             # A clan with the longest name and tag the editor takes.
             await ev("import('/js/ui/progress.js').then(m => m.Clan.create({ tag: 'WWWW', name: 'WWWWWWWWWWWWWWWW', c: 4, mk: 6 }))")

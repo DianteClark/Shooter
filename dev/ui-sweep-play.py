@@ -95,6 +95,17 @@ OVERFLOW = """(() => {
 })()"""
 
 
+async def settle_results(pg):
+    """The results reel to its end (Skip), then the Unlocked summary it opens over the screen closed (Continue): that
+    overlay carries its own Menu and Rematch and covers the results' buttons (bug sweep 2026-11-20)."""
+    await pg.evaluate("document.querySelector('.res-skip:not([hidden])')?.click()")
+    try: await pg.wait_for_function("!document.querySelector('.res-skip') || document.querySelector('.res-skip').hidden", timeout=60000)
+    except Exception: pass
+    await pg.wait_for_timeout(300)
+    await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
+    await pg.wait_for_timeout(300)
+
+
 async def run_case(browser, name, kind, arg, size, report):
     vw, vh = size
     ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
@@ -248,6 +259,7 @@ async def play_once(pg, ev, name, kind, arg, notes, fails, shot, before, rnd_i):
             hist = await ev("import('/js/ui/progress.js').then(m => m.MatchHistory.list().length)")
             if hist < 1: fails.append('no match history entry')
             # Back to the menu from the results.
+            await settle_results(pg)
             btn = pg.locator('[data-act="resMenu"]').first
             if await btn.count():
                 await btn.click()

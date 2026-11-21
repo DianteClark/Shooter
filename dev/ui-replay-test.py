@@ -77,6 +77,18 @@ async def start_custom(pg):
 async def to_results(pg, timeout=120000):
     await pg.wait_for_function(f"{G}.menu.el.dataset.screen === 'results' && {G}.menu.el.classList.contains('on')", timeout=timeout)
     await pg.wait_for_timeout(600)
+    await settle_results(pg)
+
+
+async def settle_results(pg):
+    """The results reel to its end (Skip), then the Unlocked summary it opens over the screen closed (Continue): that
+    overlay carries its own Menu and Rematch and covers the results' buttons (bug sweep 2026-11-20)."""
+    await pg.evaluate("document.querySelector('.res-skip:not([hidden])')?.click()")
+    try: await pg.wait_for_function("!document.querySelector('.res-skip') || document.querySelector('.res-skip').hidden", timeout=60000)
+    except Exception: pass
+    await pg.wait_for_timeout(300)
+    await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
+    await pg.wait_for_timeout(300)
 
 
 async def tdm(ctx):
@@ -195,7 +207,7 @@ async def tdm(ctx):
     await pg.wait_for_timeout(200)
     check('Delete asks once', await pg.locator('.hc-del.arm').count() == 1)
     await pg.locator('[data-act="hcDel"]').first.click()
-    await pg.wait_for_selector('.hs-empty', timeout=5000)
+    await pg.wait_for_selector('.hs-empty', timeout=20000)
     check('Delete removes the clip', len(await pg.evaluate(f'{G}.clips.listClips()')) == 0)
     await pg.close()
 

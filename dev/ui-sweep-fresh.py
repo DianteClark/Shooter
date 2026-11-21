@@ -74,6 +74,9 @@ async def main():
                 pg.on('response', lambda r: errors.append(f'{tag}: 404 {r.url}') if r.status == 404 else None)
 
             async def tap(pg, sel, wait=400, timeout=45000):
+                # The results' Unlocked summary (an overlay after the reel, with its own Menu and Rematch) covers the
+                # results screen: Continue closes it first.
+                if 'ux' not in sel: await pg.evaluate("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
                 try:
                     await pg.locator(sel).first.click(timeout=timeout)
                 except Exception:
