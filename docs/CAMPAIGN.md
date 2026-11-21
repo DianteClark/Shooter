@@ -70,7 +70,10 @@ is lost. The torches are drawn on the ground (a fan that warms as the meter fill
 SUSPICIOUS meter.
 
 ### The boss (mission 8)
-Marshal Kordell wears the Juggernaut suit (the armour look, drawn from `armor` on his view record) and has his own health
+Marshal Kordell wears the Juggernaut suit (the armour look, drawn from `armor` on his view record), gilded with a crimson
+visor, over a body a fifth bigger than his guard's (js/render/characters.js `bossLook`, keyed on `cpRole` 5), with a gold
+crest turning over his head, a crimson beam on him and a crimson ring breathing at his feet (js/render/cp-fx.js: one
+extra draw call, the crest; the beam and ring come from the objective pools). He has his own health
 pool (`CP.boss.hp` 12,000 x the difficulty's `boss`); the bar on his head shows the pool. He shoots a light machine gun at a
 fair rate and aim; his danger is the telegraphs:
 - **Barrage** (every 8 / 6 / 5 s by phase): a red ring on (just ahead of) up to three of the squad, filling for 1.7 s,

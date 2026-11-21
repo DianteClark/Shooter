@@ -88,6 +88,7 @@ const FIRE_RGB = [1.0, 0.5, 0.15], FIRE_HOT = [1.0, 0.78, 0.32], SMOKE_RGB = [0.
 const GLASS_RGB = [0.62, 0.8, 0.6], DIRT_RGB = [0.22, 0.19, 0.16];
 const SENSOR_RGB = NADE_RGB.sensor, ZAP_RGB = [0.62, 0.92, 1.0], EMP_RGB = [0.55, 0.78, 1.0], HEAL_RGB = [0.3, 1.0, 0.56];
 const DANGER_RGB = [1.0, 0.22, 0.14], MARK_RGB = [1.0, 0.36, 0.12];
+const BOSS_ROLE = 5, BOSS_PLATE_RGB = [1.0, 0.72, 0.2], BOSS_GLOW_RGB = [1.0, 0.16, 0.08];     // js/sim/campaign.js ROLES: 'boss'.
 
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1);
 const _e = new THREE.Euler(0, 0, 0, 'YZX');
@@ -1932,6 +1933,12 @@ export class CombatFX {
       _e.set(0, -p.aim, 0);
       _q.setFromEuler(_e);
       const low = p.armor < 100 ? (Math.sin(t * 16) > 0 ? 1 : 0.2) : 0.75;
+      if (p.cpRole === BOSS_ROLE) {
+        // Marshal Kordell (campaign mission 8): gilded plates over a body a fifth bigger (characters.js bossLook), the
+        // visor and trim glowing crimson, so he reads apart from his guard at a glance.
+        this.#putVehicle(n++, VEH.suit, _q, p.x, p.sliding ? -0.5 : 0, p.z, 1.26, 1.26, 1.26, BOSS_PLATE_RGB, BOSS_GLOW_RGB, 0.75 + 0.25 * Math.sin(t * 3), 1, 0);
+        continue;
+      }
       this.#putVehicle(n++, VEH.suit, _q, p.x, p.sliding ? -0.5 : 0, p.z, 1.05, 1.05, 1.05, rgb, low < 1 && p.armor < 100 ? DANGER_RGB : rgb, low, 1, 0);
     }
     return n;

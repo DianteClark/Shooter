@@ -846,7 +846,12 @@ const copyPart = (pose, part, mesh, slot) => {
 function viewRecord() {
   return { id: '', team: 0, x: 0, z: 0, aim: 0, vx: 0, vz: 0, alive: false, weapon: 'ar', camo: 'none', attachments: undefined,
     adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, overheated: false,
-    downed: false, air: 0, glideT: undefined, fin: null, zk: 0, ghost: false, ammo: undefined };
+    downed: false, air: 0, glideT: undefined, fin: null, zk: 0, ghost: false, ammo: undefined, boss: false };
+}
+// js/sim/campaign.js ROLES.indexOf('boss'): Marshal Kordell. He stands a head taller and broader than his guard.
+const BOSS_ROLE = 5, BOSS_SCALE = 1.2;
+function bossLook(l) {
+  return { ...l, w: l.w * BOSS_SCALE, h: l.h * BOSS_SCALE, l: (l.l ?? 1) * BOSS_SCALE, head: l.head * 1.1, armZ: l.armZ * BOSS_SCALE, hipZ: l.hipZ * BOSS_SCALE };
 }
 function readView(o, s) {
   o.id = s.id; o.team = s.team; o.x = s.x; o.z = s.z; o.aim = s.aim; o.vx = s.vx; o.vz = s.vz; o.alive = s.alive;
@@ -854,6 +859,7 @@ function readView(o, s) {
   o.reloadDur = s.reloadDur; o.sprinting = s.sprinting; o.sliding = s.sliding; o.spawnProtect = s.spawnProtect;
   o.heat = s.heat; o.overheated = s.overheated; o.downed = s.downed; o.air = s.air; o.glideT = s.glideT; o.fin = s.fin;
   o.zk = s.zk; o.ghost = s.ghost; o.ammo = s.ammo;
+  o.boss = s.cpRole === BOSS_ROLE;     // The campaign's final boss (js/sim/campaign.js ROLES): drawn bigger (bossLook).
   return o;
 }
 const SETTLED_PARTS = [P.UPPER_R, P.UPPER_L, P.FORE_R, P.FORE_L, P.THIGH_L, P.THIGH_R, P.SHIN_L, P.SHIN_R, P.BOOT_L, P.BOOT_R];
@@ -871,6 +877,7 @@ export class Characters {
     this.teamRGB = TEAM_RGB;     // Shared with the colour modes (js/shared/palette.js).
     // Per-operator numbers the frame loop reads, so it never touches colour conversion or string lookups.
     // armZ / hipZ: where the arms and legs join a body of this build; head: the head's scale.
+    this.bossLooks = [];     // Scaled copies of `looks` for the campaign boss, made on first sight.
     this.looks = ALL_OPS.map(o => ({
       ...o.look, sleeveRGB: hexRGB(o.look.sleeve), trouserRGB: hexRGB(o.look.trouser),
       armZ: 0.31 * o.look.w * (o.look.sh ?? 1), hipZ: 0.17 * o.look.w * (o.look.hip ?? 1), head: o.look.head ?? 1,
@@ -1375,7 +1382,7 @@ export class Characters {
       r.team = p.team;
       const zk = p.zk | 0;       // Graveyard Shift: 1..9 an undead kind on this seat (no gun, arms out, hunched).
       r.op = zk ? ZM_OP_BASE + zk - 1 : this.opById.get(p.id) ?? 0;
-      const look = this.looks[r.op];
+      const look = p.boss && !zk ? (this.bossLooks[r.op] ??= bossLook(this.looks[r.op])) : this.looks[r.op];
       const sk = zk ? this.zmSkins[zk - 1] : this.skinLooks[this.skinById.get(p.id) ?? this.baseSkin[r.op]];
       r.x = p.x; r.z = p.z; r.aim = p.aim;
       if (view.br) glideRig(r, p, dt, vfx, this.focusX, this.focusZ); else r.alt = r.chute = r.landT = 0;

@@ -305,6 +305,8 @@ async def main():
             await pg.wait_for_timeout(600)
             bar = await ev("({ shown: !document.querySelector('.cp-boss').hidden, name: document.querySelector('.cp-boss b')?.textContent })")
             check('  the boss bar', bar['shown'] and 'Kordell' in (bar['name'] or ''), bar)
+            look = await ev(f"(() => {{ const fx = {G}.renderer.cpFx, b = {R}.boss.p; return {{ crest: !!fx?.crest?.visible, at: fx?.crest && Math.hypot(fx.crest.position.x - b.ps.x, fx.crest.position.z - b.ps.z) }}; }})()")
+            check('  his look: the gold crest over his head', look['crest'] and look['at'] < 1.5, look)
             await shot('12-boss')
             await fit(['.cp-top', '.cp-card', '.cp-boss'], 'boss')
             await ev(f"(() => {{ const R = {R}; R.boss.pool = R.boss.max * 0.6; }})()")

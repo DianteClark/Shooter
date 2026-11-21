@@ -4,6 +4,8 @@
 //   terminal   the signal box terminal on a hack step; charges and taps on their sites (a blinking light once set)
 //   hazards    the boss's barrage rings (a red ring with a disc filling as it lands) and his charge line
 //   torches    each stealth watchman's torch as a soft fan on the ground ahead of him, hotter as his meter fills
+//   boss       Marshal Kordell's crown: a gold crest turning over his head, a crimson beam on him and a crimson ring
+//              breathing on the ground round him (with the gilded suit and his bigger build in combat.js and characters.js)
 // A handful of meshes and instanced lists: a few draw calls whatever the mission holds.
 import * as THREE from 'three';
 import { CP } from '../shared/campaign.js';
@@ -11,7 +13,17 @@ import { CP } from '../shared/campaign.js';
 const BEAM_MAX = 6, SITE_MAX = 6, HAZ_MAX = 8, CONE_MAX = 10;
 const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
+const BOSS_ROLE = 5;     // js/sim/campaign.js ROLES.indexOf('boss')
 const BLUE = 0x7cc8ff, AMBER = 0xffb21a, RED = 0xff4a2a, GREEN = 0x59d36b;
+
+// Non-indexed copies of each geometry, joined into one (the crest's points and band).
+function mergeAll(geos) {
+  const pos = [];
+  for (const g of geos) { const p = (g.index ? g.toNonIndexed() : g).attributes.position.array; for (let i = 0; i < p.length; i++) pos.push(p[i]); }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return out;
+}
 
 function noFog(root) { root.traverse(o => { if (o.material) o.material.fog = false; }); return root; }
 
@@ -51,6 +63,16 @@ export class CpFx {
     screen.position.set(0, 1.18, 0.12); screen.rotation.x = -0.4; term.add(screen);
     term.visible = false;
     this.group.add(term);
+    // The boss's crest: a gold crown of five points over his head (one mesh, drawn only while he stands).
+    const crown = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      crown.push(new THREE.ConeGeometry(0.11, 0.34, 4).translate(Math.cos(a) * 0.26, 0.17, Math.sin(a) * 0.26));
+    }
+    crown.push(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 10, 1, true));
+    this.crest = new THREE.Mesh(mergeAll(crown), new THREE.MeshBasicMaterial({ color: 0xffc23a, side: THREE.DoubleSide }));
+    this.crest.visible = false; this.crest.renderOrder = 4;
+    this.group.add(this.crest);
     noFog(this.group);
   }
 
@@ -110,6 +132,21 @@ export class CpFx {
       } else if (nl < HAZ_MAX) {
         const dx = h.x2 - h.x, dz = h.z2 - h.z, L = Math.hypot(dx, dz) || 1;
         this.#put(this.lines, nl++, (h.x + h.x2) / 2, 0.07, (h.z + h.z2) / 2, L, 1, h.r * 2, C.set(RED).multiplyScalar(0.5 + 0.5 * k).getHex(), -Math.atan2(dz, dx));
+      }
+    }
+    // The boss: crimson ring at his feet, the crest over his head.
+    this.crest.visible = false;
+    if (cp.boss) {
+      for (const p of view.players) {
+        if (p.cpRole !== BOSS_ROLE || !p.alive) continue;
+        const beat = 0.5 + 0.5 * Math.sin(t * 3);
+        ring(p.x, p.z, 1.35 + 0.12 * beat, RED, 0.12 + 0.08 * beat);
+        beam(p.x, p.z, RED);     // The objective beam, on him: the boss step has no other.
+        this.crest.visible = true;
+        this.crest.position.set(p.x, 3.3 + 0.08 * Math.sin(t * 2), p.z);
+        this.crest.scale.setScalar(1.45);
+        this.crest.rotation.y = t * 1.2;
+        break;
       }
     }
     // Torches: the stealth watchmen (cpSee >= 0 while their torch is on).
