@@ -16,20 +16,20 @@ state for longer (a pass still returns at once), and taps on screens that animat
 | test | first run | after fixes / retry |
 |---|---|---|
 | ui-mastery-badges-test | pass | |
-| ui-modes2-test | Rebound and Showdown timeouts (load) | waits on sim state lengthened, Skip clicked through the DOM; Rebound and Showdown each passed on a retry (see Open for the last full run) |
+| ui-modes2-test | Rebound and Showdown timeouts (load) | waits on sim state lengthened, Skip clicked through the DOM; pass |
 | ui-music-test | pass | |
-| ui-overflow-test (667x375, 932x430, all sections) | a gallery scene never became ready in 40 s (load), run cut | scenes get 120 s and name themselves on a timeout; see Open for the rerun |
+| ui-overflow-test (667x375, 932x430, all sections) | a gallery scene never became ready in 40 s (load), run cut | scenes get 120 s; rerun: 666 states, no spill or cut; the gunsmith scroll checks failed because the walk's last tap on a locked part leaves its unlock sheet open over the bench (test 11); `--only gunsmith` at both sizes: pass |
 | ui-prestige-test | pass | |
 | ui-qol-test | 2 fails | **real bug** fixed (game 2), friend room stabilised (test 3); pass |
 | ui-ranked-test | pass | also hub + caster at 667x375 and 932x430 with shots (new `RK_SIZE`): pass |
-| ui-replay-test | tdm/cap/zm timing fails, BR overview triangles | cap: Unlocked summary (test 1); waits (test 9); BR overview check depends on where the record is (passed on a rerun, 20k; world triangles identical to before Jadefall, see Perf) |
+| ui-replay-test | tdm/cap/zm timing fails, BR overview triangles | cap: Unlocked summary (test 1); results wait follows sim time; full run then tdm+pad rerun: all pass. The BR overview check depends on where the record is (172k, then 20k on a rerun; Frontier's world triangles are identical before and after the Jadefall work, see Perf) |
 | ui-reset-test | pass | |
-| ui-results-test | match end 120 s timeout (load), then a stale map list | waits 360 s with a state dump; ranked's medium maps include Observatory and Pagoda (test 8) |
+| ui-results-test | match end 120 s timeout (load), then a stale map list | waits 360 s with a state dump; ranked's medium maps include Observatory and Pagoda (test 7); pass |
 | ui-snd-test | pass | |
 | ui-streak-cam-test | pass | |
 | ui-sweep-fresh | Menu under the Unlocked summary | test 1; pass |
 | ui-sweep-net | pass (TDM, Graveyard Shift, BR with host migration) | |
-| ui-sweep-perf | brjade timed out waiting for the plane (load) | BR waits 180 s; all other 15 cases measured (section 3) |
+| ui-sweep-perf | brjade timed out waiting for the plane (load) | BR waits 180 s; all 16 cases measured (section 3) |
 | ui-sweep-play | (26 cases, PLAY_S=20) | **26/26 clean**, incl. 12 new 1120 cases (section 2) |
 | ui-sweep-shots | 54 screens, all ok | |
 | ui-touch-test | pass | |
@@ -39,7 +39,7 @@ state for longer (a pass still returns at once), and taps on screens that animat
 | ui-voice-test | pass | |
 | ui-zm-bodies-test | pass | |
 | ui-zombies-test (full) | Polestar "radio never locked on", "crate never offered"; Ashgrove first-click timeouts (earlier today) | **not real**: the radio did lock on and the crate did offer, seconds after the waits gave up (the screenshot shows 1/3 Radios and the feed line); the first click timed out while the page was still booting. Waits x3, 90 s default tap timeout: full run pass |
-| dev/wpn-feel-test.py (full) | the first tap hung at "performing click" (page busy booting under load) | 120 s default timeout; see Open for the rerun |
+| dev/wpn-feel-test.py (full) | the first tap hung at "performing click" (page busy booting under load) | 120 s default timeout; full run (61 guns, staged reload, low ammo, dry fire, shots per class): PASS |
 
 ## 2. Play-throughs and screens
 - `dev/ui-sweep-play.py` gained the 1120 cases: Launchpad (TDM, Dom, SnD), Observatory (TDM, HQ, KC), Pagoda (TDM,
@@ -70,7 +70,7 @@ sim tick budget 33 ms (not measured here; sweep A runs the node sims).
 | Ground War TDM, Tidebreak (new) | 39 (44) | 52k (66k) | 17.3 | |
 | Ground War TDM, Coral Quarter (new) | 24 (36) | 13k (38k) | 19.0 | |
 | BR Quads, Frontier, on the ground | 36 (42) | 51k (52k) | 7.2 | 43 / 43k |
-| BR Quads, Jadefall | timed out waiting for the plane under load; rerun in Open | | | |
+| BR Quads, Jadefall, on the ground | 42 (47) | 55k (57k) | 5.2 | |
 | Graveyard Shift r20, Ashgrove | 56 (60) | 66k (70k) | 20.6 | 58 / 116k |
 | Graveyard Shift r20, Night Market | 60 (67) | 84k (103k) | 20.1 | |
 | Graveyard Shift r20, Polestar | 59 (63) | 77k (82k) | 19.6 | 59 / 126k |
@@ -124,7 +124,17 @@ Changelog: one NEXT entry with the three.
 7. ui-results-test: ranked's medium maps include Observatory and Pagoda.
 8. ui-sweep-perf: cases for Launchpad, Observatory, Pagoda and the campaign boss (from the Campaign tab).
 9. ui-sweep-play: the 1120 maps (section 2). ui-ranked-test: `RK_SIZE=WxH`, shots named by size.
-10. ui-campaign-test: the boss's crest check.
+10. ui-campaign-test: the boss's crest check (pass).
+11. ui-overflow-test: the gunsmith scroll checks close the unlock sheet the walk leaves open first.
 
 ## 7. Open
-(filled in below as the last reruns finish)
+- Nothing failing. Load-only flakes seen once and passing on a rerun: ui-trophy-test's "still nothing past the edges"
+  at 667 (16 nodes, once), ui-replay-test's playback-rate and clip-time checks (wall-clock based; they pass when the
+  machine has a moment).
+- ui-replay-test's BR overview check ("2.5x the follow camera's triangles") compares two cameras at wherever the
+  record happens to be, so it can fail on a busy spot (172k vs a 14k follow shot) and pass on the next run; worth
+  making it compare fixed positions.
+- The Campaign map's station labels hang outside their buttons by design; if the Campaign tab joins the overflow
+  test's gallery scenes, the checker needs to allow them.
+- Merged dev (1120-14, sweep A's fixes) at the end: the changelog stacked (NEXT above 1120-14); rerun after the merge:
+  the boss look script (crest over him at both sizes, no console errors) and ui-campaign-test.
