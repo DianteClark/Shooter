@@ -4,8 +4,9 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Fixes',
+    build: '1120-14', date: '2026-11-20', title: 'The move stick and grenades, and fixes',
     items: [
+      'The move stick no longer dies after a long grenade throw. iPhone drops every other finger when one lifts right at the side edge of the screen, and a full-range throw from the Lethal button used to need a drag that far. Full range now comes before the edge: the drag is shorter where the button sits close to it, and the range ring shows how far.',
       'The Campaign\'s mission chip and objective card no longer show at the top of every other match (they covered the training card too).',
       'Rebound: a redeploy no longer lands you far from your squadmate when the spot beside them is inside a building or the water.',
       'Extraction: while spectating on a small screen, the Next, Other squad and Leave buttons stay inside their panel.',
