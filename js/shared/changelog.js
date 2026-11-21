@@ -4,6 +4,14 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Fixes',
+    items: [
+      'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',
+      'Help videos: titles wrap to two lines, so the two Battle Royale videos no longer read the same on smaller phones.',
+      'A challenge\'s Play button for Battle Royale opens the Battle Royale tab again, not the weekly event.',
+    ],
+  },
+  {
     build: '1120-13', date: '2026-11-20', title: 'Help videos, a better tutorial and more accessibility',
     items: [
       'Help has videos: short demos played in the game itself, with captions, for moving and aiming, sliding, grenades, scorestreaks, every core mode, Battle Royale, Rebound, Extraction, Graveyard Shift, the Campaign, Ranked, the Gunsmith and the caster camera. Tap Watch on a card or open the new Videos tab; Skip, Replay and Loop any time.',
