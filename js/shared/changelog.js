@@ -10,6 +10,7 @@ export const CHANGELOG = [
       'Rebound: a redeploy no longer lands you far from your squadmate when the spot beside them is inside a building or the water.',
       'Extraction: while spectating on a small screen, the Next, Other squad and Leave buttons stay inside their panel.',
       'Swapping to a melee weapon no longer shows it put away and drawn a second time.',
+      'The Caster cam button no longer covers the spectate card.',
       'The Season 3 camo Hailstone is now called Graupel (a player already went by that name).',
     ],
   },
