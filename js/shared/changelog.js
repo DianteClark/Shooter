@@ -4,6 +4,18 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-20', title: 'Animation pass: falls, reloads, footwork',
+    items: [
+      'Soldiers now fall instead of breaking apart: back onto the floor when shot from the front, onto their face from behind, spun round from the side, dropped to their knees by a headshot, turned right round by a melee hit, and thrown off their feet by a shotgun or sniper round up close. The body keeps its operator, skin and Mastery suit as it falls, lies a moment, then fades. Explosions still blow bodies apart.',
+      'A dropped gun now falls out of the hands and lands beside the body.',
+      'Reloads change with the magazine: with rounds left, the old magazine goes into a pouch and nothing needs charging; from empty, the magazine drops free and the charging handle, slide or bolt is worked. Shotguns and lever guns loaded from empty are racked once full.',
+      'Weapon swaps put the old gun away before the new one comes up, with the free hand off the gun in between.',
+      'Smoother footwork: walking backwards keeps the knees forward with shorter steps, strafing turns the hips part way and sets the feet wider, and standing still the weight shifts from foot to foot. Wading through water lifts the knees higher.',
+      'Hits twist the shoulders and knock the gun off line; a headshot that does not kill snaps the head back. Grenade throws now shift the weight back and through. Slides drop into the legs and pop back up, and a battle royale landing puts a hand on the ground.',
+      'Reduce motion (system setting or Reduce shake and flashes) keeps falls short and simple: no flying bodies, no flailing, and explosions drop bodies instead of scattering them.',
+    ],
+  },
+  {
     build: '1120-9', date: '2026-11-20', title: 'Season 3: Third Rail is coming',
     items: [
       'Season 3: Third Rail starts on February 8, when Signal Fire ends: a storm over the live wires, 42 days long.',

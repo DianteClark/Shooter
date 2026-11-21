@@ -53,7 +53,7 @@ KILL = """(([id, how]) => {
 BACK = """(() => { const app = window.__game.app, me = app.match.ps, h = window.__home; if (!h) return;
   me.x = h.x; me.z = h.z; const k = app.match.sim.players.find(p => p.id === app.match.localId); k.ps.x = h.x; k.ps.z = h.z; })()"""
 
-RIG = """((id) => { const r = window.__game.app.renderer.chars.rigs.get(id); return r ? { dying: r.dying, kind: r.die.kind, t: r.die.t, settled: r.dieSettled, down: r.down, visible: r.visible, reveal: r.reveal } : null; })"""
+RIG = """((id) => { const r = window.__game.app.match.renderer.chars.rigs.get(id); return r ? { dying: r.dying, kind: r.die.kind, t: r.die.t, settled: r.dieSettled, down: r.down, visible: r.visible, reveal: r.reveal } : null; })"""
 
 KINDS = ['back', 'front', 'side', 'head', 'melee', 'blown', 'down', 'fin', 'explode']
 
@@ -70,13 +70,26 @@ async def main():
             pg.on('pageerror', lambda e: errors.append(f'PAGEERR {e}'))
             ev = pg.evaluate
             tag = 'calm-' if reduce else ''
-            await pg.goto(f'http://localhost:{PORT}/?debug=1&map=railyard&mode=tdm', timeout=120000)
-            await pg.wait_for_function('window.__game?.app?.match?.sim && window.__game.app.renderer', timeout=180000)
-            await pg.wait_for_function('window.__game.app.match.sim.players.some(p => p.team !== 0 && p.alive)', timeout=60000)
-            await pg.wait_for_timeout(2500)
+            async def tap(sel, wait=300):
+                try: await pg.locator(sel).first.click(timeout=4000)
+                except Exception: await pg.evaluate(f"document.querySelector({sel!r})?.click()")
+                await pg.wait_for_timeout(wait)
+            await pg.goto(f'http://localhost:{PORT}/?debug=1&vote=2&search=600', timeout=120000)
+            await pg.wait_for_timeout(900)
+            await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+            await pg.reload()
+            await pg.wait_for_function('window.__game.backdrop.renderer && window.__game.backdrop.state === "live"', timeout=120000)
+            await tap('[data-act="custom"]', 600)
+            await tap('[data-act="soloMap"][data-id="railyard"]')
+            await tap('[data-act="soloMode"][data-id="tdm"]')
+            await tap('[data-act="soloStart"]', 300)
+            await pg.wait_for_function('window.__game.app.inMatch && window.__game.app.match?.interp.newest?.phase === "live" && window.__game.app.match.localAlive', timeout=120000)
+            await pg.wait_for_timeout(1500)
             print('reduced motion' if reduce else 'deaths')
+            # The quality step's corpse budget also caps bodies falling at once (Potato: 3); lift it to see every kind.
+            await ev("window.__game.app.match.renderer.chars.maxDying = 12")
             ids = await ev(LINEUP)
-            await pg.wait_for_timeout(1200)
+            await pg.wait_for_timeout(2500)
             ways = [('back', {'from': 'front', 'w': 'ar'}), ('front', {'from': 'behind', 'w': 'ar'}), ('side', {'from': 'side', 'w': 'smg'}),
                     ('head', {'from': 'front', 'w': 'dmr', 'head': True}), ('melee', {'from': 'side', 'w': 'knife'}),
                     ('blown', {'from': 'front', 'w': 'shotgun'}), ('explode', {'from': 'front', 'frag': True})]
@@ -101,9 +114,13 @@ async def main():
                     check(f'{want}: falls as {exp}', got == exp, st)
             await pg.wait_for_timeout(500)
             await pg.screenshot(path=f'{OUT}/{tag}02-down.png')
+            # The clock runs slower than the wall under a software renderer: wait for the falls' own time.
+            try: await pg.wait_for_function(f"{json.dumps(ids[:len(ways)])}.every(id => {{ const r = window.__game.app.match.renderer.chars.rigs.get(id); return !r.dying || r.die.t > 1.3; }})", timeout=15000)
+            except Exception: pass
             settled = [await ev(RIG, i) for i in ids[:len(ways)]]
             check('the bodies come to rest (limbs kept, not solved)', all(s['settled'] for s in settled if s and s['dying']), settled)
-            await pg.wait_for_timeout(2200)
+            try: await pg.wait_for_function(f"{json.dumps(ids[:len(ways)])}.every(id => !window.__game.app.match.renderer.chars.rigs.get(id).dying)", timeout=20000)
+            except Exception: pass
             gone = [await ev(RIG, i) for i in ids[:len(ways)]]
             check('and fade away', not any(s and s['dying'] for s in gone), gone)
             await pg.screenshot(path=f'{OUT}/{tag}03-gone.png')
@@ -116,27 +133,30 @@ async def main():
                   window.__spots = window.__spots.filter(s => f.some(q => q.id === s.id)); return f.slice(0, 2).map(p => p.id); })()""")
                 await ev("""(([a, b]) => { const sim = window.__game.app.match.sim;
                   for (const [id, n] of [[a, 0], [b, 7]]) { const p = sim.players.find(q => q.id === id); p.ps.slot = 0; p.ps.weapon = p.ps.primary; p.ps.ammo[0] = n; p.ps.reloadT = 0; p.ps.swapT = 0; }
-                  for (const id of [a, b]) { const p = sim.players.find(q => q.id === id); p.bot.update = () => [{ reload: true }]; }
                 })""", pair)
-                # Bots read inputs through their brain; press reload on the sim state directly if the brain path is not taken.
+                # Start the reloads on the sim state directly (the bots are held still and press nothing).
                 await ev("""(([a, b]) => { const sim = window.__game.app.match.sim;
                   for (const id of [a, b]) { const p = sim.players.find(q => q.id === id); if (p.ps.reloadT <= 0) { p.ps.reloadDur = 2.2; p.ps.reloadT = 2.2; } } })""", pair)
                 await pg.wait_for_timeout(500)
-                rel = await ev("""(([a, b]) => [a, b].map(id => { const r = window.__game.app.renderer.chars.rigs.get(id); return { empty: r.relEmpty, u: r.reloadU }; }))""", pair)
+                rel = await ev("""(([a, b]) => [a, b].map(id => { const r = window.__game.app.match.renderer.chars.rigs.get(id); return { empty: r.relEmpty, u: r.reloadU }; }))""", pair)
                 check('a reload from empty plays the empty track', rel[0]['empty'] is True, rel)
                 check('a reload with rounds left plays the tactical one', rel[1]['empty'] is False, rel)
                 await pg.screenshot(path=f'{OUT}/04-reloads.png')
                 await pg.wait_for_timeout(2200)
                 sw = await ev("""((id) => { const sim = window.__game.app.match.sim, p = sim.players.find(q => q.id === id);
-                  p.ps.slot = 1; p.ps.weapon = p.ps.secondary; p.ps.swapT = 0.35; sim._emit({ t: 'swap', id }); return p.ps.weapon; })""", pair[0])
+                  p.ps.slot = 1 - p.ps.slot; p.ps.weapon = p.ps.slot ? p.ps.secondary : p.ps.primary; p.ps.swapT = 0.35; sim._emit({ t: 'swap', id }); return p.ps.weapon; })""", pair[0])
                 await pg.wait_for_timeout(120)
-                s1 = await ev("""((id) => { const r = window.__game.app.renderer.chars.rigs.get(id); return { u: r.swapU, from: r.swapFrom, w: r.weapon }; })""", pair[0])
-                check('a swap puts the old gun away and brings the new one up', 0 < s1['u'] < 1 and s1['from'] and s1['w'] == sw, s1)
+                s1 = await ev("""((id) => { const r = window.__game.app.match.renderer.chars.rigs.get(id); return { u: r.swapU, from: r.swapFrom, w: r.weapon }; })""", pair[0])
+                check('a swap puts the old gun away and brings the new one up', 0 < s1['u'] < 1 and s1['from'] and s1['from'] != sw and s1['w'] == sw, s1)
                 await pg.screenshot(path=f'{OUT}/05-swap.png')
+                # Watch the rig's springs every frame for a moment after a headshot that does not kill.
                 await ev("""((id) => { const app = window.__game.app, sim = app.match.sim, t = sim.players.find(q => q.id === id), me = sim.players.find(q => q.id === app.match.localId);
-                  t.hp = 1e6; sim._damage(t, me, 20, 'ar', 4, null, true); })""", pair[1])
-                await pg.wait_for_timeout(60)
-                fl = await ev("""((id) => { const r = window.__game.app.renderer.chars.rigs.get(id); return [...r.sx].map(v => +v.toFixed(3)); })""", pair[1])
+                  window.__fl = [0, 0, 0, 0, 0, 0, 0, 0, 0]; const r = app.match.renderer.chars.rigs.get(id);
+                  const tick = () => { for (let k = 0; k < 9; k++) window.__fl[k] = Math.max(window.__fl[k], Math.abs(r.sx[k])); if (window.__flOn) requestAnimationFrame(tick); };
+                  window.__flOn = true; requestAnimationFrame(tick);
+                  t.spawnProtect = 0; t.hp = 1e6; sim._damage(t, me, 20, 'ar', 4, null, true); })""", pair[1])
+                await pg.wait_for_timeout(500)
+                fl = await ev("(() => { window.__flOn = false; return window.__fl.map(v => +v.toFixed(3)); })()")
                 check('a hit moves the flinch springs (twist, head, gun)', abs(fl[6]) + abs(fl[7]) + abs(fl[8]) > 0.01, fl)
                 await pg.screenshot(path=f'{OUT}/06-flinch.png')
             await ctx.close()
