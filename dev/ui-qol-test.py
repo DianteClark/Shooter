@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Quality of life pass (owner's list, 2026-11-13): one browser, a fresh save, every item checked in a real page.
 
-Run from anywhere: python3 dev/ui-qol-test.py [port]. It serves the repo itself (python3 -m http.server <port>).
+Run from anywhere: python3 dev/ui-qol-test.py [port] [part...] (parts by function name, e.g. friend_room). It serves the repo itself (python3 -m http.server <port>).
   1 Quick rematch   solo Quick Play results: the main button says Next match and names the playlist; one tap searches
                     it again. Friend room (two tabs, ?net=local): the host's button is Rematch (same room), a guest's
                     is Ready, and tapping it readies the guest in the lobby.
@@ -269,8 +269,8 @@ async def quick_results(ctx):
 
 async def friend_room(ctx):
     print('1 Quick rematch (friend room), 7 host leave, 9 extras')
-    host = await fresh_page(ctx, '&net=local&bots=elite&limit=1&time=12&vote=2')
-    guest = await fresh_page(ctx, '&net=local&bots=elite&limit=1&time=12&vote=2')
+    host = await fresh_page(ctx, '&net=local&bots=elite&limit=1&time=12&vote=8')
+    guest = await fresh_page(ctx, '&net=local&bots=elite&limit=1&time=12&vote=8')
     await guest.evaluate("window.__game.Progress.name = 'Guest'")
     async def juggle():
         while True:
@@ -298,10 +298,20 @@ async def friend_room(ctx):
     await act(guest, '[data-act="toggleReady"]'); await guest.wait_for_timeout(500)
     await host.wait_for_function("window.__game.app.lobby.humans.every(h => h.ready)", timeout=10000)
     await act(host, '[data-act="start"]')
+    # The vote: card 0 made a TDM on Railyard on the host (which resolves the winner), and both vote it. A random card
+    # could be a BR or Ground War, which the 12 s time limit does not end (bug sweep 2026-11-20).
+    await host.wait_for_function('window.__game.app.vote?.options', timeout=30000)
+    await host.evaluate("(() => { const o = window.__game.app.vote.options; o[0] = { ...o[0], mapId: 'railyard', mode: 'tdm' }; })()")
+    for pg in (host, guest):
+        await pg.wait_for_selector('.vote-card[data-i="0"]', timeout=30000)
+        await pg.evaluate("document.querySelector('.vote-card[data-i=\"0\"]')?.click()")     # Skips the animation's stability wait.
     for pg in (host, guest):
         await pg.wait_for_function('window.__game.app.inMatch', timeout=60000)
     for pg in (host, guest):
-        await pg.wait_for_function("!window.__game.app.inMatch && window.__game.menu.el.dataset.screen === 'results'", timeout=240000)
+        try: await pg.wait_for_function("!window.__game.app.inMatch && window.__game.menu.el.dataset.screen === 'results'", timeout=240000)
+        except Exception:
+            st = await pg.evaluate("(() => { const a = window.__game.app, m = a.match, v = m?.interp?.newest; return { inMatch: a.inMatch, screen: window.__game.menu.el.dataset.screen, mode: m?.mode, phase: v?.phase, t: v?.t, timeLeft: v?.timeLeft, scores: v?.scores, sim: m?.sim ? [m.sim.phase, m.sim.timeLeft, m.sim.scoreLimit] : null }; })()")
+            raise Exception(f'no results screen: {st}')
     await host.wait_for_timeout(1500)
     h = await host.evaluate("[document.querySelector('[data-act=resRematch] b')?.textContent, document.querySelector('[data-act=resRematch] small')?.textContent]")
     gl = await guest.evaluate("[document.querySelector('[data-act=resRematch] b')?.textContent, document.querySelector('[data-act=resRematch] small')?.textContent]")
@@ -407,7 +417,9 @@ async def main():
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
-            for part in (remember, search, shortcuts, dots, class_swap, spectating, quick_results, friend_room):
+            parts = [remember, search, shortcuts, dots, class_swap, spectating, quick_results, friend_room]
+            only = [a for a in sys.argv[1:] if not a.isdigit() and not a.startswith('-')]
+            for part in [f for f in parts if not only or f.__name__ in only]:
                 ctx = await browser.new_context(viewport={'width': 844, 'height': 390}, has_touch=True, is_mobile=True)
                 await ctx.add_init_script(FAKE_PAD)
                 try:

@@ -18,7 +18,7 @@ const QUICK = { tab: 'standard', sel: { playlist: 'qp', modes: [] } };
 function pickForRules(rules) {
   const tabs = ['standard', ...MP_TAB_IDS.filter(t => t !== 'standard')];
   for (const tab of tabs) {
-    const pure = playlistsFor(tab).find(p => !p.ranked && !p.event && !p.featured && !p.friends && p.modes.length && p.modes.every(m => MODES[m]?.rules === rules));
+    const pure = playlistsFor(tab).find(p => !p.ranked && !p.event && !p.wkevent && !p.featured && !p.friends && p.modes.length && p.modes.every(m => MODES[m]?.rules === rules));
     if (pure) return { tab, sel: { playlist: pure.id, modes: [] }, name: pure.name };
     const mode = modesFor(tab).find(m => MODES[m]?.rules === rules);
     if (mode) return { tab, sel: { playlist: null, modes: [mode] }, name: MODES[mode].name };
