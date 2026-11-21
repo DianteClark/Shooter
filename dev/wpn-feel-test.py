@@ -83,6 +83,7 @@ async def main():
             browser = await p.chromium.launch(channel='chrome', args=ARGS)
             ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, has_touch=True, is_mobile=True, device_scale_factor=2)
             pg = await ctx.new_page()
+            pg.set_default_timeout(120000)     # Taps under load: the page can take a minute to answer (bug sweep 2026-11-20).
             async def with_unknown(route):
                 resp = await route.fetch()
                 await route.fulfill(response=resp, body=(await resp.text()) + UNKNOWN)
