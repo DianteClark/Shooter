@@ -135,7 +135,11 @@ async def run(browser, vw, vh, failures, errors):
     except Exception: pass
     auto = await ev(f"[{G}.match.ps.weapon, {G}.match.brStash?.slot ?? -1, {G}.match.brAuto]")
     await shot('06c-autofists')
-    if auto[0] != 'knife' or auto[1] < 0 or not auto[2]: failures.append(f'{vw}: both guns dry did not bring the fists out ({auto})')
+    # A melee weapon picked up from the floor (weapons wave 4, common on Jadefall) never runs dry (brUsable), so with
+    # one in a hand the fists rightly stay put.
+    melee = await ev(f"{G}.match.ps.defs.some(d => d && d.melee && d.id !== 'knife')")
+    if melee: print(f'{vw}: a melee weapon in hand, no fists by themselves (by design): {auto}', flush=True)
+    elif auto[0] != 'knife' or auto[1] < 0 or not auto[2]: failures.append(f'{vw}: both guns dry did not bring the fists out ({auto})')
     await ev(f"""(() => {{ const m = {G}.match, br = m.sim.br, me = m.sim.byId.get(m.localId);
       for (const p of m.sim.players) if (p !== me && Math.hypot(p.ps.x - m.ps.x, p.ps.z - m.ps.z) < 25) {{ p.ps.x = 3; p.ps.z = 3; }}     // Nobody else takes the rounds.
       for (let v = 0; v < 5; v++) br._addItem({{ kind: 1, v, r: 0, n: 40, x: m.ps.x + 0.2, z: m.ps.z }}); }})()""")
