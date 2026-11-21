@@ -137,6 +137,11 @@ async def scroll_checks(pg, ctx, vw, vh, fails):
     cdp = await ctx.new_cdp_session(pg)
     where = f'{vw}x{vh} gunsmith scroll'
     centre = "(sel => { const r = document.querySelector(sel).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })"
+    # The walk's last tap on a locked part (a part the veteran save does not own yet) leaves its unlock sheet open over
+    # the bench, which would take these touches: close it first (bug sweep 2026-11-20).
+    for _ in range(3):
+        await pg.evaluate("document.querySelector('.ul-btns [data-act=\"ulClose\"]')?.click()")
+        await pg.wait_for_timeout(250)
     # Attachments: the Halyard's optics are a long list.
     await pg.evaluate("__menu.screen.selectWeapon('ar'); __menu.screen.selectTab('attach'); __menu.screen.slot = 'optic'; __menu.screen.tryAtt = null; __menu.screen.renderPanel(); __menu.screen.update()")
     await pg.wait_for_timeout(400)
