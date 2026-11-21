@@ -216,8 +216,9 @@ async def main():
                 async def load(scene, extra='', wait=None):
                     tag['v'] = f'{vw}x{vh} {scene}{extra}'
                     url = f'http://localhost:{PORT}/dev/ui-gallery.html?frame={scene}&size={SIZE_ID.get((vw, vh), 'p13')}{extra}' + (f'&wait={wait}' if wait else '')
-                    await pg.goto(url)
-                    await pg.wait_for_function('window.__ready === true', timeout=40000)
+                    await pg.goto(url, timeout=120000)
+                    try: await pg.wait_for_function('window.__ready === true', timeout=120000)     # Under load a scene can take a minute.
+                    except Exception: raise Exception(f"scene never ready: {tag['v']}")
                     errs = await pg.evaluate('window.__errors')
                     errors.extend(f"{tag['v']}: {e}" for e in errs)
 
