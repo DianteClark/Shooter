@@ -289,11 +289,8 @@ MOODS.turnstile = {
     emit: map => ofKind(map, 'wall').filter((_, i) => i % 3 === 0).map(w => ({ x: w.x + w.w / 2, z: w.z + w.d / 2, y: 3.2, kind: 'drip', rate: 1 })),
   },
   ground(ctx, p, c) {
-    // The line's roundel set into the concourse floor at the middle of the map, and leaks pooling by the walls.
-    const { W, H } = ctx, x = p[0], z = p[2];
-    const d = Math.hypot((x - W / 2) * 0.8, z - H / 2);
-    if (d > 2.6 && d < 3.6) return [0.52, 0.16, 0.14];
-    if (Math.abs(z - H / 2) < 0.55 && Math.abs(x - W / 2) < 4.4) return [0.16, 0.24, 0.42];
+    // Leaks pooling on the platforms and concourse.
+    const x = p[0], z = p[2];
     if (ctx.noise(x * 0.6 + 70, z * 0.6) > 0.7) { ctx.groundWet = 1; return scale(c, 0.7); }
     return c;
   },
@@ -359,12 +356,14 @@ MOODS.foundry = {
   },
 };
 
+const halls = map => flagged(map, 'boathouse').filter((_, i) => i % 2 === 0);   // Two of the boathouses keep a stove going.
+
 // ---- Pier: a breezy grey morning, gulls and bunting ----------------------------------------------------------------
 MOODS.pier = {
-  life: { flock: 16, ground: 10, emit: map => flagged(map, 'hall').map(w => ({ x: w.x + w.w - 1, z: w.z + 1, y: w.h + 1.4, kind: 'smoke', rate: 0.6, col: [0.6, 0.62, 0.66] })) },
+  life: { flock: 16, ground: 10, emit: map => halls(map).map(w => ({ x: w.x + w.w - 1, z: w.z + 1, y: w.h + 1.4, kind: 'smoke', rate: 0.6, col: [0.6, 0.62, 0.66] })) },
   decor(ctx) {
     const { map } = ctx, I = ctx.theme.ink;
-    for (const w of flagged(map, 'hall')) {
+    for (const w of halls(map)) {
       stack(ctx, w.x + w.w - 1, w.h - 0.2, w.z + 1, 1.5, 0.22, I.red, I.tar);
       bunting(ctx, w.x - 0.2, w.z + w.d + 0.1, w.x + w.w + 0.2, w.z + w.d + 0.1, w.h + 0.1, [I.red, I.white, I.blue, I.buoy], { sag: 0.5 });
     }

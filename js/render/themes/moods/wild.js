@@ -30,7 +30,7 @@ function brazier(ctx, x, y, z) {
 // ---- Dust: a pink-gold evening over the town --------------------------------------------------------------------
 MOODS.dust = {
   theme: {
-    light: { dir: norm([-0.86, 0.36, 0.3]), sun: [1.14, 0.72, 0.48], sky: [0.46, 0.38, 0.44], amb: [0.36, 0.3, 0.33] },
+    light: { dir: norm([-0.86, 0.36, 0.3]), sun: [1.08, 0.74, 0.52], sky: [0.46, 0.38, 0.44], amb: [0.36, 0.3, 0.33] },
     clear: 0x4a2a26,
     fog: [0.62, 0.44, 0.42], fogSeam: [0.28, 0.12, 0.06], desatTint: [0.9, 0.8, 0.78],
     shadow: { col: [0.44, 0.3, 0.44], strength: 0.72, len: 1.7 },
@@ -153,11 +153,11 @@ MOODS.canyon = {
 // ---- Ruins: sunrise mist in the clearing ---------------------------------------------------------------------------
 MOODS.ruins = {
   theme: {
-    light: { dir: norm([0.66, 0.5, 0.42]), sun: [1.04, 0.8, 0.52], sky: [0.36, 0.42, 0.42], amb: [0.27, 0.29, 0.29] },
+    light: { dir: norm([0.7, 0.42, 0.4]), sun: [1.12, 0.74, 0.46], sky: [0.34, 0.38, 0.42], amb: [0.25, 0.26, 0.3] },
     clear: 0x262c22,
     fog: [0.6, 0.62, 0.54], fogSeam: [0.22, 0.16, 0.06], desatTint: [0.88, 0.88, 0.8],
     shadow: { col: [0.32, 0.38, 0.4], strength: 0.62, len: 1.3 },
-    ink: { ground: 0x506032, grass: 0x5e7434, moss: 0x58702e },
+    ink: { ground: 0x4c5634, grass: 0x58663a, moss: 0x55663a, leaf: 0x3a5e30, leafL: 0x5a7a3a },
     weather: { fields: [
       { kind: 'mote', count: 34, box: [46, 2.2, 36], vel: [0.3, 0.02, 0.1], size: 4.6, col: [0.92, 0.92, 0.84], alpha: 0.09 },
       { kind: 'mote', count: 70, box: [38, 5, 30], vel: [0.2, 0.14, 0.1], size: 0.08, col: [1.0, 0.92, 0.6], alpha: 0.6 },
@@ -189,12 +189,12 @@ MOODS.ruins = {
 // ---- Canopy: the hour after the rain --------------------------------------------------------------------------------
 MOODS.canopy = {
   theme: {
-    light: { dir: norm([-0.22, 0.9, 0.38]), sun: [0.58, 0.64, 0.54], sky: [0.34, 0.4, 0.36], amb: [0.26, 0.3, 0.27] },
+    light: { dir: norm([-0.22, 0.9, 0.38]), sun: [0.5, 0.56, 0.5], sky: [0.34, 0.4, 0.36], amb: [0.26, 0.3, 0.27] },
     clear: 0x141c16,
     fog: [0.38, 0.48, 0.42], fogSeam: [0.08, 0.14, 0.1], desatTint: [0.8, 0.88, 0.82],
     shadow: { col: [0.3, 0.4, 0.36], strength: 0.5, len: 0.45 },
     wet: 0.6, sheen: norm([0.1, 0.9, -0.42]), sheenCol: [0.4, 0.5, 0.44],
-    ink: { ground: 0x40522c, grass: 0x4c6630, leaf: 0x2e6026, leafL: 0x4e7c2c },
+    ink: { ground: 0x3a4a2a, grass: 0x445c2e, leaf: 0x2e6026, leafL: 0x4e7c2c },
     weather: { fields: [
       { kind: 'rain', count: 140, box: [36, 14, 28], vel: [-0.6, -12, 0.6], len: 0.5, width: 0.011, col: [0.8, 0.9, 0.84], alpha: 0.18 },
       { kind: 'ripple', count: 60, box: [34, 1, 26], life: 0.7, size: 0.5, col: [0.76, 0.9, 0.82], alpha: 0.28 },
