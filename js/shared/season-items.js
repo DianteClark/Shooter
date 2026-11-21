@@ -132,7 +132,7 @@ export const SEASON_DEFS = [
       ['nimbus', 'Nimbus', 'hex', [0x6a7488, 0x3a4256, 0xe4eaf4, 0x161a24], 8.0],
       ['stormglass', 'Stormglass', 'carbon', [0x1c2230, 0x0a0d14, 0xffe14a], 11.0],
       ['ozone', 'Ozone', 'digital', [0x2a3a6a, 0x141c3a, 0x9ab8ff, 0x0a0e1e], 9.0],
-      ['hailstone', 'Hailstone', 'splinter', [0xe8eef6, 0x9aa8bc, 0x4a5668, 0x1a202a], 3.2],
+      ['hailstone', 'Graupel', 'splinter', [0xe8eef6, 0x9aa8bc, 0x4a5668, 0x1a202a], 3.2],
       ['thunderclap', 'Thunderclap', 'hex', [0xffe14a, 0xb8941a, 0x2a2410, 0x0c0a04], 8.0],
       ['forkedbolt', 'Forked Bolt', 'livewire', [0x0c0e1a, 0xffe14a, 0xffffff], 5.0, true, 0xffe860],
       ['stormeye', 'Eye of the Storm', 'aurora', [0x080a18, 0x8a6aff, 0x3ad8ff, 0xf4f6ff], 4.0, true, 0xa88aff],
