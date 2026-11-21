@@ -73,7 +73,11 @@ async def main():
                     await pg.evaluate(f"""(() => {{ const g = window.__game;
                       g.hud.showEnd = () => {{ throw new Error('{INJECTED}'); }};
                       g.menu.previewMount = () => {{ throw new Error('{INJECTED}'); }}; }})()""")
-                await pg.wait_for_function('!window.__game.app.inMatch', timeout=120000)
+                # Quick play is random: a round mode (Search and Destroy, Showdown) plays several 20 s rounds, slower
+                # again on a loaded machine (bug sweep 2026-11-20).
+                try: await pg.wait_for_function('!window.__game.app.inMatch', timeout=360000)
+                except Exception:
+                    raise Exception(f'{name}: still in the match: ' + str(await pg.evaluate("(() => { const m = window.__game.app.match, v = m?.interp?.newest; return { info: window.__game.app.matchInfo && [window.__game.app.matchInfo.mapId, window.__game.app.matchInfo.mode], phase: v?.phase, t: v?.t, timeLeft: v?.timeLeft }; })()")))
                 await pg.wait_for_timeout(3600)
                 st = await pg.evaluate(STATE)
                 ok = st['screen'] == 'results' and st['on'] and st['tables'] and st['skips'] <= 1

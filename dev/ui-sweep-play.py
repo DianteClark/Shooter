@@ -57,6 +57,10 @@ CASES += [('custom-millbrook-' + m, 'custom', ('millbrook', m)) for m in ['tdm',
 CASES += [('custom-zm-polestar', 'custom', ('polestar', 'zm')), ('custom-zm-wrenfield', 'custom', ('wrenfield', 'zm'))]
 CASES += [('mp-wkevent' + ('' if d is None else '-' + d), 'wkevent', d) for d in [None, '2026-11-30T12:00:00', '2026-12-07T12:00:00', '2026-12-14T12:00:00', '2026-12-21T12:00:00']]
 CASES += [('tourney', 'tourney', '2026-11-21T12:00:00')]
+# 1120 wave (bug sweep 2026-11-20): the three new 6v6 maps, Jadefall's island in battle royale and its two Ground War
+# maps on the coast.
+CASES += [('custom-' + mp + '-' + m, 'custom', (mp, m)) for mp, ms in [('launchpad', ['tdm', 'dom', 'snd']), ('observatory', ['tdm', 'hq', 'kc']), ('pagoda', ['tdm', 'ctf', 'ffa'])] for m in ms]
+CASES += [('custom-jadefall-br', 'custom', ('jadefall', 'br')), ('custom-tidebreak-gwtdm', 'custom', ('tidebreak', 'gwtdm')), ('custom-coral-gwdom', 'custom', ('coral', 'gwdom'))]
 
 STATE = f"""(() => {{ const a = {G}, m = a.match; return {{ screen: window.__game.menu.el.dataset.screen, inMatch: !!a.inMatch,
   phase: m?.interp?.newest?.phase ?? null, mode: m?.mode ?? null, mapId: m?.mapId ?? null }}; }})()"""
