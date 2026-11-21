@@ -51,8 +51,9 @@ async def main():
                 await pg.wait_for_timeout(1000)
                 return pg
 
-            async def tap(pg, sel, timeout=8000):
-                await pg.locator(sel).first.click(timeout=timeout)
+            async def tap(pg, sel, timeout=20000):
+                # no_wait_after: under load Playwright's wait for "scheduled navigations" after a click outlived the timeout.
+                await pg.locator(sel).first.click(timeout=timeout, no_wait_after=True)
                 await pg.wait_for_timeout(250)
 
             async def type_keys(pg, text):

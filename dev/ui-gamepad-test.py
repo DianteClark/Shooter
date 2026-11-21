@@ -218,7 +218,7 @@ async def main():
             # ring on an item, the d-pad walks the items, A buys, B closes it.
             await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local&map=ashgrove&mode=zm')
             await pg.wait_for_timeout(1300)
-            await pg.locator('[data-act="custom"]').first.click()
+            await pg.locator('[data-act="custom"]').first.click(timeout=60000, no_wait_after=True)
             await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
             await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, R = sim.rules; setInterval(() => { for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }, 200);
               for (const p of R.crew) if (p.bot) p.bot.update = () => []; R.plan = () => {}; R._crewPlan = null;
