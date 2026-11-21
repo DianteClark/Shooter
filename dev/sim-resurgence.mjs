@@ -81,10 +81,12 @@ function redeploys() {
   // Hold the squad still and safe while it waits.
   for (let i = 0; i < (RB.redeploy[sim.br.phase] + 1) * SIM_HZ; i++) {
     for (const q of mates) { q.hp = 100; q.alive = true; q.downed = false; }
-    sim.step(STEP); ev.push(...sim.drainEvents());
+    sim.step(STEP);
+    // Measured when it happens: the mate (a bot) runs on during the rest of the loop.
+    for (const e of sim.drainEvents()) { ev.push(e); if (e.t === 'brredeploy' && e.id === 'h1') { const by = sim.byId.get(e.by); e.near = Math.hypot(e.x - by.ps.x, e.z - by.ps.z); } }
   }
   const back = ev.find(e => e.t === 'brredeploy' && e.id === 'h1');
-  const near = back && Math.hypot(back.x - sim.byId.get(back.by).ps.x, back.z - sim.byId.get(back.by).ps.z);
+  const near = back?.near;
   check(me.alive && back && near < 16, `back in next to a squadmate (${near?.toFixed(1)} m)`);
   check(me.brAir === 2 && me.br.glideT > 0, 'on the parachute');
   check(me.br.guns[0] && me.br.guns[0].r <= RB.kitRarity && me.br.guns[1]?.id === 'pistol' && me.br.armor === RB.kitArmor, `a starter kit: ${me.br.guns[0]?.id} (rarity ${me.br.guns[0]?.r}), pistol, ${me.br.armor} armor`);

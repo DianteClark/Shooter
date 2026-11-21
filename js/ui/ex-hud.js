@@ -125,11 +125,12 @@ const CSS = `
 .br-out.ex-held:not(.watching) small { max-width: 360px; margin-left: auto; margin-right: auto; }
 .br-out.ex-held .acts { flex-wrap: wrap; }
 /* Watching: a compact plate under the chips (js/ui/hud.js --out-*), text over a row of small buttons, so it fits the gap
-   between the squad list and the spectate card at every size. */
+   between the squad list and the spectate card at every size (on the narrowest screens the buttons take a second row
+   rather than run out of the plate). */
 .hud .br-out.ex-held.watching { flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 10px 7px; width: max-content; max-width: min(420px, var(--out-w, calc(100vw - 24px))); }
 .br-out.ex-held.watching b { font-size: 16px; }
 .br-out.ex-held.watching small { max-width: none; margin-top: 2px; font-size: 11px; }
-.br-out.ex-held.watching .acts { margin-top: 0; gap: 5px; justify-content: flex-start; flex-wrap: nowrap; }
+.br-out.ex-held.watching .acts { margin-top: 0; gap: 5px; justify-content: flex-start; flex-wrap: wrap; }
 .br-out.ex-held.watching button { height: 30px; min-width: 0; padding: 0 9px; font-size: 13px; flex: 1 0 auto; white-space: nowrap; }
 .ex-lives-note { padding: 4px 10px; font: 12px/1 var(--f-plate); letter-spacing: var(--tr-plate);
   color: var(--c-chalk); background: var(--hud-glass, rgba(16,20,26,.78)); white-space: nowrap; }
