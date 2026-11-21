@@ -43,7 +43,13 @@ const HOLD_MAX_MS = 1500;       // A kept stick that nothing confirms is let go 
 // finger's next move, from the same base).
 const SUSPECT_MS = 180;
 const THROW_ARM_PX = 30;        // Radius around the button's centre: leaving it starts the aim, returning cancels.
-const THROW_FULL_PX = 118;      // Drag distance from the button centre that means full range.
+const THROW_FULL_PX = 118;      // Drag distance from the button centre that means full range (at most; see THROW_EDGE_PX).
+// iOS cancels every other finger (the move thumb included, never to be delivered again) when a finger lifts within
+// about 27 px of the screen's side edge while another is down: six owner reports, every throw released past x 905 of
+// 932 with the stick held lost the stick, every one released before 903 kept it (docs: dev/touch-reports). So full range
+// is reached before the drag gets that close: the range is cut to the room between the button and a 44 px edge band.
+const THROW_EDGE_PX = 44;
+const THROW_FULL_MIN_PX = 64;   // Never shorter than this, so a cramped corner still has a usable aim.
 const THROW_MIN_M = 2.5;        // Shortest aimed toss; a drag that barely clears the button is a lob at your feet.
 const THROW_BASE_M = 13;
 const THROW_STRONG_M = 19;
@@ -228,7 +234,7 @@ export class Controls {
     this.rig = {
       el: el.querySelector('.throw-rig'), range: el.querySelector('.tr-range'), line: el.querySelector('.tr-line'), dot: el.querySelector('.tr-dot'),
       label: el.querySelector('.tr-label'), dist: el.querySelector('.tr-label b'), tip: el.querySelector('.tr-label small'),
-      shownDist: NaN, shownMode: '', shownSlot: '', cancelled: null, active: null, btn: null,
+      shownDist: NaN, shownMode: '', shownSlot: '', cancelled: null, active: null, btn: null, full: THROW_FULL_PX,
     };
     this.rig.range.style.width = this.rig.range.style.height = `${THROW_FULL_PX * 2}px`;
     this.rig.range.style.margin = `-${THROW_FULL_PX}px 0 0 -${THROW_FULL_PX}px`;
@@ -661,7 +667,15 @@ export class Controls {
     if (this.throw) return true;      // One grenade at a time; the second thumb is just pressing a button.
     const r = this.rects[slot];
     const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
-    this.throw = { slot, id: touchId, cx, cy, x: cx, y: cy, at, left: false, cancel: false };
+    const h = viewport().h || window.innerHeight;
+    const room = Math.min(cx - THROW_EDGE_PX, this.width - THROW_EDGE_PX - cx, cy - THROW_EDGE_PX, h - THROW_EDGE_PX - cy);
+    const full = Math.max(THROW_FULL_MIN_PX, Math.min(THROW_FULL_PX, room));
+    this.throw = { slot, id: touchId, cx, cy, x: cx, y: cy, at, left: false, cancel: false, full };
+    if (this.rig.full !== full) {
+      this.rig.full = full;
+      this.rig.range.style.width = this.rig.range.style.height = `${full * 2}px`;
+      this.rig.range.style.margin = `-${full}px 0 0 -${full}px`;
+    }
     this.paintDirty = true;
     return true;
   }
@@ -687,7 +701,7 @@ export class Controls {
       const dx = th.x - th.cx, dy = th.y - th.cy, d = Math.hypot(dx, dy);
       out.slot = th.slot;
       out.aim = Math.atan2(dy, dx);
-      out.dist = THROW_MIN_M + Math.min(1, (d - THROW_ARM_PX) / (THROW_FULL_PX - THROW_ARM_PX)) * (this.throwMax - THROW_MIN_M);
+      out.dist = THROW_MIN_M + Math.min(1, (d - THROW_ARM_PX) / ((th.full ?? THROW_FULL_PX) - THROW_ARM_PX)) * (this.throwMax - THROW_MIN_M);
       return out;
     }
     if (now - th.at < THROW_HOLD_MS) return null;
