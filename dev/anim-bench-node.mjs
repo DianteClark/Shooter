@@ -10,6 +10,7 @@ const { Characters } = await import(ROOT + '/js/render/characters.js');
 const { OPERATORS, SKINS } = await import(ROOT + '/js/ui/operators.js');
 const N = +(process.argv[2] || 12), FRAMES = +(process.argv[3] || 3000), NODEATH = process.argv[4] === 'nodeath';
 const BR = N > 16;
+const PERIOD = +(process.env.PERIOD || 24);     // Seconds between one player's deaths (24: a heavy TDM; PERIOD=60 nearer a usual one).
 const scene = new THREE.Scene(); const time = { value: 0 };
 const chars = new Characters(scene, { walls: [] }, time);
 const W = ['ar', 'smg', 'shotgun', 'sniper', 'lmg', 'pistol', 'launcher', 'dmr', 'revolver', 'pdw', 'burst', 'autoshot'];
@@ -42,7 +43,7 @@ function script(p, i, t, dt) {
   if (u >= 5.2 && u < 5.2 + dt) chars.onThrow(p.id, 'frag');
   if (u >= 3.5 && u < 3.5 + dt) { p.weapon = W[(W.indexOf(p.weapon) + 1) % W.length]; chars.onSwap(p.id); }
   if (NODEATH) return;
-  const d = (t + i * 1.9) % 24;
+  const d = (t + i * 1.9) % PERIOD;
   if (d < dt && t > 1) { kill.dirX = Math.cos(i); kill.dirZ = Math.sin(i); kill.head = i % 4 === 0; kill.explosive = i % 5 === 0; kill.weapon = p.weapon; chars.onKill(p.id, kill); }
   p.alive = !(d > 0.15 && d < 3);
 }

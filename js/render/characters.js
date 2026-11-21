@@ -838,6 +838,24 @@ const NO_POSE = blankPose();
 // Seconds into a fall after which the body lies still enough to stop solving its limbs (death-anim.js springs).
 const DIE_SETTLE = 1.15;
 // Limb parts redrawn from a settled body's pose: upper arms, forearms, thighs, shins, boots (meshes picked in order).
+const copyPart = (pose, part, mesh, slot) => {
+  const e = mesh.instanceMatrix.array, o = part * 16, j = slot * 16;
+  for (let c = 0; c < 16; c++) e[j + c] = pose[o + c];
+};
+// The view record the frame loop reads (see update): every field it uses, copied from whatever record the view holds.
+function viewRecord() {
+  return { id: '', team: 0, x: 0, z: 0, aim: 0, vx: 0, vz: 0, alive: false, weapon: 'ar', camo: 'none', attachments: undefined,
+    adsT: 0, reloadT: 0, reloadDur: 0, sprinting: false, sliding: false, spawnProtect: false, heat: 0, overheated: false,
+    downed: false, air: 0, glideT: undefined, fin: null, zk: 0, ghost: false, ammo: undefined };
+}
+function readView(o, s) {
+  o.id = s.id; o.team = s.team; o.x = s.x; o.z = s.z; o.aim = s.aim; o.vx = s.vx; o.vz = s.vz; o.alive = s.alive;
+  o.weapon = s.weapon; o.camo = s.camo; o.attachments = s.attachments; o.adsT = s.adsT; o.reloadT = s.reloadT;
+  o.reloadDur = s.reloadDur; o.sprinting = s.sprinting; o.sliding = s.sliding; o.spawnProtect = s.spawnProtect;
+  o.heat = s.heat; o.overheated = s.overheated; o.downed = s.downed; o.air = s.air; o.glideT = s.glideT; o.fin = s.fin;
+  o.zk = s.zk; o.ghost = s.ghost; o.ammo = s.ammo;
+  return o;
+}
 const SETTLED_PARTS = [P.UPPER_R, P.UPPER_L, P.FORE_R, P.FORE_L, P.THIGH_L, P.THIGH_R, P.SHIN_L, P.SHIN_R, P.BOOT_L, P.BOOT_R];
 const POSE_FIXED = new Set(['lx', 'ly', 'lz', 'rx', 'ry', 'rz', 'lieUp']);     // Targets and flags: never eased.
 
@@ -1023,6 +1041,7 @@ export class Characters {
     this.counts = { nT: 0, nTL: 0, nU: 0, nA: 0, nL: 0, nB: 0 };
     this.corpses = new Corpses(this);
     this.vfx = null;           // Set by GameRenderer; the operator preview runs without effects.
+    this._pv = viewRecord();     // The frame loop's view record (readView).
     this.maxDying = null;      // Bodies falling at once (death-anim.js); null follows the quality step's corpse budget.
     this.zm = null;            // Graveyard Shift's undead bodies (js/render/zm-bodies.js), set by GameRenderer in that mode.
     this.surf = null;
@@ -1333,9 +1352,11 @@ export class Characters {
     // The per-frame easing factors every rig uses, worked out once (Math.exp is the costly part of easing).
     const d6 = damp(6, dt), d8 = damp(8, dt), d9 = damp(9, dt), d10 = damp(10, dt), d12 = damp(12, dt), d14 = damp(14, dt);
     const d16 = damp(16, dt), d18 = damp(18, dt), e13 = Math.exp(-dt * 13), e16 = Math.exp(-dt * 16);
+    const P1 = this._pv;
     for (let pi = 0; pi < view.players.length; pi++) {
-      let p = view.players[pi];
-      const r = this.rig(p.id);
+      let src = view.players[pi];
+      const r = this.rig(src.id);
+      let p = src;
       if (r.down) {
         // The kill event outruns the interpolated view: stay hidden until the view agrees, then until the next life.
         r.downT -= dt;
@@ -1345,9 +1366,12 @@ export class Characters {
       // Falling dead (death-anim.js): drawn from the view frozen at the kill until it has faded or the player is back.
       if (r.dying) {
         if (!r.down || r.die.t >= DIE_LIFE) r.dying = r.dieSettled = false;
-        else p = r.dview;
+        else src = r.dview;
       }
       const dying = r.dying;
+      // The loop reads the player from one record of a fixed shape, whatever made the view (the sim, a snapshot, the
+      // interpolator, a replay, the killcam, a falling body's frozen copy): each property read stays monomorphic.
+      p = readView(P1, src);
       r.team = p.team;
       const zk = p.zk | 0;       // Graveyard Shift: 1..9 an undead kind on this seat (no gun, arms out, hunched).
       r.op = zk ? ZM_OP_BASE + zk - 1 : this.opById.get(p.id) ?? 0;
@@ -1413,7 +1437,7 @@ export class Characters {
       if (!!patient !== r.wasKneeling) { r.sv[DIP] += (patient ? -1.4 : 1.1) * motion; r.wasKneeling = !!patient; }
       r.kneel += ((patient ? 1 : 0) - r.kneel) * d10;
       // A finisher or an emote over everything else (finisher-anim.js); a fall over everything when dying (death-anim.js).
-      const A = dying ? (r.die.kind === DIE.FIN ? (r.die.t += dt, r.dpose) : stepDeath(r.die, dt, r.dpose)) : this._layer(r, p, dt, speed);
+      const A = dying ? (r.die.kind === DIE.FIN || r.dieSettled ? (r.die.t += dt, r.dpose) : stepDeath(r.die, dt, r.dpose)) : this._layer(r, p, dt, speed);
       const crawl = Math.max(r.crawl, A.lie), kneel = Math.min(1, r.kneel + A.kneel);
       // Facing of the body (a finisher may turn it), and which way lying legs trail: behind, or ahead when on the back.
       const faceA = p.aim - A.twist, legDir = A.lie > r.crawl && A.lieUp ? -1 : 1;
@@ -1470,6 +1494,35 @@ export class Characters {
         continue;
       }
 
+      // A body that has come to rest is redrawn from the matrices it was last posed with (`pose`): nothing is solved
+      // again, which keeps a field of bodies cheap (docs/ANIMATION.md "Performance"). Only its fade changes.
+      if (dying && r.dieSettled) {
+        if (!r.visible) continue;
+        const team = this.teamRGB[p.team] || this.teamRGB[0], fade = r.reveal * deathFade(r.die), flash = r.flash, pose = r.pose;
+        const B = sk.suit ? banks[this.suitBankOf[r.op]] : null;
+        const suit = !!B, kit = !r.lite && !suit && this.isKit[r.op];
+        const tMesh = suit ? (r.lite ? B.ft : B.t) : r.lite ? this.torsoLite : kit ? this.torsoKit : torso;
+        const hMesh = suit ? (r.lite ? B.fh : B.h) : r.lite ? this.headLite : kit ? this.headKit : head;
+        const ti = suit ? (r.lite ? B.nf++ : B.n++) : r.lite ? nTL++ : kit ? nK++ : nT, skT = r.lite && !suit ? sk.lite : sk;
+        copyPart(pose, P.TORSO, tMesh, ti); this._writeFx(tMesh, ti, fade, flash, team, r.op, sk.acc, skT);
+        copyPart(pose, P.HEAD, hMesh, ti); this._writeFx(hMesh, ti, fade, flash, team, r.op, sk.acc, skT);
+        if (!r.lite && !kit && !suit) nT++;
+        const gm = r.gunMesh;
+        if (gm && gm.count < gm.instanceMatrix.count) {
+          const gi = gm.count++, ga = gm.geometry.attributes;
+          copyPart(pose, P.GUN, gm, gi);
+          ga.aCamo.setX(gi, r.camoI); ga.aAccent.setXYZ(gi, r.accent[0], r.accent[1], r.accent[2]); ga.aFx.setXY(gi, fade, flash); ga.aHeat.setX(gi, 0);
+        }
+        for (let k = 0; k < 10; k++) {
+          const arms = k < 4, mesh = k < 2 || (k >= 4 && k < 6) ? upper : k < 4 ? arm : k < 8 ? leg : boot;
+          const slot = mesh === upper ? nU++ : mesh === arm ? nA++ : mesh === leg ? nL++ : nB++;
+          copyPart(pose, SETTLED_PARTS[k], mesh, slot);
+          if (k >= 8) this._writeFx(boot, slot, fade, flash, team, 0, null, sk.foot ?? sk.limb ?? sk.limbFx);
+          else this._writeFx(mesh, slot, fade, flash, team, 0, arms ? sk.sleeveRGB : sk.trouserRGB, mesh === arm ? sk.limb ?? sk.limbFx : sk.limbFx);
+        }
+        r.posed = clock;
+        continue;
+      }
       const ads = p.adsT || 0;
       const sprint = r.sprint, slide = r.slide;
       const sinPhase = Math.sin(r.phase);
@@ -1657,19 +1710,6 @@ export class Characters {
         }
       }
 
-      // A body that has come to rest keeps the limbs it was last posed with: copied, not solved again (the CPU budget).
-      if (dying && r.dieSettled) {
-        const pose = r.pose;
-        for (let k = 0; k < 10; k++) {
-          const part = SETTLED_PARTS[k], arms = k < 4, mesh = k < 2 || (k >= 4 && k < 6) ? upper : k < 4 ? arm : k < 8 ? leg : boot;
-          const slot = mesh === upper ? nU++ : mesh === arm ? nA++ : mesh === leg ? nL++ : nB++;
-          const e = mesh.instanceMatrix.array, o = part * 16, j = slot * 16;
-          for (let c = 0; c < 16; c++) e[j + c] = pose[o + c];
-          if (k >= 8) this._writeFx(boot, slot, fade, flash, team, 0, null, sk.foot ?? sk.limb ?? sk.limbFx);
-          else this._writeFx(mesh, slot, fade, flash, team, 0, arms ? sk.sleeveRGB : sk.trouserRGB, mesh === arm ? sk.limb ?? sk.limbFx : sk.limbFx);
-        }
-        continue;
-      }
       if (dying && r.die.t > DIE_SETTLE) r.dieSettled = true;     // Posed in full once more below, then kept.
 
       // Arms: shoulder to hand through a solved elbow. Right hand on the grip, left on the fore point.

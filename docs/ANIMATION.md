@@ -94,10 +94,27 @@ slide dip and throw lean are scaled down.
 
 The bench crowd walks, strafes, backpedals, sprints, slides, shoots, reloads (tactical and empty), swaps, throws, is
 hit, and dies every 24 s per player (a heavy TDM) with a 3 s respawn; a third wear Mastery suits, a third kit
-operators. See "Measured" below for the numbers. Things done to stay inside the budget:
+operators. Things done to stay inside the budget:
 
 - the per-frame easing factors (`damp`, `Math.exp`) are worked out once per frame, not per rig;
 - every `Rig` field is declared in the constructor (swing, cycle, zk, tracer clock were added on the fly before, which
   gave rigs several hidden classes);
 - settled bodies copy their limbs instead of solving them;
-- the tactical track is a field on the reload entry, not a lookup.
+- the tactical track is a field on the reload entry, not a lookup;
+- the frame loop reads each player through one fixed-shape record (`readView`), whatever produced the view (sim,
+  snapshot, interpolator, replay, killcam, a falling body's frozen copy). Without it, the first falling body made every
+  property read in the loop polymorphic for every rig, which cost more than the falls themselves.
+
+### Measured (2026-11-20, 2-core machine under load average ~9)
+
+`dev/anim-bench-cmp.sh` against an export of the commit before the pass, CPU time per `Characters.update`, trimmed
+mean, median of rounds:
+
+| crowd | before | after | change |
+| --- | --- | --- | --- |
+| 12 (TDM), 4 rounds x 20000 frames | 0.0543 ms | 0.0566 ms | +4.1 % |
+| 32 (BR), 4 rounds x 12000 frames | 0.1340 ms | 0.1340 ms | +0.0 % |
+| 12, nobody dies, 3 rounds x 8000 frames | 0.0512 ms | 0.0517 ms | +1.0 % |
+
+Short runs on this machine swing by +-15 % round to round; use long runs. No per-frame allocations: the scavenge
+count over a run matches the old code's (`node --trace-gc`).
