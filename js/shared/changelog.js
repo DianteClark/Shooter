@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Animation pass: falls, reloads, footwork',
+    build: '1120-11', date: '2026-11-20', title: 'Animation pass: falls, reloads, footwork',
     items: [
       'Soldiers now fall instead of breaking apart: back onto the floor when shot from the front, onto their face from behind, spun round from the side, dropped to their knees by a headshot, turned right round by a melee hit, and thrown off their feet by a shotgun or sniper round up close. The body keeps its operator, skin and Mastery suit as it falls, lies a moment, then fades. Explosions still blow bodies apart.',
       'A dropped gun now falls out of the hands and lands beside the body.',
