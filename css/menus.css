@@ -911,10 +911,10 @@
 #ui .opt-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 #ui .opt-name b { font: 400 var(--fs-lead)/1.05 var(--f-stencil); letter-spacing: var(--tr-stencil); }
 #ui .opt-name small { font: 400 var(--fs-caption)/1.2 var(--f-body); color: var(--c-haze); white-space: normal; }
-/* Music: the "in matches" switch rides on the slider's name line (js/audio/music.js). */
+/* Music: where it plays (everywhere, menus only, off) rides on the slider's name line (js/audio/music.js). */
 #ui .opt-name-mm { flex-direction: row; align-items: center; justify-content: space-between; }
-#ui .opt-matchmusic { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); }
-#ui .opt-matchmusic small { color: var(--c-haze); font: inherit; }
+#ui .opt-musicmode { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); }
+#ui .opt-musicmode small { color: var(--c-haze); font: inherit; }
 /* Team voice: open mic or push to talk, on the voice row's name line like Music's switch (js/net/voice.js). */
 #ui .opt-voicemode { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 24px; min-height: 0; font: 400 var(--fs-caption)/1 var(--f-stencil); flex: none; margin: -3px 0 -3px auto; letter-spacing: var(--tr-plate); }
 #ui .opt-voicemode small { color: var(--c-haze); font: inherit; }

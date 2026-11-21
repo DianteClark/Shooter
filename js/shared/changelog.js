@@ -15,6 +15,40 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: '1120-12', date: '2026-11-20', title: 'The older maps get a fresh coat',
+    items: [
+      'Every older 6 v 6 and Ground War map has its own time of day and colours now, so no two look alike: Dust glows pink and gold at evening, Oasis wakes up in a cool misty dawn, Canyon burns red at sunset; Ruins sits in sunrise mist, Canopy drips after the rain, Riverbend shines gold and Expedition is caught in a monsoon with lightning.',
+      'In the city, Neon is back to its ultraviolet market night, Overpass sits in an orange smog dusk and Downtown in a rainy blue hour. Frostline is a night under the aurora; Icebreaker a bright, crisp polar noon.',
+      'Stronger centrepieces you can spot from anywhere: Railyard\'s water tower, the clock tower over Overpass\'s plaza, Downtown\'s fountain with its statue and jet, the tiled star and well-head in Dust\'s square, Icebreaker\'s smoking funnels, the furnace glow in Foundry and more.',
+      'More life everywhere: chimney and funnel smoke, steam off the market stalls, embers from braziers and the burning wreck, mist over the water, spray from the fountain and the mill race, gulls, doves and crows, bunting, lanterns, buoys and blinking aircraft lights.',
+      'Only the look changed: every wall, lane and objective is where it was, and the maps run as smoothly as before.',
+    ],
+  },
+  {
+    build: '1120-11', date: '2026-11-20', title: 'Animation pass: falls, reloads, footwork',
+    items: [
+      'Soldiers now fall instead of breaking apart: back onto the floor when shot from the front, onto their face from behind, spun round from the side, dropped to their knees by a headshot, turned right round by a melee hit, and thrown off their feet by a shotgun or sniper round up close. The body keeps its operator, skin and Mastery suit as it falls, lies a moment, then fades. Explosions still blow bodies apart.',
+      'A dropped gun now falls out of the hands and lands beside the body.',
+      'Reloads change with the magazine: with rounds left, the old magazine goes into a pouch and nothing needs charging; from empty, the magazine drops free and the charging handle, slide or bolt is worked. Shotguns and lever guns loaded from empty are racked once full.',
+      'Weapon swaps put the old gun away before the new one comes up, with the free hand off the gun in between.',
+      'Smoother footwork: walking backwards keeps the knees forward with shorter steps, strafing turns the hips part way and sets the feet wider, and standing still the weight shifts from foot to foot. Wading through water lifts the knees higher.',
+      'Hits twist the shoulders and knock the gun off line; a headshot that does not kill snaps the head back. Grenade throws now shift the weight back and through. Slides drop into the legs and pop back up, and a battle royale landing puts a hand on the ground.',
+      'Reduce motion (system setting or Reduce shake and flashes) keeps falls short and simple: no flying bodies, no flailing, and explosions drop bodies instead of scattering them.',
+    ],
+  },
+  {
+    build: '1120-10', date: '2026-11-20', title: 'Music for every mode, and a sound pass',
+    items: [
+      'Every mode has its own music now, and it follows the match: Team Deathmatch and the other 6 v 6 modes, Ranked, the round modes, Ground War, Battle Royale (the drop, a calm landing, tension as the circle closes, the final circle), Extraction (and a rush when your exfil is called), Graveyard Shift (eerier every few rounds, with a theme for the bosses), each Campaign mission, and Infected.',
+      'The music builds with the fight and peaks in the last minute or at match point, then gives way for the victory or defeat sting.',
+      'Music steps back while a teammate talks on voice chat, under campaign radio, and in a firefight.',
+      'Options, Audio: Music now plays Everywhere, in Menus only, or Off, and starts at a gentler 60%.',
+      'Footsteps sound like the ground they land on: gravel, dirt, snow, sand, boards and steel.',
+      'New sounds for Extraction (flares, the helicopter coming and going, reinforcements, charges), Infected, Headquarters, Kill Order, One in the Chamber, Showdown and Control rounds, Grind banks, being marked by a sweep, hijacks, airstrike jets, and Graveyard Shift traps and exfil.',
+      'Explosions and aircraft far across a big map now sound distant, not just quieter.',
+    ],
+  },
+  {
     build: '1120-9', date: '2026-11-20', title: 'Season 3: Third Rail is coming',
     items: [
       'Season 3: Third Rail starts on February 8, when Signal Fire ends: a storm over the live wires, 42 days long.',

@@ -85,3 +85,29 @@ The second battle royale island and two Ground War maps cut from its coast (Tide
 (js/render/themes/frontier.js) with the island's palette, so they share the island's buildings (enterable, roofs that
 dissolve round you), beaches, shallows (walkable, slow: `map.shallows`) and landmarks. Build such a map with
 js/shared/maps/isle-kit.js: a symmetric land/water lattice (`lattice`, `water`) and `twins` for each piece and its image.
+
+## World art pass on the older maps (ROADMAP 53)
+Every 6v6 and Ground War map made before 2026-11-20 gets a per-map **mood** in `js/render/themes/moods/` (urban.js:
+Railyard, Harbor, Neon, Overpass, Downtown, Turnstile, Topside, Foundry, Pier; wild.js: Dust, Oasis, Canyon, Ruins,
+Canopy, Riverbend, Expedition, Sunken, Frostline, Icebreaker, Harvest, Millbrook). Art only: no map file changed, so
+collision, cover, spawns, objectives and nav are untouched and `dev/map-validate.mjs` prints the same results.
+- `MOODS.<mapId> = { theme, life, lights, ground, paint, decor, thumb }`, registered into `MOODS` (js/render/art.js)
+  the way theme modules register `THEMES`. `themeFor(map)` merges `theme` (light, fog, clear, shadow, lamp, water,
+  weather, `sky` for the horizon ring, `ink` as hex) over the base theme and keeps the base id, so every table keyed by
+  theme id still works. Maps that share a theme now differ: desert (Dust pink-gold evening, Oasis misty dawn, Canyon
+  red-rock sunset), jungle (Ruins sunrise mist, Canopy after rain, Riverbend gold afternoon, Expedition monsoon with
+  lightning), metro (Neon ultraviolet night, Overpass sodium smog dusk, Downtown teal rainy blue hour), arctic
+  (Frostline aurora night, Icebreaker polar noon).
+- buildWorld runs `lights` after the theme's lights (so lamps bake), `ground(ctx, p, colour)` over the theme's ground
+  shader (free: plazas, the Dust star, the Turnstile roundel, oil stains), `paint` and `decor` after the theme's. New
+  solids only sit on blocking pieces, outside the border or flat on the ground (helpers in moods/lib.js: beacon,
+  festoon, bunting, waterTower, mast, stack, disc, scatter).
+- `life` overrides the theme's LIFE entry in ambient.js; `life.emit` (array or `map => [...]`) places fixed emitters
+  (smoke, steam, ember, spray, mist, drip, spark) that ride the VFX particle batch: no draw call, skipped off screen,
+  thinned on Low Power.
+- Landmarks: Railyard water tower, Overpass clock tower and brick plaza, Downtown fountain statue and jet, Dust
+  well-head and tiled star, Canyon dam mast and floodlight, Ruins altar braziers, Canopy lookout lantern and flag,
+  Riverbend idol's lamp ring, Expedition's burning wreck and tower lights, Frostline depot chimney and clock,
+  Icebreaker funnels, Neon's roof roundel and lantern strings, Topside's crane mast, Harvest and Millbrook chimneys.
+- Budget: each map stays at or under its draw calls and triangles before the pass +15% (measured with
+  `dev/perf-render.mjs --root=<before checkout>`; table in the ROADMAP 53 report).

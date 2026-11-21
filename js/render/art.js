@@ -228,6 +228,25 @@ THEMES.harvest = {
 
 export const getTheme = id => THEMES[id] || THEMES.railyard;
 
+// Per-map art direction (ROADMAP 53, js/render/themes/moods/): maps that share a theme get their own time of day,
+// palette and ambient life. A mood registers `MOODS.<mapId> = { theme, life, lights, paint, decor, thumb }`; `theme`
+// holds overrides of the base theme's fields (ink as hex, like THEMES), the drawers run after the theme's own stages.
+export const MOODS = {};
+const MERGED = new Map();
+// The theme a map is drawn with: its base theme, with its mood's overrides on top. The id stays the base theme's, so
+// every table keyed by theme id (dressers, stages, props, ambient life) still finds the theme's own entries.
+export function themeFor(map) {
+  const base = getTheme(map?.theme);
+  const t = map && MOODS[map.id]?.theme;
+  if (!t || map.giantWorld || map.size === 'giant') return base;
+  let m = MERGED.get(map.id);
+  if (!m || m.base !== base) {
+    m = { base, theme: { ...base, ...t, ink: t.ink ? { ...base.ink, ...ink(t.ink) } : base.ink, id: base.id, mood: map.id } };
+    MERGED.set(map.id, m);
+  }
+  return m.theme;
+}
+
 // Railyard defaults, kept for anything that wants them statically.
 export const SUN_DIR = THEMES.railyard.light.dir;
 export const SUN_COL = THEMES.railyard.light.sun;
@@ -265,7 +284,7 @@ export const GLSL_LIGHT = /* glsl */`
 
 // GameRenderer calls this before it creates any material; dispose restores the default for the menus.
 export function setThemeLighting(themeId) {
-  THREE.ShaderChunk.sw_light = lightGLSL(getTheme(themeId).light);
+  THREE.ShaderChunk.sw_light = lightGLSL((typeof themeId === 'object' && themeId ? themeId : getTheme(themeId)).light);
 }
 
 // Screen-door fade so characters can fade in and out while staying in the opaque queue.

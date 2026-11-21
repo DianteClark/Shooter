@@ -22,7 +22,7 @@ import { Surfaces } from './surfaces.js';
 import { Props } from './props.js';
 import { Ambient } from './ambient.js';
 import { getGun } from './guns.js';
-import { hexRGB, setThemeLighting, getTheme } from './art.js';
+import { hexRGB, setThemeLighting, themeFor } from './art.js';
 import { createCamoMaterial, addCamoInstanceAttributes, camoIndex } from './camo-shader.js';
 import { QUALITY_STEPS, AUTO_CEILING, stepIndex, deviceProfile, savedAutoStep, saveAutoStep, frameClock, Governor } from './quality.js';
 import { TUNING } from '../shared/tuning.js';
@@ -154,8 +154,8 @@ export class GameRenderer {
     const webgl = sharedWebGL(canvas);
     this.webgl = webgl;
     webgl.autoClear = true;
-    const theme = getTheme(map.theme);
-    setThemeLighting(theme.id);         // Programs compile lazily, so this lights all of this match.
+    const theme = themeFor(map);
+    setThemeLighting(theme);            // Programs compile lazily, so this lights all of this match.
     webgl.setClearColor(theme.clear, 1);
     webgl.info.autoReset = false;       // One frame spans the fog pass and the main pass.
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_DPR);
@@ -354,7 +354,7 @@ export class GameRenderer {
             else vfx.bodyHit(ev.x, ev.z, TEAM_RGB[r.team] || TEAM_RGB[0]);
             if (ev.head) vfx.headBurst(ev.x, ev.z);
             this._pushDir(ev.by, r.x, r.z);
-            chars.onHit(ev.target, this._dx, this._dz, Math.min(1, (ev.dmg || 25) / 40));
+            chars.onHit(ev.target, this._dx, this._dz, Math.min(1, (ev.dmg || 25) / 40), !!ev.head);
           }
           if (ev.target === localId) { this.trauma = Math.min(1, this.trauma + 0.4); this.hurt = 1; }
           break;
