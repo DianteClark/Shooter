@@ -100,9 +100,9 @@ async def run(browser, name, mapId, mode, rows):
           c.setRoster(ids.map((id, i) => ({{ id, operator: ops[i % ops.length], skin: `skin:${{ops[i % ops.length]}}-5` }})));
           return ids.length; }})()"""))
     if name in ('br', 'brjade'):
-        await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=60000)
+        await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=180000)
         await pg.locator('.br-jump-map').first.click()
-        await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=60000)
+        await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=180000)
         await pg.wait_for_timeout(2000)
     if name == 'cpboss':
         R = f'{G}.match.sim.rules'
