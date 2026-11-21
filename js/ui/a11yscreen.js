@@ -15,7 +15,7 @@ const toggle = (act, cls, name) => `<button class="opt-toggle ${cls}" data-act="
 const SWITCHES = [
   ['a11yHc', 'a11y-hc', 'hudContrast', 'High-contrast HUD', 'Solid plates behind HUD text, heavier hit marks and outlines, with any colour mode'],
   ['a11yShots', 'a11y-shots', 'shotCues', 'Gunfire marks', 'Enemy gunfire you would hear, as a dashed red arc on its side'],
-  ['a11yCaps', 'a11y-caps', 'captions', 'Sound captions', 'A line for each important sound and where it came from: gunfire, explosions, close steps, enemy streaks'],
+  ['a11yCaps', 'a11y-caps', 'captions', 'Sound captions', 'A line for each important sound and where it came from: gunfire, explosions, enemy streaks'],
   ['a11yHaptics', 'a11y-haptics', 'haptics', 'Haptics', 'Vibrate on hits, kills and being hit (where the browser can)'],
   ['a11yLefty', 'a11y-lefty', 'lefty', 'Left-handed', 'Mirrors the sticks, buttons and the whole HUD'],
 ];

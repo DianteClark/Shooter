@@ -4,12 +4,12 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-20', title: 'Help videos, a better tutorial and more accessibility',
+    build: '1120-13', date: '2026-11-20', title: 'Help videos, a better tutorial and more accessibility',
     items: [
       'Help has videos: short demos played in the game itself, with captions, for moving and aiming, sliding, grenades, scorestreaks, every core mode, Battle Royale, Rebound, Extraction, Graveyard Shift, the Campaign, Ranked, the Gunsmith and the caster camera. Tap Watch on a card or open the new Videos tab; Skip, Replay and Loop any time.',
       'Training speaks your controller: with a pad in hand every prompt names its buttons. It now covers swapping to your sidearm too.',
       'The first time you play each mode, a short tip says how to win it. Each shows once; Options > First-time tips: Show again brings them back.',
-      'Accessibility: a High-contrast HUD switch that works with any colour mode, Gunfire marks (enemy shots you would hear, as an arc on their side) and Sound captions (gunfire, explosions, close steps and enemy streaks, with where they came from).',
+      'Accessibility: a High-contrast HUD switch that works with any colour mode, Gunfire marks (enemy shots you would hear, as an arc on their side) and Sound captions (gunfire, explosions and enemy streaks, with where they came from).',
       'Accessibility: Controller aim and sprint can each be held or toggled. Haptics and Left-handed are also on the Accessibility screen. Screen readers now hear a name for every menu button.',
       'Reduce shake and flashes now also stills the HUD\'s score, timer and weapon pops, the tutorial card and the results screen\'s labels.',
     ],
