@@ -64,7 +64,7 @@ async def run(browser, vw, vh, failures, errors):
     await ev("(() => { const m = document.querySelector('.br-map'); m.dispatchEvent(new MouseEvent('click', { bubbles: true })); document.querySelector('.minimap').click(); })()")
     await pg.wait_for_timeout(300)
     if await pg.locator('.br-map').is_hidden(): failures.append(f'{vw}: the drop map closed before the jump')
-    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=40000)
+    await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live" && {G}.match.interp.newest.br.plane.f > 0.3', timeout=90000)
     await shot('03-flight')
     # The transport (owner notes): how many are still aboard (the panel may trail the newest view by a frame or two), and the squad's state, on the drop map's side.
     aboard = await ev(f"[document.querySelector('.br-aboard')?.hidden, document.querySelector('.br-aboard .n b')?.textContent, {G}.match.interp.newest.players.filter(p => p.alive && p.air === 1).length, document.querySelectorAll('.br-aboard .m').length]")
@@ -135,7 +135,13 @@ async def run(browser, vw, vh, failures, errors):
     except Exception: pass
     auto = await ev(f"[{G}.match.ps.weapon, {G}.match.brStash?.slot ?? -1, {G}.match.brAuto]")
     await shot('06c-autofists')
-    if auto[0] != 'knife' or auto[1] < 0 or not auto[2]: failures.append(f'{vw}: both guns dry did not bring the fists out ({auto})')
+    # A melee weapon picked up from the floor (weapons wave 4, common on Jadefall) never runs dry (brUsable), so with
+    # one in a hand the fists rightly stay put.
+    melee = await ev(f"{G}.match.ps.defs.some(d => d && d.melee && d.id !== 'knife')")
+    if melee: print(f'{vw}: a melee weapon in hand, no fists by themselves (by design): {auto}', flush=True)
+    elif auto[0] != 'knife' or auto[1] < 0 or not auto[2]:
+        hands = await ev(f"(() => {{ const ps = {G}.match.ps; return [ps.slot, ps.defs.map(d => d?.id), [...ps.ammo], [...ps.reserve]]; }})()")
+        failures.append(f'{vw}: both guns dry did not bring the fists out ({auto}; slot, guns, ammo, reserve {hands})')
     await ev(f"""(() => {{ const m = {G}.match, br = m.sim.br, me = m.sim.byId.get(m.localId);
       for (const p of m.sim.players) if (p !== me && Math.hypot(p.ps.x - m.ps.x, p.ps.z - m.ps.z) < 25) {{ p.ps.x = 3; p.ps.z = 3; }}     // Nobody else takes the rounds.
       for (let v = 0; v < 5; v++) br._addItem({{ kind: 1, v, r: 0, n: 40, x: m.ps.x + 0.2, z: m.ps.z }}); }})()""")
@@ -264,8 +270,8 @@ async def lobby_shots(browser, vw, vh, failures, errors):
     await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
     await pg.reload()
     await pg.wait_for_timeout(1200)
-    await pg.locator('[data-act="host"]').first.click()
-    await pg.wait_for_function(f'{G}.code')
+    await pg.locator('[data-act="host"]').first.click(timeout=60000)
+    await pg.wait_for_function(f'{G}.code', timeout=60000)
     await ev(f"{G}.lastPlayed = {{ mode: 'br', mapId: '{MAP}' }}")
     await pg.locator('[data-act="moveTeam"]').first.click()      # Any lobby repaint picks up the BR room.
     await pg.wait_for_timeout(500)

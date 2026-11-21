@@ -143,8 +143,11 @@ async def main():
                 check('a reload with rounds left plays the tactical one', rel[1]['empty'] is False, rel)
                 await pg.screenshot(path=f'{OUT}/04-reloads.png')
                 await pg.wait_for_timeout(2200)
+                # A pistol to swap to: a bot may carry a melee weapon second (1120), whose swap is over (a blade's in 0.12 s)
+                # before the check below looks. The sim emits the swap event itself (_diffFx) when the weapon changes.
                 sw = await ev("""((id) => { const sim = window.__game.app.match.sim, p = sim.players.find(q => q.id === id);
-                  p.ps.slot = 1 - p.ps.slot; p.ps.weapon = p.ps.slot ? p.ps.secondary : p.ps.primary; p.ps.swapT = 0.35; sim._emit({ t: 'swap', id }); return p.ps.weapon; })""", pair[0])
+                  p.ps.secondary = p.ps.primary === 'pistol' ? 'revolver' : 'pistol';
+                  p.ps.slot = 1 - p.ps.slot; p.ps.weapon = p.ps.slot ? p.ps.secondary : p.ps.primary; p.ps.swapT = 0.35; return p.ps.weapon; })""", pair[0])
                 await pg.wait_for_timeout(120)
                 s1 = await ev("""((id) => { const r = window.__game.app.match.renderer.chars.rigs.get(id); return { u: r.swapU, from: r.swapFrom, w: r.weapon }; })""", pair[0])
                 check('a swap puts the old gun away and brings the new one up', 0 < s1['u'] < 1 and s1['from'] and s1['from'] != sw and s1['w'] == sw, s1)

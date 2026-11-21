@@ -358,7 +358,9 @@ function botMatch(map, mode, out) {
   let tick = 0;
   // Flag runs are rarer than fights: Capture the Flag gets twice as long to show one.
   // Flag runs, Control rounds and the first infections are slower to show than a fight.
-  const seconds = ['ctf', 'ctl', 'inf'].includes(MODES[mode].rules) ? SECONDS * 2 : SECONDS;
+  // Headquarters too: a 6v6 brawl on a small map's middle zone (Oasis, seed 1234, since the 1120 melee weapons) can see
+  // the capture swing back and forth for a minute before anyone holds it.
+  const seconds = ['ctf', 'ctl', 'inf', 'hq'].includes(MODES[mode].rules) ? SECONDS * 2 : SECONDS;
   const end = Math.round((3.2 + seconds) * SIM_HZ);
   const t0 = performance.now();
   for (; tick < end && sim.phase !== 'ended'; tick++) {

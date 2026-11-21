@@ -22,6 +22,8 @@ const CSS = `
 .cp-ui [data-tap] { pointer-events: auto; }
 .hud.cp-on .scorebar, .hud.cp-on .streaks, .hud.cp-on .obj-strip, .hud.cp-on .gun-rung { display: none !important; }
 .cp-top { display: flex; gap: 4px; align-items: stretch; }
+/* Mounted into the shared objective strip, so out of .cp-ui's reach: hidden here outside a campaign match. */
+.hud:not(.cp-on) .cp-top, .hud:not(.cp-on) .cp-card, .hud:not(.cp-on) .cp-boss, .hud:not(.cp-on) .cp-rev { display: none !important; }
 .cp-chip { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 52px; height: 40px; padding: 0 9px;
   background: linear-gradient(180deg, rgba(42,51,61,.94), rgba(16,20,26,.9)); box-shadow: var(--hud-edge);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }

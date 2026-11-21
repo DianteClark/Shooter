@@ -819,7 +819,7 @@ class Rig {
     // Animation pass (docs/ANIMATION.md). Reloads: whether this one began on an empty gun, and whether one ran last frame.
     this.relEmpty = false; this.wasReloading = false;
     // Weapon swap: 0..1 through it (1 idle), its length, the gun being put away and its attachments.
-    this.swapU = 1; this.swapDur = 0.36; this.swapFrom = null; this.swapAtt = null; this.lastAtt = undefined; this.lastCamo = 'none';
+    this.swapU = 1; this.swapDur = 0.36; this.swapFrom = null; this.swapByView = false; this.swapAtt = null; this.lastAtt = undefined; this.lastCamo = 'none';
     // Locomotion: smoothed travel along the aim (+ forward, - backpedal) and across it; in water; slide state last frame.
     this.locF = 0; this.locS = 0; this.wade = 0; this.wasSliding = false; this.wasKneeling = false;
     // Dying (death-anim.js): the fall's springs and clock, the frozen view it is drawn from, the pose, the dropped gun.
@@ -1156,6 +1156,9 @@ export class Characters {
   onSwap(id) {
     const r = this.rigs.get(id);
     if (!r || r.swapU < 0.3) return;
+    // The view's weapon change came first and already started this swap (a quick blade's can be over in one slow
+    // frame): restarting it would put the new weapon away and bring it up again.
+    if (r.swapByView) { r.swapByView = false; return; }
     r.swapU = 0; r.swapFrom = r.weapon; r.swapAtt = r.lastAtt; r.swapPending = true;
   }
   // An emote event (index into EMOTES). Moving, firing or a finisher ends it early (see update).
@@ -1220,7 +1223,7 @@ export class Characters {
   resetTransient() {
     for (const r of this.rigs.values()) {
       r.down = false; r.sawDead = false; r.reveal = 0; r.kick = 0; r.flash = 0; r.throwT = 0; r.swap = 0;
-      r.dying = r.dieSettled = false; r.swapU = 1; r.swapPending = false; r.wasReloading = false; r.wasSliding = false; r.wasKneeling = false;
+      r.dying = r.dieSettled = false; r.swapU = 1; r.swapPending = false; r.swapByView = false; r.wasReloading = false; r.wasSliding = false; r.wasKneeling = false;
       r.sx.fill(0); r.sv.fill(0); r.aimVel = 0;
     }
     this.corpses.clear();
@@ -1381,7 +1384,7 @@ export class Characters {
       if (view.br) glideRig(r, p, dt, vfx, this.focusX, this.focusZ); else r.alt = r.chute = r.landT = 0;
       if (r.weapon !== p.weapon) {
         // A swap: the old gun goes down and the new one comes up (unless the swap event already started this one).
-        if (!(r.swapPending && r.swapU < 0.5)) { r.swapU = 0; r.swapFrom = r.weapon; r.swapAtt = r.lastAtt; }
+        if (!(r.swapPending && r.swapU < 0.5)) { r.swapU = 0; r.swapFrom = r.weapon; r.swapAtt = r.lastAtt; r.swapByView = true; }
         r.swapPending = false;
         r.swapDur = (WEAPONS[p.weapon]?.swapTime || 0.36);
         r.weapon = p.weapon;

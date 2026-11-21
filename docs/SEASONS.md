@@ -119,7 +119,7 @@ electrified lines (storm slate, electric yellow, violet). Data only, like Season
 - Track: 100 tiers in the Season 1 layout (no `fillerSkinTiers`): 40 cards (tier 1 is the season's own card, Third Rail;
   37-40 animated with the existing `gold`/`prism` card animations), 40 emblems (in `ALL_EMBLEMS` through
   `SEASON_EMBLEMS`, never in `EMBLEMS`), 10 camos on every gun (8 static: Cloudburst, Downpour, Gale Force, Nimbus,
-  Stormglass, Ozone, Hailstone, Thunderclap; 2 animated on the existing shader patterns: Forked Bolt `livewire`, Eye of
+  Stormglass, Ozone, Graupel, Thunderclap; 2 animated on the existing shader patterns: Forked Bolt `livewire`, Eye of
   the Storm `aurora`), 8 skins (`skin:<op>-s3`: Ghoul Stormcrow, Ram Thunder Ram, Sable Rain Shadow, Linnet Flash Flood,
   Mako Storm Surge, Skylark Cloudbreaker, Gambit Storm Chaser, Warden High Tempest).
 - Early unlocks: tier 25 the Lodestone (`rail`, the coil sniper, level 40), tier 75 Halcyon (10 Search and Destroy
