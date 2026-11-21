@@ -106,7 +106,8 @@ export class CasterCam {
     this.view = view;
     this.clock += dt;
     const can = this.available(view);
-    if (this.btn && this.btnOn !== (can && !this.active)) { this.btnOn = can && !this.active; this.btn.classList.toggle('on', this.btnOn); }
+    if (this.btn && this.btnOn !== (can && !this.active)) { this.btnOn = can && !this.active; this.btn.classList.toggle('on', this.btnOn); this.btnAt = -1; }
+    if (this.btnOn && this.clock >= this.btnAt) this.#placeButton();
     if (this.spectator && !this.active && view) this.open();
     if (this.active && !can) { this.close(); return; }
     if (!this.active) return;
@@ -218,6 +219,16 @@ export class CasterCam {
     b.addEventListener('click', () => this.open());
     document.body.appendChild(b);
     this.btnOn = false;
+  }
+
+  // Under the spectate card when it shows on the button's side (extraction, battle royale): the card's height follows
+  // the HUD size, so it is measured, twice a second while the button is up.
+  #placeButton() {
+    this.btnAt = this.clock + 0.5;
+    const card = document.querySelector('.spec-card:not([hidden])');
+    const r = card?.getBoundingClientRect(), b = this.btn.getBoundingClientRect();
+    const top = r && r.width && r.right > b.left && r.left < b.right ? `${Math.round(r.bottom + 6)}px` : '';
+    if (this.btn.style.top !== top) this.btn.style.top = top;
   }
 
   #buildUi() {

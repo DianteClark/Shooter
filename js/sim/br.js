@@ -825,10 +825,20 @@ export class BrRules {
     if (!mate) { p.br.redeployT = 0; return; }
     // Land a few metres off the mate, pulled inside the circle; set off 40 m back along a random line.
     const c = this.circle, a = rng() * Math.PI * 2, r = 5 + rng() * 6;
-    let lx = mate.ps.x + Math.cos(a) * r, lz = mate.ps.z + Math.sin(a) * r;
-    const dc = Math.hypot(lx - c.x, lz - c.z);
-    if (dc > c.r * 0.9 && dc > 1) { const k = (c.r * 0.9) / dc; lx = c.x + (lx - c.x) * k; lz = c.z + (lz - c.z) * k; }
-    const land = this._walkable(lx, lz);
+    // A spot in a building or the water snaps to the nearest open cell, which can be far off: try the other sides of
+    // the mate, then the mate's own spot (walkable: they stand there).
+    // (A mate out of the circle has the landing pulled in toward the middle, so far from them by design.)
+    let land = null, first = null;
+    for (let i = 0; i < 6 && !land; i++) {
+      const ai = a + i * Math.PI / 3;
+      let lx = mate.ps.x + Math.cos(ai) * r, lz = mate.ps.z + Math.sin(ai) * r;
+      const dc = Math.hypot(lx - c.x, lz - c.z);
+      if (dc > c.r * 0.9 && dc > 1) { const k = (c.r * 0.9) / dc; lx = c.x + (lx - c.x) * k; lz = c.z + (lz - c.z) * k; }
+      const w = this._walkable(lx, lz);
+      first ??= w;
+      if (Math.hypot(w.x - mate.ps.x, w.z - mate.ps.z) <= 14) land = w;
+    }
+    land ??= Math.hypot(mate.ps.x - c.x, mate.ps.z - c.z) < c.r * 0.9 ? this._walkable(mate.ps.x, mate.ps.z) : first;
     const W = sim.map.width, H = sim.map.height, b0 = rng() * Math.PI * 2;
     const sx = Math.max(4, Math.min(W - 4, land.x + Math.cos(b0) * 40)), sz = Math.max(4, Math.min(H - 4, land.z + Math.sin(b0) * 40));
     this._dropIn(p, land, sx, sz);

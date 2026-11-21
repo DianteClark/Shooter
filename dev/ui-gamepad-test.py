@@ -10,7 +10,7 @@ Run from anywhere: python3 dev/ui-gamepad-test.py [port]. It serves the repo its
               d-pad up pings; d-pad down opens quick chat, the ring picks a callout, A sends it
   Touch       a touch on the glass leaves controller mode and the sticks come back; disconnect toast in the match feed
   Zombies     Graveyard Shift's supply terminal: Interact opens its sheet with the ring on an item, the d-pad walks to the
-              Lure, A buys it (the sheet closes), B closes the sheet
+              Lure, A buys it into the held slot (the sheet closes), B closes the sheet
 """
 import asyncio, subprocess, sys, time, os, math
 from playwright.async_api import async_playwright
@@ -218,7 +218,7 @@ async def main():
             # ring on an item, the d-pad walks the items, A buys, B closes it.
             await pg.goto(f'http://localhost:{PORT}/?debug=1&net=local&map=ashgrove&mode=zm')
             await pg.wait_for_timeout(1300)
-            await pg.locator('[data-act="custom"]').first.click()
+            await pg.locator('[data-act="custom"]').first.click(timeout=60000, no_wait_after=True)
             await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=90000)
             await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, R = sim.rules; setInterval(() => { for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }, 200);
               for (const p of R.crew) if (p.bot) p.bot.update = () => []; R.plan = () => {}; R._crewPlan = null;
@@ -233,7 +233,10 @@ async def main():
             ok = await walk_to('.zm-item[data-item="lure"]')
             check('d-pad walks the ring to the Lure', ok, await pg.evaluate("document.querySelector('.pad-focus')?.dataset.item ?? ''"))
             await press(A, 80, 600)
-            bought = await pg.evaluate("window.__game.app.match.sim.rules.econ.gear.some(g => g.kind === 'lure')")
+            # A bought streak goes into the one held slot (called in later from its own button), not straight down.
+            try: await pg.wait_for_function("(() => { const m = window.__game.app.match; return m.sim.byId.get(m.localId).zm.stk === 'lure'; })()", timeout=10000)
+            except Exception: pass
+            bought = await pg.evaluate("(() => { const m = window.__game.app.match; return m.sim.byId.get(m.localId).zm.stk === 'lure' || m.sim.rules.econ.gear.some(g => g.kind === 'lure'); })()")
             check('A buys it and the sheet closes', bought and await pg.evaluate("document.querySelector('.zm-shop').hidden"), bought)
             await press(A, 80, 500)
             await press(B, 80, 400)

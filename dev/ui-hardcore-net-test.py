@@ -72,10 +72,15 @@ async def main():
             await host.locator('[data-act="start"]').first.click()
             await host.wait_for_function(f'{G}.vote?.options', timeout=10000)
             # A card Hardcore fits (not battle royale).
-            i = await host.evaluate(f"{G}.vote.options.findIndex(o => !['br', 'brduo', 'brsolo', 'exq', 'exd'].includes(o.mode) && o.mode !== 'random')")
+            # The host resolves the winner from its own options: card 0 becomes Railyard TDM, and both vote for it through
+            # the DOM (under load a tap can wait out the vote on the card's entrance, and a random card may be a mode
+            # Hardcore does not fit, as the 1120 modes added more of).
+            await host.evaluate(f"{G}.vote.options[0] = {{ mapId: 'railyard', mode: 'tdm' }}")
+            i = 0
             for pg in pages:
-                try: await pg.locator(f'.vote-card[data-i="{i}"]:not([disabled])').click(timeout=6000)
-                except Exception: pass      # A ballot that misses the window only leaves the pick to the other.
+                try: await pg.wait_for_selector(f'.vote-card[data-i="{i}"]', state='attached', timeout=15000)
+                except Exception: pass
+                await pg.evaluate(f"document.querySelector('.vote-card[data-i=\"{i}\"]')?.click()")
             await guest.wait_for_function(f'{G}.inMatch && {G}.matchInfo', timeout=60000)
             mods = await guest.evaluate(f'{G}.matchInfo.mods')
             check('hardcore' in (mods or []), f"the guest's match plays Hardcore ({mods})")
