@@ -4,7 +4,8 @@
 // wet-ground light streaks, a flickering sign mesh, and a water mesh where the map has basins.
 import * as THREE from 'three';
 import { MeshBuilder, settleCoplanar } from './meshbuild.js';
-import { hexRGB, lightAt, getTheme } from './art.js';
+import { hexRGB, lightAt, getTheme, themeFor, MOODS } from './art.js';
+import './themes/moods/index.js';   // Per-map moods (ROADMAP 53): they register into MOODS.
 import * as metroTheme from './themes/metro.js';
 import * as desertTheme from './themes/desert.js';
 import jungle from './themes/jungle.js';
@@ -337,7 +338,9 @@ function ground(ctx) {
     pts.push(row);
   }
   const inWater = (x, z) => waters.some(w => x > w.x && x < w.x + w.w && z > w.z && z < w.z + w.d);
-  const shade = groundShader(ctx);
+  const own = groundShader(ctx), tint = MOODS[map.id]?.ground;
+  // A map's mood may repaint its theme's ground (worn paths, a plaza round the landmark): free, the cells are there.
+  const shade = tint ? p => tint(ctx, p, own(p)) : own;
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
       const a = pts[j][i], b1 = pts[j + 1][i], c = pts[j + 1][i + 1], d = pts[j][i + 1];
@@ -1269,6 +1272,7 @@ function dustDecor(ctx) {
 // horizon band is tinted toward `warm` on the side the light comes from. Costs no draw call (glow batch).
 export function skyRing(ctx, sky) {
   const { glow, W, H } = ctx;
+  if (ctx.theme.sky) sky = { ...sky, ...ctx.theme.sky };    // A map's mood (themes/moods/) recolours its theme's sky.
   const cx = W / 2, cz = H / 2, R = Math.max(W, H) * 0.5 + 34, N = 28;
   const y0 = sky.y0 ?? -30, y1 = sky.y1 ?? 10, y2 = sky.y2 ?? 60;
   const wd = sky.warmDir || [-1, 0], wl = Math.hypot(wd[0], wd[1]);
@@ -3236,7 +3240,8 @@ function buildDecals(map, theme) {
 export function buildWorld(map, teams, fogUniforms) {
   // Giant battle royale maps stream their tiles in as the camera comes near (js/render/themes/frontier.js).
   if (map.size === 'giant' || map.giantWorld) return frontier.buildGiantWorld(map, fogUniforms, INTERNALS);
-  const theme = getTheme(map.theme);
+  const theme = themeFor(map);
+  const mood = MOODS[map.id] || {};
   INK = theme.ink;
   CONTAINER_COLORS = theme.containers;
   const W = map.width, H = map.height;
@@ -3252,14 +3257,17 @@ export function buildWorld(map, teams, fogUniforms) {
   const stages = THEME_STAGES[theme.id];
   const dress = DRESS[theme.id];
   stages.lights(ctx);
+  mood.lights?.(ctx);
   ground(ctx);
   stages.paint(ctx);
+  mood.paint?.(ctx);
   if (!map.zmOnly) spawnPads(b, map, teams, W);      // A Graveyard Shift map has no team ends.
   for (const w of map.walls) {
     const draw = dress[w.kind];
     if (draw) draw(ctx, w);
   }
   stages.decor(ctx);
+  mood.decor?.(ctx);
 
   const group = new THREE.Group();
   const material = createWorldMaterial(fogUniforms, theme);
@@ -3449,7 +3457,7 @@ const INTERNALS = {
 // A static top-down thumbnail of a map from its wall data. Returns an HTMLCanvasElement; `scale` is
 // pixels per metre. Team spawns are the two team colours, domination points are the little diamonds.
 export function mapThumbnail(map, { width = 160, teams = null, spawns = true } = {}) {
-  const s = THUMB_STYLE[map.theme] || THUMB_STYLE.railyard;
+  const s = MOODS[map.id]?.thumb || THUMB_STYLE[map.theme] || THUMB_STYLE.railyard;
   const k = width / map.width;
   const height = Math.round(map.height * k);
   const canvas = document.createElement('canvas');
