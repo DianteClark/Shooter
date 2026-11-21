@@ -16,7 +16,7 @@ looked at for load before it counted, and timings only compare within a table.
 | sim-resurgence | quick FAIL "back in next to a squadmate (20.1 m)", fixed (fix 3); full pass after |
 | sim-seasons | pass (rerun after the camo rename: pass) |
 | help-videos-test.mjs | pass (30) |
-| map-validate.mjs (full) | FAIL oasis: "hq: no objective activity in 60 s" (fix 7); every other map passes |
+| map-validate.mjs (full) | FAIL oasis: "hq: no objective activity in 60 s" (fix 7); every other map passes. Oasis after the fix: pass |
 
 ### Browser (python3 dev/ui-*.py, ports 9800-9849)
 
@@ -31,9 +31,9 @@ looked at for load before it counted, and timings only compare within a table.
 | br-net-test | pass |
 | br-test (Frontier) | not finished: twice timed out under load (plane wait 40 s, then the Custom tap on a title still loading). Waits raised (fix 10); not rerun to the end |
 | br-test --map=jadefall | first run: the Host tap timed out (load). Second run (21 min) reached the end with one finding at all three sizes: "both guns dry did not bring the fists out" (open, see 4) |
-| br-visuals | not finished: the Custom / Start taps timed out under load twice (load average 20+); rerun RERUN_BRV |
+| br-visuals | not finished: the Custom / Start taps timed out under load twice (load average 20+); rerun: pass |
 | campaign-test | pass |
-| clans-test | FAIL: a random vote card (One in the Chamber) left no teammate bot (fix 9); later runs timed out on taps while the page was busy (load), tap made not to wait for navigations; rerun RERUN_CLANS |
+| clans-test | FAIL: a random vote card (One in the Chamber) left no teammate bot (fix 9); later runs timed out on taps while the page was busy (load), tap made not to wait for navigations; rerun: pass |
 | devices-test | pass |
 | emblems-test | pass |
 | endings-test | pass (28 min) |
@@ -45,9 +45,9 @@ looked at for load before it counted, and timings only compare within a table.
 | gamepad-test | FAIL "A buys it" (stale since 1119: a bought streak goes into the held slot), fixed; rerun: that passes, "A sends the focused callout" failed once under load (as in 1118) |
 | hardcore-net-test | FAIL (a random card won, a mode Hardcore does not fit), vote pinned and cast through the DOM; rerun: pass |
 | help-videos-test | pass |
-| history-test | not finished: the Custom tap timed out under load; rerun RERUN_HIST |
+| history-test | not finished: the Custom tap timed out under load; rerun: pass |
 | hud-layout-test | `--only tutorial`: 60 findings, fixed (fix 1); `--only tutorial,tdm` after: pass. The full walk (every mode, five sizes, both hands, three HUD sizes) did not get a quiet slot to run in this sweep (see 4) |
-| juice-test | not finished: the Custom tap timed out under load; rerun RERUN_JUICE |
+| juice-test | not finished: the Custom tap timed out under load; rerun: got through the checks to the reduced-motion pass, then a screenshot timed out (30 s, load) |
 
 
 ## 2. Fixes
@@ -106,7 +106,7 @@ like the sound captions); "Damage by range" on a blade reads "100% to 4 m, 100% 
   floor melee weapon (weapons wave 4) is always usable, so this may be by design on Jadefall; the test now says so when
   a melee weapon is in hand, and otherwise prints the hands (slot, guns, ammo, reserve) so the next run tells which.
   Frontier's run never reached this step under load.
-- **The full hud-layout walk, br-test (Frontier), br-visuals, history and juice** need a quiet slot: every failure seen in
+- **The full hud-layout walk, br-test (Frontier) and juice-test** need a quiet slot: every failure seen in
   them was a tap or wait timing out while the page was still loading (load average 13 to 31, sweep B and two server
   restarts alongside). A shared fix would be for these tests to wait for `__game.backdrop.state === "live"` (as
   ui-anim-test does) before the first tap.
