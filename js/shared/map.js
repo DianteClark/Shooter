@@ -41,10 +41,16 @@ import canalrow from './maps/canalrow.js';
 import unionsq from './maps/unionsq.js';
 import meridian from './maps/br-meridian.js';
 import saltmere from './maps/saltmere.js';   // Graveyard Shift only: the fourth built for it (appended).
+// The Coast (docs/DISTRICTS.md): Kittiwake Bay's four districts, each a 6v6 map, and the bay assembled from them.
+import fishmarket from './maps/fishmarket.js';
+import shipyard from './maps/shipyard.js';
+import boardwalk from './maps/boardwalk.js';
+import stiltrow from './maps/stiltrow.js';
 import { MODE_IDS, MODES } from './modes.js';
 import { prepareBreakables } from './destruction.js';
 
-export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda, midtown, oldquarter, canalrow, unionsq, meridian, saltmere };
+export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda, midtown, oldquarter, canalrow, unionsq, meridian, saltmere,
+  fishmarket, shipyard, boardwalk, stiltrow };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // Destruction (docs/DESTRUCTION.md): what breaks on each map, resolved once here, before anything indexes the walls.
