@@ -324,6 +324,8 @@ export const REWARD_PATTERNS = {
       s += fillPath(`M${x} ${y} q4 -9 9 -4 q3 -5 6 -1 l3 -5 l2 1 l-2 7 l0 6 l-2 0 l0 -4 l-9 0 l0 4 l-2 0 Z`, c[0]);
     }
     for (let i = 0; i < 18; i++) { const y = 6 + r() * 60, x = 92 + r() * 190; s += line(x, y, x + 14 + r() * 20, y + 1, c[2], 0.8, op((0.15 + r() * 0.25).toFixed(2))); }
+    return s;
+  },
   fjord(c, r) {            // Kaldvik: mountains down to a frozen fjord, a church steeple and a trawler in the ice, the copper sun low in a squall.
     let s = circ(112, 40, 16, c[3], op('.35')) + circ(112, 40, 7, c[3], op('.7'));
     s += poly([[90, 62], [130, 22], [158, 50], [186, 16], [230, 58], [262, 30], [300, 56], [300, 80], [90, 80]], c[1]);
