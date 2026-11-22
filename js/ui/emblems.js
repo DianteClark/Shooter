@@ -76,6 +76,10 @@ const GLYPHS = {
     + [11.6, 15, 18.4].map(x => poly([[x, 13], [x + 1.2, 13], [x + 3, 20], [x + 1.8, 20]], b) + poly([[x + 1.8, 13], [x + 3, 13], [x + 1.2, 20], [x, 20]], b)).join(''),
   mast: (a, b) => poly([[12, 28], [16, 5], [20, 28], [18.4, 28], [16, 10], [13.6, 28]], a) + rect(13, 14, 6, 1.6, a) + rect(12.4, 21, 7.2, 1.6, a)
     + poly(ngon(2.2, 6, 0, 16, 4), b) + poly([[5, 9], [8, 6], [8.6, 7], [6.2, 9.4], [8.6, 11.8], [8, 12.8]], b) + poly([[27, 9], [24, 6], [23.4, 7], [25.8, 9.4], [23.4, 11.8], [24, 12.8]], b),
+  // Saltmere Abbey: a punt pole crossed over a ship's hand-bell, a wave under them.
+  oar: (a, b) => poly([[8, 26], [22.6, 5.4], [24.6, 6.8], [10, 27.4]], a) + poly([[22, 4], [25.8, 2.6], [27.4, 5.2], [24.6, 8.6]], a)
+    + poly([[11, 19], [12, 13.4], [15.6, 11], [19.2, 13.4], [20.2, 19], [21.6, 20.4], [9.6, 20.4]], b) + poly(ngon(1.6, 8, 0, 15.6, 22.2), b)
+    + poly([[4, 27], [9, 24.6], [14, 27], [19, 24.6], [24, 27], [28, 25], [28, 28.6], [4, 28.6]], b),
   bell: (a, b) => poly([[9, 23], [10.4, 13], [12.4, 8.6], [16, 7], [19.6, 8.6], [21.6, 13], [23, 23], [25, 25], [7, 25]], a) + poly(ngon(2.4, 8, 0, 16, 27.4), b)
     + rect(14.8, 3.6, 2.4, 3.6, b) + poly([[11.5, 21], [12.4, 14], [13.6, 14], [12.9, 21]], b),
   exit: (a, b) => rect(6, 10, 3, 18, a) + rect(23, 10, 3, 18, a) + poly([[6, 10], [16, 4], [26, 10], [26, 12], [16, 6.6], [6, 12]], a)
@@ -152,6 +156,8 @@ const FEAT_ROWS = [
   // The co-op campaign (docs/CAMPAIGN.md): every Operation Nightrail mission cleared on Veteran.
   ['feat-nightrail', 'Nightrail', '#7cc8ff', ['#e6ecf2', '#7cc8ff'], 'laurel', { life: 'cp:vetall', goal: 1, label: 'Clear every Operation Nightrail mission on Veteran' }, { tab: 'campaign', modes: ['cp'] }],
   ['feat-champion', 'Champion', '#ff4a5a', ['#ffe0b0', '#ff4a5a'], 'laurel', { ranked: 6, label: 'Reach Champion in Ranked' }, { tab: 'standard', playlist: 'ranked' }],
+  // Appended: Saltmere Abbey's Ferryman (docs/ZOMBIES.md "Saltmere Abbey").
+  ['feat-ferryman', 'Drowned Bell', '#5affd0', ['#d0fff0', '#5affd0'], 'oar', { zmboss: 'saltmere', label: 'Put down the Ferryman on Saltmere Abbey in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
 ];
 export const FEAT_EMBLEMS = FEAT_ROWS.map(([id, name, rim, colours, glyph, rule, play]) => ({ id, name, plate: 'seal', rim, colours, glyph, rule, feat: true, play }));
 // Weekend tournaments (docs/TOURNAMENTS.md): the champion's crest, granted through the save's tournament block.

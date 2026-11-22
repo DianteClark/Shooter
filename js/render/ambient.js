@@ -16,6 +16,7 @@ const LIFE = {
   ashgrove: { flock: 7, ground: 6, col: [0.05, 0.05, 0.06], size: 0.46, flockY: 9, vents: 0 },      // Crows over the churchyard.
   polestar: { flock: 0, ground: 5, col: [0.86, 0.92, 0.98], size: 0.4, flockY: 9, vents: 4 },        // Snow off the roofs, steam from the boiler.
   wrenfield: { flock: 6, ground: 6, col: [0.08, 0.06, 0.1], size: 0.42, flockY: 11, vents: 2 },       // Bats over the wheel, exhaust off the generators.
+  saltmere: { flock: 8, ground: 5, col: [0.82, 0.86, 0.84], size: 0.44, flockY: 10, vents: 2 },     // Gulls over the nave, steam off the pumps.
   millbrook: { flock: 9, ground: 7, col: [0.1, 0.1, 0.14], size: 0.36, flockY: 8, vents: 0 },        // Swallows over the creek.
   launchpad: { flock: 4, ground: 3, col: [0.16, 0.14, 0.14], size: 0.6, flockY: 14, vents: 5 },     // Ravens on the thermals, oxygen venting.
   observatory: { flock: 6, ground: 4, col: [0.05, 0.05, 0.07], size: 0.46, flockY: 10, vents: 2 },   // Alpine choughs, the lodge chimney.

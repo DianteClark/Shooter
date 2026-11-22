@@ -229,6 +229,25 @@ export const THEMES = {
     },
   },
 
+  // Graveyard Shift on Saltmere Abbey: "High Water". The same climb as Night Shift, in the drowned town's own voice:
+  // a slow swell in A minor (two bars rising, two falling, wind like surf on every one), the tower bell tolling on the
+  // one, a sea-shanty turned sour on the music box; the heartbeat, then a creaking hull of tremolo and a slow drum, then
+  // the shanty on the lead over a march.
+  zmtide: {
+    bpm: 66, gain: 1,
+    bar(b, L, e) {
+      const k = b & 7, ch = ['Am', 'Am', 'F', 'F', 'Dm', 'Dm', 'Bdim', 'E'][k], ns = C[ch], r = R[ch];
+      chord(e, 'dark', ns, 4, 0.7);
+      e('sub', 0, r, 4, 0.55);
+      e('wind', 0, 0, 0, 0.5);
+      e('bell', 0, 57, 0, k === 0 || k === 4 ? 0.55 : 0.3);
+      mel(e, 'bell', ZM_SHANTY[k & 3], 0.3, k >= 4 ? 1 : 0);
+      if (L >= 1) hits(e, 'boom', HEART, 0.6);
+      if (L >= 2) { chord(e, 'trem', [ns[0] + 12, ns[0] + 19], 4, 0.3); hits(e, 'tom', TOMS, 0.45, 38); figure(e, 'bass', r, [0, null, null, 0, null, null, 7, null], 0.5, 0.5); }
+      if (L >= 3) { hits(e, 'snare', MARCH, 0.42); hits(e, 'kick', K2, 0.8); mel(e, 'lead', ZM_SHANTY_LEAD[k & 3], 0.48); if (k === 7) fill(e, 0.5, 44); }
+    },
+  },
+
   // A Graveyard Shift boss round: "The Warden". Half-time booms, a tritone cluster on tremolo, a chromatic lead
   // falling, snare rolls.
   zmboss: {
@@ -334,6 +353,9 @@ const EXFIL_BASS = [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 1, 0, 13, 0];
 const ZM_BOX = [[0, 86, 1, 1, 81, 1, 2, 82, 1, 3, 80, 1], [0, 86, 1, 1.5, 89, 0.5, 2, 86, 1, 3, 80, 1],
   [0, 84, 1, 1, 81, 1, 2, 77, 1, 3, 80, 1], [0, 81, 1, 1, 80, 1, 2, 74, 2]];
 const ZM_LEAD = [[0, 50, 2, 2, 56, 2], [0, 53, 2, 2, 50, 2], [0, 56, 1.5, 1.5, 55, 0.5, 2, 50, 2], [0, 49, 2, 2, 50, 2]];
+// Saltmere Abbey's shanty (A minor), on the music box and, at the peak, an octave down on the lead.
+const ZM_SHANTY = [[0, 81, 1, 1, 84, 0.5, 1.5, 83, 0.5, 2, 81, 1, 3, 76, 1], [0, 77, 1.5, 1.5, 76, 0.5, 2, 74, 2], [0, 74, 1, 1, 77, 1, 2, 81, 1, 3, 80, 1], [0, 81, 1.5, 1.5, 79, 0.5, 2, 76, 2]];
+const ZM_SHANTY_LEAD = ZM_SHANTY.map(m => m.map((v, i) => (i % 3 === 1 ? v - 24 : v)));
 const BOSS_LEAD = [[0, 62, 1, 1, 61, 1, 2, 60, 1, 3, 59, 1], [0, 56, 2, 2, 55, 2], [0, 62, 0.5, 0.5, 63, 0.5, 1, 62, 1, 2, 56, 2], [0, 50, 4]];
 const INF_BASS = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 12];
 const INF_LEAD = [[0, 64, 1.5, 1.5, 65, 0.5, 2, 64, 2], [0, 71, 1, 1, 70, 1, 2, 64, 2], [0, 65, 2, 2, 64, 2], [0, 76, 0.5, 0.5, 77, 0.5, 1, 76, 3]];
@@ -353,6 +375,8 @@ export const MISSION_MOOD = {
   8: ['cpaction', -1],    // Iron Crown: the boss's yard (cpboss when he is up).
 };
 const TACTICAL = new Set(['snd', 'ctl', 'gf', 'oic']);
+// Graveyard Shift maps with a theme (or a key) of their own: Saltmere Abbey has High Water.
+export const ZM_MAP_MOOD = { saltmere: ['zmtide', 0] };
 
 // The base theme of a match, from what main.js knows when it starts (mode id, rules, ranked, Ground War, mission).
 export function baseTheme(info) {
@@ -360,7 +384,7 @@ export function baseTheme(info) {
   if (info.mode === 'range' || info.mode === 'tutorial') return [null, 0];
   if (rules === 'br') return ['br', 0];
   if (rules === 'ex') return ['ex', 0];
-  if (rules === 'zm') return ['zm', 0];
+  if (rules === 'zm') return ZM_MAP_MOOD[info.map] ?? ['zm', 0];
   if (rules === 'cp') return MISSION_MOOD[info.mission] ?? ['cpaction', 0];
   if (rules === 'inf') return ['inf', 0];
   if (info.ranked) return ['ranked', 0];

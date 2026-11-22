@@ -1187,6 +1187,9 @@ export const CARDS = [
     return card(r.id.slice(5), r.name, 'Mastery', `${t.name} mastery tier ${r.tier}`, c => !!c.rewards?.has(r.id), MASTERY_CARD_ART[t.kind](t),
       c => [Math.min(r.tier, c.trackTiers?.[t.id] ?? 0), r.tier]);
   }),
+  // Appended. Saltmere Abbey's quest boss: the Ferryman, called up the nave by the tower bell once the fonts are full
+  // (docs/ZOMBIES.md "Saltmere Abbey").
+  card('zm-ferryman', 'Last Crossing', 'Zombies', 'Put down the Ferryman on Saltmere Abbey in Graveyard Shift', c => zmFerrymanDown(c.zmFeats), { p: 'tide', c: ['#04100e', '#16403a', '#d0fff0', '#5affd0'], e: 'map:saltmere', gold: true }),
 ];
 export const CARD_IDS = CARDS.map(c => c.id);
 export const getCard = id => CARDS.find(c => c.id === id) ?? CARDS[0];
@@ -1461,8 +1464,12 @@ export function recordZmFeat(save, mapId, { escaped = 0, boss = false } = {}) {
 // Barker's (Wrenfield Fair).
 export const ZM_LISTENER_MAPS = ['polestar'];
 export const ZM_BARKER_MAPS = ['wrenfield'];
+// And the Ferryman's (Saltmere Abbey).
+export const ZM_FERRYMAN_MAPS = ['saltmere'];
 // Whether the Gravewarden has gone down on any map (its calling card).
-export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && !ZM_BARKER_MAPS.includes(k) && Array.isArray(v) && v[1]);
+export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && !ZM_BARKER_MAPS.includes(k) && !ZM_FERRYMAN_MAPS.includes(k) && Array.isArray(v) && v[1]);
+// Whether the Ferryman has (its calling card, Last Crossing, and the Drowned Bell emblem).
+export const zmFerrymanDown = feats => isObj(feats) && ZM_FERRYMAN_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 // Whether the Barker has (its calling card, Show's Over, and the Last Bell emblem).
 export const zmBarkerDown = feats => isObj(feats) && ZM_BARKER_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 // Whether the Listener has (its calling card, Dead Air, and the Dead Frequency emblem).

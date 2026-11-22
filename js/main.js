@@ -1108,7 +1108,7 @@ function beginSpectating(msg) {
   app.inMatch = true;
   wakeLock.set(true);
   app.matchInfo = { roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode), scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit, spectating: true };
-  music.match({ mode: msg.mode, rules: MODES[msg.mode]?.rules ?? msg.mode, large: !!MODES[msg.mode]?.large });     // docs/AUDIO.md
+  music.match({ mode: msg.mode, map: msg.mapId, rules: MODES[msg.mode]?.rules ?? msg.mode, large: !!MODES[msg.mode]?.large, mission: MODES[msg.mode]?.cp ? Math.floor((msg.scoreLimit | 0) / 10) : 0 });     // docs/AUDIO.md
   stopVote();
   net.resetGameHandlers();
   backdrop.stop();
@@ -2000,7 +2000,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;
   // The match music's theme (docs/AUDIO.md): by mode, Ground War, ranked, and the campaign's mission.
-  music.match({ mode, rules: MODES[mode]?.rules ?? mode, ranked: !!ranked, large: !!MODES[mode]?.large, mission: MODES[mode]?.cp ? Math.floor((scoreLimit | 0) / 10) : 0 });
+  music.match({ mode, map: mapId, rules: MODES[mode]?.rules ?? mode, ranked: !!ranked, large: !!MODES[mode]?.large, mission: MODES[mode]?.cp ? Math.floor((scoreLimit | 0) / 10) : 0 });
   // The caster camera (docs/RANKED.md): out-of-play players may watch with it, except where seeing everyone would be
   // unfair (Ranked) or makes no sense (Training, the tutorial, the range).
   if (app.match.caster) {

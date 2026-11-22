@@ -6,7 +6,7 @@
 //   stepFonts    a woken font left thirsty (no kill for ZE.quest.thirst s) loses a soul every ZE.quest.drain s
 //   stepFerryman the Ferryman's undertow (it sinks, crosses under the flood to one of the crew and comes up beneath
 //                them, a whirlpool ring marking the spot the whole time) and its drowned at its call
-// Events: {t:'zfont', i, state: 1 filled | 2 full | 3 a soul lost, n, of, by?}, {t:'zsoul', i, n, x, z} (a soul drunk:
+// Events: {t:'zfont', i, state: 1 filled | 2 full | 3 a soul lost, n, of, by?}, {t:'zsoul', i, n, x, z, fx, fz} (a soul drunk:
 // the wisp flies from the kill to the font), {t:'zdive', x, z, tx, tz, r, sink, warn} (the Ferryman going under, the
 // spot it comes up at), {t:'zfx', k: 'surface', x, z, r} (it comes up).
 import { ZM, ZE, ZK, ZM_FERRY, NO_GUN, clawDmg, isBossKind } from '../shared/zombies.js';
@@ -48,7 +48,7 @@ export function feedFonts(E, target) {
   if (!best) return;
   const i = best.i, n = Math.min(ZE.quest.souls, (q.souls[i] ?? 0) + 1);
   q.souls[i] = n; q.thirst[i] = 0;
-  E.sim._emit({ t: 'zsoul', i, n, x: r2(target.ps.x), z: r2(target.ps.z) });
+  E.sim._emit({ t: 'zsoul', i, n, x: r2(target.ps.x), z: r2(target.ps.z), fx: best.x, fz: best.z });
   if (n < ZE.quest.souls) return;
   q.got |= 1 << i; q.woke &= ~(1 << i);
   const full = L.relics.filter(r => q.got & (1 << r.i)).length;

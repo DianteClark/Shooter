@@ -446,16 +446,63 @@ const BARKER = {
   },
 };
 
-// By the view's zk (1 shambler ... 11 the Listener, 12 the Barker; 10, the wire's broken-shield code, is never drawn
-// as such).
-export const ZM_MODELS = { 1: SHAMBLER, 2: RUNNER, 3: BRUTE, 4: YARDMASTER, 5: WARDEN, 6: SPITTER, 7: BLOATER, 8: CRAWLER, 9: SHIELD, 11: LISTENER, 12: BARKER };
+// The Ferryman (Saltmere Abbey's tower bell calls it up the nave): a drowned boatman, the tallest thing in the abbey
+// but the Listener, in a long oilskin gone black-green with the sea, kelp hanging off it, barnacles on its shoulders, a
+// faded sou'wester over a bloated grey face, a punt pole in its right fist and a ship's hand-bell on a chain in its
+// left, burning sea-green.
+const FERRYMAN = {
+  dims: { hip: 0.98, waist: 0.1, chest: 0.58, neck: 0.06, shW: 0.22, hipW: 0.1, ua: 0.36, fa: 0.38, th: 0.48, sh: 0.46, s: 1.75, headX: 0.07, ex: { parent: FAL, at: [0.04, -0.42, 0] } },
+  gait: { stride: 1.7, swing: 0.22, knee: 0.35, hunch: 0.38, lurch: 0.06, limp: 0, bob: 0.03, glide: 1, ferry: 1, headTilt: 0.1, twitch: 0.12, boss: 1 },
+  eye: 0x5affd0,
+  build(k) {
+    const skin = 0x7a8c88, coat = 0x1c2a26, coatL = 0x2c4038, kelp = 0x3a4a1e, hat = 0x8a7a2a, barn = 0xbab4a0, green = 0x5affd0;
+    // The oilskin hangs from the pelvis to the shins, split and ragged at the hem, kelp tangled in it.
+    k.at(PEL, coat).bulb(0, 0, [[-0.72, 0.29], [-0.36, 0.24], [0.0, 0.17], [0.08, 0.15]], 8, 1, 1.12);
+    k.detail(() => {
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; k.at(PEL, i % 2 ? coatL : kelp).box(Math.cos(a) * 0.27, -0.8 - (i % 3) * 0.05, Math.sin(a) * 0.3, 0.05, 0.16 + (i % 3) * 0.06, 0.09); }
+    });
+    k.at(CH, coat).box(0, 0.28, 0, 0.24, 0.56, 0.38, 0.04);
+    k.at(CH, coatL).box(0.0, 0.5, 0, 0.3, 0.1, 0.5, 0.03).box(0.125, 0.3, 0, 0.01, 0.46, 0.06);
+    // An iron chain across the chest, barnacles on the shoulders, weed hanging off them.
+    k.at(CH, IRON).turn(0.13, 0.32, 0, 0.7, 0, 0, () => k.box(0.13, 0.32, 0, 0.02, 0.04, 0.42));
+    k.detail(() => {
+      for (const z of [-1, 1]) { for (const x of [-0.06, 0.04]) k.at(CH, barn).box(x, 0.56, z * (0.16 + (x > 0 ? 0.04 : 0)), 0.05, 0.04, 0.05); }
+      flap(k, CH, kelp, -0.1, 0.5, 0.18, 0.4, 0.06, 0.2); flap(k, CH, kelp, -0.08, 0.5, -0.2, 0.3, 0.05, -0.25); flap(k, CH, kelp, 0.1, 0.48, 0.2, 0.26, 0.04, 0.1);
+    });
+    k.at(CH, skin).prismY(0.52, 0.64, 0.04, 0, 0.055, 0.05, 5);
+    skull(k, { skin, eye: this.eye, w: 0.21, h: 0.24, d: 0.22, jaw: 0.6 });
+    k.at(HD, shade(skin, 0.8)).box(0.06, 0.08, 0, 0.14, 0.1, 0.23);                            // A bloated jowl.
+    // The sou'wester: a deep crown and a broad brim drooping behind.
+    k.at(HD, hat).prismY(0.22, 0.36, 0.0, 0, 0.13, 0.15, 8);
+    k.at(HD, shade(hat, 0.8)).prismY(0.21, 0.24, 0.0, 0, 0.27, 0.27, 10);
+    k.at(HD, shade(hat, 0.7)).box(-0.24, 0.17, 0, 0.12, 0.03, 0.4);
+    k.detail(() => { k.at(HD, kelp).box(-0.12, 0.1, 0.12, 0.03, 0.2, 0.03).box(-0.1, 0.06, -0.1, 0.03, 0.26, 0.03); });
+    k.at(UAL, coat).limb(0.36, 0.075, 0.065); k.at(FAL, coat).limb(0.24, 0.07, 0.08); k.at(FAL, skin).limb(0.14, 0.045, 0.04, 5, -0.24); claw(k, FAL, 0.38, skin);
+    k.at(UAR, coat).limb(0.36, 0.075, 0.065); k.at(FAR, coat).limb(0.24, 0.07, 0.08); k.at(FAR, skin).limb(0.14, 0.045, 0.04, 5, -0.24);
+    k.at(FAR, skin).box(0.0, -0.4, 0, 0.09, 0.09, 0.09);
+    // The punt pole, held upright in the right fist: a long shaft, an iron shoe at its foot.
+    k.at(FAR, 0x4a3a26).prismY(-1.75, 0.95, 0.02, 0, 0.022, 0.026, 5);
+    k.at(FAR, IRON).prismY(-1.9, -1.72, 0.02, 0, 0.012, 0.03, 5);
+    // The hand-bell on its chain, burning sea-green.
+    k.at(EX, IRON).prismY(0.0, 0.12, 0, 0, 0.008, 0.008, 4);
+    k.at(EX, 0x7a5a2a).prismY(-0.16, 0.0, 0, 0, 0.09, 0.035, 8);
+    k.at(EX, green, 3).box(0, -0.15, 0, 0.1, 0.04, 0.1);
+    k.at(THL, coat).limb(0.48, 0.07, 0.06); k.at(THR, coat).limb(0.48, 0.07, 0.06);
+    k.at(SHL, coatL).limb(0.46, 0.06, 0.05); foot(k, SHL, 0.46, 0x101614, 0.26);
+    k.at(SHR, coatL).limb(0.46, 0.06, 0.05); foot(k, SHR, 0.46, 0x101614, 0.26);
+  },
+};
+
+// By the view's zk (1 shambler ... 11 the Listener, 12 the Barker, 13 the Ferryman; 10, the wire's broken-shield
+// code, is never drawn as such).
+export const ZM_MODELS = { 1: SHAMBLER, 2: RUNNER, 3: BRUTE, 4: YARDMASTER, 5: WARDEN, 6: SPITTER, 7: BLOATER, 8: CRAWLER, 9: SHIELD, 11: LISTENER, 12: BARKER, 13: FERRYMAN };
 export const ZM_MODEL_KEYS = Object.keys(ZM_MODELS).map(Number);
 // What a hit on each kind looks like (zm-bodies.js onHit): the ichor's colour and what else flies.
 export const ZM_MATTER = {
   1: { ichor: [0.07, 0.09, 0.05] }, 2: { ichor: [0.09, 0.06, 0.05] }, 3: { ichor: [0.06, 0.08, 0.05], heavy: 1 },
   4: { ichor: [0.08, 0.06, 0.04], spark: [1, 0.55, 0.2] }, 5: { ichor: [0.08, 0.05, 0.1], glow: [0.75, 0.5, 1] },
   6: { ichor: [0.1, 0.14, 0.03], glow: [0.6, 1, 0.23] }, 7: { ichor: [0.16, 0.09, 0.16], glow: [1, 0.7, 0.25] },
-  8: { ichor: [0.05, 0.06, 0.04] }, 9: { ichor: [0.07, 0.08, 0.06] }, 11: { ichor: [0.5, 0.62, 0.7], frost: [0.6, 0.95, 1] }, 12: { ichor: [0.1, 0.05, 0.05], glow: [1, 0.75, 0.25] },
+  8: { ichor: [0.05, 0.06, 0.04] }, 9: { ichor: [0.07, 0.08, 0.06] }, 11: { ichor: [0.5, 0.62, 0.7], frost: [0.6, 0.95, 1] }, 12: { ichor: [0.1, 0.05, 0.05], glow: [1, 0.75, 0.25] }, 13: { ichor: [0.05, 0.12, 0.1], glow: [0.35, 1, 0.82] },
 };
 
 export function buildModel(zk) {

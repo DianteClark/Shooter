@@ -16,6 +16,7 @@ import * as frontier from './themes/frontier.js';
 import { ashgrove } from './themes/ashgrove.js';
 import { polestar } from './themes/polestar.js';
 import { wrenfield } from './themes/wrenfield.js';
+import { saltmere } from './themes/saltmere.js';
 import { millbrook } from './themes/millbrook.js';
 import { launchpad } from './themes/launchpad.js';
 import { observatory } from './themes/observatory.js';
@@ -3153,6 +3154,7 @@ const DRESS = {
   ashgrove: { ...RAILYARD_DRESS, ...ashgrove.dress },
   polestar: { ...RAILYARD_DRESS, ...polestar.dress },
   wrenfield: { ...RAILYARD_DRESS, ...wrenfield.dress },
+  saltmere: { ...RAILYARD_DRESS, ...saltmere.dress },
   millbrook: { ...RAILYARD_DRESS, ...millbrook.dress },
   launchpad: { ...RAILYARD_DRESS, ...launchpad.dress },
   observatory: { ...RAILYARD_DRESS, ...observatory.dress },
@@ -3183,6 +3185,7 @@ const THEME_STAGES = {
   ashgrove: ashgrove.stage,
   polestar: polestar.stage,
   wrenfield: wrenfield.stage,
+  saltmere: saltmere.stage,
   millbrook: millbrook.stage,
   launchpad: launchpad.stage,
   observatory: observatory.stage,
@@ -3438,6 +3441,7 @@ const THUMB_STYLE = {
   ashgrove: ashgrove.thumb,
   polestar: polestar.thumb,
   wrenfield: wrenfield.thumb,
+  saltmere: saltmere.thumb,
   millbrook: millbrook.thumb,
   launchpad: launchpad.thumb,
   observatory: observatory.thumb,

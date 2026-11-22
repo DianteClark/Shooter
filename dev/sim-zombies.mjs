@@ -1688,6 +1688,14 @@ section('econ');
   ok(bow?.need({ zmFeats: ws.zmFeats }) && !card.need({ zmFeats: ws.zmFeats }) && !dead.need({ zmFeats: ws.zmFeats }) && !bow.need({ zmFeats: ps.zmFeats }), 'Show\'s Over follows the Barker, not Lantern Out or Dead Air');
   ok(bell && emblemProgress(bell, { zmFeats: ws.zmFeats })[0] === 1 && emblemProgress(bell, { zmFeats: ps.zmFeats })[0] === 0, 'the Last Bell emblem too');
   ok(EXTRA_CARD_IDS.includes('zm-map-wrenfield') && EXTRA_CARD_IDS.includes('map-wrenfield'), 'Wrenfield has its round-15 card (Closing Time) and map cards');
+  // Saltmere Abbey's boss flag is the Ferryman's: its own card (Last Crossing) and emblem (Drowned Bell), none of the others.
+  const oar = CARDS.find(c => c.id === 'zm-ferryman'), drowned = getEmblem('feat-ferryman');
+  const ss = blankSave();
+  ok(recordZmFeat(ss, 'saltmere', { boss: true }).freshBoss && decodeSave(encodeSave(ss)).save.zmFeats.saltmere[1] === 1, 'the Ferryman flag, through an export code');
+  ok(oar?.need({ zmFeats: ss.zmFeats }) && !card.need({ zmFeats: ss.zmFeats }) && !dead.need({ zmFeats: ss.zmFeats }) && !bow.need({ zmFeats: ss.zmFeats }) && !oar.need({ zmFeats: ws.zmFeats }),
+    'Last Crossing follows the Ferryman, not Lantern Out, Dead Air or Show\'s Over');
+  ok(drowned && emblemProgress(drowned, { zmFeats: ss.zmFeats })[0] === 1 && emblemProgress(drowned, { zmFeats: ws.zmFeats })[0] === 0, 'the Drowned Bell emblem too');
+  ok(EXTRA_CARD_IDS.includes('zm-map-saltmere') && EXTRA_CARD_IDS.includes('map-saltmere'), 'Saltmere has its round-15 card (Spring Tide) and map cards');
   void cardsEarned;
 }
 

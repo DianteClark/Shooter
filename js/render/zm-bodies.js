@@ -26,7 +26,7 @@ const ROWS = 80;                 // Bodies drawn at once: 24 up, the dying, the 
 const TW = NB * 3 + 2;           // Texels a row: three per bone, then fx (fade, flash, glow, lite) and tint (rgb, k).
 const NCH = 30;                  // Pose channels (see pose()).
 const RISE = 1.05, STRIKE = 0.32, LIE = 2.4, SINK = 0.8, GIB_LIFE = 3.2;
-const BOSS = new Set([4, 5, 11, 12]);
+const BOSS = new Set([4, 5, 11, 12, 13]);
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const sstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -217,6 +217,12 @@ function pose(st, def, t, dt) {
       A[C.RAP] = hang + 0.3 + 0.1 * run * sL; A[C.RFA] = 0.6; A[C.RAT] = 0.4;
       A[C.EXP] = -(A[C.CPITCH] + A[C.LAP] + A[C.LFA]) + 0.25 * Math.sin(t * 2.2 + seed) + 0.2 * run * Math.sin(ph);
     }
+    if (g.ferry) {
+      // The Ferryman walks with its pole: planted ahead of it, the bell held out low on its chain in the other hand.
+      A[C.RAP] = hang + 0.45 + 0.12 * run * sL; A[C.RFA] = 0.5; A[C.RAT] = 0.2; A[C.RAO] = 0.2;
+      A[C.LAP] = hang + 0.6; A[C.LFA] = 0.4; A[C.LAO] = 0.25;
+      A[C.EXP] = -(A[C.CPITCH] + A[C.LAP] + A[C.LFA]) + 0.3 * Math.sin(t * 1.8 + seed) + 0.2 * run * Math.sin(ph);
+    }
     if (g.strut) {
       // The Barker struts: chest out, the trumpet arm swinging high, the free arm held out for the crowd; its tails flap.
       A[C.CPITCH] = -(hunch + 0.1 * run) + 0.06; A[C.HPITCH] = 0.1 + 0.08 * Math.cos(ph * 2) * run;
@@ -280,6 +286,16 @@ function pose(st, def, t, dt) {
   }
   // A hit: the chest and head thrown back or aside on a spring.
   A[C.CPITCH] += st.ff; A[C.CROLL] += st.fs; A[C.HPITCH] += st.ff * 0.7; A[C.HROLL] += st.fs * 0.6;
+  // The Ferryman's undertow ('zdive'): it sinks into the flood, arms raised; under, nothing shows; then it bursts up
+  // beneath its mark, pole first.
+  if (st.diveT >= 0) {
+    const deep = (d.hip + d.waist + d.chest + d.neck + 0.5) * d.s;
+    const sink = st.diveSink, warn = st.diveWarn, u = st.diveT;
+    const under = u < sink ? sstep(0, sink, u) : u < warn ? 1 : 1 - sstep(warn, warn + 0.45, u);
+    A[C.RY] -= under * deep;
+    A[C.LAP] = lerp(A[C.LAP], hunch + 2.6, under); A[C.RAP] = lerp(A[C.RAP], hunch + 2.9, under);
+    A[C.CPITCH] -= 0.3 * under; A[C.HPITCH] -= 0.3 * under;
+  }
   // Rising: from under the ground, reaching up out of it, the body tipped back.
   if (st.riseT < 1) {
     // The hands break the surface first, then the head, then it hauls itself out.
@@ -302,6 +318,7 @@ class Body {
     this.windT = 0; this.strikeT = -1; this.swing = false; this.riseT = 1; this.dirtT = 0;
     this.goneT = -1; this.shield = false; this.lite = false; this.dead = false; this.deadT = 0;
     this.callT = -1; this.callWind = 1.1; this.callDash = 0.45;
+    this.diveT = -1; this.diveSink = 0.6; this.diveWarn = 1.7;
     this.A = new Float32Array(NCH);
     this.root = new THREE.Matrix4();
     this.M = Array.from({ length: NB }, () => new THREE.Matrix4());
@@ -418,6 +435,17 @@ export class ZmBodies {
       if (d < bd) { bd = d; best = b; }
     }
     if (best) { best.callT = 0; best.callWind = ev.wind ?? 1.1; best.callDash = ev.dash ?? 0.45; }
+  }
+
+  // The Ferryman goes under ('zdive', js/sim/zm-abbey.js): whichever Ferryman stands where it went down.
+  onDive(ev) {
+    let best = null, bd = 3;
+    for (const b of this.bodies.values()) {
+      if (!b.alive || b.zk !== 13) continue;
+      const d = Math.hypot(b.x - ev.x, b.z - ev.z);
+      if (d < bd) { bd = d; best = b; }
+    }
+    if (best) { best.diveT = 0; best.diveSink = ev.sink ?? 0.6; best.diveWarn = ev.warn ?? 1.7; }
   }
 
   // A zombie died where we could see it (Characters.onKill hands it here): a body that falls and goes limp, gibs, ichor.
@@ -554,6 +582,7 @@ export class ZmBodies {
       b.fsv += (-90 * b.fs - 10 * b.fsv) * dt; b.fs += b.fsv * dt;
       b.flash *= Math.exp(-dt * 14);
       if (b.callT >= 0) { b.callT += dt; if (b.callT > b.callWind + b.callDash + 0.3) b.callT = -1; }
+      if (b.diveT >= 0) { b.diveT += dt; if (b.diveT > b.diveWarn + 0.5) b.diveT = -1; }
       if (b.riseT < 1) b.riseT = Math.min(1, b.riseT + dt / (draw === 8 ? 0.75 : BOSS.has(draw) ? 1.6 : RISE));
       const r = chars?.rigs.get(p.id);
       const seen = r ? r.visible : true;
