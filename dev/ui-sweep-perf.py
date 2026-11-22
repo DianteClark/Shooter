@@ -2,7 +2,7 @@
 """Perf overlay numbers in real matches (ROADMAP item 37): python3 dev/ui-sweep-perf.py [port] [outdir] [--root=DIR] [--q=low|high] [cases]
 
 At 932x430 in headless Chromium (SwiftShader, so frame and script ms only compare runs on this machine; draw calls and
-triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall), brcity (the same on Meridian City), gwtide and gwcoral (Ground War on Jadefall's coast),
+triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall), brcity (the same on Meridian City), brnorth (the same on Kaldvik, in the church square), gwtide and gwcoral (Ground War on Jadefall's coast),
 gw (Ground War TDM on Harvest), tdmlaunch, tdmobs, tdmpagoda (the 1120 6v6 maps), cpboss (campaign mission 8 at the
 boss, from the Campaign tab), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
@@ -99,7 +99,7 @@ async def run(browser, name, mapId, mode, rows):
           const ids = [...c.opById.keys()];
           c.setRoster(ids.map((id, i) => ({{ id, operator: ops[i % ops.length], skin: `skin:${{ops[i % ops.length]}}-5` }})));
           return ids.length; }})()"""))
-    if name in ('br', 'brjade', 'brcity'):
+    if name in ('br', 'brjade', 'brcity', 'brnorth'):
         await pg.wait_for_function(f'{G}.match.interp.newest.br?.plane?.f > 0.25', timeout=180000)
         await pg.locator('.br-jump-map').first.click()
         await pg.wait_for_function(f'(() => {{ const p = {G}.match.interp.newest.players.find(q => q.id === {G}.match.localId); return p && !p.air; }})()', timeout=180000)
@@ -107,6 +107,10 @@ async def run(browser, name, mapId, mode, rows):
     if name == 'brcity':
         # The densest view in the city: Midtown's boulevard by Monument Plaza, towers and streets on every side.
         await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); m.sim._placeAt(me, {{ x: 190, z: 200 }}, 0); }})()")
+        await pg.wait_for_timeout(4000)
+    if name == 'brnorth':
+        # Kaldvik's densest view: the church square at the Harbour Road crossing, the town blocks on every side.
+        await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); m.sim._placeAt(me, {{ x: 196, z: 156 }}, 0); }})()")
         await pg.wait_for_timeout(4000)
     if name == 'cpboss':
         R = f'{G}.match.sim.rules'

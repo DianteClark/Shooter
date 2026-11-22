@@ -475,8 +475,8 @@ function build() {
       id: 'fjord', name: 'Kaldvik: Fjord Road', area: { x: 20, z: 128, w: 364, h: 166 },
       hq: [pt(26, 220, { r: 10 }), pt(380, 220, { r: 10 })],
       flags: [
-        pt(88, 220, { id: 'A', name: 'Telemark' }), pt(204, 160, { id: 'B', name: 'Kaldvik Town' }), pt(200, 220, { id: 'C', name: 'Crossroads' }),
-        pt(214, 262, { id: 'D', name: 'Birchwood' }), pt(328, 220, { id: 'E', name: 'Ice Core' }),
+        pt(88, 220, { id: 'A', name: 'Telemark' }), pt(198, 160, { id: 'B', name: 'Kaldvik Town' }), pt(200, 220, { id: 'C', name: 'Crossroads' }),
+        pt(198, 266, { id: 'D', name: 'Birchwood' }), pt(328, 220, { id: 'E', name: 'Ice Core' }),
       ],
     }],
     breakthrough: [{
