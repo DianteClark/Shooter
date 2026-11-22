@@ -499,7 +499,7 @@ const ALIAS = {
   tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm', cp: 'mode:cp',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry', ashgrove: 'map:ashgrove', polestar: 'map:polestar', wrenfield: 'map:wrenfield',
-  ...Object.fromEntries(['turnstile', 'overpass', 'downtown', 'oasis', 'canyon', 'ruins', 'canopy', 'riverbend', 'expedition', 'icebreaker', 'millbrook', 'jadefall', 'tidebreak', 'coral', 'launchpad', 'observatory', 'pagoda'].map(m => [m, 'map:' + m])),
+  ...Object.fromEntries(['turnstile', 'overpass', 'downtown', 'oasis', 'canyon', 'ruins', 'canopy', 'riverbend', 'expedition', 'icebreaker', 'millbrook', 'jadefall', 'tidebreak', 'coral', 'launchpad', 'observatory', 'pagoda', 'midtown', 'oldquarter', 'canalrow', 'unionsq', 'meridian'].map(m => [m, 'map:' + m])),
   'map:range': 'ui:aim', range: 'ui:aim',
   // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).
   'medal:hq_capture': 'medal:capture', hq_capture: 'medal:capture', 'medal:hq_destroy': 'medal:carrier_kill', hq_destroy: 'medal:carrier_kill',

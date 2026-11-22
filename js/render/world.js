@@ -20,6 +20,7 @@ import { millbrook } from './themes/millbrook.js';
 import { launchpad } from './themes/launchpad.js';
 import { observatory } from './themes/observatory.js';
 import { pagoda } from './themes/pagoda.js';
+import { BreakRanges } from './destruct-fx.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
 const COL_RANGE = 4;         // Baked colours (lamp pools add up past 1) are stored as colour / COL_RANGE.
@@ -3193,7 +3194,9 @@ const THEME_STAGES = {
 const KIT = { box3, emissive, scale, skyRing, building, container, crate, barrier, concreteWall, border, hexRGB, WATER_Y };
 
 // Sun shadows and contact darkening: per-vertex strength a, drawn with multiply blending.
-function buildDecals(map, theme) {
+// `rec` (destruction, js/render/destruct-fx.js): breakable pieces cast the shadow of their whole rect, and the
+// recorder keeps which triangles each one's are, so a break can take them away.
+function buildDecals(map, theme, rec = null) {
   const pos = [], str = [];
   const push = (x, z, a) => { pos.push(x, 0.14, z); str.push(a); };
   const tri = (ax, az, aa, bx, bz, ba, cx, cz, ca) => { push(ax, az, aa); push(bx, bz, ba); push(cx, cz, ca); };
@@ -3201,8 +3204,10 @@ function buildDecals(map, theme) {
   const dir = theme.light.dir;
   const sx = (-dir[0] / dir[1]) * theme.shadow.len, sz = (-dir[2] / dir[1]) * theme.shadow.len;
   const S = theme.shadow.strength;
-  for (const w of map.walls) {
-    if (w.kind === 'water') continue;
+  for (const w0 of map.walls) {
+    if (w0.kind === 'water') continue;
+    const piece = w0.brk !== undefined ? map.breakables?.[w0.brk] ?? null : null;
+    const w = piece ?? w0, t0 = pos.length / 9;
     const h = w.h * 0.82;
     const pts = [
       [w.x, w.z, S], [w.x + w.w, w.z, S], [w.x + w.w, w.z + w.d, S], [w.x, w.z + w.d, S],
@@ -3233,6 +3238,7 @@ function buildDecals(map, theme) {
     band(w.x + w.w, w.z, w.x, w.z, 0, -e);
     band(w.x, w.z, w.x, w.z + w.d, -e, 0);
     band(w.x + w.w, w.z + w.d, w.x + w.w, w.z, e, 0);
+    if (piece && rec) rec.shadow(piece.id, t0, pos.length / 9, piece);
   }
   return [{ name: 'position', data: pos, size: 3 }, { name: 'aStr', data: str, size: 1 }];
 }
@@ -3262,9 +3268,14 @@ export function buildWorld(map, teams, fogUniforms) {
   stages.paint(ctx);
   mood.paint?.(ctx);
   if (!map.zmOnly) spawnPads(b, map, teams, W);      // A Graveyard Shift map has no team ends.
+  // Destruction: breakable pieces go into the same mesh, their vertex ranges (and rubble) kept by BreakRanges.
+  const brk = new BreakRanges(map);
+  const rec = brk.recorder({ sb: new MeshBuilder(null), glow: new GlowList() });
   for (const w of map.walls) {
     const draw = dress[w.kind];
-    if (draw) draw(ctx, w);
+    const piece = w.brk !== undefined ? map.breakables?.[w.brk] : null;
+    if (piece) rec.piece(ctx, b, piece, w, iw => { if (draw) draw(ctx, iw); });
+    else if (draw) draw(ctx, w);
   }
   stages.decor(ctx);
   mood.decor?.(ctx);
@@ -3289,10 +3300,10 @@ export function buildWorld(map, teams, fogUniforms) {
       if (parts.length > 1) chunks.push(m);
       parent.add(m);
     }
-    return parts.length;
+    return parts;
   };
   settleCoplanar([b, sb]);       // Trims, caps and panels laid flat on bigger faces: lift them so they never flicker.
-  addLayer(packWorld(b), material, 0);
+  brk.bind(rec, 'body', addLayer(packWorld(b), material, 0));
 
   const decalMat = new THREE.ShaderMaterial({
     vertexShader: `attribute float aStr; varying float vS; void main(){ vS = aStr; gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0); }`,
@@ -3308,8 +3319,8 @@ export function buildWorld(map, teams, fogUniforms) {
   });
   // The decal layer is a group, so the quality step can switch every tile of it at once.
   const decals = new THREE.Group();
-  const decalAttrs = buildDecals(map, theme);
-  addLayer(decalAttrs, decalMat, -1, decals);
+  const decalAttrs = buildDecals(map, theme, rec);
+  brk.bind(rec, 'decal', addLayer(decalAttrs, decalMat, -1, decals));
   group.add(decals);
 
   let tris = b.pos.length / 9 + decalAttrs[0].data.length / 9;
@@ -3331,7 +3342,7 @@ export function buildWorld(map, teams, fogUniforms) {
   group.updateMatrixWorld(true);
 
   return {
-    group, material, tris, lamps, decals, chunks,
+    group, material, tris, lamps, decals, chunks, brk,
     drawCalls: group.children.length,
     // Advances the world's shader clock (signs, water, wet sheen). Lightning writes uFlash through Weather.
     update(dt) { timeU.value = (timeU.value + dt) % 3600; },
@@ -3416,6 +3427,12 @@ function splitTiles(attrs, tile) {
     }
     dst.forEach((d, i) => geos[i].setAttribute(a.name, new THREE.BufferAttribute(d, a.size, !!a.normalized)));
   }
+  // Where each source triangle went (geometry, index there), for BreakRanges.bind. One geometry: the identity.
+  if (geos.length > 1) {
+    const dest = new Int32Array(triCount), at = new Int32Array(counts.length);
+    for (let t = 0; t < triCount; t++) dest[t] = at[slot[t]]++;
+    geos.slot = slot; geos.dest = dest;
+  }
   return geos;
 }
 
@@ -3444,12 +3461,13 @@ const THUMB_STYLE = {
   pagoda: pagoda.thumb,
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,
+  city: frontier.cityThumb,
 };
 
 // What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a
 // region's palette, as buildWorld does for the whole map.
 const INTERNALS = {
-  DRESS, THEME_STAGES, KIT, GlowList, makeBake, mulberry, makeNoise, packWorld, floatAttrs, buildDecals, createWorldMaterial,
+  DRESS, THEME_STAGES, KIT, GlowList, MeshBuilder, makeBake, mulberry, makeNoise, packWorld, floatAttrs, buildDecals, createWorldMaterial,
   SIGN_VERT, SIGN_FRAG, GLOW_VERT, GLOW_FRAG, WATER_VERT, WATER_FRAG, rockMass,
   setPalette(theme) { INK = theme.ink; CONTAINER_COLORS = theme.containers; },
 };

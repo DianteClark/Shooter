@@ -25,6 +25,8 @@
 //              least 2 m; no fairness check (nobody spawns in teams); sight sampled coarser; instead of the mode's own
 //              match (the sim cannot host 'br' here) a 32-bot free roam under Ground War TDM rules for 120 s
 //              (--seconds doubles) for stuck bots and the host's tick cost (fails over 4 ms mean)
+//   broken     (destruction, docs/DESTRUCTION.md) nav, objectives, gaps, fairness and the giant checks again with every
+//              breakable piece broken (rubble piles in place); --intact skips it
 // Exits non-zero if any map fails a hard check (fields, nav, gaps, fair, bots); sight lines are reported, not failed.
 import { MAPS, MAP_IDS, BR_MAP_IDS, sizeOf, REGIONS } from '../js/shared/map.js';
 import { MODES, mapModes, modeFitsMap, playersFor, isFfa, teamSizeFor } from '../js/shared/modes.js';
@@ -35,9 +37,11 @@ import { NavGrid } from '../js/sim/nav.js';
 import { raycastMap } from '../js/shared/geometry.js';
 import { PLAYER_RADIUS, SIM_HZ } from '../js/shared/constants.js';
 import { zmLayout, placeZmWalls, clearZmWalls, bandOpen } from '../js/shared/zombies.js';
+import { breakAll, resetBreakables } from '../js/shared/destruction.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const a = args.find(x => x.startsWith(`--${k}=`)); return a ? a.split('=')[1] : d; };
+const INTACT_ONLY = args.includes('--intact');
 const QUICK = args.includes('--quick'), ASCII = args.includes('--ascii'), ARGS_ALL = args.includes('--all');
 const SECONDS = Number(opt('seconds', 60));
 const ONLY_MODES = opt('modes', null)?.split(',');
@@ -242,8 +246,9 @@ function checkGaps(map, out) {
     const gz = Math.max(B.z - (A.z + A.d), A.z - (B.z + B.d));
     const ox = -gx, oz = -gz;                                          // > 0: overlap length on that axis
     let gap = null;
-    if (gx > TOUCH && oz > 0.4 && gx < GAP) gap = gx;
-    else if (gz > TOUCH && ox > 0.4 && gz < GAP) gap = gz;
+    // (1e-6: a district placed into a region by an offset must not flip a 0.4 m overlap on float noise alone.)
+    if (gx > TOUCH && oz > 0.4 + 1e-6 && gx < GAP) gap = gx;
+    else if (gz > TOUCH && ox > 0.4 + 1e-6 && gz < GAP) gap = gz;
     else if (gx > 0 && gz > 0 && Math.hypot(gx, gz) < GAP && Math.hypot(gx, gz) > TOUCH && gx > TOUCH && gz > TOUCH) gap = Math.hypot(gx, gz);
     if (gap === null || gap > GAP - 0.005) continue;
     // Not a gap if something else that blocks fills it (a hull's basin between the hull and the quay).
@@ -592,6 +597,21 @@ for (const id of todo) {
   else checkFair(map, nav, out);
   checkSight(map, nav, reach, size, out, isGiant(map) ? 6 : 2);
   if (ASCII) console.log(ascii(map, nav, reach));
+  // The same map with every breakable piece down: still fair, still reachable, no new gaps that look passable.
+  if (!INTACT_ONLY && map.breakables?.length) {
+    const n = breakAll(map), bo = { id, fail: [], warn: [], info: [] };
+    try {
+      const nav2 = new NavGrid(map), reach2 = flood(nav2, map.spawns[0][0]);
+      checkNav(map, nav2, reach2, bo);
+      checkModePoints(map, nav2, reach2, bo);
+      checkGaps(map, bo);
+      if (isGiant(map)) checkGiant(map, nav2, reach2, bo);
+      else if (!map.zmOnly) checkFair(map, nav2, bo);
+    } finally { resetBreakables(map); }
+    for (const f of bo.fail) out.fail.push(`all broken: ${f}`);
+    for (const w of bo.warn) if (!out.warn.includes(w)) out.warn.push(`all broken: ${w}`);
+    out.info.push(`all ${n} breakable pieces broken: ${bo.fail.length ? 'FAILS' : 'passes'} (${bo.info.filter(i => /fair/.test(i)).join('; ') || 'geometry'})`);
+  }
   if (!QUICK && isGiant(map)) freeRoam(map, out);
   else if (!QUICK && map.zmOnly) zmMatch(map, out);
   else if (!QUICK) for (const mode of mapModes(map)) {

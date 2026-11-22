@@ -15,6 +15,27 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Meridian City',
+    items: [
+      'A new Battle Royale map, Meridian City: one huge city at blue hour, its lights coming on. Four new districts sit in the middle of it, side by side along the boulevard: the Old Quarter, Midtown, Canal Row, and Union Square south of Midtown.',
+      'Each district is also a new map of its own for 6 v 6: Midtown (large: towers either side of Monument Plaza), Old Quarter (medium: brownstones round Fountain Square), Canal Row (medium: warehouses either side of a canal and its three bridges) and Union Square (small: round the bandstand).',
+      'Round them the rest of the city: the Rail Depot, Uptown, Gallery Row, The Exchange, the Ferry Terminal and the Docks on the waterfront, City Hall, Mercy Hospital, Meridian Park, the Stadium, Southside, Chapel Row, the Power Station and Westgate. The districts\' buildings open up in Meridian City: walk in and loot them.',
+      'Meridian City plays Battle Royale (Quads, Duos, Solos), Rebound and Extraction, and comes up in the vote with Frontier and Jadefall.',
+      'New calling cards: City Lights, Monument, Cobblestone, Lock Gate and Bandstand, each with its Elite and Master tiers.',
+    ],
+  },
+  {
+    build: '1122-1', date: '2026-11-22', title: 'Destruction',
+    items: [
+      'Maps break. Crates, stalls, tents, furniture and shop fronts splinter; windows and kiosks shatter; barriers, sandbags, sheds, huts and short walls come down. Every 6 v 6, Ground War and Battle Royale map has pieces that go.',
+      'Grenades, satchels, launchers, airstrikes, mortars and missiles break what they hit. Light machine guns, marksman rifles, snipers and shotguns chew through wood, and any bullet breaks glass. Heavier walls take a rocket or a streak.',
+      'A broken wall opens a new way through and a new sight line. Sheds and huts leave a waist-high heap of rubble you can hide behind and shoot over; broken windows can be climbed through.',
+      'Outer walls, big buildings, containers, rock and anything screening a spawn never break, so no map gets flattened. Search and Destroy keeps its bomb sites whole, and every round of Search and Destroy and Control starts on a whole map. Graveyard Shift keeps its own barricades.',
+      'Bots walk through the gaps you make, and now and then blow their own way through a wall with a grenade.',
+      'The minimap shows the openings, players who join mid-match see the map as it stands, and replays and replay codes show walls coming down (scrub back and they stand up again).',
+    ],
+  },
+  {
     build: '1121-1', date: '2026-11-21', title: 'Fixes',
     items: [
       'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',

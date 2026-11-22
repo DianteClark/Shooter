@@ -19,6 +19,8 @@ import { lighthouse } from './coast.js';
 import { regionField, segDist, mulberry as mul2 } from '../../shared/maps/br-kit.js';
 import { inShallows } from '../../shared/geometry.js';
 import * as isle from './jadefall.js';
+import * as city from './city.js';
+import { BreakRanges } from '../destruct-fx.js';
 
 const TILE = 32;
 const PAD = 40;                 // Ground drawn past the map edge, for the off-map view.
@@ -80,6 +82,8 @@ const ZONE = {
 const ROAD = { asphalt: H(0x46474c), dirt: H(0x7a6a50) };
 // The second island's regions, styles and surfaces (themes/jadefall.js).
 Object.assign(SKIN, isle.SKIN); Object.assign(GROUND, isle.GROUND); Object.assign(ZONE, isle.ZONE); Object.assign(ROAD, isle.ROAD);
+// The first region's (themes/city.js, docs/DISTRICTS.md).
+Object.assign(SKIN, city.SKIN); Object.assign(GROUND, city.GROUND); Object.assign(ZONE, city.ZONE);
 
 // Building styles: walls, trim, roof, floor, and the roof's shape.
 const STYLE = {
@@ -97,7 +101,7 @@ const STYLE = {
   jungle: { wall: [0x6a5039, 0x7a5e40], trim: 0x4a382a, roof: 0x9a8450, floor: 0x5a4630, floorB: 0x4e3c28, roofKind: 'hip', planks: true },
   temple: { wall: [0x8a8a72, 0x7e7e68], trim: 0x6c6c58, roof: 0x7a7a64, floor: 0x6c6c58, floorB: 0x626250, roofKind: 'stepped' },
 };
-Object.assign(STYLE, isle.STYLE);
+Object.assign(STYLE, isle.STYLE, city.STYLE);
 for (const s of Object.values(STYLE)) { s.wall = s.wall.map(H); s.trim = H(s.trim); s.roof = H(s.roof); s.floor = H(s.floor); s.floorB = H(s.floorB); }
 const styleOf = id => STYLE[id] || STYLE.metro;
 const wallCol = (S, id) => S.wall[(id * 7 + 3) % S.wall.length];
@@ -117,7 +121,7 @@ const BANK = {
   coast: { face: H(0x5a5650), lip: H(0x8a8880) }, industrial: { face: H(0x5c5a56), lip: H(0x8a8882) },
   metro: { face: H(0x5c5a56), lip: H(0x8e8c86) },
 };
-Object.assign(ROCK, isle.ROCK); Object.assign(BANK, isle.BANK);
+Object.assign(ROCK, isle.ROCK, city.ROCK); Object.assign(BANK, isle.BANK, city.BANK);
 
 // Roof layer: baked colour plus the building's footprint per vertex; a roof dissolves round the cutters (the local
 // player and nearby teammates): fully when one stands inside its footprint, partly just outside.
@@ -200,9 +204,13 @@ function buildingTiles(map, tileAt) {
   return out;
 }
 
+// A region city's extras (themes/city.js): a lights pass per tile, zone ground patterns, tile decor, the city's edge.
+const EXTRAS = { city };
+
 export function buildGiantWorld(map, fogUniforms, X) {
   // A map whose theme is a giant-world palette (themes/jadefall.js) lights the world with it; anything else, Frontier's.
   const theme = THEMES[map.theme]?.giant ? THEMES[map.theme] : THEMES.frontier;
+  const ext = EXTRAS[map.theme] ?? null;
   const W = map.width, Hh = map.height;
   const field0 = regionField(map.regionSeeds);
   // The region field on a 2 m lattice, memoised (the ground asks it for every triangle).
@@ -333,7 +341,7 @@ export function buildGiantWorld(map, fogUniforms, X) {
       } else if (zn.kind === 'ice') c = mix(c, zc, 0.35 + noise(x * 0.12, z * 0.12) * 0.4);
       else if (zn.kind === 'field') c = noise(x * 0.04, z * 0.3) > 0.45 ? zc : mix(zc, H(0x6a5c48), 0.6);
       else if (zn.kind === 'court') c = (Math.floor(x / 1.6) + Math.floor(z / 1.6)) % 3 ? zc : scale(zc, 0.85);
-      else c = zc;
+      else c = ext?.zoneColour ? ext.zoneColour(zn, x, z, zc) : zc;
     }
     return scale(c, 0.92 + noise(x * 0.7, z * 0.7) * 0.14);
   };
@@ -351,6 +359,10 @@ export function buildGiantWorld(map, fogUniforms, X) {
     const [r] = field(Math.max(1, Math.min(W - 1, x)), Math.max(1, Math.min(Hh - 1, z)));
     return (noise(x * 0.5, z * 0.5) - 0.5) * GROUND[r].amp;
   };
+
+  // Destruction: which vertices of the built tiles are which breakable piece (tiles bind theirs as they build).
+  const brk = new BreakRanges(map);
+  const sink = { sb: new MeshBuilder(null), glow: new X.GlowList() };
 
   // ---- One tile -----------------------------------------------------------------------------------------------
   const skinState = (ctx, skin) => {
@@ -379,6 +391,8 @@ export function buildGiantWorld(map, fogUniforms, X) {
       field, wet: wetAt, road: onRoad, roads, rails: map.rails ?? [] };
     X.setPalette(theme);
     focus(x0, z0, x1, z1);
+    ctx.blocked = (x, z, m) => blocked(ctx, x, z, m);
+    ext?.lights?.(ctx, t, TILE);
 
     // Ground.
     const gi0 = Math.round(x0 / CELL), gj0 = Math.round(z0 / CELL), n = TILE / CELL;
@@ -429,25 +443,32 @@ export function buildGiantWorld(map, fogUniforms, X) {
     paintRoads(ctx, x0, z0, x1, z1);
     rails(ctx, x0, z0, x1, z1);
 
-    // Pieces.
+    // Pieces. Breakable ones (destruction, js/render/destruct-fx.js) are drawn the same way, their ranges kept.
     let skin = null;
-    for (const w of t.walls) {
+    const piece = w => {
       const reg = w.region || 'farmland';
-      if (w.bwall || w.window || w.furn) { X.setPalette(theme); ctx.theme = theme; skin = null; kitPiece(ctx, w); continue; }
-      if (w.kind === 'border') { edge(ctx, w); continue; }
-      if (w.kind === 'water' && !w.fountain) { const k = BANK[reg] || BANK.coast; if (map.cells) isle.islandBank(ctx, w, k); else waterBanks(ctx, w, { face: k.face, lip: k.lip }); continue; }
-      if (map.cells && isle.islandPiece(ctx, w)) { skin = null; X.setPalette(theme); ctx.theme = theme; continue; }
-      if (w.crag) { const k = ROCK[reg] || ROCK.farmland; mass(ctx, w.x, w.z, w.w, w.d, w.h, { cols: k.cols, cap: k.cap, levels: 3 }); continue; }
-      if (w.mast) { mast(ctx, w); continue; }
-      if (w.generator) { ctx.b.setColor(H(0x52603e)); box3(ctx.b, w.x, 0, w.z, w.w, w.h, w.d); continue; }
-      if (w.lighthouse) { skinState(ctx, 'pier'); skin = 'pier'; lighthouse(ctx, w.x + w.w / 2, w.z + w.d / 2, w.h + 1); continue; }
+      if (w.bwall || w.window || w.furn) { X.setPalette(theme); ctx.theme = theme; skin = null; kitPiece(ctx, w); return; }
+      if (w.kind === 'border') { if (ext?.edge) ext.edge(ctx, w); else edge(ctx, w); return; }
+      if (w.void) { skinState(ctx, 'topside'); skin = 'topside'; X.DRESS.topside.water(ctx, w); return; }
+      if (w.kind === 'water' && !w.fountain) { const k = BANK[reg] || BANK.coast; if (map.cells) isle.islandBank(ctx, w, k); else waterBanks(ctx, w, { face: k.face, lip: k.lip }); return; }
+      if (map.cells && isle.islandPiece(ctx, w)) { skin = null; X.setPalette(theme); ctx.theme = theme; return; }
+      if (w.crag) { const k = ROCK[reg] || ROCK.farmland; mass(ctx, w.x, w.z, w.w, w.d, w.h, { cols: k.cols, cap: k.cap, levels: 3 }); return; }
+      if (w.mast) { mast(ctx, w); return; }
+      if (w.generator) { ctx.b.setColor(H(0x52603e)); box3(ctx.b, w.x, 0, w.z, w.w, w.h, w.d); return; }
+      if (w.lighthouse) { skinState(ctx, 'pier'); skin = 'pier'; lighthouse(ctx, w.x + w.w / 2, w.z + w.d / 2, w.h + 1); return; }
       const s = w.skin || SKIN[reg] || 'harvest';
       if (s !== skin) { skinState(ctx, s); skin = s; }
       const draw = X.DRESS[s]?.[w.kind] || X.DRESS.railyard[w.kind];
       if (draw) draw(ctx, w);
+    };
+    const rec = brk.recorder(sink);
+    for (const w of t.walls) {
+      const p = w.brk !== undefined ? map.breakables?.[w.brk] : null;
+      if (p) rec.piece(ctx, b, p, w, piece);
+      else piece(w);
     }
     X.setPalette(theme); ctx.theme = theme;
-    decor(ctx, t);
+    if (ext?.decor) ext.decor(ctx, t, TILE); else decor(ctx, t);
 
     // Roofs.
     for (const r of t.roofs) {
@@ -469,9 +490,9 @@ export function buildGiantWorld(map, fogUniforms, X) {
       t.meshes.push(m);
       t.box = t.box ? t.box.union(geo.boundingBox) : geo.boundingBox.clone();
     };
-    if (b.pos.length) add(geometry(X.packWorld(b)), material, 0);
-    const dec = X.buildDecals({ walls: t.walls.filter(w => w.kind !== 'border') }, theme);
-    if (dec[0].data.length) add(geometry(dec), decalMat, -1, decals);
+    if (b.pos.length) { add(geometry(X.packWorld(b)), material, 0); brk.bind(rec, 'body', [t.meshes[t.meshes.length - 1].geometry], t); }
+    const dec = X.buildDecals({ walls: t.walls.filter(w => w.kind !== 'border'), breakables: map.breakables }, theme, rec);
+    if (dec[0].data.length) { add(geometry(dec), decalMat, -1, decals); brk.bind(rec, 'decal', [t.meshes[t.meshes.length - 1].geometry], t); }
     if (sb.pos.length) add(geometry(X.floatAttrs(sb)), signMat, 0);
     if (glow.pos.length) add(geometry([{ name: 'position', data: glow.pos, size: 3 }, { name: 'aCol', data: glow.col, size: 3 }]), glowMat, 5);
     if (rb.pos.length) add(geometry([{ name: 'position', data: rb.pos, size: 3 }, { name: 'aCol', data: rb.col, size: 3 }, { name: 'aRect', data: rect, size: 4 }]), roofMat, 2);
@@ -483,6 +504,7 @@ export function buildGiantWorld(map, fogUniforms, X) {
   }
 
   function dropTile(t) {
+    brk.dropKey(t);
     for (const m of t.meshes) { m.parent.remove(m); m.geometry.dispose(); }
     t.meshes = []; t.box = null; t.built = false;
   }
@@ -491,7 +513,7 @@ export function buildGiantWorld(map, fogUniforms, X) {
   {
     const pos = [];
     for (const w of [...waters, ...seaOff]) {
-      if (w.fountain) continue;
+      if (w.fountain || w.void) continue;
       const y = X.KIT.WATER_Y;
       const p = [[w.x, y, w.z], [w.x, y, w.z + w.d], [w.x + w.w, y, w.z + w.d], [w.x + w.w, y, w.z]];
       for (const i of [0, 1, 2, 0, 2, 3]) pos.push(...p[i]);
@@ -543,7 +565,7 @@ export function buildGiantWorld(map, fogUniforms, X) {
 
   const order = [];
   const world = {
-    group, material, decals, lamps: [], chunks: [], tris: 0, drawCalls: 0, tiles,
+    group, material, decals, lamps: [], chunks: [], tris: 0, drawCalls: 0, tiles, brk,
     stats: { built: 0, buildMs: 0, maxTileMs: 0, dropped: 0 },
     update(dt) { timeU.value = (timeU.value + dt) % 3600; },
     // Builds what the view needs (see the top of this file), then culls: a tile shows when its box is in the frustum
@@ -865,3 +887,4 @@ function bigScenery(ctx, reg, x, z) {
   }
 }
 export const isleThumb = isle.thumb;
+export const cityThumb = city.thumb;
