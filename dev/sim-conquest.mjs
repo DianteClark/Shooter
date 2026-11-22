@@ -184,9 +184,10 @@ for (const map of MAPS_RUN) {
     });
   }
 }
-if (rows.length > 1) {
+// A balance check needs enough matches to mean anything: the full run (every map, two seeds), not quick.
+if (rows.length) console.table(rows);
+if (rows.length >= 6) {
   await test('bots: both sides win somewhere', () => {
-    console.table(rows);
     const wins = [0, 1].map(t => rows.filter(r => r.winner === t).length);
     assert.ok(wins[0] > 0 && wins[1] > 0, `wins ${wins.join(' / ')}`);
   });

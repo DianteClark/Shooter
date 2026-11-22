@@ -584,7 +584,7 @@ const BF_LAYOUTS = {
     id: 'westisle', name: 'Jadefall: West Isle', area: { x: 20, z: 70, w: 210, h: 290 },
     hq: [{ x: 54, z: 96, r: 10 }, { x: 60, z: 310, r: 10 }],
     flags: [
-      { id: 'A', x: 92, z: 138, name: 'Plantation' }, { id: 'B', x: 144, z: 154, name: 'Stilt Market' },
+      { id: 'A', x: 92, z: 138, name: 'Plantation' }, { id: 'B', x: 140, z: 160, name: 'Stilt Market' },
       { id: 'C', x: 77.5, z: 199.5, name: 'Serpent Ruins' }, { id: 'D', x: 200, z: 189, name: 'Jade Pyramid' },
       { id: 'E', x: 88, z: 268, name: 'Research Camp' }, { id: 'F', x: 132, z: 340, name: 'Shipwreck Cove' },
     ],

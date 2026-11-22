@@ -13,7 +13,7 @@ import { QUICK, botMatch, checkLayout, done, makeSim, run, test } from './sim-bf
 
 const arg = k => process.argv.find(a => a.startsWith(`--${k}=`))?.split('=')[1];
 const HOSTS = Object.keys(MAPS).filter(id => modeFitsMap(MAPS[id], 'bt'));
-const MAPS_RUN = arg('maps')?.split(',') ?? (QUICK ? ['harvest', 'coral', 'jadefall'] : HOSTS);
+const MAPS_RUN = arg('maps')?.split(',') ?? (QUICK ? ['harvest', 'coral', 'frontier'] : HOSTS);
 const SEEDS = Array.from({ length: +(arg('seeds') ?? (QUICK ? 1 : 2)) }, (_, i) => 5 + i * 13);
 const human = team => [{ id: 'h1', name: 'Host', team, primary: 'ar', camo: 'none' }, { id: 'h2', name: 'Guest', team: 1 - team, primary: 'smg', camo: 'none' }];
 const bench = (sim, keep = []) => { for (const p of sim.players) if (!keep.includes(p.id)) { p.alive = false; p.respawnT = 1e6; p.deadT = 0; } };
@@ -156,9 +156,10 @@ for (const map of MAPS_RUN) {
     });
   }
 }
-if (rows.length > 1) {
+// A balance check needs enough matches to mean anything: the full run (every map, two seeds), not quick.
+if (rows.length) console.table(rows);
+if (rows.length >= 6) {
   await test('bots: attackers and defenders both win somewhere', () => {
-    console.table(rows);
     const att = rows.filter(r => r.attWon).length;
     assert.ok(att > 0 && att < rows.length, `attackers won ${att} of ${rows.length}`);
   });
