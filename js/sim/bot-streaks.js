@@ -12,8 +12,8 @@ import { airHp, DOME_R } from './streaks-v9.js';
 
 const WAIT = 10;                 // bots.js STREAK_WAIT: a bot sitting on a streak this long calls it anyway.
 const AIR_SEE = 26;              // Metres (ground distance) at which a bot notices and engages an enemy aircraft.
-const HIGH = new Set(['gunship', 'chopper']);    // Flying high enough to see over buildings.
-const SHOOTABLE_AIR = new Set(['gunship', 'chopper', 'recon', 'hound', 'swarm']);
+const HIGH = new Set(['gunship', 'chopper', 'vtol']);    // Flying high enough to see over buildings.
+const SHOOTABLE_AIR = new Set(['gunship', 'chopper', 'recon', 'hound', 'swarm', 'vtol']);
 const STRIKE_WARN = 2;           // Seconds before a bomb lands that a bot starts to move out from under it.
 
 // Is now a good moment for `kind`? `visible`: the bot is looking at an enemy. Answers for every kind bots.js does not
@@ -37,6 +37,10 @@ export function streakMoment(b, kind, visible) {
     case 'bombrun': return seen() >= 2 || (seen() >= 1 && b.streakWait >= WAIT / 2);
     case 'chopper':
     case 'gunship': return seen() > 0 || b.streakWait >= WAIT;
+    // Wave 5: the VTOL hovers where it is called, so in a fight; the SAM when something of theirs is flying.
+    case 'vtol': return busy || (seen() > 0 && b.streakWait >= WAIT / 2);
+    case 'napalm': return seen() >= 2 || (seen() >= 1 && b.streakWait >= WAIT / 2);
+    case 'sam': return sim.gunships.some(g => g.team !== p.team && g.kind !== 'reticle') || b.streakWait >= WAIT;
     default: return true;
   }
 }

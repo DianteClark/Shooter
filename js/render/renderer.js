@@ -456,7 +456,7 @@ export class GameRenderer {
         case 'zpulse': vfx.ring(ev.x, ev.z, ev.r, ev.r, ev.wind, ZM_FROST, 0.55); vfx.ring(ev.x, ev.z, 0.4, ev.r, ev.wind, ZM_FROST, 0.35); break;     // The Listener's frost pulse, winding up.
         case 'turret_shot': {
           if (ev.zm === 'drone') { vfx.tracer(ev.ox, 2.3, ev.oz, ev.x, 1.05, ev.z, ZM_DRONE, 0.08); vfx.sparks(ev.x, 0.6, ev.z, 0, 0, ZM_DRONE, 2, 6); break; }
-          vfx.tracer(ev.ox, 1.0, ev.oz, ev.x, 1.05, ev.z, TURRET_TRACER, 0.1);
+          vfx.tracer(ev.ox, ev.kind === 'vtol' ? 5.9 : 1.0, ev.oz, ev.x, 1.05, ev.z, TURRET_TRACER, ev.kind === 'vtol' ? 0.13 : 0.1);   // Wave 5: from the VTOL's chin gun.
           vfx.sparks(ev.x, 0.6, ev.z, 0, 0, FIRE_SPARK, 2, 6);
           break;
         }

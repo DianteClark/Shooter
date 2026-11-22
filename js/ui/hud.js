@@ -105,11 +105,13 @@ const STREAK_VERB = {
   strike: 'inbound', overwatch: 'online', chopper: 'overhead', emp: 'detonated', gunship: 'overhead',
   missile: 'launched', swarm: 'launched', juggernaut: 'suited up',
   sweep: 'pinging', recon: 'launched', airdrop: 'inbound', plates: 'dropped', hound: 'deployed', dome: 'raised', bombrun: 'inbound', rover: 'deployed',
+  vtol: 'on station', sam: 'deployed', napalm: 'inbound',
 };
 // Enemy streaks the local player should react to right now.
 const STREAK_WARN = { jammer: 'Radar jammed', strike: 'Airstrike inbound', mortar: 'Mortars incoming', overwatch: 'Enemy Overwatch: Ghost is off', chopper: 'Enemy chopper', gunship: 'Enemy gunship', emp: 'EMP: streaks offline', missile: 'Cruise missile inbound', swarm: 'Drone swarm: break line of sight', juggernaut: 'Enemy Juggernaut: use explosives',
   sweep: 'Sonar sweep: you may be on their map', recon: 'Enemy recon drone: shoot it down', hound: 'Enemy Wingman drone', dome: 'Aegis Dome: fight inside it',
-  bombrun: 'Carpet Line: get off the red line', rover: 'Enemy Rover: shoot it' };
+  bombrun: 'Carpet Line: get off the red line', rover: 'Enemy Rover: shoot it',
+  vtol: 'Enemy VTOL: get under a roof or shoot it down', sam: 'Enemy SAM: your aircraft are in danger', napalm: 'Napalm inbound: get off the line' };
 // V9: what a piloted streak tells its own pilot, and how a shoot-down reads.
 const PILOT_HINT = { missile: 'Steer it with the aim stick', recon: 'Hold the aim stick to fly it', bombrun: 'Drag the aim stick, let go to drop' };          // Seconds of hits averaged into the live damage readout.
 const RANGE_HZ = 6;              // The readout repaints this often; it would be unreadable any faster.

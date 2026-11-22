@@ -81,7 +81,7 @@ const enemyOf = (sim, p) => sim.players.find(q => q.team !== p.team && !q.dummy)
 test('eight new streaks appended after V8, with role, counter and a wire id that fits five bits', () => {
   assert.deepEqual(STREAK_IDS.slice(0, 13), ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut']);
   assert.deepEqual(STREAK_IDS.slice(13, 13 + NEW.length), NEW);
-  assert.deepEqual(STREAK_IDS.slice(13 + NEW.length), ['blackbird', 'vulture']);      // Extraction exclusives, appended.
+  assert.deepEqual(STREAK_IDS.slice(13 + NEW.length), ['blackbird', 'vulture', 'vtol', 'napalm', 'sam']);      // Extraction exclusives, then wave 5, appended.
   assert.ok(STREAK_IDS.length <= 32);
   for (const id of STREAK_IDS) {
     const s = STREAKS[id];
@@ -550,6 +550,122 @@ test('mastery counts the new streaks: uses, kills, marks, crates, plates, dome s
   assert.equal(g.rover.kills, 1);
   assert.ok(!g.blackout, 'EMP jam not counted as Blackout');
   assert.ok(!g.sensor, 'Scout marks not counted as Sensor');
+});
+
+/* ---------------- Scorestreaks wave 5 (js/sim/streaks-w5.js): VTOL Jet and SAM Turret ---------------- */
+
+test('wave 5: VTOL Jet, Napalm Strike and SAM Turret appended to the streak ids with icons, levels, mastery tracks and cards', () => {
+  assert.deepEqual(STREAK_IDS.slice(-3), ['vtol', 'napalm', 'sam']);
+  assert.ok(STREAK_IDS.length <= 32, 'still fits the 5-bit wire');
+  for (const id of ['vtol', 'napalm', 'sam']) {
+    assert.ok(ICON_GROUPS.streaks.includes(id), `${id} icon`);
+    assert.ok(UNLOCK_SCHEDULE.some(u => u.kind === 'streak' && u.id === id && u.level > 1), `${id} level`);
+    assert.ok(MASTERY_TRACKS.some(t => t.id === id), `${id} mastery track`);
+    assert.ok(CARDS.some(c => c.id === `mastery-${id}`), `${id} card`);
+    assert.ok(STREAKS[id].counter && STREAKS[id].desc);
+  }
+  assert.ok(STREAKS.vtol.air && !STREAKS.sam.air);
+});
+
+test('VTOL Jet: flies to where it was called, shoots an enemy it can see, walls stop it, and it is shot down', () => {
+  const sim = makeSim();
+  const h = sim.byId.get('h1'), foe = enemyOf(sim, h);
+  clear(sim, [h, foe]);
+  const L = openLane(sim.map, 24);
+  place(h, L.x, L.z); place(foe, L.x + 14, L.z, Math.PI);
+  assert.equal(call(sim, h, 'vtol'), 'vtol');
+  const g = sim.gunships.find(x => x.kind === 'vtol');
+  assert.ok(g && g.owner === h && g.hp === V9.AIR_HP.vtol);
+  let shots = 0, hurt = 0, rockets = 0;
+  ticks(sim, 9, e => { if (e.t === 'turret_shot' && e.kind === 'vtol') shots++; if (e.t === 'hit' && e.target === foe.id && e.st === 'vtol') hurt += e.dmg; if (e.t === 'vtol_rocket') rockets++; });
+  assert.ok(Math.hypot(g.x - L.x, g.z - L.z) < 8, 'it hangs over the call');
+  assert.ok(shots > 0 && hurt > 0, `${shots} rounds, ${hurt} damage`);
+  assert.ok(rockets >= 2, `${rockets} rockets`);
+  // A Skyhook with a lock brings it down in two.
+  foe.alive = true; foe.hp = 100;
+  armSecondary(foe.ps, 'lockon');
+  const aim = Math.atan2(g.z - foe.ps.z, g.x - foe.ps.x);
+  shoot(sim, foe, aim, 'lockon'); shoot(sim, foe, aim, 'lockon');
+  const down = sim.drainEvents().find(e => e.t === 'air_down' && e.kind === 'vtol');
+  assert.ok(down && down.by === foe.id, 'two Skyhook rockets bring it down');
+});
+
+test('SAM Turret: turns on the nearest enemy aircraft, shoots it down, never shoots people, and is destroyed by gunfire', () => {
+  const sim = makeSim();
+  const h = sim.byId.get('h1'), foe = enemyOf(sim, h);
+  clear(sim, [h, foe]);
+  const L = openLane(sim.map, 24);
+  place(h, L.x, L.z); place(foe, L.x + 10, L.z, Math.PI);
+  assert.equal(call(sim, h, 'sam'), 'sam');
+  const sam = sim.turrets.find(t => t.kind === 'sam');
+  assert.ok(sam && sam.owner === h);
+  let shots = 0, hurtPeople = 0;
+  ticks(sim, 4, e => { if (e.t === 'sam_shot') shots++; if (e.t === 'hit' && e.target === foe.id) hurtPeople++; });
+  assert.equal(shots, 0, 'nothing in the air: it holds fire');
+  assert.equal(hurtPeople, 0, 'never shoots a player');
+  give(foe, ['hound']); sim.useStreak(foe.id, 0);
+  const hound = sim.gunships.find(x => x.kind === 'hound');
+  assert.ok(hound);
+  let killed = null;
+  ticks(sim, 6, e => { if (e.t === 'air_down' && e.kind === 'hound') killed = e; if (e.t === 'sam_shot') shots++; });
+  assert.ok(killed && killed.by === h.id, 'the SAM downs the Wingman and pays its owner');
+  assert.ok(shots >= 1);
+  const tr = new MasteryTracker('h1');
+  tr.onEvents([{ t: 'streak', id: 'h1', kind: 'sam', team: 0 }, { t: 'sam_kill', id: 'h1', kind: 'hound' }], { t: 1, players: [{ id: 'h1', team: 0, alive: true }] });
+  assert.equal(tr.gains().tracks.sam.downed, 1, 'mastery counts it');
+  for (let i = 0; i < 40 && sim.turrets.includes(sam); i++) shoot(sim, foe, Math.atan2(sam.z - foe.ps.z, sam.x - foe.ps.x), 'ar');
+  assert.ok(!sim.turrets.includes(sam), 'gunfire wrecks it');
+});
+
+test('Napalm Strike: lays burning fuel on the group the team sees; it burns as the streak, Tac Mask halves it, an enemy SAM shoots the jet down', () => {
+  const sim = makeSim();
+  const h = sim.byId.get('h1'), foe = enemyOf(sim, h);
+  clear(sim, [h, foe]);
+  const L = openLane(sim.map, 24);
+  place(h, L.x, L.z); place(foe, L.x + 12, L.z, Math.PI);
+  assert.equal(call(sim, h, 'napalm'), 'napalm');
+  let hurt = 0, kind = null, lay = 0;
+  ticks(sim, 4, e => { if (e.t === 'hit' && e.target === foe.id) { hurt += e.dmg; kind = e.st; } if (e.t === 'napalm') lay++; });
+  assert.equal(lay, 1, 'the line is laid');
+  assert.ok(sim.eq.projectiles.some(p => p.kind === 'napalm'), 'burning fuel on the ground');
+  assert.ok(hurt > 0 && kind === 'napalm', `${hurt} damage credited to the streak`);
+  // Tac Mask halves the burn.
+  foe.hp = 100; foe.ps.perks = ['tacmask', 'scavenger', 'tracker'];
+  let masked = 0;
+  ticks(sim, 1, e => { if (e.t === 'hit' && e.target === foe.id) masked += e.dmg; });
+  // A second run with an enemy SAM close: the jet is shot down, nothing burns.
+  const sim2 = makeSim();
+  const h2 = sim2.byId.get('h1'), foe2 = enemyOf(sim2, h2);
+  clear(sim2, [h2, foe2]);
+  place(h2, L.x, L.z); place(foe2, L.x + 12, L.z, Math.PI);
+  give(foe2, ['sam']); sim2.useStreak(foe2.id, 0);
+  call(sim2, h2, 'napalm');
+  let downed = false;
+  ticks(sim2, 3, e => { if (e.t === 'air_down' && e.kind === 'napalm' && e.by === foe2.id) downed = true; });
+  assert.ok(downed, 'the SAM shoots the jet down');
+  assert.ok(!sim2.eq.projectiles.some(p => p.kind === 'napalm'), 'no fuel laid');
+  assert.ok(masked < 30, `masked burn ${masked} in a second`);
+});
+
+test('wave 5 streaks reach a guest over the wire, and bots call them', () => {
+  const sim = makeSim();
+  const h = sim.byId.get('h1'), foe = enemyOf(sim, h);
+  clear(sim, [h, foe]);
+  place(h, 20, 20); place(foe, 30, 20);
+  call(sim, h, 'vtol'); give(foe, ['sam']); sim.useStreak(foe.id, 0);
+  sim.step(STEP);
+  const view = sim.decodeSnapshot(sim.encodeSnapshot(), 'h1');
+  assert.ok(view.drones.some(d => d.kind === 'vtol'), 'the VTOL is a drone row');
+  assert.ok(view.deploys.some(d => d.kind === 'sam'), 'the SAM is a machine row');
+  if (QUICK) return;
+  let called = new Set();
+  for (const seed of [3, 5, 9]) {
+    const roster = buildRoster([], { botSkill: 'elite', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed });
+    for (const [k, r] of roster.entries()) r.loadout = normalizeLoadout({ ...r.loadout, streaks: k % 2 ? ['uav', 'sam', 'vtol'] : ['uav', 'napalm', 'vtol'] });
+    const s2 = new Sim({ roster, map: 'railyard', seed, mode: 'tdm', timeLimit: 600, scoreLimit: 999 });
+    for (let i = 0; i < SIM_HZ * 120 && called.size < 3; i++) { s2.step(STEP); for (const e of s2.drainEvents()) if (e.t === 'streak' && (e.kind === 'vtol' || e.kind === 'sam' || e.kind === 'napalm')) called.add(e.kind); }
+  }
+  assert.deepEqual([...called].sort(), ['napalm', 'sam', 'vtol'], 'bots call all three');
 });
 
 console.log(`\n${passed} passed`);

@@ -1598,7 +1598,7 @@ export class CombatFX {
     if (list) {
       for (let i = 0; i < list.length; i++) {
         const p = list[i];
-        if (p.kind !== 'fire') continue;
+        if (p.kind !== 'fire' && p.kind !== 'napalm') continue;     // Wave 5's Napalm fuel burns the same.
         let s = slotOf(slots, p.id);
         if (!s) {
           s = slotOf(slots, null);

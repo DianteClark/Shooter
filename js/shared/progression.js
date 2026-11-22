@@ -163,6 +163,10 @@ export const UNLOCK_SCHEDULE = [
   { level: 19, kind: 'perk',     id: 'highalert' },
   { level: 21, kind: 'perk',     id: 'skywatch' },
   { level: 22, kind: 'perk',     id: 'overkill' },
+  // Scorestreaks wave 5 (js/sim/streaks-w5.js): the SAM where the air streaks have all opened, the VTOL late.
+  { level: 23, kind: 'streak',   id: 'sam' },
+  { level: 25, kind: 'streak',   id: 'napalm' },
+  { level: 26, kind: 'streak',   id: 'vtol' },
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 const V1_GRANT_LEVEL = 15;
@@ -441,9 +445,9 @@ export function isVeteran({ prestige = 0, level = 1, pro = 0 } = {}) {
 }
 
 const BLAST_EQUIP = new Set(['frag', 'sticky', 'mine', 'cluster']);
-const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm', 'bombrun']);
+const BLAST_STREAK = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm', 'bombrun', 'vtol']);
 const MULTI_MEDALS = new Set(['double', 'triple', 'fury']);
-const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'vulture', 'gunship', 'missile', 'swarm', 'recon', 'hound', 'rover', 'dome']);
+const DEPLOY_STREAKS = new Set(['turret', 'chopper', 'vulture', 'gunship', 'missile', 'swarm', 'recon', 'hound', 'rover', 'dome', 'vtol', 'sam']);
 const FAR_THROW = 13;            // Past the base throw range (js/sim/equipment.js THROW_RANGE): a Strong Arm throw.
 const SWAP_WINDOW = 2.5;
 const BURN_GAP = 1.5;            // Burn ticks closer together than this are one fire.
@@ -652,6 +656,10 @@ const GEAR_TRACKS = {
     dome:      [T('uses', 5, 'Raise 5 Aegis Domes'), T('saves', 8, 'Shoot down 8 enemy throws with a Dome'), T('uses', 20, 'Raise 20 Aegis Domes'), T('saves', 40, 'Shoot down 40 enemy throws with a Dome')],
     bombrun:   [T('uses', 5, 'Draw 5 Carpet Lines'), T('kills', 10, 'Get 10 Carpet Line kills'), T('multi', 4, 'Get 4 Carpet Line multi-kills'), T('kills', 40, 'Get 40 Carpet Line kills')],
     rover:     [T('uses', 3, 'Deploy 3 Rovers'), T('kills', 10, 'Get 10 Rover kills'), T('multi', 3, 'Get 3 Rover multi-kills'), T('kills', 35, 'Get 35 Rover kills')],
+    // Wave 5 (js/sim/streaks-w5.js).
+    vtol:      [T('uses', 3, 'Call in 3 VTOL Jets'), T('kills', 10, 'Get 10 VTOL kills'), T('multi', 3, 'Get 3 VTOL multi-kills'), T('kills', 35, 'Get 35 VTOL kills')],
+    napalm:    [T('uses', 5, 'Call in 5 Napalm Strikes'), T('kills', 10, 'Get 10 Napalm kills'), T('multi', 3, 'Get 3 Napalm multi-kills'), T('kills', 35, 'Get 35 Napalm kills')],
+    sam:       [T('uses', 5, 'Deploy 5 SAM Turrets'), T('downed', 3, 'Shoot down 3 aircraft with a SAM'), T('uses', 15, 'Deploy 15 SAM Turrets'), T('downed', 15, 'Shoot down 15 aircraft with a SAM')],
   },
 };
 // Operators: time, kills, a signature that fits the character, wins, then a long kill count. The roster itself lives in
@@ -1023,6 +1031,7 @@ export class MasteryTracker {
         case 'stuck': if (e.by === id && e.kind === 'tagger') this.add('tagger', 'tagged'); break;
         case 'hit': if (e.by === id && e.eq === 'shiv' && e.dmg >= MAX_HP) this.backT = t; break;
         case 'zap': if (e.by === id) this.add(e.kind === 'dome' ? 'dome' : 'trophy', 'saves'); break;
+        case 'sam_kill': if (e.id === id) this.add('sam', 'downed'); break;     // Wave 5: a SAM brought one down.
         // V9: Airdrops opened and stolen, plates handed out.
         case 'crate_open':
           if (e.owner === id && e.id === id) this.add('airdrop', 'opened');

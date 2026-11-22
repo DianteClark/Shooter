@@ -34,6 +34,10 @@ export const STREAKS = {
   // machinery they run on (js/sim/sim.js _callStreak), with their own numbers.
   blackbird: { id: 'blackbird', name: 'Blackbird',    cost: 3400, air: true,  limit: 1, role: 'intel',   base: 'overwatch', desc: 'Stealth advanced UAV for 45 s: reveals Ghost too, Jammers cannot blank it', counter: 'EMP' },
   vulture:   { id: 'vulture',   name: 'Vulture',      cost: 3300, air: true,  limit: 1, role: 'offense', base: 'chopper', desc: 'Armoured attack chopper that hunts for 38 s and shrugs off light fire', counter: 'Launchers; buildings; EMP' },
+  // Wave 5 (2026-11-22, js/sim/streaks-w5.js). Appended: old ids keep their wire numbers.
+  vtol:      { id: 'vtol',      name: 'VTOL Jet',     cost: 3200, air: true,  limit: 1, role: 'offense', desc: 'Hovers over where you call it for 25 s: gun bursts and rocket pairs at enemies it can see', counter: 'Shoot it down, Skyhook best; roofs and walls; Cold Blooded until close; EMP' },
+  napalm:    { id: 'napalm',    name: 'Napalm Strike', cost: 2600, air: true, limit: 1, role: 'denial',  desc: 'A jet lays a line of burning fuel across the biggest group your team can see; it burns for 6 s', counter: 'Get off the line; Tac Mask halves it; a SAM shoots the jet down; EMP before it drops' },
+  sam:       { id: 'sam',       name: 'SAM Turret',   cost: 1600, air: false, limit: 1, role: 'denial',  desc: 'A missile pod at your feet for 45 s that shoots down enemy aircraft and drones within 40 m', counter: 'Shoot it, explosives, Shock; EMP. It never shoots people' },
 };
 export const STREAK_IDS = Object.keys(STREAKS);
 

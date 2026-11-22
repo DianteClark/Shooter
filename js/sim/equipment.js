@@ -117,6 +117,8 @@ export const EQUIPMENT = {
 
   molotov: { fuse: 3, air: 0.75, sticks: true, burstOnStick: true, spawns: 'fire', burstR: 3.2 },
   fire:    { noThrow: true, as: 'molotov', quietEnd: true, fuse: 5.5, burn: { radius: 3.2, dps: 34 } },
+  // Wave 5's Napalm Strike (js/sim/streaks-w5.js): burning fuel laid by a jet. Its damage is the streak's (sim.js).
+  napalm:  { noThrow: true, as: 'napalm', quietEnd: true, fuse: 6, burn: { radius: 2.6, dps: 30 } },
   mine:    { fuse: 45, air: 0.75, sticks: true, quietEnd: true, mine: { arm: 1.1, trigger: 2.4 }, blast: { radius: 4.4, inner: 1.4, max: 150, min: 30 } },
   cluster: { fuse: 1.6, air: 0.75, blast: { radius: 4, inner: 1, max: 70, min: 12 }, scatter: { kind: 'bomblet', n: 4, r: 3.1, gap: 0.16 } },
   bomblet: { noThrow: true, as: 'cluster', fuse: 0.3, sticks: true, blast: { radius: 3.3, inner: 0.9, max: 62, min: 15 } },
@@ -489,6 +491,14 @@ export class EquipmentSystem {
   }
 
   get projectiles() { return this._projectiles; }
+
+  // Something lying on the ground that nobody threw: wave 5's Napalm fuel (js/sim/streaks-w5.js). `delay` seconds
+  // before it starts.
+  lay(kind, owner, team, x, z, delay = 0) {
+    const p = makeLying(this._nextId++, kind, owner, team, x, z, delay);
+    this._projectiles.push(p);
+    return p;
+  }
   get smokes() { return this._smokes; }
 
   reset() {

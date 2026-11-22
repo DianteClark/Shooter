@@ -99,7 +99,7 @@ const MEDIC_REACH = 7;           // Field Medic: teammates this close regenerate
 const WIND_TIME = 2.5, WIND_TAKEN = 0.75;    // Second Wind: seconds, and the share of damage still taken.
 const RESTOCK_TIME = 30;         // Quartermaster: seconds per piece of equipment coming back.
 const HIJACK_REACH = 1.8, HIJACK_TIME = 1.5; // Hijacker: metres from an enemy Sentry, seconds held there.
-const BLAST_STREAKS = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm', 'bombrun']);
+const BLAST_STREAKS = new Set(['strike', 'mortar', 'gunship', 'missile', 'swarm', 'bombrun', 'vtol']);   // Not 'napalm': it is fire.
 // Bots at these tiers carry Pro on every perk they hold, and a calling card: veterans are meant to look it.
 const PRO_SKILLS = new Set(['veteran', 'elite']);
 
@@ -125,12 +125,13 @@ const FFA_SIGHT = 34;
 const PHASES = ['warmup', 'live', 'ended'];
 const PROJECTILE_KINDS = ['frag', 'sticky', 'smoke', 'flash', 'molotov', 'fire', 'mine', 'cluster', 'bomblet', 'hatchet', 'decoy', 'sensor', 'trophy',
   'stun', 'gas', 'gascloud', 'shock', 'impact', 'claymore', 'drill',   // V8 equipment: appended, old indices keep their numbers.
-  'snapshot', 'blackout', 'bulwark', 'tagger', 'medpack', 'charge', 'thermite', 'tripwire', 'crawler', 'shiv'];   // Gear wave.
+  'snapshot', 'blackout', 'bulwark', 'tagger', 'medpack', 'charge', 'thermite', 'tripwire', 'crawler', 'shiv',   // Gear wave.
+  'napalm'];   // Wave 5's Napalm Strike fuel (streaks-w5.js).
 const TACTICAL_IDS = Object.keys(TACTICALS);
 const LETHAL_IDS = Object.keys(LETHALS);
 const PERKS_BY_TIER = [0, 1, 2].map(t => PERK_IDS.filter(id => PERKS[id].tier === t));
 // Kinds on the wire's aircraft list. 'juggernaut' rows are not aircraft: they carry a wearer's armour (see _encodeEntities).
-const GUNSHIP_KINDS = ['gunship', 'chopper', 'missile', 'swarm', 'juggernaut', 'recon', 'hound', 'reticle', 'plates'];   // V9 appended.
+const GUNSHIP_KINDS = ['gunship', 'chopper', 'missile', 'swarm', 'juggernaut', 'recon', 'hound', 'reticle', 'plates', 'vtol'];   // V9 appended, then wave 5.
 const AIR_KINDS = STREAK_IDS.filter(id => STREAKS[id].air);
 const POS = { x: 0, z: 0, sliding: false };
 const TURRET_RAY = { head: false, pen: 1 };   // Scratch ray for rayDamage on a turret hit.
@@ -189,6 +190,8 @@ const BOT_STREAKS = [
   ['resupply', 'swarm', 'emp'], ['jammer', 'turret', 'juggernaut'], ['missile', 'swarm', 'gunship'],
   // V9 streaks, appended so the six above deal as before.
   ['sweep', 'hound', 'bombrun'], ['recon', 'plates', 'rover'], ['airdrop', 'dome', 'chopper'], ['sweep', 'hound', 'gunship'],
+  // Wave 5 streaks (js/sim/streaks-w5.js), appended the same way.
+  ['uav', 'sam', 'vtol'], ['sam', 'napalm', 'gunship'],
 ];
 // Recruits hold the cheap end of the list and never field anything that fights for them.
 const RECRUIT_STREAKS = ['uav', 'jammer', 'resupply'];
@@ -429,6 +432,12 @@ function poolBotEntry(n, team, pick, botSkill, seed) {
       loadout.secondary = overkillPartner(primary, prof.index);
       loadout.attachments[loadout.secondary] = botAttachments(loadout.secondary, usual, prof.kit[loadout.secondary] ?? 0);
     }
+  }
+  // ...and a new scorestreak in place of the cheapest one that costs less, one match in three.
+  const rs5 = roll();
+  if (tryout5.streak && rs5 < 0.34 && !loadout.streaks.includes(tryout5.streak)) {
+    const k = loadout.streaks.findIndex(id => STREAKS[id].cost <= STREAKS[tryout5.streak].cost);
+    if (k >= 0) { loadout.streaks[k] = tryout5.streak; loadout.streaks.sort((a, b) => STREAKS[a].cost - STREAKS[b].cost); }
   }
   if (PRO_SKILLS.has(usual) || pick.badge.prestige > 0) loadout.pro = loadout.perks.slice();
   loadout.card = looks.card;
@@ -1858,6 +1867,8 @@ export class Sim {
   _onEqDamage(targetId, dmg, ownerId, kind) {
     const target = this.byId.get(targetId), owner = this.byId.get(ownerId);
     if (!target || !owner) return;
+    // Wave 5's Napalm fuel burns for the streak that laid it, not as thrown kit.
+    if (kind === 'napalm') { this._damage(target, owner, dmg, owner.ps.weapon, Math.hypot(owner.ps.x - target.ps.x, owner.ps.z - target.ps.z), 'napalm'); return; }
     // Aegis Dome: an enemy blast does not reach its team inside (burns and gas still do).
     if (EQUIPMENT[kind]?.blast && V9.domeCovers(this, target.ps.x, target.ps.z, target.team)) return;
     const dist = Math.hypot(owner.ps.x - target.ps.x, owner.ps.z - target.ps.z);
@@ -1893,7 +1904,7 @@ export class Sim {
     const kind = s.kind;
     let denied = this.streakDenied(p, kind);
     let spot = null;
-    if (!denied && (kind === 'strike' || (kind === 'bombrun' && p.isBot))) {
+    if (!denied && (kind === 'strike' || kind === 'napalm' || (kind === 'bombrun' && p.isBot))) {
       spot = this._strikeTarget(p);
       if (!spot) denied = 'no_target';
     }
@@ -1966,6 +1977,7 @@ export class Sim {
     for (let i = 0; i < this.gunships.length; i++) if (this.gunships[i].lead !== false) n[this.gunships[i].team]++;   // A swarm is one aircraft.
     const striking = this._striking.fill(false);
     for (let i = 0; i < this.strikes.length; i++) if (this.strikes[i].kind === 'strike' || this.strikes[i].kind === 'bombrun') striking[this.strikes[i].team] = true;
+    if (this.w5Runs) for (const r of this.w5Runs) striking[r.team] = true;     // A Napalm jet on its way in.
     for (let t = 0; t < T; t++) if (striking[t]) n[t]++;
   }
 

@@ -26,6 +26,7 @@ import { addScore } from './streaks.js';
 import { EQUIPMENT } from './equipment.js';
 import { angleDiff, hasPro, shotPassage } from './player.js';
 import { streakDamage } from './arsenal-w5.js';
+import { launchW5, stepAirW5, stepMachineW5, stepW5 } from './streaks-w5.js';   // Wave 5: VTOL Jet, SAM Turret.
 
 const STEP = 1 / SIM_HZ;
 const round2 = v => Math.round(v * 100) / 100;
@@ -63,13 +64,13 @@ export const EMP_LOCK = 12, EMP_KIT = 6;
 
 // Aircraft toughness and hit shape. A capsule from the ground point toward the camera-projected point: the camera is
 // tilted 55 degrees (js/render/renderer.js TILT), so something AIR_Y up is drawn 0.7 * AIR_Y north of where it is.
-export const AIR_HP = { gunship: 1800, chopper: 1100, missile: 40, swarm: 80, recon: 180, hound: 300 };
-const AIR_R = { gunship: 2.4, chopper: 1.8, missile: 0.55, swarm: 0.6, recon: 0.8, hound: 0.8 };
-export const AIR_Y = { gunship: 7.5, chopper: 5.6, missile: 1.7, swarm: 2.9, recon: 4, hound: 2.6 };
+export const AIR_HP = { gunship: 1800, chopper: 1100, missile: 40, swarm: 80, recon: 180, hound: 300, vtol: 1300 };
+const AIR_R = { gunship: 2.4, chopper: 1.8, missile: 0.55, swarm: 0.6, recon: 0.8, hound: 0.8, vtol: 2.0 };
+export const AIR_Y = { gunship: 7.5, chopper: 5.6, missile: 1.7, swarm: 2.9, recon: 4, hound: 2.6, vtol: 6.2 };
 const TILT_K = 1 / Math.tan(55 * Math.PI / 180);
 export const LAUNCHER_AIR = 4, BULLET_AIR = 0.5;
 // Machines that can be shot to pieces, and their toughness (the Sentry's is sim.js TURRET_HP).
-export const MACHINE_HP = { turret: 180, rover: ROVER_HP, dome: DOME_HP, crate: CRATE_HP };
+export const MACHINE_HP = { turret: 180, rover: ROVER_HP, dome: DOME_HP, crate: CRATE_HP, sam: 260 };
 // Shots (every pellet on target) that bring down `hp` of a streak with gun `w`: what the HUD's first-time hint, the
 // target tags and How to play quote. Air takes BULLET_AIR of a bullet and LAUNCHER_AIR of a launcher round.
 export function hitsToDown(hp, w, air) {
@@ -80,12 +81,12 @@ export function hitsToDown(hp, w, air) {
 const ENGINEER_AIR = 1.25, ENGINEER_TURRET = 1.5;
 
 // Kinds by where they live and how the wire names them. Appended only (indices are on the wire).
-export const TURRET_KINDS = ['sentry', 'rover', 'dome', 'crate'];
-export const V9_AIR = new Set(['recon', 'hound', 'reticle']);
+export const TURRET_KINDS = ['sentry', 'rover', 'dome', 'crate', 'sam'];   // Wave 5's SAM appended.
+export const V9_AIR = new Set(['recon', 'hound', 'reticle', 'vtol']);         // Stepped here (vtol: streaks-w5.js).
 export const PILOTED = new Set(['missile', 'recon', 'reticle']);
 const SHOOTERS = new Set(['sentry', 'rover']);
 // Limits double in the 16 v 16 modes for anything that is a thing on the map (not a team-wide timer).
-const ENTITY_KINDS = new Set(['turret', 'mortar', 'strike', 'chopper', 'gunship', 'missile', 'swarm', 'recon', 'airdrop', 'hound', 'dome', 'bombrun', 'rover']);
+const ENTITY_KINDS = new Set(['turret', 'mortar', 'strike', 'chopper', 'gunship', 'missile', 'swarm', 'recon', 'airdrop', 'hound', 'dome', 'bombrun', 'rover', 'vtol', 'sam', 'napalm']);
 // Enemy throws a Dome shoots down: anything thrown that hurts, blinds, marks or jams. Not smoke or cover.
 const DOME_ZAPS = new Set(['frag', 'sticky', 'molotov', 'mine', 'cluster', 'bomblet', 'hatchet', 'impact', 'claymore', 'drill',
   'flash', 'stun', 'gas', 'shock', 'snapshot', 'blackout', 'tagger', 'charge', 'thermite', 'tripwire', 'crawler', 'sensor', 'decoy']);
@@ -120,6 +121,9 @@ export function activeCount(sim, team, kind) {
     case 'sweep': for (const s of sim.v9.sweeps) if (s.team === team) return 1; return 0;
     case 'recon': return aircraft(sim, team, 'recon');
     case 'hound': return aircraft(sim, team, 'hound');
+    case 'vtol': return aircraft(sim, team, 'vtol');
+    case 'sam': return machines(sim, team, 'sam');
+    case 'napalm': return (sim.w5Runs ?? []).some(r => r.team === team) ? 1 : 0;
     case 'bombrun': {
       let n = aircraft(sim, team, 'reticle');
       for (const s of sim.strikes) if (s.kind === 'bombrun' && s.team === team) return n + 1;
@@ -156,7 +160,7 @@ export function launch(sim, p, kind, spot) {
     case 'dome': return callDome(sim, p);
     case 'bombrun': return callBombrun(sim, p, spot);
     case 'rover': return callRover(sim, p);
-    default: return false;
+    default: return launchW5(sim, p, kind, spot);
   }
 }
 
@@ -311,6 +315,7 @@ export function stepV9(sim) {
     sim._emit({ t: 'crate', id: t.id, team: t.team, x: round2(t.x), z: round2(t.z) });
   }
   if (v.empLock) for (let t = 0; t < v.empLock.length; t++) if (v.empLock[t] > 0) v.empLock[t] = Math.max(0, v.empLock[t] - STEP);
+  stepW5(sim);       // Wave 5's Napalm runs (streaks-w5.js).
 }
 
 // Per machine, from sim._stepTurrets before its own life and fire logic. Returns true when the Sim should skip the
@@ -320,7 +325,7 @@ export function stepMachine(sim, t) {
     case 'rover': driveRover(sim, t); return false;
     case 'dome': stepDome(sim, t); return true;
     case 'crate': stepCrate(sim, t); return true;
-    default: return false;
+    default: return stepMachineW5(sim, t);
   }
 }
 
@@ -411,7 +416,7 @@ export function stepAir(sim, g) {
     case 'recon': return stepScout(sim, g);
     case 'hound': return stepHound(sim, g);
     case 'reticle': return stepReticle(sim, g);
-    default: return false;
+    default: return stepAirW5(sim, g);
   }
 }
 
@@ -679,6 +684,7 @@ export function empBlast(sim, p) {
     sim._dropAir(i);
   }
   sim.strikes = sim.strikes.filter(s => !(s.team !== own && (s.kind === 'strike' || s.kind === 'bombrun')));
+  if (sim.w5Runs) sim.w5Runs = sim.w5Runs.filter(r => r.team === own);     // A Napalm jet on its way in turns back.
   v.sweeps = v.sweeps.filter(s => s.team === own);
   for (let enemy = 0; enemy < sim.teamCount; enemy++) if (enemy !== own) v.empLock[enemy] = EMP_LOCK;
   // Enemy kit goes dark, as if every one of them stood in a Blackout. Engineers are immune, as they are to Blackout.
@@ -693,7 +699,7 @@ export function empLocked(sim, team) { return !!(sim.v9.empLock && sim.v9.empLoc
 
 // ---------------------------------------------------------------- views and wire
 
-const NEW_AIR_VIEW = new Set(['recon', 'hound', 'reticle']);
+const NEW_AIR_VIEW = new Set(['recon', 'hound', 'reticle', 'vtol']);
 
 // Host view: the lists as they always were, plus the V9 ones.
 export function viewLists(sim, view) {

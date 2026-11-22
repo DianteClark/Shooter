@@ -20,8 +20,8 @@ const gear = kind => t => `<div class="help-stat"><dt>${esc(t.name)} <small>${ki
 // One help card: an icon, a stencil heading and a sentence or two.
 // Which enemy streaks can be shot down, and roughly what it takes (roadmap 40). Hits from js/sim/streaks-v9.js, so the
 // table follows any change to toughness: a rifle (the Halyard) and a launcher (the Breaker), every round on target.
-const SHOOTABLE = [['recon', 'air'], ['missile', 'air'], ['swarm', 'air', 'each drone'], ['hound', 'air'], ['chopper', 'air'], ['gunship', 'air'],
-  ['turret', 'machine'], ['rover', 'machine'], ['dome', 'machine', 'the emitter'], ['airdrop', 'machine', 'the crate']];
+const SHOOTABLE = [['recon', 'air'], ['missile', 'air'], ['swarm', 'air', 'each drone'], ['hound', 'air'], ['chopper', 'air'], ['vtol', 'air'], ['gunship', 'air'],
+  ['turret', 'machine'], ['rover', 'machine'], ['sam', 'machine'], ['dome', 'machine', 'the emitter'], ['airdrop', 'machine', 'the crate']];
 function shootDown() {
   const rows = SHOOTABLE.map(([id, what, note]) => {
     const air = what === 'air', hp = air ? AIR_HP[id] : MACHINE_HP[id === 'airdrop' ? 'crate' : id];

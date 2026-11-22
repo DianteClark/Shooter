@@ -24,10 +24,11 @@ import { hexRGB } from './art.js';
 import { smokeBlocks } from '../shared/geometry.js';
 import { BOMB_DELAY, BOMB_RADIUS, BOMB_STEP, DOME_R, DROP_DELAY, SWEEP_R, SCOUT_EYE } from '../sim/streaks-v9.js';
 
-const M = { recon: 0, hound: 1, rover: 2, emitter: 3, crate: 4, bomber: 5, jet: 6 };
+const M = { recon: 0, hound: 1, rover: 2, emitter: 3, crate: 4, bomber: 5, jet: 6, vtol: 7, sam: 8 };   // Wave 5: VTOL, SAM.
 const MAX = 24, MAX_DOMES = 6, MAX_DROPS = 6, MAX_LINES = 4, TRAIL = 48, MAX_TRAILS = 4, MAX_RUNS = 4;
 const JET_Y = 6.8, JET_SPEED = 40;   // Airstrike jets: height and ground speed (m/s), a pair passing over the line.
-const SCOUT_Y = 4, HOUND_Y = 2.6, BOMBER_Y = 9, DROP_FROM = 9;
+const SCOUT_Y = 4, HOUND_Y = 2.6, BOMBER_Y = 9, DROP_FROM = 9, VTOL_Y = 6.2;
+const AIR_DRAW_Y = { gunship: 7.5, chopper: 5.6, recon: 4, hound: 2.6, vtol: 6.2, swarm: 2.9, missile: 1.7 };
 const MAX_MARKS = 96;          // Overlay rings: the Carpet Line reticle, its trail and the dropped line's markers.
 const RED = hexRGB(0xff3a2a), WHITE = [1, 1, 1], HOT = [1, 0.86, 0.5], SMOKE = [0.16, 0.16, 0.18], DEBRIS = [0.32, 0.34, 0.37];
 const STEEL = hexRGB(0x9fb8d0), SONAR = hexRGB(0x6fe0ff), LIME = hexRGB(0x7dff9a);
@@ -130,6 +131,43 @@ export function buildModels(ModelSet) {
     b.setPart(2);
     for (const z of [-0.14, 0.14]) b.prismX(-2.15, -1.9, 0, z, 0.1, 0.13, 6);              // Afterburners.
   });
+  S.model(M.vtol, b => {                // VTOL Jet: a stubby fuselage, a broad cropped delta with a lift fan in each wing
+    // (the rings and spinning blades are the tell from above), twin tails, a chin gun and a rocket pod under each wing.
+    b.setPart(0).setColor(0x2b3139).prismX(-1.7, 1.2, 0, 0, 0.34, 0.26, 8, Math.PI / 8);
+    b.setColor(0x3a414b).prismX(1.2, 2.0, 0, 0, 0.26, 0.04, 8, Math.PI / 8);
+    b.setColor(0x86aecb).box(0.9, 0.26, 0, 0.8, 0.12, 0.26, 0.04);                        // Canopy.
+    b.setColor(0x323841);
+    b.matrix = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+    b.extrude([[0.7, -0.3], [-0.5, -2.1], [-1.25, -2.1], [-1.25, -0.3], [-1.25, 0.3], [-1.25, 2.1], [-0.5, 2.1], [0.7, 0.3]], -0.05, 0.05);
+    b.matrix = null;
+    for (const z of [-1.25, 1.25]) {
+      b.setColor(0x1d2126).prismY(-0.08, 0.08, -0.55, z, 0.56, 0.56, 10);               // Fan ring.
+      b.setPart(1).prismY(0.08, 0.1, -0.55, z, 0.6, 0.6, 10);                           // Team rim.
+      S.rig(-0.55, 0.05, z, 1, bb => { bb.setPart(0).setColor(0x5a626d).box(-0.55, 0.05, z, 0.95, 0.02, 0.12); bb.box(-0.55, 0.05, z, 0.12, 0.02, 0.95); });
+      b.setPart(0).setColor(0x22262c).prismX(-0.4, 0.4, -0.22, z * 0.62, 0.1, 0.1, 6);   // Rocket pod.
+      b.setPart(2).prismX(0.4, 0.46, -0.22, z * 0.62, 0.08, 0.08, 6);
+    }
+    for (const z of [-0.36, 0.36]) b.setPart(0).setColor(0x262b31).box(-1.5, 0.4, z, 0.55, 0.55, 0.05);   // Twin tails.
+    b.setColor(0x16181c).prismX(1.0, 1.7, -0.3, 0, 0.06, 0.05, 6);                      // Chin gun.
+    b.setPart(1).box(-0.2, 0.08, 0, 1.4, 0.03, 0.3);                                     // Team spine.
+    b.setPart(2); for (const z of [-0.16, 0.16]) b.prismX(-1.95, -1.7, 0, z, 0.1, 0.13, 6);   // Exhausts.
+  });
+  S.model(M.sam, b => {                 // SAM Turret: a tripod and turntable, a four-tube pod on a turning rig, tilted up.
+    b.setPart(0).setColor(0x2c3137);
+    for (let i = 0; i < 3; i++) { const a = i * 2.094 + 0.5; b.box(Math.cos(a) * 0.45, 0.16, Math.sin(a) * 0.45, 0.7, 0.07, 0.09); }
+    b.setColor(0x3b424b).prismY(0.1, 0.42, 0, 0, 0.3, 0.26, 8);
+    b.setPart(1).prismY(0.42, 0.48, 0, 0, 0.34, 0.34, 8);
+    S.rig(0, 0, 0, 1, bb => {
+      bb.setPart(0).setColor(0x353b43).box(0, 0.62, 0, 0.3, 0.3, 0.22, 0.03);           // Yoke.
+      bb.matrix = new THREE.Matrix4().makeRotationZ(0.55).setPosition(0.05, 0.95, 0);
+      bb.setColor(0x414952).box(0, 0, 0, 1.1, 0.46, 0.62, 0.04);                       // The pod.
+      bb.setColor(0x17191d);
+      for (const y of [-0.11, 0.11]) for (const z of [-0.15, 0.15]) bb.prismX(0.5, 0.57, y, z, 0.085, 0.085, 6);
+      bb.setPart(2); for (const y of [-0.11, 0.11]) for (const z of [-0.15, 0.15]) bb.prismX(0.56, 0.58, y, z, 0.05, 0.05, 6);   // Lit seekers.
+      bb.setPart(1).box(-0.1, 0.235, 0, 0.7, 0.02, 0.5);                               // Team top.
+      bb.matrix = null;
+    });
+  });
   return S.build();
 }
 
@@ -185,6 +223,7 @@ export class StreaksFX {
     this.runs = Array.from({ length: MAX_RUNS }, () => ({ t: -1, x: 0, z: 0, dx: 1, dz: 0, team: 0, at: 1.3, len: 18 }));
     this.trails = Array.from({ length: MAX_TRAILS }, () => ({ owner: null, pts: new Float32Array(TRAIL * 2), n: 0, seen: false }));
     this.smokeT = 0;
+    this.samBooms = [];             // Wave 5: SAM missiles on their way up; each bursts where it meets its target.
     VFX.prewarm?.([this.mesh, this.domes, this.marks]);
   }
 
@@ -226,6 +265,12 @@ export class StreaksFX {
     const c = this.c, vfx = this.vfx, t = c.time.value;
     let n = 0, nd = 0;
     this.nm = 0;
+    for (let i = this.samBooms.length - 1; i >= 0; i--) {
+      const m = this.samBooms[i];
+      if ((m.t -= dt) > 0) continue;
+      this.samBooms.splice(i, 1);
+      vfx.pop(m.x, m.y, m.z, 4, HOT, 0.18); vfx.sparks(m.x, m.y, m.z, 0, 0, HOT, vfx._n(8), 8); vfx.fireball(m.x, m.y, m.z, 1.1, 0.3);
+    }
     this.smokeT += dt;
     const puff = this.smokeT > 0.08;
     if (puff) this.smokeT = 0;
@@ -262,6 +307,13 @@ export class StreaksFX {
           }
           continue;
         }
+        if (d.kind === 'sam') {
+          // The pod turns on its target; a team ring round its feet.
+          n = this.#put(n, M.sam, 0, d.x, 0, d.z, 1.15, rgb, friendly ? rgb : RED, 0.55 + 0.45 * Math.sin(t * 4), 1, d.aim ?? 0);
+          vfx.addRing(d.x, d.z, 0.9, 1.1, rgb, 0.45);
+          if (d.hp > 0 && d.maxHp && d.hp / d.maxHp < 0.4 && puff) vfx.spawn(d.x, 1, d.z, rand(-0.3, 0.3), rand(1.2, 2), rand(-0.3, 0.3), 1, 0.25, 0.8, SMOKE, 0.6, -0.4, 0.5);
+          continue;
+        }
         if (d.kind === 'rover') {
           if (!friendly && !uav && hasLocal && !this.#clear(lx, lz, d.x, d.z, view.smokes)) continue;
           let s = this.rovers.get(d.id);
@@ -290,6 +342,15 @@ export class StreaksFX {
         if (d.kind === 'reticle') {
           if (!friendly) continue;
           this.#reticle(d, t, d.owner === view.localId);
+          continue;
+        }
+        if (d.kind === 'vtol') {
+          // Hovering: a slow bob, the lift fans spinning, its shadow ring and dust kicked up under the fans.
+          const bob = Math.sin(t * 1.7 + i) * 0.18;
+          n = this.#put(n, M.vtol, d.aim ?? 0, d.x, VTOL_Y + bob, d.z, 1.35, rgb, HOT, 0.6 + 0.4 * Math.abs(Math.sin(t * 7)), 1, t * 30);
+          vfx.addRing(d.x, d.z, 1.6, 2.0, rgb, 0.3);
+          if (puff && Math.random() < 0.5) vfx.spawn(d.x + rand(-1.4, 1.4), 0.15, d.z + rand(-1.4, 1.4), rand(-1.2, 1.2), 0.3, rand(-1.2, 1.2), 0.5, 0.3, 1.1, DEBRIS, 0.18, 0, 1.4);
+          this.#damaged(d, VTOL_Y, puff);
           continue;
         }
         const y = d.kind === 'recon' ? SCOUT_Y : HOUND_Y;
@@ -437,7 +498,7 @@ export class StreaksFX {
           } else if (ev.kind === 'bombrun' && Array.isArray(ev.path)) {
             const L = this.lines.find(s => s.t < 0);
             if (L) { L.t = 0; L.pts = ev.path; L.team = ev.team ?? 0; L.dur = BOMB_DELAY + (ev.path.length / 2) * BOMB_STEP; }
-          } else if (ev.kind === 'strike' && Number.isFinite(ev.x)) {
+          } else if ((ev.kind === 'strike' || ev.kind === 'napalm') && Number.isFinite(ev.x)) {     // Napalm: the same pair of jets.
             const R = this.runs.find(s => s.t < 0);
             const l = Math.hypot(ev.dx ?? 1, ev.dz ?? 0) || 1;
             // The middle bomb lands at delay + step * (n - 1) / 2 (js/sim/sim.js _launchStrike).
@@ -482,7 +543,18 @@ export class StreaksFX {
         case 'air_down': this.#airDown(ev); break;
         case 'turret_shot':
           if (ev.kind === 'hound') vfx.muzzleFlash(ev.ox, HOUND_Y - 0.2, ev.oz, Math.atan2(ev.z - ev.oz, ev.x - ev.ox), HOT, 0.45);
+          else if (ev.kind === 'vtol') vfx.muzzleFlash(ev.ox, VTOL_Y - 0.3, ev.oz, Math.atan2(ev.z - ev.oz, ev.x - ev.ox), HOT, 0.6);
           break;
+        // Wave 5: the VTOL's rocket pair (the blast follows as an 'explosion'), and a SAM missile climbing to its target.
+        case 'vtol_rocket': vfx.rocket(ev.ox, VTOL_Y - 0.4, ev.oz, ev.x, 0.4, ev.z); break;
+        case 'sam_shot': {
+          const y = AIR_DRAW_Y[ev.kind] ?? 4;
+          vfx.rocket(ev.ox, 1.3, ev.oz, ev.x, y, ev.z);
+          vfx.contrail(ev.ox, 1.3, ev.oz, ev.x, y, ev.z);
+          for (let k = vfx._n(6); k > 0; k--) vfx.spawn(ev.ox + rand(-0.4, 0.4), 0.6, ev.oz + rand(-0.4, 0.4), rand(-1, 1), rand(0.5, 1.5), rand(-1, 1), 0.9, 0.3, 1.2, SMOKE, 0.5, -0.2, 0.8);
+          this.samBooms.push({ x: ev.x, y, z: ev.z, t: Math.hypot(ev.x - ev.ox, y - 1.3, ev.z - ev.oz) / 92 });
+          break;
+        }
         case 'marked':
           if (ev.kind === 'sweep' || ev.kind === 'recon') {
             const p = c.posOf.get(ev.id);
@@ -497,8 +569,8 @@ export class StreaksFX {
   // Shot down (or knocked out by an EMP): a burst where it was, debris raining, a smoke column and a scorch below.
   #airDown(ev) {
     const vfx = this.vfx, k = ev.kind;
-    const big = k === 'gunship' || k === 'chopper';
-    const y = k === 'gunship' ? 7.5 : k === 'chopper' ? 5.6 : k === 'recon' ? SCOUT_Y : k === 'hound' ? HOUND_Y : 2.2;
+    const big = k === 'gunship' || k === 'chopper' || k === 'vtol';
+    const y = AIR_DRAW_Y[k] ?? 2.2;
     vfx.pop(ev.x, y, ev.z, big ? 9 : 4, HOT, big ? 0.4 : 0.25);
     vfx.fireball?.(ev.x, y, ev.z, big ? 3 : 1.4, big ? 0.6 : 0.4);
     vfx.sparks(ev.x, y, ev.z, 0, 0, HOT, vfx._n(big ? 18 : 9), big ? 12 : 8);
@@ -515,6 +587,7 @@ export class StreaksFX {
     for (const R of this.runs) R.t = -1;
     for (const tr of this.trails) tr.owner = null;
     this.rovers.clear();
+    this.samBooms.length = 0;
   }
 
   dispose() {

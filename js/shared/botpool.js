@@ -243,6 +243,9 @@ const W5_BY_CLASS = {};
 for (const c in W5_GUNS) for (const id of W5_GUNS[c]) (W5_BY_CLASS[c] ??= []).push(id);
 const W5_SIDEARMS = [...(W5_GUNS.Pistol ?? []), ...(W5_GUNS.Launcher ?? [])];
 const W5_PERKS = ['overkill', 'amped', 'doubletime', 'highalert', 'skywatch'];   // Never in a profile's own lists.
+// Streaks added after the pool (wave 5 on): their Master cards stay out of the pool's picks, as later guns' do.
+const LATER_STREAKS = new Set(['vtol', 'sam', 'napalm']);
+const W5_STREAKS = ['vtol', 'sam', 'napalm'];
 const TRYOUTS5 = new Map();
 export function tryout5Of(profile) {
   let t = TRYOUTS5.get(profile.id);
@@ -253,7 +256,9 @@ export function tryout5Of(profile) {
   const secondary = rng() < 0.25 ? W5_SIDEARMS[Math.floor(rng() * W5_SIDEARMS.length)] : null;
   // The perks wave (catalog.js, 2026-11-22): about a third of the pool has a new perk to try.
   const perk = rng() < 0.35 ? W5_PERKS[Math.floor(rng() * W5_PERKS.length)] : null;
-  t = Object.freeze({ primary, secondary, perk });
+  // And the wave 5 scorestreaks: a quarter of the pool has one in place of a streak of theirs.
+  const streak = rng() < 0.25 ? W5_STREAKS[Math.floor(rng() * W5_STREAKS.length)] : null;
+  t = Object.freeze({ primary, secondary, perk, streak });
   TRYOUTS5.set(profile.id, t);
   return t;
 }
@@ -355,7 +360,7 @@ function pickCard(rng, base, perks, locked, mu) {
     // Gear and the pool's own operators: a later operator's Master card is not in the list (see POOL_ROSTER).
     // The same for guns: a later gun's Master card (weapons wave 3 on) is not in it either.
     const gold = CARDS.filter(c => c.group === 'Mastery' && !EXCLUSIVE.has(c.id.replace(/^mastery-/, '')) && !LATER_OPS.has(c.id.replace(/^mastery-/, ''))
-      && !LATER_GUNS.has(c.id.replace(/^gun-/, '')));
+      && !LATER_GUNS.has(c.id.replace(/^gun-/, '')) && !LATER_STREAKS.has(c.id.replace(/^mastery-/, '')));
     return gold[Math.floor(rng() * gold.length)].id;
   }
   return 'yard';

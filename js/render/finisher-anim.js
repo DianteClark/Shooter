@@ -336,6 +336,7 @@ const CALL_OF = {
   jammer: 'laptop', bombrun: 'laptop', emp: 'laptop', sweep: 'laptop',
   resupply: 'flare', airdrop: 'flare', plates: 'flare', strike: 'flare',
   mortar: 'radio', chopper: 'radio', vulture: 'radio', gunship: 'radio', rover: 'radio', dome: 'radio', turret: 'radio', juggernaut: 'radio',
+  vtol: 'laptop', sam: 'radio', napalm: 'flare',     // Wave 5.
 };
 export const CALL_DUR = 1.4;
 export const callInOf = kind => (CALL_OF[kind] ? 'call:' + CALL_OF[kind] : null);
