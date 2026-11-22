@@ -130,7 +130,7 @@ const HARD_ROTATE = 40, HARD_TICK = 1;
 const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
 const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
 const PLAN_EVERY = 15;           // Ticks between bot objective plans.
-const PATH_WORK = 5000;          // Path cells expanded a tick, all bots together (see _tick).
+const PATH_WORK = 3000;          // Path cells expanded a tick, all bots together (see _tick): on a giant map one capped search.
 const THINK_WORK = 24;           // Expensive bot decisions a tick, in units (bots.js spend): throws, cover searches.
 const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd', 'ctf', 'br']);
 
