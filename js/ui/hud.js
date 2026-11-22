@@ -1631,6 +1631,11 @@ export class HUD {
     if (!this.remeasured) { this.remeasured = true; this.remeasure(); }
     const previousPhase = this.cache.phase;
     this.view = view;
+    // Destruction: the walls changed since the minimap's wall layer was drawn (docs/DESTRUCTION.md).
+    if (this.map && this.mmBase && (this.map.brkVer ?? 0) !== this.mmVer) {
+      this.#drawMapBase();
+      for (const h of [this.brHud, this.exHud, this.cpHud]) if (h && 'base' in h) h.base = null;
+    }
     const me = this.#findLocal(view);
     if (!me) return;
     const c = this.cache;
@@ -3170,11 +3175,18 @@ export class HUD {
     g.fillStyle = '#2b3540';
     g.fillRect(0, 0, W, H);
     g.fillStyle = '#39444f';
+    // Destruction: a broken piece's footprint shows as rubble (darker than the floor round it), so openings read.
+    for (const p of map.breakables ?? []) {
+      if (p.wall._brk !== 2) continue;
+      g.fillStyle = '#3f3a36';
+      g.fillRect(p.x * this.mmX, p.z * this.mmZ, Math.max(p.w * this.mmX, 2), Math.max(p.d * this.mmZ, 2));
+    }
     for (const w of map.walls) {
-      if (w.kind === 'border') continue;
+      if (w.kind === 'border' || !w.blocksMove) continue;
       g.fillStyle = w.blocksVision ? '#8896a3' : '#566370';
       g.fillRect(w.x * this.mmX, w.z * this.mmZ, Math.max(w.w * this.mmX, 2), Math.max(w.d * this.mmZ, 2));
     }
+    this.mmVer = map.brkVer ?? 0;
   }
 
   #drawMinimap(view, me) {
