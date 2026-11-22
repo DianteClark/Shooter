@@ -368,6 +368,17 @@ export const REWARD_PATTERNS = {
     for (let i = 0; i < 18; i++) { const y = 6 + r() * 60, x = 92 + r() * 190; s += line(x, y, x + 14 + r() * 20, y + 1, c[2], 0.8, op((0.15 + r() * 0.25).toFixed(2))); }
     return s;
   },
+  fjord(c, r) {            // Kaldvik: mountains down to a frozen fjord, a church steeple and a trawler in the ice, the copper sun low in a squall.
+    let s = circ(112, 40, 16, c[3], op('.35')) + circ(112, 40, 7, c[3], op('.7'));
+    s += poly([[90, 62], [130, 22], [158, 50], [186, 16], [230, 58], [262, 30], [300, 56], [300, 80], [90, 80]], c[1]);
+    s += poly([[130, 22], [138, 30], [128, 32], [122, 30]], c[2]) + poly([[186, 16], [196, 26], [182, 28], [178, 24]], c[2]) + poly([[262, 30], [270, 37], [256, 38]], c[2]);
+    s += rect(90, 64, W - 90, 16, c[2], op('.85'));
+    for (let k = 0; k < 6; k++) s += line(100 + k * 34, 70 + r() * 6, 124 + k * 34, 68 + r() * 6, c[1], 0.8, op('.5'));
+    s += rect(160, 50, 8, 14, c[2]) + poly([[158, 50], [164, 36], [170, 50]], c[0]) + rect(163, 54, 2, 2.4, c[3]);
+    s += poly([[214, 66], [252, 66], [258, 60], [210, 60]], c[0]) + rect(222, 53, 10, 7, c[2]) + rect(240, 46, 1.4, 14, c[0]);
+    for (let k = 0; k < 26; k++) { const x = 92 + r() * 206, y = r() * 64; s += line(x, y, x + 9, y + 2.4, c[2], 0.7, op('.5')); }
+    return s;
+  },
   isles(c, r) {            // Jadefall: the stepped pyramid on its islet, a ring of islands round the lagoon, a jade light.
     let s = '';
     for (let k = 0; k < 4; k++) s += path(`M${96 + k * 52} ${70 + (k % 2) * 3} q13 -5 26 0 t26 0`, c[2], 1, op('.35'));

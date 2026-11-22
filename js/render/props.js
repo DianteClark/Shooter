@@ -30,6 +30,8 @@ const SETS = {
   shore: [CRATE, BARREL, CRATE, CONE, BARREL],
   sirocco: [JAR, JAR, CRATE, BARREL, JAR],
   basin: [JAR, CRATE, BARREL, JAR, CRATE],
+  north: [CRATE, BARREL, CRATE, CONE],
+  kaldvik: [CRATE, BARREL, CRATE, CONE],
   arctic: [CRATE, BARREL, CRATE, CONE],
   pier: [CRATE, BARREL, CRATE, CONE],
   foundry: [BARREL, BARREL, CRATE, CONE, BARREL],

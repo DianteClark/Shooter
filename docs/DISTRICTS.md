@@ -215,6 +215,72 @@ counts are exact).
 `node dev/sim-conquest.mjs --maps=sirocco`; `node dev/sim-breakthrough.mjs --maps=sirocco`;
 `python3 dev/ui-sweep-perf.py [port] [out] brsirocco`; `node dev/br-overview.mjs sirocco`;
 `node dev/render-snapshots.mjs caravanserai redgulch copperstep signalridge sirocco`.
+## The North (`kaldvik`, Kaldvik): the fourth region (branch region4)
+400 x 400 m, a fishing town on a frozen fjord under a **blizzard dusk**: a copper sun low in the west-south-west behind
+a snow squall, warm grey-white snow with long violet shadows, sodium lamps and lit windows, snow driving in sideways
+from the west. Made to look and play unlike the snow maps already in the game (Frostline and Icebreaker: blue hour and
+an aurora over station red; Polestar: polar night; Observatory: an alpine dawn), which are untouched: timber, falu red,
+ochre, research yellow and slate; walkable ice everywhere (the harbour, the river, the reservoir, the sea ice) with
+open leads that stop feet but not shots. Four new districts, each a 6v6 map (theme `north`, region tag Arctic):
+
+| District | Map (size) | Region rect (x, z, w, h) | What it is |
+|---|---|---|---|
+| Trawler Basin | `trawler` (medium, 80 x 48) | 160, 40, 80, 48 | Net sheds and fish halls on two quays; between them the frozen basin with two trawlers locked in the ice bow to stern, shanties, a lead; the ice road between the ships is the middle lane |
+| Telemark | `telemark` (large, 108 x 64) | 34, 188, 108, 64 | Ski village: chalets and the old lodge, the chairlift's base station on the green with its pylons running north and south, car parks; its village street is the Fjord Road |
+| Ice Core | `icecore` (medium, 76 x 46) | 290, 197, 76, 46 | A drilling camp on the ice shelf: lab pods on legs, snowcats, drums, crevasses between the lanes, and the fight under the derrick's four legs in the middle |
+| Spillway | `spillway` (small, 56 x 36) | 192, 300, 56, 36 | The dam's crest runs north-south through the middle (parapets broken at the lanes, two gatehouses); the frozen reservoir west of it and the tailrace east (the map is a 180-degree turn, so the zones say which ice is which) |
+
+Places (18): the four districts (Telemark tier 1, the others tier 2), Kaldvik Town (tier 1: the church and its steeple,
+the town hall, the square with the town's lit tree, four blocks), Birchwood, the Cannery, Lighthouse Point, the Tank
+Farm, the Radar Dome, the Freight Depot (the ore line), the Logging Camp, the Ski Jump, the Summit Lodge (the chairlift
+runs on up to it from Telemark), the Ice Fishing Camp on the reservoir, the Turbine Hall, the Shelf Airstrip and the Hot
+Springs. Open sea along the north edge (sea ice inside it), mountains south and west, the shelf's ice cliffs east.
+
+- **Modes**: Battle Royale, Rebound, Extraction (`BR_MAP_IDS` picks it up as a giant map). `map.bf`: Conquest
+  "Kaldvik: Fjord Road" (A Telemark, B Kaldvik Town, C Crossroads, D Birchwood, E Ice Core; HQs at the two ends of the
+  Fjord Road) and Breakthrough "Kaldvik: Harbour Run" (north to south down the Harbour Road: Trawler Basin, Kaldvik
+  Town, Spillway; attackers from the sea ice, defenders' last stand on the reservoir).
+- **Files**: `js/shared/maps/trawler.js`, `telemark.js`, `icecore.js`, `spillway.js`, `br-kaldvik.js` (appended to
+  `MAPS`); `js/render/themes/north.js` (THEMES.north for the districts, THEMES.kaldvik for the region; the drawers
+  for every new piece: chalets, net sheds, fish halls, shanties, lab pods, the lift station and pylons, the intake
+  tower, gatehouses, the steeple, tanks, the radome, the ski jump, trawlers, the plane, the derrick, firs and birches,
+  snowmobiles, ski racks, snow fences, drifts, pressure ridges, icebergs, leads, crevasses, hot springs; the 6v6 stages;
+  the region's tables and `giant` extras). Wiring: world.js `DRESS`/`THEME_STAGES`/`THUMB_STYLE`, frontier.js tables
+  and `EXTRAS.kaldvik`, audio (snow steps, the arctic room), ambient, props, cards (Iced In, Chairlift, Bore Hole,
+  Floodgate, Squall Line; new pattern `fjord`), icons, `dev/render-maps.html` framings, `dev/ui-sweep-perf.py` case
+  `brnorth`, art `assets/maps/<id>.jpg` and `assets/maps/kaldvik-overview.jpg`.
+- **region-kit.js is unchanged.** Everything new is additive and keyed so it cannot repaint another region: ground
+  regions are `kv*` (kvtown, kvsnow, kvice, kvshelf, kvforest, kvpiste, kvquay, kvlake), building styles `kv*`
+  (kvnordic, kvchalet, kvboathouse, kvshed, kvlab, kvplant, kvchurch, kvhall), new zone kinds only (seaice, river,
+  piste, lake, reservoir, tailrace, crest, drillpad; Kaldvik's `zoneColour` repaints the shared kinds on its own map
+  only), and a new road kind `plough` (packed slush, no kerbs or paint) added to the streamer's `ROAD` table.
+- **Weather** stays in the existing pools: 130 streaks, 160 flakes and 14 gusts (the arctic set is 316 particles too).
+
+### Measured (2-vCPU sandbox shared by four builders; wall-clock worst ticks are mostly the neighbours)
+| | walls | buildings | loot / caches | places | host tick mean (validator roam / sim-br quads) |
+|---|---|---|---|---|---|
+| Meridian City | ~2,800 | ~120 | ~870 / ~43 | 18 | 0.36-0.51 ms / 0.24 ms |
+| Kaldvik | 2,011 | 90 | 681 / 41 | 18 | 0.61 ms / 0.18 ms |
+
+| Low quality, 932 x 430, on the ground after the jump (dev/ui-sweep-perf.py, same run) | calls median (max) | triangles median (max) | script ms median (max) |
+|---|---|---|---|
+| Meridian, Midtown's boulevard (`brcity`) | 47.5 (54) | 36.6k (59.6k) | 11.0 (36.4) |
+| Kaldvik, the church square (`brnorth`) | 41.5 (54) | 32.8k (64.8k) | 8.2 (23.4) |
+
+- Rebound (`node dev/sim-resurgence.mjs --map=kaldvik`): quads 7.2-8.0 min, duos 7.0-8.4 min, 30-52 redeploys a quads
+  match. Conquest: B and D sit a touch west of the middle (the west has to push through Telemark's chalets): 3 / 3 over
+  six seeds, 6.7-9.1 minutes (before: the east won 5 of 6 with C at the river and D 22 m nearer its HQ). Breakthrough:
+  attackers 1 of 2 (all three sectors in 7.3 min; held at sector 2 of 3 at the clock).
+- Districts (`node dev/map-validate.mjs trawler telemark icecore spillway`): every mode, fairness within 10% (intact
+  and all broken), bot matches with no stuck bots worth a warning (Trawler's Kill Order had no objective activity in its
+  60 s, as other maps do).
+
+### Tests
+`node dev/map-validate.mjs trawler telemark icecore spillway kaldvik`; `node dev/sim-br.mjs --map=kaldvik`;
+`node dev/sim-resurgence.mjs --map=kaldvik`; `node dev/sim-extract.mjs --map=kaldvik --quick`;
+`node dev/sim-conquest.mjs --maps=kaldvik --seeds=6`; `node dev/sim-breakthrough.mjs --maps=kaldvik`;
+`python3 dev/ui-sweep-perf.py [port] [out] brnorth`; `node dev/br-overview.mjs kaldvik`;
+`node dev/render-snapshots.mjs trawler telemark icecore spillway kaldvik`.
 
 ## The Coast (`kittiwake`, Kittiwake Bay): the third region
 400 x 400 m, a bright, windy morning (theme `shore`): a low sun out of the east, a pale washed sky, spray and sand on
@@ -314,7 +380,7 @@ Each later region is new districts too (the existing maps stay as they are):
 - **The Coast**: built, see Kittiwake Bay above.
 - **The Desert**: built, see Sirocco Basin above.
 - **The Wilds**: a river valley: a jungle landing, a waterfall temple, a rope-bridge gorge.
-- **The North**: a frozen harbour, a ski village, a research base on the ice shelf.
+- **The North**: built (above, Kaldvik).
 - Each later region reuses region-kit.js unchanged: list the districts and their offsets, write the fill, a palette
   module, the art. A district can be in at most one region.
 - Later, a district that only exists inside a region (a region place good enough for 6v6) can be promoted: make it its
