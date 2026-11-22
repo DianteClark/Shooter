@@ -51,9 +51,17 @@ MATCH_SHOTS = [
     ('match-flare', """(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId), f = sim.byId.get(window.__foe);
       sim.eq.projectiles.length = 0; f.hp = 100; f.alive = true;
       sim.applyShot(me.id, { weapon: 'flare', ox: me.ps.x, oz: me.ps.z, aim: Math.atan2(f.ps.z - me.ps.z, f.ps.x - me.ps.x), ads: true, angles: [Math.atan2(f.ps.z - me.ps.z, f.ps.x - me.ps.x)] }, 0); })()""", 900),
-    # High Alert: someone far off screen to the south-west has us in their sights.
-    ('match-highalert', """(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId), f = sim.byId.get(window.__foe);
-      me.ps.perks = ['marathon', 'scavenger', 'highalert']; f.ps.x = me.ps.x - 24; f.ps.z = me.ps.z + 12; f.ps.aim = Math.atan2(me.ps.z - f.ps.z, me.ps.x - f.ps.x); })()""", 1200),
+    # High Alert: someone off screen, in clear sight 22-30 m away, has us in their sights.
+    ('match-highalert', """(async () => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId);
+      sim.eq.projectiles.length = 0;
+      const { hasLineOfSight } = await import('/js/shared/geometry.js');
+      const f = sim.players.find(q => q.team !== me.team && q.alive && q.id !== window.__foe) ?? sim.byId.get(window.__foe);
+      me.ps.perks = ['marathon', 'scavenger', 'highalert'];
+      let spot = null;
+      for (let a = 0; a < 6.28 && !spot; a += 0.2) for (const d of [26, 22, 30]) { const x = me.ps.x + Math.cos(a) * d, z = me.ps.z + Math.sin(a) * d;
+        if (x < 2 || z < 2 || x > sim.map.width - 2 || z > sim.map.height - 2) continue;
+        if (hasLineOfSight(sim.map, x, z, me.ps.x, me.ps.z)) { spot = { x, z }; break; } }
+      f.alive = true; f.ps.x = spot.x; f.ps.z = spot.z; f.ps.aim = Math.atan2(me.ps.z - f.ps.z, me.ps.x - f.ps.x); })()""", 1500),
 ]
 
 
@@ -105,6 +113,10 @@ async def main():
             for name, js, wait in MATCH_SHOTS:
                 await pg.evaluate(js)
                 await pg.wait_for_timeout(wait)
+                if name == 'match-highalert':
+                    n = await pg.evaluate('window.__game.app.match.hud.alertList?.length ?? 0')
+                    if not n:
+                        fails.append('High Alert: nobody flagged for an enemy in clear sight aiming at us')
                 await pg.screenshot(path=f'{OUT}/{name}.png')
                 print(f'ok   {name}')
             if errs:

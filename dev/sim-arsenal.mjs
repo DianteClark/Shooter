@@ -627,6 +627,7 @@ test('Fusee: one flare burns its target for three seconds, lights them on the ma
   const w = WEAPONS.flare;
   assert.ok(w.burn && w.burn.mark && w.magazine === 1 && SECONDARY_IDS.includes('flare'));
   assert.ok(w.damage + w.burn.dps * w.burn.time < 100, 'one flare is never a kill on full health');
+  assert.ok(w.damage * Math.min(w.headMult, w.headMax) < 100, 'not even to the head');
   const { sim, h, foe } = duel('flare', 8);
   h.ps.slot = 1; h.ps.weapon = 'flare';
   sim.applyShot('h1', { weapon: 'flare', ox: h.ps.x, oz: h.ps.z, aim: 0, ads: true, angles: [0] }, 0);

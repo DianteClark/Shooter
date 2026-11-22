@@ -88,12 +88,13 @@ export const W5_WEAPONS = {
   },
 
   // A brass railway flare pistol. One fat, slow, blinding round: what it hits burns for three seconds and shows on
-  // your team's map until it stops. The burn never kills a healthy player on its own; the round after it does.
+  // your team's map until it stops. Never a kill on its own, not even to the head: the burn and the round after it are.
   flare: {
     id: 'flare', name: 'Fusee', role: 'Flare gun', auto: false,
     damage: 40, rpm: 70, magazine: 1, reserve: 14, reload: 1.5, range: 32,
     falloff: { start: 14, end: 26, min: 0.6 },
     burn: { dps: 16, time: 3, mark: true },
+    headMax: 1.5,     // Not even a head hit is a kill on its own: the burn and a second round finish it.
     adsSpread: 0.008, hipSpread: 0.03, bloomPerShot: 0.5, bloomRecover: 2, bloomScale: 1,
     adsTime: 0.14, sprintToFire: 0.1, swapTime: 0.22, moveMult: 1.06, adsMoveMult: 0.82,
     pellets: 1, kickCam: 0.85, tracerWidth: 2.2, longshot: 18,

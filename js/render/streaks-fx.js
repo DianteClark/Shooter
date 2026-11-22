@@ -142,7 +142,7 @@ export function buildModels(ModelSet) {
     b.matrix = null;
     for (const z of [-1.25, 1.25]) {
       b.setColor(0x1d2126).prismY(-0.08, 0.08, -0.55, z, 0.56, 0.56, 10);               // Fan ring.
-      b.setPart(1).prismY(0.08, 0.1, -0.55, z, 0.6, 0.6, 10);                           // Team rim.
+      b.setPart(1).prismY(0.08, 0.1, -0.55, z, 0.2, 0.2, 10);                           // Team hub.
       S.rig(-0.55, 0.05, z, 1, bb => { bb.setPart(0).setColor(0x5a626d).box(-0.55, 0.05, z, 0.95, 0.02, 0.12); bb.box(-0.55, 0.05, z, 0.12, 0.02, 0.95); });
       b.setPart(0).setColor(0x22262c).prismX(-0.4, 0.4, -0.22, z * 0.62, 0.1, 0.1, 6);   // Rocket pod.
       b.setPart(2).prismX(0.4, 0.46, -0.22, z * 0.62, 0.08, 0.08, 6);

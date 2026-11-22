@@ -55,22 +55,24 @@ export function drawAlerts(g, threats, project, W, H, t, css = '#ff4d3d') {
     if (inside) continue;                  // On screen: you can see them yourself.
     const dx = sx - cx, dy = sy - cy, k = Math.min(Math.abs(cx / (dx || 1e-6)), Math.abs(cy / (dy || 1e-6)));
     const ex = cx + dx * k, ey = cy + dy * k;
-    const r = Math.min(W, H) * 0.32, pulse = 0.55 + 0.45 * Math.sin(t * 9);
+    const r = Math.min(W, H) * 0.42, pulse = 0.65 + 0.35 * Math.sin(t * 9);
     const grad = g.createRadialGradient(ex, ey, 0, ex, ey, r);
     grad.addColorStop(0, css);
+    grad.addColorStop(0.35, css);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
-    g.globalAlpha = 0.5 * pulse;
+    g.globalAlpha = 0.55 * pulse;
     g.fillStyle = grad;
     g.beginPath(); g.arc(ex, ey, r, 0, Math.PI * 2); g.fill();
-    // A bright chevron on the edge pointing at them.
-    const a = Math.atan2(dy, dx), ix = ex - Math.cos(a) * 18, iy = ey - Math.sin(a) * 18;
-    g.globalAlpha = 0.95 * pulse;
-    g.fillStyle = '#fff2ec';
+    // A bright chevron in from the edge, pointing at them, with a dark outline so it reads over anything.
+    const a = Math.atan2(dy, dx), ix = ex - Math.cos(a) * 30, iy = ey - Math.sin(a) * 30;
+    g.globalAlpha = pulse;
+    g.fillStyle = '#fff2ec'; g.strokeStyle = 'rgba(20,10,10,.8)'; g.lineWidth = 2;
     g.beginPath();
-    g.moveTo(ix + Math.cos(a) * 11, iy + Math.sin(a) * 11);
-    g.lineTo(ix + Math.cos(a + 2.4) * 9, iy + Math.sin(a + 2.4) * 9);
-    g.lineTo(ix + Math.cos(a - 2.4) * 9, iy + Math.sin(a - 2.4) * 9);
-    g.closePath(); g.fill();
+    g.moveTo(ix + Math.cos(a) * 17, iy + Math.sin(a) * 17);
+    g.lineTo(ix + Math.cos(a + 2.45) * 14, iy + Math.sin(a + 2.45) * 14);
+    g.lineTo(ix + Math.cos(a) * 3, iy + Math.sin(a) * 3);
+    g.lineTo(ix + Math.cos(a - 2.45) * 14, iy + Math.sin(a - 2.45) * 14);
+    g.closePath(); g.fill(); g.stroke();
     drawn = true;
   }
   g.globalAlpha = 1;
