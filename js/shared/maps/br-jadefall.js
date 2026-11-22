@@ -571,9 +571,34 @@ function build() {
     shallows, underDecks, cells: { size: CELL, n: N, nz: N, cls },
     modes: ['br'], large: true,
     br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias, reboundAreas, exfils },
+    // Conquest and Breakthrough on parts of the island (js/shared/bf.js has the format; docs/MODES.md).
+    bf: BF_LAYOUTS,
     skipped,
   };
 }
+
+// Conquest: the west island, HQs at either end, the pyramid across the west causeway as the far flag.
+// Breakthrough: down the east island from Turtle Bay, through Port Coral, to Pearl Village.
+const BF_LAYOUTS = {
+  conquest: [{
+    id: 'westisle', name: 'Jadefall: West Isle', area: { x: 20, z: 70, w: 210, h: 290 },
+    hq: [{ x: 54, z: 96, r: 10 }, { x: 60, z: 310, r: 10 }],
+    flags: [
+      { id: 'A', x: 92, z: 138, name: 'Plantation' }, { id: 'B', x: 144, z: 154, name: 'Stilt Market' },
+      { id: 'C', x: 77.5, z: 199.5, name: 'Serpent Ruins' }, { id: 'D', x: 200, z: 189, name: 'Jade Pyramid' },
+      { id: 'E', x: 88, z: 268, name: 'Research Camp' }, { id: 'F', x: 132, z: 340, name: 'Shipwreck Cove' },
+    ],
+  }],
+  breakthrough: [{
+    id: 'coastroad', name: 'Jadefall: Coast Road', area: { x: 228, z: 38, w: 158, h: 290 },
+    hq: [{ x: 292, z: 58, r: 10 }, { x: 284, z: 312, r: 10 }],
+    sectors: [
+      { name: 'Signal Peak', objs: [{ x: 262, z: 98 }, { x: 316, z: 122 }] },
+      { name: 'Port Coral', objs: [{ x: 310, z: 182 }, { x: 338, z: 215 }] },
+      { name: 'Lighthouse', objs: [{ x: 340, z: 266 }, { x: 260, z: 292 }] },
+    ],
+  }],
+};
 
 // A star fort round (cx, cz): curtain walls with gates north and south, a bastion at each corner.
 function fort(P, cx, cz) {

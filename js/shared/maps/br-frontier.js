@@ -493,8 +493,34 @@ function build() {
     rooms: P.rooms, roofs: P.roofs, zones: P.zones, roads: P.roads, rails: P.rails, regionSeeds: REGION_SEEDS,
     modes: ['br'], large: true,
     br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias },
+    // Conquest and Breakthrough on parts of the island (js/shared/bf.js has the format; docs/MODES.md).
+    bf: BF_LAYOUTS,
   };
 }
+
+// Conquest: the city between the rail yard and the station, HQs on the ring road west and by the east bridge.
+// Breakthrough: from north of Downtown south through the station blocks to the airfield.
+const BF_LAYOUTS = {
+  conquest: [{
+    id: 'downtown', name: 'Frontier: Downtown', area: { x: 100, z: 95, w: 188, h: 180 },
+    hq: [{ x: 110, z: 205, r: 10 }, { x: 272, z: 205, r: 10 }],
+    flags: [
+      { id: 'A', x: 135, z: 152, name: 'Radio Hill' }, { id: 'B', x: 240, z: 125, name: 'Freight Yard' },
+      { id: 'C', x: 171.5, z: 179.5, name: 'West Blocks' }, { id: 'D', x: 230.5, z: 183.5, name: 'Plaza' },
+      { id: 'E', x: 200, z: 241, name: 'Central Station' }, { id: 'F', x: 128, z: 256, name: 'Grain Co-op' },
+      { id: 'G', x: 250, z: 250, name: 'Depot' },
+    ],
+  }],
+  breakthrough: [{
+    id: 'southbound', name: 'Frontier: Southbound', area: { x: 110, z: 135, w: 178, h: 240 },
+    hq: [{ x: 205, z: 148, r: 10 }, { x: 190, z: 366, r: 10 }],
+    sectors: [
+      { name: 'Downtown', objs: [{ x: 175, z: 185 }, { x: 232, z: 188 }] },
+      { name: 'Central Station', objs: [{ x: 200, z: 240 }, { x: 140, z: 255 }] },
+      { name: 'Airfield', objs: [{ x: 216.5, z: 318.5 }, { x: 262, z: 322 }] },
+    ],
+  }],
+};
 
 function regionOfRiver(z) { return z < 30 ? 'coast' : z < 150 ? 'industrial' : z < 220 ? 'metro' : 'jungle'; }
 
