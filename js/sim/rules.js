@@ -5,7 +5,9 @@
 //   look                    rule set whose zones the renderer and HUD draw ('hard', 'dom'), as view.mode
 //   ownClock                the rules run the match clock themselves (rounds)
 //   allIn                   every bot plays the objective, whatever its roll for this life
+//   pathBudget              bot path searches a tick (default 2)
 //   step(dt)                one live tick; the rules end the match themselves (sim._end)
+//   onNav()                 the host's nav grid was just built (first step, or a new host): precompute from it here
 //   onLive()                the sim went live (every time, for round modes that re-freeze)
 //   onSpawn(p)              p was just placed on the field
 //   onKill(target, killer, info)   after a death (killer null: no credit; info.away: a human left)

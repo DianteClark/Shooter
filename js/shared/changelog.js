@@ -4,6 +4,13 @@
 
 export const CHANGELOG = [
   {
+    build: '1122-6', date: '2026-11-22', title: 'Breakthrough balance',
+    items: [
+      'Breakthrough: once attackers hold an objective of a sector they respawn near it, and in sectors whose objectives lie far past the front line they no longer have to walk all the way from the HQ. Attacking bots now swing out to the sides instead of filing down one street, and objectives take a little longer to capture. Meridian City\'s Crosstown is now winnable for the attackers.',
+      'Big Ground War maps on the islands and in Meridian City run a little smoother.',
+    ],
+  },
+  {
     build: '1122-5', date: '2026-11-22', title: 'Graveyard Shift: Saltmere Abbey, and Operation Starfall',
     items: [
       'Graveyard Shift has a fourth map built for it: Saltmere Abbey, a drowned abbey town on the salt marsh where the tide came in one night and never went out. Brine in the streets, candles in the windows, the abbey church open to the sky. Seven areas in a loop round the marsh pumps; turn the power on to wake the perks. It has its own music.',

@@ -14,12 +14,13 @@
 // Medals: bt_capture, bt_sector (and the sim's own defend for kills on a held objective).
 import { addScore } from './streaks.js';
 import { BF, along, bfLayout, btAttackers, inArea, sectorBand } from '../shared/bf.js';
-import { alive, closestBot, decodeStats, encodeStats, makeZones, packZone, restoreStats, unpackZone, zoneObjective } from './mode-kit.js';
-import { bestSpot, faceTo, intoArea, sendBack, spawnSpots, stepBounds, stepFlag } from './bf-kit.js';
+import { alive, closestBot, decodeStats, encodeStats, makeZones, packZone, restoreStats, unpackZone, walkable, zoneObjective } from './mode-kit.js';
+import { bestSpot, faceTo, intoArea, sendBack, spawnSpots, stepBounds, stepFlag, warmPaths } from './bf-kit.js';
 import { hqSpots } from './conquest.js';
 
 const STATS = ['btCaps', 'oobDs'];
 const REASONS = ['sectors', 'tickets', 'time'];
+const LANES = [-1, 0, 1, 1, 0, -1];
 
 export class BreakthroughRules {
   constructor(sim, seed) {
@@ -27,6 +28,9 @@ export class BreakthroughRules {
     this.look = 'dom';
     this.allIn = true;
     this.ownSpawns = true;
+    // On a battle royale island a cross-district path search costs a few milliseconds; with 32 bots sent somewhere new
+    // at once (the start, a flag falling) two a tick made 8-11 ms ticks. One a tick spreads them out.
+    this.pathBudget = sim.map.size === 'giant' ? 1 : 2;
     this.ownClock = true;
     const l = this.layout = bfLayout(sim.map, 'breakthrough', seed);
     this.att = btAttackers(seed);
@@ -109,10 +113,15 @@ export class BreakthroughRules {
     const all = this._spots() ?? [];
     let spots;
     if (p.team === this.att) {
-      // Short of the sector's nearest objective (and never past the line behind it): the attack starts close enough
-      // to matter on a big island part, and from the HQ as well in sector one.
-      const [n0, n1] = BF.bt.attackBand;
-      spots = all.filter(s => s.a >= sec.min - n1 && s.a <= Math.min(sec.min - n0, b.lo));
+      // Short of the nearest objective still to take, never past the line behind the sector unless the ground is
+      // theirs (an objective of it already held): the attack starts close enough to matter on a big island part, a
+      // taken objective is a foothold for the next, and the HQ is a spawn as well in sector one.
+      const [n0, n1] = BF.bt.attackBand, open = this.zones.filter(z => z.owner !== this.att), held = this.zones.filter(z => z.owner === this.att);
+      const ref = open.length ? Math.min(...open.map(z => along(l, z.x, z.z))) : sec.min;
+      // (A sector whose objectives sit far past its line used to leave that band empty, and everyone walked from the HQ.)
+      const top = held.length || b.lo === -Infinity ? ref - n0 : Math.min(ref - n0, b.lo + 10);
+      spots = all.filter(s => s.a >= Math.min(ref - n1, top - 16) && s.a <= top);
+      if (!spots.length && b.lo > -Infinity) spots = all.filter(s => s.a >= b.lo - 30 && s.a <= b.lo);
       if (this.sector === 0) spots = spots.concat(this.hq[0]);
       if (!spots.length) spots = this.hq[0];
     } else {
@@ -128,6 +137,9 @@ export class BreakthroughRules {
     sim._placeAt(p, s, this._face(s));
     return true;
   }
+
+  // Spawn spots built with the nav grid, not on the first respawn (see ConquestRules.onNav).
+  onNav() { this._spots(); if (this.layout) warmPaths(this.sim, [this.layout.hq[0], ...this.layout.sectors.flatMap(s => s.objs), this.layout.hq[1]]); }
 
   holdDead(p) { return p.team === this.att && this.tickets <= 0; }
 
@@ -240,6 +252,15 @@ export class BreakthroughRules {
           const c = Math.hypot(z.x - bot.ps.x, z.z - bot.ps.z) + (load.get(z) ?? 0) * (3 + bot.S.objSplit);
           if (c < bc) { bc = c; best = z; }
         }
+        // Far from it, a third of the attackers come up the middle and the rest swing out to either side and close
+        // in from there: a column straight down one street toward a held objective (Meridian's boulevard) stalls in a
+        // long-range trade the defenders always win.
+        const lane = this._lane(bot);
+        const short = along(l, best.x, best.z) - along(l, bot.ps.x, bot.ps.z);
+        if (lane && short > BF.bt.flankFrom) {
+          const at = this._flankPoint(best, lane);
+          if (at) { bot.setObjective({ key: `fl${best.id}${lane}`, x: at.x, z: at.z, r: 4, role: 'attack', aim: face }); free.delete(bot); load.set(best, (load.get(best) ?? 0) + 1); continue; }
+        }
         assign(bot, best, 'attack');
       }
       return;
@@ -247,7 +268,7 @@ export class BreakthroughRules {
     const lost = zones.filter(z => z.owner !== this.def);
     const hot = zones.filter(z => z.owner === this.def && (z.contested || Math.abs(z.cap) < 0.97));
     // Lost objectives: most of the side goes to take it back.
-    for (const z of lost) for (let k = 0; k < Math.ceil(crew.length * 0.6 / lost.length); k++) { const bot = closestBot(free, z.x, z.z); if (bot) assign(bot, z, 'attack', 'retake'); }
+    for (const z of lost) for (let k = 0; k < Math.ceil(crew.length * BF.bt.retake / lost.length); k++) { const bot = closestBot(free, z.x, z.z); if (bot) assign(bot, z, 'attack', 'retake'); }
     for (const z of hot) for (let k = 0; k < 4; k++) { const bot = closestBot(free, z.x, z.z); if (bot) assign(bot, z, 'defend'); }
     // Long guns cover from behind the objectives.
     const heavies = [...free].filter(q => q.S.objDefend > 0).sort((x, y) => y.style.hold - x.style.hold).slice(0, Math.min(4, Math.floor(free.size / 4)));
@@ -260,6 +281,25 @@ export class BreakthroughRules {
       }
       assign(bot, best, 'defend');
     }
+  }
+
+  // A bot's approach for this life: -1, 0 or +1 (left, middle, right of the axis), two in three off the middle.
+  _lane(bot) { return LANES[(bot.p.index + this.sector) % LANES.length]; }
+
+  // Where a flanker gathers before closing in: short of the objective along the axis, out to one side by BF.bt.flank,
+  // on walkable ground inside the area. Cached per objective and side.
+  _flankPoint(z, lane) {
+    const key = `${z.id}${lane}`, c = (this.flanks ??= new Map());
+    if (c.has(key)) return c.get(key);
+    const l = this.layout, { dx, dz } = l.axis, back = BF.bt.flankBack;
+    let at = null;
+    for (const side of [BF.bt.flank, BF.bt.flank * 0.6, BF.bt.flank * 0.3]) {
+      const p = intoArea(l.area, z.x - dx * back - dz * side * lane, z.z - dz * back + dx * side * lane, 6);
+      const w = walkable(this.sim, p.x, p.z);
+      if (this.sim.nav && Math.hypot(w.x - p.x, w.z - p.z) < 6) { at = w; break; }
+    }
+    c.set(key, at);
+    return at;
   }
 
   // ---- View and wire ----

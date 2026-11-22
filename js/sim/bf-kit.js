@@ -56,18 +56,25 @@ export function spawnSpots(sim, area, from) {
 }
 
 // The best of `spots` for p: far from living enemies, out of their sight, not just used, nearer `toward` if given.
+// At most SAMPLE spots are scored (a seeded pick when there are more: a band on a big map holds hundreds, and scoring
+// each against every enemy with sight lines cost a phone host 5-15 ms a respawn), and the enemies are gathered once.
+const SAMPLE = 28;
+const _foes = [];
 export function bestSpot(sim, p, spots, toward = null) {
-  let best = null, bestScore = -Infinity;
   const foe = 1 - p.team;
-  for (const s of spots) {
+  let nf = 0;
+  for (const q of sim.players) if (q.team === foe && q.alive) { _foes[nf++] = q.ps; }
+  const n = spots.length, step = n > SAMPLE ? n / SAMPLE : 1, off = n > SAMPLE ? sim.rng() * step : 0;
+  let best = null, bestScore = -Infinity;
+  for (let f = off; f < n; f += step) {
+    const s = spots[Math.floor(f)];
     let nearest = 60, seen = false;
-    for (const q of sim.players) {
-      if (q.team !== foe || !q.alive) continue;
-      const dx = q.ps.x - s.x, dz = q.ps.z - s.z, d2 = dx * dx + dz * dz;
+    for (let k = 0; k < nf; k++) {
+      const q = _foes[k], dx = q.x - s.x, dz = q.z - s.z, d2 = dx * dx + dz * dz;
       if (d2 > 3600) continue;
       const d = Math.sqrt(d2);
       if (d < nearest) nearest = d;
-      if (!seen && d < 36 && hasLineOfSight(sim.map, s.x, s.z, q.ps.x, q.ps.z)) seen = true;
+      if (!seen && d < 36 && hasLineOfSight(sim.map, s.x, s.z, q.x, q.z)) seen = true;
     }
     const usedAgo = sim.time - (sim.spawnUsedAt.get(s) ?? -99);
     let score = Math.min(nearest, 40) - (seen ? 30 : 0) - (usedAgo < 2.5 ? 12 : 0) + sim.rng() * 4;
@@ -76,6 +83,14 @@ export function bestSpot(sim, p, spots, toward = null) {
   }
   if (best) sim.spawnUsedAt.set(best, sim.time);
   return best;
+}
+
+// A few path searches across the layout on the step that builds the nav grid: the first searches of a match run cold
+// (the engine has not compiled them yet) and cost several times a warm one, which made the first live tick on an
+// island part the match's longest. Their result is thrown away; nothing the sim decides depends on them.
+const _warmPath = new Float32Array(256);
+export function warmPaths(sim, pts) {
+  for (let i = 0; i + 1 < pts.length; i++) sim.nav.findPath(pts[i].x, pts[i].z, pts[i + 1].x, pts[i + 1].z, _warmPath, 64, -1);
 }
 
 export const faceTo = (s, t) => Math.atan2(t.z - s.z, t.x - s.x);

@@ -227,7 +227,7 @@ map.bf = {
 
 ### Breakthrough
 - Only the current sector's objectives are live; they start the defenders'. Attackers take one as a Conquest flag
-  (slower: `BF.bt.capture` 16 s alone), and each one taken puts a minute back on the sector clock; defenders can take it back. All held at once: the sector falls, the attackers
+  (slower: `BF.bt.capture` 25 s alone), and each one taken puts a minute back on the sector clock; defenders can take it back. All held at once: the sector falls, the attackers
   get `refill` tickets, the sector clock (5 minutes, or the layout's `clock`) restarts, and the next objectives stay locked
   for `BF.bt.lock` s while both sides move up.
 - Attackers spend a ticket a death; at zero they stop respawning and lose when the last is down. Defenders respawn
@@ -236,12 +236,15 @@ map.bf = {
 - Bounds: attackers may not go more than `BF.bt.margin` past the line ahead, defenders no further back than the line
   behind; outside, the out-of-bounds clock (8 s, then death without credit). Defenders caught behind a fallen line get
   `BF.bt.fallBack` 12 s ("Fall back").
-- Spawns: attackers 18-34 m short of the sector's nearest objective, never past the line behind it (and the HQ in
-  sector one); defenders 14-30 m behind its farthest objective, 16 m or more from any live objective (the last sector
-  adds their HQ). Both sides walk about as far to the fight.
-- Bots: attackers spread over the objectives still to take (two hold one taken), pushing onto it shooting on the move
-  within 18 m (`commit`); defenders split over the objectives, four more on one under attack, long guns covering from
-  behind, most of the side back to retake a lost one.
+- Spawns: attackers 18-34 m short of the nearest objective they still have to take, no more than 10 m past the line
+  behind the sector until they hold one of its objectives (a held objective is a foothold for the next), behind that
+  line if the band is empty, and the HQ in sector one; defenders 14-30 m behind the sector's farthest objective, 16 m
+  or more from any live objective (the last sector adds their HQ). Both sides walk about as far to the fight.
+- A part of a big map (an island, Meridian) defaults to a 7-minute sector clock and a 1.5 s longer defender respawn.
+- Bots: attackers spread over the objectives still to take (two hold one taken). Further than 30 m short of it, two in
+  three gather 22 m out to one side and 16 m short first (`BF.bt.flank`), then close in; within 28 m they push onto it
+  shooting on the move (`commit`). Defenders split over the objectives, four more on one under attack, long guns
+  covering from behind, 55% of the side back to retake a lost one.
 - Events `{t:'bt', kind:'capture'|'neutral'|'retake'|'sector'|'overtime'|'low'|'end'}`; medals bt_capture, bt_sector.
 
 ### Tuning (bot-only matches, 32 mixed bots, every map, two seeds; `dev/sim-conquest.mjs`, `dev/sim-breakthrough.mjs`)
@@ -256,6 +259,20 @@ map.bf = {
   and bigger pools, and a minute back on the clock for every objective taken. Measured after the merge with
   destruction: attackers won 4 of 14 and reached the last sector in 5 more, 3-15 minute matches, stuck under 0.25 s
   a bot a minute, host tick under 0.7 ms mean. Conquest over the same maps: 6 / 8, 7-13 minutes.
+- Second pass (with Meridian's Crosstown, where attackers took 0 of 3 sectors): the attackers' spawn band was empty
+  whenever a sector's objectives lay well past its line (it was capped at the line), so everyone walked from the HQ;
+  on Meridian's straight boulevard the column then lost every long-range trade. Fixed the band (above), added the
+  flank approach and the big-map clock defaults, then capture 25 s and a 55% retake share to bring it back from 14 of
+  16 attacker wins. Measured over 7 maps x 2 seeds plus Meridian x 2: attackers won 9 of 16 (Meridian 1 of 2),
+  4-12 minute matches. Conquest: 8 / 8, Meridian 11-12 minutes.
+- Host tick spikes (Meridian Conquest showed a 28.6 ms worst): ours were the flag spawn rings built on the first
+  deploy (11-14 ms flood fill), respawn scoring of every spot in a band against every enemy (4-15 ms), and two cold
+  cross-city path searches a tick when everyone was sent somewhere at once. Now the spots are built on the step that
+  builds the nav grid (`onNav`), a respawn scores at most 28 spots, the first path searches are warmed there too, and
+  on a giant map the rules allow one path search a tick (`pathBudget`). The tests now report wall-clock worst and
+  p99.9 per match: p99.9 is 1.6-4.7 ms on every map. Single ticks of 10-40 ms still turn up on this shared 2-core
+  machine on every map (Harvest included); traced on Meridian they are garbage collection and single bot thinks
+  (`_thinkThreats`, `_landing`, `_ambush`), and the first live tick (11 ms: the bot code's first run), not mode code.
 
 ### Wire, migration, replays
 - Conquest's block: tickets (ds), every flag packed (`packZone`), stats (cqCaps, oob ds). Breakthrough's: sector,

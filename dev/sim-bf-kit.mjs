@@ -56,12 +56,15 @@ export function botMatch(mode, map, seed, { maxSeconds = 1500, every = null } = 
   const { sim } = makeSim(mode, map, { seed });
   const ev = {}, hist = new Map();
   let stuck = 0, ticks = 0, cpu = 0, worst = 0, spreadN = 0, spreadSum = 0;
+  const walls = [];
   const end = Math.round(maxSeconds * SIM_HZ);
   for (let i = 0; i < end && sim.phase !== 'ended'; i++) {
-    const a = process.cpuUsage();
+    // Mean: CPU time of the process. Worst: the main thread's wall time (CPU time also counts the collector's and the
+    // compiler's own threads, which do not stall the tick), from the first live tick on (the warmup builds the nav grid).
+    const a = process.cpuUsage(), w0 = performance.now();
     sim.step(STEP);
-    const u = process.cpuUsage(a), ms = (u.user + u.system) / 1000;
-    if (sim.phase === 'live') { ticks++; cpu += ms; if (i > 10 * SIM_HZ) worst = Math.max(worst, ms); }
+    const wall = performance.now() - w0, u = process.cpuUsage(a), ms = (u.user + u.system) / 1000;
+    if (sim.phase === 'live') { ticks++; cpu += ms; worst = Math.max(worst, wall); walls.push(wall); }
     for (const e of sim.drainEvents()) {
       const k = e.kind && (e.t === 'cq' || e.t === 'bt') ? `${e.t}:${e.kind}` : e.t;
       ev[k] = (ev[k] ?? 0) + 1;
@@ -86,5 +89,9 @@ export function botMatch(mode, map, seed, { maxSeconds = 1500, every = null } = 
       every?.(sim);
     }
   }
-  return { sim, winner: sim.winner, seconds: sim.time, ev, mean: cpu / Math.max(1, ticks), worst, stuckPerBotMin: stuck / sim.players.length / Math.max(1, sim.time / 60), spread: spreadSum / Math.max(1, spreadN) };
+  // p999: the tick only one in a thousand is slower than (on a shared, busy test machine the single worst is often the
+  // machine, not the game).
+  walls.sort((a, b) => a - b);
+  const p999 = walls[Math.min(walls.length - 1, Math.floor(walls.length * 0.999))] ?? 0;
+  return { sim, winner: sim.winner, seconds: sim.time, ev, mean: cpu / Math.max(1, ticks), worst, p999, stuckPerBotMin: stuck / sim.players.length / Math.max(1, sim.time / 60), spread: spreadSum / Math.max(1, spreadN) };
 }

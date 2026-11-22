@@ -14,7 +14,7 @@ import { addScore } from './streaks.js';
 import { BF, bfLayout, inArea } from '../shared/bf.js';
 import { wallsInBox, wallScratch } from '../shared/geometry.js';
 import { closestBot, decodeStats, encodeStats, makeZones, packZone, restoreStats, unpackZone, zoneObjective } from './mode-kit.js';
-import { bestSpot, faceTo, intoArea, sendBack, spawnSpots, stepBounds, stepFlag } from './bf-kit.js';
+import { bestSpot, faceTo, intoArea, sendBack, spawnSpots, stepBounds, stepFlag, warmPaths } from './bf-kit.js';
 
 const STATS = ['cqCaps', 'oobDs'];
 let _scratch = null;
@@ -48,6 +48,9 @@ export class ConquestRules {
     this.look = 'dom';
     this.allIn = true;
     this.ownSpawns = true;
+    // On a battle royale island a cross-district path search costs a few milliseconds; with 32 bots sent somewhere new
+    // at once (the start, a flag falling) two a tick made 8-11 ms ticks. One a tick spreads them out.
+    this.pathBudget = sim.map.size === 'giant' ? 1 : 2;
     const l = this.layout = bfLayout(sim.map, 'conquest', seed);
     this.zones = makeZones(l?.flags ?? []).map(z => ({ ...z, by: -1 }));
     sim.points = this.zones;
@@ -146,6 +149,10 @@ export class ConquestRules {
     p.deploy = at === 'hq' || this.zones.some(z => z.id === at) ? at : null;
     return true;
   }
+
+  // The flag spawn rings are built with the nav grid (the sim's first step, which builds that anyway), not on the first
+  // deploy: on a big island part the flood fill is several milliseconds a phone host should not spend mid-fight.
+  onNav() { this._flagSpots(); if (this.layout) warmPaths(this.sim, [this.layout.hq[0], ...this.layout.flags, this.layout.hq[1]]); }
 
   // ---- Rules ----
   step(dt) {
