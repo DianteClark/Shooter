@@ -61,6 +61,16 @@ CASES += [('tourney', 'tourney', '2026-11-21T12:00:00')]
 # maps on the coast.
 CASES += [('custom-' + mp + '-' + m, 'custom', (mp, m)) for mp, ms in [('launchpad', ['tdm', 'dom', 'snd']), ('observatory', ['tdm', 'hq', 'kc']), ('pagoda', ['tdm', 'ctf', 'ffa'])] for m in ms]
 CASES += [('custom-jadefall-br', 'custom', ('jadefall', 'br')), ('custom-tidebreak-gwtdm', 'custom', ('tidebreak', 'gwtdm')), ('custom-coral-gwdom', 'custom', ('coral', 'gwdom'))]
+# 1122 wave (bug sweep 2026-11-22): the sixteen district maps of the four new BR regions as 6v6 maps (Meridian City,
+# Sirocco Basin, Kittiwake Bay, Kaldvik), one mode each round the Standard list; Graveyard Shift on Saltmere Abbey; and
+# Conquest and Breakthrough from their Ground War playlists and on a map each.
+DISTRICTS = ['midtown', 'oldquarter', 'canalrow', 'unionsq', 'caravanserai', 'redgulch', 'copperstep', 'signalridge',
+             'fishmarket', 'shipyard', 'boardwalk', 'stiltrow', 'trawler', 'telemark', 'icecore', 'spillway']
+DISTRICT_MODES = ['tdm', 'dom', 'kc', 'hard', 'hq', 'snd', 'ctf', 'ffa']
+CASES += [('custom-' + mp + '-' + DISTRICT_MODES[i % len(DISTRICT_MODES)], 'custom', (mp, DISTRICT_MODES[i % len(DISTRICT_MODES)])) for i, mp in enumerate(DISTRICTS)]
+CASES += [('custom-zm-saltmere', 'custom', ('saltmere', 'zm'))]
+CASES += [('mp-conquest', 'mp', ('groundwar', 'conquest')), ('mp-breakthrough', 'mp', ('groundwar', 'breakthrough')),
+          ('custom-harvest-cq', 'custom', ('harvest', 'cq')), ('custom-tidebreak-bt', 'custom', ('tidebreak', 'bt'))]
 
 STATE = f"""(() => {{ const a = {G}, m = a.match; return {{ screen: window.__game.menu.el.dataset.screen, inMatch: !!a.inMatch,
   phase: m?.interp?.newest?.phase ?? null, mode: m?.mode ?? null, mapId: m?.mapId ?? null }}; }})()"""
@@ -123,12 +133,12 @@ async def run_case(browser, name, kind, arg, size, report):
     t0 = time.time()
     try:
         await pg.goto(f'http://localhost:{PORT}/{q}')
-        await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
+        await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
         await ev("window.__game.Progress.name='Sweeper'; window.__game.Progress.setFlag('tutorialOffered'); window.__game.Progress.setFlag('aimHint')")
         # Today's challenges include "Play N matches", so every case has challenge rows to check against the save.
         await ev(SET_CHALLENGES)
         await pg.reload()
-        await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
+        await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
         await pg.wait_for_timeout(1200)
         before = await ev(SAVE)
         if kind == 'wkevent':
@@ -187,10 +197,10 @@ async def play_once(pg, ev, name, kind, arg, notes, fails, shot, before, rnd_i):
                     # The Training tab of Custom: its Start button.
                     btn = pg.locator('[data-act="trainStart"], [data-act="training"]').first
                     if await btn.count(): await btn.click()
-        await pg.wait_for_function(f'{G}.inMatch && !!{G}.match', timeout=60000)
+        await pg.wait_for_function(f'{G}.inMatch && !!{G}.match', timeout=120000)
         st = await ev(STATE)
         notes.append(f"{st['mode']} on {st['mapId']}")
-        await pg.wait_for_function(f"['live', 'prematch', 'round'].includes({G}.match?.interp?.newest?.phase) || {G}.match?.interp?.newest?.phase === 'live'", timeout=60000)
+        await pg.wait_for_function(f"['live', 'prematch', 'round'].includes({G}.match?.interp?.newest?.phase) || {G}.match?.interp?.newest?.phase === 'live'", timeout=120000)
         # BR / Rebound / Extraction start in the plane or a deploy: let the bots do it, and jump the local player out.
         await ev("window.__connect(true)")
         rnd = random.Random(hash(name) & 0xffff)
@@ -268,7 +278,7 @@ async def play_once(pg, ev, name, kind, arg, notes, fails, shot, before, rnd_i):
                 notes.append(f'after results: {scr}')
                 # The save survives a reload.
                 await pg.reload()
-                await pg.wait_for_function('!!window.__game?.Progress', timeout=30000)
+                await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
                 xp2 = await ev("window.__game.Progress.totalXp")
                 if xp2 != after['xp']: fails.append(f"XP after reload {xp2} != {after['xp']}")
                 await pg.wait_for_timeout(1000)

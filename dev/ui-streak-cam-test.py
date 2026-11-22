@@ -21,6 +21,9 @@ RADAR_ONLY = '--radar' in sys.argv
 TRACKING = ['uav', 'overwatch', 'blackbird', 'sweep', 'recon']
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 PILOTED = {'missile', 'recon', 'bombrun'}
+# Wave 5 (1122-4): where each new streak lives once called (bug sweep 2026-11-22 checks they are really up).
+W5_UP = {'vtol': "sim.gunships.some(g => g.kind === 'vtol')", 'sam': "sim.turrets.some(t => t.kind === 'sam')",
+         'napalm': "(sim.w5Runs ?? []).length > 0 || sim.eq.projectiles.some(e => e.kind === 'napalm')"}
 
 CALL = """(kind) => { const g = window.__game, m = g.app.match, sim = m.sim, p = sim.byId.get(m.localId);
   if (!p?.alive) return 'dead';
@@ -155,19 +158,31 @@ async def main():
                 await pg.evaluate("""(() => { const c = window.__game.controls;
                   const read = c.__read ??= c.read.bind(c);
                   c.read = () => { const i = read(); const t = performance.now() / 900; i.mx = Math.cos(t) * 0.6; i.mz = Math.sin(t) * 0.6; return i; }; })()""")
+                if kind == 'napalm':
+                    # The jet lays its line across the biggest group the team can see: bring a few enemies into view.
+                    await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId);
+                      sim.players.filter(q => q.team !== me.team && q.alive).slice(0, 3).forEach((q, i) => { q.ps.x = me.ps.x + 6 + i; q.ps.z = me.ps.z + 2; }); })()""")
                 res = await pg.evaluate(f'({CALL})({json.dumps(kind)})')
+                if kind in W5_UP:
+                    await pg.wait_for_timeout(600)
+                    up = await pg.evaluate(f"(() => {{ const sim = window.__game.app.match.sim; return !!({W5_UP[kind]}); }})()")
+                    print(f'  {kind:<11} is up in the sim after the call: {"ok" if up else "FAIL"}')
+                    if not up: failures.append(f'{kind}: not up after the call ({res})')
                 worst = 0.0
                 for _ in range(10):
                     await pg.wait_for_timeout(250)
                     s = await pg.evaluate(f'({SAMPLE})()')
                     worst = max(worst, (s['dx'] ** 2 + s['dz'] ** 2) ** 0.5)
+                if kind in W5_UP:
+                    os.makedirs('/tmp/streak-cam', exist_ok=True)
+                    await pg.screenshot(path=f'/tmp/streak-cam/{kind}.png')
                 follows = worst < 3.5
                 steered = kind in PILOTED
                 ok = res not in ('refused', 'dead') and (steered or follows)
                 table.append((kind, res, round(worst, 1), 'moves to the streak' if not follows else 'stays on player'))
                 print(f'  {kind:<11} called={res!s:<10} max cam offset {worst:5.1f} m  {"steered" if steered else "not steered"}  {"ok" if ok else "FAIL"}')
                 if not ok: failures.append(f'{kind}: {res} offset {worst:.1f}')
-                await pg.evaluate("(() => { const m = window.__game.app.match; m.sim.gunships.length = 0; m.sim.turrets.length = 0; m.sim.strikes.length = 0; })()")
+                await pg.evaluate("(() => { const m = window.__game.app.match; m.sim.gunships.length = 0; m.sim.turrets.length = 0; m.sim.strikes.length = 0; if (m.sim.w5Runs) m.sim.w5Runs.length = 0; })()")
                 await pg.wait_for_timeout(700)
 
             # Recon Drone: the aim stick flies it at once, sprinting, no ADS.

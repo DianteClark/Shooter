@@ -4,7 +4,8 @@
 At 932x430 in headless Chromium (SwiftShader, so frame and script ms only compare runs on this machine; draw calls and
 triangles are exact), with the perf overlay on (?fps=1). Cases: br (Quads on Frontier, after the jump, on the ground), brjade (the same on Jadefall), brcity (the same on Meridian City), brbay (the same on Kittiwake Bay), brnorth (the same on Kaldvik), brsirocco (the same on Sirocco Basin), gwtide and gwcoral (Ground War on Jadefall's coast),
 gw (Ground War TDM on Harvest), tdmlaunch, tdmobs, tdmpagoda (the 1120 6v6 maps), cpboss (campaign mission 8 at the
-boss, from the Campaign tab), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
+boss, from the Campaign tab), cq, bt, cqcity, btcity (Conquest and Breakthrough on Harvest, Tidebreak and Meridian City), zm20saltmere,
+cpfinale (Starfall's mission 12 at Director Vane), zm20 (Graveyard Shift round 20 on Ashgrove with every gate open, the horde full, traps
 on and sentries out, as dev/sim-zombies.mjs's perf section), tdm (Railyard, for scale). Prints the median and worst of
 calls, triangles and script ms over 12 s, and a screenshot of each with the overlay. --root serves another checkout
 (an older build) for a before/after. --suits dresses everyone in the match in a Mastery suit, twelve different operators
@@ -33,10 +34,15 @@ CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('brcity', 'mer
          ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('zm20wrenfield', 'wrenfield', 'zm'), ('replay', 'railyard', 'tdm'),
          # 1120 wave (bug sweep 2026-11-20): the three new 6v6 maps, and the campaign's mission 8 at the boss (Marshal
          # Kordell with his crest, beam and ring, his guard, the barrage rings), started from the Campaign tab.
-         ('tdmlaunch', 'launchpad', 'tdm'), ('tdmobs', 'observatory', 'tdm'), ('tdmpagoda', 'pagoda', 'tdm'), ('cpboss', 'canyon', 'cp')]
+         ('tdmlaunch', 'launchpad', 'tdm'), ('tdmobs', 'observatory', 'tdm'), ('tdmpagoda', 'pagoda', 'tdm'), ('cpboss', 'canyon', 'cp'),
+         # 1122 wave (bug sweep 2026-11-22): Conquest and Breakthrough on a Ground War map and on Meridian City's
+         # layouts, Graveyard Shift round 20 on Saltmere Abbey, and Starfall's finale (mission 12, Director Vane) at the boss.
+         ('cq', 'harvest', 'cq'), ('bt', 'tidebreak', 'bt'), ('cqcity', 'meridian', 'cq'), ('btcity', 'meridian', 'bt'),
+         ('zm20saltmere', 'saltmere', 'zm'), ('cpfinale', 'launchpad', 'cp')]
 
 OPEN_ALL = """(() => { const s = JSON.parse(localStorage.getItem('switchyard.save'));
-  s.cp = { m1: [2, 1, 400], m2: [2, 0, 500], m3: [2, 0, 500], m4: [2, 0, 500], m5: [2, 0, 500], m6: [2, 0, 500], m7: [2, 0, 500] };
+  s.cp = { m1: [2, 1, 400], m2: [2, 0, 500], m3: [2, 0, 500], m4: [2, 0, 500], m5: [2, 0, 500], m6: [2, 0, 500], m7: [2, 0, 500],
+    m8: [2, 0, 500], m9: [2, 0, 500], m10: [2, 0, 500], m11: [2, 0, 500] };
   localStorage.setItem('switchyard.save', JSON.stringify(s)); })()"""
 
 ZM20 = f"""(async () => {{
@@ -86,7 +92,8 @@ async def run(browser, name, mapId, mode, rows):
     await pg.wait_for_function('!!window.__game?.Progress', timeout=90000)
     await pg.wait_for_timeout(1000)
     if mode == 'cp':
-        for sel in ['[data-act="multiplayer"]', '[data-act="mpTab"][data-tab="campaign"]', '[data-act="cpPick"][data-k="7"]', '[data-act="cpBrief"]', '[data-act="cpSolo"]']:
+        pick = ['[data-act="cpOp"][data-o="1"]', '[data-act="cpPick"][data-k="11"]'] if name == 'cpfinale' else ['[data-act="cpPick"][data-k="7"]']
+        for sel in ['[data-act="multiplayer"]', '[data-act="mpTab"][data-tab="campaign"]', *pick, '[data-act="cpBrief"]', '[data-act="cpSolo"]']:
             await pg.locator(sel).first.click()
             await pg.wait_for_timeout(700)
     else:
@@ -118,7 +125,7 @@ async def run(browser, name, mapId, mode, rows):
         # Kaldvik's densest view: the church square at the Harbour Road crossing, the town blocks on every side.
         await ev(f"(() => {{ const m = {G}.match, me = m.sim.byId.get(m.localId); m.sim._placeAt(me, {{ x: 196, z: 156 }}, 0); }})()")
         await pg.wait_for_timeout(4000)
-    if name == 'cpboss':
+    if name in ('cpboss', 'cpfinale'):
         R = f'{G}.match.sim.rules'
         await pg.wait_for_function(f'{R}?.state === 1', timeout=90000)
         for _ in range(8):

@@ -32,7 +32,7 @@ SIZE_ID = {(667, 375): 'se', (812, 375): 'mini', (844, 390): 'p13', (852, 393): 
 GL = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader']
 
 # Menu scenes of the gallery, and the saves each is checked with.
-SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-modes', 'mp-groundwar', 'mp-br', 'mp-search', 'vote-mp', 'lobby-host', 'lobby-full', 'vote', 'keypad-name', 'not-found', 'loadouts', 'operators', 'profile',
+SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-modes', 'mp-groundwar', 'mp-gw-conquest', 'mp-gw-bt', 'mp-campaign', 'mp-campaign-starfall', 'cp-brief-starfall', 'mp-br','mp-search', 'vote-mp', 'lobby-host', 'lobby-full', 'vote', 'keypad-name', 'not-found', 'loadouts', 'loadouts-overkill', 'operators', 'profile',
           'save-code', 'options', 'controller', 'a11y', 'lobby-voice', 'help', 'help-install', 'help-updates', 'help-modes', 'help-videos', 'help-controls', 'install', 'stats', 'challenges', 'history', 'history-list', 'history-match', 'history-awards', 'history-ch', 'history-br', 'history-ex', 'history-zm', 'history-sd', 'history-old', 'boards', 'boards-friends', 'boards-around', 'boards-kd', 'cards', 'emblems', 'results-draw', 'results-gw', 'results-zm',
           # Seasons and ranked (docs/SEASONS.md): on a day in Season 1 (dev/ui-gallery.html sets the date).
           'title-season', 'season-track', 'season-weekly', 'season-ranked', 'season-pre', 'mp-ranked', 'boards-season', 'boards-ranked', 'results-season', 'lobby-ranked', 'lobby-unranked',
@@ -43,7 +43,9 @@ SCENES = ['title', 'custom', 'custom-lobby', 'training', 'multiplayer', 'mp-mode
           # Weekly events (docs/SEASONS.md "Weekly events"): on a day of the week with the longest event name.
           'title-event', 'title-season-event', 'challenges-event', 'mp-event', 'unlock-event']
 # A spread of guns: long names, no attachments, signature parts and kits, melee, launchers, the akimbo pair.
-GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper', 'golden', 'akimbo', 'knife', 'beltlmg']
+GUNS = ['ar', 'lmg', 'dmr', 'rampar', 'semisnipe', 'lever', 'scatter', 'thumper', 'golden', 'akimbo', 'knife', 'beltlmg',
+        # The 1122-4 guns.
+        'hipsmg', 'panlmg', 'autosniper', 'flare', 'lockon']
 
 CHECK = r"""
 (() => {
@@ -94,7 +96,9 @@ CHECK = r"""
       break;
     }
     // Spill: past the plate it sits on, or the screen (a scroller's own axis excepted).
-    const plate = el.closest(plateSel);
+    // The Campaign map's station labels hang below their station button by design (absolutely placed, pointer-events
+    // none): they are not held by the button, so only the screen edge counts for them.
+    const plate = el.closest('.cpm-lb') ? null : el.closest(plateSel);
     const sc = el.closest('.scroll-y, .scroll-x');
     const scX = sc && sc.matches('.scroll-x'), scY = sc && sc.matches('.scroll-y');
     if (plate && (!sc || plate !== sc && sc.contains(plate))) {

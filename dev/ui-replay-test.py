@@ -291,16 +291,28 @@ async def busy(ctx, name, mapId, mode):
         rp = await pg.evaluate(RP)
         check(f'{name}: replay plays', rp and rp['c'] > 0.5, rp and rp['c'])
         await pg.evaluate(f"{G}.app.renderer.setQuality('low')")     # As docs/BR-PERF.md and dev/ui-sweep-perf.py measure.
-        for cam in ('me', 'free'):
-            await pg.locator(f'.rp-cam[data-cam="{cam}"]').click(); await pg.wait_for_timeout(1500)
-            calls, tris = [], []
-            for _ in range(6):
-                st = await pg.evaluate(f'{G}.app.renderer.getStats()')
-                calls.append(st['calls']); tris.append(st['triangles'])
-                await pg.wait_for_timeout(250)
-            print(f"    low, {cam} camera: calls {max(calls)}, triangles {max(tris)} at most")
-            if cam == 'me': follow = max(tris)
-            else: check(f'{name}: overview under 64 calls and 2.5x the follow camera\'s triangles', max(calls) < 64 and max(tris) < 2.5 * max(follow, 20000), (calls, tris, follow))
+        # The overview against the follow camera at fixed points on the map, playback paused (bug sweep 2026-11-22: the
+        # old check compared the two cameras wherever the record happened to be, so a busy spot failed it). The follow
+        # camera is held on each point by giving the clip a local id nobody has, so it keeps the target it is given.
+        cams = await pg.evaluate(f"""(async () => {{ const v = {G}.replay(), m = v.map, out = [];
+          v.setPlaying(false); const me = v.clip.localId; v.clip.localId = '__fixed__';
+          const frames = async () => {{ for (let i = 0; i < 4; i++) await new Promise(r => requestAnimationFrame(r)); await new Promise(r => setTimeout(r, 300)); }};
+          const read = async () => {{ let c = 0, t = 0; for (let i = 0; i < 3; i++) {{ await frames(); const s = {G}.app.renderer.getStats(); c = Math.max(c, s.calls); t = Math.max(t, s.triangles); }} return [c, t]; }};
+          for (const [fx, fz] of [[0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]]) {{
+            const x = m.width * fx, z = m.height * fz;
+            v.setCam('me'); v.follow.x = x; v.follow.z = z; v.follow.ok = true; v.snap = true;
+            const f = await read();
+            v.setCam('free'); v.pan.x = x; v.pan.z = z; v.snap = true;
+            const o = await read();
+            out.push({{ at: [Math.round(x), Math.round(z)], follow: f, over: o }});
+          }}
+          v.clip.localId = me; v.setCam('free'); v.setPlaying(true);
+          return out; }})()""")
+        for c in cams:
+            print(f"    low, fixed {c['at']}: follow {c['follow'][0]} calls {c['follow'][1]} tris; overview {c['over'][0]} calls {c['over'][1]} tris")
+        fsum, osum = sum(c['follow'][1] for c in cams), sum(c['over'][1] for c in cams)
+        ocalls = max(c['over'][0] for c in cams)
+        check(f'{name}: overview under 64 calls and 2.5x the follow camera\'s triangles at five fixed points', ocalls < 64 and osum < 2.5 * max(fsum, 5 * 20000), (ocalls, osum, fsum))
         await pg.screenshot(path=f'/tmp/replay-{name}.png')
         rp = await pg.evaluate(RP)
         s = rp['stats']

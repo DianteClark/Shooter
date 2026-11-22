@@ -127,7 +127,14 @@ const SCENES = {
   'multiplayer': menuScene('Multiplayer: Standard', ({ menu }) => menu.multiplayer({ tab: 'standard', sel: { playlist: 'qp', modes: [] } })),
   'mp-modes': menuScene('Multiplayer: ticked modes', ({ menu }) => menu.multiplayer({ tab: 'standard', sel: { playlist: null, modes: ['hq', 'snd', 'oic'] } })),
   'mp-groundwar': menuScene('Multiplayer: Ground War', ({ menu }) => menu.multiplayer({ tab: 'groundwar', sel: { playlist: 'gwqp', modes: [] } })),
-  'mp-br': menuScene('Multiplayer: Battle Royale', ({ menu }) => menu.multiplayer({ tab: 'br', sel: { playlist: 'quads', modes: [] } })),
+  // Conquest and Breakthrough (1122-3) on the Ground War tab.
+  'mp-gw-conquest': menuScene('Multiplayer: Ground War, Conquest', ({ menu }) => menu.multiplayer({ tab: 'groundwar', sel: { playlist: 'conquest', modes: [] } })),
+  'mp-gw-bt': menuScene('Multiplayer: Ground War, Breakthrough', ({ menu }) => menu.multiplayer({ tab: 'groundwar', sel: { playlist: 'breakthrough', modes: [] } })),
+  // The Campaign tab (docs/CAMPAIGN.md): Nightrail, Starfall (1122-5), and Starfall's finale briefing.
+  'mp-campaign': menuScene('Multiplayer: Campaign, Nightrail', ({ menu }) => menu.multiplayer({ tab: 'campaign', cpPick: { k: 0, diff: 1 } })),
+  'mp-campaign-starfall': menuScene('Multiplayer: Campaign, Starfall', ({ menu }) => menu.multiplayer({ tab: 'campaign', cpPick: { k: 8, diff: 2 } })),
+  'cp-brief-starfall': menuScene('Campaign: Starfall finale briefing', ({ menu }) => menu.campaignBrief({ k: 11, diff: 2 })),
+  'mp-br': menuScene('Multiplayer: Battle Royale',({ menu }) => menu.multiplayer({ tab: 'br', sel: { playlist: 'quads', modes: [] } })),
   'mp-search': menuScene('Multiplayer: finding a match', ({ menu }) => menu.matchSearch({ name: 'Quick Play: Standard', tab: 'standard', size: 12 }).found(7)),
   'vote-mp': menuScene('Multiplayer: pre-match vote', async ({ menu }) => {
     const { mpVoteOptions } = await import('./js/ui/matchmaking.js');
