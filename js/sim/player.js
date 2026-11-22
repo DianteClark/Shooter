@@ -157,9 +157,9 @@ function applyLoadout(ps, l) {
   if (l.primary && WEAPONS[l.primary]) ps.primary = l.primary;
   if (Array.isArray(l.perks)) ps.perks = l.perks.slice();
   // Overkill lets a second primary into the sidearm slot; without it a primary there falls back to the default sidearm.
+  // An id that is not allowed is ignored as before, unless the slot still holds a second primary from an Overkill life.
   if (secondaryAllowed(l.secondary, ps.perks, ps.primary)) ps.secondary = l.secondary;
-  else if (PRIMARY_IDS.includes(l.secondary)) ps.secondary = SECONDARY_ID;
-  if (!secondaryAllowed(ps.secondary, ps.perks, ps.primary)) ps.secondary = SECONDARY_ID;
+  else if (l.secondary !== undefined && !SECONDARY_IDS.includes(ps.secondary)) ps.secondary = SECONDARY_ID;
   if (l.camo) ps.camo = l.camo;
   if (Array.isArray(l.pro)) ps.pro = l.pro.slice();
   if (TACTICALS[l.tactical]) ps.tactical = l.tactical;

@@ -326,7 +326,7 @@ const SKIN_ROWS = {
   brigid: [['Placement', 'urban', { life: 'ranked:played', goal: 25, label: 'Play 25 Ranked matches' }], ['Climb', 'sky'], ['Promotion', 'crimson'], ['Top Table', 'navy'], ['Champion\'s Due', 'prism']],
   // Wave 5.
   juniper: [['Clear Road', 'woodland', { stat: 'kills', goal: 300 }], ['Junction Box', 'slate'], ['Danger Aspect', 'crimson'], ['Green Light', 'toxic'], ['Lily Pad', 'aurora']],
-  fenwick: [['Battery', 'olive', { stat: 'kills', goal: 400 }], ['Searchlight', 'urban'], ['Flak Burst', 'ember'], ['Interceptor', 'navy'], ['Red Tide', 'molten']],
+  fenwick: [['Gun Pit', 'olive', { stat: 'kills', goal: 400 }], ['Searchlight', 'urban'], ['Flak Burst', 'ember'], ['Interceptor', 'navy'], ['Red Tide', 'molten']],
   odessa: [['Mail Run', 'desert', { life: 'streaksCalled', goal: 40, label: 'Call in 40 scorestreaks' }], ['Overcast', 'sky'], ['Slipstream Oil', 'violet'], ['Midnight Run', 'night'], ['Deep Bloom', 'wraith']],
   calder: [['Heather', 'moss', { stat: 'long', goal: 60 }], ['Grouse', 'desert'], ['Stalker', 'rust'], ['Hill Mist', 'ash'], ['Royal Stag', 'gold']],
 };

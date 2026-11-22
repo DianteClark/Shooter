@@ -663,7 +663,9 @@ test('wave 5 streaks reach a guest over the wire, and bots call them', () => {
     const roster = buildRoster([], { botSkill: 'elite', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed });
     for (const [k, r] of roster.entries()) r.loadout = normalizeLoadout({ ...r.loadout, streaks: k % 2 ? ['uav', 'sam', 'vtol'] : ['uav', 'napalm', 'vtol'] });
     const s2 = new Sim({ roster, map: 'railyard', seed, mode: 'tdm', timeLimit: 600, scoreLimit: 999 });
-    for (let i = 0; i < SIM_HZ * 120 && called.size < 3; i++) { s2.step(STEP); for (const e of s2.drainEvents()) if (e.t === 'streak' && (e.kind === 'vtol' || e.kind === 'sam' || e.kind === 'napalm')) called.add(e.kind); }
+    s2.step(0);
+    for (const [k, p] of s2.players.entries()) give(p, k % 2 ? ['uav', 'sam', 'vtol'] : ['uav', 'napalm', 'vtol']);   // Earned: does it call them?
+    for (let i = 0; i < SIM_HZ * 60 && called.size < 3; i++) { s2.step(STEP); for (const e of s2.drainEvents()) if (e.t === 'streak' && (e.kind === 'vtol' || e.kind === 'sam' || e.kind === 'napalm')) called.add(e.kind); }
   }
   assert.deepEqual([...called].sort(), ['napalm', 'sam', 'vtol'], 'bots call all three');
 });

@@ -75,7 +75,8 @@ export const MACHINE_HP = { turret: 180, rover: ROVER_HP, dome: DOME_HP, crate: 
 // target tags and How to play quote. Air takes BULLET_AIR of a bullet and LAUNCHER_AIR of a launcher round.
 export function hitsToDown(hp, w, air) {
   if (!w || !(hp > 0)) return 0;
-  const per = w.explosive ? w.explosive.damage * (air ? LAUNCHER_AIR : 1) : (w.damage ?? 20) * (w.pellets ?? 1) * (air ? BULLET_AIR : 1);
+  const per = w.lockon && air ? w.lockon.air      // Wave 5's Skyhook: a locked rocket (arsenal-w5.js).
+    : w.explosive ? w.explosive.damage * (air ? LAUNCHER_AIR : 1) : (w.damage ?? 20) * (w.pellets ?? 1) * (air ? BULLET_AIR : 1);
   return Math.max(1, Math.ceil(hp / per));
 }
 const ENGINEER_AIR = 1.25, ENGINEER_TURRET = 1.5;
