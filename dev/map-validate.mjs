@@ -246,8 +246,9 @@ function checkGaps(map, out) {
     const gz = Math.max(B.z - (A.z + A.d), A.z - (B.z + B.d));
     const ox = -gx, oz = -gz;                                          // > 0: overlap length on that axis
     let gap = null;
-    if (gx > TOUCH && oz > 0.4 && gx < GAP) gap = gx;
-    else if (gz > TOUCH && ox > 0.4 && gz < GAP) gap = gz;
+    // (1e-6: a district placed into a region by an offset must not flip a 0.4 m overlap on float noise alone.)
+    if (gx > TOUCH && oz > 0.4 + 1e-6 && gx < GAP) gap = gx;
+    else if (gz > TOUCH && ox > 0.4 + 1e-6 && gz < GAP) gap = gz;
     else if (gx > 0 && gz > 0 && Math.hypot(gx, gz) < GAP && Math.hypot(gx, gz) > TOUCH && gx > TOUCH && gz > TOUCH) gap = Math.hypot(gx, gz);
     if (gap === null || gap > GAP - 0.005) continue;
     // Not a gap if something else that blocks fills it (a hull's basin between the hull and the quay).

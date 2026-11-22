@@ -3465,6 +3465,7 @@ const THUMB_STYLE = {
   pagoda: pagoda.thumb,
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,
+  city: frontier.cityThumb,
 };
 
 // What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a
