@@ -82,7 +82,8 @@ async def radar_check(browser, hardcore, failures, errors):
         await pg.evaluate("""(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId);
           sim.uav.fill(0); sim.overwatch.fill(0); sim.jam.fill(0); sim.gunships.length = 0; if (sim.v9) sim.v9.sweeps.length = 0;
           window.__game.hud.radarUntil = 0;
-          const foes = sim.players.filter(q => q.team !== me.team && q.alive);
+          // Not two Ghosts: a bot's random loadout can carry Ghost, which no sweep or drone marks (bug sweep 2026-11-22).
+          const foes = sim.players.filter(q => q.team !== me.team && q.alive).sort((a, b) => a.ps.perks.includes('ghost') - b.ps.perks.includes('ghost'));
           foes.slice(0, 2).forEach((q, i) => { q.ps.x = me.ps.x + 6 + i * 3; q.ps.z = me.ps.z + 4; q.markT = 0; });
           for (const q of sim.players) q.ps.firingT = 0; })()""")
         await pg.wait_for_timeout(900)

@@ -206,7 +206,9 @@ async def tdm(ctx):
     await pg.locator('[data-act="hcDel"]').first.click()
     await pg.wait_for_timeout(200)
     check('Delete asks once', await pg.locator('.hc-del.arm').count() == 1)
-    await pg.locator('[data-act="hcDel"]').first.click()
+    # The confirm tap through the DOM: the arm lapses after 2.5 s, and under load a locator click's actionability waits
+    # can outlast it, so the tap re-arms instead of deleting (bug sweep 2026-11-22).
+    await pg.evaluate("document.querySelector('.hc-del.arm')?.click()")
     await pg.wait_for_selector('.hs-empty', timeout=20000)
     check('Delete removes the clip', len(await pg.evaluate(f'{G}.clips.listClips()')) == 0)
     await pg.close()
@@ -333,6 +335,7 @@ async def cap(ctx):
     await to_results(pg)
     await pg.locator('[data-act="resReplay"]').click()
     await pg.wait_for_timeout(800)
+    for c in await pg.evaluate(f'{G}.clips.listClips()'): await pg.evaluate(f'{G}.clips.deleteClip("{c["id"]}")')     # A part before may have left one.
     res = await pg.evaluate(f"""(async () => {{ const v = {G}.replay(), out = [];
       for (let i = 0; i < 5; i++) out.push((await {G}.clips.saveClip({{ ...v.clip, at: v.clip.at + i }})).ok);
       return out; }})()""")

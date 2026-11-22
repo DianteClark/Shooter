@@ -133,7 +133,7 @@ async def main():
             await pg.locator('[data-act="soloMap"][data-id="harvest"]').first.tap()
             await pg.wait_for_timeout(300)
             gw_modes = await pg.evaluate("[...document.querySelectorAll('.solo-mode')].filter(b => !b.hidden).map(b => b.dataset.id)")
-            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
+            ok = set(gw_modes) <= {'gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf', 'cq', 'bt', 'ffa', 'gun', 'random'} and 'gwtdm' in gw_modes and 'tdm' not in gw_modes
             print(f'  {"harvest offers no 6v6 team modes":<44} {"ok" if ok else "FAIL"} {gw_modes}')
             if not ok: failures.append(f'harvest modes {gw_modes}')
             st5 = await play('5 harvest ground war', tap('[data-act="soloStart"]'))
@@ -159,7 +159,9 @@ async def main():
             mi = st6['last'] or {}
             rk1 = await pg.evaluate('window.__game.Progress.ranked()')
             row = await pg.evaluate("!!document.querySelector('.rs-rk')")
-            ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in ('railyard', 'harbor', 'neon', 'dust', 'frost', 'topside', 'sunken', 'canopy', 'observatory', 'pagoda') and rk1['pm'] == 1 and row     # Observatory and Pagoda: medium maps of 1120-8.
+            # Ranked plays the medium maps (the game's own list: every new medium map joins it, e.g. 1122's districts).
+            medium = await pg.evaluate("Promise.all([import('/js/shared/map.js'), import('/js/ui/vote.js'), import('/js/shared/ranked.js')]).then(([M, V, R]) => M.MAP_IDS.filter(id => V.tierOf(id) === R.RANKED_RULES.size && !M.MAPS[id].devMap))")
+            ok = mi.get('mode') in ('hard', 'snd', 'ctl') and mi.get('mapId') in medium and {'railyard', 'observatory', 'pagoda'} <= set(medium) and rk1['pm'] == 1 and row
             print(f'  {"ranked: ruleset, a placement, the results row":<44} {"ok" if ok else "FAIL"} {mi.get("mode")} {mi.get("mapId")} pm={rk1["pm"]} row={row}')
             if not ok: failures.append(f'ranked {mi} {rk1} {row}')
             # Bundled unlocks: one match's worth of XP that climbs dozens of levels.

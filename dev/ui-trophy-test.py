@@ -92,8 +92,12 @@ async def main():
                 check('trophy screen opens', t['screen'] == 'trophy', t['screen'])
                 check('five collections and a total', t['cats'] == 5 and t['total'].endswith('%'), t)
                 check('six personal bests, all empty on a fresh save', len(t['recs']) == 6 and t['recs'][0][1] == '-', t['recs'])
-                check('Graveyard Shift maps listed', len(t['zm']) == 6, t['zm'])     # Neon, Ruins, Foundry, Ashgrove, Polestar (1118), Wrenfield (1120).
+                check('Graveyard Shift maps listed', len(t['zm']) == 7, t['zm'])     # Neon, Ruins, Foundry, Ashgrove, Polestar (1118), Wrenfield (1120), Saltmere (1122).
                 check('rarest row empty', t['none'] and not t['rare'])
+                for _ in range(20):          # Sections slide in; under load an entrance outlasts a fixed wait (bug sweep 2026-11-22).
+                    if t['over'] == 0: break
+                    await pg.wait_for_timeout(500)
+                    t = await pg.evaluate(TROPHY)
                 check('nothing past the screen edges', t['over'] == 0, t['over'])
                 await shot('trophy-fresh')
 
@@ -109,6 +113,10 @@ async def main():
                 check('Night Market round 31 and escapes', any('31' in z and 'Night Market' in z for z in t['zm']), t['zm'])
                 check('rarest shows feat emblems and earned cards', any(r.startswith('emblem:feat-ace') for r in t['rare']) and any(r.startswith('emblem:feat-zm30') for r in t['rare'])
                       and any(r.startswith('card:') for r in t['rare']), t['rare'])
+                for _ in range(20):          # The rarest row's tiles slide in; under load the entrance outlasts a fixed wait.
+                    if t['over'] == 0: break
+                    await pg.wait_for_timeout(500)
+                    t = await pg.evaluate(TROPHY)
                 check('still nothing past the edges', t['over'] == 0, t['over'])
                 await shot('trophy-seeded')
                 await tap('.tc-tile[data-kind="emblem"]', 500)
@@ -173,7 +181,7 @@ async def main():
             await pg.goto(f'http://localhost:{PORT}/dev/rewards-gallery.html')
             await pg.wait_for_selector('body[data-ready]', timeout=20000)
             n = await pg.evaluate("[document.querySelectorAll('.ccard').length, document.querySelectorAll('.em svg').length]")
-            check('gallery draws every new card and feat emblem', n[0] >= 105 and n[1] == 15, n)     # 15 feat emblems (FEAT_EMBLEMS): the Listener, the Barker and Nightrail came after the first 12.
+            check('gallery draws every new card and feat emblem', n[0] >= 105 and n[1] == 17, n)     # 17 feat emblems (FEAT_EMBLEMS): the Listener, the Barker and Nightrail came after the first 12, Starfall and the Ferryman in 1122.
             if SHOTS:
                 await pg.screenshot(path=f'{OUT}/gallery.png', full_page=True)
             await browser.close()
