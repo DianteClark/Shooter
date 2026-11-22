@@ -31,7 +31,7 @@ function build() {
     cart(9, 19.2), trough(21.2, 16.6, 0.9, 2.8), crate(15, 15.2),
 
     // ---- The ledge paths: boulders off the cliffs, a crate stack.
-    boulder(24.6, 3.4), boulder(7, 30.6, 2, 1.4), crate(21, 31.2),
+    boulder(24.6, 3.4), boulder(7, 30.6, 2, 1.4), crate(21, 30.4),
 
     // ---- Spawn screens.
     screen(4.6, 15.4, 0.8, 2.8), screen(3.2, 9, 0.8, 3),

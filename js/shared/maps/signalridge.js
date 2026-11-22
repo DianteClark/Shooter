@@ -31,7 +31,7 @@ function build() {
     transformer(16, 14.8),
 
     // ---- The south crest path (z 30-42): a dish, the control block, a generator, sandbags, a cable spool.
-    dish(18, 33.4), control(7.6, 29.5, 9, 6), generator(30, 29), sandbag(25.6, 38.4, 3, 1), spool(35.4, 37),
+    dish(20, 33.4), control(9.4, 29.5, 9, 6), generator(30, 29), sandbag(25.6, 38.4, 3, 1), spool(35.4, 37),
 
     // ---- The access road (z 20-26): a cable drum, a parked truck.
     spool(10, 20.6), [20, 24.2, 5, 2.2, 2.6, 'container', { truck: true }],

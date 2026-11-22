@@ -136,11 +136,70 @@ coast region will join one day.
 each); `python3 dev/ui-sweep-perf.py [port] [out] brcity`; `node dev/br-overview.mjs meridian`;
 `node dev/render-snapshots.mjs midtown oldquarter canalrow unionsq meridian`.
 
+## The Desert (`sirocco`, Sirocco Basin): the second region
+400 x 400 m, desert dusk with a sandstorm coming in from the west. Four new districts, each a 6v6 map (theme `sirocco`,
+js/render/themes/sirocco.js), built to look and play nothing like Dust, Oasis and Canyon (untouched): red sandstone and
+red mud brick instead of pale adobe, striped canvas, copper-green spoil and steel dishes, a dusk sky instead of the hard
+white afternoon, and layouts of their own (a walled courtyard, a cliff street, terraces, fenced yards).
+
+| District | Map (size) | Region rect (x, z, w, h) | What it is |
+|---|---|---|---|
+| Caravanserai | `caravanserai` (large, 100 x 64) | 150, 168, 100, 64 | The centre: a walled caravan inn straddling the Spice Road; the road runs in at the west gate, across the courtyard past the domed well house (the Sunwell) and out at the east gate. Arcades inside the north and south walls, two gates in each; the souk street along the north edge, camel yards along the south |
+| Red Gulch | `redgulch` (small, 56 x 36) | 82, 182, 56, 36 | A canyon town: cliffs on both sides, a row of tall mud tower houses at the foot of each, the main street (the road) between them under the stone arch; ledge paths along the cliff feet, 3 m alleys joining them to the street |
+| Signal Ridge | `signalridge` (medium, 76 x 46) | 262, 128, 76, 46 | A dish array on a ridge: dishes on pedestals along the crest paths, the great dish over the access road (the road's north branch), chain-link transformer yards (stop feet, not shots), prefab huts, the control block, radio masts |
+| Copperstep | `copperstep` (medium, 80 x 50) | 262, 224, 80, 50 | An open-pit copper mine: upper benches with tin sheds, two waist-high terrace faces down each side with ramps, the pit floor and its haul road (the road's south branch) past the headframe, ore carts on two tracks, a hopper, a haul truck |
+
+The Spice Road (z 200) comes in from the west edge through the canyon, Red Gulch and the inn to the Fork Road (x 256),
+which runs north-south between the inn and the two eastern districts; the ridge and the mine sit on its two branches
+(z 151 and 249). Places round them (region fill, 14; 18 in all): the Rail Halt, the Citadel (tier 1: a walled fort with
+its keep and barracks), the Airstrip and the Fuel Stop on the Highway across the north; the Necropolis (tombs cut into
+the canyon's north wall) and Gulch Mouth on the canyon floor; the Souk Quarter and Lower Town either side of the inn;
+the Pump Station, the Smelter and the Wreck Dunes (a cargo plane down in two pieces) in the east and south; the Date
+Grove, the Nomad Camp and the Saltworks in the south-west. The Fork's trading post (Conquest's flag E) has no place
+name of its own. The canyon's two cliff walls run from Red Gulch to the west edge with a pass in each for the west
+track.
+
+### What was built (files)
+- `js/shared/maps/caravanserai.js`, `redgulch.js`, `copperstep.js`, `signalridge.js`: the districts (appended to `MAPS`).
+- `js/shared/maps/br-sirocco.js`: the basin. `districts`, `br` (18 places, loot, caches, `circleBias`, `reboundAreas`,
+  `exfils` with reserved landing zones), `bf` (Conquest "Sirocco: Spice Road", five flags Red Gulch, Souk Quarter,
+  Caravanserai, Lower Town, The Fork, HQs at either end of the road; Breakthrough "Sirocco: Caravan Run", west to east,
+  sectors Red Gulch, Caravanserai, The Fork with one objective on each branch). District road zones become `dirt` tracks.
+  `cliffWall` builds the canyon walls whole (tested once, pieces touching end to end, allowed to meet the map edge: the
+  first pass tested each 16 m piece against its neighbour and kept every other one).
+- `js/render/themes/sirocco.js`: the district theme (`THEMES.sirocco`, dress, stage, thumb): tower houses, souk shops
+  with awnings, merchant houses, the serai wall and ksar towers, arcade pillars and their arches, the arch over Red
+  Gulch's street (drawn to its partner pier), the Sunwell, layered cliffs, terrace faces, ore carts, hopper, headframe,
+  dishes, chain-link and rail fences, camels, wagons, pavilion, canopy stalls, the wreck's hull pieces, dunes, palms.
+  Cliffs on the south side of the ground they wall in (the south half, or flagged `low`) are drawn as a low lip: the
+  camera looks north at 55 degrees and a 7 m cliff hid the whole south ledge path. Red Gulch's houses are 4.8-5.8 m
+  for the same reason (as Midtown's towers).
+- `js/render/themes/basin.js`: the basin's palette (`THEMES.basin`, `giant: true`), ground regions (`dunes`, `scrub`,
+  `gulch`, `saltpan`, `spoil`, all dressed by `sirocco`), zones and styles under keys of their own (the streamer's
+  tables are shared: `court`, `plaza` and the style `tin` belong to Frontier and Jadefall, so the districts' zones are
+  `serai`, `gulchsq`, `pad`, `compound` and the shed style `tinshed`), lanterns by the bigger buildings, the Highway's
+  lamps, sand ripples and scrub per tile, and the mountains round the edge (tall only to the north).
+- Wiring: `EXTRAS.basin` and the merged tables in themes/frontier.js; world.js `DRESS`/`THEME_STAGES`/`THUMB_STYLE`;
+  `THEME_AUDIO.sirocco`/`basin`, footsteps on sand, ambient life (dust devils), props; icons (icons-maps.js, icons.js),
+  cards (cardbook.js `MAP_ART`, `sirocco` plays-based; patterns `serai`, `gulch`, `terraces`, `dishes`, `sirocco` in
+  cardart.js); `dev/render-maps.html` framings; perf case `brsirocco`; art `assets/maps/<id>.jpg` and
+  `assets/maps/sirocco-overview.jpg`.
+
+### Measured
+MEASURED_TABLES
+
+### Tests
+`node dev/map-validate.mjs caravanserai redgulch copperstep signalridge sirocco`; `node dev/sim-br.mjs --map=sirocco`;
+`node dev/sim-resurgence.mjs --map=sirocco`; `node dev/sim-extract.mjs --quick --map=sirocco`;
+`node dev/sim-conquest.mjs --maps=sirocco`; `node dev/sim-breakthrough.mjs --maps=sirocco`;
+`python3 dev/ui-sweep-perf.py [port] [out] brsirocco`; `node dev/br-overview.mjs sirocco`;
+`node dev/render-snapshots.mjs caravanserai redgulch copperstep signalridge sirocco`.
+
 ## The rest (plan)
 Each later region is new districts too (the existing maps stay as they are):
 - **The Coast**: a shoreline region east of the City's waterfront: a fish market, a boardwalk and its pier, a tidal
   quarter of stilt houses, a lighthouse headland (4 new 6v6 maps) along a 400 m quay.
-- **The Desert**: a canyon town, a caravan market round a well, a mining terrace, an observatory ridge.
+- **The Desert**: built, see Sirocco Basin above.
 - **The Wilds**: a river valley: a jungle landing, a waterfall temple, a rope-bridge gorge.
 - **The North**: a frozen harbour, a ski village, a research base on the ice shelf.
 - Each later region reuses region-kit.js unchanged: list the districts and their offsets, write the fill, a palette

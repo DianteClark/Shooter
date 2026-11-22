@@ -270,6 +270,62 @@ export const REWARD_PATTERNS = {
     for (let wx = 154; wx < 232; wx += 7) s += rect(wx, 51.5, 4, 3, c[3]);
     return s + circ(236, 53, 2.4, '#fff4d0') + circ(236, 53, 8, c[3], op('.2'));
   },
+  serai(c, r) {            // Caravanserai: the inn's crenellated wall and arched gate, the well house's dome behind, a lantern.
+    let s = circ(272, 20, 16, c[3], op('.14')) + circ(272, 20, 7, c[3], op('.3'));
+    s += fillPath('M196 40 Q196 24 212 22 Q228 24 228 40 Z', c[2], op('.7')) + rect(210.6, 14, 2.8, 8, c[3]);
+    s += rect(96, 40, W - 96, 40, c[1]);
+    for (let x = 98; x < W; x += 12) s += rect(x, 35, 7, 5, c[1]);
+    s += fillPath('M196 80 L196 58 Q212 42 228 58 L228 80 Z', c[0]);
+    for (const x of [132, 168, 252, 280]) s += fillPath(`M${x} 80 L${x} 66 Q${x + 6} 58 ${x + 12} 66 L${x + 12} 80 Z`, c[0], op('.55'));
+    s += circ(212, 60, 2.6, c[3]) + circ(212, 60, 9, c[3], op('.2'));
+    for (let i = 0; i < 10; i++) s += line(96 + r() * 200, 8 + r() * 26, 112 + r() * 200, 8 + r() * 26, c[2], 0.8, op('.25'));
+    return s;
+  },
+  gulch(c, r) {            // Red Gulch: sheer cliffs either side, tower houses at their feet, the arch over the street.
+    let s = fillPath('M92 0 L136 0 L130 80 L92 80 Z', c[1]) + fillPath('M300 0 L262 0 L270 80 L300 80 Z', c[1]);
+    for (let y = 8; y < H; y += 12) s += line(92, y, 134 - y * 0.06, y, c[0], 1.2, op('.4')) + line(264 + y * 0.08, y, 300, y, c[0], 1.2, op('.4'));
+    for (const [x, h] of [[140, 46], [158, 56], [238, 50], [252, 40]]) {
+      s += rect(x, H - h, 14, h, c[2], op('.75'));
+      for (let y = H - h + 6; y < H - 8; y += 8) s += rect(x + 3, y, 2.4, 3.4, c[0]) + rect(x + 8.6, y, 2.4, 3.4, c[0]);
+    }
+    s += fillPath('M186 80 L186 46 Q201 26 216 46 L216 80 L210 80 L210 48 Q201 36 192 48 L192 80 Z', c[2]);
+    return s + circ(201, 50, 2.4, c[3]) + circ(201, 50, 8, c[3], op('.22'));
+  },
+  terraces(c, r) {         // Copperstep: the pit's benches stepping down to the headframe and its wheel.
+    let s = '';
+    for (let k = 0; k < 5; k++) {
+      const y = 30 + k * 10, inset = k * 18;
+      s += rect(96 + inset, y, W - 96 - 2 * inset, 10, k % 2 ? c[1] : c[2], op((0.5 + k * 0.1).toFixed(2)));
+      s += line(96 + inset, y, W - inset, y, c[3], 0.8, op('.35'));
+    }
+    s += line(186, 72, 198, 14, c[2], 2) + line(210, 72, 198, 14, c[2], 2) + line(190, 50, 206, 50, c[2], 1.4);
+    s += circ(198, 14, 7, 'none', ` stroke="${c[3]}" stroke-width="2"`) + circ(198, 14, 1.6, c[3]);
+    for (let i = 0; i < 6; i++) s += rect(110 + r() * 170, 64 + r() * 10, 5, 3, c[3], op('.6'));
+    return s;
+  },
+  dishes(c, r) {           // Signal Ridge: three dishes on the ridge, tipped up at the last of the sun.
+    let s = circ(120, 52, 22, c[3], op('.16')) + circ(120, 52, 10, c[3], op('.35'));
+    s += fillPath('M92 80 L92 64 Q150 54 200 60 Q250 52 300 62 L300 80 Z', c[1]);
+    for (const [x, k] of [[156, 1], [214, 1.4], [270, 0.9]]) {
+      const y = 58 - 10 * k;
+      s += rect(x - 2, y, 4, 14 * k, c[1]);
+      s += fillPath(`M${x - 16 * k} ${y - 4 * k} Q${x} ${y + 10 * k} ${x + 14 * k} ${y - 14 * k} Q${x - 2} ${y - 6 * k} ${x - 16 * k} ${y - 4 * k} Z`, c[2]);
+      s += line(x - 1, y - 2 * k, x + 4 * k, y - 16 * k, c[2], 1) + circ(x + 4 * k, y - 16 * k, 1.6, c[3]);
+    }
+    for (let i = 0; i < 12; i++) s += circ(96 + r() * 204, 4 + r() * 30, 0.6 + r() * 0.7, c[2], op((0.2 + r() * 0.3).toFixed(2)));
+    return s;
+  },
+  sirocco(c, r) {          // Sirocco Basin: the sun swollen in the dust, dunes, a caravan crossing, the storm blowing in.
+    let s = circ(250, 46, 26, c[3], op('.16')) + circ(250, 46, 15, c[3], op('.5'));
+    s += fillPath('M92 80 L92 62 Q140 50 190 60 Q240 70 300 56 L300 80 Z', c[1]);
+    s += fillPath('M92 80 Q150 66 210 74 Q260 80 300 70 L300 80 Z', c[0], op('.5'));
+    for (let k = 0; k < 4; k++) {
+      const x = 130 + k * 22, y = 58 + Math.sin(k) * 1.5;
+      s += fillPath(`M${x} ${y} q4 -9 9 -4 q3 -5 6 -1 l3 -5 l2 1 l-2 7 l0 6 l-2 0 l0 -4 l-9 0 l0 4 l-2 0 Z`, c[0]);
+    }
+    for (let i = 0; i < 18; i++) { const y = 6 + r() * 60, x = 92 + r() * 190; s += line(x, y, x + 14 + r() * 20, y + 1, c[2], 0.8, op((0.15 + r() * 0.25).toFixed(2))); }
+    return s;
+  },
   isles(c, r) {            // Jadefall: the stepped pyramid on its islet, a ring of islands round the lagoon, a jade light.
     let s = '';
     for (let k = 0; k < 4; k++) s += path(`M${96 + k * 52} ${70 + (k % 2) * 3} q13 -5 26 0 t26 0`, c[2], 1, op('.35'));
