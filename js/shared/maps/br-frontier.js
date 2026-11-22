@@ -513,7 +513,7 @@ const BF_LAYOUTS = {
   }],
   breakthrough: [{
     id: 'southbound', name: 'Frontier: Southbound', area: { x: 110, z: 135, w: 178, h: 240 },
-    hq: [{ x: 205, z: 148, r: 10 }, { x: 190, z: 366, r: 10 }],
+    hq: [{ x: 205, z: 148, r: 10 }, { x: 190, z: 366, r: 10 }], tickets: 300, refill: 240,
     sectors: [
       { name: 'Downtown', objs: [{ x: 175, z: 185 }, { x: 232, z: 188 }] },
       { name: 'Central Station', objs: [{ x: 200, z: 240 }, { x: 140, z: 255 }] },

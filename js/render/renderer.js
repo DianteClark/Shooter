@@ -9,7 +9,8 @@ import { ZmFx } from './zm-fx.js';     // Graveyard Shift: fences, gates, wall-b
 import { ZmBodies } from './zm-bodies.js';     // Graveyard Shift: each undead kind's own model and animation (ROADMAP item 50).
 import { ZM_INTRO } from '../ui/zm-intro.js';     // A boss's intro: the camera beat (the card is the zombies HUD's).
 import { ZmFairFx } from './zm-fair-fx.js';     // Wrenfield Fair: the Barker's marked lanes, the Whirligig's whirls.
-import { CpFx } from './cp-fx.js';     // The co-op campaign: objectives, charges, the boss's telegraphs, torches (docs/CAMPAIGN.md).
+import { CpFx } from './cp-fx.js';
+import { BfFx } from './bf-fx.js';     // Conquest and Breakthrough: front lines and an island part's edge (docs/MODES.md).     // The co-op campaign: objectives, charges, the boss's telegraphs, torches (docs/CAMPAIGN.md).
 import { clearZmWalls } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
@@ -774,6 +775,7 @@ export class GameRenderer {
     if (view.br) (this.brFx ??= new BrFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, this.chars);
     if ((view.obj ?? view.points?.obj)?.ex) (this.exFx ??= new ExFx(this.scene, this.map)).update(view, fxDt, this.camTarget.x, this.camTarget.z, localTeam);
     if ((view.obj ?? view.points?.obj)?.cp) (this.cpFx ??= new CpFx(this.scene, this.map)).update(view, fxDt);
+    if ((view.obj ?? view.points?.obj)?.bf) (this.bfFx ??= new BfFx(this.scene, this.map)).update(view, fxDt);
     if (zmObj?.layout) {
       (this.zmFx ??= new ZmFx(this.scene, this.map, zmObj.layout)).update(view, fxDt);
       this.zmFx.kinds.drawShields = !this.zmBodies;     // The Shieldbearer's door is part of its body now.
@@ -891,6 +893,7 @@ export class GameRenderer {
     this.brFx?.dispose();
     this.exFx?.dispose(); this.exFx = null;
     this.cpFx?.dispose(); this.cpFx = null;
+    this.bfFx?.dispose(); this.bfFx = null;
     this.zmFx?.dispose(); this.zmFx = null;
     this.zmBodies?.dispose(); this.zmBodies = null; this.chars.zm = null; ZM_INTRO.reset();
     this.fairFx?.dispose(); this.fairFx = null;

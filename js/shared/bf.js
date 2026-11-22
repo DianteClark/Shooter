@@ -50,11 +50,13 @@ export const BF = {
   bt: {
     tickets: 220,           // The attackers' pool to start, and what a fallen sector adds (scaled by sector count).
     refill: 180,
-    sectorTime: 300,        // Seconds on the clock for a sector; a fallen one adds this for the next, minus the change.
     margin: 10,             // How far past their line each side may go before the out-of-bounds clock starts.
     fallBack: 12,           // Defenders caught behind a fallen line get this long to get out, not the usual 8 s.
-    attackBand: [6, 30],    // Attackers respawn this far behind the front line once sector one has fallen.
-    defendBand: [12, 26],   // Defenders respawn from this far behind the sector's last objective to this far past its line.
+    capture: 20,            // An objective is slower to take than a Conquest flag (one player, from neutral).
+    lock: 12,               // After a sector falls, the next one's objectives cannot be taken for this long (regroup).
+    attackBand: [10, 32],   // Attackers respawn this far short of the sector's nearest objective (behind the line).
+    defendDelay: 1.5,         // Defenders wait this much longer to respawn: the ground they hold is the advantage.
+    defendBand: [20, 34],   // Defenders respawn from this far behind the sector's last objective to this far past its line.
     clear: 16,
     push: 18,               // Bots this close to an objective they are taking push onto it (js/sim/breakthrough.js plan).              // ...and no nearer than this to a live objective.
     capScore: 250, sectorScore: 300, defendScore: 75,

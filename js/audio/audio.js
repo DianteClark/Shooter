@@ -788,6 +788,11 @@ const MEDALS = {
   ctl_capture: { notes: [[0, 0], [7, 0.1], [12, 0.2]], dur: 0.55, gain: 0.7, shape: 1 },
   ctl_hold: { notes: [[7, 0], [12, 0.08], [16, 0.16]], dur: 0.55, gain: 0.7, shape: 0.6 },
   grind_bank: { notes: [[9, 0], [16, 0.07], [21, 0.14]], dur: 0.4, gain: 0.62 },
+  // Conquest and Breakthrough (ROADMAP 65).
+  cq_capture: { notes: [[0, 0], [7, 0.1], [12, 0.2]], dur: 0.55, gain: 0.7, shape: 1 },
+  cq_neutral: { notes: [[7, 0], [0, 0.09]], dur: 0.38, gain: 0.58, shape: 1.1 },
+  bt_capture: { notes: [[0, 0], [7, 0.1], [12, 0.2]], dur: 0.55, gain: 0.7, shape: 1 },
+  bt_sector: { notes: [[0, 0], [5, 0.09], [9, 0.18], [12, 0.3]], dur: 0.85, gain: 0.78, shape: 0.5 },
 };
 
 function renderMedal(spec, sr) {

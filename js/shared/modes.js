@@ -73,11 +73,11 @@ export const MODES = {
   cp:    { id: 'cp',    rules: 'cp',  teamSize: 4, cp: true, noMods: true, name: 'Operation Nightrail', short: 'OPS', scoreLimit: 11, timeLimit: 3600, desc: 'Co-op campaign: scripted missions for up to four against the Meridian Line.' },
   // Conquest and Breakthrough (ROADMAP 65, docs/MODES.md "Conquest and Breakthrough"): 16 v 16 on every Ground War map and
   // on parts of the battle royale islands, wherever the map has a layout (js/shared/bf.js bfLayouts: its own `bf`, or
-  // one derived from its Domination flags). `bf` marks the family. Conquest's scoreLimit is a nominal ticket pool that a
-  // custom limit scales (the layout sets the real one); Breakthrough's timeLimit is one sector's clock and its
-  // scoreLimit the nominal 100 that scales the attackers' tickets.
-  cq:    { id: 'cq',    rules: 'cq',  teamSize: 16, large: true, bf: 'conquest', everyHuge: true, name: 'Conquest', short: 'CQ', scoreLimit: 300, timeLimit: 1200, desc: '16 v 16 over five to seven flags. Hold more flags to drain their tickets; every death costs one. Spawn on any flag you hold.' },
-  bt:    { id: 'bt',    rules: 'bt',  teamSize: 16, large: true, bf: 'breakthrough', everyHuge: true, name: 'Breakthrough', short: 'BT', scoreLimit: 100, timeLimit: 300, desc: '16 v 16, attack or defend. Attackers take sector after sector on limited tickets; defenders fall back to the next line.' },
+  // one derived from its Domination flags). `bf` marks the family. Both scoreLimits are a percentage of the layout's
+  // ticket pools (Conquest both sides', Breakthrough the attackers'), 100 by default, that a custom limit scales;
+  // Breakthrough's timeLimit is one sector's clock.
+  cq:    { id: 'cq',    rules: 'cq',  teamSize: 16, large: true, bf: 'conquest', look: 'dom', everyHuge: true, name: 'Conquest', short: 'CQ', scoreLimit: 100, timeLimit: 1200, desc: '16 v 16 over five to seven flags. Hold more flags to drain their tickets; every death costs one. Spawn on any flag you hold.' },
+  bt:    { id: 'bt',    rules: 'bt',  teamSize: 16, large: true, bf: 'breakthrough', look: 'dom', everyHuge: true, name: 'Breakthrough', short: 'BT', scoreLimit: 100, timeLimit: 300, desc: '16 v 16, attack or defend. Attackers take sector after sector on limited tickets; defenders fall back to the next line.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 

@@ -132,6 +132,34 @@ export const THEMES = {
     },
   },
 
+  // Conquest and Breakthrough (ROADMAP 65): "Breakline". Ground War's weight at a march: E minor, a galloping
+  // sixteenth ostinato on the low strings, stabbed brass chords on the off-beats, the snare march and booms; at the peak
+  // (tickets running out, the last sector, overtime) the motif in octaves over tremolo.
+  bf: {
+    bpm: 96, gain: 1,
+    bar(b, L, e) {
+      const k = b & 7, ch = ['Em', 'Em', 'C', 'D', 'Em', 'Em', 'Am', 'Bm'][k], ns = C[ch], r = R[ch];
+      chord(e, L >= 2 ? 'pad' : 'dark', ns, 4, L >= 2 ? 0.55 : 0.72);
+      e('sub', 0, r, 4, L >= 1 ? 0.5 : 0.72);
+      if ((b & 3) === 0) e('wind', 0, 0, 0, L >= 2 ? 0.25 : 0.45);
+      if (L >= 1) {
+        figure(e, 'bass', r, [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 7, 12, 7], 0.25, 0.55, 0.22, 1);
+        e('boom', 0, 0, 0, 0.75);
+        hits(e, 'tom', TOMS, 0.45, 43);
+      }
+      if (L >= 2) {
+        hits(e, 'snare', k === 7 ? SNF : MARCH, 0.55); hits(e, 'kick', KB, 0.85); hits(e, 'hat', H8, 0.45);
+        for (const bt of [0.5, 2.5]) chord(e, 'pluck', ns, 0.3, 0.4, bt, 12);
+      }
+      if (L >= 3) {
+        if (k >= 4) { motif(e, 'lead', k - 4, -14, 0.65); motif(e, 'pluck', k - 4, -2, 0.3); }
+        else chord(e, 'trem', ns, 4, 0.4, 0, 12);
+        if (k === 0) e('crash', 0, 0, 0, 0.75);
+        if (k === 7) fill(e, 0.6, 47);
+      }
+    },
+  },
+
   // Battle royale, in the air: "Drop Zone". Four on the floor, octave bass, the wind through the door, the motif.
   brdrop: {
     bpm: 124, gain: 0.9,
@@ -364,6 +392,7 @@ export function baseTheme(info) {
   if (rules === 'cp') return MISSION_MOOD[info.mission] ?? ['cpaction', 0];
   if (rules === 'inf') return ['inf', 0];
   if (info.ranked) return ['ranked', 0];
+  if (rules === 'cq' || rules === 'bt') return ['bf', 0];      // Conquest and Breakthrough: "Breakline".
   if (info.large) return ['gw', 0];
   if (TACTICAL.has(rules)) return ['tactical', 0];
   return ['tdm', 0];
@@ -436,6 +465,16 @@ export function pickTheme(st, info, view, me, fight, closing, now) {
     const ps = view.players;
     for (let i = 0; i < ps.length; i++) { const p = ps[i]; if (p.dummy) continue; all++; if (p.team === 0) surv++; }
     level = !o?.started ? 0 : surv <= 1 || (view.timeLeft > 0 && view.timeLeft <= 30) ? 3 : surv <= all / 2 ? 2 : 1;
+  } else if (rules === 'cq' || rules === 'bt') {
+    // The pulse from the start, the groove in a firefight; the peak when the match is on the line: a pool under a fifth
+    // (Conquest, either side), the last sector, overtime or a sector clock under a minute (Breakthrough).
+    level = live ? (hot ? 2 : 1) : 0;
+    const low = rules === 'cq' ? (o?.tickets ?? []).some(t => t <= (o.max ?? 1) * 0.2)
+      : !!o && (o.overtime || o.sector >= (o.sectors ?? 3) - 1 || o.tickets <= (o.max ?? 1) * 0.2 || (view.timeLeft > 0 && view.timeLeft <= 60));
+    if (live && (low || closing)) {
+      level = 3;
+      if (!st.peak) { st.peak = true; sting = 'matchPoint'; }
+    }
   } else {
     if (hot && live) level = 2;
     if (live && (closing || (view.timeLeft > 0 && view.timeLeft <= 60))) {

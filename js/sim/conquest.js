@@ -51,9 +51,9 @@ export class ConquestRules {
     const l = this.layout = bfLayout(sim.map, 'conquest', seed);
     this.zones = makeZones(l?.flags ?? []).map(z => ({ ...z, by: -1 }));
     sim.points = this.zones;
-    // A custom score limit scales the pool (the mode's own limit is the nominal 300). sim.scoreLimit stays nominal: a
-    // new host is built with the snapshot's, and scaling twice would double the pool.
-    this.max = Math.max(20, Math.round((l?.tickets ?? 300) * (sim.scoreLimit ?? 300) / 300));
+    // The score limit is a percentage of the layout's pool (100 by default; Custom scales it). sim.scoreLimit stays
+    // that percentage: a new host is built with the snapshot's, and scaling twice would double the pool.
+    this.max = Math.max(20, Math.round((l?.tickets ?? 300) * (sim.scoreLimit ?? 100) / 100));
     this.tickets = [this.max, this.max];
     this.warned = [false, false];
     this.allBy = -1;            // The side holding every flag, once announced.

@@ -41,7 +41,7 @@ const MISSILE_Y = 1.7;           // A cruise missile skims just over waist-high 
 const SWARM_Y = 2.9;
 const MISSILE_SPEED = 17, MISSILE_R = 5;   // Cosmetic copies of js/sim/sim.js MISSILE_SPEED and MISSILE_RADIUS.
 const MAX_TAGS = 24;
-const MAX_POINTS = 6;
+const MAX_POINTS = 8;     // Conquest has up to seven flags.
 const FLAG_H = 3.4;              // Pole height; tall enough to read over cover from the tilted camera.
 const NEUTRAL_RGB = [0.82, 0.85, 0.88];
 const CONTEST_RGB = [1.0, 0.84, 0.32];

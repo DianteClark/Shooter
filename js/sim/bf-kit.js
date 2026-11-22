@@ -81,18 +81,21 @@ export function bestSpot(sim, p, spots, toward = null) {
 export const faceTo = (s, t) => Math.atan2(t.z - s.z, t.x - s.x);
 
 // The out-of-bounds clock. `inside(p)` says whether p may be where it is; `limit(p)` how long it may stay out. p.oob
-// counts down while out (null while in, after BF.ret seconds back in); at 0 the player dies with no credit.
+// counts down while out and is null while in (what the HUD shows). The time left is kept for BF.ret seconds after
+// stepping back in (p.oobLeft), so dancing on the edge does not refill it. At 0 the player dies with no credit.
 export function stepBounds(sim, dt, inside, limit) {
   for (const p of sim.players) {
-    if (!p.alive || p.dummy || p.away) { p.oob = null; p.oobBack = 0; continue; }
+    if (!p.alive || p.dummy || p.away) { p.oob = null; p.oobLeft = null; p.oobBack = 0; continue; }
     if (inside(p)) {
-      if (p.oob != null && (p.oobBack = (p.oobBack ?? 0) + dt) >= BF.ret) { p.oob = null; p.oobBack = 0; }
+      p.oob = null;
+      if (p.oobLeft != null && (p.oobBack = (p.oobBack ?? 0) + dt) >= BF.ret) { p.oobLeft = null; p.oobBack = 0; }
       continue;
     }
     p.oobBack = 0;
-    if (p.oob == null) p.oob = limit(p);
-    p.oob -= dt;
-    if (p.oob <= 0) { p.oob = null; sim._selfKill(p, 'zone'); }
+    if (p.oobLeft == null) p.oobLeft = limit(p);
+    p.oobLeft -= dt;
+    p.oob = p.oobLeft;
+    if (p.oobLeft <= 0) { p.oob = p.oobLeft = null; sim._selfKill(p, 'zone'); }
   }
 }
 

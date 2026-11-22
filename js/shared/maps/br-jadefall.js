@@ -591,7 +591,7 @@ const BF_LAYOUTS = {
   }],
   breakthrough: [{
     id: 'coastroad', name: 'Jadefall: Coast Road', area: { x: 228, z: 38, w: 158, h: 290 },
-    hq: [{ x: 292, z: 58, r: 10 }, { x: 284, z: 312, r: 10 }],
+    hq: [{ x: 292, z: 58, r: 10 }, { x: 284, z: 312, r: 10 }], tickets: 300, refill: 240,
     sectors: [
       { name: 'Signal Peak', objs: [{ x: 262, z: 98 }, { x: 316, z: 122 }] },
       { name: 'Port Coral', objs: [{ x: 310, z: 182 }, { x: 338, z: 215 }] },

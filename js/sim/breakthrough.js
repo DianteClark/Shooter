@@ -6,7 +6,7 @@
 // of bounds for them (BF.bt.fallBack s to get out), as the ground beyond the next line is for attackers all along.
 //
 // Attackers have a ticket pool (a death spends one); at zero they stop respawning and lose once the last is down.
-// Defenders respawn freely. The sector clock (BF.bt.sectorTime) running out with no attacker on a live objective ends it
+// Defenders respawn freely. The sector clock (the mode's timeLimit, restarted for each sector) running out with no attacker on a live objective ends it
 // for the defenders; with one on it, overtime runs until they are off or it falls. The last sector falling ends it for
 // the attackers. sim.scores: the attackers' sectors taken, the defenders' sectors still standing.
 //
@@ -33,7 +33,7 @@ export class BreakthroughRules {
     this.def = 1 - this.att;
     this.sector = 0;
     this.sectors = (l?.sectors ?? []).map(s => makeZones(s.objs).map(z => ({ ...z, by: -1, owner: this.def, cap: this.def ? 1 : -1 })));
-    // A custom score limit scales the pools (the mode's own limit is the nominal 100).
+    // The score limit is a percentage of the layout's pools (100 by default; Custom scales it).
     const k = (sim.scoreLimit ?? 100) / 100;
     this.refill = Math.max(10, Math.round((l?.refill ?? BF.bt.refill) * k));
     this.tickets = Math.max(10, Math.round((l?.tickets ?? BF.bt.tickets) * k));
@@ -51,6 +51,8 @@ export class BreakthroughRules {
   }
 
   get zones() { return this.sectors[this.sector] ?? []; }
+  // Seconds before the sector's objectives open (after one falls). A guest reads it from the block.
+  get lockLeft() { return this.authority === false ? this.lockWire : Math.max(0, BF.bt.lock - (this.sim.time - this.fellAt)); }
   get band() { return sectorBand(this.layout, Math.min(this.sector, this.sectors.length - 1)); }
 
   _sync() {
@@ -105,8 +107,11 @@ export class BreakthroughRules {
     const all = this._spots() ?? [];
     let spots;
     if (p.team === this.att) {
+      // Short of the sector's nearest objective (and never past the line behind it): the attack starts close enough
+      // to matter on a big island part, and from the HQ as well in sector one.
       const [n0, n1] = BF.bt.attackBand;
-      spots = this.sector === 0 ? this.hq[0] : all.filter(s => s.a >= b.lo - n1 && s.a <= b.lo - n0);
+      spots = all.filter(s => s.a >= sec.min - n1 && s.a <= Math.min(sec.min - n0, b.lo));
+      if (this.sector === 0) spots = spots.concat(this.hq[0]);
       if (!spots.length) spots = this.hq[0];
     } else {
       // Behind the objectives and clear of them, so a defence has to be walked back into, not spawned onto.
@@ -129,9 +134,11 @@ export class BreakthroughRules {
     const sim = this.sim;
     if (this.done) return;
     let pushing = false;
+    const locked = sim.time - this.fellAt < BF.bt.lock;
     for (const z of this.zones) {
       const n = sim._countIn(z);
-      const what = stepFlag(z, n, dt);
+      const what = locked ? null : stepFlag(z, n, dt, BF.bt.capture);
+      if (locked) z.contested = n[0] > 0 && n[1] > 0;
       if (what) this._flagEvent(z, what);
       if (n[this.att] > 0 && z.owner !== this.att) pushing = true;
     }
@@ -188,7 +195,8 @@ export class BreakthroughRules {
   }
 
   onKill(target, killer, info) {
-    if (info?.away || target.team !== this.att || this.sim.phase !== 'live' || this.done) return;
+    if (info?.away || this.sim.phase !== 'live' || this.done) return;
+    if (target.team === this.def) { target.respawnT += BF.bt.defendDelay; return; }
     this.tickets = Math.max(0, this.tickets - 1);
     if (!this.warned && this.tickets <= BF.bt.low) { this.warned = true; this.sim._emit({ t: 'bt', kind: 'low', team: this.att, n: this.tickets }); }
   }
@@ -256,26 +264,29 @@ export class BreakthroughRules {
     return {
       kind: 'bt', bf: true, layout: this.layout, att: this.att, sector: this.sector, sectors: this.sectors.length,
       tickets: this.tickets, max: this.max, overtime: this.overtime, done: this.done, reason: this.reason,
+      lock: this.lockLeft,
       ids: this.zones.map(z => z.id),
     };
   }
 
   playerView(p, v) { v.btCaps = p.btCaps ?? 0; v.oob = p.oob ?? null; }
 
-  // [sector, tickets, max, flags (overtime 1, done 2), reason, packed zone..., stats...]
+  // [sector, tickets, max, flags (overtime 1, done 2), reason, lock ds, packed zone..., stats...]
   encode() {
     for (const p of this.sim.players) p.oobDs = p.oob != null ? Math.max(1, Math.ceil(p.oob * 10)) : 0;
-    const out = [this.sector, this.tickets, this.max, (this.overtime ? 1 : 0) | (this.done ? 2 : 0), REASONS.indexOf(this.reason) + 1, ...this.zones.map(packZone)];
+    const out = [this.sector, this.tickets, this.max, (this.overtime ? 1 : 0) | (this.done ? 2 : 0), REASONS.indexOf(this.reason) + 1, Math.ceil(this.lockLeft * 10), ...this.zones.map(packZone)];
     return encodeStats(out, this.sim.players, STATS);
   }
 
   decode(a, out, host = false) {
     if (!host && a) this._setSector(Math.min(a[0], this.sectors.length));
-    decodeStats(a, 5 + this.zones.length, out.players, STATS);
+    decodeStats(a, 6 + this.zones.length, out.players, STATS);
     for (const v of out.players) v.oob = v.oobDs ? v.oobDs / 10 : null;
     if (!host && a) {
+      this.authority = false;
       this.tickets = a[1]; this.max = a[2]; this.overtime = !!(a[3] & 1); this.done = !!(a[3] & 2); this.reason = REASONS[a[4] - 1] ?? null;
-      this.zones.forEach((z, i) => unpackZone(z, a[5 + i]));
+      this.lockWire = a[5] / 10;
+      this.zones.forEach((z, i) => unpackZone(z, a[6 + i]));
     }
     for (const z of this.zones) out.points.push(this.sim._pointView(z, z.owner, z.cap, z.contested));
     return this.view();
@@ -299,6 +310,7 @@ export class BreakthroughRules {
     if (!o) return;
     this._setSector(o.sector);
     this.tickets = o.tickets; this.max = o.max; this.overtime = o.overtime; this.done = o.done; this.reason = o.reason;
+    this.fellAt = this.sim.time - (BF.bt.lock - (o.lock ?? 0));
     for (const pt of view.points ?? []) {
       const z = this.zones.find(q => q.id === pt.id);
       if (z) { z.owner = pt.owner; z.cap = pt.capture; z.contested = !!pt.contested; }

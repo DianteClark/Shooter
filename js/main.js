@@ -1970,7 +1970,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   backdrop.stop();
   menu.hide();
   menu.overlay('');
-  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro, training, title: tourney?.title ?? null });
+  hud.prepare({ mapId, scoreLimit, timeLimit, roster, mode, mods, localId: id, intro, training, title: tourney?.title ?? null, seed });
   app.badges = new Map(roster.map(r => [r.id, r.badge ?? null]));
   hud.setVisible(true);
   hud.setMic(net?.room ? (app.voice?.shownState ?? 'off') : 'hidden', app.voice?.muted);
@@ -2019,6 +2019,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   hud.onExCommand((act, extra) => app.match?.exCommand(act, extra));
   hud.onZmCommand((act, extra) => app.match?.zmCommand(act, extra));
   hud.onCpCommand((act, extra) => app.match?.cpCommand(act, extra));
+  hud.onBfCommand((act, extra) => app.match?.bfCommand(act, extra));     // Conquest's deploy pick.
   hud.onFinCommand((act, e) => (act === 'finish' ? app.match?.finish() : app.match?.emote(e)));
   hud.zmHud.guns = () => (app.match ? [app.match.ps.primary, app.match.ps.secondary] : []);
   hud.zmHud.hands = () => app.match?.ps ?? null;
@@ -2154,6 +2155,7 @@ function showResults(results) {
       ex: results.ex ?? null, exView: results.exView ?? null,
       zm: results.zm ?? null, zmView: results.zmView ?? null,
       cp: results.cp ?? null, cpView: results.cpView ?? null,
+      bfView: results.bfView ?? null,
       early: !!results.early,
       practice: !!results.practice,
       mastery: results.mastery,

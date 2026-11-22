@@ -330,6 +330,12 @@ export class Match {
     this.#command({ cmd: 'cp', act, ...extra });
   }
 
+  // Conquest's deploy pick from the death screen (js/ui/bf-hud.js): a flag id, 'hq', or null for the front.
+  bfCommand(act, extra = {}) {
+    if (this.sim.rules?.layout === undefined) return;
+    this.#command({ cmd: 'bf', act, ...extra });
+  }
+
   // Extraction commands from the HUD: call (the helicopter, standing in an open zone), take (a contract at a phone).
   exCommand(act, extra = {}) {
     if (!this.ex) return;
@@ -704,6 +710,8 @@ export class Match {
       br: view.br ? { stats: view.br.stats, squad: view.br.squad, squadsLeft: view.br.squadsLeft, t: view.br.t } : null,
       exView: objOf(view)?.ex ? { squads: objOf(view).squads, stats: objOf(view).stats, t: objOf(view).t } : null,
       zmView: objOf(view)?.zm ? { round: objOf(view).round, best: objOf(view).best, crew: objOf(view).crew, escaped: objOf(view).escaped ?? [] } : null,
+      // Conquest and Breakthrough (js/ui/outcome.js says how it ended): the pools, the sector, who attacked.
+      bfView: objOf(view)?.bf ? { kind: objOf(view).kind, tickets: objOf(view).tickets, att: objOf(view).att ?? null, sector: objOf(view).sector ?? null, sectors: objOf(view).sectors ?? null, reason: objOf(view).reason ?? null, name: objOf(view).layout?.name ?? null } : null,
       cpView: objOf(view)?.cp ? { id: objOf(view).id, k: objOf(view).k, diff: objOf(view).diff, state: objOf(view).state, t: objOf(view).t, fails: objOf(view).fails, deaths: objOf(view).deaths, bonusOk: objOf(view).bonusOk, why: objOf(view).why } : null,
       early: !!this.early,
       replay,
