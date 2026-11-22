@@ -136,10 +136,77 @@ coast region will join one day.
 each); `python3 dev/ui-sweep-perf.py [port] [out] brcity`; `node dev/br-overview.mjs meridian`;
 `node dev/render-snapshots.mjs midtown oldquarter canalrow unionsq meridian`.
 
+## The Coast (`kittiwake`, Kittiwake Bay): the second region
+400 x 400 m, a bright, windy morning (theme `shore`): a low sun out of the east, a pale washed sky, spray and sand on
+an onshore wind, a cold green-grey sea, gulls (ambient life `shore`). The west and the south are open sea. Four new
+districts, each a 6v6 map. Unlike the City's, they are drawn by the giant-world streamer with the bay's own palette
+(`giantWorld: true`, `theme: 'shore'`, like Tidebreak and Coral Quarter), so they look the same on their own as in the
+bay, and nothing like Harbor, Pier, Sunken or Jadefall (none of which was touched):
+
+| District | Map (size) | Region rect (x, z, w, h) | What it is |
+|---|---|---|---|
+| Fish Market | `fishmarket` (medium, 80 x 48) | 40, 152, 80, 48 | An open iron market hall on its columns, counters under it, the auction floor (B) in the middle; harbour basins at two corners with a trawler in each; quay road and dock road as the long lanes |
+| Shipyard | `shipyard` (large, 104 x 60) | 148, 146, 104, 60 | A dry dock through the middle with two hulls bow to bow (B between the bows), two gantry cranes over it, steps in the rim; plate stacks, timber and sheds in the yards; fitting-out quays at two corners |
+| Boardwalk | `boardwalk` (large, 100 x 56) | 140, 272, 100, 56 | The resort on the spit: the planked promenade under the pier gates (B), a carousel and its image the helter-skelter, rows of arcades, beaches with huts, deckchairs and groynes, wading surf on both shores |
+| Stilt Row | `stiltrow` (medium, 80 x 50) | 262, 220, 80, 50 | A fishing hamlet on a shingle bank between two tidal flats: stilt huts on plank platforms out on the flats, a creek with a footbridge into each side, net sheds and the cockle shed on the bank |
+
+Harbour Road (z 176) is the middle lane of the Fish Market and the Shipyard and runs on west to the Lifeboat Station
+and east past the Cannery to the headland. Between the districts: Slipway Lane (28 m, the town down to Harbour Road and
+on as the Causeway across the back bay to the spit). Places round them (region fill, 18 in all): Market Cross, the
+Harbour Office, St Agnes, Windmill Hill (the town on its hill, north), the Freight Quay's wet basin with a coaster in
+it, the Lifeboat Station at the harbour mouth, the Cannery, the Coastguard Station, the Gun Battery and Lantern Point
+(the lighthouse) on the headland, the Dune Camp, the Lido and the Winter Gardens on the spit, the Pleasure Pier with
+its big wheel out at sea. The back bay between Harbour Road and the spit is tidal flats you wade (`shallows`: slower,
+no slides) with a deep channel through them, crossed by the Causeway's bridge.
+
+### Water: one lattice (js/shared/maps/coast-kit.js)
+The bay keeps the same land/water lattice as Jadefall's maps (isle-kit.js `cells`, deep water as `water` walls,
+wading water as `shallows`), so the streamer draws beaches, banks and the shallow-water sheet as it does on the island.
+- A district gives its water as rects for its west half (`mirror` adds the 180-degree images): `deep` (flag `quay`: a
+  stone quay edge, drawn with the streamer's `waterBanks` instead of a beach slope), `steep` (a creek), `shallow`,
+  `deck` (plank platforms and footbridges: dry footing, planks drawn, water under). `coastWater` turns them into the
+  lattice, the water walls, the shallows, the deck rooms and `underDecks`.
+- The region builds one lattice for the whole bay: `seaBase` returns the district's own cell inside each district rect
+  and the sea, surf, back bay and channel outside, then the bay's own quays and decks. Water walls come only from cells
+  outside the districts (`wallMask`); the districts' come through `placeDistrict` as usual. The shallows list is the
+  whole lattice's. District offsets are even, so their 2 m cells line up.
+- Districts carry art lists the bay translates into its own (`halls`, `docks`, `promenade`), plus their deck rooms and
+  `underDecks`.
+
+### What was built (files)
+- `js/shared/maps/coast-kit.js` (new): `coastWater`, `waterOf`, `mirror`.
+- `js/shared/maps/fishmarket.js`, `shipyard.js`, `boardwalk.js`, `stiltrow.js`: the districts (appended to `MAPS`).
+- `js/shared/maps/br-kittiwake.js`: the bay. `districts`, `br` (18 places, loot, caches, `circleBias`,
+  `reboundAreas`, `exfils` with reserved landing zones), `bf` (Conquest "Kittiwake: Harbour", six flags: Fish
+  Market, Shipyard, The Causeway, Boardwalk, The Cannery, Stilt Row; Breakthrough "Kittiwake: Harbour Road", west to
+  east, one sector per place: Fish Market, Shipyard, The Cannery).
+- `js/render/themes/shore.js` (new): `THEMES.shore` (`giant: true`), ground, zones, roads, building styles, the `shore`
+  skin's drawers for every piece the bay uses (market hall columns and counters, sheds, ice house, smokehouse, net
+  shops, stilt huts, arcades and tea rooms, beach huts, kiosks, carousel, helter-skelter, bandstand, caravans, hulls on
+  blocks and afloat, gantry and quay cranes, boats, groynes, windbreaks, deckchairs, nets, the lighthouse, the
+  windmill, the spire, the mast, the big wheel), tile decor (the hall's frame, the dock walls, gantry girders, the pier
+  gates' arch, promenade lamps and bunting) and the edge of the bay (dry-stone walls and heath).
+- Wiring: `themes/frontier.js` merges the tables, `EXTRAS.shore`, and draws `quay` water as stone banks (one line,
+  additive); `world.js` `DRESS.shore`, `THUMB_STYLE.shore`; `THEME_AUDIO.shore`, step surface sand, ambient `shore`,
+  props `shore`; `map:<id>` icons, cards (cardbook.js `MAP_ART`; `kittiwake` plays-based), new card patterns
+  `seawind`, `drydock`, `stilts` and `fishhall` (cardart.js), framings in `dev/render-maps.html`,
+  perf case `brbay` in `dev/ui-sweep-perf.py`, art `assets/maps/<id>.jpg` and `assets/maps/kittiwake-overview.jpg`.
+- region-kit.js is unchanged: `placeDistrict` already keeps per-piece flags (`quay`, `sea`, `channel`), and the
+  district's deck rooms and art lists are translated by the bay itself.
+
+### Measured
+PERF_TABLE
+
+### Tests
+`node dev/map-validate.mjs fishmarket shipyard boardwalk stiltrow kittiwake`; `node dev/sim-br.mjs --map=kittiwake`;
+`node dev/sim-resurgence.mjs --map=kittiwake`; `node dev/sim-extract.mjs --map=kittiwake --quick`;
+`node dev/sim-conquest.mjs --maps=kittiwake`; `node dev/sim-breakthrough.mjs --maps=kittiwake`;
+`python3 dev/ui-sweep-perf.py [port] [out] brbay`; `node dev/br-overview.mjs kittiwake`;
+`node dev/render-snapshots.mjs fishmarket shipyard boardwalk stiltrow kittiwake`.
+
 ## The rest (plan)
 Each later region is new districts too (the existing maps stay as they are):
-- **The Coast**: a shoreline region east of the City's waterfront: a fish market, a boardwalk and its pier, a tidal
-  quarter of stilt houses, a lighthouse headland (4 new 6v6 maps) along a 400 m quay.
+- **The Coast**: built, Kittiwake Bay (above).
 - **The Desert**: a canyon town, a caravan market round a well, a mining terrace, an observatory ridge.
 - **The Wilds**: a river valley: a jungle landing, a waterfall temple, a rope-bridge gorge.
 - **The North**: a frozen harbour, a ski village, a research base on the ice shelf.

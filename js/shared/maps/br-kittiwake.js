@@ -190,7 +190,7 @@ function build() {
 
   // ---- Kittiwake town (north): cottages and shops round its streets ------------------------------------------------
   const TOWN = { style: 'kwcottage', tall: 0.12, yard: 0.14, lot: [8, 12], h: [3.4, 4.2], towerH: [5.4, 6.6], towerSkin: 'shore', loot: 2 };
-  poi('town', 'Kittiwake', 168, 82, 36, 'kwtown', 2);
+  poi('town', 'Market Cross', 168, 82, 36, 'kwtown', 2);
   cityBlock(P, 138, 66, 58, 34, { ...TOWN, rows: 1 });
   cityBlock(P, 204, 66, 52, 26, { ...TOWN, rows: 1 });
   cityBlock(P, 138, 4, 58, 52, TOWN);
