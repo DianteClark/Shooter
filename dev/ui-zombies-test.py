@@ -916,7 +916,7 @@ MSG_SIZES = [(640, 360), (667, 375), (852, 393), (932, 430), (956, 440)]
 FIRE = r"""(async () => {
   const g = window.__game, hud = g.hud, zh = hud.zmHud, view = hud.view;
   const { ZM_PERK_IDS, ZM_PERKS, ZE, ZM_FX, zmFxOf, ZM_WONDERS } = await import('/js/shared/zombies.js');
-  const { QUEST_HINT, RADIO_HINT, LANTERN_HINT } = await import('/js/ui/zm-hud.js');
+  const { QUEST_HINT, RADIO_HINT, LANTERN_HINT, FONT_HINT } = await import('/js/ui/zm-hud.js');
   const { WEAPONS } = await import('/js/shared/weapons.js');
   const me = view.players.find(p => p.id === view.localId), mate = view.players.find(p => p.team === me.team && p.id !== me.id && !p.ai) ?? me;
   const long = 'Maximilian-Longname';
@@ -933,7 +933,7 @@ FIRE = r"""(async () => {
   const notes = what => { for (const a of document.querySelectorAll('.hud .f-row')) for (const an of a.getAnimations()) an.finish(); for (const n of document.querySelectorAll('.hud .f-row .f-note')) { cut(n, what); box(n.closest('.f-row'), what); } feed(); };
   const banner = what => { const b = document.querySelector('.obj-banner'); for (const a of b.getAnimations()) a.finish?.(); box(b, what); cut(b.querySelector('small'), what + ' (sub)'); cut(b.querySelector('b'), what + ' (title)'); };
   const fire = (e, what) => { feed(); zh.onEvent(e, view); notes(what); banner(what); };
-  hud.notify(QUEST_HINT); notes('relic hint'); hud.notify(RADIO_HINT); notes('radio hint'); hud.notify(LANTERN_HINT); notes('lantern hint');
+  hud.notify(QUEST_HINT); notes('relic hint'); hud.notify(RADIO_HINT); notes('radio hint'); hud.notify(LANTERN_HINT); notes('lantern hint'); hud.notify(FONT_HINT); notes('font hint');
   const guns = Object.keys(WEAPONS), longGun = guns.reduce((a, b) => ((WEAPONS[b].name ?? b).length > (WEAPONS[a].name ?? a).length ? b : a));
   fire({ t: 'zround', round: 1 }, 'round 1 / power out');
   fire({ t: 'zround', round: 10, boss: true }, 'boss round');
@@ -962,6 +962,10 @@ FIRE = r"""(async () => {
   fire({ t: 'zrelic', i: 1, n: 1, of: 4, by: mate.id, lantern: 1 }, 'lantern lit'); fire({ t: 'zrelic', i: 0, n: 4, of: 4, by: me.id, lantern: 1 }, 'lanterns all');
   fire({ t: 'zlantern', state: 0, i: 2, by: mate.id }, 'wrong lantern'); fire({ t: 'zlantern', state: 2 }, 'lanterns burnt out');
   fire({ t: 'zwarden', state: 1, k: 11 }, 'barker steps in'); fire({ t: 'zwarden', state: 2, k: 11 }, 'barker falls');
+  // Saltmere Abbey's fonts and the Ferryman.
+  fire({ t: 'zfont', i: 0, state: 1, n: 0, of: 10, by: mate.id }, 'font filled'); fire({ t: 'zfont', i: 1, state: 2, n: 1, of: 3 }, 'font full');
+  fire({ t: 'zfont', i: 2, state: 2, n: 3, of: 3 }, 'fonts all'); zh.thirstAt = -99; fire({ t: 'zfont', i: 0, state: 3, n: 4, of: 10 }, 'font thirsty');
+  fire({ t: 'zwarden', state: 1, k: 12 }, 'ferryman comes'); fire({ t: 'zwarden', state: 2, k: 12 }, 'ferryman falls');
   for (const w of Object.values(ZM_WONDERS)) fire({ t: 'zbox', state: 2, by: me.id, gun: w.gun }, 'wonder offer ' + w.id);
   // The use button's longest lines.
   const use = zh.useEl, lines = [['UPGRADE ' + (WEAPONS[longGun].name ?? longGun).toUpperCase(), '12,000 · tier 3 · ' + Object.values(ZM_FX).map(f => f.name).reduce((a, b) => (b.length > a.length ? b : a))],
@@ -971,6 +975,8 @@ FIRE = r"""(async () => {
     ['ASK THE ORACLE', "Free: it knows the lanterns' order"], ['THE ORACLE', 'Green, Gold, Blue, Red'], ['THE ORACLE', 'No power: find the switch'],
     ['LIGHT THE GREEN LANTERN', "Free: in the Oracle's order, or they all go out"], ['COLD LANTERN', 'Which first? Ask the Oracle'],
     ['HIGH STRIKER', '3 of 4 lanterns lit'], ['RING THE BELL', 'Something is waiting in the wings'],
+    ['DRY FONT', 'No power: the pumps are still'], ['FILL THE FONT', 'Free: then kill the drowned beside it'], ['THE FONT DRINKS', `${ZE.quest.souls - 1} of ${ZE.quest.souls}: kill the drowned beside it`],
+    ['THE BELL ROPE', '2 of 3 fonts full'], ['TOLL THE BELL', 'Something waits under the water'],
     ...Object.values(ZM_WONDERS).map(w => ['TAKE ' + w.name.toUpperCase(), `Wonder weapon: ${w.desc.toLowerCase()}`]),
     ['CALL EXFIL', '20,000 · hold the pad ' + ZE.exfil.hold + ' s'], ['ARMOUR PLATE', '2,500 · up to ' + ZE.plate.max + ' plates'],
     ...ZM_PERK_IDS.map(k => [ZM_PERKS[k].name.toUpperCase(), `${ZM_PERKS[k].cost.toLocaleString('en-US')} · ${ZM_PERKS[k].desc}`]),
