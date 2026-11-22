@@ -228,6 +228,15 @@ function exposureAt(map, x, z) {
   return sum / EXPOSE_RAYS;
 }
 
+// exposureAt of a cover point, kept on the point: twelve rays each, and a close gun's corner search asks it of every
+// cover point within 12 m. Asked again whenever the walls may have changed (a piece broke: map.brkVer; a Bulwark went
+// up or came down: the wall count) or for another map (a warm-up sim shares the points, Sim._warmUp).
+function coverExposure(map, c) {
+  const v = map.brkVer ?? 0, n = map.walls.length;
+  if (c.eMap !== map || c.eVer !== v || c.eN !== n) { c.e = exposureAt(map, c.x, c.z); c.eMap = map; c.eVer = v; c.eN = n; }
+  return c.e;
+}
+
 // Full kits per gun; a bot runs one of them, cut down for its tier. Slots listed in the order they are fitted,
 // so a low tier keeps what matters most on that gun. Suppressors are listed third: veterans and elites only.
 const BOT_KITS = {
@@ -1159,6 +1168,12 @@ export class BotBrain {
   // ---- Decisions ----
 
   think() {
+    this.deferred = false;
+    this._think();
+    if (this.deferred) this.thinkT = Math.min(this.thinkT, 0);     // Out of allowance (see _spend): again next tick.
+  }
+
+  _think() {
     const { sim, p, ps, S } = this;
     this._perceive();
     // Pre-aim only matters on the move with nothing to look at; the lane is looked up again after a few metres.
@@ -1213,7 +1228,7 @@ export class BotBrain {
     } else if (visible && this.targetDist > 8 && (ammo === 0 || ps.reloadT > 0) && sim.rng() < S.coverReload && !this.objective?.commit) {
       this._takeCover();
     }
-    this.lastRetreatHp = p.hp;
+    if (!this.deferred) this.lastRetreatHp = p.hp;
 
     // Fighting from beside cover: set up once a fight at the right distance starts, then step in and out (see _peek).
     const bu0 = styleOf(ps.weapon, ps);
@@ -1235,7 +1250,7 @@ export class BotBrain {
       const facingUs = Math.abs(angleDiff(t.aim, Math.atan2(ps.z - t.z, ps.x - t.x))) < 0.9;
       if (facingUs || this.targetDist > bu.rush * 2.2) {
         // Nowhere to go: a gun that still reaches fights from where it stands rather than run mute into the fire.
-        if (!this._closeIn(t.x, t.z) && !this._ambush()) this.plink = !bu.fireMax || this.targetDist <= bu.fireMax;
+        if (!this._closeIn(t.x, t.z) && !this._ambush() && !this.deferred) this.plink = !bu.fireMax || this.targetDist <= bu.fireMax;
       }
     }
     if (this.mode === 'close') {
@@ -1312,6 +1327,18 @@ export class BotBrain {
 
   _setMode(m) { this.mode = m; if (m === 'none') this.arrived = false; }
 
+  // The expensive decisions (a throw's flight worked out a few ways, a search of the cover round about) share one
+  // allowance a tick between all bots (sim.thinkWork, js/sim/sim.js THINK_WORK). When it is spent, the decision is not
+  // made now: the bot thinks again on the next tick, when there is allowance again. A tick where many bots meet a
+  // fight at once then costs about what a normal one does, and the decision comes 33 ms later. Counted in decisions,
+  // not milliseconds, so every phone and replay agrees.
+  _spend(n) {
+    const sim = this.sim;
+    if (!(sim.thinkWork > 0)) { this.deferred = true; return false; }
+    sim.thinkWork -= n;
+    return true;
+  }
+
   // Uses a streak a moment after earning it. Recruits press whichever button lit up first; everyone else goes for the
   // dearest they hold, waits for a moment it is actually worth something, and a capped bot's spend resets its score.
   _thinkStreaks(visible) {
@@ -1385,6 +1412,7 @@ export class BotBrain {
     const { ps, S } = this;
     const want = Math.hypot(tx - ps.x, tz - ps.z), reach = Math.min(want, maxThrowRange(ps.perks));
     const shots = S.arcTries ?? 0;
+    if (!this._spend(1 + shots)) return null;
     let found = false, bestMiss = radius, bestAim = 0, bestX = 0, bestZ = 0;
     for (let i = 0; i <= shots; i++) {
       const a = aim + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.32);
@@ -1539,7 +1567,7 @@ export class BotBrain {
           return;
         }
         this.nadeT = 2.5;   // Decided against it. Don't reconsider on the very next think.
-      } else {
+      } else if (!this.deferred) {
         this.nadeT = 0.5;   // No line right now. Looking again every think would just burn time.
       }
     }
@@ -1655,7 +1683,7 @@ export class BotBrain {
       if (this.dodgeId !== threat.id) { this.dodgeId = threat.id; this.dodgeRoll = sim.rng() < S.dodge; }
       if (this.dodgeRoll && !(this.mode === 'cover' && this.dodgeFrom === threat.id)) {
         this.dodgeFrom = threat.id;
-        if (!this._coverFrom(threat.x, threat.z)) {
+        if (!this._coverFrom(threat.x, threat.z) && !this.deferred) {
           const a = Math.atan2(ps.z - threat.z, ps.x - threat.x);
           this.mode = 'cover'; this.modeT = 2;
           this._goTo(ps.x + Math.cos(a) * 7, ps.z + Math.sin(a) * 7);
@@ -1835,6 +1863,7 @@ export class BotBrain {
 
   _coverFrom(tx, tz, reach = 14) {
     const { sim, ps } = this;
+    if (!this._spend(1)) return false;
     const c = sim.nav.findCover(ps.x, ps.z, tx, tz, sim.rng, reach);
     if (!c) return false;
     this.mode = 'cover';
@@ -1855,6 +1884,7 @@ export class BotBrain {
   _ambush() {
     const { sim, ps, S } = this;
     const t = this.target.ps;
+    if (!this._spend(1)) return false;
     const c = sim.nav.findCover(ps.x, ps.z, t.x, t.z, sim.rng);
     if (!c) return false;
     this.mode = 'hold';
@@ -1870,6 +1900,7 @@ export class BotBrain {
   _closeIn(tx, tz) {
     const { sim, ps } = this;
     const here = Math.hypot(tx - ps.x, tz - ps.z);
+    if (!this._spend(1)) return false;
     let best = null, bestScore = Infinity;
     const ix = sim.nav.coverIndex, n = ix.near(ps.x, ps.z, CLOSE_REACH);
     for (let q = 0; q < n; q++) {
@@ -1990,6 +2021,7 @@ export class BotBrain {
       return;
     }
     if (r < S.flank * style.flank + S.holdProb * style.hold && this._goHold()) return;
+    if (this.deferred) return;     // The hold search waits for the next tick's allowance (_spend): decide then.
 
     this.stage++;
     if (this.stage > style.advance + (S.flank > 0.2 ? 1 : 0)) this._assignLane(), this.stage = 1;
@@ -2005,6 +2037,7 @@ export class BotBrain {
     const { sim, ps, S, style } = this;
     const r = sim.rng();
     if (r < S.holdProb * style.hold * 0.8 && this._goHold()) return;
+    if (this.deferred) return;
     const hot = sim.hot;
     if (hot && sim.time - hot.t < 8 && r < 0.55 && Math.hypot(hot.x - ps.x, hot.z - ps.z) < 45) {
       this.mode = 'advance';
@@ -2034,6 +2067,7 @@ export class BotBrain {
   _goCorner() {
     const { sim, ps, S } = this;
     const laneZ = sim.map.lanes[this.laneIdx].z, W = sim.map.width;
+    if (!this._spend(1)) return false;
     let best = null, bestScore = Infinity;
     const ix = sim.nav.coverIndex, n = ix.near(ps.x, ps.z, 12);
     for (let q = 0; q < n; q++) {
@@ -2043,7 +2077,7 @@ export class BotBrain {
       if (!sim.ffa && Math.abs(c.z - laneZ) > 11) continue;
       const depth = sim.ffa ? 0 : (this.side === 0 ? c.x : W - c.x) / W;
       if (depth > 0.72 || this._teammateNear(c.x, c.z, 3)) continue;
-      const e = exposureAt(sim.map, c.x, c.z);
+      const e = coverExposure(sim.map, c);
       if (e > CORNER_SIGHT) continue;
       // Forward of here rather than back toward the spawn: a corner nobody walks past is no ambush.
       const ahead = sim.ffa ? 0 : (this.side === 0 ? c.x - ps.x : ps.x - c.x);
@@ -2106,12 +2140,13 @@ export class BotBrain {
 
   _solvePath() {
     const { sim, ps } = this;
-    if (sim.pathBudget <= 0) return;
+    if (sim.pathBudget <= 0 || sim.pathWork <= 0) return;
     sim.pathBudget--;
     this.pathDirty = false;
     // Recruits walk straight through a turret's field of fire; everyone else takes the long way round.
     this.pathLen = sim.nav.findPath(ps.x, ps.z, this.goalX, this.goalZ, this.path, PATH_POINTS, this.S.turret ? this.p.team : -1);
     this.pathPartial = sim.nav.partial;      // Only a big map's capped search leaves it set: see _followPath.
+    sim.pathWork -= sim.nav.expanded;
     this.pathI = 0;
     // A fresh path means somewhere to go. The solve can lag _goTo by a tick or two (path budget), and the old path's
     // end reached in between must not leave the bot standing on 'arrived' with a whole new route ahead of it.

@@ -112,7 +112,7 @@ export function thinkStrikes(b, visible) {
   const key = `${threat.kind}${Math.round(threat.x)}:${Math.round(threat.z)}`;
   if (b.strikeKey !== key) { b.strikeKey = key; b.strikeRoll = sim.rng() < S.dodge; }
   if (!b.strikeRoll || b.mode === 'cover') return;
-  if (!b._coverFrom(threat.x, threat.z)) {
+  if (!b._coverFrom(threat.x, threat.z) && !b.deferred) {
     const a = Math.atan2(ps.z - threat.z, ps.x - threat.x);
     b.mode = 'cover'; b.modeT = 1.5;
     b._goTo(ps.x + Math.cos(a) * (threat.radius + 2), ps.z + Math.sin(a) * (threat.radius + 2));

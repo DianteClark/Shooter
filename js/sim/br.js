@@ -783,7 +783,9 @@ export class BrRules {
       if ((sim.tick + p.index) % 3 === 0) this._pickups(p);
       if (p.bot && (sim.tick + p.index) % 10 === 0) this._botHands(p);
     }
-    if (sim.tick % PLAN_EVERY === 0) this.plan();
+    // Each squad plans every PLAN_EVERY ticks, but not all on the same tick: squad (side) k on ticks k mod PLAN_EVERY, so
+    // eight squads' plans (loot searches, holds, revives) are one or two a tick instead of a bump every half second.
+    if (this.dropsPlanned || sim.tick % PLAN_EVERY === 0) this.plan(this.dropsPlanned ? sim.tick % PLAN_EVERY : -1);
     if (sim.tick % 30 === 7 && this.recallOn) this._sweepTags();
     while (this.noise.length && sim.time - this.noise[0].t > NOISE_KEEP) this.noise.shift();
     // Changes older than the repeat window that every guest has had can go.
@@ -1478,19 +1480,22 @@ export class BrRules {
     return false;
   }
 
-  // Squad plans, twice a second: where each bot squad drops, loots, rotates and holds, and who revives whom.
-  plan() {
+  // Squad plans, twice a second: where each bot squad drops, loots, rotates and holds, and who revives whom. `slot`
+  // (0..PLAN_EVERY-1) plans only the squads whose side falls on it; -1 plans every squad (and the drops, once).
+  plan(slot = -1) {
     const sim = this.sim;
     if (!sim.nav) return;
-    const squads = new Map();
+    const squads = this._squadBuf || (this._squadBuf = new Map());
+    for (const a of squads.values()) a.length = 0;
+    const all = slot < 0 || !this.dropsPlanned;
     for (const p of sim.players) {
-      if (!p.br || !p.alive) continue;
+      if (!p.br || !p.alive || (!all && p.team % PLAN_EVERY !== slot)) continue;
       let s = squads.get(p.team);
       if (!s) squads.set(p.team, s = []);
       s.push(p);
     }
     if (!this.dropsPlanned) { this._planDrops(squads); this.dropsPlanned = true; }
-    for (const [team, members] of squads) this._planSquad(team, members);
+    for (const [team, members] of squads) if (members.length && (slot < 0 || team % PLAN_EVERY === slot)) this._planSquad(team, members);
   }
 
   // Bot squads pick places along the flight line, spread out, the best ones drawing more than one squad (hot drops).

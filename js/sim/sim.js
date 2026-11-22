@@ -130,6 +130,8 @@ const HARD_ROTATE = 40, HARD_TICK = 1;
 const HOLD_TICK = 3;             // Seconds between personal SCORE.holdTick payouts for standing on a held point.
 const DEFEND_REACH = 3;          // Metres past a point's edge that a kill still counts as defending it.
 const PLAN_EVERY = 15;           // Ticks between bot objective plans.
+const PATH_WORK = 5000;          // Path cells expanded a tick, all bots together (see _tick).
+const THINK_WORK = 24;           // Expensive bot decisions a tick, in units (bots.js spend): throws, cover searches.
 const OBJECTIVE_RULES = new Set(['kc', 'dom', 'hard', 'snd', 'ctf', 'br']);
 
 // Free-for-all spawning: anywhere open on the map, as far from everyone as it can get.
@@ -659,6 +661,7 @@ export class Sim {
     this._onEqEvent = this._onEqEvent.bind(this);
     this._onEqDamage = this._onEqDamage.bind(this);
     this.pathBudget = 0;
+    this.pathWork = PATH_WORK; this.thinkWork = THINK_WORK;      // Per-tick allowances, reset each tick (_tick).
     this.nav = null;     // Built on first step; guests only decode snapshots and never need it.
     // The host sets this (js/game/match.js): the step that builds the nav grid also plays a throwaway match for a moment
     // (see _warmUp), so the first live seconds do not run the bot code cold. Nothing of it reaches this match.
@@ -1028,6 +1031,11 @@ export class Sim {
     this.tick++;
     this.time += STEP;
     this.pathBudget = this.rules?.pathBudget ?? 2;     // Path searches a tick (a rule set on a giant map asks for fewer).
+    // And the cells those searches may expand between them, on every map: a search always runs to its end, but once
+    // the tick has paid for PATH_WORK cells the next bot waits a tick (or two) for its route. Counted in cells, not
+    // milliseconds, so every phone and every replay of the match agrees on who waited.
+    this.pathWork = PATH_WORK;
+    this.thinkWork = THINK_WORK;
     this.brk.step(STEP);
 
     if (this.phase === 'warmup') {

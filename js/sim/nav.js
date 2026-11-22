@@ -119,7 +119,7 @@ export class NavGrid {
         const key = Math.floor(j / 3) * w + Math.floor(i / 3);
         if (taken[key]) continue;
         taken[key] = 1;
-        const point = { x: cx, z: cz, solid: nearSolid };
+        const point = { x: cx, z: cz, solid: nearSolid, e: 0, eMap: null, eVer: -1, eN: -1 };     // e*: bots.js coverExposure.
         if (nearSolid) this.cover.push(point);
         this._rateHold(point);
       }
@@ -230,6 +230,7 @@ export class NavGrid {
     const danger = team >= 0 ? this.danger[team > 1 ? 0 : team] : null;
     const id = ++this.search;
     this.partial = false;
+    this.expanded = 0;
     let corridor = null, cap = Infinity;
     if (this.regionOf) {
       if (!this._route(startCell, goalCell, id)) return 0;
@@ -248,11 +249,12 @@ export class NavGrid {
       closed[cur] = id;
       if (cur === goalCell) { found = true; break; }
       const ci = cur % w, cj = (cur - ci) / w;
+      expanded++;
       if (corridor) {
         // Capped: remember the closest cell so far, and settle for it when the cap runs out.
         const hc = this._h(cur);
         if (hc < nearestH) { nearestH = hc; nearest = cur; }
-        if (++expanded > cap) break;
+        if (expanded > cap) break;
       }
       const base = g[cur];
       for (let dj = -1; dj <= 1; dj++) {
@@ -272,6 +274,7 @@ export class NavGrid {
         }
       }
     }
+    this.expanded = expanded;      // What this search cost, for the sim's per-tick path budget (bots.js _solvePath).
     // A capped search that ran out hands back the way to the closest cell it reached and says so in `partial`: the
     // bot walks that far and asks again from there.
     this.partial = false;
