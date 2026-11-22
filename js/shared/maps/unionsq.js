@@ -20,7 +20,7 @@ function build() {
 
     // ---- The square's west half (x 12-28): trees, hedges, benches.
     tree(15, 11), tree(19.5, 25), tree(23, 10.5),
-    hedge(14, 15, 0.8, 6), hedge(18, 21.4, 5, 0.8), hedge(22, 15.6, 0.8, 3.4), [10.5, 30.4, 3, 1.1, 1.0, 'stall'],
+    hedge(14, 15, 0.8, 6), hedge(18, 21.4, 5, 0.8), hedge(22, 15.6, 0.8, 3.4),
     bench(20, 13.4), bench(13.4, 26.4),
 
     // ---- Spawn screens.

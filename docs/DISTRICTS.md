@@ -91,6 +91,51 @@ Midtown), the Ferry Terminal and the Waterfront Docks (the east shore), City Hal
 Westgate, the Stadium, Southside and Chapel Row (south), the Power Station. The sea along the east edge is where the
 coast region will join one day.
 
+### What was built (files)
+- `js/shared/maps/region-kit.js`: `placeDistrict`, `doorSpots`, `cityBlock` (region fill), `shellWalls`, `floorLoot`,
+  `pruneUnreachable` (drops loot a bot could never reach, same rule as the nav grid and the validator), `offsetPicks`.
+- `js/shared/maps/midtown.js`, `oldquarter.js`, `canalrow.js`, `unionsq.js`: the districts (appended to `MAPS`).
+- `js/shared/maps/br-meridian.js`: the City. `districts` (each district's rect), `br` (18 places, loot, caches,
+  `circleBias`, `reboundAreas`, `exfils` with reserved landing zones), `bf` (Conquest and Breakthrough layouts).
+  District street zones become painted `roads`; streets of the city's own are `ROADS`.
+- `js/render/themes/city.js`: the City palette (`THEMES.city`, `giant: true`), ground, zones, the brownstone style,
+  per-tile lights (streetlamp pools baked across tile edges), lamp posts, El decks, lantern strings, trains, shop sign
+  styles, the edge of the city. Hooked into the giant-world streamer (themes/frontier.js `EXTRAS`), which also draws
+  `void` pits (light wells) as holes, not water.
+- Wiring: `map:<id>` icons (icons-maps.js, icons.js), cards (cardbook.js `MAP_ART`; `meridian` is plays-based like the
+  islands; new pattern `metropolis` in cardart.js), `THEME_AUDIO.city`, ambient `city`, props `city`, `THUMB_STYLE.city`,
+  `dev/render-maps.html` framings, art `assets/maps/<id>.jpg` and `assets/maps/meridian-overview.jpg`.
+
+### Measured (2-vCPU sandbox, busy; SwiftShader frame times compare runs here only, calls and triangles are exact)
+| | walls | buildings | loot / caches | places | host tick mean (validator roam / sim-br quads) |
+|---|---|---|---|---|---|
+| Frontier | 1,561 | 75 | 560 / 44 | 17 | - / - |
+| Meridian City | ~2,800 | ~120 | ~870 / ~43 | 18 | 0.36-0.51 ms / 0.24 ms |
+
+| Low quality, 932 x 430, on the ground after the jump (dev/ui-sweep-perf.py) | calls median (max) | triangles median (max) | script ms median (max) |
+|---|---|---|---|
+| Frontier (`br`) | 51.5 (59) | 61.0k (83.3k) | 10.6 (18.8) |
+| Jadefall (`brjade`) | 47.0 (53) | 55.1k (55.5k) | 9.8 (20.0) |
+| Meridian, Midtown's boulevard (`brcity`) | 55.5 (69) | 48.6k (68.9k) | 12.0 (81.5: the frame the test teleports the player in, when the nearest tiles are built at once) |
+
+### Tuning notes
+- Places: Midtown is the only tier 1 district; the Old Quarter, Canal Row and Union Square are tier 2. With three tier 1
+  districts side by side, Rebound squads were all geared within a minute and some matches ended at 4.5 min.
+- Rebound areas (`br.reboundAreas`): four 150 m areas over the middle of the city. One leaning east over the sea left
+  too little land (a 4.5 min match); one leaning north put Gallery Row on its edge, where a bot's landing spot pushed
+  out of a building ended up just outside the area. Measured after: quads 5.9-7.3 min, duos 5.9-7.1, mean 6.5.
+- Extraction's landing zones are named and reserved before the fill (a dense city has no open clearings for the
+  derived ones): seven round the city, the final at one of the four junctions round Midtown, eight inserts.
+- dev/sim-extract.mjs: two unit checks were map-dependent (squads parked a metre apart in one corner took finishers
+  off each other; an idle guest was found by a patrol). The test now parks them 2.2 m apart and keeps the guest up;
+  Frontier and Jadefall still pass.
+
+### Tests
+`node dev/map-validate.mjs midtown oldquarter canalrow unionsq meridian`; `node dev/sim-br.mjs --map=meridian`;
+`node dev/sim-resurgence.mjs --map=meridian`; `node dev/sim-extract.mjs --map=meridian` (`--quick` for one match
+each); `python3 dev/ui-sweep-perf.py [port] [out] brcity`; `node dev/br-overview.mjs meridian`;
+`node dev/render-snapshots.mjs midtown oldquarter canalrow unionsq meridian`.
+
 ## The rest (plan)
 Each later region is new districts too (the existing maps stay as they are):
 - **The Coast**: a shoreline region east of the City's waterfront: a fish market, a boardwalk and its pier, a tidal

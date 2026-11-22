@@ -121,8 +121,9 @@ function build() {
   P.zones.push({ x: 372, z: 0, w: 12, d: H, kind: 'quay' });
 
   // ---- The districts ------------------------------------------------------------------------------------------
-  // Each is its 6v6 map placed as it is (border dropped, blocks opened up into buildings to loot), a tier 1 place
-  // (Union Square, mostly open ground, tier 2) with loot out round its cover.
+  // Each is its 6v6 map placed as it is (border dropped, blocks opened up into buildings to loot), with loot out round
+  // its cover: Midtown a tier 1 place, the other three tier 2 (three tier 1 places side by side geared every squad
+  // in Rebound's area too fast).
   const district = (id, map, name, poiX, poiZ, r, tier = 1) => {
     const at = DISTRICTS[id];
     P.poi(id, name, poiX, poiZ, r, 'metro', tier);
@@ -131,8 +132,8 @@ function build() {
     P.outdoorLoot(at.x + map.width / 2, at.z + map.height / 2, Math.min(map.width, map.height) / 2, Math.round(map.width * map.height / 300), tier);
   };
   district('midtown', midtown, 'Midtown', 200, 200, 40);
-  district('oldquarter', oldquarter, 'Old Quarter', 96, 200, 30);
-  district('canalrow', canalrow, 'Canal Row', 306, 200, 30);
+  district('oldquarter', oldquarter, 'Old Quarter', 96, 200, 30, 2);
+  district('canalrow', canalrow, 'Canal Row', 306, 200, 30, 2);
   district('unionsq', unionsq, 'Union Square', 200, 276, 22, 2);
 
   // ---- The Exchange (north of Midtown, between North Street and Park Row): the stock exchange and its blocks ----------
@@ -423,8 +424,8 @@ function build() {
 
   const circleBias = P.pois.map(p => ({ x: p.x, z: p.z, w: p.tier === 1 ? 1 : p.tier === 2 ? 0.8 : 0.5 }))
     .concat([[144, 154], [292, 248], [144, 304], [292, 94], [24, 120]].map(([x, z]) => ({ x, z, w: 0.4 })));
-  // Rebound's compact areas: centred on the districts, leaning west, east and north (each keeps clear of the corners).
-  const reboundAreas = [{ x: 200, z: 200, r: 150 }, { x: 165, z: 195, r: 150 }, { x: 235, z: 205, r: 150 }, { x: 200, z: 165, r: 150 }];
+  // Rebound's compact areas: centred on the districts, leaning west, east and north (each keeps clear of the corners, and the east one of the sea, which left too little land).
+  const reboundAreas = [{ x: 200, z: 200, r: 150 }, { x: 168, z: 196, r: 150 }, { x: 222, z: 204, r: 150 }, { x: 200, z: 184, r: 150 }];
 
   // Conquest and Breakthrough (branch bfmodes, docs/MODES.md "Layout format"): the boulevard and the districts on it.
   // Every point is moved onto open ground round its place.

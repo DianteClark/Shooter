@@ -309,7 +309,8 @@ function units() {
     for (const p of sim.players) if (!p.isBot) p.wantRespawn = true;
     let view = null;
     const R = sim.rules;
-    const pump = n => { for (let i = 0; i < n && sim.phase !== 'ended'; i++) { sim.step(STEP); sim.drainEvents(); if (sim.tick % 2 === 0) view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2'); } };
+    // The guest is kept up throughout (see keepUp below): on some maps a patrol finds it idle at a phone.
+    const pump = n => { for (let i = 0; i < n && sim.phase !== 'ended'; i++) { sim.step(STEP); sim.drainEvents(); const hh = sim.byId.get('h2'); if (sim.time > 30 && hh.alive) { hh.hp = 100; hh.downed = false; hh.spawnProtect = 1; } if (sim.tick % 2 === 0) view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2'); } };
     pump(SIM_HZ * 10);
     { const h1 = sim.byId.get('h1'), ph0 = R.phones[3]; place(h1, ph0.x, ph0.z); check(sim.applyCommand('h1', { cmd: 'ex', act: 'take', phone: ph0.i, k: 2 }), 'the host takes a contract at a phone'); }
     pump(SIM_HZ * 50);
@@ -344,7 +345,8 @@ function units() {
     const guest = new Sim({ roster, map: MAP, seed: 23, mode: 'exq' });
     for (const p of sim.players) if (!p.isBot) p.wantRespawn = true;
     let view = null;
-    const pump = n => { for (let i = 0; i < n && sim.phase !== 'ended'; i++) { sim.step(STEP); sim.drainEvents(); if (sim.tick % 2 === 0) view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2'); } };
+    // The guest is kept up throughout (see keepUp below): on some maps a patrol finds it idle at a phone.
+    const pump = n => { for (let i = 0; i < n && sim.phase !== 'ended'; i++) { sim.step(STEP); sim.drainEvents(); const hh = sim.byId.get('h2'); if (sim.time > 30 && hh.alive) { hh.hp = 100; hh.downed = false; hh.spawnProtect = 1; } if (sim.tick % 2 === 0) view = guest.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshotFor('h2'))), 'h2'); } };
     pump(SIM_HZ * 30);
     const h2 = sim.byId.get('h2'), s = squadOf(sim, h2.team);
     check(!s.contract && !s.taken, 'a human squad\'s bots leave the phones to their humans (30 s in)');
@@ -355,9 +357,11 @@ function units() {
     check(!objOf(view).squads.find(q => q.team === h2.team)?.contract, 'the guest\'s mirror shows the squad without a contract');
     const host2 = Sim.fromSnapshot(view, roster, { map: MAP, seed: 23, gone: ['h1'] });
     const s2 = host2.rules.squads.get(h2.team);
-    for (let i = 0; i < SIM_HZ * 5; i++) { host2.step(STEP); host2.drainEvents(); }
+    // Kept up while the new host plays on too: the check below is about contracts, not survival.
+    const keepUp = () => { const g = host2.byId.get('h2'); if (g.alive) { g.hp = 100; g.downed = false; g.spawnProtect = 1; } };
+    for (let i = 0; i < SIM_HZ * 5; i++) { host2.step(STEP); host2.drainEvents(); keepUp(); }
     void s;
-    for (let i = 0; i < SIM_HZ * (EX.abandonWait + 2); i++) { host2.step(STEP); host2.drainEvents(); }
+    for (let i = 0; i < SIM_HZ * (EX.abandonWait + 2); i++) { host2.step(STEP); host2.drainEvents(); keepUp(); }
     check(!s2.contract, 'the new host deals nothing after the abandon either');
     const g2 = host2.byId.get('h2'), ph = host2.rules.phones[0];
     place(g2, ph.x, ph.z);
