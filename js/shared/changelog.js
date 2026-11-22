@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Kittiwake Bay: a new battle royale coast, and four new maps',
+    build: '1122-8', date: '2026-11-22', title: 'Kittiwake Bay: a new battle royale coast, and four new maps',
     items: [
       'Kittiwake Bay, a new battle royale map on a windy, bright morning by the sea. A fishing town on its hill, a harbour, tidal flats you can wade across (slowly), a sand spit with a seaside resort, and a headland with a lighthouse on its point. Pick it in the Battle Royale vote and play Rebound and Extraction there too.',
       'Four new 6v6 maps, each one a part of the bay. Fish Market: an open iron market hall on the harbour, with trawlers tied up in the basins at its corners. Shipyard: a dry dock with two hulls bow to bow and gantry cranes over them. Drop in and fight along the hulls, or keep to the rim and the yards. Boardwalk: a planked promenade under the pier gates, a carousel and a helter-skelter, arcades and beach huts, and surf that slows you down. Stilt Row: a fishing hamlet on a shingle bank, with stilt huts out on the flats and a creek to cross by footbridge.',
