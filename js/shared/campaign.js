@@ -351,7 +351,7 @@ export const MISSIONS = [
       later: { t: 40, spawn: [{ role: 'assault', at: 'h1', n: 3 }] } },
     steps: [
       { type: 'goto', at: 'h0', r: 4, label: 'Slip through the north gate', checkpoint: true, cp: 's0', stealth: true,
-        spawn: [{ role: 'guard', at: 'd1', n: 2, stealth: true }, { role: 'guard', at: 'h3', n: 2, stealth: true }, { role: 'guard', at: 'd2', n: 2, stealth: true },
+        spawn: [{ role: 'guard', at: 'd1', n: 2, stealth: true }, { role: 'guard', at: ['h3', -7, 9], n: 2, stealth: true }, { role: 'guard', at: 'd2', n: 2, stealth: true },
           { role: 'patrol', at: 'd0', n: 2, route: ['d0', 'h3', 'd1', 'h0'], stealth: true }, { role: 'patrol', at: 'h2', n: 1, route: ['h2', 'd1', 'h1', 'd1'], stealth: true }],
         say: [L('lantern', 'Same rules as the market: their lanterns are their eyes. Kestrel is in the bell tower, east end.')] },
       { type: 'plant', sites: ['b0'], plant: 4, hostage: true, label: 'Cut Kestrel loose', checkpoint: true, cp: 'h0', stealth: true,

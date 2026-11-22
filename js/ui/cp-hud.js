@@ -21,6 +21,9 @@ const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)
 const CSS = `
 .cp-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
 .cp-ui [data-tap] { pointer-events: auto; }
+/* A night mission's dark (Operation Starfall): under every other piece of the HUD, a clear pool round the player. */
+.cp-night { position: absolute; left: 0; top: 0; width: var(--app-w, 100vw); height: var(--app-h, 100vh); pointer-events: none; }
+.cp-night[hidden] { display: none; }
 .hud.cp-on .scorebar, .hud.cp-on .streaks, .hud.cp-on .obj-strip, .hud.cp-on .gun-rung { display: none !important; }
 .cp-top { display: flex; gap: 4px; align-items: stretch; }
 /* Mounted into the shared objective strip, so out of .cp-ui's reach: hidden here outside a campaign match. */
@@ -121,6 +124,13 @@ export class CpHud {
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
+    this.nightEl = document.createElement('div');
+    this.nightEl.className = 'cp-night';
+    this.nightEl.hidden = true;
+    // Over the game canvas and under the whole interface (the sticks and buttons stay bright).
+    const canvas = document.getElementById('game');
+    if (canvas) canvas.after(this.nightEl); else hud.el.prepend(this.nightEl);
+    this.nightK = 0;
     const el = this.el = document.createElement('div');
     el.className = 'cp-ui';
     el.hidden = true;
@@ -169,6 +179,7 @@ export class CpHud {
     this.el.hidden = !on;
     this.hud.el.classList.toggle('cp-on', on);
     this.hud.el.classList.remove('cp-down-on', 'cp-fail-on');
+    this.nightEl.hidden = true; this.nightK = 0;
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId; this.mode = mode;
     const { k, mission, diff } = cpDecode(scoreLimit);
@@ -207,6 +218,28 @@ export class CpHud {
     this.#reviving(view, me);
     this.#fail(cp, me);
     this.#radio(dt);
+    this.#night(view, me, cp, dt);
+  }
+
+  // The night: dark past about seven metres of the player (or whoever they watch), lifted while a flare burns.
+  #night(view, me, cp, dt) {
+    const want = cp.night && cp.state !== 'complete' ? (cp.flareT > 0 ? 0.1 : 1) : 0;
+    this.nightK += (want - this.nightK) * Math.min(1, (dt || 0.016) * (cp.flareT > 0 ? 4 : 1.2));
+    const on = this.nightK > 0.01, cam = this.hud.camera;
+    if (this.c.night !== on) { this.c.night = on; this.nightEl.hidden = !on; }
+    if (!on || !cam) return;
+    const eye = me.alive ? me : view.players.find(p => p.id === spectate.target(view, me.id)) ?? me;
+    const P = (x, z) => {
+      const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements;
+      const vx = v[0] * x + v[8] * z + v[12], vy = v[1] * x + v[9] * z + v[13], vz = v[2] * x + v[10] * z + v[14];
+      const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15] || 1;
+      return [((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * this.hud.viewW, (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * this.hud.viewH];
+    };
+    const [sx, sy] = P(eye.x, eye.z), [ex] = P(eye.x + 1, eye.z), m = Math.max(4, Math.abs(ex - sx));
+    const g = `radial-gradient(circle at ${Math.round(sx)}px ${Math.round(sy)}px, rgba(3,5,12,0) 0, rgba(3,5,12,0) ${Math.round(m * 6)}px, rgba(3,5,12,.55) ${Math.round(m * 9)}px, rgba(3,5,12,.93) ${Math.round(m * 12.5)}px)`;
+    if (this.c.nightG !== g) { this.c.nightG = g; this.nightEl.style.background = g; }
+    const o = this.nightK.toFixed(2);
+    if (this.c.nightO !== o) { this.c.nightO = o; this.nightEl.style.opacity = o; }
   }
 
   #intro() {
