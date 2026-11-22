@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Smoother matches when your phone hosts',
+    build: '1122-10', date: '2026-11-22', title: 'Smoother matches when your phone hosts',
     items: [
       'When your phone hosts, matches no longer stutter in their first seconds or when a battle royale squad lands: the host gets ready while the match loads.',
       'Fewer single hitches during big fights for everyone in a match your phone hosts, on every map and mode: bots spread their heavier thinking and route-finding over a few frames instead of all doing it at once.',
