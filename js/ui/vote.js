@@ -11,6 +11,14 @@ import { ico, header } from './yard.js';
 import { sweep, flash, enter } from './motion.js';
 import { cleanMods, playlistName } from '../shared/playlist.js';
 import { soloMods } from './modifiers.js';
+import { bfLayouts } from '../shared/bf.js';
+
+// A map's name on a card: Conquest and Breakthrough on a battle royale island name the part they play (one layout of
+// that mode on the map; with several, the seed picks and the card says the island).
+export function cardMapName(mapId, mode) {
+  const map = MAPS[mapId], kind = MODES[mode]?.bf, list = kind ? bfLayouts(map, kind) : [];
+  return list.length === 1 && list[0].sub ? list[0].name : map?.name ?? '';
+}
 
 export const RANDOM = 'random';
 const RANDOM_MODE = { short: '?', name: 'Random', desc: 'Any mode the map can host.' };
@@ -88,7 +96,7 @@ export function voteMarkup(state) {
       <span class="vc-shade"></span>
       <span class="vc-top">${o.again ? '<b class="vc-again t-tag">Rematch</b>' : ''}<span class="vc-votes"></span></span>
       ${mode.large || isLarge(o.mapId) ? `<b class="vc-gw t-tag">${ico('party')}${mode.br ? 'Battle royale' : mode.ex ? 'Extraction' : 'Ground War'}</b>` : ''}
-      <b class="vc-map">${esc(map.name)}</b>
+      <b class="vc-map">${esc(cardMapName(o.mapId, o.mode))}</b>
       <span class="vc-mode">${modeIcon(o.mode)}<span class="vc-mode-name">${esc(mode.name)}</span></span>
       <small class="vc-desc">${esc(mode.desc)}</small>
     </button>`;
@@ -120,7 +128,7 @@ export function paintVote(root, state) {
   } else {
     const o = state.options[state.winner];
     const r = isRandom(o) ? state.resolved : o;
-    title.textContent = r ? `${isRandom(o) ? 'Random: ' : ''}${MODES[r.mode].name} on ${MAPS[r.mapId].name}` : 'Random';
+    title.textContent = r ? `${isRandom(o) ? 'Random: ' : ''}${MODES[r.mode].name} on ${cardMapName(r.mapId, r.mode)}` : 'Random';
     foot.textContent = 'Loading the match';
     // The Random card turns into what it rolled.
     const card = isRandom(o) && r && root.querySelectorAll('.vote-card')[state.winner];

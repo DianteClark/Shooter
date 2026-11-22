@@ -61,6 +61,10 @@ CASES = [
     ('exd out of time', ('random', 'exd'), EX_TIME, 'Out of time', r'^.*(lost: nobody got out|Nobody in the squad got out)$', ('none',)),
     ('zm overrun', ('neon', 'zm'), ZM_OVERRUN, 'Overrun', r'^Survived \d+ rounds?', ('one', r'^Round$')),
     ('ranked tdm win', ('random', 'tdm'), RANKED, 'Victory', r'^The yard is yours · Placement 1/\d+$', PAIR(7, 3)),
+    # Conquest and Breakthrough (ROADMAP 65): the score is tickets left, or sectors (taken / still standing).
+    ('cq win', ('harvest', 'cq'), "R.tickets[1 - me.team] = 0;", 'Victory', r'^Their tickets ran out$', ('pair', None)),
+    ('bt out of tickets', ('harvest', 'bt'), "R.tickets = 0; for (const p of sim.players) if (p.team === R.att && p.alive) sim._selfKill(p, 'oob');",
+     r'^(Victory|Defeat)$', r'^(Held the first line|Out of tickets at sector 1 of 3)$', ('pair', None)),
     ('training', 'training', WIN, 'Training over', r'^Practice: no XP, no record$', ('none',)),
 ]
 

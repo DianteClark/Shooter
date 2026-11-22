@@ -1365,7 +1365,7 @@ export class Sim {
     if (msg.cmd === 'loadout') return this.setLoadout(id, msg.loadout);
     if (msg.cmd === 'respawn') return this.requestRespawn(id, msg);
     if (msg.cmd === 'br') return !!this.br && this.br.command(this.byId.get(id), msg);
-    if (msg.cmd === 'ex' || msg.cmd === 'zm' || msg.cmd === 'cp') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
+    if (msg.cmd === 'ex' || msg.cmd === 'zm' || msg.cmd === 'cp' || msg.cmd === 'bf') return !!this.rules?.command && this.rules.command(this.byId.get(id), msg);
     if (msg.cmd === 'rangeReset') { this.range?.resetStats(); return !!this.range; }
     if (msg.cmd === 'trainSwap') return this._trainSwap(id);
     // Finishers and emotes (js/sim/finishers.js): the phone names the target it saw; the host checks it with some slack.

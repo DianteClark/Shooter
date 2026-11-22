@@ -29,6 +29,7 @@
 //              breakable piece broken (rubble piles in place); --intact skips it
 // Exits non-zero if any map fails a hard check (fields, nav, gaps, fair, bots); sight lines are reported, not failed.
 import { MAPS, MAP_IDS, BR_MAP_IDS, sizeOf, REGIONS } from '../js/shared/map.js';
+import { bfLayouts } from '../js/shared/bf.js';
 import { MODES, mapModes, modeFitsMap, playersFor, isFfa, teamSizeFor } from '../js/shared/modes.js';
 import { CTL } from '../js/sim/ctl.js';
 import { GRIND } from '../js/sim/grind.js';
@@ -184,6 +185,12 @@ function checkModePoints(map, nav, reach, out) {
     const d = p.dom ?? [], banks = d.length >= 2 ? [d[0], d[d.length - 1]] : [];
     for (const z of banks) zones.push({ mode: 'grind', ...z, r: Math.max(z.r ?? 4, GRIND.radius) });
     if (banks.length === 2 && (banks[0].x < map.width / 2) === (banks[1].x < map.width / 2)) out.warn.push('grind: both banks on one half');
+  }
+  // Conquest's flags and Breakthrough's objectives, from the map's layouts (its own `bf`, or derived): js/shared/bf.js.
+  for (const m of hosts) {
+    const kind = MODES[m].bf;
+    if (!kind) continue;
+    for (const l of bfLayouts(map, kind)) for (const z of l.flags ?? l.sectors.flatMap(s => s.objs)) zones.push({ mode: m, ...z, id: `${l.id}:${z.id}` });
   }
   let n = 0;
   for (const z of zones) {
@@ -371,7 +378,7 @@ function botMatch(map, mode, out) {
   for (; tick < end && sim.phase !== 'ended'; tick++) {
     sim.step(STEP);
     for (const e of sim.drainEvents()) {
-      const k = e.kind && ['snd', 'ctf', 'hq', 'ko', 'inf', 'oic', 'ctl', 'grind'].includes(e.t) ? `${e.t}:${e.kind}` : e.t;
+      const k = e.kind && ['snd', 'ctf', 'hq', 'ko', 'inf', 'oic', 'ctl', 'grind', 'cq', 'bt'].includes(e.t) ? `${e.t}:${e.kind}` : e.t;
       ev[k] = (ev[k] ?? 0) + 1;
     }
     // Once a second: a bot that has been pushing its stick for 4 s and gone less than 0.6 m is stuck on something.
@@ -395,7 +402,9 @@ function botMatch(map, mode, out) {
   const obj = { dom: ev.capture ?? 0, hard: sim.scores[0] + sim.scores[1], kc: ev.tag ?? 0, snd: (ev['snd:plant'] ?? 0) + (ev['snd:defuse'] ?? 0) + (ev['snd:round'] ?? 0), ctf: (ev['ctf:take'] ?? 0) + (ev['ctf:capture'] ?? 0) + (ev['ctf:return'] ?? 0),
     // The modes overhaul.
     hq: (ev['hq:capture'] ?? 0) + (ev['hq:destroy'] ?? 0), ko: ev['ko:kill'] ?? 0, inf: ev['inf:infected'] ?? 0, oic: ev['oic:out'] ?? 0,
-    ctl: (ev['ctl:capture'] ?? 0) + (ev['ctl:end'] ?? 0), grind: (ev['grind:pick'] ?? 0) + (ev['grind:bank'] ?? 0) };
+    ctl: (ev['ctl:capture'] ?? 0) + (ev['ctl:end'] ?? 0), grind: (ev['grind:pick'] ?? 0) + (ev['grind:bank'] ?? 0),
+    // Conquest and Breakthrough (docs/MODES.md): flags and objectives moving.
+    cq: (ev['cq:capture'] ?? 0) + (ev['cq:neutral'] ?? 0), bt: (ev['bt:capture'] ?? 0) + (ev['bt:neutral'] ?? 0) + (ev['bt:sector'] ?? 0) };
   const rules = MODES[mode].rules;
   const objective = obj[rules];
   const stuckSpots = [...stuck.entries()].sort((a, b) => b[1] - a[1]);

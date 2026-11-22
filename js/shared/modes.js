@@ -8,6 +8,7 @@
 //   rounds    Search and Destroy: scoreLimit is rounds to win, timeLimit the length of one round (see SND below).
 import { normalizeLoadout } from './catalog.js';
 import { V10_LADDER } from './weapons-v10.js';
+import { bfLayouts } from './bf.js';
 
 // Gun Game: one rung per kill, about one gun per category on the way, sidearms last. The final kill has to be made with
 // the Verdict. Order runs from forgiving to demanding, so the climb gets harder as you near the top.
@@ -70,6 +71,13 @@ export const MODES = {
   // Meridian Line (js/sim/campaign.js). Only ever started from the Campaign tab: no map or picker offers it
   // (modeFitsMap). scoreLimit carries the mission and difficulty (js/shared/campaign.js cpCode).
   cp:    { id: 'cp',    rules: 'cp',  teamSize: 4, cp: true, noMods: true, name: 'Operation Nightrail', short: 'OPS', scoreLimit: 11, timeLimit: 3600, desc: 'Co-op campaign: scripted missions for up to four against the Meridian Line.' },
+  // Conquest and Breakthrough (ROADMAP 65, docs/MODES.md "Conquest and Breakthrough"): 16 v 16 on every Ground War map and
+  // on parts of the battle royale islands, wherever the map has a layout (js/shared/bf.js bfLayouts: its own `bf`, or
+  // one derived from its Domination flags). `bf` marks the family. Both scoreLimits are a percentage of the layout's
+  // ticket pools (Conquest both sides', Breakthrough the attackers'), 100 by default, that a custom limit scales;
+  // Breakthrough's timeLimit is one sector's clock.
+  cq:    { id: 'cq',    rules: 'cq',  teamSize: 16, large: true, bf: 'conquest', look: 'dom', everyHuge: true, name: 'Conquest', short: 'CQ', scoreLimit: 100, timeLimit: 1200, desc: '16 v 16 over five to seven flags. Hold more flags to drain their tickets; every death costs one. Spawn on any flag you hold.' },
+  bt:    { id: 'bt',    rules: 'bt',  teamSize: 16, large: true, bf: 'breakthrough', look: 'dom', everyHuge: true, name: 'Breakthrough', short: 'BT', scoreLimit: 100, timeLimit: 300, desc: '16 v 16, attack or defend. Attackers take sector after sector on limited tickets; defenders fall back to the next line.' },
 };
 export const MODE_IDS = Object.keys(MODES);
 
@@ -230,7 +238,7 @@ export function mapModes(map) {
   const own = map?.modes ?? MODE_IDS.filter(id => !MODES[id].large);
   // A battle royale map lists 'br'; it hosts every squad size. Huge maps host the `everyHuge` Ground War modes. A map
   // built for Graveyard Shift (`zmOnly`) hosts that alone.
-  const extra = MODE_IDS.filter(id => (MODES[id].maps?.includes(map?.id) || (MODES[id].everyMap && map?.size !== 'giant' && !map?.zmOnly) || (MODES[id].everyHuge && tierOf(map) === 'huge' && !own.includes('br')) || ((MODES[id].br || MODES[id].ex) && own.includes('br'))) && !own.includes(id));
+  const extra = MODE_IDS.filter(id => (MODES[id].maps?.includes(map?.id) || (MODES[id].everyMap && map?.size !== 'giant' && !map?.zmOnly) || (MODES[id].everyHuge && tierOf(map) === 'huge' && !own.includes('br')) || ((MODES[id].br || MODES[id].ex) && own.includes('br')) || (MODES[id].bf && map?.size === 'giant' && bfLayouts(map, MODES[id].bf).length)) && !own.includes(id));
   return extra.length ? [...own, ...extra] : own;
 }
 
@@ -240,6 +248,7 @@ export function modeFitsMap(map, mode) {
   const rules = MODES[mode].rules;
   const def = MODES[mode];
   if (def.sizes && !def.sizes.includes(tierOf(map))) return false;
+  if (def.bf) return bfLayouts(map, def.bf).length > 0;
   if (def.needs) return [def.needs].flat().some(need => Object.entries(need).every(([kind, n]) => (map.points?.[kind]?.length ?? 0) >= n));
   if (rules === 'dom') return !!map.points?.dom?.length;
   if (rules === 'hard') return !!map.points?.hard?.length;

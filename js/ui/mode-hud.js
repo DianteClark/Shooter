@@ -1,5 +1,6 @@
 // The modes overhaul's HUD layer (docs/MODES.md): Headquarters, Kill Order, Infected, One in the Chamber, Control,
-// Grind and Showdown. The ordinary HUD owns one and calls it from a few hooks (prepare, update, onEvent, drawMini, meter, stat), the
+// Grind and Showdown, and Conquest and Breakthrough (ROADMAP 65: ticket bars, the deploy row, out of bounds, front
+// lines on the minimap; js/ui/bf-hud.js). The ordinary HUD owns one and calls it from a few hooks (prepare, update, onEvent, drawMini, meter, stat), the
 // way it calls the battle royale layer. Zones (the HQ, Control's two, Grind's banks) are drawn by the ordinary objective
 // chips, markers and renderer through the mode's `look`; this adds what those cannot say:
 //
@@ -14,8 +15,9 @@ import { objOf } from '../sim/rules.js';
 import { spectate } from '../sim/snd.js';
 import { icon } from './icons.js';
 import { esc } from './widgets.js';
+import { BfHud } from './bf-hud.js';
 
-const RULES = new Set(['hq', 'ko', 'inf', 'oic', 'ctl', 'grind', 'gf']);
+const RULES = new Set(['hq', 'ko', 'inf', 'oic', 'ctl', 'grind', 'gf', 'cq', 'bt']);
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const MARK_Y = 2.6;          // Metres above the ground a head tag floats.
 
@@ -106,9 +108,10 @@ export class ModeHud {
     this.mods = el.querySelector('.mh-mods');
     this.tags = [...el.querySelectorAll('.mh-tag')].map(root => ({ root, span: root.querySelector('span'), html: '', x: NaN, y: NaN, cls: '' }));
     this.cache = {};
+    this.bf = new BfHud(this);
   }
 
-  prepare(mode, mods = []) {
+  prepare(mode, mods = [], { map = null, seed = 0 } = {}) {
     this.modeId = mode;
     this.rules = modeRules(mode);
     this.on = RULES.has(this.rules);
@@ -126,7 +129,12 @@ export class ModeHud {
     // The match's modifiers, as small plates in the top corner, for the whole match.
     this.mods.hidden = !mods.length;
     this.mods.innerHTML = mods.map(id => `<i title="${esc(MODS[id]?.name ?? id)}">${esc(MODS[id]?.short ?? id)}</i>`).join('');
+    this.bf.prepare(this.rules, map, seed);
+    this.hud.el.classList.toggle('bf-on', this.bf.on);
   }
+
+  // How many zone chips the objective strip needs for this mode (null: the HUD's own count).
+  chips() { return this.bf.on ? this.bf.chips() : null; }
 
   // One line of state, painted only when its text changes.
   #paint(key, { ico, word, sub = '', side = '', extra = '' }) {
@@ -156,7 +164,7 @@ export class ModeHud {
     if (!this.on) return;
     const o = objOf(view);
     const intro = this.hud.introOn || view.phase === 'ended';
-    if (!o || intro) { this.#paint('', {}); this.#waitFor(''); this.#hideTags(); this.hud.el.classList.remove('mh-watch'); this.watching = false; return; }
+    if (!o || intro) { this.#paint('', {}); this.#waitFor(''); this.#hideTags(); this.hud.el.classList.remove('mh-watch'); this.watching = false; this.bf.idle(); return; }
     const fn = this[`_${this.rules}`];
     fn?.call(this, view, me, o);
     // Dead, the death screen and the wait plate do the talking.
@@ -276,6 +284,34 @@ export class ModeHud {
     this.#hideTags();
   }
 
+  // Conquest: both ticket pools as bars (yours first), the flag count and who is bleeding; the deploy row while dead.
+  _cq(view, me, o) {
+    const mine = o.tickets[me.team], theirs = o.tickets[1 - me.team], own = o.owned[me.team], foe = o.owned[1 - me.team];
+    const k = n => Math.max(0, Math.min(1, n / (o.max || 1))).toFixed(3);
+    const bars = `<span class="bf-tk mine"><i style="--k:${k(mine)}"></i><b>${mine}</b></span><span class="bf-tk enemy"><i style="--k:${k(theirs)}"></i><b>${theirs}</b></span>`;
+    const word = own > foe ? 'Draining their tickets' : own < foe ? 'Losing tickets' : 'Flags even';
+    const sub = own < foe ? `Flags ${own}-${foe} · take one back` : `Flags ${own}-${foe}${own > foe ? ' · hold them' : ' · take the lead'}`;
+    this.#paint(`cq${mine}|${theirs}|${own}|${foe}`, { ico: 'ui:flag', word, sub, side: own > foe ? 'mine' : own < foe ? 'enemy' : '', extra: bars });
+    this.#waitFor('');
+    this.bf.update(view, me, o);
+    this.#hideTags();
+  }
+
+  // Breakthrough: attack or defend which sector, the attackers' tickets, overtime; out of tickets, the wait plate.
+  _bt(view, me, o) {
+    const att = o.att === me.team, sec = o.layout?.sectors?.[Math.min(o.sector, o.sectors - 1)];
+    const name = sec?.name ?? `Sector ${o.sector + 1}`;
+    const left = o.ids?.length ? o.ids.join(' ') : '';
+    const word = o.overtime ? 'Overtime' : att ? `Attack: ${name}` : `Defend: ${name}`;
+    const lock = Math.ceil(o.lock ?? 0);
+    const sub = lock > 0 ? `${att ? 'Regroup' : 'Dig in'} · objectives open in ${lock}` : `Sector ${Math.min(o.sector + 1, o.sectors)} of ${o.sectors}${left ? ` · ${left}` : ''} · ${att ? 'take every objective' : 'hold them'}`;
+    const bar = `<span class="bf-tk ${att ? 'mine' : 'enemy'}"><i style="--k:${Math.max(0, Math.min(1, o.tickets / (o.max || 1))).toFixed(3)}"></i><b>${o.tickets}</b></span>`;
+    this.#paint(`bt${o.sector}${o.tickets}${o.overtime}${att}${lock}`, { ico: att ? 'ui:flag' : 'ui:lock', word, sub, side: o.overtime ? 'alert' : att ? 'mine' : 'enemy', extra: bar });
+    this.#waitFor(!me.alive && att && o.tickets <= 0 && view.phase === 'live' ? 'Out of tickets' : '', 'Your side cannot respawn. If the last of you fall, the attack fails.');
+    this.bf.update(view, me, o);
+    this.#hideTags();
+  }
+
   // ---- Head tags, projected like the objective markers ----
   #tag(k, x, z, cls, html) {
     const t = this.tags[k], cam = this.hud.camera;
@@ -349,6 +385,9 @@ export class ModeHud {
         else if (e.kind === 'end') hud.banner(e.winner < 0 ? 'Round Drawn' : ours(e.winner) ? 'Round Won' : 'Round Lost',
           { elim: 'Wiped out', flag: 'The flag was taken', health: 'More health at the end', draw: 'Nobody scores' }[e.reason] ?? '', 1800, e.winner < 0 ? '' : ours(e.winner) ? 'mine' : 'enemy');
         break;
+      case 'cq': case 'bt':
+        this.bf.onEvent(e, view, me);
+        break;
       case 'grind':
         if (e.kind === 'bank' && e.id === me.id) hud.banner(`Banked ${e.n}`, `+${e.n} for your team`, 1100, 'mine');
         else if (e.kind === 'bank') hud.pushFeed(`${who(e.id)}<span class="f-note">banked ${e.n}</span>`, false, view.players.find(p => p.id === e.id)?.team === me.team ? 'ally' : 'foe');
@@ -389,6 +428,7 @@ export class ModeHud {
   drawMini(g, view, me, sx, sz, t) {
     const o = objOf(view);
     if (!this.on || !o) return;
+    if (this.bf.on) { this.bf.drawMini(g, view, me, sx, sz, t, o); return; }
     if (this.rules === 'ko') {
       for (let k = 0; k < 2; k++) {
         const p = view.players.find(q => q.id === o.vip[k]);
@@ -417,8 +457,15 @@ export class ModeHud {
 
   // What the scorebar says under the clock, where "to <limit>" does not fit the mode. Null keeps the default.
   goal(limit) {
-    return { inf: 'survive', oic: 'last alive', ctl: `${limit} rounds`, ko: `${limit} vips`, gf: `${limit} rounds` }[this.rules] ?? null;
+    return { inf: 'survive', oic: 'last alive', ctl: `${limit} rounds`, ko: `${limit} vips`, gf: `${limit} rounds`, cq: 'tickets', bt: `${this.bf.layout?.sectors?.length ?? 3} sectors` }[this.rules] ?? null;
   }
+
+  // The intro card's rules line, where the mode has its own (null keeps the HUD's).
+  rulesLine(minutes) { return this.bf.on ? this.bf.rulesLine(minutes) : null; }
+
+  // The minimap window on a battle royale island's part (null: the whole map).
+  miniWindow(view, me, W, H) { return this.bf.on ? this.bf.miniWindow(W, H) : null; }
+  drawMiniBase(g, z) { this.bf.drawMiniBase(g, z); }
 }
 
 // The scoreboard and results column of each rule set here: its header and each player's number. Null for the others.
@@ -430,5 +477,7 @@ const COLUMNS = {
   ctl: { head: 'Cap', title: 'Zones taken', stat: p => p.ctlCaps ?? 0 },
   grind: { head: 'Bank', title: 'Tags banked', stat: p => p.banked ?? 0 },
   gf: { head: 'Rds', title: 'Rounds won', stat: p => p.gfWins ?? 0 },
+  cq: { head: 'Caps', title: 'Flags captured', stat: p => p.cqCaps ?? 0 },
+  bt: { head: 'Caps', title: 'Objectives taken', stat: p => p.btCaps ?? 0 },
 };
 export const modeColumn = rules => COLUMNS[rules] ?? null;
