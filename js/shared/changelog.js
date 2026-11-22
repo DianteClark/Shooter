@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-22', title: 'New guns, perks, scorestreaks and operators',
+    build: '1122-4', date: '2026-11-22', title: 'New guns, perks, scorestreaks and operators',
     items: [
       'Five new guns. Gadfly: an SMG built for the hip, with the tightest hip-fire of any automatic and a sight that adds almost nothing. Carousel: a pan-fed LMG that kills in three to the body out to 16 m with no wind-up or overheating. Vigil: a semi-automatic sniper, two to the body anywhere it reaches. Fusee: a railway flare pistol that sets its target burning for three seconds and shows them on your team\'s map. Skyhook: a twin-tube lock-on launcher; aim it at an enemy aircraft and the rocket cannot miss (two bring down a Chopper).',
       'Every new gun has its own model, icon, sound, two signature attachments, camos and mastery, and opens on its own level from 37 to 44.',
