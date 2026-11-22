@@ -325,7 +325,10 @@ export class ClipReader {
           to.sprinting = B.sprinting; to.sliding = B.sliding; to.air = B.air; to.ghost = B.ghost; to.spawnProtect = B.spawnProtect;
         }
         const was = readFlagAlive(data, oa + i * S);
-        if (was === B.alive) {
+        // A life starting or ending between the two keyframes: from the half way on the flags are b's, and so is the
+        // place (a respawn was drawn alive on the spot they died, for half a keyframe).
+        if (was !== B.alive && k >= 0.5) { to.x = B.x; to.z = B.z; to.aim = B.aim; }
+        else if (was === B.alive) {
           const dx = B.x - to.x, dz = B.z - to.z;
           if (dx * dx + dz * dz < 36) {
             to.x += dx * k; to.z += dz * k;

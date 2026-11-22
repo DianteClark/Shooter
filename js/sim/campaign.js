@@ -403,6 +403,14 @@ export class CampaignRules {
       }
       this._spawnGroup(def, i);
     }
+    // Back at the checkpoint of a step whose target an earlier step brought on (Dead Man's Run: the commander turns up at
+    // the last relay of the chase): _retry cleared him with everyone else, so he comes back here, or the step could
+    // never be done.
+    if (retry && (s.type === 'kill' || s.type === 'pursue') && !this.target?.p?.alive) {
+      let def = null;
+      for (const st of this.m.steps.slice(0, i)) for (const d of [...(st.spawn ?? []), ...(st.on ?? []).flatMap(tr => tr.spawn ?? [])]) if (d.role === 'target') def = d;
+      if (def) this._spawnGroup(def, i);
+    }
     for (const l of s.say ?? []) this._say(l);
     if (s.type === 'escort') this._startVip(retry);
     // The escape after a quiet rescue: the whole place knows.
@@ -1510,7 +1518,9 @@ export class CampaignRules {
       const bi = old?._mBoss?.idx;
       if (boss && bi !== undefined && sim.players[bi]?.alive) {
         const p = sim.players[bi];
-        this.boss = { p, g: p.cpGroup, pool: boss[0], max: boss[1], phase: old._mBoss.phase, inv: 0, atk: boss[2] / 10, n: boss[3] };
+        // Health from the snapshot itself (every one carries it), not from the backup, which can be seconds old.
+        const pool = old._mBoss.frac != null ? old._mBoss.frac * boss[1] : boss[0];
+        this.boss = { p, g: p.cpGroup, pool, max: boss[1], phase: old._mBoss.phase, inv: 0, atk: boss[2] / 10, n: boss[3] };
       }
       const ti = old?._mTarget?.idx;
       if (target && ti !== undefined && sim.players[ti]?.alive) {
