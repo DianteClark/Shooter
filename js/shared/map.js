@@ -35,10 +35,13 @@ import launchpad from './maps/launchpad.js';
 import observatory from './maps/observatory.js';
 import pagoda from './maps/pagoda.js';
 import { MODE_IDS, MODES } from './modes.js';
+import { prepareBreakables } from './destruction.js';
 
 export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
+// Destruction (docs/DESTRUCTION.md): what breaks on each map, resolved once here, before anything indexes the walls.
+for (const id in MAPS) prepareBreakables(MAPS[id]);
 // What the vote and match setup offer. The firing range is reached from its own menu entry only.
 // Giant battle royale maps (docs/BR.md) are never in a 6v6 or Ground War rotation, the solo picker's size sections or
 // the menu backdrop: the battle royale mode lists them itself (BR_MAP_IDS).
