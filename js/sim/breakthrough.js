@@ -44,7 +44,9 @@ export class BreakthroughRules {
     this.warned = false;
     this.reason = null;
     sim.points = this.sectors[0] ?? [];
-    sim.timeLeft = sim.timeLimit;
+    // A layout may run a longer sector clock (a big island part); a custom time limit scales it.
+    this.clock = Math.round((l?.clock ?? 300) * (sim.timeLimit ?? 300) / 300);
+    sim.timeLeft = this.clock;
     this.hq = (l?.hq ?? []).map(h => hqSpots(sim.map, h));
     this.area = null;           // Host: every spawn spot in the layout's area, built with the nav grid.
     this._sync();
@@ -116,7 +118,7 @@ export class BreakthroughRules {
     } else {
       // Behind the objectives and clear of them, so a defence has to be walked back into, not spawned onto.
       const last = this.sector >= l.sectors.length - 1, [d0, d1] = BF.bt.defendBand;
-      spots = all.filter(s => s.a >= sec.max + d0 && s.a <= (last ? Infinity : Math.max(b.hi, sec.max + d0) + d1)
+      spots = all.filter(s => s.a >= sec.max + d0 && s.a <= (last ? Infinity : sec.max + d1)
         && this.zones.every(z => (s.x - z.x) ** 2 + (s.z - z.z) ** 2 > BF.bt.clear * BF.bt.clear));
       if (last) spots = spots.concat(this.hq[1]);
       if (!spots.length) spots = this.hq[1];
@@ -180,7 +182,7 @@ export class BreakthroughRules {
     this.max = Math.max(this.max, this.tickets);
     this.warned = false;
     sim.points = this.zones;
-    sim.timeLeft = sim.timeLimit;
+    sim.timeLeft = this.clock;
     sim._emit({ t: 'bt', kind: 'sector', sector: this.sector, tickets: this.tickets, team: this.att });
   }
 
@@ -196,7 +198,7 @@ export class BreakthroughRules {
 
   onKill(target, killer, info) {
     if (info?.away || this.sim.phase !== 'live' || this.done) return;
-    if (target.team === this.def) { target.respawnT += BF.bt.defendDelay; return; }
+    if (target.team === this.def) { target.respawnT += this.layout.defendDelay ?? 0; return; }
     this.tickets = Math.max(0, this.tickets - 1);
     if (!this.warned && this.tickets <= BF.bt.low) { this.warned = true; this.sim._emit({ t: 'bt', kind: 'low', team: this.att, n: this.tickets }); }
   }

@@ -188,6 +188,7 @@ map.bf = {
     hq: [{ x, z, r }, { x, z, r }],               // hq[0] the attackers' end, hq[1] the defenders' last stand
     sectors: [{ name, objs: [{ x, z, r? }, ...] }, ...],   // 3-4 sectors from hq[0] toward hq[1], 1-2 objectives each
     tickets?, refill?,                            // the attackers' starting pool and what a fallen sector adds
+    clock?, defendDelay?,                         // seconds a sector (300) and extra defender respawn wait (0)
   }],
 };
 ```
@@ -225,17 +226,17 @@ map.bf = {
 ### Breakthrough
 - Only the current sector's objectives are live; they start the defenders'. Attackers take one as a Conquest flag
   (slower: `BF.bt.capture` 20 s alone); defenders can take it back. All held at once: the sector falls, the attackers
-  get `refill` tickets, the sector clock (the mode's 5-minute timeLimit) restarts, and the next objectives stay locked
+  get `refill` tickets, the sector clock (5 minutes, or the layout's `clock`) restarts, and the next objectives stay locked
   for `BF.bt.lock` s while both sides move up.
 - Attackers spend a ticket a death; at zero they stop respawning and lose when the last is down. Defenders respawn
-  freely, `BF.bt.defendDelay` s later than usual. The clock running out with no attacker on a live objective ends it
+  freely (a layout's `defendDelay` s later than usual: the islands' 1.5 s). The clock running out with no attacker on a live objective ends it
   for the defenders; with one on it, overtime. sim.scores: the attackers' sectors taken, the defenders' still standing.
 - Bounds: attackers may not go more than `BF.bt.margin` past the line ahead, defenders no further back than the line
   behind; outside, the out-of-bounds clock (8 s, then death without credit). Defenders caught behind a fallen line get
   `BF.bt.fallBack` 12 s ("Fall back").
-- Spawns: attackers 10-32 m short of the sector's nearest objective, never past the line behind it (and the HQ in
-  sector one); defenders 20 m behind the sector's last objective to 34 m past its line, 16 m or more from any live
-  objective (the last sector adds their HQ).
+- Spawns: attackers 18-34 m short of the sector's nearest objective, never past the line behind it (and the HQ in
+  sector one); defenders 14-30 m behind its farthest objective, 16 m or more from any live objective (the last sector
+  adds their HQ). Both sides walk about as far to the fight.
 - Bots: attackers spread over the objectives still to take (two hold one taken), pushing onto it shooting on the move
   within 18 m (`commit`); defenders split over the objectives, four more on one under attack, long guns covering from
   behind, most of the side back to retake a lost one.

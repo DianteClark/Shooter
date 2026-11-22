@@ -118,7 +118,9 @@ export class BfHud {
     const l = this.layout, k = (this.hud.scoreLimit ?? 100) / 100;
     if (!l) return null;
     if (this.rules === 'cq') return `${Math.max(20, Math.round(l.tickets * k))} tickets<i></i>${l.flags.length} flags<i></i>${minutes} min`;
-    return `${l.sectors.length} sectors<i></i>${Math.max(10, Math.round(l.tickets * k))} attacker tickets<i></i>${minutes} min a sector`;
+    const clock = Math.round((l.clock ?? 300) * (this.hud.timeLimit ?? 300) / 300);
+    void minutes;
+    return `${l.sectors.length} sectors<i></i>${Math.max(10, Math.round(l.tickets * k))} attacker tickets<i></i>${Math.floor(clock / 60)}:${String(clock % 60).padStart(2, '0')} a sector`;
   }
 
   update(view, me, o) {

@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Conquest and Breakthrough',
+    items: [
+      'New Ground War mode, Conquest: 16 v 16 over five to seven flags. Each side has a pool of tickets; every death costs one, and while the other side holds more flags than you, yours drain. Take a flag faster with more of your side on it. When you die, pick where to deploy: the front, your HQ, or any flag your side holds.',
+      'New Ground War mode, Breakthrough: attack or defend through three sectors. Attackers take every objective of a sector to make it fall and earn more tickets for the next push; defenders fall back to the next line. The front lines glow on the ground and show on the minimap.',
+      'Both play on every Ground War map and on parts of the battle royale islands: Downtown and the road south to the airfield on Frontier, the West Isle and the Coast Road on Jadefall. Leave the field and a countdown starts.',
+      'Find them on the Ground War tab (their own playlists, and in Ground War Quick Play), in Custom and in friend rooms. Help has cards and videos for both, and they have their own music.',
+    ],
+  },
+  {
     build: '1121-1', date: '2026-11-21', title: 'Fixes',
     items: [
       'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',

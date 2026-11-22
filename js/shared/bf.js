@@ -17,6 +17,9 @@
 //       hq: [{ x, z, r }, { x, z, r }],   // hq[0] the attackers' end, hq[1] the defenders' last stand
 //       sectors: [{ name, objs: [{ id, x, z, r }] }],   // 3 or 4 sectors from hq[0] toward hq[1], 1 or 2 objectives each
 //       tickets, refill,                  // optional: the attackers' starting pool and what each fallen sector adds
+//       clock, defendDelay,               // optional: seconds a sector (default the mode's timeLimit, 300) and extra
+//                                         // seconds a defender waits to respawn (default 0): big parts of an island
+//                                         // take longer to cross
 //     }],
 //   };
 //
@@ -48,15 +51,16 @@ export const BF = {
     low: 50,                // The "tickets low" warning fires once at this.
   },
   bt: {
-    tickets: 220,           // The attackers' pool to start, and what a fallen sector adds (scaled by sector count).
-    refill: 180,
+    tickets: 300,           // The attackers' pool to start, and what a fallen sector adds (scaled by sector count).
+    refill: 220,
     margin: 10,             // How far past their line each side may go before the out-of-bounds clock starts.
     fallBack: 12,           // Defenders caught behind a fallen line get this long to get out, not the usual 8 s.
     capture: 20,            // An objective is slower to take than a Conquest flag (one player, from neutral).
     lock: 12,               // After a sector falls, the next one's objectives cannot be taken for this long (regroup).
-    attackBand: [10, 32],   // Attackers respawn this far short of the sector's nearest objective (behind the line).
-    defendDelay: 1.5,         // Defenders wait this much longer to respawn: the ground they hold is the advantage.
-    defendBand: [20, 34],   // Defenders respawn from this far behind the sector's last objective to this far past its line.
+    // Spawns, in metres along the axis: attackers this far short of the sector's nearest objective (never past the line
+    // behind it), defenders this far behind its farthest one, so both sides walk about as far to the fight.
+    attackBand: [18, 34],
+    defendBand: [14, 30],
     clear: 16,
     push: 18,               // Bots this close to an objective they are taking push onto it (js/sim/breakthrough.js plan).              // ...and no nearer than this to a live objective.
     capScore: 250, sectorScore: 300, defendScore: 75,
@@ -144,6 +148,8 @@ function normalize(map, kind, l) {
   const k = out.sectors.length;
   out.tickets = l.tickets ?? Math.round(BF.bt.tickets * (k <= 3 ? 1 : 0.85));
   out.refill = l.refill ?? Math.round(BF.bt.refill * (k <= 3 ? 1 : 0.85));
+  out.clock = l.clock ?? null;
+  out.defendDelay = l.defendDelay ?? 0;
   return out;
 }
 

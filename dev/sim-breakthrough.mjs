@@ -56,7 +56,7 @@ await test('sector: all objectives held falls it; tickets refill, the clock rest
   assert.ok(evs.some(e => e.t === 'bt' && e.kind === 'sector' && e.sector === 1), 'the sector fell');
   assert.equal(r.sector, 1);
   assert.equal(r.tickets, t0 + r.refill, 'refill');
-  assert.ok(Math.abs(sim.timeLeft - sim.timeLimit) < 1, 'clock restarted');
+  assert.ok(Math.abs(sim.timeLeft - r.clock) < 1, 'clock restarted');
   assert.deepEqual(sim.points.map(p => p.id), r.layout.sectors[1].objs.map(q => q.id), 'next objectives live');
   assert.deepEqual([sim.scores[1], sim.scores[0]], [1, r.layout.sectors.length - 1]);
   assert.ok(me.oob > BF.oob, `the defender has the longer fall-back clock (${me.oob?.toFixed(1)} s)`);
@@ -145,7 +145,7 @@ const rows = [];
 for (const map of MAPS_RUN) {
   for (const seed of SEEDS) {
     await test(`bots: ${map} seed ${seed} plays to an end`, () => {
-      const r = botMatch('bt', map, seed, { maxSeconds: 4 * MODES.bt.timeLimit + 60 });
+      const r = botMatch('bt', map, seed, { maxSeconds: 4 * 450 + 60 });
       const o = r.sim.rules;
       rows.push({ map, seed, att: o.att, winner: r.winner, attWon: r.winner === o.att, reason: o.reason, sector: `${o.sector}/${o.sectors.length}`, min: (r.seconds / 60).toFixed(1), tickets: o.tickets, caps: r.ev['bt:capture'] ?? 0, retakes: r.ev['bt:retake'] ?? 0, kills: r.ev.kill ?? 0, spread: r.spread.toFixed(1), stuck: r.stuckPerBotMin.toFixed(2), mean: r.mean.toFixed(2), worst: r.worst.toFixed(1) });
       console.log('     ', JSON.stringify(rows.at(-1)));
