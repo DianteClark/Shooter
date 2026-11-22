@@ -448,14 +448,14 @@ function build() {
   const bf = {
     conquest: [{
       id: 'spiceroad', name: 'Sirocco: Spice Road', area: { x: 24, z: 108, w: 352, h: 186 },
-      hq: [pt(40, 200, { r: 10 }), pt(364, 200, { r: 10 })],
+      hq: [pt(58, 200, { r: 10 }), pt(372, 200, { r: 10 })],
       flags: [
         pt(110, 200, { id: 'A', name: 'Red Gulch' }), pt(198, 136, { id: 'B', name: 'Souk Quarter' }), pt(200, 200, { id: 'C', name: 'Caravanserai' }),
-        pt(198, 266, { id: 'D', name: 'Lower Town' }), pt(296, 200, { id: 'E', name: 'The Fork' }),
+        pt(198, 266, { id: 'D', name: 'Lower Town' }), pt(304, 200, { id: 'E', name: 'The Fork' }),
       ],
     }],
     breakthrough: [{
-      id: 'caravanrun', name: 'Sirocco: Caravan Run', area: { x: 14, z: 118, w: 372, h: 164 }, tickets: 300, refill: 240,
+      id: 'caravanrun', name: 'Sirocco: Caravan Run', area: { x: 14, z: 118, w: 372, h: 164 }, tickets: 260, refill: 210,
       hq: [pt(30, 200, { r: 10 }), pt(372, 200, { r: 10 })],
       sectors: [
         { name: 'Red Gulch', objs: [pt(98, 196), pt(122, 205)] },
