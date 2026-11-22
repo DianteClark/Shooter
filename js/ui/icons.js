@@ -17,6 +17,7 @@
 import { v10Icons } from './icons-v10.js';
 import { w3Icons } from './icons-w3.js';
 import { w4Icons } from './icons-w4.js';
+import { w5Icons, w5Square } from './icons-w5.js';
 import { mapIcons } from './icons-maps.js';
 
 // ---- Geometry. Polygons are flat [x, y, x, y, ...] arrays. ----------------------------------------------------------
@@ -172,6 +173,7 @@ const WEAPON_SPECS = {
 Object.assign(WEAPON_SPECS, v10Icons({ P, R, O, bar, grip }));   // The V10 arsenal's icons (icons-v10.js).
 Object.assign(WEAPON_SPECS, w3Icons({ P, R, grip }));             // Weapons wave 3 (icons-w3.js).
 Object.assign(WEAPON_SPECS, w4Icons({ P, R }));                   // Weapons wave 4's melee (icons-w4.js).
+Object.assign(WEAPON_SPECS, w5Icons({ P, R, O, grip }));          // Weapons wave 5 (icons-w5.js).
 
 // ---- Square icons on the 32 grid. ------------------------------------------------------------------------------
 
@@ -484,6 +486,7 @@ const SQUARE = {
 };
 
 Object.assign(SQUARE, mapIcons({ P, R, O, bar }));          // Every later map's icon (icons-maps.js).
+Object.assign(SQUARE, w5Square({ P, R, O, bar, star, mini, merge, back, rotSpec }));   // Wave 5's perks and streaks (icons-w5.js).
 
 // Categories: each is its family's archetype, fitted to the square at a climb.
 const CATEGORY_WEAPON = { Assault: 'ar', SMG: 'smg', Shotgun: 'shotgun', LMG: 'lmg', Marksman: 'dmr', Sniper: 'sniper', Pistol: 'pistol', Launcher: 'launcher', Melee: 'knife' };
@@ -571,11 +574,12 @@ export const ICON_GROUPS = {
   weapons: Object.keys(WEAPON_SPECS),
   categories: Object.keys(CATEGORY_WEAPON).map(c => 'cat:' + c),
   streaks: ['uav', 'jammer', 'resupply', 'turret', 'mortar', 'strike', 'overwatch', 'chopper', 'emp', 'gunship', 'missile', 'swarm', 'juggernaut',
-    'sweep', 'recon', 'airdrop', 'plates', 'hound', 'dome', 'bombrun', 'rover', 'blackbird', 'vulture'],
+    'sweep', 'recon', 'airdrop', 'plates', 'hound', 'dome', 'bombrun', 'rover', 'blackbird', 'vulture', 'vtol', 'sam', 'napalm'],
   tacticals: ['smoke', 'flash', 'stim', 'decoy', 'sensor', 'trophy', 'stun', 'gas', 'shock', 'snapshot', 'blackout', 'bulwark', 'tagger', 'medpack'],
   lethals: ['frag', 'sticky', 'molotov', 'mine', 'cluster', 'hatchet', 'impact', 'claymore', 'drill', 'charge', 'thermite', 'tripwire', 'crawler', 'shiv'],
   objectives: ['bomb'],
-  perks: ['marathon', 'flak', 'quickmend', 'tacmask', 'adrenaline', 'scavenger', 'fasthands', 'strongarm', 'bandolier', 'hardline', 'ghost', 'coldblood', 'deadsilence', 'tracker', 'engineer', 'hardtarget'],
+  perks: ['marathon', 'flak', 'quickmend', 'tacmask', 'adrenaline', 'scavenger', 'fasthands', 'strongarm', 'bandolier', 'hardline', 'ghost', 'coldblood', 'deadsilence', 'tracker', 'engineer', 'hardtarget',
+    'overkill', 'amped', 'doubletime', 'highalert', 'skywatch'],
   slots: ['optic', 'barrel', 'mag', 'grip'],
   modes: Object.keys(SQUARE).filter(k => k.startsWith('mode:')),
   maps: Object.keys(SQUARE).filter(k => k.startsWith('map:')),

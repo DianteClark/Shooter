@@ -34,6 +34,7 @@ import { V11_ATTACHMENTS } from './attachments-v11.js';
 import { W2_ATTACHMENTS, W2_EXTEND } from './attachments-w2.js';
 import { W3_ATTACHMENTS } from './attachments-w3.js';
 import { W4_ATTACHMENTS } from './attachments-w4.js';
+import { W5_ATTACHMENTS } from './attachments-w5.js';
 
 export const SLOTS = ['optic', 'barrel', 'mag', 'grip'];
 
@@ -370,6 +371,11 @@ for (const [id, more] of W2_EXTEND) ATTACHMENTS[id].weapons = [...new Set([...AT
 Object.assign(ATTACHMENTS, W3_ATTACHMENTS);
 // Weapons wave 4 (attachments-w4.js): the melee signatures (and the Slugger's), after wave 3 for the same reason.
 Object.assign(ATTACHMENTS, W4_ATTACHMENTS);
+// Weapons wave 5 (attachments-w5.js): the five new guns' signatures, after wave 4 for the same reason.
+Object.assign(ATTACHMENTS, W5_ATTACHMENTS);
+// The Fusee holds one flare like the Doublet holds two shells: magazine-size mods are replaced for it, as for them.
+ATTACHMENTS.speedmag.perWeapon.flare = ATTACHMENTS.speedmag.perWeapon.coach;
+ATTACHMENTS.lightmag.perWeapon.flare = ATTACHMENTS.lightmag.perWeapon.coach;
 
 // V10 guns: exclusions a category allow-list cannot express (weapons-v10.js V10_DENY), taken out of every list above.
 // Signature attachments and kits name their one gun themselves, so the blanket exclusions (blades) skip them.

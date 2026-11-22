@@ -8,6 +8,7 @@ import { kitKey, normalizeKit, NO_ATTACHMENTS, ATTACHMENTS, SLOTS } from '../sha
 import { v10Factories, fitOpticV10, fitBarrelV10, fitForegripV10, V10_MAG_LOOK } from './guns-v10.js';
 import { w3Factories } from './guns-w3.js';
 import { w4Factories } from './guns-w4.js';
+import { w5Factories } from './guns-w5.js';
 import { detailGun } from './guns-detail.js';
 import { WEAPON_CATEGORY } from '../shared/constants.js';
 import { fairWonderFactories } from './zm-wonder-models.js';     // Graveyard Shift's Whirligig (Wrenfield Fair).
@@ -1297,6 +1298,8 @@ Object.assign(FACTORIES, v10Factories({ kit, pistolGrip, fitOptic, fitBarrel, fi
 Object.assign(FACTORIES, w3Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, fitShellCuff, fitVentRib }));
 // Weapons wave 4's six melee weapons (guns-w4.js).
 Object.assign(FACTORIES, w4Factories({ kit }));
+// Weapons wave 5's five guns (guns-w5.js).
+Object.assign(FACTORIES, w5Factories({ kit, pistolGrip, fitOptic, fitBarrel, fitForegrip, fitWrap, isWrap, fitStock, fitDrum, magLook, fitGuideRail, fitVenturi }));
 
 // Graveyard Shift's wonder weapons (js/shared/zombies.js ZM_WONDERS): our own models, drawn in place of the gun they
 // ride on in that mode only (characters.js, zm-fx.js). Both low-poly, both read from above by their silhouettes.

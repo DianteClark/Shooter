@@ -9,6 +9,7 @@ import { WEAPONS, shotsToKill } from '../js/shared/weapons.js';
 import { V10_WEAPONS, V10_GUNS, V10_LIKE, V10_UNLOCKS } from '../js/shared/weapons-v10.js';
 import { W3_WEAPONS, W3_GUNS, W3_LIKE, W3_UNLOCKS } from '../js/shared/weapons-w3.js';
 import { W4_WEAPONS, W4_GUNS, W4_LIKE, W4_UNLOCKS } from '../js/shared/weapons-w4.js';
+import { W5_WEAPONS, W5_GUNS, W5_LIKE, W5_UNLOCKS } from '../js/shared/weapons-w5.js';
 import { FINISHERS, weaponFinisher, OPERATOR_FINISHERS } from '../js/shared/finishers.js';
 import { SIM_HZ, WEAPON_IDS, PRIMARY_IDS, SECONDARY_IDS, CATEGORIES, WEAPON_CATEGORY } from '../js/shared/constants.js';
 import { ATTACHMENTS, MOD_INFO, SLOTS, availableFor, isAvailable, modsFor, normalizeKit, packKit, unpackKit, trackFor, applyAttachments } from '../js/shared/attachments.js';
@@ -24,6 +25,7 @@ const STEP = 1 / SIM_HZ, DT = 1 / 60;
 const NEW = Object.keys(V10_WEAPONS);
 const W3 = Object.keys(W3_WEAPONS);                    // Weapons wave 3 (weapons-w3.js), after the V10 guns.
 const W4 = Object.keys(W4_WEAPONS);                    // Weapons wave 4's melee (weapons-w4.js), after wave 3.
+const W5 = Object.keys(W5_WEAPONS);                    // Weapons wave 5 (weapons-w5.js), after wave 4.
 const NEW_ATTACHMENTS = ['steady', 'ghostring', 'breacher', 'floated', 'satchel', 'tapedmag', 'bipod', 'handstop'];
 const OLD_IDS = ['ar', 'burst', 'heavyar', 'smg', 'pdw', 'tacsmg', 'shotgun', 'autoshot', 'coach', 'lmg', 'saw', 'rotary', 'dmr', 'battle', 'lever',
   'sniper', 'antimat', 'semisnipe', 'pistol', 'revolver', 'machpistol', 'deuce', 'launcher', 'thumper', 'golden',
@@ -133,7 +135,8 @@ test('older ids keep their wire index; the new ones are appended, primaries then
   assert.deepEqual([...WEAPON_IDS.slice(OLD_IDS.length, OLD_IDS.length + NEW.length)].sort(), [...NEW].sort());
   const w3 = WEAPON_IDS.slice(OLD_IDS.length + NEW.length, OLD_IDS.length + NEW.length + W3.length);
   assert.deepEqual([...w3].sort(), [...W3].sort(), 'wave 3 after the V10 guns');
-  assert.deepEqual(WEAPON_IDS.slice(OLD_IDS.length + NEW.length + W3.length), W4, 'then wave 4\'s melee, in order, and nothing else');
+  assert.deepEqual(WEAPON_IDS.slice(OLD_IDS.length + NEW.length + W3.length, OLD_IDS.length + NEW.length + W3.length + W4.length), W4, 'then wave 4\'s melee, in order');
+  assert.deepEqual(WEAPON_IDS.slice(OLD_IDS.length + NEW.length + W3.length + W4.length), W5, 'then wave 5, primaries then secondaries, and nothing else');
   assert.deepEqual(w3.map(id => SECONDARY_IDS.includes(id)), [...w3].map(id => SECONDARY_IDS.includes(id)).sort(), 'wave 3: primaries, then secondaries');
   for (const id of W3) assert.equal(PRIMARY_IDS.includes(id) + SECONDARY_IDS.includes(id), 1, `${id} is in exactly one slot list`);
   assert.equal(new Set(WEAPON_IDS).size, WEAPON_IDS.length);
@@ -557,6 +560,121 @@ test('Gavel: three to the body out to 22 m, the quickest sidearm kill from 18 m 
   assert.ok(w.rpm < WEAPONS.pistol.rpm && SECONDARY_IDS.includes('battlepistol'));
 });
 
+/* ---------------- Weapons wave 5 (js/shared/weapons-w5.js, js/sim/arsenal-w5.js) ---------------- */
+
+test('wave 5: five guns in their classes, with names, feel, a borrowed reload, icons, and a level no other gun opens on', () => {
+  assert.deepEqual(Object.values(W5_GUNS).flat(), W5);
+  const names = new Set(Object.values(WEAPONS).map(w => w.name));
+  assert.equal(names.size, Object.keys(WEAPONS).length, 'every weapon has its own name');
+  for (const id of W5) {
+    const w = WEAPONS[id];
+    assert.equal(w.category, WEAPON_CATEGORY[id]);
+    assert.ok(w.feel && w.feel.fx && w.feel.voice && w.feel.recoil, `${id} has its own flash, voice and kick`);
+    for (const key of ['sound', 'fx', 'reload', 'hold', 'force']) assert.ok(OLD_IDS.includes(W5_LIKE[id][key]), `${id} borrows a real ${key}`);
+    assert.ok(w.headMult >= 1 && Number.isFinite(w.headMult) && hasIcon(id), id);
+    assert.equal(PRIMARY_IDS.includes(id) + SECONDARY_IDS.includes(id), 1, `${id} is in exactly one slot list`);
+  }
+  const levels = UNLOCK_SCHEDULE.filter(u => u.kind === 'weapon');
+  for (const u of W5_UNLOCKS) assert.equal(levels.filter(v => v.level === u.level).length, 1, `${u.id}: level ${u.level} is its own`);
+  const carried = new Set();
+  for (const mapId of Object.keys(MAPS)) for (const mode of ['tdm', 'dom', 'kc']) for (const r of buildRoster([], { botSkill: 'regular', teamSize: 6, mapId, mode, seed: 3 })) { carried.add(r.loadout.primary); carried.add(r.loadout.secondary); }
+  for (const id of W5) assert.ok(carried.has(id), `bots are dealt the ${id}`);
+});
+
+test('Gadfly: the tightest hip cone of any automatic primary, and aiming it adds almost nothing', () => {
+  const w = WEAPONS.hipsmg;
+  for (const id of PRIMARY_IDS.filter(id => WEAPONS[id].auto && id !== 'hipsmg' && (WEAPONS[id].pellets || 1) === 1)) {
+    assert.ok(w.hipSpread < WEAPONS[id].hipSpread, `tighter from the hip than the ${id}`);
+  }
+  assert.ok(w.adsSpread / w.hipSpread > 0.75, 'the sight barely tightens it');
+  for (const id of ['smg', 'pdw', 'tacsmg', 'hushsmg']) assert.ok(w.adsTime > WEAPONS[id].adsTime, `slower to aim than the ${id}`);
+  const ps = shooter('hipsmg');
+  const shots = run(ps, 1.0, { fire: true });
+  assert.ok(shots.length >= 13, `${shots.length} rounds from the hip in a second`);
+  const kt = killTime('hipsmg', 6);
+  assert.ok(kt >= 0, `it kills (${kt})`);
+});
+
+test('Carousel: three to the body to 16 m from the first pull, no heat, no wind-up; slower than the belt guns, slower to change', () => {
+  const w = WEAPONS.panlmg;
+  assert.equal(shotsToKill(w, 16), 3);
+  assert.ok(!w.heat && !w.spinup && w.magazine === 47 && w.reload > WEAPONS.lightlmg.reload, 'a slow pan change');
+  for (const id of WEAPON_IDS.filter(id => WEAPONS[id].category === 'LMG' && id !== 'panlmg')) {
+    assert.ok(shotsToKill(WEAPONS[id], 16) > 3, `the ${id} needs more`);
+    assert.ok(w.rpm < WEAPONS[id].rpm, `slower than the ${id}`);
+  }
+  assert.ok(!isAvailable('panlmg', 'heatsink') && !isAvailable('panlmg', 'shroud'), 'no heat parts on a gun with no heat bar');
+  const t = killTime('panlmg', 6);
+  assert.ok(t >= 0 && t < 0.6, `kills at 6 m in ${t}`);
+});
+
+test('Vigil: two to the body anywhere it reaches, never one, semi-automatic, the scope thrown every round', () => {
+  const w = WEAPONS.autosniper;
+  for (const d of [5, 20, 40, 60]) assert.equal(shotsToKill(w, d), 2, `${d} m`);
+  assert.ok(!w.auto && w.boltKick > 0 && w.magazine >= 6);
+  for (const id of ['sniper', 'antimat', 'semisnipe']) assert.ok(w.rpm > 2 * WEAPONS[id].rpm, `far quicker follow-ups than the ${id}`);
+  const ps = aimedIn(shooter('autosniper'), 'autosniper');
+  const shots = run(ps, 1.6, AIM_FIRE);
+  assert.ok(shots.length >= 3, `${shots.length} aimed rounds in 1.6 s`);
+  const t = killTime('autosniper', 20);
+  assert.ok(t >= 0 && t < 1.2, `kills at 20 m in ${t}`);
+});
+
+test('Fusee: one flare burns its target for three seconds, lights them on the map, never kills a healthy player alone; a burn kill is its kill', () => {
+  const w = WEAPONS.flare;
+  assert.ok(w.burn && w.burn.mark && w.magazine === 1 && SECONDARY_IDS.includes('flare'));
+  assert.ok(w.damage + w.burn.dps * w.burn.time < 100, 'one flare is never a kill on full health');
+  const { sim, h, foe } = duel('flare', 8);
+  h.ps.slot = 1; h.ps.weapon = 'flare';
+  sim.applyShot('h1', { weapon: 'flare', ox: h.ps.x, oz: h.ps.z, aim: 0, ads: true, angles: [0] }, 0);
+  let ev = sim.drainEvents();
+  assert.ok(ev.some(e => e.t === 'ignite' && e.id === foe.id && e.by === 'h1'), 'it ignites');
+  assert.ok(foe.markT > 0 && foe.burn, 'burning and marked');
+  const hp0 = foe.hp;
+  for (let i = 0; i < SIM_HZ * 3.2; i++) sim.step(STEP);
+  ev = sim.drainEvents();
+  assert.ok(Math.abs(hp0 - foe.hp - w.burn.dps * w.burn.time) < 1, `burned ${hp0 - foe.hp}`);
+  assert.ok(foe.alive && !foe.burn, 'the fire goes out; still alive');
+  // Tac Mask halves it; a burn that finishes a hurt player is the Fusee's kill.
+  foe.ps.perks = ['tacmask', 'scavenger', 'tracker']; foe.hp = 100;
+  sim.applyShot('h1', { weapon: 'flare', ox: h.ps.x, oz: h.ps.z, aim: 0, ads: true, angles: [0] }, 0);
+  const masked = foe.hp;
+  for (let i = 0; i < SIM_HZ * 3.2; i++) sim.step(STEP);
+  assert.ok(Math.abs(masked - foe.hp - w.burn.dps * w.burn.time / 2) < 1, `masked burn ${masked - foe.hp}`);
+  foe.hp = 30; foe.ps.perks = ['marathon', 'scavenger', 'tracker'];
+  sim.drainEvents();
+  sim.applyShot('h1', { weapon: 'flare', ox: h.ps.x, oz: h.ps.z, aim: 0, ads: true, angles: [0] }, 0);
+  foe.hp = 20;
+  let kill = null;
+  for (let i = 0; i < SIM_HZ * 3.2 && !kill; i++) { sim.step(STEP); kill = sim.drainEvents().find(e => e.t === 'kill' && e.target === foe.id); }
+  assert.ok(kill && kill.weapon === 'flare' && kill.by === 'h1' && !kill.equip && !kill.streak, 'the burn kill is the Fusee\'s');
+});
+
+test('Skyhook: fully aimed at an enemy aircraft in its cone it cannot miss; two bring a chopper down; at people a small rocket', () => {
+  const w = WEAPONS.lockon;
+  assert.ok(w.lockon && w.explosive && w.explosive.damage < 100 && SECONDARY_IDS.includes('lockon'));
+  const { sim, h, foe } = duel('lockon', 20);
+  foe.alive = true;
+  sim._launchChopper(foe);
+  const g = sim.gunships.find(x => x.kind === 'chopper' && x.team === foe.team);
+  g.x = h.ps.x + 18; g.z = h.ps.z + 6;        // Well off the line of the aim, inside the cone.
+  const aim = 0;
+  sim.drainEvents();
+  sim.applyShot('h1', { weapon: 'lockon', ox: h.ps.x, oz: h.ps.z, aim, ads: false, angles: [aim] }, 0);
+  assert.ok(!sim.drainEvents().some(e => e.t === 'shot' && e.lk), 'from the hip it does not lock');
+  sim.applyShot('h1', { weapon: 'lockon', ox: h.ps.x, oz: h.ps.z, aim, ads: true, angles: [aim] }, 0);
+  const ev = sim.drainEvents();
+  assert.ok(ev.some(e => e.t === 'shot' && e.lk && Math.abs(e.lk[0] - g.x) < 0.1), 'aimed, it locks and the shot says where');
+  assert.ok(g.hp < g.maxHp && g.hp > 0, 'one rocket hurts it');
+  sim.applyShot('h1', { weapon: 'lockon', ox: h.ps.x, oz: h.ps.z, aim, ads: true, angles: [aim] }, 0);
+  assert.ok(sim.drainEvents().some(e => e.t === 'air_down' && e.by === 'h1'), 'two bring it down');
+  // Behind you: no lock.
+  sim._launchChopper(foe);
+  const g2 = sim.gunships.at(-1); g2.x = h.ps.x - 20; g2.z = h.ps.z;
+  sim.applyShot('h1', { weapon: 'lockon', ox: h.ps.x, oz: h.ps.z, aim, ads: true, angles: [aim] }, 0);
+  assert.ok(!sim.drainEvents().some(e => e.t === 'shot' && e.lk), 'outside the cone, no lock');
+});
+
 /* ---------------- Weapons wave 4: six melee weapons (js/shared/weapons-w4.js) ---------------- */
 
 test('wave 4: six melee secondaries with their own swings, names, levels, finishers and a signature each; no bot carries one', () => {
@@ -616,7 +734,7 @@ test('wave 4: every blade swings, reaches no further than its range, and the Gle
 
 if (!process.argv.includes('quick')) {
   const line = [];
-  for (const id of [...NEW, ...W3.filter(id => PRIMARY_IDS.includes(id))]) {
+  for (const id of [...NEW, ...W3.filter(id => PRIMARY_IDS.includes(id)), ...W5.filter(id => PRIMARY_IDS.includes(id))]) {
     test(`bots carrying the ${WEAPONS[id].name} get kills with it in a 60 s match`, () => {
       let best = 0, note = '';
       // Two seeds on two maps: a gun has to work somewhere on its own, not ride one lucky spawn.

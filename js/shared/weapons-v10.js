@@ -14,6 +14,7 @@
 //            ordinary braking takes it off again within about a metre and a half.
 
 import { W3_LIKE } from './weapons-w3.js';
+import { W5_LIKE, W5_DENY } from './weapons-w5.js';
 import { W4_LIKE } from './weapons-w4.js';
 
 // Category -> ids, in display order. Melee is a new secondary-slot category (constants.js CATEGORIES).
@@ -274,7 +275,7 @@ export const V10_LIKE = {
 };
 // Fills a per-gun table in place: every V10 (and wave 3, weapons-w3.js) gun without its own entry gets its
 // lookalike's. `key` picks the column.
-const ALL_LIKE = { ...V10_LIKE, ...W3_LIKE, ...W4_LIKE };
+const ALL_LIKE = { ...V10_LIKE, ...W3_LIKE, ...W4_LIKE, ...W5_LIKE };
 export function fillV10(table, key) {
   for (const id in ALL_LIKE) if (table[id] === undefined && table[ALL_LIKE[id][key]] !== undefined) table[id] = table[ALL_LIKE[id][key]];
   return table;
@@ -290,6 +291,7 @@ export const V10_DENY = {
   akimbo: ['reflex', 'holo', 'pointdot', 'ghostring'],      // Nobody sights down a pair.
   knife: '*', maul: '*', bat: '*',                          // Blades and clubs (the Slugger is weapons-w3.js).
   katana: '*', fireaxe: '*', shovel: '*', kama: '*', machete: '*', tonfa: '*',   // Weapons wave 4 (weapons-w4.js).
+  ...W5_DENY,                                               // Weapons wave 5 (weapons-w5.js).
 };
 
 // Where the new guns join the bot rotations (sim.js BOT_PRIMARIES, bots.js BOT_SECONDARIES) and Gun Game's ladder

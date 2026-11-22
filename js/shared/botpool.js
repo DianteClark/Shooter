@@ -35,6 +35,7 @@ import { EX_UNLOCKS } from './extraction.js';
 import { RESET_AT } from './reset.js';
 import { W3_GUNS } from './weapons-w3.js';
 import { W4_GUNS } from './weapons-w4.js';
+import { W5_GUNS } from './weapons-w5.js';
 // Extraction's exclusive items never reach the pool: bots cannot have earned them, and adding them must not reshuffle
 // the profiles the boards already show.
 const EXCLUSIVE = new Set(EX_UNLOCKS.map(u => u.item));
@@ -212,7 +213,7 @@ const SIDEARMS = {
 
 // Favourites come from the guns that existed when the pool was made: a gun added later (weapons wave 3 on) would
 // reshuffle every profile the boards show. New guns reach pool players as tryouts instead (tryoutOf, below).
-const LATER_GUNS = new Set([...Object.values(W3_GUNS).flat(), ...Object.values(W4_GUNS).flat()]);   // Wave 4's melee too.
+const LATER_GUNS = new Set([...Object.values(W3_GUNS).flat(), ...Object.values(W4_GUNS).flat(), ...Object.values(W5_GUNS).flat()]);   // Waves 4 and 5 too.
 const GUNS_BY_CLASS = {};
 for (const id of PRIMARY_IDS) {
   const w = WEAPONS[id];
@@ -234,6 +235,23 @@ export function tryoutOf(profile) {
   const secondary = LATER_SIDEARMS.length && rng() < 0.2 ? LATER_SIDEARMS[Math.floor(rng() * LATER_SIDEARMS.length)] : null;
   t = Object.freeze({ primary, secondary });
   TRYOUTS.set(profile.id, t);
+  return t;
+}
+// Weapons wave 5's guns reach pool players the same way, from a stream of their own (so tryoutOf never moves).
+const TRYOUT5_SEED = 0x2d91f6c5;
+const W5_BY_CLASS = {};
+for (const c in W5_GUNS) for (const id of W5_GUNS[c]) (W5_BY_CLASS[c] ??= []).push(id);
+const W5_SIDEARMS = [...(W5_GUNS.Pistol ?? []), ...(W5_GUNS.Launcher ?? [])];
+const TRYOUTS5 = new Map();
+export function tryout5Of(profile) {
+  let t = TRYOUTS5.get(profile.id);
+  if (t) return t;
+  const rng = mulberry32(hash32(TRYOUT5_SEED, profile.index));
+  const pool = profile.classes.flatMap(c => W5_BY_CLASS[c] ?? []).filter(id => PRIMARY_IDS.includes(id));
+  const primary = pool.length && rng() < 0.5 ? pool[Math.floor(rng() * pool.length)] : null;
+  const secondary = rng() < 0.25 ? W5_SIDEARMS[Math.floor(rng() * W5_SIDEARMS.length)] : null;
+  t = Object.freeze({ primary, secondary });
+  TRYOUTS5.set(profile.id, t);
   return t;
 }
 const CARD_IDS = new Set(CARDS.map(c => c.id));

@@ -29,6 +29,7 @@ import { TUNING } from '../shared/tuning.js';
 import { spectate } from '../sim/snd.js';
 import { PILOTED } from '../sim/streaks-v9.js';
 const STEERED_KILLS = new Set([...PILOTED, 'bombrun']);   // Streak kills that still punch the camera: ones you aimed.   // Live feel tuning: camera kick, shake, ADS lookahead, zoom.
+import { W5Fx } from './w5-fx.js';     // Weapons wave 5: burning targets, locked rockets.
 import { feelMotion } from './feel.js';   // Reduced motion scales the camera kick a gun adds.
 
 // weapons.js is owned by Gameplay and may be absent at first load, so never import it statically.
@@ -347,6 +348,7 @@ export class GameRenderer {
       const ev = events[i];
       switch (ev.t) {
         case 'shot': this._onShot(ev, localId, localTeam); break;
+        case 'ignite': (this.w5Fx ??= new W5Fx(vfx)).onEvent(ev); break;     // A Fusee's burn (w5-fx.js).
         case 'hit': {
           const r = chars.rigs.get(ev.target);
           if (r && (r.visible || r.team === localTeam)) {
@@ -360,6 +362,7 @@ export class GameRenderer {
           break;
         }
         case 'kill': {
+          this.w5Fx?.onEvent(ev);
           const r = chars.rigs.get(ev.target);
           // A view can report the death in the very frame the event lands, so "drawn a moment ago" counts as seen.
           const seen = r && (r.visible || r.team === localTeam || Math.abs(this.time.value - r.posed) < 0.2);
@@ -402,6 +405,7 @@ export class GameRenderer {
           break;
         }
         case 'spawn': {
+          this.w5Fx?.onEvent(ev);
           const r = chars.rigs.get(ev.id);
           vfx.spawnFx(ev.x, ev.z, (r && TEAM_RGB[r.team]) || TEAM_RGB[0]);
           if (ev.id === localId) this.fog.reset();
@@ -528,7 +532,8 @@ export class GameRenderer {
       for (let i = 0; i < rays.length; i++) {
         const ray = rays[i];
         // Explosive rounds fly as a projectile; the blast waits for it to arrive (see 'explosion').
-        if (explosive) vfx.rocket(mx, my, mz, ray.x, 1.05, ray.z);
+        if (explosive && ev.lk) { if (i === 0) (this.w5Fx ??= new W5Fx(vfx)).lockShot(mx, my, mz, ev.lk); }   // Skyhook: up to its lock.
+        else if (explosive) vfx.rocket(mx, my, mz, ray.x, 1.05, ray.z);
         else {
           vfx.gunTracer(G, ev.by, i, local, mx, my, mz, ray.x, 1.05, ray.z, rgb, width);
           if (!this.cine) this.props.hitRay(ev.ox, ev.oz, ray.x, ray.z);
@@ -779,6 +784,7 @@ export class GameRenderer {
       this.zmFx.kinds.drawShields = !this.zmBodies;     // The Shieldbearer's door is part of its body now.
     }
     this.fairFx?.update(fxDt);
+    this.w5Fx?.update(fxDt, this.chars, localTeam);
     this._heatFx(view, fxDt, localTeam);
     if (!this.finalKill && !cine) this._drawLaser(local);
     this.ambient.update(fxDt, this.camTarget.x, this.camTarget.z);
@@ -894,6 +900,7 @@ export class GameRenderer {
     this.zmFx?.dispose(); this.zmFx = null;
     this.zmBodies?.dispose(); this.zmBodies = null; this.chars.zm = null; ZM_INTRO.reset();
     this.fairFx?.dispose(); this.fairFx = null;
+    this.w5Fx?.dispose(); this.w5Fx = null;
     this.vfx.dispose();
     this.combat.dispose();
     this.props.dispose();

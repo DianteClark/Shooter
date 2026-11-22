@@ -10,6 +10,8 @@ import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/at
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_PRIMARIES } from '../shared/weapons-v10.js';
 import { W3_BOT_PRIMARIES } from '../shared/weapons-w3.js';
+import { W5_BOT_PRIMARIES } from '../shared/weapons-w5.js';
+import * as W5 from './arsenal-w5.js';   // Weapons wave 5: burn and lock-on (arsenal-w5.js).
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange, COLD_MARK, syncCover } from './equipment.js';
 import { NavGrid } from './nav.js';
@@ -22,7 +24,7 @@ import { CtfRules, decodeCtf, restoreCtf } from './ctf.js';
 import { MODE_RULES } from './rules.js';     // Modes overhaul: one rules module per mode (js/sim/rules.js).
 import { cleanMods, dealLoadout, HARDCORE_DAMAGE } from '../shared/playlist.js';
 import { BrRules } from './br.js';   // Battle royale (docs/BR.md).
-import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING, tryoutOf } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
+import { HUMAN_BASE, displayName, pickPoolBots, TIER_RATING, tryoutOf, tryout5Of } from '../shared/botpool.js';   // The bot player pool (ROADMAP item 15).
 import { clearZmWalls, ZM, ZM_SQUAD, ZM_TEAM } from '../shared/zombies.js';   // Graveyard Shift (docs/ZOMBIES.md).
 import * as Fin from './finishers.js';     // Finishing moves and emotes (docs/FINISHERS.md).
 import { CP } from '../shared/campaign.js';   // The co-op campaign (docs/CAMPAIGN.md).
@@ -164,6 +166,7 @@ const BOT_PRIMARIES = [
 ];
 BOT_PRIMARIES.push(...V10_BOT_PRIMARIES);   // V10 guns join the rotation after the older ones.
 BOT_PRIMARIES.push(...W3_BOT_PRIMARIES);    // Weapons wave 3 after them.
+BOT_PRIMARIES.push(...W5_BOT_PRIMARIES);    // Weapons wave 5 after those.
 const MIXED_SKILLS = ['regular', 'veteran', 'veteran', 'regular', 'elite', 'recruit'];
 // Every tactical and lethal. A match deals them from an offset (see botLoadout), so over a session each is carried.
 const BOT_TACTICALS = Object.keys(TACTICALS);
@@ -393,8 +396,11 @@ function poolBotEntry(n, team, pick, botSkill, seed) {
   // Weapons wave 3: a player who has picked up a newer gun (botpool tryoutOf) brings it about one match in three. The
   // later draws come after the favourite's, so the favourite roll is as before.
   const tryout = tryoutOf(prof), rt = roll(), rs = roll();
-  const primary = tryout.primary && rt < 0.34 ? tryout.primary : prof.guns[r < 0.6 ? 0 : r < 0.85 ? 1 : 2] ?? prof.guns[0];
-  const secondary = tryout.secondary && rs < 0.34 ? tryout.secondary : prof.secondary;
+  // Weapons wave 5 (botpool tryout5Of): its own pick-up, drawn after all of those, so every older roll holds.
+  const tryout5 = tryout5Of(prof), r5 = roll(), r5s = roll();
+  const primary = tryout.primary && rt < 0.34 ? tryout.primary : tryout5.primary && r5 < 0.3 ? tryout5.primary
+    : prof.guns[r < 0.6 ? 0 : r < 0.85 ? 1 : 2] ?? prof.guns[0];
+  const secondary = tryout.secondary && rs < 0.34 ? tryout.secondary : tryout5.secondary && r5s < 0.3 ? tryout5.secondary : prof.secondary;
   // Looks as of the match date (botpool looksAt): what the career since the progress reset has earned.
   const looks = pick.looks ?? prof;
   const loadout = normalizeLoadout({
@@ -992,6 +998,7 @@ export class Sim {
       return;
     }
     if (p.ackT > 0) p.ackT -= STEP;
+    if (p.burn) W5.stepBurn(this, p, STEP);     // Weapons wave 5: a Fusee's burn (arsenal-w5.js).
     if (!p.alive) {
       if (this.snd || this.br) return;   // One life a round (S&D), or one life (battle royale).
       if (this.rules?.holdDead?.(p)) return;     // Out of lives, or a Headquarters standing for their team.
@@ -1440,6 +1447,8 @@ export class Sim {
     const fired = { t: 'shot', by: id, weapon: shot.weapon, camo: shooter.camo,
       ox: round2(shot.ox), oz: round2(shot.oz), aim: round2(shot.aim), rays: lean };
     if (w.suppressed) fired.sup = 1;
+    const lock = w.lockon && this.phase === 'live' ? W5.lockTarget(this, shooter, shot, w) : null;   // Skyhook.
+    if (lock) fired.lk = [round2(lock.x), round2(lock.z)];
     this._emit(fired);
     this._alertBots(shooter, !!w.suppressed);
     this.br?.onShot(shooter);
@@ -1450,6 +1459,7 @@ export class Sim {
     shooter.spawnProtect = 0;      // Shooting gives up your protection.
 
     const ads = shot.ads ?? (shooter.ps.adsT >= 0.85);
+    if (lock) { W5.hitLock(this, shooter, lock, w); return; }              // A locked rocket goes up, not along the ground.
     if (this.gunships.length) V9.shootAir(this, shooter, shot, rays, w);   // Aircraft can be shot down.
     if (w.explosive) { this._detonate(shooter, shot, rays[0], w, scratch); return; }
     if (turretHits) this._damageTurretsFromShot(turretHits, rays, shot, w, ads, shooter);
@@ -1612,6 +1622,7 @@ export class Sim {
     else if (equip) hit.eq = equip;     // What a non-gun hit was, for Pro challenges (js/shared/progression.js).
     else hit.st = streak;
     this._emit(hit);
+    if (!streak && !equip && !killed && !down && !this._burning && WEAPONS[weapon]?.burn) W5.onGunHit(this, target, attacker, weapon, dist);   // Fusee.
     if (target.bot) target.bot.onDamaged(attacker, !!(streak || equip));
     this.snd?.onDamaged(target);
     if (killed) this._kill(target, attacker, weapon, dist, streak, head, equip);
