@@ -618,6 +618,7 @@ THEME_AUDIO.wrenfield = THEME_AUDIO.harvest;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;
 THEME_AUDIO.sunken = THEME_AUDIO.harbor;
 THEME_AUDIO.topside = THEME_AUDIO.railyard;
+THEME_AUDIO.city = THEME_AUDIO.metro;   // Meridian City (docs/DISTRICTS.md): the metro maps' streets.
 THEME_AUDIO.subway = { ir: { len: 1.1, damp: 0.45, gain: 0.36 }, slaps: [[0.04, 1], [0.09, 0.7], [0.16, 0.45]], f0: 2800, f1: 700, metal: 900, wash: 0.08 };
 const SIZE_TUNE = [{ dur: 0.14, f: 1.2, gain: 0.8 }, { dur: 0.2, f: 1, gain: 1 }, { dur: 0.3, f: 0.78, gain: 1.15 }];
 
