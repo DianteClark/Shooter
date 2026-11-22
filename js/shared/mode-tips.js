@@ -28,13 +28,15 @@ export const TIPS = {
   rb: { title: 'Rebound', lines: ['While a squadmate is in, you redeploy beside them after a short countdown.', 'A squad is out only when nobody in it is left.'], video: 'brfight' },
   ex: { title: 'Extraction', lines: ['Do contracts for rewards; AI patrols guard every place.', 'Call the exfil and hold until it lands to get out with your loot.'], video: 'ex' },
   zm: { title: 'Graveyard Shift', lines: ['Hits and kills pay points: buy gates, wall guns, perks and the crate.', 'Revive downed crewmates before they bleed out.'], video: 'zm' },
+  cq: { title: 'Conquest', lines: ['Hold more flags to drain their tickets. Every death costs one.', 'Dead? Pick a flag your side holds to deploy on.'], video: 'cq' },
+  bt: { title: 'Breakthrough', lines: ['Attackers take every objective of a sector to make it fall.', 'Defenders fall back to the next line. Attackers have limited tickets.'], video: 'bt' },
   cp: { title: 'Campaign', lines: ['The card at the top says what to do next; the radio is subtitled.', 'Downed squadmates can be revived.'], video: 'cp' },
 };
 
 export const TIP_OF = {
   tdm: 'tdm', kc: 'kc', dom: 'dom', hard: 'hard', snd: 'snd', ctf: 'ctf', hq: 'hq', ffa: 'ffa', gun: 'gun', ko: 'ko', inf: 'inf',
   oic: 'oic', ctl: 'ctl', grind: 'grind', gf: 'gf', gwtdm: 'tdm', gwdom: 'dom', gwhq: 'hq', gwko: 'ko', gwinf: 'inf',
-  br: 'br', brduo: 'br', brsolo: 'br', rb: 'rb', rbduo: 'rb', exq: 'ex', exd: 'ex', zm: 'zm', cp: 'cp',
+  br: 'br', brduo: 'br', brsolo: 'br', rb: 'rb', rbduo: 'rb', exq: 'ex', exd: 'ex', zm: 'zm', cp: 'cp', cq: 'cq', bt: 'bt',
 };
 
 export function tipFor(mode, seen = {}) {

@@ -407,6 +407,10 @@ const SQUARE = {
   'mode:rb': { f: [P(3, 12, 8, 5.5, 16, 3.5, 24, 5.5, 29, 12, 24, 10.5, 16, 10, 8, 10.5), bar(5.5, 12, 14, 21, 1.6), bar(26.5, 12, 18, 21, 1.6), R(13.5, 20, 5, 7.5, 1)], a: [P(2, 26, 6, 21, 10, 26), P(22, 26, 26, 21, 30, 26), R(4.8, 26, 2.4, 4), R(24.8, 26, 2.4, 4)] },
   // Showdown: two and two either side of the overtime flag, the flag lit.
   'mode:gf': { f: [O(5.5, 9, 3.2), O(5.5, 22, 3.2), O(26.5, 9, 3.2), O(26.5, 22, 3.2)], h: [R(14.8, 5, 2.4, 23)], a: [P(17.2, 5, 25, 8.5, 17.2, 12), R(10, 27.5, 12, 2.5, 1)] },
+  // Conquest (ROADMAP 65): three flags along the line, the middle one lit: hold more of them than they do.
+  'mode:cq': { f: [R(3.5, 9, 2.2, 19, 0.5), P(5.7, 9, 12, 11.6, 5.7, 14.2), R(24.3, 9, 2.2, 19, 0.5), P(26.5, 9, 31, 11.6, 26.5, 14.2), R(2, 27.5, 28, 2.5, 1)], a: [R(14.9, 3, 2.2, 25, 0.5), P(17.1, 3, 24.5, 6.2, 17.1, 9.4)] },
+  // Breakthrough: an arrow driving through two front lines.
+  'mode:bt': { f: [R(10, 2, 2.4, 28, 1), R(20.5, 2, 2.4, 28, 1)], a: [P(2, 13.2, 17, 13.2, 17, 8, 30, 16, 17, 24, 17, 18.8, 2, 18.8)] },
   // Gun Game: a ladder, its top rung lit.
   'mode:gun': { f: [R(5, 2, 3.4, 28, 1), R(23.6, 2, 3.4, 28, 1), R(8.4, 12, 15.2, 2.8), R(8.4, 18.5, 15.2, 2.8), R(8.4, 25, 15.2, 2.8)], a: [R(8.4, 5, 15.2, 3.4)] },
 
@@ -496,7 +500,7 @@ const ALIAS = {
   lock: 'ui:lock', back: 'ui:back', close: 'ui:close', check: 'ui:check', settings: 'ui:settings', play: 'ui:play',
   star: 'ui:star', mic: 'ui:mic', chat: 'ui:chat', user: 'ui:user', bot: 'ui:bot', flag: 'ui:flag', aim: 'ui:aim', camo: 'ui:camo',
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
-  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm', cp: 'mode:cp',
+  tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', cq: 'mode:cq', bt: 'mode:bt', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm', cp: 'mode:cp',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
   railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry', ashgrove: 'map:ashgrove', polestar: 'map:polestar', wrenfield: 'map:wrenfield',
   ...Object.fromEntries(['turnstile', 'overpass', 'downtown', 'oasis', 'canyon', 'ruins', 'canopy', 'riverbend', 'expedition', 'icebreaker', 'millbrook', 'jadefall', 'tidebreak', 'coral', 'launchpad', 'observatory', 'pagoda', 'midtown', 'oldquarter', 'canalrow', 'unionsq', 'meridian'].map(m => [m, 'map:' + m])),
@@ -508,6 +512,8 @@ const ALIAS = {
   'medal:last_stand': 'medal:clutch', last_stand: 'medal:clutch', 'medal:survivor': 'medal:defend', survivor: 'medal:defend',
   'medal:oic_last': 'medal:clutch', oic_last: 'medal:clutch', 'medal:ctl_capture': 'medal:capture', ctl_capture: 'medal:capture',
   'medal:ctl_hold': 'medal:defend', ctl_hold: 'medal:defend', 'medal:grind_bank': 'mode:grind', grind_bank: 'mode:grind',
+  'medal:cq_capture': 'medal:capture', cq_capture: 'medal:capture', 'medal:cq_neutral': 'ui:flag', cq_neutral: 'ui:flag',
+  oob: 'ui:warning', 'medal:bt_capture': 'medal:capture', bt_capture: 'medal:capture', 'medal:bt_sector': 'mode:bt', bt_sector: 'mode:bt',
   // Menu vocabulary (js/ui/yard.js names).
   bots: 'ui:bot', rejoin: 'ui:refresh', load: 'ui:download', export: 'ui:share', equip: 'ui:check', team: 'ui:party',
   swapteam: 'swap', wait: 'ui:clock', warn: 'ui:warning', sound: 'ui:volume', settings: 'ui:settings',

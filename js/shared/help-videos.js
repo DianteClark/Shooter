@@ -105,6 +105,19 @@ export const VIDEOS = [
     star: KIT, cam: 'wide',
     captions: [[0, 'Your own loadout, four squads, AI patrols everywhere'], [5.5, 'Take contracts: carry intel, hunt a commander, hold a terminal'],
       [11, 'Patrols are tougher toward the middle and call reinforcements'], [16.5, 'Call the exfil and hold until it lands. Out with your loot or lose it']] },
+  // Conquest and Breakthrough (ROADMAP 65): Ground War bot matches, eight a side, watched from above.
+  { id: 'cq', title: 'Conquest', group: 'big', icon: 'mode:cq', map: 'harvest', mode: 'cq', seed: 4, len: 22, pre: 24, team: 8, skill: 'regular',
+    star: KIT, cam: 'wide',
+    ops: [[7, 'cam', 'tactical'], [15, 'cam', 'wide']],
+    captions: [[0, 'Five to seven flags. More of you on one takes it faster'], [4, 'Each side has tickets: every death costs one'],
+      [8, 'Hold more flags than they do and their tickets drain'], [13, 'Dead? Deploy on any flag your side holds, or at your HQ'],
+      [18, 'Out of tickets loses. At the clock, more tickets wins']] },
+  { id: 'bt', title: 'Breakthrough', group: 'big', icon: 'mode:bt', map: 'tidebreak', mode: 'bt', seed: 3, len: 22, pre: 16, team: 8, skill: 'regular',
+    star: KIT, cam: 'wide',
+    ops: [[8, 'cam', 'tactical']],
+    captions: [[0, 'Attackers push through sectors, one or two objectives each'], [5, 'Take every objective of a sector at once and it falls'],
+      [10, 'Attackers have limited tickets; a fallen sector adds more'], [15, 'Defenders fall back behind the next line when a sector falls'],
+      [19, 'The lines show on the ground and the minimap']] },
   { id: 'zm', title: 'Graveyard Shift', group: 'big', icon: 'mode:zm', map: 'ashgrove', mode: 'zm', seed: 2, len: 22, pre: 12, skill: 'regular',
     star: KIT, cam: 'wide',
     captions: [[0, 'Survive the waves with your crew. Every hit and kill pays points'], [5.5, 'Spend points on gates, wall guns, perks and the mystery crate'],
@@ -134,7 +147,7 @@ export const VIDEO_BY_ID = Object.fromEntries(VIDEOS.map(v => [v.id, v]));
 export const CARD_VIDEOS = {
   'ctl:left': 'move', 'ctl:right': 'move', 'ctl:slide': 'slide', 'ctl:throw': 'nades', 'streaks': 'streaks',
   'mode:dom': 'dom', 'mode:hard': 'hard', 'mode:snd': 'snd', 'mode:kc': 'kc', 'mode:hq': 'hq', 'mode:ctf': 'ctf',
-  'mode:br': 'br', 'mode:rb': 'brfight', 'mode:ex': 'ex', 'mode:zm': 'zm', 'mode:cp': 'cp', 'mode:ranked': 'ranked', 'gunsmith': 'gunsmith', 'caster': 'caster',
+  'mode:br': 'br', 'mode:rb': 'brfight', 'mode:cq': 'cq', 'mode:bt': 'bt', 'mode:ex': 'ex', 'mode:zm': 'zm', 'mode:cp': 'cp', 'mode:ranked': 'ranked', 'gunsmith': 'gunsmith', 'caster': 'caster',
 };
 
 // The caption's words for this device: a caption may carry a controller version as its third entry, where {action}

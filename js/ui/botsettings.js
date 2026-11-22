@@ -118,8 +118,8 @@ export function botMatchSummary({ mapId, mode }) {
   if (MODES[mode].ex) return { top: skillName(saved.skill), sub: `${MODES[mode].players} players · squads of ${MODES[mode].squad} · AI patrols` };
   const r = resolve(mode, MAPS[mapId] ?? null);
   const sides = !r.bots ? 'No bots' : isFfa(mode) ? `${r.bots + 1} players` : `${Math.max(1, r.bots)}v${r.bots}`;
-  const limit = MODES[mode].rounds ? `${r.scoreLimit} rds` : r.scoreLimit;
-  const clock = MODES[mode].rounds ? `${mmss(r.timeLimit)}/rd` : mmss(r.timeLimit);
+  const limit = MODES[mode].rounds ? `${r.scoreLimit} rds` : MODES[mode].bf ? `${r.scoreLimit}% tickets` : r.scoreLimit;
+  const clock = MODES[mode].rounds ? `${mmss(r.timeLimit)}/rd` : mode === 'bt' ? `${mmss(r.timeLimit)}/sector` : mmss(r.timeLimit);
   return { top: skillName(r.skill), sub: `${sides} · ${limit} · ${clock}`, custom: r.custom };
 }
 

@@ -143,6 +143,8 @@ means something. `python3 dev/ui-endings-test.py [port]` ends a match of every m
 | TDM, Kill Confirmed, Domination, Hardpoint, Headquarters, Kill Order, Grind (and their Ground War versions) | Victory / Defeat / Draw | The yard is yours / lost / Neither side broke through | team score, yours - theirs |
 | Search and Destroy, Control, Showdown | Victory / Defeat / Draw | Won 4 rounds to 2 (Lost ..., Level at N rounds each); S&D's banner adds how the last round went | rounds won, 6 - 4 |
 | Capture the Flag | Victory / Defeat / Draw | Won 3 captures to 1 (Lost ..., Level at ...) | captures, yours - theirs |
+| Conquest | Victory / Defeat / Draw | Their tickets ran out, More tickets at the clock (and the losing side's own) | tickets left, yours - theirs |
+| Breakthrough | Victory / Defeat | Broke through all 3 sectors, Out of tickets (or time) at sector 2 of 3, Held at sector 2 of 3, All 3 sectors fell | sectors: taken (attackers) - still standing (defenders) |
 | Infected | Victory / Defeat (by the side you ended on) | You held out to the end / N survivors held out / Everyone was infected | one number: Survivors N |
 | Free-for-All, Gun Game, One in the Chamber | 1st place / 2nd place / ... | Nobody else came close, One short of the top, On the podium, or who took the yard (Gun Game: Through every gun) | your score - the best other score (Gun Game: guns) |
 | Battle Royale, Duos, Solos, Rebound | Victory, or 3rd place | Last squad standing, or #3 of 8 squads (players in Solos) | one number: #3, "of 8 squads" |
@@ -155,3 +157,126 @@ means something. `python3 dev/ui-endings-test.py [port]` ends a match of every m
 Left a team match early: Defeat, "You left before the end". Before this, Extraction's header put contracts banked
 against contracts lost as if they were a score ("0 - 2" after a wipe), battle royale's put the place against the
 squad count ("3 - 8"), and draws said Stalemate on the banner.
+
+## Conquest and Breakthrough (ROADMAP 65)
+Two Battlefield-style modes, 16 v 16 (32 players at most), on every Ground War map (Harvest, Downtown, Expedition,
+Tidebreak, Coral Quarter) and on parts of the battle royale islands (Frontier: Downtown and Southbound; Jadefall: West
+Isle and Coast Road). No vehicles, classes or squad spawns. Mode ids `cq` and `bt` (js/shared/modes.js, `bf` marks the
+family, `look: 'dom'` draws their flags as Domination flags); rules js/sim/conquest.js and js/sim/breakthrough.js
+(registered in js/sim/rules.js), shared host helpers js/sim/bf-kit.js, the numbers and layouts js/shared/bf.js.
+
+| id | name | one line |
+|---|---|---|
+| cq | Conquest | 5-7 flags, a ticket pool a side; deaths cost tickets, holding more flags drains theirs; spawn on held flags or HQ |
+| bt | Breakthrough | attackers take 3-4 sectors in turn on a limited, refilled ticket pool; defenders fall back line by line |
+
+### Layout format (for any map, the districts maps included)
+A map hosts these modes when it has a layout: declare them in `map.bf`, or (any map with three or more Domination
+flags and two spawn lists, i.e. every Ground War map) get one derived. Everything is pure data and geometry, read the
+same way by the host, every phone, the HUD, the renderer and the bots from the map and the match seed: nothing about
+the layout rides the wire.
+
+```js
+map.bf = {
+  conquest: [{
+    id: 'downtown', name: 'Frontier: Downtown',   // name: the intro card, the vote card (on an island part)
+    area: { x, z, w, h },                         // the field; outside is out of bounds (omit: the whole map)
+    hq: [{ x, z, r }, { x, z, r }],               // team 0's and team 1's HQ: always a spawn, never capturable
+    flags: [{ id: 'A', x, z, r?, name? }, ...],   // 5-7 flags; r defaults to BF.radius (5.5 m)
+    tickets?,                                     // each side's pool (default BF.cq.tickets by flag count)
+  }],
+  breakthrough: [{
+    id, name, area,
+    hq: [{ x, z, r }, { x, z, r }],               // hq[0] the attackers' end, hq[1] the defenders' last stand
+    sectors: [{ name, objs: [{ x, z, r? }, ...] }, ...],   // 3-4 sectors from hq[0] toward hq[1], 1-2 objectives each
+    tickets?, refill?,                            // the attackers' starting pool and what a fallen sector adds
+    clock?, defendDelay?,                         // seconds a sector (300) and extra defender respawn wait (0)
+  }],
+};
+```
+
+- Objectives are lettered A, B, C... in play order; flags keep their ids. An HQ may carry `spawns: [{x, z}]`; without
+  them up to 16 spots are found round its centre by geometry (no nav grid needed: the opening places everyone).
+- **Front lines are not data.** The attack axis runs from hq[0] to hq[1]; each line lies across it halfway between one
+  sector's farthest objective and the next sector's nearest (`lines`, metres along the axis; `lineSegment(l, s)` clips
+  one to the area for drawing). So place objectives in order along the axis, with room between sectors.
+- A map with several layouts of a kind plays the one the seed picks (`bfLayout(map, kind, seed)`); which side attacks
+  in Breakthrough is the seed's too (`btAttackers`). The vote card names a single island layout ("Frontier: Downtown").
+- Derived layouts (no `map.bf`): Conquest takes the Domination flags (radius at least 5.5 m) and the spawn lists as HQs;
+  Breakthrough sorts the flags along the axis from team 0's spawns to team 1's and groups them 2-1-2 (five flags),
+  1-2-1 (four), 2-2-2 (six), 2-1-2-2 (seven). The area is the whole map, so there is no out of bounds but the lines.
+- `node dev/sim-conquest.mjs` and `dev/sim-breakthrough.mjs` check every layout of every map that hosts the modes:
+  each point on walkable ground, reachable on foot from hq[0] inside the area, lines in order, then play bot matches on
+  it. A district map that declares layouts is picked up by both with no change (`--maps=<id>` runs one).
+
+### Conquest
+- Flags start neutral. Whoever has more players on a flag moves it their way, faster with a bigger edge
+  (`BF.capture` 10 s alone from neutral, `BF.crowd` by the edge); equal numbers: contested, nothing moves. A held flag
+  goes neutral before it changes hands; left alone part taken it drifts back. (`stepFlag`, js/sim/bf-kit.js.)
+- Tickets: each side starts with the layout's pool (850 for five flags, 1050 for seven; the custom score limit is a
+  percentage of it). A death costs one; while one side holds more flags, the other bleeds `BF.cq.bleed[lead]` a second
+  (+`allBleed` holding every flag). Zero loses; at the 20-minute clock more tickets wins. sim.scores are tickets.
+- Spawns: the HQ, or a flag the side holds outright, not contested, with no enemy within 22 m (`canDeploy`); spots in a
+  6-13 m ring round it from the nav grid (`spawnSpots`, `bestSpot`: away from enemies and their sight). The phone picks
+  on the death screen ({cmd:'bf', act:'deploy', at}); Auto is the held flag nearest the front. Bots deploy at the held
+  flag nearest where they were sent.
+- Bots: two or three back to any held flag under attack, a small quota on calm ones, the rest spread over the flags the
+  side does not hold (each flag's load costs, at most a third of the free bots on one), half hunting when everything is
+  held. On an island part a bot near the edge walks back in first.
+- Events `{t:'cq', kind:'capture'|'neutral'|'low'|'all'|'deploy'}`; medals cq_capture, cq_neutral (and defend).
+
+### Breakthrough
+- Only the current sector's objectives are live; they start the defenders'. Attackers take one as a Conquest flag
+  (slower: `BF.bt.capture` 16 s alone), and each one taken puts a minute back on the sector clock; defenders can take it back. All held at once: the sector falls, the attackers
+  get `refill` tickets, the sector clock (5 minutes, or the layout's `clock`) restarts, and the next objectives stay locked
+  for `BF.bt.lock` s while both sides move up.
+- Attackers spend a ticket a death; at zero they stop respawning and lose when the last is down. Defenders respawn
+  freely (a layout's `defendDelay` s later than usual: the islands' 1.5 s). The clock running out with no attacker on a live objective ends it
+  for the defenders; with one on it, overtime. sim.scores: the attackers' sectors taken, the defenders' still standing.
+- Bounds: attackers may not go more than `BF.bt.margin` past the line ahead, defenders no further back than the line
+  behind; outside, the out-of-bounds clock (8 s, then death without credit). Defenders caught behind a fallen line get
+  `BF.bt.fallBack` 12 s ("Fall back").
+- Spawns: attackers 18-34 m short of the sector's nearest objective, never past the line behind it (and the HQ in
+  sector one); defenders 14-30 m behind its farthest objective, 16 m or more from any live objective (the last sector
+  adds their HQ). Both sides walk about as far to the fight.
+- Bots: attackers spread over the objectives still to take (two hold one taken), pushing onto it shooting on the move
+  within 18 m (`commit`); defenders split over the objectives, four more on one under attack, long guns covering from
+  behind, most of the side back to retake a lost one.
+- Events `{t:'bt', kind:'capture'|'neutral'|'retake'|'sector'|'overtime'|'low'|'end'}`; medals bt_capture, bt_sector.
+
+### Tuning (bot-only matches, 32 mixed bots, every map, two seeds; `dev/sim-conquest.mjs`, `dev/sim-breakthrough.mjs`)
+- Bots die often: about 60 deaths a minute a side on a Ground War map, so pools are big (850 tickets for five flags).
+  Conquest: matches of 7-9 minutes on the Ground War maps and 9-12 on the island parts, both sides winning
+  (6 / 8 over 14), 7-49 flag captures a match, bots on 2.3-3.2 flags a side at any moment, stuck under 0.2 s a bot a
+  minute, host tick 0.45-0.7 ms mean.
+- Breakthrough took the most work. With defenders spawning beside the objectives and attackers at the HQ, no sector
+  ever fell on the islands; with attackers pushing onto the objective (`commit`) and defenders delayed, Ground War
+  sectors fell in under a minute. Shipped: both sides spawn about as far from the objectives (the bands above), a
+  slower capture (16 s), a 12 s lock after a sector falls, and the islands' own `clock` (7 min), `defendDelay` (1.5 s)
+  and bigger pools, and a minute back on the clock for every objective taken. Measured after the merge with
+  destruction: attackers won 4 of 14 and reached the last sector in 5 more, 3-15 minute matches, stuck under 0.25 s
+  a bot a minute, host tick under 0.7 ms mean. Conquest over the same maps: 6 / 8, 7-13 minutes.
+
+### Wire, migration, replays
+- Conquest's block: tickets (ds), every flag packed (`packZone`), stats (cqCaps, oob ds). Breakthrough's: sector,
+  tickets, pool size, overtime and done bits, the end's reason, the lock (ds), the live objectives packed, stats (btCaps,
+  oob ds). The host decoding its own snapshot keeps its exact state (as Headquarters does). `restore` rebuilds both from
+  a guest's view, sector and lock included; Conquest's pool size is not scaled twice (scoreLimit stays the percentage).
+- Replays record the flags (view.points) as any Domination match; the front lines draw from the view's mode block,
+  which shared replay codes leave out, so a shared code shows the flags without the lines.
+
+### HUD, world, menus
+- js/ui/mode-hud.js `_cq` / `_bt` paint the status plate (ticket bars, flags held; the sector, its objectives and the
+  attackers' tickets, the lock and overtime); js/ui/bf-hud.js adds the deploy row on Conquest's death screen, the
+  out-of-bounds plate, and on the minimap the HQs, Breakthrough's lines with the given-up ground washed in each side's
+  colour, and an island part's edge (the minimap frames the part, as the campaign's does). The flag strip shows one chip
+  a flag (up to seven; the renderer's point instances went from six to eight).
+- js/render/bf-fx.js: the front lines (the line ahead in the defenders' colour, the one behind in the attackers') and an
+  island part's edge as glowing ground strips under a low curtain of light; two draw calls.
+- Ground War tab: Conquest and Breakthrough playlists, both in Ground War Quick Play and tickable; the tab's maps now
+  include the islands (only these two modes fit them). Custom and friend rooms offer them on every map that fits.
+  Help cards and videos (`cq`, `bt`), first-time tips, the "Breakline" music theme (js/audio/music-themes.js `bf`),
+  medals, results lines (js/ui/outcome.js: "Their tickets ran out", "Broke through all 3 sectors", "Held at sector 2 of
+  3"), and daily "Play 2 Conquest / Breakthrough matches" (the pool adds every rule set by itself).
+- Tests: `node dev/sim-conquest.mjs [quick]`, `node dev/sim-breakthrough.mjs [quick]`,
+  `python3 dev/ui-bfmodes-test.py [port]`.

@@ -135,7 +135,8 @@ async def main():
             await tap('[data-act="mpTab"][data-tab="groundwar"]')
             if SHOTS: await shots(pg, 'multiplayer-groundwar')
             await tap('[data-act="mpPlaylist"][data-id="gwqp"]')
-            opts, info = await find_and_vote({'huge'}, {'gwtdm', 'gwdom', 'gwhq', 'gwko', 'gwinf'})
+            # Conquest and Breakthrough (ROADMAP 65) also play parts of the battle royale islands.
+            opts, info = await find_and_vote({'huge', 'giant'}, {'gwtdm', 'gwdom', 'cq', 'bt', 'gwhq', 'gwko', 'gwinf'})
             check('  32 players', info['n'] == 32, info['n'])
             await leave()
 

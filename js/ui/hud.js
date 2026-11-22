@@ -14,6 +14,7 @@ import { CpHud } from './cp-hud.js';     // The co-op campaign (docs/CAMPAIGN.md
 import { zmWonderOf } from '../shared/zombies.js';     // Graveyard Shift's wonder weapons go by their own names.
 import { StreakTags } from './streak-tags.js';  // Enemy streaks you can shoot down: ring, health, hits left (roadmap 40).
 import { CuesHud } from './cues-hud.js';        // Visual sound cues (docs/ACCESSIBILITY.md).            // Graveyard Shift layer (docs/ZOMBIES.md).
+import { BF } from '../shared/bf.js';
 import { ModeHud } from './mode-hud.js';    // The modes overhaul's layer (docs/MODES.md).
 import { matchHeader } from './outcome.js';    // End banners say what the results header says.
 import { playlistName } from '../shared/playlist.js';
@@ -154,6 +155,9 @@ const MEDALS = {
   infect: ['Infection', '+100', 1], first_infected: ['Patient Zero', 'Spread it', 2], last_stand: ['Last Stand', 'Outlasted them all', 3],
   survivor: ['Survivor', 'Made it to the end', 2], oic_last: ['Last Gun Standing', 'One round to spare', 3],
   ctl_capture: ['Zone Taken', `+${SCORE.capture}`, 2], ctl_hold: ['Held the Line', '+150', 2], grind_bank: ['Tags Banked', 'Points on the board', 2],
+  // Conquest and Breakthrough (ROADMAP 65).
+  cq_capture: ['Flag Captured', `+${BF.cq.capScore}`, 2], cq_neutral: ['Flag Neutralised', `+${BF.cq.neutralScore}`, 1],
+  bt_capture: ['Objective Taken', `+${BF.bt.capScore}`, 2], bt_sector: ['Sector Taken', `+${BF.bt.sectorScore}`, 3],
 };
 // A medal's name for other screens (the match history's detail); null for one the HUD does not name.
 export const medalTitle = id => MEDALS[id]?.[0] ?? null;
@@ -390,6 +394,7 @@ const zmWeaponName = id => zmWonderOf(id)?.name ?? weaponName(id);
 // What the feed names for a kill: a gun id alone would credit the gun for a grenade or streak kill.
 export function killCause(e) {
   if (e.equip === 'bomb') return 'Bomb';
+  if (e.equip === 'oob') return 'Out of bounds';      // Conquest and Breakthrough's boundary (js/sim/bf-kit.js).
   if (e.equip) return LETHALS[e.equip]?.name ?? e.equip;
   if (typeof e.streak === 'string') return STREAKS[e.streak]?.name ?? e.streak;
   return weaponName(e.weapon);
@@ -465,6 +470,7 @@ export class HUD {
   onBrCommand(cb) { this.brHud.onCommand(cb); }
   // Extraction buttons (call exfil, take a contract at a phone).
   onExCommand(cb) { this.exHud.onCommand(cb); }
+  onBfCommand(cb) { this.modeHud.bf.onCommand(cb); }     // Conquest's deploy pick (js/ui/bf-hud.js).
   // Graveyard Shift's use button (a gate, a wall-buy, the crate, a perk machine).
   onZmCommand(cb) { this.zmHud.onCommand(cb); }
   onCpCommand(cb) { this.cpHud.onCommand(cb); }
@@ -764,7 +770,7 @@ export class HUD {
 
   // Call before each match.
   // `training` (Custom > Training): the firing range's readout and armory on an ordinary map.
-  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [], training = null, title = null } = {}) {
+  prepare({ mapId = DEFAULT_MAP, scoreLimit = SCORE_LIMIT, timeLimit = TIME_LIMIT, roster = [], mode = 'tdm', localId = null, intro = true, mods = [], training = null, title = null, seed = 0 } = {}) {
     this.map = MAPS[mapId] ?? this.map;
     this.introTitle = title;          // A tournament round's name over the map card ("Semi-final vs [VXN] Vexen").
     this.scoreLimit = scoreLimit;
@@ -774,7 +780,7 @@ export class HUD {
     // The rule set it plays by, e.g. 'dom'; a modes-overhaul mode is drawn as the rule set it looks like (its `look`),
     // and its own layer (this.modeHud) says the rest.
     this.mode = MODES[mode]?.look ?? modeRules(mode);
-    this.modeHud.prepare(mode, mods);
+    this.modeHud.prepare(mode, mods, { map: this.map, seed });     // Conquest and Breakthrough read their layout from the seed.
     this.ffa = isFfa(mode);             // Every player for themselves: scorebar, board and banners rank players.
     this.gun = this.mode === 'gun';
     this.snd = this.mode === 'snd';           // Search and Destroy: rounds, the bomb, spectating instead of respawns.
@@ -796,7 +802,8 @@ export class HUD {
     spectate.reset();
     this.specCard.prepare(roster);
     this.boardMode.textContent = playlistName(mode, mods);
-    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : this.ctf ? `first to ${scoreLimit} captures` : `first to ${scoreLimit}`}`;
+    const bfGoal = this.modeHud.bf?.on ? this.modeHud.goal(scoreLimit) : null;
+    this.boardGoal.textContent = `${this.map?.name ?? ''}, ${this.gun ? `${scoreLimit} guns to win` : this.snd ? `first to ${scoreLimit} rounds` : this.ctf ? `first to ${scoreLimit} captures` : bfGoal ?? `first to ${scoreLimit}`}`;
     this.el.classList.toggle('ffa-on', this.ffa);
     this.gunEl.hidden = !this.gun;
     this.#oneGunControls(this.gun);
@@ -897,14 +904,14 @@ export class HUD {
     const roundTime = `${Math.floor(this.timeLimit / 60)}:${pad2(this.timeLimit % 60)}`;
     const rules = this.gun ? `${GUN_LADDER.length} guns<i></i>${minutes} min`
       : this.snd ? `First to ${this.scoreLimit} rounds<i></i>${roundTime} a round`
-      : this.ctf ? `First to ${this.scoreLimit} captures<i></i>${minutes} min` : `First to ${this.scoreLimit}<i></i>${minutes} min`;
+      : this.ctf ? `First to ${this.scoreLimit} captures<i></i>${minutes} min` : this.modeHud.rulesLine(minutes) ?? `First to ${this.scoreLimit}<i></i>${minutes} min`;
     this.introEl.innerHTML = `
       ${this.ffa ? field(roster.slice(0, half), 'ours', 'Every player') : team(myTeam, 'ours')}
       <div class="in-mid">
         <div class="in-card">
           <div class="in-pic" style="background-image:url(assets/maps/${esc(map?.id ?? mapId)}.jpg)"></div>
           <div class="in-mode">${glyph(`mode:${mode}`, 15, 'gl in-mode-icon')}<span>${esc(m?.name ?? '')}</span></div>
-          <h2>${esc(map?.name ?? '')}</h2>
+          <h2>${esc(this.modeHud.bf?.layout?.sub ? this.modeHud.bf.layout.name : map?.name ?? '')}</h2>
           <p class="in-rules">${rules}</p>
           ${this.introTitle ? `<p class="in-tn">${glyph('ui:cup', 13, 'gl')}<span>${esc(this.introTitle)}</span></p>` : ''}
         </div>
@@ -3175,7 +3182,8 @@ export class HUD {
     let won = winner === myTeam, at = 0;
     if (this.ffa && view) { at = ffaRank(view).findIndex(p => p.team === myTeam) + 1; won = won || (!drawn && at === 1); }
     const outcome = drawn ? 'draw' : won ? 'win' : 'loss';
-    const head = matchHeader({ modeId: this.modeId, outcome, scores: view?.scores, myTeam, roster: view?.players ?? [], localId: view?.localId, practice: !!this.training });
+    const bf = (view?.obj ?? view?.points?.obj)?.bf ? (view.obj ?? view.points.obj) : null;     // Conquest and Breakthrough: how it ended.
+    const head = matchHeader({ modeId: this.modeId, outcome, scores: view?.scores, myTeam, roster: view?.players ?? [], localId: view?.localId, practice: !!this.training, bfView: bf });
     this.endEl.dataset.result = this.ffa ? (won ? 'win' : drawn || at <= 3 ? 'draw' : 'loss') : outcome;
     this.endEl.querySelector('b').textContent = head.word;
     // Search and Destroy: the score in rounds and how the last one went.
@@ -3227,7 +3235,8 @@ export class HUD {
     let sx = this.mmX, sz = this.mmZ;
     // Battle royale: the minimap shows your surroundings, not the whole 400 m map (js/ui/br-hud.js); everything below
     // draws in map metres times sx, so a translate and a bigger scale are all it takes.
-    const zoomer = this.br && this.brHud.on ? this.brHud : this.ex && this.exHud.on ? this.exHud : this.cp && this.cpHud.on && this.map?.size === 'giant' ? this.cpHud : null;
+    const zoomer = this.br && this.brHud.on ? this.brHud : this.ex && this.exHud.on ? this.exHud : this.cp && this.cpHud.on && this.map?.size === 'giant' ? this.cpHud
+      : this.modeHud.bf?.on && this.modeHud.bf.layout?.sub ? this.modeHud : null;     // Conquest and Breakthrough on an island part: that part.
     const zoom = zoomer ? zoomer.miniWindow(view, me, this.mmCanvas.width, this.mmCanvas.height) : null;
     if (zoom) { zoomer.drawMiniBase(g, zoom); g.save(); g.translate(-zoom.ox * zoom.k, -zoom.oz * zoom.k); sx = sz = zoom.k; }
     else g.drawImage(this.mmBase, 0, 0);
@@ -3505,7 +3514,8 @@ export class HUD {
     }
     if (!uses) return;
     // Control's zones and Grind's banks are two; Domination has the map's flags.
-    const count = this.modeHud.on && mode === 'dom' ? 2 : mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;
+    // Conquest's flags and Breakthrough's objectives: the layout's count (js/ui/bf-hud.js).
+    const count = this.modeHud.on && mode === 'dom' ? (this.modeHud.chips() ?? 2) : mode === 'dom' ? (this.map.points?.dom?.length ?? 3) : 1;
     for (let i = 0; i < count; i++) {
       const chip = document.createElement('span');
       chip.className = 'o-chip';
@@ -3532,6 +3542,8 @@ export class HUD {
     if (this.objNodes.length && points) {
       const n = Math.min(points.length, this.objNodes.length);
       for (let i = 0; i < n; i++) this.#paintPoint(this.objNodes[i].chip, points[i], i, me.team);
+      // Breakthrough's sector with one objective leaves the second chip empty: hidden.
+      if (this.modeHud.bf?.on) for (let i = 0; i < this.objNodes.length; i++) { const c = this.objNodes[i].chip; if (c.gone !== (i >= n)) { c.gone = i >= n; c.root.classList.toggle('bf-gone', c.gone); } }
     }
     this.#updateMeter(view, me, c, points);
     this.#updateHardTimer(view, c);
