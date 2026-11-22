@@ -635,8 +635,8 @@ async def run_saltmere(browser, vw, vh, failures, errors):
     except Exception: failures.append(f'{tag}: the font was not filled')
     await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, f = R.L.relics[0], me = m.sim.byId.get(m.localId);
       for (let k = 0; k < 5; k++) {{ const s = R.horde.find(q => !q.alive && (q.zFree ?? 0) <= m.sim.time) ?? R.horde.find(q => !q.alive); R._raise(s, 0, {{ x: f.x + 2 + (k % 2), z: f.z - 2 - (k % 3) * 0.6 }}); m.sim._damage(s, me, s.hp + 10, 'ar', 3); }} }})()""")
-    try: await pg.wait_for_function(f"/^0\\/3 . 5\\/12/.test({chip} ?? '')", timeout=15000)
-    except Exception: failures.append(f'{tag}: the round plate does not show the souls 5/12: ' + str(await ev(chip)))
+    try: await pg.wait_for_function(f"import('/js/shared/zombies.js').then(Z => new RegExp('^0/3 . 5/' + Z.ZE.quest.souls).test({chip} ?? ''))", timeout=15000)
+    except Exception: failures.append(f'{tag}: the round plate does not show the souls 5 of the font\'s: ' + str(await ev(chip)))
     await pg.wait_for_timeout(700)
     await shot('04-font-drinks')
     # All three full (on the host), then the bell: the Ferryman rises up the nave, its bar, its dive.
