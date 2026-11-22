@@ -81,6 +81,8 @@ export class Match {
       roster: this.roster, map: this.map, seed: this.seed,
       scoreLimit: this.scoreLimit, timeLimit: this.timeLimit, mode: this.mode, mods: this.mods ?? [], training: this.training ?? null,
     });
+    // The host warms the engine up on the step that builds the nav grid (Sim._warmUp), so the first live seconds do not hitch.
+    this.sim.warm = !!this.isHost;
     // The host's view is a fresh 30 Hz local copy, so it needs far less smoothing than a 15 Hz network stream.
     this.telemetry = new MatchTelemetry({ localId: this.localId });
     this.killcam = new Killcam({ renderer: this.renderer, localId: this.localId });
@@ -588,6 +590,7 @@ export class Match {
     this.sim = Sim.fromSnapshot(view, this.roster, {
       map: this.map, seed: this.seed, timeLimit: this.timeLimit, scoreLimit: this.scoreLimit, gone: goneIds, mods: this.mods ?? [],
       br: this.sim.br ?? null,      // The guest's battle royale mirror: loot table and the host's last backup.
+      warm: true,                   // A new host's engine is as cold as a match start (Sim._warmUp).
     });
     this.isHost = true;
     this.hostId = this.localId;

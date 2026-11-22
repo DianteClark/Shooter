@@ -46,6 +46,23 @@ export class NavGrid {
     if (n > BIG_CELLS) this._buildSectors();
   }
 
+  // A copy for a throwaway sim on a copy of the map (Sim._warmUp): the tactical points, indexes and sector graph are
+  // shared (nothing changes them after the build), everything a match can change (blocked cells as walls break or
+  // doors open, turret danger, regions reopened) is its own. The search scratch is shared too: searches only compare
+  // stamps with their own id, so `join` hands the id counter back and the next search here starts above any stamp
+  // the copy wrote.
+  fork(map) {
+    const f = Object.create(NavGrid.prototype);
+    Object.assign(f, this);
+    f.map = map;
+    f.blocked = this.blocked.slice();
+    f.danger = this.danger.map(d => d.slice());
+    if (this.regionOf) f.regionOf = this.regionOf.slice();
+    return f;
+  }
+
+  join(fork) { this.search = Math.max(this.search, fork.search); }
+
   // Each movement-blocking wall marks the cells whose centre is within CLEARANCE of it: the same test the old
   // every-cell-against-every-wall loop made, run only over the cells near each wall.
   _buildBlocked() {

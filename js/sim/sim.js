@@ -5,7 +5,7 @@ import { LETHALS, normalizeLoadout, PERK_IDS, PERKS, SCORE, STREAK_DENY_REASONS,
 import { FFA_MAX, FFA_TEAM, GOLDEN_ID, MAX_HP, PLAYER_RADIUS, RESPAWN_TIME, SECONDARY_IDS, SIM_HZ, SNAPSHOT_EVERY, SPAWN_PROTECT, TEAM_SIZE, WEAPON_IDS } from '../shared/constants.js';
 import { hasLineOfSight, raycastMap, rayCircle, wallsInBox, wallScratch } from '../shared/geometry.js';
 import { MAPS, DEFAULT_MAP } from '../shared/map.js';
-import { EX, EX_AI_TEAM, GUN_LADDER, gunLoadout, MODES, playersFor, teamSizeFor } from '../shared/modes.js';
+import { EX, EX_AI_TEAM, GUN_LADDER, gunLoadout, MODES, modeFitsMap, playersFor, teamSizeFor } from '../shared/modes.js';
 import { attachmentsFor, NO_ATTACHMENTS, packKit, unpackKit } from '../shared/attachments.js';
 import { rayDamage, WEAPONS } from '../shared/weapons.js';
 import { V10_BOT_PRIMARIES } from '../shared/weapons-v10.js';
@@ -35,6 +35,20 @@ import { cleanFinisher, FINISHER_IDS, OPERATOR_FINISHER_IDS } from '../shared/fi
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
 const WARMUP = 3;
+// Sim._warmUp: the throwaway match at load runs at most this many ticks, or this much wall time.
+const WARM_TICKS = 240, WARM_MS = 350;
+// A copy of a map for a throwaway sim: its own walls (destruction breaks them, Bulwarks and Graveyard Shift's fences
+// are pushed onto the list) and breakables pointing at those walls; everything else (layout, regions, caches that
+// never change) shared.
+function cloneMap(map) {
+  const out = Object.create(Object.getPrototypeOf(map), Object.getOwnPropertyDescriptors(map));
+  const copy = new Map();
+  out.walls = map.walls.map(w => { const c = { ...w }; copy.set(w, c); return c; });
+  if (map.breakables) out.breakables = map.breakables.map(p => ({ ...p, wall: copy.get(p.wall) ?? { ...p.wall } }));
+  out._cover = new Map();
+  out._zmDoors = map._zmDoors ? map._zmDoors.map(w => copy.get(w) ?? { ...w }) : null;
+  return out;
+}
 const HISTORY = 12;              // Ring of past positions: ~400 ms at 30 Hz.
 const MAX_REWIND = 0.3;
 
@@ -646,6 +660,10 @@ export class Sim {
     this._onEqDamage = this._onEqDamage.bind(this);
     this.pathBudget = 0;
     this.nav = null;     // Built on first step; guests only decode snapshots and never need it.
+    // The host sets this (js/game/match.js): the step that builds the nav grid also plays a throwaway match for a moment
+    // (see _warmUp), so the first live seconds do not run the bot code cold. Nothing of it reaches this match.
+    this.warm = false;
+    this.warmMs = 0;
     // Per-guest snapshots (encodeSnapshotFor, eventsFor): on for maps past INTEREST_AREA only; see setInterest.
     this.interest = this.map.width * this.map.height > INTEREST_AREA;
     this._encodes = 0;
@@ -972,6 +990,38 @@ export class Sim {
     let stagger = 0;
     for (const p of this.players) if (p.isBot && !p.dummy) p.bot = new BotBrain(this, p, stagger++);
     this.rules?.onNav?.();     // Rules that precompute from the nav grid do it here, on the step that already builds it.
+    if (this.warm) this._warmUp();
+  }
+
+  // Match load, on the host: the first live ticks used to run every bot's think, drive, path search and the gun and
+  // movement code for the first time at once, in the engine's slowest tier (11-25 ms for the first live tick, and a
+  // landing in battle royale the same). This plays a throwaway bot match of the same mode on a copy of the map (battle
+  // royale: Conquest on the same map, where everyone is on the ground from the start) for WARM_TICKS ticks or WARM_MS
+  // of wall time, so the engine has compiled that code before anyone is watching. The copy has its own walls, breakables
+  // and blocked cells and its own random stream; nothing it does reaches this sim, so the match is the same with or
+  // without it (replays, host migration and the tests do not see it).
+  _warmUp() {
+    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+    try {
+      let mode = this.modeId;
+      if (MODES[mode]?.br) mode = modeFitsMap(this.map, 'cq') ? 'cq' : null;
+      if (!mode || mode === 'range' || this.training) return;
+      const map = cloneMap(this.map);
+      const seed = 0x5eed;      // Its own stream: never a draw from this match's.
+      const roster = buildRoster([], { botSkill: 'mixed', mode, mapId: this.map.id, seed });
+      const shadow = new Sim({ roster, map, seed, mode });
+      shadow.nav = this.nav.fork(map);
+      let stagger = 0;
+      for (const p of shadow.players) if (p.isBot && !p.dummy) p.bot = new BotBrain(shadow, p, stagger++);
+      shadow.rules?.onNav?.();
+      shadow.phaseT = STEP / 2;
+      for (let i = 0; i < WARM_TICKS && shadow.phase !== 'ended' && clock() < WARM_MS; i++) { shadow.step(STEP); shadow.events.length = 0; }
+      this.nav.join(shadow.nav);
+    } catch (err) {
+      // A warm-up that trips over something is only a slower start, never a broken match.
+    }
+    this.warmMs = clock();
   }
 
   _tick() {
@@ -2788,6 +2838,7 @@ export class Sim {
       scoreLimit: opts.scoreLimit ?? view.scoreLimit, timeLimit: opts.timeLimit,
     });
     sim.rng = mulberry32((seed ^ Math.round(view.t * 1000)) >>> 0);
+    sim.warm = !!opts.warm;       // A new host warms up as a match start does (_warmUp).
     sim.events = [];
     sim.time = view.t;
     sim.tick = Math.round(view.t * SIM_HZ);

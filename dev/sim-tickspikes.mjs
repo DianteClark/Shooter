@@ -10,6 +10,7 @@
 //   --seed=N        match seed (default 5)
 //   --spike=MS      a tick at or over this many ms is a spike (default 4)
 //   --top=N         spikes listed per scenario (default 6), functions per spike (5)
+//   --cold          no warm-up at load (Sim.warm off, as before build NEXT); the match itself must be the same
 //   --no-profile    timing only (the sampler costs a few % and adds a little jitter)
 //   --interval=US   sampling interval (default 100 us)
 //   --expose-gc     (node flag: node --expose-gc dev/sim-tickspikes.mjs) runs a full collection between ticks every
@@ -151,6 +152,7 @@ const yieldLoop = () => new Promise(r => setImmediate(r));
 async function runOnce(name, sc) {
   const roster = buildRoster([], { botSkill: 'mixed', mode: sc.mode, mapId: sc.map, seed: SEED });
   const sim = new Sim({ roster, map: sc.map, seed: SEED, mode: sc.mode });
+  sim.warm = !args.includes('--cold');      // As the game's host does (js/game/match.js).
   const l0 = performance.now();
   sim.step(STEP);                       // The match load: nav grid, bots, the rules' onNav.
   const loadMs = performance.now() - l0;
@@ -158,7 +160,7 @@ async function runOnce(name, sc) {
   sim.drainEvents();
   const secs = Number(SECS ?? sc.secs);
   const end = Math.round(secs * SIM_HZ);
-  const wall = [], perf0 = [], hr = [], live = [];
+  const wall = [], perf0 = [], hr = [], live = [], cpu = [];
   const ev = { kill: 0, obj: 0, zkill: 0 };
   let stuck = 0, h = 0x811c9dc5;
   const hist = new Map();
@@ -169,9 +171,10 @@ async function runOnce(name, sc) {
   for (let i = 0; i < end && sim.phase !== 'ended'; i++) {
     keep?.();
     if (FORCE_GC && i % GC_EVERY === GC_EVERY - 1) globalThis.gc();
-    const h0 = nowUs(), w0 = performance.now();
+    const c0 = process.cpuUsage(), h0 = nowUs(), w0 = performance.now();
     sim.step(STEP);
-    const w1 = performance.now(), h1 = nowUs();
+    const w1 = performance.now(), h1 = nowUs(), c1 = process.cpuUsage(c0);
+    cpu.push((c1.user + c1.system) / 1000);
     wall.push(w1 - w0); perf0.push(w0); hr.push([h0, h1]); live.push(sim.phase === 'live' ? 1 : 0);
     for (const e of sim.drainEvents()) {
       if (e.t === 'kill') { ev.kill++; if (sim.mode === 'zm') ev.zkill++; }
@@ -225,7 +228,7 @@ async function runOnce(name, sc) {
     }
   }
   const liveTicks = live.reduce((a, b) => a + b, 0);
-  return { name, wall, busy, gcIn, live, detail, loadMs, simMin: sim.time / 60, hash: h.toString(16), players: sim.players.length,
+  return { name, wall, cpu, busy, gcIn, live, detail, loadMs, warmMs: sim.warmMs ?? 0, simMin: sim.time / 60, hash: h.toString(16), players: sim.players.length,
     kills: ev.kill, obj: ev.obj, stuck: stuck / Math.max(1, sim.players.length) / Math.max(1, liveTicks / SIM_HZ / 60) };
 }
 
@@ -236,28 +239,31 @@ const f = (v, d = 2) => v.toFixed(d);
 // what the game itself costs (the same match each time; the neighbours' load and the OS are not the same twice).
 function combine(name, sc, runs) {
   const n = Math.min(...runs.map(r => r.wall.length));
-  const minWall = new Array(n), minBusy = new Array(n), from = new Array(n);
+  const minWall = new Array(n), minBusy = new Array(n), from = new Array(n), minCpu = new Array(n);
   for (let i = 0; i < n; i++) {
     let b = 0;
     for (let r = 1; r < runs.length; r++) if (runs[r].wall[i] < runs[b].wall[i]) b = r;
     minWall[i] = runs[b].wall[i]; from[i] = b;
     minBusy[i] = Math.min(...runs.map(r => r.busy[i]));
+    minCpu[i] = Math.min(...runs.map(r => r.cpu[i]));
   }
   const same = runs.every(r => r.hash === runs[0].hash);
   const firstLive = runs[0].live.indexOf(1);
   const mean = a => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
   const res = { name, mode: sc.mode, map: sc.map, runs: runs.length, same, ticks: n, simMin: runs[0].simMin,
-    load: pct(runs.map(r => r.loadMs), 0.5),
+    load: pct(runs.map(r => r.loadMs), 0.5), warm: pct(runs.map(r => r.warmMs), 0.5), hash: runs[0].hash,
     // Single runs (medians over runs) and the per-tick minimum.
     one: { mean: pct(runs.map(r => mean(r.wall)), 0.5), p99: pct(runs.map(r => pct(r.wall, 0.99)), 0.5), p999: pct(runs.map(r => pct(r.wall, 0.999)), 0.5), worst: pct(runs.map(r => Math.max(...r.wall)), 0.5) },
     min: { mean: mean(minWall), p99: pct(minWall, 0.99), p999: pct(minWall, 0.999), worst: Math.max(...minWall), spikes: minWall.filter(v => v >= SPIKE).length,
       firstLive: firstLive >= 0 ? minWall[firstLive] : 0 },
+    cpu: { mean: mean(minCpu), p99: pct(minCpu, 0.99), p999: pct(minCpu, 0.999), worst: Math.max(...minCpu) },
     run: PROFILE ? { p999: pct(minBusy, 0.999), worst: Math.max(...minBusy) } : null,
     kills: runs[0].kills, obj: runs[0].obj, stuck: runs[0].stuck };
-  console.log(`\n== ${name} (${sc.mode} on ${sc.map}, seed ${SEED}): ${n} ticks (${f(res.simMin, 1)} sim min), ${runs.length} run${runs.length > 1 ? 's' : ''}${runs.length > 1 ? (same ? ', the same match each time' : ', NOT THE SAME MATCH (hashes differ)') : ''}, load ${f(res.load, 0)} ms`);
+  console.log(`\n== ${name} (${sc.mode} on ${sc.map}, seed ${SEED}): ${n} ticks (${f(res.simMin, 1)} sim min), ${runs.length} run${runs.length > 1 ? 's' : ''}${runs.length > 1 ? (same ? ', the same match each time' : ', NOT THE SAME MATCH (hashes differ)') : ''}, load ${f(res.load, 0)} ms (warm-up ${f(res.warm, 0)}), fingerprint ${res.hash}`);
   console.log(`   one run (median): mean ${f(res.one.mean)}  p99 ${f(res.one.p99)}  p99.9 ${f(res.one.p999)}  worst ${f(res.one.worst)} ms`);
   console.log(`   per-tick min:     mean ${f(res.min.mean)}  p99 ${f(res.min.p99)}  p99.9 ${f(res.min.p999)}  worst ${f(res.min.worst)} ms, first live tick ${f(res.min.firstLive)}, ticks >= ${SPIKE} ms: ${res.min.spikes}` +
     (res.run ? `   | running (sampled): p99.9 ${f(res.run.p999)} worst ${f(res.run.worst)}` : ''));
+  console.log(`   process CPU, per-tick min (counts the collector's and compiler's threads too; little affected by the neighbours): mean ${f(res.cpu.mean)}  p99 ${f(res.cpu.p99)}  p99.9 ${f(res.cpu.p999)}  worst ${f(res.cpu.worst)}`);
   if (STATS) console.log(`   bots: kills ${res.kills}  objective ${res.obj}  stuck ${f(res.stuck)} bot-s/min`);
   // The slowest ticks by their minimum, each with the profile of its cleanest run.
   const order = minWall.map((v, i) => i).sort((a, b) => minWall[b] - minWall[a]);
@@ -311,8 +317,8 @@ for (const n of names) {
   all.push(combine(n, SCENARIOS[n], runs));
 }
 rmSync(tmp, { recursive: true, force: true });
-console.log(`\nscenario       runs   mean    p99  p99.9  worst  first-live  spikes   (per-tick min over runs; ms)`);
-for (const r of all) console.log(`${r.name.padEnd(14)} ${String(r.runs).padStart(4)} ${f(r.min.mean).padStart(6)} ${f(r.min.p99).padStart(6)} ${f(r.min.p999).padStart(6)} ${f(r.min.worst, 1).padStart(6)} ${f(r.min.firstLive, 1).padStart(10)} ${String(r.min.spikes).padStart(7)}` +
+console.log(`\nscenario       runs   mean    p99  p99.9  worst  first-live  spikes  | cpu p99.9  worst   (per-tick min over runs; ms)`);
+for (const r of all) console.log(`${r.name.padEnd(14)} ${String(r.runs).padStart(4)} ${f(r.min.mean).padStart(6)} ${f(r.min.p99).padStart(6)} ${f(r.min.p999).padStart(6)} ${f(r.min.worst, 1).padStart(6)} ${f(r.min.firstLive, 1).padStart(10)} ${String(r.min.spikes).padStart(7)}  | ${f(r.cpu.p999).padStart(9)} ${f(r.cpu.worst, 1).padStart(6)}` +
   `${STATS ? `   kills ${r.kills} obj ${r.obj} stuck ${f(r.stuck)}` : ''}${r.same ? '' : '  (runs differ!)'}`);
 const json = opt('json', null);
 if (json) writeFileSync(json, JSON.stringify(all.map(({ topPhases, topFns, ...r }) => ({ ...r, topPhases, topFns })), null, 1));
