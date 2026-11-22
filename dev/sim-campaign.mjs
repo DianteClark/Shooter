@@ -5,13 +5,14 @@
 //   node dev/sim-campaign.mjs --quick    units, then every mission on Regular once
 //   node dev/sim-campaign.mjs --full     as the default, plus every mission on Veteran
 //   node dev/sim-campaign.mjs --units    the units alone
+//   --missions=9,10                      play only these missions (by number)
 import { Sim, buildRoster } from '../js/sim/sim.js';
 import { MAPS } from '../js/shared/map.js';
 import { SIM_HZ } from '../js/shared/constants.js';
 import { NavGrid } from '../js/sim/nav.js';
 import { hasLineOfSight } from '../js/shared/geometry.js';
 import { objOf } from '../js/sim/rules.js';
-import { MISSIONS, CP, CP_DIFFS, cpCode, cpDecode, missionLines, cpStars, cpXp, recordCampaign, cleanCampaign, campaignVetAll, missionOpen } from '../js/shared/campaign.js';
+import { MISSIONS, CP, CP_DIFFS, cpCode, cpDecode, missionLines, cpStars, cpXp, recordCampaign, cleanCampaign, campaignVetAll, missionOpen, OPERATIONS, opOf } from '../js/shared/campaign.js';
 import { blankSave, encodeSave, decodeSave } from '../js/shared/progression.js';
 import { modeFitsMap, MODES } from '../js/shared/modes.js';
 
@@ -40,14 +41,14 @@ const squadOf = sim => sim.players.filter(p => p.team === 0 && !p.ai);
 const jump = (sim, pred) => { until(sim, () => sim.rules.state === 1, 20); const i = sim.rules.m.steps.findIndex(pred); sim.rules._begin(i); return i; };
 const killAll = sim => { for (const p of squadOf(sim)) if (p.alive) { p.downed = false; sim._selfKill(p, 'bleed'); } };
 
-function units() {
+async function units() {
   console.log('units');
   // Codes, data.
-  check(MISSIONS.length >= 6 && MISSIONS.length <= 8, `${MISSIONS.length} missions`);
+  check(MISSIONS.length === 12 && OPERATIONS.length === 2 && OPERATIONS[1].from === 8 && OPERATIONS[1].to === 12 && MISSIONS.every((m, k) => m.op === opOf(k).id && m.n === k + 1), `${MISSIONS.length} missions in ${OPERATIONS.length} operations`);
   check(MISSIONS.every((m, k) => [0, 1, 2].every(d => { const c = cpDecode(cpCode(k, d)); return c.k === k && c.diff === d; })), 'mission and difficulty ride the scoreLimit both ways');
   check(!Object.values(MAPS).some(map => modeFitsMap(map, 'cp')) && MODES.cp.noMods, 'no map offers the campaign mode to the pickers; it takes no modifiers');
   const kinds = new Set(MISSIONS.flatMap(m => m.steps.map(s => s.type)));
-  check(['hack', 'defend', 'escort', 'kill', 'plant', 'chase', 'boss', 'extract', 'goto'].every(t => kinds.has(t)) && MISSIONS.some(m => m.steps.some(s => s.stealth)), `every objective kind is used (${[...kinds].join(', ')}), and a stealth section`);
+  check(['hack', 'defend', 'escort', 'kill', 'plant', 'chase', 'boss', 'extract', 'goto', 'pursue'].every(t => kinds.has(t)) && MISSIONS.some(m => m.steps.some(s => s.stealth)), `every objective kind is used (${[...kinds].join(', ')}), and a stealth section`);
   check(MISSIONS.every(m => missionLines(m).length >= 3 && m.brief.length >= 2 && m.bonus), 'every mission has briefing cards, radio lines and a bonus objective');
   for (const m of MISSIONS) {
     const map = MAPS[m.map], nav = new NavGrid(map);
@@ -75,8 +76,11 @@ function units() {
     check(a.first && !b.first && save.cp.m1[0] === 6 && save.cp.m1[1] === 2 && save.cp.m1[2] === 380, `the save keeps cleared difficulties, best stars and best time (${JSON.stringify(save.cp.m1)})`);
     check(missionOpen(save.cp, 1) && !missionOpen(save.cp, 2), 'clearing a mission opens the next');
     let vet = null;
-    for (const m of MISSIONS) vet = recordCampaign(save, { id: m.id, diff: 2, stars: 3, secs: 300 });
-    check(vet.vetAll && campaignVetAll(save.cp) && !recordCampaign(save, { id: 'm1', diff: 2 }).vetAll, 'the last Veteran clear reports the full set once');
+    for (const m of MISSIONS.slice(0, 8)) vet = recordCampaign(save, { id: m.id, diff: 2, stars: 3, secs: 300 });
+    check(vet.vetAll && !vet.vetAll2 && campaignVetAll(save.cp) && !campaignVetAll(save.cp, 1) && !recordCampaign(save, { id: 'm1', diff: 2 }).vetAll, 'the last Veteran clear of Nightrail reports its full set once');
+    check(missionOpen(save.cp, 8) && !missionOpen(save.cp, 9), 'Operation Starfall opens once Nightrail\'s last mission is cleared');
+    for (const m of MISSIONS.slice(8)) vet = recordCampaign(save, { id: m.id, diff: 2, stars: 3, secs: 300 });
+    check(vet.vetAll2 && !vet.vetAll && campaignVetAll(save.cp, 1) && !recordCampaign(save, { id: 'm9', diff: 2 }).vetAll2, 'and Starfall\'s last reports its own set once');
     const back = decodeSave(encodeSave(save));
     check(back.ok && JSON.stringify(back.save.cp) === JSON.stringify(cleanCampaign(save.cp)), 'the campaign block survives a save code');
     const plain = blankSave();
@@ -201,6 +205,102 @@ function units() {
     check(!!R.alarm, 'an unsuppressed shot near a watchman is the alarm');
   }
 
+  // Operation Starfall's own mechanics.
+  {
+    // The night: everyone's sight cut until a flare goes up; the flare on the wire; it burns out.
+    const k = MISSIONS.findIndex(m => m.night);
+    const { sim } = makeSim(k, 1, 21);
+    const R = sim.rules;
+    jump(sim, s => s.type === 'defend');
+    run(sim, 1);
+    const bot = sim.players.find(p => p.bot && p.alive && p.team === 0);
+    check(R.night && Math.abs(bot.bot.sightK - CP.nightSight) < 1e-6, `the night cuts the bots' sight (${bot.bot.sightK})`);
+    const ev = [];
+    R._flare();
+    run(sim, 0.2, e => ev.push(e));
+    check(ev.some(e => e.t === 'cpflare') && R.flareT > CP.flare - 1 && bot.bot.sightK === 1, 'a flare lights the field');
+    const view = objOf(sim.decodeSnapshot(JSON.parse(JSON.stringify(sim.encodeSnapshot())), null));
+    check(view?.flareT > CP.flare - 1 && view.night, `and rides the wire (${view?.flareT})`);
+    run(sim, CP.flare);
+    check(R.flareT === 0 && sim.players.filter(p => p.bot && p.alive && p.team === 0).every(p => Math.abs(p.bot.sightK - CP.nightSight) < 1e-6), 'then burns out');
+  }
+  {
+    // The hostage: held at her spot, never finished; an alarm before she is free starts the clock, run out it fails;
+    // freed, the clock stops and the bonus holds only if nobody raised the alarm first.
+    const k = MISSIONS.findIndex(m => m.hostage);
+    const m = MISSIONS[k];
+    const { sim } = makeSim(k, 1, 22, [{ id: 'h1', name: 'Host', team: 0 }]);
+    const R = sim.rules;
+    until(sim, () => R.state === 1, 20);
+    freeze(sim);
+    run(sim, 0.5);
+    const vip = R._vip(), spot = R._pt(m.vip.at);
+    check(vip?.alive && Math.hypot(vip.ps.x - spot.x, vip.ps.z - spot.z) < 3, 'the hostage is held at her spot from the start');
+    const { canFinish } = await import('../js/sim/finishers.js');
+    const foe = sim.players.find(p => p.team === CP.team && p.alive);
+    check(!R.noFinish || R.noFinish(foe, vip), 'nobody can finish the hostage');
+    const ev = [];
+    R._raiseAlarm(vip.ps.x, vip.ps.z);
+    run(sim, 0.2, e => ev.push(e));
+    check(R.execT > 0 && Math.abs(R.timer - m.hostage.clock * R.D.timer) < 1 && !R.bonusOk, `an alarm before she is free starts the clock (${R.timer.toFixed(1)} s) and costs the bonus`);
+    run(sim, m.hostage.clock + 1, e => ev.push(e));
+    check(ev.some(e => e.t === 'cpfail' && e.why === 'hostage'), 'run out, they moved her: the mission fails');
+    void canFinish;
+    const { sim: s2 } = makeSim(k, 1, 23, [{ id: 'h1', name: 'Host', team: 0 }]);
+    const R2 = s2.rules;
+    jump(s2, s => s.hostage);
+    freeze(s2);
+    R2._raiseAlarm(10, 10);
+    const me = s2.byId.get('h1'), site = R2.sites[0];
+    for (const p of squadOf(s2)) place(p, 2, 2);
+    place(me, site.x, site.z);
+    until(s2, () => R2.freed, 10);
+    check(R2.freed && R2.execT === 0 && R2.cur.type === 'escort' && R2.state === 1, 'freed in time: the clock stops and the escort starts');
+  }
+  {
+    // The pursuit: he shrugs off fire on the run; left alone too long, he is lost.
+    const k = MISSIONS.findIndex(m => m.steps.some(s => s.type === 'pursue'));
+    const { sim } = makeSim(k, 1, 24, [{ id: 'h1', name: 'Host', team: 0 }]);
+    const R = sim.rules;
+    jump(sim, s => s.type === 'pursue');
+    freeze(sim);
+    run(sim, 0.5);
+    const T = R.target, me = sim.byId.get('h1');
+    check(T?.p?.alive && T.route.length >= 3, `the courier is up with his route (${T?.route.length} stops)`);
+    for (const p of squadOf(sim)) place(p, T.p.ps.x + 6, T.p.ps.z);
+    run(sim, 1.5);
+    check(T.moving && T.started, 'he runs once the squad is on him');
+    const hp = T.p.hp;
+    sim._damage(T.p, me, 60, 'ar', 8);
+    check(T.p.hp === hp, 'bullets do not stop him on the run');
+    const ev = [];
+    const far = R._pt(MISSIONS[k].insert);
+    for (const p of squadOf(sim)) place(p, far.x, far.z);
+    for (let i = 0; i < (CP.trail + 3) * SIM_HZ && !ev.some(e => e.t === 'cpfail'); i++) { for (const p of squadOf(sim)) place(p, far.x, far.z); sim.step(STEP); for (const e of sim.drainEvents()) ev.push(e); }
+    check(ev.some(e => e.t === 'cpfail' && e.why === 'trail') && !R.bonusOk, 'left alone too long, he is lost (and the bonus with him)');
+  }
+  {
+    // The final boss: Vane's salvo (a line of rings walking out toward one of the squad) and the launch clock.
+    const k = MISSIONS.findIndex(m => m.boss?.salvo);
+    const { sim } = makeSim(k, 1, 25);
+    const R = sim.rules;
+    jump(sim, s => s.type === 'boss');
+    freeze(sim);
+    run(sim, 0.5);
+    check(R.boss && Math.abs(R.boss.max - CP.boss.hp * R.D.boss * MISSIONS[k].boss.hp) < 1, `Vane's own pool (${Math.round(R.boss?.max)})`);
+    R.boss.n = 1; R.boss.atk = 0; R.hazards = [];
+    const q = squadOf(sim)[0];
+    place(q, R.boss.p.ps.x + 14, R.boss.p.ps.z);
+    run(sim, 0.1);
+    const hz = R.hazards.filter(h => h.k === 0);
+    const lined = hz.length >= 3 && hz.every((h, i) => i === 0 || h.t > hz[i - 1].t - 1e-6);
+    check(lined, `a salvo: ${hz.length} rings walking out, each landing after the last`);
+    R.timer = 0.3;
+    const ev = [];
+    run(sim, 0.6, e => ev.push(e));
+    check(ev.some(e => e.t === 'cpfail' && e.why === 'time'), 'the launch clock run out fails the mission');
+  }
+
   // Abort: a human ends a failed mission instead of retrying.
   {
     const { sim } = makeSim(0, 0, 8, [{ id: 'h1', name: 'Host', team: 0 }]);
@@ -283,11 +383,13 @@ function playMission(k, diff, seed) {
   return { won, t: R.t, fails: R.fails };
 }
 
-units();
+await units();
 if (args.includes('--units')) { console.log(`\n${failed ? `${failed} FAILED` : 'all passed'} (units only)`); process.exit(failed ? 1 : 0); }
 console.log('missions');
 const runs = [];
+const only = (args.find(a => a.startsWith('--missions='))?.split('=')[1] ?? '').split(',').filter(Boolean).map(Number);
 for (let k = 0; k < MISSIONS.length; k++) {
+  if (only.length && !only.includes(k + 1)) continue;
   runs.push(playMission(k, 1, 1));
   if (!QUICK) { runs.push(playMission(k, 1, 2)); runs.push(playMission(k, 0, 3)); }
   if (FULL) runs.push(playMission(k, 2, 4));

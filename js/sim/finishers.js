@@ -38,6 +38,7 @@ export function finishersOn(sim) {
 export function canFinish(sim, a, v, slack = 0) {
   if (!a || !v || !finishersOn(sim)) return false;
   if (!a.alive || a.away || a.downed || a.brAir || a.fin) return false;
+  if (sim.rules?.noFinish?.(a, v)) return false;     // A mode's own exceptions (the campaign's escorted VIP).
   if (!finishable(rec(a, RA), rec(v, RV), slack)) return false;
   return hasLineOfSight(sim.map, a.ps.x, a.ps.z, v.ps.x, v.ps.z);
 }

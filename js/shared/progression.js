@@ -14,7 +14,7 @@ import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
 import { DIVISIONS } from './season-items.js';     // Ranked seasons: the ranked camo's division (docs/RANKED.md).
 import { blankTourney, cleanTourney, tourneyEmpty } from './tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
-import { cleanCampaign, CP_CARDS, CP_LIFE, MISSIONS as CP_MISSIONS } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
+import { cleanCampaign, CP_CARDS, CP_LIFE, MISSIONS as CP_MISSIONS, opOf as cpOpOf } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { RESET_GEN } from './reset.js';     // Save codes carry the progress reset's generation (docs/RESET.md).
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
@@ -1176,8 +1176,8 @@ export const CARDS = [
   // Wrenfield Fair's: the Barker, called out by the high striker's bell once the lanterns are lit (docs/ZOMBIES.md).
   card('zm-barker', 'Show\'s Over', 'Zombies', 'Put down the Barker on Wrenfield Fair in Graveyard Shift', c => zmBarkerDown(c.zmFeats), { p: 'wheel', c: ['#140a1c', '#4a1e3a', '#ffe0b0', '#ff7ad8'], e: 'map:wrenfield', gold: true }),
   // The co-op campaign (docs/CAMPAIGN.md): one card per Operation Nightrail mission, for clearing it on any difficulty.
-  ...CP_CARDS.map(([id, name, p, c], k) => card(id, name, 'Campaign', `Clear ${name} in Operation Nightrail`, cc => (cc.life?.[CP_LIFE(CP_MISSIONS[k].id)] ?? 0) >= 1,
-    { p, c, e: `map:${CP_MISSIONS[k].map}`, ...(k === CP_CARDS.length - 1 ? { gold: true } : {}) })),
+  ...CP_CARDS.map(([id, name, p, c], k) => card(id, name, 'Campaign', `Clear ${name} in ${cpOpOf(k).name}`, cc => (cc.life?.[CP_LIFE(CP_MISSIONS[k].id)] ?? 0) >= 1,
+    { p, c, e: `map:${CP_MISSIONS[k].map}`, ...(k === cpOpOf(k).to - 1 ? { gold: true } : {}) })),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),

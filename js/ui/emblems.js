@@ -156,6 +156,8 @@ const FEAT_ROWS = [
   // The co-op campaign (docs/CAMPAIGN.md): every Operation Nightrail mission cleared on Veteran.
   ['feat-nightrail', 'Nightrail', '#7cc8ff', ['#e6ecf2', '#7cc8ff'], 'laurel', { life: 'cp:vetall', goal: 1, label: 'Clear every Operation Nightrail mission on Veteran' }, { tab: 'campaign', modes: ['cp'] }],
   ['feat-champion', 'Champion', '#ff4a5a', ['#ffe0b0', '#ff4a5a'], 'laurel', { ranked: 6, label: 'Reach Champion in Ranked' }, { tab: 'standard', playlist: 'ranked' }],
+  // Appended: Operation Starfall cleared on Veteran (docs/CAMPAIGN.md).
+  ['feat-starfall', 'Starfall', '#c8a8ff', ['#e6ecf2', '#c8a8ff'], 'star', { life: 'cp:vetall2', goal: 1, label: 'Clear every Operation Starfall mission on Veteran' }, { tab: 'campaign', modes: ['cp'] }],
   // Appended: Saltmere Abbey's Ferryman (docs/ZOMBIES.md "Saltmere Abbey").
   ['feat-ferryman', 'Drowned Bell', '#5affd0', ['#d0fff0', '#5affd0'], 'oar', { zmboss: 'saltmere', label: 'Put down the Ferryman on Saltmere Abbey in Graveyard Shift' }, { tab: 'zombies', playlist: 'zmsolo' }],
 ];
