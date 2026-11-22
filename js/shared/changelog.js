@@ -4,7 +4,7 @@
 
 export const CHANGELOG = [
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Sirocco Basin, a desert battle royale map',
+    build: '1122-7', date: '2026-11-22', title: 'Sirocco Basin, a desert battle royale map',
     items: [
       'New battle royale map: Sirocco Basin, a desert at dusk with a sandstorm blowing in. Like Meridian City it is built from four smaller maps joined edge to edge along the old Spice Road, with the rest of the basin round them: the Citadel, the Rail Halt, the Airstrip, the Necropolis cut into the canyon wall, the Date Grove, the Saltworks, a cargo plane down in the Wreck Dunes and more. Battle Royale, Rebound and Extraction can all vote for it.',
       'Its four districts are also new 6v6 maps of their own. Caravanserai: a walled caravan inn round a domed well, arcades along its walls, the souk outside. Red Gulch: a canyon town of tall mud tower houses under red cliffs, with the old stone arch over its main street. Copperstep: an open-pit copper mine, its terraces waist high, ore carts on the pit floor and the headframe over the shaft. Signal Ridge: a dish array on a ridge, fenced yards you can shoot through and the great dish over the road.',
