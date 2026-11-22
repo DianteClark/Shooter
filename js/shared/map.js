@@ -53,11 +53,18 @@ import shipyard from './maps/shipyard.js';
 import boardwalk from './maps/boardwalk.js';
 import stiltrow from './maps/stiltrow.js';
 import kittiwake from './maps/br-kittiwake.js';
+// The North (docs/DISTRICTS.md, region4): Kaldvik's four districts, each a 6v6 map, and Kaldvik assembled from them.
+import trawler from './maps/trawler.js';
+import telemark from './maps/telemark.js';
+import icecore from './maps/icecore.js';
+import spillway from './maps/spillway.js';
+import kaldvik from './maps/br-kaldvik.js';
 import { MODE_IDS, MODES } from './modes.js';
 import { prepareBreakables } from './destruction.js';
 
 export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda, midtown, oldquarter, canalrow, unionsq, meridian, saltmere, caravanserai, redgulch, copperstep, signalridge, sirocco,
-  fishmarket, shipyard, boardwalk, stiltrow, kittiwake };
+  fishmarket, shipyard, boardwalk, stiltrow, kittiwake,
+  trawler, telemark, icecore, spillway, kaldvik };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // Destruction (docs/DESTRUCTION.md): what breaks on each map, resolved once here, before anything indexes the walls.

@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: '1122-9', date: '2026-11-22', title: 'The North: Kaldvik',
+    items: [
+      'New battle royale region, Kaldvik: a fishing town on a frozen fjord under a blizzard dusk. The harbour is ice you can walk on, a frozen river runs from the dam to the sea, and the ski slopes, the ice shelf and the reservoir are all in play. Eighteen places, from the Cannery and the church square to the Radar Dome, the Summit Lodge and the Hot Springs.',
+      'It plays Battle Royale, Rebound and Extraction alongside the other islands, and Conquest (Kaldvik: Fjord Road, five flags) and Breakthrough (Kaldvik: Harbour Run, from the harbour to the dam) on the Ground War tab.',
+      'Four new 6v6 maps, each a district of Kaldvik: Trawler Basin (medium, trawlers locked in the harbour ice), Telemark (large, a ski village round the chairlift), Ice Core (medium, a drilling camp on the ice shelf) and Spillway (small, close fights across a dam\'s crest).',
+      'Each new map has its own calling cards (Iced In, Chairlift, Bore Hole, Floodgate, Squall Line) with Elite and Master tiers.',
+    ],
+  },
+  {
     build: '1122-8', date: '2026-11-22', title: 'Kittiwake Bay: a new battle royale coast, and four new maps',
     items: [
       'Kittiwake Bay, a new battle royale map on a windy, bright morning by the sea. A fishing town on its hill, a harbour, tidal flats you can wade across (slowly), a sand spit with a seaside resort, and a headland with a lighthouse on its point. Pick it in the Battle Royale vote and play Rebound and Extraction there too.',

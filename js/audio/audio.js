@@ -65,7 +65,7 @@ const DISTANT = 44;              // Metres: world sounds (explosions, aircraft, 
 const STEP_SURFACE = {
   railyard: 'stepsGravel', frontier: 'stepsDirt', launchpad: 'stepsSand', dust: 'stepsSand', desert: 'stepsSand', sirocco: 'stepsSand', basin: 'stepsSand',
   jungle: 'stepsDirt', jadefall: 'stepsDirt', harvest: 'stepsDirt', ashgrove: 'stepsDirt', millbrook: 'stepsDirt', wrenfield: 'stepsDirt',
-  arctic: 'stepsSnow', frost: 'stepsSnow', observatory: 'stepsSnow', polestar: 'stepsSnow',
+  arctic: 'stepsSnow', frost: 'stepsSnow', north: 'stepsSnow', kaldvik: 'stepsSnow', observatory: 'stepsSnow', polestar: 'stepsSnow',
   harbor: 'stepsWood', pier: 'stepsWood', shore: 'stepsSand', pagoda: 'stepsWood', foundry: 'stepsMetal', topside: 'stepsMetal',
 };
 const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
@@ -619,6 +619,8 @@ THEME_AUDIO.saltmere = THEME_AUDIO.harbor;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;
 THEME_AUDIO.sunken = THEME_AUDIO.harbor;
 THEME_AUDIO.topside = THEME_AUDIO.railyard;
+THEME_AUDIO.north = THEME_AUDIO.arctic;   // The North (region4): snow swallows the shots, the wind does the rest.
+THEME_AUDIO.kaldvik = THEME_AUDIO.arctic;
 THEME_AUDIO.city = THEME_AUDIO.metro;   // Meridian City (docs/DISTRICTS.md): the metro maps' streets.
 // Sirocco Basin and its districts: dry rock and mud brick like Dust, the storm's hiss a little louder in the wash.
 THEME_AUDIO.sirocco = { ...THEME_AUDIO.dust, wash: 0.05 };

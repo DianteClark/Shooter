@@ -56,6 +56,16 @@ export function mapIcons({ P, R, O, bar }) {
     'map:signalridge': { f: [R(14, 18, 4, 9.5), P(3, 9, 9, 17, 18, 19, 26, 14, 29, 4, 22, 10, 12, 12), R(1, 27, 30, 2.5)], s: [P(16, 15, 22, 6)], sw: 1.4, a: [O(22.5, 5.5, 1.8)] },
     // Sirocco Basin: the swollen sun over the dunes, the storm's streaks blowing in.
     'map:sirocco': { a: [O(21, 11, 5.5)], f: [P(1, 29.5, 1, 22, 8, 19, 16, 23, 24, 18, 31, 21, 31, 29.5)], b: [R(2, 9, 10, 1.4, 0.7), R(4, 13, 9, 1.4, 0.7), R(1, 17, 12, 1.4, 0.7)] },
+    // Trawler Basin: a trawler locked in the ice, its wheelhouse and mast, floes round the hull.
+    'map:trawler': { f: [P(2, 20, 24, 20, 30, 15, 27, 25, 5, 25), R(6, 13, 8, 7), R(20, 5, 1.6, 15)], h: [R(8, 15, 1.6, 2), R(11, 15, 1.6, 2)], a: [P(1, 28, 10, 27, 13, 30, 1, 30), P(16, 28, 26, 27, 31, 30, 14, 30)] },
+    // Telemark: a chalet under a snow-loaded roof, the chairlift's cable and a chair over it.
+    'map:telemark': { f: [P(3, 18, 13, 9, 23, 18), R(5, 18, 16, 11.5), R(26, 6, 2, 23.5)], h: [R(8, 21, 3, 3), R(15, 21, 3, 3), R(11.5, 25, 3, 4.5)], s: [P(1, 4, 27, 7, 31, 8)], sw: 1.2, a: [R(23, 9, 4, 3), P(2, 17, 13, 7.5, 24, 17, 13, 9.5)] },
+    // Ice Core: the derrick over its bore hole, a lab pod on its legs.
+    'map:icecore': { f: [P(9, 29.5, 13, 3, 15, 3, 19, 29.5, 16.5, 29.5, 14, 8, 11.5, 29.5), R(21, 17, 10, 6), R(22, 23, 1.4, 6.5), R(29, 23, 1.4, 6.5)], h: [R(23, 19, 1.6, 1.6), R(26, 19, 1.6, 1.6)], a: [O(14, 2.2, 1.4), R(1, 27, 8, 2.5)] },
+    // Spillway: the dam wall with its two gatehouses, the water falling over the gate between them.
+    'map:spillway': { f: [R(1, 14, 30, 6), R(4, 8, 6, 6), R(22, 8, 6, 6), R(1, 20, 4, 9.5), R(27, 20, 4, 9.5)], h: [R(6, 10, 2, 2), R(24, 10, 2, 2)], a: [R(12, 20, 8, 9.5), R(1, 12, 30, 1.4)] },
+    // Kaldvik: a mountain over the fjord, the church steeple and its town by the water, the low sun.
+    'map:kaldvik': { f: [P(1, 22, 11, 8, 17, 14, 22, 6, 31, 22), R(1, 22, 30, 3), R(8, 16, 4, 6), P(7.5, 16, 10, 10, 12.5, 16), R(14, 18, 5, 4), R(21, 17, 6, 5)], h: [R(9.4, 18, 1.2, 1.4), R(15.5, 19.4, 1.4, 1.4), R(23, 18.6, 1.4, 1.4)], a: [O(27, 9, 2.6), R(1, 27, 30, 2.5)] },
     // Tidebreak: a causeway on its piers over the waves, the shrine's broken arch on it.
     'map:tidebreak': { f: [R(1, 16, 30, 4), R(4, 20, 3, 6), R(14.5, 20, 3, 6), R(25, 20, 3, 6), R(10, 5, 3, 11), R(19, 8, 3, 8), R(9, 3, 9, 3, [1, 0, 0, 1])], as: [P(1, 29.5, 5.5, 27, 10, 29.5, 14.5, 27, 19, 29.5, 23.5, 27, 28, 29.5)], sw: 2 },
     // Coral Quarter: the church tower over two roofs, its bell lit.
