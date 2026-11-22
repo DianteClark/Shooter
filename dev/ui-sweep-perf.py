@@ -27,7 +27,7 @@ SUIT_OPS = ['trooper', 'ronin', 'monarch', 'coyote', 'ox', 'harrow', 'flint', 'n
 ARGS = ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
         '--disable-background-timer-throttling', '--disable-renderer-backgrounding']
 G = 'window.__game.app'
-CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('brcity', 'meridian', 'br'), ('gw', 'harvest', 'gwtdm'), ('gwtide', 'tidebreak', 'gwtdm'), ('gwcoral', 'coral', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
+CASES = [('br', 'frontier', 'br'), ('brjade', 'jadefall', 'br'), ('brcity', 'meridian', 'br'), ('brnorth', 'kaldvik', 'br'), ('gw', 'harvest', 'gwtdm'), ('gwtide', 'tidebreak', 'gwtdm'), ('gwcoral', 'coral', 'gwtdm'), ('zm20', 'ashgrove', 'zm'), ('zm20neon', 'neon', 'zm'), ('tdm', 'railyard', 'tdm'),
          # 1118 wave: Millbrook, Graveyard Shift round 20 on Polestar Relay, and a replay's playback (a TDM on Railyard,
          # ended after 20 s, Watch replay from the results: the replay player's own renderer and frame cost).
          ('tdmmill', 'millbrook', 'tdm'), ('zm20polestar', 'polestar', 'zm'), ('zm20wrenfield', 'wrenfield', 'zm'), ('replay', 'railyard', 'tdm'),

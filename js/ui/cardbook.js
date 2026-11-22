@@ -86,6 +86,12 @@ const MAP_ART = {
   canalrow:   ['Lock Gate', 'river', ['#0c161c', '#22404e', '#cfe8f0', '#4ad0ff']],
   unionsq:    ['Bandstand', 'crowns', ['#0e1a12', '#26442e', '#d8f0d4', '#ffd24a']],
   meridian:   ['City Lights', 'metropolis', ['#0e1220', '#2a3456', '#d8e0ff', '#ffb84a']],
+  // The North (docs/DISTRICTS.md, appended): Kaldvik and its districts.
+  trawler:    ['Iced In', 'cranes', ['#1a1416', '#4a3a3e', '#f0e6e0', '#ff8a4a']],
+  telemark:   ['Chairlift', 'peaks', ['#1c1618', '#5a4448', '#f4ece6', '#e0482a']],
+  icecore:    ['Bore Hole', 'mast', ['#181418', '#4a4048', '#ece4e0', '#ffc030']],
+  spillway:   ['Floodgate', 'river', ['#141618', '#3e4448', '#e4e0dc', '#ff9a4a']],
+  kaldvik:    ['Squall Line', 'fjord', ['#1e1618', '#5a3e3a', '#f2e8e2', '#ff8a3a']],
 };
 const MAP_WINS = 10;
 // Map cards come in three tiers (bronze, silver, gold; the gold one animated): wins on the map, or for the maps that
@@ -93,7 +99,7 @@ const MAP_WINS = 10;
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
+const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'kaldvik', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },

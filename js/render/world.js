@@ -21,6 +21,7 @@ import { millbrook } from './themes/millbrook.js';
 import { launchpad } from './themes/launchpad.js';
 import { observatory } from './themes/observatory.js';
 import { pagoda } from './themes/pagoda.js';
+import { north } from './themes/north.js';   // The North's districts (docs/DISTRICTS.md, region4).
 import { BreakRanges } from './destruct-fx.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
@@ -3160,6 +3161,7 @@ const DRESS = {
   launchpad: { ...RAILYARD_DRESS, ...launchpad.dress },
   observatory: { ...RAILYARD_DRESS, ...observatory.dress },
   pagoda: { ...RAILYARD_DRESS, ...pagoda.dress },
+  north: { ...RAILYARD_DRESS, ...north.dress },
 };
 
 const THEME_STAGES = {
@@ -3191,6 +3193,7 @@ const THEME_STAGES = {
   launchpad: launchpad.stage,
   observatory: observatory.stage,
   pagoda: pagoda.stage,
+  north: north.stage,
 };
 
 // What theme modules (js/render/themes/) may draw with, handed over on ctx.kit: they cannot import world.js back.
@@ -3466,6 +3469,8 @@ const THUMB_STYLE = {
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,
   city: frontier.cityThumb,
+  north: north.thumb,
+  kaldvik: frontier.northThumb,
 };
 
 // What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a

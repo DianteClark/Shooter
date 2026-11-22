@@ -20,6 +20,7 @@ import { regionField, segDist, mulberry as mul2 } from '../../shared/maps/br-kit
 import { inShallows } from '../../shared/geometry.js';
 import * as isle from './jadefall.js';
 import * as city from './city.js';
+import * as north from './north.js';   // The North (region4): Kaldvik's palette, tables and extras.
 import { BreakRanges } from '../destruct-fx.js';
 
 const TILE = 32;
@@ -84,6 +85,8 @@ const ROAD = { asphalt: H(0x46474c), dirt: H(0x7a6a50) };
 Object.assign(SKIN, isle.SKIN); Object.assign(GROUND, isle.GROUND); Object.assign(ZONE, isle.ZONE); Object.assign(ROAD, isle.ROAD);
 // The first region's (themes/city.js, docs/DISTRICTS.md).
 Object.assign(SKIN, city.SKIN); Object.assign(GROUND, city.GROUND); Object.assign(ZONE, city.ZONE);
+// The North's (themes/north.js): region names and zone kinds of its own, so nothing above is repainted.
+Object.assign(SKIN, north.SKIN); Object.assign(GROUND, north.GROUND); Object.assign(ZONE, north.ZONE);
 
 // Building styles: walls, trim, roof, floor, and the roof's shape.
 const STYLE = {
@@ -101,7 +104,7 @@ const STYLE = {
   jungle: { wall: [0x6a5039, 0x7a5e40], trim: 0x4a382a, roof: 0x9a8450, floor: 0x5a4630, floorB: 0x4e3c28, roofKind: 'hip', planks: true },
   temple: { wall: [0x8a8a72, 0x7e7e68], trim: 0x6c6c58, roof: 0x7a7a64, floor: 0x6c6c58, floorB: 0x626250, roofKind: 'stepped' },
 };
-Object.assign(STYLE, isle.STYLE, city.STYLE);
+Object.assign(STYLE, isle.STYLE, city.STYLE, north.STYLE);
 for (const s of Object.values(STYLE)) { s.wall = s.wall.map(H); s.trim = H(s.trim); s.roof = H(s.roof); s.floor = H(s.floor); s.floorB = H(s.floorB); }
 const styleOf = id => STYLE[id] || STYLE.metro;
 const wallCol = (S, id) => S.wall[(id * 7 + 3) % S.wall.length];
@@ -121,7 +124,7 @@ const BANK = {
   coast: { face: H(0x5a5650), lip: H(0x8a8880) }, industrial: { face: H(0x5c5a56), lip: H(0x8a8882) },
   metro: { face: H(0x5c5a56), lip: H(0x8e8c86) },
 };
-Object.assign(ROCK, isle.ROCK, city.ROCK); Object.assign(BANK, isle.BANK, city.BANK);
+Object.assign(ROCK, isle.ROCK, city.ROCK, north.ROCK); Object.assign(BANK, isle.BANK, city.BANK, north.BANK);
 
 // Roof layer: baked colour plus the building's footprint per vertex; a roof dissolves round the cutters (the local
 // player and nearby teammates): fully when one stands inside its footprint, partly just outside.
@@ -205,7 +208,7 @@ function buildingTiles(map, tileAt) {
 }
 
 // A region city's extras (themes/city.js): a lights pass per tile, zone ground patterns, tile decor, the city's edge.
-const EXTRAS = { city };
+const EXTRAS = { city, kaldvik: north.giant };
 
 export function buildGiantWorld(map, fogUniforms, X) {
   // A map whose theme is a giant-world palette (themes/jadefall.js) lights the world with it; anything else, Frontier's.
@@ -888,3 +891,4 @@ function bigScenery(ctx, reg, x, z) {
 }
 export const isleThumb = isle.thumb;
 export const cityThumb = city.thumb;
+export const northThumb = north.thumb;
