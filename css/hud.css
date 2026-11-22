@@ -20,6 +20,8 @@
 .os-row[data-row="2"] { left: var(--os-x2, 50%); top: var(--os-y2, calc(var(--st) + 124px)); max-width: var(--os-w2, 360px); }
 .os-row:empty { display: none; }
 .hud .os-row > .os-item { position: relative; left: auto; right: auto; top: auto; bottom: auto; margin: 0; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* The zone chips keep their width: the status plate beside them is what gives (its text ellipsises). */
+.hud .os-row > .obj-strip.os-item { flex-shrink: 0; }
 /* The live scoreboard and a death replay's banner take the space under the score bar. */
 .hud:has(.board:not([hidden])) .ostrip, .killcam-on .ostrip { visibility: hidden; }
 /* Dead: the death screen's card sits where the strip's lower rows are. */

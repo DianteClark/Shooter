@@ -118,6 +118,15 @@ CHECK = r"""
   for (let i = 0; i < panels.length; i++) for (let j = i + 1; j < panels.length; j++) {
     if (inter(panels[i].r, panels[j].r, 1)) out.push(`overlap: ${panels[i].name} [${round(panels[i].r)}] and ${panels[j].name} [${round(panels[j].r)}]`);
   }
+  // Inside a strip row: the items side by side, and the zone chips inside their item (Conquest's chips ran under the
+  // ticket plate at 667 wide, bug sweep 2026-11-22).
+  for (const row of qa('.os-row')) {
+    const items = [...row.children].filter(shown).map(e => { const r = e.getBoundingClientRect(); return { n: e.className.split(' ')[0], r: { x0: r.left, y0: r.top, x1: r.right, y1: r.bottom } }; });
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++)
+      if (inter(items[i].r, items[j].r, 1)) out.push(`overlap: strip row ${row.dataset.row} ${items[i].n} [${round(items[i].r)}] and ${items[j].n} [${round(items[j].r)}]`);
+  }
+  const chips = q('.obj-strip .obj-chips'), os = q('.obj-strip');
+  if (shown(chips) && shown(os)) { const a = chips.getBoundingClientRect(), b = os.getBoundingClientRect(); if (a.right > b.right + 1 || a.left < b.left - 1) out.push(`cut: zone chips ${Math.round(a.width)} wide in a strip item ${Math.round(b.width)} wide`); }
   // Kill feed rows: nothing may run out of its row (once a fresh row's slide-in is over).
   for (const row of qa('.feed .f-row')) row.getAnimations().forEach(a => a.finish());
   for (const row of qa('.feed .f-row')) {
