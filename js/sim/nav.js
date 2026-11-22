@@ -27,7 +27,7 @@ export class NavGrid {
     this.g = new Float32Array(n);
     this.stamp = new Uint32Array(n);
     this.closed = new Uint32Array(n);
-    this.search = 0;
+    this.ids = { n: 0 };     // Search ids (stamps), shared with a fork: see fork.
     this.heap = new Int32Array(n * 8);
     this.heapF = new Float32Array(n * 8);
     this.tmp = new Int32Array(n);
@@ -49,8 +49,7 @@ export class NavGrid {
   // A copy for a throwaway sim on a copy of the map (Sim._warmUp): the tactical points, indexes and sector graph are
   // shared (nothing changes them after the build), everything a match can change (blocked cells as walls break or
   // doors open, turret danger, regions reopened) is its own. The search scratch is shared too: searches only compare
-  // stamps with their own id, so `join` hands the id counter back and the next search here starts above any stamp
-  // the copy wrote.
+  // stamps with their own id, and the two draw their ids from one counter, so neither ever reads the other's stamps.
   fork(map) {
     const f = Object.create(NavGrid.prototype);
     Object.assign(f, this);
@@ -60,8 +59,6 @@ export class NavGrid {
     if (this.regionOf) f.regionOf = this.regionOf.slice();
     return f;
   }
-
-  join(fork) { this.search = Math.max(this.search, fork.search); }
 
   // Each movement-blocking wall marks the cells whose centre is within CLEARANCE of it: the same test the old
   // every-cell-against-every-wall loop made, run only over the cells near each wall.
@@ -228,7 +225,7 @@ export class NavGrid {
     let goalCell = this.nearestFree(bx, bz);
     const { g, parent, stamp, closed, blocked } = this;
     const danger = team >= 0 ? this.danger[team > 1 ? 0 : team] : null;
-    const id = ++this.search;
+    const id = ++this.ids.n;
     this.partial = false;
     this.expanded = 0;
     let corridor = null, cap = Infinity;

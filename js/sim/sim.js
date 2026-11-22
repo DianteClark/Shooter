@@ -35,8 +35,10 @@ import { cleanFinisher, FINISHER_IDS, OPERATOR_FINISHER_IDS } from '../shared/fi
 const STEP = 1 / SIM_HZ;
 const MAX_CATCHUP_STEPS = 6;     // After a stall, drop time rather than spiral.
 const WARMUP = 3;
-// Sim._warmUp: the throwaway match at load runs at most this many ticks, or this much wall time.
-const WARM_TICKS = 240, WARM_MS = 350;
+// Sim._warmUp: the throwaway match runs at most WARM_TICKS ticks: WARM_LOAD_MS of wall time at load, WARM_TICK_MS a tick
+// through the countdown, and WARM_LATE_MS more at load for a new host mid-match.
+const WARM_TICKS = 900, WARM_LOAD_MS = 150, WARM_TICK_MS = 2.5, WARM_LATE_MS = 250;
+const warmClock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 // A copy of a map for a throwaway sim: its own walls (destruction breaks them, Bulwarks and Graveyard Shift's fences
 // are pushed onto the list) and breakables pointing at those walls; everything else (layout, regions, caches that
 // never change) shared.
@@ -667,6 +669,7 @@ export class Sim {
     // (see _warmUp), so the first live seconds do not run the bot code cold. Nothing of it reaches this match.
     this.warm = false;
     this.warmMs = 0;
+    this._shadow = null; this._shadowTicks = 0;
     // Per-guest snapshots (encodeSnapshotFor, eventsFor): on for maps past INTEREST_AREA only; see setInterest.
     this.interest = this.map.width * this.map.height > INTEREST_AREA;
     this._encodes = 0;
@@ -997,15 +1000,17 @@ export class Sim {
   }
 
   // Match load, on the host: the first live ticks used to run every bot's think, drive, path search and the gun and
-  // movement code for the first time at once, in the engine's slowest tier (11-25 ms for the first live tick, and a
+  // movement code for the first time at once, in the engine's slowest tier (10-25 ms for the first live tick, and a
   // landing in battle royale the same). This plays a throwaway bot match of the same mode on a copy of the map (battle
-  // royale: Conquest on the same map, where everyone is on the ground from the start) for WARM_TICKS ticks or WARM_MS
-  // of wall time, so the engine has compiled that code before anyone is watching. The copy has its own walls, breakables
-  // and blocked cells and its own random stream; nothing it does reaches this sim, so the match is the same with or
-  // without it (replays, host migration and the tests do not see it).
+  // royale: Conquest on the same map, where everyone is on the ground from the start) so the engine has compiled that
+  // code before anyone is watching: WARM_LOAD_MS of it on this step (the one that builds the nav grid), then
+  // WARM_TICK_MS a tick through the countdown before the match goes live (nobody moves then), WARM_TICKS ticks at most.
+  // A new host mid-match (no countdown) plays it all on this step, WARM_LOAD_MS + WARM_LATE_MS. The copy has its own
+  // walls, breakables and blocked cells and its own random stream; nothing it does reaches this sim, so the match is
+  // the same with or without it (replays, host migration and the tests do not see it). Wall time decides only how much
+  // of the throwaway match is played.
   _warmUp() {
-    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+    const t0 = warmClock();
     try {
       let mode = this.modeId;
       if (MODES[mode]?.br) mode = modeFitsMap(this.map, 'cq') ? 'cq' : null;
@@ -1019,12 +1024,25 @@ export class Sim {
       for (const p of shadow.players) if (p.isBot && !p.dummy) p.bot = new BotBrain(shadow, p, stagger++);
       shadow.rules?.onNav?.();
       shadow.phaseT = STEP / 2;
-      for (let i = 0; i < WARM_TICKS && shadow.phase !== 'ended' && clock() < WARM_MS; i++) { shadow.step(STEP); shadow.events.length = 0; }
-      this.nav.join(shadow.nav);
+      this._shadow = shadow; this._shadowTicks = 0;
+      this._warmMore(WARM_LOAD_MS + (this.phase === 'warmup' ? 0 : WARM_LATE_MS) - (warmClock() - t0));
     } catch (err) {
-      // A warm-up that trips over something is only a slower start, never a broken match.
+      this._shadow = null;     // A warm-up that trips over something is only a slower start, never a broken match.
     }
-    this.warmMs = clock();
+  }
+
+  // Plays the throwaway match on for up to `ms` of wall time; drops it once it has played WARM_TICKS or ended.
+  _warmMore(ms) {
+    const shadow = this._shadow;
+    if (!shadow) return;
+    const t0 = warmClock();
+    try {
+      while (this._shadowTicks < WARM_TICKS && shadow.phase !== 'ended' && warmClock() - t0 < ms) {
+        shadow.step(STEP); shadow.events.length = 0; this._shadowTicks++;
+      }
+    } catch (err) { this._shadowTicks = WARM_TICKS; }
+    this.warmMs += warmClock() - t0;
+    if (this._shadowTicks >= WARM_TICKS || shadow.phase === 'ended') this._shadow = null;
   }
 
   _tick() {
@@ -1038,6 +1056,10 @@ export class Sim {
     this.thinkWork = THINK_WORK;
     this.brk.step(STEP);
 
+    if (this._shadow) {
+      if (this.phase === 'warmup') this._warmMore(WARM_TICK_MS);
+      else this._shadow = null;          // Live: whatever was played is what the engine has seen.
+    }
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
       if (this.phaseT <= 0) this._setPhase('live');
