@@ -16,6 +16,36 @@ briefing cards and radio lines (text with a synthesised radio squelch, no voice 
 | 7 | Dead Man's Run | Frontier | Chase | five relays across the west of Frontier against the clock (each buys time), the convoy commander at the dam, blow the dam road |
 | 8 | Iron Crown | Canyon | Boss | push into the canyon, blow the gate to his yard, bring down Marshal Kordell in his juggernaut suit |
 
+## Operation Starfall (build NEXT, ROADMAP item 69)
+The second operation, appended after Nightrail (missions 9-12; `OPERATIONS` in js/shared/campaign.js, each mission's
+`op`), opens once Iron Crown is cleared. Kordell is gone, but the Line's board, the Directorate, has bought a launch: a
+satellite to take the signals back from orbit. Director Vane on the radio (`RADIO.vane`), Kestrel back with the squad.
+
+| # | Mission | Map | Kind | Steps and twist |
+|---|---|---|---|---|
+| 9 | Dark Sky | Observatory | Night defence | climb to the observatory, wire the receiver into the dish, hold it 4:00 through the night (six waves), ride the cable car down. `night`: the phones see a pool of about 7-9 m round the player, dark past 12 m (js/ui/cp-hud.js: an overlay between the game canvas and the interface, so the sticks and buttons stay bright; cp-fx.js draws the flare itself) and every bot's sight is cut (`CP.nightSight`); two waves fire a **flare** (`flare` on a trigger, `{t:'cpflare'}`): the field lit and everyone seeing for `CP.flare` s |
+| 10 | Paper Lanterns | Pagoda | Hostage rescue | slip in past the lantern-carrying watchmen, cut Kestrel loose in the bell tower (a `hostage` plant step), walk her out the west gate (the escort raises the alarm as it starts: `loud`), get out. Kestrel is held at her spot from the start (`vip.early`). An alarm before she is free starts the **hostage clock** (`hostage.clock` 45 s x the timers): reach her in time or they move her (fail `hostage`) |
+| 11 | Cold Trail | Jadefall | Pursuit | into Port Coral, then a `pursue` step: the courier runs Port Coral, Cannery Wharf, the coast road, Turtle Bay without waiting; plated, **bullets do nothing while he runs** (`CP.runTake` 0); with nobody of the squad within 32 m the trail meter fills (`CP.trail` 12 s: fail `trail`); cornered at the bay he fights. Then take the codes, hold the bay 60 s, board the boat |
+| 12 | Zero Hour | Launchpad | Final assault, boss | breach the tank farm, cut the two fuel lines (charges with a fuse, 4:00 to set them), bring down **Director Vane** before the **launch clock** (the boss step's `timer`, 7:00) runs out, then abort the launch at the gantry (a hack under waves). Vane (`mission.boss`: 1.1x the pool, a pale blue crest) has Kordell's barrage, kneel and charge, and a **salvo**: every third attack a line of six rings walked out toward one of the squad, each landing a moment after the last (`cpwarn` k 2) |
+
+New in the script: the `pursue` step; the plant step's `hostage`; the step's `loud`; the mission's `night`, `hostage`,
+`vip.early` and `boss`; a boss step's `timer`; triggers' `flare`. Two fails appended (the wire sends the index; 5 stays
+an abort): `trail`, `hostage`. The flare's time and the hostage clock ride the objective block's flags (bits 6-12 and 13;
+the clock in its timer). Nobody can finish the VIP or the hostage (`noFinish`, js/sim/finishers.js): a finisher killed
+Kestrel through the damage rules in the first test runs.
+
+Stars as before (bonuses: Never let the dish fall below half, Free Kestrel without an alarm, Never lose sight of him,
+Nobody caught by a barrage). Rewards: a calling card a mission (`cp-m9`..`cp-m12`, appended to `CP_CARDS`), and every
+Starfall mission on Veteran earns Sparrow's **Starfall** skin (appended after the Nightrail skin) and the **Starfall**
+feat emblem (life tally `cp:vetall2`, `CP_OP_REWARDS`). `campaignVetAll(cp, op)` and `campaignStars(cp, op)` take the
+operation; `recordCampaign` reports `vetAll` (Nightrail) and `vetAll2` (Starfall). The save block is unchanged (missions
+by id). Music: Dark Sky the stealth theme low, Paper Lanterns the stealth theme, Cold Trail the chase, Zero Hour the
+action theme (the boss theme when Vane is up). The Campaign tab switches operations from the route map's head; each has
+its own line of stations (Starfall's in violet).
+
+Measured (`node dev/sim-campaign.mjs --missions=9,10,11,12`, bot squads, Regular): Dark Sky 4:29, Paper Lanterns 1:14
+(1 retry), Cold Trail 2:00, Zero Hour 3:13 (1 retry).
+
 ## The mission script (`js/sim/campaign.js`)
 - **The match carries the mission**: the scoreLimit is `cpCode(mission, difficulty)` ((index + 1) x 10 + difficulty),
   so the friend room's start, a rejoin and a host migration build the same script with no new field on the wire. The mode
@@ -134,7 +164,9 @@ humans' phones. `restore` rebuilds from the guest's mirror and that backup; livi
 assault group.
 
 ## Tests
-- `node dev/sim-campaign.mjs [--quick | --full]`: places on walkable ground on every map, codes, stars, XP, the save
+- `node dev/sim-campaign.mjs [--quick | --full] [--missions=9,10]`: Starfall's night (sight cut, a flare lifts it and
+  rides the wire, burns out), hostage (held, never finished, the clock after an alarm, freed in time), pursuit (runs
+  once the squad is on him, bullets do nothing, lost when left), Vane's pool, salvo and launch clock; places on walkable ground on every map, codes, stars, XP, the save
   block and save code, a wipe and the retry at the checkpoint, every other fail (VIP, the charges' clock, the zone, the
   escaped target, the chase clock), stealth (the torch meter, gunfire, weapons-tight bots, the alarm waves), Abort and
   Retry now, determinism, host migration mid-escort and mid-boss (the new host finishes the mission), then every mission

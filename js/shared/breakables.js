@@ -17,4 +17,6 @@ export const BREAKABLES = {
   ruins: { pick: [[11.1, 11.7, null], [40.9, 22.3, null], [11.1, 22.3, null], [40.9, 11.7, null]] },
   // The water tanks by the huts.
   canyon: { mirror: true, pick: [[72.8, 20.8, 'heavy']] },
+  // Graveyard Shift's fourth map (zmOnly already keeps it whole): its barricades and gates stay, like the other three.
+  saltmere: { off: true },
 };

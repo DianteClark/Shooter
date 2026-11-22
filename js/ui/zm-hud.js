@@ -19,6 +19,8 @@ export const QUEST_HINT = 'Something glows in the dead ends: old lanterns, still
 export const RADIO_HINT = 'Static on the radios: with the power on, something might be listening';
 // Wrenfield Fair's lantern quest (questKind 'lantern'): its clue.
 export const LANTERN_HINT = 'The fair\'s lanterns are cold: with the power on, the Oracle knows the order';
+// Saltmere Abbey's font quest (questKind 'font'): its clue.
+export const FONT_HINT = 'The abbey\'s fonts are dry: with the pumps running, they would drink';
 const questBossName = z => zmQuestBoss(z?.layout).name;
 
 
@@ -323,6 +325,10 @@ export class ZmHud {
       case 'exfil': return ['CALL EXFIL', u.off ? why(fmt(u.cost)) : u.ok ? `${fmt(u.cost)} · hold the pad ${ZE.exfil.hold} s` : price];
       case 'oracle': return u.off ? ['THE ORACLE', why()] : ['ASK THE ORACLE', 'Free: it knows the lanterns\' order'];
       case 'relic':
+        if (u.font !== undefined) {
+          if (!u.off) return ['FILL THE FONT', 'Free: then kill the drowned beside it'];
+          return [u.label === 'Dry font' ? 'DRY FONT' : 'THE FONT DRINKS', why()];
+        }
         if (u.lantern !== undefined) {
           const col = ZM_LANTERNS[u.lantern]?.name.toUpperCase() ?? '';
           return u.off ? ['COLD LANTERN', why()] : [`LIGHT THE ${col} LANTERN`, 'Free: in the Oracle\'s order, or they all go out'];
@@ -331,6 +337,7 @@ export class ZmHud {
         if (u.label === 'Dead radio' || u.label === 'Tune the radio') return [u.label.toUpperCase(), u.off ? why() : `Free: stay by it ${ZE.quest.tune} s`];
         return ['PICK IT UP', 'An old lantern, still warm'];
       case 'altar':
+        if (u.label === 'Toll the bell' || u.label === 'The bell rope') return [u.off ? 'THE BELL ROPE' : 'TOLL THE BELL', u.off ? why() : 'Something waits under the water'];
         if (u.label === 'Ring the bell' || u.label === 'High striker') return [u.off ? 'HIGH STRIKER' : 'RING THE BELL', u.off ? why() : 'Something is waiting in the wings'];
         if (u.label === 'Transmit' || u.label === 'Relay console') return [u.off ? 'RELAY CONSOLE' : 'TRANSMIT', u.off ? why() : 'Something out there will hear'];
         return [u.off ? 'THE ALTAR' : 'SET THE RELICS', u.off ? why() : 'Something will answer'];
@@ -405,18 +412,21 @@ export class ZmHud {
     const kind = z.layout?.questKind;
     // Wrenfield Fair: from the Oracle on, the count, the burn's seconds and the order as coloured dots (lit ones bright).
     const lan = kind === 'lantern' && q && !q.state && q.read;
-    const rel = lan ? `${n}/${z.layout.relics.length}${q.burnT > 0 ? ` ${Math.ceil(q.burnT)}s` : ''}|${q.got}|${(q.order ?? []).join('')}` : n ? `${n}/${z.layout.relics.length}` : '';
+    // Saltmere Abbey: the fonts full, and while one drinks, its souls.
+    const drink = kind === 'font' && q && !q.state && q.woke ? (z.layout.relics.find(r => q.woke & (1 << r.i))?.i ?? -1) : -1;
+    const rel = lan ? `${n}/${z.layout.relics.length}${q.burnT > 0 ? ` ${Math.ceil(q.burnT)}s` : ''}|${q.got}|${(q.order ?? []).join('')}`
+      : drink >= 0 ? `${n}/${z.layout.relics.length} \u00b7 ${q.souls?.[drink] ?? 0}/${ZE.quest.souls}` : n ? `${n}/${z.layout.relics.length}` : '';
     if (c.relic !== rel) {
       c.relic = rel; this.relicEl.hidden = !rel; this.relicB.textContent = rel.split('|')[0];
       const label = this.relicB.nextElementSibling;
       if (lan) label.innerHTML = (q.order ?? []).map(i => `<i style="color:${ZM_LANTERNS[i].css};opacity:${q.got & (1 << i) ? 1 : 0.35};font-style:normal">\u25cf</i>`).join('');
-      else label.textContent = kind === 'radio' ? 'Radios' : 'Relics';
+      else label.textContent = kind === 'radio' ? 'Radios' : kind === 'font' ? 'Fonts' : 'Relics';
       this.relicEl.title = lan ? `Lanterns: ${lanternOrderText(q.order)}` : '';
     }
     // A hint at the quest: from round 3, once, while nobody has found a relic.
     if (!this.hinted && z.round >= 3 && z.state === 'round' && q && !q.got && z.layout?.relics?.length) {
       this.hinted = true;
-      this.hud.notify(z.layout.questKind === 'radio' ? RADIO_HINT : z.layout.questKind === 'lantern' ? LANTERN_HINT : QUEST_HINT);
+      this.hud.notify(z.layout.questKind === 'radio' ? RADIO_HINT : z.layout.questKind === 'lantern' ? LANTERN_HINT : z.layout.questKind === 'font' ? FONT_HINT : QUEST_HINT);
     }
   }
 
@@ -444,7 +454,7 @@ export class ZmHud {
   quietKill(e, view) {
     const t = view?.players?.find(p => p.id === e.target);
     if (!t?.ai) return false;
-    return t.zk !== 4 && t.zk !== 5 && t.zk !== 11 && t.zk !== 12;     // The Yardmaster's (4), the Gravewarden's (5), the Listener's (11) and the Barker's (12) deaths make the feed.
+    return t.zk !== 4 && t.zk !== 5 && t.zk !== 11 && t.zk !== 12 && t.zk !== 13;     // The Yardmaster's (4), the Gravewarden's (5), the Listener's (11), the Barker's (12) and the Ferryman's (13) deaths make the feed.
   }
 
   onEvent(e, view) {
@@ -503,8 +513,23 @@ export class ZmHud {
         if (e.state === 0) this.hud.banner('Wrong lantern', 'Every lantern went out', 1800, 'enemy');
         else this.hud.notify('The lanterns burned out: light them again, faster');
         break;
+      case 'zfont': {
+        // Saltmere Abbey's fonts (js/sim/zm-abbey.js): filled, full, thirsty.
+        const z = objOf(view), where = z?.layout?.bands?.[z.layout.relics?.[e.i]?.band]?.name ?? '';
+        if (e.state === 1) this.hud.notify(`${e.by === me?.id ? 'You' : name(e.by)} filled the font${where ? ` in ${where}` : ''}: kill the drowned beside it`);
+        else if (e.state === 2) {
+          const bell = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
+          if (e.n >= e.of) this.hud.banner(`All ${e.of} fonts are full`, `Toll the bell${bell ? ` in ${bell}` : ''}`, 2200);
+          else this.hud.notify(`The font${where ? ` in ${where}` : ''} is full: ${e.n} of ${e.of}`);
+        } else if (e.state === 3 && (this.thirstAt ?? -99) < performance.now() / 1000 - 12) {
+          this.thirstAt = performance.now() / 1000;
+          this.hud.notify(`The font${where ? ` in ${where}` : ''} is thirsty: it is losing souls`);
+        }
+        break;
+      }
       case 'zrelic': {
         const z = objOf(view);
+        if (e.font) break;     // The fonts say it themselves ('zfont').
         if (e.lantern) {
           const ring = z?.layout?.altar ? z.layout.bands[z.layout.altar.band]?.name : null;
           this.hud.notify(e.n >= e.of ? `All ${e.of} lanterns lit: ring the bell${ring ? ` in ${ring}` : ''}` : `${e.by === me?.id ? 'You' : name(e.by)} lit the ${ZM_LANTERNS[e.i]?.name ?? ''} lantern: ${e.n} of ${e.of}${e.n === 1 ? `, ${ZE.quest.burn} s to light the rest` : ''}`);

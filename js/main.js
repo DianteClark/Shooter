@@ -9,7 +9,7 @@ import { buildRoster } from './sim/sim.js';
 import { RANGE_MODE, rangeDummies } from './sim/range.js';
 import { MAPS, DEFAULT_MAP } from './shared/map.js';
 import { MODES, firstModeFor, isBr, isEx, isFfa, isZm, isCp, playersFor } from './shared/modes.js';
-import { MISSIONS, CP, cpCode, cpDecode, missionOpen, campaignCleared } from './shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
+import { MISSIONS, CP, cpCode, cpDecode, missionOpen, campaignCleared, OPERATIONS } from './shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { ZM_SQUAD } from './shared/zombies.js';     // Graveyard Shift seats four (docs/ZOMBIES.md).
 const BR_HUMANS = 8;           // Battle royale: up to eight people in a room, bots fill the rest of the 32 (docs/BR.md).
 import { normalizeLoadout } from './shared/catalog.js';
@@ -388,6 +388,16 @@ menu.on({
   // The co-op campaign (js/ui/campaign.js): a mission on the map, its difficulty, the briefing, then solo or a room.
   cpPick: ({ k }) => { const n = Number(k); if (MISSIONS[n]) { if (!missionOpen(Progress.campaign(), n)) menu.toast(`Clear ${MISSIONS[n - 1]?.name ?? 'the mission before'} first`); setCpPick({ k: n }); } },
   cpDiff: ({ d }) => setCpPick({ diff: Number(d) }),
+  // An operation (Nightrail, Starfall): its first mission not yet cleared (its first, locked, until it opens).
+  cpOp: ({ o }) => {
+    const op = OPERATIONS[Number(o)];
+    if (!op) return;
+    const cp = Progress.campaign();
+    let k = op.from;
+    for (let i = op.from; i < op.to; i++) if (missionOpen(cp, i)) { k = i; if (!campaignCleared(cp, MISSIONS[i].id)) break; }
+    if (!missionOpen(cp, op.from)) menu.toast(`Clear ${MISSIONS[op.from - 1]?.name ?? 'the operation before'} first`);
+    setCpPick({ k });
+  },
   cpBrief: () => { if (missionOpen(Progress.campaign(), cpPickNow().k)) menu.campaignBrief(cpPickNow()); },
   cpBriefBack: () => renderMp(),
   cpSolo: () => needName(() => launchCampaign(cpPickNow().k, cpPickNow().diff)),
@@ -1108,7 +1118,7 @@ function beginSpectating(msg) {
   app.inMatch = true;
   wakeLock.set(true);
   app.matchInfo = { roster: msg.roster, seed: msg.seed, mapId: msg.mapId, mode: msg.mode, mods: cleanMods(msg.mods, msg.mode), scoreLimit: msg.scoreLimit, timeLimit: msg.timeLimit, spectating: true };
-  music.match({ mode: msg.mode, rules: MODES[msg.mode]?.rules ?? msg.mode, large: !!MODES[msg.mode]?.large });     // docs/AUDIO.md
+  music.match({ mode: msg.mode, map: msg.mapId, rules: MODES[msg.mode]?.rules ?? msg.mode, large: !!MODES[msg.mode]?.large, mission: MODES[msg.mode]?.cp ? Math.floor((msg.scoreLimit | 0) / 10) : 0 });     // docs/AUDIO.md
   stopVote();
   net.resetGameHandlers();
   backdrop.stop();
@@ -2000,7 +2010,7 @@ function beginMatch({ roster, seed, mapId, mode, mods = [], scoreLimit, timeLimi
   if (ranked && !training && !tutorial) { try { app.match.awards.ranked = rankedContext(roster, id, ranked); } catch (err) { console.error('ranked', err); } }
   app.matchInfo.ranked = !!ranked;
   // The match music's theme (docs/AUDIO.md): by mode, Ground War, ranked, and the campaign's mission.
-  music.match({ mode, rules: MODES[mode]?.rules ?? mode, ranked: !!ranked, large: !!MODES[mode]?.large, mission: MODES[mode]?.cp ? Math.floor((scoreLimit | 0) / 10) : 0 });
+  music.match({ mode, map: mapId, rules: MODES[mode]?.rules ?? mode, ranked: !!ranked, large: !!MODES[mode]?.large, mission: MODES[mode]?.cp ? Math.floor((scoreLimit | 0) / 10) : 0 });
   // The caster camera (docs/RANKED.md): out-of-play players may watch with it, except where seeing everyone would be
   // unfair (Ranked) or makes no sense (Training, the tutorial, the range).
   if (app.match.caster) {

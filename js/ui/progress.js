@@ -95,7 +95,7 @@ import { weeklyEventAt, eventStatus, eventRoll, applyEventMatch } from '../share
 import { applyRanked, placed, division, codeOf, PLACEMENTS } from '../shared/ranked.js';
 import { tourneyOwned, tourneyAt, runStatus, enterTourney, joinTourney, applyTourneyRound, rollTourney, cleanTourney, startRound, settleForfeit } from '../shared/tourney-items.js';     // docs/TOURNAMENTS.md
 import { OPERATOR_FINISHERS as FINISHERS, EMOTES, DEFAULT_FINISHER, unlockOk, unlockText } from '../shared/finishers.js';     // docs/FINISHERS.md
-import { cleanCampaign, recordCampaign, CP_LIFE, CP_VET_LIFE, CP_SKIN } from '../shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
+import { cleanCampaign, recordCampaign, CP_LIFE, CP_VET_LIFE, CP_SKIN, CP_VET_LIFE2, CP_SKIN2 } from '../shared/campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 
 export { levelOf };
 
@@ -806,8 +806,9 @@ export const Progress = {
     const zmRecord = zmRounds != null && mapId ? recordZmBest(data, mapId, zmRounds) : null;
     // A cleared campaign mission: the save block, and the lifetime tallies its cards, emblem and skin read.
     const cpSkinBefore = cpRun ? skinUnlock(getSkin(CP_SKIN.id) ?? { unlock: null }, looksCareer()).unlocked : true;
+    const cpSkin2Before = cpRun ? skinUnlock(getSkin(CP_SKIN2.id) ?? { unlock: null }, looksCareer()).unlocked : true;
     const cpRec = cpRun ? recordCampaign(data, cpRun) : null;
-    if (cpRec) life = { ...(life ?? {}), [CP_LIFE(cpRun.id)]: 1, ...(cpRec.vetAll ? { [CP_VET_LIFE]: 1 } : {}) };
+    if (cpRec) life = { ...(life ?? {}), [CP_LIFE(cpRun.id)]: 1, ...(cpRec.vetAll ? { [CP_VET_LIFE]: 1 } : {}), ...(cpRec.vetAll2 ? { [CP_VET_LIFE2]: 1 } : {}) };
     addLife(data, { ...(life ?? {}), ...(mapId ? { [`map:${mapId}`]: 1, ...(won ? { [`mapwon:${mapId}`]: 1 } : {}) } : {}) });
     if (extracted) data.extractions = (data.extractions ?? 0) + 1;      // Extraction: the career count leaderboards read.
     lastMastery = tiers.moved;
@@ -848,6 +849,7 @@ export const Progress = {
       .map(e => ({ kind: 'emblem', id: e.id, name: e.name, req: e.rule.label, feat: true }));
     unlocks.unshift(...proUnlocks, ...ups, ...cardUnlocks, ...featUnlocks);
     if (!cpSkinBefore && getSkin(CP_SKIN.id) && skinUnlock(getSkin(CP_SKIN.id), looksCareer()).unlocked) unlocks.unshift({ kind: 'skin', id: CP_SKIN.id, name: `${CP_SKIN.name} (Marshal)`, req: CP_SKIN.label });
+    if (!cpSkin2Before && getSkin(CP_SKIN2.id) && skinUnlock(getSkin(CP_SKIN2.id), looksCareer()).unlocked) unlocks.unshift({ kind: 'skin', id: CP_SKIN2.id, name: `${CP_SKIN2.name} (Sparrow)`, req: CP_SKIN2.label });
     // Master Prestige (docs/PRESTIGE.md): the icon tiers and milestones this match passed, ahead of the rest (their
     // cards are already in cardUnlocks, so they are not stamped twice).
     const masterAfter = masterNow();

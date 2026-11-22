@@ -432,6 +432,8 @@ const SQUARE = {
   // Wrenfield Fair: the big wheel on its A-frame, spokes and cars, its hub lit.
   'map:wrenfield': { f: [bar(16, 15, 8, 29.5, 2.4), bar(16, 15, 24, 29.5, 2.4), bar(5, 15, 27, 15, 1.3), bar(16, 4, 16, 26, 1.3), bar(8.2, 7.2, 23.8, 22.8, 1.3), bar(23.8, 7.2, 8.2, 22.8, 1.3)],
     h: [R(3.2, 14.6, 3.6, 3, 0.6), R(25.2, 14.6, 3.6, 3, 0.6), R(14.2, 3.6, 3.6, 3, 0.6), R(14.2, 25.6, 3.6, 3, 0.6), R(6.4, 6.8, 3.6, 3, 0.6), R(22, 6.8, 3.6, 3, 0.6), R(6.4, 22.4, 3.6, 3, 0.6), R(22, 22.4, 3.6, 3, 0.6)], a: [O(16, 15, 2.6)] },
+  // Saltmere Abbey: the abbey's bell tower and a broken arch standing in the flood.
+  'map:saltmere': { f: [R(18, 8, 8, 18), P(17, 8, 22, 1.5, 27, 8), R(3, 12, 3, 14), R(12, 12, 3, 14), P(3, 12, 9, 5, 15, 12, 13, 12, 9, 7.6, 5, 12)], h: [R(20, 11, 4, 4, [2, 2, 0, 0]), R(1, 27, 30, 1.6), R(5, 29.6, 22, 1.4)], a: [O(22, 13.6, 1.5)] },
   'map:topside': { f: [P(2, 29.5, 2, 16, 8, 16, 8, 10, 15, 10, 15, 19, 20, 19, 20, 6.5, 26.5, 6.5, 26.5, 29.5, 30, 29.5, 30, 29.5), R(22.5, 1.5, 1.6, 5)], h: [R(10, 13, 3, 3), R(21.8, 10, 3, 3), R(21.8, 16, 3, 3), R(4, 20, 2.5, 3)], a: [O(23.3, 2, 1.6)] },
 
   // ---- Search and Destroy ----
@@ -502,7 +504,7 @@ const ALIAS = {
   strike: 'strike', ...Object.fromEntries(['headshot', 'first_blood', 'double', 'triple', 'fury', 'revenge', 'longshot', 'streak3', 'streak5', 'streak10', 'capture', 'defend', 'flag_take', 'flag_capture', 'flag_return', 'carrier_kill', 'flag_defend', 'plant', 'defuse', 'clutch'].map(m => [m, 'medal:' + m])),
   tdm: 'mode:tdm', kc: 'mode:kc', dom: 'mode:dom', hard: 'mode:hard', gwtdm: 'mode:tdm', gwdom: 'mode:dom', cq: 'mode:cq', bt: 'mode:bt', ffa: 'mode:ffa', gun: 'mode:gun', snd: 'mode:snd', ctf: 'mode:ctf', br: 'mode:br', hq: 'mode:hq', gwhq: 'mode:hq', ko: 'mode:ko', gwko: 'mode:ko', gwinf: 'mode:inf', inf: 'mode:inf', oic: 'mode:oic', ctl: 'mode:ctl', grind: 'mode:grind', brduo: 'mode:br', brsolo: 'mode:br', rb: 'mode:rb', rbduo: 'mode:rb', gf: 'mode:gf', exq: 'mode:ex', exd: 'mode:ex', ex: 'mode:ex', zm: 'mode:zm', cp: 'mode:cp',
   intel: 'ex:intel', hvt: 'ex:hvt', cache: 'ex:cache', hack: 'ex:hack', escort: 'ex:escort',
-  railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry', ashgrove: 'map:ashgrove', polestar: 'map:polestar', wrenfield: 'map:wrenfield',
+  railyard: 'map:railyard', harbor: 'map:harbor', neon: 'map:neon', dust: 'map:dust', frost: 'map:frost', sunken: 'map:sunken', topside: 'map:topside', harvest: 'map:harvest', pier: 'map:pier', foundry: 'map:foundry', ashgrove: 'map:ashgrove', polestar: 'map:polestar', wrenfield: 'map:wrenfield', saltmere: 'map:saltmere',
   ...Object.fromEntries(['turnstile', 'overpass', 'downtown', 'oasis', 'canyon', 'ruins', 'canopy', 'riverbend', 'expedition', 'icebreaker', 'millbrook', 'jadefall', 'tidebreak', 'coral', 'launchpad', 'observatory', 'pagoda', 'midtown', 'oldquarter', 'canalrow', 'unionsq', 'meridian'].map(m => [m, 'map:' + m])),
   'map:range': 'ui:aim', range: 'ui:aim',
   // Modes overhaul medals wear the nearest existing medal (js/ui/mode-hud.js names them).

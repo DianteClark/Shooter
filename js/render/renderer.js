@@ -124,7 +124,7 @@ function tracerColor(camoId, team) {
 const GUNSHIP_TRACER = [1.0, 0.42, 0.12];
 const FIRE_SPARK = [1.0, 0.6, 0.2];
 const TURRET_TRACER = [1.0, 0.72, 0.3];
-const ZM_ARC = [0.45, 0.85, 1.0], ZM_FROST = [0.75, 0.95, 1.0], ZM_DRONE = [0.4, 1.0, 0.65], ZM_WHIRL = [1.0, 0.5, 0.9];   // Graveyard Shift's economy.
+const ZM_ARC = [0.45, 0.85, 1.0], ZM_FROST = [0.75, 0.95, 1.0], ZM_DRONE = [0.4, 1.0, 0.65], ZM_WHIRL = [1.0, 0.5, 0.9], ZM_TIDE = [0.35, 1.0, 0.85];   // Graveyard Shift's economy.
 
 // Cheap pseudo-noise for screen shake.
 function wobble(t, seed) {
@@ -453,10 +453,22 @@ export class GameRenderer {
           // The Rimecaster (a zombie frozen solid, one shattering) and the Listener's pulse going off.
           else if (ev.k === 'freeze') { vfx.pop(ev.x, 1, ev.z, 1.6, ZM_FROST, 0.5); vfx.ring(ev.x, ev.z, 0.3, 0.9, 2.4, ZM_FROST, 0.5); }
           else if (ev.k === 'whirlpop') { const r = ev.r ?? 3; vfx.sparks(ev.x, 0.8, ev.z, 0, 0, ZM_WHIRL, 18, 10); vfx.ring(ev.x, ev.z, 0.3, r, 0.35, ZM_WHIRL, 0.9); vfx.pop(ev.x, 1, ev.z, r, ZM_WHIRL, 0.25); }     // The Whirligig's burst.
+          else if (ev.k === 'surface') { const r = ev.r ?? 3; vfx.sparks(ev.x, 0.4, ev.z, 0, 0, ZM_TIDE, 22, 9); vfx.ring(ev.x, ev.z, 0.3, r, 0.45, ZM_TIDE, 0.9); vfx.pop(ev.x, 1, ev.z, r, ZM_TIDE, 0.3); }     // The Ferryman comes up.
           else if (ev.k === 'shatter') { const r = ev.r ?? 2.6; vfx.sparks(ev.x, 1, ev.z, 0, 0, ZM_FROST, ev.r ? 16 : 10, 9); vfx.ring(ev.x, ev.z, 0.3, r, 0.4, ZM_FROST, 0.8); vfx.pop(ev.x, 1, ev.z, r * 0.8, ZM_FROST, 0.2); }
           break;
         }
         case 'zpulse': vfx.ring(ev.x, ev.z, ev.r, ev.r, ev.wind, ZM_FROST, 0.55); vfx.ring(ev.x, ev.z, 0.4, ev.r, ev.wind, ZM_FROST, 0.35); break;     // The Listener's frost pulse, winding up.
+        // Saltmere Abbey (js/sim/zm-abbey.js): the Ferryman going under (a splash where it sinks, then the whirlpool at
+        // the spot it comes up at: a ring the whole time, a second closing in on it as the moment comes, foam turning),
+        // and a soul drunk by a font (a pale streak from the kill to the bowl).
+        case 'zdive': {
+          vfx.ring(ev.x, ev.z, 0.4, 2.4, 0.5, ZM_TIDE, 0.5); vfx.sparks(ev.x, 0.3, ev.z, 0, 0, ZM_TIDE, 10, 5);
+          vfx.ring(ev.tx, ev.tz, ev.r, ev.r, ev.warn, ZM_TIDE, 0.6); vfx.ring(ev.tx, ev.tz, ev.r, 0.3, ev.warn, ZM_TIDE, 0.4);
+          vfx.ring(ev.tx, ev.tz, ev.r * 0.62, ev.r * 0.62, ev.warn, [0.2, 0.55, 0.5], 0.3);
+          this.zmBodies?.onDive(ev);
+          break;
+        }
+        case 'zsoul': if (ev.fx !== undefined) { vfx.tracer(ev.x, 1.1, ev.z, ev.fx, 1.3, ev.fz, ZM_TIDE, 0.1, 8, 0.25, 26); vfx.pop(ev.fx, 1.2, ev.fz, 1.2, ZM_TIDE, 0.25); } break;
         case 'turret_shot': {
           if (ev.zm === 'drone') { vfx.tracer(ev.ox, 2.3, ev.oz, ev.x, 1.05, ev.z, ZM_DRONE, 0.08); vfx.sparks(ev.x, 0.6, ev.z, 0, 0, ZM_DRONE, 2, 6); break; }
           vfx.tracer(ev.ox, ev.kind === 'vtol' ? 5.9 : 1.0, ev.oz, ev.x, 1.05, ev.z, TURRET_TRACER, ev.kind === 'vtol' ? 0.13 : 0.1);   // Wave 5: from the VTOL's chin gun.

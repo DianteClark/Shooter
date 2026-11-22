@@ -13,7 +13,8 @@
 //   quest      the relics (small violet lanterns, floating where they lie, gone once found) and the altar's sockets
 //              lighting as they are found; Polestar's radios and console; Wrenfield Fair's four coloured lanterns on
 //              their posts (cold, waiting, lit, guttering as the burn runs out), the Oracle's cabinet showing the order
-//              once asked, and the high striker's scale lighting a lamp a lantern
+//              once asked, and the high striker's scale lighting a lamp a lantern; Saltmere Abbey's fonts (their
+//              water dark, dry, drinking with a wisp circling faster as it fills, full) and the bell rope's three lamps
 //   gear       sentries (turning to their aim), hunter drones (hovering, bobbing), lures (a pulsing red post) and the
 //              air strike's mark on the ground: instanced, one draw call each
 //   x-ray      the stations' outlines, their lamps and the trap rings through walls and roofs (the camera looks north:
@@ -140,6 +141,12 @@ export class ZmEconFx {
       }
       st.at(Al.x, Al.z, 0);
       st.box(0.6, 0.12, 0.3, 0.9, 0.12, 0.14, 0x6a4c32).box(1.0, 0.18, 0.3, 0.26, 0.26, 0.4, 0x2e2c32);
+    } else if (Al && L.questKind === 'font') {
+      // Saltmere Abbey: the fonts' basins stand in the world (the theme); the bell rope's cleat and a board for its
+      // three lamps (below) at the tower's foot.
+      st.at(Al.wx, Al.wz, Al.face);
+      st.box(0.1, 1.1, 0.5, 0.08, 0.9, 0.5, 0x3a2c20).box(0.14, 0.9, -0.4, 0.16, 0.16, 0.3, 0x2a2c2e);
+      ghost.at(Al.wx, Al.wz, Al.face).box(0.1, 1.2, 0, 0.1, 1.4, 1.4, 0x7affe0, 0, false);
     } else if (Al) {
       st.at(Al.wx, Al.wz, Al.face);
       st.box(0.6, 0.42, 0, 1.0, 0.84, 1.5, 0x5d5a55).box(0.6, 0.88, 0, 1.12, 0.09, 1.64, 0x726e68).box(0.14, 1.3, 0, 0.18, 0.9, 0.5, 0x4a4743);
@@ -279,9 +286,10 @@ export class ZmEconFx {
     // Relics and the altar's sockets.
     const q = obj.quest ?? { got: 0, state: 0 };
     let n = 0;
-    const radio = L.questKind === 'radio', lantern = L.questKind === 'lantern';
+    const radio = L.questKind === 'radio', lantern = L.questKind === 'lantern', font = L.questKind === 'font';
     if (lantern) n = this.#lanterns(obj, q, t);
-    for (const r of lantern ? [] : L.relics) {
+    if (font) n = this.#fonts(obj, q, t);
+    for (const r of lantern || font ? [] : L.relics) {
       if (radio) {
         // A radio's lamp: dark with no power, amber live, cyan blinking while tuned, green once it is locked on.
         const got = q.got & (1 << r.i), tuning = q.tuneI === r.i, live = obj.power ?? 1;
@@ -295,7 +303,7 @@ export class ZmEconFx {
       this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(0xb070ff)); n++;
     }
     const Al = L.altar;
-    if (Al && !lantern) {
+    if (Al && !lantern && !font) {
       for (const r of L.relics) {
         const lit = q.got & (1 << r.i), c = Math.cos(Al.face), s = Math.sin(Al.face), side = (r.i - 1) * 0.42;
         M4.compose(V.set(Al.wx + c * 0.6 - s * side, 1.0, Al.wz + s * 0.6 + c * side), Q.identity(), S.setScalar(lit ? 0.8 + 0.15 * Math.sin(t * 3 + r.i) : 0.5));
@@ -365,6 +373,33 @@ export class ZmEconFx {
     // The high striker's lamps up its scale: one a lantern lit; all four ringing once the Barker is out.
     const Al = L.altar;
     if (Al) for (let k = 0; k < L.relics.length; k++) put(Al.wx, 1.4 + k * 0.8, Al.wz + 0.12, 0.6, k < n0 || done ? (q.state === 1 ? (Math.sin(t * 10 + k) > 0 ? 0xffd27a : 0xff4a3a) : 0xffd27a) : 0x2a2018);
+    return n;
+  }
+
+  // Saltmere Abbey's fonts and the bell rope's lamps, on the relic instances. Returns the count.
+  #fonts(obj, q, t) {
+    const L = this.L, done = q.state > 0, full = i => done || q.got & (1 << i), woke = i => (q.woke ?? 0) & (1 << i);
+    let n = 0;
+    const put = (x, y, z, sx, sy, hex) => { M4.compose(V.set(x, y, z), Q.setFromEuler(E.set(0, t * 0.5, 0)), S.set(sx, sy, sx)); this.relics.setMatrixAt(n, M4); this.relics.setColorAt(n, C.setHex(hex)); n++; };
+    for (const r of L.relics) {
+      const souls = q.souls?.[r.i] ?? 0, k = souls / ZE.quest.souls;
+      // The water in the bowl: black and dry with no power, a dull teal waiting to be filled, drinking (brighter as it
+      // fills, pulsing), and white-green once it is full.
+      const hex = full(r.i) ? 0xb8fff0 : woke(r.i) ? C.setHex(0x3affd0).multiplyScalar(0.45 + 0.4 * k + 0.15 * Math.sin(t * 6)).getHex() : obj.power ? 0x0e3a34 : 0x0a1414;
+      put(r.x, 1.0, r.z, full(r.i) ? 2.4 + 0.1 * Math.sin(t * 2) : 2.2, 0.14, hex);
+      // A wisp circling the font while it drinks (quicker and higher as it fills), one steady over a full one.
+      if (woke(r.i) || full(r.i)) {
+        const a = t * (2 + k * 5) + r.i * 2, R = full(r.i) ? 0 : 0.9;
+        put(r.x + Math.cos(a) * R, 1.4 + (full(r.i) ? 0.4 + Math.sin(t * 2) * 0.1 : k * 0.8), r.z + Math.sin(a) * R, 0.5, 0.8, full(r.i) ? 0xe8fff8 : 0x7affe0);
+      }
+    }
+    // The bell rope's board: a lamp a full font; all three swinging bright once the Ferryman is out.
+    const Al = L.altar;
+    if (Al) {
+      const c = Math.cos(Al.face), s = Math.sin(Al.face);
+      L.relics.forEach((r, k) => put(Al.wx + c * 0.16 - s * (0.3 + k * 0.32), 1.6, Al.wz + s * 0.16 + c * (0.3 + k * 0.32), 0.6, 0.6,
+        full(r.i) ? (q.state === 1 ? (Math.sin(t * 8 + k) > 0 ? 0xb8fff0 : 0x2a8a7a) : 0x7affe0) : 0x14201e));
+    }
     return n;
   }
 

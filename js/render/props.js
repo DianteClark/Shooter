@@ -33,6 +33,7 @@ const SETS = {
   ashgrove: [CRATE, BARREL, JAR, CRATE],
   polestar: [BARREL, CRATE, BARREL, CONE],
   wrenfield: [CRATE, BARREL, JAR, CRATE],
+  saltmere: [CRATE, BARREL, CRATE, JAR],
   millbrook: [CRATE, BARREL, JAR, CRATE],
   launchpad: [CONE, BARREL, CRATE, CONE, SIGN],
   observatory: [CRATE, BARREL, CRATE, SIGN],

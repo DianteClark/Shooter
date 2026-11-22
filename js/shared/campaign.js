@@ -11,10 +11,19 @@
 //            (enemies standing on a charge pull it); `timer` s to set them all
 //   kill     every `target` group member dead (a fleeing target that reaches its last stop and waits there escapes)
 //   chase    reach the gates of `route` in order before the clock (`timer`, plus `add` a gate) runs out
-//   boss     bring the boss down (phases and telegraphed attacks: js/sim/campaign.js)
+//   boss     bring the boss down (phases and telegraphed attacks: js/sim/campaign.js); with `timer`, before it runs out
 //   extract  every squad member who is up within r of `at` for `time` s (at least one of them)
+//   pursue   (Operation Starfall) stay within `r` of a running target (its `target` group's route, no waiting) until it
+//            is cornered at its last stop, then put it down: lose it for CP.trail s and it is gone; it shrugs off most
+//            of the damage while it runs
+// A plant step with `hostage` frees a prisoner (the mission's `vip`, held at its spot from the start with `vip.early`):
+// an alarm before then starts the mission's `hostage.clock` (they move the prisoner: fail). A step with `loud` raises the
+// alarm as it starts (the escape after a quiet rescue). A mission with `night` is fought in the dark (the phones see a
+// few metres round the player, the bots' sight is cut) except under a flare (`flare` on a trigger lights the field for
+// CP.flare s). A mission's `boss` ({name, hp, salvo, crest}) tunes the boss step's boss: his health pool (x CP.boss.hp),
+// a salvo (a line of rings walked out toward one of the squad) among his attacks, the colour of his crest.
 // Step fields: label (the HUD's line), at/r, spawn (groups made when the step starts), say (radio at the start), done
-// (radio at the end), on (triggers: {when: {t} | {prog} | {gate} | {planted}, spawn, say}), checkpoint (the squad's
+// (radio at the end), on (triggers: {when: {t} | {prog} | {gate} | {planted}, spawn, say, flare}), checkpoint (the squad's
 // respawn spot moves to `cp` or `at` when the step starts), stealth (guards see with cones until the alarm).
 // A group: {role: guard | patrol | assault | sniper | target | boss, at, n, route, fixed (n not scaled), name, tough}.
 // Places (`at`, `route`, `sites`) are names the map resolves (cpPoint): s0/s1 the two spawn ends, d0.. Domination
@@ -24,6 +33,11 @@
 export const OPERATION = {
   id: 'nightrail', name: 'Operation Nightrail', short: 'Nightrail',
   blurb: 'The Meridian Line has seized the rail network. Lantern needs a squad on the ground to take it back, one yard at a time.',
+};
+// The second operation (appended): the Line's board, the Directorate, is buying a launch.
+export const OPERATION2 = {
+  id: 'starfall', name: 'Operation Starfall', short: 'Starfall',
+  blurb: 'Kordell is gone, but the Line was never only his. Its board, the Directorate, means to take the signals back from orbit. Lantern needs the squad again.',
 };
 
 // Numbers the sim, HUD and menus share. Seconds and metres.
@@ -39,6 +53,10 @@ export const CP = {
   detect: { range: 15, cone: 0.62, rate: 0.9, fall: 0.35, crouchK: 0.55 },     // Stealth: cone half-angle (rad), fill per second at 0 m.
   hvtWait: 40, hvtNear: 55, hvtEscape: 25,     // A fleeing target holds a stop this long (or until the squad is this near); at the last it waits this long.
   ping: 20,              // Seconds between Lantern's pings on a fleeing target.
+  trail: 12,             // A pursuit: seconds with nobody of the squad within the step's r before the target is lost.
+  runTake: 0,            // A pursued target on the run takes this share of the damage (plated: nothing stops him until he is cornered).
+  flare: 10,             // A night mission: seconds a flare lights the field.
+  nightSight: 0.55,      // A night mission: everyone's sight (the bots' sightK) without a flare.
   boss: { hp: 12000, barrage: [8, 6, 5], warn: 1.7, ring: 3.4, hit: 45, charge: 9, chargeWarn: 1.3, chargeSpeed: 15, chargeHit: 60, chargeW: 2.2, guard: 4 },
 };
 
@@ -59,6 +77,7 @@ export const RADIO = {
   line: { name: 'Meridian radio', css: '#ff8a7c' },
   magpie: { name: 'Kingfisher', css: '#ffd27c' },
   kordell: { name: 'Marshal Kordell', css: '#ff5a4a' },
+  vane: { name: 'Director Vane', css: '#c8a8ff' },
 };
 
 const L = (who, text) => [who, text];
@@ -287,7 +306,137 @@ export const MISSIONS = [
         done: [L('lantern', 'Kordell is down. The Line is ours again. Operation Nightrail is complete. Thank you, all of you.')] },
     ],
   },
+  // ---- Operation Starfall (appended): four missions after Nightrail ----
+  {
+    id: 'm9', n: 9, op: 'starfall', name: 'Dark Sky', map: 'observatory', par: 660, insert: 's0', night: true,
+    tag: 'Night defence',
+    brief: [
+      ['After the crown', 'Kordell is gone, but the Line was never only his. Its board, the Directorate, has bought a launch: a satellite to take the signals back from orbit.'],
+      ['Your job', 'The observatory dish is the only ear high enough to hear their launch telemetry. Wire Lantern\'s receiver into it and hold the summit until dawn.'],
+      ['In the dark', 'No moon tonight. You see a few metres round you, and so do they. When a flare goes up, everyone sees everything: use it.'],
+    ],
+    bonus: { id: 'zone', label: 'Never let the dish fall below half' },
+    steps: [
+      { type: 'goto', at: 'h0', r: 6, label: 'Climb to the observatory', checkpoint: true, cp: 's0',
+        spawn: [{ role: 'guard', at: 'h0', n: 2 }, { role: 'guard', at: 'd1', n: 3 }, { role: 'patrol', at: 'h2', n: 2, route: ['h2', 'd1', 'h3', 'd1'] }],
+        say: [L('lantern', 'Lantern on the net. Welcome back. It is darker than it looks from here: stay close to each other.')] },
+      { type: 'plant', sites: ['d1'], plant: 5, tap: true, label: 'Wire the receiver into the dish', checkpoint: true, cp: 'h0',
+        spawn: [{ role: 'guard', at: ['d1', 4, 3], n: 2 }],
+        say: [L('lantern', 'The dish is in the dome\'s courtyard. Plug me in and keep your heads down.')],
+        done: [L('lantern', 'I can hear them. Launch telemetry, clear as a bell. Now hold that dish while I copy it.')] },
+      { type: 'defend', at: 'd1', r: 9, time: 240, label: 'Hold the dish until dawn', checkpoint: true, cp: 'd1',
+        on: [{ when: { t: 5 }, spawn: [{ role: 'assault', at: 's1', n: 3 }] },
+          { when: { t: 40 }, spawn: [{ role: 'assault', at: 'b1', n: 3 }, { role: 'assault', at: 'h1', n: 2 }], say: [L('line', 'Movement at the dish. Light it up!')], flare: true },
+          { when: { t: 85 }, spawn: [{ role: 'assault', at: 's1', n: 4 }] },
+          { when: { t: 125 }, spawn: [{ role: 'assault', at: 'b0', n: 3 }, { role: 'assault', at: 'h3', n: 2 }], say: [L('lantern', 'Halfway. They are coming over the ridge path, north side.')] },
+          { when: { t: 170 }, spawn: [{ role: 'assault', at: 's1', n: 4 }, { role: 'sniper', at: 'd2', n: 1 }], say: [L('line', 'Flares! Find them and finish it!')], flare: true },
+          { when: { t: 210 }, spawn: [{ role: 'assault', at: 'h1', n: 3 }, { role: 'assault', at: 'b1', n: 3 }], say: [L('lantern', 'Nearly dawn. Don\'t give them the dish now.')] }],
+        done: [L('lantern', 'Got it all. The launch is at their desert pad, and Kestrel... they have Kestrel. She was taken last night.')] },
+      { type: 'extract', at: 's0', r: 6, time: 5, label: 'Ride the cable car down', checkpoint: true, cp: 'd1',
+        spawn: [{ role: 'assault', at: 'd0', n: 3 }],
+        done: [L('lantern', 'Down safe. Get some sleep. Tomorrow we bring her home.')] },
+    ],
+  },
+  {
+    id: 'm10', n: 10, op: 'starfall', name: 'Paper Lanterns', map: 'pagoda', par: 660, insert: 's0', stealth: true, vip: { name: 'Kestrel', at: 'b0', early: true },
+    hostage: { clock: 45 },
+    tag: 'Hostage rescue',
+    brief: [
+      ['Taken', 'The Directorate took Kestrel to make her finish their launch software. They are holding her in the bell tower of the hillside temple.'],
+      ['Your job', 'Get in quietly, cut her loose and walk her out the west gate. Once she is free, the whole temple will know.'],
+      ['Quiet first', 'Watchmen carry lanterns: stay out of the light. If they raise the alarm before she is free, they move her: you will have seconds to reach her.'],
+    ],
+    bonus: { id: 'quiet', label: 'Free Kestrel without an alarm' },
+    alarm: { spawn: [{ role: 'assault', at: 's1', n: 4 }], say: [L('line', 'Intruders in the temple! Move the prisoner!')],
+      later: { t: 40, spawn: [{ role: 'assault', at: 'h1', n: 3 }] } },
+    steps: [
+      { type: 'goto', at: 'h0', r: 4, label: 'Slip through the north gate', checkpoint: true, cp: 's0', stealth: true,
+        spawn: [{ role: 'guard', at: 'd1', n: 2, stealth: true }, { role: 'guard', at: ['h3', -7, 9], n: 2, stealth: true }, { role: 'guard', at: 'd2', n: 2, stealth: true },
+          { role: 'patrol', at: 'd0', n: 2, route: ['d0', 'h3', 'd1', 'h0'], stealth: true }, { role: 'patrol', at: 'h2', n: 1, route: ['h2', 'd1', 'h1', 'd1'], stealth: true }],
+        say: [L('lantern', 'Same rules as the market: their lanterns are their eyes. Kestrel is in the bell tower, east end.')] },
+      { type: 'plant', sites: ['b0'], plant: 4, hostage: true, label: 'Cut Kestrel loose', checkpoint: true, cp: 'h0', stealth: true,
+        say: [L('kestrel', 'Is that... you came. Quick, the ropes. They check on me every few minutes.')],
+        done: [L('kestrel', 'I\'m free. They will see the empty chair any moment.')] },
+      { type: 'escort', route: [['~', 'b0', 'd0', 0.5], 'd0', 'h0', 's0'], label: 'Walk Kestrel out the west gate', checkpoint: true, cp: 'b0', loud: true,
+        spawn: [{ role: 'guard', at: 'd0', n: 2 }],
+        on: [{ when: { gate: 1 }, spawn: [{ role: 'assault', at: 'd1', n: 3 }], say: [L('line', 'The prisoner is out! Cut them off at the gate!')] },
+          { when: { gate: 2 }, spawn: [{ role: 'assault', at: 'h2', n: 3 }, { role: 'sniper', at: 'h3', n: 1 }] },
+          { when: { gate: 3 }, spawn: [{ role: 'assault', at: 's1', n: 4 }], say: [L('kestrel', 'The gate! Almost there.')] }],
+        done: [L('kestrel', 'Lantern, they had me writing their uplink. I know where the launch codes go: a courier takes them to the pad tonight.')] },
+      { type: 'extract', at: 's0', r: 6, time: 4, label: 'Get out of the temple grounds', checkpoint: true, cp: 's0',
+        spawn: [{ role: 'assault', at: 'h0', n: 3 }],
+        done: [L('lantern', 'Welcome back, Kestrel. Squad: find me that courier.')] },
+    ],
+  },
+  {
+    id: 'm11', n: 11, op: 'starfall', name: 'Cold Trail', map: 'jadefall', par: 720, insert: ['p4', -40, 4],
+    tag: 'Pursuit',
+    brief: [
+      ['The courier', 'The Directorate\'s launch codes go to the pad by hand. Their courier lands at Port Coral tonight and runs for a boat at Turtle Bay.'],
+      ['Your job', 'Stay on him through the port and up the coast. He wears plates and he will not stop: bullets barely slow him while he runs. Corner him at the bay and take the codes.'],
+      ['Don\'t lose him', 'If none of you is close to him for long, he is gone. Keep someone on his heels.'],
+    ],
+    bonus: { id: 'close', label: 'Never lose sight of him' },
+    steps: [
+      { type: 'goto', at: ['p4', -14, 6], r: 8, label: 'Get into Port Coral', checkpoint: true, cp: ['p4', -40, 4],
+        spawn: [{ role: 'guard', at: ['p4', -10, 4], n: 3 }, { role: 'patrol', at: ['p4', 6, -8], n: 2, route: [['p4', 6, -8], ['p4', 14, 10], ['p4', -6, 12]] }],
+        say: [L('lantern', 'He is on the quay now. When he sees you he will run. Let him: just don\'t let him get away.')] },
+      { type: 'pursue', r: 32, label: 'Stay on the courier', checkpoint: true, cp: ['p4', -14, 6],
+        spawn: [{ role: 'target', at: 'p4', n: 1, fixed: true, name: 'Courier', route: [['~', 'p4', 'p5', 0.5], 'p5', ['~', 'p5', 'p15', 0.5], 'p15'], escorts: 2 },
+          { role: 'guard', at: 'p5', n: 3 }, { role: 'guard', at: ['~', 'p5', 'p15', 0.5], n: 2 }, { role: 'guard', at: 'p15', n: 3 }],
+        say: [L('lantern', 'There he goes. North along the waterfront. Stay on him!')],
+        on: [{ when: { gate: 1 }, say: [L('line', 'Courier to escort: I have company. Keep them off me.')] },
+          { when: { gate: 2 }, spawn: [{ role: 'assault', at: ['p5', 10, -12], n: 3 }], say: [L('lantern', 'Cannery Wharf. He is making for the coast road.')] },
+          { when: { gate: 4 }, say: [L('lantern', 'He is cornered at the bay: his boat is not there. Finish it.')] }],
+        done: [L('lantern', 'Courier down. The codes are on him.')] },
+      { type: 'goto', at: '@kill', r: 2.6, label: 'Take the launch codes',
+        done: [L('lantern', 'Got them. Launch is at dawn, Launchpad. Hold the bay: a boat is coming for you.')] },
+      { type: 'defend', at: 'p15', r: 10, time: 60, label: 'Hold Turtle Bay for the boat', checkpoint: true, cp: '@kill',
+        on: [{ when: { t: 3 }, spawn: [{ role: 'assault', at: ['p15', 26, 10], n: 3 }] }, { when: { t: 30 }, spawn: [{ role: 'assault', at: ['p15', -24, 18], n: 4 }], say: [L('line', 'They killed the courier! All units to the bay!')] }] },
+      { type: 'extract', at: 'p15', r: 9, time: 5, label: 'Board the boat', checkpoint: true, cp: 'p15',
+        done: [L('lantern', 'Everyone aboard. Next stop, the desert.')] },
+    ],
+  },
+  {
+    id: 'm12', n: 12, op: 'starfall', name: 'Zero Hour', map: 'launchpad', par: 900, insert: 's0',
+    boss: { name: 'Director Vane', hp: 1.1, salvo: true, crest: 0x9ad8ff },
+    tag: 'Final assault',
+    brief: [
+      ['Zero hour', 'The rocket stands on the pad, fuelled and counting down. Director Vane has come out to watch it go, in the Directorate\'s own heavy suit.'],
+      ['Your job', 'Breach the tank farm, cut the fuel lines, then bring Vane down before the count reaches zero. Then abort the launch from the gantry.'],
+      ['Read him', 'Rings on the ground are his barrage. A line of rings walking toward you is his salvo: get off the line. When he kneels, his guard is coming.'],
+    ],
+    bonus: { id: 'dodge', label: 'Nobody caught by a barrage' },
+    steps: [
+      { type: 'goto', at: 'h0', r: 7, label: 'Breach the tank farm', checkpoint: true, cp: 's0',
+        spawn: [{ role: 'guard', at: 'h0', n: 3 }, { role: 'guard', at: 'd0', n: 3 }, { role: 'sniper', at: 'h3', n: 1 }, { role: 'patrol', at: 'h2', n: 2, route: ['h2', 'd0', 'h0', 'd0'] }],
+        say: [L('vane', 'Lantern\'s squad. You are late. Watch the sky with the rest of them.')] },
+      { type: 'plant', sites: ['d0', 'h2'], plant: 3, fuse: 15, timer: 240, label: 'Cut the fuel lines', checkpoint: true, cp: 'h0',
+        spawn: [{ role: 'guard', at: ['d0', 3, 3], n: 2 }, { role: 'guard', at: ['h2', 3, -3], n: 2 }],
+        say: [L('lantern', 'Two fuel lines run from the tank farm to the pad. Charges on both.')],
+        on: [{ when: { planted: 1 }, spawn: [{ role: 'assault', at: 'd1', n: 3 }], say: [L('line', 'Charges on the fuel lines! Pull them!')] },
+          { when: { planted: 2 }, spawn: [{ role: 'assault', at: 'h1', n: 3 }] }],
+        done: [L('lantern', 'Lines cut. The count is still running: Vane is on the apron. Bring him down.')] },
+      { type: 'boss', at: 'd1', r: 32, timer: 420, label: 'Bring down Director Vane before the launch', checkpoint: true, cp: 'd0',
+        spawn: [{ role: 'boss', at: 'd1', n: 1, fixed: true, name: 'Director Vane' }, { role: 'guard', at: 'd2', n: 2 }],
+        say: [L('vane', 'Seven minutes. You will not stop the count, and you will not stop me.')],
+        on: [{ when: { phase: 1 }, say: [L('vane', 'Guard! Hold the apron!')] }, { when: { phase: 2 }, say: [L('vane', 'Then we go up together.')] }],
+        done: [L('lantern', 'Vane is down! The count is still running: the abort is on the gantry. Go!')] },
+      { type: 'hack', at: 'd1', r: 5, time: 40, label: 'Abort the launch', checkpoint: true, cp: 'd1',
+        say: [L('kestrel', 'I wrote their uplink: the abort is mine. Keep them off the console and I will walk you through it.')],
+        on: [{ when: { prog: 0.3 }, spawn: [{ role: 'assault', at: 's1', n: 4 }] }, { when: { prog: 0.65 }, spawn: [{ role: 'assault', at: 'b1', n: 3 }, { role: 'assault', at: 'b0', n: 3 }], say: [L('line', 'They are at the console! Stop them!')] }],
+        done: [L('lantern', 'Launch aborted. The Directorate is finished. Operation Starfall is complete. Lantern out, for good this time.')] },
+    ],
+  },
 ];
+// Each operation's missions, by index in MISSIONS (appended: Nightrail 0-7, Starfall 8-11).
+export const OPERATIONS = [
+  { ...OPERATION, from: 0, to: 8 },
+  { ...OPERATION2, from: 8, to: 12 },
+];
+for (const o of OPERATIONS) for (let k = o.from; k < o.to; k++) if (MISSIONS[k]) MISSIONS[k].op = o.id;
+export const opOf = k => OPERATIONS.find(o => k >= o.from && k < o.to) ?? OPERATIONS[0];
+export const opOfMission = m => opOf(MISSIONS.indexOf(m));
 export const MISSION_IDS = MISSIONS.map(m => m.id);
 export const missionById = id => MISSIONS.find(m => m.id === id) ?? null;
 
@@ -373,22 +522,24 @@ export function cleanCampaign(raw) {
   }
   return out;
 }
-// One clear into the save block. Returns {first, vetAll (every mission now cleared on Veteran, and this clear did
-// it), best, before}. Mutates the save.
+// One clear into the save block. Returns {first, vetAll (every Operation Nightrail mission now cleared on Veteran, and
+// this clear did it), vetAll2 (the same for Operation Starfall), best, before}. Mutates the save.
 export function recordCampaign(save, { id, diff = 1, stars = 0, secs = 0 }) {
   const cp = save.cp = cleanCampaign(save.cp);
-  if (!MISSION_IDS.includes(id)) return { first: false, vetAll: false };
+  if (!MISSION_IDS.includes(id)) return { first: false, vetAll: false, vetAll2: false };
   const was = cp[id] ?? [0, 0, 0];
-  const vetBefore = campaignVetAll(cp);
+  const vetBefore = campaignVetAll(cp), vet2Before = campaignVetAll(cp, 1);
   const now = [was[0] | (1 << Math.max(0, Math.min(2, diff))), Math.max(was[1], stars), was[2] && secs ? Math.min(was[2], Math.round(secs)) : Math.round(secs) || was[2]];
   cp[id] = now;
-  return { first: !was[0], vetAll: !vetBefore && campaignVetAll(cp), stars: now[1], starsBefore: was[1], secs: now[2], secsBefore: was[2] };
+  return { first: !was[0], vetAll: !vetBefore && campaignVetAll(cp), vetAll2: !vet2Before && campaignVetAll(cp, 1), stars: now[1], starsBefore: was[1], secs: now[2], secsBefore: was[2] };
 }
-export const campaignVetAll = cp => MISSION_IDS.every(id => ((cp?.[id]?.[0] ?? 0) & 4) !== 0);
+// Every mission of an operation (0 Nightrail, 1 Starfall) cleared on Veteran.
+const opIds = o => MISSION_IDS.slice(OPERATIONS[o].from, OPERATIONS[o].to);
+export const campaignVetAll = (cp, o = 0) => opIds(o).every(id => ((cp?.[id]?.[0] ?? 0) & 4) !== 0);
 export const campaignCleared = (cp, id) => ((cp?.[id]?.[0] ?? 0) & 7) !== 0;
 // A mission is open once the one before it is cleared (on any difficulty); the first always is.
 export const missionOpen = (cp, k) => k === 0 || campaignCleared(cp, MISSIONS[k - 1]?.id);
-export const campaignStars = cp => MISSION_IDS.reduce((n, id) => n + (cp?.[id]?.[1] ?? 0), 0);
+export const campaignStars = (cp, o = -1) => (o < 0 ? MISSION_IDS : opIds(o)).reduce((n, id) => n + (cp?.[id]?.[1] ?? 0), 0);
 
 // Rewards. Lifetime tallies (save.life) drive the cards, emblem and skin through the usual unlock rules:
 // cp:<mission id> one per clear, cp:vetall once every mission is cleared on Veteran.
@@ -396,6 +547,12 @@ export const CP_LIFE = id => `cp:${id}`;
 export const CP_VET_LIFE = 'cp:vetall';
 export const CP_SKIN = { id: 'skin:marshal-nightrail', operator: 'marshal', name: 'Nightrail', label: 'Clear every Operation Nightrail mission on Veteran' };
 export const CP_EMBLEM = { id: 'feat-nightrail', name: 'Nightrail', label: 'Clear every Operation Nightrail mission on Veteran' };
+// Operation Starfall's Veteran clear (appended): Kestrel's Starfall skin and the Starfall emblem.
+export const CP_VET_LIFE2 = 'cp:vetall2';
+export const CP_SKIN2 = { id: 'skin:kestrel-starfall', operator: 'sparrow', name: 'Starfall', label: 'Clear every Operation Starfall mission on Veteran' };
+export const CP_EMBLEM2 = { id: 'feat-starfall', name: 'Starfall', label: 'Clear every Operation Starfall mission on Veteran' };
+// An operation's Veteran rewards, by its index in OPERATIONS.
+export const CP_OP_REWARDS = [{ skin: CP_SKIN, emblem: CP_EMBLEM, life: CP_VET_LIFE }, { skin: CP_SKIN2, emblem: CP_EMBLEM2, life: CP_VET_LIFE2 }];
 // One calling card per mission: id, name, art (pattern and colours for js/shared/progression.js card()).
 export const CP_CARDS = [
   ['cp-m1', 'Switch Room', 'circuit', ['#0e1820', '#1e3a4a', '#bfe6ff', '#7cc8ff']],
@@ -406,4 +563,9 @@ export const CP_CARDS = [
   ['cp-m6', 'Kingfisher', 'rings', ['#1c1a10', '#4a4220', '#fff0b8', '#ffd27c']],
   ['cp-m7', 'Dead Man\'s Run', 'chevrons', ['#1c120a', '#5a3414', '#ffd9a0', '#ff9f1c']],
   ['cp-m8', 'Iron Crown', 'rays', ['#1c0a0a', '#5a1414', '#ffd0c8', '#ff4a3a']],
+  // Operation Starfall (appended).
+  ['cp-m9', 'Dark Sky', 'stardome', ['#060a16', '#1a2444', '#d8e4ff', '#9ad8ff']],
+  ['cp-m10', 'Paper Lanterns', 'tiers', ['#140c10', '#4a2430', '#ffe0c8', '#ff8a3a']],
+  ['cp-m11', 'Cold Trail', 'speed', ['#081418', '#1e3e46', '#c8f4ff', '#38d8c8']],
+  ['cp-m12', 'Zero Hour', 'liftoff', ['#1a1008', '#5a3414', '#fff0d0', '#c8a8ff']],
 ];

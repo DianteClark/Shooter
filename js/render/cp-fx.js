@@ -5,7 +5,10 @@
 //   hazards    the boss's barrage rings (a red ring with a disc filling as it lands) and his charge line
 //   torches    each stealth watchman's torch as a soft fan on the ground ahead of him, hotter as his meter fills
 //   boss       Marshal Kordell's crown: a gold crest turning over his head, a crimson beam on him and a crimson ring
-//              breathing on the ground round him (with the gilded suit and his bigger build in combat.js and characters.js)
+//              breathing on the ground round him (with the gilded suit and his bigger build in combat.js and characters.js);
+//              a mission's own boss (Operation Starfall's Vane) wears its crest in its own colour
+//   flare      a night mission (Operation Starfall's Dark Sky): a flare's light hanging over the field while it burns
+//              (the dark round the player is the HUD's, js/ui/cp-hud.js)
 // A handful of meshes and instanced lists: a few draw calls whatever the mission holds.
 import * as THREE from 'three';
 import { CP } from '../shared/campaign.js';
@@ -73,6 +76,10 @@ export class CpFx {
     this.crest = new THREE.Mesh(mergeAll(crown), new THREE.MeshBasicMaterial({ color: 0xffc23a, side: THREE.DoubleSide }));
     this.crest.visible = false; this.crest.renderOrder = 4;
     this.group.add(this.crest);
+    // A flare's light, hanging over the field on a night mission.
+    this.flare = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2d8 }));
+    this.flare.visible = false; this.flare.renderOrder = 4;
+    this.group.add(this.flare);
     noFog(this.group);
   }
 
@@ -134,8 +141,14 @@ export class CpFx {
         this.#put(this.lines, nl++, (h.x + h.x2) / 2, 0.07, (h.z + h.z2) / 2, L, 1, h.r * 2, C.set(RED).multiplyScalar(0.5 + 0.5 * k).getHex(), -Math.atan2(dz, dx));
       }
     }
-    // The boss: crimson ring at his feet, the crest over his head.
+    // The night's flare (the dark itself is the HUD's: js/ui/cp-hud.js, a pool of light round the player).
+    const lit = cp.flareT > 0;
+    this.flare.visible = lit && !!cp.at;
+    if (this.flare.visible) { this.flare.position.set(cp.at.x + Math.sin(t * 0.7) * 2, 9 + (cp.flareT / CP.flare) * 4, cp.at.z - 3); this.flare.scale.setScalar(0.8 + 0.3 * Math.sin(t * 23)); }
+    // The boss: crimson ring at his feet, the crest over his head (in the mission's own colour when it has one).
     this.crest.visible = false;
+    const crest = cp.mission?.boss?.crest;
+    if (this.crest.material.color.getHex() !== (crest ?? 0xffc23a)) this.crest.material.color.setHex(crest ?? 0xffc23a);
     if (cp.boss) {
       for (const p of view.players) {
         if (p.cpRole !== BOSS_ROLE || !p.alive) continue;

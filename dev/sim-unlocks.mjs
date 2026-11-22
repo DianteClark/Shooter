@@ -471,7 +471,7 @@ test('every new calling card and feat emblem reads a stat the game counts, in it
     // Campaign tallies (cp:) come from a mission cleared, paid by js/game/awards.js: dev/sim-campaign.mjs plays them.
     if (e.rule.life && !FEAT_RARE.has(e.rule.life) && !e.rule.life.startsWith('ex:') && !e.rule.life.startsWith('cp:')) out.push(...lifeReach(e.rule.life).map(x => `${e.id}: ${x}`));
   }
-  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 15, 'fifteen feat emblems (Last Bell: the Barker on Wrenfield Fair; Nightrail: the campaign on Veteran)');
+  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 17, 'seventeen feat emblems (Last Bell: the Barker on Wrenfield Fair; Nightrail: the campaign on Veteran; Starfall: the second operation on Veteran; Drowned Bell: the Ferryman on Saltmere Abbey)');
   assert.deepEqual(out, []);
 });
 
@@ -555,6 +555,8 @@ const FEAT_KEYS = ['ace', 'streak10', 'finishers', 'long40', 'gf:flawless', 'inf
   'ranked:played', 'ranked:won'];
 const RULES = [...new Set(MODE_IDS.map(modeRules))];
 const ZM_MAPS = MODES.zm.maps;
+// The career's length: 84 matches, then one on each Graveyard Shift map (Saltmere Abbey made it 91).
+const CAREER = 84 + ZM_MAPS.length;
 function bigMatch(i) {
   const life = Object.fromEntries([...TALLY_STATS, ...EX_KEYS].map(k => [k, k.startsWith('ex:') ? 2 : 8]));
   for (const m of MAP_LIST) { life[`map:${m}`] = 2; life[`mapwon:${m}`] = 1; }
@@ -568,7 +570,7 @@ function bigMatch(i) {
   return { xp: 220000, weapons, pro, mastery: { tracks, weapons: ladder }, life, mapId: zmAt ?? MAP_LIST[i < 80 ? i % 8 : i % MAP_LIST.length], won: true,
     career: { kills: 40, deaths: 20, br: false, place: null, extracted: true }, extracted: true,
     // Polestar Relay's boss flag is the Listener's (Dead Air, Dead Frequency): put down there in its match.
-    zmFeat: i === 7 ? { escaped: 21, boss: true } : zmAt ? { escaped: 26, boss: zmAt === 'polestar' || zmAt === 'wrenfield' } : null, zmRounds: zmAt ? 31 : null,
+    zmFeat: i === 7 ? { escaped: 21, boss: true } : zmAt ? { escaped: 26, boss: zmAt === 'polestar' || zmAt === 'wrenfield' || zmAt === 'saltmere' } : null, zmRounds: zmAt ? 31 : null,
     // The co-op campaign (docs/CAMPAIGN.md): every mission cleared on Veteran over the first matches (cards, emblem, skin).
     cpRun: i < CP_MISSIONS.length ? { id: CP_MISSIONS[i].id, diff: 2, stars: 3, secs: 400 } : null,
     records: { streak: 5 + (i % 20), long: 20 + (i % 30), brPlace: 1 + (i % 7), exSecs: 600 - i } };
@@ -579,7 +581,7 @@ const silent = [], twice = [];
 test('a whole career: every unlock that opens is stamped on the results once, and never again', () => {
   Challenges.reset();
   let before = opened();
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < CAREER; i++) {
     const r = Progress.applyMatch(bigMatch(i));
     const after = opened();
     const keys = [];
@@ -609,7 +611,7 @@ test('a whole career: every unlock that opens is stamped on the results once, an
     while (Progress.canPrestige()) Progress.doPrestige();
     before = opened();
   }
-  console.log(`     ${stamped.size} unlocks stamped over 90 matches; prestige ${Progress.prestige}, Master ${Progress.master}`);
+  console.log(`     ${stamped.size} unlocks stamped over ${CAREER} matches; prestige ${Progress.prestige}, Master ${Progress.master}`);
   assert.deepEqual(twice, [], 'stamped twice');
   assert.deepEqual(silent.slice(0, 40), [], `opened without a stamp (${silent.length})`);
 });

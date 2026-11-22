@@ -86,7 +86,7 @@ export function trophyScreen(menu, { onBack }) {
     menu.el.dataset.screen = 'trophy';
     const c = collections(), t = trophyTotals(c), pct = v => Math.floor((v.have / Math.max(1, v.of)) * 100);
     const rare = rarest(c);
-    const zm = (MODES.zm?.maps ?? []).filter(id => MAPS[id]).map(id => [MAPS[id].name, Progress.zmBest(id), Progress.zmFeats(id), { radio: 'Listener', lantern: 'Barker' }[MAPS[id].zm?.quest?.kind] ?? 'Warden']);
+    const zm = (MODES.zm?.maps ?? []).filter(id => MAPS[id]).map(id => [MAPS[id].name, Progress.zmBest(id), Progress.zmFeats(id), { radio: 'Listener', lantern: 'Barker', font: 'Ferryman' }[MAPS[id].zm?.quest?.kind] ?? 'Warden']);
     menu.el.innerHTML = `
       ${header({ back: 'tcBack', label: 'Back', title: 'Trophy case', extra: `<span class="hdr-tag">${ico('star')}${pct(t)}% complete</span>` })}
       <div class="tc-wrap scroll-y">

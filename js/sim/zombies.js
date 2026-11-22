@@ -269,7 +269,7 @@ export class ZmRules {
 
   _raise(p, kind, spot) {
     const sim = this.sim, K = ZM.kinds[ZM_KINDS[kind]];
-    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0; p.zFrozenT = 0; p.zChill = 0; p.zHoldT = 0;
+    p.zk = kind; p.zExtra = false; p.zSlowT = 0; p.zBurnT = 0; p.zFrozenT = 0; p.zChill = 0; p.zHoldT = 0; p.zUnderT = 0;
     sim._placeAt(p, spot, Math.atan2(sim.map.height / 2 - spot.z, sim.map.width / 2 - spot.x));
     p.hp = p.zMax = zmMaxHp(kind, this.hp, this.crew.length, this.humans);
     p.zSwing = 0; p.zCool = 0.4 + this.rng() * 0.4; p.zT = null; p.zStuck = 0; p.zLastX = spot.x; p.zLastZ = spot.z; p.zStuckT = 0;
@@ -290,9 +290,13 @@ export class ZmRules {
       for (const s of list) cands.push(s);
     });
     if (!cands.length) return null;
+    // A font drinking (Saltmere Abbey): it calls the drowned, a share of them climbing out near it.
+    let pool = cands;
+    const call = this.econ.fontCall?.();
+    if (call && this.rng() < ZE.quest.call) { const near = cands.filter(s => Math.hypot(s.x - call.x, s.z - call.z) < 20); if (near.length) pool = near; }
     let best = null, bestS = -Infinity;
     for (let k = 0; k < 14; k++) {
-      const s = cands[Math.floor(this.rng() * cands.length)];
+      const s = pool[Math.floor(this.rng() * pool.length)];
       let d = BIG;
       const cell = Math.floor(s.z) * sim.nav.w + Math.floor(s.x);
       for (const f of fields) if (f) d = Math.min(d, f.dist[cell]);
@@ -519,6 +523,8 @@ export class ZmRules {
   // effect) pay no hit points and take no perk or tier on top: their damage is already what it should be.
   damage(target, attacker, dmg, weapon, streak, equip) {
     if (this.isZ(target)) {
+      // Under the flood (the Ferryman's undertow, js/sim/zm-abbey.js): nothing reaches it.
+      if (target.zUnderT > this.sim.time) return 0;
       if (!attacker?.zm) return dmg;
       if (streak && streak[0] === 'z') return dmg;
       dmg = this.kinds.shield(target, attacker, dmg, weapon, streak, equip);
@@ -888,6 +894,12 @@ export class ZmRules {
       }
       // The power, on a map with a switch: solo with bots, one bot goes and throws it after round 2 if nobody has.
       const run = this._powerRun(p, crew) ?? this._questRun(p, crew, humans);
+      if (run?.hold) {
+        // Holding a font while it drinks (Saltmere Abbey): a spot beside it, fighting what comes.
+        const a = p.index * 1.3, at = this._walk(run.x + Math.cos(a) * 2, run.z + Math.sin(a) * 2);
+        bot.setObjective({ key: `zqfont${run.use.i}`, role: 'defend', x: at.x, z: at.z, r: 2.4 });
+        continue;
+      }
       if (run) {
         if (Math.hypot(run.x - p.ps.x, run.z - p.ps.z) < ZM.useReach * 0.8) {
           // A radio locking on (its tuner has to stay by it): stand with it.
@@ -996,6 +1008,11 @@ export class ZmRules {
     if (!mine && [...crew].reverse().find(b => b.p.alive && !b.p.downed && b.p.zm && b.p.isBot)?.p !== p) return null;
     // Lanterns burning (Wrenfield Fair): no waiting for a quiet moment, the clock is running.
     const burning = L.questKind === 'lantern' && q.burnT > 0;
+    // A font drinking (Saltmere Abbey): the bot holds by it and fights there, whatever is about, so the kills feed it.
+    if (L.questKind === 'font' && q.woke && !L.relics.every(r => q.got & (1 << r.i))) {
+      const f = L.relics.find(r => q.woke & (1 << r.i) && !(q.got & (1 << r.i)) && bandOpen(L, this.open, r.band));
+      if (f) return { x: f.x, z: f.z, hold: true, use: { kind: 'font', i: f.i, cost: 0, ok: false } };
+    }
     if (!mine && !burning && this.state === 1 && (this._count(p, 12) > 0 || this.killed < this.count * 0.15)) return null;
     if (mine) { const r = L.relics[q.tuneI]; return { x: r.x, z: r.z, use: { kind: 'relic', i: r.i, cost: 0, ok: true } }; }
     const left = L.relics.filter(r => !(q.got & (1 << r.i)) && bandOpen(L, this.open, r.band));
@@ -1015,6 +1032,14 @@ export class ZmRules {
       if (bandOpen(L, this.open, next.band)) return { x: next.x, z: next.z, use: { kind: 'relic', i: next.i, cost: 0, ok: true } };
       // Shut away: the gates on the way, while it keeps something back for itself.
       return this._gateToward(p, next.band, 1500);
+    }
+    if (L.questKind === 'font') {
+      // The fonts need the pumps (the power); one filled at a time, the nearest dry one open, else the gates to one.
+      if (!this.power || q.woke) return null;
+      const dry = L.relics.filter(r => !(q.got & (1 << r.i)));
+      const open = dry.filter(r => bandOpen(L, this.open, r.band)).sort((a, b) => Math.hypot(a.x - p.ps.x, a.z - p.ps.z) - Math.hypot(b.x - p.ps.x, b.z - p.ps.z))[0];
+      if (open) return { x: open.x, z: open.z, use: { kind: 'relic', i: open.i, cost: 0, ok: true } };
+      return dry.length ? this._gateToward(p, dry[0].band, 1500) : null;
     }
     let best = null, bd = 50;
     for (const r of left) { const d = Math.hypot(r.x - p.ps.x, r.z - p.ps.z); if (d < bd) { bd = d; best = r; } }

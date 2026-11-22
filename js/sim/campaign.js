@@ -43,7 +43,8 @@ const GUNS = {
 };
 const OPS = { guard: 'ghoul', patrol: 'ghoul', assault: 'ram', sniper: 'vesper', target: 'courier', boss: 'marshal' };
 const STATES = ['brief', 'live', 'failed', 'complete'];
-const FAILS = ['wipe', 'vip', 'time', 'lost', 'escaped'];
+// Appended only (the wire sends the index): 5 is an abort, then Operation Starfall's lost pursuit and moved hostage.
+const FAILS = ['wipe', 'vip', 'time', 'lost', 'escaped', 'abort', 'trail', 'hostage'];
 const r1 = v => Math.round(v * 10);
 const dist = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 
@@ -91,6 +92,8 @@ export class CampaignRules {
     this.sites = []; this.fuseT = -1; this.hazards = []; this.groups = []; this.gid = 0;
     this.boss = null; this.target = null; this.killAt = null; this.pingT = 0; this.ping = null;
     this.vipMin = 100; this.charge = null;
+    // Operation Starfall: the night (a flare's time left), the hostage (freed yet, the clock once they are moving her).
+    this.night = !!mission.night; this.flareT = 0; this.freed = false; this.execT = 0;
     this._geo = new Map();
     this.saved = null;
   }
@@ -203,9 +206,9 @@ export class CampaignRules {
   _sight(p) {
     const b = p.bot;
     if (!b) return;
-    const quiet = this._stealthOn();
-    if (p.team === 0) b.sightK = quiet && !p.ai ? 0.02 : 1;
-    else b.sightK = p.cpGroup?.stealth && quiet ? 0.02 : p.cpGroup?.role === 'sniper' ? 1.6 : 1;
+    const quiet = this._stealthOn(), dark = this.night && !(this.flareT > 0) ? CP.nightSight : 1;
+    if (p.team === 0) b.sightK = (quiet && !p.ai ? 0.02 : 1) * dark;
+    else b.sightK = (p.cpGroup?.stealth && quiet ? 0.02 : p.cpGroup?.role === 'sniper' ? 1.6 : 1) * dark;
     b.calm = p.team !== 0 && !!p.cpGroup && p.cpGroup.state === 'calm';
   }
   _stealthOn() { return !!this.cur?.stealth && !this.alarm; }
@@ -272,6 +275,8 @@ export class CampaignRules {
       return 9999;
     }
     dmg *= target.cpTake ?? this.D.take;
+    // A pursued target on the run: plates and a moving target, most of it does nothing.
+    if (target.cpTarget && this.cur?.type === 'pursue' && this.target?.moving) dmg *= CP.runTake;
     if (g && attacker && attacker.team === 0) {
       if (g.stealth && this._stealthOn()) {
         // A guard shot and left standing, or a body another guard can see, is the alarm.
@@ -282,6 +287,10 @@ export class CampaignRules {
     void weapon; void sim;
     return dmg;
   }
+
+  // Nobody finishes the escorted VIP or the hostage (js/sim/finishers.js canFinish): a finisher would skip the
+  // damage rules above.
+  noFinish(a, v) { return v?.id === 'cp-vip'; }
 
   _witness(victim) {
     for (const q of this.sim.players) {
@@ -358,6 +367,7 @@ export class CampaignRules {
       if (p.downed) this._stepDowned(p, dt);
     }
     if (this.boss) this._stepBoss(dt);
+    if (this.flareT > 0) { this.flareT -= dt; if (this.flareT <= 0) { this.flareT = 0; for (const p of sim.players) if (p.bot && p.alive) this._sight(p); this._dirty(); } }
     this._stepHazards(dt);
     if (this._stealthOn()) this._stepDetect(dt);
     if (this.alarm) this._stepAlarm(dt);
@@ -382,6 +392,9 @@ export class CampaignRules {
     const G = this.geo(i);
     this.sites = G.sites.map((p, k) => ({ i: k, x: p.x, z: p.z, state: 0, prog: 0, def: 0 }));
     if (s.checkpoint && !retry) this._checkpoint(G.cp);
+    // A hostage (Operation Starfall): held at her spot until the step that frees her is done.
+    this.freed = this.m.steps.slice(0, i).some(x => x.hostage);
+    if (this.m.vip?.early && !this.freed) this._holdHostage();
     for (const def of s.spawn ?? []) {
       // Back at a checkpoint part way through a step: no posts on top of the squad (a stop it already took).
       if (retry && this.cpAt && (def.role === 'guard' || def.role === 'patrol' || def.role === 'sniper')) {
@@ -392,6 +405,8 @@ export class CampaignRules {
     }
     for (const l of s.say ?? []) this._say(l);
     if (s.type === 'escort') this._startVip(retry);
+    // The escape after a quiet rescue: the whole place knows.
+    if (s.loud && !this.alarm) this._raiseAlarm(G.route[0]?.x ?? this.cpAt?.x ?? 0, G.route[0]?.z ?? this.cpAt?.z ?? 0);
     sim._emit({ t: 'cpstep', i });
     for (const p of sim.players) if (p.bot && p.alive) this._sight(p);
     this._dirty();
@@ -406,6 +421,7 @@ export class CampaignRules {
 
   _complete() {
     const s = this.cur;
+    if (s.hostage) { this.freed = true; this.execT = 0; this.timer = 0; }
     for (const l of s.done ?? []) this._say(l);
     this.sim._emit({ t: 'cpdone', i: this.stepI });
     if (this.stepI + 1 < this.m.steps.length) this._begin(this.stepI + 1);
@@ -447,6 +463,8 @@ export class CampaignRules {
     // The checkpoint's gate: its triggers have been and gone.
     (this.m.steps[i].on ?? []).forEach((tr, k) => { if ((tr.when.gate && tr.when.gate <= gate) || (held && tr.when.t !== undefined && tr.when.t < held)) this.fired |= 1 << k; });
     if (held && this.m.steps[i].type === 'defend') { this.stepT = held; this.cpStepT = held; }
+    this.execT = this.alarm && this.m.hostage && !this.freed ? this.m.hostage.clock * this.D.timer : 0;
+    this.flareT = 0;
     if (this.target && gate > 0) this._placeTargetAt(gate);
     // Past the escort (holding the platform), the VIP stands up at the checkpoint with the squad.
     if (vip && this.m.vip && this.cur.type !== 'escort' && this.m.steps.slice(0, i).some(s => s.type === 'escort')) this._startVip(true);
@@ -478,8 +496,31 @@ export class CampaignRules {
       }
       for (const def of on[k].spawn ?? []) this._spawnGroup(def, this.stepI);
       for (const l of on[k].say ?? []) this._say(l);
+      if (on[k].flare) this._flare();
       this._dirty();
     }
+  }
+
+  // A flare over a night mission: the field lit for CP.flare s (everyone sees, the phones' dark lifts).
+  _flare() {
+    if (!this.night) return;
+    this.flareT = CP.flare;
+    const at = this.geo(this.stepI)?.at ?? this.cpAt ?? { x: 0, z: 0 };
+    this.sim._emit({ t: 'cpflare', x: r1(at.x) / 10, z: r1(at.z) / 10, life: CP.flare });
+    for (const p of this.sim.players) if (p.bot && p.alive) this._sight(p);
+  }
+
+  // The hostage at her spot, not moving, until she is freed (the mission's vip with `early`).
+  _holdHostage() {
+    const vip = this._vip();
+    if (!vip) return;
+    const at = this._pt(this.m.vip.at);
+    vip.pendingLoadout = normalizeLoadout({ primary: 'pistol', secondary: 'pistol', camo: 'none', operator: 'sparrow', perks: [], streaks: [] });
+    vip.rating = 0; vip.skill = 'recruit';
+    if (!vip.alive || dist(vip.ps.x, vip.ps.z, at.x, at.z) > 3) this.sim._placeAt(vip, openNear(this.sim.map, at.x, at.z, 0.5, 8), 0);
+    vip.spawnProtect = 0;
+    vip.name = this.m.vip.name ?? vip.name;
+    this.vipMoving = false;
   }
 
   _stepObjective(dt) {
@@ -487,6 +528,11 @@ export class CampaignRules {
     if (!s) return;
     this._trigger({ gate: this.gate, planted: this.sites.filter(x => x.state === 1).length, phase: this.boss?.phase ?? 0 });
     const squad = this._squad().filter(p => this._up(p));
+    // They are moving the hostage: the clock the alarm started.
+    if (this.execT > 0) {
+      this.execT -= dt; this.timer = Math.max(0, this.execT);
+      if (this.execT <= 0) { this.execT = 0; this._fail('hostage'); return; }
+    }
     switch (s.type) {
       case 'goto': {
         const r = s.r ?? 5;
@@ -538,7 +584,19 @@ export class CampaignRules {
         break;
       }
       case 'kill': this._stepTarget(s, dt); break;
-      case 'boss': break;          // _stepBoss; done when he falls (_bossDown).
+      case 'pursue': {
+        this._stepTarget(s, dt);
+        const T = this.target;
+        if (!T?.p?.alive || !T.started || this.state !== 1) break;
+        const near = squad.some(p => dist(p.ps.x, p.ps.z, T.p.ps.x, T.p.ps.z) < (s.r ?? 30));
+        this.lost = near ? Math.max(0, this.lost - dt / (CP.trail * 1.5)) : this.lost + dt / CP.trail;
+        if (this.lost >= 0.5 && this.m.bonus?.id === 'close' && this.bonusOk) { this.bonusOk = false; this._dirty(); }
+        if (this.lost >= 1) this._fail('trail');
+        break;
+      }
+      case 'boss':                 // _stepBoss; done when he falls (_bossDown). A launch clock, when the step has one.
+        if (s.timer) { this.timer -= dt; if (this.timer <= 0) this._fail('time'); }
+        break;
     }
   }
 
@@ -557,7 +615,7 @@ export class CampaignRules {
   _stepPlant(s, dt) {
     const sim = this.sim;
     const planted = () => this.sites.filter(x => x.state === 1).length;
-    if (this.timer > 0 && planted() < this.sites.length) {
+    if (s.timer && this.timer > 0 && planted() < this.sites.length) {
       this.timer -= dt;
       if (this.timer <= 0) { this._fail('time'); return; }
     }
@@ -675,6 +733,19 @@ export class CampaignRules {
     }
     T.holdT += dt;
     const last = T.wp >= G.length - 1 && this.gate >= G.length;
+    if (s.type === 'pursue') {
+      // He runs stop to stop without waiting, once the squad is on him; cornered at the last, he turns and fights.
+      if (last) { this.prog = 1; return; }
+      let close = false;
+      for (const q of sim.players) if (q.team === 0 && !q.ai && this._up(q) && dist(q.ps.x, q.ps.z, p.ps.x, p.ps.z) < (s.r ?? 30)) { close = true; break; }
+      if ((T.started && T.holdT > 0.6) || close) {
+        if (this.gate > 0 || T.wp > 0 || T.started) T.wp = Math.min(G.length - 1, this.gate);
+        T.started = true; T.moving = true;
+        this._dirty();
+      }
+      this.prog = this.gate / G.length;
+      return;
+    }
     if (last) {
       this.prog = Math.min(1, T.holdT / CP.hvtEscape);
       if (T.holdT >= CP.hvtEscape) this._fail('escaped');
@@ -705,7 +776,7 @@ export class CampaignRules {
     if (this.m.bonus?.id === 'early' && this.gate >= 2) this.bonusOk = false;
     this.target = null; this.ping = null;
     this._dirty();
-    if (this.cur?.type === 'kill') this._complete();
+    if (this.cur?.type === 'kill' || this.cur?.type === 'pursue') this._complete();
   }
 
   // ---- The boss ----
@@ -754,6 +825,19 @@ export class CampaignRules {
         return;
       }
     }
+    // A salvo (a mission's boss with `salvo`): a line of rings walked out toward one of the squad, each landing a
+    // moment after the one before; step off the line.
+    if (this.m.boss?.salvo && B.n % 3 === 2) {
+      const q = squad[B.n % squad.length], a = Math.atan2(q.ps.z - p.ps.z, q.ps.x - p.ps.x);
+      for (let k = 0; k < 6; k++) {
+        const d = 3 + k * 3.2, x = p.ps.x + Math.cos(a) * d, z = p.ps.z + Math.sin(a) * d;
+        if (sim.nav && !sim.nav.isWalkable(x, z)) break;
+        this.hazards.push({ k: 0, x, z, x2: x, z2: z, r: 2.3, t: CP.boss.warn + k * 0.22, w: CP.boss.warn + k * 0.22, live: true });
+      }
+      sim._emit({ t: 'cpwarn', k: 2, x: r1(p.ps.x) / 10, z: r1(p.ps.z) / 10 });
+      this._dirty();
+      return;
+    }
     // A barrage: a ring on (just ahead of) each of up to three of the squad.
     const n = Math.min(3, squad.length), lead = 0.5 * CP.boss.warn;
     for (let k = 0; k < n; k++) {
@@ -788,6 +872,8 @@ export class CampaignRules {
   }
 
   _hitK() { return [0.7, 1, 1.3][this.diff]; }
+  // The boss's pool: the numbers' base, the difficulty and the mission's own (Operation Starfall's Vane).
+  _bossMax() { return CP.boss.hp * this.D.boss * (this.m.boss?.hp ?? 1); }
 
   _stepHazards(dt) {
     if (!this.hazards.length) return;
@@ -847,6 +933,11 @@ export class CampaignRules {
     const sim = this.sim;
     this.alarm = 1; this.alarmT = 0; this.alarmLater = false;
     if (this.m.bonus?.id === 'hidden') this.bonusOk = false;
+    // Before the hostage is free: the bonus is gone and they start moving her.
+    if (this.m.hostage && !this.freed) {
+      if (this.m.bonus?.id === 'quiet') this.bonusOk = false;
+      this.execT = this.m.hostage.clock * this.D.timer;
+    }
     sim._emit({ t: 'cpalarm', x: r1(x) / 10, z: r1(z) / 10 });
     for (const g of this.groups) { if (g.stealth) { g.stealth = false; for (const q of g.members) q.cpSee = 0; } this._alert(g, x, z); }
     for (const def of this.m.alarm?.spawn ?? []) this._spawnGroup(def, this.stepI);
@@ -921,7 +1012,7 @@ export class CampaignRules {
         this.pingT = 2;
       }
       if (lead && def.role === 'boss') {
-        const max = CP.boss.hp * this.D.boss, saved = this.cpBoss;
+        const max = this._bossMax(), saved = this.cpBoss;
         this.boss = { p, g, pool: saved ? Math.min(max, saved[1]) : max, max, phase: saved ? saved[0] : 0, inv: 0, atk: 5, n: 0 };
       }
       this._sight(p);
@@ -1154,7 +1245,7 @@ export class CampaignRules {
         const goal = G.route[this.gate];
         return goal ? ring(goal.x, goal.z, 3, 'collect', 'c') : null;
       }
-      case 'kill': {
+      case 'kill': case 'pursue': {
         const T = this.target;
         if (T?.p?.alive) {
           const x = T.p.ps.x, z = T.p.ps.z;
@@ -1275,7 +1366,8 @@ export class CampaignRules {
     V.stepI = this.stepI; V.step = this.cur; V.prog = this.prog; V.timer = this.timer; V.gate = this.gate; V.lost = this.lost;
     V.at = G?.at ?? null; V.route = G?.route ?? []; V.sites = this.sites; V.fuse = this.fuseT; V.contested = !!this.contested;
     V.cpAt = this.cpAt; V.alarm = !!this.alarm; V.stealth = this._stealthOn(); V.bonusOk = this.bonusOk;
-    V.fails = this.fails; V.deaths = this.deaths; V.why = FAILS[this.why] ?? (this.why === 5 ? 'abort' : null);
+    V.fails = this.fails; V.deaths = this.deaths; V.why = FAILS[this.why] ?? null;
+    V.night = this.night; V.flareT = this.flareT; V.freed = this.freed; V.hostage = !!this.m.hostage && !this.freed && this.execT > 0;
     V.hazards = this.hazards; V.ping = this.ping; V.killAt = this.killAt;
     V.boss = this.boss ? { idx: this.boss.p.index, frac: Math.max(0, this.boss.pool / this.boss.max), phase: this.boss.phase, inv: this.boss.inv > 0 } : null;
     V.target = this.target?.p?.alive ? { idx: this.target.p.index, wp: this.target.wp, moving: !!this.target.moving, hold: this.target.holdT ?? 0 } : null;
@@ -1300,7 +1392,8 @@ export class CampaignRules {
     const B = this.boss, T = this.target, vip = this._vip();
     this._enc = ((this._enc ?? 0) + 1) % (BACKUP_EVERY / 2);
     this._bk = this._enc === 0 ? this.backup() : 0;
-    return this._lastBlock = [r1(this.t), this.state | (this.alarm ? 4 : 0) | (this.bonusOk ? 8 : 0) | (this.contested ? 16 : 0) | (this.vipMoving ? 32 : 0), this.stepI,
+    return this._lastBlock = [r1(this.t), this.state | (this.alarm ? 4 : 0) | (this.bonusOk ? 8 : 0) | (this.contested ? 16 : 0) | (this.vipMoving ? 32 : 0)
+      | (Math.min(127, Math.round(this.flareT * 10)) << 6) | (this.execT > 0 ? 1 << 13 : 0), this.stepI,
       Math.round(this.prog * 1000), r1(this.timer), this.gate, Math.round(this.lost * 100), r1(this.stateT),
       this.cpAt ? [r1(this.cpAt.x), r1(this.cpAt.z)] : 0, this.fails, this.deaths, this.why,
       this.sites.map(s => s.state | (Math.round(s.prog * 100) << 1) | (Math.round(s.def * 100) << 8)), r1(this.fuseT),
@@ -1327,6 +1420,7 @@ export class CampaignRules {
       const [t, flags, stepI, prog, timer, gate, lost, stateT, cpAt, fails, deaths, why, sites, fuse, haz, boss, target, vip, ping, killAt, per, revives, backup] = a;
       this.t = t / 10;
       this.state = flags & 3; this.alarm = flags & 4 ? 1 : 0; this.bonusOk = !!(flags & 8); this.contested = !!(flags & 16); this.vipMoving = !!(flags & 32);
+      this.flareT = ((flags >> 6) & 127) / 10; this.execT = flags & (1 << 13) ? Math.max(0.1, timer / 10) : 0;
       if (killAt) this.killAt = { x: killAt[0] / 10, z: killAt[1] / 10 }; else this.killAt = null;
       if (stepI !== this.stepI) { this.stepI = stepI; this.sites = this.geo(stepI)?.sites.map((p, k) => ({ i: k, x: p.x, z: p.z, state: 0, prog: 0, def: 0 })) ?? []; }
       this.prog = prog / 1000; this.timer = timer / 10; this.gate = gate; this.lost = lost / 100; this.stateT = stateT / 10;
@@ -1382,7 +1476,8 @@ export class CampaignRules {
     this.authority = true;
     if (old && old !== this) {
       Object.assign(this, { t: old.t, state: old.state, stateT: old.stateT, stepI: old.stepI, prog: old.prog, timer: old.timer, gate: old.gate, lost: old.lost,
-        cpAt: old.cpAt, fails: old.fails, deaths: old.deaths, why: old.why, alarm: old.alarm, bonusOk: old.bonusOk, killAt: old.killAt, ping: old.ping, vipMin: old.vipMin });
+        cpAt: old.cpAt, fails: old.fails, deaths: old.deaths, why: old.why, alarm: old.alarm, bonusOk: old.bonusOk, killAt: old.killAt, ping: old.ping, vipMin: old.vipMin,
+        flareT: old.flareT ?? 0, execT: old.execT ?? 0, freed: old.m.steps.slice(0, old.stepI).some(x => x.hostage) });
       this.sites = old.sites.map(s => ({ ...s }));
       this.fuseT = old.fuseT;
       this.hazards = old.hazards.map(h => ({ ...h, live: h.k === 0 }));
@@ -1434,7 +1529,7 @@ export class CampaignRules {
       this.groups.push(g);
     }
     if (!this.boss && old?._mBoss && sim.players[old._mBoss.idx]?.alive) {
-      const p = sim.players[old._mBoss.idx], max = CP.boss.hp * this.D.boss;
+      const p = sim.players[old._mBoss.idx], max = this._bossMax();
       this.boss = { p, g: p.cpGroup, pool: old._mBoss.frac * max, max, phase: old._mBoss.phase, inv: 0, atk: 4, n: 0 };
     }
     for (const p of sim.players) if (p.bot && p.alive) this._sight(p);

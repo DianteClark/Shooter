@@ -98,11 +98,19 @@ const RECIPES = {
   ding: [1.0, (d, sr) => { bell(d, sr, 0, 880, 0.7, 1.2); tone(d, sr, { at: 0.02, dur: 0.6, gain: 0.3, f0: 1760, decay: 5 }); }, 0.45],
   snuff: [0.8, (d, sr, r) => { noise(d, sr, r, { dur: 0.7, gain: 0.9, f0: 2400, f1: 300, decay: 3, attack: 0.02, hp: 200 }); tone(d, sr, { dur: 0.5, gain: 0.4, f0: 400, f1: 150, decay: 4, square: 0.4 }); }, 0.5],
   striker: [2.2, (d, sr, r) => { click(d, sr, r, 0, 1, 60); bell(d, sr, 0.05, 1046, 1, 2); bell(d, sr, 0.05, 784, 0.6, 2); }, 0.6],
+  // Saltmere Abbey (js/sim/zm-abbey.js): the Ferryman going under (a deep suck of water and a drowned groan), coming
+  // up (a heave and a falling crash of water), a font filling (water pouring in), a soul drunk (a soft glassy chime),
+  // a font full and the tower bell tolling (a low, slow bell).
+  undertow: [1.6, (d, sr, r) => { noise(d, sr, r, { dur: 1.4, gain: 0.9, f0: 500, f1: 120, decay: 1.5, attack: 0.15, hp: 60 }); tone(d, sr, { dur: 1.3, gain: 0.7, f0: 70, f1: 46, decay: 1.6, attack: 0.1, square: 0.4, vib: [5, 0.05] }); }, 0.7],
+  heave: [1.3, (d, sr, r) => { tone(d, sr, { dur: 0.45, gain: 1, f0: 60, f1: 110, decay: 4 }); noise(d, sr, r, { at: 0.05, dur: 1.1, gain: 1, f0: 1400, f1: 260, decay: 3, attack: 0.005, hp: 120 }); noise(d, sr, r, { at: 0.25, dur: 0.8, gain: 0.5, f0: 700, f1: 200, decay: 4, hp: 80 }); }, 0.75],
+  pour: [1.4, (d, sr, r) => { noise(d, sr, r, { dur: 1.3, gain: 0.8, f0: 900, f1: 600, decay: 1.2, attack: 0.1, hp: 250 }); for (let k = 0; k < 5; k++) tone(d, sr, { at: 0.2 + k * 0.2, dur: 0.15, gain: 0.35, f0: 300 + k * 40, f1: 500 + k * 60, decay: 8 }); }, 0.5],
+  soul: [0.9, (d, sr) => { tone(d, sr, { dur: 0.8, gain: 0.5, f0: 1318, f1: 1320, decay: 4, attack: 0.03 }); tone(d, sr, { at: 0.06, dur: 0.7, gain: 0.3, f0: 1975, decay: 5 }); }, 0.4],
+  toll: [3.2, (d, sr, r) => { click(d, sr, r, 0, 0.8, 50); bell(d, sr, 0.02, 196, 1, 3); bell(d, sr, 0.02, 294, 0.5, 2.6); tone(d, sr, { dur: 3, gain: 0.35, f0: 98, decay: 1 }); }, 0.75],
   down: [0.9, (d, sr) => { tone(d, sr, { dur: 0.35, gain: 1, f0: 700, f1: 600, decay: 1.5, square: 0.4 }); tone(d, sr, { at: 0.38, dur: 0.5, gain: 1, f0: 500, f1: 350, decay: 2, square: 0.4 }); }, 0.5],
 };
 const GROANS = ['groan', 'moan', 'groan', 'moan'];
 // Undead kinds as the view has them (p.zk, js/sim/zombies.js playerView): 1 shambler, 2 runner, 3 brute, 4 the boss.
-const VOICE = { 1: GROANS, 2: ['rasp', 'groan'], 3: ['bellow', 'moan'], 4: ['bellow'], 6: ['gurgle'], 7: ['bubble', 'moan'], 8: ['skitter', 'rasp'], 9: ['bellow', 'groan'] };
+const VOICE = { 1: GROANS, 2: ['rasp', 'groan'], 3: ['bellow', 'moan'], 4: ['bellow'], 6: ['gurgle'], 7: ['bubble', 'moan'], 8: ['skitter', 'rasp'], 9: ['bellow', 'groan'], 13: ['gurgle', 'bellow'] };
 
 export class ZmSfx {
   constructor(engine) {
@@ -146,7 +154,12 @@ export class ZmSfx {
         case 'zwhirl': this.#world('whirl', e.x, e.z, 30, { gain: 0.8, rate: 0.9 + Math.random() * 0.2 }); break;
         case 'zlantern': this.#ui('snuff', 0.8); break;
         case 'zoracle': this.#ui('ding', 0.6, 0.7); break;
-        case 'zrelic': if (e.lantern) this.#ui(e.n >= e.of ? 'striker' : 'ding', 0.7, 0.85 + e.n * 0.1); break;
+        case 'zrelic': if (e.lantern) this.#ui(e.n >= e.of ? 'striker' : 'ding', 0.7, 0.85 + e.n * 0.1); else if (e.font) this.#ui('toll', 0.7, 1.1 + e.n * 0.1); break;
+        case 'zdive': this.#world('undertow', e.x, e.z, 45, { gain: 1 }); this.#world('gurgle', e.tx, e.tz, 30, { gain: 0.8, rate: 0.7 }); break;
+        case 'zfx': if (e.k === 'surface') this.#world('heave', e.x, e.z, 50, { gain: 1 }); break;
+        case 'zfont': { const at = z?.layout?.relics?.[e.i]; if (e.state === 1 && at) this.#world('pour', at.x, at.z, 40, { gain: 0.9 }); break; }
+        case 'zsoul': if (e.fx !== undefined) this.#world('soul', e.fx, e.fz, 30, { gain: 0.6, rate: 0.85 + e.n * 0.03 }); break;
+        case 'zwarden': if (e.state === 1 && e.k === 12) this.#ui('toll', 0.9, 0.8); break;
         case 'zover': this.#ui('over', 0.9); break;
         case 'zdoor': { const p = this.#pos(view, e.by); if (p) this.#world('gate', p.x, p.z, 40, { gain: 1 }); break; }
         case 'zbuy': {

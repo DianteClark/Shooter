@@ -5,7 +5,7 @@
 // intro card, checkpoint and objective callouts, and the failed panel (the reason, the retry countdown, Retry now and
 // Abort). js/ui/hud.js makes one and forwards prepare/update/onEvent/endBanner/drawMini; on Frontier it zooms the
 // minimap round you.
-import { CP, CP_DIFFS, RADIO, missionLines, cpDecode, OPERATION } from '../shared/campaign.js';
+import { CP, CP_DIFFS, RADIO, missionLines, cpDecode, OPERATIONS } from '../shared/campaign.js';
 import { MAPS } from '../shared/map.js';
 import { objOf } from '../sim/rules.js';
 import { spectate } from '../sim/snd.js';
@@ -14,12 +14,16 @@ import { icon } from './icons.js';
 import { cpRadio } from '../audio/audio.js';
 
 const MAP_PX = 640, MINI_SPAN = 130, MARK_Y = 1.6, TAGS = 5;
-const FAIL_TEXT = { wipe: 'The squad was wiped out', vip: 'Kestrel is down', time: 'Out of time', lost: 'The position was lost', escaped: 'The target got away', abort: 'Mission aborted' };
+const FAIL_TEXT = { wipe: 'The squad was wiped out', vip: 'Kestrel is down', time: 'Out of time', lost: 'The position was lost', escaped: 'The target got away', abort: 'Mission aborted',
+  trail: 'You lost him', hostage: 'They moved Kestrel' };
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 const CSS = `
 .cp-ui { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-hud-alert); }
 .cp-ui [data-tap] { pointer-events: auto; }
+/* A night mission's dark (Operation Starfall): under every other piece of the HUD, a clear pool round the player. */
+.cp-night { position: absolute; left: 0; top: 0; width: var(--app-w, 100vw); height: var(--app-h, 100vh); pointer-events: none; }
+.cp-night[hidden] { display: none; }
 .hud.cp-on .scorebar, .hud.cp-on .streaks, .hud.cp-on .obj-strip, .hud.cp-on .gun-rung { display: none !important; }
 .cp-top { display: flex; gap: 4px; align-items: stretch; }
 /* Mounted into the shared objective strip, so out of .cp-ui's reach: hidden here outside a campaign match. */
@@ -57,6 +61,7 @@ const CSS = `
   background: var(--hud-glass, rgba(16,20,26,.78)); clip-path: polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
 .cp-boss b { font: 400 13px/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #ff7a5a; }
 .cp-boss b span { color: var(--c-haze); font-size: 11px; margin-left: 6px; }
+.cp-boss b em { font-style: normal; }
 .cp-boss > i { display: block; height: 6px; margin-top: 4px; background: rgba(231,234,228,.15); position: relative; overflow: hidden; }
 .cp-boss > i i { position: absolute; inset: 0; background: linear-gradient(90deg, #ff4a2a, #ffb21a); transform-origin: left; transform: scaleX(var(--k, 1)); }
 .cp-boss > i u { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(10,13,17,.9); }
@@ -119,6 +124,13 @@ export class CpHud {
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
+    this.nightEl = document.createElement('div');
+    this.nightEl.className = 'cp-night';
+    this.nightEl.hidden = true;
+    // Over the game canvas and under the whole interface (the sticks and buttons stay bright).
+    const canvas = document.getElementById('game');
+    if (canvas) canvas.after(this.nightEl); else hud.el.prepend(this.nightEl);
+    this.nightK = 0;
     const el = this.el = document.createElement('div');
     el.className = 'cp-ui';
     el.hidden = true;
@@ -129,7 +141,7 @@ export class CpHud {
         <div class="cp-chip cp-hide" hidden><b>HIDDEN</b><small>Stealth</small></div>
       </div>
       <div class="cp-card"><span class="ci">${icon('mode:cp', { size: 16 })}</span><b></b><small></small><em></em><div class="cpbar"><i></i></div></div>
-      <div class="cp-boss" hidden><b>Marshal Kordell<span></span></b><i><i></i><u style="left:66%"></u><u style="left:33%"></u></i></div>
+      <div class="cp-boss" hidden><b><em class="cp-bn">Marshal Kordell</em><span></span></b><i><i></i><u style="left:66%"></u><u style="left:33%"></u></i></div>
       <div class="cp-rev" hidden><b>Reviving</b><i><i></i></i></div>
       <div class="cp-radio" hidden><b></b><span></span></div>
       <div class="cp-eye" hidden><b>SEEN</b><i><i></i></i></div>
@@ -147,7 +159,7 @@ export class CpHud {
     this.timerChip = $('.cp-timer'); this.timerEl = $('.cp-timer b'); this.timerS = $('.cp-timer small');
     this.hideChip = $('.cp-hide'); this.hideEl = $('.cp-hide b');
     this.card = $('.cp-card'); this.cardB = $('.cp-card b'); this.cardS = $('.cp-card small'); this.cardE = $('.cp-card em'); this.cardBar = $('.cp-card .cpbar i');
-    this.bossEl = $('.cp-boss'); this.bossBar = $('.cp-boss > i > i'); this.bossS = $('.cp-boss b span');
+    this.bossEl = $('.cp-boss'); this.bossBar = $('.cp-boss > i > i'); this.bossS = $('.cp-boss b span'); this.bossN = $('.cp-boss .cp-bn');
     this.radioEl = $('.cp-radio'); this.radioWho = $('.cp-radio b'); this.radioText = $('.cp-radio span');
     this.eyeEl = $('.cp-eye'); this.eyeBar = $('.cp-eye i i');
     this.tags = [...el.querySelectorAll('.cp-tag')].map(root => ({ root, span: root.querySelector('span'), html: '', x: NaN, y: NaN, cls: '' }));
@@ -167,6 +179,7 @@ export class CpHud {
     this.el.hidden = !on;
     this.hud.el.classList.toggle('cp-on', on);
     this.hud.el.classList.remove('cp-down-on', 'cp-fail-on');
+    this.nightEl.hidden = true; this.nightK = 0;
     if (!on) return;
     this.map = map; this.roster = roster; this.localId = localId; this.mode = mode;
     const { k, mission, diff } = cpDecode(scoreLimit);
@@ -174,6 +187,8 @@ export class CpHud {
     this.c = {}; this.base = null; this.queue = []; this.radioT = 0; this.say = null; this.introShown = false;
     this.failEl.hidden = true; this.radioEl.hidden = true;
     this.misEl.textContent = String(mission.n);
+    // The boss's name: the mission's own (Operation Starfall's Director Vane), else Kordell.
+    this.bossN.textContent = mission.boss?.name ?? 'Marshal Kordell';
     this.misS.textContent = `Mission · ${CP_DIFFS[diff].name}`;
   }
 
@@ -186,11 +201,11 @@ export class CpHud {
     const c = this.c;
     if (!this.introShown && (view.phase === 'warmup' || cp.state === 'brief' || cp.t < 3)) this.#intro();
     // Chips: a timer while one runs, the stealth state on a stealth mission.
-    const timed = cp.state === 'live' && cp.timer > 0 && (cp.step?.type === 'chase' || (cp.step?.type === 'plant' && cp.step.timer && cp.prog < 1));
+    const timed = cp.state === 'live' && cp.timer > 0 && (cp.step?.type === 'chase' || (cp.step?.type === 'plant' && cp.step.timer && cp.prog < 1) || cp.hostage || (cp.step?.type === 'boss' && cp.step.timer));
     if (c.timed !== timed) { c.timed = timed; this.timerChip.hidden = !timed; }
     if (timed) {
       const t = clock(cp.timer);
-      if (c.timer !== t) { c.timer = t; this.timerEl.textContent = t; this.timerChip.classList.toggle('low', cp.timer < 15); this.timerS.textContent = cp.step.type === 'chase' ? 'To the relay' : 'To set them'; }
+      if (c.timer !== t) { c.timer = t; this.timerEl.textContent = t; this.timerChip.classList.toggle('low', cp.timer < 15); this.timerS.textContent = cp.hostage ? 'Kestrel' : cp.step.type === 'chase' ? 'To the relay' : cp.step.type === 'boss' ? 'To launch' : 'To set them'; }
     }
     const stealthy = !!this.m.stealth;
     const hide = stealthy ? (cp.alarm ? 'ALARM' : cp.stealth ? 'HIDDEN' : 'CLEAR') : '';
@@ -203,13 +218,35 @@ export class CpHud {
     this.#reviving(view, me);
     this.#fail(cp, me);
     this.#radio(dt);
+    this.#night(view, me, cp, dt);
+  }
+
+  // The night: dark past about seven metres of the player (or whoever they watch), lifted while a flare burns.
+  #night(view, me, cp, dt) {
+    const want = cp.night && cp.state !== 'complete' ? (cp.flareT > 0 ? 0.1 : 1) : 0;
+    this.nightK += (want - this.nightK) * Math.min(1, (dt || 0.016) * (cp.flareT > 0 ? 4 : 1.2));
+    const on = this.nightK > 0.01, cam = this.hud.camera;
+    if (this.c.night !== on) { this.c.night = on; this.nightEl.hidden = !on; }
+    if (!on || !cam) return;
+    const eye = me.alive ? me : view.players.find(p => p.id === spectate.target(view, me.id)) ?? me;
+    const P = (x, z) => {
+      const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements;
+      const vx = v[0] * x + v[8] * z + v[12], vy = v[1] * x + v[9] * z + v[13], vz = v[2] * x + v[10] * z + v[14];
+      const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15] || 1;
+      return [((p[0] * vx + p[8] * vz + p[12]) / w * 0.5 + 0.5) * this.hud.viewW, (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * this.hud.viewH];
+    };
+    const [sx, sy] = P(eye.x, eye.z), [ex] = P(eye.x + 1, eye.z), m = Math.max(4, Math.abs(ex - sx));
+    const g = `radial-gradient(circle at ${Math.round(sx)}px ${Math.round(sy)}px, rgba(3,5,12,0) 0, rgba(3,5,12,0) ${Math.round(m * 6)}px, rgba(3,5,12,.55) ${Math.round(m * 9)}px, rgba(3,5,12,.93) ${Math.round(m * 12.5)}px)`;
+    if (this.c.nightG !== g) { this.c.nightG = g; this.nightEl.style.background = g; }
+    const o = this.nightK.toFixed(2);
+    if (this.c.nightO !== o) { this.c.nightO = o; this.nightEl.style.opacity = o; }
   }
 
   #intro() {
     this.introShown = true;
     const n = document.createElement('div');
     n.className = 'cp-intro';
-    n.innerHTML = `<small>${esc(OPERATION.name)}</small><b>${this.m.n}. ${esc(this.m.name)}</b><span>${esc(MAPS[this.m.map]?.name ?? '')} · ${esc(CP_DIFFS[this.diff].name)} · ${esc(this.m.tag)}</span>`;
+    n.innerHTML = `<small>${esc((OPERATIONS.find(o => o.id === this.m.op) ?? OPERATIONS[0]).name)}</small><b>${this.m.n}. ${esc(this.m.name)}</b><span>${esc(MAPS[this.m.map]?.name ?? '')} · ${esc(CP_DIFFS[this.diff].name)} · ${esc(this.m.tag)}</span>`;
     this.el.appendChild(n);
     setTimeout(() => n.remove(), 5600);
   }
@@ -249,7 +286,16 @@ export class CpHud {
           em = cp.ping ? far(cp.ping) : ''; break;
         }
         case 'boss': sub = cp.boss?.inv ? 'He is calling his guard' : 'Watch the ground for his barrage'; em = cp.boss ? `${Math.round(cp.boss.frac * 100)}%` : ''; k = cp.boss ? 1 - cp.boss.frac : 1; break;
+        case 'pursue': {
+          // Operation Starfall's courier: plated while he runs, lost if nobody stays near him.
+          const t = cp.target, tp = t ? view.players[t.idx] : null;
+          sub = !t ? 'Target down' : t.moving ? 'Bullets will not stop him: stay on him' : cp.prog >= 1 ? 'Cornered: put him down' : 'He will run when he sees you';
+          if (cp.lost > 0.05) { sub = `You are losing him: ${Math.round(cp.lost * 100)}%`; if (cp.lost > 0.3) cls = 'warn'; }
+          em = tp?.alive ? far(tp) : cp.ping ? far(cp.ping) : ''; break;
+        }
       }
+      // A hostage being moved (an alarm before she is free): the clock is all that matters.
+      if (cp.hostage) { sub = 'They are moving Kestrel: get to her!'; cls = 'warn'; }
     }
     const key = `${title}|${sub}|${em}|${cls}`;
     if (this.c.card !== key) { this.c.card = key; this.cardB.textContent = title; this.cardS.textContent = sub; this.cardE.textContent = em; this.card.className = `cp-card os-item ${cls}`; }
@@ -300,9 +346,9 @@ export class CpHud {
       } else if (s.type === 'chase') {
         const g = cp.route?.[cp.gate];
         if (g) n = this.#tag(n, g.x, g.z, cp.timer < 15 ? 'warn' : '', `${icon('ui:timer', { size: 12 })}Relay ${d(g)}`, eye);
-      } else if (s.type === 'kill') {
+      } else if (s.type === 'kill' || s.type === 'pursue') {
         const t = cp.target ? view.players[cp.target.idx] : null;
-        const seenNow = t?.alive && Math.hypot(t.x - eye.x, t.z - eye.z) < 30;
+        const seenNow = t?.alive && Math.hypot(t.x - eye.x, t.z - eye.z) < (s.type === 'pursue' ? 60 : 30);
         const at = seenNow ? t : cp.ping;
         if (at) n = this.#tag(n, at.x, at.z, 'hvt', `${icon('ex:hvt', { size: 12 })}${esc(t?.name ?? 'Target')} ${d(at)}`, eye);
       } else if (s.type === 'boss') {
@@ -412,9 +458,10 @@ export class CpHud {
       case 'cpfail': this.queue.length = 0; this.say = null; this.radioEl.hidden = true; break;
       case 'cpretry': this.#callout('Checkpoint', 'Back where you left off'); break;
       case 'cpwin': this.#callout('Mission complete', `${this.m.n}. ${this.m.name}`); break;
-      case 'cpalarm': this.#callout('Alarm!', 'They know you are here', true); break;
+      case 'cpalarm': this.#callout('Alarm!', this.m.hostage && !objOf(view)?.freed ? 'They are moving Kestrel: get to her!' : 'They know you are here', true); break;
+      case 'cpflare': this.#callout('Flare!', 'Everyone can see: use it', true); break;
       case 'cpplant': this.hud.notify(e.pulled ? 'They pulled a charge: set it again' : this.m.steps.find(s => s.type === 'plant')?.tap ? 'Tap in place' : 'Charge set'); break;
-      case 'cpgate': if (this.m.steps.find(s => s.type === 'chase')) this.hud.notify('Relay reached: more time'); break;
+      case 'cpgate': if (this.m.steps.find(s => s.type === 'chase')) this.hud.notify('Relay reached: more time'); else if (objOf(view)?.step?.type === 'pursue') this.hud.notify('He is still running: stay on him'); break;
       case 'cpphase': this.#callout(`Phase ${e.n + 1}`, e.n === 1 ? 'He calls his guard' : 'He charges: step aside when he lines up', true); break;
       case 'cpping': break;
       case 'down':

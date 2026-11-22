@@ -10,7 +10,7 @@
 // Mastery skins are equipped through Progress (operatorSkin / setOperatorSkin); js/ui/cards.js wraps both paths.
 // The local picks live in their own small save (STORE_KEY) so this module needs nothing from Progress.
 import './cardbook.js';
-import { CP_SKIN, CP_VET_LIFE } from '../shared/campaign.js';     // The co-op campaign's skin (docs/CAMPAIGN.md).
+import { CP_SKIN, CP_VET_LIFE, CP_SKIN2, CP_VET_LIFE2 } from '../shared/campaign.js';     // The co-op campaign's skin (docs/CAMPAIGN.md).
 import { SEASON_DEFS } from '../shared/season-items.js';     // Registers the extra calling cards before progress.js reads the save (it imports this file).
 
 // The first nine are modelled by hand in characters.js (TORSOS / HEADS). Every operator after them is assembled from
@@ -379,6 +379,12 @@ for (const def of SEASON_DEFS) {
 if (OPERATORS.some(o => o.id === CP_SKIN.operator)) {
   SKINS.push({ id: CP_SKIN.id, operator: CP_SKIN.operator, tier: 'campaign', name: CP_SKIN.name, slot: 2, glow: 2, gear: 0x18222e, sleeve: 0x1e2c3a, trouser: 0x121a24, accent: 0x7cc8ff,
     unlock: { life: CP_VET_LIFE, goal: 1, label: CP_SKIN.label } });
+}
+// Operation Starfall's (appended after it): Sparrow's Starfall, night blue with a pale violet star-glow, for clearing
+// every Starfall mission on Veteran.
+if (OPERATORS.some(o => o.id === CP_SKIN2.operator)) {
+  SKINS.push({ id: CP_SKIN2.id, operator: CP_SKIN2.operator, tier: 'campaign', name: CP_SKIN2.name, slot: 2, glow: 2, gear: 0x161a2e, sleeve: 0x1c2240, trouser: 0x10142a, accent: 0xc8a8ff,
+    unlock: { life: CP_VET_LIFE2, goal: 1, label: CP_SKIN2.label } });
 }
 for (const s of SKINS) if (SKIN_ART[s.id]) Object.assign(s, SKIN_ART[s.id]);
 SKINS.forEach((s, i) => { s.index = i; });

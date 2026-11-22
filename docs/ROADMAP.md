@@ -216,3 +216,6 @@ No vehicles, no classes, no squad systems, no balance pass.
 67. Large infantry maps for the new modes (via 66 where possible).
 68. Arsenal: 4-5 new guns, new perks (dual primaries "Overkill" and more), 2-3 new kill streaks.
 69. Expansion: Graveyard Shift map 4 with boss and quest; Campaign operation 2 (4 missions); more operators; more maps.
+    Done (build NEXT): Graveyard Shift's Saltmere Abbey, its font quest and the Ferryman (docs/ZOMBIES.md "Saltmere
+    Abbey"); Operation Starfall, four missions after Nightrail (docs/CAMPAIGN.md "Operation Starfall"). Open: operators,
+    maps.

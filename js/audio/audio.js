@@ -615,6 +615,7 @@ THEME_AUDIO.observatory = THEME_AUDIO.arctic;
 THEME_AUDIO.pagoda = { ir: { len: 0.7, damp: 0.3, gain: 0.26 }, slaps: [[0.07, 0.7], [0.15, 0.4]], f0: 2000, f1: 480, metal: 0, wash: 0.06 };
 THEME_AUDIO.polestar = THEME_AUDIO.arctic;
 THEME_AUDIO.wrenfield = THEME_AUDIO.harvest;
+THEME_AUDIO.saltmere = THEME_AUDIO.harbor;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;
 THEME_AUDIO.sunken = THEME_AUDIO.harbor;
 THEME_AUDIO.topside = THEME_AUDIO.railyard;

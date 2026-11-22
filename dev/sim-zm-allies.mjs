@@ -1,6 +1,6 @@
 // Graveyard Shift ally bots (owner: "they don't buy new weapons, they don't do much of anything except die").
 //
-//   node dev/sim-zm-allies.mjs [--maps=ashgrove,polestar,wrenfield,neon] [--runs=4] [--seed=1] [--cap=30] [--v]
+//   node dev/sim-zm-allies.mjs [--maps=ashgrove,polestar,wrenfield,saltmere,neon] [--runs=4] [--seed=1] [--cap=30] [--v]
 //
 // A crew of one human-like stand-in (js/sim/humanlike.js, seated as the human: the allies revive it first, follow it
 // and leave it the quest's last step) and three ally bots, run until overrun, escaped or --cap. Per run: the round
@@ -13,7 +13,7 @@ import { makeHumanLike } from '../js/sim/humanlike.js';
 import { BotChatter, CHATTER } from '../js/sim/chatter.js';
 
 const arg = (k, d) => { const a = process.argv.find(x => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
-const MAPS = arg('maps', 'ashgrove,polestar,wrenfield,neon').split(','), RUNS = Number(arg('runs', 4)), SEED = Number(arg('seed', 1)), CAP = Number(arg('cap', 30));
+const MAPS = arg('maps', 'ashgrove,polestar,wrenfield,saltmere,neon').split(','), RUNS = Number(arg('runs', 4)), SEED = Number(arg('seed', 1)), CAP = Number(arg('cap', 30));
 const V = process.argv.includes('--v');
 const DT = 1 / SIM_HZ;
 const mean = a => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
@@ -51,7 +51,8 @@ function run(map, seed) {
       }
       if (e.t === 'zbench' && e.state === 1 && isAlly(e.by)) o.tierMax = Math.max(o.tierMax, e.tier);
       if (e.t === 'zsupply' && isAlly(e.by) && e.item !== 'vest') o.deploys++;
-      if ((e.t === 'zrelic' || e.t === 'ztune' && e.state === 1) && isAlly(e.by)) o.quest++;
+      if ((e.t === 'zrelic' || e.t === 'ztune' && e.state === 1 || e.t === 'zfont' && e.state === 1) && isAlly(e.by)) o.quest++;
+      if (e.t === 'zfont' && e.state === 2) o.fonts = (o.fonts ?? 0) + 1;     // Saltmere Abbey: a font full (whoever fed it).
       if (e.t === 'zwarden' && e.state === 1 && isAlly(e.by)) o.questStole = 1;
       if (e.t === 'chatter') { const id = CHATTER[e.l].id; o.lines[id] = (o.lines[id] ?? 0) + 1; if (V) console.log(`  r${R.round} ${e.id}: ${CHATTER[e.l].text}`); }
     }
@@ -69,7 +70,7 @@ for (const map of MAPS) {
   for (let k = 0; k < RUNS; k++) {
     const r = run(map, SEED + k * 101);
     rows.push(r); all.push(r);
-    console.log(`${map} seed ${String(r.seed).padStart(4)}: round ${String(r.round).padStart(2)}${r.escaped ? ' escaped' : ''} (${r.mins} min)  ally downs ${r.downs} (${f1(r.dpr)}/rd) bleeds ${r.bleeds}  human downs ${r.meDowns} revived by allies ${r.revMe}  spent ${r.spent}/${r.earned} (${Math.round(r.share * 100)}%)  tier ${r.tierMax} wall ${r.wallMax} perks ${r.perks} streaks ${r.deploys} quest ${r.quest}${r.questStole ? ' STOLE' : ''}  kills ${r.kills}  buys ${JSON.stringify(r.buys)}${Object.keys(r.lines).length ? '  lines ' + JSON.stringify(r.lines) : ''}`);
+    console.log(`${map} seed ${String(r.seed).padStart(4)}: round ${String(r.round).padStart(2)}${r.escaped ? ' escaped' : ''} (${r.mins} min)  ally downs ${r.downs} (${f1(r.dpr)}/rd) bleeds ${r.bleeds}  human downs ${r.meDowns} revived by allies ${r.revMe}  spent ${r.spent}/${r.earned} (${Math.round(r.share * 100)}%)  tier ${r.tierMax} wall ${r.wallMax} perks ${r.perks} streaks ${r.deploys} quest ${r.quest}${r.fonts ? ` fonts full ${r.fonts}` : ''}${r.questStole ? ' STOLE' : ''}  kills ${r.kills}  buys ${JSON.stringify(r.buys)}${Object.keys(r.lines).length ? '  lines ' + JSON.stringify(r.lines) : ''}`);
   }
   console.log(`${map}: rounds ${rows.map(r => r.round).join(' ')} (mean ${f1(mean(rows.map(r => r.round)))}); ally downs/round ${f1(mean(rows.map(r => r.dpr)))}; spent ${Math.round(mean(rows.map(r => r.share)) * 100)}%; tier ${f1(mean(rows.map(r => r.tierMax)))}; perks ${f1(mean(rows.map(r => r.perks)))}`);
 }

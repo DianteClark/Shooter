@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: '1122-5', date: '2026-11-22', title: 'Graveyard Shift: Saltmere Abbey, and Operation Starfall',
+    items: [
+      'Graveyard Shift has a fourth map built for it: Saltmere Abbey, a drowned abbey town on the salt marsh where the tide came in one night and never went out. Brine in the streets, candles in the windows, the abbey church open to the sky. Seven areas in a loop round the marsh pumps; turn the power on to wake the perks. It has its own music.',
+      'Its own hidden quest: with the pumps running, fill the three dry fonts, then kill the drowned beside each one until it is full. Leave a font thirsty and it loses what it drank. Three full fonts, then toll the bell in the tower.',
+      'The bell calls up the Ferryman, a new boss. It sinks into the flood and comes up beneath one of you: a ring on the ground shows where. Get out of it. Put it down for the Last Crossing calling card and the Drowned Bell emblem.',
+      'Campaign: Operation Starfall, four new missions after Operation Nightrail. Hold the observatory dish through a moonless night, with flares; free Kestrel from the hillside temple before they move her; stay on a courier across Jadefall that bullets will not stop; then the final assault on the launch pad against Director Vane, before the countdown reaches zero.',
+      'Each Starfall mission has its own calling card. Clear all four on Veteran for Sparrow\'s Starfall skin and the Starfall emblem. The Campaign tab switches between the two operations.',
+    ],
+  },
+  {
     build: '1122-4', date: '2026-11-22', title: 'New guns, perks, scorestreaks and operators',
     items: [
       'Five new guns. Gadfly: an SMG built for the hip, with the tightest hip-fire of any automatic and a sight that adds almost nothing. Carousel: a pan-fed LMG that kills in three to the body out to 16 m with no wind-up or overheating. Vigil: a semi-automatic sniper, two to the body anywhere it reaches. Fusee: a railway flare pistol that sets its target burning for three seconds and shows them on your team\'s map. Skyhook: a twin-tube lock-on launcher; aim it at an enemy aircraft and the rocket cannot miss (two bring down a Chopper).',

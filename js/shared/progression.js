@@ -15,7 +15,7 @@ import { EX_UNLOCKS } from './extraction.js';
 import { blankSeasonState, cleanSeasonState, seasonStateEmpty, seasonOwned, defById, dateLocked } from './seasons.js';
 import { DIVISIONS } from './season-items.js';     // Ranked seasons: the ranked camo's division (docs/RANKED.md).
 import { blankTourney, cleanTourney, tourneyEmpty } from './tourney-items.js';     // Weekend tournaments (docs/TOURNAMENTS.md).
-import { cleanCampaign, CP_CARDS, CP_LIFE, MISSIONS as CP_MISSIONS } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
+import { cleanCampaign, CP_CARDS, CP_LIFE, MISSIONS as CP_MISSIONS, opOf as cpOpOf } from './campaign.js';     // The co-op campaign (docs/CAMPAIGN.md).
 import { RESET_GEN } from './reset.js';     // Save codes carry the progress reset's generation (docs/RESET.md).
 
 // 4: mastery tracks, the weapon ladder, unlock challenges and operator skins (docs/PROGRESSION.md). 3: Pro perk
@@ -1210,8 +1210,8 @@ export const CARDS = [
   // Wrenfield Fair's: the Barker, called out by the high striker's bell once the lanterns are lit (docs/ZOMBIES.md).
   card('zm-barker', 'Show\'s Over', 'Zombies', 'Put down the Barker on Wrenfield Fair in Graveyard Shift', c => zmBarkerDown(c.zmFeats), { p: 'wheel', c: ['#140a1c', '#4a1e3a', '#ffe0b0', '#ff7ad8'], e: 'map:wrenfield', gold: true }),
   // The co-op campaign (docs/CAMPAIGN.md): one card per Operation Nightrail mission, for clearing it on any difficulty.
-  ...CP_CARDS.map(([id, name, p, c], k) => card(id, name, 'Campaign', `Clear ${name} in Operation Nightrail`, cc => (cc.life?.[CP_LIFE(CP_MISSIONS[k].id)] ?? 0) >= 1,
-    { p, c, e: `map:${CP_MISSIONS[k].map}`, ...(k === CP_CARDS.length - 1 ? { gold: true } : {}) })),
+  ...CP_CARDS.map(([id, name, p, c], k) => card(id, name, 'Campaign', `Clear ${name} in ${cpOpOf(k).name}`, cc => (cc.life?.[CP_LIFE(CP_MISSIONS[k].id)] ?? 0) >= 1,
+    { p, c, e: `map:${CP_MISSIONS[k].map}`, ...(k === cpOpOf(k).to - 1 ? { gold: true } : {}) })),
   card('pro-all', 'Full Kit', 'Career', 'Earn every Pro perk', c => c.pro.length >= PERK_IDS.length, { p: 'rays', c: ['#2a1e04', '#9c7414', '#fff8d8', '#ffd659'], e: 'ui:crown', gold: true }, c => [c.pro.length, PERK_IDS.length]),
   card('veteran', 'Old Hand', 'Career', 'Become a Veteran', c => isVeteran({ prestige: c.prestige, level: c.peakLevel, pro: c.pro }), { p: 'rings', c: ['#1c1a14', '#4e4a34', '#f2ead0', '#ff9f1c'], e: 'ui:cup' },
     c => bestOf([c.prestige ?? 0, VETERAN.prestige], [c.peakLevel, VETERAN.level], [c.pro.length, VETERAN.pro])),
@@ -1221,6 +1221,9 @@ export const CARDS = [
     return card(r.id.slice(5), r.name, 'Mastery', `${t.name} mastery tier ${r.tier}`, c => !!c.rewards?.has(r.id), MASTERY_CARD_ART[t.kind](t),
       c => [Math.min(r.tier, c.trackTiers?.[t.id] ?? 0), r.tier]);
   }),
+  // Appended. Saltmere Abbey's quest boss: the Ferryman, called up the nave by the tower bell once the fonts are full
+  // (docs/ZOMBIES.md "Saltmere Abbey").
+  card('zm-ferryman', 'Last Crossing', 'Zombies', 'Put down the Ferryman on Saltmere Abbey in Graveyard Shift', c => zmFerrymanDown(c.zmFeats), { p: 'tide', c: ['#04100e', '#16403a', '#d0fff0', '#5affd0'], e: 'map:saltmere', gold: true }),
 ];
 export const CARD_IDS = CARDS.map(c => c.id);
 export const getCard = id => CARDS.find(c => c.id === id) ?? CARDS[0];
@@ -1495,8 +1498,12 @@ export function recordZmFeat(save, mapId, { escaped = 0, boss = false } = {}) {
 // Barker's (Wrenfield Fair).
 export const ZM_LISTENER_MAPS = ['polestar'];
 export const ZM_BARKER_MAPS = ['wrenfield'];
+// And the Ferryman's (Saltmere Abbey).
+export const ZM_FERRYMAN_MAPS = ['saltmere'];
 // Whether the Gravewarden has gone down on any map (its calling card).
-export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && !ZM_BARKER_MAPS.includes(k) && Array.isArray(v) && v[1]);
+export const zmWardenDown = feats => isObj(feats) && Object.entries(feats).some(([k, v]) => !ZM_LISTENER_MAPS.includes(k) && !ZM_BARKER_MAPS.includes(k) && !ZM_FERRYMAN_MAPS.includes(k) && Array.isArray(v) && v[1]);
+// Whether the Ferryman has (its calling card, Last Crossing, and the Drowned Bell emblem).
+export const zmFerrymanDown = feats => isObj(feats) && ZM_FERRYMAN_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 // Whether the Barker has (its calling card, Show's Over, and the Last Bell emblem).
 export const zmBarkerDown = feats => isObj(feats) && ZM_BARKER_MAPS.some(k => Array.isArray(feats[k]) && feats[k][1]);
 // Whether the Listener has (its calling card, Dead Air, and the Dead Frequency emblem).

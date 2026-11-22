@@ -187,6 +187,21 @@ export const REWARD_PATTERNS = {
     for (let i = 0; i < 26; i++) s += circ(96 + r() * 204, r() * 60, 0.9 + r() * 1.3, c[3], op((0.45 + r() * 0.45).toFixed(2)));
     return s;
   },
+  tide(c, r) {             // Saltmere Abbey: the drowned abbey's broken arches and bell tower over the flood, the moon in the water.
+    let s = circ(250, 18, 9, c[2], op('.85')) + circ(253, 16, 8, c[0]);
+    // The nave's arches, broken off at different heights.
+    for (let k = 0; k < 5; k++) {
+      const x = 104 + k * 24, h = 34 + (k % 3) * 8 + r() * 6;
+      s += rect(x, H - h, 5, h, c[1]) + path(`M${x + 5} ${H - h + 6} Q${x + 12} ${H - h - 8} ${x + 19} ${H - h + 6}`, c[1], 3);
+    }
+    // The bell tower, its bell lit.
+    s += rect(232, 22, 16, H - 22, c[1]) + poly([[230, 22], [240, 8], [250, 22]], c[1]) + rect(236, 26, 8, 8, c[0]) + circ(240, 31, 3, c[3]);
+    // The flood: bands of water, the moon's road across it, rain.
+    for (let k = 0; k < 4; k++) s += path(`M${92 + k * 4} ${62 + k * 5} q25 -4 50 0 t50 0 t50 0 t50 0`, c[3], 0.9, op((0.55 - k * 0.1).toFixed(2)));
+    for (let k = 0; k < 6; k++) s += rect(244 + (r() - 0.5) * 8, 60 + k * 3.2, 4 + r() * 8, 0.8, c[2], op('.6'));
+    for (let i = 0; i < 26; i++) { const x = 96 + r() * 204, y = r() * 60; s += line(x, y, x - 2, y + 6, c[2], 0.5, op('.35')); }
+    return s;
+  },
   wheel(c, r) {            // Wrenfield Fair: the big wheel lit against a violet night, a striped tent, a string of bulbs.
     let s = '';
     const cx = 236, cy = 34, R = 26;

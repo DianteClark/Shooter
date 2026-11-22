@@ -164,9 +164,10 @@ export class Music {
   get ownsTension() { return this.scene === 'match' && this.mode === 'all' && !!this.seq.themeId; }
 
   // From main.js, as a match starts: what it is, for the choice of theme.
-  //   { mode, rules, ranked, large, mission }   mission: the campaign mission's number (1-8)
+  //   { mode, map, rules, ranked, large, mission }   mission: the campaign mission's number (1-12); map: the map id (a
+  //   Graveyard Shift map can have a theme or key of its own)
   match(info) {
-    this.info = { mode: info.mode ?? 'tdm', rules: info.rules ?? info.mode ?? 'tdm', ranked: !!info.ranked, large: !!info.large, mission: info.mission | 0 };
+    this.info = { mode: info.mode ?? 'tdm', map: info.map ?? null, rules: info.rules ?? info.mode ?? 'tdm', ranked: !!info.ranked, large: !!info.large, mission: info.mission | 0 };
     this.pick = newPickState();
   }
 
