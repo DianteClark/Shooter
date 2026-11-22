@@ -51,11 +51,12 @@ export const BF = {
     low: 50,                // The "tickets low" warning fires once at this.
   },
   bt: {
-    tickets: 300,           // The attackers' pool to start, and what a fallen sector adds (scaled by sector count).
-    refill: 220,
+    tickets: 360,           // The attackers' pool to start, and what a fallen sector adds (scaled by sector count).
+    refill: 260,
     margin: 10,             // How far past their line each side may go before the out-of-bounds clock starts.
     fallBack: 12,           // Defenders caught behind a fallen line get this long to get out, not the usual 8 s.
-    capture: 20,            // An objective is slower to take than a Conquest flag (one player, from neutral).
+    capture: 16,            // An objective is slower to take than a Conquest flag (one player, from neutral).
+    capTime: 60,            // An objective taken by the attackers puts this back on the sector clock (up to a full clock).
     lock: 12,               // After a sector falls, the next one's objectives cannot be taken for this long (regroup).
     // Spawns, in metres along the axis: attackers this far short of the sector's nearest objective (never past the line
     // behind it), defenders this far behind its farthest one, so both sides walk about as far to the fight.

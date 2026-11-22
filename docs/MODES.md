@@ -227,7 +227,7 @@ map.bf = {
 
 ### Breakthrough
 - Only the current sector's objectives are live; they start the defenders'. Attackers take one as a Conquest flag
-  (slower: `BF.bt.capture` 20 s alone); defenders can take it back. All held at once: the sector falls, the attackers
+  (slower: `BF.bt.capture` 16 s alone), and each one taken puts a minute back on the sector clock; defenders can take it back. All held at once: the sector falls, the attackers
   get `refill` tickets, the sector clock (5 minutes, or the layout's `clock`) restarts, and the next objectives stay locked
   for `BF.bt.lock` s while both sides move up.
 - Attackers spend a ticket a death; at zero they stop respawning and lose when the last is down. Defenders respawn
@@ -252,7 +252,7 @@ map.bf = {
 - Breakthrough took the most work. With defenders spawning beside the objectives and attackers at the HQ, no sector
   ever fell on the islands; with attackers pushing onto the objective (`commit`) and defenders delayed, Ground War
   sectors fell in under a minute. Shipped: both sides spawn about as far from the objectives (the bands above), a
-  slower capture (20 s), a 12 s lock after a sector falls, and the islands' own `clock` (7 min), `defendDelay` (1.5 s)
+  slower capture (16 s), a 12 s lock after a sector falls, and the islands' own `clock` (7 min), `defendDelay` (1.5 s)
   and bigger pools. Measured: attackers won 5 of 14 (both sides win on most maps over more seeds), 3-14 minute matches,
   host tick 0.5-0.8 ms mean.
 

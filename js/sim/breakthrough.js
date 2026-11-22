@@ -159,6 +159,7 @@ export class BreakthroughRules {
   _flagEvent(z, what) {
     const sim = this.sim, team = z.by, att = team === this.att;
     if (what === 'capture' && att) {
+      sim.timeLeft = Math.min(this.clock, sim.timeLeft + BF.bt.capTime);      // Progress buys time.
       for (const p of sim.players) {
         if (p.team !== team || !sim._onZone(p, z)) continue;
         p.btCaps = (p.btCaps ?? 0) + 1; addScore(p.score, BF.bt.capScore); sim._medal(p, 'bt_capture');
