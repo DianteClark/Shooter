@@ -510,7 +510,7 @@ const ALIAS = {
   'medal:oic_last': 'medal:clutch', oic_last: 'medal:clutch', 'medal:ctl_capture': 'medal:capture', ctl_capture: 'medal:capture',
   'medal:ctl_hold': 'medal:defend', ctl_hold: 'medal:defend', 'medal:grind_bank': 'mode:grind', grind_bank: 'mode:grind',
   'medal:cq_capture': 'medal:capture', cq_capture: 'medal:capture', 'medal:cq_neutral': 'ui:flag', cq_neutral: 'ui:flag',
-  'medal:bt_capture': 'medal:capture', bt_capture: 'medal:capture', 'medal:bt_sector': 'mode:bt', bt_sector: 'mode:bt',
+  oob: 'ui:warning', 'medal:bt_capture': 'medal:capture', bt_capture: 'medal:capture', 'medal:bt_sector': 'mode:bt', bt_sector: 'mode:bt',
   // Menu vocabulary (js/ui/yard.js names).
   bots: 'ui:bot', rejoin: 'ui:refresh', load: 'ui:download', export: 'ui:share', equip: 'ui:check', team: 'ui:party',
   swapteam: 'swap', wait: 'ui:clock', warn: 'ui:warning', sound: 'ui:volume', settings: 'ui:settings',

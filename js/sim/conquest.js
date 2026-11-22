@@ -86,9 +86,10 @@ export class ConquestRules {
     return true;
   }
 
+  // Facing the nearest flag.
   _face(s) {
     let best = null, bd = Infinity;
-    for (const z of this.zones) { const d = Math.hypot(z.x - s.x, z.z - s.z); if (d < bd && z.owner === -1 || d < bd * 0.5) { bd = d; best = z; } }
+    for (const z of this.zones) { const d = Math.hypot(z.x - s.x, z.z - s.z); if (d < bd) { bd = d; best = z; } }
     return faceTo(s, best ?? { x: this.sim.map.width / 2, z: this.sim.map.height / 2 });
   }
 
@@ -135,7 +136,7 @@ export class ConquestRules {
     const i = z ? this.zones.indexOf(z) : -1, spots = i >= 0 ? this._flagSpots()?.[i] : null;
     const s = spots?.length ? bestSpot(sim, p, spots) : bestSpot(sim, p, this.hq[p.team]);
     sim._placeAt(p, s, this._face(s));
-    if (z) sim._emit({ t: 'cq', kind: 'deploy', id: z.id, who: p.id });
+    if (z && !p.isBot) sim._emit({ t: 'cq', kind: 'deploy', id: z.id, who: p.id });     // The phone's "Deployed at B".
     return true;
   }
 

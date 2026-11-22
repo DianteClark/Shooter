@@ -95,7 +95,7 @@ export function stepBounds(sim, dt, inside, limit) {
     if (p.oobLeft == null) p.oobLeft = limit(p);
     p.oobLeft -= dt;
     p.oob = p.oobLeft;
-    if (p.oobLeft <= 0) { p.oob = p.oobLeft = null; sim._selfKill(p, 'zone'); }
+    if (p.oobLeft <= 0) { p.oob = p.oobLeft = null; sim._selfKill(p, 'oob'); }
   }
 }
 

@@ -391,6 +391,7 @@ const zmWeaponName = id => zmWonderOf(id)?.name ?? weaponName(id);
 // What the feed names for a kill: a gun id alone would credit the gun for a grenade or streak kill.
 export function killCause(e) {
   if (e.equip === 'bomb') return 'Bomb';
+  if (e.equip === 'oob') return 'Out of bounds';      // Conquest and Breakthrough's boundary (js/sim/bf-kit.js).
   if (e.equip) return LETHALS[e.equip]?.name ?? e.equip;
   if (typeof e.streak === 'string') return STREAKS[e.streak]?.name ?? e.streak;
   return weaponName(e.weapon);

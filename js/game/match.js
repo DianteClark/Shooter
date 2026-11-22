@@ -332,7 +332,7 @@ export class Match {
 
   // Conquest's deploy pick from the death screen (js/ui/bf-hud.js): a flag id, 'hq', or null for the front.
   bfCommand(act, extra = {}) {
-    if (this.sim.rules?.layout === undefined) return;
+    if (!this.sim.rules?.layout) return;
     this.#command({ cmd: 'bf', act, ...extra });
   }
 
