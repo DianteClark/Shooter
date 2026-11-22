@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'The North: Kaldvik',
+    items: [
+      'New battle royale region, Kaldvik: a fishing town on a frozen fjord under a blizzard dusk. The harbour is ice you can walk on, a frozen river runs from the dam to the sea, and the ski slopes, the ice shelf and the reservoir are all in play. Eighteen places, from the Cannery and the church square to the Radar Dome, the Summit Lodge and the Hot Springs.',
+      'It plays Battle Royale, Rebound and Extraction alongside the other islands, and Conquest (Kaldvik: Fjord Road, five flags) and Breakthrough (Kaldvik: Harbour Run, from the harbour to the dam) on the Ground War tab.',
+      'Four new 6v6 maps, each a district of Kaldvik: Trawler Basin (medium, trawlers locked in the harbour ice), Telemark (large, a ski village round the chairlift), Ice Core (medium, a drilling camp on the ice shelf) and Spillway (small, close fights across a dam\'s crest).',
+      'Each new map has its own calling cards (Iced In, Chairlift, Bore Hole, Floodgate, Squall Line) with Elite and Master tiers.',
+    ],
+  },
+  {
     build: '1122-6', date: '2026-11-22', title: 'Breakthrough balance',
     items: [
       'Breakthrough: once attackers hold an objective of a sector they respawn near it, and in sectors whose objectives lie far past the front line they no longer have to walk all the way from the HQ. Attacking bots now swing out to the sides instead of filing down one street, and objectives take a little longer to capture. Meridian City\'s Crosstown is now winnable for the attackers.',
