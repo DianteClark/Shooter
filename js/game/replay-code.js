@@ -47,10 +47,11 @@ const EV_FIELDS = {
   swap: ['id'],
   slide: ['id'],
   emote: ['id', 'e'],
+  brk: ['i', 's', 'x', 'z', 'm', 'dx', 'dz'],     // Destruction (appended: older codes keep their type numbers).
 };
 const EV_TYPES = Object.keys(EV_FIELDS);
 const ID_FIELDS = new Set(['by', 'target', 'id', 'assist', 'owner']);
-const EXTRA_KEYS = ['points', 'mode', 'scores'];
+const EXTRA_KEYS = ['points', 'mode', 'scores', 'brk'];
 
 /* ---------- Bytes ---------- */
 class Writer {
@@ -170,7 +171,18 @@ export async function encodeReplay(clip, { from = 0, to = clip?.dur ?? 0, hz = S
     xIdx.push(j);
   }
   let xJson = `[${xt.join(',')}]`;
-  if (xJson.length > 60000) { xJson = '[{}]'; xIdx.fill(0); }      // Something huge (a battle royale's points): left out.
+  if (xJson.length > 60000) {
+    // Something huge (a battle royale's points): left out, keeping the break string (walls must stand as they stood).
+    xt.length = 0; xSeen.clear();
+    for (let k = 0; k < keep.length; k++) {
+      const brk = clip.x?.[keep[k]]?.brk;
+      const s = brk ? JSON.stringify({ brk }) : '{}';
+      let j = xSeen.get(s);
+      if (j === undefined) { j = xt.length; xt.push(s); xSeen.set(s, j); }
+      xIdx[k] = j;
+    }
+    xJson = `[${xt.join(',')}]`;
+  }
   // Events within the range, ids as cast indices (players never seen in a kept keyframe still get a cast slot).
   const ev = [];
   let lastMs = 0;
@@ -325,7 +337,7 @@ function readBody(raw) {
     const j = rd.vu(), v = xt[j];
     if (!v || typeof v !== 'object') return null;
     x[f] = { projectiles: null, smokes: null, turrets: null, gunships: null, deploys: null, drones: null, tags: null, uav: null, br: null,
-      points: v.points ?? null, mode: v.mode ?? null, scores: v.scores ?? null };
+      points: v.points ?? null, mode: v.mode ?? null, scores: v.scores ?? null, brk: typeof v.brk === 'string' ? v.brk : '' };
   }
   const rawEv = JSON.parse(rd.text());
   if (!Array.isArray(rawEv) || rawEv.length > MAX_EV) return null;

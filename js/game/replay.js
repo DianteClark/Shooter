@@ -24,7 +24,7 @@ const TAIL = 1.2;                      // Seconds kept after the match ends (the
 
 // Only what the renderer and the replay's kill feed react to.
 export const KEEP_EVENTS = new Set(['gear', 'fried', 'shot', 'hit', 'kill', 'explosion', 'bang', 'swap', 'slide', 'throw', 'heal',
-  'overheat', 'turret', 'turret_down', 'turret_shot', 'gunship_shot', 'emote', 'spawn']);
+  'overheat', 'turret', 'turret_down', 'turret_shot', 'gunship_shot', 'emote', 'spawn', 'brk']);
 
 // One player in a keyframe: STRIDE Int16 values.
 export const STRIDE = 20;
@@ -35,7 +35,8 @@ const F_ALIVE = 1, F_SPRINT = 2, F_SLIDE = 4, F_PROTECT = 8, F_GHOST = 16, F_DOW
 const i16 = v => (v > 32767 ? 32767 : v < -32768 ? -32768 : Math.round(v));
 
 // The extras of a keyframe, by name; a stored clip keeps each as an index into a table of distinct values.
-export const EXTRAS = ['projectiles', 'smokes', 'turrets', 'gunships', 'deploys', 'drones', 'tags', 'points', 'mode', 'uav', 'br', 'scores'];
+// Append only: a stored clip keeps EXTRAS.length indices a keyframe, and an older clip's shorter row still reads.
+export const EXTRAS = ['projectiles', 'smokes', 'turrets', 'gunships', 'deploys', 'drones', 'tags', 'points', 'mode', 'uav', 'br', 'scores', 'brk'];
 const capList = a => (Array.isArray(a) && a.length > MAX_LIST ? a.slice(0, MAX_LIST) : a ?? null);
 
 export class ReplayRecorder {
@@ -168,6 +169,7 @@ export class ReplayRecorder {
     x.gunships = view.gunships ?? null; x.deploys = view.deploys ?? null; x.drones = view.drones ?? null;
     x.tags = capList(view.tags); x.points = view.points ?? null; x.mode = view.mode ?? null; x.uav = view.uav ?? null;
     x.scores = view.scores ?? null;
+    x.brk = view.brk ?? '';      // Destruction: which pieces are down (a string, so repeats share one table entry).
     // Battle royale: the circle and the transport, not the loot table or the inventory.
     const br = view.br;
     x.br = br ? { circle: br.circle, next: br.next, state: br.state, plane: br.plane } : null;
@@ -347,6 +349,7 @@ export class ClipReader {
     out.projectiles = x.projectiles; out.smokes = x.smokes; out.turrets = x.turrets; out.gunships = x.gunships;
     out.deploys = x.deploys; out.drones = x.drones; out.tags = x.tags; out.points = x.points; out.mode = x.mode;
     out.uav = x.uav ?? [0, 0]; out.br = x.br; out.scores = x.scores ?? out.scores;
+    out.brk = x.brk ?? '';
     return out;
   }
 
@@ -399,12 +402,12 @@ export function packClip(clip) {
 }
 
 export function unpackClip(rec) {
-  const NX = EXTRAS.length, F = rec.fat.length;
+  const F = rec.fat.length, NX = F ? Math.round(rec.xi.length / F) : EXTRAS.length;     // A clip saved before an extra was appended has fewer.
   const parsed = rec.xt.map(s => JSON.parse(s));
   const x = new Array(F);
   for (let k = 0; k < F; k++) {
     const o = {};
-    for (let j = 0; j < NX; j++) o[EXTRAS[j]] = parsed[rec.xi[k * NX + j]];
+    for (let j = 0; j < NX && j < EXTRAS.length; j++) o[EXTRAS[j]] = parsed[rec.xi[k * NX + j]];
     x[k] = o;
   }
   return {

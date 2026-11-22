@@ -20,6 +20,15 @@ import { spectate } from '../sim/snd.js';
 import { esc, nameHtml } from './widgets.js';
 import { icon } from './icons.js';
 
+// Destruction: rubble where a piece stood (over a painted overview too), so the map shows the openings.
+function paintBroken(g, map, s) {
+  for (const p of map.breakables ?? []) {
+    if (p.wall._brk !== 2) continue;
+    g.fillStyle = '#4a433b';
+    g.fillRect(p.x * s, p.z * s, Math.max(1, p.w * s), Math.max(1, p.d * s));
+  }
+}
+
 const ORD = n => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const MAP_PX = 640;          // Backing pixels of the big map.
@@ -881,15 +890,16 @@ export class BrHud {
     const g = c.getContext('2d'), s = MAP_PX / Math.max(map.width, map.height);
     // A map with a painted overview (assets/maps/<id>-overview.jpg, north up, edge to edge) uses it once it loads.
     const img = new Image();
-    img.onload = () => { g.drawImage(img, 0, 0, MAP_PX, MAP_PX); g.fillStyle = 'rgba(10,13,17,.18)'; g.fillRect(0, 0, MAP_PX, MAP_PX); };
+    img.onload = () => { g.drawImage(img, 0, 0, MAP_PX, MAP_PX); g.fillStyle = 'rgba(10,13,17,.18)'; g.fillRect(0, 0, MAP_PX, MAP_PX); paintBroken(g, map, s); };
     if (!map.devMap) img.src = `assets/maps/${map.id}-overview.jpg`;
     g.fillStyle = '#33402f'; g.fillRect(0, 0, MAP_PX, MAP_PX);
     for (const r of map.rooms ?? []) { g.fillStyle = '#5a5240'; g.fillRect(r.x * s, r.z * s, r.w * s, r.d * s); }
     for (const w of map.walls) {
-      if (w.kind === 'border') continue;
+      if (w.kind === 'border' || !w.blocksMove) continue;
       g.fillStyle = w.kind === 'water' ? '#2c4a54' : w.blocksVision ? '#b9b19a' : '#6f7660';
       g.fillRect(w.x * s, w.z * s, Math.max(1, w.w * s), Math.max(1, w.d * s));
     }
+    paintBroken(g, map, s);
     this.base = c; this.baseS = s;
     return c;
   }

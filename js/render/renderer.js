@@ -13,6 +13,7 @@ import { CpFx } from './cp-fx.js';     // The co-op campaign: objectives, charge
 import { clearZmWalls } from '../shared/zombies.js';
 import { getCamo } from '../shared/camos.js';
 import { buildWorld } from './world.js';
+import { DestructFx } from './destruct-fx.js';
 import { Weather } from './weather.js';
 import { FogMask, castRay } from './fog.js';
 import { Characters, GLIDE_ALT } from './characters.js';
@@ -190,6 +191,7 @@ export class GameRenderer {
 
     this.visionWalls = map.walls.filter(w => w.blocksVision);
     this.bulletWalls = map.walls.filter(w => w.blocksBullet);
+    this.brkFx = new DestructFx(this, world);     // Destruction's picture (js/render/destruct-fx.js).
 
     // Overlay for low HP and damage. A clip-space triangle, so it needs no camera.
     const og = new THREE.BufferGeometry();
@@ -488,6 +490,27 @@ export class GameRenderer {
     this._dx = dx; this._dz = dz;
   }
 
+  // Destruction: the map's walls changed (a piece broke or stood back up), so every cached wall list the picture
+  // tests sight and shots against is rebuilt from the flags as they are now.
+  refreshWalls() {
+    const walls = this.map.walls, vision = walls.filter(w => w.blocksVision);
+    this.visionWalls = vision;
+    this.bulletWalls = walls.filter(w => w.blocksBullet);
+    this.chars.visionWalls = vision;
+    this.combat.visionWalls = vision;
+    if (this.combat.gear) this.combat.gear.visionWalls = vision;
+    if (this.combat.streakFx) this.combat.streakFx.visionWalls = vision;
+    this.fog.refreshWalls();
+  }
+
+  // A break near the player shakes the camera a little (a blast already shook it; this is for the crash of a wall).
+  shakeAt(x, z, k) {
+    const me = this.chars.rigs.get(this.localId);
+    if (!me || this.cine) return;
+    const d = Math.hypot(me.x - x, me.z - z);
+    this.trauma = Math.min(1, this.trauma + Math.max(0, 1 - d / 14) * k);
+  }
+
   _boom(x, z, radius) {
     this.vfx.explosion(x, z, radius);
     if (!this.cine) this.props.blast(x, z, radius);
@@ -777,6 +800,8 @@ export class GameRenderer {
     if (zmObj && !this.zmBodies) { this.zmBodies = new ZmBodies(this.scene, this.vfx); this.chars.zm = this.zmBodies; }
     this.chars.update(view, fxDt, opts);
     this._handleEvents(events, localId, localTeam);
+    this.brkFx.onEvents(events);
+    this.brkFx.update(view, !!cine);
     if (this.zmBodies) this.zmBodies.update(view, fxDt, this.chars, { cine: !!cine });
     if (!cine) ZM_INTRO.step(realDt);
     this.combat.onEvents(events, localId, localTeam);
