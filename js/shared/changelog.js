@@ -4,6 +4,14 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Smoother matches when your phone hosts',
+    items: [
+      'When your phone hosts, matches no longer stutter in their first seconds or when a battle royale squad lands: the host gets ready while the match loads.',
+      'Fewer single hitches during big fights for everyone in a match your phone hosts, on every map and mode: bots spread their heavier thinking and route-finding over a few frames instead of all doing it at once.',
+      'A phone that takes over as host when the old one drops gets the same treatment.',
+    ],
+  },
+  {
     build: '1122-6', date: '2026-11-22', title: 'Breakthrough balance',
     items: [
       'Breakthrough: once attackers hold an objective of a sector they respawn near it, and in sectors whose objectives lie far past the front line they no longer have to walk all the way from the HQ. Attacking bots now swing out to the sides instead of filing down one street, and objectives take a little longer to capture. Meridian City\'s Crosstown is now winnable for the attackers.',

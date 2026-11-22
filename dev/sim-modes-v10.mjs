@@ -303,8 +303,10 @@ await test('inf: survivors spread over several spots in small groups, not one ca
     return sizes;
   };
   let C = 0, S = 0, N = 0, moved = 0;
-  for (const map of ['oasis', 'railyard']) {
-    const { sim } = makeSim('inf', map, { seed: 3 });
+  // Two seeds a map: one seed alone sits within a few percent of the bar either way (build NEXT's hyp() distances moved
+  // seed 3 from 71% to 76% while six seeds averaged 62% before and after).
+  for (const [map, seed] of [['oasis', 3], ['railyard', 3], ['oasis', 4], ['railyard', 4]]) {
+    const { sim } = makeSim('inf', map, { seed });
     const spotOf = new Map();
     run(sim, 150, s => {
       if (s.phase === 'live' && s.tick % (SIM_HZ * 2) === 0) {
