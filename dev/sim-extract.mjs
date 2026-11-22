@@ -195,7 +195,9 @@ function units() {
     live(sim);
     freeze(sim);
     const R = sim.rules;
-    for (const p of sim.players) if (!p.ai) place(p, 5 + p.index, 5);
+    // Parked 2.2 m apart: frozen bots still take a melee finisher on an enemy at arm's length (Fin.botFinishers), and a
+    // stack of squads in one corner thinned itself out on some maps before the contest below.
+    for (const p of sim.players) if (!p.ai) place(p, 4 + p.index * 2.2, 5);
     R.t = EX.windows[0].open + 1;
     R._stepWindows();
     const e = R.exfils.find(x => x.state === 1);

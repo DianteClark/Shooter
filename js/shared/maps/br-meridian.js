@@ -87,6 +87,10 @@ function build() {
     && (extra.car || extra.bus || !onRoad(x, z, w, d)) && P.free(x, z, w, d, m);
   const T = (x, z, w, d, h, kind, extra = {}, m = 1.6) => (fits(x, z, w, d, extra, m) ? P.add(x, z, w, d, h, kind, extra) : null);
   const keep = (x, z, w, d, m = 3) => P.keepOut.push({ x: x - m, z: z - m, w: w + 2 * m, d: d + 2 * m });
+  // Extraction's landing zones, reserved before anything is placed so street clutter keeps off them (see br.exfils).
+  const LZ_RING = [[100, 290], [112, 138], [313, 288], [352, 338], [330, 52], [116, 64], [106, 384]];
+  const LZ_FINAL = [[140, 154], [260, 154], [140, 248], [260, 248]];
+  for (const [x, z] of [...LZ_RING, ...LZ_FINAL]) keep(x - 9, z - 9, 18, 18, 0);
   const districts = [];
   const art = { el: [], strings: [], crossings: [], trains: [] };
   const take = rec => {
@@ -346,6 +350,33 @@ function build() {
     }
   }
 
+  // ---- Extraction's landing zones (docs/EXTRACT.md; js/sim/extract.js reads br.exfils): a dense city has few open
+  // clearings, so they are named and reserved (LZ_RING, LZ_FINAL): the pitch, the lawn, the helipad, the dock yard, the
+  // ferry car park, the depot and the power station yard for the ring, the final out at one of the four junctions
+  // round Midtown; squads come in at eight streets round the edge.
+  const clearSq = (x, z, r) => x > r + 2 && z > r + 2 && x < W - r - 2 && z < H - r - 2 && P.near(x - r, z - r, 2 * r, 2 * r).size === 0
+    && !P.roofs.some(f => x > f.x - r && x < f.x + f.w + r && z > f.z - r && z < f.z + f.d + r);
+  const findClear = (x0, z0, r, reach = 26) => {
+    for (let d = 0; d <= reach; d += 2) for (let a = 0; a < 6.28; a += 0.4) {
+      const x = Math.round(x0 + Math.cos(a) * d), z = Math.round(z0 + Math.sin(a) * d);
+      if (clearSq(x, z, r)) return { x, z };
+    }
+    return null;
+  };
+  const ring = LZ_RING.map(([x, z]) => findClear(x, z, 8)).filter(Boolean);
+  const final = LZ_FINAL.map(([x, z]) => findClear(x, z, 7)).filter(Boolean);
+  const inserts = [];
+  for (let k = 0; k < 8; k++) {
+    const a = (k + 0.5) / 8 * Math.PI * 2;
+    let got = null;
+    for (let r = 182; r > 140 && !got; r -= 3) for (const da of [0, 0.1, -0.1, 0.2, -0.2]) {
+      if (got) break;
+      got = clearSq(200 + Math.cos(a + da) * r, 200 + Math.sin(a + da) * r, 5) ? { x: Math.round(200 + Math.cos(a + da) * r), z: Math.round(200 + Math.sin(a + da) * r) } : null;
+    }
+    if (got) inserts.push(got);
+  }
+  const exfils = { ring, final, inserts };
+
   // Nothing a bot cannot walk to (a corner pocket behind furniture): flooded from the boulevard by the Seam.
   pruneUnreachable(P, 144, 200);
 
@@ -392,8 +423,8 @@ function build() {
 
   const circleBias = P.pois.map(p => ({ x: p.x, z: p.z, w: p.tier === 1 ? 1 : p.tier === 2 ? 0.8 : 0.5 }))
     .concat([[144, 154], [292, 248], [144, 304], [292, 94], [24, 120]].map(([x, z]) => ({ x, z, w: 0.4 })));
-  // Rebound's compact areas: over the middle districts, the north and the south of the city.
-  const reboundAreas = [{ x: 200, z: 200, r: 150 }, { x: 150, z: 150, r: 150 }, { x: 250, z: 250, r: 150 }, { x: 250, z: 150, r: 150 }];
+  // Rebound's compact areas: centred on the districts, leaning west, east and north (each keeps clear of the corners).
+  const reboundAreas = [{ x: 200, z: 200, r: 150 }, { x: 165, z: 195, r: 150 }, { x: 235, z: 205, r: 150 }, { x: 200, z: 165, r: 150 }];
 
   // Conquest and Breakthrough (branch bfmodes, docs/MODES.md "Layout format"): the boulevard and the districts on it.
   // Every point is moved onto open ground round its place.
@@ -424,7 +455,7 @@ function build() {
     rooms: P.rooms, roofs: P.roofs, zones: P.zones, roads: P.roads, rails: P.rails, regionSeeds: REGION_SEEDS,
     districts, el: art.el, strings: art.strings, crossings: art.crossings, trains: art.trains,
     modes: ['br'], large: true, bf,
-    br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias, reboundAreas },
+    br: { pois: P.pois, loot: P.loot, chests: P.chests, drop: null, circleBias, reboundAreas, exfils },
   };
 }
 
