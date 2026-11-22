@@ -26,6 +26,8 @@ export function mapIcons({ P, R, O, bar }) {
     // Millbrook: a stone mill with a pitched roof, its waterwheel turning in the race below.
     // Jadefall: the stepped pyramid, its jade crown lit, the lagoon's swell below.
     'map:jadefall': { f: [R(5, 21, 22, 4.5), R(8.5, 16.5, 15, 4.5), R(12, 12, 8, 4.5)], h: [R(14.5, 21, 3, 4.5), R(14.8, 16.5, 2.4, 4.5)], s: [P(1, 29, 6, 26.5, 11, 29, 16, 26.5, 21, 29, 26, 26.5, 31, 29)], sw: 2, a: [P(13.5, 12, 16, 4, 18.5, 12)] },
+    // Meridian City: a skyline of four districts, the El's deck across the front on its columns, a lit window.
+    'map:meridian': { f: [R(1, 12, 7, 12), R(9, 5, 7, 19), R(17, 9, 6, 15), R(24, 14, 7, 10), R(1, 24, 30, 3), R(4, 27, 2, 3), R(15, 27, 2, 3), R(26, 27, 2, 3)], h: [R(3, 15, 1.6, 2), R(11, 8, 1.6, 2), R(13.5, 12, 1.6, 2), R(19, 12, 1.6, 2), R(26, 17, 1.6, 2)], a: [R(11, 16, 1.6, 2), R(19, 18, 1.6, 2), R(3, 20, 1.6, 2)] },
     // Tidebreak: a causeway on its piers over the waves, the shrine's broken arch on it.
     'map:tidebreak': { f: [R(1, 16, 30, 4), R(4, 20, 3, 6), R(14.5, 20, 3, 6), R(25, 20, 3, 6), R(10, 5, 3, 11), R(19, 8, 3, 8), R(9, 3, 9, 3, [1, 0, 0, 1])], as: [P(1, 29.5, 5.5, 27, 10, 29.5, 14.5, 27, 19, 29.5, 23.5, 27, 28, 29.5)], sw: 2 },
     // Coral Quarter: the church tower over two roofs, its bell lit.

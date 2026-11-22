@@ -4,6 +4,15 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Meridian City',
+    items: [
+      'A new Battle Royale map, Meridian City: one huge city built from five maps you know. Downtown sits in the middle, Overpass to the west with its El running on to the edge of town, the Night Market to the east on the boulevard down to the waterfront, Turnstile as the station under Union Square and Topside as the tower going up north of Downtown.',
+      'Round them the rest of the city: the Rail Depot, Uptown, the Ferry Terminal and the Docks on the waterfront, City Hall, Mercy Hospital, Meridian Park, the Stadium, Old Town, the Power Station and Westgate. The buildings in the districts open up in Meridian City: walk in and loot them.',
+      'Meridian City plays Battle Royale (Quads, Duos, Solos), Rebound and Extraction, and comes up in the vote with Frontier and Jadefall.',
+      'New calling cards for it: City Lights, Meridian City Elite and Meridian City Master.',
+    ],
+  },
+  {
     build: '1121-1', date: '2026-11-21', title: 'Fixes',
     items: [
       'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',

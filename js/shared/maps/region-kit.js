@@ -111,7 +111,7 @@ export function placeDistrict(P, map, ox, oz, o = {}) {
 // long side, one row deep (two, back to back with a service alley, when the block is deep enough); every few lots an
 // alley cuts through. Each lot is an enterable building (shop, flats; doors onto the street or the alley), a solid
 // tower, or an open yard with some cover. o: { style, tall (share of towers), yard (share of yards), lot [min, max],
-// h [min, max], towerH [min, max], alleyEvery, tier, rows, loot (spots a room, default 3), windowEvery (default 6.5) }. Returns { built: [ids], towers, yards: [rects] }.
+// h [min, max], towerH [min, max], alleyEvery, tier, rows, loot (spots a room, default 2, 3 on lots over 180 m^2), windowEvery (default 6.5) }. Returns { built: [ids], towers, yards: [rects] }.
 export function cityBlock(P, x, z, w, d, o = {}) {
   const R = P.rnd;
   const inset = o.inset ?? 1.6, alley = 3.6;
@@ -157,7 +157,7 @@ export function cityBlock(P, x, z, w, d, o = {}) {
     const prefer = along ? (lot.row ? ['s', 'n', 'w', 'e'] : ['n', 's', 'w', 'e']) : (lot.row ? ['e', 'w', 'n', 's'] : ['w', 'e', 'n', 's']);
     const doors = doorSpots(lot.x, lot.z, lot.w, lot.d, clear, { prefer, want: 2 });
     if (!doors.length) { P.add(lot.x, lot.z, lot.w, lot.d, t0, 'building', { tower: true, skin: o.towerSkin ?? 'metro' }); out.towers++; continue; }
-    const b = P.building(lot.x, lot.z, lot.w, lot.d, { h: h0 + R() * (h1 - h0), style: o.style ?? 'metro', doors, furnish: lot.w * lot.d > 80 ? 2 : 1, tier: o.tier, loot: o.loot ?? 3, windowEvery: o.windowEvery ?? 6.5 });
+    const b = P.building(lot.x, lot.z, lot.w, lot.d, { h: h0 + R() * (h1 - h0), style: o.style ?? 'metro', doors, furnish: lot.w * lot.d > 80 ? 2 : 1, tier: o.tier, loot: o.loot ?? (lot.w * lot.d < 180 ? 2 : 3), windowEvery: o.windowEvery ?? 6.5 });
     out.built.push(b.id);
   }
   return out;

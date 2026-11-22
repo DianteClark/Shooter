@@ -1,34 +1,33 @@
-// Battle royale (docs/DISTRICTS.md): Meridian City, 400 x 400 m, the first region. Five 6v6 maps are its districts,
-// placed edge to edge and joined by the city's own streets, with the rest of the city built round them:
-//   Downtown (downtown)   the centre: towers, the fountain park, the construction site, the subway plaza
-//   Overpass (overpass)   west of Downtown; its El carries on west to the edge of the city
-//   Night Market (neon)   east of Downtown, on the boulevard down to the waterfront
-//   Turnstile (turnstile) Central Station under Union Square, south of Downtown, in a shell with stair entrances
-//   Topside (topside)     Topside Works: the tower going up north of Downtown, behind hoarding
-// Overpass's El avenue, Downtown's middle street and the Night Market's drag line up into one boulevard (z 200) from
-// the west edge to the waterfront. Round them: the Rail Depot and Uptown (north), the Ferry Terminal and the Docks on
-// the east shore, City Hall, Mercy Hospital, Meridian Park, Westgate, the Stadium, Old Town, the Power Station.
-// The district files stay the source of truth (js/shared/maps/region-kit.js placeDistrict); nothing here changes them.
+// Battle royale (docs/DISTRICTS.md): Meridian City, 400 x 400 m, the first region. Four districts, each a 6v6 map of
+// its own built to fit the city, are placed edge to edge along the boulevard and joined by the city's streets, with
+// the rest of the city built round them:
+//   Old Quarter (oldquarter)   brownstones round Fountain Square, west of the centre
+//   Midtown (midtown)          the centre: towers either side of Monument Plaza
+//   Canal Row (canalrow)       warehouses either side of the canal and its three bridges, east of the centre
+//   Union Square (unionsq)     the square and its bandstand, south of Midtown
+// The middle lane of the first three is the city's boulevard (z 200), from the west edge to the waterfront. Round
+// them: the Rail Depot, Uptown and Gallery Row (north), the Ferry Terminal and the Docks on the east shore, City Hall,
+// The Exchange, Mercy Hospital, Meridian Park, Westgate, the Stadium, Southside and Chapel Row, the Power Station.
+// The district files are the source of truth (js/shared/maps/region-kit.js placeDistrict); nothing here changes them.
 // Contract: docs/BR.md. Dressed by the giant-world streamer (js/render/themes/frontier.js) with the city's palette and
 // extras (js/render/themes/city.js).
 import { wall } from './build.js';
 import { Plan, mulberry, segDist } from './br-kit.js';
-import { placeDistrict, cityBlock, shellWalls, floorLoot, pruneUnreachable } from './region-kit.js';
-import downtown from './downtown.js';
-import overpass from './overpass.js';
-import neon from './neon.js';
-import turnstile from './turnstile.js';
-import topside from './topside.js';
+import { placeDistrict, cityBlock, pruneUnreachable } from './region-kit.js';
+import midtown from './midtown.js';
+import oldquarter from './oldquarter.js';
+import canalrow from './canalrow.js';
+import unionsq from './unionsq.js';
 
 const W = 400, H = 400;
 
-// Where each district sits (north-west corner, region metres).
+// Where each district sits (north-west corner, region metres). The first three share the boulevard at z 200 (their
+// middle lanes), with 12 m streets between them; Union Square sits south of Midtown across Union Street.
 export const DISTRICTS = {
-  downtown: { x: 150, z: 160 },
-  overpass: { x: 34, z: 168 },
-  neon: { x: 298, z: 178 },
-  turnstile: { x: 190, z: 258 },
-  topside: { x: 184, z: 102 },
+  oldquarter: { x: 58, z: 177 },
+  midtown: { x: 146, z: 168 },
+  canalrow: { x: 266, z: 176 },
+  unionsq: { x: 172, z: 258 },
 };
 
 // Ground regions for the renderer: [region, x, z, bias] (themes/city.js colours them).
@@ -47,20 +46,21 @@ const ROADS = [
   { pts: [[0, 154], [366, 154]], w: 10, kind: 'asphalt' },               // Park Row.
   { pts: [[0, 248], [366, 248]], w: 10, kind: 'asphalt' },               // Union Street.
   { pts: [[144, 304], [366, 304]], w: 10, kind: 'asphalt' },             // South Street.
-  { pts: [[0, 200], [34, 200]], w: 7, kind: 'asphalt' },                 // The boulevard, west of Overpass...
-  { pts: [[138, 200], [150, 200]], w: 7, kind: 'asphalt' },              // ...across the seam to Downtown...
-  { pts: [[286, 200], [298, 200]], w: 7, kind: 'asphalt' },              // ...on to the Night Market...
-  { pts: [[362, 200], [366, 200]], w: 7, kind: 'asphalt' },              // ...and out to the quay.
+  { pts: [[0, 200], [58, 200]], w: 7, kind: 'asphalt' },                 // The boulevard, west of the Old Quarter...
+  { pts: [[134, 200], [146, 200]], w: 7, kind: 'asphalt' },              // ...across to Midtown...
+  { pts: [[254, 200], [266, 200]], w: 7, kind: 'asphalt' },              // ...on to Canal Row...
+  { pts: [[346, 200], [366, 200]], w: 7, kind: 'asphalt' },              // ...and out to the quay.
   { pts: [[149, 44], [288, 44]], w: 8, kind: 'asphalt' },                // Uptown's cross street.
-  { pts: [[149, 352], [288, 352]], w: 8, kind: 'asphalt' },              // Old Town's.
+  { pts: [[149, 352], [288, 352]], w: 8, kind: 'asphalt' },              // Southside's.
   // North-south.
-  { pts: [[24, 0], [24, 168]], w: 10, kind: 'asphalt' },                 // West Avenue (north of Overpass)...
-  { pts: [[24, 232], [24, 400]], w: 10, kind: 'asphalt' },               // ...and south of it.
-  { pts: [[144, 0], [144, 400]], w: 10, kind: 'asphalt' },               // Seam Street: between Overpass and Downtown.
-  { pts: [[292, 0], [292, 400]], w: 8, kind: 'asphalt' },                // East Avenue: between Downtown and the market.
+  { pts: [[24, 0], [24, 400]], w: 10, kind: 'asphalt' },                 // West Avenue.
+  { pts: [[140, 0], [140, 400]], w: 8, kind: 'asphalt' },                // Seam Street: between the Old Quarter and Midtown.
+  { pts: [[260, 154], [260, 248]], w: 8, kind: 'asphalt' },              // Canal Street: between Midtown and Canal Row.
+  { pts: [[292, 0], [292, 172]], w: 8, kind: 'asphalt' },                // East Avenue, north of Canal Row...
+  { pts: [[292, 228], [292, 400]], w: 8, kind: 'asphalt' },              // ...and south of it.
   { pts: [[368, 0], [368, 400]], w: 8, kind: 'asphalt' },                // The quay road.
   { pts: [[218, 0], [218, 89]], w: 8, kind: 'asphalt' },                 // Uptown's avenue.
-  { pts: [[218, 309], [218, 400]], w: 8, kind: 'asphalt' },              // Old Town's.
+  { pts: [[218, 309], [218, 400]], w: 8, kind: 'asphalt' },              // Southside's.
 ];
 // Rails into the depot (renderer: horizontal lines, sleepers and two rails).
 const RAILS = [{ pts: [[-30, 28], [134, 28]] }, { pts: [[-30, 33], [134, 33]] }, { pts: [[-30, 70], [80, 70]] }];
@@ -111,48 +111,32 @@ function build() {
   P.zones.push({ x: 372, z: 0, w: 12, d: H, kind: 'quay' });
 
   // ---- The districts ------------------------------------------------------------------------------------------
-  // Downtown.
-  P.poi('downtown', 'Downtown', 218, 200, 46, 'metro', 1);
-  take(placeDistrict(P, downtown, DISTRICTS.downtown.x, DISTRICTS.downtown.z, { skin: 'metro' }));
-  keep(150, 160, 136, 80);
-  // Overpass, and its El carried on west over the boulevard to the edge of the city (columns on the kerbs).
-  P.poi('overpass', 'Overpass', 86, 200, 40, 'metro', 1);
-  take(placeDistrict(P, overpass, DISTRICTS.overpass.x, DISTRICTS.overpass.z, { skin: 'metro' }));
-  keep(34, 168, 104, 64);
-  art.el.push({ x0: -24, x1: 34, z0: 196, z1: 204, y: 7 }, { x0: 138, x1: 147, z0: 196, z1: 204, y: 7, end: true });
+  // Each is its 6v6 map placed as it is (border dropped, blocks opened up into buildings to loot), a tier 1 place
+  // (Union Square, mostly open ground, tier 2) with loot out round its cover.
+  const district = (id, map, name, poiX, poiZ, r, tier = 1) => {
+    const at = DISTRICTS[id];
+    P.poi(id, name, poiX, poiZ, r, 'metro', tier);
+    take(placeDistrict(P, map, at.x, at.z, { skin: 'metro', id, name }));
+    keep(at.x, at.z, map.width, map.height);
+    P.outdoorLoot(at.x + map.width / 2, at.z + map.height / 2, Math.min(map.width, map.height) / 2, Math.round(map.width * map.height / 300), tier);
+  };
+  district('midtown', midtown, 'Midtown', 200, 200, 40);
+  district('oldquarter', oldquarter, 'Old Quarter', 96, 200, 30);
+  district('canalrow', canalrow, 'Canal Row', 306, 200, 30);
+  district('unionsq', unionsq, 'Union Square', 200, 276, 22, 2);
+
+  // ---- The Exchange (north of Midtown, between North Street and Park Row): the stock exchange and its blocks ----------
+  P.poi('exchange', 'The Exchange', 218, 124, 30, 'metro', 2);
+  B(196, 104, 44, 18, { h: 5.8, style: 'station', furnish: 2, chest: true, loot: 8, doors: [['s', 0.2], ['s', 0.5], ['s', 0.8], ['n', 0.3], ['n', 0.7], ['w', 0.5], ['e', 0.5]] });
+  P.zones.push({ x: 184, z: 124, w: 68, d: 24, kind: 'plaza' });
   P.skin = 'metro';
-  for (const x of [8, 30]) for (const z of [195.6, 203.6]) A(x, z, 0.8, 0.8, 6, 'crane', { el: true });
-  A(144.6, 195.6, 0.8, 0.8, 6, 'crane', { el: true });
-  A(144.6, 203.6, 0.8, 0.8, 6, 'crane', { el: true });
+  A(215, 132, 6, 5, 0, 'water', { fountain: true });
+  for (const [x, z] of [[190, 128], [244, 128], [190, 142], [244, 142]]) A(x, z, 1, 1, 4.5, 'wall', { tree: true });
+  for (const [x, z, w, d] of [[200, 140, 3.4, 1.2], [232, 140, 3.4, 1.2], [204, 128, 1.2, 3.4], [230, 128, 1.2, 3.4]]) A(x, z, w, d, 0.9, 'barrier', { planter: true });
   P.skin = null;
-  // The Night Market.
-  P.poi('market', 'Night Market', 330, 200, 30, 'metro', 1);
-  take(placeDistrict(P, neon, DISTRICTS.neon.x, DISTRICTS.neon.z, { skin: 'metro', id: 'neon', name: 'Night Market' }));
-  keep(298, 178, 64, 44);
-  // Turnstile: Central Station under Union Square. A tiled shell where its 6v6 border was, stair entrances on every
-  // side, a roof over the lot (it dissolves round you inside), loot on the halls and platforms.
-  P.poi('station', 'Turnstile Station', 218, 275, 26, 'metro', 1);
-  const TS = DISTRICTS.turnstile;
-  let stairs = [];
-  take(placeDistrict(P, turnstile, TS.x, TS.z, {
-    skin: 'subway', hollow: false,
-    shell: () => { P.skin = 'subway'; stairs = shellWalls(P, TS.x, TS.z, 56, 34, { t: 0.6, h: 3.4, extra: { tile: true }, gates: { n: 2, s: 2, w: 1, e: 1 } }); P.skin = null; },
-  }));
-  P.roofs.push({ id: P.roofs.length, x: TS.x - 0.6, z: TS.z - 0.6, w: 57.2, d: 35.2, h: 4.2, style: 'station', roof: 'station', region: 'metro', district: 'turnstile' });
-  for (const [sx, sz] of stairs) P.zones.push({ x: sx - 2, z: sz - 2, w: 4, d: 4, kind: 'stairs' });
-  floorLoot(P, TS.x, TS.z, 28, 34, 9, 1);
-  floorLoot(P, TS.x + 28, TS.z, 28, 34, 9, 1);
-  keep(TS.x - 0.6, TS.z - 0.6, 57.2, 35.2);
-  // Topside Works: the tower going up, at street level behind hoarding with gates. Its light wells are the pits.
-  P.poi('topside', 'Topside Works', 218, 124, 28, 'industrial', 2);
-  const TP = DISTRICTS.topside;
-  take(placeDistrict(P, topside, TP.x, TP.z, {
-    skin: 'topside', hollow: false,
-    shell: () => { P.skin = 'metro'; shellWalls(P, TP.x, TP.z, 68, 44, { t: 0.8, h: 2.6, extra: { hoarding: true }, gate: 4, gates: { n: 2, s: 2, w: 2, e: 2 } }); P.skin = null; },
-  }));
-  P.zones.push({ x: TP.x, z: TP.z, w: 68, d: 44, kind: 'slab' });
-  P.outdoorLoot(218, 124, 30, 18, 2);
-  keep(TP.x - 0.8, TP.z - 0.8, 69.6, 45.6);
+  cityBlock(P, 149, 99, 31, 50, { style: 'metro', tall: 0.45, rows: 1, lot: [10, 15] });
+  cityBlock(P, 256, 99, 32, 50, { style: 'metro', tall: 0.45, rows: 1, lot: [10, 15] });
+  P.outdoorLoot(218, 128, 28, 3, 2);
 
   // ---- Rail Depot (north-west) ----------------------------------------------------------------------------------
   P.poi('depot', 'Rail Depot', 78, 46, 40, 'industrial', 2);
@@ -172,13 +156,15 @@ function build() {
   P.outdoorLoot(78, 46, 40, 12, 2);
 
   // ---- Uptown (north): four blocks round its cross streets ------------------------------------------------------------
-  P.poi('uptown', 'Uptown', 218, 46, 42, 'metro', 2);
   const UP = { style: 'metro', tall: 0.45, yard: 0.1, lot: [10, 16] };
+  P.poi('uptown', 'Uptown', 182, 46, 34, 'metro', 2);
   cityBlock(P, 149, 4, 65, 36, UP);
-  cityBlock(P, 222, 4, 66, 36, UP);
   cityBlock(P, 149, 48, 65, 41, UP);
+  P.outdoorLoot(182, 46, 34, 3, 2);
+  P.poi('gallery', 'Gallery Row', 255, 46, 34, 'metro', 2);
+  cityBlock(P, 222, 4, 66, 36, UP);
   cityBlock(P, 222, 48, 66, 41, UP);
-  P.outdoorLoot(218, 46, 44, 10, 2);
+  P.outdoorLoot(255, 46, 34, 3, 2);
 
   // ---- Ferry Terminal (north-east shore) ------------------------------------------------------------------------
   P.poi('ferry', 'Ferry Terminal', 336, 46, 32, 'coast', 2);
@@ -229,28 +215,29 @@ function build() {
   for (const [x, z, w, d] of [[40, 104, 0.8, 8], [104, 136, 0.8, 8], [44, 140, 9, 0.8], [96, 104, 9, 0.8], [20, 120, 0.8, 9], [124, 118, 0.8, 9]]) T(x, z, w, d, 1.1, 'barrier', { hedge: true });
   for (const [x, z] of [[58, 110], [92, 132], [60, 132], [94, 110]]) T(x, z, 2.2, 0.6, 0.9, 'barrier', { bench: true }, 1.2);
   P.skin = null;
-  P.outdoorLoot(80, 124, 40, 8, 3);
+  P.outdoorLoot(80, 124, 40, 5, 3);
 
-  // ---- Topside's flanking blocks, the East Market and Westgate -----------------------------------------------------
-  P.poi('westgate', 'Westgate', 14, 200, 22, 'metro', 3);
+  // ---- Westgate (west of the Old Quarter), and the blocks round the middle districts ---------------------------------
+  P.poi('westgate', 'Westgate', 30, 200, 24, 'metro', 3);
   cityBlock(P, 2, 160, 17, 34, { style: 'metro', tall: 0.2, rows: 1 });
   cityBlock(P, 2, 206, 17, 37, { style: 'metro', tall: 0.2, rows: 1 });
-  P.outdoorLoot(14, 200, 20, 4, 3);
+  cityBlock(P, 31, 160, 24, 34, { style: 'brownstone', tall: 0.3, rows: 1, lot: [9, 13] });
+  cityBlock(P, 31, 206, 24, 37, { style: 'brownstone', tall: 0.3, rows: 1, lot: [9, 13] });
+  P.outdoorLoot(30, 200, 24, 2, 3);
   P.region = 'metro'; P.tier = 2;
-  cityBlock(P, 149, 99, 31, 50, { style: 'metro', tall: 0.45, rows: 1, lot: [10, 15] });
-  cityBlock(P, 256, 99, 32, 50, { style: 'metro', tall: 0.45, rows: 1, lot: [10, 15] });
-  cityBlock(P, 296, 159, 68, 15.5, { style: 'metro', tall: 0.15, rows: 1, lot: [9, 12] });
-  cityBlock(P, 296, 225.5, 68, 17.5, { style: 'metro', tall: 0.15, rows: 1, lot: [9, 12] });
+  cityBlock(P, 58, 159, 76, 15, { style: 'brownstone', tall: 0.35, rows: 1, lot: [9, 13] });
+  cityBlock(P, 58, 226, 76, 17, { style: 'brownstone', tall: 0.35, rows: 1, lot: [9, 13] });
+  cityBlock(P, 266, 159, 22, 13.5, { style: 'industrial', tall: 0.3, rows: 1, lot: [9, 12] });
+  cityBlock(P, 296, 159, 50, 13.5, { style: 'industrial', tall: 0.3, rows: 1, lot: [9, 12] });
+  cityBlock(P, 266, 227.5, 22, 15.5, { style: 'industrial', tall: 0.3, rows: 1, lot: [9, 12] });
+  cityBlock(P, 296, 227.5, 50, 15.5, { style: 'industrial', tall: 0.3, rows: 1, lot: [9, 12] });
+  cityBlock(P, 349, 175, 15, 20, { style: 'coast', tall: 0.2, rows: 1, lot: [8, 11] });
+  cityBlock(P, 349, 205, 15, 20, { style: 'coast', tall: 0.2, rows: 1, lot: [8, 11] });
 
-  // ---- Union Square round the station, and its two flanking blocks ---------------------------------------------------
-  P.zones.push({ x: 149, z: 253, w: 139, d: 51, kind: 'square' });
-  P.tier = 1;
-  cityBlock(P, 149, 253, 35, 46, { style: 'metro', tall: 0.4, rows: 1, lot: [10, 15] });
-  cityBlock(P, 252, 253, 36, 46, { style: 'metro', tall: 0.4, rows: 1, lot: [10, 15] });
-  P.skin = 'metro';
-  for (const [x, z] of [[188, 296], [246, 296], [186, 254.5], [248, 254.5]]) T(x, z, 2, 1.6, 2.4, 'shop', { newsstand: true }, 1.2);
-  for (const [x, z] of [[196, 296.5], [238, 296.5]]) T(x, z, 3.6, 1.3, 2.4, 'barrier', { shelter: true }, 1.2);
-  P.skin = null;
+  // ---- Union Square's flanking blocks -------------------------------------------------------------------------
+  P.tier = 2;
+  cityBlock(P, 149, 253, 20, 46, { style: 'metro', tall: 0.4, rows: 1, lot: [10, 15] });
+  cityBlock(P, 231, 253, 57, 46, { style: 'metro', tall: 0.4, lot: [10, 15] });
 
   // ---- Mercy Hospital (south-east of Downtown) -----------------------------------------------------------------
   P.poi('hospital', 'Mercy Hospital', 330, 276, 26, 'metro', 2);
@@ -282,14 +269,16 @@ function build() {
   P.skin = null;
   P.outdoorLoot(84, 302, 30, 10, 2);
 
-  // ---- Old Town (south): brownstones round its cross streets ---------------------------------------------------------
-  P.poi('oldtown', 'Old Town', 218, 352, 42, 'metro', 2);
+  // ---- Southside and Chapel Row (south): brownstones round their cross streets ---------------------------------------------------------
   const OLD = { style: 'brownstone', tall: 0.35, yard: 0.15, lot: [9, 13], h: [3.6, 4.4], towerH: [4.6, 6], towerSkin: 'metro' };
+  P.poi('southside', 'Southside', 182, 352, 34, 'metro', 2);
   cityBlock(P, 149, 309, 65, 39, OLD);
-  cityBlock(P, 222, 309, 66, 39, OLD);
   cityBlock(P, 149, 356, 65, 40, OLD);
+  P.outdoorLoot(182, 352, 34, 3, 2);
+  P.poi('chapel', 'Chapel Row', 255, 352, 34, 'metro', 3);
+  cityBlock(P, 222, 309, 66, 39, OLD);
   cityBlock(P, 222, 356, 66, 40, OLD);
-  P.outdoorLoot(218, 352, 44, 10, 2);
+  P.outdoorLoot(255, 352, 34, 3, 3);
 
   // ---- The Docks (south-east shore) ----------------------------------------------------------------------------------
   P.poi('docks', 'Waterfront Docks', 336, 354, 36, 'coast', 2);
@@ -392,7 +381,7 @@ function build() {
     const team = p.x < 200 ? 0 : 1;
     for (const k of [0, 1]) { const s = spot(p.x + (k ? 5 : -5), p.z + p.r * 0.5); spawns[team].push({ ...s, aim: team ? Math.PI : 0 }); }
   }
-  const nav = P.pois.map(p => spot(p.x, p.z)).concat(stairs.map(([x, z]) => spot(x, z)));
+  const nav = P.pois.map(p => spot(p.x, p.z));
   const lanes = [{ id: 'north', z: 94 }, { id: 'park', z: 154 }, { id: 'mid', z: 200 }, { id: 'union', z: 248 }, { id: 'south', z: 304 }];
 
   const circleBias = P.pois.map(p => ({ x: p.x, z: p.z, w: p.tier === 1 ? 1 : p.tier === 2 ? 0.8 : 0.5 }))
@@ -405,13 +394,13 @@ function build() {
   const flag = (id, name, x, z, r, district) => ({ id, name, ...spot(x, z), r, district });
   const bf = {
     flags: [
-      flag('A', 'Overpass', 86, 200, 6, 'overpass'), flag('B', 'Meridian Park', 80, 124, 6, null), flag('C', 'Stadium', 84, 300, 6, null),
-      flag('D', 'Topside Works', 218, 124, 6, 'topside'), flag('E', 'Downtown', 218, 200, 6, 'downtown'), flag('F', 'Turnstile Station', 218, 275, 5, 'turnstile'),
-      flag('G', 'City Hall', 330, 128, 6, null), flag('H', 'Night Market', 330, 200, 5, 'neon'), flag('I', 'Mercy Hospital', 330, 276, 6, null),
+      flag('A', 'Old Quarter', 96, 200, 5, 'oldquarter'), flag('B', 'Meridian Park', 80, 124, 6, null), flag('C', 'Stadium', 84, 300, 6, null),
+      flag('D', 'The Exchange', 218, 128, 6, null), flag('E', 'Midtown', 200, 200, 6, 'midtown'), flag('F', 'Union Square', 200, 276, 5, 'unionsq'),
+      flag('G', 'City Hall', 330, 128, 6, null), flag('H', 'Canal Row', 306, 200, 4, 'canalrow'), flag('I', 'Mercy Hospital', 330, 276, 6, null),
     ],
     sectors: [
       { id: 'west', name: 'West Side', flags: ['A', 'B', 'C'], rect: { x: 0, z: 89, w: 144, d: 260 } },
-      { id: 'centre', name: 'Downtown', flags: ['D', 'E', 'F'], rect: { x: 144, z: 89, w: 148, d: 215 } },
+      { id: 'centre', name: 'Midtown', flags: ['D', 'E', 'F'], rect: { x: 144, z: 89, w: 148, d: 215 } },
       { id: 'east', name: 'Waterfront', flags: ['G', 'H', 'I'], rect: { x: 292, z: 89, w: 108, d: 215 } },
     ],
   };

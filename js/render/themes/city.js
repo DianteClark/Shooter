@@ -111,7 +111,23 @@ export function lampSpots(map) {
 }
 
 const LAMP_COL = [1.0, 0.66, 0.3];
+// themes/metro.js gives each plain shop (the market's shophouses and kiosks) its sign colours in its lights stage, which
+// the streamer does not run: the same here, per tile, for the shops the tile draws.
+const SHOP_FLAGS = ['newsstand', 'booth', 'kiosk', 'vending', 'ticket', 'metro'];
+function shopStyles(ctx) {
+  const signs = THEMES.metro.signs;
+  ctx.shopStyle = new Map();
+  for (const w of ctx.map.walls) {
+    if (w.kind !== 'shop' || SHOP_FLAGS.some(k => w[k])) continue;
+    const h = Math.abs(Math.round(w.x * 7.31 + w.z * 3.17));
+    const signCol = signs[h % signs.length], accent = signs[(h >> 2) % signs.length];
+    ctx.shopStyle.set(w, { signCol, accent, phase: (h % 97) / 97 });
+    ctx.lamps.push({ x: w.x + w.w / 2, z: w.z + w.d + 1.8, r: Math.min(w.w, 8) * 0.7, col: signCol.map(c => c * 0.34) });
+  }
+}
+
 export function lights(ctx, t, TILE) {
+  shopStyles(ctx);
   for (const l of lampSpots(ctx.full)) {
     if (l.x < t.x0 - LAMP_REACH || l.x > t.x0 + TILE + LAMP_REACH || l.z < t.z0 - LAMP_REACH || l.z > t.z0 + TILE + LAMP_REACH) continue;
     ctx.lamps.push({ x: l.x + l.dx, z: l.z + l.dz, r: 7, col: [0.5, 0.3, 0.1] });

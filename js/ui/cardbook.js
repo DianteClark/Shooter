@@ -79,6 +79,8 @@ const MAP_ART = {
   jadefall:   ['Jade Crown', 'isles', ['#0a1c1c', '#1e4a40', '#c8f0e0', '#3ad89a']],
   tidebreak:  ['Causeway', 'causeway', ['#0c1a1e', '#24505a', '#d0f0ec', '#ffc04a']],
   coral:      ['Bell Tower', 'belfry', ['#1a120e', '#5a3a2a', '#f4e6d0', '#e0603a']],
+  // ROADMAP 66/67 (appended): the first region.
+  meridian:   ['City Lights', 'metropolis', ['#0e1220', '#2a3456', '#d8e0ff', '#ffb84a']],
 };
 const MAP_WINS = 10;
 // Map cards come in three tiers (bronze, silver, gold; the gold one animated): wins on the map, or for the maps that
@@ -86,7 +88,7 @@ const MAP_WINS = 10;
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'ashgrove', 'polestar', 'wrenfield']);
+const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'ashgrove', 'polestar', 'wrenfield']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },
