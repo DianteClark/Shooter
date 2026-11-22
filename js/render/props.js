@@ -27,6 +27,8 @@ const SETS = {
   jungle: [JAR, CRATE, BARREL, JAR, CRATE],
   jadefall: [JAR, CRATE, BARREL, JAR, CRATE],
   city: [SIGN, CONE, BARREL, CRATE, SIGN],
+  sirocco: [JAR, JAR, CRATE, BARREL, JAR],
+  basin: [JAR, CRATE, BARREL, JAR, CRATE],
   north: [CRATE, BARREL, CRATE, CONE],
   kaldvik: [CRATE, BARREL, CRATE, CONE],
   arctic: [CRATE, BARREL, CRATE, CONE],

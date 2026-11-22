@@ -21,6 +21,7 @@ import { millbrook } from './themes/millbrook.js';
 import { launchpad } from './themes/launchpad.js';
 import { observatory } from './themes/observatory.js';
 import { pagoda } from './themes/pagoda.js';
+import { sirocco } from './themes/sirocco.js';
 import { north } from './themes/north.js';   // The North's districts (docs/DISTRICTS.md, region4).
 import { BreakRanges } from './destruct-fx.js';
 
@@ -3161,6 +3162,7 @@ const DRESS = {
   launchpad: { ...RAILYARD_DRESS, ...launchpad.dress },
   observatory: { ...RAILYARD_DRESS, ...observatory.dress },
   pagoda: { ...RAILYARD_DRESS, ...pagoda.dress },
+  sirocco: { ...RAILYARD_DRESS, ...sirocco.dress },
   north: { ...RAILYARD_DRESS, ...north.dress },
 };
 
@@ -3193,6 +3195,7 @@ const THEME_STAGES = {
   launchpad: launchpad.stage,
   observatory: observatory.stage,
   pagoda: pagoda.stage,
+  sirocco: sirocco.stage,
   north: north.stage,
 };
 
@@ -3469,6 +3472,8 @@ const THUMB_STYLE = {
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,
   city: frontier.cityThumb,
+  sirocco: sirocco.thumb,
+  basin: frontier.basinThumb,
   north: north.thumb,
   kaldvik: frontier.northThumb,
 };

@@ -63,7 +63,7 @@ const STEP_RANGE = 24;
 const DISTANT = 44;              // Metres: world sounds (explosions, aircraft, tails) past this go through the distant bus.
 // The ground underfoot by map theme (renderSfx stepSet); anything not listed is concrete and pavement.
 const STEP_SURFACE = {
-  railyard: 'stepsGravel', frontier: 'stepsDirt', launchpad: 'stepsSand', dust: 'stepsSand', desert: 'stepsSand',
+  railyard: 'stepsGravel', frontier: 'stepsDirt', launchpad: 'stepsSand', dust: 'stepsSand', desert: 'stepsSand', sirocco: 'stepsSand', basin: 'stepsSand',
   jungle: 'stepsDirt', jadefall: 'stepsDirt', harvest: 'stepsDirt', ashgrove: 'stepsDirt', millbrook: 'stepsDirt', wrenfield: 'stepsDirt',
   arctic: 'stepsSnow', frost: 'stepsSnow', north: 'stepsSnow', kaldvik: 'stepsSnow', observatory: 'stepsSnow', polestar: 'stepsSnow',
   harbor: 'stepsWood', pier: 'stepsWood', pagoda: 'stepsWood', foundry: 'stepsMetal', topside: 'stepsMetal',
@@ -622,6 +622,9 @@ THEME_AUDIO.topside = THEME_AUDIO.railyard;
 THEME_AUDIO.north = THEME_AUDIO.arctic;   // The North (region4): snow swallows the shots, the wind does the rest.
 THEME_AUDIO.kaldvik = THEME_AUDIO.arctic;
 THEME_AUDIO.city = THEME_AUDIO.metro;   // Meridian City (docs/DISTRICTS.md): the metro maps' streets.
+// Sirocco Basin and its districts: dry rock and mud brick like Dust, the storm's hiss a little louder in the wash.
+THEME_AUDIO.sirocco = { ...THEME_AUDIO.dust, wash: 0.05 };
+THEME_AUDIO.basin = THEME_AUDIO.sirocco;
 THEME_AUDIO.subway = { ir: { len: 1.1, damp: 0.45, gain: 0.36 }, slaps: [[0.04, 1], [0.09, 0.7], [0.16, 0.45]], f0: 2800, f1: 700, metal: 900, wash: 0.08 };
 const SIZE_TUNE = [{ dur: 0.14, f: 1.2, gain: 0.8 }, { dur: 0.2, f: 1, gain: 1 }, { dur: 0.3, f: 0.78, gain: 1.15 }];
 

@@ -86,6 +86,12 @@ const MAP_ART = {
   canalrow:   ['Lock Gate', 'river', ['#0c161c', '#22404e', '#cfe8f0', '#4ad0ff']],
   unionsq:    ['Bandstand', 'crowns', ['#0e1a12', '#26442e', '#d8f0d4', '#ffd24a']],
   meridian:   ['City Lights', 'metropolis', ['#0e1220', '#2a3456', '#d8e0ff', '#ffb84a']],
+  // The second region (appended).
+  caravanserai: ['Silk Road', 'serai', ['#24120e', '#6a3424', '#f6dcc0', '#3ad0c0']],
+  redgulch:   ['Cliff Dwellers', 'gulch', ['#1e0e0a', '#6a2a1c', '#f0c8a8', '#ffb050']],
+  copperstep: ['Ore Vein', 'terraces', ['#141614', '#3e4a3e', '#d8e0cc', '#4ad89a']],
+  signalridge: ['Deep Listen', 'dishes', ['#1a1020', '#4a2e3e', '#f0dcd8', '#ff8a4a']],
+  sirocco:    ['Dust Storm', 'sirocco', ['#22100e', '#7a3a24', '#ffe0b8', '#ff7a2a']],
   // The North (docs/DISTRICTS.md, appended): Kaldvik and its districts.
   trawler:    ['Iced In', 'cranes', ['#1a1416', '#4a3a3e', '#f0e6e0', '#ff8a4a']],
   telemark:   ['Chairlift', 'peaks', ['#1c1618', '#5a4448', '#f4ece6', '#e0482a']],
@@ -99,6 +105,7 @@ const MAP_WINS = 10;
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
+const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'sirocco', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
 const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'kaldvik', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };

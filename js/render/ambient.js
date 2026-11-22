@@ -31,6 +31,8 @@ const LIFE = {
   north:    { flock: 5, ground: 4, col: [0.06, 0.06, 0.08], size: 0.46, flockY: 9.5, vents: 4 },      // Ravens in the squall, chimney smoke.
   kaldvik:  { flock: 7, ground: 5, col: [0.06, 0.06, 0.08], size: 0.46, flockY: 10, vents: 5 },
   city:     { flock: 6, ground: 4, col: [0.12, 0.12, 0.15], size: 0.4, flockY: 9, vents: 6 },         // Pigeons, steam from the gratings.
+  sirocco:  { flock: 4, ground: 4, col: [0.18, 0.12, 0.1], size: 0.6, flockY: 12, vents: 0, devils: 5 },   // Kites over the souk, dust devils in the storm.
+  basin:    { flock: 4, ground: 3, col: [0.18, 0.12, 0.1], size: 0.6, flockY: 12, vents: 0, devils: 6 },
 };
 const NONE = { flock: 0, ground: 0, col: [0, 0, 0], size: 0.5, flockY: 8, vents: 0 };
 

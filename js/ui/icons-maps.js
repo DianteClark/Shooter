@@ -36,6 +36,16 @@ export function mapIcons({ P, R, O, bar }) {
     'map:unionsq': { f: [P(9, 12, 16, 5, 23, 12), R(10, 12, 12, 2), R(10.5, 14, 1.6, 10), R(20, 14, 1.6, 10), R(8, 24, 16, 3), O(4, 17, 3.4), O(28, 17, 3.4), R(3.2, 20, 1.6, 9.5), R(27.2, 20, 1.6, 9.5)], a: [O(16, 9.5, 1.3)] },
     // Meridian City: a skyline of four districts, the El's deck across the front on its columns, a lit window.
     'map:meridian': { f: [R(1, 12, 7, 12), R(9, 5, 7, 19), R(17, 9, 6, 15), R(24, 14, 7, 10), R(1, 24, 30, 3), R(4, 27, 2, 3), R(15, 27, 2, 3), R(26, 27, 2, 3)], h: [R(3, 15, 1.6, 2), R(11, 8, 1.6, 2), R(13.5, 12, 1.6, 2), R(19, 12, 1.6, 2), R(26, 17, 1.6, 2)], a: [R(11, 16, 1.6, 2), R(19, 18, 1.6, 2), R(3, 20, 1.6, 2)] },
+    // Caravanserai: the crenellated wall, its arched gate, the well house's dome behind with its finial.
+    'map:caravanserai': { f: [R(2, 16, 28, 13.5), R(2, 13, 3, 3), R(8, 13, 3, 3), R(21, 13, 3, 3), R(27, 13, 3, 3)], h: [P(12.5, 29.5, 12.5, 22, 16, 18.5, 19.5, 22, 19.5, 29.5)], b: [O(16, 13, 5.5)], a: [R(15.2, 4, 1.6, 4.5), O(16, 25, 1.3)] },
+    // Red Gulch: cliffs either side, the stone arch over the street, a lantern hung under it.
+    'map:redgulch': { f: [P(1, 29.5, 1, 3, 9, 3, 10, 29.5), P(31, 29.5, 31, 5, 23, 5, 22, 29.5), R(12, 14, 2.4, 15.5), R(17.6, 14, 2.4, 15.5), P(12, 14, 12, 12, 16, 8.5, 20, 12, 20, 14, 17.6, 14, 16, 12.2, 14.4, 14)], h: [R(3, 10, 1.6, 2.4), R(5, 16, 1.6, 2.4), R(26, 12, 1.6, 2.4), R(25, 19, 1.6, 2.4)], a: [O(16, 18, 1.6)] },
+    // Copperstep: the pit's benches stepping down, the headframe and its wheel over the shaft.
+    'map:copperstep': { f: [P(1, 29.5, 1, 20, 7, 20, 7, 24, 12, 24, 12, 27.5, 20, 27.5, 20, 24, 25, 24, 25, 20, 31, 20, 31, 29.5)], s: [P(12.5, 27.5, 16, 8, 19.5, 27.5), P(13.5, 21, 18.5, 21)], sw: 1.8, a: [O(16, 7.5, 3)], h: [O(16, 7.5, 1.3)] },
+    // Signal Ridge: a dish on its pedestal tipped up at the sky, its feed horn lit, the ridge below.
+    'map:signalridge': { f: [R(14, 18, 4, 9.5), P(3, 9, 9, 17, 18, 19, 26, 14, 29, 4, 22, 10, 12, 12), R(1, 27, 30, 2.5)], s: [P(16, 15, 22, 6)], sw: 1.4, a: [O(22.5, 5.5, 1.8)] },
+    // Sirocco Basin: the swollen sun over the dunes, the storm's streaks blowing in.
+    'map:sirocco': { a: [O(21, 11, 5.5)], f: [P(1, 29.5, 1, 22, 8, 19, 16, 23, 24, 18, 31, 21, 31, 29.5)], b: [R(2, 9, 10, 1.4, 0.7), R(4, 13, 9, 1.4, 0.7), R(1, 17, 12, 1.4, 0.7)] },
     // Trawler Basin: a trawler locked in the ice, its wheelhouse and mast, floes round the hull.
     'map:trawler': { f: [P(2, 20, 24, 20, 30, 15, 27, 25, 5, 25), R(6, 13, 8, 7), R(20, 5, 1.6, 15)], h: [R(8, 15, 1.6, 2), R(11, 15, 1.6, 2)], a: [P(1, 28, 10, 27, 13, 30, 1, 30), P(16, 28, 26, 27, 31, 30, 14, 30)] },
     // Telemark: a chalet under a snow-loaded roof, the chairlift's cable and a chair over it.
