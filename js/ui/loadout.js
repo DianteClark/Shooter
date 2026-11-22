@@ -161,7 +161,7 @@ export class LoadoutsScreen {
           <div class="ld-sub">
             <button class="ld-side${overkill ? ' ld-overkill' : ''}" data-act="loWeapon" data-key="secondary">
               <span class="ld-side-pic"><canvas class="gun-pic" data-gun="${esc(l.secondary)}"></canvas></span>
-              <span class="ld-tx"><small>${overkill ? '<i class="pro-chip ok-chip">Overkill</i>' : ''}Secondary / ${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelHtml(l.secondary)}</small></span>
+              <span class="ld-tx"><small>${overkill && PRIMARY_IDS.includes(l.secondary) ? '<i class="pro-chip">Overkill</i>' : 'Secondary / '}${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelHtml(l.secondary)}</small></span>
             </button>
             <button class="ld-act" data-act="loGunsmith">${ico('gunsmith')}<b>Gunsmith</b><small>Parts and camos</small></button>
             <button class="ld-act" data-act="loRename">${ico('edit')}<b>Rename</b><small>${esc(l.name)}</small></button>

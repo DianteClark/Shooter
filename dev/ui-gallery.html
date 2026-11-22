@@ -145,6 +145,12 @@ const SCENES = {
     menu.vote({ key: 1, options: voteOptions(() => 0.37), left: 11, seconds: 15, winner: null, resolved: null, mine: 1, counts: [1, 2, 0], total: 4 });
   }),
   'loadouts': menuScene('Loadouts', ({ menu }) => menu.loadouts({ onBack: noop, onChange: noop, onGunsmith: noop, onOperators: noop, onRename: noop }), { gl: true }),
+  // Perks wave: Overkill on, a Vigil in the sidearm slot beside the Halyard (use with &save=veteran).
+  'loadouts-overkill': menuScene('Loadouts: Overkill', async ({ menu }) => {
+    const { Progress } = await import('./js/ui/progress.js');
+    Progress.updateLoadout(Progress.activeLoadout, { primary: 'ar', secondary: 'autosniper', perks: ['doubletime', 'overkill', 'highalert'], streaks: ['sam', 'napalm', 'vtol'] });
+    menu.loadouts({ onBack: noop, onChange: noop, onGunsmith: noop, onOperators: noop, onRename: noop });
+  }, { gl: true }),
   'gunsmith': menuScene('Gunsmith', ({ menu }) => menu.gunsmith({ loadoutIndex: 0, weapon: 'ar', onBack: noop, onChange: noop }), { gl: true }),
   // V12: the pick view (classes across the top, guns below); &cat=Sniper opens on a class.
   'gunsmith-pick': menuScene('Gunsmith: classes and guns', ({ menu }) => {

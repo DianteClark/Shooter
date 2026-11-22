@@ -1019,3 +1019,67 @@ Tests: dev/sim-arsenal.mjs (three wave 4 tests: data, identities, every blade sw
 dev/sim-attachments.mjs (wave 4 signatures in order, the triangle budget), dev/sim-finishers.mjs (weapon finishers:
 appended, never picked, played with the weapon in hand), dev/sim-botpool.mjs, dev/sim-streaks-v9.mjs, dev/sim-br.mjs,
 dev/sim-zombies.mjs, dev/wpn-feel-test.py, dev/ui-attachments-test.py, dev/ui-streak-cam-test.py.
+
+## Wave 5: guns, perks, scorestreaks and operators (ROADMAP item 68, with operators from 69; 2026-11-22)
+
+Owner: "a nice focus on having a few more weapons, perks, and kill streaks would be awesome. Perks like dual primary
+weapons could be awesome." No balance pass on existing guns. Every new id is appended (weapon ids, attachment slot
+lists, perk tiers, streak ids, equipment kinds, projectile kinds, aircraft and machine kinds, operators, skin effects),
+so old kit ints, SY4 codes and wire indices keep their meaning.
+
+### Five guns (js/shared/weapons-w5.js; models guns-w5.js, icons icons-w5.js, signatures attachments-w5.js)
+What the roster lacked, read against it: an SMG that rewards never aiming (the Stitch is the one you aim), an LMG with no
+wind-up and no heat that kills like a rifle, a semi-automatic sniper, a sidearm that marks and burns, and anything made to
+answer the sky.
+
+| Gun | Id | Class | Identity | Unlock |
+|---|---|---|---|---|
+| **Gadfly** | `hipsmg` | SMG | Tightest hip cone of any automatic primary (0.021); aiming tightens it under 20% and is the slowest ADS of the SMGs. | 37 |
+| **Carousel** | `panlmg` | LMG | 47-round pan, 430 rpm: three to the body to 16 m from the first pull, no wind-up, no heat (no heat parts). Slower than every belt gun. | 41 |
+| **Vigil** | `autosniper` | Sniper | Semi-auto, 160 rpm: two to the body at every range, never one (head kills as every sniper); the scope is thrown each round. | 44 |
+| **Fusee** | `flare` | Pistol | One flare: 40 on the hit, then a 3 s burn (16/s, Tac Mask halves) that marks the target on the shooter's team map. Never a kill alone on full health; a burn kill is the Fusee's. | 39 |
+| **Skyhook** | `lockon` | Launcher | Fully aimed with an enemy aircraft within 0.42 rad and 55 m, the rocket homes for 650 (two down a Chopper or a VTOL, three a Gunship). At people a 90-damage rocket. | 43 |
+
+Mechanics (js/sim/arsenal-w5.js): `burn` (sim._damage starts it on a gun hit, sim._stepTimers ticks it every 0.5 s as the
+gun's damage; an 'ignite' event draws the flames, js/render/w5-fx.js) and `lockon` (applyShot picks the target before the
+shot event goes out and adds `lk: [x, z]`, so every phone draws the rocket climbing to it; the HUD shows the same pick as
+a lock box, js/ui/alert-hud.js). Two signatures each (a level and Mastery I), same boost as wave 3. Bots: appended to
+BOT_PRIMARIES / BOT_SECONDARIES and BOT_KITS; pool players pick them up from a stream of their own (botpool.js
+tryout5Of, drawn after every older roll, so no profile moves).
+
+### Five perks (js/shared/catalog.js, appended in their tiers: Body 7, Hands 7, Senses 7 of the wire's 8)
+| Perk | Tier | Does | Pro | Level |
+|---|---|---|---|---|
+| **Overkill** | Hands | A primary in the sidearm slot (any but the one in the primary slot); constants.js `secondaryAllowed` is the one rule the sim, host, saves and loadout UI read. Taking Overkill off puts the default sidearm back. | Gunrunner: swaps between the two primaries 30% faster again | 22 |
+| **Amped** | Hands | Swaps x0.55, launcher reloads x0.65 | Hot Tubes: launchers aim 25% faster | 18 |
+| **Double Time** | Body | Aimed move speed x1.25 (cap 1), sprint-to-fire x0.7 | Second Gear: slide back 30% sooner | 16 |
+| **High Alert** | Senses | HUD: a pulse and chevron on the screen edge toward any enemy off screen whose aim is on you (34 m, sight checked 10 times a second) | Sixth Sense: enemies within 8 m behind you ping the minimap | 19 |
+| **Skywatch** | Senses | 40% more to enemy aircraft and machines (hurtAir, _hurtTurret) | Flak Gunner: hitting a streak marks its owner 3 s | 21 |
+
+Pro challenges reuse stats the tally already counts. Bots: two BOT_PERKS rows appended (an Overkill bot carries a second
+primary from the other end of the range and swaps to whichever gun's `pref` fits the fight, js/sim/bots.js), and a third
+of pool players try a new perk one match in three (tryout5Of).
+
+### Three scorestreaks (js/sim/streaks-w5.js, dispatched from streaks-v9.js)
+| Streak | Id | Cost | Does | Counter |
+|---|---|---|---|---|
+| **VTOL Jet** | `vtol` | 3200, air | Flies in and hovers 25 s over the call: gun bursts (14) at the nearest enemy it sees from up there, a rocket pair every 5 s. 1300 hp. | Shoot it down (Skyhook two), roofs and walls, Cold Blooded until close, EMP, an enemy SAM |
+| **Napalm Strike** | `napalm` | 2600, air | Aimed like the Airstrike; after 1.6 s five patches of burning fuel (EQUIPMENT.napalm, drawn as fire) burn 6 s, as the streak's damage. | Get off the line, Tac Mask halves, an enemy SAM within 40 m shoots the jet down first, EMP before it drops |
+| **SAM Turret** | `sam` | 1600, ground | 45 s missile pod: 450 to the nearest enemy aircraft in 40 m every 1.6 s. Never shoots people. 260 hp. | Shoot it, explosives, Shock, EMP |
+
+Models in js/render/streaks-fx.js (a delta VTOL with spinning lift fans and rocket pods; a tripod SAM whose four-tube pod
+turns on its target), call-ins (laptop, flare, radio), sounds (js/audio/streaks-sfx.js), HUD feed lines and warnings,
+Help's shoot-down table, mastery tracks and cards. Graveyard Shift keeps the class streaks off as before.
+
+### Four operators (js/ui/operators.js; suits js/render/operator-suits-w5.js)
+| Operator | Unlock | Kit piece | Elite effect | Mastery suit |
+|---|---|---|---|---|
+| Juniper (f) | 150 hip-fire kills | semaphore pole | pulsar | tree frog |
+| Fenwick (m) | 50 Carousel kills | missile tube | fireworks | crab |
+| Odessa (f) | 30 scorestreak kills | leather flying cap | oilslick | jellyfish |
+| Calder (m) | 50 Vigil kills | scope on a tripod | plasma | elk |
+
+The skin effect table grows to 36 rows (180 vec4, under WebGL 2's 224); the roster is 39 of MAX_OPERATORS 40.
+
+Tests: dev/sim-arsenal.mjs (wave 5 guns and perks), dev/sim-attachments.mjs, dev/sim-streaks-v9.mjs (wave 5 streaks),
+dev/ui-attachments-test.py (the new guns in the Gunsmith), dev/ui-wave5-test.py (guns, operators, the Overkill loadout).

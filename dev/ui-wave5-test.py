@@ -27,6 +27,7 @@ PAGES = [
     ('ops-mastery-front', f'/dev/ops-lineup.html?ops={OPS}&skin=5&view=front&zoom=2&w=1000&h=420', (1000, 420)),
     ('ops-mastery-top', f'/dev/ops-lineup.html?ops={OPS}&skin=5&view=game&zoom=2&per=4&w=852&h=393', (852, 393)),
     ('ops-game', f'/dev/ops-lineup.html?ops={OPS}&skin=5&view=game&mixteams=1&w=852&h=393', (852, 393)),
+    ('loadout-overkill', '/dev/ui-gallery.html?frame=loadouts-overkill&size=p15&save=veteran&wait=1500', (852, 393)),
 ]
 
 
@@ -51,6 +52,11 @@ async def main():
                 except Exception:
                     await pg.wait_for_timeout(6000)
                 await pg.wait_for_timeout(1500)
+                if name.startswith('loadout'):
+                    txt = await pg.evaluate("document.querySelector('.ld-side')?.textContent || ''")
+                    errs += await pg.evaluate("window.__errors || []")
+                    if 'Vigil' not in txt or 'Overkill' not in txt:
+                        errs.append(f'the sidearm slot does not show the Vigil under Overkill: {txt!r}')
                 await pg.screenshot(path=f'{OUT}/{name}.png')
                 if errs:
                     fails.append(f'{name}: {errs[:4]}')

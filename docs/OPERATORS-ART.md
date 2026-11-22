@@ -70,6 +70,10 @@ build 1119-13 within the machine's noise.
 | 33 | harlequin | diamonds trading colours | Gambit (Dead Man's Hand) |
 | 34 | tracer | rounds streaking across | Garrison (Frontline) |
 | 35 | shockwave | rings bursting out of the chest | Ram (Siege) |
+| 36 | pulsar | white rings pulsing out of the chest, a lamp's beat | Juniper (Danger Aspect) |
+| 37 | plasma | warped prism swirl | Calder (Stalker) |
+| 38 | oilslick | slow iridescent bands, oil on water | Odessa (Slipstream Oil) |
+| 39 | fireworks | prism cells bursting and climbing | Fenwick (Flak Burst) |
 
 Per instance it is `aOp.y` (`slot + 4 x glow + 16 x suit + 32 x fx`), so it costs no attribute, uniform or draw call;
 instances without an fx skip it on one branch. The distance LOD keeps the fx. The Operators screen marks active skins
@@ -124,6 +128,10 @@ and nothing of its usual torso and head shows.
 | Linnet | pirate with a treasure chest | the tricorn triangle, team coat |
 | Garrison | walking tank | the gun along his aim, team fenders |
 | Brigid | dragon | team wing membranes, horns, tail |
+| Juniper | tree frog | two eye domes, team spots down the back |
+| Fenwick | crab | the carapace and claws, wider than anyone, team rim |
+| Odessa | jellyfish | a lit bell with a team rim, trailing tentacles |
+| Calder | elk | broad palmate antlers, team scarf |
 
 - `torso(b)` / `head(b)`: MeshBuilder calls in the usual frames (forward +X, up +Y, left +Z; torso origin at the hips,
   head origin at the top of the chest). Everything is tagged SUIT automatically.

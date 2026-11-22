@@ -4,6 +4,17 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'New guns, perks, scorestreaks and operators',
+    items: [
+      'Five new guns. Gadfly: an SMG built for the hip, with the tightest hip-fire of any automatic and a sight that adds almost nothing. Carousel: a pan-fed LMG that kills in three to the body out to 16 m with no wind-up or overheating. Vigil: a semi-automatic sniper, two to the body anywhere it reaches. Fusee: a railway flare pistol that sets its target burning for three seconds and shows them on your team\'s map. Skyhook: a twin-tube lock-on launcher; aim it at an enemy aircraft and the rocket cannot miss (two bring down a Chopper).',
+      'Every new gun has its own model, icon, sound, two signature attachments, camos and mastery, and opens on its own level from 37 to 44.',
+      'Five new perks. Overkill: carry a second primary in place of your sidearm (pick it from the Secondary slot once Overkill is on). Amped: much faster weapon swaps, and launchers reload faster. Double Time: faster while aiming and quicker to fire out of a sprint. High Alert: the edge of your screen pulses toward anyone off screen who has you in their sights. Skywatch: 40% more damage to enemy scorestreaks. Each has a Pro version.',
+      'Three new scorestreaks. VTOL Jet: hovers over where you call it, firing gun bursts and rocket pairs at enemies it can see; shoot it down. Napalm Strike: a jet lays a line of burning fuel across the enemy. SAM Turret: a missile pod that shoots down enemy aircraft and drones, and even the Napalm jet before it drops.',
+      'Four new operators, each with an unlock challenge, an animated Elite skin and a Mastery suit: Juniper (tree frog), Fenwick (crab), Odessa (jellyfish) and Calder (elk).',
+      'Bots carry the new guns, try the new perks (two primaries with Overkill included) and call the new scorestreaks.',
+    ],
+  },
+  {
     build: '1121-1', date: '2026-11-21', title: 'Fixes',
     items: [
       'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',

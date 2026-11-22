@@ -29,12 +29,12 @@ import { icon, resolveIcon } from './icons.js';
 import { ArmorySheet } from './trainarmory.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
 import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
-import { sightedBy, behindMe, drawAlerts, ALERT_HZ } from './alert-hud.js';     // High Alert and Sixth Sense (perks wave).
+import { sightedBy, behindMe, drawAlerts, ALERT_HZ, lockCandidate, drawLock } from './alert-hud.js';     // High Alert and Sixth Sense (perks wave).
 import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
 import { SpectateCard } from './spectate-card.js';     // QoL: who you are watching, with Previous and Next.
 import { ctfOf } from '../sim/ctf.js';
-import { AIR_HP, SWEEP_GAP, SWEEP_MARK, SCOUT_LIFE, SCOUT_MARK } from '../sim/streaks-v9.js';
+import { AIR_HP, AIR_Y, SWEEP_GAP, SWEEP_MARK, SCOUT_LIFE, SCOUT_MARK } from '../sim/streaks-v9.js';
 import { RADAR_TIMES } from '../sim/sim.js';
 
 // One icon from the shared set at a given height (weapons come out 2.5x as wide), or '' when the set has no drawing
@@ -2198,7 +2198,8 @@ export class HUD {
     const g = this.proCtx, cam = this.camera;
     if (this.proDrawn) { g.clearRect(0, 0, this.proCanvas.width, this.proCanvas.height); this.proDrawn = false; }
     const alert = !!me.perks?.includes('highalert');
-    if (!cam || !me.alive || view.phase === 'ended' || (pro.length === 0 && !alert)) return;
+    const lock = WEAPONS[me.weapon]?.lockon;      // Skyhook in hand: its lock box (weapons wave 5).
+    if (!cam || !me.alive || view.phase === 'ended' || (pro.length === 0 && !alert && !lock)) return;
     const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements, W = this.viewW, H = this.viewH;
     const P = this.projected ??= { x: 0, y: 0 };
     const project = (x, y, z) => {
@@ -2209,6 +2210,15 @@ export class HUD {
       P.y = (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * H;
       return P;
     };
+    if (lock && (me.adsT ?? 0) > 0.2) {
+      const air = (this.lockAir ??= []);
+      air.length = 0;
+      for (const a of view.gunships ?? []) air.push(a);
+      for (const a of view.drones ?? []) air.push(a);
+      const c = lockCandidate(me, air, lock);
+      const q = c && project(c.g.x, AIR_Y[c.g.kind] ?? 4, c.g.z);
+      if (q) { drawLock(g, q, me.adsT, c.locked, view.t); this.proDrawn = true; }
+    }
     // High Alert: whoever off screen has you in their sights, a pulse on that edge (sight checked ALERT_HZ a second).
     if (alert) {
       this.alertClock = (this.alertClock ?? 1) + dt;

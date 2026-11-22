@@ -76,3 +76,32 @@ export function drawAlerts(g, threats, project, W, H, t, css = '#ff4d3d') {
   g.globalAlpha = 1;
   return drawn;
 }
+
+// Skyhook (weapons wave 5): the enemy aircraft a lock-on launcher in hand is pointed at, the same pick the host makes
+// (js/sim/arsenal-w5.js lockTarget), so the box on screen is the one the rocket will fly to. `air` is the view's
+// aircraft (gunships and drones together). Returns {g, locked} or null.
+export function lockCandidate(me, air, lock) {
+  if (!me?.alive || !lock || !air?.length) return null;
+  let best = null, bestA = lock.cone;
+  for (const g of air) {
+    if (g.team === me.team || g.kind === 'reticle' || g.kind === 'plates' || g.kind === 'juggernaut') continue;
+    const dx = g.x - me.x, dz = g.z - me.z, d = Math.hypot(dx, dz);
+    if (d > lock.range) continue;
+    const a = d < 3 ? 0 : Math.abs(wrap(Math.atan2(dz, dx) - me.aim));
+    if (a <= bestA) { best = g; bestA = a; }
+  }
+  return best ? { g: best, locked: (me.adsT ?? 0) >= 0.85 } : null;
+}
+
+// The lock box: four corner brackets round the aircraft, closing in as the sights come up, red and solid once locked.
+export function drawLock(g, q, adsT, locked, t) {
+  const r = 34 - 14 * Math.min(1, adsT), c = locked ? '#ff4d3d' : '#ffd659';
+  g.strokeStyle = c; g.lineWidth = locked ? 3 : 2; g.globalAlpha = locked ? 1 : 0.6 + 0.4 * Math.sin(t * 14);
+  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    g.beginPath();
+    g.moveTo(q.x + sx * r, q.y + sy * (r - 9)); g.lineTo(q.x + sx * r, q.y + sy * r); g.lineTo(q.x + sx * (r - 9), q.y + sy * r);
+    g.stroke();
+  }
+  if (locked) { g.font = 'bold 11px system-ui, sans-serif'; g.fillStyle = c; g.textAlign = 'center'; g.fillText('LOCK', q.x, q.y + r + 13); }
+  g.globalAlpha = 1;
+}
