@@ -48,6 +48,7 @@ export class CtlRules {
   startRound() {
     const sim = this.sim;
     this.round++;
+    sim.brk?.restoreAll();      // Every round starts on a whole map (docs/DESTRUCTION.md).
     this.attackers = (this.round - 1) % 2;
     this.state = 'freeze'; this.postT = 0; this.overtime = false;
     const size = Math.max(1, ...[0, 1].map(t => sim.players.filter(p => p.team === t && !p.dummy).length));

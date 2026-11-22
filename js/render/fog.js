@@ -197,6 +197,22 @@ export class FogMask {
     this.still = 0;
   }
 
+  // Destruction: the map's vision walls changed (a piece broke, or a new round stood it back up). Rebuilds the wall
+  // arrays from the flags as they are now; only a list that grew past the arrays (never, in practice) reallocates.
+  refreshWalls() {
+    this.walls = this.map.walls.filter(w => w.blocksVision);
+    const nw = this.walls.length;
+    if (nw > this.wx0.length) {
+      for (const k of ['wx0', 'wz0', 'wx1', 'wz1', 'x0', 'z0', 'x1', 'z1']) this[k] = new Float32Array(nw);
+      this.touched = new Uint8Array(nw);
+    }
+    this.wx0.fill(1e9); this.wz0.fill(1e9); this.wx1.fill(-1e9); this.wz1.fill(-1e9);
+    this.walls.forEach((w, i) => { this.wx0[i] = w.x; this.wz0[i] = w.z; this.wx1[i] = w.x + w.w; this.wz1[i] = w.z + w.d; });
+    this._activate();
+    this.lastX = 1e9; this.lastZ = 1e9;     // Sweep again on the next update even if the viewer stands still.
+    this.still = 0;
+  }
+
   _setXf() {
     const b = this.bounds;
     this.uniforms.xf.value.set(1 / b.w, 1 / b.h, -b.x / b.w, -b.z / b.h);

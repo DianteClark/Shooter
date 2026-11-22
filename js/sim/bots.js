@@ -170,6 +170,8 @@ const MINE_SPOT = 2.5;          // A mine goes this far in front of its owner.
 const SHOCK_TARGETS = new Set(['mine', 'claymore', 'trophy', 'sensor', 'decoy', 'charge', 'tripwire', 'medpack']);   // Devices worth a Shock or Blackout.
 // Gear wave. What a bot plants where it means to stay, and what it does about the other side's kit.
 const PLACED_LETHALS = new Set(['mine', 'claymore', 'charge', 'tripwire']);
+// Thrown lethals that blow a hole in a wall: what a bot may use to breach (see _thinkBreach).
+const BREACH_LETHALS = new Set(['frag', 'sticky', 'impact', 'drill']);
 const PLACE_SPOT = { mine: MINE_SPOT, claymore: MINE_SPOT, charge: 6, tripwire: 3.5 };
 const CHARGE_REACH = 4.2;       // An enemy this close to a bot's own armed Satchel is worth setting it off.
 const RUN_FROM = new Set(['frag', 'sticky', 'cluster', 'bomblet', 'impact', 'drill', 'charge', 'crawler', 'molotov', 'thermite']);
@@ -1392,6 +1394,7 @@ export class BotBrain {
     this.nadeT -= this.interval;
     this.tacticalT -= this.interval;
     if (this.flashT > 0 || ps.sliding) return;
+    if (this._thinkBreach(visible)) return;
 
     if (ps.tactical === 'stim' && ps.tacticalLeft > 0 && p.hp < S.stimHp && this.tacticalT <= 0) {
       this._throw('tactical', ps.aim, 0);
@@ -1524,6 +1527,33 @@ export class BotBrain {
       }
     }
     this._thinkTacOpeners(visible, d, aim, tx, tz);
+  }
+
+  // Destruction (docs/DESTRUCTION.md): a bot with nobody in sight, walking a long way round a breakable wall or shed
+  // that stands between it and where it is going, sometimes blows its own way through with its grenade.
+  _thinkBreach(visible) {
+    const { sim, ps, S } = this;
+    if (visible || !sim.brk?.on || (this.breachT ?? 0) > sim.time || this.nadeT > 0 || ps.lethalLeft <= 0 || !BREACH_LETHALS.has(ps.lethal)) return false;
+    if (this.arrived || this.pathLen < 2 || this.mode === 'none') return false;
+    const gx = this.goalX, gz = this.goalZ, straight = Math.hypot(gx - ps.x, gz - ps.z);
+    if (straight < 8) return false;
+    let walk = 0, x = ps.x, z = ps.z;
+    for (let i = this.pathI; i < this.pathLen; i++) {
+      const nx = this.path[i * 2], nz = this.path[i * 2 + 1];
+      walk += Math.hypot(nx - x, nz - z); x = nx; z = nz;
+    }
+    if (walk < straight * 1.4 + 6) return false;
+    const piece = sim.brk.blockerOn(ps.x, ps.z, gx, gz);
+    if (!piece) return false;
+    const cx = piece.x + piece.w / 2, cz = piece.z + piece.d / 2, d = Math.hypot(cx - ps.x, cz - ps.z);
+    const face = Math.max(0.3, d - Math.min(piece.w, piece.d) / 2 - 0.2);
+    if (face > 13 || face < 4) return false;       // Out of throwing reach, or close enough to catch its own blast.
+    this.breachT = sim.time + 10;
+    if (sim.rng() >= S.nade + 0.15) return false;
+    this._throw('lethal', Math.atan2(cz - ps.z, cx - ps.x), face);
+    this.nadeT = between(sim.rng, S.nadeCd[0], S.nadeCd[1]);
+    this.breaches = (this.breaches ?? 0) + 1;
+    return true;
   }
 
   _thinkTacOpeners(visible, d, aim, tx, tz) {

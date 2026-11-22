@@ -19,7 +19,7 @@ const FINAL_PRE = 1.7, FINAL_POST = 1.0;
 
 // Only the things the renderer reacts to; everything else stays out of the buffer.
 const KEEP = new Set(['gear', 'fried', 'shot', 'hit', 'kill', 'explosion', 'bang', 'swap', 'slide', 'throw', 'heal', 'overheat',
-  'turret', 'turret_down', 'turret_shot', 'gunship_shot', 'emote']);
+  'turret', 'turret_down', 'turret_shot', 'gunship_shot', 'emote', 'brk']);
 
 const smooth = t => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
@@ -150,6 +150,7 @@ export class Killcam {
     f.projectiles = view.projectiles; f.smokes = view.smokes; f.turrets = view.turrets; f.gunships = view.gunships;
     f.deploys = view.deploys; f.drones = view.drones;     // V9 scorestreaks.
     f.tags = view.tags; f.points = view.points; f.mode = view.mode; f.uav = view.uav;
+    f.brk = view.brk;
   }
 
   #frame(i) { return this.frames[(this.head - this.count + i + FRAMES * 2) % FRAMES]; }
@@ -314,6 +315,7 @@ export class Killcam {
     out.t = src.t; out.projectiles = src.projectiles; out.smokes = src.smokes; out.turrets = src.turrets;
     out.gunships = src.gunships; out.tags = src.tags; out.points = src.points; out.mode = src.mode;
     out.deploys = src.deploys; out.drones = src.drones;
+    out.brk = src.brk;
     if (src.uav) out.uav = src.uav;
   }
 

@@ -8,11 +8,11 @@ export const MATERIALS = ['glass', 'wood', 'light', 'heavy'];
 export const MAT = {
   glass: { hp: 20, bullet: 1, blast: 1 },
   wood: { hp: 260, bullet: 1, blast: 1 },
-  light: { hp: 560, bullet: 0, blast: 1 },
-  heavy: { hp: 1500, bullet: 0, blast: 1, light: 1 / 3 },   // `light`: what frag-class blasts do to it.
+  light: { hp: 420, bullet: 0, blast: 1 },
+  heavy: { hp: 1200, bullet: 0, blast: 1, light: 1 / 3 },   // `light`: what frag-class blasts do to it.
 };
 export const DAMAGED_AT = 0.55;           // Health fraction under which a piece shows as damaged.
-const SPAWN_GUARD = 4.5, EDGE_GUARD = 0.6, SND_GUARD = 3;
+const SPAWN_GUARD = 5, EDGE_GUARD = 0.6, SND_GUARD = 3;
 const PILE_CLEAR = 1.5, PILE_MIN = 0.9, PILE_H = 0.85;
 
 // Kinds the rules never break (a pick in js/shared/breakables.js still can; borders, water and landmarks never).

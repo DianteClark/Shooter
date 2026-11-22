@@ -28,7 +28,7 @@ calls `prepareBreakables(map)`):
    with the walls for free. Never rely on piece ids across maps.
 
 Protected whatever the rules say: `border`, `water`, `container`, `rock`, `hull`, `crane`, `boulder`, `landmark: true`,
-enterable buildings' outer walls (`bwall` without `inner`), walls within 0.6 m of the map edge, anything within 4.5 m of
+enterable buildings' outer walls (`bwall` without `inner`), walls within 0.6 m of the map edge, anything within 5 m of
 a spawn point, and (Search and Destroy only) anything within the bomb site's radius + 3 m.
 
 ## Resolved form (what code reads)
@@ -48,10 +48,10 @@ object).
 |---|---|---|---|
 | glass | 20 | any round breaks it | yes |
 | wood | 260 | LMG, marksman, sniper and shotgun rounds chip it | yes |
-| light | 560 | no | yes |
-| heavy | 1500 | no | launchers, satchels, streaks (frag-class at a third) |
-Blast damage to a piece: the source's structural power (`POWER`: frag 300, launcher 360, satchel 800, airstrike 900,
-missile 1000, mortar 520...) times 1 - 0.6 x (distance to the rect / reach), within reach = 0.8 x blast radius + 0.5 m,
+| light | 420 | no | yes (a frag landing at it, a rocket, a satchel) |
+| heavy | 1200 | no | launchers, satchels, streaks (frag-class at a third) |
+Blast damage to a piece: the source's structural power (`POWER_*` in js/sim/destruction.js: frag 460, launcher 640,
+satchel 900, airstrike 1000, missile 1200, mortar 600...) times 1 - 0.6 x (distance to the rect / reach), within reach = 0.8 x blast radius + 0.5 m,
 and only when nothing that blocks vision stands between the blast and the piece.
 
 ## Sim (js/sim/destruction.js, host only)
