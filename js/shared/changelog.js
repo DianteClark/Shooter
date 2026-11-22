@@ -13,6 +13,17 @@ export const CHANGELOG = [
     ],
   },
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Destruction',
+    items: [
+      'Maps break. Crates, stalls, tents, furniture and shop fronts splinter; windows and kiosks shatter; barriers, sandbags, sheds, huts and short walls come down. Every 6 v 6, Ground War and Battle Royale map has pieces that go.',
+      'Grenades, satchels, launchers, airstrikes, mortars and missiles break what they hit. Light machine guns, marksman rifles, snipers and shotguns chew through wood, and any bullet breaks glass. Heavier walls take a rocket or a streak.',
+      'A broken wall opens a new way through and a new sight line. Sheds and huts leave a waist-high heap of rubble you can hide behind and shoot over; broken windows can be climbed through.',
+      'Outer walls, big buildings, containers, rock and anything screening a spawn never break, so no map gets flattened. Search and Destroy keeps its bomb sites whole, and every round of Search and Destroy and Control starts on a whole map. Graveyard Shift keeps its own barricades.',
+      'Bots walk through the gaps you make, and now and then blow their own way through a wall with a grenade.',
+      'The minimap shows the openings, players who join mid-match see the map as it stands, and replays and replay codes show walls coming down (scrub back and they stand up again).',
+    ],
+  },
+  {
     build: '1121-1', date: '2026-11-21', title: 'Fixes',
     items: [
       'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',

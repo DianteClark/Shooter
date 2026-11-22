@@ -13,6 +13,8 @@ import { W3_BOT_PRIMARIES } from '../shared/weapons-w3.js';
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange, COLD_MARK, syncCover } from './equipment.js';
 import { NavGrid } from './nav.js';
+import { Destruction } from './destruction.js';
+import { setBreakState } from '../shared/destruction.js';
 import { angleDiff, applyDaze, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_IDLE, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
@@ -595,6 +597,8 @@ export class Sim {
     this.gunships = [];
     this.nextTurretId = 1;
     this.v9 = V9.createV9State();    // Sonar sweeps, falling Airdrops, the EMP lock (js/sim/streaks-v9.js).
+    this.brk = new Destruction(this);    // What breaks on this map and how worn it is (js/sim/destruction.js).
+    this._brkText = '';                  // A guest's last break string from the host.
     this.callouts = [];       // Sightings on their way to teammates, oldest first. See BotBrain._callOut.
     this.calloutSeq = 0;
     this.calledAt = null;     // Per team, per enemy index: when that enemy was last called out.
@@ -658,7 +662,14 @@ export class Sim {
     this._spawnAll();
   }
 
-  _emit(e) { this.events.push(e); }
+  // Every blast goes through here as an event, so this is where destruction hears them all: grenades and charges as
+  // a blast kind's `bang`, launchers, streaks and the bomb as an `explosion` (`k` names a streak's kind).
+  _emit(e) {
+    this.events.push(e);
+    if (!this.brk?.on) return;
+    if (e.t === 'explosion' && !e.zm) this.brk.blast(e, e.radius, e.weapon ?? e.k ?? null, e.weapon ? 'gun' : 'streak');
+    else if (e.t === 'bang' && EQUIPMENT[e.kind]?.blast) this.brk.blast(e, e.r ?? EQUIPMENT[e.kind].blast.radius, e.kind, 'bang');
+  }
 
   // Points are the map's, with match state added. `points` is what the view shows: every flag in Domination,
   // only the live zone in Hardpoint.
@@ -929,6 +940,7 @@ export class Sim {
     this.tick++;
     this.time += STEP;
     this.pathBudget = 2;
+    this.brk.step(STEP);
 
     if (this.phase === 'warmup') {
       this.phaseT -= STEP;
@@ -1452,6 +1464,7 @@ export class Sim {
     const ads = shot.ads ?? (shooter.ps.adsT >= 0.85);
     if (this.gunships.length) V9.shootAir(this, shooter, shot, rays, w);   // Aircraft can be shot down.
     if (w.explosive) { this._detonate(shooter, shot, rays[0], w, scratch); return; }
+    if (this.brk.on) this.brk.bullet(shot, rays, w);     // Heavy rounds chip wood, any round breaks glass.
     if (turretHits) this._damageTurretsFromShot(turretHits, rays, shot, w, ads, shooter);
     if (this.eq.projectiles.length) this._shootGear(shooter, shot, rays, w);
     for (let i = 0; i < rays.length; i++) {
@@ -2545,7 +2558,7 @@ export class Sim {
       const s = this.strikes[i];
       if (s.at > this.time) continue;
       this.strikes.splice(i, 1);
-      this._emit({ t: 'explosion', x: round2(s.x), z: round2(s.z), radius: s.radius, by: s.by.id });
+      this._emit({ t: 'explosion', x: round2(s.x), z: round2(s.z), radius: s.radius, by: s.by.id, k: s.kind });
       if (s.kind === 'mortar' && this._onRoof(s.x, s.z)) continue;    // Spent on the roof.
       this.eq.setOffMines(s.x, s.z, s.radius);
       for (const q of this.players) {
@@ -2756,6 +2769,7 @@ export class Sim {
       }
     }
     sim.eq.restore(view.projectiles, view.smokes, id => sim.byId.get(id)?.team);
+    sim.brk.restore(view.brk);      // Before the nav grid is built, so it is built round the broken pieces.
     sim._initBots();
     for (const id of opts.gone ?? []) sim.humanLeft(id);
     for (const p of sim.players) if (p.bot) p.bot.resumeFromMigration();
@@ -2919,6 +2933,7 @@ export class Sim {
       turrets: null, gunships: null, deploys: null, drones: null,      // Filled by V9.viewLists below.
       localId, lastKill: this.lastKill,
       jam: this.jam.slice(), overwatchT: this.overwatch.slice(),
+      brk: this.brk.encode(),
     };
     V9.viewLists(this, view);
     this.br?.hostView(view);
@@ -3002,7 +3017,10 @@ export class Sim {
     const packed = this._packPlayers(out);
     // Finishers running (js/sim/finishers.js) ride after the player records: who, on whom, which, how far in.
     this._finBlock = Fin.encodeFins(this);
-    if (this._finBlock) packed.push(this._finBlock);
+    // Destruction (docs/DESTRUCTION.md "Wire"): the break string after the finishers block (0 when none runs).
+    this._brkBlock = this.brk.sendNow(this.tick, this._metaUntil) ? this.brk.encode() : null;
+    if (this._finBlock || this._brkBlock !== null) packed.push(this._finBlock || 0);
+    if (this._brkBlock !== null) packed.push(this._brkBlock);
     return (this._lastBroadcast = packed);
   }
 
@@ -3221,6 +3239,9 @@ export class Sim {
     this._decodeHead(d, view);
     this._decodeObjective(d[14], view);
     syncCover(this.map, view.projectiles);      // Bulwarks stand on a guest's map too: movement and shots collide with them.
+    // Broken pieces: the guest's own walls follow the host's, so its movement, shots and fog agree.
+    if (typeof d.brkBlock === 'string' && d.brkBlock !== this._brkText) { this._brkText = d.brkBlock; setBreakState(this.map, d.brkBlock); }
+    view.brk = this._brkText;
     return this._applyIntel(view);
   }
 
@@ -3302,7 +3323,8 @@ export class Sim {
       if (code === 2) for (let k = 0; k < POS_FIELDS.length; k++) out.push(full[o + POS_FIELDS[k]]);
       else if (code) for (let k = 0; k < PLAYER_STRIDE; k++) if (code === 3 || !IS_SLOW[k]) out.push(full[o + k]);
     }
-    if (this._finBlock) out.push(this._finBlock);
+    if (this._finBlock || this._brkBlock !== null) out.push(this._finBlock || 0);
+    if (this._brkBlock !== null) out.push(this._brkBlock);
     return out;
   }
 
@@ -3343,6 +3365,7 @@ export class Sim {
       for (let k = 0; k < PLAYER_STRIDE; k++) full.push(known[i] ? c[k] : (k === 6 ? 0 : c[k]));
     }
     full.finBlock = o < d.length ? d[o] : 0;      // The finishers block, when any are running (encodeSnapshot).
+    full.brkBlock = o + 1 < d.length ? d[o + 1] : null;     // The break string, when this snapshot carries it.
     return full;
   }
 }

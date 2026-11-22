@@ -204,3 +204,15 @@ C. Big features: 58. (Dropped by the owner, 2026-11-20: no map editor.)
 D. Polish: 61. Sound design pass and music for every mode. 62. Animation pass (vault/mantle, reload variety, deaths).
    63. Tutorial and help videos (in-engine), accessibility depth.
 Every addition stays within docs/BR-PERF.md budgets and 60 fps on the owner's iPhone.
+
+## The Battlefield update (owner, 2026-11-22). Budget: up to 95% of the weekly usage.
+No vehicles, no classes, no squad systems, no balance pass.
+64. Destruction: breakable walls, fences, sheds, shop fronts; explosives and streaks break them; bots re-path; deterministic
+    for netcode, replays and host migration; within the frame budget.
+65. Conquest (ticket flags) and Breakthrough (attackers push through sectors) for 16v16 and larger maps.
+66. Districts: enormous region maps assembled from 3-5 smaller maps (e.g. the whole city: Downtown, Overpass, Neon,
+    Turnstile...) for BR, Conquest and Breakthrough; the 6v6 maps become districts of their region, reworked to fit edge
+    to edge. Prototype one region, then roll out.
+67. Large infantry maps for the new modes (via 66 where possible).
+68. Arsenal: 4-5 new guns, new perks (dual primaries "Overkill" and more), 2-3 new kill streaks.
+69. Expansion: Graveyard Shift map 4 with boss and quest; Campaign operation 2 (4 missions); more operators; more maps.

@@ -999,6 +999,24 @@ function renderSfx(sr) {
       addNoise(d, sr, r, { at: 0.08, dur: 1.9, gain: 0.55, f0: 420, f1: 70, decay: 3 });
       for (let i = 0; i < d.length; i++) d[i] = softClip(d[i] * 0.75);
     }, 0.95),
+    // Destruction (docs/DESTRUCTION.md): glass going (a bright burst and a scatter of tinkles), wood (a crack and
+    // splinters), and a wall coming down (a crunch and a rumble of falling masonry).
+    brkGlass: mk(0.7, (d, r) => {
+      addNoise(d, sr, r, { dur: 0.12, gain: 1.2, f0: 9000, f1: 3500, hp: 2500, decay: 6 });
+      for (let i = 0; i < 14; i++) addMetal(d, sr, { at: 0.02 + r() * 0.45, dur: 0.06, gain: 0.25 + r() * 0.3, f: 3200 + r() * 4200, spread: 1.01, decay: 14 });
+    }, 0.8),
+    brkWood: mk(0.6, (d, r) => {
+      addClick(d, sr, r, { dur: 0.008, gain: 1.2, hp: 1400 });
+      addNoise(d, sr, r, { dur: 0.16, gain: 1.1, f0: 2600, f1: 500, decay: 5 });
+      addTone(d, sr, { dur: 0.12, gain: 0.9, f0: 190, f1: 90, decay: 5, shape: 0.8 });
+      for (let i = 0; i < 6; i++) addClick(d, sr, r, { at: 0.05 + r() * 0.3, dur: 0.005, gain: 0.4, hp: 1800 });
+    }, 0.85),
+    brkStone: mk(1.3, (d, r) => {
+      addClick(d, sr, r, { dur: 0.012, gain: 1.1, hp: 700 });
+      addNoise(d, sr, r, { dur: 0.35, gain: 1.3, f0: 1500, f1: 160, decay: 4 });
+      addTone(d, sr, { dur: 0.5, gain: 1.2, f0: 64, f1: 32, decay: 3.5, shape: 1.2 });
+      for (let i = 0; i < 10; i++) addNoise(d, sr, r, { at: 0.1 + r() * 0.8, dur: 0.07, gain: 0.35, f0: 900 + r() * 800, f1: 200, decay: 9 });
+    }, 0.9),
     heartbeat: mk(0.42, (d) => {
       addTone(d, sr, { dur: 0.13, gain: 1, f0: 62, f1: 42, decay: 5, shape: 0.8 });
       addTone(d, sr, { at: 0.18, dur: 0.16, gain: 0.72, f0: 54, f1: 36, decay: 5, shape: 0.8 });
@@ -2291,6 +2309,13 @@ export class AudioEngine {
           if (e.weapon) this._world(this.sfx.frag, e.x, e.z, HEAR_RANGE + 10, { gain: 1.75, priority: PR.boom, cls: 'boom', room: 0.3, rate: 0.82 });
           else this._world(this.sfx.explosion, e.x, e.z, HEAR_RANGE + 20, { gain: 1.8, priority: PR.boom, cls: 'boom', room: 0.32 });
           break;
+        case 'brk': {
+          // m: 0 glass, 1 wood, 2 light wall, 3 heavy wall (MATERIALS in js/shared/destruction.js).
+          const snd = e.m === 0 ? this.sfx.brkGlass : e.m === 1 ? this.sfx.brkWood : this.sfx.brkStone;
+          if (e.s >= 2) this._world(snd, e.x, e.z, HEAR_RANGE, { gain: e.m >= 2 ? 1.4 : 1, priority: PR.boom, cls: 'world', room: 0.25, rate: e.m === 3 ? 0.85 : 1 });
+          else this._world(snd, e.x, e.z, HEAR_RANGE * 0.6, { gain: 0.45, priority: PR.gun, cls: 'world', rate: 1.25 });
+          break;
+        }
         case 'tag':
           if (e.by === me) this._play(this.sfx.tag, { bus: this.ui, priority: PR.ui, cls: 'ui', gain: 0.85, rate: e.kind === 'confirm' ? 1 : 0.8 });
           else this._world(this.sfx.tag, e.x, e.z, 16, { gain: 0.5, priority: PR.gun, rate: e.kind === 'confirm' ? 1 : 0.8 });

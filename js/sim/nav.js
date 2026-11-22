@@ -383,6 +383,31 @@ export class NavGrid {
     this.rHeap = new Int32Array(start[R] + R + 1); this.rHeapF = new Float32Array(start[R] + R + 1);
   }
 
+  // Destruction (docs/DESTRUCTION.md): cells in the box that just became walkable join a region of their own sector
+  // next to them, so a route can start, end or pass there. A break only ever opens ground, so the sector graph stays
+  // safe without a rebuild: at worst it misses a new shortcut between two regions, which the fine search inside the
+  // corridor still finds when the route passes that way. Cheap (the box only), unlike _buildSectors on a giant map.
+  reopen(x0, z0, x1, z1) {
+    if (!this.regionOf) return;
+    const { w, h, blocked, regionOf } = this;
+    const i0 = Math.max(0, Math.floor(x0)), i1 = Math.min(w - 1, Math.floor(x1));
+    const j0 = Math.max(0, Math.floor(z0)), j1 = Math.min(h - 1, Math.floor(z1));
+    const sector = k => ((((k / w) | 0) >> SECTOR_SHIFT) * this.sw) + ((k % w) >> SECTOR_SHIFT);
+    for (let changed = true, pass = 0; changed && pass < 32; pass++) {
+      changed = false;
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const k = j * w + i;
+          if (blocked[k] || regionOf[k] >= 0) continue;
+          const s = sector(k);
+          for (const n of [i > 0 ? k - 1 : -1, i < w - 1 ? k + 1 : -1, j > 0 ? k - w : -1, j < h - 1 ? k + w : -1]) {
+            if (n >= 0 && !blocked[n] && regionOf[n] >= 0 && sector(n) === s) { regionOf[k] = regionOf[n]; changed = true; break; }
+          }
+        }
+      }
+    }
+  }
+
   // A* over regions from the start cell's region to the goal cell's. On success marks, in sectorMark with this search
   // id, every sector the route passes through and the ring of sectors around each, and returns true.
   _route(startCell, goalCell, id) {

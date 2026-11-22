@@ -52,6 +52,7 @@ export class SndRules {
   startRound() {
     const sim = this.sim;
     this.round++;
+    sim.brk?.restoreAll();      // Every round starts on a whole map (docs/DESTRUCTION.md).
     // Halftime: the teams trade roles, and with them ends of the map.
     this.attackers = this.round > SND.halftime ? 1 : 0;
     this.state = 'freeze';
@@ -262,7 +263,7 @@ export class SndRules {
     const sim = this.sim, b = this.bomb, planter = b.planter;
     b.state = 'exploded'; b.fuse = 0;
     this.defuse.p = null; this.defuse.t = 0;
-    sim._emit({ t: 'explosion', x: r2(b.x), z: r2(b.z), radius: SND.blast, by: planter?.id ?? null });
+    sim._emit({ t: 'explosion', x: r2(b.x), z: r2(b.z), radius: SND.blast, by: planter?.id ?? null, k: 'bomb' });
     sim._emit({ t: 'snd', kind: 'exploded', x: r2(b.x), z: r2(b.z) });
     sim.eq.setOffMines(b.x, b.z, SND.blast);
     for (const q of sim.players) {
