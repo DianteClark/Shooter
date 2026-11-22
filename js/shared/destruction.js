@@ -33,7 +33,8 @@ export function ruleFor(w) {
     case 'crate': case 'stall': case 'tent': return area <= 30 ? 'wood' : null;
     case 'barrier': return long <= 8 ? 'light' : null;
     case 'sandbag': return long <= 8 ? 'light' : null;
-    case 'shop': return area <= 12 && w.h <= 3 ? 'wood' : null;
+    // Booths and kiosks (a phone box, a ticket machine) are glass; small stalls and shop fronts wood.
+    case 'shop': return area <= 4 && w.h <= 3 ? 'glass' : area <= 12 && w.h <= 3 ? 'wood' : null;
     case 'adobe': return area <= 24 ? 'light' : null;
     case 'building': return area <= 26 && w.h <= 4.6 ? 'light' : null;
     case 'wall':

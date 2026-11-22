@@ -3,7 +3,8 @@
 // the stages from snapshots (js/shared/destruction.js setBreakState).
 import { WEAPON_CATEGORY } from '../shared/constants.js';
 import { MAT, MATERIALS, DAMAGED_AT, applyStage, encodeBreak, decodeBreak, prepareBreakables, resetBreakables } from '../shared/destruction.js';
-import { hasLineOfSight, wallsInBox, wallScratch } from '../shared/geometry.js';
+import { hasLineOfSight, wallsInBox, wallsOnRay, wallScratch } from '../shared/geometry.js';
+import { NEAR_COVER } from './player.js';
 import { reblockNav } from '../shared/zombies.js';
 
 // Modes whose design a breaking map would spoil: Graveyard Shift keeps its own barricades, the campaign its scripted
@@ -24,7 +25,18 @@ const SECTOR_EVERY = 2;           // Seconds between big-map sector rebuilds.
 const SEND_FOR = 30;              // Ticks the break string rides every snapshot after a change.
 const SEND_EVERY = 15;            // Otherwise every this many ticks.
 
+const OWN_COVER = NEAR_COVER;     // Cover this close to the shooter is fired over (player.js ownCover).
 const r2 = v => Math.round(v * 100) / 100;
+const rectDist = (w, x, z) => Math.hypot(Math.max(w.x - x, 0, x - w.x - w.w), Math.max(w.z - z, 0, z - w.z - w.d));
+// Entry distance of a normalised ray into a rect (0 when it starts inside), or -1 for a miss.
+function slab(ox, oz, dx, dz, r) {
+  let t0 = 0, t1 = Infinity;
+  if (Math.abs(dx) < 1e-9) { if (ox < r.x || ox > r.x + r.w) return -1; }
+  else { let a = (r.x - ox) / dx, b = (r.x + r.w - ox) / dx; if (a > b) { const q = a; a = b; b = q; } if (a > t0) t0 = a; if (b < t1) t1 = b; }
+  if (Math.abs(dz) < 1e-9) { if (oz < r.z || oz > r.z + r.d) return -1; }
+  else { let a = (r.z - oz) / dz, b = (r.z + r.d - oz) / dz; if (a > b) { const q = a; a = b; b = q; } if (a > t0) t0 = a; if (b < t1) t1 = b; }
+  return t0 <= t1 ? t0 : -1;
+}
 
 export class Destruction {
   constructor(sim) {
@@ -125,28 +137,30 @@ export class Destruction {
     }
   }
 
-  // Gunfire: a ray that ended on a breakable piece chips it, if the round is heavy enough (glass takes anything).
+  // Gunfire: every breakable piece a round's ray crossed (a penetrating round goes through cover) or ended on takes a
+  // chip if the round is heavy enough; glass takes anything. Cover at the shooter's own feet is fired over, not hit.
   bullet(shot, rays, w) {
     if (!this.on) return;
     const map = this.sim.map, cat = WEAPON_CATEGORY[shot.weapon], chip = CHIP[cat] ?? 0;
     const near = this._near = wallScratch(map, this._near);
+    const ox = shot.ox, oz = shot.oz;
     for (let i = 0; i < rays.length; i++) {
       const r = rays[i];
-      if (r.hit !== 'wall') continue;
-      const px = r.x - r.nx * 0.05, pz = r.z - r.nz * 0.05;
-      const n = wallsInBox(map, px, pz, px, pz, near);
+      const len = Math.hypot(r.x - ox, r.z - oz);
+      if (len < 1e-3) continue;
+      const dx = (r.x - ox) / len, dz = (r.z - oz) / len, reach = len + 0.06;
+      const n = wallsOnRay(map, ox, oz, dx, dz, reach, near);
       for (let k = 0; k < n; k++) {
         const q = map.walls[near[k]];
         const id = q.brk;
         if (id === undefined || this.stage[id] === 2 || this.locked[id]) continue;
-        if (px < q.x || px > q.x + q.w || pz < q.z || pz > q.z + q.d) continue;
+        const t = slab(ox, oz, dx, dz, q);
+        if (t < 0 || t > reach) continue;
         const p = this.list[id];
+        // Own cover: the shooter is crouched at it and fires across its top.
+        if (!q.blocksBullet && rectDist(q, ox, oz) < OWN_COVER) continue;
         const dmg = p.mat === 'glass' ? Math.max(w.damage ?? 20, p.hp) : MAT[p.mat].bullet ? (w.damage ?? 0) * chip : 0;
-        if (dmg > 0) {
-          const dl = Math.hypot(r.x - shot.ox, r.z - shot.oz) || 1;
-          this._hit(id, dmg, (r.x - shot.ox) / dl, (r.z - shot.oz) / dl, null);
-        }
-        break;
+        if (dmg > 0) this._hit(id, dmg, dx, dz, null);
       }
     }
   }
