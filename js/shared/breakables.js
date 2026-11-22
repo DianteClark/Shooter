@@ -13,6 +13,8 @@ export const BREAKABLES = {
   range: { off: true },
   // The two small dockside tanks either side of the middle: steel, but thin enough for a launcher or a strike.
   harbor: { mirror: true, pick: [[32, 24, 'heavy'], [36.9, 26.9, 'heavy']] },
+  // The thickets screening dom A and C stay: with them gone team 0's walk to A is 10% shorter than team 1's to C.
+  ruins: { pick: [[11.1, 11.7, null], [40.9, 22.3, null], [11.1, 22.3, null], [40.9, 11.7, null]] },
   // The water tanks by the huts.
   canyon: { mirror: true, pick: [[72.8, 20.8, 'heavy']] },
 };
