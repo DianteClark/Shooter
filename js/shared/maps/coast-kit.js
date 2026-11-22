@@ -19,10 +19,11 @@ export function mirror(W, H, list) {
 const inR = (r, x, z) => x > r.x && x < r.x + r.w && z > r.z && z < r.z + r.d;
 
 // The lattice for a W x H map. `w`: { deep, steep, shallow, deck } rect lists (later lists win: a deck over a creek
-// is dry); `base(x, z)` (optional) classes every cell first (the region's sea and flats). Returns
-// { cells, water: [[x, z, w, d, flags]], shallows, decks, underDecks }: the water as wall entries for the map's own
-// list, `decks` as pier-floor rooms, `underDecks` the water to draw under them.
-export function coastWater(W, H, w, base = null) {
+// is dry); `base(x, z)` (optional) classes every cell first (the region's sea and flats, its districts' own cells).
+// `wallMask(i, j)` (optional): only these cells become water walls (a region leaves its districts' to the districts).
+// Returns { cells, water: [[x, z, w, d, flags]], shallows, decks, underDecks }: the water as wall entries for the
+// map's own list, `decks` as pier-floor rooms, `underDecks` the water to draw under them.
+export function coastWater(W, H, w, base = null, wallMask = null) {
   const n = Math.round(W / CELL), nz = Math.round(H / CELL), cls = new Uint8Array(n * nz);
   const deck = new Uint8Array(n * nz);
   const quay = new Uint8Array(n * nz);
@@ -36,11 +37,11 @@ export function coastWater(W, H, w, base = null) {
     cls[k] = c;
   }
   const cells = { size: CELL, n, nz, cls };
-  return { cells, ...waterOf(cells, W, H, quay, deck, w.deck ?? []) };
+  return { cells, ...waterOf(cells, W, H, quay, deck, w.deck ?? [], wallMask) };
 }
 
-// Walls, shallows and decks of a lattice (`mask(i, j)`: only these cells, for a region's own ground round its
-// districts). Deep rects touching the map's edge are `sea`; rects of quay cells are `quay`.
+// Walls, shallows and decks of a lattice (`mask(i, j)`: only these cells become walls; the shallows are every
+// cell's). Deep rects touching the map's edge are `sea`; rects of quay cells are `quay`.
 export function waterOf(cells, W, H, quay = null, deck = null, decks = [], mask = null) {
   const water = [];
   const m = f => (mask ? (i, j) => mask(i, j) && f(i, j) : f);
@@ -51,8 +52,8 @@ export function waterOf(cells, W, H, quay = null, deck = null, decks = [], mask 
       water.push([r.x, r.z, r.w, r.d, { ...(edge ? { sea: true } : {}), ...(isQuay ? { quay: true } : {}) }]);
     }
   }
-  for (const r of rectsOf(cells, STEEP, mask)) water.push([r.x, r.z, r.w, r.d, { channel: true }]);
-  const shallows = rectsOf(cells, SHALLOW, mask);
+  for (const r of rectsOf(cells, STEEP, mask ?? null)) water.push([r.x, r.z, r.w, r.d, { channel: true }]);
+  const shallows = rectsOf(cells, SHALLOW);
   const underDecks = deck ? rectsOf(cells, LAND, m((i, j) => deck[j * n + i] === 1)) : [];
   return { water, shallows, decks: decks.map(r => ({ x: r.x, z: r.z, w: r.w, d: r.d, floor: 'pier' })), underDecks };
 }
