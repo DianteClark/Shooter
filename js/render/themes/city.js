@@ -92,7 +92,6 @@ const LAMP_REACH = 8;
 export function lampSpots(map) {
   if (map._lampSpots) return map._lampSpots;
   const out = [];
-  const inDistrict = (x, z) => (map.districts ?? []).some(d => x > d.x - 1 && x < d.x + d.w + 1 && z > d.z - 1 && z < d.z + d.h + 1);
   const blocked = (x, z) => map.walls.some(w => w.kind !== 'border' && x > w.x - 0.6 && x < w.x + w.w + 0.6 && z > w.z - 0.6 && z < w.z + w.d + 0.6);
   const onOtherRoad = (x, z, self) => (map.roads ?? []).some(r => r !== self && r.pts.some((p, i) => i > 0 && segDist(x, z, ...r.pts[i - 1], ...p) < r.w / 2 + 0.3));
   for (const rd of map.roads ?? []) {
@@ -102,7 +101,7 @@ export function lampSpots(map) {
       for (let s = 7, i = 0; s < L - 3; s += 17, i++) {
         const side = i % 2 ? 1 : -1, off = rd.w / 2 + 0.5;
         const x = ax + ux * s + nx * off * side, z = az + uz * s + nz * off * side;
-        if (x < 2 || z < 2 || x > map.width - 2 || z > map.height - 2 || inDistrict(x, z) || blocked(x, z) || onOtherRoad(x, z, rd)) continue;
+        if (x < 2 || z < 2 || x > map.width - 2 || z > map.height - 2 || blocked(x, z) || onOtherRoad(x, z, rd)) continue;
         out.push({ x, z, dx: -nx * side, dz: -nz * side });
       }
     }

@@ -70,7 +70,7 @@ function build() {
   const R = P.rnd;
   const B = (x, z, w, d, o) => P.building(x, z, w, d, o);
   const A = (x, z, w, d, h, kind, extra = {}) => P.add(x, z, w, d, h, kind, extra);
-  P.roads = ROADS; P.rails = RAILS;
+  P.roads = [...ROADS]; P.rails = RAILS;
   P.keepOut = [];
   // Every doorway built (district buildings and region ones), so street clutter never blocks one.
   P.doorPts = [];
@@ -93,7 +93,13 @@ function build() {
     districts.push({ id: rec.id, name: rec.name, x: rec.x, z: rec.z, w: rec.w, h: rec.h });
     for (const k of ['strings', 'crossings', 'trains']) if (rec[k]) art[k].push(...rec[k]);
     if (rec.el) art.el.push(rec.el);
-    P.zones.push(...rec.zones);
+    // A district's street zones become road strips (painted like the city's own, kerbs and lines), the rest stay zones.
+    for (const zn of rec.zones) {
+      if (zn.kind !== 'road') { P.zones.push(zn); continue; }
+      const along = zn.w >= zn.d;
+      P.roads.push(along ? { pts: [[zn.x, zn.z + zn.d / 2], [zn.x + zn.w, zn.z + zn.d / 2]], w: zn.d, kind: 'asphalt' }
+        : { pts: [[zn.x + zn.w / 2, zn.z], [zn.x + zn.w / 2, zn.z + zn.d]], w: zn.w, kind: 'asphalt' });
+    }
     return rec;
   };
 
@@ -389,20 +395,27 @@ function build() {
   // Rebound's compact areas: over the middle districts, the north and the south of the city.
   const reboundAreas = [{ x: 200, z: 200, r: 150 }, { x: 150, z: 150, r: 150 }, { x: 250, z: 250, r: 150 }, { x: 250, z: 150, r: 150 }];
 
-  // Large-mode hook (docs/DISTRICTS.md, Conquest and Breakthrough on branch bfmodes): a flag per district and per big
-  // region place, grouped west to east into sectors for a push.
-  const flag = (id, name, x, z, r, district) => ({ id, name, ...spot(x, z), r, district });
+  // Conquest and Breakthrough (branch bfmodes, docs/MODES.md "Layout format"): the boulevard and the districts on it.
+  // Every point is moved onto open ground round its place.
+  const pt = (x, z, extra = {}) => ({ ...spot(x, z), ...extra });
   const bf = {
-    flags: [
-      flag('A', 'Old Quarter', 96, 200, 5, 'oldquarter'), flag('B', 'Meridian Park', 80, 124, 6, null), flag('C', 'Stadium', 84, 300, 6, null),
-      flag('D', 'The Exchange', 218, 128, 6, null), flag('E', 'Midtown', 200, 200, 6, 'midtown'), flag('F', 'Union Square', 200, 276, 5, 'unionsq'),
-      flag('G', 'City Hall', 330, 128, 6, null), flag('H', 'Canal Row', 306, 200, 4, 'canalrow'), flag('I', 'Mercy Hospital', 330, 276, 6, null),
-    ],
-    sectors: [
-      { id: 'west', name: 'West Side', flags: ['A', 'B', 'C'], rect: { x: 0, z: 89, w: 144, d: 260 } },
-      { id: 'centre', name: 'Midtown', flags: ['D', 'E', 'F'], rect: { x: 144, z: 89, w: 148, d: 215 } },
-      { id: 'east', name: 'Waterfront', flags: ['G', 'H', 'I'], rect: { x: 292, z: 89, w: 108, d: 215 } },
-    ],
+    conquest: [{
+      id: 'boulevard', name: 'Meridian: Boulevard', area: { x: 44, z: 110, w: 316, h: 190 },
+      hq: [pt(52, 200, { r: 10 }), pt(354, 200, { r: 10 })],
+      flags: [
+        pt(96, 200, { id: 'A', name: 'Old Quarter' }), pt(218, 136, { id: 'B', name: 'The Exchange' }), pt(200, 200, { id: 'C', name: 'Midtown' }),
+        pt(200, 276, { id: 'D', name: 'Union Square' }), pt(306, 200, { id: 'E', name: 'Canal Row' }),
+      ],
+    }],
+    breakthrough: [{
+      id: 'crosstown', name: 'Meridian: Crosstown', area: { x: 20, z: 150, w: 352, h: 100 }, tickets: 300, refill: 240,
+      hq: [pt(32, 200, { r: 10 }), pt(358, 200, { r: 10 })],
+      sectors: [
+        { name: 'Old Quarter', objs: [pt(80, 190), pt(112, 210)] },
+        { name: 'Midtown', objs: [pt(182, 190), pt(222, 212)] },
+        { name: 'Canal Row', objs: [pt(296, 190), pt(318, 210)] },
+      ],
+    }],
   };
 
   return {

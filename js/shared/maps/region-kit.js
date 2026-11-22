@@ -8,10 +8,19 @@
 // The district file stays the source of truth: nothing here changes the district's own map object.
 import { DOOR, WALL_T } from './br-kit.js';
 
-// Top-level lists of rects or points on a map that a region carries over by the district's offset (any of them a
-// district may have; docs/DISTRICTS.md). `breakables` and `destructibles` are for the destruction builder's pieces
-// (docs/DESTRUCTION.md on branch destruct) should they live beside `walls` rather than as flags on them.
-export const CARRY = ['breakables', 'destructibles', 'breakable', 'debris'];
+// Top-level lists of rects or points on a map that a region carries over by the district's offset (docs/DISTRICTS.md).
+// Destruction (docs/DESTRUCTION.md, branch destruct) needs nothing here: its kind rules read each wall, which comes
+// along with its flags, and map.breakables is resolved per map (the region gets its own). A district's own entry in
+// that builder's BREAKABLES side table can be offset into the region's with `offsetPicks`.
+export const CARRY = ['debris'];
+
+// Destruction's per-map picks ([x, z, material], docs/DESTRUCTION.md), moved by a district's offset; a `mirror` table
+// (a 180-degree map) is unrolled first, since the district's image point is not the region's.
+export function offsetPicks(entry, map, ox, oz) {
+  if (!entry?.pick) return [];
+  const all = entry.mirror ? entry.pick.flatMap(([x, z, m]) => [[x, z, m], [map.width - x, map.height - z, m]]) : entry.pick;
+  return all.map(([x, z, m]) => [x + ox, z + oz, m]);
+}
 
 // Piece flags that mark a block as a landmark or a fitting, never opened up into a building.
 const KEEP = ['metro', 'newsstand', 'booth', 'kiosk', 'vending', 'ticket', 'landmark', 'stairs', 'keep', 'el', 'bus', 'materials'];

@@ -26,6 +26,14 @@ export function mapIcons({ P, R, O, bar }) {
     // Millbrook: a stone mill with a pitched roof, its waterwheel turning in the race below.
     // Jadefall: the stepped pyramid, its jade crown lit, the lagoon's swell below.
     'map:jadefall': { f: [R(5, 21, 22, 4.5), R(8.5, 16.5, 15, 4.5), R(12, 12, 8, 4.5)], h: [R(14.5, 21, 3, 4.5), R(14.8, 16.5, 2.4, 4.5)], s: [P(1, 29, 6, 26.5, 11, 29, 16, 26.5, 21, 29, 26, 26.5, 31, 29)], sw: 2, a: [P(13.5, 12, 16, 4, 18.5, 12)] },
+    // Midtown: the founder on his plinth between two towers.
+    'map:midtown': { f: [R(1, 6, 8, 23.5), R(23, 9, 8, 20.5), R(13, 21, 6, 4), R(11.5, 25, 9, 4.5)], h: [R(3, 9, 1.6, 2), R(6, 13, 1.6, 2), R(25, 12, 1.6, 2), R(28, 17, 1.6, 2)], a: [O(16, 14, 3), R(14.5, 16.5, 3, 4.5)] },
+    // Old Quarter: a row of brownstones with stoops, a bell tower behind.
+    'map:oldquarter': { f: [R(1, 14, 9, 15.5), R(11, 12, 10, 17.5), R(22, 15, 9, 14.5), R(14, 3, 4, 9)], h: [R(3, 17, 2, 3), R(6, 17, 2, 3), R(13, 15, 2, 3), R(17, 15, 2, 3), R(24, 18, 2, 3), R(27, 18, 2, 3)], a: [O(16, 6.5, 1.4), R(4, 25, 2, 4.5), R(15, 25, 2, 4.5), R(25, 25, 2, 4.5)] },
+    // Canal Row: a bridge over the canal between two warehouses.
+    'map:canalrow': { f: [R(1, 8, 10, 21.5), R(21, 8, 10, 21.5), R(11, 15, 10, 3)], h: [R(3, 12, 6, 3), R(23, 12, 6, 3)], a: [R(12, 21, 8, 8.5)] },
+    // Union Square: the bandstand's roof on its posts among two trees.
+    'map:unionsq': { f: [P(9, 12, 16, 5, 23, 12), R(10, 12, 12, 2), R(10.5, 14, 1.6, 10), R(20, 14, 1.6, 10), R(8, 24, 16, 3), O(4, 17, 3.4), O(28, 17, 3.4), R(3.2, 20, 1.6, 9.5), R(27.2, 20, 1.6, 9.5)], a: [O(16, 9.5, 1.3)] },
     // Meridian City: a skyline of four districts, the El's deck across the front on its columns, a lit window.
     'map:meridian': { f: [R(1, 12, 7, 12), R(9, 5, 7, 19), R(17, 9, 6, 15), R(24, 14, 7, 10), R(1, 24, 30, 3), R(4, 27, 2, 3), R(15, 27, 2, 3), R(26, 27, 2, 3)], h: [R(3, 15, 1.6, 2), R(11, 8, 1.6, 2), R(13.5, 12, 1.6, 2), R(19, 12, 1.6, 2), R(26, 17, 1.6, 2)], a: [R(11, 16, 1.6, 2), R(19, 18, 1.6, 2), R(3, 20, 1.6, 2)] },
     // Tidebreak: a causeway on its piers over the waves, the shrine's broken arch on it.

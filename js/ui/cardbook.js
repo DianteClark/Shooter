@@ -80,6 +80,10 @@ const MAP_ART = {
   tidebreak:  ['Causeway', 'causeway', ['#0c1a1e', '#24505a', '#d0f0ec', '#ffc04a']],
   coral:      ['Bell Tower', 'belfry', ['#1a120e', '#5a3a2a', '#f4e6d0', '#e0603a']],
   // ROADMAP 66/67 (appended): the first region.
+  midtown:    ['Monument', 'towers', ['#10141e', '#2c3a52', '#dce6ff', '#ffc24a']],
+  oldquarter: ['Cobblestone', 'belfry', ['#1a120e', '#4a3226', '#f2e2cc', '#ff8a4a']],
+  canalrow:   ['Lock Gate', 'river', ['#0c161c', '#22404e', '#cfe8f0', '#4ad0ff']],
+  unionsq:    ['Bandstand', 'crowns', ['#0e1a12', '#26442e', '#d8f0d4', '#ffd24a']],
   meridian:   ['City Lights', 'metropolis', ['#0e1220', '#2a3456', '#d8e0ff', '#ffb84a']],
 };
 const MAP_WINS = 10;
