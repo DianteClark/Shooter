@@ -129,3 +129,9 @@ Measured (dev/balance-sim.mjs --realistic, seed 1, the human-like thumb):
 
 Tried and dropped: breaking off a fight only when losing it (bot-vs-bot K/D worse), a shorter dash to cover under fire
 (worse), routing close guns round long sight lines (no measurable gain, +30% path cost).
+
+Per-tick allowances (build NEXT, docs/BR-PERF.md "Tick spikes"): all bots together may expand 3,000 path cells a tick
+(`sim.pathWork`, on top of the old two searches a tick) and spend 24 units of expensive decisions (`sim.thinkWork`: a
+throw's flight worked out, one unit a line tried; a cover, close-in or corner search, one each). Out of allowance, a
+decision is not dropped: the bot thinks again next tick (`_spend` sets `deferred`; the fallbacks that would have chosen
+something else wait too). Counted in work, not milliseconds, so it is the same on every phone and replay.

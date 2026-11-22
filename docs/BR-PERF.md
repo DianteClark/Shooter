@@ -207,3 +207,88 @@ per-guest snapshots switch on only past 40,000 cells / m^2, which no map in the 
   (0.014 m) and far ones lag by at most about 3 m. Host upload for 7 guests on the giant map: about 160 to 90 KB/s.
 - Today's maps leave it off: it saves only 5 to 8% there (a guest sees most of a Ground War map), and the broadcast
   snapshot is one encode for everyone.
+
+## Tick spikes: the host's single slow ticks (2026-11-22, branch botperf)
+
+Mean host ticks were fine (0.1 to 0.6 ms) but single ticks of 10 to 40 ms turned up on every map: a visible hitch for
+every player when a phone hosts. Target: worst tick under about 8 ms and p99.9 under about 4 ms (wall clock, main thread)
+in 32-player BR on Frontier, Jadefall and Meridian, Ground War 16 v 16 on Harvest and Tidebreak, Conquest and
+Breakthrough on Meridian, Graveyard Shift rounds 20 and 30, and 6 v 6 TDM.
+
+### The profiler: `dev/sim-tickspikes.mjs`
+- Plays each scenario (bot-only, mixed skill, seed 5: BR to the end, the others 4 minutes, Graveyard Shift 1 minute at
+  round 20 / 30 with the horde kept full) and times every host tick after the load step, countdown included.
+- `--repeat=N` plays it N times, each in a fresh process (so every run pays the cold start), checks with a position
+  fingerprint that it was the same match each time, and reports the **per-tick minimum** over the runs. This sandbox
+  has 2 cores shared by four builders (load 2 to 12 while this was measured): one run's worst tick is mostly someone
+  else's process, and taking the same tick's best of five leaves what the game costs. One-run medians are printed too.
+- A sampling CPU profile (node:inspector, 100 us, on the same clock as the ticks) is cut at the tick boundaries: each
+  slow tick lists its phase (the call under `Sim._tick`, and for bots the method under think or drive), the functions
+  with the most self time, GC from the `gc` performance entries, and `(descheduled)` for gaps where the thread was not
+  running. `--alloc` lists allocation sites (bytes a second, collected objects included). `node --expose-gc` runs a full
+  collection between ticks every `--gc-every` ticks so the spikes left are the game's own. `--cold` switches the
+  load-time warm-up off; the fingerprint must not change (it does not, on every scenario).
+
+### What the spikes were
+- **The first live tick and a battle royale landing (6 to 25 ms)**: every bot's think, drive, path search and the gun
+  and movement code running for the first time at once, in the engine's slowest tier; on Meridian a 1,000-cell path
+  search took 9 ms cold against 0.2 ms warm.
+- **Path searches**: a capped big-map search costs 0.8 to 1.3 ms, and two could run in one tick (BR has no rules budget).
+- **Garbage**: 5.6 MB/s of allocation on Ground War, a quarter of it `Math.hypot` (in V8 a library call that returns a
+  boxed number; about 20x the cost of `Math.sqrt(x*x + z*z)`), then collision and the bots' own temporaries.
+- Single expensive decisions (`_bestThrow`'s throw simulations, cover searches, a close gun's corner search: twelve
+  rays per cover point), and every BR squad's plan on the same tick: rarely a spike on their own, but they pile up in
+  the ticks where many bots meet a fight at once.
+
+### What changed
+- **Warm-up at load** (`Sim.warm`, set by the host in js/game/match.js and for a new host in `promoteToHost`): the step
+  that builds the nav grid starts a throwaway bot match of the same mode (BR: Conquest on the same map, everyone on the
+  ground from the start) on a copy of the map, with a nav grid that shares the static parts and the search scratch
+  (`new NavGrid(map, from)`; one search-id counter) and owns its blocked cells, danger and regions. 200 ms of it at load,
+  then 1.5 ms a tick through the countdown (nobody moves then), 600 ticks at most; a new host mid-match plays 450 ms at
+  load. The copies are made so they keep the real objects' hidden classes (the map by spread, the grid through its
+  constructor): with `Object.create` copies the engine's optimised code was thrown away the moment it met the real map.
+  Nothing of it reaches the match: its own walls, breakables, random stream; the fingerprints match with and without.
+- **Path budget on every map** (`sim.pathWork`, 3,000 cells a tick next to the old 2 searches a tick): a search always
+  runs to its end; once the tick has paid for 3,000 cells the next bot waits a tick for its route. One capped search a
+  tick on a giant map, two on the others most ticks.
+- **Decision budget** (`sim.thinkWork`, 24 units a tick; bots.js `_spend`): throw simulations (one unit a line tried)
+  and cover searches share it. When it is spent the decision is not skipped: the bot thinks again on the next tick
+  (fallbacks that would have made a different choice wait too). It never bound in the first minutes of any scenario
+  (fingerprints unchanged).
+- **BR squad plans staggered**: each squad still plans every 15 ticks, squad k on ticks k mod 15.
+- **Cached exposure** of cover points (`coverExposure`, keyed on the map object, its break version and wall count, so it is
+  the same answer as before).
+- **`hyp(x, z)`** (js/shared/geometry.js) for the sim's two-argument distances: allocation 5.6 to 3.8 MB/s on Ground War.
+  It can differ from `Math.hypot` in the last bit, so matches run slightly differently from before (deterministically).
+- Counted in cells and decisions, never milliseconds: every phone and replay agrees. Wall time only decides how much of
+  the throwaway warm-up match is played.
+
+### Numbers (per-tick minimum over 5 fresh-process runs each, before and after alternated; load average about 2)
+| scenario | worst ms | p99.9 | p99 | mean | first live tick | ticks >= 4 ms | bots: kills / objective events / stuck s a bot-min |
+|---|---|---|---|---|---|---|---|
+| BR Frontier (12 min) | 8.1 -> **2.3** | 1.37 -> 1.80 | 0.61 -> 0.56 | 0.09 -> 0.10 | 1.8 -> 0.8 | 3 -> 0 | 37/65/0.01 -> 36/63/0.03 |
+| BR Jadefall | 9.3 -> **2.1** | 1.28 -> 1.68 | 0.61 -> 0.54 | 0.07 -> 0.10 | 1.6 -> 0.9 | 1 -> 0 | 35/61/0.05 -> 33/64/0.02 |
+| BR Meridian | 10.4 -> **2.1** | 1.23 -> 1.55 | 0.59 -> 0.66 | 0.07 -> 0.09 | 1.8 -> 0.8 | 2 -> 0 | 35/54/0.01 -> 36/58/0.08 |
+| Ground War Harvest | 7.8 -> **2.1** | 1.97 -> 1.87 | 0.92 -> 1.56 | 0.37 -> 0.35 | 7.8 -> 1.7 | 1 -> 0 | 351/0/0.09 -> 345/0/0.13 |
+| Ground War Tidebreak | 9.8 -> **2.4** | 1.42 -> 1.79 | 0.79 -> 1.52 | 0.32 -> 0.32 | 9.8 -> 1.4 | 1 -> 0 | 315/0/0.01 -> 299/0/0.09 |
+| Conquest Meridian | 6.6 -> **2.5** | 1.75 -> 1.65 | 1.23 -> 1.25 | 0.49 -> 0.45 | 6.6 -> 2.0 | 1 -> 0 | 413/18/0.03 -> 379/32/0.02 |
+| Breakthrough Meridian | 11.2 -> **3.0** | 1.99 -> 1.91 | 1.47 -> 1.61 | 0.53 -> 0.52 | 11.2 -> 2.5 | 1 -> 0 | 531/3/0.06 -> 493/5/0.14 |
+| Graveyard Shift r20 | 3.1 -> **1.2** | 2.75 -> 1.13 | 0.93 -> 0.83 | 0.23 -> 0.24 | 3.1 -> 1.2 | 0 -> 0 | (crew kills) 11 -> 13 |
+| Graveyard Shift r30 | 2.9 -> **1.2** | 2.40 -> 1.09 | 0.87 -> 0.88 | 0.24 -> 0.23 | 2.9 -> 1.2 | 0 -> 0 | 8 -> 28 |
+| TDM 6 v 6 Harbor | 5.4 -> **0.9** | 0.86 -> 0.48 | 0.38 -> 0.30 | 0.10 -> 0.08 | 5.4 -> 0.4 | 1 -> 0 | 129/0/0.11 -> 116/0/0.03 |
+
+- One run on its own (median of the five) on this busy machine: BR Meridian worst 15.2 -> 9.1 ms, p99.9 4.7 -> 4.6;
+  Harvest 9.7 -> 9.2, 5.3 -> 6.1; Breakthrough Meridian 13.4 -> 10.9, 6.6 -> 6.3. What is left there is the neighbours:
+  the profile of those ticks is `(descheduled)`, at different ticks in every run.
+- The cost: the countdown ticks carry the warm-up slice (about 1.5 to 2 ms instead of 0.3), which is why p99 rose on the
+  Ground War maps (90 of 7,200 ticks) and p99.9 a little in BR (210 countdown ticks). No gameplay happens in them.
+  Load: about 200 ms more at the step that builds the nav grid.
+- Bots over more matches (sim-conquest / sim-breakthrough, Harvest, Tidebreak, Frontier, three seeds each, before ->
+  after): Conquest 132 -> 132 kills a minute, 19.8 -> 19.2 captures, 2.68 -> 2.62 flags covered, stuck 0.060 -> 0.067,
+  side 0 won 4 -> 4 of 9; Breakthrough 166 -> 161 kills a minute, attackers won 4 -> 5 of 9, stuck 0.078 -> 0.064.
+  The single-seed rows above move as any change to a match's trajectory moves them.
+- `node --expose-gc dev/sim-tickspikes.mjs` (a full collection between ticks every 10 s): what is left in the slowest
+  ticks is a countdown warm-up slice or a busy tick of ordinary work (equipment bursts, a path search), each under 3 ms
+  of running time. Not done, and the next step if a phone shows more: the per-player event objects (`shot` rays) and
+  boxed doubles in collision are most of the remaining 3.8 MB/s.
