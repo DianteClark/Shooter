@@ -241,6 +241,20 @@ export const REWARD_PATTERNS = {
     s += line(96, 8, 300, 30, c[2], 1, op('.6') + ' stroke-dasharray="2 4"') + poly([[262, 26], [276, 27.5], [262, 29]], c[2]);
     return s + circ(236, 46, 4, c[3]);
   },
+  metropolis(c, r) {       // Meridian City: districts of towers at blue hour, the El crossing in front with a lit train.
+    let s = circ(268, 18, 10, c[2], op('.25')), x = 92;
+    while (x < W) {
+      const w = 10 + r() * 16, h = 20 + r() * 50;
+      s += rect(x, H - h, w, h, c[1], op((0.7 + r() * 0.3).toFixed(2)));
+      for (let wy = H - h + 4; wy < H - 14; wy += 5) for (let wx = x + 2; wx < x + w - 3; wx += 4) if (r() < 0.25) s += rect(wx, wy, 2, 2.4, r() < 0.7 ? c[3] : c[2], op('.7'));
+      x += w + 2;
+    }
+    s += rect(90, 58, W - 90, 3, c[0]) + rect(90, 61, W - 90, 1.4, c[2], op('.5'));
+    for (let px = 100; px < W; px += 26) s += rect(px, 62, 3, H - 62, c[0]);
+    s += rect(150, 49, 86, 9, c[2], op('.85'));
+    for (let wx = 154; wx < 232; wx += 7) s += rect(wx, 51.5, 4, 3, c[3]);
+    return s + circ(236, 53, 2.4, '#fff4d0') + circ(236, 53, 8, c[3], op('.2'));
+  },
   isles(c, r) {            // Jadefall: the stepped pyramid on its islet, a ring of islands round the lagoon, a jade light.
     let s = '';
     for (let k = 0; k < 4; k++) s += path(`M${96 + k * 52} ${70 + (k % 2) * 3} q13 -5 26 0 t26 0`, c[2], 1, op('.35'));

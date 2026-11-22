@@ -247,14 +247,15 @@ map.bf = {
 ### Tuning (bot-only matches, 32 mixed bots, every map, two seeds; `dev/sim-conquest.mjs`, `dev/sim-breakthrough.mjs`)
 - Bots die often: about 60 deaths a minute a side on a Ground War map, so pools are big (850 tickets for five flags).
   Conquest: matches of 7-9 minutes on the Ground War maps and 9-12 on the island parts, both sides winning
-  (9 / 5 over 14), 7-49 flag captures a match, bots on 2.3-3.2 flags a side at any moment, stuck under 0.2 s a bot a
+  (6 / 8 over 14), 7-49 flag captures a match, bots on 2.3-3.2 flags a side at any moment, stuck under 0.2 s a bot a
   minute, host tick 0.45-0.7 ms mean.
 - Breakthrough took the most work. With defenders spawning beside the objectives and attackers at the HQ, no sector
   ever fell on the islands; with attackers pushing onto the objective (`commit`) and defenders delayed, Ground War
   sectors fell in under a minute. Shipped: both sides spawn about as far from the objectives (the bands above), a
   slower capture (16 s), a 12 s lock after a sector falls, and the islands' own `clock` (7 min), `defendDelay` (1.5 s)
-  and bigger pools. Measured: attackers won 5 of 14 (both sides win on most maps over more seeds), 3-14 minute matches,
-  host tick 0.5-0.8 ms mean.
+  and bigger pools, and a minute back on the clock for every objective taken. Measured after the merge with
+  destruction: attackers won 4 of 14 and reached the last sector in 5 more, 3-15 minute matches, stuck under 0.25 s
+  a bot a minute, host tick under 0.7 ms mean. Conquest over the same maps: 6 / 8, 7-13 minutes.
 
 ### Wire, migration, replays
 - Conquest's block: tickets (ds), every flag packed (`packZone`), stats (cqCaps, oob ds). Breakthrough's: sector,

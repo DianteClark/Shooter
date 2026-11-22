@@ -34,10 +34,16 @@ import brtest from './maps/brtest.js';     // Battle royale test map: small, fas
 import launchpad from './maps/launchpad.js';
 import observatory from './maps/observatory.js';
 import pagoda from './maps/pagoda.js';
+// ROADMAP 66/67 (docs/DISTRICTS.md): Meridian City's four districts, each a 6v6 map, and the city assembled from them.
+import midtown from './maps/midtown.js';
+import oldquarter from './maps/oldquarter.js';
+import canalrow from './maps/canalrow.js';
+import unionsq from './maps/unionsq.js';
+import meridian from './maps/br-meridian.js';
 import { MODE_IDS, MODES } from './modes.js';
 import { prepareBreakables } from './destruction.js';
 
-export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda };
+export const MAPS = { railyard, harbor, neon, dust, frost, topside, sunken, harvest, pier, foundry, turnstile, overpass, downtown, oasis, canyon, ruins, canopy, riverbend, expedition, tidebreak, coral, icebreaker, millbrook, ashgrove, polestar, wrenfield, range, frontier, jadefall, brtest, launchpad, observatory, pagoda, midtown, oldquarter, canalrow, unionsq, meridian };
 // Every map says which modes it hosts. A map that lists none hosts the 6v6 modes; Ground War maps list their own.
 for (const id in MAPS) if (!MAPS[id].modes) MAPS[id].modes = MODE_IDS.filter(m => !MODES[m].large);
 // Destruction (docs/DESTRUCTION.md): what breaks on each map, resolved once here, before anything indexes the walls.

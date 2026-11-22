@@ -26,6 +26,7 @@ const SETS = {
   desert: [JAR, JAR, BARREL, CRATE, SIGN],
   jungle: [JAR, CRATE, BARREL, JAR, CRATE],
   jadefall: [JAR, CRATE, BARREL, JAR, CRATE],
+  city: [SIGN, CONE, BARREL, CRATE, SIGN],
   arctic: [CRATE, BARREL, CRATE, CONE],
   pier: [CRATE, BARREL, CRATE, CONE],
   foundry: [BARREL, BARREL, CRATE, CONE, BARREL],

@@ -13,7 +13,17 @@ export const CHANGELOG = [
     ],
   },
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Destruction',
+    build: 'NEXT', date: '2026-11-22', title: 'Meridian City',
+    items: [
+      'A new Battle Royale map, Meridian City: one huge city at blue hour, its lights coming on. Four new districts sit in the middle of it, side by side along the boulevard: the Old Quarter, Midtown, Canal Row, and Union Square south of Midtown.',
+      'Each district is also a new map of its own for 6 v 6: Midtown (large: towers either side of Monument Plaza), Old Quarter (medium: brownstones round Fountain Square), Canal Row (medium: warehouses either side of a canal and its three bridges) and Union Square (small: round the bandstand).',
+      'Round them the rest of the city: the Rail Depot, Uptown, Gallery Row, The Exchange, the Ferry Terminal and the Docks on the waterfront, City Hall, Mercy Hospital, Meridian Park, the Stadium, Southside, Chapel Row, the Power Station and Westgate. The districts\' buildings open up in Meridian City: walk in and loot them.',
+      'Meridian City plays Battle Royale (Quads, Duos, Solos), Rebound and Extraction, and comes up in the vote with Frontier and Jadefall.',
+      'New calling cards: City Lights, Monument, Cobblestone, Lock Gate and Bandstand, each with its Elite and Master tiers.',
+    ],
+  },
+  {
+    build: '1122-1', date: '2026-11-22', title: 'Destruction',
     items: [
       'Maps break. Crates, stalls, tents, furniture and shop fronts splinter; windows and kiosks shatter; barriers, sandbags, sheds, huts and short walls come down. Every 6 v 6, Ground War and Battle Royale map has pieces that go.',
       'Grenades, satchels, launchers, airstrikes, mortars and missiles break what they hit. Light machine guns, marksman rifles, snipers and shotguns chew through wood, and any bullet breaks glass. Heavier walls take a rocket or a streak.',
