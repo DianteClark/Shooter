@@ -31,6 +31,32 @@ PAGES = [
 ]
 
 
+# Bots stand still and nobody on our side can be hurt; a foe 9 m east of us, the rest out of the way.
+SETUP = """(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId);
+  for (const p of sim.players) if (p.bot) p.bot.update = () => [];
+  const dmg = sim._damage.bind(sim); sim._damage = (v, ...a) => (v.team === me.team ? undefined : dmg(v, ...a));
+  sim.streakDenied = () => null;
+  const foes = sim.players.filter(q => q.team !== me.team);
+  foes.forEach((f, i) => { f.ps.x = me.ps.x + 9 + i * 0.01; f.ps.z = me.ps.z + (i ? 30 : 0); f.ps.aim = Math.PI; f.spawnProtect = 0; });
+  window.__foe = foes[0].id;
+  window.__call = (id, kind) => { const p = sim.byId.get(id); p.score.slots = [{ kind, cost: 1, held: true, blocked: false }]; return sim.useStreak(id, 0); };
+})()"""
+MATCH_SHOTS = [
+    # An enemy VTOL hovering over us; our SAM shooting at it.
+    ('match-vtol-sam', """(() => { const m = window.__game.app.match, sim = m.sim; window.__call(window.__foe, 'vtol');
+      const g = sim.gunships.find(g => g.kind === 'vtol'); g.x = m.ps.x + 4; g.z = m.ps.z - 2; g.hx = g.x; g.hz = g.z; window.__call(m.localId, 'sam'); })()""", 2600),
+    # Our Napalm on the foe.
+    ('match-napalm', """(() => { const m = window.__game.app.match, sim = m.sim; sim.gunships.length = 0; sim.turrets.length = 0; window.__call(m.localId, 'napalm'); })()""", 3200),
+    # A Fusee into the foe: they burn and show on our map.
+    ('match-flare', """(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId), f = sim.byId.get(window.__foe);
+      sim.eq.projectiles.length = 0; f.hp = 100; f.alive = true;
+      sim.applyShot(me.id, { weapon: 'flare', ox: me.ps.x, oz: me.ps.z, aim: Math.atan2(f.ps.z - me.ps.z, f.ps.x - me.ps.x), ads: true, angles: [Math.atan2(f.ps.z - me.ps.z, f.ps.x - me.ps.x)] }, 0); })()""", 900),
+    # High Alert: someone far off screen to the south-west has us in their sights.
+    ('match-highalert', """(() => { const m = window.__game.app.match, sim = m.sim, me = sim.byId.get(m.localId), f = sim.byId.get(window.__foe);
+      me.ps.perks = ['marathon', 'scavenger', 'highalert']; f.ps.x = me.ps.x - 24; f.ps.z = me.ps.z + 12; f.ps.aim = Math.atan2(me.ps.z - f.ps.z, me.ps.x - f.ps.x); })()""", 1200),
+]
+
+
 async def main():
     os.makedirs(OUT, exist_ok=True)
     srv = subprocess.Popen(['python3', '-m', 'http.server', str(PORT)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -62,6 +88,28 @@ async def main():
                     fails.append(f'{name}: {errs[:4]}')
                 print(f'{"FAIL" if errs else "ok  "} {name}')
                 await ctx.close()
+            # In a match: the wave 5 streaks, a Fusee's burn, the High Alert edge pulse and the Skyhook lock box.
+            ctx = await browser.new_context(viewport={'width': 852, 'height': 393}, device_scale_factor=2, has_touch=True, is_mobile=True)
+            pg = await ctx.new_page()
+            errs = []
+            pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' and 'Failed to load resource' not in m.text else None)
+            pg.on('pageerror', lambda e: errs.append(f'PAGEERR {e}'))
+            await pg.goto(f'http://localhost:{PORT}/?debug=1&map=railyard&mode=tdm&bots=recruit')
+            await pg.wait_for_timeout(800)
+            await pg.evaluate("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+            await pg.reload()
+            await pg.wait_for_timeout(1200)
+            await pg.locator('[data-act="custom"]').first.click(no_wait_after=True)
+            await pg.wait_for_function('window.__game.app.match?.interp.newest?.phase === "live"', timeout=120000)
+            await pg.evaluate(SETUP)
+            for name, js, wait in MATCH_SHOTS:
+                await pg.evaluate(js)
+                await pg.wait_for_timeout(wait)
+                await pg.screenshot(path=f'{OUT}/{name}.png')
+                print(f'ok   {name}')
+            if errs:
+                fails.append(f'match: {errs[:4]}')
+            await ctx.close()
             await browser.close()
     finally:
         srv.terminate()

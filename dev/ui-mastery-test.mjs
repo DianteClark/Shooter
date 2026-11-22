@@ -45,16 +45,16 @@ test('every tactical, lethal, streak and operator has a track of 3 to 5 tiers wi
   }
 });
 
-test('operators wave: 27 operators (29 with the two Extraction exclusives, 35 with Season 2\'s six), the first nine in their old order, women and men, every unlock kind', () => {
+test('operators wave: 27 operators (29 with the two Extraction exclusives, 35 with Season 2\'s six, 39 with wave 5\'s four), the first nine in their old order, women and men, every unlock kind', () => {
   const { OPERATOR_IDS, operatorUnlock, botOrder, botOperator, skinsFor, SKIN_TIERS, getSkin } = OPS;
   assert.deepEqual(OPERATOR_IDS.slice(0, 9), ['trooper', 'wisp', 'anvil', 'relay', 'yarddog', 'ronin', 'ghoul', 'ram', 'monarch'], 'ids are appended, never reordered');
-  assert.equal(OPERATORS.length, 35);
-  assert.equal(new Set(OPERATOR_IDS).size, 35);
+  assert.equal(OPERATORS.length, 39);
+  assert.equal(new Set(OPERATOR_IDS).size, 39);
   const women = OPERATORS.filter(o => o.voice === 'f').length;
-  assert.ok(women >= 11 && women <= 13, `${women} women`);
+  assert.ok(women >= 13 && women <= 15, `${women} women`);
   for (const op of OPERATORS) {
     assert.ok(op.name && op.role && op.bio, op.id);
-    assert.equal(skinsFor(op.id).filter(k => !k.season).length, 6, `${op.id}: issue, field and four mastery skins`);
+    assert.equal(skinsFor(op.id).filter(k => !k.season && k.tier !== 'campaign').length, 6, `${op.id}: issue, field and four mastery skins`);
     for (const k of skinsFor(op.id)) assert.ok(SKIN_TIERS[k.tier] && (k.gear === null || Number.isFinite(k.gear)), k.id);
     if (op.kit) for (const slot of ['core', 'face']) assert.ok(op.kit[slot], `${op.id} ${slot}`);
   }
@@ -73,18 +73,39 @@ test('operators wave: 27 operators (29 with the two Extraction exclusives, 35 wi
   assert.ok(operatorUnlock(get('morse'), { ...career, level: 16 }).unlocked);
   // Bots: every operator once before any repeat, women and men alternating, the same order on every client.
   const o = botOrder(1234);
-  assert.equal(new Set(o).size, 35);
+  assert.equal(new Set(o).size, 39);
   assert.deepEqual(botOrder(1234), o);
   for (let i = 0; i < 6; i++) assert.notEqual(get(o[2 * i]).voice === 'f', get(o[2 * i + 1]).voice === 'f', 'alternates');
-  assert.equal(botOperator(1234, 35), o[0]);
+  assert.equal(botOperator(1234, 39), o[0]);
   assert.notDeepEqual(botOrder(99), o);
+});
+
+test('wave 5 operators: two women and two men, a challenge each on the new arsenal and streaks, their own kit piece, an Elite effect and a Mastery suit', () => {
+  const { operatorUnlock, getSkin } = OPS;
+  const ids = ['juniper', 'fenwick', 'odessa', 'calder'];
+  const ops = ids.map(id => OPERATORS.find(o => o.id === id));
+  assert.deepEqual(OPERATOR_IDS_NOW().slice(35), ids, 'appended after Season 2\'s');
+  assert.equal(ops.filter(o => o.voice === 'f').length, 2);
+  const blank = { level: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: {} };
+  const pieces = { juniper: 'signalpole', fenwick: 'missiletube', odessa: 'pilotcap', calder: 'scopecase' };
+  for (const op of ops) {
+    assert.equal(operatorUnlock(op, blank).unlocked, false, `${op.id} locked`);
+    assert.ok(operatorUnlock(op, { ...blank, life: { [op.unlock.life]: op.unlock.goal } }).unlocked, `${op.id} opens at its goal`);
+    const piece = pieces[op.id];
+    assert.equal(OPERATORS.filter(o => o.kit && Object.values(o.kit).includes(piece)).length, 1, `${op.id} alone wears the ${piece}`);
+    assert.ok(getSkin(`skin:${op.id}-3`).fx && getSkin(`skin:${op.id}-5`).suit, `${op.id} Elite effect and Mastery suit`);
+    const t = getTrack(op.id);
+    assert.deepEqual(t.tiers.flatMap(c => c.rewards).filter(r => r.kind === 'skin').map(r => r.id), [2, 3, 4, 5].map(n => `skin:${op.id}-${n}`));
+  }
+  const fx = new Set(OPERATORS.map(o => getSkin(`skin:${o.id}-3`)?.fx).filter(Boolean));
+  assert.equal(fx.size, OPERATORS.filter(o => getSkin(`skin:${o.id}-3`)?.fx).length, 'every Elite effect is its own');
 });
 
 test('Season 2 operators: three women, a challenge per mode, four mastery skins and a signature emote at tier 3', () => {
   const { operatorUnlock } = OPS;
   const ids = ['skylark', 'gambit', 'corvid', 'linnet', 'garrison', 'brigid'];
   const ops = ids.map(id => OPERATORS.find(o => o.id === id));
-  assert.deepEqual(OPERATOR_IDS_NOW().slice(29), ids, 'appended after the Extraction exclusives');
+  assert.deepEqual(OPERATOR_IDS_NOW().slice(29, 35), ids, 'appended after the Extraction exclusives');
   assert.equal(ops.filter(o => o.voice === 'f').length, 3);
   assert.deepEqual(ops.map(o => o.unlock.life), ['rb:top5', 'won:gf', 'zm:kills', 'ex:out', 'gw:kills', 'ranked:won'], 'Rebound, Showdown, Graveyard Shift, Extraction, Ground War, Ranked');
   const blank = { level: 1, prestige: 0, kills: 0, head: 0, long: 0, slide: 0, clean: 0, life: {} };
