@@ -310,6 +310,8 @@ export const REWARD_PATTERNS = {
     for (let k = 0; k < 4; k++) s += path(`M${114 + k * 44} 30 Q${132 + k * 44} 14 ${150 + k * 44} 30`, c[2], 0.8, op('.6'));
     for (let i = 0; i < 18; i++) s += rect(100 + r() * 180, 56 - Math.floor(r() * 3) * 5, 9, 4.6, ['#d04a3a', '#2f7aa8', '#e0b030', '#3e9a6a'][i % 4], op('.9'));
     for (let k = 0; k < 4; k++) { const x = 122 + k * 44; s += circ(x + 10, 13 + (k % 2) * 3, 1.8, c[2]) + poly([[x + 8, 13 + (k % 2) * 3], [x + 4, 11 + (k % 2) * 3], [x + 9, 12 + (k % 2) * 3]], c[2]); }
+    return s;
+  },
   serai(c, r) {            // Caravanserai: the inn's crenellated wall and arched gate, the well house's dome behind, a lantern.
     let s = circ(272, 20, 16, c[3], op('.14')) + circ(272, 20, 7, c[3], op('.3'));
     s += fillPath('M196 40 Q196 24 212 22 Q228 24 228 40 Z', c[2], op('.7')) + rect(210.6, 14, 2.8, 8, c[3]);

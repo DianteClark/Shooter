@@ -258,7 +258,7 @@ wading water as `shallows`), so the streamer draws beaches, banks and the shallo
 - `js/shared/maps/fishmarket.js`, `shipyard.js`, `boardwalk.js`, `stiltrow.js`: the districts (appended to `MAPS`).
 - `js/shared/maps/br-kittiwake.js`: the bay. `districts`, `br` (18 places, loot, caches, `circleBias`,
   `reboundAreas`, `exfils` with reserved landing zones), `bf` (Conquest "Kittiwake: Harbour", six flags: Fish
-  Market, Shipyard, The Causeway, Boardwalk, The Cannery, Stilt Row; Breakthrough "Kittiwake: Harbour Road", west to
+  Market, Shipyard, Swing Bridge, Boardwalk, The Cannery, Stilt Row; Breakthrough "Kittiwake: Harbour Road", west to
   east, one sector per place: Fish Market, Shipyard, The Cannery).
 - `js/render/themes/shore.js` (new): `THEMES.shore` (`giant: true`), ground, zones, roads, building styles, the `shore`
   skin's drawers for every piece the bay uses (market hall columns and counters, sheds, ice house, smokehouse, net

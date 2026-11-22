@@ -468,14 +468,16 @@ function build() {
   const reboundAreas = [{ x: 210, z: 190, r: 150 }, { x: 236, z: 176, r: 150 }, { x: 200, z: 160, r: 150 }, { x: 226, z: 214, r: 150 }];
 
   // Conquest and Breakthrough (docs/MODES.md "Layout format"): the harbour, the bay and the spit; Harbour Road west to
-  // east. Every point is moved onto dry open ground round its place.
+  // east. Every point is moved onto dry open ground round its place. Each side has two flags near its HQ (the Fish
+  // Market and the Swing Bridge; the Cannery and Stilt Row): with the Causeway in place of the Swing Bridge the east
+  // side held two flags to the west's one from the opening and won every bot match.
   const pt = (x, z, extra = {}) => ({ ...spot(x, z), ...extra });
   const bf = {
     conquest: [{
       id: 'harbour', name: 'Kittiwake: Harbour', area: { x: 14, z: 120, w: 372, h: 210 },
       hq: [pt(28, 176, { r: 10 }), pt(370, 176, { r: 10 })],
       flags: [
-        pt(80, 176, { id: 'A', name: 'Fish Market' }), pt(200, 176, { id: 'B', name: 'Shipyard' }), pt(130, 250, { id: 'C', name: 'The Causeway' }),
+        pt(80, 176, { id: 'A', name: 'Fish Market' }), pt(200, 176, { id: 'B', name: 'Shipyard' }), pt(64, 130, { id: 'C', name: 'Swing Bridge' }),
         pt(190, 300, { id: 'D', name: 'Boardwalk' }), pt(290, 176, { id: 'E', name: 'The Cannery' }), pt(302, 245, { id: 'F', name: 'Stilt Row' }),
       ],
     }],
