@@ -471,7 +471,7 @@ test('every new calling card and feat emblem reads a stat the game counts, in it
     // Campaign tallies (cp:) come from a mission cleared, paid by js/game/awards.js: dev/sim-campaign.mjs plays them.
     if (e.rule.life && !FEAT_RARE.has(e.rule.life) && !e.rule.life.startsWith('ex:') && !e.rule.life.startsWith('cp:')) out.push(...lifeReach(e.rule.life).map(x => `${e.id}: ${x}`));
   }
-  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 15, 'fifteen feat emblems (Last Bell: the Barker on Wrenfield Fair; Nightrail: the campaign on Veteran)');
+  assert.equal(ALL_EMBLEMS.filter(e => e.feat).length, 17, 'seventeen feat emblems (Last Bell: the Barker on Wrenfield Fair; Nightrail: the campaign on Veteran; Starfall: the second operation on Veteran; Drowned Bell: the Ferryman on Saltmere Abbey)');
   assert.deepEqual(out, []);
 });
 

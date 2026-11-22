@@ -5,7 +5,10 @@
 //   hazards    the boss's barrage rings (a red ring with a disc filling as it lands) and his charge line
 //   torches    each stealth watchman's torch as a soft fan on the ground ahead of him, hotter as his meter fills
 //   boss       Marshal Kordell's crown: a gold crest turning over his head, a crimson beam on him and a crimson ring
-//              breathing on the ground round him (with the gilded suit and his bigger build in combat.js and characters.js)
+//              breathing on the ground round him (with the gilded suit and his bigger build in combat.js and characters.js);
+//              a mission's own boss (Operation Starfall's Vane) wears its crest in its own colour
+//   night      a night mission (Operation Starfall's Dark Sky): a dark wash over everything past a few metres of the
+//              local player, lifted while a flare burns (the flare itself a white light hanging over the field)
 // A handful of meshes and instanced lists: a few draw calls whatever the mission holds.
 import * as THREE from 'three';
 import { CP } from '../shared/campaign.js';
@@ -26,6 +29,27 @@ function mergeAll(geos) {
 }
 
 function noFog(root) { root.traverse(o => { if (o.material) o.material.fog = false; }); return root; }
+
+// The night's dark: rings of radius 0, r-4, r-1.5, r+1.5 and 100 m, clear inside and near black past r+1.5 (as
+// js/render/zm-kinds-fx.js's fog round, a cold blue-black).
+const NIGHT_R = 11;
+function darkDisc(r) {
+  const radii = [0.01, r - 4, r - 1.5, r + 1.5, 100], alpha = [0, 0, 0.5, 0.94, 0.94], seg = 32, pos = [], col = [], idx = [];
+  for (let i = 0; i < radii.length; i++) for (let k = 0; k < seg; k++) {
+    const a = k / seg * Math.PI * 2;
+    pos.push(Math.cos(a) * radii[i], 0, Math.sin(a) * radii[i]);
+    col.push(0.02, 0.03, 0.06, alpha[i]);
+  }
+  for (let i = 0; i + 1 < radii.length; i++) for (let k = 0; k < seg; k++) {
+    const a = i * seg + k, b = i * seg + (k + 1) % seg, c = a + seg, d = b + seg;
+    idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+  g.setIndex(idx);
+  return g;
+}
 
 export class CpFx {
   constructor(scene, map) {
@@ -73,6 +97,13 @@ export class CpFx {
     this.crest = new THREE.Mesh(mergeAll(crown), new THREE.MeshBasicMaterial({ color: 0xffc23a, side: THREE.DoubleSide }));
     this.crest.visible = false; this.crest.renderOrder = 4;
     this.group.add(this.crest);
+    // The night's dark and a flare's light.
+    this.dark = new THREE.Mesh(darkDisc(NIGHT_R), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    this.dark.position.y = 2.7; this.dark.renderOrder = 999; this.dark.frustumCulled = false; this.dark.visible = false;
+    this.flare = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2d8 }));
+    this.flare.visible = false; this.flare.renderOrder = 4;
+    this.group.add(this.dark, this.flare);
+    this.darkK = 0;
     noFog(this.group);
   }
 
@@ -134,8 +165,18 @@ export class CpFx {
         this.#put(this.lines, nl++, (h.x + h.x2) / 2, 0.07, (h.z + h.z2) / 2, L, 1, h.r * 2, C.set(RED).multiplyScalar(0.5 + 0.5 * k).getHex(), -Math.atan2(dz, dx));
       }
     }
-    // The boss: crimson ring at his feet, the crest over his head.
+    // The night: dark round the local player (or whoever they watch) unless a flare is up.
+    const me = view.players.find(p => p.id === view.localId);
+    const lit = cp.flareT > 0;
+    this.darkK += ((cp.night && me && cp.state !== 'complete' ? (lit ? 0.12 : 1) : 0) - this.darkK) * Math.min(1, dt * (lit ? 4 : 1.2));
+    this.dark.visible = this.darkK > 0.01;
+    if (this.dark.visible && me) { this.dark.position.x = me.x; this.dark.position.z = me.z; this.dark.material.opacity = this.darkK; }
+    this.flare.visible = lit && !!cp.at;
+    if (this.flare.visible) { this.flare.position.set(cp.at.x + Math.sin(t * 0.7) * 2, 9 + (cp.flareT / CP.flare) * 4, cp.at.z - 3); this.flare.scale.setScalar(0.8 + 0.3 * Math.sin(t * 23)); }
+    // The boss: crimson ring at his feet, the crest over his head (in the mission's own colour when it has one).
     this.crest.visible = false;
+    const crest = cp.mission?.boss?.crest;
+    if (this.crest.material.color.getHex() !== (crest ?? 0xffc23a)) this.crest.material.color.setHex(crest ?? 0xffc23a);
     if (cp.boss) {
       for (const p of view.players) {
         if (p.cpRole !== BOSS_ROLE || !p.alive) continue;

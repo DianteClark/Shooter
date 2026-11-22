@@ -2,8 +2,8 @@
 
 Our own co-op wave survival: up to four players (friends from the lobby, bot teammates in every empty seat) hold off a
 horde round after round on Night Market (`neon`), Ruins (`ruins`), Foundry (`foundry`), Ashgrove Halt (`ashgrove`),
-Polestar Relay (`polestar`) and Wrenfield Fair (`wrenfield`), the last three built for the mode (see "Ashgrove Halt",
-"Polestar Relay" and "Wrenfield Fair" below). Everyone starts with a
+Polestar Relay (`polestar`), Wrenfield Fair (`wrenfield`) and Saltmere Abbey (`saltmere`), the last four built for the
+mode (see "Ashgrove Halt", "Polestar Relay", "Wrenfield Fair" and "Saltmere Abbey" below). Everyone starts with a
 pistol and the blade; points from hits and kills buy guns off the walls, the mystery crate, gates into the rest of the
 map, six perk machines and the late-game economy (the upgrade bench, the supply terminal, armour plates, traps, the exfil
 and a hidden quest: "Economy" below). The match ends when nobody is left up, or when the crew gets out. All names are our
@@ -11,7 +11,7 @@ own.
 
 | id | name | players | maps |
 |---|---|---|---|
-| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove, polestar, wrenfield |
+| `zm` | Graveyard Shift | 1-4 humans, bots fill to 4, plus 24 horde seats | neon, ruins, foundry, ashgrove, polestar, wrenfield, saltmere |
 
 Rule set `zm` (`js/sim/zombies.js`, registered in `js/sim/rules.js`), numbers, formulas and layouts in
 `js/shared/zombies.js` (`ZM`), mode entry `MODES.zm` (`js/shared/modes.js`, `maps` lists where it plays).
@@ -335,6 +335,7 @@ The undead were recoloured soldiers; each kind now has a low-poly model and anim
 | Gravewarden (5) | 1.7x: a sexton's black robe to the ankles, long white hair, a spade, a lantern burning violet on its chain | a glide, the lantern swinging; the spade over the shoulder and down | violet |
 | Listener (11) | 1.8x, the thinnest: parka hood with no face but a cyan slit, the radio pack on its back, a whip aerial | stilted strides, head cocked and turning; arms spread wide, then closed | cyan |
 | Barker (12) | 1.62x: a showman in a red tailcoat whose tails flap, gold epaulettes, a peaked cap, chalk face paint, red hair, a brass speaking-trumpet | a strut, chest out; marking its lane (`zcharge`) it raises the trumpet to its mouth, then leans into the run; a backhand with the trumpet | gold |
+| Ferryman (13) | 1.75x: a drowned boatman in a long black-green oilskin hung with kelp, barnacled shoulders, a sou'wester over a bloated grey face, a punt pole upright in its fist, a ship's hand-bell on a chain | a glide with the pole planted ahead and the bell swinging; diving (`zdive`) it sinks arms raised, nothing shows while it crosses, then it bursts up; the pole over its head and down | sea-green |
 
 - **Rising**: a zombie that comes up claws out of the ground: hands first, then the head, then it hauls itself out
   (about a second; bosses 1.6 s), throwing dirt and leaving a dark ring. Not for a horde already up when a phone joins.
@@ -671,6 +672,80 @@ light the lanterns in order; a saw in the second slot cools); the Wrenfield part
 LANTERN and 1/4 with the burn, a wrong one's banner, RING THE BELL, the Barker's bar and its lane, the crate's Whirligig
 fired into a crowd that is dragged in); its messages part fires the lantern and Barker lines too.
 
+## Saltmere Abbey (build NEXT, ROADMAP item 69)
+A drowned abbey town on the salt marsh, the night the spring tide came over the sea wall and stayed:
+`js/shared/maps/saltmere.js` (medium, 80 x 52, region coast), theme `js/render/themes/saltmere.js`. Our own place and
+names. Built for Graveyard Shift alone like the other three (`hidden`, `modes: []`, `zmOnly`; `MODES.zm.maps` lists it,
+appended to `MAPS` after `pagoda`). Where Ashgrove is amber lamplight and fog, Polestar blue snow and aurora and
+Wrenfield a violet night of coloured bulbs, Saltmere is sea-green and black water: a cold drizzle with rings on the
+flood, brine standing in the streets (dark teal pools that catch the light), wet cobbles and rubble stone with weed at
+the tide mark, candle amber in the windows, ship's lanterns on the quay and the abbey's rose window in ruby and
+sapphire. The roofless nave's piers, the abbey's north wall to the clerestory and its east gable stand round the boss
+arena; the harbour and sunken masts lie beyond the sea wall.
+
+| area | id | where | what is there |
+|---|---|---|---|
+| Fish Quay (start) | `quay` | south-centre | the fish market hall, the harbour office (Mercy Run), a fishing smack fetched up by the flood; SMG and shotgun, the supply terminal |
+| Market Row | `market` | south-west | shops on a flooded street (the baker's: the armour bench; the draper's: Fleetfoot), the market cross, the chandlery (a dead end: crate spot, font 1); AR, DMR |
+| The Cloister | `cloister` | north-west | the lavabo in the garth (Quickdraw), the walk's piers, the chapter house (a dead end: crate spot, font 2); PDW, heavy SMG |
+| Cathedral Close | `close` | north | the west front with its rose window (the upgrade bench at the tower's foot), a fallen saint; auto shotgun, battle rifle; a trap at the Cloister gate |
+| The Pump House (power) | `pump` | centre | the engine house with the switch (Hammerfall on its front), two marsh pumps; heavy AR; a trap at the Market Row gate. Walled in, reached from Market Row or the Nave |
+| The Drowned Nave (boss arena) | `nave` | north-east | two rows of piers down the aisles, the high altar, a fallen pier, the bell tower (the bell rope: the quest's end), a crate spot; LMG, saw, Last Breath; 578 m2 |
+| Lifeboat Slip | `slip` | south-east | the lifeboat house (Ironhide), the hard (the exfil), the slipway (a dead end: crate spot, font 3); carbine, Clatter; a trap at the Nave gate |
+
+Gates as on Wrenfield's frame: Quay-Market 750, Quay-Slip 750, Market-Cloister 1000, Market-Pump 1250, Slip-Nave 1500,
+Nave-Pump 1250, Cloister-Close 1250, Close-Nave 1500. One loop (Quay, Market Row, the Cloister, the Close, the Nave, the
+Slip, back to the Quay), the Pump House (the power) off Market Row and the Nave, never the start. Spawn windows: six per
+area. The boss rounds' Yardmaster and the quest's Ferryman rise in the Nave when it is open.
+
+**The quest: the fonts** (`map.zm.quest = { kind: 'font', bell, fonts }`; graphLayout puts the fonts and the bell in the
+relics' and the altar's slots and sets `L.questKind = 'font'`; the host side is js/sim/zm-abbey.js). Different from the
+other three: the crew's own kills are the steps. A font is dry until the power runs the pumps ("DRY FONT, No power: the
+pumps are still"); FILL THE FONT (free) wakes it, and every zombie killed within `ZE.quest.fontR` = 6.5 m of a woken
+font is a soul in it (`zsoul`: a pale streak from the kill to the bowl), `ZE.quest.souls` = 12 fill it. A woken font
+left `ZE.quest.thirst` = 25 s without a kill loses a soul every `ZE.quest.drain` = 4 s ("The font is thirsty"). The
+round plate counts "Fonts n/3 · souls/12" while one drinks. Three full, TOLL THE BELL on the tower's west face.
+
+**The Ferryman** answers (`ZK.ferryman` = 12, view zk 13; its body in js/render/zm-models.js, see "Bodies"; the old
+operator-kit look is slot 12 of js/render/zm-looks.js): 50x a round's health (+10% per crew seat), slow, a long reach, and
+it fights from under the water (`ZM_FERRY`): every 10 s, with one of the crew up within 22 m (the nearest more than 3 m
+off, else the nearest), it **sinks** (0.6 s, untouchable from the moment it goes down: `zUnderT`, damage is refused),
+**crosses under the flood** to where they stood and **comes up beneath them** 1.7 s after it went down: a whirlpool
+ring of 3.2 m marks the spot the whole time (`zdive`: three rings, one closing in), then 60 (grown with the round like a
+claw) to anyone still inside (`zfx` `surface`). Up again it stands 0.8 s. Every 14 s it calls three shamblers out of the
+water, never more than six of its callers up. Bots step out of the ring (js/sim/zm-kinds.js `dodge`, from
+`ZmEcon.laneDodge`). Putting it down pays 3000 each and 1500 XP ("Ferryman put down"), the **Last Crossing** calling card
+(appended to `CARDS`) and the **Drowned Bell** feat emblem (appended to the feat rows; `save.zmFeats.saltmere[1]`, the
+Ferryman's flag: `ZM_FERRYMAN_MAPS`, so it does not count for Lantern Out). The fonts (filled bits and souls) and the
+Ferryman's bar ride the wire and a host migration (a dive under way is dropped; the new host's next comes on its clock).
+The round-15 card is **Spring Tide**; the map cards are High Water (pattern `tide`).
+
+**Bots** throw the power (solo, from round 3, buying the gates on the way), then the last bot up fills a font when it
+is safe (the nearest open one, one at a time, buying the gates to a shut one while keeping 1500 back) and **holds by it
+while it drinks**, fighting there whatever comes (the kills that come to it feed the font). The bell is left to a
+person; with no person in the crew a bot tolls it from round 8.
+
+**Music**: Saltmere plays its own Graveyard Shift theme, "High Water" (js/audio/music-themes.js `zmtide`, picked by the
+map: `ZM_MAP_MOOD`): a slow swell in A minor with surf, the tower bell on the one and a sea-shanty gone sour on the
+music box, climbing with the rounds like Night Shift (heartbeat, then a creaking tremolo and slow drum, then the shanty on
+the lead over a march); boss rounds switch to The Warden as everywhere.
+
+**Art and budget**: the world's 3 draw calls as on the other three; 20 ship's lanterns, the candles on the nave's piers
+and the altar, the fonts' cold glow and the rose window's ruby and sapphire baked into the lamp pools. The fonts' water,
+wisps and the bell rope's three lamps ride the economy's relic instances; the dive rings, surfacing and souls are the
+shared vfx (no new draw calls).
+
+**Pacing and difficulty**: the same rounds, mix and late escalation as the others (`ZM_LATE`), so a good run should end
+in the same rounds 16-20 band; the quest asks a crew to fight in a dead end three times (the fonts), the Ferryman's dive
+punishes standing still. A 300 s bot crew (dev/map-validate.mjs saltmere): round 7, power on.
+
+**Tests**: `node dev/map-validate.mjs saltmere`; the `saltmere` section of dev/sim-zombies.mjs (layout, loop, dead ends;
+the fonts dry without the power, filled, a kill beside one feeds it and one away does not, thirst, full at its count, the
+bell waits for three; the Ferryman rises up the Nave, its bar, the dive: for the nearest, untouchable under, up beneath
+them hurting only those in the ring; bots step out; the drowned at its call; pays everyone, off the count; the fonts and
+the Ferryman on a guest and through a migration; bots throw the power, fill a font and hold by it; the card, emblem and
+map cards); the Saltmere part of dev/ui-zombies-test.py (`ZM_ONLY=saltmere`).
+
 ## Wonder weapons (build NEXT)
 Three crate-only specials on every Graveyard Shift map (`ZM_WONDERS` in js/shared/zombies.js). A crate roll offers one 8%
 of the time (`ZM_WONDER_ROLL`; never one you hold); no wall sells them and the bench will not take them ("Wonders stay as
@@ -701,7 +776,7 @@ dragging a crowd in but not one out of its reach nor a boss, and its burst).
 - The economy on the banded maps sits where the placement rules put it; a hand-placed pass (like Ashgrove's) would read
   better on Foundry, whose deepest bands are big.
 - A new banded map needs a `ZM_MAPS` entry (cuts, door z, start band); a new built map a `map.zm` block (see Ashgrove,
-  Polestar and Wrenfield) and a pass of the layout tests.
+  Polestar, Wrenfield and Saltmere) and a pass of the layout tests.
 
 Ally pay (1119-7): ally bots in a crew with a human earn `ALLY_PAY` (1.75x) points per kill (js/sim/zombies.js `_pay`); humans unchanged. Bot crews
 (dev/sim-zm-allies.mjs, 9 runs): mean round reached 9.8 -> 12.4, ally downs per round 0.32, human revived by allies 1.3 a run.

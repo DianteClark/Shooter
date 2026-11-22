@@ -18,7 +18,8 @@ the use button (TUNING n%, the Radios count), the console, and the crate handing
 weapon panel) fired into a crowd. Then Wrenfield Fair at 932x430: the Oracle dark, the power, the Oracle asked (the
 order on the round plate), a lantern lit and a wrong one snuffing them, the bell rung, the Barker's bar and marked lane,
 and the crate's Whirligig fired into a crowd (the whirl drags it in). ZM_SIZE=WxH runs one size of the first part;
-ZM_ONLY=ashgrove, polestar, wrenfield or ZM_ONLY=econ runs only that part.
+ZM_ONLY=ashgrove, polestar, wrenfield, saltmere or ZM_ONLY=econ runs only that part. Saltmere Abbey at 932x430: a dry
+font, the power, a font filled and fed (Fonts 0/3 · 5/12), the bell tolled, the Ferryman's bar, dive and surfacing.
 Last, every Graveyard Shift message (hints, feed notes, banners, the use button's lines) is fired through the real layer
 at 640x360 to 956x440 and must read whole: nothing cut, clamped or off screen (ZM_ONLY=messages runs only that).
 """
@@ -88,7 +89,7 @@ async def run(browser, vw, vh, failures, errors):
     mode = await ev(f'{G}.match.mode')
     if mode != 'zm': failures.append(f'{tag}: match mode {mode}')
     mapId = await ev(f'{G}.match.mapId')
-    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove', 'polestar', 'wrenfield'): failures.append(f'{tag}: zombies on {mapId}')
+    if mapId not in ('neon', 'ruins', 'foundry', 'ashgrove', 'polestar', 'wrenfield', 'saltmere'): failures.append(f'{tag}: zombies on {mapId}')
     await pg.wait_for_function(f'{G}.match.interp.newest.phase === "live"', timeout=30000)
     # Nobody on the crew dies by accident while the test drives (spawn protection holds the claws off).
     await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200); }})()""")
@@ -572,6 +573,111 @@ async def run_wrenfield(browser, vw, vh, failures, errors):
     await ctx.close()
 
 
+async def run_saltmere(browser, vw, vh, failures, errors):
+    """Saltmere Abbey (docs/ZOMBIES.md "Saltmere Abbey") at 932x430: the match starts on it with the power out, a font
+    dry, the switch in the Pump House through the use button, a font filled (FILL THE FONT), the drowned killed beside it
+    feeding it (the round plate's Fonts count and souls), all three full, the bell tolled (TOLL THE BELL), the Ferryman's
+    bar, its dive (the ring where it comes up, then the surfacing), and a look at the nave and the quay."""
+    ctx = await browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True, is_mobile=True)
+    pg = await ctx.new_page()
+    pg.set_default_timeout(90000)
+    pg.on('console', lambda m: errors.append(f'salt {vw}: {m.text}') if m.type == 'error' else None)
+    pg.on('pageerror', lambda e: errors.append(f'salt {vw}: PAGEERR {e} {getattr(e, "stack", "")}'))
+    tag = f'saltmere {vw}x{vh}'
+    async def shot(name):
+        print(f'  {tag} {name}', flush=True)
+        await pg.screenshot(path=f'{OUT}/salt-{name}-{vw}x{vh}.png')
+    ev = lambda js: pg.evaluate(js)
+    use_t = "document.querySelector('.zm-use:not([hidden]) .t')?.textContent"
+    chip = "(() => { const n = document.querySelector('.zm-relic'); return n && !n.hidden ? n.textContent : null; })()"
+    await pg.goto(f'http://localhost:{PORT}/?debug=1&map=saltmere&mode=zm', timeout=120000)
+    await pg.wait_for_timeout(900)
+    await ev("window.__game.Progress.name='Tester'; window.__game.Progress.setFlag('tutorialOffered')")
+    await pg.reload()
+    await pg.wait_for_timeout(1200)
+    await pg.locator('[data-act="custom"]').first.click()
+    await pg.wait_for_function(f'{G}.match?.interp.newest?.phase === "live"', timeout=90000)
+    mapId, mode = await ev(f'[{G}.match.mapId, {G}.match.mode]')
+    if (mapId, mode) != ('saltmere', 'zm'): failures.append(f'{tag}: match on {mapId} / {mode}')
+    await ev(f"""(() => {{ const sim = {G}.match.sim; window.__shield = setInterval(() => {{ for (const p of sim.players) if (p.team === 0) p.spawnProtect = 99; }}, 200);
+      for (const p of sim.rules.crew) if (p.bot) {{ p.bot.update = () => []; }} sim.rules.plan = () => {{}}; sim.rules._crewPlan = null; }})()""")
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.round === 1 && {G}.match.sim.rules.horde.some(p => p.alive)", timeout=150000)
+    except Exception:
+        await shot('00-stuck')
+        failures.append(f'{tag}: round 1 never started: ' + str(await ev(f"[{G}.match.sim.rules.round, {G}.match.sim.rules.state, {G}.match.sim.phase, {G}.match.sim.rules.horde.filter(p => p.alive).length]")))
+    await pg.wait_for_timeout(2500)
+    await shot('01-round1-quay')
+    await check_fit(pg, ['.zm-top', '.zm-crew', '.minimap'], f'{tag} hud', failures)
+    if await ev(f'{G}.match.sim.rules.power') != 0: failures.append(f'{tag}: the power is not off at the start')
+    # Every gate open (on the host), points to spend; a font first: dry with the power out.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, L = R.L, me = m.sim.byId.get(m.localId); me.zm.pts = 30000;
+      for (const d of L.doors) R._use(me, {{ kind: 'door', i: d.i, cost: 0, ok: true }});
+      const f = L.relics[0]; m.ps.x = f.x; m.ps.z = f.z; m.ps.vx = 0; m.ps.vz = 0; }})()""")
+    try: await pg.wait_for_function(f"{use_t} === 'DRY FONT'", timeout=30000)
+    except Exception: failures.append(f'{tag}: no DRY FONT prompt with the power out: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(900)
+    await shot('02-font-dry')
+    # The switch in the Pump House, through the use button.
+    await ev(f"(() => {{ const m = {G}.match, L = m.sim.rules.L; m.ps.x = L.power.x; m.ps.z = L.power.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'TURN ON THE POWER'", timeout=30000)
+    except Exception: failures.append(f'{tag}: no TURN ON THE POWER prompt: ' + str(await ev(use_t)))
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.power === 1", timeout=18000)
+    except Exception: failures.append(f'{tag}: the switch did not turn the power on')
+    await pg.wait_for_timeout(900)
+    await shot('03-power-on')
+    # The font, filled through the use button; the drowned killed beside it feed it.
+    await ev(f"(() => {{ const m = {G}.match, f = m.sim.rules.L.relics[0]; m.ps.x = f.x + 0.3; m.ps.z = f.z - 0.3; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'FILL THE FONT'", timeout=30000)
+    except Exception: failures.append(f'{tag}: no FILL THE FONT prompt: ' + str(await ev(use_t)))
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.woke === 1", timeout=18000)
+    except Exception: failures.append(f'{tag}: the font was not filled')
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, f = R.L.relics[0], me = m.sim.byId.get(m.localId);
+      for (let k = 0; k < 5; k++) {{ const s = R.horde.find(q => !q.alive && (q.zFree ?? 0) <= m.sim.time) ?? R.horde.find(q => !q.alive); R._raise(s, 0, {{ x: f.x + 2 + (k % 2), z: f.z - 2 - (k % 3) * 0.6 }}); m.sim._damage(s, me, s.hp + 10, 'ar', 3); }} }})()""")
+    try: await pg.wait_for_function(f"/^0\\/3 . 5\\/12/.test({chip} ?? '')", timeout=15000)
+    except Exception: failures.append(f'{tag}: the round plate does not show the souls 5/12: ' + str(await ev(chip)))
+    await pg.wait_for_timeout(700)
+    await shot('04-font-drinks')
+    # All three full (on the host), then the bell: the Ferryman rises up the nave, its bar, its dive.
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, q = R.econ.quest; for (const h of R.horde) if (h.alive) {{ h.alive = false; h.zFree = 0; }}
+      q.woke = 0; q.got = 7; q.souls = [12, 12, 12]; }})()""")
+    await ev(f"(() => {{ const m = {G}.match, A = m.sim.rules.L.altar; m.ps.x = A.x; m.ps.z = A.z; m.ps.vx = 0; m.ps.vz = 0; }})()")
+    try: await pg.wait_for_function(f"{use_t} === 'TOLL THE BELL'", timeout=30000)
+    except Exception: failures.append(f'{tag}: no TOLL THE BELL prompt: ' + str(await ev(use_t)))
+    await pg.wait_for_timeout(900)
+    await shot('05-bell')
+    await pg.locator('.zm-use').first.click()
+    try: await pg.wait_for_function(f"(() => {{ const E = {G}.match.sim.rules.econ; return E.wardenSeat >= 0 && {G}.match.sim.players[E.wardenSeat].alive; }})()", timeout=24000)
+    except Exception: failures.append(f'{tag}: the Ferryman never rose')
+    try: await pg.wait_for_function("(() => { const b = document.querySelector('.zm-boss'); return b && !b.hidden && /Ferryman/.test(b.textContent); })()", timeout=12000)
+    except Exception: failures.append(f'{tag}: no Ferryman boss bar')
+    await pg.wait_for_timeout(3500)
+    await ev(f"""(() => {{ const m = {G}.match, R = m.sim.rules, E = R.econ, w = m.sim.players[E.wardenSeat];
+      w.ps.x = 63; w.ps.z = 9; m.ps.x = 70; m.ps.z = 14; m.ps.vx = 0; m.ps.vz = 0; E.quest.callT = 999; w.zHoldT = 0; E.quest.dive = null; E.quest.diveT = 1.2; }})()""")
+    await pg.wait_for_timeout(1500)
+    await shot('06-ferryman')
+    try: await pg.wait_for_function(f"!!{G}.match.sim.rules.econ.quest.dive", timeout=18000)
+    except Exception: failures.append(f'{tag}: the Ferryman did not dive')
+    await pg.wait_for_timeout(700)
+    await shot('07-dive-ring')
+    await pg.wait_for_timeout(1300)
+    await shot('08-surfaced')
+    await ev(f"(() => {{ const m = {G}.match, E = m.sim.rules.econ, w = m.sim.players[E.wardenSeat]; if (w?.alive) {{ w.zUnderT = 0; m.sim._damage(w, m.sim.byId.get(m.localId), w.hp + 10, 'ar', 5); }} }})()")
+    try: await pg.wait_for_function(f"{G}.match.sim.rules.econ.quest.state === 2", timeout=18000)
+    except Exception: failures.append(f'{tag}: the Ferryman never went down')
+    await pg.wait_for_timeout(800)
+    await shot('09-ferryman-down')
+    # A look round: the Close and its west front, the Cloister.
+    for name, (x, z) in [('10-close', (40, 10)), ('11-cloister', (14, 22))]:
+        await ev(f"(() => {{ const m = {G}.match; m.ps.x = {x}; m.ps.z = {z}; m.ps.vx = 0; m.ps.vz = 0; }})()")
+        await pg.wait_for_timeout(1400)
+        await shot(name)
+    await check_fit(pg, ['.zm-top', '.zm-use', '.zm-boss'], f'{tag} hud', failures)
+    await ev('clearInterval(window.__shield)')
+    await ctx.close()
+
+
 async def run_econ(browser, vw, vh, failures, errors):
     """The economy (ROADMAP item 36) on Ashgrove Halt: upgrade a gun at the bench, buy from the supply terminal's sheet,
     arm a trap, buy a plate, the exfil called and the quest's altar; screenshots and crops of each piece."""
@@ -929,6 +1035,9 @@ async def main():
             if os.environ.get('ZM_ONLY') in (None, '', 'wrenfield'):
                 try: await run_wrenfield(browser, 932, 430, failures, errors)
                 except Exception as e: failures.append(f'wrenfield: {type(e).__name__}: {e}')
+            if os.environ.get('ZM_ONLY') in (None, '', 'saltmere'):
+                try: await run_saltmere(browser, 932, 430, failures, errors)
+                except Exception as e: failures.append(f'saltmere: {type(e).__name__}: {e}')
             if os.environ.get('ZM_ONLY') in (None, '', 'messages'):
                 try: await run_messages(browser, failures, errors)
                 except Exception as e: failures.append(f'messages: {type(e).__name__}: {e}')

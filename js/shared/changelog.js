@@ -4,6 +4,16 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Graveyard Shift: Saltmere Abbey, and Operation Starfall',
+    items: [
+      'Graveyard Shift has a fourth map built for it: Saltmere Abbey, a drowned abbey town on the salt marsh where the tide came in one night and never went out. Brine in the streets, candles in the windows, the abbey church open to the sky. Seven areas in a loop round the marsh pumps; turn the power on to wake the perks. It has its own music.',
+      'Its own hidden quest: with the pumps running, fill the three dry fonts, then kill the drowned beside each one until it is full. Leave a font thirsty and it loses what it drank. Three full fonts, then toll the bell in the tower.',
+      'The bell calls up the Ferryman, a new boss. It sinks into the flood and comes up beneath one of you: a ring on the ground shows where. Get out of it. Put it down for the Last Crossing calling card and the Drowned Bell emblem.',
+      'Campaign: Operation Starfall, four new missions after Operation Nightrail. Hold the observatory dish through a moonless night, with flares; free Kestrel from the hillside temple before they move her; stay on a courier across Jadefall that bullets will not stop; then the final assault on the launch pad against Director Vane, before the countdown reaches zero.',
+      'Each Starfall mission has its own calling card. Clear all four on Veteran for Sparrow\'s Starfall skin and the Starfall emblem. The Campaign tab switches between the two operations.',
+    ],
+  },
+  {
     build: '1121-1', date: '2026-11-21', title: 'Fixes',
     items: [
       'Campaign: Marshal Kordell now stands out from his guard: bigger, in gilded armour with a crimson visor, a gold crest over his head and a red beam and ring on him.',

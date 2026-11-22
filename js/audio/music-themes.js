@@ -373,6 +373,11 @@ export const MISSION_MOOD = {
   6: ['cpstealth', 2],    // Kingfisher: the hunt.
   7: ['cpchase', 0],      // Dead Man's Run: the chase.
   8: ['cpaction', -1],    // Iron Crown: the boss's yard (cpboss when he is up).
+  // Operation Starfall.
+  9: ['cpstealth', -3],   // Dark Sky: the night defence (the alarm-free stealth theme at night, its drums when they come).
+  10: ['cpstealth', 1],   // Paper Lanterns: the hostage rescue.
+  11: ['cpchase', 2],     // Cold Trail: the pursuit.
+  12: ['cpaction', 1],    // Zero Hour: the final assault (cpboss when Vane is up).
 };
 const TACTICAL = new Set(['snd', 'ctl', 'gf', 'oic']);
 // Graveyard Shift maps with a theme (or a key) of their own: Saltmere Abbey has High Water.

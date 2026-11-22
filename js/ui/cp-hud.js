@@ -5,7 +5,7 @@
 // intro card, checkpoint and objective callouts, and the failed panel (the reason, the retry countdown, Retry now and
 // Abort). js/ui/hud.js makes one and forwards prepare/update/onEvent/endBanner/drawMini; on Frontier it zooms the
 // minimap round you.
-import { CP, CP_DIFFS, RADIO, missionLines, cpDecode, OPERATION } from '../shared/campaign.js';
+import { CP, CP_DIFFS, RADIO, missionLines, cpDecode, OPERATIONS } from '../shared/campaign.js';
 import { MAPS } from '../shared/map.js';
 import { objOf } from '../sim/rules.js';
 import { spectate } from '../sim/snd.js';
@@ -14,7 +14,8 @@ import { icon } from './icons.js';
 import { cpRadio } from '../audio/audio.js';
 
 const MAP_PX = 640, MINI_SPAN = 130, MARK_Y = 1.6, TAGS = 5;
-const FAIL_TEXT = { wipe: 'The squad was wiped out', vip: 'Kestrel is down', time: 'Out of time', lost: 'The position was lost', escaped: 'The target got away', abort: 'Mission aborted' };
+const FAIL_TEXT = { wipe: 'The squad was wiped out', vip: 'Kestrel is down', time: 'Out of time', lost: 'The position was lost', escaped: 'The target got away', abort: 'Mission aborted',
+  trail: 'You lost him', hostage: 'They moved Kestrel' };
 const clock = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 const CSS = `
@@ -186,11 +187,11 @@ export class CpHud {
     const c = this.c;
     if (!this.introShown && (view.phase === 'warmup' || cp.state === 'brief' || cp.t < 3)) this.#intro();
     // Chips: a timer while one runs, the stealth state on a stealth mission.
-    const timed = cp.state === 'live' && cp.timer > 0 && (cp.step?.type === 'chase' || (cp.step?.type === 'plant' && cp.step.timer && cp.prog < 1));
+    const timed = cp.state === 'live' && cp.timer > 0 && (cp.step?.type === 'chase' || (cp.step?.type === 'plant' && cp.step.timer && cp.prog < 1) || cp.hostage || (cp.step?.type === 'boss' && cp.step.timer));
     if (c.timed !== timed) { c.timed = timed; this.timerChip.hidden = !timed; }
     if (timed) {
       const t = clock(cp.timer);
-      if (c.timer !== t) { c.timer = t; this.timerEl.textContent = t; this.timerChip.classList.toggle('low', cp.timer < 15); this.timerS.textContent = cp.step.type === 'chase' ? 'To the relay' : 'To set them'; }
+      if (c.timer !== t) { c.timer = t; this.timerEl.textContent = t; this.timerChip.classList.toggle('low', cp.timer < 15); this.timerS.textContent = cp.hostage ? 'Kestrel' : cp.step.type === 'chase' ? 'To the relay' : cp.step.type === 'boss' ? 'To launch' : 'To set them'; }
     }
     const stealthy = !!this.m.stealth;
     const hide = stealthy ? (cp.alarm ? 'ALARM' : cp.stealth ? 'HIDDEN' : 'CLEAR') : '';
@@ -209,7 +210,7 @@ export class CpHud {
     this.introShown = true;
     const n = document.createElement('div');
     n.className = 'cp-intro';
-    n.innerHTML = `<small>${esc(OPERATION.name)}</small><b>${this.m.n}. ${esc(this.m.name)}</b><span>${esc(MAPS[this.m.map]?.name ?? '')} · ${esc(CP_DIFFS[this.diff].name)} · ${esc(this.m.tag)}</span>`;
+    n.innerHTML = `<small>${esc((OPERATIONS.find(o => o.id === this.m.op) ?? OPERATIONS[0]).name)}</small><b>${this.m.n}. ${esc(this.m.name)}</b><span>${esc(MAPS[this.m.map]?.name ?? '')} · ${esc(CP_DIFFS[this.diff].name)} · ${esc(this.m.tag)}</span>`;
     this.el.appendChild(n);
     setTimeout(() => n.remove(), 5600);
   }
@@ -249,7 +250,16 @@ export class CpHud {
           em = cp.ping ? far(cp.ping) : ''; break;
         }
         case 'boss': sub = cp.boss?.inv ? 'He is calling his guard' : 'Watch the ground for his barrage'; em = cp.boss ? `${Math.round(cp.boss.frac * 100)}%` : ''; k = cp.boss ? 1 - cp.boss.frac : 1; break;
+        case 'pursue': {
+          // Operation Starfall's courier: plated while he runs, lost if nobody stays near him.
+          const t = cp.target, tp = t ? view.players[t.idx] : null;
+          sub = !t ? 'Target down' : t.moving ? 'Bullets will not stop him: stay on him' : cp.prog >= 1 ? 'Cornered: put him down' : 'He will run when he sees you';
+          if (cp.lost > 0.05) { sub = `You are losing him: ${Math.round(cp.lost * 100)}%`; if (cp.lost > 0.3) cls = 'warn'; }
+          em = tp?.alive ? far(tp) : cp.ping ? far(cp.ping) : ''; break;
+        }
       }
+      // A hostage being moved (an alarm before she is free): the clock is all that matters.
+      if (cp.hostage) { sub = 'They are moving Kestrel: get to her!'; cls = 'warn'; }
     }
     const key = `${title}|${sub}|${em}|${cls}`;
     if (this.c.card !== key) { this.c.card = key; this.cardB.textContent = title; this.cardS.textContent = sub; this.cardE.textContent = em; this.card.className = `cp-card os-item ${cls}`; }
@@ -300,9 +310,9 @@ export class CpHud {
       } else if (s.type === 'chase') {
         const g = cp.route?.[cp.gate];
         if (g) n = this.#tag(n, g.x, g.z, cp.timer < 15 ? 'warn' : '', `${icon('ui:timer', { size: 12 })}Relay ${d(g)}`, eye);
-      } else if (s.type === 'kill') {
+      } else if (s.type === 'kill' || s.type === 'pursue') {
         const t = cp.target ? view.players[cp.target.idx] : null;
-        const seenNow = t?.alive && Math.hypot(t.x - eye.x, t.z - eye.z) < 30;
+        const seenNow = t?.alive && Math.hypot(t.x - eye.x, t.z - eye.z) < (s.type === 'pursue' ? 60 : 30);
         const at = seenNow ? t : cp.ping;
         if (at) n = this.#tag(n, at.x, at.z, 'hvt', `${icon('ex:hvt', { size: 12 })}${esc(t?.name ?? 'Target')} ${d(at)}`, eye);
       } else if (s.type === 'boss') {
@@ -412,9 +422,10 @@ export class CpHud {
       case 'cpfail': this.queue.length = 0; this.say = null; this.radioEl.hidden = true; break;
       case 'cpretry': this.#callout('Checkpoint', 'Back where you left off'); break;
       case 'cpwin': this.#callout('Mission complete', `${this.m.n}. ${this.m.name}`); break;
-      case 'cpalarm': this.#callout('Alarm!', 'They know you are here', true); break;
+      case 'cpalarm': this.#callout('Alarm!', this.m.hostage && !objOf(view)?.freed ? 'They are moving Kestrel: get to her!' : 'They know you are here', true); break;
+      case 'cpflare': this.#callout('Flare!', 'Everyone can see: use it', true); break;
       case 'cpplant': this.hud.notify(e.pulled ? 'They pulled a charge: set it again' : this.m.steps.find(s => s.type === 'plant')?.tap ? 'Tap in place' : 'Charge set'); break;
-      case 'cpgate': if (this.m.steps.find(s => s.type === 'chase')) this.hud.notify('Relay reached: more time'); break;
+      case 'cpgate': if (this.m.steps.find(s => s.type === 'chase')) this.hud.notify('Relay reached: more time'); else if (objOf(view)?.step?.type === 'pursue') this.hud.notify('He is still running: stay on him'); break;
       case 'cpphase': this.#callout(`Phase ${e.n + 1}`, e.n === 1 ? 'He calls his guard' : 'He charges: step aside when he lines up', true); break;
       case 'cpping': break;
       case 'down':

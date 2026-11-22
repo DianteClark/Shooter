@@ -11,6 +11,16 @@
 #ui .cpm-head { position: relative; display: flex; align-items: baseline; gap: var(--sp-3); }
 #ui .cpm-head b { font: 400 var(--fs-title)/1 var(--f-stencil); letter-spacing: var(--tr-stencil); color: #bfe6ff; text-transform: uppercase; }
 #ui .cpm-head small { font: 400 var(--fs-micro)/1 var(--f-plate); letter-spacing: var(--tr-plate); color: var(--c-haze); text-transform: uppercase; }
+/* The two operations, switched from the map's head; Starfall's map is drawn in its own violet. */
+#ui .cpm-ops { margin-left: auto; display: flex; gap: 4px; align-self: center; }
+#ui .cpm-ops .bm-seg { min-height: 30px; padding: 0 var(--sp-3); }
+#ui .cpm-ops .bm-seg .ico { height: 11px; margin-right: 4px; }
+#ui .cpm-ops .bm-seg.locked:not(.on) { opacity: .6; }
+#ui .cpm-o1 .cpm-head b { color: #d8c8ff; }
+#ui .cpm-o1 .cpm-dot { box-shadow: 0 0 0 3px #c8a8ff, 0 3px 0 rgba(0,0,0,.4); }
+#ui .cpm-o1 .cpm-st.done .cpm-dot { background: #5a3e9e; box-shadow: 0 0 0 3px #c8a8ff, 0 0 12px rgba(200,168,255,.5); }
+#ui .cpm-o1 .cpm-st.locked .cpm-dot { box-shadow: 0 0 0 3px var(--c-plate); }
+#ui .cpm-o1 .cpm-st.on .cpm-dot { box-shadow: 0 0 0 3px var(--c-sodium), 0 0 16px var(--c-sodium-glow); background: var(--c-sodium); }
 #ui .cpm-rail { position: relative; flex: 1; min-height: 120px; margin: 4px 26px 26px 18px; }
 #ui .cpm-rail svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 #ui .cpm-bed { fill: none; stroke: #2c3742; stroke-width: 3.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
