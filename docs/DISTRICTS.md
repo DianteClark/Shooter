@@ -186,7 +186,28 @@ track.
   `assets/maps/sirocco-overview.jpg`.
 
 ### Measured
-MEASURED_TABLES
+2-vCPU sandbox, busy (load 3-10 from another builder: frame and worst-tick times compare nothing; calls, triangles and
+counts are exact).
+
+| | walls | buildings | loot / caches | places | host tick mean (validator roam / sim-br quads) |
+|---|---|---|---|---|---|
+| Meridian City | 2,766 | 122 | 871 / 41 | 18 | 0.36-0.51 ms / 0.24 ms |
+| Sirocco Basin | 1,901 | 104 | 582 / 45 | 18 | 0.60 ms / 0.24 ms (duos 0.17, solos 0.19; p99 0.8-1.9 ms) |
+
+| Low, 932 x 430, on the ground after the jump (dev/ui-sweep-perf.py), same run | calls median (max) | triangles median (max) |
+|---|---|---|
+| Meridian, Midtown's boulevard (`brcity`) | 50 (55) | 41.5k (52.1k) |
+| Sirocco, the Caravanserai's courtyard (`brsirocco`) | 46 (50) | 49.5k (63.2k) |
+
+- Battle royale (sim-br, 12 matches): 12.0 min mean (10.6-12.4), 36% of deaths in the first 3 min, 8.2 squads at
+  phase 4. Rebound: quads 5.9-8.5 min, duos 5.9-8.4. Extraction (quick): quads 2/4 squads out, duos 4/8.
+- Conquest "Spice Road": with HQs at the canyon's mouth (40, 200) the west side lost both seeds (0/318, 0/179: the
+  canyon is the only way out); with the west HQ at (58, 200), the east one and flag E 8 m further out, 2 to 1 for the
+  west over three seeds, 6.8-10.8 min, 2.0-2.3 flags a side, stuck 0.01-0.07 s a bot a minute, tick 0.62-0.66 ms mean.
+- Breakthrough "Caravan Run": at 300/240 tickets the attackers won both seeds, one in 6.2 min with 475 left; at
+  260/210, 2 of 3 (6.2 and 14.0 min, 15 tickets left in the second) and one hold at sector 1. Tick 0.58-0.69 ms mean.
+- 6v6 (map-validate, 60-120 s per mode): no hard failures; Signal Ridge's control block stood on the west spawns' way
+  out (4 stuck in TDM) and moved 1.8 m east (0 after).
 
 ### Tests
 `node dev/map-validate.mjs caravanserai redgulch copperstep signalridge sirocco`; `node dev/sim-br.mjs --map=sirocco`;
