@@ -14,7 +14,7 @@ export const CHANGELOG = [
     ],
   },
   {
-    build: 'NEXT', date: '2026-11-22', title: 'Destruction',
+    build: '1122-1', date: '2026-11-22', title: 'Destruction',
     items: [
       'Maps break. Crates, stalls, tents, furniture and shop fronts splinter; windows and kiosks shatter; barriers, sandbags, sheds, huts and short walls come down. Every 6 v 6, Ground War and Battle Royale map has pieces that go.',
       'Grenades, satchels, launchers, airstrikes, mortars and missiles break what they hit. Light machine guns, marksman rifles, snipers and shotguns chew through wood, and any bullet breaks glass. Heavier walls take a rocket or a streak.',
