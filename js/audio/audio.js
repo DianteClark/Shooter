@@ -66,7 +66,7 @@ const STEP_SURFACE = {
   railyard: 'stepsGravel', frontier: 'stepsDirt', launchpad: 'stepsSand', dust: 'stepsSand', desert: 'stepsSand',
   jungle: 'stepsDirt', jadefall: 'stepsDirt', harvest: 'stepsDirt', ashgrove: 'stepsDirt', millbrook: 'stepsDirt', wrenfield: 'stepsDirt',
   arctic: 'stepsSnow', frost: 'stepsSnow', observatory: 'stepsSnow', polestar: 'stepsSnow',
-  harbor: 'stepsWood', pier: 'stepsWood', pagoda: 'stepsWood', foundry: 'stepsMetal', topside: 'stepsMetal',
+  harbor: 'stepsWood', pier: 'stepsWood', shore: 'stepsSand', pagoda: 'stepsWood', foundry: 'stepsMetal', topside: 'stepsMetal',
 };
 const WHIZ_RADIUS = 1.5;         // A round passing this close to you is heard going by.
 const OCCLUDE_RECHECK = 0.3;     // Seconds a shooter's "is there a wall between us" answer is kept.
@@ -619,7 +619,8 @@ THEME_AUDIO.saltmere = THEME_AUDIO.harbor;
 THEME_AUDIO.pier = THEME_AUDIO.harbor;
 THEME_AUDIO.sunken = THEME_AUDIO.harbor;
 THEME_AUDIO.topside = THEME_AUDIO.railyard;
-THEME_AUDIO.city = THEME_AUDIO.metro;   // Meridian City (docs/DISTRICTS.md): the metro maps' streets.
+THEME_AUDIO.city = THEME_AUDIO.metro;
+THEME_AUDIO.shore = { ...THEME_AUDIO.harbor, wash: 0.18 };   // Kittiwake Bay (docs/DISTRICTS.md): the harbour's stone, more surf.   // Meridian City (docs/DISTRICTS.md): the metro maps' streets.
 THEME_AUDIO.subway = { ir: { len: 1.1, damp: 0.45, gain: 0.36 }, slaps: [[0.04, 1], [0.09, 0.7], [0.16, 0.45]], f0: 2800, f1: 700, metal: 900, wash: 0.08 };
 const SIZE_TUNE = [{ dur: 0.14, f: 1.2, gain: 0.8 }, { dur: 0.2, f: 1, gain: 1 }, { dur: 0.3, f: 0.78, gain: 1.15 }];
 

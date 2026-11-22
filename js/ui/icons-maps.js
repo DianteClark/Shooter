@@ -34,6 +34,16 @@ export function mapIcons({ P, R, O, bar }) {
     'map:canalrow': { f: [R(1, 8, 10, 21.5), R(21, 8, 10, 21.5), R(11, 15, 10, 3)], h: [R(3, 12, 6, 3), R(23, 12, 6, 3)], a: [R(12, 21, 8, 8.5)] },
     // Union Square: the bandstand's roof on its posts among two trees.
     'map:unionsq': { f: [P(9, 12, 16, 5, 23, 12), R(10, 12, 12, 2), R(10.5, 14, 1.6, 10), R(20, 14, 1.6, 10), R(8, 24, 16, 3), O(4, 17, 3.4), O(28, 17, 3.4), R(3.2, 20, 1.6, 9.5), R(27.2, 20, 1.6, 9.5)], a: [O(16, 9.5, 1.3)] },
+    // Fish Market: the market hall's arched roof on its columns, fish boxes stacked under it.
+    'map:fishmarket': { f: [P(2, 14, 16, 4, 30, 14), R(2, 14, 28, 2.5), R(3, 16.5, 2, 12), R(27, 16.5, 2, 12), R(15, 16.5, 2, 12), R(1, 28.5, 30, 2)], a: [R(6, 23, 4, 3), R(10.5, 23, 4, 3), R(19, 23, 4, 3), R(8, 19.5, 4, 3)] },
+    // Shipyard: a hull on its blocks in the dock, the gantry over it.
+    'map:shipyard': { f: [R(3, 3, 2.4, 25), R(26.6, 3, 2.4, 25), R(3, 2, 26, 3), P(5, 18, 25, 18, 29, 23, 25, 27, 7, 27, 5, 23), R(1, 28, 30, 2.5)], h: [R(13, 5, 5, 3)], a: [R(5, 22, 24, 1.6)] },
+    // Boardwalk: the big wheel on the pier, the boards on their piles.
+    'map:boardwalk': { f: [O(16, 12, 9), R(1, 23, 30, 2.5), R(3, 25.5, 2, 5), R(14, 25.5, 2, 5), R(27, 25.5, 2, 5)], h: [O(16, 12, 6)], a: [O(16, 12, 1.6), R(15.2, 12, 1.6, 11)] },
+    // Stilt Row: a tarred hut on its stilts over the flats.
+    'map:stiltrow': { f: [P(6, 12, 16, 4, 26, 12), R(7, 12, 18, 9), R(8, 21, 1.6, 8), R(15, 21, 1.6, 8), R(22.4, 21, 1.6, 8)], h: [R(14, 14, 4, 4)], s: [P(1, 29, 6, 27.5, 11, 29, 16, 27.5, 21, 29, 26, 27.5, 31, 29)], sw: 1.6 },
+    // Kittiwake Bay: the striped lighthouse on its rock, its lamp lit, the swell.
+    'map:kittiwake': { f: [P(12, 8, 13, 26, 19, 26, 20, 8), R(11, 4, 10, 4), P(4, 30, 10, 25, 22, 25, 28, 30)], h: [R(12.6, 12, 6.8, 3), R(12.2, 19, 7.6, 3)], a: [R(13, 5, 6, 2.4), P(10, 4, 16, 0.5, 22, 4)], s: [P(1, 31, 6, 29.5, 11, 31)], sw: 1.4 },
     // Meridian City: a skyline of four districts, the El's deck across the front on its columns, a lit window.
     'map:meridian': { f: [R(1, 12, 7, 12), R(9, 5, 7, 19), R(17, 9, 6, 15), R(24, 14, 7, 10), R(1, 24, 30, 3), R(4, 27, 2, 3), R(15, 27, 2, 3), R(26, 27, 2, 3)], h: [R(3, 15, 1.6, 2), R(11, 8, 1.6, 2), R(13.5, 12, 1.6, 2), R(19, 12, 1.6, 2), R(26, 17, 1.6, 2)], a: [R(11, 16, 1.6, 2), R(19, 18, 1.6, 2), R(3, 20, 1.6, 2)] },
     // Tidebreak: a causeway on its piers over the waves, the shrine's broken arch on it.

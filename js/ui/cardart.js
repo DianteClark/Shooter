@@ -270,6 +270,48 @@ export const REWARD_PATTERNS = {
     for (let wx = 154; wx < 232; wx += 7) s += rect(wx, 51.5, 4, 3, c[3]);
     return s + circ(236, 53, 2.4, '#fff4d0') + circ(236, 53, 8, c[3], op('.2'));
   },
+  // The Coast (docs/DISTRICTS.md, appended): Kittiwake Bay and its districts.
+  seawind(c, r) {          // Kittiwake Bay: the striped lighthouse on its point, gulls on the wind, whitecaps, the pier's wheel far off.
+    let s = circ(120, 16, 11, c[2], op('.35'));
+    for (let k = 0; k < 5; k++) s += path(`M${92 + k * 3} ${56 + k * 5} q15 -4 30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0`, c[2], 0.9, op((0.6 - k * 0.1).toFixed(2)));
+    s += poly([[214, H], [226, 58], [268, 54], [296, H]], c[1]);
+    for (let k = 0; k < 6; k++) s += rect(238 - k * 0.6, 14 + k * 7, 12 + k * 1.2, 7, k % 2 ? c[3] : c[2]);
+    s += rect(236, 8, 14, 6, c[0]) + rect(238, 9, 10, 4, '#fff4c8') + poly([[235, 8], [243, 2], [251, 8]], c[3]);
+    s += path('M250 11 L300 2 L300 20 Z', '#fff4c8', 0.1, op('.25') + ' fill="#fff4c8"');
+    s += circ(150, 50, 7, 'none', ` stroke="${c[1]}" stroke-width="1.2"`) + line(150, 50, 146, 62, c[1], 1) + line(150, 50, 154, 62, c[1], 1) + rect(132, 61, 40, 1.6, c[1]);
+    for (let k = 0; k < 7; k++) { const x = 100 + r() * 180, y = 8 + r() * 36, w = 3 + r() * 3; s += path(`M${x - w} ${y} q${w / 2} -${w / 2} ${w} 0 q${w / 2} -${w / 2} ${w} 0`, c[2], 1.1); }
+    return s;
+  },
+  drydock(c, r) {          // Shipyard: a hull on its keel blocks in the dry dock, a gantry crane straddling it, sparks from a welder.
+    let s = rect(90, 66, W - 90, H - 66, c[0]) + rect(100, 64, 190, 2, c[2], op('.5'));
+    s += path('M120 58 L250 58 L272 46 L250 34 L132 34 Q120 34 120 46 Z', c[1], 0.1, ' fill="' + c[1] + '"') + rect(120, 50, 152, 3, c[3], op('.9'));
+    for (let x = 128; x < 250; x += 14) s += rect(x, 58, 6, 8, c[2], op('.7'));
+    s += rect(150, 4, 5, 62, c[3]) + rect(236, 4, 5, 62, c[3]) + rect(146, 2, 99, 6, c[3]) + rect(186, 8, 10, 6, c[2]);
+    s += line(191, 14, 191, 30, c[2], 0.6);
+    for (let i = 0; i < 14; i++) { const a = r() * 3.14, d = 3 + r() * 8; s += line(206, 34, 206 + Math.cos(a) * d, 34 - Math.sin(a) * d, '#ffe08a', 0.7, op('.8')); }
+    return s;
+  },
+  stilts(c, r) {           // Stilt Row: tarred huts on their stilts over the flats at low tide, a boat on the mud, the gulls.
+    let s = rect(90, 56, W - 90, H - 56, c[1], op('.6'));
+    for (let k = 0; k < 5; k++) s += path(`M${92 + k * 40} ${62 + (k % 3) * 5} q12 -2 24 0`, c[2], 0.9, op('.5'));
+    for (const [x, w, h] of [[118, 26, 24], [168, 20, 30], [214, 30, 22], [262, 22, 26]]) {
+      s += rect(x, 56 - h, w, h - 10, c[0]) + poly([[x - 3, 56 - h], [x + w / 2, 46 - h], [x + w + 3, 56 - h]], c[0]);
+      for (let px = x + 2; px < x + w; px += w / 3) s += rect(px, 46, 1.6, 20, c[0]);
+      s += rect(x + w / 2 - 3, 60 - h, 6, 6, c[3], op('.8'));
+    }
+    s += path('M150 68 q10 6 20 0 Z', c[2], 1, ' fill="' + c[2] + '"');
+    for (let k = 0; k < 5; k++) { const x = 110 + r() * 170, y = 6 + r() * 16; s += path(`M${x - 3} ${y} q1.5 -2 3 0 q1.5 -2 3 0`, c[2], 0.9); }
+    return s;
+  },
+  fishhall(c, r) {         // Fish Market: the iron market hall's arched roof, crates of the catch stacked below, gulls on the ridge.
+    let s = '';
+    for (let k = 0; k < 4; k++) s += path(`M${110 + k * 44} 66 L${110 + k * 44} 30 Q${132 + k * 44} 10 ${154 + k * 44} 30 L${154 + k * 44} 66`, c[3], 2.2);
+    s += rect(104, 28, 182, 2.4, c[3]) + rect(104, 64, 182, 3, c[3]);
+    for (let k = 0; k < 4; k++) s += path(`M${114 + k * 44} 30 Q${132 + k * 44} 14 ${150 + k * 44} 30`, c[2], 0.8, op('.6'));
+    for (let i = 0; i < 18; i++) s += rect(100 + r() * 180, 56 - Math.floor(r() * 3) * 5, 9, 4.6, ['#d04a3a', '#2f7aa8', '#e0b030', '#3e9a6a'][i % 4], op('.9'));
+    for (let k = 0; k < 4; k++) { const x = 122 + k * 44; s += circ(x + 10, 13 + (k % 2) * 3, 1.8, c[2]) + poly([[x + 8, 13 + (k % 2) * 3], [x + 4, 11 + (k % 2) * 3], [x + 9, 12 + (k % 2) * 3]], c[2]); }
+    return s;
+  },
   isles(c, r) {            // Jadefall: the stepped pyramid on its islet, a ring of islands round the lagoon, a jade light.
     let s = '';
     for (let k = 0; k < 4; k++) s += path(`M${96 + k * 52} ${70 + (k % 2) * 3} q13 -5 26 0 t26 0`, c[2], 1, op('.35'));

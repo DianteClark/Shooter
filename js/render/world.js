@@ -21,6 +21,7 @@ import { millbrook } from './themes/millbrook.js';
 import { launchpad } from './themes/launchpad.js';
 import { observatory } from './themes/observatory.js';
 import { pagoda } from './themes/pagoda.js';
+import * as shore from './themes/shore.js';   // Kittiwake Bay and its districts (docs/DISTRICTS.md "The Coast").
 import { BreakRanges } from './destruct-fx.js';
 
 export const MAX_POPS = 4;   // Simultaneous dynamic light pops the ground shader evaluates.
@@ -3160,6 +3161,7 @@ const DRESS = {
   launchpad: { ...RAILYARD_DRESS, ...launchpad.dress },
   observatory: { ...RAILYARD_DRESS, ...observatory.dress },
   pagoda: { ...RAILYARD_DRESS, ...pagoda.dress },
+  shore: { ...RAILYARD_DRESS, ...shore.dress },
 };
 
 const THEME_STAGES = {
@@ -3466,6 +3468,7 @@ const THUMB_STYLE = {
   frontier: frontier.thumb,
   jadefall: frontier.isleThumb,
   city: frontier.cityThumb,
+  shore: frontier.shoreThumb,
 };
 
 // What the giant-map streamer (themes/frontier.js) builds its tiles with. setPalette points the built-in drawers at a
