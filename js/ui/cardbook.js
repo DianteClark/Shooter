@@ -86,6 +86,18 @@ const MAP_ART = {
   canalrow:   ['Lock Gate', 'river', ['#0c161c', '#22404e', '#cfe8f0', '#4ad0ff']],
   unionsq:    ['Bandstand', 'crowns', ['#0e1a12', '#26442e', '#d8f0d4', '#ffd24a']],
   meridian:   ['City Lights', 'metropolis', ['#0e1220', '#2a3456', '#d8e0ff', '#ffb84a']],
+  // The second region (appended).
+  caravanserai: ['Silk Road', 'serai', ['#24120e', '#6a3424', '#f6dcc0', '#3ad0c0']],
+  redgulch:   ['Cliff Dwellers', 'gulch', ['#1e0e0a', '#6a2a1c', '#f0c8a8', '#ffb050']],
+  copperstep: ['Ore Vein', 'terraces', ['#141614', '#3e4a3e', '#d8e0cc', '#4ad89a']],
+  signalridge: ['Deep Listen', 'dishes', ['#1a1020', '#4a2e3e', '#f0dcd8', '#ff8a4a']],
+  sirocco:    ['Dust Storm', 'sirocco', ['#22100e', '#7a3a24', '#ffe0b8', '#ff7a2a']],
+  // The Coast (appended): Kittiwake Bay's districts and the bay.
+  fishmarket: ['First Catch', 'fishhall', ['#0e1a1e', '#24424a', '#e8f0ec', '#3e8a6a']],
+  shipyard:   ['Keel Laid', 'drydock', ['#12161a', '#3a4650', '#d8e0e4', '#e0a830']],
+  boardwalk:  ['Pier Lights', 'wheel', ['#14202e', '#e8e0d0', '#f4f0e4', '#e05a6a']],
+  stiltrow:   ['Low Water', 'stilts', ['#2a2622', '#7a8a84', '#eaf0ec', '#e08a3a']],
+  kittiwake:  ['Lantern Point', 'seawind', ['#16303a', '#4a6a6e', '#f2f4ee', '#d0402e']],
 };
 const MAP_WINS = 10;
 // Map cards come in three tiers (bronze, silver, gold; the gold one animated): wins on the map, or for the maps that
@@ -93,7 +105,7 @@ const MAP_WINS = 10;
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
+const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'sirocco', 'kittiwake', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },

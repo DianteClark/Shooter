@@ -109,6 +109,8 @@ function units() {
   const k = nav.nearestFree(200, 200); me.ps.x = k % nav.w + 0.5; me.ps.z = Math.floor(k / nav.w) + 0.5;
   pal.brAir = 0; pal.ps.x = me.ps.x + 4; pal.ps.z = me.ps.z;
   for (const p of sim.players) if (p !== me && p !== pal && p.alive && Math.hypot(p.ps.x - me.ps.x, p.ps.z - me.ps.z) < 60) { p.ps.x = 5; p.ps.z = 5; }
+  // Nothing of the map's own loot under my feet (on a region the spot can be inside a building with floor loot).
+  for (const it of sim.br.items) if (it && Math.hypot(it.x - me.ps.x, it.z - me.ps.z) < 4) sim.br._removeItem(it);
   const plate = sim.br._addItem({ kind: BR_KIND.plate, v: 0, r: 0, n: 2, x: me.ps.x, z: me.ps.z });
   const gun = sim.br._addItem({ kind: BR_KIND.gun, v: 0, r: 4, n: 1, x: me.ps.x + 0.3, z: me.ps.z, kit: {} });
   sim.drainEvents();
