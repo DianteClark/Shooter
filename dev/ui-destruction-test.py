@@ -145,7 +145,7 @@ async def play(browser, MAP, MODE, errors):
         got = await ev("""((p) => new Promise(res => { const app = window.__game.app, sim = app.match.sim, me = sim.byId.get('local');
           me.ps.lethal = 'frag'; me.ps.lethalLeft = 2;
           const cx = p.x + p.w / 2, cz = p.z + p.d / 2;
-          sim.applyCommand('local', { cmd: 'throw', slot: 'lethal', ox: me.ps.x, oz: me.ps.z, aim: Math.atan2(cz - me.ps.z, cx - me.ps.x), dist: Math.hypot(cx - me.ps.x, cz - me.ps.z) });
+          sim.applyCommand('local', { cmd: 'throw', slot: 'lethal', ox: me.ps.x, oz: me.ps.z, aim: Math.atan2(cz - me.ps.z, cx - me.ps.x), dist: Math.max(1, Math.hypot(cx - me.ps.x, cz - me.ps.z) - Math.min(p.w, p.d) / 2 - 0.6) });   // To its face: a solid piece bounces a grenade aimed at its middle.
           const t0 = performance.now(); const poll = () => { if (sim.brk.stage[p.id] > 0 || performance.now() - t0 > 6000) res(sim.brk.stage[p.id]); else setTimeout(poll, 100); }; poll(); }))""", crate)
         await pg.wait_for_timeout(400)
         await pg.screenshot(path=f'{OUT}/{TAG}{shot_i:02d}-frag-crate.png'); shot_i += 1
@@ -176,8 +176,46 @@ async def play(browser, MAP, MODE, errors):
 
     # The minimap after the breaks.
     await pg.locator('.minimap').first.screenshot(path=f'{OUT}/{TAG}{shot_i:02d}-minimap.png')
+    if MAP == 'riverbend':
+        await replay_check(pg, ev)
 
     await ctx.close()
+
+
+async def replay_check(pg, ev):
+    """One more piece down two seconds before the end, then the results' replay: scrubbed to the start it stands,
+    scrubbed to the end it is down (the replay applies each keyframe's break string exactly)."""
+    piece = await ev(PICK, [['light', 'wood'], False]) or await ev(PICK, [['light', 'heavy'], True])
+    if not piece:
+        return
+    await ev(PLACE, piece)
+    await pg.wait_for_timeout(1500)
+    await ev(BOOM, piece)
+    await pg.wait_for_timeout(2500)
+    await ev("""(() => { const s = window.__game.app.match.sim; if (s.phase !== 'ended') s._end(0); })()""")
+    await pg.wait_for_function("window.__game.menu.el.dataset.screen === 'results' && window.__game.menu.el.classList.contains('on')", timeout=120000)
+    await pg.wait_for_timeout(600)
+    await ev("document.querySelector('.res-skip:not([hidden])')?.click()")
+    await pg.wait_for_timeout(1500)
+    await ev("document.querySelector('.overlay.show [data-act=\"uxDone\"]')?.click()")
+    await pg.wait_for_timeout(400)
+    await ev("document.querySelector('[data-act=\"resReplay\"]')?.click()")
+    try: await pg.wait_for_function('!!window.__game.replay()', timeout=20000)
+    except Exception:
+        check('replay opens', False); return
+    await pg.wait_for_timeout(1500)
+    await ev("window.__game.replay().setPlaying(false)")
+    box = await pg.locator('.rp-scrub').bounding_box()
+    stage = f"(() => window.__game.replay().renderer.brkFx.ranges.stage[{piece['id']}])()"
+    await pg.mouse.click(box['x'] + 2, box['y'] + box['height'] / 2)
+    await pg.wait_for_timeout(700)
+    first = await ev(stage)
+    await pg.screenshot(path=f'{OUT}/riverbend-replay-start.png')
+    await pg.mouse.click(box['x'] + box['width'] - 2, box['y'] + box['height'] / 2)
+    await pg.wait_for_timeout(700)
+    last = await ev(stage)
+    await pg.screenshot(path=f'{OUT}/riverbend-replay-end.png')
+    check('replay: scrubbed back the piece stands, at the end it is down', first == 0 and last == 2, (first, last))
 
 
 async def main():

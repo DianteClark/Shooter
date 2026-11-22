@@ -50,7 +50,7 @@ function drawRubble(b, p, rgb) {
       turnedBox(b, q.x + s / 2 + rnd() * Math.max(0.01, q.w - s), q.h * 0.56 + s * 0.3, q.z + s / 2 + rnd() * Math.max(0.01, q.d - s), s, s * 0.7, s * 0.8, rnd() * 3);
     }
   }
-  const n = Math.max(3, Math.min(p.mat === 'glass' ? 10 : 9, Math.round(area * (p.mat === 'glass' ? 1.6 : 0.7))));   // 12 triangles each.
+  const n = Math.max(3, Math.min(p.mat === 'glass' ? 10 : 9, Math.round(p.mat === 'glass' ? area * 1.6 : Math.max(area * 0.7, Math.max(p.w, p.d) * 1.3))));   // 12 triangles each.
   for (let i = 0; i < n; i++) {
     const x = x0 + rnd() * W, z = z0 + rnd() * D, yaw = rnd() * Math.PI;
     b.setColor(i % 3 ? tint : dark);
