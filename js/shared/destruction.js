@@ -158,7 +158,7 @@ export function decodeBreak(text, n, out = new Uint8Array(n)) {
     out[at] = v & 3;
     v = 0; mul = 1;
   }
-  return out;
+  return mul === 1 ? out : null;      // A string cut in the middle of a value does not read.
 }
 
 // Applies a whole break string to the map's walls (a guest's snapshot, a replay frame). Returns how many pieces'

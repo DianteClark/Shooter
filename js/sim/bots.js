@@ -1542,7 +1542,7 @@ export class BotBrain {
       const nx = this.path[i * 2], nz = this.path[i * 2 + 1];
       walk += Math.hypot(nx - x, nz - z); x = nx; z = nz;
     }
-    if (walk < straight * 1.4 + 6) return false;
+    if (walk < straight + 5) return false;          // Only worth a grenade when the way round is a real detour.
     const piece = sim.brk.blockerOn(ps.x, ps.z, gx, gz);
     if (!piece) return false;
     const cx = piece.x + piece.w / 2, cz = piece.z + piece.d / 2, d = Math.hypot(cx - ps.x, cz - ps.z);
