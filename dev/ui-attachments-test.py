@@ -46,6 +46,13 @@ CASES = [
     # Weapons wave 4 (js/shared/weapons-w4.js): a new blade's signature, and the Slugger's.
     ('katana', 'barrel', 's_longtang', ''),
     ('bat', 'grip', 's_corkhandle', ''),
+    # Weapons wave 5 (js/shared/weapons-w5.js): every new gun with a signature tried and class parts fitted.
+    ('hipsmg', 'mag', 's_buzzspring', 'optic:pointdot,barrel:compensator,grip:wrap'),
+    ('panlmg', 'mag', 's_doublepan', 'optic:prism,barrel:heavybarrel,grip:bipod'),
+    ('autosniper', 'grip', 's_vigilbuffer', 'barrel:muzzlebrake,mag:extmag'),
+    ('flare', 'mag', 's_magnesium', 'optic:reflex,barrel:longbarrel,grip:beavertail'),
+    ('lockon', 'optic', 's_seeker', 'barrel:guiderail,mag:lightrocket,grip:thumbrest'),
+    ('lockon', 'mag', 's_thirdtube', ''),     # Mastery I: locked on a veteran save.
 ]
 
 CHECK = """() => {

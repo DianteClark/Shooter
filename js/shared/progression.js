@@ -674,7 +674,9 @@ const MASTERY_OPERATORS = [['trooper', 'Trooper'], ['wisp', 'Wisp'], ['anvil', '
   // Extraction exclusives.
   ['courier', 'Courier'], ['nightjar', 'Nightjar'],
   // Season 2 operators.
-  ['skylark', 'Skylark'], ['gambit', 'Gambit'], ['corvid', 'Corvid'], ['linnet', 'Linnet'], ['garrison', 'Garrison'], ['brigid', 'Brigid']];
+  ['skylark', 'Skylark'], ['gambit', 'Gambit'], ['corvid', 'Corvid'], ['linnet', 'Linnet'], ['garrison', 'Garrison'], ['brigid', 'Brigid'],
+  // Wave 5 operators (2026-11-22).
+  ['juniper', 'Juniper'], ['fenwick', 'Fenwick'], ['odessa', 'Odessa'], ['calder', 'Calder']];
 const OPERATOR_SIGNATURE = {
   trooper: T('multi', 15, 'Get 15 multi-kills'),
   wisp: T('slideKills', 20, 'Get 20 kills while sliding'),
@@ -711,6 +713,11 @@ const OPERATOR_SIGNATURE = {
   linnet: T('obj', 20, 'Capture, confirm, plant or defuse 20 times'),
   garrison: T('assists', 40, 'Get 40 assists'),
   brigid: T('multi', 15, 'Get 15 multi-kills'),
+  // Wave 5.
+  juniper: T('closeKills', 50, 'Get 50 kills within 8 m'),
+  fenwick: T('hurtKills', 40, 'Get 40 kills while hurt'),
+  odessa: T('multi', 15, 'Get 15 multi-kills'),
+  calder: T('long', 25, 'Get 25 longshots'),
 };
 const operatorTiers = (id, name) => [
   T('secs', 900, `Play 15 minutes as ${name}`), T('kills', 50, `Get 50 kills as ${name}`),

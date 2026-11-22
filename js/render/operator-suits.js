@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { MeshBuilder } from './meshbuild.js';
 import { ACC, KEEP, TONE, LOCKS, SUITS, tag, seg, plate } from './operator-kit.js';
+import { W5_SUITS } from './operator-suits-w5.js';     // The wave 5 operators' suits.
 
 /* ---------- Active skins ---------- */
 // skinFx(c, k, p, a) colours a fragment of gear wearing effect k (operators.js SKIN_FX): c is the lit colour, p the object
@@ -59,6 +60,11 @@ const FX_ROWS = {
   harlequin: { dir: [3.5, 3.5, 3.5], speed: 0.06, sharp: -1, band: 0.75, pal: 0, base: 0.5, gain: 1, mode: 3 },
   tracer: { dir: [-0.3, 0, 1.4], speed: 2, sharp: 8, band: 0.3, cells: [14, 0.45, 0, 0], both: 2.2, pal: 1, base: 0.8, gain: 1 },
   shockwave: { dir: [3, 0, 0], speed: 1.3, sharp: 12, band: 1.4, pal: 0, base: 0.78, gain: 1, mode: 1 },
+  // Wave 5 operators (js/ui/operators.js): a lamp's pulse, a seeker's heat swirl, oil on water, fireworks.
+  pulsar: { dir: [4, 0, 0], speed: 2.2, sharp: 20, band: 1.6, pal: 4, base: 0.7, gain: 1, mode: 1, beat: 1 },
+  plasma: { dir: [1.1, 1.7, 0.9], speed: 0.9, warp: [1.4, 9], sharp: 7, band: 1.3, pal: 2, base: 0.5, gain: 1.2, amb: 0.1 },
+  oilslick: { dir: [0.8, 2.2, 1.4], speed: 0.15, warp: [0.9, 4], sharp: 1.5, band: 1, pal: 2, base: 0.35, gain: 1, amb: 0.2 },
+  fireworks: { dir: [0, 1, 0], speed: 0, sharp: 1, band: 0.05, cells: [14, 0.3, -2.5, 0.2], cell: 1.4, pal: 2, base: 0.8, gain: 1, step: 4 },
 };
 // A beat is one pulse a second, carried as a negative gain.
 const fxRow = r => {
@@ -70,10 +76,10 @@ const ROW = 5;     // vec4s a row
 // SKIN_FX names in order (kept in step with js/ui/operators.js SKIN_FX: append only).
 const FX_ORDER = ['flame', 'frost', 'glitch', 'starfield', 'lightning', 'camo', 'lava', 'aurora', 'hex', 'void', 'sparkle', 'caustics',
   'radar', 'bubbles', 'coderain', 'embers', 'hazard', 'morse', 'heartbeat', 'thermal', 'sandstorm', 'chevron', 'ink', 'checker',
-  'clouds', 'snow', 'rays', 'scan', 'smoke', 'harlequin', 'tracer', 'shockwave'];
+  'clouds', 'snow', 'rays', 'scan', 'smoke', 'harlequin', 'tracer', 'shockwave', 'pulsar', 'plasma', 'oilslick', 'fireworks'];
 const FX_FIRST = 4;
 // The table is a uniform array, not a const one: a software renderer copies a dynamically indexed const array into
-// every fragment's own memory. 160 vec4s of the fragment budget (WebGL 2 guarantees 224).
+// every fragment's own memory. 180 vec4s of the fragment budget since wave 5 (WebGL 2 guarantees 224).
 const FXT = FX_ORDER.flatMap(n => fxRow(FX_ROWS[n]));
 export const FX_TABLE = Array.from({ length: FXT.length / 4 }, (_, i) => new THREE.Vector4(...FXT.slice(i * 4, i * 4 + 4)));
 
@@ -1618,3 +1624,4 @@ MORE_SUITS.marshal = {
 };
 
 Object.assign(SUITS, MORE_SUITS);
+Object.assign(SUITS, W5_SUITS);

@@ -154,6 +154,24 @@ export const OPERATORS = [
     bio: 'Keeps a notebook of every match she has lost and why. It gets shorter every season.',
     unlock: { life: 'ranked:won', goal: 10, label: 'Win 10 Ranked matches' }, kit: { core: 'plate', back: 'cape', extra: 'sash', gear: 'laurel', hair: 'long', face: 'plain' },
     look: { w: 0.9, h: 1.01, l: 0.88, sh: 0.9, hip: 1.02, head: 0.96, skin: 0xe8c0a0, hair: 0xc8562a, sleeve: 0x3a3a4a, trouser: 0x2c2c38 } },
+  // Wave 5 operators (2026-11-22): one challenge each, tied to the new arsenal and streaks. Never in the bot pool's
+  // picks (botpool.js POOL_ROSTER stops at Nightjar). Suits in js/render/operator-suits-w5.js.
+  { id: 'juniper', name: 'Juniper', role: 'Line flagger with a semaphore pole', voice: F,
+    bio: 'Waved trains through the junction for six years. Now she waves the squad through, and a flare pistol tells everyone where the enemy went.',
+    unlock: { life: 'hipKills', goal: 150, label: 'Get 150 kills from the hip' }, kit: { core: 'light', back: 'signalpole', extra: 'armband', gear: 'backcap', hair: 'pony', face: 'goggles' },
+    look: { w: 0.88, h: 0.97, l: 0.86, sh: 0.88, hip: 1.03, head: 0.95, skin: 0xd8a888, hair: 0x2a1a10, sleeve: 0x4a5a3a, trouser: 0x343e2c } },
+  { id: 'fenwick', name: 'Fenwick', role: 'Air-defence loader, a missile on his back', voice: M,
+    bio: 'Ran the flak battery on the depot roof until there was nothing left to shoot at. Took a missile home with him, just in case.',
+    unlock: { life: 'gun:panlmg', goal: 50, label: 'Get 50 kills with the Carousel' }, kit: { core: 'heavy', back: 'missiletube', extra: 'belts', gear: 'helmet', hair: null, face: 'moustache' },
+    look: { w: 1.12, h: 1.02, l: 1.12, sh: 1.04, hip: 1, head: 1.02, skin: 0xc89070, hair: 0x6a3a1c, sleeve: 0x4a4e3a, trouser: 0x383c2c } },
+  { id: 'odessa', name: 'Odessa', role: 'Night pilot in a leather flying cap', voice: F,
+    bio: 'Flew the mail run over the mountains in anything with wings. These days the wings carry guns, and she still lands on time.',
+    unlock: { life: 'streakKills', goal: 30, label: 'Get 30 scorestreak kills' }, kit: { core: 'light', back: 'chute', extra: 'furcollar', gear: 'pilotcap', hair: 'bob', face: 'plain' },
+    look: { w: 0.9, h: 0.99, l: 0.86, sh: 0.9, hip: 1.02, head: 0.96, skin: 0x8a5a3c, hair: 0x120c0a, sleeve: 0x5a4030, trouser: 0x3a2e24 } },
+  { id: 'calder', name: 'Calder', role: 'Highland spotter with a scope on a tripod', voice: M,
+    bio: 'Counted deer on the high moor for the estate. Counts something else now, through the same glass, and never loses the tally.',
+    unlock: { life: 'gun:autosniper', goal: 50, label: 'Get 50 kills with the Vigil' }, kit: { core: 'parka', back: 'scopecase', extra: 'scrim', gear: 'beanie', hair: null, face: 'beard' },
+    look: { w: 1.02, h: 1.04, l: 1, sh: 1.02, hip: 1, head: 1.02, skin: 0xe0b090, hair: 0x7a4a2a, sleeve: 0x5a5440, trouser: 0x3e3a2c } },
 ];
 
 export const OPERATOR_IDS = OPERATORS.map(o => o.id);
@@ -306,6 +324,11 @@ const SKIN_ROWS = {
   linnet: [['Salvage', 'rust', { life: 'ex:contracts', goal: 30, label: 'Bank 30 contracts in Extraction' }], ['Pickings', 'desert'], ['Lockbox', 'slate'], ['Jackpot', 'teal'], ['Treasure', 'gold']],
   garrison: [['Parade', 'ivory', { stat: 'kills', goal: 800 }], ['Company', 'olive'], ['Frontline', 'urban'], ['Breakthrough', 'ember'], ['Iron Line', 'molten']],
   brigid: [['Placement', 'urban', { life: 'ranked:played', goal: 25, label: 'Play 25 Ranked matches' }], ['Climb', 'sky'], ['Promotion', 'crimson'], ['Top Table', 'navy'], ['Champion\'s Due', 'prism']],
+  // Wave 5.
+  juniper: [['Clear Road', 'woodland', { stat: 'kills', goal: 300 }], ['Junction Box', 'slate'], ['Danger Aspect', 'crimson'], ['Green Light', 'toxic'], ['Lily Pad', 'aurora']],
+  fenwick: [['Battery', 'olive', { stat: 'kills', goal: 400 }], ['Searchlight', 'urban'], ['Flak Burst', 'ember'], ['Interceptor', 'navy'], ['Red Tide', 'molten']],
+  odessa: [['Mail Run', 'desert', { life: 'streaksCalled', goal: 40, label: 'Call in 40 scorestreaks' }], ['Overcast', 'sky'], ['Slipstream Oil', 'violet'], ['Midnight Run', 'night'], ['Deep Bloom', 'wraith']],
+  calder: [['Heather', 'moss', { stat: 'long', goal: 60 }], ['Grouse', 'desert'], ['Stalker', 'rust'], ['Hill Mist', 'ash'], ['Royal Stag', 'gold']],
 };
 
 // Showpiece art (docs/OPERATORS-ART.md), keyed by skin id and merged into the skin: `fx` is an animated "active" effect
@@ -316,13 +339,14 @@ const SKIN_ROWS = {
 export const SKIN_FX = { holo: 1, circuit: 2, shimmer: 3, flame: 4, frost: 5, glitch: 6, starfield: 7, lightning: 8, camo: 9,
   lava: 10, aurora: 11, hex: 12, void: 13, sparkle: 14, caustics: 15, radar: 16, bubbles: 17, coderain: 18, embers: 19,
   hazard: 20, morse: 21, heartbeat: 22, thermal: 23, sandstorm: 24, chevron: 25, ink: 26, checker: 27, clouds: 28, snow: 29,
-  rays: 30, scan: 31, smoke: 32, harlequin: 33, tracer: 34, shockwave: 35 };
+  rays: 30, scan: 31, smoke: 32, harlequin: 33, tracer: 34, shockwave: 35, pulsar: 36, plasma: 37, oilslick: 38, fireworks: 39 };
 const ELITE_FX = {
   trooper: 'hex', wisp: 'camo', anvil: 'circuit', relay: 'radar', yarddog: 'hazard', ronin: 'ink', ghoul: 'bubbles', ram: 'shockwave',
   monarch: 'starfield', sparrow: 'heartbeat', coyote: 'shimmer', vesper: 'aurora', wren: 'glitch', ox: 'lava', morse: 'morse',
   cipher: 'coderain', harrow: 'snow', sable: 'sandstorm', marshal: 'holo', flint: 'embers', nyx: 'void', halcyon: 'frost',
   tinker: 'lightning', rook: 'checker', mako: 'caustics', seraph: 'rays', warden: 'flame', courier: 'scan', nightjar: 'thermal',
   skylark: 'clouds', gambit: 'harlequin', corvid: 'smoke', linnet: 'sparkle', garrison: 'tracer', brigid: 'chevron',
+  juniper: 'pulsar', fenwick: 'fireworks', odessa: 'oilslick', calder: 'plasma',     // Wave 5.
 };
 const SKIN_ART = {};
 for (const op of OPERATORS) {

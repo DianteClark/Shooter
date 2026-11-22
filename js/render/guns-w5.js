@@ -65,7 +65,8 @@ export function w5Factories(h) {
     const pr = Math.min(0.42, 0.3 * Math.max(0.75, f)), ph = m.part === 'body2' ? 0.06 : 0.09;
     k[m.part]().prismY(0.3, 0.3 + ph, 0.12, 0, pr, pr, 12);
     k.metal().prismY(0.3 + ph, 0.34 + ph, 0.12, 0, 0.05, 0.05, 6);                            // Spindle.
-    k.accent(); for (let i = 0; i < 4; i++) { const t = i * Math.PI / 4; b.box(0.12, 0.3 + ph + 0.003, 0, 2 * pr * 0.92 * Math.abs(Math.cos(t)) + 0.02, 0.01, 2 * pr * 0.92 * Math.abs(Math.sin(t)) + 0.02); }
+    k.dark(); b.box(0.12, 0.3 + ph + 0.004, 0, pr * 1.7, 0.012, 0.035); b.box(0.12, 0.3 + ph + 0.004, 0, 0.035, 0.012, pr * 1.7);   // Ribs.
+    k.accent(); for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; b.box(0.12 + Math.cos(t) * pr * 0.9, 0.3 + ph * 0.5, Math.sin(t) * pr * 0.9, 0.05, ph + 0.012, 0.05); }   // Round counters on the rim.
     if (m.tab) k.accent().box(0.12 + pr, 0.3 + ph / 2, 0, 0.05, ph, 0.08);
     if (m.drum || f > 1.2) k.dark().prismY(0.3 + ph, 0.34 + ph, 0.12, 0, pr * 0.7, pr * 0.7, 12);   // A second layer on a big pan.
     // Sights sit behind the pan, on a raised block.
@@ -147,7 +148,7 @@ export function w5Factories(h) {
       k.accent().prismX(0.66, 0.69, 0.21, 0, 0.09, 0.09, 10);                                  // The lit star.
       mx = 0.7;
     }
-    k.metal().extrude([[-0.24, 0.3], [-0.16, 0.3], [-0.2, 0.42], [-0.3, 0.44]], -0.03, 0.03);   // Hammer spur.
+    k.metal().extrude([[-0.22, 0.3], [-0.16, 0.3], [-0.19, 0.37], [-0.25, 0.38]], -0.025, 0.025);   // Hammer spur.
     if (a.optic) fitOptic(k, a.optic, 0.02, 0.33, 0.66);
     else k.accent().box(0.5, 0.36, 0, 0.04, 0.04, 0.04);
     // A round grip, and the spare flares in a cuff on its right; a speed or light mag changes the cuff.

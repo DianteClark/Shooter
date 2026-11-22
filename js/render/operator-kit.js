@@ -380,6 +380,36 @@ export const BACK = {
       b.box(-0.275, -0.17, 0, 0.012, 0.04, 0.62);
     });
   },
+  // Wave 5 operators (js/ui/operators.js). Juniper's semaphore pole: a staff over her shoulder with a signal arm set at
+  // danger and a lit lamp on top; from above a long line off the back with a crossbar.
+  signalpole(b) {
+    b.setPart(0).setColor(0x30343a).box(-0.24, 0.34, 0, 0.12, 0.3, 0.3, 0.03);
+    b.setColor(0x24272c);
+    seg(b, [-0.3, 0.0, -0.2], [-0.36, 1.32, 0.12], 0.025, 0.02, 5);
+    b.setPart(1);
+    plate(b, [-0.355, 1.16, 0.1], [-0.355, 1.24, 0.46], 0.09, 0.02);                              // The arm, in team red or blue.
+    b.setPart(0).setColor(0xf2f2ea).box(-0.355, 1.2, 0.38, 0.03, 0.08, 0.04);
+    tag(b, ACC, () => b.setPart(0).setColor(0xffcc33).prismY(1.32, 1.42, -0.36, 0.12, 0.05, 0.04, 6));
+  },
+  // Fenwick's missile tube across the back, nose up over the left shoulder: fat, finned and seeker-lit.
+  missiletube(b) {
+    b.setPart(0).setColor(0x4a5040);
+    seg(b, [-0.26, 0.02, -0.28], [-0.28, 0.98, 0.3], 0.1, 0.1, 8);
+    b.setColor(0x2a2e26);
+    seg(b, [-0.26, 0.02, -0.28], [-0.26, 0.1, -0.23], 0.12, 0.12, 8);
+    seg(b, [-0.28, 0.9, 0.25], [-0.28, 0.98, 0.3], 0.12, 0.12, 8);
+    b.setPart(1).box(-0.18, 0.4, 0.0, 0.06, 0.06, 0.3);                                            // Team strap.
+    tag(b, ACC, () => b.setPart(0).setColor(0xff4a2a).box(-0.28, 1.0, 0.31, 0.04, 0.03, 0.04));
+  },
+  // Calder's spotting scope on a folded tripod, strapped upright, the legs fanned in a V over the shoulders.
+  scopecase(b) {
+    b.setPart(0).setColor(0x3a3830).box(-0.25, 0.34, 0, 0.13, 0.36, 0.3, 0.03);
+    b.setColor(0x22241f);
+    for (const z of [-0.22, 0, 0.22]) seg(b, [-0.27, 0.2, z * 0.2], [-0.3, 0.98, z], 0.018, 0.014, 4);
+    b.setColor(0x2a2c30).prismX(-0.46, -0.06, 0.92, 0, 0.055, 0.07, 8);                            // The scope.
+    b.setPart(1).box(-0.25, 0.5, 0, 0.14, 0.05, 0.32);
+    tag(b, ACC, () => b.setPart(0).setColor(0x9fe8ff).prismX(-0.07, -0.05, 0.92, 0, 0.06, 0.06, 8));
+  },
 };
 
 export const EXTRA = {
@@ -689,6 +719,15 @@ export const GEAR = {
       }
     });
     tag(b, ACC | ELITE, () => b.setPart(0).setColor(0xff3a2a).prismX(0.17, 0.19, 0.33, 0, 0.03, 0.03, 6));
+  },
+  // Wave 5: Odessa's leather flying cap with the ear flaps down and the goggles pushed up on the brow; a team band.
+  pilotcap(b) {
+    b.setPart(0).setColor(0x5a3a22).prismY(0.2, 0.38, -0.01, 0, 0.19, 0.17, 8, Math.PI / 8);
+    b.prismY(0.38, 0.43, -0.02, 0, 0.17, 0.08, 8, Math.PI / 8);
+    for (const s of [1, -1]) b.box(0.02, 0.17, s * 0.17, 0.12, 0.16, 0.035, 0.015);             // Ear flaps.
+    b.setPart(1).prismY(0.3, 0.33, -0.01, 0, 0.195, 0.195, 8, Math.PI / 8);
+    b.setPart(0).setColor(0x2a2c30).box(0.15, 0.37, 0, 0.06, 0.05, 0.3);
+    tag(b, ACC, () => b.setPart(0).setColor(0x9ad8ff).prismX(0.17, 0.2, 0.37, 0.075, 0.035, 0.035, 8).prismX(0.17, 0.2, 0.37, -0.075, 0.035, 0.035, 8));
   },
 };
 
