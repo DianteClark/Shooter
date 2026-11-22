@@ -47,21 +47,21 @@ export const REGION_SEEDS = [
 // the road.
 const ROADS = [
   // East-west.
-  { pts: [[14, 64], [160, 64]], w: 8, kind: 'asphalt' },                 // Quay Street, west of the harbour...
-  { pts: [[240, 64], [388, 64]], w: 8, kind: 'asphalt' },                // ...and east of it.
-  { pts: [[146, 92], [284, 92]], w: 8, kind: 'asphalt' },                // Front Street, behind the harbour.
-  { pts: [[150, 150], [266, 150]], w: 9, kind: 'asphalt' },              // Church Street, through the square.
-  { pts: [[0, 220], [34, 220]], w: 8, kind: 'asphalt' },                 // The Fjord Road, west of Telemark...
-  { pts: [[142, 220], [290, 220]], w: 8, kind: 'asphalt' },              // ...through town to Ice Core...
-  { pts: [[366, 220], [396, 220]], w: 8, kind: 'asphalt' },              // ...and out to the shelf's edge.
-  { pts: [[4, 318], [192, 318]], w: 7, kind: 'asphalt' },                // The Dam Road along the reservoir...
-  { pts: [[248, 318], [396, 318]], w: 7, kind: 'asphalt' },              // ...and on past the turbine hall.
+  { pts: [[14, 64], [160, 64]], w: 8, kind: 'plough' },                 // Quay Street, west of the harbour...
+  { pts: [[240, 64], [388, 64]], w: 8, kind: 'plough' },                // ...and east of it.
+  { pts: [[146, 92], [284, 92]], w: 8, kind: 'plough' },                // Front Street, behind the harbour.
+  { pts: [[150, 150], [266, 150]], w: 9, kind: 'plough' },              // Church Street, through the square.
+  { pts: [[0, 220], [34, 220]], w: 8, kind: 'plough' },                 // The Fjord Road, west of Telemark...
+  { pts: [[142, 220], [290, 220]], w: 8, kind: 'plough' },              // ...through town to Ice Core...
+  { pts: [[366, 220], [396, 220]], w: 8, kind: 'plough' },              // ...and out to the shelf's edge.
+  { pts: [[4, 318], [192, 318]], w: 7, kind: 'plough' },                // The Dam Road along the reservoir...
+  { pts: [[248, 318], [396, 318]], w: 7, kind: 'plough' },              // ...and on past the turbine hall.
   { pts: [[60, 112], [146, 112]], w: 6, kind: 'dirt' },                  // The depot yard road.
   // North-south.
-  { pts: [[150, 64], [150, 318]], w: 8, kind: 'asphalt' },               // West Street.
-  { pts: [[200, 88], [200, 300]], w: 8, kind: 'asphalt' },               // Harbour Road, through the square.
-  { pts: [[284, 64], [284, 197]], w: 8, kind: 'asphalt' },               // Shelf Road, north of Ice Core...
-  { pts: [[284, 243], [284, 318]], w: 8, kind: 'asphalt' },              // ...and south of it.
+  { pts: [[150, 64], [150, 318]], w: 8, kind: 'plough' },               // West Street.
+  { pts: [[200, 88], [200, 300]], w: 8, kind: 'plough' },               // Harbour Road, through the square.
+  { pts: [[284, 64], [284, 197]], w: 8, kind: 'plough' },               // Shelf Road, north of Ice Core...
+  { pts: [[284, 243], [284, 318]], w: 8, kind: 'plough' },              // ...and south of it.
   { pts: [[60, 64], [60, 188]], w: 6, kind: 'dirt' },                    // The logging track.
   { pts: [[96, 252], [96, 318]], w: 6, kind: 'dirt' },                   // The piste road up to the summit.
 ];
@@ -110,8 +110,8 @@ function build() {
     for (const zn of rec.zones) {
       if (zn.kind !== 'road') { P.zones.push(zn); continue; }
       const along = zn.w >= zn.d;
-      P.roads.push(along ? { pts: [[zn.x, zn.z + zn.d / 2], [zn.x + zn.w, zn.z + zn.d / 2]], w: zn.d, kind: 'asphalt' }
-        : { pts: [[zn.x + zn.w / 2, zn.z], [zn.x + zn.w / 2, zn.z + zn.d]], w: zn.w, kind: 'asphalt' });
+      P.roads.push(along ? { pts: [[zn.x, zn.z + zn.d / 2], [zn.x + zn.w, zn.z + zn.d / 2]], w: zn.d, kind: 'plough' }
+        : { pts: [[zn.x + zn.w / 2, zn.z], [zn.x + zn.w / 2, zn.z + zn.d]], w: zn.w, kind: 'plough' });
     }
     return rec;
   };
@@ -346,7 +346,11 @@ function build() {
   grove(4, 64, 50, 18, 10);
   grove(248, 372, 52, 26, 14);
   grove(196, 340, 60, 50, 18);
+  // Spruce stands and boulders over the open snowfields, so a crossing always has something to run to.
+  for (const [x0, z0, w, d, n] of [[296, 92, 60, 40, 22], [300, 300, 90, 30, 18], [370, 160, 26, 30, 10], [300, 384, 90, 12, 10], [4, 300, 12, 90, 12],
+    [100, 380, 90, 16, 14], [370, 92, 26, 14, 8]]) grove(x0, z0, w, d, n);
   P.region = 'kvsnow';
+  for (let k = 0; k < 46; k++) { const x = 8 + R() * 384, z = 90 + R() * 300, s = 2 + R() * 3; T(x, z, s, s * (0.6 + R() * 0.5), 1.4 + R() * 1.6, 'rock', {}, 2.4); }
   for (let k = 0; k < 40; k++) drift(8 + R() * 384, 90 + R() * 300, R() < 0.5);
   P.region = 'kvice';
   for (let k = 0; k < 18; k++) {
@@ -366,7 +370,7 @@ function build() {
   P.region = 'kvtown'; P.skin = 'north';
   const rnd = mulberry(7771);
   for (const rd of ROADS) {
-    if (rd.kind !== 'asphalt') continue;
+    if (rd.kind !== 'plough') continue;
     const [[ax, az], [bx, bz]] = [rd.pts[0], rd.pts[rd.pts.length - 1]];
     const horiz = Math.abs(bz - az) < Math.abs(bx - ax), L = Math.hypot(bx - ax, bz - az);
     for (let s = 8; s < L - 8; s += 12 + rnd() * 18) {

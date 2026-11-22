@@ -86,7 +86,7 @@ Object.assign(SKIN, isle.SKIN); Object.assign(GROUND, isle.GROUND); Object.assig
 // The first region's (themes/city.js, docs/DISTRICTS.md).
 Object.assign(SKIN, city.SKIN); Object.assign(GROUND, city.GROUND); Object.assign(ZONE, city.ZONE);
 // The North's (themes/north.js): region names and zone kinds of its own, so nothing above is repainted.
-Object.assign(SKIN, north.SKIN); Object.assign(GROUND, north.GROUND); Object.assign(ZONE, north.ZONE);
+Object.assign(SKIN, north.SKIN); Object.assign(GROUND, north.GROUND); Object.assign(ZONE, north.ZONE); Object.assign(ROAD, north.ROAD);
 
 // Building styles: walls, trim, roof, floor, and the roof's shape.
 const STYLE = {

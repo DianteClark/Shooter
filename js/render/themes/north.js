@@ -8,14 +8,14 @@
 // module's tables and calls its `giant` extras: a lights pass, zone ground, tile decor, the edge of the world).
 import { THEMES, hexRGB } from '../art.js';
 import { box3, emissive, scale, mix, mass, rimPoints, skyRing, lattice, ball, waterBanks, WATER_Y } from './kit.js';
-import { segDist } from '../../shared/maps/br-kit.js';
+import { valueNoise } from '../../shared/maps/br-kit.js';
 
 const H = hexRGB;
 const norm = v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
 const ink = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, hexRGB(v)]));
 
 const INK = {
-  ground: 0xd2cbc6, asphalt: 0x5a555a, dirt: 0x8a8380, gravel: 0x6a6462,
+  ground: 0xd4d0cc, asphalt: 0x5a555a, dirt: 0x8a8380, gravel: 0x6a6462,
   roof: 0xe6e0dc, wall: 0x7a5a48, wallB: 0x6a6266, trim: 0x2e2a2c,
   concrete: 0x9a948e, crate: 0x8a6a48, crateD: 0x4e3c2c,
   rail: 0x8a8a90, tie: 0x3a3230, hazardY: 0xc0902e, hazardK: 0x26242a,
@@ -28,7 +28,7 @@ const INK = {
 };
 const BASE = {
   // Low copper sun in the west-south-west, through the squall: long shadows to the east.
-  light: { dir: norm([-0.82, 0.38, 0.32]), sun: [1.0, 0.62, 0.42], sky: [0.42, 0.4, 0.48], amb: [0.35, 0.32, 0.36] },
+  light: { dir: norm([-0.82, 0.38, 0.32]), sun: [0.98, 0.7, 0.5], sky: [0.42, 0.42, 0.5], amb: [0.36, 0.34, 0.37] },
   clear: 0x2a2428,
   fog: [0.56, 0.5, 0.52], fogSeam: [0.2, 0.1, 0.06], desatTint: [0.9, 0.86, 0.84],
   shadow: { col: [0.48, 0.42, 0.54], strength: 0.45, len: 1.35 },
@@ -596,7 +596,7 @@ function zoneGround(k, kind, x, z, noise) {
     case 'road': return noise(x * 0.3, z * 0.3) > 0.55 ? k.dirt : mix(k.asphalt, k.dirt, 0.35);
     case 'quay': return (Math.floor(x / 3) + Math.floor(z / 3)) % 2 ? mix(k.stone, k.snow, 0.55) : mix(k.stone, k.snow, 0.45);
     case 'ice': case 'seaice': case 'reservoir': case 'tailrace': case 'lake': case 'river': {
-      const crack = Math.abs(Math.sin(x * 0.21 + Math.sin(z * 0.13) * 2.2)) < 0.035;
+      const crack = Math.abs(noise(x * 0.18, z * 0.18) - 0.5) < 0.012;
       const snowy = noise(x * 0.11 + 7, z * 0.11) > (kind === 'seaice' ? 0.45 : 0.6);
       return crack ? k.iceD : snowy ? mix(k.ice, k.snow, 0.6) : k.ice;
     }
@@ -686,6 +686,8 @@ export const GROUND = {
 export const ROCK = Object.fromEntries(REGIONS.map(r => [r, { cols: [H(0x5a5660), H(0x46424c)], cap: H(0xe4ded8) }]));
 export const BANK = Object.fromEntries(REGIONS.map(r => [r, { face: H(0x5a7482), lip: H(0xe4ded8) }]));
 // New zone kinds only (existing kinds keep their colours on the other maps; zoneColour below repaints them here).
+// Ploughed roads: packed grey slush, no kerbs or paint (themes/frontier.js paints only 'asphalt' ones).
+export const ROAD = { plough: H(0x8a8486) };
 export const ZONE = {
   seaice: H(0xa4b4bc), river: H(0x98b0bc), piste: H(0xeae6e2), lake: H(0xa0b2bc), reservoir: H(0xa0b2bc), tailrace: H(0x98aab4),
   crest: H(0xa09a92), drillpad: H(0x5a5e66),
@@ -708,7 +710,7 @@ function lampSpots(map) {
   const out = [];
   const blocked = (x, z) => map.walls.some(w => w.kind !== 'border' && x > w.x - 0.6 && x < w.x + w.w + 0.6 && z > w.z - 0.6 && z < w.z + w.d + 0.6);
   for (const rd of map.roads ?? []) {
-    if (rd.kind !== 'asphalt' || rd.w < 7) continue;
+    if (rd.kind !== 'plough' || rd.w < 7) continue;
     for (let k = 1; k < rd.pts.length; k++) {
       const [ax, az] = rd.pts[k - 1], [bx, bz] = rd.pts[k], L = Math.hypot(bx - ax, bz - az);
       const ux = (bx - ax) / L, uz = (bz - az) / L, nx = -uz, nz = ux;
@@ -730,9 +732,10 @@ function gLights(ctx, t, TILE) {
   }
 }
 
+const VN = valueNoise(7717);
 function zoneColour(zn, x, z, c) {
   const k = THEMES.kaldvik.ink;
-  return zoneGround(k, zn.kind, x, z, (a, b2) => 0.5 + 0.5 * Math.sin(a * 3.1 + b2 * 1.7)) ?? c;
+  return zoneGround(k, zn.kind, x, z, VN) ?? c;
 }
 
 function gDecor(ctx, t, TILE) {
