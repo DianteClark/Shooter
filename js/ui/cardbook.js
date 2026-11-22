@@ -105,8 +105,7 @@ const MAP_WINS = 10;
 // Tier 1 keeps the original `map-<id>` card and its 10 wins, so nothing earned is lost.
 const MAP_TIERS = [MAP_WINS, 30, 75];
 const MAP_PLAYS = [10, 40, 100];
-const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'sirocco', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
-const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'kaldvik', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
+const PLAYS_ONLY = new Set(['frontier', 'jadefall', 'meridian', 'sirocco', 'kaldvik', 'ashgrove', 'polestar', 'wrenfield', 'saltmere']);
 // Where a card's goal counts, for the unlock sheet's Play now: a Multiplayer tab and a playlist or ticked modes.
 const STANDARD = { tab: 'standard', playlist: 'qp' };
 const playFor = mode => ({ br: { tab: 'br', playlist: 'quads' }, rb: { tab: 'br', playlist: 'rbquads' }, ex: { tab: 'extraction', playlist: 'exquads' },
