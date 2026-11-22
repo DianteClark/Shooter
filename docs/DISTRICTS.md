@@ -195,7 +195,25 @@ wading water as `shallows`), so the streamer draws beaches, banks and the shallo
   district's deck rooms and art lists are translated by the bay itself.
 
 ### Measured
-PERF_TABLE
+(2-vCPU sandbox shared with three other builders: CPU times wander; calls and triangles are exact.)
+
+| | walls | buildings | loot / caches | places | shallows rects | host tick mean (validator roam / sim-br quads, duos, solos) |
+|---|---|---|---|---|---|---|
+| Meridian City | 2,766 | 122 | 871 / 41 | 18 | - | 0.36-0.51 ms / 0.24 ms |
+| Kittiwake Bay | 2,132 | 96 | 646 / 37 | 18 | 112 | 0.72 ms (worst 33.7 CPU, busier box) / 0.28, 0.20, 0.17 ms |
+
+| Low quality, 932 x 430, on the ground after the jump (dev/ui-sweep-perf.py, the same run) | calls median (max) | triangles median (max) | script ms median (max) |
+|---|---|---|---|
+| Meridian, Midtown's boulevard (`brcity`) | 49.0 (53) | 44.2k (65.6k) | 9.5 (49.4) |
+| Kittiwake, the Shipyard's west yard (`brbay`) | 37.5 (45) | 19.9k (35.5k) | 10.0 (15.3) |
+
+- Region build (node import of the map file): 209 ms against Meridian's 182 ms; the lattice (40,000 cells) and the
+  reach flood are most of the difference.
+- Battle royale pacing (sim-br, 12 bot matches): 11.7 min mean (9.1-12.6), 40% of deaths in the first three minutes.
+  Rebound (sim-resurgence): 5.9-8.3 min, mean 7.1. Shipyard is the only tier 1 district; Lantern Point is the other
+  tier 1 place.
+- dev/sim-br.mjs's pickup check stood the test player on the nav cell nearest (200, 200), which in the bay is inside
+  the Shipyard's opened paint store, on its floor loot; the test now clears the map's own items round that spot.
 
 ### Tests
 `node dev/map-validate.mjs fishmarket shipyard boardwalk stiltrow kittiwake`; `node dev/sim-br.mjs --map=kittiwake`;
