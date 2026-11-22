@@ -934,12 +934,13 @@ export class Sim {
     this.nav = new NavGrid(this.map);
     let stagger = 0;
     for (const p of this.players) if (p.isBot && !p.dummy) p.bot = new BotBrain(this, p, stagger++);
+    this.rules?.onNav?.();     // Rules that precompute from the nav grid do it here, on the step that already builds it.
   }
 
   _tick() {
     this.tick++;
     this.time += STEP;
-    this.pathBudget = 2;
+    this.pathBudget = this.rules?.pathBudget ?? 2;     // Path searches a tick (a rule set on a giant map asks for fewer).
     this.brk.step(STEP);
 
     if (this.phase === 'warmup') {

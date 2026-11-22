@@ -17,9 +17,8 @@
 //       hq: [{ x, z, r }, { x, z, r }],   // hq[0] the attackers' end, hq[1] the defenders' last stand
 //       sectors: [{ name, objs: [{ id, x, z, r }] }],   // 3 or 4 sectors from hq[0] toward hq[1], 1 or 2 objectives each
 //       tickets, refill,                  // optional: the attackers' starting pool and what each fallen sector adds
-//       clock, defendDelay,               // optional: seconds a sector (default the mode's timeLimit, 300) and extra
-//                                         // seconds a defender waits to respawn (default 0): big parts of an island
-//                                         // take longer to cross
+//       clock, defendDelay,               // optional: seconds a sector and extra seconds a defender waits to respawn
+//                                         // (default 300 and 0 on a whole map, 420 and 1.5 on a part of a big one)
 //     }],
 //   };
 //
@@ -55,15 +54,19 @@ export const BF = {
     refill: 260,
     margin: 10,             // How far past their line each side may go before the out-of-bounds clock starts.
     fallBack: 12,           // Defenders caught behind a fallen line get this long to get out, not the usual 8 s.
-    capture: 16,            // An objective is slower to take than a Conquest flag (one player, from neutral).
+    capture: 25,            // An objective is slower to take than a Conquest flag (one player, from neutral).
     capTime: 60,            // An objective taken by the attackers puts this back on the sector clock (up to a full clock).
     lock: 12,               // After a sector falls, the next one's objectives cannot be taken for this long (regroup).
     // Spawns, in metres along the axis: attackers this far short of the sector's nearest objective (never past the line
     // behind it), defenders this far behind its farthest one, so both sides walk about as far to the fight.
     attackBand: [18, 34],
     defendBand: [14, 30],
-    clear: 16,
-    push: 18,               // Bots this close to an objective they are taking push onto it (js/sim/breakthrough.js plan).              // ...and no nearer than this to a live objective.
+    clear: 16,              // ...and no nearer than this to a live objective.
+    retake: 0.55,           // The share of the defenders sent to take back a lost objective (the rest hold the other).
+    flank: 22,              // Attackers off the middle gather this far to one side of the axis...
+    flankBack: 16,          // ...this far short of the objective, then close in (js/sim/breakthrough.js plan).
+    flankFrom: 30,          // Only from further back than this along the axis.
+    push: 28,               // Bots this close to an objective they are taking push onto it (js/sim/breakthrough.js plan).
     capScore: 250, sectorScore: 300, defendScore: 75,
     low: 25,
   },
@@ -149,8 +152,10 @@ function normalize(map, kind, l) {
   const k = out.sectors.length;
   out.tickets = l.tickets ?? Math.round(BF.bt.tickets * (k <= 3 ? 1 : 0.85));
   out.refill = l.refill ?? Math.round(BF.bt.refill * (k <= 3 ? 1 : 0.85));
-  out.clock = l.clock ?? null;
-  out.defendDelay = l.defendDelay ?? 0;
+  // A part of a big map (a battle royale island, a city) takes longer to cross: a longer sector clock and a beat more
+  // on the defenders' respawn unless the layout says otherwise.
+  out.clock = l.clock ?? (out.sub ? 420 : null);
+  out.defendDelay = l.defendDelay ?? (out.sub ? 1.5 : 0);
   return out;
 }
 

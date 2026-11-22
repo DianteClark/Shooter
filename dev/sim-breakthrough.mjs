@@ -147,7 +147,7 @@ for (const map of MAPS_RUN) {
     await test(`bots: ${map} seed ${seed} plays to an end`, () => {
       const r = botMatch('bt', map, seed, { maxSeconds: 4 * 450 + 60 });
       const o = r.sim.rules;
-      rows.push({ map, seed, att: o.att, winner: r.winner, attWon: r.winner === o.att, reason: o.reason, sector: `${o.sector}/${o.sectors.length}`, min: (r.seconds / 60).toFixed(1), tickets: o.tickets, caps: r.ev['bt:capture'] ?? 0, retakes: r.ev['bt:retake'] ?? 0, kills: r.ev.kill ?? 0, spread: r.spread.toFixed(1), stuck: r.stuckPerBotMin.toFixed(2), mean: r.mean.toFixed(2), worst: r.worst.toFixed(1) });
+      rows.push({ map, seed, att: o.att, winner: r.winner, attWon: r.winner === o.att, reason: o.reason, sector: `${o.sector}/${o.sectors.length}`, min: (r.seconds / 60).toFixed(1), tickets: o.tickets, caps: r.ev['bt:capture'] ?? 0, retakes: r.ev['bt:retake'] ?? 0, kills: r.ev.kill ?? 0, spread: r.spread.toFixed(1), stuck: r.stuckPerBotMin.toFixed(2), mean: r.mean.toFixed(2), p999: r.p999.toFixed(1), worst: r.worst.toFixed(1) });
       console.log('     ', JSON.stringify(rows.at(-1)));
       assert.equal(r.sim.phase, 'ended', 'the match ends');
       assert.ok((r.ev['bt:capture'] ?? 0) + (r.ev['bt:neutral'] ?? 0) >= 1, 'the attackers get onto an objective');

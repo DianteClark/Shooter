@@ -4,6 +4,13 @@
 
 export const CHANGELOG = [
   {
+    build: 'NEXT', date: '2026-11-22', title: 'Breakthrough balance',
+    items: [
+      'Breakthrough: once attackers hold an objective of a sector they respawn near it, and in sectors whose objectives lie far past the front line they no longer have to walk all the way from the HQ. Attacking bots now swing out to the sides instead of filing down one street, and objectives take a little longer to capture. Meridian City\'s Crosstown is now winnable for the attackers.',
+      'Big Ground War maps on the islands and in Meridian City run a little smoother.',
+    ],
+  },
+  {
     build: '1122-3', date: '2026-11-22', title: 'Conquest and Breakthrough',
     items: [
       'New Ground War mode, Conquest: 16 v 16 over five to seven flags. Each side has a pool of tickets; every death costs one, and while the other side holds more flags than you, yours drain. Take a flag faster with more of your side on it. When you die, pick where to deploy: the front, your HQ, or any flag your side holds.',
