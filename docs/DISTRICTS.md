@@ -292,6 +292,13 @@ wading water as `shallows`), so the streamer draws beaches, banks and the shallo
 - Battle royale pacing (sim-br, 12 bot matches): 11.7 min mean (9.1-12.6), 40% of deaths in the first three minutes.
   Rebound (sim-resurgence): 5.9-8.3 min, mean 7.1. Shipyard is the only tier 1 district; Lantern Point is the other
   tier 1 place.
+- Conquest (sim-conquest, bot matches): with the Causeway as flag C the east side had two flags near its HQ (the
+  Cannery, Stilt Row) to the west's one and won both seeds by 322-408 tickets; with C at the Swing Bridge the west won
+  all three. With D moved from the pier gates to the promenade's east end (214, 300) as well: west 2, east 1 over three
+  seeds, 10-15 minutes, stuck 0.04-0.07 s a bot a minute, host tick 0.68-0.84 ms mean. Breakthrough "Harbour Road":
+  attackers took all three sectors in one of two seeds (9.9 min) and were held in the first in the other (4.0 min),
+  as on Meridian.
+- Extraction (sim-extract --quick): quads 3 of 4 squads out, duos 2 of 8, tick 0.34-0.36 ms mean.
 - dev/sim-br.mjs's pickup check stood the test player on the nav cell nearest (200, 200), which in the bay is inside
   the Shipyard's opened paint store, on its floor loot; the test now clears the map's own items round that spot.
 

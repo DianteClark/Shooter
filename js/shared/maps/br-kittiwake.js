@@ -478,7 +478,7 @@ function build() {
       hq: [pt(28, 176, { r: 10 }), pt(370, 176, { r: 10 })],
       flags: [
         pt(80, 176, { id: 'A', name: 'Fish Market' }), pt(200, 176, { id: 'B', name: 'Shipyard' }), pt(64, 130, { id: 'C', name: 'Swing Bridge' }),
-        pt(190, 300, { id: 'D', name: 'Boardwalk' }), pt(290, 176, { id: 'E', name: 'The Cannery' }), pt(302, 245, { id: 'F', name: 'Stilt Row' }),
+        pt(214, 300, { id: 'D', name: 'Boardwalk' }), pt(290, 176, { id: 'E', name: 'The Cannery' }), pt(302, 245, { id: 'F', name: 'Stilt Row' }),
       ],
     }],
     breakthrough: [{
