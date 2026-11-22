@@ -44,13 +44,13 @@ function drawRubble(b, p, rgb) {
     const q = p.pile;
     b.setColor(dark);
     b.box(q.x + q.w / 2, q.h * 0.28, q.z + q.d / 2, q.w, q.h * 0.56, q.d);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       b.setColor(i % 2 ? tint : dark);
       const s = 0.35 + rnd() * 0.45;
       turnedBox(b, q.x + s / 2 + rnd() * Math.max(0.01, q.w - s), q.h * 0.56 + s * 0.3, q.z + s / 2 + rnd() * Math.max(0.01, q.d - s), s, s * 0.7, s * 0.8, rnd() * 3);
     }
   }
-  const n = Math.max(3, Math.min(14, Math.round(area * (p.mat === 'glass' ? 1.6 : 0.9))));
+  const n = Math.max(3, Math.min(p.mat === 'glass' ? 10 : 9, Math.round(area * (p.mat === 'glass' ? 1.6 : 0.7))));   // 12 triangles each.
   for (let i = 0; i < n; i++) {
     const x = x0 + rnd() * W, z = z0 + rnd() * D, yaw = rnd() * Math.PI;
     b.setColor(i % 3 ? tint : dark);

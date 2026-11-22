@@ -87,4 +87,17 @@ fog and visibility tests use when the map's break version changes; the minimap r
 `node dev/sim-destruction.mjs [--quick]`: resolution counts per map, determinism, snapshot / late joiner / migration /
 replay-code round trips, nav re-path through a new opening, bots breaching, perf. `python3 dev/ui-destruction-test.py
 <port>`: a wall breaking on screen (before/after screenshots), the minimap, frame time and draw calls.
-`node dev/map-validate.mjs --broken` validates every map with every piece broken.
+`node dev/map-validate.mjs` validates every map a second time with every piece broken (nav, objectives, gaps,
+fairness, the giant checks); `--intact` skips that pass.
+
+## Numbers (2026-11-22, the shared 2-vCPU box, so CPU times are noisy)
+- Pieces: 1,616 over 28 maps (6v6 6 to 42, Ground War 50 to 127, Frontier 424, Jadefall 274); Graveyard Shift's own
+  maps and the range have none.
+- Draw calls: unchanged (dev/perf-render.mjs on Low, before / after: Railyard 25 / 25, Riverbend 24 / 24, Downtown
+  36 / 35). Triangles submitted: +2% to +10% (the collapsed rubble sets: Riverbend world 48k -> 52k), and breaking
+  changes neither (ranges are rewritten in place, dev/ui-destruction-test.py checks both).
+- Host sim: a blast on Frontier's 424 pieces costs about 1 us; Frontier's sector graph rebuild after an opening 3 ms
+  (at most every 2 s); a Ground War tick with destruction on and off is the same within noise.
+- Wire: about one character per broken piece (`encodeBreak`), so ten broken pieces add ten bytes to a snapshot of about
+  880, and only while it is being sent (1 s after a change, then twice a second).
+- Bots: in a 90 s Ground War match with frags, 7 to 10 breach throws; 18 to 30 pieces broken by bots in all.
