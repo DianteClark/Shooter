@@ -824,7 +824,7 @@ export class BotBrain {
     this.knownErr = 0; this.knownBias = 0;
     this.heardT = -99; this.lastUavT = -99;
     this.calloutSeq = this.sim.calloutSeq ?? 0;       // Ignore anything called out before this life.
-    this.holdT = 0; this.holdAim = 0; this.holdSpot = null; this.modeT = 0;
+    this.holdT = 0; this.holdAim = 0; this.holdSpot = null; this.modeT = 0; this.dodgeT = 0;
     this.strafeT = 0; this.strafeDir = 0;
     this.burstLeft = 0; this.burstPause = 0;
     this.wantSwap = false; this.wantSlide = false;
@@ -1222,7 +1222,9 @@ export class BotBrain {
     if (this.mode === 'cover') {
       this.modeT -= this.interval;
       const healed = p.hp >= 82 && ps.reloadT <= 0;
-      if (this.modeT <= 0 || healed || (this.arrived && visible && this.targetDist < 7)) this._setMode('none');
+      // A dodge (a grenade at its feet, a strike called on its spot) holds until the danger has gone off: at full health
+      // `healed` would end it on the next think and the bot dithered between the way out and its next goal.
+      if (sim.time >= this.dodgeT && (this.modeT <= 0 || healed || (this.arrived && visible && this.targetDist < 7))) this._setMode('none');
     } else if (S.retreatHp > 0 && p.hp < S.retreatHp && (visible || this.hasKnown) && p.hp < this.lastRetreatHp && !this.objective?.commit) {
       this._takeCover();
     } else if (visible && this.targetDist > 8 && (ammo === 0 || ps.reloadT > 0) && sim.rng() < S.coverReload && !this.objective?.commit) {
@@ -1683,9 +1685,10 @@ export class BotBrain {
       if (this.dodgeId !== threat.id) { this.dodgeId = threat.id; this.dodgeRoll = sim.rng() < S.dodge; }
       if (this.dodgeRoll && !(this.mode === 'cover' && this.dodgeFrom === threat.id)) {
         this.dodgeFrom = threat.id;
-        if (!this._coverFrom(threat.x, threat.z) && !this.deferred) {
+        if (this._coverFrom(threat.x, threat.z)) this.dodgeT = sim.time + DODGE_SECS;
+        else if (!this.deferred) {
           const a = Math.atan2(ps.z - threat.z, ps.x - threat.x);
-          this.mode = 'cover'; this.modeT = 2;
+          this.mode = 'cover'; this.modeT = 2; this.dodgeT = sim.time + DODGE_SECS;
           this._goTo(ps.x + Math.cos(a) * 7, ps.z + Math.sin(a) * 7);
         }
       }
