@@ -63,7 +63,7 @@
 // access, so every read and write tolerates failure and the game simply plays without persistence.
 // The rules live in js/shared/progression.js; this module owns the save and applies them.
 import { CAMOS, TRACERS, KILL_EFFECTS, getTracer, getKillEffect } from '../shared/camos.js';
-import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS } from '../shared/constants.js';
+import { GOLDEN_ID, PRIMARY_IDS, SECONDARY_IDS, secondaryAllowed } from '../shared/constants.js';
 import { normalizeLoadout, SCORE } from '../shared/catalog.js';
 import { RESET_GEN } from '../shared/reset.js';
 import { dropCareerMemo } from './cardbook.js';
@@ -313,6 +313,8 @@ function matchLoadout(saved, wanted = saved.primary) {
   const secondary = gateGun(saved.secondary, SECONDARY_IDS, 'pistol');
   const base = normalizeLoadout({ ...saved, primary, secondary, attachments: saved.attachments });
   const gear = gateLoadoutGear(base, isOpen);    // One perk per tier, through catalog gatePerks.
+  // Overkill: a primary in the sidearm slot only while the perk is (still) in the kit.
+  if (!secondaryAllowed(gear.secondary, gear.perks, gear.primary)) gear.secondary = gateGun('pistol', SECONDARY_IDS, 'pistol');
   return {
     ...gear,
     name: saved.name,

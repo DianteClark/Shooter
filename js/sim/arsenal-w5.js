@@ -10,7 +10,7 @@
 //            metres (ground distance), homes on the nearest-to-the-aim one: `air` damage to it, nothing on the
 //            ground. The shot event carries `lk: [x, z]` so the rocket is drawn climbing to it.
 import { WEAPONS } from '../shared/weapons.js';
-import { angleDiff } from './player.js';
+import { angleDiff, hasPro } from './player.js';
 import { AIR_HP, airHp, hurtAir } from './streaks-v9.js';
 
 export const BURN_TICK = 0.5;
@@ -79,3 +79,14 @@ export function locksToDown(kind, w) {
   return hp && w?.lockon ? Math.ceil(hp / w.lockon.air) : 0;
 }
 
+
+// ---------------------------------------------------------------- Skywatch (perks wave, catalog.js)
+
+export const SKYWATCH_MULT = 1.4, SKYWATCH_PRO_MARK = 3;
+// What a hit on an enemy streak (aircraft or machine) does with Skywatch: 40% more, and with Flak Gunner its owner goes
+// on the hitter's team map. `owner` is the streak's owner (a player record), when it has one.
+export function streakDamage(sim, by, owner, dmg) {
+  if (!by?.ps?.perks?.includes('skywatch') || !(dmg > 0)) return dmg;
+  if (owner && owner.alive && owner.team !== by.team && hasPro(by.ps, 'skywatch') && sim._markable(owner)) owner.markT = Math.max(owner.markT, SKYWATCH_PRO_MARK);
+  return dmg * SKYWATCH_MULT;
+}

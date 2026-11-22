@@ -105,6 +105,12 @@ export const PERKS = {
   engineer:    { id: 'engineer',    tier: 2, name: 'Engineer',     desc: 'Your sentries, aircraft and Trophy last longer; Blackout cannot jam you' },
   // Extraction exclusive (js/shared/extraction.js). Appended: the wire packs a perk as its index within its tier.
   hardtarget:  { id: 'hardtarget',  tier: 0, name: 'Hard Target',  desc: 'Take 15% less gunfire while sprinting or sliding' },
+  // Perks wave (2026-11-22). Appended: each keeps the index within its tier the wire packs (3 bits a tier, 8 at most).
+  overkill:    { id: 'overkill',    tier: 1, name: 'Overkill',     desc: 'Carry a second primary in place of your sidearm' },
+  amped:       { id: 'amped',       tier: 1, name: 'Amped',        desc: 'Much faster weapon swaps; launchers reload faster' },
+  doubletime:  { id: 'doubletime',  tier: 0, name: 'Double Time',  desc: 'Move faster while aiming, and fire sooner out of a sprint' },
+  highalert:   { id: 'highalert',   tier: 2, name: 'High Alert',   desc: 'The screen edge pulses toward anyone off screen who has you in their sights' },
+  skywatch:    { id: 'skywatch',    tier: 2, name: 'Skywatch',     desc: 'Your gunfire and rockets do 40% more to enemy scorestreaks' },
 };
 export const PERK_IDS = Object.keys(PERKS);
 export const HARDLINE_MULT = 0.85;
@@ -130,6 +136,11 @@ export const PRO = {
   tracker:     { name: 'Footprints',      desc: 'See enemy footprints from the last 4 s wherever you have sight', where: 'hud' },
   engineer:    { name: 'Hijacker',        desc: 'See enemy equipment through walls; stand at an enemy Sentry for 1.5 s to take it', where: 'sim' },
   hardtarget:  { name: 'Evasive',         desc: 'The cut also holds for 1 s after you stop sprinting or sliding', where: 'sim' },
+  overkill:    { name: 'Gunrunner',       desc: 'Swapping between your two primaries is 30% faster again', where: 'player' },
+  amped:       { name: 'Hot Tubes',       desc: 'Launchers aim 25% faster', where: 'player' },
+  doubletime:  { name: 'Second Gear',     desc: 'Your slide comes back 30% sooner', where: 'player' },
+  highalert:   { name: 'Sixth Sense',     desc: 'Enemies within 8 m behind you ping your minimap', where: 'hud' },
+  skywatch:    { name: 'Flak Gunner',     desc: 'Hitting an enemy scorestreak shows its owner on your team\'s minimap for 3 s', where: 'sim' },
 };
 
 // Calling card ids are data in js/shared/progression.js (CARDS); a loadout only carries the id, checked there.

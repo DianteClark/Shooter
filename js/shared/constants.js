@@ -87,4 +87,10 @@ export const WEAPON_IDS = [...OLD_PRIMARY, ...OLD_SECONDARY, GOLDEN_ID, ...V8_ID
   ...V10_IDS(PRIMARY_CATS), ...V10_IDS(SECONDARY_CATS), ...W3_IDS(PRIMARY_CATS), ...W3_IDS(SECONDARY_CATS),
   ...W4_IDS(PRIMARY_CATS), ...W4_IDS(SECONDARY_CATS), ...W5_IDS(PRIMARY_CATS), ...W5_IDS(SECONDARY_CATS)];
 export const SECONDARY_ID = 'pistol';
+// Overkill (catalog.js perks wave): may a loadout with these perks carry `id` in the sidearm slot? Any sidearm, or with
+// Overkill any primary but the one already in the primary slot.
+export function secondaryAllowed(id, perks, primary) {
+  if (SECONDARY_IDS.includes(id)) return true;
+  return !!(Array.isArray(perks) && perks.includes('overkill') && PRIMARY_IDS.includes(id) && id !== primary);
+}
 export const BOT_SKILLS = ['recruit', 'regular', 'veteran', 'elite'];

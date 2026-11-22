@@ -15,6 +15,7 @@ import { hasLineOfSight, raycastMap } from '../shared/geometry.js';
 import { effectRadius, landingOf, maxThrowRange, EQUIPMENT, SHOOTABLE, tripBeam } from './equipment.js';
 import { ADS_STICK_FULL, angleDiff, shotPassage, stepPlayer, weaponDef } from './player.js';
 import { WEAPONS } from '../shared/weapons.js';
+import { PRIMARY_IDS } from '../shared/constants.js';
 import { V10_BOT_SECONDARIES } from '../shared/weapons-v10.js';
 import { W3_BOT_SECONDARIES, W3_BOT_KITS } from '../shared/weapons-w3.js';
 import { W5_BOT_SECONDARIES, W5_BOT_KITS } from '../shared/weapons-w5.js';
@@ -23,6 +24,7 @@ import { SND } from '../shared/modes.js';
 import { STYLES, TIERS } from '../shared/botpool.js';
 
 const DEG = Math.PI / 180;
+const OVERKILL_FIT = 6, OVERKILL_SWAP_GAP = 2.5;   // Overkill bots: metres of better fit worth a swap; seconds between swaps.
 
 // aimError: sigma in radians at first sight. aimFloor: sigma once settled (never zero: no aimbots).
 // V10 fairness pass (dev/balance-sim.mjs --human, js/sim/humanlike.js): a thumb on the aim stick, with aim assist, wins
@@ -1246,8 +1248,20 @@ export class BotBrain {
       }
     }
 
+    // Overkill (perks wave): a second primary in the holster. Whichever gun suits the fight's distance comes out, or the
+    // other one when this one is dry; never more often than OVERKILL_SWAP_GAP, so a bot does not juggle at the edge.
+    if (PRIMARY_IDS.includes(ps.secondary)) {
+      if (ps.swapT <= 0 && sim.time >= (this.okSwapAt ?? 0)) {
+        const oi = 1 - ps.slot, here = weaponDef(ps), other = weaponDef(ps, oi === 0 ? ps.primary : ps.secondary);
+        const otherOk = ps.ammo[oi] > 0, dry = ammo === 0 || ps.overheated;
+        const d = this.targetDist, fit = w => Math.abs(d - (w.botUse?.pref ?? 12));
+        if (visible && otherOk && (dry || (fit(other) + OVERKILL_FIT < fit(here) && d < other.range))) this.wantSwap = true;
+        else if (!visible && ps.slot === 1 && dry && (ps.ammo[0] > 0 || ps.reserve[0] > 0)) this.wantSwap = true;
+        if (this.wantSwap) this.okSwapAt = sim.time + OVERKILL_SWAP_GAP;
+      }
+    }
     // Pistol when the primary runs dry mid-fight; back to the main gun when it is over.
-    if (S.pistolSwap && visible && ps.slot === 0 && (ammo === 0 || ps.overheated) && this.targetDist < 14) this.wantSwap = true;
+    else if (S.pistolSwap && visible && ps.slot === 0 && (ammo === 0 || ps.overheated) && this.targetDist < 14) this.wantSwap = true;
     else if (!visible && ps.slot === 1 && ps.swapT <= 0 && !ps.overheated && (ps.ammo[0] > 0 || ps.reserve[0] > 0)) this.wantSwap = true;
     // A rocket opens a fight at range, once a life; the empty tube goes straight back on the shoulder.
     else if (S.pistolSwap && visible && ps.slot === 0 && WEAPONS[ps.secondary].explosive && ps.ammo[1] > 0 && this.targetDist > 8 && this.targetDist < Math.min(34, WEAPONS[ps.secondary].range - 2) && sim.rng() < 0.12) this.wantSwap = true;

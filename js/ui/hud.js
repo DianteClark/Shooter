@@ -29,6 +29,7 @@ import { icon, resolveIcon } from './icons.js';
 import { ArmorySheet } from './trainarmory.js';
 import { cardHtml, identityOf, setRosterIdentity, vetOf, vetTag } from './cards.js';
 import { Footprints, heardEnemies, HEAR_RANGE, RESPAWN_IDLE } from '../sim/player.js';
+import { sightedBy, behindMe, drawAlerts, ALERT_HZ } from './alert-hud.js';     // High Alert and Sixth Sense (perks wave).
 import { effectRadius } from '../sim/equipment.js';
 import { sndOf, spectate } from '../sim/snd.js';
 import { SpectateCard } from './spectate-card.js';     // QoL: who you are watching, with Previous and Next.
@@ -2194,7 +2195,8 @@ export class HUD {
     const pro = me.pro ?? NO_PRO;
     const g = this.proCtx, cam = this.camera;
     if (this.proDrawn) { g.clearRect(0, 0, this.proCanvas.width, this.proCanvas.height); this.proDrawn = false; }
-    if (!cam || !me.alive || view.phase === 'ended' || pro.length === 0) return;
+    const alert = !!me.perks?.includes('highalert');
+    if (!cam || !me.alive || view.phase === 'ended' || (pro.length === 0 && !alert)) return;
     const v = cam.matrixWorldInverse.elements, p = cam.projectionMatrix.elements, W = this.viewW, H = this.viewH;
     const P = this.projected ??= { x: 0, y: 0 };
     const project = (x, y, z) => {
@@ -2205,6 +2207,13 @@ export class HUD {
       P.y = (0.5 - (p[5] * vy + p[9] * vz + p[13]) / w * 0.5) * H;
       return P;
     };
+    // High Alert: whoever off screen has you in their sights, a pulse on that edge (sight checked ALERT_HZ a second).
+    if (alert) {
+      this.alertClock = (this.alertClock ?? 1) + dt;
+      if (this.alertClock >= 1 / ALERT_HZ) { this.alertClock = 0; this.alertList = sightedBy(view, me, this.map, this.alertList ?? []).slice(); }
+      const css = this.ffa || this.ex ? FFA_FOE : TEAMS[1 - me.team]?.css ?? FFA_FOE;
+      if (this.alertList?.length && drawAlerts(g, this.alertList, project, W, H, view.t, css)) this.proDrawn = true;
+    }
     if (pro.includes('tracker')) {
       this.prints.update(view, me, view.t);
       this.printClock += dt;
@@ -2244,6 +2253,18 @@ export class HUD {
       g.stroke();
       g.setLineDash([]);
       this.proDrawn = true;
+    }
+    // Sixth Sense (High Alert Pro): anyone close behind you, a ring that pulses where they are.
+    if (pro.includes('highalert') && me.alive) {
+      const near = behindMe(view, me, this.behind ??= []);
+      g.lineWidth = 1.6;
+      for (const p of near) {
+        const k = (clock * 2 + p.z * 0.07) % 1;
+        g.strokeStyle = TEAMS[p.team]?.css ?? FFA_FOE;
+        g.globalAlpha = 0.9 * (1 - k);
+        g.beginPath(); g.arc(p.x * sx, p.z * sz, 2.5 + k * 7, 0, Math.PI * 2); g.stroke();
+      }
+      g.globalAlpha = 1;
     }
     if (pro.includes('engineer') && view.projectiles?.length) {
       const pulse = 0.65 + 0.35 * Math.sin(view.t * 6);
@@ -3321,6 +3342,18 @@ export class HUD {
         g.stroke();
         g.setLineDash([]);
       }
+    }
+    // Sixth Sense (High Alert Pro): anyone close behind you, a ring that pulses where they are.
+    if (pro.includes('highalert') && me.alive) {
+      const near = behindMe(view, me, this.behind ??= []);
+      g.lineWidth = 1.6;
+      for (const p of near) {
+        const k = (clock * 2 + p.z * 0.07) % 1;
+        g.strokeStyle = TEAMS[p.team]?.css ?? FFA_FOE;
+        g.globalAlpha = 0.9 * (1 - k);
+        g.beginPath(); g.arc(p.x * sx, p.z * sz, 2.5 + k * 7, 0, Math.PI * 2); g.stroke();
+      }
+      g.globalAlpha = 1;
     }
     if (pro.includes('engineer') && view.projectiles?.length) {
       for (const q of view.projectiles) {

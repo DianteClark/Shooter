@@ -15,7 +15,7 @@ import * as W5 from './arsenal-w5.js';   // Weapons wave 5: burn and lock-on (ar
 import { botAttachments, BotBrain, botSecondary, planObjectives } from './bots.js';
 import { blastDamage, EQUIPMENT, EquipmentSystem, flakMult, maxThrowRange, COLD_MARK, syncCover } from './equipment.js';
 import { NavGrid } from './nav.js';
-import { angleDiff, applyDaze, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_IDLE, respawnPlayer, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
+import { angleDiff, applyDaze, armPlayer, armSecondary, createPlayerState, hasPro, RESPAWN_IDLE, respawnPlayer, secondaryAllowed, takeEquipment, shotPassage, traceShot, weaponDef } from './player.js';
 import { RANGE_MODE, RangeDirector, rangeDummies } from './range.js';
 import { addScore, createStreakState, setStreakKinds, spendStreak } from './streaks.js';
 import * as V9 from './streaks-v9.js';   // Scorestreaks overhaul (2026-11): new streaks, shoot-downs, EMP rework.
@@ -174,7 +174,16 @@ const BOT_LETHALS = Object.keys(LETHALS);
 const BOT_PERKS = [
   ['marathon', 'scavenger', 'tracker'], ['flak', 'fasthands', 'ghost'], ['tacmask', 'strongarm', 'coldblood'],
   ['quickmend', 'hardline', 'deadsilence'], ['adrenaline', 'bandolier', 'engineer'], ['marathon', 'hardline', 'ghost'],
+  // Perks wave (2026-11-22), appended so the six above deal as before.
+  ['quickmend', 'amped', 'skywatch'], ['doubletime', 'overkill', 'highalert'],
 ];
+// Overkill bots carry a second primary from the other end of the range: a long gun's partner is a close one and back.
+const OVERKILL_CLOSE = ['SMG', 'Shotgun'], OVERKILL_LONG = ['Marksman', 'Sniper', 'LMG'];
+function overkillPartner(primary, i) {
+  const want = OVERKILL_CLOSE.includes(WEAPONS[primary]?.category) ? OVERKILL_LONG : OVERKILL_CLOSE;
+  const list = BOT_PRIMARIES.filter(id => id !== primary && want.includes(WEAPONS[id]?.category));
+  return list[i % list.length] ?? 'smg';
+}
 const BOT_STREAKS = [
   ['uav', 'turret', 'strike'], ['missile', 'mortar', 'chopper'], ['uav', 'overwatch', 'gunship'],
   ['resupply', 'swarm', 'emp'], ['jammer', 'turret', 'juggernaut'], ['missile', 'swarm', 'gunship'],
@@ -374,6 +383,10 @@ function botLoadout(primary, side, skill, i, deal = 0) {
     perks: BOT_PERKS[i % BOT_PERKS.length],
     streaks: skill === 'recruit' ? RECRUIT_STREAKS : BOT_STREAKS[i % BOT_STREAKS.length],
   });
+  if (loadout.perks.includes('overkill')) {
+    loadout.secondary = overkillPartner(primary, i + side);
+    loadout.attachments[loadout.secondary] = botAttachments(loadout.secondary, skill, i);
+  }
   if (PRO_SKILLS.has(skill)) {
     loadout.pro = loadout.perks.slice();
     loadout.card = `pro-${loadout.perks[skill === 'elite' ? 2 : i % 3]}`;
@@ -408,6 +421,15 @@ function poolBotEntry(n, team, pick, botSkill, seed) {
     attachments: { [primary]: botAttachments(primary, usual, prof.kit[primary] ?? 0) },
     tactical: prof.tactical, lethal: prof.lethal, perks: prof.perks.slice(), streaks: prof.streaks.slice(),
   });
+  // The perks wave reaches pool players the same way: a new perk tried in its tier, one match in three (tryout5Of).
+  const rp = roll();
+  if (tryout5.perk && rp < 0.34) {
+    loadout.perks[PERKS[tryout5.perk].tier] = tryout5.perk;
+    if (tryout5.perk === 'overkill') {
+      loadout.secondary = overkillPartner(primary, prof.index);
+      loadout.attachments[loadout.secondary] = botAttachments(loadout.secondary, usual, prof.kit[loadout.secondary] ?? 0);
+    }
+  }
   if (PRO_SKILLS.has(usual) || pick.badge.prestige > 0) loadout.pro = loadout.perks.slice();
   loadout.card = looks.card;
   Object.assign(loadout, { operator: prof.operator, skin: looks.skin, emblem: looks.emblem });
@@ -707,7 +729,7 @@ export class Sim {
   _cleanLoadout(raw, fallback = null) {
     const l = normalizeLoadout(raw);
     if (!WEAPONS[l.primary]) l.primary = fallback ? fallback.primary : 'ar';
-    if (!SECONDARY_IDS.includes(l.secondary)) l.secondary = fallback ? fallback.secondary : 'pistol';
+    if (!secondaryAllowed(l.secondary, l.perks, l.primary)) l.secondary = fallback && secondaryAllowed(fallback.secondary, l.perks, l.primary) ? fallback.secondary : 'pistol';   // Overkill: a second primary.
     // Search and Destroy has no scorestreaks: one life a round leaves no room to earn them fairly.
     if (this.mode === 'snd' || this.mode === 'br' || this.mode === 'ex') l.streaks = [];     // Extraction: none either.
     if (this.mode === 'br') l.perks = [];      // Battle royale: nothing from your own loadout fights, only its looks.
@@ -1317,7 +1339,7 @@ export class Sim {
     const ps = p.ps;
     ps.x = d.x; ps.z = d.z; ps.aim = d.aim; ps.vx = d.vx; ps.vz = d.vz;
     ps.slot = d.slot; ps.primary = d.primary; ps.weapon = d.weapon;
-    if (d.secondary && SECONDARY_IDS.includes(d.secondary)) ps.secondary = d.secondary;
+    if (d.secondary && secondaryAllowed(d.secondary, ps.perks, ps.primary)) ps.secondary = d.secondary;
     ps.sprinting = d.sprinting; ps.sliding = d.sliding; ps.steer = !!d.steer;
     ps.ammo[0] = d.ammo[0]; ps.ammo[1] = d.ammo[1];
     ps.reserve[0] = d.reserve[0]; ps.reserve[1] = d.reserve[1];
@@ -2190,6 +2212,7 @@ export class Sim {
   }
 
   _hurtTurret(t, dmg, by = null) {
+    if (by && by.team !== t.team) dmg = W5.streakDamage(this, by, t.owner, dmg);   // Skywatch (arsenal-w5.js).
     t.hp -= dmg;
     // An enemy's hit on a machine is shown to whoever landed it: a hit marker and the health bar (roadmap 40).
     if (by && by.team !== t.team && dmg > 0) V9.streakHit(this, by, V9.kindOf(t) === 'sentry' ? 'turret' : V9.kindOf(t), t.hp / (t.maxHp || TURRET_HP), t.x, t.z);
@@ -2881,7 +2904,7 @@ export class Sim {
       heat: ps.heat, overheated: ps.overheated, firingT: Math.max(this._firingReveal(ps), p.markT),
       tacticalLeft: ps.tacticalLeft, lethalLeft: ps.lethalLeft, tactical: ps.tactical, lethal: ps.lethal,
       ghost: ps.perks.includes('ghost'), quiet: ps.perks.includes('deadsilence'), jammedSelf: p.jamT > 0,
-      pro: ps.perks.filter(id => ps.pro.includes(id)), card: p.card ?? null,
+      pro: ps.perks.filter(id => ps.pro.includes(id)), card: p.card ?? null, perks: ps.perks,
       attachments: this._heldKit(p, ps.weapon),
       plants: p.plants ?? 0, defuses: p.defuses ?? 0,
       captures: p.captures ?? 0, returns: p.returns ?? 0, carrierKills: p.carrierKills ?? 0,
@@ -3204,7 +3227,7 @@ export class Sim {
         tactical: r.ps.tactical, lethal: r.ps.lethal,
         heat: d[o + 21] / 20, overheated: !!(flags & 32), firingT: d[o + 22] / 10, head: d[o + 23],
         ghost: !!(flags & 16), quiet: !!(flags & 256), jammedSelf: !!(flags & 2048),
-        pro: r.ps.pro, card: r.card ?? null,
+        pro: r.ps.pro, card: r.card ?? null, perks: r.ps.perks,
         attachments: this._decodedKit(r, WEAPON_IDS[d[o + 8]]),
       };
     }

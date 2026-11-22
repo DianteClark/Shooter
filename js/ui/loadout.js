@@ -11,7 +11,7 @@ import { getOperator } from './operators.js';
 import { esc, swatchCss, levelRequirement, SLOT_LABEL, itemMark, weaponLevelHtml } from './widgets.js';
 import { statBars, weaponFacts } from './gunstats.js';
 import { CATEGORIES, categoryOf, gunsIn, slotOf, SLOT_NAME } from './armory.js';
-import { GOLDEN_ID, WEAPON_IDS } from '../shared/constants.js';
+import { GOLDEN_ID, WEAPON_IDS, PRIMARY_IDS, secondaryAllowed } from '../shared/constants.js';
 import { playUi } from '../audio/audio.js';
 import { ico, backButton } from './yard.js';
 import { stagger, flash, sweep, pop } from './motion.js';
@@ -130,6 +130,7 @@ export class LoadoutsScreen {
     const camo = getCamo(l.camo), kit = this.kitOf(l.primary), isActive = this.selected === active;
     m.el.dataset.screen = 'loadouts';
     const prog = Progress.weaponProgress(l.primary);
+    const overkill = l.perks.includes('overkill');     // Overkill: the sidearm slot takes a second primary.
     m.el.innerHTML = `
       <header class="bar ld-bar">
         ${backButton('loBack', 'Done')}
@@ -158,9 +159,9 @@ export class LoadoutsScreen {
             </i>`).join('')}</span>
           </button>
           <div class="ld-sub">
-            <button class="ld-side" data-act="loWeapon" data-key="secondary">
+            <button class="ld-side${overkill ? ' ld-overkill' : ''}" data-act="loWeapon" data-key="secondary">
               <span class="ld-side-pic"><canvas class="gun-pic" data-gun="${esc(l.secondary)}"></canvas></span>
-              <span class="ld-tx"><small>Secondary / ${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelHtml(l.secondary)}</small></span>
+              <span class="ld-tx"><small>${overkill ? '<i class="pro-chip ok-chip">Overkill</i>' : ''}Secondary / ${esc(categoryOf(l.secondary))}</small><b>${esc(gunName(l.secondary))}</b><small>${levelHtml(l.secondary)}</small></span>
             </button>
             <button class="ld-act" data-act="loGunsmith">${ico('gunsmith')}<b>Gunsmith</b><small>Parts and camos</small></button>
             <button class="ld-act" data-act="loRename">${ico('edit')}<b>Rename</b><small>${esc(l.name)}</small></button>
@@ -227,8 +228,15 @@ export class LoadoutsScreen {
 
   openArmory(key) {
     const id = this.loadout[key];
-    this.panel = { type: 'armory', cat: categoryOf(id), browse: id };
+    this.panel = { type: 'armory', cat: categoryOf(id), browse: id, key };
     this.paintPanel();
+  }
+
+  // Which slot equipping `id` fills. Opened from the sidearm slot with Overkill in the kit, a primary goes there.
+  slotFor(id) {
+    const l = this.loadout;
+    if (this.panel?.key === 'secondary' && PRIMARY_IDS.includes(id) && secondaryAllowed(id, l.perks, l.primary)) return 'secondary';
+    return slotOf(id);
   }
 
   /* ---------- Armory ---------- */
@@ -319,7 +327,7 @@ export class LoadoutsScreen {
   }
 
   paintBrowse() {
-    const id = this.panel.browse, a = this.ar, l = this.loadout, slot = slotOf(id), open = owned(id);
+    const id = this.panel.browse, a = this.ar, l = this.loadout, slot = this.slotFor(id), open = owned(id);
     const kit = this.kitOf(id), current = l[slot];
     const on = id === current;
     const camo = getCamo(Progress.camo(id));
@@ -350,7 +358,10 @@ export class LoadoutsScreen {
       else unlockSheet(this.menu, 'weapon', id);
       return;
     }
-    Progress.updateLoadout(this.selected, { [slotOf(id)]: id });
+    const slot = this.slotFor(id), l = this.loadout, change = { [slot]: id };
+    // Overkill: the gun already in the other slot trades places rather than sitting in both.
+    if (slot === 'primary' && id === l.secondary) change.secondary = secondaryAllowed(l.primary, l.perks, id) ? l.primary : 'pistol';
+    Progress.updateLoadout(this.selected, change);
     this.onChange?.();
     this.panel = null;
     this.render();
@@ -437,7 +448,10 @@ export class LoadoutsScreen {
       const list = [...l.perks];
       list[PERKS[id].tier] = id;
       this.panel.focus = id;
-      Progress.updateLoadout(this.selected, { perks: list });
+      // Taking Overkill off puts a second primary back in the holster: the sidearm slot gets the default sidearm.
+      const fix = secondaryAllowed(l.secondary, list, l.primary) ? {} : { secondary: 'pistol' };
+      Progress.updateLoadout(this.selected, { perks: list, ...fix });
+      if (fix.secondary) this.menu.toast(`Overkill off: ${gunName(l.secondary)} swapped for the ${gunName('pistol')}`);
     } else if (key === 'streaks') {
       // The tile that opened this is the one being replaced; tapping a held streak moves that aim to it instead.
       const list = [...l.streaks];

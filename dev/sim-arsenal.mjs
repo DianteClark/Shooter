@@ -19,6 +19,9 @@ import { MAPS } from '../js/shared/map.js';
 import { MasteryTracker, applyMasteryGains, blankSave, blankWeapon, sanitizeSave, migrateSave, encodeSave, decodeSave, itemOpen, itemUnlockLevel,
   UNLOCK_SCHEDULE, challengesFor, ladderStatus, levelOf, PLAYER_CURVE, MAX_LEVEL, GOLDEN_REQ_WEAPONS, cleanLoadout } from '../js/shared/progression.js';
 import { hasIcon } from '../js/ui/icons.js';
+import { PERK_IDS, PERKS, PRO } from '../js/shared/catalog.js';
+import { secondaryAllowed } from '../js/shared/constants.js';
+import { airHp as airHpOf, hurtAir as hurtAirOf } from '../js/sim/streaks-v9.js';
 import { statBars, weaponFacts, compareStats } from '../js/ui/gunstats.js';
 
 const STEP = 1 / SIM_HZ, DT = 1 / 60;
@@ -673,6 +676,95 @@ test('Skyhook: fully aimed at an enemy aircraft in its cone it cannot miss; two 
   const g2 = sim.gunships.at(-1); g2.x = h.ps.x - 20; g2.z = h.ps.z;
   sim.applyShot('h1', { weapon: 'lockon', ox: h.ps.x, oz: h.ps.z, aim, ads: true, angles: [aim] }, 0);
   assert.ok(!sim.drainEvents().some(e => e.t === 'shot' && e.lk), 'outside the cone, no lock');
+});
+
+/* ---------------- Perks wave (js/shared/catalog.js, 2026-11-22) ---------------- */
+
+test('perks wave: five perks appended in their tiers, each with a Pro, an icon and a level; the wire still packs a tier in 3 bits', () => {
+  const NEWP = ['overkill', 'amped', 'doubletime', 'highalert', 'skywatch'];
+  assert.deepEqual(PERK_IDS.slice(-NEWP.length), NEWP, 'appended after every older perk');
+  for (const t of [0, 1, 2]) assert.ok(PERK_IDS.filter(id => PERKS[id].tier === t).length <= 8, `tier ${t} fits 3 bits`);
+  for (const id of NEWP) {
+    assert.ok(PERKS[id].name && PERKS[id].desc && PRO[id]?.name && PRO[id]?.desc, id);
+    assert.ok(hasIcon(id), `${id} icon`);
+    assert.ok(itemUnlockLevel('perk', id) > 1, `${id} opens on a level`);
+  }
+});
+
+test('Overkill: a second primary in the sidearm slot only with the perk, never the same gun twice; it fires from slot 2', () => {
+  const kit = (perks, secondary, primary = 'ar') => createPlayerState({ id: 'p', primary, loadout: { primary, secondary, perks } });
+  assert.equal(kit(['marathon', 'overkill', 'tracker'], 'sniper').secondary, 'sniper');
+  assert.equal(kit(['marathon', 'scavenger', 'tracker'], 'sniper').secondary, 'pistol', 'no perk, no second primary');
+  assert.equal(kit(['marathon', 'overkill', 'tracker'], 'ar').secondary, 'pistol', 'not the same gun twice');
+  assert.equal(kit(['marathon', 'overkill', 'tracker'], 'revolver').secondary, 'revolver', 'a sidearm still fits');
+  assert.ok(secondaryAllowed('smg', ['flak', 'overkill', 'ghost'], 'ar') && !secondaryAllowed('smg', ['flak', 'fasthands', 'ghost'], 'ar'));
+  const ps = kit(['marathon', 'overkill', 'tracker'], 'shotgun');
+  ps.x = LANE.x; ps.z = LANE.z;
+  stepPlayer(ps, { ...IDLE, swap: true }, DT, MAP, mid); run(ps, 1.2);
+  assert.equal(ps.weapon, 'shotgun');
+  assert.ok(run(ps, 0.6, { fire: true }).some(s => s.weapon === 'shotgun'), 'the second primary fires');
+  // The host keeps it, and a guest's state cannot sneak one in without the perk.
+  const HUMAN = { id: 'h1', name: 'Human', team: 0, primary: 'ar', camo: 'none', loadout: { primary: 'ar', secondary: 'lmg', perks: ['marathon', 'overkill', 'tracker'] } };
+  const roster = buildRoster([HUMAN], { botSkill: 'regular', teamSize: 2, mapId: 'railyard', mode: 'tdm', seed: 7 });
+  const sim = new Sim({ roster, map: 'railyard', seed: 7, mode: 'tdm' });
+  assert.equal(sim.byId.get('h1').ps.secondary, 'lmg');
+  const HUMAN2 = { ...HUMAN, loadout: { ...HUMAN.loadout, perks: ['marathon', 'scavenger', 'tracker'] } };
+  const sim2 = new Sim({ roster: buildRoster([HUMAN2], { botSkill: 'regular', teamSize: 2, mapId: 'railyard', mode: 'tdm', seed: 7 }), map: 'railyard', seed: 7, mode: 'tdm' });
+  assert.equal(sim2.byId.get('h1').ps.secondary, 'pistol');
+  const save = blankSave();
+  save.loadouts[0] = cleanLoadout({ ...save.loadouts[0], primary: 'ar', secondary: 'sniper', perks: ['marathon', 'overkill', 'tracker'] }, 0);
+  assert.equal(decodeSave(encodeSave(save)).save.loadouts[0].secondary, 'sniper', 'a save code keeps it');
+});
+
+test('Overkill bots carry two primaries from either end of the range, and swap between them in a fight', () => {
+  let carried = 0, swapped = 0;
+  for (const seed of [2, 4, 6, 8]) {
+    const roster = buildRoster([], { botSkill: 'veteran', teamSize: 6, mapId: 'railyard', mode: 'tdm', seed });
+    for (const r of roster) if (r.loadout.perks.includes('overkill')) {
+      carried++;
+      assert.ok(PRIMARY_IDS.includes(r.loadout.secondary) && r.loadout.secondary !== r.loadout.primary, `${r.loadout.primary} + ${r.loadout.secondary}`);
+      assert.notEqual(WEAPONS[r.loadout.primary].category, WEAPONS[r.loadout.secondary].category);
+    }
+    const sim = new Sim({ roster, map: 'railyard', seed, mode: 'tdm', timeLimit: 600, scoreLimit: 999 });
+    const ok = sim.players.filter(p => p.ps.perks.includes('overkill'));
+    for (let i = 0; i < SIM_HZ * 40; i++) {
+      sim.step(STEP);
+      for (const e of sim.drainEvents()) if (e.t === 'shot' && ok.some(p => p.id === e.by && e.weapon === p.ps.secondary)) swapped++;
+    }
+  }
+  assert.ok(carried >= 2, `${carried} Overkill bots`);
+  assert.ok(swapped > 0, `${swapped} shots from a second primary`);
+});
+
+test('Amped swaps and reloads launchers faster; Double Time is quicker aimed and out of a sprint; Pro adds on top', () => {
+  const kit = (perks, pro = []) => { const ps = createPlayerState({ id: 'p', primary: 'ar', loadout: { primary: 'ar', secondary: 'launcher', perks, pro } }); ps.x = LANE.x; ps.z = LANE.z; return ps; };
+  const swapT = ps => { stepPlayer(ps, { ...IDLE, swap: true }, DT, MAP, mid); return ps.swapT; };
+  const base = swapT(kit(['marathon', 'scavenger', 'tracker'])), amped = swapT(kit(['marathon', 'amped', 'tracker']));
+  assert.ok(amped < base * 0.6, `swap ${base.toFixed(2)} -> ${amped.toFixed(2)}`);
+  const reloadOf = perks => { const ps = kit(perks); stepPlayer(ps, { ...IDLE, swap: true }, DT, MAP, mid); run(ps, 1.2); run(ps, 0.4, { fire: true }); run(ps, 0.2, { reload: true }); return ps.reloadDur; };
+  assert.ok(reloadOf(['marathon', 'amped', 'tracker']) < reloadOf(['marathon', 'scavenger', 'tracker']) * 0.7, 'launcher reload');
+  const recover = perks => { const ps = kit(perks); run(ps, 0.6, { sprint: true, mx: 1 }); stepPlayer(ps, { ...IDLE, aiming: true }, DT, MAP, mid); return ps.sprintRecoverT; };
+  assert.ok(recover(['doubletime', 'scavenger', 'tracker']) < recover(['flak', 'scavenger', 'tracker']) * 0.8, 'out of a sprint');
+  const aimedPace = perks => { const ps = createPlayerState({ id: 'p', primary: 'sniper', loadout: { primary: 'sniper', perks } }); ps.x = LANE.x; ps.z = LANE.z; run(ps, 0.8, AIM); run(ps, 0.6, { aiming: true, mx: 0.6 }); return Math.hypot(ps.vx, ps.vz); };
+  assert.ok(aimedPace(['doubletime', 'scavenger', 'tracker']) > aimedPace(['flak', 'scavenger', 'tracker']) * 1.1, 'aimed pace');
+  const proSwap = swapT(Object.assign(createPlayerState({ id: 'p', primary: 'ar', loadout: { primary: 'ar', secondary: 'sniper', perks: ['marathon', 'overkill', 'tracker'], pro: ['overkill'] } }), { x: LANE.x, z: LANE.z }));
+  const plainSwap = swapT(Object.assign(createPlayerState({ id: 'p', primary: 'ar', loadout: { primary: 'ar', secondary: 'sniper', perks: ['marathon', 'overkill', 'tracker'] } }), { x: LANE.x, z: LANE.z }));
+  assert.ok(proSwap < plainSwap * 0.8, 'Gunrunner');
+});
+
+test('Skywatch: 40% more to enemy scorestreaks; Flak Gunner marks the owner', () => {
+  const { sim, h, foe } = duel('ar', 20);
+  sim._launchChopper(foe);
+  const g = sim.gunships.at(-1);
+  airHpOf(g);
+  const hp0 = g.hp;
+  hurtAirOf(sim, g, 100, h);
+  const plain = hp0 - g.hp;
+  h.ps.perks = ['marathon', 'scavenger', 'skywatch']; h.ps.pro = ['skywatch'];
+  foe.markT = 0;
+  hurtAirOf(sim, g, 100, h);
+  assert.ok(Math.abs(hp0 - plain - g.hp - 140) < 1e-6, `skywatch hit ${(hp0 - plain - g.hp).toFixed(1)}`);
+  assert.ok(foe.markT > 0, 'the owner is marked');
 });
 
 /* ---------------- Weapons wave 4: six melee weapons (js/shared/weapons-w4.js) ---------------- */

@@ -242,6 +242,7 @@ const TRYOUT5_SEED = 0x2d91f6c5;
 const W5_BY_CLASS = {};
 for (const c in W5_GUNS) for (const id of W5_GUNS[c]) (W5_BY_CLASS[c] ??= []).push(id);
 const W5_SIDEARMS = [...(W5_GUNS.Pistol ?? []), ...(W5_GUNS.Launcher ?? [])];
+const W5_PERKS = ['overkill', 'amped', 'doubletime', 'highalert', 'skywatch'];   // Never in a profile's own lists.
 const TRYOUTS5 = new Map();
 export function tryout5Of(profile) {
   let t = TRYOUTS5.get(profile.id);
@@ -250,7 +251,9 @@ export function tryout5Of(profile) {
   const pool = profile.classes.flatMap(c => W5_BY_CLASS[c] ?? []).filter(id => PRIMARY_IDS.includes(id));
   const primary = pool.length && rng() < 0.5 ? pool[Math.floor(rng() * pool.length)] : null;
   const secondary = rng() < 0.25 ? W5_SIDEARMS[Math.floor(rng() * W5_SIDEARMS.length)] : null;
-  t = Object.freeze({ primary, secondary });
+  // The perks wave (catalog.js, 2026-11-22): about a third of the pool has a new perk to try.
+  const perk = rng() < 0.35 ? W5_PERKS[Math.floor(rng() * W5_PERKS.length)] : null;
+  t = Object.freeze({ primary, secondary, perk });
   TRYOUTS5.set(profile.id, t);
   return t;
 }

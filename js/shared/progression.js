@@ -157,6 +157,12 @@ export const UNLOCK_SCHEDULE = [
   ...W3_UNLOCKS,    // Weapons wave 3, levels 25, 27 and 29 (js/shared/weapons-w3.js).
   ...W4_UNLOCKS,    // Weapons wave 4's melee, levels 31 to 45 (js/shared/weapons-w4.js).
   ...W5_UNLOCKS,    // Weapons wave 5, levels 37 to 44 (js/shared/weapons-w5.js).
+  // Perks wave (2026-11-22): one on most levels from 16 to 22, past where the older perks have all opened.
+  { level: 16, kind: 'perk',     id: 'doubletime' },
+  { level: 18, kind: 'perk',     id: 'amped' },
+  { level: 19, kind: 'perk',     id: 'highalert' },
+  { level: 21, kind: 'perk',     id: 'skywatch' },
+  { level: 22, kind: 'perk',     id: 'overkill' },
 ];
 export const SCHEDULE_TOP = Math.max(...UNLOCK_SCHEDULE.map(u => u.level));
 const V1_GRANT_LEVEL = 15;
@@ -407,6 +413,12 @@ export const PRO_CHALLENGES = {
   tracker:     [{ stat: 'hits', goal: 160, label: 'Land 160 hits' }, { stat: 'assists', goal: 18, label: 'Get 18 assists' }],
   engineer:    [{ stat: 'deploys', goal: 8, label: 'Make 8 Trophy saves or Sentry and aircraft calls' }, { stat: 'kills', goal: 50, label: 'Get 50 kills' }],
   hardtarget:  [{ stat: 'sprintM', goal: 2500, label: 'Sprint 2,500 m' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  // Perks wave (catalog.js, 2026-11-22): stats the tally already counts.
+  overkill:    [{ stat: 'swapKills', goal: 10, label: 'Get 10 kills just after a swap' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  amped:       [{ stat: 'swapKills', goal: 8, label: 'Get 8 kills just after a swap' }, { stat: 'reloads', goal: 25, label: 'Reload 25 times' }],
+  doubletime:  [{ stat: 'sprintM', goal: 2500, label: 'Sprint 2,500 m' }, { stat: 'slides', goal: 40, label: 'Slide 40 times' }],
+  highalert:   [{ stat: 'flankKills', goal: 7, label: 'Get 7 kills from the side or behind' }, { stat: 'kills', goal: 60, label: 'Get 60 kills' }],
+  skywatch:    [{ stat: 'enemyStreaks', goal: 8, label: 'Be alive for 8 enemy scorestreaks' }, { stat: 'kills', goal: 50, label: 'Get 50 kills' }],
 };
 export const PRO_STATS = [...new Set(Object.values(PRO_CHALLENGES).flatMap(list => list.map(c => c.stat)))];
 
@@ -1140,6 +1152,10 @@ const PRO_ART = {
   ghost: ['fog', '#151a22', '#3d4a5c', '#d6e2f0'], coldblood: ['frost', '#0f2233', '#2a6e99', '#bfefff'],
   deadsilence: ['waves', '#16161e', '#3a3a50', '#c6c6e6'], tracker: ['prints', '#24200f', '#5e5426', '#f5e7a0'],
   engineer: ['circuit', '#12261c', '#2b6b4a', '#9dffc8'], hardtarget: ['chevrons', '#2a1408', '#7a3a14', '#ffb070'],
+  // Perks wave (2026-11-22).
+  overkill: ['plates', '#2a1010', '#7a2626', '#ffb0a0'], amped: ['pulse', '#10202e', '#1f6a8e', '#9ae8ff'],
+  doubletime: ['speed', '#262410', '#6e6a22', '#fff09a'], highalert: ['waves', '#2e1414', '#8a3030', '#ffc2c2'],
+  skywatch: ['rails', '#101a2e', '#2a4a8a', '#c2d8ff'],
 };
 // Default art for the mastery cards by kind: the item's own icon on a pattern in that kind's colours.
 const MASTERY_CARD_ART = {

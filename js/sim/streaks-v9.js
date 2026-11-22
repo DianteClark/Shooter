@@ -25,6 +25,7 @@ import { WEAPONS } from '../shared/weapons.js';
 import { addScore } from './streaks.js';
 import { EQUIPMENT } from './equipment.js';
 import { angleDiff, hasPro, shotPassage } from './player.js';
+import { streakDamage } from './arsenal-w5.js';
 
 const STEP = 1 / SIM_HZ;
 const round2 = v => Math.round(v * 100) / 100;
@@ -595,6 +596,7 @@ export function shootAir(sim, shooter, shot, rays, w) {
 
 export function hurtAir(sim, g, dmg, by) {
   airHp(g);
+  if (by && by.team !== g.team) dmg = streakDamage(sim, by, g.owner, dmg);   // Skywatch (arsenal-w5.js).
   g.hp -= dmg;
   if (by && by.team !== g.team && dmg > 0) streakHit(sim, by, g.kind, g.hp / g.maxHp, g.x, g.z);
   if (g.hp > 0) return false;

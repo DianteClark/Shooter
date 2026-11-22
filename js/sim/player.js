@@ -17,7 +17,7 @@
 // round cannot get there, otherwise the damage multiplier left after cover. Sight (hasLineOfSight) is not enough:
 // you can see over a crate that an SMG cannot shoot through.
 
-import { PLAYER_RADIUS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS } from '../shared/constants.js';
+import { PLAYER_RADIUS, PRIMARY_IDS, SECONDARY_ID, SECONDARY_IDS, WEAPON_IDS, secondaryAllowed } from '../shared/constants.js';
 import { hasLineOfSight, inShallows, rayCircle, resolveCircle, SHALLOW_SLOW, wallsOnRay, wallScratch } from '../shared/geometry.js';
 import { HEAD_RADIUS, MAX_COVER_PIECES, WEAPONS, effectiveWeapon } from '../shared/weapons.js';
 import { attachmentsFor, NO_ATTACHMENTS } from '../shared/attachments.js';
@@ -129,14 +129,38 @@ function hasPerk(ps, perk) { return ps.perks.includes(perk); }
 // (from loadout.pro), so a loadout change on the death screen needs nothing else to keep Pro right.
 export function hasPro(ps, perk) { return ps.perks.includes(perk) && ps.pro.includes(perk); }
 function reloadMult(ps) { return hasPerk(ps, 'fasthands') ? FASTHANDS_MULT : 1; }
-function slideCooldownOf(ps) { return MOVE.slideCooldown * (hasPerk(ps, 'marathon') ? MARATHON_SLIDE_COOL : 1); }
+function slideCooldownOf(ps) {
+  return MOVE.slideCooldown * (hasPerk(ps, 'marathon') ? MARATHON_SLIDE_COOL : 1) * (hasPro(ps, 'doubletime') ? DOUBLETIME_PRO_SLIDE : 1);
+}
+
+// Perks wave (catalog.js, 2026-11-22). Amped: swaps much faster and launchers reload faster (Pro: launchers aim faster).
+// Double Time: faster while aimed and out of a sprint (Pro: the slide comes back sooner). Overkill: a second primary in
+// the sidearm slot (applyLoadout), and with Pro the swap between the two is quicker.
+export const AMPED_SWAP = 0.55, AMPED_LAUNCHER = 0.65, AMPED_PRO_ADS = 0.75;
+export const DOUBLETIME_ADS_MOVE = 1.25, DOUBLETIME_SPRINT = 0.7, DOUBLETIME_PRO_SLIDE = 0.7;
+export const OVERKILL_PRO_SWAP = 0.7;
+const isLauncher = w => !!w.explosive;
+function swapMult(ps) {
+  let k = reloadMult(ps);
+  if (hasPerk(ps, 'amped')) k *= AMPED_SWAP;
+  if (hasPro(ps, 'overkill') && PRIMARY_IDS.includes(ps.secondary) && PRIMARY_IDS.includes(ps.primary)) k *= OVERKILL_PRO_SWAP;
+  return k;
+}
+function gunReloadMult(ps, w) { return reloadMult(ps) * (isLauncher(w) && hasPerk(ps, 'amped') ? AMPED_LAUNCHER : 1); }
+function sprintToFireOf(ps, w) { return w.sprintToFire * (hasPerk(ps, 'doubletime') ? DOUBLETIME_SPRINT : 1); }
+function adsMoveOf(ps, w) { return hasPerk(ps, 'doubletime') ? Math.min(1, w.adsMoveMult * DOUBLETIME_ADS_MOVE) : w.adsMoveMult; }
+function adsTimeOf(ps, w) { return w.adsTime * (isLauncher(w) && hasPro(ps, 'amped') ? AMPED_PRO_ADS : 1); }
+export { secondaryAllowed };     // Overkill's rule lives in constants.js, beside the slot lists.
 
 // Takes a full normalized loadout or the older partial {primary, camo}; absent fields are left alone.
 function applyLoadout(ps, l) {
   if (l.primary && WEAPONS[l.primary]) ps.primary = l.primary;
-  if (SECONDARY_IDS.includes(l.secondary)) ps.secondary = l.secondary;
-  if (l.camo) ps.camo = l.camo;
   if (Array.isArray(l.perks)) ps.perks = l.perks.slice();
+  // Overkill lets a second primary into the sidearm slot; without it a primary there falls back to the default sidearm.
+  if (secondaryAllowed(l.secondary, ps.perks, ps.primary)) ps.secondary = l.secondary;
+  else if (PRIMARY_IDS.includes(l.secondary)) ps.secondary = SECONDARY_ID;
+  if (!secondaryAllowed(ps.secondary, ps.perks, ps.primary)) ps.secondary = SECONDARY_ID;
+  if (l.camo) ps.camo = l.camo;
   if (Array.isArray(l.pro)) ps.pro = l.pro.slice();
   if (TACTICALS[l.tactical]) ps.tactical = l.tactical;
   if (LETHALS[l.lethal]) ps.lethal = l.lethal;
@@ -281,7 +305,7 @@ export function setSlot(ps, slot) {
   if (resume) { ps.reloadT = resumeT; ps.reloadDur = resumeDur; }
   ps.shotIndex = 0; ps.bloom = 0; ps.burstLeft = 0;
   ps.adsT *= 0.4;
-  ps.swapT = w.swapTime * reloadMult(ps);
+  ps.swapT = w.swapTime * swapMult(ps);
   ps.cooldown = Math.max(ps.cooldown, ps.swapT);
 }
 
@@ -293,12 +317,12 @@ function startReload(ps, w) {
   if (ps.reserve[i] <= 0 && !w.unlimitedReserve) return;
   if (w.shellReload) {
     // reloadT / reloadDur cover the whole loop so the HUD ring stays simple; shellT paces each round.
-    const shell = w.reload * reloadMult(ps);
+    const shell = w.reload * gunReloadMult(ps, w);
     const n = Math.min(missing, ps.reserve[i]);
     ps.reloadDur = n * shell;
     ps.shellT = shell;
   } else {
-    ps.reloadDur = w.reload * reloadMult(ps);
+    ps.reloadDur = w.reload * gunReloadMult(ps, w);
   }
   ps.reloadT = ps.reloadDur;
   ps.shotIndex = 0;
@@ -327,7 +351,7 @@ function stepReload(ps, w, dt) {
     ps.shellT -= dt;
     while (ps.shellT <= 0 && ps.ammo[i] < w.magazine && ps.reserve[i] > 0) {
       ps.ammo[i]++; ps.reserve[i]--;
-      ps.shellT += w.reload * reloadMult(ps);
+      ps.shellT += w.reload * gunReloadMult(ps, w);
     }
     if (ps.ammo[i] >= w.magazine || ps.reserve[i] <= 0) { ps.reloadT = 0; ps.reloadDur = 0; ps.shellT = 0; }
     else if (ps.reloadT <= 0) ps.reloadT = ps.shellT;   // Rounding: keep going until the tube is full.
@@ -463,7 +487,7 @@ function stepMovement(ps, input, w, dt, map) {
   const adsIntent = !!input.aiming && moveLen < ADS_STICK_NONE;
   const wantsSprint = !!input.sprint && moveLen > 0.5 && !adsIntent && !input.fire && !ps.sliding;
   ps.sprinting = wantsSprint;
-  if (ps.sprinting) ps.sprintRecoverT = w.sprintToFire;
+  if (ps.sprinting) ps.sprintRecoverT = sprintToFireOf(ps, w);
   else if (ps.sprintRecoverT > 0) ps.sprintRecoverT -= dt;
 
   const speedNow = Math.hypot(ps.vx, ps.vz);
@@ -474,7 +498,7 @@ function stepMovement(ps, input, w, dt, map) {
     ps.slideDirZ = ps.vz / speedNow;
     ps.slideSpeed = Math.max(speedNow * 1.25, MOVE.slideBoost * Math.min(1, w.moveMult));
     ps.sprinting = false;
-    ps.sprintRecoverT = Math.min(ps.sprintRecoverT, w.sprintToFire * MOVE.slideRecoverMult);
+    ps.sprintRecoverT = Math.min(ps.sprintRecoverT, sprintToFireOf(ps, w) * MOVE.slideRecoverMult);
   }
 
   if (ps.sliding) {
@@ -497,7 +521,7 @@ function stepMovement(ps, input, w, dt, map) {
       * (ps.dazeT > 0 ? 1 - DAZE_SLOW * ps.daze : 1) * (map.shallows && inShallows(map, ps.x, ps.z) ? SHALLOW_SLOW : 1);
     // ADS caps the speed rather than scaling the stick: a part-pushed stick that is already slower than the ADS pace
     // loses nothing, which is what lets a player ease the stick off into ADS without crawling.
-    const cap = ps.sprinting ? base : base * (1 + (w.adsMoveMult - 1) * ps.adsT);
+    const cap = ps.sprinting ? base : base * (1 + (adsMoveOf(ps, w) - 1) * ps.adsT);
     let scale = (moveLen > 1 ? 1 / moveLen : 1) * base;
     if (Math.min(moveLen, 1) * base > cap) scale = cap / moveLen;
     const tx = mx * scale, tz = mz * scale;
@@ -574,7 +598,7 @@ export function stepPlayer(ps, input, dt, map, rng = Math.random) {
   // ADS blocked by sprinting, swapping and magazine reloads; a shell-fed gun can stay up.
   // How far in it can go also depends on the move stick; see adsRoomFor.
   const wantAds = !!input.aiming && !ps.sprinting && ps.swapT <= 0 && (ps.reloadT <= 0 || !!w.shellReload);
-  const rate = dt / (w.adsTime * TUNING.adsTime);
+  const rate = dt / (adsTimeOf(ps, w) * TUNING.adsTime);
   const room = wantAds ? adsRoomFor(Math.hypot(input.mx || 0, input.mz || 0)) : 0;
   ps.adsT = ps.adsT < room ? Math.min(room, ps.adsT + rate) : Math.max(room, ps.adsT - rate * ADS_OUT_RATE);
 
