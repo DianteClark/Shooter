@@ -21,9 +21,9 @@ function build() {
   const walls = [];
   rotated(walls, W, H, [
     // ---- The upper benches: tin sheds on the north edge's west half and the south edge's west half (the images fill
-    // the rest), the haul road in front of them (z 4-10), a drill rig, drums.
-    shed(11, 0, 10, 4), shed(27, 0, 7, 4, 3.4),
-    shed(9, 46, 9, 4, 3.4), shed(24, 46, 10, 4),
+    // the rest), the haul road in front of them (z 4.6-10.4), a drill rig, drums.
+    shed(11, 0, 10, 4.6), shed(27, 0, 7, 4.6, 3.4),
+    shed(9, 45.4, 9, 4.6, 3.4), shed(24, 45.4, 10, 4.6),
     rig(32.6, 6.4), drums(20, 6.6),
 
     // ---- The terrace faces: the top step (z 10.4) and the second (z 16.6) on the north side, and the same on the south
@@ -64,7 +64,7 @@ function build() {
   points.ctf = flagBases(W, H, { x: 6.6, z: 25 });
 
   const zones = [{ x: 0, z: 21.4, w: W, d: 7.2, kind: 'road' },
-    { x: 0, z: 4, w: W, d: 6.4, kind: 'bench' }, { x: 0, z: 39.6, w: W, d: 6.4, kind: 'bench' },
+    { x: 0, z: 4.6, w: W, d: 5.8, kind: 'bench' }, { x: 0, z: 39.6, w: W, d: 5.8, kind: 'bench' },
     { x: 0, z: 11.2, w: W, d: 5.4, kind: 'step' }, { x: 0, z: 33.4, w: W, d: 5.4, kind: 'step' },
     { x: 0, z: 17.4, w: W, d: 15.2, kind: 'pit' }];
 

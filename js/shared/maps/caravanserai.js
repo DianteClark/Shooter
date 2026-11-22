@@ -24,11 +24,11 @@ function build() {
   const walls = [];
   rotated(walls, W, H, [
     // ---- The souk: shopfronts on the north edge (and the south edge's west half; the images fill in), awnings and
-    // stalls along the souk street (z 3.8-11).
-    store(10, 0, 12, 3.8), store(26, 0, 9, 3.8, 3.4), store(39, 0, 8, 3.8),
-    store(12, 60.2, 11, 3.8), store(27, 60.2, 9, 3.8, 3.4), store(40, 60.2, 7, 3.8),
-    stall(15, 7.4), stall(30.5, 8.2, 2.6), sacks(23.8, 5.6, 1.6, 1.6),
-    [44, 3.8, 3, 3, 2.6, 'tent', { awning: true }], wagon(35.4, 7.8),
+    // stalls along the souk street (z 4.6-11).
+    store(10, 0, 12, 4.6), store(26, 0, 9, 4.6, 3.4), store(39, 0, 8, 4.6),
+    store(12, 59.4, 11, 4.6), store(27, 59.4, 9, 4.6, 3.4), store(40, 59.4, 7, 4.6),
+    stall(15, 7.6), stall(30.5, 8.4, 2.6), sacks(23.8, 6.2, 1.6, 1.6),
+    [44, 4.6, 3, 2.8, 2.6, 'tent', { awning: true }], wagon(35.4, 8),
 
     // ---- The serai's outer wall (x 30-70, z 12-52), corner towers, the west road gate (z 27-37) and its towers; the
     // north gates at x 40-43.6 and 59.4-63, the south ones at 37-40.6 and 56.4-60.
@@ -76,7 +76,7 @@ function build() {
   points.ctf = flagBases(W, H, { x: 8.5, z: 32 });
 
   const zones = [{ x: 0, z: 27, w: W, d: 10, kind: 'road' },
-    { x: 0, z: 3.8, w: W, d: 7.4, kind: 'souk' }, { x: 0, z: 52.8, w: W, d: 7.4, kind: 'souk' },
+    { x: 0, z: 4.6, w: W, d: 6.6, kind: 'souk' }, { x: 0, z: 52.8, w: W, d: 6.6, kind: 'souk' },
     { x: 31.2, z: 13.2, w: 37.6, d: 37.6, kind: 'court' }];
 
   return {
